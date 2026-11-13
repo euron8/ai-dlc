@@ -1,0 +1,7 @@
+# file-mtime's starts of core/scripts/file-mtime.sh (BL-879 grammar). Every other drive is in process: run.sh sources
+# the subject once (and each mutant copy once) and calls fm_main in a subshell. One cli cell per distinct CLI
+# outcome (exit 0 stated, exit 1 MISSING, exit 2 usage), each started as FXCELL=<id> bash "$SUBJ" in eqv() and
+# compared byte for byte with the in-process call on the same input.
+cli core/scripts/file-mtime.sh cli-pass
+cli core/scripts/file-mtime.sh cli-missing
+cli core/scripts/file-mtime.sh cli-usage

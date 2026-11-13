@@ -1,0 +1,7 @@
+# escalation-delivery's starts of core/hooks/ai-dlc-escalation-delivery.sh (BL-879 grammar). Every other drive is in
+# process: run.sh sources the hook once (and each battery inner run sources its mutant copy once) and pipes the payload
+# into esd_main in a subshell. One cli cell per distinct outcome (exit 0 with an ESCALATION_UNDELIVERED entry, exit 0
+# with no log), each started as FXCELL=<id> bash "$HOOK" with the payload on stdin in eqv() and compared byte for byte
+# (stdout, stderr, exit, log with its stamp normalised) with the in-process call on the same payload.
+cli core/hooks/ai-dlc-escalation-delivery.sh cli-event
+cli core/hooks/ai-dlc-escalation-delivery.sh cli-silent

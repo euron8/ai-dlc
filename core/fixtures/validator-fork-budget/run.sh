@@ -137,6 +137,7 @@ if [ -z "$REPO" ]; then
   exit 2
 fi
 PROFILER="$REPO/scripts/fork-profile.sh"
+echo "HERMETIC-CONSUMED scripts/fork-profile.sh"
 VAL="$REPO/scripts/validate-enforcement-map.sh"
 [ -f "$VAL" ] || { echo "FIXTURE ERROR: missing $VAL" >&2; exit 2; }
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
@@ -158,7 +159,7 @@ ok()  { note "ok    $1"; }
 bad() { note "FAIL  $1"; rc=1; }
 MUT_LIB="$DIR/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
-. "$MUT_LIB"
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # --- the budget, read from the ONE line that declares it ---------------------------------
@@ -334,7 +335,7 @@ marker_verdict() {
 # ==========================================================================================
 # NECESSITY: the profiler's own self-probe is the only source of PROBEPOS, PROBENEG and PROBEASG, and A0 asserts those
 # three readings rather than recomputing them; no cheaper call produces them. One invocation, as before.
-if ! bash "$PROFILER" --probe-only > "$TMP/probe.out" 2>"$TMP/probe.err"; then
+if ! FXCELL=fp-probe bash "$PROFILER" --probe-only > "$TMP/probe.out" 2>"$TMP/probe.err"; then
   note "FIXTURE BROKEN: the profiler's own self-probe failed."
   sed 's/^/      /' "$TMP/probe.err" | head -5
   exit 1
@@ -367,7 +368,7 @@ FLOOR=""
 # subject, so its profile is reused below rather than taken twice. Two invocations, as before.
 for fs in tiny:"$TMP/tiny.sh" cut:"$TMP/cut/scripts/validate-enforcement-map.sh"; do
   fs_name="${fs%%:*}"; fs_path="${fs#*:}"
-  if ! bash "$PROFILER" --target "$fs_path" --section total > "$TMP/floor-$fs_name.out" 2>"$TMP/floor-$fs_name.err"; then
+  if ! FXCELL="fp-floor-$fs_name" bash "$PROFILER" --target "$fs_path" --section total > "$TMP/floor-$fs_name.out" 2>"$TMP/floor-$fs_name.err"; then
     note "FIXTURE BROKEN: the profiler could not profile the broken subject '$fs_name' at all, so the floor is unknown."
     sed 's/^/      /' "$TMP/floor-$fs_name.err" | head -3
     exit 1
@@ -388,7 +389,7 @@ cp "$TMP/floor-tiny.out" "$TMP/m0.out"
 # the live verdict judges and that every judge mutant below derives its inputs from; no cheaper call yields a real
 # total, and a second reading would add nothing because A2 proves the one reading exact. It is 31 of the fixture's
 # 32 seconds and is the subject itself, so it stays at exactly one invocation.
-if ! bash "$PROFILER" --section total > "$TMP/r1.out" 2>"$TMP/r1.err"; then
+if ! FXCELL=fp-corpus bash "$PROFILER" --section total > "$TMP/r1.out" 2>"$TMP/r1.err"; then
   note "FIXTURE BROKEN: the profiler could not produce a reading of the real validator."
   sed 's/^/      /' "$TMP/r1.err" | head -5
   exit 1
@@ -723,7 +724,8 @@ fi
 RCPT="$DIR/receipt-bl898.sh"
 [ -f "$RCPT" ] || { echo "FIXTURE ERROR: missing $RCPT" >&2; exit 2; }
 # NECESSITY: the receipt runs the validator once per distinct world (unseeded, K plain files, K restating files,
-# a mode-000 file, readers stripped); no cheaper call shows a fork count that does not move with the corpus.
+# a mode-000 file, readers stripped); no cheaper call shows a fork count that does not move with the corpus. Each
+# world runs in process (vem_entry); only the two cli cells start the validator as a program.
 bash "$RCPT" "$VAL" > "$TMP/rcpt.out" 2>"$TMP/rcpt.err"; rcpt_rc=$?
 if [ "$rcpt_rc" = 0 ] && [ "$(grep -c '^CELL [a-z]* PASS' "$TMP/rcpt.out")" = 5 ]; then
   note "ok    A6 BL-898      -- $(grep '^CELL count ' "$TMP/rcpt.out" | cut -d' ' -f4-); the unread and self-reader cells pass"; B_rcpt=1
@@ -731,6 +733,13 @@ elif [ "$rcpt_rc" = 9 ]; then
   bad "FIXTURE BROKEN: receipt-bl898.sh refused to measure: $(head -1 "$TMP/rcpt.err")"
 else
   bad "A6 BL-898 -- receipt-bl898.sh exited $rcpt_rc against the shipped validator: $(grep '^CELL [a-z]* FAIL' "$TMP/rcpt.out" | head -2 | tr '\n' ' ')"
+fi
+# THE TWO CLI CELLS' EQUIVALENCE. The receipt runs the validator in process; its full run also starts it as a program
+# on the clean world (exit 0) and the unread world (exit 1), and both must answer as the in-process run did.
+if [ "$(grep -c '^EQUIV bl898-cli-pass same exit 0$' "$TMP/rcpt.out")" = 1 ] && [ "$(grep -c '^EQUIV bl898-cli-refuse same exit 1$' "$TMP/rcpt.out")" = 1 ]; then
+  ok "A6 equivalence -- the validator in process and as a program answer byte-identically (stdout, stderr, exit, grep execs) on the clean world, exit 0, and the unread world, exit 1"
+else
+  bad "A6 equivalence -- the in-process and command-line runs differ or did not run: $(grep '^EQUIV ' "$TMP/rcpt.out" | tr '\n' ' ')"
 fi
 
 # m16-m19 -- each a copy of the validator with ONE layer of the BL-898 fix reverted, scored by the receipt on its
@@ -770,7 +779,7 @@ rcpt_mut m19-unread-probe-return clean,count "$TMP/m19.sh" "m19-unread-probe-ret
 RCPT981="$DIR/receipt-bl981.sh"
 [ -f "$RCPT981" ] || { echo "FIXTURE ERROR: missing $RCPT981" >&2; exit 2; }
 # NECESSITY: one `--arms I14` run of the validator is the only call that shows I14's per-hook git starts.
-bash "$DIR/receipt-bl981.sh" > "$TMP/r981.out" 2>"$TMP/r981.err"; r981_rc=$?
+R981_TAG=bl981 R981_EQUIV=1 bash "$DIR/receipt-bl981.sh" > "$TMP/r981.out" 2>"$TMP/r981.err"; r981_rc=$?
 # a7_verdict <receipt exit> <receipt stdout> -> OK | BROKEN | RED <why>. A7's whole condition, one implementation,
 # which m20 below drives in a relaxed copy.
 a7_verdict() {
@@ -788,6 +797,13 @@ case "$r981_v" in
   OK) note "ok    A7 BL-981      -- receipt exit 0: $(grep '^CELL ' "$TMP/r981.out" | cut -d' ' -f2-3 | tr '\n' ' ')" ;;
   *) bad "A7 BL-981 -- receipt-bl981.sh ${r981_v#RED } (exit 0 and one PASS of each owed): $(grep '^CELL ' "$TMP/r981.out" | tr '\n' ' ')$(head -c 400 "$TMP/r981.err" | tr '\n' ' ')" ;;
 esac
+# THE TWO BL-981 CLI CELLS' EQUIVALENCE (cells.decl bl981-em, bl981-emp): the receipt's live run re-runs each `--arms I14`
+# world in process and both must answer as the started program did. Not part of A7's verdict.
+if [ "$(grep -c '^EQUIV bl981-em same exit 0$' "$TMP/r981.out")" = 1 ] && [ "$(grep -c '^EQUIV bl981-emp same exit 1$' "$TMP/r981.out")" = 1 ]; then
+  ok "A7 equivalence -- the I14 validator in process and as a program answer byte-identically (stdout, stderr, exit, git starts) on the unseeded index, exit 0, and the seeded index, exit 1"
+else
+  bad "A7 equivalence -- the in-process and command-line I14 runs differ or did not run: $(grep '^EQUIV ' "$TMP/r981.out" | tr '\n' ' ')"
+fi
 
 # m20 -- A7 RELAXED BACK to the open-entry form (exit 0 OR 1 with both CELL lines). Its deciding cell R7fail feeds the
 # relaxed copy ONE FAILING receipt run, the real receipt-bl981.sh in a scratch root whose enforcement-map validator is a
@@ -804,7 +820,7 @@ printf 'ai-dlc-r7a.sh ai-dlc-r7b.sh ai-dlc-r7c.sh\n' > "$R7S/templates/settings.
 { git init -q "$R7S" && git -C "$R7S" add -A && git -C "$R7S" -c user.name=r -c user.email=r@r -c commit.gpgsign=false \
     -c core.hooksPath=/dev/null commit -qm r7; } >/dev/null 2>&1
 # NECESSITY: one receipt run over a seeded failing subject is the only input on which the relaxed A7 and the shipped A7 differ.
-bash "$R7S/core/fixtures/validator-fork-budget/receipt-bl981.sh" > "$TMP/r981m.out" 2>"$TMP/r981m.err"; r981m_rc=$?
+R981_TAG=bl981m20 bash "$R7S/core/fixtures/validator-fork-budget/receipt-bl981.sh" > "$TMP/r981m.out" 2>"$TMP/r981m.err"; r981m_rc=$?
 B_a7=0
 if [ "$r981m_rc" = 1 ] && grep -q '^CELL em FAIL ' "$TMP/r981m.out" && case "$(a7_verdict 1 "$TMP/r981m.out")" in RED*) true ;; *) false ;; esac; then
   B_a7=1

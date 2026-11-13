@@ -1,0 +1,8 @@
+# install-scaffold-ignored: the real scripts/install.sh is started once per end-to-end world, each start tagged FXCELL=<id>
+# on its own command line in run.sh (run_inst). Every other cell sources the two function files in-process and starts
+# nothing. BASE, the absent-file copies and every mutant copy are scripts/install-mut-<m>.sh, which does not end in the
+# declared path, so the judge does not attribute them to it and they carry no tag.
+e2e scripts/install.sh e1 why=E1, a fresh install with its cwd an unrelated directory: the report is called once at the end of a whole install, after the render and the feedback log, and install.sh has no source guard
+e2e scripts/install.sh e2 why=E2, a re-install into the E1 tree, where every ignored path is now present before the install
+e2e scripts/install.sh e4 why=E4, the transient render writes the ignore line the report must see, so only a whole install orders the two
+e2e scripts/install.sh e5 why=E5, a target inside no repository: the whole install completes and the report SKIPs

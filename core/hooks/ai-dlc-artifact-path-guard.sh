@@ -183,7 +183,7 @@ SLOT_RE="$(bash "$CONFIG" --slot-re 2>/dev/null)" || exit 0
 # ---------------------------------------------------------------------------
 # A GITIGNORED PATH IS NOT THIS GUARD'S SUBJECT, AND DENYING ONE IS UNAPPEALABLE.
 #
-# `validate-artifact-paths.sh:136-140` builds its corpus with `git ls-files` — the TRACKED
+# `validate-artifact-paths.sh`'s `$TMP/paths` loop builds its corpus with `git ls-files` — the TRACKED
 # set. This hook's corpus is whatever an agent hands to `Write`. Those differ by exactly the
 # ignored set, and the difference runs in the dangerous direction: for an ignored path the
 # batched arm can never render a verdict, so a deny here is the ONLY verdict and there is no

@@ -1,0 +1,4 @@
+DISTRIBUTION-ONLY: its subject is scripts/install.sh, the installer a new consumer runs from a
+clone of the distribution. install.sh is not shipped to consumers, so on a consumer this fixture
+cannot resolve its subject and would exit 2 on every run. It is also a mutation battery that writes
+edited copies of install.sh beside it in the distribution's own scripts/ directory.

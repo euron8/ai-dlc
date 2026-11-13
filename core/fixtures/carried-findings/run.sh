@@ -106,6 +106,10 @@
 # the base asserted (every named arm dead, the rest green) and prints one MATRIX row per mutant and arm.
 # That recorded matrix plus the twin replaces the per-push exact-vector assertion. The unmutated pass and the
 # exit-0 stub still run every arm. Re-measure whenever an arm or a mutant is added or changed.
+# selfloc's vector is W1 S6 G1 G2 H1, not W1 alone, ON PURPOSE: the mutated property is location-dependence (the copy
+# returns 1 from locate() when it does not sit under the review's TOP), and one sourced copy -- placed in R -- sits
+# under one TOP, so every arm whose review lives in another world trips on it. Do not narrow it back to W1; the
+# reason and the vacuity cell that keeps it distinct from an unconditional `return 1` sit at its score call.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/carried-findings/run.sh --matrix
 # MUTANT-MATRIX nocarry decides=F1 twins=F2
 # MUTANT-MATRIX appr decides=F2 twins=N2
@@ -186,6 +190,34 @@ MWIDE=0; MROWS=0
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# IN PROCESS (BL-878). Each copy of the validator -- the real one, each mutant, the unmutated control and the exit-0
+# stub -- is SOURCED ONCE into this shell by src (its guard returns after defining vcf_main; one fx_inproc pass each),
+# and every arm calls the vcf_main sourced last inside the `$( )` that captures its output, so the validator's `exit`,
+# its `set -u`, `export LC_ALL=C` and `unset GIT_DIR ...` stay in that subshell. The validator reads no file beside
+# itself (its one self-read is --help), so where a copy sits changes no verdict except the selfloc mutant's, whose
+# measured --matrix vector is recorded at its score call. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with neither the `vcf_main() {`
+# line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an ok); exactly one half is a
+# respelled subject and FAILs. The distribution cannot reach the SKIP unnoticed: C5 (validate-fixture-inprocess.sh)
+# refuses a cli subject without the guard, and J3 refuses the start count moving.
+# A subject grep cannot READ (exit 2) is no pre-wrap subject: it is FIXTURE ERROR, never the SKIP.
+w_def=0; w_guard=0
+grep -q '^vcf_main() {$' "$V"; g_def=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$V"; g_guard=$?
+if [ "$g_def" -gt 1 ] || [ "$g_guard" -gt 1 ]; then echo "FIXTURE ERROR: cannot read $V (grep exit $g_def/$g_guard), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2; fi
+[ "$g_def" = 0 ] && w_def=1; [ "$g_guard" = 0 ] && w_guard=1
+if [ "$w_def$w_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$w_def" = 0 ]; then echo "  FAIL  $V carries the column-0 source guard but no \`vcf_main() {\` line -- a respelled subject this fixture cannot drive"; echo "carried-findings: 1 FAILED"; exit 1; fi
+if [ "$w_guard" = 0 ]; then echo "  FAIL  $V defines \`vcf_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vcf_main in this shell"; echo "carried-findings: 1 FAILED"; exit 1; fi
+src() { # src <copy> -- source one copy of the validator; every arm drives the copy sourced last
+  unset -f vcf_main
+  fx_inproc "$1"
+  . "$1" || { echo "FIXTURE BROKEN: sourcing $1 failed" >&2; exit 2; }
+  declare -F vcf_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $1 defined no vcf_main" >&2; exit 2; }
+  LOADED="$1"
+}
+LOADED=""
+# own <copy>: an arm names the copy it scores, and refuses to read any other one's verdict.
+own() { [ "$1" = "$LOADED" ] || { echo "FIXTURE BROKEN: an arm drove $1 while the vcf_main sourced last is ${LOADED:-none}" >&2; exit 2; }; }
 # mcell <mutant> <arm> <result 0 green|1 tripped>: one matrix row, printed by the sourced matrix_row, and only
 # under --matrix (a plain run prints none and counts none).
 mcell() {
@@ -343,7 +375,7 @@ printf '# QA Validation: 1\n\nreviewed-sha: 9d8f14d171cfd4629858bc1315901d89d12e
 printf '# QA Validation: 1\n\nreviewed-sha: 9d8f14d171cfd4629858bc1315901d89d12e8d80\n\n## Findings\n\n### Notes\n\n#### a heading under Notes is not a finding\n\nbody\n\n### Important\n\n#### %s\n\nbody\n' "$I0" > "$S/top-notes.md"
 p2 "$S/top-i0-p2.md" APPROVED "$(c_res "$I0")"
 
-run() { out="$(bash "$1" "$2" "$3" 2>&1)"; rc=$?; }
+run() { own "$1"; out="$(set +o pipefail; vcf_main "$2" "$3" 2>&1)"; rc=$?; }
 
 # ---- the topology repository ----------------------------------------------------------------------
 G() { git -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
@@ -501,12 +533,11 @@ QA_OLD="$(G -C "$RQ" show "${QA}:.claude/team-roles/qa.md")" || exit 2
 grep -q '^## Carried Findings' "$RQ/.claude/team-roles/qa.md" && [ -n "$QA_OLD" ] && ! grep -q '^## Carried Findings' <<<"$QA_OLD" \
   || { echo "FIXTURE BROKEN: qa.md at $QA carries the section, or the tip lacks it" >&2; exit 2; }
 VQ="$RQ/scripts/ai-dlc/validate-carried-findings.sh"
-# install <validator>: every topology arm runs the copy that sits in its checkout.
-install() { mkdir -p "$RI/scripts/ai-dlc" && cp "$1" "$VR" && cp "$1" "$VS" && cp "$1" "$VD" && cp "$1" "$VI" && cp "$1" "$VH" && cp "$1" "$VF" && cp "$1" "$VQ" && cp "$1" "$VN" && cp "$1" "$VO" ||
-  { echo "FIXTURE ERROR: install failed" >&2; exit 2; }; }
+# Every checkout carries the program on disk where its world needs it (committed, or gitignored at $VI, which is
+# placed once below); the arms run the copy sourced last, in process, against the reviews in these checkouts.
 
 # ---- arms ------------------------------------------------------------------------------------
-# arm_<id> <validator> -> 0 when the arm holds. The topology arms read the installed copies.
+# arm_<id> <validator> -> 0 when the arm holds. <validator> must be the copy sourced last (own).
 arm_C()  { run "$1" "$S/merged.md" "$S/all.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 3 prior' <<<"$out"; }
 arm_F1() { run "$1" "$S/merged.md" "$S/miss.md"; [ "$rc" -eq 1 ] && grep -qF "has no carried: line in $S/miss.md: $H2" <<<"$out"; }
 arm_F2() { run "$1" "$S/merged.md" "$S/open-appr.md"; [ "$rc" -eq 1 ] && grep -q 'open carried finding(s) under verdict APPROVED' <<<"$out"; }
@@ -521,19 +552,19 @@ arm_F6() { run "$1" "$S/decoy.md" "$S/all.md"; [ "$rc" -eq 0 ] && grep -q '^PASS
 # The template a serial reviewer writes from: two placeholder findings it can carry (one per
 # Critical/Important container) and a column-0 reviewed-sha line. A bullet template fails here.
 arm_T()  { run "$1" "$S/template.md" "$S/template-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 2 prior' <<<"$out" && grep -q '^reviewed-sha: ' "$S/template.md"; }
-arm_P1() { run "$VR" "$R/docs/reviews/s1/1-code-review.md" "$R/docs/reviews/s1/1-code-review-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PENDING:' <<<"$out"; }
-arm_P2() { run "$VR" "$R/docs/reviews/s1/1-code-review.md" "$R/docs/reviews/s1/1-code-review-p3.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 3 prior' <<<"$out"; }
-arm_P3() { run "$VR" "$R/docs/reviews/s1/1-code-review.md" "$R/docs/reviews/s1/1-code-review-p4.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 3 prior' <<<"$out"; }
-arm_W1() { run "$VR" "$WT/docs/reviews/s2/1-code-review.md" "$WT/docs/reviews/s2/1-code-review-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PENDING:.*no commit on the history of HEAD' <<<"$out"; }
-arm_W2() { run "$VR" "$WP/docs/reviews/s2/1-code-review.md" "$WP/docs/reviews/s2/1-code-review-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 3 prior' <<<"$out"; }
-arm_D1() { run "$VD" "$WR/docs/reviews/s3/1-code-review.md" "$WR/docs/reviews/s3/1-code-review-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 3 prior' <<<"$out"; }
-arm_S1() { run "$VS" "$WS/docs/reviews/s4/1-code-review.md" "$WS/docs/reviews/s4/1-code-review-p2.md"
+arm_P1() { run "$1" "$R/docs/reviews/s1/1-code-review.md" "$R/docs/reviews/s1/1-code-review-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PENDING:' <<<"$out"; }
+arm_P2() { run "$1" "$R/docs/reviews/s1/1-code-review.md" "$R/docs/reviews/s1/1-code-review-p3.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 3 prior' <<<"$out"; }
+arm_P3() { run "$1" "$R/docs/reviews/s1/1-code-review.md" "$R/docs/reviews/s1/1-code-review-p4.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 3 prior' <<<"$out"; }
+arm_W1() { run "$1" "$WT/docs/reviews/s2/1-code-review.md" "$WT/docs/reviews/s2/1-code-review-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PENDING:.*no commit on the history of HEAD' <<<"$out"; }
+arm_W2() { run "$1" "$WP/docs/reviews/s2/1-code-review.md" "$WP/docs/reviews/s2/1-code-review-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 3 prior' <<<"$out"; }
+arm_D1() { run "$1" "$WR/docs/reviews/s3/1-code-review.md" "$WR/docs/reviews/s3/1-code-review-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 3 prior' <<<"$out"; }
+arm_S1() { run "$1" "$WS/docs/reviews/s4/1-code-review.md" "$WS/docs/reviews/s4/1-code-review-p2.md"
            [ "$rc" -eq 0 ] && grep -q '^PASS: 1 prior' <<<"$out" && [ "$(grep -c '^NOTE:' <<<"$out")" -eq 2 ]; }
-arm_S3() { run "$VS" "$WS/docs/reviews/s4/2-code-review.md" "$WS/docs/reviews/s4/2-code-review-p2.md"
+arm_S3() { run "$1" "$WS/docs/reviews/s4/2-code-review.md" "$WS/docs/reviews/s4/2-code-review-p2.md"
            [ "$rc" -eq 1 ] && grep -q 'Important finding that is not a "#### " heading' <<<"$out" && grep -q '^NOTE:.*lead-in prose' <<<"$out"; }
 
 # L1: the lazily persisted pre-rule pass 1 (no marker, committed after the pull) is read by label.
-arm_L1() { run "$VS" "$WS/docs/reviews/s4/3-code-review.md" "$WS/docs/reviews/s4/3-code-review-p2.md"
+arm_L1() { run "$1" "$WS/docs/reviews/s4/3-code-review.md" "$WS/docs/reviews/s4/3-code-review-p2.md"
            [ "$rc" -eq 0 ] && grep -q '^PASS: 1 prior' <<<"$out" && [ "$(grep -c '^NOTE:' <<<"$out")" -eq 2 ]; }
 # S4/S5: a post-rule heading prior; lead-in prose is a NOTE, a bullet in the lead-in FAILS.
 arm_S4() { run "$1" "$S/leadin.md" "$S/leadin-p2.md"
@@ -541,7 +572,7 @@ arm_S4() { run "$1" "$S/leadin.md" "$S/leadin-p2.md"
 arm_S7() { run "$1" "$S/leadin-bold.md" "$S/leadin-p2.md"
            [ "$rc" -eq 1 ] && grep -q 'Important finding that is not a "#### " heading' <<<"$out" && ! grep -q '^FAIL: prior' <<<"$out"; }
 # S6: a MARKED prior committed before the pull is still read by label (both conjuncts decide).
-arm_S6() { run "$VS" "$WS/docs/reviews/s4/4-code-review.md" "$WS/docs/reviews/s4/4-code-review-p2.md"
+arm_S6() { run "$1" "$WS/docs/reviews/s4/4-code-review.md" "$WS/docs/reviews/s4/4-code-review-p2.md"
            [ "$rc" -eq 0 ] && grep -q '^PASS: 1 prior' <<<"$out" && [ "$(grep -c '^NOTE:' <<<"$out")" -eq 2 ]; }
 arm_S5() { run "$1" "$S/leadin-bullet.md" "$S/leadin-p2.md"
            [ "$rc" -eq 1 ] && grep -q 'Important finding that is not a "#### " heading' <<<"$out" && ! grep -q '^FAIL: prior' <<<"$out"; }
@@ -550,7 +581,7 @@ arm_S5() { run "$1" "$S/leadin-bullet.md" "$S/leadin-p2.md"
 # bold span with no finding id -> lead-in prose.
 arm_WR1() { run "$1" "$S/wrap-mark.md" "$S/empty.md"
             [ "$rc" -eq 1 ] && grep -q 'Critical finding that is not a "#### " heading' <<<"$out" || return 1
-            local a; a="$(bash "$1" --list "$S/wrap-mark.md" 2>/dev/null)"; [ "$?" -eq 1 ] && [ -z "$a" ]; }
+            local a; a="$(set +o pipefail; vcf_main --list "$S/wrap-mark.md" 2>/dev/null)"; [ "$?" -eq 1 ] && [ -z "$a" ]; }
 arm_WR2() { run "$1" "$S/wrap-nomark.md" "$S/empty.md"
             [ "$rc" -eq 0 ] && grep -q '^PASS: 0 prior' <<<"$out" && grep -q '^NOTE: .*: \*\*C1 .*not carried' <<<"$out"; }
 arm_WR3() { run "$1" "$S/wrap-prose.md" "$S/empty.md"
@@ -564,41 +595,41 @@ arm_K4() { run "$1" "$S/lab-c1.md" "$S/lab-c1-p2.md"; [ "$rc" -eq 0 ] && grep -q
 arm_K5() { run "$1" "$S/lab-dup.md" "$S/lab-dup-p2.md"; [ "$rc" -eq 1 ] && [ "$(grep -c '^FAIL: prior' <<<"$out")" -eq 2 ]; }
 # G1: the program gitignored in the review's checkout binds (a dropped carry FAILS) with a NOTE;
 # G2 the same checkout carrying every finding PASSES. W1 (program absent) is the PENDING twin.
-arm_G1() { run "$VI" "$RI/docs/reviews/s5/1-code-review.md" "$RI/docs/reviews/s5/1-code-review-p2.md"
+arm_G1() { run "$1" "$RI/docs/reviews/s5/1-code-review.md" "$RI/docs/reviews/s5/1-code-review-p2.md"
            [ "$rc" -eq 1 ] && grep -q '^NOTE: .* is gitignored in .*the rule binds' <<<"$out" && grep -q '^FAIL: prior' <<<"$out"; }
-arm_G2() { run "$VI" "$RI/docs/reviews/s5/2-code-review.md" "$RI/docs/reviews/s5/2-code-review-p2.md"
+arm_G2() { run "$1" "$RI/docs/reviews/s5/2-code-review.md" "$RI/docs/reviews/s5/2-code-review-p2.md"
            [ "$rc" -eq 0 ] && grep -q '^PASS: 3 prior' <<<"$out" && grep -q '^NOTE: .* is gitignored' <<<"$out"; }
 # H1: a shallow repository is refused naming why; H2 the full clone of the same pair PASSES.
-arm_H1() { run "$VH" "$WORK/shallow/docs/reviews/s4/1-code-review.md" "$WORK/shallow/docs/reviews/s4/1-code-review-p2.md"
+arm_H1() { run "$1" "$WORK/shallow/docs/reviews/s4/1-code-review.md" "$WORK/shallow/docs/reviews/s4/1-code-review-p2.md"
            [ "$rc" -eq 2 ] && grep -q '^REFUSED: .* is a shallow repository' <<<"$out"; }
-arm_H2() { run "$VF" "$WORK/full/docs/reviews/s4/1-code-review.md" "$WORK/full/docs/reviews/s4/1-code-review-p2.md"
+arm_H2() { run "$1" "$WORK/full/docs/reviews/s4/1-code-review.md" "$WORK/full/docs/reviews/s4/1-code-review-p2.md"
            [ "$rc" -eq 0 ] && grep -q '^PASS: 1 prior' <<<"$out"; }
 # Q: gate 2, keyed on qa.md's `## Carried Findings` at the pass's reviewed-sha. QL the section absent
 # there and p2 answering nothing -> LEGACY, exit 0; QF present, p2 missing one -> 1; QP present, p2
 # answering every finding -> PASS. The tip's qa.md carries the section in all three.
-arm_QL() { run "$VQ" "$RQ/docs/reviews/s6/6-qa-validation.md" "$RQ/docs/reviews/s6/6-qa-validation-p2.md"
+arm_QL() { run "$1" "$RQ/docs/reviews/s6/6-qa-validation.md" "$RQ/docs/reviews/s6/6-qa-validation-p2.md"
            [ "$rc" -eq 0 ] && grep -q '^LEGACY: .*carries no "## Carried Findings" section' <<<"$out"; }
-arm_QF() { run "$VQ" "$RQ/docs/reviews/s7/6-qa-validation.md" "$RQ/docs/reviews/s7/6-qa-validation-p2.md"
+arm_QF() { run "$1" "$RQ/docs/reviews/s7/6-qa-validation.md" "$RQ/docs/reviews/s7/6-qa-validation-p2.md"
            [ "$rc" -eq 1 ] && grep -qF "has no carried: line in $RQ/docs/reviews/s7/6-qa-validation-p2.md: $Q2" <<<"$out" && [ "$(grep -c '^FAIL: prior' <<<"$out")" -eq 1 ]; }
-arm_QP() { run "$VQ" "$RQ/docs/reviews/s8/6-qa-validation.md" "$RQ/docs/reviews/s8/6-qa-validation-p2.md"
+arm_QP() { run "$1" "$RQ/docs/reviews/s8/6-qa-validation.md" "$RQ/docs/reviews/s8/6-qa-validation-p2.md"
            [ "$rc" -eq 0 ] && grep -q '^PASS: 2 prior' <<<"$out"; }
 # LIST: --list prints exactly the carry strings on stdout, in file order, and NOTEs on stderr.
-arm_LIST() { local a b
-             a="$(bash "$1" --list "$S/merged.md" 2>/dev/null)" || return 1
+arm_LIST() { local a b; own "$1"
+             a="$(set +o pipefail; vcf_main --list "$S/merged.md" 2>/dev/null)" || return 1
              [ "$a" = "$H1$NLF$H3$NLF$H2" ] || return 1
-             b="$(bash "$1" --list "$S/span-prior.md" 2>/dev/null)" || return 1
+             b="$(set +o pipefail; vcf_main --list "$S/span-prior.md" 2>/dev/null)" || return 1
              [ "$b" = "I1. stale cache" ] || return 1
-             [ "$(bash "$1" --list "$S/span-prior.md" 2>&1 >/dev/null | grep -c '^NOTE:')" -eq 2 ]; }
+             [ "$(set +o pipefail; vcf_main --list "$S/span-prior.md" 2>&1 >/dev/null | grep -c '^NOTE:')" -eq 2 ]; }
 NLF='
 '
 # TA: top-level findings are carried. --list prints both, --classes their Class or `-`, in order.
-arm_TA() { local a b
-           a="$(bash "$1" --list "$S/top.md" 2>/dev/null)" || return 1
+arm_TA() { local a b; own "$1"
+           a="$(set +o pipefail; vcf_main --list "$S/top.md" 2>/dev/null)" || return 1
            [ "$a" = "$T1$NLF$T2" ] || return 1
-           b="$(bash "$1" --classes "$S/top.md" 2>/dev/null)" || return 1
+           b="$(set +o pipefail; vcf_main --classes "$S/top.md" 2>/dev/null)" || return 1
            [ "$b" = "EVIDENCE$TAB_$T1$TAB_-$NLF-$TAB_$T2$TAB_-" ]; }
 # TQ: the same prior at gate 2, the qa.md key present, a p2 with no carried: line for T2 -> 1.
-arm_TQ() { run "$VQ" "$RQ/docs/reviews/s9/1-2-qa-validation.md" "$RQ/docs/reviews/s9/1-2-qa-validation-p2.md"
+arm_TQ() { run "$1" "$RQ/docs/reviews/s9/1-2-qa-validation.md" "$RQ/docs/reviews/s9/1-2-qa-validation-p2.md"
            [ "$rc" -eq 1 ] && grep -qF "has no carried: line in $RQ/docs/reviews/s9/1-2-qa-validation-p2.md: $T2" <<<"$out" && [ "$(grep -c '^FAIL: prior' <<<"$out")" -eq 1 ]; }
 # TB/TC: the decoy stays uncounted, so the p2 answering I0 alone passes with exactly 1 prior.
 arm_TB() { run "$1" "$S/top-out.md" "$S/top-i0-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 1 prior' <<<"$out"; }
@@ -608,47 +639,99 @@ TAB_="$(printf '\t')"
 # on-disk qa.md carries the section -> checked, Q2 dropped -> 1. QU2 no qa.md in either layout ->
 # checked (an unreadable role file never acquits) -> 1. QU3 the near-miss: on-disk qa.md without
 # the section -> LEGACY, 0, naming the on-disk copy.
-arm_QU1() { run "$VQ" "$RQ/docs/reviews/s10/6-qa-validation.md" "$RQ/docs/reviews/s10/6-qa-validation-p2.md"
+arm_QU1() { run "$1" "$RQ/docs/reviews/s10/6-qa-validation.md" "$RQ/docs/reviews/s10/6-qa-validation-p2.md"
             [ "$rc" -eq 1 ] && grep -qF "has no carried: line in $RQ/docs/reviews/s10/6-qa-validation-p2.md: $Q2" <<<"$out" && [ "$(grep -c '^FAIL: prior' <<<"$out")" -eq 1 ]; }
-arm_QU2() { run "$VN" "$WORK/noqa/docs/reviews/s1/6-qa-validation.md" "$WORK/noqa/docs/reviews/s1/6-qa-validation-p2.md"
+arm_QU2() { run "$1" "$WORK/noqa/docs/reviews/s1/6-qa-validation.md" "$WORK/noqa/docs/reviews/s1/6-qa-validation-p2.md"
             [ "$rc" -eq 1 ] && grep -qF "has no carried: line in $WORK/noqa/docs/reviews/s1/6-qa-validation-p2.md: $Q2" <<<"$out" && [ "$(grep -c '^FAIL: prior' <<<"$out")" -eq 1 ]; }
-arm_QU3() { run "$VO" "$WORK/oldqa/docs/reviews/s1/6-qa-validation.md" "$WORK/oldqa/docs/reviews/s1/6-qa-validation-p2.md"
+arm_QU3() { run "$1" "$WORK/oldqa/docs/reviews/s1/6-qa-validation.md" "$WORK/oldqa/docs/reviews/s1/6-qa-validation-p2.md"
             [ "$rc" -eq 0 ] && grep -qF "LEGACY: $WORK/oldqa/docs/reviews/s1/6-qa-validation-p2.md is a gate-2 re-validation run against " <<<"$out"; }
 # V1-V5: the verdict reader with an open carry. V1 the one-line `Verdict: NEEDS_REWORK` -> 0;
 # V2 one-line `Verdict: PASS` -> 1, as the heading form; V3 the heading and the line disagree ->
 # refused; V4 they agree -> 0; V5 `NEEDS_REWORK-pending` is its whole token -> 1.
-arm_V1() { run "$VQ" "$RQ/docs/reviews/s11/6-qa-validation.md" "$RQ/docs/reviews/s11/6-qa-validation-p2.md"
+arm_V1() { run "$1" "$RQ/docs/reviews/s11/6-qa-validation.md" "$RQ/docs/reviews/s11/6-qa-validation-p2.md"
            [ "$rc" -eq 0 ] && grep -q '^PASS: 2 prior.*1 open, verdict NEEDS_REWORK' <<<"$out"; }
-arm_V2() { run "$VQ" "$RQ/docs/reviews/s12/6-qa-validation.md" "$RQ/docs/reviews/s12/6-qa-validation-p2.md"
+arm_V2() { run "$1" "$RQ/docs/reviews/s12/6-qa-validation.md" "$RQ/docs/reviews/s12/6-qa-validation-p2.md"
            [ "$rc" -eq 1 ] && grep -q 'open carried finding(s) under verdict PASS;' <<<"$out"; }
-arm_V3() { run "$VQ" "$RQ/docs/reviews/s13/6-qa-validation.md" "$RQ/docs/reviews/s13/6-qa-validation-p2.md"
+arm_V3() { run "$1" "$RQ/docs/reviews/s13/6-qa-validation.md" "$RQ/docs/reviews/s13/6-qa-validation-p2.md"
            [ "$rc" -eq 2 ] && grep -q '^REFUSED: .*more than one verdict value' <<<"$out"; }
-arm_V4() { run "$VQ" "$RQ/docs/reviews/s14/6-qa-validation.md" "$RQ/docs/reviews/s14/6-qa-validation-p2.md"
+arm_V4() { run "$1" "$RQ/docs/reviews/s14/6-qa-validation.md" "$RQ/docs/reviews/s14/6-qa-validation-p2.md"
            [ "$rc" -eq 0 ] && grep -q '^PASS: 2 prior.*1 open, verdict NEEDS_REWORK' <<<"$out"; }
-arm_V5() { run "$VQ" "$RQ/docs/reviews/s15/6-qa-validation.md" "$RQ/docs/reviews/s15/6-qa-validation-p2.md"
+arm_V5() { run "$1" "$RQ/docs/reviews/s15/6-qa-validation.md" "$RQ/docs/reviews/s15/6-qa-validation-p2.md"
            [ "$rc" -eq 1 ] && grep -q 'under verdict NEEDS_REWORK-pending;' <<<"$out"; }
 
 ARMS="C F1 F2 N2 F3 N3 F4 F5 F6 T P1 P2 P3 W1 W2 D1 S1 S3 L1 S4 S5 S6 S7 WR1 WR2 WR3 K1 K2 K3 K4 K5 G1 G2 H1 H2 QL QF QP LIST TA TQ TB TC QU1 QU2 QU3 V1 V2 V3 V4 V5"
-install "$V"
+cp "$V" "$VI" || { echo "FIXTURE ERROR: cannot place the gitignored program at $VI" >&2; exit 2; }
+src "$V"
 B_all=0; arms_bad=0
 for a in $ARMS; do
   if "arm_$a" "$V"; then ok "$a"; else arms_bad=$((arms_bad + 1)); bad "$a: rc=$rc out=$(head -2 <<<"$out" | tr '\n' ' ')"; fi
 done
 if [ "$arms_bad" -eq 0 ]; then ok "every arm green on the unmutated validator"; B_all=1; fi
 
+# ---- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome ------------------
+# Outcomes, exit x output class: 0 a PASS line on stdout; 1 FAIL lines on stdout; 2 a REFUSED usage line on stdout;
+# 0 under --list, carry strings on stdout and NOTEs on stderr; 0 under --help, the header (the one self-read, through
+# ${BASH_SOURCE[0]}). One `FXCELL=<id> bash "$V"` start per outcome, each compared with the in-process call on the
+# same input: stdout, stderr and exit separately, byte for byte. Each cell also asserts its own outcome (a positive
+# conjunct, so two runs that both printed nothing cannot read as equivalent), and the pass and fail cells must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ" || exit 2
+eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"; shift
+  own "$V"
+  ( set +o pipefail; cd "$WORK" && vcf_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$WORK" && FXCELL="$id" bash "$V" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -3 "$EQ/$1.ip.out")" "$(head -3 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -3 "$EQ/$1.cl.out")" "$(head -3 "$EQ/$1.cl.err")"; }
+if eqv cli-pass "$S/merged.md" "$S/all.md" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] \
+   && grep -q '^PASS: 3 prior' "$EQ/cli-pass.cl.out" && [ ! -s "$EQ/cli-pass.cl.err" ]; then
+  ok "cli-pass: the program passes merged.md into all.md exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with PASS: 3 prior ($(eq_twin cli-pass))"; fi
+if eqv cli-fail "$S/merged.md" "$S/miss.md" && [ "$(cat "$EQ/cli-fail.cl.rc")" = 1 ] \
+   && grep -qF "has no carried: line in $S/miss.md: $H2" "$EQ/cli-fail.cl.out" && [ ! -s "$EQ/cli-fail.cl.err" ]; then
+  ok "cli-fail: the program refuses miss.md's dropped carry exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-fail: the program and the in-process call differ, or the outcome is not exit 1 naming the dropped carry ($(eq_twin cli-fail))"; fi
+if eqv cli-refuse && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] \
+   && grep -q '^REFUSED: usage: validate-carried-findings.sh ' "$EQ/cli-refuse.cl.out" && [ ! -s "$EQ/cli-refuse.cl.err" ]; then
+  ok "cli-refuse: the program refuses no arguments exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-refuse))"; fi
+if eqv cli-list --list "$S/span-prior.md" && [ "$(cat "$EQ/cli-list.cl.rc")" = 0 ] \
+   && [ "$(cat "$EQ/cli-list.cl.out")" = "I1. stale cache" ] && [ "$(grep -c '^NOTE:' "$EQ/cli-list.cl.err")" -eq 2 ]; then
+  ok "cli-list: the program lists span-prior.md's carry string and NOTEs exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-list: the program and the in-process call differ, or the outcome is not exit 0 with one carry string and two NOTEs ($(eq_twin cli-list))"; fi
+if eqv cli-help --help && [ "$(cat "$EQ/cli-help.cl.rc")" = 0 ] \
+   && grep -q '^# validate-carried-findings.sh -- a gate-1 re-review' "$EQ/cli-help.cl.out" \
+   && grep -qF '#   (core/fixtures/carried-findings).' "$EQ/cli-help.cl.out" && ! grep -q 'vcf_main' "$EQ/cli-help.cl.out"; then
+  ok "cli-help: the program prints its header and nothing past it exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-help: the program and the in-process call differ, or the header is cut short or runs into vcf_main ($(eq_twin cli-help))"; fi
+if ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-fail.cl.out" && ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-fail.cl.rc"; then
+  ok "cli cells discriminate: the passing and the refusing input give different stdout and exit"
+else bad "cli cells do not discriminate: cli-pass and cli-fail gave the same stdout or exit"; fi
+
 # ---- mutants: each removes one rule and must flip exactly the arms it names --------------------
 M="$WORK/mut"; mkdir -p "$M" || exit 2
-# mut <name> <sed expression> -> path of the mutated copy, or empty when the sed matched nothing
+# mut <name> <sed expression> -> path of the mutated copy, or empty when the sed matched nothing. The copy sits at
+# $M/<name>/core/scripts/validate-carried-findings.sh, the subject's own relative path, so its fx_inproc pass counts
+# under the inproc: row; score sources it once.
 mut() {
-  local dst="$M/$1.sh"
+  local dst="$M/$1/core/scripts/validate-carried-findings.sh"
+  mkdir -p "${dst%/*}" || { echo ""; return; }
   sed -e "$2" "$V" > "$dst" || { echo ""; return; }
   if cmp -s "$V" "$dst"; then echo ""; else echo "$dst"; fi
 }
 # mut_after <name> <exact anchor line> <line to insert after it>
 mut_after() {
-  local dst="$M/$1.sh"
+  local dst="$M/$1/core/scripts/validate-carried-findings.sh"
+  mkdir -p "${dst%/*}" || { echo ""; return; }
   CF_A="$2" CF_X="$3" awk '{ print } $0 == ENVIRON["CF_A"] { print ENVIRON["CF_X"] }' "$V" > "$dst" || { echo ""; return; }
   if cmp -s "$V" "$dst"; then echo ""; else echo "$dst"; fi
+}
+same_set() { # <arms a> <arms b> -> 0 when the two blank-separated arm lists name the same arms (no arm repeats)
+  local x n=0 m=0
+  for x in $1; do n=$((n + 1)); case " $2 " in *" $x "*) ;; *) return 1 ;; esac; done
+  for x in $2; do m=$((m + 1)); done
+  [ "$n" -eq "$m" ]
 }
 score() { # <mutant path> "<arms that trip>" <description> <twin arm> <mutant name>
   # Per push: the deciding arm (the first arm named) must trip under the mutant and the twin, an arm the matrix
@@ -658,18 +741,17 @@ score() { # <mutant path> "<arms that trip>" <description> <twin arm> <mutant na
   local mv="$1" want="$2" desc="$3" twin="$4" name="$5" a dec why="" died=""
   dec="${want%% *}"
   [ -n "$mv" ] || { bad "MUTANT $desc: the mutation did not apply"; return; }
-  install "$mv"
+  [ "$mv" = "$LOADED" ] || src "$mv"   # selfloc's copy is sourced (once) before its differ cell, never twice
   if [ "$MATRIX" = 1 ]; then
     MWIDE=$((MWIDE + 1))
     for a in $ARMS; do if "arm_$a" "$mv"; then mcell "$name" "$a" 0; else died="$died $a"; mcell "$name" "$a" 1; fi; done
-    install "$V"
-    if [ "$died" = " $want" ]; then mutant_killed "$B_all" "$name" "MUTANT $name ($desc): deciding arm $dec dead, twin $twin green, vector exact: $want"
+    # The vector is compared as a SET: want names the per-push deciding arm first, died lists arms in ARMS order.
+    if same_set "$died" "$want"; then mutant_killed "$B_all" "$name" "MUTANT $name ($desc): deciding arm $dec dead, twin $twin green, vector exact: $want"
     else bad "MUTANT $name ($desc): arms that died:${died:- none} (want exactly $want)"; fi
     return
   fi
   if "arm_$dec" "$mv"; then why="deciding arm $dec survived"; fi
   "arm_$twin" "$mv" || why="$why twin $twin died"
-  install "$V"
   if [ -z "$why" ]; then mutant_killed "$B_all" "$name" "MUTANT $name ($desc): deciding arm $dec dead, twin $twin green"
   else bad "MUTANT $name ($desc): $why"; fi
 }
@@ -715,7 +797,50 @@ score "$(mut untracked 's/^  \[ -n "\$r" \] || return 1/  [ -n "$r" ] || return 
 # reads, so this mutant names all of them.
 score "$(mut pmalways 's/^  git -C "\$TOP" merge-base --is-ancestor "\$VADD" "\$r" 2>\/dev\/null && return 1/  :/')" "P2 W2 D1 S1 S3 L1 S6 H2 QL QF QP TQ QU1 QU2 QU3 V1 V2 V3 V4 V5" "every committed review is exempt" P1 pmalways
 score "$(mut recent 's/log --diff-filter=A --reverse --format=%H HEAD/log --diff-filter=A --format=%H HEAD/')" D1 "the MOST RECENT add is the epoch (revert and re-add acquits)" P2 recent
-score "$(mut_after selfloc '  TOP="$(cd "$TOP" && pwd -P)" || return 1' '  case "$(cd "$(dirname "$0")" && pwd -P)/" in "$TOP"/*) ;; *) return 1 ;; esac')" W1 "the running copy must sit inside the review's checkout" W2 selfloc
+# The unmutated copy: the mutant harness (install of a byte-identical copy) running the shipped behaviour green, on
+# C, F1 and K2 and on the topology arms the selfloc cells below read (P1 S6 G1 G2 H1 W1 W2).
+CTL="$M/ctl/core/scripts/validate-carried-findings.sh"
+mkdir -p "${CTL%/*}" && cp "$V" "$CTL" && cmp -s "$V" "$CTL" || { echo "FIXTURE ERROR: cannot copy the unmutated control" >&2; exit 2; }
+src "$CTL"
+arm_C "$CTL" && arm_F1 "$CTL" && arm_K2 "$CTL" \
+  && ok "CONTROL unmutated-copy: arms C, F1 and K2 pass against a byte-identical installed copy" \
+  || bad "CONTROL unmutated-copy: an unmutated installed copy did not pass arms C, F1 and K2"
+TOPO="P1 S6 G1 G2 H1 W1 W2"
+topo_vec() { local a v=""; for a in $TOPO; do if "arm_$a" "$1"; then v="$v $a:pass"; else v="$v $a:FAIL"; fi; done; printf '%s' "${v# }"; }
+CTL_TOPO="$(topo_vec "$CTL")"; own "$CTL"
+if [ "$CTL_TOPO" = "P1:pass S6:pass G1:pass G2:pass H1:pass W1:pass W2:pass" ]; then
+  ok "CONTROL unmutated-copy: the topology arms P1 S6 G1 G2 H1 W1 W2 all pass against the unmutated copy"
+else bad "CONTROL unmutated-copy: the unmutated copy did not pass every topology arm ($CTL_TOPO)"; fi
+# selfloc: the running copy must sit inside the review's checkout. Its copy is sourced from R, base VR's checkout, at
+# the subject's declared path ($R/core/scripts/validate-carried-findings.sh: R tracks the program at scripts/ai-dlc/,
+# so this untracked copy never reaches locate's untracked-program branch). WHY THE WANT IS "W1 S6 G1 G2 H1", NOT W1:
+# the mutated property is LOCATION-DEPENDENCE -- the copy returns 1 from locate() whenever it does not sit under the
+# review's TOP -- and one sourced copy sits under one TOP. Every arm whose review lives in another world trips on
+# exactly that property: W1 (WT), S6 (WS), G1/G2 (RI), H1 (the shallow clone). At the command line each topology arm
+# ran a copy installed in its own checkout, which confined it to W1; restoring that needs one copy per world, re-sourced
+# as the arms switch worlds, for one mutant. Do not narrow the want back to W1. P1 (TOP = R) is where the mutant
+# differs from an unconditional `return 1`, and the vacuity cell after the score holds that by name.
+SLR="$R/core/scripts/validate-carried-findings.sh"
+SLM="$(mut_after selfloc '  TOP="$(cd "$TOP" && pwd -P)" || return 1' '  case "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/" in "$TOP"/*) ;; *) return 1 ;; esac')"
+R1M="$(mut_after ret1 '  TOP="$(cd "$TOP" && pwd -P)" || return 1' '  return 1')"
+[ -n "$SLM" ] && [ -n "$R1M" ] && mkdir -p "${SLR%/*}" && cp "$SLM" "$SLR" \
+  || { echo "FIXTURE ERROR: the selfloc or return-1 copy did not apply, or could not be placed at $SLR" >&2; exit 2; }
+src "$SLR"
+SL_TOPO="$(topo_vec "$SLR")"; own "$SLR"
+# Before any kill is read: the mutated copy must ANSWER DIFFERENTLY from the unmutated one on the widened control.
+if [ "$SL_TOPO" != "$CTL_TOPO" ]; then ok "selfloc differs from the unmutated copy on the topology arms ($SL_TOPO)"
+else bad "selfloc answers exactly as the unmutated copy on every topology arm -- a mutant that changes nothing there"; fi
+score "$SLR" "W1 S6 G1 G2 H1" "the running copy must sit inside the review's checkout" W2 selfloc
+# THE VACUITY CELL: a copy that returns 1 unconditionally after TOP= is resolved, sourced from the SAME path. It must
+# FAIL P1 where selfloc PASSES P1 -- named arm against named arm -- or selfloc is indistinguishable from it.
+cp "$R1M" "$SLR" || { echo "FIXTURE ERROR: cannot place the return-1 copy at $SLR" >&2; exit 2; }
+src "$SLR"
+if arm_P1 "$SLR"; then R1_P1=pass; else R1_P1=FAIL; fi
+case " $SL_TOPO " in *" P1:pass "*) SL_P1=pass ;; *) SL_P1=FAIL ;; esac
+if [ "$SL_P1" = pass ] && [ "$R1_P1" = FAIL ]; then
+  ok "VACUITY selfloc: selfloc passes P1 and an unconditional return 1 after TOP= fails P1, both sourced from R's core/scripts/validate-carried-findings.sh"
+else bad "VACUITY selfloc: selfloc P1=$SL_P1, return-1 P1=$R1_P1 -- selfloc is not distinguished from an unconditional return 1"; fi
+rm -f "$SLR"
 # The ignored program binds; the mutant reads it as pre-migration.
 score "$(mut ignpend 's/^  \[ -z "\$UNC" \] || return 1$/  :/')" "G1 G2" "a gitignored program reads PENDING" W1 ignpend
 score "$(mut shallow 's/= "true" \] &&$/= "__never__" ] \&\&/')" H1 "a shallow repository is read, not refused" H2 shallow
@@ -733,16 +858,13 @@ score "$(mut idprefix 's/(ENVIRON\["CF_I"\] != "" && \$3 == ENVIRON\["CF_I"\])/(
 score "$(mut nopunct 's/function key(s) { s = norm(s); sub(\/\[.:;, \\t\]+\$\/, "", s); return s }/function key(s) { return norm(s) }/')" K3 "trailing punctuation is significant" K1 nopunct
 score "$(mut dupid 's/if (n\[i\] == 1) print i/print i/')" K5 "an id two labels share answers both" K2 dupid
 score "$(mut listnone 's/printf .%s\\n. "\$disp"/:/')" "LIST TA" "--list prints no carry strings" K1 listnone
-# The unmutated copy: the mutant harness (install of a byte-identical copy) running the shipped behaviour green.
-cp "$V" "$M/ctl.sh" && cmp -s "$V" "$M/ctl.sh" && install "$M/ctl.sh" && arm_C "$M/ctl.sh" && arm_F1 "$M/ctl.sh" && arm_K2 "$M/ctl.sh" \
-  && ok "CONTROL unmutated-copy: arms C, F1 and K2 pass against a byte-identical installed copy" \
-  || bad "CONTROL unmutated-copy: an unmutated installed copy did not pass arms C, F1 and K2"
-install "$V"
-# A validator replaced by `exit 0` must fail every arm.
-printf '#!/usr/bin/env bash\nexit 0\n' > "$M/stub.sh"
-install "$M/stub.sh"
-died=""; for a in $ARMS; do if "arm_$a" "$M/stub.sh"; then mcell stub "$a" 0; else died="$died $a"; mcell stub "$a" 1; fi; done
-install "$V"
+# A validator replaced by `exit 0` must fail every arm: its vcf_main is `exit 0`, behind the same guard.
+STUB="$M/stub/core/scripts/validate-carried-findings.sh"
+mkdir -p "${STUB%/*}" || exit 2
+printf '#!/usr/bin/env bash\nvcf_main() { exit 0; }\n[ "${BASH_SOURCE[0]}" = "$0" ] || return 0\nvcf_main "$@"\n' > "$STUB"
+src "$STUB"
+died=""; for a in $ARMS; do if "arm_$a" "$STUB"; then mcell stub "$a" 0; else died="$died $a"; mcell stub "$a" 1; fi; done
+src "$V"
 if [ "$died" = " $ARMS" ]; then mutant_killed "$B_all" stub "MUTANT exit-0 stub: every arm dies"; else bad "MUTANT exit-0 stub: arms that died:${died:- none}"; fi
 # The role file's template, mutated back to the bullet form it had and stripped of reviewed-sha:
 # arm T alone reads it, so each must kill T.

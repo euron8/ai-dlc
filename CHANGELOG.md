@@ -19,6 +19,121 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1097.0] - 2026-11-12
+
+### BL-978 — the six create-once reconcile scaffold arms report a scaffolded path the consumer ignores, with an exact-path exit
+
+The reconcile scaffold created its smoke-surface file and told the consumer to commit it, and never ran `git check-ignore`. In a consumer whose `.gitignore` covers the path, a plain `git add` refuses silently, the file stays untracked, and `smoke-not-updated`, which reads the tracked surface, never runs. graph's `docs/smoke-surface.txt` (`.gitignore:29:*.txt`) was in exactly that state.
+
+- **Shared library.** `core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh` holds `scaffold_ignore_state` (the decision) and `scaffold_ignore_remedy` (the text). `apply.sh` sources it from its own directory and calls `scaffold_ignore_check <rel> <scaffolded|preserved>` at the crosswalk, machinery, pr-class, story-fields, artifact-paths and smoke-surface arms, after the RESOLVED row, which is unchanged byte for byte.
+- **Every scaffold-check row is a WORKLIST, at all tiers.** `WORKLIST scaffold-ignored` for an ignored path, fresh or already present; `WORKLIST scaffold-ignore-unchecked` for an in-repo `check-ignore` exit other than 0 or 1. BL-978 prints no `NOTE` row. Each counts toward `restamp-withheld`. A non-repo and a tracked path get no row (`git check-ignore -q`, never `-v`).
+- **Exact-path exit.** If the deciding pattern string-equals `<rel>` or `/<rel>`, nothing prints: the deliberate disposition. The remedy offers `git add -f <rel>` or an exact-path line in `.gitignore`. Near-misses (`docs/smoke-surface.*`, `**/smoke-surface.txt`, a parent directory) still print the row, and an exact line followed by a later `!<rel>` leaves the path unignored. Known limit: a pattern git prints with `\` escapes never string-equals the raw path, so `git add -f` is the only exit there.
+- **Early load, default arm.** The library is loaded at `apply.sh`'s start, right after `SELF=`, before phase 1 writes anything, so a BASE driver on a DEFER path never sources a THEIRS library. The state `case` has a default arm: any state other than the four documented states (`untracked-ok`, `exact`, `ignored`, `unchecked:<rc>`), including an empty one, prints `WORKLIST scaffold-ignore-unchecked`. The library is `set -e` safe.
+- **A missing sibling is loud and never fatal.** `DECISION scaffold-ignore-lib-missing` prints once, at first use, withholds through the hand-back count (no longer a mechanical failure), and every check is skipped.
+- **Fixture.** `layer-crosswalk-home` gains a `synth six` mode: `EXPECTED_ASSERTIONS` 24 to 64 and 20 mutants (including `drop-default-arm`, killed by the stub-state cell ST, and `finish-rederives`, killed by the `--finish` cell FIN). On a consumer whose installed `apply.sh` predates the check, the block prints `SKIP SUBJECT-ABSENT` and deducts its 40 assertions (`SIX_ASSERTIONS`=40); in the distribution the absence is a FAIL and the 40 is bound by a count check. Four of the six arms had no fixture coverage before. Its receipt is `verify: sh bash core/fixtures/layer-crosswalk-home/run.sh`.
+- **Cost.** `invocations.decl` 75 to 383; `FORK_BUDGET` 2926 to 2930. `core/scripts/check-owed-derivations.sh` re-pins to `SKILL.md:2699` and `apply.sh:3531`.
+- **Rehearsal.** On scratch clones of graph (installed 0.1061.0), real state, every run exited 0. Base prints no scaffold-ignore row. The tip prints exactly `WORKLIST scaffold-ignored docs/smoke-surface.txt` (provenance `.gitignore:29:*.txt`) plus `DECISION restamp-withheld`, and delivers the library as `RESOLVED pure-apply`. `--finish` did not re-derive the row; the stamp stayed withheld by `WORKLIST agent-definitions`, outstanding at base too and unrelated, so `--finish` stamping is not shown on graph's tree (masked by `agent-definitions`). The fixture now shows it: `--finish` after a `scaffold-ignored` row in a GX world with the rows undisposed re-stamps with 0 scaffold rows (`RESOLVED restamp`), against a G1 control and an exact-path twin. `git add -f` and commit gives no row, and an exact path appended to `.gitignore` gives no row. Each copy's report region was regenerated with step 5's `emit-report.sh` and `--verify` exited 0.
+- **Bootstrap.** On `SELF-UPDATE-OK`, step 2 writes the slice and then re-invokes, so `apply.sh` first runs after the library has landed (the rehearsal copied the skill subtree whole, a simplification of the diff-scoped write; the row printed with no lib-missing row). On DEFER the installed 0.1061.0 `apply.sh` has 0 references to the library (control: 11 for `emit-report.sh`); it ran with no library, printed no lib-missing row and delivered the library for the next pull. The lazy lib-missing branch is unreachable in a normal pull.
+- **Not built here.** `scripts/install.sh` scaffolds the same files with 0 `check-ignore`; BL-992 is closed in this same release.
+
+### BL-1017 — step 7 of `/ai-dlc-update` relays no `NOTE` row except `reconcile-log-name` (filed OPEN)
+
+Step 7 of `core/skills/ai-dlc-update/SKILL.md` names `RESOLVED` (`:1888`), `WORKLIST` (`:1895`) and `DECISION` (`:1910`) and says to "Work only the `WORKLIST` and `DECISION` rows" (`:1925`). Its only `NOTE` instruction is the paragraph at `:1923`, which covers `NOTE reconcile-log-name`; none of the other 13 kinds has one. `apply.sh` has 16 `say NOTE` sites over 14 kinds (a floor; variable-passed kinds are invisible), against a control of 46 `say WORKLIST` sites. Reading each, 10 are rows an operator wants relayed with no instruction, 5 are not, and 1 is covered. `verify: manual`.
+
+### BL-1021 — `FORK_BUDGET` carries 136 forks of headroom, so the fork ceiling cannot see a rise smaller than that (filed OPEN)
+
+`fork-budget.txt` commits `FORK_BUDGET=2926` while its own convention is the tip reading plus `HEADROOM_MARGIN` 2. `scripts/fork-profile.sh --section total` reads TOTAL 2790 at origin/main `74f2cbcf0` and at `abc25f555`, so the budget sits 136 above the convention's 2792 and a rise smaller than 136 passes unseen. The ratchet to tip plus 2 is owed in a release built after the batch queue drains; BL-978's +4 raise (to 2930) stands as measured. `verify: manual`.
+
+### BL-992 `scripts/install.sh` reports every create-once scaffold path the target's git ignore rules hide
+`install.sh` created consumer-owned files once and never asked git whether they were ignored. So a consumer whose `.gitignore` matched one (`*.txt` over `docs/smoke-surface.txt`) ran `git add -A`, staged nothing, was told nothing, and the file never reached history. After the transient-ignore render, install.sh now prints one line per such path that exists: `  WARNING scaffold-ignored <rel> "<remedy>"`, or `  WARNING scaffold-ignore-unchecked <rel> (...)` when git could not answer or the decision function answered anything other than `exact`, `untracked-ok` or `ignored` (an empty answer included); such a path is never acquitted. An exact-path ignore line and a not-ignored or tracked path are quiet. The exit code is unchanged.
+- **Population.** `ai_dlc_once_paths` in the new `scripts/install-scaffold-ignore.sh` derives it from the `consumer_*_file:` keys of `layer-contract.yaml`, the two layer READMEs and `docs/ai-dlc-feedback.md`. A contract with no key returns 2.
+- **One decision.** The state and the remedy come by call from BL-978's `scaffold_ignore_state` and `scaffold_ignore_remedy`, so an install and a pull give one path one answer.
+- **Location.** install.sh locates both function files from its own directory via `SCRIPT_DIR` (`$SCRIPT_DIR/../core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh`, `$SCRIPT_DIR/install-scaffold-ignore.sh`), not by walking up from a core file (I33). Both resolve at any cwd and load before anything is written; a missing one prints "Nothing was written to <PROJECT_ROOT>." and exits 1.
+- **Scope.** The report keeps its own `--is-inside-work-tree` gate (a bare repo or a non-repo prints `scaffold ignore check SKIPPED`) and runs with `GIT_DIR` and its siblings unset.
+- **Fixture.** `core/fixtures/install-scaffold-ignored` (.dist-only) runs 43 starts and 18 mutants. Its E1 install runs from an unrelated cwd, and its in-process cells run under `set -e` as install.sh does.
+- **Packaging.** `install-scaffold-ignore.sh` is added to the `inputs.decl` of `schema-install-fallback` and `shipped-rule-version-floor`, and the latter's `run.sh` copies it beside `install.sh`. validator-fork-budget's `*` row moves +4 for the one added `scripts/` file.
+
+### BL-878 PARTIAL: 15 more fixture rows run their subjects in process (164 -> 149 allowlist rows remain)
+
+The pattern. Twelve shipped or distribution subjects become `<p>_main() { <body> }` above a column-0 source guard, followed by `<p>_main "$@"`: `core/scripts/file-mtime.sh`, `validate-spec-adoption.sh`, `validate-artifact-paths.sh`, `validate-escalation-status-vocabulary.sh` and `validate-carried-findings.sh`; `core/hooks/ai-dlc-escalation-delivery.sh`; `reconcile/warn-shadowed-local-validators.sh` and `reconcile/dist-clone.sh`; `scripts/render-path-mapping.sh`, `validate-hermetic-consumption.sh` and `validate-claude-rules.sh`; and `core/scripts/validate-mandatory-rules.sh` (`vmr_main`). No body line is re-indented and no `eval` is used. The only lines deleted are 10 `$0` reads ported to `${BASH_SOURCE[0]}`, one blank line, and `validate-mandatory-rules.sh`'s old `if [ "${BASH_SOURCE[0]}" = "$0" ]; then` wrapper with its `fi`. Four of the ports have a cell that goes red with `$0` restored:
+- validate-artifact-paths `--help`
+- validate-escalation-status-vocabulary's script dir
+- validate-hermetic-consumption's usage and no-VERSION messages
+- validate-claude-rules' no-VERSION refusal
+
+For the other two, the commits show byte-identical output, and no cell restores `$0`:
+- validate-carried-findings `--help`
+- render-path-mapping's VERSION walk-up and no-marker message
+
+validate-mandatory-rules ports `$0` at the clean-tree path and in the sprint-path message.
+
+Run as programs, the subjects behave byte-identically. `partition-document.sh`, `wait-for-deliverable.sh`, `scripts/validate-enforcement-map.sh` and `scripts/fork-profile.sh` are unedited, because they were already callable as they stand.
+
+The 15 rows: cycle-commits-enforce, file-mtime, spec-adoption-floor, shadowed-local-validators, dist-clone, artifact-path-conformance, escalation-status-vocabulary, hermetic-consumption, claude-rules-joins, carried-findings, escalation-delivery, path-mapping-render, derivation-capture, wait-stale-deliverable and validator-fork-budget. Each sources every copy once and calls the function in a subshell. Each keeps one `cli` cell per distinct outcome, compared byte for byte with the in-process call, and declares an `inproc:` row. Their rows are deleted from `scripts/fixture-inprocess-allowlist.txt`.
+
+| Fixture | Counted starts, `*` / subject, base -> tip | inproc | cli cells |
+|---|---|---|---|
+| file-mtime | 19 / 6 -> 7 / 3 | 5 | 3 |
+| spec-adoption-floor | 16 / 15 -> 4 / 3 | 1 | 3 |
+| shadowed-local-validators | 9 / 1 -> 4 / 3 | 8 | 3 |
+| dist-clone | 764 / 21 -> 696 / 3 | 5 | 3 |
+| artifact-path-conformance | 166 / 6 -> 162 / 4 | 8 | 4 |
+| escalation-status-vocabulary | 114 / 23 -> 28 / 4 | 21 | 4 |
+| hermetic-consumption | 52 / 19 -> 44 / 3 | 19 | 3 |
+| claude-rules-joins | 20 / 19 -> 4 / 3 | 18 | 3 |
+| carried-findings | 196 / 34 -> 6 / 5 | 44 | 5 |
+| escalation-delivery | 24 / 7 -> 5 / 2 | 3 | 2 |
+| path-mapping-render | 24 / 23 -> 4 / 3 | 11 | 3 |
+| derivation-capture | 156 / 2 -> 166 / 2 | 4 | 2 |
+| wait-stale-deliverable | 371 / 23 -> 404 / 3 | 56 | 3 |
+| validator-fork-budget | 1120 / 22 -> 1145 / 8 | 18 | 4 cli + 2 e2e (validator); 4 e2e + 1 nested (profiler) |
+| cycle-commits-enforce | 22 / 3 -> 27 / 2 | 5 | 2 |
+
+Each base is the fixture's `invocations.decl` at 78dc3ef56, except validator-fork-budget's, which is read on this release's own base, where it declares 1120. Each tip is the same file at the release commit.
+
+Where a cost moved:
+- validator-fork-budget's `*` rises by 25, from 1120 to 1145, while its validator starts fall from 22 to 8. The rise is the same 25 as 1116 to 1141 on the earlier base. FORK_BUDGET is unchanged: TOTAL is 2790, with 136 of headroom. The remaining 8 are tagged or nested. The profiler's 4 starts are `e2e`, because its `bash -x` child must keep the profiler as its logged parent.
+- wait-stale-deliverable's `*` falls from 371 to 341 with the conversion, then rises to 404 when C14's guard beat moves onto the injected clock (BL-868 item 8): 21 shim starts in each of 3 cells. That beat no longer sleeps on the default PATH.
+- dist-clone's git shim moves from 658 to 692 starts, artifact-path-conformance's resolver from 134 to 146, and hermetic-consumption's `core-paths.sh` from 32 to 40.
+- cycle-commits-enforce's `*` moves from 22 to 27, from one counted run. The subject's 3 starts become 2 cli cells (-1). The four per-push twins each run their mutant copy once (+4). The sprint-900 cell starts `validate-retro-evidence.sh` twice more (+2).
+- derivation-capture's `*` rises from 156 to 166 with its new `MUTANT-MATRIX` block. All 10 starts come from the per-push twins: the hook from 73 to 77 and the validator from 77 to 83.
+- Build-once (item 4): artifact-derivations' `t_arms` cd root (8 builds) and `t-a1` render (2 builds) are now built once and copied, with starts unchanged at 131. apply-restamp-worklist's `ar_w` world is hoisted, with starts unchanged in shards a, b and c (1207, 1809 and 451). apply-drift-refile falls from 899 to 877.
+- Wall time was not measured for any row; the cost evidence is the counts the gate records (starts, in-process passes, fork total).
+
+The earlier attribution is corrected. The 0.1074.0 note put validator-fork-budget's validator starts on `fork-profile.sh`'s traced child and the `fp-*.sh` copies. One counted hermetic run at 0bd891bd7 (after C6) recorded 22 starts. Joining each start's parent pid to that parent's logged path splits them: 16 to `receipt-bl898.sh`, 4 to `receipt-bl981.sh` (2 live, plus 2 from C6's m20 stub), 2 to the profiler and 0 to `fp-*.sh`.
+
+The consumer gate. A consumer runs its own installed subject, so each shipped converted fixture reads the subject's halves before sourcing it. path-mapping-render, which is dist-only, carries the same gate.
+- Neither the wrap's function line nor its guard: the fixture prints `SKIP: subject predates the in-process wrap` and exits 0.
+- Exactly one of the two: the fixture FAILs.
+- A subject the gate cannot read (`grep` exit 2): FIXTURE ERROR, exit 2, never the SKIP. This holds in all 9 gated fixtures.
+
+The tip adversary ruled that the SKIP cannot be reached over a readable subject that is wrapped but broken. A broken body still carries both halves, so the fixture runs and FAILs. Respelling both halves does reach the SKIP, but in the distribution that run makes zero cli and zero in-process starts, and J3's exact compare turns the push red. So a consumer only ever receives a subject that passed J3.
+
+wait-stale-deliverable gates on its subject's three halves: `wfd_mark_main`, `wfd_beat_main` and the guard. Proven on a tree built by `install.sh`:
+- The current subject passes, with 74 ok.
+- A pre-0.971.0 subject reads SKIP.
+- Deleting the gate turns the fixture red, with 42 FAIL.
+- Under `chmod 000`, the subject reads FIXTURE ERROR.
+
+Its `--matrix` was re-taken with the gate in place: 240 cells, 0 FAIL and 0 mismatches against the block over 22 cells.
+
+derivation-capture treats a pre-wrap splitter as absent instead, and takes the header-specified manifest path. The tip adversary ruled this sound. The splitter is not that fixture's subject (the hook is), and the base seed already took the manifest path when the splitter was absent. Respelling both halves turns J3 red on its 2 cli starts and 4 in-process passes.
+
+cycle-commits-enforce follows the same deviation. A `validate-mandatory-rules.sh` that predates the wrap takes the fixture's existing absent path and never prints an ok. A whole-fixture SKIP would also drop the fixture's own subject, `validate-cycle-commits.sh`. A half-wrapped subject FAILs, and an unreadable one gives FIXTURE ERROR.
+
+Item 3:
+- escalation-status-vocabulary, dist-clone, hermetic-consumption, claude-rules-joins, derivation-capture and cycle-commits-enforce gain `MUTANT-MATRIX` blocks and `--matrix` handlers, and leave `scripts/fixture-matrix-allowlist.txt` (90 -> 84). derivation-capture's block scores 6 mutants, and J5 joins all 6. cycle-commits-enforce's block has 4 rows plus a control, taken from a measured diagonal matrix, and ai-dlc-f3's four `mutant_killed` lines are kept byte-identical.
+- `validate-fixture-hygiene.sh` H5 S2 no longer counts `mutant` inside the literal path `lib/mutant.sh` in a fixture that has a line sourcing that lib, and it gains an S2 self-probe cell. The FP set moves 224 -> 223, and the one fixture that leaves is spec-adoption-floor.
+- carried-findings' `selfloc` mutant measured a wider `--matrix` vector after the conversion, `W1 P1 S6 G1 G2 H1`. That vector was an artifact: no copy sat in a checkout, so the mutant read the same as an unconditional `return 1` in `locate()`. The mutant now sources its copy from inside the R world, and the control is widened to the topology arms. The want changes from the base's `W1` to the measured `W1 S6 G1 G2 H1`, because the mutated property is location-dependence and one sourced copy sits under one review TOP. A `return 1` copy at the same path FAILS P1 where `selfloc` PASSES it, which proves the mutant is not vacuous; that cell takes the `inproc` row from 43 to 44. The matrix comparison stays a set comparison (`same_set`).
+
+Not taken in this release: eleven original U4 candidates that other in-flight releases held: fixture-drivability, snapshot-conservation, setup-site-drift, retired-fixture-orphan, fanout-payload-channel, fanout-untracked-corpus, write-format-steering-multiformat, bmad-invocation-resolve, request-coverage, layer-debt-due-and-discharge and layer-debt-ledger. Rows remaining: 149, from `bash scripts/validate-fixture-inprocess.sh --complete` at the tip (exit 1, `INCOMPLETE  149 allowlist row(s) remain`; control `273 fixture(s) scanned`, equal to the 273 `core/fixtures/*/run.sh`).
+
+Owed after the push: the converted fixtures' read-set re-trace (lead, sandbox tracer).
+
+### BL-1007 filed OPEN: escalation-status-vocabulary is green only from the repo root
+
+Run from `/`, the fixture's 15 mutant and refusal lines FAIL. Its unmutated controls fail themselves there, because the copies cannot resolve a project root. The sorted FAIL sets at 3e0800c07 and at this release's converted fixture are byte-identical, 15 lines each, so the dependence predates the conversion. From the root, every control holds and each mutant scores its own vector. A green run from the root is therefore a real check that needs a project root, not a check that asserts nothing. No fix is made in this release.
+
 ## [0.1096.0] - 2026-11-12
 
 ### BL-911 (PARTIAL): document and subject passes narrow by part content

@@ -97,6 +97,11 @@
 #
 # Usage: validate-hermetic-consumption.sh [--quiet]
 # Exit:  0 = clean, 1 = at least one finding, 2 = usage, environment, or a refused self-probe.
+#
+# The whole program is vhc_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition. Its own name and directory are
+# read through BASH_SOURCE[0], never $0, which in a sourcing shell names the caller.
+vhc_main() {
 set -uo pipefail
 export LC_ALL=C
 
@@ -104,14 +109,14 @@ QUIET=0
 case "${1:-}" in
   "") : ;;
   --quiet) QUIET=1 ;;
-  *) echo "usage: $(basename "$0") [--quiet]" >&2; exit 2 ;;
+  *) echo "usage: $(basename "${BASH_SOURCE[0]}") [--quiet]" >&2; exit 2 ;;
 esac
 
 # Walk UP for the marker, never count `..` hops, so this answers identically from the repo
 # root, from a subdirectory, and from a fixture sandbox that copied it.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/VERSION" ]; do ROOT="$(dirname "$ROOT")"; done
-[ -f "$ROOT/VERSION" ] || { echo "validate-hermetic-consumption: no VERSION marker above $0" >&2; exit 2; }
+[ -f "$ROOT/VERSION" ] || { echo "validate-hermetic-consumption: no VERSION marker above ${BASH_SOURCE[0]}" >&2; exit 2; }
 CP="$ROOT/core/scripts/core-paths.sh"
 [ -f "$CP" ] || { echo "validate-hermetic-consumption: core/scripts/core-paths.sh not found under $ROOT" >&2; exit 2; }
 [ -d "$ROOT/core/fixtures" ] || { echo "validate-hermetic-consumption: no core/fixtures under $ROOT" >&2; exit 2; }
@@ -369,3 +374,7 @@ done < "$WORK/corpus/flags"
 say "hermetic-consumption: scanned=$c_open required-inputs=$c_inputs layout-independent=$c_same variable-sentinel=$c_var elsewhere=$c_else no-installed-branch=$c_nobr scored=$c_scored flagged=$c_flag"
 [ "$c_flag" = "0" ] || exit 1
 exit 0
+}
+# Executed, it runs; sourced, it has defined vhc_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vhc_main "$@"

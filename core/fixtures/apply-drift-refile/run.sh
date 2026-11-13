@@ -102,6 +102,34 @@ rm -rf "$JW"
 echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
+# EVERY WORLD IS BUILT ONCE AND COPIED (fixture-mutants.md clause 4). seed.sh runs here and nowhere else:
+# its output is kept untouched in $SEED_TPL before any arm writes to $WORK, and seed_copy hands each later
+# cell a `cp -Rp` of it with env.sh's paths rewritten (seed.sh's inputs never vary, so every copy is the
+# world a fresh seed.sh would build). world_once does the same for the in-file builders (h_world, t_aworld,
+# u_world, x_world): the first call per builder and argument list builds the template, every call returns a copy.
+SEED_TPL="$(mktemp -d "$WORK/.seed-tpl.XXXXXX")" && cp -Rp "$WORK/dist" "$WORK/consumer" "$WORK/env.sh" "$SEED_TPL/" \
+  || { echo "FIXTURE ERROR: could not keep the seed template" >&2; exit 2; }
+seed_copy() { # seed_copy [<parent dir, default $WORK>] -> path of a fresh copy of the seed world
+  local c; c="$(mktemp -d "${1:-$WORK}/apply-drift.XXXXXX")" || return 1
+  cp -Rp "$SEED_TPL/." "$c/" && sed "s|$WORK|$c|g" "$SEED_TPL/env.sh" > "$c/env.sh" || return 1
+  printf '%s\n' "$c"
+}
+world_once() { # world_once <copy prefix> <builder> [<arg>...] -> path of a fresh copy of the world `<builder> <arg>...` builds
+  # The template is keyed on the builder AND its FULL argument list, %q-quoted so no two lists share a key;
+  # $WORK/.tpl.idx maps each key to its template's number. Builders run inside $( ), so the map lives on disk.
+  local p="$1" k l t="" n=0 b c; shift
+  printf -v k '%q ' "$@"
+  if [ -f "$WORK/.tpl.idx" ]; then
+    while IFS= read -r l; do n=$((n + 1)); [ "${l#*	}" = "$k" ] && t="$WORK/.tpl.${l%%	*}"; done < "$WORK/.tpl.idx"
+  fi
+  if [ -z "$t" ]; then
+    t="$WORK/.tpl.$((n + 1))"
+    b="$("$@")" && [ -n "$b" ] && [ -d "$b" ] && mv "$b" "$t" || return 1
+    printf '%s\t%s\n' "$((n + 1))" "$k" >> "$WORK/.tpl.idx" || return 1
+  fi
+  c="$(mktemp -d "$WORK/$p.XXXXXX")" && cp -Rp "$t/." "$c/" || return 1
+  printf '%s' "$c"
+}
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
@@ -138,7 +166,7 @@ ks_ctl_ready() { # builds the hooked shipped copy once and runs it UNFORCED once
   if ! { cp -R "$(dirname "$APPLY")" "$HK" && ks_hook "$HK"; }; then
     KS_READY="the ap_ks_diff anchor is not in apply.sh exactly once, so the diff-failure hook cannot be added"; bad "FIXTURE BROKEN [forcing hook]: $KS_READY"; return 0
   fi
-  w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { KS_READY="seed failed"; bad "FIXTURE BROKEN [forcing near-miss]: $KS_READY"; return 0; }
+  w="$(seed_copy)" || { KS_READY="seed failed"; bad "FIXTURE BROKEN [forcing near-miss]: $KS_READY"; return 0; }
   eval "$(sed 's/^/KN_/' "$w/env.sh")"
   nm="$(bash "$HK/apply.sh" "$KN_DIST" "$KN_BASE" "$KN_CONSUMER" "$KN_THEIRS" 2>/dev/null)"
   if ! grep -q 'did not run' <<<"$nm" && grep -q 'drift-refile' <<<"$nm"; then
@@ -154,7 +182,7 @@ norow_note() { # norow_note <apply-stdout> <apply-stderr-file> -> records which 
     awk -F'\t' '$1=="DECISION" {printf "%s ", $2}' <<<"$1"; } > "$WORK/norow.why"
 }
 q_base() { # q_base <hooked-reconcile-dir> -> ONE forced ordinary run; sets QT (the post-run world, cloned per case), QT_OUT, QT_ERR
-  local w; w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || return 1
+  local w; w="$(seed_copy)" || return 1
   eval "$(sed 's/^/QB_/' "$w/env.sh")"
   QT="$w"; QT_ERR="$w/apply.err"
   QT_OUT="$(FX_KSDIFF_FAIL=1 bash "$1/apply.sh" "$QB_DIST" "$QB_BASE" "$QB_CONSUMER" "$QB_THEIRS" 2>"$QT_ERR")"
@@ -247,7 +275,8 @@ q_score() { # q_score <hooked-reconcile-dir> [worlds] -> the six cells (`.` for 
 }
 # h_world / h_score are hoisted: they are the cross-unit TWIN of the arm s and mapper mutants.
 # h_world -> a fresh zero-work world under $WORK, refs recorded IN it as .B/.T
-h_world() {
+h_world() { world_once zr h_world_build; }
+h_world_build() {
   local _h; _h="$(mktemp -d "$WORK/zr.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
   mkdir -p "$_h/dist/core/scripts" "$_h/dist/core/rules" "$_h/cons/scripts" "$_h/cons/.claude/rules"
   printf '#!/usr/bin/env bash\necho x\n' > "$_h/dist/core/scripts/x.sh"
@@ -282,7 +311,8 @@ h_score() {
   grep -qE '^(RESOLVED|DECISION|NOTE)	' <<<"$_o" || _m="${_m}no-manifest "
   printf '%s' "$_m"
 }
-t_aworld() { # t_aworld <add-persona 0|1> -> path of a fresh world, refs in .B/.T
+t_aworld() { world_once t t_aworld_build "$1"; } # t_aworld <add-persona 0|1> -> path of a fresh world, refs in .B/.T
+t_aworld_build() {
   local _w _d _c
   _w="$(mktemp -d "$WORK/t.XXXXXX")" || return 1
   _d="$_w/dist"; _c="$_w/cons"
@@ -320,7 +350,8 @@ mut_copy() { # mut_copy <dir> <anchor> <replacement> [<anchor> <replacement>]
   done
   ! cmp -s "$APPLY" "$d/apply.sh" && bash -n "$d/apply.sh" && [ -f "$d/preclassify.sh" ]
 }
-u_world() {
+u_world() { world_once u u_world_build; }
+u_world_build() {
   local _w _d _c _ld i
   _w="$(mktemp -d "$WORK/u.XXXXXX")" || return 1
   _d="$_w/dist"; _c="$_w/cons"
@@ -430,7 +461,7 @@ mkdir -p "$MUTDIR"
 # mapper is ever reached.
 cp "$(dirname "$APPLY")"/*.sh "$(dirname "$APPLY")"/*.md "$MUTDIR/" 2>/dev/null
 sed 's|^\( *\)local m; m=.*|\1local m; m=""|' "$APPLY" > "$MUTDIR/apply.sh"
-W2="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: second seed failed" >&2; exit 2; }
+W2="$(seed_copy "${TMPDIR:-/tmp}")" || { echo "FIXTURE ERROR: second seed failed" >&2; exit 2; }
 eval "$(sed 's/^/M_/' "$W2/env.sh")"
 if ! grep -q 'local m; m=""' "$MUTDIR/apply.sh" || [ ! -f "$MUTDIR/preclassify.sh" ]; then
   bad "FIXTURE STALE: could not build the mapper mutant — consumer_path() no longer resolves via 'local m; m=...', or reconcile/ has no preclassify.sh sibling"
@@ -547,7 +578,7 @@ if [ "$F_RUN" = 1 ]; then
   # f_case <force|""> -> sets F_RC F_OUT F_STAMP_BEFORE F_STAMP_AFTER F_DRV for a fresh seed.
   # Each seed is made UNDER $WORK, so the EXIT trap above removes it with everything else.
   f_case() {
-    local _w; _w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
+    local _w; _w="$(seed_copy)" || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
     eval "$(sed 's/^/F_/' "$_w/env.sh")"
     F_STAMP_BEFORE="$(cat "$F_STAMP")"
     F_OUT="$(FX_B230_PC="$1" bash "$FH/apply.sh" "$F_DIST" "$F_BASE" "$F_CONSUMER" "$F_THEIRS" 2>&1)"; F_RC=$?
@@ -559,7 +590,7 @@ if [ "$F_RUN" = 1 ]; then
   # f_pre <force> <marker-bytes> -> like f_case, but a fresh seed first gets an in-flight marker
   # planted as a PREVIOUS aborted run would have left it, and only then does apply run.
   f_pre() {
-    local _w; _w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
+    local _w; _w="$(seed_copy)" || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
     eval "$(sed 's/^/F_/' "$_w/env.sh")"
     F_MARK="$F_CONSUMER/.claude/.ai-dlc-applying"
     printf '%s' "$2" > "$F_MARK"
@@ -651,7 +682,7 @@ if [ "$H_RUN" = 1 ]; then
     else
       hm="$(h_score "$HM")"
       # f's forced rc2 case on the SAME mutant copy: the row cannot reach it, so it must still stop.
-      _hf_w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
+      _hf_w="$(seed_copy)" || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
       eval "$(sed 's/^/HF_/' "$_hf_w/env.sh")"
       FX_B230_PC=rc2 bash "$HM/apply.sh" "$HF_DIST" "$HF_BASE" "$HF_CONSUMER" "$HF_THEIRS" >/dev/null 2>&1; _hf_rc=$?
       if [ "$MATRIX" = 1 ]; then
@@ -690,7 +721,7 @@ if sg r; then
 # A missing row is FIXTURE BROKEN naming the gate that refused, never a SKIP.
 r_follow() { # r_follow <reconcile-dir> -> "<row?>|<rc2>|<ext>|<schema>|<stamp>|<remedy>"
   local rec="$1" w row rem rc2
-  w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { printf 'BROKEN'; return; }
+  w="$(seed_copy)" || { printf 'BROKEN'; return; }
   eval "$(sed 's/^/R_/' "$w/env.sh")"
   mkdir -p "$R_CONSUMER/_bmad-output/ai-dlc-update"
   r_render() { { printf '# reconcile report (fixture)\n\n'; bash "$rec/emit-report.sh" "$R_DIST" "$R_BASE" "$R_CONSUMER" "$R_THEIRS" 2>/dev/null; } \
@@ -1361,7 +1392,8 @@ if sg x; then
 #       cannot move (base passes them too): the written copies are executable (sync_mode_from_theirs's
 #       mode lookup), and a tracked transient directory `café-state/` is counted (the ls-files count)
 # Cell: "<XA café N>|<XA café D>|<XA plain N+D>|<XB café>|<XB plain>|<XC hits>|<XC café +x>|<XC tracked>"
-x_world() { # x_world <A|B|C> -> path of a fresh world, refs in .B/.T
+x_world() { world_once x x_world_build "$1"; } # x_world <A|B|C> -> path of a fresh world, refs in .B/.T
+x_world_build() {
   local _w _d _c _cf _f
   _w="$(mktemp -d "$WORK/x.XXXXXX")" || return 1
   _d="$_w/dist"; _c="$_w/cons"; _cf="$(printf 'caf\303\251')"
@@ -1507,7 +1539,7 @@ if sg s; then
 # Its mutant restores the `|| true` capture, and must lose the row.
 s_score() { # s_score <reconcile-dir> -> "<relabel-refused row?>|<stamp>"
   local w o
-  w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { printf 'BROKEN'; return; }
+  w="$(seed_copy)" || { printf 'BROKEN'; return; }
   eval "$(sed 's/^/S_/' "$w/env.sh")"
   o="$(bash "$1/apply.sh" "$S_DIST" "$S_BASE" "$S_CONSUMER" "$S_THEIRS" 2>/dev/null)"
   printf '%s|%s' \

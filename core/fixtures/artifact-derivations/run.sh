@@ -471,6 +471,7 @@ exec_contained sed-s-hash-delim  "sed 's#a#b#w canary' data.txt"
 # name the fixture chooses -- `-i` creates `data.txtbak`, not `canary` -- so the observable
 # is the INPUT FILE ITSELF: bash rewrites it, and the validator must not.
 inplace_contained() { # $1 label  $2 command
+  # Reset per call and again after the control, never copied from one build: the control's bash rewrites data.txt.
   mkdir -p "$WORK/h2"
   printf 'a\nb\nc\n' > "$WORK/h2/data.txt"
   cp "$WORK/h2/data.txt" "$WORK/h2/.orig"
@@ -2304,6 +2305,7 @@ t_arms() { # <validator> <quiet> -> ARMS_FAILED
   # gates apart; the BAN's only ban-alone subject here is the redirection. The status gate's own
   # subjects are the `$?` in t-retro and the backtick, which the ban does not carry.
   if want t-canary; then
+    # Built fresh per use, never copied from one build: t-m4 lets a canary body run, which dirties the root it ran in.
     tc="$(mktemp -d "$T/canary.XXXXXX")"; mkdir -p "$tc/.claude"; printf 'x\n' > "$tc/f.txt"; printf 'b\n' > "$tc/g.txt"
     o="$(t_ex "$V" "$tc" "$T_CAN")"
     [ ! -e "$tc/CANARY1" ] && [ ! -e "$tc/CANARY2" ] && [ ! -e "$tc/CANARY3" ] \
@@ -2317,6 +2319,7 @@ t_arms() { # <validator> <quiet> -> ARMS_FAILED
   t_wanted=0
   while IFS='|' read -r lbl cmd want_v; do want "$lbl" && t_wanted=1; done <<< "$T_SPLIT"
   if [ "$t_wanted" -eq 1 ] || want t-failclosed; then
+    # Built fresh per use, never copied from one build: t-failclosed asserts this root holds only what was seeded.
     tc="$(mktemp -d "$T/split.XXXXXX")"; mkdir -p "$tc/.claude"; printf 'x\n' > "$tc/f.txt"; printf 'b\n' > "$tc/g.txt"
     while IFS='|' read -r lbl cmd want_v; do
       o="$(t_ex "$V" "$tc" "$cmd")"; got="$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')"
@@ -2334,7 +2337,10 @@ t_arms() { # <validator> <quiet> -> ARMS_FAILED
   t_wanted=0
   while IFS='^' read -r lbl cmd want_v gops; do want "$lbl" && t_wanted=1; done <<< "$T_CD"
   if [ "$t_wanted" -eq 1 ]; then
-    tc="$(mktemp -d "$T/cd.XXXXXX")"; mkdir -p "$tc/.claude"; printf 'x\n' > "$tc/f.txt"; printf 'b\n' > "$tc/g.txt"
+    # BUILT ONCE, COPIED PER USE (fixture-mutants.md clause 4): the cd root is read only through --explain-cmd, which
+    # executes nothing, so every use starts from the same three entries. $T/cd-tpl is built by the first use.
+    if [ ! -d "$T/cd-tpl" ]; then mkdir -p "$T/cd-tpl/.claude"; printf 'x\n' > "$T/cd-tpl/f.txt"; printf 'b\n' > "$T/cd-tpl/g.txt"; fi
+    tc="$(mktemp -d "$T/cd.XXXXXX")"; cp -Rp "$T/cd-tpl/." "$tc/"
     while IFS='^' read -r lbl cmd want_v wops; do
       want "$lbl" || continue
       o="$(t_ex "$V" "$tc" "$cmd")"; got="$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')"
@@ -2346,9 +2352,16 @@ t_arms() { # <validator> <quiet> -> ARMS_FAILED
   # t-a1: the CHECK path's verdict and text equal the reference's for every chain, redirect and
   # substitution form, and each is the ALLOWLIST refusal (a presence, so silence cannot pass).
   if want t-a1; then
+    # BUILT ONCE, COPIED PER USE (fixture-mutants.md clause 4): the a1-<i>.md files depend only on T_A1_CMDS, so they
+    # are rendered into $T/a1-tpl by the first use and copied into $T by every use.
+    if [ ! -d "$T/a1-tpl" ]; then
+      mkdir -p "$T/a1-tpl"; i=0
+      while IFS= read -r c; do i=$((i + 1)); printf '# t\n\n```derived\n$ %s\n1\n```\n' "$c" > "$T/a1-tpl/a1-$i.md"; done <<< "$T_A1_CMDS"
+    fi
+    cp -Rp "$T/a1-tpl/." "$T/"
     i=0; fc_bad=0; out=""
     while IFS= read -r c; do
-      i=$((i + 1)); printf '# t\n\n```derived\n$ %s\n1\n```\n' "$c" > "$T/a1-$i.md"
+      i=$((i + 1))
       ro="$(cd "$T" && vad_call "$V" AI_DLC_PROJECT_ROOT="$T" -- "a1-$i.md" 2>&1)"; rr=$?
       r="$(cd "$T" && vad_call "$TREF" AI_DLC_PROJECT_ROOT="$T" -- "a1-$i.md" 2>&1)"
       if [ "$rr|$ro" != "1|$r" ] || ! grep -q '^FAIL (ALLOWLIST): ' <<< "$r"; then

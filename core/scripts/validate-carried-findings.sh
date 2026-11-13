@@ -133,12 +133,15 @@
 #   id must match whole, so `I11` never answers `I1`. `--list` prints the exact strings.
 #   The false-positive set over graph's real pairs is recorded in the fixture header
 #   (core/fixtures/carried-findings).
+vcf_main() {
+# The whole program is vcf_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition. --help prints the header above.
 set -u
 export LC_ALL=C
 
 refuse() { printf 'REFUSED: %s\n' "$*"; exit 2; }
 USAGE="usage: validate-carried-findings.sh <pass M-1 review file> <pass M review file> | --list <pass M-1 review file> | --classes <pass M-1 review file>"
-case "${1:-}" in -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;; esac
+case "${1:-}" in -h|--help) awk 'NR > 1 && $0 == "vcf_main() {" { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;; esac
 [ "$#" -eq 2 ] || refuse "$USAGE"
 LIST=0; CLASSES=0
 if [ "$1" = "--list" ]; then LIST=1; PRIOR="$2"; CUR="$2"
@@ -454,3 +457,7 @@ fi
 printf 'PASS: %s prior Critical/Important finding(s) carried into %s (%s resolved, %s open, verdict %s)\n' \
   "$n_prior" "$CUR" "$n_res" "$n_open" "$VERDICT"
 exit 0
+}
+# Executed, it runs; sourced, it has defined vcf_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vcf_main "$@"

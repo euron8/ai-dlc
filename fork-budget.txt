@@ -66,4 +66,11 @@
 # `core/hooks/`, which gained `ai-dlc-inflight-row.sh` and `ai-dlc-snapshot-edit-deny.sh`, so each new
 # hook costs +2 in I13 and +4 in I14. I83 and I84 did not move. The budget is the tip reading plus
 # HEADROOM_MARGIN 2.
-FORK_BUDGET=2926
+#
+# Raised 2926 -> 2930 for BL-978, by exactly the measured rise of 4. That rise is from the new
+# non-fixture `core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh` entering the corpus. Measured
+# with `scripts/fork-profile.sh --section total`, each run from inside its own clean detached worktree:
+# base origin/main 74f2cbcf0 read 2790, EXIT 0; the release tip read 2794, EXIT 0. An earlier tip
+# reading of 2793 is void: it was taken before the file carried its I105 exemption marker, and the
+# traced validator exited 1 there.
+FORK_BUDGET=2930

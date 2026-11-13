@@ -124,30 +124,62 @@ mkdir -p "$WORK/local/lib"
 for f in validate-foo.sh validate-bar.sh validate-nofork.sh validate-orphan.sh \
          validate-sub.sh validate-bold.sh validate-mention.sh validate-fenced.sh; do : > "$WORK/core/$f"; done
 
-run_warn_2() { # run_warn_2 <script> <stderr-file>
-  bash "$1" --root "$WORK" --ledger "$WORK/ledger.md" \
-    --local-dir "$WORK/local" --core-dir "$WORK/core" 2>"$2"
+# IN PROCESS (BL-878). Every copy of the subject -- the real one, the control, each mutant and each refusal sandbox
+# -- is SOURCED ONCE into this shell by src_warn (its guard returns after defining ws_main; one fx_inproc pass each),
+# and run_warn_2 then calls the ws_main sourced last inside a `( )` subshell, so the subject's `exit`, `set -f`, EXIT
+# trap and sourced siblings stay there. Inside ws_main BASH_SOURCE[0] is the sourced copy, so its siblings resolve
+# in that copy's sandbox exactly as they did when it ran as a program. src_warn runs in this shell, never inside the
+# `$( )` that captures run_warn_2's output, so a failed source cannot read as the subject's own exit.
+src_warn() { # src_warn <script>
+  unset -f ws_main
+  fx_inproc "$1"
+  . "$1" || { echo "FIXTURE BROKEN: sourcing $1 failed" >&2; exit 2; }
+  declare -F ws_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $1 defined no ws_main" >&2; exit 2; }
+  WS_SOURCED="$1"
+}
+WS_SOURCED=""
+run_warn_2() { # run_warn_2 <script> <stderr-file> -- <script> must be the one src_warn sourced last
+  [ "$1" = "$WS_SOURCED" ] || { echo "FIXTURE BROKEN: driving $1 while the ws_main sourced last is ${WS_SOURCED:-none}" >&2; return 2; }
+  ( ws_main --root "$WORK" --ledger "$WORK/ledger.md" \
+    --local-dir "$WORK/local" --core-dir "$WORK/core" ) 2>"$2"
 }
 run_warn() { run_warn_2 "$1" /dev/null; }
 
 # A sandbox carrying what the subject reads. NOT a copy of the whole reconcile directory:
 # only the two files the subject actually loads, so no mutant can silently read an
 # unmutated twin of itself. One directory per mutant, so the mutants cannot see each other.
+# The copy sits under the subject's own relative path, so its fx_inproc row is counted under the inproc: row.
 new_sandbox() { # new_sandbox <name>  -> path on stdout
-  local d="$WORK/sbx-$1"
+  local d="$WORK/sbx-$1/core/skills/ai-dlc-update/reconcile"
   mkdir -p "$d" && cp "$SRC_DIR/lib.sh" "$SRC_DIR/ledger-reverify.sh" "$SRC_DIR/consumer-read.sh" "$d/" || return 1
   printf '%s\n' "$d"
 }
 
 echo "HERMETIC-CONSUMED $SRC_DIR/$(basename "$SCRIPT")"
-OUT="$(run_warn "$SCRIPT")"; OUT_RC=$?
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
-MUT_LIB="$DIR/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
-. "$MUT_LIB"
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped subject, and
+# sourcing a pre-wrap one would run its argument loop and `exit` in this shell. Neither the `ws_main() {` line nor the
+# column-0 source guard is a subject that predates the wrap: SKIP and exit 0, never an ok. Exactly one half is a
+# respelled subject this fixture can no longer drive: FAIL. The distribution cannot reach the SKIP unnoticed: C5
+# (validate-fixture-inprocess.sh) refuses a cli subject without the guard, and J3 refuses the start count moving.
+w_def=0; w_guard=0
+grep -q '^ws_main() {$' "$SCRIPT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SCRIPT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || w_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SCRIPT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SCRIPT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || w_guard=1
+if [ "$w_def$w_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$w_def" = 0 ]; then echo "  FAIL  $SCRIPT carries the column-0 source guard but no \`ws_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "shadowed-local-validators: 1 assertion(s) violated." >&2; exit 1; fi
+if [ "$w_guard" = 0 ]; then echo "  FAIL  $SCRIPT defines \`ws_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run ws_main in this shell" >&2; echo "shadowed-local-validators: 1 assertion(s) violated." >&2; exit 1; fi
+src_warn "$SCRIPT"
+OUT="$(run_warn "$SCRIPT")"; OUT_RC=$?
 # The emitted path is the fork's REAL location, root-relative — here `local/…`, because
 # that is where --local-dir points. Until v0.194.0 the script fabricated the string
 # `scripts/ai-dlc-local/<basename>` no matter where --local-dir actually pointed or where
@@ -158,6 +190,39 @@ has() { row "$OUT" "local/$1"; }
 
 echo "shadowed-local-validators:"
 
+# --- the cli cells (cells.decl): the REAL subject run as a PROGRAM once per distinct CLI outcome -----------------
+# Outcomes, exit x output class: 0 with RETIRE-CANDIDATE rows on stdout; 0 with nothing (no ledger, nothing to
+# classify); 2 a refusal on stderr. One `FXCELL=<id> bash "$SCRIPT"` start per outcome, compared byte for byte
+# (stdout, stderr, exit) with the in-process call of the real subject on the same input. They run here, while the
+# ws_main sourced last is still the real subject's. Each asserts its own outcome too, so two runs that both printed
+# nothing cannot read as equivalent on the passing cell.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"; shift
+  [ "$WS_SOURCED" = "$SCRIPT" ] || { echo "FIXTURE BROKEN: cli cell $id with the ws_main of ${WS_SOURCED:-nothing} sourced" >&2; exit 2; }
+  ( ws_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$SCRIPT" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+if eqv cli-pass --root "$WORK" --ledger "$WORK/ledger.md" --local-dir "$WORK/local" --core-dir "$WORK/core" \
+   && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && row "$(cat "$EQ/cli-pass.cl.out")" "local/validate-foo.sh"; then
+  ok "cli-pass: the program reports the RETIRE-CANDIDATE rows exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with the foo row ($(eq_twin cli-pass))"; fi
+if eqv cli-silent --root "$WORK" --ledger "$WORK/no-such-ledger.md" --local-dir "$WORK/local" --core-dir "$WORK/core" \
+   && [ "$(cat "$EQ/cli-silent.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-silent.cl.out" ] && [ ! -s "$EQ/cli-silent.cl.err" ]; then
+  ok "cli-silent: with no ledger the program classifies nothing exactly as the in-process call does (empty, exit 0)"
+else bad "cli-silent: the program and the in-process call differ, or the outcome is not an empty exit 0 ($(eq_twin cli-silent))"; fi
+if eqv cli-refuse --no-such-flag \
+   && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-refuse.cl.out" ] \
+   && [ "$(cat "$EQ/cli-refuse.cl.err")" = "unknown argument: --no-such-flag" ]; then
+  ok "cli-refuse: the program refuses an unknown argument exactly as the in-process call does (stderr, exit 2)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 2 with the unknown-argument line ($(eq_twin cli-refuse))"; fi
+if ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-silent.cl.out" && ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-refuse.cl.rc"; then
+  ok "cli cells discriminate: the rows and the empty output differ, and exit 0 differs from exit 2"
+else bad "cli cells do not discriminate: cli-pass matched cli-silent's stdout or cli-refuse's exit"; fi
+
 # HARNESS CONTROL, FIRST. An unmutated copy in a mutant-shaped sandbox. Every mutant below
 # is scored on an ABSENCE or a presence in output produced this way, and a sandbox that
 # cannot run the subject produces no output at all — which reads as a kill. This arm is the
@@ -165,6 +230,7 @@ echo "shadowed-local-validators:"
 CTRL_DIR="$(new_sandbox control)" || { echo "FIXTURE ERROR: cannot build the control sandbox" >&2; exit 2; }
 cp "$SCRIPT" "$CTRL_DIR/warn-shadowed-local-validators.sh"
 CTRL_ERR="$WORK/control.err"
+src_warn "$CTRL_DIR/warn-shadowed-local-validators.sh"
 COUT="$(run_warn_2 "$CTRL_DIR/warn-shadowed-local-validators.sh" "$CTRL_ERR")"; CRC=$?
 # rc IS PART OF THE CONTROL, because it is the other half of the REFUSAL arms' claim below.
 # Those assert a NON-ZERO exit when the close grammar cannot be lifted; that assertion means
@@ -291,6 +357,7 @@ PY
 if [ "$CHG" != "CHANGED" ]; then
   bad "MUTATION matched nothing — the closed-gate in flush() was renamed"
 else
+  src_warn "$MUT"
   MOUT="$(run_warn_2 "$MUT" "$WORK/mut-closed-gate.err")"
   mx_prep mut-closed-gate "$MOUT" "$WORK/mut-closed-gate.err"
   if [ "$MX_D" = RED ] && [ "$MX_T" = GREEN ]; then
@@ -320,6 +387,7 @@ PY
 if [ "$CHG2" != "CHANGED" ]; then
   bad "MUTATION 2 matched nothing — the home walk is no longer a cr_walk over LOCAL_DIR's root and path"
 else
+  src_warn "$MUT2"
   MOUT2="$(run_warn_2 "$MUT2" "$WORK/mut-depth.err")"
   mx_prep mut-depth "$MOUT2" "$WORK/mut-depth.err"
   if [ "$MX_D" = GREEN ]; then
@@ -363,6 +431,7 @@ if [ "$CHG3" != "CHANGED" ]; then
 elif cmp -s "$SRC_DIR/ledger-reverify.sh" "$MUT3_DIR/ledger-reverify.sh"; then
   bad "MUTATION 3 — the mutated ledger-reverify.sh is byte-identical to the original; the mutation did not apply"
 else
+  src_warn "$MUT3"
   MOUT3="$(run_warn_2 "$MUT3" "$WORK/mut-close-anchor.err")"
   mx_prep mut-close-anchor "$MOUT3" "$WORK/mut-close-anchor.err"
   if [ "$MX_D" = GREEN ]; then
@@ -386,6 +455,7 @@ sed 's@if (__lef_in && sh != "") {@if (0) {@' "$SRC_DIR/lib.sh" > "$MUT4_DIR/lib
 if cmp -s "$SRC_DIR/lib.sh" "$MUT4_DIR/lib.sh"; then
   bad "MUTATION 4 matched nothing — the in-fence branch of ledger_entry_shape() in lib.sh has moved; re-anchor this mutant"
 else
+  src_warn "$MUT4"
   MOUT4="$(run_warn_2 "$MUT4" "$WORK/mut-fence-blind.err")"
   mx_prep mut-fence-blind "$MOUT4" "$WORK/mut-fence-blind.err"
   if [ "$MX_D" = GREEN ]; then
@@ -415,6 +485,7 @@ refusal_arm() { # refusal_arm <label> <sandbox-dir> <expected stderr phrase> <wh
   local out err rc
   err="$WORK/$1.err"
   cp "$SCRIPT" "$2/warn-shadowed-local-validators.sh"
+  src_warn "$2/warn-shadowed-local-validators.sh"
   out="$(run_warn_2 "$2/warn-shadowed-local-validators.sh" "$err")"; rc=$?
   if grep -q "RETIRE-CANDIDATE" <<<"$out"; then
     bad "REFUSAL ($1) — rows were emitted with the close grammar unliftable; the predicate fell back to something instead of refusing"

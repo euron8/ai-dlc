@@ -2117,7 +2117,7 @@ verify: manual
 
 **NOTE (item 3, batch b247 close; read at 8f25c6904).** review-reroute starts its subjects only through relocated copies, so BL-879's C1 can never fire on it, and C1's header does not list it among the relocated-copy fixtures. `core/fixtures/review-reroute/run.sh:326-333` (`mkcopy`) copies partition-review-diff.sh, merge-review-shards.sh and the other siblings into `$M/<name>/`, and its `invocations.decl` declares 0 starts for the three subjects. C1's header at `scripts/validate-fixture-invocations.sh:101-106` names only ledger-reverify's mut-memo-*, artifact-derivations' s-m-* and the sib.* stubs. The conversion of review-reroute therefore reaches these starts through item 3's uncounted route, not through C1.
 
-No timing runs and no per-fixture before/after measurement are taken (operator ruling, 2026-10-30).
+Wall time was not measured for any row; the cost evidence is the counts the gate records (starts, in-process passes, fork total).
 
 **Owed items carried from BL-850 at its closing (batch b247).** Each is part of the conversion of the fixture it names, and none is a choice.
 
@@ -2133,6 +2133,112 @@ No timing runs and no per-fixture before/after measurement are taken (operator r
 **Progress (0.971.0, corrected at 0.986.0; the entry stays OPEN, `verify: sh` unchanged, no LANDED line).** Fifteen fixtures were converted in 0.971.0, and only four of them meet BL-879's predicate: push-drain-refusals, ledger-reverify-unfalsifiable, readset-stage1-verdict and story-evidence-scaffold. Those four are off the allowlist in 0.986.0. The other eleven are still rows of `scripts/fixture-inprocess-allowlist.txt`, each with the subject start counts its `invocations.decl` declares at the 0.986.0 tip (read from each file by script, not at the base): content-seal (core/scripts/content-seal.sh 132 starts; core/hooks/ai-dlc-content-seal.sh 80 starts; core/scripts/merge-adversarial-shards.sh 20 starts; core/scripts/join-remediator-shards.sh 8 starts; core/scripts/validate-gate-adjudication.sh 3 starts; core/scripts/wait-for-deliverable.sh 4 starts), gate-adjudication (core/scripts/validate-gate-adjudication.sh 248 starts), adversarial-shard-merge (core/scripts/merge-adversarial-shards.sh 11 starts; core/scripts/content-seal.sh 397 starts), review-shard-merge (core/scripts/partition-review-diff.sh 4 starts; core/scripts/merge-review-shards.sh 7 starts; core/scripts/content-seal.sh 21 starts; core/scripts/wait-for-deliverable.sh 2 starts; core/hooks/ai-dlc-content-seal.sh 2 starts), wait-beat-liveness (core/scripts/merge-adversarial-shards.sh 33 starts; core/scripts/wait-for-deliverable.sh 5 starts), artifact-derivations (core/scripts/validate-artifact-derivations.sh 17 starts), remediator-shard-join (core/scripts/join-remediator-shards.sh 44 starts; core/hooks/ai-dlc-gate-remediation-guard.sh 64 starts; core/hooks/ai-dlc-derivation-capture.sh 2 starts; core/scripts/serial-remediation-worklist.sh 35 starts), ledger-reverify (core/skills/ai-dlc-update/reconcile/ledger-reverify.sh 7 starts), backlog-receipt-binding (scripts/validate-backlog-receipts.sh 2067 starts), postcompact-rulebook-recovery (core/hooks/ai-dlc-postcompact.sh 3 starts; core/hooks/ai-dlc-recover-gate.sh 2 starts; core/hooks/ai-dlc-recover.sh 3 starts; core/scripts/validate-reattach-budget.sh 3 starts; core/scripts/verdict.sh 1 start), readset-skip (core/scripts/derive-fixture-readsets.sh 87 starts). The allowlist is 177 rows. BL-879's first measurement refused 206 fixtures at 6c70d332e, before the missing `invocations.decl` rows were added; `--derive` then seeded 181, and removing the four passing fixtures leaves 177. At the seeding commit 258 fixtures were judged: 260 `run.sh` = 181 refused + 77 predicted to pass + 2 undeclarable (exempt), and the 77 are 76 fixtures whose every subject row is 0 (nothing to tag) plus fixture-inprocess, which carries its own `cells.decl`. BL-879 shipped first, because this entry's population is the allowlist it seeds.
 
 **Progress (batch 255).** `scripts/validate-enforcement-map.sh` is now loadable and callable in process: sourcing it defines `vem_entry` and returns at a column-0 guard, and its command-line behaviour is byte-identical. `vem_entry` resets the shell state a caller can carry and clears the caller's unexported functions and variables, keeping exported ones and bash's own variables. An earlier draft located the source guard with a longest-suffix strip over the 1.1 MB file, quadratic on bash 3.2 at about 5 CPU-s per call; it is fixed in this release by a `case` presence test, a shortest-prefix strip and a length slice. Rows converted: 12 (enforcement-map-sites, `-b` and `-c`; validator-arm-selection and `-b`; layer-contract-conformance and `-b`; enforcement-map-derivations; derived-fence-binding; ledger-status-vocabulary; crosswalk-home-declaration; consumer-machinery-home), their allowlist rows deleted, plus the new dist-only shard `enforcement-map-sites-d` that takes the full-run equivalence twins off the pole shard `enforcement-map-sites` a. Rows remaining: 164, read from `bash scripts/validate-fixture-inprocess.sh --complete` at the tip (`INCOMPLETE  164 allowlist row(s) remain`, 176 at base). `validator-fork-budget`, the thirteenth fixture of the validator-enforcement-map component, was deferred: its 19 validator starts (at 0.1073.0) come from `scripts/fork-profile.sh:240`'s untagged `bash -x` child and the renamed profiler copies `fp-*.sh`, so converting it means editing `fork-profile.sh`. The entry stays PARTIAL, `verify:` unchanged, no LANDED line.
+
+**Progress (batch 256).** Fifteen rows are converted, and their rows are deleted from `scripts/fixture-inprocess-allowlist.txt`.
+
+The wrap. Each subject becomes `<p>_main() { <body> }`, followed by the column-0 source guard `[ "${BASH_SOURCE[0]}" = "$0" ] || return 0` and then `<p>_main "$@"`. No `eval` is used and no body line is re-indented. Across the twelve wrapped subjects, `git diff --numstat` deletes 13 lines:
+- ten are `$0` reads ported to `${BASH_SOURCE[0]}`;
+- one is a blank line in `validate-spec-adoption.sh`;
+- two are `validate-mandatory-rules.sh`'s old `if [ "${BASH_SOURCE[0]}" = "$0" ]; then` wrapper and its `fi`, which `vmr_main` replaces.
+
+The ports are in validate-artifact-paths, validate-escalation-status-vocabulary, validate-hermetic-consumption (2), validate-claude-rules, validate-carried-findings, render-path-mapping (2) and validate-mandatory-rules (2). Four of the ports have a cell that goes red with `$0` restored: artifact-paths, escalation-status-vocabulary, hermetic-consumption and claude-rules. For the carried-findings and render-path-mapping ports, the commits show byte-identical output at base and tip, and no cell restores `$0`.
+
+Each fixture sources every copy once (`fx_inproc` paired, an `<N> inproc:<path>` row) and calls `<p>_main` in a subshell. The command-line starts that remain are one `cli` cell per distinct outcome, each compared byte for byte (stdout, stderr, exit) with the in-process call. The counts below are from two agreeing counted runs, as `*` / subject, base -> tip:
+
+- file-mtime: 19 / 6 -> 7 / 3, 5 inproc, 3 cli cells.
+- spec-adoption-floor: 16 / 15 -> 4 / 3, 1 inproc, 3 cli.
+- shadowed-local-validators: 9 / 1 -> 4 / 3, 8 inproc, 3 cli. The one base start, a command-line run, became 3 cli cells, one per distinct CLI outcome, each with an equivalence cell.
+- dist-clone: 764 / 21 -> 696 / 3, 5 inproc, 3 cli. The git shim's own starts move from 658 to 692.
+- artifact-path-conformance: 166 / 6 -> 162 / 4, 8 inproc, 4 cli. The 14 mutant-copy starts are gone. The resolver `artifact-path-config.sh` moves from 134 to 146.
+- escalation-status-vocabulary: 114 / 23 -> 28 / 4, 21 inproc, 4 cli. Twenty-two of the 28 are the forced-failure `grep` stub's starts.
+- hermetic-consumption: 52 / 19 -> 44 / 3, 19 inproc, 3 cli. The mapper `core-paths.sh`, which every validator run starts, moves from 32 to 40.
+- claude-rules-joins: 20 / 19 -> 4 / 3, 18 inproc, 3 cli.
+- carried-findings: 196 / 34 -> 6 / 5, 44 inproc, 5 cli. The conversion gives 43 inproc, and the `selfloc` vacuity cell adds one.
+- escalation-delivery: 24 / 7 -> 5 / 2, 3 inproc, 2 cli.
+- path-mapping-render: 24 / 23 -> 4 / 3, 11 inproc, 3 cli.
+- derivation-capture: 156 / 2 -> 166 / 2, 4 inproc. The two subject starts are now the two cli cells, and `partition-document.sh` is unedited. The conversion leaves `*` at 156. The new `MUTANT-MATRIX` block (6 mutants) adds 10 starts, all from the per-push twins: the hook moves from 73 to 77 and the validator from 77 to 83.
+- wait-stale-deliverable: 371 / 23 -> 404 / 3, 56 inproc, 3 cli. The conversion takes `*` from 371 to 341. C14's guard beat then moves onto the injected clock (item 5), which adds 3 sleep-shim and 18 date-shim starts in each of its 3 cells and takes `*` from 341 to 404. `wait-for-deliverable.sh` is unedited.
+- validator-fork-budget: `scripts/validate-enforcement-map.sh` 22 -> 8, 18 inproc. All 8 are covered: 6 are declared cells (4 cli, 2 e2e), and 2 sit under the `nested` profiler row. `scripts/fork-profile.sh` gets 4 `e2e` starts, and `*` rises from 1120 to 1145 on this release's base (+25, the same rise as 1116 to 1141 on the earlier base).
+  - `receipt-bl898.sh` runs its validator worlds in process through `vem_entry`.
+  - `receipt-bl981.sh` tags its two `--arms I14` starts and re-runs both worlds in process as their equivalence cells.
+  - The four profiler drives are `e2e` cells, because the profiler's `bash -x` child must have the profiler as its logged parent. A `nested` row covers that child.
+- cycle-commits-enforce: 22 / 3 -> 27 / 2, 5 inproc, 2 cli cells (exit 0, exit 1), each with its equivalence cell.
+  - `validate-mandatory-rules.sh` is wrapped as `vmr_main`, and `$0` is ported at the clean-tree path and in the sprint-path message.
+  - From one counted run, every start of the `*` move is named. The subject's 3 starts become the 2 cli cells (-1). The four per-push twins each run their mutant copy once (+4). The sprint-900 cell starts `validate-retro-evidence.sh` twice more (+2).
+  - A `MUTANT-MATRIX` block of 4 rows plus a control is taken from a measured diagonal matrix. ai-dlc-f3's four `mutant_killed` lines are kept byte-identical.
+  - Its consumer gate follows derivation-capture's deviation: an absent subject takes the fixture's existing absent path and never prints an ok. The reason is that the fixture's own subject is `validate-cycle-commits.sh`, which a whole-fixture SKIP would also drop. A half-wrapped subject FAILs, and an unreadable one gives FIXTURE ERROR.
+  - The fixture leaves both `scripts/fixture-inprocess-allowlist.txt` and `scripts/fixture-matrix-allowlist.txt`.
+
+In-process passes are counted per source, in the unit `core/fixtures/lib/mutant.sh` documents for `fx_inproc`: "one IN-PROCESS pass of a subject: a drive that SOURCES the subject and calls its functions, which starts no bash and so is invisible to the start counter. Call it once per pass, on the line before the `.`/`source` of the subject". So one counted source can feed several in-process calls.
+
+For four fixtures, the counts below are N sources / M calls fed by the subject's source. Each source count equals the fixture's `inproc:` row. Each call count is a static count of `<p>_main` calls per source on the per-push path (no `--matrix`), read from the fixture's `run.sh`:
+- file-mtime, 5/9: the subject and the four mutants `mutate()` sources. The subject's source feeds the six `arm_*` arms and the three `eqv` cli twins. Each mutant runs only its deciding arms and its twin: nolocal 3; exitcode, missok and datepath 2 each.
+- spec-adoption-floor, 1/18: three `eqv` cli twins, twelve `rcof` calls and three direct calls.
+- dist-clone, 5/24: one `src_dc` per `suite()` run, for the real suite and the four mutant suites. `suite()` makes 21 `dc` calls with no loop, and the real subject's source adds the three `eqv` cli twins. Each mutant source feeds 21.
+- shadowed-local-validators, 8/4: the real script's source feeds one `run_warn` and the three `eqv` cli twins. The control, the four mutants and the two `refusal_arm` sandboxes each feed one `run_warn_2` call.
+
+The batch-255 paragraph's attribution of validator-fork-budget's validator starts was wrong. It put them on `scripts/fork-profile.sh`'s untagged `bash -x` child and on the renamed profiler copies `fp-*.sh`. One counted hermetic run at 0bd891bd7, after C6 landed, recorded 22 validator starts. Joining each start's parent pid to that parent's logged path splits them:
+- 16 from `receipt-bl898.sh`'s `--arms I83,I84` run over five worlds;
+- 4 from `receipt-bl981.sh`: 2 live, plus 2 from the m20 stub that C6 added;
+- 2 from `scripts/fork-profile.sh`'s traced child;
+- 0 from `fp-*.sh`.
+
+So converting the row did not require editing `fork-profile.sh`, and it is unedited.
+
+Rows remaining: 149, against 164 at base. `bash scripts/validate-fixture-inprocess.sh --complete` exits 1 at the tip with `INCOMPLETE  149 allowlist row(s) remain`. The same run's control line is `273 fixture(s) scanned; 122 predicted to pass, 149 refused, 2 out of population`, and `ls core/fixtures/*/run.sh | wc -l` reads 273.
+
+Item 3. escalation-status-vocabulary, dist-clone, hermetic-consumption, claude-rules-joins, derivation-capture and cycle-commits-enforce each gain a `MUTANT-MATRIX` block and a `--matrix` handler. All six leave `scripts/fixture-matrix-allowlist.txt`, which goes from 90 to 84 rows. derivation-capture's block scores its 6 mutants, and J5 joins all 6 names.
+
+`validate-fixture-hygiene.sh`'s H5 S2 no longer counts `mutant` inside the literal path `lib/mutant.sh` in a fixture that has a line sourcing that lib. Without that discount, a converted fixture that scores no mutant read as a battery. S2 has its own self-probe cell. Over 457 fixture `.sh` files, S2's FP set moves 224 -> 223 and the P-row union 228 -> 227; the one fixture that leaves is spec-adoption-floor.
+
+A consumer runs its own installed subject, which can predate the wrap. Each shipped converted fixture whose subject is wrapped here reads that subject's halves before sourcing it: artifact-path-conformance, carried-findings, dist-clone, escalation-delivery, escalation-status-vocabulary, file-mtime, shadowed-local-validators and spec-adoption-floor. path-mapping-render, which is dist-only, carries the same gate.
+- Neither the `<p>_main() {` line nor the column-0 guard: the fixture prints `SKIP: subject predates the in-process wrap` and exits 0, never an `ok`.
+- Exactly one half: it FAILs, naming the missing half.
+- A subject the gate cannot read (`grep` exit 2): FIXTURE ERROR, exit 2, never the SKIP.
+
+The tip adversary ruled that the SKIP cannot be reached over a readable subject that is wrapped but broken. A broken body still carries both halves, so the fixture runs and FAILs. Respelling both halves does reach the SKIP, but in the distribution that run makes zero cli and zero in-process starts, and J3's exact compare turns the push red. So a consumer only ever receives a subject that passed J3. C5 also refuses a cli subject without the guard.
+
+dist-clone keeps the SKIP it had at base for a missing `reconcile/dist-clone.sh` beside an installed `reconcile/`.
+
+wait-stale-deliverable carries the same gate (D1), keyed on its subject's three halves: the `wfd_mark_main() {` line, the `wfd_beat_main() {` line and the column-0 guard. The gate is proven on a tree built by `scripts/install.sh`:
+- The current subject passes, with 74 ok.
+- A subject from before 0.971.0, when the wrap landed, reads SKIP.
+- With the gate deleted, the fixture goes red, with 42 FAIL.
+- A subject set to `chmod 000` gives FIXTURE ERROR.
+
+derivation-capture deviates from the gate. A splitter carrying neither `pdoc_main` nor the guard is treated as absent, and the seed takes the header-specified manifest path, which the split line states. That is not a SKIP, and one half alone FAILs. The tip adversary ruled this deviation sound: the splitter is not that fixture's subject (the hook is), and the base seed already took the manifest path when the splitter was absent. Respelling both halves turns J3 red on the 2 cli starts and 4 in-process passes.
+
+carried-findings' `selfloc` mutant now reads `$(dirname "${BASH_SOURCE[0]}")`, because in process `$0` is `run.sh`. At the conversion, its `--matrix` vector measured `W1 P1 S6 G1 G2 H1`, wider than the recorded `W1`. The tip adversary found that widening was an artifact. With no copy inside a checkout, the mutant could not be told apart from an unconditional `return 1` in `locate()`.
+
+The fix: the mutant now sources its copy from inside the R world, and the unmutated control is widened to the topology arms. The want is now the measured `W1 S6 G1 G2 H1`, not the base's `W1`. The mutated property is location-dependence: in process, one sourced copy sits under one review TOP, so the mutant trips every topology arm whose answer depends on that location, not only W1. A fixture cell proves the mutant is not vacuous: a `return 1` copy at the same path FAILS P1, where `selfloc` PASSES it. The matrix comparison stays a set comparison (`same_set`), because `died` lists arms in ARMS order while the want names the decider first.
+
+Left open (D2): `core/scripts/wait-for-deliverable.sh` still reads `$0` in its `--help` and in its `usage:` line. Neither is ported: no in-process drive reaches `--help` or the usage path, and the subject stays unedited because many fixtures share it. If a later in-process drive reaches either path, it prints the caller's script name instead of the subject's.
+
+wait-stale-deliverable, item 5: C14's accepted guard beat was the one beat in the fixture that entered the subject's poll sleep on the default PATH. It now runs under a fast sleep stub with its own virtual clock; the stub records 3 sleeps and its clock reads 3. The condition polls stay real (`deliver_on_sleep`, C02, `run_stale`, `until_event`), and so do the stubs' gate and hold loops: each waits on an event and decides no verdict. The fixture's `--matrix` was re-taken on the converted fixture, with the D1 gate in: 240 cells, 0 FAIL, and 0 mismatches against the block over 22 cells.
+
+Two converted rows' `*` rose: validator-fork-budget (1120 -> 1145, while its validator starts fell from 22 to 8) and wait-stale-deliverable (371 -> 404). Wall time was not measured for any row; the cost evidence is the counts the gate records (starts, in-process passes, fork total).
+
+Item 4, worlds built once (no allowlist row moves):
+- artifact-derivations: its git worlds were already built once. Two scratch worlds were rebuilt from identical inputs, the `t_arms` cd root (8 builds) and the `t-a1` render (2 builds). Each is now built once and copied. Three worlds stay fresh, each for its own reason:
+  - the split root: `t-failclosed` asserts that it holds only what was seeded;
+  - the canary root: `t-m4` lets a canary body dirty it;
+  - `inplace_contained`'s reset: its control's bash rewrites `data.txt`.
+
+  After mktemp names are normalised, verdicts are byte-identical, and starts stay at 131.
+- apply-restamp-worklist: shard a was already build-once (1 build, 0 repeats, 33 copies). There the logger run and a plain run agree: 1207 starts each, and 68 verdict lines equal once mktemp names and printed shas are normalised. The `ar_w` world is now built once and copied. Starts are unchanged in shards a, b and c (1207, 1809 and 451).
+- apply-drift-refile: `seed.sh` now runs once and is copied per call. The in-file builders `h_world`, `t_aworld`, `u_world` and `x_world` build one template per argument list and copy it. `y_init` is not hoisted, because its worlds are built differently per case. Starts fall from 899 to 877.
+- snapshot-archive-rotate is build-once, cited by text: `world()` copies a template built once, and the kill-point sweep copies one world per point. Both logger runs on this fixture are VOID. Under the logger, the sweep's first arm lost every worker result and exited 1, and the cause is not yet identified. One toy tested one hypothesis, that a `$( )` inside a backgrounded subshell fires the inherited EXIT trap. Its two sides read equal, so that hypothesis is not supported, which is not evidence that the logger is sound on this fixture.
+- backlog-receipt-binding is build-once, cited by text: its `seed()` builds a template once. Its build count is OWED; it needs a counted run at push time, since the fixture is not run outside a push.
+
+A logger reading stands only where a plain run of the same unit agrees with it. A unit whose arms background a function gets the plain pair or a by-text citation, never the logger alone.
+
+An instrument that shadows a command name changes what `command -v` answers, so a fixture that captures its real tool that way runs a different program. That caused this batch's 1,724-process burst and the hang. And a logger keyed on `git init` and `cp -R` cannot see a world built with `mkdir` and `printf`, so its "0 repeats" is a floor, not a count.
+
+Not converted in this release: the remaining allowlist rows, counted above. Rows this release did not take were left because other in-flight releases held them: ai-dlc-f3's `run.sh` KILL-line edits and ai-dlc-3b's party-wave-barrier rebuild. Eleven of them were original U4 candidates, dropped before building for that reason: fixture-drivability, snapshot-conservation, setup-site-drift, retired-fixture-orphan, fanout-payload-channel, fanout-untracked-corpus, write-format-steering-multiformat, bmad-invocation-resolve, request-coverage, layer-debt-due-and-discharge and layer-debt-ledger. They stay allowlist rows for a later BL-878 release.
+
+The converted fixtures' read sets are owed a re-trace after the push. The lead runs `bash core/scripts/derive-fixture-readsets.sh --list "<names>" --tracer sandbox` from the main checkout, detached at the pushed commit.
+
+The entry stays PARTIAL: `verify:` is unchanged, and there is no LANDED line.
 
 **Close condition.** The allowlist is empty and BL-879's check passes over the whole suite. The receipt runs that check in its completion mode, which exits non-zero while any allowlist row remains, so the entry cannot close the day the check lands. At the 0.986.0 base `bash scripts/validate-fixture-inprocess.sh --complete` exits 1 with `  INCOMPLETE  177 allowlist row(s) remain in scripts/fixture-inprocess-allowlist.txt`, so the receipt reads STILL-LIVE for that reason.
 
@@ -2396,22 +2502,6 @@ Decision rule: the step-value ruling, "A step with no measured value goes" (`.cl
 Receipt: `verify: manual`, by operator ruling, batch 256. BL-972 closes on an `Outcome measured:` line from a graph sprint read by `docs/analysis/pipeline-efficiency-s317-s322/scripts/ask_split.py`, giving that sprint's ADJ-DISPATCH rate above 9.5%. ADJ-DISPATCH counts an ask whose own message, or the lead message just before it, carries an `Agent` dispatch with `toolUseResult.isAsync` true. The bar is s320's 6 of 63 asks (9.5%), the highest pre-rule sprint measured, set by a second operator ruling, batch 256. The pre-rule spread, from `docs/analysis/pipeline-efficiency-s317-s322/out/ask_split.txt`, is s317 0 of 13, s318 0 of 26, s319 4 of 71 (5.6%), s320 6 of 63 (9.5%), s321 4 of 56 (7.1%) and s322 0 of 17. The first bar, above s321's 7.1%, was replaced because it sat inside that spread. Its population is graph's Claude Code lead transcripts and their subagent transcripts under `~/.claude/projects/-Users-n8-git-graph/`, read only, with sprints bounded by `EDGES` in `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` and the window ending at `EXTRACT_WIN_END=2026-11-11T10:30:00Z`. The baseline re-run was on an earlier version of `ask_split.py` in this release, before the `defer_plus_bg` arm and the DRAINED-AT-ASK column were added: a builder hand under the b256-N10 owner re-ran it at that window on a fresh `extract.py` output, its output was byte-identical to the committed `out/ask_split.txt` (`cmp` exit 0), and the owner confirmed the cmp. That run supersedes the contract adversary's earlier estimate of "about 2 of 56". At `ask_split.py` blob f9e83d26dfb6 (`out/ask_split.txt` blob cf6978c4ad1c, this release) the ADJ, HELD and DISPATCHED values are unchanged: columns 1-20 of every ask row and every per-sprint ADJ/HELD/DISPATCHED line are byte-identical to the output of an earlier version of `ask_split.py` in this release, before the `defer_plus_bg` arm and the DRAINED-AT-ASK column were added, and the only changes are added lines and the added `drained_at_ask` column. Corrected HELD-AT-ASK is a regression guard, and it must read 0 on the closing sprint itself; s321 reads 0 asks above 0. Two older sprints carry a non-zero reading, each of 1, in the same file: s319 2026-10-23T00:20:46Z, which is api-request anchored, and s318 2026-10-12T03:13:16Z, which is fallback-anchored. Fallback-anchored means the ask has no `api-request` record, as in s317/s318-era transcripts, so the visibility boundary falls back to the last `user` record before the ask's message. That anchor agrees with the api anchor on all 207 api-anchored asks (FB-DISAGREE 0, with 39 asks on the fallback). The ask count must not fall. A fall against s321's 56 is a contact regression: it is never credited, and it blocks the close whatever else moved. The count is compared only within `ask_split.py`'s output, never against `operator_asks.py`'s 57 (the Correction above). DISPATCHED-AT-ASK (s321 16 of 56, 28.6%, same file) is reported beside the close and is not a close condition. What else would satisfy a weaker receipt: a lead that holds a question back until its lanes drain. That turns every FINISHED-INSIDE wait into NONE-RUNNING and moves the minutes to 0 with the ask count intact. It is the deferral this entry forbids. The pure deferral dispatches nothing adjacent to the ask and reads ADJ 0, which is why the close is keyed on ADJ-DISPATCH and not on minutes. ADJ-DISPATCH alone cannot tell a lead that drains its lanes and then dispatches (it reads ADJ 1, HELD 0) from a compliant one (lead ruling, batch 256; `ask_split.py` probe (q) records it as the KNOWN LIMIT `defer_plus_bg`). DRAINED-AT-ASK is the column a reader checks for that shape. It is reported, never a close guard. DRAINED-AT-ASK, from the same file: s317 2 of 13, s318 2 of 26, s319 4 of 71, s320 4 of 63, s321 4 of 56 and s322 0 of 17. ADJ-DISPATCH and DRAINED-AT-ASK together: 1 of 56 in s321 (2026-11-08T16:24:12Z, the drain-then-dispatch shape in real data) and 0 in every other sprint, s320 included. ACT-INSIDE is no longer the key, because a compliant lead reads 0 on it by construction under a blocking ask. Fewer or faster-answered questions shrink every bucket without the mechanism, which the ask-count rule refuses. What this does not establish: whether every ready action was dispatched cannot be measured from a transcript, because no record names the actions that were ready. ADJ-DISPATCH shows a background dispatch next to the ask, not that it was the whole ready set. Subagents dispatched from another lead session are not joined, and asks issued from a subagent are not counted. Every column here is positional against a blocking ask. If the harness's ask mechanism changes (BL-994), check what these columns record under it before reading them. The step token is `extract.py`'s step for the asks carrying the most s321 FINISHED-INSIDE minutes (87 of 164).
 
 Provenance: batch 254, BL-841 R1 by ruling of lead ai-dlc-7f; id allocated by ai-dlc-7f.
-
-verify: manual
-
-## BL-978 — the smoke-surface scaffold never checks whether the path it creates is ignored, so a plain `git add` silently refuses and `smoke-not-updated` never runs
-
-**DEFECT.** Filed 2026-11-11. The reconcile scaffold in `core/skills/ai-dlc-update/reconcile/apply.sh` creates the declared smoke-surface file from its template and tells the consumer "It is YOURS from here ... Commit it between sprints" (the RESOLVED text around line 2795). It never runs `git check-ignore` on the scaffolded path (`check-ignore` occurs 0 times in `apply.sh`). In a consumer whose `.gitignore` covers that path, a plain `git add` refuses silently, the file stays untracked, and `smoke-not-updated`, which reads the tracked surface, never runs. The instruction to commit it is followed correctly and does nothing.
-
-Provenance is graph's state at da6cadadd468, read only. `docs/smoke-surface.txt` is on disk with 26 non-empty lines. `git cat-file -e HEAD:docs/smoke-surface.txt` exits 128, against a control exit of 0 for the committed `scripts/test-aws-smoke.sh`. `git check-ignore -v` names `.gitignore:29:*.txt`. `git log --all` on the path finds 0 commits. So the file has existed on disk and has never been committed on any ref. BL-845's `WARN smoke-surface-ignored` surfaces this at every handoff once graph has it, but only after the handoff; the reconcile that created the file is silent.
-
-Owed: at reconcile, when the declared surface path is ignored and not tracked, print the `git add -f <path>` remedy beside the scaffold's RESOLVED text.
-
-BOOTSTRAPPING file (`apply.sh`): it ships alone per plan action 2 (`docs/plans/graph-ledger-full-drain.md:1434`, "a candidate whose fix touches a BOOTSTRAPPING file ... ships ALONE"). Evidence on the mechanics, which may make the plan rule relaxable for a step-7-only change like this one; that is the operator's call, to be raised at batch close. The scaffold arm is in `apply.sh`, which runs at step 7 (the gated apply), not in steps 1-2. `apply.sh` is in the machinery slice (`core/skills/ai-dlc-update/**` in `reconcile/setup-sites.md`'s `machinery:` list), which step 2 writes by hand on `SELF-UPDATE-OK` and then re-invokes the skill, so step 7 of the DELIVERING pull runs the new `apply.sh` and the fix acts on that pull. Only when step 2 defers (`SELF-UPDATE-DEFER`, `SELF-UPDATE-UNDECIDED`, an un-synced branch, or a refused self-update push) does step 7 run the installed copy, and then the fix acts from the next pull; a release carrying other work changes neither path. Scope note: the arm runs only when the declared path is ABSENT (`[ ! -f "$CONSUMER/$SS_REL" ]`), so a consumer whose surface is already on disk and ignored, graph's state, never reaches it; that state is BL-845's `WARN smoke-surface-ignored`.
-
-Receipt: `verify: manual`. The receipt shape is a reconcile fixture arm that seeds a consumer whose `.gitignore` covers the surface path, runs the scaffold, and asserts the `git add -f` remedy line. No runner-wired receipt exists without a fixture change, and a `has` on `apply.sh` for `check-ignore` is closable by a comment.
-
-Provenance: batch 255, cluster F3-smoke-surface; id allocated by the lead.
 
 verify: manual
 
@@ -2852,6 +2942,90 @@ Owed: the matrix and plain runs bound their concurrency to a fixed width, so a `
 Receipt: `verify: manual`. The fix decides the test, and a receipt written only to file this entry is what BL-915 forbids.
 
 Provenance: batch 256, M6; id allocated by the lead.
+
+verify: manual
+
+## BL-1017 — step 7 of `/ai-dlc-update` relays no `NOTE` row except `reconcile-log-name`, so any other `NOTE` that `apply.sh` prints can go unrelayed to the operator
+
+**DEFECT.** OPEN. Filed 2026-11-12. Step 7 of `core/skills/ai-dlc-update/SKILL.md` names three row kinds the session acts on: `RESOLVED` (`:1888`, "already done, no operator step"), `WORKLIST` (`:1895`, "the only things left for YOU. Work EVERY row") and `DECISION` (`:1910`, "a genuine operator call"). It then says "Do NOT re-do a `RESOLVED` row by hand. Work only the `WORKLIST` and `DECISION` rows" (`:1925`). Its only instruction for a `NOTE` row is the paragraph at `:1923`, which covers one kind, `NOTE reconcile-log-name` (write the reconcile log at that path); none of the other 13 kinds has one, so nothing tells the session to read them, relay them or ask about them. graph's installed 0.1061.0 `SKILL.md:1843` carries the same wording (read by the lead; not re-read here). Any `NOTE` of those 13 kinds that `apply.sh` prints can therefore go unrelayed.
+
+Population, re-derived at the tip of the BL-978 unit with `grep -n '^[^#]*say NOTE' core/skills/ai-dlc-update/reconcile/apply.sh`: 16 sites over 14 kinds, against a control of 46 `say WORKLIST` sites from the same pattern. origin/main carries 16 sites over 14 kinds; BL-978 adds none (its `scaffold-ignored` and `scaffold-ignore-unchecked` rows are WORKLIST at every tier). The count is a floor: a kind passed through a variable is invisible to the grep.
+
+Each site classified by READING its text, answering whether an operator wants it relayed:
+- 334 `report-verified`: no, it confirms the union-gate condition passed.
+- 463 `blockers-resolved`: no, the approval already covers the region.
+- 465 `blockers-resolved`: no, the unseen rows were already re-approved on record.
+- 483 `report-unverified`: yes, nothing confirmed an operator approved a region matching theirs.
+- 1271 `finish-template-unrecorded`: yes, the text asks for a by-hand confirmation of each template-derived file.
+- 1274 `finish-template-manifest-unreadable`: yes, a merge was not re-tested and the text names the restore.
+- 2155 `override-adjudicated`: no, a recorded verdict stands and nothing is prescribed.
+- 2233 `override-readopt-subsumed`: yes, it says to skip the readopt that an earlier row prints.
+- 2334 `extension-adjudicated`: no, "no re-read is prescribed".
+- 2338 `extension-retire`: yes, the recorded verdict authorizes deleting the entry.
+- 2340 `extension-contradicts-core`: yes, it asks for a refile.
+- 2342 `extension-adjudicated-unrouted`: yes, the register entry has to be checked against the verdict enum.
+- 2983 `reconcile-log-name`: covered, `SKILL.md:1923` instructs it.
+- 3170 `finish-unverified` (empty setup-sited set): yes, no changed setup-sited path could be verified.
+- 3203 `finish-unverified` (setup-sited bucket): yes, the text asks for a by-hand confirmation.
+- 3246 `finish-classify-unrecorded`: yes, each `semantic-merge` row needs a by-hand check.
+
+That is 10 sites an operator wants relayed and has no instruction for, 5 that need no relay, and 1 already covered.
+
+Owed: a step-7 instruction for the other `NOTE` kinds (which to relay and which to leave), or a move of the 10 relay-worthy sites to a kind step 7 already works. Which of the two is a design call for the builder.
+
+Receipt: `verify: manual`. The owed work is a judgment of which kinds an operator wants, and a tree predicate would read CLOSE-CANDIDATE on any edit to step 7's prose.
+
+Provenance: batch 256, filed by the BL-978 owner at the lead's ruling; id allocated by the lead.
+
+verify: manual
+
+## BL-1021 — `FORK_BUDGET` carries 136 forks of headroom, so the fork ceiling cannot see a rise smaller than that
+
+**DEFECT.** OPEN. Filed 2026-11-12. The fork ceiling in `fork-budget.txt` is `FORK_BUDGET=2926` (line 69 at origin/main, the one line the reader's `^FORK_BUDGET=<digits>$` anchor accepts). The file's own convention is stated at lines 49, 54, 60 and 68: "The budget is the tip reading plus HEADROOM_MARGIN 2." The tip reading is 2790, so the convention gives 2792, and the committed budget sits 136 above it (2926 - 2790 = 136).
+
+Measured by the BL-978 builder, each reading `bash scripts/fork-profile.sh --section total` in a clean detached worktree, exit 0:
+- origin/main `74f2cbcf0`: TOTAL 2790.
+- origin/main `abc25f555`: TOTAL 2790.
+
+So a change that adds fewer than 136 forks passes the ceiling unseen, and the ratchet that is meant to catch a rise of a few forks (the margin is 2) cannot fire on one. A ceiling that nothing can reach reads exactly like one that passed.
+
+Owed: one ratchet of `FORK_BUDGET` to the tip reading plus `HEADROOM_MARGIN` 2, in a release built after the batch queue drains. It is NOT done in the BL-978 release, because lowering the budget now would collide with every queued release that raises it. BL-978's +4 raise (to 2930) stays as measured.
+
+Receipt: `verify: manual`. The owed work is a re-measurement at the tip after the queue drains, and no predicate over the tree today can state the future tip reading.
+
+Provenance: batch 256, filed by the BL-978 owner at the lead's ruling, from the final delta adversary's NOTE; id allocated by the lead (ai-dlc-a7).
+
+verify: manual
+
+## BL-1007 — escalation-status-vocabulary is green only from the repo root: run from `/`, its 15 mutant and refusal lines FAIL, the same 15 before and after the in-process conversion
+
+**DEFECT.** OPEN. Filed 2026-11-12. `core/fixtures/escalation-status-vocabulary/run.sh` passes from the repository root and fails from `/`. The pre-push hook runs every fixture from the root, so the push sees only the green run.
+
+Measured on one plain run per side, each output saved and read back:
+- From `/`, at 3e0800c07 (before the conversion): 42 ok, 15 FAIL.
+- From `/`, with this release's converted fixture (before its `MUTANT-MATRIX` block was added): 48 ok, 15 FAIL.
+- From the root, the same converted fixture: 63 ok, 0 FAIL, PASS.
+
+The two sorted FAIL sets from `/` are byte-identical, 15 lines each, so the cwd dependence predates the conversion. Control: the ok line `(a) an appended resolution status is the token adjudicated` is present once in both `/` runs and absent from both FAIL sets, and the two `/` runs share 42 ok lines.
+
+The 15 lines are the battery: three unmutated controls and the twelve mutants scored against them. From `/`, every control fails itself:
+- the whole-directory control scores 00000 against a wanted 11111;
+- the refusal control scores 000000 against 111111;
+- the reader control answers offender=2 and near-miss=2.
+
+Every call answers rc 2 because the copies cannot resolve a project root, so each mutant scored against those controls fails too.
+
+From the root, every control holds (11111, 111111, offender reported and near-miss quiet). Each mutant also scores its own distinct vector, for example M-revert 00111, R-rc 011011 and R-revert-all 000011.
+
+So green-from-root does NOT mean those arms assert nothing at the root. Their controls' positive conjuncts hold there, and every mutant is told apart from its control. It means the fixture needs a project root to resolve its copies. This is not the `core/fixtures/check-3b-locked-anchor` hazard (green because the cwd lacks the decoys): from the wrong cwd this fixture goes red, not green.
+
+What is wrong is that nothing states the dependence. A fixture that must hold from any cwd asserts cwd-invariance in its own arms; this one neither asserts it nor refuses a non-root cwd with FIXTURE BROKEN, so it reports 15 assertion failures that are not regressions.
+
+Not measured here: the `/` run of the tip as it now stands, after its `MUTANT-MATRIX` block changed how the mutants are scored per push.
+
+Not fixed here.
+
+Provenance: batch 256, cluster N11; id allocated by the lead.
 
 verify: manual
 

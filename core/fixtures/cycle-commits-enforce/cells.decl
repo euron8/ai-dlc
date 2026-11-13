@@ -1,0 +1,6 @@
+# cycle-commits-enforce's starts of core/scripts/validate-mandatory-rules.sh (BL-879 grammar). Every Check 2 drive is in
+# process: run.sh sources the subject in a subshell and calls vmr_main (vmr_ip). One cli cell per distinct outcome the
+# equivalence needs (exit 0 --check-clean-tree, exit 1 sprint 900), each started as FXCELL=<id> bash "$VMR" in vmr_eqv()
+# and compared byte for byte with the in-process call on the same input.
+cli core/scripts/validate-mandatory-rules.sh vmr-clean-tree
+cli core/scripts/validate-mandatory-rules.sh vmr-sprint-900

@@ -87,7 +87,8 @@ note() { printf '%s\n' "$*"; }
 nested_dist() {
   local d="$1" s
   mkdir -p "$d/scripts" "$d/core/fixtures"
-  cp "$INSTALL" "$UNINSTALL" "$d/scripts/"
+  # install.sh refuses before writing anything when its function file is not beside it.
+  cp "$INSTALL" "$UNINSTALL" "$ROOT/scripts/install-scaffold-ignore.sh" "$d/scripts/"
   for s in "$ROOT/core/"*/; do
     s="${s%/}"; [ "${s##*/}" = fixtures ] && continue
     cp -R "$s" "$d/core/"

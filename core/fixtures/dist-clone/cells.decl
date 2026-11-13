@@ -1,0 +1,7 @@
+# dist-clone's starts of the subject (BL-879 grammar). Every other drive is in process: run.sh sources the real
+# subject and each mutant copy once (src_dc) and calls dcl_main in a subshell. One cli cell per distinct CLI outcome
+# (exit 0 dist and theirs on stdout, exit 1 STOP on stderr, exit 2 usage on stderr), each started as
+# FXCELL=<id> bash "$SUBJ" in eqv() and compared byte for byte with the in-process call on the same input.
+cli core/skills/ai-dlc-update/reconcile/dist-clone.sh cli-pass
+cli core/skills/ai-dlc-update/reconcile/dist-clone.sh cli-stop
+cli core/skills/ai-dlc-update/reconcile/dist-clone.sh cli-usage

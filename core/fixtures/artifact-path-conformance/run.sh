@@ -82,6 +82,62 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 . "$HERE/matrix.sh" || { echo "FIXTURE ERROR: matrix.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/artifact-path-conformance/matrix.sh"
 
+# IN PROCESS (BL-878). The validator -- the shipped one, the control pair's and each mutant pair's -- is SOURCED ONCE
+# into this shell by src_vap (its guard returns after defining vap_main; one fx_inproc pass each), and every drive
+# calls vap_main inside the `$( )` or `( )` that captures it, so its `exit`, `cd "$ROOT"` and EXIT trap stay there.
+# Inside vap_main BASH_SOURCE[0] is the sourced copy, so the resolver beside it is the one that copy calls. A CORE
+# FIXTURE SHIPS AHEAD OF ITS SUBJECT: a validator with neither the `vap_main() {` line nor the column-0 source guard
+# predates the wrap and reads SKIP (exit 0, never an ok); exactly one half is a respelled subject and FAILs. The
+# distribution cannot reach the SKIP unnoticed: C5 (validate-fixture-inprocess.sh) refuses a cli subject without the
+# guard, and J3 refuses the start count moving.
+src_vap() { # src_vap <validator copy>
+  unset -f vap_main
+  fx_inproc "$1"
+  . "$1" || { echo "FIXTURE BROKEN: sourcing $1 failed" >&2; exit 2; }
+  declare -F vap_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $1 defined no vap_main" >&2; exit 2; }
+  VAP_SOURCED="$1"
+}
+VAP_SOURCED=""
+vreal() { # vreal <args...> -- one in-process call of the SHIPPED validator; refuses if another copy is sourced
+  [ "$VAP_SOURCED" = "$VAL" ] || { echo "FIXTURE BROKEN: a shipped-validator drive while ${VAP_SOURCED:-nothing} is sourced" >&2; return 2; }
+  vap_main "$@"
+}
+w_def=0; w_guard=0
+grep -q '^vap_main() {$' "$VAL"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VAL (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || w_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VAL"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VAL (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || w_guard=1
+if [ "$w_def$w_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$w_def" = 0 ]; then echo "  FAIL  $VAL carries the column-0 source guard but no \`vap_main() {\` line -- a respelled subject this fixture cannot drive"; echo "artifact-path-conformance: 1 of 1 assertion(s) FAILED" >&2; exit 1; fi
+if [ "$w_guard" = 0 ]; then echo "  FAIL  $VAL defines \`vap_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vap_main in this shell"; echo "artifact-path-conformance: 1 of 1 assertion(s) FAILED" >&2; exit 1; fi
+src_vap "$VAL"
+
+# --- the cli cells (cells.decl): the shipped validator run as a PROGRAM once per distinct CLI outcome ------------
+# Outcomes, by exit: 1 BLOCKING (cli-block, run by a RELATIVE path, which is also section 5's question); 0 VERDICT:
+# PASS (cli-pass); 0 the --help text read from the file itself (cli-help, the equivalence proof of the $0 ->
+# BASH_SOURCE[0] port); 2 an unknown option (cli-usage). NOT-APPLICABLE, the greenfield exit 0, has no cli cell:
+# every validator run starts the resolver five times, so a cell costs six starts, and cells may be fewer than
+# outcomes. One `FXCELL=<id> bash` start each, compared byte for byte (stdout, stderr, exit) with the in-process call
+# from the same directory on the same tree; the validator only reads, so the two sides see one state. cli-pass
+# compares against section 2's own in-process run of the migrated tree rather than repeating it. Each cell also
+# asserts its own outcome.
+EQ="$(mktemp -d "${TMPDIR:-/tmp}/apconf-eq-XXXXXX")"
+eqv() { # eqv <cell-id> <dir> <program path, as typed from <dir>> <args...>
+  local id="$1" dir="$2" prog="$3"; shift 3
+  ( cd "$dir" && vreal "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  eqv_cl "$id" "$dir" "$prog" "$@"
+}
+eqv_cl() { # eqv_cl <cell-id> <dir> <program path> <args...> -- the program side only, against $EQ/<id>.ip.* already written
+  local id="$1" dir="$2" prog="$3"; shift 3
+  ( cd "$dir" && FXCELL="$id" bash "$prog" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_rc() { cat "$EQ/$1.cl.rc"; }
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -c 300 "$EQ/$1.ip.out")" "$(head -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -c 300 "$EQ/$1.cl.out")" "$(head -c 300 "$EQ/$1.cl.err")"; }
+
 # The validator prints one indented path per blocking row. Read the PATHS, never the count line.
 blocking_of() { sed -n '/^BLOCKING —/,/^$/p' <<<"$1" | sed -n 's/^  \([^ ].*\)$/\1/p' | grep -v '^(' | sort; }
 
@@ -102,7 +158,7 @@ clone_world() {
 #    that must NOT block are as load-bearing as the ones that must.
 # =============================================================================
 W="$(clone_world)"
-OUT="$(bash "$VAL" --root "$W" 2>&1)"; RC=$?
+OUT="$(vreal --root "$W" 2>&1)"; RC=$?
 
 [ "$RC" -eq 1 ] && ok "a tree with migratable violations exits 1" \
                 || bad "expected exit 1 on a non-conforming tree, got $RC"
@@ -174,7 +230,9 @@ fi
 
 # ...and after the remedy has run, the gate is green. A blocking arm whose own remedy does not
 # clear it is a gate with no exit.
-OUT2="$(bash "$VAL" --root "$W" 2>&1)"; RC2=$?
+# Captured as two streams, because this run is also cli-pass's in-process side; the arms below read for presence.
+( vreal --root "$W" ) > "$EQ/cli-pass.ip.out" 2> "$EQ/cli-pass.ip.err"; RC2=$?; echo "$RC2" > "$EQ/cli-pass.ip.rc"
+OUT2="$(cat "$EQ/cli-pass.ip.out" "$EQ/cli-pass.ip.err")"
 [ "$RC2" -eq 0 ] && ok "after the migration applies, the validator exits 0 — the remedy clears the gate" \
                  || { bad "the migration ran and the validator still exits $RC2"; blocking_of "$OUT2" | sed 's/^/        /'; }
 grep -q 'VERDICT: PASS' <<<"$OUT2" && ok "...and says PASS in its own words" \
@@ -185,12 +243,15 @@ grep -q 'VERDICT: PASS' <<<"$OUT2" && ok "...and says PASS in its own words" \
 grep -q 'REPORTED —' <<<"$OUT2" \
   && ok "the refused and deferred classes are still reported on a green run" \
   || bad "a green run went silent about the paths the migration could not move"
+if eqv_cl cli-pass "$PWD" "$VAL" --root "$W" && [ "$(eq_rc cli-pass)" = 0 ] && grep -q 'VERDICT: PASS' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program passes the migrated tree exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with VERDICT: PASS ($(eq_twin cli-pass))"; fi
 
 # =============================================================================
 # 3. AN EMPTY SUBJECT IS NOT A PASS. A greenfield consumer, first push.
 # =============================================================================
 WE="$(bash "$HERE/seed.sh" "$GRAMMAR" --empty)"
-OUTE="$(bash "$VAL" --root "$WE" 2>&1)"; RCE=$?
+OUTE="$(vreal --root "$WE" 2>&1)"; RCE=$?
 [ "$RCE" -eq 0 ] && ok "a tree with no artifact under any scan root does not FAIL" \
                  || bad "a greenfield consumer exits $RCE, which makes the grammar unadoptable"
 grep -q 'NOT-APPLICABLE' <<<"$OUTE" && ok "...and says NOT-APPLICABLE rather than PASS" \
@@ -203,8 +264,8 @@ grep -q 'VERDICT: PASS' <<<"$OUTE" && bad "an empty subject printed a PASS verdi
 #    relaxes the gate is a gate with an off switch in its own usage line.
 # =============================================================================
 W3="$(clone_world)"
-bash "$VAL" --root "$W3" >/dev/null 2>&1; R_PLAIN=$?
-R_OUT="$(bash "$VAL" --root "$W3" --report 2>&1)"; R_REP=$?
+( vreal --root "$W3" ) >/dev/null 2>&1; R_PLAIN=$?
+R_OUT="$(vreal --root "$W3" --report 2>&1)"; R_REP=$?
 [ "$R_PLAIN" -eq "$R_REP" ] && ok "--report leaves the exit code alone ($R_PLAIN both ways)" \
                             || bad "--report changed the exit code: $R_PLAIN -> $R_REP"
 grep -q 'REPORT —' <<<"$R_OUT" && ok "--report actually adds the census" \
@@ -222,9 +283,23 @@ rm -rf "$W3"
 # =============================================================================
 W4="$(clone_world)"
 VDIR="$(dirname "$VAL")"; VBASE="$(basename "$VAL")"; MBASE="$(basename "$MIG")"
-( cd "$VDIR" && bash "./$VBASE" --root "$W4" >/dev/null 2>&1 ); RREL=$?
+# The relative run is the cli-block cell: the program typed as `./<name>` from its own directory, compared with the
+# in-process call from that directory on the same tree.
+eqv cli-block "$VDIR" "./$VBASE" --root "$W4"; EQB=$?; RREL="$(eq_rc cli-block)"
 [ "$RREL" -eq 1 ] && ok "the validator run by a RELATIVE path still judges the tree (exit 1)" \
                   || bad "relative invocation of the validator gave $RREL, expected 1"
+if [ "$EQB" -eq 0 ] && grep -q '^BLOCKING —' "$EQ/cli-block.cl.out"; then
+  ok "cli-block: the program blocks the pre-migration tree exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-block: the program and the in-process call differ, or no BLOCKING block was printed ($(eq_twin cli-block))"; fi
+eqv cli-usage "$VDIR" "$VAL" --no-such-option; EQU=$?
+if [ "$EQU" -eq 0 ] && [ "$(eq_rc cli-usage)" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && grep -qF "unknown option '--no-such-option'" "$EQ/cli-usage.cl.err"; then
+  ok "cli-usage: the program refuses an unknown option exactly as the in-process call does (stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 naming the option ($(eq_twin cli-usage))"; fi
+eqv cli-help "$VDIR" "$VAL" --help; EQH=$?
+if [ "$EQH" -eq 0 ] && [ "$(eq_rc cli-help)" = 0 ] && grep -q '^validate-artifact-paths.sh' "$EQ/cli-help.cl.out"; then
+  ok "cli-help: --help prints the validator's own header in process exactly as the program does (the \$0 port; exit 0)"
+else bad "cli-help: --help differs in process, or does not print the validator's header ($(eq_twin cli-help))"; fi
 ( cd "$VDIR/.." && bash "$(basename "$VDIR")/$MBASE" --root "$W4" >/dev/null 2>&1 ); RREL2=$?
 [ "$RREL2" -eq 0 ] && ok "the migration run by a relative path from one level up still plans (exit 0)" \
                    || bad "relative invocation of the migration gave $RREL2, expected 0"
@@ -401,13 +476,16 @@ done
 # gate probes through D's resolver. Each arm's RAW output is what killed=yes|no diverges on.
 # =============================================================================
 MUT="$(mktemp -d "${TMPDIR:-/tmp}/apconf-mut-XXXXXX")"
-lay_pair() { mkdir -p "$1"; cp "$VAL" "$1/m.sh"; cp "$CONFIG" "$1/artifact-path-config.sh"; }
+lay_pair() { mkdir -p "$1/core/scripts"; cp "$VAL" "$1/core/scripts/validate-artifact-paths.sh"; cp "$CONFIG" "$1/core/scripts/artifact-path-config.sh"; }
 ARMS="V-judges V-allows-inferred V-probe-nonconform V-empty G-token G-slot"
-dir_run() { # dir_run <D>: run the copy once on the standard tree and once on the greenfield tree
+dir_run() { # dir_run <D>: run the copy once on the standard tree and once on the greenfield tree. It is called in THIS
+  # shell, right after the pair is laid, so the source happens here and never inside arm_raw's `$( )`; arm_raw's own
+  # call then reads the two cached answers.
   local d="$1" w we o
   if [ ! -f "$d/std.rc" ]; then
-    w="$(clone_world)"; o="$(bash "$d/m.sh" --root "$w" 2>&1)"; printf '%s\n' "$?" > "$d/std.rc"; printf '%s\n' "$o" > "$d/std.out"; rm -rf "$w"
-    we="$(bash "$HERE/seed.sh" "$GRAMMAR" --empty)"; o="$(bash "$d/m.sh" --root "$we" 2>&1)"; printf '%s\n' "$o" > "$d/empty.out"; rm -rf "$we"
+    src_vap "$d/core/scripts/validate-artifact-paths.sh"
+    w="$(clone_world)"; o="$(vap_main --root "$w" 2>&1)"; printf '%s\n' "$?" > "$d/std.rc"; printf '%s\n' "$o" > "$d/std.out"; rm -rf "$w"
+    we="$(bash "$HERE/seed.sh" "$GRAMMAR" --empty)"; o="$(vap_main --root "$we" 2>&1)"; printf '%s\n' "$o" > "$d/empty.out"; rm -rf "$we"
   fi
 }
 arm_raw() { # arm_raw <arm> <D>: the arm's raw verdict token for that copy
@@ -418,9 +496,9 @@ arm_raw() { # arm_raw <arm> <D>: the arm's raw verdict token for that copy
     V-allows-inferred) if grep -qxF "_bmad-output/brainstorming/s301/discovery-brainstorming.md" <<<"$(blocking_of "$o")"; then echo blocked; else echo allowed; fi ;;
     V-probe-nonconform) if [ "$rc" = 2 ] && grep -q "expected NONCONFORMING, got CONFORMING" <<<"$o"; then echo fired; else echo quiet; fi ;;
     V-empty) if grep -q "VERDICT: PASS" "$d/empty.out"; then echo pass; else echo nopass; fi ;;
-    G-token) t="$(bash "$d/artifact-path-config.sh" --token-re-prescribed 2>/dev/null)"; s="$GP_TOK_RE"; GP_TOK_RE="$t"
+    G-token) t="$(bash "$d/core/scripts/artifact-path-config.sh" --token-re-prescribed 2>/dev/null)"; s="$GP_TOK_RE"; GP_TOK_RE="$t"
              sv="$(gp_findings "$GP_PROBE/token.md")"; GP_TOK_RE="$s"; if grep -q "^TOKEN" <<<"$sv"; then echo flags; else echo silent; fi ;;
-    G-slot)  t="$(bash "$d/artifact-path-config.sh" --slot-re-prescribed 2>/dev/null)"; s="$GP_SLOT_RE"; GP_SLOT_RE="$t"
+    G-slot)  t="$(bash "$d/core/scripts/artifact-path-config.sh" --slot-re-prescribed 2>/dev/null)"; s="$GP_SLOT_RE"; GP_SLOT_RE="$t"
              sv="$(gp_findings "$GP_PROBE/no-slot.md")"; GP_SLOT_RE="$s"; if grep -q "^NO-SLOT" <<<"$sv"; then echo flags; else echo silent; fi ;;
   esac
 }
@@ -428,14 +506,15 @@ arm_holds() { # arm_holds <arm> <raw>
   case "$1:$2" in V-judges:judges|V-allows-inferred:allowed|V-probe-nonconform:quiet|V-empty:nopass|G-token:flags|G-slot:flags) return 0 ;; esac
   return 1
 }
-SHIPD="$MUT/ship"; lay_pair "$SHIPD"
+SHIPD="$MUT/ship"; lay_pair "$SHIPD"; dir_run "$SHIPD"
 # mutant_score <name> <val|config> <sed program> <deciding arm> <twin arm> <claim>
 mutant_score() {
   local n="$1" which="$2" prog="$3" dec="$4" tw="$5" claim="$6" d="$MUT/$1" src dst a r sr w kd base
   lay_pair "$d"
-  if [ "$which" = val ]; then src="$VAL"; dst="$d/m.sh"; else src="$CONFIG"; dst="$d/artifact-path-config.sh"; fi
+  if [ "$which" = val ]; then src="$VAL"; dst="$d/core/scripts/validate-artifact-paths.sh"; else src="$CONFIG"; dst="$d/core/scripts/artifact-path-config.sh"; fi
   sed -E "$prog" "$src" > "$dst.new" && mv "$dst.new" "$dst"
   if cmp -s "$src" "$dst"; then bad "MUTANT $n sed matched NOTHING — the mutant IS the original"; return; fi
+  dir_run "$d"
   if [ "$MATRIX" = 1 ]; then
     for a in $ARMS; do
       r="$(arm_raw "$a" "$d")"; sr="$(arm_raw "$a" "$SHIPD")"
@@ -456,7 +535,7 @@ mutant_score() {
 }
 
 # UNMUTATED CONTROL, from the same directory layout: every arm must hold on a copy.
-lay_pair "$MUT/control"
+lay_pair "$MUT/control"; dir_run "$MUT/control"
 ctl_held=0; ctl_n=0
 for a in $ARMS; do ctl_n=$((ctl_n + 1)); arm_holds "$a" "$(arm_raw "$a" "$MUT/control")" && ctl_held=$((ctl_held + 1)); done
 if [ "$ctl_held" -eq "$ctl_n" ]; then
@@ -485,7 +564,11 @@ else
   if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (5 mutants)"
   else bad "MX matrix run measured $MROWS cells, $_nx expected"; fi
 fi
-rm -rf "$GP_PROBE" "$GP_EMPTY" "$TPL" "$MUT" "$W" "$WE"
+if ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-block.cl.rc" && ! cmp -s "$EQ/cli-block.cl.rc" "$EQ/cli-usage.cl.rc" \
+   && ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-help.cl.out"; then
+  ok "cli cells discriminate: pass, block and usage exit 0, 1 and 2, and the two exit-0 cells print different text"
+else bad "cli cells do not discriminate: two of cli-pass, cli-block, cli-usage share an exit, or cli-pass printed what cli-help did"; fi
+rm -rf "$GP_PROBE" "$GP_EMPTY" "$TPL" "$MUT" "$W" "$WE" "$EQ"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "artifact-path-conformance: PASS ($asserts assertions)"; exit 0; fi

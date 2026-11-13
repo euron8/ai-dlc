@@ -1,7 +1,8 @@
 # dist-clone drives reconcile/dist-clone.sh against throwaway upstreams and consumers built under mktemp,
 # and pins the SKILL.md sentences it implements (DCP). reconcile/emit-report.sh is declared because the
-# fixture locates the reconcile directory by its presence (run.sh:45, a -f test). Mutants are lone copies of
-# dist-clone.sh, which resolves no sibling. The list is derived from run.sh:2, :45, :50 and :65.
+# fixture locates the reconcile directory by its presence (run.sh's `-f` test on it). Mutants are lone copies of
+# dist-clone.sh, which resolves no sibling. The list is derived from run.sh's lib/preamble.sh source, that
+# `-f` test, its `SUBJ="$RECON/dist-clone.sh"` line and its lib/mutant.sh source.
 !core/skills/ai-dlc-update/reconcile/dist-clone.sh
 !core/skills/ai-dlc-update/SKILL.md
 core/skills/ai-dlc-update/reconcile/emit-report.sh

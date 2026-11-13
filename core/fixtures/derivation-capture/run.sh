@@ -16,7 +16,30 @@
 # unrelated edit in 30% of live files and be turned off within a sprint. A5 and A6 edit
 # two pairs of ONE block and require opposite verdicts; a mask that works at block grain
 # passes every other arm here and fails those two.
+#
+# THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). M1-M6 mutate the BL-727 fix, each a copy built
+# by sup_mk; the arms are the cells their kills read (sup_arm: r1..r5, jg, join, pre2, preM). PER PUSH a mutant runs
+# its DECIDING arm (the kill's own check, unchanged) and its TWIN, an arm the measured matrix shows GREEN for it, which
+# must stay green (sup_twin), so the kill is confined. `--matrix` runs ctl and every mutant on every arm, each cell in
+# a fresh project, and prints one `MATRIX <mutant> <arm> GREEN|TRIPPED` row per cell. Measured: ctl GREEN on all nine;
+# M1 and M2 trip r1-r4 (M2 is scored on r1 alone); M3 trips join; M4 and M5 trip jg; M6 trips pre2 and preM; every
+# other cell GREEN. RE-MEASURE whenever an arm or a mutant is added or changed, from the repo root:
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/derivation-capture/run.sh --matrix
+# MUTANT-MATRIX M1 decides=r1,r2,r3,r4 twins=r5
+# MUTANT-MATRIX M2 decides=r1 twins=r5
+# MUTANT-MATRIX M3 decides=join twins=pre2
+# MUTANT-MATRIX M4 decides=jg twins=r1
+# MUTANT-MATRIX M5 decides=jg twins=r1
+# MUTANT-MATRIX M6 decides=pre2,preM twins=join
+# MUTANT-MATRIX-CONTROL ctl why=the unmutated hook and validator in a project of their own; every arm holds there, and B_SUPCTL gates every kill on it
 set -uo pipefail
+# Usage: run.sh [--matrix]   (--matrix also prints one MATRIX row per mutant-or-ctl and arm; see the M1-M6 block)
+MATRIX=0
+case "${1:-}" in
+  "") ;;
+  --matrix) MATRIX=1 ;;
+  *) echo "FIXTURE ERROR: unknown argument '$1' (usage: run.sh [--matrix])" >&2; exit 2 ;;
+esac
 
 # The pre-push gate exports every AI_DLC_* tunable a consumer set in settings.json into
 # this process. Scrub them so the hook and the validator are tested against their own
@@ -36,10 +59,60 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required to build 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# THE SECTION SPLIT, IN PROCESS (BL-878). The splitter is not this fixture's subject -- the hook is -- so the split
+# is made by the REAL partition-document.sh when either layout carries it (the manifest is then the producer's
+# bytes), and otherwise by the manifest the splitter's own header specifies, written here; the run says which.
+# Each split SOURCES the splitter inside a subshell and calls pdoc_main, the line its own tail runs: its `exit` and
+# its EXIT trap end that subshell, its `set -u` stays there, and pipefail is off as the program runs it. It is
+# sourced per call, never into this shell, so its functions cannot shadow this file's. Calls stay SERIAL: the
+# splitter names its temp files by $$, which is this shell's pid for every in-process call. Each source is one
+# fx_inproc pass (the inproc: row).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A splitter with neither the `pdoc_main() {` line nor the column-0
+# source guard predates the in-process wrap: it is treated as absent (the header-specified manifest, said on the
+# split line), never sourced, since sourcing it would run its whole program in the subshell with this file's
+# argv. Exactly one of the two halves is a respelled splitter this fixture can no longer drive, and FAILS.
+PDOC=""
+for _c in "$HERE/../../../core/scripts/partition-document.sh" "$HERE/../../../scripts/ai-dlc/partition-document.sh"; do
+  [ -f "$_c" ] && { PDOC="$_c"; break; }
+done
+PD_PREWRAP=0
+if [ -n "$PDOC" ]; then
+  pd_def=0; pd_guard=0
+  grep -q '^pdoc_main() {$' "$PDOC" && pd_def=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$PDOC" && pd_guard=1
+  if [ "$pd_def$pd_guard" = 00 ]; then PDOC=""; PD_PREWRAP=1; fi
+  if [ "$pd_def$pd_guard" = 01 ]; then echo "  FAIL  $PDOC carries the column-0 source guard but no \`pdoc_main() {\` line -- a respelled splitter this fixture cannot drive" >&2; exit 1; fi
+  if [ "$pd_def$pd_guard" = 10 ]; then echo "  FAIL  $PDOC defines \`pdoc_main() {\` but carries no column-0 source guard -- sourcing it would run pdoc_main with this file's argv" >&2; exit 1; fi
+  echo "HERMETIC-CONSUMED core/scripts/partition-document.sh"
+fi
+# pd_split <doc> <dir>: one in-process --split, streams discarded as the seed discarded them; returns its exit.
+pd_split() {
+  fx_inproc "$PDOC"
+  ( set +o pipefail; . "$PDOC" || exit 97; pdoc_main --split "$1" "$2" ) >/dev/null 2>&1
+}
+# split_seed <doc> <dir>: the seeded document's section split; sets SPLIT_BY.
+split_seed() {
+  if [ -n "$PDOC" ]; then
+    pd_split "$1" "$2" || { echo "FIXTURE ERROR: partition-document.sh --split refused the seeded document" >&2; exit 2; }
+    SPLIT_BY="partition-document.sh"
+  else
+    mkdir -p "$2/sections"
+    sed -n '1,7p' "$1" > "$2/sections/1.md"
+    sed -n '8,13p' "$1" > "$2/sections/2.md"
+    sed -n '14,16p' "$1" > "$2/sections/3.md"
+    { printf 'document\t%s/%s\n' "$(cd "$(dirname "$1")" && pwd -P)" "$(basename "$1")"
+      printf 'sha256\t%s\n' "$(shasum -a 256 "$1" | cut -d' ' -f1)"
+      printf 'part\t1\t1\t7\t## Goals\npart\t2\t8\t13\t## Scope\npart\t3\t14\t16\t## Risks\n'; } > "$2/sections/.manifest"
+    if [ "$PD_PREWRAP" = 1 ]; then SPLIT_BY="the fixture (the partition-document.sh present predates the in-process wrap)"
+    else SPLIT_BY="the fixture (no partition-document.sh in either layout)"; fi
+  fi
+}
+split_seed "$SPLIT_DOC" "$REPDIR"
 
 OUT="$WORK/stdout"; ERR="$WORK/stderr"
 # fire <json> -> sets RC, writes the hook's streams to $OUT/$ERR
@@ -433,6 +506,47 @@ sec_write() { # <file> <pair> -> append the pair to the file, then fire an Edit 
 }
 echo "  (section split made by $SPLIT_BY)"
 
+# THE CLI CELLS (cells.decl): the splitter run as a PROGRAM once per distinct outcome this fixture relies on and its
+# refusal -- exit 0 with the sections written (cli-split-pass) and exit 2 with one REFUSED line on stderr and nothing
+# written (cli-split-refuse) -- each compared byte for byte with the in-process call on the same input: stdout, stderr
+# and exit separately, and the written tree (moved aside after each side, so both write the same <dir> from the same
+# state). Each cell also asserts its own outcome, and the two must differ, so two runs that did nothing cannot agree.
+if [ -n "$PDOC" ]; then
+  EQ="$WORK/eq"; mkdir -p "$EQ"
+  pd_eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc,tree}; 0 when every pair is identical
+    local id="$1"; shift
+    fx_inproc "$PDOC"
+    ( set +o pipefail; . "$PDOC" || exit 97; pdoc_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    if [ -d "$EQ/d" ]; then mv "$EQ/d" "$EQ/$id.ip.tree"; fi
+    FXCELL="$id" bash "$PDOC" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+    if [ -d "$EQ/d" ]; then mv "$EQ/d" "$EQ/$id.cl.tree"; fi
+    cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" || return 1
+    if [ -d "$EQ/$id.ip.tree" ] || [ -d "$EQ/$id.cl.tree" ]; then diff -r "$EQ/$id.ip.tree" "$EQ/$id.cl.tree" >/dev/null 2>&1 || return 1; fi
+    return 0
+  }
+  pd_twin() { printf 'in-process rc=%s err=[%s] / program rc=%s err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(cat "$EQ/$1.ip.err")" \
+    "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.err")"; }
+  if pd_eqv cli-split-pass --split "$SPLIT_DOC" "$EQ/d" && [ "$(cat "$EQ/cli-split-pass.cl.rc")" = 0 ] \
+     && [ -f "$EQ/cli-split-pass.cl.tree/sections/.manifest" ] && [ -f "$EQ/cli-split-pass.cl.tree/sections/2.md" ] \
+     && [ ! -s "$EQ/cli-split-pass.cl.err" ]; then
+    ok "cli-split-pass: the splitter as a program splits the seeded document exactly as the in-process call does (stdout, stderr, exit 0, the sections and manifest)"
+  else
+    bad "cli-split-pass: the program and the in-process split differ, or the outcome is not exit 0 with a manifest ($(pd_twin cli-split-pass))"
+  fi
+  if pd_eqv cli-split-refuse --split "$WORK/no-such-document.md" "$EQ/d" && [ "$(cat "$EQ/cli-split-refuse.cl.rc")" = 2 ] \
+     && [ ! -s "$EQ/cli-split-refuse.cl.out" ] && [ ! -e "$EQ/cli-split-refuse.cl.tree" ] \
+     && [ "$(grep -c '^partition-document: REFUSED' "$EQ/cli-split-refuse.cl.err")" = 1 ]; then
+    ok "cli-split-refuse: the splitter as a program refuses a missing document exactly as the in-process call does (stdout, stderr, exit 2, nothing written)"
+  else
+    bad "cli-split-refuse: the program and the in-process refusal differ, or the outcome is not exit 2 with one REFUSED line ($(pd_twin cli-split-refuse))"
+  fi
+  if ! cmp -s "$EQ/cli-split-pass.cl.rc" "$EQ/cli-split-refuse.cl.rc"; then
+    ok "cli cells discriminate: the passing and the refusing input give different exits"
+  else
+    bad "cli cells do not discriminate: cli-split-pass and cli-split-refuse gave the same exit"
+  fi
+fi
+
 # CONTROL: the pair really is stale, so every exit 0 below is the exemption and not a match.
 printf '# c\n\n%s\n' "$PAIR_SELF" > "$WORK/self-ctl.md"
 SCTL="$( ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$VALIDATOR" "$WORK/self-ctl.md" ) 2>&1 )"
@@ -674,6 +788,8 @@ if [ "$(cd /tmp && pwd -P)" != /tmp ] && TW="$(TMPDIR=/tmp bash "$HERE/seed.sh" 
   NOROOT_DIRS="${NOROOT_DIRS:-} $TW"
   T_CONSUMER="$( . "$TW/env.sh"; printf '%s' "$CONSUMER" )"; T_REPDIR="$( . "$TW/env.sh"; printf '%s' "$REPDIR" )"
   T_HOOK="$( . "$TW/env.sh"; printf '%s' "$HOOK" )"
+  # The second seed's split, made here as the first one's is (split_seed, in process).
+  split_seed "$( . "$TW/env.sh"; printf '%s' "$SPLIT_DOC" )" "$T_REPDIR"
   T_PHYS="$(cd "$T_CONSUMER" && pwd -P)"
   T_DOCLINE="$(sed -n 's/^document	//p' "$T_REPDIR/sections/.manifest")"
   PAIR_TMP="$(pair_on "$T_CONSUMER/$SELF_REL")"
@@ -983,6 +1099,59 @@ sup_mut() { # <src> <dst> <old> <new> -> 0 when <old> is on exactly one line of 
   ! cmp -s "$1" "$2"
 }
 MH="$WORK/sup-mut-hook.sh"; MV="$WORK/sup-mut-validator.sh"
+# sup_mk <M1..M6|ctl> -> SB_H, SB_V: the hook and validator that mutant's project carries, one of them a mutated copy
+# (ctl: neither). THE ONE HOME of the six mutations: the per-push block below and the --matrix loop both build here.
+sup_mk() {
+  SB_H="$HOOK"; SB_V="$VALIDATOR"
+  case "$1" in
+    ctl) return 0 ;;
+    M1) SB_H="$MH"; sup_mut "$HOOK" "$MH" 'AI_DLC_DERIV_SUPERSEDE_FROM="$FILE" bash "$VALIDATOR"' 'bash "$VALIDATOR"' ;;
+    M2) SB_V="$MV"; sup_mut "$VALIDATOR" "$MV.1" 'd="${sf%/*}"; [ "$d" = "$sf" ] && d="."' 'd="${f%/*}"; [ "$d" = "$f" ] && d="."' \
+          && sup_mut "$MV.1" "$MV" '-v bn="${sf##*/}"' '-v bn="${f##*/}"' ;;
+    M3) SB_V="$MV"; sup_mut "$VALIDATOR" "$MV" 'substr($0, 1, 2) == "C " && !($0 in have)' 'substr($0, 1, 2) == "C " && 0' ;;
+    M4) SB_H="$MH"; sup_mut "$HOOK" "$MH" "if _jg=\"\$(grep -m1 '^REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=' <<<\"\$OUT\")\"; then" 'if false; then' ;;
+    M5) SB_H="$MH"; sup_mut "$HOOK" "$MH" 'jq -n --arg context' ': --arg context' ;;
+    M6) SB_V="$MV"; sup_mut "$VALIDATOR" "$MV" 'if [ "$#" -ne 1 ] || [ ! -f "$1" ] || [ ! -r "$SUP_FROM" ] || [ ! -f "$SUP_FROM" ]; then' 'if false; then' ;;
+    *) echo "FIXTURE ERROR: no mutation registered for '$1'" >&2; exit 2 ;;
+  esac
+}
+# sup_arm <arm> -> 0 GREEN (the arm holds), 1 TRIPPED, run with SB_H/SB_V in a FRESH project of its own. The arms are
+# the cells the six kills read: r1..r5 one row's Edit fired through the hook (sup_ok, as A54-A58 read it); jg the
+# replayed join REFUSED fired through the hook (sup_jg_ok, A64); join the validator on a non-joining SUPERSEDE_FROM
+# (rc 2 and a REFUSED line, A62); pre2 and preM the pre-check's two refusals (A65 two arguments, A66 a missing file:
+# its own text). On the unmutated pair every arm is GREEN, which the matrix's ctl row shows.
+SUP_AN=0
+sup_arm() {
+  SUP_AN=$((SUP_AN + 1))
+  sup_world "arm$SUP_AN" "$SB_H" "$SB_V" || { echo "FIXTURE ERROR: the project for arm $1 could not be built" >&2; exit 2; }
+  case "$1" in
+    r1|r2|r3|r4|r5) sup_fire "$SUPW" "${1#r}"; sup_ok "${1#r}" ;;
+    jg) sup_body 1 > "$SUPW/$(sup_path 1)"
+        sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
+        sup_fire "$SUPW" 1; sup_jg_ok ;;
+    join) sup_body 1 > "$SUPW/$(sup_path 1)"; sup_body 5 > "$SUPW/$(sup_path 5)"
+        ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$(sup_path 5)" \
+            bash "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh" "$SUPW/$(sup_path 1)" ) > "$WORK/sup-arm.txt" 2>&1
+        [ "$?" = 2 ] && grep -q '^REFUSED' "$WORK/sup-arm.txt" ;;
+    pre2) sup_body 1 > "$SUPW/$(sup_path 1)"; sup_body 5 > "$SUPW/$(sup_path 5)"
+        ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$(sup_path 1)" \
+            bash "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh" "$SUPW/$(sup_path 1)" "$SUPW/$(sup_path 5)" ) > "$WORK/sup-arm.txt" 2>&1
+        grep -q "$SUP_PRE" "$WORK/sup-arm.txt" ;;
+    preM) sup_body 1 > "$SUPW/$(sup_path 1)"
+        ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$SUP_PA/s1/sup-absent.md" \
+            bash "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh" "$SUPW/$(sup_path 1)" ) > "$WORK/sup-arm.txt" 2>&1
+        grep -q "$SUP_PRE" "$WORK/sup-arm.txt" ;;
+    *) echo "FIXTURE ERROR: no arm '$1'" >&2; exit 2 ;;
+  esac
+}
+SUP_ARMS="r1 r2 r3 r4 r5 jg join pre2 preM"
+# sup_twin <M> <arm> -> 0 when the mutant's TWIN arm (its MUTANT-MATRIX row) still holds under that mutant's pair, so
+# the kill is confined to the deciding arm; otherwise one FAIL naming it. Run after the deciding check has been read.
+sup_twin() {
+  sup_mk "$1" > /dev/null && sup_arm "$2" && return 0
+  bad "$1: twin $2 tripped beside its deciding arm -- the kill is not confined to it; re-measure the matrix (--matrix)"
+  return 1
+}
 
 # CONTROL: the unmutated pair in a project of its own.
 if sup_world ctl "$HOOK" "$VALIDATOR" && cmp -s "$HOOK" "$SUPW/.claude/hooks/ai-dlc-derivation-capture.sh"; then
@@ -1003,23 +1172,22 @@ fi
 # M1: the hook drops AI_DLC_DERIV_SUPERSEDE_FROM -- the defect as filed. Rows 1-4 go red, each on
 # the EARLIER pair the mask can no longer see superseded. Row 4 is scored too: A57 is silent-shaped
 # and would pass against a hook that emits nothing, so it needs a mutant that reddens it.
-if sup_mut "$HOOK" "$MH" 'AI_DLC_DERIV_SUPERSEDE_FROM="$FILE" bash "$VALIDATOR"' 'bash "$VALIDATOR"' \
-   && sup_world m1 "$MH" "$VALIDATOR"; then
+if sup_mk M1 && sup_world m1 "$SB_H" "$SB_V"; then
   _k=""
   for _r in 1 2 3 4; do sup_fire "$SUPW" "$_r"; sup_ok "$_r" || { sup_stale_at4 "$_r" && _k="$_k$_r"; }; done
-  [ "$_k" = 1234 ] && mutant_killed "${B_SUPCTL:-0}" M1 "M1 killed: the hook without SUPERSEDE_FROM refuses rows 1, 2, 3 and 4 at :4" \
+  if [ "$_k" != 1234 ]; then bad "M1 survived: with the env dropped only rows '$_k' of 1-4 went red at :4 -- A54-A57 do not need the real file"
+  elif sup_twin M1 r5; then mutant_killed "${B_SUPCTL:-0}" M1 "M1 killed: the hook without SUPERSEDE_FROM refuses rows 1, 2, 3 and 4 at :4" \
     || bad "M1 survived: with the env dropped only rows '$_k' of 1-4 went red at :4 -- A54-A57 do not need the real file"
+  fi
 else
   bad "M1 DID NOT APPLY: the hook's validator call no longer carries AI_DLC_DERIV_SUPERSEDE_FROM=\"\$FILE\""
 fi
 
 # M2: the validator keeps the ARGUMENT's parent and basename for is_record (the mask's mktemp dir),
 # while the later copies still come from the real file. Row 1 goes red: no record, no supersession.
-if sup_mut "$VALIDATOR" "$MV.1" 'd="${sf%/*}"; [ "$d" = "$sf" ] && d="."' 'd="${f%/*}"; [ "$d" = "$f" ] && d="."' \
-   && sup_mut "$MV.1" "$MV" '-v bn="${sf##*/}"' '-v bn="${f##*/}"' \
-   && sup_world m2 "$HOOK" "$MV"; then
+if sup_mk M2 && sup_world m2 "$SB_H" "$SB_V"; then
   sup_fire "$SUPW" 1
-  if ! sup_ok 1 && sup_stale_at4 1; then mutant_killed "${B_SUPCTL:-0}" M2 "M2 killed: is_record read off the mask's path refuses row 1 at :4"
+  if ! sup_ok 1 && sup_stale_at4 1; then sup_twin M2 r5 && mutant_killed "${B_SUPCTL:-0}" M2 "M2 killed: is_record read off the mask's path refuses row 1 at :4"
   else bad "M2 survived: is_record keyed on the argument's path gave row 1 rc $RC -- A54 does not need the real file's identity"; fi
 else
   bad "M2 DID NOT APPLY: the supersession pre-pass no longer takes par/bn from \$sf"
@@ -1027,14 +1195,13 @@ fi
 
 # M3: the validator's join guard matches nothing. A62's call then reads the other file's one command,
 # skips the pre-pass and answers FAIL (STALE) at rc 1 -- a verdict built on a file it never joined.
-if sup_mut "$VALIDATOR" "$MV" 'substr($0, 1, 2) == "C " && !($0 in have)' 'substr($0, 1, 2) == "C " && 0' \
-   && sup_world m3 "$HOOK" "$MV"; then
+if sup_mk M3 && sup_world m3 "$SB_H" "$SB_V"; then
   sup_body 1 > "$SUPW/$(sup_path 1)"; sup_body 5 > "$SUPW/$(sup_path 5)"
   ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$(sup_path 5)" \
       bash "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh" "$SUPW/$(sup_path 1)" ) > "$WORK/sup-m3.txt" 2>&1
   _m3=$?
   if [ "$_m3" = 1 ] && ! grep -q '^REFUSED' "$WORK/sup-m3.txt" && grep -q 'FAIL (STALE): .*:4 records an output' "$WORK/sup-m3.txt"; then
-    mutant_killed "${B_SUPCTL:-0}" M3 "M3 killed: without the join guard a non-joining SUPERSEDE_FROM gives a verdict (rc 1, FAIL (STALE)), not REFUSED"
+    sup_twin M3 pre2 && mutant_killed "${B_SUPCTL:-0}" M3 "M3 killed: without the join guard a non-joining SUPERSEDE_FROM gives a verdict (rc 1, FAIL (STALE)), not REFUSED"
   else
     bad "M3 survived: without the join guard the non-joining call gave rc $_m3: $(head -2 "$WORK/sup-m3.txt")"
   fi
@@ -1044,13 +1211,12 @@ fi
 
 # M4: the hook's join-guard arm matches nothing. The REFUSED line then falls to the generic arm and
 # the write is refused under the "did not run to completion" headline -- an author blocked by drift.
-if sup_mut "$HOOK" "$MH" "if _jg=\"\$(grep -m1 '^REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=' <<<\"\$OUT\")\"; then" 'if false; then' \
-   && sup_world m4 "$MH" "$VALIDATOR"; then
+if sup_mk M4 && sup_world m4 "$SB_H" "$SB_V"; then
   sup_body 1 > "$SUPW/$(sup_path 1)"
   sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
   sup_fire "$SUPW" 1
   if ! sup_jg_ok && [ "$RC" = 2 ] && grep -q 'did not run to' "$ERR"; then
-    mutant_killed "${B_SUPCTL:-0}" M4 "M4 killed: without the join-guard arm the drift refuses the write under the 'did not run to completion' headline"
+    sup_twin M4 r1 && mutant_killed "${B_SUPCTL:-0}" M4 "M4 killed: without the join-guard arm the drift refuses the write under the 'did not run to completion' headline"
   else
     bad "M4 survived: without the join-guard arm the hook gave rc $RC: $(head -2 "$ERR")"
   fi
@@ -1060,13 +1226,12 @@ fi
 
 # M5: the join-guard arm still exits 0 but emits nothing -- the silent fail-open A64 exists to refuse.
 # `:` swallows the jq call's arguments, so the arm emits neither the JSON nor anything on stderr.
-if sup_mut "$HOOK" "$MH" 'jq -n --arg context' ': --arg context' \
-   && sup_world m5 "$MH" "$VALIDATOR"; then
+if sup_mk M5 && sup_world m5 "$SB_H" "$SB_V"; then
   sup_body 1 > "$SUPW/$(sup_path 1)"
   sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
   sup_fire "$SUPW" 1
   if ! sup_jg_ok && [ "$RC" = 0 ] && [ ! -s "$OUT" ] && [ ! -s "$ERR" ]; then
-    mutant_killed "${B_SUPCTL:-0}" M5 "M5 killed: a join-guard arm that exits 0 silently (no stdout, no stderr) fails A64"
+    sup_twin M5 r1 && mutant_killed "${B_SUPCTL:-0}" M5 "M5 killed: a join-guard arm that exits 0 silently (no stdout, no stderr) fails A64"
   else
     bad "M5 survived: the silenced join-guard arm gave rc $RC with $(wc -c < "$OUT") stdout and $(wc -c < "$ERR") stderr bytes"
   fi
@@ -1077,8 +1242,7 @@ fi
 # M6: the validator's SUPERSEDE_FROM pre-check matches nothing. A65's and A66's inputs then reach
 # the walk, and the join guard refuses them under ITS text -- a refusal for the wrong reason, after
 # reading a file the pre-check exists to keep it from reading. Scored as the presence of that text.
-if sup_mut "$VALIDATOR" "$MV" 'if [ "$#" -ne 1 ] || [ ! -f "$1" ] || [ ! -r "$SUP_FROM" ] || [ ! -f "$SUP_FROM" ]; then' 'if false; then' \
-   && sup_world m6 "$HOOK" "$MV"; then
+if sup_mk M6 && sup_world m6 "$SB_H" "$SB_V"; then
   sup_body 1 > "$SUPW/$(sup_path 1)"; sup_body 5 > "$SUPW/$(sup_path 5)"
   _MV6="$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
   ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$(sup_path 1)" \
@@ -1091,12 +1255,24 @@ if sup_mut "$VALIDATOR" "$MV" 'if [ "$#" -ne 1 ] || [ ! -f "$1" ] || [ ! -r "$SU
   ! grep -q "$SUP_PRE" "$WORK/sup-m6-two.txt" && grep -q 'does not carry the commands of' "$WORK/sup-m6-two.txt" && _k6="${_k6}a"
   ! grep -q "$SUP_PRE" "$WORK/sup-m6-missing.txt" && grep -q 'does not carry the commands of' "$WORK/sup-m6-missing.txt" && _k6="${_k6}b"
   if [ "$_k6" = ab ]; then
-    mutant_killed "${B_SUPCTL:-0}" M6 "M6 killed: without the pre-check both A65's and A66's inputs reach the walk and are refused by the join guard instead (rc $_m6a, $_m6b)"
+    sup_twin M6 join && mutant_killed "${B_SUPCTL:-0}" M6 "M6 killed: without the pre-check both A65's and A66's inputs reach the walk and are refused by the join guard instead (rc $_m6a, $_m6b)"
   else
     bad "M6 survived: without the pre-check only inputs '$_k6' of ab lost the pre-check text for the join guard's (rc $_m6a, $_m6b): $(head -2 "$WORK/sup-m6-two.txt")"
   fi
 else
   bad "M6 DID NOT APPLY: the validator's SUPERSEDE_FROM pre-check test is not on one line"
+fi
+
+# THE MATRIX, printed only under --matrix: every mutant (and the unmutated pair, ctl) against every arm, each cell in
+# a fresh project, so a row is that arm's own verdict under that pair. The MUTANT-MATRIX rows in this file's header are
+# read off this output.
+if [ "$MATRIX" = 1 ]; then
+  for _m in ctl M1 M2 M3 M4 M5 M6; do
+    sup_mk "$_m" > /dev/null || { bad "MATRIX: mutant $_m did not apply"; continue; }
+    for _a in $SUP_ARMS; do
+      if sup_arm "$_a"; then printf '  MATRIX %s %s GREEN\n' "$_m" "$_a"; else printf '  MATRIX %s %s TRIPPED\n' "$_m" "$_a"; fi
+    done
+  done
 fi
 
 # --- A14: the artifact is not modified by the hook ----------------------------

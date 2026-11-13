@@ -312,7 +312,7 @@ them. **Cold-read a handoff before shipping it, separately from rehearsing its c
      `scripts/validate-plan-shape.sh` exists only in `scripts/`, which is distribution-only by
      construction, and `core/fixtures/plan-shape/.dist-only` already declares exactly this.
    - *Version the hook in this repo* — actively fenced out. `.gitignore:41` ignores `.claude/*`,
-     and I88's A1 arm at `scripts/validate-claude-rules.sh:95` fails the push on any tracked path
+     and I88's A1 arm of `scripts/validate-claude-rules.sh` fails the push on any tracked path
      under `.claude/` that is not `.claude/rules/**/*.md`. It would also be covered by nothing:
      `validate-hook-registration.sh` SKIPs here (no `.claude/settings.json`), its glob is
      `ai-dlc-*.sh` anyway, this repo's pre-push never calls it, and no other gate reads that path.
@@ -358,7 +358,7 @@ starts from the finding rather than re-discovering it:
    exactly once in the file, at `:87` itself. **The enforcer is stricter than the rule it cites**,
    and ten live bare-number citations sit compliant-by-rule-text while being only accidentally
    safe from the regex. Fix the rule or narrow the detector; do not leave them disagreeing.
-2. **`scripts/validate-claude-rules.sh:109` — a stale citation inside a LIVE error message.** A1's
+2. **`scripts/validate-claude-rules.sh`'s `A1: tracked path(s) under .claude/` emit — a stale citation inside a LIVE error message.** A1's
    error string cites `.gitignore:19-24` as the narrowing it is protecting. Those lines are the
    `_bmad-output/` comment block. The actual `.claude/*` narrowing is `.gitignore:41-45`. An
    operator who follows the pointer the failure hands them lands on the wrong block.

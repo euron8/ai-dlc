@@ -1,5 +1,12 @@
-# Measured by an armed run through core/scripts/hermetic-run.sh (the judge's own J3 output: measured 371), twice, identical.
-371 *
-0 core/fixtures/lib/matrix.sh
-0 core/fixtures/lib/mutant.sh
-23 core/scripts/wait-for-deliverable.sh
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The three
+# starts of wait-for-deliverable.sh are the three cli cells of cells.decl (C48). Every other beat is in process
+# (wsd_enter), which also removed the `bash -c` parent wrappers (`own`, chained_beat's) the CLI beats needed and the
+# mutant cells' `bash <copy>` starts: the total fell from 371 to 341. C14's `guard wt` beat on the fast stub's virtual
+# clock (BL-878 item 5) adds 63: 3 sleep-shim and 18 date-shim starts in each of the 3 C14 cells (the base arm and the
+# state-dir-guard and path-exists-check deciding cells), 341 to 404.
+# inproc rows (fx_inproc, one per in-process beat): the base arms' beats, the mutant and MX0 cells' beats (each copy
+# keeps the declared suffix, $MUTDIR/<m>/core/scripts/wait-for-deliverable.sh), C31's relaunch of C23, and C48's
+# three in-process sides. Each is counted in the call site's foreground before any background (BL-868).
+404 *
+3 core/scripts/wait-for-deliverable.sh
+56 inproc:core/scripts/wait-for-deliverable.sh

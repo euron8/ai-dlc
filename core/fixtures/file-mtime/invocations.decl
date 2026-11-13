@@ -1,3 +1,9 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-19 *
-6 core/scripts/file-mtime.sh
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
+# are run.sh itself (1), the three cli cells of cells.decl (3), and the GNU-shaped stat shim, a #!/bin/bash script
+# the subject runs as `stat` (3: twice under the real subject's shape arm, once under the exitcode mutant's).
+# inproc rows (fx_inproc, one per source): the subject once and each of the four mutant copies once, whose
+# paths keep the declared suffix ($MUT/<name>/core/scripts/file-mtime.sh). datepath is sourced on every platform,
+# scored only where date reads an all-digit path as an epoch, so the count does not move with the platform.
+7 *
+3 core/scripts/file-mtime.sh
+5 inproc:core/scripts/file-mtime.sh

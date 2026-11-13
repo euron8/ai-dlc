@@ -86,6 +86,21 @@ if [ -z "$ai_dlc_src_top" ] || [ "$ai_dlc_src_top" != "$AI_DLC_ROOT_PHYS" ]; the
   echo "Nothing was written to $PROJECT_ROOT."
   exit 1
 fi
+
+# The scaffold ignore check's two function files (BL-992), loaded here, before anything is
+# written, so a missing one refuses the install instead of printing a clean report over no check.
+# scaffold-ignore.sh holds the decision and the remedy text apply.sh uses for the same question;
+# install-scaffold-ignore.sh beside this script holds the population and the report that call it.
+# Both are located from SCRIPT_DIR, never from another core file.
+for ai_dlc_si_lib in "$SCRIPT_DIR/../core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh" \
+                     "$SCRIPT_DIR/install-scaffold-ignore.sh"; do
+  if [ ! -f "$ai_dlc_si_lib" ]; then
+    echo "Error: $ai_dlc_si_lib is missing, so install.sh cannot check scaffolded files against git ignore rules."
+    echo "Nothing was written to $PROJECT_ROOT."
+    exit 1
+  fi
+  . "$ai_dlc_si_lib"
+done
 AI_DLC_FX_LS="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-install-fixtures.XXXXXX")"
 trap 'rm -f "$AI_DLC_FX_LS"' EXIT
 
@@ -766,6 +781,13 @@ contributed back to the upstream AI/DLC project.
 FEEDBACK
   echo "  ai-dlc-feedback.md created (feedback loop log)"
 fi
+
+# Report every create-once scaffold path the target's git ignore rules hide (BL-992): `git add -A`
+# skips such a path and a plain `git add <path>` refuses it, so it never reaches history. This runs
+# AFTER the transient-state ignore render above, which writes .gitignore, so it judges the rules the
+# install leaves behind. A finding never changes the exit code; a fault in the check itself
+# (return 2, named on stderr) stops the install here, before the version stamp.
+ai_dlc_scaffold_ignore_report "$PROJECT_ROOT" "$AI_DLC_ROOT"
 
 # Write version stamp so consumers can detect drift from upstream
 VERSION_STAMP="$PROJECT_ROOT/.claude/.ai-dlc-version"

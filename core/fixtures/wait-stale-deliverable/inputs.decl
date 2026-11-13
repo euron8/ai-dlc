@@ -2,6 +2,8 @@
 !core/scripts/wait-for-deliverable.sh
 # C46 reads Rule 29's exit list and requires it to name every code the subject can return.
 !core/skills/ai-dlc/rule-bodies/rule-29.md
-# The mutant helper and the matrix-row printer run.sh sources (REQUIRED: each prints its HERMETIC-CONSUMED line).
-!core/fixtures/lib/mutant.sh
-!core/fixtures/lib/matrix.sh
+# The mutant helper and the matrix-row printer run.sh sources. Plain reads, not `!` rows: in a fixture opted in by an
+# inproc: row, a `!` .sh is a declared bash subject and P1 reads its source as an unpaired in-process pass, and a
+# sourced lib is no subject. run.sh refuses (FIXTURE ERROR, exit 2) when either is absent.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh

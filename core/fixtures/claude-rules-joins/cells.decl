@@ -1,0 +1,7 @@
+# claude-rules-joins' starts of scripts/validate-claude-rules.sh (BL-879 grammar). Every other drive is in process:
+# src_vcr sources each seeded tree's copy once and run_v / run_v_env call vcr_main in a subshell. One cli cell per
+# distinct CLI outcome, each started as FXCELL=<id> bash scripts/validate-claude-rules.sh inside the tree in eqv() and
+# compared byte for byte with the in-process call: exit 0 (control tree), exit 1 (m1's tree), exit 2 usage.
+cli scripts/validate-claude-rules.sh cli-pass
+cli scripts/validate-claude-rules.sh cli-finding
+cli scripts/validate-claude-rules.sh cli-usage

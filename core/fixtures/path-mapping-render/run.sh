@@ -114,10 +114,38 @@ note() { printf '%s\n' "$*"; }
 # sets the variable this file exits on (rc).
 ok()  { note "ok    ${1-}"; }
 bad() { note "FAIL  ${1-}"; rc=1; }
-MUT_LIB="$DIR/../lib/mutant.sh"
-if [ ! -f "$MUT_LIB" ]; then echo "run.sh: no lib/mutant.sh beside $DIR" >&2; exit 2; fi
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+if [ ! -f "$DIR/../lib/mutant.sh" ]; then echo "run.sh: no lib/mutant.sh beside $DIR" >&2; exit 2; fi
 # shellcheck source=/dev/null
-. "$MUT_LIB"
+. "$DIR/../lib/mutant.sh"
+
+# IN PROCESS (BL-878). Each renderer copy -- the real one and the one seeded into each sandbox -- is SOURCED ONCE into
+# this shell by use() before its first drive (its guard returns after defining rpm_main; one fx_inproc pass each), and
+# every drive calls the rpm_main sourced last inside a subshell, so the renderer's `exit`, `set -uo pipefail`, its
+# eval'd map_consumer() and its helper functions stay there. The renderer walks up for VERSION from
+# ${BASH_SOURCE[0]}, which inside rpm_main names the copy that defined it, so a sandbox copy still resolves its own
+# sandbox. Each world's drives are contiguous, so no copy is sourced twice. A renderer with neither the `rpm_main() {`
+# line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an ok); exactly one half is a
+# respelled subject and FAILs. C5 (validate-fixture-inprocess.sh) refuses a cli subject without the guard, and J3
+# refuses the start count moving, so the SKIP cannot pass unseen.
+# A renderer grep cannot READ (exit 2) is no pre-wrap renderer: it is FIXTURE ERROR, never the SKIP.
+w_def=0; w_guard=0
+grep -q '^rpm_main() {$' "$RENDERER"; g_def=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$RENDERER"; g_guard=$?
+if [ "$g_def" -gt 1 ] || [ "$g_guard" -gt 1 ]; then echo "FIXTURE ERROR: cannot read $RENDERER (grep exit $g_def/$g_guard), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2; fi
+[ "$g_def" = 0 ] && w_def=1; [ "$g_guard" = 0 ] && w_guard=1
+if [ "$w_def$w_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$w_def" = 0 ]; then bad "$RENDERER carries the column-0 source guard but no \`rpm_main() {\` line -- a respelled subject this fixture cannot drive"; exit 1; fi
+if [ "$w_guard" = 0 ]; then bad "$RENDERER defines \`rpm_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run rpm_main in this shell"; exit 1; fi
+LOADED=""
+use() { # use <renderer copy> -- source it, unless it is the copy sourced last
+  [ "$1" = "$LOADED" ] && return 0
+  unset -f rpm_main
+  fx_inproc "$1"
+  . "$1" || { echo "FIXTURE BROKEN: sourcing $1 failed" >&2; exit 2; }
+  declare -F rpm_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $1 defined no rpm_main" >&2; exit 2; }
+  LOADED="$1"
+}
 
 HEADING='## Path mapping (core/ → consumer)'
 OK_MSG='render-path-mapping: OK'
@@ -154,11 +182,18 @@ EOF
 }
 
 # Sandbox invocations run from a NEUTRAL working directory -- never the sandbox, never the
-# repo root. The renderer resolves its root from \$0; running it from a cwd that agrees with
-# that root would hide a cwd-derived resolution rather than exercise it.
-render_in() { ( cd "$TMP" && bash "$1/scripts/render-path-mapping.sh" 2>&1 ); }
-write_in()  { ( cd "$TMP" && bash "$1/scripts/render-path-mapping.sh" --write 2>&1 ); }
-check_in()  { ( cd "$TMP" && bash "$1/scripts/render-path-mapping.sh" --check 2>&1 ); }
+# repo root. The renderer resolves its root from its own path; running it from a cwd that agrees with
+# that root would hide a cwd-derived resolution rather than exercise it. Each drives the sandbox's copy in process;
+# the caller has use()d it (in this shell, never inside the `$( )` that captures the output), and a drive of any
+# other copy answers FIXTURE BROKEN with exit 2, which no arm reads as a pass or a kill.
+in_sb() { # in_sb <sandbox> [args...]
+  local s="$1/scripts/render-path-mapping.sh"; shift
+  [ "$s" = "$LOADED" ] || { echo "FIXTURE BROKEN: a drive of $s while the rpm_main sourced last is ${LOADED:-none}"; return 2; }
+  ( cd "$TMP" && rpm_main "$@" 2>&1 )
+}
+render_in() { in_sb "$1"; }
+write_in()  { in_sb "$1" --write; }
+check_in()  { in_sb "$1" --check; }
 
 skill_of() { printf '%s\n' "$1/core/skills/ai-dlc-update/SKILL.md"; }
 preclass_of() { printf '%s\n' "$1/core/skills/ai-dlc-update/reconcile/preclassify.sh"; }
@@ -168,6 +203,7 @@ preclass_of() { printf '%s\n' "$1/core/skills/ai-dlc-update/reconcile/preclassif
 prep() {
   local d="$1" out
   seed "$d"
+  use "$d/scripts/render-path-mapping.sh"
   if ! out="$(write_in "$d")"; then
     note "FIXTURE BROKEN: --write failed while preparing ${d##*/}."
     printf '%s\n' "$out" | sed 's/^/      /' | head -6
@@ -260,6 +296,7 @@ mx_score() {
 # the unmutated round trip (--write, then --check green) that every mutant here is a one-edit copy of.
 kill_check() { # kill_check <flag> <id> <name> <dir> <expected-cell>
   local id="$2" n="$3" d="$4" cell="$5" out rc_v
+  use "$d/scripts/render-path-mapping.sh"
   out="$(check_in "$d")"; rc_v=$?
   if [ "$rc_v" -eq 0 ]; then
     note "FAIL  $n -- mutant SURVIVED (--check exited 0)"; rc=1; return
@@ -275,6 +312,7 @@ kill_check() { # kill_check <flag> <id> <name> <dir> <expected-cell>
 
 quiet_check() { # quiet_check <name> <dir>
   local n="$1" d="$2" out rc_v
+  use "$d/scripts/render-path-mapping.sh"
   out="$(check_in "$d")"; rc_v=$?
   if [ "$rc_v" -ne 0 ] || ! grep -qF "$OK_TAIL" <<<"$out"; then
     note "FAIL  $n -- a change that does not touch map_consumer() disturbed --check"
@@ -286,7 +324,10 @@ quiet_check() { # quiet_check <name> <dir>
 no_mutation() { note "FAIL  $1 -- the mutation matched nothing; no mutant was built"; rc=1; }
 
 # --- controlA: the real repo ------------------------------------------------
-if outA="$( cd "$REPO" && bash scripts/render-path-mapping.sh --check 2>&1 )" \
+# The real renderer is sourced once, here; controlA, controlE and the cli-ok and cli-usage cells drive it before any
+# sandbox copy is sourced.
+use "$RENDERER"
+if outA="$( cd "$REPO" && rpm_main --check 2>&1 )" \
    && grep -qF "$OK_TAIL" <<<"$outA"; then
   # PC-S330 BY NAME. The git-hooks omission is the one that cost a consumer a silent no-op
   # self-update -- the hook written to `.claude/git-hooks/pre-push`, an inert orphan, while
@@ -302,6 +343,46 @@ else
   printf '%s\n' "$outA" | sed 's/^/      /' | head -8
   exit 1
 fi
+
+# --- controlE: --check is cwd-invariant --------------------------------------
+# The renderer walks up from its own path for a VERSION marker rather than counting `..` hops, and a
+# fixture that is green only from one cwd may be asserting nothing. Three cwds, one answer.
+e_root="$( ( cd "$REPO" && rpm_main --check ) 2>&1; echo "rc=$?" )"
+e_slash="$( ( cd / && rpm_main --check ) 2>&1; echo "rc=$?" )"
+e_tmp="$( ( cd "$TMP" && rpm_main --check ) 2>&1; echo "rc=$?" )"
+if [ "$e_root" = "$e_slash" ] && [ "$e_root" = "$e_tmp" ] && grep -qF "$OK_TAIL" <<<"$e_root"; then
+  note "ok    controlE   --check answers identically from the repo root, / and a temp dir"
+else
+  note "FAIL  controlE   --check is cwd-dependent, or did not pass from all three"
+  printf 'root : %s\n/    : %s\ntmp  : %s\n' "$e_root" "$e_slash" "$e_tmp" | sed 's/^/      /' | head -9
+  rc=1
+fi
+
+# --- the cli cells (cells.decl): the renderer run as a PROGRAM once per distinct CLI outcome ---------------------
+# Outcomes, exit x output class: 0 the OK line on stdout (--check clean); 1 the drift FAIL and its diff on stderr
+# (--check stale, cli-drift, in the m1 section below where that copy is the one sourced last); 2 the usage line on
+# stderr. One `FXCELL=<id> bash <renderer>` start per outcome, each compared with the in-process call on the same
+# input from the same cwd: stdout, stderr and exit separately, byte for byte. cli-ok runs the renderer by the
+# RELATIVE path controlA used, so the root walk from ${BASH_SOURCE[0]} is exercised as the program sees it. Each
+# cell also asserts its own outcome, and the ok and drift cells must differ.
+EQ="$TMP/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <copy sourced last> <cwd> <renderer as invoked> [args...] -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" cp_="$2" cwd="$3" inv="$4"; shift 4
+  [ "$cp_" = "$LOADED" ] || { echo "FIXTURE BROKEN: cell $id compares $cp_ while the rpm_main sourced last is ${LOADED:-none}" >&2; exit 2; }
+  ( cd "$cwd" && rpm_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$cwd" && FXCELL="$id" bash "$inv" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -2 "$EQ/$1.ip.out")" "$(head -2 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -2 "$EQ/$1.cl.out")" "$(head -2 "$EQ/$1.cl.err")"; }
+if eqv cli-ok "$RENDERER" "$REPO" scripts/render-path-mapping.sh --check && [ "$(cat "$EQ/cli-ok.cl.rc")" = 0 ] \
+   && grep -qF "$OK_MSG" "$EQ/cli-ok.cl.out" && [ ! -s "$EQ/cli-ok.cl.err" ]; then
+  ok "cli-ok: the program passes --check on the real repo exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-ok: the program and the in-process call differ, or the outcome is not exit 0 with the OK line ($(eq_twin cli-ok))"; fi
+if eqv cli-usage "$RENDERER" "$TMP" "$RENDERER" --bogus && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] \
+   && [ ! -s "$EQ/cli-usage.cl.out" ] && [ "$(cat "$EQ/cli-usage.cl.err")" = "usage: render-path-mapping.sh [--write|--check]" ]; then
+  ok "cli-usage: the program refuses an unknown mode exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-usage))"; fi
 
 # --- controlB: the legacy hand-written section, repaired --------------------
 prep "$TMP/controlB"
@@ -364,6 +445,7 @@ note "ok    controlC   --write is idempotent and leaves everything outside the r
 # the sandbox copy. This is the arm that separates "the mutants are being read" from "the
 # renderer resolved the real repo root and every mutation was applied to a file nobody read".
 seed "$TMP/controlD"
+use "$TMP/controlD/scripts/render-path-mapping.sh"
 if mutate_awk "$(preclass_of "$TMP/controlD")" '
   /^map_consumer\(\) \{/ { inf=1 }
   inf && /^\}/           { inf=0 }
@@ -396,20 +478,6 @@ else
   no_mutation "controlD"
 fi
 
-# --- controlE: --check is cwd-invariant --------------------------------------
-# The renderer walks up from `$0` for a VERSION marker rather than counting `..` hops, and a
-# fixture that is green only from one cwd may be asserting nothing. Three cwds, one answer.
-e_root="$( cd "$REPO" && bash "$RENDERER" --check 2>&1; echo "rc=$?" )"
-e_slash="$( cd / && bash "$RENDERER" --check 2>&1; echo "rc=$?" )"
-e_tmp="$( cd "$TMP" && bash "$RENDERER" --check 2>&1; echo "rc=$?" )"
-if [ "$e_root" = "$e_slash" ] && [ "$e_root" = "$e_tmp" ] && grep -qF "$OK_TAIL" <<<"$e_root"; then
-  note "ok    controlE   --check answers identically from the repo root, / and a temp dir"
-else
-  note "FAIL  controlE   --check is cwd-dependent, or did not pass from all three"
-  printf 'root : %s\n/    : %s\ntmp  : %s\n' "$e_root" "$e_slash" "$e_tmp" | sed 's/^/      /' | head -9
-  rc=1
-fi
-
 # --- m1: the arm PC-S330 was filed about, deleted ---------------------------
 # THIS IS THE REGRESSION THAT SHIPPED. With the arm gone the function no longer answers
 # `.githooks/` for a hook, the rendered table loses the row, and the committed region is
@@ -418,6 +486,15 @@ fi
 prep "$TMP/m1"
 if mutate "$(preclass_of "$TMP/m1")" '/core\/git-hooks\/\*)/d'; then
   kill_check "${B_ctlB:-0}" m1 "m1 arm-deleted  core/git-hooks/* removed from map_consumer()" "$TMP/m1" drift
+  # cli-drift: the stale-region outcome, on the m1 sandbox whose copy is the one sourced last.
+  if eqv cli-drift "$TMP/m1/scripts/render-path-mapping.sh" "$TMP" "$TMP/m1/scripts/render-path-mapping.sh" --check \
+     && [ "$(cat "$EQ/cli-drift.cl.rc")" = 1 ] && [ ! -s "$EQ/cli-drift.cl.out" ] \
+     && grep -qF 'does not match what map_consumer() renders today' "$EQ/cli-drift.cl.err"; then
+    ok "cli-drift: the program refuses the stale region exactly as the in-process call does (stdout, stderr, exit 1)"
+  else bad "cli-drift: the program and the in-process call differ, or the outcome is not exit 1 with the drift message ($(eq_twin cli-drift))"; fi
+  if ! cmp -s "$EQ/cli-ok.cl.rc" "$EQ/cli-drift.cl.rc" && ! cmp -s "$EQ/cli-ok.cl.err" "$EQ/cli-drift.cl.err"; then
+    ok "cli cells discriminate: the clean and the stale --check give different exit and stderr"
+  else bad "cli cells do not discriminate: cli-ok and cli-drift gave the same exit or stderr"; fi
 else
   no_mutation "m1 arm-deleted"
 fi

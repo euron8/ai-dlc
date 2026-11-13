@@ -96,7 +96,8 @@ done <<<"$(git -C "$root" ls-files -- 'core/hooks/ai-dlc-*.sh' 2>/dev/null)"
 probe="$(printf '%s' "$regl" | sed -n "$(( (reg + 1) / 2 ))p")"
 [ "$reg" -ge 3 ] || { echo "receipt-bl981: only $reg registered tracked hook(s); the per-hook shape cannot exceed the bound here" >&2; exit 9; }
 : > "$W/em.ev"
-( cd "$root" && GIT_TRACE2_EVENT="$W/em.ev" bash "$EM" --arms I14 ) < /dev/null > "$W/em.out" 2>&1; em_rc=$?
+( cd "$root" && GIT_TRACE2_EVENT="$W/em.ev" FXCELL="${R981_TAG:+$R981_TAG-em}" bash "$EM" --arms I14 ) < /dev/null > "$W/em.so" 2> "$W/em.se"; em_rc=$?
+cat "$W/em.so" "$W/em.se" > "$W/em.out"
 case "$em_rc" in 0|1) ;; *) echo "receipt-bl981: --arms I14 exited $em_rc" >&2; exit 9 ;; esac
 grep -qE '^(OK|FAIL): ' "$W/em.out" || { echo "receipt-bl981: the --arms I14 run never reached its verdict line" >&2; exit 9; }
 e="$(starts "$W/em.ev")"
@@ -111,7 +112,8 @@ cp "$idx" "$W/em.index" && GIT_INDEX_FILE="$W/em.index" git -C "$root" update-in
 case "$(GIT_INDEX_FILE="$W/em.index" git -C "$root" ls-files -s -- "$probe")" in
   "100644 "*) ;; *) echo "receipt-bl981: the seeded index copy does not carry $probe at 100644" >&2; exit 9 ;;
 esac
-( cd "$root" && GIT_INDEX_FILE="$W/em.index" bash "$EM" --arms I14 ) < /dev/null > "$W/emp.out" 2>&1; emp_rc=$?
+( cd "$root" && GIT_INDEX_FILE="$W/em.index" FXCELL="${R981_TAG:+$R981_TAG-emp}" bash "$EM" --arms I14 ) < /dev/null > "$W/emp.so" 2> "$W/emp.se"; emp_rc=$?
+cat "$W/emp.so" "$W/emp.se" > "$W/emp.out"
 case "$emp_rc" in 0|1) ;; *) echo "receipt-bl981: the seeded --arms I14 run exited $emp_rc" >&2; exit 9 ;; esac
 grep -qE '^(OK|FAIL): ' "$W/emp.out" || { echo "receipt-bl981: the seeded --arms I14 run never reached its verdict line" >&2; exit 9; }
 hit="$(grep -cF "FAIL: hook '$pb' is registered in templates/settings.json.template but is COMMITTED 100644" "$W/emp.out")" || hit=0
@@ -121,6 +123,30 @@ if [ "$e" -le 2 ] && [ "$hit" = 1 ] && [ "$all" = 1 ]; then
 else
   echo "CELL em FAIL --arms I14 git starts: $e with $reg registered tracked hooks (bound 2); $pb seeded 0644 named by $hit of $all COMMITTED 100644 line(s) (want 1 of 1), unseeded 0"
   fail=1
+fi
+
+# THE EQUIVALENCE CELLS of the two cli starts above (R981_EQUIV=1, set by run.sh's live run only; the tag prefix is
+# R981_TAG, and with it unset FXCELL is empty, an untagged start): each world runs again IN PROCESS, the validator
+# sourced by absolute path in a subshell and run as `vem_entry --arms I14`, and must answer byte for byte as the
+# started program did: stdout, stderr, exit, and on the unseeded world the git start count. GIT_TRACE2_EVENT and
+# GIT_INDEX_FILE are EXPORTED there, because vem_entry unsets every unexported caller variable. A failed source exits
+# 97, never the validator's own code. One `EQUIV <cell> same|DIFF` line each; no CELL line moves.
+if [ "${R981_EQUIV:-}" = 1 ]; then
+  ok() { :; }; bad() { :; }
+  . "$HERE/../lib/mutant.sh" || { echo "receipt-bl981: cannot source lib/mutant.sh beside $HERE" >&2; exit 9; }
+  for ql in em emp; do
+    if [ "$ql" = em ]; then qr="$em_rc" qx=""; else qr="$emp_rc" qx="$W/em.index"; fi
+    : > "$W/$ql.iev"
+    fx_inproc "$EM"
+    ( cd "$root" || exit 97; export GIT_TRACE2_EVENT="$W/$ql.iev"; [ -z "$qx" ] || export GIT_INDEX_FILE="$qx"
+      . "$EM" || exit 97; vem_entry --arms I14 ) < /dev/null > "$W/$ql.iso" 2> "$W/$ql.ise"; q_rc=$?
+    q_d=""
+    cmp -s "$W/$ql.so" "$W/$ql.iso" || q_d="$q_d stdout"
+    cmp -s "$W/$ql.se" "$W/$ql.ise" || q_d="$q_d stderr"
+    [ "$qr" = "$q_rc" ] || q_d="$q_d exit=$qr/$q_rc"
+    if [ "$ql" = em ] && [ "$(starts "$W/em.ev")" != "$(starts "$W/em.iev")" ]; then q_d="$q_d git-starts=$(starts "$W/em.ev")/$(starts "$W/em.iev")"; fi
+    if [ -z "$q_d" ]; then echo "EQUIV ${R981_TAG:-}-$ql same exit $qr"; else echo "EQUIV ${R981_TAG:-}-$ql DIFF$q_d"; fi
+  done
 fi
 
 exit "$fail"

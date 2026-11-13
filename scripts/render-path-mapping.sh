@@ -59,7 +59,12 @@
 #   2  usage error
 #
 # Compatible with bash 3.2: no mapfile, no readarray, no declare -A.
+#
+# The whole program is rpm_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition. The root walk starts from
+# ${BASH_SOURCE[0]}, which names this file whether it is executed or sourced.
 
+rpm_main() {
 set -uo pipefail
 
 BEGIN_MARK='<!-- BEGIN GENERATED: path-mapping — source: reconcile/preclassify.sh map_consumer() -->'
@@ -70,12 +75,12 @@ HEADING='## Path mapping (core/ → consumer)'
 # A validator that counts hops answers differently from the repo root, from a subdirectory,
 # and from a fixture sandbox that copied it -- and the sandbox answer is the silent one.
 ROOT=""
-d="$(cd "$(dirname "$0")" && pwd)"
+d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [ "$d" != "/" ]; do
   if [ -f "$d/VERSION" ]; then ROOT="$d"; break; fi
   d="$(dirname "$d")"
 done
-[ -n "$ROOT" ] || { echo "render-path-mapping: FAIL — no VERSION marker above $0; cannot resolve the repo root." >&2; exit 1; }
+[ -n "$ROOT" ] || { echo "render-path-mapping: FAIL — no VERSION marker above ${BASH_SOURCE[0]}; cannot resolve the repo root." >&2; exit 1; }
 
 SKILL="$ROOT/core/skills/ai-dlc-update/SKILL.md"
 PRECLASS="$ROOT/core/skills/ai-dlc-update/reconcile/preclassify.sh"
@@ -221,3 +226,7 @@ case "$MODE" in
     ;;
 esac
 exit 0
+}
+# Executed, it runs; sourced, it has defined rpm_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rpm_main "$@"

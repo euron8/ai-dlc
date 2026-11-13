@@ -11052,7 +11052,7 @@ esv_sites() {
 # while 11 files call it, against 146 verdict-phrase lines overall.
 #
 #   `there is   a HYPOTHETICAL clause -- "without a floor THERE IS NOTHING TO compare a sprint
-#    nothing    against" (validate-spec-adoption.sh:107, a malformed-declaration `return 1`) --
+#    nothing    against" (validate-spec-adoption.sh's `adopted_from_sprint` refusal, a malformed-declaration `return 1`) --
 #    to ...`    argues about what a state would mean; it does not report that this run examined
 #               nothing. BL-221's own entry names a `return 1` failure path as one of the three
 #               false positives that sank the earlier prototype, and this is that row. The

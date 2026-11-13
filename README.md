@@ -118,6 +118,19 @@ files and absorbs your project-specific content (ownership paths,
 model strings, conventions, infrastructure rules) into AI/DLC's
 templates during configuration.
 
+The installer creates some files once and leaves them to you (the
+crosswalk, machinery, PR-class, story-field, artifact-path and
+smoke-surface files, `docs/ai-dlc-feedback.md` and the two skill-layer
+READMEs). When your `.gitignore` matches one of them, `git add -A` skips
+it silently, so it never reaches history. The installer then prints
+`WARNING scaffold-ignored <path>`, whether it created the file or found
+it already there. Run `git add -f <path>` from the project root to
+commit it, or, to keep it untracked on purpose, ignore it by its exact
+path (a `<path>` line in `.gitignore`), which silences the warning. A
+path git could not check prints `WARNING scaffold-ignore-unchecked`.
+The install still exits 0, and outside a git work tree it prints
+`scaffold ignore check SKIPPED` and checks nothing.
+
 ## Uninstall
 
 ```bash

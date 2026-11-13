@@ -555,7 +555,7 @@ is_archive() {
 # ALL 26 spurious rows carried an `s<N>` component; one rule excludes all of them.
 #
 # `s[0-9]+` matched against a whole path COMPONENT is the grammar's own spelling of
-# the slot (validate-artifact-paths.sh:167,241), reused rather than re-invented. It is
+# the slot (validate-artifact-paths.sh's legacy_story() and SLOT_RE), reused rather than re-invented. It is
 # a component match and not a substring, so `s301-close-out/` is not a slot; and the
 # FILENAME is dropped before the search, because a file is never a slot.
 is_sprint_slotted() {

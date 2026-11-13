@@ -2,7 +2,7 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # dist-clone -- the update skill's private, main-only, bare distribution clone (BL-685).
 #
-# Usage: run.sh
+# Usage: run.sh [--matrix]
 # Exit:  0 = every arm and mutant behaved, 1 = one did not, 2 = fixture broken.
 #
 # THE SUBJECT. reconcile/dist-clone.sh builds `<dist>` in the consumer's git common dir from the
@@ -33,7 +33,26 @@
 #   DCP  SKILL.md carries the R3 theirs-default sentence and the full-sha re-invoke sentence
 # MUTANTS run the arm suite (all but DCP) against a COPY of dist-clone.sh with one line
 # edited, and each must fail EXACTLY its expected kill set, written beside it.
+#
+# THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). Each mutant is scored on its EXACT FAIL set
+# over the whole suite, so every arm is part of its decision -- a kill set of one arm is only exact if every other
+# arm reads ok on the same copy -- and each is a FULL row whose worlds are the suite's arms. `--matrix` prints one
+# `MATRIX <mutant> FULL <FAIL set>` row per mutant; the per-push score is the same run. RE-MEASURE whenever an arm
+# or a mutant is added or changed, from the repo root:
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/dist-clone/run.sh --matrix
+# MUTANT-MATRIX-FULL M-shared worlds=DC1,DC17,DC3,DC2,DC13,DC10,DC11,DC19,DC4,DC16,DC5,DC5b,DC6,DC7,DC18,DC20,DC14,DC12,DC9 why=score asserts the FAIL set is exactly DC9 across the whole suite
+# MUTANT-MATRIX-FULL M-allbranches worlds=DC1,DC17,DC3,DC2,DC13,DC10,DC11,DC19,DC4,DC16,DC5,DC5b,DC6,DC7,DC18,DC20,DC14,DC12,DC9 why=score asserts the FAIL set is exactly DC3 across the whole suite
+# MUTANT-MATRIX-FULL M-nopin worlds=DC1,DC17,DC3,DC2,DC13,DC10,DC11,DC19,DC4,DC16,DC5,DC5b,DC6,DC7,DC18,DC20,DC14,DC12,DC9 why=score asserts the FAIL set is exactly DC14 across the whole suite
+# MUTANT-MATRIX-FULL M-fallback worlds=DC1,DC17,DC3,DC2,DC13,DC10,DC11,DC19,DC4,DC16,DC5,DC5b,DC6,DC7,DC18,DC20,DC14,DC12,DC9 why=score asserts the FAIL set is exactly DC4 DC5 DC7 DC12 DC16 DC18 DC20 across the whole suite
+# MUTANT-MATRIX-DYNAMIC score why=score passes each mutant name above to mutant_killed as its first argument
 set -uo pipefail
+MATRIX=0
+for _a in "$@"; do
+  case "$_a" in
+    --matrix) MATRIX=1 ;;
+    *) echo "FIXTURE ERROR: unknown argument '$_a' (only --matrix)" >&2; exit 2 ;;
+  esac
+done
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do [ "$_v" = AI_DLC_PROJECT_ROOT ] || unset "$_v"; done
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 unset GIT_CONFIG_COUNT
@@ -82,17 +101,45 @@ mkcons() { # mkcons <dir> -- a consumer repo with one commit
   mkdir -p "$1" && git -C "$1" init -q && echo c > "$1/c" && G -C "$1" add -A && G -C "$1" commit -qm c
 }
 common() { (cd "$1/.git" && pwd -P); }
+# WORLDS BUILT ONCE (fixture-mutants.md clause 4). mkup and mkcons take only a directory and write literal content, so
+# every upstream and every consumer the five suites seed (3 upstreams and 6 consumers each, 45 builds a run) is the
+# same world built again. Each is built ONCE here and every site takes a `cp -Rp` copy, which a suite then mutates
+# on its own. The copies share their commit shas with each other; every arm reads the shas it compares from the copy
+# it drives, and the wrong-origin arm (DC5) keys on the URL, never on a sha.
+TPL="$W/tpl"
+mkup "$TPL/up" && mkcons "$TPL/c" || { echo "FIXTURE BROKEN: could not build the template worlds" >&2; exit 2; }
+newup() { cp -Rp "$TPL/up" "$1"; }      # newup <dir> -- a copy of the template upstream
+newcons() { cp -Rp "$TPL/c" "$1"; }     # newcons <dir> -- a copy of the template consumer
 
-# dc <subject> <tag> [env...] -- [--] args: runs the subject through the counting shim.
-# Sets RC, OUT (stdout), ERRF (stderr file), L1/L2 (stdout lines).
+# IN PROCESS (BL-878). Each copy of the subject -- the real one and each mutant -- is SOURCED ONCE into this shell
+# by src_dc at the top of its suite (its guard returns after defining dcl_main; one fx_inproc pass each), and dc
+# calls the dcl_main sourced last inside the `$( )` that captures its stdout, so the subject's `exit`, EXIT trap,
+# exports and its own G() stay in that subshell. The env words a drive carries are exported in that subshell, which
+# is what `env VAR=x bash` gave the program. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with neither the
+# `dcl_main() {` line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an ok); exactly
+# one half is a respelled subject and FAILs. The distribution cannot reach the SKIP unnoticed: C5
+# (validate-fixture-inprocess.sh) refuses a cli subject without the guard, and J3 refuses the start count moving.
+MP=core/skills/ai-dlc-update/reconcile/dist-clone.sh
+src_dc() { # src_dc <script>
+  unset -f dcl_main
+  fx_inproc "$1"
+  . "$1" || { echo "FIXTURE BROKEN: sourcing $1 failed" >&2; exit 2; }
+  declare -F dcl_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $1 defined no dcl_main" >&2; exit 2; }
+  DC_SOURCED="$1"
+}
+DC_SOURCED=""
+
+# dc <subject> <tag> [env...] -- [--] args: runs the subject (in process, the copy src_dc sourced last) through the
+# counting shim. Sets RC, OUT (stdout), ERRF (stderr file), L1/L2 (stdout lines).
 dc() {
   local s="$1" t="$2"; shift 2
   local envs=()
   while [ $# -gt 0 ] && [ "$1" != "--" ]; do envs+=("$1"); shift; done
   [ "${1:-}" = "--" ] && shift
+  [ "$s" = "$DC_SOURCED" ] || { echo "FIXTURE BROKEN: driving $s while the dcl_main sourced last is ${DC_SOURCED:-none}" >&2; exit 2; }
   ERRF="$SD/$t.err"
-  OUT="$(env ${envs[@]+"${envs[@]}"} DCF_LOG="$SD/fetch.log" DCF_REALGIT="$REALGIT" PATH="$SD/shim:$PATH" \
-    bash "$s" "$@" 2>"$ERRF")"; RC=$?
+  OUT="$(export ${envs[@]+"${envs[@]}"} DCF_LOG="$SD/fetch.log" DCF_REALGIT="$REALGIT" PATH="$SD/shim:$PATH" \
+    && dcl_main "$@" 2>"$ERRF")"; RC=$?
   L1="$(printf '%s\n' "$OUT" | sed -n 1p)"; L2="$(printf '%s\n' "$OUT" | sed -n 2p)"
 }
 has() { grep -qF -- "$1" "$ERRF"; }
@@ -100,6 +147,7 @@ has() { grep -qF -- "$1" "$ERRF"; }
 # suite <subject> <dir> -- every DC arm but DC8/DCP; one `ok|FAIL <id> ...` per id in <dir>/verdicts
 suite() {
   local S="$1" v; SD="$2"; mkdir -p "$SD/shim"; v="$SD/verdicts"; : > "$v"
+  src_dc "$S"
   V()  { printf 'ok %s %s\n' "$1" "$2" >> "$v"; }
   X()  { printf 'FAIL %s %s\n' "$1" "$2" >> "$v"; }
   cat > "$SD/shim/git" <<'SHIM'
@@ -109,7 +157,7 @@ exec "$DCF_REALGIT" "$@"
 SHIM
   chmod +x "$SD/shim/git"; : > "$SD/fetch.log"
   local U="$SD/up" C="$SD/c" D tip sh rel t9 y x n
-  mkup "$U" && mkcons "$C" || { X DC1 "FIXTURE BROKEN: could not seed"; return 0; }
+  newup "$U" && newcons "$C" || { X DC1 "FIXTURE BROKEN: could not seed"; return 0; }
   D="$(common "$C")/ai-dlc-dist"
 
   dc "$S" dc1 -- "$C" "$U"
@@ -159,9 +207,9 @@ SHIM
   [ "$RC" -eq 1 ] && [ -z "$OUT" ] && has "an abbreviated sha cannot be fetched; name the branch or tag, or give the full sha" \
     && V DC16 "an unresolvable abbreviated sha STOPped with its named message" || X DC16 "rc=$RC out=[$OUT]"
 
-  local C5="$SD/c5" U2="$SD/up2"; mkcons "$C5"; mkdir -p "$(common "$C5")/ai-dlc-dist"; echo x > "$(common "$C5")/ai-dlc-dist/junk"
+  local C5="$SD/c5" U2="$SD/up2"; newcons "$C5"; mkdir -p "$(common "$C5")/ai-dlc-dist"; echo x > "$(common "$C5")/ai-dlc-dist/junk"
   dc "$S" dc5a -- "$C5" "$U"; local a_rc="$RC" a_out="$OUT" a_ok=0; has "is not a bare git repository" && a_ok=1
-  mkup "$U2"; dc "$S" dc5b -- "$C" "$U2"
+  newup "$U2"; dc "$S" dc5b -- "$C" "$U2"
   if [ "$a_rc" -eq 1 ] && [ -z "$a_out" ] && [ "$a_ok" -eq 1 ] && [ "$RC" -eq 1 ] && [ -z "$OUT" ] && has "remote set-url origin"; then
     V DC5 "a non-git dir and a wrong-origin clone both STOPped, the latter printing the set-url remedy"
   else X DC5 "non-git rc=$a_rc out=[$a_out]; wrong-origin rc=$RC out=[$OUT]"; fi
@@ -174,7 +222,7 @@ SHIM
   dc "$S" dc6 -- "$SD/cwt" "$U"
   [ "$RC" -eq 0 ] && [ "$L1" = "$D" ] && V DC6 "a consumer worktree resolved to the common dir's clone" || X DC6 "rc=$RC [$L1] want [$D]"
 
-  local C7="$SD/c7"; mkcons "$C7"; chmod a-w "$C7/.git"
+  local C7="$SD/c7"; newcons "$C7"; chmod a-w "$C7/.git"
   dc "$S" dc7 -- "$C7" "$U"; local built=0; [ -e "$C7/.git/ai-dlc-dist" ] && built=1; chmod u+w "$C7/.git"
   [ "$RC" -eq 1 ] && [ -z "$OUT" ] && [ "$built" -eq 0 ] && has "is not writable" && V DC7 "an unwritable git-dir STOPped, built nothing, printed no dist" \
     || X DC7 "rc=$RC out=[$OUT] built=$built"
@@ -187,7 +235,7 @@ SHIM
 
   # --- the prune world: its own upstream, because it deletes and prunes there -------------------
   local U9="$SD/up9" C14="$SD/c14" C12="$SD/c12" C12b="$SD/c12b" D14 D12
-  mkup "$U9" && mkcons "$C14" && mkcons "$C12" && mkcons "$C12b"
+  newup "$U9" && newcons "$C14" && newcons "$C12" && newcons "$C12b"
   y="$(offmain "$U9" keep)"; x="$(offmain "$U9" gone)"
   D14="$(common "$C14")/ai-dlc-dist"; D12="$(common "$C12")/ai-dlc-dist"
   dc "$S" dc14a -- --theirs "$y" "$C14" "$U9"; local y_rc="$RC"
@@ -212,6 +260,16 @@ SHIM
 }
 
 # ---- the shipping subject ---------------------------------------------------------------------------
+w_def=0; w_guard=0
+grep -q '^dcl_main() {$' "$SUBJ"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || w_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJ"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || w_guard=1
+if [ "$w_def$w_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$w_def" = 0 ]; then bad "$SUBJ carries the column-0 source guard but no \`dcl_main() {\` line -- a respelled subject this fixture cannot drive"; echo "FAILED dist-clone: $FAILS"; exit 1; fi
+if [ "$w_guard" = 0 ]; then bad "$SUBJ defines \`dcl_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run dcl_main in this shell"; echo "FAILED dist-clone: $FAILS"; exit 1; fi
 suite "$SUBJ" "$W/real"
 while read -r st id msg; do
   if [ "$st" = ok ]; then ok "$id $msg"; else bad "$id $msg"; fi
@@ -219,6 +277,42 @@ done < "$W/real/verdicts"
 for id in DC1 DC17 DC3 DC2 DC13 DC10 DC11 DC19 DC4 DC16 DC5 DC5b DC6 DC7 DC18 DC20 DC14 DC12 DC9; do
   grep -q "^[a-zA-Z]* $id " "$W/real/verdicts" || bad "$id produced no verdict"
 done
+
+# ---- the cli cells (cells.decl): the REAL subject run as a PROGRAM once per distinct CLI outcome -------------
+# Outcomes, exit x output class: 0 the dist path and the theirs line on stdout; 1 a STOP line on stderr; 2 the usage
+# line on stderr. One `FXCELL=<id> bash "$SUBJ"` start per outcome, through the same shim and on the real suite's
+# consumer and upstream, compared byte for byte (stdout, stderr, exit) with the in-process call on the same input.
+# Every input is one the suite already ran, so the clone is in the state both sides leave it in: the pass is a
+# refresh of an up-to-date clone, the STOP fetches a ref that names nothing, the usage line touches nothing.
+EQ="$W/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"; shift
+  [ "$DC_SOURCED" = "$SUBJ" ] || { echo "FIXTURE BROKEN: cli cell $id with the dcl_main of ${DC_SOURCED:-nothing} sourced" >&2; exit 2; }
+  ( export DCF_LOG="$W/real/fetch.log" DCF_REALGIT="$REALGIT" PATH="$W/real/shim:$PATH" && dcl_main "$@" ) \
+    > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  DCF_LOG="$W/real/fetch.log" DCF_REALGIT="$REALGIT" PATH="$W/real/shim:$PATH" FXCELL="$id" bash "$SUBJ" "$@" \
+    > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+EQ_D="$(common "$W/real/c")/ai-dlc-dist"
+if eqv cli-pass "$W/real/c" "$W/real/up" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-pass.cl.err" ] \
+   && [ "$(sed -n 1p "$EQ/cli-pass.cl.out")" = "$EQ_D" ] && [ "$(sed -n 2p "$EQ/cli-pass.cl.out")" = "theirs $(git -C "$W/real/up" rev-parse refs/heads/main)" ]; then
+  ok "cli-pass: the program prints the dist path and theirs exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with the dist and theirs lines ($(eq_twin cli-pass))"; fi
+if eqv cli-stop "$W/real/c" "$W/real/up" no-such-ref-anywhere && [ "$(cat "$EQ/cli-stop.cl.rc")" = 1 ] && [ ! -s "$EQ/cli-stop.cl.out" ] \
+   && grep -qF 'the ref names nothing in the distribution clone' "$EQ/cli-stop.cl.err"; then
+  ok "cli-stop: the program STOPs on a ref that names nothing exactly as the in-process call does (stderr, exit 1)"
+else bad "cli-stop: the program and the in-process call differ, or the outcome is not exit 1 with the named STOP ($(eq_twin cli-stop))"; fi
+if eqv cli-usage && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && [ "$(cat "$EQ/cli-usage.cl.err")" = "usage: dist-clone.sh [--theirs <ref>] <consumer> <upstream> [<ref>...]" ]; then
+  ok "cli-usage: the program refuses no arguments exactly as the in-process call does (stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-usage))"; fi
+if ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-stop.cl.rc" && ! cmp -s "$EQ/cli-stop.cl.rc" "$EQ/cli-usage.cl.rc" \
+   && ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-stop.cl.out"; then
+  ok "cli cells discriminate: the three cells exit 0, 1 and 2 and the pass alone prints a dist"
+else bad "cli cells do not discriminate: two of cli-pass, cli-stop, cli-usage share an exit, or pass and stop share stdout"; fi
 
 # ---- DCP: the SKILL.md sentences this subject implements ---------------------------------------------
 R3S='**With no `theirs` argument, theirs is the clone'"'"'s fetched upstream `main`, resolved to a FULL 40-hex sha, never a checkout'"'"'s HEAD.**'
@@ -231,16 +325,16 @@ n="$(grep -cF -- 'ZZ-NEVER-IN-SKILL-ZZ' "$SKILL")" || n=0
 [ "$n" -eq 0 ] && ok "DCP control: an impossible phrase is absent from SKILL.md" || bad "DCP control matched $n"
 
 # ---- mutants -------------------------------------------------------------------------------------
-# mut <name> <literal anchor> <replacement line> -- a copy of dist-clone.sh with the ONE line holding
+# mut <name> <literal anchor> <replacement line> -- a copy of dist-clone.sh, at $d/$MP so its fx_inproc row counts under the inproc: row, with the ONE line holding
 # the anchor replaced. dist-clone.sh resolves no sibling, so a lone copy runs as the original does;
 # DC1's ok in every mutant run is the control that the copy ran.
 mut() {
   local d="$W/mut/$1" n
-  mkdir -p "$d"
+  mkdir -p "$d/${MP%/*}"
   n="$(grep -cF -- "$2" "$SUBJ")" || n=0
   [ "$n" -eq 1 ] || { bad "$1 anchor matches $n lines, not 1 -- re-anchor it; do NOT relax the assertion"; return 1; }
-  ANCH="$2" REPL="$3" awk 'index($0, ENVIRON["ANCH"]) { print ENVIRON["REPL"]; next } { print }' "$SUBJ" > "$d/dist-clone.sh"
-  cmp -s "$SUBJ" "$d/dist-clone.sh" && { bad "$1 DID NOT APPLY"; return 1; }
+  ANCH="$2" REPL="$3" awk 'index($0, ENVIRON["ANCH"]) { print ENVIRON["REPL"]; next } { print }' "$SUBJ" > "$d/$MP"
+  cmp -s "$SUBJ" "$d/$MP" && { bad "$1 DID NOT APPLY"; return 1; }
   return 0
 }
 # base_ok_count <ids> -- how many of the named arms the UNMUTATED subject passed in this run (its verdicts file).
@@ -251,10 +345,11 @@ BV_nopin="$(base_ok_count "DC14")"
 BV_fallback="$(base_ok_count "DC4 DC5 DC7 DC12 DC16 DC18 DC20")"
 score() { # score <name> <expected kill set, space separated> <flag: 1 when the unmutated subject passed every arm in the set>
   local d="$W/mut/$1" got want
-  suite "$d/dist-clone.sh" "$d/run"
+  suite "$d/$MP" "$d/run"
   grep -q '^ok DC1 ' "$d/run/verdicts" || { bad "$1 BROKEN: the mutant copy failed DC1, so it did not run as a dist clone"; return; }
   got="$(awk '$1=="FAIL"{print $2}' "$d/run/verdicts" | sort | tr '\n' ' ')"
   want="$(printf '%s\n' $2 | sort | tr '\n' ' ')"
+  [ "$MATRIX" = 1 ] && printf 'MATRIX %s FULL [%s]\n' "$1" "$got"
   if [ "$got" = "$want" ]; then mutant_killed "$3" "$1" "$1 KILLED by exactly [$got]"; else bad "$1 moved [$got], expected exactly [$want]"; fi
 }
 CLONE_ANCHOR='git clone --bare --single-branch --branch main --no-tags "$UP_ARG" "$TMP/c"'

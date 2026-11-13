@@ -65,6 +65,27 @@ SUBJ="$(pick "$HERE/../../scripts/wait-for-deliverable.sh" \
              "$HERE/../../../scripts/ai-dlc/wait-for-deliverable.sh" \
              "$HERE/../../../core/scripts/wait-for-deliverable.sh")"
 [ -n "$SUBJ" ] || { echo "FIXTURE ERROR: cannot locate wait-for-deliverable.sh" >&2; exit 2; }
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. Every beat below SOURCES the subject and calls wfd_mark_main then
+# wfd_beat_main; a consumer can receive this file one pull before (or without) the wrapped wait-for-deliverable.sh
+# (the wrap landed in 0.971.0), and sourcing the flat program would run a whole beat with this file's argv inside
+# each case. So the subject's three halves are checked first, before any fx_inproc: the `wfd_mark_main() {` line,
+# the `wfd_beat_main() {` line and the column-0 source guard. None of the three is a subject that predates the wrap,
+# which prints SKIP and exits 0 -- never an ok. Some but not all is a respelled subject this fixture can no longer
+# drive, which FAILS. An unreadable subject (grep exit 2) is FIXTURE ERROR. The distribution cannot reach the SKIP
+# unnoticed: C5 (validate-fixture-inprocess.sh) refuses a cli subject without the guard, and J3 refuses the count.
+wd_has() { # <fixed line> -> 1 present, 0 absent; exits 2 when the subject cannot be read
+  grep -qxF -- "$1" "$SUBJ"
+  case $? in 0) printf 1 ;; 1) printf 0 ;; *) echo "FIXTURE ERROR: cannot read $SUBJ" >&2; exit 2 ;; esac
+}
+wd_gate="$(wd_has 'wfd_mark_main() {')$(wd_has 'wfd_beat_main() {')$(wd_has '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0')"
+# `exit 2` inside a $( ) ends only that substitution, so a read failure shows as a missing digit: refuse it here.
+case "$wd_gate" in [01][01][01]) ;; *) echo "FIXTURE ERROR: the wrap check could not read $SUBJ (got '$wd_gate')" >&2; exit 2 ;; esac
+case "$wd_gate" in
+  111) ;;
+  000) echo "SKIP: subject predates the in-process wrap ($SUBJ carries neither wfd_mark_main nor wfd_beat_main nor the column-0 source guard)"; exit 0 ;;
+  *) echo "  FAIL  $SUBJ carries only part of the in-process wrap (wfd_mark_main, wfd_beat_main, column-0 guard: $wd_gate) -- a respelled subject this fixture cannot drive"
+     echo "wait-stale-deliverable: 1 assertion(s) FAILED" >&2; exit 1 ;;
+esac
 SEED="$HERE/seed.sh"
 [ -f "$SEED" ] || { echo "FIXTURE ERROR: cannot locate seed.sh" >&2; exit 2; }
 
@@ -81,6 +102,11 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 PRE_FILE=""; pre_fails=0
 pre_ok()  { ok "$1"; if [ -n "$PRE_FILE" ]; then printf '%s\n' "$1" >> "$PRE_FILE"; fi; }
 pre_bad() { bad "$1"; pre_fails=$((pre_fails+1)); }
+# lib/mutant.sh is loaded HERE, before the --run-one branch, because every worker records its in-process beats through
+# its fx_inproc (and its load guard needs ok/bad, defined just above). A literal-tail path, never `. "$VAR"`: in a
+# fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
 
 # A short beat keeps the suite fast. AI_DLC_WAIT_MARGIN_SECS is load-bearing and
 # easy to miss: MARGIN defaults to 10, and RESERVE = max(MARGIN, POLL), so with the
@@ -123,14 +149,38 @@ setup_tmp() {
 # case that asserts WHETHER a beat slept sets BW_Q itself and runs under the recording stub; a case that needs the sleep record or a
 # quantum no scheduling delay can cross sets them for its own beat and unsets them after.
 BW_Q=""; BW_PATH=""
+# ---------------------------------------------------------------------------
+# THE SUBJECT, IN PROCESS (BL-878; wait-beat-liveness's wbl_ip is the template). Every beat SOURCES the subject in a
+# subshell the call site opens and runs wfd_mark_main then wfd_beat_main with the argv the CLI got -- the two lines
+# its own tail runs. Its `exit` and EXIT trap end that subshell, so a beat costs a subshell, not a bash start. It is
+# sourced once per beat because it reads its AI_DLC_* tuning at source time and the call sites vary that tuning.
+# Each source is one fx_inproc pass (the inproc: row), called in the call site's FOREGROUND on the line before the
+# subshell, so a backgrounded beat that is reaped early cannot move the count (BL-868).
+#   wsd_enter <fresh|chain> <work> [NAME=value...] runs FIRST inside that subshell: cd to the world, export the env
+#   words the CLI was started with plus AI_DLC_PROJECT_ROOT, and turn pipefail off, as the program runs. Then:
+#   THE PARENT SHELL. The CLI ran every beat with a fresh parent pid, so a beat never found a `.shell-<its PPID>`
+#   marker it had not been chained behind. In process every beat of a case shares this worker's $PPID, so a `fresh`
+#   beat first removes `.shell-$PPID` from its counter dir -- a fresh shell. A `chain` beat instead writes it (an
+#   epoch alone, as chained_beat's wrapper wrote `.shell-$$`), so the beat sees a sibling recorded by its own parent.
+#   THE LEASE HOLDER is $$ (WFD_SELF_PID unset): no case runs two beats at once, so a beat's lease is only ever
+#   compared with its own pid, and the marker's pid field is never asserted.
+wsd_enter() {
+  local mode="$1" w="$2" a; shift 2
+  cd "$w" || return 2
+  for a in "$@"; do export "${a%%=*}=${a#*=}"; done
+  export AI_DLC_PROJECT_ROOT="$PWD"
+  set +o pipefail
+  case "$mode" in
+    fresh) rm -f "_bmad-output/.wait-beats/.shell-$PPID" ;;
+    chain) printf '%s' "$(date +%s)" > "_bmad-output/.wait-beats/.shell-$PPID" || exit 3 ;;
+    *) return 2 ;;
+  esac
+}
 beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and OUT
   local subj="$1" w="$2"; shift 2
-  ( cd "$w" && env PATH="${BW_PATH:-$PATH}" \
-                   AI_DLC_WAIT_BEAT_SECS="${BW_Q:-1}" \
-                   AI_DLC_WAIT_POLL_SECS=1 \
-                   AI_DLC_WAIT_MARGIN_SECS=1 \
-                   AI_DLC_MAX_WAIT_BEATS=6 \
-    AI_DLC_PROJECT_ROOT="$PWD" bash "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
+  fx_inproc "$subj"
+  ( wsd_enter fresh "$w" PATH="${BW_PATH:-$PATH}" AI_DLC_WAIT_BEAT_SECS="${BW_Q:-1}" AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 && . "$subj" || exit 97
+    wfd_mark_main "$@" deliv.md; wfd_beat_main "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -292,14 +342,12 @@ beat() { local w="$1"; shift; beat_with "$SUBJ" "$w" "$@"; }
 chained_beat() { # <subject> <work> [args...] -> as beat_with, with a sibling beat
                  # already recorded in the shell that invokes the subject
   local subj="$1" w="$2"; shift 2
-  ( cd "$w" && env AI_DLC_WAIT_BEAT_SECS=60 \
-                   AI_DLC_WAIT_POLL_SECS=1 \
-                   AI_DLC_WAIT_MARGIN_SECS=1 \
-                   AI_DLC_MAX_WAIT_BEATS=6 \
-    bash -c 'printf "%s" "$(date +%s)" > "_bmad-output/.wait-beats/.shell-$$" || exit 3
-             s="$1"; shift
-             AI_DLC_PROJECT_ROOT="$PWD" bash "$s" "$@"
-             exit $?' _ "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
+  # IN PROCESS (see wsd_enter): the subject's $PPID is this worker's, and `chain` writes `.shell-$PPID` from the
+  # subshell the subject then runs in, so the marker names exactly the parent the subject looks up -- what the
+  # `bash -c` wrapper's `$$` (and its trailing `exit $?`) arranged when the subject was a child of that wrapper.
+  fx_inproc "$subj"
+  ( wsd_enter chain "$w" AI_DLC_WAIT_BEAT_SECS=60 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 && . "$subj" || exit 97
+    wfd_mark_main "$@" deliv.md; wfd_beat_main "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -402,7 +450,9 @@ mutant() { # <name> -> sets $MUT to the mutant's path
   local expr
   mutant_expr "$name"
   expr="$MUT_EXPR"
-  local m="$MUTDIR/$name.sh"
+  # The copy keeps the subject's declared suffix, so its in-process passes count under the same inproc: row (J7).
+  local m="$MUTDIR/$name/core/scripts/wait-for-deliverable.sh"
+  mkdir -p "${m%/*}" || { echo "FIXTURE ERROR: cannot create the dir for mutant '$name'" >&2; exit 2; }
   sed "$expr" "$SUBJ" > "$m" || { echo "FIXTURE ERROR: sed failed for mutant '$name'" >&2; exit 2; }
   if cmp -s "$SUBJ" "$m"; then
     echo "FIXTURE ERROR: mutant '$name' matched nothing -- the code it targets was" >&2
@@ -467,9 +517,9 @@ W="$( bash "$SEED" stale-marker )"
 # real write is made and the gate opened, so it delivers and leaves through its normal EXIT trap.
 # No quantum is waited out and no clock decides either moment.
 sleep_stub "$W/.stub" gate
-( cd "$W" && env PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS=60 AI_DLC_WAIT_POLL_SECS=1 \
-                 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
+fx_inproc "$SUBJ"
+( wsd_enter fresh "$W" PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS=60 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 && . "$SUBJ" || exit 97
+  wfd_mark_main deliv.md; wfd_beat_main deliv.md ) >/dev/null 2>&1 & PID=$!
 seen=0
 # The beat is parked when the stub has RECORDED its first poll sleep, which is after every pre-loop lease write, so the
 # marker is read at a fixed point of the beat (and the beat's clock reads before the release do not move with load).
@@ -592,10 +642,9 @@ rm -rf "$W"
 # target is written on the first recorded sleep, so a beat on the sleeping side returns at its
 # first wake instead of running its quantum out -- the passing reverse case pays one POLL.
 knob_beat() { # <work> <quantum> <steering budget>
-  ( cd "$1" && env PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS="$2" AI_DLC_STEERING_BUDGET="$3" \
-                   AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=3 \
-                   AI_DLC_MAX_WAIT_BEATS=6 \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md ) > "$BEATOUT" 2>&1 || true
+  fx_inproc "$SUBJ"
+  ( wsd_enter fresh "$1" PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS="$2" AI_DLC_STEERING_BUDGET="$3" AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=3 AI_DLC_MAX_WAIT_BEATS=6 && . "$SUBJ" || exit 97
+    wfd_mark_main deliv.md; wfd_beat_main deliv.md ) > "$BEATOUT" 2>&1 || true
 }
 C08_knob_split_forward() {
 W="$( bash "$SEED" knob-split-forward )"
@@ -668,9 +717,9 @@ run_stale() { # <subject> -> MS_LEASE MS_KILL_T MS_DISCRIM ; leaves W
   # above KILL_T + 3 x POLL (base + 4) by construction, whatever the box does between start and kill.
   sleep_stub "$W/.stub" gate
   MS_T0="$(clock_now)"
-  ( cd "$W" && env PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS="$MS_Q" AI_DLC_WAIT_POLL_SECS="$MS_POLL" \
-                   AI_DLC_WAIT_MARGIN_SECS="$MS_MARGIN" AI_DLC_MAX_WAIT_BEATS=6 \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" deliv.md >/dev/null 2>&1 ) & pid=$!
+  fx_inproc "$1"
+  ( wsd_enter fresh "$W" PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS="$MS_Q" AI_DLC_WAIT_POLL_SECS="$MS_POLL" AI_DLC_WAIT_MARGIN_SECS="$MS_MARGIN" AI_DLC_MAX_WAIT_BEATS=6 && . "$1" || exit 97
+    wfd_mark_main deliv.md; wfd_beat_main deliv.md ) >/dev/null 2>&1 & pid=$!
   until [ -s "$STUB_LOG" ] || ! kill -0 "$pid" 2>/dev/null; do sleep 0.02; done
   reap_tree "$pid"
   MS_KILL_T="$(clock_now)"
@@ -774,9 +823,18 @@ rm -rf "$W"
 # three exit-64 assertions and be entirely useless.
 C14_progress_guards() {
 W="$( bash "$SEED" progress-guards )"
-guard() { ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 \
-                           AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-              AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --progress-path "$1" deliv.md ) >/dev/null 2>&1; echo $?; }
+# THE INJECTED CLOCK (BL-878 item 5). The accepted `guard wt` beat is the one beat of this file that enters the
+# subject's poll sleep on the default PATH (quantum 4 against margin 1), so it runs under a fast sleep stub with its own
+# virtual clock (GUARD_PATH): its deadline is reached after its own stubbed sleeps, never by wall time, and its verdict
+# stays `rc != 64`. The three refusals exit 64 at argument parse, before any sleep, so they keep the fixture's PATH and
+# pay no shim start. The fixture's condition polls (deliver_on_sleep, C02, run_stale, until_event) and the stubs' own
+# gate/hold loops stay real: each waits on an event and decides no verdict.
+sleep_stub "$W/.stub" fast "$W/.clk"
+GUARD_PATH=""
+guard() {
+  fx_inproc "$SUBJ"
+  ( wsd_enter fresh "$W" PATH="${GUARD_PATH:-$PATH}" AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 && . "$SUBJ" || exit 97
+    wfd_mark_main --progress-path "$1" deliv.md; wfd_beat_main --progress-path "$1" deliv.md ) >/dev/null 2>&1; echo $?; }
 if [ "$(guard _bmad-output)" = "64" ]; then
   ok "progress-guards: the state dir is refused — it is written by this beat every poll"
 else bad "progress-guards: --progress-path _bmad-output accepted; progress is then always true and NON-DELIVERY can never fire"; fi
@@ -786,6 +844,7 @@ else bad "progress-guards: --progress-path . accepted; it contains the state dir
 if [ "$(guard no-such-dir)" = "64" ]; then
   ok "progress-guards: a nonexistent path is refused — it could never show work"
 else bad "progress-guards: a typo'd progress path is accepted and silently grants nothing, ever"; fi
+GUARD_PATH="$STUB_PATH"
 if [ "$(guard wt)" != "64" ]; then
   ok "progress-guards: CONTROL — a real worktree path is accepted"
 else bad "progress-guards: every --progress-path is rejected; the flag does nothing"; fi
@@ -889,7 +948,9 @@ rm -rf "$W"
 # subject the WRAPPER's parent instead (see `chained_beat` for the measurement). Every runner
 # asserts the result through `separate_shells`: one `.shell-*` marker per beat started, and no
 # beat printing the sibling NOTE.
-own() { bash -c '"$@"; exit $?' _ "$@"; }
+# IN PROCESS that parent is this worker's for every beat (see wsd_enter), and a `fresh` beat removes its
+# `.shell-$PPID` before it runs, so a beat still never sees a sibling it was not chained behind; one beat per case
+# writes one marker, which is what separate_shells counts.
 
 # bg_beat <subject> <work> <out> <quantum> <poll> [args...] -> starts one beat in its own
 # shell, in the background; sets BG to the pid `wait` takes. The subject's OWN pid is read
@@ -899,10 +960,9 @@ own() { bash -c '"$@"; exit $?' _ "$@"; }
 BG=""; BG_PATH=""
 bg_beat() {
   local subj="$1" w="$2" o="$3" q="$4" p="$5"; shift 5
-  ( cd "$w" && own env PATH="${BG_PATH:-$PATH}" AI_DLC_WAIT_BEAT_SECS="$q" AI_DLC_WAIT_POLL_SECS="$p" \
-                       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-                       AI_DLC_WAIT_SETTLE_SECS=2 \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$subj" "$@" ) > "$o" 2>&1 &
+  fx_inproc "$subj"
+  ( wsd_enter fresh "$w" PATH="${BG_PATH:-$PATH}" AI_DLC_WAIT_BEAT_SECS="$q" AI_DLC_WAIT_POLL_SECS="$p" AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_WAIT_SETTLE_SECS=2 && . "$subj" || exit 97
+    wfd_mark_main "$@"; wfd_beat_main "$@" ) > "$o" 2>&1 &
   BG=$!
 }
 until_event() { # <command...> -- returns once the command succeeds; NO count and NO time cap. A hang
@@ -1115,6 +1175,60 @@ if [ "$n" = "3" ]; then
 else bad "cwd-invariance: $n assertions from cwd=/ , expected 3 — the case exited without running, which scores as clean"; fi
 }
 
+# --- 24. THE CLI CELLS (cells.decl): the subject run as a PROGRAM once per distinct outcome ---
+# Every other beat in this file is in process (see wsd_enter). The outcomes the cases rely on are exit x output
+# class: 0 a beat that completes WAITING on stdout, 1 NON-DELIVERY on stdout, 64 a refused argument on stderr. One
+# `FXCELL=<id> bash "$SUBJ"` start per outcome, each compared with the in-process beat on the same input: stdout,
+# stderr and exit separately, byte for byte. BOTH SIDES SEE ONE STATE AND ONE CLOCK: the world is seeded once and
+# copied pristine (`cp -Rp`, mtimes kept) before the in-process beat; that beat's world is then moved aside and the
+# copy put back at the SAME path for the program. Both run under one fast sleep stub whose virtual clock lives
+# outside the world, and at quantum 1 against margin 1 the beat's deadline is `now`, so it never enters its poll
+# sleep and the clock never advances: the two `date +%s` readings agree whatever the load. Each cell also asserts
+# its own outcome (a positive conjunct), and the three must differ in exit. C48 is not an arm: like C31 it takes no
+# mutant (a mutant copy is no declared cli subject).
+C48_cli_equivalence() {
+  local EQD id
+  # The beat's LIVENESS line reads this session's live transcripts ($HOME/.claude/projects/*/<session id>/), which a
+  # run outside the hermetic runner (env -i) would see move between the two sides; this worker is one case's process.
+  unset CLAUDE_CODE_SESSION_ID
+  EQD="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+  wsd_eqv() { # <cell-id> <seed> [args...] -> $EQD/<id>.{ip,cl}.{out,err,rc}; 0 when every pair is identical
+    local id="$1" seed="$2" w; shift 2
+    w="$( bash "$SEED" "$seed" )"
+    [ -n "$w" ] && [ -d "$w" ] || { echo "FIXTURE ERROR: $id: seed $seed made no world" >&2; exit 2; }
+    sleep_stub "$EQD/$id.stub" fast "$EQD/$id.clk"
+    cp -Rp "$w" "$EQD/$id.pristine" || { echo "FIXTURE ERROR: $id: cannot copy the world" >&2; exit 2; }
+    fx_inproc "$SUBJ"
+    ( wsd_enter fresh "$w" PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 && . "$SUBJ" || exit 97
+      wfd_mark_main "$@" deliv.md; wfd_beat_main "$@" deliv.md ) > "$EQD/$id.ip.out" 2> "$EQD/$id.ip.err"; echo "$?" > "$EQD/$id.ip.rc"
+    mv "$w" "$EQD/$id.ip.world" && cp -Rp "$EQD/$id.pristine" "$w" || { echo "FIXTURE ERROR: $id: cannot restore the world" >&2; exit 2; }
+    ( cd "$w" && export PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
+        AI_DLC_PROJECT_ROOT="$PWD" && FXCELL="$id" bash "$SUBJ" "$@" deliv.md ) > "$EQD/$id.cl.out" 2> "$EQD/$id.cl.err"; echo "$?" > "$EQD/$id.cl.rc"
+    rm -rf "$w"
+    [ "$(stub_lines)" = 0 ] || { echo "FIXTURE ERROR: $id: a beat entered its poll sleep, so the clock moved between the two sides" >&2; exit 2; }
+    cmp -s "$EQD/$id.ip.out" "$EQD/$id.cl.out" && cmp -s "$EQD/$id.ip.err" "$EQD/$id.cl.err" && cmp -s "$EQD/$id.ip.rc" "$EQD/$id.cl.rc"
+  }
+  # awk, not head or wc: neither is in this fixture's tools.decl.
+  eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQD/$1.ip.rc")" \
+    "$(awk 'NR <= 3' "$EQD/$1.ip.out")" "$(awk 'NR <= 3' "$EQD/$1.ip.err")" "$(cat "$EQD/$1.cl.rc")" "$(awk 'NR <= 3' "$EQD/$1.cl.out")" "$(awk 'NR <= 3' "$EQD/$1.cl.err")"; }
+  if wsd_eqv cli-beat-waiting absent && [ "$(cat "$EQD/cli-beat-waiting.cl.rc")" = 0 ] \
+     && grep -q '^WAITING' "$EQD/cli-beat-waiting.cl.out" && grep -q '^BEAT COMPLETE' "$EQD/cli-beat-waiting.cl.out"; then
+    ok "cli-beat-waiting: the program beats an absent deliverable exactly as the in-process beat does (stdout, stderr, exit 0, WAITING)"
+  else bad "cli-beat-waiting: the program and the in-process beat differ, or the outcome is not exit 0 with WAITING ($(eq_twin cli-beat-waiting))"; fi
+  if wsd_eqv cli-beat-nondelivery exhausted && [ "$(cat "$EQD/cli-beat-nondelivery.cl.rc")" = 1 ] \
+     && grep -q '^NON-DELIVERY' "$EQD/cli-beat-nondelivery.cl.out"; then
+    ok "cli-beat-nondelivery: the program declares an exhausted join exactly as the in-process beat does (stdout, stderr, exit 1, NON-DELIVERY)"
+  else bad "cli-beat-nondelivery: the program and the in-process beat differ, or the outcome is not exit 1 with NON-DELIVERY ($(eq_twin cli-beat-nondelivery))"; fi
+  if wsd_eqv cli-beat-refuse progress-guards --progress-path no-such-dir && [ "$(cat "$EQD/cli-beat-refuse.cl.rc")" = 64 ] \
+     && [ ! -s "$EQD/cli-beat-refuse.cl.out" ] && grep -q "progress-path 'no-such-dir' does not exist" "$EQD/cli-beat-refuse.cl.err"; then
+    ok "cli-beat-refuse: the program refuses a missing --progress-path exactly as the in-process beat does (stdout, stderr, exit 64)"
+  else bad "cli-beat-refuse: the program and the in-process beat differ, or the outcome is not exit 64 with the refusal ($(eq_twin cli-beat-refuse))"; fi
+  if [ "$(cat "$EQD"/cli-beat-*.cl.rc | LC_ALL=C sort -u | awk 'END { print NR }')" = 3 ]; then
+    ok "cli cells discriminate: the three inputs give three different exits"
+  else bad "cli cells do not discriminate: the three cli cells did not give three different exits"; fi
+  rm -rf "$EQD"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------
@@ -1156,17 +1270,16 @@ if [ "$N_LISTED" -lt 10 ]; then
   echo "FIXTURE ERROR: derived $N_LISTED case(s) from this file — the C<nn>_ naming grammar moved" >&2
   exit 2
 fi
-# C31 re-launches C23 from / and takes no subject, so no mutant can reach it: a base arm only.
-ARMS="$(printf '%s\n' "$NAMES" | grep -v '^C31_')"
+# C31 re-launches C23 from / and takes no subject, so no mutant can reach it: a base arm only. C48 runs the declared
+# subject as a program in its cli cells, which a mutant copy is not: a base arm only.
+ARMS="$(printf '%s\n' "$NAMES" | grep -v '^C31_' | grep -v '^C48_')"
 N_ARMS="$(printf '%s\n' "$ARMS" | grep -c . || true)"
 # A here-string read, never a pipe into grep -q: has_arm <name> is 0 when <name> is one of the arms.
 has_arm() { grep -qx "$1" <<<"$ARMS"; }
 
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-MX_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/matrix.sh"
-[ -f "$MUT_LIB" ] && [ -f "$MX_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh or lib/matrix.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-. "$MX_LIB"
+# lib/mutant.sh was loaded at the top (the workers need its fx_inproc); lib/matrix.sh only the driver reads.
+[ -f "$HERE/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: lib/matrix.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/matrix.sh" || { echo "FIXTURE ERROR: sourcing lib/matrix.sh failed" >&2; exit 2; }
 
 echo "wait-stale-deliverable:"
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$SUBJ")" && pwd)/$(basename "$SUBJ")"
@@ -1191,8 +1304,8 @@ while read -r m d t; do
   mutant "$m"
 done < "$OUT/table"
 # THE UNMUTATED COPY (MX0), built the way a mutant is: a copy in the mutant directory.
-cp "$SUBJ" "$MUTDIR/MX0.sh" || { echo "FIXTURE ERROR: cannot copy the subject for MX0" >&2; exit 2; }
-MX0_SAME=0; cmp -s "$SUBJ" "$MUTDIR/MX0.sh" && MX0_SAME=1
+mkdir -p "$MUTDIR/MX0/core/scripts" && cp "$SUBJ" "$MUTDIR/MX0/core/scripts/wait-for-deliverable.sh" || { echo "FIXTURE ERROR: cannot copy the subject for MX0" >&2; exit 2; }
+MX0_SAME=0; cmp -s "$SUBJ" "$MUTDIR/MX0/core/scripts/wait-for-deliverable.sh" && MX0_SAME=1
 
 # JOBS. Every worker is `--run-one <arm> [<subject>]`: one arm, one process, one subject. Base arms
 # run on the real subject. PER PUSH a mutant's cells are its DECIDING arm and its TWIN; under
@@ -1201,10 +1314,10 @@ MX0_SAME=0; cmp -s "$SUBJ" "$MUTDIR/MX0.sh" && MX0_SAME=1
 while read -r m d t; do
   if [ "$MATRIX" -eq 1 ]; then cells="$ARMS"; else cells="$d
 $t"; fi
-  for a in $cells; do printf 'x.%s.%s|%s|%s\n' "$m" "$a" "$a" "$MUTDIR/$m.sh" >> "$OUT/jobs"; done
+  for a in $cells; do printf 'x.%s.%s|%s|%s\n' "$m" "$a" "$a" "$MUTDIR/$m/core/scripts/wait-for-deliverable.sh" >> "$OUT/jobs"; done
 done < "$OUT/table"
 if [ "$MATRIX" -eq 1 ]; then mx0_cells="$ARMS"; else mx0_cells="C06_regression_guards"; fi
-for a in $mx0_cells; do printf 'x.MX0.%s|%s|%s\n' "$a" "$a" "$MUTDIR/MX0.sh" >> "$OUT/jobs"; done
+for a in $mx0_cells; do printf 'x.MX0.%s|%s|%s\n' "$a" "$a" "$MUTDIR/MX0/core/scripts/wait-for-deliverable.sh" >> "$OUT/jobs"; done
 for a in $NAMES; do printf 'b.%s|%s|-\n' "$a" "$a" >> "$OUT/jobs"; done
 
 # EIGHT. This pool nests inside the pre-push suite's, so a knob here would multiply against a

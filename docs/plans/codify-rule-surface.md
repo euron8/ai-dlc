@@ -111,7 +111,7 @@ Target files: `verification-discipline.md` (VD), `tool-hazards.md` (TH), `consum
 
 | # | Rule | Disposition |
 |---|---|---|
-| D1 | Prove a check passes vacuously → FAILS on the real bug → passes after the fix | HAVE `CLAUDE.md §A check that cannot fire`; the **self-probe-before-corpus** form (`validate-claude-rules.sh:29`) is unstated → +VD |
+| D1 | Prove a check passes vacuously → FAILS on the real bug → passes after the fix | HAVE `CLAUDE.md §A check that cannot fire`; the **self-probe-before-corpus** form (`validate-claude-rules.sh`'s `EVERY ARM CARRIES A SELF-PROBE` header) is unstated → +VD |
 | D2 | The distribution is not a consumer: install into a clean tree and run as one, in both layouts | HAVE partly `CLAUDE.md §Two layouts`; general form → CB |
 | D3 | A hand-maintained list is the bug — derive both sides | HAVE `CLAUDE.md §Prohibitions need mechanisms` |
 | D4 | A control that agrees with the verdict, or that proves only the run worked, is not a control | HAVE partly `CLAUDE.md §A zero is not a finding`; refinement → VD |
@@ -321,7 +321,7 @@ step costs ~1s serial.
 Scope: D7's remainder, D8's `$( )` half, D10's bash-3.2 floor. Today's finding set over the
 tracked shell corpus is **empty**, which makes each arm a pure regression guard and makes the
 fixture the only evidence the arm works — so each arm ships with a self-probe that runs before
-the corpus, in the shape at `scripts/validate-claude-rules.sh:29`.
+the corpus, in the shape of `scripts/validate-claude-rules.sh`'s `EVERY ARM CARRIES A SELF-PROBE` header.
 
 ## R4 — The two directives go to `operator-rulings.md`; only the checkable half becomes an arm — RULED
 
@@ -412,7 +412,7 @@ mechanism as the existing home-plans warning, and it is labeled as such.
 Each has a live corpus and no general statement anywhere. All go to `verification-discipline.md`.
 
 1. **Every arm carries a self-probe that runs before the corpus** —
-   `scripts/validate-claude-rules.sh:29`: an arm reporting zero findings without first proving it
+   `scripts/validate-claude-rules.sh`, its `EVERY ARM CARRIES A SELF-PROBE` header: an arm reporting zero findings without first proving it
    can produce one has established that it ran, not that the corpus is clean. This is the repo's
    most-repeated rule and it has no general home.
 2. **How a false-positive set was taken to zero is part of the arm.** A new arm with no narrowing
@@ -539,7 +539,7 @@ outstanding at handoff were closed by actions 1 and 2 above.
    Discharged by R6.
 2. **RULED — hold the durable-channel ceiling at 40,960 and change nothing.** Measured at the
    time of the ruling: the channel was **38,950 bytes across 7 files**, 2,010 of headroom. The
-   ruling follows the arm's own stated order at `scripts/validate-claude-rules.sh:275` — when A6
+   ruling follows the arm's own stated order in A6's header in `scripts/validate-claude-rules.sh` — when A6
    fires, the first question is what can be MECHANIZED or SCOPED out, and raising is the last
    resort. It has not fired. A pre-emptive prose cut is separately forbidden by
    `.claude/rules/resident-context.md`, which says rule text here is not trimmed for byte cost;
@@ -548,7 +548,7 @@ outstanding at handoff were closed by actions 1 and 2 above.
    sentence.**
 3. **RULED — do NOT widen arm A1, and Wave E's carriers stay in the home directory,
    unversioned.** The decisive measurement is that **A1's own probe seeds `.claude/settings.json`
-   as its offender** (`scripts/validate-claude-rules.sh:95`), and a repo-local hook needs its
+   as its offender** (`scripts/validate-claude-rules.sh`, `A1's own probe did not fire`), and a repo-local hook needs its
    registration in exactly that file — so admitting it breaks the probe and reopens the
    containment the `.gitignore` narrowing exists to hold. Admitting `.claude/hooks/**` alone
    yields a tracked copy nothing executes, with the executing copy still in the home directory:

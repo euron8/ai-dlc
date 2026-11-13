@@ -1,0 +1,7 @@
+# path-mapping-render's starts of scripts/render-path-mapping.sh (BL-879 grammar). Every other drive is in process:
+# run.sh sources the real renderer and each sandbox's copy once (use) and calls rpm_main in a subshell. One cli cell per
+# distinct CLI outcome (exit 0 OK on stdout, exit 1 drift on stderr, exit 2 usage on stderr), each started as
+# FXCELL=<id> bash <renderer> in eqv() and compared byte for byte with the in-process call on the same input.
+cli scripts/render-path-mapping.sh cli-ok
+cli scripts/render-path-mapping.sh cli-usage
+cli scripts/render-path-mapping.sh cli-drift

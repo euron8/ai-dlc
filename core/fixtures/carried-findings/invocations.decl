@@ -1,3 +1,9 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-196 *
-34 core/scripts/validate-carried-findings.sh
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
+# are run.sh itself (1) and the five cli cells of cells.decl (5). inproc rows (fx_inproc, one per source): the real
+# validator twice (before the arms, and again after the stub for the role-template arms), each of the 39 mutant
+# copies once, the unmutated control, the exit-0 stub, and the vacuity cell's return-1 copy; every copy keeps the
+# declared suffix ($M/<name>/core/scripts/validate-carried-findings.sh, and selfloc's and return-1's at
+# $R/core/scripts/validate-carried-findings.sh, each sourced once in its turn).
+6 *
+5 core/scripts/validate-carried-findings.sh
+44 inproc:core/scripts/validate-carried-findings.sh

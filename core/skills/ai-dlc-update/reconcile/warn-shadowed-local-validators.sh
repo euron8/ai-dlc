@@ -34,6 +34,11 @@
 #         not be staged (each with a `REFUSED —` line on stderr). That distinction is the contract — a caller must be
 #         able to tell "no forks are shadowed" from "this never ran", and those are the same empty
 #         output. This line read `0 ALWAYS` while three `exit 2` paths already existed.
+#
+# The whole program is ws_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition. Inside ws_main,
+# BASH_SOURCE[0] is still this file, so SELF and the siblings resolve beside it either way.
+ws_main() {
 set -uo pipefail
 # GLOBBING OFF: every consumer path is read through consumer-read.sh, and an unquoted expansion
 # must never resolve names against the caller's cwd.
@@ -227,3 +232,7 @@ while IFS= read -r base; do
 done < "$WS_T/closed"
 
 exit 0   # classifier — the signal never blocks
+}
+# Executed, it runs; sourced, it has defined ws_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ws_main "$@"

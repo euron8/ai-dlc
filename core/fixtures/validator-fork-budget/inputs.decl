@@ -7,6 +7,8 @@
 # reason: core/ is walked whole -- the profiled validator enumerates "$REPO_ROOT"/core/fixtures/*/ by content, scripts/validate-enforcement-map.sh:1305, so the fork count measured is a function of every directory under core/.
 # The validator under test, REQUIRED: run.sh prints the sentinel once it has located it.
 !scripts/validate-enforcement-map.sh
+# The profiler, REQUIRED: run.sh drives it four times (cells.decl) and prints the sentinel once it has located it.
+!scripts/fork-profile.sh
 # The profiler walks up from itself for VERSION; the renderer it calls for the arm map does the same.
 # copy-only: core/fixtures/validator-fork-budget/run.sh:131 run.sh tests for the marker beside the profiler; nothing reads its content
 VERSION

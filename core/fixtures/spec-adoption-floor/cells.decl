@@ -1,0 +1,7 @@
+# spec-adoption-floor's starts of core/scripts/validate-spec-adoption.sh (BL-879 grammar). Every other drive is in
+# process: run.sh sources the subject once and calls vsa_main in a subshell. One cli cell per distinct CLI outcome
+# (exit 0 a verdict on stdout, exit 1 REFUSED on stderr, exit 2 PENDING on stderr), each started as
+# FXCELL=<id> bash "$V" in eqv() and compared byte for byte with the in-process call on the same input.
+cli core/scripts/validate-spec-adoption.sh cli-pass
+cli core/scripts/validate-spec-adoption.sh cli-refuse
+cli core/scripts/validate-spec-adoption.sh cli-pending

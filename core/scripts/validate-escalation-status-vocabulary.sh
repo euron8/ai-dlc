@@ -51,6 +51,11 @@
 #   2  bad arguments, or the vocabulary source could not be read — see above, this is a
 #      refusal, not a pass; or the escalations path exists but is not a regular file, or
 #      could not be read (`REFUSED:` on stderr)
+#
+# The whole program is esv_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition. The script's own directory is
+# read through BASH_SOURCE[0], never $0, which in a sourcing shell names the caller.
+esv_main() {
 set -u
 
 ESCALATIONS="${1:-}"
@@ -60,7 +65,7 @@ if [ -z "$ESCALATIONS" ]; then
 fi
 
 # ---- 1. Locate the vocabulary source ---------------------------------------
-ES_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ES_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # --- AI_DLC_ROOT ------------------------------------------------------------
 # Resolve the project root by walking UP for a marker, never by a fixed number of
 # `..` hops. This script runs from three layouts:
@@ -269,3 +274,7 @@ fi
 
 echo "OK: n=$n all escalation status tokens are in the derived set ($(printf '%s ' $VOCAB))."
 exit 0
+}
+# Executed, it runs; sourced, it has defined esv_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+esv_main "$@"

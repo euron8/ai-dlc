@@ -1,0 +1,13 @@
+# install-scaffold-ignored walks up from its own directory for scripts/install.sh, sources install.sh's function file
+# scripts/install-scaffold-ignore.sh and core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh in-process, and runs
+# install.sh, and edited copies of it, into empty targets. install.sh copies from core/, patterns/ and templates/
+# (SCRIPT_DIR/../<tree>). The fixture derives the population from core/skills/ai-dlc/layer-contract.yaml and seeds E4's
+# declaration from core/schemas/pipeline-state-paths.json, both under core/. A fixture's own directory is copied by the
+# runner.
+!scripts/install.sh
+!scripts/install-scaffold-ignore.sh
+# reason: core/ is enumerated -- install.sh globs core/scripts/*, core/hooks/*.sh, core/schemas/*.json and more.
+core/
+patterns/
+templates/
+core/fixtures/lib/mutant.sh

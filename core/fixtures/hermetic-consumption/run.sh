@@ -46,7 +46,30 @@
 # between a relaxed compare and a green run is a corpus world holding the near-miss; m5 asserts
 # that w4's world reads differently under it, so w4 is load-bearing and not a restatement of the
 # probe.
+#
+# Usage: run.sh [--matrix]
+#
+# THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). The five mutants are scored on five named arms
+# (probe-line, bak-seed, nonbang-seed, top-seed over fixa's world; w4 over bak's world; hc_arm below). PER PUSH a
+# mutant builds only the world its deciding arm reads, which it must trip, and reads its twin from that same world,
+# which it must leave GREEN; `--matrix` builds both worlds and prints `MATRIX <mutant> <arm> TRIPPED|GREEN` for all
+# five arms. The rows below are the one source: hc_score reads them from this file. RE-MEASURE whenever an arm or a
+# mutant is added or changed, from the repo root:
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/hermetic-consumption/run.sh --matrix
+# MUTANT-MATRIX m1 decides=probe-line twins=bak-seed
+# MUTANT-MATRIX m2 decides=bak-seed twins=top-seed
+# MUTANT-MATRIX m3 decides=nonbang-seed twins=bak-seed
+# MUTANT-MATRIX m4 decides=top-seed twins=nonbang-seed
+# MUTANT-MATRIX m5 decides=w4 twins=- why=w4 is the only arm that reads bak's world, the one world m5 builds per push
+# MUTANT-MATRIX-DYNAMIC hc_score why=hc_score passes each of m1-m5 above to mutant_killed as its first argument
 set -u
+MATRIX=0
+for _a in "$@"; do
+  case "$_a" in
+    --matrix) MATRIX=1 ;;
+    *) echo "FIXTURE ERROR: unknown argument '$_a' (only --matrix)" >&2; exit 2 ;;
+  esac
+done
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Both layouts named, never a single walk-up (I33c). The subject is distribution-only.
@@ -70,6 +93,10 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 rc=0
 ok()  { printf '  ok    %s\n' "$*"; }
 bad() { printf '  FAIL  %s\n' "$*"; rc=1; }
+# fx_inproc lives in lib/mutant.sh, which needs ok() and bad() first. A literal-tail path, never `. "$VAR"`: in a
+# fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
 
 # The producer's lines, as the shipped file carries them.
 CE='  echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"'
@@ -135,20 +162,56 @@ world() {
   return 0
 }
 
-# drive <dir> -- runs the world's own validator copy; sets OUT and RC.
-drive() { OUT="$(bash "$1/scripts/validate-hermetic-consumption.sh" 2>&1)"; RC=$?; }
+# IN PROCESS (BL-878). drive SOURCES the world's own validator copy once into this shell (its guard returns after
+# defining vhc_main; one fx_inproc pass per world) and calls vhc_main in the `$( )` that captures it, so its `exit`,
+# EXIT trap and LC_ALL stay there. Inside vhc_main BASH_SOURCE[0] is that copy, so its VERSION walk-up finds the
+# world, exactly as running the copy did. drive runs in this shell, never inside a `$( )`, so a failed source is
+# FIXTURE BROKEN and never reads as the copy's own exit. Every copy sits at <world>/scripts/<name>, the subject's
+# relative path, so each pass is counted under the inproc: row.
+VHC_SOURCED=""
+src_vhc() { # src_vhc <copy>
+  unset -f vhc_main
+  fx_inproc "$1"
+  . "$1" || { echo "FIXTURE BROKEN: sourcing $1 failed" >&2; exit 2; }
+  declare -F vhc_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $1 defined no vhc_main" >&2; exit 2; }
+  VHC_SOURCED="$1"
+}
+# drive <dir> -- runs the world's own validator copy in process; sets OUT and RC.
+drive() { src_vhc "$1/scripts/validate-hermetic-consumption.sh"; OUT="$(vhc_main 2>&1)"; RC=$?; }
+
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome -----------------
+# Outcomes, by exit: 0 clean (cli-pass, over w1's world), 1 a finding naming the subject (cli-finding, over w3's
+# world), 2 a usage refusal (cli-usage, the shipped validator given an unknown argument; its usage line names the
+# program through BASH_SOURCE[0], so this cell is the proof of the $0 port). One `FXCELL=<id> bash <copy>` start
+# each, compared byte for byte (stdout, stderr, exit) with vhc_main of the SAME copy, sourced last, called in process.
+EQ="$TMP/eq"; mkdir -p "$EQ"
+eqv() { # eqv <cell-id> <copy> <args...> -- <copy> must be the copy src_vhc sourced last
+  local id="$1" c="$2"; shift 2
+  [ "$c" = "$VHC_SOURCED" ] || { echo "FIXTURE BROKEN: cli cell $id against $c while ${VHC_SOURCED:-nothing} is sourced" >&2; exit 2; }
+  ( vhc_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$c" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_rc() { cat "$EQ/$1.cl.rc"; }
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(tail -c 300 "$EQ/$1.ip.out")" "$(tail -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(tail -c 300 "$EQ/$1.cl.out")" "$(tail -c 300 "$EQ/$1.cl.err")"; }
 summary_has() { grep -q "^hermetic-consumption: .*$1" <<< "$OUT"; }
 names_subject() { grep -q '^FAIL: core/fixtures/b-subject: REQUIRED input core/scripts/validate-layer-entries.sh ' <<< "$OUT"; }
 
 echo "== c: the real corpus"
 want="$(cd "$ROOT/core/fixtures" && n=0 && for d in */; do d="${d%/}"; [ -f "$d/.dist-only" ] && continue; [ -f "$d/inputs.decl" ] && grep -q '^!' "$d/inputs.decl" && n=$((n + 1)); done; echo "$n")"
-OUT="$(bash "$VALIDATOR" 2>&1)"; RC=$?
+src_vhc "$VALIDATOR"
+OUT="$(vhc_main 2>&1)"; RC=$?
 case "$want" in ''|0|*[!0-9]*) bad "c: this fixture derived '$want' shipped \`!\` fixtures -- the derivation is broken, so nothing below means anything" ;; esac
 if [ "$RC" = 0 ] && grep -q '^self-probe: ok' <<< "$OUT" && summary_has "scanned=$want " && summary_has 'flagged=0$'; then
   ok "c: the real corpus is clean, the self-probe ran, and scanned=$want matches this fixture's own count"
 else
   bad "c: want exit 0, a self-probe line, scanned=$want and flagged=0; got exit $RC: $(printf '%s\n' "$OUT" | tail -3 | tr '\n' '|')"
 fi
+if eqv cli-usage "$VALIDATOR" --no-such-arg && [ "$(eq_rc cli-usage)" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && [ "$(cat "$EQ/cli-usage.cl.err")" = "usage: validate-hermetic-consumption.sh [--quiet]" ]; then
+  ok "cli-usage: the program refuses an unknown argument exactly as the in-process call does, naming itself (stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with its own usage line ($(eq_twin cli-usage))"; fi
 
 echo "== W: seeded worlds from the real producer"
 w() { # w <id> <variant> <want rc> <want subject named: y|n> <want scanned> [dist-only]
@@ -157,14 +220,26 @@ w() { # w <id> <variant> <want rc> <want subject named: y|n> <want scanned> [dis
   drive "$d"
   names_subject && named=y
   if [ "$RC" = "$wr" ] && [ "$named" = "$wn" ] && summary_has "scanned=$ws "; then
-    ok "$id: $v -> exit $RC, subject named=$named, scanned=$ws"
+    ok "$id: $v -> exit $RC, subject named=$named, scanned=$ws"; [ "$id" != w4 ] || HC_W4_OK=1
   else
     bad "$id: $v -> want exit $wr named=$wn scanned=$ws; got exit $RC named=$named: $(printf '%s\n' "$OUT" | tail -2 | tr '\n' '|')"
   fi
 }
 w w1 fixa     0 n 2
+if eqv cli-pass "$TMP/w.w1/scripts/validate-hermetic-consumption.sh" && [ "$(eq_rc cli-pass)" = 0 ] \
+   && grep -q '^hermetic-consumption: .*flagged=0$' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program reads w1's world clean exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with flagged=0 ($(eq_twin cli-pass))"; fi
 w w2 fixb     0 n 2
 w w3 base     1 y 2
+if eqv cli-finding "$TMP/w.w3/scripts/validate-hermetic-consumption.sh" && [ "$(eq_rc cli-finding)" = 1 ] \
+   && grep -q '^FAIL: core/fixtures/b-subject: REQUIRED input core/scripts/validate-layer-entries.sh ' "$EQ/cli-finding.cl.err"; then
+  ok "cli-finding: the program names w3's subject exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-finding: the program and the in-process call differ, or the outcome is not exit 1 naming the subject ($(eq_twin cli-finding))"; fi
+if ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-finding.cl.rc" && ! cmp -s "$EQ/cli-finding.cl.rc" "$EQ/cli-usage.cl.rc" \
+   && ! cmp -s "$EQ/cli-pass.cl.err" "$EQ/cli-finding.cl.err"; then
+  ok "cli cells discriminate: pass, finding and usage exit 0, 1 and 2, and only the finding names the subject on stderr"
+else bad "cli cells do not discriminate: two of cli-pass, cli-finding, cli-usage share an exit, or pass and finding share stderr"; fi
 w w4 bak      1 y 2
 w w5 top      1 y 2
 w w6 override 1 y 2
@@ -201,25 +276,80 @@ M_AFTER='s/sdep\[j\] == 0 \&\& cend\[c\] > 0 \&\& sline\[j\] > cend\[c\]/sdep[j]
 d="$TMP/m.K"
 if world "$d" "$VALIDATOR" fixa; then
   drive "$d"
-  if [ "$RC" = 0 ] && grep -q '^self-probe: ok' <<< "$OUT" && summary_has 'scanned=2 '; then ok "k: the unmutated copy runs in the harness (exit 0, probe ok, scanned=2)"
+  if [ "$RC" = 0 ] && grep -q '^self-probe: ok' <<< "$OUT" && summary_has 'scanned=2 '; then ok "k: the unmutated copy runs in the harness (exit 0, probe ok, scanned=2)"; B_K=1
   else bad "k: FIXTURE BROKEN -- the unmutated copy did not run clean in the harness; every mutant verdict below is void: exit $RC $(printf '%s\n' "$OUT" | tail -2 | tr '\n' '|')"; fi
 else bad "k: FIXTURE BROKEN -- world could not be built"; fi
+
+# THE MUTANT ARMS, each a reading of ONE world's run of a copy (GREEN = what the unmutated copy shows, k above):
+#   probe-line    fixa's world: exit 0, the `self-probe: ok` line, scanned=2
+#   bak-seed      fixa's world: the probe names no `d-bak` seed      nonbang-seed  ... no `e-non-bang` seed
+#   top-seed      fixa's world: the probe names no `f-top` seed
+#   w4            bak's world: exit 1 naming the subject (w4's own reading)
+# A mutant's DECIDING arm must be TRIPPED and its twin GREEN; per push a mutant builds only the world its deciding
+# arm and twin read, and `--matrix` builds both worlds and prints `MATRIX <mutant> <arm> TRIPPED|GREEN` for all five.
+hc_arm() { # hc_arm <arm> -- over the OUT/RC of the world that arm reads
+  case "$1" in
+    probe-line)   [ "$RC" = 0 ] && grep -q '^self-probe: ok' <<< "$OUT" && summary_has 'scanned=2 ' ;;
+    bak-seed)     ! grep -q 'self-probe: seeded [a-z-]* d-bak ' <<< "$OUT" ;;
+    nonbang-seed) ! grep -q 'self-probe: seeded [a-z-]* e-non-bang ' <<< "$OUT" ;;
+    top-seed)     ! grep -q 'self-probe: seeded [a-z-]* f-top ' <<< "$OUT" ;;
+    w4)           [ "$RC" = 1 ] && names_subject ;;
+    *) echo "FIXTURE BROKEN: unknown mutant arm $1" >&2; exit 2 ;;
+  esac
+}
+hc_world_of() { case "$1" in w4) echo bak ;; *) echo fixa ;; esac; }
+HC_ARMS="probe-line bak-seed nonbang-seed top-seed w4"
+mx_row() { grep -m 1 -F -- "# MUTANT-MATRIX $1 decides=" "$DIR/run.sh"; }
+mx_field() { local l; l="$(mx_row "$1")"; l="${l#*"$2"=}"; printf '%s' "${l%% *}"; }
+# The unmutated copy's reading of every arm, with no new run: the four fixa arms over k's own OUT/RC, still current
+# here, and w4 from w4's own verdict in the W section (the shipped validator over bak's world), so a mutant's
+# tripped arm is the mutation's.
+hc_base=0; hc_held=""
+[ "${HC_W4_OK:-0}" = 1 ] && { hc_base=$((hc_base + 1)); hc_held="$hc_held w4"; }
+for _a in probe-line bak-seed nonbang-seed top-seed; do hc_arm "$_a" && { hc_base=$((hc_base + 1)); hc_held="$hc_held $_a"; }; done
+if [ "$hc_base" -eq 5 ]; then
+  ok "baseline (unmutated copy): all five mutant arms hold (${hc_held# }), so a mutant's tripped arm is the mutation's"; B_HCBASE=1
+else bad "baseline (unmutated copy): only $hc_base of five mutant arms hold (${hc_held# }) -- every mutant verdict below is void"; fi
+HC_CELLS=0
+# hc_score <mutant> <copy> <deciding check: a command over OUT/RC> <ok message> <bad message>
+hc_score() {
+  local n="$1" m="$2" chk="$3" okm="$4" badm="$5" dec tw w a cur="" t
+  if [ "$MATRIX" = 1 ]; then
+    for w in fixa bak; do
+      d="$TMP/m.$n.$w"; world "$d" "$m" "$w" && drive "$d"
+      for a in $HC_ARMS; do
+        [ "$(hc_world_of "$a")" = "$w" ] || continue
+        HC_CELLS=$((HC_CELLS + 1))
+        if hc_arm "$a"; then printf '  MATRIX %s %s GREEN\n' "$n" "$a"; else printf '  MATRIX %s %s TRIPPED\n' "$n" "$a"; fi
+      done
+    done
+    return 0
+  fi
+  [ -n "$(mx_row "$n")" ] || { bad "$n has no MUTANT-MATRIX row in this file -- a per-push run cannot know its deciding arm or its twin"; return 0; }
+  dec="$(mx_field "$n" decides)"; tw="$(mx_field "$n" twins)"
+  w="$(hc_world_of "$dec")"
+  if [ "$tw" != - ] && [ "$(hc_world_of "$tw")" != "$w" ]; then bad "FIXTURE BROKEN: $n's twin $tw reads another world than its deciding arm $dec"; return 0; fi
+  d="$TMP/m.$n"; world "$d" "$m" "$w" && drive "$d"
+  HC_CELLS=$((HC_CELLS + 1)); [ "$tw" = - ] || HC_CELLS=$((HC_CELLS + 1))
+  if hc_arm "$dec" || ! eval "$chk"; then bad "$badm; got exit $RC: $(printf '%s\n' "$OUT" | tail -3 | tr '\n' '|') (deciding arm $dec)"; return 0; fi
+  if [ "$tw" != - ] && ! hc_arm "$tw"; then bad "$n also tripped its twin $tw -- the matrix row for this mutant moved; re-measure with --matrix"; return 0; fi
+  mutant_killed "$(( ${B_K:-0} && ${B_HCBASE:-0} ))" "$n" "$okm"
+}
 
 # m1: the probe removed. The clean world still reads exit 0 -- that is exactly why c demands the
 # probe's own line; here the arm demands that line VANISH, so a mutation that left the probe
 # running cannot score.
 if m="$(mut m1 "$M_PROBE")"; then
-  d="$TMP/m.m1"; world "$d" "$m" fixa && drive "$d"
-  if [ "$RC" = 0 ] && ! grep -q '^self-probe: ok' <<< "$OUT" && summary_has 'scanned=2 '; then ok "m1: probe removed -> the self-probe line is gone, which c refuses"
-  else bad "m1: want exit 0 with no self-probe line and scanned=2; got exit $RC: $(printf '%s\n' "$OUT" | tail -2 | tr '\n' '|')"; fi
+  hc_score m1 "$m" '[ "$RC" = 0 ] && ! grep -q "^self-probe: ok" <<< "$OUT" && summary_has "scanned=2 "' \
+    "m1: probe removed -> the self-probe line is gone, which c refuses" \
+    "m1: want exit 0 with no self-probe line and scanned=2"
 else bad "m1: DID NOT APPLY"; fi
 
 probe_refuses() { # probe_refuses <id> <mutant> <seed>
-  local id="$1" m="$2" s="$3" d="$TMP/m.$1"
-  world "$d" "$m" fixa && drive "$d"
-  if [ "$RC" = 2 ] && grep -q "self-probe: seeded [a-z-]* $s " <<< "$OUT" && ! summary_has 'scanned='; then
-    ok "$id: the self-probe refuses, naming its $s seed"
-  else bad "$id: want exit 2 and the probe naming $s before any corpus line; got exit $RC: $(printf '%s\n' "$OUT" | tail -3 | tr '\n' '|')"; fi
+  local id="$1" m="$2" s="$3"
+  hc_score "$id" "$m" "[ \"\$RC\" = 2 ] && grep -q \"self-probe: seeded [a-z-]* $s \" <<< \"\$OUT\" && ! summary_has 'scanned='" \
+    "$id: the self-probe refuses, naming its $s seed" \
+    "$id: want exit 2 and the probe naming $s before any corpus line"
 }
 if m="$(mut m2 "$M_NEAR")"; then probe_refuses m2 "$m" d-bak; else bad "m2: DID NOT APPLY"; fi
 if m="$(mut m3 "$M_WIDE")"; then probe_refuses m3 "$m" e-non-bang; else bad "m3: DID NOT APPLY"; fi
@@ -228,10 +358,17 @@ if m="$(mut m4 "$M_AFTER")"; then probe_refuses m4 "$m" f-top; else bad "m4: DID
 # m5: probe gone AND near-miss relaxed. w4's world must now read CLEAN, where the original reads
 # exit 1 naming the subject (w4 above) -- the two sides are asserted to differ.
 if m="$(mut m5 "$M_PROBE" "$M_NEAR")"; then
-  d="$TMP/m.m5"; world "$d" "$m" bak && drive "$d"
-  if [ "$RC" = 0 ] && ! names_subject && summary_has 'flagged=0$'; then ok "m5: probe gone and compare relaxed -> w4's near-miss world reads clean, so w4 is what holds the compare"
-  else bad "m5: want w4's world to read exit 0, flagged=0 under the mutant; got exit $RC: $(printf '%s\n' "$OUT" | tail -2 | tr '\n' '|')"; fi
+  hc_score m5 "$m" '[ "$RC" = 0 ] && ! names_subject && summary_has "flagged=0$"' \
+    "m5: probe gone and compare relaxed -> w4's near-miss world reads clean, so w4 is what holds the compare" \
+    "m5: want w4's world to read exit 0, flagged=0 under the mutant"
 else bad "m5: DID NOT APPLY"; fi
+if [ "$MATRIX" = 1 ]; then
+  [ "$HC_CELLS" -eq 25 ] && ok "MX matrix run measured $HC_CELLS mutant x arm cells (5 mutants x 5 arms)" \
+    || bad "MX matrix run measured $HC_CELLS cells, 25 expected"
+else
+  [ "$HC_CELLS" -eq 9 ] && ok "MX matrix, per-push run: $HC_CELLS cells scored, each mutant's deciding arm and its twin only" \
+    || bad "MX per-push run scored $HC_CELLS cells, 9 expected"
+fi
 
 if [ "$rc" = 0 ]; then echo "hermetic-consumption: PASS"; else echo "hermetic-consumption: FAIL"; fi
 exit "$rc"

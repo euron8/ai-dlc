@@ -181,24 +181,9 @@ The first risk of the product, stated in one line.
 The second risk of the product, stated in one line.
 SPLITDOC
 REPDIR="$CONSUMER/_bmad-output/planning-artifacts/s1/shards/prd-repair-p1"
-SRC_PART=""
-for _c in "$ROOT/core/scripts/partition-document.sh" "$ROOT/scripts/ai-dlc/partition-document.sh"; do
-  [ -f "$_c" ] && { SRC_PART="$_c"; break; }
-done
-if [ -n "$SRC_PART" ]; then
-  bash "$SRC_PART" --split "$SPLIT_DOC" "$REPDIR" >/dev/null 2>&1 \
-    || { echo "FIXTURE ERROR: partition-document.sh --split refused the seeded document" >&2; exit 2; }
-  SPLIT_BY="partition-document.sh"; echo "HERMETIC-CONSUMED core/scripts/partition-document.sh" >&2
-else
-  mkdir -p "$REPDIR/sections"
-  sed -n '1,7p' "$SPLIT_DOC" > "$REPDIR/sections/1.md"
-  sed -n '8,13p' "$SPLIT_DOC" > "$REPDIR/sections/2.md"
-  sed -n '14,16p' "$SPLIT_DOC" > "$REPDIR/sections/3.md"
-  { printf 'document\t%s/%s\n' "$(cd "$(dirname "$SPLIT_DOC")" && pwd -P)" "$(basename "$SPLIT_DOC")"
-    printf 'sha256\t%s\n' "$(shasum -a 256 "$SPLIT_DOC" | cut -d' ' -f1)"
-    printf 'part\t1\t1\t7\t## Goals\npart\t2\t8\t13\t## Scope\npart\t3\t14\t16\t## Risks\n'; } > "$REPDIR/sections/.manifest"
-  SPLIT_BY="the seed (no partition-document.sh in either layout)"
-fi
+# The split itself is made by run.sh (split_seed), IN PROCESS, right after this seed returns: nothing below
+# reads $REPDIR, so the order is unchanged. It moved there because the in-process pass is counted in run.sh
+# (fx_inproc, P1 pairs only run.sh); this seed no longer starts partition-document.sh.
 
 cat > "$WORK/env.sh" <<EOF
 WORK="$WORK"
@@ -211,7 +196,6 @@ IND_ART="$IND_ART"
 OPN_ART="$OPN_ART"
 SPLIT_DOC="$SPLIT_DOC"
 REPDIR="$REPDIR"
-SPLIT_BY="$SPLIT_BY"
 EOF
 
 printf '%s\n' "$WORK"

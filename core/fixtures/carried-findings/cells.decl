@@ -1,0 +1,10 @@
+# carried-findings' starts of core/scripts/validate-carried-findings.sh (BL-879 grammar). Every other drive is in
+# process: run.sh sources the real validator, each mutant copy, the unmutated control and the exit-0 stub once (src)
+# and calls vcf_main in a subshell. One cli cell per distinct CLI outcome (exit 0 PASS, exit 1 FAIL, exit 2 REFUSED
+# usage, exit 0 --list with NOTEs on stderr, exit 0 --help), each started as FXCELL=<id> bash "$V" in eqv() and
+# compared byte for byte with the in-process call on the same input.
+cli core/scripts/validate-carried-findings.sh cli-pass
+cli core/scripts/validate-carried-findings.sh cli-fail
+cli core/scripts/validate-carried-findings.sh cli-refuse
+cli core/scripts/validate-carried-findings.sh cli-list
+cli core/scripts/validate-carried-findings.sh cli-help

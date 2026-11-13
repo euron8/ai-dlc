@@ -1,3 +1,7 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-52 *
-19 scripts/validate-hermetic-consumption.sh
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
+# are run.sh itself and the three cli cells of cells.decl; every other run of a validator copy is in process. inproc
+# rows (fx_inproc, one per source): the shipped validator (arm c) and each world's copy, one per world driven
+# (w1-w12, k, m1-m5), every copy at <world>/scripts/validate-hermetic-consumption.sh.
+44 *
+3 scripts/validate-hermetic-consumption.sh
+19 inproc:scripts/validate-hermetic-consumption.sh
