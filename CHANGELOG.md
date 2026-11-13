@@ -19,6 +19,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1101.0] - 2026-11-12
+
+### PC-S322-MKPW-SEAT-NOTE-ASSERTION-CONSUMER-LAYOUT: remediator-shard-join cell MKPW judges the world it built
+
+Cell MKPW drove the real `wait-for-deliverable.sh --mark` on CPS1's world without `AI_DLC_PROJECT_ROOT`. Its in-process join therefore walked up from its own script directory. In an installed consumer that walk reaches the consumer, whose tracked rulebook carries the seat-record sentence, so the cell printed `NOTE: SEAT-ROWS: SKIP install-date-unreadable` and failed its `-- the installed` assertion on every consumer since 0.1068.0, the release that added it. The call now passes `AI_DLC_PROJECT_ROOT="$CPS1W"`, as `cps_chk` does for CPS1 to CPS4, and the assertion is unchanged. Measured under `hermetic-run.sh` in scratch consumer trees built by `scripts/install.sh`: at 0.1100.0 the result is 366 ok and 1 FAIL (MKPW, with the consumer's exact line). With the fix the consumer tree reads 367 ok and 0 FAIL, and so does the distribution. A copy with `--mark`'s relay narrowed to `^(WARN):` fails MKPW alone. BL-1027 filed OPEN: nothing ran this shipping cell in the consumer layout before it shipped.
+
 ## [0.1100.0] - 2026-11-12
 
 ### BL-999 CLOSED: every writer of a record a push reads runs under git's SIGPIPE disposition
