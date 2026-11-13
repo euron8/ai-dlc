@@ -71,6 +71,10 @@ the gate records: invocations.decl, exec, fork and render counts. Where the oper
 IS wall clock or box load, measure that: wall and CPU, old against new, interleaved. A count is a
 proxy there, and one understated a measured saving by half. Never ask to reconfirm a stated goal.
 
+## The burden of verifying a change is proportional to the change
+
+"Be more efficient and lower the burden of a change." "If we don't trust our tests to do what they say then I'm sorry, but the tests are flawed." Re-run only what a change can move; carry the rest by byte-identity with a control and prove coverage by name. The push gate is the one full verification: no hand re-runs of carriers or validators, no seeds unless named, no repeat reading passes, and "two agreeing counted runs" is one counted run plus the gate's. A test that cannot be trusted to catch what it claims gets a filing against the test, never a manual re-check around it.
+
 ## Zero tests depend on load (BL-868)
 
 "There should be ZERO tests that depend on load. If they exist, they are defects." A test whose

@@ -2558,7 +2558,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      re-rendered region against the one step 5 recorded, and when a re-approval is owed it prints
      the question and the option label. Ask exactly that question with AskUserQuestion, offering
      exactly that label, wait for the answer, and re-run apply. The finisher re-checks those rows
-     and withholds while they are undone.
+     and withholds while they are undone. It does not re-check a `scaffold-ignored` row; take that row's own exit, or the next pull raises it again.
 
      *Why a second invocation rather than a smarter first one.* The rows are work YOU
      complete after this program has exited, so there is no moment during the first run

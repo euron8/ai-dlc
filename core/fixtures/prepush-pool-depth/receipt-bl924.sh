@@ -6,14 +6,36 @@
 # pre-push hook this tree carries, edits the copy, runs it once, and reads the values it prints:
 #
 #   (a) THE LATE FLIGHT FILE. Stub fx6, in a barrier drive, writes its flight file only once the barrier poller has
-#       either COUNTED (barrier.n) or REJECTED a settle that came after fx6 arrived (a new barrier.rej line). It waits
-#       in `read -t 1` on a private FIFO, a builtin wait in state S, so the drive's tree settles with six workers
-#       forked and five flight files. The fixed poller rejects that settle and reads 6 of 6; a poller that counts the
-#       settled flight dir reads 5.
-#   (b) THE LATE WRITER. The first step of the fix_hlink, fix_fifo and fix_silent watcher drives (the unit's byte, or
-#       its FIFO-step) waits the same way until the fixture has RECORDED that drive (pf.<tag>.at) or REJECTED a settle
-#       of it (a new "<tag> " line in pn.rej). A fixture that records a drive at a settle and releases it reads
-#       pn_hlink=ok, pn_silent=ok, pn_fifo=none; the fixed one reads REFUSED for all three.
+#       COUNTED (barrier.n) or has LOOKED AGAIN after a look at five flights: it reads the poller's look record
+#       barrier.look (fixed width, `f=<NN> look=<N>`), notes the first one at f=05, and goes on only when the record
+#       has changed since. It waits in `read -t 1` on a private FIFO (pacing; a look is the event). So the poller has
+#       had a look at five in flight with fx6 forked and unflighted: the fixed poller reads 6 of 6, a poller that counts
+#       a stable five (BL-924's defect: two ps tables alike, read as the pool's width) reads 5.
+#   (b) THE LATE WRITER. The first step of the fix_hlink, fix_fifo and fix_silent watcher drives (after the unit's
+#       byte, before its step token) appends `unit hold <step>` to its drive's lockstep record file (PN_REC), which
+#       changes that drive's look line, and waits until the fixture has RECORDED that drive (pf.<tag>.at) or written a
+#       look line for it in pn.rej that CARRIES `unit [unit hold <step>]` -- a look at the drive caught between two
+#       steps. A fixture that records a drive at such a look and releases it (BL-924's defect) reads pn_hlink=ok,
+#       pn_silent=ok, pn_fifo=hung; the
+#       fixed one reads REFUSED for all three.
+#   THE BOUNDS ARE EVENTS THE FIXTURE WRITES, so a regressed subject ends the receipt instead of hanging it: (a) ends
+#   (by=ended) when the poller whose pid is in barrier.pid has exited without writing barrier.n (gone, or a zombie its
+#   drive cannot reap while fx6 holds: `kill -0` succeeds on a zombie, so the state is read off ps), and fx6 then EXITS
+#   without opening the gate -- with its only writer gone the open would block for good -- so the drive finishes and
+#   the receipt reaches its refusal; (b) ends (by=ended) when
+#   the fixture's look counter pn.looked has advanced two complete looks past the hold with no line carrying the hold
+#   record and no record of the drive -- on the fixed fixture the first look after the hold writes that line. Either is
+#   exit 9, naming the state awaited. (b)'s release is CAUSAL: only a line that carries this hold's own record, which no
+#   look computed before the hold can contain, releases it. KNOWN ROUTE: a barrier poller that stays alive and never
+#   looks or counts, or a gate left with no writer before the stubs open it, holds the barrier before or at forcing (a)
+#   with no record arriving, and hangs this receipt run standalone exactly as it hangs the fixture; only an outer
+#   runner's stall refusal bounds it. Forcing (a)'s bound ends fx6's own wait (by=ended, then fx6 exits without opening
+#   the writerless gate), but a poller-death regression leaves OTHER stubs opening that gate, so a STANDALONE receipt
+#   run still hangs. Inside a push the receipt runs only as prepush-pool-depth's arm, a pool unit the hook's stall
+#   refusal bounds (forced: a barrier held at five read `REFUSED ... (no progress for 5 polls ...)`). Nothing on a gate
+#   runs it standalone: its BL-924 entry is archived, the pre-push's live receipt step reads docs/backlog.md only, and
+#   `validate-backlog-receipts.sh --archive` (the only gate step reading the archive) exits after its efficiency arms,
+#   before vbr_sec_corpus, the one section that executes `verify:` receipts.
 #
 # The copy keeps one pool mutant (not-exported) and no watcher mutant, and ends just after the watcher cells with its
 # values printed. Every cell prints `CELL <name> PASS|FAIL <detail>`:
@@ -27,8 +49,9 @@
 # drive is one the forcing does not reach: fx6 is forked only after the count, so the copy re-runs the fixture's arm.
 #
 # Exit 0 when every cell passes, 1 when one fails, 9 when it cannot measure: no root, no subject, an anchor not found
-# exactly once, a copy that did not run to its value line, the copy's baseline missing, or a forcing that provably did
-# not fire (fx6 never reached the injected wait in the baseline barrier drive, or a forced watcher step never waited).
+# exactly once, a copy that did not run to its value line, the copy's baseline missing, a forcing that provably did
+# not fire (fx6 never reached the injected wait in the baseline barrier drive, or a forced watcher step never reached
+# its), or a forcing that ended on its bound (by=ended: the awaited look, count or record never came).
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -73,17 +96,17 @@ awk -v aflight="$A_FLIGHT" -v astep="$A_STEP" -v aeval="$A_EVAL" '
   /^PN_MUTS="/ { print "PN_MUTS=\"\""; next }
   $0 == aflight {
     print "case \"$0\" in */fx6/run.sh|*/fx6//run.sh) if [ -n \"${PD_GATE:-}\" ] && [ -n \"${BL924_FORCE:-}\" ]; then pw=\"${PD_FLIGHT%/flight}\"; [ -p \"$pw/force.fifo\" ] || mkfifo \"$pw/force.fifo\""
-    print "  r0=0; if [ -f \"$pw/barrier.rej\" ]; then while read -r _; do r0=$((r0 + 1)); done < \"$pw/barrier.rej\"; fi; fw=0; fb=\"\""
-    print "  while :; do [ -p \"$pw/force.fifo\" ] || break; [ -e \"$pw/barrier.n\" ] && { fb=n; break; }; r1=0; if [ -f \"$pw/barrier.rej\" ]; then while read -r _; do r1=$((r1 + 1)); done < \"$pw/barrier.rej\"; fi; [ \"$r1\" -gt \"$r0\" ] && { fb=rej; break; }; fw=$((fw + 1)); read -t 1 _ <> \"$pw/force.fifo\"; done"
-    print "  printf \"raw=%s waits=%s by=%s\\n\" \"${raw:-_}\" \"$fw\" \"$fb\" >> \"$BL924_FORCE/barrier.log\"; fi ;; esac"
+    print "  fw=0; fb=\"\"; l0=\"\""
+    print "  while :; do [ -e \"$pw/barrier.n\" ] && { fb=n; break; }; lr=\"\"; [ -f \"$pw/barrier.look\" ] && read -r lr < \"$pw/barrier.look\"; case \"$lr\" in f=05*) if [ -z \"$l0\" ]; then l0=\"$lr\"; elif [ \"$lr\" != \"$l0\" ]; then fb=look; break; fi ;; esac; bp=\"\"; [ -s \"$pw/barrier.pid\" ] && read -r bp < \"$pw/barrier.pid\"; if [ -n \"$bp\" ]; then bs=\"$(ps -o stat= -p \"$bp\" 2>/dev/null)\"; case \"$bs\" in *Z*|\"\") [ -e \"$pw/barrier.n\" ] || { fb=ended; break; } ;; esac; fi; fw=$((fw + 1)); read -t 1 _ <> \"$pw/force.fifo\"; done"
+    print "  printf \"raw=%s waits=%s by=%s\\n\" \"${raw:-_}\" \"$fw\" \"$fb\" >> \"$BL924_FORCE/barrier.log\""
+    print "  [ \"$fb\" != ended ] || exit 0; fi ;; esac"
     print; next }
   $0 == astep {
     print
     print "  pf_t=\"${PN_DIR##*/pn.}\"; pf_w=\"${PN_DIR%/*}\""
     print "  case \"$pf_t\" in fix_hlink|fix_fifo|fix_silent) if [ -n \"${BL924_FORCE:-}\" ] && [ ! -e \"$PN_DIR/forced.done\" ]; then : > \"$PN_DIR/forced.done\"; [ -p \"$PN_DIR/force.fifo\" ] || mkfifo \"$PN_DIR/force.fifo\""
-    print "    pf_c() { pf_n=0; if [ -f \"$pf_w/pn.rej\" ]; then while read -r pf_l pf_r; do [ \"$pf_l\" = \"$pf_t\" ] && pf_n=$((pf_n + 1)); done < \"$pf_w/pn.rej\"; fi; }"
-    print "    pf_c; pf_r0=$pf_n; pf_fw=0; pf_b=\"\""
-    print "    while :; do [ -p \"$PN_DIR/force.fifo\" ] || break; [ -e \"$pf_w/pf.$pf_t.at\" ] && { pf_b=at; break; }; pf_c; [ \"$pf_n\" -gt \"$pf_r0\" ] && { pf_b=rej; break; }; pf_fw=$((pf_fw + 1)); read -t 1 _ <> \"$PN_DIR/force.fifo\"; done"
+    print "    pf_h=\"unit hold ${pn_i:-0}\"; printf \"%s\\n\" \"$pf_h\" >> \"$PN_REC\"; pf_s0=-1; if [ -f \"$pf_w/pn.looked\" ]; then read -r pf_s < \"$pf_w/pn.looked\"; pf_s0=$((10#${pf_s#looks=})); fi; pf_fw=0; pf_b=\"\""
+    print "    while :; do pf_s=-1; if [ -f \"$pf_w/pn.looked\" ]; then read -r pf_s < \"$pf_w/pn.looked\"; pf_s=$((10#${pf_s#looks=})); [ \"$pf_s0\" -ge 0 ] || pf_s0=$pf_s; fi; [ -e \"$pf_w/pf.$pf_t.at\" ] && { pf_b=at; break; }; pf_g=\"$(grep -F \"$pf_t looked\" \"$pf_w/pn.rej\" 2>/dev/null)\"; grep -q -F \"unit [$pf_h]\" <<< \"$pf_g\" && { pf_b=hold; break; }; [ \"$pf_s\" -ge 0 ] && [ \"$pf_s\" -ge $((pf_s0 + 2)) ] && { pf_b=ended; break; }; pf_fw=$((pf_fw + 1)); read -t 1 _ <> \"$PN_DIR/force.fifo\"; done"
     print "    printf \"%s waits=%s by=%s\\n\" \"$pf_t\" \"$pf_fw\" \"$pf_b\" >> \"$BL924_FORCE/step.log\"; fi ;; esac"
     next }
   $0 == aeval {
@@ -106,15 +129,19 @@ grep -q '^RCPT END ' "$OUT" || refuse "the copy exited $rc before its value line
 grep -q '^  ok    \[[^]]*\] the probe emitted every arm' "$OUT" || refuse "the copy's baseline did not emit every arm, so no cell below means anything"
 
 # THE FORCINGS FIRED. (a) The baseline barrier drive is the first drive whose workers receive depth 1 (raw=1): the
-# depth-1 drives before it hand their workers 2. Its fx6 line must exist. (b) Each forced watcher step waited at least
-# once, so it was held across a point where the fixture had neither recorded nor rejected that drive.
+# depth-1 drives before it hand their workers 2. Its fx6 line must exist. (b) Each forced watcher step was released by a
+# look line CARRYING ITS OWN HOLD RECORD (by=hold) or by the drive's record (by=at); a forcing that ended on its bound
+# (by=ended) is a refusal naming the state it waited for.
 BL="$(grep -m1 '^raw=1 ' "$C/forced/barrier.log" 2>/dev/null)"
 [ -n "$BL" ] || refuse "forcing (a) never fired: fx6 did not reach the injected wait in the baseline barrier drive"
+ENDED=""
+case "$BL" in *" by=ended"*) ENDED="$ENDED; forcing (a): the barrier poller exited without counting (no barrier.n) and without a second look at five flights ($BL)" ;; esac
 for t in fix_hlink fix_fifo fix_silent; do
   SL="$(grep -m1 "^$t " "$C/forced/step.log" 2>/dev/null)"
   [ -n "$SL" ] || refuse "forcing (b) never fired for $t: its first step did not reach the injected wait"
-  case "$SL" in *" waits=0 "*) refuse "forcing (b) did not hold $t: its first step waited 0 times ($SL)" ;; esac
+  case "$SL" in *" by=ended"*) ENDED="$ENDED; forcing (b) for $t: two complete looks of the fixture after the hold wrote no line carrying the hold record and did not record the drive ($SL)" ;; esac
 done
+[ -z "$ENDED" ] || refuse "FIXTURE BROKEN: a forcing's awaited state never came${ENDED}"
 echo "FORCED barrier: $BL"
 sed 's/^/FORCED step: /' "$C/forced/step.log"
 

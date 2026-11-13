@@ -19,6 +19,56 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1099.0] - 2026-11-12
+
+### BL-985 — closed
+
+C1, C2 and C3 are closed. C1: a cmp-guarded tip mutant whose unit token write fails ended in the in-fixture verdict in 55s, not a hang (`DEADLOCK, a wait-for cycle in its lockstep records` then `FIXTURE BROKEN`). C3: a census of every bash start the fixture makes (pool workers, unit scripts, the ts/tl sleep and ps shims, fixed singletons) shows each count fixed by protocol; the start logs of 11 counted runs (8 tip, 3 unforced base) are identical source for source at 492, and the one held base run differs in exactly one entry (`-c` 222 against 223, the orphan q3 worker this release closes), so J3 492 is structural. Instance 2 (J3 374 against 373) is UNTRACED: its failure copy was pruned and never read, a +1 runs opposite to the orphan route, and the census finds no route that adds one; if a +1 recurs, file a new entry and keep that run's failure copy. The tip's `--matrix` run was green (77/77, all 30 mutants' dead sets equal their header rows), and the receipt's forcing (b) reads its look counter before grepping for the hold line.
+
+`core/fixtures/prepush-pool-depth` no longer decides a drive on a count of paced ps-table settles. The watcher drives block on an event FIFO that each drive's outer subshell writes after its verdict, the stub and watcher lockstep FIFOs are held read-write by the drive so no token write or read can block in `open()`, and a deadlock is FIXTURE BROKEN from a wait-for cycle over records the parties write (one tick in flight, look lines written only on a change, a pn_cycle self-probe including the real lost-token shape and a party on `leave` that must not fire). The barrier rendezvous is the flight files reaching min(xargs `-P`, 6), the width read off argv in both spellings by a PATH shim with a stop at six flights; `PD_REJ_MAX`, `pd_settle` and `pd_tree` are gone. The td drive waits for its subject's xargs before recording. `invocations.decl` stays at 492 (J3 492 is structural, by the census above); 77 assertions (72 plus 5 self-probe lines). `receipt-bl924.sh` was rewritten under the lead's scope ruling, because a receipt that needs a periodic line to pass is keyed on pacing, not on BL-924's defect: it forces a late flight file and a late writer, forcing (b) releases only on a pn.rej line carrying its own `unit hold <step>` record (`by=hold`), and each bound is an event that exits 9 naming the awaited state (proven by a mutant that never writes look lines, 18s). Why: a drive the injector never touched failed on base with `neither a verdict nor a FIFO open after 200 rejected settles of one table` at 14:10-14:12 on 2026-11-12, box at about 1,250-1,300 processes. The mechanism is that bash 3.2.57 does not retry a FIFO open or read a signal interrupts, losing the token: a micro-harness reads DEADLOCK on base and NO DEADLOCK on tip; with xargs held past the end of the run, base J3 read 491 against 492 and tip read 492. The rewritten receipt reads exit 0 on the tip; two cmp-guarded mutants of the tip fail it (M-a isolates the rendezvous: `barrier read 5 of 6` only; M-b is broader, failing pn_hlink, pn_fifo and pn_silent with barrier PASS, and also mis-decides unforced drives; its first form refused to measure and was narrowed, a refusal is not a kill). Limits: the deadlock was reproduced only in a micro-harness of the lockstep code, not in the shipped fixture, and base's is consistent with the instance-1 shape (all five pids S) rather than identical to it; the tip's deadlock-to-FIXTURE BROKEN path is proven by the seeded pn_cycle self-probes and by the end-to-end mutant above; the natural signal sender is not identified, so load-independence is not claimed from one natural instance (a solo idle-box run would need many runs with zero breaks at a count computed from the observed rate, about 1 in 3 base runs); a write returning 0 into nowhere reads as buffered; a subject that never ends, and a barrier that never reaches its width, are bounded only by the outer pool's stall refusal (shown in a forced run at AI_DLC_POOL_STALL=5: control ok, stuck REFUSED); a poller-death regression leaves forcing (a)'s gate writerless, so a STANDALONE receipt run hangs, while no gate step runs the archived receipt standalone. Three process incidents: a tip-C3 hang from a defect in the tip itself (bash 3.2 re-prints an exported function's `1<>` as `0<>`, fixed with `>` on a held FIFO), the builder's `rm -rf` of its own mktemp seed dir, and a two-run overlap of about 15s when a hung mutant run was backgrounded, the last two rule breaches, reported.
+
+### BL-1008 — filed OPEN
+
+`core/fixtures/enforcement-map-sites` read FIXTURE BROKEN on its sanity arm ("the pristine tree does not pass validate-enforcement-map.sh", rc 2) during a box-wide overload on 2026-11-12 and ok solo, a verdict that moves with load (BL-868 class), distinct from BL-985. The fix is owed in the test, never a retry, widened bound or fewer jobs. No code changes.
+
+### BL-1023 — filed and closed
+
+A standing operator ruling, confirmed by the operator in session ai-dlc-04, gets its carrier in the durable channel: `.claude/rules/operator-rulings.md` gains "The burden of verifying a change is proportional to the change", placed after "No needless timing runs". The channel then read 75423 bytes against `scripts/validate-claude-rules.sh`'s A6 ceiling of 74800, so the ceiling moves to 75520 by the operator's ruling, recorded in the raise comment ("A6 WAS OBSERVED FAILING AT 75423/74800 BEFORE THE CEILING MOVED"). Receipt: the heading grep in that file, anchored on the neighbouring heading.
+
+### BL-1024 filed and closed: the restamp-withheld row no longer says `--finish` re-checks a `scaffold-ignored` row
+
+`apply.sh`'s `restamp-withheld` row, in the form it prints when some outstanding row is a step only a fresh ordinary run performs, said `--finish` "re-checks those rows and withholds while they are undone". Since BL-978 (0.1097.0), `--finish` deliberately does not re-derive a `scaffold-ignored` row, so in a run carrying both kinds the sentence claimed a re-check that does not happen. Nothing was hidden: the next pull raises the row again.
+
+- The sentence now names the rows a fresh ordinary run clears, and adds: "It does not re-check a `scaffold-ignored` row; take that row's own exit, or the next pull raises it again." The same clause is appended to the matching paragraph of `core/skills/ai-dlc-update/SKILL.md`.
+- A scaffold-only withheld run prints the other form, which claims no re-check: `scaffold-ignore.sh`'s remedy carries no re-render step (0 lines, control `git add -f` 2), so it never raises `reapply_owed`.
+- No fixture asserts the changed sentence. The phrase `core/fixtures/apply-restamp-theirs/receipt-bl886.sh` matches is unchanged.
+- Text only. Receipt: red at base, green at tip.
+
+### BL-810 stays PARTIAL: the entry's claim that a four-step scope "cannot be declared mechanically" is corrected
+
+The `Step:` field takes one token (cut at the first blank), but a multi-step scope binds through the `Verdict:` group, `<tok>( plus <tok>)*`, which must name the `Step:` token and carry no other bucket token. So `Step: requirements` with the group `carry-over-evaluation plus requirements plus architecture plus stories-test-strategy` binds. The counter-case was found by bundle C's contract adversary.
+
+- Measured on the validator's own entry awk at 39239319a, over four seeded entries:
+  - that pair reads `sok=1 von=1`;
+  - adding ` plus pipeline` to the group reads `von=0`;
+  - a four-token `Step:` line is cut to its first token and reads `sok=1`;
+  - no `Step:` line reads `sok=0`.
+- BL-810's own parse is unchanged (`sok=0`, no `Verdict:`) at base and tip. BL-615 (`Step: requirements`) is the positive control, at `sok=1`.
+- The `Step:` line stays owed before the close. Text only.
+
+### BL-1025 CLOSED: validator-fork-budget's `*` invocation row no longer moves with the I84 corpus
+
+- **Cause, traced.** At 0.1094.0, two counted `hermetic-run.sh` runs of the fixture read 1120 for the base and 1124 for the base plus one `scripts/*.txt`. The start logs differ only in starts of `receipt-bl898.sh`'s grep shim, a `#!/bin/bash` script, so each grep exec is a counted bash start (1010 against 1014). Mutant m16 (`i84_reads` back to one grep per file) ran in four receipt worlds over a copy of the whole tree, so each file in the I84 corpus cost four starts. That corpus is 183 files: `core/**/*.sh` outside `core/fixtures/`, `scripts/**` and `.githooks/**`.
+- **Fix.** `receipt-bl898.sh --world small` cuts the copy's corpus to a fixed 24 files: the validator, the two files I83 and I84 require, one synthetic `stories_dir` reader and 20 plain files. It refuses (exit 9) when the unseeded small world does not read OK. `run.sh` scores m16 there. A6 and m17 to m19 stay on the whole tree, where their grep counts do not move.
+- **Declared counts.** `validator-fork-budget`'s `*` row goes 1157 to 509, from one counted run on the 0.1098.0 tree; no other row moved. On the 0.1094.0-based build the fix read 484, the same plus one `scripts/*.txt` read 484, and one more small-world file read 488 (+4).
+
+### BL-1026 CLOSED: `pregate-self-check.sh` section d judges the fork-budget fixture's invocation rows
+
+- **Defect.** Section d ran `validator-fork-budget/run.sh` directly, so the invocation judge never ran. The self-check printed ok on a candidate whose gate went red on that fixture's J3 row.
+- **Fix.** Section d runs `hermetic-run.sh --root <root> validator-fork-budget` armed as `fxcount_arm` arms it, with the rc and the verdict store in its own scratch dir. `ok` needs exit 0 and the judge's pass line. Exit 0 without that line refuses (exit 2), and a J3 FAIL is a finding under `d:fork-budget`.
+- **Arm.** `pregate-self-check`'s `receipt-bl643.sh` adds root U (the runner exits 0 with no judge line, so the self-check refuses) and root J (a J3 FAIL, read as a finding). Against the base self-check it reads `U=0 J=0`; against the fix it reads `U=2 J=1`.
+- **Declared counts.** `pregate-self-check`'s rows go `*` 44 to 75 and `scripts/pregate-self-check.sh` 21 to 27.
+
 ## [0.1098.0] - 2026-11-12
 
 ### BL-982 (PARTIAL): the tree-wide static arm P2 is built, and the fixtures named below plus `lib/inproc.sh` are remediated in this release
@@ -804,7 +854,7 @@ Three batch-254 unbuilt items are carried into the live backlog: BL-819 (the row
 
 ### BL-985 FILED: prepush-pool-depth's watcher drive goes FIXTURE BROKEN under load (BL-868)
 
-OPEN, `verify: manual`. Emitter: pn_settle's safety bound at `core/fixtures/prepush-pool-depth/run.sh:834`, with `PD_REJ_MAX=200` at `:96`. 200 consecutive rejections of one table, each paced by `sleep 0.1`, is in effect a wall-clock bound that load can exhaust. Instance 1 is F14's whole-suite push of 87dcbb935 (pool width 12, 1 of 271 units red). Instance 2 is a J3 start count of 374 against a declared 373, consistent with the same load shape but not traced to the settle bound. Owed: a fix in the test that decides on a state the subjects write, never a retry, widened bound or fewer jobs. No code changes.
+OPEN, `verify: manual`. Emitter: pn_settle's safety bound at `core/fixtures/prepush-pool-depth/run.sh:834`, with `PD_REJ_MAX=200` at `:96`. 200 consecutive rejections of one table, each paced by `sleep 0.1`, is in effect a wall-clock bound that load can exhaust. Instance 1 is session ai-dlc-91's (F14, batch 255) counted whole-suite push at 2026-11-12 08:15:48Z (pool width 12, 1 of 271 units red). Instance 2 is a J3 start count of 374 against a declared 373, consistent with the same load shape but not traced to the settle bound. Owed: a fix in the test that decides on a state the subjects write, never a retry, widened bound or fewer jobs. No code changes.
 
 ## [0.1076.0] - 2026-11-12
 

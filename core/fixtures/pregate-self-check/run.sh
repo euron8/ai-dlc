@@ -80,7 +80,7 @@ EXPECTED_ASSERTIONS=11
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
-WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes'
+WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes'
 
 cd "$REPO" || exit 2
 
@@ -107,8 +107,8 @@ if grep -qxF "$WANT" "$WORK/a1.out"; then ok "a1 control: the line '$WANT' is pr
 # A cell is RED on a mutant's captured output when it reads as changed from the unmutated verdict. Both the
 # kills below, the per-push twin check and the --matrix score read these predicates, so they cannot drift.
 # Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
-M1_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=1 D=2 Dran=no Dnamed=yes'
-M2_WANT='A=2 B=2 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes'
+M1_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=1 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes'
+M2_WANT='A=2 B=2 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=no J=2 Jnamed=no'
 MX_CELLS='exit1 m1-moved m2-refused m2-names differs'
 cell_red() { # cell_red <cell> <mutant>: the mutant's output and receipt exit are in $WORK/<mutant>.out and .rc
   local c="$1" m="$2" rc

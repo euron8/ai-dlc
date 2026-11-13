@@ -886,7 +886,12 @@ fi
 # scoped defect is fast-tracked" and, in the consumer-pull ruling, never restating it in a status
 # report (514 bytes drafted, against 2 free). Both are prose-only and cannot be SCOPED; neither is an
 # act an arm can scan for.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-74800}"
+#
+# RAISED A TWENTY-FIFTH TIME, 74800 -> 75520, ON AN OPERATOR RULING, IN SESSION ai-dlc-04, BATCH 256,
+# TO CARRY ONE RULE: `operator-rulings.md` gained "the burden of verifying a change is proportional to
+# the change" (BL-1023). It is prose-only and cannot be SCOPED, nor is it an act an arm can scan for.
+# A6 WAS OBSERVED FAILING AT 75423/74800 BEFORE THE CEILING MOVED. 75520 leaves 97 bytes.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-75520}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

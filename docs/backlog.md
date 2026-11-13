@@ -475,7 +475,7 @@ Basis (operator ruling, BL-817): dollars are token-equivalent (a local-model cal
 
 **Progress (BL-810, batch b250): UNMEASURABLE on s321, because the data is absent.** s321 ran no carry-over evaluation round, so there is no yield or cost per round to take; this is an absence, not a measurement not yet taken. Counted over graph's `origin/ai-dlc/feature/per-chain-rebalancer-instances` at e32f9ce2f (`git ls-tree -r --name-only`, files under `_bmad-output/planning-artifacts/s<N>/` whose name carries `carry-over-evaluation`): s319 29 of 522 files, s320 2 of 625 (`carry-over-evaluation.md` and its `.draft`), s321 0 of 719. The control is the looser token `carry-over` over the same listing, which returns s321 1: `stories/story-5-5-restage-base-entry-router-carry-over.md`, a story file about a router, not a round artifact. An impossible-token control over the same listing returns 0. No close and no `Outcome measured:` line follow: the first sprint that runs the round after the width and shard fixes is the one that can measure them.
 
-No `Step:` line (batch 255): this entry's Basis scope is the four planning steps, and the `Step:` field takes one token (scripts/validate-backlog-receipts.sh:1257), so a step cannot be declared mechanically; it is owed before the release that closes this entry, which otherwise fails closed (NO-STEP-BOUND).
+No `Step:` line (batch 255): this entry's Basis scope is the four planning steps. The `Step:` field takes one token (scripts/validate-backlog-receipts.sh:1257 cuts it at the first blank), but the four-step scope still binds mechanically, through the `Verdict:` group rather than the `Step:` field (corrected in batch 256; the batch-255 text said a step "cannot be declared mechanically"). The group is `<tok>( plus <tok>)*`, each token a step estep() accepts (everdict(), :1215), and the close binds when the group names the `Step:` token and carries no bucket token other than it (egroup_on(), :1231). So `Step: requirements` with the group `carry-over-evaluation plus requirements plus architecture plus stories-test-strategy` binds, and any one of the four can be the `Step:` member. Measured on the validator's own entry awk at origin/main 39239319a (dumped from a copy of the script stopped after the step set is appended, run over four seeded entries): that pair read sok=1 von=1; the same group with ` plus pipeline` added read von=0; a four-token `Step:` line was cut to `carry-over-evaluation` and read sok=1; no `Step:` line read sok=0. The `Step:` line is still owed before the release that closes this entry, which otherwise fails closed (NO-STEP-BOUND).
 
 **Progress (BL-810, batch b256): s322 is the first sprint measured after the width change. The per-width reading is taken, and the entry stays open on the `Step:` line.**
 - **Precondition holds.** Graph's installed `carry-over-evaluation.md` carries both §3a width phrases ("party dispatches one cross agent per seat" and "elicitation and each adversarial pass dispatch one cross agent") at fb6f198e7 and ed61de745. fb6f198e7 is s322's base, where `.claude/.ai-dlc-version` reads 0.1028.0. Neither phrase is present at 1da426ef9 (s319), and the change shipped in 0.952.0.
@@ -522,7 +522,7 @@ No `Step:` line (batch 255): this entry's Basis scope is the four planning steps
 - **Spawns, dollars and agent-hours per width are measured for party and p1 to p3.** They are recorded for s322 beside s319 and s320, and p2 and p3 now rest on two sprints.
   - Elicitation was not required at the intensity graph ran. The gate section records `validation_intensity: carry-over-single` (`_bmad-output/implementation-artifacts/gate-log.md:7` at ed61de745), whose minimum is "Party Mode → Adversarial Review" (:26).
   - Elicitation's merged cross width therefore has no reading after the change. That is an absence, not a zero cost, and the measurement stays owed until a sprint runs that round or the operator rules it not owed.
-- **The `Step:` line stays owed and is the remaining close precondition.** The `Step:` field takes one token, and this entry's Basis covers four planning steps. Until the `Step:` line has a resolution, the entry is not closed.
+- **The `Step:` line stays owed and is the remaining close precondition.** The `Step:` field takes one token and this entry's Basis covers four planning steps, so the close names one of the four as the `Step:` and carries the four-step scope in the `Verdict:` group, which must name that step (the batch-255 line above, as corrected). Until the `Step:` line is written, the entry is not closed.
 
 verify: manual
 
@@ -2581,17 +2581,15 @@ Provenance: batch 255, release F15 (BL-983's population question); id allocated 
 
 verify: manual
 
-## BL-985 — prepush-pool-depth's watcher drive goes FIXTURE BROKEN under load, a verdict that moves with load (BL-868)
+## BL-1008 — `core/fixtures/enforcement-map-sites` reads FIXTURE BROKEN under box overload and ok solo, a verdict that moves with load (BL-868)
 
-**DEFECT.** OPEN. Filed 2026-11-12. The emitter is pn_settle's safety bound in `core/fixtures/prepush-pool-depth/run.sh`: line 834 is `broken "watcher drive $t: neither a verdict nor a FIFO open after $PD_REJ_MAX rejected settles of one table ($lr)"`, with `PD_REJ_MAX=200` at `:96`. pn_settle (`:824`) calls pd_settle (`:195`) at `:829`. pd_settle's own header (`:190-194`) says it ends on an event or a settle and "never on a count of polls or on elapsed time", but each settle is paced by `sleep 0.1`, so 200 consecutive rejections of one unchanged table is in effect a wall-clock bound that load can exhaust. The barrier drive has the twin bound at `:291` on the same PD_REJ_MAX, reported by hang_check at `:352`.
+**DEFECT.** OPEN. Filed 2026-11-12. The emitter is the sanity arm of `core/fixtures/enforcement-map-sites/run.sh`: line 570 is `bad "FIXTURE BROKEN — the pristine tree does not pass validate-enforcement-map.sh. Every assertion below would be a false pass."`. The fixture's own subject is distinct from BL-985's (`prepush-pool-depth`), though both are verdicts that move with load.
 
-Instance 1, from a local failure copy that is not in-tree (`.git/ai-dlc-fixture-failures.20261112T081548Z.11581`): F14's counted whole-suite push of 87dcbb935, pool width 12, 1 of 271 units red. `FAIL  watcher drive pn.m-novalidate_hout: neither a verdict nor a FIFO open after 200 rejected settles of one table (S:65292:S,67664:S,67686:S,67817:S,67828:S,)`, then `prepush-pool-depth: FIXTURE BROKEN`; runner `hermetic-run: prepush-pool-depth: rc=2 sandbox_files=51 required_missing=0`; teardown `rm: …/hermetic-run.4m8Ezr/tmp/prepush-pool-depth.t6DWC7: Directory not empty`. F14's causal check: none of its changes are on this fixture's path unarmed; armed, they add only one empty-file truncate before start. The re-push of the same sha re-ran only prepush-pool-depth and it read `ok`: it passed on re-run of the same sha.
+Evidence: session ai-dlc-48's seed at tree 680965157, during a box-wide overload from 12:37 to 13:16 on 2026-11-12 (3,877 processes), returned rc 2 on the sanity arm "the pristine tree does not pass validate-enforcement-map.sh", with 0 fork or not-found lines. Its siblings `-b`, `-c` and `-d` were green in the same seeding. A solo run then returned rc 0 with 48 ok, and the fixture was ok in ai-dlc-48's gate from 13:35 to 13:47.
 
-Instance 2, consistent with the same load shape but not traced to the settle bound, from a second local copy also not in-tree (`.git/ai-dlc-fixture-failures.20261101T180839Z.31458`, pool width 8): the same fixture failed J3, `row "373 *": measured 374, declared 373`, a start count that moved by one.
+Owed: find what in the sanity arm, or in `validate-enforcement-map.sh` under that fixture, depends on load, and fix it IN THE TEST. Never a retry, a widened bound or fewer jobs (BL-868). The receipt is owed together with the fix: a receipt reproducing a load-shaped failure would itself be a load-dependent test (BL-868), so the entry is manual.
 
-Owed: a fix IN THE TEST. pn_settle and pd_settle must decide on a state the subjects write, with a deterministic bound (no count of paced polls standing in for time), and J3's start count must not move with load. Never a retry, a widened bound or fewer jobs (BL-868). The receipt is owed together with the fix: a receipt reproducing a load-shaped failure would itself be a load-dependent test (BL-868), so the entry is manual.
-
-Provenance: batch 255, F14's push of 87dcbb935 (ai-dlc-91); id allocated by the lead.
+Provenance: batch 256, filed by ai-dlc-a7 (lead); id allocated by the lead.
 
 verify: manual
 
@@ -3092,3 +3090,4 @@ Receipt: `verify: manual`. The legend gives no runner-wired form for a rule edit
 Provenance: batch 256, b256-B2; id allocated by the lead.
 
 verify: manual
+

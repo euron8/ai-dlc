@@ -744,23 +744,28 @@ fi
 
 # m16-m19 -- each a copy of the validator with ONE layer of the BL-898 fix reverted, scored by the receipt on its
 # deciding cell and its twin only. Every copy is cmp -s guarded, so a sed that matched nothing is DID NOT APPLY.
-#   m16  i84_reads back to one grep per corpus file, with the same interface -> the count cell alone
+#   m16  i84_reads back to one grep per corpus file, with the same interface -> the count cell alone, in the
+#        receipt's small world (a fixed corpus, so the mutant's per-file greps do not track the tree)
 #   m17  the corpus-level unread flag dropped in both arms (the functions still return 2) -> the unread cell alone
 #   m18  the self-reader exemption removed -> the selfreader cell alone
 #   m19  i84_reads returns 0 whatever grep answered, so a read failure is lost -> the validator's own unread probe,
 #        read off the clean cell
-rcpt_mut() { # <mutant> <cells> <copy> <message>
-  local n="$1" c="$2" f="$3" msg="$4"
+rcpt_mut() { # <mutant> <cells> <copy> <message> [<world>]
+  local n="$1" c="$2" f="$3" msg="$4" w="${5:-tree}"
   if [ ! -s "$f" ] || cmp -s "$VAL" "$f"; then bad "$n DID NOT APPLY -- the copy is empty or identical to the validator; no mutation occurred, so nothing was proven"; return; fi
   # NECESSITY: each mutant is a different validator copy, and the receipt runs only its deciding and twin worlds.
-  bash "$RCPT" --cells "$c" "$f" > "$TMP/mx.$n.txt" 2>&1
+  bash "$RCPT" --cells "$c" --world "$w" "$f" > "$TMP/mx.$n.txt" 2>&1
   mx_score "$n" "${B_rcpt:-0}" "$msg"
 }
 awk '
 /^  grep -lE "\^\[\[:blank:\]\]\*\(\[\^#\[:blank:\]\]\.\*\)\?stories_dir" -- "\$@"$/ {
   print "  i84_r=0; for i84_g in \"$@\"; do grep -qE \"^[[:blank:]]*([^#[:blank:]].*)?stories_dir\" \"$i84_g\"; i84_s=$?; [ \"$i84_s\" -eq 0 ] && printf \"%s\\n\" \"$i84_g\"; [ \"$i84_s\" -ge 2 ] && i84_r=2; done; return \"$i84_r\""; n++; next }
 { print } END { if (n != 1) exit 3 }' "$VAL" > "$TMP/m16.sh" || : > "$TMP/m16.sh"
-rcpt_mut m16-i84-reads-per-file count,selfreader "$TMP/m16.sh" "m16-i84-reads-per-file: one grep per file for i84_reads makes the count move with the corpus"
+# m16 runs in the receipt's SMALL world (BL-1025): its grep count is the corpus size, so on the real tree every
+# file added to the I84 corpus -- core/**/*.sh outside core/fixtures/, scripts/**, .githooks/** -- cost 4 counted
+# starts of the receipt's grep shim (k0, kK, kC, selfreader), and this fixture's `*` row moved with unrelated
+# releases. The small world's corpus is fixed, so its K=6 differential still kills m16 and the row does not move.
+rcpt_mut m16-i84-reads-per-file count,selfreader "$TMP/m16.sh" "m16-i84-reads-per-file: one grep per file for i84_reads makes the count move with the corpus" small
 sed -e 's/^    i83_extracts "\${i83_list\[@\]}" > "\$i83_probe_dir\/hits" || i83_unread=1$/    i83_extracts "${i83_list[@]}" > "$i83_probe_dir\/hits"/' \
     -e 's/^\(      i84_[a-z]*s "\${i84_list\[@\]}" > "\$i84_probe_dir\/[a-z]*"\) || i84_unread=1$/\1/' "$VAL" > "$TMP/m17.sh" || : > "$TMP/m17.sh"
 rcpt_mut m17-unread-flag-dropped unread,selfreader "$TMP/m17.sh" "m17-unread-flag-dropped: a corpus with a mode-000 file reads clean"

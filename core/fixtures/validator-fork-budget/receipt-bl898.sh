@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# receipt-bl898.sh [--cells <cell>[,<cell>...]] [<validator>] -- the BL-898 receipt, both subjects.
+# receipt-bl898.sh [--cells <cell>[,<cell>...]] [--world tree|small] [<validator>] -- the BL-898 receipt, both subjects.
+# --world small cuts the copy's corpus to a fixed 24 files (THE SMALL WORLD, below); the default, tree, keeps it whole.
 #
 #   (1) I83's and I84's corpus scans cost a number of grep processes that does NOT depend on how
 #       many files the corpus holds;
@@ -34,10 +35,16 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 CELLS="clean,count,control,unread,selfreader"; FULL=1
-if [ "${1:-}" = "--cells" ]; then
-  [ -n "${2:-}" ] || { echo "receipt-bl898: --cells needs a list" >&2; exit 9; }
-  CELLS="$2"; FULL=0; shift 2
-fi
+WORLD=tree
+while :; do
+  case "${1:-}" in
+    --cells) [ -n "${2:-}" ] || { echo "receipt-bl898: --cells needs a list" >&2; exit 9; }; CELLS="$2"; FULL=0; shift 2 ;;
+    --world) case "${2:-}" in tree|small) WORLD="$2" ;; *) echo "receipt-bl898: --world takes tree or small" >&2; exit 9 ;; esac; shift 2 ;;
+    *) break ;;
+  esac
+done
+# The cli equivalence cells describe the WHOLE-tree worlds, so a small-world run never starts them.
+[ "$WORLD" = tree ] || FULL=0
 want() { case ",$CELLS," in *",$1,"*) return 0 ;; esac; return 1; }
 case ",$CELLS," in *",control,"*) CELLS="$CELLS,count" ;; esac
 case ",$CELLS," in *",count,"*) CELLS="$CELLS,control" ;; esac
@@ -80,6 +87,35 @@ for e in "$root"/core/*; do
 done
 cp "$SUBJ" "$T/$REL_SELF" || exit 9
 
+# THE SMALL WORLD (--world small). The copy's corpus -- the find I84 runs -- is cut to a FIXED set:
+# the validator, the two files I83/I84 require by name (the renderer `--arms` refuses without, and
+# the one file I83 requires to carry the grammar extraction), one synthetic `stories_dir` reader
+# that names its sprint slot, and SMALL_FILL plain files, so every run walks the same 24 files
+# whatever the tree holds. A validator whose grep count moves with the corpus (m16) costs a number of
+# greps fixed by this world rather than by the tree: on the real corpus each file added anywhere in it
+# cost 4 counted starts of the shim per mutant run (BL-1025). The fill keeps the corpus over both
+# arms' floor of 20, below which the verdict chain stops before the restate and no-reader branches
+# the control and selfreader cells read. The unseeded small world must read OK, or its keep list has
+# drifted from what the validator requires, and the receipt refuses (9) rather than score a world
+# that measures something else.
+SMALL_KEEP="scripts/validate-enforcement-map.sh scripts/render-invariant-index.sh core/scripts/artifact-path-config.sh"
+SMALL_FILL=20
+if [ "$WORLD" = small ]; then
+  ( cd "$T" && { find core -type f -name '*.sh' -not -path 'core/fixtures/*'; find scripts .githooks -type f 2>/dev/null; } ) > "$W/full" || exit 9
+  while IFS= read -r f; do
+    case " $SMALL_KEEP " in *" $f "*) continue ;; esac
+    rm -f "$T/$f" || exit 9
+  done < "$W/full"
+  for f in $SMALL_KEEP; do
+    [ -f "$T/$f" ] || { echo "receipt-bl898: the small world needs $f and the copy has none" >&2; exit 9; }
+  done
+  slot="$(sed -n 's/.*"stories_dir_sprint_placeholder"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$T/core/schemas/sprint-status.json" | head -1)"
+  [ -n "$slot" ] || { echo "receipt-bl898: no sprint slot in the copy's core/schemas/sprint-status.json" >&2; exit 9; }
+  printf '#!/usr/bin/env bash\nD="$(read stories_dir)"\nD="${D//%s/s1}"\n' "$slot" > "$T/scripts/zz-bl898-reader.sh" || exit 9
+  i=0
+  while [ "$i" -lt "$SMALL_FILL" ]; do i=$((i + 1)); printf '#!/usr/bin/env bash\necho bl898 fill %s\n' "$i" > "$T/scripts/zz-bl898-fill-$i.sh" || exit 9; done
+fi
+
 run() { # <label> -> the run's output in $W/<label>.out, its grep exec count on stdout; 9 when it never reached the verdict
   # IN PROCESS: the copy is sourced by absolute path in a subshell and run as `vem_entry --arms I83,I84`. GREP_LOG and
   # the shim PATH are EXPORTED there, because vem_entry unsets every unexported caller variable, and the shim (a
@@ -111,9 +147,13 @@ cell() { # <name> <0|1> <detail>
   if [ "$2" = 0 ]; then echo "CELL $1 PASS $3"; else echo "CELL $1 FAIL $3"; [ "$rc" = 9 ] || rc=1; fi
 }
 
-if want clean || want count; then
+if want clean || want count || [ "$WORLD" = small ]; then
   n0="$(run k0)" || exit 9
   [ "$FULL" = 0 ] || equiv k0 bl898-cli-pass
+  if [ "$WORLD" = small ] && ! grep -q '^OK: ' "$W/k0.out"; then
+    echo "receipt-bl898: the unseeded small world does not read OK, so its keep list no longer matches what the validator requires: $(grep -m1 '^FAIL' "$W/k0.out" | cut -c1-200)" >&2
+    exit 9
+  fi
   if want clean; then
     if grep -q '^OK: ' "$W/k0.out"; then cell clean 0 "the unseeded copy reads OK"
     else cell clean 1 "the unseeded copy did not read OK: $(grep -m1 '^FAIL' "$W/k0.out" | cut -c1-160)"; fi
