@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1095.0] - 2026-11-12
+
+Batch 256, release cluster b256-B1-bl915-audit, lead ai-dlc-a7. This release advances BL-915, closes nothing and files BL-1006 (net -1: closes 0, files 1). The only fixture edit is validator-fork-budget's declared `*` row, 1120 to 1124.
+
+### BL-915 advanced (stays PARTIAL): the (a) and (c) audit of 265 fixtures, the kill-matrix tool, and (b) re-scoped to the within-fixture matrix
+
+- **"Sample first" answer.** The sample did not run to completion. (b) was answered by an analytic bound with zero conclusive removals, and then re-scoped by operator ruling to BL-918's within-fixture matrix. A fixture is UNIQUE (a conclusive keep) only if it is the sole killer of at least one sampled mutant. With 4 mutant sites per subject, a tranche yields at most 4 UNIQUE fixtures whatever the sample size n, at about 7 hermetic runs per fixture plus adaptive cells: at most 4 per about 140 runs at n=20, and at most 4 per about 560 at all 80 coverers of `reconcile/lib.sh`. Criterion (b) is a removal criterion, and a finite mutant sample can confirm a keep but never prove a fail, so subject-mutation sampling yields zero conclusive removals at any size.
+- **Operator ruling, batch 256.** Criterion (b) is RE-SCOPED to BL-918's mechanism: each fixture's own declared mutants are run, every arm is recorded as red or not per mutant (the fixture's `--matrix` mode where it has one), and an arm whose kill set is covered by other arms is a removal candidate. Unlike subject-mutation sampling, this can decide redundancy over the declared mutant set. BL-915 stays PARTIAL, and (b) is owed under that mechanism for every in-scope fixture outside the BL-918 set.
+- **Runs spent.** 73 hermetic runs over three attempts, with no fixture scored and none found defective: attempt 1 (46 runs) refused at smoke on two tool defects, both fixed; attempt 2 (5 runs) was stopped on purpose after the delta review found two scorer BLOCKERs (a false COVERED), both fixed; attempt 3 (22 runs, every base rc 0) was stopped on ruling once the bound answered the question.
+- **Tool.** `scripts/kill-matrix.sh` ships as an operator instrument that runs on no gate and no hook: a 31-case self-probe with each case failed by a named broken variant, a byte-transparent overlay through a side file, plain and overlaid comparison on the scorer's view, the classes RED-BROKEN, PLAIN-RED, FORK-FAIL, OVERLAY-OPAQUE and OVERLAY-NOT-SOURCED, and `--rescore`. It was reviewed by a tip adversary and three delta passes, the last reading no BLOCKER.
+- **Audit.** `docs/analysis/bl915-fixture-audit.md` judges (a) and (c) statically for the 265 in-scope fixtures (273 minus the 8 BL-918 directories). (a): 211 PASS (4 of them PASS(OPERATOR-CMD)), 4 FAIL, 30 READ, 20 wrappers. (c): 152 NONE, 78 NOT-ASSERTED, 13 SEAMED, 2 LOAD-DEPENDENT, 20 wrappers. Follow-ups owed as rows of BL-915: the 4 (a) FAILs, the 30 READs, and `gate-resume`'s (c).
+- **Declared counts.** `validator-fork-budget`'s `*` row goes 1120 to 1124 for the new `scripts/*.sh` (0.1094.0 had moved it 1116 to 1120 for its own new scripts/ file), measured by one counted run on the release base; the release push's counted run is the second. Measured unchanged: consumer-machinery-home 23, crosswalk-home-declaration 15, derived-fence-binding 126, enforcement-map-derivations 164, enforcement-map-sites 163, -b 89, -c 99, -d 62, layer-contract-conformance 41, -b 21. The rest are measured by the push gate.
+- **Read-set map finding.** `.git/ai-dlc-fixture-readsets.local` is unusable as a fan-out source (66 of 218 fixtures carry only `#discards` rows; its hashes are stale). The pre-push skip is fail-safe on both counts (`derive-fixture-readsets.sh:245-246`, `.githooks/pre-push:1502-1513`), so it is not a correctness defect.
+- Counts at this release: 273 fixtures, 34 fixture receipt files.
+
+### BL-1006 FILED (OPEN): `gate-resume`'s self-probe verdict depends on load
+
+`gate-checkpoint.sh --self-probe` Direction 10 starts 20 parallel writers whose mkdir-lock retry is capped at 200 tries of `sleep 0.05` and then exits 2, so the `gate-resume` fixture's verdict can move with load independent of correctness (BL-868 class). Established by a static read during BL-915's (c) audit; no load run. The fix (seam the bound or force the interleaving) is owed and not in this release. OPEN, `verify: manual`.
+
 ## [0.1094.0] - 2026-11-12
 
 ### BL-868 PARTIAL: the receipt's bounded-wait scan is arm H9 of the fixture-hygiene validator, item 9 closed, item 8 down to one site
