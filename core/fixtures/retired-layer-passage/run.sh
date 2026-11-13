@@ -20,8 +20,9 @@
 # `run.sh --matrix` scores each mutant against every cell and prints one MATRIX line per mutant. The BL-355
 # mutants no-probe and no-awk decide N3 on a host whose `tr` folds a multibyte capital; on a host whose `tr`
 # does not, the deciding cell is N1 instead (the run derives it from the same host probe, and the header
-# names the host the matrix was measured on). The matrix is re-measured whenever an arm or a mutant is
-# added or changed, by the REMEASURE command below, run from the repo root.
+# names the host the matrix was measured on). The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
+# command below, from the repo root.
 # also trips: c-fold -> F0,F1
 # MUTANT-MATRIX rlp-exit0 decides=X7b twins=X1
 # MUTANT-MATRIX c-fold decides=N1 twins=N0

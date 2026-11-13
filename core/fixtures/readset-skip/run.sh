@@ -19,7 +19,7 @@
 # TWIN arm(s) that stay green under it. Per push a mutant runs its deciding arm and its twin only;
 # READSET_SKIP_MATRIX=1 drives every arm of its world (slot: all twelve scenarios; vs: every cell; the
 # in-pool canary mutant: every scenario) and prints a `matrix` row per mutant. The matrix is re-measured
-# whenever an arm or a mutant is added or changed. tk and dg carry no mutants.
+# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. tk and dg carry no mutants.
 # MUTANT-MATRIX-DYNAMIC copy-mutants why=one loop over the three whole-function wrong copies cprm, archive and rsync, each scored on its own named member
 # MUTANT-MATRIX-DYNAMIC pseudo-mutants why=one loop over the ten wrong pseudo-path filters, each scored on the 11-seed signature
 # MUTANT-MATRIX-DYNAMIC both-width-mutants why=one loop over the three wrong --tracer both width injections m2, m4 and prefix
@@ -683,6 +683,11 @@ f2b_world() { # <seed fn> <dst> [seed args]
 # `pkill -P $$ -x fs_usage` cannot reach a stub fs_usage forked from this subshell; every stub world reaps its stubs
 # by recorded pid (stub_reap), so no verdict reads it. The --tracer both stub world's fs_usage reaping waits are
 # injected (READSET_SLEEP_CMD) and keyed on the capture holding the stub's last line, not on the clock.
+# EVERY DRIVE OF THE DERIVER IS ONE IN-PROCESS PASS (BL-982): fx_inproc (lib/mutant.sh) logs it when the sourced path IS
+# the deriver's, core/scripts/derive-fixture-readsets.sh in whatever world the drive runs, keyed on the PATH and never the
+# content -- a mutant copy at that path is a pass of the subject it copies, as lib/inproc.sh states for inproc_run. A
+# renamed copy, an extracted span, a decision driver and hermetic-run.sh log nothing. fx_inproc is kept through the
+# function strip and unset on the line that sources, and that paired source covers the rs_main call after it.
 inproc() {
   local _ip_v _ip_keep
   _ip_keep=""
@@ -699,7 +704,7 @@ inproc() {
   done
   [ -f "$1" ] || { echo "inproc: no script '$1'" >&2; return 97; }
   trap - EXIT INT TERM HUP
-  for _ip_v in $(compgen -A function); do unset -f "$_ip_v"; done
+  for _ip_v in $(compgen -A function); do [ "$_ip_v" != fx_inproc ] || continue; unset -f "$_ip_v"; done
   _ip_keep=" $(compgen -e | tr '\n' ' ') "
   for _ip_v in $(compgen -v); do
     case "$_ip_v" in
@@ -710,7 +715,8 @@ inproc() {
   done
   unset _ip_keep
   set +u +e +m; set +o pipefail
-  . "$@"
+  case "$1" in core/scripts/derive-fixture-readsets.sh|*/core/scripts/derive-fixture-readsets.sh) _ip_v=1 ;; *) _ip_v="" ;; esac
+  [ -z "$_ip_v" ] || fx_inproc "$1"; unset -f fx_inproc; unset _ip_v; . "$@"
   if declare -F rs_main >/dev/null; then shift; rs_main "$@"; fi
 }
 # rs_drive [env words] -- <deriver> [args]: the deriver, in process. Call inside `( cd <repo> && rs_drive ... )`.
@@ -6092,8 +6098,9 @@ fi
 # a property of the battery, not of the hook, so it is measured at authoring by running every mutant
 # over all fifteen worlds against the first hook (.githooks/pre-push in this repo) and recorded below;
 # X = the world's vector differed from the unmutated run in the same process, . = identical.
-# THE MATRIX IS RE-MEASURED WHENEVER A WORLD, A MUTANT OR A TWIN IS ADDED OR CHANGED, and the rows below
-# are replaced with the printed ones. The command, from the repo root, runs every unit in one process (`--matrix` replaces `--group`):
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# The rows below are replaced with the printed ones. The command, from the repo root, runs every unit in one
+# process (`--matrix` replaces `--group`):
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/readset-skip/run.sh --matrix
 # and `sed -n 's/^CK-MATRIX //p'` over its log prints these rows. It is a direct run, not
 # core/scripts/hermetic-run.sh, because the hermetic runner forwards no argument. A plain run executes no

@@ -19,6 +19,98 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1108.0] - 2026-11-13
+
+### BL-1021 CLOSED: FORK_BUDGET ratcheted to the drained batch's reading
+
+`fork-budget.txt` `FORK_BUDGET` falls from 2930 to 2675, the tip reading plus `HEADROOM_MARGIN` 2. Readings by `scripts/fork-profile.sh --section total`, each in a clean detached worktree, exit 0: base `323ce0939` 2794, release tip `b6ab71906` 2673. The batch queue drained in this bundle, which was the entry's owed condition.
+
+### BL-1007 CLOSED: escalation-status-vocabulary passes from any working directory
+
+The fixture resolves its root by walking up from its own directory and pins `AI_DLC_PROJECT_ROOT` for every copy except LONE_V and SIB_V. A cwd-invariance arm covers all three controls (reader `10,10`, whole-directory `11111`, refusal `111111`) from `/` and from the root, with mutants `cwd-unpinned`, `cwd-unpinned-ven` and `cwd-unpinned-vr` all killed; an exported `CLAUDE_PROJECT_DIR` hid the defect at base. `invocations.decl` `* 28 -> 30`.
+
+### BL-1006 CLOSED: gate-checkpoint's self-probe forces its concurrent-writer interleaving by events, not load
+
+`gate-checkpoint.sh` gains the probe-only seam `AI_DLC_GATE_CHECKPOINT_PROBE_SEAM` (read-before-rename, first failed `mkdir`). Direction 10 now forces A-reads-then-B-starts and reads `L fb` with 2 rows under the shipped lock against `R fb` with 1 row under a no-lock writer; Direction 12 asserts the unseamed 200-try bound with a `sleep` shadow and no real sleeping. `gate-resume` mutants ck1, ck2 and ck3 each die on their exact FAIL text, and a seamed writer never waits unannounced: ck4 and ck5 are killed as refusals, not hangs, with one stated limit (an edit that keeps the flag assignment but drops only the append still waits silently). Counts over F4's figures: `gate-resume` `* 583 -> 604` (+21 starts), `gate-checkpoint.sh 147 -> 151` (+4); the mutant copies drop Directions 1-9 and read FIXTURE STALE if they still carry them.
+
+### BL-1011 CLOSED: the party-wave-barrier detector reads `if`, `while`, `until` and `$( )` waits
+
+`wlead` strips `if`, `while` and `until`, `wsegs` keeps each outer segment whole and adds the text after each `$(`, and `bmode` accepts `)` after the flag. Five new fire arms (ifw, untilw, whilesl, subw, subsl), four quiet near-misses (stsub, stpwd, ifpg, datesub) and nine new mutants, all killed; MSEG is re-anchored. Over graph's transcripts, read only, 0 of 15054 foreground Bash commands differ base against tip. `invocations.decl` `* 163 -> 190`.
+
+### BL-1020 CLOSED: pregate-self-check judges the hook a push would run
+
+The pregate resolves the hook with `git rev-parse --git-path hooks/pre-push` and refuses with exit 2 when it is absent or not byte-identical to `$ROOT/.githooks/pre-push`, naming both paths and the side moved relative to the base, and, where only the tree hook moved, classifying against the merge-base copy (behind: rebase onto the base; edited: update the checkout holding the resolved hook or push from it). New worlds Hcwd, Hres, Htree, Habs and Hbehind; mutant m3 is killed. From a linked worktree the resolved hook is the main checkout's, so the pregate refuses whenever that checkout holds a different hook. `invocations.decl` `* 75 -> 161`.
+
+### BL-1000 CLOSED: I75 reads the fails-closed token from the chain's terminal guard only
+
+`i75_failsclosed` counts only executable lines after the cwd-walk line and before the end marker, and a start marker with no end marker exits 3. `audit-layer-debt.sh` gains its end marker and a non-exiting `/nonexistent` default. The self-probe over six shapes (vector `011013`), its real-sized copies padded with 500 real-shaped lines so they hold for any layout of the live `merge-review-shards.sh`, with only build checks that can fire kept, and `derived-fence-binding` arms A51-A53 bind it, with mutant W12 killed. `validator-fork-budget` reads 2673 forks of `FORK_BUDGET=2930`, down from 2794. `invocations.decl` `* 126 -> 130`.
+
+### BL-1001 PARTIAL: the habitual `used to` detector flags a clause-initial indefinite habitual subject
+
+`audit-rule-files.sh` `PURPOSE_BEFORE` clause 2 flags an indefinite-subject habitual `used to` that is clause-initial and has no finite verb in its clause; a cue followed by a finite verb clears it, and the clause is cut at punctuation and at and, but, which, where, while, whereas, because, although and though. 0 new NARRATIVE_DRIFT hits over a fresh consumer clone at 0fd24a0501448473cc8ac35d44b55e985079cc86 (8 lines, 123 files) and over the distribution corpus (46 lines, 88 files), shipped audit at f23f7742c against the narrowed audit. `retro-audit-scans` world UQ, mutants uq1-uq17 killed, `invocations.decl` `* 165 -> 235`. Owed, each counting 0 in both corpora: acquittals (the habitual clause after another word or phrase, one with a finite verb before its first cut, and the cue/cut asymmetry) and false positives (a purpose noun after a comma or in parentheses, a bare `A flag used to select the root.`, and a sentence-initial purpose noun with a third-person present predicate).
+
+### BL-974 PARTIAL: `--check-shard` refuses a block-less document-mode shard at the seal
+
+The seal takes the document from the shard's SEALED siblings when every sealed sibling that declares an `artifact:` agrees, so a block-less document-mode shard is refused with the merge's own block-count line instead of being SKIPped; disagreeing siblings give SKIP plus a WARN. Arms CS13 and CS14 of `adversarial-shard-merge`, mutant CSM-docfb killed. A census over 1737 block-less graph shards (file:// clone at c8ab65397) changed 0 answers, with a positive control. `invocations.decl` `* 3101 -> 3125`. Owed: the `Outcome measured:` line.
+
+### BL-976 PARTIAL: `--check-shard` survives a relative root beginning with `-`
+
+`--check-shard`, `--derived-set` and `--document` pass `--` to `basename` and `dirname` and enter a relative dir as `./<dir>`, so a root beginning with `-` no longer makes every findings count exit 3 and silently skip `--mark` term 7's per-shard check. `content-seal` CS-CSF and CS-CSA with mutants CSF, CSFD and CSA killed. `invocations.decl` `* 579 -> 625`. Owed: the `Outcome measured:` line and the fixture's read-set trace.
+
+### BL-1008 PARTIAL: enforcement-map-sites prints the failing run's stderr
+
+`A00_sanity` captures `vem_entry`'s stderr and rc and prints them (up to 40 lines) on the FIXTURE BROKEN branch, so the next load-dependent occurrence names its cause. The cause and its fix are still OPEN; the entry stays `verify: manual`.
+
+### BL-808 CLOSED: the gate-1 partition width clause closes on a `fell` verdict
+
+BL-808 closes on a `fell` verdict; the efficiency close arm does not check a `fell` verdict against its figures (`scripts/validate-backlog-receipts.sh:1636-1639`), so a second opus verifier re-derived every figure behind the direction by hand. The b255 joint figures were re-derived on the fixed extractor.
+
+### BL-913 CLOSED: a story's gate transition closes on a `did not fall` verdict by lead ruling
+
+BL-913 closes on a `did not fall` verdict by lead ruling, with its value citation (`core/skills/ai-dlc/steps/implementation.md:511`). Its expected movement is absolute and absolute lead hours rose; the per-story s320 to s321 fall is recorded as fact and attributed mostly to story mix; s322 rose per story.
+
+### BL-1003 CLOSED: the extractor's gate-span entry closes with every owed item met
+
+BL-1003 is untagged; E1 is tag- or outcome-scoped, so its `verify: manual` close is unjudged by the close arm rather than passed; a second opus verifier checked its 16-member re-derivation. Its second subject, the 14:00Z to 15:08Z slice rule, is carried by BL-1035.
+
+### BL-1035 FILED OPEN: the gate span ends only on a whole step-file read, so slices after the gate's terminal record keep charging it
+
+BL-1035 is filed OPEN with a `verify: sh` driver receipt, `docs/analysis/pipeline-efficiency-s317-s320/scripts/check-gate-slice-end.sh`, which exits 1 until `extract.py` is fixed.
+
+### BL-538, BL-512, BL-812 and BL-912 PARTIAL: sprint-322 outcome readings
+
+BL-538, BL-512, BL-812 and BL-912 take new readings and stay PARTIAL, `verify: manual`, with no LANDED line; BL-538 and BL-512 gain a Step line. BL-912 reads `did not fall` on s322 with no Failure caught: citation available. BL-510's re-derivation paragraph is recorded under its archived entry in `docs/backlog.archive.md`. No file under `core/`, `scripts/` or `.githooks/` changes for these entries; the release adds one receipt script and its two fixtures under `docs/analysis/`, analysis scripts and outputs, and edits `docs/backlog.md` and `docs/backlog.archive.md`.
+
+Not-discharged: BL-538 BL-512 BL-812 BL-912
+
+### BL-1022 CLOSED: fixture matrix headers cite fixture-mutants.md clause 2 instead of restating its old per-change duty
+
+133 fixture headers said the mutant x arm matrix is re-measured whenever an arm or a mutant is added or changed. That was the pre-amendment form of `.claude/rules/fixture-mutants.md` clause 2 ("One run per distinct state"). Each now carries one sentence, identical everywhere: "The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires." Where the old text also said where the command lives or which cwd it runs from, that stays as a following sentence. The per-change `--matrix` duty is NOT removed. Clause 2 still requires it where a fixture's counted run does not itself score each mutant's deciding arm and twin, and it runs the matrix whole where `--matrix` takes no mutant list. The headers now point at the rule instead of restating it.
+
+Population: the union of the run.sh files carrying `# MUTANT-MATRIX-REMEASURE` (152) and the shell files whose joined comment text matches `whenever an arm|whenever arms|whenever a mutant` (128), giving 153 files. 133 of them carry the duty and are rewritten; the rest make no on-change claim. Reconciliation by name: 120 is the single-line `re-?measured? whenever` grep over run.sh, and 79 is the entry's own phrase. Edits are comment-only: every diff line is a `#` line, and the comment-stripped files are byte-identical to base. Seven `inputs.decl` `# copy-only:` citations move by one line to follow. Re-key: 89 shipping and 44 .dist-only fixtures (the operator ruled it ships at the measured count).
+
+### BL-909 PARTIAL: 63 keyword-free kill lines route through mutant_killed
+
+ledger-reverify 36, check-3b-locked-anchor 14, check-24-adversarial-convergence 8, layer-anchor-declaration 4, layer-contract-conformance 1, each with its message byte-identical. Each base-pass flag is bound where M5 accepts it: an `ok`-form call with byte-identical output on the guarded arm, or `$?` captured from the guarded helper, which now returns 1 on FAIL. `scripts/mutant-verdicts-allowlist.txt` goes from 75 rows / 204 lines to 72 / 141, and rows only fall. M5 goes from 1359 to 1422 scored sites with 0 refused. `scripts/twin-built-allowlist.txt` loses 8 check-24 rows that the new names make resolvable (H7STALE), 401 to 393. The same verdicts are printed at base and tip. A scratch copy with each flag forced to 0 refuses exactly that fixture's `mutant_killed` calls. Not taken: the 5 lines with no unmutated arm (each needs a new arm), the 25 MUTANT-MATRIX lines needing a measured row, retro-compliance-workflow's 3 and setup-config-drift's 2.
+
+### BL-982 PARTIAL: readset-skip, readset-stage1-verdict and review-shard-merge pair their in-process passes
+
+P2 OWED goes from 404 to 359 with NEW 0. Each family was first instrumented per execution, and only a site whose executed file is the subject at its own path is paired: lib/inproc.sh's rule that a same-path mutant copy is a pass of the subject it copies. Extracted spans, renamed copies and fixture-written drivers stay OWED under validate-fixture-invocations.sh:626-627.
+- readset-skip: of 65 sites, only the fixture's runner `inproc()` ever ran the deriver (83 times, all in shard c). It is paired on the deriver path, which also covers `rs_main`. readset-skip-c declares `83 inproc:core/scripts/derive-fixture-readsets.sh`. The other 63 sites ran only `$WORK` spans, span mutants or drivers. The hermetic-run.sh drive sites stay OWED, because declaring them needs a `!` flip in a shipping fixture's inputs.decl.
+- readset-stage1-verdict: 17 of 19 rows paired; :252 (run only under --matrix) and :645 (renamed copies only) stay OWED.
+- review-shard-merge and -b: all 10 sites paired in both shards.
+- Item 5 (the `lib/mutant.sh` comment and the validator header) stays owed. Those comment edits would re-key 222 declarers and every counted pass, so they were withdrawn.
+
+### BL-1042 CLOSED: a change carries process proportional to its size, and the always-loaded rules carry rules and directions only
+
+The batch-257 process review's ten items, implemented outside the heavy owner process.
+
+- **Bundle by default (`docs/plans/graph-ledger-full-drain.md` action 0, `.claude/rules/operator-rulings.md`).** The lead collects ready releases onto one integration branch and gates them once; a red caused only by one release drops it. Pushes stay serialized. A docs-only release runs `scripts/pregate-self-check.sh` and rides the next bundle.
+- **One reviewer, owner rules as citations.** The owner-rules block is citations plus a queue protocol (READY with a sha; the lead bundles, gates, merges and verifies by content). The flow's advisor calls are the roll call's (exempt only PAUSED or CLOSABLE sessions) and one immediately before every push, which a hook outside the repo requires; the pre-merge advisor call is removed. A contract adversary runs only for a new mechanism or consumer cost; one tip adversary carries the close verifier's job; BLOCKERs-only fold. The restated re-run duties are deleted; `FORK_BUDGET` and `invocations.decl` ratchet once per batch and the NET is computed at batch close.
+- **Pre-seeding leaves the flow.** P14's sixth train label in `scripts/validate-plan-shape.sh` is `BUNDLE BY DEFAULT` in place of `PRE-SEED BEHIND THE GATE`, with the `plan-shape` fixture, `.claude/rules/plan-shape.md` and the four live plans moved with it. `scripts/seed-verdict-store.sh` stays as an optional tool.
+- **Rules and directions only.** `CLAUDE.md` and the six unconditional `.claude/rules/` files drop incident stories, measurements and justification (75420 at 0.1106.0, 76451 at 0.1107.0's additions, to 46198 bytes, eight dropped rules restored as one-liners after a rule-by-rule carrier audit); `scripts/validate-claude-rules.sh` A6's ceiling drops from 76544 to 46336.
+- **Dead state.** `.git/ai-dlc-suite-pole.history` (no reader) is retired. BL-583 advances: the read-set skip already runs a battery only when its declared inputs move.
+
 ## [0.1107.0] - 2026-11-13
 
 ### BL-1028 CLOSED: migrate-artifact-paths.sh prints progress and no longer forks per path component

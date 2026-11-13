@@ -160,8 +160,9 @@ defer() { printf '  ----  %s -- stands down; %s owns this finding\n' "$1" "$2"; 
 # still "flips exactly {decides}" over that selection. `--matrix` runs EVERY predicate of the battery
 # against every mutant, prints one `MATRIX <mutant> decides=[...] measured=[...]` line each, and the
 # same exact-set comparison then holds over the whole battery -- which is what licenses the selection.
-# Re-run `bash core/fixtures/postcompact-rulebook-recovery/run.sh --matrix` whenever a predicate, a
-# mutant or a twin list changes; every MATRIX line must read measured = decides.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# Run `bash core/fixtures/postcompact-rulebook-recovery/run.sh --matrix`; every MATRIX line must read
+# measured = decides.
 MXMODE=0; [ "${1:-}" = --matrix ] && MXMODE=1
 mx_sel() { # mx_sel <all predicates, in order> <decides> <twins|-> -> the members of <all> to run
   if [ "$MXMODE" = 1 ]; then printf '%s' "$1"; return; fi

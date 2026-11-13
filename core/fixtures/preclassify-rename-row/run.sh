@@ -68,7 +68,8 @@
 #   shim-noop-git        U2 U3 nl
 #   shim-noop-ngit       b230c b230d U1 U2 U3 T1
 # Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
-# The matrix is re-measured whenever a cell or a mutant is added or changed.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 # MUTANT-MATRIX norenames decides=A,B twins=C
 # MUTANT-MATRIX b230-memo decides=b230d twins=b230c
 # MUTANT-MATRIX untangle-nols decides=U1 twins=U2

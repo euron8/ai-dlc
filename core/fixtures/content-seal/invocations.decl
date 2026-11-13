@@ -3,10 +3,12 @@
 # Re-measured for BL-716 on 0.1057.0 by a counted run (571, budget ok): one start over 974's 570 and one hook start over 84, both CS-K2a (its seal_hook Write and its --mark of an amended adjudicator batch file).
 # Re-measured for the BL-976 follow-up (CS-CSD) by two agreeing counted runs (573 and 27 both times, over 571 and 26): one --check-shard-dir run of the shipped merge (the merge row) and one of the CSD mutant copy under the fixture's WORK (counted in * only).
 # Re-measured for the BL-976 merge_locate follow-up (CS-CSL) by two agreeing counted runs (579 and 200 both times, over 573 and 196; the merge row unmoved at 27): no CLI start is added. The cell asks four in-process ip runs, and each one that passes the seal phase starts content-seal.sh twice (--check, --last-tool-row): the shipped merge's locx and locy add 4 to the content-seal.sh row, and the CSL mutant's locy adds 2 starts of the copy's content-seal.sh under the fixture's WORK, counted in * only. The mutant's locx refuses at merge_locate and starts nothing.
-579 *
-200 core/scripts/content-seal.sh
+# Re-measured for BL-976 (CS-CSF) by two agreeing counted runs on a clean worktree of its commit (610, 210 and 33 both times, over 579, 200 and 27): the merge row +6 is the shipped program's six CLI cells (csfx, csfy, dsx, dsy, docx, docy); content-seal.sh +10 is the sealed-sibling admissions (--admit-marker) of csfx and csfy; the rest of * (+15) is the CSF and CSFD copies under the fixture's WORK (six CLI starts and their siblings' starts), not attributed per start.
+# Re-measured for BL-976 (CS-CSA, resolve_artifact) by two agreeing counted runs on a clean worktree of its commit (625 and 35 both times, over 610 and 33; content-seal.sh unmoved at 210): the merge row +2 is the shipped program's rx and ry --check-shard runs; the rest of * (+13) is the CSA copy's two runs, the document world's build and their siblings' starts, not attributed per start.
+625 *
+210 core/scripts/content-seal.sh
 85 core/hooks/ai-dlc-content-seal.sh
-27 core/scripts/merge-adversarial-shards.sh
+35 core/scripts/merge-adversarial-shards.sh
 8 core/scripts/join-remediator-shards.sh
 3 core/scripts/validate-gate-adjudication.sh
 4 core/scripts/wait-for-deliverable.sh

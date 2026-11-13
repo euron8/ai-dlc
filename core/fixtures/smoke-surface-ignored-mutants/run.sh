@@ -13,8 +13,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # is scored only through mutant_killed on that flag.
 #
 # THE MUTANT MATRIX. Each mutant runs on its deciding arm and its twin; the twin must stay green, the deciding arm must
-# fail. The full mutant x arm matrix is printed by `--matrix` (one MATRIX row per cell, fails=yes|no), re-measured
-# whenever an arm or a mutant is added or changed.
+# fail. The full mutant x arm matrix is printed by `--matrix` (one MATRIX row per cell, fails=yes|no). The matrix
+# is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
 # Measured (--matrix): forced-true, forced-false, frozen-set and init-below-smoke trip all seven arms; cache-unkeyed
 # trips ig-d alone (dF's frozen-first handoff row), v-decides ig-e and ig-g (the neg and dstarn negation worlds), and
 # dirs-one-call ig-g alone, through BOTH of its firing worlds (measured with ig-g split in two: dstar trips through the

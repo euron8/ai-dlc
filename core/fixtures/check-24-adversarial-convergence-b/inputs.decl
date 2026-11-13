@@ -16,6 +16,7 @@ core/schemas/provenance-block.json
 core/hooks/ai-dlc-acknowledge.sh
 core/team-roles/remediator.md
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh
 # The shard drivers: the parent's coverage join reads every one. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.
 core/fixtures/check-24-adversarial-convergence-b/run.sh
 core/fixtures/check-24-adversarial-convergence-c/run.sh

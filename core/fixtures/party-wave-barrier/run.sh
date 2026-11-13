@@ -87,6 +87,8 @@
 #   MSEG a command is one segment (no split on ; && || | newline)
 #   MMODE the non-blocking wait-for-deliverable modes no longer excluded
 #   MSLP sleep only by its bare name (no path)     MLAST every delivery written during a wait closed at its return
+#   MIF/MUN/MWH  if / until / while no longer stripped as a keyword   MSUBW/MSUBS  `$(` splits only before sleep / only before scripts
+#   MWHOLE  wsegs cuts at `$(` instead of keeping the outer segment whole   MBR  bmode no longer accepts `)` after its flag   MIFANY  any `if` segment is a WAIT   MSUBANY  any `NAME=$(` segment is a WAIT
 #   Extra FAIL cells that are the SAME property the mutant removes, not entanglement; every row's
 #   decides and twins hold. M2 also FAILs v, y, vmark and vgin: each is quiet only because a dispatch
 #   answers the delivery. M6 also FAILs u, v, x, y and the six WAIT-shape arms: a coordinator's
@@ -100,7 +102,8 @@
 # MATRIX. Measured by `bash core/fixtures/party-wave-barrier/run.sh --matrix`: every mutant against
 # every base arm (plus the `probe` cell, the mutant with its self-probe left in). A cell is FAIL when
 # the arm fails under the mutant. decides = the arm that kills it; twins = arms that stay green under
-# it. Re-measured whenever an arm or a mutant is added or changed.
+# it. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 # MUTANT-MATRIX M1 decides=m twins=l
 # MUTANT-MATRIX M2 decides=b twins=a
 # MUTANT-MATRIX M3 decides=d twins=dcap
@@ -134,6 +137,15 @@
 # MUTANT-MATRIX MMODE decides=vmark twins=stat2
 # MUTANT-MATRIX MSLP decides=binsleep twins=bashc
 # MUTANT-MATRIX MLAST decides=vgin twins=v
+# MUTANT-MATRIX MIF decides=ifw twins=ifpg
+# MUTANT-MATRIX MUN decides=untilw twins=ifw
+# MUTANT-MATRIX MWH decides=whilesl twins=ifw
+# MUTANT-MATRIX MSUBW decides=subw twins=subsl
+# MUTANT-MATRIX MSUBS decides=subsl twins=subw
+# MUTANT-MATRIX MBR decides=stsub twins=datesub
+# MUTANT-MATRIX MWHOLE decides=stpwd twins=stsub
+# MUTANT-MATRIX MIFANY decides=ifpg twins=ifw
+# MUTANT-MATRIX MSUBANY decides=datesub twins=subw
 # MUTANT-MATRIX-DYNAMIC score why=every mutant is passed to mutant_killed by name from the one score() driver
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/party-wave-barrier/run.sh --matrix
 #
@@ -241,6 +253,16 @@ dlg_var binsleep '/bin/sleep 2100' || { echo "FIXTURE ERROR: seed binsleep did n
 dlg_var bashc 'bash -c \\"sleep 2100\\"' || { echo "FIXTURE ERROR: seed bashc did not apply" >&2; exit 2; }
 dlg_var stat2 "$U_WAIT; scripts/ai-dlc/wait-for-deliverable.sh --status _bmad-output/party-mode/s900/stories-dev-02.md" || { echo "FIXTURE ERROR: seed stat2 did not apply" >&2; exit 2; }
 dlg_var mark 'scripts/ai-dlc/wait-for-deliverable.sh --mark x.md stories dev 01 findings=0' || { echo "FIXTURE ERROR: seed mark did not apply" >&2; exit 2; }
+dlg_var ifw "if $U_WAIT; then echo ok; fi" || { echo "FIXTURE ERROR: seed ifw did not apply" >&2; exit 2; }
+dlg_var untilw "until $U_WAIT; do :; done" || { echo "FIXTURE ERROR: seed untilw did not apply" >&2; exit 2; }
+dlg_var whilesl 'while sleep 2100; do break; done' || { echo "FIXTURE ERROR: seed whilesl did not apply" >&2; exit 2; }
+dlg_var subw 'r=$(scripts/ai-dlc/wait-for-deliverable.sh --complete _bmad-output/party-mode/s900/stories-dev-0{1,2}.md)' || { echo "FIXTURE ERROR: seed subw did not apply" >&2; exit 2; }
+dlg_var subsl 'x=$(sleep 2100)' || { echo "FIXTURE ERROR: seed subsl did not apply" >&2; exit 2; }
+dlg_var stsub 's=$(scripts/ai-dlc/wait-for-deliverable.sh --status)' || { echo "FIXTURE ERROR: seed stsub did not apply" >&2; exit 2; }
+dlg_var stpwd 'scripts/ai-dlc/wait-for-deliverable.sh \\"$(pwd)/x.md\\" --status' || { echo "FIXTURE ERROR: seed stpwd did not apply" >&2; exit 2; }
+grep -qF 'x.md\"' "$T/stpwd/subagents/agent-ac01.jsonl" || { echo "FIXTURE ERROR: seed stpwd lost its quoting" >&2; exit 2; }
+dlg_var ifpg 'if pgrep -fl wait-for-deliverable.sh; then echo x; fi' || { echo "FIXTURE ERROR: seed ifpg did not apply" >&2; exit 2; }
+dlg_var datesub 'r=$(date)' || { echo "FIXTURE ERROR: seed datesub did not apply" >&2; exit 2; }
 grep -qF 'bash -c \"sleep 2100\"' "$T/bashc/subagents/agent-ac01.jsonl" || { echo "FIXTURE ERROR: seed bashc lost its quoting" >&2; exit 2; }
 VC="$T/v/subagents/agent-ac01.jsonl"
 # vmark: v with a --dispatch-ts call in a message of its own between Dev 01's delivery and the refill.
@@ -467,6 +489,21 @@ dlg_fires() { # <world> <what>: u's barrier still fires with tw2's command repla
 }
 arm_binsleep() { dlg_fires binsleep "/bin/sleep 2100"; }
 arm_bashc()    { dlg_fires bashc 'bash -c "sleep 2100"'; }
+arm_ifw()      { dlg_fires ifw 'if <wait> ...; then'; }
+arm_untilw()   { dlg_fires untilw 'until <wait> ...; do'; }
+arm_whilesl()  { dlg_fires whilesl 'while sleep N; do'; }
+arm_subw()     { dlg_fires subw 'r=$(<wait> ...)'; }
+arm_subsl()    { dlg_fires subsl 'x=$(sleep N)'; }
+# Near-misses: no WAIT, so the refill after the call answers the delivery (quiet), the round still judged.
+dlg_quiet() { # <world> <what>
+  run "$ADET" "$T/$1.jsonl"
+  eq  "$1: $2 is no WAIT, so the refill after it answers (quiet)" "$(rfu)" "0/0/0"
+  has "$1: the followed round was judged" "$R_ERR" "given=1 scanned=1 rounds=1 batches=2 findings=0 unknown-cap=0 followed=1 delegated-missing=0"
+}
+arm_stsub()    { dlg_quiet stsub 's=$(wait-for-deliverable.sh --status)'; }
+arm_stpwd()    { dlg_quiet stpwd 'wait-for-deliverable.sh "$(pwd)/x.md" --status'; }
+arm_ifpg()     { dlg_quiet ifpg 'if pgrep -fl wait-for-deliverable.sh; then'; }
+arm_datesub()  { dlg_quiet datesub 'r=$(date)'; }
 arm_stat2()    { dlg_fires stat2 "a --complete wait followed by \`; ... --status\`"; }
 arm_mark() {
   run "$ADET" "$T/mark.jsonl"
@@ -523,7 +560,7 @@ arm_refuse_emptyfile() {
   has "refuse: scanned is counted short of given" "$R_ERR" "given=2 scanned=1"
 }
 # Arm ids as the header spells them; an id's function is arm_<id with - as _>.
-ARMS="a b c cenv d dcap e f g h i j k l m n o p q qmeta r s t u v w x y binsleep bashc stat2 mark vmark vgin rem remseat adv deliv gp cross bprose set refuse-empty refuse-unread refuse-emptyfile"
+ARMS="a b c cenv d dcap e f g h i j k l m n o p q qmeta r s t u v w x y binsleep bashc stat2 ifw untilw whilesl subw subsl stsub stpwd ifpg datesub mark vmark vgin rem remseat adv deliv gp cross bprose set refuse-empty refuse-unread refuse-emptyfile"
 armfn() { printf 'arm_%s' "${1//-/_}"; }
 # armrc <arm> <detector>: 0 when the arm passes against that detector. A subshell, so FAILS is untouched.
 armrc() { ( ADET="$2"; FAILS=0; "$(armfn "$1")" >/dev/null 2>&1; [ "$FAILS" -eq 0 ] ); }
@@ -675,13 +712,31 @@ score MN y x \
 score MS u v \
   1 '  return n + selfslot' '  return n'
 score MSEG stat2 binsleep \
-  1 'def wsegs: [splits("\n|;|&&|\\|\\||\\|")];' 'def wsegs: [.];'
+  1 'def wsegs: [splits("\n|;|&&|\\|\\||\\|") | (., ([splits("\\$\\(")] | .[1:][]))];' 'def wsegs: [.];'
 score MMODE vmark stat2 \
   1 'and (bmode | not)' 'and true'
 score MSLP binsleep bashc \
   1 '(cmdw | test("(^|/)sleep$"))' '(cmdw | test("^sleep$"))'
 score MLAST vgin v \
   1 '{ for (i = gn; i >= 1; i--) if (gin[i]) { gin[i] = 0; gseen[i] = 0; gwait[i] = ""; break }; close_seen("", 1);' '{ close_seen("", 1);'
+score MIF ifw ifpg \
+  1 '|elif|if|' '|elif|'
+score MUN untilw ifw \
+  1 '|until|' '|'
+score MWH whilesl ifw \
+  1 '|while|' '|'
+score MSUBW subw subsl \
+  1 '[splits("\\$\\(")]' '[splits("\\$\\((?=sleep)")]'
+score MSUBS subsl subw \
+  1 '[splits("\\$\\(")]' '[splits("\\$\\(scripts")]'
+score MWHOLE stpwd stsub \
+  1 'def wsegs: [splits("\n|;|&&|\\|\\||\\|") | (., ([splits("\\$\\(")] | .[1:][]))];' 'def wsegs: [splits("\n|;|&&|\\|\\||\\||\\$\\(")];'
+score MBR stsub datesub \
+  1 '|=|\\)|$)' '|=|$)'
+score MIFANY ifpg ifw \
+  1 'def iswait: wsegs | any(.[]; ' 'def iswait: wsegs | any(.[]; test("^\\s*if\\s") or '
+score MSUBANY datesub subw \
+  1 'def iswait: wsegs | any(.[]; ' 'def iswait: wsegs | any(.[]; test("^\\s*[A-Za-z_]+=\\$\\(") or '
 
 # M1's self-probe refusal, end to end, once per push: the probe is the shipped detector's own defence and
 # one representative proves it still fires. The other mutants' probe cells are in the matrix.

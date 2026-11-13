@@ -59,8 +59,9 @@
 # output and GREEN when it is absent. A mutant's row names the cell that kills it (decides) and the cell it could
 # plausibly co-trip but must leave GREEN (twins). A plain run scores each mutant on its deciding cell and its twin
 # only, off the one --check run it already makes. m1 and m2 are both decided by the drift message, since both leave
-# a stale region. The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
-# command below, run from the repo root. It scores every mutant on every cell and prints one MATRIX line each.
+# a stale region. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per
+# distinct state") requires. Run the REMEASURE command below, from the repo root. It scores every mutant on
+# every cell and prints one MATRIX line each.
 # MUTANT-MATRIX m1 decides=drift twins=grammar
 # MUTANT-MATRIX m2 decides=drift twins=no-region
 # MUTANT-MATRIX m3 decides=no-region twins=drift

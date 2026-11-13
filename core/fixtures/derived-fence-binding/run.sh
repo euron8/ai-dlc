@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # derived-fence-binding — assert invariant I108 both fires and discriminates.
-# Also hosts I75's seeded-drift oracle (A16-A19), which had no fixture anywhere, and I121's
+# Also hosts I75's seeded-drift oracle (A16-A19, and A51-A53 on real-sized spans), which had no fixture anywhere, and I121's
 # battery (A20-A33): the verify-shape paragraph every role contract carries, with its three
 # wrong arms (opener-only compare, hand-listed population, substring key) each scored killed.
 # And I122's battery (A34-A47): the advisor paragraph directly below it in every role contract,
@@ -87,7 +87,8 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 # Every mutant of the validator below is scored per push on its DECIDING arm plus one TWIN
 # arm; the full mutant x arm matrix is MEASURED by the --matrix argv mode, not re-run per push.
 # A TWIN is an arm that must stay GREEN under the mutant (the kill is confined to the deciding
-# arm). The matrix is re-measured whenever an arm or a mutant is added or changed. The recorded
+# arm). The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. The recorded
 # matrix plus the twin replace an exact-vector assertion of every arm on every mutant.
 # MUTANT-MATRIX READER-FLAT decides=I108 twins=I122
 # MUTANT-MATRIX READER-WIDE decides=I108 twins=I122
@@ -104,6 +105,7 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 # MUTANT-MATRIX W9 decides=I122 twins=I121
 # MUTANT-MATRIX W10 decides=I122 twins=I121
 # MUTANT-MATRIX W11 decides=I122 twins=I121
+# MUTANT-MATRIX W12 decides=I75 twins=I121
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/derived-fence-binding/run.sh --matrix
 
 # twin <mutant> <tree> <twin arm> — after a mutant is built in <tree>, the TWIN arm must stay
@@ -1267,7 +1269,9 @@ i75_case() { # <label> <tree> <want-substring|OK> — presence-shaped both ways
 }
 
 t="$(fresh)"
+i75_f0="$fails"
 i75_case "A16 I75 CONTROL: the unmutated seed passes --arms I75 and reaches its verdict" "$t" OK
+I75_A16_FAILS=$((fails - i75_f0))
 
 # The override read moved BELOW the CLAUDE_PROJECT_DIR fallback: the precedence that answers
 # about whichever repo the session started in.
@@ -1302,11 +1306,71 @@ if edit "$t" "$I75_SUBJ" '
   i75_case "A19 I75 a reworded COMMENT inside the root block is acquitted and the run reaches its verdict" "$t" OK
 fi
 
+# --- I75 on REAL-SIZED spans (BL-1000) -----------------------------------------
+# The fails-closed token was read from the whole span between the markers. merge-review-shards.sh's
+# span is ~1390 lines and carries the token on ten of them, so deleting its one real guard line left
+# I75 green; a start marker with no end marker ran the span to EOF. Both seeds are the real files.
+# i75_says <label> <tree> <want-substring> <subject basename> -- the finding must name that subject.
+i75_says() {
+  local label="$1" t="$2" want="$3" subj="$4" out rc
+  out="$(run_i75 "$t")"; rc=$?
+  if guard_sel "$rc" "$out"; then
+    case "$out" in
+      *"$want"*"$subj"*) ok "$label" ;;
+      *) bad "$label -- I75 did not report $subj (rc=$rc): $(printf '%s\n' "$out" | grep I75 | cut -c1-200)" ;;
+    esac
+  fi
+}
+
+# A51: merge-review-shards.sh's terminal guard `exit 2` removed -- the line AFTER the cwd walk.
+# (Its own self-probe, which builds the real-sized copies from this file, refuses too; the arm
+# reads the corpus finding, which names the subject.)
+t="$(fresh)"
+if edit "$t" "core/scripts/merge-review-shards.sh" '
+  /^# --- AI_DLC_ROOT ---/ { inb = 1 }
+  inb && /ai_dlc_resolve_root "\$\(pwd\)"/ { w = 1 }
+  inb && w && $0 == "  exit 2" { next }
+  /^# --- end AI_DLC_ROOT ---/ { inb = 0 }
+  { print }'; then
+  i75_says "A51 I75 a REAL-SIZED span (merge-review-shards.sh, ~1390 lines) with its terminal guard deleted is REPORTED as not failing closed, though nine other token lines remain in its span" \
+    "$t" "does not fail closed" "merge-review-shards.sh"
+fi
+
+# A52: audit-layer-debt.sh's end marker removed -- the span runs to EOF, past its register guard.
+t="$(fresh)"
+if edit "$t" "core/scripts/audit-layer-debt.sh" '
+  /^# --- end AI_DLC_ROOT ---/ { next }
+  { print }'; then
+  i75_says "A52 I75 a start marker with NO end marker (audit-layer-debt.sh, span to EOF) is REPORTED by name" \
+    "$t" "has NO end marker" "audit-layer-debt.sh"
+fi
+
+# W12: the WHOLE-SPAN reader restored, the shape I75 shipped with. On the pristine tree it is
+# killed by I75's own self-probe, whose real-sized copy big-ng.sh (merge-review-shards.sh with its
+# guard deleted) it accepts: the reader scores 011000 where 011013 is required.
+MUT_W12='
+  $0 == "i75_failsclosed() {" { print "i75_failsclosed() { i75_norm \"$1\" | awk \047/exit [0-9]|:-\\/nonexistent/ { f = 1 } END { exit (f ? 0 : 1) }\047; }"; skip = 1; next }
+  skip && $0 == "}" { skip = 0; next }
+  skip { next }
+  { print }'
+t="$(fresh)"
+if edit "$t" "$ARM" "$MUT_W12"; then
+  twin W12 "$t" I121
+  out="$(run_i75 "$t")"; rc=$?
+  if guard_sel "$rc" "$out"; then
+    case "$out" in
+      *"I75 self-probe FAILED: the fail-closed reader scored 011000 "*)
+        mutant_killed "$([ "$I75_A16_FAILS" = 0 ] && echo 1)" W12 "A53 W12 (the fails-closed token read from the WHOLE span) is KILLED by I75's self-probe on the real-sized copy: 011000 against 011013" ;;
+      *) bad "A53 W12 (the whole-span reader) was not refused by I75's self-probe (rc=$rc): $(printf '%s\n' "$out" | grep I75 | cut -c1-200)" ;;
+    esac
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 # THE COUNT IS ASSERTED. A driver whose `for` loop or `if` guard stopped reaching an assertion
 # prints fewer lines and no failure, and an unrun assertion is indistinguishable from one that
 # passed.
-EXPECTED=85
+EXPECTED=89
 # --- no shipped caller passes validate-spawn-ledger.sh's --probe-from-caller seam ----------------
 # Hosted HERE because this fixture is .dist-only and seeds core/ and scripts/ whole, so the scan
 # reads a real tree; the shipping fold-architect-ledger-join cannot declare them. Non-comment lines
@@ -1338,8 +1402,8 @@ if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
   else bad "MX plain run executed $MROWS matrix-only rows"; fi
 else
-  if [ "$MROWS" -eq 75 ]; then ok "MX matrix run measured 75 mutant x arm cells (15 mutants x 5 arms)"
-  else bad "MX matrix run measured $MROWS cells, 75 expected"; fi
+  if [ "$MROWS" -eq 80 ]; then ok "MX matrix run measured 80 mutant x arm cells (16 mutants x 5 arms)"
+  else bad "MX matrix run measured $MROWS cells, 80 expected"; fi
 fi
 if ! tree_clean; then
   printf '\nderived-fence-binding: FIXTURE BROKEN — the working tree differs from the pristine seed after the final restore, so some case wrote a path it never recorded with track:\n' >&2

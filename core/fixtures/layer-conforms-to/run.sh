@@ -27,7 +27,8 @@
 # is the one source; a plain run refuses a mutant with no row, and a cell that disagrees with its row is a failure.
 # Arm tokens are the base-pass flag names without the B_ prefix. No new harness: each mutant's output is the one
 # its kill already reads.
-# RE-MEASURE whenever an arm or a mutant is added or changed. hermetic-run.sh runs a fixture under `env -i` and
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. hermetic-run.sh runs a fixture under `env -i` and
 # forwards no argument, so the matrix is NOT reached through it; run.sh is invoked directly from the repo root.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-conforms-to/run.sh --matrix
 # MUTANT-MATRIX m1 decides=undeclared twins=abovecv

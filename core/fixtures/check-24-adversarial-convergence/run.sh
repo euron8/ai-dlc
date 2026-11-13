@@ -140,6 +140,17 @@ TRANSCRIPT="$ROOT/operator-transcript.jsonl"
 FAILURES=0
 ASSERTIONS=0
 
+# A kill is emitted through lib/mutant.sh's mutant_killed, which refuses unless the unmutated arm the mutant
+# guards passed in this run. It needs ok() and bad(): ok prints its line as given, and bad counts a refused
+# base in FAILURES, so the verdict lines, the counters and the PASS total are those of the printf it replaced.
+# Sourced after the AI_DLC_* scrub above. expect, expect_says, expect_state and seam_guard return 1 on a FAIL,
+# so a caller capturing $? holds that arm's own verdict.
+ok() { printf '%s\n' "$1"; }
+bad() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
+[ -f "$DIR/../lib/mutant.sh" ] || broken "lib/mutant.sh not found beside $DIR"
+# shellcheck source=/dev/null
+. "$DIR/../lib/mutant.sh"
+
 # ------------------------------------------------------------------------------ vrun ----
 # THE PER-RUN MEMO. Most arms in a unit ask the SAME (program, series, flags) question and read a
 # different property of the one answer: `expect` reads the exit, `expect_says` the message,
@@ -231,6 +242,7 @@ expect() {
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s exit=%s want=%s  (%s)\n' "$case_dir" "$got" "$want" "$why"
     printf '%s\n' "$out" | sed 's/^/          | /'
+    return 1
   fi
 }
 
@@ -251,6 +263,7 @@ expect_says() {
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s %s\n' "$label" "the right exit code for the WRONG reason:$missing"
+    return 1
   fi
 }
 
@@ -267,6 +280,7 @@ expect_state() {
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s %s/%s want=%s/%s  (%s)\n' \
       "$case_dir" "${state:-<none>}" "$rc" "$want_state" "$want_rc" "$why"
+    return 1
   fi
 }
 
@@ -327,9 +341,10 @@ fi
 # its twin (RCPT_WORLDS), against worlds built ONCE per receipt and release (RCPT_WORLD_DIR), never once
 # per mutant. A mutant that crashes the validator flips its twin too, so the exact line still refuses it.
 #
-# RE-MEASURE THE MATRIX whenever an arm, a world or a mutant is added or changed, from the repo root, by
-# invoking run.sh DIRECTLY (hermetic-run.sh runs a fixture under `env -i` and forwards no argument, so a
-# matrix run through it would silently be a per-push run):
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. Run the re-measure from the repo root, by invoking run.sh DIRECTLY (hermetic-run.sh runs a
+# fixture under `env -i` and forwards no argument, so a matrix run through it would silently be a
+# per-push run):
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/check-24-adversarial-convergence/run.sh --matrix
 # With no --group it runs every shard in turn; the log must carry `MATRIX MODE: on` once per shard. Every
 # mutant then scores every cell and every receipt world; each row must still equal its want row, which is
@@ -339,7 +354,8 @@ fi
 # twins=<arm>.<cell>`: the arm is the mutant's own `ok` label (slugged: any character outside [A-Za-z0-9_-]
 # becomes `-`), the deciding cells are the cells (1-based in the row) or receipt worlds whose verdict the
 # mutant flips, and each twin is a cell of the same arm, beside the subject, GREEN in the matrix and run on
-# every push. Re-measure whenever an arm, a world or a mutant is added or changed.
+# every push. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per
+# distinct state") requires.
 # MUTANT-MATRIX MUTATION-chrono-raw-string decides=MUTATION-chrono-raw-string.cell1,MUTATION-chrono-raw-string.cell2 twins=MUTATION-chrono-raw-string.cell3
 # MUTANT-MATRIX MUTATION-chrono-strip-z decides=MUTATION-chrono-strip-z.cell3 twins=MUTATION-chrono-strip-z.cell2
 # MUTANT-MATRIX MUTATION-chrono-arm-g-off decides=MUTATION-chrono-arm-g-off.cell2 twins=MUTATION-chrono-arm-g-off.cell1
@@ -562,6 +578,7 @@ seam_guard() { # <label> <arm set> <row fn> <script> [<full row> <its row_prov>]
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s %s\n' "$1" "$SG_MSG"
+    return 1
   fi
 }
 # MX0, read once at the end of the shard: a per-push run must have SKIPPED matrix-only cells (else the
@@ -934,7 +951,7 @@ expect_state divergent-terminal-resolved s1-adversarial-p RESOLVED 0 "THE RESUME
 
 # --- the sanctioned exit from a STALL ------------------------------------------
 expect_state stalled              s1-adversarial-p STALLED  3 "no record: the stall stands"
-expect_state stalled-resolved     s1-adversarial-p RESOLVED 0 "SAME trajectory + a valid record: the verification pass is legal. RESOLVED was unreachable for a stall and the branch was dead code"
+expect_state stalled-resolved     s1-adversarial-p RESOLVED 0 "SAME trajectory + a valid record: the verification pass is legal. RESOLVED was unreachable for a stall and the branch was dead code"; R_stalled_res=$?
 expect_state stalled-record-invalid s1-adversarial-p STALLED 3 "OVER-FIRE CONTROL: an INVALID record legalises nothing, or the resume is reachable by writing any file"
 
 # --- MUTATION: the stall call site is what makes RESOLVED reachable ------------
@@ -956,7 +973,8 @@ else
   m_pln="$(bash "$MUT" --series "$ROOT/stalled/s1-adversarial-p"          --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>/dev/null | cut -f1)"
   m_inv="$(bash "$MUT" --series "$ROOT/stalled-record-invalid/s1-adversarial-p" --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>/dev/null | cut -f1)"
   if [ "$m_res" = "STALLED" ] && [ "$m_pln" = "STALLED" ] && [ "$m_inv" = "STALLED" ]; then
-    printf '  ok    %-28s %s  (%s)\n' "MUTATION stall-resolution" "STALLED" "without the stall call site RESOLVED is unreachable again; the other two are unmoved, so the mutant is attributable"
+    printf -v _m '  ok    %-28s %s  (%s)' "MUTATION stall-resolution" "STALLED" "without the stall call site RESOLVED is unreachable again; the other two are unmoved, so the mutant is attributable"
+    mutant_killed "$([ "$R_stalled_res" = 0 ] && echo 1)" MUTATION-stall-resolution "$_m"
   else
     echo "  FAIL  MUTATION: expected stalled-resolved to revert to STALLED, got '$m_res' (plain='$m_pln' invalid='$m_inv')" >&2
     FAILURES=$((FAILURES + 1))
@@ -975,14 +993,14 @@ expect_state cdiv-verified            s1-adversarial-p CONVERGED 0 "the verifica
 expect_state cdiv-verified-unresolved s1-adversarial-p DIVERGENT 3 "a pass after the divergence that declares no record is another repair pass"
 expect_state cdiv-verified-invalid    s1-adversarial-p DIVERGENT 3 "declaring an INVALID record is declaring none"
 expect cdiv-terminal-resolved   1 "the gate still fails a series ENDING on a divergence, record or not (C)" s1-adversarial-p
-expect cdiv-verified            0 "resolved on the record and verified MET -- the gate passes" s1-adversarial-p
+expect cdiv-verified            0 "resolved on the record and verified MET -- the gate passes" s1-adversarial-p; R_cdiv_ver=$?
 expect cdiv-verified-unresolved 1 "the divergence was walked past -- FAIL (C)" s1-adversarial-p
 expect cdiv-verified-invalid    1 "the record does not resolve it -- FAIL (C, F)" s1-adversarial-p
 expect_says cdiv-verified-invalid s1-adversarial-p "cdiv-invalid-names-defect" \
   "C -- DIVERGENCE" "F -- RESOLUTION" "did not shrink"
 # The terminal branch's own error. Arm D fires on these series too, so the exit code alone
 # cannot see arm C go silent there -- only the arm's name can.
-expect_says cdiv-terminal-resolved s1-adversarial-p "cdiv-terminal-names-C" "C -- DIVERGENCE"
+expect_says cdiv-terminal-resolved s1-adversarial-p "cdiv-terminal-names-C" "C -- DIVERGENCE"; R_cdiv_names_c=$?
 
 # --- MUTATIONS: each branch of the arm-C resolution block is load-bearing --------
 # Built with an EXACT-ONCE replace: an anchor that occurs zero times or twice refuses (exit 3)
@@ -1063,7 +1081,8 @@ MUT_OLD='      if validate_record "$cdiv_rec" "${P_FILE[$ci]}" "$ci"; then' MUT_
     ASSERTIONS=$((ASSERTIONS + 1))
     m_gate="$(cdiv_gate "$MUT" cdiv-verified)"
     if [ "$m_gate" = "1" ]; then
-      printf '  ok    %-28s gate=1  (and the GATE refuses the verified series again)\n' "MUTATION cdiv-never-resolves"
+      printf -v _m '  ok    %-28s gate=1  (and the GATE refuses the verified series again)' "MUTATION cdiv-never-resolves"
+      mutant_killed "$([ "$R_cdiv_ver" = 0 ] && echo 1)" MUTATION-cdiv-never-resolves "$_m"
     else
       FAILURES=$((FAILURES + 1))
       printf '  FAIL  %-28s gate=%s on cdiv-verified, want 1\n' "MUTATION cdiv-never-resolves" "$m_gate"
@@ -1097,7 +1116,8 @@ MUT_OLD='    err "C -- DIVERGENCE" "${P_CDIV_MSG[$ci]}"
     m_out="$(bash "$MUT" --series "$ROOT/cdiv-verified-unresolved/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
     m_u="$(grep -c 'C -- DIVERGENCE' <<<"$m_out")" || m_u=0
     if [ "$m_t" = "0" ] && [ "$m_u" != "0" ]; then
-      printf '  ok    %-28s terminal C lines=0, non-terminal=%s  (the terminal error is pinned by name)\n' "MUTATION cdiv-terminal-silent" "$m_u"
+      printf -v _m '  ok    %-28s terminal C lines=0, non-terminal=%s  (the terminal error is pinned by name)' "MUTATION cdiv-terminal-silent" "$m_u"
+      mutant_killed "$([ "$R_cdiv_names_c" = 0 ] && echo 1)" MUTATION-cdiv-terminal-silent "$_m"
     else
       FAILURES=$((FAILURES + 1))
       printf '  FAIL  %-28s terminal C lines=%s want 0, non-terminal=%s want >0\n' "MUTATION cdiv-terminal-silent" "$m_t" "$m_u"
@@ -1308,7 +1328,8 @@ ts_row() { # ts_row <convergence-script> -> the five verdicts, space separated (
 ASSERTIONS=$((ASSERTIONS + 1))
 ts_ctrl="$(ts_row "$MWORK/validate-adversarial-convergence.sh")"
 if [ "$ts_ctrl" = "$(echo $TS_REAL)" ]; then
-  printf '  ok    %-28s [%s]\n' "CONTROL third-state copy" "$ts_ctrl"
+  printf -v _m '  ok    %-28s [%s]' "CONTROL third-state copy" "$ts_ctrl"
+  ok "$_m"; B_ts_ctrl=1
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-28s got [%s] want [%s] -- the copy tree is what fails; every mutant below is vacuous\n' \
@@ -1349,7 +1370,8 @@ ts_mutate() {
   got="$(ts_row "$mdir/validate-adversarial-convergence.sh")"
   RSEL=""
   if [ "$got" = "$(echo $wm)" ]; then
-    printf '  ok    %-28s [%s]  (%s)\n' "MUTATION $label" "$got" "$why"
+    printf -v _m '  ok    %-28s [%s]  (%s)' "MUTATION $label" "$got" "$why"
+    mutant_killed "${B_ts_ctrl:-0}" "MUTATION-$label" "$_m"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s got [%s] want [%s]  (%s)\n' "MUTATION $label" "$got" "$(echo $want)" "$why"
@@ -1481,7 +1503,8 @@ ASSERTIONS=$((ASSERTIONS + 1))
 ctrl_got=""
 for c in $CEIL_CASES; do ctrl_got="$ctrl_got $(mstate "$CTRL" "$c")"; done
 if [ "$(echo $ctrl_got)" = "$(echo $CEIL_REAL)" ]; then
-  printf '  ok    %-28s %s\n' "CONTROL unmutated copy" "reproduces all four verdicts from \$ROOT, so a mutant's change is the mutation"
+  printf -v _m '  ok    %-28s %s' "CONTROL unmutated copy" "reproduces all four verdicts from \$ROOT, so a mutant's change is the mutation"
+  ok "$_m"; B_ceil_ctrl=1
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-28s got [%s] want [%s] -- the harness itself is what fails; every mutant below is vacuous\n' \
@@ -1516,7 +1539,8 @@ mutate_ceiling() {
   for c in $CEIL_CASES; do i=$((i + 1)); if ron "$i"; then got="$got $(mstate "$mut" "$c")"; else got="$got ."; fi; done
   RSEL=""
   if [ "$(echo $got)" = "$(echo $wm)" ]; then
-    printf '  ok    %-28s [%s]\n' "MUTATION $label" "$(echo $got)"
+    printf -v _m '  ok    %-28s [%s]' "MUTATION $label" "$(echo $got)"
+    mutant_killed "${B_ceil_ctrl:-0}" "MUTATION-$label" "$_m"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s got [%s] want [%s]\n' "MUTATION $label" "$(echo $got)" "$(echo $want)"
@@ -2518,7 +2542,8 @@ AG_WANT="1|shape 1|shape 1|shape 1|shape 1|empty 1|twice 0|subset 0|subset"
 ASSERTIONS=$((ASSERTIONS + 1))
 ag_got="$(ag_row "$VALIDATOR")"
 if [ "$ag_got" = "$AG_WANT" ]; then
-  printf '  ok    %-28s [%s]\n' "ARMS-GUARD" "$ag_got"
+  printf -v _m '  ok    %-28s [%s]' "ARMS-GUARD" "$ag_got"
+  ok "$_m"; B_armsguard=1
 else
   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s got [%s] want [%s]\n' "ARMS-GUARD" "$ag_got" "$AG_WANT"
 fi
@@ -2541,7 +2566,8 @@ else
   set -f; ag_m=($ag_mut); ag_w=($AG_WANT); set +f
   if [ "${ag_m[0]}${ag_m[1]}${ag_m[2]}${ag_m[3]}" != "1|shape1|shape1|shape1|shape" ] && [ "${ag_m[0]%|*}" = 0 ] \
      && [ "${ag_m[4]} ${ag_m[5]} ${ag_m[6]} ${ag_m[7]}" = "${ag_w[4]} ${ag_w[5]} ${ag_w[6]} ${ag_w[7]}" ]; then
-    printf '  ok    %-28s ARMS-GUARD fails on it: [%s]\n' "MUTATION arms-guard-removed" "$ag_mut"
+    printf -v _m '  ok    %-28s ARMS-GUARD fails on it: [%s]' "MUTATION arms-guard-removed" "$ag_mut"
+    mutant_killed "${B_armsguard:-0}" MUTATION-arms-guard-removed "$_m"
   else
     FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s [%s] -- ARMS-GUARD would pass without the shape guard\n' "MUTATION arms-guard-removed" "$ag_mut"
   fi
@@ -2589,7 +2615,7 @@ j2_score "CONTROL j2 copy" "$J2_MUT/control.sh" "$J2_REAL"
 J2_CTL_ROW="$J2_SCORE_ROW"; J2_CTL_PROV="$J2_SCORE_PROV"
 # The j2 battery's mutants run in this directory, which has no merge beside them, so the guard reads
 # the same copy they do. Its full side is the control row just scored, at this path with no --arms.
-seam_guard "SEAM-GUARD J2" J2 j2_row "$J2_MUT/control.sh" "$J2_CTL_ROW" "$J2_CTL_PROV"
+seam_guard "SEAM-GUARD J2" J2 j2_row "$J2_MUT/control.sh" "$J2_CTL_ROW" "$J2_CTL_PROV"; R_sg_j2=$?
 # MUTANT seam-reused-row: the guard is handed a SEAMED row as its full side. The row is the seam's own answer
 # (so it EQUALS the real full row and a bare comparison would pass) with the provenance of how it was made.
 # The reuse assertion alone must refuse it, before the seam runs -- and must also refuse the right row at
@@ -2599,7 +2625,8 @@ sr_prov="$(SEAM_ARMS=J2; row_prov "$J2_MUT/control.sh")"
 seam_guard_eval J2 j2_row "$J2_MUT/control.sh" "$SG_SROW" "$sr_prov"; sr_seamed="$SG_VERDICT"
 seam_guard_eval J2 j2_row "$J2_MUT/control.sh" "$J2_CTL_ROW" "$(row_prov "$VALIDATOR")"; sr_path="$SG_VERDICT"
 if [ "$sr_seamed" = refused ] && [ "$sr_path" = refused ] && [ -n "$J2_CTL_ROW" ] && [ "$J2_CTL_PROV" = "|$J2_MUT/control.sh|$(shasum -a 256 < "$J2_MUT/control.sh" | cut -d' ' -f1)" ]; then
-  printf '  ok    %-28s the reuse assertion refuses a seamed row [%s] and a row from another path\n' "MUTATION seam-reused-row" "$sr_prov"
+  printf -v _m '  ok    %-28s the reuse assertion refuses a seamed row [%s] and a row from another path' "MUTATION seam-reused-row" "$sr_prov"
+  mutant_killed "$([ "$R_sg_j2" = 0 ] && echo 1)" MUTATION-seam-reused-row "$_m"
 else
   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s seamed row: %s, other path: %s, control prov [%s] -- the guard would compare against a seamed row\n' "MUTATION seam-reused-row" "$sr_seamed" "$sr_path" "$J2_CTL_PROV"
 fi
@@ -2640,7 +2667,8 @@ if ! j2_mut_build "$SC_MUT" 'case ",$AC_ARMS," in *",$1,"*) return 0 ;; esac; re
 else
   sc_s="$(SEAM_ARMS=J2; j2_row "$SC_MUT")"; sc_f="$(SEAM_ARMS=""; j2_row "$SC_MUT")"
   if [ "$sc_f" = "$(echo $J2_REAL)" ] && [ "$sc_s" != "$sc_f" ]; then
-    printf '  ok    %-28s SEAM-GUARD refuses it: seam [%s] != full [%s]\n' "MUTATION seam-constant" "$sc_s" "$sc_f"
+    printf -v _m '  ok    %-28s SEAM-GUARD refuses it: seam [%s] != full [%s]' "MUTATION seam-constant" "$sc_s" "$sc_f"
+    mutant_killed "$([ "$R_sg_j2" = 0 ] && echo 1)" MUTATION-seam-constant "$_m"
   else
     FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s seam [%s] full [%s] -- the guard would pass a constant seam\n' "MUTATION seam-constant" "$sc_s" "$sc_f"
   fi

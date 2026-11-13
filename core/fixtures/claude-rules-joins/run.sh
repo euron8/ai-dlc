@@ -41,8 +41,8 @@
 # arm the validator carries (A1 A2 A3 A3b A4 A5 A6), and kill_check asserts the FAIL lines are exactly one, its own:
 # the whole arm vector is each mutant's decision, so each is a FULL row whose worlds are those arms. `--matrix` prints
 # one `MATRIX <mutant> FULL [<arms that FAILed>]` row per mutant; the per-push score is the same run. The mutant name
-# mutant_killed carries is the label's first word (m1, mA2b, ...). RE-MEASURE whenever an arm or a mutant is added
-# or changed, from the repo root:
+# mutant_killed carries is the label's first word (m1, mA2b, ...). The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run it from the repo root:
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/claude-rules-joins/run.sh --matrix
 # MUTANT-MATRIX-FULL m1 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A1's, across every arm
 # MUTANT-MATRIX-FULL m2 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A2's, across every arm

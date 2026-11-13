@@ -29,7 +29,8 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/preamble.sh"
 # re-seeding its own branch and log. PER PUSH a mutant runs its deciding arm (the kill's own check, unchanged) and its
 # TWIN, an arm the measured matrix shows GREEN for it, which must stay green (cce_twin). `--matrix` runs the unmutated
 # validator (ctl) and every mutant on every arm and prints one `MATRIX <mutant> <arm> GREEN|TRIPPED` row per cell.
-# RE-MEASURE whenever an arm or a mutant is added or changed, from the repo root:
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Run it from the repo root:
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/cycle-commits-enforce/run.sh --matrix
 # Measured: ctl GREEN on all five arms; each mutant trips its own arm alone (log-rows-guard rows, prior-sprint-test
 # prior, non-vacuity vac, carve-out carve) and every other cell is GREEN.

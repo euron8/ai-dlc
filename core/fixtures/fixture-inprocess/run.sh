@@ -42,7 +42,8 @@
 # MUTANT-MATRIX MDG decides=DG twins=DS
 # MUTANT-MATRIX MM4M decides=DR,D4,D5,DQ,C,N,DV,K twins=- why=the self-probe refuses the whole run when m4 hands m4cmp no remedy
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-inprocess/run.sh --matrix
-# Re-measure it whenever an arm or a mutant is added or changed.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 #   MR   the unlisted-refusal R row is never printed         -> DR reads the self-probe refusal on the probe verdict
 #   MC5  fxc_guarded counts every file as guarded (judge)    -> D5 reads the self-probe refusal: the judge's OWN
 #        self-probe (C5 cell), run by --b2-census, is red, so the probe tree cannot be joined

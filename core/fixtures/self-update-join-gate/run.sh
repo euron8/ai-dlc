@@ -43,7 +43,8 @@
 # `MATRIX <mutant> <arm> KILLED|GREEN` row. An arm is KILLED when its unmutated assertion no longer holds on the
 # mutant's output. The block below is the one source; a plain run refuses a mutant with no row, and a cell that
 # disagrees with its row is a failure. Arm tokens are the base-pass flag names without the B_ prefix.
-# RE-MEASURE whenever an arm or a mutant is added or changed. hermetic-run.sh forwards no argument, so --matrix is
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# hermetic-run.sh forwards no argument, so --matrix is
 # run directly from the repo root of the branch, where seed.sh takes its range from range.sh (the same file
 # git.decl's `range @range.sh` line derives the sandbox range from).
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/self-update-join-gate/run.sh --matrix

@@ -5,8 +5,9 @@
 # validate catches entry shape drift, and the reader fails CLOSED on an unreadable schema.
 #
 # Per push the one mutant runs its deciding arm and one twin; the measured matrix replaces an
-# exact-vector assertion (the old "E:no V:pass" pair) and is re-measured whenever an arm or the
-# mutant changes. Arm names are the column names `--matrix` prints.
+# exact-vector assertion (the old "E:no V:pass" pair). The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Arm names are the
+# column names `--matrix` prints.
 # MUTANT-MATRIX no-enum-check decides=E twins=V
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/audit-anchors-schema/run.sh --matrix
 #

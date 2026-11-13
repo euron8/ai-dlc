@@ -27,8 +27,9 @@
 #
 # THE OLD MUTATION BATTERY HAS BEEN RETIRED. One mutant is scored here, of the --probe-from-caller seam.
 # Per push it runs on its DECIDING arm plus one TWIN that must stay green; the full mutant x arm
-# matrix is MEASURED by the --matrix argv mode and is re-measured whenever an arm or a mutant
-# changes. The recorded matrix plus the twin replaces an exact-vector assertion of every arm.
+# matrix is MEASURED by the --matrix argv mode. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. The recorded
+# matrix plus the twin replaces an exact-vector assertion of every arm.
 # MUTANT-MATRIX SEAM-INVERTED decides=SEAM-mutant twins=SEAM-verdict
 # MUTANT-MATRIX PROBE-STUB decides=PROBE-refuses twins=PROBE-seam-skip
 # MUTANT-MATRIX st-nostate decides=NET-frozen twins=NET-changing

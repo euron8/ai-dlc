@@ -21,8 +21,8 @@
 # c-offset and tol-auth; bound-not-applied trips c-old c-offset-bounds tol-later; derive-removed trips
 # d-N d-S; derive-one-mode trips d-C; sib-bash-exempt trips d-N sib-c sib-d sib-h; sib-record-key trips
 # sib-e sib-f sib-g; sib-ts-window trips sib-b; the pause-legal and Explore mutants trip their sibling
-# cells. Every other mutant trips only its deciding cell. The matrix is re-measured whenever an arm or
-# a mutant is added or changed.
+# cells. Every other mutant trips only its deciding cell. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
 # MUTANT-MATRIX-DYNAMIC mutant-stage why=the stage loops over the M_NAME table; every name it produces has its own row below
 # MUTANT-MATRIX no-ismeta decides=c-meta twins=c-typed
 # MUTANT-MATRIX exact-ts-compare decides=c-auth twins=c-later

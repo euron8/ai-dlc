@@ -87,8 +87,9 @@
 #   m-narrowfirst       --narrow answers in place of --route -> R2 Q1 (also trips the other --route arms)
 #   m-rv-noset          --read-verdict accepts a value outside the lifted set -> RV (its PASS cell)
 # Each mutant co-trips no arm outside its decides list, measured at authoring (m-classonly's two deciding
-# arms R1 and R6 are both deltas that only the guard sends full). The matrix is re-measured whenever an arm
-# or mutant is added or changed, by the REMEASURE command below.
+# arms R1 and R6 are both deltas that only the guard sends full). The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
+# command below.
 # MUTANT-MATRIX m-classonly decides=R1,R6,Q2 twins=R5
 # MUTANT-MATRIX m-failopen-missing decides=C1b,Q4n twins=R2
 # MUTANT-MATRIX m-strict decides=C1a twins=C3

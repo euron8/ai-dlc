@@ -16,10 +16,20 @@
 # Prints `ok <cell>` or `FAIL <cell>: <got>` per cell. 0 = every cell held. 1 = a cell did not. 9 = the receipt
 # could not run (bad usage, a seed that failed or has the wrong shape, a subject that defines no ro_main).
 set -uo pipefail
+# fx_inproc (core/fixtures/lib/mutant.sh) logs this receipt's in-process passes under the fixture's counted run.
+# mutant.sh refuses to load without ok() and bad(), so it is sourced behind stubs that are removed again, as
+# lib/inproc.sh sources it.
+case "${BASH_SOURCE[0]}" in */*) _rl="${BASH_SOURCE[0]%/*}/../lib" ;; *) _rl=../lib ;; esac
+ok() { :; }; bad() { :; }
+. "$_rl/mutant.sh" || { echo "FIXTURE BROKEN: cannot source $_rl/mutant.sh" >&2; exit 2; }
+unset -f ok bad; unset _rl
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 [ "$#" -eq 1 ] && [ -f "$1" ] && [ "$(basename "$1")" = record-only-diff.sh ] \
   || { echo "REFUSED: usage: bash receipt-bl885-frozen.sh <path to record-only-diff.sh>" >&2; exit 9; }
 RO="$(cd "$(dirname "$1")" && pwd)/record-only-diff.sh"
+# A pass is logged only for a subject at its own path (a core/scripts directory); a mutant script directory's
+# copy is no pass of the subject.
+case "${RO%/*}" in */core/scripts) RO_PASS=1 ;; *) RO_PASS=0 ;; esac
 ( set +u +o pipefail; . "$RO" && declare -F ro_main > /dev/null ) > /dev/null 2>&1 \
   || { echo "REFUSED: $RO defines no ro_main when sourced" >&2; exit 9; }
 G() { git -c user.name=receipt -c user.email=receipt@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null -c maintenance.auto=false "$@"; }
@@ -43,7 +53,7 @@ mkdir -p "$T/stories" && G init -q "$T" \
 fails=0; n=0
 cell() { # <cell> <want rc> <stdout|stderr|silent> <token> <args to ro_main...>
   local c="$1" w="$2" ch="$3" t="$4" rc o e held=0; shift 4
-  ( set +u +o pipefail; . "$RO" && ro_main "$@" ) > "$R/o" 2> "$R/e" < /dev/null; rc=$?
+  ( set +u +o pipefail; [ "$RO_PASS" = 0 ] || fx_inproc "$RO"; . "$RO" && ro_main "$@" ) > "$R/o" 2> "$R/e" < /dev/null; rc=$?
   n=$((n + 1))
   case "$ch" in
     stdout) [ "$rc" = "$w" ] && grep -qF -- "$t" "$R/o" && held=1 ;;

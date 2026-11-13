@@ -24,8 +24,8 @@ mkdir -p "$S/scripts" "$S/$FX" || exit 9
 echo 0.0.1 > "$S/VERSION" || exit 9
 cp "$SC" "$S/scripts/pregate-self-check.sh" || exit 9
 cp "$FX/procsub-spell.awk" "$FX/procsub-spell-probe.diff" "$S/$FX/" || exit 9
-seedgit() { # <root> -> commit everything in it
-  ( cd "$1" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git init -q . && git add -A \
+seedgit() { # <root> -> commit everything in it; the root pushes through .githooks, as the distribution does (BL-1020)
+  ( cd "$1" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git init -q . && git config core.hooksPath .githooks && git add -A \
     && git -c user.email=x@x -c user.name=x commit -q -m seed )
 }
 # Section d runs the fork-budget fixture through core/scripts/hermetic-run.sh with the counter armed by
@@ -72,6 +72,46 @@ done
 drive() { # <root> <out-file> -> the self-check's exit
   ( cd "$1" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
 }
+# BL-1020 worlds: copies of root A (committed hook = A's), each with a different hook-path state.
+#   Hcwd: A driven from a cwd that is not the root (it does NOT test the defensive relative-path join: the self-check cds to its root first). Hres: core.hooksPath -> an absolute dir whose hook differs from the
+#   committed one (the resolved hook moved). Htree: hooksPath -> an absolute dir holding the committed bytes, the tree's
+#   own hook then edited (the tree hook moved). Habs: no core.hooksPath (a push runs no hook).
+gitin() { ( cd "$1" && shift && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git "$@" ); }
+for h in Hres Htree Hbehind Habs; do cp -R "$W/rootA" "$W/root$h" || exit 9; done
+mkdir -p "$W/ext-res" "$W/ext-tree" || exit 9
+{ cat "$W/rootA/.githooks/pre-push"; printf '# resolved hook moved\n'; } > "$W/ext-res/pre-push" || exit 9
+cp "$W/rootA/.githooks/pre-push" "$W/ext-tree/pre-push" || exit 9
+# Htree: the branch COMMITS a hook edit on top of the base tag (edited case). Hbehind: the base tag is a later commit
+# carrying the updated hook, which the resolved hook also holds, while the tree stays at the old commit (behind case).
+gitin "$W/rootHtree" tag base0 || exit 9
+printf '# tree hook moved\n' >> "$W/rootHtree/.githooks/pre-push" || exit 9
+gitin "$W/rootHtree" -c user.email=x@x -c user.name=x commit -q -am "branch edits the hook" || exit 9
+{ cat "$W/rootA/.githooks/pre-push"; printf '# base hook updated\n'; } > "$W/ext-behind-pre-push" || exit 9
+mkdir -p "$W/ext-behind" && cp "$W/ext-behind-pre-push" "$W/ext-behind/pre-push" || exit 9
+gitin "$W/rootHbehind" checkout -q -b updbase || exit 9
+cp "$W/ext-behind/pre-push" "$W/rootHbehind/.githooks/pre-push" || exit 9
+gitin "$W/rootHbehind" -c user.email=x@x -c user.name=x commit -q -am "base updates the hook" || exit 9
+gitin "$W/rootHbehind" tag newbase || exit 9
+gitin "$W/rootHbehind" checkout -q --detach HEAD~1 || exit 9
+gitin "$W/rootHbehind" config core.hooksPath "$W/ext-behind" || exit 9
+gitin "$W/rootHres" config core.hooksPath "$W/ext-res" || exit 9
+gitin "$W/rootHtree" config core.hooksPath "$W/ext-tree" || exit 9
+gitin "$W/rootHabs" config --unset core.hooksPath || exit 9
+drive_away() { # <root> <out-file> -> the self-check's exit, run from a cwd other than the root
+  ( cd "$W" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
+}
+drive_away "$W/rootA" "$W/Hcwd.out"; hcwd=$?
+drive "$W/rootHres" "$W/Hres.out"; hres=$?
+drive_base() { # <root> <out-file> <base> -> the self-check's exit, with an explicit base ref
+  ( cd "$1" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" "$3" </dev/null >"$2" 2>&1 )
+}
+drive_base "$W/rootHtree" "$W/Htree.out" base0; htree=$?
+drive_base "$W/rootHbehind" "$W/Hbehind.out" newbase; hbehind=$?
+drive "$W/rootHabs" "$W/Habs.out"; habs=$?
+hresn=no; grep -qF "$W/ext-res/pre-push" "$W/Hres.out" && grep -qF "$W/rootHres/.githooks/pre-push" "$W/Hres.out" && grep -qF 'the resolved hook moved relative to HEAD:.githooks/pre-push' "$W/Hres.out" && hresn=yes
+htreen=no; grep -qF "$W/ext-tree/pre-push" "$W/Htree.out" && grep -qF "$W/rootHtree/.githooks/pre-push" "$W/Htree.out" && grep -qF 'the tree hook moved relative to base0:.githooks/pre-push; the branch edited the hook, but the push will run '"$W/ext-tree/pre-push"', not the edit' "$W/Htree.out" && ! grep -qF 'rebase onto' "$W/Htree.out" && htreen=yes
+hbehindn=no; grep -qF "$W/ext-behind/pre-push" "$W/Hbehind.out" && grep -qF 'the tree hook moved relative to newbase:.githooks/pre-push; the branch is behind: rebase onto newbase' "$W/Hbehind.out" && hbehindn=yes
+habsn=no; grep -qF 'would run no pre-push hook' "$W/Habs.out" && habsn=yes
 drive "$W/rootA" "$W/A.out"; a=$?
 drive "$W/rootB" "$W/B.out"; b=$?
 drive "$W/rootC" "$W/C.out"; c=$?
@@ -111,8 +151,8 @@ nv=$RC
 # World A's own output, printed ABOVE the summary only when A is not clean, so a caller can read why; the
 # summary stays the last line.
 [ "$a" = 0 ] || sed 's/^/A| /' "$W/A.out"
-echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed"
-[ "$a" = 0 ] && [ "$b" = 1 ] && grep -qF 'seeded red step' "$W/B.out" && [ "$c" = 2 ] \
+echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hcwd=$hcwd Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn"
+[ "$a" = 0 ] && [ "$hcwd" = 0 ] && [ "$hres" = 2 ] && [ "$hresn" = yes ] && [ "$htree" = 2 ] && [ "$htreen" = yes ] && [ "$habs" = 2 ] && [ "$habsn" = yes ] && [ "$hbehind" = 2 ] && [ "$hbehindn" = yes ] && [ "$b" = 1 ] && grep -qF 'seeded red step' "$W/B.out" && [ "$c" = 2 ] \
   && [ "$np" = 2 ] && [ "$ns" = 2 ] && [ "$nv" = 2 ] \
   && [ "$d" = 2 ] && [ "$dran" = no ] && [ "$dnamed" = yes ] \
   && [ "$u" = 2 ] && [ "$unamed" = yes ] && [ "$j" = 1 ] && [ "$jnamed" = yes ] && exit 0

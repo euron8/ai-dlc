@@ -139,8 +139,9 @@
 #
 # THE MUTANT MATRIX. Each mutant is scored per push on its DECIDING cell (FUTURE) and its named TWIN (VALID),
 # which the mutant must leave GREEN: it breaks the refusal and not the write path. `run.sh --matrix` scores each
-# mutant against every cell and prints one MATRIX line per mutant. The matrix is re-measured whenever an arm or a
-# mutant is added or changed, by the REMEASURE command below, run from the repo root.
+# mutant against every cell and prints one MATRIX line per mutant. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE command
+# below, from the repo root.
 # also trips: m-nocheck -> FUTUREROW,MALFORMED
 # also trips: m-nopay -> FUTUREROW,MALFORMED
 # also trips: m-early -> VALID,FUTUREROW,MALFORMED,NEARMISS,OLDLINE,LOCKSTALE,READERS,LIVE,SECADD,SECMOVE,SWALLOW,WRAPPED,KEYLINE,HDRREMEDY,SECDUP,POSLINE,IFLINEWRITE,IFADDWRITE

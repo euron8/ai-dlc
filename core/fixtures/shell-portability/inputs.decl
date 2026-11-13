@@ -2,7 +2,7 @@
 # VERSION is the marker both run.sh (lines 102-104) and the validator walk up for; plain, so the walk
 # resolves inside the sandbox. lib/ holds the sourced preamble.
 !scripts/validate-shell-portability.sh
-# copy-only: core/fixtures/shell-portability/run.sh:206 run.sh tests for the marker beside the validator; nothing reads its content
+# copy-only: core/fixtures/shell-portability/run.sh:207 run.sh tests for the marker beside the validator; nothing reads its content
 VERSION
 core/fixtures/lib/matrix.sh
 # S15 (BL-917) derives its seeds from the hook and fails any metadata-only test with no classified allowlist row. Each sandbox seeds its

@@ -35,8 +35,9 @@
 # MUTANT BATTERY. Per push each mutant drives its deciding arm (its M function) plus its named
 # twin: an arm that stays GREEN under the mutant, proving the kill stays confined to the deciding
 # arm. The matrix (mode FULL) samples three non-deciding arms per mutant from a fixed pool and
-# prints every sampled cell as arm:0 (green) or arm:1 (tripped); it is re-measured whenever an arm
-# or a mutant is added or changed. Re-measure from the repo root:
+# prints every sampled cell as arm:0 (green) or arm:1 (tripped). The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Re-measure from
+# the repo root:
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/wait-beat-liveness/run.sh --matrix
 # Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
 # Wide co-trips (arms other than the targeted one that also read 1; plain comment, not a row):

@@ -2,6 +2,6 @@
 # controlA runs the renderer over the real tree: the validator's arm headers and the committed index.
 !scripts/render-invariant-index.sh
 scripts/validate-enforcement-map.sh
-# copy-only: core/fixtures/invariant-index/run.sh:72 run.sh tests for the marker beside the renderer; nothing reads its content
+# copy-only: core/fixtures/invariant-index/run.sh:73 run.sh tests for the marker beside the renderer; nothing reads its content
 VERSION
 core/fixtures/lib/mutant.sh

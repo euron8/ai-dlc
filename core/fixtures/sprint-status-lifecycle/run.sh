@@ -23,7 +23,8 @@
 # MUTANT MATRIX. "A mutant fails only its own assertion" (.claude/rules/fixture-mutants.md) is a
 # test-quality property, measured ONCE for every mutant against EVERY arm and recorded below; per
 # push each mutant runs its deciding arm(s) (must flip) and one twin (must stay green). The matrix
-# is re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
+# is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# Run the REMEASURE command below.
 # Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
 # 4d-degenerate-pre-change also trips TB_empty and TB_implpre in the measured matrix (the other refusal states; TB_preamble is the one it targets).
 # d8-close-skips-malformed also trips D10 and D11 in the measured matrix (a misindented key reaches close as a malformed value; D8 is the one it targets).

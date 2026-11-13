@@ -52,8 +52,9 @@
 # the same world as the unmutated pass, so it is not re-driven.
 # Per push each mutant drives its deciding arm(s) and its twin(s): a twin is an arm that stays GREEN
 # under the mutant and that it is the likeliest to co-trip, and a tripped twin fails the fixture.
-# The full mutant x arm matrix is measured by the REMEASURE command below and is re-measured whenever
-# an arm or a mutant is added or changed. Each mutant co-trips no other arm, measured at authoring.
+# The full mutant x arm matrix is measured by the REMEASURE command below. The matrix is re-measured
+# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Each mutant
+# co-trips no other arm, measured at authoring.
 # MUTANT-MATRIX M1 decides=a1 twins=a4
 # MUTANT-MATRIX M2 decides=a2,a2b,a3 twins=a0
 # MUTANT-MATRIX M3 decides=a3 twins=a2

@@ -49,7 +49,8 @@
 # MUTANT-MATRIX MREL decides=A8,A10,SP twins=A1
 # MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; the names are the seven literals above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-invocation-budget/run.sh --matrix
-# Re-measure it whenever an arm or a mutant is added or changed. The matrix also shows A1, A4, A5, A6 and A7 green
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# The matrix also shows A1, A4, A5, A6 and A7 green
 # under MJ3, A3, A6, A8 and SP green under MGATE and MPASS, A1-A6 green under MEXEMPT, and every arm but A8 green under
 # MARM, and A1-A7 green under MNRM and MJ6; only the twin each mutant runs per push is named. A8 decides MJ3, MEXEMPT, MNRM
 # and MJ6 because arming runs the subject judge's self-probe, which is red under all four. MNRM and MJ6 run SP with twin A3. Per push: MJ3 runs SP with twin A3 (the per-fixture judge no longer

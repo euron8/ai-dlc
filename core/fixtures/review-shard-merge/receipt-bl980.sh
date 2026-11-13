@@ -146,7 +146,8 @@ done
 [ "$H904" = 1 ] || r_broken "receipt-bl904.sh, the must-hit (it copies the repository its commits wrote), is absent from $ROOT"
 
 # ---- the must-fire: receipt-bl904.sh less its flag, driven the same way
-mkdir -p "$W/seed" || r_broken "could not make $W/seed"
+# The copy sits at $W/seed/, so the ../lib/mutant.sh it sources (for fx_inproc) resolves $W/lib/mutant.sh: copied first.
+mkdir -p "$W/seed" "$W/lib" && cp "$HERE/../lib/mutant.sh" "$W/lib/mutant.sh" || r_broken "could not make $W/seed and the lib/mutant.sh its copy sources"
 sed 's/ -c maintenance\.auto=false//g' "$ROOT/receipt-bl904.sh" > "$W/seed/receipt-bl904.sh" || r_broken "could not build the must-fire"
 n1="$(grep -c ' -c maintenance\.auto=false' "$W/seed/receipt-bl904.sh")" || n1=0
 [ "$n1" = 0 ] || r_broken "the must-fire still carries the flag $n1 time(s)"

@@ -299,12 +299,13 @@
 #   no finding here is closed by one. The non-wait class holds no foreground call of 30 s or more (the
 #   longest is 1 s; 0 without a result), so the rule acquits no real block on these seven.
 #   RESIDUALS OF THE FOLLOW:
-#   - Four shapes of a real wait are NOT read as one, so the barrier they hold can be ACQUITTED (the
-#     wait is missed, the response runs on to a later dispatch): `if <wait> ...; then`, `until <wait>
-#     ...; do`, `r=$(<wait> ...)` and `x=$(sleep 600)`. wlead strips do/then/else/elif but not
-#     if/while/until, and `NAME=$(cmd` reads as one assignment token. No rule, team role or core
-#     script prescribes these forms (core/skills, core/rules, core/team-roles and core/scripts
-#     searched), and the seven coordinators carry no such call: List 2 above is empty.
+#   - Five shapes of a real wait ARE read as one: `if <wait> ...; then`, `while sleep N; do`, `until
+#     <wait> ...; do`, `r=$(<wait> ...)` and `x=$(sleep 600)`. wlead strips if/while/until beside
+#     do/then/else/elif and wsegs splits on `$(`, so the inner command is the segment's command word;
+#     bmode accepts `)` after its flag, so `s=$(wait-for-deliverable.sh --status)` stays a non-wait. Not
+#     measured: a wait inside a backtick substitution. No rule, team
+#     role or core script prescribes these forms (core/skills, core/rules, core/team-roles and
+#     core/scripts searched), and the seven coordinators carry no such call: List 2 above is empty.
 #   - A single delivery written inside one long open wait and refilled after the return reads as
 #     answered (the last-delivery rule, no time threshold), so a barrier of that shape is missed; the
 #     adversary could not seed it and it is not measured.
@@ -358,14 +359,14 @@ def kid($k): ((capture("<" + $k + ">(?<x>[^<]*)</" + $k + ">") | .x) // "");
 def exitrec($kind; $e; $ts): if type == "string" then ["N", $e, $ts, $kind, kid("tool-use-id"), kid("task-id"), kid("status")] else empty end;
 def nkind: (try .origin.kind catch null);
 def akind: (try .attachment.origin.kind catch null);
-# A WAIT is keyed per command SEGMENT, positively. wsegs splits on ; && || | and newline; cmdw is a
-# segment's command word once leading assignments, keywords and launchers (do, exec, env, timeout N,
+# A WAIT is keyed per command SEGMENT, positively. wsegs splits on ; && || | newline, keeps each segment whole and adds the text after each $( as a segment of its own; cmdw is a
+# segment's command word once leading assignments, keywords (do then else elif if while until) and launchers (do, exec, env, timeout N,
 # bash -c, ...) and quotes are stripped; bmode is a non-blocking wait-for-deliverable mode.
-def wsegs: [splits("\n|;|&&|\\|\\||\\|")];
+def wsegs: [splits("\n|;|&&|\\|\\||\\|") | (., ([splits("\\$\\(")] | .[1:][]))];
 def wstrip: sub("^[\\s(){}!\"'`]+"; "");
-def wlead: test("^([A-Za-z_][A-Za-z0-9_]*=[^\\s]*|do|then|else|elif|exec|nohup|time|env|command|timeout|bash|sh|-[A-Za-z-]+|[0-9]+[smhd]?)(\\s|$)");
+def wlead: test("^([A-Za-z_][A-Za-z0-9_]*=[^\\s]*|do|then|else|elif|if|while|until|exec|nohup|time|env|command|timeout|bash|sh|-[A-Za-z-]+|[0-9]+[smhd]?)(\\s|$)");
 def cmdw: wstrip | until((wlead | not) or . == ""; sub("^[^\\s]+\\s*"; "") | wstrip) | (split(" ")[0] // "") | gsub("[\"'`)]"; "");
-def bmode: test("(^|\\s)--(status|mark|mark-repair|dispatch-ts|reset)(\\s|=|$)");
+def bmode: test("(^|\\s)--(status|mark|mark-repair|dispatch-ts|reset)(\\s|=|\\)|$)");
 def iswait: wsegs | any(.[]; ((cmdw | test("(^|/)wait-for-deliverable(\\.sh)?$")) and (bmode | not)) or (cmdw | test("(^|/)sleep$")));
 fromjson? // empty
 | select(type == "object" and ($side == 1 or .isSidechain != true))

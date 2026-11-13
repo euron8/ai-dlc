@@ -23,8 +23,9 @@
 # baseline row cells (a cell is RED when its baseline expectation fails on that output). PER PUSH a mutant is
 # scored on its DECIDING cell and its named TWIN, a cell it could plausibly co-trip but must leave GREEN;
 # `run.sh --matrix` scores the same output against all nine cells and prints one MATRIX line per mutant. The
-# matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command below, run
-# from the repo root. The two REFUSAL arms at the foot sabotage a sandbox and assert the subject refuses; they
+# matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# Run the REMEASURE command below, from the repo root. The two REFUSAL arms at the foot sabotage a sandbox and
+# assert the subject refuses; they
 # score no mutant of the subject and carry no row.
 # also trips: mut-closed-gate -> mention
 # MUTANT-MATRIX mut-closed-gate decides=bar twins=foo

@@ -1,107 +1,69 @@
-<!-- unconditional: designing a mechanism begins before any file is opened — the first move is deciding whether to build one at all, and a `paths:` glob cannot fire on a decision. It also has to survive into a long session, which is where accretion happens. -->
+<!-- unconditional: designing a mechanism begins with deciding whether to build one at all, before any file is opened, and a `paths:` glob cannot fire on a decision. -->
 
 # Designing a mechanism
 
-`CLAUDE.md` establishes that a prohibition without an enforcer is a suggestion, and that both
-sides of a join are derived rather than hand-listed. These are the design rules that follow
-from that.
-
 ## Before writing a mechanism, grep for it
 
-The program usually already exists — as a restatement in a copy no gate can reach, as an
-invariant that would bind it with one more arm, or as a detector that is simply scoped away
-or switched off. Building a second one splits the corpus and neither half sees everything.
+The program may already exist as a restatement in a copy no gate reaches, as an invariant one more arm would
+bind, or as a detector scoped away or switched off. Do not build a second one.
 
 ## Cite, do not restate
 
-A rule that RESTATES a mechanism drifts tighter than the mechanism, invisibly, and a
-restatement that contradicts its emitter is usually just stale. Name the enforcer and stop.
-Where a duplicate genuinely must exist, bind the copies byte-identically and assert that a
-third cannot appear.
-
-A schema, list or grammar written N times is N−1 chances to drift. Single-source it as data
-the reader LOADS and the docs RENDER.
+Name the enforcer and stop. Where a duplicate must exist, bind the copies byte-identically and assert a third
+cannot appear. Where a restatement and its emitter disagree, the emitter wins; fix or delete the restatement.
+A schema, list or grammar is single-sourced as data the reader LOADS and the docs RENDER.
 
 ## A join that cannot fail is the mirror of a check that cannot fire
 
-Ask what state returns success without observing anything. Ask what satisfies NEITHER arm of
-a two-way resolve. Ask what a detector's join key structurally excludes from its own
-population. Run a new detector's rule against the case that MOTIVATED it before building it: if
-that case does not fire, the population is not the shape you think. Measured — a guard scored 0 of
-12 and missed its own subject, its probe being tree-wide where the receipt greps one file.
-Where the shape allows it, build a PARTITION that makes the bad state
-unconstructible instead of a check that looks for it.
+- Ask what state returns success without observing anything, what satisfies NEITHER arm of a two-way resolve,
+  and what a detector's join key structurally excludes from its own population.
+- Run a new detector's rule against the case that MOTIVATED it before building it; if that case does not fire,
+  the population is not the shape you think.
+- Where the shape allows it, build a PARTITION that makes the bad state unconstructible.
 
 ## A vacuous guard is a loaded gun
 
-A condition that changes no outcome today will change one when the surrounding schema moves,
-and nobody will be looking. Either give it a subject or delete it — a guard whose removal
-changes nothing is not load-bearing. Fix by subtraction first.
+A guard whose removal changes no outcome is vacuous. Give a guard a subject or delete it; fix by subtraction
+first. A property is unobservable when an EARLIER exit
+pre-empts its only reader: ask what READS the property under the shipped control flow and assert the value,
+not the count.
 
-A property is also unobservable when an EARLIER exit pre-empts its only reader. Measured:
-"refuses to overwrite" was asserted by a row COUNT — true either way — and the refusal exits
-before that row is read, so a mutant reporting AND overwriting passed everything. Ask what READS
-the property under the shipped control flow, and assert the value, not the count.
-
-**TWO THRESHOLDS BOUNDING ONE QUANTITY FROM OPPOSITE SIDES CAN CLOSE THE WINDOW BETWEEN THEM,
-AND THE ARM THAT DIES IS THE ONE NOBODY EDITED.** Measured: a fork gate's floor was a constant
-and its stale-high arm a fraction of a budget that ratchets DOWN every time work is removed, so
-the window was empty at every budget below a value the budget had already passed — the arm whose
-own message is "a ceiling nothing can reach reads exactly like one that passed" had become that,
-one release earlier, silently. Its mutant could not see it because the mutant was wired to a
-budget DERIVED from the live reading, where the window is never empty; that wiring is right for
-the other arms and is exactly why none of them watched the committed value. **Ask of every
-ratchet what it makes UNREACHABLE, not only what it makes smaller**, express paired bounds in
-the same units so they move together, and give the reachability of the window its own arm keyed
-on the COMMITTED value.
+Two thresholds bounding one quantity from opposite sides can close the window between them. Ask of every
+ratchet what it makes UNREACHABLE, not only smaller; express paired bounds in the same units so they move
+together; give the window's reachability its own arm keyed on the COMMITTED value.
 
 ## Ask what a change makes always-true downstream
 
-Every new constraint has three questions attached: what does this make permanently true or
-permanently false further down, what does it UNBLOCK, and does it turn an existing join into
-a tautology. A fix that satisfies a join by deleting the join's subject reads as green
-forever.
-
-**Ask what it ACQUITS, not only what it catches.** Measured: a new arm's exemption acquitted a
-path the consumer-side validator BLOCKS, its own remedy pointed at that form, and its own probe
-asserted the acquittal on every run — a mechanism defending its own defect. An exemption needs a
-probe proving it does NOT cover the arm's own subject.
-
-**A record a program writes from its own input is a record of INTENT, not of completion.**
-Comparing it against that input is a tautology. Measured: a diagnosis keyed on the in-flight
-marker's `theirs:`, which `apply.sh` writes from its own argument before any write, fired over a
-tree still at base, and the remedy it offered stamped an unwritten tree. Decide only from records
-some OTHER event wrote — the stamp, written by the re-stamp after the writes — and ask of every
-record what state it can be in WITHOUT the thing it seems to attest having happened.
+- What does the constraint make permanently true or false further down, what does it UNBLOCK, and does it turn
+  an existing join into a tautology. A fix that satisfies a join by deleting its subject reads green forever.
+- Ask what it ACQUITS, not only what it catches. An exemption needs a probe proving it does NOT cover the arm's
+  own subject.
+- A record a program writes from its own input is a record of INTENT, not completion; comparing it against
+  that input is a tautology. Decide only from records some OTHER event wrote, and ask what state a record can
+  be in WITHOUT the thing it seems to attest having happened.
 
 ## Site the duty where the declaration decides
 
-Detect at USE time when a property has to hold across several delivery paths, and put the
-check on the function every subject already calls rather than on each caller. Route a new
-answer through the row that already exists. Pick a home by what machinery is already there,
-not by what the topic is called.
+Detect at USE time when a property has to hold across several delivery paths, on the function every subject
+already calls. Route a new answer through the row that already exists. Pick a home by what machinery is
+already there.
 
 ## Remove the affordance rather than policing the violation
 
-When a wrong action is possible, deleting the way to take it beats detecting it afterwards.
-In a role file the LOUD line wins, and an imperative to delete primes deletion — put the
-boundary where the imperative is.
+Delete the way to take a wrong action rather than detecting it afterwards. In a role file the LOUD line wins.
+An imperative to delete primes deletion; put the boundary on the line that carries the imperative.
 
 ## Render safety-critical output; do not let a model retype it
 
-Where a tool's output has to reach an operator intact, RENDER it into a generated region and
-byte-compare with a `--check` mode at the gate. A skill that ends in a manual transcription
-step ends in a place where the transcription silently stops happening.
+Render it into a generated region and byte-compare with a `--check` mode at the gate.
 
 ## Never ship a check that wedges live work or errors on correct data
 
-Report PENDING or SKIP for pre-migration states rather than failing them. Enforce canonical
-form at the PRODUCER, where there is one writer, rather than at every reader. Tier a finding
-as ERROR only where no false-positive path exists, and prove the standard is SATISFIABLE by
-asserting the exit condition, not just the entry condition.
+Report PENDING or SKIP for pre-migration states. Enforce canonical form at the PRODUCER. Tier a finding as
+ERROR only where no false-positive path exists, and prove the standard is SATISFIABLE by asserting the exit
+condition, not just the entry condition.
 
-## KISS applies to rules, checks, schemas and hooks, not just code
+## KISS applies to rules, checks, schemas and hooks
 
-Before adding any mechanism, establish that no simpler change suffices, and write down why
-not. Take the reshaped or reduced form over the additive one. Retire redundant enforcement
-rather than porting it forward.
+Before adding a mechanism, establish that no simpler change suffices and write down why not. Take the reshaped
+or reduced form over the additive one; retire redundant enforcement rather than porting it forward.

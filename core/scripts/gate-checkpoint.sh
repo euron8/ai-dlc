@@ -137,6 +137,9 @@ if [ "$PROBE" = "1" ]; then
   # THE PROBE RUNS BEFORE ANY REAL LEDGER AND FIRES IN BOTH DIRECTIONS. A checkpoint
   # that reports a clean read without first proving it can refuse has established that
   # it ran, not that it discriminates. Built under `mktemp`, never a real state dir.
+  # The record seam is the probe's own and is set only per writer below; an inherited one
+  # would seam Directions 1-9 and 12, whose verdicts are about the unseamed path.
+  unset AI_DLC_GATE_CHECKPOINT_PROBE_SEAM
   _pr="$(mktemp -d)"; mkdir -p "${_pr}/_bmad-output"
   _me="$0"
   _n="planning-19700101T000000Z"
@@ -207,18 +210,73 @@ if [ "$PROBE" = "1" ]; then
   _cur="$(bash "$_me" --root "$_pr" current 2>/dev/null || true)"
   [ "$_cur" = "planning-19700101T000003Z" ] || { echo "gate-checkpoint SELF-PROBE FAIL: a second open did not replace the first ('${_cur}')." >&2; exit 2; }
 
-  # Direction 10: concurrent writers lose nothing. Twenty records at one nonce, in parallel.
+  # Direction 10: THE LOCK SERIALISES THE READ-MODIFY-WRITE, shown by a FORCED interleaving
+  # that waits on events and never on time (BL-1006, BL-868). Writer A reads and holds at
+  # seam point (1), between its read and its rename; only then is writer B started, and the
+  # probe reads B's FIRST event. Under the lock B cannot read while A holds it, so that event
+  # is `L fb`, seam point (2), and both rows land. A writer that appends unlocked reads the
+  # same stale ledger A read, reports `R fb` first, and whichever rename lands second erases
+  # the other's row: one row of two, at any load, because no step here is decided by a clock.
+  # A writer's exit is an event too, and a seamed writer never waits unannounced (see the seam
+  # in `record`, and its one stated limit), so a seam whose event line is gone refuses here
+  # rather than hangs.
+  _ps="$(mktemp -d)"; _pf="$(mktemp -d)"; mkdir -p "${_pf}/_bmad-output"
+  printf '%s\n' "$$" > "${_ps}/pid"; : > "${_ps}/hold.fa"; : > "${_ps}/hold.fb"
+  mkfifo "${_ps}/ev"; exec 3<>"${_ps}/ev"
+  _gw() { # _gw <id>: one seamed writer, then its exit as an event
+    _wr=0
+    AI_DLC_GATE_CHECKPOINT_PROBE_SEAM="$_ps" bash "$_me" --root "$_pf" --nonce "$_n" record "$1" PASS >/dev/null 2>&1 || _wr=$?
+    printf 'X %s %s\n' "$1" "$_wr" >> "${_ps}/ev"
+  }
+  _gw fa & _pa=$!
+  read -r _ea <&3
+  if [ "$_ea" != "R fa" ]; then
+    : > "${_ps}/go.fa"; wait "$_pa"; exec 3<&-
+    echo "gate-checkpoint SELF-PROBE FAIL: writer A's first event was '${_ea}', expected 'R fa' -- seam point (1) never held it between its read and its rename, so no interleaving was forced." >&2; exit 2
+  fi
+  _gw fb & _pb=$!
+  read -r _eb <&3
+  : > "${_ps}/go.fa"; : > "${_ps}/go.fb"
+  wait "$_pa" "$_pb"; exec 3<&-
+  _rows="$(bash "$_me" --root "$_pf" --nonce "$_n" list 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$_eb" != "L fb" ] || [ "$_rows" != "2" ]; then
+    echo "gate-checkpoint SELF-PROBE FAIL: while writer A held between its read and its rename, writer B's first event was '${_eb}' (expected 'L fb', waiting on the lock) and the ledger kept ${_rows} of 2 rows -- the read-modify-write is not serialised." >&2; exit 2
+  fi
+
+  # Direction 11: twenty concurrent writers lose nothing. Seamed, so a writer waits on the
+  # holder's release instead of a 200-try clock: the count cannot move with load.
   _pc="$(mktemp -d)"; mkdir -p "${_pc}/_bmad-output"
+  _ps="$(mktemp -d)"; printf '%s\n' "$$" > "${_ps}/pid"
   _i=1
   while [ "$_i" -le 20 ]; do
-    bash "$_me" --root "$_pc" --nonce "$_n" record "c${_i}" PASS >/dev/null 2>&1 &
+    AI_DLC_GATE_CHECKPOINT_PROBE_SEAM="$_ps" bash "$_me" --root "$_pc" --nonce "$_n" record "c${_i}" PASS >/dev/null 2>&1 &
     _i=$(( _i + 1 ))
   done
   wait
   _rows="$(bash "$_me" --root "$_pc" --nonce "$_n" list 2>/dev/null | wc -l | tr -d ' ')"
   [ "$_rows" = "20" ] || { echo "gate-checkpoint SELF-PROBE FAIL: 20 concurrent records landed ${_rows} rows." >&2; exit 2; }
 
-  # Direction 11: `open` refuses a non-canonical nonce and leaves the open gate unchanged;
+  # Direction 12: UNSEAMED, the shipped bound stands. A lock held by hand (never by a racing
+  # writer) and `sleep` shadowed by an exported function that returns at once and logs its
+  # argument: the writer must try 200 times, sleep 0.05 between tries (199 sleeps), refuse with
+  # the shipped text, exit 2 and write no ledger. Deterministic, it costs no real sleeping, and
+  # the function forks nothing, so the arm's cost is the writer's own 200 `mkdir` attempts.
+  _pl="$(mktemp -d)"; _lk="${_pl}/_bmad-output/.gate-checkpoint/${_n}.tsv.lock"; mkdir -p "$_lk"
+  _sb="$(mktemp -d)"; : > "${_sb}/slept"
+  GCK_PROBE_SLEPT="${_sb}/slept"; export GCK_PROBE_SLEPT
+  sleep() { printf '%s\n' "$1" >> "$GCK_PROBE_SLEPT"; }
+  export -f sleep
+  _wr=0
+  _err="$(bash "$_me" --root "$_pl" --nonce "$_n" record h PASS 2>&1 >/dev/null)" || _wr=$?
+  unset -f sleep; unset GCK_PROBE_SLEPT
+  _l1="$(printf '%s\n' "$_err" | head -1)"
+  _sl="$(wc -l < "${_sb}/slept" | tr -d ' ')"; _sv="$(sort -u "${_sb}/slept" | tr '\n' ' ')"
+  if [ "$_wr" != "2" ] || [ "$_l1" != "gate-checkpoint: FAIL -- could not take ${_lk} after 200 tries." ] \
+     || [ "$_sl" != "199" ] || [ "$_sv" != "0.05 " ] || [ -e "${_pl}/_bmad-output/.gate-checkpoint/${_n}.tsv" ]; then
+    echo "gate-checkpoint SELF-PROBE FAIL: an unseamed writer against a held lock exited ${_wr} after ${_sl} sleep(s) of '${_sv}' and said '${_l1}' -- the shipped bound (200 tries, sleep 0.05, refusal, exit 2, no write) moved." >&2; exit 2
+  fi
+
+  # Direction 13: `open` refuses a non-canonical nonce and leaves the open gate unchanged;
   # a canonical one (a hyphenated gate type included) opens; `record` is not gated.
   if bash "$_me" --root "$_pr" --nonce "implementation-1970-01-01T000004Z" open >/dev/null 2>&1; then
     echo "gate-checkpoint SELF-PROBE FAIL: a hyphenated-date nonce opened." >&2; exit 2
@@ -230,7 +288,7 @@ if [ "$PROBE" = "1" ]; then
   bash "$_me" --root "$_pr" --nonce "probe-free-form" record 1 PASS >/dev/null 2>&1 \
     || { echo "gate-checkpoint SELF-PROBE FAIL: a non-canonical record was refused; only open is gated." >&2; exit 2; }
 
-  # Direction 12: a gate LEFT at a step entry re-opens on `record` and on `done` at LEFT's
+  # Direction 14: a gate LEFT at a step entry re-opens on `record` and on `done` at LEFT's
   # nonce, and on nothing else. Each world starts closed, with LEFT naming _ln.
   _ln="story-19700101T000006Z"; _lo="story-19700101T000007Z"
   _left_world() {
@@ -244,7 +302,7 @@ if [ "$PROBE" = "1" ]; then
   _cur="$(bash "$_me" --root "$_lw" current 2>/dev/null || true)"
   [ "$_cur" = "$_ln" ] && [ ! -f "${_lw}/_bmad-output/.gate-checkpoint/LEFT" ] \
     || { echo "gate-checkpoint SELF-PROBE FAIL: record at LEFT's nonce did not re-open it (current '${_cur}')." >&2; exit 2; }
-  # Direction 14: the re-open puts STEP back on the gate's own step, keeping STEP's session.
+  # Direction 15: the re-open puts STEP back on the gate's own step, keeping STEP's session.
   _stp="$(cat "${_lw}/_bmad-output/.gate-checkpoint/STEP" 2>/dev/null || true)"
   [ "$_stp" = "create-story${_tab}sess-a" ] \
     || { echo "gate-checkpoint SELF-PROBE FAIL: the re-open did not restore STEP to the gate's step (STEP '${_stp}')." >&2; exit 2; }
@@ -270,7 +328,7 @@ if [ "$PROBE" = "1" ]; then
   _cur="$(bash "$_me" --root "$_lw" current 2>/dev/null || true)"
   [ -z "$_cur" ] && [ -f "${_lw}/_bmad-output/.gate-checkpoint/LEFT" ] \
     || { echo "gate-checkpoint SELF-PROBE FAIL: list re-opened a left gate (current '${_cur}'); gate-transition.sh runs list on every story close." >&2; exit 2; }
-  # Direction 13: open, and close in both of its branches, clear LEFT.
+  # Direction 16: open, and close in both of its branches, clear LEFT.
   _left_world
   bash "$_me" --root "$_lw" --nonce "$_lo" open >/dev/null 2>&1 || _fail=1
   [ ! -f "${_lw}/_bmad-output/.gate-checkpoint/LEFT" ] \
@@ -286,7 +344,7 @@ if [ "$PROBE" = "1" ]; then
     || { echo "gate-checkpoint SELF-PROBE FAIL: close of the open marker kept LEFT at its nonce." >&2; exit 2; }
 
   [ "$_fail" = "0" ] || { echo "gate-checkpoint SELF-PROBE FAIL: a well-formed record returned non-zero." >&2; exit 2; }
-  echo "gate-checkpoint SELF-PROBE PASS: PASS/SKIP settle, FAIL/PENDING do not, a fresh nonce reads empty, bad verdicts and verdictless rows refuse, re-records replace, current reads the OPEN marker (not mtime) and open/close move it, open refuses a non-canonical nonce, 20 concurrent records land 20 rows, a LEFT gate re-opens on record and done at its nonce and not at another nonce or on list, the re-open restores STEP to the gate's own step (and invents none), open and close clear LEFT."
+  echo "gate-checkpoint SELF-PROBE PASS: PASS/SKIP settle, FAIL/PENDING do not, a fresh nonce reads empty, bad verdicts and verdictless rows refuse, re-records replace, current reads the OPEN marker (not mtime) and open/close move it, open refuses a non-canonical nonce, a forced read-rename interleaving keeps both rows, 20 concurrent records land 20 rows, an unseamed writer keeps the shipped 200-try refusal, a LEFT gate re-opens on record and done at its nonce and not at another nonce or on list, the re-open restores STEP to the gate's own step (and invents none), open and close clear LEFT."
   exit 0
 fi
 
@@ -480,8 +538,35 @@ case "$ACTION" in
     # lock is the race with one more step. Tabs are the field separator and the note is
     # stripped of them for that reason.
     _note="$(printf '%s' "$_note" | tr '\t\n' '  ')"
+    # THE PROBE SEAM (BL-868). Set ONLY by --self-probe, on its own writers, to a scratch dir
+    # holding `pid` (the probe's pid). Unset, every line below it runs exactly as without it.
+    # Set, it does three things and nothing else: point (1) appends `R <id>` to `<seam>/ev`
+    # after the read, before the rename, and holds there while `<seam>/hold.<id>` exists
+    # until `<seam>/go.<id>` appears; point (2) appends `L <id>` on the FIRST failed mkdir;
+    # and the lock wait is taken off the 200-try bound, waiting on the holder's release
+    # instead, so a probe verdict never depends on how fast twenty writers are scheduled.
+    # A probe that dies releases its writers: each one exits 2 once `pid` is gone.
+    # A SEAMED WRITER NEVER WAITS UNANNOUNCED. The probe waits only on events, so a writer
+    # that held or waited without first telling it would leave both blocked with no clock to
+    # end it. Each wait is therefore licensed by `_seam_ev`, which only the SAME statement
+    # that appends its event sets: delete either event line and the writer exits 2 at the
+    # wait instead, the probe reads that exit as the writer's event and refuses. The limit,
+    # stated: an edit that keeps `&& _seam_ev=...` while dropping only the append before it
+    # still waits silently; no event-only construction can tell an event that was never
+    # sent from one not sent YET, and a clock is the thing this seam exists to remove.
+    _seam="${AI_DLC_GATE_CHECKPOINT_PROBE_SEAM:-}"; _seam_ev=""
     _tries=0
     until mkdir "$_lock" 2>/dev/null; do
+      # PROBE-SEAM(2) begin
+      if [ -n "$_seam" ]; then
+        [ "$_tries" -gt 0 ] || { printf 'L %s\n' "$_id" >> "${_seam}/ev" && _seam_ev=L; }
+        [ "$_seam_ev" = L ] || exit 2
+        _tries=$(( _tries + 1 ))
+        kill -0 "$(cat "${_seam}/pid")" 2>/dev/null || exit 2
+        sleep 0.05
+        continue
+      fi
+      # PROBE-SEAM(2) end
       _tries=$(( _tries + 1 ))
       if [ "$_tries" -ge 200 ]; then
         echo "gate-checkpoint: FAIL -- could not take ${_lock} after ${_tries} tries." >&2
@@ -494,6 +579,16 @@ case "$ACTION" in
     { [ -f "$LEDGER" ] && awk -F'\t' -v id="$_id" '$1 != id' "$LEDGER"
       printf '%s\t%s\t%s\t%s\n' "$_id" "$_v" "$_now" "$_note"
     } > "$_tmp" 2>/dev/null || { rmdir "$_lock" 2>/dev/null; echo "gate-checkpoint: FAIL -- cannot write ${LEDGER}." >&2; rm -f "$_tmp"; exit 2; }
+    # PROBE-SEAM(1) begin
+    if [ -n "$_seam" ]; then
+      printf 'R %s\n' "$_id" >> "${_seam}/ev" && _seam_ev=R
+      while [ -e "${_seam}/hold.${_id}" ] && [ ! -e "${_seam}/go.${_id}" ]; do
+        [ "$_seam_ev" = R ] || { rmdir "$_lock" 2>/dev/null; rm -f "$_tmp"; exit 2; }
+        kill -0 "$(cat "${_seam}/pid")" 2>/dev/null || { rmdir "$_lock" 2>/dev/null; rm -f "$_tmp"; exit 2; }
+        sleep 0.05
+      done
+    fi
+    # PROBE-SEAM(1) end
     mv "$_tmp" "$LEDGER" || { rmdir "$_lock" 2>/dev/null; echo "gate-checkpoint: FAIL -- cannot replace ${LEDGER}." >&2; rm -f "$_tmp"; exit 2; }
     rmdir "$_lock" 2>/dev/null || true
     printf 'gate-checkpoint: %s recorded %s in %s\n' "$_id" "$_v" "$LEDGER" >&2

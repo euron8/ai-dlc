@@ -1,1 +1,2 @@
 core/scripts/validate-locked-anchor.sh
+core/fixtures/lib/mutant.sh

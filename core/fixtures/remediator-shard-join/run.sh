@@ -37,7 +37,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # under the mutant). A mutant whose drive reads one cell alone writes `twins=-`. The unmutated arm a
 # mutant guards is the live run's own arm, never re-run per mutant: its pass sets the B_ flag the kill
 # is gated on. The matrix is each mutant's own drive cells, printed one row per mutant by the REMEASURE
-# command below, and is re-measured whenever an arm or a mutant is added or changed. Each mutant
+# command below. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per
+# distinct state") requires. Each mutant
 # co-trips no other arm, measured at authoring.
 # MUTANT-MATRIX HX1 decides=L4 twins=- why=the hook drive reads L4 alone, one conjunction of every key
 # MUTANT-MATRIX HX2 decides=L4 twins=- why=the hook drive reads L4 alone, one conjunction of every key

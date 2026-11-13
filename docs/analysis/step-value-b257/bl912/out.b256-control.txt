@@ -1,0 +1,105 @@
+# command: python3 -I docs/analysis/step-value-b257/bl912/bl912_counts.py 2026-11-12T10:23:35Z  (b256 control window: latest lead record the b256 reading read; graph ref ed61de745)
+WIN_END 2026-11-12T10:23:35Z | latest record read 2026-11-12T10:23:34.771Z in e444bf13 | records dropped after WIN_END 8144
+lead transcripts 160
+impossible tokens: pipeline-snapshot-QZX9.md 0 snapshot-update-QZX9.sh 0
+s321 eight-transcript snapshot file-tool calls {'Edit': 428, 'Write': 7} 435
+== s322 snapshot file-tool attempts 11 is_error {True: 11} by step {'implementation': 4, 'requirements': 1, 'handoff': 1, 'stories-test-strategy': 1, 'deploy-validate': 3, 'retro': 1}
+s322 attempts by result: deny 10 other 1
+   2026-11-11T11:09:09.880Z 6249c621 Edit implementation is_error True deny
+   2026-11-09T16:26:56.452Z 6c14d949 Edit requirements is_error True deny
+   2026-11-09T19:44:44.247Z 6c14d949 Edit handoff is_error True other
+   2026-11-10T09:30:55.675Z 9a646a3b Edit stories-test-strategy is_error True deny
+   2026-11-12T01:04:30.723Z e444bf13 Edit implementation is_error True deny
+   2026-11-12T01:04:30.725Z e444bf13 Edit implementation is_error True deny
+   2026-11-12T01:04:30.726Z e444bf13 Edit implementation is_error True deny
+   2026-11-12T05:44:50.015Z e444bf13 Edit deploy-validate is_error True deny
+   2026-11-12T05:44:50.017Z e444bf13 Edit deploy-validate is_error True deny
+   2026-11-12T05:44:50.019Z e444bf13 Edit deploy-validate is_error True deny
+   2026-11-12T09:27:07.779Z e444bf13 Edit retro is_error True deny
+== snapshot-update.sh Bash calls per sprint {320: 2, 321: 938, 322: 1062}
+s322 is_error split {False: 980, True: 82}
+snapshot-update.sh calls per (sprint, step):
+   320 pre-step 1
+   320 stories-test-strategy 1
+   321 deploy-validate 219
+   321 handoff 8
+   321 implementation 541
+   321 pre-step 6
+   321 retro 16
+   321 route 2
+   321 sprint-review 99
+   321 stories-test-strategy 45
+   321 ui-direction 2
+   322 architecture 85
+   322 bug-investigation 50
+   322 carry-over-evaluation 127
+   322 deploy-validate 65
+   322 handoff 32
+   322 implementation 266
+   322 pre-step 2
+   322 requirements 141
+   322 retro 29
+   322 route 27
+   322 sprint-review 46
+   322 stories-test-strategy 192
+== active hours by sprint/step (heuristic): total, snapEdit, snapUpd
+320 architecture total 1.89 snapEdit 0.40 snapUpd 0.00
+320 carry-over-evaluation total 3.97 snapEdit 0.94 snapUpd 0.00
+320 deploy-validate total 4.18 snapEdit 0.78 snapUpd 0.00
+320 handoff total 0.87 snapEdit 0.05 snapUpd 0.00
+320 implementation total 15.59 snapEdit 2.75 snapUpd 0.00
+320 pre-step total 7.27 snapEdit 0.00 snapUpd 0.00
+320 requirements total 3.60 snapEdit 1.16 snapUpd 0.00
+320 retro total 1.32 snapEdit 0.02 snapUpd 0.00
+320 route total 0.54 snapEdit 0.00 snapUpd 0.00
+320 sprint-review total 0.93 snapEdit 0.17 snapUpd 0.00
+320 stories-test-strategy total 9.62 snapEdit 2.07 snapUpd 0.00
+320 ui-direction total 0.10 snapEdit 0.00 snapUpd 0.00
+321 architecture total 4.49 snapEdit 1.35 snapUpd 0.00
+321 deploy-validate total 8.73 snapEdit 0.00 snapUpd 2.30
+321 handoff total 1.44 snapEdit 0.06 snapUpd 0.01
+321 implementation total 20.92 snapEdit 0.00 snapUpd 4.84
+321 pre-step total 5.31 snapEdit 0.00 snapUpd 0.14
+321 requirements total 6.48 snapEdit 1.30 snapUpd 0.00
+321 retro total 1.37 snapEdit 0.01 snapUpd 0.04
+321 route total 0.22 snapEdit 0.00 snapUpd 0.01
+321 sprint-review total 3.45 snapEdit 0.00 snapUpd 0.91
+321 stories-test-strategy total 10.09 snapEdit 1.69 snapUpd 0.54
+322 architecture total 3.13 snapEdit 0.00 snapUpd 0.97
+322 bug-investigation total 1.28 snapEdit 0.00 snapUpd 0.30
+322 carry-over-evaluation total 4.13 snapEdit 0.00 snapUpd 0.80
+322 deploy-validate total 1.99 snapEdit 0.00 snapUpd 0.23
+322 handoff total 1.61 snapEdit 0.00 snapUpd 0.13
+322 implementation total 10.47 snapEdit 0.01 snapUpd 1.45
+322 pre-step total 3.94 snapEdit 0.00 snapUpd 0.00
+322 requirements total 5.51 snapEdit 0.00 snapUpd 1.41
+322 retro total 1.13 snapEdit 0.00 snapUpd 0.27
+322 route total 0.81 snapEdit 0.00 snapUpd 0.09
+322 sprint-review total 1.57 snapEdit 0.00 snapUpd 0.29
+322 stories-test-strategy total 4.54 snapEdit 0.00 snapUpd 0.69
+== groups (heuristic h): total, snapEdit, snapUpd, snapEdit+snapUpd, and per story
+320 verdict-group-4 total 19.08 snapEdit 4.56 snapUpd 0.00 snap 4.56 | per story (13) total 1.468 snapEdit 0.351 snapUpd 0.000 snap 0.351
+320 planning total 19.19 snapEdit 4.56 snapUpd 0.00 snap 4.56 | per story (13) total 1.476 snapEdit 0.351 snapUpd 0.000 snap 0.351
+320 planning+bug-investigation total 19.19 snapEdit 4.56 snapUpd 0.00 snap 4.56 | per story (13) total 1.476 snapEdit 0.351 snapUpd 0.000 snap 0.351
+320 implementation total 15.59 snapEdit 2.75 snapUpd 0.00 snap 2.75 | per story (13) total 1.200 snapEdit 0.212 snapUpd 0.000 snap 0.212
+320 planning+implementation total 34.78 snapEdit 7.32 snapUpd 0.00 snap 7.32 | per story (13) total 2.675 snapEdit 0.563 snapUpd 0.000 snap 0.563
+320 planning+bug-investigation+implementation total 34.78 snapEdit 7.32 snapUpd 0.00 snap 7.32 | per story (13) total 2.675 snapEdit 0.563 snapUpd 0.000 snap 0.563
+320 stories-test-strategy total 9.62 snapEdit 2.07 snapUpd 0.00 snap 2.07 | per story (13) total 0.740 snapEdit 0.159 snapUpd 0.000 snap 0.159
+320 bug-investigation total 0.00 snapEdit 0.00 snapUpd 0.00 snap 0.00 | per story (13) total 0.000 snapEdit 0.000 snapUpd 0.000 snap 0.000
+321 verdict-group-4 total 21.06 snapEdit 4.34 snapUpd 0.54 snap 4.88 | per story (25) total 0.842 snapEdit 0.174 snapUpd 0.022 snap 0.195
+321 planning total 21.12 snapEdit 4.34 snapUpd 0.54 snap 4.89 | per story (25) total 0.845 snapEdit 0.174 snapUpd 0.022 snap 0.195
+321 planning+bug-investigation total 21.12 snapEdit 4.34 snapUpd 0.54 snap 4.89 | per story (25) total 0.845 snapEdit 0.174 snapUpd 0.022 snap 0.195
+321 implementation total 20.92 snapEdit 0.00 snapUpd 4.84 snap 4.84 | per story (25) total 0.837 snapEdit 0.000 snapUpd 0.194 snap 0.194
+321 planning+implementation total 42.04 snapEdit 4.35 snapUpd 5.38 snap 9.73 | per story (25) total 1.682 snapEdit 0.174 snapUpd 0.215 snap 0.389
+321 planning+bug-investigation+implementation total 42.04 snapEdit 4.35 snapUpd 5.38 snap 9.73 | per story (25) total 1.682 snapEdit 0.174 snapUpd 0.215 snap 0.389
+321 stories-test-strategy total 10.09 snapEdit 1.69 snapUpd 0.54 snap 2.23 | per story (25) total 0.404 snapEdit 0.067 snapUpd 0.022 snap 0.089
+321 bug-investigation total 0.00 snapEdit 0.00 snapUpd 0.00 snap 0.00 | per story (25) total 0.000 snapEdit 0.000 snapUpd 0.000 snap 0.000
+322 verdict-group-4 total 17.30 snapEdit 0.00 snapUpd 3.87 snap 3.87 | per story (8) total 2.163 snapEdit 0.000 snapUpd 0.484 snap 0.484
+322 planning total 17.30 snapEdit 0.00 snapUpd 3.87 snap 3.87 | per story (8) total 2.163 snapEdit 0.000 snapUpd 0.484 snap 0.484
+322 planning+bug-investigation total 18.59 snapEdit 0.00 snapUpd 4.18 snap 4.18 | per story (8) total 2.323 snapEdit 0.000 snapUpd 0.522 snap 0.522
+322 implementation total 10.47 snapEdit 0.01 snapUpd 1.45 snap 1.46 | per story (8) total 1.308 snapEdit 0.001 snapUpd 0.181 snap 0.182
+322 planning+implementation total 27.77 snapEdit 0.01 snapUpd 5.32 snap 5.33 | per story (8) total 3.471 snapEdit 0.001 snapUpd 0.665 snap 0.667
+322 planning+bug-investigation+implementation total 29.05 snapEdit 0.01 snapUpd 5.63 snap 5.64 | per story (8) total 3.632 snapEdit 0.001 snapUpd 0.703 snap 0.705
+322 stories-test-strategy total 4.54 snapEdit 0.00 snapUpd 0.69 snap 0.69 | per story (8) total 0.567 snapEdit 0.000 snapUpd 0.086 snap 0.086
+322 bug-investigation total 1.28 snapEdit 0.00 snapUpd 0.30 snap 0.30 | per story (8) total 0.160 snapEdit 0.000 snapUpd 0.038 snap 0.038
+window control: s323 lead 0ef7ba46 first record 2026-11-13T08:16:50.213Z after WIN_END: True

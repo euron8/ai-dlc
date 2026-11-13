@@ -8,8 +8,9 @@
 # THE MUTANT MATRIX (mutant-battery rule). Per push each M mutant runs its DECIDING arm(s) and the TWIN arm(s) named
 # below, the arm list its run_mutant / run_hook_mutant call carries; a DC mutant runs the declared copy, whose arms
 # are A and L. With --matrix every M mutant runs against EVERY arm and one `MATRIX <mutant> <arm> DEAD|GREEN` row is
-# printed per cell; a plain run executes no matrix-only cell. RE-MEASURE whenever an arm or a mutant is added or
-# changed. hermetic-run.sh forwards no argument, so the matrix is run directly, from the repo root.
+# printed per cell; a plain run executes no matrix-only cell. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. hermetic-run.sh forwards no
+# argument, so the matrix is run directly, from the repo root.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/hermetic-runner/run.sh --matrix
 # MUTANT-MATRIX M1 decides=B twins=D
 # MUTANT-MATRIX M2 decides=A,C,D,L twins=B

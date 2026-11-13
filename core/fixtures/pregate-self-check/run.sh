@@ -29,10 +29,13 @@
 # each mutant on its deciding cells and checks its twins on the SAME captured output, which costs no
 # receipt run. Each mutant's twins are the other mutant's own cells: the two mutations sit on different
 # lines of the self-check, so a kill that leaked across them would show there.
-# The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command
-# below, run from the repo root. It scores every mutant against every cell and prints one MATRIX line each.
-# MUTANT-MATRIX m1 decides=exit1,m1-moved,differs twins=m2-refused,m2-names
-# MUTANT-MATRIX m2 decides=exit1,m2-refused,m2-names,differs twins=m1-moved
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. Run the REMEASURE command below, from the repo root. It scores every mutant against every cell
+# and prints one MATRIX line each.
+# MUTANT-MATRIX m1 decides=exit1,m1-moved,differs twins=m2-refused,m2-names,m3-moved
+# MUTANT-MATRIX m2 decides=exit1,m2-refused,m2-names,differs twins=m1-moved,m3-moved
+# MUTANT-MATRIX m3 decides=exit1,m3-moved,differs twins=m1-moved,m2-refused,m2-names
+# Measured by the REMEASURE command below: m3 decides=exit1:RED,m3-moved:RED,differs:RED twins=m1-moved:GREEN,m2-refused:GREEN,m2-names:GREEN others=0/0.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/pregate-self-check/run.sh --matrix
 set -uo pipefail
 
@@ -75,12 +78,12 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # 11 = a1: 2 notes, plus m1: 3 notes on either branch, plus m2: 1 anchor-uniqueness note and 4 notes on either
 # branch (applied, or DID NOT APPLY; each mutant's branches are exclusive), plus the rule-9 arm: 1 note.
 # The count is asserted on a plain run only; --matrix emits the same notes but no rule-9 `ok`.
-EXPECTED_ASSERTIONS=11
+EXPECTED_ASSERTIONS=15
 # The shared mutant-kill helper: a kill is emitted only through mutant_killed, behind a same-run base-pass flag.
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
-WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes'
+WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes'
 
 cd "$REPO" || exit 2
 
@@ -107,9 +110,10 @@ if grep -qxF "$WANT" "$WORK/a1.out"; then ok "a1 control: the line '$WANT' is pr
 # A cell is RED on a mutant's captured output when it reads as changed from the unmutated verdict. Both the
 # kills below, the per-push twin check and the --matrix score read these predicates, so they cannot drift.
 # Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
-M1_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=1 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes'
-M2_WANT='A=2 B=2 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=no J=2 Jnamed=no'
-MX_CELLS='exit1 m1-moved m2-refused m2-names differs'
+M1_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=1 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes'
+M2_WANT='A=2 B=2 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=no J=2 Jnamed=no Hcwd=2 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes'
+M3_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=0 Hresn=no Htree=0 Htreen=no Habs=0 Habsn=no Hbehind=0 Hbehindn=no'
+MX_CELLS='exit1 m1-moved m2-refused m2-names m3-moved differs'
 cell_red() { # cell_red <cell> <mutant>: the mutant's output and receipt exit are in $WORK/<mutant>.out and .rc
   local c="$1" m="$2" rc
   rc="$(cat "$WORK/$m.rc")" || return 2
@@ -117,6 +121,7 @@ cell_red() { # cell_red <cell> <mutant>: the mutant's output and receipt exit ar
     exit1)      [ "$rc" -eq 1 ] ;;
     m1-moved)   grep -qxF "$M1_WANT" "$WORK/$m.out" ;;
     m2-refused) grep -qxF "$M2_WANT" "$WORK/$m.out" ;;
+    m3-moved)   grep -qxF "$M3_WANT" "$WORK/$m.out" ;;
     m2-names)   grep -qF 'A| pregate-self-check: the run died before its verdict' "$WORK/$m.out" \
                   && grep -qF 'ai_dlc_m2_unbound: unbound variable' "$WORK/$m.out" ;;
     differs)    ! grep -qxF "$WANT" "$WORK/$m.out" ;;
@@ -220,6 +225,30 @@ else
   BROKEN=$((BROKEN + 1))
 fi
 
+# --- m3: the old HOOK line (the hook a push would run is not resolved; the tree's own file is run) -----------
+# The whole HOOK-RESOLVE block is replaced by the pre-BL-1020 assignment, so the Hres, Htree and Habs worlds, which
+# all hold a valid tree hook, run it and exit 0 instead of refusing.
+n_h3="$(grep -cxF '# HOOK-RESOLVE-BEGIN' "$SUBJECT")" || n_h3=0
+if [ "$n_h3" -eq 1 ]; then ok "m3 mutant applied: the HOOK-RESOLVE block occurs exactly once in the subject"; B_m3_anchor=1
+else bad "m3 mutant: the HOOK-RESOLVE block occurs $n_h3 times in the subject, expected exactly 1"; fi
+MUT3="$WORK/m3-pregate-self-check.sh"
+awk '$0 == "# HOOK-RESOLVE-BEGIN" { print "HOOK=\"$ROOT/.githooks/pre-push\""; skip = 1; next }
+     $0 == "# HOOK-RESOLVE-END" { skip = 0; next }
+     !skip { print }' "$SUBJECT" > "$MUT3" 2>/dev/null
+if [ "$n_h3" -eq 1 ] && [ -s "$MUT3" ] && ! cmp -s "$SUBJECT" "$MUT3"; then
+  bash "$RECEIPT" "$MUT3" > "$WORK/m3.out" 2>&1; echo $? > "$WORK/m3.rc"; m3="$(cat "$WORK/m3.rc")"
+  if cell_red exit1 m3; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m3_anchor:-0} ))" m3 "m3 mutant: receipt exit 1 (killed)"; else bad "m3 mutant SURVIVED: receipt exit $m3, expected 1"; fi
+  if cell_red m3-moved m3; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m3_anchor:-0} ))" m3 "m3 mutant: Hres, Htree and Habs each ran the hook (0) and named nothing"; else bad "m3 mutant SURVIVED: expected the line '$M3_WANT' (got: $(tail -1 "$WORK/m3.out"))"; fi
+  if cell_red differs m3; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m3_anchor:-0} ))" m3 "m3 mutant: output differs from the control"; else bad "m3 mutant SURVIVED: output equals the control"; fi
+  mx_twins m3
+  mx_matrix_only m3
+else
+  bad "m3 mutant: DID NOT APPLY (the block markers were not unique, or awk died)"
+  bad "m3 mutant: DID NOT APPLY (no kill line to check)"
+  bad "m3 mutant: DID NOT APPLY (no differential)"
+  BROKEN=$((BROKEN + 1))
+fi
+
 # --- RULE 9: a plain run executes NO matrix-only cell ------------------------------------------
 # Every matrix-only score appends `mx-score` to the ledger before anything else; the per-push twin check
 # appends `plain-twins` to the SAME ledger. The CONTROL is that second line: it must be present, so a zero
@@ -233,7 +262,7 @@ if [ "$MODE" = plain ]; then
 else
   # The header is bound to the measured set both ways: one MUTANT-MATRIX row per mutant, one mutant per row.
   mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
-  [ "$mx_hdr" = "m1 m2 " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr], expected [m1 m2 ]"; }
+  [ "$mx_hdr" = "m1 m2 m3 " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr], expected [m1 m2 m3 ]"; }
   echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
   [ "$MX_FAILS" -eq 0 ] || fails=$((fails + MX_FAILS))
 fi

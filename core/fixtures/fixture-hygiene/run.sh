@@ -55,7 +55,8 @@
 # MUTANT-MATRIX MM4B decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4 hands m4base a fixed M4
 # MUTANT-MATRIX MH9 decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H9's row() prints nothing
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-hygiene/run.sh --matrix
-# Re-measure it whenever an arm or a mutant is added or changed.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 #   MH1  H1's branch verdict made false        -> D1 reads the self-probe refusal naming H1
 #   MH2  H2's branch verdict made false        -> D2 reads the self-probe refusal naming H2
 #   MH3  H3's offender print removed           -> D3 reads the self-probe refusal naming H3

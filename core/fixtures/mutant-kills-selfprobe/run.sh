@@ -57,7 +57,8 @@
 # MUTANT-MATRIX MM4A decides=C twins=- why=the M4 probe case added refuses the whole run when m4's arm default is M7
 # MUTANT-MATRIX MM4P decides=C twins=- why=the M4 probe case m7added refuses the whole run when m4 hands m4cmp a fixed M4
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/mutant-kills-selfprobe/run.sh --matrix
-# Re-measure it whenever the arm or a mutant is added or changed: --matrix drives every mutant once and prints, per
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# --matrix drives every mutant once and prints, per
 # mutant, its rc, whether C still holds, and the refusal line it died on.
 #
 # THE IN-PROCESS CELLS of this fixture are its own cells.decl: every validator start is one e2e cell, tagged at its

@@ -18,7 +18,8 @@
 #                 fabricated citation too.
 # MUTANT MATRIX. --matrix prints a MATRIX row per mutant over every cell. Each mutant is scored on its deciding arm (which must go red) and on its named twins
 # (arms the measured matrix shows GREEN under it); the exact vector this file scores per mutant is the
-# recorded matrix, and the matrix is re-measured whenever an arm or a mutant is added or changed.
+# recorded matrix. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
+# per distinct state") requires.
 # Arms: dir-empty, dir-sidecar, dir-silent, dir-real, both-flags (std cells); gate-padded, gate-blank,
 # gate-whole, hook-padded, hook-blank, hook-whole (the six floor cells). R also reddens dir-sidecar.
 # MUTANT-MATRIX R decides=dir-empty twins=dir-silent,dir-real,dir-empty+silent.jsonl

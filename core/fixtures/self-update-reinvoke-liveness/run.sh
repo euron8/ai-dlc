@@ -30,8 +30,8 @@
 # the new probe) and sliceleft (the second invocation's slice is empty by content). Each mutant is a flow whose
 # output is read through its DECIDING cells and its named TWIN, which it must leave GREEN. No cell costs a
 # flow: they read the output the mutant's flow already wrote. `run.sh --matrix` reads every cell and prints one
-# MATRIX line per mutant. The matrix is re-measured whenever an arm or a mutant is added or changed, by the
-# REMEASURE command below, run from the repo root.
+# MATRIX line per mutant. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
+# per distinct state") requires. Run the REMEASURE command below, from the repo root.
 # also trips: M1 -> inv2step1
 # also trips: M2 -> inv2step3,size,tree2 (inv2step3 follows from the missing engine: the re-invoke then runs the old engine)
 # MUTANT-MATRIX M1 decides=inv2step3 twins=tree2

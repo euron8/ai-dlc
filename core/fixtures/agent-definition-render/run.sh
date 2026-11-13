@@ -68,7 +68,8 @@
 # MUTANT-MATRIX-FULL skip-the-arm worlds=hook-world-A,hook-world-D,hook-world-C,hook-world-U why=measured: a skipped arm moves all four worlds (A unrendered, D unrefused, C no OK line, U exits 0), so no world is left green to serve as a twin
 # MUTANT-MATRIX-DYNAMIC mut-hmut-label why=mut() and hmut() pass their first argument "$label" to mutant_killed; every caller (mut renders-model-less-roles ..., hmut never-render ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/agent-definition-render/run.sh --matrix
-# The matrix is re-measured whenever an arm or a mutant is added or changed. Under --matrix every
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Under --matrix every
 # mutant runs ALL 14 arms (or all four hook worlds) and prints one "MATRIX <mutant> ..." row per
 # mutant, one cell per arm or world written <name>:<value>(killed=yes|no); the names in decides= and
 # twins= are exactly those cell names (arms by their function suffix, worlds as hook-world-A, -D, -C

@@ -22,8 +22,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # call; each rr mutant runs the full call of its receipt copy, after the unmodified twin of that copy passed C3. The ctl
 # cell and the twin print no label of their own (the helper refuses a `FAIL ctl:` line, and the twin's ok line is a
 # sentence), so every row is `twins=-` with that reason. The full mutant x cell matrix is printed by `--matrix` (one
-# MATRIX-ROW per mutant: the cells its full receipt call fails, or for an rr mutant whether C3 held), re-measured
-# whenever a cell or a mutant is added or changed.
+# MATRIX-ROW per mutant: the cells its full receipt call fails, or for an rr mutant whether C3 held). The matrix
+# is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
 # Measured (--matrix): every row's deciding cell is in the set its full receipt call trips, and no mutant trips
 # ctl; each rr mutant leaves C3 failed with exit 0 and no cell tripped, so it fails C3 alone.
 # MUTANT-MATRIX cn-n1-no-normaliser decides=inner twins=- why=its twin is bl815 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it

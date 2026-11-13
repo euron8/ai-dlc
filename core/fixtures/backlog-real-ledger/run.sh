@@ -33,8 +33,9 @@
 #
 # Usage: run.sh
 # Exit:  0 = both arms hold, 1 = one regressed, 2 = fixture broken.
-# The mutant x arm matrix is MEASURED by the --matrix argv mode and is re-measured whenever an arm or
-# a mutant is added or changed. The recorded matrix plus the twin replaces the exact-vector assertion.
+# The mutant x arm matrix is MEASURED by the --matrix argv mode. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. The recorded
+# matrix plus the twin replaces the exact-vector assertion.
 # MUTANT-MATRIX m-r9call decides=r9-call twins=j1-pop
 # MUTANT-MATRIX m-j1-nobase decides=j1-m1x twins=m1x-pop
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-real-ledger/run.sh --matrix

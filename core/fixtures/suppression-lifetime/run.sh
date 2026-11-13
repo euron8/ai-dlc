@@ -33,7 +33,8 @@
 # MUTANT MATRIX. "A mutant fails only its own assertion" (.claude/rules/fixture-mutants.md) is a
 # test-quality property, measured ONCE for every mutant against EVERY arm and recorded below; per push
 # each mutant runs its deciding arm(s) (must flip) and one twin (must stay green). The matrix is
-# re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
+# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# Run the REMEASURE command below.
 # decides= is the minimal set the mutant is about; co-tripping cells are recorded in the comments above, not driven per push.
 # a_whitespace_tolerance_dropped also trips 16 further arms in the measured matrix (the metrics reader goes blind, so every lifetime read moves).
 # c_ifs_delimiter also trips 73 further arms in the measured matrix (wholesale delimiter break).

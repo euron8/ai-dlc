@@ -50,7 +50,8 @@
 # mutated deriver, deny-rewritten and run under the sandbox, denies root metadata/existence. A mutant's row lists the
 # emitters it breaks (decides) and the emitter it could plausibly co-trip but must leave GREEN (twins). Every rendering
 # runs once and every cell reads that run's rc file, so a twin costs no extra render and no extra run. The matrix is re-measured
-# whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the repo root. It
+# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
+# command below, from the repo root. It
 # scores every mutant against every emitter and prints one MATRIX line each.
 # MUTANT-MATRIX markdir-default decides=def twins=lm
 # MUTANT-MATRIX markdir-ov-lm decides=lm,ov twins=def

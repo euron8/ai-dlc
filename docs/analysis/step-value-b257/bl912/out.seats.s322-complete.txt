@@ -1,0 +1,24 @@
+# command: EXTRACT_WIN_END=2026-11-12T12:32:58Z python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/spawns.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/analyze.py $OUT && python3 -I docs/analysis/step-value-b257/bl912/bl912_seats.py $OUT  (graph ref f7e60625b)
+control: steps.csv token total, every row and seat: 24685508442
+control: s319 whole pipeline bucket subagent $ per story: token-equivalent $88.1 API $88.1
+control: s321 whole pipeline bucket subagent $ per story: token-equivalent $75.1 API $75.1
+-- stories-test-strategy [pipeline]
+   s320 (13 stories): agent wait 0.32 h; 1.13 h gap-inclusive (gap 0.43 h), token-equivalent $47.6 (API $47.6), 79.2M tokens; lead active 0.71 h, lead $5.6, subagent active 3.74 h, subagent $42.0; lead-seat local share 0% of 1023 calls
+   s321 (25 stories): agent wait 0.33 h; 0.79 h gap-inclusive (gap 0.42 h), token-equivalent $26.9 (API $26.1), 47.5M tokens; lead active 0.38 h, lead $3.3 (API $2.6), subagent active 2.43 h, subagent $23.6; lead-seat local share 30% of 1309 calls
+   s322 (8 stories): agent wait 0.41 h; 0.93 h gap-inclusive (gap 0.41 h), token-equivalent $26.4 (API $20.8), 58.9M tokens; lead active 0.52 h, lead $5.6 (API $0.0), subagent active 2.01 h, subagent $20.8; lead-seat local share 100% of 1180 calls
+-- verdict group (4 steps) [pipeline]
+   s320 (13 stories): agent wait 1.21 h; 5.75 h gap-inclusive (gap 4.37 h), token-equivalent $87.4 (API $87.4), 152.0M tokens; lead active 1.38 h, lead $11.2, subagent active 6.66 h, subagent $76.3; lead-seat local share 0% of 2008 calls
+   s321 (25 stories): agent wait 0.70 h; 1.61 h gap-inclusive (gap 0.84 h), token-equivalent $50.9 (API $50.1), 90.5M tokens; lead active 0.78 h, lead $6.6 (API $5.8), subagent active 4.63 h, subagent $44.3; lead-seat local share 15% of 2530 calls
+   s322 (8 stories): agent wait 2.40 h; 5.02 h gap-inclusive (gap 3.24 h), token-equivalent $89.9 (API $72.8), 188.9M tokens; lead active 1.78 h, lead $17.1 (API $0.0), subagent active 7.46 h, subagent $72.8; lead-seat local share 100% of 3530 calls
+-- planning [pipeline]
+   s320 (13 stories): agent wait 1.21 h; 5.76 h gap-inclusive (gap 4.37 h), token-equivalent $87.5 (API $87.5), 152.2M tokens; lead active 1.39 h, lead $11.2, subagent active 6.66 h, subagent $76.3; lead-seat local share 0% of 2019 calls
+   s321 (25 stories): agent wait 0.70 h; 1.62 h gap-inclusive (gap 0.84 h), token-equivalent $50.9 (API $50.2), 90.6M tokens; lead active 0.78 h, lead $6.6 (API $5.9), subagent active 4.63 h, subagent $44.3; lead-seat local share 15% of 2535 calls
+   s322 (8 stories): agent wait 2.40 h; 5.02 h gap-inclusive (gap 3.24 h), token-equivalent $89.9 (API $72.8), 188.9M tokens; lead active 1.78 h, lead $17.1 (API $0.0), subagent active 7.46 h, subagent $72.8; lead-seat local share 100% of 3530 calls
+-- planning+bug-investigation [pipeline]
+   s320 (13 stories): agent wait 1.21 h; 5.76 h gap-inclusive (gap 4.37 h), token-equivalent $87.5 (API $87.5), 152.2M tokens; lead active 1.39 h, lead $11.2, subagent active 6.66 h, subagent $76.3; lead-seat local share 0% of 2019 calls
+   s321 (25 stories): agent wait 0.70 h; 1.62 h gap-inclusive (gap 0.84 h), token-equivalent $50.9 (API $50.2), 90.6M tokens; lead active 0.78 h, lead $6.6 (API $5.9), subagent active 4.63 h, subagent $44.3; lead-seat local share 15% of 2535 calls
+   s322 (8 stories): agent wait 2.44 h; 5.21 h gap-inclusive (gap 3.28 h), token-equivalent $94.4 (API $75.9), 200.5M tokens; lead active 1.92 h, lead $18.5 (API $0.0), subagent active 7.68 h, subagent $75.9; lead-seat local share 100% of 3806 calls
+-- implementation [pipeline]
+   s320 (13 stories): agent wait 0.39 h; 1.36 h gap-inclusive (gap 0.57 h), token-equivalent $14.7 (API $14.7), 58.9M tokens; lead active 0.78 h, lead $6.4, subagent active 1.20 h, subagent $8.4; lead-seat local share 0% of 1158 calls
+   s321 (25 stories): agent wait 0.12 h; 0.68 h gap-inclusive (gap 0.17 h), token-equivalent $15.8 (API $15.8), 41.7M tokens; lead active 0.52 h, lead $4.3, subagent active 0.92 h, subagent $11.5; lead-seat local share 0% of 1562 calls
+   s322 (8 stories): agent wait 0.10 h; 1.07 h gap-inclusive (gap 0.27 h), token-equivalent $14.8 (API $8.2), 42.9M tokens; lead active 0.79 h, lead $6.6 (API $0.0), subagent active 0.61 h, subagent $8.2; lead-seat local share 100% of 1413 calls

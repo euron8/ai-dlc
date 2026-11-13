@@ -90,7 +90,7 @@
 # MUTANT-MATRIX i65-noneforged decides=i65-noneforged twins=i65-missing
 # MUTANT-MATRIX skip-name-mut decides=skip-name twins=skip-name-a
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-contract-conformance/run.sh --matrix
-# Re-measured whenever an arm or a mutant is added or changed. The block and the REMEASURE line live in this parent file for the whole shard family.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. The block and the REMEASURE line live in this parent file for the whole shard family.
 set -u
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -140,12 +140,13 @@ if [ -z "$VAL" ] || [ -z "$CONTRACT" ]; then
 fi
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
-# fx_inproc (one row per in-process vem_entry pass, BL-982) comes from lib/mutant.sh, which refuses to load
-# without ok() and bad(); this file defines neither, so it is sourced behind stubs that are then removed.
+# fx_inproc (one row per in-process vem_entry pass, BL-982) and mutant_killed come from lib/mutant.sh, which
+# refuses to load without ok() and bad(). ok prints its line as given; bad counts a refused base in FAILURES, so
+# a routed kill prints the line its printf printed and the counters and the PASS total are unchanged.
 [ -f "$DIR/../lib/mutant.sh" ] || { echo "$NAME: FIXTURE ERROR -- lib/mutant.sh not found beside $DIR" >&2; exit 2; }
-ok() { :; }; bad() { :; }
+ok() { printf '%s\n' "$1"; }
+bad() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
 . "$DIR/../lib/mutant.sh"
-unset -f ok bad
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 [ "$MATRIX" = 1 ] && echo "MATRIX-MODE on"
 
@@ -973,7 +974,8 @@ if [ "$GROUP" = a ]; then
   if grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_a" \
      && grep -q '^layer-contract-conformance-b: SKIP' <<<"$_sk_b" \
      && ! grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_b"; then
-    printf '  ok    %-18s %s\n' skip-name "on a consumer-shaped tree each shard's SKIP line names its own directory"
+    printf -v _sk_msg '  ok    %-18s %s' skip-name "on a consumer-shaped tree each shard's SKIP line names its own directory"
+    ok "$_sk_msg"; B_sk_name=1
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-18s %s\n' skip-name "the consumer SKIP lines do not name their shards — a: [${_sk_a}] b: [${_sk_b}]"
@@ -995,7 +997,8 @@ if [ "$GROUP" = a ]; then
     SK_CELL_TWIN=FAIL
     grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_ma" && SK_CELL_TWIN=ok
     if grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_m" && ! grep -q '^layer-contract-conformance-b: SKIP' <<<"$_sk_m"; then
-      printf '  ok    skip-name-mut: MUTANT (literal SKIP name restored): shard '"'"'b'"'"' prints its sibling'"'"'s name again, so skip-name can fire\n'
+      printf -v _sk_msg '  ok    skip-name-mut: MUTANT (literal SKIP name restored): shard '"'"'b'"'"' prints its sibling'"'"'s name again, so skip-name can fire'
+      mutant_killed "${B_sk_name:-0}" skip-name-mut "$_sk_msg"
     else
       FAILURES=$((FAILURES + 1))
       printf '  FAIL  skip-name-mut: MUTANT SURVIVED: with the literal restored shard '"'"'b'"'"' printed [%s]\n' "${_sk_m}"

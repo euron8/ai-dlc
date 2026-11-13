@@ -30,7 +30,7 @@
 # mutant's (rc, output) on that arm differs from the unmutated subject's. Per push each mutant runs
 # ONCE on its deciding arm (the assertion it always made) and ONCE on its named TWIN, an arm the
 # measured matrix shows green. `--matrix` runs every mutant against every arm. The matrix is
-# re-measured whenever an arm or a mutant changes.
+# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/spec-join-integrity/run.sh --matrix
 # MUTANT-MATRIX-DYNAMIC mut-helpers why=mut, mut_says, mut2 and mut2_says pass the mutant id as a variable; every id they produce has its own row above
 # MUTANT-MATRIX-CONTROL lr-local-regex-baseform why=the same local matcher must stay GREEN (rc 0) on the bare closer in lr-below-marker.md; the survivor is the pass

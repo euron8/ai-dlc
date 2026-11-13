@@ -64,8 +64,9 @@
 # PER PUSH a mutant is scored on its DECIDING arm, which must find it, and its named TWIN, a different arm it could
 # plausibly co-trip but must leave compliant: two predicate runs over the mutant copy where the full vector took
 # thirteen. `run.sh --matrix` scores each mutant on every arm in scope and prints one MATRIX line per mutant. The four
-# BL-391 rows decide arms 7-9, which a consumer predating BL-391 skips. The matrix is re-measured whenever an arm
-# or a mutant is added or changed, by the REMEASURE command below, run from the repo root.
+# BL-391 rows decide arms 7-9, which a consumer predating BL-391 skips. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE command
+# below, from the repo root.
 # MUTANT-MATRIX wrong1 decides=ahead twins=noup
 # MUTANT-MATRIX wA-halt decides=ahead twins=noup
 # MUTANT-MATRIX wrong2 decides=nopush twins=refuse

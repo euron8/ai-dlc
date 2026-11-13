@@ -32,8 +32,9 @@
 # silent and its twin N6b must warn), RED on a mutant when the mutated block's output differs from what the
 # unmutated block gives that drive. A mutant's row names the cell that kills it (decides) and the cell it could
 # plausibly co-trip but must leave GREEN (twins). A plain run drives each mutant on its deciding cell and its twin
-# cell only. The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command
-# below, run from the repo root. It drives every mutant on every cell and prints one MATRIX line each.
+# cell only. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Run the REMEASURE command below, from the repo root. It drives every mutant on every cell
+# and prints one MATRIX line each.
 # MUTANT-MATRIX M1 decides=A1 twins=N1
 # MUTANT-MATRIX M2 decides=N3 twins=A2
 # MUTANT-MATRIX M3 decides=N1 twins=A1

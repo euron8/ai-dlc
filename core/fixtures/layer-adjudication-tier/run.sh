@@ -14,8 +14,9 @@
 # carries a clause at WARN, and Part 5 flips the adjudicable clause's LEVEL and re-runs. Without
 # that, a classifier that had started emitting the blocking row unconditionally would score as a
 # pass on all of Parts 1-4.
-# MUTANT BATTERY. Per push each mutant runs only its DECIDING arm plus one TWIN that stays green; the
-# matrix below is re-measured whenever an arm or a mutant is added or changed. Every drive of the shipped
+# MUTANT BATTERY. Per push each mutant runs only its DECIDING arm plus one TWIN that stays green. The
+# matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. Every drive of the shipped
 # subject (the live pass) keeps all base parts and worlds.
 # MUTANT-MATRIX m3c-clause-conj decides=P3c-c3 twins=P3c-rows
 # MUTANT-MATRIX m3c-cur-digest decides=P3c-c4 twins=P3c-rows

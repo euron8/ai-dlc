@@ -11,7 +11,8 @@
 # wall clock.
 #
 # The one committed mutant is scored per push on its deciding arm and one twin; the measured matrix
-# replaces an exact-vector assertion and is re-measured whenever an arm or the mutant changes.
+# replaces an exact-vector assertion. The matrix is re-measured as .claude/rules/fixture-mutants.md
+# clause 2 ("One run per distinct state") requires.
 # The arm names are the ones lib.sh documents (and `--matrix` prints).
 # MUTANT-MATRIX netcap10 decides=REREAD twins=UNAV
 # MUTANT-MATRIX noid-wait decides=REREAD twins=UNAV

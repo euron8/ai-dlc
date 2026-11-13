@@ -36,8 +36,9 @@
 #     mutant's tripped set must EQUAL the recorded kill set passed at its call site. That is the
 #     exact-vector assertion fixture-mutants.md asks for ("a mutant must fail only its own
 #     assertion"); per push, the recorded matrix plus the twin stand in for it.
-# THE MATRIX IS RE-MEASURED WHENEVER AN ARM OR A MUTANT IS ADDED OR CHANGED, from the repo root, by
-# the command on the MUTANT-MATRIX-REMEASURE line. It is not re-run through hermetic-run.sh, which
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Run it from the repo root, by the command on the MUTANT-MATRIX-REMEASURE line. It
+# is not re-run through hermetic-run.sh, which
 # forwards no argument. A per-push verdict is only as good as the matrix it reads.
 #
 # The tripped set of each mutant, as measured (every arm not listed is GREEN for it):

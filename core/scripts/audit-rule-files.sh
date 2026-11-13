@@ -702,21 +702,104 @@ NARRATIVE = re.compile(
 # survives. A tense-shift marker in the window ("now", "no longer") was scored
 # and rejected: it clears the same purpose sites and silences most of the
 # habitual ones, because a rule stating what it USED TO say rarely says "now".
-# STATED LIMITS, neither shape in either corpus today: a purpose clause on a
-# bare or definite noun ("Evidence used to close a finding MUST ...") still
-# flags, which is the old behaviour and a triage cost rather than a wrong gate;
-# a habitual clause with an indefinite subject ("a step used to say") clears.
-# Both directions read one line and its predecessor, so a reflow that moves the
-# cue onto a third line moves the verdict -- the scan is line-grain by design.
+# CLAUSE 2 AS SHIPPED (BL-1001, PARTIAL). `a/an <noun> used to` is a habitual line, and flags, unless
+# one of these holds; the order is the code's:
+#   (i)   a `be` follows the article inside the window (passive: "a probe is used to ...");
+#   (ii)  a cue directly before the article (where, when, whereas, while, if, because, since, once,
+#         until, unless, or an em dash or `--`) AND a finite verb or modal follows in the same clause
+#         ("Where a flag used to select the root is set, read it"); with no such verb the cue flags
+#         ("Where a per-sprint block used to sit", "— a failed push used to commit locally");
+#   (iii) no cue, and a finite verb or modal follows in the same clause (FINITE_AFTER: is are must
+#         should shall may can cannot will does do has have need, and was were had and any
+#         `...n't` contraction) -- the noun is the subject of a
+#         later predicate ("A health signal used to clear it MUST be ..."); the clause is the rest of
+#         the line plus the next line, cut at . ; : ! ? , and at and but which where while whereas
+#         because although though;
+#   (iv)  no cue, no such verb, and the article is NOT clause-initial. Clause-initial means the text
+#         before it in its sentence is empty, or ends in , ; : ( an em dash, an en dash, `--`,
+#         a spaced hyphen, `and` or `but`; a sentence ends at . ! ? (also at a line end) but not
+#         at e.g. i.e. etc vs cf. So the five
+#         cue-less shapes flag: "A step used to say nothing." (sentence start), "Before 0.9, a ..."
+#         (comma), "Before: a ..." (colon), "(a ...)" (open paren), ", and/but a ..." and "and a ...".
+# Measured at the two verifier probes (v2): the first cue-less form, "exactly one word precedes it
+# reads as an imperative object, otherwise flag", flagged purpose clauses after a verb or a copula
+# ("The hook reads a variable used to override the root", "It takes an argument used to name the
+# file", "You can pass a flag used to select the root", "This is a flag used to select the root", the
+# wrapped form of the first). The clause-initial test clears those; the cost is the acquittals below.
+# How the FP set reached zero: the shipped audit's NARRATIVE_DRIFT list, base vs tip, over the
+# distribution's `--list` corpus (88 files) and the reference consumer's file:// clone, is identical,
+# and the only `a/an <noun> used to` lines in either are "A health signal used to clear", "a
+# TEL-denominated total used to validate" and the passive "be used to satisfy". Candidates rejected:
+# any cue in the four-word window (flags a purpose noun phrase that merely follows a cue earlier in
+# the sentence); the one-word-before imperative rule (above); a tense-shift marker (silences most
+# habitual lines, because a rule stating what it USED TO say rarely says "now").
+# STATED LIMITS -- every one has a count of 0 over the distribution's 88-file `--list` corpus and
+# over the consumer's file:// clone; none is a shape either corpus holds today.
+#   REMAINING ACQUITTALS (habitual, clears): an article mid-clause after any word or phrase, since
+#   only the text before the article decides ("Earlier a step used to fail", "Sometimes a step used
+#   to stop here", "In 0.9 a step used to fail", "Back then an agent used to skip it", "Once upon a
+#   time a step used to fail", "Note that a step used to stop here", and the same text wrapped,
+#   a line-initial article after a line ending "In older releases"); a habitual clause whose finite
+#   verb comes before the first cut ("A step used to say nothing is worse" -- `is` precedes any
+#   cut); a bare or definite habitual subject is NOT in this list, it always flags.
+#   ASYMMETRY (acquittal): when, if, since, once, until and unless are CUES but not cut points, so
+#   "A step used to fail when the store has entries" clears (`has` precedes no cut).
+#   REMAINING FALSE POSITIVES (purpose, flags): a clause-initial purpose noun whose predicate is
+#   outside FINITE_AFTER -- a third-person present verb ("A file used to record the verdicts lives
+#   at ...", "A script used to seed the store runs first", "... takes a path") or none ("A flag used
+#   to select the root."; "A flag used to select the root and name it
+#   MUST be set" -- `and` cuts the clause before `MUST`); an appositive or parenthetical after a
+#   comma, paren or spaced dash ("Pass --root, a flag used to select the tree"; "Set ROOT (a
+#   variable used to locate the tree)"); a purpose clause on a bare or definite noun ("Evidence used to close a
+#   finding MUST ...", the old behaviour, a triage cost rather than a wrong gate).
+# Both directions read one line and its neighbours, so a reflow that moves a cue onto a third line
+# moves the verdict -- the scan is line-grain by design.
 HABITUAL = re.compile(r"\bused to\b", re.I)
 PURPOSE_BEFORE = re.compile(
-    r"(\b(am|is|are|was|were|be|been|being)"
+    r"(\b(?P<be>am|is|are|was|were|be|been|being)"
     r"(\s+(not|never|only|also|then|directly|solely|merely|still|already"
     r"|explicitly|first|ever|now))*\s*$"
     r"|\b(a|an)\b(\s+[^\s.;:!?]+){0,3}\s*$)", re.I)
+CLAUSE_OPENER = re.compile(
+    r"(\b(where|when|whereas|while|if|because|since|once|until|unless)|\u2014|--)\s*$", re.I)
 
 
-def habitual_used_to(prev, text):
+FINITE_AFTER = re.compile(r"\b(is|are|was|were|had|\w*n't|must|should|shall|may|can|cannot|will|does|do|has|have|needs?)\b", re.I)
+SENT_END = re.compile(r"(?<!\be\.g)(?<!\bi\.e)(?<!\betc)(?<!\bvs)(?<!\bcf)[.!?](?:\*\*)?(?:\s+|$)")
+CLAUSE_INIT = re.compile(r"([,;:(\u2014\u2013]|--|\s-|\b(and|but))\s*$", re.I)
+
+
+def after_clause(rest, nxt):
+    if nxt.strip():
+        rest = rest + " " + nxt
+    return re.split(r"[.;:!?,]|\b(?:and|but|which|where|while|whereas|because|although|though)\b", rest, maxsplit=1)[0]
+
+
+def article_opens_clause(before, prev, own, rest=""):
+    pb = PURPOSE_BEFORE.search(before)
+    if not pb or pb.groupdict().get("be"):
+        return False
+    pre = before[:pb.start()]
+    if not pre.strip() and own:
+        pre = used(prev)
+    p = pb.start() + 1
+    while p <= len(before):
+        q = PURPOSE_BEFORE.search(before, p)
+        if not q:
+            break
+        if q.groupdict().get("be"):
+            return False
+        p = q.start() + 1
+    finite = FINITE_AFTER.search(rest)
+    if CLAUSE_OPENER.search(pre):
+        return not finite
+    if finite:
+        return False
+    seg = re.sub(r"^[\s>*_-]+|\s+$", "", SENT_END.split(pre)[-1])
+    return seg == "" or bool(CLAUSE_INIT.search(seg))
+
+
+def habitual_used_to(prev, text, nxt=""):
     t = used(text)
     for m in HABITUAL.finditer(t):
         before = t[:m.start()]
@@ -724,18 +807,21 @@ def habitual_used_to(prev, text):
             before = used(prev)
         if not PURPOSE_BEFORE.search(before):
             return True
+        if article_opens_clause(before, prev, bool(text[:m.start()].strip()), after_clause(t[m.end():], used(nxt))):
+            return True
     return False
 
 
 def scannable_with_prev(path):
     prev = ""
-    for n, t in scannable(path):
-        yield n, t, prev
+    items = list(scannable(path))
+    for i, (n, t) in enumerate(items):
+        yield n, t, prev, (items[i + 1][1] if i + 1 < len(items) else "")
         prev = t
 
 
-hits = [(p, n, t.strip()) for p in corpus for n, t, prev in scannable_with_prev(p)
-        if NARRATIVE.search(used(t)) or habitual_used_to(prev, t)]
+hits = [(p, n, t.strip()) for p in corpus for n, t, prev, nxt in scannable_with_prev(p)
+        if NARRATIVE.search(used(t)) or habitual_used_to(prev, t, nxt)]
 emit("NARRATIVE_DRIFT", hits, 2)
 
 # --------------------------------------------------------------- Class 1b

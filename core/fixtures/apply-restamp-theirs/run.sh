@@ -35,8 +35,9 @@
 # reconcile directory). A mutant's row names the cell that kills it (decides) and the cell it could plausibly co-trip
 # but must leave GREEN (twins): the two status-read mutants are each other's sibling cell, and the shim mutant
 # touches only preclassify.sh, so the ordinary apply must stay green under it. A plain run scores each mutant on its
-# deciding cell and its twin only. The matrix is re-measured whenever an arm or a mutant is added or changed, by the
-# REMEASURE command below, run from the repo root. It scores every mutant on every cell and prints one MATRIX line
+# deciding cell and its twin only. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
+# per distinct state") requires. Run the REMEASURE command below, from the repo root. It scores every mutant on
+# every cell and prints one MATRIX line
 # each. No validator unit is selected here, so there is no outside-unit diff. The assertions ahead of the cluster
 # (stamp, ordering, marker, pre-push) drive apply.sh against a synthetic dist and are not mutant cells.
 # MUTANT-MATRIX sited-marker decides=ss-apply twins=ss-finish

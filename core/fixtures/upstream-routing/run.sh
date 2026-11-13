@@ -28,8 +28,9 @@
 # "the subject behaves" are different claims and must not share an exit code.
 # THE MUTANT MATRIX. Each mutant runs per push on its DECIDING arm (which must FAIL under the mutant) plus ONE
 # measured-GREEN twin (which must PASS), so the kill stays confined to its own arm. The full mutant x arm
-# matrix is measured by `--matrix` (an argv flag: every mutant against every arm, one MATRIX row each) and is
-# re-measured whenever an arm or a mutant is added or changed. The recorded matrix plus the twin replaces a
+# matrix is measured by `--matrix` (an argv flag: every mutant against every arm, one MATRIX row each). The
+# matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# The recorded matrix plus the twin replaces a
 # per-push check that no OTHER arm trips. The arms are the columns of the MATRIX rows.
 # MUTANT-MATRIX disarm decides=named twins=zero
 # MUTANT-MATRIX pair decides=pairskip twins=bracket

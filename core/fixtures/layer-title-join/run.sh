@@ -28,7 +28,8 @@
 # MUTANT-MATRIX me2-narrow-to-joins-grammar decides=8c twins=8a
 # MUTANT-MATRIX lookup-continue-dropped decides=ap-match twins=ap-fresh
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-title-join/run.sh --matrix
-# The matrix is re-measured whenever an arm or a mutant is added or changed.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 #
 # Usage: run.sh [--matrix] [path-to-layer-drift.sh]
 # Exit:  0 = every assertion holds, 1 = an arm regressed, 2 = the fixture could not run.

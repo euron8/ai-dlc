@@ -86,7 +86,8 @@
 # score_mutant; they are outside MUTS and ARMS, so --matrix does not drive them.)
 # MUTANT-MATRIX-DYNAMIC score-mutant why=score_mutant passes its first argument "$m" to mutant_killed; the loop over MUTS names only literal mutants m1-m23 and sk1-sk9, each carrying its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/mutation-red-replay/run.sh --matrix
-# The matrix is re-measured whenever an arm or a mutant is added or changed.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 #
 # NOT COVERED, deliberately: the stale-bytecode guard (PYTHONDONTWRITEBYTECODE plus the
 # __pycache__ clear). Reproducing a reused .pyc needs a mutation whose size and mtime

@@ -43,8 +43,9 @@
 # shipped gate, and the probe is itself the subject of b13, d05, d06, ms and m-heading-only, which
 # need it to run in their own worlds. The unit costs seconds (22 seeds, one validator run each).
 # Each mutant is scored on one deciding arm per push, plus ONE named twin that must stay green on
-# that same output; the full mutant x arm matrix is MEASURED by the --matrix argv mode and is
-# re-measured whenever an arm or a mutant is added or changed. The recorded matrix plus the twin
+# that same output; the full mutant x arm matrix is MEASURED by the --matrix argv mode. The matrix is
+# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# The recorded matrix plus the twin
 # replaces the exact-vector assertion that a mutant fails only its own assertion.
 # MUTANT-MATRIX b13 decides=b13 twins=mc
 # MUTANT-MATRIX d05 decides=d05 twins=mc

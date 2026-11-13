@@ -20,10 +20,20 @@
 # Prints `ok <cell>` or `FAIL <cell>: <got>` per cell. 0 = every cell held. 1 = a cell did not. 9 = the receipt could
 # not run (bad usage, a seed that failed, a subject that defines no mrs_main, no qa.md under the project root).
 set -uo pipefail
+# fx_inproc (core/fixtures/lib/mutant.sh) logs this receipt's in-process passes under the fixture's counted run.
+# mutant.sh refuses to load without ok() and bad(), so it is sourced behind stubs that are removed again, as
+# lib/inproc.sh sources it.
+case "${BASH_SOURCE[0]}" in */*) _rl="${BASH_SOURCE[0]%/*}/../lib" ;; *) _rl=../lib ;; esac
+ok() { :; }; bad() { :; }
+. "$_rl/mutant.sh" || { echo "FIXTURE BROKEN: cannot source $_rl/mutant.sh" >&2; exit 2; }
+unset -f ok bad; unset _rl
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 [ "$#" -ge 1 ] && [ "$#" -le 2 ] && [ -f "$1" ] && [ "$(basename "$1")" = merge-review-shards.sh ] \
   || { echo "REFUSED: usage: bash receipt-bl956.sh <path to merge-review-shards.sh> [<project root>]" >&2; exit 9; }
 MRS="$(cd "$(dirname "$1")" && pwd)/merge-review-shards.sh"
+# A pass is logged only for a subject at its own path (a core/scripts directory); a mutant script directory's
+# copy is no pass of the subject.
+case "${MRS%/*}" in */core/scripts) MRS_PASS=1 ;; *) MRS_PASS=0 ;; esac
 # The project root: given, else the working directory (the tree root a `verify:` runs from); it must hold qa.md where
 # the subject reads it.
 ROOT="${2:-$PWD}"
@@ -60,7 +70,7 @@ fails=0
 cell() { # <name> <review basename> <story> <base> <frozen> <want rc> <want token>
   local f="$T/docs/reviews/s3/$2" o rc
   review "$f"
-  o="$( cd "$T" && set +u +o pipefail && AI_DLC_PROJECT_ROOT="$ROOT"; export AI_DLC_PROJECT_ROOT; . "$MRS" && mrs_main --check-serial "$f" --gate qa --story "$3" --range "$4" "$5" 2>&1 < /dev/null )"; rc=$?
+  o="$( cd "$T" && set +u +o pipefail && AI_DLC_PROJECT_ROOT="$ROOT"; export AI_DLC_PROJECT_ROOT; [ "$MRS_PASS" = 0 ] || fx_inproc "$MRS"; . "$MRS" && mrs_main --check-serial "$f" --gate qa --story "$3" --range "$4" "$5" 2>&1 < /dev/null )"; rc=$?
   rm -f "$f"
   if [ "$rc" = "$6" ] && case "$o" in *"$7"*) true ;; *) false ;; esac; then echo "ok $1"
   else echo "FAIL $1: rc=$rc ${o%%$'\n'*}"; fails=$((fails + 1)); fi

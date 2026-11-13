@@ -60,8 +60,9 @@
 # MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the thirty literal callers (mutant, pn_eval, td_eval, the I66 arm, the pool_stop arm and the td-life-fd lifeline arm) has its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-pool-depth/run.sh --matrix
 #
-# The matrix is re-measured whenever an arm or a mutant is added or changed, with the command above, run
-# from the repository root; its log names every mutant's dead cells. Each mutant co-trips no other arm
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. Run the command above, from the repository root; its log names every mutant's dead cells.
+# Each mutant co-trips no other arm
 # than the ones it decides, measured at authoring. The decides and twins of a mutant are READ FROM THE
 # ROWS ABOVE at run time (mrow), so the header cannot drift from what runs. A plain run drives, per
 # mutant, only its decides cells and its twin cells, and requires that every cell it is SCORED ON (its

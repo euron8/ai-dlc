@@ -22,8 +22,9 @@
 # THE MUTANT MATRIX. The level-rule mutant is scored per push on its DECIDING arm (nesting-deeper-does-not-end)
 # and its named TWIN (nesting-equal-ends), which the mutant must leave GREEN: it changes how a span is closed by
 # a DEEPER heading, not by an equal-level one that sits under a shallower heading. `run.sh --matrix` scores the
-# mutant against all seven span arms and prints one MATRIX line. The matrix is re-measured whenever an arm or a
-# mutant is added or changed, by the REMEASURE command below, run from the repo root.
+# mutant against all seven span arms and prints one MATRIX line. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE command
+# below, from the repo root.
 # also trips: level-rule -> nesting-parent-swallows,normalised-backticks
 # MUTANT-MATRIX level-rule decides=nesting-deeper-does-not-end twins=nesting-equal-ends
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/span-of-containment/run.sh --matrix

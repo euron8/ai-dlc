@@ -30,8 +30,9 @@
 # RED when it does not. A mutant's row names the arm that kills it (decides) and the arm it could plausibly
 # co-trip but must leave GREEN (twins). A plain run scores each mutant on its deciding arm and its twin only. An
 # arm that also goes RED on a mutant without being its decides is a second killer, not a twin; it is counted
-# in the others= figure of the REMEASURE command. The matrix is re-measured whenever an arm or a mutant is added
-# or changed, by the REMEASURE command below, run from the repo root. It scores every mutant on every arm and
+# in the others= figure of the REMEASURE command. The matrix is re-measured as .claude/rules/fixture-mutants.md
+# clause 2 ("One run per distinct state") requires. Run the REMEASURE command below, from the repo root. It
+# scores every mutant on every arm and
 # prints one MATRIX line each.
 # MUTANT-MATRIX mutant-renest decides=artifact-not-swallowed twins=artifact-heading-present
 # MUTANT-MATRIX ss-m1 decides=ss-disjunction-gone twins=ss-not-a-conjunction

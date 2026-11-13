@@ -12,8 +12,9 @@
 # mutant runs on its DECIDING arm, which must report it, plus its named TWIN, an arm the measured
 # matrix shows GREEN under that mutant, which must stay green: the kill is confined to its arm.
 # `--matrix` replays every mutant against every arm this file drives and prints one row per cell;
-# the header lines below are joined to that grid by the same mode, and the matrix is re-measured
-# whenever an arm or a mutant changes. The deciding arm of each mutant is the arm its assertion
+# the header lines below are joined to that grid by the same mode. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. The deciding arm
+# of each mutant is the arm its assertion
 # is named for; the twin is read from this header by the assertion, so there is no second list.
 # MUTANT-MATRIX i84-slot-whole-file-grep decides=I84 twins=I86
 # MUTANT-MATRIX i85-blinded-scanner decides=I85 twins=I86

@@ -16,8 +16,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 #
 # THE MUTANT MATRIX. Each mutant runs on its deciding cell and the clean cell, inside one receipt call. clean prints no
 # label of its own (sm_mutant refuses a `FAIL clean:` line), so every row is `twins=-` with that reason. The full mutant
-# x cell matrix is printed by `--matrix` (one MATRIX-ROW per mutant: the cells its full receipt call fails),
-# re-measured whenever a cell or a mutant is added or changed.
+# x cell matrix is printed by `--matrix` (one MATRIX-ROW per mutant: the cells its full receipt call fails).
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires.
 # Measured (--matrix): every row's deciding cell is in the set its full receipt call trips, and no mutant trips
 # clean.
 # MUTANT-MATRIX sm-m1-off decides=m1 twins=- why=its twin is bl845 clean, run in the same receipt call and refused by the FAIL clean check; no label here emits it

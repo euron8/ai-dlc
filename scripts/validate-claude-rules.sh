@@ -900,7 +900,14 @@ fi
 # 74.75 KiB, one KiB above the old ceiling, and left 449 bytes; in the same release
 # `verification-discipline.md` gained the transcript-replay rule (356 bytes) inside that headroom,
 # with no further raise, leaving 93.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-76544}"
+#
+# LOWERED 76544 -> 45312 UNDER BL-1042, when the durable channel was rewritten to rules and directions
+# only (measured total 45246 bytes, rounded up to the next multiple of 256). Prose added later must
+# stay rules-only; raising this ceiling again needs an operator ruling.
+# RAISED 45312 -> 46336 UNDER BL-1042 (F13b): eight rules the rewrite dropped were restored as one-liners,
+# plus the operator rulings on the push and roll-call advisor calls (measured total 46198 bytes, rounded up
+# to the next multiple of 256).
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-46336}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

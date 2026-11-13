@@ -46,7 +46,8 @@
 # the full mutant x arm matrix is `--matrix`, measured from a real run and recorded here:
 # MUTANT-MATRIX MCELL decides=A4 twins=A8
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/architecture-index-cell-escaping/run.sh --matrix
-# Re-measure it whenever an arm or a mutant is added or changed. The matrix also shows A3, A5 and A9 green under
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. The matrix also shows A3, A5 and A9 green under
 # MCELL; only the twin it runs per push is named.
 #
 # Usage: run.sh [--matrix]     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.

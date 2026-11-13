@@ -805,7 +805,8 @@ resolve_artifact() {
   esac
   d="$SPRINT_DIR"
   while [ -n "$d" ]; do
-    if [ -f "$d/$t" ]; then ART_ABS="$(cd "$(dirname "$d/$t")" && pwd -P)/$(basename "$t")"; return 0; fi
+    # $t is the shard-written token and may begin with `-`: its basename takes `--` (the dirname operand is absolute).
+    if [ -f "$d/$t" ]; then ART_ABS="$(cd "$(dirname "$d/$t")" && pwd -P)/$(basename -- "$t")"; return 0; fi
     [ "$d" = "/" ] && return 0
     d="$(dirname "$d")"
   done
@@ -922,8 +923,27 @@ cs_sealed() {
   [ -f "$CS_SEAL" ] || return 1
   bash "$CS_SEAL" --admit-marker "$1" >/dev/null 2>&1
 }
+# cs_sib_artifact <shard dir> <own name>: the `artifact:` every SEALED sibling (cs_sealed; self, drafts and non-shard
+#   names excluded, as the agreement's walk excludes them) that declares one agrees on. Prints nothing when none
+#   declares one; when they disagree among themselves, prints nothing and WARNs, as the agreement does.
+cs_sib_artifact() {
+  local sib v a="" n=0
+  for sib in "$1"/*.md; do
+    [ -f "$sib" ] || continue
+    case "${sib##*/}" in "$2") continue ;; cross.md|cross-*.md|[0-9]*.md) ;; *) continue ;; esac
+    cs_sealed "$sib" || continue
+    parse_shard "$sib" > "$T/cs.fb" || continue
+    v="$(field "$T/cs.fb" artifact)"
+    [ -n "$v" ] || continue
+    if [ "$n" -eq 0 ]; then a="$v"; n=1; elif [ "$v" != "$a" ]; then n=2; fi
+  done
+  if [ "$n" -eq 2 ]; then
+    printf 'WARN: the sealed shards in %s disagree on artifact among themselves; %s takes no document from them\n' "$1" "$2" >&2
+  elif [ "$n" -eq 1 ]; then printf '%s' "$a"; fi
+  return 0
+}
 check_shard_main() {
-  local sf n by bn key is_x pre mt k own ref reff nref sib sv_ v cs_e
+  local sf n by bn key is_x pre mt k own ref reff nref sib sv_ v cs_e cs_art
   [ $# -eq 4 ] && [ "$3" = "--findings" ] \
     || { printf '%s\n' "usage: merge-adversarial-shards.sh --check-shard <shard-file> --findings <n>"; exit 64; }
   [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] \
@@ -943,15 +963,18 @@ check_shard_main() {
   # name, or a dir that is no adversary shard dir (a placement merge_locate refuses, a name that is not
   # `<artifact>-p<M>`, the series stem, a repair or resolution series), holds no adversary shard, so no
   # adversary check applies to it.
+  # The shard path is a CLI operand and may be RELATIVE with a first component beginning with `-`: every
+  # basename/dirname of it takes `--` (BSD reads `-x…` as an option otherwise), and merge_locate enters the
+  # relative dir as ./<dir>.
   CS_SKIP=1
-  bn="$(basename "$sf")"; is_x=0; key=""
+  bn="$(basename -- "$sf")"; is_x=0; key=""
   case "$bn" in
     *.draft) cs_skip "$bn is a draft; only a shard is checked" ;;
     cross.md|cross-[0-9]*.md) is_x=1; key="${bn%.md}" ;;
     *.md) key="${bn%.md}"; case "$key" in ""|*[!0-9]*) cs_skip "$bn is not a shard name; the shard-set walk is the merge's" ;; esac ;;
     *) cs_skip "$bn is not a shard name; the shard-set walk is the merge's" ;;
   esac
-  merge_locate "$(dirname "$sf")"
+  merge_locate "$(dirname -- "$sf")"
   SUBJECT=""; DOCUMENT=""; ELICIT=0; AXIS=convergence; CITE=""; OTHER=""
   if [ "$SHARD_BASE" = "requirements-elicitation" ]; then
     ARTIFACT=requirements; ELICIT=1; AXIS=elicitation; SUBJECT="${SPRINT_DIR##*/s}"
@@ -979,6 +1002,7 @@ check_shard_main() {
   # for s<N>/architecture-spine/ when asked about ARCHITECTURE-SPINE, a dir holding the ONE document
   # the pass was merged against with --document.
   cs_dir="$SHARD_DIR"; CS_MODE=""
+  CS_SEAL="$(cd "$(dirname "$MERGE_SELF")" && pwd)/content-seal.sh"
   if [ -n "$SUBJECT" ]; then CITE=sections; OTHER=stories; CS_MODE=subject
   else
     cs_e=""
@@ -990,7 +1014,12 @@ check_shard_main() {
     if [ -z "$CS_MODE" ]; then
       CITE=sections; OTHER=stories
       parse_shard "$by" > "$T/cs.pre" || { printf 'REFUSED: parsing %s did not run; no verdict\n' "$sf"; exit 4; }
-      resolve_artifact "$(field "$T/cs.pre" artifact)"
+      # NO `artifact:` OF ITS OWN (its whole provenance block deleted, say): the document is the one the SEALED
+      # siblings declare (cs_sib_artifact), so such a shard is refused here as the merge's join refuses it, never
+      # SKIPped. No sealed sibling declaring one, or sealed siblings that disagree: no document, today's answer.
+      cs_art="$(field "$T/cs.pre" artifact)"
+      [ -n "$cs_art" ] || cs_art="$(cs_sib_artifact "$cs_dir" "$bn")"
+      resolve_artifact "$cs_art"
       if [ -n "$ART_ABS" ] && bash "$(cd "$(dirname "$MERGE_SELF")" && pwd)/partition-document.sh" --map "$ART_ABS" > /dev/null 2>&1; then
         DOCUMENT="$ART_ABS"; CS_MODE=document
       else
@@ -1004,7 +1033,6 @@ check_shard_main() {
       fi
     fi
   fi
-  CS_SEAL="$(cd "$(dirname "$MERGE_SELF")" && pwd)/content-seal.sh"
   # A provenance block that does not parse stops here, as it skips the rest of that shard in the merge
   # loop; past it every refusal is collected.
   CS_CITE="$CITE"; [ -n "$CITE" ] || CITE=stories
@@ -1039,11 +1067,11 @@ check_shard_main() {
     while IFS= read -r sib; do
       v="$(field "$T/cs.sib.${sib##*/}" "$k")"
       [ -n "$v" ] || continue
-      if [ "$nref" -eq 0 ]; then ref="$v"; reff="$(dirname "$sf")/${sib##*/}"; nref=1
+      if [ "$nref" -eq 0 ]; then ref="$v"; reff="$(dirname -- "$sf")/${sib##*/}"; nref=1
       elif [ "$v" != "$ref" ]; then nref=2; fi
     done < "$T/cs.sibs"
     if [ "$nref" -eq 2 ]; then
-      printf 'WARN: the sealed shards in %s disagree on %s among themselves; %s is not compared with them\n' "$(dirname "$sf")" "$k" "$sf" >&2
+      printf 'WARN: the sealed shards in %s disagree on %s among themselves; %s is not compared with them\n' "$(dirname -- "$sf")" "$k" "$sf" >&2
     elif [ "$nref" -eq 1 ] && [ "$ref" != "$own" ]; then
       cs_refuse "$sf declares $k '$own' where the sealed shard $reff declares '$ref'; every shard in a pass declares one $k, spelled as the first shard sealed spells it -- write '$ref'"
     fi
@@ -1363,8 +1391,11 @@ derived_set_main() {
   [ -f "$pf" ] || { printf 'REFUSED: %s is not a pass file\n' "$pf"; return 2; }
   T="$(mktemp -d "${TMPDIR:-/tmp}/merge-adversarial-shards.XXXXXX")" || { printf 'REFUSED: mktemp failed\n'; return 2; }
   trap 'rm -rf "$T"' EXIT
-  SPRINT_DIR="$(cd "$(dirname "$pf")" && pwd)" || return 2
-  b="$(basename "$pf")"; art="${b%-adversarial-p*}"; m="${b##*-adversarial-p}"; m="${m%.md}"
+  # A RELATIVE operand may begin with `-`: dirname/basename take `--`, and the dir is entered as ./<dir>
+  # (merge_locate's reason: a bare `cd -x…` reads an option, and CDPATH redirects a bare or `--` operand).
+  SPRINT_DIR="$(dirname -- "$pf")"; case "$SPRINT_DIR" in /*) ;; *) SPRINT_DIR="./$SPRINT_DIR" ;; esac
+  SPRINT_DIR="$(cd "$SPRINT_DIR" && pwd)" || return 2
+  b="$(basename -- "$pf")"; art="${b%-adversarial-p*}"; m="${b##*-adversarial-p}"; m="${m%.md}"
   case "$m" in ""|*[!0-9]*) printf 'REFUSED: %s is not <artifact>-adversarial-p<M>.md\n' "$b"; return 2 ;; esac
   m=$((10#$m))
   d_map "$pf" > "$T/cmap" || return 2
@@ -1635,7 +1666,9 @@ case "${1:-}" in
     [ $# -ge 2 ] || refuse "$USAGE"
     DOCUMENT="$2"; shift 2
     [ -n "$DOCUMENT" ] && [ -f "$DOCUMENT" ] && [ -r "$DOCUMENT" ] || refuse "--document ${DOCUMENT:-<empty>} is not a readable file"
-    DOCUMENT="$(cd "$(dirname "$DOCUMENT")" && pwd -P)/$(basename "$DOCUMENT")" || refuse "--document's directory is not enterable" ;;
+    # A RELATIVE operand may begin with `-`: dirname/basename take `--` and the dir is entered as ./<dir>.
+    DOC_DIR="$(dirname -- "$DOCUMENT")"; case "$DOC_DIR" in /*) ;; *) DOC_DIR="./$DOC_DIR" ;; esac
+    DOCUMENT="$(cd "$DOC_DIR" && pwd -P)/$(basename -- "$DOCUMENT")" || refuse "--document's directory is not enterable" ;;
 esac
 [ $# -eq 1 ] || refuse "$USAGE"
 if [ "$DMAP" -eq 1 ]; then

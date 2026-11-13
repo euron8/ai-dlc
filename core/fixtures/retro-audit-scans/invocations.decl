@@ -1,5 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-165 *
+235 *
 0 core/git-hooks/pre-push
-33 core/scripts/audit-rule-files.sh
+34 core/scripts/audit-rule-files.sh
 19 core/scripts/validate-gate-manifest.sh

@@ -20,8 +20,9 @@
 # matrix.sh, every cell `<arm>:killed=yes|no` plus `tripped=[...]`), and asserts the tripped set EQUALS
 # the set recorded in the bmut call, contains the deciding arm and excludes the twin. The recorded sets
 # plus the twin replace the old per-push exact-vector assertion. A plain run prints no MATRIX row.
-# THE MATRIX IS RE-MEASURED WHENEVER AN ARM OR A MUTANT IS ADDED OR CHANGED, from the repo root, with
-# AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is not run through hermetic-run.sh, which forwards
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. Run it from the repo root, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is not
+# run through hermetic-run.sh, which forwards
 # no argument.
 #
 # MUTANT-MATRIX-DYNAMIC bmut why=bmut passes its first argument to mutant_killed in both its matrix and its per-push branch; every bmut call names a literal mutant that carries its own row in this block

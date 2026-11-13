@@ -1,0 +1,108 @@
+== 1. lead 6c14d949, gate-checkpoint.sh calls and step-file Reads, 2026-11-09T13:30Z to 2026-11-09T15:10Z
+2026-11-09T13:38:21Z READ  carry-over-evaluation.md SLICE offset=143 limit=None
+2026-11-09T13:38:24Z READ  carry-over-evaluation.md WHOLE offset=None limit=None
+2026-11-09T13:38:32Z READ  carry-over-evaluation.md WHOLE offset=None limit=None
+2026-11-09T13:40:29Z open  gate-checkpoint.sh --nonce "$N" open
+2026-11-09T13:40:31Z READ  gate-validation.md SLICE offset=1 limit=481
+2026-11-09T13:40:35Z READ  gate-validation.md SLICE offset=579 limit=12
+2026-11-09T13:40:35Z READ  gate-validation.md SLICE offset=715 limit=15
+2026-11-09T13:40:37Z READ  gate-validation.md SLICE offset=854 limit=764
+2026-11-09T13:40:43Z READ  gate-validation.md SLICE offset=1728 limit=54
+2026-11-09T13:40:43Z READ  gate-validation.md SLICE offset=2730 limit=208
+2026-11-09T13:40:46Z READ  gate-validation.md SLICE offset=2152 limit=468
+2026-11-09T13:40:50Z READ  gate-validation.md SLICE offset=3143 limit=452
+2026-11-09T13:41:54Z verb  gate-checkpoint.sh --nonce $N record 2 PASS | gate-checkpoint.sh --nonce $N record 2a PENDING
+2026-11-09T13:41:59Z verb  gate-checkpoint.sh --nonce planning-20261109T134029Z record 
+2026-11-09T13:42:21Z READ  _gate-procedures.md SLICE offset=206 limit=70
+2026-11-09T13:49:03Z open  gate-checkpoint.sh --nonce "$N2" open
+2026-11-09T13:52:10Z READ  carry-over-evaluation.md WHOLE offset=None limit=None
+2026-11-09T13:52:16Z READ  carry-over-evaluation.md SLICE offset=None limit=145
+2026-11-09T13:52:18Z READ  carry-over-evaluation.md SLICE offset=146 limit=146
+2026-11-09T13:53:46Z verb  gate-checkpoint.sh --nonce planning-20261109T134906Z done | gate-checkpoint.sh --nonce planning-20261109T134906Z done)"
+2026-11-09T13:53:59Z READ  gate-validation.md SLICE offset=1 limit=327
+2026-11-09T13:53:59Z READ  gate-validation.md SLICE offset=453 limit=29
+2026-11-09T13:53:59Z READ  gate-validation.md SLICE offset=579 limit=12
+2026-11-09T13:53:59Z READ  gate-validation.md SLICE offset=715 limit=15
+2026-11-09T13:54:06Z READ  gate-validation.md SLICE offset=854 limit=390
+2026-11-09T13:54:09Z READ  gate-validation.md SLICE offset=1244 limit=374
+2026-11-09T13:54:13Z READ  gate-validation.md SLICE offset=1728 limit=54
+2026-11-09T13:54:13Z READ  gate-validation.md SLICE offset=2152 limit=249
+2026-11-09T13:54:17Z READ  gate-validation.md SLICE offset=2448 limit=172
+2026-11-09T13:54:17Z READ  gate-validation.md SLICE offset=2730 limit=208
+2026-11-09T13:54:21Z READ  gate-validation.md SLICE offset=3143 limit=452
+2026-11-09T13:55:00Z verb  gate-checkpoint.sh --nonce $N record $c $v >/dev/null | gate-checkpoint.sh --nonce $N done
+2026-11-09T13:55:06Z verb  gate-checkpoint.sh --nonce planning-20261109T134906Z record 
+2026-11-09T13:55:24Z verb  gate-checkpoint.sh --nonce $N record 26 PASS
+2026-11-09T13:59:05Z verb  gate-checkpoint.sh --nonce planning-20261109T134906Z record 
+2026-11-09T14:00:05Z READ  requirements.md SLICE offset=None limit=160
+2026-11-09T14:00:08Z READ  requirements.md SLICE offset=160 limit=170
+2026-11-09T14:02:02Z READ  carry-over-evaluation.md SLICE offset=None limit=145
+2026-11-09T14:02:09Z READ  carry-over-evaluation.md WHOLE offset=None limit=None
+2026-11-09T14:04:17Z READ  requirements.md SLICE offset=None limit=150
+2026-11-09T14:04:19Z READ  requirements.md SLICE offset=151 limit=None
+2026-11-09T14:29:16Z READ  _gate-procedures.md SLICE offset=283 limit=190
+2026-11-09T14:29:20Z READ  _gate-procedures.md SLICE offset=473 limit=200
+2026-11-09T14:29:23Z READ  _gate-procedures.md SLICE offset=673 limit=210
+2026-11-09T15:03:50Z READ  _gate-procedures.md SLICE offset=895 limit=160
+2026-11-09T15:03:52Z READ  _gate-procedures.md SLICE offset=1055 limit=150
+2026-11-09T15:03:58Z READ  _gate-procedures.md SLICE offset=1219 limit=75
+2026-11-09T15:08:37Z READ  requirements.md WHOLE offset=None limit=None
+2026-11-09T15:08:41Z READ  requirements.md SLICE offset=None limit=160
+2026-11-09T15:08:52Z READ  requirements.md WHOLE offset=None limit=None
+2026-11-09T15:08:54Z READ  requirements.md SLICE offset=None limit=165
+2026-11-09T15:08:57Z READ  requirements.md SLICE offset=166 limit=165
+first WHOLE read of requirements.md: 2026-11-09T15:08:37Z
+== 2. s322 spawns labelled gate-validation[carry-over-evaluation], by subagent start
+before 14:00Z: 20 spawns, $7.06, 0.37 agent-h
+14:00Z to 2026-11-09T15:08:37Z: 32 spawns, $77.39, 6.50 agent-h
+  first start 2026-11-09T14:00:33Z, last start 2026-11-09T15:07:10Z
+from 2026-11-09T15:08:37Z on: 0 spawns, $0.00, 0.00 agent-h
+  2026-11-09T14:00:33Z analyst          sonnet $ 1.720    7.3 min  Requirements context digest s322
+  2026-11-09T14:08:13Z pm-escalated     sonnet $ 5.746   25.7 min  Authoring chain s322 requirements
+  2026-11-09T14:35:44Z general-purpose  sonnet $ 1.592   30.4 min  Dispatch requirements-party round
+  2026-11-09T14:36:13Z architect        opus   $ 6.313   27.1 min  architect cross seat
+  2026-11-09T14:36:20Z dev              sonnet $ 3.088   20.0 min  dev cross seat
+  2026-11-09T14:36:26Z architect        opus   $ 4.883   22.0 min  architect part 1
+  2026-11-09T14:36:32Z architect        opus   $ 3.196   12.3 min  architect part 2
+  2026-11-09T14:36:39Z architect        opus   $ 2.884   11.4 min  architect part 3
+  2026-11-09T14:36:45Z architect        opus   $ 3.917   14.8 min  architect part 4
+  2026-11-09T14:36:52Z architect        opus   $ 4.257   15.9 min  architect part 5
+  2026-11-09T14:36:58Z architect        opus   $ 5.069   25.3 min  architect part 6
+  2026-11-09T14:37:05Z architect        opus   $ 3.633   16.3 min  architect part 7
+  2026-11-09T14:37:11Z architect        opus   $ 3.533   15.5 min  architect part 8
+  2026-11-09T14:37:18Z architect        opus   $ 2.766    8.2 min  architect part 9
+  2026-11-09T14:37:25Z dev              sonnet $ 0.461    1.5 min  dev part 1
+  2026-11-09T14:37:31Z dev              sonnet $ 2.381   14.6 min  dev part 2
+  2026-11-09T14:37:38Z dev              sonnet $ 1.697   10.2 min  dev part 3
+  2026-11-09T14:37:44Z dev              sonnet $ 0.723    3.3 min  dev part 4
+  2026-11-09T14:37:51Z dev              sonnet $ 1.220    6.7 min  dev part 5
+  2026-11-09T14:37:58Z dev              sonnet $ 4.009   28.1 min  dev part 6
+  2026-11-09T14:38:04Z dev              sonnet $ 1.783   14.0 min  dev part 7
+  2026-11-09T14:38:11Z dev              sonnet $ 0.757    3.4 min  dev part 8
+  2026-11-09T14:38:18Z dev              sonnet $ 0.316    0.7 min  dev part 9
+  2026-11-09T15:07:10Z remediator       sonnet $ 1.168    5.6 min  Party repair part 1
+  2026-11-09T15:07:10Z remediator       sonnet $ 0.989    5.4 min  Party repair part 2
+  2026-11-09T15:07:10Z remediator       sonnet $ 2.216   11.7 min  Party repair part 7
+  2026-11-09T15:07:10Z remediator       sonnet $ 1.390    6.1 min  Party repair part 5 (SPEC)
+  2026-11-09T15:07:10Z remediator       sonnet $ 1.671    9.4 min  Party repair part 8
+  2026-11-09T15:07:10Z remediator       sonnet $ 0.764    3.1 min  Party repair part 9
+  2026-11-09T15:07:10Z remediator       sonnet $ 0.913    3.1 min  Party repair part 4
+  2026-11-09T15:07:10Z remediator       sonnet $ 0.914    3.7 min  Party repair part 6
+  2026-11-09T15:07:10Z remediator       sonnet $ 1.420    7.4 min  Party repair part 3
+== 3. controls
+CONTROL OK   whole label: recorded (52, 84.45, 6.87), derived (52, 84.45, 6.87)
+CONTROL OK   before 14:00Z: recorded (20, 7.06, 0.37), derived (20, 7.06, 0.37)
+CONTROL OK   impossible label gate-validation[QZXV-NO-SUCH-STEP-1035]: 0 spawns (must be 0); s322 spawns in <OUT>: 644 (must be > 0)
+== 4. record 26 verdicts in lead Bash calls, 2026-10-05 to 2026-11-12T10:16:23Z: {'FAIL': 5, 'PASS': 30, 'PENDING': 1}
+  189712ad 2026-11-04T04:42:04Z PENDING
+  562ac82a 2026-10-09T19:51:31Z FAIL
+  888e1365 2026-10-22T16:25:21Z FAIL
+  888e1365 2026-10-22T17:13:02Z FAIL
+  9a646a3b 2026-11-10T02:32:19Z FAIL
+  ca14f3b7 2026-10-27T14:24:38Z FAIL
+== 5. owner.json against <OUT2>: 6394 and 6394 owners, same keys True
+CHANGED 32 gate-validation[carry-over-evaluation] -> requirements, 2026-11-09T14:00:32.884Z to 2026-11-09T15:07:09.590Z
+CHANGED 5 gate-validation[implementation] -> implementation, 2026-10-22T16:26:28.201Z to 2026-10-22T17:28:18.947Z
+owners changed: 37
+the 32 14:00Z-bucket spawns land on: {'requirements': 32}
+CONTROL the 20 spawns before 14:00Z land on: {'gate-validation[carry-over-evaluation]': 20}

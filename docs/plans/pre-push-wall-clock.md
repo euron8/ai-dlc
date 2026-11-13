@@ -198,10 +198,9 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
      placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
      the moment its turn comes.
-   - PRE-SEED BEHIND THE GATE. Operator instruction at batch 256: owners queued behind a gate
-     pre-seed the verdict store at their final sha, as "a standard operating rule". The rule is
-     stated in full under that label in `docs/plans/graph-ledger-full-drain.md` action 0; follow it
-     there.
+   - BUNDLE BY DEFAULT. Ready releases are collected by the lead onto one integration branch and
+     gated once. The rule is stated in full under that label in
+     `docs/plans/graph-ledger-full-drain.md` action 0; follow it there.
 1. **REMOVE TOTAL WORK. The lever is repeated I/O over the same files, and it is the largest
    single finding in this plan.** Operator's own lead at batch 119, confirmed by derivation:
    every real input file is opened **~8.8 times per full suite run**, by different fixtures, for

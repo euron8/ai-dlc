@@ -87,8 +87,8 @@
 # gate-adjudication DEL and IFMAP). A twin is an arm that stays GREEN under the mutant. The full A B C D E
 # M N P vector of every mutant is the MUTANTS table below, measured at authoring and asserted whole when
 # the --matrix argument (the remeasure command above); a plain run (the per-push one) scores each mutant on its
-# deciding arm(s) plus its named twin. The matrix is re-measured whenever an arm or a mutant is added or
-# changed.
+# deciding arm(s) plus its named twin. The matrix is re-measured as .claude/rules/fixture-mutants.md
+# clause 2 ("One run per distinct state") requires.
 #
 # THE KILL IS THE WHOLE VECTOR. A mutant is killed only when every arm of the script it edits
 # answers exactly as declared — its own arm(s) fail and the rest hold — so no kill is borrowed

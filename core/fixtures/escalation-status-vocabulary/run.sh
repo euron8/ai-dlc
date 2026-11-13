@@ -21,7 +21,8 @@
 # rows below are the one source: mx_row reads them from this file, and a per-push run refuses a mutant with none.
 # The fifteen CELL-VECTOR mutants (the empty-file, refusal, posture and refusal-prose batteries) are each scored by
 # one string of every cell of their battery against the whole vector they must produce, so each is a FULL row.
-# RE-MEASURE whenever an arm or a mutant is added or changed, from the repo root:
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Run it from the repo root:
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/escalation-status-vocabulary/run.sh --matrix
 # Measured by the REMEASURE command: canon-guard-deleted also trips d-off (its token check), and first-wins-outright
 # also trips a-off and b-off (the reading this change replaced is first-wins for both); each stands down for the
@@ -45,6 +46,9 @@
 # MUTANT-MATRIX-FULL RP-map-clause worlds=A,B,C,D2,D2a,Dm,E,PA,PB,PC why=the refusal-prose arm asserts the seven refusal cells and the three posture cells equal 0111111/111 together
 # MUTANT-MATRIX-FULL RP-step-2a-tail worlds=A,B,C,D2,D2a,Dm,E,PA,PB,PC why=the refusal-prose arm asserts the seven refusal cells and the three posture cells equal 1101111/111 together
 # MUTANT-MATRIX-FULL RP-check-26 worlds=A,B,C,D2,D2a,Dm,E,PA,PB,PC why=the refusal-prose arm asserts the seven refusal cells and the three posture cells equal 1111110/111 together
+# MUTANT-MATRIX-FULL cwd-unpinned worlds=slash,root why=the cwd-invariance arm asserts the whole two-cwd vector equals 10,10, so each cwd cell is its decision
+# MUTANT-MATRIX-FULL cwd-unpinned-ven worlds=A,B,C,D,E why=the whole-directory control's five-cell vector from / equals 11111 under the pin and differs without it, so every cell is its decision
+# MUTANT-MATRIX-FULL cwd-unpinned-vr worlds=A,B,C,D,E,F why=the refusal control's six-cell vector from / equals 111111 under the pin and differs without it, so every cell is its decision
 # The kills reach mutant_killed through variables, one name per scorer call:
 # MUTANT-MATRIX-DYNAMIC reader-loop why=the reader loop passes each of the four reader mutant names above as $mname
 # MUTANT-MATRIX-DYNAMIC ven_score why=ven_score passes M-revert and M-zero-records as its name argument
@@ -63,6 +67,16 @@ done
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# The project root, found by walking UP from this script's own location for a marker (the ai_dlc_resolve_root()
+# pattern), never from the cwd and never by counted `..` hops. Every copy of the validator the fixture builds sits
+# under a mktemp dir with no marker above it, so it needs the root handed to it (ev below does that).
+ESV_ROOT=""
+_d="$HERE"
+while [ -n "$_d" ] && [ "$_d" != "/" ] && [ "$_d" != "." ]; do
+  if [ -e "$_d/.git" ] || [ -d "$_d/.claude" ] || [ -d "$_d/core/skills/ai-dlc" ]; then ESV_ROOT="$_d"; break; fi
+  _d="$(dirname "$_d")"
+done
+[ -n "$ESV_ROOT" ] || { echo "FIXTURE ERROR: no .git, .claude/ or core/skills/ai-dlc marker above $HERE" >&2; exit 2; }
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
@@ -100,10 +114,20 @@ src_esv() { # src_esv <copy>
 }
 ev() { # ev <copy> <args...> -- one in-process run of <copy>, which must be the copy src_esv sourced last
   [ "$1" = "$ESV_SOURCED" ] || { echo "FIXTURE BROKEN: driving $1 while ${ESV_SOURCED:-nothing} is sourced" >&2; return 97; }
-  shift
   # The program runs with `set -u` alone; this fixture runs with pipefail, which a subshell inherits. Turned off
   # first, so a pipeline inside esv_main answers in process exactly as it does when the validator is run as a program.
+  # The root is pinned for every copy that would otherwise inherit an unresolved one. The lone copy (LONE_V) severs
+  # itself by design and the script-relative copy (SIB_V) is handed its own root, so both are left exactly as they
+  # set themselves. ESV_NOPIN=1 is the cwd-dependent resolution the cwd-invariance arm's mutant restores.
+  local c="$1"
+  shift
+  (
+    case "$c" in
+      "${LONE_V:-}"|"${SIB_V:-}") : ;;
+      *) if [ "${ESV_NOPIN:-0}" = 1 ]; then unset AI_DLC_PROJECT_ROOT CLAUDE_PROJECT_DIR; else export AI_DLC_PROJECT_ROOT="$ESV_ROOT"; fi ;;
+    esac
   ( set +o pipefail; esv_main "$@" )
+  )
 }
 ESV_REL="core/scripts/$(basename "$VALIDATOR")"
 w_def=0; w_guard=0
@@ -429,6 +453,32 @@ _rb_all=1; for _ra in $R_ARMS; do [ "$(rb "$_ra")" = 1 ] || _rb_all=0; done
 if [ "$_rb_all" = 1 ]; then
   ok "baseline (unmutated control copy): all seven reader arms hold, so a reader mutant's tripped arm is the mutation's"; B_READERS=1
 else bad "baseline (unmutated control copy): a reader arm does not hold on the control copy -- every reader mutant verdict below is void"; fi
+
+# --- THE CWD-INVARIANCE ARM (BL-1007): the control's vector is the same from `/` and from the root -----------------
+# The copies carry no marker above them, so a copy that resolves its root from the cwd answers rc 2 from `/` and the
+# real verdict from the root. Offender then near-miss on the unmutated control copy, from each cwd; the whole
+# vector is "<from />,<from root>" and must read 10,10. The LONE and SIB arms fix their own root, so a two-cwd cell
+# of theirs cannot fail and is not coverage here. The mutant restores the cwd-dependent resolution (ESV_NOPIN=1).
+cwd_vec() { # cwd_vec <cwd> <copy> <nopin> -> "<offender rc><near-miss rc>"
+  ( cd "$1" || exit 9; ESV_NOPIN="$3"
+    ev "$2" "$PROSE_BELOW" "$SPEC_SRC" >/dev/null 2>&1; _o=$?
+    ev "$2" "$PROSE_BELOW_OK" "$SPEC_SRC" >/dev/null 2>&1; _n=$?
+    printf '%s%s' "$_o" "$_n" )
+}
+CWD_CTL="$(cwd_vec / "$MCTL" 0),$(cwd_vec "$ESV_ROOT" "$MCTL" 0)"
+B_CWD=0
+if [ "$CWD_CTL" = "10,10" ]; then
+  ok "cwd-invariance: the control copy reports the offender and stays quiet on the near-miss from / and from the root alike ($CWD_CTL)"
+  B_CWD=1
+else
+  bad "cwd-invariance: the control copy's vector from / and from the root is $CWD_CTL, wanted 10,10 -- the copies resolve a project root from the cwd"
+fi
+CWD_MUT="$(cwd_vec / "$MCTL" 1),$(cwd_vec "$ESV_ROOT" "$MCTL" 1)"
+if [ "$CWD_MUT" = "$CWD_CTL" ]; then
+  bad "MUTANT cwd-unpinned did not apply: the cwd-dependent resolution answers $CWD_MUT, the same vector as the control, so the arm discriminates nothing"
+else
+  mutant_killed "$B_CWD" "cwd-unpinned" "MUTANT cwd-unpinned killed by the cwd-invariance arm: the cwd-dependent resolution scored $CWD_MUT against the control's $CWD_CTL"
+fi
 MX_CELLS=0
 mut_why() {     # <name> -> which arm owns the kill, and what the mutant costs
   case "$1" in
@@ -571,6 +621,14 @@ else
     if [ "$5" = control ]; then
       if [ "$VEN_CELLS" = "$3" ]; then ok "$1 scored $VEN_CELLS -- $4"; B_VENC=1
       else bad "$1 scored $VEN_CELLS, wanted $3 -- $4"; fi
+      # THE CWD-INVARIANCE ARM, whole-directory control: the same five cells from `/` (BL-1007), and the unpinned
+      # resolution (ESV_NOPIN=1) from `/` must move the vector, so a pin dropped from this copy alone is caught.
+      VEN_CWD="$(cd / && ven_cells "$2" && printf '%s' "$VEN_CELLS")"
+      if [ "$VEN_CWD" = "$3" ]; then ok "cwd-invariance: the whole-directory control scores $VEN_CWD from / as from the root"; B_VENCWD=1
+      else bad "cwd-invariance: the whole-directory control scores $VEN_CWD from /, wanted $3"; fi
+      VEN_CWDM="$(cd / && ESV_NOPIN=1 && ven_cells "$2" && printf '%s' "$VEN_CELLS")"
+      if [ "$VEN_CWDM" = "$3" ]; then bad "MUTANT cwd-unpinned-ven did not apply: the cwd-dependent resolution still scores $VEN_CWDM from /"
+      else mutant_killed "${B_VENCWD:-0}" "cwd-unpinned-ven" "MUTANT cwd-unpinned-ven killed by the whole-directory cwd arm: the cwd-dependent resolution scored $VEN_CWDM from / against $3"; fi
       return 0
     fi
     vec_score "$1" "$VEN_CELLS" "$3" "$(( ${B_VEN:-0} && ${B_VENC:-0} ))" \
@@ -814,6 +872,14 @@ else
     if [ "$name" = ctl ]; then
       if [ "$VR_CELLS" = "$want" ]; then ok "$label scored $VR_CELLS"; B_VRC=1
       else bad "$label scored $VR_CELLS, wanted $want"; fi
+      # THE CWD-INVARIANCE ARM, refusal control: the same six cells from `/` (BL-1007), and the unpinned resolution
+      # (ESV_NOPIN=1) from `/` must move the vector.
+      VR_CWD="$(cd / && vr_cells "$out" && printf '%s' "$VR_CELLS")"
+      if [ "$VR_CWD" = "$want" ]; then ok "cwd-invariance: the refusal control scores $VR_CWD from / as from the root"; B_VRCWD=1
+      else bad "cwd-invariance: the refusal control scores $VR_CWD from /, wanted $want"; fi
+      VR_CWDM="$(cd / && ESV_NOPIN=1 && vr_cells "$out" && printf '%s' "$VR_CELLS")"
+      if [ "$VR_CWDM" = "$want" ]; then bad "MUTANT cwd-unpinned-vr did not apply: the cwd-dependent resolution still scores $VR_CWDM from /"
+      else mutant_killed "${B_VRCWD:-0}" "cwd-unpinned-vr" "MUTANT cwd-unpinned-vr killed by the refusal cwd arm: the cwd-dependent resolution scored $VR_CWDM from / against $want"; fi
       return 0
     fi
     vec_score "$label" "$VR_CELLS" "$want" "$(( ${B_VR:-0} && ${B_VRC:-0} ))" \

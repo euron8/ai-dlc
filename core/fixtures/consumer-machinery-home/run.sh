@@ -11,8 +11,9 @@
 # Per push each mutant runs `validate-enforcement-map.sh --arms I43,I44` (I44 declares
 # `requires-arms: I43`, so those two units are the whole run): the deciding arm's own message
 # is asserted. `--matrix` runs every world through the WHOLE validator and prints one MATRIX row
-# per world naming every arm that reported FAIL. The matrix is re-measured whenever an arm or a
-# mutant is added or changed. Measured (every world through the whole validator): each mutant
+# per world naming every arm that reported FAIL. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Measured (every
+# world through the whole validator): each mutant
 # trips exactly its deciding arm and nothing else, so each twin is green for it. The per-push
 # run asserts the twin stays green; a change in co-tripping fails that mutant.
 # a1 mutates the READER because renaming the home in the GUARD fires two arms at once.

@@ -21,7 +21,8 @@
 #
 # The mutant matrix: each mutant is scored on its DECIDING ARM plus ONE named TWIN, an arm the measured matrix shows
 # GREEN under it, read off the same capture. `--matrix` captures every mutant once and scores it on every arm this
-# file defines. Re-measured whenever an arm or a mutant is added or changed. Measured (--matrix, 28 captures x 17
+# file defines. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Measured (--matrix, 28 captures x 17
 # arms): every row's deciding arm TRIPPED and its twin GREEN. The twelve mutants E0 refuses before any world is
 # read twinned on m6 while they lived in backlog-receipt-binding; arm_m6 stays in that file's text, and a twin must
 # be a label THIS fixture emits (validate-fixture-hygiene H7), so they twin on m_vprose, another E0-refusal arm,
@@ -772,7 +773,8 @@ ef_mutd m-d6 's/if (isrow \&\& NR != hnr) {/if (isrow) {/'
 # --- per-push twins ----------------------------------------------------------------------------
 # A TWIN is a different arm that the MEASURED matrix shows GREEN for the mutant. Every push reads it
 # off the mutant's own capture, so a kill that spreads past its deciding arm is seen at no cost.
-# The table is generated from a `--matrix` run; re-measure whenever an arm or a mutant changes.
+# The table is generated from a `--matrix` run. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
 twin_of() {
   case "$1" in
 # TWINS-BEGIN

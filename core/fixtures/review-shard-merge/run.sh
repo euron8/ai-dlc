@@ -48,9 +48,9 @@
 # else it is DERIVED from the partition script's own dereference site. lib.sh sets the shell
 # options, scrubs AI_DLC_*, owns WORK and its one EXIT trap.
 #
-# THE MUTANT MATRIX. Measured once by the re-measure command below, and re-measured whenever an arm or
-# a mutant is added or changed: a mut_run line, a `cell` a mutant drive declares, or a file of the
-# derived sibling set. Its population is each mutant x the cells of its own drive (the predicate its
+# THE MUTANT MATRIX. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per
+# distinct state") requires. It was measured once by the re-measure command below. Its population is
+# each mutant x the cells of its own drive (the predicate its
 # mut_run names), plus, for a drive declaring fewer than two cells, the deciding cell of every mutant of
 # the same file; cells outside that population are not measured. Each cell is scored over the mutant
 # copy and over the unmutated control copy, and reads RED (the cell failed), GREEN (it passed, exactly

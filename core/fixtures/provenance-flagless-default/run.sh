@@ -48,7 +48,8 @@
 # h read 1; b and f read 0; e reads 2 in both orders). A mutant's row names the cells that kill it (decides) and the
 # cells it could plausibly co-trip but must leave GREEN (twins): the arms whose behaviour sits one rung away from the
 # mutated line. A plain run scores each mutant on its deciding cells and its twins only. The matrix is re-measured
-# whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the repo root. It scores
+# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE command
+# below, from the repo root. It scores
 # every mutant on every cell and prints one MATRIX line each. No validator unit is selected here, so there is no
 # outside-unit diff.
 # Twins for M4 (a, g, a4) and M5 (a, a2, a5) are several because each mutant adds an acquittal beside the absent rung

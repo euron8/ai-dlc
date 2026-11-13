@@ -37,8 +37,8 @@
 # THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). Each mutant is scored on its EXACT FAIL set
 # over the whole suite, so every arm is part of its decision -- a kill set of one arm is only exact if every other
 # arm reads ok on the same copy -- and each is a FULL row whose worlds are the suite's arms. `--matrix` prints one
-# `MATRIX <mutant> FULL <FAIL set>` row per mutant; the per-push score is the same run. RE-MEASURE whenever an arm
-# or a mutant is added or changed, from the repo root:
+# `MATRIX <mutant> FULL <FAIL set>` row per mutant; the per-push score is the same run. The matrix is re-measured
+# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run it from the repo root:
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/dist-clone/run.sh --matrix
 # MUTANT-MATRIX-FULL M-shared worlds=DC1,DC17,DC3,DC2,DC13,DC10,DC11,DC19,DC4,DC16,DC5,DC5b,DC6,DC7,DC18,DC20,DC14,DC12,DC9 why=score asserts the FAIL set is exactly DC9 across the whole suite
 # MUTANT-MATRIX-FULL M-allbranches worlds=DC1,DC17,DC3,DC2,DC13,DC10,DC11,DC19,DC4,DC16,DC5,DC5b,DC6,DC7,DC18,DC20,DC14,DC12,DC9 why=score asserts the FAIL set is exactly DC3 across the whole suite

@@ -35,8 +35,8 @@
 # THE MUTANT MATRIX. Every mutant below is scored on its DECIDING cell plus one named TWIN on a plain run (what the hook
 # and hermetic-run.sh run); `--matrix` also drives every other cell a mutant has and prints one `MATRIX <mutant> <cell>`
 # row each. The rows were measured from ONE `--matrix` run of this file from the repo root, and the fixture arm
-# `MX:` fails a plain run that executed any matrix-only cell. Re-measure whenever an arm or a mutant is added or changed,
-# and re-measure invocations.decl beside it. Several mutants also move cells outside their decides set (a wrong fix that
+# `MX:` fails a plain run that executed any matrix-only cell. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# Re-measure invocations.decl beside it. Several mutants also move cells outside their decides set (a wrong fix that
 # is seen by more than one arm): m11 moves forged-clean-leadwrite; wms moves W7; m-fallback-live-alone moves AD-IW-UNPARSE;
 # m-unsafe-live-alone moves AD-UNREADABLE, AD-IW-SPACE, AD-IW-NEWLINE and AD-IW-DASH; m-unsafe-dropped moves AD-IW-NEWLINE
 # and AD-IW-DASH; m-stems-wordsplit moves AD-NEWLINE, AD-A-SPACE, AD-B-SPACE and AD-W4-SPACE; m-multidoc-drops moves
