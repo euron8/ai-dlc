@@ -891,7 +891,16 @@ fi
 # TO CARRY ONE RULE: `operator-rulings.md` gained "the burden of verifying a change is proportional to
 # the change" (BL-1023). It is prose-only and cannot be SCOPED, nor is it an act an arm can scan for.
 # A6 WAS OBSERVED FAILING AT 75423/74800 BEFORE THE CEILING MOVED. 75520 leaves 97 bytes.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-75520}"
+#
+# RAISED A TWENTY-SIXTH TIME, 75520 -> 76544, ON AN OPERATOR RULING, IN SESSION ai-dlc-15, BATCH 257
+# ("Raise ceiling ~1 KiB"), TO CARRY TWO RULES: `operator-rulings.md` gained "Bundle releases only to
+# cut wall clock", and `CLAUDE.md` gained that a `+`-declared fixture input is hashed by both skip keys
+# (675 bytes together, against 100 free). Both are prose-only and cannot be SCOPED; neither is an act
+# an arm can scan for. A6 WAS OBSERVED FAILING AT 76095/75520 BEFORE THE CEILING MOVED. 76544 is
+# 74.75 KiB, one KiB above the old ceiling, and left 449 bytes; in the same release
+# `verification-discipline.md` gained the transcript-replay rule (356 bytes) inside that headroom,
+# with no further raise, leaving 93.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-76544}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

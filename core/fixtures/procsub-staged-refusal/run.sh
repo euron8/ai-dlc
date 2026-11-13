@@ -2767,8 +2767,8 @@ mutant UD-MEMO reconcile unregistered-drift.sh \
   $'sed \'s/^[[:space:]]*//; s/[[:space:]]*$//\' "$t/blob-theirs" | sort -u' \
   $'git_show "${THEIRS}" "${cp}" > "$t/ap-theirs-blob" || return 3\n  sed \'s/^[[:space:]]*//; s/[[:space:]]*$//\' "$t/ap-theirs-blob" | sort -u'
 mutant MG-LS scripts migrate-artifact-paths.sh \
-  'git ls-files -- $(printf '"'"'%s '"'"' $SCAN_ROOTS) 2>/dev/null > "$TMP/tracked" || LS_RC=$?' ':' \
-  'done < "$TMP/tracked"' 'done < <(git ls-files -- $(printf '"'"'%s '"'"' $SCAN_ROOTS) 2>/dev/null)'
+  'git ls-files -z -- $(printf '"'"'%s '"'"' $SCAN_ROOTS) 2>/dev/null > "$TMP/tracked" || LS_RC=$?' ':' \
+  'done < "$TMP/tracked"' 'done < <(git ls-files -z -- $(printf '"'"'%s '"'"' $SCAN_ROOTS) 2>/dev/null)'
 mutant AC-SEGMENT scripts validate-ac-falsifiability.sh \
   $'  _acf_rc=0\n  awk \'' \
   $'  while IFS=\'|\' read -r ac_id start end; do\n    [ -n "$ac_id" ] && block_ids+=("$ac_id|$start|$end")\n  done < <(awk \'' \

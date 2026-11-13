@@ -19,6 +19,53 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1107.0] - 2026-11-13
+
+### BL-1028 CLOSED: migrate-artifact-paths.sh prints progress and no longer forks per path component
+
+Filed by the consumer as PC-S322-MIGRATE-PLAN-PHASE-NO-PROGRESS-OUTPUT. The consumer reported an 11-minute plan phase on 16554 tracked files, with nothing on either stream until the summary, against a 0.9 s scan of the same tree by the conformance validator. The change is one file, `core/scripts/migrate-artifact-paths.sh`. `sprints_in`, `strip_token`, the `nhits` count and the story helpers are pure bash, answering through globals. The `--apply` move loop runs one `shasum` per batch of 256 moves, an `mv` per move, and one `git update-index --index-info` per batch that stages the source's own index entry (mode and blob) at the destination, as `git mv` does. The plan and the batch staging enumerate with `git ls-files -z`.
+
+Measured, exec counts, base 0569579f4 against the tip, on file:// clones of the consumer:
+- HEAD tree c8ab65397 (16554 files): plan 431407 to 38, move loop 1393 to 237, total 432908 to 383.
+- Pre-migration tree 188a4b006 (5148 files, 1001 legacy stories, 3637 moves): plan 103059 to 77, move loop 21823 to 4868 (3637 of them one `mv` per move), total 124993 to 5056.
+- Dry-run and `--apply` stdout, exit code, full PLAN rows (3637 and 232), `git status -z` (7274 and 464 entries) and `git ls-files -s` after apply (9929 and 22918 entries) are EQUAL to base on both trees, in the C and en_US.UTF-8 locales. Neither tree has a path that git would quote.
+- `sprints_in` and `strip_token` are EQUAL to base over 38732 inputs.
+
+No wall-clock base-against-tip figure is stated here. The 11 minutes and the 0.9 s are the consumer's own figures.
+
+Consumer-visible changes:
+- PROGRESS lines go to stderr every `AI_DLC_MIGRATE_PROGRESS_EVERY` files or moves, default 1000: `plan: <total> tracked file(s) to scan` (only when total >= N), `plan: scanned <i> of <total>`, `apply: <n> move(s) to apply` (only when n >= N) and `apply: moved <i> of <n>`.
+- A value of `AI_DLC_MIGRATE_PROGRESS_EVERY` not matching `^[1-9][0-9]*$` exits 2, where base ignored it.
+- The `--help` window is longer.
+- The stage-failure message names `git update-index` and says the batch was moved back. Every abort leaves the tree, the index and `git status` as base leaves them.
+- Non-ASCII, backslash and double-quote paths are migrated. Under the default `core.quotePath` base listed them quoted and skipped them silently, as it had since the script existed. A path holding a tab or newline that would otherwise be planned or refused is refused as the new class `UNSAFE-NAME`, because the plan and move lists are tab-separated; a conforming or tokenless one is skipped silently as before.
+- UTF-8: under a UTF-8 locale a story header carrying invalid UTF-8 is now read, where the old `sed` died with `illegal byte sequence`.
+
+### BL-1038 FILED OPEN: validate-artifact-paths.sh judges quoted names under core.quotePath
+
+Found while fixing BL-1028's plan scan. `core/scripts/validate-artifact-paths.sh` enumerates with line-delimited `git ls-files`, so under `core.quotePath` it judges the QUOTED name. It reports a non-conforming `café` path under its quoted name, which is not a path the operator can act on, and it falsely BLOCKS a conforming `s322/café.md`: the leading `"` makes `"docs` the first component, so `s322/` no longer sits directly under the area. It can therefore block a push on a conforming tree. The fix shape is `git ls-files -z` with a NUL-delimited read. Its receipt exits 1 now; nothing in this release changes the validator.
+
+### D1: batch 257 close docs; BL-1031, BL-1032, BL-1039 and BL-1041 filed OPEN
+
+Docs and durable-channel prose only; no engine code changes.
+
+`docs/plans/graph-ledger-full-drain.md`:
+- The owner-rules block cites operator-rulings.md "The burden of verifying a change is proportional to the change": the Runs paragraph and step 5 drop the hand validator list and carrier runs; `invocations.decl` is one counted run plus the gate's; the pre-ready `validate-enforcement-map` and language-change pre-run are removed, as is the "fixture hand whose arms touch hooks runs validate-enforcement-map" bullet.
+- Hand pre-suite prefix runs are dropped entirely: action 4's conditional prefix run and its extraction bullet, the Receipts bullet's prefix instruction, and step 7's condition.
+- The batch-256 `AI_DLC_FIXTURE_JOBS=9` clause is removed; one owner line: the session environment's value, never set, overridden or unset on a push. Batch 255's stale A6 clause is removed.
+- PRE-SEED BEHIND THE GATE: the seed set is derived by the hook's `apply_readset_skip`, never a hand query; seeders run with stdin from `/dev/null`.
+- Roll call: the advisor-call exemption is only PAUSED or stated CLOSABLE.
+- BUNDLE FOR WALL CLOCK as a lead duty; the owner line proposes, the lead decides.
+
+Durable channel, on the operator's ruling "Raise ceiling ~1 KiB": `.claude/rules/operator-rulings.md` gains "Bundle releases only to cut wall clock"; `CLAUDE.md` states that a `+`-declared fixture input is hashed by both skip keys; `.claude/rules/verification-discipline.md` states that a transcript replay counts executed calls, pairing `tool_use` with `tool_result` by id and dropping denied or `is_error` calls. A6 of `scripts/validate-claude-rules.sh` failed at 76095/75520 before the ceiling moved to 76544; it now reads 76451/76544 (93 B headroom).
+
+`docs/backlog.md`: BL-1031 (DEFECT), BL-1032 (DEFECT) and BL-1039 (NOTE, efficiency) filed OPEN. BL-1031 and BL-1032 carry runner-wired `verify: sh` receipts, each with a must-fire control (exit 9 when it does not fire), measured once at base (exit 1) and once against a stand-in fix (exit 0); BL-1032 cites F4's guard at `core/hooks/ai-dlc-handoff-entry.sh:143`. BL-1009's banner names v0.1105.0. At the bundle, BL-1032's receipt guards its read of `core/hooks/ai-dlc-context-provenance.sh` (`|| exit 9`, R13), and BL-1031's receipt builds the bold efficiency tag and the `docs/analysis` path at run time; both still exit 1, and BL-1031's scratch ledgers are byte-equal to before.
+
+BL-1041 (NOTE) filed OPEN: the E arm of `scripts/validate-backlog-receipts.sh` (`:1304`) classes an entry as efficiency from text inside its own `verify:` line, which is what failed BL-1031 with F-BASELINE, F-STEP and F-MOVEMENT. The check itself is unfixed.
+
+NET -5: closed 1 (BL-1028), filed 6 (BL-1028, BL-1038, BL-1031, BL-1032, BL-1039, BL-1041).
+
+
 ## [0.1106.0] - 2026-11-13
 
 ### BL-1017 CLOSED: step 7 of `/ai-dlc-update` relays every `NOTE` row, and the derivation differential's own rows reach the manifest

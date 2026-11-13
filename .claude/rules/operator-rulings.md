@@ -64,6 +64,14 @@ probe, the one unit it edited. The gate runs everything else; a hand re-running 
 Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule, never a cause outside its
 control. Pushes take the lead's slot one at a time; every other run goes in parallel.
 
+## Bundle releases only to cut wall clock
+
+When READY releases queue behind the serial push gate, the lead combines them into one release
+only when that cuts overall wall clock: push slots saved against integration cost and any slip
+moved onto another release, stated as numbers. "you are not bundling for bundling's sake. You are
+doing it because we can reduce overall wall clock time. If bundling were to have the opposite
+effect then we don't bundle."
+
 ## No needless timing runs
 
 "Stop timing things that don't need to be timed." Cost evidence for a routine change is the counts

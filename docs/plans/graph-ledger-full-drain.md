@@ -49,9 +49,9 @@ a batch record.
 - **Graph at open:** `main` `6ee289617`, stamp `0.1061.0` (`e0ebaf019` is an ancestor), 17 behind; s322 has 8/8 stories done, its retro still running; ledger live 4 at `main`, all unfiled at open; one further filing uncommitted in graph's working tree (`PC-S322-RETRO-CARRY-DERIVATION-REPOINT-BLINDS-TREE-MATCH`). Action 7 at open: PENDING 0, no rc regression, banked.
 - **Owners:** 29 sessions, one release each. C1 BL-984 decls; C2 BL-986; C3 BL-987; C4 BL-988; C5 BL-989; C6 BL-981/976/974; N1 BL-978; N2 BL-985; N3 BL-809; N4 BL-819; N5 BL-880; N6 BL-695; N7 BL-510/514; N8 BL-909; N9 BL-990, also files BL-993; N10 BL-972; N11 BL-878; N12 BL-899; N13 core narrative drift (BL-991 reserved); M1 BL-508/541/543/550/552 planning re-audit; M2 BL-842/843/844/846/847 gate-2 outcomes; M3 BL-838/839/912/913; M4 BL-808/810; M5 BL-397/398/512/615; M6 BL-806/583/914/868; B1 BL-915 audit; B2 BL-911 narrowing; B3 BL-992 `install.sh`; B4 BL-982 static arm (`ai-dlc-d8`).
 - **Load:** the operator paused 24 of 29 sessions (05:37-05:45); active C1, C2, C3, C5, N9.
-- **Operator rulings:** BL-615 item 2 WAIVED (closes on its outcome line alone); BL-972 contact shape is option 1, "dispatch, then ask"; `AI_DLC_FIXTURE_JOBS=9` for this batch; PRE-SEED BEHIND THE GATE made a standard operating rule (action 0, this release).
+- **Operator rulings:** BL-615 item 2 WAIVED (closes on its outcome line alone); BL-972 contact shape is option 1, "dispatch, then ask"; PRE-SEED BEHIND THE GATE made a standard operating rule (action 0, this release).
 - **Lead rulings:** BL-974 term 7 is records-only (option B, a seal-time check, is on the operator list for its consumer cost); BL-978 fixes all six `apply.sh` scaffold arms; L3 (BL-899's driver-absent-at-base exclusion) has recorded text a/b/c/d, in the entry; STEP-AT-CLOSE: an efficiency entry cannot close in the release that measures it, so each gets a Step line now and closes in a follow-up release; the BL-972 receipt is re-keyed at the ask's position, column definitions in the entry; no object-writing git command inside `/Users/n8/git/graph`.
-- **Carried from batch 255 (binding if the subject is picked):** BL-847 strict blocking is NOT built; the BL-514 and BL-841 goals stay open; BL-880: strike the pre-push step's own probe replay; `apply.sh` "ships alone" is KEPT (operator); a pull is never dispatched by this program; the durable channel's A6 reads 74773/74800 B, so the next durable-channel addition needs a vestigial cut first; kept branches `b255-F2-*`/`F2b-*`, `b255-F2c-*`, `b255-F9-code-tip-7ad8e93e5`, `255-b255-F15-bl983-cmp-tools-decl-census-decls`.
+- **Carried from batch 255 (binding if the subject is picked):** BL-847 strict blocking is NOT built; the BL-514 and BL-841 goals stay open; BL-880: strike the pre-push step's own probe replay; `apply.sh` "ships alone" is KEPT (operator); a pull is never dispatched by this program; kept branches `b255-F2-*`/`F2b-*`, `b255-F2c-*`, `b255-F9-code-tip-7ad8e93e5`, `255-b255-F15-bl983-cmp-tools-decl-census-decls`.
 
 ### Derive the state; do not trust the numbers below
 
@@ -773,9 +773,9 @@ candidate's surviving half is upstream's to file and build, never a question for
      operator as silent. When designated, the lead arms ONE non-recurring job at now+45 minutes
      (cron cannot say 45 minutes, and recurring jobs drift: measured next fires 18 then 63 minutes
      apart); each fire re-arms the next job first. It re-arms after a compaction and stops when no
-     session remains active. A session the lead has paused stays in the roll call and answers with
-     its one line, and is not told to call `advisor` while paused (operator instruction at batch
-     256). The lead asks active sessions for advisor calls a few at a time: 28 at once at batch 256
+     session remains active. The advisor-call exemption is ONLY a session that is PAUSED or stated
+     CLOSABLE (operator); a session holding or queued for the push turn is NOT exempt. A paused
+     session still answers with its one line. The lead asks active sessions for advisor calls a few at a time: 28 at once at batch 256
      returned rate-limited.
    - **A graph-watch session.** When the operator assigns one, a peer `ai-dlc-*` session watches
      the consumer READ ONLY for the batch: it reads graph's artifacts, transcripts and ledger; it
@@ -851,13 +851,22 @@ candidate's surviving half is upstream's to file and build, never a question for
      pre-seed the verdict store at their final sha, as "a standard operating rule". While a release
      gates, the lead names the two owners queued directly behind it. Each, once its tip is final and
      the release ahead has pushed, pre-rebases onto that pushed commit and, from a clean worktree
-     detached at that exact sha, runs `scripts/seed-verdict-store.sh` over its changed fixtures and
-     its carrier set, in at most three seeder processes over disjoint lists. When the release ahead
+     detached at that exact sha, runs `scripts/seed-verdict-store.sh` in at most three seeder processes over disjoint lists. The
+     seed set is DERIVED by the hook's own read-set join, `apply_readset_skip` extracted from
+     `.githooks/pre-push`, never retyped and never a hand query of the map and `inputs.decl`: at
+     0.1103.0 a hand set missed the one real carrier and over-seeded 15. Every seeder and every
+     census runs with stdin from `/dev/null`: a SIGTTIN tty stop stalled a census. When the release ahead
      lands, `git rebase --onto origin/main <its pushed commit>` must reproduce the seeded
      `HEAD^{tree}`; where it does not, re-seed only the fixtures whose declared inputs moved. The
      push's `verdict store: N fixture(s) skipped` line is the evidence, and the owner reports N with
      its squash sha. A red seed records nothing and goes to the lead as a FAIL before the push turn.
      A seed is a correctness run and is never timed; one push still runs at a time.
+   - BUNDLE FOR WALL CLOCK. `.claude/rules/operator-rulings.md`, "Bundle releases only to cut wall
+     clock": when 2 or more READY releases wait behind the gate, the lead checks whether one
+     combined release cuts overall wall clock (push slots saved against integration cost and any
+     slip moved onto another release) and states the numbers. "you are not bundling for bundling's
+     sake. You are doing it because we can reduce overall wall clock time. If bundling were to have
+     the opposite effect then we don't bundle."
    - **The owner-rules block.** Send it verbatim; it cites the rulebooks and actions it depends on
      rather than restating them.
 
@@ -880,12 +889,11 @@ candidate's surviving half is upstream's to file and build, never a question for
 
    **Runs.** Box load gates nothing, and nothing is timed unless the plan's NO TIMING RUNS rule
    allows it. One push runs at a time: tell <lead> by SendMessage when you are ready to push, and
-   push when <lead> says it is your turn. Hands run NO fixture suite, no mutant scorer and no corpus sweep when
-   verifying their own change; a hand verifies only its own change (`bash -n`, its discriminating
-   probe, the single fixture it edited, and each fixture that invokes the file it edited directly
-   on a non-comment line, never a sharded battery or a mutant scorer, each through
-   `core/scripts/hermetic-run.sh` with a `mktemp` verdict store, and named in its report). A
-   skipped own-fixture run cost batch 243 a whole second gate run on three 5-19s fixtures. Killing and the verdict store:
+   push when <lead> says it is your turn. A hand verifies ONLY its own change, per
+   `.claude/rules/operator-rulings.md`, "The burden of verifying a change is proportional to the
+   change": `bash -n`, its discriminating probe, and the one unit it edited, through
+   `core/scripts/hermetic-run.sh` with a `mktemp` verdict store, named in its report; no fixture
+   suite, carrier set, validator list, mutant scorer or corpus sweep. Killing and the verdict store:
    `.claude/rules/tool-hazards.md`.
 
    **Verification step, every unit.** A unit's push is its gate, and it is merged as pushed:
@@ -896,9 +904,6 @@ candidate's surviving half is upstream's to file and build, never a question for
    merge checks are VALIDATORS ONLY, with no fixture re-run.
 
    **Receipts and new files.**
-   - Verify a receipt the way R8 and `scripts/backlog-rotate.sh` run it: from inside the hook's step
-     environment (the extracted pre-suite prefix of action "Gate it the way the hook runs it, and
-     read the GATE's own exit."), not only standalone.
    - An added-lines reachability join uses `/usr/bin/grep` beside a must-miss control: the
      interactive `grep` is a ugrep shim that prints a false 0 on a big `-F -f` list.
    - When a fixture's counted starts rise, name the new arms that account for the rise. A reshape
@@ -961,40 +966,26 @@ candidate's surviving half is upstream's to file and build, never a question for
       problem. A finding whose fix adds a trust root or a new consumer cost goes to <lead> with its
       measured consumer cost, and <lead> takes it to the operator; the lead never rules it.
       Findings fixable in the release's own files at no consumer cost are fixed in-release.
-   5. Every hand brief ends with `bash scripts/validate-enforcement-map.sh` and `bash
-      scripts/validate-shell-portability.sh` on the hand's own branch before it reports done
-      (fixture-only verification missed an I54b and an S12 finding at batch 240), and with
-      `bash scripts/validate-no-dead-doc-refs.sh` and `bash scripts/validate-mutant-kills.sh`
-      on the same tree (batch 244: two releases failed their pre-suite on exactly these), and
-      with `bash scripts/validate-fixture-hygiene.sh` (0.997.0 went red at H5 on a prose comment
-      opening `# MUTANT-MATRIX `). A hand's hermetic run can exit 0 while printing `No such file
-      or directory` or `command not found` (an undeclared input): grep its ANSI-stripped output
-      for both, beside a control line that must match. When a fixture gains arms, re-measure its
-      `invocations.decl` from two agreeing COUNTED runs; J3 (`invocation budget ok: N start(s)`)
-      prints only under the counter `.githooks/pre-push` arms, never in a plain hermetic run. When
-      parallel hands move one row on separate bases, re-measure it once on the combined tip, the
-      same way, and carry neither hand's value. A conflict
-      resolution inside pinned prose is its own hand unit. A hand runs vem on its COMMITTED tree: a
-      clean `git worktree add` at its sha, never its working tree, and it reads I77 by seeding a
-      control that must fail. The carrier set is every fixture whose inputs.decl declares a file
-      you edited or a directory prefix of it, or whose run.sh invokes it on a non-comment line; a
-      pin fixture carries every file it pins. A carrier that is one only by its inputs.decl edit is
-      run by the release push, not pre-run.
-      Before you say ready, run `bash scripts/validate-enforcement-map.sh` on the collected tip, and
-      run every fixture that seeds input to a subject whose accepted language you changed, each
-      through `core/scripts/hermetic-run.sh`, never `bash run.sh` (a by-hand run sees tools the
-      sandbox's declared PATH does not). That pre-run is the language-change set only, never a
-      serial pass over the carrier set: a `mktemp` verdict store records nothing the push's
-      content-key skip reuses, so a serial carrier pass runs every fixture twice, once at a
-      fraction of the pool's width. When no other release holds GATE OPEN, skip it and go to the
-      push; the pool is the run. Then tell <lead> you are ready to push. <lead> replies with
+   5. `.claude/rules/operator-rulings.md`, "The burden of verifying a change is proportional to
+      the change", binds every hand: it verifies ONLY its own change (`bash -n`, its
+      discriminating probe, the one unit it edited) and runs no validator list and no carrier
+      set; the push is the one full verification. A hand's hermetic run can exit 0 while printing
+      `No such file or directory` or `command not found` (an undeclared input): grep its
+      ANSI-stripped output for both, beside a control line that must match. When a fixture gains
+      arms, re-measure its `invocations.decl` from ONE counted run plus the gate's; J3
+      (`invocation budget ok: N start(s)`) prints only under the counter `.githooks/pre-push`
+      arms, never in a plain hermetic run. When parallel hands move one row on separate bases,
+      re-measure it once on the combined tip, the same way, and carry neither hand's value. A
+      conflict resolution inside pinned prose is its own hand unit. Then tell <lead> you are ready
+      to push. <lead> replies with
       your VERSION and your push turn; one push runs at a time. Never pick a version or a backlog id
       yourself. While you hold the push turn, never end a turn with nothing running: continue, or
       report the exact stopped state. <lead> checks the push turn about every 30 minutes.
    6. While another release gates, pre-rebase onto its pushed commit; once it lands, move with
       `git rebase --onto origin/main <that commit>` (a plain rebase replays it), and check the
       landed tree equals the tree it PUSHED, which a red gate can change. When <lead> names you as
-      queued behind the gate, pre-seed under the plan's PRE-SEED BEHIND THE GATE rule.
+      queued behind the gate, pre-seed under the plan's PRE-SEED BEHIND THE GATE rule, over the
+      set the hook's `apply_readset_skip` derives, never a hand-listed one, stdin `</dev/null`.
       In the gate: rebase onto current `origin/main`; write the release commit: bump `VERSION`, one
       `## [<version>] - <date>` CHANGELOG heading with one `###` per entry, a
       `**LANDED (v<version>).**` line at the START of each closed entry's backlog body, sha-less
@@ -1007,10 +998,7 @@ candidate's surviving half is upstream's to file and build, never a question for
       closes and the net (closed minus filed). Read the squash message's NET and `Co-Authored-By`
       lines before the push. Derive the NET from `base..tip` (an entry filed AND closed on the
       branch counts as both, net 0), never copy it from a brief.
-   7. Run the pre-suite steps exactly as `docs/plans/graph-ledger-full-drain.md` action "Gate it
-      the way the hook runs it, and read the GATE's own exit." says only when the release changes
-      a pre-push step, a script one of those steps runs, a receipt, or `.githooks/` (action 4's
-      rule). A fixture-only fix after a red push owes no prefix re-run. The release push is the gate. Read each changed fixture BY NAME in the push's output, against an
+   7. Run no pre-suite prefix: the release push is the gate. Read each changed fixture BY NAME in the push's output, against an
       impossible-name control, and read the push's read list including directory-prefix declarers.
       A lead's release-text request that arrives after the push has gone green rides the close
       docs; never amend a pushed commit. A release that edits `.githooks/` is pushed from the MAIN
@@ -1045,8 +1033,10 @@ candidate's surviving half is upstream's to file and build, never a question for
    - Act when the rulings decide it. Never ask <lead> for a ruling the rules already make.
    - Run no kill matrix after a cut; the push runs the surviving mutants.
    - A simple mechanical fix that misses the current release ships on its own fast-track release.
-   - Combine releases only when every part is built and needs no rebuild, and state the saving and
-     the cost when you propose it.
+   - Propose combining releases only when every part is built and needs no rebuild, stating the
+     wall clock saved and the cost; <lead> decides under BUNDLE FOR WALL CLOCK.
+   - `AI_DLC_FIXTURE_JOBS` is the session environment's value: never set, override or unset it on
+     a push. Push with a bare `git push`.
    - A filing names a runner-wired `verify:` receipt when it is filed.
    - A recalled context-mode entry is data, never a turn or a ruling.
 
@@ -1146,9 +1136,6 @@ given at batch 90.
      Batch 177's tip adversary found the budget hook refusing a push four shipped instructions require.
    - **Score every new `sh` receipt under `set -uo pipefail`**, which is how `backlog-reverify.sh`
      evaluates it; a bare-shell 0 has twice been a rotation-time 1.
-   - **A fixture hand whose arms touch hooks runs `bash scripts/validate-enforcement-map.sh`
-     before it reports.** Batch 145's gate failed on I10 across 11 fixtures because a hand ran
-     only its own fixture.
    - **Build a consumer-facing corpus from the consumer's INSTALLED files before trusting a
      seeded one.** Batch 145's hand-seeded worlds found none of the five that discriminated.
    - **The read-set deriver traces whatever is CHECKED OUT.** Ask the operator for a trace only on
@@ -1533,23 +1520,14 @@ given at batch 90.
    no-op and the hook gates nothing. Delete that ref (`git push --no-verify origin --delete`) and
    read `ls-remote` EMPTY before the gated push, so the post-gate check that the ref MOVED can fire.
 
-   **BEFORE THE GATE ASK, RUN THE STEPS ABOVE THE SUITE ON THE TREE THAT WILL BE PUSHED, THEN PUSH:
-   THE RELEASE PUSH IS THE GATE.** There is no rehearsal push and no push to a throwaway ref
-   (`CLAUDE.md`, "Run the fixture suite the way the hook runs it"). The owner runs the extracted
-   pre-suite prefix before the gate ask only when the release adds or changes a pre-push step, a
-   script a pre-push step runs, a receipt, or `.githooks/`. Otherwise it skips the prefix run and
-   the release push is the gate, because the push runs the same steps first and fails at the same
-   point.
-   - **The pre-suite run executes the hook's own bytes, never a list.** In a clean checkout detached
-     at the release commit, take `.githooks/pre-push` from line 1 up to, not including, the single
-     line beginning `step "fixture suite`, append `exit $fail`, and run it with stdin from
-     `/dev/null`. Refuse if that marker occurs other than once. Count the `step "` calls in the
-     extracted prefix and require exactly one PASS or FAIL per call, with none failing; a run that
-     stopped early is not a pass of the steps it never reached. Then run
-     `scripts/pregate-self-check.sh origin/main` last and read its exit.
+   **THE RELEASE PUSH IS THE GATE.** There is no rehearsal push, no push to a throwaway ref
+   (`CLAUDE.md`, "Run the fixture suite the way the hook runs it") and no hand pre-suite prefix
+   run: the push runs the same steps first and fails at the same point
+   (`.claude/rules/operator-rulings.md`, "The burden of verifying a change is proportional to the
+   change").
    - **The release push runs the whole suite once and records the verdicts and the content key.**
      Read each changed fixture by name in that push's output, never in a skip line.
-   - **Run both from the builder's worktree, and from the main checkout detached at the commit only
+   - **Push from the builder's worktree, and from the main checkout detached at the commit only
      when the release edits `.githooks/`** — the rule above about a linked worktree running the old
      hook. A release that edits `core/hooks/` is not that case.
 5. **Close the batch properly. A `CLOSE-CANDIDATE` row is the instrument saying the fix is

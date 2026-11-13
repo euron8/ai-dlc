@@ -283,10 +283,23 @@ printing PASS over nothing is the zero-verification pass this repo keeps finding
 
 ```
 scripts/ai-dlc/migrate-artifact-paths.sh              # plan + refusals, writes nothing
-scripts/ai-dlc/migrate-artifact-paths.sh --apply      # git mv, verified per file
+scripts/ai-dlc/migrate-artifact-paths.sh --apply      # staged renames, verified per file
 ```
 
-It moves with `git mv` only, never deletes, and never edits a file's content. Each move is
+**Progress goes to stderr; stdout carries only the report.** On a tree with at least 1000
+tracked files under the scan roots, the plan phase prints
+`migrate-artifact-paths.sh: PROGRESS plan: <total> tracked file(s) to scan` and then
+`... PROGRESS plan: scanned <i> of <total>` every 1000 files. `--apply` prints
+`... PROGRESS apply: <n> move(s) to apply` and `... PROGRESS apply: moved <i> of <n>` on the same
+cadence. `AI_DLC_MIGRATE_PROGRESS_EVERY=<N>` changes the interval. It takes a positive integer
+only, and any other value exits 2. Below the interval nothing is printed, and stdout is the same
+with or without progress, so a script that parses the report sees no change.
+
+It moves by staged renames only, never deletes, and never edits a file's content. Each file is
+moved with `mv`, and each batch of moves is staged by one `git update-index --index-info`, which
+copies the source's own index entry (mode and blob) to the destination path and removes the
+source entry. That leaves the index exactly as a `git mv` per file would. If staging a batch
+fails, that batch's moves are moved back before the run aborts. Each move is
 confirmed as *source absent AND destination readable AND sha256 identical to the pre-move
 source*, per file — a count of moved files cannot see whether the right bytes arrived, which is
 the only failure a migration really has. It aborts at the first failure, and a clean tree
@@ -302,6 +315,10 @@ DEFERRED (stories/, see below)          1001
 destinations still carrying a token        0  <- the script's own self-check, both roads
 re-run after applying                   rc=3  <- nothing left to migrate; it is idempotent
 ```
+
+That rehearsal moved files with a `git mv` per file. The batched staging that replaced it stages
+each destination with the source's own blob, so the staged content of every move is still the
+pre-move blob. "0 content changes" therefore still holds by construction.
 
 **And the story corpus, measured on the same consumer once the deferral was lifted** — a second
 dry run, after the first migration had already been applied for real:
@@ -320,7 +337,7 @@ in a stories/ dir outside the slot       1001  the subject; 23 of the 1024 under
 programs reading one grammar, and the failure that matters is not either being wrong alone but the
 two disagreeing, which leaves a push blocked on a path its own remedy will not move.
 
-**Three things it will not do, each reported rather than guessed:**
+**Four things it will not do, each reported rather than guessed:**
 
 - **A path naming two different sprints** (`story-S246-1-s11-...`, `gate-log-archive-s291-s292.md`)
   is REFUSED. Which sprint owns it is not derivable, and picking one silently files an artifact
@@ -333,6 +350,11 @@ two disagreeing, which leaves a push blocked on a path its own remedy will not m
   file it under a sprint that never produced it. Rename it and the next run moves it. **23 on the
   reference consumer.** This replaced the wholesale `stories/` deferral: the class is no longer
   *this directory is hard*, it is *this file cannot be placed*, and it empties one rename at a time.
+- **A path holding a tab or a newline** is REFUSED as `UNSAFE-NAME`. The plan and move lists are
+  tab-separated lines, so such a name cannot be carried through them intact. Rename it without the
+  tab or newline and the next run moves it. Every other byte is read as it is. Tracked paths are
+  listed NUL-delimited, so `core.quotePath` never quotes a non-ASCII, backslash or double-quote
+  name out of the scan.
 
 **Areas it had to INFER are reported too, and the report sends you to YOUR file, not this one.**
 This grammar declares eight. The reference consumer held sprint-tokened files in **nine** more —

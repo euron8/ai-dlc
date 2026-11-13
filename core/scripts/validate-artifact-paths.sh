@@ -420,7 +420,7 @@ echo "and search means mtime — which is how both hooks came to pick the live a
 echo "across 56 sprints in one directory."
 echo ""
 echo "  scripts/ai-dlc/migrate-artifact-paths.sh              # plan, writes nothing"
-echo "  scripts/ai-dlc/migrate-artifact-paths.sh --apply      # git mv, verified per file"
+echo "  scripts/ai-dlc/migrate-artifact-paths.sh --apply      # staged renames, verified per file"
 echo ""
 echo "VERDICT: FAIL — $N_BLOCK blocking, $N_AMBIG ambiguous, $N_NOAREA with no area, $N_STORY story file(s) with no derivable sprint."
 exit 1
