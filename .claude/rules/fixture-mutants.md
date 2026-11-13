@@ -242,10 +242,17 @@ clauses; they bind every fixture, and clause 2 binds every mutant battery.
    do not each re-run the subject. Measured: `reconcile-emit-report` rendered the full report
    about 200 times where one or two renders carried every assertion.
 2. **A mutant runs only the world where its arm decides, plus its named twins.** The mutant by
-   arm matrix is measured once, from a real hermetic run, and recorded in the fixture's header,
-   with the command that re-measures it, which is re-run whenever an arm or a mutant is added
-   or changed. A battery change re-measures `invocations.decl` beside the matrix. "Killed by its own arm alone" is a test-quality property established at
-   authoring and re-established on change, never re-checked per push. Measured: `readset-skip`
+   arm matrix is recorded in the fixture's header, with the command that re-measures it. When an
+   arm or a mutant changes, the REQUIRED evidence is the fixture's counted run, showing each
+   declared mutant killed by its deciding arm with its twin holding, by name. Where a fixture's
+   counted run does not itself score each mutant's deciding arm and twin, the change re-measures
+   only the changed mutants' rows by running the fixture's `--matrix` narrowed to those mutants;
+   a fixture whose `--matrix` takes no mutant list runs it whole. Apart from the case in the
+   previous sentence, a full or partial `--matrix` is an operator instrument and never a
+   per-change duty. A matrix row records only
+   `decides=` and `twins=`, so a cell outside a row is not re-measured by the counted run. A battery change re-measures `invocations.decl` beside the matrix. "Killed by its own arm alone" is a test-quality property established at
+   authoring and never re-checked per push; on a change it is re-measured only as the sentences
+   above require. Measured: `readset-skip`
    scored 15 mutants against 15 worlds on every push. The block forms are `MUTANT-MATRIX`,
    `MUTANT-MATRIX-FULL` (a whole world vector, with its reason), `MUTANT-MATRIX-CONTROL` (a
    knock-out control that must survive), `MUTANT-MATRIX-DYNAMIC` (a loop whose names are not

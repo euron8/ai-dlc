@@ -211,21 +211,31 @@
 #   the predecessor's embedded `## Shard ordinal map`, whatever their disposition), and the cross shard.
 #     files     a story is changed when its disk sha differs from the predecessor's `<stem>=<sha>`;
 #               keyed on story BASENAME, rendered onto this pass's ordinals.
-#     document, subject  NOT NARROWED: the full map, with `full width: <mode> mode is not narrowed ...`
-#               on the derived header. The predecessor's bytes would be the split's pre-repair snapshot,
-#               which serial-remediation-worklist.sh consumes before the serial dispatch (a kept one
-#               lands in the consumer's commit), so no later pass or gate can read it.
+#     document, subject  by PART CONTENT: every such convergence pass notarizes `part_sha:`, one
+#               `<ordinal>=<sha256>` per map row (partition-document.sh --part-sha, the bytes --split
+#               would cut), so no pre-repair snapshot is kept. A part is unchanged only when its digest
+#               (subject: (file, digest)) occurs exactly once in the predecessor's list and once in this
+#               pass's; a boundary that shifted, a renamed or new section and both copies of a duplicate
+#               are owed. Cited parts map forward by that unique digest. The pass also notarizes
+#               `part_run:`, the parts holding the pieces of one cut table (`-`, or runs of two or more
+#               ordinals joined by `,`, runs joined by `;`), printed by the same --part-sha that cuts the
+#               table; a run is owed whole when any member is. No heading is read.
 #   A file outside every part (an epic, a spine, a PRD outside the subject) widens nothing: the cross
 #   shard reads the whole subject. FAIL TOWARD FULL WIDTH: an unreadable predecessor map, sha list
 #   or findings (declared counts that disagree with the headed findings, a finding with other
-#   than one citation line) owes the full map, never cross-only. Document and subject modes always owe
-#   the full map, with a `full width:` reason on the derived header.
+#   than one citation line) owes the full map, never cross-only. A document or subject pass also owes
+#   the full map, with a `full width:` reason on the derived header, when the predecessor carries no
+#   `part_sha:` or no `part_run:` (an older engine merged it), the pass's own lists are absent
+#   (--derived-set), either list is malformed or not joinable to its map, or the series is LEGACY or
+#   NOTOKEN under NARROW_ERA_TOKEN.
 #   The merge then REFUSES a shard outside the derived set and a missing derived shard, notarizes the
 #   disk sha of EVERY stem (dispatched or not) so F4, REVERT_REPAIR and sha_key see a whole list, and
-#   writes `shard_set_derived_from: <predecessor basename>`. A first pass, elicitation, and a tree
-#   whose rulebook lacks the token are unchanged byte for byte.
+#   writes `shard_set_derived_from: <predecessor basename>`. A files-mode first pass, elicitation, and a
+#   files-mode tree whose rulebook lacks the token are unchanged byte for byte; a document or subject
+#   convergence pass ALWAYS carries `part_sha:` and `part_run:`, in every era, first pass included.
 #   THE ERA is the convergence validator's era_resolve, extracted (d_era_load), keyed on the series'
-#   FIRST pass: the merge narrows exactly where arm N binds, and a LEGACY series keeps the full map.
+#   FIRST pass: the merge narrows exactly where arm N binds, and a LEGACY series keeps the full map. The
+#   document and subject narrowing is a SECOND era, the same era_resolve asked with NARROW_ERA_TOKEN (d_nera).
 #   `--derived-map` (a flag on files mode, `--document` and `--subject`, in any position) prints the
 #   derived rows of the map that mode prints -- the lead's dispatch list; `--map` is unchanged, so its
 #   other callers (party rounds, sprint review) keep the full map;
@@ -1072,38 +1082,67 @@ check_shard_main() {
 # THE ERA, ONE IMPLEMENTATION. ERA_TOKEN, era_cmp and era_resolve are the convergence validator's own
 # definitions, extracted from it (each declared exactly once, as at_key is), so the merge narrows exactly
 # where the validator's arm N binds. Absent or duplicated: no era, the full map, nothing stamped.
+# NARROW_ERA_TOKEN, declared there beside ERA_TOKEN, is loaded by the same read; absent or duplicated,
+# D_NERA stays 0 and document and subject passes keep the full map with a `full width:` reason.
 d_era_load() {
-  local v n fn
-  D_ERA=0
+  local v n nn fn l tl="" tok
+  D_ERA=0; D_NERA=0; D_NERA_STATE=""
   v="$(cd "$(dirname "$MERGE_SELF")" && pwd)/validate-adversarial-convergence.sh"
   [ -f "$v" ] || return 0
-  n="$(grep -cE "^ERA_TOKEN='[^']+'\$" "$v")" || n=0
+  n=0; nn=0
+  # grep exits 1 on no token line: an empty capture, then one empty line, which matches neither case
+  # arm, so n stays 0 and the `[ "$n" = 1 ]` below returns with no era, as before.
+  tok="$(grep -E "^(NARROW_)?ERA_TOKEN='[^']+'\$" "$v")" || tok=""
+  while IFS= read -r l; do
+    case "$l" in ERA_TOKEN=*) n=$((n + 1)); tl="$l" ;; NARROW_ERA_TOKEN=*) nn=$((nn + 1)); [ "$nn" -gt 1 ] || eval "$l" ;; esac
+  done <<< "$tok"
   [ "$n" = 1 ] || return 0
-  eval "$(grep -E "^ERA_TOKEN='[^']+'\$" "$v")"
+  eval "$tl"
   for fn in era_cmp era_resolve; do
     n="$(grep -c "^$fn() {" "$v")" || n=0
     [ "$n" = 1 ] || return 0
     eval "$(awk -v h="$fn() {" 'index($0, h) == 1 { on = 1 } on { print } on && /^}/ { exit }' "$v")"
   done
   ERA_STATE=""; D_ERA=1
+  [ "$nn" = 1 ] && D_NERA=1
+  return 0
 }
 # d_era_bound <sprint dir> <artifact> -> 0 when the era binds this series: its FIRST pass (the lowest
 # `<artifact>-adversarial-p<k>.md`) and that pass's invoked_at go to era_resolve. A series with no
 # earlier pass on disk has no predecessor and is never narrowed, so it is never asked.
 d_era_bound() {
-  local f k best="" bk=-1 at
   [ "$D_ERA" -eq 1 ] || return 1
+  d_first "$1" "$2" || return 1
+  era_resolve "$D_FIRST" "$D_FIRST_AT"
+  [ "$ERA_STATE" = bound ]
+}
+# d_first <sprint dir> <artifact> -> D_FIRST, the series' FIRST pass (the lowest k), and D_FIRST_AT, its
+# invoked_at; 1 when the series has no pass on disk.
+d_first() {
+  local f k bk=-1
+  D_FIRST=""; D_FIRST_AT=""
   for f in "$1/$2-adversarial-p"*.md; do
     [ -f "$f" ] || continue
     k="${f##*-adversarial-p}"; k="${k%.md}"
     case "$k" in ""|*[!0-9]*) continue ;; esac
     k=$((10#$k))
-    if [ "$bk" -lt 0 ] || [ "$k" -lt "$bk" ]; then bk="$k"; best="$f"; fi
+    if [ "$bk" -lt 0 ] || [ "$k" -lt "$bk" ]; then bk="$k"; D_FIRST="$f"; fi
   done
-  [ -n "$best" ] || return 1
-  at="$(awk '/SKILL_INVOCATION_PROVENANCE v1/ { i = 1; next } /SKILL_INVOCATION_PROVENANCE_END/ { i = 0 } i && /^invoked_at:/ { sub(/^invoked_at:[ \t]*/, ""); sub(/[ \t].*$/, ""); print; exit }' "$best")"
-  era_resolve "$best" "$at"
-  [ "$ERA_STATE" = bound ]
+  [ -n "$D_FIRST" ] || return 1
+  D_FIRST_AT="$(awk '/SKILL_INVOCATION_PROVENANCE v1/ { i = 1; next } /SKILL_INVOCATION_PROVENANCE_END/ { i = 0 } i && /^invoked_at:/ { sub(/^invoked_at:[ \t]*/, ""); sub(/[ \t].*$/, ""); print; exit }' "$D_FIRST")"
+}
+# d_nera <sprint dir> <artifact> -> D_NERA_STATE bound|legacy|notoken|undeclared, the NARROWING era of the
+# series: the one era_resolve, asked once with NARROW_ERA_TOKEN swapped in for ERA_TOKEN, every ERA_* value
+# restored after, so the cap's era and this one never share a cached answer.
+d_nera() {
+  local st="${ERA_TOKEN:-}" ss="${ERA_STATE:-}" sp="${ERA_STAMP:-}" sr="${ERA_ROOT:-}"
+  [ -z "$D_NERA_STATE" ] || return 0
+  if [ "$D_ERA" -ne 1 ] || [ "$D_NERA" -ne 1 ]; then D_NERA_STATE=undeclared; return 0; fi
+  d_first "$1" "$2" || { D_NERA_STATE=legacy; return 0; }
+  ERA_TOKEN="$NARROW_ERA_TOKEN"; ERA_STATE=""
+  era_resolve "$D_FIRST" "$D_FIRST_AT"
+  D_NERA_STATE="$ERA_STATE"
+  ERA_TOKEN="$st"; ERA_STATE="$ss"; ERA_STAMP="$sp"; ERA_ROOT="$sr"
 }
 # d_pred <sprint dir> <artifact> <pass M> -> D_PRED, the series predecessor: the HIGHEST k < M with a
 # `<artifact>-adversarial-p<k>.md` beside the series, never literal M-1 (a series may skip a number).
@@ -1128,28 +1167,88 @@ d_pairs() {
 }
 # d_map <pass file> -> the fenced `## Shard ordinal map` block a merged pass embeds, one row per part.
 d_map() { awk '/^## Shard ordinal map[ \t]*$/ { s = 1; next } s == 1 && /^```/ { s = 2; next } s == 2 && /^```/ { exit } s == 2' "$1"; }
-# derive_set <mode files|document|subject> <sprint dir> <artifact> <pass M> <current map> <current source>
-#   current source -- files: `<basename>\t<sha>` per story; document and subject: unread.
+# d_psha <label> <part_sha value> <map file> -> `<ordinal>\t<sha>` per map row on stdout, rc 0; rc 1 with
+#   D_PSHA_WHY when the list is malformed, names other ordinals than the map's in its order, or counts
+#   other than the map's rows.
+d_psha() {
+  local g=0 out
+  D_PSHA_WHY=""
+  case "$-" in *f*) g=1 ;; esac
+  set -f
+  out="$(printf '%s\n' $2 | awk -v lb="$1" -v fm="$3" '
+    BEGIN { while ((getline l < fm) > 0) { split(l, c, "\t"); MO[++m] = c[1] + 0 } }
+    NF == 0 { next }
+    { n++; t = $0; p = index(t, "="); o = substr(t, 1, p - 1); s = substr(t, p + 1)
+      if (p < 2 || o ~ /[^0-9]/ || length(s) != 64 || s ~ /[^0-9a-f]/) { print "BAD\tthe part_sha of " lb " is malformed: token " t " is not <ordinal>=<sha256>"; bad = 1; exit }
+      if (n <= m && o + 0 != MO[n]) { print "BAD\tthe part_sha of " lb " lists ordinal " o " at position " n ", where its shard ordinal map has " MO[n]; bad = 1; exit }
+      R[n] = o "\t" s }
+    END { if (bad) exit
+      if (n != m) { print "BAD\tthe part_sha of " lb " lists " (n + 0) " parts but its shard ordinal map has " (m + 0) " rows"; exit }
+      for (i = 1; i <= n; i++) print R[i] }')"
+  [ "$g" = 1 ] || set +f
+  case "$out" in BAD*) D_PSHA_WHY="${out#BAD?}"; return 1 ;; esac
+  printf '%s\n' "$out"
+}
+# d_prun <label> <part_run value> <map file> -> one run per line (`<o>,<o>,...`) on stdout, rc 0; rc 1 with
+#   D_PSHA_WHY. The grammar: `-` (no cut table spans two parts) or runs joined by `;`, each two or more
+#   distinct ordinals of the map joined by `,`, no ordinal in two runs.
+d_prun() {
+  local out
+  D_PSHA_WHY=""
+  [ "$2" = "-" ] && return 0
+  # Every run is checked before ANY is printed: a good run ahead of a bad one must not reach the caller,
+  # so the output is either all the runs (in END) or the one BAD line.
+  out="$(printf '%s\n' "$2" | awk -v lb="$1" -v fm="$3" '
+    BEGIN { while ((getline l < fm) > 0) { split(l, c, "\t"); IN[c[1] + 0] = 1 } }
+    { n = split($0, R, ";")
+      for (r = 1; r <= n; r++) {
+        if (R[r] !~ /^[0-9]+(,[0-9]+)+$/) { print "BAD\tthe part_run of " lb " is malformed: run " R[r] " is not <ordinal>,<ordinal>[,...]"; bad = 1; exit }
+        m = split(R[r], q, ",")
+        for (i = 1; i <= m; i++) {
+          if (!((q[i] + 0) in IN)) { print "BAD\tthe part_run of " lb " names ordinal " q[i] ", outside its shard ordinal map"; bad = 1; exit }
+          if ((q[i] + 0) in SEEN) { print "BAD\tthe part_run of " lb " names ordinal " q[i] " twice"; bad = 1; exit }
+          SEEN[q[i] + 0] = 1
+        }
+        G[++ng] = R[r]
+      } }
+    END { if (bad) exit; for (r = 1; r <= ng; r++) print G[r] }')"
+  case "$out" in BAD*) D_PSHA_WHY="${out#BAD?}"; return 1 ;; esac
+  printf '%s\n' "$out"
+}
+# derive_set <mode files|document|subject> <sprint dir> <artifact> <pass M> <current map> <current source> [<label>]
+#   current source -- files: `<basename>\t<sha>` per story; document and subject: a file whose line 1 is
+#   the current `part_sha:` value and line 2 the current `part_run:` value (the merge's, from disk;
+#   --derived-set's, pass M's own), <label> naming it.
 #   Sets D_PRED (empty: the first pass, nothing derived) and D_FULL (why the set fell to full width,
 #   empty when derived); writes the derived ordinals, bare, to $T/d.out. Every input it cannot read
 #   widens to the full map, never narrows.
-#   DOCUMENT AND SUBJECT MODES ARE NOT NARROWED. Their predecessor bytes would be the split's pre-repair
-#   snapshot (`sections/.before`, `.before/<stem>`), which serial-remediation-worklist.sh consumes
-#   before the serial dispatch, so it is absent by the next pass; kept, it lands in the consumer's
-#   commit. Those modes owe the full map, and D_FULL says why.
+#   DOCUMENT AND SUBJECT MODES ARE NARROWED BY PART CONTENT, never by ordinal or line range: a repair that
+#   grows one section shifts every later boundary. A current part is UNCHANGED only when its digest
+#   (subject: its (file, digest)) occurs exactly once in the predecessor's `part_sha:` and once in the
+#   current list; a new, renamed or duplicated part is owed, both copies of a duplicate. A cited part maps
+#   forward by the same unique digest. A cut table's run, as this pass NOTARIZES it in `part_run:` (written
+#   from partition-document.sh --part-sha, the program that cuts the table), is owed whole when any member
+#   is owed; no heading is read. FULL, with the reason: the series not bound under NARROW_ERA_TOKEN
+#   (d_nera), either pass lacking `part_sha:` or `part_run:`, or either list malformed or not joinable to
+#   its map.
 derive_set() {
-  local mode="$1" sd="$2" art="$3" m="$4" cmap="$5" csrc="$6" pv pc pm nx c sv_c sv_o
+  local mode="$1" sd="$2" art="$3" m="$4" cmap="$5" csrc="$6" lb="${7:-the current partition}" pv pc pm nx c sv_c sv_o
   D_FULL=""
   : > "$T/d.out" || return 1
   d_pred "$sd" "$art" "$m"
   [ -n "$D_PRED" ] || return 0
   if [ "$mode" != files ]; then
-    D_FULL="$mode mode is not narrowed: its pre-repair snapshot under shards/$art-repair-p<k>/ is consumed by serial-remediation-worklist.sh before the next pass"
-    return 0
+    d_nera "$sd" "$art"
+    case "$D_NERA_STATE" in
+      bound) ;;
+      legacy) D_FULL="$mode mode narrows only a series opened after the installed rulebook's '$NARROW_ERA_TOKEN' sentence was committed; this series is LEGACY"; return 0 ;;
+      notoken) D_FULL="the installed rulebook carries no '$NARROW_ERA_TOKEN' sentence, so $mode mode is not narrowed"; return 0 ;;
+      *) D_FULL="validate-adversarial-convergence.sh declares no single NARROW_ERA_TOKEN, so $mode mode is not narrowed"; return 0 ;;
+    esac
   fi
   d_map "$D_PRED" > "$T/d.pmap" || return 1
   sv_c="${CITE:-}"; sv_o="${OTHER:-}"
-  CITE=stories; OTHER=""
+  if [ "$mode" = files ]; then CITE=stories; OTHER=""; else CITE=sections; OTHER=stories; fi
   parse_shard "$D_PRED" > "$T/d.px"; c=$?
   CITE="$sv_c"; OTHER="$sv_o"
   [ "$c" -eq 0 ] || { D_FULL="$(basename "$D_PRED") could not be parsed"; return 0; }
@@ -1161,6 +1260,62 @@ derive_set() {
     return 0
   fi
   awk '$1 == "X" && ($3 == "CRITICAL" || $3 == "MAJOR") { print $4 "\t" $5 }' "$T/d.px" > "$T/d.fx" || return 1
+  if [ "$mode" = document ] || [ "$mode" = subject ]; then
+    pv="$(field "$T/d.px" part_sha)"
+    [ -n "$pv" ] || { D_FULL="$(basename "$D_PRED") carries no part_sha list (merged by an engine before $mode-mode narrowing)"; return 0; }
+    d_psha "$(basename "$D_PRED")" "$pv" "$T/d.pmap" > "$T/d.ppairs" || { D_FULL="$D_PSHA_WHY"; return 0; }
+    pv="$(field "$T/d.px" part_run)"
+    [ -n "$pv" ] || { D_FULL="$(basename "$D_PRED") carries no part_run list (merged by an engine before cut-table runs were notarized)"; return 0; }
+    d_prun "$(basename "$D_PRED")" "$pv" "$T/d.pmap" > /dev/null || { D_FULL="$D_PSHA_WHY"; return 0; }
+    pv="$(sed -n 1p "$csrc")" || return 1
+    [ -n "$pv" ] || { D_FULL="$lb carries no part_sha list of its own, so the set it owed cannot be recomputed"; return 0; }
+    d_psha "$lb" "$pv" "$cmap" > "$T/d.cpairs" || { D_FULL="$D_PSHA_WHY"; return 0; }
+    pv="$(sed -n 2p "$csrc")" || return 1
+    [ -n "$pv" ] || { D_FULL="$lb carries no part_run list of its own, so the set it owed cannot be recomputed"; return 0; }
+    d_prun "$lb" "$pv" "$cmap" > "$T/d.cruns" || { D_FULL="$D_PSHA_WHY"; return 0; }
+    # ONE awk: the content join (key: digest, subject (file, digest); unchanged = unique on both sides),
+    # the cited parts mapped forward by that unique key, then the NOTARIZED cut-table runs (B1).
+    awk -F'\t' -v md="$mode" -v fp="$T/d.pmap" -v fc="$cmap" -v pp="$T/d.ppairs" -v cp="$T/d.cpairs" -v fr="$T/d.cruns" -v fx="$T/d.fx" '
+      FILENAME == pp { PS[$1 + 0] = $2; next }
+      FILENAME == cp { CS[$1 + 0] = $2; next }
+      FILENAME == fr { nr++; RUN[nr] = $0; next }
+      FILENAME == fp || FILENAME == fc {
+        sd = (FILENAME == fp) ? "P" : "C"
+        fl = (md == "subject") ? $2 : "-"
+        n = ++NR_[sd]; O[sd, n] = $1 + 0; F[sd, n] = fl
+        if (sd == "P") PORD[$1 + 0] = n; else CORD[$1 + 0] = n
+        next
+      }
+      FILENAME == fx { nf++; FN[nf] = $1; FCI[nf] = $2; next }
+      END {
+        np = NR_["P"] + 0; nc = NR_["C"] + 0
+        for (j = 1; j <= np; j++) { k = F["P", j] SUBSEP PS[O["P", j]]; PK[j] = k; PC[k]++ }
+        for (i = 1; i <= nc; i++) { k = F["C", i] SUBSEP CS[O["C", i]]; CK[i] = k; CC[k]++; CI[k] = i }
+        for (i = 1; i <= nc; i++) if (!(PC[CK[i]] == 1 && CC[CK[i]] == 1)) OW[i] = 1
+        for (f = 1; f <= nf; f++) {
+          if (FN[f] != 1) { print "FULL\ta CRITICAL or MAJOR finding of the predecessor carries " FN[f] " citation lines"; exit }
+          m = split(FCI[f], cc, ",")
+          for (q = 1; q <= m; q++) {
+            if (cc[q] !~ /^[0-9]+$/ || !((cc[q] + 0) in PORD)) { print "FULL\tthe predecessor cites ordinal " cc[q] ", outside its own ordinal map"; exit }
+            k = PK[PORD[cc[q] + 0]]
+            if (PC[k] == 1 && CC[k] == 1) OW[CI[k]] = 1
+          }
+        }
+        # B1: a notarized run (this pass s own `part_run:`, the pieces of one cut table) is owed whole
+        # when any member is owed. Nothing else widens.
+        for (r = 1; r <= nr; r++) {
+          m = split(RUN[r], rr, ","); hit = 0
+          for (q = 1; q <= m; q++) if (OW[CORD[rr[q] + 0]]) hit = 1
+          if (hit) for (q = 1; q <= m; q++) OW[CORD[rr[q] + 0]] = 1
+        }
+        for (i = 1; i <= nc; i++) if (OW[i]) print "O\t" O["C", i]
+      }' "$T/d.ppairs" "$T/d.cpairs" "$T/d.cruns" "$T/d.pmap" "$cmap" "$T/d.fx" > "$T/d.res" || { D_FULL="the derivation over $(basename "$D_PRED") did not run"; return 0; }
+    case "$(head -1 "$T/d.res")" in
+      FULL*) D_FULL="$(head -1 "$T/d.res" | cut -f2-)"; return 0 ;;
+    esac
+    awk -F'\t' '$1 == "O" { print $2 }' "$T/d.res" > "$T/d.out"
+    return 0
+  fi
   pv="$(field "$T/d.px" artifact_sha)"
   d_pairs "$pv" > "$T/d.psha"
   [ -s "$T/d.psha" ] || { D_FULL="$(basename "$D_PRED") notarizes no <stem>=<sha> list"; return 0; }
@@ -1200,9 +1355,9 @@ derive_set() {
   awk -F'\t' '$1 == "O" { print $2 }' "$T/d.res" > "$T/d.out"
 }
 # --derived-set <pass file>: the set pass M OWED, recomputed from pass M's own notarized record (its
-# embedded map and its `<stem>=<sha>` list). stdout `FROM\t<predecessor>`, then `FULL\t<why>` when the
-# set fell to full width (always, for a document or subject pass: derive_set), then one bare ordinal per
-# line. Exit 0; 3 no predecessor (the first pass); 2 refused.
+# embedded map and its `<stem>=<sha>` list, or, for a document or subject pass, its `part_sha:` list).
+# stdout `FROM\t<predecessor>`, then `FULL\t<why>` when the set fell to full width (derive_set names
+# why), then one bare ordinal per line. Exit 0; 3 no predecessor (the first pass); 2 refused.
 derived_set_main() {
   local pf="$1" b art m pv dm
   [ -f "$pf" ] || { printf 'REFUSED: %s is not a pass file\n' "$pf"; return 2; }
@@ -1227,8 +1382,10 @@ derived_set_main() {
         "$T/cpairs" "$T/cmap" > "$T/csrc" || return 2
       derive_set files "$SPRINT_DIR" "$art" "$m" "$T/cmap" "$T/csrc" || return 2 ;;
     *)
-      # Not narrowed (derive_set): the owed set is the full map, with its reason, and reads no bytes.
-      derive_set "$dm" "$SPRINT_DIR" "$art" "$m" "$T/cmap" - || return 2 ;;
+      # Narrowed by part content (derive_set) from pass M's OWN `part_sha:`; reads no document bytes.
+      d_era_load
+      printf '%s\n%s\n' "$(field "$T/cpx" part_sha)" "$(field "$T/cpx" part_run)" > "$T/cpsha" || return 2
+      derive_set "$dm" "$SPRINT_DIR" "$art" "$m" "$T/cmap" "$T/cpsha" "$b" || return 2 ;;
   esac
   [ -n "$D_PRED" ] || return 3
   printf 'FROM\t%s\n' "$(basename "$D_PRED")"
@@ -1610,6 +1767,45 @@ if [ "$MAP_ONLY" -eq 2 ]; then
   [ -z "$RERUN" ] || refuse "--rerun supersedes write-ledger rows at a merge; --derived-map reads no ledger"
   [ "$DRY" -eq 0 ] || refuse "--dry-run checks a merge; --derived-map reads no shard and writes nothing"
 fi
+# ---- THE PART DIGESTS (BL-911; header: THE DERIVED SET) ------------------------------------------
+# A document or subject convergence pass notarizes `part_sha:`, one `<ordinal>=<sha256>` per map row in
+# map order, sliced by partition-document.sh --part-sha exactly as --split cuts, from the bytes DOC_SHA
+# (document) or the subject shas (subject) hashed: a document that moved refuses there, and a subject
+# file that moved refuses below. The next pass's derived set joins against it; elicitation writes none.
+# IN PROCESS: the sibling is SOURCED inside a subshell and its own pdoc_main answers --part-sha, so the
+# slicing is that one implementation and no second program is started; the subshell keeps its
+# functions (refuse, sha_of, map_of) and its exit out of this shell, and its stdout, stderr and exit
+# status are the standalone mode's.
+PART_SHA_LIST=""; PART_RUN_LIST=""
+if [ "$ELICIT" -eq 0 ] && { [ -n "$DOCUMENT" ] || [ -n "$SUBJECT" ]; }; then
+  PSD="$(cd "$(dirname "$MERGE_SELF")" && pwd)/partition-document.sh"
+  [ -f "$PSD" ] || refuse "cannot read the part digests: $PSD is absent"
+  if [ -n "$DOCUMENT" ]; then
+    ( . "$PSD" && pdoc_main --part-sha "$DOCUMENT" --expect-sha "$DOC_SHA" ) > "$T/psha" 2> "$T/psha.err" \
+      || refuse "partition-document.sh --part-sha $DOCUMENT failed: $(head -1 "$T/psha.err")"
+  else
+    _sb="$(awk '/REQUIREMENTS_SUBJECT v1/ { i = 1; next } /REQUIREMENTS_SUBJECT_END/ { i = 0 } i && index($0, "base: ") == 1 { print substr($0, 7); exit }' "$SUBJ_MF")"
+    [ -n "$_sb" ] || refuse "$SUBJ_MF records no base; the subject's cut-table runs are read from its scoped maps"
+    cut -f1-4 "$T/map" | ( . "$PSD" && pdoc_main --part-sha --rows "$SUBJ_ROOT" --scope-ref "$_sb" ) > "$T/psha" 2> "$T/psha.err" \
+      || refuse "partition-document.sh --part-sha --rows failed: $(head -1 "$T/psha.err")"
+    # $T/mfiles holds the manifest's `file: <stem> <path>` rows, SPACE-separated (partition-subject.sh
+    # writes them so): default IFS, as subj_stems_build reads the same file. $T/stems is `<stem>\t<sha>`.
+    while read -r _k _st _rel; do
+      [ "$_k" = "file:" ] || continue
+      _want=""
+      while IFS=$'\t' read -r _s _h; do [ "$_s" = "$_st" ] && _want="$_h"; done < "$T/stems"
+      [ "$(sha_of "$SUBJ_ROOT/$_rel")" = "$_want" ] \
+        || refuse "$_rel moved while the subject's parts were hashed"
+    done < "$T/mfiles"
+  fi
+  PART_SHA_LIST="$(awk -F'\t' 'FILENAME == ARGV[1] { O[++m] = $1; next }
+    /^run:/ { next }
+    { n++; p = index($0, "="); if (p < 2 || substr($0, 1, p - 1) != O[n]) { bad = 1; exit } printf " %s", $0 }
+    END { if (bad || n != m) exit 1 }' "$T/map" "$T/psha")" \
+    || refuse "partition-document.sh --part-sha printed other parts than the ordinal map ($(grep -c . "$T/psha") digests, $K rows)"
+  # `part_run:` -- the cut-table runs the same program printed, `;`-joined, or `-` when none spans two parts.
+  PART_RUN_LIST="$(awk '/^run:/ { printf "%s%s", (n++ ? ";" : ""), substr($0, 5) } END { if (!n) printf "-" }' "$T/psha")"
+fi
 if [ -n "$SUBJECT" ]; then UNIT_COUNT="part count of the sprint $SUBJECT subject"
 elif [ -n "$DOCUMENT" ]; then UNIT_COUNT="part count of $DOCUMENT"; else UNIT_COUNT="story count of $STORIES_DIR"; fi
 ORDINALS="$(cut -f1 "$T/map" | tr '\n' ' ')"
@@ -1628,10 +1824,10 @@ norm_ord() { # "003" -> 03 at width W; empty unless digits within 1..K
 DERIVED_FROM=""; DERIVED_FULL=""
 d_era_load
 if [ "$ELICIT" -eq 0 ] && d_era_bound "$SPRINT_DIR" "$ARTIFACT"; then
-  if [ -n "$SUBJECT" ]; then
-    derive_set subject "$SPRINT_DIR" "$ARTIFACT" "$PASS" "$T/map" - || refuse "the derived set did not run"
-  elif [ -n "$DOCUMENT" ]; then
-    derive_set document "$SPRINT_DIR" "$ARTIFACT" "$PASS" "$T/map" - || refuse "the derived set did not run"
+  if [ -n "$SUBJECT" ] || [ -n "$DOCUMENT" ]; then
+    printf '%s\n%s\n' "$PART_SHA_LIST" "$PART_RUN_LIST" > "$T/dpsha" || refuse "cannot stage the derived set"
+    if [ -n "$SUBJECT" ]; then _dm=subject; else _dm=document; fi
+    derive_set "$_dm" "$SPRINT_DIR" "$ARTIFACT" "$PASS" "$T/map" "$T/dpsha" || refuse "the derived set did not run"
   else
     : > "$T/dsrc" || refuse "cannot stage the derived set"
     while IFS="$(printf '\t')" read -r _o _b; do
@@ -2404,8 +2600,10 @@ fi
   printf 'artifact: %s\n' "$CROSS_ARTIFACT"
   if [ -n "$SUBJECT" ]; then
     printf 'artifact_sha:%s\n' "$SUBJ_SHA_LIST"
+    [ -z "$PART_SHA_LIST" ] || printf 'part_sha:%s\npart_run: %s\n' "$PART_SHA_LIST" "$PART_RUN_LIST"
   elif [ -n "$DOCUMENT" ]; then
     printf 'artifact_sha: %s\n' "$DOC_SHA"
+    printf 'part_sha:%s\npart_run: %s\n' "$PART_SHA_LIST" "$PART_RUN_LIST"
     printf 'shard_wall:%s\n' "$WALL_LIST"
   else
     printf 'artifact_sha:%s\n' "$SHA_LIST"
@@ -2421,15 +2619,27 @@ fi
   printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
 } > "$T/out" || refuse "cannot stage the merged pass file"
 
+# THE OLDER ENGINE'S PASS (BL-911). A document or subject pass merged before `part_sha:` and `part_run:`
+# were notarized carries neither line in its provenance block. It is compared with this merge's output
+# minus those two lines, so an identical re-merge answers as it did under that engine (UNCHANGED), never
+# "differs": a live series is not wedged by the fields this release adds. A pass carrying either line in
+# its block can never equal the stripped output (the stripped block holds neither, and the merge refuses a
+# body mentioning SKILL_INVOCATION_PROVENANCE, so there is no second block), so it matches only byte for byte.
+out_matches() {
+  cmp -s "$T/out" "$OUT" && return 0
+  [ -n "$PART_SHA_LIST" ] || return 1
+  awk '/SKILL_INVOCATION_PROVENANCE v1/ { i = 1 } /SKILL_INVOCATION_PROVENANCE_END/ { i = 0 } i && /^part_(sha|run):/ { next } { print }' "$T/out" > "$T/out.old" || return 1
+  cmp -s "$T/out.old" "$OUT"
+}
 if [ "$DRY" -eq 1 ]; then
   # --dry-run writes nothing: an existing output that differs still refuses at once, as below.
-  if [ -e "$OUT" ] && ! cmp -s "$T/out" "$OUT"; then
+  if [ -e "$OUT" ] && ! out_matches; then
     refuse "$OUT already exists and differs from this merge; a pass file is never overwritten"
   fi
   printf 'DRY-RUN: clean\n'; exit 0
 fi
 if [ -e "$OUT" ]; then
-  if cmp -s "$T/out" "$OUT"; then
+  if out_matches; then
     printf 'UNCHANGED: %s verdict=%s\n' "$OUT" "$VERDICT"; exit 0
   fi
   refuse "$OUT already exists and differs from this merge; a pass file is never overwritten"

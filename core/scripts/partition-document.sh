@@ -13,6 +13,20 @@
 #   partition-document.sh --assemble <dir>
 #       writes the sections back over the document the manifest names. Exit 0 on
 #       `ASSEMBLED:` or `UNCHANGED:` (stdout).
+#   partition-document.sh --part-sha <doc> [--expect-sha <sha256>]
+#   partition-document.sh --part-sha --rows <root> [--scope-ref <sha>]
+#       stdout: one `<ordinal>=<sha256>` line per part, in map order, then one `run:<o>,<o>,...` line per
+#       CUT TABLE whose pieces landed in two or more parts (THE GRAMMAR's row cut; the first piece counted
+#       in whatever part the packer put it, under whatever heading), the sha taken over the part's
+#       lines first..last cut exactly as --split cuts them (`tail -n +<first> | head -n <count>`), so
+#       a digest equals the sha of the `sections/<ordinal>.md` a split would write. The first form
+#       slices the unscoped `--map` of <doc>, refuses a document that is not <sha256> (--expect-sha)
+#       or that moved while it was sliced, and answers SERIAL as --map does (exit 3). The second
+#       reads `<ordinal>\t<file>\t<first>\t<last>[\t...]` rows on stdin (a subject map's first four
+#       columns, a whole-file part being lines 1..N), a relative <file> resolved under <root>; its runs
+#       come from each file's map scoped at --scope-ref (the subject's base), joined to the rows by
+#       (file, first, last), and with no --scope-ref it prints no run line.
+#       The merge notarizes this list as `part_sha:` (merge-adversarial-shards.sh, THE DERIVED SET).
 #
 #   partition-document.sh --shard-dir [--existing] <artifact path> <M> [--sprint <N>]
 #       stdout: ONE line, the physical absolute path of <state>/planning-artifacts/s<N>/shards/<name>-p<M>
@@ -202,7 +216,7 @@ abs_path() { # <existing file> -> physical absolute path
 map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or one SERIAL line (rc 3)
   # With no line list every line weighs its bytes and the program is the unscoped partitioner.
   # With one, a line not on the list weighs 0, and every byte quantity below is the in-scope sum.
-  awk -v cap="$PART_CAP" -v maxpct="$MAX_SHARE_PCT" -v sf="${2:-}" -v relax="${3:-0}" '
+  awk -v cap="$PART_CAP" -v maxpct="$MAX_SHARE_PCT" -v sf="${2:-}" -v relax="${3:-0}" -v runs="${PD_RUNS:-0}" '
     BEGIN {
       scoped = (sf != ""); bad = 0; nin = 0
       if (scoped) {
@@ -257,12 +271,14 @@ map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or o
       nb = 0
       for (i = 1; i <= na; i++) {
         s = 0; for (k = A1[i]; k <= A2[i]; k++) s += W[k]
-        st = A1[i]
+        st = A1[i]; nb0 = nb
         if (s * 100 > tot * maxpct)
           for (k = A1[i] + 2; k <= A2[i]; k++) if (TR[k] && TR[k - 1] && TR[k - 2] && RUNSEP[k - 1]) {
             nb++; C1[nb] = st; C2[nb] = k - 1; CH[nb] = AH[i]; st = k
           }
         nb++; C1[nb] = st; C2[nb] = A2[i]; CH[nb] = AH[i]
+        # THE TABLE RUN: every piece of an atom the row cut split shares the id i (0: not cut).
+        for (q = nb0 + 1; q <= nb; q++) TB[q] = (nb > nb0 + 1) ? i : 0
       }
       # Keep the atoms carrying in-scope bytes (every atom, unscoped: a line weighs at least its
       # newline). RN is a run id that changes across every dropped atom, so no part spans a gap.
@@ -270,7 +286,7 @@ map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or o
       for (i = 1; i <= nb; i++) {
         s = 0; for (k = C1[i]; k <= C2[i]; k++) s += W[k]
         if (scoped && s == 0) { if (na > 0 && RN[na] == run) run++; continue }
-        na++; A1[na] = C1[i]; A2[na] = C2[i]; AH[na] = CH[i]; AS[na] = s; RN[na] = run
+        na++; A1[na] = C1[i]; A2[na] = C2[i]; AH[na] = CH[i]; AS[na] = s; RN[na] = run; ATB[na] = TB[i]
         if (s > mx) mx = s
       }
       if (RN[na] > cap) for (i = 1; i <= na; i++) RN[i] = 1
@@ -284,6 +300,8 @@ map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or o
       for (i = 1; i <= na; i++) {
         if ((PS[np] > 0 && PS[np] + AS[i] > target) || (i > 1 && RN[i] != RN[i - 1])) { np++; P1[np] = A1[i]; PH[np] = AH[i]; PS[np] = 0 }
         PS[np] += AS[i]; P2[np] = A2[i]
+        t = ATB[i]
+        if (t > 0 && GL[t] != np) { GL[t] = np; GN[t]++; GM[t] = GM[t] (GN[t] > 1 ? "," : "") np; if (GN[t] == 1) GO[++ng] = t }
       }
       big = 0; for (i = 1; i <= np; i++) if (PS[i] > big) { big = PS[i]; bi = i }
       if (np < 2 && !relax) { print "SERIAL: one part"; exit 3 }
@@ -295,6 +313,9 @@ map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or o
       }
       fmt = "%0" length(np "") "d\t%d\t%d\t%s\n"
       for (i = 1; i <= np; i++) printf fmt, i, P1[i], P2[i], head_of(PH[i])
+      # PD_RUNS=1 (--part-sha alone sets it): one `run<TAB><o>,<o>,...` line per cut table whose pieces
+      # landed in two or more parts, the first piece counted wherever the packer put it. --map never prints it.
+      if (runs) for (g = 1; g <= ng; g++) if (GN[GO[g]] > 1) print "run\t" GM[GO[g]]
     }' "$1"
 }
 
@@ -574,6 +595,88 @@ case "${1:-}" in
     [ -n "$M" ] && printf '%s\n' "$M"
     exit "$MRC" ;;
 
+  --part-sha)
+    shift
+    PS_ROOT=""; DOC=""; EXPECT=""; SHA=""; PS_RUNS=""; PS_REF=""
+    if [ "${1:-}" = "--rows" ]; then
+      [ "$#" -eq 2 ] || { [ "$#" -eq 4 ] && [ "$3" = "--scope-ref" ] && [ -n "$4" ]; } && [ -d "$2" ] \
+        || refuse "usage: --part-sha <doc> [--expect-sha <sha256>] | --part-sha --rows <root> [--scope-ref <sha>]"
+      PS_ROOT="$2"; PS_ROWS="$(cat)"; [ "$#" -eq 4 ] && PS_REF="$4"
+      # The subject's runs: each sectioned file's SCOPED map at the base, its local run ordinals joined to
+      # the global rows by (file, first, last). A run any member of which joins no row is not in this map.
+      if [ -n "$PS_REF" ]; then
+        PS_RF="$(mktemp "${TMPDIR:-/tmp}/partition-document.rows.XXXXXX")" || refuse "mktemp failed"
+        # Every refusal below exits; the EXIT trap removes the rows file and the scope files either way.
+        trap 'scope_cleanup; rm -f "$PS_RF"' EXIT
+        printf '%s\n' "$PS_ROWS" > "$PS_RF" || refuse "cannot stage the rows"
+        # One file per LINE (a path may hold a blank or a glob character), read on fd 3 so nothing in
+        # the body can consume the list. The list is captured first so an awk failure refuses; an empty
+        # list is one empty line, which the body's `[ -n "$f" ] || continue` skips.
+        ps_files="$(awk -F'\t' 'NF >= 4 && !s[$2]++ { print $2 }' "$PS_RF")" || refuse "cannot list the subject files"
+        while IFS= read -r f <&3; do
+          [ -n "$f" ] || continue
+          p="$f"; case "$f" in /*) ;; *) p="$PS_ROOT/$f" ;; esac
+          [ -f "$p" ] || refuse "row file $p does not exist"
+          PD_RUNS=1 scoped_map "$p" "$PS_REF"; scope_cleanup
+          # 3 is SERIAL (a whole-file part, no run). Anything else but 0 is a map that did not run; its
+          # runs are unknown, so the answer is a refusal, never a silently narrower record.
+          [ "$MRC" -ne 3 ] || continue
+          [ "$MRC" -eq 0 ] || refuse "the scoped map of $p at $PS_REF failed (rc=$MRC); its cut-table runs are unknown"
+          PS_RUNS="$PS_RUNS$(printf '%s\n' "$M" | awk -F'\t' -v f="$f" -v rf="$PS_RF" '
+            BEGIN { while ((getline l < rf) > 0) { split(l, c, "\t"); if (c[2] == f) G[c[3] + 0, c[4] + 0] = c[1] + 0 } }
+            $1 == "run" { m = split($2, q, ","); out = ""; ok = 1
+              for (i = 1; i <= m; i++) { if (!((L1[q[i] + 0], L2[q[i] + 0]) in G)) { ok = 0; break } out = out (i > 1 ? "," : "") G[L1[q[i] + 0], L2[q[i] + 0]] }
+              if (ok) print "run:" out; next }
+            { L1[$1 + 0] = $2 + 0; L2[$1 + 0] = $3 + 0 }')
+"
+        done 3<<< "$ps_files"
+        rm -f "$PS_RF"
+      fi
+    else
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --expect-sha) [ "$#" -ge 2 ] || refuse "--expect-sha needs a value"; EXPECT="$2"; shift 2 ;;
+          --*) refuse "unknown flag $1" ;;
+          *) [ -z "$DOC" ] || refuse "usage: --part-sha <doc> [--expect-sha <sha256>]"; DOC="$1"; shift ;;
+        esac
+      done
+      [ -n "$DOC" ] || refuse "usage: --part-sha <doc> [--expect-sha <sha256>]"
+      [ -f "$DOC" ] || refuse "no document at $DOC"
+      SHA="$(sha_of "$DOC")"
+      [ -n "$SHA" ] || refuse "cannot hash $DOC"
+      [ -z "$EXPECT" ] || [ "$EXPECT" = "$SHA" ] || refuse "$DOC is not the expected bytes: sha256 $SHA, expected $EXPECT"
+      M="$(PD_RUNS=1 map_of "$DOC")"; rc=$?
+      if [ "$rc" -eq 3 ]; then printf '%s\n' "$M"; exit 3; fi
+      [ "$rc" -eq 0 ] && [ -n "$M" ] || refuse "the partition of $DOC failed (awk rc=$rc)"
+      PS_ROWS="$(printf '%s\n' "$M" | awk -F'\t' -v d="$DOC" '$1 != "run" { print $1 "\t" d "\t" $2 "\t" $3 }')"
+      PS_RUNS="$(printf '%s\n' "$M" | awk -F'\t' '$1 == "run" { print "run:" $2 }')
+"
+    fi
+    PS_T="$(mktemp "${TMPDIR:-/tmp}/partition-document.part.XXXXXX")" || refuse "mktemp failed"
+    TAB="$(printf '\t')"; PS_OUT=""
+    while IFS="$TAB" read -r o f a z _r; do
+      [ -n "$o$f$a$z" ] || continue
+      case "$o" in ""|*[!0-9]*) rm -f "$PS_T"; refuse "row ordinal '$o' is not a number" ;; esac
+      case "$a$z" in *[!0-9]*) rm -f "$PS_T"; refuse "row $o: lines '$a'-'$z' are not numbers" ;; esac
+      [ -n "$a" ] && [ -n "$z" ] && [ "$a" -ge 1 ] && [ "$z" -ge "$((a - 1))" ] || { rm -f "$PS_T"; refuse "row $o: lines '$a'-'$z' are not a range"; }
+      p="$f"
+      if [ -n "$PS_ROOT" ]; then case "$f" in /*) ;; *) p="$PS_ROOT/$f" ;; esac; fi
+      [ -f "$p" ] || { rm -f "$PS_T"; refuse "row $o: no file at $p"; }
+      tail -n "+$a" "$p" | head -n "$((z - a + 1))" > "$PS_T" || { rm -f "$PS_T"; refuse "cannot slice lines $a-$z of $p"; }
+      s="$(sha_of "$PS_T")"
+      [ -n "$s" ] || { rm -f "$PS_T"; refuse "cannot hash lines $a-$z of $p"; }
+      PS_OUT="$PS_OUT$o=$s
+"
+    done <<EOF
+$PS_ROWS
+EOF
+    rm -f "$PS_T"
+    [ -n "$PS_OUT" ] || refuse "no part to hash"
+    if [ -n "$DOC" ] && [ "$(sha_of "$DOC")" != "$SHA" ]; then refuse "$DOC moved while its parts were hashed"; fi
+    printf '%s' "$PS_OUT"
+    printf '%s\n' "$PS_RUNS" | awk 'NF'
+    exit 0 ;;
+
   --split)
     shift
     DOC=""; DIR=""; EXPECT=""; REF=""
@@ -722,7 +825,7 @@ EOF
     printf 'ASSEMBLED: %s sha256=%s\n' "$DOC" "$NEW"
     exit 0 ;;
 
-  *) refuse "usage: partition-document.sh --map <doc> [--scope-ref <sha>] | --split <doc> <dir> [--expect-sha <sha256>] [--scope-ref <sha>] | --assemble <dir> | --shard-dir [--existing] <artifact path> <pass> [--sprint <N>]" ;;
+  *) refuse "usage: partition-document.sh --map <doc> [--scope-ref <sha>] | --split <doc> <dir> [--expect-sha <sha256>] [--scope-ref <sha>] | --assemble <dir> | --part-sha <doc> [--expect-sha <sha256>] | --part-sha --rows <root> [--scope-ref <sha>] | --shard-dir [--existing] <artifact path> <pass> [--sprint <N>]" ;;
 esac
 }
 # The program runs only when executed; sourced (a fixture asking a decision in process), it defines

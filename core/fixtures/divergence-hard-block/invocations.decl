@@ -1,2 +1,9 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-415 *
+# Re-measured for BL-911 (415 -> 424) by two agreeing counted runs, counted from their per-start logs: the +9 is arm N's
+# DOCUMENT self-probe, one `merge-adversarial-shards.sh --derived-set` start in every gate run that reaches a bound arm N
+# (each such run now starts the merge 3 times, where the files probe alone started it 2; the merge starts nothing of
+# its own). The 9 runs are the gate cells where the era binds: era-bound and era-merge-after on the shipped validator;
+# era-between (bound by the mutant) and era-bound under era-date-gate-dropped; era-bound under legacy-on-field-absence;
+# era-between (bound by the mutant) and era-bound under era-on-engine-commit; era-merge-before (bound by the mutant) and
+# era-merge-after under era-not-first-parent.
+424 *

@@ -484,6 +484,9 @@ mx() {
     for _mx_v in $(compgen -A function); do [ "$_mx_v" = mx ] || unset -f "$_mx_v"; done
     unset _mx_keep _mx_exp _mx_i _mx_n _mx_v
     . "$1" || exit 90
+    # MX_HOOK (exported, so the sweep above keeps it): code eval'd after the merge is sourced and before merge_main,
+    # to inject a fault at a point the SHIPPED merge reaches (p_pcmv). Unset everywhere else, so nothing changes.
+    [ -z "${MX_HOOK:-}" ] || eval "$MX_HOOK"
     shift; merge_main "$@" )
 }
 run_merge() { # <merge-script> <shard-dir> -> RC, $MO
@@ -1960,14 +1963,19 @@ p_dv4() {
   printf '# Story 0\n\nA story the repair added.\n' > "$s/stories/story-00-a.md"
   dv_map "$1" "$s" stories-p2; [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "1 4 6 7 8" ]
 }
-# DV4D: section mode is NOT narrowed (its pre-repair snapshot is consumed by the worklist before the next
-# pass). Section 2b inserted, Section 4 edited, a p1 MAJOR on Section 6, and the snapshot still on disk: the
-# FULL eight-part map, derived from p1, and the header names why -- never a silent full width.
+# DV4D: section mode narrows by part CONTENT, so a CITED part that the repair left unchanged is owed at its NEW
+# ordinal. Section 2b inserted (every later ordinal shifts by one), Section 4 edited, p1's MAJOR on Section 6
+# (p1 ordinal 6, now 7): owed {3 5 7} -- the new 2b, the edited 4, the cited 6 -- derived from p1, no full-width
+# reason. THE SEED DISCRIMINATES, asserted before the verdict is read (pc_alt): an ordinal-keyed join owes
+# {3 4 5 6 7 8} and a line-range join the same; a cite read as a current ordinal owes {3 5 6}.
 p_dv4d() {
   local s; s="$(dvd_world)" || return 1
+  pc_cur document "$s/test-strategy-adversarial-p1.md" "$s/test-strategy.md" || return 1
+  pc_alt document 6 || return 1
+  [ "$PC_CON" = "3 5 7" ] && [ "$PC_ORD" != "3 5 7" ] && [ "$PC_RNG" != "3 5 7" ] && [ "$PC_CBO" = "3 5 6" ] || { PC_WHY="seed does not discriminate: $PC_ALL"; return 1; }
   dv_map "$1" "$s" test-strategy-p2 --document "$s/test-strategy.md"
-  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "1 2 3 4 5 6 7 8" ] \
-    && case "$DV_HDR" in *"derived from test-strategy-adversarial-p1.md (full width: document mode is not narrowed"*) true ;; *) false ;; esac
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "3 5 7" ] \
+    && case "$DV_HDR" in *"derived from test-strategy-adversarial-p1.md"*) true ;; *) false ;; esac && ! has "$WORK/dv.err" "full width"
 }
 # DV5: p1's artifact_sha line removed (an unreadable predecessor sha list) -> the FULL map, said so.
 p_dv5() {
@@ -2006,13 +2014,13 @@ p_dv10() {
   dv_gate "$m" "$s"; has "$CO" "dispatched parts {1 3 6} but owed {3 6}"
 }
 # ---- THE SHIPPED SEQUENCE (BL-911). DV4D seeds a world that still holds its pre-repair snapshot; the lead's
-# real flow never leaves one. These worlds stop at the p1 merge (cached), and each use then drives the shipped
-# programs in order: the split keyed on p1's artifact_sha, one edit to a section copy, the assembly, the
-# worklist WITHOUT --keep (which consumes the snapshot), --derived-map for p2, the full-width dispatch plus its
-# cross shards, the merge, and the gate. The split, assembly and worklist run from $SRCDIR, never from beside a
-# mutated merge, so a merge mutant moves only what the merge decides. Every merge call reads /dev/null: document
-# and subject modes hand derive_set `-` as the current source, and a mutant routing them into the files
-# derivation would otherwise read the fixture's stdin.
+# real flow never leaves one, and the narrowing never reads one (it joins p1's notarized `part_sha:`). These
+# worlds stop at the p1 merge (cached), and each use then drives the shipped programs in order: the split keyed
+# on p1's artifact_sha, one edit to a section copy, the assembly, the worklist WITHOUT --keep (which consumes the
+# snapshot), --derived-map for p2 (narrowed), the full map dispatched and REFUSED, the derived dispatch plus its
+# cross shards merged, and the gate both ways. The split, assembly and worklist run from $SRCDIR, never from
+# beside a mutated merge, so a merge mutant moves only what the merge decides. Every merge call reads /dev/null,
+# so a mutant that reads stdin reads nothing rather than the fixture's.
 dvrs_doc_build() { # -> the s1 dir of a document world with p1 merged by --document, a MAJOR on Section 6
   local w pa d o x i doc
   w="$(mktemp -d "$WORK/dvrs.XXXXXX")" || return 1
@@ -2038,35 +2046,53 @@ dvrs_subj_build() { # -> the s9 dir of a subject world (rulebook committed) with
   printf '%s' "$(dirname "$(dirname "$d")")"
 }
 dvrs_subj_world() { wc_get dvrss dvrs_subj_build; }
-# dvrs_tail <merge> <mode document|subject> <sprint dir> <artifact> <p2 shard dir> <merge args...> -- steps 4 and 5:
-# the derived map byte-equal to the mode's own --map and naming why, then every mapped part plus the cross
-# shards dispatched and merged, stamped derived from p1, and the gate judging the series with no FAIL (N.
+# dvrs_tail <merge> <mode document|subject> <sprint dir> <artifact> <p2 shard dir> <owed ordinals> <merge args...> --
+# steps 4 and 5: the derived map is exactly the mode's own --map rows of <owed> (narrowed by part content, no
+# full-width reason); the FULL map dispatched with its cross shards is REFUSED, nothing written; the owed parts
+# alone merge, stamped derived from p1, and the gate judges the series with no FAIL (N. Then arm N is shown
+# able to fire on this pass BOTH ways (N4): a part outside the owed set added to the dispatch ids (a SUPERSET:
+# a pass wider than the recomputed derived set) and an owed part's id dropped (a SUBSET), each FAIL (N) owed <owed>.
 dvrs_tail() {
-  local m="$1" mode="$2" s="$3" art="$4" sd="$5" o x k; shift 5
+  local m="$1" mode="$2" s="$3" art="$4" sd="$5" want="$6" o x k xo="" p l; shift 6
+  p="$s/$art-adversarial-p2.md"
   mkdir -p "$sd" || return 1
   # The mode's own map, from its one speller (the merge's --map is files mode only).
   if [ "$mode" = document ]; then bash "$PARTITION" --map "$2" < /dev/null > "$WORK/dvrs.map" 2>/dev/null || return 1
   else ( cd "$(subj_root "$sd")" && AI_DLC_PROJECT_ROOT="$(subj_root "$sd")" bash "$SRCDIR/partition-subject.sh" --map 9 --read-only ) < /dev/null > "$WORK/dvrs.map" 2>/dev/null || return 1; fi
   [ -s "$WORK/dvrs.map" ] || return 1
+  awk -F'\t' -v w=" $want " 'index(w, " " ($1 + 0) " ")' "$WORK/dvrs.map" > "$WORK/dvrs.want"
+  [ "$(grep -c . "$WORK/dvrs.want")" = "$(printf '%s\n' $want | grep -c .)" ] || return 1
   $ASM_RUN "$m" "$@" --derived-map "$sd" < /dev/null > "$WORK/dvrs.dm" 2> "$WORK/dvrs.err" || return 1
-  cmp -s "$WORK/dvrs.map" "$WORK/dvrs.dm" || return 1
-  has "$WORK/dvrs.err" "derived from $art-adversarial-p1.md (full width: $mode mode is not narrowed" || return 1
+  cmp -s "$WORK/dvrs.want" "$WORK/dvrs.dm" || return 1
+  has "$WORK/dvrs.err" "derived from $art-adversarial-p1.md" && ! has "$WORK/dvrs.err" "full width" || return 1
   k="$(grep -c . "$WORK/dvrs.map")" || k=0
   for o in $(cut -f1 "$WORK/dvrs.map"); do
     if [ "$mode" = document ]; then dshard "$sd" "$((10#$o))" 0 EXIT_CONDITION_MET "$((10#$o))"; else sshard "$sd" "$o" 0 "$((10#$o))"; fi
   done
   for x in $(xkeys "$k"); do
-    if [ "$mode" = document ]; then dshard "$sd" "$x" 0 EXIT_CONDITION_MET "1, 2"; else sshard "$sd" "$x" 0 "1, 2"; fi
+    if [ "$mode" = document ]; then dshard "$sd" "$x" 0 EXIT_CONDITION_MET "$(printf '%s' "$want" | sed 's/ /, /g')"; else sshard "$sd" "$x" 0 "$(printf '%s' "$want" | sed 's/ /, /g')"; fi
   done
+  # The full map is refused: a shard outside the derived set, and nothing written.
   $ASM_RUN "$m" "$@" "$sd" < /dev/null > "$MO" 2>&1; RC=$?
-  [ "$RC" -eq 0 ] && has "$s/$art-adversarial-p2.md" "shard_set_derived_from: $art-adversarial-p1.md" || return 1
+  [ "$RC" -eq 2 ] && has "$MO" "outside the derived set {" && [ ! -e "$p" ] || return 1
+  for o in $(cut -f1 "$WORK/dvrs.map"); do
+    case " $want " in *" $((10#$o)) "*) continue ;; esac
+    [ -n "$xo" ] || xo="$((10#$o))"
+    if [ "$mode" = document ]; then rm -f "$sd/$((10#$o)).md"; else rm -f "$sd/$o.md"; fi
+  done
+  [ -n "$xo" ] || return 1
+  $ASM_RUN "$m" "$@" "$sd" < /dev/null > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$p" "shard_set_derived_from: $art-adversarial-p1.md" && has "$p" "part_sha: " || return 1
   bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/$art-adversarial-p" < /dev/null > "$CO" 2>&1
   has "$CO" "pass artifact" && ! has "$CO" "FAIL (N" || return 1
-  # Arm N is shown able to fire on this pass: part 2's dispatch id dropped -> FAIL (N) owed the WHOLE map.
-  awk '/^shard_tool_use_ids:/ { sub(/ 0*2=[^ ]+/, "") } { print }' "$s/$art-adversarial-p2.md" > "$s/$art-adversarial-p2.md.n" \
-    && mv "$s/$art-adversarial-p2.md.n" "$s/$art-adversarial-p2.md" || return 1
+  cp "$p" "$WORK/dvrs.p2" || return 1
+  awk -v x="$xo" '/^shard_tool_use_ids:/ { print $0 " " x "=toolu_01DvExtra000000000000"; next } { print }' "$WORK/dvrs.p2" > "$p" || return 1
   bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/$art-adversarial-p" < /dev/null > "$CO" 2>&1
-  has "$CO" "but owed {$(cut -f1 "$WORK/dvrs.map" | awk '{ printf "%s%d", (n++ ? " " : ""), $1 }')}, derived from $art-adversarial-p1.md"
+  l="$(grep -F "but owed {$want}, derived from $art-adversarial-p1.md" "$CO")" || return 1
+  grep -qE "parts \{([0-9]+ )*$xo( [0-9]+)*\} but" <<< "$l" || return 1
+  awk -v x="${want%% *}" '/^shard_tool_use_ids:/ { sub(" 0*" x "=[^ ]+", "") } { print }' "$WORK/dvrs.p2" > "$p" || return 1
+  bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/$art-adversarial-p" < /dev/null > "$CO" 2>&1
+  has "$CO" "but owed {$want}, derived from $art-adversarial-p1.md"
 }
 # DVRS: document mode, the shipped sequence; and, in the same arm, a FILES-mode twin that still narrows to {3 6}
 # with no full-width reason -- so a merge printing full width everywhere fails this arm too.
@@ -2083,7 +2109,7 @@ p_dvrs() {
   bash "$wl" "$rd" < /dev/null > "$WORK/dvrs.wl" 2>&1; rc=$?
   case "$rc" in 0|3) ;; *) return 1 ;; esac
   [ ! -e "$rd/sections/.before" ] && [ -f "$rd/sections/.manifest" ] || return 1
-  dvrs_tail "$m" document "$s" test-strategy "$s/shards/test-strategy-p2" --document "$doc" || return 1
+  dvrs_tail "$m" document "$s" test-strategy "$s/shards/test-strategy-p2" "4 6" --document "$doc" || return 1
   s="$(dvA_world)" || return 1
   dv_map "$m" "$s" stories-p2 < /dev/null
   [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "3 6" ] && has "$WORK/dv.err" "derived from stories-adversarial-p1.md" && ! has "$WORK/dv.err" "full width"
@@ -2103,5 +2129,531 @@ p_dvrss() {
   ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$wl" "$rd" ) < /dev/null > "$WORK/dvrss.wl" 2>&1; rc=$?
   case "$rc" in 0|3) ;; *) return 1 ;; esac
   [ ! -e "$rd/prd/sections/.before" ] && [ ! -e "$rd/.before/SPEC" ] && [ -f "$rd/.subject" ] || return 1
-  dvrs_tail "$m" subject "$s" requirements "$s/shards/requirements-p2" --subject 9
+  # Owed {2 3}: p1's MAJOR cites part 2 (SPEC, unchanged), and prd's first in-scope section (`## Sprint 9`, part 3)
+  # grew by the repaired line; Goals and Requirements moved down one line with their bytes unchanged.
+  dvrs_tail "$m" subject "$s" requirements "$s/shards/requirements-p2" "2 3" --subject 9
+}
+# ---- THE PART-CONTENT DERIVED SET (BL-911: document and subject modes). Every document or subject pass
+# notarizes `part_sha:`, one `<ordinal>=<sha256>` per map row; a later pass owes the parts whose digest
+# (subject: (file, digest)) is not UNIQUE on both sides, the parts p1's CRITICAL/MAJOR findings cite mapped
+# forward by that unique digest, and a cut table's whole run. Each arm below copies a cached p1 world, edits the
+# DISK, and asks --derived-map; and each first asserts that its SEED DISCRIMINATES -- that the wrong join a
+# feared regression would ship (pc_alt) answers differently from the owed set on that very seed -- before the
+# merge's verdict is read. A seed on which the wrong join agrees proves nothing about the join.
+# pc_cur <mode> <p1 pass file> <document | subject root> -> $WORK/pc.{pmap,pps,cmap,cps}: p1's embedded map and
+# part_sha list, the CURRENT map from the mode's partitioner and each current row's digest taken HERE (one awk
+# printing the row's lines first..last, then sha_of; no pipe, and every seeded file ends in a newline, so the slice
+# is byte-equal to the one --split cuts), never by the merge or by partition-document.sh --part-sha.
+pc_cur() {
+  local mode="$1" p1="$2" src="$3" o f a z p
+  awk '/^## Shard ordinal map[ \t]*$/ { s = 1; next } s == 1 && /^```/ { s = 2; next } s == 2 && /^```/ { exit } s == 2' "$p1" > "$WORK/pc.pmap"
+  sed -n 's/^part_sha: //p' "$p1" | head -1 | tr ' ' '\n' | awk 'NF' > "$WORK/pc.pps"
+  if [ "$mode" = document ]; then
+    bash "$PARTITION" --map "$src" < /dev/null 2>/dev/null | awk -F'\t' -v d="$src" '{ print $1 "\t" d "\t" $2 "\t" $3 "\t" $4 }' > "$WORK/pc.cmap" || return 1
+  else
+    ( cd "$src" && AI_DLC_PROJECT_ROOT="$src" bash "$SRCDIR/partition-subject.sh" --map 9 --read-only ) < /dev/null > "$WORK/pc.cmap" 2>/dev/null || return 1
+  fi
+  : > "$WORK/pc.cps" || return 1
+  while IFS="$(printf '\t')" read -r o f a z _; do
+    case "$f" in /*) p="$f" ;; *) p="$src/$f" ;; esac
+    awk -v a="$a" -v z="$z" 'NR > z { exit } NR >= a' "$p" > "$WORK/pc.slice" || return 1
+    printf '%s=%s\n' "$o" "$(sha_of "$WORK/pc.slice")" >> "$WORK/pc.cps"
+  done < "$WORK/pc.cmap"
+  [ -s "$WORK/pc.pmap" ] && [ -s "$WORK/pc.pps" ] && [ -s "$WORK/pc.cmap" ] && [ "$(grep -c . "$WORK/pc.cps")" = "$(grep -c . "$WORK/pc.cmap")" ]
+}
+# pc_alt <mode> <p1 ordinals the p1 findings cite> -> PC_CON PC_ORD PC_RNG PC_CBO PC_PRS PC_DIG (space-joined owed
+# sets) and PC_ALL, over pc_cur's files. CON is the content join with cites mapped forward and NO table-run
+# widening; the rest are the wrong joins: ORD keyed on the ordinal (digest at the same ordinal), RNG on the row's
+# (file, first, last), CBO the content join with each cite read as a CURRENT ordinal, PRS a part unchanged when its
+# digest is merely PRESENT in p1 (duplicates not owed), DIG keyed on the digest alone (subject: file dropped).
+pc_alt() {
+  local l
+  PC_CON=""; PC_ORD=""; PC_RNG=""; PC_CBO=""; PC_PRS=""; PC_DIG=""
+  awk -F'\t' -v md="$1" -v cites="$2" '
+    function put(nm, i) { S[nm, i] = 1 }
+    FILENAME == ARGV[1] { p = index($0, "="); PS[substr($0, 1, p - 1) + 0] = substr($0, p + 1); next }
+    FILENAME == ARGV[2] { p = index($0, "="); CS[substr($0, 1, p - 1) + 0] = substr($0, p + 1); next }
+    FILENAME == ARGV[3] { np++; PO[np] = $1 + 0; if (md == "subject") { PF[np] = $2; PA[np] = $3; PZ[np] = $4 } else { PF[np] = "-"; PA[np] = $2; PZ[np] = $3 }; POS[$1 + 0] = np; next }
+    { nc++; CO[nc] = $1 + 0; CF[nc] = (md == "subject") ? $2 : "-"; CA[nc] = $3; CZ[nc] = $4 }
+    END {
+      for (j = 1; j <= np; j++) { k = PF[j] SUBSEP PS[PO[j]]; PK[j] = k; PC[k]++; PD[j] = PS[PO[j]]; PDC[PD[j]]++ }
+      for (i = 1; i <= nc; i++) { k = CF[i] SUBSEP CS[CO[i]]; CK[i] = k; CC[k]++; CI[k] = i; CD[i] = CS[CO[i]]; CDC[CD[i]]++; CDI[CD[i]] = i }
+      for (i = 1; i <= nc; i++) {
+        if (!(PC[CK[i]] == 1 && CC[CK[i]] == 1)) { put("CON", i); put("CBO", i) }
+        if (!(CK[i] in PC)) put("PRS", i)
+        if (!(PDC[CD[i]] == 1 && CDC[CD[i]] == 1)) put("DIG", i)
+        o = CO[i]; j = POS[o]
+        if (!(o in POS) || PS[o] != CS[o] || PF[j] != CF[i]) put("ORD", i)
+        if (!(o in POS) || PF[j] != CF[i] || PA[j] != CA[i] || PZ[j] != CZ[i]) put("RNG", i)
+      }
+      n = split(cites, cc, " ")
+      for (q = 1; q <= n; q++) {
+        c = cc[q] + 0; j = POS[c]
+        if (c <= nc) { put("ORD", c); put("RNG", c); put("CBO", c) }
+        k = PK[j]; if (PC[k] == 1 && CC[k] == 1) { put("CON", CI[k]); put("PRS", CI[k]) }
+        d = PD[j]; if (PDC[d] == 1 && CDC[d] == 1) put("DIG", CDI[d])
+      }
+      split("CON ORD RNG CBO PRS DIG", nm, " ")
+      for (t = 1; t <= 6; t++) { o = ""; for (i = 1; i <= nc; i++) if ((nm[t], i) in S) o = o (o == "" ? "" : " ") CO[i]; print nm[t] "\t" o }
+    }' "$WORK/pc.pps" "$WORK/pc.cps" "$WORK/pc.pmap" "$WORK/pc.cmap" > "$WORK/pc.alt" || return 1
+  while IFS="$(printf '\t')" read -r l v; do
+    case "$l" in CON) PC_CON="$v" ;; ORD) PC_ORD="$v" ;; RNG) PC_RNG="$v" ;; CBO) PC_CBO="$v" ;; PRS) PC_PRS="$v" ;; DIG) PC_DIG="$v" ;; esac
+  done < "$WORK/pc.alt"
+  PC_ALL="CON {$PC_CON} ORD {$PC_ORD} RNG {$PC_RNG} CBO {$PC_CBO} PRS {$PC_PRS} DIG {$PC_DIG}"
+  [ "$(grep -c . "$WORK/pc.alt")" = 6 ]
+}
+pc_root() { printf '%s' "${1%/_bmad-output/planning-artifacts/s*}"; } # <sprint dir> -> its world root
+# PC1: a REPACK. p1's seven one-section parts; the repair grows Section 2 by twenty lines and edits Section 4, so
+# the packer's target rises and the map becomes five parts {S1, S2, S3+S4, S5+S6, S7}: every boundary after part 2
+# moved, and ordinals 3-5 hold other sections. Owed {2 3 4} -- the grown S2, the part holding the edited S4, the
+# part holding the cited S6 -- and NOT part 5 (S7, byte-identical at another ordinal). An ordinal or line-range
+# join owes {2 3 4 5}.
+p_pc1() {
+  local s doc; s="$(dvrs_doc_world)" || return 1; doc="$s/test-strategy.md"
+  awk '{ print } /^sec2 line 15 of/ { for (i = 1; i <= 20; i++) print "grown line " i " of section two, carrying prose to weigh something." } /^sec4 line 3 of/ { print "Repaired line." }' \
+    "$doc" > "$doc.n" && mv "$doc.n" "$doc" || return 1
+  pc_cur document "$s/test-strategy-adversarial-p1.md" "$doc" && pc_alt document 6 || return 1
+  [ "$(grep -c . "$WORK/pc.cmap")" = 5 ] && [ "$PC_CON" = "2 3 4" ] && [ "$PC_ORD" != "2 3 4" ] && [ "$PC_RNG" != "2 3 4" ] \
+    || { PC_WHY="seed does not discriminate: $PC_ALL"; return 1; }
+  dv_map "$1" "$s" test-strategy-p2 --document "$doc" < /dev/null
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "2 3 4" ] && has "$WORK/dv.err" "derived from test-strategy-adversarial-p1.md" && ! has "$WORK/dv.err" "full width"
+}
+# PCD: TWO IDENTICAL PARTS, BOTH OWED. The repair rewrites Section 3 into a byte copy of Section 5 (heading and
+# body): part 3 changed, and part 5, unchanged, now shares its digest with it. Owed {3 5 6}: a digest is unchanged
+# only when it is UNIQUE on both sides. A join that asks only whether the digest is PRESENT in p1 owes {6}.
+p_pcd() {
+  local s doc; s="$(dvrs_doc_world)" || return 1; doc="$s/test-strategy.md"
+  awk '/^## Section 5$/ { c = 1 } c && /^## Section 6$/ { c = 0 } c { B[++n] = $0 } { L[NR] = $0 }
+    END { for (i = 1; i <= NR; i++) { if (L[i] == "## Section 3") { for (j = 1; j <= n; j++) print B[j]; s = 1; continue }
+          if (s && L[i] == "## Section 4") s = 0; if (!s) print L[i] } }' "$doc" > "$doc.n" && mv "$doc.n" "$doc" || return 1
+  pc_cur document "$s/test-strategy-adversarial-p1.md" "$doc" && pc_alt document 6 || return 1
+  [ "$PC_CON" = "3 5 6" ] && [ "$PC_PRS" != "3 5 6" ] || { PC_WHY="seed does not discriminate: $PC_ALL"; return 1; }
+  dv_map "$1" "$s" test-strategy-p2 --document "$doc" < /dev/null
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "3 5 6" ] && ! has "$WORK/dv.err" "full width"
+}
+# THE CUT-TABLE RUN (B1), NOTARIZED. partition-document.sh --part-sha prints one `run:<o>,<o>,...` line per cut
+# table that spans two or more parts; the merge writes them as `part_run:` (`-` when none, runs joined by `;`)
+# and derive_set owes a run whole when any member is owed, reading no heading. tbl_build is the engine's own
+# probe shape: `## Section 1` of <s1> prose lines, `## Section 2` holding a header, a separator and <n> rows, then
+# <k> sections of <s3> lines; p1 merged, no finding.
+tbl_build() { # <s1> <n> <k> <s3> -> the s1 dir
+  local w pa s doc d o x i j k
+  w="$(mktemp -d "$WORK/tw.XXXXXX")" || return 1
+  pa="$w/_bmad-output/planning-artifacts"; s="$pa/s1"; doc="$s/test-strategy.md"; d="$s/shards/test-strategy-p1"
+  mkdir -p "$d" && dv_root "$w" || return 1
+  { printf '# T\n\n## Section 1\n\n'; for i in $(seq 1 "$1"); do echo "one line $i of prose carrying weight here"; done
+    printf '\n## Section 2\n\n| Col A | Col B |\n|---|---|\n'
+    for i in $(seq 1 "$2"); do printf '| row %03d carrying a cell of prose | value %03d |\n' "$i" "$i"; done
+    for j in $(seq 3 $((2 + $3))); do printf '\n## Section %s\n\n' "$j"; for i in $(seq 1 "$4"); do echo "sec $j line $i of prose"; done; done; } > "$doc"
+  bash "$PARTITION" --map "$doc" < /dev/null > "$w/t.map" 2>/dev/null || return 1
+  k="$(grep -c . "$w/t.map")" || k=0
+  for o in $(cut -f1 "$w/t.map"); do dshard "$d" "$((10#$o))" 0 EXIT_CONDITION_NOT_MET "$((10#$o))"; done
+  for x in $(xkeys "$k"); do dshard "$d" "$x" 0 EXIT_CONDITION_NOT_MET "1, 2"; done
+  $ASM_RUN "$MERGE" --document "$doc" "$d" < /dev/null > /dev/null 2>&1 && [ -f "$s/test-strategy-adversarial-p1.md" ] || return 1
+  printf '%s' "$s"
+}
+tbl_world() { wc_get "tbl$1x$2x$3x$4" tbl_build "$@"; }
+# pc_run <pass file> -> PC_RUN (the members of its part_run:, space-joined; empty for `-`), PC_NRUN (runs)
+pc_run() {
+  local v; v="$(sed -n 's/^part_run: *//p' "$1" | head -1)"
+  PC_NRUN=0; PC_RUN=""
+  [ -n "$v" ] && [ "$v" != - ] || return 0
+  PC_NRUN="$(printf '%s\n' "$v" | tr ';' '\n' | grep -c .)" || PC_NRUN=0
+  PC_RUN="$(printf '%s\n' "$v" | tr ';,' '  ')"
+}
+tbl_hdr_edit() { sed 's/^| Col A | Col B |$/| Col X | Col Y |/' "$1" > "$1.n" && mv "$1.n" "$1"; }
+# pc_hdr_row -> the current ordinal of the row holding the table's header line (pc.cmap, after pc_cur)
+pc_hdr_row() {
+  local h; h="$(grep -n '^| Col [AX] | Col [BY] |$' "$1" | head -1 | cut -d: -f1)"
+  awk -F'\t' -v h="$h" '$3 <= h + 0 && h + 0 <= $4 { print ($1 + 0) "\t" $5 }' "$WORK/pc.cmap"
+}
+# PCT (B1): a 260-row table cut into a run of parts -- PCC's world (an 80-line Section 1 its own row, the run from
+# row 2), shared rather than built a second time: its run is the long run this arm needs, and the packed-header
+# shape is PCT2's. The repair renames the header cells, so only the run's first piece changes. Owed: every member
+# of p1's notarized run. The seed holds first: one run of two or more parts, the content join (no run) owes exactly
+# ONE part, a member of that run.
+p_pct() {
+  local s doc p1; s="$(tbl_world 80 260 1 12)" || return 1; doc="$s/test-strategy.md"; p1="$s/test-strategy-adversarial-p1.md"
+  pc_run "$p1"; tbl_hdr_edit "$doc" || return 1
+  pc_cur document "$p1" "$doc" && pc_alt document "" || return 1
+  [ "$PC_NRUN" = 1 ] && [ "$(printf '%s\n' $PC_RUN | grep -c .)" -ge 2 ] && [ "$(printf '%s\n' $PC_CON | grep -c .)" = 1 ] \
+    && case " $PC_RUN " in *" $PC_CON "*) true ;; *) false ;; esac || { PC_WHY="seed does not discriminate: run [$PC_RUN] $PC_ALL"; return 1; }
+  dv_map "$1" "$s" test-strategy-p2 --document "$doc" < /dev/null
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "$PC_RUN" ] && ! has "$WORK/dv.err" "full width"
+}
+# PCT2 (B1, the two-piece shape the heading heuristic could not see): a 20-row table cut into EXACTLY two pieces,
+# the header piece packed under `## Section 1`, so `## Section 2` heads one row only. The header changed: BOTH owed.
+# The seed holds first: the header's row is headed otherwise than `## Section 2`, one row is, the run has exactly
+# two members, and the content join owes the header's row alone. Ignoring the run owes {1}.
+p_pct2() {
+  local s doc p1 hh n2; s="$(tbl_world 3 20 1 30)" || return 1; doc="$s/test-strategy.md"; p1="$s/test-strategy-adversarial-p1.md"
+  pc_run "$p1"; tbl_hdr_edit "$doc" || return 1
+  pc_cur document "$p1" "$doc" && pc_alt document "" || return 1
+  hh="$(pc_hdr_row "$doc")"; n2="$(awk -F'\t' '$5 == "## Section 2"' "$WORK/pc.cmap" | grep -c .)" || n2=0
+  [ "$(printf '%s' "$hh" | cut -f2)" != "## Section 2" ] && [ "$n2" = 1 ] && [ "$(printf '%s\n' $PC_RUN | grep -c .)" = 2 ] \
+    && [ "$PC_CON" = "$(printf '%s' "$hh" | cut -f1)" ] || { PC_WHY="seed shape: header row [$hh] Section-2 rows $n2 run [$PC_RUN] $PC_ALL"; return 1; }
+  dv_map "$1" "$s" test-strategy-p2 --document "$doc" < /dev/null
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "$PC_RUN" ] && ! has "$WORK/dv.err" "full width"
+}
+# PCC: a PLAIN row BEFORE a run (an 80-line Section 1, then the 260-row table's run from row 2). An edit to row 1
+# owes row 1 only: the run is the cut table's pieces, never its neighbour. The seed holds first: row 1 is outside
+# the run and the run starts at row 2. Widening a run to the row before it owes {1} plus the whole run.
+p_pcc() {
+  local s doc p1; s="$(tbl_world 80 260 1 12)" || return 1; doc="$s/test-strategy.md"; p1="$s/test-strategy-adversarial-p1.md"
+  pc_run "$p1"
+  sed 's/^one line 5 of prose carrying weight here$/one line 5 of prose carrying MORE weight/' "$doc" > "$doc.n" && mv "$doc.n" "$doc" || return 1
+  pc_cur document "$p1" "$doc" && pc_alt document "" || return 1
+  [ "$PC_NRUN" = 1 ] && [ "${PC_RUN%% *}" = 2 ] && [ "$PC_CON" = 1 ] || { PC_WHY="seed shape: run [$PC_RUN] $PC_ALL"; return 1; }
+  dv_map "$1" "$s" test-strategy-p2 --document "$doc" < /dev/null
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = 1 ] && ! has "$WORK/dv.err" "full width"
+}
+# PCSR: a SUBJECT cut-table run, mapped onto GLOBAL ordinals. Since base, prd gained a `## Table` of 260 rows that the
+# scoped map cuts into pieces; partition-document.sh --part-sha --rows --scope-ref names the run in prd's local
+# ordinals and maps it onto the subject's rows by (file, first, last). The header renamed: owed, every member. The
+# seed holds first: p1 carries one run of two or more members, every member is a prd.md row of p1's map, the header
+# line lies inside the FIRST member, and the content join owes that member alone.
+dvst_build() { # -> the s9 dir of a subject world whose prd gained a cut table since base, p1 merged, no finding
+  local d w pa o i
+  d="$(new_subj_world_build)" || return 1; w="$(subj_root "$d")"; pa="$w/$SUBJ_PA"
+  { printf '\n## Table\n\n| Col A | Col B |\n|---|---|\n'
+    for i in $(seq 1 260); do printf '| row %03d carrying a cell of prose | value %03d |\n' "$i" "$i"; done
+    printf '\n## After\n\n'; slorem after 12; } >> "$pa/prd.md"
+  AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --map 9 > "$w/subject.map" 2>&1 || return 1
+  dv_root "$w" || return 1
+  for o in $(cut -f1 "$w/subject.map"); do sshard "$d" "$o" 0 "$((10#$o))" "" "" EXIT_CONDITION_NOT_MET; done
+  for o in $(subj_xkeys "$d"); do sshard "$d" "$o" 0 "1, 2" "" "" EXIT_CONDITION_NOT_MET; done
+  $ASM_RUN "$MERGE" --subject 9 "$d" < /dev/null > /dev/null 2>&1 && [ -f "$(subj_out_of "$d")" ] || return 1
+  printf '%s' "$(dirname "$(dirname "$d")")"
+}
+dvst_world() { wc_get dvst dvst_build; }
+p_pcsr() {
+  local s w p1 prd h f a z o bad=0; s="$(dvst_world)" || return 1; w="$(pc_root "$s")"; p1="$s/requirements-adversarial-p1.md"; prd="$w/$SUBJ_PA/prd.md"
+  pc_run "$p1"; h="$(grep -n '^| Col A | Col B |$' "$prd" | head -1 | cut -d: -f1)"
+  tbl_hdr_edit "$prd" || return 1
+  pc_cur subject "$p1" "$w" && pc_alt subject "" || return 1
+  for o in $PC_RUN; do
+    f="$(awk -F'\t' -v o="$o" '$1 + 0 == o + 0 { print $2 }' "$WORK/pc.pmap")"; case "$f" in */prd.md) ;; *) bad=1 ;; esac
+  done
+  a="$(awk -F'\t' -v o="${PC_RUN%% *}" '$1 + 0 == o + 0 { print $3 }' "$WORK/pc.pmap")"; z="$(awk -F'\t' -v o="${PC_RUN%% *}" '$1 + 0 == o + 0 { print $4 }' "$WORK/pc.pmap")"
+  [ "$PC_NRUN" = 1 ] && [ "$(printf '%s\n' $PC_RUN | grep -c .)" -ge 2 ] && [ "$bad" = 0 ] && [ -n "$h" ] && [ -n "$a" ] \
+    && [ "$a" -le "$h" ] && [ "$h" -le "$z" ] && [ "$PC_CON" = "${PC_RUN%% *}" ] || { PC_WHY="seed shape: run [$PC_RUN] header line $h first member $a-$z $PC_ALL"; return 1; }
+  dv_map "$1" "$s" requirements-p2 --subject 9 < /dev/null
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "$PC_RUN" ] && ! has "$WORK/dv.err" "full width"
+}
+# PCS: SUBJECT mode, keyed (file, digest). p1's six parts {brief, SPEC, prd Sprint 9, Goals, Requirements, arch}
+# with p1's MAJOR on part 2 (SPEC). The repair REVERTS the brief to base, so its part LEAVES the subject and every
+# later ordinal drops by one; grows Goals by five lines (Requirements' boundaries move); edits Requirements in
+# place. Owed {1 3 4}: the cited SPEC at its new ordinal 1, Goals, Requirements. Ordinal and range joins owe the
+# whole map; a cite read as a current ordinal owes {2 3 4}.
+p_pcs() {
+  local s w pa; s="$(dvrs_subj_world)" || return 1; w="$(pc_root "$s")"; pa="$w/$SUBJ_PA"
+  grep -v '^A new brief line\.$' "$pa/product-brief.md" > "$pa/product-brief.md.n" && mv "$pa/product-brief.md.n" "$pa/product-brief.md" || return 1
+  awk '{ print } /^s9g line 30 of/ { for (i = 1; i <= 5; i++) print "grown goal " i " carrying enough prose to weigh something real." }
+    /^s9r line 3 of/ { print "A repaired requirement line." }' "$pa/prd.md" > "$pa/prd.md.n" && mv "$pa/prd.md.n" "$pa/prd.md" || return 1
+  pc_cur subject "$s/requirements-adversarial-p1.md" "$w" && pc_alt subject 2 || return 1
+  [ "$(cut -f2 "$WORK/pc.cmap" | grep -c 'product-brief')" = 0 ] && [ "$PC_CON" = "1 3 4" ] && [ "$PC_ORD" != "1 3 4" ] \
+    && [ "$PC_RNG" != "1 3 4" ] && [ "$PC_CBO" = "2 3 4" ] || { PC_WHY="seed does not discriminate: $PC_ALL"; return 1; }
+  dv_map "$1" "$s" requirements-p2 --subject 9 < /dev/null
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "1 3 4" ] && ! has "$WORK/dv.err" "full width"
+}
+# PCS2: THE SAME BYTES IN TWO FILES. The repair rewrites SPEC.md into a byte copy of architecture-impact.md. Keyed
+# (file, digest), SPEC changed and arch did not: owed {2}. Keyed on the digest alone the two parts are a duplicate
+# and both are owed: {2 6}.
+p_pcs2() {
+  local s w pa; s="$(dvrs_subj_world)" || return 1; w="$(pc_root "$s")"; pa="$w/$SUBJ_PA"
+  cp "$pa/s9/architecture-impact.md" "$w/_bmad-output/specs/s9/kernel/SPEC.md" || return 1
+  pc_cur subject "$s/requirements-adversarial-p1.md" "$w" && pc_alt subject 2 || return 1
+  [ "$PC_CON" = 2 ] && [ "$PC_DIG" != 2 ] || { PC_WHY="seed does not discriminate: $PC_ALL"; return 1; }
+  dv_map "$1" "$s" requirements-p2 --subject 9 < /dev/null
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = 2 ] && ! has "$WORK/dv.err" "full width"
+}
+# pc_ds <merge> <pass file> -> DS_ORDS, DS_FULL (the FULL reason, empty when narrowed), DS_RC: --derived-set.
+pc_ds() {
+  $ASM_RUN "$1" --derived-set "$2" < /dev/null > "$WORK/pc.ds" 2>&1; DS_RC=$?
+  DS_ORDS="$(awk -F'\t' 'NF == 1 && /^[0-9]+$/ { printf "%s%d", (n++ ? " " : ""), $1 }' "$WORK/pc.ds")"
+  DS_FULL="$(awk -F'\t' '$1 == "FULL" { print $2; exit }' "$WORK/pc.ds")"
+}
+# pc_fw -> the `full width:` reason --derived-map printed (dv_map's stderr), empty when none.
+pc_fw() { sed -n 's/^# derived from [^ ]* (full width: \(.*\))$/\1/p' "$WORK/dv.err" | head -1; }
+# pc_full <merge> <sprint dir> <want reason> [<full map ordinals>] -> 0 when --derived-map AND --derived-set (on a
+# p2 that is p1's copy) both owe the full map (default: the seven-part test-strategy) with a reason containing
+# <want reason>, the two reasons byte-identical.
+pc_full() {
+  local r1 fm="${4:-1 2 3 4 5 6 7}"
+  dv_map "$1" "$2" test-strategy-p2 --document "$2/test-strategy.md" < /dev/null; r1="$(pc_fw)"
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "$fm" ] || { PC_WHY="derived-map rc=$RC [$DV_ORDS] [$r1]"; return 1; }
+  pc_ds "$1" "$2/test-strategy-adversarial-p2.md"
+  [ "$DS_RC" -eq 0 ] && [ "$DS_ORDS" = "$fm" ] && [ -n "$DS_FULL" ] && [ "$DS_FULL" = "$r1" ] \
+    && case "$r1" in *"$3"*) true ;; *) false ;; esac || { PC_WHY="derived-set rc=$DS_RC [$DS_ORDS] [$DS_FULL] vs [$r1], want [$3]"; return 1; }
+}
+pc_p2() { cp "$1/test-strategy-adversarial-p1.md" "$1/test-strategy-adversarial-p2.md"; } # <sprint dir>: a p2 carrying p1's record
+# PCK (K4): EVERY UNJOINABLE LIST FALLS TO FULL WIDTH WITH ITS REASON, the same in the merge (--derived-map) and in
+# the gate's recomputation (--derived-set). ONE ARM PER CELL (PCKa..PCKh), so a fallback mutant re-runs only the
+# cell it breaks (fixture-mutants.md, one run per distinct state); PCK itself holds the two CONTROLS, each world's
+# narrowed answer in both channels -- the unedited document world {6}, and PCC's world with row 1 edited {1} --
+# so a full map in a cell is the fallback and not the world. Cells: (a) p1 without part_sha (an older engine
+# merged it); (b) pass M (--derived-set only) without its own list while p1 has one -- never narrowed; (c) a
+# malformed p1 token; (d) p1's list one entry short of its map; (e) p1 without `part_run:`; (f) pass M
+# (--derived-set) without its own `part_run:`; (g) p1's run naming an ordinal outside its map; (h) a run of one
+# member. Every cell takes its own fresh copy of a cached world (wc_get), so no cell or mutant re-run reads
+# another's edits.
+p_pck() {
+  local m="$1" s
+  s="$(dvrs_doc_world)" || return 1; pc_p2 "$s" || return 1
+  dv_map "$m" "$s" test-strategy-p2 --document "$s/test-strategy.md" < /dev/null; pc_ds "$m" "$s/test-strategy-adversarial-p2.md"
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = 6 ] && [ "$DS_ORDS" = 6 ] && [ -z "$DS_FULL" ] || { PC_CELL=control; PC_WHY="[$DV_ORDS] [$DS_ORDS] [$DS_FULL]"; return 1; }
+  s="$(pcc_edited)" || return 1; pc_p2 "$s" || return 1
+  dv_map "$m" "$s" test-strategy-p2 --document "$s/test-strategy.md" < /dev/null; pc_ds "$m" "$s/test-strategy-adversarial-p2.md"
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = 1 ] && [ -z "$DS_FULL" ] || { PC_CELL=run-control; PC_WHY="[$DV_ORDS] [$DS_ORDS] [$DS_FULL]"; return 1; }
+}
+p_pcka() {
+  local s p1; s="$(dvrs_doc_world)" || return 1; p1="$s/test-strategy-adversarial-p1.md"
+  sed '/^part_sha:/d' "$p1" > "$p1.n" && mv "$p1.n" "$p1" && pc_p2 "$s" || return 1
+  PC_CELL=a; pc_full "$1" "$s" "test-strategy-adversarial-p1.md carries no part_sha list (merged by an engine before document-mode narrowing)"
+}
+p_pckb() {
+  local s; s="$(dvrs_doc_world)" || return 1; pc_p2 "$s" || return 1
+  sed '/^part_sha:/d' "$s/test-strategy-adversarial-p2.md" > "$s/p2.n" && mv "$s/p2.n" "$s/test-strategy-adversarial-p2.md" || return 1
+  PC_CELL=b; pc_ds "$1" "$s/test-strategy-adversarial-p2.md"
+  [ "$DS_RC" -eq 0 ] && [ "$DS_ORDS" = "1 2 3 4 5 6 7" ] && [ "$DS_FULL" = "test-strategy-adversarial-p2.md carries no part_sha list of its own, so the set it owed cannot be recomputed" ] \
+    || { PC_WHY="rc=$DS_RC [$DS_ORDS] [$DS_FULL]"; return 1; }
+}
+p_pckc() {
+  local s p1; s="$(dvrs_doc_world)" || return 1; p1="$s/test-strategy-adversarial-p1.md"
+  sed 's/^\(part_sha: 1=\)[0-9a-f]/\1/' "$p1" > "$p1.n" && mv "$p1.n" "$p1" && pc_p2 "$s" || return 1
+  PC_CELL=c; pc_full "$1" "$s" "the part_sha of test-strategy-adversarial-p1.md is malformed: token 1="
+}
+p_pckd() {
+  local s p1; s="$(dvrs_doc_world)" || return 1; p1="$s/test-strategy-adversarial-p1.md"
+  sed 's/^\(part_sha:.*\) 7=[0-9a-f]*$/\1/' "$p1" > "$p1.n" && mv "$p1.n" "$p1" && pc_p2 "$s" || return 1
+  PC_CELL=d; pc_full "$1" "$s" "the part_sha of test-strategy-adversarial-p1.md lists 6 parts but its shard ordinal map has 7 rows"
+}
+p_pcke() {
+  local s p1 fm; s="$(pcc_edited)" || return 1; p1="$s/test-strategy-adversarial-p1.md"; fm="$(pc_fm "$p1")"
+  sed '/^part_run:/d' "$p1" > "$p1.n" && mv "$p1.n" "$p1" && pc_p2 "$s" || return 1
+  PC_CELL=e; pc_full "$1" "$s" "test-strategy-adversarial-p1.md carries no part_run list (merged by an engine before cut-table runs were notarized)" "$fm"
+}
+p_pckf() {
+  local s fm; s="$(pcc_edited)" || return 1; pc_p2 "$s" || return 1; fm="$(pc_fm "$s/test-strategy-adversarial-p1.md")"
+  sed '/^part_run:/d' "$s/test-strategy-adversarial-p2.md" > "$s/p2.n" && mv "$s/p2.n" "$s/test-strategy-adversarial-p2.md" || return 1
+  PC_CELL=f; pc_ds "$1" "$s/test-strategy-adversarial-p2.md"
+  [ "$DS_RC" -eq 0 ] && [ "$DS_ORDS" = "$fm" ] && [ "$DS_FULL" = "test-strategy-adversarial-p2.md carries no part_run list of its own, so the set it owed cannot be recomputed" ] \
+    || { PC_WHY="rc=$DS_RC [$DS_ORDS] [$DS_FULL]"; return 1; }
+}
+p_pckg() {
+  local s p1 fm; s="$(pcc_edited)" || return 1; p1="$s/test-strategy-adversarial-p1.md"; fm="$(pc_fm "$p1")"
+  awk '/^part_run:/ { print "part_run: 2,99"; next } { print }' "$p1" > "$p1.n" && mv "$p1.n" "$p1" && pc_p2 "$s" || return 1
+  PC_CELL=g; pc_full "$1" "$s" "the part_run of test-strategy-adversarial-p1.md names ordinal 99, outside its shard ordinal map" "$fm"
+}
+p_pckh() {
+  local s p1 fm; s="$(pcc_edited)" || return 1; p1="$s/test-strategy-adversarial-p1.md"; fm="$(pc_fm "$p1")"
+  awk '/^part_run:/ { print "part_run: 2"; next } { print }' "$p1" > "$p1.n" && mv "$p1.n" "$p1" && pc_p2 "$s" || return 1
+  PC_CELL=h; pc_full "$1" "$s" "the part_run of test-strategy-adversarial-p1.md is malformed: run 2 is not <ordinal>,<ordinal>[,...]" "$fm"
+}
+# pc_fm <pass file> -> its embedded map's ordinals, space-joined
+pc_fm() { awk '/^## Shard ordinal map[ \t]*$/ { s = 1; next } s == 1 && /^```/ { s = 2; next } s == 2 && /^```/ { exit } s == 2 { printf "%s%d", (n++ ? " " : ""), $1 }' "$1"; }
+# pcc_edited -> a copy of PCC's world with row 1 edited (the narrowed answer {1})
+pcc_edited() {
+  local s; s="$(tbl_world 80 260 1 12)" || return 1
+  sed 's/^one line 5 of prose carrying weight here$/one line 5 of prose carrying MORE weight/' "$s/test-strategy.md" > "$s/test-strategy.md.n" \
+    && mv "$s/test-strategy.md.n" "$s/test-strategy.md" && printf '%s' "$s"
+}
+# PCR: AN IDENTICAL RE-MERGE OVER AN OLD-ENGINE PASS ANSWERS AS IT DID AT BASE. The document world's p1 rewritten
+# as an engine before part_sha wrote it (its part_sha: and part_run: lines removed), then its OWN p1 shards merged
+# again: `UNCHANGED:`, rc 0, the pass file byte-for-byte as it was -- never a refusal for the field the old engine
+# could not write, and never an overwrite that adds it. The control: the same re-merge over the CURRENT engine's p1
+# is UNCHANGED too, so the old-engine cell is not passing on a re-merge that answers UNCHANGED to anything; and a
+# p1 with one counted field changed still REFUSES (`already exists and differs`), so the tolerance is the two
+# fields and nothing else. --dry-run answers the old-engine pass alike (clean), and a pass carrying part_sha: but
+# no part_run: -- either field present -- is compared byte for byte and refuses.
+p_pcr() {
+  local m="$1" s p1 d
+  s="$(dvrs_doc_world)" || return 1; p1="$s/test-strategy-adversarial-p1.md"; d="$s/shards/test-strategy-p1"
+  $ASM_RUN "$m" --document "$s/test-strategy.md" "$d" < /dev/null > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "UNCHANGED: " || { PC_CELL=control; PC_WHY="rc=$RC $(head -1 "$MO")"; return 1; }
+  s="$(dvrs_doc_world)" || return 1; p1="$s/test-strategy-adversarial-p1.md"; d="$s/shards/test-strategy-p1"
+  sed '/^part_sha:/d; /^part_run:/d' "$p1" > "$WORK/pcr.old" && cp "$WORK/pcr.old" "$p1" || return 1
+  ! has "$p1" "part_sha:" || return 1
+  $ASM_RUN "$m" --document "$s/test-strategy.md" "$d" < /dev/null > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "UNCHANGED: " && cmp -s "$WORK/pcr.old" "$p1" || { PC_CELL=old; PC_WHY="rc=$RC $(head -1 "$MO")"; return 1; }
+  $ASM_RUN "$m" --dry-run --document "$s/test-strategy.md" "$d" < /dev/null > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "DRY-RUN: clean" && cmp -s "$WORK/pcr.old" "$p1" || { PC_CELL=old-dry-run; PC_WHY="rc=$RC $(head -1 "$MO")"; return 1; }
+  # part_sha: kept, part_run: gone -- a shape no engine writes: compared byte for byte, so it REFUSES.
+  s="$(dvrs_doc_world)" || return 1; p1="$s/test-strategy-adversarial-p1.md"; d="$s/shards/test-strategy-p1"
+  sed '/^part_run:/d' "$p1" > "$WORK/pcr.half" && cp "$WORK/pcr.half" "$p1" && has "$p1" "part_sha:" || return 1
+  $ASM_RUN "$m" --document "$s/test-strategy.md" "$d" < /dev/null > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$MO" "already exists and differs from this merge" && cmp -s "$WORK/pcr.half" "$p1" || { PC_CELL=half; PC_WHY="rc=$RC $(head -1 "$MO")"; return 1; }
+  s="$(dvrs_doc_world)" || return 1; p1="$s/test-strategy-adversarial-p1.md"; d="$s/shards/test-strategy-p1"
+  sed '/^part_sha:/d; /^part_run:/d; s/^findings_minor: .*/findings_minor: 9/' "$p1" > "$WORK/pcr.dif" && cp "$WORK/pcr.dif" "$p1" || return 1
+  $ASM_RUN "$m" --document "$s/test-strategy.md" "$d" < /dev/null > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$MO" "already exists and differs from this merge" && cmp -s "$WORK/pcr.dif" "$p1" || { PC_CELL=differs; PC_WHY="rc=$RC $(head -1 "$MO")"; return 1; }
+  # Subject mode, the same old-engine shape: p1 of the subject world without its part_sha:/part_run:.
+  s="$(dvrs_subj_world)" || return 1; p1="$s/requirements-adversarial-p1.md"; d="$s/shards/requirements-p1"
+  sed '/^part_sha:/d; /^part_run:/d' "$p1" > "$WORK/pcr.sold" && cp "$WORK/pcr.sold" "$p1" || return 1
+  $ASM_RUN "$m" --subject 9 "$d" < /dev/null > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "UNCHANGED: " && cmp -s "$WORK/pcr.sold" "$p1" || { PC_CELL=subject-old; PC_WHY="rc=$RC $(head -1 "$MO")"; return 1; }
+}
+# pc_era <world root> <legacy|notoken>: the world's history replaced (an orphan branch) by a rulebook WITHOUT the
+# NARROW_ERA_TOKEN sentence committed 2026-01-01 -- the cap's ERA_TOKEN kept, so the files-mode era still binds --
+# and, for legacy, the real rulebook committed 2026-09-01, after the series' first pass (2026-08-24).
+pc_era() {
+  local rb="$1/.claude/skills/ai-dlc/steps/_gate-procedures.md"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=f -c user.email=f@example.invalid \
+          -c core.hooksPath=/dev/null -c commit.gpgsign=false "${@:2}"; }
+    g "$1" checkout -q --orphan "era-$2" && sed 's/narrows by part content/narrows by part bytes/g' "$RULEBOOK" > "$rb" \
+      && g "$1" add .claude && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z GIT_AUTHOR_DATE=2026-01-01T00:00:00Z g "$1" commit -q -m stripped || exit 1
+    [ "$2" = legacy ] || exit 0
+    cp "$RULEBOOK" "$rb" && g "$1" add .claude && GIT_COMMITTER_DATE=2026-09-01T00:00:00Z GIT_AUTHOR_DATE=2026-09-01T00:00:00Z g "$1" commit -q -m token ) >/dev/null 2>&1 || return 1
+  if [ "$2" = legacy ]; then has "$rb" "narrows by part content"; else ! has "$rb" "narrows by part content" && has "$rb" "A p3 that does not stamp"; fi
+}
+# PCE (D1): THE NARROWING ERA, each state on the unedited document world (narrowed: {6}, PCK's control). LEGACY (the
+# sentence committed after the series opened) and NOTOKEN (no sentence installed) each owe the full map with
+# their reason, the same in --derived-map and --derived-set.
+p_pce() {
+  local m="$1" s
+  s="$(dvrs_doc_world)" || return 1; pc_era "$(pc_root "$s")" legacy && pc_p2 "$s" || { PC_WHY="legacy world did not build"; return 1; }
+  PC_CELL=legacy; pc_full "$m" "$s" "document mode narrows only a series opened after the installed rulebook's 'narrows by part content' sentence was committed; this series is LEGACY" || return 1
+  s="$(dvrs_doc_world)" || return 1; pc_era "$(pc_root "$s")" notoken && pc_p2 "$s" || { PC_WHY="notoken world did not build"; return 1; }
+  PC_CELL=notoken; pc_full "$m" "$s" "the installed rulebook carries no 'narrows by part content' sentence, so document mode is not narrowed"
+}
+# ---- THE TIP-ADVERSARY FIXES, EACH SHOWN ABLE TO FIRE (BL-911). Every arm fires on a seeded offender AND stays
+# quiet on its near-miss in the same arm.
+# PCKm (D2): d_prun checks EVERY run before printing any, so a malformed run AFTER a good one still falls to full
+# width. PCC's world, row 1 edited: p1's part_run replaced by (control, narrows) a good-only `1,2` -> {1}, no
+# full-width reason; (near-miss, first position, which print-as-you-go also caught) `3;1,2` -> FULL; and three bad
+# runs in SECOND position, each FULL with its reason in --derived-map and --derived-set alike: `1,2;3` (malformed),
+# `1,2;2,3` (twice), `1,2;3,99` (outside the map). Printing the good run before the bad one owes {1} for all three.
+pckm_cell() { # <merge> <part_run value> -> the sprint dir of a fresh copy whose p1 (and p2, its copy) carry it
+  local s p1; s="$(pcc_edited)" || return 1; p1="$s/test-strategy-adversarial-p1.md"
+  awk -v v="$2" '/^part_run:/ { print "part_run: " v; next } { print }' "$p1" > "$p1.n" && mv "$p1.n" "$p1" && pc_p2 "$s" || return 1
+  grep -qx "part_run: $2" "$p1" && printf '%s' "$s"
+}
+p_pckm() {
+  local m="$1" s fm lb="test-strategy-adversarial-p1.md"
+  s="$(pckm_cell "$m" 1,2)" || return 1; fm="$(pc_fm "$s/test-strategy-adversarial-p1.md")"
+  dv_map "$m" "$s" test-strategy-p2 --document "$s/test-strategy.md" < /dev/null; pc_ds "$m" "$s/test-strategy-adversarial-p2.md"
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = 1 ] && [ -z "$(pc_fw)" ] && [ "$DS_RC" -eq 0 ] && [ -z "$DS_FULL" ] \
+    || { PC_CELL=good; PC_WHY="[$DV_ORDS] [$(pc_fw)] [$DS_FULL]"; return 1; }
+  case " $fm " in *" 3 "*) ;; *) PC_CELL=seed; PC_WHY="the map [$fm] has no ordinal 3"; return 1 ;; esac
+  s="$(pckm_cell "$m" '3;1,2')" || return 1
+  PC_CELL=first; pc_full "$m" "$s" "the part_run of $lb is malformed: run 3 is not <ordinal>,<ordinal>[,...]" "$fm" || return 1
+  s="$(pckm_cell "$m" '1,2;3')" || return 1
+  PC_CELL=second-malformed; pc_full "$m" "$s" "the part_run of $lb is malformed: run 3 is not <ordinal>,<ordinal>[,...]" "$fm" || return 1
+  s="$(pckm_cell "$m" '1,2;2,3')" || return 1
+  PC_CELL=second-twice; pc_full "$m" "$s" "the part_run of $lb names ordinal 2 twice" "$fm" || return 1
+  s="$(pckm_cell "$m" '1,2;3,99')" || return 1
+  PC_CELL=second-outside; pc_full "$m" "$s" "the part_run of $lb names ordinal 99, outside its shard ordinal map" "$fm"
+}
+# PCMV (D1): a subject file that MOVES between the part-digest hashing and the check is refused, nothing written.
+# THE SEAM is in process and runs the shipped code: mx sources the merge, MX_HOOK renames the merge's own sha_of
+# (declare -f, its body unchanged) and wraps it so that, the first time it is asked to hash SPEC.md AFTER the merge's
+# part-digest list exists ($T/psha non-empty -- the hashing is done and the check loop is the next reader), it
+# appends one line to SPEC.md and then hashes it with the shipped body. No merge logic is restated: the refusal, its
+# text and the write that does not happen are all the merge's. Near-miss: the same re-merge of p1 with no hook is
+# UNCHANGED; the sentinel proves the fault fired (a seam the merge never reached would read as a pass).
+PCMV_HOOK='eval "$(declare -f sha_of | sed "1s/^sha_of /_mx_sha_of_shipped /")"
+sha_of() {
+  case "$1" in *"/$MX_FAULT_REL")
+    if [ -n "${T:-}" ] && [ -s "$T/psha" ] && [ ! -e "$MX_FAULT_SENT" ]; then printf "moved\n" >> "$1"; : > "$MX_FAULT_SENT"; fi ;;
+  esac
+  _mx_sha_of_shipped "$1"
+}'
+p_pcmv() {
+  local m="$1" s p1 d rel=_bmad-output/specs/s9/kernel/SPEC.md sent
+  s="$(dvrs_subj_world)" || return 1; d="$s/shards/requirements-p1"; p1="$s/requirements-adversarial-p1.md"
+  cp "$p1" "$WORK/pcmv.p1" || return 1
+  mx "$m" --subject 9 "$d" < /dev/null > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "UNCHANGED: " && cmp -s "$WORK/pcmv.p1" "$p1" || { PC_CELL=near-miss; PC_WHY="rc=$RC $(head -1 "$MO")"; return 1; }
+  s="$(dvrs_subj_world)" || return 1; d="$s/shards/requirements-p1"; p1="$s/requirements-adversarial-p1.md"
+  cp "$p1" "$WORK/pcmv.p1" || return 1; sent="$(mktemp -d "$WORK/pcmv.XXXXXX")/fired"
+  MX_HOOK="$PCMV_HOOK" MX_FAULT_REL="$rel" MX_FAULT_SENT="$sent" mx "$m" --subject 9 "$d" < /dev/null > "$MO" 2>&1; RC=$?
+  [ -e "$sent" ] || { PC_CELL=seam; PC_WHY="the fault never fired: rc=$RC $(head -1 "$MO")"; return 1; }
+  [ "$RC" -eq 2 ] && has "$MO" "$rel moved while the subject's parts were hashed" && cmp -s "$WORK/pcmv.p1" "$p1" \
+    || { PC_CELL=offender; PC_WHY="rc=$RC $(head -1 "$MO")"; return 1; }
+}
+# PCN2 (N2): partition-document.sh --part-sha --rows --scope-ref REFUSES when a file's scoped map fails (rc other than
+# 0 or 3), never answers with that file's runs silently dropped. The seam is in process: the partition-document.sh
+# beside the merge under test is SOURCED (as the merge sources it) and its own scope_lines is renamed and wrapped to
+# chmod the scope list it just wrote to 000, so the shipped map_of cannot read it and exits 2. Near-miss: the same
+# call unwrapped, on dvst's world (a table cut into a run inside prd), prints its run line and exits 0.
+PCN2_HOOK='eval "$(declare -f scope_lines | sed "1s/^scope_lines /_pc_scope_lines_shipped /")"
+scope_lines() { _pc_scope_lines_shipped "$@"; chmod 000 "$SCOPE_TMP"; }'
+pcn2_call() { # <partition-document.sh> <root> <base> <rows file> <hook or empty> -> $WORK/pcn2.{out,err}, PCN2_RC
+  ( . "$1" || exit 90; [ -z "$5" ] || eval "$5"; pdoc_main --part-sha --rows "$2" --scope-ref "$3" ) < "$4" > "$WORK/pcn2.out" 2> "$WORK/pcn2.err"
+  PCN2_RC=$?
+}
+p_pcn2() {
+  local m="$1" s w pd base; pd="$(dirname "$m")/partition-document.sh"; [ -f "$pd" ] || return 1
+  s="$(dvst_world)" || return 1; w="$(pc_root "$s")"
+  base="$(awk '/REQUIREMENTS_SUBJECT v1/ { i = 1; next } /REQUIREMENTS_SUBJECT_END/ { i = 0 } i && index($0, "base: ") == 1 { print substr($0, 7); exit }' "$s/requirements-subject.md")"
+  [ -n "$base" ] || { PC_CELL=seed; PC_WHY="no base in the subject manifest"; return 1; }
+  awk -F'\t' '/^## Shard ordinal map[ \t]*$/ { s = 1; next } s == 1 && /^```/ { s = 2; next } s == 2 && /^```/ { exit }
+    s == 2 { print $1 "\t" $2 "\t" $3 "\t" $4 }' "$s/requirements-adversarial-p1.md" > "$WORK/pcn2.rows" || return 1
+  [ -s "$WORK/pcn2.rows" ] || { PC_CELL=seed; PC_WHY="p1 embeds no map"; return 1; }
+  pcn2_call "$pd" "$w" "$base" "$WORK/pcn2.rows" ""
+  [ "$PCN2_RC" -eq 0 ] && has "$WORK/pcn2.out" "run:" || { PC_CELL=near-miss; PC_WHY="rc=$PCN2_RC $(head -1 "$WORK/pcn2.err")"; return 1; }
+  pcn2_call "$pd" "$w" "$base" "$WORK/pcn2.rows" "$PCN2_HOOK"
+  [ "$PCN2_RC" -ne 0 ] && has "$WORK/pcn2.err" "failed (rc=2); its cut-table runs are unknown" && ! has "$WORK/pcn2.out" "run:" \
+    || { PC_CELL=offender; PC_WHY="rc=$PCN2_RC $(head -1 "$WORK/pcn2.err")"; return 1; }
+}
+# NDP (D4): arm N's DOCUMENT self-probe can fail. dvA's files world, p3 merged over the derived {3 6} (as DV10), so
+# the gate reaches arm N and runs its self-probes. Near-miss: the validator beside the merge under test passes them
+# (no 'self-probe failed', not exit 2). Offender: a copy of that same sibling set whose merge keeps document mode at
+# full width (`bound)` answering a FULL reason for a document) -- the gate exits 2 naming the document self-probe.
+ndp_world() { # <merge> -> NDP_S, a fresh dvA copy with p3 merged over the derived {3 6}, so the gate reaches arm N
+  local m="$1" s d x o
+  s="$(dvA_world)" || return 1; dv_map "$m" "$s" stories-p3 < /dev/null; [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "3 6" ] || return 1
+  d="$s/shards/stories-p3"; o="$s/stories-adversarial-p3.md"
+  for x in 3 6; do shard "$d" "$x" 0 EXIT_CONDITION_MET "$x"; done
+  for x in $(xkeys 8); do shard "$d" "$x" 0 EXIT_CONDITION_MET "3, 6"; done
+  run_merge "$m" "$d"; [ "$RC" -eq 0 ] && [ -f "$o" ] || { PC_CELL=seed; PC_WHY="p3 did not merge: $(head -1 "$MO")"; return 1; }
+  NDP_S="$s"
+}
+p_ndp() {
+  local m="$1" s nd
+  ndp_world "$m" || return 1; s="$NDP_S"
+  bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/stories-adversarial-p" < /dev/null > "$CO" 2>&1; RC=$?
+  [ "$RC" -ne 2 ] && has "$CO" "pass artifact" && ! has "$CO" "self-probe failed" || { PC_CELL=near-miss; PC_WHY="rc=$RC $(grep -m1 'self-probe' "$CO")"; return 1; }
+  nd="$(mktemp -d "$WORK/ndp.XXXXXX")" && cp "$(dirname "$m")"/*.sh "$nd/" || return 1
+  M_OLD='      bound) ;;' M_NEW='      bound) if [ "$mode" = document ]; then D_FULL="document mode held at full width (NDP)"; return 0; fi ;;' \
+    python3 - "$nd/merge-adversarial-shards.sh" <<'PY' || { PC_CELL=seed; PC_WHY="the forced-full copy did not apply"; return 1; }
+import os, sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+  bash "$nd/validate-adversarial-convergence.sh" --series "$s/stories-adversarial-p" < /dev/null > "$CO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$CO" "arm N document self-probe failed" || { PC_CELL=offender; PC_WHY="rc=$RC $(grep -m1 'self-probe' "$CO")"; return 1; }
+}
+# NDC (N4): arm N's document self-probe holds when TMPDIR sits INSIDE a git work tree. The probe's rulebook root is
+# a mktemp dir under TMPDIR; era_resolve runs `git -C <root>`, and git never excludes its own working directory from
+# discovery, so a ceiling AT the root lets it climb to the outer tree, where the probe's rulebook is untracked: LEGACY,
+# FULL, and a gate that refuses every run of a correct engine. The shipped ceiling is the root's PARENT. One arm, both
+# ways, on NDP's world with TMPDIR inside a `git init` tree under WORK (the positive control: git, asked from inside
+# that TMPDIR, answers it is in a work tree): the shipped sibling set passes the probe (no 'document self-probe
+# failed', exit other than 2); a copy whose ceiling is put back AT the root exits 2 naming it. The two validators are
+# asserted to differ before either verdict is read.
+p_ndc() {
+  local m="$1" s g tp nd a; a='GIT_CEILING_DIRECTORIES="$AC_T" bash "$N_MERGE"'
+  ndp_world "$m" || return 1; s="$NDP_S"
+  g="$(mktemp -d "$WORK/ndc.XXXXXX")" && mkdir -p "$g/tmp" || return 1
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$g" -c core.hooksPath=/dev/null init -q . ) >/dev/null 2>&1 || return 1
+  tp="$g/tmp"
+  [ "$(GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$tp" rev-parse --is-inside-work-tree 2>/dev/null)" = true ] \
+    || { PC_CELL=control; PC_WHY="git does not see the outer tree from $tp"; return 1; }
+  nd="$(mktemp -d "$WORK/ndc-v.XXXXXX")" && cp "$(dirname "$m")"/*.sh "$nd/" || return 1
+  M_OLD="$a" M_NEW='GIT_CEILING_DIRECTORIES="$AC_T/nd" bash "$N_MERGE"' python3 - "$nd/validate-adversarial-convergence.sh" <<'PY' \
+    || { PC_CELL=seed; PC_WHY="the root-ceiling copy did not apply"; return 1; }
+import os, sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+  ! cmp -s "$(dirname "$m")/validate-adversarial-convergence.sh" "$nd/validate-adversarial-convergence.sh" || { PC_CELL=seed; PC_WHY="the two validators are identical"; return 1; }
+  TMPDIR="$tp" bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/stories-adversarial-p" < /dev/null > "$CO" 2>&1; RC=$?
+  [ "$RC" -ne 2 ] && has "$CO" "pass artifact" && ! has "$CO" "document self-probe failed" || { PC_CELL=shipped; PC_WHY="rc=$RC $(grep -m1 'self-probe' "$CO")"; return 1; }
+  TMPDIR="$tp" bash "$nd/validate-adversarial-convergence.sh" --series "$s/stories-adversarial-p" < /dev/null > "$CO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$CO" "arm N document self-probe failed" || { PC_CELL=root-ceiling; PC_WHY="rc=$RC $(grep -m1 'self-probe' "$CO")"; return 1; }
 }

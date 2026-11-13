@@ -270,7 +270,7 @@ scope, shrink the sprint, restart. Contract: `team-roles/adversary.md`.
 **A series is bounded at p3.** A p3 that does not stamp `EXIT_CONDITION_MET` stops the
 cycle as a STALL does, and the next pass must declare `resolves_divergence:`. A pass after
 the first is dispatched over the parts `merge-adversarial-shards.sh --derived-map` prints; in files mode that
-is narrowed to the repair, and in document and subject modes it is the full map. Procedure:
+is narrowed to the repair; in document and subject modes it is narrowed by the pass file's `part_sha:` and `part_run:` fields, and falls to the full map with a `full width:` reason where a list is missing or unjoinable. Procedure:
 `steps/_gate-procedures.md`, "Divergence resolution dispatch".
 
 **A stop is not the end of the cycle: STOP -> ADJUDICATE -> RESOLVE -> VERIFY.** A repair

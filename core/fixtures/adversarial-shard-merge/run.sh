@@ -101,10 +101,30 @@
 # MUTANT-MATRIX DV-joined-record-only decides=DV2 twins=DV5
 # MUTANT-MATRIX DV-open-findings-dropped decides=DV3 twins=DV2
 # MUTANT-MATRIX DV-files-key-ordinal decides=DV4 twins=DV3
-# MUTANT-MATRIX DV-sections-silent-full decides=DV4D,DVRS,DVRSS twins=DV3
-# MUTANT-MATRIX DV-reason-blank decides=DVRS,DVRSS,DV4D twins=DV5
-# MUTANT-MATRIX DV-doc-narrow-consumed decides=DVRS twins=DV4D
-# MUTANT-MATRIX DV-subj-narrow-consumed decides=DVRSS twins=DVRS
+# MUTANT-MATRIX DV-sections-silent-full decides=DV4D twins=DV3
+# MUTANT-MATRIX DV-reason-blank decides=PCE twins=DV5
+# MUTANT-MATRIX DV-doc-narrow-consumed decides=DVRS twins=PCS
+# MUTANT-MATRIX DV-subj-narrow-consumed decides=DVRSS twins=PC1
+# MUTANT-MATRIX PC-ordinal-join decides=PC1 twins=DV3
+# MUTANT-MATRIX PC-cite-by-ordinal decides=DV4D twins=PC1
+# MUTANT-MATRIX PC-dup-presence decides=PCD twins=PC1
+# MUTANT-MATRIX PC-subject-digest-only decides=PCS2 twins=PC1
+# MUTANT-MATRIX PC-pred-nolist-narrows decides=PCKa twins=DV5
+# MUTANT-MATRIX PC-own-nolist-narrows decides=PCKb twins=DV5
+# MUTANT-MATRIX PC-malformed-narrows decides=PCKc twins=DV5
+# MUTANT-MATRIX PC-count-unchecked decides=PCKd twins=DV5
+# MUTANT-MATRIX PC-legacy-narrows decides=PCE twins=DV5
+# MUTANT-MATRIX PC-no-table-run decides=PCT2,PCT,PCSR twins=PC1
+# MUTANT-MATRIX PC-run-widen-neighbour decides=PCC twins=PCT2
+# MUTANT-MATRIX PC-pred-norun-narrows decides=PCKe twins=DV5
+# MUTANT-MATRIX PC-own-norun-narrows decides=PCKf twins=DV5
+# MUTANT-MATRIX PC-run-malformed-narrows decides=PCKg twins=DV5
+# MUTANT-MATRIX PC-remerge-strict decides=PCR twins=DV3
+# MUTANT-MATRIX PC-prun-print-as-you-go decides=PCKm twins=DV5
+# MUTANT-MATRIX PC-moved-tab-ifs decides=PCMV twins=PC1
+# MUTANT-MATRIX PC-scoped-map-continue decides=PCN2 twins=PC1
+# MUTANT-MATRIX VAC-doc-probe-gone decides=NDP twins=DV2
+# MUTANT-MATRIX VAC-ceiling-nd decides=NDC twins=DV2
 # MUTANT-MATRIX DV-narrow-on-unread decides=DV5 twins=DV2
 # MUTANT-MATRIX DV-gate-supersets-only decides=DVRS twins=DV2
 # MUTANT-MATRIX DV-notarize-dispatched-only decides=DV10 twins=DV2
@@ -128,13 +148,23 @@
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="adversarial-shard-merge"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; nothing was asserted" >&2; exit 2; }
-MATRIX=0; MATRIX_ROWS=0
+# --matrix scores every mutant against every arm. Two optional narrowings, each a comma list, each legal only with
+# --matrix: --mutants=<m>,... scores only those mutants (the rest are neither built nor scored), --arms=<arm>,...
+# scores each against only those arms (MX0 included). Both go through the same sc_run and mx_cells as the full
+# matrix; a scored mutant whose deciding or twin arm is outside --arms= has its cells recorded and its kill NOT
+# judged. An unknown name in either list is FIXTURE ERROR. The plain run reads neither.
+MATRIX=0; MATRIX_ROWS=0; MX_MUT_SEL=""; MX_ARM_SEL=""
 for _a in "$@"; do
   case "$_a" in
     --matrix) MATRIX=1 ;;
-    *) echo "FIXTURE ERROR: unknown argument '$_a' (usage: run.sh [--matrix])" >&2; exit 2 ;;
+    --mutants=?*) MX_MUT_SEL="${_a#--mutants=}"; MX_MUT_SEL=" ${MX_MUT_SEL//,/ } " ;;
+    --arms=?*) MX_ARM_SEL="${_a#--arms=}"; MX_ARM_SEL="${MX_ARM_SEL//,/ }" ;;
+    *) echo "FIXTURE ERROR: unknown argument '$_a' (usage: run.sh [--matrix [--mutants=<m>,...] [--arms=<arm>,...]])" >&2; exit 2 ;;
   esac
 done
+if [ "$MATRIX" -eq 0 ] && [ -n "$MX_MUT_SEL$MX_ARM_SEL" ]; then
+  echo "FIXTURE ERROR: --mutants= and --arms= narrow --matrix and mean nothing without it" >&2; exit 2
+fi
 # Every arm asks the merge IN PROCESS (lib.sh mx: the merge sourced, merge_main called in a subshell); the
 # CLI is driven once per distinct outcome by the EQ arms below, each byte-compared with its in-process twin.
 ASM_RUN=mx
@@ -188,7 +218,7 @@ eq_pair() { # <label> <shard dir or -> <args...> (@D is replaced by the shard di
 eq_arm() { # <label> <want rc> <token in stdout or stderr> <describe> <shard dir or -> <args...>
   local lab="$1" want="$2" tok="$3" what="$4"; shift 4
   eq_pair "$lab" "$@"
-  if [ "$EQ_SAME" = 1 ] && [ "$EQ_RC" = "$want" ] && cat "$WORK/eq.$lab.c.out" "$WORK/eq.$lab.c.err" | grep -qF -- "$tok"; then
+  if [ "$EQ_SAME" = 1 ] && [ "$EQ_RC" = "$want" ] && grep -qF -- "$tok" "$WORK/eq.$lab.c.out" "$WORK/eq.$lab.c.err"; then
     ok "$lab: $what -- the CLI and merge_main in process answer byte-identically (stdout, stderr, rc $want, pass file)"
   else bad "$lab: $what -- same=$EQ_SAME rc=$EQ_RC (want $want, '$tok'): $(head -2 "$WORK/eq.$lab.c.out") | $(head -2 "$WORK/eq.$lab.i.out")"; fi
 }
@@ -723,7 +753,7 @@ cs_mk_refused() { # <shard file> <the merge's REFUSED line>
 }
 cs_mk_marked() { # <shard file>
   [ "$RC" -eq 0 ] && has "$MO" "MARKED " && ! has "$MO" "REFUSED" && ! cmp -s "$WORK/cs-e2e.before" "$1" \
-    && tail -1 "$1" | grep -q '^seat-complete: requirements adversary [0-9]* sha=[0-9a-f]\{64\} findings=1$'
+    && grep -q '^seat-complete: requirements adversary [0-9]* sha=[0-9a-f]\{64\} findings=1$' <<< "$(tail -1 "$1")"
 }
 p_cs_e2e() { # <merge>
   local m="$1" wd d w ok=1
@@ -1047,15 +1077,39 @@ else
   p_dv2 "$MERGE" && ok "DV2: story 6, changed on disk and cited by no edit: line (a serial edit), is in the set {$DV_ORDS}" || bad "DV2: ords [$DV_ORDS]"
   p_dv3 "$MERGE" && ok "DV3: p1's MAJOR on unedited story 5 and its repaired + 'edit: n/a' MAJOR on story 7 keep both in: {3 5 6 7}" || bad "DV3: ords [$DV_ORDS], want [3 5 6 7]"
   p_dv4 "$MERGE" && ok "DV4: a story sorting FIRST shifts every ordinal; keyed on basename the set is {1 4 6 7 8}" || bad "DV4: ords [$DV_ORDS], want [1 4 6 7 8]"
-  p_dv4d "$MERGE" && ok "DV4D: --document after p1: the FULL map, and the header names why (document mode is not narrowed)" || bad "DV4D: ords [$DV_ORDS] hdr [$DV_HDR], want the full map with a reason"
+  p_dv4d "$MERGE" && ok "DV4D: --document after p1, Section 2b inserted and Section 4 edited: {3 5 7}, the cited unchanged Section 6 owed at its NEW ordinal 7 (ordinal join {3 4 5 6 7 8}, cite-by-ordinal {3 5 6})" || bad "DV4D: ords [$DV_ORDS] hdr [$DV_HDR] ${PC_WHY:-}, want {3 5 7}"
+  p_pc1 "$MERGE" && ok "PC1: a repack (Section 2 grows, Section 4 edited, seven parts become five): {2 3 4}, not the byte-identical Section 7 at another ordinal (ordinal and line-range joins {2 3 4 5})" || bad "PC1: ords [$DV_ORDS] hdr [$DV_HDR] ${PC_WHY:-}, want {2 3 4}"
+  p_pcd "$MERGE" && ok "PCD: Section 3 rewritten into a byte copy of Section 5: both copies owed, {3 5 6} (a presence join owes {6})" || bad "PCD: ords [$DV_ORDS] ${PC_WHY:-}, want {3 5 6}"
+  p_pct "$MERGE" && ok "PCT: a 260-row table cut into a notarized run, only the header piece changed: every member of p1's part_run owed (the content join alone owes one)" || bad "PCT: ords [$DV_ORDS] run [${PC_RUN:-}] ${PC_WHY:-}"
+  p_pct2 "$MERGE" && ok "PCT2: a table cut into exactly two pieces, the header piece packed under Section 1, only the header changed: both pieces owed (ignoring the run owes {1})" || bad "PCT2: ords [$DV_ORDS] run [${PC_RUN:-}] ${PC_WHY:-}"
+  p_pcc "$MERGE" && ok "PCC: a plain row before a run edited: {1} only, never the run beside it" || bad "PCC: ords [$DV_ORDS] run [${PC_RUN:-}] ${PC_WHY:-}, want {1}"
+  p_pcsr "$MERGE" && ok "PCSR: subject, a table added since base inside prd, cut into a run mapped onto GLOBAL ordinals (every member a prd.md row, the header inside the first): its header changed, the whole run owed" || bad "PCSR: ords [$DV_ORDS] run [${PC_RUN:-}] ${PC_WHY:-}"
+  p_pcs "$MERGE" && ok "PCS: subject, the brief leaves scope (ordinals drop by one), Goals grows, Requirements edited: {1 3 4}, the cited SPEC at its new ordinal 1 (cite-by-ordinal {2 3 4}, ordinal join the whole map)" || bad "PCS: ords [$DV_ORDS] ${PC_WHY:-}, want {1 3 4}"
+  p_pcs2 "$MERGE" && ok "PCS2: subject, SPEC.md rewritten into architecture-impact.md's bytes: keyed (file, digest) only SPEC is owed, {2} (digest alone {2 6})" || bad "PCS2: ords [$DV_ORDS] ${PC_WHY:-}, want {2}"
+  p_pck "$MERGE" && ok "PCK: K4 controls -- the unedited document world owes {6} and PCC's edited world {1}, narrowed in --derived-map and --derived-set alike" || bad "PCK: ${PC_CELL:-}: ${PC_WHY:-}"
+  p_pcka "$MERGE" && ok "PCKa: p1 without part_sha: the FULL map with its reason, byte-identical in --derived-map and --derived-set" || bad "PCKa: ${PC_WHY:-}"
+  p_pckb "$MERGE" && ok "PCKb: pass M without its own part_sha (p1 has one): --derived-set owes the FULL map with its reason, never narrowed" || bad "PCKb: ${PC_WHY:-}"
+  p_pckc "$MERGE" && ok "PCKc: a malformed part_sha token in p1: the FULL map with its reason, both programs alike" || bad "PCKc: ${PC_WHY:-}"
+  p_pckd "$MERGE" && ok "PCKd: p1's part_sha one entry short of its map: the FULL map with its reason, both programs alike" || bad "PCKd: ${PC_WHY:-}"
+  p_pcke "$MERGE" && ok "PCKe: p1 without part_run: the FULL map with its reason, both programs alike" || bad "PCKe: ${PC_WHY:-}"
+  p_pckf "$MERGE" && ok "PCKf: pass M without its own part_run: --derived-set owes the FULL map with its reason, never narrowed" || bad "PCKf: ${PC_WHY:-}"
+  p_pckg "$MERGE" && ok "PCKg: p1's part_run naming an ordinal outside its map: the FULL map with its reason, both programs alike" || bad "PCKg: ${PC_WHY:-}"
+  p_pckh "$MERGE" && ok "PCKh: a one-member run in p1's part_run: the FULL map with its reason, both programs alike" || bad "PCKh: ${PC_WHY:-}"
+  p_pce "$MERGE" && ok "PCE: D1 -- a LEGACY series and a NOTOKEN rulebook each owe the FULL map with their reason, identical in --derived-map and --derived-set (bound: PCK's control {6})" || bad "PCE: cell ${PC_CELL:-?}: ${PC_WHY:-}"
+  p_pcr "$MERGE" && ok "PCR: an identical re-merge over an old-engine document or subject pass (no part_sha:/part_run:) is UNCHANGED (and --dry-run clean) and leaves the file byte-for-byte; a same-engine re-merge is UNCHANGED; a pass with part_sha: but no part_run:, and one differing in a counted field, still refuse" || bad "PCR: cell ${PC_CELL:-?}: ${PC_WHY:-}"
+  p_pckm "$MERGE" && ok "PCKm: a malformed, repeated or outside run in SECOND position of p1's part_run (1,2;3 / 1,2;2,3 / 1,2;3,99) owes the FULL map with its reason in both programs; near-misses: a good-only 1,2 narrows to {1}, a first-position 3;1,2 is FULL" || bad "PCKm: cell ${PC_CELL:-?}: ${PC_WHY:-}"
+  p_pcmv "$MERGE" && ok "PCMV: SPEC.md moved between the part-digest hashing and the check (in-process seam, the merge's own sha_of wrapped) -> REFUSED naming it, p1 byte-unchanged; near-miss: the unhooked re-merge is UNCHANGED" || bad "PCMV: cell ${PC_CELL:-?}: ${PC_WHY:-}"
+  p_pcn2 "$MERGE" && ok "PCN2: --part-sha --rows --scope-ref with a scope list the scoped map cannot read (rc=2) REFUSES and prints no run; near-miss: unwrapped, the same rows print the prd table's run" || bad "PCN2: cell ${PC_CELL:-?}: ${PC_WHY:-}"
+  p_ndp "$MERGE" && ok "NDP: arm N's document self-probe -- the gate exits 2 'arm N document self-probe failed' when the merge beside it holds document mode at full width; near-miss: the shipped sibling set passes it" || bad "NDP: cell ${PC_CELL:-?}: ${PC_WHY:-}"
+  p_ndc "$MERGE" && ok "NDC: TMPDIR inside a git work tree (git sees it from there) -- the shipped validator's document self-probe passes; a copy with the ceiling put back at the probe root exits 2 'arm N document self-probe failed'" || bad "NDC: cell ${PC_CELL:-?}: ${PC_WHY:-}"
   p_dv5 "$MERGE" && ok "DV5: p1's sha list unreadable -> the FULL map, and the header says why" || bad "DV5: ords [$DV_ORDS] hdr [$DV_HDR]"
   p_dv10 "$MERGE" && ok "DV10: p3 with no p2 on disk derives from p1 (series order); a dispatch adding underived shard 1 is REFUSED, nothing written (DV1); the merge of 3 and 6 stamps p1 and notarizes all 8 stems at their disk shas (DV7); arm N reads p1 as its predecessor, and the same pass dispatching {1 3 6} (a superset) FAILS owed {3 6} (DV6 superset half; the subset half is held by DVRS)" \
     || bad "DV10: failed at stage ${DV_STAGE:-?}: rc=$RC ords [$DV_ORDS] hdr [$DV_HDR] $(head -1 "$MO") $(grep -m2 'FAIL (N' "$CO")"
   if [ -f "$SRCDIR/serial-remediation-worklist.sh" ]; then
     echo "HERMETIC-CONSUMED $SRCDIR/serial-remediation-worklist.sh"
-    p_dvrs "$MERGE" && ok "DVRS: document mode, the shipped sequence (split on p1's sha, a section edited, assembled, the worklist consuming .before): --derived-map prints the whole --map and names why, the full-width p2 merges derived from p1, the gate reads no FAIL (N; a files world in the same arm still narrows to {3 6}" \
+    p_dvrs "$MERGE" && ok "DVRS: document mode, the shipped sequence (split on p1's sha, a section edited, assembled, the worklist consuming .before): --derived-map prints exactly the --map rows {4 6} with no full-width reason, the full map dispatched is REFUSED, the derived p2 merges derived from p1, the gate reads no FAIL (N, and arm N FAILs a superset and a subset of {4 6} (N4); a files world in the same arm still narrows to {3 6}" \
       || bad "DVRS: rc=$RC ords [$DV_ORDS] $(head -2 "$WORK/dvrs.err" 2>/dev/null) | $(head -2 "$MO") | $(grep -m2 'FAIL (N' "$CO")"
-    p_dvrss "$MERGE" && ok "DVRSS: subject mode, the shipped sequence (split on p1's sha list, a prd section edited, assembled, the worklist consuming prd's and SPEC's .before): the whole --map with its reason, p2 merges derived from p1, the gate reads no FAIL (N" \
+    p_dvrss "$MERGE" && ok "DVRSS: subject mode, the shipped sequence (split on p1's sha list, a prd section edited, assembled, the worklist consuming prd's and SPEC's .before): exactly the --map rows {2 3}, the full map REFUSED, p2 merges derived from p1, the gate reads no FAIL (N, and arm N FAILs a superset and a subset (N4)" \
       || bad "DVRSS: rc=$RC $(head -2 "$WORK/dvrs.err" 2>/dev/null) | $(head -2 "$MO") | $(head -2 "$WORK/dvrss.split" 2>/dev/null) | $(grep -m2 'FAIL (N' "$CO")"
   else bad "DVRS: FIXTURE BROKEN -- serial-remediation-worklist.sh is not beside the merge; the shipped sequence cannot run"; fi
 fi
@@ -1067,7 +1121,7 @@ fi
 # the unmutated copy (MX0). --matrix scores the unmutated copy and every mutant against EVERY arm and
 # prints one MATRIX row per cell (matrix_row, core/fixtures/lib/matrix.sh), `killed=yes` iff THAT arm tripped.
 n_mut=0; n_kill=0
-ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 FI1 FI2 FI3a FI3b FIF FIE FIS FISa B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS TR1 FG2 RR3 RR6a RR6n RR6b RR6c RR6d RR6e RR6f RR6g CS1 CS2 CS3 CS4 CS5 CS6 CS8 CS9 CS10 CS11 CS12"
+ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 FI1 FI2 FI3a FI3b FIF FIE FIS FISa B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS PC1 PCD PCT PCT2 PCC PCSR PCS PCS2 PCK PCKa PCKb PCKc PCKd PCKe PCKf PCKg PCKh PCE PCR PCKm PCMV PCN2 NDP NDC TR1 FG2 RR3 RR6a RR6n RR6b RR6c RR6d RR6e RR6f RR6g CS1 CS2 CS3 CS4 CS5 CS6 CS8 CS9 CS10 CS11 CS12"
 [ "$KOK" = 1 ] && ARMS_ALL="$ARMS_ALL K1_inst K1_core K2vac_inst K2vac_core KEnone_inst KEvac_inst KEps_inst KEnone_core KEvac_core KEsch_core"
 karm() { # <merge file> <swap> <layout> <want> -- --pair-sep answer in that world
   local w a
@@ -1116,6 +1170,23 @@ arm_run() { # <arm> <merge file> -> 0 iff the arm HOLDS
     DV10) p_dv10 "$2" ;;
     DVRS) p_dvrs "$2" ;;
     DVRSS) p_dvrss "$2" ;;
+    PC1) p_pc1 "$2" ;;
+    PCD) p_pcd "$2" ;;
+    PCT) p_pct "$2" ;;
+    PCT2) p_pct2 "$2" ;;
+    PCC) p_pcc "$2" ;;
+    PCSR) p_pcsr "$2" ;;
+    PCS) p_pcs "$2" ;;
+    PCS2) p_pcs2 "$2" ;;
+    PCK) p_pck "$2" ;;
+    PCK[a-h]) "p_pck${1#PCK}" "$2" ;;
+    PCE) p_pce "$2" ;;
+    PCR) p_pcr "$2" ;;
+    PCKm) p_pckm "$2" ;;
+    PCMV) p_pcmv "$2" ;;
+    PCN2) p_pcn2 "$2" ;;
+    NDP) p_ndp "$2" ;;
+    NDC) p_ndc "$2" ;;
     TR1) p_tree "$2" ;;
     FG2) p_fence_unclosed "$2" ;;
     RR3) p_rerun_same "$2" ;;
@@ -1179,17 +1250,23 @@ sc_run() { # <merge file> <arm>... -> SC_DEAD, the arms that TRIPPED (did not ho
   SC_DEAD="${SC_DEAD# }"
 }
 mrow() { matrix_row "$1" "$2" 0 "$3" "$4"; MATRIX_ROWS=$((MATRIX_ROWS + 1)); } # <id> <arm> <GREEN|TRIPPED> <yes|no>
-mx_cells() { # <id> -> one MATRIX row per arm of ARMS_ALL, from SC_DEAD
+mx_cells() { # <id> -> one MATRIX row per arm of MX_ARMS (ARMS_ALL unless --arms= narrows it), from SC_DEAD
   local a
-  for a in $ARMS_ALL; do
+  for a in $MX_ARMS; do
     if in_set "$a" "$SC_DEAD"; then mrow "$1" "$a" TRIPPED yes; else mrow "$1" "$a" GREEN no; fi
   done
 }
 mut() { # <name> <deciding arm> <twin arm> <merge file>
   local name="$1" dec="$2" twin="$3" mf="$4" fl
+  mx_skip "$name" && return 0
   fl="$(bflag "$dec")$(bflag "$twin")${B_MX0:-0}"
   n_mut=$((n_mut + 1))
-  if [ "$MATRIX" -eq 1 ]; then sc_run "$mf" $ARMS_ALL; mx_cells "$name"; else sc_run "$mf" "$dec" "$twin"; fi
+  if [ "$MATRIX" -eq 1 ]; then
+    sc_run "$mf" $MX_ARMS; mx_cells "$name"
+    if ! in_set "$dec" "$MX_ARMS" || ! in_set "$twin" "$MX_ARMS"; then
+      n_unj=$((n_unj + 1)); printf '  note  mutant %s: deciding [%s] or twin [%s] outside --arms=; cells recorded, kill not judged\n' "$name" "$dec" "$twin"; return 0
+    fi
+  else sc_run "$mf" "$dec" "$twin"; fi
   if ! in_set "$dec" "$SC_DEAD"; then bad "mutant $name SURVIVED its deciding arm [$dec] (tripped: [$SC_DEAD]) -- the kill moved; re-measure with --matrix"
   elif in_set "$twin" "$SC_DEAD"; then bad "mutant $name: twin [$twin] FAILS too (tripped: [$SC_DEAD]) -- the kill spread past the recorded matrix; re-measure with --matrix"
   else n_kill=$((n_kill + 1)); mutant_killed "$([ "$fl" = 111 ] && echo 1 || echo 0)" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
@@ -1197,6 +1274,7 @@ mut() { # <name> <deciding arm> <twin arm> <merge file>
 }
 mutc() { # <name> <deciding arm> <twin arm> <old> <new> -- the CONVERGENCE VALIDATOR mutated beside an unmutated merge
   local md s
+  mx_skip "$1" && return 0
   md="$(mktemp -d "$WORK/rc.XXXXXX")" || return 1
   for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh validate-provenance-block.sh content-seal.sh; do
     [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$md/"
@@ -1210,11 +1288,38 @@ PY
   then bad "$1: FIXTURE STALE -- its anchor is not in the validator exactly once; re-anchor it, never relax the arm"; n_mut=$((n_mut + 1)); return; fi
   mut "$1" "$2" "$3" "$md/merge-adversarial-shards.sh"
 }
+mutp() { # <name> <deciding arm> <twin arm> <old> <new> -- partition-document.sh mutated beside an unmutated merge
+  local md s
+  mx_skip "$1" && return 0
+  md="$(mktemp -d "$WORK/rp.XXXXXX")" || return 1
+  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh validate-provenance-block.sh content-seal.sh; do
+    [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$md/"
+  done
+  if ! M_OLD="$4" M_NEW="$5" python3 - "$md/partition-document.sh" <<'PY' || cmp -s "$PARTITION" "$md/partition-document.sh" || ! bash -n "$md/partition-document.sh"
+import os, sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+  then bad "$1: FIXTURE STALE -- its anchor is not in partition-document.sh exactly once; re-anchor it, never relax the arm"; n_mut=$((n_mut + 1)); return; fi
+  mut "$1" "$2" "$3" "$md/merge-adversarial-shards.sh"
+}
 mutm() { # <name> <deciding arm> <twin arm> <old> <new>
-  local mm; mm="$(mut_merge "$4" "$5")"
+  local mm; mx_skip "$1" && return 0; mm="$(mut_merge "$4" "$5")"
   if [ -z "$mm" ]; then bad "$1: FIXTURE STALE -- its anchor is not in the merge exactly once; re-anchor it, never relax the arm"; n_mut=$((n_mut + 1)); return; fi
   mut "$1" "$2" "$3" "$mm"
 }
+# THE MATRIX NARROWINGS (--mutants=, --arms=; see the argument block). mx_skip <name> -> 0 when --mutants= leaves the
+# mutant out (it is then neither built nor scored); every name asked about is recorded for the unknown-name check.
+n_unj=0; MX_ASKED=""
+mx_skip() { MX_ASKED="$MX_ASKED $1 "; [ "$MATRIX" -eq 1 ] && [ -n "$MX_MUT_SEL" ] && ! in_set "$1" "$MX_MUT_SEL"; }
+MX_ARMS="$ARMS_ALL"
+if [ -n "$MX_ARM_SEL" ]; then
+  for _a in $MX_ARM_SEL; do
+    in_set "$_a" "$ARMS_ALL" || { echo "FIXTURE ERROR: --arms= names '$_a', which is not an arm of ARMS_ALL in this run" >&2; exit 2; }
+  done
+  MX_ARMS="$MX_ARM_SEL"
+fi
 # MX0: the UNMUTATED copy, built as a mutant is (the whole sibling set, cmp'd identical). Per push it must hold
 # the arms below; --matrix scores it on every arm. A1 gives it a positive conjunct (a merge that ran).
 mx0d="$(mktemp -d "$WORK/mx0.XXXXXX")"
@@ -1224,7 +1329,7 @@ done
 MX0F="$mx0d/merge-adversarial-shards.sh"
 if ! cmp -s "$MERGE" "$MX0F"; then bad "MX0: FIXTURE BROKEN -- the unmutated copy is not byte-identical to the merge"
 elif [ "$MATRIX" -eq 1 ]; then
-  sc_run "$MX0F" $ARMS_ALL; mx_cells MX0
+  sc_run "$MX0F" $MX_ARMS; mx_cells MX0
   if [ -z "$SC_DEAD" ]; then ok "CONTROL MX0 (unmutated copy of the merge's sibling set): every arm HOLDS on it, tripped=[] (matrix)"; B_MX0=1
   else bad "unmutated copy fails [$SC_DEAD] -- the harness, not a mutant, is what fails"; fi
 else
@@ -1245,20 +1350,72 @@ mutm DV-joined-record-only DV2 DV5 \
   '"$T/d.psha" "$csrc" | while IFS="$(printf '"'"'\t'"'"')" read -r _b _s; do if [ "$_s" = changed ] && ! grep -rqF -- "$_b" "$sd/shards/$art"-repair-p* 2>/dev/null; then _s=same; fi; printf '"'"'%s\t%s\n'"'"' "$_b" "$_s"; done > "$T/d.src" || return 1'
 mutm DV-open-findings-dropped DV3 DV2 'if (K["P", j] in CKEY) OP[CKEY[K["P", j]]] = 1' 'if (0) OP[1] = 1'
 mutm DV-files-key-ordinal DV4 DV3 'key = $2 }' 'key = $1 + 0 }'
-mutm DV-sections-silent-full DV4D DV3 'D_FULL="$mode mode is not narrowed: ' 'D_FULL=""; : "'
-# The reason blanked while the full map is kept: every row still prints, so only the header's reason separates it.
-mutm DV-reason-blank DVRS DV5 'D_FULL="$mode mode is not narrowed: ' \
-  'awk '"'"'{ print $1 + 0 }'"'"' "$cmap" > "$T/d.out"; D_FULL=""; : "'
-# Narrowing a document (or a subject) pass whenever its pre-repair snapshot is GONE -- the state the worklist
-# always leaves -- to part 1. DV4D (snapshot kept) and the other mode's real-sequence arm are each its twin.
-DVN_ANCHOR='  if [ "$mode" != files ]; then'
-DVN_BODY='then awk '"'"'NR == 1 { print $1 + 0 }'"'"' "$cmap" > "$T/d.out"; return 0; fi'
-mutm DV-doc-narrow-consumed DVRS DV4D "$DVN_ANCHOR" \
-  '  if [ "$mode" = document ] && [ -z "$(find "$sd/shards" -path "*/$art-repair-p*" -name .before 2>/dev/null)" ]; '"$DVN_BODY
-$DVN_ANCHOR"
-mutm DV-subj-narrow-consumed DVRSS DVRS "$DVN_ANCHOR" \
-  '  if [ "$mode" = subject ] && [ -z "$(find "$sd/shards" -path "*/$art-repair-p*" -name .before 2>/dev/null)" ]; '"$DVN_BODY
-$DVN_ANCHOR"
+# A bound document pass silently derives NOTHING (cross only, no reason): DV4D's {3 5 7} reads empty.
+mutm DV-sections-silent-full DV4D DV3 '      bound) ;;' '      bound) return 0 ;;'
+# The reason blanked while the full map is kept (re-keyed onto the NOTOKEN reason): every row still prints, so only
+# the header's reason separates it.
+mutm DV-reason-blank PCE DV5 '      notoken) D_FULL="the installed rulebook carries no' \
+  '      notoken) awk '"'"'{ print $1 + 0 }'"'"' "$cmap" > "$T/d.out"; D_FULL=""; : "the installed rulebook carries no'
+# One mode keeps the retired full width in a bound series (re-keyed: once, narrowing a pass whose snapshot was
+# consumed): the shipped-sequence arm of that mode fails, the other mode's holds.
+mutm DV-doc-narrow-consumed DVRS PCS '      bound) ;;' \
+  '      bound) if [ "$mode" = document ]; then D_FULL="document mode kept at full width"; return 0; fi ;;'
+mutm DV-subj-narrow-consumed DVRSS PC1 '      bound) ;;' \
+  '      bound) if [ "$mode" = subject ]; then D_FULL="subject mode kept at full width"; return 0; fi ;;'
+# THE PART-CONTENT JOIN's mutants (BL-911), each the wrong join its arm's seed is asserted to separate.
+# Keyed on the ordinal: a part is changed when the digest AT ITS ORDINAL moved.
+mutm PC-ordinal-join PC1 DV3 'for (i = 1; i <= nc; i++) if (!(PC[CK[i]] == 1 && CC[CK[i]] == 1)) OW[i] = 1' \
+  'for (i = 1; i <= nc; i++) if (PS[O["C", i]] != CS[O["C", i]]) OW[i] = 1'
+# A cited part read as a CURRENT ordinal instead of mapped forward by its unique digest.
+mutm PC-cite-by-ordinal DV4D PC1 'if (PC[k] == 1 && CC[k] == 1) OW[CI[k]] = 1' 'OW[cc[q] + 0] = 1'
+# Unchanged when the digest is merely PRESENT in the predecessor: duplicates are not owed.
+mutm PC-dup-presence PCD PC1 'for (i = 1; i <= nc; i++) if (!(PC[CK[i]] == 1 && CC[CK[i]] == 1)) OW[i] = 1' \
+  'for (i = 1; i <= nc; i++) if (!(CK[i] in PC)) OW[i] = 1'
+# Subject keyed on the digest alone: the same bytes in two files collide.
+mutm PC-subject-digest-only PCS2 PC1 'fl = (md == "subject") ? $2 : "-"' 'fl = "-"'
+# B1: the notarized run ignored -- a changed header piece owes itself alone.
+mutm PC-no-table-run PCT2 PC1 'if (hit) for (q = 1; q <= m; q++) OW[CORD[rr[q] + 0]] = 1' 'if (0) OW[1] = 1'
+# B1: a run widened to the row before it (the retired heuristic) -- an edit to that plain row owes the run too.
+mutm PC-run-widen-neighbour PCC PCT2 'if (hit) for (q = 1; q <= m; q++) OW[CORD[rr[q] + 0]] = 1' \
+  'if (CORD[rr[1] + 0] > 1 && OW[CORD[rr[1] + 0] - 1]) hit = 1; if (hit) { for (q = 1; q <= m; q++) OW[CORD[rr[q] + 0]] = 1; if (CORD[rr[1] + 0] > 1) OW[CORD[rr[1] + 0] - 1] = 1 }'
+# K4: each unjoinable input narrows (cross only) instead of falling to full width with its reason.
+mutm PC-pred-nolist-narrows PCKa DV5 \
+  '[ -n "$pv" ] || { D_FULL="$(basename "$D_PRED") carries no part_sha list (merged by an engine before $mode-mode narrowing)"; return 0; }' \
+  '[ -n "$pv" ] || return 0'
+mutm PC-own-nolist-narrows PCKb DV5 \
+  '[ -n "$pv" ] || { D_FULL="$lb carries no part_sha list of its own, so the set it owed cannot be recomputed"; return 0; }' \
+  '[ -n "$pv" ] || return 0'
+mutm PC-malformed-narrows PCKc DV5 '"$T/d.pmap" > "$T/d.ppairs" || { D_FULL="$D_PSHA_WHY"; return 0; }' '"$T/d.pmap" > "$T/d.ppairs" || return 0'
+mutm PC-count-unchecked PCKd DV5 'if (n != m) { print "BAD' 'if (0) { print "BAD'
+mutm PC-pred-norun-narrows PCKe DV5 \
+  '[ -n "$pv" ] || { D_FULL="$(basename "$D_PRED") carries no part_run list (merged by an engine before cut-table runs were notarized)"; return 0; }' \
+  '[ -n "$pv" ] || return 0'
+mutm PC-own-norun-narrows PCKf DV5 \
+  '[ -n "$pv" ] || { D_FULL="$lb carries no part_run list of its own, so the set it owed cannot be recomputed"; return 0; }' \
+  '[ -n "$pv" ] || return 0'
+mutm PC-run-malformed-narrows PCKg DV5 \
+  'd_prun "$(basename "$D_PRED")" "$pv" "$T/d.pmap" > /dev/null || { D_FULL="$D_PSHA_WHY"; return 0; }' \
+  'd_prun "$(basename "$D_PRED")" "$pv" "$T/d.pmap" > /dev/null || return 0'
+# The old-engine tolerance gone: every re-merge over a pass without part_sha: compares byte for byte and refuses.
+# THE TIP-ADVERSARY FIXES' mutants, each the regression the fix removed.
+# D2: d_prun prints each good run as it passes, so a bad run after a good one never reaches the BAD* test.
+mutm PC-prun-print-as-you-go PCKm DV5 '        G[++ng] = R[r]
+      } }
+    END { if (bad) exit; for (r = 1; r <= ng; r++) print G[r] }' '        print R[r]
+      } }
+    END { }'
+# D1: the moved-file check reads the space-separated manifest rows with a TAB IFS, so no row is a `file:` row.
+mutm PC-moved-tab-ifs PCMV PC1 '    while read -r _k _st _rel; do' '    while IFS="$(printf '"'"'\t'"'"')" read -r _k _st _rel; do'
+# N2: a failed scoped map is skipped, so its runs are dropped and the answer reads complete.
+mutp PC-scoped-map-continue PCN2 PC1 '          [ "$MRC" -eq 0 ] || refuse "the scoped map of $p at $PS_REF failed (rc=$MRC); its cut-table runs are unknown"' \
+  '          [ "$MRC" -eq 0 ] || continue'
+# D4: the validator's document self-probe never refuses, so a merge that never narrows a document passes it.
+mutc VAC-doc-probe-gone NDP DV2 '    if [ "$n_dset" != "2 3 " ] || [ -n "$(printf '"'"'%s\n'"'"' "$n_d" | awk -F'"'"'\t'"'"' '"'"'$1 == "FULL"'"'"')" ]; then' '    if false; then'
+# N4: the ceiling back AT the probe root, which git ignores for its own working directory.
+mutc VAC-ceiling-nd NDC DV2 'GIT_CEILING_DIRECTORIES="$AC_T" bash "$N_MERGE"' 'GIT_CEILING_DIRECTORIES="$AC_T/nd" bash "$N_MERGE"'
+mutm PC-remerge-strict PCR DV3 '  [ -n "$PART_SHA_LIST" ] || return 1' '  return 1'
+# D1: a LEGACY series narrowed as if bound.
+mutm PC-legacy-narrows PCE DV5 '      legacy) D_FULL="$mode mode narrows only' '      legacy) ;; xlegacy) D_FULL="$mode mode narrows only'
 mutm DV-narrow-on-unread DV5 DV2 \
   '[ -s "$T/d.psha" ] || { D_FULL="$(basename "$D_PRED") notarizes no <stem>=<sha> list"; return 0; }' '[ -s "$T/d.psha" ] || return 0'
 mutc DV-gate-supersets-only DVRS DV2 'if [ "$n_have" != "$n_owe" ]; then' 'if [ "$n_have" != "$n_owe" ] && [ "${#n_have}" -gt "${#n_owe}" ]; then'
@@ -1374,6 +1531,7 @@ mutm CSM-flagglob CS12 A1 '  --check-shard-dir)
 # only arm that runs the mutated file (CS1 seals with the shipped one and asks the merge directly: the twin).
 mutw() { # <name> <deciding arm> <twin arm> <old> <new>
   local md s
+  mx_skip "$1" && return 0
   md="$(mktemp -d "$WORK/rw.XXXXXX")" || return 1
   for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh validate-provenance-block.sh content-seal.sh; do
     [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$md/"
@@ -1417,12 +1575,15 @@ if [ "$KOK" = 1 ]; then
 else
   bad "KMb/KMc/KEM: not scored -- the K section did not build (see K0)"
 fi
-[ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] && ok "$n_kill of $n_mut mutants scored dead" || bad "$n_kill of $n_mut mutants scored dead"
 if [ "$MATRIX" -eq 0 ]; then
+  [ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] && ok "$n_kill of $n_mut mutants scored dead" || bad "$n_kill of $n_mut mutants scored dead"
   [ "$MATRIX_ROWS" -eq 0 ] && ok "PLAIN-RUN: no MATRIX row printed -- the full matrix runs only under --matrix" || bad "PLAIN-RUN printed $MATRIX_ROWS MATRIX row(s)"
 else
-  n_arm=0; for _a in $ARMS_ALL; do n_arm=$((n_arm + 1)); done
-  [ "$MATRIX_ROWS" -eq $(( (n_mut + 1) * n_arm )) ] && ok "MATRIX: $MATRIX_ROWS rows printed ($n_arm arms x (every mutant plus MX0))" || bad "MATRIX printed $MATRIX_ROWS rows, expected $(( (n_mut + 1) * n_arm ))"
+  [ "$n_mut" -gt 0 ] && [ "$((n_kill + n_unj))" -eq "$n_mut" ] && ok "matrix tally (--arms= narrowed): $n_kill of $n_mut mutants scored dead, $n_unj recorded and not judged" \
+    || bad "matrix tally (--arms= narrowed): $n_kill of $n_mut mutants scored dead, $n_unj recorded and not judged"
+  for _m in $MX_MUT_SEL; do in_set "$_m" "$MX_ASKED" || bad "FIXTURE ERROR: --mutants= names '$_m', which no mutant of this run carries"; done
+  n_arm=0; for _a in $MX_ARMS; do n_arm=$((n_arm + 1)); done
+  [ "$MATRIX_ROWS" -eq $(( (n_mut + 1) * n_arm )) ] && ok "MATRIX: $MATRIX_ROWS rows printed ($n_arm arms x (every scored mutant plus MX0))" || bad "MATRIX printed $MATRIX_ROWS rows, expected $(( (n_mut + 1) * n_arm ))"
 fi
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
