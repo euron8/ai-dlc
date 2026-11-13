@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1104.0] - 2026-11-13
+
+### BL-844 — closed on its gate-2 subject; the measurement is corrected, nothing is built
+
+BL-844's record-only gate-2 route shipped in 0.968.0, and this release does not build it. It corrects BL-844's measurement by re-sourcing routes from graph's committed gate-transition plans: `core/scripts/gate-transition.sh` writes a `route:` line (`partitioned`, `record-only` or `serial`) into every gate plan. `docs/analysis/bl844-gate2-route-seats/derive.sh` (output `out.txt`, with `README.md`) joins those plans to shard dirs and review files. QA seats per gate-2 re-validation:
+
+- s320 (before, no gate plans): 4.00 to 4.75
+- s321 (after): 2.00
+- s322 (after): 1.67
+- s321 and s322 pooled: 1.89, with 11 of 18 routed record-only and 0 unknown
+
+The old "11 of the 18 unknown" is corrected from the plans. The `Outcome measured:` line takes implementation plus gate-validation[implementation] per story from the recorded `cost_rows.txt` (s320 before, s321 and s322 after). Verdict: it did not fall. The value citation is a routed single seat's catch. BL-844 closes on its gate-2 subject and names the gate-3 subject as carried by BL-1030. The 0.968.0 paragraph is marked superseded.
+
+NOTE, recorded and not fixed: `core/fixtures/dispatch-model-guard/run.sh:2819` seeds its gate plans with `route: full`, a value `gate-transition.sh` never writes. No script reader keys on the field, so the seed is inert.
+
+### BL-1030 — filed OPEN: gate 1 has no zero-seat GATE1-SKIP answer after a gate-3 rework
+
+**NOTE (efficiency).** This is the gate-3 subject of BL-844's title. `docs/analysis/bl844-gate2-route-seats/derive-g3.sh` (output `out-g3.txt`) joins each gate-1 and gate-2 plan after a gate-3 rework to its review file and classes each seat: (a) re-run, (b) same-gate re-review after NEEDS_REWORK, (c) gate-3 remedy. Over 9 gate-3 reworks (s321 1-4 and 2-4; s322 1, 3, 4, 6 and 8) it finds 15 seats, (a) 7, (b) 3, (c) 5. Three reworks re-ran neither gate. 0 class (a) seats ran over a records-only delta. Every records-only gate-1 seat was a class (c) remedy. The entry is a mechanism gap with no measured cost, and it is not discharged. The `--gate1-rerun` question that records GATE1-SKIP is asked only in the Rule A block when a gate-2 pass M >= 2 opens, so a gate-1 plan opened after a gate-3 rework always dispatches a seat. The Owed fix asks it after a gate-3 rework, except for class (c) remedies. `derive-g3.sh` breaks same-sha ties by remedy citation and refuses, exit 2, when its GATE1-RERUN control's fixture is absent. `derive.sh` now exits 2 if its shard-dir negative control reads non-zero (an added guard, not yet fired).
+
 ## [0.1103.0] - 2026-11-13
 
 ### BL-615: CLOSED, Outcome measured and Verdict lines written
