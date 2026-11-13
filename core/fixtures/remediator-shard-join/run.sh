@@ -1020,7 +1020,9 @@ else
   if cps3; then ok "CPS3: CPS4's world with jq off PATH -> --check-part rc 0 with a line opening 'NOTE: SEAT-ROWS: SKIP jq-absent', no WARN"; B_CPS3=1
   else bad "CPS3: with jq absent the seat-row join did not SKIP by name (rc=$RC): $(head -4 "$JO")"; fi
   cps_part "$CPS1W"; cp "$CPS1W/$PRD/01.md" "$WORK/cps.before"
-  wfd_run "$SRCDIR/wait-for-deliverable.sh" --mark "$CPS1W/$PRD/01.md" stories remediator 01 findings=1 > "$JO" 2>&1; RC=$?
+  # The world root is passed as cps_chk passes it: without it the join walks up from its own script dir, which in the
+  # consumer layout is the consumer, whose installed rulebook carries the seat-record sentence (install-date-unreadable).
+  AI_DLC_PROJECT_ROOT="$CPS1W" wfd_run "$SRCDIR/wait-for-deliverable.sh" --mark "$CPS1W/$PRD/01.md" stories remediator 01 findings=1 > "$JO" 2>&1; RC=$?
   if [ "$RC" -eq 0 ] && has "$JO" "MARKED " && hasl "$JO" "$CPS_WARN" && hasl "$JO" "NOTE: SEAT-ROWS: SKIP -- the installed" && ! has "$JO" "REFUSED" \
      && ! cmp -s "$WORK/cps.before" "$CPS1W/$PRD/01.md"; then ok "MKPW: CPS1's part sealed through the real wait-for-deliverable.sh --mark -> MARKED rc 0, the join's WARN and NOTE lines relayed"
   else bad "MKPW: the real --mark did not mark CPS1's part relaying the seat WARN and NOTE (rc=$RC): $(head -5 "$JO")"; fi

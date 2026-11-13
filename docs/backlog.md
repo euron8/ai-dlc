@@ -3065,6 +3065,14 @@ Provenance: batch 256, filed by the BL-978 owner at the lead's ruling, from the 
 
 verify: manual
 
+## BL-1027 — a shipping fixture's new cell can reach consumers without ever having run in the consumer layout
+
+**DEFECT.** OPEN. Filed 2026-11-12. `remediator-shard-join` cell MKPW (added in 0.1068.0 with the seal-time seat checks) drove the real `wait-for-deliverable.sh --mark` without `AI_DLC_PROJECT_ROOT`, so its in-process join walked up from its own script directory. In the distribution that walk reaches a tree with no installed rulebook and prints the expected `NOTE: SEAT-ROWS: SKIP -- the installed`. In an installed consumer it reaches the consumer, whose tracked rulebook carries the seat-record sentence, and prints `NOTE: SEAT-ROWS: SKIP install-date-unreadable`. The cell therefore failed on every consumer while this repo's suite stayed green, and it blocked graph's delivery push (PC-S322-MKPW-SEAT-NOTE-ASSERTION-CONSUMER-LAYOUT, fixed in 0.1101.0). The process gap is that nothing runs a SHIPPING fixture in the consumer layout before it ships. Measured in the 0.1101.0 fix: `scripts/install.sh` into an empty scratch tree carrying `_bmad/`, then `scripts/ai-dlc/hermetic-run.sh --root <tree> remediator-shard-join`, reproduced the consumer's failure exactly (366 ok, 1 FAIL, MKPW) at 0.1100.0. Owed: a pre-ship consumer-layout run for any shipping fixture whose cells changed, or an arm that refuses a shipped cell which drives a root-resolving subject with no explicit root. Measure that arm's false-positive set before choosing it.
+
+Provenance: batch 256, filed by the 0.1101.0 fast-track builder at the lead's (ai-dlc-a7) brief; id allocated by the lead.
+
+verify: manual
+
 ## BL-1007 — escalation-status-vocabulary is green only from the repo root: run from `/`, its 15 mutant and refusal lines FAIL, the same 15 before and after the in-process conversion
 
 **DEFECT.** OPEN. Filed 2026-11-12. `core/fixtures/escalation-status-vocabulary/run.sh` passes from the repository root and fails from `/`. The pre-push hook runs every fixture from the root, so the push sees only the green run.
