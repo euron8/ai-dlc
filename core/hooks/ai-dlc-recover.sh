@@ -423,7 +423,24 @@ done
 # opened, such as another session's live gate behind a `gate-transition.sh … 3` that refused before
 # its own open.
 # Anything unreadable leaves the resume block as it was.
-GATE_LEFT=""
+#
+# A GATE ALREADY CLOSED AT A STEP ENTRY IS REPORTED ONCE, FROM ITS RECORD. ai-dlc-handoff-entry.sh
+# closes the marker when the lead whole-reads another step and writes `.gate-checkpoint/LEFT` =
+# `<nonce><TAB><step left to><TAB><the gate's own step>` after that close (the field order is
+# gate-checkpoint.sh's; its re-open restores STEP from the third). With no OPEN marker and LEFT
+# readable, the section below names that nonce and step and nothing is closed here. A compaction is
+# where the lead loses the note the entry hook printed, so the section carries the way back across
+# it -- but only once: LEFT is then rewritten with a fourth field `noted`, and a LEFT carrying it emits nothing, since the
+# measured leaves either returned within minutes or never (7 of 9 leaves were followed by a return)
+# and a note repeated at every later compaction is a standing instruction about a finished gate.
+# LEFT itself stays, for gate-checkpoint.sh's re-open.
+GATE_LEFT=""; GATE_LEFT_REC=""; GATE_LEFT_STEP=""
+if [ -z "$GATE_NONCE" ] && [ -n "$GATE_CKP" ] && [ -r "${STATE_DIR}/.gate-checkpoint/LEFT" ]; then
+  IFS="$(printf '\t')" read -r _lf_n _lf_x _lf_g _lf_noted < "${STATE_DIR}/.gate-checkpoint/LEFT" 2>/dev/null || true
+  if [ -n "${_lf_n:-}" ] && [ -n "${_lf_x:-}" ] && [ "${_lf_noted:-}" != noted ]; then
+    GATE_NONCE="$_lf_n"; GATE_LEFT="$_lf_x"; GATE_LEFT_REC=1
+  fi
+fi
 GATE_JQ='def ev: [splits("\\|\\||&&|[|;&\\n]")
       | [splits("[[:space:]]+") | select(length > 0) | gsub("^[\"\u0027]+|[\"\u0027]+$"; "")]
       | until(length == 0 or (.[0] | test("^(bash|sh|env)$|^[A-Za-z_][A-Za-z0-9_]*=") | not); .[1:])
@@ -446,7 +463,12 @@ GATE_JQ='def ev: [splits("\\|\\||&&|[|;&\\n]")
     elif ((.input | has("offset")) or (.input | has("limit"))) then "R S " + $s
     else "R W " + $s end
   else empty end'
-if [ -n "$GATE_NONCE" ] && [ -n "$GATE_CKP" ] && [ -n "$REC_TP" ] && [ -r "$REC_TP" ]; then
+# `route` and `handoff` never leave a gate, the same excluded set as ai-dlc-handoff-entry.sh's close:
+# route.md is read first on every `/ai-dlc` invocation, resume included, and handoff.md is the pause
+# procedure, taken mid-gate. A whole Read of either after the open is a live gate being resumed or
+# paused, and closing it here would tell the lead "do not resume it" about a gate it is still working.
+# The awk prints `<step left to> <open timestamp> <the gate's own step>`; the third goes into LEFT.
+if [ -z "$GATE_LEFT_REC" ] && [ -n "$GATE_NONCE" ] && [ -n "$GATE_CKP" ] && [ -n "$REC_TP" ] && [ -r "$REC_TP" ]; then
   _gl="$(grep -E '"tool_use"' "$REC_TP" 2>/dev/null \
     | grep -E 'gate-checkpoint\.sh|gate-transition\.sh|/steps/[A-Za-z0-9_.-]+\.md' \
     | jq -rR "$GATE_JQ" 2>/dev/null \
@@ -458,22 +480,34 @@ if [ -n "$GATE_NONCE" ] && [ -n "$GATE_CKP" ] && [ -n "$REC_TP" ] && [ -r "$REC_
           s = $3
           if (s == "gate-validation") { left = ""; next }
           if (substr(s, 1, 1) == "_") next
+          if (s == "route" || s == "handoff") next
           if ($2 == "W" && gate && m != "" && s != m) left = s
           if ($2 == "W" || !(s in whole)) main = s
           if ($2 == "W") whole[s] = 1
         }
-        END { if (gate && left != "") print left " " ot }')"
+        END { if (gate && left != "") print left " " ot " " m }')"
   # The binding: the nonce ends in its mint time, `<type>-YYYYmmddTHHMMSSZ` (gate-checkpoint.sh
   # refuses any other `open`), and the open's tool call carries its own timestamp.
-  if [ -n "$_gl" ] && [ "$(jq -nr --arg n "$GATE_NONCE" --arg t "${_gl#* }" '
+  _gl_r="${_gl#* }"; _gl_t="${_gl_r%% *}"; GATE_LEFT_STEP="${_gl_r#* }"
+  if [ -n "$_gl" ] && [ "$(jq -nr --arg n "$GATE_NONCE" --arg t "$_gl_t" '
         ($n | capture("-(?<d>[0-9]{8}T[0-9]{6}Z)$").d | strptime("%Y%m%dT%H%M%SZ") | mktime) as $m
         | ($t | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) as $o
         | if $m >= $o - 120 and $m <= $o + 120 then "bound" else "other" end' 2>/dev/null)" = bound ]; then
     GATE_LEFT="${_gl%% *}"
   fi
 fi
-if [ -n "$GATE_LEFT" ]; then
+if [ -n "$GATE_LEFT" ] && [ -z "$GATE_LEFT_REC" ]; then
   CLAUDE_PROJECT_DIR="$PROJECT_DIR" bash "$GATE_CKP" --nonce "$GATE_NONCE" close >/dev/null 2>&1 || GATE_LEFT=""
+  # The section below tells the lead `record|done` re-opens the gate, and gate-checkpoint.sh re-opens
+  # only at the nonce LEFT names. So this close writes LEFT too, after the close and only once the
+  # marker is gone, already `noted`: the section is emitted by this very recovery. Without it a
+  # `record` after this close writes the ledger with no marker open, and the next compaction resumes
+  # nothing.
+  _lf="${STATE_DIR}/.gate-checkpoint/LEFT"
+  if [ -n "$GATE_LEFT" ] && [ ! -f "${STATE_DIR}/.gate-checkpoint/OPEN" ]; then
+    printf '%s\t%s\t%s\tnoted\n' "$GATE_NONCE" "$GATE_LEFT" "${GATE_LEFT_STEP:--}" > "${_lf}.$$" 2>/dev/null \
+      && mv "${_lf}.$$" "$_lf" 2>/dev/null || rm -f "${_lf}.$$" 2>/dev/null || true
+  fi
 fi
 #
 # THE SECTION CARRIES THE NONCE AND THE ONE COMMAND THAT USES IT, AND NOTHING THE GATE FILE
@@ -491,9 +525,9 @@ if [ -n "$GATE_LEFT" ]; then
   # Shorter than the resume block it replaces, so the byte budget below still holds.
   GATE_RESUME="## A gate left open was closed -- do not resume it
 
-\`.gate-checkpoint/OPEN\` named \`${GATE_NONCE}\`, which this session left at its whole Read of
-\`${GATE_LEFT}.md\` without a \`close\`. This hook closed it. If that gate is in
-fact unfinished, \`open\` it again at that nonce before its next check."
+Gate \`${GATE_NONCE}\` was left at a whole Read of \`${GATE_LEFT}.md\` without a
+\`close\`, and closed. If it is unfinished,
+\`gate-checkpoint.sh --nonce ${GATE_NONCE} record|done\` re-opens it."
 elif [ -n "$GATE_NONCE" ]; then
   GATE_RESUME="## The cut landed inside a gate -- RESUME it, do not restart it
 
@@ -801,5 +835,12 @@ rm -f "${STATE_DIR}/.recover-gate-progress" "${STATE_DIR}"/.recover-gate-progres
 # budget, and EMITTED is its head and tail around the trimmed block.
 jq -n --arg ctx "$EMITTED" \
   '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}}'
+
+# The left gate's section was emitted from LEFT once; mark it so no later recovery repeats it.
+if [ -n "$GATE_LEFT_REC" ] && [ -f "${STATE_DIR}/.gate-checkpoint/LEFT" ] && [ ! -f "${STATE_DIR}/.gate-checkpoint/OPEN" ]; then
+  printf '%s\t%s\t%s\tnoted\n' "$GATE_NONCE" "$GATE_LEFT" "${_lf_g:--}" > "${STATE_DIR}/.gate-checkpoint/LEFT.$$" 2>/dev/null \
+    && mv "${STATE_DIR}/.gate-checkpoint/LEFT.$$" "${STATE_DIR}/.gate-checkpoint/LEFT" 2>/dev/null \
+    || rm -f "${STATE_DIR}/.gate-checkpoint/LEFT.$$" 2>/dev/null || true
+fi
 
 exit 0

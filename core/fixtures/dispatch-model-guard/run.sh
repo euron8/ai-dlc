@@ -121,6 +121,7 @@
 # MUTANT-MATRIX anyshard decides=noshard twins=nogp
 # MUTANT-MATRIX wholegroups decides=packed twins=part
 # MUTANT-MATRIX nostoryless decides=adjsl,adjslsh twins=adjnp
+# MUTANT-MATRIX noreopen decides=lvback twins=lvleft
 # MUTANT-MATRIX dl-nodeny decides=nodl,indent,bold twins=dl,mark
 # MUTANT-MATRIX dl-nomark decides=mark twins=markbad
 # MUTANT-MATRIX dl-nobg decides=fg twins=bgabsent
@@ -137,6 +138,7 @@
 # MUTANT-MATRIX sdnostrip decides=sdtrail twins=sdbad
 # MUTANT-MATRIX sdkeepempty decides=sdellip twins=sdgood
 # MUTANT-MATRIX sdmergeok decides=sdbad,sdmixed,sdtrail twins=sdgood
+# MUTANT-MATRIX-DYNAMIC lv_mut why=the gate-leave helper passes the mutant name as a variable; every name it produces carries its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-DYNAMIC sd_mut why=the shard-dir helper passes the mutant name as a variable; every name it produces carries its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-DYNAMIC fam_mut why=the vector-family helpers pass the mutant name as a variable; every name they produce carries its own MUTANT-MATRIX row above
 set -uo pipefail
@@ -2986,6 +2988,90 @@ gp_mut wrongseat "$(grep -m1 -F '    code-reviewer:1|code-reviewer-escalated:1|q
   "a guard that accepts any reviewer or QA seat on a gate 1, 2 or rerun plan dispatches QA over a g1 plan, a reviewer over a g2 plan and a reviewer or QA over a rerun plan -- cells rerunqa, qag1, rvg2 and rerunrv move"
 gp_mut nostoryless '    [ "$DG_STORY" = true ] || DG_GP_SUBJECT=false ;;' '    ;;' adjsl,adjslsh adjnp 'adjsl=deny:-:a;adjslsh=deny:-:a;adjnp=deny:-:a' \
   "without the storyless exemption a multi-story or storyless implementation adjudicator, which gate-transition.sh can write no plan for, is refused for having none -- cells adjsl and adjslsh move, the story-bearing adjnp does not"
+
+# --- CHECK (e) ACROSS A GATE CLOSED EARLY AND THEN RESUMED (BL-1009) -------------------------------
+# ai-dlc-handoff-entry.sh closes the OPEN marker when the lead whole-reads ANOTHER step while a gate
+# is open, and gate-checkpoint.sh's `record` at the nonce LEFT names re-opens it. Check (e) reads only
+# OPEN, so between those two acts the adjudicator is refused, and after the re-open it is allowed
+# again. Nothing is hand-written to OPEN or LEFT here: the REAL hook closes, by a real PostToolUse
+# Read payload, with STEP bound to the reading session as the engine writes it, and the checkpoint
+# script under test (installed where the hook locates it) re-opens. A cell is
+# "<gate-plan cell>|o<OPEN carries GP_NS: 1|0>|l<LEFT present: 1|0>". Each cell copies one base world.
+LV_CKP=""; for _c in "$REM_ROOT/core/scripts/gate-checkpoint.sh" "$REM_ROOT/scripts/ai-dlc/gate-checkpoint.sh"; do
+  [ -f "$_c" ] && { LV_CKP="$_c"; break; }; done
+[ -n "$LV_CKP" ] && echo "HERMETIC-CONSUMED $LV_CKP" || bad "LEAVE FIXTURE BROKEN: gate-checkpoint.sh not found beside $HOOK"
+LV_HE="$HOOKS_SRC/ai-dlc-handoff-entry.sh"
+[ -f "$LV_HE" ] || bad "LEAVE FIXTURE BROKEN: ai-dlc-handoff-entry.sh not found beside $HOOK"
+# THE FIXTURE SHIPS AHEAD OF ITS SUBJECT (consumer-boundary.md): a delivering pull can carry this
+# section while the installed handoff-entry hook still predates the gate-leave close. Such a hook is
+# detected by CODE, never by a comment: no line reads or writes `${<dir>}/STEP` before any `#`. Then
+# every cell and the mutant print SKIP on a consumer (a FAIL in the distribution), by name, and
+# none prints ok. The detector is probed
+# both ways on seeded lines first: a commented write must read absent, the same write live present.
+lv_has_m1() { local n; n="$(grep -cE '^[^#]*\}/STEP' "$1" 2>/dev/null)" || n=0; [ "$n" -gt 0 ]; }
+LV_PR="$WORK/lv-m1-probe"
+printf '#   printf x > "${d}/STEP"\n' > "$LV_PR.old"; printf '    printf x > "${d}/STEP"\n' > "$LV_PR.new"
+if ! lv_has_m1 "$LV_PR.old" && lv_has_m1 "$LV_PR.new"; then
+  ok "LEAVE m1-detector: a commented STEP write reads as no gate-leave close, a live one as present"
+else bad "LEAVE m1-detector: cannot tell a commented STEP write from a live one -- the SKIP below is not believable"; fi
+LV_M1=0; lv_has_m1 "$LV_HE" && LV_M1=1
+LV_SID='lv-session-0001'
+if [ "$LV_M1" = 1 ]; then
+LV_BASE="$(gp_world leave "$(printf '# Implementation\n%s\nbody' "$GP_SENT")" "$GP_POS")"
+printf 'implementation\t%s\n' "$LV_SID" > "$LV_BASE/_bmad-output/.gate-checkpoint/STEP"
+lv_cell() { # lv_cell <gate-checkpoint script> <cell> -- a fresh copy per call (it runs inside $( ), so no counter survives)
+  local w o l
+  w="$(mktemp -d "$WORK/lv-$2.XXXXXX")" && cp -R "$LV_BASE/." "$w/" && mkdir -p "$w/scripts/ai-dlc" && cp "$1" "$w/scripts/ai-dlc/gate-checkpoint.sh" \
+    && chmod +x "$w/scripts/ai-dlc/gate-checkpoint.sh" || { printf 'unbuilt'; return; }
+  case "$2" in lvleft|lvback)
+    jq -nc --arg f "$w/.claude/skills/ai-dlc/steps/deploy-validate.md" --arg s "$LV_SID" \
+      '{session_id:$s,hook_event_name:"PostToolUse",tool_name:"Read",tool_input:{file_path:$f},tool_response:{}}' \
+      | CLAUDE_PROJECT_DIR="$w" bash "$LV_HE" >/dev/null 2>&1 ;;
+  esac
+  [ "$2" = lvback ] && bash "$w/scripts/ai-dlc/gate-checkpoint.sh" --root "$w" --nonce "$GP_NS" record c1 PASS >/dev/null 2>&1
+  o=0; [ "$(cat "$w/_bmad-output/.gate-checkpoint/OPEN" 2>/dev/null)" = "$GP_NS" ] && o=1
+  l=0; [ -f "$w/_bmad-output/.gate-checkpoint/LEFT" ] && l=1
+  printf '%s|o%s|l%s' "$(gp_run "$HOOK" "$w" gate-adjudicator "gate_nonce: $GP_NS" 'story: 7-2' "gate-plan: $GP_PD/7-2-g3-p1.plan")" "$o" "$l"
+}
+ALL_LV=lvopen,lvleft,lvback
+LV_WANT='lvopen=allow:-:-|o1|l0;lvleft=deny:-:e|o0|l1;lvback=allow:-:-|o1|l0'
+LV_TIP="$(for _c in ${ALL_LV//,/ }; do printf '%s=%s;' "$_c" "$(lv_cell "$LV_CKP" "$_c")"; done)"
+_old_ifs="$IFS"; IFS=';'
+for _c in $LV_WANT; do
+  case ";$LV_TIP" in
+    *";$_c;"*) ok "LEAVE ${_c%%=*}: '${_c#*=}' (decision:note:reason|OPEN|LEFT)" ;;
+    *) bad "LEAVE ${_c%%=*}: expected '${_c#*=}', got vector '$LV_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+SEP_LV=";"; CELLFN_LV=lv_cell; BASE_LV="$(want_lines ';' "$LV_WANT")"
+B_LV=$([ "$LV_TIP" = "$LV_WANT;" ] && echo 1 || echo 0)
+# The mutant is a copy of the checkpoint script; the hook and the guard stay the real ones.
+lv_mut() { # lv_mut <tag> <exact-anchor-line> <replacement-line> <decides> <twins> <expected> <message>
+  local n m="$WORK/lvmut-$1-gate-checkpoint.sh"
+  n="$(grep -cxF -- "$2" "$LV_CKP")" || n=0
+  if [ "$n" != 1 ]; then bad "MUTANT $1 anchor matched $n lines in gate-checkpoint.sh, expected exactly 1"; return; fi
+  A="$2" R="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$LV_CKP" > "$m"
+  if cmp -s "$LV_CKP" "$m"; then bad "MUTANT $1 DID NOT APPLY (cmp -s)"; return; fi
+  if ! bash -n "$m" 2>/dev/null; then bad "MUTANT $1 DID NOT APPLY as valid shell"; return; fi
+  fam_score LV "$1" "$m" "$4" "$5" "$B_LV" "$6" "LEAVE MUTANT $1 scores a kill: $7"
+}
+lv_mut noreopen '  [ -f "$OPEN_MARKER" ] && return 0' '  return 0' lvback lvleft 'lvback=deny:-:e|o0|l1;lvleft=deny:-:e|o0|l1' \
+  "a checkpoint that never re-opens a gate left at a step entry keeps the resumed gate's adjudicator refused -- cell lvback alone moves"
+else
+  # HARD in the distribution, SKIP on a consumer: gate-resume's skip() and its layout test (seed.sh,
+  # IS_DIST: this repo carries core/skills/ai-dlc, a consumer does not). Here the hook IS the subject,
+  # so a distribution hook without the close is a deleted close, never a pull still in flight.
+  LV_IS_DIST=0; [ -d "$REM_ROOT/core/skills/ai-dlc" ] && LV_IS_DIST=1
+  lv_skip() { # lv_skip <what> <why>
+    if [ "$LV_IS_DIST" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
+    else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
+  }
+  for _c in lvopen lvleft lvback; do
+    lv_skip "LEAVE $_c" "$LV_HE predates the gate-leave close (no code line reads or writes .gate-checkpoint/STEP), so this cell checked NOTHING"
+  done
+  lv_skip "LEAVE noreopen (mutant)" "not scored, the hook under test predates the gate-leave close"
+fi
 
 # ===== THE DELIVERABLE-LINE DENY (BL-819) ==========================================================
 # NO SKIP ARM FOR AN ABSENT GUARD BLOCK, BY RULING: this section ships in the SAME release as the guard

@@ -1,5 +1,10 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-741 *
+# 741 -> 756 (BL-1009): the gate-leave world's five cells (lvopen, lvleft, lvback, and noreopen's lvback
+# and lvleft) start 15: the guard once per cell, the handoff-entry hook and the close it runs once per
+# leave, and the re-opening `record` once per lvback.
+756 *
 2 core/scripts/validate-gate-adjudication.sh
 21 core/scripts/validate-spawn-ledger.sh
 23 core/scripts/merge-adversarial-shards.sh
+# The checkpoint script runs only as a copy installed into each world, never at its sandbox path.
+0 core/scripts/gate-checkpoint.sh

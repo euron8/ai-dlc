@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1105.0] - 2026-11-13
+
+### BL-1009: the next step's entry closes a gate the lead left, a record or done re-opens it, and the recover hook's backstop no longer closes a paused or resumed gate (PARTIAL)
+
+This release closes a defect present since 0.1100.0. The recover hook's transcript backstop treated a whole Read of `handoff.md` or `route.md` as a leave, so at a compaction it could close a paused or resumed live gate and tell the lead "do not resume it". Its leave rule now excludes `route` and `handoff`, the same set as the new entry-hook close (G2 worlds `handoff` and `route`, mutant m15). On graph, from its pull of 0.1101.0 (06:57Z) to 13:18Z, there were 0 such injections against 2 compactions, neither inside a live gate; that is latent, not ruled out.
+
+Remainder (2) of the original entry was that the lead can leave a gate without `gate-checkpoint.sh ... close`, so the OPEN marker outlives it. The existing PostToolUse `Read` hook `ai-dlc-handoff-entry.sh` now closes the marker when the lead whole-reads another step. The close is bound to the session that opened the gate; `gate-validation`, `_*`, `route` and `handoff` never close it; a Read forced by recover-gate is exempt; and it never refuses. `gate-checkpoint.sh` re-opens the gate on `record` or `done` at the left nonce, restoring its step, and not on `list`. LEFT is `<nonce><TAB><step left to><TAB><gate's own step>`, and the recover hook's backstop close writes it too, so "record|done re-opens it" is true on both close paths. The recover hook emits its closed-gate note once. A re-open that did not restore STEP was found and fixed in this release (world `return-own`, mutant `g3m-norestore`). M1 is inert off the default state directory until cluster F10 makes recover-gate honour `AI_DLC_STATE_DIR`.
+
+Measured on graph's s317 to s322 lead transcripts, over executed Reads (2283 step Reads, 2147 executed, 136 denied). The replay makes 0 closes inside a worked window and 1 idle close (`09dc13f7`, 3 s before the real close). With the forced-read exemption off it makes 2 closes, 1 of them inside a worked window (`189712ad`), so the exemption prevents exactly 1 wrong close. 3 of the 7 carried leaves were denied by context-mode and never reached the hook. Separately, whole step Reads on graph since 2026-11-01 were 115 ok and 105 denied; that is a different window and is not comparable to the replay figures.
+
+Remainder (2) is narrowed to the window from a leave to the next compaction and stays OPEN. BL-1009 advances and stays PARTIAL.
+
 ## [0.1104.0] - 2026-11-13
 
 ### BL-844 — closed on its gate-2 subject; the measurement is corrected, nothing is built

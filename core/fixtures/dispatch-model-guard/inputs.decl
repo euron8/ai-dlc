@@ -10,6 +10,10 @@ core/hooks/
 # THE SHARD-DIR DENY (BL-976): the guard walks up to the merge's --check-shard-dir, and the fixture
 # mutates a copy of it.
 !core/scripts/merge-adversarial-shards.sh
+# CHECK (e) ACROSS A GATE CLOSED EARLY AND RESUMED (BL-1009): the handoff-entry hook (under
+# core/hooks/ above) closes through the checkpoint script, which the fixture installs into its world
+# and mutates a copy of.
+!core/scripts/gate-checkpoint.sh
 core/scripts/validate-adversarial-convergence.sh
 core/schemas/gate-adjudication-verdict.json
 core/skills/ai-dlc/enforcement-map.yaml

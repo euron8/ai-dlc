@@ -28,3 +28,5 @@ mv
 sort
 date
 od
+ln
+rmdir
