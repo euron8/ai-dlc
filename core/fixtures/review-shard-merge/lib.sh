@@ -5198,6 +5198,12 @@ WR_DW="hands the declared wrapper scripts/w.py"
 # a wrong answer in the cell that asked, and `run.sh --matrix` completes under it. wr_ask runs ro_main under
 # `ulimit -t 5` and `ulimit -f 2048`; wr_rec and wr_crun run a --record-run and a --check-serial under `ulimit -t 10`
 # (the merge runs in process, in that subshell) and carry their exit back.
+# NO WALL-CLOCK WATCHDOG (BL-868: no verdict may be decided by real time; a `sleep 600` backstop stood here, in
+# wr_bounded, and is removed). The CPU limit (`ulimit -t`) ends the only hang an ask can reach, the declaration
+# reader's awk spinning (the termination seed, m988-loop). Nothing else in an ask can block: its stdin is /dev/null,
+# it reads only regular files to EOF, and it reads no fifo, starts no background child and opens no network. So a
+# hang that remains would be a new defect, and it now shows as a hang -- the push's own watchdog reports a stalled
+# fixture -- rather than as a silent pass or fail that real time decided.
 wr_ask() { # <script-dir> <mode> <value> [conventions file] -> WRC, WRO (the whole output), $MO; in process, one subshell
   ( ulimit -t 5; ulimit -f 2048; ip_run "$1/record-only-diff.sh" ro_main "$2" "$3" ${4:+"$4"} ) > "$MO" 2>&1 < /dev/null; WRC=$?
   WRO=""; IFS= read -r -d '' WRO < "$MO"; WRO="${WRO%$'\n'}"
@@ -5207,31 +5213,6 @@ wr_rec() { # rr_rec's arguments -> RRC, $MO, under the CPU bound
 }
 wr_crun() { # cr_run's arguments -> SRC, $CO, under the CPU bound
   ( ulimit -t 10; ulimit -f 20480; cr_run "$@"; exit "$SRC" ); SRC=$?
-}
-# wr_bounded <script-dir> <mode> <value> <conventions file> -> WRC, WRO: wr_ask behind a far-out wall backstop. The ask
-# runs in a background subshell under the same CPU bound; the backstop beside it kills THAT pid, the one this function
-# started, only if its 600-second sleep runs to its end, and no verdict a working subject can reach depends on it.
-# THE SLEEPER IS KILLED BY ITS RECORDED PID AND REAPED ON EVERY PATH, by a file handshake, never by a signal to the
-# watchdog (a TERM sent to a just-forked subshell was measured LOST, the watchdog waiting on a live `sleep 600`): the
-# watchdog starts it, writes its pid to <k>.pid, then kills it itself if <k>.done exists; this function writes <k>.done
-# once the ask is over, then kills the pid in <k>.pid if it is there. Whichever runs second sees the other's file, and
-# the watchdog, which waits on the sleeper, reaps it. WR_WD_PIDF (a probe's file, never set here) gets each pid.
-WR_WDN=0
-wr_bounded() {
-  local p w k sp=""
-  WR_WDN=$((WR_WDN + 1)); k="$WORK/wr-wd.$WR_WDN"
-  ( ulimit -t 5; ulimit -f 2048; ip_run "$1/record-only-diff.sh" ro_main "$2" "$3" "$4" ) > "$MO" 2>&1 < /dev/null &
-  p=$!
-  ( sleep 600 & s=$!
-    printf '%s\n' "$s" > "$k.pid"; [ -z "${WR_WD_PIDF:-}" ] || printf '%s\n' "$s" >> "$WR_WD_PIDF"
-    [ ! -e "$k.done" ] || kill "$s" 2> /dev/null
-    wait "$s" && kill -KILL "$p" 2> /dev/null; exit 0 ) > /dev/null 2>&1 < /dev/null &
-  w=$!
-  wait "$p"; WRC=$?
-  : > "$k.done"
-  [ ! -s "$k.pid" ] || { IFS= read -r sp < "$k.pid"; case "$sp" in [1-9]*) kill "$sp" 2> /dev/null ;; esac; }
-  wait "$w" 2> /dev/null; rm -f "$k.pid" "$k.done"
-  WRO=""; IFS= read -r -d '' WRO < "$MO"; WRO="${WRO%$'\n'}"
 }
 wr_cell() { # <cell> <script-dir> <mode> <value> <conventions file | -> <want exit> <want output, exact>
   cell "$1" || return 0
@@ -5317,11 +5298,11 @@ p_wrap() {
   wr_cell wr-noconv "$sd" run-filter "\`$WR_W suite/tests -q -n 8\`" - 1 "hands the runner a path after -- (suite/tests)"
   wr_cell wr-noconv-shape "$sd" run-shape "\`$WR_W suite/tests -q -n 8\`" - 1 ""
   wr_cell wr-nodecl "$sd" run-filter "\`$WR_W suite/tests -q -n 8\`" "$nd" 1 "hands the runner a path after -- (suite/tests)"
-  # wr-term: THE TERMINATION SEED, bounded (wr_bounded). A declared wrapper run under it is a run (exit 0, no output); a
-  # declaration read that never ends is killed, rw_wrap then reads no wrapper, and the base reading (exit 1) or the
-  # kill's own exit fails the cell.
+  # wr-term: THE TERMINATION SEED, asked under wr_ask's CPU bound. A declared wrapper run under it is a run (exit 0, no
+  # output); a declaration read that never ends dies of SIGXCPU, rw_wrap then reads no wrapper, and the base reading
+  # (exit 1) fails the cell.
   if cell wr-term; then
-    wr_bounded "$sd" run-shape '`python3 scripts/w.py --cwd /r -- -n 8`' "$c1"
+    wr_ask "$sd" run-shape '`python3 scripts/w.py --cwd /r -- -n 8`' "$c1"
     [ "$WRC" = 0 ] && [ -z "$WRO" ] || WHY="$WHY wr-term{rc=$WRC [$WRO], want rc=0 and no output}"
   fi
   # wr-loop-twin: a conventions file holding a bare `--` in pytest spans only, so the declaration reader's awk runs over

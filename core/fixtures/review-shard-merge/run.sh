@@ -1622,7 +1622,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # there passes. m988-w4 reads a wrapper's payload flags-only, as the no-pytest branch reads every token (W4), so an
   # undeclared payload sub-path passes. m988-quote drops the quote guard, so `'--junitxml=x>y'` reads as a redirect and
   # the test file after it is never read. m988-loop advances the conventions line AFTER decl(), whose own match() reset
-  # RSTART and RLENGTH: the non-consuming loop an earlier draft shipped, scored only through wr_bounded's kill switch.
+  # RSTART and RLENGTH: the non-consuming loop an earlier draft shipped, ended by wr_ask's CPU bound (SIGXCPU).
   # m988-n2 restores RUN-SHAPE's refusal of a declared wrapper outside its declaration, so --prelude beside a count is
   # no run. m988-w6 removes --record-run's pre-check (its RUN-FILTER ask answers 0 unasked), so a -k run is recorded;
   # m988-w6s adds RUN-SHAPE to it, so a program only RUN-SHAPE refuses, recorded at base, is refused. m988-1041 deletes

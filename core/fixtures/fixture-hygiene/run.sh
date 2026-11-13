@@ -11,14 +11,16 @@
 # THE WORLDS, each built once as a git repository (index only; the validator lists tracked files):
 #   dirty  one offender per arm: H1 a `-d …/.git` skip, H2 a declared-tool skip, H3 a `sh -c` start and a written
 #          `#!/bin/sh` stub run by path, H5 a battery with a mutation helper and no block, not on the allowlist, E1 a
-#          receipt-x.sh that nothing reads, H6 an unguarded `. "$HERE/../lib/mutant.sh"`.
+#          receipt-x.sh that nothing reads, H6 an unguarded `. "$HERE/../lib/mutant.sh"`, H9 a top-level `sleep 5`
+#          carrying a `# bl868-allow:` marker in a world with no H9 allowlist file (it fires, and so does its marker as
+#          W-ALLOW-STALE).
 #   clean  the near-miss of each, carrying the property a regression would key on: a `-d …/.git` that exits 2, a
 #          declared tool that exits 2, `sh` inside an awk program, the same chmod'ed stub run as `bash P` (which
-#          ignores the shebang), a battery WITH a valid block, the same receipt-x.sh run by its run.sh, and the same
-#          lib source carrying `|| { … exit 2; }`.
-#   Both carry a docs/backlog.md (E1 does not read it; receipt-bl868's ledger mode of the shared inert() does).
+#          ignores the shebang), a battery WITH a valid block, the same receipt-x.sh run by its run.sh, the same
+#          lib source carrying `|| { … exit 2; }`, and the sleep as the poll quantum of an unbounded `until` wait.
 # THE ARMS, each one read of a validator run:
-#   D1 D2 D3 D5 D6 DE1  the dirty run (rc 1) names exactly its arm's seeded line under `FAIL H<n>:` / `FAIL E1:`
+#   D1 D2 D3 D5 D6 DE1 DW  the dirty run (rc 1) names exactly its arm's seeded line under `FAIL H<n>:` / `FAIL E1:`
+#       (DW reads `FAIL H9:`)
 #   D7  IS receipt-bl921.sh (its exit and its `receipt-bl921: PASS` line): it seeds its OWN world, a new fixture dir
 #       fx7 whose twin GONE7 no code path emits beside an all-real row, and drives the byte-identical validator (or,
 #       for MH7, the mutant copy) over it. The clean world's fb emits its twin R2, so H7 is quiet there.
@@ -32,25 +34,26 @@
 # (exit 2) on any silenced arm, so no arm of this fixture can hold under it -- what a mutant proves is that the
 # validator's own self-probe catches the silenced arm, which is the defence a regression would meet first. Per push
 # each runs its own D arm only, and the kill is scored on the refusal line naming that arm.
-# MUTANT-MATRIX MH1 decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H1 is silenced
-# MUTANT-MATRIX MH2 decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H2 is silenced
-# MUTANT-MATRIX MH3 decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H3 is silenced
-# MUTANT-MATRIX MH3S decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when the H3 stub join is silenced
-# MUTANT-MATRIX MH5 decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H5 is silenced
-# MUTANT-MATRIX MH5N decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H5 reads a helper argument as a name
-# MUTANT-MATRIX ME1 decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when E1 reads every receipt as read
-# MUTANT-MATRIX MH6 decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H6 is silenced
-# MUTANT-MATRIX MH7 decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H7 is silenced
-# MUTANT-MATRIX MH8O decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 ignores order
-# MUTANT-MATRIX MH8G decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 accepts a GIT_ loop
-# MUTANT-MATRIX MH8C decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 accepts a commented loop
-# MUTANT-MATRIX MH8S decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 judges a stub by itself
-# MUTANT-MATRIX MH8R decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 drops its stale-row check
-# MUTANT-MATRIX MM4 decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when M4 never refuses an added row
-# MUTANT-MATRIX MM4R decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4's rel default is another list
-# MUTANT-MATRIX MM4A decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4's arm default is another arm
-# MUTANT-MATRIX MM4P decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4 hands m4cmp a fixed M4
-# MUTANT-MATRIX MM4B decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4 hands m4base a fixed M4
+# MUTANT-MATRIX MH1 decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H1 is silenced
+# MUTANT-MATRIX MH2 decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H2 is silenced
+# MUTANT-MATRIX MH3 decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H3 is silenced
+# MUTANT-MATRIX MH3S decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when the H3 stub join is silenced
+# MUTANT-MATRIX MH5 decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H5 is silenced
+# MUTANT-MATRIX MH5N decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H5 reads a helper argument as a name
+# MUTANT-MATRIX ME1 decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when E1 reads every receipt as read
+# MUTANT-MATRIX MH6 decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H6 is silenced
+# MUTANT-MATRIX MH7 decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H7 is silenced
+# MUTANT-MATRIX MH8O decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 ignores order
+# MUTANT-MATRIX MH8G decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 accepts a GIT_ loop
+# MUTANT-MATRIX MH8C decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 accepts a commented loop
+# MUTANT-MATRIX MH8S decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 judges a stub by itself
+# MUTANT-MATRIX MH8R decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 drops its stale-row check
+# MUTANT-MATRIX MM4 decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when M4 never refuses an added row
+# MUTANT-MATRIX MM4R decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4's rel default is another list
+# MUTANT-MATRIX MM4A decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4's arm default is another arm
+# MUTANT-MATRIX MM4P decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4 hands m4cmp a fixed M4
+# MUTANT-MATRIX MM4B decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4 hands m4base a fixed M4
+# MUTANT-MATRIX MH9 decides=D1,D2,D3,D5,D6,DE1,DW,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H9's row() prints nothing
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-hygiene/run.sh --matrix
 # Re-measure it whenever an arm or a mutant is added or changed.
 #   MH1  H1's branch verdict made false        -> D1 reads the self-probe refusal naming H1
@@ -80,6 +83,8 @@
 #        (the whole of m4 with an explicit arm, as the H7-M4, H8-M4 and E1-M4 corpus calls pass it)
 #   MM4B m4() hands m4base a fixed M4, not its arm -> D1 reads the self-probe refusal naming M4, on the `nofile`
 #        case (the whole of m4 with an explicit arm; its SKIP line is m4base's, headed M4 instead of P-M4)
+#   MH9  H9's row() prints nothing (every row but a deferred `read -t` one dropped) -> DW reads the self-probe
+#        refusal naming H9
 #
 # D8  IS receipt-bl929.sh, D9 IS receipt-bl930.sh: each seeds its OWN world and drives the validator (BL-929: a
 #     scrubbed fixture and a scrubbed-IMPL stub read SCRUBBED, an unscrubbed unlisted one FAILs H8, a listed one
@@ -130,6 +135,10 @@ printf '#!/bin/sh\nexit 0\n' > "$W/stub" && chmod +x "$W/stub"
 "$W/stub"
 . "$HERE/../lib/mutant.sh"
 EOF
+    # fa:11, the H9 offender: a marked sleep in a world with NO scripts/bl868-wait-allowlist.txt, so it must FIRE
+    # and its marker read W-ALLOW-STALE (an absent list acquits nothing). Appended by printf, so this file's own line
+    # does not END in the marker and the real tree's H9 reads no marker here.
+    printf '%s\n' 'sleep 5 # bl868-allow: fa-wait' >> "$w/core/fixtures/fa/run.sh"
     put "$w/core/fixtures/fb/run.sh" <<'EOF'
 #!/usr/bin/env bash
 mkmut() { :; }
@@ -148,6 +157,7 @@ awk '{ if (sh != "") print sh }' f
 printf '#!/bin/sh\nexit 0\n' > "$W/stub" && chmod +x "$W/stub"
 bash "$W/stub"
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+until [ -s "$W/stub" ]; do sleep 0.1; done
 EOF
     put "$w/core/fixtures/fb/run.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -164,8 +174,7 @@ EOF
   rm -f "$w/tools.tmp"
   # fa and fb carry no AI_DLC_* scrub; in both worlds they are rows of the world's own H8 list, so H8 stays quiet
   printf '# probe\nfa\tworld seed\nfb\tworld seed\n' > "$w/scripts/env-scrub-allowlist.txt"
-  mkdir -p "$w/docs" && printf '# ledger\n' > "$w/docs/backlog.md"
-  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY git -c core.hooksPath=/dev/null init -q "$w" && g -C "$w" add -A core docs >/dev/null 2>&1
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY git -c core.hooksPath=/dev/null init -q "$w" && g -C "$w" add -A core >/dev/null 2>&1
 }
 mk_world "$WORK/w-dirty" dirty && mk_world "$WORK/w-clean" clean \
   || { echo "FIXTURE BROKEN: could not build the probe worlds byte-identical" >&2; exit 2; }
@@ -219,6 +228,8 @@ mk_mutant MM4P 'm4cmp "$2" "$3" "$rel" "$arm" "$remedy" "$noun"' 'm4cmp "$2" "$3
   || { echo "FIXTURE BROKEN: mutant MM4P DID NOT APPLY" >&2; exit 2; }
 mk_mutant MM4B 'm4base "$1" "$3" "$rel" "$arm"' 'm4base "$1" "$3" "$rel" M4' \
   || { echo "FIXTURE BROKEN: mutant MM4B DID NOT APPLY" >&2; exit 2; }
+mk_mutant MH9 'function row(cls, ln, txt) { print cls' 'function row(cls, ln, txt) { if (0) print cls' \
+  || { echo "FIXTURE BROKEN: mutant MH9 DID NOT APPLY" >&2; exit 2; }
 
 # --- one validator run per distinct state -------------------------------------------------------------------------
 drive() { # <tag> <world dir> [--derive]
@@ -256,6 +267,9 @@ verdict() { # <arm> <tag>
     D5) rcis "$t" 1 && [ "$(section "$t" H5)" = '    FLOOR fb: S1 mkmut()' ] ;;
     D6) rcis "$t" 1 && [ "$(section "$t" H6)" = '    core/fixtures/fa/run.sh:10: . "$HERE/../lib/mutant.sh"' ] ;;
     DE1) rcis "$t" 1 && [ "$(section "$t" E1)" = '    INERT core/fixtures/fb/receipt-x.sh' ] ;;
+    # the marker is spelled through H9MK so no line of THIS file ends in a marker (the real tree's H9 reads raw lines)
+    DW) rcis "$t" 1 && [ "$(section "$t" H9)" = "    W-SLEEP core/fixtures/fa/run.sh:11: sleep 5 $H9MK
+    W-ALLOW-STALE core/fixtures/fa/run.sh fa-wait: line 11 carries $H9MK and no allowlist row names that id" ] ;;
     D7) rcis "$t" 0 && { has "$t" 'receipt-bl921: PASS' || has "$t" 'receipt-bl921: held under a substituted validator'; } ;;
     D8) rcis "$t" 0 && { has "$t" 'receipt-bl929: PASS' || has "$t" 'receipt-bl929: held under a substituted validator'; } ;;
     D9) rcis "$t" 0 && { has "$t" 'receipt-bl930: PASS' || has "$t" 'receipt-bl930: held under a substituted validator'; } ;;
@@ -265,19 +279,20 @@ verdict() { # <arm> <tag>
     *) return 1 ;;
   esac
 }
+H9MK="# bl868-allow: fa-wait"
 REFUSAL() { printf 'self-probe %s: FAIL' "$1"; }
 
 if [ "$MODE" = matrix ]; then
   : > "$WORK/mx.ran"
-  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7 MH8O MH8G MH8C MH8S MH8R MM4 MM4R MM4A MM4P MM4B; do
+  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7 MH8O MH8G MH8C MH8S MH8R MM4 MM4R MM4A MM4P MM4B MH9; do
     cp -R "$WORK/w-clean" "$WORK/mclean-$m" && cp -p "$WORK/mut-$m/$VREL" "$WORK/mclean-$m/$VREL" \
       || { echo "FIXTURE BROKEN: could not build the clean world for $m" >&2; exit 2; }
     drive "$m.d" "$WORK/mut-$m" & drive "$m.v" "$WORK/mut-$m" --derive & drive "$m.c" "$WORK/mclean-$m" &
     d7drive "$m.7" "$WORK/mut-$m/$VREL" & d8drive "$m.8" "$WORK/mut-$m/$VREL" & d9drive "$m.9" "$WORK/mut-$m/$VREL" &
   done; wait
-  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7 MH8O MH8G MH8C MH8S MH8R MM4 MM4R MM4A MM4P MM4B; do
+  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7 MH8O MH8G MH8C MH8S MH8R MM4 MM4R MM4A MM4P MM4B MH9; do
     dec=""; tw=""
-    for a in D1 D2 D3 D5 D6 DE1; do if verdict "$a" "$m.d"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
+    for a in D1 D2 D3 D5 D6 DE1 DW; do if verdict "$a" "$m.d"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
     if verdict D7 "$m.7"; then tw="$tw,D7"; else dec="$dec,D7"; fi
     if verdict D8 "$m.8"; then tw="$tw,D8"; else dec="$dec,D8"; fi
     if verdict D9 "$m.9"; then tw="$tw,D9"; else dec="$dec,D9"; fi
@@ -289,13 +304,13 @@ if [ "$MODE" = matrix ]; then
 fi
 
 drive dirty "$WORK/w-dirty" & drive clean "$WORK/w-clean" & drive derive "$WORK/w-dirty" --derive &
-for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MM4 MM4R MM4A MM4P MM4B; do drive "$m" "$WORK/mut-$m" & done
+for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MM4 MM4R MM4A MM4P MM4B MH9; do drive "$m" "$WORK/mut-$m" & done
 d7drive d7 & d7drive MH7 "$WORK/mut-MH7/$VREL" &
 d8drive d8 & d9drive d9 &
 for m in MH8O MH8G MH8C MH8S MH8R; do d8drive "$m" "$WORK/mut-$m/$VREL" & done
 wait
 B_DIRTY=0
-for a in D1 D2 D3 D5 D6 DE1; do
+for a in D1 D2 D3 D5 D6 DE1 DW; do
   if verdict "$a" dirty; then ok "$a the dirty world names exactly its seeded line"; : > "$WORK/base.$a"
   else bad "$a fails on the unmutated validator (rc $(cat "$WORK/c.dirty.rc")): $(head -c 800 "$WORK/c.dirty.out" | tr '\n' ' ')"; fi
 done
@@ -328,10 +343,11 @@ score() { # <mutant> <arm> <arm label in the self-probe>; 0 when the arm fails f
   rcis "$1" 2 && has "$1" "$(REFUSAL "$3")" || { bad "$1: arm $2 fails under it, but not by the self-probe naming $3 (rc $(cat "$WORK/c.$1.rc"))"; return 1; }
 }
 flag() { [ -e "$WORK/base.$1" ] && echo 1 || echo 0; }
-BASE_D1="$(flag D1)"; BASE_D2="$(flag D2)"; BASE_D3="$(flag D3)"; BASE_D5="$(flag D5)"; BASE_D6="$(flag D6)"; BASE_DE1="$(flag DE1)"; BASE_D7="$(flag D7)"
+BASE_D1="$(flag D1)"; BASE_D2="$(flag D2)"; BASE_D3="$(flag D3)"; BASE_D5="$(flag D5)"; BASE_D6="$(flag D6)"; BASE_DE1="$(flag DE1)"; BASE_D7="$(flag D7)"; BASE_DW="$(flag DW)"
 score MH7 D7 H7 && mutant_killed "$([ "$BASE_D7" = 1 ] && echo 1 || echo 0)" MH7 "MH7: arm D7 fails by the self-probe refusal naming H7"
 score MH6 D6 H6 && mutant_killed "$([ "$BASE_D6" = 1 ] && echo 1 || echo 0)" MH6 "MH6: arm D6 fails by the self-probe refusal naming H6"
 score ME1 DE1 E1 && mutant_killed "$([ "$BASE_DE1" = 1 ] && echo 1 || echo 0)" ME1 "ME1: arm DE1 fails by the self-probe refusal naming E1"
+score MH9 DW H9 && mutant_killed "$([ "$BASE_DW" = 1 ] && echo 1 || echo 0)" MH9 "MH9: arm DW fails by the self-probe refusal naming H9"
 score MH1 D1 H1 && mutant_killed "$([ "$BASE_D1" = 1 ] && echo 1 || echo 0)" MH1 "MH1: arm D1 fails by the self-probe refusal naming H1"
 score MH2 D2 H2 && mutant_killed "$([ "$BASE_D2" = 1 ] && echo 1 || echo 0)" MH2 "MH2: arm D2 fails by the self-probe refusal naming H2"
 score MH3 D3 H3 && mutant_killed "$([ "$BASE_D3" = 1 ] && echo 1 || echo 0)" MH3 "MH3: arm D3 fails by the self-probe refusal naming H3"

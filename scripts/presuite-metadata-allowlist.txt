@@ -58,7 +58,6 @@ scripts/validate-enforcement-map.sh	if [ ! -s "$lc_pairs_all" ]; then	scratch: $
 scripts/validate-enforcement-map.sh	if [ -r "$TEMPLATE" ]; then	mode-keyed-by-present-key: a -r mode test on templates/settings.json.template, which I14 then reads
 scripts/validate-enforcement-map.sh	printf '%s\n' 'SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1)"'	text-only: the ls -t is text printf writes into a probe file, never executed by the step
 scripts/validate-fixture-hygiene.sh	[ -s "$o.e1list" ] || { echo "BROKEN: E1 listed 0 tracked receipt*.sh under $repo; an empty population has no inert receipt by construction"; return 2; }	scratch: $o is an output prefix under the step's own mktemp directory
-scripts/validate-fixture-hygiene.sh	elif LC_ALL=C sort "$WORK/e1p-ledger" | cmp -s "$WORK/e1p-ledger.want" - && [ -s "$WORK/e1p-ledger.want" ] \	scratch: $WORK is the step's own mktemp directory
 scripts/validate-fixture-hygiene.sh	if [ -s "$WORK/e1c.verdict" ]; then	scratch: $WORK is the step's own mktemp directory
 scripts/validate-fixture-invocations.sh	elif [ -s "$log.mutants" ]; then	scratch: $log is the judge's run-log prefix under TMPDIR; the pre-suite call is --impl-of, which never judges
 scripts/validate-fixture-invocations.sh	if [ ! -s "$w/log" ]; then	scratch: $w is the judge's own mktemp directory

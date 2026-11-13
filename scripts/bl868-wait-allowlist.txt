@@ -1,0 +1,17 @@
+# scripts/bl868-wait-allowlist.txt -- the allowlist of validate-fixture-hygiene.sh's arm H9 (BL-868: no fixture
+# verdict may depend on load). Rows `<path>\t<id>\t<reason>`, one per site. The allowed line ends in a trailing comment
+# `# bl868-allow: <id>`, and the row drops every H9 row on THAT line. Keyed on the marker, never on the line's text,
+# so an edit that keeps the marker keeps the suppression, and an unmarked identical line is still a row. Each id is
+# unique here and must sit on exactly one line of its path; an id on no line or on several is a W-ALLOW-STALE row (a
+# FAIL), and so is a marker whose id no row here names, or whose row names another file (it also suppresses
+# nothing). A marked line the scan no longer flags is a NOTE on stderr. A malformed or duplicate row refuses the run (exit 2). Every row is a line where no
+# elapsed time can decide a verdict; its reason says why. Read from the validator's resolved root; a root without this
+# file allows nothing, so every marked site there fires.
+core/fixtures/readset-skip/run.sh	rs-trace-floor	a floor, not a bound: the trace must start in a later second; load only lengthens it and decides nothing
+core/fixtures/readset-skip/run.sh	rs-lstart-floor	a floor, not a bound: each judge must start in a later lstart second than the lock pid
+core/fixtures/consumer-suite-pool/run.sh	csp-barrier-cap	the observe barrier's cap: CSP_BARRIER_N is set only in the -P1 world and the m3 mutant, where one fixture is in flight whatever the timing, so the cap's expiry records 1 either way; unset, the wait is unbounded
+core/fixtures/wait-beat-liveness/run.sh	wbl-clock-shim-probe	the clock shim probe: this sleep is the injected clock, which reaches no real sleep
+core/fixtures/wait-beat-liveness/run.sh	wbl-clock-shim-control	the clock shim control: one real 1s sleep whose outcome is which binary it reached
+core/fixtures/wait-beat-liveness/run.sh	wbl-clock-ip-probe	the in-process clock probe: sleep is the clock function, no real sleep
+core/fixtures/wait-beat-liveness/run.sh	wbl-clock-ip-control	the in-process clock control: which binary the sleep reached
+core/fixtures/presuite-present-key/run.sh	ppk-l1-control-child	L1.control's live child: it must exist while the scoped listing is read, and is killed by pid and reaped at `kill "$SLP" 2>/dev/null; wait "$SLP"`; no elapsed time decides a verdict
