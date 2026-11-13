@@ -1,0 +1,7 @@
+# shadowed-local-validators' starts of the subject (BL-879 grammar). Every other drive is in process: run.sh sources
+# each copy once and calls ws_main in a subshell. One cli cell per distinct CLI outcome (exit 0 with rows, exit 0
+# empty, exit 2 refused), each started as FXCELL=<id> bash "$SCRIPT" in eqv() and compared byte for byte with the
+# in-process call on the same input.
+cli core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh cli-pass
+cli core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh cli-silent
+cli core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh cli-refuse

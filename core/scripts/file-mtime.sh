@@ -23,6 +23,10 @@
 # ISO FORMATTING tries GNU `date -u -d @E` first and BSD `date -u -r E` second, the order
 # wait-for-deliverable.sh and validate-scope-confirmation.sh use: BSD fails loudly on `-d`,
 # whereas GNU reads `-r E` as a file NAME.
+#
+# The whole program is fm_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition.
+fm_main() {
 set -uo pipefail
 
 [ $# -ge 1 ] || { echo "usage: file-mtime.sh <path> [<path> ...]" >&2; exit 2; }
@@ -52,3 +56,7 @@ for p in "$@"; do
   printf '%s\t%s\t%s\n' "$p" "$ep" "$iso"
 done
 exit "$rc"
+}
+# Executed, it runs; sourced, it has defined fm_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+fm_main "$@"

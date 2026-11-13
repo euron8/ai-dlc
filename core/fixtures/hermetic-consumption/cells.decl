@@ -1,0 +1,8 @@
+# hermetic-consumption's starts of scripts/validate-hermetic-consumption.sh (BL-879 grammar). Every other drive is in
+# process: drive() sources each world's validator copy once (src_vhc) and calls vhc_main in a subshell. One cli cell
+# per distinct CLI outcome, each started as FXCELL=<id> bash <copy> in eqv() and compared byte for byte with the
+# in-process call of the same copy: exit 0 clean (w1's world), exit 1 a finding (w3's world), exit 2 the usage line
+# (the shipped validator; the proof of the $0 port).
+cli scripts/validate-hermetic-consumption.sh cli-pass
+cli scripts/validate-hermetic-consumption.sh cli-finding
+cli scripts/validate-hermetic-consumption.sh cli-usage

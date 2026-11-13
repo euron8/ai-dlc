@@ -57,7 +57,10 @@
 #         or --report ran
 #   1  -- the declaration is present but malformed, or --declare was refused
 #   2  -- PENDING (no declaration) under --verdict, or a usage error
-
+#
+# The whole program is vsa_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition.
+vsa_main() {
 set -u
 
 PROG="validate-spec-adoption.sh"
@@ -199,3 +202,7 @@ rationale: spec layer applies from s$ARG forward; sprints before it carry no cap
 EOF
 echo "$PROG: declared — spec layer in force from sprint $ARG (at $sha). Commit $REL; the floor is auditable only once it is in history."
 exit 0
+}
+# Executed, it runs; sourced, it has defined vsa_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vsa_main "$@"

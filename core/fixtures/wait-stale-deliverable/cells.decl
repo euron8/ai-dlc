@@ -1,0 +1,8 @@
+# wait-stale-deliverable's starts of core/scripts/wait-for-deliverable.sh (BL-879 grammar). Every beat of every case
+# is in process: the call site sources the subject in a subshell and runs wfd_mark_main then wfd_beat_main
+# (wsd_enter). One cli cell per distinct outcome the cases rely on (exit 0 WAITING, exit 1 NON-DELIVERY, exit 64 a
+# refused argument), each started as FXCELL=<id> bash "$SUBJ" in C48's wsd_eqv and compared byte for byte with the
+# in-process beat on the same world and the same frozen clock.
+cli core/scripts/wait-for-deliverable.sh cli-beat-waiting
+cli core/scripts/wait-for-deliverable.sh cli-beat-nondelivery
+cli core/scripts/wait-for-deliverable.sh cli-beat-refuse

@@ -1,1 +1,2 @@
 !core/scripts/validate-spec-adoption.sh
+core/fixtures/lib/mutant.sh

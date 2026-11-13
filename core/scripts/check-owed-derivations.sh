@@ -143,8 +143,8 @@ ROOT="$CO_ROOT"
 
 # ---- the scope classifier: ONE place ------------------------------------------------------------
 # A SLOT is any whole `s<digits>` path COMPONENT anywhere under `_bmad-output/`, derived from the path
-# grammar: core/scripts/validate-artifact-paths.sh:167 and :241 match `s[0-9]+` against a whole path
-# COMPONENT, and its SLOT_RE (:125, from `artifact-path-config.sh --slot-re`) is `^s[0-9]+$`. This script
+# grammar: core/scripts/validate-artifact-paths.sh's legacy_story() matches `s[0-9]+` against a whole path
+# COMPONENT, and its SLOT_RE (from `artifact-path-config.sh --slot-re`) is `^s[0-9]+$`. This script
 # cannot obtain SLOT_RE from that config without walking from one core file to another (I33), so the
 # expression is copied here and BOUND to `--slot-re` by a dist-only battery arm. The FILENAME is never a
 # slot (the basename is dropped first), a directory `s319x/` or `s5-notes/` is no slot, and a path carrying
@@ -216,8 +216,8 @@ sprint_split() {
 #     `_bmad-output/gate-adjudication/` (SRC, :271) is NOT history as a directory: it classifies by the
 #     guard's live-nonce rule below (live stem and sidecars CURRENT, every other stem HISTORY).
 #   - `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, ts shaped `[0-9]{8}T[0-9]{4,6}Z`: written by the
-#     update session itself, one per run (core/skills/ai-dlc-update/SKILL.md:2497, "YOU write ... and
-#     `apply.sh` does NOT"; apply.sh:2780 confirms).
+#     update session itself, one per run (core/skills/ai-dlc-update/SKILL.md:2699, "YOU write ... and
+#     `apply.sh` does NOT"; apply.sh:3531 confirms).
 #   - `_bmad-output/planning-artifacts/implementation-readiness-report-<YYYY-MM-DD>.md`: written fresh per run by
 #     BMAD's pre-6.11 skill `bmad-check-implementation-readiness` (outputFile
 #     `{planning_artifacts}/implementation-readiness-report-{{date}}.md`). From BMAD 6.11 the readiness check is

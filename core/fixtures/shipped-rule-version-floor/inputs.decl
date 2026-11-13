@@ -8,6 +8,8 @@
 # named fixtures, cannot see it.
 !scripts/install.sh
 !scripts/uninstall.sh
+# install.sh sources its function file before it writes anything and refuses the install when it is absent.
+scripts/install-scaffold-ignore.sh
 !core/hooks/ai-dlc-rules-floor.sh
 core/fixtures/
 core/hooks/

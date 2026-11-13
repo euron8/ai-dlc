@@ -1,3 +1,7 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-24 *
-7 core/hooks/ai-dlc-escalation-delivery.sh
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
+# are run.sh itself (1), the two cli cells of cells.decl (2), and the battery's two inner runs of this script's copy
+# (2), one per mutant. inproc rows (fx_inproc, one per source): the hook once in the outer run and each mutant copy
+# once in its inner run, at $MB/core/hooks/ai-dlc-escalation-delivery.sh.
+5 *
+2 core/hooks/ai-dlc-escalation-delivery.sh
+3 inproc:core/hooks/ai-dlc-escalation-delivery.sh

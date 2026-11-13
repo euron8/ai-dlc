@@ -1,4 +1,10 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-22 *
-0 core/fixtures/lib/preamble.sh
-3 core/scripts/validate-mandatory-rules.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output); the push's counted run is
+# the second. The two starts of validate-mandatory-rules.sh are the two cli cells of cells.decl; its Check 2 drives are
+# in process (vmr_ip). From 22: the subject's 3 starts become the 2 cli cells (-1); the four MUTANT-MATRIX twins
+# (cce_twin) each run their mutant copy once (+4); the sprint-900 cell runs the series twice more (in process and as
+# the program), each starting validate-retro-evidence.sh once (+2). Measured 27: run.sh 1, the subject 2, the four
+# mutant copies 2 each, validate-cycle-commits.sh 11, validate-retro-evidence.sh 5.
+# inproc rows (fx_inproc, one per source): the three Check 2 drives and the two in-process sides of the cli cells.
+27 *
+2 core/scripts/validate-mandatory-rules.sh
+5 inproc:core/scripts/validate-mandatory-rules.sh

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# The whole program is vcr_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition. Its own path is read through
+# BASH_SOURCE[0], never $0, which in a sourcing shell names the caller.
+vcr_main() {
 set -uo pipefail
 
 # THE REPOSITORY ENVIRONMENT IS SCRUBBED ONCE, HERE, BEFORE ANY GIT CALL -- READS INCLUDED.
@@ -82,7 +86,7 @@ done
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/VERSION" ]; do ROOT="$(dirname "$ROOT")"; done
 if [ ! -f "$ROOT/VERSION" ]; then
-  echo "validate-claude-rules: FAIL -- could not resolve repo root (no VERSION marker above $0)" >&2
+  echo "validate-claude-rules: FAIL -- could not resolve repo root (no VERSION marker above ${BASH_SOURCE[0]})" >&2
   exit 2
 fi
 cd "$ROOT" || exit 2
@@ -908,3 +912,7 @@ if [ "$fail" = "0" ]; then
   say "OK: validate-claude-rules -- A1 tracked-path containment, A2 no orphan globs, A3 paths-only frontmatter, A3b scope declared once, A4 pointer/no-stub join, A5 live invariant citations, A6 durable-channel ceiling. Corpus: $(rule_files | wc -l | tr -d ' ') rule file(s), $(rule_globs | wc -l | tr -d ' ') glob(s), ${d_total}B durable."
 fi
 exit "$fail"
+}
+# Executed, it runs; sourced, it has defined vcr_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vcr_main "$@"

@@ -1,3 +1,5 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-16 *
-15 core/scripts/validate-spec-adoption.sh
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
+# are run.sh itself (1) and the three cli cells of cells.decl (3); the inproc row is the one source of the subject.
+4 *
+3 core/scripts/validate-spec-adoption.sh
+1 inproc:core/scripts/validate-spec-adoption.sh

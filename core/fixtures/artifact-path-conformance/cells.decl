@@ -1,0 +1,9 @@
+# artifact-path-conformance's starts of core/scripts/validate-artifact-paths.sh (BL-879 grammar). Every other drive is
+# in process: run.sh sources the shipped validator and each control/mutant pair's copy once (src_vap) and calls
+# vap_main in a subshell. One cli cell per exit code the program has, plus --help: each started as
+# FXCELL=<id> bash <program> and compared byte for byte with the in-process call: exit 1 BLOCKING (run by a relative
+# path, section 5's question), exit 0 VERDICT: PASS, exit 0 --help (the $0 port's proof), exit 2 an unknown option.
+cli core/scripts/validate-artifact-paths.sh cli-block
+cli core/scripts/validate-artifact-paths.sh cli-pass
+cli core/scripts/validate-artifact-paths.sh cli-help
+cli core/scripts/validate-artifact-paths.sh cli-usage

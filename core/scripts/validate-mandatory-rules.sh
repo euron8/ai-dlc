@@ -104,7 +104,7 @@ else
 fi
 }
 
-if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+vmr_main() {
 
 # ---- Subset mode: --check-clean-tree ---------------------------------------
 # A tree-state-agnostic entrypoint (no sprint number, no in-flight retro): assert
@@ -115,7 +115,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
 # validate-retro-prereq.sh is consumer-provided (Check 4 SKIPs when absent), so it
 # is NOT part of the floor — its absence is expected on a stock install.
 if [ "${1:-}" = "--check-clean-tree" ]; then
-  CT_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  CT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   ct_missing=0
   for dep in validate-retro-evidence.sh validate-cycle-commits.sh; do
     [ -f "${CT_SCRIPT_DIR}/${dep}" ] || { echo "clean-tree: sibling validator missing: ${dep}" >&2; ct_missing=1; }
@@ -147,7 +147,7 @@ case "$SPRINT_N" in
 esac
 
 RETRO_BRANCH="ai-dlc/retro/sprint-${SPRINT_N}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ---- run AT the project root, whatever directory it was invoked from (BL-328) ----------------
 # Every path this script reads is written relative to the project root: the schema's two root
@@ -1052,4 +1052,8 @@ else
   printf '%s' "$FAILURE_MSGS" >&2
   exit 1
 fi
-fi
+}
+# The program runs only when executed; sourced (a fixture asking the series in process), it defines the
+# functions above and vmr_main, and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vmr_main "$@"

@@ -1,0 +1,8 @@
+# escalation-status-vocabulary's starts of core/scripts/validate-escalation-status-vocabulary.sh (BL-879 grammar).
+# Every other drive is in process: run.sh sources each copy once (src_esv) and calls esv_main in a subshell (ev).
+# One cli cell per distinct CLI outcome, each started as FXCELL=<id> bash "$VALIDATOR" in eqv() and compared byte
+# for byte with the in-process call: exit 0 OK, exit 0 EXAMINED NOTHING, exit 1 a finding, exit 2 the usage refusal.
+cli core/scripts/validate-escalation-status-vocabulary.sh cli-pass
+cli core/scripts/validate-escalation-status-vocabulary.sh cli-empty
+cli core/scripts/validate-escalation-status-vocabulary.sh cli-finding
+cli core/scripts/validate-escalation-status-vocabulary.sh cli-usage

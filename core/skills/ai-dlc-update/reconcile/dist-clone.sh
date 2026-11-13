@@ -39,6 +39,10 @@
 #     keeps it and `log --all` sees it.
 #   - every git call on the clone is `--git-dir=`, so `safe.bareRepository=explicit` cannot refuse
 #     THIS script; the siblings read `<dist>` with `git -C`, so that setting is a named STOP.
+#
+# The whole program is dcl_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition.
+dcl_main() {
 set -uo pipefail
 
 export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=
@@ -185,3 +189,7 @@ esac
 printf '%s\n' "$DIR"
 printf 'theirs %s\n' "$THEIRS"
 exit 0
+}
+# Executed, it runs; sourced, it has defined dcl_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+dcl_main "$@"

@@ -101,7 +101,13 @@
 # H5  the mutant matrix. Population is the UNION, mapped through shard stubs to their IMPL by the ONE resolver,
 #     `validate-fixture-invocations.sh --impl-of` (`[exec ]bash "$IMPL" --group`):
 #       S1   a function whose name contains `mut` (any case) is defined in the fixture's files;
-#       S2   a fixture file carries `cmp -s` in code and the word `mutant` (any case) anywhere;
+#       S2   a fixture file carries `cmp -s` in code and the word `mutant` (any case) anywhere; in a fixture with a
+#            SOURCING line of the lib (`. "<…>/lib/mutant.sh"` or `source …`, at line start) an occurrence inside the
+#            literal path `lib/mutant.sh` does not count, on any line, so a no-mutant fixture that sources the lib for
+#            fx_inproc is no member while a battery's other `mutant` text still makes it one. The discount is
+#            fixture-wide ON PURPOSE: the motivating fixture names the path on four lines (a comment, the existence
+#            test, the source and its error text, the HERMETIC-CONSUMED echo), so discounting it on the sourcing line
+#            alone narrows nothing. Do not tighten it back to that line; the self-probe's s2nom seed carries all four;
 #       MKA  a row of scripts/mutant-kills-allowlist.txt, which validate-mutant-kills.sh's M1/M2 hold equal to its
 #            --derive set on every green push (read as data, so the probe can seed it);
 #       MKC  any tracked fixture .sh, not only run.sh, calling `mutant_killed` in code (core/fixtures/lib excluded);
@@ -144,7 +150,9 @@
 #     PRESENCE and row SHAPE only, and no name of it is joined; BL-828's migration to mutant_killed closes that.
 #     FP SET. The union over the b245-p1 tree is 214 fixtures after shard stubs map to their IMPL (rule 7's estimate
 #     was 210; the gap is this branch's two new batteries plus the census counting every fixture .sh, not run.sh
-#     only): S1 158, S2 212, MKA 124, MKC 4 at base. `_kill`/`kill_by` are NOT S1 tokens (they match process
+#     only): S1 158, S2 212, MKA 124, MKC 4 at base. S2's lib-path discount, measured on the BL-878 u3 tree (the
+#     converted fixtures that source lib/mutant.sh for fx_inproc): S2 224 to 223 members, the one leaver
+#     spec-adoption-floor (no mutant_killed, no block, on no allowlist), none joining. `_kill`/`kill_by` are NOT S1 tokens (they match process
 #     reapers). The block and unblocked-member counts are PRINTED by every run (the `H5 N block(s), M unblocked
 #     member(s)` line) and are not fixed in this comment; the unblocked members are the derived allowlist. Being a
 #     member is a floor claim, not a defect claim, so the allowlist IS
@@ -1076,7 +1084,8 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
     if (!HDL[i]) { h6(i); h7(i) }
     # H5 facts
     if (s ~ /(^|[^A-Za-z0-9_])cmp[[:space:]]+-s([[:space:]]|$)/) CMP[FX] = 1
-    if (O[i] ~ /[Mm][Uu][Tt][Aa][Nn][Tt]/) MUTW[FX] = 1
+    if (O[i] ~ /[Mm][Uu][Tt][Aa][Nn][Tt]/) { MUTW[FX] = 1; t5 = O[i]; gsub(/lib\/mutant\.sh/, "", t5); if (t5 ~ /[Mm][Uu][Tt][Aa][Nn][Tt]/) MUTX[FX] = 1 }
+    if (O[i] ~ /^[[:space:]]*(\.|source)[[:space:]]+"?[^[:space:]"]*lib\/mutant\.sh"?([[:space:]]|;|$)/) SRCM[FX] = 1
     if (match(s, /(^|[[:space:];&|(])mutant_killed[[:space:]]+/)) {
       MKC[FX] = 1
       q = RSTART + RLENGTH; w = wordat(O[i], q); q = WEND; while (substr(O[i], q, 1) ~ /[[:space:]]/) q++
@@ -1111,7 +1120,7 @@ pass == 2 { NL++; O[NL] = $0; M[NL] = maskl($0); HDL[NL] = INHD }
 END {
   if (CUR != "") analyze()
   for (f in S1) print "P\t" f "\tS1 " S1[f] "()"
-  for (f in CMP) if (f in MUTW) print "P\t" f "\tS2 cmp -s + mutant"
+  for (f in CMP) if ((f in MUTX) || ((f in MUTW) && !(f in SRCM))) print "P\t" f "\tS2 cmp -s + mutant"
   for (f in MKC) print "P\t" f "\tMKC mutant_killed caller"
   print "T\tH1\t" (T1 + 0); print "T\tH2\t" (T2 + 0); print "T\tH6\t" (T6 + 0)
 }
@@ -2224,6 +2233,35 @@ m4_case reworded - 0 "OK M4: no allowlist row added against origin/main" "$(prin
 m4_case nofile "+$RN" 0 "SKIP P-M4: origin/main carries no $M4XREL -- this is the release that first ships it" "$(printf 'c\tr')" || m4ok=1
 m4_case noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there is no base allowlist to compare against" "$(printf 'c\tr')" || m4ok=1
 [ "$m4ok" = 0 ] && sp_line M4 "ok (added and swapped rows refused; shrink and a reworded reason pass; both no-base states SKIP)"
+
+# S2's lib-path discount, its own probe: the scan alone over three seeds. s2bat sources lib/mutant.sh AND carries mutant
+# text outside the path (FIRES); s2nom sources it and names it only by its path, on the four lines a converted
+# no-mutant fixture carries -- a comment, the existence test, the source with its error text, the HERMETIC-CONSUMED
+# echo (QUIET); s2var sources it through a variable, so no literal sourcing line turns the discount on (FIRES).
+S2P="$WORK/s2probe"
+mkdir -p "$S2P/core/fixtures/s2bat" "$S2P/core/fixtures/s2nom" "$S2P/core/fixtures/s2var" \
+  || { echo "validate-fixture-hygiene: REFUSED -- could not build the S2 probe under $WORK" >&2; exit 2; }
+printf '%s\n' '#!/usr/bin/env bash' '. "$HERE/../lib/mutant.sh" || exit 2' 'cmp -s "$S" "$M" && echo "mutant m1 did not apply"' \
+  > "$S2P/core/fixtures/s2bat/run.sh"
+printf '%s\n' '#!/usr/bin/env bash' '# fx_inproc lives in lib/mutant.sh' \
+  '[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }' \
+  '. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }' \
+  'echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"' 'cmp -s "$A" "$B" && echo same' > "$S2P/core/fixtures/s2nom/run.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'MUT_LIB="$HERE/../lib/mutant.sh"' '. "$MUT_LIB"' 'cmp -s "$A" "$B" && echo same' \
+  > "$S2P/core/fixtures/s2var/run.sh"
+s2a="$S2P/core/fixtures/s2bat/run.sh"; s2b="$S2P/core/fixtures/s2nom/run.sh"; s2c="$S2P/core/fixtures/s2var/run.sh"
+s2got=""; s2f=0
+while IFS=$'\t' read -r k2 f2 r2; do
+  case "$k2" in F) s2f=$((s2f + 1)) ;; P) case "$r2" in "S2 "*) s2got="$s2got $f2" ;; esac ;; esac
+done <<EOF
+$(awk -v ROOTP="$S2P/" "$SCAN_AWK" pass=1 "$s2a" "$s2b" "$s2c" pass=2 "$s2a" "$s2b" "$s2c")
+EOF
+case " $s2got " in *" s2nom "*) s2nm=1 ;; *) s2nm=0 ;; esac
+case " $s2got " in *" s2bat "*) s2bt=1 ;; *) s2bt=0 ;; esac
+case " $s2got " in *" s2var "*) s2vr=1 ;; *) s2vr=0 ;; esac
+if [ "$s2f" = 3 ] && [ "$s2bt$s2nm$s2vr" = 101 ]; then
+  sp_line S2 "ok (a battery sourcing lib/mutant.sh fires; a no-mutant fixture naming it only by path beside its sourcing line is quiet; a source through a variable fires)"
+else SP_RED=1; sp_line S2 "FAIL -- scanned $s2f of 3; S2 members:${s2got:- none} (want s2bat and s2var, never s2nom)"; fi
 
 # E1's probe: one repository, index only, no commit (E1 lists tracked files, and nothing here reads HEAD). Fires: zz1 (named by nothing), zz5 (named only by
 # a live `verify:` line of docs/backlog.md -- NOT a reader for E1), zz8's twin zza (named only in a comment),

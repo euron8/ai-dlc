@@ -61,6 +61,32 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE BROKEN: escalation-delivery nee
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+# The battery's inner runs find it too: it copies lib/mutant.sh beside its copy of this script.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# IN PROCESS (BL-878). The hook is SOURCED once into this shell (its guard returns after defining esd_main), and every
+# drive pipes its payload into esd_main inside a `( )` subshell with CLAUDE_PROJECT_DIR exported there, which is what
+# `printf | CLAUDE_PROJECT_DIR=w bash HOOK` gave the program: the same stdin, the same environment, and the hook's
+# `set -u`, assignments and `exit` stay in that subshell. A battery inner run sources its mutant copy the same way.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a hook with neither the `esd_main() {` line nor the column-0 source guard
+# predates the wrap and reads SKIP (exit 0, never an ok); exactly one half is a respelled hook and FAILs. The
+# distribution cannot reach the SKIP unnoticed: C5 (validate-fixture-inprocess.sh) refuses a cli subject without the
+# guard, and J3 refuses the start count moving.
+# A hook grep cannot READ (exit 2) is no pre-wrap hook: it is FIXTURE ERROR, never the SKIP.
+w_def=0; w_guard=0
+grep -q '^esd_main() {$' "$HOOK"; g_def=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK"; g_guard=$?
+if [ "$g_def" -gt 1 ] || [ "$g_guard" -gt 1 ]; then echo "FIXTURE ERROR: cannot read $HOOK (grep exit $g_def/$g_guard), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2; fi
+[ "$g_def" = 0 ] && w_def=1; [ "$g_guard" = 0 ] && w_guard=1
+if [ "$w_def$w_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$w_def" = 0 ]; then bad "$HOOK carries the column-0 source guard but no \`esd_main() {\` line -- a respelled hook this fixture cannot drive"; echo "escalation-delivery: $fails assertion(s) FAILED" >&2; exit 1; fi
+if [ "$w_guard" = 0 ]; then bad "$HOOK defines \`esd_main() {\` but carries no column-0 source guard -- a respelled hook; sourcing it would run esd_main in this shell"; echo "escalation-delivery: $fails assertion(s) FAILED" >&2; exit 1; fi
+fx_inproc "$HOOK"
+. "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK failed" >&2; exit 2; }
+declare -F esd_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no esd_main" >&2; exit 2; }
 
 LOG='_bmad-output/pipeline-continuation-log.md'
 # One event is one `## <timestamp> -- <EVENT>` line. A bare token grep also matches the
@@ -72,7 +98,7 @@ entry()  { sed -n '/^## [^ ]* -- ESCALATION_UNDELIVERED$/,/^$/p' "$1/$LOG" 2>/de
 drive() { # <payload-json> -> work dir on stdout
   local w; w="$(mktemp -d "${TMPDIR:-/tmp}/esc-deliv-XXXXXX")"
   mkdir -p "$w/_bmad-output"
-  printf '%s' "$1" | CLAUDE_PROJECT_DIR="$w" bash "$HOOK" >/dev/null 2>&1
+  printf '%s' "$1" | ( set +o pipefail; export CLAUDE_PROJECT_DIR="$w"; esd_main ) >/dev/null 2>&1
   printf '%s\n' "$w"
 }
 
@@ -151,6 +177,43 @@ fi
 rm -rf "$W"
 
 # =============================================================================
+# 5b. THE CLI CELLS (cells.decl): the hook run as a PROGRAM once per distinct outcome.
+# =============================================================================
+# Every path exits 0 with nothing on stdout, so the outcome is what the hook LEAVES: an ESCALATION_UNDELIVERED entry
+# (a failed send) or no log at all (a delivered one). One `FXCELL=<id> bash "$HOOK"` start per outcome, its payload
+# piped on stdin exactly as drive() pipes it into esd_main, compared with the in-process call on the same payload:
+# stdout, stderr, exit and the log, byte for byte, with only the entry's `## <UTC second> --` stamp normalised (the two
+# calls need not land in the same second). Each cell asserts its own outcome too, and the two must differ. The outer
+# run only: a battery inner run drives a mutant copy, and these cells are about the shipped hook.
+if [ ! -e "$HERE/.no-battery" ]; then
+EQ="$(mktemp -d "${TMPDIR:-/tmp}/esc-eq-XXXXXX")"
+eqv() { # <cell-id> <payload> -> $EQ/<id>.{ip,cl}.{out,err,rc,log}
+  local id="$1" p="$2" s
+  mkdir -p "$EQ/$id.ip.w/_bmad-output" "$EQ/$id.cl.w/_bmad-output"
+  printf '%s' "$p" | ( set +o pipefail; export CLAUDE_PROJECT_DIR="$EQ/$id.ip.w"; esd_main ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  printf '%s' "$p" | CLAUDE_PROJECT_DIR="$EQ/$id.cl.w" FXCELL="$id" bash "$HOOK" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  for s in ip cl; do
+    if [ -f "$EQ/$id.$s.w/$LOG" ]; then sed 's/^## [0-9TZ:-]* -- /## <stamp> -- /' "$EQ/$id.$s.w/$LOG" > "$EQ/$id.$s.log"
+    else echo "<no log>" > "$EQ/$id.$s.log"; fi
+  done
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+    && cmp -s "$EQ/$id.ip.log" "$EQ/$id.cl.log"
+}
+if eqv cli-event "$P_FAIL" && [ "$(cat "$EQ/cli-event.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-event.cl.out" ] \
+   && [ "$(events "$EQ/cli-event.cl.w")" -eq 1 ] && grep -q 'Intended recipient: graph-6b' "$EQ/cli-event.cl.log"; then
+  ok "cli-event: the program logs the undelivered send exactly as the in-process call does (stdout, stderr, exit 0, log)"
+else bad "cli-event: the program and the in-process call differ, or the program logged no ESCALATION_UNDELIVERED entry (rc=$(cat "$EQ/cli-event.cl.rc")/$(cat "$EQ/cli-event.ip.rc"))"; fi
+if eqv cli-silent "$P_OK" && [ "$(cat "$EQ/cli-silent.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-silent.cl.out" ] \
+   && [ "$(cat "$EQ/cli-silent.cl.log")" = "<no log>" ]; then
+  ok "cli-silent: the program leaves no log for a delivered send exactly as the in-process call does (stdout, stderr, exit 0, log)"
+else bad "cli-silent: the program and the in-process call differ, or the program wrote a log for a delivered send (rc=$(cat "$EQ/cli-silent.cl.rc")/$(cat "$EQ/cli-silent.ip.rc"))"; fi
+if ! cmp -s "$EQ/cli-event.cl.log" "$EQ/cli-silent.cl.log"; then
+  ok "cli cells discriminate: the failed and the delivered send leave different logs"
+else bad "cli cells do not discriminate: cli-event and cli-silent left the same log"; fi
+rm -rf "$EQ"
+fi
+
+# =============================================================================
 # 6. MUTATION BATTERY — the absence-shaped arms above must be shown to discriminate.
 # =============================================================================
 # ARMS 2, 3 AND 4 ASSERT A ZERO. Every one of them passes against a hook replaced by
@@ -175,31 +238,29 @@ rm -rf "$W"
 if [ -e "$HERE/.no-battery" ]; then
   :
 else
-# `$MB/fixtures/escalation-delivery/run.sh` resolves `$HERE/../../hooks/...` to
-# `$MB/hooks/`, so the copy the run LOADS is the copy this battery mutates. Mutating a file
+# `$MB/core/fixtures/escalation-delivery/run.sh` resolves `$HERE/../../hooks/...` to
+# `$MB/core/hooks/`, so the copy the run LOADS is the copy this battery mutates. Mutating a file
 # the run never opens leaves every arm green and reads exactly like an arm that cannot fire.
-# Sourced HERE, past the .no-battery check: the inner runs execute a copy of this script under $MB, where
-# ../lib/mutant.sh does not exist, and they never score a mutant.
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# The tree keeps the subject's own relative path, so an inner run's source of its mutant copy counts under the
+# inproc: row; lib/mutant.sh sits beside the copied script because the inner run sources it (for fx_inproc) and,
+# behind .no-battery, never scores a mutant.
 MB="$(mktemp -d "${TMPDIR:-/tmp}/esc-mut-XXXXXX")"
-mkdir -p "$MB/hooks" "$MB/fixtures/escalation-delivery"
-cp "$HERE/run.sh" "$MB/fixtures/escalation-delivery/run.sh"
-touch "$MB/fixtures/escalation-delivery/.no-battery"
+mkdir -p "$MB/core/hooks" "$MB/core/fixtures/escalation-delivery" "$MB/core/fixtures/lib" "$MB/mut"
+cp "$HERE/run.sh" "$MB/core/fixtures/escalation-delivery/run.sh"
+cp "$HERE/../lib/mutant.sh" "$MB/core/fixtures/lib/mutant.sh"
+touch "$MB/core/fixtures/escalation-delivery/.no-battery"
 kills=0; expected=0
 
-mutate() { # <name> <sed-program> ; builds $MB/hooks/<name>.sh from the resolved hook
-  sed "$2" "$HOOK" > "$MB/hooks/$1.sh"
-  cmp -s "$HOOK" "$MB/hooks/$1.sh" && return 1
+mutate() { # <name> <sed-program> ; builds $MB/mut/<name>.sh from the resolved hook
+  sed "$2" "$HOOK" > "$MB/mut/$1.sh"
+  cmp -s "$HOOK" "$MB/mut/$1.sh" && return 1
   return 0
 }
 run_mutant() { # <name> <expected-failed-arms> <what it proves> <base-pass flag>
   local name="$1" want="$2" what="$3" got
   expected=$((expected+1))
-  cp "$MB/hooks/$name.sh" "$MB/hooks/ai-dlc-escalation-delivery.sh"
-  bash "$MB/fixtures/escalation-delivery/run.sh" > "$MB/out.$name" 2>&1
+  cp "$MB/mut/$name.sh" "$MB/core/hooks/ai-dlc-escalation-delivery.sh"
+  bash "$MB/core/fixtures/escalation-delivery/run.sh" > "$MB/out.$name" 2>&1
   got=$(grep -c '^  FAIL' "$MB/out.$name")
   if [ "$got" -eq "$want" ]; then
     mutant_killed "$4" "$name" "mutant $name: failed $got arm(s) as expected — $what" && kills=$((kills+1))
@@ -275,13 +336,13 @@ mx_all() { # <mutant>
 # one property under test. The mutation has to keep the predicate shape and widen only what
 # it accepts.
 if mutate typestrict 's@== false)@== false or .tool_response.success == "false")@'; then
-  printf '        mutant typestrict edits: %s\n' "$MB/hooks/typestrict.sh"
+  printf '        mutant typestrict edits: %s\n' "$MB/mut/typestrict.sh"
   run_mutant typestrict 1 "the string \"false\" must not count as a failed send" "${B_fs_string:-0}"
 else
   bad "FIXTURE STALE: the type-strictness mutation matched nothing — the jq comparison was reworded"
 fi
 if mutate toolgate 's|\[ "\$TOOL_NAME" = "SendMessage" \]|[ -n "$TOOL_NAME" ]|'; then
-  printf '        mutant toolgate edits: %s\n' "$MB/hooks/toolgate.sh"
+  printf '        mutant toolgate edits: %s\n' "$MB/mut/toolgate.sh"
   run_mutant toolgate 1 "the SendMessage matcher must be load-bearing" "${B_toolgate:-0}"
 else
   bad "FIXTURE STALE: the tool-name mutation matched nothing — the gate was reworded"

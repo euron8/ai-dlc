@@ -4140,14 +4140,31 @@ ar_B() { sed -n 1p "$1/.B"; }
 ar_D() { printf '%s\n' "$DIST"; }
 ar_T() { sed -n 1p "$1/.T"; }
 # ar_w <tag> <green|worklist> <theirs> [nogit] -> the world dir on stdout; the caller checks it is a dir
+# BUILT ONCE PER ARGUMENT LIST AND COPIED (fixture-mutants.md clause 4). The tag names the directory
+# and nothing else, so the template is keyed on the REST of the argument list, %q-quoted so no two
+# lists share a key ($WORK/.ar-tpl.idx maps each key to its template; ar_w runs inside $( ), so the
+# map lives on disk). Every call, the first included, gets a `cp -Rp` copy at its own path.
 ar_w() {
-  local w="$WORK/ar-$1-$$-$RANDOM"
+  local w="$WORK/ar-$1-$$-$RANDOM" k l t="" n=0; shift
+  printf -v k '%q ' "$@"
+  if [ -f "$WORK/.ar-tpl.idx" ]; then
+    while IFS= read -r l; do n=$((n + 1)); [ "${l#*	}" = "$k" ] && t="$WORK/.ar-tpl.${l%%	*}"; done < "$WORK/.ar-tpl.idx"
+  fi
+  if [ -z "$t" ]; then
+    t="$WORK/.ar-tpl.$((n + 1))"
+    ar_w_build "$t" "$@" || return 1
+    printf '%s\t%s\n' "$((n + 1))" "$k" >> "$WORK/.ar-tpl.idx" || return 1
+  fi
+  mkdir -p "$w" && cp -Rp "$t/." "$w/" || return 1
+  printf '%s\n' "$w"
+}
+ar_w_build() { # ar_w_build <dir> <green|worklist> <theirs> [nogit] -- the world ar_w copies
+  local w="$1"
   mkdir -p "$w" || return 1
   printf '%s\n' "$BASE" > "$w/.B"; printf '%s\n' "$3" > "$w/.T"
   mk_consumer "$w/c" "$2" || return 1
   mkdir -p "$w/c/_bmad-output/ai-dlc-update" || return 1
   if [ "${4:-}" != nogit ]; then git -C "$w/c" init -q 2>/dev/null || return 1; fi
-  printf '%s\n' "$w"
 }
 ar_rec() { printf '%s\n' "$1/c/.git/ai-dlc-approved-region"; }
 # ar_render <world> [theirs] -- the SHIPPED renderer, as the session runs it; mutants are of the gate

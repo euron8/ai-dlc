@@ -1,4 +1,10 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once.
-75 *
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's J3 output); the push gate's
+# counted run is the second, agreeing reading.
+# BL-978 raised it: 21 apply.sh runs over the shipped subject (G0 G1 GX GY GN GU GT, the second pull
+# over G1 GX GY, the next-pull cells a b b2 n1 n2 n3 ng, LN's lib-present control, and the three
+# --finish runs over GX, G1 and GX with exact-path lines) and 23 copy runs (LM and LN over the
+# sibling-less reconcile copy, ST over the stub-library copy, and the 20 mutants), each with the starts
+# apply.sh makes inside itself.
+383 *
 8 core/scripts/validate-layer-entries.sh
-3 core/skills/ai-dlc-update/reconcile/apply.sh
+24 core/skills/ai-dlc-update/reconcile/apply.sh

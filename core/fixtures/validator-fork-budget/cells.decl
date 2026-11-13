@@ -1,0 +1,19 @@
+# receipt-bl898.sh runs the validator in process; these two start it as a program, one per distinct outcome of its
+# --arms I83,I84 run (the clean world exits 0 with OK, the unread world exits 1 with FAIL), each beside its EQUIV line.
+cli scripts/validate-enforcement-map.sh bl898-cli-pass
+cli scripts/validate-enforcement-map.sh bl898-cli-refuse
+# receipt-bl981.sh's live run starts `--arms I14` once per distinct outcome (the unseeded index exits 0 with OK, the
+# seeded index exits 1 with FAIL), each beside its in-process EQUIV line.
+cli scripts/validate-enforcement-map.sh bl981-em
+cli scripts/validate-enforcement-map.sh bl981-emp
+# m20's failing receipt run starts a three-line STUB at its scratch root's scripts/validate-enforcement-map.sh, which
+# the counter keys on that suffix; the stub has no vem_entry to source, and its git starts are the input m20 needs.
+e2e scripts/validate-enforcement-map.sh bl981m20-em why=m20 feeds A7 a failing receipt run whose em subject is a three-line stub making three git starts; the stub has no source guard or entry function
+e2e scripts/validate-enforcement-map.sh bl981m20-emp why=the same stub's seeded-index run inside m20's failing receipt; it is a stub, not the validator, so it cannot be sourced
+# The profiler has no source guard and is the parent the nested row below needs: in process its traced child's logged
+# parent would be run.sh, a fixture-local driver NP refuses. Each row is one drive of it in run.sh.
+e2e scripts/fork-profile.sh fp-probe why=the profiler's own self-probe is the only source of PROBEPOS, PROBENEG and PROBEASG; it has no guard to source it by
+e2e scripts/fork-profile.sh fp-floor-tiny why=A1's floor is what a broken subject reads under this profiler, measured as a separate program; it has no guard to source it by
+e2e scripts/fork-profile.sh fp-floor-cut why=A1's floor, the cut validator copy; its traced child must have the profiler as logged parent for the nested cover
+e2e scripts/fork-profile.sh fp-corpus why=the one corpus reading of the real validator; its traced child must have the profiler as logged parent for the nested cover
+nested scripts/fork-profile.sh scripts/validate-enforcement-map.sh why=the profiler measures the validator by running `bash -x` over its own text, which is intrinsically a separate program, once per profile of a validator copy

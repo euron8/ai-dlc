@@ -20,7 +20,6 @@ check-22-spawn-ledger	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mut
 check-3b-locked-anchor	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 check5-anchor-base	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKC mutant_killed caller
 ci-gates-resolution	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-claude-rules-joins	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 command-args-citation	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller,MVA mutant-verdicts allowlist row
 consolidation-residue	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller
 consumer-machinery-inventory	no MUTANT-MATRIX block; floor: S1 mut_reds(),S2 cmp -s + mutant,MKC mutant_killed caller
@@ -29,14 +28,10 @@ context-provenance	no MUTANT-MATRIX block; floor: S1 mutlib(),S2 cmp -s + mutant
 context-sensor	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller,MVA mutant-verdicts allowlist row
 core-paths-audit-diff	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 core-script-boundary	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller
-cycle-commits-enforce	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller
 deploy-validate-smoke-classification	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-derivation-capture	no MUTANT-MATRIX block; floor: S1 sup_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 derivation-capture-worktree-root	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-dist-clone	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKC mutant_killed caller
 divergence-hard-block	no MUTANT-MATRIX block; floor: S1 pend_mutant(),S2 cmp -s + mutant,MKC mutant_killed caller
 enforcement-map-yaml-plain	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
-escalation-status-vocabulary	no MUTANT-MATRIX block; floor: S1 mut_prog(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 extension-check-adoption	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKC mutant_killed caller
 extract-push-flag-decision	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller
 fanout-payload-channel	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
@@ -47,7 +42,6 @@ gate-repair-record	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 gate-verdict-grep-shape	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller,MVA mutant-verdicts allowlist row
 h2-attest-scripts-dir	no MUTANT-MATRIX block; floor: S1 mut_sub(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 handoff-resume-guard	no MUTANT-MATRIX block; floor: S1 hook_mut(),S2 cmp -s + mutant,MKC mutant_killed caller,MVA mutant-verdicts allowlist row
-hermetic-consumption	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant
 hook-registration-join	no MUTANT-MATRIX block; floor: S1 apply_mut(),S2 cmp -s + mutant
 implementation-join-yield	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKC mutant_killed caller,MVA mutant-verdicts allowlist row
 inflight-row-shape	no MUTANT-MATRIX block; floor: S1 mut_copy(),S2 cmp -s + mutant,MKA mutant-kills allowlist row

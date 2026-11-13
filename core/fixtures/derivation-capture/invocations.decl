@@ -1,6 +1,12 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-156 *
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The two
+# starts of partition-document.sh are the two cli cells of cells.decl; the seed's two section splits (the first seed and
+# the /tmp-spelled second one, which runs only where /tmp is a symlink) are in process in run.sh (split_seed).
+# inproc rows (fx_inproc, one per source of the splitter): the two splits and the two in-process sides of the cli cells.
+# The MUTANT-MATRIX twins (sup_twin) add 10: r5 under M1 and M2 and r1 under M4 and M5 each fire the hook, which runs
+# the validator (2 starts each, 8), and pre2 under M3 and join under M6 each run the validator once (2). 156 to 166.
+166 *
 2 core/scripts/partition-document.sh
+4 inproc:core/scripts/partition-document.sh
 0 core/scripts/validate-adversarial-convergence.sh
 0 core/scripts/validate-artifact-budget.sh
 0 core/scripts/wait-for-deliverable.sh

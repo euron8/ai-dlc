@@ -21,6 +21,11 @@
 #   selfreader  with every non-comment `stories_dir` line stripped from every corpus file except the
 #               validator, I84 must report that NO shipped program reads `stories_dir`
 #
+# Every world runs the validator IN PROCESS (`vem_entry`, see run()). A full run (no --cells) also starts it as a
+# program twice, once per distinct outcome -- the clean world (exit 0, OK) as cli cell bl898-cli-pass and the unread
+# world (exit 1, FAIL) as bl898-cli-refuse, declared in cells.decl -- and prints one `EQUIV <cell> same|DIFF` line
+# each: stdout, stderr, exit and grep exec count byte-identical to that world's in-process run.
+#
 # Exit 0 when every selected cell passes, 1 when one fails, 9 when it cannot measure: no root, no
 # subject, a copy that failed, a run that never reached the verdict block, a shim that counted
 # nothing, a failed control, or a mode-000 file that is still readable (root, or a filesystem that
@@ -28,16 +33,20 @@
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
-CELLS="clean,count,control,unread,selfreader"
+CELLS="clean,count,control,unread,selfreader"; FULL=1
 if [ "${1:-}" = "--cells" ]; then
   [ -n "${2:-}" ] || { echo "receipt-bl898: --cells needs a list" >&2; exit 9; }
-  CELLS="$2"; shift 2
+  CELLS="$2"; FULL=0; shift 2
 fi
 want() { case ",$CELLS," in *",$1,"*) return 0 ;; esac; return 1; }
 case ",$CELLS," in *",control,"*) CELLS="$CELLS,count" ;; esac
 case ",$CELLS," in *",count,"*) CELLS="$CELLS,control" ;; esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# fx_inproc counts each in-process pass under the pre-push counter. lib/mutant.sh refuses to load before ok() and bad()
+# exist; this receipt reports through cell() and calls neither.
+ok() { :; }; bad() { :; }
+. "$HERE/../lib/mutant.sh" || { echo "receipt-bl898: cannot source lib/mutant.sh beside $HERE" >&2; exit 9; }
 root=""; d="$HERE"
 while [ -n "$d" ] && [ "$d" != "/" ]; do
   if [ -f "$d/scripts/validate-enforcement-map.sh" ] && [ -f "$d/fork-budget.txt" ]; then root="$d"; break; fi
@@ -72,10 +81,30 @@ done
 cp "$SUBJ" "$T/$REL_SELF" || exit 9
 
 run() { # <label> -> the run's output in $W/<label>.out, its grep exec count on stdout; 9 when it never reached the verdict
+  # IN PROCESS: the copy is sourced by absolute path in a subshell and run as `vem_entry --arms I83,I84`. GREP_LOG and
+  # the shim PATH are EXPORTED there, because vem_entry unsets every unexported caller variable, and the shim (a
+  # separate program) reads GREP_LOG from its environment. A failed source exits 97, never the validator's own code.
   : > "$W/log"
-  GREP_LOG="$W/log" PATH="$W/shim:$PATH" bash "$T/$REL_SELF" --arms I83,I84 > "$W/$1.out" 2>&1
+  fx_inproc "$T/$REL_SELF"
+  ( export GREP_LOG="$W/log" PATH="$W/shim:$PATH"; . "$T/$REL_SELF" || exit 97; vem_entry --arms I83,I84 ) > "$W/$1.so" 2> "$W/$1.se"
+  echo "$?" > "$W/$1.rc"
+  cat "$W/$1.so" "$W/$1.se" > "$W/$1.out"
   grep -qE '^(OK|FAIL): ' "$W/$1.out" || { echo "receipt-bl898: the $1 run never reached the verdict block" >&2; return 9; }
   wc -c < "$W/log" | tr -d ' '
+}
+# equiv <label> <cell-id> -- THE EQUIVALENCE CELL of one cli cell: the same world started as a program, tagged, with its
+# own grep log, must answer byte for byte as the in-process run of <label> did: stdout, stderr, exit and grep exec
+# count. Prints `EQUIV <cell-id> same` or `EQUIV <cell-id> DIFF <what>`. Only a full run (no --cells) calls it, so
+# each cli cell tags exactly one start per fixture run.
+equiv() {
+  : > "$W/log.cli"
+  FXCELL="$2" GREP_LOG="$W/log.cli" PATH="$W/shim:$PATH" bash "$T/$REL_SELF" --arms I83,I84 > "$W/$1.cso" 2> "$W/$1.cse"
+  e_rc=$?; e_d=""
+  cmp -s "$W/$1.so" "$W/$1.cso" || e_d="$e_d stdout"
+  cmp -s "$W/$1.se" "$W/$1.cse" || e_d="$e_d stderr"
+  [ "$(cat "$W/$1.rc")" = "$e_rc" ] || e_d="$e_d exit=$(cat "$W/$1.rc")/$e_rc"
+  [ "$(wc -c < "$W/log" | tr -d ' ')" = "$(wc -c < "$W/log.cli" | tr -d ' ')" ] || e_d="$e_d grep-execs=$(wc -c < "$W/log" | tr -d ' ')/$(wc -c < "$W/log.cli" | tr -d ' ')"
+  if [ -z "$e_d" ]; then echo "EQUIV $2 same exit $e_rc"; else echo "EQUIV $2 DIFF$e_d"; fi
 }
 rc=0
 cell() { # <name> <0|1> <detail>
@@ -84,6 +113,7 @@ cell() { # <name> <0|1> <detail>
 
 if want clean || want count; then
   n0="$(run k0)" || exit 9
+  [ "$FULL" = 0 ] || equiv k0 bl898-cli-pass
   if want clean; then
     if grep -q '^OK: ' "$W/k0.out"; then cell clean 0 "the unseeded copy reads OK"
     else cell clean 1 "the unseeded copy did not read OK: $(grep -m1 '^FAIL' "$W/k0.out" | cut -c1-160)"; fi
@@ -115,6 +145,7 @@ if want unread; then
     exit 9
   fi
   run unread > /dev/null || exit 9
+  [ "$FULL" = 0 ] || equiv unread bl898-cli-refuse
   u83=0; u84=0
   grep -q '^FAIL: I83 could not read every file in its corpus' "$W/unread.out" && u83=1
   grep -q '^FAIL: I84 could not read every file in its corpus' "$W/unread.out" && u84=1

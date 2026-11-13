@@ -1,3 +1,7 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-764 *
-21 core/skills/ai-dlc-update/reconcile/dist-clone.sh
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
+# are run.sh itself (1), the three cli cells of cells.decl (3), and the counting git shim, a #!/bin/bash script every
+# git call in the five suites and the cli cells goes through. inproc rows (fx_inproc, one per source): the real
+# subject and the four mutant copies, each copy at $W/mut/<name>/core/skills/ai-dlc-update/reconcile/dist-clone.sh.
+696 *
+3 core/skills/ai-dlc-update/reconcile/dist-clone.sh
+5 inproc:core/skills/ai-dlc-update/reconcile/dist-clone.sh

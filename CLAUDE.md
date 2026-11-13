@@ -224,7 +224,7 @@ throwaway draft. This repo's mechanisms deny an act and never evaluate a reason,
 here separates the two, so there is nothing to deny.
 
 **The guard cannot be versioned in this repo either.** `.gitignore:41` ignores `.claude/*`,
-and arm A1 at `scripts/validate-claude-rules.sh:95` fails the push on any tracked path
+and arm A1 of `scripts/validate-claude-rules.sh` fails the push on any tracked path
 under `.claude/` that is not `.claude/rules/**/*.md`. Force-tracking a hook file or a
 `settings.json` here breaks the push. So the hook stays in the operator's home directory, is
 **NOT** part of the distribution, and reaches no consumer by design — a consumer tree gets no

@@ -18,7 +18,33 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/preamble.sh"
 # A retro branch is used because mandatory-rules Check 2 passes
 # "ai-dlc/retro/sprint-<N>" to the validator: planning artifacts are squash-skipped,
 # the retro artifact is validated.
+#
+# IN PROCESS (BL-878). validate-mandatory-rules.sh is SOURCED in a subshell and its vmr_main called (vmr_ip), with
+# pipefail off as the program runs it; each source is one fx_inproc pass (the inproc: row). Two cli cells, exit 0
+# (--check-clean-tree) and exit 1 (sprint 900), each compare the program's stdout, stderr and exit with the in-process
+# call on the same input (cells.decl).
+#
+# THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). The four mutants copy validate-cycle-commits.sh;
+# the arms (cce_arm) are the cells their kills read: valid (A1), rows (A2), prior (A6), vac (A9), carve (A13), each
+# re-seeding its own branch and log. PER PUSH a mutant runs its deciding arm (the kill's own check, unchanged) and its
+# TWIN, an arm the measured matrix shows GREEN for it, which must stay green (cce_twin). `--matrix` runs the unmutated
+# validator (ctl) and every mutant on every arm and prints one `MATRIX <mutant> <arm> GREEN|TRIPPED` row per cell.
+# RE-MEASURE whenever an arm or a mutant is added or changed, from the repo root:
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/cycle-commits-enforce/run.sh --matrix
+# Measured: ctl GREEN on all five arms; each mutant trips its own arm alone (log-rows-guard rows, prior-sprint-test
+# prior, non-vacuity vac, carve-out carve) and every other cell is GREEN.
+# MUTANT-MATRIX log-rows-guard decides=rows twins=valid
+# MUTANT-MATRIX prior-sprint-test decides=prior twins=valid
+# MUTANT-MATRIX non-vacuity decides=vac twins=prior
+# MUTANT-MATRIX carve-out decides=carve twins=valid
+# MUTANT-MATRIX-CONTROL ctl why=the unmutated validate-cycle-commits.sh; every arm holds there, and the B_ flags gate every kill on its arm
 set -uo pipefail
+MATRIX=0
+case "${1:-}" in
+  "") ;;
+  --matrix) MATRIX=1 ;;
+  *) echo "FIXTURE ERROR: unknown argument '$1' (usage: run.sh [--matrix])" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
@@ -50,6 +76,30 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
 B_carve=0; B_prior=0; B_rows=0; B_vac=0
+
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can hold a validate-mandatory-rules.sh from before its
+# vmr_main wrap, which sourcing would run as a whole series with this file's argv. Its two halves are read first:
+# neither the `vmr_main() {` line nor the column-0 source guard is a subject that predates the wrap, and the Check 2
+# arms below take the path they already take for an absent one (a note, never an ok; this fixture's own subject,
+# validate-cycle-commits.sh, is still tested). Exactly one of the two is a respelled subject: FAIL. Unreadable
+# (grep exit 2): FIXTURE ERROR.
+VMR_PREWRAP=0
+if [ -f "$VMR" ]; then
+  vm_has() { grep -qxF -- "$1" "$VMR"; case $? in 0) printf 1 ;; 1) printf 0 ;; *) printf E ;; esac; }
+  vm_gate="$(vm_has 'vmr_main() {')$(vm_has '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0')"
+  case "$vm_gate" in
+    11) ;;
+    00) VMR_PREWRAP=1 ;;
+    01|10) echo "  FAIL  $VMR carries only part of the in-process wrap (vmr_main, column-0 guard: $vm_gate) -- a respelled subject this fixture cannot drive"
+           echo "cycle-commits-enforce: FAIL (1 assertion(s))"; exit 1 ;;
+    *) echo "FIXTURE ERROR: cannot read $VMR (got '$vm_gate')" >&2; exit 2 ;;
+  esac
+fi
+# vmr_ip <args...>: one in-process call of validate-mandatory-rules.sh, its streams and exit as the program's.
+vmr_ip() {
+  fx_inproc "$VMR"
+  ( set +o pipefail; . "$VMR" || exit 97; vmr_main "$@" )
+}
 
 LOG="_bmad-output/validation-cycle-log.md"
 
@@ -85,6 +135,64 @@ commit_cycle "Sprint 900 retro: party-mode cycle 1"
 commit_cycle "Sprint 900 retro: adversarial-review pass 1"
 commit_cycle "Sprint 900 retro: party-mode cycle 2"
 
+# cce_arm <arm> <validator> -> 0 GREEN (the arm holds, as on the unmutated validator), 1 TRIPPED. Each arm seeds its
+# own branch and log and puts back what it found -- the branch, the log and the sprint-status dir -- so it can run
+# beside any assertion. The carve arm's branch, cce-arm/ts, is its own (built once, from the retro tip), never the
+# feature/ts-carveout branch assertion 13 builds.
+cce_arm() {
+  local a="$1" v="$2" br had_log=0 had_ia=0 r br_run
+  br="$(git rev-parse --abbrev-ref HEAD)"
+  rm -rf "$WORK/.git/arm-save"; mkdir -p "$WORK/.git/arm-save"
+  [ -f "$WORK/$LOG" ] && { cp -p "$WORK/$LOG" "$WORK/.git/arm-save/log"; had_log=1; }
+  [ -d "$WORK/_bmad-output/implementation-artifacts" ] && { cp -Rp "$WORK/_bmad-output/implementation-artifacts" "$WORK/.git/arm-save/ia"; had_ia=1; }
+  rm -rf "$WORK/_bmad-output/implementation-artifacts"
+  br_run=ai-dlc/retro/sprint-900
+  # Off the current branch the log and the sprint-status dir are this arm's to write; the saved copies come back after.
+  rm -f "$WORK/$LOG"
+  git checkout -q ai-dlc/retro/sprint-900 || { echo "FIXTURE ERROR: arm $a could not check out the retro branch" >&2; exit 2; }
+  case "$a" in
+    valid|rows) [ "$a" = valid ] && write_log 3 || write_log 2 ;;
+    prior) write_log 3
+      printf '\n## Sprint 136 — retro\n\n| # | Cycle | Notes | SHA |\n|---|-------|-------|-----|\n| 1 | party-mode cycle 1 | note | `deadbee` |\n| 2 | adversarial-review pass 1 | note | `deadbef` |\n| 3 | party-mode cycle 2 | note | `deadbf0` |\n' >> "$WORK/$LOG" ;;
+    vac) mkdir -p "$WORK/_bmad-output"
+      printf '## Sprint 800 — retro\n\n| # | Cycle | Notes | SHA |\n|---|-------|-------|-----|\n| 1 | party-mode cycle 1 | note | `%s` |\n| 2 | adversarial-review pass 1 | note | `%s` |\n| 3 | party-mode cycle 2 | note | `%s` |\n' \
+        "$(git rev-parse HEAD)" "$(git rev-parse HEAD~1)" "$(git rev-parse HEAD~2)" > "$WORK/$LOG" ;;
+    carve) br_run=cce-arm/ts
+      if git rev-parse -q --verify refs/heads/cce-arm/ts >/dev/null; then git checkout -q cce-arm/ts
+      else git checkout -q -b cce-arm/ts
+        # work.txt alone, never `git add -A` (commit_cycle): the arm must not commit this run's untracked files.
+        for _p in 1 2 3; do echo "Sprint 900 test-strategy: adversarial-review pass $_p" >> work.txt; git add work.txt
+          git commit -q -m "Sprint 900 test-strategy: adversarial-review pass $_p"; done
+      fi
+      write_log 3
+      printf '\n## Sprint 900 — Test Strategy\n\n| # | Cycle | Notes | SHA |\n|---|-------|-------|-----|\n| 1 | adversarial-review pass 1 | note | TBD |\n| 2 | adversarial-review pass 2 | note | TBD |\n| 3 | adversarial-review pass 3 | note | TBD |\n' >> "$WORK/$LOG" ;;
+    *) echo "FIXTURE ERROR: no arm '$a'" >&2; exit 2 ;;
+  esac
+  bash "$v" "$br_run" > "$WORK/.git/arm.txt" 2>&1; r=$?
+  case "$a" in
+    valid) [ "$r" = 0 ] && grep -q 'RESULT: PASS' "$WORK/.git/arm.txt" ;;
+    rows) [ "$r" = 1 ] && grep -q 'FAIL' "$WORK/.git/arm.txt" ;;
+    prior) [ "$r" = 0 ] && grep -q 'UNVERIFIABLE (history rewritten)' "$WORK/.git/arm.txt" && grep -q 'RESULT: PASS' "$WORK/.git/arm.txt" ;;
+    vac) [ "$r" = 4 ] && grep -q 'NOTHING MEASURED' "$WORK/.git/arm.txt" ;;
+    carve) [ "$r" = 0 ] && grep -q 'EXEMPT (Rule 8 carve-out: convergence series, Check 24)' "$WORK/.git/arm.txt" ;;
+  esac
+  r=$?
+  rm -f "$WORK/$LOG"; rm -rf "$WORK/_bmad-output/implementation-artifacts"
+  git checkout -q "$br" || { echo "FIXTURE ERROR: arm $a could not return to $br" >&2; exit 2; }
+  if [ "$had_log" = 1 ]; then cp -p "$WORK/.git/arm-save/log" "$WORK/$LOG"; else rm -f "$WORK/$LOG"; fi
+  [ "$had_ia" = 1 ] && cp -Rp "$WORK/.git/arm-save/ia" "$WORK/_bmad-output/implementation-artifacts"
+  rm -rf "$WORK/.git/arm-save"
+  return "$r"
+}
+CCE_ARMS="valid rows prior vac carve"
+# cce_twin <mutant copy> <twin arm> <mutant name> -> 0 when the twin holds under the mutant, so the kill is confined;
+# otherwise one FAIL naming it. Run after the deciding check has been read.
+cce_twin() {
+  cce_arm "$2" "$1" && return 0
+  bad "MUTATION $3: twin $2 tripped beside its deciding arm -- the kill is not confined to it; re-measure the matrix (--matrix)"
+  return 1
+}
+
 echo "cycle-commits-enforce"
 
 # --- 1. Valid tree passes -----------------------------------------------------
@@ -118,6 +226,7 @@ if cmp -s "$VALIDATOR" "$MUTANT"; then
 fi
 bash "$MUTANT" ai-dlc/retro/sprint-900 >"$WORK/mut.txt" 2>&1
 if [ "$?" = "0" ]; then
+  cce_twin "$MUTANT" valid log-rows-guard &&
   mutant_killed "$B_rows" log-rows-guard "MUTATION: disabling the log-rows guard makes the 2-row input pass (FAIL was real)"
 else
   bad "MUTATION: the 2-row input still failed without the guard"; sed 's/^/        /' "$WORK/mut.txt"
@@ -125,9 +234,9 @@ fi
 
 # --- 4. Check 2 delegation ENGAGES when the log is present --------------------
 write_log 3
-if [ -f "$VMR" ]; then
+if [ -f "$VMR" ] && [ "$VMR_PREWRAP" = 0 ]; then
   echo "HERMETIC-CONSUMED core/scripts/validate-mandatory-rules.sh"
-  VOUT="$(bash "$VMR" 900 2>/dev/null || true)"
+  VOUT="$(vmr_ip 900 2>/dev/null || true)"
   if grep -q 'CHECK 2: PASS' <<<"$VOUT"; then
     ok "mandatory-rules Check 2 delegates to the validator and PASSes with a log present"
   else
@@ -137,13 +246,40 @@ if [ -f "$VMR" ]; then
 
 # --- 5. Check 2 SKIPs (never fails) when the producer is absent ---------------
   rm -f "$WORK/$LOG"
-  VOUT="$(bash "$VMR" 900 2>/dev/null || true)"
+  VOUT="$(vmr_ip 900 2>/dev/null || true)"
   if grep -q 'CHECK 2: SKIP' <<<"$VOUT"; then
     ok "mandatory-rules Check 2 SKIPs when no validation-cycle-log.md (log-keyed opt-in)"
   else
     bad "Check 2 did not SKIP on a missing log"
     echo "$VOUT" | grep -i 'check 2' | sed 's/^/        /'
   fi
+
+# --- 5b. THE CLI CELLS (cells.decl): the program once per distinct outcome, against the in-process call ---------
+# exit 0 (--check-clean-tree: the toolchain beside the script is present) and exit 1 (sprint 900: checks fail in
+# this tree). Each compares stdout, stderr and exit byte for byte; each asserts its own outcome, and the two differ.
+# Both reach a `${BASH_SOURCE[0]}` site (:118 and :150), which a sourced call would resolve to run.sh under `$0`.
+  EQ="$WORK/eq"; mkdir -p "$EQ"
+  vmr_eqv() { # <cell-id> <args...> -> 0 when the program and the in-process call agree on all three streams
+    local id="$1"; shift
+    vmr_ip "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    FXCELL="$id" bash "$VMR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+    cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+  }
+  vmr_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+    "$(sed -n 1,2p "$EQ/$1.ip.out")" "$(sed -n 1,2p "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(sed -n 1,2p "$EQ/$1.cl.out")" "$(sed -n 1,2p "$EQ/$1.cl.err")"; }
+  if vmr_eqv vmr-clean-tree --check-clean-tree && [ "$(cat "$EQ/vmr-clean-tree.cl.rc")" = 0 ] \
+     && grep -q '^VALIDATE-MANDATORY-RULES: PASS (--check-clean-tree' "$EQ/vmr-clean-tree.cl.out"; then
+    ok "vmr-clean-tree: --check-clean-tree as a program equals the in-process call (stdout, stderr, exit 0, PASS)"
+  else bad "vmr-clean-tree: the program and the in-process call differ, or the outcome is not exit 0 PASS ($(vmr_twin vmr-clean-tree))"; fi
+  if vmr_eqv vmr-sprint-900 900 && [ "$(cat "$EQ/vmr-sprint-900.cl.rc")" = 1 ] \
+     && grep -q '^VALIDATE-MANDATORY-RULES: FAIL$' "$EQ/vmr-sprint-900.cl.out"; then
+    ok "vmr-sprint-900: sprint 900 as a program equals the in-process call (stdout, stderr, exit 1, FAIL)"
+  else bad "vmr-sprint-900: the program and the in-process call differ, or the outcome is not exit 1 FAIL ($(vmr_twin vmr-sprint-900))"; fi
+  if ! cmp -s "$EQ/vmr-clean-tree.cl.rc" "$EQ/vmr-sprint-900.cl.rc"; then
+    ok "vmr cli cells discriminate: the passing and the refusing input give different exits"
+  else bad "vmr cli cells do not discriminate: both gave the same exit"; fi
+elif [ "$VMR_PREWRAP" = 1 ]; then
+  echo "  note  validate-mandatory-rules.sh predates the in-process wrap — delegation assertions skipped"
 else
   echo "  note  validate-mandatory-rules.sh absent — delegation assertions skipped"
 fi
@@ -226,6 +362,7 @@ if cmp -s "$VALIDATOR" "$MUT2"; then
 else
   bash "$MUT2" ai-dlc/retro/sprint-900 >"$WORK/mut2.txt" 2>&1
   if [ "$?" = "1" ] && ! grep -q 'UNVERIFIABLE' "$WORK/mut2.txt"; then
+    cce_twin "$MUT2" valid prior-sprint-test &&
     mutant_killed "$B_prior" prior-sprint-test "MUTATION: without the prior-sprint test, dead SHAs fail the run again (assertion 6 is real)"
   else
     bad "MUTATION: the run still passed without the prior-sprint test — assertion 6 is vacuous"
@@ -271,12 +408,12 @@ fi
 # never prints the capture. A worklist at exit 0 would be invisible at the only place the
 # verdict is consumed. Assert the wedge is real and visible, because choosing to wedge a
 # dormant-log consumer is the load-bearing half of that decision.
-if [ -f "$VMR" ]; then
+if [ -f "$VMR" ] && [ "$VMR_PREWRAP" = 0 ]; then
   echo "HERMETIC-CONSUMED core/scripts/validate-mandatory-rules.sh"
   # 2>&1, unlike the arms above: mandatory-rules prints its per-check verdict on stdout and
   # accumulates the DETAIL into FAILURE_MSGS, which it dumps to stderr at the end. Reading
   # only stdout would score a bare `CHECK 2: FAIL` as full disclosure.
-  VOUT="$(bash "$VMR" 900 2>&1 || true)"
+  VOUT="$(vmr_ip 900 2>&1 || true)"
   if grep -q 'CHECK 2: FAIL' <<<"$VOUT" && grep -q 'exited 4' <<<"$VOUT" \
      && grep -q 'NOTHING MEASURED' <<<"$VOUT"; then
     ok "mandatory-rules Check 2 renders the 4 as FAIL and carries the code into its message"
@@ -348,6 +485,7 @@ if cmp -s "$VALIDATOR" "$MUT3"; then
 else
   bash "$MUT3" ai-dlc/retro/sprint-900 >"$WORK/mut3.txt" 2>&1
   if [ "$?" = "0" ] && grep -q 'RESULT: PASS' "$WORK/mut3.txt"; then
+    cce_twin "$MUT3" prior non-vacuity &&
     mutant_killed "$B_vac" non-vacuity "MUTATION: without the arm, the all-exempted log prints the old bare PASS (the 4 was real)"
   else
     bad "MUTATION: the all-exempted log did not pass without the arm — assertion 9 is vacuous"
@@ -391,11 +529,30 @@ if cmp -s "$VALIDATOR" "$MUT4"; then
 else
   bash "$MUT4" feature/ts-carveout >"$WORK/mut4.txt" 2>&1
   if [ "$?" = "1" ] && grep -q 'test-strategy .*FAIL (missing cycle type: party-mode)' "$WORK/mut4.txt"; then
+    cce_twin "$MUT4" valid carve-out &&
     mutant_killed "$B_carve" carve-out "MUTATION: without the carve-out the Test Strategy section FAILs (assertion 13 is real)"
   else
     bad "MUTATION: the Test Strategy section did not FAIL without the carve-out — assertion 13 is vacuous"
     sed 's/^/        /' "$WORK/mut4.txt"
   fi
+fi
+
+# THE MATRIX, printed only under --matrix: the unmutated validator (ctl) and every mutant copy on every arm.
+if [ "$MATRIX" = 1 ]; then
+  # The copies are moved under .git first: an arm switches branches, and a branch whose commit swept this run's
+  # untracked files (assertion 13's commit_cycle) takes them out of the work tree when it is left.
+  mkdir -p "$WORK/.git/mx"
+  for _mx in "log-rows-guard:$MUTANT" "prior-sprint-test:$MUT2" "non-vacuity:$MUT3" "carve-out:$MUT4"; do
+    cp -p "${_mx#*:}" "$WORK/.git/mx/${_mx%%:*}.sh" || { bad "MATRIX: ${_mx%%:*} has no copy at ${_mx#*:}"; }
+  done
+  for _mx in "ctl:$VALIDATOR" "log-rows-guard:$WORK/.git/mx/log-rows-guard.sh" "prior-sprint-test:$WORK/.git/mx/prior-sprint-test.sh" \
+             "non-vacuity:$WORK/.git/mx/non-vacuity.sh" "carve-out:$WORK/.git/mx/carve-out.sh"; do
+    _m="${_mx%%:*}"; _mv="${_mx#*:}"
+    [ -f "$_mv" ] || { bad "MATRIX: $_m has no copy at $_mv"; continue; }
+    for _a in $CCE_ARMS; do
+      if cce_arm "$_a" "$_mv"; then printf '  MATRIX %s %s GREEN\n' "$_m" "$_a"; else printf '  MATRIX %s %s TRIPPED\n' "$_m" "$_a"; fi
+    done
+  done
 fi
 
 echo

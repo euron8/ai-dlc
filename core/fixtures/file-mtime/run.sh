@@ -62,9 +62,9 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '   ok    %s\n' "$1"; }
 bad() { printf '   FAIL  %s\n' "$1" >&2; fails=$((fails + 1)); }
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 W="$WORK/w"; N="$WORK/n"; SHIM="$WORK/shim"; MUT="$WORK/mut"
@@ -86,49 +86,105 @@ exit 1
 EOF
 chmod +x "$SHIM/stat"
 
-# run <script> <tz> <dir> <args...> -> OUT, RC
+# IN PROCESS (BL-878). The subject is SOURCED once into this shell (its guard returns after defining fm_main), and
+# every arm calls fm_main inside a `$( )` subshell, so the subject's own `exit` ends that subshell and its
+# `set -uo pipefail`, TZ, PATH and cd stay there. A mutant copy is sourced once in its turn, which redefines fm_main,
+# so the arms below always drive the copy sourced last. Each source is one fx_inproc pass (the inproc: row).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped
+# file-mtime.sh, and sourcing a pre-wrap subject would run its top-level `[ $# -ge 1 ] || exit 2` in this shell. So the
+# shape is checked first, on its two halves: neither the `fm_main() {` line nor the column-0 source guard is a subject
+# that predates the wrap, which prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled subject this
+# fixture can no longer drive, which FAILS. The distribution cannot reach the SKIP unnoticed: C5
+# (validate-fixture-inprocess.sh) refuses a cli subject without the guard, and J3 refuses the start count moving.
+fm_def=0; fm_guard=0
+grep -q '^fm_main() {$' "$SUBJ"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || fm_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJ"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || fm_guard=1
+if [ "$fm_def$fm_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$fm_def" = 0 ]; then echo "   FAIL  $SUBJ carries the column-0 source guard but no \`fm_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "file-mtime: FAIL (1)" >&2; exit 1; fi
+if [ "$fm_guard" = 0 ]; then echo "   FAIL  $SUBJ defines \`fm_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run fm_main in this shell" >&2; echo "file-mtime: FAIL (1)" >&2; exit 1; fi
+fx_inproc "$SUBJ"
+. "$SUBJ" || { echo "FIXTURE BROKEN: sourcing $SUBJ failed" >&2; exit 2; }
+declare -F fm_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $SUBJ defined no fm_main" >&2; exit 2; }
+
+# run <tz> <dir> <args...> -> OUT, RC: one in-process call of the fm_main sourced last
 run() {
-  local s="$1" tz="$2" d="$3"; shift 3
-  OUT="$(cd "$d" && TZ="$tz" bash "$s" "$@" 2>&1)"; RC=$?
+  local tz="$1" d="$2"; shift 2
+  OUT="$(cd "$d" && export TZ="$tz" && fm_main "$@" 2>&1)"; RC=$?
 }
 run_shim() {
-  local s="$1"
-  OUT="$(cd "$W" && TZ=UTC PATH="$SHIM:$PATH" bash "$s" rec.md 2>&1)"; RC=$?
+  OUT="$(cd "$W" && export TZ=UTC PATH="$SHIM:$PATH" && fm_main rec.md 2>&1)"; RC=$?
 }
 TAB="$(printf '\t')"
 
-# --- arms, each a function of the script under test, so a mutant reuses it -----------
-arm_utc()   { run "$1" UTC "$W" rec.md;                    [ "$RC" -eq 0 ] && [ "$OUT" = "rec.md${TAB}${LIT_E}${TAB}${LIT_I}" ]; }
-arm_ny()    { run "$1" America/New_York "$W" rec.md;       [ "$RC" -eq 0 ] && [ "$OUT" = "rec.md${TAB}${LIT_E}${TAB}${LIT_I}" ]; }
-arm_num()   { run "$1" America/New_York "$N" 1792126782;   [ "$RC" -eq 0 ] && [ "$OUT" = "1792126782${TAB}${NUM_E}${TAB}${NUM_I}" ]; }
-arm_shape() { run_shim "$1";                               [ "$RC" -eq 0 ] && [ "$OUT" = "rec.md${TAB}${LIT_E}${TAB}${LIT_I}" ]; }
+# --- arms, each a call of the fm_main sourced last, so a mutant reuses it --------------
+arm_utc()   { run UTC "$W" rec.md;                    [ "$RC" -eq 0 ] && [ "$OUT" = "rec.md${TAB}${LIT_E}${TAB}${LIT_I}" ]; }
+arm_ny()    { run America/New_York "$W" rec.md;       [ "$RC" -eq 0 ] && [ "$OUT" = "rec.md${TAB}${LIT_E}${TAB}${LIT_I}" ]; }
+arm_num()   { run America/New_York "$N" 1792126782;   [ "$RC" -eq 0 ] && [ "$OUT" = "1792126782${TAB}${NUM_E}${TAB}${NUM_I}" ]; }
+arm_shape() { run_shim;                               [ "$RC" -eq 0 ] && [ "$OUT" = "rec.md${TAB}${LIT_E}${TAB}${LIT_I}" ]; }
 arm_miss()  {
-  run "$1" UTC "$W" nope.md rec.md
+  run UTC "$W" nope.md rec.md
   [ "$RC" -eq 1 ] && [ "$OUT" = "nope.md${TAB}MISSING
 rec.md${TAB}${LIT_E}${TAB}${LIT_I}" ]
 }
-arm_noargs() { OUT="$(bash "$1" 2>&1)"; RC=$?; [ "$RC" -eq 2 ]; }
+arm_noargs() { OUT="$(fm_main 2>&1)"; RC=$?; [ "$RC" -eq 2 ]; }
 
 echo "== real script"
 # Each arm sets its B_<arm> flag only in its passing branch; the mutant that arm kills is scored on it.
-if arm_utc "$SUBJ"; then ok "UTC: literal epoch and ISO stamp"; B_utc=1
+if arm_utc; then ok "UTC: literal epoch and ISO stamp"; B_utc=1
 else bad "UTC arm: rc=$RC out=[$OUT]"; fi
-if arm_ny "$SUBJ"; then ok "America/New_York: same literal stamp"; B_ny=1
+if arm_ny; then ok "America/New_York: same literal stamp"; B_ny=1
 else bad "NY arm: rc=$RC out=[$OUT]"; fi
-if arm_num "$SUBJ"; then ok "all-digit basename reports its mtime, not its name"; B_num=1
+if arm_num; then ok "all-digit basename reports its mtime, not its name"; B_num=1
 else bad "numeric-basename arm: rc=$RC out=[$OUT]"; fi
-if arm_shape "$SUBJ"; then ok "GNU-shaped stat -f (exit 0, text) is not taken as an epoch"; B_shape=1
+if arm_shape; then ok "GNU-shaped stat -f (exit 0, text) is not taken as an epoch"; B_shape=1
 else bad "stat-shape arm: rc=$RC out=[$OUT]"; fi
-if arm_miss "$SUBJ"; then ok "MISSING path: reported, others still stated, exit 1"; B_miss=1
+if arm_miss; then ok "MISSING path: reported, others still stated, exit 1"; B_miss=1
 else bad "MISSING arm: rc=$RC out=[$OUT]"; fi
-if arm_noargs "$SUBJ"; then ok "no arguments: exit 2"; B_noargs=1
+if arm_noargs; then ok "no arguments: exit 2"; B_noargs=1
 else bad "no-args arm: rc=$RC out=[$OUT]"; fi
 
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome -----------------------
+# The outcomes are exit x output class: 0 every path stated on stdout, 1 a MISSING row on stdout, 2 the usage line
+# on stderr. One `FXCELL=<id> bash "$SUBJ"` start per outcome, each compared with the in-process call on the same
+# input: stdout, stderr and exit separately, byte for byte. A cell also asserts its own outcome (a positive conjunct,
+# so two runs that both printed nothing cannot read as equivalent), and the pass and refuse cells must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <tz> <dir> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" tz="$2" d="$3"; shift 3
+  ( cd "$d" && export TZ="$tz" && fm_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$d" && TZ="$tz" FXCELL="$id" bash "$SUBJ" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+echo "== cli cells"
+if eqv cli-pass UTC "$W" rec.md && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] \
+   && [ "$(cat "$EQ/cli-pass.cl.out")" = "rec.md${TAB}${LIT_E}${TAB}${LIT_I}" ] && [ ! -s "$EQ/cli-pass.cl.err" ]; then
+  ok "cli-pass: the program states rec.md exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with the literal row ($(eq_twin cli-pass))"; fi
+if eqv cli-missing UTC "$W" nope.md rec.md && [ "$(cat "$EQ/cli-missing.cl.rc")" = 1 ] \
+   && [ "$(cat "$EQ/cli-missing.cl.out")" = "nope.md${TAB}MISSING
+rec.md${TAB}${LIT_E}${TAB}${LIT_I}" ] && [ ! -s "$EQ/cli-missing.cl.err" ]; then
+  ok "cli-missing: the program refuses nope.md exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-missing: the program and the in-process call differ, or the outcome is not exit 1 with a MISSING row ($(eq_twin cli-missing))"; fi
+if eqv cli-usage UTC "$W" && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && [ "$(cat "$EQ/cli-usage.cl.err")" = "usage: file-mtime.sh <path> [<path> ...]" ]; then
+  ok "cli-usage: the program refuses no arguments exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-usage))"; fi
+if ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-missing.cl.out" && ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-missing.cl.rc"; then
+  ok "cli cells discriminate: the passing and the refusing input give different stdout and exit"
+else bad "cli cells do not discriminate: cli-pass and cli-missing gave the same stdout or exit"; fi
+
 # --- mutants: literal replace, exactly once, cmp -s guarded, killed by its arm -------
-# mutate <name> <old> <new> [<old> <new>] -> writes $MUT/<name>.sh or sets MUTFAIL
+# mutate <name> <old> <new> [<old> <new>] -> writes $MUT/<name>/core/scripts/file-mtime.sh and SOURCES it once. The
+# copy keeps the subject's declared suffix, so its fx_inproc row is counted under the same inproc: row.
 mutate() {
   local name="$1"; shift
-  local f="$MUT/$name.sh"; cp "$SUBJ" "$f"
+  local f="$MUT/$name/core/scripts/file-mtime.sh"; mkdir -p "${f%/*}"; cp "$SUBJ" "$f"
   while [ $# -ge 2 ]; do
     local o="$1" n="$2"; shift 2
     local cnt; cnt="$(grep -cF -- "$o" "$f")" || cnt=0
@@ -138,7 +194,13 @@ mutate() {
     printf '%s\n' "$out" > "$f"
   done
   if cmp -s "$SUBJ" "$f"; then echo "FIXTURE ERROR: mutant $name is byte-identical to the subject" >&2; exit 2; fi
+  unset -f fm_main
+  fx_inproc "$f"
+  . "$f" || { echo "FIXTURE BROKEN: sourcing mutant $name failed" >&2; exit 2; }
+  declare -F fm_main > /dev/null || { echo "FIXTURE BROKEN: sourcing mutant $name defined no fm_main" >&2; exit 2; }
+  MUT_SOURCED="$name"
 }
+MUT_SOURCED=""
 MX_SRC="$HERE/run.sh"; MX_CELLS=0; MX_RUN=0; MX_SEEN=""
 mx_row() { grep -m 1 -F -- "# MUTANT-MATRIX $1 decides=" "$MX_SRC"; } # no awk: the tool farm of this fixture does not declare it
 mx_role() { # <mutant> <arm> -> D (decides), T (twin) or - (neither), read from the header block
@@ -165,7 +227,8 @@ mx_cell() {
   if [ "$MATRIX" != 1 ] && [ "$role" = - ]; then return 0; fi
   [ "$role" = - ] && MX_CELLS=$((MX_CELLS + 1))
   MX_RUN=$((MX_RUN + 1))
-  if "$fn" "$MUT/$m.sh"; then
+  [ "$MUT_SOURCED" = "$m" ] || { echo "FIXTURE BROKEN: scoring mutant $m while the fm_main sourced last is ${MUT_SOURCED:-the subject}" >&2; exit 2; }
+  if "$fn"; then
     ok "MATRIX $m $t GREEN"
     if [ "$MATRIX" != 1 ] && [ "$role" = D ]; then bad "mutant $m SURVIVED arm $t, which the header names as its deciding arm"; fi
   else

@@ -1,3 +1,7 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-24 *
-23 scripts/render-path-mapping.sh
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
+# are run.sh itself (1) and the three cli cells of cells.decl (3). inproc rows (fx_inproc, one per source): the real
+# renderer once and each sandbox's copy once (controlB, controlC, controlD, m1-m6, n1), every copy at
+# <sandbox>/scripts/render-path-mapping.sh.
+4 *
+3 scripts/render-path-mapping.sh
+11 inproc:scripts/render-path-mapping.sh

@@ -814,8 +814,8 @@ over the basename instead of the whole path. **A `git log --follow` rename query
 where a derived 1192-pair rename map scored 62**, and the 1 had already been quoted into a value
 argument that the correction inverted.
 
-**A FALSE `BL-272` SIBLING WAS FILED AND WITHDRAWN.** `validate-artifact-paths.sh:410` is
-`head -60`, but `:411` prints `… first 30 of 73 shown.` — a DECLARED preview, not a silent
+**A FALSE `BL-272` SIBLING WAS FILED AND WITHDRAWN.** `validate-artifact-paths.sh`'s `cls NONCONFORMING` listing is
+`head -60`, but the line after it prints `… first 30 of 73 shown.` — a DECLARED preview, not a silent
 truncation, and it was in the captured output of the run that was misread. Not filed. The error was
 reading a RENDERED artifact instead of driving the program.
 

@@ -134,7 +134,7 @@ CONSUMER="${_p3:?}"
 THEIRS="${_p4:?}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
-
+SCAFFOLD_IGNORE_LIB="$SELF/scaffold-ignore.sh"; scaffold_ignore_loaded=0; . "$SCAFFOLD_IGNORE_LIB" 2>/dev/null && declare -F scaffold_ignore_state >/dev/null && declare -F scaffold_ignore_remedy >/dev/null && scaffold_ignore_loaded=1 # loaded BEFORE phase 1 writes anything; see scaffold_ignore_check()
 # The running script AS A FILE, not as the directory above. Used only to notice that this
 # driver is among the files it is about to replace -- see overwrite_from_theirs().
 #
@@ -164,8 +164,8 @@ self_replaced=0
 # (`semantic-merge` with no addendum) is byte-identical to what it printed before and no reader
 # gains a trailing tab it did not have.
 #
-# THE HAND-BACK COUNT IS TAKEN HERE, IN THE EMITTER, AND NOT AT THE CALL SITES. There are 22
-# `say WORKLIST` sites and 39 `say DECISION` sites today (non-comment lines), and a counter incremented at
+# THE HAND-BACK COUNT IS TAKEN HERE, IN THE EMITTER, AND NOT AT THE CALL SITES. Dozens of
+# `say WORKLIST`/`say DECISION` sites exist (`grep -v '^ *#' apply.sh | grep -cE 'say (WORKLIST|DECISION)'`), and a counter incremented at
 # each is a hand-list that the next row added silently falls out of -- the same shape as the
 # `mech_fail` list below, which is why that one had to be measured rather than trusted. Every row
 # reaches this function, so this is the one place the duty cannot be missed.
@@ -2615,6 +2615,60 @@ done
 [ "$declared_bad" -eq 0 ] || mech_fail=$((mech_fail + declared_bad))
 
 # -----------------------------------------------------------------------------
+# A SCAFFOLDED FILE THE CONSUMER'S OWN IGNORE RULES HIDE IS A FILE NO OTHER CHECKOUT RECEIVES.
+# Each of the six create-once arms below writes a path the contract declares, and a consumer whose
+# `.gitignore` carries a broad rule (`*.txt`, `*.md`) gets that file on disk here and nowhere else:
+# `git add -A` skips it, `git add <path>` refuses it, and the RESOLVED row reads as done. So each arm
+# calls this, in the main shell and never inside `$( )`, after its RESOLVED row (`scaffolded`) or from
+# its `else` when the path was already on disk (`preserved`), and the RESOLVED row itself stays exactly
+# what it was. An ignored path emits a SEPARATE `WORKLIST scaffold-ignored` row, one grammar for all six
+# arms and both tiers, and that row counts toward the withheld stamp like any other.
+#
+# THE DECISION AND THE REMEDY LIVE IN scaffold-ignore.sh, beside this file, so install.sh can load the
+# same code; its header states the rules (the rev-parse gate, `-q` never `-v`, the working-tree check,
+# a tracked path never reported, the exact-path exit and its string-equality forms, the escaped-path
+# limit). This function only turns its state into a row.
+#
+# EVERY ROW IS A WORKLIST, ON BOTH TIERS, BECAUSE THE ROW HAS AN EXIT. A consumer that keeps the file
+# untracked on purpose ignores it by its exact path (`<rel>` or `/<rel>`), the state reads `exact`,
+# and no row prints; `git add -f` is the other exit. An in-repo `check-ignore` exit other than 0 or 1
+# is `WORKLIST scaffold-ignore-unchecked`: the operator has to look.
+#
+# A MISSING SIBLING IS LOUD AND NEVER FATAL. scaffold-ignore.sh is loaded beside `SELF=`, before phase 1
+# writes anything, so the library that answers is the one that shipped with THIS driver and never one a
+# DEFERred pull wrote from THEIRS. If it did not load, the first arm that would ask prints
+# `DECISION scaffold-ignore-lib-missing` once; the DECISION hands the stamp back through the hand-back
+# count like any other, with no mechanical failure, since every file was placed. Every check is skipped.
+# It is said at first use, not at load, so a run that reaches no scaffold arm, which is every pull whose
+# THEIRS declares none of the six paths, is not withheld for it.
+#
+# AN UNKNOWN STATE ASKS, IT NEVER ACQUITS: any state word but the four the library documents, an empty
+# one included, is `WORKLIST scaffold-ignore-unchecked`.
+scaffold_ignore_missing_said=0
+scaffold_ignore_check() { # <consumer-relative path> <scaffolded|preserved>
+  local rel="$1" tier="${2:-scaffolded}" st prov
+  if [ "$scaffold_ignore_loaded" != 1 ]; then
+    if [ "$scaffold_ignore_missing_said" = 0 ]; then
+      scaffold_ignore_missing_said=1
+      say DECISION scaffold-ignore-lib-missing "$SCAFFOLD_IGNORE_LIB" \
+        "scaffold-ignore.sh did not load beside apply.sh, so whether the six create-once scaffold paths are hidden by this checkout's ignore rules was NOT checked. The machinery slice delivers it; re-run the pull once it is in place."
+    fi
+    return 0
+  fi
+  st="$(scaffold_ignore_state "$CONSUMER" "$rel")"
+  prov="${st#*$'\t'}"; st="${st%%$'\t'*}"
+  case "$st" in
+    exact|untracked-ok) : ;;
+    ignored)
+      say WORKLIST scaffold-ignored "$rel" "$(scaffold_ignore_remedy "$rel" "$prov")" ;;
+    unchecked:*)
+      say WORKLIST scaffold-ignore-unchecked "$rel" \
+        "'git check-ignore' exited ${st#unchecked:} in this checkout, so whether this ${tier} path is ignored was not decided. Run 'git check-ignore -v -- ${rel}'; if it names a rule, commit the file with 'git add -f ${rel}', or ignore it by its exact path." ;;
+    *) say WORKLIST scaffold-ignore-unchecked "$rel" "scaffold-ignore.sh answered the state '${st}' for this ${tier} path, which is none it documents, so whether it is ignored was not decided. Run 'git check-ignore -v -- ${rel}'; if it names a rule, commit the file with 'git add -f ${rel}', or ignore it by its exact path." ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
 # THE CONSUMER-OWNED CROSSWALK FILE IS SCAFFOLDED HERE, and the reason it has to be
 # here is that `install.sh` is the only other writer of it and NO CONSUMER RUNS
 # install.sh AGAIN. A pull is how an existing consumer receives everything; a
@@ -2665,12 +2719,15 @@ elif [ ! -f "$CONSUMER/$CW_REL" ]; then
     mv "$cw_tmp" "$CONSUMER/$CW_REL"
     say RESOLVED crosswalk-scaffold "$CW_REL" \
       "created from ${cw_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes to it again, and the branch above is why: this driver only ever creates it when absent."
+    scaffold_ignore_check "$CW_REL" scaffolded
   else
     rm -f "$cw_tmp"
     say DECISION crosswalk-template-missing "$cw_tpl" \
       "THEIRS declares '$CW_REL' but ships no template to scaffold it from, so the declared path would stay empty while the validator reports rows against it. Fix upstream and re-run; this is a distribution packaging defect and not something to work around here."
     mech_fail=$((mech_fail+1))
   fi
+else
+  scaffold_ignore_check "$CW_REL" preserved
 fi
 
 # The machinery inventory, scaffolded on exactly the same terms as the crosswalk above and
@@ -2693,12 +2750,15 @@ elif [ ! -f "$CONSUMER/$MC_REL" ]; then
     mv "$mc_tmp" "$CONSUMER/$MC_REL"
     say RESOLVED machinery-scaffold "$MC_REL" \
       "created from ${mc_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes it again. Declare which of your scripts are ai-dlc machinery, or leave the literal 'none' if this project has none of its own."
+    scaffold_ignore_check "$MC_REL" scaffolded
   else
     rm -f "$mc_tmp"
     say DECISION machinery-template-missing "$mc_tpl" \
       "THEIRS declares '$MC_REL' but ships no template to scaffold it from, so the declared path would stay empty while the contract says it is the inventory's home."
     mech_fail=$((mech_fail+1))
   fi
+else
+  scaffold_ignore_check "$MC_REL" preserved
 fi
 
 # The PR-class taxonomy the post-merge trunk audit reads, on the same terms and with the same
@@ -2718,12 +2778,15 @@ elif [ ! -f "$CONSUMER/$PC_REL" ]; then
     mv "$pc_tmp" "$CONSUMER/$PC_REL"
     say RESOLVED pr-class-scaffold "$PC_REL" \
       "created from ${pc_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes it again. Declare your trunk's classes and the validators each owes, or leave the literal 'none': until you do, 'validate-cycle-commits.sh --audit-trunk' prints a worklist line and audits nothing."
+    scaffold_ignore_check "$PC_REL" scaffolded
   else
     rm -f "$pc_tmp"
     say DECISION pr-class-template-missing "$pc_tpl" \
       "THEIRS declares '$PC_REL' but ships no template to scaffold it from, so the declared path would stay empty while the trunk audit has nothing to resolve commits against."
     mech_fail=$((mech_fail+1))
   fi
+else
+  scaffold_ignore_check "$PC_REL" preserved
 fi
 
 # The derivable story-field list `sprint-status.sh derive-stories` reads, on the same terms and
@@ -2743,12 +2806,15 @@ elif [ ! -f "$CONSUMER/$SF_REL" ]; then
     mv "$sf_tmp" "$CONSUMER/$SF_REL"
     say RESOLVED story-fields-scaffold "$SF_REL" \
       "created from ${sf_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes it again. List the story-entry fields this project DERIVES from its story files, or leave the literal 'none': until you do, 'sprint-status.sh derive-stories' prints a worklist line and derives only \`status\`, which comes from the schema and is not declarable."
+    scaffold_ignore_check "$SF_REL" scaffolded
   else
     rm -f "$sf_tmp"
     say DECISION story-fields-template-missing "$sf_tpl" \
       "THEIRS declares '$SF_REL' but ships no template to scaffold it from, so the declared path would stay empty while the derive has nothing to read."
     mech_fail=$((mech_fail+1))
   fi
+else
+  scaffold_ignore_check "$SF_REL" preserved
 fi
 
 # The artifact kinds and areas rule 4 of artifact-path-grammar.md reads, on the same terms and
@@ -2768,12 +2834,15 @@ elif [ ! -f "$CONSUMER/$AP_REL" ]; then
     mv "$ap_tmp" "$CONSUMER/$AP_REL"
     say RESOLVED artifact-paths-scaffold "$AP_REL" \
       "created from ${ap_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes it again. Declare the artifact kinds and any extra area roots this project uses, or leave the literal 'none': until you do, rule 4 of artifact-path-grammar.md (kind comes from a declared closed set) has nothing to check against. The other four rules do not depend on it."
+    scaffold_ignore_check "$AP_REL" scaffolded
   else
     rm -f "$ap_tmp"
     say DECISION artifact-paths-template-missing "$ap_tpl" \
       "THEIRS declares '$AP_REL' but ships no template to scaffold it from, so the declared path would stay empty while the grammar says it is the kind set's home."
     mech_fail=$((mech_fail+1))
   fi
+else
+  scaffold_ignore_check "$AP_REL" preserved
 fi
 
 # The smoke surface validate-handoff-evidence.sh's smoke arms read, on the same terms and with the
@@ -2793,12 +2862,15 @@ elif [ ! -f "$CONSUMER/$SS_REL" ]; then
     mv "$ss_tmp" "$CONSUMER/$SS_REL"
     say RESOLVED smoke-surface-scaffold "$SS_REL" \
       "created from ${ss_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes it again. It is comments only: until you write the git pathspecs of this project's smoke surface, or a lone 'none', 'validate-handoff-evidence.sh' prints 'SKIP SMOKE-SURFACE (empty ...)' and checks no smoke coverage. Commit it between sprints: a story whose range edits it refuses smoke-surface-edited."
+    scaffold_ignore_check "$SS_REL" scaffolded
   else
     rm -f "$ss_tmp"
     say DECISION smoke-surface-template-missing "$ss_tpl" \
       "THEIRS declares '$SS_REL' but ships no template to scaffold it from, so the declared path would stay absent while the smoke arms read it as the surface's home."
     mech_fail=$((mech_fail+1))
   fi
+else
+  scaffold_ignore_check "$SS_REL" preserved
 fi
 
 # -----------------------------------------------------------------------------

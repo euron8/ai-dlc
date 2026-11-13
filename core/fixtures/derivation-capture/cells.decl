@@ -1,0 +1,6 @@
+# derivation-capture's starts of core/scripts/partition-document.sh (BL-879 grammar). Every section split the
+# fixture needs is in process: run.sh sources the splitter in a subshell and calls pdoc_main (split_seed). One cli
+# cell per distinct outcome the equivalence needs (exit 0 split written, exit 2 REFUSED and nothing written), each
+# started as FXCELL=<id> bash "$PDOC" in pd_eqv() and compared byte for byte with the in-process call on the same input.
+cli core/scripts/partition-document.sh cli-split-pass
+cli core/scripts/partition-document.sh cli-split-refuse

@@ -57,7 +57,11 @@
 #      ]
 # 4. Restart Claude Code
 # 5. Verify with /hooks
+#
+# The whole program is esd_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition.
 
+esd_main() {
 set -u
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
@@ -194,3 +198,7 @@ fi
 } >> "$LOG_FILE"
 
 exit 0
+}
+# Executed, it runs; sourced, it has defined esd_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+esd_main "$@"

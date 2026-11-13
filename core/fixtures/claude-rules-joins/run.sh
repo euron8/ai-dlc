@@ -34,7 +34,39 @@
 #
 # A mutant must fail ONLY its own assertion. Two FAIL lines mean the arms are entangled
 # and one of them is vacuous, so the count is asserted, not just the message.
+#
+# Usage: run.sh [--matrix]
+#
+# THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). One run of a mutated tree's copy answers every
+# arm the validator carries (A1 A2 A3 A3b A4 A5 A6), and kill_check asserts the FAIL lines are exactly one, its own:
+# the whole arm vector is each mutant's decision, so each is a FULL row whose worlds are those arms. `--matrix` prints
+# one `MATRIX <mutant> FULL [<arms that FAILed>]` row per mutant; the per-push score is the same run. The mutant name
+# mutant_killed carries is the label's first word (m1, mA2b, ...). RE-MEASURE whenever an arm or a mutant is added
+# or changed, from the repo root:
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/claude-rules-joins/run.sh --matrix
+# MUTANT-MATRIX-FULL m1 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A1's, across every arm
+# MUTANT-MATRIX-FULL m2 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A2's, across every arm
+# MUTANT-MATRIX-FULL m3 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A3's, across every arm
+# MUTANT-MATRIX-FULL m4 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A4's, across every arm
+# MUTANT-MATRIX-FULL m5 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A4's, across every arm
+# MUTANT-MATRIX-FULL m6 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A4's, across every arm
+# MUTANT-MATRIX-FULL m7 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A3b's, across every arm
+# MUTANT-MATRIX-FULL m8 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A3b's, across every arm
+# MUTANT-MATRIX-FULL m9 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A3b's, across every arm
+# MUTANT-MATRIX-FULL m10 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A5's, across every arm
+# MUTANT-MATRIX-FULL m11 worlds=A1,A2,A3,A3b,A4,A5,A6 why=the m11 arm asserts exactly one FAIL line, A6's, across every arm
+# MUTANT-MATRIX-FULL mA1 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A1's own probe, across every arm
+# MUTANT-MATRIX-FULL mA2 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A2's own probe, across every arm
+# MUTANT-MATRIX-FULL mA2b worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A2's own probe, across every arm
+# MUTANT-MATRIX-DYNAMIC kill_check why=kill_check passes the first word of each label above to mutant_killed by variable
 set -u
+MATRIX=0
+for _a in "$@"; do
+  case "$_a" in
+    --matrix) MATRIX=1 ;;
+    *) echo "FIXTURE ERROR: unknown argument '$_a' (only --matrix)" >&2; exit 2 ;;
+  esac
+done
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset CLAUDE_PROJECT_DIR
@@ -109,11 +141,48 @@ EOF
   ( cd "$d" && git init -q . && git add -A >/dev/null 2>&1 )
 }
 
-run_v() { ( cd "$1" && bash scripts/validate-claude-rules.sh 2>&1 ); }
-run_v_env() { ( cd "$2" && env "$1" bash scripts/validate-claude-rules.sh 2>&1 ); }
+# IN PROCESS (BL-878). Each seeded tree's validator copy is SOURCED ONCE into this shell by src_vcr (its guard
+# returns after defining vcr_main; one fx_inproc pass per copy, and the copy sourced last is not sourced again), and
+# run_v / run_v_env call vcr_main inside a `( )` subshell after a `cd` into that tree, so the subject's `exit`, its
+# `cd "$ROOT"`, its EXIT trap and its unset of the repository environment stay there. An env word a drive carries
+# is EXPORTED in that subshell, which is what `env VAR=x bash` gave the program, and the subject's own top-of-main
+# unset then meets it exactly as it did. Inside vcr_main BASH_SOURCE[0] is the tree's copy, so its VERSION walk-up
+# finds the tree. Every src_vcr runs in THIS shell, never inside a `$( )`. The copies sit at <tree>/scripts/<name>,
+# the subject's relative path, so each pass is counted under the inproc: row.
+VCR_SOURCED=""
+src_vcr() { # src_vcr <tree>
+  local c="$1/scripts/validate-claude-rules.sh"
+  [ "$c" = "$VCR_SOURCED" ] && return 0
+  unset -f vcr_main
+  fx_inproc "$c"
+  . "$c" || { echo "FIXTURE BROKEN: sourcing $c failed" >&2; exit 2; }
+  declare -F vcr_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $c defined no vcr_main" >&2; exit 2; }
+  VCR_SOURCED="$c"
+}
+vcr_ready() { [ "$1/scripts/validate-claude-rules.sh" = "$VCR_SOURCED" ] || { echo "FIXTURE BROKEN: driving $1 while ${VCR_SOURCED:-nothing} is sourced" >&2; return 97; }; }
+run_v() { vcr_ready "$1" || return 97; ( cd "$1" && vcr_main 2>&1 ); }
+run_v_env() { vcr_ready "$2" || return 97; ( cd "$2" && export "$1" && vcr_main 2>&1 ); }
+
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome -----------------
+# Outcomes, by exit: 0 every arm passes (cli-pass, over the control tree), 1 a finding (cli-finding, over m1's tree),
+# 2 a usage refusal (cli-usage, an unknown argument). One `FXCELL=<id> bash scripts/validate-claude-rules.sh` start
+# each from inside the tree, compared byte for byte (stdout, stderr, exit) with vcr_main of the same copy, sourced
+# last, called in process from the same directory. Each also asserts its own outcome.
+EQ="$TMP/eq"; mkdir -p "$EQ"
+eqv() { # eqv <cell-id> <tree> <args...>
+  local id="$1" t="$2"; shift 2
+  vcr_ready "$t" || exit 2
+  ( cd "$t" && vcr_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$t" && FXCELL="$id" bash scripts/validate-claude-rules.sh "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_rc() { cat "$EQ/$1.cl.rc"; }
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(tail -c 300 "$EQ/$1.ip.out")" "$(tail -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(tail -c 300 "$EQ/$1.cl.out")" "$(tail -c 300 "$EQ/$1.cl.err")"; }
 
 # --- unmutated control ------------------------------------------------------
 seed "$TMP/control"
+src_vcr "$TMP/control"
 if out="$(run_v "$TMP/control")" && [ -n "$out" ]; then
   ok "control -- clean tree passes, harness is live"; B_CTRL=1
 else
@@ -121,12 +190,21 @@ else
   printf '%s\n' "$out" | sed 's/^/      /'
   exit 1
 fi
+if eqv cli-pass "$TMP/control" && [ "$(eq_rc cli-pass)" = 0 ] && grep -q '^OK: validate-claude-rules' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program passes the control tree exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with its OK line ($(eq_twin cli-pass))"; fi
+if eqv cli-usage "$TMP/control" --no-such-flag && [ "$(eq_rc cli-usage)" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && [ "$(cat "$EQ/cli-usage.cl.err")" = "usage: validate-claude-rules.sh [--quiet]" ]; then
+  ok "cli-usage: the program refuses an unknown argument exactly as the in-process call does (stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-usage))"; fi
 
 # --- mutant driver ----------------------------------------------------------
 kill_check() { # kill_check <name> <dir> <expected-substring>
   local n="$1" d="$2" pat="$3" out rc_v nfail
+  src_vcr "$d"
   out="$(run_v "$d")"; rc_v=$?
   nfail="$(printf '%s\n' "$out" | grep -c '^FAIL:')"
+  [ "$MATRIX" = 1 ] && printf 'MATRIX %s FULL [%s]\n' "${n%% *}" "$(fail_arms "$out")"
   if [ "$rc_v" -eq 0 ]; then
     note "FAIL  $n -- mutant SURVIVED (validator exited 0)"; rc=1; return
   fi
@@ -138,8 +216,10 @@ kill_check() { # kill_check <name> <dir> <expected-substring>
     note "FAIL  $n -- $nfail FAIL lines; a mutant must fail ONLY its own assertion, so the arms are entangled"
     rc=1; return
   fi
-  mutant_killed "${B_CTRL:-0}" "$n" "$n -- killed by its own arm, and only its own"
+  mutant_killed "${B_CTRL:-0}" "${n%% *}" "$n -- killed by its own arm, and only its own"
 }
+# fail_arms <validator output> -> the arm id each FAIL line opens with (A1, A3b, ...), sorted, space-separated
+fail_arms() { sed -n "s/^FAIL: \(A[0-9][a-z]*\)[:'].*/\1/p" <<<"$1" | LC_ALL=C sort | tr '\n' ' '; }
 
 mutate() { # mutate <file> <sed-expr> ; guarded so a no-op sed cannot pass as a mutation
   local f="$1" expr="$2"
@@ -153,6 +233,21 @@ mutate() { # mutate <file> <sed-expr> ; guarded so a no-op sed cannot pass as a 
 seed "$TMP/m1"; printf '{}\n' > "$TMP/m1/.claude/settings.json"
 ( cd "$TMP/m1" && git add -f .claude/settings.json >/dev/null 2>&1 )
 kill_check "m1 A1 tracked non-rule path" "$TMP/m1" "A1: tracked path(s) under .claude/"
+if eqv cli-finding "$TMP/m1" && [ "$(eq_rc cli-finding)" = 1 ] && grep -qF 'A1: tracked path(s) under .claude/' "$EQ/cli-finding.cl.err"; then
+  ok "cli-finding: the program convicts m1's tracked non-rule path exactly as the in-process call does (exit 1)"
+else bad "cli-finding: the program and the in-process call differ, or the outcome is not exit 1 naming A1 ($(eq_twin cli-finding))"; fi
+# The no-VERSION refusal names the program through BASH_SOURCE[0]. Run in process, `$0` names this fixture, so a
+# validator reading `$0` would name run.sh; the message must name the copy that is running.
+seed "$TMP/nover"; rm -f "$TMP/nover/VERSION"
+src_vcr "$TMP/nover"
+nv_out="$(run_v "$TMP/nover")"; nv_rc=$?
+if [ "$nv_rc" -eq 2 ] && grep -qF "(no VERSION marker above $TMP/nover/scripts/validate-claude-rules.sh)" <<<"$nv_out"; then
+  ok "no VERSION above the copy: exit 2, and the refusal names the copy that is running, not its caller"
+else bad "no VERSION above the copy: want exit 2 naming $TMP/nover/scripts/validate-claude-rules.sh; got exit $nv_rc: $(printf '%s' "$nv_out" | head -1)"; fi
+if ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-finding.cl.rc" && ! cmp -s "$EQ/cli-finding.cl.rc" "$EQ/cli-usage.cl.rc" \
+   && ! cmp -s "$EQ/cli-pass.cl.err" "$EQ/cli-finding.cl.err"; then
+  ok "cli cells discriminate: pass, finding and usage exit 0, 1 and 2, and only the finding prints an A1 conviction"
+else bad "cli cells do not discriminate: two of cli-pass, cli-finding, cli-usage share an exit, or pass and finding share stderr"; fi
 
 # m2 -- A2 orphan glob
 seed "$TMP/m2"
@@ -222,14 +317,16 @@ else note "SKIP  m10 -- sed matched nothing; no mutation occurred"; rc=1; fi
 # m11 -- A6 over the ceiling. Driven by the documented override rather than by writing a
 # 32 KB file, so the arm is tested at its real comparison and not at its file arithmetic.
 seed "$TMP/m11"
+src_vcr "$TMP/m11"
 out="$(run_v_env AI_DLC_DURABLE_BYTES=10 "$TMP/m11")"
+[ "$MATRIX" = 1 ] && printf 'MATRIX %s FULL [%s]\n' m11 "$(fail_arms "$out")"
 if [ -z "$out" ] || ! grep -qF "against a ceiling of 10" <<<"$out"; then
   note "FAIL  m11 A6 over ceiling -- mutant SURVIVED or failed on another arm"
   printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
 elif [ "$(printf '%s\n' "$out" | grep -c '^FAIL:')" -ne 1 ]; then
   note "FAIL  m11 A6 over ceiling -- more than one FAIL line; the arms are entangled"; rc=1
 else
-  mutant_killed "${B_CTRL:-0}" "m11 A6 over ceiling" "m11 A6 over ceiling -- killed by its own arm, and only its own"
+  mutant_killed "${B_CTRL:-0}" "m11" "m11 A6 over ceiling -- killed by its own arm, and only its own"
 fi
 
 # m12 -- THE PROBE MUST BUILD ITS OWN REPOSITORY, NOT WRITE THE CALLER'S.
@@ -282,6 +379,7 @@ elif [ "$v_before" -ne 9 ]; then
 else
   # The ARMING control: with the environment inherited, this is the exact shape git hands a
   # hook pushed from a linked worktree. If the seed cannot express that, the arm is vacuous.
+  src_vcr "$TMP/m12"
   out="$(run_v_env "GIT_DIR=$victim/.git" "$TMP/m12")"
   v_after="$( ( cd "$victim" && git ls-files | wc -l ) | tr -d ' ' )"
   if [ "$v_after" -ne "$v_before" ]; then
@@ -334,8 +432,9 @@ else
     note "FIXTURE BROKEN: m12b's victim seeded $b_before entries, expected 7; the arm cannot discriminate."
     rc=1
   else
-    out_b="$( cd "$TMP/m12" && env "GIT_INDEX_FILE=$m12b_victim/.git/index" "GIT_WORK_TREE=$m12b_victim" \
-      bash scripts/validate-claude-rules.sh 2>&1 )"
+    src_vcr "$TMP/m12"
+    out_b="$( vcr_ready "$TMP/m12" && cd "$TMP/m12" && export "GIT_INDEX_FILE=$m12b_victim/.git/index" "GIT_WORK_TREE=$m12b_victim" \
+      && vcr_main 2>&1 )"
     b_after="$( ( cd "$m12b_victim" && git ls-files | wc -l ) | tr -d ' ' )"
     if [ "$b_after" -ne "$b_before" ]; then
       note "FAIL  m12b probe wrote the caller's index through GIT_INDEX_FILE -- victim went $b_before -> $b_after."
@@ -384,6 +483,7 @@ else
   # BOTH DIRECTIONS, in the same run. Scrubbed: A1 must convict. Inherited: A1 must convict
   # the SAME offender. A build that reads the victim prints `A1  ok` on the second only, so
   # the pair separates a working scrub from one that covers the write alone.
+  src_vcr "$TMP/m13"
   m13_clean="$(run_v_env "AI_DLC_UNUSED=1" "$TMP/m13")"
   m13_armed="$(run_v_env "GIT_DIR=$m13victim/.git" "$TMP/m13")"
   if ! grep -qF "A1: tracked path(s) under .claude/" <<<"$m13_clean"; then

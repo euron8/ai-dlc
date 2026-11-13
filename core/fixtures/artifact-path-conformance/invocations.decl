@@ -1,3 +1,8 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-166 *
-6 core/scripts/validate-artifact-paths.sh
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
+# are run.sh itself, seed.sh, the migration, the resolver artifact-path-config.sh (which every validator run, in
+# process or not, starts as a program, five times), and the four cli cells of cells.decl. inproc rows (fx_inproc, one
+# per source): the shipped validator, and the ship, control and five mutant pairs' copies, each pair laid at
+# $MUT/<name>/core/scripts/ so the copy keeps the subject's relative path.
+162 *
+4 core/scripts/validate-artifact-paths.sh
+8 inproc:core/scripts/validate-artifact-paths.sh

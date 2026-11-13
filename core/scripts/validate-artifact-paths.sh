@@ -57,6 +57,11 @@
 #   0  -- no blocking finding (including NOT-APPLICABLE: nothing tracked under any scan root)
 #   1  -- at least one blocking finding
 #   2  -- usage error, or the grammar/areas/scan-roots could not be resolved
+#
+# The whole program is vap_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition. --help reads this file through
+# BASH_SOURCE[0], never $0, which in a sourcing shell names the caller.
+vap_main() {
 set -uo pipefail
 
 PROG="validate-artifact-paths.sh"
@@ -69,7 +74,7 @@ while [ $# -gt 0 ]; do
     --report) REPORT=1; shift ;;
     --root)   ROOT="${2:-}"; [ -n "$ROOT" ] || { echo "$PROG: --root needs a directory" >&2; exit 2; }; shift 2 ;;
     --grammar) GRAMMAR_ARG="${2:-}"; [ -n "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar needs a file" >&2; exit 2; }; shift 2 ;;
-    -h|--help) sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "$PROG: unknown option '$1'" >&2
        echo "usage: $PROG [--root <dir>] [--grammar <file>] [--report]" >&2
        exit 2 ;;
@@ -419,3 +424,7 @@ echo "  scripts/ai-dlc/migrate-artifact-paths.sh --apply      # git mv, verified
 echo ""
 echo "VERDICT: FAIL — $N_BLOCK blocking, $N_AMBIG ambiguous, $N_NOAREA with no area, $N_STORY story file(s) with no derivable sprint."
 exit 1
+}
+# Executed, it runs; sourced, it has defined vap_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vap_main "$@"

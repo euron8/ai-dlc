@@ -16,6 +16,7 @@ git
 grep
 head
 jq
+ln
 mkdir
 mktemp
 mv

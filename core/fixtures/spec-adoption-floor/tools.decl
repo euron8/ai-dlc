@@ -11,3 +11,4 @@ sed
 head
 cat
 git
+cmp

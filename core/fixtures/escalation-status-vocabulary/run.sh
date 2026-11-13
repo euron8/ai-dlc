@@ -11,7 +11,54 @@
 #
 # Measured on the reference consumer: 8 entries on FILED and OPEN, accumulated across the
 # sprints they were written in, every gate in that window reporting Check 2 as passing.
+#
+# Usage: run.sh [--matrix]
+#
+# THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). The four READER mutants are scored on the
+# seven reader arms (a-off a-near b-off b-near d-off d-near M-mid: assertions 4 and 8-10, an offender and a near-miss
+# per reading). PER PUSH a reader mutant runs only its DECIDING arm, which it must trip, and its TWIN, which it must
+# leave GREEN; `--matrix` runs every arm and prints one `MATRIX <mutant> <arm> TRIPPED|GREEN` row per pair. The
+# rows below are the one source: mx_row reads them from this file, and a per-push run refuses a mutant with none.
+# The fifteen CELL-VECTOR mutants (the empty-file, refusal, posture and refusal-prose batteries) are each scored by
+# one string of every cell of their battery against the whole vector they must produce, so each is a FULL row.
+# RE-MEASURE whenever an arm or a mutant is added or changed, from the repo root:
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/escalation-status-vocabulary/run.sh --matrix
+# Measured by the REMEASURE command: canon-guard-deleted also trips d-off (its token check), and first-wins-outright
+# also trips a-off and b-off (the reading this change replaced is first-wins for both); each stands down for the
+# deciding near-miss, which is the cell no other mutant here reaches.
+# MUTANT-MATRIX canon-guard-deleted decides=d-near twins=b-near
+# MUTANT-MATRIX line-anchored decides=M-mid twins=a-near
+# MUTANT-MATRIX first-canonical-wins decides=a-off twins=b-off
+# MUTANT-MATRIX first-wins-outright decides=b-near twins=d-near
+# MUTANT-MATRIX-FULL M-revert worlds=A,B,C,D,E why=the empty-file arm asserts the whole five-cell vector equals 00111, so every cell is its decision
+# MUTANT-MATRIX-FULL M-zero-records worlds=A,B,C,D,E why=the empty-file arm asserts the whole five-cell vector equals 11101, so every cell is its decision
+# MUTANT-MATRIX-FULL R-revert-all worlds=A,B,C,D,E,F why=the refusal arm asserts the whole six-cell vector equals 000011, so every cell is its decision
+# MUTANT-MATRIX-FULL R-nonregular worlds=A,B,C,D,E,F why=the refusal arm asserts the whole six-cell vector equals 100111, so every cell is its decision
+# MUTANT-MATRIX-FULL R-no-symlink worlds=A,B,C,D,E,F why=the refusal arm asserts the whole six-cell vector equals 110111, so every cell is its decision
+# MUTANT-MATRIX-FULL R-rc worlds=A,B,C,D,E,F why=the refusal arm asserts the whole six-cell vector equals 011011, so every cell is its decision
+# MUTANT-MATRIX-FULL R-readable-never worlds=A,B,C,D,E,F why=the refusal arm asserts the whole six-cell vector equals 011111, so every cell is its decision
+# MUTANT-MATRIX-FULL R-readable-always worlds=A,B,C,D,E,F why=the refusal arm asserts the whole six-cell vector equals 111011, so every cell is its decision
+# MUTANT-MATRIX-FULL M-step-2 worlds=A,B,C why=the posture arm asserts the whole three-cell vector equals 011, so every cell is its decision
+# MUTANT-MATRIX-FULL M-step-2a worlds=A,B,C why=the posture arm asserts the whole three-cell vector equals 101, so every cell is its decision
+# MUTANT-MATRIX-FULL M-map worlds=A,B,C why=the posture arm asserts the whole three-cell vector equals 110, so every cell is its decision
+# MUTANT-MATRIX-FULL RP-fail-sentence worlds=A,B,C,D2,D2a,Dm,E,PA,PB,PC why=the refusal-prose arm asserts the seven refusal cells and the three posture cells equal 1110111/111 together
+# MUTANT-MATRIX-FULL RP-map-clause worlds=A,B,C,D2,D2a,Dm,E,PA,PB,PC why=the refusal-prose arm asserts the seven refusal cells and the three posture cells equal 0111111/111 together
+# MUTANT-MATRIX-FULL RP-step-2a-tail worlds=A,B,C,D2,D2a,Dm,E,PA,PB,PC why=the refusal-prose arm asserts the seven refusal cells and the three posture cells equal 1101111/111 together
+# MUTANT-MATRIX-FULL RP-check-26 worlds=A,B,C,D2,D2a,Dm,E,PA,PB,PC why=the refusal-prose arm asserts the seven refusal cells and the three posture cells equal 1111110/111 together
+# The kills reach mutant_killed through variables, one name per scorer call:
+# MUTANT-MATRIX-DYNAMIC reader-loop why=the reader loop passes each of the four reader mutant names above as $mname
+# MUTANT-MATRIX-DYNAMIC ven_score why=ven_score passes M-revert and M-zero-records as its name argument
+# MUTANT-MATRIX-DYNAMIC vr_score why=vr_score passes the six R- mutant names above as its name argument
+# MUTANT-MATRIX-DYNAMIC en_score why=en_score passes M-step-2, M-step-2a and M-map as its name argument
+# MUTANT-MATRIX-DYNAMIC rp_score why=rp_score passes the four RP- mutant names above as its name argument
 set -uo pipefail
+MATRIX=0
+for _a in "$@"; do
+  case "$_a" in
+    --matrix) MATRIX=1 ;;
+    *) echo "FIXTURE ERROR: unknown argument '$_a' (only --matrix)" >&2; exit 2 ;;
+  esac
+done
 # The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -24,24 +71,95 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "escalation-status-vocabulary:"
 echo "HERMETIC-CONSUMED $VALIDATOR"
 
+# IN PROCESS (BL-878). Every copy of the validator -- the shipped one, the lone copy, the mutant control and every
+# mutant -- is SOURCED by src_esv in THIS shell (its guard returns after defining esv_main; one fx_inproc pass per
+# source, and a copy already sourced last is not sourced again), and `ev <copy> <args>` runs that copy's esv_main in
+# a `( )` subshell, refusing any copy but the one sourced last. The subject's `exit` and `cd` stay in the subshell,
+# and the env a drive needs is exported there. Every group of drives opens with src_esv on its copy, in this shell,
+# never inside a `$( )`. Copies keep the subject's relative path (.../core/scripts/<name>), so each pass is counted
+# under the inproc: row. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a validator with neither the `esv_main() {` line
+# nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an ok); exactly one half is a
+# respelled subject and FAILs. The distribution cannot reach the SKIP unnoticed: C5 (validate-fixture-inprocess.sh)
+# refuses a cli subject without the guard, and J3 refuses the start count moving.
+ESV_SOURCED=""
+src_esv() { # src_esv <copy>
+  [ "$1" = "$ESV_SOURCED" ] && return 0
+  unset -f esv_main
+  fx_inproc "$1"
+  . "$1" || { echo "FIXTURE BROKEN: sourcing $1 failed" >&2; exit 2; }
+  declare -F esv_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $1 defined no esv_main" >&2; exit 2; }
+  ESV_SOURCED="$1"
+}
+ev() { # ev <copy> <args...> -- one in-process run of <copy>, which must be the copy src_esv sourced last
+  [ "$1" = "$ESV_SOURCED" ] || { echo "FIXTURE BROKEN: driving $1 while ${ESV_SOURCED:-nothing} is sourced" >&2; return 97; }
+  shift
+  # The program runs with `set -u` alone; this fixture runs with pipefail, which a subshell inherits. Turned off
+  # first, so a pipeline inside esv_main answers in process exactly as it does when the validator is run as a program.
+  ( set +o pipefail; esv_main "$@" )
+}
+ESV_REL="core/scripts/$(basename "$VALIDATOR")"
+w_def=0; w_guard=0
+grep -q '^esv_main() {$' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || w_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || w_guard=1
+if [ "$w_def$w_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$w_def" = 0 ]; then bad "$VALIDATOR carries the column-0 source guard but no \`esv_main() {\` line -- a respelled subject this fixture cannot drive"; echo "escalation-status-vocabulary: $fails assertion(s) FAILED" >&2; exit 1; fi
+if [ "$w_guard" = 0 ]; then bad "$VALIDATOR defines \`esv_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run esv_main in this shell"; echo "escalation-status-vocabulary: $fails assertion(s) FAILED" >&2; exit 1; fi
+src_esv "$VALIDATOR"
+
+# --- the cli cells (cells.decl): the shipped validator run as a PROGRAM once per distinct CLI outcome -------------
+# Outcomes, exit x output class: 0 the OK line (cli-pass); 0 OK: EXAMINED NOTHING (cli-empty); 1 a finding naming the
+# out-of-vocabulary tokens (cli-finding); 2 the usage refusal on stderr (cli-usage). One `FXCELL=<id> bash
+# "$VALIDATOR"` start each, compared byte for byte (stdout, stderr, exit) with the in-process call on the same input;
+# the validator only reads. Each also asserts its own outcome.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # eqv <cell-id> <args...>
+  local id="$1"; shift
+  ev "$VALIDATOR" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_rc() { cat "$EQ/$1.cl.rc"; }
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -c 300 "$EQ/$1.ip.out")" "$(head -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -c 300 "$EQ/$1.cl.out")" "$(head -c 300 "$EQ/$1.cl.err")"; }
+if eqv cli-pass "$CLEAN" "$SPEC_SRC" && [ "$(eq_rc cli-pass)" = 0 ] && grep -q '^OK: ' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program passes the published set exactly as the in-process call does (exit 0, an OK line)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with an OK line ($(eq_twin cli-pass))"; fi
+if eqv cli-empty "$EMPTY" "$SPEC_SRC" && [ "$(eq_rc cli-empty)" = 0 ] && grep -qF 'EXAMINED NOTHING' "$EQ/cli-empty.cl.out"; then
+  ok "cli-empty: the program examines nothing in an empty file exactly as the in-process call does (exit 0)"
+else bad "cli-empty: the program and the in-process call differ, or the outcome is not exit 0 EXAMINED NOTHING ($(eq_twin cli-empty))"; fi
+if eqv cli-finding "$DRIFT" "$SPEC_SRC" && [ "$(eq_rc cli-finding)" = 1 ] && grep -qF 'out-of-vocabulary status' "$EQ/cli-finding.cl.out" "$EQ/cli-finding.cl.err"; then
+  ok "cli-finding: the program reports the drifted entries exactly as the in-process call does (exit 1)"
+else bad "cli-finding: the program and the in-process call differ, or the outcome is not exit 1 with a finding ($(eq_twin cli-finding))"; fi
+if eqv cli-usage && [ "$(eq_rc cli-usage)" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] && grep -qF 'FAIL: usage:' "$EQ/cli-usage.cl.err"; then
+  ok "cli-usage: the program refuses no arguments exactly as the in-process call does (stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-usage))"; fi
+if ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-finding.cl.rc" && ! cmp -s "$EQ/cli-finding.cl.rc" "$EQ/cli-usage.cl.rc" \
+   && ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-empty.cl.out"; then
+  ok "cli cells discriminate: pass, finding and usage exit 0, 1 and 2, and the pass and the empty file print different lines"
+else bad "cli cells do not discriminate: two of cli-pass, cli-finding, cli-usage share an exit, or cli-pass printed what cli-empty did"; fi
+
 # --- Assertion 1: POSITIVE CONTROL — the published set passes ----------------
 # Without this, every assertion below is satisfied by a validator that reds on everything.
-if bash "$VALIDATOR" "$CLEAN" "$SPEC_SRC" >/dev/null 2>&1; then
+if ev "$VALIDATOR" "$CLEAN" "$SPEC_SRC" >/dev/null 2>&1; then
   ok "positive control: every token the spec publishes passes"
 else
-  bad "the check reds on entries using only the published set — it would fail every gate: $(bash "$VALIDATOR" "$CLEAN" "$SPEC_SRC" 2>&1 | grep FAIL | head -1)"
+  bad "the check reds on entries using only the published set — it would fail every gate: $(ev "$VALIDATOR" "$CLEAN" "$SPEC_SRC" 2>&1 | grep FAIL | head -1)"
 fi
 
 # --- Assertion 2: THE DEFECT — out-of-vocabulary tokens FAIL -----------------
-OUT="$(bash "$VALIDATOR" "$DRIFT" "$SPEC_SRC" 2>&1)"; rc=$?
+OUT="$(ev "$VALIDATOR" "$DRIFT" "$SPEC_SRC" 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q "FILED" <<<"$OUT" && grep -q "OPEN" <<<"$OUT"; then
   ok "drifted entries FAIL (rc=1) and both offending tokens are named"
 else
@@ -61,7 +179,7 @@ fi
 # The naive validator anyone writes first anchors `**Status:**` to line start. Check 2 has
 # no such blind spot — it reads the entry — so a mid-entry token is just as silently
 # skipped, and a checker that misses it reports a green it did not earn.
-if ! bash "$VALIDATOR" "$MIDENTRY" "$SPEC_SRC" >/dev/null 2>&1; then
+if ! ev "$VALIDATOR" "$MIDENTRY" "$SPEC_SRC" >/dev/null 2>&1; then
   ok "a mid-entry **Status:** token outside the set is caught (not only line-anchored ones)"
 else
   bad "a mid-entry out-of-vocabulary token passed — the check has the line-anchored blind spot"
@@ -82,7 +200,7 @@ sed 's/^\(\*\*Terminal statuses\*\*.*\)`$/\1 | FILED | OPEN`/' \
   "$SPEC_SRC" > "$SPEC_MUT"
 if ! grep -q 'FILED | OPEN' "$SPEC_MUT"; then
   bad "FIXTURE STALE: could not extend the terminal-status line — escalations.md's '**Terminal statuses**' line was reworded"
-elif bash "$VALIDATOR" "$DRIFT" "$SPEC_MUT" >/dev/null 2>&1; then
+elif ev "$VALIDATOR" "$DRIFT" "$SPEC_MUT" >/dev/null 2>&1; then
   ok "widening escalations.md's published set makes the same entries pass — the vocabulary is read, not restated"
 else
   bad "the drifted file STILL fails after escalations.md was widened — the script carries a private set and 'derived' is decoration"
@@ -95,7 +213,7 @@ SPEC_NARROW="$WORK/escalations-narrow.md"
 sed 's/^\*\*Status:\*\* HARD_BLOCK.*/**Status:** HARD_BLOCK/' "$SPEC_SRC" > "$SPEC_NARROW"
 if ! grep -qx '\*\*Status:\*\* HARD_BLOCK' "$SPEC_NARROW"; then
   bad "FIXTURE STALE: could not narrow the entry-format Status line — escalations.md's format block was reworded"
-elif ! bash "$VALIDATOR" "$CLEAN" "$SPEC_NARROW" >/dev/null 2>&1; then
+elif ! ev "$VALIDATOR" "$CLEAN" "$SPEC_NARROW" >/dev/null 2>&1; then
   ok "narrowing the format block's Status line reds the clean file — BOTH source lines are read"
 else
   bad "the clean file still passes with DECIDED_AUTONOMOUSLY/DEFERRAL_REQUEST removed from the source — the format block is not being read"
@@ -104,14 +222,34 @@ fi
 # --- Assertion 7: unreadable vocabulary source REFUSES, never passes ----------
 # A validator that falls back to a built-in set when it cannot read escalations.md has
 # reintroduced the hand-listed copy silently. Exit 2 (refusal), not 0 (clean).
-LONE="$WORK/lone"; mkdir -p "$LONE"
-cp "$VALIDATOR" "$LONE/validate-escalation-status-vocabulary.sh"
-LONE_OUT="$(cd "$LONE" && env -u AI_DLC_PROJECT_ROOT CLAUDE_PROJECT_DIR="$LONE" bash ./validate-escalation-status-vocabulary.sh "$DRIFT" 2>&1)"
+# The lone copy sits at $LONE/core/scripts/ (its counted relative path), alone: nothing beside it, no marker above
+# it, so it is severed from escalations.md exactly as a copy directly in $LONE was.
+LONE="$WORK/lone"; mkdir -p "$LONE/core/scripts"
+LONE_V="$LONE/$ESV_REL"
+cp "$VALIDATOR" "$LONE_V"
+src_esv "$LONE_V"
+LONE_OUT="$(cd "$LONE" && unset AI_DLC_PROJECT_ROOT && export CLAUDE_PROJECT_DIR="$LONE" && ev "$LONE_V" "$DRIFT" 2>&1)"
 lone_rc=$?
 if [ "$lone_rc" -eq 2 ] && grep -q "will not guess" <<<"$LONE_OUT"; then
   ok "with escalations.md unreachable the check REFUSES (rc=2) instead of passing"
 else
   bad "severed from its vocabulary source the check returned rc=$lone_rc — it guessed a built-in set or reported clean"
+fi
+
+# --- Assertion 7b: the SCRIPT-relative escalations.md is found beside the copy that is running ----------
+# The validator's last candidate is <its own dir>/../skills/ai-dlc/escalations.md, and its own dir is read through
+# BASH_SOURCE[0]. Run in process, `$0` names this fixture, so a validator reading `$0` looks beside run.sh, finds
+# nothing and refuses (exit 2). Here the project root is pinned to the empty $LONE, so the first two candidates are
+# absent and only the script-relative one can supply the vocabulary: the drifted file must then be JUDGED (exit 1).
+SIB="$WORK/sib"; mkdir -p "$SIB/core/scripts" "$SIB/core/skills/ai-dlc"
+SIB_V="$SIB/$ESV_REL"
+cp "$VALIDATOR" "$SIB_V"; cp "$SPEC_SRC" "$SIB/core/skills/ai-dlc/escalations.md"
+src_esv "$SIB_V"
+SIB_OUT="$(export AI_DLC_PROJECT_ROOT="$LONE" && ev "$SIB_V" "$DRIFT" 2>&1)"; sib_rc=$?
+if [ "$sib_rc" -eq 1 ] && grep -qF 'out-of-vocabulary status' <<<"$SIB_OUT"; then
+  ok "the escalations.md beside the running copy supplies the vocabulary when the root has none (rc=1, judged)"
+else
+  bad "with the root pinned to an empty dir the copy did not read the escalations.md beside it (rc=$sib_rc): $(printf '%s' "$SIB_OUT" | head -1)"
 fi
 
 # --- Assertions 8-10: WHICH occurrence of `**Status:**` is the entry's status -----
@@ -126,7 +264,8 @@ fi
 RC=0; TOK=""
 rc_tok() {
   local out
-  out="$(bash "$VALIDATOR" "$1" "$SPEC_SRC" 2>&1)"; RC=$?
+  src_esv "$VALIDATOR"
+  out="$(ev "$VALIDATOR" "$1" "$SPEC_SRC" 2>&1)"; RC=$?
   TOK="$(sed -n "s@.*out-of-vocabulary status '\([^']*\)'.*@\1@p" <<<"$out" | head -1)"
 }
 
@@ -210,10 +349,12 @@ MUTD="$WORK/mut"; mkdir -p "$MUTD"
 # The CONTROL is presence-shaped and runs FIRST. A copy that cannot run at all reports
 # nothing, and an arm reading only "the offender was not reported" would score that silence
 # as a kill on every mutant below.
-cp "$VALIDATOR" "$MUTD/control.sh"
+MCTL="$MUTD/control/$ESV_REL"; mkdir -p "${MCTL%/*}"
+cp "$VALIDATOR" "$MCTL"
+src_esv "$MCTL"
 rc_ctl_bad=0; rc_ctl_ok=0
-bash "$MUTD/control.sh" "$PROSE_BELOW" "$SPEC_SRC" >/dev/null 2>&1; rc_ctl_bad=$?
-bash "$MUTD/control.sh" "$PROSE_BELOW_OK" "$SPEC_SRC" >/dev/null 2>&1; rc_ctl_ok=$?
+ev "$MCTL" "$PROSE_BELOW" "$SPEC_SRC" >/dev/null 2>&1; rc_ctl_bad=$?
+ev "$MCTL" "$PROSE_BELOW_OK" "$SPEC_SRC" >/dev/null 2>&1; rc_ctl_ok=$?
 if [ "$rc_ctl_bad" -eq 1 ] && [ "$rc_ctl_ok" -eq 0 ]; then
   ok "mutant control: an unmutated copy REPORTS the offender and stays quiet on the near-miss"
   B_MCTL=1
@@ -254,22 +395,41 @@ AWKP
   esac
 }
 
-mut_probe() {   # <name> -> the input this mutant is scored on
-  case "$1" in
-    canon-guard-deleted)  printf '%s' "$PROSE_BELOW_OK" ;;
-    line-anchored)        printf '%s' "$MIDENTRY" ;;
-    first-canonical-wins) printf '%s' "$APPENDED" ;;
-    first-wins-outright)  printf '%s' "$PROSE_ABOVE_OK" ;;
+# THE SEVEN READER ARMS, the readings assertions 4 and 8-10 hold, as one predicate over a copy:
+# rarm <arm> <copy> -> 0 when the arm's expectation HOLDS on that copy (GREEN), 1 when it is TRIPPED. The offender
+# arms also demand the token named is the FIELD's (BAD_TOK), as assertions 8-10 do.
+R_ARMS="a-off a-near b-off b-near d-off d-near M-mid"
+rarm() {
+  local a="$1" c="$2" f="" want="" o r t
+  case "$a" in
+    a-off) f="$APPENDED"; want=bad ;;      a-near) f="$APPENDED_OK"; want=0 ;;
+    b-off) f="$PROSE_ABOVE"; want=bad ;;   b-near) f="$PROSE_ABOVE_OK"; want=0 ;;
+    d-off) f="$PROSE_BELOW"; want=bad ;;   d-near) f="$PROSE_BELOW_OK"; want=0 ;;
+    M-mid) f="$MIDENTRY"; want=nonzero ;;
+    *) echo "FIXTURE BROKEN: unknown reader arm $a" >&2; exit 2 ;;
+  esac
+  o="$(ev "$c" "$f" "$SPEC_SRC" 2>&1)"; r=$?
+  t="$(sed -n "s@.*out-of-vocabulary status '\([^']*\)'.*@\1@p" <<<"$o" | head -1)"
+  case "$want" in
+    0) [ "$r" -eq 0 ] ;;
+    nonzero) [ "$r" -ne 0 ] ;;
+    bad) [ "$r" -eq 1 ] && [ "$t" = "$BAD_TOK" ] ;;
   esac
 }
-mut_want() {    # <name> -> the exit code the MUTANT produces on that input
-  case "$1" in
-    canon-guard-deleted)  printf '1' ;;
-    line-anchored)        printf '0' ;;
-    first-canonical-wins) printf '0' ;;
-    first-wins-outright)  printf '1' ;;
-  esac
-}
+mx_row() { grep -m 1 -F -- "# MUTANT-MATRIX $1 decides=" "$HERE/run.sh"; }
+mx_field() { local l; l="$(mx_row "$1")"; l="${l#*"$2"=}"; printf '%s' "${l%% *}"; }
+# The unmutated control copy's reading of every reader arm, so each kill is scored only where the arm it trips HELD
+# on the same harness in this run (the base-pass flag mutant_killed requires).
+src_esv "$MCTL"
+for _ra in $R_ARMS; do
+  if rarm "$_ra" "$MCTL"; then eval "RB_$(printf '%s' "$_ra" | tr '-' '_')=1"; else eval "RB_$(printf '%s' "$_ra" | tr '-' '_')=0"; fi
+done
+rb() { eval "printf '%s' \"\${RB_$(printf '%s' "$1" | tr '-' '_'):-0}\""; }
+_rb_all=1; for _ra in $R_ARMS; do [ "$(rb "$_ra")" = 1 ] || _rb_all=0; done
+if [ "$_rb_all" = 1 ]; then
+  ok "baseline (unmutated control copy): all seven reader arms hold, so a reader mutant's tripped arm is the mutation's"; B_READERS=1
+else bad "baseline (unmutated control copy): a reader arm does not hold on the control copy -- every reader mutant verdict below is void"; fi
+MX_CELLS=0
 mut_why() {     # <name> -> which arm owns the kill, and what the mutant costs
   case "$1" in
     canon-guard-deleted)
@@ -284,22 +444,40 @@ mut_why() {     # <name> -> which arm owns the kill, and what the mutant costs
 }
 
 for mname in $MUT_NAMES; do
-  copy="$MUTD/$mname.sh"
+  copy="$MUTD/$mname/$ESV_REL"; mkdir -p "${copy%/*}"
   mut_prog "$mname" > "$MUTD/$mname.awk"
   awk -f "$MUTD/$mname.awk" "$VALIDATOR" > "$copy" 2>/dev/null
   if cmp -s "$VALIDATOR" "$copy"; then
     bad "MUTANT $mname — the anchor matched nothing, so no mutation applied and nothing was proven. The awk record-builder was reworded; re-anchor it on the line that spells the rule, never relax the assertion."
     continue
   fi
-  probe="$(mut_probe "$mname")"
-  want="$(mut_want "$mname")"
-  bash "$copy" "$probe" "$SPEC_SRC" >/dev/null 2>&1; got=$?
-  if [ "$got" -eq "$want" ]; then
-    mutant_killed "${B_MCTL:-0}" "$mname" "MUTANT $mname killed by $(mut_why "$mname")"
+  src_esv "$copy"
+  if [ "$MATRIX" = 1 ]; then
+    for _ra in $R_ARMS; do
+      MX_CELLS=$((MX_CELLS + 1))
+      if rarm "$_ra" "$copy"; then printf '  MATRIX %s %s GREEN\n' "$mname" "$_ra"; else printf '  MATRIX %s %s TRIPPED\n' "$mname" "$_ra"; fi
+    done
+    continue
+  fi
+  if [ -z "$(mx_row "$mname")" ]; then bad "MUTANT $mname has no MUTANT-MATRIX row in this file -- a per-push run cannot know its deciding arm or its twin"; continue; fi
+  dec="$(mx_field "$mname" decides)"; tw="$(mx_field "$mname" twins)"
+  MX_CELLS=$((MX_CELLS + 2))
+  if rarm "$dec" "$copy"; then
+    bad "MUTANT $mname SURVIVED its deciding arm $dec. The arm that should own this reading is not reading it."
+  elif ! rarm "$tw" "$copy"; then
+    bad "MUTANT $mname also tripped its twin $tw -- the matrix row for this mutant moved; re-measure with --matrix"
   else
-    bad "MUTANT $mname SURVIVED — $(basename "$probe") answered rc=$got, wanted rc=$want. The arm that should own this reading is not reading it."
+    mutant_killed "$(( ${B_MCTL:-0} && ${B_READERS:-0} ))" "$mname" "MUTANT $mname killed by $(mut_why "$mname")"
   fi
 done
+# A plain run scores exactly two reader cells per mutant; --matrix scores every arm.
+if [ "$MATRIX" = 1 ]; then
+  [ "$MX_CELLS" -eq 28 ] && ok "MX matrix run measured $MX_CELLS reader mutant x arm cells (4 mutants x 7 arms)" \
+    || bad "MX matrix run measured $MX_CELLS reader cells, 28 expected"
+else
+  [ "$MX_CELLS" -eq 8 ] && ok "MX matrix, per-push run: $MX_CELLS reader cells scored, each mutant's deciding arm and its twin only" \
+    || bad "MX per-push run scored $MX_CELLS reader cells, 8 expected"
+fi
 
 # --- Assertions 11-15: an EMPTY file is the ABSENT state, and only an empty one -----
 # A file that exists and holds no non-whitespace byte used to fall through to the parser and
@@ -320,24 +498,36 @@ done
 VEN_CELLS=""
 ven_cells() {  # <validator> -> sets VEN_CELLS
   local v="$1" o o2 rc rc2 c=""
-  o="$(bash "$v" "$EMPTY" "$SPEC_SRC" 2>/dev/null)"; rc=$?
+  src_esv "$v"
+  o="$(ev "$v" "$EMPTY" "$SPEC_SRC" 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" "$BLANK" "$SPEC_SRC" 2>/dev/null)"; rc=$?
+  o="$(ev "$v" "$BLANK" "$SPEC_SRC" 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" "$WORK/pending-never-written.md" "$SPEC_SRC" 2>/dev/null)"; rc=$?
+  o="$(ev "$v" "$WORK/pending-never-written.md" "$SPEC_SRC" 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "no escalations file" <<<"$o" \
      && ! grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" "$HEADING" "$SPEC_SRC" 2>/dev/null)"; rc=$?
-  o2="$(bash "$v" "$UNPARSED" "$SPEC_SRC" 2>/dev/null)"; rc2=$?
+  o="$(ev "$v" "$HEADING" "$SPEC_SRC" 2>/dev/null)"; rc=$?
+  o2="$(ev "$v" "$UNPARSED" "$SPEC_SRC" 2>/dev/null)"; rc2=$?
   if [ "$rc" -eq 0 ] && [ "$rc2" -eq 0 ] && ! grep -qF "EXAMINED NOTHING" <<<"$o$o2" \
      && grep -qF "n=[]" <<<"$o" && grep -qF "n=[]" <<<"$o2"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" "$DRIFT" "$SPEC_SRC" 2>&1)"; rc=$?
+  o="$(ev "$v" "$DRIFT" "$SPEC_SRC" 2>&1)"; rc=$?
   if [ "$rc" -eq 1 ] && grep -qF "out-of-vocabulary status" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
   VEN_CELLS="$c"
+}
+# vec_score <label> <got vector> <want vector> <base flag> <pass message> <fail message> -- one FULL-row mutant scored
+# on its battery's whole cell vector, through mutant_killed. The name is the label's second word. Every caller fills
+# the flag with a $(( )) conjunction of the B_ flags its battery's baseline and control set beside their own ok. The
+# messages are each battery's own, unchanged. --matrix also prints the vector.
+vec_score() {
+  local n="${1#MUTANT }"; n="${n%% *}"
+  [ "$MATRIX" = 1 ] && printf '  MATRIX %s FULL %s\n' "$n" "$2"
+  if [ "$2" = "$3" ]; then mutant_killed "$4" "$n" "$5"; return 0; fi
+  bad "$6"; return 1
 }
 VEN_IS_DIST=0
 case "$(cd "$(dirname "$VALIDATOR")" && pwd)" in */core/scripts) VEN_IS_DIST=1 ;; esac
 ven_cells "$VALIDATOR"
+VEN_REAL="$VEN_CELLS"
 # A SUBJECT THAT PREDATES THE FIX. This fixture ships and can reach a consumer one pull ahead of
 # the validator: cells A and B read 0 and nothing else moves. SKIP there; FAIL here.
 if [ "$(printf '%s' "$VEN_CELLS" | cut -c1-2)" = "00" ] && [ "$(printf '%s' "$VEN_CELLS" | cut -c3-5)" = "111" ] \
@@ -351,6 +541,7 @@ else
     if [ "$(printf '%s' "$VEN_CELLS" | cut -c"$i")" = "1" ]; then ok "empty-file cell $nm"
     else bad "empty-file cell $nm does not hold (cells=$VEN_CELLS)"; fi
   done
+  if [ "$VEN_REAL" = 11111 ]; then ok "baseline (unmutated validator): all five empty-file cells hold, so the battery's mutants are scored"; B_VEN=1; fi
 
   # --- the mutants, each in a copy of the WHOLE scripts dir, with an unmutated control ------
   VEN_SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
@@ -360,23 +551,31 @@ else
   # with the subshell and a mutant that never built would score nothing at all. It writes its
   # reason to VEN_MW/<name>.why and prints no path; ven_score reads the empty path and fails.
   ven_mk() {  # <name> <literal anchor, exactly one line, or empty for the control> <replacement file>
-    local d="$VEN_MW/$1" n
-    cp -R "$VEN_SRC_DIR" "$d" || { echo "could not copy $VEN_SRC_DIR" > "$VEN_MW/$1.why"; return 1; }
-    [ -n "$2" ] || { printf '%s\n' "$d/$VEN_BASE"; return 0; }
+    # The scripts dir is copied to <d>/core/scripts, so the copy keeps the subject's counted relative path.
+    local d="$VEN_MW/$1" n s
+    s="$d/core/scripts"
+    mkdir -p "$d/core" && cp -R "$VEN_SRC_DIR" "$s" || { echo "could not copy $VEN_SRC_DIR" > "$VEN_MW/$1.why"; return 1; }
+    [ -n "$2" ] || { printf '%s\n' "$s/$VEN_BASE"; return 0; }
     n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
     [ "$n" -eq 1 ] || { echo "anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm" > "$VEN_MW/$1.why"; return 1; }
     awk -v A="$2" -v R="$3" '
       index($0, A) { while ((getline l < R) > 0) print l; close(R); next }
-      { print }' "$VALIDATOR" > "$d/$VEN_BASE"
-    if cmp -s "$VALIDATOR" "$d/$VEN_BASE"; then echo "changed no bytes -- it would score as a kill" > "$VEN_MW/$1.why"; return 1; fi
-    bash -n "$d/$VEN_BASE" 2>/dev/null || { echo "does not parse" > "$VEN_MW/$1.why"; return 1; }
-    printf '%s\n' "$d/$VEN_BASE"
+      { print }' "$VALIDATOR" > "$s/$VEN_BASE"
+    if cmp -s "$VALIDATOR" "$s/$VEN_BASE"; then echo "changed no bytes -- it would score as a kill" > "$VEN_MW/$1.why"; return 1; fi
+    bash -n "$s/$VEN_BASE" 2>/dev/null || { echo "does not parse" > "$VEN_MW/$1.why"; return 1; }
+    printf '%s\n' "$s/$VEN_BASE"
   }
   ven_score() {  # <name> <path-or-empty> <want> <why> <mk-name>
     if [ -z "$2" ]; then bad "$1 was never built: $(cat "$VEN_MW/$5.why" 2>/dev/null || echo 'no reason recorded')"; return 0; fi
     ven_cells "$2"
-    if [ "$VEN_CELLS" = "$3" ]; then ok "$1 scored $VEN_CELLS -- $4"
-    else bad "$1 scored $VEN_CELLS, wanted $3 -- $4"; fi
+    if [ "$5" = control ]; then
+      if [ "$VEN_CELLS" = "$3" ]; then ok "$1 scored $VEN_CELLS -- $4"; B_VENC=1
+      else bad "$1 scored $VEN_CELLS, wanted $3 -- $4"; fi
+      return 0
+    fi
+    vec_score "$1" "$VEN_CELLS" "$3" "$(( ${B_VEN:-0} && ${B_VENC:-0} ))" \
+      "$1 scored $VEN_CELLS -- $4" "$1 scored $VEN_CELLS, wanted $3 -- $4"
+    return 0
   }
   printf '%s\n' 'if false; then' > "$VEN_MW/r-revert"
   printf '%s\n' 'if [ -z "$RECORDS" ]; then echo "OK: EXAMINED NOTHING — zero parsed records ($ESCALATIONS)."; exit 0; fi' \
@@ -433,6 +632,7 @@ if [ ! -f "$EN_GV" ] || [ ! -f "$EN_MAP" ]; then
 else
   en_cells "$EN_GV" "$EN_MAP"
 fi
+EN_REAL="$EN_CELLS"
 # A TREE THAT PREDATES THE RULING. This fixture ships, and a consumer can run it against step
 # and map files installed before the ruling: all three cells read 0. SKIP there; FAIL here.
 if [ -f "$EN_GV" ] && [ -f "$EN_MAP" ] && [ "$EN_CELLS" = "000" ] && [ "$VEN_IS_DIST" -ne 1 ]; then
@@ -446,6 +646,7 @@ elif [ -f "$EN_GV" ] && [ -f "$EN_MAP" ]; then
     if [ "$(printf '%s' "$EN_CELLS" | cut -c"$i")" = "1" ]; then ok "posture cell $nm"
     else bad "posture cell $nm does not hold (cells=$EN_CELLS)"; fi
   done
+  if [ "$EN_REAL" = 111 ]; then ok "baseline (unmutated step and map files): all three posture cells hold, so the posture mutants are scored"; B_EN=1; fi
 
   # --- the mutants restore the old reading, each in ONE artifact, in copies ----------------
   EN_MW="$WORK/posture-mut"; mkdir -p "$EN_MW"
@@ -461,8 +662,9 @@ elif [ -f "$EN_GV" ] && [ -f "$EN_MAP" ]; then
   en_score() {  # <label> <gv> <map> <want> <why> <mk-name>
     if [ -z "$2" ] || [ -z "$3" ]; then bad "$1 was never built: $(cat "$EN_MW/$6.why" 2>/dev/null || echo 'no reason recorded')"; return 0; fi
     en_cells "$2" "$3"
-    if [ "$EN_CELLS" = "$4" ]; then ok "$1 scored $EN_CELLS -- $5"
-    else bad "$1 scored $EN_CELLS, wanted $4 -- $5"; fi
+    vec_score "$1" "$EN_CELLS" "$4" "$(( ${B_EN:-0} ))" \
+      "$1 scored $EN_CELLS -- $5" "$1 scored $EN_CELLS, wanted $4 -- $5"
+    return 0
   }
   # The step-text sentence is wrapped identically in both sections, so the anchor is each
   # section's OWN lead-in, which differs: Check 2's is a bullet, Check 2a's is a paragraph.
@@ -541,7 +743,7 @@ vr_run() {  # <validator> <file> [stub-dir] -> VR_RC VR_O VR_E
   local p="$PATH"
   [ -n "${3:-}" ] && p="$3:$PATH"
   : > "$VR_STUB/LOG"
-  VR_O="$(PATH="$p" bash "$1" "$2" "$SPEC_SRC" 2>"$VR/err")"; VR_RC=$?
+  VR_O="$(export PATH="$p" && ev "$1" "$2" "$SPEC_SRC" 2>"$VR/err")"; VR_RC=$?
   VR_E="$(cat "$VR/err")"
 }
 vr_refused() {  # <reason-ERE> -> the last run refused, for that reason, with stdout empty
@@ -550,6 +752,7 @@ vr_refused() {  # <reason-ERE> -> the last run refused, for that reason, with st
 VR_CELLS=""
 vr_cells() {  # <validator> -> VR_CELLS
   local v="$1" c=""
+  src_esv "$v"
   if [ -n "$VR_SKIP_A" ]; then c="${c}S"
   else vr_run "$v" "$VR_LOCKED"; if vr_refused 'could not be read'; then c="${c}1"; else c="${c}0"; fi; fi
   vr_run "$v" "$VR_DIR";  if vr_refused 'is not a regular file'; then c="${c}1"; else c="${c}0"; fi
@@ -564,6 +767,7 @@ vr_cells() {  # <validator> -> VR_CELLS
 }
 vr_want() { if [ -n "$VR_SKIP_A" ]; then printf 'S%s' "${1#?}"; else printf '%s' "$1"; fi; }
 vr_cells "$VALIDATOR"
+VR_REAL="$VR_CELLS"
 # A SUBJECT THAT PREDATES THE REFUSAL. This fixture ships one pull ahead of the validator: there B, C
 # and D read 0 and E, F still hold. SKIP there; FAIL here.
 if [ "$(printf '%s' "$VR_CELLS" | cut -c2-4)" = "000" ] && [ "$(printf '%s' "$VR_CELLS" | cut -c5-6)" = "11" ] \
@@ -584,10 +788,13 @@ else
       *) bad "refusal cell $nm does not hold (cells=$VR_CELLS)" ;;
     esac
   done
+  if [ "$VR_REAL" = "$(vr_want 111111)" ]; then ok "baseline (unmutated validator): every refusal cell holds, so the refusal mutants are scored"; B_VR=1; fi
 
   # --- the mutants: one per layer of the guard, plus one reverting EVERY layer ---------------------
-  # Siblings in ONE copy of the whole scripts directory; the unmutated control is a sibling too, so a
-  # copy that cannot run fails the control's presence cells rather than scoring as a kill.
+  # Each mutant is built from VR_SRC, a copy in ONE copy of the whole scripts directory, into its own
+  # $VR/m/<name>/core/scripts/ (the subject sources no sibling, and that path keeps its pass counted); the
+  # unmutated control is built the same way, so a copy that cannot run fails the control's presence cells
+  # rather than scoring as a kill.
   VR_MD="$VR/mut"
   cp -R "$(cd "$(dirname "$VALIDATOR")" && pwd)" "$VR_MD" || bad "refusal mutants: could not copy the scripts directory"
   VR_SRC="$VR_MD/$(basename "$VALIDATOR")"
@@ -599,13 +806,19 @@ else
     local label="$1" name="$2" want out
     want="$(vr_want "$3")"
     shift 4
-    out="$VR_MD/_vr_$name.sh"
+    out="$VR/m/$name/$ESV_REL"; mkdir -p "${out%/*}"
     if [ "$#" -eq 0 ]; then cp "$VR_SRC" "$out"
     elif ! fx_sub "$VR_SRC" "$out" "$@"; then bad "$label DID NOT APPLY: $FX_WHY"; return 0
     elif ! bash -n "$out" 2>/dev/null; then bad "$label DID NOT APPLY: the mutated copy does not parse"; return 0; fi
     vr_cells "$out"
-    if [ "$VR_CELLS" = "$want" ]; then ok "$label scored $VR_CELLS"
-    else bad "$label scored $VR_CELLS, wanted $want"; fi
+    if [ "$name" = ctl ]; then
+      if [ "$VR_CELLS" = "$want" ]; then ok "$label scored $VR_CELLS"; B_VRC=1
+      else bad "$label scored $VR_CELLS, wanted $want"; fi
+      return 0
+    fi
+    vec_score "$label" "$VR_CELLS" "$want" "$(( ${B_VR:-0} && ${B_VRC:-0} ))" \
+      "$label scored $VR_CELLS" "$label scored $VR_CELLS, wanted $want"
+    return 0
   }
   vr_score "MUTANT refusal-control (unmutated sibling copy): every cell holds" ctl 111111 ""
   vr_score "MUTANT R-revert-all (every layer removed, grep status 2 falls through): A-D red, E and F hold" \
@@ -680,7 +893,7 @@ rp_cells "$RPP/gv-ok.md" "$RPP/map.yaml"; RPP_OK="$RP_CELLS"
 rp_cells "$RPP/gv-fail.md" "$RPP/map.yaml"; RPP_FAIL="$RP_CELLS"
 rp_cells "$RPP/gv-near.md" "$RPP/map.yaml"; RPP_NEAR="$RP_CELLS"
 if [ "$RPP_OK" = 1111111 ] && [ "$RPP_FAIL" = 1110111 ] && [ "$RPP_NEAR" = 1111111 ]; then
-  ok "refusal-prose self-probe: a conforming pair scores 1111111, the FAIL sentence moves ONLY D2, the near-miss is quiet"
+  ok "refusal-prose self-probe: a conforming pair scores 1111111, the FAIL sentence moves ONLY D2, the near-miss is quiet"; B_RPP=1
 else
   bad "refusal-prose self-probe read ok=$RPP_OK fail=$RPP_FAIL near=$RPP_NEAR, wanted 1111111/1110111/1111111 -- the cells cannot be trusted on the real files"
 fi
@@ -688,6 +901,7 @@ if [ ! -f "$EN_GV" ] || [ ! -f "$EN_MAP" ]; then
   bad "refusal-prose arms cannot run: gate-validation.md or enforcement-map.yaml is not beside $SPEC_SRC"
 else
   rp_cells "$EN_GV" "$EN_MAP"
+  RP_REAL="$RP_CELLS"
   # A TREE THAT PREDATES THE REFUSAL SENTENCE: A, B and C all read 0 there. SKIP on a consumer only.
   if [ "$(printf '%s' "$RP_CELLS" | cut -c1-3)" = "000" ] && [ "$VEN_IS_DIST" -ne 1 ]; then
     printf '  SKIP  the refusal-prose arms -- the installed step and map files predate the unreadable-file refusal\n'
@@ -704,6 +918,7 @@ else
       if [ "$(printf '%s' "$RP_CELLS" | cut -c"$i")" = "1" ]; then ok "refusal-prose cell $nm"
       else bad "refusal-prose cell $nm does not hold (cells=$RP_CELLS)"; fi
     done
+    if [ "$RP_REAL" = 1111111 ]; then ok "baseline (unmutated step and map files): all seven refusal-prose cells hold, so the refusal-prose mutants are scored"; B_RP=1; fi
     RP_MW="$WORK/rp-mut"; mkdir -p "$RP_MW"
     rp_score() {  # <label> <which: gv|map> <name> <want-rp> <want-en> <anchor> <replacement>
       local label="$1" which="$2" out gv="$EN_GV" map="$EN_MAP" wrp="$4" wen="$5"
@@ -712,8 +927,10 @@ else
       if [ "$which" = gv ]; then fx_sub "$EN_GV" "$out" "$@" && gv="$out"; else fx_sub "$EN_MAP" "$out" "$@" && map="$out"; fi
       if [ ! -f "$out" ]; then bad "$label DID NOT APPLY: $FX_WHY"; return 0; fi
       rp_cells "$gv" "$map"; en_cells "$gv" "$map"
-      if [ "$RP_CELLS" = "$wrp" ] && [ "$EN_CELLS" = "$wen" ]; then ok "$label scored refusal=$RP_CELLS posture=$EN_CELLS"
-      else bad "$label scored refusal=$RP_CELLS posture=$EN_CELLS, wanted $wrp/$wen"; fi
+      vec_score "$label" "$RP_CELLS/$EN_CELLS" "$wrp/$wen" \
+        "$(( ${B_RP:-0} && ${B_EN:-0} && ${B_RPP:-0} ))" \
+        "$label scored refusal=$RP_CELLS posture=$EN_CELLS" "$label scored refusal=$RP_CELLS posture=$EN_CELLS, wanted $wrp/$wen"
+      return 0
     }
     # THE BL-353 GAP: the old posture cells stay 111 under this mutant, and only the new D2 cell sees it.
     rp_score "MUTANT RP-fail-sentence (step 2 appends 'Treat that line as a FAIL.'): ONLY D2 goes red; the old posture cells cannot see it" \
