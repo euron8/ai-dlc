@@ -2,7 +2,7 @@
 # migrate-artifact-paths.sh — move a consumer's artifacts onto the declared path grammar.
 #
 #   migrate-artifact-paths.sh [--root <dir>] [--grammar <file>]            # DRY RUN. Writes nothing.
-#   migrate-artifact-paths.sh [--root <dir>] [--grammar <file>] --apply    # git mv + verification.
+#   migrate-artifact-paths.sh [--root <dir>] [--grammar <file>] --apply    # staged renames + verification.
 #
 # WHAT IT DOES. `artifact-path-grammar.md` makes the DIRECTORY the only sprint slot, immediately
 # under the area root:
@@ -19,10 +19,13 @@
 # non-conforming directory it was meant to replace, on 53 destination directories. The sprint is
 # ONE fact about a file: every component is stripped and the slot is inserted once, under the area.
 #
-# `git mv` ONLY, NEVER A DELETE, and never a rewrite of any file's CONTENT. Breaking historical
-# traceability is accepted by operator directive -- the declared convention is the guide to where
-# to look, and a link-rewriting pass over 2000+ files is a second, unverifiable migration riding
-# on this one.
+# STAGED RENAMES ONLY, NEVER A DELETE, and never a rewrite of any file's CONTENT. Each file is
+# moved with `mv`, and its batch is staged by one `git update-index --index-info` that carries
+# each source's EXISTING index entry (mode and blob) to the destination -- nothing is re-hashed
+# through a filter -- which is the index a `git mv` per file leaves. Breaking historical
+# traceability is accepted by operator directive --
+# the declared convention is the guide to where to look, and a link-rewriting pass over 2000+
+# files is a second, unverifiable migration riding on this one.
 #
 # VERIFICATION IS PER FILE AND IS NOT A COUNT. Each move is confirmed as
 #   source ABSENT  AND  destination READABLE  AND  sha256 IDENTICAL to the pre-move source
@@ -39,6 +42,15 @@
 #   2  -- usage error, unreadable grammar file, or a tree this cannot safely operate on
 #   3  -- nothing to migrate. Distinct from 0 so "no work" is never reported in the same
 #         breath as "work done and verified".
+#
+# PROGRESS goes to STDERR, so stdout stays the report it always was. The plan phase prints
+#   migrate-artifact-paths.sh: PROGRESS plan: <total> tracked file(s) to scan
+#   migrate-artifact-paths.sh: PROGRESS plan: scanned <i> of <total>
+# and --apply's move loop prints
+#   migrate-artifact-paths.sh: PROGRESS apply: <N> move(s) to apply
+#   migrate-artifact-paths.sh: PROGRESS apply: moved <i> of <N>
+# every AI_DLC_MIGRATE_PROGRESS_EVERY files (default 1000; a positive integer, anything else is
+# exit 2). A phase with fewer files than that prints nothing at all.
 set -uo pipefail
 
 PROG="migrate-artifact-paths.sh"
@@ -53,12 +65,26 @@ while [ $# -gt 0 ]; do
     # For REHEARSING the migration before the pull that installs the grammar, and for the
     # fixture. The normal path resolves the consumer's own installed copy.
     --grammar) GRAMMAR_ARG="${2:-}"; [ -n "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar needs a file" >&2; exit 2; }; shift 2 ;;
-    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^set -uo pipefail$/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "$PROG: unknown option '$1'" >&2
        echo "usage: $PROG [--root <dir>] [--grammar <file>] [--apply]" >&2
        exit 2 ;;
   esac
 done
+
+# The PROGRESS cadence (see the header). Validated before any work, because a value that cannot
+# be a count would otherwise surface as an arithmetic error in the middle of the plan loop. More
+# than 18 digits is past what shell arithmetic holds, and means "never": no file count reaches it.
+_PG_EVERY=1000
+if [ -n "${AI_DLC_MIGRATE_PROGRESS_EVERY+set}" ]; then
+  _PG_RE='^[1-9][0-9]*$'
+  if ! [[ $AI_DLC_MIGRATE_PROGRESS_EVERY =~ $_PG_RE ]]; then
+    echo "$PROG: AI_DLC_MIGRATE_PROGRESS_EVERY must be a positive integer, got '$AI_DLC_MIGRATE_PROGRESS_EVERY'" >&2
+    exit 2
+  fi
+  if [ "${#AI_DLC_MIGRATE_PROGRESS_EVERY}" -le 18 ]; then _PG_EVERY="$AI_DLC_MIGRATE_PROGRESS_EVERY"
+  else _PG_EVERY=999999999999999999; fi
+fi
 
 # RESOLVE --grammar BEFORE the cd. It is the operator's path, relative to where they are
 # standing, and this script then changes directory into the consumer -- so a relative value would
@@ -167,27 +193,87 @@ TOKEN_RE="$(cfg --token-re)"
 # Measured: 21 destinations still carrying a token, and -- worse -- files whose sprint is
 # genuinely ambiguous reported as unambiguous and queued for a move. Stripping one occurrence
 # and re-scanning from the start makes the next token visible again.
-strip_token() { # <component> -> the component with EVERY sprint token removed, separators tidied
-  local cur="$1" prev=""
-  while [ "$cur" != "$prev" ]; do
-    prev="$cur"
-    cur="$(printf '%s' "$cur" | sed -E 's/(^|-)(s|S|sprint-)[0-9]+(-|$|\.)/\1\3/')"
+#
+# NO PROCESS PER PATH. Both helpers run once per tracked file under the scan roots -- tokenless and
+# already-conforming files included -- so a fork per component was a fork count in the hundreds of
+# thousands on the reference consumer, and minutes of silence. They are pure bash, and each hands
+# its answer back in ONE global that nothing else reads or writes (`_STRIP_TOKEN_OUT`,
+# `_SPRINTS_IN_OUT`), so the caller needs no `$( )` subshell either.
+#
+# THE MATCH POSITION IS CONSTRUCTED, NOT SEARCHED FOR. `BASH_REMATCH` gives the matched text and no
+# offset, and the first LITERAL occurrence of that text can sit left of the leftmost regex match:
+# in `x-s123x-s12` the regex matches the trailing `-s12` through `$`, while the text `-s12` first
+# occurs at offset 1. A match whose terminator group is EMPTY ended at `$`, so it is a suffix and
+# is cut from the right. Otherwise it ends in a literal `-` or `.`, and any earlier occurrence of
+# that text would itself be an earlier match -- so the first occurrence is the match.
+#
+# DETECTION IS TOKEN_RE AND STRIPPING IS THE LITERAL BELOW, kept as two expressions exactly as the
+# two `sed`/`grep` calls this replaced kept them: TOKEN_RE comes from the config, and merging the
+# two would change behaviour wherever they could ever differ.
+_STRIP_RE='(^|-)(s|S|sprint-)[0-9]+(-|$|\.)'
+_DIGITS_RE='[0-9]+'
+strip_token() { # <component> -> _STRIP_TOKEN_OUT: the component with EVERY sprint token removed, separators tidied
+  local _st_cur="$1" _st_m="" _st_pre=""
+  _STRIP_TOKEN_OUT=""
+  while [[ $_st_cur =~ $_STRIP_RE ]]; do
+    _st_m="${BASH_REMATCH[0]}"
+    if [ -z "${BASH_REMATCH[3]}" ]; then _st_pre="${_st_cur%"$_st_m"}"
+    else _st_pre="${_st_cur%%"$_st_m"*}"; fi
+    _st_cur="${_st_pre}${BASH_REMATCH[1]}${BASH_REMATCH[3]}${_st_cur:$((${#_st_pre} + ${#_st_m}))}"
   done
-  printf '%s' "$cur" | sed -E 's/--+/-/g; s/^-+//; s/-+(\.|$)/\1/'
+  # The tidy, as `s/--+/-/g; s/^-+//; s/-+(\.|$)/\1/`. After the first two no run of dashes is
+  # left, so the third removes ONE dash: before the first `.` that follows one, else a trailing one
+  # (a `-.` always sits left of a trailing dash, so it is the leftmost match whenever it exists).
+  while [[ $_st_cur == *--* ]]; do _st_cur="${_st_cur//--/-}"; done
+  _st_cur="${_st_cur#-}"
+  if [[ $_st_cur == *-.* ]]; then
+    _st_pre="${_st_cur%%-.*}"
+    _st_cur="${_st_pre}${_st_cur:$((${#_st_pre} + 1))}"
+  else
+    _st_cur="${_st_cur%-}"
+  fi
+  _STRIP_TOKEN_OUT="$_st_cur"
 }
 
-sprints_in() { # <path> -> the DISTINCT sprint numbers its components name, one per line
-  local c cur prev n
-  printf '%s\n' "$1" | tr '/' '\n' | while IFS= read -r c; do
-    cur="$c"; prev=""
-    while [ "$cur" != "$prev" ]; do
-      prev="$cur"
-      n="$(printf '%s' "$cur" | grep -oE "$TOKEN_RE" | head -1 | grep -oE '[0-9]+')"
-      [ -n "$n" ] || break
-      printf '%s\n' "$n"
-      cur="$(printf '%s' "$cur" | sed -E 's/(^|-)(s|S|sprint-)[0-9]+(-|$|\.)/\1\3/')"
+sprints_in() { # <path> -> _SPRINTS_IN_OUT: the DISTINCT sprint numbers its components name, one per line, in `sort -u` order
+  local _si_p="$1" _si_more=1 _si_c="" _si_cur="" _si_m="" _si_d="" _si_n="" _si_got=0
+  local _si_list="" _si_rest="" _si_new="" _si_x="" _si_placed=0 _si_nl=$'\n'
+  _SPRINTS_IN_OUT=""
+  while [ "$_si_more" -eq 1 ]; do
+    case "$_si_p" in
+      */*) _si_c="${_si_p%%/*}"; _si_p="${_si_p#*/}" ;;
+      *)   _si_c="$_si_p"; _si_more=0 ;;
+    esac
+    _si_cur="$_si_c"
+    while [[ $_si_cur =~ $TOKEN_RE ]]; do
+      # Every digit run in the token match, as `grep -oE '[0-9]+'` printed them. The leftmost run
+      # starts at the first digit, so its first literal occurrence is the run itself.
+      _si_d="${BASH_REMATCH[0]}"; _si_got=0
+      while [[ $_si_d =~ $_DIGITS_RE ]]; do
+        _si_n="${BASH_REMATCH[0]}"; _si_d="${_si_d#*"$_si_n"}"; _si_got=1
+        # Insert into the sorted, distinct list: `sort -u` order, which is lexical (`10` before `9`).
+        _si_rest="$_si_list"; _si_new=""; _si_placed=0
+        while [ -n "$_si_rest" ]; do
+          _si_x="${_si_rest%%"$_si_nl"*}"; _si_rest="${_si_rest#*"$_si_nl"}"
+          if [ "$_si_placed" -eq 0 ]; then
+            if [ "$_si_x" = "$_si_n" ]; then _si_placed=1
+            elif [[ $_si_n < $_si_x ]]; then _si_new="${_si_new}${_si_n}${_si_nl}"; _si_placed=1; fi
+          fi
+          _si_new="${_si_new}${_si_x}${_si_nl}"
+        done
+        [ "$_si_placed" -eq 1 ] || _si_new="${_si_new}${_si_n}${_si_nl}"
+        _si_list="$_si_new"
+      done
+      [ "$_si_got" -eq 1 ] || break
+      # Strip ONE token and re-scan, so an adjacent token becomes visible (see above).
+      [[ $_si_cur =~ $_STRIP_RE ]] || break
+      _si_m="${BASH_REMATCH[0]}"
+      if [ -z "${BASH_REMATCH[3]}" ]; then _si_x="${_si_cur%"$_si_m"}"
+      else _si_x="${_si_cur%%"$_si_m"*}"; fi
+      _si_cur="${_si_x}${BASH_REMATCH[1]}${BASH_REMATCH[3]}${_si_cur:$((${#_si_x} + ${#_si_m}))}"
     done
-  done | sort -u
+  done
+  _SPRINTS_IN_OUT="${_si_list%"$_si_nl"}"
 }
 
 # A component that strips to nothing, or to a bare extension, has no name left. That is NOT a
@@ -244,11 +330,17 @@ legacy_story() { # <path> -> 0 when it sits in a stories/ dir carrying no `s<N>/
 # BOTH numbers must be numeric. `story-131b-1-…` and `story-168-process-A.md` are refused rather
 # than resolved, and a basename that is ALREADY `story-<M>-<slug>` (one number, then a word) is
 # left alone rather than having its index read as a sprint.
-story_normalize() { # <path> -> the path with a bare leading sprint number spelt `s<N>`
-  local b="${1##*/}" nb
-  case "$b" in story-[0-9]*) ;; *) printf '%s' "$1"; return ;; esac
-  nb="$(printf '%s' "$b" | sed -E 's/^story-([0-9]+)-([0-9]+)/story-s\1-\2/')"
-  if [ "$nb" = "$b" ]; then printf '%s' "$1"; else printf '%s/%s' "${1%/*}" "$nb"; fi
+#
+# FORK-FREE, like the scan helpers above: the answer comes back in `_STORY_NORMALIZE_OUT`, never
+# through `$( )`. The substitution this replaced (`^story-<A>-<B>` -> `story-s<A>-<B>`) only ever
+# inserts an `s` after the `story-` its own anchor matched, so a match is that insertion exactly.
+_STORY_NUM_NUM_RE='^story-[0-9]+-[0-9]+'
+story_normalize() { # <path> -> _STORY_NORMALIZE_OUT: the path with a bare leading sprint number spelt `s<N>`
+  local _sn_b="${1##*/}" nb=""
+  _STORY_NORMALIZE_OUT="$1"
+  [[ $_sn_b =~ $_STORY_NUM_NUM_RE ]] || return 0
+  nb="story-s${_sn_b#story-}"
+  [ "$nb" = "$_sn_b" ] || _STORY_NORMALIZE_OUT="${1%/*}/$nb"
 }
 
 # --- RECOVERING A SPRINT BEFORE REFUSING --------------------------------------
@@ -309,10 +401,55 @@ story_normalize() { # <path> -> the path with a bare leading sprint number spelt
 # So the header is read in TWO steps: does a `**Sprint:**` line exist at all, and does its value
 # parse. `sprint_header_present` owns the first question, and the caller refuses when it says yes
 # and the value comes back empty.
+#
+# BOTH QUESTIONS READ THE SAME FORTY LINES, FORK-FREE. `_sprint_header_scan` reads them with a
+# bounded `read` loop where a `head -40` used to run: a final line with no newline still counts,
+# CR bytes stay in the line, and an unopenable file reads as an empty one (the `head` form's
+# `|| body=""`). The value is the capture of the FIRST line matching the value grammar, which is
+# what `${first%%$'\n'*}` took from the `sed -n ... p` output this replaced -- with one difference:
+# under a UTF-8 locale that `sed` died on a line holding invalid UTF-8 (`illegal byte sequence`)
+# and gave no value, so the file was refused; this reader reads the declaration on such a line.
+_HDR_DECL_RE='^\*\*Sprint:?\*\*'
+_HDR_VALUE_RE='^\*\*Sprint:?\*\*[[:blank:]]*[Ss]?([0-9]+)([[:blank:]].*)?$'
+#
+# NUL BYTES ARE WHY THIS READS NUL-DELIMITED CHUNKS AND SPLITS THE LINES ITSELF. `$(head -40 ...)`
+# DROPPED every NUL and kept the bytes either side, so `**Sprint:** 4<NUL>9` read as 49; a plain
+# `read -r` line loop on bash 3.2 instead ENDS the line at the NUL and reads 4. `read -d ''` makes
+# the NUL the delimiter, so concatenating the chunks is the NUL-dropped stream, exactly as before.
+_sprint_header_scan() { # <path> -> _SPRINT_HDR_SEEN (1 when a declaration line is in the first 40 lines, else 0), _SPRINT_HDR_RAW (the first value's digits, or empty)
+  local _sh_line="" _sh_n=0 _sh_eof=0 _sh_buf="" _sh_chunk="" _sh_nl=$'\n' _sh_np=0
+  local -a _sh_parts=()
+  local IFS=''                               # so "${_sh_parts[*]}" joins the chunks with nothing between
+  _SPRINT_HDR_SEEN=0; _SPRINT_HDR_RAW=""
+  {
+    while [ "$_sh_n" -lt 40 ]; do
+      # Only the NEW chunk is searched for the newline, since the buffer held none before it, and
+      # the chunks are joined ONCE: searching and re-copying the growing buffer per chunk made a
+      # long line quadratic (17s on a 4MB line, against the head form's 0.1s).
+      if [[ $_sh_buf != *"$_sh_nl"* ]]; then
+        _sh_parts=("$_sh_buf"); _sh_np=1
+        while [ "$_sh_eof" = 0 ]; do
+          IFS= read -r -d '' -n 4096 _sh_chunk || _sh_eof=1
+          _sh_parts[$_sh_np]="$_sh_chunk"; _sh_np=$((_sh_np + 1))
+          [[ $_sh_chunk != *"$_sh_nl"* ]] || break
+        done
+        _sh_buf="${_sh_parts[*]}"
+      fi
+      if [[ $_sh_buf == *"$_sh_nl"* ]]; then _sh_line="${_sh_buf%%"$_sh_nl"*}"; _sh_buf="${_sh_buf#*"$_sh_nl"}"
+      elif [ -n "$_sh_buf" ]; then _sh_line="$_sh_buf"; _sh_buf=""
+      else break; fi
+      _sh_n=$((_sh_n + 1))
+      [[ $_sh_line =~ $_HDR_DECL_RE ]] || continue
+      _SPRINT_HDR_SEEN=1
+      if [[ $_sh_line =~ $_HDR_VALUE_RE ]]; then _SPRINT_HDR_RAW="${BASH_REMATCH[1]}"; break; fi
+    done
+  } 2>/dev/null < "$1"
+  return 0
+}
+
 sprint_header_present() { # <path> -> 0 when a **Sprint:** declaration line exists, whatever it says
-  local body
-  body="$(head -40 "$1" 2>/dev/null)" || body=""
-  grep -qE '^\*\*Sprint:?\*\*' <<<"$body"
+  _sprint_header_scan "$1"
+  [ "$_SPRINT_HDR_SEEN" = 1 ]
 }
 
 sprint_from_header() { # <path> -> the CANONICAL sprint the file's own header declares, or empty
@@ -329,10 +466,11 @@ sprint_from_header() { # <path> -> the CANONICAL sprint the file's own header de
   # so the prefix is a real and separately-populated spelling, not a stray. The value is CASE-
   # FOLDED to the one legal slot spelling by `canon_sprint` below, exactly as the path-side
   # transform already normalises an uppercase `S301` component.
-  local body first
-  body="$(head -40 "$1" 2>/dev/null)" || body=""
-  first="$(sed -n -E 's/^\*\*Sprint:?\*\*[[:blank:]]*[Ss]?([0-9]+)([[:blank:]].*)?$/\1/p' <<<"$body")"
-  canon_sprint "${first%%$'\n'*}"
+  #
+  # The answer comes back in `_SPRINT_FROM_HEADER_OUT`, never through `$( )`.
+  _sprint_header_scan "$1"
+  canon_sprint "$_SPRINT_HDR_RAW"
+  _SPRINT_FROM_HEADER_OUT="$_CANON_SPRINT_OUT"
 }
 
 # ONE CANONICAL FORM, ENFORCED AT THE ONLY WRITER THAT MINTS A SLOT FROM FILE CONTENT.
@@ -345,15 +483,17 @@ sprint_from_header() { # <path> -> the CANONICAL sprint the file's own header de
 # Leading zeros are STRIPPED rather than refused, because `007` states its sprint unambiguously and
 # refusing it would strand a file over a spelling. `0` has no `s0` sprint to belong to and is
 # refused, as is a value long enough to be an identifier rather than a sprint.
-canon_sprint() { # <raw digits> -> the canonical spelling, or empty when it is not a sprint
+canon_sprint() { # <raw digits> -> _CANON_SPRINT_OUT: the canonical spelling, or empty when it is not a sprint
   local v="$1"
-  [ -n "$v" ] || { printf ''; return; }
-  case "$v" in *[!0-9]*) printf ''; return ;; esac
-  [ "${#v}" -le 6 ] || { printf ''; return; }     # not a sprint number; a date or an id
+  _CANON_SPRINT_OUT=""
+  [ -n "$v" ] || return 0
+  case "$v" in *[!0-9]*) return 0 ;; esac
+  [ "${#v}" -le 6 ] || return 0     # not a sprint number; a date or an id
   # `0` and `000` strip to the empty string and are refused BY that, with no separate guard. A
   # guard here would be vacuous -- both branches return empty -- and a mutant deleting it survived
-  # every arm, which is exactly what a vacuous guard looks like from the outside.
-  printf '%s' "$(printf '%s' "$v" | sed -E 's/^0+//')"
+  # every arm, which is exactly what a vacuous guard looks like from the outside. The strip is
+  # `s/^0+//` without the fork: `${v%%[!0]*}` is the run of leading zeros, removed from the front.
+  _CANON_SPRINT_OUT="${v#"${v%%[!0]*}"}"
 }
 
 # THE BASENAME CHANNEL AND `story_normalize` READ THE SAME DIGITS AND DO NOT AGREE, DELIBERATELY.
@@ -375,11 +515,16 @@ canon_sprint() { # <raw digits> -> the canonical spelling, or empty when it is n
 # already been left alone by `story_normalize` AND scored zero by `sprints_in`, so nothing else in
 # the tree claims it; and the value goes through `canon_sprint`, so this channel cannot mint a slot
 # spelling the path-side transform would not.
-sprint_from_subject() { # <path> -> a sprint opening the basename, or empty
-  local b="${1##*/}" v
-  v="$(sed -n -E 's/^(story|bug|hotfix|spike|chore|task)-([0-9]+)-.*$/\2/p' <<<"$b")"
-  [ -n "$v" ] || v="$(sed -n -E 's/^([0-9]+)-.*$/\1/p' <<<"$b")"
-  canon_sprint "${v%%$'\n'*}"
+_SUBJECT_TYPED_RE='^(story|bug|hotfix|spike|chore|task)-([0-9]+)-.*$'
+_SUBJECT_BARE_RE='^([0-9]+)-.*$'
+# The plan loop reads the normalised name's own number with this, where a `sed -n` ran per story.
+_STORY_S_NUM_RE='^story-s([0-9]+)-.*$'
+sprint_from_subject() { # <path> -> _SPRINT_FROM_SUBJECT_OUT: a sprint opening the basename, or empty
+  local _sf_b="${1##*/}" v=""
+  if [[ $_sf_b =~ $_SUBJECT_TYPED_RE ]]; then v="${BASH_REMATCH[2]}"
+  elif [[ $_sf_b =~ $_SUBJECT_BARE_RE ]]; then v="${BASH_REMATCH[1]}"; fi
+  canon_sprint "$v"
+  _SPRINT_FROM_SUBJECT_OUT="$_CANON_SPRINT_OUT"
 }
 
 # --- build the plan -----------------------------------------------------------
@@ -396,16 +541,43 @@ STORIES_SEEN=0
 # with no artifact under any scan root, so the run exited 3, "nothing to migrate" -- a false
 # clear on a tree full of work. A listing that did not run is exit 2, a tree this cannot safely
 # operate on. SCAN_ROOTS is word-split into pathspecs exactly as before.
+#
+# NUL-DELIMITED, RAW PATHS. A plain `ls-files` prints any path holding a non-ASCII byte, a quote, a
+# backslash or a control character C-QUOTED (`"docs/retro/sprint-320-caf\303\251.md"`), and that
+# string names no file: such a path was neither planned nor refused -- silently skipped. `-z`
+# prints every path as its bytes whatever `core.quotePath` says (git: "do not quote filenames").
 LS_RC=0
 # shellcheck disable=SC2046,SC2086
-git ls-files -- $(printf '%s ' $SCAN_ROOTS) 2>/dev/null > "$TMP/tracked" || LS_RC=$?
+git ls-files -z -- $(printf '%s ' $SCAN_ROOTS) 2>/dev/null > "$TMP/tracked" || LS_RC=$?
 if [ "$LS_RC" -ne 0 ]; then
   echo "$PROG: git ls-files over the scan roots did not run (exit $LS_RC), so no artifact was listed; refusing rather than reporting nothing to migrate" >&2
   exit 2
 fi
-while IFS= read -r src; do
+# PROGRESS (see the header), on stderr. The total is counted once -- NUL-terminated records, read
+# by the shell, no process -- and both lines are keyed on SCANNED straight after it moves, so no
+# `continue` below can skip a tick.
+_PG_TOTAL=0; _NL=$'\n'; _TAB=$'\t'
+{ while IFS= read -r -d '' _pg_rec; do _PG_TOTAL=$((_PG_TOTAL + 1)); done < "${TMP}/tracked"; } 2>/dev/null
+[ "$_PG_TOTAL" -lt "$_PG_EVERY" ] || echo "$PROG: PROGRESS plan: $_PG_TOTAL tracked file(s) to scan" >&2
+_unsafe=0
+_unsafe_row() { # the UNSAFE-NAME refusal for the current `src`, which holds a tab or a newline
+  printf 'UNSAFE-NAME\t%q\tthe path holds a tab or a newline, and the plan and move lists this script carries are tab-separated lines, so it cannot be moved intact. Rename it without the tab or newline and the next run moves it.\n' \
+    "$src" >> "$REFUSE"
+}
+_refuse() { # <printf format> <args>... -> that refusal row, or UNSAFE-NAME in its place for an unsafe `src`
+  if [ "$_unsafe" = 1 ]; then _unsafe_row; else printf "$@" >> "$REFUSE"; fi
+}
+while IFS= read -r -d '' src; do
   [ -n "$src" ] || continue
   SCANNED=$((SCANNED + 1))
+  [ $((SCANNED % _PG_EVERY)) -ne 0 ] || echo "$PROG: PROGRESS plan: scanned $SCANNED of $_PG_TOTAL" >&2
+  # A TAB OR A NEWLINE IN THE PATH. The plan, the refusal list, the recovery and inferred-area
+  # lists and the move list are tab-separated lines, so such a path cannot be carried through any
+  # of them intact. It is only FLAGGED here: a conforming or tokenless path is skipped below exactly
+  # as every other one is, and only a path that would produce a plan or refusal row is refused, by
+  # name and shell-quoted (`_unsafe_row`), in place of that row. It never reaches a list.
+  _unsafe=0
+  case "$src" in *"$_NL"*|*"$_TAB"*) _unsafe=1 ;; esac
 
   # THE SPRINT IS ONE FACT ABOUT THE FILE. Read it from every component at once, so a path whose
   # directory and basename disagree is refused rather than silently resolved by whichever the
@@ -417,7 +589,7 @@ while IFS= read -r src; do
   scan="$src"
   if legacy_story "$src"; then
     STORIES_SEEN=$((STORIES_SEEN + 1))
-    scan="$(story_normalize "$src")"
+    story_normalize "$src"; scan="$_STORY_NORMALIZE_OUT"
     # THE HEADER OUTRANKS THE LEADING NUMBER HERE TOO, NOT ONLY WHEN THE PATH IS SILENT. In the
     # pre-s199 era `story-<A>-<B>` opens with the carry-over ITEM or epic number, so `A` is not
     # the sprint: `story-102-1-effective-spread-500.md` declares `**Sprint:** 53`, and reading `A`
@@ -427,19 +599,21 @@ while IFS= read -r src; do
     # validator, which reads paths and never headers, still counts as one this script moves.
     if [ "$scan" != "$src" ]; then
       sb="${scan##*/}"
-      nm_n="$(canon_sprint "$(sed -n -E 's/^story-s([0-9]+)-.*$/\1/p' <<<"$sb")")"
-      hd_n="$(sprint_from_header "$src")"
+      _NM_RAW=""; [[ $sb =~ $_STORY_S_NUM_RE ]] && _NM_RAW="${BASH_REMATCH[1]}"
+      canon_sprint "$_NM_RAW"; nm_n="$_CANON_SPRINT_OUT"
+      sprint_from_header "$src"; hd_n="$_SPRINT_FROM_HEADER_OUT"
       if [ -n "$hd_n" ] && [ -n "$nm_n" ] && [ "$hd_n" != "$nm_n" ]; then
-        # Composed through printf so this line does not carry the `/story-s` literal the
-        # artifact-path-migration fixture's `stories-half-migrated` mutant anchors on.
+        # Composed through printf so this line stays clear of `story_normalize`'s `nb=` line, which
+        # the artifact-path-migration fixture's `stories-half-migrated` mutant anchors on.
         scan="${scan%/*}/$(printf 'story-s%s-%s' "$hd_n" "${sb#story-s*-}")"
-        printf '%s\t%s\t%s\n' "$src" "$hd_n" "header>name" >> "$RECOVERED"
+        [ "$_unsafe" = 1 ] || printf '%s\t%s\t%s\n' "$src" "$hd_n" "header>name" >> "$RECOVERED"
       fi
     fi
   fi
 
-  hits="$(sprints_in "$scan")"
-  nhits="$(printf '%s\n' "$hits" | grep -c .)"
+  sprints_in "$scan"; hits="$_SPRINTS_IN_OUT"
+  # The line count of `hits` (every line non-empty): its newlines, plus one, unless it is empty.
+  nhits=0; [ -z "$hits" ] || { _NHITS_NL="${hits//[!$'\n']/}"; nhits=$(( ${#_NHITS_NL} + 1 )); }
   if [ "$nhits" -eq 0 ]; then
     # A legacy story path is NON-CONFORMING by position whatever its name, so a sprint this cannot
     # derive is a refusal that must be named -- not the silent skip every other tokenless path
@@ -450,27 +624,27 @@ while IFS= read -r src; do
       # channel. A recovery is never silent -- it is recorded here and printed under RECOVERED, so
       # the operator can audit every sprint this script decided rather than read.
       rec=""; rec_ch=""
-      rec="$(sprint_from_header "$src")"
+      sprint_from_header "$src"; rec="$_SPRINT_FROM_HEADER_OUT"
       [ -n "$rec" ] && rec_ch="header"
       # THE HEADER SPOKE AND COULD NOT BE READ -> REFUSE, never fall through to the basename.
       # For every carry-over shape the basename is the ITEM number, so falling through files the
       # file under a sprint that does not own it, silently -- strictly worse than the refusal this
       # recovery replaced. A file whose own declaration is unreadable is one the operator must fix.
       if [ -z "$rec" ] && sprint_header_present "$src"; then
-        printf 'STORY-NO-SPRINT\t%s\tsits in a stories/ directory with no `s<N>/` above it, and it DOES carry a `**Sprint:**` line whose value could not be read as a sprint number. Its basename was NOT used as a fallback, deliberately: for a carry-over story the leading number is the ITEM, so guessing from it files the story under a sprint that does not own it. Fix the header to `**Sprint:** <N>` (an `S` prefix is fine) and the next run moves it.\n' \
-          "$src" >> "$REFUSE"
+        _refuse 'STORY-NO-SPRINT\t%s\tsits in a stories/ directory with no `s<N>/` above it, and it DOES carry a `**Sprint:**` line whose value could not be read as a sprint number. Its basename was NOT used as a fallback, deliberately: for a carry-over story the leading number is the ITEM, so guessing from it files the story under a sprint that does not own it. Fix the header to `**Sprint:** <N>` (an `S` prefix is fine) and the next run moves it.\n' \
+          "$src"
         continue
       fi
       if [ -z "$rec" ]; then
-        rec="$(sprint_from_subject "$src")"
+        sprint_from_subject "$src"; rec="$_SPRINT_FROM_SUBJECT_OUT"
         [ -n "$rec" ] && rec_ch="basename"
       fi
       if [ -n "$rec" ]; then
-        printf '%s\t%s\t%s\n' "$src" "$rec" "$rec_ch" >> "$RECOVERED"
+        [ "$_unsafe" = 1 ] || printf '%s\t%s\t%s\n' "$src" "$rec" "$rec_ch" >> "$RECOVERED"
         hits="$rec"; nhits=1
       else
-        printf 'STORY-NO-SPRINT\t%s\tsits in a stories/ directory with no `s<N>/` above it, so it is not on the grammar. Its name gives no sprint, its own `**Sprint:** <N>` header gives none either, and a suffixed sprint (`131b`) has no legal `s<N>/` slot to move to -- so both readings were tried and both came back empty. Add a `**Sprint:** <N>` header line, or rename it `story-<sprint>-<index>-<slug>.md` (or `s<N>-...`), and the next run moves it.\n' \
-          "$src" >> "$REFUSE"
+        _refuse 'STORY-NO-SPRINT\t%s\tsits in a stories/ directory with no `s<N>/` above it, so it is not on the grammar. Its name gives no sprint, its own `**Sprint:** <N>` header gives none either, and a suffixed sprint (`131b`) has no legal `s<N>/` slot to move to -- so both readings were tried and both came back empty. Add a `**Sprint:** <N>` header line, or rename it `story-<sprint>-<index>-<slug>.md` (or `s<N>-...`), and the next run moves it.\n' \
+          "$src"
         continue
       fi
     else
@@ -478,8 +652,8 @@ while IFS= read -r src; do
     fi
   fi
   if [ "$nhits" -gt 1 ]; then
-    printf 'AMBIGUOUS\t%s\tpath names %s different sprints (%s); which one owns it is not derivable\n' \
-      "$src" "$nhits" "$(printf '%s' "$hits" | tr '\n' ' ')" >> "$REFUSE"
+    _refuse 'AMBIGUOUS\t%s\tpath names %s different sprints (%s); which one owns it is not derivable\n' \
+      "$src" "$nhits" "$(printf '%s' "$hits" | tr '\n' ' ')"
     continue
   fi
   n="$hits"
@@ -523,10 +697,10 @@ EOF
               # a sprint directory sitting directly under a scan root that is declared NOT to
               # be an area, so there is no area to anchor the slot to and nothing here can
               # derive one. Refused and named, not guessed.
-              *)   _ac="$(strip_token "${rest%%/*}")"
+              *)   strip_token "${rest%%/*}"; _ac="$_STRIP_TOKEN_OUT"
                    if [ -z "$_ac" ]; then
-                     printf 'NO-AREA\t%s\t`%s/%s` is a sprint directory directly under a scan root that is not an area, so there is no area to anchor `s<N>/` to. Declare the area it belongs in, or move it under one.\n' \
-                       "$src" "$r" "${rest%%/*}" >> "$REFUSE"
+                     _refuse 'NO-AREA\t%s\t`%s/%s` is a sprint directory directly under a scan root that is not an area, so there is no area to anchor `s<N>/` to. Declare the area it belongs in, or move it under one.\n' \
+                       "$src" "$r" "${rest%%/*}"
                      continue
                    fi
                    area="$r/$_ac" ;;
@@ -538,7 +712,7 @@ EOF
       esac
     done
     [ -n "$area" ] || continue
-    [ "$area" = "_bmad-output" ] || printf '%s\n' "$area" >> "$INFERRED"
+    [ "$area" = "_bmad-output" ] || [ "$_unsafe" = 1 ] || printf '%s\n' "$area" >> "$INFERRED"
   fi
 
   # `rel` comes off the ORIGINAL prefix, since an inferred area may have been stripped and no
@@ -559,7 +733,7 @@ EOF
   i=0
   for c in "${parts[@]}"; do
     i=$((i + 1))
-    s="$(strip_token "$c")"
+    strip_token "$c"; s="$_STRIP_TOKEN_OUT"
     if [ "$i" -lt "$ncomp" ]; then
       is_nameless "$s" && continue           # the directory WAS the sprint
       out="${out}${s}/"; prev_named="$s"
@@ -578,6 +752,7 @@ EOF
 
   dest="$area/s$n/${out}${last}"
   [ "$dest" = "$src" ] && continue           # already conforming
+  if [ "$_unsafe" = 1 ]; then _unsafe_row; continue; fi
   printf '%s\t%s\n' "$src" "$dest" >> "$PLAN"
 done < "$TMP/tracked"
 
@@ -707,36 +882,198 @@ if [ "$LEFTOVER" -ne 0 ]; then
 fi
 
 # --- apply --------------------------------------------------------------------
-MOVED=0
+#
+# BATCHED, AND STILL VERIFIED PER FILE. One `shasum` and one `git mv` per move cost ~77ms a move,
+# ~280s for the reference consumer's 3637 moves, and the two `shasum` runs were most of it. So the
+# moves run in batches of _AP_CHUNK: one `shasum` over the batch's sources, then per move the same
+# checks in the same order (source readable, destination ABSENT -- never overwritten --, directory,
+# move), then one `shasum` over the batch's destinations and the three legs per file, in order, then
+# ONE index update staging the batch's moves as renames from the sources' existing index entries
+# (`git ls-files -s` -> `git update-index --index-info`), the same mode and blob `git mv` carries.
+#
+# A FAILED MOVE, READ OR VERIFICATION LEAVES THE TREE AND THE INDEX THE ONE-MOVE-AT-A-TIME LOOP
+# LEFT. A failing move at position k is reported only after the moves before it are verified; a
+# failed verification at k moves the batch's later, unverified files back to their sources first;
+# and the moves through k are staged before the exit, as `git mv` had already staged them.
+# A FAILED INDEX UPDATE (a stale `index.lock`, say) moves the WHOLE batch back, last first, so the
+# tree and index are what the one-at-a-time loop leaves when its first `git mv` in that batch is
+# refused; only the message differs, naming the index update rather than `git mv`. A file that
+# cannot be moved back is reported by name, never dropped. Every directory THIS run created is
+# recorded with the move that created it, and a rollback removes the ones the one-at-a-time loop
+# would never have reached, deepest first, with `rmdir` only -- so a directory that is not empty
+# stays.
+_AP_CHUNK=256
+_AP_S=(); _AP_D=(); _AP_N=0; _AP_H=(); _AP_B=(); _AP_LO=0
+_AP_MKD=(); _AP_MKW=(); _AP_MKN=0; _AP_VK=""; _AP_VMSG=""; _AP_RBSKIP=""
 while IFS=$'\t' read -r src dest; do
   [ -n "$src" ] && [ -n "$dest" ] || continue
-  before="$(shasum -a 256 "$src" 2>/dev/null | cut -d' ' -f1)"
-  if [ -z "$before" ]; then
-    echo "$PROG: FAIL — cannot read $src before moving it. Aborting after $MOVED move(s)." >&2
-    exit 1
-  fi
-  if [ -e "$dest" ]; then
-    echo "$PROG: FAIL — destination already exists: $dest. Aborting after $MOVED move(s)." >&2
-    echo "  Not in the collision set, so it is a pre-existing file. Never overwritten." >&2
-    exit 1
-  fi
-  mkdir -p "${dest%/*}" || { echo "$PROG: FAIL — cannot create ${dest%/*}" >&2; exit 1; }
-  if ! git mv -- "$src" "$dest" 2>/dev/null; then
-    echo "$PROG: FAIL — git mv refused: $src -> $dest. Aborting after $MOVED move(s)." >&2
-    exit 1
-  fi
-  # PER-FILE, THREE LEGS, AND A COUNT WOULD SEE NONE OF THEM.
-  after="$(shasum -a 256 "$dest" 2>/dev/null | cut -d' ' -f1)"
-  if [ -e "$src" ] || [ ! -r "$dest" ] || [ "$before" != "$after" ]; then
-    echo "$PROG: FAIL — verification failed for $src -> $dest" >&2
-    echo "    source still present: $([ -e "$src" ] && echo yes || echo no)" >&2
-    echo "    destination readable: $([ -r "$dest" ] && echo yes || echo no)" >&2
-    echo "    sha256 before/after:  $before / ${after:-<unreadable>}" >&2
-    echo "  Aborting after $MOVED verified move(s). \`git checkout -- .\` restores the tree." >&2
-    exit 1
-  fi
-  MOVED=$((MOVED + 1))
+  _AP_S[$_AP_N]="$src"; _AP_D[$_AP_N]="$dest"; _AP_N=$((_AP_N + 1))
 done < "$PLAN"
+
+_ap_hash() { # <path>... -> _AP_H[k]: what `shasum -a 256 <path> | cut -d' ' -f1` gives the k-th path, '' when unreadable
+  local _ah_p="" _ah_k=0 _ah_j=0 _ah_n=0 _ah_l=""
+  local -a _ah_lines=()
+  _AP_H=()
+  shasum -a 256 "$@" > "$TMP/apply-hash" 2>/dev/null
+  while IFS= read -r _ah_l; do _ah_lines[$_ah_n]="$_ah_l"; _ah_n=$((_ah_n + 1)); done < "$TMP/apply-hash"
+  for _ah_p in "$@"; do
+    # An unreadable path has NO line, and a name `shasum` escapes does not compare equal. Either
+    # way the path gets the one-file command, and the next line is consumed only if that path was
+    # readable -- so a line is never credited to the wrong path.
+    _ah_l=""; [ "$_ah_j" -ge "$_ah_n" ] || _ah_l="${_ah_lines[$_ah_j]}"
+    if [ -n "$_ah_l" ] && [ "${_ah_l:0:1}" != '\' ] && [ "${_ah_l#*  }" = "$_ah_p" ]; then
+      _AP_H[$_ah_k]="${_ah_l%%  *}"; _ah_j=$((_ah_j + 1))
+    else
+      _AP_H[$_ah_k]="$(shasum -a 256 "$_ah_p" 2>/dev/null | cut -d' ' -f1)"
+      [ -z "${_AP_H[$_ah_k]}" ] || _ah_j=$((_ah_j + 1))
+    fi
+    _ah_k=$((_ah_k + 1))
+  done
+}
+
+_ap_mkdir() { # <move> <dir> -> `mkdir -p <dir>`, recording each level it creates against <move>
+  local _md_d="$2" _md_i=0
+  local -a _md_l=()
+  [ -d "$_md_d" ] && return 0
+  while [ -n "$_md_d" ] && [ ! -e "$_md_d" ]; do
+    _md_l[$_md_i]="$_md_d"; _md_i=$((_md_i + 1))
+    case "$_md_d" in */*) _md_d="${_md_d%/*}" ;; *) _md_d="" ;; esac
+  done
+  mkdir -p "$2" || return 1
+  while [ "$_md_i" -gt 0 ]; do               # recorded shallowest first, so a reverse walk is deepest first
+    _md_i=$((_md_i - 1))
+    _AP_MKD[$_AP_MKN]="${_md_l[$_md_i]}"; _AP_MKW[$_AP_MKN]="$1"; _AP_MKN=$((_AP_MKN + 1))
+  done
+}
+
+_ap_rollback() { # <from> <to, exclusive> <first move whose directories go> -> moves back, last first, then rmdir
+  local _rb_k=$(($2 - 1)) _rb_j=$((_AP_MKN - 1))
+  while [ "$_rb_k" -ge "$1" ]; do
+    # Never onto a source path that exists again: the file there is not this run's to replace.
+    if [ -e "${_AP_S[$_rb_k]}" ] || [ -L "${_AP_S[$_rb_k]}" ]; then
+      echo "$PROG: FAIL — could not move ${_AP_D[$_rb_k]} back to ${_AP_S[$_rb_k]}: that path exists again and is never overwritten; the file is still at the destination, unstaged." >&2
+      _AP_RBSKIP=1
+    else
+      mv -- "${_AP_D[$_rb_k]}" "${_AP_S[$_rb_k]}" 2>/dev/null \
+        || { echo "$PROG: FAIL — could not move ${_AP_D[$_rb_k]} back to ${_AP_S[$_rb_k]}; it is still at the destination, unstaged." >&2; _AP_RBSKIP=1; }
+    fi
+    _rb_k=$((_rb_k - 1))
+  done
+  while [ "$_rb_j" -ge 0 ] && [ "${_AP_MKW[$_rb_j]}" -ge "$3" ]; do
+    rmdir -- "${_AP_MKD[$_rb_j]}" 2>/dev/null
+    _rb_j=$((_rb_j - 1))
+  done
+}
+
+# STAGED FROM THE SOURCE'S OWN INDEX ENTRY. `git update-index --add` would re-hash the moved file
+# through the clean and eol filters, and a file committed before a `text=auto` attribute then stages
+# as a content change; `git mv` carries the entry over. So the entry is read and carried: one removal
+# line for the source, one line for the destination with the source's mode and blob.
+#
+# BOTH SIDES ARE NUL-DELIMITED RAW PATHS, for the reason the plan's own listing is: a C-quoted
+# `ls-files -s` path matches no source, and the batch would roll back and abort over a name it
+# could have moved. The entries come back in index order, which is the plan's order, so each source
+# is matched at its own position first and searched for only if that fails; a source with no
+# stage-0 entry fails the batch rather than being staged from a guess.
+_ap_stage() { # <from> <to, exclusive> -> 0 when those moves are staged as renames in ONE index update
+  local _sg_k="$1" _sg_n=0 _sg_j=0 _sg_r="" _sg_p="" _sg_ms="" _sg_z=""
+  local -a _sg_ep=() _sg_em=()
+  [ "$1" -lt "$2" ] || return 0
+  git --literal-pathspecs ls-files -s -z -- "${_AP_S[@]:$1:$(($2 - $1))}" > "$TMP/apply-entries" 2>/dev/null || return 1
+  while IFS= read -r -d '' _sg_r; do        # `<mode> <blob> <stage>TAB<path>`
+    _sg_p="${_sg_r#*$'\t'}"; _sg_ms="${_sg_r%%$'\t'*}"
+    [ "${_sg_ms##* }" = 0 ] || continue
+    _sg_ep[$_sg_n]="$_sg_p"; _sg_em[$_sg_n]="${_sg_ms% *}"; _sg_n=$((_sg_n + 1))
+  done < "$TMP/apply-entries"
+  : > "$TMP/apply-info" || return 1
+  while [ "$_sg_k" -lt "$2" ]; do
+    _sg_j=$((_sg_k - $1))
+    if [ "$_sg_j" -ge "$_sg_n" ] || [ "${_sg_ep[$_sg_j]}" != "${_AP_S[$_sg_k]}" ]; then
+      _sg_j=0
+      while [ "$_sg_j" -lt "$_sg_n" ] && [ "${_sg_ep[$_sg_j]}" != "${_AP_S[$_sg_k]}" ]; do _sg_j=$((_sg_j + 1)); done
+      [ "$_sg_j" -lt "$_sg_n" ] || return 1
+    fi
+    _sg_z="${_sg_em[$_sg_j]#* }"; _sg_z="${_sg_z//?/0}"
+    printf '0 %s\t%s\0%s 0\t%s\0' "$_sg_z" "${_AP_S[$_sg_k]}" "${_sg_em[$_sg_j]}" "${_AP_D[$_sg_k]}" >> "$TMP/apply-info"
+    _sg_k=$((_sg_k + 1))
+  done
+  git update-index -z --index-info < "$TMP/apply-info" 2>/dev/null
+}
+
+_ap_fail_msg() { # <kind> -> the failure message the one-at-a-time loop printed for it
+  case "$1" in
+    read)   echo "$PROG: FAIL — cannot read $src before moving it. Aborting after $MOVED move(s)." >&2 ;;
+    exists) echo "$PROG: FAIL — destination already exists: $dest. Aborting after $MOVED move(s)." >&2
+            echo "  Not in the collision set, so it is a pre-existing file. Never overwritten." >&2 ;;
+    mkdir)  echo "$PROG: FAIL — cannot create ${dest%/*}" >&2 ;;
+    mv)     echo "$PROG: FAIL — git mv refused: $src -> $dest. Aborting after $MOVED move(s)." >&2 ;;
+    verify) printf '%s\n' "$_AP_VMSG" >&2
+            echo "  Aborting after $MOVED verified move(s). \`git checkout -- .\` restores the tree." >&2 ;;
+  esac
+}
+
+_ap_verify() { # <from> <to, exclusive> -> PER-FILE, THREE LEGS, AND A COUNT WOULD SEE NONE OF THEM
+  # -> _AP_VK: the first move failing a leg ('' when none), and _AP_VMSG: its report, legs read now
+  local _vf_k="$1" _vf_m=0 _vf_src="" _vf_dest="" _vf_before="" _vf_after="" _vf_sp=no _vf_dr=no
+  _AP_VK=""; _AP_VMSG=""
+  [ "$1" -lt "$2" ] || return 0
+  _ap_hash "${_AP_D[@]:$1:$(($2 - $1))}"
+  while [ "$_vf_k" -lt "$2" ]; do
+    _vf_src="${_AP_S[$_vf_k]}"; _vf_dest="${_AP_D[$_vf_k]}"
+    _vf_before="${_AP_B[$((_vf_k - _AP_LO))]}"; _vf_after="${_AP_H[$_vf_m]}"
+    if [ -e "$_vf_src" ] || [ ! -r "$_vf_dest" ] || [ "$_vf_before" != "$_vf_after" ]; then
+      _vf_sp=no; [ ! -e "$_vf_src" ] || _vf_sp=yes
+      _vf_dr=no; [ ! -r "$_vf_dest" ] || _vf_dr=yes
+      _AP_VK="$_vf_k"
+      _AP_VMSG="$PROG: FAIL — verification failed for $_vf_src -> $_vf_dest
+    source still present: $_vf_sp
+    destination readable: $_vf_dr
+    sha256 before/after:  $_vf_before / ${_vf_after:-<unreadable>}"
+      return 0
+    fi
+    _vf_k=$((_vf_k + 1)); _vf_m=$((_vf_m + 1))
+  done
+}
+
+MOVED=0
+[ "$N_PLAN" -lt "$_PG_EVERY" ] || echo "$PROG: PROGRESS apply: $N_PLAN move(s) to apply" >&2
+while [ "$_AP_LO" -lt "$_AP_N" ]; do
+  _ap_hi=$((_AP_LO + _AP_CHUNK)); [ "$_ap_hi" -le "$_AP_N" ] || _ap_hi="$_AP_N"
+  _ap_hash "${_AP_S[@]:$_AP_LO:$((_ap_hi - _AP_LO))}"
+  _AP_B=(${_AP_H[@]+"${_AP_H[@]}"})
+  _ap_done="$_AP_LO"; _ap_fail=""; _ap_k="$_AP_LO"
+  while [ "$_ap_k" -lt "$_ap_hi" ]; do
+    src="${_AP_S[$_ap_k]}"; dest="${_AP_D[$_ap_k]}"; before="${_AP_B[$((_ap_k - _AP_LO))]}"
+    if [ -z "$before" ]; then _ap_fail=read; break; fi
+    if [ -e "$dest" ]; then _ap_fail=exists; break; fi
+    _ap_mkdir "$_ap_k" "${dest%/*}" || { _ap_fail=mkdir; break; }
+    mv -- "$src" "$dest" 2>/dev/null || { _ap_fail=mv; break; }
+    _ap_k=$((_ap_k + 1)); _ap_done="$_ap_k"
+  done
+  # A failed leg at k: the later moves never happened in the one-at-a-time loop, so undo them.
+  _ap_verify "$_AP_LO" "$_ap_done"
+  _ap_end="$_ap_done"; _ap_ok="$_ap_done"
+  if [ -n "$_AP_VK" ]; then
+    _ap_rollback $((_AP_VK + 1)) "$_ap_done" $((_AP_VK + 1))
+    _ap_end=$((_AP_VK + 1)); _ap_ok="$_AP_VK"; _ap_fail=verify
+  fi
+  # The index update failed: the one-at-a-time loop's first `git mv` of this batch is refused, so
+  # every move of the batch is undone; the directory that loop created for that first move stays.
+  if ! _ap_stage "$_AP_LO" "$_ap_end"; then
+    _ap_rollback "$_AP_LO" "$_ap_end" $((_AP_LO + 1))
+    echo "$PROG: FAIL — git update-index refused to stage this batch's renames, from ${_AP_S[$_AP_LO]} -> ${_AP_D[$_AP_LO]}; the batch was moved back${_AP_RBSKIP:+, except the file(s) named above}. Aborting after $MOVED move(s)." >&2
+    _ap_fail_msg "$_ap_fail"
+    exit 1
+  fi
+  _ap_k="$_AP_LO"
+  while [ "$_ap_k" -lt "$_ap_ok" ]; do
+    MOVED=$((MOVED + 1))
+    [ $((MOVED % _PG_EVERY)) -ne 0 ] || echo "$PROG: PROGRESS apply: moved $MOVED of $N_PLAN" >&2
+    _ap_k=$((_ap_k + 1))
+  done
+  [ -z "$_ap_fail" ] || { _ap_fail_msg "$_ap_fail"; exit 1; }
+  _AP_LO="$_ap_hi"
+done
 
 echo "VERDICT: $MOVED of $N_PLAN planned move(s) applied and VERIFIED per file"
 echo "  (source absent AND destination readable AND sha256 identical, checked for each one)."

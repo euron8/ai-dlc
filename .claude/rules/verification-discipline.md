@@ -56,6 +56,11 @@ testing that extracted text CONTAINED a function name, which mangled unparseable
 Reading harder does not fix it — reading is the faculty that fails. Recompute and compare two
 independently derived values; a count read off a rendering is not a derived count.
 
+**A transcript replay counts EXECUTED calls, not attempted ones.** Pair each `tool_use` with its
+`tool_result` by id and drop denied or `is_error` calls: a PreToolUse deny means PostToolUse never
+fires. Measured: context-mode denied 105 of 220 whole step Reads, and a replay counting attempts
+claimed 4 prevented wrong closes where executed Reads gave 1.
+
 ## A coverage proof over a DERIVED population cannot see outside it
 
 Measured: a census from a pinned snapshot was fully accounted for and blind to entries filed after

@@ -2721,7 +2721,7 @@ verify: manual
 
 ## BL-1009 — the lead can leave a gate without `gate-checkpoint.sh … close`, so the OPEN marker outlives the gate and a compaction resumes a finished gate
 
-**PARTIAL (batch 257, cluster F4; v0.1100.0 first).** v0.1100.0 made the recover hook close a gate its own session left. This release adds the close at the next step's entry (M1), the way back after a close (M2), the carry of that way back across a compaction (M3), and a LEFT record from the recover hook's own backstop close. Remainder (1) is decided below. Remainder (2) is narrowed to window (A), from the leave to the next compaction, and stays OPEN; see **Remainder, OPEN.**
+**PARTIAL (v0.1105.0; batch 257, cluster F4).** v0.1100.0 made the recover hook close a gate its own session left. This release adds the close at the next step's entry (M1), the way back after a close (M2), the carry of that way back across a compaction (M3), and a LEFT record from the recover hook's own backstop close. Remainder (1) is decided below. Remainder (2) is narrowed to window (A), from the leave to the next compaction, and stays OPEN; see **Remainder, OPEN.**
 
 At a compaction, `core/hooks/ai-dlc-recover.sh` now reads its own session's transcript before it builds the resume block. It uses `extract.py`'s `gate_event()` grammar, and over all 1568 graph lead commands that name a gate script the two grammars agree on every one (157 opens and 109 closes each; 0 disagreements). Its rules:
 - A gate opens on `gate-checkpoint.sh … open` or `gate-transition.sh <story> 3`, and closes on `gate-checkpoint.sh … close`.
@@ -2920,6 +2920,31 @@ Provenance: batch 256, filed by the 0.1101.0 fast-track builder at the lead's (a
 
 verify: manual
 
+## BL-1038 — `validate-artifact-paths.sh` enumerates with line-delimited `git ls-files -- "$r"`, so under `core.quotePath` it judges non-ASCII, backslash and double-quote paths by their QUOTED names
+
+**DEFECT.** OPEN. Filed 2026-11-13. This is the same class as BL-1028's plan scan, in the conformance validator that gates every consumer push. `core/scripts/validate-artifact-paths.sh` collects its subject with `git ls-files -- "$r" 2>/dev/null >> "$TMP/paths"`, one line per path, once per scan root (`:145`). Under the default `core.quotePath`, git prints a path holding a non-ASCII byte, a backslash or a double quote as a C-quoted string, so the classifier reads `"docs/retro/s322/caf\303\251.md"` rather than the path.
+
+**Measured** at dc79f7b73 by the receipt below, the entry's first reading. The scratch repository has `core.quotePath` pinned true and three tracked files under `docs/retro/`: a plain non-conforming control `sprint-321-plain.md`, a non-conforming `sprint-320-café.md`, and a CONFORMING `s322/café.md`. The shipped validator exits 1 with `VERDICT: FAIL — 3 blocking`, and its BLOCKING list is:
+```
+  "docs/retro/s322/caf\303\251.md"
+  "docs/retro/sprint-320-caf\303\251.md"
+  docs/retro/sprint-321-plain.md
+```
+So the filing's "silently skipped" premise is not what this validator does; it is worse in one direction. A non-conforming non-ASCII path is reported, but under a quoted name that is not a path the operator can act on. A CONFORMING non-ASCII path is BLOCKED: the leading `"` makes `"docs` the first component, so `s322/` no longer sits directly under the area. That is a false push block. A backslash is quoted even with `core.quotePath` false, and in the same session's probe a conforming `_bmad-output/implementation-artifacts/s5/a\b.md` was blocked under both settings, while a conforming `café` path was blocked only under true.
+
+**Fix shape.** Enumerate with `git ls-files -z -- "$r"` and a NUL-delimited read, as BL-1028's plan scan now does. Decide what a tab or newline path is in this validator, which does not carry tab-separated lists the way the migrator does, and state it. Its count lines (`tracked files`, `under the scan roots`) must count the same paths.
+
+**Receipt.** The `verify:` line below is inline and drives the shipped validator from the repo root on a scratch repository under `mktemp -d`, seeded as above. It anchors on `SCAN_ROOTS` in the script (else exit 9). The validator must exit 1, else 9: the two non-conforming files guarantee a block. The control `  docs/retro/sprint-321-plain.md` must appear as a whole line, else 9. The receipt then exits 1 while the literal `  docs/retro/sprint-320-café.md` line is absent, and 1 while any line names `s322`, which is the conforming file being blocked. Otherwise it exits 0.
+- At dc79f7b73 it exits 1.
+- Against a scratch copy of `core/` whose enumeration line alone is changed to `git -c core.quotePath=false ls-files` (sides proven different by `cmp`), it exits 0. That copy is a stand-in for the fix that lifts the quoting, not the fix.
+- With the control seed removed, it exits 9.
+
+Every grep reads the validator's captured output, never a tracked file other than the anchor, so a comment cannot satisfy it.
+
+Provenance: batch 257, cluster P1, from the quotePath fix to BL-1028; id allocated by the lead.
+
+verify: sh S=core/scripts/validate-artifact-paths.sh; G=core/skills/ai-dlc/artifact-path-grammar.md; grep -q 'SCAN_ROOTS' "$S" || exit 9; S="$PWD/$S"; G="$PWD/$G"; T="$(mktemp -d)" || exit 9; unset AI_DLC_PROJECT_ROOT; R="$T/r"; git init -q "$R" || exit 9; git -C "$R" config core.quotePath true || exit 9; mkdir -p "$R/docs/retro/s322" || exit 9; printf a > "$R/docs/retro/sprint-321-plain.md"; printf b > "$R/docs/retro/sprint-320-café.md"; printf c > "$R/docs/retro/s322/café.md"; git -C "$R" add -A && git -C "$R" -c user.name=r -c user.email=r@r -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -qm seed || exit 9; bash "$S" --root "$R" --grammar "$G" > "$T/out" 2>&1 < /dev/null; [ $? -eq 1 ] || exit 9; grep -qxF '  docs/retro/sprint-321-plain.md' "$T/out" || exit 9; grep -qxF '  docs/retro/sprint-320-café.md' "$T/out" || exit 1; if grep -qF 's322' "$T/out"; then exit 1; fi; exit 0
+
 ## BL-1007 — escalation-status-vocabulary is green only from the repo root: run from `/`, its 15 mutant and refusal lines FAIL, the same 15 before and after the in-process conversion
 
 **DEFECT.** OPEN. Filed 2026-11-12. `core/fixtures/escalation-status-vocabulary/run.sh` passes from the repository root and fails from `/`. The pre-push hook runs every fixture from the root, so the push sees only the green run.
@@ -3046,5 +3071,68 @@ Decision rule: the step-value ruling, "A step with no measured value goes" (`.cl
 Receipt: `verify: manual`, the form BL-1004 and BL-1005 use. The close is a measurement on a future sprint, so no tree receipt exists. It closes on an `Outcome measured:` line from a graph sprint with a gate-3 rework that names that sprint, `derive-g3.sh`, the class (a), (b) and (c) seats per gate-3 rework with their dollars and hours, and the GATE1-SKIP records. The expected owner of the fix is `gate-transition.sh`'s Rule A block at `:393`-`:397`, which asks `--gate1-rerun` only on a gate-2 pass M >= 2. A tree receipt for the mechanism, once built, is a `core/fixtures/gate-transition` cell asserting GATE1-SKIP on a gate-1 open after a gate-3 rework with a records-only delta, and a seat on a class (c) remedy; that is new test code and is not written here. What else would satisfy a weaker receipt: a `has` on `implementation.md` for a gate-3 rework sentence, which a prose edit satisfies without any behaviour.
 
 Provenance: batch 257, release cluster F3, from BL-844's close verifier; amended in the same release on the delta adversary's tie finding; id reserved by the lead.
+
+verify: manual
+
+
+## BL-1031 — the efficiency close arm of `scripts/validate-backlog-receipts.sh` never checks a `fell` verdict against a value citation, and its header still says "12 live Step lines" and "BL-810 carries no Step: line"
+
+**DEFECT.** OPEN. Filed 2026-11-13. In `eff_close()` (`scripts/validate-backlog-receipts.sh:1620`), the live branch checks a value citation only when the Verdict direction is `did not fall` (`:1636`-`:1639`, `eff_cite_ok` under `[ "$6" = dnf ]`); a `fell` verdict returns with nothing checking that the figures it cites fell, or that any value citation resolves. A close can therefore state `Verdict: <group> fell` beside figures that rose and pass E1. Found by R1's close verifier (batch 257, 0.1103.0).
+
+Also stale in the same header: `:1561` says "12 live, 3 archive at ca6a6f941 (0.1070.0) and this tip (BL-809, BL-812 gained Step lines)", and `:1576` says "BL-810 carries no `Step:` line"; 0.1103.0 declared Step lines on BL-508, BL-541, BL-543, BL-550, BL-552, BL-810 and BL-912, so both statements no longer describe the ledger: the header's own command, `grep -cE '^(<br>|- )?(\*\*)?Step:' docs/backlog.md`, reads 27 live at 0.1104.0 (6ee555c87), against 0 for the negative control `BasisZZQ`.
+
+The header at `:1200`-`:1201` says by design that "no threshold or comparison is applied to any number"; the fix reconciles that design statement rather than contradicting it silently.
+
+Owed: a `fell` verdict is held to a rule of its own (a resolving value citation, or BEFORE and AFTER figures for the declared step that fell), with an E0 self-probe seeding a `fell` close beside figures that rose (must fire) and one beside figures that fell (must stay quiet); and the header's Step-line count and BL-810 sentence re-derived by the commands the header names.
+
+Receipt: runner-wired, run from the repo root. It writes two scratch ledgers holding one LANDED efficiency close whose BEFORE and AFTER figures ROSE (1.0 h to 2.0 h) and which carries no value citation, and runs the validator `--efficiency-only` over each. Control: the `did not fall` copy must fire `NO-VALUE-CITATION`, else exit 9. Subject: the `fell` copy draws no finding today, exit 1; any finding naming the entry, exit 0. Measured once each: base 0.1105.0 exit 1; a stand-in fix (a `fell` whose AFTER exceeds its BEFORE reads FELL-ROSE at `:1636`, E0 still green) exit 0. A `fell` with NO figures is already refused at `NO-FIGURES`, so the discriminating input is rising figures.
+
+Provenance: batch 257, R1's close verifier; id reserved by the lead (cluster F9), filed at the close docs because no session took it.
+
+verify: sh grep -q 'eff_cite_ok' scripts/validate-backlog-receipts.sh || exit 9; V=scripts/validate-backlog-receipts.sh; T=$(mktemp -d) || exit 9; R='Cites "A step with no measured value goes" in `.claude/rules/operator-rulings.md`.'; L='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive, 2.1M tokens, lead active 0.4 h, subagent $5, measured by '; P=docs/anal; L="${L}${P}ysis/"'pipeline-efficiency-s317-s320/scripts/roll.py, before 1.0 h and after 2.0 h'; E='(efficien'; E="${E}cy)"; for v in fell 'did not fall'; do printf '# probe\n\n## BL-9001\n\n**DEFECT %s.** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; rose.\n\nStep: implementation\n\nVerdict: implementation %s.\n' "$E" "$R" "$L" "$v" > "$T/l-${v%% *}.md"; done; c=$(bash "$V" "$T/l-did.md" --efficiency-only --root . </dev/null 2>&1); case "$c" in *BL-9001*NO-VALUE-CITATION*) ;; *) exit 9 ;; esac; s=$(bash "$V" "$T/l-fell.md" --efficiency-only --root . </dev/null 2>&1); case "$s" in *BL-9001*) exit 0 ;; esac; exit 1
+
+
+## BL-1032 — `core/hooks/ai-dlc-recover-gate.sh` hardcodes `_bmad-output` as its state directory while its sibling hooks honour `AI_DLC_STATE_DIR`
+
+**DEFECT.** OPEN. Filed 2026-11-13. `core/hooks/ai-dlc-recover-gate.sh:169` sets `STATE_DIR="${PROJECT_DIR}/_bmad-output"`, while `core/hooks/ai-dlc-content-seal.sh`, `ai-dlc-context-sensor.sh`, `ai-dlc-continue.sh`, `ai-dlc-dispatch-guard.sh` and `ai-dlc-gate-remediation-guard.sh` read `AI_DLC_STATE_DIR`. A consumer that sets the variable gets a recover gate reading a different directory from every other hook. graph does not set it, so the cost there is 0; other consumers are unmeasured.
+
+Operator ruling: "fix in a later release". The fix also lifts the guard F4 (0.1105.0) added at `core/hooks/ai-dlc-handoff-entry.sh:143` that makes M1 inert when the state directory is not `_bmad-output`; that guard exists only because of this hardcode, and leaving it would keep M1 off for exactly the consumers the fix serves.
+
+Owed: line 169 resolves the state directory the way its siblings do, F4's guard is removed in the same change, and a fixture cell runs the recover gate with `AI_DLC_STATE_DIR` set to a non-default directory and asserts it reads that directory, with a default-directory twin.
+
+Receipt: runner-wired, run from the repo root. It drives `core/hooks/ai-dlc-recover-gate.sh` with a Write call over two scratch projects whose `.recover-fired` breadcrumb arms the read stage (snapshot and step file present). Control: the breadcrumb under `_bmad-output` with `AI_DLC_STATE_DIR` unset must be denied, else exit 9. Subject: the breadcrumb only under `st` with `AI_DLC_STATE_DIR=st`; today the hook reads `_bmad-output`, finds nothing and allows, exit 1; a deny, exit 0. Measured once each: base 0.1105.0 exit 1; line 169 changed to `${AI_DLC_STATE_DIR:-_bmad-output}` as a stand-in, exit 0.
+
+Provenance: batch 257, the lead's operator queue; id reserved by the lead (cluster F10), filed at the close docs because no session took it.
+
+verify: sh [ -f core/hooks/ai-dlc-context-provenance.sh ] || exit 9; grep -q 'recover-advisor-owed' core/hooks/ai-dlc-recover-gate.sh || exit 9; H=core/hooks/ai-dlc-recover-gate.sh; command -v jq >/dev/null || exit 9; T=$(mktemp -d) || exit 9; for w in c:_bmad-output s:st; do p="$T/${w%%:*}"; mkdir -p "$p/${w#*:}" && : > "$p/snap.md" && : > "$p/step.md" && printf 'step_file_resolved=1\nsnapshot_path=snap.md\nstep_file=step.md\n' > "$p/${w#*:}/.recover-fired" || exit 9; done; j='{"tool_name":"Write","tool_input":{"file_path":"x.md"}}'; c=$(printf '%s' "$j" | env -u AI_DLC_STATE_DIR CLAUDE_PROJECT_DIR="$T/c" bash "$H" 2>/dev/null); case "$c" in *'"deny"'*) ;; *) exit 9 ;; esac; s=$(printf '%s' "$j" | env CLAUDE_PROJECT_DIR="$T/s" AI_DLC_STATE_DIR=st bash "$H" 2>/dev/null); case "$s" in *'"deny"'*) exit 0 ;; esac; exit 1
+
+
+## BL-1039 — `core/fixtures/pregate-self-check` rose from 75 to 161 counted starts, and part of the rise re-runs worlds its mutants do not decide
+
+**NOTE (efficiency).** OPEN. Filed 2026-11-13. S1 (0.1107.0) raised `core/fixtures/pregate-self-check/invocations.decl` from 75 to 161. That release's tip adversary found two cuttable costs: mutant m3 re-runs worlds it does not decide, and world Hcwd repeats world A. Neither changes a verdict, so the starts they add can be removed with no coverage lost.
+
+There is no graph pipeline step behind this entry: it is fixture-suite cost in this repo; the cost lives in core/fixtures/pregate-self-check/, as counted starts in its `invocations.decl`.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Owed: m3 runs only the worlds it decides, Hcwd is folded into world A or given a distinct input, and `invocations.decl` falls from 161 by the measured amount, from one counted run plus the gate's.
+
+Receipt: `verify: manual`. No runner-wired receipt exists for an unmade cut: the closing evidence is the lower `invocations.decl` row held by J3 at the push, with each removed world named. A `has` on the decl for a number is satisfied by an edit that runs nothing less.
+
+Provenance: batch 257, S1's tip adversary; id allocated by the lead.
+
+verify: manual
+
+## BL-1041 — the E arm of `scripts/validate-backlog-receipts.sh` classes an entry by text inside its own `verify:` line
+
+**NOTE.** OPEN. Filed 2026-11-13. The E arm's entry scan in `scripts/validate-backlog-receipts.sh` runs `backlog_efficiency_tagged($0)` on every line of an entry (`:1304`, `if (backlog_efficiency_tagged($0)) tagged = 1`; the regex is `core/skills/ai-dlc-update/reconcile/lib.sh:560`), and appends every line to `text` (`:1303`), whose `index(text, ...)` on the `docs/analysis` directory path sets the citer field (`:1250`). The `verify:` line is one of those lines, so a receipt that writes a scratch ledger carrying the bold efficiency tag or that path makes its own entry an efficiency entry. That is a classifier false positive: text about a program read as the program.
+
+Measured instance: BL-1031, a plain DEFECT, failed `FAIL: E BL-1031 F-BASELINE`, `F-STEP` and `F-MOVEMENT` at the 0.1107.0 bundle, from the literal bold tag and `docs/analysis` path inside its receipt's scratch ledger. This release works around it by building both tokens at run time in BL-1031's receipt (the scratch ledgers it writes are byte-equal to before, and it still exits 1); the check itself is unfixed.
+
+Owed: the class scan excludes the `verify:` line (or fenced receipt text), with an E0 self-probe seeding an untagged entry whose receipt writes the tag (must stay quiet) beside a tagged one (must fire).
+
+Receipt: `verify: manual`. The subject is a classifier's population, and BL-1031's runtime-built receipt no longer exercises it; a runner-wired receipt would seed a scratch ledger and is owed with the fix.
+
+Provenance: batch 257, the 0.1107.0 bundle's receipts gate; id allocated by the lead.
 
 verify: manual

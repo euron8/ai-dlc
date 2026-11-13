@@ -2,6 +2,7 @@ awk
 basename
 bash
 cat
+chmod
 cmp
 cp
 cut
@@ -13,10 +14,12 @@ git
 grep
 head
 kill
+ln
 mkdir
 mktemp
 mv
 rm
+rmdir
 sed
 shasum
 sort

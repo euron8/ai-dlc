@@ -78,7 +78,9 @@ main checkout's hook, and that hook begins `cd "$(git rev-parse --show-toplevel)
 **`scripts/suite-content-key.sh` declares which paths cannot change a fixture verdict**, as the
 names between its `# EXCLUDE_BEGIN` and `# EXCLUDE_END` markers. Both skips in `.githooks/pre-push`
 read it: the whole-suite key hashes everything except that set, and the per-fixture read-set skip
-resolves the same set in `readset_excluded_re`. A wrong edit there silently widens or narrows what a
+resolves the same set in `readset_excluded_re`. A `+`-declared file in a fixture's inputs (e.g.
+`+docs/backlog.archive.md`, declared by `backlog-receipt-fixture-join`) is hashed by BOTH keys, so
+every edit to it moves the whole-suite key and dispatches that fixture. A wrong edit there silently widens or narrows what a
 push skips, so every added line needs the two-tree mutation measurement its header describes.
 
 **`core/scripts/derive-fixture-readsets.sh --reconcile` traces every stale, changed and unmapped

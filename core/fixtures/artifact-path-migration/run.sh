@@ -34,6 +34,19 @@
 # MUTANT-MATRIX consumer-areas decides=R-areas twins=T-conform
 # MUTANT-MATRIX remedy-root-mig decides=R-remedy-mig twins=T-conform
 # MUTANT-MATRIX remedy-root-val decides=R-remedy-val twins=T-conform
+# MUTANT-MATRIX fork-sprints-in decides=R-forks twins=R-progress
+# MUTANT-MATRIX fork-strip-token decides=R-forks twins=R-progress
+# MUTANT-MATRIX fork-nhits decides=R-forks twins=R-progress
+# MUTANT-MATRIX progress-stdout decides=R-progress twins=T-conform
+# MUTANT-MATRIX progress-none decides=R-progress twins=T-conform
+# MUTANT-MATRIX apply-per-file decides=R-applyscale twins=R-progress
+# MUTANT-MATRIX verify-rollback-off decides=A-verify twins=A-crlf
+# MUTANT-MATRIX stage-bound-short decides=A-verify twins=A-crlf
+# MUTANT-MATRIX hash-path-guard-off decides=A-read twins=A-quote
+# MUTANT-MATRIX stage-rollback-off decides=A-stage twins=A-crlf
+# MUTANT-MATRIX stage-add-rehash decides=A-crlf twins=A-stage
+# MUTANT-MATRIX quoted-read decides=A-quote twins=A-crlf
+# MUTANT-MATRIX unsafe-early decides=A-quote twins=A-crlf
 # MUTANT-MATRIX-DYNAMIC mutant_score-name why=mutant_score() passes its first argument "$n" to mutant_killed; each mutant_score call (ambiguity-allowed, stories-half-migrated, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/artifact-path-migration/run.sh --matrix
 #
@@ -575,6 +588,373 @@ else
 fi
 
 # =============================================================================
+# 5b. NO PROCESS PER FILE, AND PROGRESS ON STDERR ONLY.
+#
+# THE DEFECT. The plan loop forked per file and per path component -- `sprints_in` ran tr, grep,
+# head, sed and sort for EVERY tracked file under the scan roots, token or not, `strip_token` ran
+# sed per component of every file with one sprint (the already-conforming `area/s<N>/...` majority
+# included), and the hit count was one more grep. On the reference consumer that was ~400k forks
+# over 16554 files and eleven minutes with no output at all, so the operator could not tell a slow
+# run from a hung one.
+#
+# THE COST ARM COUNTS PROCESSES, NEVER TIME (zero load-dependent tests). sed/grep/tr/sort/head are
+# counting shims on PATH, and the same tree is scanned at two sizes: K tokenless, K tokened-but-
+# nonconforming and K already-conforming files, at K=1 and K=2. A fork-free scan starts the same
+# number of those tools at both sizes, because everything it starts runs once per RUN (the resolver
+# calls, the report); one fork per file anywhere in the plan loop makes the two counts differ by 3
+# per fork. K is small on purpose: each shim is a counted bash start, and two sizes that differ are
+# all equality needs -- a larger K only multiplies the starts the forking mutants pay. The
+# moves-planned line is the control that each run read its tree.
+# =============================================================================
+PA=_bmad-output/planning-artifacts
+# small_world <path>... -> a clone of the seeded world holding ONLY these artifacts under the scan
+# roots (one line each), committed. Everything else the seed carries under them is removed, so a
+# count or a report read off this world is about the named files alone.
+small_world() {
+  local d f; d="$(clone_world)" || return 1
+  ( cd "$d" && git rm -rq _bmad-output docs && for f in "$@"; do mkdir -p "${f%/*}" && printf 'x\n' > "$f" || exit 1; done \
+      && git add -A && git commit -qm small ) >/dev/null 2>&1 || return 1
+  printf '%s\n' "$d"
+}
+fork_world() { # <K>
+  local k="$1" i=0 fs=()
+  while [ "$i" -lt "$k" ]; do
+    i=$((i + 1))
+    fs+=("$PA/plain-$i.md" "$PA/s$i-notes.md" "$PA/s$((i + 500))/x.md")
+  done
+  small_world "${fs[@]}"
+}
+FW1="$(fork_world 1)"; FW2="$(fork_world 2)"
+[ -n "$FW1" ] && [ -n "$FW2" ] || { echo "FIXTURE BROKEN: the fork-scaling worlds could not be built" >&2; exit 2; }
+SHIMS="$(mktemp -d "${TMPDIR:-/tmp}/apmig-shim-XXXXXX")" || exit 2
+for _t in sed grep tr sort head; do
+  _real="$(type -P "$_t")" || { echo "FIXTURE BROKEN: $_t is not on PATH, so it cannot be shimmed" >&2; exit 2; }
+  printf '#!%s\nprintf "%%s\\n" %s >> "$APMIG_SHIM_LOG"\nexec %s "$@"\n' "$BASH" "$_t" "$_real" > "$SHIMS/$_t"
+  chmod +x "$SHIMS/$_t"
+done
+# fork_count <script> <world> -> "<shimmed starts> <moves planned>" for one dry run
+fork_count() {
+  local log n m
+  log="$(mktemp "${TMPDIR:-/tmp}/apmig-shlog-XXXXXX")" || return 2
+  APMIG_SHIM_LOG="$log" PATH="$SHIMS:$PATH" bash "$1" --root "$2" > "$log.out" 2>&1
+  n="$(wc -l < "$log")"; m="$(sed -n 's/^  moves planned: *//p' "$log.out")"
+  rm -f "$log" "$log.out"
+  printf '%s %s\n' "$((n + 0))" "${m:-none}"
+}
+# forks_hold <script> -> 0 when both sizes start the same non-zero number of shimmed tools and each
+# run planned its K moves (only the tokened-nonconforming files move). FORKS_SEEN carries the readings for the report.
+forks_hold() {
+  local a b
+  a="$(fork_count "$1" "$FW1")"; b="$(fork_count "$1" "$FW2")"
+  FORKS_SEEN="K=1: $a / K=2: $b (shimmed starts, moves planned)"
+  [ "${a#* }" = 1 ] && [ "${b#* }" = 2 ] && [ "${a%% *}" -gt 0 ] && [ "${a%% *}" = "${b%% *}" ]
+}
+forks_hold "$MIG"; FORKS_RC_MIG=$?; FORKS_SEEN_MIG="$FORKS_SEEN"
+if [ "$FORKS_RC_MIG" -eq 0 ]; then ok "fork-scaling: the plan scan starts no tool per file -- $FORKS_SEEN"
+else bad "fork-scaling: the shimmed tool count GROWS with the tree, or a run did not plan its moves -- $FORKS_SEEN"; fi
+
+# THE MOVE LOOP, THE SAME WAY. --apply used to run two `shasum` and one `git mv` per move, ~77ms a
+# move and ~280s on the reference consumer's 3637. It now hashes and stages per BATCH, so `shasum`
+# and `git` starts must not grow with the number of moves: the same worlds, applied on copies, at
+# K=1 and K=2 planned moves, under counting shims for exactly those two tools. `mv` and `mkdir`
+# stay per move by design and are not shimmed. The VERDICT line is the control that every move ran.
+SHIMA="$(mktemp -d "${TMPDIR:-/tmp}/apmig-shima-XXXXXX")" || exit 2
+for _t in shasum git; do
+  _real="$(type -P "$_t")" || { echo "FIXTURE BROKEN: $_t is not on PATH, so it cannot be shimmed" >&2; exit 2; }
+  printf '#!%s\nprintf "%%s\\n" %s >> "$APMIG_SHIM_LOG"\nexec %s "$@"\n' "$BASH" "$_t" "$_real" > "$SHIMA/$_t"
+  chmod +x "$SHIMA/$_t"
+done
+# apply_count <script> <world> -> "<git starts> <shasum starts> <moved>" for one --apply on a copy
+apply_count() {
+  local t g s m
+  t="$(mktemp -d "${TMPDIR:-/tmp}/apmig-apc-XXXXXX")" || return 2
+  mkdir -p "$t/w" && cp -R "$2/." "$t/w" || return 2
+  APMIG_SHIM_LOG="$t/log" PATH="$SHIMA:$PATH" bash "$1" --root "$t/w" --apply > "$t/out" 2>&1
+  g="$(grep -c '^git$' "$t/log")" || g=0
+  s="$(grep -c '^shasum$' "$t/log")" || s=0
+  m="$(sed -n 's/^VERDICT: \([0-9]*\) of \([0-9]*\) planned move(s) applied.*/\1\/\2/p' "$t/out")"
+  rm -rf "$t"
+  printf '%s %s %s\n' "$g" "$s" "${m:-none}"
+}
+# applyscale_hold <script> -> 0 when git and shasum starts are equal, and non-zero, at both sizes
+# and each run applied all of its K moves. APPLYSCALE_SEEN carries the readings.
+applyscale_hold() {
+  local a b
+  a="$(apply_count "$1" "$FW1")"; b="$(apply_count "$1" "$FW2")"
+  APPLYSCALE_SEEN="K=1: $a / K=2: $b (git starts, shasum starts, moved)"
+  set -- $a $b
+  [ "$3" = 1/1 ] && [ "$6" = 2/2 ] && [ "$1" -gt 0 ] && [ "$2" -gt 0 ] && [ "$1" = "$4" ] && [ "$2" = "$5" ]
+}
+applyscale_hold "$MIG"; APPLYSCALE_RC_MIG=$?; APPLYSCALE_SEEN_MIG="$APPLYSCALE_SEEN"
+if [ "$APPLYSCALE_RC_MIG" -eq 0 ]; then ok "apply-scaling: --apply starts no git or shasum per move -- $APPLYSCALE_SEEN"
+else bad "apply-scaling: git or shasum starts GROW with the moves, or a run did not apply them all -- $APPLYSCALE_SEEN"; fi
+
+# THE BATCHED LOOP ABORTS WHERE THE ONE-AT-A-TIME LOOP ABORTED, AND LEAVES WHAT IT LEFT. Batching
+# moves a whole batch on disk before anything is verified or staged, so every abort is now a
+# rollback, and a rollback can leave a tree no operator would get from the old loop. 300 planned
+# moves (x1001-s1001.md .. x1300-s1300.md, each its own content) put the trouble at move 280, in the
+# SECOND batch of 256, so batch one is moved, verified and staged before it:
+#   read    the source is a dangling symlink, so it has no hash
+#   exists  an IGNORED file already sits at the destination
+#   verify  a relative symlink that resolves at the source and dangles once moved
+#   stage   a stale .git/index.lock. It refuses the FIRST index update, so this one aborts in batch
+#           one: a lock present at start cannot first appear at batch two without racing the run.
+# Each is asserted on rc, `git status --porcelain=v1 -z`, `git ls-files -s` (both over _bmad-output),
+# the directory tree, and the first stderr FAIL line. Every expected value was produced by RUNNING
+# the 0.1101.0 one-at-a-time migrator on the same world and is pinned (status, index and tree as
+# the first 16 hex of their sha256); the stage line alone is the batched loop's documented new text.
+#
+# B1, THE STAGING ITSELF. A file committed with CRLF before `* text=auto` is moved and must stage as a
+# pure rename: `git update-index --add` would re-hash it through the eol filter and stage a content
+# change, which `git mv` never did. Its blob is compared with the source's own pre-move entry.
+ABW="$(mktemp -d "${TMPDIR:-/tmp}/apmig-abw-XXXXXX")" || exit 2
+h16() { local h; h="$(shasum -a 256 < "$1")" || return 1; printf '%s' "${h:0:16}"; }
+ab_base() { # -> the 300-move world, committed
+  local d i=1000; d="$ABW/base"
+  mkdir "$d" && cp -R "$TPL/." "$d" || return 1
+  # No automatic gc or maintenance: a detached one packing objects while the world is copied
+  # removes directories from under `cp -R`.
+  ( cd "$d" && git config gc.auto 0 && git config maintenance.auto false \
+      && git rm -rq _bmad-output docs && mkdir -p "$PA" \
+      && while [ "$i" -lt 1300 ]; do i=$((i + 1)); printf 'f%s\n' "$i" > "$PA/x$i-s$i.md" || exit 1; done \
+      && git add -A && git commit -qm abort-base ) >/dev/null 2>&1
+}
+ab_world() { mkdir "$ABW/$1" && cp -R "$ABW/base/." "$ABW/$1"; }
+ab_commit() { ( cd "$ABW/$1" && git add -A && git commit -qm "$1" ) >/dev/null 2>&1; }
+{ ab_base \
+  && ab_world read && rm "$ABW/read/$PA/x1280-s1280.md" && ln -s nowhere "$ABW/read/$PA/x1280-s1280.md" && ab_commit read \
+  && ab_world exists && printf '%s\n' "$PA/s1280/x1280.md" > "$ABW/exists/.gitignore" \
+     && mkdir -p "$ABW/exists/$PA/s1280" && printf 'ignored\n' > "$ABW/exists/$PA/s1280/x1280.md" && ab_commit exists \
+  && ab_world verify && printf 't\n' > "$ABW/verify/$PA/x1280-target.md" && rm "$ABW/verify/$PA/x1280-s1280.md" \
+     && ln -s x1280-target.md "$ABW/verify/$PA/x1280-s1280.md" && ab_commit verify \
+  && ab_world stage && : > "$ABW/stage/.git/index.lock"; } \
+  || { echo "FIXTURE BROKEN: the abort-path worlds could not be built" >&2; exit 2; }
+mkdir "$ABW/crlf" && cp -R "$TPL/." "$ABW/crlf" \
+  && ( cd "$ABW/crlf" && git config core.autocrlf false && git config gc.auto 0 && git config maintenance.auto false && git rm -rq _bmad-output docs && mkdir -p "$PA" \
+       && printf 'a\r\nb\r\n' > "$PA/crlf-s1500.md" && git add -A && git commit -qm crlf \
+       && printf '* text=auto\n' > .gitattributes && git add .gitattributes && git commit -qm attr ) >/dev/null 2>&1 \
+  || { echo "FIXTURE BROKEN: the CRLF world could not be built" >&2; exit 2; }
+CRLF_BLOB="$(git -C "$ABW/crlf" ls-files -s -- "$PA/crlf-s1500.md")"; CRLF_BLOB="${CRLF_BLOB#* }"; CRLF_BLOB="${CRLF_BLOB%% *}"
+# The pins: "<rc> <status> <index> <tree>" and the first stderr FAIL line, from the 0.1101.0 run.
+AB_EXP_read="1 e3bb5b21144ee81c d7026bbfd3b8c1fd 1f8341d1b11c2ec7"
+AB_EXP_exists="1 e3bb5b21144ee81c bacfbaca8d98b913 4a966e3bcdd22b9f"
+AB_EXP_verify="1 1106200149097029 3ab6d5be7e4d42eb 0ca6ea2696f51417"
+AB_EXP_stage="1 e3b0c44298fc1c14 c1d1e71cf1a5cc66 5a8bf898bd38acd5"
+AB_LINE_read='migrate-artifact-paths.sh: FAIL — cannot read _bmad-output/planning-artifacts/x1280-s1280.md before moving it. Aborting after 279 move(s).'
+AB_LINE_exists='migrate-artifact-paths.sh: FAIL — destination already exists: _bmad-output/planning-artifacts/s1280/x1280.md. Aborting after 279 move(s).'
+AB_LINE_verify='migrate-artifact-paths.sh: FAIL — verification failed for _bmad-output/planning-artifacts/x1280-s1280.md -> _bmad-output/planning-artifacts/s1280/x1280.md'
+AB_LINE_stage='migrate-artifact-paths.sh: FAIL — git update-index refused to stage this batch'"'"'s renames, from _bmad-output/planning-artifacts/x1001-s1001.md -> _bmad-output/planning-artifacts/s1001/x1001.md; the batch was moved back. Aborting after 0 move(s).'
+# abort_run <script> <world> -> AB_OBS "<rc> <status> <index> <tree>" and AB_LINE, for one --apply on a copy
+abort_run() {
+  local t; t="$(mktemp -d "$ABW/r-XXXXXX")" || return 2
+  mkdir "$t/w" && cp -R "$ABW/$2/." "$t/w" || return 2
+  bash "$1" --root "$t/w" --apply > "$t/out" 2> "$t/err"; AB_RC=$?
+  git -C "$t/w" status --porcelain=v1 -z -- _bmad-output > "$t/st" 2>/dev/null
+  git -C "$t/w" ls-files -s -- _bmad-output > "$t/ls" 2>/dev/null
+  ( cd "$t/w" && find _bmad-output -print ) > "$t/tr0"; LC_ALL=C sort "$t/tr0" > "$t/tr"
+  AB_OBS="$AB_RC $(h16 "$t/st") $(h16 "$t/ls") $(h16 "$t/tr")"
+  AB_LINE="$(grep -m1 'FAIL' "$t/err")"
+  AB_STAT=""; AB_DEST=""
+  if [ "$2" = crlf ]; then
+    AB_STAT="$(git -C "$t/w" diff --cached -M --stat 2>/dev/null)"
+    AB_DEST="$(git -C "$t/w" ls-files -s -- "$PA/s1500/crlf.md")"; AB_DEST="${AB_DEST#* }"; AB_DEST="${AB_DEST%% *}"
+  fi
+  rm -rf "$t"
+}
+crlf_blob_ok() { [ "$AB_RC" -eq 0 ] && [ -n "$CRLF_BLOB" ] && [ "$AB_DEST" = "$CRLF_BLOB" ]; }
+crlf_stat_ok() { case "$AB_STAT" in *"crlf-s1500.md => s1500/crlf.md} | 0"*"0 insertions(+), 0 deletions(-)"*) return 0 ;; esac; return 1; }
+# abort_hold <script> <world> -> 0 when the run matches every pin for that world
+abort_hold() {
+  abort_run "$1" "$2" || return 2
+  if [ "$2" = crlf ]; then crlf_blob_ok && crlf_stat_ok; return; fi
+  local e l; eval "e=\"\$AB_EXP_$2\"; l=\"\$AB_LINE_$2\""
+  [ "$AB_OBS" = "$e" ] && [ "$AB_LINE" = "$l" ]
+}
+for _w in read exists verify stage; do
+  abort_run "$MIG" "$_w"; eval "_e=\"\$AB_EXP_$_w\"; _l=\"\$AB_LINE_$_w\""
+  set -- $AB_OBS; _x="$_e"; _er="${_x%% *}"; _x="${_x#* }"; _est="${_x%% *}"; _x="${_x#* }"; _els="${_x%% *}"; _etr="${_x#* }"
+  [ "$1" = "$_er" ] && ok "abort-$_w: --apply exits $1, as the one-at-a-time loop did" || bad "abort-$_w: --apply exited $1, the one-at-a-time loop exited $_er"
+  [ "$2" = "$_est" ] && ok "abort-$_w: git status is the one-at-a-time loop's" || bad "abort-$_w: git status differs from the one-at-a-time loop's ($2, want $_est)"
+  [ "$3" = "$_els" ] && ok "abort-$_w: the index (ls-files -s) is the one-at-a-time loop's" || bad "abort-$_w: the index differs from the one-at-a-time loop's ($3, want $_els)"
+  [ "$4" = "$_etr" ] && ok "abort-$_w: the directory tree is the one-at-a-time loop's" || bad "abort-$_w: the directory tree differs from the one-at-a-time loop's ($4, want $_etr)"
+  [ "$AB_LINE" = "$_l" ] && ok "abort-$_w: stderr's FAIL line is the expected text" || bad "abort-$_w: stderr's FAIL line was: $AB_LINE"
+  [ "$AB_OBS" = "$_e" ] && [ "$AB_LINE" = "$_l" ]; echo "$?" > "$ABW/prim-A-$_w.rc"
+done
+abort_run "$MIG" crlf
+crlf_blob_ok && ok "crlf-rename: a CRLF file committed before text=auto stages under its own blob ($CRLF_BLOB)" \
+  || bad "crlf-rename: rc=$AB_RC, staged blob '$AB_DEST' against the source's '$CRLF_BLOB'"
+crlf_stat_ok && ok "crlf-rename: git diff --cached -M --stat shows a pure rename, 0 insertions and 0 deletions" \
+  || bad "crlf-rename: the staged move is not a pure rename: $(printf '%s' "$AB_STAT" | tr '\n' '|')"
+crlf_blob_ok && crlf_stat_ok; echo "$?" > "$ABW/prim-A-crlf.rc"
+
+# NAMES GIT QUOTES. A line-delimited `git ls-files` C-quotes any path holding a non-ASCII byte, a
+# backslash or a double quote under `core.quotePath true` (`"…caf\303\251.md"`), and that string
+# names no file: the one-at-a-time loop neither planned nor refused such a path, it dropped it.
+# The world pins `core.quotePath true` in its own config and tracks five tokened names: café,
+# a backslash and a double quote must each stage as an R100 rename under the source's own blob;
+# a tab and a newline cannot ride the tab-separated plan rows and must each be an UNSAFE-NAME
+# refusal, left in place. The control asserts the hazard is live HERE: a plain `ls-files` in this
+# world prints the quoted spelling, so the quoted-read mutant drops what the fixed read moves.
+QN_CAFE="$PA/sprint-320-café.md"; QN_BSL="$PA/sprint-321-a\\b.md"; QN_DQ="$PA/sprint-322-a\"b.md"
+QN_TAB="$PA/sprint-323-a"$'\t'"b.md"; QN_NL="$PA/sprint-324-a"$'\n'"b.md"
+# AND TWO TAB/NEWLINE NAMES THAT WOULD PRODUCE NO ROW AT ALL: a CONFORMING one already in its slot,
+# and a TOKENLESS one. The one-at-a-time loop skipped both silently, and an UNSAFE-NAME raised for
+# them would refuse a file the migration never had a reason to touch. Neither may appear in any
+# UNSAFE-NAME row or in REFUSED, while the two movable names above still must.
+QN_CTAB="docs/retro/s3/notes"$'\t'"x.md"; QN_TNL="docs/retro/readme"$'\n'".md"
+# Built in place per run rather than copied: a `cp -R` of this world inside the hermetic sandbox
+# lost its `.git/objects/*` directories mid-copy (cp: No such file or directory, once per object
+# directory), which no other world here did; the cause was not isolated.
+quote_build() { # <dir> -> the quoted-name world, committed, at <dir>
+  mkdir "$1" && cp -R "$TPL/." "$1" \
+    && ( cd "$1" && git config core.quotePath true && git config core.autocrlf false \
+         && git config gc.auto 0 && git config maintenance.auto false \
+         && git rm -rq _bmad-output docs && mkdir -p "$PA" \
+         && printf 'cafe\n' > "$QN_CAFE" && printf 'bsl\n' > "$QN_BSL" && printf 'dq\n' > "$QN_DQ" \
+         && printf 'tab\n' > "$QN_TAB" && printf 'nl\n' > "$QN_NL" \
+         && mkdir -p docs/retro/s3 && printf 'ctab\n' > "$QN_CTAB" && printf 'tnl\n' > "$QN_TNL" \
+         && git add -A && git commit -qm quote ) >/dev/null 2>&1
+}
+quote_build "$ABW/quote" || { echo "FIXTURE BROKEN: the quoted-name world could not be built" >&2; exit 2; }
+git -C "$ABW/quote" ls-files -s -z -- _bmad-output > "$ABW/quote.pre" 2>/dev/null
+git -C "$ABW/quote" ls-files -- _bmad-output > "$ABW/quote.plain" 2>/dev/null
+git -C "$ABW/quote" ls-files -z -- docs/retro > "$ABW/quote.docs" 2>/dev/null
+_qn=0; while IFS= read -r -d '' _r; do _qn=$((_qn + 1)); done < "$ABW/quote.pre"
+_qd=0; while IFS= read -r -d '' _r; do case "$_r" in "$QN_CTAB"|"$QN_TNL") _qd=$((_qd + 1)) ;; esac; done < "$ABW/quote.docs"
+asserts=$((asserts+1))
+if [ "$_qn" -eq 5 ] && [ "$_qd" -eq 2 ] && [ "$(git -C "$ABW/quote" config core.quotePath)" = true ] \
+   && grep -qF '"_bmad-output/planning-artifacts/sprint-320-caf\303\251.md"' "$ABW/quote.plain"; then
+  printf '  ok    %-26s %s\n' "quoted-names-control" "git tracks all seven names here and, with quotePath true, a line-delimited ls-files quotes cafe"
+else
+  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "quoted-names-control" "tracked $_qn of 5 movable and $_qd of 2 rowless names, or quotePath is not true, or ls-files did not quote the cafe name: the arm below cannot discriminate"
+fi
+# qn_blob <ls-files -s -z file> <path> -> the blob staged at <path>, '' when none
+qn_blob() {
+  local r; QN_B=""
+  while IFS= read -r -d '' r; do [ "${r#*$'\t'}" = "$2" ] && { r="${r#* }"; QN_B="${r%% *}"; return 0; }; done < "$1"
+  return 1
+}
+# quote_run <script> -> QN_RC, QN_ROWS (renames found R100 under their source's blob), QN_UNSAFE (refusal rows), QN_STAY (refused files still in place)
+quote_run() {
+  local t a b c s d
+  QN_RC=99; QN_ROWS=0; QN_UNSAFE=0; QN_STAY=0; QN_NAMED=0; QN_QUIET=0
+  t="$(mktemp -d "$ABW/q-XXXXXX")" || return 2
+  quote_build "$t/w" || return 2
+  bash "$1" --root "$t/w" --apply > "$t/out" 2> "$t/err"; QN_RC=$?
+  git -C "$t/w" diff --cached -M --name-status -z > "$t/ns" 2>/dev/null
+  git -C "$t/w" ls-files -s -z -- _bmad-output > "$t/post" 2>/dev/null
+  : > "$t/rows"
+  while IFS= read -r -d '' a; do
+    case "$a" in R*) IFS= read -r -d '' b; IFS= read -r -d '' c; printf '%s|%s|%s\n' "$a" "$b" "$c" >> "$t/rows" ;; esac
+  done < "$t/ns"
+  QN_ROWS=0
+  for s in "$QN_CAFE" "$QN_BSL" "$QN_DQ"; do
+    case "$s" in
+      "$QN_CAFE") d="$PA/s320/café.md" ;; "$QN_BSL") d="$PA/s321/a\\b.md" ;; *) d="$PA/s322/a\"b.md" ;;
+    esac
+    qn_blob "$ABW/quote.pre" "$s"; a="$QN_B"; qn_blob "$t/post" "$d"; b="$QN_B"
+    grep -qxF "R100|$s|$d" "$t/rows" && [ -n "$a" ] && [ "$a" = "$b" ] && QN_ROWS=$((QN_ROWS + 1))
+  done
+  QN_UNSAFE="$(grep -c '^  UNSAFE-NAME ' "$t/out")" || QN_UNSAFE=0
+  # NAMED: both movable tab/newline names are in UNSAFE-NAME rows. QUIET: neither rowless name is
+  # anywhere in the report -- not in an UNSAFE-NAME row, not elsewhere in REFUSED.
+  QN_NAMED=0; QN_QUIET=0
+  grep '^  UNSAFE-NAME ' "$t/out" > "$t/unsafe"
+  grep -q 'sprint-323-a' "$t/unsafe" && grep -q 'sprint-324-a' "$t/unsafe" && QN_NAMED=1
+  grep -q 's3/notes' "$t/out" || grep -q 'retro/readme' "$t/out" || QN_QUIET=1
+  QN_STAY=0; [ -e "$t/w/$QN_TAB" ] && QN_STAY=$((QN_STAY + 1)); [ -e "$t/w/$QN_NL" ] && QN_STAY=$((QN_STAY + 1))
+  rm -rf "$t"
+}
+quote_hold() {
+  quote_run "$1" || return 2
+  [ "$QN_RC" -eq 0 ] && [ "$QN_ROWS" -eq 3 ] && [ "$QN_UNSAFE" -eq 2 ] && [ "$QN_STAY" -eq 2 ] \
+    && [ "$QN_NAMED" -eq 1 ] && [ "$QN_QUIET" -eq 1 ]
+}
+quote_hold "$MIG"; echo "$?" > "$ABW/prim-A-quote.rc"
+[ "$QN_RC" -eq 0 ] && [ "$QN_ROWS" -eq 3 ] \
+  && ok "quoted-names: cafe, a backslash and a double quote each stage as R100 under their own blob (rc 0)" \
+  || bad "quoted-names: rc=$QN_RC, $QN_ROWS of 3 quoted names staged as R100 under their own blob"
+[ "$QN_UNSAFE" -eq 2 ] && [ "$QN_NAMED" -eq 1 ] && [ "$QN_STAY" -eq 2 ] \
+  && ok "quoted-names: the movable tab and newline names are each an UNSAFE-NAME refusal and stay where they are" \
+  || bad "quoted-names: $QN_UNSAFE UNSAFE-NAME row(s) (want 2, naming sprint-323 and sprint-324: $QN_NAMED) and $QN_STAY of 2 tab/newline files left in place"
+[ "$QN_QUIET" -eq 1 ] \
+  && ok "quoted-names: a conforming tab name and a tokenless newline name are skipped silently, in no UNSAFE-NAME row and not in REFUSED" \
+  || bad "quoted-names: docs/retro/s3/notes<TAB>x.md or docs/retro/readme<NL>.md was reported, though neither would produce a plan or refusal row"
+
+# PROGRESS. One world carries a tokenless file, a conforming one, a refused one and two moves -- so
+# a tick keyed anywhere but straight after the scan counter moves (a `continue` path skipping it)
+# lands on a different line. Every 2 files: the start line, then scanned 2 and 4 of 5.
+#
+# AND THE SAME WORLD CARRIES THE MATCH-POSITION TRAPS, END TO END. `x-s123x-s12` and `a-s12x-s12`
+# end in a token matched through `$`, and the text of that token occurs EARLIER as a literal -- a
+# strip that finds the match by searching for its text cuts the wrong place. `x/s9/s10-y.md` names
+# two sprints whose `sort -u` order is lexical: the refusal prints `(10 9)`, not `(9 10)`. Every
+# expected line below was produced by RUNNING the pre-fix forking script (0.1101.0) on this world
+# and is pinned byte-exact.
+PW="$(small_world "$PA/plain.md" "$PA/s7/x.md" "$PA/x/s9/s10-y.md" "$PA/x-s123x-s12/f.md" "$PA/a-s12x-s12/f.md")"
+[ -n "$PW" ] || { echo "FIXTURE BROKEN: the progress world could not be built" >&2; exit 2; }
+PGD="$(mktemp -d "${TMPDIR:-/tmp}/apmig-pg-XXXXXX")" || exit 2
+printf '%s\n' "migrate-artifact-paths.sh: PROGRESS plan: 5 tracked file(s) to scan" \
+  "migrate-artifact-paths.sh: PROGRESS plan: scanned 2 of 5" \
+  "migrate-artifact-paths.sh: PROGRESS plan: scanned 4 of 5" > "$PGD/exp.plan"
+cp "$PGD/exp.plan" "$PGD/exp.apply"
+printf '%s\n' "migrate-artifact-paths.sh: PROGRESS apply: 2 move(s) to apply" \
+  "migrate-artifact-paths.sh: PROGRESS apply: moved 2 of 2" >> "$PGD/exp.apply"
+bash "$MIG" --root "$PW" > "$PGD/out0" 2> "$PGD/err0"; rc0=$?
+AI_DLC_MIGRATE_PROGRESS_EVERY=2 bash "$MIG" --root "$PW" > "$PGD/out1" 2> "$PGD/err1"; rc1=$?
+# progress_hold <script> -> 0 when a dry run every 2 files prints exactly the plan lines on stderr
+# and the stdout of the unset run, byte for byte.
+progress_hold() {
+  local t; t="$(mktemp -d "$PGD/h-XXXXXX")" || return 2
+  AI_DLC_MIGRATE_PROGRESS_EVERY=2 bash "$1" --root "$PW" > "$t/o" 2> "$t/e"
+  cmp -s "$t/e" "$PGD/exp.plan" && cmp -s "$t/o" "$PGD/out0"
+}
+[ "$rc0" -eq 0 ] && [ "$rc1" -eq 0 ] && [ ! -s "$PGD/err0" ] \
+  && ok "progress: below the cadence (1000) a run prints nothing on stderr" \
+  || bad "progress: unset run rc=$rc0, cadence-2 run rc=$rc1, or the unset run wrote stderr: $(head -2 "$PGD/err0")"
+cmp -s "$PGD/err1" "$PGD/exp.plan" \
+  && ok "progress: every 2 files the plan prints its start line and scanned 2 and 4 of 5, on stderr" \
+  || bad "progress: plan stderr was not the three expected lines: $(tr '\n' '|' < "$PGD/err1")"
+cmp -s "$PGD/out1" "$PGD/out0" && grep -q 'tracked files scanned: 5' "$PGD/out0" \
+  && ok "progress: stdout is byte-identical to the run without the variable" \
+  || bad "progress: stdout CHANGED when progress was turned on (or the unset run scanned nothing)"
+asserts=$((asserts+1))
+if grep -qxF '    _bmad-output/planning-artifacts/x-s123x-s12/f.md' "$PGD/out0" \
+   && grep -qxF '      -> _bmad-output/planning-artifacts/s12/x-s123x/f.md' "$PGD/out0" \
+   && grep -qxF '    _bmad-output/planning-artifacts/a-s12x-s12/f.md' "$PGD/out0" \
+   && grep -qxF '      -> _bmad-output/planning-artifacts/s12/a-s12x/f.md' "$PGD/out0"; then
+  printf '  ok    %-26s %s\n' "match-position-traps" "x-s123x-s12/ and a-s12x-s12/ plan s12/x-s123x/ and s12/a-s12x/, as the forking script did"
+else
+  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "match-position-traps" "a trap directory planned a destination the forking script did not"
+fi
+asserts=$((asserts+1))
+if grep -qxF '  AMBIGUOUS  _bmad-output/planning-artifacts/x/s9/s10-y.md' "$PGD/out0" \
+   && grep -qxF '             path names 2 different sprints (10 9); which one owns it is not derivable' "$PGD/out0"; then
+  printf '  ok    %-26s %s\n' "ambiguous-sort-order" "x/s9/s10-y.md is refused naming (10 9), the forking script's sort -u order"
+else
+  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "ambiguous-sort-order" "the AMBIGUOUS refusal for x/s9/s10-y.md is not the forking script's text"
+fi
+# APPLY, on its own copy so the dry-run world stays pristine for the mutants. Run with the cadence,
+# reset, run without it: the move loop's lines are on stderr and stdout is unchanged.
+PWA="$(mktemp -d "${TMPDIR:-/tmp}/apmig-pwa-XXXXXX")" && cp -R "$PW/." "$PWA"
+AI_DLC_MIGRATE_PROGRESS_EVERY=2 bash "$MIG" --root "$PWA" --apply > "$PGD/aout1" 2> "$PGD/aerr1"; arc1=$?
+git -C "$PWA" reset -q --hard
+bash "$MIG" --root "$PWA" --apply > "$PGD/aout0" 2> "$PGD/aerr0"; arc0=$?
+[ "$arc1" -eq 0 ] && [ "$arc0" -eq 0 ] && cmp -s "$PGD/aerr1" "$PGD/exp.apply" && [ ! -s "$PGD/aerr0" ] \
+  && ok "progress: --apply prints the plan lines, then 2 move(s) to apply and moved 2 of 2, on stderr" \
+  || bad "progress: --apply rc=$arc1/$arc0, or its stderr was not the expected five lines: $(tr '\n' '|' < "$PGD/aerr1")"
+cmp -s "$PGD/aout1" "$PGD/aout0" && grep -q 'VERDICT: 2 of 2 planned move(s) applied' "$PGD/aout0" \
+  && ok "progress: --apply stdout is byte-identical to the run without the variable" \
+  || bad "progress: --apply stdout CHANGED when progress was on, or the moves were not applied"
+for _v in 0 01 abc; do
+  AI_DLC_MIGRATE_PROGRESS_EVERY="$_v" bash "$MIG" --root "$PW" > "$PGD/vo" 2> "$PGD/ve"; _rc=$?
+  [ "$_rc" -eq 2 ] && [ ! -s "$PGD/vo" ] && grep -q 'AI_DLC_MIGRATE_PROGRESS_EVERY must be a positive integer' "$PGD/ve" \
+    && ok "progress: AI_DLC_MIGRATE_PROGRESS_EVERY=$_v is a usage error, exit 2" \
+    || bad "progress: AI_DLC_MIGRATE_PROGRESS_EVERY=$_v exited $_rc (want 2, empty stdout and the usage message)"
+done
+rm -rf "$PWA"
+
+# =============================================================================
 # 6. MUTANTS. Each removes ONE mechanism. An ARM is a named predicate over what a copy of the program
 #    produced: T-* read the TREE after --apply, R-* read the report. Every mutant is a guarded COPY
 #    (a sed that matches nothing is a failure) laid down beside its resolver sibling, so a copy that
@@ -586,7 +966,7 @@ MUT="$(mktemp -d "${TMPDIR:-/tmp}/apmig-mut-XXXXXX")"
 RW="$(clone_world)"
 mkdir -p "$RW/.claude/skills/ai-dlc"
 printf '# consumer artifact paths\n\nareas:\n  _bmad-output/brainstorming\n' > "$RW/.claude/skills/ai-dlc/artifact-paths.md"
-ARMS="T-ambig T-storyalpha T-storybeta T-conform T-hdr R-areas R-remedy-mig R-remedy-val"
+ARMS="T-ambig T-storyalpha T-storybeta T-conform T-hdr R-areas R-remedy-mig R-remedy-val R-forks R-progress R-applyscale A-read A-exists A-verify A-stage A-crlf A-quote"
 lay_dir() { lay_pair "$1"; [ -z "$VAL" ] || cp "$VAL" "$1/v.sh"; }
 names_a() { grep -q 'TREE-A-FILE\.md' <<<"$1" && ! grep -q 'TREE-B-FILE\.md' <<<"$1" \
               && ! grep -q '\.claude/skills/ai-dlc/artifact-paths\.md' <<<"$1"; }
@@ -615,9 +995,31 @@ arm_hold() {
                   ! grep -q "_bmad-output/brainstorming" <<<"$o" && grep -q "party-verdicts-retro" <<<"$o" ;;
     R-remedy-mig) names_a "$(cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$d/m.sh" --root "$ra" 2>&1)" ;;
     R-remedy-val) [ -f "$d/v.sh" ] && names_a "$(sed -n '/NO-AREA/,/move it under one/p' <<<"$(cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$d/v.sh" --root "$ra" 2>&1)")" ;;
+    # The two cost/progress arms are dry runs over read-only worlds, so each copy's answer is kept
+    # beside it: the shipped copy is consulted once per mutant and is measured once.
+    R-forks)      [ -f "$d/forks.rc" ] || { forks_hold "$d/m.sh"; echo "$?" > "$d/forks.rc"; printf '%s\n' "$FORKS_SEEN" > "$d/forks.seen"; }
+                  read -r o < "$d/forks.rc"; return "$o" ;;
+    R-applyscale) [ -f "$d/applyscale.rc" ] || { applyscale_hold "$d/m.sh"; echo "$?" > "$d/applyscale.rc"; printf '%s\n' "$APPLYSCALE_SEEN" > "$d/applyscale.seen"; }
+                  read -r o < "$d/applyscale.rc"; return "$o" ;;
+    R-progress)   [ -f "$d/progress.rc" ] || { progress_hold "$d/m.sh"; echo "$?" > "$d/progress.rc"; }
+                  read -r o < "$d/progress.rc"; return "$o" ;;
+    A-quote)      [ -f "$d/$a.rc" ] || { quote_hold "$d/m.sh"; echo "$?" > "$d/$a.rc"; }
+                  read -r o < "$d/$a.rc"; return "$o" ;;
+    A-read|A-exists|A-verify|A-stage|A-crlf)
+                  [ -f "$d/$a.rc" ] || { abort_hold "$d/m.sh" "${a#A-}"; echo "$?" > "$d/$a.rc"; }
+                  read -r o < "$d/$a.rc"; return "$o" ;;
   esac
 }
 SHIPD="$MUT/ship"; lay_dir "$SHIPD"
+# The shipped pair was already measured on R-forks and R-progress in 5b; a byte-identical copy is
+# not re-run per mutant (clause 3), its answers are carried over.
+if cmp -s "$MIG" "$SHIPD/m.sh" && cmp -s "$CONFIG" "$SHIPD/artifact-path-config.sh"; then
+  echo "$FORKS_RC_MIG" > "$SHIPD/forks.rc"; printf '%s\n' "$FORKS_SEEN_MIG" > "$SHIPD/forks.seen"
+  echo "$APPLYSCALE_RC_MIG" > "$SHIPD/applyscale.rc"; printf '%s\n' "$APPLYSCALE_SEEN_MIG" > "$SHIPD/applyscale.seen"
+  for _a in A-read A-exists A-verify A-stage A-crlf A-quote; do cp "$ABW/prim-$_a.rc" "$SHIPD/$_a.rc"; done
+  if cmp -s "$PGD/err1" "$PGD/exp.plan" && cmp -s "$PGD/out1" "$PGD/out0"; then echo 0 > "$SHIPD/progress.rc"
+  else echo 1 > "$SHIPD/progress.rc"; fi
+fi
 # mutant_score <name> <m|c|v: which file the sed edits> <sed flag> <sed program> <deciding arm> <twin arm> <claim>
 mutant_score() {
   local n="$1" which="$2" flag="$3" prog="$4" dec="$5" tw="$6" claim="$7" d="$MUT/$1" src dst a base_rc
@@ -657,7 +1059,7 @@ fi
 
 mutant_score ambiguity-allowed m -E 's@^  if \[ "\$nhits" -gt 1 \]; then@  hits="$(printf "%s" "$hits" | head -1)"; nhits=1\n  if [ "$nhits" -gt 1 ]; then@' T-ambig T-conform \
   'collapsing to the FIRST sprint instead of refusing files a two-sprint path under a guess'
-mutant_score stories-half-migrated m -E 's@/story-s@/story-@' T-storybeta T-storyalpha \
+mutant_score stories-half-migrated m -E 's@^  nb="story-s@  nb="story-@' T-storybeta T-storyalpha \
   'without the bare-number normalisation one sprint stories split across two conventions (beta keeps its number)'
 mutant_score story-slot-blind m -E 's@^  local head=@  return 0\n  local head=@' T-conform T-storyalpha \
   'a conforming story is re-migrated once the s<N>/-above-it test stops firing'
@@ -670,16 +1072,161 @@ mutant_score remedy-root-mig m "" 's@--consumer-file --root "\$ROOT_ABS"@--consu
 mutant_score remedy-root-val v "" 's@--consumer-file --root "\$ROOT_ABS"@--consumer-file@' R-remedy-val T-conform \
   'without --root the validator remedy names tree B file'
 
+# THE FORK MUTANTS each put back ONE helper's pre-fix forking form, verbatim from 0.1101.0, behind
+# the global the caller now reads -- so every planned path and every refusal is unchanged and only
+# the process count moves. Each is inserted after the fixed definition (a later definition wins),
+# by a sed script file, because the restored code carries both quote characters.
+cat > "$MUT/base-sprints-in.txt" <<'EOF'
+sprints_in() { # MUTANT fork-sprints-in: the pre-fix forking form, answering through the same global
+  _SPRINTS_IN_OUT="$(_apmig_base_sprints_in "$1")"
+}
+_apmig_base_sprints_in() {
+  local c cur prev n
+  printf '%s\n' "$1" | tr '/' '\n' | while IFS= read -r c; do
+    cur="$c"; prev=""
+    while [ "$cur" != "$prev" ]; do
+      prev="$cur"
+      n="$(printf '%s' "$cur" | grep -oE "$TOKEN_RE" | head -1 | grep -oE '[0-9]+')"
+      [ -n "$n" ] || break
+      printf '%s\n' "$n"
+      cur="$(printf '%s' "$cur" | sed -E 's/(^|-)(s|S|sprint-)[0-9]+(-|$|\.)/\1\3/')"
+    done
+  done | sort -u
+}
+EOF
+cat > "$MUT/base-strip-token.txt" <<'EOF'
+strip_token() { # MUTANT fork-strip-token: the pre-fix forking form, answering through the same global
+  _STRIP_TOKEN_OUT="$(_apmig_base_strip_token "$1")"
+}
+_apmig_base_strip_token() {
+  local cur="$1" prev=""
+  while [ "$cur" != "$prev" ]; do
+    prev="$cur"
+    cur="$(printf '%s' "$cur" | sed -E 's/(^|-)(s|S|sprint-)[0-9]+(-|$|\.)/\1\3/')"
+  done
+  printf '%s' "$cur" | sed -E 's/--+/-/g; s/^-+//; s/-+(\.|$)/\1/'
+}
+EOF
+printf '/^# A component that strips to nothing, or to a bare extension, has no name left/r %s\n' "$MUT/base-sprints-in.txt" > "$MUT/sed-fork-sprints-in"
+printf '/^# A component that strips to nothing, or to a bare extension, has no name left/r %s\n' "$MUT/base-strip-token.txt" > "$MUT/sed-fork-strip-token"
+cat > "$MUT/sed-fork-nhits" <<'EOF'
+s@^  nhits=0; \[ -z "\$hits" \] .*$@  nhits="$(printf '%s\\n' "$hits" | grep -c .)"@
+EOF
+mutant_score fork-sprints-in m -f "$MUT/sed-fork-sprints-in" R-forks R-progress \
+  'a sprint scan forking per component makes the plan cost grow with the tree'
+mutant_score fork-strip-token m -f "$MUT/sed-fork-strip-token" R-forks R-progress \
+  'a token strip forking per component of every one-sprint file (conforming ones included) grows with the tree'
+mutant_score fork-nhits m -f "$MUT/sed-fork-nhits" R-forks R-progress \
+  'counting the hits through a grep forks once per scanned file'
+for _m in fork-sprints-in fork-strip-token fork-nhits; do
+  [ -f "$MUT/$_m/forks.seen" ] && printf '        %s: %s\n' "$_m" "$(cat "$MUT/$_m/forks.seen")"
+done
+
+# THE APPLY MUTANT puts back the 0.1101.0 move loop verbatim -- two `shasum` and one `git mv` per
+# move -- right after the apply start line, and empties the batched loop's work list so the batched
+# loop below it never runs. Every move, check and VERDICT is the same; only the starts move.
+cat > "$MUT/base-apply-loop.txt" <<'EOF'
+MOVED=0
+while IFS=$'\t' read -r src dest; do
+  [ -n "$src" ] && [ -n "$dest" ] || continue
+  before="$(shasum -a 256 "$src" 2>/dev/null | cut -d' ' -f1)"
+  if [ -z "$before" ]; then
+    echo "$PROG: FAIL — cannot read $src before moving it. Aborting after $MOVED move(s)." >&2
+    exit 1
+  fi
+  if [ -e "$dest" ]; then
+    echo "$PROG: FAIL — destination already exists: $dest. Aborting after $MOVED move(s)." >&2
+    echo "  Not in the collision set, so it is a pre-existing file. Never overwritten." >&2
+    exit 1
+  fi
+  mkdir -p "${dest%/*}" || { echo "$PROG: FAIL — cannot create ${dest%/*}" >&2; exit 1; }
+  if ! git mv -- "$src" "$dest" 2>/dev/null; then
+    echo "$PROG: FAIL — git mv refused: $src -> $dest. Aborting after $MOVED move(s)." >&2
+    exit 1
+  fi
+  # PER-FILE, THREE LEGS, AND A COUNT WOULD SEE NONE OF THEM.
+  after="$(shasum -a 256 "$dest" 2>/dev/null | cut -d' ' -f1)"
+  if [ -e "$src" ] || [ ! -r "$dest" ] || [ "$before" != "$after" ]; then
+    echo "$PROG: FAIL — verification failed for $src -> $dest" >&2
+    echo "    source still present: $([ -e "$src" ] && echo yes || echo no)" >&2
+    echo "    destination readable: $([ -r "$dest" ] && echo yes || echo no)" >&2
+    echo "    sha256 before/after:  $before / ${after:-<unreadable>}" >&2
+    echo "  Aborting after $MOVED verified move(s). \`git checkout -- .\` restores the tree." >&2
+    exit 1
+  fi
+  MOVED=$((MOVED + 1))
+done < "$PLAN"
+_AP_N=0
+EOF
+printf '/PROGRESS apply: \$N_PLAN move(s) to apply" >&2$/r %s\n' "$MUT/base-apply-loop.txt" > "$MUT/sed-apply-per-file"
+mutant_score apply-per-file m -f "$MUT/sed-apply-per-file" R-applyscale R-progress \
+  'two shasum and one git mv per move make --apply cost grow with the plan (~280s on the reference consumer)'
+[ -f "$MUT/apply-per-file/applyscale.seen" ] && printf '        apply-per-file: %s\n' "$(cat "$MUT/apply-per-file/applyscale.seen")"
+
+# THE ABORT-PATH MUTANTS, one per rollback mechanism, plus the staging form B1 replaced. Sed scripts
+# in files, because the anchors carry both quote characters.
+cat > "$MUT/sed-verify-rollback-off" <<'EOF'
+/^    _ap_rollback \$((_AP_VK + 1)) "\$_ap_done" \$((_AP_VK + 1))$/d
+EOF
+cat > "$MUT/sed-stage-bound-short" <<'EOF'
+s@^    _ap_end=\$((_AP_VK + 1)); _ap_ok=@    _ap_end="$_AP_VK"; _ap_ok=@
+EOF
+cat > "$MUT/sed-hash-path-guard-off" <<'EOF'
+s@ && \[ "\${_ah_l#\*  }" = "\$_ah_p" \]@@
+EOF
+cat > "$MUT/sed-stage-rollback-off" <<'EOF'
+/^    _ap_rollback "\$_AP_LO" "\$_ap_end" \$((_AP_LO + 1))$/d
+EOF
+cat > "$MUT/sed-stage-add-rehash" <<'EOF'
+s@^  git update-index -z --index-info < "\$TMP/apply-info" 2>/dev/null$@  _sg_k="$1"; while [ "$_sg_k" -lt "$2" ]; do printf '%s\\0%s\\0' "${_AP_S[$_sg_k]}" "${_AP_D[$_sg_k]}"; _sg_k=$((_sg_k + 1)); done | git update-index --add --remove -z --stdin 2>/dev/null@
+EOF
+mutant_score verify-rollback-off m -f "$MUT/sed-verify-rollback-off" A-verify A-crlf \
+  'a failed verification leaves the later moves of its batch moved on disk and unstaged'
+mutant_score stage-bound-short m -f "$MUT/sed-stage-bound-short" A-verify A-crlf \
+  'staging stops one short of the failed move, which git mv had already staged'
+# THE GUARD IS REACHED BY AN UNREADABLE PATH, NOT AN ESCAPED NAME: a name `shasum` escapes (a
+# backslash in it) prints a line opening with `\`, which the check one conjunct earlier already
+# refuses, so dropping this conjunct changes nothing for it. A path with NO line (the dangling
+# source) is what shifts every later line onto the wrong path, which is what the guard stops. Its
+# twin is the quoted-name world, which now plans a backslash name: it holding under this mutant is
+# the measurement that the escaped name does not reach the guard.
+mutant_score hash-path-guard-off m -f "$MUT/sed-hash-path-guard-off" A-read A-quote \
+  'without the line-to-path check an unreadable source takes the next file s hash and the abort moves'
+mutant_score stage-rollback-off m -f "$MUT/sed-stage-rollback-off" A-stage A-crlf \
+  'a refused index update leaves the whole batch moved on disk and unstaged'
+mutant_score stage-add-rehash m -f "$MUT/sed-stage-add-rehash" A-crlf A-stage \
+  'git update-index --add re-hashes a CRLF file through text=auto and stages a content change'
+# THE QUOTED READ: the line-delimited `ls-files` and the newline reads of its output, as before the
+# NUL fix. Under the world's `core.quotePath true` every quoted name becomes a string naming no file.
+cat > "$MUT/sed-quoted-read" <<'EOF'
+s@^git ls-files -z -- \$(printf@git ls-files -- $(printf@
+s@^{ while IFS= read -r -d '' _pg_rec; do@{ while IFS= read -r _pg_rec; do@
+s@^while IFS= read -r -d '' src; do$@while IFS= read -r src; do@
+EOF
+mutant_score quoted-read m -f "$MUT/sed-quoted-read" A-quote A-crlf \
+  'a C-quoted path names no file, so cafe, a backslash and a quote are never moved, and tab/newline never refused by name'
+# THE EARLY, UNCONDITIONAL UNSAFE-NAME: every tab/newline path refused at the top of the loop, so a
+# conforming or tokenless one that would make no row is refused too.
+cat > "$MUT/sed-unsafe-early" <<'EOF'
+s@^  case "\$src" in \*"\$_NL"\*|\*"\$_TAB"\*) _unsafe=1 ;; esac$@  case "$src" in *"$_NL"*|*"$_TAB"*) _unsafe_row; continue ;; esac@
+EOF
+mutant_score unsafe-early m -f "$MUT/sed-unsafe-early" A-quote A-crlf \
+  'refusing every tab/newline name up front refuses a conforming and a tokenless file the migration would never touch'
+mutant_score progress-stdout m -E '/PROGRESS (plan|apply):/s@" >&2$@"@' R-progress T-conform \
+  'progress written to stdout changes the report operators and fixtures parse'
+mutant_score progress-none m -E '/echo "\$PROG: PROGRESS/s@echo "[^"]*" >&2$@:@' R-progress T-conform \
+  'with no progress line a long plan phase is silent, indistinguishable from a hang'
+
 # A plain run executes no matrix-only cell; --matrix executes one row per mutant per arm.
 if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
   else bad "MX plain run executed $MROWS matrix-only rows"; fi
 else
-  _nx=$(( 7 * $(printf '%s\n' $ARMS | grep -c .) ))
-  if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (7 mutants)"
+  _nx=$(( 20 * $(printf '%s\n' $ARMS | grep -c .) ))
+  if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (20 mutants)"
   else bad "MX matrix run measured $MROWS cells, $_nx expected"; fi
 fi
-rm -rf "$ra" "$rb" "$RW" "$MUT"
+rm -rf "$ra" "$rb" "$RW" "$MUT" "$FW1" "$FW2" "$PW" "$PGD" "$SHIMS" "$SHIMA" "$ABW"
 rm -rf "$TPL"
 echo
 if [ "$fails" -eq 0 ]; then echo "artifact-path-migration: PASS ($asserts assertions)"; exit 0; fi
