@@ -7,6 +7,13 @@
 # Each caller resolves this file under the repo root it found by walking up for `VERSION`, and
 # refuses rather than falling back to a private copy when it is absent.
 #
+# ONE DELIBERATE, BASE-DEPENDENT SUPERSET (BL-899). The pre-push worker's cannot-measure set is this
+# predicate PLUS `driver-absent` (m1_driver_absent in validate-backlog-receipts.sh): the receipt's own
+# `bash <P>` operand is gone and bash said so for that path. It is not here because it is decided against
+# `--base` (lead ruling L3: absent at the base too is EXCLUDED, not a finding), and only the worker has a
+# base. So backlog-reverify.sh reads such a receipt STILL-LIVE where the worker reads it cannot-measure;
+# that difference is this one route, recorded in both files, and no other.
+#
 # THE CONTRACT. The caller sets SELF_NAME to the `$0` its receipts are `eval`led under, then calls
 # `cant_measure <rc>` with the receipt's stderr on stdin. It prints why the receipt could not
 # measure, or nothing.

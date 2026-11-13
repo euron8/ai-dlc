@@ -1,0 +1,10 @@
+# backlog-receipt-traced-removal copies the receipts validator and every file it resolves beside itself into each
+# seeded tree (mkdist), and seeds its own worlds; it reads nothing else from the tree.
+!scripts/validate-backlog-receipts.sh
+scripts/backlog-receipt-lib.sh
+scripts/backlog-reverify.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+# The fixture helpers it sources.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

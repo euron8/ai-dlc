@@ -1,0 +1,77 @@
+# backlog-receipt-traced-removal's validator starts (BL-879 grammar), lead ruling (a), batch 256. Every distinct state
+# is ONE start of a copy of scripts/validate-backlog-receipts.sh, tagged at its start through env FXCELL=<cell> by
+# run.sh's cli(); run.sh asserts that the tagged starts are exactly the cli cells below, each once. The validator's own
+# worker re-starts under a tagged start are covered by the ONE nested row at the end. The in-process passes that remain
+# (fx_inproc: the probe-world build, r13_untraced, vbr_sec_setup alone) reach no worker start.
+# controls
+cli scripts/validate-backlog-receipts.sh m1
+cli scripts/validate-backlog-receipts.sh c-write
+cli scripts/validate-backlog-receipts.sh c-replay
+cli scripts/validate-backlog-receipts.sh c-moved-judge
+cli scripts/validate-backlog-receipts.sh c-moved-named
+cli scripts/validate-backlog-receipts.sh red
+cli scripts/validate-backlog-receipts.sh overflow
+cli scripts/validate-backlog-receipts.sh notrun
+cli scripts/validate-backlog-receipts.sh c-stale-high
+cli scripts/validate-backlog-receipts.sh c-committed
+cli scripts/validate-backlog-receipts.sh pop-1
+cli scripts/validate-backlog-receipts.sh pop-2
+cli scripts/validate-backlog-receipts.sh within-1
+cli scripts/validate-backlog-receipts.sh within-2
+cli scripts/validate-backlog-receipts.sh within-3
+cli scripts/validate-backlog-receipts.sh c-instr-refused
+cli scripts/validate-backlog-receipts.sh base3-3
+cli scripts/validate-backlog-receipts.sh cli-wire
+cli scripts/validate-backlog-receipts.sh c-m1-e2e
+cli scripts/validate-backlog-receipts.sh c-empty-stale
+cli scripts/validate-backlog-receipts.sh c-nothing-judged
+cli scripts/validate-backlog-receipts.sh c-restricted-seeds
+# mutants, one start per drive
+cli scripts/validate-backlog-receipts.sh m-r13-skipped
+cli scripts/validate-backlog-receipts.sh m-removal-not-applied
+cli scripts/validate-backlog-receipts.sh m-cm-widened
+cli scripts/validate-backlog-receipts.sh m-l3b-widened
+cli scripts/validate-backlog-receipts.sh m-any-bash-line
+cli scripts/validate-backlog-receipts.sh m-no-exist-conjunct
+cli scripts/validate-backlog-receipts.sh m-no-options
+cli scripts/validate-backlog-receipts.sh m-no-long-options
+cli scripts/validate-backlog-receipts.sh m-no-optarg
+cli scripts/validate-backlog-receipts.sh m-first-segment
+cli scripts/validate-backlog-receipts.sh m-no-rc1-branch
+cli scripts/validate-backlog-receipts.sh m-red-writes
+cli scripts/validate-backlog-receipts.sh m-replay-drops-rows-1
+cli scripts/validate-backlog-receipts.sh m-replay-drops-rows-2
+cli scripts/validate-backlog-receipts.sh m-replay-drops-rows-3
+cli scripts/validate-backlog-receipts.sh m-replay-drops-counts-1
+cli scripts/validate-backlog-receipts.sh m-replay-drops-counts-2
+cli scripts/validate-backlog-receipts.sh m-key-no-blobs-1
+cli scripts/validate-backlog-receipts.sh m-key-no-blobs-2
+cli scripts/validate-backlog-receipts.sh m-no-enum-count
+cli scripts/validate-backlog-receipts.sh m-key-no-judge-1
+cli scripts/validate-backlog-receipts.sh m-key-no-judge-2
+cli scripts/validate-backlog-receipts.sh m-depth1
+cli scripts/validate-backlog-receipts.sh m-named-all-reads
+cli scripts/validate-backlog-receipts.sh m-basename
+cli scripts/validate-backlog-receipts.sh m-no-epoch
+cli scripts/validate-backlog-receipts.sh m-no-must-hit
+cli scripts/validate-backlog-receipts.sh m-atime-never
+cli scripts/validate-backlog-receipts.sh m-instrument-skipped
+cli scripts/validate-backlog-receipts.sh m-comments-named
+cli scripts/validate-backlog-receipts.sh m-expand-any-named
+cli scripts/validate-backlog-receipts.sh m-no-overflow
+cli scripts/validate-backlog-receipts.sh m-trustctime-dropped
+cli scripts/validate-backlog-receipts.sh m-closure-after-reset
+cli scripts/validate-backlog-receipts.sh m-no-named-read-rule
+cli scripts/validate-backlog-receipts.sh m-no-stale-high
+cli scripts/validate-backlog-receipts.sh m-no-settle
+cli scripts/validate-backlog-receipts.sh m-restricted-exit-dropped
+cli scripts/validate-backlog-receipts.sh m-l3-base-not-exported-1
+cli scripts/validate-backlog-receipts.sh m-l3-base-not-exported-2
+cli scripts/validate-backlog-receipts.sh m-cm-m1-call-dropped-1
+cli scripts/validate-backlog-receipts.sh m-cm-m1-call-dropped-2
+cli scripts/validate-backlog-receipts.sh m-excluded-call-dropped-1
+cli scripts/validate-backlog-receipts.sh m-excluded-call-dropped-2
+cli scripts/validate-backlog-receipts.sh m-empty-stale-dropped
+cli scripts/validate-backlog-receipts.sh m-nothing-judged-dropped
+cli scripts/validate-backlog-receipts.sh m-restricted-trigger-drive-only
+nested scripts/validate-backlog-receipts.sh scripts/validate-backlog-receipts.sh why=worker re-starts of --score-one, --closed-one and --r13-one

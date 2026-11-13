@@ -11,9 +11,19 @@ Two attribution rules beyond the step-file reads:
     read no step file) is resolved before owner.json is written to the step its own subagent was spawned under,
     following the chain; a lead-recorded pre-step spawn stays pre-step.
   Gate span. In a LEAD scan an INVOCATION of gate-checkpoint.sh ... open (or a non-close gate-transition.sh <story> 3)
-    opens a gate labelled gate-validation[<main at open>]; until an invocation of gate-checkpoint.sh ... close,
-    gate-validation reads keep that label and a whole read of another step moves main but not step. Close sets
-    step = main (also when no gate was open). With no open ever seen, behaviour is the plain read-driven rule.
+    opens a gate labelled gate-validation[M], M being main at the open. While the lead is IN the gate,
+    gate-validation reads keep that label and a read of another step moves main but not step, with one exception:
+    a WHOLE read (no offset, no limit) of a step file S that is not gate-validation, not _gate-procedures or
+    _dispatch-protocol (any name starting with an underscore), and S != M LEAVES the gate. That read ends the span:
+    step = main = S. The gate stays remembered, so a later gate-validation read (sliced or whole) before any new
+    open/close RETURNS to it under the same label, not one recomputed from the new main. A new open replaces the
+    remembered gate; gate-checkpoint.sh ... close clears it and sets step = main (also when no gate was open).
+    gate-checkpoint.sh ... done is a post-compaction read-back inside a live gate and does not end the span, and a
+    gate-checkpoint.sh record, done or list after leaving RETURNS to the gate like a gate-validation read. A gate
+    opened before any step was entered (M = pre-step) is never left. The recover hook applies the same rule.
+    With no open ever seen, behaviour is the plain read-driven rule. Per sprint, the opens, closes, opens with no
+    close (replaced by a later open or still open at the end of the scan) and LEFT events are printed to stderr as
+    "gate-terminator sprint=N opens= closed= unclosed= left=" lines.
 """
 import json, os, re, sys, glob, datetime as dt
 
@@ -66,9 +76,10 @@ def strip_heredocs(cmd):
     return "\n".join(out)
 
 def gate_event(cmd):
-    """'open' / 'close' / None for the INVOCATIONS of the gate scripts in a Bash command (heredoc bodies stripped,
-    script name in command position of a pipeline / ; / && segment, after optional bash/sh/env and VAR=x words)."""
-    ev = None
+    """'open' / 'close' / 'verb' / None for the INVOCATIONS of the gate scripts in a Bash command (heredoc bodies
+    stripped, script name in command position of a pipeline / ; / && segment, after optional bash/sh/env and VAR=x
+    words). 'verb' is a gate-checkpoint.sh record, done or list with no open or close in the command."""
+    ev = None; verb = False
     for seg_ in re.split(r"\|\||&&|[|;&\n]", strip_heredocs(cmd)):
         w = [x.strip("\"'") for x in seg_.split()]
         while w and (w[0] in ("bash", "sh", "env") or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w[0])): w = w[1:]
@@ -77,6 +88,7 @@ def gate_event(cmd):
         if base == "gate-checkpoint.sh":
             if "close" in args: ev = "close"
             elif "open" in args: ev = "open"
+            elif any(a in args for a in ("record", "done", "list")): verb = True
         elif base == "gate-transition.sh":
             # usage: gate-transition.sh <story-index> 1|2|3|close ; the gate is the SECOND positional argument
             pos, skip = [], False
@@ -87,7 +99,7 @@ def gate_event(cmd):
                     continue
                 pos.append(a)
             if len(pos) > 1 and pos[1] == "3": ev = "open"
-    return ev
+    return ev or ("verb" if verb else None)
 
 def human_prompt(r):
     if r.get("type") != "user" or r.get("toolUseResult") is not None or r.get("isMeta"):
@@ -299,10 +311,15 @@ class Classer:
             cfh.write(json.dumps(dict(unit=unit, sess=sess, kind="lead", step=s, cls=k,
                                       sprint=sprint_of(segs[s]["first"]), **R)) + "\n")
 
+GATE_EV = []   # (sprint, "open" | "closed" | "unclosed" | "left"), lead scans only
+
 def scan(path, kind, meta):
     usage = {}           # message.id -> (model, usage, ts, step)
     step = "pre-step"; main = "pre-step"
-    gate = None          # label of the open gate segment (lead scans only)
+    gate = None          # label of the gate segment the lead is IN (lead scans only)
+    glabel = None        # label of the last opened, never closed gate; stays set after the lead leaves it
+    gmain = None         # main at the open of glabel
+    gopen = None         # timestamp of that open
     whole = set()        # step files this transcript has read without offset/limit
     segs = {}            # step -> dict
     pend = {}            # tool_use_id -> (name, ts, step)
@@ -356,8 +373,15 @@ def scan(path, kind, meta):
                     rec_by[c["id"]] = (meta or {}).get("toolUseId") if kind == "sub" else None
                 if kind == "lead" and c.get("name") == "Bash":
                     ev = gate_event(str((c.get("input") or {}).get("command") or ""))
-                    if ev == "open": gate = "gate-validation[" + main + "]"; step = gate
-                    elif ev == "close": gate = None; step = main
+                    if ev == "open":
+                        if glabel is not None: GATE_EV.append((sprint_of(gopen), "unclosed"))
+                        glabel = "gate-validation[" + main + "]"; gate = glabel; gmain = main; gopen = t
+                        GATE_EV.append((sprint_of(t), "open")); step = gate
+                    elif ev == "close":
+                        if glabel is not None: GATE_EV.append((sprint_of(gopen), "closed"))
+                        gate = None; glabel = None; step = main
+                    elif ev == "verb" and glabel is not None and gate is None:
+                        gate = glabel; step = gate   # a record, done or list after leaving: back in the gate
                 mm = STEP_RE.search(inp)
                 if mm and c.get("name") == "Read":
                     name = mm.group(1)
@@ -368,11 +392,16 @@ def scan(path, kind, meta):
                     isslice = "offset" in c.get("input", {}) or "limit" in c.get("input", {})
                     sliced = isslice and name in whole
                     if not isslice: whole.add(name)
-                    if name not in SUBPROC and not sliced:
+                    if not (name in SUBPROC or name.startswith("_")) and not sliced:
                         if name == "gate-validation":
+                            if glabel is not None: gate = glabel   # back in the gate it left; keep its label
                             step = gate or "gate-validation[" + main + "]"
                         else:
+                            leave = gate is not None and not isslice and name != gmain and gmain != "pre-step"
                             main = name
+                            if leave:
+                                gate = None   # LEFT: a whole read of another step ends the span
+                                GATE_EV.append((sprint_of(t), "left"))
                             if gate is None: step = name
         elif typ == "user":
             c = r.get("message", {}).get("content")
@@ -396,6 +425,7 @@ def scan(path, kind, meta):
                     event=a.get("hookEvent"), ms=float(a.get("durationMs") or 0), bytes=b, sprint=sprint_of(t))) + "\n")
         if K: K.record(r, typ)
         prev_type = typ
+    if glabel is not None: GATE_EV.append((sprint_of(gopen), "unclosed"))
     if first is None: return
     if K: K.write(unit, sess, usage, segs)
     tok = {}
@@ -443,6 +473,13 @@ for i, p in enumerate(sorted(subs)):
     meta = json.load(open(mp)) if os.path.exists(mp) else {}
     scan(p, "sub", meta)
     if i % 200 == 0: print("sub", i, file=sys.stderr)
+gtab = {}
+for sp, e in GATE_EV:
+    gtab.setdefault(sp, {}).setdefault(e, 0); gtab[sp][e] += 1
+for sp in sorted(gtab, key=lambda x: (x is None, x)):
+    g = gtab[sp]
+    print("gate-terminator sprint=%s opens=%d closed=%d unclosed=%d left=%d" % (
+        sp, g.get("open", 0), g.get("closed", 0), g.get("unclosed", 0), g.get("left", 0)), file=sys.stderr)
 for k in list(owner):
     seen = {k}; cur = k
     while owner[k][1] == "pre-step" and rec_by.get(cur) and rec_by[cur] in owner and rec_by[cur] not in seen:

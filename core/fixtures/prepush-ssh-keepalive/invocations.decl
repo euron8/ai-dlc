@@ -1,8 +1,11 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's J3 reading `measured 22, declared 19`),
-# then verified by a second counted run reading 22. The +3 over the earlier 19 is run.sh:258, mx_twins's
-# `$(printf | tr ',' ' ')` loop, live once `tr` is declared (an undeclared `tr` is 127 and the loop iterated over no
-# word): one twin drive each for m_nourlgate.sh (M2), m_novalue.sh (M3) and m_nosshname.sh (M4), 1 -> 2 starts per
-# mutant in the start-log diff. M1's twin drive is live too and uncounted, as is its deciding drive: m_nocall.sh's
+# Measured by a counted run through core/scripts/hermetic-run.sh on the combined 0.1100.0 tree (the judge's J3 reading
+# `measured 33, declared 22`); the push's own counted run is the second. 33 = 22 + 11.
+# The 22: BL-984's `measured 22, declared 19`, verified by a second counted run. Its +3 over the earlier 19 is run.sh:258,
+# mx_twins's `$(printf | tr ',' ' ')` loop, live once `tr` is declared (an undeclared `tr` is 127 and the loop iterated
+# over no word): one twin drive each for m_nourlgate.sh (M2), m_novalue.sh (M3) and m_nosshname.sh (M4), 1 -> 2 starts
+# per mutant in the start-log diff. M1's twin drive is live too and uncounted, as is its deciding drive: m_nocall.sh's
 # only top-level line is the deleted call, so the copy runs a function definition and no simple command, and the
 # counter's DEBUG trap never fires (0 start rows on both sides).
-22 *
+# The +11: arms S1-S2 and D1-D4 (BL-999, BL-1010), the same +11 measured on that unit alone (19 -> 30) before BL-984:
+# the S2 span and control probes, the D2 predicate cells, D3's two real-hook drives and D4's six gate-cut drives.
+33 *

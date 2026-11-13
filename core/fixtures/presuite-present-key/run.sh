@@ -9,7 +9,7 @@
 # one escaped `<path>\t<kind>\t<target>` line per path; a walk find could not finish turns the keys off. pk_init
 # writes a START MARK just before that walk, and after every traced step a path newer than the mark makes the run
 # unrecordable; pk_finish re-walks when the push recorded anything and deletes this push's records if the key moved.
-# Records are named `<slug>.<present[:16]>.key`, carry a `#format k2` header and a non-# `@present` row, and a
+# Records are named `<slug>.<present[:16]>.key`, carry a `#format k3` header and a non-# `@present` row, and a
 # successful record prunes the step's k1 files and keeps the newest 4.
 #
 # WHAT IT DRIVES, ALL CUT FROM THE HOOK'S BYTES, NEVER A COPY OF THE LOGIC. Per variant (the hook, or a mutated copy
@@ -34,7 +34,7 @@
 #   A1.content  a content-only edit does NOT move it (both keys 64 hex, equal)
 #   A2.holds    a record written by `record` passes `check` on the same tree
 #   A2.moved    after a new path is created, `check` refuses with the present-set reason
-#   A3.k1       a record with a `#format k1` header and the same body is refused (malformed record)
+#   A3.k2       a record with a `#format k2` header (the format BL-999 retired) and the same body is refused (malformed record)
 #   A3.hashrow  a record whose present key sits only in a `#` row is refused (malformed record)
 #   A4          tree A's record copied to tree B's filename is refused in tree B (present-set reason)
 #   A5          prune keeps exactly the newest 4 `s.<hash>.key`, deletes `s.key` and `s.key.absent`, and leaves
@@ -113,7 +113,7 @@
 #             so its command reads as bash
 # MUTANT-MATRIX n1 decides=A1.dir,A1.link twins=A1.create
 # MUTANT-MATRIX n2 decides=A2.moved,A4 twins=A2.holds
-# MUTANT-MATRIX n3 decides=A3.k1 twins=A3.hashrow
+# MUTANT-MATRIX n3 decides=A3.k2 twins=A3.hashrow
 # MUTANT-MATRIX n4 decides=A5 twins=A2.holds
 # MUTANT-MATRIX n5 decides=A1.link twins=A1.dir
 # MUTANT-MATRIX n6 decides=A6.grep twins=A6.run
@@ -335,10 +335,10 @@ cell() {
     A2.moved)
       kd="$(mktemp -d "$T/kd.XXXXXX")" && k0="$(pkey "$v" "$W/base")" && k1="$(pkey "$v" "$W/moved")" && [ "$k0" != "$k1" ] \
         && r="$(mkrec "$p" "$kd" "$W/base" "$k0")" && chk "$p" "$r" "$W/moved" "$k1" 1 "$PRESENT_WHY" ;;
-    A3.k1)
+    A3.k2)
       kd="$(mktemp -d "$T/kd.XXXXXX")" && k0="$(pkey "$v" "$W/base")" && r="$(mkrec "$p" "$kd" "$W/base" "$k0")" \
-        && sed '1s/^#format k2$/#format k1/' "$r" > "$kd/k1.key" && ! cmp -s "$r" "$kd/k1.key" \
-        && chk "$p" "$kd/k1.key" "$W/base" "$k0" 1 "malformed record" ;;
+        && sed '1s/^#format k3$/#format k2/' "$r" > "$kd/k2.key" && ! cmp -s "$r" "$kd/k2.key" \
+        && chk "$p" "$kd/k2.key" "$W/base" "$k0" 1 "malformed record" ;;
     A3.hashrow)
       kd="$(mktemp -d "$T/kd.XXXXXX")" && k0="$(pkey "$v" "$W/base")" && r="$(mkrec "$p" "$kd" "$W/base" "$k0")" \
         && awk 'NR == 5 { sub(/^@present/, "# @present") } { print }' "$r" > "$kd/hash.key" && ! cmp -s "$r" "$kd/hash.key" \
@@ -469,7 +469,7 @@ if cell "$V0" A1.link; then ok "A1.link a symlink retarget moves the present key
 if cell "$V0" A1.content; then ok "A1.content a content-only edit leaves the present key (64 hex) unmoved"; else bad "A1.content the present key moved on a content-only edit, or was not 64 hex"; fi
 if cell "$V0" A2.holds; then ok "A2.holds a recorded pass is accepted on the same tree (2 key(s))"; B_A2holds=1; else bad "A2.holds the record did not hold on its own tree"; fi
 if cell "$V0" A2.moved; then ok "A2.moved a new path refuses the record: $PRESENT_WHY"; B_A2moved=1; else bad "A2.moved the record was not refused with the present-set reason after a path appeared"; fi
-if cell "$V0" A3.k1; then ok "A3.k1 a #format k1 record is refused as malformed"; B_A3k1=1; else bad "A3.k1 a k1 record was not refused as malformed"; fi
+if cell "$V0" A3.k2; then ok "A3.k2 a #format k2 record is refused as malformed"; B_A3k2=1; else bad "A3.k2 a k2 record was not refused as malformed"; fi
 if cell "$V0" A3.hashrow; then ok "A3.hashrow a present key only in a # row is refused as malformed"; B_A3hashrow=1; else bad "A3.hashrow a #-row present key was not refused as malformed"; fi
 if cell "$V0" A4; then ok "A4 tree A's record under tree B's filename is refused in tree B"; B_A4=1; else bad "A4 tree A's record was not refused in tree B"; fi
 if cell "$V0" A5; then ok "A5 prune keeps the newest 4, drops s.key and s.key.absent, leaves s-x alone"; B_A5=1; else bad "A5 prune left the wrong set of files"; fi
@@ -502,7 +502,7 @@ if cell "$V0" T1.esc.nl; then ok "T1.esc.nl symlink to x<NL>b plus c does not co
 if cell "$V0" T1.esc.tab; then ok "T1.esc.tab file p<TAB>l<TAB>x does not collide with symlink p to x<TAB>f<TAB>"; B_T1esctab=1; else bad "T1.esc.tab the TAB pair collided"; fi
 
 # ---- mutants ----
-ALL_CELLS="L1.leak A1.create A1.dir A1.link A1.content A2.holds A2.moved A3.k1 A3.hashrow A4 A5 A6.run A6.grep T1.unsearch T1.nlrename T1.linknl T1.esc.bs T1.esc.nl T1.esc.tab W.skip W.settings W.collide W.t2b W.samesec W.forged W.multi W.rewalkfail W.empty W.emptyold W.emptyctl A1.chmod W.mode W.modectl"
+ALL_CELLS="L1.leak A1.create A1.dir A1.link A1.content A2.holds A2.moved A3.k2 A3.hashrow A4 A5 A6.run A6.grep T1.unsearch T1.nlrename T1.linknl T1.esc.bs T1.esc.nl T1.esc.tab W.skip W.settings W.collide W.t2b W.samesec W.forged W.multi W.rewalkfail W.empty W.emptyold W.emptyctl A1.chmod W.mode W.modectl"
 SELF_FILE="$HERE/run.sh"
 mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
   local n="$1" f="$2" l w c=0 v=""
@@ -570,8 +570,8 @@ hmut n1 'out.append(esc(rel) + b"\t" + k + b"%o" % stat.S_IMODE(st.st_mode) + b"
   && mrun n1 && mutant_killed "$(( ${B_A1dir:-0} && ${B_A1link:-0} ))" n1 "n1 names-only present key -- A1.dir and A1.link red, A1.create green"
 hmut n2 'if lines[4] != "@present' 'if False and lines[4] != "@present' \
   && mrun n2 && mutant_killed "$(( ${B_A2moved:-0} && ${B_A4:-0} ))" n2 "n2 check skips @present -- A2.moved and A4 red, A2.holds green"
-hmut n3 'if lines[:3] != ["#format k2", ' 'if lines[1:3] != [' \
-  && mrun n3 && mutant_killed "${B_A3k1:-0}" n3 "n3 k1 accepted -- A3.k1 red, A3.hashrow green"
+hmut n3 'if lines[:3] != ["#format k3", ' 'if lines[1:3] != [' \
+  && mrun n3 && mutant_killed "${B_A3k2:-0}" n3 "n3 k2 accepted -- A3.k2 red, A3.hashrow green"
 hmut n4 'mine[4:]' 'mine[len(mine):]' \
   && mrun n4 && mutant_killed "${B_A5:-0}" n4 "n4 prune keeps every record -- A5 red, A2.holds green"
 hmut n5 'os.readlink(p)' 'b""' \

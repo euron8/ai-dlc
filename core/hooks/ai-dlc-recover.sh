@@ -396,13 +396,85 @@ commit, working tree, sprint status, gate-log tail) is at
 # than telling the lead to go and look -- a lead that has to look reconstructs instead.
 # The checkpoint script is a sibling in scripts/ai-dlc/ on a consumer and core/scripts/
 # here; both are named, neither is derived from the other (I33).
-GATE_NONCE=""
+GATE_NONCE=""; GATE_CKP=""
 for _ckp in "${PROJECT_DIR}/scripts/ai-dlc/gate-checkpoint.sh" "${PROJECT_DIR}/core/scripts/gate-checkpoint.sh"; do
   if [ -x "$_ckp" ]; then
     GATE_NONCE="$(CLAUDE_PROJECT_DIR="$PROJECT_DIR" bash "$_ckp" current 2>/dev/null || true)"
+    GATE_CKP="$_ckp"
     break
   fi
 done
+#
+# A MARKER THE LEAD LEFT BEHIND IS CLOSED, NOT RESUMED. `gate-validation.md` orders the close after
+# Check 15 and nothing else enforces it, so a lead that moves to the next step without it leaves
+# `.gate-checkpoint/OPEN` standing, and the resume block below would send a compacted lead back into
+# a finished gate. Read from THIS session's transcript, in order, with `extract.py`'s gate_event()
+# grammar (a command split at `||`, `&&`, `|`, `;`, `&` and newlines; leading `bash`, `sh`, `env` and
+# `VAR=x` words dropped; the script's basename in command position; the verb an exact word): a gate
+# opens on `gate-checkpoint.sh … open` or `gate-transition.sh <story> 3`, and closes on
+# `gate-checkpoint.sh … close`. While one is open, a Read with no offset and no limit of a step file
+# that is not `gate-validation`, not a `_` procedure file and not the step entered before the open
+# LEAVES it. Any later `gate-checkpoint.sh` verb (`record`, `done`, `list`) or Read of
+# `gate-validation` RETURNS to it: on the reference consumer a lead recorded checks after reading the
+# next step whole, and the gate was live. The step entered is the last step file read whole, or read
+# in slices before any whole read of it. The marker is closed only when the gate is LEFT at the cut,
+# a step was entered before its open, and the marker's nonce was minted within 120 s of that open's
+# tool call, either side: a marker minted outside that window names a gate this transcript never
+# opened, such as another session's live gate behind a `gate-transition.sh … 3` that refused before
+# its own open.
+# Anything unreadable leaves the resume block as it was.
+GATE_LEFT=""
+GATE_JQ='def ev: [splits("\\|\\||&&|[|;&\\n]")
+      | [splits("[[:space:]]+") | select(length > 0) | gsub("^[\"\u0027]+|[\"\u0027]+$"; "")]
+      | until(length == 0 or (.[0] | test("^(bash|sh|env)$|^[A-Za-z_][A-Za-z0-9_]*=") | not); .[1:])
+      | select(length > 0) | (.[0] | sub(".*/"; "")) as $b | .[1:] as $a
+      | if $b == "gate-checkpoint.sh" then
+          (if any($a[]; . == "close") then "C" elif any($a[]; . == "open") then "O"
+           elif any($a[]; . == "record" or . == "done" or . == "list") then "V" else empty end)
+        elif $b == "gate-transition.sh" then
+          ([$a[] | select(startswith("-") | not)] as $p | if ($p | length) > 1 and $p[1] == "3" then "O" else empty end)
+        else empty end];
+  fromjson? | select(.type == "assistant") | (.timestamp // "") as $t | .message.content[]?
+  | select(type == "object" and .type == "tool_use") |
+  if .name == "Bash" then
+    ((.input.command // "") | tostring | ev) as $e |
+    ([$e[] | select(. == "O" or . == "C")] | last) as $oc |
+    if $oc != null then $oc + " " + $t elif ($e | index("V")) != null then "V" else empty end
+  elif .name == "Read" then
+    ([(.input.file_path // "") | tostring | capture("skills/ai-dlc(-update)?/steps/(?<s>[A-Za-z0-9_.-]+)\\.md$")][0].s) as $s |
+    if $s == null then empty
+    elif ((.input | has("offset")) or (.input | has("limit"))) then "R S " + $s
+    else "R W " + $s end
+  else empty end'
+if [ -n "$GATE_NONCE" ] && [ -n "$GATE_CKP" ] && [ -n "$REC_TP" ] && [ -r "$REC_TP" ]; then
+  _gl="$(grep -E '"tool_use"' "$REC_TP" 2>/dev/null \
+    | grep -E 'gate-checkpoint\.sh|gate-transition\.sh|/steps/[A-Za-z0-9_.-]+\.md' \
+    | jq -rR "$GATE_JQ" 2>/dev/null \
+    | awk '
+        $1 == "O" { gate = 1; m = main; ot = $2; left = ""; next }
+        $1 == "C" { gate = 0; left = ""; next }
+        $1 == "V" { left = ""; next }
+        $1 == "R" {
+          s = $3
+          if (s == "gate-validation") { left = ""; next }
+          if (substr(s, 1, 1) == "_") next
+          if ($2 == "W" && gate && m != "" && s != m) left = s
+          if ($2 == "W" || !(s in whole)) main = s
+          if ($2 == "W") whole[s] = 1
+        }
+        END { if (gate && left != "") print left " " ot }')"
+  # The binding: the nonce ends in its mint time, `<type>-YYYYmmddTHHMMSSZ` (gate-checkpoint.sh
+  # refuses any other `open`), and the open's tool call carries its own timestamp.
+  if [ -n "$_gl" ] && [ "$(jq -nr --arg n "$GATE_NONCE" --arg t "${_gl#* }" '
+        ($n | capture("-(?<d>[0-9]{8}T[0-9]{6}Z)$").d | strptime("%Y%m%dT%H%M%SZ") | mktime) as $m
+        | ($t | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) as $o
+        | if $m >= $o - 120 and $m <= $o + 120 then "bound" else "other" end' 2>/dev/null)" = bound ]; then
+    GATE_LEFT="${_gl%% *}"
+  fi
+fi
+if [ -n "$GATE_LEFT" ]; then
+  CLAUDE_PROJECT_DIR="$PROJECT_DIR" bash "$GATE_CKP" --nonce "$GATE_NONCE" close >/dev/null 2>&1 || GATE_LEFT=""
+fi
 #
 # THE SECTION CARRIES THE NONCE AND THE ONE COMMAND THAT USES IT, AND NOTHING THE GATE FILE
 # ALREADY SAYS. Three sentences were cut to keep a gate-in-flight block under the cliff, each
@@ -415,7 +487,14 @@ done
 #     the fresh nonce and `open` it").
 # The nonce is also named twice rather than four times: it is the one part of this section whose
 # length the hook does not choose, so every repetition multiplies the overrun a long one causes.
-if [ -n "$GATE_NONCE" ]; then
+if [ -n "$GATE_LEFT" ]; then
+  # Shorter than the resume block it replaces, so the byte budget below still holds.
+  GATE_RESUME="## A gate left open was closed -- do not resume it
+
+\`.gate-checkpoint/OPEN\` named \`${GATE_NONCE}\`, which this session left at its whole Read of
+\`${GATE_LEFT}.md\` without a \`close\`. This hook closed it. If that gate is in
+fact unfinished, \`open\` it again at that nonce before its next check."
+elif [ -n "$GATE_NONCE" ]; then
   GATE_RESUME="## The cut landed inside a gate -- RESUME it, do not restart it
 
 Its \`gate_nonce\` is \`${GATE_NONCE}\` (\`.gate-checkpoint/OPEN\`). At that gate's

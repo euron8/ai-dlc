@@ -72,6 +72,15 @@ set -u
 # EVERYTHING BETWEEN THESE MARKERS DECIDES WHAT A FIXTURE RUNS WITH (arguments, declaration, population, key rows, copy, env -i
 # invocation, sentinels) and is what the verdict store digests as `#runner`. Store read/write, logging and the summary line
 # are OUTSIDE it, so an edit to those does not invalidate a recorded pass.
+# SIGPIPE_BEGIN
+# ONE SIGNAL DISPOSITION FOR EVERY WRITER OF A RECORD A PUSH READS (BL-999). git runs a pre-push hook with SIGPIPE
+# ignored, so a writer whose reader leaves early gets EPIPE, prints `Broken pipe` and exits non-zero, where under the
+# default it dies silently with 141. A pass recorded under one disposition and read by a gate under the other can
+# disagree with the gate's own run. Both pre-push hooks and core/scripts/hermetic-run.sh carry this span byte for byte,
+# so a hand run, the verdict seeder and git's own run all judge under git's disposition. An ignored signal is inherited
+# across exec, so every child sees it.
+trap '' PIPE
+# SIGPIPE_END
 HR_ROOT_OPT=""
 HR_FXDIR=""
 HR_KEY_ONLY=0

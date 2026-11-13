@@ -22,6 +22,10 @@
 # core.sshCommand, GIT_SSH, and a PATH `ssh` that is a wrapper. Global and system git
 # config are switched off so an operator's core.sshCommand cannot answer for a seed.
 #
+# THE OTHER TOP-OF-HOOK SPANS. Arms S1-S2 hold the SIGPIPE span (BL-999) in both hooks and core/scripts/hermetic-run.sh,
+# and D1-D4 the PUSH_DELETE span (BL-1010) in both hooks: D3 drives each REAL hook end to end on a delete-only push,
+# D4 cuts each hook at its gate and requires an update and a mixed push to pass it.
+#
 # DIST-ONLY: the subject is `.githooks/pre-push`, which install.sh never ships.
 #
 # THE MUTANT MATRIX. A cell is one drive of the block (A1-A5 must warn, N1-N5 must stay silent, N6a must stay
@@ -336,6 +340,110 @@ else
   echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
   fails=$((fails + MX_FAILS))
 fi
+
+# ------------------------------------------------- the other top-of-hook spans: SIGPIPE (BL-999), PUSH_DELETE (BL-1010) --
+# Both sit above the first step of BOTH pre-push hooks, as this file's block does, so they are held here. CHOOK is the
+# consumer hook as it sits in this repo; HRUN is the sandbox runner, the third carrier of the SIGPIPE span. Every arm
+# below asserts a value in both directions; none is satisfied by a span or a hook that emits nothing.
+CHOOK="$(cd "$HERE/../.." && pwd)/git-hooks/pre-push"
+HRUN="$(cd "$HERE/../.." && pwd)/scripts/hermetic-run.sh"
+[ -f "$CHOOK" ] || broken "no core/git-hooks/pre-push at $CHOOK"
+[ -f "$HRUN" ] || broken "no core/scripts/hermetic-run.sh at $HRUN"
+PERL_BIN="$(command -v perl 2>/dev/null)" || PERL_BIN=""
+[ -n "$PERL_BIN" ] || broken "no perl on PATH: the SIGPIPE arms need it to start a bash with SIGPIPE at its DEFAULT"
+span() { sed -n "/^# $1_BEGIN\$/,/^# $1_END\$/p" "$2"; }
+
+# S1. The SIGPIPE span is one span: byte-identical in the three carriers, and it carries exactly one ignore line.
+span SIGPIPE "$HOOK" > "$WORK/sp.d"; span SIGPIPE "$CHOOK" > "$WORK/sp.c"; span SIGPIPE "$HRUN" > "$WORK/sp.h"
+n_ign="$(grep -c "^trap '' PIPE\$" "$WORK/sp.d")" || n_ign=0
+if [ "$n_ign" -eq 1 ] && cmp -s "$WORK/sp.d" "$WORK/sp.c" && cmp -s "$WORK/sp.d" "$WORK/sp.h"; then
+  ok "S1 the SIGPIPE span is byte-identical in both hooks and hermetic-run.sh, with one \`trap '' PIPE\` line"
+else
+  bad "S1 SIGPIPE span: ignore lines=$n_ign, hook/consumer equal=$(cmp -s "$WORK/sp.d" "$WORK/sp.c" && echo y || echo n), hook/runner equal=$(cmp -s "$WORK/sp.d" "$WORK/sp.h" && echo y || echo n)"
+fi
+# S2. The span gives a child writer git's disposition when the caller's is the DEFAULT. perl resets SIGPIPE to the
+# default before it execs bash, so both sides are forced whatever this fixture inherited (a push runs it with SIGPIPE
+# ignored, a hand run with the default). The writer is `yes` into `head -1`: killed (141) under the default, an EPIPE
+# exit under the ignore. The control, the same probe without the span, must read 141, or the probe cannot discriminate.
+PROBE="yes | head -1 >/dev/null; echo \"w=\${PIPESTATUS[0]}\""
+{ cat "$WORK/sp.d"; printf '%s\n' "$PROBE"; } > "$WORK/sp.with.sh"
+printf '%s\n' "$PROBE" > "$WORK/sp.without.sh"
+w_ctl="$("$PERL_BIN" -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' "$BASH_BIN" "$WORK/sp.without.sh" 2>/dev/null)"
+w_sub="$("$PERL_BIN" -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' "$BASH_BIN" "$WORK/sp.with.sh" 2>/dev/null)"
+if [ "$w_ctl" != "w=141" ]; then
+  broken "S2 control: the probe without the span read [$w_ctl], not w=141, so SIGPIPE was not at its default and the arm cannot discriminate"
+elif [ -n "$w_sub" ] && [ "$w_sub" != "w=141" ] && [ "$w_sub" != "w=" ]; then
+  ok "S2 under a default SIGPIPE the span makes the writer exit on EPIPE ($w_sub) where the control dies of SIGPIPE (w=141)"
+else
+  bad "S2 the span did not ignore SIGPIPE for its children: the writer read [$w_sub], the control w=141"
+fi
+
+# D1. The PUSH_DELETE span is one span: byte-identical in both hooks and defining push_delete_only.
+span PUSH_DELETE "$HOOK" > "$WORK/pd.d"; span PUSH_DELETE "$CHOOK" > "$WORK/pd.c"
+n_def="$(grep -c '^push_delete_only() ' "$WORK/pd.d")" || n_def=0
+if [ "$n_def" -eq 1 ] && cmp -s "$WORK/pd.d" "$WORK/pd.c"; then
+  ok "D1 the PUSH_DELETE span is byte-identical in both hooks and defines push_delete_only once"
+else
+  bad "D1 PUSH_DELETE span: definitions=$n_def, hooks equal=$(cmp -s "$WORK/pd.d" "$WORK/pd.c" && echo y || echo n)"
+fi
+# D2. The predicate on the five shapes git can hand a hook: a delete (sha1 and sha256 widths) is a delete; a new branch
+# (all-zero REMOTE sha, the near-miss carrying zeros in the wrong field), a delete beside an update, and an empty
+# stdin are not. One bash start reads all five; the answer is a string, so a predicate that answers one way for
+# every input cannot produce it.
+Z40=0000000000000000000000000000000000000000
+Z64=0000000000000000000000000000000000000000000000000000000000000000
+H40=1111111111111111111111111111111111111111
+{ cat "$WORK/pd.d"
+  printf 'v=""\n'
+  printf 'push_delete_only "(delete) %s refs/heads/x %s" && v="${v}T" || v="${v}F"\n' "$Z40" "$H40"
+  printf 'push_delete_only "(delete) %s refs/heads/x %s" && v="${v}T" || v="${v}F"\n' "$Z64" "$H40"
+  printf 'push_delete_only "refs/heads/x %s refs/heads/x %s" && v="${v}T" || v="${v}F"\n' "$H40" "$Z40"
+  printf 'push_delete_only "(delete) %s refs/heads/x %s\nrefs/heads/y %s refs/heads/y %s" && v="${v}T" || v="${v}F"\n' "$Z40" "$H40" "$H40" "$H40"
+  printf 'push_delete_only "" && v="${v}T" || v="${v}F"\n'
+  printf 'echo "$v"\n'; } > "$WORK/pd.cells.sh"
+pd_got="$("$BASH_BIN" "$WORK/pd.cells.sh" 2>&1)"
+if [ "$pd_got" = TTFFF ]; then
+  ok "D2 push_delete_only: delete40 T, delete64 T, new branch F, delete+update F, empty F"
+else
+  bad "D2 push_delete_only answered [$pd_got] for delete40/delete64/new-branch/mixed/empty, want TTFFF"
+fi
+# D3. The REAL hooks, end to end, handed a delete-only push the way git hands it (two arguments, the ref line on stdin),
+# from a scratch repository: exit 0 and exactly the one line saying no step runs. A hook that lost the early exit runs
+# its steps and prints more; one that lost the stdin read prints nothing of the kind.
+REPO_DEL="$WORK/del"; git init -q "$REPO_DEL" || broken "git init failed"
+for hk in "$HOOK" "$CHOOK"; do
+  out="$WORK/del.$(basename "$(dirname "$hk")")"
+  printf '(delete) %s refs/heads/gone %s\n' "$Z40" "$H40" \
+    | ( cd "$REPO_DEL" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+          AI_DLC_READSET_LIVE_TRACE=0 "$BASH_BIN" "$hk" origin "file:///nowhere/x.git" ) > "$out" 2>&1
+  r=$?
+  case "$hk" in "$HOOK") want='pre-push: every ref in this push is a delete (all-zero local sha): no tree is delivered, so no step runs.' ;;
+                *) want='pre-push: every ref in this push is a delete (all-zero local sha): no tree is delivered, so no later step runs.' ;; esac
+  if [ "$r" -eq 0 ] && [ "$(cat "$out")" = "$want" ]; then
+    ok "D3 ${hk#"$(cd "$HERE/../../.." && pwd)/"} on a delete-only push: exit 0 and only the no-step line"
+  else
+    bad "D3 ${hk#"$(cd "$HERE/../../.." && pwd)/"} on a delete-only push: rc=$r [$(head -c 300 "$out")]"
+  fi
+done
+# D4. D3's ALLOW twin, through each hook's OWN bytes: line 1 through the gate's closing `fi` (the first `fi` at column 0
+# after the PUSH_DELETE_END line), with one marker line appended. An update push and a mixed push must reach the marker;
+# the delete must not. A call site that exits on every push passes D1-D3 and fails here.
+for hk in "$HOOK" "$CHOOK"; do
+  tag="$(basename "$(dirname "$hk")")"; pre="$WORK/gate.$tag.sh"
+  awk '{ print } $0 == "# PUSH_DELETE_END" { s = 1 } s && $0 == "fi" { f = 1; exit } END { exit (f ? 0 : 1) }' "$hk" > "$pre" \
+    || broken "D4: no column-0 \`fi\` after PUSH_DELETE_END in $hk, so the gate cannot be cut out"
+  printf 'echo PAST-THE-GATE\n' >> "$pre"
+  d4=""
+  for ln in "refs/heads/x $H40 refs/heads/x $Z40" "(delete) $Z40 refs/heads/y $H40
+refs/heads/x $H40 refs/heads/x $H40" "(delete) $Z40 refs/heads/y $H40"; do
+    o="$(printf '%s\n' "$ln" | ( cd "$REPO_DEL" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE GIT_CONFIG_GLOBAL=/dev/null \
+          GIT_CONFIG_NOSYSTEM=1 "$BASH_BIN" "$pre" origin "file:///nowhere/x.git" ) 2>&1)"; r=$?
+    case "$r:$o" in 0:PAST-THE-GATE) d4="${d4}P" ;; "0:pre-push: every ref"*) d4="${d4}D" ;; *) d4="${d4}?" ;; esac
+  done
+  if [ "$d4" = PPD ]; then ok "D4 $tag cut at its gate: an update and a mixed push pass it, a delete stops at it"
+  else bad "D4 $tag cut at its gate answered [$d4] for update/mixed/delete, want PPD"; fi
+done
+
 if [ "$BROKEN" -ne 0 ]; then echo "prepush-ssh-keepalive: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 if [ "$fails" -ne 0 ]; then

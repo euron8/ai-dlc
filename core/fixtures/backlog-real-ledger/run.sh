@@ -24,11 +24,19 @@
 # The anchor-collision guard on BL-899 below is now a constant against the snapshot (max id BL-883);
 # it can fire only when the snapshot is refreshed past it.
 #
+# j1's --base IS j1's OWN COMMIT (BL-899, lead ruling A, accepted by the lead). The seeded repository has no
+# origin/main, and the snapshot's two open driver receipts (BL-868, BL-878) name scripts the seed does not carry;
+# at j1's own commit those drivers are absent at HEAD and at the base, so M1 counts them EXCLUDED and j1-m1x
+# asserts the VALUE `M1-EXCLUDED: 2`. Not the root commit: a root base would make every LANDED entry of the
+# snapshot an R8 close of this branch and run its receipt. The mutant m-j1-nobase drops --base, so L3 (d) fires and
+# the count reads 0; it is decided on a three-entry world (BL-868, BL-878 and j1's anchor; no size validator), not a second j1.
+#
 # Usage: run.sh
 # Exit:  0 = both arms hold, 1 = one regressed, 2 = fixture broken.
 # The mutant x arm matrix is MEASURED by the --matrix argv mode and is re-measured whenever an arm or
 # a mutant is added or changed. The recorded matrix plus the twin replaces the exact-vector assertion.
 # MUTANT-MATRIX m-r9call decides=r9-call twins=j1-pop
+# MUTANT-MATRIX m-j1-nobase decides=j1-m1x twins=m1x-pop
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-real-ledger/run.sh --matrix
 set -u
 
@@ -307,8 +315,13 @@ if grep -qE "^## ${J1_ANCHOR}([^0-9]|\$)" "$TMP/j1/docs/backlog.md" \
 fi
 printf '\n## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1/docs/backlog.md"
 ( cd "$TMP/j1" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m real >/dev/null 2>&1 )
+# --base IS GIVEN EXPLICITLY (BL-899, lead ruling A): this repository has no origin/main, and the snapshot's open
+# driver receipts name scripts the seed does not carry, so under M1 their drivers are absent at HEAD. At the j1
+# commit itself they are absent at the base too, so they read EXCLUDED-DRIVER-ABSENT-AT-BASE (L3 (b)) and print in
+# the M1-EXCLUDED count, never as R7 findings. The j1 commit, not the root: a root base would make every LANDED
+# entry of the snapshot an R8 close of this branch and run its receipt.
 # shellcheck disable=SC2086
-j1_out="$(run_r "" "$TMP/j1" $J1_ARGS)"
+j1_out="$(run_r "" "$TMP/j1" $J1_ARGS --base "$(git -C "$TMP/j1" rev-parse HEAD)")"
 j1_rd="$(j1_read "$j1_out")"
 # The store is wired: j1p's first run wrote the record, and j1, on the same validator bytes, replayed it.
 if grep -q '^PROBE-RECORD: WRITTEN (K=' <<<"$(run_r_first_out)" && grep -q '^PROBE-RECORD: REPLAYED (K=' <<<"$j1_out"; then
@@ -433,10 +446,65 @@ if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ -n "$j1_arm" ]; then
   fi
 fi
 
+# j1-m1x (BL-899, lead ruling A): the snapshot holds exactly TWO open receipts whose first command is `bash <P>` --
+# BL-868 (`bash scripts/check-no-provisional-invocations.sh`) and BL-878 (`bash scripts/validate-fixture-inprocess.sh
+# --complete`), derived by reading ledger.snapshot -- and seed_r carries neither script. With j1's --base at its own
+# commit both drivers are absent at HEAD and at the base, so M1 counts them EXCLUDED (L3 (b)).
+# m-j1-nobase: --base dropped, so L3 (d) fires (DRIVER-ABSENT-UNRESOLVED-BASE) and the count is 0 -- decided on the
+# smallest world that separates the two (below), not on a second full j1 run.
+M1X_WANT="M1-EXCLUDED: 2 open sh receipt(s) EXCLUDED-DRIVER-ABSENT-AT-BASE"
+B_M1X=0
+if grep -qF "$M1X_WANT" <<<"$j1_out"; then
+  ok "j1-m1x -- the validator counted BL-868 and BL-878 EXCLUDED-DRIVER-ABSENT-AT-BASE under j1's --base"; B_M1X=1
+else
+  bad "j1-m1x -- the M1 line is '$(printf '%s\n' "$j1_out" | grep '^M1-EXCLUDED' )', want '$M1X_WANT'"
+fi
+# THE SMALLEST WORLD THAT SEPARATES --base FROM NO --base: a seed_r repository whose ledger is the snapshot's two driver
+# entries (BL-868, BL-878, cut from ledger.snapshot by heading) plus j1's own anchor entry, and no size validator, so
+# R9 says NOT RUN. THE ANCHOR IS LOAD-BEARING: with only the two driver receipts every row is OUT-OF-POPULATION, R2
+# scores nothing and exits 1 at its ZERO-scored refusal (vbr_sec_corpus, before `M1-EXCLUDED` prints), which is why the
+# two-entry world printed no M1 line at all; the anchor's grep receipt is scored, so R2 passes and the run reaches the
+# M1 line. CONTROL j1nb-base: the same world WITH --base at its own commit prints `M1-EXCLUDED: 2`, or the world is
+# FIXTURE BROKEN and the mutant is not scored. Twin m1x-pop: the mutant's capture reads the sh population 3.
+seed_r "$TMP/j1nb"
+awk '/^## BL-/ { keep = ($2 == "BL-868" || $2 == "BL-878") } keep' "$REAL_LEDGER" > "$TMP/j1nb/docs/backlog.md"
+printf '\n## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1nb/docs/backlog.md"
+( cd "$TMP/j1nb" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m small >/dev/null 2>&1 )
+B_M1XS=0
+# shellcheck disable=SC2086
+j1nbb_out="$(run_r "" "$TMP/j1nb" $J1_ARGS --base "$(git -C "$TMP/j1nb" rev-parse HEAD)")"
+if grep -qF "$M1X_WANT" <<<"$j1nbb_out"; then
+  ok "j1nb-base -- the small world WITH --base counts BL-868 and BL-878 EXCLUDED (M1-EXCLUDED: 2), so it reaches the M1 line"; B_M1XS=1
+else
+  note "FAIL  FIXTURE BROKEN: j1nb-base -- the small world with --base printed '$(printf '%s\n' "$j1nbb_out" | grep '^M1-EXCLUDED')', not '$M1X_WANT'; m-j1-nobase is not scored on it"; rc=1
+fi
+# shellcheck disable=SC2086
+j1nb_out="$(run_r "" "$TMP/j1nb" $J1_ARGS)"
+j1nb_sum="$(j1_read "$j1nb_out")"
+if [ "$B_M1XS" != 1 ]; then
+  : # the world is broken (above); no verdict is read off it
+elif ! grep -qF "$M1X_WANT" <<<"$j1nb_out" && grep -q '^M1-EXCLUDED: 0 ' <<<"$j1nb_out"; then
+  mutant_killed "$B_M1X" m-j1-nobase "m-j1-nobase [j1-m1x]: with --base dropped L3 (d) fires and M1-EXCLUDED reads 0"
+else
+  bad "m-j1-nobase SURVIVED: with --base dropped the M1 line read '$(printf '%s\n' "$j1nb_out" | grep '^M1-EXCLUDED')'"
+fi
+if [ -n "$j1nb_sum" ] && [ "${j1nb_sum%% *}" = 3 ]; then
+  ok "[m1x-pop] twin of m-j1-nobase stays green: the small world reads the sh population 3"
+else
+  bad "[m1x-pop] the twin of m-j1-nobase TRIPPED: read '${j1nb_sum}', want population 3"
+fi
+if [ "$MATRIX" = 1 ]; then
+  m1x_t=GREEN; m1x_k=no; grep -qF "$M1X_WANT" <<<"$j1nb_out" || { m1x_t=TRIPPED; m1x_k=yes; }
+  j1q_t=GREEN; j1q_k=no; [ -n "$j1nb_sum" ] && [ "${j1nb_sum%% *}" = 3 ] || { j1q_t=TRIPPED; j1q_k=yes; }
+  matrix_row m-j1-nobase j1-m1x 0 "$m1x_t" "$m1x_k"
+  matrix_row m-j1-nobase m1x-pop 0 "$j1q_t" "$j1q_k"
+  MROWS=$(( MROWS + 2 ))
+fi
+
 if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
-elif [ "$MROWS" -eq 2 ]; then ok "[MX] the matrix run measured 2 cells for the 1 mutant"
-else bad "[MX] matrix rows=$MROWS, 2 expected"; fi
+elif [ "$MROWS" -eq 4 ]; then ok "[MX] the matrix run measured 4 cells for the 2 mutants"
+else bad "[MX] matrix rows=$MROWS, 4 expected"; fi
 
 if [ "$rc" -eq 0 ]; then
   note "PASS  backlog-real-ledger -- j1 and b16 hold on the frozen ledger snapshot"

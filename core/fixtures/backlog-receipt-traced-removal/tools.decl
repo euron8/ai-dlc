@@ -1,0 +1,37 @@
+# Tools run.sh, the validator (its workers, R13's epoch and read set, M3's key) and lib.sh invoke, keyed on their
+# binaries. sw_vers is read into R13's key, with uname as its fallback. chmod, cksum, diff and python3 are run by the
+# arms the one CLI cell (cli-wire) reaches (R0, E0, R1), as backlog-real-ledger declares them; rmdir by R12's
+# fail-closed probe, which cli-wire also reaches.
+awk
+basename
+bash
+cat
+chmod
+cksum
+cmp
+cp
+cut
+diff
+dirname
+env
+find
+git
+grep
+head
+ls
+mkdir
+mktemp
+mv
+python3
+rm
+rmdir
+sed
+sleep
+sort
+sw_vers
+tail
+touch
+tr
+uname
+wc
+xargs

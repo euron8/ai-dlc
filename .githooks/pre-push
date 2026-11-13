@@ -33,6 +33,40 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 # "backlog receipts" step replay R1 and R7/R8 from a record, so it is dropped before any step runs.
 unset BR_PROBE_RECORD
 
+# SIGPIPE_BEGIN
+# ONE SIGNAL DISPOSITION FOR EVERY WRITER OF A RECORD A PUSH READS (BL-999). git runs a pre-push hook with SIGPIPE
+# ignored, so a writer whose reader leaves early gets EPIPE, prints `Broken pipe` and exits non-zero, where under the
+# default it dies silently with 141. A pass recorded under one disposition and read by a gate under the other can
+# disagree with the gate's own run. Both pre-push hooks and core/scripts/hermetic-run.sh carry this span byte for byte,
+# so a hand run, the verdict seeder and git's own run all judge under git's disposition. An ignored signal is inherited
+# across exec, so every child sees it.
+trap '' PIPE
+# SIGPIPE_END
+
+# PUSH_DELETE_BEGIN
+# A PUSH THAT DELIVERS NO TREE RUNS NO STEP (BL-1010). git hands a pre-push hook one line per ref on stdin,
+# `<local ref> <local sha> <remote ref> <remote sha>`, and a delete carries an all-zero local sha (40 zeros, 64 in a
+# sha256 repository). True only when there is at least one line and every line is a delete: an empty stdin (a hand
+# run, a fixture driving the hook with </dev/null) and a mixed push both run every step.
+push_delete_only() { # <ref lines>
+  local pd_lr pd_ls pd_rr pd_rs pd_n=0
+  while read -r pd_lr pd_ls pd_rr pd_rs; do
+    [ -n "$pd_lr" ] || continue
+    case "$pd_ls" in ''|*[!0]*) return 1 ;; esac
+    pd_n=$((pd_n + 1))
+  done <<PD_EOF
+$1
+PD_EOF
+  [ "$pd_n" -gt 0 ]
+}
+# PUSH_DELETE_END
+# stdin is read only when git's two arguments are present and it is not a terminal: a hand run passes no arguments,
+# and a terminal read would wait forever.
+if [ "$#" -ge 2 ] && [ ! -t 0 ] && push_delete_only "$(cat)"; then
+  printf 'pre-push: every ref in this push is a delete (all-zero local sha): no tree is delivered, so no step runs.\n'
+  exit 0
+fi
+
 # 0. A GREEN GATE IS NOT A LANDED PUSH, and the cause is a dotfile, not this tree. `git push`
 #    opens the SSH connection BEFORE this hook runs; the suite below then idles it for minutes,
 #    GitHub's sshd drops it, and the pack write takes SIGPIPE -- exit 141, every phase PASS, the
@@ -122,13 +156,15 @@ fail=0
 #
 # PRE-SUITE STEP KEYS: A STEP RUNS ONLY WHEN SOMETHING IT READ MOVED SINCE ITS LAST PASS. Each
 # pre-suite step (every `step` before PRESUITE_DONE=1) is keyed the way a fixture is, in a record
-# grammar of its own (`#format k2`, `#state ok`, `#tools canonical`, `#cmd <sha256>`, then the
+# grammar of its own (`#format k3`, `#state ok`, `#tools canonical`, `#cmd <sha256>`, then the
 # row `@present\t<sha256>`, then `<path>\t<sha256>`, `<dir>/\t#listing:<sha256>`,
 # `<tool path>\t<sha256>`), records under `<git common dir>/ai-dlc-presuite-keys/`, named
 # `<step slug>.<first 16 hex of the present key>.key`, and skipped on a recorded pass when every
 # key still holds. The filename hash is advisory; the `@present` row is what the check compares. A
 # k1 record (`<step slug>.key`, written by an older hook in the same common dir) is never read,
-# and an older hook refuses a k2 record as malformed. A skipped step prints `skipped on a recorded pass` and then PASS, the way
+# and an older hook refuses a k3 record as malformed. A k2 record is refused here as malformed too, so its step
+# re-runs and records k3: k2 records were written before the SIGPIPE span (BL-999), some by hand-run prefixes under
+# the default disposition git never runs a hook with, and a pass recorded under that disposition is not trusted. A skipped step prints `skipped on a recorded pass` and then PASS, the way
 # the suite's content-key skip prints SKIPPED and then PASS, so the verdict count per step is
 # unchanged; one `pre-suite keys:` line at PRESUITE_DONE names every step skipped.
 #
@@ -410,7 +446,7 @@ class Tree:
 def check(rec, u, top, cmdsha, present):
     # Order: header, command, present key, and only then the tree, so a refusal never depends on the hashes.
     lines = open(rec, encoding="utf-8", errors="surrogateescape").read().split("\n")
-    if lines[:3] != ["#format k2", "#state ok", "#tools canonical"]:
+    if lines[:3] != ["#format k3", "#state ok", "#tools canonical"]:
         print("malformed record"); return 1
     if len(lines) < 4 or lines[3] != "#cmd " + cmdsha:
         print("the command, its declaration or its wrapper body changed"); return 1
@@ -584,7 +620,7 @@ def record(rec, u, top, cmdsha, presentkey, readlist, t2, argv):
     for w in argv:
         if w in tl: keys.add(tl[w])
         elif w.startswith("/") and os.path.isfile(w): keys.add(w)
-    out = ["#format k2", "#state ok", "#tools canonical", "#cmd " + cmdsha, "@present\t" + presentkey]
+    out = ["#format k3", "#state ok", "#tools canonical", "#cmd " + cmdsha, "@present\t" + presentkey]
     body = []
     for i, s in enumerate(sorted(specs)):
         out.append("#gitcmd %d\t%s" % (i, s))
@@ -773,7 +809,7 @@ step "backlog depth (docs/backlog.md stays a queue, not a log)" \
 step "backlog receipts (a receipt a COMMENT can satisfy is not a receipt)" \
   bash scripts/validate-backlog-receipts.sh \
     --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
-    --max-unstable 0 --min-entries 1
+    --max-unstable 0 --min-entries 1 --traced-removal --base origin/main
 
 # 1f2. BL-817: an efficiency close in the ARCHIVE carries its outcome. The bare run above judges the
 #     live ledger only, and rotation moves a close out of its sight the moment it is archived -- so
@@ -3049,6 +3085,18 @@ run_fixtures() {
   pool_xp=""
   readset_pool_trace_merge "$out"
 
+  # A GREEN FIXTURE THAT CHECKED NOTHING SAYS SO (BL-998). A shipped fixture whose subject is absent prints a
+  # `PENDING  <what>` row (two spaces after the word, at the start of the line or after indentation) and exits 0,
+  # and a bare `ok` row read the same as a pass. One grep over every captured log counts those rows; an ok row
+  # carrying any is printed with its count, and one line after the report names them all. The count covers the
+  # fixtures THIS run dispatched: one skipped on a recorded pass is not re-read.
+  pend_map=" "; pend_fx=""; pend_n=0
+  while IFS=: read -r pk pv; do
+    case "$pv" in ''|*[!0-9]*|0) continue ;; esac
+    pend_map="$pend_map$pk=$pv "
+  done <<PEND_EOF
+$(cd "$out/.log" 2>/dev/null && grep -HcE '^[[:space:]]*PENDING  ' -- * 2>/dev/null)
+PEND_EOF
   # Rendered in list order, so the output is deterministic and diffable across runs even
   # though the work completed out of order.
   n_actual=0
@@ -3060,10 +3108,16 @@ run_fixtures() {
     fi
     n_actual=$((n_actual + 1))
     verdict="$(cat "$out/$b")"
-    if [ "$verdict" = ok ]; then printf '   ok    %s\n' "$b"
+    if [ "$verdict" = ok ]; then
+      case "$pend_map" in
+        *" $b="*) pv="${pend_map#* $b=}"; pv="${pv%% *}"; pend_fx="$pend_fx $b"; pend_n=$((pend_n + 1))
+                  printf '   ok    %s  (%s PENDING row(s): its subject is absent, so those parts checked nothing)\n' "$b" "$pv" ;;
+        *) printf '   ok    %s\n' "$b" ;;
+      esac
     elif [ "$verdict" = REFUSED ]; then printf '   REFUSED  %s  (no progress for %s polls; a refusal costs a re-run, never a verdict)\n' "$b" "$POOL_STALL"; rc=1
     else                        printf '   FAIL  %s\n' "$b"; rc=1; rf_hard=1; fi
   done < "$out/list"
+  [ "$pend_n" -eq 0 ] || printf '   PENDING: %s green fixture(s) printed a PENDING row, so part of each checked nothing:%s\n' "$pend_n" "$pend_fx"
 
   # THE CONTROL PARALLELISM MAKES NECESSARY. Serially, a fixture that never ran could not
   # print an `ok` -- the loop and the report were the same thing. With a worker pool they

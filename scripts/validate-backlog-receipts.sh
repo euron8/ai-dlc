@@ -221,6 +221,12 @@
 # grammar, exemption, self-probe, the measured false-positive set, its narrowing and its floors: the R12
 # block above r12_judge. `R12-POPULATION:` prints in every verbosity; ceiling 0.
 #
+# M1 AND R13 -- A REMOVED DRIVER IS A CANNOT-MEASURE EXIT, AND A NAMED FILE A RECEIPT READS IS REMOVED AND THE
+# RECEIPT RE-RUN (BL-899). M1 is R7's fourth route (driver-absent, lead ruling L3); R13 runs only under
+# `--traced-removal`. Mechanism, instrument (atime after a forced epoch), the NAMED closure and its narrowing,
+# the blind spots, the record and the self-probes: the M1/R13 block above vbr_sec_corpus.
+# `R13-POPULATION:` prints in every verbosity; ceiling DEFAULT_MAX_R13.
+#
 # EMPTY IS NOT CLEAN. Both populations print a line in every verbosity -- `OPEN-POPULATION: EMPTY`
 # when the ledger has no live `sh` receipt (the state on every push when this shipped: 43 live
 # entries, 0 `sh` receipts; control, the same ledger's `^verify:` lines, 47, of which the one
@@ -282,11 +288,14 @@
 # Usage: validate-backlog-receipts.sh [<ledger>] [--root <dir>] [--base <ref>] [--quiet]
 #          [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N]
 #          [--max-unstable N] [--max-cannot-measure N] [--max-unanchored N]
-#          [--min-sh-receipts N] [--min-entries N]
+#          [--traced-removal] [--max-unguarded N] [--min-sh-receipts N] [--min-entries N]
 # Output: one TAB-delimited row per finding, then a summary and one OK line.
 #          STATUS <TAB> ENTRY <TAB> paths=... <TAB> tokens=...
 # Exit:  0 = at or under every ceiling; 1 = over one, or nothing was scored;
-#        2 = usage, environment, or a self-probe that did not fire.
+#        2 = usage, environment, or a self-probe that did not fire;
+#        3 = RESTRICTED: the run was given --r13-drive, --probe-seeds, --probe-world or BR_R13_PROBE_DIR (the fixture's
+#            cheap mode), so it is never a gate pass; its verdict (0 or 1) is printed as `RESTRICTED: verdict-rc=<n>`.
+#            A restricted refusal stays 2.
 vbr_sec_env() {
 set -uo pipefail
 
@@ -325,7 +334,10 @@ unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
 # exports it to each pass, and the worker's argv is how this tells the two apart.
 # BR_PROBE_COUNTER is the same: R1 sets it to its own file, but a replay runs no R1, so an inherited one
 # would reach the corpus pass, where score_ledger overwrites the caller's file with 0.
-case "${1:-}" in --score-one|--closed-one) ;; *) unset BR_GENERIC_SEED BR_PROBE_COUNTER ;; esac
+case "${1:-}" in --score-one|--closed-one|--r13-one) ;; *) unset BR_GENERIC_SEED BR_PROBE_COUNTER ;; esac
+# BR_R13_DIR ARMS R13'S TRACE IN EVERY --score-one WORKER (BL-899), so it too is the parent's alone: r13_arm sets
+# it for the corpus pass and vbr_probe_r13 for its own. An inherited one would trace every probe pass.
+case "${1:-}" in --score-one|--closed-one|--r13-one) ;; *) unset BR_R13_DIR BR_R13_STORE BR_R13_KCOMMON BR_R13_AWK BR_R13_RMOUT ;; esac
 }
 
 # ---------------------------------------------------------------------------
@@ -437,7 +449,7 @@ PROVENANCE='detached checkout of HEAD'
 # hand-written second copy is a second implementation whose bugs nobody finds.
 # ===========================================================================
 vbr_worker() {
-if [ "${1:-}" = "--score-one" ] || [ "${1:-}" = "--closed-one" ]; then
+if [ "${1:-}" = "--score-one" ] || [ "${1:-}" = "--closed-one" ] || [ "${1:-}" = "--r13-one" ]; then
   WMODE="$1"
   REC="${2:-}"
   [ -n "$REC" ] || exit 2
@@ -540,14 +552,22 @@ if [ "${1:-}" = "--score-one" ] || [ "${1:-}" = "--closed-one" ]; then
   # error). NOT bare 127 and NOT 2-8: a subject that exits 127 because IT calls a helper it does
   # not ship, and the 2-8 codes, are real STILL-LIVE answers here (BL-830's receipt exits 2 open).
   # ONE function, so a mutant emptying the set is one edit and is killed by the self-probe.
+  # THE FOURTH ROUTE, driver-absent (BL-899 M1): the receipt's own `bash <P>` operand is gone and
+  # bash said so for THAT path; m1_driver_absent (the M1/R13 block) decides it with lead ruling L3
+  # applied, in this worker, against the tree the receipt ran in ($TA).
   cm_reason() {
     case "$1" in
       9) printf 'exit-9' ;;
       126) printf 'exit-126' ;;
       *) if [ "$1" -ge 128 ]; then printf 'exit-%s' "$1"
-         elif [ -n "$(cant_measure "$1" < "$2")" ]; then printf 'own-shell'; fi ;;
+         elif [ -n "$(cant_measure "$1" < "$2")" ]; then printf 'own-shell'
+         else _cm_m1="$(m1_driver_absent "$1" "$2" "${TA:-}" "$REST")"
+              case "$_cm_m1" in driver-absent/*) printf '%s' "$_cm_m1" ;; esac; fi ;;
     esac
   }
+
+  # --- an R13 removal (BL-899): one NAMED path removed, the receipt run as above --------------
+  [ "$WMODE" = "--r13-one" ] && { r13_remove_one; exit 0; }
 
   # --- a CLOSED-on-branch receipt: run once, expect exactly 0 -------------------------------
   # Its fix is claimed present by the close itself, so 0 is the only exit that agrees with the
@@ -592,9 +612,19 @@ if [ "${1:-}" = "--score-one" ] || [ "${1:-}" = "--closed-one" ]; then
 
   # STDERR IS KEPT, NOT DISCARDED: cant_measure reads it to tell the receipt's own shell failing
   # (a missing helper, a missing sourced file, a syntax error) from the subject failing.
-  ( cd "$TA" && eval "$REST" ) >/dev/null 2>"$W/t/$n.err"
+  # R13 (BL-899): with BR_R13_DIR set, this baseline run IS the trace -- closure and key first, the forced
+  # epoch, the run, then the read set before anything else walks the tree. Unset, neither line does anything.
+  # The traced run alone also carries r13_eval_env (core.trustctime=false, scoped to this subshell), because the
+  # forced epoch moves every ctime and a git-refreshing receipt would otherwise re-read the whole tree.
+  [ -n "${BR_R13_DIR:-}" ] && r13_pre "$TA"
+  ( cd "$TA" && { [ -z "${BR_R13_DIR:-}" ] || r13_eval_env; } && eval "$REST" ) >/dev/null 2>"$W/t/$n.err"
   BASE_RC=$?
+  [ -n "${BR_R13_DIR:-}" ] && r13_post "$TA"
   BASE_CM="$(cm_reason "$BASE_RC" "$W/t/$n.err")"
+  # L3 (b): a driver absent at HEAD AND at --base is EXCLUDED, never a cannot-measure member, and the
+  # row says so (`-excluded=driver-absent-at-base`) so R13 counts it separately.
+  BASE_X=""
+  [ -z "$BASE_CM" ] && [ "$(m1_driver_absent "$BASE_RC" "$W/t/$n.err" "$TA" "$REST")" = EXCLUDED-DRIVER-ABSENT-AT-BASE ] && BASE_X="-excluded=driver-absent-at-base"
 
   # --- what the receipt NAMES ---------------------------------------------------------
   # Split on every character a path cannot contain, so each candidate stands as its own word.
@@ -661,13 +691,17 @@ if [ "${1:-}" = "--score-one" ] || [ "${1:-}" = "--closed-one" ]; then
     # A FAIL-SET EXIT STAYS OUT-OF-POPULATION AND CARRIES A MARKER. It is decided AFTER the re-read,
     # so a receipt that answers 9 then 1 is UNSTABLE, never cannot-measure; the parent counts the
     # marker under R7, whose ceiling is 0.
-    wr OUT-OF-POPULATION "base-exit=$BASE_RC${BASE_CM:+-cannot-measure=$BASE_CM}" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
+    wr OUT-OF-POPULATION "base-exit=$BASE_RC${BASE_CM:+-cannot-measure=$BASE_CM}$BASE_X" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
   fi
   # THE OWN-SHELL ROUTE AT EXIT 1. A receipt whose own shell could not source its helper (`. missing.sh`
   # with no guard) exits 1, which is a reproduction's code; without this it would go on to be seeded
   # and scored as though it had measured something.
   if [ -n "$BASE_CM" ]; then
     wr OUT-OF-POPULATION "base-exit=$BASE_RC-cannot-measure=$BASE_CM" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
+  fi
+  # L3 (b) AT EXIT 1 (`bash -e <never built>` exits 1): routed as at 127, so the exclusion is said, never lost.
+  if [ -n "$BASE_X" ]; then
+    wr OUT-OF-POPULATION "base-exit=$BASE_RC$BASE_X" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
   fi
 
   # --- the DRIVER class -----------------------------------------------------------------
@@ -784,9 +818,9 @@ fi
 # PARENT MODE
 # ===========================================================================
 vbr_sec_args() {
-QUIET=0; LEDGER=""; ROOT_ARG=""; EFF_MODE=""; BASE_REF="origin/main"
-MAX_PC=""; MAX_UNSC=""; MAX_OOP=""; MAX_UNSTABLE=""; MIN_SH=""; MIN_ENTRIES=""; MAX_CM=""; MAX_R10=""
-usage() { echo "usage: validate-backlog-receipts.sh [<ledger>] [--archive | --efficiency-only] [--root <dir>] [--base <ref>] [--quiet] [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N] [--max-cannot-measure N] [--max-unanchored N] [--min-sh-receipts N] [--min-entries N]" >&2; }
+QUIET=0; LEDGER=""; ROOT_ARG=""; EFF_MODE=""; BASE_REF="origin/main"; BASE_GIVEN=0
+MAX_PC=""; MAX_UNSC=""; MAX_OOP=""; MAX_UNSTABLE=""; MIN_SH=""; MIN_ENTRIES=""; MAX_CM=""; MAX_R10=""; MAX_R13=""; R13_OPT=0; R13_DRIVE=""; PROBE_SEEDS=""; PROBE_WORLD=""
+usage() { echo "usage: validate-backlog-receipts.sh [<ledger>] [--archive | --efficiency-only] [--root <dir>] [--base <ref>] [--quiet] [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N] [--max-cannot-measure N] [--max-unanchored N] [--traced-removal] [--max-unguarded N] [--min-sh-receipts N] [--min-entries N]" >&2; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --quiet) QUIET=1; shift ;;
@@ -799,7 +833,12 @@ while [ "$#" -gt 0 ]; do
     --max-unstable) MAX_UNSTABLE="${2:-}"; shift 2 ;;
     --max-cannot-measure) MAX_CM="${2:-}"; shift 2 ;;
     --max-unanchored) MAX_R10="${2:-}"; shift 2 ;;
-    --base) BASE_REF="${2:-}"; shift 2 ;;
+    --traced-removal) R13_OPT=1; shift ;;
+    --r13-drive) [ "$#" -ge 2 ] || { usage; exit 2; }; R13_DRIVE="$2"; shift 2 ;;
+    --probe-seeds) [ "$#" -ge 2 ] || { usage; exit 2; }; PROBE_SEEDS="$2"; shift 2 ;;
+    --probe-world) [ "$#" -ge 2 ] || { usage; exit 2; }; PROBE_WORLD="$2"; shift 2 ;;
+    --max-unguarded) MAX_R13="${2:-}"; shift 2 ;;
+    --base) BASE_REF="${2:-}"; BASE_GIVEN=1; shift 2 ;;
     --min-sh-receipts) MIN_SH="${2:-}"; shift 2 ;;
     --min-entries) MIN_ENTRIES="${2:-}"; shift 2 ;;
     -*) usage; exit 2 ;;
@@ -877,7 +916,10 @@ num_or_die() { # num_or_die <value> <name>
 num_or_die "$MAX_CM" --max-cannot-measure
 [ -n "$MAX_R10" ]     || MAX_R10="${AI_DLC_BACKLOG_MAX_UNANCHORED:-$DEFAULT_MAX_R10}"
 num_or_die "$MAX_R10" --max-unanchored
+[ -n "$MAX_R13" ]     || MAX_R13="${AI_DLC_BACKLOG_MAX_UNGUARDED:-$DEFAULT_MAX_R13}"
+num_or_die "$MAX_R13" --max-unguarded
 [ -n "$BASE_REF" ] || { echo "$(me): FAIL -- --base needs a ref" >&2; exit 2; }
+m1_base_check
 # RE-ENTRY. A receipt that invokes `.githooks/pre-push` (dozens of archive receipts do, directly
 # or as `git push`) re-enters this validator from inside the run executing it, whose population at
 # that tree is the same one, so it would recurse without end. Both receipt executors -- score_ledger
@@ -941,6 +983,18 @@ parent_cleanup_trees() {
 }
 parent_cleanup() { parent_cleanup_trees; rm -rf "$WORK"; }
 trap parent_cleanup EXIT INT TERM
+# A RESTRICTED RUN IS NEVER A GATE PASS (lead ruling, batch 256). Given --r13-drive, --probe-seeds, --probe-world, or BR_R13_PROBE_DIR
+# (which moves the instrument probe off the checkouts' filesystem), the run narrowed its self-probes, so every exit
+# after this line leaves through this trap: a verdict of 0 or 1 leaves as 3, a refusal stays 2, and the verdict it
+# would have given is printed as `RESTRICTED: verdict-rc=<n>`. A refusal BEFORE this line (an argument or setup error)
+# exits 2 without the RESTRICTED line. No path of a restricted run exits 0.
+vbr_restricted_exit() {
+  local _rc=$?
+  parent_cleanup
+  echo "RESTRICTED: verdict-rc=$_rc -- this run narrowed the self-probes and is never a gate pass"
+  case "$_rc" in 0|1) exit 3 ;; *) exit "$_rc" ;; esac
+}
+[ -n "$R13_DRIVE$PROBE_SEEDS$PROBE_WORLD${BR_R13_PROBE_DIR:-}" ] && trap vbr_restricted_exit EXIT
 mkdir -p "$WORK/out" "$WORK/rec" "$WORK/t"
 
 # ---------------------------------------------------------------------------
@@ -1519,9 +1573,15 @@ AWK
 #                  Basis line, and an entry whose only step naming is its Basis line fails closed
 #                  (NO-STEP-BOUND). All 5 declare a step scope, and BL-808, 809, 811 and 812 carry
 #                  a matching `Step:` line (implementation, implementation, stories-test-strategy,
-#                  pipeline). BL-810 does not: its scope is four steps and the `Step:` field takes
-#                  one token (cut at the first blank, line 1257 above), so its step is owed before
-#                  the release that closes it, which otherwise fails closed (NO-STEP-BOUND).
+#                  pipeline). BL-810 carries no `Step:` line, and with no Step line a close fails
+#                  closed (NO-STEP-BOUND). Its four-step scope binds by declaring ONE member in `Step:`
+#                  (the field takes one token) and naming all four in the `Verdict:` group, which carries
+#                  every step of the scope (`Step: stories-test-strategy` with the group
+#                  `carry-over-evaluation plus requirements plus architecture plus stories-test-strategy`,
+#                  or `Step: implementation` with `implementation plus gate-validation[implementation]`,
+#                  reads quiet; a group not naming the declared member reads OFF-STEP). egroup_on lets such
+#                  a group read `fell` while the declared member rose, so a close states the declared
+#                  member's own movement beside the group's.
 #   NO-DIRECTION   a `Verdict: <group> fell|did not fall` field (`vd`); direction is read from
 #                  that field ONLY, never from `fell` anywhere in the prose;
 #   OFF-STEP       a group naming the entry's own step and no bucket token other than it (`von`);
@@ -1695,10 +1755,10 @@ vbr_probe_e0() {
 # (quiet); BL-1012 is in $EP/added.stepchg (STEP-AT-CLOSE), BL-1013 is not though BL-10133 is
 # (quiet); BL-1014 a no-step line with a stray `fell` and no token figure (quiet, no-step branch);
 # BL-1015 an added filing with `Step: <bucket>` (quiet: F-STEP takes a bucket token). E0's ledger is
-# isolated, and BL-1000..1015 and BL-10133 were checked unused in docs/backlog.md and
-# docs/backlog.archive.md (control BL-976 present) when seeded. BL-1057..1060 (VERDICT-CONFLICT and
-# the archive's merge-base scope, described where they are printed) were checked the same way:
-# 0 and 0 in each file, control BL-976 3 and 1.
+# isolated: BL-1000..1015, BL-10133 and BL-1057..1060 (VERDICT-CONFLICT and the archive's
+# merge-base scope, described where they are printed) are synthetic ids written only into the
+# probe's own ledger, $EP/backlog.md under $EP="$WORK/effprobe" with WORK from mktemp -d, and the
+# real docs/backlog.md never reaches the probe, so an id equal to a real one collides with nothing.
 EP="$WORK/effprobe"; mkdir -p "$EP/docs/m"
 printf '| Fix | Failure caught |\n|---|---|\n| E-9 | ROWPHRASE alpha |\n\nPLAINPHRASE gamma\n' > "$EP/docs/v.md"
 mkdir -p "$EP/core/skills/ai-dlc/steps"
@@ -1960,7 +2020,8 @@ EOF
 
   BR_WORK="$WORK"; BR_SUBJECT_ROOT="$_sl_root"; BR_PATH_CLASS="$PATH_CLASS"
   BR_TOKAWK="$TOKAWK"; BR_GENERIC_SEED="${BR_GENERIC_SEED:-0}"
-  export BR_WORK BR_SUBJECT_ROOT BR_PATH_CLASS BR_TOKAWK BR_GENERIC_SEED BR_SENTINEL BR_LIB_VARS
+  BR_L3_BASE="$(m1_l3_base "$_sl_root")"
+  export BR_WORK BR_SUBJECT_ROOT BR_PATH_CLASS BR_TOKAWK BR_GENERIC_SEED BR_SENTINEL BR_LIB_VARS BR_L3_BASE
   # BR_RECEIPTS_RUNNING reaches every open receipt and everything it starts -- see RE_ENTRY.
   # The key is resolved BEFORE the pipeline and a failure refuses: an empty key exported here would
   # leave every receipt this pass runs unguarded against re-entry, which fails open.
@@ -2044,7 +2105,8 @@ EOF
   BR_SENTINEL="$(git -C "$_sc_root" ls-tree -r --name-only HEAD 2>/dev/null | sed -n '1p')"
   [ -n "$BR_SENTINEL" ] || { echo "$(me): FAIL -- $_sc_root has no tracked files at HEAD, so no checkout can be proven complete." >&2; return 2; }
   BR_WORK="$WORK"; BR_SUBJECT_ROOT="$_sc_root"
-  export BR_WORK BR_SUBJECT_ROOT BR_SENTINEL BR_LIB_VARS
+  BR_L3_BASE="$(m1_l3_base "$_sc_root")"
+  export BR_WORK BR_SUBJECT_ROOT BR_SENTINEL BR_LIB_VARS BR_L3_BASE
   # BR_RECEIPTS_RUNNING reaches every closed receipt and everything it starts -- see RE_ENTRY.
   _sc_key="$(ledger_key "$_sc_ledger" "$_sc_root")" || { echo "$(me): FAIL -- could not resolve the re-entry key for $_sc_ledger." >&2; return 2; }
   find "$WORK/crec" -type f | sort | BR_RECEIPTS_RUNNING="$_sc_key" xargs -P "$JOBS" -n 1 bash "$SELF" --closed-one
@@ -2600,11 +2662,13 @@ vbr_probes() {
   if [ "$PR_STATE" = replay ]; then
     R1_PROBED="R1 replayed (K=$PR_K)"
     R7_PROBED="R7 and R8 replayed (K=$PR_K)"
+    M1_PROBED="M1 replayed (K=$PR_K)"
     echo "PROBE-RECORD: REPLAYED (K=$PR_K) -- R1 and R7/R8 fired green on this key earlier; they were not run again."
     return 0
   fi
   vbr_probe_r1
   vbr_probe_r7r8
+  vbr_probe_m1
   vbr_probe_record_write
 }
 
@@ -3590,6 +3654,950 @@ rm -f "$fcl"; rmdir "$fcd"
 R12_PROBED="R12 fired both directions over 20 seeded entries"
 }
 
+
+# ===========================================================================
+# M1 AND R13 -- A RECEIPT THAT STOPS MEASURING WHEN A FILE IT READS IS REMOVED (BL-899).
+#
+# M1, driver-absent. A receipt `bash <P>` whose own driver P is gone exits 127 with bash's
+#   `bash: <P>: No such file or directory`, and cant_measure (keyed on `$SELF_NAME: line`) never
+#   saw it, so a renamed driver was invisible to R7 for EVERY driver receipt. m1_driver_absent is
+#   the fourth cannot-measure route, decided in the WORKER (cm_reason) and keyed on the receipt's
+#   OWN operand only: every `bash [-opts] <P>` segment of the top-level `&&` chain, in order, until
+#   a segment of any other shape (a `cd` before it moves the operand). Conjuncts, each with its own
+#   probe seed: exit 127 (or 1 when an option precedes P), `[ ! -e <tree>/<P> ]`, and the exact
+#   stderr line for THAT P. Lead ruling L3 (ai-dlc-a7, batch 256), applied where it is decided:
+#     (a) driver present at HEAD: judged normally;
+#     (b) absent at HEAD and at --base: EXCLUDED-DRIVER-ABSENT-AT-BASE, counted separately, no
+#         cannot-measure member (an unbuilt fix's script; its baseline is 127 by construction);
+#     (c) absent at HEAD, present at --base: a FINDING, driver-absent/DRIVER-REMOVED;
+#     (d) --base not given or not resolving: nothing excluded, driver-absent/
+#         DRIVER-ABSENT-UNRESOLVED-BASE, a finding (fail closed).
+#   "Present at --base" is `git cat-file -e "${BASE}:${P}"`. M1 lives HERE and not in
+#   scripts/backlog-receipt-lib.sh because only this validator has a base to compare; the two
+#   programs therefore differ by exactly this base-dependent route, which both files record.
+#   Its self-probe, vbr_probe_m1, runs with R7/R8 and rides the same probe record.
+#
+# R13, traced removal over the NAMED closure (`--traced-removal`, which the hook passes; a run
+#   without it prints `R13-POPULATION: NOT RUN`, so the fixtures that drive this file over seeded
+#   ledgers never start it). Population: every open `verify: sh` receipt R2 runs.
+#   WHAT DECIDES "READ": atime after a forced epoch, the instrument `.githooks/pre-push` uses for its
+#   pre-suite step keys (comment :135-148, pk_reset_all and the canary :260-268). Before the baseline
+#   run the worker forces every path of its checkout (outside .git) and a control file beside it
+#   to 2000-01-01 00:00; after it, every tracked file whose atime is newer than a 00:01 mark was
+#   READ. The baseline IS R2's own run: same eval, `$0`, stdin, and environment except one variable set:
+#   core.trustctime=false, exported inside the eval's own subshell (r13_eval_env), because the epoch
+#   moves every ctime and a git that refreshes the index would otherwise re-read the whole tree. Before
+#   the epoch the checkout's index is settled (r13_settle_index) so no entry is racily clean or smudged.
+#   THE INSTRUMENT IS PROVED BEFORE IT IS USED: r13_instrument_probe, in `$WORK` beside the
+#   checkouts, must see a cat move atime, an unopened file not move, and a second read after a
+#   second reset move again; anything else prints `R13-INSTRUMENT-REFUSED <which>` and R13 refuses,
+#   exit 2. The third check catches noatime and a filesystem that records only a first access; it does
+#   NOT catch relatime, which the 2000 epoch defeats by design (an atime older than mtime always moves).
+#   Per receipt a must-miss control (an unread file reset by the same find) and a must-hit control
+#   (the driver, the one file a `bash <P>` receipt is KNOWN to read, `./` normalised) refuse that
+#   receipt when either fails. And for EVERY receipt that names a file, a read set holding none of
+#   its named files refuses it (`R13-NO-NAMED-READ <id>`, exit 2, no record): that covers the receipts
+#   with no driver for must-hit (`cd x && bash P`, grep-only). named > 0 with removed = 0 is a
+#   refusal, never a clean line. And R13's traced count plus R2's refused-before-checkout count must
+#   equal the sh population R2 scored, or R13 refuses (`R13-UNTRACED <n>`, exit 2).
+#   RECORDED BLIND SPOT: a stat-only read (`[ -f ]`, `test -e`, a stat) moves no atime and is not
+#   seen; such a file is counted named-unread and is not removed.
+#   RECORDED LIMIT: each removal commits on a detached state, so it writes objects into the subject's
+#   common object store (unreachable, left to gc), and a receipt that reads HEAD's log in a removal
+#   run sees that removal commit.
+#   WHY NOT THE SANDBOX TRACER (BL-899's title): `log stream` drops reports under load
+#   (core/scripts/derive-fixture-readsets.sh:11, :1816) and BL-868 forbids a load-dependent
+#   verdict. The operator ruled atime for this arm (batch 256).
+#   NAMED: a fixed point over NAMED SCRIPTS from the receipt text (B1): a path token resolved
+#   against the referencing script's directory (`$HERE/`, `$DIR/`, `$(dirname "$0")/`, `./`, `../`)
+#   or the repo root (`$ROOT/`, `$root/`, bare) that is TRACKED (B2), read from EXECUTABLE lines
+#   only (a line whose first non-blank character is `#` is dropped), and every named `*.sh` or
+#   shell-shebang file the closure EXECUTES (the expansion rule below) read the same way. Basename
+#   matching is forbidden. A path built from
+#   any other variable is not named: NAMED IS A FLOOR, and every traced read outside it is
+#   ENUMERATED -- counted on the population line every run, never removed. That exclusion is the
+#   owed half of BL-899, which stays PARTIAL. The removal set is NAMED ∩ READ; a named file the
+#   baseline did not read is counted named-unread.
+#   HOW THE NAMED SET REACHED ITS SHAPE (the narrowing, measured by the owner's reference closure script over base
+#   0bb1ee28d, batch 256): with comment lines included the closure SATURATED at 340 files for every seed, through the
+#   hub scripts/validate-enforcement-map.sh, whose comments alone add 128-139 paths; executable lines
+#   only, the archived BL-981 shape names 163, and BL-878 (`bash scripts/validate-fixture-inprocess.sh
+#   --complete`) names 14, of which 6 of its 892 traced reads are named (886 enumerated). The third
+#   saturation was measured on a scratch combine with a sibling bundle (batch 256): a self-probe in
+#   scripts/validate-fixture-invocations.sh names scripts/validate-enforcement-map.sh inside a printf
+#   string and a function argument, on executable lines, and BL-878 then read `R13-NAMED-OVERFLOW
+#   BL-878 126` (176 named). So EXPANSION IS RESTRICTED TO EXECUTION EDGES: every resolved token on an
+#   executable line of the receipt or of an EXPANDED script is still NAMED, but a named script is
+#   EXPANDED (its own text read) only when that text EXECUTES it -- the token is the operand of bash or
+#   sh (options allowed), `.`, `source` or `exec`, or the command word (line start, or after `&&`, `||`,
+#   `;`, `|`, `$(` or `(`), or it is assigned to a variable (`V=path`) that the same text executes by
+#   one of those forms. A token inside an open quote (counted after the last `$(`) is never an
+#   execution edge. Measured by a byte comparison against an independent python reference of the same
+#   rule: BL-878 names 8 on that combine and 7 at this release's tip, the archived BL-981 shape 131 on
+#   both, identical sets. A receipt whose removal set exceeds R13_MAX_REMOVALS (32) prints
+#   `R13-NAMED-OVERFLOW <id> <n>` and is REFUSED, never truncated.
+#   REMOVAL: per P, a fresh checkout of HEAD, `git rm` P and a commit on the private detached state
+#   (gone from disk and from ls-files, the tree clean -- asserted), then the receipt exactly as R2
+#   runs it. PASS when cm_reason, M1 included, names a member; otherwise `UNGUARDED-READ <id> <P>
+#   exit=<n>`. L3 compares a removal against the PRE-REMOVAL HEAD, because a removal stands for a
+#   rename inside a release and a driver new on the branch is absent at --base. Width 4, never wider.
+#   Ceiling DEFAULT_MAX_R13 (`--max-unguarded`, AI_DLC_BACKLOG_MAX_UNGUARDED).
+#   THE RECORD (M3): on a run whose UNGUARDED-READ count is within the ceiling (owner ruling, batch 256), every
+#   judged receipt writes `<K>.green` -- the manifest, a `#r13-rows` line, a `#r13-pop <named removals> <named-unread> <enumerated>` line (a replay re-prints those figures labelled replayed, so the enumerated exclusion is said on every run), and its rows VERBATIM -- in
+#   `<subject common dir>/ai-dlc-r13-records/` (BR_R13_RECORD_DIR overrides; the hook never sets it),
+#   by a temp file and a move. K is the `git hash-object` of the manifest: this file's,
+#   backlog-receipt-lib.sh's and reconcile/lib.sh's blob ids, $BASH_VERSION, `git --version`, the
+#   `command -v` paths of the tools R13 runs, the OS version, whether --base resolves, the entry label (two entries with one receipt text keep two records), the receipt
+#   text, and each NAMED path with its blob id at HEAD and its presence at --base. A record whose
+#   manifest half equals the manifest REPLAYS that receipt: no epoch, no removal, and its stored rows are
+#   printed and counted against --max-unguarded exactly as the live run's were, so a lowered ceiling fails a
+#   replay as it fails a live run. A red R13, a refusal, an OVERFLOW, an instrument refusal, a must-hit
+#   failure, and an EXCLUDED or BASELINE-CM receipt write nothing. RECORDED LIMIT: a change only to an
+#   ENUMERATED file does not move K. The self-probe fires only when a removal will run.
+#   TEST SEAM BR_R13_PROBE_DIR: an absolute directory r13_instrument_probe uses in place of `$WORK/r13i`. It
+#   creates only the probe files that are ABSENT, so a caller can pre-place one (an unreadable `read`, mode
+#   0200) and DRIVE a refusal. The hook never sets it. Its limit: pointed elsewhere, the probe proves atime on
+#   THAT filesystem, not on the one the checkouts are made on.
+# ===========================================================================
+# DEFAULT_MAX_R13 -- DERIVED AT BUILD FROM THE FINAL BASE; RE-MEASURED AFTER REBASE (lead ruling, batch 256). It is a
+# TWO-SIDED RATCHET: the run FAILS when the live UNGUARDED-READ count is ABOVE it, and ALSO when it is BELOW it (a
+# stale-high ceiling hides a regrowth, as in the fork-budget gate), with a message naming the live count to lower it
+# to. `--max-unguarded` / AI_DLC_BACKLOG_MAX_UNGUARDED keep the same two-sided meaning.
+# THE SIX ROWS, measured on the live ledger in the batch 256 window, all against BL-878's receipt (`bash
+# scripts/validate-fixture-inprocess.sh --complete`, base exit 1). They are findings against THAT RECEIPT, not R13's
+# own failures, in two classes by consequence:
+#   (a) THE REAL DEFECT, three rows: scripts/fixture-inprocess-allowlist.txt, scripts/fixture-matrix-allowlist.txt and
+#       scripts/validate-enforcement-map.sh. Removed, the driver exits 1 -- the receipt's own STILL-LIVE code -- on a
+#       DELETED input, which reads as "rows remain". R7 reads exit 1 as a measurement, so a rename of any of them would
+#       leave BL-878 with no instrument.
+#       THE scripts/validate-enforcement-map.sh ROW was introduced by 0.1098.0: BL-982's P2 self-probe in
+#       scripts/validate-fixture-invocations.sh names scripts/validate-enforcement-map.sh on an executable line, and
+#       BL-878's run reads it; removed, the driver exits 1 (cause not determined). The ceiling drops back to 5 when it
+#       is guarded.
+#   (b) THE CONTRACT MISMATCH, three rows: core/fixtures/lib/mutant.sh, scripts/validate-fixture-hygiene.sh and
+#       scripts/validate-fixture-invocations.sh. Removed, the driver gives its DOCUMENTED refusal, exit 2 (its header
+#       :9 documents 0 clean, 1 FAIL, 2 refused; for the two scripts the line is `validate-fixture-inprocess:
+#       REFUSED -- <path> is absent` at :90). R13 scores them unguarded only because R7's could-not-measure contract
+#       wants 9, and 2 is a reproduction's code there. Whether 2 should count is a contract question for the
+#       follow-up and is NOT settled here; the arm does not read stderr.
+# Any release that moves BL-878's unguarded count (rotating BL-878, or changing its driver or the files it reads) must
+# edit DEFAULT_MAX_R13 in scripts/validate-backlog-receipts.sh in the same commit; the two-sided ceiling fails the
+# 'backlog receipts' step otherwise.
+DEFAULT_MAX_R13=6
+R13_MAX_REMOVALS=32
+
+# THE FIXTURE'S CHEAP MODE (fixture-mutants.md clause 5), never passed by the hook. core/fixtures/
+# backlog-receipt-traced-removal starts this file as ONE tagged `cli` start per distinct state, so the workers each
+# start launches are covered by its single self-nested cells.decl row; a full CLI run per state would fire R1, R7/R8,
+# R10-R12 and the efficiency arms for nothing. After vbr_sec_setup it runs exactly one of:
+#   --r13-drive m1       vbr_probe_m1                                      prints `M1-OK <summary>`
+#   --r13-drive probe    r13_arm, vbr_probe_r13                            prints `R13-OK <summary>`
+#   --r13-drive corpus   r13_arm, the corpus score_ledger, r13_corpus      prints `R13-RC <rc> <summary>`
+#   --r13-drive score    the corpus score_ledger's rows                    (the M1 rows of a seeded ledger)
+# --probe-seeds "<BL-id ...>" restricts the M1 and R13 self-probes to those seeds (`-`: none), so a mutant re-runs only
+# the seed that kills it; a restricted run says RESTRICTED in its summary. --probe-world <dir> reuses an R13 probe world
+# r13_world built once (beside it, <dir>.base and <dir>.ledger). With neither, every probe runs whole, as at the gate.
+probe_sel() { [ -z "$PROBE_SEEDS" ] && return 0; case " $PROBE_SEEDS " in *" $1 "*) return 0 ;; esac; return 1; }
+probe_filter() { # probe_filter <ledger> -> the ledger's entries probe_sel keeps
+  if [ -z "$PROBE_SEEDS" ]; then cat "$1"; return 0; fi
+  awk -v keep=" $PROBE_SEEDS " '/^## BL-/ { k = (index(keep, " " $2 " ") > 0) } k' "$1"
+}
+vbr_r13_drive() {
+  case "$R13_DRIVE" in
+    m1) vbr_probe_m1; echo "M1-OK $M1_PROBED"; exit 0 ;;
+    probe) r13_arm; vbr_probe_r13; echo "R13-OK $R13_PROBED"; exit 0 ;;
+    corpus) r13_arm; OUT="$(score_ledger "$LEDGER" "$SUBJECT_ROOT")" || exit 2; read_counts
+            r13_corpus; _vd_rc=$?; echo "R13-RC $_vd_rc $R13_PROBED"; exit "$_vd_rc" ;;
+    score) score_ledger "$LEDGER" "$SUBJECT_ROOT" || exit 2; exit 0 ;;
+    *) echo "$(me): FAIL -- --r13-drive takes m1, probe, corpus or score, not '$R13_DRIVE'" >&2; exit 2 ;;
+  esac
+}
+
+# --- M1 ----------------------------------------------------------------------
+# m1_l3_base <root> -> the commit --base resolves to in <root>, or nothing (L3 (d)).
+m1_l3_base() { git -C "$1" rev-parse --verify -q "${BASE_REF:-origin/main}^{commit}" 2>/dev/null || true; }
+
+# m1_base_check -- LEAD RULING A (batch 256): a --base that was GIVEN and does not resolve to a commit in the subject
+# root refuses the whole run before anything is scored: `M1-BASE-UNRESOLVED: <reason>` and the remedy, exit 2. This is
+# a refusal, never a per-receipt finding. The hook always passes `--base origin/main`. With no --base at all (every
+# other caller) nothing is refused here, BASE_REF keeps its default origin/main, and L3 is judged against it per
+# receipt; only where origin/main does not resolve in the subject root does L3 (d) apply: DRIVER-ABSENT-UNRESOLVED-BASE,
+# a finding.
+m1_base_check() {
+  [ "${BASE_GIVEN:-0}" = 1 ] || return 0
+  git -C "$SUBJECT_ROOT" rev-parse --verify -q "${BASE_REF}^{commit}" >/dev/null 2>&1 && return 0
+  echo "M1-BASE-UNRESOLVED: --base '$BASE_REF' names no commit in $SUBJECT_ROOT, so lead ruling L3 cannot tell a removed driver (a finding) from one never built (excluded)."
+  echo "$(me): FAIL -- M1-BASE-UNRESOLVED. REMEDY: run \`git fetch origin\`, or pass --base <ref> naming a commit that resolves in $SUBJECT_ROOT. Nothing was scored; this is a refusal, not a reading." >&2
+  exit 2 # M1-BASE-UNRESOLVED refuses
+}
+
+# m1_driver_ops <receipt> -> one "<opt 0|1> <P>" line per `bash [options] <P> [plain args]` segment of the
+# top-level `&&` chain, in order, stopping at the first segment of any other shape. Options: short flags (`-e`,
+# `-ex`), long flags (`--norc`), and the four that take the next word (`-o <opt>`, `-O <opt>`, `--rcfile <f>`,
+# `--init-file <f>`). P is printed as written (bash names it that way in its diagnostic); r13_pre normalises `./`.
+m1_driver_ops() {
+  awk '{
+    ns = split($0, SEG, /&&/)
+    for (k = 1; k <= ns; k++) {
+      s = SEG[k]; sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
+      nw = split(s, T, /[ \t]+/)
+      if (nw < 2 || T[1] != "bash") exit 0
+      o = 0; i = 2
+      while (i <= nw && substr(T[i], 1, 1) == "-") {
+        if (T[i] == "-o" || T[i] == "-O" || T[i] == "--rcfile" || T[i] == "--init-file") { o = 1; i += 2; continue }
+        if (T[i] ~ /^--[a-z][a-z-]*$/) { o = 1; i++; continue }
+        if (T[i] ~ /^-[A-Za-z]+$/) { o = 1; i++; continue }
+        exit 0
+      }
+      if (i > nw) exit 0
+      p = T[i]
+      if (p !~ /^[A-Za-z0-9_.\/][A-Za-z0-9_.\/-]*$/ || p ~ /^\//) exit 0
+      for (j = i + 1; j <= nw; j++) if (T[j] !~ /^[A-Za-z0-9_.=\/,:+-]+$/) exit 0
+      print o " " p
+    }
+  }' <<<"$1"
+}
+
+# m1_driver_absent <rc> <stderr-file> <tree> <receipt> -> driver-absent/DRIVER-REMOVED,
+# driver-absent/DRIVER-ABSENT-UNRESOLVED-BASE, EXCLUDED-DRIVER-ABSENT-AT-BASE, or nothing.
+m1_driver_absent() {
+  local _rc="$1" _err="$2" _tree="$3" _o _p
+  case "$_rc" in 127|1) ;; *) return 0 ;; esac
+  [ -n "$_tree" ] && [ -f "$_err" ] || return 0
+  while read -r _o _p; do
+    [ -n "$_p" ] || continue
+    [ "$_rc" = 127 ] || [ "$_o" = 1 ] || continue
+    [ ! -e "$_tree/$_p" ] || continue
+    grep -qxF -- "bash: $_p: No such file or directory" "$_err" || continue
+    if [ -z "${BR_L3_BASE:-}" ]; then printf 'driver-absent/DRIVER-ABSENT-UNRESOLVED-BASE'
+    elif git -C "$_tree" cat-file -e "${BR_L3_BASE}:${_p}" 2>/dev/null; then printf 'driver-absent/DRIVER-REMOVED'
+    else printf 'EXCLUDED-DRIVER-ABSENT-AT-BASE'; fi
+    return 0
+  done <<EOF
+$(m1_driver_ops "$4")
+EOF
+  return 0
+}
+
+# vbr_probe_m1 -- M1's self-probe, BOTH DIRECTIONS, START-FREE: m1_driver_absent (with m1_driver_ops and the L3
+# decision inside it) is called in this process on synthesized inputs -- the receipt text, an exit code, a stderr
+# file holding bash's line, the probe directory as the tree (what is on disk is "present at HEAD"), and BR_L3_BASE
+# naming a base commit built with plumbing only (hash-object, mktree, commit-tree; no checkout, no worker, no
+# `bash "$SELF"`). The base holds gone.sh and ok.sh; on disk are ok.sh, near.sh and mimic.sh. A function-level probe
+# cannot see a CALLER defect (the worker not exporting BR_L3_BASE, or not calling M1): that end-to-end proof is the
+# traced-removal fixture's c-m1-e2e cell, which drives real --score-one and --r13-one workers.
+#   BL-1321 `bash gone.sh`                 rc 127                    (c) -> driver-absent/DRIVER-REMOVED
+#   BL-1322 `bash never.sh`                rc 127                    (b) -> EXCLUDED-DRIVER-ABSENT-AT-BASE
+#   BL-1323 `bash ok.sh`                   rc 0                      (a) -> nothing (judged normally)
+#   BL-1324 `bash near.sh`, stderr names ANOTHER path (other-absent.sh), rc 127 -> nothing (keyed on the own operand)
+#   BL-1325 `bash mimic.sh`, PRESENT, stderr names its own operand, rc 127 -> nothing (the [ ! -e ] conjunct)
+#   BL-1326 `bash -x gone.sh`              rc 127 (an option)        -> driver-absent/DRIVER-REMOVED
+#   BL-1328 `bash -e gone.sh`              rc 1 (`-e` exits 1, measured; -x and --norc give 127) -> DRIVER-REMOVED
+#   BL-1327 `bash ok.sh && bash gone.sh`   rc 127 (the second segment) -> driver-absent/DRIVER-REMOVED
+#   BL-1329 `bash --norc gone.sh`          rc 127 (a long option)    -> driver-absent/DRIVER-REMOVED
+#   BL-1330 `bash -o pipefail gone.sh`     rc 127 (-o takes the next word) -> driver-absent/DRIVER-REMOVED
+#   BL-1331 `bash -e never.sh`             rc 1, never built          -> EXCLUDED-DRIVER-ABSENT-AT-BASE
+#   M1-D    `bash gone.sh` with no resolvable base (L3 (d))           -> driver-absent/DRIVER-ABSENT-UNRESOLVED-BASE
+vbr_probe_m1() {
+m1_fail() { echo "$(me): SELF-PROBE FAILED -- M1: $1" >&2; exit 2; }
+local _q="$WORK/m1probe" _b _row _id _rc _rcpt _line _want _seed _got _n=0
+mkdir -p "$_q" || m1_fail "the probe directory did not create."
+printf 'exit 0\n' > "$_q/ok.sh" && printf 'bash other-absent.sh\n' > "$_q/near.sh" \
+  && printf 'echo "bash: mimic.sh: No such file or directory" >&2\nexit 127\n' > "$_q/mimic.sh" || m1_fail "the probe files did not write."
+_b="$( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+       cd "$_q" && git init -q . >/dev/null 2>&1 || exit 1
+       _h="$(printf 'exit 0\n' | git hash-object -w --stdin)" || exit 1
+       _t="$(printf '100644 blob %s\tgone.sh\n100644 blob %s\tok.sh\n' "$_h" "$_h" | git mktree)" || exit 1
+       git -c user.email=probe@local -c user.name=probe commit-tree "$_t" -m base )" || _b=""
+[ -n "$_b" ] || m1_fail "the plumbing-only base commit did not build."
+# id|rc|receipt|stderr line|want|seed -- the order is load-bearing: each mutant meets its own seed first.
+while IFS='|' read -r _id _rc _rcpt _line _want _seed; do
+  [ -n "$_id" ] || continue
+  probe_sel "$_id" || continue
+  _n=$(( _n + 1 ))
+  printf '%s\n' "$_line" > "$_q/err.$_id" || m1_fail "the stderr file for $_id did not write."
+  if [ "$_id" = M1-D ]; then _got="$(BR_L3_BASE="" m1_driver_absent "$_rc" "$_q/err.$_id" "$_q" "$_rcpt")"
+  else _got="$(BR_L3_BASE="$_b" m1_driver_absent "$_rc" "$_q/err.$_id" "$_q" "$_rcpt")"; fi
+  [ "$_got" = "$_want" ] || m1_fail "seed $_seed: \`$_rcpt\` at exit $_rc read '$_got', want '$_want'."
+done <<'EOF'
+BL-1321|127|bash gone.sh|bash: gone.sh: No such file or directory|driver-absent/DRIVER-REMOVED|m1-c
+BL-1322|127|bash never.sh|bash: never.sh: No such file or directory|EXCLUDED-DRIVER-ABSENT-AT-BASE|m1-b
+BL-1323|0|bash ok.sh|||m1-a
+BL-1324|127|bash near.sh|bash: other-absent.sh: No such file or directory||m1-nearmiss
+BL-1325|127|bash mimic.sh|bash: mimic.sh: No such file or directory||m1-present
+BL-1326|127|bash -x gone.sh|bash: gone.sh: No such file or directory|driver-absent/DRIVER-REMOVED|m1-option
+BL-1328|1|bash -e gone.sh|bash: gone.sh: No such file or directory|driver-absent/DRIVER-REMOVED|m1-option-e
+BL-1327|127|bash ok.sh && bash gone.sh|bash: gone.sh: No such file or directory|driver-absent/DRIVER-REMOVED|m1-chain
+BL-1329|127|bash --norc gone.sh|bash: gone.sh: No such file or directory|driver-absent/DRIVER-REMOVED|m1-option-long
+BL-1330|127|bash -o pipefail gone.sh|bash: gone.sh: No such file or directory|driver-absent/DRIVER-REMOVED|m1-option-arg
+BL-1331|1|bash -e never.sh|bash: never.sh: No such file or directory|EXCLUDED-DRIVER-ABSENT-AT-BASE|m1-b-exit1
+M1-D|127|bash gone.sh|bash: gone.sh: No such file or directory|driver-absent/DRIVER-ABSENT-UNRESOLVED-BASE|m1-d
+EOF
+[ -n "$PROBE_SEEDS" ] || [ "$_n" -eq 12 ] || m1_fail "the probe table read $_n rows, want 12."
+M1_PROBED="M1 fired both directions over 11 seeds and L3 (d), start-free"
+[ -z "$PROBE_SEEDS" ] || M1_PROBED="M1 self-probe RESTRICTED to: $PROBE_SEEDS"
+}
+
+# --- R13 ---------------------------------------------------------------------
+# r13_named_awk <file> -- writes the NAMED-closure program. Input: the tracked list (ARGV). -v root=<tree>
+# -v recf=<receipt file>. Output: the NAMED paths, then `#scanned <n> unread <u>`; exit 2 when it could not
+# read its input. No apostrophe may appear in the program (it is a quoted heredoc, but kept clean anyway).
+r13_named_awk() {
+cat <<'AWK' > "$1"
+function norm(p,    n, i, a, k, s, out) {
+  if (substr(p, 1, 1) == "/") return ""
+  n = split(p, a, "/"); k = 0
+  for (i = 1; i <= n; i++) {
+    s = a[i]
+    if (s == "" || s == ".") continue
+    if (s == "..") { if (k > 0 && ST[k] != "..") { k--; continue }; k++; ST[k] = ".."; continue }
+    k++; ST[k] = s
+  }
+  if (k == 0 || ST[1] == "..") return ""
+  out = ST[1]; for (i = 2; i <= k; i++) out = out "/" ST[i]
+  return out
+}
+function jn(d, p) { return (d == "" ? p : d "/" p) }
+function dirof(p,   i) { i = match(p, /\/[^\/]*$/); return (i ? substr(p, 1, i - 1) : "") }
+function isdirvar(v) { return v == "HERE" || v == "DIR" || v == "here" || v == "dir" || v == "SCRIPT_DIR" || v == "FX_DIR" }
+function isrootvar(v) { return v == "ROOT" || v == "root" || v == "REPO" || v == "REPO_ROOT" }
+function isscript(p,   l, r, f) {
+  if (p ~ /[.]sh$/) return 1
+  f = root "/" p; l = ""; r = (getline l < f); close(f)
+  if (r <= 0) return 0
+  return (l ~ /^#!(.*[^A-Za-z0-9_])?(ba|z|da|k)?sh([^A-Za-z0-9_]|$)/)
+}
+# EXECUTION EDGES. unq(p): p with ONE trailing quote (the token own opening quote) removed. inq(p): 1 when p ends
+# inside an open quote, counted after the last command substitution opener. isexec(pre): the text before a token
+# puts the token in an executed position -- the operand of bash/sh (options allowed), dot, source or exec, or the
+# command word (line start, or after a double ampersand, a double bar, a semicolon, a bar, a substitution opener or an
+# open paren). asgvar(pre): the variable a token is assigned to, or nothing.
+function unq(p,   e) { e = substr(p, length(p), 1); if (e == DQ || e == SQ) return substr(p, 1, length(p) - 1); return p }
+function inq(p,   i, j, s, a, b) {
+  i = 0; s = p
+  while ((j = index(s, "$(")) > 0) { i += j + 1; s = substr(s, j + 2) }
+  s = substr(p, i + 1)
+  a = s; b = s
+  return ((gsub(DQ, "", a) % 2) == 1 || (gsub(SQ, "", b) % 2) == 1)
+}
+function isexec(pre,   p) {
+  p = unq(pre)
+  if (inq(p)) return 0
+  if (p ~ /(^|[;&|(`[:space:]])(bash|sh)([[:space:]]+-[A-Za-z-]+)*[[:space:]]+$/) return 1
+  if (p ~ /(^|[;&|(`[:space:]])([.]|source|exec)[[:space:]]+$/) return 1
+  if (p ~ /^[[:space:]]*$/ || p ~ /(&&|[|][|]|;|[|]|[$][(]|[(])[[:space:]]*$/) return 1
+  return 0
+}
+function asgvar(pre,   p, v) {
+  p = unq(pre)
+  if (inq(p)) return ""
+  if (match(p, /(^|[;&|[:space:]])[A-Za-z_][A-Za-z0-9_]*=$/) == 0) return ""
+  v = substr(p, RSTART, RLENGTH); sub(/^[;&|[:space:]]/, "", v); sub(/=$/, "", v)
+  return v
+}
+function push(c) { if (!(c in EXD)) { EXD[c] = 1; ne++; EQ[ne] = c } }
+# resolve <text> <refdir>: every resolved token is NAMED; one in an executed position is queued for expansion; one
+# assigned to a variable is remembered in ASG; a variable in an executed position is remembered in EXV.
+function resolve(text, refdir,    rest, off, m, pre, v, path, nc, c, i, ms, ml, isx, av, vn) {
+  rest = text; off = 0
+  while (match(rest, TOK) > 0) {
+    ms = RSTART; ml = RLENGTH
+    m = substr(rest, ms, ml); rest = substr(rest, ms + ml)
+    pre = substr(text, 1, off + ms - 1); off = off + ms + ml - 1
+    path = m; v = ""; vn = ""
+    if (substr(m, 1, 1) == "$") {
+      if (match(m, DN0) > 0 || match(m, DNB) > 0) { vn = "dirname"; path = substr(m, RLENGTH + 1) }
+      else if (match(m, VARP) > 0) { v = substr(m, 1, RLENGTH - 1); gsub(/[${}]/, "", v); vn = "var"; path = substr(m, RLENGTH + 1) }
+    }
+    if (vn == "var" && !isdirvar(v) && !isrootvar(v)) continue
+    nc = 0
+    if (vn == "dirname" || (vn == "var" && isdirvar(v))) { nc++; C[nc] = norm(jn(refdir, path)) }
+    else if (vn == "var") { nc++; C[nc] = norm(path) }
+    else if (substr(path, 1, 2) == "./" || substr(path, 1, 3) == "../") { nc++; C[nc] = norm(jn(refdir, path)); nc++; C[nc] = norm(path) }
+    else { nc++; C[nc] = norm(path); nc++; C[nc] = norm(jn(refdir, path)) }
+    for (i = 1; i <= nc; i++) {
+      c = C[i]
+      if (c != "" && (c in TR)) {
+        if (!(c in NAMED)) { NAMED[c] = 1; nn++; NEW[nn] = c }
+        isx = isexec(pre)
+        if (isx) push(c)
+        av = asgvar(pre); if (av != "") ASG[av] = ASG[av] " " c
+        break
+      }
+    }
+  }
+  rest = text; off = 0
+  while (match(rest, VREF) > 0) {
+    ms = RSTART; ml = RLENGTH
+    m = substr(rest, ms, ml); rest = substr(rest, ms + ml)
+    pre = substr(text, 1, off + ms - 1); off = off + ms + ml - 1
+    if (substr(rest, 1, 1) == "/") continue
+    v = m; gsub(/[${}]/, "", v)
+    if (isexec(pre)) EXV[v] = 1
+  }
+}
+# endscope: a variable assigned a path and executed in the same text queues that path; the scope is then cleared.
+function endscope(   v, n, a, i) {
+  for (v in EXV) if (v in ASG) { n = split(ASG[v], a, " "); for (i = 1; i <= n; i++) if (a[i] != "") push(a[i]) }
+  split("", EXV); split("", ASG)
+}
+BEGIN {
+  TOK = "([$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?/|[$][(]dirname \"?[$]0\"?[)]/|[$][(]dirname \"?[$][{]BASH_SOURCE[[]0[]][}]\"?[)]/)?([.][.]?/)*([A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+[.][A-Za-z0-9]+"
+  DN0 = "^[$][(]dirname \"?[$]0\"?[)]/"
+  DNB = "^[$][(]dirname \"?[$][{]BASH_SOURCE[[]0[]][}]\"?[)]/"
+  VARP = "^[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?/"
+  VREF = "[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?"
+  DQ = "\""; SQ = sprintf("%c", 39)
+  nn = 0; ne = 0; ntr = 0
+}
+{ TR[$0] = 1; ntr++ }
+END {
+  if (ntr == 0) { print "#refused no-tracked-set"; exit 2 }
+  r = 0
+  while ((r = (getline l < recf)) > 0) resolve(l, "")
+  if (r < 0) { print "#refused receipt-unread"; exit 2 }
+  close(recf)
+  endscope()
+  q = 1; scanned = 0; unread = 0
+  while (q <= ne) {
+    p = EQ[q]; q++
+    if (!isscript(p)) continue
+    f = root "/" p; scanned++
+    while ((r = (getline l < f)) > 0) {
+      t = l; sub(/^[[:space:]]+/, "", t)
+      if (substr(t, 1, 1) == "#") continue
+      resolve(l, dirof(p))
+    }
+    if (r < 0) unread++
+    close(f)
+    endscope()
+  }
+  for (i = 1; i <= nn; i++) print NEW[i]
+  printf "#scanned %d unread %d\n", scanned, unread
+}
+AWK
+}
+
+# r13_reset <tree> <control-dir> -- the forced epoch, pk_reset_all's technique: every path under <tree> outside
+# .git, and the control beside it, in ONE find. Nothing may walk <tree> between this and the receipt.
+r13_reset() {
+  find "$1" "$2" -path "$1/.git" -prune -o -exec touch -a -h -t 200001010000 {} + 2>/dev/null
+}
+
+# r13_state <state> [detail] -- the worker's per-receipt state line.
+r13_state() { printf '%s %s\n' "$1" "${2:--}" > "$BR_R13_DIR/$n.state"; }
+
+# r13_manifest <tree> <named-file> -> the per-receipt manifest (M3's K is its blob id).
+r13_manifest() {
+  local _d="$BR_R13_DIR"
+  printf '%s\n' "$BR_R13_KCOMMON"
+  printf 'label %s\n' "$LABEL"
+  printf 'receipt %s\n' "$RECEIPT"
+  : > "$_d/$n.ls"; : > "$_d/$n.bc"
+  if [ -s "$2" ]; then
+    tr '\n' '\0' < "$2" | xargs -0 git -C "$1" ls-files -s -- > "$_d/$n.ls" 2>/dev/null || return 1
+    if [ -n "${BR_L3_BASE:-}" ]; then
+      awk -v b="$BR_L3_BASE" '{ print b ":" $0 }' "$2" | git -C "$1" cat-file --batch-check > "$_d/$n.bc" 2>/dev/null || return 1
+    fi
+  fi
+  awk -F'\t' -v lsf="$_d/$n.ls" -v bcf="$_d/$n.bc" '
+    BEGIN { while ((getline l < lsf) > 0) { split(l, h, "\t"); split(h[1], w, " "); B[h[2]] = w[2] }
+            while ((getline l < bcf) > 0) { nb++; P[nb] = (l ~ / missing$/ ? 0 : 1) } }
+    { m++; printf "named %s %s base=%s\n", $0, ($0 in B ? B[$0] : "-"), (nb ? P[m] : "-") }' "$2"
+}
+
+# r13_pre <tree> -- in the --score-one worker, BEFORE the baseline eval: the NAMED closure and the key are read
+# from the tree first (a read moves atime), then the record is asked, then the forced epoch.
+r13_pre() {
+  local _t="$1" _d="$BR_R13_DIR" _man _k _sc
+  printf '%s\n%s\n' "$LABEL" "$RECEIPT" > "$_d/$n.rec"
+  printf '%s\n' "$REST" > "$_d/$n.receipt"
+  git -C "$_t" ls-files > "$_d/$n.tracked" 2>/dev/null || { r13_state refused closure-no-tracked-set; return 0; }
+  awk -v root="$_t" -v recf="$_d/$n.receipt" -f "$BR_R13_AWK" "$_d/$n.tracked" > "$_d/$n.closure" 2>/dev/null \
+    || { r13_state refused closure-unreadable; return 0; }
+  _sc="$(sed -n 's/^#scanned [0-9]* unread \([0-9]*\)$/\1/p' "$_d/$n.closure")"
+  [ "$_sc" = 0 ] || { r13_state refused "closure-unread-script(${_sc:-none})"; return 0; }
+  grep -v '^#' "$_d/$n.closure" | LC_ALL=C sort -u > "$_d/$n.named"
+  m1_driver_ops "$REST" | awk 'NR == 1 { p = $2; while (substr(p, 1, 2) == "./") p = substr(p, 3); print p }' > "$_d/$n.drv"
+  _man="$(r13_manifest "$_t" "$_d/$n.named")" || { r13_state refused key-unreadable; return 0; }
+  _k="$(printf '%s\n' "$_man" | git hash-object --stdin 2>/dev/null)" || _k=""
+  [ -n "$_k" ] || { r13_state refused key-unhashable; return 0; }
+  printf '%s\n' "$_man" > "$_d/$n.man"
+  # A RECORD IS THE MANIFEST, A `#r13-rows` LINE, THEN THE ROWS ITS RUN PRINTED (every one R13-PASS or an
+  # UNGUARDED-READ within the ceiling). The manifest half is compared byte for byte; the rows are replayed
+  # verbatim, so a replay prints and counts exactly what the live run did.
+  if [ -f "$BR_R13_STORE/$_k.green" ] && [ "$(sed '/^#r13-rows$/,$d' "$BR_R13_STORE/$_k.green")" = "$_man" ] \
+     && grep -qx '#r13-rows' "$BR_R13_STORE/$_k.green"; then
+    sed '1,/^#r13-rows$/d' "$BR_R13_STORE/$_k.green" | awk '!/^#r13-pop /' > "$_d/$n.replayrows"
+    sed -n 's/^#r13-pop //p' "$BR_R13_STORE/$_k.green" > "$_d/$n.replaypop"
+    r13_state replay "$_k"; return 0
+  fi
+  mkdir -p "$_d/$n.ctl" && printf 'u\n' > "$_d/$n.ctl/unread" && touch -t 200001010001 "$_d/$n.mark" \
+    || { r13_state refused control-setup; return 0; }
+  r13_settle_index "$_t" || { r13_state refused index-settle; return 0; }
+  r13_state fire "$_k"
+  r13_reset "$_t" "$_d/$n.ctl"
+}
+
+# r13_eval_env -- exported INSIDE the traced (and removal) eval's subshell only: core.trustctime=false, through
+# GIT_CONFIG_COUNT/KEY_0/VALUE_0. The forced epoch moves every file's ctime, and with ctime trusted a receipt that
+# refreshes the index (git status, diff, add) would re-hash, so READ, the whole tree.
+r13_eval_env() { export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.trustctime GIT_CONFIG_VALUE_0=false; }
+
+# r13_settle_index <tree> -- before the epoch, make the checkout's index neither racy nor smudged, so a git that
+# stats the tree during the receipt reads no file whose stat is unchanged. A fresh `worktree add` writes its files
+# and index within one second, so every entry is racily clean (re-read by content) and smudged on the next write.
+# The index's mtime is moved one minute FORWARD, the index refreshed (it is read with the forward timestamp, so no
+# entry is racy and none is smudged on write), and moved forward again after that write.
+r13_settle_index() {
+  local _ix
+  _ix="$(git -C "$1" rev-parse --git-path index 2>/dev/null)" || return 1
+  case "$_ix" in /*) ;; *) _ix="$1/$_ix" ;; esac
+  [ -f "$_ix" ] || return 1
+  touch -m -A 0100 "$_ix" && git -C "$1" -c core.trustctime=false update-index -q --refresh >/dev/null 2>&1
+  touch -m -A 0100 "$_ix"
+}
+
+# r13_post <tree> -- AFTER the baseline eval and before anything else walks the tree: the read set (tracked
+# files only), then the must-miss control.
+r13_post() {
+  local _t="$1" _d="$BR_R13_DIR" _s _x
+  read -r _s _x < "$_d/$n.state" 2>/dev/null || return 0
+  [ "$_s" = fire ] || return 0
+  find "$_t" -path "$_t/.git" -prune -o -type f -neweram "$_d/$n.mark" -print 2>/dev/null \
+    | awk -v p="$_t/" 'index($0, p) == 1 { print substr($0, length(p) + 1) }' > "$_d/$n.allreads"
+  awk 'NR == FNR { T[$0] = 1; next } ($0 in T)' "$_d/$n.tracked" "$_d/$n.allreads" | LC_ALL=C sort -u > "$_d/$n.reads"
+  if [ -n "$(find "$_d/$n.ctl/unread" -neweram "$_d/$n.mark" 2>/dev/null)" ]; then
+    r13_state refused must-miss "$_x"
+  fi
+}
+
+# r13_instrument_probe <dir> -- ATIME MUST BE A WORKING READ INSTRUMENT ON THE FILESYSTEM OF THE CHECKOUTS.
+# Three files and an epoch mark, in a fresh directory beside the checkouts: a file read with cat moves; a file
+# never opened does not; a file read BEFORE the reset does not; and after a SECOND reset a second read moves
+# again (noatime fails that; relatime does not, as the 2000 epoch is older than mtime). Its own literal touches, never r13_reset, so a defect in either is
+# seen by its own guard. Prints `R13-INSTRUMENT-REFUSED <which>` and returns 1 on any failure.
+r13_instrument_probe() {
+  local _d="$1" _why=""
+  # Only ABSENT probe files are created (the BR_R13_PROBE_DIR seam; a fresh $WORK/r13i has none).
+  mkdir -p "$_d" && { [ -e "$_d/read" ] || printf 'r\n' > "$_d/read"; } && { [ -e "$_d/unread" ] || printf 'u\n' > "$_d/unread"; } \
+    && { [ -e "$_d/spare" ] || printf 's\n' > "$_d/spare"; } && touch -t 200001010001 "$_d/mark" || _why=setup
+  [ -n "$_why" ] || cat "$_d/spare" > /dev/null
+  [ -n "$_why" ] || touch -a -h -t 200001010000 "$_d/read" "$_d/unread" "$_d/spare" 2>/dev/null || _why=epoch-refused
+  [ -n "$_why" ] || { cat "$_d/read" > /dev/null; [ -n "$(find "$_d/read" -neweram "$_d/mark" 2>/dev/null)" ] || _why=read-not-moved; }
+  [ -n "$_why" ] || [ -z "$(find "$_d/unread" -neweram "$_d/mark" 2>/dev/null)" ] || _why=unread-moved
+  [ -n "$_why" ] || [ -z "$(find "$_d/spare" -neweram "$_d/mark" 2>/dev/null)" ] || _why=reset-not-applied
+  [ -n "$_why" ] || touch -a -h -t 200001010000 "$_d/read" 2>/dev/null || _why=epoch-refused
+  [ -n "$_why" ] || [ -z "$(find "$_d/read" -neweram "$_d/mark" 2>/dev/null)" ] || _why=second-reset-not-applied
+  [ -n "$_why" ] || { cat "$_d/read" > /dev/null; [ -n "$(find "$_d/read" -neweram "$_d/mark" 2>/dev/null)" ] || _why=second-read-not-moved; }
+  if [ -n "$_why" ]; then
+    echo "R13-INSTRUMENT-REFUSED $_why -- atime is not a working read instrument under $_d, so no read set R13 takes there can be trusted; R13 refuses rather than judge zero removals."
+    return 1
+  fi
+  echo "R13-INSTRUMENT: atime moved on a read and on a second read after a second reset, and not on an unopened file or a file read before the reset, under $(dirname "$_d")."
+  return 0
+}
+
+# r13_arm -- before the corpus score_ledger: decides whether R13 runs at all, proves the instrument, and exports
+# what the --score-one workers need (BR_R13_DIR arms r13_pre/r13_post there).
+R13_STATE=off
+r13_arm() {
+  R13_STATE=off
+  [ "${R13_OPT:-0}" = 1 ] || return 0
+  [ -z "$RE_ENTRY" ] || return 0
+  r13_instrument_probe "${BR_R13_PROBE_DIR:-$WORK/r13i}" || exit 2
+  R13_STATE=on
+  BR_R13_AWK="$WORK/r13named.awk"; r13_named_awk "$BR_R13_AWK"
+  BR_R13_DIR="$WORK/r13c"; mkdir -p "$BR_R13_DIR" || { echo "$(me): FAIL -- R13 could not create $BR_R13_DIR." >&2; exit 2; }
+  if [ -n "${BR_R13_RECORD_DIR:-}" ]; then BR_R13_STORE="$BR_R13_RECORD_DIR"
+  else
+    BR_R13_STORE="$(git -C "$SUBJECT_ROOT" rev-parse --git-common-dir 2>/dev/null)" || BR_R13_STORE=""
+    case "$BR_R13_STORE" in ''|/*) ;; *) BR_R13_STORE="$SUBJECT_ROOT/$BR_R13_STORE" ;; esac
+    [ -n "$BR_R13_STORE" ] && BR_R13_STORE="$BR_R13_STORE/ai-dlc-r13-records"
+  fi
+  { [ -n "$BR_R13_STORE" ] && mkdir -p "$BR_R13_STORE" && [ -w "$BR_R13_STORE" ]; } \
+    || { echo "$(me): FAIL -- R13's record store '$BR_R13_STORE' is not a writable directory; this is a refusal, not a reading." >&2; exit 2; }
+  BR_R13_KCOMMON="$(r13_key_common)" || { echo "$(me): FAIL -- R13's key could not be computed; this is a refusal, not a reading." >&2; exit 2; }
+  export BR_R13_AWK BR_R13_DIR BR_R13_STORE BR_R13_KCOMMON
+}
+
+# r13_key_common -> the manifest lines every receipt's key shares.
+r13_key_common() {
+  local _ids _t
+  _ids="$(git hash-object --no-filters -- "$SELF" "$BR_RECEIPT_LIB" "$LIB" 2>/dev/null)" || return 1
+  [ "$(printf '%s\n' "$_ids" | grep -c .)" -eq 3 ] || return 1
+  printf 'r13-judge %s\n' $_ids
+  printf 'bash %s\n' "$BASH_VERSION"
+  printf 'git %s\n' "$(git --version 2>/dev/null)"
+  for _t in git awk sed grep find touch xargs sort tr cmp; do printf 'tool %s %s\n' "$_t" "$(command -v "$_t")"; done
+  printf 'os %s\n' "$(sw_vers -productVersion 2>/dev/null || uname -sr)"
+  if [ -n "$(m1_l3_base "$SUBJECT_ROOT")" ]; then printf 'base resolved\n'; else printf 'base unresolved\n'; fi
+}
+
+# r13_plan <state-dir> <rows> -- per traced receipt, its verdict line in <state-dir>/plan and its removal records in
+# <state-dir>/rm/; the counts in <state-dir>/pcounts. Decides nothing it cannot read from the files the workers wrote.
+#   plan rows: <n> TAB <label> TAB replay|baseline-cm|excluded|refused|overflow|judge TAB <detail>
+r13_plan() {
+  local _sd="$1" _rows="$2" _f _n _s _x _lbl _row _drv _k _nr _nu _ne
+  local _t=0 _rm=0 _un=0 _en=0 _xc=0 _cc=0 _pc=0 _oc=0 _rc=0 _rmr=0 _unr=0 _enr=0 _a _b _c
+  mkdir -p "$_sd/rm"; : > "$_sd/plan"
+  for _f in "$_sd"/*.state; do
+    [ -f "$_f" ] || continue
+    _n="$(basename "$_f" .state)"; _t=$(( _t + 1 ))
+    read -r _s _x _ < "$_f"
+    _lbl="$(sed -n '1p' "$_sd/$_n.rec")"
+    _row="$(printf '%s\n' "$_rows" | awk -F'\t' -v id="$_lbl" '$2 == id { print $3; exit }')"
+    case "$_s" in
+      replay) _pc=$(( _pc + 1 ))
+              # A REPLAY RE-PRINTS ITS RUN'S POPULATION FIGURES (named removals, named-unread, enumerated), stored
+              # in the record, so the enumerated exclusion is said on every run, never as a replay's zero.
+              if read -r _a _b _c < "$_sd/$_n.replaypop" 2>/dev/null; then
+                _rmr=$(( _rmr + ${_a:-0} )); _unr=$(( _unr + ${_b:-0} )); _enr=$(( _enr + ${_c:-0} ))
+              fi
+              printf '%s\t%s\treplay\t%s\n' "$_n" "$_lbl" "$_x" >> "$_sd/plan"; continue ;;
+      refused) _rc=$(( _rc + 1 )); printf '%s\t%s\trefused\t%s\n' "$_n" "$_lbl" "$_x" >> "$_sd/plan"; continue ;;
+    esac
+    case "$_row" in
+      *-cannot-measure=*) _cc=$(( _cc + 1 )); printf '%s\t%s\tbaseline-cm\t%s\n' "$_n" "$_lbl" "$_row" >> "$_sd/plan"; continue ;;
+      *-excluded=driver-absent-at-base*) _xc=$(( _xc + 1 )); printf '%s\t%s\texcluded\tEXCLUDED-DRIVER-ABSENT-AT-BASE\n' "$_n" "$_lbl" >> "$_sd/plan"; continue ;;
+    esac
+    # THE MUST-HIT CONTROL: the driver is the one file a `bash <P>` receipt is KNOWN to read. Absent from the
+    # read set, the instrument saw nothing, and named > 0 with removed = 0 is a refusal, never a clean line.
+    _drv="$(sed -n '1p' "$_sd/$_n.drv" 2>/dev/null)"
+    if [ -n "$_drv" ] && grep -qxF -- "$_drv" "$_sd/$_n.named" && ! grep -qxF -- "$_drv" "$_sd/$_n.reads"; then
+      _rc=$(( _rc + 1 )); printf '%s\t%s\trefused\tmust-hit:%s\n' "$_n" "$_lbl" "$_drv" >> "$_sd/plan"; continue
+    fi
+    awk 'NR == FNR { R[$0] = 1; next } ($0 in R)' "$_sd/$_n.reads" "$_sd/$_n.named" > "$_sd/$_n.remove"
+    _nr="$(grep -c . "$_sd/$_n.remove")" || _nr=0
+    _nu=$(( $(grep -c . "$_sd/$_n.named" || true) - _nr ))
+    _ne="$(awk 'NR == FNR { N[$0] = 1; next } !($0 in N)' "$_sd/$_n.named" "$_sd/$_n.reads" | grep -c .)" || _ne=0
+    _en=$(( _en + _ne )); _un=$(( _un + _nu ))
+    # NO NAMED READ (tip adversary D4): for EVERY receipt that names a file, a baseline read set holding none of
+    # them is a refusal -- a `cd x && bash P`, a `bash ./P` or a grep-only receipt has no driver for must-hit.
+    if [ -s "$_sd/$_n.named" ] && [ "$_nr" -eq 0 ]; then
+      _rc=$(( _rc + 1 )); printf '%s\t%s\trefused\tno-named-read\n' "$_n" "$_lbl" >> "$_sd/plan"; continue
+    fi
+    if [ "$_nr" -gt "$R13_MAX_REMOVALS" ]; then
+      _oc=$(( _oc + 1 )); printf '%s\t%s\toverflow\t%s\n' "$_n" "$_lbl" "$_nr" >> "$_sd/plan"; continue
+    fi
+    _rm=$(( _rm + _nr )); printf '%s %s %s\n' "$_nr" "$_nu" "$_ne" > "$_sd/$_n.pop"
+    _k=0
+    while IFS= read -r _p; do
+      [ -n "$_p" ] || continue
+      _k=$(( _k + 1 ))
+      { sed -n '1,2p' "$_sd/$_n.rec"; printf '%s\n' "$_p"; } > "$_sd/rm/$_n.r$(printf '%02d' "$_k")"
+    done < "$_sd/$_n.remove"
+    printf '%s\t%s\tjudge\t%s\n' "$_n" "$_lbl" "$_nr" >> "$_sd/plan"
+  done
+  printf '%s %s %s %s %s %s %s %s %s %s %s %s\n' "$_t" "$_rm" "$_un" "$_en" "$_xc" "$_cc" "$_pc" "$_oc" "$_rc" "$_rmr" "$_unr" "$_enr" > "$_sd/pcounts"
+}
+
+# r13_untraced <traced> <rows> <sh-population> -> how many scored receipts R13 neither traced nor saw refused before
+# a checkout (R2's `empty-sh-one-liner` and `malformed-receipt-does-not-parse` rows); 0 when all are accounted for.
+r13_untraced() {
+  local _pre
+  _pre="$(printf '%s\n' "$2" | awk -F'\t' '$1 == "UNSCORABLE" && ($3 == "empty-sh-one-liner" || $3 == "malformed-receipt-does-not-parse")' | grep -c .)" || _pre=0
+  printf '%s' "$(( $3 - $1 - _pre ))"
+}
+
+# r13_removals <state-dir> <root> <ledger> -- runs every removal record in <state-dir>/rm, width 4, through the
+# shipping worker (--r13-one), into <state-dir>/rows; returns 2 when a dispatched removal produced no verdict.
+r13_removals() {
+  local _sd="$1" _root="$2" _key _head _i _got
+  mkdir -p "$_sd/rows.d"
+  _i="$(find "$_sd/rm" -type f | grep -c .)" || _i=0
+  [ "$_i" -gt 0 ] || { : > "$_sd/rows"; return 0; }
+  _key="$(ledger_key "$3" "$_root")" || { echo "$(me): FAIL -- R13 could not resolve the re-entry key for $3." >&2; return 2; }
+  _head="$(git -C "$_root" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null)" || _head=""
+  BR_SENTINEL="$(git -C "$_root" ls-tree -r --name-only HEAD 2>/dev/null | sed -n '1p')"
+  BR_WORK="$WORK"; BR_SUBJECT_ROOT="$_root"; BR_R13_RMOUT="$_sd/rows.d"
+  export BR_WORK BR_SUBJECT_ROOT BR_SENTINEL BR_LIB_VARS BR_R13_RMOUT
+  git -C "$_root" worktree prune >/dev/null 2>&1 || true
+  # L3 IN A REMOVAL RUN COMPARES AGAINST THE PRE-REMOVAL HEAD: the removal stands for a rename inside a release.
+  find "$_sd/rm" -type f | sort | BR_RECEIPTS_RUNNING="$_key" BR_L3_BASE="$_head" xargs -P 4 -n 1 bash "$SELF" --r13-one
+  _got="$(find "$_sd/rows.d" -type f | grep -c .)" || _got=0
+  if [ "$_got" -ne "$_i" ]; then
+    echo "$(me): FAIL -- $_got of $_i dispatched R13 removals produced a verdict; a missing verdict reads exactly like a guarded read. This is a refusal, not a reading." >&2
+    return 2
+  fi
+  cat "$_sd/rows.d"/* > "$_sd/rows"
+  return 0
+}
+
+# r13_removed_ok <tree> <path> -- the removal is APPLIED: gone from disk, gone from ls-files, the tree clean.
+r13_removed_ok() { [ ! -e "$1/$2" ] && [ -z "$(git -C "$1" ls-files -- "$2" 2>/dev/null)" ] && [ -z "$(git -C "$1" status --porcelain 2>/dev/null)" ]; }
+
+# r13_judge_rc <rc> <cm member> -> PASS when the removal made the receipt say it cannot measure.
+r13_judge_rc() { [ -n "$2" ]; }
+
+# r13_remove_one -- the --r13-one worker body: record lines 1-2 are the receipt, line 3 the path to remove.
+r13_remove_one() {
+  local _p _rc _cm _out
+  _p="$(sed -n '3p' "$REC")"
+  _out="$BR_R13_RMOUT/$n"
+  rw() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$LABEL" "$_p" "$2" "$3" > "$_out"; }
+  [ -n "$_p" ] || { rw BROKEN exit=none no-path; return 0; }
+  TA="$(mktree a)"
+  [ -n "$TA" ] || { rw BROKEN exit=none no-removal-worktree; return 0; }
+  git -C "$TA" rm -q -- "$_p" >/dev/null 2>&1 \
+    && git -C "$TA" -c user.email=r13@local -c user.name=r13 -c commit.gpgsign=false -c core.hooksPath=/dev/null \
+         -c maintenance.auto=false commit -q --no-verify -m "r13 removal" >/dev/null 2>&1 \
+    || { rw BROKEN exit=none removal-did-not-commit; return 0; }
+  r13_removed_ok "$TA" "$_p" || { rw BROKEN exit=none removal-not-applied; return 0; }
+  ( cd "$TA" && r13_eval_env && eval "$REST" ) >/dev/null 2>"$W/t/$n.err"
+  _rc=$?
+  _cm="$(cm_reason "$_rc" "$W/t/$n.err")"
+  if r13_judge_rc "$_rc" "$_cm"; then rw R13-PASS "exit=$_rc" "$_cm"; else rw UNGUARDED-READ "exit=$_rc" "-"; fi
+}
+
+# r13_records <state-dir> -- called only on a run within the ceiling (owner ruling, batch 256): every judged receipt
+# whose rows are all R13-PASS or UNGUARDED-READ writes its record -- the manifest, `#r13-rows`, its rows verbatim --
+# by a temp file and a move. A red R13, a refusal, an overflow, an instrument refusal and a must-hit failure exit or
+# return before this is reached, so none of them writes one.
+r13_records() {
+  local _sd="$1" _n _lbl _v _x _k _t
+  while IFS="$(printf '\t')" read -r _n _lbl _v _x; do
+    [ "$_v" = judge ] || continue
+    if [ -n "$(cat "$_sd"/rows.d/"$_n".r* 2>/dev/null | awk -F'\t' '$1 != "R13-PASS" && $1 != "UNGUARDED-READ"')" ]; then continue; fi
+    read -r _ _k < "$_sd/$_n.state"
+    _t="$(mktemp "$BR_R13_STORE/.$_k.XXXXXX")" || continue
+    if { cat "$_sd/$_n.man"; printf '#r13-rows\n'; printf '#r13-pop %s\n' "$(cat "$_sd/$_n.pop" 2>/dev/null)"; cat "$_sd"/rows.d/"$_n".r* 2>/dev/null; } > "$_t" && mv -f "$_t" "$BR_R13_STORE/$_k.green"; then
+      printf 'R13-RECORD: WRITTEN %s (K=%s)\n' "$_lbl" "$_k"
+    else rm -f "$_t"; fi
+  done < "$_sd/plan"
+}
+
+# r13_world <dir> -- the self-probe repository: a base commit, then HEAD. The seeds (header of vbr_probe_r13).
+r13_world() {
+  local _w="$1" _i _l
+  mkdir -p "$_w/p1" "$_w/p2/sub" "$_w/p2/lib" "$_w/p3" "$_w/p4" "$_w/p5" "$_w/p6/enum" "$_w/p7" "$_w/p8" || return 1
+  printf 'grep -q ANCHORWORD p1/f.txt || exit 9\n' > "$_w/p1/d1.sh"
+  printf 'ANCHORWORD\n' > "$_w/p1/f.txt"
+  printf '%s\n' 'HERE="$(cd "$(dirname "$0")" && pwd)"' 'bash "$HERE/sub/c2.sh"' > "$_w/p2/d2.sh"
+  printf '%s\n' 'HERE="$(cd "$(dirname "$0")" && pwd)"' 'bash "$HERE/../lib/h2.sh"' > "$_w/p2/sub/c2.sh"
+  printf 'exit 0\n' > "$_w/p2/sub/h2.sh"
+  printf 'exit 0\n' > "$_w/p2/lib/h2.sh"
+  printf 'bash p3/c3.sh\n' > "$_w/p3/d3.sh"
+  printf '%s\n' '. "$(dirname "$0")/s3.sh"' 's3_fn' > "$_w/p3/c3.sh"
+  printf 's3_fn() { :; }\n' > "$_w/p3/s3.sh"
+  printf '%s\n' '# reads p4/conly.txt' 'F=p4' 'cat "$F/conly.txt" > /dev/null' 'grep -q x p4/f4.txt || exit 1' > "$_w/p4/d4.sh"
+  printf 'x\n' > "$_w/p4/f4.txt"
+  printf 'c\n' > "$_w/p4/conly.txt"
+  printf 'exit 0\n' > "$_w/p5/gone.sh"
+  printf '%s\n' 'cat p6/read.txt > /dev/null' 'for f in p6/enum/*; do cat "$f" > /dev/null; done' > "$_w/p6/d6.sh"
+  printf 'r\n' > "$_w/p6/read.txt"; printf 'n\n' > "$_w/p6/never.txt"; printf 'e\n' > "$_w/p6/enum/e1.txt"
+  printf 'bash p7/other-absent.sh\n' > "$_w/p7/d7.sh"
+  _l="cat"; _i=1
+  while [ "$_i" -le 33 ]; do
+    printf 'f\n' > "$_w/p8/f$(printf '%02d' "$_i").txt"; _l="$_l p8/f$(printf '%02d' "$_i").txt"; _i=$(( _i + 1 ))
+  done
+  printf '%s > /dev/null\n' "$_l" > "$_w/p8/d8.sh"
+  mkdir -p "$_w/p9" "$_w/p10" "$_w/p12" "$_w/p13" || return 1
+  printf '%s\n' 'git status --porcelain > /dev/null' 'cat p9/one.txt > /dev/null' > "$_w/p9/d9.sh"
+  printf 'o\n' > "$_w/p9/one.txt"; printf 'x\n' > "$_w/p9/other.txt"
+  printf '%s\n' 'if false; then bash p10/never.sh; fi' > "$_w/p10/d10.sh"
+  printf 'exit 0\n' > "$_w/p10/never.sh"
+  printf 'GTOKEN\n' > "$_w/p12/g.txt"
+  printf 'exit 0\n' > "$_w/p13/d13.sh"
+  mkdir -p "$_w/p14" "$_w/p15" || return 1
+  printf '%s\n' 'note() { :; }' "printf 'see p14/hub.sh' > /dev/null" 'note p14/hub.sh' \
+    'for f in p14/h*.txt; do cat "$f" > /dev/null; done' > "$_w/p14/d14.sh"
+  _l="cat"; _i=1
+  while [ "$_i" -le 40 ]; do
+    printf 'h\n' > "$_w/p14/h$(printf '%02d' "$_i").txt"; _l="$_l p14/h$(printf '%02d' "$_i").txt"; _i=$(( _i + 1 ))
+  done
+  printf '%s > /dev/null\n' "$_l" > "$_w/p14/hub.sh"
+  printf '%s\n' 'V=p15/hub15.sh' 'bash "$V"' > "$_w/p15/d15.sh"
+  printf 'cat p15/x.txt > /dev/null\n' > "$_w/p15/hub15.sh"
+  printf 'x\n' > "$_w/p15/x.txt"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    cd "$_w" && git init -q . >/dev/null 2>&1 && git add -A >/dev/null 2>&1 \
+      && git -c user.email=probe@local -c user.name=probe -c maintenance.auto=false -c commit.gpgsign=false commit -q --no-verify -m base >/dev/null 2>&1 ) || return 1
+  git -C "$_w" rev-parse HEAD > "$_w.base" 2>/dev/null || return 1
+  printf 'exit 0\n' > "$_w/p5/here.sh"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    cd "$_w" && git rm -q p5/gone.sh >/dev/null 2>&1 && git add -A >/dev/null 2>&1 \
+      && git -c user.email=probe@local -c user.name=probe -c maintenance.auto=false -c commit.gpgsign=false commit -q --no-verify -m head >/dev/null 2>&1 ) || return 1
+  { printf '# p\n\n'
+    for _i in "1301 p1/d1.sh" "1302 p2/d2.sh" "1303 p3/d3.sh" "1304 p4/d4.sh" "1305 p5/here.sh" "1306 p5/never.sh" \
+              "1307 p5/gone.sh" "1308 p6/d6.sh" "1309 p7/d7.sh" "1310 p8/d8.sh" "1311 p9/d9.sh" "1312 p10/d10.sh" \
+              "1314 ./p13/d13.sh" "1315 p14/d14.sh" "1316 p15/d15.sh"; do
+      printf '## BL-%s\n\nverify: sh bash %s\n\n' "${_i%% *}" "${_i#* }"
+    done
+    printf '## BL-1313\n\nverify: sh grep -q GTOKEN p12/g.txt || exit 9\n\n'
+  } > "$_w.ledger"
+}
+
+# vbr_probe_r13 -- R13's self-probe, BOTH DIRECTIONS, every case a REAL trace through score_ledger, r13_plan,
+# r13_removals and the shipping workers, in a mktemp repository, before any corpus removal runs.
+#   p1 BL-1301 anchored driver: removing p1/f.txt exits 9 (PASS); removing the driver is driver-absent (PASS)
+#   p2 BL-1302 S2 in the `$HERE/../lib/x.sh` idiom, two levels down: removing p2/lib/h2.sh gives the child a bare
+#      127 (UNGUARDED-READ); p2/sub/h2.sh, sharing only the BASENAME of p2/lib/h2.sh, is NOT named
+#   p3 BL-1303 S3: c3.sh sources `$(dirname "$0")/s3.sh`; removing it is UNGUARDED-READ
+#   p4 BL-1304 SD: `grep -q x p4/f4.txt || exit 1`: removing f4.txt exits 1 (UNGUARDED-READ); p4/conly.txt is READ
+#      through a variable and named ONLY on a comment line, so it is NOT named (no row)
+#   p5 L3: BL-1305 a driver NEW on the branch is judged and its removal is driver-absent (PASS, against the
+#      pre-removal HEAD); BL-1306 absent at HEAD and base: EXCLUDED; BL-1307 deleted on the branch: BASELINE-CM
+#   p6 BL-1308 tracer controls: p6/read.txt is read, p6/never.txt is not, p6/enum/e1.txt (a `for f in dir/*`)
+#      is read and ENUMERATED, not NAMED
+#   p7 BL-1309 a present driver whose child prints `bash: p7/other-absent.sh: No such ...`: no cannot-measure
+#   p8 BL-1310 34 named files read: R13-NAMED-OVERFLOW, never removed
+#   p9 BL-1311 a driver running `git status` and reading p9/one.txt: its read set is exactly those two files
+#   p10 BL-1312 p10/never.sh named under `if false`, never run: named-unread, not removed
+#   p12 BL-1313 a grep-only receipt (no driver): removing its anchored file exits 9 (PASS)
+#   p13 BL-1314 `bash ./p13/d13.sh`: `./` normalised for must-hit; removing the driver is driver-absent (PASS)
+#   p14 BL-1315 a path in a string literal is not expanded: d14 names p14/hub.sh only inside a printf string and as
+#      a function argument, and reads 40 files through `for f in p14/h*.txt`; hub.sh names all 40 but is never
+#      executed, so it is NAMED and NOT EXPANDED: judge|1, no overflow, no p14/h*.txt named (an expanded hub reads
+#      as overflow|41)
+#   p15 BL-1316 the positive twin: `V=p15/hub15.sh` then `bash "$V"` executes the hub, so it is EXPANDED and the
+#      p15/x.txt it reads is NAMED and removed
+#   failure: BL-1301's read set with the driver struck must refuse (must-hit), and BL-1313's emptied must
+#   refuse (no-named-read)
+vbr_probe_r13() {
+r13_fail() { echo "$(me): SELF-PROBE FAILED -- R13: $1" >&2; exit 2; }
+local _w="$WORK/r13probe" _sd="$WORK/r13p" _o _save _sdir _sstore _p
+mkdir -p "$_sd" "$WORK/r13ps" || r13_fail "the probe directories did not create."
+if [ -n "$PROBE_WORLD" ]; then _w="$PROBE_WORLD"; [ -d "$_w/.git" ] && [ -f "$_w.base" ] && [ -f "$_w.ledger" ] || r13_fail "the --probe-world $_w is not a world r13_world built."
+else r13_world "$_w" || r13_fail "the probe repository did not build."; fi
+probe_filter "$_w.ledger" > "$WORK/r13probe.sel" || r13_fail "the probe ledger did not filter."
+_sdir="$BR_R13_DIR"; _sstore="$BR_R13_STORE"; _save="$BASE_REF"
+BR_R13_DIR="$_sd"; BR_R13_STORE="$WORK/r13ps"; BASE_REF="$(cat "$_w.base")"; export BR_R13_DIR BR_R13_STORE
+_o="$(score_ledger "$WORK/r13probe.sel" "$_w")" || { BASE_REF="$_save"; exit 2; }
+r13_plan "$_sd" "$_o"
+r13_removals "$_sd" "$_w" "$WORK/r13probe.sel" || { BASE_REF="$_save"; exit 2; }
+BR_R13_DIR="$_sdir"; BR_R13_STORE="$_sstore"; BASE_REF="$_save"; export BR_R13_DIR BR_R13_STORE
+pl() { awk -F'\t' -v id="$1" '$2 == id { print $3 "|" $4 }' "$_sd/plan"; }
+rr() { awk -F'\t' -v id="$1" -v p="$2" '$2 == id && $3 == p { print $1 "|" $4 }' "$_sd/rows"; }
+# TRUSTCTIME, FUNCTION-LEVEL, AND FIRST. git compares ctime at one-second granularity here (measured), so a traced
+# run whose epoch lands in the same second as its checkout cannot show the ctime re-read, and seed p9 passes with or
+# without the setting; it shows only when the epoch crosses a second boundary, which no seed can force without a
+# clock wait. So the setting is asserted where it is made, before any seed a crossed second could fail first.
+[ "$( r13_eval_env; git config --get core.trustctime 2>/dev/null )" = false ] || r13_fail "seed trustctime: r13_eval_env does not set core.trustctime=false, so a traced git-refreshing receipt whose epoch crosses a second would re-read the whole tree."
+[ -z "$(awk -F'\t' '$3 == "refused" && $4 == "must-miss"' "$_sd/plan")" ] || r13_fail "seed must-miss: a control file beside the checkout, reset by the same find and never opened, read as moved ($(awk -F'\t' '$3 == "refused" { print $2 ":" $4 }' "$_sd/plan" | tr '\n' ' ')), so the forced epoch was not applied."
+[ -z "$(awk -F'\t' '$3 == "refused" && $4 ~ /^must-hit/' "$_sd/plan")" ] || r13_fail "seed must-hit: a driver the receipt ran was absent from its read set ($(awk -F'\t' '$3 == "refused" { print $2 ":" $4 }' "$_sd/plan" | tr '\n' ' ')), so atime saw no read."
+[ -z "$(awk -F'\t' '$3 == "refused"' "$_sd/plan")" ] || r13_fail "a probe receipt was refused: $(awk -F'\t' '$3 == "refused" { print $2 ":" $4 }' "$_sd/plan" | tr '\n' ' ')"
+! probe_sel BL-1301 || [ "$(rr BL-1301 p1/f.txt)" = "R13-PASS|exit=9" ] || r13_fail "seed p1: removing an anchored read read '$(rr BL-1301 p1/f.txt)', not R13-PASS exit=9."
+! probe_sel BL-1301 || [ "$(rr BL-1301 p1/d1.sh)" = "R13-PASS|exit=127" ] || r13_fail "seed p1: removing the driver read '$(rr BL-1301 p1/d1.sh)', not R13-PASS exit=127 (driver-absent)."
+! probe_sel BL-1302 || [ "$(rr BL-1302 p2/lib/h2.sh)" = "UNGUARDED-READ|exit=127" ] || r13_fail "seed p2: removing a helper two levels down (\$HERE/../lib/h2.sh) read '$(rr BL-1302 p2/lib/h2.sh)', not UNGUARDED-READ exit=127."
+_p="$_sd/$(awk -F'\t' '$2 == "BL-1302" { print $1 }' "$_sd/plan")"
+! probe_sel BL-1302 || ! grep -qxF p2/sub/h2.sh "$_p.named" 2>/dev/null || r13_fail "seed p2-basename: p2/sub/h2.sh, which shares only a BASENAME with the named p2/lib/h2.sh, is in the NAMED set; basename matching is forbidden."
+! probe_sel BL-1303 || [ "$(rr BL-1303 p3/s3.sh)" = "UNGUARDED-READ|exit=127" ] || r13_fail "seed p3: removing a sourced file read '$(rr BL-1303 p3/s3.sh)', not UNGUARDED-READ exit=127."
+! probe_sel BL-1304 || [ "$(rr BL-1304 p4/f4.txt)" = "UNGUARDED-READ|exit=1" ] || r13_fail "seed p4: removing the file a driver greps with \`|| exit 1\` read '$(rr BL-1304 p4/f4.txt)', not UNGUARDED-READ exit=1."
+_p="$_sd/$(awk -F'\t' '$2 == "BL-1308" { print $1 }' "$_sd/plan")"
+! probe_sel BL-1308 || grep -qxF p6/read.txt "$_p.reads" 2>/dev/null || r13_fail "seed p6: a file the driver cat-ed is not in its read set."
+! probe_sel BL-1308 || ! grep -qxF p6/never.txt "$_p.reads" 2>/dev/null || r13_fail "seed p6: a tracked file nothing opened is in the read set."
+! probe_sel BL-1308 || { grep -qxF p6/enum/e1.txt "$_p.reads" && ! grep -qxF p6/enum/e1.txt "$_p.named"; } 2>/dev/null || r13_fail "seed p6-enum: a file read through \`for f in dir/*\` is not READ-and-ENUMERATED (in reads, not named)."
+! probe_sel BL-1308 || [ -z "$(rr BL-1308 p6/enum/e1.txt)" ] || r13_fail "seed p6-enum: an ENUMERATED read was removed ('$(rr BL-1308 p6/enum/e1.txt)'); only NAMED reads are."
+! probe_sel BL-1308 || [ "$(rr BL-1308 p6/read.txt)" = "UNGUARDED-READ|exit=0" ] || r13_fail "seed p6: removing p6/read.txt read '$(rr BL-1308 p6/read.txt)', not UNGUARDED-READ exit=0."
+! probe_sel BL-1304 || [ -z "$(rr BL-1304 p4/conly.txt)" ] || r13_fail "seed p4-comment: p4/conly.txt, named only on a COMMENT line, was removed ('$(rr BL-1304 p4/conly.txt)'); the closure reads executable lines only."
+! probe_sel BL-1305 || [ "$(rr BL-1305 p5/here.sh)" = "R13-PASS|exit=127" ] || r13_fail "seed p5-a: removing a driver new on the branch read '$(rr BL-1305 p5/here.sh)', not R13-PASS (L3 against the pre-removal HEAD)."
+! probe_sel BL-1306 || [ "$(pl BL-1306)" = "excluded|EXCLUDED-DRIVER-ABSENT-AT-BASE" ] || r13_fail "seed p5-b: a driver absent at HEAD and base planned '$(pl BL-1306)', not excluded."
+! probe_sel BL-1307 || case "$(pl BL-1307)" in "baseline-cm|"*"-cannot-measure=driver-absent/DRIVER-REMOVED"*) ;; *) r13_fail "seed p5-c: a driver deleted on the branch planned '$(pl BL-1307)', not baseline-cm (R7 owns it)." ;; esac
+! probe_sel BL-1309 || [ "$(rr BL-1309 p7/d7.sh)" = "R13-PASS|exit=127" ] || r13_fail "seed p7: the near-miss driver's own removal read '$(rr BL-1309 p7/d7.sh)', not R13-PASS."
+! probe_sel BL-1309 || [ "$(pl BL-1309)" = "judge|1" ] || r13_fail "seed p7: a present driver whose child printed another path's bash line planned '$(pl BL-1309)', not judge|1 (its baseline is not cannot-measure)."
+! probe_sel BL-1310 || [ "$(pl BL-1310)" = "overflow|34" ] || r13_fail "seed p8-overflow: a receipt reading 34 named files planned '$(pl BL-1310)', not overflow|34 against a ceiling of $R13_MAX_REMOVALS."
+_p="$_sd/$(awk -F'\t' '$2 == "BL-1311" { print $1 }' "$_sd/plan")"
+! probe_sel BL-1311 || [ "$(tr '\n' ' ' < "$_p.reads" 2>/dev/null)" = "p9/d9.sh p9/one.txt " ] || r13_fail "seed p9-gitstatus: a driver running \`git status\` read '$(tr '\n' ' ' < "$_p.reads" 2>/dev/null)', not exactly its driver and p9/one.txt; the checkout's index was racy or smudged (r13_settle_index), so git re-read the tree."
+_p="$_sd/$(awk -F'\t' '$2 == "BL-1312" { print $1 }' "$_sd/plan")"
+! probe_sel BL-1312 || { [ "$(pl BL-1312)" = "judge|1" ] && grep -qxF p10/never.sh "$_p.named" && ! grep -qxF p10/never.sh "$_p.reads"; } 2>/dev/null \
+  || r13_fail "seed p10-unread: p10/never.sh, NAMED under \`if false\` and never run, planned '$(pl BL-1312)' (want judge|1, named, not read); a read of it is the closure reading after the epoch."
+! probe_sel BL-1313 || [ "$(rr BL-1313 p12/g.txt)" = "R13-PASS|exit=9" ] || r13_fail "seed p12-greponly: removing the file a grep-only receipt anchors read '$(rr BL-1313 p12/g.txt)', not R13-PASS exit=9."
+! probe_sel BL-1314 || [ "$(rr BL-1314 p13/d13.sh)" = "R13-PASS|exit=127" ] || r13_fail "seed p13-dotslash: removing the driver of \`bash ./p13/d13.sh\` read '$(rr BL-1314 p13/d13.sh)', not R13-PASS exit=127."
+_p="$_sd/$(awk -F'\t' '$2 == "BL-1315" { print $1 }' "$_sd/plan")"
+! probe_sel BL-1315 || { [ "$(pl BL-1315)" = "judge|1" ] && grep -qxF p14/hub.sh "$_p.named" && ! grep -q '^p14/h[0-9]' "$_p.named" && grep -qxF p14/h01.txt "$_p.reads"; } 2>/dev/null \
+  || r13_fail "seed p14-string: p14/hub.sh, named only in a printf string and a function argument and never executed, planned '$(pl BL-1315)' (want judge|1, the hub named, none of the 40 p14/h*.txt it names named, p14/h01.txt read and ENUMERATED); a named script that is not EXECUTED must not be expanded."
+_p="$_sd/$(awk -F'\t' '$2 == "BL-1316" { print $1 }' "$_sd/plan")"
+! probe_sel BL-1316 || { grep -qxF p15/x.txt "$_p.named" && [ -n "$(rr BL-1316 p15/x.txt)" ]; } 2>/dev/null \
+  || r13_fail "seed p15-varexec: p15/hub15.sh, assigned to V and run by \`bash \"\$V\"\`, was not expanded: p15/x.txt, which it reads, is not named and removed (row '$(rr BL-1316 p15/x.txt)')."
+[ -n "$PROBE_SEEDS" ] || [ "$(awk 'END { print NR }' "$_sd/rows")" = 23 ] || r13_fail "the probe ran $(awk 'END { print NR }' "$_sd/rows") removals, want 23."
+# THE FAILURE PROBES: the same plan over a copied state with the read set broken must refuse.
+mkdir -p "$WORK/r13pf" "$WORK/r13pg" || r13_fail "the failure-probe directories did not create."
+if probe_sel BL-1301; then
+_p="$(awk -F'\t' '$2 == "BL-1301" { print $1 }' "$_sd/plan")"
+for _x in state rec drv named; do cp "$_sd/$_p.$_x" "$WORK/r13pf/$_p.$_x" || r13_fail "the failure probe could not copy $_x."; done
+grep -vxF p1/d1.sh "$_sd/$_p.reads" > "$WORK/r13pf/$_p.reads"
+printf 'fire -\n' > "$WORK/r13pf/$_p.state"
+r13_plan "$WORK/r13pf" "$_o"
+case "$(awk -F'\t' '{ print $3 "|" $4 }' "$WORK/r13pf/plan")" in "refused|must-hit:p1/d1.sh") ;; *) r13_fail "seed failure-probe: a receipt KNOWN to read its driver, with the driver absent from the read set, planned '$(awk -F'\t' '{ print $3 "|" $4 }' "$WORK/r13pf/plan")', not refused (named > 0 and removed = 0 is a refusal)." ;; esac
+fi
+if probe_sel BL-1313; then
+_p="$(awk -F'\t' '$2 == "BL-1313" { print $1 }' "$_sd/plan")"
+for _x in state rec drv named; do cp "$_sd/$_p.$_x" "$WORK/r13pg/$_p.$_x" || r13_fail "the no-named-read probe could not copy $_x."; done
+: > "$WORK/r13pg/$_p.reads"
+printf 'fire -\n' > "$WORK/r13pg/$_p.state"
+r13_plan "$WORK/r13pg" "$_o"
+case "$(awk -F'\t' '{ print $3 "|" $4 }' "$WORK/r13pg/plan")" in "refused|no-named-read") ;; *) r13_fail "seed no-named-read: a grep-only receipt (no driver) whose read set holds none of its named files planned '$(awk -F'\t' '{ print $3 "|" $4 }' "$WORK/r13pg/plan")', not refused no-named-read." ;; esac
+fi
+R13_PROBED="R13 fired both directions over 16 seeded receipts, 23 traced removals and the must-hit and no-named-read failure probes"
+[ -z "$PROBE_SEEDS" ] || R13_PROBED="R13 self-probe RESTRICTED to: $PROBE_SEEDS"
+}
+
+# r13_corpus -- after every other corpus reader: plans, self-probes (only when a removal will run), removes,
+# records, and prints the rows and the population line. Exit 2 on any refusal; returns 1 over the ceiling.
+R13_PROBED="R13 self-probe not fired (no removal ran)"
+r13_corpus() {
+  local _sd="$WORK/r13c" _t _rm _un _en _xc _cc _pc _oc _rc _ng _n9 _ncm _nrm _f _untr _jd
+  if [ "$R13_STATE" != on ]; then
+    echo "R13-POPULATION: NOT RUN -- --traced-removal was not given, so no receipt was traced and nothing was removed; that is not a clean result."
+    return 0
+  fi
+  if [ "$SH_RECEIPTS" -eq 0 ]; then
+    echo "R13-POPULATION: EMPTY -- 0 open sh receipt(s), so traced removal (R13) observed NOTHING this run; that is not a clean result."
+    # THE TWO-SIDED CEILING HOLDS ON AN EMPTY POPULATION TOO: rotating the receipt that carried the unguarded reads
+    # empties it, and a ceiling left above 0 would let the next, unrelated receipt's reads through unseen.
+    [ "$MAX_R13" -gt 0 ] && { echo "FAIL: R13: the open sh population is EMPTY, so the live UNGUARDED-READ count is 0, BELOW the ceiling of $MAX_R13. REMEDY: lower DEFAULT_MAX_R13 in scripts/validate-backlog-receipts.sh to 0 (and drop the rows beside it). A red R13 writes no record." >&2; return 1; }
+    return 0
+  fi
+  r13_plan "$_sd" "$OUT"
+  read -r _t _rm _un _en _xc _cc _pc _oc _rc _rmr _unr _enr < "$_sd/pcounts"
+  awk -F'\t' '$3 == "overflow" { printf "R13-NAMED-OVERFLOW %s %s\n", $2, $4 }' "$_sd/plan"
+  awk -F'\t' '$3 == "refused" && $4 == "no-named-read" { printf "R13-NO-NAMED-READ %s\n", $2 }' "$_sd/plan"
+  awk -F'\t' '$3 == "refused" { printf "R13-REFUSED %s %s\n", $2, $4 }' "$_sd/plan"
+  # EVERY RECEIPT R2 SCORED IS ACCOUNTED FOR (tip adversary D6): traced (a state file each) plus those R2 refused
+  # before any checkout (an empty or unparsable one-liner) must equal the sh population, or R13 refuses.
+  _untr="$(r13_untraced "$_t" "$OUT" "$SH_RECEIPTS")"
+  if [ "$_untr" != 0 ]; then
+    echo "R13-UNTRACED $_untr"
+    echo "$(me): FAIL -- R13: $_untr of $SH_RECEIPTS open sh receipt(s) R2 scored left no R13 state and were not refused before a checkout, so R13 cannot say it traced them. This is a refusal, not a reading." >&2
+    exit 2
+  fi
+  _nrm="$(find "$_sd/rm" -type f | grep -c .)" || _nrm=0
+  if [ "$_oc" -eq 0 ] && [ "$_rc" -eq 0 ] && [ "$_nrm" -gt 0 ]; then
+    vbr_probe_r13
+    r13_removals "$_sd" "$SUBJECT_ROOT" "$LEDGER" || exit 2
+  else
+    : > "$_sd/rows"
+  fi
+  # A REPLAYED receipt's stored rows join the live ones, so they print and count against --max-unguarded alike.
+  for _f in "$_sd"/*.replayrows; do [ -f "$_f" ] && cat "$_f" >> "$_sd/rows"; done
+  _ng="$(awk -F'\t' '$1 == "UNGUARDED-READ"' "$_sd/rows" | grep -c .)" || _ng=0
+  _n9="$(awk -F'\t' '$4 == "exit=9"' "$_sd/rows" | grep -c .)" || _n9=0
+  _ncm="$(awk -F'\t' '$1 == "R13-PASS"' "$_sd/rows" | grep -c .)" || _ncm=0
+  [ "$QUIET" = 1 ] || awk -F'\t' '$1 != "R13-PASS" { printf "%s\t%s\t%s\t%s\n", $1, $2, $3, $4 }' "$_sd/rows"
+  echo "R13-POPULATION: $SH_RECEIPTS open sh receipt(s), $_t traced, $(( _rm + _rmr )) named removals ($_rmr replayed), $(( _un + _unr )) named-unread ($_unr replayed), $(( _en + _enr )) enumerated excluded ($_enr replayed), $_xc EXCLUDED-DRIVER-ABSENT-AT-BASE, $_cc baseline-cm, $_pc replayed, $_oc overflow, $_rc refused; removals: $_n9 exit 9, $_ncm in the cannot-measure set, $_ng UNGUARDED-READ (ceiling $MAX_R13)."
+  if [ -n "$(awk -F'\t' '$1 == "BROKEN"' "$_sd/rows")" ]; then
+    awk -F'\t' '$1 == "BROKEN" { printf "FAIL: R13 BROKEN\t%s\t%s\t%s\n", $2, $3, $5 }' "$_sd/rows" >&2
+    echo "$(me): FAIL -- R13: a removal could not be built or applied (named above). This is a refusal, not a reading." >&2
+    exit 2
+  fi
+  if [ "$_oc" -gt 0 ] || [ "$_rc" -gt 0 ]; then
+    echo "$(me): FAIL -- R13: $_oc receipt(s) named more than $R13_MAX_REMOVALS read files (R13-NAMED-OVERFLOW, never truncated) and $_rc receipt(s) were refused (R13-REFUSED: an unreadable closure or key, the must-miss control moved, or the must-hit driver was not in the read set). No record was written for them. This is a refusal, not a reading." >&2
+    exit 2
+  fi
+  # NOTHING JUDGED IS NOT A COUNT OF 0: when every traced receipt was baseline cannot-measure or excluded (none judged,
+  # none replayed), the live count reads 0 only because nothing was removed, so a ceiling above 0 cannot be checked and
+  # the run fails saying so -- never "lower it to 0", which would be a reading of nothing.
+  _jd="$(awk -F'\t' '$3 == "judge" || $3 == "replay"' "$_sd/plan" | grep -c .)" || _jd=0
+  [ "$_jd" -eq 0 ] && [ "$MAX_R13" -gt 0 ] && { echo "FAIL: R13: NOTHING WAS JUDGED -- 0 of $_t traced open sh receipt(s) were judged or replayed (each was baseline cannot-measure or excluded), so the live UNGUARDED-READ count of 0 measures nothing and the ceiling of $MAX_R13 cannot be checked. REMEDY: repair the receipts R7 reads as cannot-measure, or, if the receipts that carried the unguarded reads have left the ledger, set DEFAULT_MAX_R13 in scripts/validate-backlog-receipts.sh to match. A red R13 writes no record." >&2; return 1; }
+  # THE CEILING IS TWO-SIDED: a live count BELOW it is a stale-high ceiling, and a failure. No record is written.
+  [ "$_ng" -lt "$MAX_R13" ] && { echo "FAIL: R13: the live UNGUARDED-READ count is $_ng, BELOW the ceiling of $MAX_R13. A stale-high ceiling would let $(( MAX_R13 - _ng )) new unguarded read(s) through unseen. REMEDY: lower DEFAULT_MAX_R13 in scripts/validate-backlog-receipts.sh to $_ng (and drop the rows beside it that no longer print). A red R13 writes no record." >&2; return 1; }
+  [ "$_ng" -gt "$MAX_R13" ] || { r13_records "$_sd"; return 0; }
+  awk -F'\t' '$1 == "UNGUARDED-READ" { printf "FAIL: R13\t%s\t%s\t%s\n", $2, $3, $4 }' "$_sd/rows" >&2
+  echo "FAIL: R13: $_ng read(s) of a NAMED file by an open receipt in $LEDGER, when removed, left the receipt exiting with a code R7 reads as a measurement (named above with the path and the exit), against a ceiling of $MAX_R13. A rename of that file inside a release would leave the entry with no instrument and nothing would say so. REMEDY: guard the read so its absence exits 9 (\`[ -f <path> ] || exit 9\` before it, or \`grep -q <anchor> <path> || exit 9\`), in the receipt or in the script it runs. A red R13 writes no record." >&2
+  return 1
+}
+
 vbr_sec_corpus() {
 # ---------------------------------------------------------------------------
 # THE CORPUS.
@@ -3616,11 +4624,13 @@ if [ -n "$RE_ENTRY" ]; then
   closed_line 0
   echo "R11-POPULATION: SKIPPED -- re-entered from inside a receipt; the outer run checks the branch's added LANDED shas once."
   echo "R10-POPULATION: SKIPPED -- re-entered from inside a receipt, so the anchor convention judged no open receipt here; the outer run judges them once."
+  echo "R13-POPULATION: SKIPPED -- re-entered from inside a receipt, so nothing was traced or removed here; the outer run traces them once."
   eff_report || exit 1
   parent_cleanup_trees
   echo "OK: validate-backlog-receipts -- EXAMINED NOTHING for R2-R8: re-entered from inside a receipt (BR_RECEIPTS_RUNNING set on entry), so no corpus receipt was executed here; ${R7_PROBED}; R12 ${N_R12}/0 PARTIAL entries not manual, ${R12_PROBED}; the efficiency arms ran over ${LEDGER}."
   exit 0
 fi
+r13_arm
 OUT="$(score_ledger "$LEDGER" "$SUBJECT_ROOT")" || exit 2
 read_counts
 # R10 over the records score_ledger just wrote: the exact bytes its workers evaluated, as TEXT.
@@ -3649,6 +4659,7 @@ N_UNSTABLE="$(n_of UNSTABLE)"     || N_UNSTABLE=0
 N_BROKEN="$(n_of BROKEN)"         || N_BROKEN=0
 N_DRIVER="$(n_of DRIVER)"         || N_DRIVER=0
 N_CM="$(printf '%s\n' "$OUT" | awk -F'\t' '$1 == "OUT-OF-POPULATION" && $3 ~ /-cannot-measure=/' | grep -c .)" || N_CM=0
+N_M1X="$(printf '%s\n' "$OUT" | awk -F'\t' '$1 == "OUT-OF-POPULATION" && $3 ~ /-excluded=driver-absent-at-base/' | grep -c .)" || N_M1X=0
 N_CFAIL="$(printf '%s\n' "$CLOSED_OUT" | awk -F'\t' '$1 == "CLOSED-FAIL"' | grep -c .)" || N_CFAIL=0
 N_CBROKEN="$(printf '%s\n' "$CLOSED_OUT" | awk -F'\t' '$1 == "BROKEN"' | grep -c .)" || N_CBROKEN=0
 SCORED=$(( N_PC + N_BOUND + N_FS ))
@@ -3734,6 +4745,7 @@ fi
 # be able to see even under --quiet: it is the difference between "checked, clean" and "checked
 # nothing", and the second reads exactly like the first in every other line this arm prints.
 open_empty_line "$SH_RECEIPTS"
+echo "M1-EXCLUDED: $N_M1X open sh receipt(s) EXCLUDED-DRIVER-ABSENT-AT-BASE (driver absent at HEAD and at --base '$BASE_REF', lead ruling L3 (b)); counted here, never an R7 finding."
 closed_line "$N_CFAIL"
 r11_line "$R11_OUT"
 if [ "$QUIET" != "1" ] && [ "$R10_N" -gt 0 ]; then
@@ -3765,7 +4777,7 @@ fi
 
 if [ "$N_CM" -gt "$MAX_CM" ]; then
   printf '%s\n' "$OUT" | awk -F'\t' '$1 == "OUT-OF-POPULATION" && $3 ~ /-cannot-measure=/ { sub(/^base-exit=/, "", $3); printf "FAIL: R7\t%s\texit=%s\n", $2, $3 }' >&2
-  echo "FAIL: R7: $N_CM OPEN receipt(s) in $LEDGER CANNOT MEASURE their subject (named above), against a ceiling of $MAX_CM. The set is exit 9, 126, 128 and above, and the receipt's OWN shell reporting a missing command, a missing sourced file or a syntax error (scripts/backlog-receipt-lib.sh cant_measure). Such a receipt answers whatever the fix does, so the entry it guards has no instrument -- usually a subject renamed or moved inside a release. NOT in the set: bare 127 and 2-8, which are reproductions. REMEDY: repair the receipt so it reaches its question." >&2
+  echo "FAIL: R7: $N_CM OPEN receipt(s) in $LEDGER CANNOT MEASURE their subject (named above), against a ceiling of $MAX_CM. The set is exit 9, 126, 128 and above, the receipt's OWN shell reporting a missing command, a missing sourced file or a syntax error (scripts/backlog-receipt-lib.sh cant_measure), and the receipt's own \`bash <P>\` driver absent at HEAD (driver-absent: DRIVER-REMOVED when --base has it, DRIVER-ABSENT-UNRESOLVED-BASE when --base does not resolve; absent at --base too is EXCLUDED, lead ruling L3). Such a receipt answers whatever the fix does, so the entry it guards has no instrument -- usually a subject renamed or moved inside a release. NOT in the set: bare 127 and 2-8, which are reproductions. REMEDY: repair the receipt so it reaches its question." >&2
   RC=1
 fi
 if [ "$R10_N" -gt "$MAX_R10" ]; then
@@ -3802,6 +4814,7 @@ r9_run; _r9_rc=$?
 [ "$_r9_rc" -eq 2 ] && exit 2
 [ "$_r9_rc" -eq 0 ] || RC=1
 eff_report || RC=1
+r13_corpus || RC=1
 [ "$RC" -ne 0 ] && exit 1
 
 # THE WORKTREE REGISTRY IS ASSERTED BACK. Each checkout registers in the subject repository,
@@ -3816,7 +4829,7 @@ fi
 _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 if [ "$QUIET" != "1" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; ${R1_PROBED}; R7 ${N_CM}/${MAX_CM} open receipts cannot measure; R8 ${N_CFAIL} closed-on-branch receipts not exiting 0; ${R7_PROBED}; R11 ${N_R11} added LANDED shas not on ${BASE_REF}, ${R11_PROBED}; R10 ${R10_N}/${MAX_R10} open receipts unanchored over ${R10_SCAN} read, ${R10_PROBED}; R12 ${N_R12}/0 PARTIAL entries not manual over ${R12_PART} PARTIAL, ${R12_PROBED}; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; ${R1_PROBED}; R7 ${N_CM}/${MAX_CM} open receipts cannot measure; R8 ${N_CFAIL} closed-on-branch receipts not exiting 0; ${R7_PROBED}; ${M1_PROBED}; ${R13_PROBED}; R11 ${N_R11} added LANDED shas not on ${BASE_REF}, ${R11_PROBED}; R10 ${R10_N}/${MAX_R10} open receipts unanchored over ${R10_SCAN} read, ${R10_PROBED}; R12 ${N_R12}/0 PARTIAL entries not manual over ${R12_PART} PARTIAL, ${R12_PROBED}; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
 else
   # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
   # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
@@ -3837,6 +4850,7 @@ vbr_sec_env "$@"
 vbr_worker "$@"
 vbr_sec_args "$@"
 vbr_sec_setup
+[ -n "$R13_DRIVE" ] && vbr_r13_drive
 vbr_probe_r0
 vbr_sec_r0
 vbr_probe_e0

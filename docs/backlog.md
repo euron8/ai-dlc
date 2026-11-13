@@ -475,7 +475,7 @@ Basis (operator ruling, BL-817): dollars are token-equivalent (a local-model cal
 
 **Progress (BL-810, batch b250): UNMEASURABLE on s321, because the data is absent.** s321 ran no carry-over evaluation round, so there is no yield or cost per round to take; this is an absence, not a measurement not yet taken. Counted over graph's `origin/ai-dlc/feature/per-chain-rebalancer-instances` at e32f9ce2f (`git ls-tree -r --name-only`, files under `_bmad-output/planning-artifacts/s<N>/` whose name carries `carry-over-evaluation`): s319 29 of 522 files, s320 2 of 625 (`carry-over-evaluation.md` and its `.draft`), s321 0 of 719. The control is the looser token `carry-over` over the same listing, which returns s321 1: `stories/story-5-5-restage-base-entry-router-carry-over.md`, a story file about a router, not a round artifact. An impossible-token control over the same listing returns 0. No close and no `Outcome measured:` line follow: the first sprint that runs the round after the width and shard fixes is the one that can measure them.
 
-No `Step:` line (batch 255): this entry's Basis scope is the four planning steps. The `Step:` field takes one token (scripts/validate-backlog-receipts.sh:1257 cuts it at the first blank), but the four-step scope still binds mechanically, through the `Verdict:` group rather than the `Step:` field (corrected in batch 256; the batch-255 text said a step "cannot be declared mechanically"). The group is `<tok>( plus <tok>)*`, each token a step estep() accepts (everdict(), :1215), and the close binds when the group names the `Step:` token and carries no bucket token other than it (egroup_on(), :1231). So `Step: requirements` with the group `carry-over-evaluation plus requirements plus architecture plus stories-test-strategy` binds, and any one of the four can be the `Step:` member. Measured on the validator's own entry awk at origin/main 39239319a (dumped from a copy of the script stopped after the step set is appended, run over four seeded entries): that pair read sok=1 von=1; the same group with ` plus pipeline` added read von=0; a four-token `Step:` line was cut to `carry-over-evaluation` and read sok=1; no `Step:` line read sok=0. The `Step:` line is still owed before the release that closes this entry, which otherwise fails closed (NO-STEP-BOUND).
+No `Step:` line (batch 255): this entry's Basis scope is the four planning steps. The `Step:` field takes one token (scripts/validate-backlog-receipts.sh:1311 cuts it at the first blank), but the four-step scope still binds mechanically, through the `Verdict:` group rather than the `Step:` field (corrected in batch 256; the batch-255 text said a step "cannot be declared mechanically"). The group is `<tok>( plus <tok>)*`, each token a step estep() accepts (everdict(), :1215), and the close binds when the group names the `Step:` token and carries no bucket token other than it (egroup_on(), :1231). So `Step: requirements` with the group `carry-over-evaluation plus requirements plus architecture plus stories-test-strategy` binds, and any one of the four can be the `Step:` member. Measured on the validator's own entry awk at origin/main 39239319a (dumped from a copy of the script stopped after the step set is appended, run over four seeded entries): that pair read sok=1 von=1; the same group with ` plus pipeline` added read von=0; a four-token `Step:` line was cut to `carry-over-evaluation` and read sok=1; no `Step:` line read sok=0. The `Step:` line is still owed before the release that closes this entry, which otherwise fails closed (NO-STEP-BOUND).
 
 **Progress (BL-810, batch b256): s322 is the first sprint measured after the width change. The per-width reading is taken, and the entry stays open on the `Step:` line.**
 - **Precondition holds.** Graph's installed `carry-over-evaluation.md` carries both §3a width phrases ("party dispatches one cross agent per seat" and "elicitation and each adversarial pass dispatch one cross agent") at fb6f198e7 and ed61de745. fb6f198e7 is s322's base, where `.claude/.ai-dlc-version` reads 0.1028.0. Neither phrase is present at 1da426ef9 (s319), and the change shipped in 0.952.0.
@@ -2242,6 +2242,8 @@ The entry stays PARTIAL: `verify:` is unchanged, and there is no LANDED line.
 
 **Close condition.** The allowlist is empty and BL-879's check passes over the whole suite. The receipt runs that check in its completion mode, which exits non-zero while any allowlist row remains, so the entry cannot close the day the check lands. At the 0.986.0 base `bash scripts/validate-fixture-inprocess.sh --complete` exits 1 with `  INCOMPLETE  177 allowlist row(s) remain in scripts/fixture-inprocess-allowlist.txt`, so the receipt reads STILL-LIVE for that reason.
 
+A sixth unguarded read, scripts/validate-enforcement-map.sh (exit 1 when removed; named since 0.1098.0's BL-982 P2 self-probe), is owed here; BL-899's R13 ceiling DEFAULT_MAX_R13 drops from 6 to 5 when it is guarded.
+
 verify: sh bash scripts/validate-fixture-inprocess.sh --complete
 
 ## BL-899 — a command-level sandbox tracer for an arbitrary receipt run, so a traced-removal arm can cover child-process deletions
@@ -2249,6 +2251,44 @@ verify: sh bash scripts/validate-fixture-inprocess.sh --complete
 **NOTE.** Split from BL-836 at 0.987.0. R10 lints receipt TEXT, so it cannot see a child process's missing file (BL-836 shapes 2 and 3: a child's bare 127, and a child script sourcing a missing file) or a driver's internal grep (a `bash x.sh` receipt whose driver greps inside itself). A traced-removal arm would run the receipt in a scratch tree with each file it read removed and require exit 9. That needs a tracer for an arbitrary command. `core/scripts/derive-fixture-readsets.sh --tracer sandbox` traces fixtures only (its runner is at `:1878`), refuses linked worktrees (LW_GATE, `:205`) and copies the whole tree (`:1402`). The driver-absent-at-base exclusion (lead ruling L3) moved here from BL-836: it changes no outcome until an arm reads driver files.
 
 Folded from BL-836 (batch b248, operator ruling): BL-836's three remaining shapes are carried here.
+
+**PARTIAL (batch 256).** Landed: M1, R13 over the NAMED closure, and R13's per-receipt green record, all in `scripts/validate-backlog-receipts.sh` (the M1/R13 block above `vbr_sec_corpus`); R13 IS wired into `.githooks/pre-push`'s "backlog receipts" step, which passes `--traced-removal --base origin/main` (lead ruling, batch 256, cost measured): a replay on an unmoved key adds about 0; a moved key costs 4 min 0 s loaded at width 4 on base `359fdb213` (7 removals); 14 of the last 40 main commits moved the key, so the expected cost is about 50 s per push (35% of pushes x (240 s minus the default step's 99-116 s)). M1 is not behind the flag: every run applies it. Fixture `core/fixtures/backlog-receipt-traced-removal`. Owed, and the reason this entry stays open with `verify: manual` (operator ruling, batch 256: "Stays partial"): reads of files whose path is built from a variable or reached by enumeration. R13 counts them as ENUMERATED on its population line every run and never removes them.
+
+- **M1, driver-absent.** A receipt `bash <P>` whose own driver P is gone exits 127 with `bash: <P>: No such file or directory`, which `cant_measure` (keyed on `$SELF_NAME: line`) never saw, so a renamed driver was invisible to R7. `cm_reason` gains the member `driver-absent`, decided in the worker and keyed on the receipt's OWN operand: every `bash [-opts] <P>` segment of the top-level `&&` chain, `[ ! -e <tree>/<P> ]`, and the exact stderr line for that P. Lead ruling L3 (ai-dlc-a7, batch 256), verbatim:
+  - (a) Driver present at HEAD (the base tree): traced and judged normally.
+  - (b) Absent at HEAD and absent at --base: EXCLUDED-DRIVER-ABSENT-AT-BASE, counted separately. This is an unbuilt fix's script, its baseline is 127 by construction, and there is nothing to compare.
+  - (c) Absent at HEAD but present at --base: a FINDING, DRIVER-REMOVED, never excluded.
+  - (d) --base not given or not resolving: nothing is EXCLUDED. A driver absent at HEAD is reported DRIVER-ABSENT-UNRESOLVED-BASE and judged as a finding (fail closed).
+
+  Options before P are parsed: short flags (`-e`, `-x`), long flags (`--norc`), and the four that take the next word (`-o <opt>`, `-O <opt>`, `--rcfile <f>`, `--init-file <f>`). `bash -x` and `bash --norc` on an absent P exit 127, and `bash -e` exits 1 (measured with `bash -e /absent; echo $?` → 1 on this repo's bash 3.2, batch 256), so exit 1 is admitted only when an option precedes P. `-x`, `-e`, `--norc` and `-o pipefail` each have their own probe seed. A `bash -e <never-built driver>` (exit 1) still reads EXCLUDED. Lead ruling A (batch 256): the hook's step passes `--base origin/main`, and a `--base` that is GIVEN and does not resolve refuses the step before scoring: it prints `M1-BASE-UNRESOLVED: <reason>` and the remedy (`git fetch origin`, or a `--base` naming a commit that resolves), and exits 2. With no `--base` (any other caller), the validator's base defaults to `origin/main` (`BASE_REF="origin/main"`, `BASE_GIVEN=0`), nothing is refused, and L3 is judged against `origin/main` per receipt: a driver absent at HEAD and present there reads DRIVER-REMOVED (an R7 finding), absent at both reads EXCLUDED; only where `origin/main` does not resolve does (d) apply, DRIVER-ABSENT-UNRESOLVED-BASE, a finding. The corpus prints an `M1-EXCLUDED` count every run.
+
+  `scripts/backlog-reverify.sh` has no base, so it reads such a receipt STILL-LIVE; that one base-dependent difference is recorded in both files and in `scripts/backlog-receipt-lib.sh`. M1 FALSE-POSITIVE CENSUS: owed. The live open `sh` population is one receipt (BL-878). The archived receipts were available and were not executed, because they are inert and about 40 of them recurse into pre-push.
+- **R13, the instrument changed from this entry's title.** The read set is NOT taken with the sandbox tracer. It is ATIME after a forced epoch, the instrument `.githooks/pre-push` uses for its pre-suite step keys. Reason: `log stream` drops reports under load (`core/scripts/derive-fixture-readsets.sh:11`, `:1816`), and BL-868 forbids a load-dependent verdict. This is an operator ruling, batch 256, and an exception to "read-set traces use the sandbox tracer" for this arm only. The baseline run IS R2's own run. An in-arm instrument probe in `$WORK` (a read moves atime, an unopened file does not, and a second read after a second reset moves again) refuses with `R13-INSTRUMENT-REFUSED <which>`. Per receipt, a must-miss control and a must-hit control (the driver, `./` normalised) also refuse. For EVERY receipt that names a file, a read set holding none of its named files refuses that receipt (`R13-NO-NAMED-READ <id>`, exit 2, no record); this covers receipts that have no driver for must-hit. R13's traced count plus R2's refused-before-checkout count must equal the sh population R2 scored, or R13 refuses (`R13-UNTRACED <n>`). The traced and removal runs carry `core.trustctime=false`, exported inside the eval's own subshell. The epoch moves every ctime, and without that setting a receipt that refreshes git's index would re-read the whole tree. The checkout's index is also settled before the epoch, so no entry is racily clean. The trustctime setting's effect across a second boundary is inferred from git's documented ctime granularity, not measured; the function-level seed proves only that the setting is applied. RECORDED BLIND SPOT: a stat-only read (`[ -f ]`, `test -e`, a stat) moves no atime and is not detected; such a file counts as named-unread and is not removed. RECORDED LIMIT: removal commits write unreachable objects into the subject's common store, and a receipt that reads HEAD's log during a removal run sees the removal commit.
+- **NAMED.** A fixed point over named scripts from the receipt text, with tokens resolved against the referencing script's directory and the repo root. It reads EXECUTABLE LINES ONLY (lead ruling, batch 256) and never matches by basename. The removal set is NAMED ∩ atime-read. More than 32 removals prints `R13-NAMED-OVERFLOW <id> <n>` and the receipt is refused, never truncated. Narrowing, measured by the owner's reference closure script over base `0bb1ee28d`: with comments included the closure SATURATED at 340 files for every seed, through `scripts/validate-enforcement-map.sh`, whose comments add 128-139 paths. Executable lines only: the archived BL-981 shape names 163, and BL-878 names 14. The shipped awk port reproduced the reference sets byte for byte (14, 163, and `core/fixtures/lib/mutant.sh` naming only itself). A third saturation, on a scratch combine with a sibling bundle: a self-probe in `scripts/validate-fixture-invocations.sh` names `scripts/validate-enforcement-map.sh` in a printf string and a function argument on executable lines, and BL-878 read `R13-NAMED-OVERFLOW BL-878 126` (176 named). So EXPANSION IS RESTRICTED TO EXECUTION EDGES (lead ruling, batch 256): every resolved token on an executable line of the receipt or of an expanded script is still NAMED, but a named script is EXPANDED only when that text executes it -- the operand of bash or sh (options allowed), `.`, `source` or `exec`, the command word (line start, or after `&&`, `||`, `;`, `|`, `$(` or `(`), or a variable assigned the path and executed by one of those forms; a token inside an open quote is never an execution edge. The shipped awk and an independent python reference of the rule agree byte for byte: BL-878 names 8 on that combine and 7 at this release's tip, the archived BL-981 shape 131 on both. Self-probe seeds p14 (a hub named only in a string and a function argument, naming 40 files read by enumeration: judge|1, not overflow) and p15 (`V=hub; bash "$V"`: the hub is expanded) hold the rule in both directions, and the mutant `m-expand-any-named` (expand every named script) is killed by p14.
+- **Removal.** Each removal is a fresh checkout, `git rm` plus a commit on the private detached state (asserted applied), and the receipt run as R2 runs it. A removal PASSES when `cm_reason` names a member; otherwise the row is `UNGUARDED-READ <id> <P> exit=<n>`. In a removal run, L3 compares against the pre-removal HEAD. Width 4. Ceiling `DEFAULT_MAX_R13` = 6. It is derived at build from the final base and re-measured after rebase (lead ruling, batch 256), and it is TWO-SIDED: a live count above it fails, and a live count below it fails too, with a message naming the count to lower it to. An EMPTY open sh population under a ceiling above 0 fails the same way, naming 0; a run in which no receipt was judged or replayed fails saying NOTHING WAS JUDGED, never "lower it to 0". Any release that moves BL-878's unguarded count (rotating BL-878, or changing its driver or the files it reads) must edit DEFAULT_MAX_R13 in scripts/validate-backlog-receipts.sh in the same commit; the two-sided ceiling fails the 'backlog receipts' step otherwise.
+
+- **The six UNGUARDED-READ rows are findings against BL-878's receipt** (`bash scripts/validate-fixture-inprocess.sh --complete`, base exit 1), not failures of this arm. In order of consequence:
+  - (a) THE REAL DEFECT, three rows: `scripts/fixture-inprocess-allowlist.txt`, `scripts/fixture-matrix-allowlist.txt` and `scripts/validate-enforcement-map.sh`. The last was introduced by 0.1098.0: BL-982's P2 self-probe in `scripts/validate-fixture-invocations.sh` names `scripts/validate-enforcement-map.sh` on an executable line, and BL-878's run reads it; removed, the driver exits 1 (cause not determined). The ceiling drops back to 5 when it is guarded. With any of the three removed, the driver exits 1, the receipt's own STILL-LIVE code, on a DELETED input, which reads as "rows remain". R7 reads 1 as a measurement.
+  - (b) THE CONTRACT MISMATCH, three rows: `core/fixtures/lib/mutant.sh`, `scripts/validate-fixture-hygiene.sh` and `scripts/validate-fixture-invocations.sh`. With any of them removed, the driver gives its DOCUMENTED refusal, exit 2. Its header (`scripts/validate-fixture-inprocess.sh:9`) documents 0 clean, 1 FAIL, 2 refused. For the two scripts the line is `validate-fixture-inprocess: REFUSED -- <path> is absent` (`:90`). R13 scores these three unguarded only because R7's could-not-measure contract wants 9. Whether 2 should count is a contract question for the follow-up, and it is NOT settled here. The arm does not read stderr.
+- **Record (M3).** Owner ruling, batch 256: on a run whose UNGUARDED-READ count is within `--max-unguarded`, every judged receipt writes `<K>.green` under `<common dir>/ai-dlc-r13-records/`. The record holds its rows verbatim, and a replay re-prints them and counts them against the ceiling exactly as the live run did. A lowered ceiling therefore fails a replay just as it fails a live run. The record also stores its run's named-removal, named-unread and enumerated counts; a replay re-prints them on the population line, labelled `(N replayed)`, so the enumerated exclusion is stated on every run. A red run, a refusal, an OVERFLOW, an instrument refusal and a must-hit failure write nothing. K covers the judge's blob ids, the tool paths, the OS and bash versions, the base state, the entry label, the receipt text, and each NAMED path's blob id and base presence. An unmoved key replays the receipt with no epoch and no removal. RECORDED LIMIT: a change only to an ENUMERATED file does not move K.
+- **Figures, each labelled with its instrument and tree.**
+  - Sandbox tracer, at `e3d2dfc35` (the M1 hand's contract measurement): BL-878's receipt reads 892 tracked files, 6 NAMED and 886 ENUMERATED under the executable-lines rule. It took 155 s untraced. BL-981's shape reads 41 files and took about 9 s.
+  - The shipped atime arm, on the live ledger at this release's tip before the trustctime fold, on base `064b8c231` (window W3a): BL-878 has 6 named removals, 8 named-unread and 617 enumerated excluded.
+  - The two enumerated counts differ, 886 against 617. Tree drift since `e3d2dfc35` is one possible cause. The stat-only blind spot is another: the sandbox tracer counts a file stat, while atime moves only on an open. By reading the driver, `scripts/validate-fixture-inprocess.sh` stat-tests every `core/fixtures/*/run.sh` with `[ -f ]` to count them (`:105`), so those reach the tracer as accesses and not the atime arm. It also hands `core/fixtures/*/cells.decl` by glob to the judge's static join (`:184`), which opens them. How much of the 269-file gap each cause explains is not determined.
+- **Cadence.** R13 removes only on a moved key, at removal width 4. On a moved key: about 12 min loaded at width 2 on a tree with BL-982's P2 (7 removals); at width 4, measured 4 min 0 s loaded on base `359fdb213` (7 removals); a replay on an unmoved key adds about 0 (whole step 86-93 s vs 99-116 s without the flag). The key moves only when BL-878's receipt text, one of its 7 named files, the validator, lib or tools change: 14 of the last 40 main commits did. The final figures, from one R13 run shaped as the hook step plus `--traced-removal --base origin/main` on base `65bbbedad` under the execution-edge closure: 6 named removals, 1 named-unread, 617 enumerated excluded, 5 UNGUARDED-READ (ceiling 5); on a combine with B1-B2's code: 7 named removals, 1 named-unread, 1223 enumerated excluded, 6 UNGUARDED-READ; the ceiling 6 is that tree's count.
+
+  Per-push work, read from the code:
+  - **Every `--traced-removal` run, moved key or replay.** `r13_arm` runs the in-arm instrument probe once. It touches and reads files only, and runs no receipt.
+  - **Per receipt, in R2's own baseline run** (no extra receipt run):
+    - the NAMED closure (one awk) and the key (`git ls-files`, `ls-files -s`, one `cat-file --batch-check`, one `hash-object`);
+    - on a moved key only: the index settle (two `touch`, one `update-index --refresh`), the forced epoch (one `find` with batched `touch`), and the read-set `find` after the run.
+  - **On a moved key, per judged receipt:**
+    - one removal run per NAMED∩READ path (BL-878: 6), each a `git worktree add`, one `git rm` and one commit, then one receipt run, at width 4;
+    - one record write (a temp file and a move).
+    - Before the first removal runs, the R13 self-probe runs whole once: it builds its probe repository, runs 16 seeded baselines (3 of them re-read in a second checkout, being non-0/1), and runs 23 removals, each a worktree add and a receipt run.
+  - **On a replay:** 0 removal runs, 0 removal worktree adds, no self-probe, no epoch.
+  - **The default run without `--traced-removal`:** none of the above. R13 prints NOT RUN.
+  - The wall-clock share of each part is not counted.
 
 verify: manual
 
@@ -2617,23 +2657,19 @@ verify: manual
 
 ## BL-993 — deploy-validate does not record the sprint PR number and squash sha, so retro Step 1 must re-derive them through a `gh` fallback
 
+**Premise expired (0.1100.0); stays OPEN.** Core never merges the sprint PR:
+- `core/skills/ai-dlc/steps/deploy-validate.md` has 0 `gh pr merge` hits, against 10 other core files that carry it.
+- Its Step 2 runs the consumer's `{deploy_command}`. On the reference consumer that is the extension `.claude/skills/ai-dlc/extensions/steps-domain/deploy-validate-domain.md`, Step 2a, `gh pr merge --squash`.
+
+So deploy-validate does not know the PR number or the squash sha. A core record taken at merge time would have to ask `gh pr view --json number,mergeCommit`. That moves the `gh` call rather than removing it, and the lead ruled it not worth building.
+
+A real fix needs either of two things, and each is a change to the extension contract:
+- core owns the merge;
+- the contract requires the `{deploy_command}` extension to write the PR number and squash sha to a named record that retro Step 1 reads.
+
 **DEFECT.** OPEN. Filed 2026-11-12. Retro Step 1's carry block has to find the sprint PR head after the fact: by tree-match, and (BL-990's fix) by a `gh pr list --head '<sprint-branch>' --state merged` fallback when deploy-validate left the sprint branch reset onto the squash. Both are re-derivations of two facts deploy-validate already knows when it merges: the sprint PR number and the squash commit sha. Owed: deploy-validate records both in a file the retro reads (for example a line in the sprint's pipeline snapshot), and retro Step 1 reads the record instead of calling `gh`. That removes the gh fallback BL-990 adds, which is the removal condition its minimum-mechanism paragraph names.
 
 Not built, and nothing here can be run: the recording mechanism does not exist yet, so there is no behaviour a receipt could execute, and a `has` on `deploy-validate.md` for a sha or PR-number line is closable by a comment. The receipt shape when it lands is a fixture world in `core/fixtures/retro-branch-behind-main` in which the `gh` stub is absent and the carry still derives from the record.
-
-Provenance: batch 256, cluster N9; id allocated by the lead.
-
-verify: manual
-
-## BL-997 — retro's `git checkout main && git merge --ff-only origin/main` chain silently overwrites an operator's IGNORED file at a path origin/main tracks, and exits 0
-
-**DEFECT.** OPEN. Filed 2026-11-12. The chain `git checkout main && git merge --ff-only origin/main` runs in `core/skills/ai-dlc/steps/retro.md` Step 1 (`:27` at base e3d2dfc35 and at the release tip) and in the 7a-post step 1 LAND block (base `:1340`; at the tip the fenced block at `:1434-1435`). When an operator holds an IGNORED file at a path that origin/main force-adds, the fast-forward replaces the file with the upstream bytes and exits 0. At the tip the LAND block then prints its success line `LAND: main at origin/main` over the loss; BL-990's release adds no behaviour change here. An untracked, non-ignored file at such a path is protected, because the fast-forward aborts with exit 1.
-
-Measured worlds: ignored `e.log`, `é.log` and `sub/x.log`, each force-added upstream, all clobbered from the operator's data to the upstream bytes by base `:1340`, by the tip LAND block, and by `:27` at base and at the tip. Controls in the same runs: a no-op subject keeps the operator's data; `git check-ignore e.log` reports the file ignored while `e.log` is tracked at origin/main; `grep ff-only` hits 2 in both files. git 2.56.0. That `gh pr merge --delete-branch`'s own local step is the same chain is an inference from the gh v2.103.3 source, not run.
-
-Owed: a pre-merge check that refuses, before the fast-forward, when a path the incoming range adds is ignored and present in the working tree. BL-986 (C2's sibling, the update skill's return, where C2 is adding a pre-merge check) is the mechanism to reuse rather than growing a second. No fix in this release; the fix owner is assigned later.
-
-Not built, and nothing runnable exists to point a receipt at: no check mechanism exists yet, and a `has` on `retro.md` for a check name is closable by a comment. The receipt shape when it lands is a fixture world in `core/fixtures/retro-branch-behind-main` holding an ignored file at a path origin/main force-adds, in which the Step 1 block and the LAND block both refuse and the file's bytes survive.
 
 Provenance: batch 256, cluster N9; id allocated by the lead.
 
@@ -2651,23 +2687,9 @@ Not built, and no runner-wired receipt is honestly constructible now: the surfac
 
 Provenance: batch 256, cluster N9; id allocated by the lead.
 
-verify: manual
+**PARTIAL (v0.1100.0; the entry stays open, `verify: manual` unchanged, no LANDED line).** Both hooks now count, inside the I66-joined FIXTURE_POOL block (executable lines identical in both), the `PENDING  ` rows each dispatched green fixture printed. The grammar is `^[[:space:]]*PENDING  `, the two shapes the shipped emitters use. One `grep -Hc` runs over the run's captured logs, not one per fixture. An ok row that carries any is rendered `   ok    <name>  (<n> PENDING row(s): its subject is absent, so those parts checked nothing)`, and one `   PENDING: <k> green fixture(s) printed a PENDING row, so part of each checked nothing: <names>` line follows the report. `core/fixtures/consumer-suite-pool` drives the consumer hook over a world of two green fixtures. `pend` prints one row in each shape and must render with `(2 PENDING row(s) ...)`, and the summary must name it. `near` carries the word mid-line and once with one space, and must render bare. False-positive population: a log holds everything a fixture drives, so the census runs over `core/`, `scripts/` and `.githooks/`, not only fixture run.sh files. Printed text matching the grammar comes from 3 emitters, `pause-hook-origin`, `push-drain-refusals` and `retro-branch-behind-main`, each printing only when its subject is absent. Two more places carry the two-space token outside an emitter. `core/scripts/validate-adversarial-convergence.sh` has it only in comments; its runtime rows are `PENDING (`, one space, and stay outside the grammar. `core/scripts/validate-spec-adoption.sh` has it only in a comment. A `%-Ns` printf with PENDING as an argument: 2 sites, both beginning `  ok` or `  FAIL`, against a control of 1081 padded printf sites.
 
-## BL-996 — a sharded gate repair with no serial round leaves the remediation guard no record to lift on
-
-**DEFECT.** OPEN. Filed 2026-11-12. Premise, each derived at this entry's fold tip:
-- `core/skills/ai-dlc/steps/_gate-procedures.md:1092-1133` ("Every escalated entry reaches the serial remediator") dispatches serial remediators only "whenever SERIAL-REQUIRED or ESCALATED-COUNT is above 0" (`:1097-1098`): one lane remediator per lane, in parallel (`:1119`), then one fan-in remediator (`:1130-1131`). When the join prints `SERIAL-REQUIRED: 0` and `ESCALATED-COUNT: 0`, no serial remediator runs.
-- A shard writes no agent id (`core/team-roles/remediator.md` item 1), so the join's record carries none. `_gate-procedures.md:1337` ("At a gate failure, give the remediator its own agent id") gives the gate nonce and an id to ONE serial-round remediator, the fan-in remediator when the round-one join prints `FANIN-COUNT:` above 0 and otherwise the lane-1 remediator, and only that one writes `gate-adjudication/<nonce>.repair.md`. With no serial round, no agent receives an id and nobody writes that file.
-- LIFT ARM 8 of `core/hooks/ai-dlc-gate-remediation-guard.sh` (header `:1856`, the two candidate homes named at `:1858-1859` and read at `:1891-1892`, cited at v0.1083.0) lifts only on a record bound to the live nonce that carries a non-empty `remediator_agent_id:` and a `repaired_checks:` naming a live FAIL. In this case neither home holds such a record, so arm 8 has nothing to lift on.
-- The deny then stands until a re-run of the failed check (`steps/gate-validation.md` "Gate Failure", step 2) writes a newest pass bound to a dispatch that records no FAIL (hook decision order `:69-75`: "a clean bound pass allows"), every FAIL is covered by an in-force SUPPRESSED entry or a verified waiver (`:80-83`, arm 7b), or an operator authorization lifts it (LIFT ARM 9, `:1974`). `remediator.md`'s paragraph **A gate repair record carries the live gate nonce** says that when the join prints `SERIAL-REQUIRED: 0` and `ESCALATED-COUNT: 0`, no serial remediator runs, nobody writes `gate-adjudication/<nonce>.repair.md`, and the guard has no record to lift on; `_gate-procedures.md:1337` says the same and names the three exits above. No mechanism gives the honest sharded repair a lift of its own.
-
-Measured by a measurement hand, driving the REAL hook. The world was built with the real `core/scripts/join-remediator-shards.sh` on the `p_sjgate` path of `core/fixtures/remediator-shard-join/lib.sh` (`:769`), every shard part `edit: n/a`, so the join printed `SERIAL-REQUIRED: 0`, `ESCALATED-COUNT: 0`, `FANIN-COUNT: 0` and `LANE-COUNT: 0`. The joined record `planning-artifacts/s<N>/gate-<type>-repair-p<M>.md` carries no gate nonce: the join copies each part verbatim under a `<!-- shard: X -->` marker (`join-remediator-shards.sh:3452-3494`), so arm 8 skips it at the nonce bind. On byte-identical worlds the hook at base f11a8e566 read DENY, and at the tip DENY, so this release adds no new refusal. Controls at both revisions: no record read DENY, and a genuine column-0 `gate-adjudication/<nonce>.repair.md` read ALLOW. Frequency on the reference consumer (graph main 6ee289617, `git log --all --name-only`): 3 sharded gate repairs, all sprint 319 (`gate-implementation-repair-p3`, `-p4` and `-p5`), against a control of 158 `shards/*repair*` directories and 0 for an impossible token. 0 of the 3 are in this state; each ends in `repair-complete: serial`. The state is reachable by the procedure and has not occurred.
-
-No fix is proposed.
-
-Receipt: `verify: manual`. No runner-wired receipt exists for an unchosen fix. A `has` on either file for the sentence describing this case is closable by that sentence, which this entry's own release already wrote. What else would satisfy a weaker receipt: an operator authorization or a clean re-run, both of which lift today and leave the defect in place.
-
-Provenance: batch 256, release cluster b256-C5, from the tip adversary's review of BL-989 (D1); id allocated by the lead.
+Remainder (lead ruling, batch 256): the count covers only fixtures this run DISPATCHED. A PENDING fixture skipped on a recorded pass is not re-read, so from its second push on it reads 0. That covers the verdict-store skip, the read-set skip and the whole-suite key. That consumer case, the one this entry's title names, is still owed. It needs the PENDING fact carried with the per-fixture record, which touches the READSET_VS span and so every key.
 
 verify: manual
 
@@ -2734,7 +2756,50 @@ verify: manual
 
 ## BL-1003 — the extractor's gate span ends only on `gate-checkpoint.sh … close`, so a gate the lead never closes charges every later step's spawns to `gate-validation[<step>]`
 
-**DEFECT.** OPEN. Filed 2026-11-12. There is no graph pipeline step; the cost lives in `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py`, analysis tooling, and in every reading taken with it.
+**PARTIAL (v0.1100.0) — items 1 and 2 shipped; item 3 is OPEN.**
+
+**Item 1.** `extract.py`'s gate span now ends where the lead LEFT the gate. This is the same rule BL-1009's recover hook applies:
+- While a gate opened at main M is live, a Read with no offset and no limit of a step file sets step and main to that file. The file is not `gate-validation`, not a `_` file, and not M.
+- A later `gate-validation` read, or a `gate-checkpoint.sh` `record`, `done` or `list`, before a new open or close returns to the gate's own label.
+- A gate opened at `pre-step` is never left. A resume `done` inside a live gate ends nothing.
+
+The receipt is `docs/analysis/pipeline-efficiency-s317-s320/scripts/check-gate-terminator.sh <extract.py> docs/analysis/pipeline-efficiency-s317-s320/fixture-gate-terminator`. Its seven worlds are: leave, the `done` twin, return, a whole read of M, close, a record after leaving, and an open at pre-step.
+- The base `extract.py` exits 1 and the fix exits 0.
+- The entry's named wrong fix, `done` in the close set, passes the leave world and fails both twin lines.
+- A form without the verb return and the pre-step rule fails the record and pre-step worlds.
+- `check-slice-reads.sh` still exits 0.
+
+**Item 2.** Per sprint, the extractor prints `gate-terminator sprint=N opens= closed= unclosed= left=` to stderr. Over graph's transcripts to EXTRACT_WIN_END=2026-11-12T18:53:06Z:
+
+| Sprint | opens | closed | unclosed | LEFT |
+|---|---|---|---|---|
+| s317 | 27 | 18 | 9 | 1 |
+| s318 | 16 | 10 | 6 | 2 |
+| s319 | 23 | 13 | 10 | 0 |
+| s320 | 18 | 15 | 3 | 0 |
+| s321 | 40 | 27 | 13 | 1 |
+| s322 | 33 | 20 | 13 | 3 |
+
+The opens and LEFT columns equal BL-1009's opens and "carried" columns.
+
+On s322, `gate-validation[carry-over-evaluation]` owns 86 spawns on the base extractor and 57 on the fix (`owner.json` rows; the 81 above counted `spawns.jsonl`).
+- Across all 6423 owner rows, exactly 29 change owner. All 29 move from that label to `requirements`, between 15:21Z and 19:08Z.
+- 32 spawns between 14:00Z and 15:08:37Z keep the label. The lead's 14:00Z reads of `requirements.md` were slices, and the first whole read is at 15:08:37Z.
+- An impossible label reads 0.
+- Priced by a peer hand with `roll.py` and not re-derived here: $174.46 before and $84.44 after; $90.02 moved and $77.39 stayed.
+
+No spawn-label reading over s317 to s321 moves, because no owner there changed.
+
+**Item 3, OPEN.** None of these readings was re-derived here. The ones that can still move:
+- BL-812 "Projection (c)".
+- BL-975, whose 17:54Z remediators now read `requirements`.
+- The s322 rows of `ask_split.txt`, `poles.txt` and `seats_adversary.txt`.
+- BL-972's per-ask step column.
+- Every lead-side `step` reading (segs, hours, hooks, tools) at the LEFT events.
+
+Whether the 14:00Z to 15:08Z slices should also end the span is a rule change, and it was not made.
+
+**DEFECT.** Filed 2026-11-12. There is no graph pipeline step; the cost lives in `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py`, analysis tooling, and in every reading taken with it.
 
 Mechanism, read at this entry's base. In `extract.py`, `gate_event()` returns `close` for a `gate-checkpoint.sh` invocation only on `if "close" in args: ev = "close"`, and `open` only on `elif "open" in args: ev = "open"`. Every other verb returns None. The lead scan sets the label on `if ev == "open": gate = "gate-validation[" + main + "]"; step = gate` and clears it only on `elif ev == "close": gate = None; step = main`. While a gate is open, a whole read of another step file moves `main` but not `step` (the module docstring's "Gate span" paragraph). So a gate that is opened and never closed keeps its label until the next `open` or `close`, and every spawn in between joins to it.
 
@@ -2816,7 +2881,34 @@ verify: manual
 
 ## BL-1009 — the lead can leave a gate without `gate-checkpoint.sh … close`, so the OPEN marker outlives the gate and a compaction resumes a finished gate
 
-**DEFECT.** OPEN. Filed 2026-11-12. No fix in this release. `core/skills/ai-dlc/steps/gate-validation.md` orders the close in prose: "After Check 15, run `gate-checkpoint.sh --nonce <gate_nonce> close`". `core/skills/ai-dlc/SKILL.md` says the same ("The gate is `open`ed at nonce mint and `close`d after Check 15"). Nothing enforces it. No later step's entry reads the marker, and `gate-checkpoint.sh`'s `open)` arm overwrites an existing marker without refusing.
+**PARTIAL (v0.1100.0) — the recover hook no longer resumes a gate its own session left; a marker left by an EARLIER session is still resumed.**
+
+At a compaction, `core/hooks/ai-dlc-recover.sh` now reads its own session's transcript before it builds the resume block. It uses `extract.py`'s `gate_event()` grammar, and over all 1568 graph lead commands that name a gate script the two grammars agree on every one (157 opens and 109 closes each; 0 disagreements). Its rules:
+- A gate opens on `gate-checkpoint.sh … open` or `gate-transition.sh <story> 3`, and closes on `gate-checkpoint.sh … close`.
+- The gate is LEFT when, after the open, the lead read a step file whole and has done nothing since that returns to it. The step file is not `gate-validation`, not a `_` file, and not the step entered before the open.
+- A later `gate-validation` read returns to it. So does a `gate-checkpoint.sh` `record`, `done` or `list`. On graph, leads recorded checks after a whole read of the next step: `562ac82a`, `9a646a3b` and `e444bf13`.
+- The marker's nonce must have been minted within 120 s of that open's tool call, on either side. A marker another session minted later, or earlier behind a `gate-transition.sh … 3` that refused before its own open, is not this transcript's gate.
+- On a LEFT gate the hook runs `gate-checkpoint.sh --nonce <marker> close`. In place of the RESUME block it injects a short note naming the nonce and the step.
+- A live gate, a gate the lead returned to, a re-read of the gate's own step, a gate opened before any step was entered, and a transcript with no gate line all keep the resume block.
+
+On graph's s322 lead `6c14d949`, with the marker at `planning-20261109T134906Z`, the real hook resumes at cuts of 13:51Z and 14:30Z. At 15:30Z it closes the marker. The 14:00Z reads of `requirements.md` are slices, and the first whole read is at 15:08:37Z.
+
+The proof is arm G2 of fixture `gate-resume`, eight worlds; its tokens are resume, note, marker. The left world reads `nyn`. The live, return, wholeM, record, other, older and nolines worlds read `yny`. Each mutant is killed on its deciding world plus one twin:
+- m10 drops the close; it keeps the marker.
+- m11 drops the leave rule; it resumes the left gate, which is the base behaviour.
+- m12 drops the mint-time binding; it closes another session's later marker.
+- m14 drops the binding's lower bound; it closes a marker minted an hour before a refused transition.
+- m13 drops the verb return; it closes a gate the lead recorded in.
+
+On a consumer whose hook predates this, the arm is SKIP. It was checked in an `install.sh` tree both ways.
+
+**Remainder, OPEN.**
+- A marker left by an earlier session is resumed by the next session's first compaction, because that transcript holds no open to bind it to. Two of the seven carried episodes in the table above went to `handoff`.
+- Between the leave and the next compaction the marker still stands.
+
+**A new state this creates.** A compaction that lands after the lead read another step whole, but before it went back to the gate, closes a gate that was in fact unfinished. On graph, the lead went back to the gate after 4 of the 7 leaves (`189712ad`, `562ac82a`, `9a646a3b`, `e444bf13`), between 5 s and about 4 min later. The lead then finds no marker. Dispatch-guard check (e) denies a gate-3 adjudicator dispatch until the gate is `open`ed again at its nonce, and the hook's note says so. That state was not driven through check (e).
+
+**DEFECT.** Filed 2026-11-12. No fix in this release. `core/skills/ai-dlc/steps/gate-validation.md` orders the close in prose: "After Check 15, run `gate-checkpoint.sh --nonce <gate_nonce> close`". `core/skills/ai-dlc/SKILL.md` says the same ("The gate is `open`ed at nonce mint and `close`d after Check 15"). Nothing enforces it. No later step's entry reads the marker, and `gate-checkpoint.sh`'s `open)` arm overwrites an existing marker without refusing.
 
 What reads the OPEN marker (`OPEN_MARKER="${LEDGER_DIR}/OPEN"` in `core/scripts/gate-checkpoint.sh`), from a grep of `core/` for `gate-checkpoint/OPEN` and for `gate-checkpoint.sh current`. Outside fixtures and `SKILL.md`'s prose, there are two readers, both in `core/` (the first two bullets); the third bullet is the analysis extractor, which is not a `core/` reader:
 - `core/hooks/ai-dlc-recover.sh`, the post-compaction hook. It runs `bash "$_ckp" current` into `GATE_NONCE`, and when that is non-empty it injects "## The cut landed inside a gate -- RESUME it, do not restart it", naming `.gate-checkpoint/OPEN`'s nonce and the `gate-slice.sh … --done` command for it. With a stale marker this sends a lead that has left the gate back into it, at a finished gate's nonce. That is a mis-route, so this is a DEFECT and not a NOTE.
@@ -2908,54 +3000,16 @@ Provenance: batch 256, cluster b256-M5, from the BL-397 value measurement; id al
 
 verify: manual
 
-## BL-999 — a verdict or pass record written outside a git hook (SIGPIPE at its default) is read by a push gate running inside one (SIGPIPE ignored), so a recorded pass can disagree with the hook's verdict
+## BL-1020 — pregate-self-check judges the tree's own hook, while a push runs the main checkout's hook
 
-**DEFECT.** OPEN. Filed 2026-11-12. A push gate runs inside git's pre-push hook, where SIGPIPE is ignored, so a writer whose reader exits early gets EPIPE: it prints a `Broken pipe` diagnostic and exits non-zero instead of dying silently. Records the push skips on are also written by runs outside any hook, where SIGPIPE is at its default. A unit whose verdict depends on that difference can therefore be recorded as a pass outside the hook and be skipped by a push whose own run of it would fail.
+**DEFECT.** OPEN. Filed 2026-11-12. `scripts/pregate-self-check.sh:109` sets `HOOK="$ROOT/.githooks/pre-push"`, and the prefix it runs is cut from that file (the `^step "fixture suite` marker, `:114`-`:116`). A push runs the hook named by `core.hooksPath`, which is the main checkout's `.githooks`, whatever tree is pushed. So the pregate judges one hook and the push runs another. The defect has two directions:
 
-Executed probe (a scratch repo with a bare `file://` remote, under mktemp; git 2.56.0, bash 3.2.57). The repo's pre-push hook runs a snippet and records the writer's `PIPESTATUS[0]` and its stderr; the same snippet runs again outside any hook, from the same script:
-- `yes | head -1`: inside the hook `yes` exits 1, outside it exits 141 (killed by SIGPIPE). Neither printed anything on stderr: BSD `yes` exits on the write error without a message.
-- `grep -h . <300000-line file> | head -1`: inside the hook grep exits 2 and prints `grep: stdout: Broken pipe`, outside it exits 141 with empty stderr.
-- The push exited 0 and the remote ref was created, so the hook ran.
+- **F1: a release that changes the hook, pushed from a LINKED worktree, would be judged by the main checkout's older hook.** A general gap. `core.hooksPath` names the main checkout's `.githooks`, so a linked worktree's push runs that file, not the branch's. Pushing from the main checkout detached at the release sha avoids it.
+- **F2: an un-rebased tree reads GREEN at pregate and fails at push.** The pregate cuts the tree's own hook and runs it against the tree's own validator, so it passes. The push runs the main checkout's hook against that same tree. BL-899's release adds `--traced-removal --base origin/main` to the "backlog receipts" step, so once it lands, an un-rebased tree whose validator predates those flags will pass its pregate and fail its push: the step prints `usage: validate-backlog-receipts.sh [<ledger>] ...`, exits 2, and reads `FAIL`. The mechanism is measured: an older validator exits 2 with `usage` on a flag it does not know (`scripts/validate-backlog-receipts.sh:805`, `-*) usage; exit 2 ;;`, at `d0ea60a54`). It goes in the landing notice.
 
-Instance 1, the verdict seeder. `scripts/seed-verdict-store.sh` runs each named fixture through `core/scripts/hermetic-run.sh` (its header: "Each named fixture runs serially through core/scripts/hermetic-run.sh with the invocation counter armed") from an ordinary shell, and its passes land in the counted store a push reads. Neither file installs a PIPE disposition: `seed-verdict-store.sh` carries no `trap` token at all, and `hermetic-run.sh`'s one trap line is `trap '[ "${AI_DLC_HERMETIC_KEEP:-0}" = 1 ] || rm -rf "$HR_WORK"' EXIT` (`:149`), with 0 lines naming PIPE in either file. Control: the same count finds 6 `trap` lines in `.githooks/pre-push`, also 0 naming PIPE, so the hook's ignored SIGPIPE comes from git, as the probe shows, and not from the hook. The seeder was not run for this entry. The case it bit: 0.1081.0's fix of `i75_failsclosed` in `scripts/validate-enforcement-map.sh` (now `:6548`, `i75_norm "$1" | awk '/exit [0-9]|:-\/nonexistent/ { f = 1 } END { exit (f ? 0 : 1) }'`). At base the reader was `i75_norm | grep -qE`, and its writers printed `Broken pipe` only under the hook's ignored SIGPIPE, which turned `validator-arm-selection`'s stderr compare red on a push (BL-868). The comment above `i75_failsclosed` on origin/main records the base measurement with SIGPIPE ignored: "two batches of 40 runs: the sed line 40 and 40 times, the grep line 34 and 23 times". The 0.1081.0 CHANGELOG entry gives the figure as sed 40 / grep 24 Broken pipe at base, and 0 at the fix. With SIGPIPE at its default, 0.
+No fix is built here. Owed: the pregate judges the hook a push will actually run (the one `core.hooksPath` resolves to), or it refuses when that hook and `$ROOT/.githooks/pre-push` differ, and says which side moved.
 
-Instance 2, hand-run pre-suite prefixes. Owners run the hook's pre-suite prefix by hand before a push, outside any hook, and that run writes pass records into `<git common dir>/ai-dlc-presuite-keys` (`.githooks/pre-push:202`, `PK_DIR="$gcd/ai-dlc-presuite-keys"`, with `gcd` from `git rev-parse --git-common-dir`), which every worktree's push reads. A record's name ends in the first 16 hex of the present key, which `pk_present` (`:244`) hashes from the walk `/usr/bin/find . -path ./.git -prune -o -print0` (`:248`): every path with its kind and symlink target, with file content excluded (`:231`, "every path under the work tree when the push began, hashed with its kind and symlink target"). Evidence, from the BL-914 population (104 distinct on-disk logs): in 11 sessions a push's `N of 23 step(s) skipped on a recorded pass` with N>=1 followed a hand prefix in the same session minutes earlier, and in session 83ed1313 the push from `wt-F14` skipped 4 steps that a hand prefix in another worktree, `f14pre.Wnu6WP`, had recorded. The hook prints no present key, so which run wrote a given record is not attributable from the logs.
-
-Fix shape: the seeder, the hand prefix and the hook run their units under one signal disposition. No fix in this release.
-
-Receipt: `verify: manual`. The fix decides what test exists (a disposition set in the seeder and the prefix, or a check that refuses a record written under the other one), and a receipt written only to file this entry is what BL-915 forbids.
-
-Provenance: batch 256, M6; id allocated by the lead.
-
-verify: manual
-
-## BL-1010 — a branch-delete push runs the full pre-push hook, about 2.5 minutes, when made without `--no-verify`
-
-**DEFECT.** OPEN. Filed 2026-11-12. A `git push origin --delete <branch>` delivers no tree, yet git runs the pre-push hook for it, and the hook runs its pre-suite steps and reaches the fixture suite's whole-suite key before it exits. Neither hook looks at what is being pushed: `.githooks/pre-push:31` begins `cd "$(git rev-parse --show-toplevel)" || exit 1` and the hook never reads the ref lines git hands it on stdin, so a delete (local sha all zeros) is judged on the working tree like any release push. Searched for any all-zero-sha test: `0{40}`, the literal 40-zero string and `zero=` read 0 in `.githooks/pre-push` and 0 in `core/git-hooks/pre-push`; control, the same search reads 1 in git's own `pre-push.sample` in the main checkout's `.git/hooks/`.
-
-Evidence, batch 256 M6, from the recorded population in `docs/analysis/push-gate-cost-and-pole-value-b256.md` (section "Branch-delete pushes run the whole hook"): 7 delete pushes made without `--no-verify`, each with a `.git/ai-dlc-suite-key.log` HIT line inside its window. Start to HIT, a lower bound on the hook's wall, for the 6 whose start is on record (starts from m6-583a's transcript census): e1d32849 2026-11-10T14:35:00Z 144 s; 94d65a60 2026-11-11T15:24:18Z 157 s; b655f7b8 15:33:12Z 155 s; a9cff818 16:23:33Z 148 s; 490b0ab0 18:53:56Z 200 s; 949b78fd 19:28:31Z 258 s. The seventh, bf3ed410, is in m6-914v's table, and its log (perishable, in that session's scratchpad at `rdel.lVnW/push.out`) ends `- [deleted] b254-F975` at mtime 2026-11-11T18:29:36Z, 3 s after its HIT at 18:29:33Z; its start is not in that session's transcript, so its wall is not measured. m6-914v's table reads all 7 as green, `FIXTURE SUITE SKIPPED`, pre-suite `17 of 23` skipped, so the other 6 pre-suite steps ran on every delete.
-
-Owed: a delete costs no hook time. Either the hook exits 0 when every ref line it is handed has an all-zero local sha, or the step that deletes a branch passes `--no-verify`. The first keeps every caller covered; the hook's own stdin is the only input that distinguishes a delete. No fix in this release.
-
-There is no graph pipeline step; the cost lives in this repo's pre-push hook. It is not filed as an efficiency entry, because the tag would bring E3b's Baseline/Step/Movement filing arms, and the lead ruled it untagged. Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
-
-Receipt: `verify: manual`. The fix decides the test: a delete fed to the real hook exiting before its first step, with a release push as the control. A receipt written only to file this entry is what BL-915 forbids.
-
-Provenance: batch 256, M6, from m6-583a's push census; id allocated by the lead.
-
-verify: manual
-
-## BL-1013 — fixture-hygiene `--matrix` fans out every mutant's drives unbounded, about 120 concurrent validator runs, past the box's process-group line, while a bounded width gives the same verdicts
-
-**DEFECT.** OPEN. Filed 2026-11-12. In `core/fixtures/fixture-hygiene/run.sh` the matrix block (`if [ "$MODE" = matrix ]; then`, `:285`) loops over 20 mutants (`for m in MH1 MH2 ... MM4B MH9; do`, `:287`). For each one it starts six background drives: `drive "$m.d"`, `drive "$m.v" ... --derive` and `drive "$m.c"` (`:290`), and `d7drive "$m.7"`, `d8drive "$m.8"` and `d9drive "$m.9"` (`:291`). It then waits once, after the loop (`done; wait`, `:292`). That is 20 x 6 = 120 drives in flight at once, each a full validator run, with nothing bounding the width. The run-rules line of 150 members per process group is crossed by construction. The plain run (`:306-311`) starts 26 concurrent drives the same way (3 at `:306`, 14 at `:307`, 2 at `:308`, 2 at `:309` and 5 at `:310`) before its one `wait` at `:311`.
-
-By construction, the width should not move a verdict. `drive()` (`:235-238`) writes `$WORK/c.<tag>.out`, `.err` and `.rc` per tag, and the matrix reads them only after the `wait`. One caveat: the `$m.d` and `$m.v` drives run in the same world directory, `mut-$m`, at the same time. Measured at width 6, once, by m6-h9 at the release tip. The run used a scratch copy whose only change is an added `wait` after each mutant's six backgrounded drives, so 20 rounds of 6. It was started as `bash core/fixtures/fixture-hygiene/run.sh --matrix` from the worktree root, because `core/scripts/hermetic-run.sh` passes the fixture no arguments. Result: rc 0, empty stderr, and a peak process group of 36 members (a watchdog at 100 never fired). It printed 20 `MATRIX` lines, and each equals its committed `# MUTANT-MATRIX` row once `twins=` is normalised to `twins=-`, the DW and MH9 rows included. The fixture-hygiene `# MUTANT-MATRIX` rows were measured through that width-6 scratch edit only, never by a plain matrix run, and the unbounded width was not run.
-
-Owed: the matrix and plain runs bound their concurrency to a fixed width, so a `--matrix` run stays inside one process-group budget. No fix in this release.
-
-Receipt: `verify: manual`. The fix decides the test, and a receipt written only to file this entry is what BL-915 forbids.
-
-Provenance: batch 256, M6; id allocated by the lead.
+Provenance: batch 256, filed by the BL-899 builder on the lead's word; id allocated by the lead.
 
 verify: manual
 
@@ -3058,6 +3112,12 @@ Provenance: batch b256 BL-915 (c) audit; lead ai-dlc-a7.
 verify: manual
 
 ## BL-1014 — a full `--matrix` re-measure of adversarial-shard-merge costs about 4.8 to 8.3 hours in one invocation and 6.8 to 10.3 hours in 11 chunks, so the per-start cost and the starts per cell are the lever
+
+**PARTIAL (v0.1100.0) — `--matrix` now scores its rows in parallel, `--jobs=8` by default and `--jobs=1` for the serial matrix; the wall clock is the lever moved, and the starts and CPU are not lower.** Each row (MX0 and each mutant) runs in its own worker with its own WORK, scratch names and KE world. The workers copy the parent's cached worlds, and once every worker has answered, the rows print in the serial run's order. Measured on one tree in one window, the same 8 mutants plus MX0 against all 90 arms (810 rows), on the runner before the KE fix below: old serial 3101 s wall and 2744 s CPU (user 911, sys 1833); new at `--jobs=9` 1076 s wall and 3902 s CPU (user 1002, sys 2900). That is -65% wall and +42% CPU, almost all of the extra in sys, which is fork contention. Both runs started 8734 bash scripts, with identical per-script counts once the root and temp-dir names are normalized. The load included another session's gate running this fixture. The shipped runner adds 13 bash starts per parallel row that runs a KE arm, for the worker's own KE world (12 hook runs and 1 `partition-document.sh`, counted). The full-matrix wall time is an ESTIMATE, not a measurement: the paired 2.88× ratio applied to the derived 4.8 to 8.3 h gives about 1.7 to 2.9 h. That the estimate is conservative, because the serial base phase is a larger share of 9 rows than of 88, is reasoning, not a measurement.
+
+Equivalence: 806 of the 810 rows were byte-identical. The other 4 tripped only in parallel. Three were KEnone_core and KEvac_core on CSW-call and KEvac_inst on KMb-inst: KE's subject world was shared by every drive, so two rows driving it at once each read the other's output as already written; KMb-inst's worker also printed a `mv` of a missing output. Each worker now builds its own (`ke_build`). On the fixed runner, a 9-worker re-run of those 9 rows against 8 arms (PCN2, PC1 and six KE arms) gave 72 of 72 cells byte-identical to the serial run's, 54 of them KE cells. The fourth, PCN2 on CM-doc-sha-unchecked, is UNEXPLAINED: a parallel-only trip in that one cell, with that row's 90 arms running in a worker beside 8 other rows under the window's load, and no stray output from its worker. It did not recur in the 9-worker re-run, in 16 workers × 6 forced concurrent PCN2 calls (96 of 96 held), or in 12 workers interleaving PCN2 with twelve other PC/DV arms (36 of 36 held). The probe's positive control, PC-scoped-map-continue's edit, tripped 3 of 3. `--jobs=1` rules the parallel runner out for any cell that trips. The search for other shared worlds covered the globals bound to a world or a temp dir and the memoized-global guards, and found only `SH_D`, which the arms only read. That search is not exhaustive. Ctrl-C does not reach the workers; stop a `--matrix` by its process group.
+
+Still owed: the PCN2 trip explained; a measured full `--matrix` wall clock and start count (an operator instrument under BL-1022, not run here); and the per-start cost and the starts per cell, which this change does not move.
 
 **DEFECT.** OPEN. Filed 2026-11-12. For `core/fixtures/adversarial-shard-merge`, a full `--matrix` re-measure is 87 mutants × 90 arms and costs about 4.8 to 8.3 hours in one invocation (a 701 s base phase plus 87 passes of 192 to 336 s, five passes measured), about 6.8 to 10.3 hours when run in 11 chunks. That figure is DERIVED; the full run was not timed.
 

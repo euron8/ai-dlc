@@ -1,3 +1,5 @@
 .githooks/pre-push
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/mutant.sh
+core/git-hooks/pre-push
+core/scripts/hermetic-run.sh
