@@ -20,7 +20,8 @@
 # collisions had been labelled.
 #
 # WHY A FALSE ROW COSTS MORE THAN A MISCOUNT. Step 7 of the updater skill tells the reader "Do
-# NOT re-do a `RESOLVED` row by hand. Work only the `WORKLIST` and `DECISION` rows", and names
+# NOT re-do a `RESOLVED` row by hand. Work the `WORKLIST` and `DECISION` rows, and every `NOTE`
+# row as the NOTE bullet above says", and names
 # catalog relabels in that legend specifically. So this row is read by someone who has been
 # instructed not to verify it. On a consumer whose catalog was never colliding it says "your
 # catalog was colliding and I fixed it", with no count and no subject to disambiguate it -- the

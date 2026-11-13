@@ -1,5 +1,6 @@
-# apply-worklist-rows sources the shared preamble and drives apply.sh from a copy of the reconcile directory, which apply.sh reads many siblings of.
+# apply-worklist-rows sources the shared preamble and drives apply.sh from a copy of the reconcile directory, which apply.sh reads many siblings of. Arm C1 joins apply.sh row classes to the step-7 bullets of SKILL.md, beside reconcile/.
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/mutant.sh
 core/skills/ai-dlc-update/reconcile/
 !core/skills/ai-dlc-update/reconcile/apply.sh
+!core/skills/ai-dlc-update/SKILL.md

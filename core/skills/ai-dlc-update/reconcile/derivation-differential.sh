@@ -303,6 +303,25 @@ VALIDATOR="$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
 [ -f "$VALIDATOR" ] || refuse validator "$VALIDATOR is not on this consumer, so nothing can re-run the derivations. install.sh delivers it from core/scripts/."
 ART="$CONSUMER/_bmad-output"
 [ -d "$ART" ] || refuse corpus "$ART does not exist, so there is no artifact corpus and no row to clear."
+# THE RUN-OWNED PATHS, defined once and read by both tests that must not count them as the consumer's: the in-flight
+# marker apply.sh writes (its APPLYING), and in record mode the owed-derivations record this run writes, relative to the
+# consumer root. The unmoved test and the uncommitted-path NOTE rows exclude exactly these two FILES -- never the
+# directory around the record, where a consumer keeps hand-written reconcile logs that are genuinely uncommitted.
+# The record path is taken as apply.sh typed it, and apply.sh builds it from ITS consumer argument (`.`, `/abs/`), while
+# CONSUMER above is absolute. So the record is made absolute against this run's starting directory and its `.`, `..` and
+# empty segments collapsed lexically (as `cd` resolves CONSUMER), before the consumer prefix is stripped; a record that
+# still does not sit under the consumer stays absolute, and both readers treat that as no run-owned record.
+RO_MARKER=".claude/.ai-dlc-applying"
+RO_RECORD=""
+if [ "$OWED_SET" -eq 1 ]; then
+  _ro_a="$OWED_FILE"; case "$_ro_a" in /*) ;; *) _ro_a="$PWD/$_ro_a" ;; esac
+  _ro_n=""; _ro_ifs="$IFS"; IFS=/; set -f
+  for _ro_s in $_ro_a; do
+    case "$_ro_s" in ''|.) ;; ..) _ro_n="${_ro_n%/*}" ;; *) _ro_n="$_ro_n/$_ro_s" ;; esac
+  done
+  IFS="$_ro_ifs"; set +f
+  RO_RECORD="${_ro_n#"$CONSUMER"/}"
+fi
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/$PROG-XXXXXX")" || refuse tmp "could not create a scratch directory."
 WT_PARENT=""; WT=""
@@ -466,10 +485,9 @@ else
   # an ignored OPERAND, fails at the base and passes at the consumer, so it reads NEWLY-PASSING in the full run and is never
   # NEWLY-FAILING (the NOTE operands row below says so); the short-circuit and the full run agree on it.
   if [ "$OWED_SET" -eq 1 ]; then
-    _rec_rel="${OWED_FILE#"$CONSUMER"/}"
     _tm_d="$(git -C "$CONSUMER" -c core.quotePath=false diff --name-only "$BASE_COMMIT" -- 2>/dev/null)" || _tm_d="?git-diff-failed"
     _tm_u="$(git -C "$CONSUMER" -c core.quotePath=false ls-files --others 2>/dev/null)" || _tm_u="?git-ls-files-failed"
-    _tm_n="$(printf '%s\n%s\n' "$_tm_d" "$_tm_u" | awk -v a=".claude/.ai-dlc-applying" -v b="$_rec_rel" '$0 != "" && $0 != a && $0 != b { n++ } END { print n + 0 }')"
+    _tm_n="$(printf '%s\n%s\n' "$_tm_d" "$_tm_u" | awk -v a="$RO_MARKER" -v b="$RO_RECORD" '$0 != "" && $0 != a && $0 != b { n++ } END { print n + 0 }')"
     if [ "$_tm_n" = 0 ]; then
       make_record
       print_dropped
@@ -705,7 +723,7 @@ dd_overlay_pass() {
     return 0
   fi
   _roots="$_roots$_ts$_nl${ART#"$CONSUMER"/}/$_nl"
-  _rf="${OWED_FILE#"$CONSUMER"/}"
+  _rf="$RO_RECORD"
   : > "$TMP/ov.keys"; : > "$TMP/ov.files"; : > "$TMP/ov.copied"; : > "$TMP/ov.dirs"
   while IFS="$(printf '\t')" read -r _k _cmd; do
     [ -n "$_k" ] || continue
@@ -947,7 +965,12 @@ while IFS="$(printf '\t')" read -r _k _cmd; do
 done < "$TMP/operands"
 set +f
 [ "$_n_only" -eq 0 ] || say_row NOTE operands "${_n_only} base-side failure(s) name an operand that exists only in the consumer's tree (untracked or ignored, so absent from the base root). They read as NEWLY-PASSING or STALE-BOTH, never as NEWLY-FAILING, and are not this pull's doing."
-git -C "$CONSUMER" status --porcelain 2>/dev/null \
+# The run-owned paths are excluded by PATHSPEC, not by a filter on the output: porcelain collapses an untracked directory
+# holding only the record into one `?? <dir>/` row that no string filter on the record path matches, and a pathspec
+# exclude makes that directory vanish while a genuine untracked file beside the record still names it. _ro_rec falls
+# back to the marker (a repeated exclude is harmless) so no exclude pathspec is ever EMPTY, which would exclude the tree.
+_ro_rec="$RO_MARKER"; case "$RO_RECORD" in ''|/*) ;; *) _ro_rec="$RO_RECORD" ;; esac
+git -C "$CONSUMER" status --porcelain -- . ":(exclude,top)$RO_MARKER" ":(exclude,top)$_ro_rec" 2>/dev/null \
   | awk -v mf="$TMP/moved" '
       BEGIN { while ((getline l < mf) > 0) M[l] = 1 }
       { p = substr($0, 4); i = index(p, " -> "); if (i) p = substr(p, i + 4); gsub(/^"|"$/, "", p); if (!(p in M)) print p }

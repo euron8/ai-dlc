@@ -119,7 +119,8 @@
 # MUTANT-MATRIX BL706-M11 decides=B7i twins=B7f
 # MUTANT-MATRIX BL706-M12 decides=B7l twins=B7b,B7d
 # MUTANT-MATRIX BL706-M13 decides=B7e2 twins=B7e
-# MUTANT-MATRIX-DYNAMIC b7_mut why=b7_mut passes its mutant id (BL706-M1, M2, M4 to M13) to mutant_killed as a variable; each id keeps its own MUTANT-MATRIX row above
+# MUTANT-MATRIX BL706-M14 decides=B7a4,B7a5,B7a6,B7b4,B7b5,B7b6,B7b7 twins=B7a,B7b
+# MUTANT-MATRIX-DYNAMIC b7_mut why=b7_mut passes its mutant id (BL706-M1, M2, M4 to M14) to mutant_killed as a variable; each id keeps its own MUTANT-MATRIX row above
 # BL706 (B7 cells) measured by: bash core/fixtures/owed-derivations/receipt-bl706.sh, whose CELL lines the B7 arms read; mutants M1 to M8 each copy the whole reconcile/ directory.
 set -uo pipefail
 
@@ -1461,7 +1462,7 @@ rd "$C" "$OWED"
 rc_is "Wh once the tree reproduces the derivation again the writer's rows read closed -> exit 0" 0 "$RC"
 
 # ---- B7: BL-706 -- the shipping apply.sh runs the differential on EVERY ordinary pull ------------------------
-# receipt-bl706.sh drives the shipping apply.sh and the helper beside it over seeded worlds (cells a a2 a3 b d l c e e2 f g h i i2 j k,
+# receipt-bl706.sh drives the shipping apply.sh and the helper beside it over seeded worlds (cells a a2 a3 a4 a5 a6 b b4 b5 b6 b7 d l c e e2 f g h i i2 j k,
 # its header names each) and prints one `CELL <id> ok|FAIL` line per cell. It runs once unmutated here. Each mutant is a
 # COPY of the whole reconcile/ directory (the helper lifts vd_join out of the apply.sh beside it and apply.sh shells to
 # its siblings, so a lone mutated file would find none), mutated by ONE exact-once replacement, and is scored on its
@@ -1474,9 +1475,9 @@ B7_RCPT="$HERE/receipt-bl706.sh"
 b7_state() { awk -v c="$2" '$1 == "CELL" && $2 == c { print $3; f = 1; exit } END { if (!f) print "MISSING" }' <<<"$1"; }
 b7_text() { awk -v c="$2" '$1 == "CELL" && $2 == c { sub(/^CELL [^ ]+ [^ ]+ /, ""); print; exit }' <<<"$1"; }
 B7_REAL="$(TMPDIR="$WORK" bash "$B7_RCPT" "$B7_RECON" "$READER" 2>&1)"; B7_RC=$?
-for _c in a a2 a3 b d l c e e2 f g h i i2 j k; do
+for _c in a a2 a3 a4 a5 a6 b b4 b5 b6 b7 d l c e e2 f g h i i2 j k; do
   if [ "$(b7_state "$B7_REAL" "$_c")" = ok ]; then
-    case "$_c" in a) B_B7a=1 ;; b) B_B7b=1 ;; c) B_B7c=1 ;; d) B_B7d=1 ;; e) B_B7e=1 ;; e2) B_B7e2=1 ;; f) B_B7f=1 ;; g) B_B7g=1 ;; h) B_B7h=1 ;; i) B_B7i=1 ;; j) B_B7j=1 ;; k) B_B7k=1 ;; l) B_B7l=1 ;; esac
+    case "$_c" in a) B_B7a=1 ;; b) B_B7b=1 ;; c) B_B7c=1 ;; d) B_B7d=1 ;; e) B_B7e=1 ;; e2) B_B7e2=1 ;; f) B_B7f=1 ;; g) B_B7g=1 ;; h) B_B7h=1 ;; i) B_B7i=1 ;; j) B_B7j=1 ;; k) B_B7k=1 ;; l) B_B7l=1 ;; a4) B_B7a4=1 ;; a5) B_B7a5=1 ;; a6) B_B7a6=1 ;; b4) B_B7b4=1 ;; b5) B_B7b5=1 ;; b6) B_B7b6=1 ;; b7) B_B7b7=1 ;; esac
     ok "B7$_c $(b7_text "$B7_REAL" "$_c" | cut -c1-200)"
   else bad "B7$_c the shipping apply.sh/helper did not hold cell $_c: $(b7_text "$B7_REAL" "$_c" | cut -c1-300) (state $(b7_state "$B7_REAL" "$_c"))"; fi
 done
@@ -1564,6 +1565,9 @@ b7_mut BL706-M12 apply.sh l "b d" "bd" "$(( ${B_B7l:-0} && ${B_B7b:-0} && ${B_B7
 # M13 the base-root hand remedy drops --base-root.
 B7_OLD='            base-root:*) dd_hand=' B7_NEW='            base-rootX:*) dd_hand='
 b7_mut BL706-M13 apply.sh e2 e "e" "$(( ${B_B7e2:-0} && ${B_B7e:-0} ))"
+# M14 the differential's INFO, NOTE, UNASSESSABLE and SUMMARY rows are not carried into the manifest (the re-emit loop deleted).
+B7_OLD='      while IFS= read -r _ddl; do' B7_NEW='      while false; do'
+b7_mut BL706-M14 apply.sh "a4 a5 a6 b4 b5 b6 b7" "a b" "a bd" "$(( ${B_B7a4:-0} && ${B_B7a5:-0} && ${B_B7a6:-0} && ${B_B7b4:-0} && ${B_B7b5:-0} && ${B_B7b6:-0} && ${B_B7b7:-0} && ${B_B7a:-0} && ${B_B7b:-0} ))"
 
 # ---- G: the callers (rulebook prose) --------------------------------------------------------------
 # The prose-presence arms for the three callers lived in a retired dist-only mutation battery: on a

@@ -22,6 +22,10 @@
 #          l  (inside bd) the record's field 7 is the name of the NOTE reconcile-log-name row apply.sh printed, and has the
 #             reconcile-log-<UTC stamp>.md shape the reader classes as HISTORY
 #          e2 (inside e) the refusal row's hand remedy carries --base-root where the refusal is base-root
+#          a4 a5 a6 (inside a, helper exit 0) and b4 b5 b6 (inside bd, helper exit 1): the differential's INFO stamps row, its
+#             NOTE row for a seeded untracked file, its SUMMARY row (a6) and its UNASSESSABLE row for a fence the validator
+#             refuses (b6) and its INFO out-of-scope row for a past-sprint file (b7) each reach the manifest as one 4-field
+#             NOTE derivation-* row
 #   The negative for cell a (the code before this change leaves NO record on the same world) is the mutant that
 #   deletes the call; run.sh scores it. This script never names a git ref of the distribution.
 set -uo pipefail
@@ -104,10 +108,23 @@ dd2() { ( cd / && TMPDIR="$D" bash "$RECON/derivation-differential.sh" "$DIST2" 
 okeys() { awk -F'\t' '$1 == "OWED" { print $2 }' "$1" 2>/dev/null | sort | paste -sd, - ; }
 dd_direct() { ( cd / && TMPDIR="$D" bash "$RECON/derivation-differential.sh" "$DIST" "$BASE" "$@" 2>&1 ); }
 
+# dd_rows <cell prefix> <apply output>: the differential's INFO stamps row and its NOTE row for the seeded untracked file
+# each reach the manifest as a 4-field NOTE row (cells <p>4 and <p>5), whatever the helper's exit
+dd_rows() {
+  local st nt
+  st="$(awk -F'\t' '$1 == "NOTE" && $2 == "derivation-info-stamps" && $3 == "_bmad-output/" && $4 ~ /stamp commit/ && NF == 4 { n++ } END { print n + 0 }' <<<"$2")"
+  nt="$(awk -F'\t' '$1 == "NOTE" && $2 == "derivation-note" && $3 == "zz-untracked.txt" && $4 ~ /^uncommitted in the consumer/ && NF == 4 { n++ } END { print n + 0 }' <<<"$2")"
+  cell "${1}4" "$([ "$st" = 1 ] && echo 0 || echo 1)" "the differential's INFO stamps row reaches the manifest as one NOTE derivation-info-stamps row ($st, want 1)"
+  cell "${1}5" "$([ "$nt" = 1 ] && echo 0 || echo 1)" "the differential's NOTE row for an untracked file reaches the manifest as one NOTE derivation-note row naming it ($nt, want 1)"
+}
 cell_a() {
   local w="$D/wa" out n
   mkdir -p "$w"; mkc "$w/c" clean || exit 9
+  # an untracked file outside the range's changed set, so the differential prints a NOTE row naming that path
+  printf 'u\n' > "$w/c/zz-untracked.txt"
   apply "$w/c"; out="$(rd "$w/c")"; n="$(sent "$w")"
+  dd_rows a "$APPLY_OUT"
+  cell a6 "$([ "$(rows "$APPLY_OUT" NOTE derivation-summary)" = 1 ] && echo 0 || echo 1)" "the differential's SUMMARY row reaches the manifest as one NOTE derivation-summary row ($(rows "$APPLY_OUT" NOTE derivation-summary), want 1)"
   local ok=1
   [ -f "$w/c/$REC" ] && [ "$(owed_rows "$w/c")" = 0 ] && case "$out" in UNMEASURED:*"present with 0 OWED rows"*) ok=0 ;; esac
   cell a "$ok" "record present with 0 OWED rows after an apply whose fence names no changed path (reader: ${out:-<empty>})"
@@ -117,7 +134,20 @@ cell_a() {
 cell_bd() {
   local w="$D/wb" b_n b_w d_n
   mkdir -p "$w"; mkc "$w/c" hidden || exit 9
+  # a second fence the validator refuses (ALLOWLIST), so the differential prints an UNASSESSABLE row; and an untracked
+  # file outside the range's changed set, so it prints a NOTE row naming that path
+  printf '\n```derived\n$ curl scripts/ai-dlc/stable.sh\n1\n```\n' >> "$w/c/_bmad-output/story.md"
+  # a PAST-sprint document (the sprint is 1) whose fence names the changed toy.sh: the helper prints INFO out-of-scope for it
+  mkdir -p "$w/c/_bmad-output/planning-artifacts/s0" || exit 9
+  printf '# Old sprint\n\n```derived\n$ grep -c qqalpha scripts/ai-dlc/toy.sh\n1\n```\n' > "$w/c/_bmad-output/planning-artifacts/s0/old.md"
+  g "$w/c" add -A; g "$w/c" commit -qm unassessable || exit 9
+  printf 'u\n' > "$w/c/zz-untracked.txt"
   apply "$w/c"
+  dd_rows b "$APPLY_OUT"
+  local un; un="$(awk -F'\t' '$1 == "NOTE" && $2 == "derivation-unassessable" && $3 ~ /^_bmad-output\/story\.md:[0-9]+$/ && $4 ~ /^base=.*[$] curl / && NF == 4 { n++ } END { print n + 0 }' <<<"$APPLY_OUT")"
+  cell b6 "$([ "$un" = 1 ] && echo 0 || echo 1)" "the refused derivation reaches the manifest as one 4-field NOTE derivation-unassessable row keyed on story.md:<line> ($un, want 1)"
+  local os; os="$(awk -F'\t' '$1 == "NOTE" && $2 == "derivation-info-out-of-scope" && $3 == "_bmad-output/" && index($4, "PAST _bmad-output/planning-artifacts/s0/old.md ") == 1 && NF == 4 { n++ } END { print n + 0 }' <<<"$APPLY_OUT")"
+  cell b7 "$([ "$os" = 1 ] && echo 0 || echo 1)" "the past-sprint file's INFO out-of-scope row (a TAB inside its detail) reaches the manifest as one 4-field NOTE derivation-info-out-of-scope row naming it ($os, want 1)"
   b_n="$(owed_rows "$w/c")"; b_w="$(rows "$APPLY_OUT" WORKLIST artifact-derivations-owed)"
   cell b "$([ "$b_n" = 1 ] && [ "$b_w" = 1 ] && echo 0 || echo 1)" "the NEWLY-FAILING derivation is recorded ($b_n OWED row(s), want 1) and apply.sh draws the WORKLIST row ($b_w, want 1)"
   local nm fld shape=1
