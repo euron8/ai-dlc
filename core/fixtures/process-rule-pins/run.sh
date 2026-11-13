@@ -230,6 +230,21 @@
 #     asserts it fails ONLY its row.
 #     BL-868: zero load-dependent tests -- these are text pins over files. KNOWN LIMIT (F3): a pin
 #     proves the clause PRESENT in its span, never the absence of an appended contradiction.
+#   - the retro gate's own gate-log entry is committed before the Step 6b push and archived by
+#     7a-post's rotation. Inside retro.md `### 7.`..`3. Archive the WHOLE live log verbatim`,
+#     7a-post item 2 names the retro gate's entry as one of the sprint's writes
+#     (retro-7apost-own-entry) and says Step 5c check 6 appends one per dispatch
+#     (retro-7apost-per-dispatch). Para rows bound to item 2 ALONE, twice over: a blank line
+#     separates item 2 from item 3, so they are two paragraphs to para mode and to the flattener;
+#     and the span ENDS at item 3's lead, so a scan flushes item 2 there even where that blank line
+#     is gone. Without both, the clauses moved into item 3's first line (old sentence back in
+#     item 2) still pinned. An `exact` row cannot do it: exact needs ONE non-heading paragraph in
+#     its span, and the only span holding item 2 alone ends mid-paragraph in the flattened copy,
+#     so the flattened control reads 0. Section 4a's named mutants restore the old "Retro appends
+#     no gate entry; deploy-validate's was the last write." sentence against each row, and drop
+#     the own-entry clause alone, whose twin keeps the per-dispatch row pinned in that copy; the
+#     retro-7apost/moved block below them reproduces the move into item 3, blank line removed,
+#     and must fail both rows while the moved clauses stay in the file.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -639,6 +654,8 @@ retro-gar-survivor|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Ve
 retro-gar-legacy|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**A `--series` run may itself exit 1 and print a `--legacy-through` remedy.**|para|then re-run the `--series` line before re-running the close
 retro-gar-close|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|where a sprint has none, it is the merge commit of that sprint's retro PR
 retro-gar-utc|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|Read `TZ=UTC git log --date=format-local:%Y%m%dT%H%M%SZ --format='%ad %s'` for this repo's sprint-close commits
+retro-7apost-own-entry|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|3. Archive the WHOLE live log verbatim|2. Confirm no further gate-log writes remain this sprint.|para|the retro gate's own entry included
+retro-7apost-per-dispatch|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|3. Archive the WHOLE live log verbatim|2. Confirm no further gate-log writes remain this sprint.|para|appends it, one entry per dispatch
 dp-git-c|S|steps/_dispatch-protocol.md|**Worktree-explicit dev dispatch.**|**Bounded-join dispatch mandate (Rule 29).**|0. Lead MUST commit all planning artifacts|para|`git -C <worktree absolute path> <cmd>`, or the dev `cd`s into the worktree on EVERY Bash call
 dp-one-story|S|steps/_dispatch-protocol.md|**Worktree-explicit dev dispatch.**|**Bounded-join dispatch mandate (Rule 29).**|0. Lead MUST commit all planning artifacts|para|The dev works only the story it was dispatched for, one story per dispatch, and never claims another from a task list
 dev-one-story|R|dev.md|## Responsibilities|## As a party seat|- Implement the story the lead dispatched you for|para|Implement the story the lead dispatched you for: one story per dispatch.
@@ -1442,6 +1459,9 @@ impl-dar-copy|S|steps/implementation.md|### 6. Orchestrate|### 7. All Gates Pass
 gv17-retro-args|S|steps/gate-validation.md|### 17. Skill-invocation provenance|### 18.|- **Retro gate:**|para|`scripts/ai-dlc/validate-retro-evidence.sh ai-dlc/retro/sprint-<N> <N>`.|validate-retro-evidence.sh ai-dlc/retro/sprint-<N> <N>`.|validate-retro-evidence.sh <N>`.
 r11a-dispatch-ask-D1|S|SKILL.md|#### Operator decisions: dispatch, then ask|### Rule 13 |**Immediately before every `AskUserQuestion`, dispatch, then ask.**|exact|**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join every lane whose completion has arrived: read the completion and record it. Acting on its output is itself a ready action, dispatched below, not work to finish before asking. Dispatch every ready action the question does not hold, in the background (Rule 29), and arm its join. An action is ready when its inputs exist now, and the question holds it only when it reads the answer. Name the lanes held in your output beside the question, not inside it. Then send the question at once, in `AskUserQuestion`, unchanged by the lane state. Never wait for a running lane before asking, and never hold back, defer or drop a question, or fold it into a later one, to suit the lanes.|**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join every lane whose completion has arrived: read the completion and record it. Acting on its output is itself a ready action, dispatched below, not work to finish before asking. Dispatch every ready action the question does not hold, in the background (Rule 29), and arm its join. An action is ready when its inputs exist now, and the question holds it only when it reads the answer. Name the lanes held in your output beside the question, not inside it. Then send the question at once, in `AskUserQuestion`, unchanged by the lane state. Never wait for a running lane before asking, and never hold back, defer or drop a question, or fold it into a later one, to suit the lanes.|Before every `AskUserQuestion`, wait until every running lane has finished, join them, then ask.
 r11a-dispatch-ask-D2|S|SKILL.md|#### Operator decisions: dispatch, then ask|### Rule 13 |**Immediately before every `AskUserQuestion`, dispatch, then ask.**|exact|**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join every lane whose completion has arrived: read the completion and record it. Acting on its output is itself a ready action, dispatched below, not work to finish before asking. Dispatch every ready action the question does not hold, in the background (Rule 29), and arm its join. An action is ready when its inputs exist now, and the question holds it only when it reads the answer. Name the lanes held in your output beside the question, not inside it. Then send the question at once, in `AskUserQuestion`, unchanged by the lane state. Never wait for a running lane before asking, and never hold back, defer or drop a question, or fold it into a later one, to suit the lanes.|or fold it into a later one, to suit the lanes.|or fold it into a later one, to suit the lanes. Ask once every running lane has finished.
+retro-7apost-own-entry-old|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|3. Archive the WHOLE live log verbatim|2. Confirm no further gate-log writes remain this sprint.|para|the retro gate's own entry included|Every gate-log write this sprint is committed before the Step 6b push, the retro gate's own entry included: `gate-validation.md` Check 12 is in the `GATE_MANIFEST` `universal` row, so Step 5c check 6 appends it, one entry per dispatch. All of it is on `main` by now, through the retro PR or, on the direct-to-main path, through those commits. Step 3 archives it with the rest of the log.|Retro appends no gate entry; deploy-validate's was the last write.
+retro-7apost-per-dispatch-old|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|3. Archive the WHOLE live log verbatim|2. Confirm no further gate-log writes remain this sprint.|para|appends it, one entry per dispatch|Every gate-log write this sprint is committed before the Step 6b push, the retro gate's own entry included: `gate-validation.md` Check 12 is in the `GATE_MANIFEST` `universal` row, so Step 5c check 6 appends it, one entry per dispatch. All of it is on `main` by now, through the retro PR or, on the direct-to-main path, through those commits. Step 3 archives it with the rest of the log.|Retro appends no gate entry; deploy-validate's was the last write.
+retro-7apost-own-entry-drop|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|3. Archive the WHOLE live log verbatim|2. Confirm no further gate-log writes remain this sprint.|para|the retro gate's own entry included|, the retro gate's own entry included:|:
 NAMED
 }
 # lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
@@ -1469,7 +1489,7 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   if [ "${out%% *}" = "0" ]; then mutant_killed "${B_named:-0}" "$id/named" "$id/named: rewritten to '$new'"
   else bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"; fi
 done <<<"$(named_mutants)"
-[ "$n_named" -eq 15 ] || bad "named: $n_named named mutant(s) read, wanted 15"
+[ "$n_named" -eq 18 ] || bad "named: $n_named named mutant(s) read, wanted 18"
 # D-new and D-near: a paragraph added after the line opening with <after>, on the D2 flattened copy.
 # D-new adds a drain paragraph INSIDE the dispatch-then-ask subsection and must KILL the exact row;
 # D-near adds one to the sibling attested-act subsection, outside the span, and must stay green.
@@ -1508,6 +1528,39 @@ else bad "arch-ready-nostatus/named twin: the intent row reads in-span=$t1 in th
 if [ -f "$M/arch-ready-intent.named.md" ] && [ "$t2" = 1 ]; then
   ok "arch-ready-intent/named twin: the no-sprint-status clause still pins in its copy (in-span=1)"
 else bad "arch-ready-intent/named twin: the clause row reads in-span=$t2 in that copy, wanted 1"; fi
+# retro-7apost-own-entry-drop's TWIN. The two 7a-post rows share item 2's one paragraph, so dropping
+# the own-entry clause must leave the per-dispatch clause pinned in that same copy.
+rp_tok="$(pins | awk -F'|' '$1 == "retro-7apost-per-dispatch" { print $8 }')"
+rp_out="$(pin_scan "$M/retro-7apost-own-entry-drop.named.md" '### 7. Merge and Next-Sprint Handoff' '3. Archive the WHOLE live log verbatim' '2. Confirm no further gate-log writes remain this sprint.' para "$rp_tok")"
+if [ -f "$M/retro-7apost-own-entry-drop.named.md" ] && [ -n "$rp_tok" ] && [ "${rp_out%% *}" = 1 ]; then
+  ok "retro-7apost-own-entry-drop/named twin: the per-dispatch clause still pins in its copy (in-span=1)"
+else bad "retro-7apost-own-entry-drop/named twin: the per-dispatch row reads in-span=${rp_out%% *} in that copy, wanted 1"; fi
+# retro-7apost/moved: the old sentence back in item 2, both pinned clauses moved into item 3's first
+# line, and the blank line between the two items removed. Built on the flattened copy, where item 2
+# and item 3 are one line each. Each row must read in-span 0 while its clause is still in the file.
+rp_flat="$M/retro-7apost.moved.flat.md"; rp_mut="$M/retro-7apost.moved.md"
+flatten "$(pin_path S steps/retro.md)" "$rp_flat"
+RM_L2='2. Confirm no further gate-log writes remain this sprint.' RM_L3='3. Archive the WHOLE live log verbatim' \
+RM_OLD="2. Confirm no further gate-log writes remain this sprint. Retro appends no gate entry; deploy-validate's was the last write." \
+RM_NEW3="3. Archive the WHOLE live log verbatim, the retro gate's own entry included; Step 5c check 6 appends it, one entry per dispatch:" awk '
+  BEGIN { a = ENVIRON["RM_L2"]; b = ENVIRON["RM_L3"]; o = ENVIRON["RM_OLD"]; n = ENVIRON["RM_NEW3"]; d = 0 }
+  { q = $0; gsub(/[ \t]+/, " ", q); sub(/^ /, "", q) }
+  index(q, a) == 1 { print o; d = 1; next }
+  d == 1 && q == "" { d = 2; next }
+  index(q, b) == 1 { print n; next }
+  { print }' "$rp_flat" > "$rp_mut"
+for rid in retro-7apost-own-entry retro-7apost-per-dispatch; do
+  IFS='|' read -r _ _ _ rs re rl _ rt <<<"$(pins | awk -F'|' -v i="$rid" '$1 == i')"
+  c0="$(pin_scan "$rp_flat" "$rs" "$re" "$rl" para "$rt")"; c1="$(pin_scan "$rp_mut" "$rs" "$re" "$rl" para "$rt")"
+  kept="$(grep -cF -- "$rt" "$rp_mut")" || kept=0
+  B_rm=0
+  if [ -n "$rt" ] && [ "${c0%% *}" = 1 ]; then ok "$rid/moved: control: the unmutated flattened copy pins in span (1)"; B_rm=1
+  else bad "$rid/moved: CONTROL -- unmutated flattened in-span=${c0%% *}, wanted 1"; continue; fi
+  if cmp -s "$rp_flat" "$rp_mut"; then bad "$rid/moved: the move did not apply"
+  elif [ "${c1%% *}" = 0 ] && [ "$kept" -ge 1 ]; then
+    mutant_killed "${B_rm:-0}" "$rid/moved" "$rid/moved: old sentence back in item 2 and the clause moved into item 3, blank line removed, fails the row though the clause is still in the file ($kept)"
+  else bad "$rid/moved: SURVIVED (in-span=${c1%% *} kept=$kept)"; fi
+done
 
 # --- 4a1. the qa class-sweep pin survives the consumer's Validation Checklist shadow ---------
 # graph shadows `team-roles/qa.md#Validation Checklist`, so a rule that lives there is replaced on

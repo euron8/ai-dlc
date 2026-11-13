@@ -1478,8 +1478,12 @@ else
 fi
 ```
 
-2. Confirm no further gate-log writes remain this sprint. Retro appends no gate
-   entry; deploy-validate's was the last write.
+2. Confirm no further gate-log writes remain this sprint. Every gate-log write this sprint is
+   committed before the Step 6b push, the retro gate's own entry included:
+   `gate-validation.md` Check 12 is in the `GATE_MANIFEST` `universal` row, so Step 5c check 6
+   appends it, one entry per dispatch. All of it is on `main` by now, through the retro PR or,
+   on the direct-to-main path, through those commits. Step 3 archives it with the rest of the log.
+
 3. Archive the WHOLE live log verbatim:
 
        mkdir -p _bmad-output/implementation-artifacts/s<N>

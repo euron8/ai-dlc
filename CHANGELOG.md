@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1102.0] - 2026-11-13
+
+### BL-1029 CLOSED: retro.md 7a-post no longer says the retro appends no gate entry
+
+Filed by the consumer as PC-S322-RETRO-GATE-ENTRY-CONTRADICTS-7A-LAST-WRITE-CLAIM. gate-validation.md Check 12 ("Append gate log entry") is in the GATE_MANIFEST `universal` row, so the retro gate loads it, and retro.md Step 5c check 6 runs that gate before the Step 6 commit. 7a-post item 2 said "Retro appends no gate entry; deploy-validate's was the last write". The two texts contradicted each other: the retro gate loads Check 12 at §5c check 6, before 7a-post, and 7a-post then said no retro entry exists. 7a-post item 2 now says every gate-log write this sprint, the retro gate's own entry included, is committed before the Step 6b push, that Check 12 appends one entry per dispatch, and that Step 3 archives the whole log. Check 12, GATE_MANIFEST and §5c are unchanged; the choice is to correct 7a-post, not to carve Check 12 out of the retro slice. Two `process-rule-pins` rows pin the corrected clauses, and the old sentence is the near-miss mutant they kill.
+
+History: before s322 the reference consumer's gate log and gate-metrics held no Check 12 retro-gate entry and no `"gate": "retro"` row. That absence came from its installed engine lacking §5c item 6, not from leads obeying 7a-post; the retro did write a §5c section at s315.
+
+Owed on the reference consumer, text only, with no consumer write from core:
+- `.claude/skills/ai-dlc/overrides/steps__retro__domain-sections.md` shadows `#7. Merge and Next-Sprint Handoff` and carries the old sentence at lines 370-371. This change raises section drift there. Adjudicate it READOPT, not REAFFIRM, because a reaffirm keeps the wrong text.
+- `.claude/skills/ai-dlc/extensions/steps-domain/retro-gate-log-rotation.md` lines 31-34 carry the same claim. It extends `#5. Human Commentary`, which this change does not touch, so no drift detector prompts it. It needs a consumer hand edit.
+
 ## [0.1101.0] - 2026-11-12
 
 ### PC-S322-MKPW-SEAT-NOTE-ASSERTION-CONSUMER-LAYOUT: remediator-shard-join cell MKPW judges the world it built
