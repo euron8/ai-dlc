@@ -20,3 +20,5 @@ dirname
 basename
 tr
 sort
+perl
+yes

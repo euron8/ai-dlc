@@ -68,6 +68,7 @@ done
 echo "$NAME: resolved subject = $MERGE"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/$NAME.XXXXXX")" || exit 2
+WC_ROOT="$WORK" # the world cache's root (wc_get); unlike WORK, nothing rebinds it
 trap 'rm -rf "$WORK"' EXIT
 
 fails=0
@@ -231,13 +232,18 @@ shard() {
 # recorded in the write ledger (root, transcript_path), logical and physical spellings alike, both ending in the
 # world dir's own name. Identity (hr_ids) is a function of the shard dir and file name alone, so every id, sha and
 # golden byte is the one a fresh build writes. A call under any harness-record knob (HR_*, SELF_ID) builds afresh.
+# The cache and every copy of it live under WC_ROOT, the WORK this file created, never under a later rebinding of
+# WORK: a --matrix worker (run.sh mx_enqueue) rebinds WORK to its own dir and still copies the parent's pristine
+# worlds, each copy a sibling of the template's original dir, so the one-name rewrite below stays exact. A worker
+# that misses the cache builds afresh and caches nothing, so no two workers ever write one template.
 WC_KNOBS="HR_OFF HR_ROLE HR_AGENT_O HR_DID_O HR_NOMETA HR_NOSPAWN HR_PRE HR_NOPROBE HR_PROBE HR_SESSION SELF_ID HR_IDFORM HR_SPAWN_TS HR_BOUND HR_BOUND_V HR_FP_O"
 wc_get() {
   local key="$1" t d rel old nr f v; shift
   if [ "${ASM_WCACHE:-0}" != 1 ]; then "$@"; return; fi
   for v in $WC_KNOBS; do [ -z "${!v:-}" ] || { "$@"; return; }; done
-  t="$WORK/wcache/$key"
+  t="$WC_ROOT/wcache/$key"
   if [ ! -f "$t.rel" ]; then
+    [ -z "${MX_WORKER:-}" ] || { "$@"; return; }
     mkdir -p "$WORK/wcache" || return 1
     d="$("$@")" || return 1
     case "$d" in "$WORK"/*/*) ;; *) return 1 ;; esac
@@ -247,7 +253,7 @@ wc_get() {
     printf '%s' "$d"; return 0
   fi
   old="$(cat "$t.old")"; rel="$(cat "$t.rel")"
-  nr="$(mktemp -d "$WORK/${old%.*}.XXXXXX")" || return 1
+  nr="$(mktemp -d "$WC_ROOT/${old%.*}.XXXXXX")" || return 1
   cp -Rp "$t.tpl/." "$nr/" || return 1
   for f in $(grep -rlF -- "/$old" "$nr" 2>/dev/null); do
     O="/$old" N="/${nr##*/}" perl -pi -e 's/\Q$ENV{O}\E/$ENV{N}/g' "$f" || return 1

@@ -153,18 +153,25 @@ NAME="adversarial-shard-merge"
 # scores each against only those arms (MX0 included). Both go through the same sc_run and mx_cells as the full
 # matrix; a scored mutant whose deciding or twin arm is outside --arms= has its cells recorded and its kill NOT
 # judged. An unknown name in either list is FIXTURE ERROR. The plain run reads neither.
-MATRIX=0; MATRIX_ROWS=0; MX_MUT_SEL=""; MX_ARM_SEL=""
+# --jobs=<n> (--matrix only, default 8) scores that many matrix rows (MX0 and each mutant) at once, each in its own
+# worker (mx_enqueue); once every worker has answered, the rows print in the serial run's order, each row's kill
+# line after its cells, all of them after the K section rather than interleaved with it. --jobs=1 is the serial
+# matrix, every row scored inline as before. Ctrl-C does not reach the workers (a non-interactive shell's background
+# jobs ignore SIGINT): stop a --matrix by its process group, with SIGTERM.
+MATRIX=0; MATRIX_ROWS=0; MX_MUT_SEL=""; MX_ARM_SEL=""; MX_JOBS=""
 for _a in "$@"; do
   case "$_a" in
     --matrix) MATRIX=1 ;;
     --mutants=?*) MX_MUT_SEL="${_a#--mutants=}"; MX_MUT_SEL=" ${MX_MUT_SEL//,/ } " ;;
     --arms=?*) MX_ARM_SEL="${_a#--arms=}"; MX_ARM_SEL="${MX_ARM_SEL//,/ }" ;;
-    *) echo "FIXTURE ERROR: unknown argument '$_a' (usage: run.sh [--matrix [--mutants=<m>,...] [--arms=<arm>,...]])" >&2; exit 2 ;;
+    --jobs=[1-9]|--jobs=[1-9][0-9]) MX_JOBS="${_a#--jobs=}" ;;
+    *) echo "FIXTURE ERROR: unknown argument '$_a' (usage: run.sh [--matrix [--mutants=<m>,...] [--arms=<arm>,...] [--jobs=<1-99>]])" >&2; exit 2 ;;
   esac
 done
-if [ "$MATRIX" -eq 0 ] && [ -n "$MX_MUT_SEL$MX_ARM_SEL" ]; then
-  echo "FIXTURE ERROR: --mutants= and --arms= narrow --matrix and mean nothing without it" >&2; exit 2
+if [ "$MATRIX" -eq 0 ] && [ -n "$MX_MUT_SEL$MX_ARM_SEL$MX_JOBS" ]; then
+  echo "FIXTURE ERROR: --mutants=, --arms= and --jobs= shape --matrix and mean nothing without it" >&2; exit 2
 fi
+MX_JOBS="${MX_JOBS:-8}"
 # Every arm asks the merge IN PROCESS (lib.sh mx: the merge sourced, merge_main called in a subshell); the
 # CLI is driven once per distinct outcome by the EQ arms below, each byte-compared with its in-process twin.
 ASM_RUN=mx
@@ -1034,9 +1041,14 @@ else
   # once per world and reads the separator of every pair in the artifact_sha list it wrote. One
   # subject world serves every drive: each output is moved aside, so the next drive writes afresh.
   # Expectations are hard-coded: `@` with every reader current, `=` in each old-reader world.
-  KE_SD="$(new_subj_world)" && {
-    for k in $(cut -f1 "$(subj_root "$KE_SD")/subject.map"); do sshard "$KE_SD" "$k" 0 "$k"; done
-    for k in $(subj_xkeys "$KE_SD"); do sshard "$KE_SD" "$k" 0 "1, 2"; done; }
+  # The world is SHARED by every drive, so a parallel --matrix worker builds its own (mx_enqueue clears KE_SD and
+  # kearm calls ke_build): two rows driving one world at once read each other's output as already written.
+  ke_build() {
+    KE_SD="$(new_subj_world)" && {
+      for k in $(cut -f1 "$(subj_root "$KE_SD")/subject.map"); do sshard "$KE_SD" "$k" 0 "$k"; done
+      for k in $(subj_xkeys "$KE_SD"); do sshard "$KE_SD" "$k" 0 "1, 2"; done; }
+  }
+  ke_build
   # k_drive <world> <merge in that world> -> `@` or `=` when every pair carries that one separator, else BAD(...)
   k_drive() {
     local o lst tok s seps="" n=0 r
@@ -1130,6 +1142,7 @@ karm() { # <merge file> <swap> <layout> <want> -- --pair-sep answer in that worl
 }
 kearm() { # <merge file> <swap> <layout> <want> -- the separator the merge itself writes in that world
   local w a
+  [ -n "${KE_SD:-}" ] || ke_build || return 1
   w="$(kl_world "$3" "$2" "$1")" || return 1
   a="$(k_drive "$w" "$w/$(k_dir "$3")/merge-adversarial-shards.sh")"
   [ "$a" = "$4" ]
@@ -1257,16 +1270,61 @@ mx_cells() { # <id> -> one MATRIX row per arm of MX_ARMS (ARMS_ALL unless --arms
   done
 }
 mut() { # <name> <deciding arm> <twin arm> <merge file>
-  local name="$1" dec="$2" twin="$3" mf="$4" fl
+  local name="$1" dec="$2" twin="$3" mf="$4"
   mx_skip "$name" && return 0
-  fl="$(bflag "$dec")$(bflag "$twin")${B_MX0:-0}"
   n_mut=$((n_mut + 1))
+  if [ "$MATRIX" -eq 1 ] && [ "$MX_JOBS" -gt 1 ]; then mx_enqueue "$name" "$dec" "$twin" "$mf"; return 0; fi
+  if [ "$MATRIX" -eq 1 ]; then sc_run "$mf" $MX_ARMS; else sc_run "$mf" "$dec" "$twin"; fi
+  mut_judge "$name" "$dec" "$twin"
+}
+# THE PARALLEL MATRIX (--jobs=<n> above 1). mx_enqueue starts one row's sc_run in a background worker, at most
+# MX_JOBS at once (FIFO: the oldest is waited on when every slot is taken). The worker rebinds WORK and the two fixed
+# scratch names (bind_scratch) to a dir of its own and builds its own KE world (ke_build; measured, the shared one
+# tripped KEnone_core, KEvac_core and KEvac_inst on rows that hold them serially), so no fixed path or world is
+# written by two rows at once, and copies the parent's cached worlds (lib.sh wc_get, WC_ROOT). It writes SC_DEAD to
+# <seq>.dead and everything it printed, stderr included, to <seq>.log; mx_drain then replays every row in enqueue
+# order through the same mx_cells and mut_judge the serial matrix runs inline. A worker that leaves no .dead is a
+# FAIL, never a row (that branch has not been seen to fire).
+MXQ=""; MXQ_N=0; MXQ_PIDS=""
+mx_enqueue() { # <id> <deciding arm> <twin arm> <merge file>
+  local n p rest
+  [ -n "$MXQ" ] || { MXQ="$(mktemp -d "$WORK/mxq.XXXXXX")" || { bad "matrix: no queue dir"; return 1; }; }
+  printf '%s %s %s\n' "$1" "$2" "$3" > "$MXQ/$MXQ_N.job"
+  n=0; for p in $MXQ_PIDS; do n=$((n + 1)); done
+  if [ "$n" -ge "$MX_JOBS" ]; then
+    p="${MXQ_PIDS%% *}"; rest="${MXQ_PIDS#* }"; [ "$rest" = "$MXQ_PIDS" ] && rest=""
+    wait "$p"; MXQ_PIDS="$rest"
+  fi
+  ( WORK="$(mktemp -d "$MXQ/w.XXXXXX")" || exit 1
+    bind_scratch "$WORK"; MX_WORKER=1; KE_SD=""
+    sc_run "$4" $MX_ARMS
+    printf '%s\n' "$SC_DEAD" > "$MXQ/$MXQ_N.dead.t" && mv "$MXQ/$MXQ_N.dead.t" "$MXQ/$MXQ_N.dead"
+    rm -rf "$WORK" ) > "$MXQ/$MXQ_N.log" 2>&1 < /dev/null &
+  MXQ_PIDS="${MXQ_PIDS:+$MXQ_PIDS }$!"
+  MXQ_N=$((MXQ_N + 1))
+}
+mx_drain() { # every enqueued row, in enqueue order: its worker's output, its cells, its judgment
+  local i=0 p id dec twin
+  for p in $MXQ_PIDS; do wait "$p"; done
+  MXQ_PIDS=""
+  while [ "$i" -lt "$MXQ_N" ]; do
+    read -r id dec twin < "$MXQ/$i.job"
+    cat "$MXQ/$i.log"
+    if [ ! -f "$MXQ/$i.dead" ]; then bad "matrix row $id: its worker wrote no verdict -- nothing was scored for it"; i=$((i + 1)); continue; fi
+    SC_DEAD="$(cat "$MXQ/$i.dead")"; mx_cells "$id"
+    if [ "$id" = MX0 ]; then mx0_judge; else mut_judge "$id" "$dec" "$twin"; fi
+    i=$((i + 1))
+  done
+}
+mut_judge() { # <name> <deciding arm> <twin arm> -- SC_DEAD holds the row; the kill, or the FAIL saying why not
+  local name="$1" dec="$2" twin="$3" fl
+  fl="$(bflag "$dec")$(bflag "$twin")${B_MX0:-0}"
   if [ "$MATRIX" -eq 1 ]; then
-    sc_run "$mf" $MX_ARMS; mx_cells "$name"
+    [ "$MX_JOBS" -gt 1 ] || mx_cells "$name"
     if ! in_set "$dec" "$MX_ARMS" || ! in_set "$twin" "$MX_ARMS"; then
       n_unj=$((n_unj + 1)); printf '  note  mutant %s: deciding [%s] or twin [%s] outside --arms=; cells recorded, kill not judged\n' "$name" "$dec" "$twin"; return 0
     fi
-  else sc_run "$mf" "$dec" "$twin"; fi
+  fi
   if ! in_set "$dec" "$SC_DEAD"; then bad "mutant $name SURVIVED its deciding arm [$dec] (tripped: [$SC_DEAD]) -- the kill moved; re-measure with --matrix"
   elif in_set "$twin" "$SC_DEAD"; then bad "mutant $name: twin [$twin] FAILS too (tripped: [$SC_DEAD]) -- the kill spread past the recorded matrix; re-measure with --matrix"
   else n_kill=$((n_kill + 1)); mutant_killed "$([ "$fl" = 111 ] && echo 1 || echo 0)" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
@@ -1327,11 +1385,15 @@ for _s in merge-adversarial-shards.sh validate-adversarial-convergence.sh valida
   [ -f "$SRCDIR/$_s" ] && cp "$SRCDIR/$_s" "$mx0d/"
 done
 MX0F="$mx0d/merge-adversarial-shards.sh"
-if ! cmp -s "$MERGE" "$MX0F"; then bad "MX0: FIXTURE BROKEN -- the unmutated copy is not byte-identical to the merge"
-elif [ "$MATRIX" -eq 1 ]; then
-  sc_run "$MX0F" $MX_ARMS; mx_cells MX0
+mx0_judge() { # SC_DEAD holds MX0's matrix row
   if [ -z "$SC_DEAD" ]; then ok "CONTROL MX0 (unmutated copy of the merge's sibling set): every arm HOLDS on it, tripped=[] (matrix)"; B_MX0=1
   else bad "unmutated copy fails [$SC_DEAD] -- the harness, not a mutant, is what fails"; fi
+}
+if ! cmp -s "$MERGE" "$MX0F"; then bad "MX0: FIXTURE BROKEN -- the unmutated copy is not byte-identical to the merge"
+elif [ "$MATRIX" -eq 1 ] && [ "$MX_JOBS" -gt 1 ]; then
+  mx_enqueue MX0 - - "$MX0F"
+elif [ "$MATRIX" -eq 1 ]; then
+  sc_run "$MX0F" $MX_ARMS; mx_cells MX0; mx0_judge
 else
   sc_run "$MX0F" A1 RS1
   if [ -z "$SC_DEAD" ]; then ok "CONTROL MX0 (unmutated copy of the merge's sibling set): B3 merges NOT_MET and RS1 refuses the reserved form, tripped=[]"; B_MX0=1
@@ -1575,6 +1637,7 @@ if [ "$KOK" = 1 ]; then
 else
   bad "KMb/KMc/KEM: not scored -- the K section did not build (see K0)"
 fi
+[ "$MATRIX" -eq 1 ] && [ "$MX_JOBS" -gt 1 ] && mx_drain
 if [ "$MATRIX" -eq 0 ]; then
   [ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] && ok "$n_kill of $n_mut mutants scored dead" || bad "$n_kill of $n_mut mutants scored dead"
   [ "$MATRIX_ROWS" -eq 0 ] && ok "PLAIN-RUN: no MATRIX row printed -- the full matrix runs only under --matrix" || bad "PLAIN-RUN printed $MATRIX_ROWS MATRIX row(s)"

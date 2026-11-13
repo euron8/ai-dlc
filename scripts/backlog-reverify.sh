@@ -346,6 +346,10 @@ while IFS="$(printf '\t')" read -r LABEL CLOSED RECEIPT; do
       # so either would turn "I could not tell" into a false close. 9 is the receipt's own
       # signal; the stderr rule below is the SECOND could-not-measure route, and 126 and every
       # other non-zero still read STILL-LIVE.
+      # A RECEIPT WHOSE OWN `bash <P>` DRIVER IS ABSENT reads STILL-LIVE here and cannot-measure in
+      # scripts/validate-backlog-receipts.sh (driver-absent, BL-899). That is deliberate: the worker
+      # decides it against --base (lead ruling L3), and this classifier has no base. It is the one
+      # route by which the two sets differ; scripts/backlog-receipt-lib.sh records the same.
       # Stdin is closed: this loop's own stdin is the rest of the ledger, which a receipt
       # reading stdin (`cat >/dev/null`) would consume, dropping every later entry's row.
       # lib.sh's variables and functions are removed INSIDE the subshell (BL-382, see where

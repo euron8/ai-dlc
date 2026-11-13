@@ -1,0 +1,15 @@
+# BL-899: one counted run at this release's tip; the push's counted run is the second (the judge's own J2 output, no C1
+# row). Every distinct state is ONE FXCELL-tagged cli start of a validator copy (69 cells, cells.decl), its workers
+# covered by the one self-nested row; the R13 probe world is built once; each mutant re-runs only its killing seed.
+# vbr_probe_m1 is start-free (function-level, plumbing-only base), so an M1 drive starts the validator once and no
+# worker. The largest single costs are c-write's whole R13 self-probe and cli-wire's full CLI run; c-m1-e2e and each
+# caller-wiring mutant's end-to-end start drive real --score-one and --r13-one workers over one three-receipt world.
+# inproc 16 (was 6; +10 from arm P2's pairing, every in-process call paired with its own fx_inproc): the probe-world
+# build 1, untraced_fn 3 per pass (one per r13_untraced call) x 2 passes (control and mutant) = 6, and base_setup 3 per
+# pass (vbr_sec_env, vbr_sec_args, vbr_sec_setup) x 3 passes (two controls, one mutant) = 9; 1 + 6 + 9 = 16, as measured.
+# * 553 (was 526) and validator 349 (was 335): +27 * and +14 validator from self-probe seeds p14/p15, their 4 removals,
+# and the mutant m-expand-any-named, as measured.
+# +2 * / +1 validator measured on the B4 tree (fixture, validator and libs blob-identical to the unit's 553/349; not hermetic-run's PIPE trap, by differential); counted once on the B4 tree, the push's counted run is the second.
+555 *
+350 scripts/validate-backlog-receipts.sh
+16 inproc:scripts/validate-backlog-receipts.sh

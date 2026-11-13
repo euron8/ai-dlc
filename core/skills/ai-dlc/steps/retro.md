@@ -24,7 +24,18 @@ to) and `<N>` with the sprint number, and run the block as written:
 ```bash
 # retro Step 1: cut the retro branch from the trunk, then carry the post-squash sprint commits
 SPRINT_TIP="$(git rev-parse --verify -q '<sprint-branch>^{commit}')"
-git fetch origin main && git checkout main && git merge --ff-only origin/main
+git fetch origin main
+TRUNK_HOLD="$( cd "$(git rev-parse --show-toplevel)" || exit
+  { git rev-parse -q --verify refs/heads/main >/dev/null && git diff -z --name-only --no-renames HEAD main
+    git diff -z --name-only --no-renames HEAD origin/main; } | sort -zu |
+  while IFS= read -r -d '' p; do
+    if ! git cat-file -e "HEAD:$p" 2>/dev/null && { [ -e "$p" ] || [ -L "$p" ]; }; then echo "ON-DISK $p"; fi
+  done )"
+if [ -n "$TRUNK_HOLD" ]; then
+  echo "CARRY: HARD_BLOCK on-disk — main at origin/main tracks these paths, HEAD does not, and a file is on disk at each; move each aside and re-run the block"
+  printf '%s\n' "$TRUNK_HOLD"
+else
+git checkout main && git merge --ff-only origin/main
 git rev-list --count HEAD..origin/main   # MUST be 0
 git checkout -b ai-dlc/retro/sprint-<N> origin/main
 if [ -z "$SPRINT_TIP" ]; then
@@ -86,7 +97,15 @@ else
     fi
   fi
 fi
+fi
 ```
+
+**Both landing blocks refuse before the checkout when a file sits on disk at a path the trunk
+would write.** `git checkout main && git merge --ff-only origin/main` overwrites an IGNORED file
+at a path that `main` or `origin/main` tracks and `HEAD` does not, and exits 0; an untracked one
+it refuses. So this block and 7a-post step 1 first list those paths and print an `ON-DISK <path>`
+line for each one present on disk, under a `HARD_BLOCK on-disk` line, and move nothing. Move each
+named file aside and re-run the block. The predicate is `ai-dlc-update`'s working-tree check.
 
 **The carry exists because deploy-validate does not stop at the squash.** It
 keeps committing to the sprint branch after the sprint PR squash-merges — gate-log
@@ -131,8 +150,10 @@ network and no authentication, and it is keyed on the fork point so that it
 cannot accept a PR whose squash is not the sprint branch's own base. A miss
 whose fork point is not a merged PR's merge commit stays `underivable`.
 
-**Every `CARRY:` line is one of four outcomes, and three of them STOP.** A
-count or `none` continues to the next paragraph. `HARD_BLOCK unresolved`,
+**Every `CARRY:` line is one of five outcomes, and four of them STOP.** A
+count or `none` continues to the next paragraph. `HARD_BLOCK on-disk` STOPs
+before anything moved and files nothing: move each `ON-DISK` path aside and
+re-run the block. `HARD_BLOCK unresolved`,
 `HARD_BLOCK underivable` and `HARD_BLOCK conflict` each file a Tier 1
 `HARD_BLOCK` in `docs/escalations/pending.md` carrying the line verbatim, and
 the retro STOPS. On `underivable` the operator supplies the sprint PR's head and
@@ -1428,11 +1449,24 @@ follow their audit, these must follow the merge.
    this block is the only return to the trunk. The chain's exit refuses a
    failed fetch, a `main` held by another worktree and a `main` that cannot
    fast-forward; the branch check refuses a `main` that resolved to a tag and
-   detached `HEAD`, where the fast-forward itself succeeds.
+   detached `HEAD`, where the fast-forward itself succeeds. The on-disk check
+   runs first, as in Step 1, and refuses a file on disk at a path the landing
+   would write.
 
 ```bash
 # retro 7a-post step 1: land on the merged trunk
-if git fetch origin main && git checkout main && git merge --ff-only origin/main \
+git fetch origin main
+LAND_HOLD="$( cd "$(git rev-parse --show-toplevel)" || exit
+  { git rev-parse -q --verify refs/heads/main >/dev/null && git diff -z --name-only --no-renames HEAD main
+    git diff -z --name-only --no-renames HEAD origin/main; } | sort -zu |
+  while IFS= read -r -d '' p; do
+    if ! git cat-file -e "HEAD:$p" 2>/dev/null && { [ -e "$p" ] || [ -L "$p" ]; }; then echo "ON-DISK $p"; fi
+  done )"
+if [ -n "$LAND_HOLD" ]; then
+  echo "LAND: HARD_BLOCK on-disk — main at origin/main tracks these paths, HEAD does not, and a file is on disk at each; move each aside and re-run the block"
+  printf '%s\n' "$LAND_HOLD"
+  false
+elif git fetch origin main && git checkout main && git merge --ff-only origin/main \
     && [ "$(git symbolic-ref -q --short HEAD)" = main ]; then
   echo "LAND: main at origin/main"
 else

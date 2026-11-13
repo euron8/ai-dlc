@@ -1,0 +1,10 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Two of the rule's three shapes apply, either alone being sufficient.
+
+Its SUBJECT is scripts/validate-backlog-receipts.sh (M1 driver-absent, R13 traced removal and its record,
+BL-899) and the distribution .githooks/pre-push flag that turns R13 on; neither is installed. install.sh's
+copy loop derives from core/fixtures/ and core/scripts/ and never touches the repo-root scripts/, so on a
+consumer this fixture would resolve no validator and could only refuse.
+
+It is also a MUTATION BATTERY: every one of its mutants edits a seeded copy of that validator.

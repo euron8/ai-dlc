@@ -1,3 +1,8 @@
+# BL-899: 118 -> 126 *, 83 -> 91 validator, size 4 and reverify 8 unchanged; one counted run at this release's tip; the
+# push's counted run is the second. vbr_probe_m1 is start-free (function-level over a plumbing-only base), so it adds
+# no start on the 2 FIRED runs (j1p's first run and the m-r9call copy). +8 validator, +8 `*`: the two small-world runs
+# (the j1nb-base control and the m-j1-nobase mutant over BL-868, BL-878 and j1's anchor, no size validator so no R9),
+# 1 start and 3 workers each.
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 # Over the frozen ledger.snapshot (BL-872), so a docs/backlog.md edit no longer moves these rows. The r9 arm runs the
 # receipts validator's own R9 in the j1 world: +2 classifier and +3 ceiling starts, each ceiling start asking the
@@ -13,7 +18,7 @@
 # BL-880 (receipts R1 generic pass): 140 -> 118 *, 95 -> 83 validator, four agreeing counted runs of the change (two
 # on e3d2dfc35, one rebased on f11a8e566, one on its comment-only fold; each read 118 * / 83 validator). R1's generic pass now scores six receipts filtered from $P's ledger, not all twelve across $P and
 # $PH, so each FIRED run (j1p's first run and the m-r9call copy) scores six fewer receipts and makes no $PH generic call.
-118 *
-83 scripts/validate-backlog-receipts.sh
+126 *
+91 scripts/validate-backlog-receipts.sh
 4 scripts/validate-backlog-size.sh
 8 scripts/backlog-reverify.sh

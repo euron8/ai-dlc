@@ -4,3 +4,6 @@ Its subject is the KEEPALIVE block of .githooks/pre-push -- the distribution's o
 which install.sh never ships. The consumer's pre-push is core/git-hooks/pre-push, a
 different program that does not carry this block, so on a consumer these arms would be
 asserting against a file that is not there.
+
+Its SIGPIPE (BL-999) and PUSH_DELETE (BL-1010) arms read core/git-hooks/pre-push and
+core/scripts/hermetic-run.sh at their paths in THIS repository, which a consumer tree does not have.

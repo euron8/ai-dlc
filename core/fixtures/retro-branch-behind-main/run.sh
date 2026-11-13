@@ -1705,9 +1705,22 @@ mutate_p() {
 }
 
 if [ "$ST_LAND" = present ]; then
-# --- land-pre-fix: item 1 as it stood, the bare chain with no verdict. The address is the
-# block's own first line (the Step 1 chain at the top of the file has no `if ` and no trailing
-# backslash), and the range ends at the block's own unindented `fi`.
+# --- land-pre-fix: item 1 as it stood, the bare chain with no verdict. The range opens at the
+# block's on-disk check (`LAND_HOLD=`, which only this block assigns) and ends at the block's own
+# unindented `fi`; only the chain line survives, its `elif ` and trailing backslash stripped. The
+# block's leading `git fetch origin main` stays, a second fetch the bare chain repeats.
+# A consumer's retro.md one pull behind carries the LAND block without the on-disk check (BL-997's
+# subject, PENDING below): there the range opens at the block's own `if git fetch` line, as before.
+if grep -q '^LAND_HOLD="\$( cd ' "$RETRO"; then
+cat > "$SEDS/land-pre-fix" <<'SED'
+/^LAND_HOLD="\$( cd /,/^fi$/{
+/^elif git fetch origin main/!d
+s/^elif //
+s/ \\$//
+}
+SED
+_lpf='elif git fetch origin main && git checkout main && git merge --ff-only origin/main \'
+else
 cat > "$SEDS/land-pre-fix" <<'SED'
 /^if git fetch origin main && git checkout main && git merge --ff-only origin\/main \\$/,/^fi$/{
 /^if git fetch origin main/!d
@@ -1715,7 +1728,9 @@ s/^if //
 s/ \\$//
 }
 SED
-mutate_p 3 land-pre-fix 'if git fetch origin main && git checkout main && git merge --ff-only origin/main \' "@$SEDS/land-pre-fix" \
+_lpf='if git fetch origin main && git checkout main && git merge --ff-only origin/main \'
+fi
+mutate_p 3 land-pre-fix "$_lpf" "@$SEDS/land-pre-fix" \
   "land-ok:NONE/main/y/-/0 land-wt:NONE/retro/n/-/nz land-diverged:NONE/main/n/-/nz land-tag:NONE/detached/y/-/0" \
   "the bare chain prints no verdict: a main held by another worktree leaves HEAD on the retro branch and nothing says so"
 
@@ -1981,6 +1996,31 @@ else
 fi
 fi
 
+# ============================================================================
+# BL-997's RECEIPT. Both landing blocks refuse before the checkout when a file sits on disk at a
+# path the trunk would write, so an operator's IGNORED file at a path origin/main force-adds keeps
+# its bytes. It builds its own five worlds from the resolved retro.md: the ignored e.log, é.log and
+# sub/x.log at Step 1 and at the LAND block, each with a clean twin, and an untracked, non-ignored
+# control. Its subject is the on-disk check: ABSENT when retro.md carries no `ON-DISK ` token, and
+# then PENDING (RED in the distribution), like every subject above.
+# ============================================================================
+RCPT997="$DIR/receipt-bl997.sh"
+[ -f "$RCPT997" ] || { echo "FIXTURE ERROR: missing $RCPT997" >&2; exit 2; }
+_hold="$(grep -c 'ON-DISK ' "$RETRO")" || _hold=0
+if [ "$_hold" -eq 0 ] || [ "$ST_CARRY" = absent ] || [ "$ST_LAND" = absent ]; then
+  pending "BL-997 receipt" "the on-disk check before Step 1's and the LAND block's checkout" "receipt-bl997.sh is not run" 1
+else
+bash "$RCPT997" "$RETRO" > "$WORK/r997.out" 2>"$WORK/r997.err"; r997_rc=$?
+r997_pass="$(grep -cE '^CELL (step1-ignored|step1-clean|land-ignored|land-clean|land-untracked) PASS ' "$WORK/r997.out")" || r997_pass=0
+if [ "$r997_rc" = 9 ]; then
+  bad "FIXTURE BROKEN: receipt-bl997.sh refused to build its worlds: $(head -1 "$WORK/r997.err")"
+elif [ "$r997_rc" = 0 ] && [ "$r997_pass" = 5 ]; then
+  ok "BL-997 receipt: exit 0, all five cells PASS: $(grep '^CELL ' "$WORK/r997.out" | cut -d' ' -f2-3 | tr '\n' ' ')"
+else
+  bad "BL-997 receipt: exit $r997_rc with $r997_pass of 5 CELL PASS lines: $(cat "$WORK/r997.out" "$WORK/r997.err" | head -c 600 | tr '\n' ' ')"
+fi
+fi
+
 
 # A plain (per-push) run must drive no matrix-only cell; a --matrix run must drive them.
 if [ "$MATRIX" = 0 ]; then
@@ -1993,8 +2033,8 @@ echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
 # A PENDING skip is counted, so asserted + skipped must still be the full count.
 # A distribution-layout absence is one FAILED assertion beside its skipped arms, so it is netted out.
-if [ $((asserted + SKIPPED - PENDBAD)) -ne 50 ]; then
-  echo "retro-branch-behind-main: FIXTURE ERROR — ran $asserted assertions ($PENDBAD of them distribution-absence failures) and skipped $SKIPPED as PENDING, expected 50 in all" >&2
+if [ $((asserted + SKIPPED - PENDBAD)) -ne 51 ]; then
+  echo "retro-branch-behind-main: FIXTURE ERROR — ran $asserted assertions ($PENDBAD of them distribution-absence failures) and skipped $SKIPPED as PENDING, expected 51 in all" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then

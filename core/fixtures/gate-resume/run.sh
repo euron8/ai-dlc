@@ -27,6 +27,11 @@
 # MUTANT-MATRIX m7 decides=refusal-after-write twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX m8 decides=refusal-every-action twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX m9 decides=loose-regex twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m10 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m11 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m12 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m13 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m14 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX b457-a decides=S1 twins=S2
 # MUTANT-MATRIX b457-b decides=RB twins=WC
 # MUTANT-MATRIX b457-c decides=S2 twins=NC
@@ -554,6 +559,111 @@ except Exception: pass'
   fi
 else
   skip "end-to-end gate resume through ai-dlc-recover.sh" "gate-checkpoint.sh is not present in this tree"
+fi
+
+# ============================================================================
+# G2. A GATE THE LEAD LEFT WITHOUT `close` (BL-1009). The marker names planning-20260921T130000Z in
+# every world and the hook is handed a transcript. Each world enters architecture.md, opens the gate
+# at 13:00:01Z, reads a gate-validation slice and runs a resume `done`, then:
+#   left     reads stories-test-strategy.md whole -> no RESUME block, the closed note, no marker
+#   live     nothing more (a `done` inside a live gate)  -> RESUME block, marker kept
+#   return   leaves, then reads a gate-validation slice   -> RESUME block, marker kept
+#   wholeM   reads architecture.md (the step at the open) whole again -> RESUME block, marker kept
+#   record   leaves, then runs `gate-checkpoint.sh … record` -> RESUME block, marker kept (a lead on
+#            the reference consumer recorded checks after reading the next step whole)
+#   other    as left, but its open was at 11:00:00Z with an 11:00 nonce: the marker was minted by
+#            another session after this transcript's open -> RESUME block, marker kept
+#   nolines  a transcript with no gate or step line -> RESUME block, marker kept
+#   older    as left, but its open (a gate-transition.sh … 3) was at 14:00:01Z, an hour after the
+#            marker was minted: a refused transition left another session's marker -> RESUME, kept
+# TOKEN per world: <resume y|n><note y|n><marker y|n>. Mutants on the hook, each driving its deciding
+# world and one twin: m10 drops the close (left keeps its marker), m11 drops the leave rule (left
+# resumes), m12 drops the mint-time binding (other is closed), m13 drops the verb return (record is
+# closed), m14 drops the binding's lower bound (older is closed). The subject is the hook's GATE_LEFT rule: a hook without it is SKIP (HARD in the
+# distribution).
+# ============================================================================
+if [ -n "$CKPT" ] && grep -q 'GATE_LEFT' "$HOOK"; then
+  _GL_N=6
+  _gl_rd() { printf '{"type":"assistant","timestamp":"2026-09-21T13:05:00.000Z","message":{"content":[{"type":"tool_use","id":"x","name":"Read","input":{"file_path":"/p/.claude/skills/ai-dlc/steps/%s.md"%s}}]}}\n' "$1" "${2:-}"; }
+  _gl_bs() { printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"tool_use","id":"x","name":"Bash","input":{"command":"%s"}}]}}\n' "${2:-2026-09-21T13:05:00.000Z}" "$1"; }
+  _gl_nonce="planning-20260921T130000Z"
+  gl_battery() { # gl_battery <hook> <tag> [worlds] -> "<world>:<tok> ..." (default: all seven)
+    local hook="$1" tag="$2" w d c r k m out=""
+    for w in ${3:-left live return wholeM record other nolines older}; do
+      d="$WORK/g2-$tag-$w"; _mkconsumer "$d"
+      cp "$hook" "$d/.claude/hooks/ai-dlc-recover.sh"
+      bash "$CKPT" --root "$d" --nonce "$_gl_nonce" open >/dev/null 2>&1
+      if [ "$w" = nolines ]; then
+        printf '{"type":"assistant","timestamp":"2026-09-21T13:05:00.000Z","message":{"content":[{"type":"text","text":"no tool"}]}}\n' > "$d/t.jsonl"
+      else
+      { _gl_rd architecture
+        if [ "$w" = older ]; then
+          _gl_bs 'scripts/ai-dlc/gate-transition.sh s1 3' 2026-09-21T14:00:01.000Z
+        elif [ "$w" = other ]; then
+          _gl_bs 'N=planning-20260921T110000Z; scripts/ai-dlc/gate-checkpoint.sh --nonce \"$N\" open' 2026-09-21T11:00:00.000Z
+        else
+          _gl_bs "N=$_gl_nonce; scripts/ai-dlc/gate-checkpoint.sh --nonce \\\"\$N\\\" open" 2026-09-21T13:00:01.000Z
+        fi
+        _gl_rd gate-validation ',"offset":1,"limit":40'
+        _gl_bs 'scripts/ai-dlc/gate-checkpoint.sh --nonce \"$N\" done'
+        case "$w" in
+          left|other|older) _gl_rd stories-test-strategy ;;
+          return) _gl_rd stories-test-strategy; _gl_rd gate-validation ',"offset":40,"limit":10' ;;
+          record) _gl_rd stories-test-strategy; _gl_bs 'scripts/ai-dlc/gate-checkpoint.sh --nonce \"$N\" record 15 PASS' ;;
+          wholeM) _gl_rd architecture ;;
+        esac; } > "$d/t.jsonl"
+      fi
+      c="$(printf '{"source":"compact","session_id":"fixture","transcript_path":"%s"}' "$d/t.jsonl" \
+        | CLAUDE_PROJECT_DIR="$d" bash "$d/.claude/hooks/ai-dlc-recover.sh" 2>/dev/null \
+        | python3 -c 'import sys,json
+try: print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
+except Exception: pass')"
+      r=n; grep -q 'RESUME it, do not restart it' <<<"$c" && r=y
+      k=n; grep -q 'A gate left open was closed' <<<"$c" && grep -qF "$_gl_nonce" <<<"$c" && k=y
+      m=n; [ "$(bash "$CKPT" --root "$d" current 2>/dev/null)" = "$_gl_nonce" ] && m=y
+      out="$out $w:$r$k$m"
+    done
+    printf '%s' "${out# }"
+  }
+  _gl_want="left:nyn live:yny return:yny wholeM:yny record:yny other:yny nolines:yny older:yny"
+  _gl_got="$(gl_battery "$HOOK" ship)"
+  B_GL=0
+  if [ "$_gl_got" = "$_gl_want" ]; then
+    B_GL=1
+    ok "a gate left at a whole read of another step is closed and not resumed; a live gate, a return to it by a read or a record, a re-read of its own step, a marker minted outside 120 s of this transcript's open on either side, and a transcript with no gate line still resume [$_gl_got]"
+  else
+    bad "gate-left battery: expected [$_gl_want], got [$_gl_got]"
+  fi
+  _m10="$WORK/recover-m10.sh"; _m11="$WORK/recover-m11.sh"; _m12="$WORK/recover-m12.sh"; _m13="$WORK/recover-m13.sh"; _m14="$WORK/recover-m14.sh"
+  awk 'index($0, "bash \"$GATE_CKP\" --nonce \"$GATE_NONCE\" close >/dev/null 2>&1 || GATE_LEFT=\"\"") { print "  :"; next } { print }' "$HOOK" > "$_m10"
+  grep -vF 'if ($2 == "W" && gate && m != "" && s != m) left = s' "$HOOK" > "$_m11"
+  sed 's/if \$m >= \$o - 120 and \$m <= \$o + 120 then "bound" else "other" end/"bound"/' "$HOOK" > "$_m12"
+  sed 's/if \$m >= \$o - 120 and \$m <= \$o + 120 then/if $m <= $o + 120 then/' "$HOOK" > "$_m14"
+  grep -vF '$1 == "V" { left = ""; next }' "$HOOK" > "$_m13"
+  for _mm in m10 m11 m12 m13 m14; do
+    eval "_mf=\$_$_mm"
+    if cmp -s "$HOOK" "$_mf" || ! bash -n "$_mf" 2>/dev/null; then
+      bad "FIXTURE STALE: $_mm -- its line is gone from the hook, or the mutant does not parse"; continue
+    fi
+    case "$_mm" in
+      m10) _mw="left live"; _mok="left:nyn live:yny"; _mexp="left:nyy live:yny"
+           _mclaim="mutant m10: without the close the left gate's marker stands, so the next compaction resumes it" ;;
+      m11) _mw="left live"; _mok="left:nyn live:yny"; _mexp="left:yny live:yny"
+           _mclaim="mutant m11: without the leave rule a gate the lead left is resumed as if live" ;;
+      m12) _mw="other left"; _mok="other:yny left:nyn"; _mexp="other:nyn left:nyn"
+           _mclaim="mutant m12: without the mint-time binding a marker another session opened later is closed" ;;
+      m13) _mw="record live"; _mok="record:yny live:yny"; _mexp="record:nyn live:yny"
+           _mclaim="mutant m13: without the verb return a gate the lead went back to and recorded in is closed" ;;
+      m14) _mw="older left"; _mok="older:yny left:nyn"; _mexp="older:nyn left:nyn"
+           _mclaim="mutant m14: without the lower bound a marker minted before a refused transition is closed" ;;
+    esac
+    _mg="$(gl_battery "$_mf" "$_mm" "$_mw")"
+    mcell "$_mm" gate-left "$([ "$_mg" = "$_mok" ] && echo 1 || echo 0)"
+    if [ "$_mg" = "$_mexp" ]; then mutant_killed "$B_GL" "$_mm" "$_mclaim [$_mg]"
+    else bad "MUTANT $_mm: expected [$_mexp], got [$_mg]"; fi
+  done
+else
+  skip "a gate left without close is closed, not resumed (BL-1009)" "gate-checkpoint.sh or the recover hook's GATE_LEFT rule is not present in this tree"
 fi
 
 # ============================================================================
@@ -1212,7 +1322,8 @@ else
 fi
 
 # ============================================================================
-EXPECTED_ASSERTIONS=63
+# 63, plus the six gate-left assertions (G2) when its subject is present and the arm ran.
+EXPECTED_ASSERTIONS=$((63 + ${_GL_N:-0}))
 echo
 if [ "$total" -lt "$EXPECTED_ASSERTIONS" ]; then
   bad "only ${total} assertion(s) ran, below the ${EXPECTED_ASSERTIONS}-assertion floor -- an arm silently failed to fire rather than to pass"

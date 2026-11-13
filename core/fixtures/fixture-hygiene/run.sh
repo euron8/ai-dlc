@@ -236,6 +236,13 @@ drive() { # <tag> <world dir> [--derive]
   ( cd "$2" && unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && bash "$2/$VREL" ${3:+"$3"} ) > "$WORK/c.$1.out" 2> "$WORK/c.$1.err"
   echo $? > "$WORK/c.$1.rc"
 }
+# spawn <drive fn> <args>: start one drive in the background, at most FH_WIDTH in flight (BL-1013). Each drive is a
+# full validator run of about six processes, so the matrix's 120 drives started at once crossed the 150-member
+# process-group line by construction. bash 3.2 has no `wait -n`, so a full batch is waited for before the next one
+# starts. Width cannot move a verdict: every drive writes only its own c.<tag>.* files, and they are read after the
+# final `wait`. Measured at width 12: peak process group and the 20 MATRIX rows in the BL-1013 release entry.
+FH_WIDTH=12; fh_n=0
+spawn() { "$@" & fh_n=$((fh_n + 1)); [ "$fh_n" -lt "$FH_WIDTH" ] || { wait; fh_n=0; }; }
 # d7drive <tag> [<validator>]: arm D7 IS receipt-bl921.sh, which seeds its own world (a NEW fixture dir fx7 with a
 # dangling twin, beside an all-real row) and drives the byte-identical validator, or the named mutant copy, over it.
 d7drive() {
@@ -287,8 +294,8 @@ if [ "$MODE" = matrix ]; then
   for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7 MH8O MH8G MH8C MH8S MH8R MM4 MM4R MM4A MM4P MM4B MH9; do
     cp -R "$WORK/w-clean" "$WORK/mclean-$m" && cp -p "$WORK/mut-$m/$VREL" "$WORK/mclean-$m/$VREL" \
       || { echo "FIXTURE BROKEN: could not build the clean world for $m" >&2; exit 2; }
-    drive "$m.d" "$WORK/mut-$m" & drive "$m.v" "$WORK/mut-$m" --derive & drive "$m.c" "$WORK/mclean-$m" &
-    d7drive "$m.7" "$WORK/mut-$m/$VREL" & d8drive "$m.8" "$WORK/mut-$m/$VREL" & d9drive "$m.9" "$WORK/mut-$m/$VREL" &
+    spawn drive "$m.d" "$WORK/mut-$m"; spawn drive "$m.v" "$WORK/mut-$m" --derive; spawn drive "$m.c" "$WORK/mclean-$m"
+    spawn d7drive "$m.7" "$WORK/mut-$m/$VREL"; spawn d8drive "$m.8" "$WORK/mut-$m/$VREL"; spawn d9drive "$m.9" "$WORK/mut-$m/$VREL"
   done; wait
   for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7 MH8O MH8G MH8C MH8S MH8R MM4 MM4R MM4A MM4P MM4B MH9; do
     dec=""; tw=""
@@ -303,11 +310,11 @@ if [ "$MODE" = matrix ]; then
   exit 0
 fi
 
-drive dirty "$WORK/w-dirty" & drive clean "$WORK/w-clean" & drive derive "$WORK/w-dirty" --derive &
-for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MM4 MM4R MM4A MM4P MM4B MH9; do drive "$m" "$WORK/mut-$m" & done
-d7drive d7 & d7drive MH7 "$WORK/mut-MH7/$VREL" &
-d8drive d8 & d9drive d9 &
-for m in MH8O MH8G MH8C MH8S MH8R; do d8drive "$m" "$WORK/mut-$m/$VREL" & done
+spawn drive dirty "$WORK/w-dirty"; spawn drive clean "$WORK/w-clean"; spawn drive derive "$WORK/w-dirty" --derive
+for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MM4 MM4R MM4A MM4P MM4B MH9; do spawn drive "$m" "$WORK/mut-$m"; done
+spawn d7drive d7; spawn d7drive MH7 "$WORK/mut-MH7/$VREL"
+spawn d8drive d8; spawn d9drive d9
+for m in MH8O MH8G MH8C MH8S MH8R; do spawn d8drive "$m" "$WORK/mut-$m/$VREL"; done
 wait
 B_DIRTY=0
 for a in D1 D2 D3 D5 D6 DE1 DW; do

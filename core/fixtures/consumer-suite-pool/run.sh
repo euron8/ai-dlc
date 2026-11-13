@@ -400,6 +400,26 @@ else
 fi
 B_green=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
 
+# ------------------------------- 7. a green fixture's PENDING rows are counted (BL-998) --
+# A shipped fixture whose subject is absent prints `PENDING  <what>` rows and exits 0, and its ok row used to read
+# the same as a pass. pend prints two rows, one in each shape the shipped emitters use (indented, and at column 0);
+# near is its near-miss, carrying the word where no row starts and once with one space, and must render bare. Its
+# own world, because the green world's report rows are read by name at end of line.
+T="$WORK/pend"
+seed "$T" "$HOOK" || broken "seed failed"
+mkdir -p "$T/tests/fixtures/pend" "$T/tests/fixtures/near"
+printf '#!/usr/bin/env bash\necho "  PENDING  csp: the subject is absent"\necho "PENDING  csp: a second absent part"\nexit 0\n' > "$T/tests/fixtures/pend/run.sh"
+printf '#!/usr/bin/env bash\necho "near: not PENDING  here"\necho "PENDING (one space, a different row)"\nexit 0\n' > "$T/tests/fixtures/near/run.sh"
+p_rc="$(drive "$T" "$WORK/pend.out")"
+if [ "$p_rc" = 0 ] \
+   && grep -qxF '   ok    pend  (2 PENDING row(s): its subject is absent, so those parts checked nothing)' "$WORK/pend.out" \
+   && grep -qxF '   ok    near' "$WORK/pend.out" \
+   && grep -qxF '   PENDING: 1 green fixture(s) printed a PENDING row, so part of each checked nothing: pend' "$WORK/pend.out"; then
+  ok "a green fixture's PENDING rows are counted on its ok row and named once after the report; its near-miss renders bare"
+else
+  bad "PENDING count (rc=$p_rc): $(grep -E 'ok    |PENDING' "$WORK/pend.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 400)"
+fi
+
 # ------------------- 2. a real failure is attributed; 2b/2c its record is kept ------
 # ONE red drive over the arm-2c world (twenty seeded copies, three decoys, one noisy red) serves the
 # attribution arm, the evidence arms and the retention arms: all of them ask about the same red run.
@@ -1237,7 +1257,7 @@ fi
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=53
+EXPECTED_ASSERTIONS=54
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

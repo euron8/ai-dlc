@@ -19,6 +19,78 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1100.0] - 2026-11-12
+
+### BL-999 CLOSED: every writer of a record a push reads runs under git's SIGPIPE disposition
+
+A byte-identical `# SIGPIPE_BEGIN` span holding `trap '' PIPE` now sits in both pre-push hooks (above every step) and in `core/scripts/hermetic-run.sh` (inside HR_SANDBOX). A hand-run hook prefix, the verdict seeder and every sandboxed fixture therefore judge with SIGPIPE ignored, as git runs the hook. **ONE-TIME COST, by lead ruling:** HR_SANDBOX is digested into every verdict key as `#runner`. So every recorded pass in the verdict store, including those the seeder wrote under default SIGPIPE, is retired, and this release's push runs the whole suite once. **Consumers pay it once too:** `core/git-hooks/pre-push` keys its own verdict store on the same HR_SANDBOX digest (`readset_vs_ident`). So each consumer's first push after pulling this release re-runs its whole fixture suite, and later pushes skip as before. **Pre-suite step records are retired too:** the record format moves `#format k2` to `#format k3` in the hook's pk.py writer and reader, so every pre-suite step re-runs once and records k3. 17 of 24 steps' records do not read the hook and would otherwise have survived. `presuite-present-key` cell A3.k2 shows a k2 record refused; its W.skip shows a k3 record honoured on the next push. Releases rebased onto this one reuse what that run records. `core/fixtures/prepush-ssh-keepalive` S1-S2: the span is identical in all three carriers, and under a perl-forced default SIGPIPE a `yes | head -1` writer reads `w=1` with the span against a `w=141` control without it.
+
+### BL-1010 CLOSED: a delete-only push runs no step
+
+Both hooks carry a byte-identical `push_delete_only` (PUSH_DELETE span). It is true only for at least one ref line with every local sha a run of zeros, at 40 and 64 widths. The distribution hook reads stdin only with git's two arguments and a non-terminal stdin, and exits 0 before its first step on a delete-only push. The consumer hook exits `$fail` after arm 0, which judges the ref lines. Empty stdin, a new branch and a mixed push run every step. `prepush-ssh-keepalive` D1-D3: span identity, the predicate's `TTFFF` over five shapes, and each REAL hook driven end to end on a delete line exiting 0 with its one line. D4 is the allow twin: each hook's own bytes are cut at the gate's closing `fi`, and an update and a mixed push must pass it while a delete stops. A hand mutant making the call site unconditional fails D4 alone. The keepalive budget row is set from a counted run on the combined tree.
+
+### BL-1013 CLOSED: fixture-hygiene runs its drives at a bounded width
+
+Every drive goes through `spawn` at `FH_WIDTH=12` (batch wait; bash 3.2 has no `wait -n`). Plain run, old against new, one run each: peak process group 143 to 68, wall 8.14 s to 9.35 s, user+sys 90.5 s to 69.2 s. `--matrix`: rc 0, peak 71, wall 30.5 s, and the 20 MATRIX rows equal the committed ones (`twins=` normalised). Budget `88 *` unchanged on a counted run.
+
+### BL-998 PARTIAL: a green fixture's PENDING rows are counted in the run that dispatched it
+
+Inside the I66-joined pool block of both hooks, one `grep -Hc '^[[:space:]]*PENDING  '` over the run's captured logs annotates each ok row that printed any (`ok <name>  (<n> PENDING row(s): ...)`). A `PENDING: <k> green fixture(s) ...: <names>` line follows the report. `core/fixtures/consumer-suite-pool` gains one world, with a two-row `pend` and a bare-rendering near-miss `near`. Its assertions go 53 to 54 and its budget `356 *` to `361 *` from a counted run. Remainder: a PENDING fixture skipped on a recorded pass is not re-read.
+
+### BL-899 stays PARTIAL: a removed driver is cannot-measure (M1), and the "backlog receipts" step now removes each named read of an open receipt and requires it to stop measuring (R13, by atime); BL-1020 filed OPEN
+
+BL-899 keeps `verify: manual` and gains no LANDED line (operator: "Stays partial" — variable-built reads are not covered). The work is in `scripts/validate-backlog-receipts.sh`, the new `.dist-only` fixture `core/fixtures/backlog-receipt-traced-removal`, and the "backlog receipts" step of `.githooks/pre-push`, which now passes `--traced-removal --base origin/main`.
+
+- **M1, driver-absent (lead ruling L3 a-d).** `cm_reason` gains `driver-absent`, keyed on the receipt's own `bash [-opts] <P>` operand. Absent at HEAD and at `--base`: EXCLUDED-DRIVER-ABSENT-AT-BASE, counted. Absent at HEAD, present at `--base`: DRIVER-REMOVED, a finding. No resolvable `--base` given: DRIVER-ABSENT-UNRESOLVED-BASE, a finding. A GIVEN `--base` that does not resolve refuses the whole run (`M1-BASE-UNRESOLVED`, exit 2, with the remedy). [builder confirms what a plain hook run does for the default base — see the entry]
+- **R13, traced removal by atime (`--traced-removal`).** The read set is atime after a forced epoch in private checkouts (the sandbox stream drops reports under load and BL-868 forbids a load-dependent verdict; operator ruling, this arm only). Removal set = the NAMED closure (every path on an executable line is named; a named script is expanded only where a script EXECUTES it — `bash`/`sh`/`.`/`source`/`exec` operand, command word, or a variable assigned and then executed; a path in a string literal is never followed; 32-removal ceiling, OVERFLOW refused) ∩ files the baseline read, at removal width 4. An in-arm instrument probe, a must-hit and a must-miss control refuse rather than degrade. Stat-only reads are not seen (recorded limit).
+- **Cost (measured; lead ruling to wire).** A replay on an unmoved key adds about 0 (whole step 86-93 s against 99-116 s without the flag, loaded). A moved key costs 4 min 0 s loaded at removal width 4 on base `359fdb213` (7 removals; it was about 12 min at width 2). 14 of the last 40 main commits moved BL-878's key, so the expected cost is about 50 s per push.
+- **M3 record.** A run within the ceiling writes a per-receipt record; an unmoved key replays its rows and counts.
+- **Two-sided ceiling `DEFAULT_MAX_R13=6`.** Above or below fails; an EMPTY population or a run that judged nothing under a ceiling above 0 fails too. BL-878's six rows are findings against BL-878's receipt: three exit-1 rows (`scripts/fixture-inprocess-allowlist.txt`, `scripts/fixture-matrix-allowlist.txt`, and `scripts/validate-enforcement-map.sh` — the last introduced by 0.1098.0's BL-982 P2 self-probe naming it on an executable line, read by BL-878's run; BL-878's entry now says it is owed there and the ceiling drops to 5 when guarded) and three exit-2 contract questions (`core/fixtures/lib/mutant.sh`, `scripts/validate-fixture-hygiene.sh`, `scripts/validate-fixture-invocations.sh`: removed, the driver gives its documented refusal).
+- **Coupling.** Any release that moves BL-878's unguarded count must edit `DEFAULT_MAX_R13` in the same commit; a release that rotates BL-878 out must set it to 0.
+- **Restricted test flags.** `--r13-drive`, `--probe-seeds`, `--probe-world` and `BR_R13_PROBE_DIR` never exit 0 (verdict 0/1 exits 3 with `RESTRICTED: verdict-rc=<n>`; a refusal stays 2).
+- **Measured.** R13 on base 65bbbedad under the execution-edge closure: 6 named removals, 1 named-unread, 617 enumerated excluded, 5 UNGUARDED-READ. On a combine carrying BL-982's P2: 7 named removals, 1 named-unread, 1223 enumerated excluded, 6 UNGUARDED-READ (the five plus `validate-enforcement-map.sh`). `M1-BASE-UNRESOLVED` exited 2 on a seeded unresolvable base. PENDING (ai-dlc-ca confirms on the B4 release sha before this is kept): the same six rows by path and exit on the bundle tree.
+- **Enumerated figures by instrument and tree.** Sandbox tracer at `e3d2dfc35`: 886 enumerated / 6 named of 892 reads. Shipped atime arm on base `65bbbedad`: 617 enumerated / 6 named removals / 1 named-unread. Cause: the driver only stat-tests each `run.sh` and globs `cells.decl` (`scripts/validate-fixture-inprocess.sh`, cited in BL-899 at its bundle line numbers); the split against tree drift is not determined.
+- **Starts.** New fixture: one tagged cli start per state plus one self-nested row for worker re-starts, 553 `*` / 349 validator / 16 in-process (cut from 2176 / 1237). backlog-real-ledger 118 → 126 `*`, 83 → 91 validator: the two small-world `m-j1-nobase` runs (the `j1nb-base` control and the mutant), 1 start and 3 workers each; vbr_probe_m1 is start-free. backlog-receipt-binding unchanged at 2851 / 2110. [owner re-counts once on the bundle tree]
+- **16 shifted citations deliberately left**: 15 in `docs/backlog.archive.md`, 1 in `core/fixtures/backlog-real-ledger/ledger.snapshot` (archived history, frozen fixture data).
+- **ai-dlc-80's part.** Two comment-only corrections to `scripts/validate-backlog-receipts.sh` from its BL-615/397/512/398 work, carried as their own commit.
+
+BL-1020 filed OPEN: `scripts/pregate-self-check.sh` judges the tree's own hook (`:109`) while a push runs the hook `core.hooksPath` names (the main checkout's). A hook-changing release pushed from a linked worktree is judged by the main checkout's older hook (F1: at `064b8c231` a "backlog receipts" line lacking a new flag was what such a push would run); and an un-rebased tree reads green at pregate and fails at push when a release adds a flag to a hook step, because an older validator exits 2 `usage` on an unknown flag (F2: the mechanism is measured, `scripts/validate-backlog-receipts.sh:805` at `d0ea60a54`; this release is such an instance, so every unlanded branch must rebase onto it before pushing). No fix here.
+
+### BL-1014 (PARTIAL): adversarial-shard-merge's `--matrix` scores its rows in parallel
+
+- **The mechanism.** `--matrix` takes `--jobs=<n>`, default 8 by operator ruling, and `--jobs=1` runs the serial matrix as before. Each row (MX0 and each mutant) is scored by `sc_run` in a background worker. The worker has its own WORK, the two fixed scratch names rebound (`bind_scratch`) and its own KE world (`ke_build`). At most `n` workers run at once. A worker copies the parent's cached worlds through `wc_get`, which now keeps the cache and its copies under `WC_ROOT`; a worker that misses the cache builds afresh and caches nothing. `mx_drain` replays every row in enqueue order through the same `mx_cells` and judgment the serial matrix runs. The plain run is unchanged. Ctrl-C does not reach the workers, so a `--matrix` is stopped by its process group.
+- **Measured.** One tree, one window, the same 8 mutants plus MX0 against all 90 arms (810 rows), runner before the KE fix: old serial 3101 s wall and 2744 s CPU; new at `--jobs=9` 1076 s wall and 3902 s CPU. That is -65% wall and +42% CPU, the extra almost all sys time, which is fork contention. Bash starts were 8734 on both, with identical per-script counts. The shipped runner adds 13 counted starts per parallel row that runs a KE arm. The full-matrix wall is an ESTIMATE scaled from that ratio: about 1.7 to 2.9 h against the derived 4.8 to 8.3 h serial.
+- **Equivalence.** 806 of the 810 rows were byte-identical. Three KE cells tripped only in parallel because KE's subject world was shared by every drive. On the fixed runner, 72 of 72 re-run cells matched the serial run, 54 of them KE cells. One PCN2 cell (CM-doc-sha-unchecked) tripped only in parallel and is UNEXPLAINED. Forced concurrency did not reproduce it: 96 of 96 PCN2 calls held across 16 workers, and 36 of 36 interleaved with twelve other PC/DV arms across 12 workers, against a positive control that tripped 3 of 3. `--jobs=1` rules the runner out for any cell that trips.
+- **Status.** BL-1014 stays PARTIAL. Still owed: the PCN2 explanation, a measured full `--matrix` (an operator instrument under BL-1022), and the per-start cost and starts per cell.
+
+### BL-997 closed: retro's two landing blocks refuse before a checkout that would overwrite a file on disk
+
+`git checkout main && git merge --ff-only origin/main` overwrites an operator's IGNORED file at a path that `origin/main` force-adds, and exits 0. It does this both in `retro.md` Step 1 and in 7a-post step 1's LAND block. Both blocks now first list the paths that `main` or `origin/main` tracks and `HEAD` does not. If a file is on disk at one of them, the block prints `CARRY: HARD_BLOCK on-disk` or `LAND: HARD_BLOCK on-disk`, then one `ON-DISK <path>` line per path, and moves nothing. The LAND form exits non-zero. The predicate is `ai-dlc-update`'s working-tree check (BL-986).
+
+- **Receipt.** `core/fixtures/retro-branch-behind-main/receipt-bl997.sh`, run by the fixture, five worlds. At each site, ignored `e.log`, `é.log` and `sub/x.log` are force-added upstream, with a clean twin; there is also an untracked, non-ignored control. At base, both ignored cells FAIL with the operator's bytes replaced, and the three controls PASS. On the fix, all five PASS.
+- **Consumer layouts.** The `land-pre-fix` mutant picks its anchor by whether the check is present. A consumer one pull behind reads PENDING and exits 0. This was measured on an `install.sh` tree with each `retro.md`: PASS with 1 PENDING on the old one, PASS 51 on the new one.
+- `invocations.decl` 215 to 221.
+
+### BL-1009 PARTIAL: the recover hook closes a gate its own session left, instead of resuming it
+
+At a compaction, `core/hooks/ai-dlc-recover.sh` reads its own transcript with `extract.py`'s `gate_event()` grammar. Over 1568 real graph lead commands the two grammars disagree on 0. If the lead left the gate, the hook runs `gate-checkpoint.sh close` and injects a short note in place of the RESUME block. Leaving means a whole read of another step file, with no later `gate-validation` read and no `record`, `done` or `list`. The hook acts only when the marker's nonce was minted within 120 s of that transcript's open, on either side.
+
+- **Fixture.** Arm G2 of `gate-resume` has eight worlds. Mutants m10 to m14 remove, in turn, the close, the leave rule, the binding, the verb return and the binding's lower bound; each is killed. `invocations.decl` goes from 241 to 319 total, and `gate-checkpoint.sh` from 88 to 124.
+- **Real transcript.** On graph s322 lead `6c14d949`, the real hook resumes at 13:51Z and 14:30Z and closes at 15:30Z.
+- **Remainder.** A marker left by an earlier session.
+
+### BL-1003 PARTIAL: the extractor's gate span ends where the lead left the gate
+
+`extract.py` applies the same rule and prints a per-sprint count of opens, closes, unclosed opens and LEFT events.
+
+- **Receipt.** `check-gate-terminator.sh` over seven synthetic worlds exits 1 on the base extractor and 0 on the fix.
+- **s322.** On s322, 29 of 6423 spawn owners move from `gate-validation[carry-over-evaluation]` to `requirements`.
+- **Remainder.** Item 3, re-deriving the readings the entry lists, stays OPEN.
+
+### BL-996 closed as not a defect; BL-993 entry text only
+
+BL-996 closes on the operator's disposition. When a sharded repair's join prints SERIAL-REQUIRED 0 and ESCALATED-COUNT 0, no part cites an edit. So the deny standing until a clean re-run, a SUPPRESSED entry or waiver, or an operator authorization is the designed outcome. Both candidate lifts were scored on the real hook and the real join, and each would lift without a repair; nothing shipped. BL-993's premise is expired: core never merges the sprint PR, because the merge is the consumer's `{deploy_command}` extension. The entry names what a real fix would need, and stays OPEN.
+
 ## [0.1099.0] - 2026-11-12
 
 ### BL-985 — closed

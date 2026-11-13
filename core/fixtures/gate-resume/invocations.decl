@@ -1,5 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-241 *
+# Re-measured for BL-1009 from one counted hermetic-run.sh run: arm G2 drives the recover hook over eight transcript worlds, and mutants m10 to m14 drive two worlds each (the deciding world and one twin), 18 worlds; each world opens the gate and reads `current`, the hook reads `current`, and it closes the left one, +78 starts, +36 of them gate-checkpoint.sh.
+319 *
 0 core/hooks/ai-dlc-recover.sh
-88 core/scripts/gate-checkpoint.sh
+124 core/scripts/gate-checkpoint.sh
 21 core/scripts/gate-slice.sh
