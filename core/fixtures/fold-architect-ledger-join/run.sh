@@ -91,9 +91,9 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 case "$WORK" in /tmp/*|/private/*|/var/folders/*) trap 'rm -rf "$WORK"' EXIT ;; esac
 
-fails=0; asserted=0; stood=0
-ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
+stood=0
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 sd()  { printf '  --    %s\n' "$1"; stood=$((stood+1)); }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
@@ -1016,8 +1016,5 @@ fi
 
 # --- verdict ---------------------------------------------------------------------------------
 EXPECTED_ARMS=86
-if [ $((asserted + stood)) -ne "$EXPECTED_ARMS" ]; then
-  echo "FIXTURE BROKEN: $((asserted + stood)) arms reported, $EXPECTED_ARMS expected" >&2; exit 1
-fi
-echo "fold-architect-ledger-join: $((asserted - fails)) ok, $fails FAIL, $stood stood down"
-[ "$fails" -eq 0 ]
+echo "fold-architect-ledger-join: $stood stood down"
+report_end fold-architect-ledger-join "$((EXPECTED_ARMS - stood))"

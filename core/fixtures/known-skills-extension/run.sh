@@ -15,9 +15,7 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 echo "HERMETIC-CONSUMED $VALIDATOR"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 # run_with <ext-path> -> sets RC. Empty ext-path = no extension (explicitly).
 run_with() { AI_DLC_KNOWN_SKILLS_EXT="$1" bash "$VALIDATOR" "$ARTIFACT" >/dev/null 2>&1; RC=$?; }
@@ -54,6 +52,4 @@ run_with "$WORK/does-not-exist.json"
   || bad "a nonexistent extension path did not behave as absent (rc=$RC)"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "known-skills-extension: PASS"; exit 0; fi
-echo "known-skills-extension: $fails assertion(s) FAILED" >&2
-exit 1
+report_end known-skills-extension

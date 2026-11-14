@@ -92,9 +92,7 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/_bmad-output/planning-artifacts" "$WORK/docs" "$WORK/.claude/team-roles" || exit 2
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 B_a2b=0; B_a2e=0; B_a2f=0; B_a2d_penv=0; B_a2d_env=0; B_a4=0; B_a4b=0; B_a8d=0; B_a10=0; B_a10b=0
 
@@ -806,9 +804,4 @@ else
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "whole-read-pool: PASS"
-  exit 0
-fi
-echo "whole-read-pool: FAIL ($fails assertion(s))"
-exit 1
+report_end whole-read-pool

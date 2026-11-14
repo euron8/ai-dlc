@@ -19,6 +19,32 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1126.0] - 2026-11-14
+
+### BL-1051 CLOSED: fixtures declare what they read, not whole directories
+
+15 fixtures' `inputs.decl` are narrowed to the lines their sandbox traces read, and two whole-hook lines are dropped (`self-update-gate`, `-d`); `docs/inputs-decl-whole-rows.tsv` shrinks to 230 rows. Every traceable line now matches its trace. The `core/`, `core/scripts/`, `scripts/` and reconcile directory lines stay: their declarers list those directories, keep them by a `!` rule, or have no accepted trace. `procsub-staged-refusal-boot-b` and `-c` stay wide until their rewritten run.sh is traced.
+
+### BL-1056 PARTIAL: 85 more fixtures report through `core/fixtures/lib/report.sh`
+
+58 mechanical fixtures and 27 reconcile fixtures replace their own `fails=0`, `ok()` and `bad()` with one source of `lib/report.sh` and end in `report_end`. `fixture-contract-allowlist.txt` is regenerated with `--derive-h10`: 238 to 152 rows.
+
+### BL-1059 filed: heavy fixtures pay for arms and worlds a narrower drive would answer
+
+`procsub-staged-refusal-boot` (+`-b`, `-c`) scores each mutant on its deciding arms plus one twin, from a 43-row MUTANT-MATRIX block, and moves onto `lib/report.sh` and `lib/matrix.sh`: the kill set is identical and counted starts fall from 3041 to 2191. `story-evidence-scaffold` drops the deciding worlds its DAR-N mutants do not need. The remainder is named in the entry with measured seconds.
+
+### BL-1072 filed and CLOSED: a pool worker at width 1 no longer hangs with no unit under it
+
+The watcher loop in both pre-push hooks exits when the unit it watches is gone (`kill -0 "$pid" || exit 0`).
+
+### BL-1073 filed and CLOSED: adversarial-shard-merge CS13 passes on a plain run
+
+A trailing-slash `TMPDIR` made `lib.sh` build a `T//` work path that CS13's literal match missed on a plain run; the gate's sandbox squeezes `TMPDIR`, so pushes never saw it. `lib.sh` squeezes it the same way.
+
+### BL-1071 filed
+
+The composer keys another fixture's `inputs.decl` through any covering directory line, so every declaration edit re-runs the `core/` and `core/fixtures/` declarers.
+
 ## [0.1125.0] - 2026-11-14
 
 ### BL-1054 CLOSED: the backlog-receipts step's R9 pass runs alongside the corpus score pool

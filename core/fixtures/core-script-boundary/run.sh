@@ -51,9 +51,7 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_a5=0
 
@@ -238,9 +236,4 @@ got="$(decision .claude/skills/ai-dlc/templates/brand-new.md Write)"
                     || bad "  a Write creating .claude/skills/ai-dlc/templates/brand-new.md was $got -- the unfixable-[core] state can still be entered"
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "core-script-boundary: PASS"
-  exit 0
-fi
-echo "core-script-boundary: FAIL ($fails assertion(s))"
-exit 1
+report_end core-script-boundary

@@ -76,9 +76,7 @@ trap 'rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED core/scripts/audit-rule-files.sh"
 echo "HERMETIC-CONSUMED core/scripts/validate-gate-manifest.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # Herestring, not a pipe: under `pipefail`, a `grep -q` that matches in the first
 # few lines exits before the writer finishes and the pipeline reports the writer's
 # SIGPIPE, so a MATCH is read as a failed assertion. Every tier-1 label prints at
@@ -1910,6 +1908,4 @@ else
     || bad "a plain run drove $mcells matrix-only cells"
 fi
 echo
-if [ "$fails" -eq 0 ]; then echo "retro-audit-scans: PASS"; exit 0; fi
-echo "retro-audit-scans: $fails assertion(s) FAILED" >&2
-exit 1
+report_end retro-audit-scans

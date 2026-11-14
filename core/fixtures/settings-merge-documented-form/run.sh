@@ -43,9 +43,7 @@ done
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # Kills go through mutant_killed (scripts/validate-mutant-kills.sh): scored only when the unmutated
 # arm passed in THIS run, so a mutant cannot score a kill by the seed failing.
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
@@ -239,6 +237,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "settings-merge-documented-form: PASS"; exit 0; fi
-echo "settings-merge-documented-form: $fails assertion(s) FAILED" >&2
-exit 1
+report_end settings-merge-documented-form

@@ -107,9 +107,8 @@ done
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
-FAILS=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 . "$ROOT/core/fixtures/lib/mutant.sh"
 JREL=scripts/validate-fixture-invocations.sh
 RREL=core/scripts/hermetic-run.sh
@@ -518,6 +517,4 @@ score MCOL K6 K1 'dead: counted-cd68ce325a3d (1 file(s))'
 if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MPASS.A1.out" ] && [ -e "$WORK/c.MJ3.SP.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"
 else bad "NM a plain run reached the matrix, or its per-push mutant drives did not run"; fi
 
-[ "$FAILS" = 0 ] || { echo "fixture-invocation-budget: $FAILS FAILED"; exit 1; }
-echo "fixture-invocation-budget: PASS"
-exit 0
+report_end fixture-invocation-budget

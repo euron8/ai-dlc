@@ -7,3 +7,4 @@ core/skills/ai-dlc-update/reconcile/setup-sites.md
 core/skills/ai-dlc-update/fixture-manifest.md
 core/team-roles/architect.md
 core/team-roles/dev.md
+core/fixtures/lib/report.sh

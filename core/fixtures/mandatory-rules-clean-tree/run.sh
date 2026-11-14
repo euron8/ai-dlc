@@ -31,9 +31,7 @@ fi
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_sibling_missing=0
 
@@ -73,9 +71,4 @@ if [ "${1:-}" = "--matrix" ]; then
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "mandatory-rules-clean-tree: PASS"
-  exit 0
-fi
-echo "mandatory-rules-clean-tree: FAIL ($fails assertion(s))"
-exit 1
+report_end mandatory-rules-clean-tree

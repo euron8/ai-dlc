@@ -3,11 +3,9 @@
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/matrix.sh
-core/hooks/
 # reason: core/scripts/ is enumerated by the parent this shard execs -- git diff over core/*.sh, core/fixtures/procsub-staged-refusal/run.sh:1967, and cp -R "$SC", run.sh:1702.
 core/scripts/
-core/session-driver/
 core/skills/
 core/schemas/provenance-block.json
 core/fixtures/procsub-staged-refusal-c/run.sh
-core/fixtures/procsub-staged-refusal/
+core/fixtures/procsub-staged-refusal/run.sh

@@ -18,9 +18,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 echo "HERMETIC-CONSUMED $SCRIPT"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 echo "relabel-theirs-collision:"
 
@@ -93,6 +91,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "relabel-theirs-collision: PASS"; exit 0; fi
-echo "relabel-theirs-collision: $fails assertion(s) FAILED" >&2
-exit 1
+report_end relabel-theirs-collision

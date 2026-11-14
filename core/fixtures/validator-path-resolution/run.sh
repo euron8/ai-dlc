@@ -87,9 +87,7 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 agreed_rows=""; B_vprGm=0; B_vprApc=0
 
@@ -616,9 +614,4 @@ echo "  not path-sensitive (agreement is trivially true for these): $n_inert"
 echo "   ${inert_list# }"
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "validator-path-resolution: PASS"
-  exit 0
-fi
-echo "validator-path-resolution: FAIL ($fails assertion(s))"
-exit 1
+report_end validator-path-resolution

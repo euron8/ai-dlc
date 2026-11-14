@@ -14,3 +14,4 @@ core/scripts/validate-artifact-budget.sh
 core/scripts/validate-steering-budget.sh
 core/scripts/content-seal.sh
 core/schemas/provenance-block.json
+core/fixtures/lib/report.sh

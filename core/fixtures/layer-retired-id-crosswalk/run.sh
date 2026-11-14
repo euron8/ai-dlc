@@ -43,10 +43,8 @@ ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$ROOT"' EXIT
 CONS="$ROOT/consumer"
 
-fails=0
-made=0
-ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
@@ -331,13 +329,4 @@ else
 fi
 
 echo
-if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "layer-retired-id-crosswalk: FAIL — $made assertions ran, $EXPECTED_ASSERTIONS were written. An arm did not execute at all, which is not the same as an arm that passed. Find the one that vanished before reading anything above as green."
-  exit 1
-fi
-if [ "$fails" -eq 0 ]; then
-  echo "layer-retired-id-crosswalk: PASS ($made assertions)"
-  exit 0
-fi
-echo "layer-retired-id-crosswalk: $fails of $made assertion(s) failed"
-exit 1
+report_end layer-retired-id-crosswalk "$EXPECTED_ASSERTIONS"

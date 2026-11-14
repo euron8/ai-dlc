@@ -13,3 +13,4 @@
 !core/schemas/pause-routing.json
 !core/skills/ai-dlc/SKILL.md
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

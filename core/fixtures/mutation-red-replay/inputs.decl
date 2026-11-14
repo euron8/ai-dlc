@@ -1,2 +1,3 @@
 !core/scripts/validate-mutation-red.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

@@ -170,9 +170,8 @@ for m in .git .claude core/skills/ai-dlc; do
   done
 done
 
-FAILS=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 MATRIX=0
 if [ "${1:-}" = --matrix ]; then MATRIX=1; fi
 MWIDE=0; MROWS=0
@@ -655,5 +654,4 @@ else
 fi
 
 echo
-if [ "$FAILS" -eq 0 ]; then echo "census-hermetic-coverage: PASS"; exit 0; fi
-echo "census-hermetic-coverage: $FAILS assertion(s) FAILED"; exit 1
+report_end census-hermetic-coverage

@@ -24,10 +24,8 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 echo "HERMETIC-CONSUMED core/scripts/validate-audit-anchors.sh"
 
-fails=0
-asserted=0
-ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 echo "audit-anchors-schema:"
 
@@ -342,10 +340,4 @@ else
   else bad "MX matrix run measured $MROWS cells, 7 expected"; fi
   _want=24
 fi
-if [ "$asserted" -ne "$_want" ]; then
-  echo "audit-anchors-schema: FIXTURE ERROR — ran $asserted assertions, expected $_want" >&2
-  exit 2
-fi
-if [ "$fails" -eq 0 ]; then echo "audit-anchors-schema: PASS ($asserted assertions)"; exit 0; fi
-echo "audit-anchors-schema: $fails of $asserted assertion(s) FAILED" >&2
-exit 1
+report_end audit-anchors-schema "$_want"

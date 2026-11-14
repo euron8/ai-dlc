@@ -49,9 +49,7 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq required" >&2; exit 2
 ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$ROOT"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_a1=0; B_a6c=0
 
@@ -283,6 +281,4 @@ else
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then echo "answer-handoff-routing: PASS"; exit 0; fi
-echo "answer-handoff-routing: $fails assertion(s) FAILED" >&2
-exit 1
+report_end answer-handoff-routing

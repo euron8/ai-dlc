@@ -1,7 +1,6 @@
 # story-evidence-receipts: the validator is copied with its whole scripts directory (world.sh's mk_tree, so its siblings
 # resolve beside it), plus the schema sprint-status.sh loads; world.sh, he-inproc.sh and the four receipts are
 # story-evidence-scaffold's, sourced (the receipts stay at the paths their verify: lines name).
-core/fixtures/story-evidence-receipts/
 core/scripts/
 !core/scripts/validate-handoff-evidence.sh
 !core/scripts/record-only-diff.sh

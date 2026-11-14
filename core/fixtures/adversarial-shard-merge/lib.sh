@@ -67,7 +67,12 @@ for _s in seed.192-ff-A-token-decimal-resolution.md seed.bug-192-il-accuracy.md 
 done
 echo "$NAME: resolved subject = $MERGE"
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/$NAME.XXXXXX")" || exit 2
+# macOS hands out TMPDIR with a trailing slash; unsqueezed, WORK reads `.../T//<name>.X` while every subject prints
+# the path squeezed, so a join on a WORK path inside an output line misses (BL-1073). hermetic-run.sh squeezes
+# TMPDIR, so only a plain run saw it; squeezing here makes both build the same paths.
+_asm_td="${TMPDIR:-/tmp}"
+while case "$_asm_td" in ?*/) true ;; *) false ;; esac; do _asm_td="${_asm_td%/}"; done
+WORK="$(mktemp -d "$_asm_td/$NAME.XXXXXX")" || exit 2
 WC_ROOT="$WORK" # the world cache's root (wc_get); unlike WORK, nothing rebinds it
 trap 'rm -rf "$WORK"' EXIT
 

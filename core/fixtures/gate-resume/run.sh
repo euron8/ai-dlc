@@ -85,10 +85,8 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
-fails=0
-total=0
-ok()  { total=$((total+1)); printf '  ok    %s\n' "$1"; }
-bad() { total=$((total+1)); printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # need_base / mutant_killed (core/fixtures/lib/mutant.sh): every kill below goes through
 # mutant_killed, gated on a B_* flag that the UNMUTATED arm set in THIS run beside its own ok.
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
@@ -1840,12 +1838,7 @@ fi
 # present and the arms ran.
 EXPECTED_ASSERTIONS=$((63 + ${_GL_N:-0} + ${_G3_N:-0}))
 echo
-if [ "$total" -lt "$EXPECTED_ASSERTIONS" ]; then
-  bad "only ${total} assertion(s) ran, below the ${EXPECTED_ASSERTIONS}-assertion floor -- an arm silently failed to fire rather than to pass"
+if [ $((oks + fails)) -lt "$EXPECTED_ASSERTIONS" ]; then
+  bad "only $((oks + fails)) assertion(s) ran, below the ${EXPECTED_ASSERTIONS}-assertion floor -- an arm silently failed to fire rather than to pass"
 fi
-if [ "$fails" -eq 0 ]; then
-  echo "gate-resume: PASS (${total} assertions)"
-  exit 0
-fi
-echo "gate-resume: ${fails} of ${total} assertion(s) FAILED" >&2
-exit 1
+report_end gate-resume

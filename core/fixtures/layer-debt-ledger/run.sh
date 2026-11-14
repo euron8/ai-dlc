@@ -32,9 +32,8 @@ trap 'rm -rf "$WORK"' EXIT
 REG="$WORK/register.jsonl"
 
 EXPECTED_ASSERTIONS=48
-fails=0; made=0
-ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 B_a9=0; B_a11=0; B_cc=0; B_a15=0; B_a16=0; B_a18=0; B_a18b=0; B_a26=0; B_a29=0; B_a31=0; B_a32=0; B_any=0
 
@@ -860,9 +859,4 @@ else
 fi
 
 echo ""
-if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "layer-debt-ledger: FAIL — $made assertions ran, $EXPECTED_ASSERTIONS were written. One did not execute at all, which is not the same as one that passed."
-  exit 1
-fi
-if [ "$fails" -eq 0 ]; then echo "layer-debt-ledger: PASS ($made assertions)"; exit 0; fi
-echo "layer-debt-ledger: FAIL ($fails of $made)"; exit 1
+report_end layer-debt-ledger "$EXPECTED_ASSERTIONS"

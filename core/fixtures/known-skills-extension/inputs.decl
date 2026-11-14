@@ -3,3 +3,4 @@
 # core/core/skills/ai-dlc are the validator's walk-up probes, not reads.
 !core/scripts/validate-provenance-block.sh
 core/schemas/provenance-block.json
+core/fixtures/lib/report.sh

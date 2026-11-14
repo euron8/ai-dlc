@@ -88,10 +88,8 @@ command -v git >/dev/null 2>&1 || { echo "FIXTURE ERROR: git not on PATH" >&2; e
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-made=0
-ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # 37 = a1: 2 notes, m1: 3, m2: 1 anchor note and 4, m3: 1 anchor note and 3, m4: 4 on either branch, gc: 2,
 # g1-g4: 4 each on either branch (applied, or DID NOT APPLY; each mutant's branches are exclusive), rule-9: 1 note.
 # The count is asserted on a plain run only; --matrix emits the same notes but no rule-9 `ok`.
@@ -394,13 +392,7 @@ if [ "$BROKEN" -ne 0 ]; then
   echo "FIXTURE BROKEN: $BROKEN mutant arm(s) could not be built or scored, so those assertions tested nothing" >&2
   exit 2
 fi
-if [ "$MODE" = plain ] && [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "FIXTURE BROKEN: $made assertion(s) ran, expected $EXPECTED_ASSERTIONS -- an arm never executed" >&2
-  exit 1
+if [ "$MODE" = plain ]; then
+  report_end pregate-self-check "$EXPECTED_ASSERTIONS"
 fi
-if [ "$fails" -ne 0 ]; then
-  echo "pregate-self-check: $fails FAILED of $made"
-  exit 1
-fi
-echo "pregate-self-check: PASS ($made assertions)"
-exit 0
+report_end pregate-self-check

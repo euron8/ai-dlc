@@ -1,9 +1,11 @@
 # procsub-staged-refusal-boot and its two shard drivers (b, c, which exec this run.sh --group) share ONE declaration shape.
 # It drives the reconcile scripts from copies of that directory, stages the reconcile-emit-report world through that
 # fixture's seed.sh, and stages pre-fix engines from the pins in git.decl.
-# lib rows derived from run.sh:2,173 (preamble.sh, mutant.sh); reconcile-emit-report row from run.sh:147-148,530 (seed.sh only).
+# lib rows derived from run.sh:2,222-224 (preamble.sh, report.sh, mutant.sh, matrix.sh); reconcile-emit-report row from run.sh:147-148,530 (seed.sh only).
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh
 core/skills/ai-dlc-update/reconcile/
 core/fixtures/reconcile-emit-report/seed.sh
 core/fixtures/procsub-staged-refusal-boot-b/run.sh

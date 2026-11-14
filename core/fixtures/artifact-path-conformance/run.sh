@@ -73,9 +73,8 @@ ROLE_QA="$(pick "$HERE/../../team-roles/qa.md" \
 [ -n "$ROLE_CR" ] && [ -n "$ROLE_QA" ] \
   || { echo "FIXTURE ERROR: cannot locate team-roles/code-reviewer.md and/or team-roles/qa.md; section 7 cannot judge a prescription it cannot read" >&2; exit 2; }
 
-fails=0; asserts=0
-ok()  { asserts=$((asserts+1)); printf '  ok    %s\n' "$1"; }
-bad() { asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  %s\n' "$1"; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 MATRIX=0; MROWS=0
 if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
@@ -423,13 +422,12 @@ printf 'Read `%s/s*/2-gate2-qa.md` across sprints.\n' "$GP_AREA" > "$GP_PROBE/al
 # $1 probe basename  $2 finding kind that must appear, empty = must stay silent  $3 claim
 gp_probe() {
   local got; got="$(gp_findings "$GP_PROBE/$1.md")"
-  asserts=$((asserts+1))
   if [ -z "$2" ]; then
-    if [ -z "$got" ]; then printf '  ok    PROBE quiet on %-15s %s\n' "$1" "$3"
-    else fails=$((fails+1)); printf '  FAIL  PROBE fired on the CONFORMING %s — %s; got: %s\n' "$1" "$3" "$(tr '\n' ';' <<<"$got")"; fi
+    if [ -z "$got" ]; then ok "$(printf 'PROBE quiet on %-15s %s' "$1" "$3")"
+    else bad "$(printf 'PROBE fired on the CONFORMING %s — %s; got: %s' "$1" "$3" "$(tr '\n' ';' <<<"$got")")"; fi
   else
-    if grep -q "^$2" <<<"$got"; then printf '  ok    PROBE flags %-15s %s\n' "$1" "$3"
-    else fails=$((fails+1)); printf '  FAIL  PROBE did NOT flag %s as %s — %s; got: %s\n' "$1" "$2" "$3" "${got:-<nothing>}"; fi
+    if grep -q "^$2" <<<"$got"; then ok "$(printf 'PROBE flags %-15s %s' "$1" "$3")"
+    else bad "$(printf 'PROBE did NOT flag %s as %s — %s; got: %s' "$1" "$2" "$3" "${got:-<nothing>}")"; fi
   fi
 }
 gp_probe no-slot        NO-SLOT         "a prescription placing no s<N>/ slot is reported"
@@ -572,6 +570,4 @@ else bad "cli cells do not discriminate: two of cli-pass, cli-block, cli-usage s
 rm -rf "$GP_PROBE" "$GP_EMPTY" "$TPL" "$MUT" "$W" "$WE" "$EQ"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "artifact-path-conformance: PASS ($asserts assertions)"; exit 0; fi
-echo "artifact-path-conformance: $fails of $asserts assertion(s) FAILED" >&2
-exit 1
+report_end artifact-path-conformance

@@ -96,9 +96,7 @@ echo "HERMETIC-CONSUMED $HOOK"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/snapshot-edit-deny.XXXXXX")" || exit 2
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -270,6 +268,4 @@ rm -f "$WORK"/*.out "$WORK"/*.err "$WORK"/*.rc
 rmdir "$WORK" 2>/dev/null
 
 echo
-if [ "$fails" -eq 0 ]; then echo "snapshot-edit-deny: PASS"; exit 0; fi
-echo "snapshot-edit-deny: $fails assertion(s) FAILED" >&2
-exit 1
+report_end snapshot-edit-deny

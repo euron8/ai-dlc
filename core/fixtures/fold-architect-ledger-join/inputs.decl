@@ -26,3 +26,4 @@ core/skills/ai-dlc/extensions/
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/matrix.sh
 core/fixtures/lib/settled-net.sh
+core/fixtures/lib/report.sh

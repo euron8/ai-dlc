@@ -76,9 +76,8 @@ for p in "$VREL" "$JREL" "$HREL" core/fixtures/lib/mutant.sh; do [ -f "$ROOT/$p"
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
-FAILS=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 . "$ROOT/core/fixtures/lib/mutant.sh"
 
 # --- the worlds -----------------------------------------------------------------------------------------------------
@@ -276,6 +275,4 @@ else bad "MDG: DG fails but not for its reason, or twin DS fails too: $(tr '\n' 
 if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MR.out" ] && [ -e "$WORK/c.MK.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"
 else bad "NM a plain run reached the matrix, or its per-push mutant drives did not run"; fi
 
-[ "$FAILS" = 0 ] || { echo "fixture-inprocess: $FAILS FAILED"; exit 1; }
-echo "fixture-inprocess: PASS"
-exit 0
+report_end fixture-inprocess

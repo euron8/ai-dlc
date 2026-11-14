@@ -42,9 +42,7 @@ ACK_HOOK="$(pick "$HERE/../../hooks/ai-dlc-acknowledge.sh" \
 [ -n "$STOP_HOOK" ] && [ -n "$ACK_HOOK" ] \
   || { echo "FIXTURE ERROR: cannot locate the hooks" >&2; exit 2; }
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # Every mutant kill goes through mutant_killed, gated on the base flag of the arm it guards (BL-828).
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh"
@@ -701,6 +699,4 @@ unset _c _g _w
 drop_world_cache
 
 echo
-if [ "$fails" -eq 0 ]; then echo "divergence-hard-block: PASS"; exit 0; fi
-echo "divergence-hard-block: $fails assertion(s) FAILED" >&2
-exit 1
+report_end divergence-hard-block

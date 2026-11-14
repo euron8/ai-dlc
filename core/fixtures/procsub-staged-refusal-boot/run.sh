@@ -118,13 +118,65 @@
 # reports its base shape. A MUTANT IS KILLED ONLY WHEN ITS OWN ARM REPORTS THE BASE SHAPE, never
 # merely when the arm fails: every base shape is presence-shaped (a named row, a record verdict,
 # exit 3, a non-O row), so a mutant copy that died on its own -- a lib.sh it could not source --
-# cannot score a kill. A mutant must also leave every OTHER arm of its script at the tip shape,
-# or two arms are entangled.
+# cannot score a kill. A mutant must also leave its TWIN arm at the tip shape, or the two arms are
+# entangled; under --matrix it must leave every other arm of its key there.
+#
+# THE MUTANT MATRIX. A plain run drives each mutant against its decides= arm(s) and its twin only, read from
+# the row below by `score_as` (never restated at the call). `--matrix` drives every arm of the mutant's key,
+# prints one MATRIX row per cell, checks the header row's twins against that measurement, and runs every unit in one
+# shard. A plain run asserts it executed no matrix-only cell.
 #
 # MUTANTS restore ONE site's base block verbatim in a copy of the WHOLE reconcile/ directory
 # (these scripts resolve lib.sh and each other beside themselves). Each mutation's anchors are
 # counted exactly once before it is applied, the copy must differ (`cmp -s`), must parse
 # (`bash -n`), and must carry the base spelling once and the staged spelling zero times.
+# MUTANT-MATRIX M-L1 decides=L1 twins=L2
+# MUTANT-MATRIX M-L2 decides=L2 twins=L1
+# MUTANT-MATRIX M-L3 decides=L3 twins=L1
+# MUTANT-MATRIX M-P1 decides=P1 twins=- why=the pc key carries one arm, so no other arm reads the copy
+# MUTANT-MATRIX M-P2 decides=P2 twins=P3
+# MUTANT-MATRIX M-P3 decides=P3 twins=P2
+# MUTANT-MATRIX M-E1 decides=E1 twins=- why=the er key carries one arm, so no other arm reads the copy
+# MUTANT-MATRIX M-S1 decides=S1 twins=S2
+# MUTANT-MATRIX M-S2 decides=S2 twins=S1
+# MUTANT-MATRIX M-S3 decides=S3 twins=S1
+# MUTANT-MATRIX M-U-base decides=U1,U2,U2b,U3,U4,U5,U5b twins=U6-hit
+# MUTANT-MATRIX M-U-emit-status decides=U5,U5b twins=U1
+# MUTANT-MATRIX M-U-exit decides=U5,U5b twins=U1
+# MUTANT-MATRIX M-U-probe decides=U5b twins=U1
+# MUTANT-MATRIX M-U-nobreak decides=U5b twins=U1
+# MUTANT-MATRIX M-U-memo decides=U2,U2b,U6-hit,U6-fill twins=U1
+# MUTANT-MATRIX M-L-cat-status decides=U6-hit twins=U1
+# MUTANT-MATRIX M-L-commit-status decides=U6-fill twins=U1
+# MUTANT-MATRIX M-U-ext decides=U3 twins=U1
+# MUTANT-MATRIX M-U-pfx decides=U4 twins=U1
+# MUTANT-MATRIX M-Art-merge decides=Art twins=Aud
+# MUTANT-MATRIX M-LD-nobreak decides=L5b,L5e twins=L5
+# MUTANT-MATRIX M-LD-nobreak-ovr decides=L5e twins=L5
+# MUTANT-MATRIX M-LD-nobreak-ext decides=L5b twins=L5
+# MUTANT-MATRIX M-LD-probe decides=L5b,L5b-hard,L5d,L5e twins=L5
+# MUTANT-MATRIX M-LD-ds-subshell decides=L5d twins=L5
+# MUTANT-MATRIX M-LD-raw-uncounted decides=L5b-hard twins=L5
+# MUTANT-MATRIX M1-stage-status decides=C2w twins=C2
+# MUTANT-MATRIX M2-no-r2 decides=C3 twins=C1
+# MUTANT-MATRIX M3-codes-herestring decides=C1w twins=C1
+# MUTANT-MATRIX M3b-codes-herestring-unread decides=C1w twins=C1
+# MUTANT-MATRIX M4-section-status decides=C2s twins=C2
+# MUTANT-MATRIX M5-hb-ld decides=C5-ld twins=C5-ud
+# MUTANT-MATRIX M6-hb-ud decides=C5-ud twins=C5-ld
+# MUTANT-MATRIX M-Aud decides=Aud twins=Art
+# MUTANT-MATRIX M-Art decides=Art twins=Aud
+# MUTANT-MATRIX M-Arlp decides=Arlp twins=Aud
+# MUTANT-MATRIX M-Ald decides=Ald twins=Aud
+# MUTANT-MATRIX M-Ana decides=Ana twins=Aud
+# MUTANT-MATRIX M-B360-O1 decides=O1 twins=O2
+# MUTANT-MATRIX M-B360-O2 decides=O2 twins=O1
+# MUTANT-MATRIX M-B360-O3 decides=O3 twins=- why=the ek world carries one cell, so no other cell reads the render
+# MUTANT-MATRIX M-B360-V1 decides=V1 twins=- why=the ev world carries one cell, so no other cell reads the render
+# MUTANT-MATRIX-DYNAMIC psb-kill why=psb_kill passes the mutant name score_as received to mutant_killed, and score_as refuses a name with no MUTANT-MATRIX row in this block, so every name it reports carries one
+# MUTANT-MATRIX-DYNAMIC b360-loop why=the BL-360 loop names its mutants from the literal list M-B360-O1 M-B360-O2 M-B360-O3 M-B360-V1, each of which carries a row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/procsub-staged-refusal-boot/run.sh --matrix
+#
 set -uo pipefail
 
 # HERMETIC -- scrub the operator's tuning before invoking any reconcile script (I10).
@@ -167,10 +219,9 @@ EW=""
 PSB_DONE=0
 trap 'rm -rf "$WORK"; [ -n "$EW" ] && rm -rf "$EW"; [ "$PSB_DONE" = 1 ] || { echo "FIXTURE BROKEN: procsub-staged-refusal-boot stopped before its verdict" >&2; exit 2; }' EXIT
 
-fails=0; asserts=0
-ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/report.sh is absent" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
+. "$HERE/../lib/matrix.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/matrix.sh is absent" >&2; exit 2; }
 # ---------------------------------------------------------------------------- shards ----
 # THIS FILE IS THREE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
 # BOUNDARY. Every assertion-bearing section below is a UNIT guarded by `if sg <unit>; then ... fi`, or, for
@@ -190,15 +241,19 @@ UNITS_a="lrpe ud"
 UNITS_b="ld b360"
 UNITS_c="lc ap spell"
 GROUP=a
+MATRIX=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; fi
 if [ "${1:-}" = "--group" ]; then
   GROUP="${2:-}"
   [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+  [ "$MATRIX" -eq 0 ] || { echo "FIXTURE ERROR: --matrix runs every unit in one shard and takes no --group" >&2; exit 2; }
 fi
 case " $SHARDS " in
   *" $GROUP "*) ;;
   *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
 esac
 eval "MINE=\"\${UNITS_$GROUP:-}\""
+[ "$MATRIX" -eq 0 ] || MINE="$UNITS_a $UNITS_b $UNITS_c"
 NAME="procsub-staged-refusal-boot"; [ "$GROUP" = a ] || NAME="procsub-staged-refusal-boot-$GROUP"
 [ -n "$MINE" ] || { echo "FIXTURE ERROR: shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
 sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
@@ -249,6 +304,20 @@ for _s in $SHARDS; do
 done
 echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 echo "$NAME:"
+if [ "$MATRIX" -eq 1 ]; then echo "  mode: FULL (--matrix: every mutant against every arm of its key)"; else echo "  mode: PUSH (each mutant drives its deciding arm(s) and its twin only)"; fi
+
+# THE MUTANT TABLE, read from this file's `# MUTANT-MATRIX` rows: `<mutant> <decides> <twins>`. Its reader is
+# probed first: two rows and a no-twin row read, a FULL row and an unprefixed line do not.
+mt_parse() { awk '$1 == "#" && $2 == "MUTANT-MATRIX" { d = ""; t = ""; for (i = 4; i <= NF; i++) { split($i, kv, "="); if (kv[1] == "decides") d = kv[2]; if (kv[1] == "twins") t = kv[2] } print $3, d, t }' "$1"; }
+MT_TAG=MUTANT-MATRIX
+printf '# %s probe-a decides=x,y twins=z\n# %s probe-b decides=x twins=- why=all dead\n# %s-FULL probe-c worlds=w why=none\n%s probe-d decides=x twins=z\n' "$MT_TAG" "$MT_TAG" "$MT_TAG" "$MT_TAG" > "$JW/mt-probe"
+if [ "$(mt_parse "$JW/mt-probe" | tr '\n' '|')" != "probe-a x,y z|probe-b x -|" ]; then
+  echo "FIXTURE ERROR: the mutant-table reader did not discriminate (two rows, a no-twin row; a FULL row and an unprefixed line must not read)" >&2; exit 2
+fi
+mt_parse "$SELF" > "$JW/mtab"
+[ -s "$JW/mtab" ] || { echo "FIXTURE ERROR: no MUTANT-MATRIX rows in $SELF's header" >&2; exit 2; }
+mt_get() { awk -v m="$1" -v f="$2" '$1 == m { print (f == "d" ? $2 : $3); exit }' "$JW/mtab"; }
+MROWS=0
 
 # --- STUBS ---------------------------------------------------------------------------------------
 # stub <dir> <tool> <real-binary> <case-pattern over "$*"> <action>
@@ -1496,12 +1565,58 @@ BLOCK='!inb && $0==ENVIRON["START"] {inb=1; seen=0; print ENVIRON["NEW"]; next}
        inb { if ($0==ENVIRON["END"]) { seen++; if (seen==ENVIRON["NFI"]+0) inb=0 } next }
        {print}'
 
+# psb_arms <mutant> <key> <decides, comma-joined> -- sets PSB_ARMS to the arms this run drives for the mutant, in
+# key order (every arm of the key under --matrix; else its decides= arm(s) and its twin) and PSB_HELD to the words
+# the kill line names for the arms that must hold. Returns 1 after a `bad` when the mutant's MUTANT-MATRIX row is
+# missing, names other decides= arms than the call scores, or names a twin outside the key.
+psb_arms() {
+  local m="$1" k="$2" dec="$3" rd rt A n=0 want
+  PSB_ARMS=""; PSB_HELD=""
+  rd="$(mt_get "$m" d)"; rt="$(mt_get "$m" t)"
+  if [ -z "$rd" ]; then bad "MUTANT HARNESS [$m]: no MUTANT-MATRIX row in the header -- re-measure with: bash core/fixtures/procsub-staged-refusal-boot/run.sh --matrix"; return 1; fi
+  if [ "$rd" != "$dec" ]; then bad "MUTANT STALE [$m]: its MUTANT-MATRIX row reads decides=$rd, the call scores $dec -- re-measure the matrix"; return 1; fi
+  for A in $(arms_of "$k"); do
+    if [ "$MATRIX" -eq 1 ]; then PSB_ARMS="$PSB_ARMS $A"; continue; fi
+    case ",$dec,$rt," in *",$A,"*) PSB_ARMS="$PSB_ARMS $A"; n=$((n+1)) ;; esac
+  done
+  want="$(printf '%s,%s' "$dec" "$rt" | tr ',' '\n' | grep -cvx -- '-')" || want=0
+  if [ "$MATRIX" -eq 0 ] && [ "$n" -ne "$want" ]; then bad "MUTANT STALE [$m]: its row names $want arm(s) (decides=$rd twins=$rt), $n of them in key $k"; return 1; fi
+  if [ "$MATRIX" -eq 1 ]; then PSB_HELD="every other $k arm stays at its tip shape"
+  elif [ "$rt" = - ]; then PSB_HELD="no twin (key $k carries one arm)"
+  else PSB_HELD="twin $rt stays at its tip shape"; fi
+  return 0
+}
+# psb_cell <mutant> <arm> <shape> <fired> -- under --matrix, one MATRIX row: GREEN when the arm fired and reads
+# its tip shape, TRIPPED otherwise.
+psb_cell() {
+  [ "$MATRIX" -eq 1 ] || return 0
+  MROWS=$((MROWS+1))
+  if [ "$4" -gt 0 ] && [ "$3" = "$(col "$2" 4)" ]; then matrix_row "$1" "$2" 0 GREEN no; PSB_GREEN="$PSB_GREEN $2"
+  else matrix_row "$1" "$2" 1 TRIPPED yes; PSB_TRIP="$PSB_TRIP $2"; fi
+}
+# psb_header <mutant> -- under --matrix, the header row's twins checked against the measured row: every twin
+# green. 0 when it agrees (or outside --matrix). A decides= arm is judged by the scoring itself, against the
+# shape its call names, never by TRIPPED: U2b, M-U-base's near-miss arm, is named at SCANNED, its tip shape.
+psb_header() {
+  local c rt
+  [ "$MATRIX" -eq 1 ] || return 0
+  rt="$(mt_get "$1" t)"
+  [ "$rt" = - ] && return 0
+  for c in $(printf '%s' "$rt" | tr ',' ' '); do
+    case " $PSB_GREEN " in *" $c "*) ;; *) bad "MATRIX [$1]: header twin $c is not green (green:$PSB_GREEN) -- re-measure and rewrite the row"; return 1 ;; esac
+  done
+  return 0
+}
+
 # score <mutant-name> <own-arm> <recon-copy>
 score() {
   local m="$1" own="$2" d="$3" k A s want got_own="" others_ok=1 detail=""
   k="$(col "$own" 2)"
-  for A in $(arms_of "$k"); do
+  psb_arms "$m" "$k" "$own" || return 0
+  PSB_TRIP=""; PSB_GREEN=""
+  for A in $PSB_ARMS; do
     set -- $(forced "$A" "$d" "$m")
+    psb_cell "$m" "$A" "$1" "${2:-0}"
     if [ "$A" = "$own" ]; then
       got_own="$1 fired=${2:-0}"
       [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 5)" ] || got_own="!$got_own"
@@ -1509,25 +1624,30 @@ score() {
       [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 4)" ] || { others_ok=0; detail="$detail $A=$1"; }
     fi
   done
+  psb_header "$m" || return 0
   report_score "$m" "$own" "$k" "$got_own" "$others_ok" "$detail" "$(col "$own" 5)"
   return 0
 }
 # score_as <mutant-name> <key> <recon-copy> <arm=shape>... -- for a mutant whose own arm lands on a
 # shape OTHER than the base spelling's (M-U2a reads EMPTY, the silent clear, where the whole base
-# pipeline read rc 1), or that two arms genuinely both own. Every arm NOT named must stay at its
-# tip shape, so an undeclared move is still ENTANGLED.
+# pipeline read rc 1), or that two arms genuinely both own. Every driven arm NOT named (the twin; every
+# other arm of the key under --matrix) must stay at its tip shape, so an undeclared move is still ENTANGLED.
 # ITS LOCAL IS `sfails`, NEVER `fails`: a local of that name shadows the global counter, and `bad`'s
 # `$((fails+1))` then evaluates the SURVIVED detail (`U5b=XFSZ-RC0-LOST(...)`) as arithmetic, which
 # under `set -u` aborts the whole fixture on its first unbound word -- exit 0 through the EXIT trap,
 # every later mutant unscored. Measured on the first survivor this function ever reported.
 score_as() {
-  local m="$1" k="$2" d="$3" A want got sfails="" others_ok=1 detail="" named=""
+  local m="$1" k="$2" d="$3" A want got sfails="" others_ok=1 detail="" named="" dec=""
   shift 3
-  for A in $(arms_of "$k"); do
+  for _p in "$@"; do dec="$dec${dec:+,}${_p%%=*}"; done
+  psb_arms "$m" "$k" "$dec" || return 0
+  PSB_TRIP=""; PSB_GREEN=""
+  for A in $PSB_ARMS; do
     want=""
     for _p in "$@"; do [ "${_p%%=*}" = "$A" ] && want="${_p#*=}"; done
     set -- $(forced "$A" "$d" "$m") "$@"
     got="$1"; local fired="${2:-0}"; shift 2
+    psb_cell "$m" "$A" "$got" "$fired"
     if [ -n "$want" ]; then
       named="$named $A=$got"
       [ "$fired" -gt 0 ] && [ "$got" = "$want" ] || sfails="$sfails $A=$got(want $want,fired=$fired)"
@@ -1535,8 +1655,9 @@ score_as() {
       [ "$fired" -gt 0 ] && [ "$got" = "$(col "$A" 4)" ] || { others_ok=0; detail="$detail $A=$got"; }
     fi
   done
+  psb_header "$m" || return 0
   if [ -n "$sfails" ]; then bad "MUTANT SURVIVED [$m]:$sfails -- the arm cannot see its own site revert"
-  elif [ "$others_ok" -eq 1 ]; then psb_kill "$k" "$m" "MUTANT [$m] scored as a kill:$named, every other $k arm stays at its tip shape"
+  elif [ "$others_ok" -eq 1 ]; then psb_kill "$k" "$m" "MUTANT [$m] scored as a kill:$named, $PSB_HELD"
   else bad "MUTANT ENTANGLED [$m]:$named but undeclared arm(s) moved too:$detail"; fi
   return 0
 }
@@ -1545,7 +1666,7 @@ report_score() { # <m> <own> <k> <got_own> <others_ok> <detail> <base-shape>
   case "$got_own" in
     '!'*) bad "MUTANT SURVIVED [$m]: arm $own read ${got_own#!}, expected the base shape $7 -- the arm cannot see its own site revert" ;;
     *) if [ "$others_ok" -eq 1 ]; then
-         psb_kill "$k" "$m" "MUTANT [$m] scored as a kill: $own reads $got_own (the base shape), every other $k arm stays at its tip shape"
+         psb_kill "$k" "$m" "MUTANT [$m] scored as a kill: $own reads $got_own (the base shape), $PSB_HELD"
        else
          bad "MUTANT ENTANGLED [$m]: $own reads $got_own but other arm(s) moved too:$detail"
        fi ;;
@@ -2433,11 +2554,9 @@ fi
 fi
 ld_heredoc_gate
 
+if [ "$MATRIX" -eq 1 ]; then ok "matrix: $MROWS cell(s) measured"
+elif [ "$MROWS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (rows=0)"
+else bad "a plain run executed $MROWS matrix-only cell(s)"; fi
 echo
 PSB_DONE=1
-if [ "$fails" -eq 0 ]; then
-  echo "$NAME: PASS ($asserts assertions)"
-  exit 0
-fi
-echo "$NAME: FAIL ($fails of $asserts assertion(s))" >&2
-exit 1
+report_end "$NAME"

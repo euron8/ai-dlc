@@ -3,3 +3,4 @@
 # preamble sourced by run.sh line 2.
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

@@ -6,3 +6,4 @@
 # preamble.sh and mutant.sh, sourced here.
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh

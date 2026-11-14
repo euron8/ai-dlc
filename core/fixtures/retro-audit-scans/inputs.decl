@@ -6,3 +6,4 @@
 !core/git-hooks/pre-push
 core/scripts/core-paths.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

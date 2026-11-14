@@ -2,3 +2,4 @@
 # seed.sh resolves it from the fixture location; run.sh drives it and copies it for both mutants.
 !core/scripts/validate-steering-budget.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

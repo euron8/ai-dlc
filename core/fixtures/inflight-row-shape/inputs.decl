@@ -2,3 +2,4 @@
 # sprint-status.sh is NOT declared: with --only the validator never reaches it (dropping it left the run green, 58 ok).
 !core/scripts/validate-artifact-budget.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

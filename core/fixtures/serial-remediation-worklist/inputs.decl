@@ -5,3 +5,4 @@
 !core/scripts/partition-document.sh
 !core/scripts/partition-subject.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

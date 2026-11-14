@@ -86,9 +86,8 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$MIG")" && pwd -P)/$(basename "$MIG")"
 # install.sh puts them. Mutants sed one of the two in place afterwards.
 lay_pair() { mkdir -p "$1"; cp "$MIG" "$1/m.sh"; cp "$CONFIG" "$1/artifact-path-config.sh"; }
 
-fails=0; asserts=0
-ok()  { asserts=$((asserts+1)); printf '  ok    %s\n' "$1"; }
-bad() { asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  %s\n' "$1"; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 has() { [ -f "$1/$2" ]; }
 
 echo "artifact-path-migration:"
@@ -144,11 +143,10 @@ OUT="$(bash "$MIG" --root "$W" --apply 2>&1)"; RC=$?
 
 # $1 label  $2 destination that MUST exist  $3 source that MUST be gone  $4 why
 moved() {
-  asserts=$((asserts+1))
-  if has "$W" "$2" && ! has "$W" "$3"; then printf '  ok    %-26s %s\n' "$1" "$4"
-  else fails=$((fails+1)); printf '  FAIL  %-26s %s\n           dest %s: %s / src %s: %s\n' "$1" "$4" \
+  if has "$W" "$2" && ! has "$W" "$3"; then ok "$(printf '%-26s %s\n' "$1" "$4")"
+  else bad "$(printf '%-26s %s\n           dest %s: %s / src %s: %s\n' "$1" "$4" \
        "$2" "$(has "$W" "$2" && echo present || echo MISSING)" \
-       "$3" "$(has "$W" "$3" && echo STILL-THERE || echo gone)"; fi
+       "$3" "$(has "$W" "$3" && echo STILL-THERE || echo gone)")"; fi
 }
 
 moved "basename-prefix"  "_bmad-output/planning-artifacts/s301/research-notes.md" \
@@ -199,11 +197,10 @@ has "$W" "_bmad-output/planning-artifacts/prd.md" \
 # =============================================================================
 # $1 label  $2 path that must still exist  $3 reason token in the report  $4 why
 refused() {
-  asserts=$((asserts+1))
-  if has "$W" "$2" && grep -q "$3" <<<"$OUT"; then printf '  ok    %-26s %s\n' "$1" "$4"
-  else fails=$((fails+1)); printf '  FAIL  %-26s %s\n           still present: %s / report names %s: %s\n' "$1" "$4" \
+  if has "$W" "$2" && grep -q "$3" <<<"$OUT"; then ok "$(printf '%-26s %s\n' "$1" "$4")"
+  else bad "$(printf '%-26s %s\n           still present: %s / report names %s: %s\n' "$1" "$4" \
        "$(has "$W" "$2" && echo yes || echo NO-IT-MOVED)" "$3" \
-       "$(grep -q "$3" <<<"$OUT" && echo yes || echo NO)"; fi
+       "$(grep -q "$3" <<<"$OUT" && echo yes || echo NO)")"; fi
 }
 
 refused "adjacent-tokens" "_bmad-output/implementation-artifacts/gate-log-archive-s298-s299.md" \
@@ -226,13 +223,11 @@ moved "story-bare-number" "_bmad-output/planning-artifacts/s297/stories/story-1-
 # A story already on the grammar is untouched, and its INDEX is not read as a sprint. Without the
 # `s<N>/`-above-it test this file would be "migrated" to s12/, which is the reading the deferral
 # was afraid of — correctly, just in the wrong place.
-asserts=$((asserts+1))
 if has "$W" "_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md" \
    && ! has "$W" "_bmad-output/planning-artifacts/s299/stories/story-3-gamma.md"; then
-  printf '  ok    %-26s %s\n' "story-index-not-sprint" "a conforming story is left alone; its index is not read as a sprint"
+  ok "$(printf '%-26s %s\n' "story-index-not-sprint" "a conforming story is left alone; its index is not read as a sprint")"
 else
-  fails=$((fails+1))
-  printf '  FAIL  %-26s %s\n' "story-index-not-sprint" "a story ALREADY under s299/ was re-read: index 12 became a sprint slot"
+  bad "$(printf '%-26s %s\n' "story-index-not-sprint" "a story ALREADY under s299/ was re-read: index 12 became a sprint slot")"
 fi
 
 refused "story-no-sprint" "_bmad-output/planning-artifacts/stories/bug-mobile-layout.md" \
@@ -254,12 +249,10 @@ moved "recover-header"   "_bmad-output/planning-artifacts/s72/stories/bug-124-de
 # opens with 124 and declares 72. Asking the basename first puts it under s124 -- a slot that is
 # WRONG rather than merely absent, and silent. Asserting the destination is s72 is not enough on
 # its own: this asserts the wrong slot was not created at all.
-asserts=$((asserts+1))
 if ! has "$W" "_bmad-output/planning-artifacts/s124/stories/bug-124-deployed-range.md"; then
-  printf '  ok    %-26s %s\n' "recover-precedence" "the HEADER outranks the basename: no s124/ slot was created"
+  ok "$(printf '%-26s %s\n' "recover-precedence" "the HEADER outranks the basename: no s124/ slot was created")"
 else
-  fails=$((fails+1))
-  printf '  FAIL  %-26s %s\n' "recover-precedence" "the basename won: 124 is a carry-over ITEM, the header said sprint 72"
+  bad "$(printf '%-26s %s\n' "recover-precedence" "the basename won: 124 is a carry-over ITEM, the header said sprint 72")"
 fi
 
 moved "recover-header-prose" "_bmad-output/planning-artifacts/s18/stories/bug-dashboard-portfolio.md" \
@@ -281,20 +274,18 @@ moved "recover-not-a-mention" "_bmad-output/planning-artifacts/s158/stories/hotf
 moved "hdr-over-name"    "_bmad-output/planning-artifacts/s53/stories/story-1-effective-spread-500.md" \
                          "_bmad-output/planning-artifacts/stories/story-102-1-effective-spread-500.md" \
                          "**Sprint:** 53 on story-102-1 lands s53, not the item number's s102"
-asserts=$((asserts+1))
 if [ ! -d "$W/_bmad-output/planning-artifacts/s102" ]; then
-  printf '  ok    %-26s %s\n' "hdr-over-name-no-s102" "no s102/ slot was created for the item number"
+  ok "$(printf '%-26s %s\n' "hdr-over-name-no-s102" "no s102/ slot was created for the item number")"
 else
-  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "hdr-over-name-no-s102" "s102/ exists: the item number was read as the sprint"
+  bad "$(printf '%-26s %s\n' "hdr-over-name-no-s102" "s102/ exists: the item number was read as the sprint")"
 fi
 moved "hdr-over-name-3dig" "_bmad-output/planning-artifacts/s185/stories/story-1-three-digit.md" \
                          "_bmad-output/planning-artifacts/stories/story-230-1-three-digit.md" \
                          "three digits each side: **Sprint:** 185 on story-230-1 lands s185"
-asserts=$((asserts+1))
 if [ ! -d "$W/_bmad-output/planning-artifacts/s230" ]; then
-  printf '  ok    %-26s %s\n' "hdr-over-name-no-s230" "no s230/ slot was created for the item number"
+  ok "$(printf '%-26s %s\n' "hdr-over-name-no-s230" "no s230/ slot was created for the item number")"
 else
-  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "hdr-over-name-no-s230" "s230/ exists: the item number was read as the sprint"
+  bad "$(printf '%-26s %s\n' "hdr-over-name-no-s230" "s230/ exists: the item number was read as the sprint")"
 fi
 moved "hdr-agrees-name"  "_bmad-output/planning-artifacts/s296/stories/story-2-delta.md" \
                          "_bmad-output/planning-artifacts/stories/story-296-2-delta.md" \
@@ -302,14 +293,13 @@ moved "hdr-agrees-name"  "_bmad-output/planning-artifacts/s296/stories/story-2-d
 moved "hdr-unreadable-name" "_bmad-output/planning-artifacts/s95/stories/story-1-foundation.md" \
                          "_bmad-output/planning-artifacts/stories/story-95-1-foundation.md" \
                          "an unreadable header (50A) leaves the name's reading in place"
-asserts=$((asserts+1))
 if grep -qE '^  s53 +header>name +.*story-102-1-effective-spread-500\.md$' <<<"$OUT" \
    && grep -qE '^  s185 +header>name +.*story-230-1-three-digit\.md$' <<<"$OUT" \
    && ! grep -q 'story-296-2-delta' <<<"$(sed -n '/SPRINT RECOVERED/,/^$/p' <<<"$OUT")" \
    && ! grep -q 'story-95-1-foundation' <<<"$(sed -n '/SPRINT RECOVERED/,/^$/p' <<<"$OUT")"; then
-  printf '  ok    %-26s %s\n' "hdr-over-name-reported" "each override is reported as header>name; the agreeing and unreadable files are not"
+  ok "$(printf '%-26s %s\n' "hdr-over-name-reported" "each override is reported as header>name; the agreeing and unreadable files are not")"
 else
-  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "hdr-over-name-reported" "an override was silent, or a non-override was reported as one"
+  bad "$(printf '%-26s %s\n' "hdr-over-name-reported" "an override was silent, or a non-override was reported as one")"
 fi
 
 # A SUFFIXED SPRINT IS REFUSED, NOT ROUNDED. `131b` has no legal `^s[0-9]+$` slot spelling, and
@@ -336,12 +326,10 @@ refused "hdr-zero"              "_bmad-output/planning-artifacts/stories/bug-315
 moved "hdr-s-prefix"     "_bmad-output/planning-artifacts/s270/stories/bug-124-s-prefix-hdr.md" \
                          "_bmad-output/planning-artifacts/stories/bug-124-s-prefix-hdr.md" \
                          "**Sprint:** S270 resolves to s270, not to the basename's carry-over 124"
-asserts=$((asserts+1))
 if ! has "$W" "_bmad-output/planning-artifacts/s124/stories/bug-124-s-prefix-hdr.md"; then
-  printf '  ok    %-26s %s\n' "hdr-s-prefix-precedence" "an S-prefixed header is READ, not skipped into the basename channel"
+  ok "$(printf '%-26s %s\n' "hdr-s-prefix-precedence" "an S-prefixed header is READ, not skipped into the basename channel")"
 else
-  fails=$((fails+1))
-  printf '  FAIL  %-26s %s\n' "hdr-s-prefix-precedence" "S270 fell through to the basename and landed s124 — the carry-over ITEM"
+  bad "$(printf '%-26s %s\n' "hdr-s-prefix-precedence" "S270 fell through to the basename and landed s124 — the carry-over ITEM")"
 fi
 
 # ONE CANONICAL SLOT PER SPRINT. `007` and `7` are one sprint; minting s007/ beside s7/ gives it
@@ -349,12 +337,10 @@ fi
 moved "hdr-leading-zeros" "_bmad-output/planning-artifacts/s7/stories/bug-314-leading-zeros-hdr.md" \
                          "_bmad-output/planning-artifacts/stories/bug-314-leading-zeros-hdr.md" \
                          "**Sprint:** 007 canonicalises to s7/, so one sprint keeps one slot"
-asserts=$((asserts+1))
 if ! has "$W" "_bmad-output/planning-artifacts/s007/stories/bug-314-leading-zeros-hdr.md"; then
-  printf '  ok    %-26s %s\n' "hdr-no-s007-slot" "no s007/ slot was minted beside s7/"
+  ok "$(printf '%-26s %s\n' "hdr-no-s007-slot" "no s007/ slot was minted beside s7/")"
 else
-  fails=$((fails+1))
-  printf '  FAIL  %-26s %s\n' "hdr-no-s007-slot" "s007/ and s7/ now both exist as homes for one sprint"
+  bad "$(printf '%-26s %s\n' "hdr-no-s007-slot" "s007/ and s7/ now both exist as homes for one sprint")"
 fi
 
 # THE `--follow` BOUND. The subject is a LEGACY story path -- no `s<N>/` above it, no sprint in the
@@ -370,46 +356,40 @@ refused "follow-bound" "_bmad-output/planning-artifacts/stories/cooldown-sentine
 
 # CONTROL ONE: the hazard must be REAL in this tree. If `--follow` and plain `git log` agree here,
 # the seeded crossing rename is missing and the arm above cannot discriminate.
-asserts=$((asserts+1))
 _p=_bmad-output/planning-artifacts/stories/cooldown-sentinel-followbait.md
 _f="$(cd "$W" && git log --follow --format=%H -- "$_p" 2>/dev/null | tail -1)"
 _n="$(cd "$W" && git log --format=%H -- "$_p" 2>/dev/null | tail -1)"
 if [ -n "$_f" ] && [ -n "$_n" ] && [ "$_f" != "$_n" ]; then
-  printf '  ok    %-26s %s\n' "follow-bound-control" "--follow and git log DISAGREE here, so a history channel would answer 71"
+  ok "$(printf '%-26s %s\n' "follow-bound-control" "--follow and git log DISAGREE here, so a history channel would answer 71")"
 else
-  fails=$((fails+1))
-  printf '  FAIL  %-26s %s\n' "follow-bound-control" "--follow ($_f) and git log ($_n) agree; the seeded rename is missing and follow-bound is vacuous"
+  bad "$(printf '%-26s %s\n' "follow-bound-control" "--follow ($_f) and git log ($_n) agree; the seeded rename is missing and follow-bound is vacuous")"
 fi
 
 # CONTROL TWO, AND IT IS THE ONE THE FIRST CUT LACKED: the subject must REACH the recovery block.
 # `legacy_story()` is what decides that, and a conforming path answers false and skips the whole
 # mechanism -- passing the arm above for a reason that has nothing to do with history. Driving the
 # SHIPPING function is the only way to establish it; a path that merely looks legacy is not one.
-asserts=$((asserts+1))
 _lsfn="$(mktemp "${TMPDIR:-/tmp}/lsfn-XXXXXX")"
 sed -n '/^legacy_story() {/,/^}/p' "$MIG" > "$_lsfn"
 # shellcheck disable=SC1090
 . "$_lsfn"
 if legacy_story "_bmad-output/planning-artifacts/stories/cooldown-sentinel-followbait.md" \
    && ! legacy_story "_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md"; then
-  printf '  ok    %-26s %s\n' "follow-bound-reaches" "the follow-bait IS legacy, so it reaches the recovery the arm guards"
+  ok "$(printf '%-26s %s\n' "follow-bound-reaches" "the follow-bait IS legacy, so it reaches the recovery the arm guards")"
 else
-  fails=$((fails+1))
-  printf '  FAIL  %-26s %s\n' "follow-bound-reaches" "the follow-bait is not legacy (or the control is): the arm never reaches the recovery"
+  bad "$(printf '%-26s %s\n' "follow-bound-reaches" "the follow-bait is not legacy (or the control is): the arm never reaches the recovery")"
 fi
 rm -f "$_lsfn"
 
 # RECOVERY IS REPORTED, NEVER SILENT. A recovered sprint is the migration's own claim about a file
 # whose path never stated one, so the operator has to be able to audit it. The report must name
 # the file AND the channel that produced it.
-asserts=$((asserts+1))
 if grep -q 'SPRINT RECOVERED' <<<"$OUT" \
    && grep -qE '^  s72 +header +.*bug-124-deployed-range\.md$' <<<"$OUT" \
    && grep -qE '^  s192 +basename +.*192-ff-A-token-decimals\.md$' <<<"$OUT"; then
-  printf '  ok    %-26s %s\n' "recovery-reported" "every recovered sprint is printed with the channel that produced it"
+  ok "$(printf '%-26s %s\n' "recovery-reported" "every recovered sprint is printed with the channel that produced it")"
 else
-  fails=$((fails+1))
-  printf '  FAIL  %-26s %s\n' "recovery-reported" "a sprint was recovered SILENTLY, or without naming its channel"
+  bad "$(printf '%-26s %s\n' "recovery-reported" "a sprint was recovered SILENTLY, or without naming its channel")"
 fi
 
 # =============================================================================
@@ -551,24 +531,22 @@ sed 's@^consumer_artifact_paths_file:.*@consumer_artifact_paths_file: TREE-A-FIL
   "$ra/.claude/skills/ai-dlc/layer-contract.yaml" > "$ra/lc.tmp" && mv "$ra/lc.tmp" "$ra/.claude/skills/ai-dlc/layer-contract.yaml"
 sed 's@^consumer_artifact_paths_file:.*@consumer_artifact_paths_file: TREE-B-FILE.md@' \
   "$rb/.claude/skills/ai-dlc/layer-contract.yaml" > "$rb/lc.tmp" && mv "$rb/lc.tmp" "$rb/.claude/skills/ai-dlc/layer-contract.yaml"
-asserts=$((asserts+1))
 if grep -qx 'consumer_artifact_paths_file: TREE-A-FILE.md' "$ra/.claude/skills/ai-dlc/layer-contract.yaml" \
    && grep -qx 'consumer_artifact_paths_file: TREE-B-FILE.md' "$rb/.claude/skills/ai-dlc/layer-contract.yaml"; then
-  printf '  ok    %-26s %s\n' "remedy-root-seeded" "tree A declares TREE-A-FILE.md and tree B TREE-B-FILE.md, so a wrong-tree read is visible"
+  ok "$(printf '%-26s %s\n' "remedy-root-seeded" "tree A declares TREE-A-FILE.md and tree B TREE-B-FILE.md, so a wrong-tree read is visible")"
 else
-  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "remedy-root-seeded" "the contract edit did not land; the remedy-root arms below cannot discriminate"
+  bad "$(printf '%-26s %s\n' "remedy-root-seeded" "the contract edit did not land; the remedy-root arms below cannot discriminate")"
 fi
 # $1 label  $2 output  $3 why
 remedy_names_a() {
-  asserts=$((asserts+1))
   if grep -q 'TREE-A-FILE\.md' <<<"$2" && ! grep -q 'TREE-B-FILE\.md' <<<"$2" \
      && ! grep -q '\.claude/skills/ai-dlc/artifact-paths\.md' <<<"$2"; then
-    printf '  ok    %-26s %s\n' "$1" "$3"
+    ok "$(printf '%-26s %s\n' "$1" "$3")"
   else
-    fails=$((fails+1)); printf '  FAIL  %-26s %s\n           A: %s / B: %s / default: %s\n' "$1" "$3" \
+    bad "$(printf '%-26s %s\n           A: %s / B: %s / default: %s\n' "$1" "$3" \
       "$(grep -q 'TREE-A-FILE\.md' <<<"$2" && echo named || echo ABSENT)" \
       "$(grep -q 'TREE-B-FILE\.md' <<<"$2" && echo NAMED || echo absent)" \
-      "$(grep -q '\.claude/skills/ai-dlc/artifact-paths\.md' <<<"$2" && echo NAMED || echo absent)"
+      "$(grep -q '\.claude/skills/ai-dlc/artifact-paths\.md' <<<"$2" && echo NAMED || echo absent)")"
   fi
 }
 remedy_names_a "migrate-remedy-override" \
@@ -822,12 +800,11 @@ git -C "$ABW/quote" ls-files -- _bmad-output > "$ABW/quote.plain" 2>/dev/null
 git -C "$ABW/quote" ls-files -z -- docs/retro > "$ABW/quote.docs" 2>/dev/null
 _qn=0; while IFS= read -r -d '' _r; do _qn=$((_qn + 1)); done < "$ABW/quote.pre"
 _qd=0; while IFS= read -r -d '' _r; do case "$_r" in "$QN_CTAB"|"$QN_TNL") _qd=$((_qd + 1)) ;; esac; done < "$ABW/quote.docs"
-asserts=$((asserts+1))
 if [ "$_qn" -eq 5 ] && [ "$_qd" -eq 2 ] && [ "$(git -C "$ABW/quote" config core.quotePath)" = true ] \
    && grep -qF '"_bmad-output/planning-artifacts/sprint-320-caf\303\251.md"' "$ABW/quote.plain"; then
-  printf '  ok    %-26s %s\n' "quoted-names-control" "git tracks all seven names here and, with quotePath true, a line-delimited ls-files quotes cafe"
+  ok "$(printf '%-26s %s\n' "quoted-names-control" "git tracks all seven names here and, with quotePath true, a line-delimited ls-files quotes cafe")"
 else
-  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "quoted-names-control" "tracked $_qn of 5 movable and $_qd of 2 rowless names, or quotePath is not true, or ls-files did not quote the cafe name: the arm below cannot discriminate"
+  bad "$(printf '%-26s %s\n' "quoted-names-control" "tracked $_qn of 5 movable and $_qd of 2 rowless names, or quotePath is not true, or ls-files did not quote the cafe name: the arm below cannot discriminate")"
 fi
 # qn_blob <ls-files -s -z file> <path> -> the blob staged at <path>, '' when none
 qn_blob() {
@@ -919,21 +896,19 @@ cmp -s "$PGD/err1" "$PGD/exp.plan" \
 cmp -s "$PGD/out1" "$PGD/out0" && grep -q 'tracked files scanned: 5' "$PGD/out0" \
   && ok "progress: stdout is byte-identical to the run without the variable" \
   || bad "progress: stdout CHANGED when progress was turned on (or the unset run scanned nothing)"
-asserts=$((asserts+1))
 if grep -qxF '    _bmad-output/planning-artifacts/x-s123x-s12/f.md' "$PGD/out0" \
    && grep -qxF '      -> _bmad-output/planning-artifacts/s12/x-s123x/f.md' "$PGD/out0" \
    && grep -qxF '    _bmad-output/planning-artifacts/a-s12x-s12/f.md' "$PGD/out0" \
    && grep -qxF '      -> _bmad-output/planning-artifacts/s12/a-s12x/f.md' "$PGD/out0"; then
-  printf '  ok    %-26s %s\n' "match-position-traps" "x-s123x-s12/ and a-s12x-s12/ plan s12/x-s123x/ and s12/a-s12x/, as the forking script did"
+  ok "$(printf '%-26s %s\n' "match-position-traps" "x-s123x-s12/ and a-s12x-s12/ plan s12/x-s123x/ and s12/a-s12x/, as the forking script did")"
 else
-  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "match-position-traps" "a trap directory planned a destination the forking script did not"
+  bad "$(printf '%-26s %s\n' "match-position-traps" "a trap directory planned a destination the forking script did not")"
 fi
-asserts=$((asserts+1))
 if grep -qxF '  AMBIGUOUS  _bmad-output/planning-artifacts/x/s9/s10-y.md' "$PGD/out0" \
    && grep -qxF '             path names 2 different sprints (10 9); which one owns it is not derivable' "$PGD/out0"; then
-  printf '  ok    %-26s %s\n' "ambiguous-sort-order" "x/s9/s10-y.md is refused naming (10 9), the forking script's sort -u order"
+  ok "$(printf '%-26s %s\n' "ambiguous-sort-order" "x/s9/s10-y.md is refused naming (10 9), the forking script's sort -u order")"
 else
-  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "ambiguous-sort-order" "the AMBIGUOUS refusal for x/s9/s10-y.md is not the forking script's text"
+  bad "$(printf '%-26s %s\n' "ambiguous-sort-order" "the AMBIGUOUS refusal for x/s9/s10-y.md is not the forking script's text")"
 fi
 # APPLY, on its own copy so the dry-run world stays pristine for the mutants. Run with the cadence,
 # reset, run without it: the move loop's lines are on stderr and stdout is unchanged.
@@ -1230,6 +1205,4 @@ fi
 rm -rf "$ra" "$rb" "$RW" "$MUT" "$FW1" "$FW2" "$PW" "$PGD" "$SHIMS" "$SHIMA" "$ABW"
 rm -rf "$TPL"
 echo
-if [ "$fails" -eq 0 ]; then echo "artifact-path-migration: PASS ($asserts assertions)"; exit 0; fi
-echo "artifact-path-migration: $fails of $asserts assertion(s) FAILED" >&2
-exit 1
+report_end artifact-path-migration

@@ -4,3 +4,4 @@
 # the runner without being named.
 !core/scripts/report-propagation-fanout.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

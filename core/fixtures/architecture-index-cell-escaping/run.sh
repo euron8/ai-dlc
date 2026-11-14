@@ -56,10 +56,8 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 MODE=plain; [ "${1:-}" = --matrix ] && MODE=matrix
 
-fails=0
-asserts=0
-ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "architecture-index-cell-escaping: FIXTURE BROKEN" >&2; exit 2; }
 
 B_A4=0   # set to 1 beside arm 4's ok: the unmutated subject's adjacent-pair row was intact in THIS run
@@ -342,14 +340,4 @@ fi
 # EXPECTED_ASSERTIONS: several arms sit behind `broken` guards, and an assertion that never
 # executed prints nothing — a short green report reads exactly like a complete one.
 EXPECTED_ASSERTIONS=10
-if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
-  printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
-    "$asserts" "$EXPECTED_ASSERTIONS"
-  fails=$((fails+1))
-fi
-
-if [ "$fails" -ne 0 ]; then
-  printf '  architecture-index-cell-escaping: %s FAILED\n' "$fails"
-  exit 1
-fi
-printf '  architecture-index-cell-escaping: %s assertions, all green\n' "$asserts"
+report_end architecture-index-cell-escaping "$EXPECTED_ASSERTIONS"

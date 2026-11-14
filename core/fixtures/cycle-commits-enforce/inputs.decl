@@ -5,3 +5,4 @@ core/scripts/validate-retro-evidence.sh
 # declared bash subject, and P1 would read its source as an unpaired in-process pass. run.sh refuses when it is absent.
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

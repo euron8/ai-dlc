@@ -14,3 +14,4 @@ VERSION
 .githooks/pre-push
 # Section d of the self-check runs it on a clean root; the receipt copies it into its SELF tree.
 !scripts/seed-verdict-store.sh
+core/fixtures/lib/report.sh

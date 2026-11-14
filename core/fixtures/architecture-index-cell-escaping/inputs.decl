@@ -4,3 +4,4 @@
 !core/scripts/gen-architecture-index.js
 # mutant.sh: sourced after ok/bad are defined, for mutant_killed.
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

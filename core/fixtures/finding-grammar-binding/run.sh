@@ -27,9 +27,7 @@
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MATRIX=0
 [ "${1:-}" = --matrix ] && MATRIX=1
 N_MROWS=0
@@ -354,6 +352,4 @@ elif [ "$N_MROWS" -eq 0 ]; then ok "PLAIN: a plain run printed no matrix-only ce
 else bad "PLAIN: a plain run printed $N_MROWS matrix row(s)"; fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "finding-grammar-binding: PASS"; exit 0; fi
-echo "finding-grammar-binding: $fails assertion(s) FAILED" >&2
-exit 1
+report_end finding-grammar-binding

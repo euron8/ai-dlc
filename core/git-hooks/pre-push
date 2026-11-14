@@ -2512,6 +2512,9 @@ run_fixtures() {
   # THE WATCHER CHECKS ITS WORKER'S PID EVERY POLL. A worker that dies (SIGKILLed, or its xargs gone) never
   # reaps the watcher, so on that poll the watcher kills the unit's tree, whose verdict nobody will record,
   # and exits; without the check its only exit was a refusal and it outlived its worker indefinitely.
+  # IT CHECKS ITS UNIT'S PID TOO, with the builtin `kill -0` (no fork): bash reaps an exited async child at once,
+  # so the check fails as soon as the unit is gone and the watcher exits with no sweep, as when the worker kills
+  # it after `wait`. A worker left blocked with no unit under it (BL-1072) is released then, not at POOL_STALL.
   # A UNIT IN ITS OWN GROUP DOES NOT HEAR THE TERMINAL'S ^C, and neither does a worker: xargs is started in
   # the background under `set -m`, so it and its workers lead a group of their own. The push's shell hears
   # the ^C (or a TERM or HUP) and pool_stop TERMs every worker recorded in `.pr/<unit>.k`; the worker traps
@@ -2598,6 +2601,7 @@ run_fixtures() {
         while :; do
           sleep 1
           if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi
+          kill -0 "$pid" || exit 0
           w="$(pool_walk "$pid" "$self" "$kg" "$kp")"
           IFS="|" read -r ws wsig wlp wlg <<< "$w"
           [ -n "$wlp" ] && { kp="$wlp"; kg="$wlg"; printf "%s\n%s\n" "$kp" "$kg" > "$pr.g"; }

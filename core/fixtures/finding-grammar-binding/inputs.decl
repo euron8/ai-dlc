@@ -10,3 +10,4 @@
 !core/hooks/
 # BIND3 scores its mutant through the shared kill helper.
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

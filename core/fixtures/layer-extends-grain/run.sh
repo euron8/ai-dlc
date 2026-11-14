@@ -69,10 +69,8 @@ BASE="$(git -C "$DIST" rev-parse --short HEAD~2)"
 MID="$(git -C "$DIST" rev-parse --short HEAD~1)"
 TIP="$(git -C "$DIST" rev-parse --short HEAD)"
 
-fails=0
-made=0
-ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
@@ -326,13 +324,4 @@ if m="$(mk_mutant m5-first-span-only "$DRIFT_BN" 's|^    _sp_rc=0; _sp_v="[$](sh
 fi
 
 echo
-if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "layer-extends-grain: FAIL — $made assertions ran, $EXPECTED_ASSERTIONS were written. An arm did not execute at all, which is not the same as an arm that passed. Find the one that vanished before reading anything above as green."
-  exit 1
-fi
-if [ "$fails" -eq 0 ]; then
-  echo "layer-extends-grain: PASS ($made assertions)"
-  exit 0
-fi
-echo "layer-extends-grain: $fails of $made assertion(s) failed"
-exit 1
+report_end layer-extends-grain "$EXPECTED_ASSERTIONS"

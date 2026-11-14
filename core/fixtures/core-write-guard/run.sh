@@ -22,9 +22,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd -P)/${HOOK##*/}"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. The manifest this seed copies is the consumer's
 # INSTALLED one, which on an un-upgraded tree does not yet claim fixtures/ -- so the guard
 # cannot deny a core fixture, and calling that a regression blocked the very self-update
@@ -255,6 +253,4 @@ d="$(decision "$CONSUMER" "$(mkjson Edit "$CORE" "Fixed rulebook prose.")")"
   || bad "with no manifest source the hook classified '$d', expected allow — it must fail open, not closed"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "core-write-guard: PASS"; exit 0; fi
-echo "core-write-guard: $fails assertion(s) FAILED" >&2
-exit 1
+report_end core-write-guard
