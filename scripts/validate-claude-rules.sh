@@ -925,7 +925,10 @@ fi
 # RAISED 48265 -> 48413 by exactly the measured overrun, ON THE OPERATOR'S DIRECT ORDER: the lead's merge step
 # gained the rebase-and-repush rule when main moved, and the build-process pointer was scoped to build and release
 # steps. A6 WAS OBSERVED FAILING AT 48413/48265 BEFORE THE CEILING MOVED.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48413}"
+# RAISED 48413 -> 48530 by exactly the measured overrun: the operator ordered the roll call moved into the repo
+# as docs/roll-call.md, and CLAUDE.md's build process gained the one line that carries it (resident-context.md).
+# A6 WAS OBSERVED FAILING AT 48530/48413 BEFORE THE CEILING MOVED.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48530}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

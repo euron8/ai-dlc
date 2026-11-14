@@ -178,6 +178,8 @@ Lead:
 5. Verify once: `origin/main`'s tree equals the pushed tree, with the previous main tree as a DIFF control.
 6. Detach the main checkout at the new `origin/main`.
 
+While builder sessions are active, the lead runs the roll call in `docs/roll-call.md` every 45 minutes, as written.
+
 ## Releases
 
 Commit subject, `VERSION`, and the `CHANGELOG` heading are one claim, joined at pre-push by
