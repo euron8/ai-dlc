@@ -471,7 +471,7 @@
 #     rows. FALSE POSITIVES: 0; the 8 allowlisted sites are enumerated in scripts/bl868-wait-allowlist.txt, each with
 #     its reason.
 # H10 a run.sh code line (masked: never a comment, a string or a heredoc body) DEFINING `ok` or `bad`, in a fixture that
-#     is not a `<fixture>:report` row of scripts/fixture-contract-allowlist.txt -> FAIL, naming the first such line.
+#     is not a `<fixture>:report` row of fixture-contract-allowlist.txt -> FAIL, naming the first such line.
 #     The contract (.claude/rules/fixture-contract.md) reports through core/fixtures/lib/report.sh.
 # H11 a run.sh code line whose command-position `bash` (the word unmasked at the column the raw line carries it) runs a
 #     path ending `.githooks/pre-push` or `git-hooks/pre-push`, in a fixture that is not a `<fixture>:hook-drive` row
@@ -524,7 +524,7 @@ ALLOW_REL="scripts/fixture-matrix-allowlist.txt"
 E1_ALLOW_REL="scripts/inert-receipt-allowlist.txt"
 H7_ALLOW_REL="scripts/twin-built-allowlist.txt"
 H8_ALLOW_REL="scripts/env-scrub-allowlist.txt"
-H10_ALLOW_REL="scripts/fixture-contract-allowlist.txt"
+H10_ALLOW_REL="fixture-contract-allowlist.txt"
 H9_ALLOW_REL="scripts/bl868-wait-allowlist.txt"
 MKA_REL="scripts/mutant-kills-allowlist.txt"
 MVA_REL="scripts/mutant-verdicts-allowlist.txt"

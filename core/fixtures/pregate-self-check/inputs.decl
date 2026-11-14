@@ -9,6 +9,8 @@ core/fixtures/procsub-staged-refusal/
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
 # run.sh and the self-check walk up for VERSION.
-# copy-only: core/fixtures/pregate-self-check/run.sh:70 run.sh tests for the marker beside the self-check; nothing reads its content
+# copy-only: core/fixtures/pregate-self-check/run.sh:73 run.sh tests for the marker beside the self-check; nothing reads its content
 VERSION
 .githooks/pre-push
+# Section d of the self-check runs it on a clean root; the receipt copies it into its SELF tree.
+!scripts/seed-verdict-store.sh

@@ -8,7 +8,9 @@
 #            step that prints no verdict each -> 2; and D (A plus a NUL byte above the marker and a step
 #            below it that touches BELOW-RAN) -> 2 with BELOW-RAN absent and the NUL named (the fix is
 #            present); and U (A, with section d's counted run printing no judge pass line) -> 2 naming it,
-#            and J (A, with section d's counted run reading a J3 FAIL) -> 1 under d:fork-budget (BL-1026)
+#            and J (A, with section d's counted run reading a J3 FAIL) -> 1 under d:fork-budget (BL-1026); and A's
+#            section d ran through seed-verdict-store.sh into its hook's counted store, Wd's (dirty) under the
+#            scratch store (BL-1064)
 #   exit 1   any of those differs
 #   exit 9   the receipt cannot measure: a root could not be built (mktemp, git init, commit, a seed hook
 #            that fails bash -n) or an input file is missing
@@ -72,7 +74,7 @@ if [ "${1:-}" = --gate ]; then
 fi
 SC="${1:-scripts/pregate-self-check.sh}"
 FX=core/fixtures/procsub-staged-refusal
-for f in "$SC" "$FX/procsub-spell.awk" "$FX/procsub-spell-probe.diff"; do [ -s "$f" ] || exit 9; done
+for f in "$SC" "$FX/procsub-spell.awk" "$FX/procsub-spell-probe.diff" scripts/seed-verdict-store.sh; do [ -s "$f" ] || exit 9; done
 W="$(mktemp -d)" || exit 9
 trap '[ -n "$W" ] && rm -rf "$W"' EXIT
 [ -d "$W" ] || exit 9
@@ -81,6 +83,14 @@ mkdir -p "$S/scripts" "$S/$FX" || exit 9
 echo 0.0.1 > "$S/VERSION" || exit 9
 cp "$SC" "$S/scripts/pregate-self-check.sh" || exit 9
 cp "$FX/procsub-spell.awk" "$FX/procsub-spell-probe.diff" "$S/$FX/" || exit 9
+cp scripts/seed-verdict-store.sh "$S/scripts/" || exit 9
+# A clean root's section d runs through the self tree's seed-verdict-store.sh, which arms with the root hook's
+# fxcount_arm. This stub, appended below each stub hook's exit, sets the four variables it exports and names a
+# counted store nothing writes (the stub runner records nothing).
+ARMFN='fxcount_arm() {
+  local vk=000000000000
+  FXCOUNT_RC=stub FXCOUNT_DIR=stub FXCOUNT_JUDGE=stub AI_DLC_VERDICT_STORE="$PWD/.stub-store/counted-$vk"; export FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE AI_DLC_VERDICT_STORE
+}'
 seedgit() { # <root> -> commit everything in it; the root pushes through .githooks, as the distribution does (BL-1020)
   ( cd "$1" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git init -q . && git config core.hooksPath .githooks && git add -A \
     && git -c user.email=x@x -c user.name=x commit -q -m seed )
@@ -120,6 +130,7 @@ for v in A B C D U J; do
     [ "$v" = C ] && printf 'step "fixture suite (12-way)" true\n'
     [ "$v" = D ] && printf 'step "below the pool" touch BELOW-RAN\n'
     printf 'exit $fail\n'
+    printf '%s\n' "$ARMFN"
   } > "$T/.githooks/pre-push"
   # No bash ever parses D's NUL-bearing text: bash versions differ on NUL in input, and this box has only 3.2 to probe.
   tr -d '\000' < "$T/.githooks/pre-push" > "$W/seed-$v.sh" || exit 9
@@ -194,13 +205,17 @@ arec="$(rec_of "$W/rootA")"; brec="$(rec_of "$W/rootB")"
 drive "$W/rootWd" "$W/Wd.out"; wd=$?
 wdrec="$(rec_of "$W/rootWd")"
 wdn=no; grep -qF 'NO RECORD written: the work tree was not clean' "$W/Wd.out" && wdn=yes
+# BL-1064: A (clean) runs section d through seed-verdict-store.sh into the counted store its hook's fxcount_arm names;
+# Wd (dirty) runs it under the scratch store.
+aseed=no; grep -qF "counted store $W/rootA/.stub-store/counted-000000000000 (clean tree" "$W/A.out" && aseed=yes
+wdscr=no; grep -qF 'scratch store (dirty tree' "$W/Wd.out" && ! grep -qF 'counted store ' "$W/Wd.out" && wdscr=yes
 seed_refusal() { # <name> <hook body above the marker> -> sets RC
   local T="$W/ref-$1"; mkdir -p "$T/.githooks" "$T/core/fixtures/validator-fork-budget" || exit 9
   echo 0.0.1 > "$T/VERSION"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$T/core/fixtures/validator-fork-budget/run.sh"
   # A green section d, so a mutant that lets one of these roots past section a reads its own exit (m1's noverdict -> 1).
   seed_counted "$T" ok || exit 9
-  { printf '#!/usr/bin/env bash\nfail=0\n'; printf '%s\n' "$2"; printf 'step "fixture suite (12-way)" true\nexit $fail\n'; } > "$T/.githooks/pre-push"
+  { printf '#!/usr/bin/env bash\nfail=0\n'; printf '%s\n' "$2"; printf 'step "fixture suite (12-way)" true\nexit $fail\n'; printf '%s\n' "$ARMFN"; } > "$T/.githooks/pre-push"
   seedgit "$T" || exit 9
   drive "$T" "$T/out"; RC=$?
 }
@@ -220,8 +235,8 @@ nv=$RC
 # World A's own output, printed ABOVE the summary only when A is not clean, so a caller can read why; the
 # summary stays the last line.
 [ "$a" = 0 ] || sed 's/^/A| /' "$W/A.out"
-echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hcwd=$hcwd Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn Arec=$arec Brec=$brec Wd=$wd Wdrec=$wdrec Wdn=$wdn"
-[ "$arec" = yes ] && [ "$brec" = no ] && [ "$wd" = 0 ] && [ "$wdrec" = no ] && [ "$wdn" = yes ] && [ "$a" = 0 ] && [ "$hcwd" = 0 ] && [ "$hres" = 2 ] && [ "$hresn" = yes ] && [ "$htree" = 2 ] && [ "$htreen" = yes ] && [ "$habs" = 2 ] && [ "$habsn" = yes ] && [ "$hbehind" = 2 ] && [ "$hbehindn" = yes ] && [ "$b" = 1 ] && grep -qF 'seeded red step' "$W/B.out" && [ "$c" = 2 ] \
+echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hcwd=$hcwd Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn Arec=$arec Brec=$brec Wd=$wd Wdrec=$wdrec Wdn=$wdn Aseed=$aseed Wdscr=$wdscr"
+[ "$aseed" = yes ] && [ "$wdscr" = yes ] && [ "$arec" = yes ] && [ "$brec" = no ] && [ "$wd" = 0 ] && [ "$wdrec" = no ] && [ "$wdn" = yes ] && [ "$a" = 0 ] && [ "$hcwd" = 0 ] && [ "$hres" = 2 ] && [ "$hresn" = yes ] && [ "$htree" = 2 ] && [ "$htreen" = yes ] && [ "$habs" = 2 ] && [ "$habsn" = yes ] && [ "$hbehind" = 2 ] && [ "$hbehindn" = yes ] && [ "$b" = 1 ] && grep -qF 'seeded red step' "$W/B.out" && [ "$c" = 2 ] \
   && [ "$np" = 2 ] && [ "$ns" = 2 ] && [ "$nv" = 2 ] \
   && [ "$d" = 2 ] && [ "$dran" = no ] && [ "$dnamed" = yes ] \
   && [ "$u" = 2 ] && [ "$unamed" = yes ] && [ "$j" = 1 ] && [ "$jnamed" = yes ] && exit 0

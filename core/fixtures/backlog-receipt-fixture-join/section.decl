@@ -1,0 +1,4 @@
+# section.decl: `<+ path> <heading>` -- the + file is keyed on that section alone (readset_section in the READSET_KEYROWS
+# span of .githooks/pre-push, and scripts/suite-content-key.sh). run.sh reads BL-040's verify line from the FIRST
+# section headed `## BL-040`, up to the next `## ` line, which is exactly that section.
+docs/backlog.archive.md ## BL-040

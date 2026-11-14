@@ -23,6 +23,8 @@
 # m4  mutant (BL-1055): the pregate record's clean-and-unmoved condition replaced by `true`; the dirty world Wd then
 #     records its tree (Wdrec=yes) and names nothing (Wdn=no). The control asserts A records (Arec=yes), B (a finding)
 #     does not, and Wd does not and says why.
+# m5  mutant (BL-1064): section d's clean-tree test made to match nothing; the clean world A then runs the fork-budget
+#     fixture under the scratch store (Aseed=no) instead of through seed-verdict-store.sh into its hook's counted store.
 # gc  control (BL-1055): the PREGATE_GATE span of .githooks/pre-push, cut and driven by the receipt's --gate mode
 #     (deny, empty, allow, tree, dirty), plus one whole-hook drive (E2E) that must stop at the gate before any step.
 # g1-g4 mutants of a copy of that hook, cut-only: g1 drops the record test, g2 the clean-tree test, g3 the
@@ -39,10 +41,11 @@
 # The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
 # requires. Run the REMEASURE command below, from the repo root. It scores every mutant against every cell
 # and prints one MATRIX line each.
-# MUTANT-MATRIX m1 decides=exit1,m1-moved,differs twins=m2-refused,m2-names,m3-moved,m4-moved
-# MUTANT-MATRIX m2 decides=exit1,m2-refused,m2-names,differs twins=m1-moved,m3-moved,m4-moved
-# MUTANT-MATRIX m3 decides=exit1,m3-moved,differs twins=m1-moved,m2-refused,m2-names,m4-moved
-# MUTANT-MATRIX m4 decides=exit1,m4-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved
+# MUTANT-MATRIX m1 decides=exit1,m1-moved,differs twins=m2-refused,m2-names,m3-moved,m4-moved,m5-moved
+# MUTANT-MATRIX m2 decides=exit1,m2-refused,m2-names,differs twins=m1-moved,m3-moved,m4-moved,m5-moved
+# MUTANT-MATRIX m3 decides=exit1,m3-moved,differs twins=m1-moved,m2-refused,m2-names,m4-moved,m5-moved
+# MUTANT-MATRIX m4 decides=exit1,m4-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m5-moved
+# MUTANT-MATRIX m5 decides=exit1,m5-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved
 # MUTANT-MATRIX g1 decides=exit1,g1-moved,gdiffers twins=g2-moved,g3-moved,g4-moved
 # MUTANT-MATRIX g2 decides=exit1,g2-moved,gdiffers twins=g1-moved,g3-moved,g4-moved
 # MUTANT-MATRIX g3 decides=exit1,g3-moved,gdiffers twins=g1-moved,g2-moved,g4-moved
@@ -92,12 +95,12 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # 37 = a1: 2 notes, m1: 3, m2: 1 anchor note and 4, m3: 1 anchor note and 3, m4: 4 on either branch, gc: 2,
 # g1-g4: 4 each on either branch (applied, or DID NOT APPLY; each mutant's branches are exclusive), rule-9: 1 note.
 # The count is asserted on a plain run only; --matrix emits the same notes but no rule-9 `ok`.
-EXPECTED_ASSERTIONS=37
+EXPECTED_ASSERTIONS=41
 # The shared mutant-kill helper: a kill is emitted only through mutant_killed, behind a same-run base-pass flag.
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
-WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes'
+WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdscr=yes'
 
 cd "$REPO" || exit 2
 
@@ -115,6 +118,7 @@ if [ "$a1" -eq 9 ]; then echo "FIXTURE BROKEN: the receipt could not build its w
 if [ "$a1" -ne 9 ] && grep -q '^A=' "$WORK/a1.out"; then
   echo "HERMETIC-CONSUMED core/fixtures/procsub-staged-refusal/procsub-spell-probe.diff"
   echo "HERMETIC-CONSUMED scripts/pregate-self-check.sh"
+  echo "HERMETIC-CONSUMED scripts/seed-verdict-store.sh"
   echo "HERMETIC-CONSUMED $RECEIPT"
 fi
 if [ "$a1" -eq 0 ]; then ok "a1 control: receipt exit 0 on the unmutated self-check"; B_a1_exit=1; else bad "a1 control: receipt exit $a1, expected 0"; fi
@@ -124,17 +128,18 @@ if grep -qxF "$WANT" "$WORK/a1.out"; then ok "a1 control: the line '$WANT' is pr
 # A cell is RED on a mutant's captured output when it reads as changed from the unmutated verdict. Both the
 # kills below, the per-push twin check and the --matrix score read these predicates, so they cannot drift.
 # Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
-M1_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=1 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes'
-M2_WANT='A=2 B=2 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=no J=2 Jnamed=no Hcwd=2 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=no Brec=no Wd=2 Wdrec=no Wdn=no'
-M3_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=0 Hresn=no Htree=0 Htreen=no Habs=0 Habsn=no Hbehind=0 Hbehindn=no Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes'
-M4_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=yes Wdn=no'
+M1_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=1 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdscr=yes'
+M2_WANT='A=2 B=2 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=no J=2 Jnamed=no Hcwd=2 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=no Brec=no Wd=2 Wdrec=no Wdn=no Aseed=no Wdscr=no'
+M3_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=0 Hresn=no Htree=0 Htreen=no Habs=0 Habsn=no Hbehind=0 Hbehindn=no Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdscr=yes'
+M4_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=yes Wdn=no Aseed=yes Wdscr=yes'
+M5_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=no Wdscr=yes'
 GWANT='Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes E2E=1 E2En=yes'
 GCUT='Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes E2E=skip E2En=skip'
 G1_WANT='Gdeny=0 Gdenyn=no Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes E2E=skip E2En=skip'
 G2_WANT='Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=0 Gdirtyn=no E2E=skip E2En=skip'
 G3_WANT='Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=0 Gtreen=no Gdirty=1 Gdirtyn=yes E2E=skip E2En=skip'
 G4_WANT='Gdeny=1 Gdenyn=yes Gempty=1 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes E2E=skip E2En=skip'
-MX_CELLS='exit1 m1-moved m2-refused m2-names m3-moved m4-moved differs g1-moved g2-moved g3-moved g4-moved gdiffers'
+MX_CELLS='exit1 m1-moved m2-refused m2-names m3-moved m4-moved m5-moved differs g1-moved g2-moved g3-moved g4-moved gdiffers'
 cell_red() { # cell_red <cell> <mutant>: the mutant's output and receipt exit are in $WORK/<mutant>.out and .rc
   local c="$1" m="$2" rc
   rc="$(cat "$WORK/$m.rc")" || return 2
@@ -144,6 +149,7 @@ cell_red() { # cell_red <cell> <mutant>: the mutant's output and receipt exit ar
     m2-refused) grep -qxF "$M2_WANT" "$WORK/$m.out" ;;
     m3-moved)   grep -qxF "$M3_WANT" "$WORK/$m.out" ;;
     m4-moved)   grep -qxF "$M4_WANT" "$WORK/$m.out" ;;
+    m5-moved)   grep -qxF "$M5_WANT" "$WORK/$m.out" ;;
     g1-moved)   grep -qxF "$G1_WANT" "$WORK/$m.out" ;;
     g2-moved)   grep -qxF "$G2_WANT" "$WORK/$m.out" ;;
     g3-moved)   grep -qxF "$G3_WANT" "$WORK/$m.out" ;;
@@ -299,6 +305,24 @@ else
   bad "m4 mutant: DID NOT APPLY (no kill line to check)"
   bad "m4 mutant: DID NOT APPLY (no moved line to check)"
   bad "m4 mutant: DID NOT APPLY (no differential)"
+  BROKEN=$((BROKEN + 1))
+fi
+
+# --- m5: section d never takes the clean-tree route (BL-1064) ------------------------------------------------
+MUT5="$WORK/m5-pregate-self-check.sh"
+if mut_line "$SUBJECT" "$MUT5" 'if [ -n "$PG_START" ] && [ "$PG_START" = "${PG_START%%' 'if false && [ "$PG_START" = "${PG_START%%'; then
+  ok "m5 mutant applied: the clean-tree test of section d occurs exactly once in the subject"; B_m5_anchor=1
+  bash "$RECEIPT" "$MUT5" > "$WORK/m5.out" 2>&1; echo $? > "$WORK/m5.rc"; m5="$(cat "$WORK/m5.rc")"
+  if cell_red exit1 m5; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m5_anchor:-0} ))" m5 "m5 mutant: receipt exit 1 (killed)"; else bad "m5 mutant SURVIVED: receipt exit $m5, expected 1"; fi
+  if cell_red m5-moved m5; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m5_anchor:-0} ))" m5 "m5 mutant: the clean world A ran section d under the scratch store"; else bad "m5 mutant SURVIVED: expected the line '$M5_WANT' (got: $(tail -1 "$WORK/m5.out"))"; fi
+  if cell_red differs m5; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m5_anchor:-0} ))" m5 "m5 mutant: output differs from the control"; else bad "m5 mutant SURVIVED: output equals the control"; fi
+  mx_twins m5
+  mx_matrix_only m5
+else
+  bad "m5 mutant: DID NOT APPLY (the clean-tree test is not exactly one line of the subject, or awk died)"
+  bad "m5 mutant: DID NOT APPLY (no kill line to check)"
+  bad "m5 mutant: DID NOT APPLY (no moved line to check)"
+  bad "m5 mutant: DID NOT APPLY (no differential)"
   BROKEN=$((BROKEN + 1))
 fi
 

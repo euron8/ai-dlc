@@ -259,9 +259,12 @@ emit_components() {
   #    directory, or is not a readable file refuses the key, so the caller runs the
   #    suite. A glob that matches no declaration contributes an empty section, which
   #    is the honest answer: no fixture opted in.
+  #    A `+` file the fixture's section.decl narrows is hashed on that section alone, by readset_section and
+  #    readset_section_of SOURCED from .githooks/pre-push's READSET_KEYROWS span (the per-fixture key's own pair), as
+  #    `<sha256>  <path> <heading>`; a file any declarer keys whole is also hashed whole.
   printf '### keyed\n'
-  local d kl kp
-  kl=""
+  local d kl kp kt p t tab
+  tab="$(printf '\t')"; kl=""
   for d in core/fixtures/*/inputs.decl; do
     [ -f "$d" ] || continue
     kp="$(awk '{ sub(/\r$/, ""); x = 0; r = 0
@@ -269,17 +272,35 @@ emit_components() {
                  if (x && r) { bad = 1; exit }
                  if (x) print }
                END { exit bad ? 3 : 0 }' "$d")" || die "could not read $d for its + declarations, or a line there carries + and ! together. Fails closed."
-    [ -n "$kp" ] && kl="${kl}${kp}
+    [ -n "$kp" ] || continue
+    if [ -f "${d%/inputs.decl}/section.decl" ]; then
+      kt="$(sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' .githooks/pre-push \
+        | awk '/^readset_section(_of)?\(\) \{/ { on = 1 } on { print } on && /^}$/ { on = 0 }')"
+      case "$kt" in *'readset_section() {'*'readset_section_of() {'*) ;; *) die "could not source readset_section and readset_section_of from .githooks/pre-push. Fails closed." ;; esac
+      eval "$kt"
+      while IFS= read -r p; do
+        t="$(readset_section_of "${d%/inputs.decl}" "$p")"
+        [ "$t" != '!' ] || die "${d%/inputs.decl}/section.decl names no # heading for '$p'. Fails closed."
+        kl="${kl}${p}${t:+$tab}${t}
 "
+      done <<< "$kp"
+    else
+      kl="${kl}${kp}
+"
+    fi
   done
   kl="$(printf '%s' "$kl" | grep -v '^$' | LC_ALL=C sort -u)"
   if [ -n "$kl" ]; then
-    while IFS= read -r p; do
+    while IFS="$tab" read -r p t; do
       case "$p" in
         /*|*/|..|../*|*/../*|*/..) die "a + declaration names '$p', which is not a root-relative file. Fails closed." ;;
       esac
       [ -f "$p" ] && [ -r "$p" ] || die "a + declaration names '$p', which is not a readable file here. Fails closed."
-      shasum -a 256 -- "$p" 2>/dev/null || die "could not hash the + declared file '$p'. Fails closed."
+      if [ -n "$t" ]; then
+        printf '%s  %s %s\n' "$(readset_section "$p" "$t" | shasum -a 256 | cut -d' ' -f1)" "$p" "$t"
+      else
+        shasum -a 256 -- "$p" 2>/dev/null || die "could not hash the + declared file '$p'. Fails closed."
+      fi
     done <<< "$kl"
   fi
 
