@@ -3241,7 +3241,7 @@ lg_ghost="$(comm -13 <(printf '%s\n' "$cm_all") <(printf '%s\n' "$mach" "$rule" 
 MK_APPLY="$(sed -nE 's@^APPLYING="\$CONSUMER/(.+)"$@\1@p' \
   "$REPO_ROOT/core/skills/ai-dlc-update/reconcile/apply.sh" | head -1)"
 MK_PP="$(sed -nE 's@^if \[ -f (\.[^ ]+) \]; then$@\1@p' \
-  "$REPO_ROOT/core/git-hooks/pre-push" | grep 'applying' | head -1)"
+  "$REPO_ROOT/core/git-hooks/pre-push" | awk '/applying/ && !n++')"
 if [ -z "$MK_APPLY" ] || [ -z "$MK_PP" ]; then
   err "I27 could not locate the in-flight marker path in apply.sh (\`APPLYING=\`) and/or core/git-hooks/pre-push (\`if [ -f ... ]\`). One end missing means the marker is written with nothing refusing on it, or refused on with nothing writing it — and either way this check just went vacuous. Found apply='${MK_APPLY:-<none>}' pre-push='${MK_PP:-<none>}'."
 elif [ "$MK_APPLY" != "$MK_PP" ]; then
@@ -4377,7 +4377,7 @@ else
       fi
       # And the literal must not come back beside it. A file that reads the key AND hard-codes
       # the old name is the half-done change that reads exactly like a finished one.
-      if grep -n "GENERATED: ${rs_slug}" "$rs_f" | grep -qv '^[0-9]*:[[:space:]]*#'; then
+      if grep -n "GENERATED: ${rs_slug}" "$rs_f" | awk '!/^[0-9]*:[[:space:]]*#/ { f = 1 } END { exit !f }'; then
         err "I48: $(basename "$rs_f") hard-codes the region name 'GENERATED: ${rs_slug}' outside a comment. That is the second spelling this key exists to prevent — build the marker from region_slug."
       fi
     done
@@ -9074,7 +9074,7 @@ The directory is the only sprint slot. A basename that carries one makes the rea
     # `_bmad-output/pipeline-history/` falls out through the first of those and not through a
     # carve-out, which matters because the grammar exempts it for a reason of its own and two
     # independent statements of one exemption is how they drift apart.
-    i82b_a1="$(printf '%s\n' "$i82_areas" | grep -E '.' | head -1)"
+    i82b_a1="$(printf '%s\n' "$i82_areas" | awk '/./ && !n++')"
     i82b_is_slot() {
       if [ -n "$i82_slot_re" ]; then
         [[ "$1" =~ $i82_slot_re ]]

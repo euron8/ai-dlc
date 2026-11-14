@@ -3043,7 +3043,7 @@ verify: manual
 
 ## BL-1056 — fixtures have no written contract, so each is built bespoke and every builder rediscovers how the fixture system works
 
-**PARTIAL (v0.1124.0; batch 257, F24).** The contract is written and bound; the migration of existing fixtures onto it is owed. `.claude/rules/fixture-contract.md` (scoped to `core/fixtures/**`) states the run.sh skeleton, the library entry points, every declaration grammar, the keys, the verdict store and the runner span in 24 clauses, each ending with its enforcer. `scripts/validate-claude-rules.sh` arm A7 resolves every cite (an arm header, a span marker, a function, or a cell or mutant word in a fixture) and fails the push on a clause with no enforcer, on a cite that names nothing, and on a declaration kind or `core/fixtures/lib/*.sh` the contract never names. New library entry points: `core/fixtures/lib/report.sh` (`ok`, `bad`, `report_end <name> [<expected>]`), `world.sh` (`world_git`, `world_repo`, `world_commit`, `world_install`) and `hook-drive.sh` (`hook_drive`: stdin `/dev/null`, `GIT_*` unset, `AI_DLC_READSET_LIVE_TRACE=0`, store `<tree>.verdicts`). `scripts/validate-fixture-hygiene.sh` arms H10 (a run.sh defining its own `ok`/`bad`) and H11 (a run.sh running a pre-push hook by hand) are down-only over `scripts/fixture-contract-allowlist.txt` (arm H10-M4). `core/fixtures/suite-dispatch-order` is migrated onto all three new files and is the contract's reference fixture. CLAUDE.md's verified-record and suite-key lines now say what F16 made true (both follow a green suite under a red step) and point at the contract.
+**PARTIAL (v0.1124.0; batch 257, F24).** The contract is written and bound; the migration of existing fixtures onto it is owed. `.claude/rules/fixture-contract.md` (scoped to `core/fixtures/**`) states the run.sh skeleton, the library entry points, every declaration grammar, the keys, the verdict store and the runner span in 24 clauses, each ending with its enforcer. `scripts/validate-claude-rules.sh` arm A7 resolves every cite (an arm header, a span marker, a function, or a cell or mutant word in a fixture) and fails the push on a clause with no enforcer, on a cite that names nothing, and on a declaration kind or `core/fixtures/lib/*.sh` the contract never names. New library entry points: `core/fixtures/lib/report.sh` (`ok`, `bad`, `report_end <name> [<expected>]`), `world.sh` (`world_git`, `world_repo`, `world_commit`, `world_install`) and `hook-drive.sh` (`hook_drive`: stdin `/dev/null`, `GIT_*` unset, `AI_DLC_READSET_LIVE_TRACE=0`, store `<tree>.verdicts`). `scripts/validate-fixture-hygiene.sh` arms H10 (a run.sh defining its own `ok`/`bad`) and H11 (a run.sh running a pre-push hook by hand) are down-only over `fixture-contract-allowlist.txt` (arm H10-M4). `core/fixtures/suite-dispatch-order` is migrated onto all three new files and is the contract's reference fixture. CLAUDE.md's verified-record and suite-key lines now say what F16 made true (both follow a green suite under a red step) and point at the contract.
 
 Owed (the migration, not done in this release by the lead's brief):
 - Mechanical, 125 fixtures: run.sh carries exactly the standard pair (`ok()  { printf '  ok    %s\n' "$1"; }`, `bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }`). Source `lib/report.sh`, end with `report_end`, declare the file, drop the `:report` row.
@@ -3051,33 +3051,15 @@ Owed (the migration, not done in this release by the lead's brief):
 - Rewrite, 4 fixtures run a hook by hand (`agent-definition-render`, `consumer-suite-pool`, `prepush-worktree-env-scrub`, `self-update-gate`): move each drive onto `hook_drive` and re-measure `invocations.decl` by a counted run. The audit's "37 drive() fixtures" counted every function named `drive`, most of which start a validator; H11 reads 5 run.sh that run a hook, and `suite-dispatch-order` is migrated here.
 - World adoption is not bound by an arm: 66 fixtures run `git init` by hand. An arm on it needs its false-positive set measured first.
 
+**PARTIAL (v0.1125.0; batch 257, G3 move).** The allowlist moved from `scripts/` to the repository root as `fixture-contract-allowlist.txt`, so dropping one of its rows no longer reruns the 16 fixtures that declare `scripts/` whole (`legacy` rows of `docs/inputs-decl-whole-rows.tsv`). No fixture reads the real allowlist; the validator reads its copy in each probe world. No row added or dropped. Migration owners by name: G3 the 124 mechanical rows and the 4 `:hook-drive` fixtures; H5 the 100 reconcile rows; G1 the 7 matrix fixtures it rewrites.
+
 **DEFECT.** OPEN. Filed 2026-11-13. Owner: `core/fixtures/` (the authoring surface) and `core/fixtures/lib/`.
 
 The batch-257 push-cost audit (lead scratch `push-cost-audit.md`, row 10 and report J) found 11 of 15 fixture-system facts only in code comments (9) or nowhere (2: the run.sh structure and how to drive the hook). 37 fixtures define their own `drive()` (34 distinct bodies); `ok` has 46 distinct bodies across 235 definitions and `bad` 51; 226 of 273 declarers name a directory or a file over 1,000 lines. With no written contract, every fixture is a new place to get keying, reporting or hook driving wrong, and builders reread the runner and the hook to learn each grammar.
 
 Fix: one contract, rules and directions only, with its enforcer beside each clause; the library entry points it names; each clause bound to a validator arm, ratcheted by a down-only allowlist so existing fixtures are not broken; CLAUDE.md cites the contract instead of restating it.
 
-Receipt: the migration is complete when `scripts/fixture-contract-allowlist.txt` holds no row. The contract and its arms are held by A7, H10, H11 and H10-M4 on every push.
-
-verify: manual
-
-## BL-1054 — pre-suite steps never skip: their key walks git-ignored paths, and the backlog-receipts step is half the pre-suite
-
-**DEFECT.** OPEN. Filed 2026-11-13. Owner: `.githooks/pre-push`, the pre-suite step keys (`pk_init`, `pk_present`, `pk_reset_all`, `pk_step`); `scripts/validate-backlog-receipts.sh` for subject (2).
-
-Two subjects, from the batch 257 push-cost audit (row 2 and "Pre-suite per-step cost"):
-(1) The present key hashed the raw walk `/usr/bin/find . -path ./.git -prune -o -print0`, git-ignored paths included. The main checkout holds about 169k paths under `.claude/worktrees/` (agent worktrees), so adding or removing a worktree anywhere moved every record's key, and 0 of 23 steps skipped: 6.5-10 min per push instead of about 1.5.
-(2) The backlog-receipts step is about half the pre-suite (136 s in the audit).
-
-**PARTIAL (v0.1124.0) — subject (1) shipped; subject (2) is OPEN, so this entry carries no `**LANDED` line.** `pk_ign` in `.githooks/pre-push` lists the git-ignored paths with `git ls-files -z -o -i --exclude-standard --directory`: an ignored directory once and never descended into, a tracked path never. It turns them into escaped `-path` prune operands, `PK_PRUNE`, which all four walks use: the present key (`pk_present`, from `pk_init` and `pk_finish`), the atime reset, the atime scan and the mtime check. So a worktree added under `.claude/worktrees/`, a `.DS_Store` or a rewritten `.claude/settings.local.json` moves no key and leaves no read row. Untracked unignored paths stay in the key. Two ignored paths are DECLARED INPUTS and stay walked and keyed, because the agent-definitions step tests and reads them: `.claude/settings.json` and `.claude/agents`. When git lists `.claude/` whole, its other children are pruned one by one. The present-row encoding is unchanged, so a tree with no ignored path keys exactly as before. Measured on a clean worktree at e00a0b111: the old and new walks both read `eb7fdc709c953ec4…`, the key of 23 existing step records, which carry forward. The tip's first prefix run in the shared store skipped 10 of 23 steps on them. Evidence: `core/fixtures/presuite-present-key`, with arms A1.ignored, A1.ignglob, W.ignored, W.ignread, W.ignwrite, W.keep, W.keep2 and W.partial (a content edit of one tracked file re-runs only its reader). Mutants `m_ign` (the walk prunes only `.git`), `m_esc`, `m_scan`, `m_mt`, `m_keep` and `m_size` are each killed by their own arm. The stray party-mode step now skips when only ignored content changed; what it judges is the distribution tree. A push from a checkout where something under a non-ignored directory such as `.claude/` is created or removed DURING the push still goes unrecorded; that guard is unchanged.
-
-Subject (2), measured and not built. An xtrace of the validator's main process on 0.1112.0 read 224 s wall on a box loaded by peer pushes. The audit's premise, a detached checkout per open receipt, does not hold: there are 5 open `sh` receipts, and the run makes 68 `git worktree add` calls, about 6 s of git time. Two lines hold 194 of the 224 s: the live score pool (`scripts/validate-backlog-receipts.sh:2029`, 89 s) and R9's classifier pass over the live ledger (`:2751`, 105 s). Both are paced by BL-878's receipt, `bash scripts/validate-fixture-inprocess.sh --complete`, which takes 81 s solo and runs once in each. There are two candidate cuts. If R9's join reads nothing exit-dependent from the classifier's rows, R9 reuses the exit and stderr the score pass recorded for the same receipt text at the same HEAD, stored under `$WORK` only and never across runs. Otherwise R9's classifier pass runs alongside the score pool instead of after it. Read `r9_judge` first to decide between them.
-
-Owed: subject (2), the cut and its measured wall clock, old against new, interleaved.
-
-Receipt: `verify: manual`. Subject (1)'s evidence is the presuite-present-key fixture named above; subject (2) is a wall-clock cut whose closing evidence is a before-and-after measurement, which no predicate over the tree can test.
-
-Provenance: batch 257, F22; id allocated by the lead.
+Receipt: the migration is complete when `fixture-contract-allowlist.txt` holds no row. The contract and its arms are held by A7, H10, H11 and H10-M4 on every push.
 
 verify: manual
 
@@ -3095,3 +3077,57 @@ Provenance: batch 257, F22's prefix runs; id allocated by the lead.
 
 verify: manual
 
+## BL-1065 — `validate-fixture-inprocess.sh --complete` re-runs the invocation judge's whole self-probe on every census call, and its corpus join takes 33 s; BL-878's receipt paces the backlog-receipts step
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: `scripts/validate-fixture-inprocess.sh` (`judge_tree`), `scripts/validate-fixture-invocations.sh` (`--b2-census`, `fxc_static_join`, `fxc_p2_scan`).
+
+BL-878's receipt, `bash scripts/validate-fixture-inprocess.sh --complete`, is the slowest open `sh` receipt. It runs twice in the backlog-receipts step, once in the score pool and once in R9's classifier pass. Since BL-1054 those two passes run side by side, so this receipt sets the step's floor. An xtrace at a3ec19ebf took 53 s solo at load 8 (exit 1, 149 allowlist rows), in three lines:
+(1) The corpus `--static-join <root> --p2-base <base>` took 33 s. It runs `fxc_p2_scan` over the tip and the materialised push base, then a per-fixture loop with several forks per fixture.
+(2) The probe tree's `--b2-census` took 9 s, and (3) the corpus `--b2-census` took 9 s. A solo `--b2-census --root .` took 10 s, of which the census walk itself was about 2 s. The rest is `fxc_self_probe`, which line 1882 runs on EVERY `--b2-census` call. `judge_tree` makes that call twice per run, so the same self-probe runs twice over the same judge.
+
+Owed: cut both. For example, run the judge's self-probe once per `validate-fixture-inprocess.sh` run, and cost the static join's per-fixture loop. Measure the step solo, old against new, interleaved. `validate-fixture-invocations.sh` is the judge that `core/scripts/hermetic-run.sh` calls once per counted run, so an edit to it moves every fixture's runner key. The fix must carry existing verdicts forward and must not force a whole-suite rerun. F25 (bundle B1) moves the judge into a per-fixture row, which may make that possible. Predict the push set with the lead's predictor before building.
+
+Receipt: `verify: manual`. This is a wall-clock cut, and its closing evidence is a before-and-after measurement.
+
+Provenance: batch 257, G2 (ai-dlc-bf), measured while closing BL-1054; id allocated by the lead.
+
+verify: manual
+
+
+## BL-1066 — scripts/pregate-self-check.sh runs two of its sections under a scratch verdict store, so their verdicts are thrown away
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: `scripts/pregate-self-check.sh`. Two lines override `AI_DLC_VERDICT_STORE` with a directory under the run's own `mktemp -d`, which `on_exit` deletes. Section a runs the hook prefix as `AI_DLC_VERDICT_STORE="$W/vs" bash "$W/prefix.sh"` (line 177 at G4's tip). Section d's dirty-tree route runs `AI_DLC_VERDICT_STORE="$W/fx/vs"` (line 258), and since BL-1064 its clean-tree route already writes the counted store through `scripts/seed-verdict-store.sh`. Every verdict those two runs produce is discarded, against the operator ruling that every measurement lands in the shared content-keyed store. A hand run that copies section a's cut inherits the override.
+
+Owed: both runs without the override, and the `pregate-self-check` fixture's m2 anchor (`M2_ANCHOR`, the exact line 177) moved with it.
+
+Provenance: batch 257, G4, from the lead's correction of a hand prefix run; id allocated by the lead.
+
+verify: manual
+
+## BL-1070 — a bundle's union merge of members' backlog appends can drop one of two identical lines, and no gate compares each entry with the member it came from
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: `.githooks/pre-push` (a pre-suite arm on release commits), with `docs/backlog.md`, `docs/backlog.archive.md` and `CHANGELOG.md` as its subjects.
+
+A bundle's integrator rebuilds the members' appends to `docs/backlog.md`, `docs/backlog.archive.md` and `CHANGELOG.md` with a three-way union merge against the base. Where two members' appends meet, the union can drop one of two identical lines, and checks that count headers or lines pass. In batch 257, bundle B1 (0.1124.0), the union of six members' appends dropped BL-1056's closing `verify: manual` where F24's and F22's appends met, leaving BL-1056 with no verify line. A line-multiplicity content check missed it, because that line appears dozens of times in the file. backlog-receipts R12 caught it in the pre-suite prefix only because the lost line happened to be a verify line. A lost or planted body line of any other kind passes every gate today. The per-entry byte comparison that confirmed it lives only in the integrator's scratch scripts and in operator memory.
+
+Owed: a pre-push arm that, for a release commit carrying members, byte-compares every `## BL-` entry and every CHANGELOG block in the combined files against the member commit it came from, after renumbering the member's own version lines to the release version, and fails on any difference. Self-probes: a combine that drops one of two identical adjacent lines fails; a byte-identical combine passes.
+
+Receipt: `verify: manual`. A runner-wired receipt would drive the arm over a seeded two-member combine, which is the fixture's job and is owed with the fix.
+
+Provenance: batch 257, bundle B1 integration by ai-dlc-b5; id allocated by the lead.
+
+verify: manual
+
+## BL-1074 — `backlog-receipt-binding` reads red under concurrency: its re-entry control and one mutant flip when five other fixtures run beside it
+
+**DEFECT.** OPEN. Filed 2026-11-14. Owner: `core/fixtures/backlog-receipt-binding/` (G1, ai-dlc-98, holds its rework).
+
+Measured instance: on e4e961799 (base 4c3a82362), run as the hook runs it (`AI_DLC_FIXTURE_JOBS=9 bash core/fixtures/backlog-receipt-binding/run.sh </dev/null` from the repository root) as one of six concurrent hook-driving fixtures, it exited 1 with `FAIL  c5r-open-control -- an OPEN receipt re-entering the validator through pre-push exited rc=2, row '', receipt runs 2; it must exit 0` and `FAIL  c5-m4-open SURVIVED: its deciding arm c5_open did not trip -- rc=0`. Run solo, the same command exits 0 at 4c3a82362 and at e4e961799 (`PASS  backlog-receipt-binding -- control green, every mutant caught by its own assertion`). e4e961799 changes nothing the fixture reads: its `inputs.decl` names `scripts/validate-backlog-receipts.sh`, `scripts/backlog-reverify.sh` and `scripts/backlog-receipt-lib.sh`, and the c5r probe hook (`run.sh` `c5r_seed`) runs only `scripts/validate-backlog-receipts.sh` on a seeded repository. A verdict that moves with load breaks the operator ruling "Zero tests depend on load (BL-868)".
+
+Owed: the red run shared one working tree with five concurrent fixtures, so it does not separate CPU load from interference through shared state; the cause on the c5r re-entry path (rc 2 is a refusal) is unmeasured. Find it and fix it in the test, so the fixture reads the same verdict solo and under the pool's width.
+
+Receipt: `verify: manual`. Reproducing needs a concurrent load, which a receipt must not generate (`.claude/rules/tool-hazards.md`, "Never brief a load generator"); the closing evidence is the fix's named condition wait, with the fixture green at the pool's width in the push that carries it.
+
+Provenance: batch 257, G3's hook-fixture run before READY; id allocated by the lead.
+
+verify: manual

@@ -19,6 +19,43 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1125.0] - 2026-11-14
+
+### BL-1054 CLOSED: the backlog-receipts step's R9 pass runs alongside the corpus score pool
+
+`scripts/validate-backlog-receipts.sh` splits R9 in two. `r9_start` runs just before the corpus `score_ledger`: it takes R9's checkout, fires R9's self-probe, and starts `backlog-reverify.sh` and `validate-backlog-size.sh` over the live ledger in the background, in their own process group. `r9_run` stays at R9's place, waits for that job, asserts the checkout survived, and judges. The output is the serial run's. R9's span fell from 59-69 s to 1 s. `backlog-real-ledger`'s `m-r9call` mutant now neuters both halves.
+
+### BL-1060 CLOSED: a reproducible push-set predictor
+
+`scripts/predict-push-set.sh <tree> <empty out dir>` sources the tree's FIXTURE_POOL span and `fxcount_arm` and runs `apply_readset_skip` against copies of the key and verified records. It prints `RUN <n>` and one line per fixture. It reads the counted store and never writes it.
+
+### BL-1061 CLOSED: a `+` file can be keyed on one section
+
+A fixture's `section.decl` (`<+ path> <heading>`) narrows a `+` file's key to the first section under that heading, in both the read-set key (`readset_section`, READSET_KEYROWS) and the whole-suite key (`scripts/suite-content-key.sh`). `backlog-receipt-fixture-join` declares `docs/backlog.archive.md ## BL-040`. `.claude/rules/fixture-contract.md` gains clause C14a.
+
+### BL-1062 CLOSED: a comment-only edit to a fixture's run.sh no longer re-runs it
+
+A declared fixture's own run.sh is keyed on its comment- and blank-stripped text when the file passes `bash -n` and bash's `declare -f` re-print of it equals that of the stripped text. Otherwise the whole-file row stays. A stored own-run.sh row equal to today's whole-file hash is read as today's stripped value, so stored passes carry forward. `READSET_VS_FORMAT` stays 1, with a new VS-IDENTITY row in both hooks.
+
+### BL-1063 CLOSED: validator-arm-selection no longer reads `grep: stdout: Broken pipe`
+
+`scripts/validate-enforcement-map.sh`'s three grep writers that fed an early-exit reader (I27, I48, I82) each end in an awk that reads its whole input.
+
+### BL-1064 CLOSED: pregate-self-check's counted fork-budget run lands in the counted store
+
+On a clean tree, section d runs `scripts/seed-verdict-store.sh --keep <dir> validator-fork-budget`, so the pass lands in the counted store the push reads. A dirty tree keeps the scratch run.
+
+### BL-1056 PARTIAL: the fixture-contract allowlist moves to the repository root
+
+`scripts/fixture-contract-allowlist.txt` moves, byte-identical, to `fixture-contract-allowlist.txt`, and `scripts/validate-fixture-hygiene.sh` reads it there. Dropping one of its rows no longer re-runs the 16 fixtures that declare `scripts/` whole. The migration of existing fixtures onto the contract stays owed.
+
+### BL-1065, BL-1066, BL-1070 and BL-1074 filed
+
+- BL-1065: `validate-fixture-inprocess.sh --complete` re-runs the invocation judge's whole self-probe on every census call, and its corpus join takes 33 s.
+- BL-1066: `scripts/pregate-self-check.sh` runs two of its sections under a scratch verdict store.
+- BL-1070: a bundle's union merge of members' backlog appends can drop one of two identical lines, and no gate compares each entry with the member it came from.
+- BL-1074: `backlog-receipt-binding` reads red under concurrency: its re-entry control and one mutant flip when five other fixtures run beside it.
+
 ## [0.1124.0] - 2026-11-13
 
 ### BL-1052 CLOSED: a change no longer re-runs fixtures it cannot reach, and the property is enforced

@@ -43,8 +43,8 @@ consolidate them here.
   rotation); the release commit adds `VERSION` and the heading and runs `scripts/backlog-rotate.sh --apply`
   (it owns the PENDING rule).
 - Pushes run one at a time; every other run goes in parallel.
-- Pre-seed a push with `scripts/seed-verdict-store.sh`: a push reads only `counted-<vk>`, so a plain or
-  mktemp-store run seeds nothing. The line `verdict store: N fixture(s) skipped` is the proof.
+- Pre-seed with `scripts/seed-verdict-store.sh`; a push reads only `counted-<vk>`. Before READY,
+  `scripts/predict-push-set.sh <tree> <empty dir>` prints, read-only, the set a push runs.
 - After a red push the failing set is in `.git/ai-dlc-fixture-failures`; a re-push re-runs those and any
   whose key moved.
 - Clear the shared verdict store by EXACT LISTING before a gate, never by glob or `rm -rf`.

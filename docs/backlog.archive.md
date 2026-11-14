@@ -43006,3 +43006,91 @@ Receipt: the `verify:` line drives the shipped judge. A code edit to a copy of t
 Provenance: batch 257, F25; id allocated by the lead.
 
 verify: sh J=scripts/validate-fixture-invocations.sh; T="$(mktemp -d)" || exit 9; mkdir -p "$T/a/scripts" "$T/b/scripts" "$T/r/core/fixtures/f" "$T/r/core/fixtures/g" || exit 9; printf 'exit 0\n' > "$T/r/core/fixtures/f/run.sh"; printf 'exit 0\n' > "$T/r/core/fixtures/g/run.sh"; cp "$J" "$T/a/scripts/" || exit 9; { cat "$J"; printf 'FXC_RECEIPT_EDIT=1\n'; } > "$T/b/scripts/validate-fixture-invocations.sh" || exit 9; printf '# none\n' > "$T/a/scripts/fixture-matrix-allowlist.txt"; printf 'f\tS1 receipt\n' > "$T/b/scripts/fixture-matrix-allowlist.txt"; ka="$(bash "$T/a/scripts/validate-fixture-invocations.sh" --store-key 2>/dev/null)"; kb="$(bash "$T/b/scripts/validate-fixture-invocations.sh" --store-key 2>/dev/null)"; case "$ka" in counted-[0-9a-f]*) ;; *) exit 1 ;; esac; [ "$ka" = "$kb" ] || exit 1; ra="$(bash "$T/a/scripts/validate-fixture-invocations.sh" --key-rows "$T/r" 2>/dev/null)"; rb="$(bash "$T/b/scripts/validate-fixture-invocations.sh" --key-rows "$T/r" 2>/dev/null)"; [ "$(printf '%s\n' "$ra" | grep -c '^f	#judge f[0-9]* f unlisted$')" = 1 ] && [ "$(printf '%s\n' "$rb" | grep -c '^f	#judge f[0-9]* f listed$')" = 1 ] || exit 1; ga="$(printf '%s\n' "$ra" | grep '^g	')"; gb="$(printf '%s\n' "$rb" | grep '^g	')"; [ -n "$ga" ] && [ "$ga" = "$gb" ] || exit 1; exit 0
+## BL-1054 — pre-suite steps never skip: their key walks git-ignored paths, and the backlog-receipts step is half the pre-suite
+
+**LANDED (v0.1125.0).** Subject (2): R9's classifier pass over the live ledger runs alongside the corpus score pool instead of after it. This is cut (b) below. Cut (a) is refuted. `r9_judge`'s j1 counts only rows reading `sh receipt exited`, and an exit of 9 or a could-not-measure exit routes to NEEDS-REVIEW, so j1 depends on the exit.
+- In `scripts/validate-backlog-receipts.sh`, `r9_start` runs just before the corpus `score_ledger`. It takes R9's checkout at `$WORK/t9/r9`, outside the `$WORK/t` that `score_ledger` and `score_closed` clear. It fires R9's self-probe and starts the classifier and the ceiling in the background, in their own process group.
+- `r9_run`, at R9's place, waits for them, refuses when the checkout vanished mid-run, and judges. Every R9 line is deferred to it, so the output is the serial run's.
+- A run that exits before `r9_run` waits for the job (`r9_reap`). Only an interrupt kills it, by its recorded pgid.
+- `core/fixtures/backlog-real-ledger`'s m-r9call mutant neuters both halves.
+
+Measured on the real corpus, solo, old against new, interleaved, with the hook's arguments:
+- 126 s old against 72 s new at load 6-8.
+- 173 and 206 s old against 122 and 105 s new at load 20-37, with user CPU unchanged (98 and 93 s against 101 and 94 s).
+- R9's own span fell from 59-69 s to 1 s.
+- The verdict and every finding are identical.
+
+The live score pool's line remains, and BL-878's receipt `validate-fixture-inprocess.sh --complete` now sets the step's floor. That cut is BL-1065's.
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: `.githooks/pre-push`, the pre-suite step keys (`pk_init`, `pk_present`, `pk_reset_all`, `pk_step`); `scripts/validate-backlog-receipts.sh` for subject (2).
+
+Two subjects, from the batch 257 push-cost audit (row 2 and "Pre-suite per-step cost"):
+(1) The present key hashed the raw walk `/usr/bin/find . -path ./.git -prune -o -print0`, git-ignored paths included. The main checkout holds about 169k paths under `.claude/worktrees/` (agent worktrees), so adding or removing a worktree anywhere moved every record's key, and 0 of 23 steps skipped: 6.5-10 min per push instead of about 1.5.
+(2) The backlog-receipts step is about half the pre-suite (136 s in the audit).
+
+**Subject (1) shipped in v0.1124.0.** `pk_ign` in `.githooks/pre-push` lists the git-ignored paths with `git ls-files -z -o -i --exclude-standard --directory`: an ignored directory once and never descended into, a tracked path never. It turns them into escaped `-path` prune operands, `PK_PRUNE`, which all four walks use: the present key (`pk_present`, from `pk_init` and `pk_finish`), the atime reset, the atime scan and the mtime check. So a worktree added under `.claude/worktrees/`, a `.DS_Store` or a rewritten `.claude/settings.local.json` moves no key and leaves no read row. Untracked unignored paths stay in the key. Two ignored paths are DECLARED INPUTS and stay walked and keyed, because the agent-definitions step tests and reads them: `.claude/settings.json` and `.claude/agents`. When git lists `.claude/` whole, its other children are pruned one by one. The present-row encoding is unchanged, so a tree with no ignored path keys exactly as before. Measured on a clean worktree at e00a0b111: the old and new walks both read `eb7fdc709c953ec4…`, the key of 23 existing step records, which carry forward. The tip's first prefix run in the shared store skipped 10 of 23 steps on them. Evidence: `core/fixtures/presuite-present-key`, with arms A1.ignored, A1.ignglob, W.ignored, W.ignread, W.ignwrite, W.keep, W.keep2 and W.partial (a content edit of one tracked file re-runs only its reader). Mutants `m_ign` (the walk prunes only `.git`), `m_esc`, `m_scan`, `m_mt`, `m_keep` and `m_size` are each killed by their own arm. The stray party-mode step now skips when only ignored content changed; what it judges is the distribution tree. A push from a checkout where something under a non-ignored directory such as `.claude/` is created or removed DURING the push still goes unrecorded; that guard is unchanged.
+
+Subject (2), measured and not built. An xtrace of the validator's main process on 0.1112.0 read 224 s wall on a box loaded by peer pushes. The audit's premise, a detached checkout per open receipt, does not hold: there are 5 open `sh` receipts, and the run makes 68 `git worktree add` calls, about 6 s of git time. Two lines hold 194 of the 224 s: the live score pool (`scripts/validate-backlog-receipts.sh:2029`, 89 s) and R9's classifier pass over the live ledger (`:2751`, 105 s). Both are paced by BL-878's receipt, `bash scripts/validate-fixture-inprocess.sh --complete`, which takes 81 s solo and runs once in each. There are two candidate cuts. If R9's join reads nothing exit-dependent from the classifier's rows, R9 reuses the exit and stderr the score pass recorded for the same receipt text at the same HEAD, stored under `$WORK` only and never across runs. Otherwise R9's classifier pass runs alongside the score pool instead of after it. Read `r9_judge` first to decide between them.
+
+Receipt: `verify: manual`. Subject (1)'s evidence is the presuite-present-key fixture named above; subject (2) is a wall-clock cut whose closing evidence is a before-and-after measurement, which no predicate over the tree can test.
+
+Provenance: batch 257, F22; id allocated by the lead.
+
+verify: manual
+
+## BL-1060 — the push-set predictor is an untracked scratch script, so no READY carries a reproducible prediction
+
+**LANDED (v0.1125.0).** `scripts/predict-push-set.sh <tree> <empty out dir>` sources `<tree>/.githooks/pre-push`'s FIXTURE_POOL span and its `fxcount_arm`, and runs `apply_readset_skip` over every fixture directory against copies of the key records and the v2 verified record. The counted store `fxcount_arm` names is read, never written. It prints the read-set and verdict-store lines, `RUN <n>` and one `run <fixture>` line per fixture. It refuses a non-empty out dir, a missing hook span and a zero fixture listing. Read-only, measured: md5 of the `.git/ai-dlc-fixture-keys`, verified, suite-key and read-set records plus the store's entry count, equal before and after a run. A planted change to a copy of the key records moved that md5. CLAUDE.md's suite section names it.
+
+**DEFECT.** Filed 2026-11-13. Every READY in batch 257 owes "the exact fixture set the push will run". The only tool producing it was `predict2.sh` in a lead's scratch handoff directory, which no gate reaches and no later session can find.
+
+Provenance: batch 257, G4, from F17's predictor; id allocated by the lead.
+
+verify: manual
+
+## BL-1061 — `+docs/backlog.archive.md` moves the whole-suite key every release, so no release can hit the whole-suite skip
+
+**LANDED (v0.1125.0).** A fixture's `section.decl` (`<+ path> <heading>`) narrows a `+` file's key to the FIRST section headed `<heading>`, up to the next heading of the same level. `readset_section` and `readset_section_of` in the READSET_KEYROWS span compute it, for the P row in `readset_decl_parse`. `scripts/suite-content-key.sh` sources the same two functions from `.githooks/pre-push` for the outer key, printing `<sha>  <path> <heading>`. A file any declarer keys whole is still hashed whole. A `section.decl` line with no `#` heading is refused (`plussect`) here and fails the outer key closed. `backlog-receipt-fixture-join` declares `docs/backlog.archive.md ## BL-040`: run.sh reads BL-040's `verify: sh` line from exactly that section. Probed on the live archive: an appended unrelated line leaves both keys unchanged; BL-040's verify line edited moves both; a duplicate `## BL-040` section inserted 5 lines in (not adjacent) moves both. Mutant (section.decl removed, whole-file hash): the unrelated edit moves both keys.
+
+**DEFECT.** Filed 2026-11-13. `backlog-receipt-fixture-join` declares `+docs/backlog.archive.md` and reads one entry's receipt. Both the per-fixture key and the whole-suite key hashed the whole archive, which every release's rotation edits, so the whole-suite key moved on every push.
+
+Provenance: batch 257, G4, from the push-cost audit's "Other" list; id allocated by the lead.
+
+verify: manual
+
+## BL-1062 — a comment-only edit to a fixture's run.sh re-runs that fixture
+
+**LANDED (v0.1125.0).** `readset_decl_keys` keys a declared fixture's own run.sh on `readset_strip_keys`: the sha of its text with comment and blank lines dropped (the `readset_span_sha` rule). It does so only where the executor agrees nothing else was dropped. The file must pass `bash -n`, so its text cannot close the wrapper early. bash's own `declare -f` re-print of the file, wrapped in a function, must also be byte-identical to that of the stripped text wrapped alike. `bash -n` alone was rejected: deleting a `#` line inside a heredoc, a multi-line string or an awk program still parses. The wrappers are sourced only in a subshell, and `bash -n` reads no BASH_ENV, so a counted run starts no extra bash.
+- Measured on the tree: 172 of 273 declared run.sh files take the stripped key; the rest keep the whole-file row.
+- Probe: a comment-only edit keeps the key. Edits to a `#` line in a heredoc or a multi-line string move it (they fall back to the whole-file row). Mutant, the equality test removed: those two read the same key.
+- Carry-forward: `readset_verdicts` reads a stored own-run.sh row whose value equals today's whole-file manifest hash as today's stripped value, so a stored pass on today's bytes is reused under either identity. READSET_VS_FORMAT stays 1, with a new VS-IDENTITY row in both hooks.
+- Measured with `scripts/predict-push-set.sh` against the real store: 137 fixtures moved by key and were skipped on stored passes. After one pass written under the stripped row, a comment-only edit to that fixture's run.sh did not put it in the push set; the same edit to a whole-file-keyed control did.
+- Cost: about 4 s per push under load 10.
+- Scope: the 2 undeclared fixtures keep whole-file keying.
+
+**DEFECT.** Filed 2026-11-13. 0.1108.0 edited 136 run.sh files, and 96 fixtures re-ran only for that.
+
+Provenance: batch 257, G4, from the push-cost audit's row 12; id allocated by the lead.
+
+verify: manual
+
+## BL-1063 — validator-arm-selection reads red as `grep: stdout: Broken pipe`
+
+**LANDED (v0.1125.0).** The text came from the subject, not the fixture: `scripts/validate-enforcement-map.sh` wrote it on stderr under `--arms` with every declared id, and the fixture's plain-vs-`--arms` differential read the extra line. Three sites fed a grep writer into an early-exit reader: `grep 'applying' | head -1` (I27), `grep -n … | grep -qv` (I48) and `grep -E '.' | head -1` (I82). With SIGPIPE ignored, grep reports the write to a closed pipe. Each now ends in an awk that reads its whole input (`awk '/applying/ && !n++'`, `awk '!/…/ { f = 1 } END { exit !f }'`, `awk '/./ && !n++'`). Probe, SIGPIPE ignored, 20,000-line input, 200 runs each: the old shape printed `Broken pipe` 200 times, the new one 0. A whole validator run, plain and with SIGPIPE ignored, gave byte-identical stdout and stderr before and after. The race did not fire in that run, so the snippet probe is the discriminating one.
+
+**DEFECT.** Filed 2026-11-13. The failure capture at 2026-11-12T11:29Z shows the fixture red only on `2a3 > grep: stdout: Broken pipe`. It was load-dependent.
+
+Provenance: batch 257, G4, from the push-cost audit's "Other" list; id allocated by the lead.
+
+verify: manual
+
+## BL-1064 — pregate-self-check's counted fork-budget run goes to a scratch store, so the push runs the fixture again
+
+**LANDED (v0.1125.0).** On a clean tree, section d runs through this tree's `scripts/seed-verdict-store.sh --keep <dir> validator-fork-budget` from the root. seed arms with the root hook's own `fxcount_arm`, so the counted-store key is not restated, and the pass lands in the counted store the push reads. `--keep` copies each fixture's output so the judge's pass line is still required. On a dirty tree, which seed refuses, section d keeps the scratch run and says the push cannot reuse it. The `pregate-self-check` fixture's receipt asserts both routes (Aseed, Wdscr), and gains mutant m5: the clean-tree test made to match nothing, which moves exactly Aseed. Its invocation rows were re-measured by one counted run.
+
+**DEFECT.** Filed 2026-11-13. Section d armed its own scratch verdict store, so its ~40 s counted pass was written where no push reads it. Every push then ran validator-fork-budget again.
+
+Provenance: batch 257, G4, from the push-cost audit's row 1 follow-up; id allocated by the lead.
+
+verify: manual
+

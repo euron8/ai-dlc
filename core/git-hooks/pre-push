@@ -1441,6 +1441,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 80230747ff4dec972f5bcc189a9553edfc36c87bbfe6d80243609789adbe36d6 spans.decl declares a span row (BL-1052); no existing row changes meaning
 # VS-IDENTITY 1 8b2bbb45754df4ddb6d99683679caa2c78bbf3f17f04c1d36df177a971d8ea6f a counted entry carries the judge's #judge row (BL-1057); uncounted digest inputs unchanged
 # VS-IDENTITY 1 3fc1c587525156eff1e5435a3cdcbe69102eb22d6c2df8f01d396caa35454186 bundle B1: the BL-1052 span rows and the BL-1057 counted #judge row together; neither changes an existing entry
+# VS-IDENTITY 1 28342ca57c853d53b8dfea1c1b7ed7e05593aba85c12e9aafe8c31e5d35ae89c a fixture's own run.sh keyed on its comment-stripped text where the executor parses both alike, a stored raw row of today's bytes reading as it (BL-1062); a + file narrowed by section.decl keyed on that section (BL-1061)
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -1539,6 +1540,22 @@ readset_span_sha() { # <file> <NAME> [raw]: `raw` keeps comment and blank lines 
   if [ "${3:-}" = raw ]; then sed -n "/^# ${2}_BEGIN\$/,/^# ${2}_END\$/p" "$1" | shasum -a 256 | cut -d' ' -f1; return 0; fi
   sed -n "/^# ${2}_BEGIN\$/,/^# ${2}_END\$/p" "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
 }
+#   readset_section  <file> <heading>: the lines of the FIRST section of <file> headed <heading> (a line equal to it, or
+#     opening with it and a space) up to, not including, the next line opening with the heading's own `#` run and a
+#     space; nothing when no line heads one. readset_section_of <fixture dir> <declared path>: the heading that
+#     fixture's section.decl names for that `+` path (`<path> <heading>`, `#` lines and blanks skipped), or nothing.
+#     A `+` file with a section is keyed on its section alone, here and in scripts/suite-content-key.sh, which sources
+#     this function from this span: an edit elsewhere in the file moves neither key. The fixture's own read of the file
+#     must lie inside that section.
+readset_section() {
+  H="$2" awk 'BEGIN { h = ENVIRON["H"]; m = substr(h, 1, index(h, " ")) }
+    on && index($0, m) == 1 { exit } !on && ($0 == h || index($0, h " ") == 1) { on = 1 } on { print }' "$1"
+}
+readset_section_of() {
+  [ -f "$1/section.decl" ] || return 0
+  P="$2" awk '$0 ~ /^[[:space:]]*(#|$)/ { next }
+    { i = index($0, " "); if (i > 1 && substr($0, 1, i - 1) == ENVIRON["P"]) { h = substr($0, i + 1); print (h ~ /^#+ [^ ]/) ? h : "!"; exit } }' "$1/section.decl"
+}
 readset_tail_sha() { # <file>: the top-level lines after its last line that is exactly `}`, comments and blanks dropped
   awk '{ a[NR] = $0 } $0 == "}" { e = NR } END { for (i = e + 1; i <= NR; i++) print a[i] }' "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
 }
@@ -1574,10 +1591,13 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
   # THE `+` ROWS, keyed on the declared spelling (field 5) so a mapped path still finds its marker. An absent file
   # is already refused (absf) above and gets no row.
   if [ -s "$w.p" ]; then
-    awk -F'\t' 'NR == FNR { m[$0] = 1; next } $2 == "F" && ($5 in m) { print $3 }' "$w.p" "$w.r" > "$w.pf"
-    while IFS= read -r p; do
+    awk -F'\t' 'NR == FNR { m[$0] = 1; next } $2 == "F" && ($5 in m) { print $3 "\t" $5 }' "$w.p" "$w.r" > "$w.pf"
+    while IFS="$(printf '\t')" read -r p dp; do
       [ -f "$p" ] || continue
-      dp="$(shasum -a 256 -- "$p" 2>/dev/null | cut -d' ' -f1)"
+      t="$(readset_section_of "$fd" "$dp")"
+      if [ "$t" = '!' ]; then printf '%s\tX\tplussect\t%s\n' "$fx" "$p"; continue
+      elif [ -n "$t" ]; then dp="$(readset_section "$p" "$t" | shasum -a 256 | cut -d' ' -f1)"
+      else dp="$(shasum -a 256 -- "$p" 2>/dev/null | cut -d' ' -f1)"; fi
       if [ "${#dp}" -eq 64 ]; then printf '%s\tP\t%s\t%s\n' "$fx" "$p" "$dp"; else printf '%s\tX\tplushash\t%s\n' "$fx" "$p"; fi
     done < "$w.pf"
   fi
@@ -1679,14 +1699,49 @@ readset_decl_tool_hashes() { # <parse rows> <tool hash file, appended>
   tr '\n' '\000' < "$2.want" | xargs -0 shasum -a 256 -- 2>/dev/null \
     | awk '{ p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" $1 }' >> "$2"
 }
+#   readset_strip_keys  <dir> <fixture root> <parse rows> <out>: `<run.sh path>\t<sha256>` for each declared fixture's
+#     own run.sh, the sha of its text with every comment line (first non-blank character `#`) and blank line dropped,
+#     the readset_span_sha rule. Only where the EXECUTOR agrees that nothing else was dropped: the file passes bash -n
+#     (so its text cannot close the wrapping function early), and bash's own re-print (declare -f) of the file wrapped
+#     in a function is byte-identical to that of the stripped text wrapped alike. A `#` line inside a heredoc, a
+#     multi-line string or an awk program is content: the two prints differ and the file keeps its whole-file row.
+#     bash -n alone cannot see that case, since deleting such a line still parses. The wrappers are sourced only in a
+#     subshell, and bash -n reads no BASH_ENV, so a counted run starts no extra bash.
+readset_strip_keys() {
+  local d="$1" w="$4.d" n=0 p f
+  rm -rf "$w" && mkdir -p "$w" && : > "$4" || return 0
+  awk -F'\t' -v r="$2" '$2 == "N" { print r $1 "/run.sh" }' "$3" > "$w/l"
+  RS_D="$d" RS_W="$w" awk '{ n++; f = (substr($0, 1, 1) == "/") ? $0 : ENVIRON["RS_D"] "/" $0; b = ENVIRON["RS_W"] "/" n
+      printf "" > (b ".s"); print "rs_f() {" > (b ".wo"); print "rs_f() {" > (b ".ws")
+      while ((getline l < f) > 0) { print l > (b ".wo"); if (l !~ /^[[:space:]]*(#|$)/) { print l > (b ".s"); print l > (b ".ws") } }
+      print "}" > (b ".wo"); print "}" > (b ".ws"); close(f); close(b ".s"); close(b ".wo"); close(b ".ws") }' "$w/l"
+  ( while IFS= read -r p; do
+      n=$((n + 1)); case "$p" in /*) f="$p" ;; *) f="$d/$p" ;; esac
+      { bash -n "$f" 2>/dev/null && : > "$w/$n.n"; } &
+      [ $((n % 8)) -ne 0 ] || wait
+    done < "$w/l"; wait ) > /dev/null 2>&1
+  ( while IFS= read -r p; do
+      n=$((n + 1))
+      [ -s "$w/$n.s" ] && [ -f "$w/$n.n" ] || continue
+      unset -f rs_f; . "$w/$n.wo" 2>/dev/null && declare -f rs_f > "$w/$n.o" || continue
+      unset -f rs_f; . "$w/$n.ws" 2>/dev/null && declare -f rs_f > "$w/$n.p" && printf '%s\t%s\n' "$n" "$p"
+    done < "$w/l" ) > "$w/ok" 2>/dev/null
+  [ -s "$w/ok" ] || return 0
+  awk -F'\t' -v w="$w" '{ print w "/" $1 ".o"; print w "/" $1 ".p"; print w "/" $1 ".s" }' "$w/ok" | tr '\n' '\000' \
+    | xargs -0 shasum -a 256 -- 2>/dev/null > "$w/sums"
+  awk -F'\t' -v w="$w" 'NR == FNR { q = $0; sub(/^[0-9a-f]+  /, "", q); H[q] = substr($0, 1, 64); next }
+    { b = w "/" $1; if (((b ".o") in H) && ((b ".p") in H) && ((b ".s") in H) && H[b ".o"] == H[b ".p"]) print $2 "\t" H[b ".s"] }' "$w/sums" "$w/ok" > "$4"
+}
 readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture root, with its trailing />
   local rk_r="" rk_p rk_d="${HR_ROOT:-.}"
   for rk_p in core/scripts/hermetic-run.sh scripts/ai-dlc/hermetic-run.sh; do
     [ -f "$rk_d/$rk_p" ] && rk_r="$rk_r$rk_p $(readset_span_sha "$rk_d/$rk_p" HR_SANDBOX) $(readset_tail_sha "$rk_d/$rk_p");"
   done
-  RK_R="$rk_r" RK_L="$2" RK_P="$3" RK_T="$4" awk -F'\t' -v root="$5" '
+  readset_strip_keys "$rk_d" "$5" "$3" "$4.sk"
+  RK_R="$rk_r" RK_L="$2" RK_P="$3" RK_T="$4" RK_S="$4.sk" awk -F'\t' -v root="$5" '
     function out(f, k, v) { if (!((f SUBSEP k) in S)) { S[f SUBSEP k] = 1; print f "\t" k "\t" v } }
     BEGIN {
+      while ((getline l < ENVIRON["RK_S"]) > 0) { t = index(l, "\t"); SK[substr(l, 1, t - 1)] = substr(l, t + 1) }
       n = split(ENVIRON["RK_R"], a, ";"); for (j = 1; j < n; j++) { split(a[j], b, " "); RNS[b[1]] = b[2]; RNT[b[1]] = b[3] }
       while ((getline l < ENVIRON["RK_P"]) > 0) { split(l, a, "\t")
         if (a[2] == "N") FX[a[1]] = 1
@@ -1704,7 +1759,7 @@ readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture ro
       if (p in RNT) for (f in FX) out(f, p "#HR_EXIT", RNT[p])
       if (p in FF) { n = split(FF[p], a, "\n"); for (j = 2; j <= n; j++) out(a[j], p, v) }
       dk = ""
-      if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1 && (substr(r, 1, i - 1) in FX)) out(substr(r, 1, i - 1), p, v)
+      if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1 && (substr(r, 1, i - 1) in FX)) out(substr(r, 1, i - 1), p, (p in SK) ? SK[p] : v)
         if (r ~ /^[^\/]+\/invocations\.decl$/) dk = substr(r, 1, i - 1) }
       q = p
       while ((i = match(q, /\/[^\/]*$/)) > 0) { q = substr(q, 1, i - 1)
@@ -1766,6 +1821,7 @@ readset_declared() { # <list> <out>
     $3 == "plusdir" { print $1 "\t+ marks a directory, and only a file may be keyed outside the universe: " $4; next }
     $3 == "plusbang" { print $1 "\t+ and ! on one inputs.decl line (a line carries one marker): " $4; next }
     $3 == "plushash" { print $1 "\t+ file could not be hashed " $4; next }
+    $3 == "plussect" { print $1 "\tsection.decl names no `#` heading for the + file " $4; next }
     $3 == "rnopath" || $3 == "rabs" || $3 == "rderive" || $3 == "rref" || $3 == "rempty" { print $1 "\tgit.decl range refused (" $3 "): " $4; next }
     $3 == "spanbad" || $3 == "spandir" || $3 == "spanabsent" { print $1 "\tspans.decl refused (" $3 "): " $4; next }
     { print $1 "\t" $4 }' "$out/.dparse" > "$out/.dunres"
@@ -1893,11 +1949,13 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
       if (ENVIRON["VLOK"] != "") while ((getline l < ENVIRON["VLOK"]) > 0) LOK[l] = 1
       vj = (ENVIRON["VJ"] != ""); vld = ENVIRON["VLD"]
       while ((getline l < ENVIRON["VN"]) > 0) { t = index(l, "\t"); p = substr(l, 1, t - 1)
-        if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh") NOW[p] = substr(l, t + 1) }
+        if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh") NOW[p] = substr(l, t + 1)
+        else if (index(p, root) == 1 && p ~ /\/run\.sh$/) RAW[p] = substr(l, t + 1) }
       while ((getline l < ENVIRON["VW"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); r = substr(l, t + 1); kd = substr(r, 1, 1); r = substr(r, 3)
         if (kd == "I") { INP[f] = r; continue }
         if (kd == "J") { JR[f] = r; continue }
         t = index(r, "\t"); k = substr(r, 1, t - 1)
+        if (k == root f "/run.sh") SV[f] = substr(r, t + 1)
         if ((f in DF) && k == root f "/inputs.decl") continue
         o = (index(k, root f "/") == 1)
         addw("n", f, r, o)
@@ -1914,9 +1972,10 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
     FNR == 6 { ok = ok && ($0 == INP[fx]); next }
     FNR == 7 && vj && !leg { ok = ok && (fx in JR) && ($0 == JR[fx]); next }
     !ok { next }
-    { t = index($0, "\t"); k = substr($0, 1, t - 1)
+    { t = index($0, "\t"); k = substr($0, 1, t - 1); row = $0
       if ((fx in DF) && k == root fx "/inputs.decl") next
-      if ((md SUBSEP fx SUBSEP $0) in W) { m++; if (index(k, root fx "/") == 1) own++ }
+      if (k == root fx "/run.sh" && (fx in SV) && (k in RAW) && substr($0, t + 1) == RAW[k]) row = k "\t" SV[fx]
+      if ((md SUBSEP fx SUBSEP row) in W) { m++; if (index(k, root fx "/") == 1) own++ }
       else if (index(k, root fx "/") == 1) ok = 0 }
     END { fin() }' 2>/dev/null | awk '!s[$0]++' > "$out/.vs.hit"
   [ -s "$out/.vs.hit" ] || return 0

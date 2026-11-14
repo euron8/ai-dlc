@@ -20,6 +20,9 @@
 # Output: the counted store dir once, then one `<fx> rc=<n>` line per fixture. Exit 0 only if every fixture
 # passed; exit 1 on any red; exit 2 on a refusal (dirty tree, no fixture, wrong cwd, arming not extractable or
 # failed). Honours AI_DLC_VERDICT_STORE as the BASE (default ~/.cache/ai-dlc/verdicts), like the hook.
+#
+# --keep <dir>: each fixture's whole output is also copied to <dir>/<fixture>.out (scripts/pregate-self-check.sh
+# reads the judge's pass line there). A copy that fails is a refusal.
 set -u
 # STDIN IS /dev/null FOR THE WHOLE RUN, as the push's pool gives every fixture (xargs children, and its worker's
 # `< /dev/null`). bash 3.2 skips BASH_ENV in a `bash -c` at shell level 1 whose stdin is an inet socket, and the
@@ -27,7 +30,12 @@ set -u
 # through `exec` (which lowers SHLVL) or `env -i`, run in the foreground or as a `set -m` job, inherits it and goes
 # uncounted, so an invocations.decl row set from a hand seed reads low against the push (BL-1053).
 exec < /dev/null
-[ "$#" -gt 0 ] || { echo "usage: bash scripts/seed-verdict-store.sh <fixture> [<fixture> ...]" >&2; exit 2; }
+keep=""
+if [ "${1:-}" = --keep ]; then
+  keep="${2:-}"; [ -n "$keep" ] && [ -d "$keep" ] || { echo "seed-verdict-store: --keep needs an existing directory" >&2; exit 2; }
+  shift 2
+fi
+[ "$#" -gt 0 ] || { echo "usage: bash scripts/seed-verdict-store.sh [--keep <dir>] <fixture> [<fixture> ...]" >&2; exit 2; }
 HOOK="$PWD/.githooks/pre-push"
 [ -f "$HOOK" ] && [ -f "$PWD/core/scripts/hermetic-run.sh" ] \
   || { echo "seed-verdict-store: run from the root of a worktree (no .githooks/pre-push or core/scripts/hermetic-run.sh here)" >&2; exit 2; }
@@ -47,6 +55,7 @@ echo "counted store: $AI_DLC_VERDICT_STORE"
 fail=0
 for fx in "$@"; do
   bash core/scripts/hermetic-run.sh "$fx" > "$work/$fx.out" 2>&1; rc=$?
+  [ -z "$keep" ] || cp "$work/$fx.out" "$keep/$fx.out" || { echo "seed-verdict-store: could not keep $fx's output in $keep" >&2; exit 2; }
   printf '%s rc=%s\n' "$fx" "$rc"
   if [ "$rc" != 0 ]; then
     fail=1

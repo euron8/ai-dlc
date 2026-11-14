@@ -58,6 +58,8 @@ change. Mutant mechanics are `fixture-mutants.md`'s; shipping is `fixture-ship-d
   `scripts/invalidation-guard.sh` r1, r2, r3, r4, r5.
 - **C14** `spans.decl`: `<path> <NAME>` rows key `<path>#<NAME>`, the `# <NAME>_BEGIN` .. `# <NAME>_END` span of a
   shared program. Enforcer: `.githooks/pre-push` readset_decl_parse.
+- **C14a** `section.decl`: `<+ path> <heading>` keys that `+` file on its first section headed `<heading>`, in the
+  fixture's key and in `scripts/suite-content-key.sh`. Enforcer: `.githooks/pre-push` readset_decl_parse.
 - **C15** `tools.decl`: one tool name per line, keyed by content; `?name` is reachable and unkeyed, and only a name
   in `READSET_UNKEYED_TOOLS`. Enforcer: `.githooks/pre-push` readset_decl_parse.
 - **C16** `invocations.decl`: `<n> *` (every bash start), `<n> <path>` (starts of a `!` subject), `<n> inproc:<path>`

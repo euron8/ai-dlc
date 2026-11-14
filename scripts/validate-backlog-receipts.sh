@@ -971,8 +971,10 @@ WORK="$(mktemp -d)" || { echo "$(me): FAIL -- mktemp -d" >&2; exit 2; }
 # THE PARENT'S OWN CLEANUP. A worker's trap removes its own trees; this catches a worker the
 # pool killed before its trap ran, and it fires on an interrupt of the parent too.
 parent_cleanup_trees() {
-  if [ -d "$WORK/t" ]; then
-    for _d in "$WORK"/t/*; do
+  r9_reap   # R9's background classifier (r9_start), when r9_run never waited for it
+
+  if [ -d "$WORK/t" ] || [ -d "$WORK/t9" ]; then
+    for _d in "$WORK"/t/* "$WORK"/t9/*; do
       [ -e "$_d/.git" ] || continue
       git -C "$SUBJECT_ROOT" worktree remove --force "$_d" >/dev/null 2>&1 || rm -rf "$_d"
     done
@@ -982,6 +984,13 @@ parent_cleanup_trees() {
   git -C "$SUBJECT_ROOT" worktree prune >/dev/null 2>&1 || true
 }
 parent_cleanup() { parent_cleanup_trees; rm -rf "$WORK"; }
+# r9_reap [kill]: an exit WAITS for R9's background job, so a run that stops before r9_run makes the same starts on
+# every run; only an interrupt (r9_start's INT/TERM trap) kills it, by its recorded process group.
+r9_reap() {
+  [ -n "${R9_PID:-}" ] || return 0
+  [ "${1:-}" = kill ] && kill -TERM -- "-$R9_PID" 2>/dev/null
+  wait "$R9_PID" 2>/dev/null; R9_PID=""
+}
 trap parent_cleanup EXIT INT TERM
 # A RESTRICTED RUN IS NEVER A GATE PASS (lead ruling, batch 256). Given --r13-drive, --probe-seeds, --probe-world, or BR_R13_PROBE_DIR
 # (which moves the instrument probe off the checkouts' filesystem), the run narrowed its self-probes, so every exit
@@ -2714,21 +2723,29 @@ r9_judge() {
   echo "j1 the sh population $1 covers the classifier's resolved set ${_r9_ns}; b16 the ceiling and the classifier agree at ${_r9_sz} entries"
   return 0
 }
-# r9_run -> prints the R9 line on stdout; returns 0 held or not run, 1 a join failed, 2 a refusal
-r9_run() {
+# R9 RUNS IN TWO HALVES (BL-1054). r9_start, called just before the corpus score_ledger, takes the checkout, fires
+# the self-probe and starts the classifier and the ceiling over the live ledger in the BACKGROUND, in their own
+# process group; r9_run, at R9's place after every read of $WORK/counts, waits for them and judges. The two passes
+# share no file: the checkout is $WORK/t9/r9, outside the $WORK/t that score_ledger and score_closed clear. Every
+# line R9 prints is deferred to r9_run, so the output is the serial run's. A run that exits before r9_run
+# waits for the job (r9_reap); an interrupt kills its group. r9_run alone (no r9_start) runs both halves in line.
+R9_STATE=""; R9_MSG=""; R9_PID=""
+r9_start() {
+  R9_STATE=notrun
   R9_SIZE="$SELF_ROOT/scripts/validate-backlog-size.sh"
   if [ ! -f "$R9_SIZE" ]; then
-    echo "R9: NOT RUN -- scripts/validate-backlog-size.sh is absent beside this validator, so the live-ledger joins (j1 population, b16 ceiling) observed NOTHING in this tree; that is not a clean result."
+    R9_MSG="R9: NOT RUN -- scripts/validate-backlog-size.sh is absent beside this validator, so the live-ledger joins (j1 population, b16 ceiling) observed NOTHING in this tree; that is not a clean result."
     return 0
   fi
   if ! git -C "$SUBJECT_ROOT" cat-file -e "HEAD:scripts/backlog-reverify.sh" 2>/dev/null; then
-    echo "R9: NOT RUN -- the subject repository's HEAD carries no scripts/backlog-reverify.sh, so the live-ledger joins (j1 population, b16 ceiling) observed NOTHING in this tree; that is not a clean result."
+    R9_MSG="R9: NOT RUN -- the subject repository's HEAD carries no scripts/backlog-reverify.sh, so the live-ledger joins (j1 population, b16 ceiling) observed NOTHING in this tree; that is not a clean result."
     return 0
   fi
-  R9_T="$WORK/t/r9"
-  mkdir -p "$WORK/t"
+  R9_STATE=refused
+  R9_T="$WORK/t9/r9"
+  mkdir -p "$WORK/t9"
   git -C "$SUBJECT_ROOT" worktree add --detach -q "$R9_T" HEAD >/dev/null 2>&1 \
-    || { echo "$(me): FAIL -- R9 could not check out HEAD of $SUBJECT_ROOT for the classifier; this is a refusal, not a reading." >&2; return 2; }
+    || { R9_MSG="$(me): FAIL -- R9 could not check out HEAD of $SUBJECT_ROOT for the classifier; this is a refusal, not a reading."; return 0; }
   R9_REV="$R9_T/scripts/backlog-reverify.sh"
   # THE SELF-PROBE, BOTH DIRECTIONS, BEFORE THE CORPUS, ON THE REAL PROGRAMS.
   printf '# R9 probe\n\n## BL-001 — probe\n\nverify: sh true\n\n## BL-002 — probe\n\nverify: manual\n' > "$WORK/r9p2.md"
@@ -2744,12 +2761,34 @@ r9_run() {
   [ -n "$r9_pfail" ] || ! r9_judge 1 "$r9_ps3" "$r9_prow" >/dev/null || r9_pfail="b16 ACCEPTED a ceiling reading one entry more than the classifier"
   if [ -n "$r9_pfail" ]; then
     git -C "$SUBJECT_ROOT" worktree remove --force "$R9_T" >/dev/null 2>&1 || rm -rf "$R9_T"
-    echo "$(me): SELF-PROBE FAILED -- R9: $r9_pfail; the live-ledger joins below would prove nothing." >&2
+    R9_MSG="$(me): SELF-PROBE FAILED -- R9: $r9_pfail; the live-ledger joins below would prove nothing."
+    return 0
+  fi
+  # THE CORPUS, in the background. The classifier's receipts run in the checkout; a re-entry into this validator skips.
+  set -m
+  { BR_RECEIPTS_RUNNING="$LEDGER_KEY" bash "$R9_REV" "$LEDGER" > "$WORK/r9.rows" 2>/dev/null
+    AI_DLC_BACKLOG_MAX_ENTRIES=100000 bash "$R9_SIZE" "$LEDGER" > "$WORK/r9.size" 2>&1; } </dev/null &
+  R9_PID=$!
+  set +m
+  trap 'r9_reap kill; parent_cleanup' INT TERM
+  R9_STATE=started
+}
+# r9_run -> prints the R9 line on stdout; returns 0 held or not run, 1 a join failed, 2 a refusal
+r9_run() {
+  [ -n "$R9_STATE" ] || r9_start
+  case "$R9_STATE" in
+    notrun) echo "$R9_MSG"; return 0 ;;
+    refused) echo "$R9_MSG" >&2; return 2 ;;
+  esac
+  wait "$R9_PID"; R9_PID=""
+  # The checkout must outlive the classifier: a pass that cleared it mid-run leaves rows j1's `at least` accepts.
+  if [ ! -f "$R9_REV" ]; then
+    git -C "$SUBJECT_ROOT" worktree remove --force "$R9_T" >/dev/null 2>&1 || rm -rf "$R9_T"
+    echo "$(me): FAIL -- R9's checkout $R9_T was removed while the classifier ran in it, so its rows describe a vanishing tree; this is a refusal, not a reading." >&2
     return 2
   fi
-  # THE CORPUS. The classifier's receipts run in the checkout; a re-entry into this validator skips.
-  r9_rows="$(BR_RECEIPTS_RUNNING="$LEDGER_KEY" bash "$R9_REV" "$LEDGER" 2>/dev/null)"
-  r9_size="$(AI_DLC_BACKLOG_MAX_ENTRIES=100000 bash "$R9_SIZE" "$LEDGER" 2>&1)"
+  r9_rows=""; [ -f "$WORK/r9.rows" ] && r9_rows="$(<"$WORK/r9.rows")"
+  r9_size=""; [ -f "$WORK/r9.size" ] && r9_size="$(<"$WORK/r9.size")"
   git -C "$SUBJECT_ROOT" worktree remove --force "$R9_T" >/dev/null 2>&1 || rm -rf "$R9_T"
   if r9_why="$(r9_judge "$SH_RECEIPTS" "$r9_size" "$r9_rows")"; then
     echo "R9: OK -- live-ledger joins on ${LEDGER}: ${r9_why} (probe fired both directions)."
@@ -4631,6 +4670,7 @@ if [ -n "$RE_ENTRY" ]; then
   exit 0
 fi
 r13_arm
+r9_start
 OUT="$(score_ledger "$LEDGER" "$SUBJECT_ROOT")" || exit 2
 read_counts
 # R10 over the records score_ledger just wrote: the exact bytes its workers evaluated, as TEXT.

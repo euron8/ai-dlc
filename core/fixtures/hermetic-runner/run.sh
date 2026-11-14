@@ -511,7 +511,9 @@ arm_G() {
   mk_probe "$P" stub_read_all $'data/a.txt\nlib/'
   fsha="$(shasum -a 256 "$P/data/a.txt" | awk '{ print $1 }')"
   lsha="$(printf 'x.txt\ny.txt\n' | shasum -a 256 | awk '{ print $1 }')"
-  rsha="$(shasum -a 256 "$P/$FXR/probe/run.sh" | awk '{ print $1 }')"
+  # The own run.sh row is the sha of its comment- and blank-stripped text (BL-1062): the probe stub carries no `#` line
+  # inside a heredoc or string, so the executor parses both texts alike and readset_strip_keys keys it stripped.
+  rsha="$(grep -v -E '^[[:space:]]*(#|$)' "$P/$FXR/probe/run.sh" | shasum -a 256 | awk '{ print $1 }')"
   rows="$(bash "$RUN" --root "$P" --key-only probe 2>/dev/null)"
   rowhas "declared file row" "$rows" "data/a.txt${T}${fsha}"
   rowhas "declared dir listing row" "$rows" "lib/${T}#listing:${lsha}"

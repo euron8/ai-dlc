@@ -416,14 +416,15 @@ if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ -n "$j1_arm" ]; then
     bad "r9 -- the world with no size validator did not print R9: NOT RUN (got '$(printf '%s\n' "$j1p_anch_out" | grep '^R9' )')"
   fi
   # m-r9call: the CALL SITE of R9 neutered (`r9_run; _r9_rc=$?` -> `_r9_rc=0`), in a copy of the j1 world
-  # that carries the ceiling. The call line is the only place R9 runs, so the mutated validator prints no
+  # that carries the ceiling. The call line is the only place R9 prints, so the mutated validator prints no
   # `R9:` line at all; the r9 OK arm above is presence-shaped and is what decides. Twin j1-pop: the same
   # mutated tree still prints a SUMMARY whose sh population equals the unmutated world's.
   cp -R "$TMP/j1" "$TMP/r9m"
   r9m_v="$TMP/r9m/scripts/validate-backlog-receipts.sh"
-  sed 's/^r9_run; _r9_rc=\$?$/_r9_rc=0/' "$RECEIPTS" > "$r9m_v"
-  if cmp -s "$RECEIPTS" "$r9m_v"; then
-    note "FAIL  r9 m-r9call -- the call-site mutation DID NOT APPLY"; rc=1
+  # r9_start, R9's first half (BL-1054), is neutered with it, so the mutated world starts no R9 program.
+  sed -e 's/^r9_run; _r9_rc=\$?$/_r9_rc=0/' -e 's/^r9_start$/:/' "$RECEIPTS" > "$r9m_v"
+  if [ "$(diff "$RECEIPTS" "$r9m_v" | grep -c '^>')" != 2 ]; then
+    note "FAIL  r9 m-r9call -- the call-site mutation DID NOT APPLY to both R9 call sites"; rc=1
   else
     r9m_out="$(run_r "" "$TMP/r9m" $J1_ARGS)"
     r9m_sum="$(j1_read "$r9m_out")"
