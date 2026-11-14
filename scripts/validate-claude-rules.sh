@@ -922,7 +922,10 @@ fi
 # numbered "Build process" (builder and lead steps), replacing the READY-seed and integrator bullets, and
 # operator-rulings.md's bundle section became a pointer to it. A6 WAS OBSERVED FAILING AT 48265/47996 BEFORE THE
 # CEILING MOVED.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48265}"
+# RAISED 48265 -> 48413 by exactly the measured overrun, ON THE OPERATOR'S DIRECT ORDER: the lead's merge step
+# gained the rebase-and-repush rule when main moved, and the build-process pointer was scoped to build and release
+# steps. A6 WAS OBSERVED FAILING AT 48413/48265 BEFORE THE CEILING MOVED.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48413}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

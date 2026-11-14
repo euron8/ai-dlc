@@ -173,7 +173,8 @@ Lead:
 2. Call the advisor in its own message, then push from a clean worktree at that sha, backgrounded, to a named
    branch, with the exit written to a file.
 3. On a red, send each failing unit from the log to its owner.
-4. `gh pr create`, then `gh pr merge --squash`, subject and body from files.
+4. If `origin/main` moved since the push, rebase, rerun builder step 5 and push again. Then `gh pr create` and
+   `gh pr merge --squash`, subject and body from files.
 5. Verify once: `origin/main`'s tree equals the pushed tree, with the previous main tree as a DIFF control.
 6. Detach the main checkout at the new `origin/main`.
 

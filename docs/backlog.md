@@ -3237,6 +3237,8 @@ verify: manual
 
 ## BL-1085 — READY acceptance is checked by reading prose; no script verifies the pregate record or the member's predicted set
 
+**WITHDRAWN (0eefdee5b).** Its subject is gone. `CLAUDE.md`'s "Build process" replaced the READY counted-seed and integrator acceptance step this entry would check, and `.githooks/pre-push`'s PREGATE_GATE span already refuses a tree with no pregate record.
+
 **DEFECT.** OPEN. Filed 2026-11-14. Owner: the READY/bundle acceptance flow (`CLAUDE.md`'s "Before READY" sentence, `scripts/pregate-self-check.sh`, `scripts/predict-push-set.sh`).
 
 `CLAUDE.md` now requires a release's final commit to carry `scripts/pregate-self-check.sh` green on its exact tree (`--member` when it edits `.githooks/pre-push`) and a counted `scripts/seed-verdict-store.sh` run of exactly the fixtures `scripts/predict-push-set.sh` says its own change moves; the integrator seeds nothing. The integrator accepts a READY by reading the owner's prose. Nothing checks that the pregate record exists for the tree, or that the member's predicted set was seeded, so a READY with a missing record or an unseeded moved fixture is accepted and the push gate pays for it.
