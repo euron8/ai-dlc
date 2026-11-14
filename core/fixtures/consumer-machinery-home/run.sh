@@ -221,7 +221,11 @@ fi
 # pool nests inside the pre-push suite's own, so a knob here multiplies against the knob
 # there and the PRODUCT is what lands on the machine. Six is the run count; a wider pool
 # than there is work is pure contention for the sibling fixtures.
-CMH_JOBS=6
+# READSET_POOL_WIDTH narrows this pool when derive-fixture-readsets.sh traces the fixture (its nest launch sets 1):
+# at full width the sweeps outrun `log stream` and the trace is discarded. It changes the schedule, not the work.
+CMH_JOBS="${READSET_POOL_WIDTH:-6}"
+case "$CMH_JOBS" in ''|*[!0-9]*|????*) echo "FIXTURE BROKEN: READSET_POOL_WIDTH='$CMH_JOBS' is not an integer from 1 to 64" >&2; exit 2 ;; esac
+{ [ "$CMH_JOBS" -ge 1 ] && [ "$CMH_JOBS" -le 64 ]; } || { echo "FIXTURE BROKEN: READSET_POOL_WIDTH='$CMH_JOBS' is not an integer from 1 to 64" >&2; exit 2; }
 CMH_MATRIX="$MATRIX" CMH_HERE="$HERE" CMH_SEDS="$SEDS" CMH_OUT="$OUTD" CMH_RUNS="$RUNS" \
   xargs -P "$CMH_JOBS" -I{} bash -c '
     l="$1"

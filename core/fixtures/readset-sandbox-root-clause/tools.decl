@@ -2,6 +2,7 @@ awk
 basename
 bash
 cat
+chmod
 cmp
 dirname
 env

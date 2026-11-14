@@ -11,6 +11,9 @@
 #       has changed since. It waits in `read -t 1` on a private FIFO (pacing; a look is the event). So the poller has
 #       had a look at five in flight with fx6 forked and unflighted: the fixed poller reads 6 of 6, a poller that counts
 #       a stable five (BL-924's defect: two ps tables alike, read as the pool's width) reads 5.
+#       THE HOLD ARMS ONLY IN A SIX-WIDE BARRIER DRIVE: the drive's xargs.P (written by its shim before xargs runs)
+#       must read 0, 6 or more, the values the rendezvous reads as six. Below six no look at five can come and the
+#       count waits on fx6's own flight file, so a hold there deadlocks whenever fx6 is dispatched first (BL-1083).
 #   (b) THE LATE WRITER. The first step of the fix_hlink, fix_fifo and fix_silent watcher drives (after the unit's
 #       byte, before its step token) appends `unit hold <step>` to its drive's lockstep record file (PN_REC), which
 #       changes that drive's look line, and waits until the fixture has RECORDED that drive (pf.<tag>.at) or written a
@@ -46,7 +49,7 @@
 #   pn_hlink, pn_fifo, pn_silent   the fix set's value is REFUSED
 #
 # cap-ignored and pool-capped-5 are left out. cap-ignored reads the same before and after the fix. pool-capped-5's
-# drive is one the forcing does not reach: fx6 is forked only after the count, so the copy re-runs the fixture's arm.
+# drive is one the forcing does not reach: its width is five, so the hold never arms, and the copy re-runs the fixture's arm.
 #
 # Exit 0 when every cell passes, 1 when one fails, 9 when it cannot measure: no root, no subject, an anchor not found
 # exactly once, a copy that did not run to its value line, the copy's baseline missing, a forcing that provably did
@@ -95,7 +98,8 @@ awk -v aflight="$A_FLIGHT" -v astep="$A_STEP" -v aeval="$A_EVAL" '
   /^  mutant [a-z]/ { if ($2 != "not-exported") next }
   /^PN_MUTS="/ { print "PN_MUTS=\"\""; next }
   $0 == aflight {
-    print "case \"$0\" in */fx6/run.sh|*/fx6//run.sh) if [ -n \"${PD_GATE:-}\" ] && [ -n \"${BL924_FORCE:-}\" ]; then pw=\"${PD_FLIGHT%/flight}\"; [ -p \"$pw/force.fifo\" ] || mkfifo \"$pw/force.fifo\""
+    print "case \"$0\" in */fx6/run.sh|*/fx6//run.sh) pw=\"${PD_FLIGHT:-}\"; pw=\"${pw%/flight}\"; xp=\"\"; [ -s \"$pw/xargs.P\" ] && read -r xp < \"$pw/xargs.P\"; case \"$xp\" in 0|6|7|8|9|[1-9][0-9]*) xw=6 ;; *) xw=\"\" ;; esac"
+    print "  if [ -n \"${PD_GATE:-}\" ] && [ -n \"${BL924_FORCE:-}\" ] && [ \"$xw\" = 6 ]; then [ -p \"$pw/force.fifo\" ] || mkfifo \"$pw/force.fifo\""
     print "  fw=0; fb=\"\"; l0=\"\""
     print "  while :; do [ -e \"$pw/barrier.n\" ] && { fb=n; break; }; lr=\"\"; [ -f \"$pw/barrier.look\" ] && read -r lr < \"$pw/barrier.look\"; case \"$lr\" in f=05*) if [ -z \"$l0\" ]; then l0=\"$lr\"; elif [ \"$lr\" != \"$l0\" ]; then fb=look; break; fi ;; esac; bp=\"\"; [ -s \"$pw/barrier.pid\" ] && read -r bp < \"$pw/barrier.pid\"; if [ -n \"$bp\" ]; then bs=\"$(ps -o stat= -p \"$bp\" 2>/dev/null)\"; case \"$bs\" in *Z*|\"\") [ -e \"$pw/barrier.n\" ] || { fb=ended; break; } ;; esac; fi; fw=$((fw + 1)); read -t 1 _ <> \"$pw/force.fifo\"; done"
     print "  printf \"raw=%s waits=%s by=%s\\n\" \"${raw:-_}\" \"$fw\" \"$fb\" >> \"$BL924_FORCE/barrier.log\""

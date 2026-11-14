@@ -640,6 +640,9 @@ if [ "$hr_fxc" = 1 ] && [ "$hr_rc" -eq 0 ]; then
 fi
 # HR_SANDBOX_END
 
+# HR_STORE: the rc line and the shared verdict store's writer, the code after the sandbox span that a fixture reading
+# this runner's printed rc line or its store entries (spans.decl `core/scripts/hermetic-run.sh HR_STORE`) depends on.
+# HR_STORE_BEGIN
 printf 'hermetic-run: %s: rc=%s sandbox_files=%s required_missing=%s\n' \
   "$HR_FX" "$hr_rc" "$(/usr/bin/find "$HR_SB" -type f | wc -l | tr -d ' ')" "$hr_missing"
 
@@ -650,15 +653,23 @@ printf 'hermetic-run: %s: rc=%s sandbox_files=%s required_missing=%s\n' \
 # this run's exit.
 # The store path, the ident and the digest input are the hook's READSET_VS span, sourced here at top level (the
 # READSET_TOOLS pattern), so the reader and this writer are one implementation. No span: the store is OFF.
+# A SPAN THAT PREDATES THE `#pending` ENTRY LINE (no readset_vs_entry, no READSET_VS_PENDING) is version skew: the store is OFF,
+# said so, and nothing is written through an undefined function or an empty grammar.
 sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$HR_HOOK" > "$HR_WORK/vs.sh"
-grep -q '^readset_vs_store() ' "$HR_WORK/vs.sh" && . "$HR_WORK/vs.sh" || : > "$HR_WORK/vs.sh"
+hr_vs_skew=0
+case "$(grep -cE '^(readset_vs_store\(\) |readset_vs_entry\(\) |READSET_VS_PENDING=)' "$HR_WORK/vs.sh")" in
+  3) . "$HR_WORK/vs.sh" || : > "$HR_WORK/vs.sh" ;;
+  0) : > "$HR_WORK/vs.sh" ;;
+  *) hr_vs_skew=1; : > "$HR_WORK/vs.sh" ;;
+esac
 # No READSET_KEYROWS span (version skew, above): no composer, so the store is OFF for this run.
 [ "$HR_KR" = 1 ] || : > "$HR_WORK/vs.sh"
 hr_store_put() {
   # A PASS WITH AN OPTIONAL PIN NOT IMPORTED IS NOT RECORDED. The key carries no trace of the pin, so a pass whose
   # pinned differential SKIPPED (a shallow clone) would be reused by a clone where that differential runs.
   [ "${hr_pin_skipped:-0}" = 0 ] || return 0
-  local store ident dig
+  local store ident dig pn
+  [ "$hr_vs_skew" = 0 ] || { printf 'hermetic-run: %s: verdict store OFF: the hook READSET_VS span lacks readset_vs_entry or READSET_VS_PENDING (version skew), so no entry is written\n' "$HR_FX"; return 0; }
   [ -s "$HR_WORK/vs.sh" ] || return 0
   store="$(readset_vs_store "$HR_ROOT")"
   [ -n "$store" ] || { printf 'hermetic-run: %s: verdict store OFF: no store base, or the project root commit cannot be resolved\n' "$HR_FX"; return 0; }
@@ -670,11 +681,17 @@ hr_store_put() {
   readset_vs_input "$HR_FX" "$ident" "$HR_WORK/vs.rows" "$HR_ROOT" > "$HR_WORK/vs.d" || return 0
   dig="$(shasum -a 256 < "$HR_WORK/vs.d" | cut -d' ' -f1)"
   [ "${#dig}" -eq 64 ] || return 0
-  { printf '#format k1\n#state ok\n'; cat "$HR_WORK/vs.d"; } > "$store/.tmp.$$.$HR_FX" 2>/dev/null \
+  # `#pending <n>`, the entry's LAST line: the PENDING rows of this pass's log, the grammar the span defines. An
+  # output, never in the name (the sha256 of the digest input); the header stays `#format k1`, so an entry is read
+  # by readset_vs_entry and the hook's subset reader alike, and one without the line keeps its meaning.
+  pn="$(grep -cE "$READSET_VS_PENDING" "$HR_LOG")"
+  case "$pn" in ''|*[!0-9]*) return 0 ;; esac
+  { printf '#format k1\n#state ok\n'; cat "$HR_WORK/vs.d"; printf '#pending %s\n' "$pn"; } > "$store/.tmp.$$.$HR_FX" 2>/dev/null \
     && mv "$store/.tmp.$$.$HR_FX" "$store/$dig" 2>/dev/null \
     && printf 'hermetic-run: %s: verdict recorded in %s\n' "$HR_FX" "$store" || rm -f "$store/.tmp.$$.$HR_FX" 2>/dev/null
   return 0
 }
+# HR_STORE_END
 if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then ( hr_store_put ) 2>/dev/null; exit 0; fi
 [ "$hr_rc" -eq 2 ] && exit 2
 exit 1

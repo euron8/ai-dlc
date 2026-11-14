@@ -245,7 +245,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 #   a  arms ign man merge ckm1 slot   pool selection worlds, the manifest, the deriver's merge and control, checksum-key mutants a-g, the trace-window slot (slot-world.sh)
 #   b  loc hr tk dg ckm2         local map and trace report, hash rows, tool keys, committed digests, checksum-key mutants h-i
 #   c  tracer rc                 trace tree, lossy window, --tracer both and its stub worlds, --reconcile
-#   d  ckw ckm3 vs               shared verdict store (vs), checksum-key worlds (fifteen against the first hook, one wiring world on the second) and checksum-key mutants j-o
+#   d  ckw ckm3 vs               shared verdict store (vs), checksum-key worlds (fifteen against the first hook, one wiring world on the second) and checksum-key mutants j-o (two on k)
 # The per-fixture checksum-key section (contract k1) is four units: ckw its worlds, ckm1..ckm3 its fifteen mutants dealt in
 # three runs. Each mutant drives its own world and one twin world, so the mutants carry the cost and are what is dealt.
 # `rc` rides with `tracer` because it drives the stub `sandbox-exec` and deriver copy that `tracer` builds.
@@ -2073,18 +2073,12 @@ while [ "$i" -lt "$reps" ]; do
 done
 printf '%s|%s|%s|%s|%s' "$ctl" "$i" "$ran" "$fin" "$leaks" > "$o/res"
 FX
-  seed_fx() { # <t>: seed() plus a TRACKED deriver stub that exits at once
-    f2b_world seed "$1" || return 1
-    mkdir -p "$1/core/scripts" && printf '#!/bin/bash\nexit 0\n' > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
-    ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fast ) >/dev/null 2>&1
-  }
   # (t4)'s deriver exits once the WATCHDOG'S SLEEP EXISTS, never before: it waits on that `sleep` in its
   # parent's process group (the trace subshell leads that group). Exiting at once, the stop could land before
   # the watchdog had forked its sleep, so that launch had nothing to leak and nosweep's stop-at-first-leak drive
   # ran a load-dependent number of launches. Ordered on the sleep, every launch leaves one to sweep: nosweep
   # leaks on the first and the shipped sweep is exercised on all FX_REPS. The wait has no bound: a deriver that
-  # never shows the sleep hangs until the gate's watchdog, a hang to read and never a verdict. (t4w) keeps the at-once deriver,
-  # because its forced window needs the stop to race the watchdog's fork.
+  # never shows the sleep hangs until the gate's watchdog, a hang to read and never a verdict.
   seed_fxw() { # <t>: seed() plus a TRACKED deriver stub that exits once the watchdog's sleep is up
     f2b_world seed "$1" || return 1
     mkdir -p "$1/core/scripts" && printf '%s\n' '#!/bin/bash' \
@@ -2105,51 +2099,37 @@ FX
     "alive|$FX_REPS|$FX_REPS|$FX_REPS|0") ok "(t4) $FX_REPS fast traces (deriver exits once the watchdog's sleep is up, ceiling 777s): every one finished exit 0 and its process group was empty once its pid was gone -- the watchdog's sleep was never left behind (control: a live group read alive)"; B_LOC_t4=1 ;;
     *) bad "(t4) a fast trace left its watchdog's sleep alive, or the drive did not run: control|reps|started|exit0|leaks = '$RT4'" ;;
   esac
-  # (t4w) THE FORK-TO-EXEC WINDOW, FORCED. The forked child of the watchdog's `sleep "$cl" &` carries
-  # any TERM handler the watchdog has until it execs, so a TERM reaching it in that window is handled
-  # and lost and the exec starts a sleep nothing stops. Under load that window is rare; here it is held
-  # open without load: PATH is a shim directory linking every tool EXCEPT sleep, then FW_NDIRS relative
-  # entries that exist nowhere, then the real PATH. Every other command resolves in the shim at once;
-  # only `sleep` walks the absent entries first, so its child spends ~0.1s before the exec while the
-  # instant-exit deriver has the subshell stop the watchdog. The driver's own waits name /bin/sleep.
-  # Measured: a watchdog with a TERM handler leaked 10 of 10 launches, with none 0 of 10. The mutant
-  # sleeptrap below restores a handler and must leak here; the fix must leak in none of FW_REPS.
-  FW_REPS=10; FW_NDIRS=15000
-  FW_SHIM="$WORK/fw-shim"; mkdir -p "$FW_SHIM"
-  _ifs="$IFS"; IFS=:
-  for _d in $PATH; do
-    [ -d "$_d" ] || continue
-    for _f in "$_d"/*; do
-      _b="${_f##*/}"
-      [ "$_b" = sleep ] && continue
-      [ -x "$_f" ] && [ ! -d "$_f" ] && [ ! -e "$FW_SHIM/$_b" ] && ln -s "$_f" "$FW_SHIM/$_b" 2>/dev/null
-    done
-  done
-  IFS="$_ifs"
-  [ -e "$FW_SHIM/sleep" ] && broken "(t4w) the shim carries a sleep, so the forced window cannot open"
-  [ -e "$FW_SHIM/git" ] && [ -e "$FW_SHIM/bash" ] || broken "(t4w) the shim is missing git or bash -- it was not built from PATH"
-  FW_PATH="$FW_SHIM:$(awk -v n="$FW_NDIRS" 'BEGIN { for (i = 0; i < n; i++) printf "fw-absent-%d:", i }')$PATH"
-  FW_DRIVER="$WORK/fw-driver.sh"
-  # The driver's waits are aw_wait's polls, which sleep through AW_SLEEP; FX_DRIVER pins it to /bin/sleep,
-  # and the wait library must carry no other sleep, or a poll would walk the absent PATH entries too. Its live
-  # control is a `tail -f /dev/null` (BL-868: a timer could run out before it was read), which the shim resolves at once.
-  cp "$FX_DRIVER" "$FW_DRIVER"
-  _aws="$(grep -cE '(^|[^-_A-Za-z"/])sleep[[:space:]]+[0-9$]' "$AW_LIB")" || _aws=0
-  grep -q '^set -m; tail -f /dev/null ' "$FW_DRIVER" && grep -qx 'AW_SLEEP=/bin/sleep' "$FW_DRIVER" \
-    && [ -e "$FW_SHIM/tail" ] \
-    && [ "$_aws" -eq 0 ] && [ "$(grep -cF '${AW_SLEEP:-sleep} 0.1' "$AW_LIB")" -eq 1 ] \
-    || broken "(t4w) the forced-window driver did not take a tail -f control the shim resolves and /bin/sleep at its waits (wait-library sleep sites: $_aws, want 1)"
-  fw_drive() { # <pool> <name> <reps> <stop at first leak: 0|1>; prints "<control>|<reps>|<started>|<exit 0>|<leaks>"
-    local t="$WORK/fw.$2" o="$WORK/fwo.$2"
-    f2b_world seed_fx "$t" || { printf 'SEED FAILED'; return 1; }
-    mkdir -p "$o"
-    ( inproc PATH="$FW_PATH" -- "$FW_DRIVER" "$1" "$t" "$o" "$3" "$4" ) > "$o/driver.out" 2>&1
-    cat "$o/res" 2>/dev/null
+  # (t4w) THE WATCHDOG CARRIES NO TERM HANDLER WHILE ITS SLEEP RUNS. The forked child of the watchdog's
+  # `sleep "$cl" &` holds any TERM handler the watchdog has until it execs, so a sweep TERM reaching it in that
+  # window is handled and lost and the exec starts a sleep nothing stops. Whether a TERM lands in that window
+  # follows the scheduler, so a leak count over traces reads 0 whenever the stop arrives after the exec, a
+  # handler or not. This arm decides the property that window depends on, with no race in it: the shipped
+  # watchdog subshell, extracted from readset_live_trace in the pool block, runs alone with a stub `sleep` that
+  # TERMs its parent (the watchdog, blocked in `wait`) and then exits. The TERM is posted before the stub exits,
+  # so a watchdog with no handler dies by it (status 143); a handler, or an ignore, leaves it to run on and exit 0.
+  # Its `dp` is empty, so the code past the wait signals nothing. The stub's marker is the control.
+  wd_probe() { # <pool> <tag>: prints "<watchdog lines>|<ran|notran>|<watchdog status>", or "EXTRACT <rc>"
+    local d="$WORK/wd.$2" r
+    mkdir -p "$d/bin"; rm -f "$d/ran"
+    awk '
+      /^readset_live_trace\(\) \{/ { inf = 1 }
+      inf && /^}$/ { inf = 0 }
+      inf { L[++n] = $0; if (index($0, "sleep \"$cl\" & s=$!")) { hit++; at = n } }
+      END {
+        if (hit != 1) exit 3
+        for (b = at; b > 0 && L[b] != "    ("; b--) ;
+        for (e = at; e <= n && L[e] != "    ) &"; e++) ;
+        if (b == 0 || e > n) exit 4
+        for (i = b; i <= e; i++) print L[i]
+      }' "$1" > "$d/wd.sh" || { r=$?; printf 'EXTRACT %s' "$r"; return 0; }
+    printf '#!/bin/bash\n: > "%s/ran"\nkill -TERM "$PPID"\nexit 0\n' "$d" > "$d/bin/sleep" && chmod +x "$d/bin/sleep" || broken "(t4w) cannot write the stub sleep"
+    r="$( cl=777; dp=""; PATH="$d/bin:$PATH"; eval "$(cat "$d/wd.sh")"; wait "$!"; echo "$?" )"
+    printf '%s|%s|%s' "$(grep -c . "$d/wd.sh")" "$([ -e "$d/ran" ] && echo ran || echo notran)" "$r"
   }
-  RT4W="$(fw_drive "$POOL" t4w "$FW_REPS" 0)"; lt_arm
+  RT4W="$(wd_probe "$POOL" t4w)"; lt_arm
   case "$RT4W" in
-    "alive|$FW_REPS|$FW_REPS|$FW_REPS|0") ok "(t4w) $FW_REPS fast traces with the watchdog sleep's fork-to-exec window held open: every process group emptied -- the trap's kill is not lost in that window (control: a live group read alive)"; B_LOC_t4w=1 ;;
-    *) bad "(t4w) with the fork-to-exec window held open a watchdog sleep survived, or the drive did not run: control|reps|started|exit0|leaks = '$RT4W'" ;;
+    [1-9]*"|ran|143") ok "(t4w) the shipped watchdog, TERMed by its own sleep while it waits on it, dies by that TERM (status 143): it carries no handler that its sleep's fork-to-exec window could lose a sweep TERM to (control: the stub sleep ran)"; B_LOC_t4w=1 ;;
+    *) bad "(t4w) the shipped watchdog did not die by the TERM its sleep sent, or the probe did not run: lines|stub|status = '$RT4W'" ;;
   esac
   CT_LIVE='alive,alive,alive,tr,tmp'
   CT_T1="$CT_LIVE|released,gone,gone,gone,notr,notmp,same|timeout|timed"
@@ -2804,17 +2784,13 @@ ct_mut() { # <name> <want: a glob over (t1)'s result>
 if [ "$LT_CAN" = 1 ]; then
   # the ceiling never armed: the watchdog sleeps far past it.
   # a TERM handler restored on the watchdog, which the child still between fork and exec inherits, so the
-  # sweep's TERM is handled and lost there. Measured with the window forced: 10 of 10 leaked.
+  # sweep's TERM is handled and lost there. (t4w) reads the handler itself: the watchdog outlives its sleep's TERM.
   if PM_FN=readset_live_trace pm_copy sleeptrap 1 '      sleep "$cl" & s=$!; wait "$s"' "      trap 'exit 0' TERM; sleep \"\$cl\" & s=\$!; wait \"\$s\""; then
-    # ALL FW_REPS LAUNCHES, NEVER STOP-AT-FIRST-LEAK: which launch first loses its TERM in the fork-to-exec window
-    # follows scheduling, so stopping there made the number of launches -- one deriver start each -- follow load.
-    lt_arm; R="$(fw_drive "$PM" pm.sleeptrap "$FW_REPS" 0)"
+    lt_arm; R="$(wd_probe "$PM" pm.sleeptrap)"
     case "$R" in
-      alive\|*\|*\|*\|0) bad "CEILING MUTANT sleeptrap SURVIVED (t4w) over $FW_REPS forced-window traces: '$R'" ;;
-      # The record holds the number of leaking launches, which varies by run: it stays off the ok line.
-      alive\|*) mutant_killed "$B_LOC_t4w" sleeptrap "CEILING MUTANT sleeptrap (a TERM handler on the watchdog) is KILLED by (t4w): a sleep signalled in its fork-to-exec window survived"
-        printf '        (drive: %s)\n' "$R" ;;
-      *) bad "CEILING MUTANT sleeptrap: the control did not read alive -- NO VERDICT: '$R'" ;;
+      [1-9]*"|ran|143") bad "CEILING MUTANT sleeptrap SURVIVED (t4w): the watchdog still died by its sleep's TERM: '$R'" ;;
+      [1-9]*"|ran|"*) mutant_killed "$B_LOC_t4w" sleeptrap "CEILING MUTANT sleeptrap (a TERM handler on the watchdog) is KILLED by (t4w): the watchdog outlived the TERM its sleep sent ('$R')" ;;
+      *) bad "CEILING MUTANT sleeptrap: the stub sleep did not run or the watchdog was not extracted -- NO VERDICT: '$R'" ;;
     esac
   fi
   # the post-reap sweep removed: the stop kills the watchdog and nothing ends its sleep. Measured: 30 of 30
@@ -5999,15 +5975,24 @@ ck_w_j() { local p="$1" x="$2" t="$3"
 CK_WANT_j='p2=alpha beta delta|0 why=1'
 
 # (k) a record with no `#format k1` line is no record: that ONE fixture runs, not everything.
+# And a `#pending` line whose value is not a non-negative integer reads as no `#pending` line, which is never a
+# run reason: beta's is EMPTY and delta's is `x1`, so each SKIPS on its recorded pass and the push names the two
+# as "count unrecorded" (never a zero). Both records are otherwise the hook's own push-1 records.
 ck_w_k() { local p="$1" x="$2" t="$3" k
   ck_seed "$t" "$x" || { printf SEED; return; }
   ck_push "$p" "$t" 1; k="$(ck_k "$t" alpha)"
   # A WRONG format line, not a deleted one: with line 1 gone the reader's FNR==1 consumes `#state`,
   # and the record reads as unrecorded whether or not the format is checked.
-  sed '1s/.*/#format k0/' "$k" > "$k.ed" && mv "$k.ed" "$k"; ck_push "$p" "$t" 2
-  printf 'p2=%s why=%s' "$(ck_r "$t" 2)" "$(ck_ln "$t" 2 '   ..      alpha: unrecorded')"
+  sed '1s/.*/#format k0/' "$k" > "$k.ed" && mv "$k.ed" "$k"
+  for k in beta:'#pending ' delta:'#pending x1'; do
+    sed "4s/^#pending .*/${k#*:}/" "$(ck_k "$t" "${k%%:*}")" > "$t.ed" && mv "$t.ed" "$(ck_k "$t" "${k%%:*}")"
+    [ "$(sed -n 4p "$(ck_k "$t" "${k%%:*}")")" = "${k#*:}" ] || { printf PSEED; return; }
+  done
+  ck_push "$p" "$t" 2
+  printf 'p2=%s why=%s pu=%s' "$(ck_r "$t" 2)" "$(ck_ln "$t" 2 '   ..      alpha: unrecorded')" \
+    "$(ck_ln "$t" 2 '   PENDING: 2 skipped on a recorded pass whose PENDING count is unrecorded (count unrecorded: recorded before counts were kept, or seeded)')"
 }
-CK_WANT_k='p2=alpha|0 why=1'
+CK_WANT_k='p2=alpha|0 why=1 pu=1'
 
 # (l) a killed fixture (beta) and one left with no verdict (delta, never dispatched once xargs saw a
 # signal) are not recorded. That the pass before them IS recorded belongs to (f).
@@ -6235,7 +6220,7 @@ if sg ckm3; then
   if [ "$CK_N" -ge 1 ]; then
     ck_mut j a hashrunall 'p2=alpha beta delta|0 why=0' \
       1 "  [ -s \"\$out/.now\" ] || { printf '   ..    could not hash" "  : || { printf '   ..    could not hash"
-    ck_mut k a anyformat 'p2=|0 why=0' \
+    ck_mut k a anyformat 'p2=|0 why=0 pu=1' \
       1 'FNR == 1 { ok = ($0 == "#format k1");' 'FNR == 1 { ok = 1;'
     ck_mut l f notfail 'p1=alpha beta|1 bad=2' \
       1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "$(cat "$out/$b" 2>/dev/null)" != FAIL ] ||'
@@ -6285,7 +6270,7 @@ ckd_world() { local p="$1" x="$2" t="$3" k kd
   ckd_dec "$p" "$t" rec
   for k in decl alpha beta; do
     [ -f "$t.dd.rec/.k/$k" ] || { printf NOREC; return; }
-    sed '2s/.*/#state ok/' "$t.dd.rec/.k/$k" > "$kd/$k.key"
+    sed '2s/.*/#state ok/' "$t.dd.rec/.k/$k" | awk '{ print } NR == 3 { print "#pending 0" }' > "$kd/$k.key"
   done
   # alpha and decl go stale; beta stays ok. The rows are kept: a stale record is a valid record.
   for k in decl alpha; do sed '2s/.*/#state stale/' "$kd/$k.key" > "$kd/$k.key.t" && mv "$kd/$k.key.t" "$kd/$k.key"; done
@@ -6388,7 +6373,7 @@ ckq_world() { local p="$1" x="$2" t="$3" k kd
   ckd_dec "$p" "$t" qrec
   for k in alpha beta delta; do
     [ -f "$t.dd.qrec/.k/$k" ] || { printf NOREC; return; }
-    cp "$t.dd.qrec/.k/$k" "$kd/$k.key"
+    awk '{ print } NR == 3 { print "#pending 0" }' "$t.dd.qrec/.k/$k" > "$kd/$k.key"
   done
   ckd_dec "$p" "$t" qctl
   printf 'alpha\t"src/q\\tx.sh"\n' >> "$t/.ai-dlc-fixture-readsets.tsv"
@@ -6421,7 +6406,7 @@ ckq_local_world() { local p="$1" x="$2" t="$3" k kd ds lm
   ckd_dec "$p" "$t" lrec
   for k in alpha beta delta gamma; do
     [ -f "$t.dd.lrec/.k/$k" ] || { printf NOREC; return; }
-    cp "$t.dd.lrec/.k/$k" "$kd/$k.key"
+    awk '{ print } NR == 3 { print "#pending 0" }' "$t.dd.lrec/.k/$k" > "$kd/$k.key"
   done
   ckd_dec "$p" "$t" lctl
   printf 'gamma\t"src/q\\tx.sh"\t-\n' >> "$lm"
@@ -6499,16 +6484,15 @@ if [ -z "$TK_EXP" ]; then
 fi
 [ -n "$TK_EXP" ] || broken "no git in git's exec-path or in any fixed tool dir, so the invariance world has no row to expect"
 # AN ALTERNATE DEVELOPER DIR, where xcrun can switch to one: the only environment in which dropping
-# `-u DEVELOPER_DIR` changes the answer. Without one the world still runs with DEVELOPER_DIR set, and
-# that one mutant reports SKIP rather than a kill it could not earn.
-TK_DEV=""; TK_DEV_ALT=0
+# `-u DEVELOPER_DIR` changes the answer. Where none exists the dev cell runs against $WORK/tk.nodev,
+# whose xcrun shim fails, so that regression reads dev=differ on every box rather than dev=same.
+TK_DEV=""
 if [ -x /usr/bin/xcrun ] && [ -n "$TK_XPE" ]; then
   for _c in /Library/Developer/CommandLineTools /Applications/Xcode*.app/Contents/Developer; do
     [ -d "$_c" ] || continue
     _x="$(DEVELOPER_DIR="$_c" /usr/bin/env -u GIT_EXEC_PATH /usr/bin/git --exec-path 2>/dev/null)" || continue
-    if [ -n "$_x" ] && [ "$_x" != "$TK_XPE" ] && [ -x "$_x/git" ]; then TK_DEV="$_c"; TK_DEV_ALT=1; break; fi
+    if [ -n "$_x" ] && [ "$_x" != "$TK_XPE" ] && [ -x "$_x/git" ]; then TK_DEV="$_c"; break; fi
   done
-  [ -n "$TK_DEV" ] || TK_DEV="$(xcode-select -p 2>/dev/null)"
 fi
 [ -n "$TK_DEV" ] || TK_DEV="$WORK/tk.nodev"
 # THE DECISION ALONE, in a process of its own so each environment is the one it is started under.
@@ -7190,7 +7174,7 @@ vs_plant() { # <pool> <t> <decision dir> <store> <fx>: the entry the digest name
     id="$(readset_vs_ident_here)" || exit 1
     tail -n +4 "$3/.k/$5" > "$3/.pl.rows" && [ -s "$3/.pl.rows" ] || exit 1
     readset_vs_input "$5" "$id" "$3/.pl.rows" > "$3/.pl.d" || exit 1
-    mkdir -p "$4" && { printf '#format k1\n#state ok\n'; cat "$3/.pl.d"; } > "$4/$(shasum -a 256 < "$3/.pl.d" | cut -d' ' -f1)" )
+    mkdir -p "$4" && { printf '#format k1\n#state ok\n'; cat "$3/.pl.d"; printf '#pending 0\n'; } > "$4/$(shasum -a 256 < "$3/.pl.d" | cut -d' ' -f1)" )
 }
 vs_world() { # <pool> <fixture root> <runner file> <t> [<cells>]: one vector
   # <cells>, when given, is a space-joined subset of b t g e d f p: the base (rcd..ann, A's four runs, the

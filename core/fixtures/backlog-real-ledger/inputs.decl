@@ -42,3 +42,7 @@ scripts/validate-plan-shape.sh
 scripts/validate-release-version.sh
 scripts/validate-shell-portability.sh
 scripts/validate-verdict-identity.sh
+# p3: both pre-push hooks name it in the consumer-layout refusal (BL-1043), so the derived hook-script set holds it.
+scripts/census-consumer-layout.sh
+# p3: the distribution hook runs it to build the consumer-layout tree (BL-1027), so the derived hook-script set holds it.
+scripts/install.sh

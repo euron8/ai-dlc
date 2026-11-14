@@ -184,7 +184,11 @@ fi
 # Keying on the count of I69 findings is what makes each verdict attributable to the arm under
 # test — and M4, the knock-out, is what proves the count comes from I69 rather than from the
 # run having died before reaching it.
-CHD_JOBS=5
+# READSET_POOL_WIDTH narrows this pool when derive-fixture-readsets.sh traces the fixture (its nest launch sets 1):
+# at full width the sweeps outrun `log stream` and the trace is discarded. It changes the schedule, not the work.
+CHD_JOBS="${READSET_POOL_WIDTH:-5}"
+case "$CHD_JOBS" in ''|*[!0-9]*|????*) echo "FIXTURE BROKEN: READSET_POOL_WIDTH='$CHD_JOBS' is not an integer from 1 to 64" >&2; exit 2 ;; esac
+{ [ "$CHD_JOBS" -ge 1 ] && [ "$CHD_JOBS" -le 64 ]; } || { echo "FIXTURE BROKEN: READSET_POOL_WIDTH='$CHD_JOBS' is not an integer from 1 to 64" >&2; exit 2; }
 CHD_MATRIX="$MATRIX" CHD_ROOT="$ROOT" CHD_WORK="$WORK" CHD_MUTS="$MUTS" CHD_OUT="$OUTD" \
   xargs -P "$CHD_JOBS" -I{} bash -c '
     l="$1"

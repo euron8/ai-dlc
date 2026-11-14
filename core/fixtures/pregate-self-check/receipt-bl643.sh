@@ -10,7 +10,10 @@
 #            present); and U (A, with section d's counted run printing no judge pass line) -> 2 naming it,
 #            and J (A, with section d's counted run reading a J3 FAIL) -> 1 under d:fork-budget (BL-1026); and A's
 #            section d ran through seed-verdict-store.sh into its hook's counted store, Wd's (dirty) under the
-#            scratch store (BL-1064)
+#            scratch store (BL-1064); and, under --member (BL-1082), Mt (a clean committed branch that edited its
+#            hook, the push running the base bytes) -> 0 naming the tree's own hook and writing no pregate record
+#            (no record dir at all), and Mr (A with a red step seeded between PRESUITE_DONE=1 and the fixture-suite
+#            marker, same hook-path state) -> 1 naming that step; and Htree's edited-hook refusal names --member
 #   exit 1   any of those differs
 #   exit 9   the receipt cannot measure: a root could not be built (mktemp, git init, commit, a seed hook
 #            that fails bash -n) or an input file is missing
@@ -167,6 +170,17 @@ gitin "$W/rootHbehind" config core.hooksPath "$W/ext-behind" || exit 9
 gitin "$W/rootHres" config core.hooksPath "$W/ext-res" || exit 9
 gitin "$W/rootHtree" config core.hooksPath "$W/ext-tree" || exit 9
 gitin "$W/rootHabs" config --unset core.hooksPath || exit 9
+# Member mode (BL-1082). Mt: a copy of Htree, so clean, committed, a fresh tree, and the push running ext-tree's base
+# bytes; a record would be written there if the mode allowed one. Mr: root A on tag base0 plus one commit seeding a red
+# step between PRESUITE_DONE=1 and the fixture-suite marker, the push again running ext-tree (A's bytes, no such step).
+cp -R "$W/rootHtree" "$W/rootMt" || exit 9
+cp -R "$W/rootA" "$W/rootMr" || exit 9
+gitin "$W/rootMr" tag base0 || exit 9
+awk '/^step "fixture suite/ && !d { print "PRESUITE_DONE=1"; print "step \"seeded post-presuite step\" false"; d = 1 } { print }' \
+  "$W/rootA/.githooks/pre-push" > "$W/rootMr/.githooks/pre-push" || exit 9
+grep -qxF 'step "seeded post-presuite step" false' "$W/rootMr/.githooks/pre-push" && bash -n "$W/rootMr/.githooks/pre-push" || exit 9
+gitin "$W/rootMr" -c user.email=x@x -c user.name=x commit -q -am "branch adds a red step after PRESUITE_DONE" || exit 9
+gitin "$W/rootMr" config core.hooksPath "$W/ext-tree" || exit 9
 drive_away() { # <root> <out-file> -> the self-check's exit, run from a cwd other than the root
   ( cd "$W" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
 }
@@ -209,6 +223,17 @@ wdn=no; grep -qF 'NO RECORD written: the work tree was not clean' "$W/Wd.out" &&
 # Wd (dirty) runs it under the scratch store.
 aseed=no; grep -qF "counted store $W/rootA/.stub-store/counted-000000000000 (clean tree" "$W/A.out" && aseed=yes
 wdscr=no; grep -qF 'scratch store (dirty tree' "$W/Wd.out" && ! grep -qF 'counted store ' "$W/Wd.out" && wdscr=yes
+drive_member() { # <root> <out-file> <base> -> the self-check's exit under --member
+  ( cd "$1" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" --member "$3" </dev/null >"$2" 2>&1 )
+}
+drive_member "$W/rootMt" "$W/Mt.out" base0; mt=$?
+mtn=no; grep -qF "member mode: running the tree's own hook $W/rootMt/.githooks/pre-push (" "$W/Mt.out" \
+  && grep -qF 'member mode wrote no pregate record' "$W/Mt.out" && mtn=yes
+mtrec=no; [ -e "$W/rootMt/.git/ai-dlc-pregate-green" ] && mtrec=yes
+drive_member "$W/rootMr" "$W/Mr.out" base0; mr=$?
+mrn=no; grep -qF 'FAIL: seeded post-presuite step' "$W/Mr.out" && grep -qF 'FINDINGS in a:hook-steps' "$W/Mr.out" && mrn=yes
+# The edited-hook refusal is the member mode's carrier: Htree's refusal names --member.
+htreem=no; grep -qF 'before READY run this script with --member' "$W/Htree.out" && htreem=yes
 seed_refusal() { # <name> <hook body above the marker> -> sets RC
   local T="$W/ref-$1"; mkdir -p "$T/.githooks" "$T/core/fixtures/validator-fork-budget" || exit 9
   echo 0.0.1 > "$T/VERSION"
@@ -235,8 +260,9 @@ nv=$RC
 # World A's own output, printed ABOVE the summary only when A is not clean, so a caller can read why; the
 # summary stays the last line.
 [ "$a" = 0 ] || sed 's/^/A| /' "$W/A.out"
-echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hcwd=$hcwd Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn Arec=$arec Brec=$brec Wd=$wd Wdrec=$wdrec Wdn=$wdn Aseed=$aseed Wdscr=$wdscr"
-[ "$aseed" = yes ] && [ "$wdscr" = yes ] && [ "$arec" = yes ] && [ "$brec" = no ] && [ "$wd" = 0 ] && [ "$wdrec" = no ] && [ "$wdn" = yes ] && [ "$a" = 0 ] && [ "$hcwd" = 0 ] && [ "$hres" = 2 ] && [ "$hresn" = yes ] && [ "$htree" = 2 ] && [ "$htreen" = yes ] && [ "$habs" = 2 ] && [ "$habsn" = yes ] && [ "$hbehind" = 2 ] && [ "$hbehindn" = yes ] && [ "$b" = 1 ] && grep -qF 'seeded red step' "$W/B.out" && [ "$c" = 2 ] \
+echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hcwd=$hcwd Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn Arec=$arec Brec=$brec Wd=$wd Wdrec=$wdrec Wdn=$wdn Aseed=$aseed Wdscr=$wdscr Mt=$mt Mtn=$mtn Mtrec=$mtrec Mr=$mr Mrn=$mrn Htreem=$htreem"
+[ "$htreem" = yes ] && [ "$mt" = 0 ] && [ "$mtn" = yes ] && [ "$mtrec" = no ] && [ "$mr" = 1 ] && [ "$mrn" = yes ] \
+  && [ "$aseed" = yes ] && [ "$wdscr" = yes ] && [ "$arec" = yes ] && [ "$brec" = no ] && [ "$wd" = 0 ] && [ "$wdrec" = no ] && [ "$wdn" = yes ] && [ "$a" = 0 ] && [ "$hcwd" = 0 ] && [ "$hres" = 2 ] && [ "$hresn" = yes ] && [ "$htree" = 2 ] && [ "$htreen" = yes ] && [ "$habs" = 2 ] && [ "$habsn" = yes ] && [ "$hbehind" = 2 ] && [ "$hbehindn" = yes ] && [ "$b" = 1 ] && grep -qF 'seeded red step' "$W/B.out" && [ "$c" = 2 ] \
   && [ "$np" = 2 ] && [ "$ns" = 2 ] && [ "$nv" = 2 ] \
   && [ "$d" = 2 ] && [ "$dran" = no ] && [ "$dnamed" = yes ] \
   && [ "$u" = 2 ] && [ "$unamed" = yes ] && [ "$j" = 1 ] && [ "$jnamed" = yes ] && exit 0

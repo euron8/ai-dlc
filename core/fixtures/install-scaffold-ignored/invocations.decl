@@ -1,9 +1,10 @@
 # Counted through core/scripts/hermetic-run.sh with the counter armed as .githooks/pre-push arms it. Every complete
-# install is 5 starts (install.sh or its copy, settings-merge.sh twice, sync-transient-ignore.sh,
-# render-agent-definitions.sh); an absent-file copy refuses before any child and is 1. Measured 43, which is run.sh 1,
-# the 4 world installs, BASE (the call-break copy) and 3 more install mutants (8 x 5 = 40), and the 2 absent-file
-# copies (2). The in-process cells and the 14 lib mutants source the function files and start nothing (the 0 row). The
-# copies do not end in scripts/install.sh, so that row counts the 4 world installs only.
-43 *
+# install is 5 starts (install.sh or its mutant text, settings-merge.sh twice, sync-transient-ignore.sh,
+# render-agent-definitions.sh); an absent-file text refuses before any child and is 1. Measured 53, which is run.sh 1,
+# the 4 world installs, the 2 carrier-control installs (E1, E4), BASE (the call-break text) and 3 more install
+# mutants (10 x 5 = 50), and the 2 absent-file texts (2). The in-process cells and the 14 lib mutants source the
+# function files and start nothing (the 0 row). A mutant text runs as a `bash -c` start, never as a start of
+# scripts/install.sh, so that row counts the 4 world installs only.
+53 *
 4 scripts/install.sh
 0 scripts/install-scaffold-ignore.sh

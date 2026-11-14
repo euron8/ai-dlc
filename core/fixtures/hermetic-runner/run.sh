@@ -1244,7 +1244,10 @@ EOF
   printf 'range rb..tipx later\n' > "$Q/$FXR/probe/git.decl"
   ( cd "$Q" && git add -A && git -c user.name=t -c user.email=t@t commit -qm lit && git tag tipx ) >/dev/null 2>&1 || bad "$CUR: could not tag tipx"
   hook_dump "$Q" "$Q/.githooks/pre-push" "$WK/XR3.o"
-  mkdir -p "$Q/.git/ai-dlc-fixture-keys" && cp "$WK/XR3.o/.k/probe" "$Q/.git/ai-dlc-fixture-keys/probe.key" 2>/dev/null \
+  # The record as readset_keys_write publishes it: the prospective rows with `#pending 0` as line 4, so the record
+  # is the one a green push leaves and only the range can move the decision.
+  mkdir -p "$Q/.git/ai-dlc-fixture-keys" && [ -s "$WK/XR3.o/.k/probe" ] \
+    && awk '{ print } NR == 3 { print "#pending 0" }' "$WK/XR3.o/.k/probe" > "$Q/.git/ai-dlc-fixture-keys/probe.key" 2>/dev/null \
     || bad "$CUR: the hook wrote no key record for the probe"
   hook_dump "$Q" "$Q/.githooks/pre-push" "$WK/XR4.o"
   rowhas "control: with a matching record and a resolving range the hook SKIPS" "$(cat "$WK/XR4.o/.kdec" 2>/dev/null)" "probe${T}skip${T}${T}${T}ok"

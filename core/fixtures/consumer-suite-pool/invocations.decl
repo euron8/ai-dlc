@@ -1,3 +1,14 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-361 *
+# BL-998 (batch 257 F6): arm 7b's declared world (P1, eight seeds, the F10 runner pass, the control), eight bl998- mutants and
+# receipt-bl998.sh (two hook drives), one counted run through hermetic-run.sh armed as fxcount_arm arms it, at 944b24690: * 361->424.
+# Re-measured for BL-1043 (the cl seed: a census over a committed tree through the hook copy's span before pushes a and b) on 257-F14, which also carries F6's arms this row had not counted: 424 to 444 from one counted run (scripts/seed-verdict-store.sh, scratch store). Re-measure on the bundle tip.
+# Re-measured for BL-1046 (the lock world, its lock-off mutant and five rename mutants add drives): two counted runs, 395 both.
+# Combined in 0.1110.0 (F6 + F14 + F15) and re-measured once on the bundle tip: one counted run, 478.
+# Re-measured on the rebuilt bundle (F5 + F6 + F14 + F15 on 0.1124.0): bl998-k1r, bl998-unk-run and bl998-cl-ungate retired with the
+# run-once rule, bl998-unrec-store and bl998-unrec-key added; one counted run (scripts/seed-verdict-store.sh, scratch store), 461.
+461 *
+# The census in the cl seed SOURCES the hook's FIXTURE_POOL span (fx_inproc, one row per in-process pass): 2, from
+# one counted run on the 0.1110.0 tip (the base drive and the bl998-cl-ungate mutant's); 1 on the rebuilt bundle, the
+# cl-ungate mutant retired (one counted run).
+1 inproc:core/git-hooks/pre-push
 0 core/git-hooks/pre-push

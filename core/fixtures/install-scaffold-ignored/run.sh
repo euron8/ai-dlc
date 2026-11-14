@@ -73,9 +73,11 @@
 #
 # MUTANTS. Lib mutants are copies of scripts/install-scaffold-ignore.sh under the work dir,
 # sourced in place of it in the in-process cells; a copy that does not source cleanly is a
-# failure, never a kill. Install mutants are copies at <root>/scripts/install-mut-<m>.sh, inside
-# the seed work tree, so install.sh's own-repository check passes and SCRIPT_DIR still finds both
-# function files. An install mutant's kill counts only when the run completed (`Installation
+# failure, never a kill. Install mutants are texts under the work dir, never files in the real
+# tree. Each runs as `bash -c <text> <root>/scripts/install.sh <target>`, so its $0 is the real
+# install.sh: the own-repository check passes and SCRIPT_DIR still finds both function files. The
+# carrier control runs the unmutated text the same way on E1 and E4 and must hold whole before an
+# install mutant's kill is scored. An install mutant's kill counts only when the run completed (`Installation
 # complete!`) and, except for call-break whose subject IS the missing report, printed the report
 # header or the SKIPPED line; a refusal is never a kill.
 # The rows below are the --matrix run's measurement (every lib mutant against every in-process
@@ -143,15 +145,7 @@ MATRIX=0
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE BROKEN: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"
-MUT_MADE="$WORK/mutants-made"
-: > "$MUT_MADE"
-# Install mutant copies live in the seed work tree; each is removed by its exact recorded name.
-cleanup() {
-  local f
-  while IFS= read -r f; do [ -n "$f" ] && rm -f "$f"; done < "$MUT_MADE"
-  rm -rf "$WORK"
-}
-trap cleanup EXIT
+trap 'rm -rf "$WORK"' EXIT
 
 # No global or system git config, and no XDG ignore file, reaches any world.
 mkdir -p "$WORK/xdg" "$WORK/elsewhere" || exit 2
@@ -411,11 +405,15 @@ JF=0; cell_WE "$SI_LIB"; if [ "$JF" = 0 ]; then B_WE=1; ok "unmutated baseline: 
 
 # --- the end-to-end installs ------------------------------------------------------------------------
 # run_inst <installer> <target> <out> <cwd> [VAR=value ...]: one install start; RC holds its exit.
+# An installer under the work dir is a mutant text, run with the real install.sh as its $0.
 run_inst() {
   local inst="$1" t="$2" o="$3" cwd="$4"
   shift 4
   RC=0
-  ( cd "$cwd" && env "$@" bash "$inst" "$t" ) </dev/null >"$o" 2>&1 || RC=$?
+  case "$inst" in
+    "$WORK"/*) ( cd "$cwd" && env "$@" bash -c "$(cat "$inst")" "$INSTALL" "$t" ) </dev/null >"$o" 2>&1 || RC=$? ;;
+    *) ( cd "$cwd" && env "$@" bash "$inst" "$t" ) </dev/null >"$o" 2>&1 || RC=$? ;;
+  esac
 }
 HDR='Checking scaffolded files against git ignore rules...'
 common() { # <world> <out>
@@ -503,11 +501,10 @@ if [ "$JF" = 0 ]; then B_E5=1; ok "unmutated baseline: E5 held whole"; fi
 
 # --- copies of install.sh -----------------------------------------------------------------------------
 SRC="$(cat "$INSTALL"; printf x)"; SRC="${SRC%x}"
-# write_copy <name> <content> -> <root>/scripts/install-mut-<name>.sh, recorded for removal.
+# write_copy <name> <content> -> <work>/imut/install-mut-<name>.sh; rc 1 when it equals install.sh.
 write_copy() {
-  local p="$ROOT_DIR/scripts/install-mut-$1.sh"
-  printf '%s\n' "$p" >> "$MUT_MADE"
-  printf '%s' "$2" > "$p" && chmod +x "$p" || return 1
+  local p="$WORK/imut/install-mut-$1.sh"
+  mkdir -p "$WORK/imut" && printf '%s' "$2" > "$p" || return 1
   cmp -s "$p" "$INSTALL" && return 1
   printf '%s' "$p"
 }
@@ -524,6 +521,13 @@ SI_REF='"$SCRIPT_DIR/install-scaffold-ignore.sh"'
 for _a in "$CALL" "$RS" "$DONE" "$N1_REF" "$SI_REF"; do
   [ "$(count_of "$SRC" "$_a")" = 1 ] || broken "anchor '$_a' is not unique in $INSTALL"
 done
+# Carrier control: install.sh's unmutated text, run the way every install mutant runs, holds E1 and
+# E4 whole. An install mutant's kill is scored only on top of it.
+CARRIER="$WORK/imut/carrier-control.sh"
+{ mkdir -p "$WORK/imut" && printf '%s' "$SRC" > "$CARRIER" && cmp -s "$CARRIER" "$INSTALL"; } || broken "could not write the carrier control"
+QUIET=1; JF=0; world_e1 "$CARRIER" ""; world_e4 "$CARRIER" ""; QUIET=0
+if [ "$JF" = 0 ]; then ok "carrier control: the unmutated text run as a mutant runs holds E1 and E4 whole"
+else bad "carrier control: the unmutated text run as a mutant runs failed $JF E1/E4 assertion(s)"; B_E1=0; B_E4=0; fi
 
 # AB1/AB2: one function file absent. ab_cell <label> <install text> <ref> -- the copy names
 # <ref> with -ABSENT spliced in, a name asserted absent, so the real tree is never edited.
@@ -541,7 +545,7 @@ ab_cell() {
   run_inst "$p" "$t" "$o" "$ROOT_DIR"
   after="$(cd "$t" && find . | srt)"
   [ "$RC" != 0 ]; chk $? "$w: install exits non-zero with a function file absent (got $RC)"
-  grep -qF "Error: $(dirname "$p")$rest is missing" "$o"; chk $? "$w: the error names the missing file"
+  grep -qF "Error: $gone is missing" "$o"; chk $? "$w: the error names the missing file"
   ! grep -qF 'Installation complete!' "$o" && ! grep -qE 'scaffold-ignored|scaffold ignore check|Checking scaffolded files' "$o"
   chk $? "$w: no completion line and no report line"
   [ "$before" = "$after" ]; chk $? "$w: the target is exactly as seeded (nothing was written)"

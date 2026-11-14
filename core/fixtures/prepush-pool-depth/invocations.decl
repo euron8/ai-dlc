@@ -2,5 +2,9 @@
 # Re-measured for BL-924's receipt (one scratch copy run once: the baseline arms, the not-exported mutant and the watcher cells): 400 to 492, two counted runs.
 # Re-measured for BL-985 (event-decided watcher and barrier drives, the td drive waiting out its subject's xargs): 492, unchanged, from two counted runs and a third under the forced orphan-xargs interleaving (the queued worker held past the drive's release), all three 492; base held the same way read 491.
 # Re-measured after BL-985's tip-adversary fold (one tick in flight, change-only look lines, the pn_cycle self-probe, the receipt's forcings on records): 492 and 492, two counted runs, unchanged.
+# Re-measured for BL-1027 (the consumer-layout section: 22 drives of the extracted FIXTURE_POOL and SUITE_STEP spans, 9 for the baseline cells and 13 for the 9 mutants' decides and twins): 492 to 719 from one counted run. Of the 227, 95 are stub fixture, stub runner and install.sh starts in the section's worlds, 39 are <fx>@consumer unit starts in the step-built trees, and 93 are bash -c rows.
+# Re-measured for BL-1043 (placement keys: the real census script driven in the A, B, C-template and stop worlds, the A world's placement stages 4-7, the B world's refusal and post-census pushes, and seven new or re-aimed mutants' decides and twins, among them cl-publish-worker): 719 to 1294 from one counted run (scripts/seed-verdict-store.sh, scratch store), on 257-F14. Re-measure on the bundle tip.
+# Re-measured once on the 0.1110.0 bundle tip (F5 + F6 + F14 + F15): one counted run, 1297; then 1294 after BL-868's unbounded waits replaced the stop world's bounded ones (one counted run).
 # Re-measured for BL-1050 (stdin from /dev/null): 492 with the caller's stdin forced to a socket and to /dev/null, one counted run each; base read 489 and 492 the same way.
-492 *
+# Re-measured on the rebuilt bundle tip (F5 + F6 + F14 + F15 on 0.1124.0, stdin from /dev/null per BL-1050/BL-1053): one counted run through scripts/seed-verdict-store.sh, scratch store, judged green at 1297.
+1297 *

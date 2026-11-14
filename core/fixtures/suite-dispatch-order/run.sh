@@ -382,7 +382,7 @@ mut m6 '/while read -r k v; do \[ -f "\${FXROOT}\${k}\/run.sh" \]/d'
 mut m7 's|\[ -f "\${FXROOT}\${k}/run.sh" \]|[ -f "core/fixtures/${k}/run.sh" ]|'
 # M5 THE RUN-VERDICT GATE REMOVED FROM THE MERGE, and only from the merge. The `.last` publish opens with the
 # same `if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]` text, so the edit is keyed on what separates them: the
-# merge line ENDS at `then`, while `.last` continues `; then cp`. awk, because the replacement carries `&&`.
+# merge line ENDS at `then`, while `.last` continues `; then rec_put`. awk, because the replacement carries `&&`.
 M5="$WORK/hook.m5"
 M5_OLD='  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then'
 M5_NEW='  if [ -s "$out/.durations" ]; then'
@@ -392,10 +392,10 @@ n_m5="$(grep -c '^>' <<<"$(diff "$HOOK" "$M5")")" || n_m5=0
 [ "$n_m5" -eq 1 ] || bad "MUTANT m5 changed $n_m5 line(s), not 1 -- the merge gate's anchor is not unique, so the mutant proves nothing"
 
 # M8 THE RUN-VERDICT GATE RESTORED ON `.last`, and only there: the `.last` publish is the one line that
-# continues `; then cp`, which the merge line (M5's anchor) does not. awk, because the replacement carries `&&`.
+# continues `; then rec_put`, which the merge line (M5's anchor) does not. awk, because the replacement carries `&&`.
 M8="$WORK/hook.m8"
-M8_OLD='  if [ -s "$out/.durations" ]; then cp "$out/.durations" "$LASTRUN_RECORD"'
-M8_NEW='  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then cp "$out/.durations" "$LASTRUN_RECORD"'
+M8_OLD='  if [ -s "$out/.durations" ]; then rec_put "$out/.durations" "$LASTRUN_RECORD"'
+M8_NEW='  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then rec_put "$out/.durations" "$LASTRUN_RECORD"'
 MO="$M8_OLD" MN="$M8_NEW" awk 'index($0, ENVIRON["MO"]) == 1 { print ENVIRON["MN"] substr($0, length(ENVIRON["MO"]) + 1); next } { print }' "$HOOK" > "$M8" \
   || broken "could not write the M8 mutant"
 n_m8="$(grep -c '^>' <<<"$(diff "$HOOK" "$M8")")" || n_m8=0

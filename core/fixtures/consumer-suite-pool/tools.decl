@@ -19,6 +19,7 @@ head
 id
 ln
 ls
+lsof
 md5
 mkdir
 mktemp
@@ -44,3 +45,4 @@ wc
 xargs
 kill
 mkfifo
+pgrep

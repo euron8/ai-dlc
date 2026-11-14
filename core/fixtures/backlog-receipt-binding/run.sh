@@ -1774,8 +1774,11 @@ c5r_seed() { # c5r_seed <dir> <closed|open> [<sed>] -- a mutant is applied BEFOR
     printf '# Probe backlog\n\n'
     printf '## BL-801\n\nBody.\n\nverify: sh grep -q %s probe/subject.txt\n\n' "'MARK801'"
     printf '## %s\n\n' "$id"; [ "$1" = 1 ] && [ "$2" = closed ] && printf '**LANDED (v0.0.1, verified probe).**\n\n'
-    printf 'verify: sh echo run >> "${C5R_LOG:-/dev/null}"; dp="${C5R_DEPTH:-0}"; [ "$dp" -lt 1 ] || exit 7; o="$(C5R_DEPTH=$(( dp + 1 )) bash .githooks/pre-push 2>&1)"; grep -q "^%s-POPULATION: SKIPPED " <<<"$o"\n\n' "$pop"
+    printf 'verify: sh echo run >> "${C5R_LOG:-/dev/null}"; dp="${C5R_DEPTH:-0}"; [ "$dp" -lt 1 ] || exit 7; o="$(C5R_DEPTH=$(( dp + 1 )) bash .githooks/pre-push 2>&1)"; r=$?; [ -z "${C5R_LOG:-}" ] || printf "inner rc=%%s\\n%%s\\n" "$r" "$o" >> "$C5R_LOG.inner"; grep -q "^%s-POPULATION: SKIPPED " <<<"$o"\n\n' "$pop"
   }
+  # BL-1074: the inner (re-entering) run's output is the receipt's `o`, which the receipt keeps only
+  # to grep; the line above also appends it, with its exit, to <C5R_LOG>.inner, and c5r_inner prints
+  # that file when a c5r cell goes red, so a red names what the inner run said.
   c5r_ledger 0 "$mode" > "$d/docs/backlog.md"
   ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m c5rbase >/dev/null 2>&1 )
   git -C "$d" rev-parse HEAD > "$d/.c5base"
@@ -1800,6 +1803,15 @@ rc=none"
   return 0
 }
 c5r_row() { printf '%s\n' "$C5R_OUT" | awk -F'\t' -v id="$1" '$2 == id { print $1 "|" $3 }'; }
+c5r_outer() { # c5r_outer <name> <output> -- on a red, the outer run's whole output, UNFILTERED: a worker that dies on a
+  # plain `bash:` error leaves only that line (through xargs, into vin's 2>&1), which no FAIL/refusal filter keeps
+  note "      outer run of $1, unfiltered (first 40 lines):"; printf '%s\n' "$2" | sed 's/^/        /' | head -40
+}
+c5r_inner() { # c5r_inner <name> -- on a red, the inner run(s) its receipt captured (exit and output), or that none was
+  if [ -s "$TMP/$1.log.inner" ]; then
+    note "      inner run(s) of $1's receipt, from $1.log.inner:"; sed 's/^/        /' "$TMP/$1.log.inner" | head -40
+  else note "      inner run(s) of $1's receipt: none captured"; fi
+}
 # c5-m4: the sentinel ignored on entry -- the run-level decision is never "re-entry". It edits the
 # CALL, not re_entry_of, so the self-probe (which drives re_entry_of directly) still passes and the
 # corpus arm below is what kills it.
@@ -1808,7 +1820,7 @@ if c5r_case c5r-ctl closed ""; then
   c5r_rows="$(c5_rows "$C5R_OUT")"
   if ! grep -qx 'rc=0' <<<"$C5R_OUT"; then
     note "FAIL  c5r-control -- a closed receipt re-entering the validator through pre-push exited $(tail -1 <<<"$C5R_OUT"), rows '$c5r_rows', receipt runs $C5R_RUNS; it must exit 0 with BL-864 run once"
-    printf '%s\n' "$C5R_OUT" | grep -E '^FAIL|SELF-PROBE|CLOSED-POPULATION' | sed 's/^/      /' | head -5; rc=1
+    c5r_outer c5r-ctl "$C5R_OUT"; c5r_inner c5r-ctl; rc=1
   elif [ "$C5R_RUNS" != 1 ]; then
     note "FAIL  c5r-control -- BL-864's receipt ran $C5R_RUNS times, want exactly 1 (R8 once, the inner run skipping it)"; rc=1
   elif ! grep -q '^CLOSED-POPULATION: 1 sh receipt(s) run over merge-base .*, 0 not exiting 0\.$' <<<"$C5R_OUT"; then
@@ -1829,7 +1841,7 @@ if c5r_case c5r-open-ctl open ""; then
   c5r_r="$(c5r_row BL-865)"
   if ! grep -qx 'rc=0' <<<"$C5R_OUT"; then
     note "FAIL  c5r-open-control -- an OPEN receipt re-entering the validator through pre-push exited $(tail -1 <<<"$C5R_OUT"), row '$c5r_r', receipt runs $C5R_RUNS; it must exit 0"
-    printf '%s\n' "$C5R_OUT" | grep -E '^FAIL|SELF-PROBE|POPULATION' | sed 's/^/      /' | head -5; rc=1
+    c5r_outer c5r-open-ctl "$C5R_OUT"; c5r_inner c5r-open-ctl; rc=1
   else
     # The corpus row prints STATUS and paths only; ALREADY-PASSING is the status of a base exit 0.
     case "$c5r_r" in
@@ -1848,6 +1860,7 @@ if c5r_case c5-m4-open open "$C5R_M4"; then
   side c5-m4-open "ctlruns=$C5R_OPEN_RUNS"
   side c5-m4-open "row=$c5r_r"
   score c5-m4-open "${B_c5r_open:-0}" "c5-m4-open -- with the sentinel ignored the open scorer re-ran inside itself and BL-865 is no longer ALREADY-PASSING" c5_open
+  arm_c5_open c5-m4-open || { c5r_outer c5-m4-open "$C5R_OUT"; c5r_inner c5-m4-open; }
 fi
 # The two exports, each dropped: the self-probe's BL-976 (open) and BL-987 (closed) refuse first.
 c5_mut c5-m5 's|BR_RECEIPTS_RUNNING="\$_sl_key" xargs|xargs|' \

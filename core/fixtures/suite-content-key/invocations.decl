@@ -2,5 +2,12 @@
 # Re-measured at slot sha 1a408b46e plus the m1-ii tip, armed through hermetic-run.sh (FXCOUNT_JUDGE, FXCOUNT_RC, FXCOUNT_DIR), two runs, identical counts (p1's rows replaced: * 23->25; scripts/suite-content-key.sh 20->21).
 # BL-954: the banner receipt adds two driven worlds and four mutant hook copies (each runs fixture_suite_step, which
 # starts the key script), re-measured the same way, two runs identical: * 25->49; scripts/suite-content-key.sh 21->38.
-49 *
-38 scripts/suite-content-key.sh
+77 *
+53 scripts/suite-content-key.sh
+# BL-998 (batch 257 F6): the W2P world, the bl998-rd-hit mutant (two worlds) and step 3b (one runner pass, one --key-only,
+# three step drives and the bl998-ip-tail mutant), one counted run through hermetic-run.sh armed as fxcount_arm arms it: * 49->68;
+# scripts/suite-content-key.sh 38->47. (A per-path row for core/scripts/hermetic-run.sh was dropped with its whole-file
+# inputs.decl line: the runner is declared as its HR_STORE span in spans.decl, and a path row binds only to a `!` line.)
+# BL-998 tip fold (batch 257 F6, T1): the W1P world and the bl998-snap-fnr mutant's two cells (w1p decides, w1 twin) are
+# three more driver runs, each one driver start and two key-script starts (before and after the run): * 68->77;
+# scripts/suite-content-key.sh 47->53. One counted run through hermetic-run.sh armed as fxcount_arm arms it.

@@ -505,6 +505,11 @@ VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"
 VERIFIED_FORMAT="$GITDIR/ai-dlc-fixture-verified.format"
 # ONE KEY RECORD PER FIXTURE, `<fixture>.key`; see the header of apply_readset_skip.
 KEYS_DIR="$GITDIR/ai-dlc-fixture-keys"
+# THE CONSUMER-LAYOUT KEY RECORDS (BL-1027; installed-path rows since BL-1043), `<fixture>.key` plus `.prev`: a separate directory,
+# written only by cl_publish and cl_write and read only by cl_select, in the shared verdict store base where the store
+# is on (cl_select resolves it); this per-clone path is the store-OFF fallback. The distribution hook alone sets the
+# switch that uses it; in this hook it stays empty and the directory is never made.
+CL_KEYS_DIR="$GITDIR/ai-dlc-consumer-placement-keys"
 # WHEN A FIXTURE GOES RED, THIS IS THE FILE TO READ. The pool runs each unit in its own worker
 # and keeps only a verdict, so without this record a failing fixture left you one line --
 # `FAIL <name>` -- and no way to see what it actually printed. Re-running the fixture by hand
@@ -528,6 +533,28 @@ KEYS_DIR="$GITDIR/ai-dlc-fixture-keys"
 # it. A hand-saved name that passes both tests is indistinguishable from a retained copy.
 FAILLOG_RECORD="$GITDIR/ai-dlc-fixture-failures"
 FAILLOG_KEEP=20
+# EVERY RECORD ABOVE IS SHARED BY CONCURRENT PUSHES: the common dir serves every worktree, and two
+# pushes may run at once. A record is therefore REPLACED BY RENAME and never written in place, so a
+# reader sees the old file or the new one whole, never a torn one. rec_put stages the copy beside
+# the record under this process's pid, then renames it over the record.
+rec_put() { # <src> <record>
+  cp "$1" "$2.tmp.$$" 2>/dev/null && mv -f "$2.tmp.$$" "$2" 2>/dev/null && return 0
+  rm -f "$2.tmp.$$" 2>/dev/null
+  return 1
+}
+# A READ-MODIFY-WRITE OF A SHARED RECORD runs under a mkdir lock judged by the live-trace lock's own
+# staleness test (readset_lock_stale), so a push killed while holding it frees it as soon as its pid
+# is gone. Its pid file is `<pid> <epoch>`, written by rename. Never waits: a held lock returns 1 and
+# the caller skips its write and says so.
+rec_lock() { # <lock dir>
+  if ! mkdir "$1" 2>/dev/null; then
+    readset_lock_stale "$1" && rm -rf "$1" 2>/dev/null
+    mkdir "$1" 2>/dev/null || return 1
+  fi
+  { printf '%s %s\n' "$$" "$(date +%s)" > "$1/pid.tmp.$$" && mv -f "$1/pid.tmp.$$" "$1/pid"; } 2>/dev/null || rm -f "$1/pid.tmp.$$" 2>/dev/null
+  return 0
+}
+rec_unlock() { rm -rf "$1" 2>/dev/null; }
 
 # Reduce "$1" (the dispatch list) to the fixtures a change can actually affect, using the
 # trace-derived read-sets in $READSET_MAP. Announces what it skipped and why; leaves the list
@@ -746,12 +773,16 @@ readset_manifest() {
 # THE KEY RECORDS, ONE PARSE: `<fx>\t#state\t<state>`, `<fx>\t#tools\t<tools format>` and
 # `<fx>\t<key>\t<value>` for every record under <keys dir> whose first line is `#format k1`. readset_keys
 # and the deriver's `--reconcile` both read it. `#tools canonical` marks tool rows resolved against the
-# fixed tool dirs; any other value, or none, is a record written by the PATH-resolved hook.
+# fixed tool dirs; any other value, or none, is a record written by the PATH-resolved hook. `<fx>\t#pending\t<n>`
+# carries line 4, the PENDING row count of the pass the record was written on; a record without it predates the count.
+# The value is passed through as written: it only rides into `.kpn`, and every reader of that (readset_keys_write,
+# readset_pending_recorded) keeps a non-negative integer alone, so a malformed `#pending` line reads as unrecorded.
 readset_key_records() { # <keys dir>
   awk 'FNR == 1 { ok = ($0 == "#format k1"); f = FILENAME; sub(/.*\//, "", f); sub(/\.key$/, "", f); next }
        !ok { next }
        /^#state / { print f "\t#state\t" substr($0, 8); next }
        /^#tools / { print f "\t#tools\t" substr($0, 8); next }
+       /^#pending / { print f "\t#pending\t" substr($0, 10); next }
        /^#/ { next }
        { print f "\t" $0 }' "$1"/*.key 2>/dev/null
 }
@@ -979,12 +1010,14 @@ readset_lock_write() { # <lock dir> <pid>
 # (5) is reached only after `kill -0` succeeded, so an empty `ps` there is a `ps` failure or a pid
 # that died in the gap. HELD with the announcement is right for both and the next push re-judges;
 # do not turn it into stale, because a false stale lets two traces run at once. A lock dir with no
-# pid file is stale once older than 60s (a launcher killed between `mkdir` and writing the pid).
+# pid file is stale once older than 60s (a launcher killed between `mkdir` and writing the pid). An
+# EMPTY pid file is judged the same way, never as malformed: it is a writer between the redirect's
+# truncate and its write, and reading it as stale let a concurrent push steal a live lock.
 # Never a process-table grep: `kill -0` on the recorded pid is the liveness test.
 readset_lock_stale() { # <lock dir>
   local lk="$1" p="" e="" now
   local s="" c=""
-  if [ -f "$lk/pid" ]; then
+  if [ -s "$lk/pid" ]; then
     { read -r p e; read -r s; } < "$lk/pid" 2>/dev/null
     case "$p" in ''|*[!0-9]*) return 0 ;; esac
     case "$e" in ''|*[!0-9]*) return 0 ;; esac
@@ -1442,6 +1475,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 8b2bbb45754df4ddb6d99683679caa2c78bbf3f17f04c1d36df177a971d8ea6f a counted entry carries the judge's #judge row (BL-1057); uncounted digest inputs unchanged
 # VS-IDENTITY 1 3fc1c587525156eff1e5435a3cdcbe69102eb22d6c2df8f01d396caa35454186 bundle B1: the BL-1052 span rows and the BL-1057 counted #judge row together; neither changes an existing entry
 # VS-IDENTITY 1 28342ca57c853d53b8dfea1c1b7ed7e05593aba85c12e9aafe8c31e5d35ae89c a fixture's own run.sh keyed on its comment-stripped text where the executor parses both alike, a stored raw row of today's bytes reading as it (BL-1062); a + file narrowed by section.decl keyed on that section (BL-1061)
+# VS-IDENTITY 1 b2ec0b25c1096bc624ac08968284825ee5ec5aecd6f3f5540127caa1e7701f0c an entry may end in `#pending <n>` (BL-998); an entry without it is reused with its count unrecorded, so no existing entry changes meaning
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -1491,6 +1525,31 @@ readset_vs_judge() { # <fx> <project root>
     r="$(bash "$FXCOUNT_JUDGE" --key-rows "$2" "$1" 2>/dev/null | F="$1" awk -F'\t' '$1 == ENVIRON["F"] { print $2; exit }')"
   fi
   case "$r" in '#judge f'*) printf '%s\n' "$r" ;; *) return 1 ;; esac
+}
+# THE PENDING ROW GRAMMAR, ONE DEFINITION. A green fixture whose subject is absent prints `PENDING  <what>` (two
+# spaces after the word, at the start of a line or after indentation). The pool's count over a dispatched fixture's
+# log and hermetic-run.sh's count into the store entry both take this variable; no other copy of the regex exists.
+READSET_VS_PENDING='^[[:space:]]*PENDING  '
+# A STORE ENTRY, ONE EXACT READER: `#format k1`, `#state ok`, exactly the digest input in <digest input file>, then
+# an optional LAST line `#pending <n>` (n a non-negative integer, the PENDING rows of the pass that wrote it; an
+# output, never part of the entry's name, which is the sha256 of the digest input). Prints n, or `-` for an entry
+# with no such line: one written before the count was recorded keeps its meaning (its pass is reused, its count is
+# unrecorded). Any other shape -- a header that differs, a body that differs -- fails closed: status 1, nothing
+# printed. <digest input file>.e is its scratch copy of the body.
+readset_vs_entry() { # <entry> <digest input file>
+  local n
+  n="$(awk 'NR == 1 { o = ($0 == "#format k1"); next } NR == 2 { o = o && ($0 == "#state ok"); next } { l = $0 }
+            END { if (o) print ((l ~ /^#pending (0|[1-9][0-9]*)$/) ? substr(l, 10) : "-") }' "$1" 2>/dev/null)"
+  [ -n "$n" ] || return 1
+  if [ "$n" = - ]; then tail -n +3 "$1" > "$2.e" 2>/dev/null || return 1
+  else sed -e '1,2d' -e '$d' "$1" > "$2.e" 2>/dev/null || return 1; fi
+  cmp -s "$2.e" "$2" || return 1
+  printf '%s\n' "$n"
+}
+# A KEY RECORD'S ROWS, ONE READER: every line but the header lines `#format `, `#state `, `#tools ` and `#pending `.
+# Status 1 when it prints no row.
+readset_key_rows() { # <record>
+  grep -vE '^#(format|state|tools|pending) ' "$1"
 }
 # READSET_VS_END
 # A DECLARED FIXTURE'S KEY ROWS, ONE COMPOSER. This hook and hermetic-run.sh both source this span -- the runner at
@@ -1838,10 +1897,14 @@ readset_declared() { # <list> <out>
 }
 
 # THE RECORD, `$KEYS_DIR/<fx>.key`: `#format k1`, `#state ok|stale|seeded`, `#tools canonical`
-# (the tool rows were resolved against the fixed tool dirs of readset_tools), then one row per key,
+# (the tool rows were resolved against the fixed tool dirs of readset_tools), `#pending <n>` where the count is
+# known (readset_keys_write writes it; the prospective `<out>/.k/<fx>` never carries it), then one row per key,
 # C-sorted: `<path>\t<sha256>` for a file, `<path>\t-` for an absent name, `<dir>/\t#listing:<sha256>`
 # for a directory listing, and `<tool path>\t<sha256>` for a tool (an absolute path). A changed tool
 # row reruns F as `tools changed` and never stales it.
+# A RECORD WITH NO `#pending` LINE (written before the count was recorded) IS DECIDED EXACTLY AS ONE WITH IT: its
+# absence is never a run reason, so no stored verdict is re-run for it; its count reads as unrecorded (`-`) until
+# the fixture next runs for a key that moved.
 #
 # THE ONE-TIME TOOL MIGRATION. A record whose `#tools` line is not `canonical` (the hook before the
 # fixed tool dirs wrote `per-fixture`) holds tool rows keyed on whatever PATH its writer inherited, so
@@ -1877,6 +1940,10 @@ readset_declared() { # <list> <out>
 # runner's HR_SANDBOX span and `#universe` the format version (READSET_VS span), so a pass under an older runner or
 # format is not reused. The key rows carry the same span sha for every declared fixture (the RUNNER ROW of
 # readset_decl_keys), so a code edit inside that span also moves the per-fixture key decision.
+# AN ENTRY MAY END IN `#pending <n>`, the PENDING rows of the pass that wrote it (hermetic-run.sh writes it; the
+# entry's name stays the sha256 of its digest input). Every reader takes the count from that last line, or `-` when
+# the entry has none: an entry written before the count was recorded is reused with its count unrecorded, never
+# re-run for it.
 # A STORED PASS COVERS THE CURRENT ROWS, IT NEED NOT EQUAL THEM (readset_verdicts). With the fixture's OWN inputs.decl
 # row dropped from both sides when every path it declares has a row (`.dfull`), an entry is reused when every current row is in it with the same value, its rows
 # under the fixture's own directory are exactly the current ones, and its `#inproc` and identity lines match: a
@@ -1899,7 +1966,7 @@ readset_vs_ident_here() { # the ident from the cwd, both layouts, consumer runne
 # THE LEGACY IDENTITY: the `#universe` values the distribution and consumer hooks wrote before READSET_VS_FORMAT.
 READSET_VS_LEGACY_UNIVERSE="68c5a2f2659c8bc02f3f1b087af17c0e683e0ae989392cf465350c1664aa7e47 a829a5b0f9ef73ce7a53c6e37f3321b852ba2c180b1627855590f562ff3c9335"
 readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pass covering its current key rows is decided `skip`
-  local out="$1" store ident fx rn="" c rraw vld vlok vj
+  local out="$1" store ident fx rn="" c rraw vld vlok vj pn
   : > "$out/.vs"
   [ -s "$out/.dfx" ] || return 0
   store="$(readset_vs_store "$PWD")"
@@ -1928,7 +1995,7 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
     awk -F'\t' -v f="$fx" '$1 == f { x = 1 } END { exit x ? 0 : 1 }' "$out/.dunres" && continue
     awk -F'\t' -v f="$fx" '$1 == f { x = 1 } END { exit x ? 0 : 1 }' "$out/.qfx" && continue
     [ -f "$out/.k/$fx" ] || continue
-    tail -n +4 "$out/.k/$fx" > "$out/.vs.rows" 2>/dev/null && [ -s "$out/.vs.rows" ] || continue
+    readset_key_rows "$out/.k/$fx" > "$out/.vs.rows" 2>/dev/null && [ -s "$out/.vs.rows" ] || continue
     { readset_vs_inproc "$fx" . | awk -v f="$fx" '{ print f "\tI\t" $0 }'
       [ -z "${FXCOUNT_JUDGE:-}" ] || readset_vs_judge "$fx" . | awk -v f="$fx" '{ print f "\tJ\t" $0 }'
       awk -v f="$fx" '{ print f "\tR\t" $0 }' "$out/.vs.rows"; } >> "$out/.vs.want"
@@ -1942,7 +2009,7 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
   tr '\n' '\000' < "$out/.vs.files" | VW="$out/.vs.want" VN="$out/.now" VF="$out/.dfull" VR="${ident%% *}" VU="${ident#* }" VL="$rraw" VLU="$READSET_VS_LEGACY_UNIVERSE" VJ="$vj" VLD="$vld" VLOK="$vlok" \
     xargs -0 awk -v root="$FXROOT" '
     function addw(md, f, r, o) { if ((md SUBSEP f SUBSEP r) in W) return; W[md SUBSEP f SUBSEP r] = 1; NW[md SUBSEP f]++; if (o) NO[md SUBSEP f]++ }
-    function fin() { if (ok && fx != "" && md != "" && !(fx in HIT) && m == NW[md SUBSEP fx] && own == NO[md SUBSEP fx] + 0) { HIT[fx] = 1; print fx } }
+    function fin() { if (ok && fx != "" && md != "" && !(fx in HIT) && m == NW[md SUBSEP fx] && own == NO[md SUBSEP fx] + 0) { HIT[fx] = 1; print fx "\t" pn } }
     BEGIN {
       n = split(ENVIRON["VLU"], a, " "); for (j = 1; j <= n; j++) LU[a[j]] = 1
       while ((getline l < ENVIRON["VF"]) > 0) DF[l] = 1
@@ -1961,7 +2028,7 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
         addw("n", f, r, o)
         if (k ~ /#HR_(SANDBOX|EXIT)$/) { sub(/#HR_[A-Z]+$/, "", k); if (!(k in NOW)) continue; r = k "\t" NOW[k] }
         addw("l", f, r, o) } }
-    FNR == 1 { fin(); ok = ($0 == "#format k1"); fx = ""; md = ""; m = 0; own = 0; leg = (vld != "" && index(FILENAME, vld "/") == 1); next }
+    FNR == 1 { fin(); ok = ($0 == "#format k1"); fx = ""; md = ""; m = 0; own = 0; pn = "-"; leg = (vld != "" && index(FILENAME, vld "/") == 1); next }
     FNR == 2 { ok = ok && ($0 == "#state ok"); next }
     FNR == 3 { if (substr($0, 1, 9) == "#fixture ") fx = substr($0, 10); ok = ok && (fx in INP) && (!leg || (fx in LOK)); next }
     FNR == 4 { rr = $0; next }
@@ -1971,23 +2038,32 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
                next }
     FNR == 6 { ok = ok && ($0 == INP[fx]); next }
     FNR == 7 && vj && !leg { ok = ok && (fx in JR) && ($0 == JR[fx]); next }
+    FNR > 6 && /^#pending (0|[1-9][0-9]*)$/ { pn = substr($0, 10); next }
     !ok { next }
     { t = index($0, "\t"); k = substr($0, 1, t - 1); row = $0
       if ((fx in DF) && k == root fx "/inputs.decl") next
       if (k == root fx "/run.sh" && (fx in SV) && (k in RAW) && substr($0, t + 1) == RAW[k]) row = k "\t" SV[fx]
       if ((md SUBSEP fx SUBSEP row) in W) { m++; if (index(k, root fx "/") == 1) own++ }
       else if (index(k, root fx "/") == 1) ok = 0 }
-    END { fin() }' 2>/dev/null | awk '!s[$0]++' > "$out/.vs.hit"
+    END { fin() }' 2>/dev/null | awk -F'\t' '!s[$1]++' > "$out/.vs.hit"
   [ -s "$out/.vs.hit" ] || return 0
   awk -F'\t' 'NR == FNR { h[$1] = 1; next } ($1 in h) && $2 == "run" { print $1 "\tskip\t\tv\tok"; next } { print }' "$out/.vs.hit" "$out/.kdec" > "$out/.kdec.t" \
     && mv "$out/.kdec.t" "$out/.kdec" || return 0
-  while IFS= read -r fx; do
+  # A STORE SKIP CARRIES THE STORE ENTRY'S PENDING COUNT into `.kpn`, which the publish writes as the record's line 4.
+  while read -r fx pn; do
     sed '2s/.*/#state ok/' "$out/.k/$fx" > "$out/.k/$fx.t" && mv "$out/.k/$fx.t" "$out/.k/$fx"
+    printf '%s\t%s\n' "$fx" "$pn" >> "$out/.kpn"
   done < "$out/.vs.hit"
-  cp "$out/.vs.hit" "$out/.vs"
+  cut -f1 "$out/.vs.hit" > "$out/.vs"
   return 0
 }
 
+# THE LEGACY RUNNER BLOBS: `<whole-file sha256>:<HR_SANDBOX span sha>:<HR_EXIT tail sha>` of a hermetic-run.sh some
+# record keyed WHOLE-FILE before the span RUNNER ROWS, pinned once from that blob (the READSET_VS_LEGACY_UNIVERSE
+# precedent). readset_keys reads such a row as standing in for `<runner>#HR_SANDBOX` and `#HR_EXIT` when the pinned
+# span shas equal the current ones, so a record of a runner whose SPANS did not move carries forward. One entry: the
+# runner the consumer-placement census keyed (BL-1043, its 210 records under consumer-placement-keys/).
+READSET_RUNNER_LEGACY="424152daacd574e7998875de703bcfa957951fe690809e7208bcb95b3b449c06:ad96b5dbb41480ae48a6dd818f8ead71a3fe6618d5f897a95bc7b58e5a0069e1:90f62e6944174ca1c9e82d68bf2ca14c7cffda305e5f9189bb6c2827e5f618e6"
 readset_keys() { # <list> <out>
   local list="$1" out="$2" seed=0 v2=/dev/null lp=/dev/null lv=/dev/null pp=/dev/null pv=/dev/null tab
   tab="$(printf '\t')"
@@ -1995,8 +2071,10 @@ readset_keys() { # <list> <out>
   readset_tools "$out"
   cut -f1 "$out/.now" > "$out/.is"
   [ -s "$out/.ls.now" ] || readset_listings "$out/.is" "$out/.ls.now"
-  if [ -s "$VERIFIED_RECORD" ] && [ "$(cat "$VERIFIED_FORMAT" 2>/dev/null)" = v2 ]; then
-    v2="$VERIFIED_RECORD"; cut -f1 "$v2" > "$out/.pv"; pv="$out/.pv"
+  # ONE READ OF THE SHARED RECORD: it is copied into "$out" once and only the copy is read, so a
+  # concurrent push renaming a new record over it cannot hand this run path lists and hashes from two trees.
+  if [ -s "$VERIFIED_RECORD" ] && [ "$(cat "$VERIFIED_FORMAT" 2>/dev/null)" = v2 ] && cp "$VERIFIED_RECORD" "$out/.v2" 2>/dev/null; then
+    v2="$out/.v2"; cut -f1 "$v2" > "$out/.pv"; pv="$out/.pv"
     readset_listings "$pv" "$out/.ls.v2"; lv="$out/.ls.v2"
     [ -d "$KEYS_DIR" ] || seed=1
   fi
@@ -2012,10 +2090,10 @@ readset_keys() { # <list> <out>
     readset_key_records "$KEYS_DIR" > "$out/.krecs"
   fi
   while IFS= read -r d; do b="${d%/}"; printf '%s\n' "${b##*/}"; done < "$list" > "$out/.kl"
-  : > "$out/.khdr"; : > "$out/.kout"
-  KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
+  : > "$out/.khdr"; : > "$out/.kout"; : > "$out/.kpn"
+  KPN="$out/.kpn" KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
   KM="$out/.mapped.all" KLOC="$out/.local.valid" KC="$out/.krecs" KF="$out/.kl" KH="$out/.khdr" KO="$out/.kout" \
-  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" KDL="$out/.dfull" awk -v seed="$seed" -v root="$FXROOT" '
+  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" KDL="$out/.dfull" KRL="$READSET_RUNNER_LEGACY" awk -v seed="$seed" -v root="$FXROOT" '
     function rd(file, arr,   l, t) { while ((getline l < file) > 0) { t = index(l, "\t"); arr[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     function kids(file, set,   l, t, p, i) { while ((getline l < file) > 0) { t = index(l, "\t"); p = (t ? substr(l, 1, t - 1) : l)
         while ((i = match(p, /\/[^\/]*$/)) > 0) { set[substr(p, 1, i - 1) SUBSEP substr(p, i + 1)] = 1; p = substr(p, 1, i - 1) } } }
@@ -2059,6 +2137,7 @@ readset_keys() { # <list> <out>
         subtree(d "/" a[j]) }
       return 1 }
     BEGIN {
+      rln = split(ENVIRON["KRL"], rla, " "); for (rlj = 1; rlj <= rln; rlj++) if (split(rla[rlj], rlb, ":") == 3) { RLS[rlb[1]] = rlb[2]; RLT[rlb[1]] = rlb[3] }
       rd(ENVIRON["KN"], NV); rd(ENVIRON["KLN"], LN); rd(ENVIRON["KLP"], LP); rd(ENVIRON["KLV"], LV)
       kids(ENVIRON["KPP"], CP); kids(ENVIRON["KPV"], CV)
       if (seed) rd(ENVIRON["KV2"], VV)
@@ -2079,6 +2158,7 @@ readset_keys() { # <list> <out>
       while ((getline l < ENVIRON["KC"]) > 0) { n = split(l, a, "\t")
         if (a[2] == "#state") RST[a[1]] = a[3]
         else if (a[2] == "#tools") RTL[a[1]] = a[3]
+        else if (a[2] == "#pending") RPN[a[1]] = a[3]
         else { RK[a[1]] = RK[a[1]] "\n" a[2]; RV[a[1] SUBSEP a[2]] = a[3] } }
       while ((getline f < ENVIRON["KF"]) > 0) {
         delete K; delete R; delete X; delete LM
@@ -2098,10 +2178,12 @@ readset_keys() { # <list> <out>
         first = ""; fch = 0; tch = 0; SB = 0
         mig = (!seed && (f in RST) && RTL[f] != "canonical")
         # A RECORD KEYING THE RUNNER WHOLE-FILE (written before the span RUNNER ROWS): that row, equal to the current
-        # file hash, stands in for `<runner>#HR_SANDBOX` and `#HR_EXIT` (same bytes); the record is republished, c `m`.
+        # file hash, stands in for `<runner>#HR_SANDBOX` and `#HR_EXIT` (same bytes); so does one naming a pinned legacy
+        # blob (READSET_RUNNER_LEGACY) whose span sha for that key equals the current one. The record is republished, c `m`.
         lg = 0
         if (has && (f in DECL)) for (k in K) if (k ~ /#HR_(SANDBOX|EXIT)$/ && (!(k in R) || (seed && R[k] == "-"))) { w = k; sub(/#HR_[A-Z]+$/, "", w)
-            ow = (w in R) ? R[w] : ((seed && (w in VV)) ? VV[w] : "-"); if (ow != "-" && (w in NV) && ow == NV[w]) { R[k] = cv(f, k); lg = 1 } }
+            ow = (w in R) ? R[w] : ((seed && (w in VV)) ? VV[w] : "-")
+            if (ow != "-" && (((w in NV) && ow == NV[w]) || ((ow in RLS) && ((k ~ /#HR_SANDBOX$/) ? RLS[ow] : RLT[ow]) == cv(f, k)))) { R[k] = cv(f, k); lg = 1 } }
         # A DECLARED FIXTURE IS COMPARED ON THE ROWS IT HAS NOW: a recorded row it no longer keys is ignored, except under
         # its own directory, where a recorded file now absent runs it; its own inputs.decl row is dropped when every path
         # it declares has a row (`.dfull`: a narrowed declaration skips, a widened one gains a row and runs).
@@ -2135,6 +2217,8 @@ readset_keys() { # <list> <out>
                if (!(f in DECL)) for (k in LM) if (!grow(k)) ns = "stale" }
         for (k in K) X[k] = 1
         print f "\t" ns > ENVIRON["KH"]
+        # A RECORD REPUBLISHED WITHOUT A RUN CARRIES ITS PENDING COUNT (none on a seed, which reads no record).
+        if (!run && !seed && (f in RPN)) print f "\t" RPN[f] > ENVIRON["KPN"]
         for (k in X) print f "\t" k "\t" cv(f, k) > ENVIRON["KO"]
         print f "\t" (run ? "run" : "skip") "\t" why "\t" c "\t" ns }
     }' > "$out/.kdec"
@@ -2149,21 +2233,209 @@ readset_keys() { # <list> <out>
 # seed skipped. A FAIL, a kill or a missing verdict publishes nothing. temp + mv per record. The pre-run
 # `.now` is kept as `$KEYS_DIR/.prev`, the path list the next run derives a moved listing's old entries
 # from; it is only ever read after its listing hash matches the record's, so a red run may write it.
-readset_keys_write() { # <out>
-  local out="$1" f b
+# LINE 4 IS `#pending <n>`: for a fixture this push RAN green, the PENDING rows of its log (`<out>/.pend`); for one
+# republished without a run, the count carried in `<out>/.kpn` (its prior record's, or the store entry's on a store
+# skip). Neither known: no line, and the count stays unrecorded (never a run reason). ONE awk writes every temp record.
+# cl_write's consumer-layout records (<keys dir> = CL_KEYS_DIR) never carry `#pending`, BY CONSTRUCTION: no `.pend`
+# is written under its <out>, and its `.kpn` carries only a count read from a record of that dir, which has none.
+readset_keys_write() { # <out> [<keys dir>, default $KEYS_DIR]
+  local out="$1" kd="${2:-$KEYS_DIR}" f b r
   [ -d "$out/.k" ] || return 0
-  mkdir -p "$KEYS_DIR" 2>/dev/null || return 0
+  mkdir -p "$kd" 2>/dev/null || return 0
+  : > "$out/.k.pub"
   for f in "$out/.k"/*; do
     [ -f "$f" ] || continue
-    b="${f##*/}"
-    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] || grep -qxF "$b" "$out/.k.always" 2>/dev/null; then
-      cp "$f" "$KEYS_DIR/$b.key.tmp.$$" 2>/dev/null && mv "$KEYS_DIR/$b.key.tmp.$$" "$KEYS_DIR/$b.key" 2>/dev/null
+    b="${f##*/}"; r=1
+    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] || { r=0; grep -qxF "$b" "$out/.k.always" 2>/dev/null; }; then
+      printf '%s\t%s\n' "$b" "$r" >> "$out/.k.pub"
     fi
   done
+  # A write error is fatal to awk, so a failed awk publishes NOTHING (a short record would key on fewer rows).
+  if KP="$out/.pend" KPN="$out/.kpn" awk -F'\t' -v kd="$out/.k" -v to="$kd" -v sfx=".key.tmp.$$" '
+    BEGIN { while ((getline l < ENVIRON["KP"]) > 0) { i = index(l, ":"); if (i > 1) P[substr(l, 1, i - 1)] = substr(l, i + 1) }
+            while ((getline l < ENVIRON["KPN"]) > 0) { i = index(l, "\t"); if (i > 1) C[substr(l, 1, i - 1)] = substr(l, i + 1) } }
+    { b = $1; n = ""; if ($2 == "1") { if (b in P) n = P[b] } else if (b in C) n = C[b]
+      if (n !~ /^(0|[1-9][0-9]*)$/) n = ""
+      o = to "/" b sfx; i = 0
+      while ((getline l < (kd "/" b)) > 0) { print l > o; if (++i == 3 && n != "") print "#pending " n > o }
+      close(kd "/" b); close(o) }' "$out/.k.pub" 2>/dev/null; then
+    while read -r b f; do
+      [ -f "$kd/$b.key.tmp.$$" ] && mv "$kd/$b.key.tmp.$$" "$kd/$b.key" 2>/dev/null
+    done < "$out/.k.pub"
+  else
+    while read -r b f; do rm -f "$kd/$b.key.tmp.$$" 2>/dev/null; done < "$out/.k.pub"
+  fi
   if [ -s "$out/.now" ]; then
-    cp "$out/.now" "$KEYS_DIR/.prev.tmp.$$" 2>/dev/null && mv "$KEYS_DIR/.prev.tmp.$$" "$KEYS_DIR/.prev" 2>/dev/null
+    cp "$out/.now" "$kd/.prev.tmp.$$" 2>/dev/null && mv "$kd/.prev.tmp.$$" "$kd/.prev" 2>/dev/null
   fi
   return 0
+}
+
+# CONSUMER-LAYOUT JOBS (BL-1027, keyed on INSTALLED PLACEMENT by BL-1043). A shipping fixture can pass here and
+# fail in the layout install.sh builds, so the distribution hook installs this tree into a scratch consumer tree
+# and names it in AI_DLC_FX_CL_TREE; run_fixtures reads that switch at depth 0 only (into `cl_tree`) and unsets
+# it for every unit. Unset or empty, every function below returns at its first test and the run is the run
+# without them; a consumer hook never sets it. Each SHIPPING fixture of the tree (tests/fixtures/<fx>/run.sh,
+# install.sh's own ship rule) is a candidate. A selected fixture is one pool unit labelled `<fx>@consumer`, a
+# name no fixture directory can carry, and its decision rows live in their own `.cl/.kdec`.
+# THE KEYS ARE TAKEN INSIDE THE INSTALLED TREE. readset_manifest and readset_keys run with the tree as the cwd
+# and tests/fixtures/ as the fixture root, so every key row is an INSTALLED path holding its INSTALLED bytes: a
+# declared fixture's inputs reach it through core-paths.sh --map (readset_decl_parse's `cons` layout), and an
+# undeclared one is keyed on the whole installed tree. A change to install.sh, a template it renders or a file
+# it copies moves exactly the units whose installed inputs it moved, and a change that installs nothing moves
+# none. The records live in CL_KEYS_DIR, never KEYS_DIR, so a pass recorded for the distribution layout skips
+# nothing here. The verified record is left as it is: with no CL_KEYS_DIR, readset_keys seeds from it, and a seed
+# keyed on distribution paths matches no installed key (every unit carries tests/fixtures/ or the installed runner
+# row, which the distribution has not), so every seeded candidate runs and none is recorded unrun.
+# EVERY PASS IS SHARED AND KEPT AT ONCE. Both stores sit in the SHARED verdict store base, counted suffix stripped:
+# hermetic-run.sh writes a declared unit's entry under <base>/<the tree's FIXED root commit> as the unit passes, and
+# the pool worker calls cl_publish for the unit's placement record under <base>/consumer-placement-keys/<repository
+# root commit> at the same moment; cl_write at the end only drops reds and republishes store skips. So any run,
+# in any clone or worktree, that reaches the same placement keys reuses the pass, and a stopped run loses none.
+# The verdict store is read inside the tree: its rows are installed paths, so no distribution-layout entry matches.
+# NO PUSH RUNS EVERY CANDIDATE. With no record and no store entry at all the step FAILs and names
+# scripts/census-consumer-layout.sh, the one-time census that records each candidate it ran green; keys that
+# cannot be built FAIL it too, naming the cause and the census. Both write `<out>/.cl.refused`, which
+# run_fixtures reads. Only AI_DLC_FIXTURE_NO_SKIP=1 (`all`) runs every candidate.
+# cl_select <out> <all|keys|census>: writes <out>/.cl.sel, the bare names this push runs as `<fx>@consumer`.
+# `census` is scripts/census-consumer-layout.sh's mode, the only one that selects with no record present.
+cl_select() {
+  local out="$1" c b n_c n_s why="" kd vh base p
+  [ -n "${cl_tree:-}" ] || return 0
+  for b in "$cl_tree"/tests/fixtures/*/; do
+    [ -f "$b/run.sh" ] || continue
+    b="${b%/}"; printf '%s\n' "${b##*/}"
+  done > "$out/.cl.all"
+  : > "$out/.cl.sel"; rm -f "$out/.cl.refused"
+  n_c="$(grep -c . "$out/.cl.all")"; case "$n_c" in ''|*[!0-9]*) n_c=0 ;; esac
+  if [ "$n_c" -eq 0 ]; then printf '   ..    consumer layout: 0 of 0 shipping fixture(s) run as <fx>@consumer in %s\n' "$cl_tree"; return 0; fi
+  # THE SHARED BASE: the verdict store base with a counted-<vk> suffix stripped. @consumer units run uncounted, and
+  # counted and uncounted entries never share a store; the census runs unarmed and lands on the same base.
+  base="${AI_DLC_VERDICT_STORE:-${HOME:-}/.cache/ai-dlc/verdicts}"
+  case "${base##*/}" in counted-????????????) base="${base%/*}" ;; esac
+  case "$base" in /*) ;; *) base="$PWD/$base" ;; esac
+  p="$(AI_DLC_VERDICT_STORE="$base" readset_vs_store "$PWD")"
+  if [ -n "$p" ]; then kd="$base/consumer-placement-keys/${p##*/}"
+  else kd="$CL_KEYS_DIR"; case "$kd" in /*) ;; *) kd="$PWD/$kd" ;; esac; fi
+  CL_KEYS_DIR="$kd"
+  printf '%s\n' "$kd" > "$out/.cl.keys"; printf '%s\n' "$base" > "$out/.cl.store"; declare -f cl_publish > "$out/.cl.pub"
+  mkdir -p "$out/.cl/.k" && c="$(cd "$out/.cl" && pwd -P)" || { printf 'no consumer-layout decision dir under %s\n' "$out" > "$out/.cl.refused"; return 0; }
+  while IFS= read -r b; do printf 'tests/fixtures/%s/\n' "$b"; done < "$out/.cl.all" > "$c/.list"
+  while IFS= read -r b; do [ ! -f "$cl_tree/tests/fixtures/$b/inputs.decl" ] || printf '%s\n' "$b"; done < "$out/.cl.all" > "$c/.mapped.all"
+  : > "$c/.kdec"
+  ( cd "$cl_tree" || exit 1
+    KEYS_DIR="$kd"; FXROOT="tests/fixtures/"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; AI_DLC_VERDICT_STORE="$base"
+    readset_manifest "$c"
+    [ -s "$c/.now" ] || exit 1
+    # THE INSTALL STAMP IS KEYED ON ITS STABLE FIELDS. install.sh writes .claude/.ai-dlc-version with the install time,
+    # the source commit and the release, which move on every install or every release; measured as the only installed
+    # file that differs between two installs of one sha, and the only one carrying the sha or VERSION. Its key value
+    # is the hash of the file without those lines, so no unit reruns on the stamp alone.
+    if [ -f .claude/.ai-dlc-version ]; then
+      vh="$(grep -vE '^(installed_at|commit|skill_commit|version|skill_version):' .claude/.ai-dlc-version | shasum -a 256 | cut -d' ' -f1)"
+      awk -F'\t' -v v="$vh" '$1 == ".claude/.ai-dlc-version" { print $1 "\t" v; next } { print }' "$c/.now" > "$c/.now.t" && mv "$c/.now.t" "$c/.now" || exit 1
+    fi
+    : > "$c/.local.valid"
+    readset_keys "$c/.list" "$c"
+    readset_vs_store "$PWD" > "$c/.vsdir" ) > "$c/.log" 2>&1 || : > "$c/.kdec"
+  n_s="$(grep -c . "$c/.kdec")"; case "$n_s" in ''|*[!0-9]*) n_s=0 ;; esac
+  if [ "$2" = all ]; then why="the read-set skip is forced off (AI_DLC_FIXTURE_NO_SKIP=1)"
+    cp "$out/.cl.all" "$out/.cl.sel"; : > "$c/.k.always"
+  elif [ "$n_s" != "$n_c" ]; then
+    printf 'the consumer-layout keys could not be built in %s (%s of %s decided)%s\n' "$cl_tree" "$n_s" "$n_c" \
+      "$([ -s "$c/.now.why" ] && printf -- ' -- %s' "$(sed -n 1p "$c/.now.why")")" > "$out/.cl.refused"
+    printf 'once the cause is fixed, rebuild the records off-gate from a clean worktree at this sha: bash scripts/census-consumer-layout.sh\n' >> "$out/.cl.refused"; return 0
+  elif [ "$2" != census ] && ! cl_any_record "$kd" "$(cat "$c/.vsdir" 2>/dev/null)"; then
+    printf 'no consumer-layout record exists in %s, so every one of the %s candidates would run -- run the one-time census from a clean worktree at this sha: bash scripts/census-consumer-layout.sh\n' "$kd" "$n_c" > "$out/.cl.refused"; return 0
+  else
+    awk -F'\t' '$2 == "run" { print $1 }' "$c/.kdec" > "$out/.cl.sel"
+    awk -F'\t' '$2 == "skip" && ($4 == "v" || $4 == "m" || $4 == "b") { print $1 }' "$c/.kdec" > "$c/.k.always"
+  fi
+  n_s="$(grep -c . "$out/.cl.sel")"; case "$n_s" in ''|*[!0-9]*) n_s=0 ;; esac
+  printf '   ..    consumer layout: %s of %s shipping fixture(s) run as <fx>@consumer in %s%s\n' "$n_s" "$n_c" "$cl_tree" "${why:+ -- every one, because $why}"
+  [ -n "$why" ] || awk -F'\t' '$2 == "run" && n < 10 { n++; print "   ..      " $1 "@consumer: " $3 }' "$c/.kdec"
+  return 0
+}
+# cl_tree_init <dir>: `git init` and the consumer tree's FIXED root commit (empty tree, fixed identity, date and
+# message). Every consumer tree therefore has ONE project id, the key the verdict store files a pass under
+# (<base>/<root commit>); a root that moved with the content would make every @consumer pass unreachable to the
+# next run. The suite step and scripts/census-consumer-layout.sh both build their tree through this function.
+# Runs with the caller's GIT_* location variables unset, so a leaked GIT_DIR can never init or commit into the
+# repository being pushed instead of the scratch tree.
+cl_tree_init() {
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    git -C "$1" init -q && GIT_AUTHOR_NAME=ai-dlc GIT_AUTHOR_EMAIL=ai-dlc@invalid GIT_COMMITTER_NAME=ai-dlc GIT_COMMITTER_EMAIL=ai-dlc@invalid GIT_AUTHOR_DATE=2000-01-01T00:00:00Z GIT_COMMITTER_DATE=2000-01-01T00:00:00Z \
+      git -C "$1" -c commit.gpgsign=false commit -q --no-verify --allow-empty -m 'consumer-layout root' )
+}
+# cl_any_record <keys dir> <consumer store project dir>: true when either holds any record or entry at all.
+cl_any_record() {
+  local f
+  for f in "$1"/*.key; do [ -f "$f" ] && return 0; done
+  [ -n "$2" ] || return 1
+  for f in "$2"/*; do [ -f "$f" ] && return 0; done
+  return 1
+}
+# cl_publish <out> <fx>: publishes <fx>'s consumer-layout record THE MOMENT its unit passed, so a run stopped or red
+# later keeps every pass it made. cl_select writes this definition to <out>/.cl.pub, which the pool worker and the
+# census unit source: ONE implementation. hermetic-run.sh writes a declared unit's store entry at the same moment.
+cl_publish() {
+  local kd=""
+  read -r kd 2>/dev/null < "$1/.cl.keys" || return 0
+  [ -n "$kd" ] && [ -s "$1/.cl/.k/$2" ] || return 0
+  mkdir -p "$kd" 2>/dev/null && cp "$1/.cl/.k/$2" "$kd/$2.key.tmp.$$" 2>/dev/null && mv "$kd/$2.key.tmp.$$" "$kd/$2.key" 2>/dev/null
+  return 0
+}
+# cl_write <out>: publishes the remaining consumer-layout records through
+# readset_keys_write with CL_KEYS_DIR named explicitly: only the store-skipped and republished rows (`.k.always`),
+# because a PASS was already published by cl_publish the moment its unit passed. It drops the prospective record of
+# every selected unit that did not pass. It never deletes a published record: the directory is shared, a record there is some run's
+# real pass at its own keys, and a red unit is re-selected anyway, its keys differing from every pass recorded.
+# Never writes KEYS_DIR. A refused selection publishes nothing.
+cl_write() {
+  local out="$1" c="$1/.cl" b
+  [ -n "${cl_tree:-}" ] && [ -d "$c" ] && [ ! -e "$out/.cl.refused" ] && [ -s "$out/.cl.keys" ] || return 0
+  read -r CL_KEYS_DIR < "$out/.cl.keys"
+  mkdir -p "$CL_KEYS_DIR" 2>/dev/null || return 0
+  while IFS= read -r b; do
+    [ -n "$b" ] || continue
+    [ "$(cat "$out/$b@consumer" 2>/dev/null)" = ok ] || rm -f "$c/.k/$b"
+  done < "$out/.cl.sel"
+  readset_keys_write "$c" "$CL_KEYS_DIR"
+  return 0
+}
+
+# A FIXTURE SKIPPED ON A RECORDED PASS KEEPS ITS PENDING COUNT IN SIGHT. Writes `<out>/.precorded`, C-sorted, one
+# `<fx>\t<n>` line per `skip` row of `.kdec` this push did not dispatch (no verdict file): n from `.kpn` (a
+# republished or store-skipped record), else from line `#pending` of `$KEYS_DIR/<fx>.key`, else `-` (a record or
+# entry written before the count was recorded, or a seeded one: unrecorded, never a run reason). Called on the
+# unchanged-push return and on the pool path, after the dispatch.
+readset_pending_recorded() { # <out>
+  : > "$1/.precorded"
+  [ -s "$1/.kdec" ] || return 0
+  awk -F'\t' -v out="$1" -v kd="$KEYS_DIR" '
+    BEGIN { c = out "/.kpn"; while ((getline l < c) > 0) { i = index(l, "\t"); if (i > 1) C[substr(l, 1, i - 1)] = substr(l, i + 1) } }
+    $2 != "skip" { next }
+    { v = out "/" $1; if ((getline l < v) >= 0) { close(v); next }
+      n = "-"
+      if ($1 in C) n = C[$1]
+      else { r = kd "/" $1 ".key"; i = 0
+             while (i < 4 && (getline l < r) > 0) { i++; if (l ~ /^#pending /) n = substr(l, 10) }
+             close(r) }
+      if (n !~ /^(0|[1-9][0-9]*)$/) n = "-"
+      print $1 "\t" n }' "$1/.kdec" | LC_ALL=C sort > "$1/.precorded.t" && mv "$1/.precorded.t" "$1/.precorded"
+}
+# THE PENDING SUMMARY LINE, ONE RENDERER: <green count> fixtures this push ran printed PENDING rows (<green names>,
+# space-led), and <recorded file> holds `<fx>\t<n>` for every fixture skipped on a recorded pass (`-` names stdin);
+# only n > 0 is named, and an n of `-` is counted as "count unrecorded", never read as a zero. Prints nothing when no clause has a member.
+readset_pending_line() { # <green count> <green names> <recorded file>
+  awk -F'\t' -v g="$1" -v gn="$2" '
+    $2 ~ /^[1-9][0-9]*$/ { k++; kn = kn " " $1 "(recorded)=" $2 }
+    $2 == "-" { u++ }
+    END { s = ""
+      if (g > 0) s = g " green fixture(s) printed a PENDING row, so part of each checked nothing:" gn
+      if (k) s = s (s == "" ? "" : "; ") k " skipped on a recorded pass that printed a PENDING row:" kn
+      if (u) s = s (s == "" ? "" : "; ") u " skipped on a recorded pass whose PENDING count is unrecorded (count unrecorded: recorded before counts were kept, or seeded)"
+      if (s != "") print "   PENDING: " s }' "$3"
 }
 
 apply_readset_skip() {
@@ -2208,17 +2480,19 @@ apply_readset_skip() {
   # THE ONLY RUN-ALL: the hashing instrument is broken, so no key can be read.
   [ -s "$out/.now" ] || { printf '   ..    could not hash the working tree -- running all %s\n' "$n_all"
     [ -s "$out/.now.why" ] && printf '   ..      cause: %s\n' "$(cat "$out/.now.why")"
+    cl_select "$out" keys
     return 0; }
 
   # A DECISION FILE SHORT OF THE LIST IS A BROKEN INSTRUMENT: an undecided fixture would read as skipped.
   if ! readset_keys "$list" "$out" || [ "$(grep -c . "$out/.kdec" 2>/dev/null)" != "$n_all" ]; then
-    printf '   ..    could not build the fixture keys -- running all %s\n' "$n_all"; return 0
+    printf '   ..    could not build the fixture keys -- running all %s\n' "$n_all"; cl_select "$out" keys; return 0
   fi
   awk -F'\t' '$2 == "skip" && ($5 == "seeded" || $4 == "v" || $4 == "m" || $4 == "b") { print $1 }' "$out/.kdec" > "$out/.k.always"
 
   if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" ]; then
     : > "$out/.k.always"
     printf '   ..    read-set skip OFF (AI_DLC_FIXTURE_NO_SKIP=1) -- running all %s\n' "$n_all"
+    cl_select "$out" all
     return 0
   fi
 
@@ -2254,7 +2528,9 @@ apply_readset_skip() {
   done
 
   # An EMPTY dispatch list is not a skip: it falls through to the empty-suite FAIL in run_fixtures.
-  if [ "$n_sel" -eq 0 ] && [ "$n_all" -gt 0 ]; then
+  # NO CHANGE MEANS BOTH SELECTIONS ARE EMPTY: a consumer-layout unit still to run keeps the pool open.
+  cl_select "$out" keys
+  if [ "$n_sel" -eq 0 ] && [ "$n_all" -gt 0 ] && [ ! -s "$out/.cl.sel" ]; then
     READSET_NO_CHANGE=1
     return 0
   fi
@@ -2316,6 +2592,11 @@ readset_invalidation_guard() { # <out>
 
 run_fixtures() {
   local rc=0 rf_hard=0 d b out out_q n_expected n_actual n_ordered verdict fx_root fx_s fx_err fx_m fx_p fx_t fx_e pool_xp=""
+  # THE CONSUMER-LAYOUT SWITCH (cl_select) is read at depth 0 only and then UNSET, so no unit and no nested
+  # hook ever inherits it: builtins only, and with the switch unset nothing below changes.
+  local cl_tree="" cl_q=""
+  if [ "$POOL_DEPTH_IN" -eq 0 ]; then cl_tree="${AI_DLC_FX_CL_TREE:-}"; fi
+  unset AI_DLC_FX_CL_TREE
   if [ "$POOL_DEPTH_IN" -ge 2 ]; then
     printf '   FAIL  fixture pool refused: nested at depth %s (PREPUSH_POOL_DEPTH=%s), a hook started by a hook started by a pool opens no pool\n' "$POOL_DEPTH_IN" "$POOL_DEPTH_IN"
     return 1
@@ -2355,7 +2636,8 @@ run_fixtures() {
   # worker's are in their own subshells), so nothing is chained; each straight-line removal of the root
   # below clears all four right after it, so the trap never outlives this function.
   printf -v out_q '%q' "$out"
-  trap "rm -rf -- $out_q" EXIT; trap 'pool_stop 130' INT; trap 'pool_stop 143' TERM; trap 'pool_stop 129' HUP
+  if [ -n "$cl_tree" ]; then printf -v cl_q ' %q' "$cl_tree"; fi
+  trap "rm -rf -- $out_q$cl_q" EXIT; trap 'pool_stop 130' INT; trap 'pool_stop 143' TERM; trap 'pool_stop 129' HUP
   # DOT-PREFIXED, and that is what makes the name collision-proof rather than
   # unlikely. Every verdict file in "$out" is named for a fixture, and the glob
   # below cannot match a directory whose name begins with a dot -- so no fixture
@@ -2385,7 +2667,8 @@ run_fixtures() {
   # leaves the file empty, so finding it empty tells you no complete measurement exists instead
   # of handing you last week's number as though it were today's. Errors are silenced the way
   # every other write in this block silences them.
-  : > "$LASTRUN_RECORD" 2>/dev/null
+  { : > "$LASTRUN_RECORD.tmp.$$" && mv -f "$LASTRUN_RECORD.tmp.$$" "$LASTRUN_RECORD"; } 2>/dev/null
+  LASTRUN_OWN=""
 
   for d in "$FXROOT"*/; do
     [ -f "$d/run.sh" ] || continue
@@ -2402,6 +2685,15 @@ run_fixtures() {
   apply_readset_skip "$out/list" "$out"
   readset_trace_report "$out"
   readset_invalidation_guard "$out" || { rm -rf "$out"; trap - EXIT INT TERM HUP; return 1; }
+  # A REFUSED CONSUMER-LAYOUT SELECTION FAILS THE STEP before any dispatch or skip return (cl_select says why).
+  if [ -s "$out/.cl.refused" ]; then
+    sed 's/^/   FAIL  consumer layout: /' "$out/.cl.refused"
+    rm -rf "$out"; trap - EXIT INT TERM HUP; return 1
+  fi
+  if [ -s "$out/.cl.sel" ]; then
+    printf '%s\n' "$cl_tree" > "$out/.cl.tree"
+    sed 's/$/@consumer/' "$out/.cl.sel" >> "$out/list"
+  fi
 
   # A WHOLE-SUITE SKIP CANNOT BE SIGNALLED BY AN EMPTY LIST, and the guard four lines down is
   # why: an empty list is a hard FAIL here, deliberately, because "an empty suite passes every
@@ -2412,6 +2704,9 @@ run_fixtures() {
     SUITE_SKIPPED=1
     # A seed that skips every fixture still publishes its records, so it lands once.
     readset_keys_write "$out"
+    cl_write "$out"
+    readset_pending_recorded "$out"
+    readset_pending_line 0 "" "$out/.precorded"
     rm -rf "$out"; trap - EXIT INT TERM HUP
     return 0
   fi
@@ -2453,7 +2748,7 @@ run_fixtures() {
   cp "$out/list" "$out/.order"
   if [ -s "$DURATIONS_RECORD" ]; then
     awk 'NR==FNR { if (NF == 2) prev[$1] = $2; next }
-         { b = $0; sub(/\/$/, "", b); sub(/.*\//, "", b)
+         { b = $0; sub(/\/$/, "", b); sub(/.*\//, "", b); sub(/@consumer$/, "", b)
            print ((b in prev) ? prev[b] : 999999) " " $0 }' \
         "$DURATIONS_RECORD" "$out/list" 2>/dev/null \
       | sort -k1,1nr | cut -d' ' -f2- > "$out/.order.lpt" 2>/dev/null
@@ -2634,7 +2929,17 @@ run_fixtures() {
       printf "%s %s\n" "$b" "$(cat "$pr.st" 2>/dev/null || echo 0)" >> "$AI_DLC_FX_OUT/.stall"
       return "$rc"
     } 2>/dev/null
-    if [ -f "$d/inputs.decl" ]; then
+    pool_cl() { cd "$1" || exit 1; shift; export TMPDIR; exec "$@"; }
+    if case "$b" in *@consumer) true ;; *) false ;; esac; then
+      ct=""; read -r ct 2>/dev/null < "$AI_DLC_FX_OUT/.cl.tree"; cf="${b%@consumer}"
+      if [ -f "$ct/tests/fixtures/$cf/inputs.decl" ]; then set -- bash "$ct/scripts/ai-dlc/hermetic-run.sh" --root "$ct" "$cf"
+      else set -- bash "tests/fixtures/$cf/run.sh"; fi
+      cs=""; read -r cs 2>/dev/null < "$AI_DLC_FX_OUT/.cl.store"
+      [ -n "$cs" ] || printf "consumer layout: %s/.cl.store names no shared store base, so %s did not run\n" "$AI_DLC_FX_OUT" "$b" > "$AI_DLC_FX_OUT/.log/$b"
+      if [ -n "$ct" ] && [ -n "$cs" ] && pool_run "$AI_DLC_FX_OUT/.log/$b" pool_cl "$ct" env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE -u AI_DLC_FX_CL_TREE \
+        AI_DLC_VERDICT_STORE="$cs" "$@"; then printf ok > "$AI_DLC_FX_OUT/$b"; . "$AI_DLC_FX_OUT/.cl.pub" && cl_publish "$AI_DLC_FX_OUT" "$cf"
+      else printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
+    elif [ -f "$d/inputs.decl" ]; then
       hr=""
       for c in scripts/ai-dlc/hermetic-run.sh core/scripts/hermetic-run.sh; do
         [ -f "$c" ] && { hr="$c"; break; }
@@ -2678,14 +2983,14 @@ run_fixtures() {
   # A GREEN FIXTURE THAT CHECKED NOTHING SAYS SO. A shipped fixture whose subject is absent on this tree (a core
   # fixture that arrived one pull ahead of its subject) prints a `PENDING  <what>` row and exits 0, and a bare `ok`
   # row would read the same as a pass. Each such ok row carries its count, and one line after the report names
-  # them all. The count covers the fixtures THIS run dispatched: one skipped on a recorded pass is not re-read.
+  # them all. The count covers the fixtures THIS run dispatched, and `<out>/.pend` keeps it for the key record's
+  # `#pending` line; one skipped on a recorded pass is named from that line by readset_pending_recorded.
   pend_map=" "; pend_fx=""; pend_n=0
+  ( cd "$out/.log" 2>/dev/null && grep -HcE "$READSET_VS_PENDING" -- * 2>/dev/null ) > "$out/.pend"
   while IFS=: read -r pk pv; do
     case "$pv" in ''|*[!0-9]*|0) continue ;; esac
     pend_map="$pend_map$pk=$pv "
-  done <<PEND_EOF
-$(cd "$out/.log" 2>/dev/null && grep -HcE '^[[:space:]]*PENDING  ' -- * 2>/dev/null)
-PEND_EOF
+  done < "$out/.pend"
   # Rendered in list order, so the output is deterministic and diffable across runs even
   # though the work completed out of order.
   n_actual=0
@@ -2706,7 +3011,8 @@ PEND_EOF
     elif [ "$verdict" = REFUSED ]; then printf '   REFUSED  %s  (no progress for %s polls; a refusal costs a re-run, never a verdict)\n' "$b" "$POOL_STALL"; rc=1
     else                        printf '   FAIL  %s\n' "$b"; rc=1; rf_hard=1; fi
   done < "$out/list"
-  [ "$pend_n" -eq 0 ] || printf '   PENDING: %s green fixture(s) printed a PENDING row, so part of each checked nothing:%s\n' "$pend_n" "$pend_fx"
+  readset_pending_recorded "$out"
+  readset_pending_line "$pend_n" "$pend_fx" "$out/.precorded"
 
   # THE CONTROL PARALLELISM MAKES NECESSARY. Serially, a fixture that never ran could not
   # print an `ok` -- the loop and the report were the same thing. With a worker pool they
@@ -2756,29 +3062,39 @@ PEND_EOF
   # The trade: a fixture that has only ever run inside red runs keeps its old cost, or none,
   # until a green run times it.
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
+  # The merge reads the record and writes it back, so it runs under the record's lock: two pushes
+  # merging at once would otherwise each drop the rows the other timed.
   if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then
-    { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
-      | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
-      | while read -r k v; do [ -f "${FXROOT}${k}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
-      | sort > "$out/.merged"
-    [ -s "$out/.merged" ] && cp "$out/.merged" "$DURATIONS_RECORD" 2>/dev/null
+    if rec_lock "$DURATIONS_RECORD.lock"; then
+      { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
+        | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
+        | while read -r k v; do [ -f "${FXROOT}${k}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
+        | sort > "$out/.merged"
+      [ -s "$out/.merged" ] && rec_put "$out/.merged" "$DURATIONS_RECORD"
+      rec_unlock "$DURATIONS_RECORD.lock"
+    else
+      printf '   ..    durations record: another push holds %s -- the costs timed by this run are not merged\n' "$DURATIONS_RECORD.lock"
+    fi
   fi
 
   # The format stamp is written only AFTER the record copy succeeds, so a failed copy cannot
   # leave a `v2` stamp vouching for a record this run did not write. A copy that lands with no
   # stamp after it is an unstamped record, which the next run reads as "run everything".
   if [ "$rc" -eq 0 ] && [ -s "$out/.now" ]; then
-    cp "$out/.now" "$VERIFIED_RECORD" 2>/dev/null && printf 'v2\n' > "$VERIFIED_FORMAT" 2>/dev/null
+    rec_put "$out/.now" "$VERIFIED_RECORD" && printf 'v2\n' > "$out/.vfmt" 2>/dev/null && rec_put "$out/.vfmt" "$VERIFIED_FORMAT"
   fi
   # PER-FIXTURE KEY RECORDS ARE PUBLISHED ON A RED RUN TOO: each one is gated on its own verdict.
   readset_keys_write "$out"
+  cl_write "$out"
 
   # PUBLISH THIS RUN'S UNMERGED COSTS WHATEVER `rc` IS, and copy the PRE-MERGE file:
   # "$out/.durations" is exactly the units this pool timed, whereas "$out/.merged" above has
   # already absorbed rows from earlier runs. `.last` is this run's own measurement and is read
   # only by the pole line, so it is true on a red run too; gating it on `rc` made a red run
   # print "no suite run, no pole". The merged record above steers dispatch and stays green-only.
-  if [ -s "$out/.durations" ]; then cp "$out/.durations" "$LASTRUN_RECORD" 2>/dev/null; fi
+  # LASTRUN_OWN is the same figures held in this process: the shared file can be another push's by the
+  # time a reader opens it, so this run's pole line reads the variable, never the file.
+  if [ -s "$out/.durations" ]; then rec_put "$out/.durations" "$LASTRUN_RECORD"; LASTRUN_OWN="$(cat "$out/.durations")"; fi
 
   # THE DETACHED TRACE STARTS ONLY HERE, after every record above is written, and whatever the push's
   # rc: readset_live_trace selects each unmapped fixture by its OWN verdict (ok), so a fixture whose
@@ -2809,13 +3125,16 @@ PEND_EOF
   # was running alongside is the thing you will want to know, and nothing else records it --
   # the durations file holds costs, not co-scheduling.
   if [ -s "$out/.failures" ]; then
-    fl_wrote=0
+    # BUILT IN A PRIVATE TEMP beside the record, copied to this run's retained name FROM THAT TEMP, and
+    # only then renamed over the shared primary: a concurrent red push may replace the primary at any
+    # moment, and a copy taken from it would file that push's failures under this run's stamp.
+    fl_wrote=0; fl_tmp="$FAILLOG_RECORD.tmp.$$"
     { printf '===== fixture failures -- %s, pool width %s, %s of %s units red =====\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FIXTURE_JOBS" \
         "$(grep -c '^===== ' "$out/.failures")" "$n_expected"
       cat "$out/.failures"
       printf '===== dispatch order this run (longest-first) =====\n'
-      cat "$out/.order"; :; } > "$FAILLOG_RECORD" 2>/dev/null && fl_wrote=1
+      cat "$out/.order"; :; } > "$fl_tmp" 2>/dev/null && fl_wrote=1
     printf '   captured output for the failing unit(s): %s\n' "$FAILLOG_RECORD"
     # THIS RUN'S OWN COPY, taken only when the write above SUCCEEDED. The trailing `:` inside the
     # braces is what makes `fl_wrote` mean "the redirect opened": without it the group's status is
@@ -2824,7 +3143,9 @@ PEND_EOF
     # here can change `rc`: a failed copy or prune is silent and the verdict stands.
     fl_stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null)" || fl_stamp=""
     fl_copy="$GITDIR/ai-dlc-fixture-failures.$fl_stamp.$$"
-    if [ "$fl_wrote" = 1 ] && [ -n "$fl_stamp" ] && cp "$FAILLOG_RECORD" "$fl_copy" 2>/dev/null; then printf '   retained copy of this run: %s\n' "$fl_copy"; fi
+    if [ "$fl_wrote" = 1 ] && [ -n "$fl_stamp" ] && cp "$fl_tmp" "$fl_copy" 2>/dev/null; then printf '   retained copy of this run: %s\n' "$fl_copy"; fi
+    [ "$fl_wrote" = 1 ] && mv -f "$fl_tmp" "$FAILLOG_RECORD" 2>/dev/null
+    rm -f "$fl_tmp" 2>/dev/null
     # PRUNE TO THE NEWEST FAILLOG_KEEP, BY NAME, ANCHORED AT BOTH ENDS. The glob anchors the
     # front -- a year, a month -- and never `ai-dlc-fixture-failures.*`, which would also take a
     # record saved under a name of its own. The glob alone cannot anchor the END: a copy saved
@@ -2841,7 +3162,7 @@ PEND_EOF
 
   # THE STILL-POLL FIGURES ARE PUBLISHED RED OR GREEN: they are the owed measurement behind POOL_STALL,
   # and a red run's longest still stretch is still evidence about the window. One line per unit run.
-  [ -s "$out/.stall" ] && cp "$out/.stall" "$GITDIR/ai-dlc-pool-stall.last" 2>/dev/null
+  [ -s "$out/.stall" ] && rec_put "$out/.stall" "$GITDIR/ai-dlc-pool-stall.last"
   # THE EXIT-2 CARRIER. "$out" dies on the next line, so the `.refused` flag is read here into a global the
   # hook's final exit reads. A refusal alone exits 2; a real FAIL, or a dropped worker, anywhere in the
   # pool exits 1, because a FAIL is a verdict and a refusal is the absence of one.

@@ -63,6 +63,12 @@
 # MUTANT-MATRIX prune-off decides=shaped,oldest twins=copies,rec
 # MUTANT-MATRIX prune-glob-wide decides=h179 twins=cleanc,rec
 # MUTANT-MATRIX prune-suffix-unanchored decides=keepc twins=h179,cleanc
+# MUTANT-MATRIX at-helper decides=at_dur,at_ver,at_stall twins=at_last,rc
+# MUTANT-MATRIX at-last-entry decides=at_last twins=at_dur,rc
+# MUTANT-MATRIX at-dur decides=at_dur twins=at_last,rc
+# MUTANT-MATRIX at-fail decides=at_fail twins=rec,copies
+# MUTANT-MATRIX lock-off decides=lockheld twins=rc
+# MUTANT-MATRIX lock-empty-pid decides=lsf twins=lso
 # MUTANT-MATRIX st-a decides=v_s twins=v_alpha
 # MUTANT-MATRIX st-w decides=v_w twins=v_alpha
 # MUTANT-MATRIX st-cpu decides=v_p twins=v_alpha
@@ -73,6 +79,14 @@
 # MUTANT-MATRIX st-g decides=ul twins=wl
 # MUTANT-MATRIX st-x decides=tv twins=rv
 # MUTANT-MATRIX st-r decides=rv twins=tv
+# MUTANT-MATRIX bl998-kw0 decides=s1.rec2 twins=s2.rec2
+# MUTANT-MATRIX bl998-sw0 decides=s2.rec2 twins=s1.rec2
+# MUTANT-MATRIX bl998-rd-early decides=s1.rec2 twins=s3.rec2
+# MUTANT-MATRIX bl998-rd-pool decides=s3.rec2 twins=s1.rec2
+# MUTANT-MATRIX bl998-carry-v decides=sv.rec2 twins=s1.rec2
+# MUTANT-MATRIX bl998-carry-vs decides=s2.rec2 twins=s1.rec2
+# MUTANT-MATRIX bl998-unrec-store decides=sk.pran twins=s2.vs
+# MUTANT-MATRIX bl998-unrec-key decides=su.pran twins=s1.rec2
 # st-c is built from two anchors (the helper calls st-c1 then st-c); st-c1 is the first layer of st-c and is not a mutant of its own.
 set -uo pipefail
 
@@ -107,17 +121,29 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 . "$HERE/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/consumer-suite-pool/matrix.sh"
 
-# Both layouts, named rather than derived from one another.
-HOOK=""
-for cand in "$HERE/../../git-hooks/pre-push" "$HERE/../../../.githooks/pre-push"; do
-  [ -f "$cand" ] && { HOOK="$cand"; break; }
+# Both layouts, named rather than derived from one another. The root is found by walking UP from this
+# fixture's own directory for a marker, the way ai_dlc_resolve_root() does in
+# core/scripts/validate-provenance-block.sh, never by counting `..` hops. The marker is the layout's own
+# hook, tried distribution first at each level (a distribution root carries .githooks/pre-push too), and
+# the layout found names its runner: install.sh copies core/git-hooks/pre-push to .githooks/pre-push and
+# core/scripts/* to scripts/ai-dlc/. Not .git/.claude: hermetic-run.sh's sandbox root carries neither, by design.
+HOOK=""; HR_SRC=""; CSP_ROOT=""
+d="$HERE"
+while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+  if [ -f "$d/core/git-hooks/pre-push" ]; then HOOK="$d/core/git-hooks/pre-push"; HR_SRC="$d/core/scripts/hermetic-run.sh"; CSP_ROOT="$d"; break; fi
+  if [ -f "$d/.githooks/pre-push" ]; then HOOK="$d/.githooks/pre-push"; HR_SRC="$d/scripts/ai-dlc/hermetic-run.sh"; CSP_ROOT="$d"; break; fi
+  d="$(dirname "$d")"
 done
-[ -n "$HOOK" ] || broken "cannot locate the pre-push hook in either layout (core/git-hooks/pre-push or .githooks/pre-push) from $HERE"
+[ -n "$HOOK" ] || broken "cannot locate the pre-push hook in either layout (core/git-hooks/pre-push or .githooks/pre-push) above $HERE"
 
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd -P)/${HOOK##*/}"
+# The hermetic runner, installed into the BL-998 world (arm 7b) as a consumer holds it.
+[ -f "$HR_SRC" ] || broken "cannot locate hermetic-run.sh for this layout: $HR_SRC (core/scripts/ or scripts/ai-dlc/)"
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$HR_SRC")" && pwd -P)/hermetic-run.sh"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/consumer-suite-pool.XXXXXX")" || broken "mktemp failed"
 trap 'rm -rf "$WORK"' EXIT
+WORK_P="$(cd "$WORK" && pwd -P)" && [ -n "$WORK_P" ] || broken "cannot resolve the physical path of $WORK"   # csp_own compares lsof's cwd, which is physical
 
 # ---------------------------------------------------------------- seed helpers --
 # A real git repository, because the hook's first act is
@@ -289,13 +315,83 @@ csp_cell() {                   # csp_cell <cell> -> the value of one named obser
     live_gh) printf '%s' "$C_LGH" ;;
     wl) printf '%s' "$C_WL" ;;
     ul) printf '%s' "$C_UL" ;;
+    at_*) eval "printf '%s' \"\${C_AT_${1#at_}:-}\"" ;;
+    lockheld) printf '%s' "$C_LOCK" ;;
+    lsf) ls_judge "$C_HOOK" fresh ;;
+    lso) ls_judge "$C_HOOK" old ;;
     tv) st_trace "$C_HOOK" "$C_TAG-t" t ;;
     rv) st_trace "$C_HOOK" "$C_TAG-r" r ;;
+    s1.*|s2.*|s3.*|s4.*|s5.*|su.*|sv.*|sk.*|cl.*) bl_cell "$1" ;;
     *) echo "<unknown cell $1>" ;;
   esac
 }
 csp_vec() { local c; for c in "$@"; do printf '%s=%s\n' "$c" "$(csp_cell "$c")"; done; }
 csp_load() { C_T="$1"; C_RC="$2"; C_O="$3"; }
+# ------------------------------- shared records are replaced by rename (BL-1046) ---
+# Pushes may run concurrently, and every record under the git common dir is shared by all of them. A
+# record written IN PLACE (`cp` over it, `>` into it) hands a concurrent reader a torn file; one REPLACED
+# BY RENAME leaves a reader holding the old file with the old bytes whole. So each seeded record is held
+# open on its own descriptor ACROSS the drive -- a concurrent reader, without a race -- and judged after:
+#   atomic     the descriptor still reads the seed and the path holds new bytes (a rename replaced it)
+#   inplace    the descriptor reads what the path now holds (the hook wrote into the reader's file)
+#   unwritten  the path still holds the seed
+at_rec() { case "$1" in dur) echo ai-dlc-fixture-durations ;; last) echo ai-dlc-fixture-durations.last ;;
+  ver) echo ai-dlc-fixture-verified ;; stall) echo ai-dlc-pool-stall.last ;; fail) echo ai-dlc-fixture-failures ;; esac; }
+at_fd() { case "$1" in dur) echo 3 ;; last) echo 4 ;; ver) echo 5 ;; stall) echo 6 ;; fail) echo 7 ;; esac; }
+AT_OPEN=""
+at_seed() {                    # at_seed <tree> <key...>: seed each record with AT-OLD-<key> and hold it open
+  local t="$1" k; shift; AT_OPEN=""
+  for k in "$@"; do
+    printf 'AT-OLD-%s\n' "$k" > "$t/.git/$(at_rec "$k")" || broken "could not seed $(at_rec "$k")"
+    eval "exec $(at_fd "$k")<\"\$t/.git/\$(at_rec \"\$k\")\"" || broken "could not hold $(at_rec "$k") open"
+    AT_OPEN="$AT_OPEN $k"
+  done
+}
+at_snap() {                    # at_snap <tree>: read each held descriptor once, judge it, close it
+  local k fd old cur
+  C_AT_dur=""; C_AT_last=""; C_AT_ver=""; C_AT_stall=""; C_AT_fail=""
+  for k in $AT_OPEN; do
+    fd="$(at_fd "$k")"
+    old="$(cat <&"$fd")"; eval "exec $fd<&-"
+    cur="$(cat "$1/.git/$(at_rec "$k")" 2>/dev/null)" || cur=""
+    if [ "$old" = "AT-OLD-$k" ] && [ -n "$cur" ] && [ "$cur" != "AT-OLD-$k" ]; then old=atomic
+    elif [ "$cur" = "AT-OLD-$k" ]; then old=unwritten
+    elif [ "$old" = "$cur" ]; then old=inplace
+    else old=other; fi
+    eval "C_AT_$k=\$old"
+  done
+  AT_OPEN=""
+}
+# THE DURATIONS MERGE IS A READ-MODIFY-WRITE, so it runs under a lock. The lock world holds that lock
+# with a LIVE pid (this fixture's own) on a green suite: the record must come back byte-identical, the
+# run must say it skipped the merge, and the lock must still be the holder's. The green world is its
+# ALLOW twin: no lock, and the record is merged (at_dur atomic).
+C_LOCK=""
+cw_lock() {
+  seed "$1" "$2" || broken "seed failed"
+  mkfx "$1" alpha 0
+  printf 'alpha 777\n' > "$1/.git/ai-dlc-fixture-durations" || broken "could not seed the durations record"
+  mkdir "$1/.git/ai-dlc-fixture-durations.lock" && printf '%s %s\n' "$$" "$(date +%s)" > "$1/.git/ai-dlc-fixture-durations.lock/pid" \
+    || broken "could not take the durations lock for the lock world"
+}
+lock_snap() {                  # lock_snap <tree> <outfile>
+  C_LOCK=no
+  [ "$(cat "$1/.git/ai-dlc-fixture-durations" 2>/dev/null)" = 'alpha 777' ] \
+    && grep -q 'durations record: another push holds' "$2" \
+    && [ "$(cut -d' ' -f1 "$1/.git/ai-dlc-fixture-durations.lock/pid" 2>/dev/null)" = "$$" ] && C_LOCK=yes
+}
+# AN EMPTY PID FILE IS A WRITER MID-WRITE, NOT A MALFORMED LOCK. readset_lock_stale, cut from the hook
+# under test, judges a lock dir holding an empty pid file: a fresh one must read HELD (a concurrent push
+# must not steal it); one whose dir is older than 60s must read STALE (a launcher that died).
+ls_judge() {                   # ls_judge <hook> <fresh|old> -> held | stale | broken
+  local d
+  d="$(mktemp -d "$WORK/ls.XXXXXX")" || { echo broken; return; }
+  { awk '/^readset_pid_start\(\) \{/,/^}/' "$1"; awk '/^readset_lock_stale\(\) \{/,/^}/' "$1"; } > "$d/lib.sh"
+  grep -q '^readset_lock_stale() {' "$d/lib.sh" || { echo broken; return; }
+  mkdir "$d/l.lock" && : > "$d/l.lock/pid" || { echo broken; return; }
+  [ "$2" = old ] && { touch -t 200001010000 "$d/l.lock" || { echo broken; return; }; }
+  if ( . "$d/lib.sh" && readset_lock_stale "$d/l.lock" ) >/dev/null 2>&1; then echo stale; else echo held; fi
+}
 cw_green() {                   # alpha waits for bravo's and charlie's verdicts so it finishes LAST; bravo is noisy and green
   seed "$1" "$2" || broken "seed failed"
   mkdir -p "$1/tests/fixtures/alpha"
@@ -305,12 +401,14 @@ until [ -s "$AI_DLC_FX_OUT/bravo" ] && [ -s "$AI_DLC_FX_OUT/charlie" ]; do sleep
 exit 0
 FX
   mkfx_noisy "$1" bravo 0 GREENTOKEN; mkfx "$1" charlie 0
+  at_seed "$1" dur last ver stall
 }
 cw_retain() {                  # the arm-2c world: twenty seeds, three decoys, one noisy red
   seed "$1" "$2" || broken "seed failed"
   seed_retained "$1" || broken "seeding retained copies failed"
   [ "$(retained_names "$1" | wc -l | tr -d ' ')" = 20 ] || broken "the retained-copy seed did not produce 20 shaped names — every arm below would read a world nobody built"
   mkfx "$1" alpha 0; mkfx_noisy "$1" bravo 1 CSPTOKEN; mkfx "$1" charlie 0
+  at_seed "$1" fail
 }
 cw_empty() {                   # directories exist, none carries a run.sh
   seed "$1" "$2" || broken "seed failed"
@@ -330,6 +428,8 @@ cw_pool() {
 cw_run() {                     # cw_run <world> <tree> <hook> -> builds, drives and loads the world's state
   "cw_$1" "$2" "$3"
   csp_load "$2" "$(drive "$2" "$2.out")" "$2.out"
+  at_snap "$2"
+  [ "$1" = lock ] && lock_snap "$2" "$2.out"
   unset CSP_OBSERVE
 }
 # csp_score <mutant> <base-flag> <decides> <twins|-> <expected-lines> <all-cells> <base-vector> <message>
@@ -356,6 +456,7 @@ T="$WORK/green"
 cw_run green "$T" "$HOOK"
 g_rc="$C_RC"; rc="$g_rc"
 BASE_green="$(csp_vec rc rec)"
+BASE_at_green="$(csp_vec rc at_dur at_last at_ver at_stall)"
 g_ret="$(retained_names "$T" | wc -l | tr -d ' ')"
 if [ "$rc" = 0 ] && grep -q 'ok    alpha' "$WORK/green.out" \
                  && grep -q 'ok    bravo' "$WORK/green.out" \
@@ -440,6 +541,7 @@ T="$WORK/retain"
 cw_run retain "$T" "$HOOK"
 rc="$C_RC"
 BASE_retain="$(csp_vec rc rec copies shaped oldest h179 keepc cleanc seed19)"
+BASE_at_retain="$(csp_vec rc rec copies at_fail)"
 if [ "$rc" = 1 ] && grep -q 'FAIL  bravo' "$WORK/retain.out" \
                  && grep -q 'ok    alpha' "$WORK/retain.out" \
                  && grep -q 'ok    charlie' "$WORK/retain.out"; then
@@ -496,6 +598,45 @@ grep -q "retained copy of this run: .git/$R_NEW" "$WORK/retain.out" \
   && ok "the run names its retained copy, so the operator knows which file is this run's" \
   || bad "the red run never named its retained copy"
 B_retain=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
+
+# ------------------------------- 2d. shared records are replaced by rename (BL-1046) --
+# Read off the green and retain drives above, through the descriptors their worlds held open across
+# the drive. Each cell must read `atomic`; the mutants below put one write back in place.
+_f0=$fails
+if [ "$BASE_at_green" = "$(printf 'rc=0\nat_dur=atomic\nat_last=atomic\nat_ver=atomic\nat_stall=atomic')" ]; then
+  ok "a green run replaces the durations, .last, verified and stall records by rename: a reader holding each open still reads the old bytes whole"
+else
+  bad "a green run wrote a shared record in place or not at all: $(printf '%s' "$BASE_at_green" | tr '\n' ' ')"
+fi
+B_at_green=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
+_f0=$fails
+if [ "$BASE_at_retain" = "$(printf 'rc=1\nrec=yes\ncopies=1\nat_fail=atomic')" ] && grep -q CSPTOKEN-stdout "$WORK/retain/.git/ai-dlc-fixture-failures"; then
+  ok "a red run replaces the failure record by rename, and the record it leaves is this run's"
+else
+  bad "a red run wrote the failure record in place or lost it: $(printf '%s' "$BASE_at_retain" | tr '\n' ' ')"
+fi
+B_at_retain=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
+
+# ------------------------------- 2e. a held durations lock is honoured, never stolen ---
+_f0=$fails
+C_LOCK=""
+cw_run lock "$WORK/lock" "$HOOK"
+BASE_lock="$(csp_vec rc lockheld)"
+if [ "$C_RC" = 0 ] && [ "$C_LOCK" = yes ]; then
+  ok "a durations lock held by a live pid is honoured: the record is untouched, the run says so, and the lock is still the holder's"
+else
+  bad "a held durations lock was not honoured (rc=$C_RC, lockheld=$C_LOCK): $(grep 'durations record' "$WORK/lock.out" | head -1)"
+fi
+B_lock=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
+_f0=$fails
+C_HOOK="$HOOK"
+BASE_ls="$(csp_vec lsf lso)"
+if [ "$BASE_ls" = "$(printf 'lsf=held\nlso=stale')" ]; then
+  ok "an empty lock pid file reads HELD while its dir is fresh and STALE once the dir is older than 60s"
+else
+  bad "the lock judge misreads an empty pid file: $(printf '%s' "$BASE_ls" | tr '\n' ' ')"
+fi
+B_ls=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
 
 # ------------------------------------------------- 3. the empty-suite guard, twice --
 # FORM 1: tests/fixtures exists and the glob matches no directory.
@@ -675,7 +816,7 @@ fi
 #
 # retain-off — the copy statement deleted. The primary record must still carry the token (so
 # the run did go red and record) while no stamped copy appears.
-if mut retain-off '/cp "\$FAILLOG_RECORD" "\$fl_copy"/d'; then
+if mut retain-off '/cp "\$fl_tmp" "\$fl_copy"/d'; then
   cw_run retain "$WORK/retain-off" "$MUT"
   csp_score retain-off "$([ "$B_retain" = 1 ] && echo 1 || echo 0)" "copies" "rec,shaped" $'copies=0' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
     "retain-off without the copy a red run records only the overwritable primary — the copy statement is what retains"
@@ -715,6 +856,47 @@ if mut prune-suffix-unanchored '/case "\${fl_f##\*\.}" in/d'; then
   cw_run retain "$WORK/prune-suffix" "$MUT"
   csp_score prune-suffix-unanchored "$([ "$B_retain" = 1 ] && echo 1 || echo 0)" "keepc" "h179,cleanc" $'keepc=no' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
     "prune-suffix-unanchored without the end anchor a .keep copy is DELETED — the all-digit last field is what protects it"
+fi
+
+# RENAME AND LOCK MUTANTS (BL-1046), each scored on the world its base arm read.
+# at-helper — rec_put copies over the record in place: every record it writes reads `inplace`. `.last` is
+# its twin: the pool entry already renamed an empty file over it, so the held descriptor keeps the seed.
+if mut at-helper 's|  cp "\$1" "\$2.tmp.\$\$" 2>/dev/null \&\& mv -f "\$2.tmp.\$\$" "\$2" 2>/dev/null \&\& return 0|  cp "$1" "$2" 2>/dev/null \&\& return 0|'; then
+  cw_run green "$WORK/at-helper" "$MUT"
+  csp_score at-helper "$([ "$B_at_green" = 1 ] && echo 1 || echo 0)" "at_dur,at_ver,at_stall" "at_last,rc" $'at_dur=inplace\nat_ver=inplace\nat_stall=inplace' "rc,at_dur,at_last,at_ver,at_stall" "$BASE_at_green" \
+    "at-helper with rec_put copying in place a concurrent reader sees each record rewritten under it — the rename is what keeps the old bytes whole"
+fi
+# at-last-entry — the pool-entry truncation of `.last` done in place: the held descriptor is emptied.
+if mut at-last-entry 's|  { : > "\$LASTRUN_RECORD.tmp.\$\$" && mv -f "\$LASTRUN_RECORD.tmp.\$\$" "\$LASTRUN_RECORD"; } 2>/dev/null|  : > "$LASTRUN_RECORD" 2>/dev/null|'; then
+  cw_run green "$WORK/at-last-entry" "$MUT"
+  csp_score at-last-entry "$([ "$B_at_green" = 1 ] && echo 1 || echo 0)" "at_last" "at_dur,rc" $'at_last=other' "rc,at_dur,at_last,at_ver,at_stall" "$BASE_at_green" \
+    "at-last-entry with the entry truncation in place a reader holding .last sees it emptied — the rename is what prevents it"
+fi
+# at-dur — ONE site reverted: the durations merge copies over the record; the others still rename.
+if mut at-dur 's|\[ -s "\$out/.merged" \] && rec_put "\$out/.merged" "\$DURATIONS_RECORD"|[ -s "$out/.merged" ] \&\& cp "$out/.merged" "$DURATIONS_RECORD"|'; then
+  cw_run green "$WORK/at-dur" "$MUT"
+  csp_score at-dur "$([ "$B_at_green" = 1 ] && echo 1 || echo 0)" "at_dur" "at_last,rc" $'at_dur=inplace' "rc,at_dur,at_last,at_ver,at_stall" "$BASE_at_green" \
+    "at-dur with the merge copying in place the durations record is rewritten under its reader — that site's rename is what prevents it"
+fi
+# at-fail — the failure record written into the primary in place instead of renamed over it.
+if mut at-fail 's|\[ "\$fl_wrote" = 1 \] && mv -f "\$fl_tmp" "\$FAILLOG_RECORD" 2>/dev/null|[ "$fl_wrote" = 1 ] \&\& cat "$fl_tmp" > "$FAILLOG_RECORD"|'; then
+  cw_run retain "$WORK/at-fail" "$MUT"
+  csp_score at-fail "$([ "$B_at_retain" = 1 ] && echo 1 || echo 0)" "at_fail" "rec,copies" $'at_fail=inplace' "rc,rec,copies,at_fail" "$BASE_at_retain" \
+    "at-fail with the failure record written in place its reader sees it rewritten — the rename is what prevents it"
+fi
+# lock-off — the merge no longer takes the lock: the held lock is ignored and the record merged.
+if mut lock-off 's|    if rec_lock "\$DURATIONS_RECORD.lock"; then|    if :; then|'; then
+  C_LOCK=""
+  cw_run lock "$WORK/lock-off" "$MUT"
+  csp_score lock-off "$([ "$B_lock" = 1 ] && echo 1 || echo 0)" "lockheld" "rc" $'lockheld=no' "rc,lockheld" "$BASE_lock" \
+    "lock-off without the lock a held durations record is merged over — the lock is what serializes the read-modify-write"
+fi
+# lock-empty-pid — the judge reads an empty pid file as malformed again: a fresh lock reads stale.
+if mut lock-empty-pid 's|  if \[ -s "\$lk/pid" \]; then|  if [ -f "$lk/pid" ]; then|'; then
+  C_HOOK="$MUT"
+  csp_score lock-empty-pid "$([ "$B_ls" = 1 ] && echo 1 || echo 0)" "lsf" "lso" $'lsf=stale' "lsf,lso" "$BASE_ls" \
+    "lock-empty-pid with an empty pid file read as malformed a live lock mid-write is judged stale and stolen — the size test is what holds it"
+  C_HOOK="$HOOK"
 fi
 
 # ================================================ 7. NO-PROGRESS REFUSAL (BL-606) ===
@@ -1037,6 +1219,31 @@ csp_state() {
     *) CSP_ST=moving; kill -STOP "$1" 2>/dev/null ;;
   esac
 }
+# csp_own <pid>: sets CSP_OWN to `gone`, `ours` or `reused`, BEFORE anything signals the pid. A recorded pid is free
+# for reuse once its process is reaped, and a reused pid reads `S` like a leaked one. Every world runs with its cwd
+# in its tree under $WORK, and a forked child holds that cwd from the instant it exists, before it execs; no other
+# process stands under this run's mktemp dir. So a live pid whose cwd is under $WORK is this fixture's, and one whose
+# cwd is elsewhere is a reused pid, which is the recorded process gone. A live pid whose cwd cannot be read is a
+# refusal (exit 2), never a FAIL.
+csp_own() {
+  local _co="" _l
+  CSP_OWN=gone
+  kill -0 "$1" 2>/dev/null || return 0
+  while IFS= read -r _l; do case "$_l" in n*) _co="${_l#n}" ;; esac; done <<<"$(lsof -a -p "$1" -d cwd -Fn 2>/dev/null)"
+  case "$_co" in
+    "$WORK_P"|"$WORK_P"/*) CSP_OWN=ours ;;
+    '') kill -0 "$1" 2>/dev/null || return 0
+        # No cwd: a process mid-exit has dropped it. Only a SETTLED one with no cwd is unreadable; any other state
+        # goes to csp_state, whose STOP a SIGKILLed pid never obeys, so it reads gone on the next pass.
+        _l="$(ps -o stat= -p "$1" 2>/dev/null)"; _l="${_l// /}"
+        case "$_l" in
+          Z*) return 0 ;;
+          S*|I*|T*) broken "csp_own: lsof gives no cwd for live settled pid $1, so whether it is this fixture's process cannot be read" ;;
+          *) CSP_OWN=ours ;;
+        esac ;;
+    *) CSP_OWN=reused ;;
+  esac
+}
 st_orphan() {                  # st_orphan <hook> <tag> [<stub-dir> [alive]] -> prints "<watcher-left> <unit-left>" or BROKEN
   local h="$1" R="$WORK/orph.$2" SB="${3:-}" AL="${4:-}" WK WP n p ul=0
   mkdir -p "$R/t/tests/fixtures/u" "$R/out/.log" "$R/out/.dur" "$R/out/.pr" "$R/gate/u"
@@ -1146,12 +1353,9 @@ fi
 # SEED VALIDITY: the stub's layout is the real deriver's, read off the deriver itself, or the arm would
 # pass against a path no deriver writes.
 # Both layouts, named: core/fixtures/<fx> -> core/scripts/ (distribution); tests/fixtures/<fx> ->
-# scripts/ai-dlc/ (consumer, per core-paths.sh --map), which is three hops up, as the hook lookup above is.
-DV=""
-for cand in "$HERE/../../scripts/derive-fixture-readsets.sh" "$HERE/../../../scripts/ai-dlc/derive-fixture-readsets.sh"; do
-  [ -f "$cand" ] && { DV="$cand"; break; }
-done
-[ -n "$DV" ] || broken "cannot locate derive-fixture-readsets.sh in either layout from $HERE -- the trace-site arm would stub a layout nobody checked"
+# scripts/ai-dlc/ (consumer, per core-paths.sh --map), beside the runner the walked-up root's layout named above.
+DV="${HR_SRC%/*}/derive-fixture-readsets.sh"
+[ -f "$DV" ] || broken "cannot locate derive-fixture-readsets.sh in either layout from $HERE -- the trace-site arm would stub a layout nobody checked"
 # The redirect is read off the SANDBOX writer line, the only one the in-pool trace site runs (--tracer sandbox).
 # A file-wide grep is also satisfied by the fs_usage writer's identical redirect, so moving only the sandbox
 # line's log path would leave this check green while the hook watched a file nobody writes.
@@ -1206,6 +1410,277 @@ if mutx st-r 'wx="$tr/w/$b.log"' 'wx="$tr/w"'; then
 fi
 unset CSP_PIDS CSP_FIFO CSP_STALL CSP_GATE CSP_GLIB
 
+# ------------- 7b. a fixture skipped on a recorded pass keeps its PENDING count in sight (BL-998) --
+# Arm 7 reads the count off a DISPATCHED fixture's log. From the second push on `pend` is skipped on a recorded
+# pass and its log is never read, so the count has to travel with the pass record: line 4 `#pending <n>` of its key
+# record (the hook writes it) and the last line of its store entry (hermetic-run.sh writes it). This world is arm 7's
+# pend/near pair DECLARED (inputs.decl), committed (the store is keyed on the root commit), with the runner installed
+# at scripts/ai-dlc/ and a mktemp verdict store passed on every drive -- never the operator's real store.
+# P1 runs both and publishes; every seed below is a COPY of the post-P1 world and its store:
+#   s1  unchanged re-push          every fixture skipped by the read-set (the unchanged-push return)
+#   s2  pend.key deleted           pend skipped on its STORE entry, its count carried into the republished record
+#   s4  s2 pushed again            the read-set skip of the record s2 wrote: store -> record -> read-set
+#   s3  near's run.sh edited       near runs, pend skipped: the pool path
+#   su  #pending stripped, entry gone  a record without the count is NO run reason: pend skips on it and the push
+#                                  names it "count unrecorded" (never a zero)
+#   s5  su pushed again            the same: still skipped, still named "count unrecorded"
+#   sv  pend.key marked stale      republished without a run (.k.always, c v): the carried count survives it
+#   sk  pend.key deleted, entry's `#pending` line cut  an entry written before the count, under the CURRENT digest:
+#                                  pend skips on it (the store announce) and is named "count unrecorded"
+#   cl  a census over a committed consumer-layout tree (the hook copy's cl_select in census mode, both units run,
+#       cl_write), then two pushes each naming a FRESH committed tree in AI_DLC_FX_CL_TREE (the switch the
+#       distribution hook sets; read at depth 0 only, so the drive pins PREPUSH_POOL_DEPTH=0) whose pend/run.sh moved
+#       after the census: both units are undeclared, so each is keyed on the whole installed tree, and push a runs
+#       both and writes their records to <store>/consumer-placement-keys/<root commit>/; push b must select 0 of the 2. Those records
+#       never carry `#pending`, and a missing count is no run reason anywhere.
+# Cells are <seed>.<observable>: rec2 = the recorded clause names pend with 2, pran = pend ran with its 2 rows,
+# vs = the store-skip announce, kp2 = pend.key line 4 is `#pending 2`, unrec = the summary names pend's count unrecorded; cl.skip = push b selects 0 of 2 consumer-layout
+# units and names none `pending count unrecorded`, cl.disp = push a's dispatched pend@consumer keeps its 2 rows on its
+# ok row AND in the pool PENDING summary, cl.nopend = `<records>:<records carrying #pending>` in the consumer-layout dir.
+BL_REC2='   PENDING: 1 skipped on a recorded pass that printed a PENDING row: pend(recorded)=2'
+BL_PRAN='   ok    pend  (2 PENDING row(s): its subject is absent, so those parts checked nothing)'
+BL_VS='   ..    verdict store: 1 fixture(s) skipped on a pass recorded elsewhere: pend'
+BL_UNREC='   PENDING: 1 skipped on a recorded pass whose PENDING count is unrecorded (count unrecorded: recorded before counts were kept, or seeded)'
+bl_mk() {                      # bl_mk <tree> <hook> <runner>: the declared, committed pend/near world
+  seed "$1" "$2" || return 1
+  mkdir -p "$1/scripts/ai-dlc" "$1/src" "$1/tests/fixtures/pend" "$1/tests/fixtures/near" || return 1
+  cp "$3" "$1/scripts/ai-dlc/hermetic-run.sh" || return 1
+  printf 'v1\n' > "$1/src/a.sh"
+  printf '#!/usr/bin/env bash\necho "  PENDING  csp: the subject is absent"\necho "PENDING  csp: a second absent part"\nexit 0\n' > "$1/tests/fixtures/pend/run.sh"
+  printf '#!/usr/bin/env bash\necho "near: not PENDING  here"\necho "PENDING (one space, a different row)"\nexit 0\n' > "$1/tests/fixtures/near/run.sh"
+  printf 'src/a.sh\n' > "$1/tests/fixtures/pend/inputs.decl"; printf 'src/a.sh\n' > "$1/tests/fixtures/near/inputs.decl"
+  ( cd "$1" && git add -A && git commit -qm seed ) >/dev/null 2>&1
+}
+bl_drv() {                     # bl_drv <tree> <outfile> -> rc; the store is <tree>.vs, the counter never armed inside
+  ( cd "$1" && env -u FXCOUNT_DIR -u FXCOUNT_RC -u FXCOUNT_JUDGE AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$1.vs" \
+      bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+}
+bl_entry() { grep -lx '#fixture pend' "$1.vs"/*/* 2>/dev/null; }   # bl_entry <tree>: pend's store entry
+bl_p1() {                      # bl_p1 <prefix> <hook> <runner>: builds and drives P1 at <prefix>.p1
+  mkdir -p "$1.p1.vs" && bl_mk "$1.p1" "$2" "$3" || broken "BL-998 world seed failed"
+  printf '%s' "$(bl_drv "$1.p1" "$1.p1.out")" > "$1.p1.rc"
+}
+bl_seed() {                    # bl_seed <seed> <prefix> <post-P1 tree> [<hook>]: copies, seeds and drives <prefix>.<seed>
+  local s="$1" p="$2" b="$3" t="$2.$1" k e n
+  if [ "$s" = s4 ]; then [ -f "$p.s2.out" ] || bl_seed s2 "$p" "$b" "${4:-}"; bl_drv "$p.s2" "$p.s4.out" > "$p.s4.rc"; return; fi
+  if [ "$s" = s5 ]; then [ -f "$p.su.out" ] || bl_seed su "$p" "$b" "${4:-}"; bl_drv "$p.su" "$p.s5.out" > "$p.s5.rc"; return; fi
+  if [ "$s" = cl ]; then cl_seed "$p" "$b" "${4:-}"; return; fi
+  cp -Rp "$b" "$t" && cp -Rp "$b.vs" "$t.vs" || broken "BL-998 seed $s: copying the post-P1 world failed"
+  [ -z "${4:-}" ] || cp "$4" "$t/.githooks/pre-push" || broken "BL-998 seed $s: installing the hook copy failed"
+  k="$t/.git/ai-dlc-fixture-keys"
+  [ -f "$k/pend.key" ] || broken "BL-998 seed $s: the post-P1 world holds no pend.key"
+  case "$s" in
+    s1) ;;
+    s2) rm "$k/pend.key" ;;
+    s3) printf ': edited\n' >> "$t/tests/fixtures/near/run.sh" ;;   # a code line: a comment no longer moves a run.sh key
+    su) grep -v '^#pending ' "$k/pend.key" > "$t.k"; cp "$t.k" "$k/pend.key"
+        # pend's store entry goes too: with it, the run the record now owes is answered by a store skip instead.
+        e="$(bl_entry "$t")"; [ -f "$e" ] && rm "$e" || broken "BL-998 seed su: no store entry names pend" ;;
+    sv) sed '2s/.*/#state stale/' "$k/pend.key" > "$t.k"; cp "$t.k" "$k/pend.key" ;;
+    sk) rm "$k/pend.key"
+        e="$(bl_entry "$t")"; n="$(printf '%s\n' "$e" | grep -c .)" || n=0
+        [ "$n" = 1 ] || broken "BL-998 seed sk: $n store entries name pend, want 1"
+        [ "$(tail -n 1 "$e")" = '#pending 2' ] || broken "BL-998 seed sk: pend's store entry does not end in '#pending 2'"
+        sed '$d' "$e" > "$t.e"; cp "$t.e" "$e" ;;
+    *) broken "BL-998: unknown seed $s" ;;
+  esac
+  bl_drv "$t" "$p.$s.out" > "$p.$s.rc"
+}
+cl_seed() {                    # cl_seed <prefix> <post-P1 tree> [<hook>]: the cl seed, two consumer-layout pushes a and b
+  local p="$1" t="$1.cl" i
+  cp -Rp "$2" "$t" && cp -Rp "$2.vs" "$t.vs" || broken "BL-998 seed cl: copying the post-P1 world failed"
+  [ -z "${3:-}" ] || cp "$3" "$t/.githooks/pre-push" || broken "BL-998 seed cl: installing the hook copy failed"
+  for i in 0 a b; do
+    # A fresh committed tree per run: run_fixtures removes the one it was handed, and cl_select keys the INSTALLED
+    # tree through git (BL-1043). Bare run.sh units, no inputs.decl. Trees a and b carry pend's run.sh edited once,
+    # so push a has units to dispatch after the census.
+    mkdir -p "$t.ct$i/tests/fixtures/pend" "$t.ct$i/tests/fixtures/near" \
+      && cp "$t/tests/fixtures/pend/run.sh" "$t.ct$i/tests/fixtures/pend/run.sh" \
+      && cp "$t/tests/fixtures/near/run.sh" "$t.ct$i/tests/fixtures/near/run.sh" \
+      && { [ "$i" = 0 ] || printf '# moved after the census\n' >> "$t.ct$i/tests/fixtures/pend/run.sh"; } \
+      && ( cd "$t.ct$i" && git init -q && git add -A && git commit -qm ct ) >/dev/null 2>&1 || broken "BL-998 seed cl: building consumer-layout tree $i failed"
+  done
+  # THE CENSUS over tree 0: no push runs every candidate, so the records a push reads come from a census first. The
+  # distribution's census script does not ship; this is its core, driven through the hook copy's own FIXTURE_POOL span:
+  # cl_select in census mode, each selected unit run from the tree and its pass published by cl_publish, cl_write.
+  # The span is SOURCED here, an in-process pass of the hook: fx_inproc records it, and invocations.decl declares it.
+  ( cd "$t" && sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' .githooks/pre-push > "$t.pool" || exit 1
+    fx_inproc "$HOOK"
+    . "$t.pool" >/dev/null 2>&1 || exit 1
+    POOL_DEPTH_IN=0 && cl_tree="$t.ct0" && AI_DLC_VERDICT_STORE="$t.vs" && o="$t.census" && mkdir -p "$o" && cl_select "$o" census >"$p.cl0.out" 2>&1 \
+      && while IFS= read -r i; do ( cd "$cl_tree" && bash "tests/fixtures/$i/run.sh" ) </dev/null >/dev/null 2>&1 && printf ok > "$o/$i@consumer" && cl_publish "$o" "$i"; done < "$o/.cl.sel" \
+      && cl_write "$o" ) || broken "BL-998 seed cl: the census over tree 0 failed: $(tr '\n' '|' < "$p.cl0.out" | tail -c 300)"
+  grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.cl0.out" \
+    || broken "BL-998 seed cl: the census did not select both fixtures: $(tr '\n' '|' < "$p.cl0.out" | tail -c 300)"
+  for i in a b; do
+    ( cd "$t" && env -u FXCOUNT_DIR -u FXCOUNT_RC -u FXCOUNT_JUDGE PREPUSH_POOL_DEPTH=0 AI_DLC_FIXTURE_JOBS=2 AI_DLC_FX_CL_TREE="$t.ct$i" \
+        AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$t.vs" bash .githooks/pre-push </dev/null >"$p.cl$i.out" 2>&1; echo $? ) > "$p.cl$i.rc"
+  done
+  grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.cla.out" \
+    || broken "BL-998 seed cl: push a did not run both fixtures in the consumer layout, so push b measures nothing: $(grep -E 'consumer layout|FAIL' "$p.cla.out" | tr '\n' '|' | tail -c 300)"
+  cp "$p.clb.out" "$p.cl.out" && cp "$p.clb.rc" "$p.cl.rc"
+}
+bl_cell() {                    # bl_cell <seed>.<observable>, read off the loaded prefix C_T
+  local s="${1%%.*}" c="${1#*.}" o="$C_T.${1%%.*}.out" t="$C_T.${1%%.*}" n m f
+  [ "$s" = s4 ] && t="$C_T.s2"; [ "$s" = s5 ] && t="$C_T.su"
+  case "$c" in
+    rec2) yn grep -qxF "$BL_REC2" "$o" ;;
+    pran) yn grep -qxF "$BL_PRAN" "$o" ;;
+    vs)   yn grep -qxF "$BL_VS" "$o" ;;
+    unrec) yn grep -qxF "$BL_UNREC" "$o" ;;
+    kp2)  yn [ "$(sed -n 4p "$t/.git/ai-dlc-fixture-keys/pend.key" 2>/dev/null)" = '#pending 2' ] ;;
+    skip) if [ "$(cat "$C_T.clb.rc" 2>/dev/null)" = 0 ] && grep -qF '   ..    consumer layout: 0 of 2 shipping fixture(s) run as <fx>@consumer in ' "$o" \
+             && ! grep -qF '@consumer: pending count unrecorded' "$o"; then echo yes; else echo no; fi ;;
+    disp) if [ "$(cat "$C_T.cla.rc" 2>/dev/null)" = 0 ] \
+             && grep -qxF '   ok    pend@consumer  (2 PENDING row(s): its subject is absent, so those parts checked nothing)' "$C_T.cla.out" \
+             && grep -qF ' green fixture(s) printed a PENDING row, so part of each checked nothing: pend@consumer' <<< "$(grep -E '^   PENDING: ' "$C_T.cla.out")"; then
+            echo yes; else echo no; fi ;;
+    nopend) n=0; m=0
+            for f in "$t.vs/consumer-placement-keys/$(git -C "$t" rev-list --max-parents=0 HEAD | LC_ALL=C sort | sed -n 1p)"/*.key; do
+              [ -f "$f" ] || continue; n=$((n + 1)); grep -q '^#pending' "$f" && m=$((m + 1))
+            done
+            printf '%s:%s' "$n" "$m" ;;
+    *) echo "<unknown cell $1>" ;;
+  esac
+}
+BL_CELLS="s1.rec2,s2.rec2,s2.vs,s2.kp2,s4.rec2,s3.rec2,su.pran,su.kp2,su.unrec,s5.unrec,sv.rec2,sv.kp2,sk.pran,sk.vs,sk.unrec,cl.skip,cl.rec2,cl.disp,cl.nopend"
+bl_drive_cells() {             # bl_drive_cells <prefix> <post-P1 tree> <hook|-> <cells>: drives only the seeds the cells read
+  local c s h="$3"; [ "$h" = - ] && h=""
+  for c in $4; do s="${c%%.*}"; [ -f "$1.$s.out" ] || bl_seed "$s" "$1" "$2" "$h"; done
+}
+lmut() {                       # lmut <label> <src> <dst> <old> <new>: the ONE line holding <old> gets <new> in its place
+  local n
+  n="$(O="$4" awk 'index($0, ENVIRON["O"]) { c++ } END { print c + 0 }' "$2")"
+  [ "$n" = 1 ] || { bad "MUTANT $1: its anchor matched $n line(s) of ${2##*/}, want 1 -- a lost subject, not a mutation"; return 1; }
+  O="$4" N="$5" awk '{ i = index($0, ENVIRON["O"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["N"] substr($0, i + length(ENVIRON["O"])); print }' "$2" > "$3" \
+    || { bad "MUTANT $1: the copy failed"; return 1; }
+  cmp -s "$2" "$3" && { bad "MUTANT $1 DID NOT APPLY (cmp -s)"; return 1; }
+  return 0
+}
+
+_f0=$fails
+BLF="$WORK/bl.fixed"
+bl_p1 "$BLF" "$HOOK" "$HR_SRC"
+BLP="$BLF.p1"
+_pk="$BLP/.git/ai-dlc-fixture-keys"
+_e="$(bl_entry "$BLP")"
+_hn="$(sed -n 's/^   ok    pend  (\([0-9]*\) PENDING row(s).*/\1/p' "$BLF.p1.out")"
+_rn="$(tail -n 1 "$_e" 2>/dev/null | sed -n 's/^#pending \([0-9]*\)$/\1/p')"
+if [ "$(cat "$BLF.p1.rc")" = 0 ] && grep -qxF "$BL_PRAN" "$BLF.p1.out" && grep -qxF '   ok    near' "$BLF.p1.out" \
+   && grep -qxF '   PENDING: 1 green fixture(s) printed a PENDING row, so part of each checked nothing: pend' "$BLF.p1.out" \
+   && [ "$(sed -n 4p "$_pk/pend.key" 2>/dev/null)" = '#pending 2' ] && [ "$(sed -n 4p "$_pk/near.key" 2>/dev/null)" = '#pending 0' ] \
+   && [ "$(sed -n 1,2p "$_e" 2>/dev/null | tr '\n' ,)" = '#format k1,#state ok,' ] && [ "$_rn" = 2 ]; then
+  ok "7b P1: the declared pend runs through the installed runner, counts 2 rows, and both pass records carry it (key record line 4 '#pending 2', near '#pending 0'; store entry k1 ending '#pending 2')"
+else
+  bad "7b P1 (rc=$(cat "$BLF.p1.rc")): $(grep -E 'ok    |PENDING|hermetic-run' "$BLF.p1.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 500) pend.key line 4 '$(sed -n 4p "$_pk/pend.key" 2>/dev/null)' entry '$(sed -n 1,2p "$_e" 2>/dev/null | tr '\n' ,)...$(tail -n 1 "$_e" 2>/dev/null)'"
+fi
+bl_drive_cells "$BLF" "$BLP" - "$(printf '%s' "$BL_CELLS" | tr , ' ')"
+C_T="$BLF"
+BASE_bl="$(for _c in ${BL_CELLS//,/ }; do printf '%s=%s\n' "$_c" "$(bl_cell "$_c")"; done)"
+_bl_eq() { [ "$(mx_get "$BASE_bl" "$1")" = "$2" ]; }
+if [ "$(cat "$BLF.s1.rc")" = 0 ] && _bl_eq s1.rec2 yes && ! grep -q '^   ok    ' "$BLF.s1.out" \
+   && grep -qF '   ..    read-set keys: 0 of 2 fixture(s) run' "$BLF.s1.out"; then
+  ok "7b s1 an unchanged re-push skips both on their records and still names pend with its 2 rows, marked recorded; near (0 rows) is not named"
+else bad "7b s1 the unchanged-push return lost the count (rc=$(cat "$BLF.s1.rc")): $(grep -E 'PENDING|read-set|   ok ' "$BLF.s1.out" | tr '\n' '|' | tail -c 400)"; fi
+if [ "$(cat "$BLF.s2.rc")" = 0 ] && _bl_eq s2.vs yes && _bl_eq s2.rec2 yes && _bl_eq s2.kp2 yes \
+   && [ -n "$_hn" ] && [ "$_hn" = "$_rn" ] && grep -qxF "   PENDING: 1 skipped on a recorded pass that printed a PENDING row: pend(recorded)=$_rn" "$BLF.s2.out"; then
+  ok "7b s2 pend skipped on its store entry: the hook's count ($_hn) equals the runner's entry count ($_rn), it is printed, and the republished record carries it"
+else bad "7b s2 the store skip (hook n '$_hn', runner n '$_rn'): $(grep -E 'PENDING|verdict store' "$BLF.s2.out" | tr '\n' '|' | tail -c 400) pend.key line 4 '$(sed -n 4p "$BLF.s2/.git/ai-dlc-fixture-keys/pend.key" 2>/dev/null)'"; fi
+if [ "$(cat "$BLF.s4.rc")" = 0 ] && _bl_eq s4.rec2 yes && ! grep -qxF "$BL_VS" "$BLF.s4.out"; then
+  ok "7b s4 the record a store skip republished is read-set skipped on the next push and still names pend with 2 (store -> record -> read-set)"
+else bad "7b s4 the carry chain broke: $(grep -E 'PENDING|verdict store' "$BLF.s4.out" | tr '\n' '|' | tail -c 400)"; fi
+if [ "$(cat "$BLF.s3.rc")" = 0 ] && _bl_eq s3.rec2 yes && grep -qxF '   ok    near' "$BLF.s3.out" && ! grep -q '^   ok    pend' "$BLF.s3.out"; then
+  ok "7b s3 near re-runs on the pool path while pend is skipped, and the pool path's summary names pend recorded with 2"
+else bad "7b s3 the pool path lost the count: $(grep -E 'PENDING|   ok ' "$BLF.s3.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 400)"; fi
+if [ "$(cat "$BLF.su.rc")" = 0 ] && _bl_eq su.pran no && _bl_eq su.kp2 no && _bl_eq su.unrec yes \
+   && ! grep -q '^   ok    ' "$BLF.su.out" && [ "$(cat "$BLF.s5.rc")" = 0 ] && _bl_eq s5.unrec yes && ! grep -q '^   ok    ' "$BLF.s5.out"; then
+  ok "7b su a record with no #pending line is no run reason: pend skips on it and the push names its count unrecorded (not a zero); s5 the next push does the same"
+else bad "7b su/s5 the record without a count: $(grep -E 'PENDING|   ok |read-set|unrecorded' "$BLF.su.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 400) s5: $(grep -E 'PENDING|   ok ' "$BLF.s5.out" | tr '\n' '|')"; fi
+if [ "$(cat "$BLF.sv.rc")" = 0 ] && _bl_eq sv.rec2 yes && _bl_eq sv.kp2 yes \
+   && [ "$(sed -n 2p "$BLF.sv/.git/ai-dlc-fixture-keys/pend.key")" = '#state ok' ]; then
+  ok "7b sv a stale record republished without a run (state back to ok) keeps '#pending 2' and is named recorded with 2"
+else bad "7b sv the stale republish: $(grep -E 'PENDING' "$BLF.sv.out" | tr '\n' '|') record '$(sed -n 1,4p "$BLF.sv/.git/ai-dlc-fixture-keys/pend.key" 2>/dev/null | tr '\n' ,)'"; fi
+if [ "$(cat "$BLF.sk.rc")" = 0 ] && _bl_eq sk.pran no && _bl_eq sk.vs yes && _bl_eq sk.unrec yes; then
+  ok "7b sk a store entry written before the count (no '#pending' line) under the current digest is reused: pend skips on it and is named count unrecorded"
+else bad "7b sk the count-less entry (pran=$(mx_get "$BASE_bl" sk.pran) vs=$(mx_get "$BASE_bl" sk.vs) unrec=$(mx_get "$BASE_bl" sk.unrec)): $(grep -E 'PENDING|verdict store|   ok ' "$BLF.sk.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 400)"; fi
+if _bl_eq cl.skip yes && _bl_eq cl.rec2 yes && _bl_eq cl.disp yes && _bl_eq cl.nopend 2:0; then
+  ok "7b cl the consumer layout: push a runs pend@consumer and names it in the pool PENDING summary; its 2 records carry no #pending; push b selects 0 of 2 and names none 'pending count unrecorded', while pend(recorded)=2 still prints"
+else bad "7b cl the consumer layout (skip=$(mx_get "$BASE_bl" cl.skip) rec2=$(mx_get "$BASE_bl" cl.rec2) disp=$(mx_get "$BASE_bl" cl.disp) records:#pending=$(mx_get "$BASE_bl" cl.nopend)): a: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cla.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300) b: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cl.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300)"; fi
+B_bl=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
+
+# F10, VERSION SKEW: a runner sourcing a hook whose READSET_VS span predates the `#pending` entry line (no readset_vs_entry, no
+# READSET_VS_PENDING) turns the store OFF, says so, and writes nothing; the same run under the current span wrote
+# P1's entry (the control above). The old span is the current one with the two definitions cut, each cut counted.
+_old="$WORK/hook.oldvs"
+awk '/^READSET_VS_PENDING=/ { next } /^readset_vs_entry\(\) \{/ { skip = 1; next } skip && /^}$/ { skip = 0; next } !skip' "$HOOK" > "$_old"
+_c0="$(grep -cE '^(readset_vs_entry\(\) |READSET_VS_PENDING=)' "$HOOK")" || _c0=0
+_c1="$(grep -cE '^(readset_vs_entry\(\) |READSET_VS_PENDING=)' "$_old")" || _c1=0
+[ "$_c0" = 2 ] && [ "$_c1" = 0 ] || broken "BL-998 F10: the old-span copy holds $_c1 of the two definitions (the hook $_c0), want 0 of 2"
+cp -Rp "$BLP" "$WORK/bl.skew" && cp "$_old" "$WORK/bl.skew/.githooks/pre-push" && mkdir -p "$WORK/bl.skew.vs" || broken "BL-998 F10 world copy failed"
+_sk="$( cd "$WORK/bl.skew" && env -u FXCOUNT_DIR -u FXCOUNT_RC -u FXCOUNT_JUDGE AI_DLC_VERDICT_STORE="$WORK/bl.skew.vs" \
+          bash scripts/ai-dlc/hermetic-run.sh --root "$WORK/bl.skew" pend 2>&1)"
+_skn="$(find "$WORK/bl.skew.vs" -type f | grep -c .)" || _skn=0
+if grep -qxF 'hermetic-run: pend: verdict store OFF: the hook READSET_VS span lacks readset_vs_entry or READSET_VS_PENDING (version skew), so no entry is written' <<< "$_sk" \
+   && grep -q '^hermetic-run: pend: rc=0 ' <<< "$_sk" && [ "$_skn" = 0 ]; then
+  ok "7b F10 a runner sourcing a span without readset_vs_entry and READSET_VS_PENDING passes pend, says the store is OFF for version skew, and writes no entry"
+else bad "7b F10 version skew: $_skn entr(ies) written; $(grep '^hermetic-run: pend' <<< "$_sk" | tr '\n' '|')"; fi
+
+# UNMUTATED CONTROL for the reused worlds: a copy of the hook installed into a copy of the post-P1 world reproduces s1.
+C_T="$WORK/bl.ctl"; bl_drive_cells "$C_T" "$BLP" "$WORK/hook.control" s1.rec2
+if [ "$B_bl" = 1 ] && [ "$(bl_cell s1.rec2)" = yes ] && ! grep -q '^   ok    ' "$C_T.s1.out"; then
+  ok "7b control: an unmutated hook copy installed into a copy of the post-P1 world reproduces s1 -- the reused worlds are sound"
+else bad "7b control is RED: no BL-998 mutant verdict below is believable"; fi
+
+# THE MUTANTS. One that edits the key writer, the runner, or a READSET_VS line (which moves #universe and so the store
+# digest) rebuilds its world from P1; one that edits the decision or the render reuses the post-P1 world with its
+# hook installed. Each drives only the seeds its deciding and twin cells read.
+bl_score() {                   # bl_score <mutant> <decides> <twins> <expected> <prefix> <message>
+  C_T="$5"
+  csp_score "$1" "$([ "$B_bl" = 1 ] && echo 1 || echo 0)" "$2" "$3" "$4" "$BL_CELLS" "$BASE_bl" "$6"
+}
+bl_reuse() {                   # bl_reuse <mutant> <decides> <twins> <expected> <old> <new> <message>
+  local h="$WORK/hook.$1" p="$WORK/bl.$1"
+  lmut "$1" "$HOOK" "$h" "$5" "$6" || return 0
+  bl_drive_cells "$p" "$BLP" "$h" "$(mx_cells "$BL_CELLS" "$2" "$3")"
+  bl_score "$1" "$2" "$3" "$4" "$p" "$7"
+}
+bl_fresh() {                   # bl_fresh <mutant> <decides> <twins> <expected> <hook> <runner> <message>
+  local p="$WORK/bl.$1"
+  bl_p1 "$p" "$5" "$6"
+  [ "$(cat "$p.p1.rc")" = 0 ] || { bad "MUTANT $1: its P1 drive failed (rc $(cat "$p.p1.rc")), so no cell of it is a verdict"; return 0; }
+  bl_drive_cells "$p" "$p.p1" - "$(mx_cells "$BL_CELLS" "$2" "$3")"
+  bl_score "$1" "$2" "$3" "$4" "$p" "$7"
+}
+if lmut bl998-kw0 "$HOOK" "$WORK/hook.bl998-kw0" 'print "#pending " n > o' 'print "#pending 0" > o'; then
+  bl_fresh bl998-kw0 s1.rec2 s2.rec2 $'s1.rec2=no' "$WORK/hook.bl998-kw0" "$HR_SRC" \
+    "bl998-kw0 with the key writer writing '#pending 0' the read-set skip names nothing, while the store skip (its count from the entry) still does"
+fi
+if lmut bl998-sw0 "$HR_SRC" "$WORK/hr.bl998-sw0" "#pending %s\\n' \"\$pn\"" "#pending %s\\n' 0"; then
+  bl_fresh bl998-sw0 s2.rec2 s1.rec2 $'s2.rec2=no' "$HOOK" "$WORK/hr.bl998-sw0" \
+    "bl998-sw0 with hermetic-run.sh writing '#pending 0' the store skip names nothing, while the read-set skip (the hook's own count) still does"
+fi
+bl_reuse bl998-rd-early s1.rec2 s3.rec2 $'s1.rec2=no' '    readset_pending_line 0 "" "$out/.precorded"' '    :' \
+  "bl998-rd-early without the renderer on the unchanged-push return the s1 summary is gone, while the pool path's stays"
+bl_reuse bl998-rd-pool s3.rec2 s1.rec2 $'s3.rec2=no' 'readset_pending_line "$pend_n" "$pend_fx" "$out/.precorded"' ':' \
+  "bl998-rd-pool without the renderer on the pool path the s3 summary is gone, while the unchanged-push return's stays"
+bl_reuse bl998-carry-v sv.rec2 s1.rec2 $'sv.rec2=no' 'if (!run && !seed && (f in RPN)) print f "\t" RPN[f] > ENVIRON["KPN"]' '' \
+  "bl998-carry-v without the republish carry a stale record republished without a run loses its count, while a plain read-set skip keeps it"
+bl_reuse bl998-carry-vs s2.rec2 s1.rec2 $'s2.rec2=no' "printf '%s\\t%s\\n' \"\$fx\" \"\$pn\" >> \"\$out/.kpn\"" ':' \
+  "bl998-carry-vs without the store-skip carry a store-skipped fixture loses the entry's count, while a plain read-set skip keeps it"
+# bl998-unrec-store: the store reader takes only an entry carrying a count, so an entry written before the count
+# re-runs its fixture (the whole stored set, on a real store); decided on sk, where pend must skip on its entry,
+# while s2 (an entry with its count) is still a store skip.
+bl_reuse bl998-unrec-store sk.pran s2.vs $'sk.pran=yes' 'HIT[fx] = 1; print fx "\t" pn }' 'HIT[fx] = 1; if (pn != "-") print fx "\t" pn }' \
+  "bl998-unrec-store with the store reader refusing a count-less entry pend re-runs on sk, while a store entry with its count (s2) still skips"
+# bl998-unrec-key: a key record with no #pending line made a run reason again (the retired "re-run once"); decided on
+# su, where pend must skip, while a record with its count (s1) still skips.
+bl_reuse bl998-unrec-key su.pran s1.rec2 $'su.pran=yes' '        else run = 0' '        else run = (!seed && !(f in RPN))' \
+  "bl998-unrec-key with a missing count made a run reason pend re-runs on su, while a record with its count (s1) still skips"
+
+# BL-998's runner-wired receipt, beside this file.
+_rb="$(bash "$HERE/receipt-bl998.sh" "$HOOK" 2>&1)"; _rbrc=$?; _rbn="$(grep -c '^CELL [^ ]* PASS' <<< "$_rb")" || _rbn=0
+[ "$_rbrc" = 0 ] && [ "$_rbn" = 3 ] && ok "receipt-bl998.sh passes: 3 CELL PASS" || bad "receipt-bl998.sh exited $_rbrc with $_rbn CELL PASS line(s), want 0 and 3: $(printf '%s\n' "$_rb" | tail -5 | tr '\n' '|')"
+
 # NO STALL WORLD LEAVES A PROCESS BEHIND. Every pid a stub recorded under a stall world's pids/ file, and
 # every pid the extracted-worker (orphan) and trace worlds recorded, must be dead by now: `kill -0` fails
 # for each. A mutant that keeps a unit's grandchild alive by design (st-c, st-g) is reaped by its own
@@ -1215,15 +1690,30 @@ unset CSP_PIDS CSP_FIFO CSP_STALL CSP_GATE CSP_GLIB
 # (every recorded pid gone, or every one not gone csp_state `settled`) with a builtin wait (`read -t 1` on a
 # held fifo, no process start, pacing only). A leaked busy loop is STOPped by csp_state and named here as a leak;
 # a SIGKILLed pid exits rather than stopping, so it is never named a survivor.
-mkfifo "$WORK/lk.fifo" || broken "mkfifo failed"; exec 8<>"$WORK/lk.fifo"
+# Each live pid is first read by csp_own: only this fixture's own process is STOPped, named or killed; a reused pid
+# is the recorded process gone, and is counted as such.
+# THE ARM'S OWN PROBE, both directions, before it reads the worlds: a fifo reader standing under $WORK reads `ours`,
+# the same reader standing outside it reads `reused`, and a reaped pid reads `gone`. Each reader writes its marker
+# after its cd, so the read waits on that condition, not on time.
+mkfifo "$WORK/lk.fifo" "$WORK/own.fifo" || broken "mkfifo failed"; exec 8<>"$WORK/lk.fifo"
+( cd "$WORK" && : > "$WORK/own.in" && exec /bin/cat "$WORK/own.fifo" ) >/dev/null 2>&1 & _ow_in=$!
+( cd / && : > "$WORK/own.out" && exec /bin/cat "$WORK/own.fifo" ) >/dev/null 2>&1 & _ow_out=$!
+( : ) & _ow_dead=$!; wait "$_ow_dead"
+while { [ ! -e "$WORK/own.in" ] || [ ! -e "$WORK/own.out" ]; } && kill -0 "$_ow_in" 2>/dev/null && kill -0 "$_ow_out" 2>/dev/null; do read -t 1 -u 8 _lk_x; done
+csp_own "$_ow_in"; _ow_r="$CSP_OWN"; csp_own "$_ow_out"; _ow_r="$_ow_r $CSP_OWN"; csp_own "$_ow_dead"; _ow_r="$_ow_r $CSP_OWN"
+kill -KILL "$_ow_in" "$_ow_out" 2>/dev/null; wait "$_ow_in" "$_ow_out" 2>/dev/null
+[ "$_ow_r" = "ours reused gone" ] && ok "csp_own reads a reader under \$WORK as ours, one outside it as reused, a reaped pid as gone" \
+                               || bad "csp_own probe read '$_ow_r', want 'ours reused gone' -- the leak arm cannot tell a leak from a reused pid"
 while :; do
-  _lk_n=0; _lk_live=""; _lk_settled=1
+  _lk_n=0; _lk_live=""; _lk_settled=1; _lk_ru=0
   for _lk_f in "$WORK"/*/pids/* "$WORK"/orph.*/pids "$WORK"/trace.*/pids; do
     [ -f "$_lk_f" ] || continue
     case "$_lk_f" in *.pgid.*) continue ;; esac
     while read -r _lk_p; do
       case "$_lk_p" in ''|*[!0-9]*) continue ;; esac
       _lk_n=$((_lk_n + 1))
+      csp_own "$_lk_p"
+      case "$CSP_OWN" in gone) continue ;; reused) _lk_ru=$((_lk_ru + 1)); continue ;; esac
       csp_state "$_lk_p"
       [ "$CSP_ST" = gone ] || { _lk_live="$_lk_live $_lk_p"; [ "$CSP_ST" = settled ] || _lk_settled=0; }
     done < "$_lk_f"
@@ -1234,7 +1724,7 @@ while :; do
 done
 exec 8>&-
 if [ "$_lk_n" -gt 0 ] && [ -z "$_lk_live" ]; then
-  ok "no stall world leaked a process: all $_lk_n recorded pids are dead (kill -0 fails, or the pid is an unreaped zombie)"
+  ok "no stall world leaked a process: all $_lk_n recorded pids are dead (kill -0 fails, the pid is an unreaped zombie, or it now names a process outside \$WORK: $_lk_ru)"
 else
   bad "stall worlds left ${_lk_live:-nothing} alive, or recorded no pid at all (read $_lk_n) -- a leaked unit tree burns a core after the fixture reports"
   for _lk_p in $_lk_live; do kill -KILL "$_lk_p" 2>/dev/null; done
@@ -1258,7 +1748,7 @@ fi
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=54
+EXPECTED_ASSERTIONS=85
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

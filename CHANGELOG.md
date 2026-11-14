@@ -19,6 +19,150 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1127.0] - 2026-11-14
+
+### BL-1043 CLOSED: consumer-layout units are keyed on their installed placement, and no push runs every shipping fixture
+Operator option 3, and the rulings that followed it:
+- A real shared input reruns the units it touches (kept).
+- No record at all, or keys that cannot be built, FAILs the push and names the census.
+- No push runs all 210.
+- Every pass goes into the shared store and is kept the moment it happens.
+
+How it works:
+- `cl_select` takes each `<fx>@consumer` unit's keys INSIDE the installed scratch tree. Every key row is an installed path with its installed bytes:
+  - A declared fixture's inputs reach the key through `core-paths.sh --map`.
+  - An undeclared fixture is keyed on the whole installed tree.
+- `cl_install_key` and its global override are deleted.
+- `.claude/.ai-dlc-version` is keyed on its stable fields. It was measured as the only per-install volatile file.
+- Every consumer-layout pass is kept the moment its unit passes, in the SHARED verdict store base (any `counted-<vk>` suffix stripped):
+  - `hermetic-run.sh` files a declared unit's entry under the consumer tree's FIXED root commit, which `cl_tree_init` makes for both the suite step and the census.
+  - `cl_publish` writes the unit's placement record under `<base>/consumer-placement-keys/<repository root commit>/`.
+  - Nothing is per clone, and a stopped run loses no pass.
+- A distribution pass cannot satisfy a consumer unit, because it has a different project and different rows (`cl_v`). A consumer-layout entry at the unit's placement key skips it (`cl_cstore`). Two mutants are killed for this: `cl-store-dist-project` and `cl-publish-worker`.
+- The step FAILs, naming the cause, in two cases:
+  - No record and no entry at all: it prints `bash scripts/census-consumer-layout.sh`.
+  - Keys that cannot be built: it prints the cause and then the census command.
+- `scripts/census-consumer-layout.sh` (new, distribution-only) is the one-time, off-gate census. It runs the hook's own `cl_select`, `cl_publish` and `cl_write`.
+
+Measured with the hook's own `cl_select` over real installs. Records were faked green in a scratch base, the census install came from one checkout, and each other install came from a second checkout:
+
+| change | units selected |
+|---|---|
+| unchanged re-install | 0 of 210 |
+| a template edit | 2 (the `.undeclarable` pair, BL-584) |
+| one `core/scripts` edit | 9 |
+| an `install.sh` comment | 0 |
+| a `hermetic-run.sh` edit (the runner row) | 210 |
+
+The every-push set is empty.
+
+Two real `hermetic-run.sh --root` passes were reused through the store after every placement record was deleted, with a never-run declared fixture as the control.
+
+`consumer-suite-pool` and `suite-content-key` read the runner's verdict-store writer through a new span, `HR_STORE` in `core/scripts/hermetic-run.sh` (the rc line and the store write), declared in each fixture's `spans.decl`, so `invalidation-guard.sh --ratchet` gains no whole-program row.
+
+`prepush-pool-depth` gains these cells:
+- `cl_census`, `cl_nl`, `cl_ni`, `cl_tp`, `cl_cstore`, `cl_ref` and `cl_resume`;
+- its B world becomes a linked worktree;
+- 7 new or re-aimed mutants;
+- the vacuous seed and store-override mutants are removed with their guards.
+
+`consumer-suite-pool`'s consumer-layout seed runs a census first.
+
+The consumer-layout tree build (`cl_tree_init`, the `install.sh` call and the tree's commit) runs with the caller's `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR` and `GIT_OBJECT_DIRECTORY` unset, so a leaked `GIT_DIR` can never init or commit into the repository being pushed. `prepush-worktree-env-scrub`'s world carries a stub `scripts/install.sh` and its own verdict store, and its hook drive runs at a push's pool depth 0 whatever depth the fixture runs at, so it gives one verdict and one invocation count plain and in the gate (lead ruling, the BL-1073 class). Dropping the stub reads FIXTURE BROKEN; its invocation row moves 37 to 49.
+
+Carry-forward: the 210 placement records the census wrote key `hermetic-run.sh` whole-file at that census's runner blob. `READSET_RUNNER_LEGACY` pins that blob's sha256 with its HR_SANDBOX and HR_EXIT shas, so a record naming it stands in for the span RUNNER ROWS while those spans are unchanged (the READSET_VS_LEGACY_UNIVERSE precedent). Measured with `cl_select` against the real records at 6cfe4fa7d: 162 of 210 selected, none on the runner row (29 on `core/fixtures/lib/report.sh`, 14 on the installed consumer hook, 5 on `hermetic-run.sh` through the legacy `core/scripts/` lines, 3 on a tools.decl, 2 on `adversarial-shard-merge/lib.sh`, about 100 on a fixture's own `run.sh`, and the `.undeclarable` pair). Main's tree alone (9cad095fe) selects the identical 162: they are content landed in 0.1124.0 to 0.1126.0 that no census has recorded, and this release adds none. A control adding one line inside HR_SANDBOX selects 210 of 210. `scripts/census-consumer-layout.sh --jobs 9` ran before this push on c69ce8988, an earlier combine of this bundle that also carried G3 batch 2: all 178 units it selected passed and were recorded.
+
+### BL-1046 CLOSED: concurrent pushes no longer tear, interleave or misattribute the per-repo gate state
+
+By operator ruling, pushes may run concurrently. Every record the pre-push hooks keep under the git common dir is shared by all of them. Each write site was classified from the code at base 9a7e42060. Seven sites were unsafe: the verified record (copied in place, and read twice by the read-set skip), the durations merge (read-modify-write, copied in place), `.prev` and `.last` (in place, read back by the pole line), the failure record (truncated in place, then copied to this run's retained name), the stall record (copied in place), the live-trace lock (an empty pid file read as stale, so a live lock could be stolen) and the presuite atime canary (one shared directory). Only the verified record could reach a verdict: a possible false skip, and only while `ai-dlc-fixture-keys/` is absent. The rest damaged schedule, report or evidence.
+
+- Shared records are replaced by rename (`rec_put`: copy to `<record>.tmp.<pid>`, then `mv`), never written in place: durations, verified and its `.format`, `.last` (and its truncation at pool entry), the failure record and the stall record. The suite key is renamed too.
+- The failure record is built in a private temp, copied to this run's retained name from that temp, then renamed over the primary.
+- The durations merge runs under a mkdir lock (`rec_lock`, judged by `readset_lock_stale`). A held lock skips the merge and prints `durations record: another push holds <lock>`.
+- `readset_lock_stale` judges an empty pid file by the 60s age rule, as it judges a missing one.
+- The read-set skip copies the verified record once and reads only the copy.
+- The pole line reads this run's figures from the hook process (`LASTRUN_OWN`, `POLE_PREV`). `ai-dlc-fixture-durations.prev` is no longer written.
+- The presuite canary uses `.probe.<pid>` and removes it.
+
+Consumer-visible: the consumer hook carries every I66-block change above. A push that finds the durations lock held prints one `..` line and leaves the record as it was.
+
+Proof: `consumer-suite-pool` holds each seeded record open across a real hook drive and reads `atomic` for each. It also runs a held-lock world and an empty-pid-file judge. Six new mutants are killed: `at-helper`, `at-last-entry`, `at-dur`, `at-fail`, `lock-off`, `lock-empty-pid`. `suite-pole-info` arm 9 seeds both shared files with another push's figures, and its mutants `m2` and `m3` are killed. Its old `m1` (the `FILENAME == ARGV[1]` condition) went with the code it guarded.
+
+### BL-984 PARTIAL: the hermetic-run `command not found` arm is recorded unbuildable under bash 3.2, and its three named rows are closed in place
+Operator ruling: "Record unbuildable". Under /bin/bash 3.2.57, `env -i PATH=/nonexistent BASH_ENV=<file defining command_not_found_handle> /bin/bash run.sh` prints its control line, exits rc=127 and records 0 handler hits. `man bash` counts command_not_found_handle 0 and BASH_ENV 6. So no handler can be injected through BASH_ENV on the interpreter the sandbox launches. Three rows are closed, each a coverage or noise repair and not a revived check:
+- readset-skip drops the `xcode-select` fallback, so every run takes the discriminating `tk.nodev` world.
+- consumer-suite-pool declares `pgrep`. Its sites are in `pool_kill_tree`, and the change adds one more symlink in a consumer's farm.
+- readset-stage1-verdict carries the `rs_sleep` definition from the scored deriver and runs it with `READSET_SLEEP_CMD=:`. That removes the 6 `command not found` lines per run, with no real wait.
+BL-984 keeps `verify: manual` and gains no LANDED line.
+
+### BL-1027 CLOSED: each selected shipping fixture runs once in the consumer layout as `<fx>@consumer`
+Operator ruling: "Pool seam (S3)".
+How it works:
+- The distribution hook's `fixture_suite_step` installs this tree into a scratch consumer tree (`install.sh <tree>`, one commit).
+- The pool then runs each selected shipping fixture there as its own unit, so a cell that fails only in the installed layout fails the push. MKPW: 366 ok and 1 FAIL at 64d6c9a6d; 367 ok and 0 FAIL at 0569579f4.
+- The seam is switched by `AI_DLC_FX_CL_TREE`, honoured at depth 0 only and then unset. The tree is built only when the hook's main body sets `PREPUSH_CL_ENTRY=1`.
+- It keeps its own records, written only on a pass, with decision rows in `$out/.cl/.kdec`. Since BL-1043 they live in the shared verdict store base and are published the moment a unit passes.
+- Selection is keyed on installed placement, with no install-key override (BL-1043, F14).
+- A distribution pass never satisfies a consumer unit. A push with no consumer-layout record at all FAILs and names the census (BL-1043).
+F5's hand census, before BL-1043's keys: all 210 shipping fixtures passed in the consumer layout at 4fcead4ae.
+prepush-pool-depth drives the seam through the real FIXTURE_POOL and SUITE_STEP spans. It covers 7 cases plus the depth, seed and entry-flag arms. 9 mutants are killed, and invocations.decl moves 492 to 719 (BL-1043 then moves it again).
+Rejected alternative: an arm refusing a root-less drive (shape b) was rejected on its false-positive set. It had 336 shipping hits and 0 known true, and was blind to 1648 variable-named drives.
+Cost:
+- Consumer runtime: 0. The seam is dormant, with 0 forks.
+- Distribution: one serial `install.sh` of about 18 s per gating push, and one extra `readset_keys` pass (208 decl parses).
+- The selected set was measured under the superseded source-keyed rule and is not restated; F14 re-derives it under placement keys.
+
+### BL-998 — PARTIAL: a fixture skipped on a recorded pass keeps its PENDING count in sight on every skip path
+
+A green fixture whose subject is absent prints `PENDING  <what>` rows. 0.1100.0 counted them only for fixtures a push dispatched, so from the second push on a PENDING fixture skipped on its recorded pass read 0. This release carries the count with every per-fixture pass record written from now on and prints it on every skip path. What remains: a record or store entry written before the count was kept reads as "count unrecorded" until its fixture next runs for a key that moved.
+
+- **One grammar.** `^[[:space:]]*PENDING  ` is defined once, as `READSET_VS_PENDING` in the READSET_VS span (both hooks; `core/scripts/hermetic-run.sh` sources it). The dispatched-fixture counter and the runner's store write both read the variable.
+- **Verdict-store skip.** `hermetic-run.sh` writes a store entry as before (`#format k1`, `#state ok`, the digest input, named for the sha256 of the digest input) with one more LAST line, `#pending <n>`. The format stays 1: an entry with no such line keeps its meaning and is reused with its count unrecorded. `READSET_VS_FORMAT` is not bumped and a new `VS-IDENTITY` row under format 1 says why. The hook's subset reader takes the count from that line; the exact reader `readset_vs_entry` (step 3b) does the same. A hook span lacking `readset_vs_entry` or `READSET_VS_PENDING` turns the store OFF with a version-skew message.
+- **Read-set skip.** Key records stay `#format k1` and gain `#pending <n>` as line 4: the run's own count for a fixture that ran green, the prior count for one republished without a run, the store entry's count on a store skip. One `readset_key_rows` reader strips exactly the four header lines, so `#pending` never becomes a key row.
+- **No forced rerun (operator ruling, superseding "Re-run once").** A record or entry with no count is never a run reason: it is decided exactly as one with a count. The "Re-run once" rule of the earlier build is removed, because no record on main carries the line and the rule alone would have re-run the whole declared set.
+- **Printing.** One renderer, byte-identical in both hooks, adds `<k> skipped on a recorded pass that printed a PENDING row: <fx>(recorded)=<n>` to the `   PENDING:` line on the unchanged-push return and on the pool path, and `<u> skipped on a recorded pass whose PENDING count is unrecorded (count unrecorded: ...)` for the count-less ones: never read as a zero.
+- **Whole-suite key (distribution only).** A green suite writes the counts as line 2 of `.git/ai-dlc-suite-key` (`#pending <fx>=<n> ...`: n above 0, or `-` for a record with no count), and a HIT prints the same summary line from it.
+- **With the consumer layout (BL-1027).** Consumer-layout records never carry `#pending`, and a missing count is no run reason there either. `@consumer` units stay in the dispatched-pool PENDING count.
+- **Self-clearing preserved.** A fixture whose subject lands re-keys, runs, and records `n = 0`, then drops off the line.
+
+Proof: `consumer-suite-pool` world 7b drives a record with its `#pending` line cut (`su`: pend skips, named count unrecorded) and a store entry with its count line cut (`sk`: a store skip, named count unrecorded). Two new mutants are killed: `bl998-unrec-store` (the reader refuses a count-less entry, so pend re-runs) and `bl998-unrec-key` (a missing count made a run reason again). `readset-skip` world (k) now asserts that a malformed `#pending` value skips with its count unrecorded. Its `anypending` mutant is retired together with the key-record reader's own value check, which no longer decided anything (every reader of `.kpn` keeps a non-negative integer alone).
+
+Receipt: `core/fixtures/consumer-suite-pool/receipt-bl998.sh`, run by the fixture and named in the entry's `verify:`. It drives the consumer hook twice over one committed world (`pend` with two PENDING rows, `near` as the near-miss) and reads exact output lines, never the hook's text.
+
+### BL-1033 and BL-1034 CLOSED: two fixtures no longer hang or misread on a stranger's process
+
+- BL-1033: `consumer-suite-pool`'s stall-world liveness arm read a reused pid as a leak and then SIGKILLed the stranger holding it. `csp_own` reads identity before any signal: a live pid whose cwd (`lsof -d cwd`) is under the world's `$WORK` is the fixture's, and one elsewhere is a reused pid. The arm self-probes in both directions.
+- BL-1034: an EXIT-trapped bash drops a TERM sent right after a fork, so `readset-stage1-verdict`'s orphan-dead cell could wait forever on its own hang reader. The fixture's five "end then wait" hang-reader kills are SIGKILL. The sampler-stop path that remains is BL-1075's, which is not in this release.
+
+### BL-1068 PARTIAL: the read-set deriver traces wider pools completely
+
+`core/scripts/derive-fixture-readsets.sh` gains the tracer's `ps` and `log` no-sandbox escapes, and three whole-tree fixtures take a `READSET_POOL_WIDTH` knob. `layer-contract-conformance-b` and `ledger-status-vocabulary` still cannot be traced completely and keep their wide declarations.
+
+### BL-1077 and BL-1080 filed and CLOSED: two fixtures no longer write into the real tree
+
+`install-scaffold-ignored` runs its install mutants as texts under `$WORK` through `bash -c <text> <root>/scripts/install.sh`, so no `scripts/install-mut-*.sh` copy appears in the repository (BL-1077). `reconcile-blocking-list`'s seed runs its machinery probe the same way instead of copying it into `core/skills/ai-dlc-update/reconcile/` (BL-1080).
+
+### BL-1078 filed and CLOSED, BL-1079 filed: pregate-self-check's matrix expects its m5 header row
+
+The matrix header list now reads `g1 g2 g3 g4 m1 m2 m3 m4 m5 m6 m7 m8`; `--matrix` exits 0. BL-1079 is filed OPEN: 13 matrix fixtures compare their header rows with a hand-written list.
+
+### BL-1081 filed and CLOSED: readset-skip-b's (t4w) arm no longer races a forced window
+
+The arm runs the shipped watchdog, extracted from `readset_live_trace`, with a stub sleep that TERMs its parent, and reads the TERM disposition (143 with no handler) instead of holding a fork-to-exec window open by elapsed time. `sleeptrap` is scored by the same probe.
+
+### BL-1082 filed and CLOSED: a hook-editing release can run its own pre-suite steps before READY
+
+`scripts/pregate-self-check.sh --member [<base>]` runs the tree's own hook prefix (up to the fixture-suite step), never writes the pregate record, and says it is not the gate. The edited-hook refusal names `--member`.
+
+### BL-1083 filed and CLOSED: prepush-pool-depth's receipt no longer deadlocks below width 6
+
+`receipt-bl924.sh`'s forcing (a) arms its fx6 hold only in the six-wide rendezvous it was written for. BL-1072's archived diagnosis is corrected: its traced `prepush-pool-depth` capture was this defect.
+
+### BL-1059 and BL-1074 progress
+
+- BL-1059 (OPEN): the `backlog-receipt-binding` remainder is named.
+- BL-1074 (OPEN): `backlog-receipt-binding` captures its inner run and prints the outer run unfiltered on a c5r red, so the next concurrency red names its cause.
+
 ## [0.1126.0] - 2026-11-14
 
 ### BL-1051 CLOSED: fixtures declare what they read, not whole directories

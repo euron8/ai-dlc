@@ -37,9 +37,15 @@
 # The hook run is the one git resolves for a push (core.hooksPath honoured); it must exist and be byte-identical to
 # $ROOT/.githooks/pre-push, else exit 2. A scratch root with no core.hooksPath therefore refuses (no hook would run).
 #
-# Usage: pregate-self-check.sh [<base>]     (default base: origin/main)
+# Usage: pregate-self-check.sh [--member] [<base>]     (default base: origin/main)
 # Exit: 0 = clean, 1 = at least one finding (the check and the lines are named), 2 = cannot run.
 # MANDATORY: .githooks/pre-push refuses a push of any tree this script has not recorded green (PREGATE_GATE span).
+#
+# --member: THE MEMBER MODE, for a release that edits .githooks/pre-push, whose tree hook can never equal the hook a
+# push runs until the main checkout holds it. Section a runs the TREE's own hook prefix ($ROOT/.githooks/pre-push, the
+# same cut) in place of the resolved one, and the byte-identity refusal is not applied; sections c and d run as above.
+# It NEVER writes the pregate record, so its pass never stands in for the gate: the push still needs a run without
+# --member where the resolved hook equals the tree's.
 set -uo pipefail
 export LC_ALL=C
 
@@ -59,8 +65,10 @@ on_exit() {
 }
 trap on_exit EXIT
 
+MEMBER=0
+if [ "${1:-}" = --member ]; then MEMBER=1; shift; fi
 BASE="${1:-origin/main}"
-[ "$#" -le 1 ] || { echo "usage: $(basename "$0") [<base>]" >&2; exit 2; }
+[ "$#" -le 1 ] || { echo "usage: $(basename "$0") [--member] [<base>]" >&2; exit 2; }
 
 # Walk UP for the marker, never count `..` hops.
 walk_up() {
@@ -137,7 +145,7 @@ HOOK_REL="$(git -C "$ROOT" rev-parse --git-path hooks/pre-push 2>/dev/null)" && 
 case "$HOOK_REL" in /*) HOOK="$HOOK_REL" ;; *) HOOK="$ROOT/$HOOK_REL" ;; esac
 [ -f "$HOOK" ] \
   || { printf 'pregate-self-check: a push from %s would run no pre-push hook (resolved %s is absent; set core.hooksPath .githooks)\n' "$ROOT" "$HOOK" >&2; exit 2; }
-if ! cmp -s "$HOOK" "$TREE_HOOK"; then
+if [ "$MEMBER" = 0 ] && ! cmp -s "$HOOK" "$TREE_HOOK"; then
   if git -C "$ROOT" show "${BASE}:.githooks/pre-push" > "$W/base-hook" 2>/dev/null; then
     r_moved=1; t_moved=1; remedy=""
     cmp -s "$HOOK" "$W/base-hook" && r_moved=0
@@ -148,7 +156,7 @@ if ! cmp -s "$HOOK" "$TREE_HOOK"; then
       mb="$(git -C "$ROOT" merge-base HEAD "$BASE" 2>/dev/null)" || mb=""
       if [ -n "$mb" ] && git -C "$ROOT" show "${mb}:.githooks/pre-push" > "$W/mb-hook" 2>/dev/null; then
         if cmp -s "$TREE_HOOK" "$W/mb-hook"; then remedy="; the branch is behind: rebase onto ${BASE}"
-        else remedy="; the branch edited the hook, but the push will run ${HOOK}, not the edit: update the checkout holding it (the main checkout) or push from that checkout"; fi
+        else remedy="; the branch edited the hook, but the push will run ${HOOK}, not the edit: update the checkout holding it (the main checkout) or push from that checkout; before READY run this script with --member, which runs the tree's own hook and records nothing"; fi
       else
         remedy="; the merge-base with ${BASE} is unavailable, so behind cannot be told from edited: rebase onto ${BASE}, or update the checkout holding ${HOOK} if the edit is intended"
       fi
@@ -161,6 +169,12 @@ if ! cmp -s "$HOOK" "$TREE_HOOK"; then
   exit 2
 fi
 # HOOK-RESOLVE-END
+# THE MEMBER MODE runs the tree's own hook, named by path here, outside the HOOK-RESOLVE block.
+if [ "$MEMBER" = 1 ]; then # member: the tree's own hook
+  m_rel="same bytes as"; cmp -s "$HOOK" "$ROOT/.githooks/pre-push" || m_rel="NOT the bytes of"
+  printf '   member mode: running the tree'"'"'s own hook %s (%s the hook a push would run, %s); no pregate record will be written\n' "$ROOT/.githooks/pre-push" "$m_rel" "$HOOK"
+  HOOK="$ROOT/.githooks/pre-push"
+fi
 # A NUL byte makes grep read the hook as binary: -c still counts the marker, but -n prints "Binary file ...
 # matches" in place of the line number. Refuse it before either grep runs.
 tr -d '\000' < "$HOOK" | cmp -s - "$HOOK" \
@@ -285,6 +299,10 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 printf 'pregate-self-check: clean against %s\n' "$BASE"
+if [ "$MEMBER" = 1 ]; then # member: no pregate record
+  printf 'pregate-self-check: member mode wrote no pregate record: this pass is not the gate; a push of this tree still needs a green run without --member where the hook a push runs equals the tree'"'"'s\n'
+  exit 0
+fi
 PG_END="$(pg_state)" || PG_END=""
 # A clean state is the tree line alone (an empty status adds nothing once $( ) strips the trailing newline).
 pg_tree="${PG_START%%

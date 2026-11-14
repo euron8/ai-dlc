@@ -16,6 +16,7 @@
 #
 # THE SUBJECT IS THE BLOCK, EXTRACTED between its sentinels and sourced in a scratch repository
 # (the way readset-skip drives it). The real hook is never run here: it runs a whole gate.
+# The consumer-layout section (BL-1027) also extracts SUITE_STEP from .githooks/pre-push and drives fixture_suite_step.
 #
 # WHAT RUNS WHERE. I66 compares the two hooks' blocks (comments and blanks stripped, fixture root mapped),
 # so the two blocks are one program. The arm battery and the watcher (nested-root) section therefore run
@@ -57,7 +58,20 @@
 # MUTANT-MATRIX td-no-mem decides=td_sbx_lead twins=td_sbx_orph
 # MUTANT-MATRIX td-life-fd decides=td_life twins=td_life_alive
 # MUTANT-MATRIX ps-rewait decides=ps_sig twins=ps_exit
-# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the thirty literal callers (mutant, pn_eval, td_eval, the I66 arm, the pool_stop arm and the td-life-fd lifeline arm) has its own row above
+# MUTANT-MATRIX cl-dist-keyed decides=cl_nl,cl_ni,cl_tp twins=cl_iv
+# MUTANT-MATRIX cl-select-all decides=cl_ii,cl_nl,cl_ni,cl_tp twins=cl_i
+# MUTANT-MATRIX cl-stamp-raw decides=cl_ii,cl_nl,cl_ni twins=cl_tp
+# MUTANT-MATRIX cl-no-refusal decides=cl_ref,cl_fb5_sel twins=cl_fb5_state
+# MUTANT-MATRIX cl-store-dist-project decides=cl_cstore twins=cl_v,cl_v_ctl
+# MUTANT-MATRIX cl-publish-late decides=cl_resume,cl_census twins=cl_entry
+# MUTANT-MATRIX cl-publish-worker decides=cl_nl twins=cl_iv
+# MUTANT-MATRIX cl-record-on-red decides=cl_census,cl_i,cl_vii,cl_v twins=cl_ii
+# MUTANT-MATRIX cl-depth1-honoured decides=cl_fb2 twins=cl_fb2_ran
+# MUTANT-MATRIX cl-switch-on decides=cl_vi_out,cl_vi_list twins=cl_entry_ran
+# MUTANT-MATRIX cl-no-entry decides=cl_entry twins=cl_iii
+# MUTANT-MATRIX cl-fail-open decides=cl_inst_rc twins=cl_inst_arg
+# MUTANT-MATRIX cl-no-arg decides=cl_inst_arg twins=cl_inst_rc
+# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the thirty-nine literal callers (mutant, pn_eval, td_eval, the I66 arm, the pool_stop arm, the td-life-fd lifeline arm and cl_mutant) has its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-pool-depth/run.sh --matrix
 #
 # The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
@@ -1657,6 +1671,451 @@ else
     "MUTANT ps-rewait kill confirmed: decides [ps_sig] moved ($ps_m_sig), twin [ps_exit] stayed green" \
     "MUTANT ps-rewait moved [${ps_moved% }], want [ps_sig] (sig read $ps_m_sig, exit read $ps_m_exit)"
 fi
+
+# ------------------------------------------------- consumer-layout jobs (BL-1027, BL-1043) -----
+# The distribution hook's fixture_suite_step installs the tree into a scratch consumer tree and names it in the
+# switch AI_DLC_FX_CL_TREE; run_fixtures (FIXTURE_POOL) reads the switch at depth 0 only, unsets it, and runs each
+# selected SHIPPING fixture there as one pool unit `<fx>@consumer`. cl_select keys each candidate INSIDE the
+# installed tree (BL-1043): its records (<store base>/consumer-placement-keys/<root commit>, published the moment a
+# unit passes) hold installed paths and installed bytes, never the distribution records, and a push with no record at all FAILs the step
+# naming scripts/census-consumer-layout.sh, the one-time census that records each candidate it ran green.
+# THE SUBJECT IS THE REAL SPANS: FIXTURE_POOL and SUITE_STEP extracted from .githooks/pre-push (the step exists only
+# there) and sourced in scratch worlds, fixture_suite_step driven with PREPUSH_CL_ENTRY=1 set the way the hook's main
+# body sets it, and the REAL census script driven over the same (possibly mutated) FIXTURE_POOL span through --pool.
+# Every world is a copy of ONE template: four stub fixtures (cl-ok passes in both layouts; cl-bad, cl-vs and cl-dist
+# exit 1 wherever core/ is absent, i.e. in the consumer layout; cl-dist carries .dist-only; cl-vs declares
+# lib/vs.txt), a stub runner at scripts/ai-dlc/hermetic-run.sh, and a stub scripts/install.sh that records its argv,
+# ships core/fixtures/<fx> unless it carries .dist-only, copies lib/, and renders templates/rd.tpl (when present) over
+# the installed lib/rd.txt, and writes a .claude/.ai-dlc-version whose volatile fields move on every install, as the
+# real stamp's do (cl_select keys it on its stable fields). The A world adds the placement pair: cl-rd declares lib/rd.txt (the rendered file) and
+# cl-dec declares lib/input.txt, both green in both layouts, beside notes/dev.txt, which the stub never installs.
+# The B world is a LINKED WORKTREE, so the hook's GITDIR is absolute there, as on every real push from a worktree.
+# One arm runs the REAL scripts/install.sh, which refuses this world, so the step's fail-closed path and its
+# explicit argument are driven through the real program. Cells, one value each, compared to CL_WANT:
+#   cl_census  the A world's census first: "<census rc>|<records>": cl-bad and cl-vs FAIL and get no record (rc 1)
+#   cl_i       first push: "<step rc>|<cl-bad dist row>|<FAIL @consumer rows>": passes in the distribution layout,
+#              FAILs as cl-bad@consumer (and cl-vs@consumer), which the census left unrecorded (case i)
+#   cl_ii      cl-ok@consumer, green in both layouts and recorded by the census, is not re-run and keeps its record (case ii)
+#   cl_iii     cl-dist ran in the distribution layout; no cl-dist@consumer anywhere (case iii)
+#   cl_arg     the stub install.sh got exactly one argument, the tree the step announced (D2)
+#   cl_vii     a no-change re-push after the red: cl-bad@consumer runs again and FAILs   (case vii)
+#   cl_v       the same re-push with cl-vs's distribution pass in the verdict store: cl-vs@consumer runs and FAILs (case v)
+#   cl_v_ctl   its CONTROL: the store entry is live, so the distribution unit cl-vs is skipped on it. The entry is
+#              composed by the hook's own READSET_VS span (readset_vs_store/_ident_here/_input, the span the store's
+#              writer hermetic-run.sh sources) over the rows of cl-vs's distribution key record, as hr_store_put does
+#   cl_iv      a push moving only lib/input.txt (installed by the stub; no fixture file): cl-ok@consumer is selected,
+#              "unmapped: closure changed"                                          (case iv)
+#   cl_nl      a push moving only notes/dev.txt, which install.sh never installs: "<cl-ok@consumer>|<cl-ok>": the
+#              consumer unit is NOT selected, the distribution unit (keyed on the whole tree) runs
+#   cl_ni      a push moving only the stub scripts/install.sh by a comment, which installs no different byte: the same pair
+#   cl_tp      a push moving only templates/rd.tpl: "<cl-rd@consumer>|<cl-dec@consumer>|<cl-rd>": the reader of the
+#              rendered file runs in the consumer layout, the declared non-reader does not, and the distribution cl-rd
+#              (keyed on the distribution lib/rd.txt, which did not move) does not either
+#   cl_cstore  a no-change push with cl-dec's CONSUMER-LAYOUT store entry (the fixed consumer root's project, cl-dec's
+#              installed-path rows) seeded and its record removed: "<cl-dec@consumer>|<record>": the store skips the
+#              unit and the record is republished. With cl_v (a DISTRIBUTION entry never skips <fx>@consumer) this is
+#              the invariant both ways: only a consumer-layout pass at the unit's placement satisfies it
+#   cl_entry   PREPUSH_CL_ENTRY absent: rc 0, no tree announced, install.sh never ran, no @consumer row
+#   cl_entry_ran  the same push: every distribution fixture ran (its positive conjunct)
+#   cl_vi_out  the same push (switch unset, the consumer's state) prints exactly what a copy of the block with the
+#              seam removed prints, `done` progress lines aside                    (case vi)
+#   cl_vi_list the same push: no @consumer row and no consumer key records         (case vi)
+#   cl_ref     the next push WITH the entry flag and no consumer record at all: "<rc>|<FAIL lines naming the census>|
+#              <@consumer unit rows>|<keys dir>": the step FAILs, runs no unit and writes no record (F-B5's first push)
+#   cl_fb5_sel  the census after it, a v2 verified record present (absolute GITDIR) and no consumer keys dir:
+#               "<verified format>|<keys dir>|<census selection>": every candidate is selected (F-B5)
+#   cl_fb5_state  the consumer record that census writes for cl-ok reads `#state ok`, never `#state seeded`
+#               (A seed from the v2 record cannot skip a unit here: its keys are distribution paths, and every unit
+#               is keyed on installed ones, so it is not guarded and not mutated.)
+#   cl_fb2     run_fixtures at depth 1 with the switch inherited (exported) over a valid tree: rc 0, no @consumer row,
+#              and the depth-1 notice printed (F-B2)
+#   cl_fb2_ran the same drive: every distribution fixture ran
+#   cl_fb2_d0  its ALLOW twin, the switch exported at depth 0 over a tree that moved since the C template's census:
+#              three @consumer rows, and every unit saw the switch unset (run_fixtures unsets it before dispatch)
+#   cl_inst_rc   the REAL install.sh refusing the tree: "<rc>|<FAIL line naming scripts/install.sh>|<unit rows>|<tree
+#                removed>" -- fails closed, the pool never opens, the tree does not leak (D2)
+#   cl_inst_arg  the target the real install.sh's log names is the tree the FAIL line names (D2)
+#   cl_resume  a census stopped mid-run keeps the passes it made (cl_K)
+# MUTANTS (rows in the header), each a cmp -s guarded copy of the span it edits, driven over only the stages its
+# decides and twins need, each drive on a fresh copy of the template.
+CLH="$ROOT/.githooks/pre-push"
+CLC="$ROOT/scripts/census-consumer-layout.sh"
+[ -f "$CLH" ] || broken "the consumer-layout section needs the distribution hook .githooks/pre-push"
+[ -f "$CLC" ] || broken "the consumer-layout section needs the census scripts/census-consumer-layout.sh"
+CLW="$WORK/cl"; mkdir -p "$CLW" || broken "mkdir $CLW"
+sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$CLH" > "$CLW/pool.sh"
+sed -n '/^# SUITE_STEP_BEGIN$/,/^# SUITE_STEP_END$/p' "$CLH" > "$CLW/step.sh"
+grep -q '^cl_select() ' "$CLW/pool.sh" && grep -q '^fixture_suite_step() ' "$CLW/step.sh" && grep -q 'PREPUSH_CL_ENTRY' "$CLW/step.sh" \
+  || broken "the extracted FIXTURE_POOL / SUITE_STEP spans of $CLH carry no consumer-layout seam"
+CLT="$CLW/tpl"
+mkdir -p "$CLT/core/fixtures/cl-ok" "$CLT/core/fixtures/cl-bad" "$CLT/core/fixtures/cl-dist" "$CLT/core/fixtures/cl-vs" \
+  "$CLT/lib" "$CLT/scripts/ai-dlc" "$CLT/.githooks" || broken "could not build the consumer-layout template"
+cp -p "$CLH" "$CLT/.githooks/pre-push" || broken "could not copy the hook into the template"
+printf 'input\n' > "$CLT/lib/input.txt"; printf 'vs\n' > "$CLT/lib/vs.txt"
+printf '#!/usr/bin/env bash\n[ -z "${CL_SAW:-}" ] || printf "%%s\\n" "${AI_DLC_FX_CL_TREE-unset}" >> "$CL_SAW"\nexit 0\n' > "$CLT/core/fixtures/cl-ok/run.sh"
+for _f in cl-bad cl-dist cl-vs; do
+  printf '#!/usr/bin/env bash\n[ -d core ] || { echo "%s: no core/ in this layout"; exit 1; }\nexit 0\n' "$_f" > "$CLT/core/fixtures/$_f/run.sh"
+done
+printf 'lib/vs.txt\n' > "$CLT/core/fixtures/cl-vs/inputs.decl"
+printf 'fails in the consumer layout by construction; the seam must never select it\n' > "$CLT/core/fixtures/cl-dist/.dist-only"
+cat > "$CLT/scripts/ai-dlc/hermetic-run.sh" <<'HR'
+#!/usr/bin/env bash
+# stub runner: --root <root> <fx> runs the fixture plainly from <root>, in either layout
+cd "$2" || exit 2
+for d in core/fixtures tests/fixtures; do [ -f "$d/$3/run.sh" ] && exec bash "$d/$3/run.sh"; done
+exit 2
+HR
+cat > "$CLT/scripts/install.sh" <<'IN'
+#!/usr/bin/env bash
+# stub install.sh: records its argv, ships every core/fixtures/<fx> that has run.sh and no .dist-only, copies lib/,
+# installs the hook as the real one does, renders templates/rd.tpl over the installed lib/rd.txt when the template
+# exists, and writes a version stamp whose
+# release, commit and install-time fields differ on every install, as the real one's do
+[ -z "${CL_ARGV:-}" ] || { printf '%s\n' "$#"; printf '%s\n' "$@"; } > "$CL_ARGV"
+t="${1:-.}"
+[ -d "$t/_bmad" ] || exit 1
+mkdir -p "$t/tests/fixtures" "$t/scripts/ai-dlc" || exit 1
+for d in core/fixtures/*/; do
+  [ -f "$d/run.sh" ] && [ ! -f "$d/.dist-only" ] || continue
+  b="${d%/}"; b="${b##*/}"; mkdir -p "$t/tests/fixtures/$b" && cp "$d"* "$t/tests/fixtures/$b/" || exit 1
+done
+cp scripts/ai-dlc/hermetic-run.sh "$t/scripts/ai-dlc/hermetic-run.sh"
+mkdir -p "$t/.githooks" && cp .githooks/pre-push "$t/.githooks/pre-push" || exit 1
+cp -R lib "$t/lib" || exit 1
+[ ! -f templates/rd.tpl ] || cp templates/rd.tpl "$t/lib/rd.txt" || exit 1
+mkdir -p "$t/.claude" && printf 'version: 1.%s\ncommit: c%s\nskill_version: 1.%s\nskill_commit: c%s\ninstalled_at: %s\nupstream: u\n' $$ $$ $$ $$ $$ > "$t/.claude/.ai-dlc-version" || exit 1
+IN
+( cd "$CLT" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qm seed ) > /dev/null 2>&1 \
+  || broken "could not commit the consumer-layout template"
+cl_commit() { ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qm "$2" ) > /dev/null 2>&1; }
+# cl_census <pool> <world> <tag>: the REAL census over <pool>, from the world's root; output in $CLW/census.<tag>, rc printed
+cl_census() {
+  local rc
+  rc="$( cd "$2" && { unset PREPUSH_POOL_DEPTH PREPUSH_CL_ENTRY AI_DLC_FX_CL_TREE
+    AI_DLC_VERDICT_STORE="$2.vs" AI_DLC_READSET_LIVE_TRACE=0 bash "$CLC" --jobs 2 --pool "$1" > "$CLW/census.$3" 2>&1; echo "$?"; } )"
+  printf '%s' "$rc"
+}
+cl_recs() { ls "$1" 2>/dev/null | sed -n 's/\.key$//p' | sort | tr '\n' ' ' | sed 's/ *$//'; }
+# cl_kdir <world>: the world's consumer-layout records dir, where cl_select puts it: the world's store base
+# (<world>.vs, every drive's AI_DLC_VERDICT_STORE), consumer-placement-keys, the world's root commit
+cl_kdir() { printf '%s.vs/consumer-placement-keys/%s' "$1" "$(git -C "$1" rev-list --max-parents=0 HEAD 2>/dev/null | LC_ALL=C sort | sed -n 1p)"; }
+# the C template: a copy of the template carrying the base span's census records, and a committed stub-installed tree
+# that moved since that census (one extra file), so a drive over a copy of it selects all three shipping fixtures
+CLTC="$CLW/tpl.c"
+cp -Rp "$CLT" "$CLTC" && [ "$(cl_census "$CLW/pool.sh" "$CLTC" tplc)" = 1 ] && [ "$(cl_recs "$(cl_kdir "$CLTC")")" = cl-ok ] \
+  || broken "the C template's census did not record exactly cl-ok: $(tail -n 3 "$CLW/census.tplc" 2>/dev/null | tr '\n' ' ')"
+mkdir -p "$CLW/tree.tpl/_bmad" && ( cd "$CLT" && unset CL_ARGV && bash scripts/install.sh "$CLW/tree.tpl" ) \
+  && [ -f "$CLW/tree.tpl/tests/fixtures/cl-ok/run.sh" ] && printf 'moved since the census\n' > "$CLW/tree.tpl/extra.txt" \
+  && ( cd "$CLW/tree.tpl" && git init -q . ) > /dev/null 2>&1 && cl_commit "$CLW/tree.tpl" tree || broken "the stub install.sh built no tree"
+# the no-seam block for case (vi): the switch read removed and the two seam entry points made empty
+sed 's|^  if \[ "\$POOL_DEPTH_IN" -eq 0 \]; then cl_tree="\${AI_DLC_FX_CL_TREE:-}"; fi$|  :|' "$CLW/pool.sh" > "$CLW/noseam.sh"
+printf 'cl_select() { return 0; }\ncl_write() { return 0; }\n' >> "$CLW/noseam.sh"
+grep -q '^  :$' "$CLW/noseam.sh" && ! cmp -s "$CLW/pool.sh" "$CLW/noseam.sh" || broken "the no-seam block is the block: the switch read was not removed"
+# cl_wt <dst>: a linked-worktree world, the template's repository at <dst>.main and its worktree at <dst>
+cl_wt() {
+  cp -Rp "$CLT" "$1.main" && git -C "$1.main" worktree add -q --detach "$1" HEAD > /dev/null 2>&1 && [ -f "$1/.githooks/pre-push" ]
+}
+
+# cl_drive <pool> <step> <world> <tag> <step|pool> [depth] [exported tree] [noentry] -> rc; output in $CLW/out.<tag>
+cl_drive() {
+  local rc
+  rc="$( cd "$3" && {
+    unset PREPUSH_POOL_DEPTH; [ -z "${6:-}" ] || export PREPUSH_POOL_DEPTH="$6"
+    [ -z "${7:-}" ] || export AI_DLC_FX_CL_TREE="$7"
+    export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$3.vs" CL_ARGV="$CLW/argv.$4" CL_SAW="$CLW/saw.$4"
+    fail=0; PENDING_N=0; SUITE_SKIPPED=0; SUITE_SKIP_CAUSE=""; unset PREPUSH_CL_ENTRY; [ "${8:-}" = noentry ] || PREPUSH_CL_ENTRY=1
+    . "$1" > /dev/null 2>&1; . "$2" > /dev/null 2>&1
+    if [ "$5" = step ]; then fixture_suite_step > "$CLW/out.$4" 2>&1; else run_fixtures > "$CLW/out.$4" 2>&1; fi
+    echo "$?"; } )"
+  printf '%s' "$rc"
+}
+cl_row() { awk -v n="$2" '($1 == "ok" || $1 == "FAIL") && NF == 2 && $2 == n { v = $1 } END { print (v == "" ? "none" : v) }' "$1" 2>/dev/null; }
+cl_crows() { awk '($1 == "ok" || $1 == "FAIL") && NF == 2 && $2 ~ /@consumer$/' "$1" 2>/dev/null | grep -c .; }
+cl_fails() { awk '$1 == "FAIL" && NF == 2 && $2 ~ /@consumer$/ { print $2 }' "$1" 2>/dev/null | sort | tr '\n' ' ' | sed 's/ *$//'; }
+cl_dist() { awk '$1 == "ok" && NF == 2 && $2 !~ /@consumer$/ { print $2 }' "$1" 2>/dev/null | sort | tr '\n' ' ' | sed 's/ *$//'; }
+cl_cnt() { local n; n="$(grep -c -- "$1" "$2" 2>/dev/null)" || n=0; printf '%s' "${n:-0}"; }
+cl_seed_store() { # <world>: the store entry hermetic-run.sh would write for cl-vs's pass; then cl-vs's distribution record goes
+  ( cd "$1" && export AI_DLC_VERDICT_STORE="$1.vs" && . "$CLW/pool.sh" > /dev/null 2>&1
+    s="$(readset_vs_store "$PWD")" && [ -n "$s" ] && id="$(readset_vs_ident_here)" && [ -s "$KEYS_DIR/cl-vs.key" ] || exit 1
+    readset_key_rows "$KEYS_DIR/cl-vs.key" > "$1.rows" && readset_vs_input cl-vs "$id" "$1.rows" > "$1.vsd" || exit 1
+    dig="$(shasum -a 256 < "$1.vsd" | cut -d' ' -f1)"; [ "${#dig}" -eq 64 ] || exit 1
+    mkdir -p "$s" && { printf '#format k1\n#state ok\n'; cat "$1.vsd"; printf '#pending 0\n'; } > "$s/$dig" && rm -f "$KEYS_DIR/cl-vs.key" )
+}
+# cl_seed_cstore <pool> <world> <fx>: the CONSUMER-LAYOUT store entry hermetic-run.sh would write for <fx>'s pass in
+# the installed tree: project <store base>/<the fixed consumer root commit> (cl_tree_init in a scratch dir), the
+# ident of the hook and runner the tree carries (the stub install copies both), and the rows of <fx>'s placement
+# record. Then the record goes, so only the store can skip the unit.
+cl_seed_cstore() {
+  ( cd "$2" && . "$1" > /dev/null 2>&1
+    k="$(cl_kdir "$2")/$3.key"; [ -s "$k" ] || exit 1
+    rt="$(mktemp -d "$CLW/root.XXXXXX")" && cl_tree_init "$rt" > /dev/null 2>&1 && root="$(git -C "$rt" rev-parse HEAD)" || exit 1
+    id="$(readset_vs_ident .githooks/pre-push scripts/ai-dlc/hermetic-run.sh)" && [ -n "$id" ] || exit 1
+    readset_key_rows "$k" > "$2.crows" && readset_vs_input "$3" "$id" "$2.crows" > "$2.cvsd" || exit 1
+    dig="$(shasum -a 256 < "$2.cvsd" | cut -d' ' -f1)"; [ "${#dig}" -eq 64 ] || exit 1
+    mkdir -p "$2.vs/$root" && { printf '#format k1\n#state ok\n'; cat "$2.cvsd"; printf '#pending 0\n'; } > "$2.vs/$root/$dig" && rm -f "$k" )
+}
+# cl_A <pool> <step> <tag> <stages>: stage 1 the census and the first push, 2 the no-change re-push with the store
+# seeded, 3 a push moving lib/input.txt only, 4 notes/dev.txt only, 5 the stub install.sh only, 6 templates/rd.tpl
+# only, 7 a no-change push with cl-dec's consumer-layout store entry seeded and its record gone. Every stage after 1
+# implies 1, and each moves one file, so any subset of 2-7 drives in order.
+cl_A() {
+  local P="$1" S="$2" g="$3" W="$CLW/$3.wa" o r t a
+  cp -Rp "$CLT" "$W" && mkdir -p "$W/core/fixtures/cl-rd" "$W/core/fixtures/cl-dec" "$W/templates" "$W/notes" \
+    || broken "could not copy the consumer-layout template"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$W/core/fixtures/cl-rd/run.sh"; printf 'lib/rd.txt\n' > "$W/core/fixtures/cl-rd/inputs.decl"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$W/core/fixtures/cl-dec/run.sh"; printf 'lib/input.txt\n' > "$W/core/fixtures/cl-dec/inputs.decl"
+  printf 'rd plain\n' > "$W/lib/rd.txt"; printf 'rd rendered\n' > "$W/templates/rd.tpl"; printf 'dev\n' > "$W/notes/dev.txt"
+  cl_commit "$W" placement || broken "could not commit the placement pair"
+  r="$(cl_census "$P" "$W" "$g.A0")"
+  printf 'cl_census=%s|%s\n' "$r" "$(cl_recs "$(cl_kdir "$W")")"
+  r="$(cl_drive "$P" "$S" "$W" "$g.A1" step)"; o="$CLW/out.$g.A1"
+  t="$(sed -n 's/^   consumer layout: scripts\/install\.sh built \([^ ]*\) (.*/\1/p' "$o")"
+  a="$(tr '\n' ' ' < "$CLW/argv.$g.A1" 2>/dev/null)"
+  printf 'cl_i=%s|%s|%s\n' "$r" "$(cl_row "$o" cl-bad)" "$(cl_fails "$o")"
+  printf 'cl_ii=%s|%s\n' "$(cl_row "$o" cl-ok@consumer)" "$([ -f "$(cl_kdir "$W")/cl-ok.key" ] && echo rec || echo norec)"
+  printf 'cl_iii=%s|%s\n' "$(cl_row "$o" cl-dist)" "$(cl_cnt 'cl-dist@consumer' "$o")"
+  if [ -n "$t" ] && [ "$a" = "1 $t " ]; then printf 'cl_arg=explicit\n'; else printf 'cl_arg=[%s] for [%s]\n' "$a" "$t"; fi
+  case " $4 " in *" 2 "*)
+    if cl_seed_store "$W"; then r="$(cl_drive "$P" "$S" "$W" "$g.A2" step)"; o="$CLW/out.$g.A2"
+      printf 'cl_vii=%s\ncl_v=%s\n' "$(cl_row "$o" cl-bad@consumer)" "$(cl_row "$o" cl-vs@consumer)"
+      printf 'cl_v_ctl=%s|%s\n' "$(cl_cnt 'verdict store: 1 fixture(s) skipped on a pass recorded elsewhere: cl-vs$' "$o")" "$(cl_row "$o" cl-vs)"
+    else printf 'cl_vii=noseed\ncl_v=noseed\ncl_v_ctl=noseed\n'; fi ;;
+  esac
+  case " $4 " in *" 3 "*)
+    printf 'moved\n' > "$W/lib/input.txt"
+    r="$(cl_drive "$P" "$S" "$W" "$g.A3" step)"; o="$CLW/out.$g.A3"
+    printf 'cl_iv=%s|%s\n' "$(cl_row "$o" cl-ok@consumer)" "$(cl_cnt '^   \.\.      cl-ok@consumer: unmapped: closure changed$' "$o")" ;;
+  esac
+  case " $4 " in *" 4 "*)
+    printf 'dev moved\n' > "$W/notes/dev.txt"
+    r="$(cl_drive "$P" "$S" "$W" "$g.A4" step)"; o="$CLW/out.$g.A4"
+    printf 'cl_nl=%s|%s\n' "$(cl_row "$o" cl-ok@consumer)" "$(cl_row "$o" cl-ok)" ;;
+  esac
+  case " $4 " in *" 5 "*)
+    printf '# a comment: no installed byte moves\n' >> "$W/scripts/install.sh"
+    r="$(cl_drive "$P" "$S" "$W" "$g.A5" step)"; o="$CLW/out.$g.A5"
+    printf 'cl_ni=%s|%s\n' "$(cl_row "$o" cl-ok@consumer)" "$(cl_row "$o" cl-ok)" ;;
+  esac
+  case " $4 " in *" 6 "*)
+    printf 'rd rendered, moved\n' > "$W/templates/rd.tpl"
+    r="$(cl_drive "$P" "$S" "$W" "$g.A6" step)"; o="$CLW/out.$g.A6"
+    printf 'cl_tp=%s|%s|%s\n' "$(cl_row "$o" cl-rd@consumer)" "$(cl_row "$o" cl-dec@consumer)" "$(cl_row "$o" cl-rd)" ;;
+  esac
+  case " $4 " in *" 7 "*)
+    if cl_seed_cstore "$P" "$W" cl-dec; then r="$(cl_drive "$P" "$S" "$W" "$g.A7" step)"; o="$CLW/out.$g.A7"
+      printf 'cl_cstore=%s|%s\n' "$(cl_row "$o" cl-dec@consumer)" "$([ -f "$(cl_kdir "$W")/cl-dec.key" ] && echo rec || echo norec)"
+    else printf 'cl_cstore=noseed\n'; fi ;;
+  esac
+}
+# cl_B <pool> <step> <tag> <stages>: a linked-worktree world. Stage 1 a push with no entry flag (the switch never
+# set); stage 2 the next push with the flag and no consumer record; stage 3 the census after it, a v2 verified
+# record present. Each stage implies the ones before it.
+cl_B() {
+  local P="$1" S="$2" g="$3" W="$CLW/$3.wb" o r a
+  cl_wt "$W" || broken "could not build the linked-worktree world"
+  r="$(cl_drive "$P" "$S" "$W" "$g.B0" step "" "" noentry)"; o="$CLW/out.$g.B0"
+  printf 'cl_entry=%s|%s|%s|%s\n' "$r" "$(cl_cnt 'consumer layout' "$o")" "$([ -e "$CLW/argv.$g.B0" ] && echo ran || echo no)" "$(cl_crows "$o")"
+  printf 'cl_entry_ran=%s\n' "$(cl_dist "$o")"
+  # Every spelling of the world path (a resolved /private/var form, a doubled slash from TMPDIR): the world dirs are
+  # named `<tag>.wb` under $CLW/, so the path is matched by that shape rather than by one literal spelling.
+  grep -v '^   done ' "$o" | sed -E "s|[^ (]*/cl/[A-Za-z0-9._-]+\.wb(\.main)?|WORLD|g" > "$o.f"
+  if [ -s "$o.f" ] && cmp -s "$o.f" "$CLW/noseam.f"; then printf 'cl_vi_out=same\n'; else printf 'cl_vi_out=differs\n'; fi
+  printf 'cl_vi_list=%s|%s\n' "$(cl_cnt '@consumer' "$o")" "$([ -e "$(cl_kdir "$W")" ] && echo cl-keys || echo none)"
+  case " $4 " in *" 2 "*|*" 3 "*)
+    r="$(cl_drive "$P" "$S" "$W" "$g.B1" step)"; o="$CLW/out.$g.B1"
+    printf 'cl_ref=%s|%s|%s|%s\n' "$r" "$(cl_cnt '^   FAIL  consumer layout: no consumer-layout record exists in .* -- run the one-time census from a clean worktree at this sha: bash scripts/census-consumer-layout.sh$' "$o")" \
+      "$(cl_crows "$o")" "$([ -e "$(cl_kdir "$W")" ] && echo cl-keys || echo nocl)" ;;
+  esac
+  case " $4 " in *" 3 "*)
+    a="$(cat "$W.main/.git/ai-dlc-fixture-verified.format" 2>/dev/null)|$([ -e "$(cl_kdir "$W")" ] && echo cl-keys || echo nocl)"
+    r="$(cl_census "$P" "$W" "$g.B2")"
+    printf 'cl_fb5_sel=%s|%s\n' "$a" "$(sed -n 's/^   \.\.    consumer layout: \([0-9]* of [0-9]*\) shipping.*/\1/p' "$CLW/census.$g.B2")"
+    printf 'cl_fb5_state=%s\n' "$(sed -n 2p "$(cl_kdir "$W")/cl-ok.key" 2>/dev/null)" ;;
+  esac
+}
+# cl_C <pool> <step> <tag> <stages>: stage 1 run_fixtures at depth 1 with the switch exported; stage 2 the same at
+# depth 0. Both worlds are copies of the C template (census records present), each over a copy of the moved tree.
+cl_C() {
+  local P="$1" S="$2" g="$3" o r
+  case " $4 " in *" 1 "*)
+    cp -Rp "$CLTC" "$CLW/$g.wc1" && cp -Rp "$CLTC.vs" "$CLW/$g.wc1.vs" && cp -Rp "$CLW/tree.tpl" "$CLW/$g.t1" || broken "could not copy the F-B2 world"
+    r="$(cl_drive "$P" "$S" "$CLW/$g.wc1" "$g.C1" pool 1 "$CLW/$g.t1")"; o="$CLW/out.$g.C1"
+    printf 'cl_fb2=%s|%s|%s\n' "$r" "$(cl_crows "$o")" "$(cl_cnt 'nested: depth 1, width' "$o")"
+    printf 'cl_fb2_ran=%s\n' "$(cl_dist "$o")" ;;
+  esac
+  case " $4 " in *" 2 "*)
+    cp -Rp "$CLTC" "$CLW/$g.wc0" && cp -Rp "$CLTC.vs" "$CLW/$g.wc0.vs" && cp -Rp "$CLW/tree.tpl" "$CLW/$g.t0" || broken "could not copy the F-B2 world"
+    r="$(cl_drive "$P" "$S" "$CLW/$g.wc0" "$g.C0" pool "" "$CLW/$g.t0")"; o="$CLW/out.$g.C0"
+    printf 'cl_fb2_d0=%s|%s\n' "$(cl_crows "$o")" "$(sort -u "$CLW/saw.$g.C0" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')" ;;
+  esac
+}
+# cl_K <pool> <step> <tag>: a census STOPPED mid-run, then a second census. One extra shipping fixture, cl-zhold,
+# sorts last; in the consumer layout it writes the sentinel $CLW/hold.<tag> and waits, unbounded, for
+# $CLW/hold.<tag>.go or for its parent to die (BL-868: no wait here is bounded by time or iterations). The first census runs one unit at a time in its own process group, so cl-bad, cl-ok and cl-vs have
+# finished when the sentinel appears; the drive then TERMs that group. cl_resume = "<records left by the stopped
+# census>|<the second census's selection>|<cl-ok@consumer lines in the second census>": cl-ok's pass survived the
+# stop and is not run again. Kept only at the end, the stop would lose it and the second census would read 4 of 4.
+cl_K() {
+  local P="$1" g="$3" W="$CLW/$3.wk" pid r h="$CLW/hold.$3"
+  cp -Rp "$CLT" "$W" && mkdir -p "$W/core/fixtures/cl-zhold" || broken "could not build the stop world"
+  printf '#!/usr/bin/env bash\n[ -d core ] || [ -z "${CL_HOLD:-}" ] || { : > "$CL_HOLD"; while [ ! -f "$CL_HOLD.go" ] && kill -0 "$PPID" 2>/dev/null; do sleep 0.1; done; }\nexit 0\n' > "$W/core/fixtures/cl-zhold/run.sh"
+  cl_commit "$W" hold || broken "could not commit the stop world"
+  rm -f "$h" "$h.go"
+  set -m
+  ( cd "$W" && unset PREPUSH_POOL_DEPTH PREPUSH_CL_ENTRY AI_DLC_FX_CL_TREE
+    CL_HOLD="$h" AI_DLC_VERDICT_STORE="$W.vs" AI_DLC_READSET_LIVE_TRACE=0 exec bash "$CLC" --jobs 1 --pool "$P" ) > "$CLW/census.$g.K1" 2>&1 &
+  pid=$!
+  set +m
+  while [ ! -f "$h" ] && kill -0 "$pid" 2>/dev/null; do sleep 0.1; done
+  kill -TERM -- "-$pid" 2>/dev/null; wait "$pid" 2>/dev/null; : > "$h.go"
+  r="$(cl_recs "$(cl_kdir "$W")")"
+  [ "$(cl_census "$P" "$W" "$g.K2")" != "" ] || broken "the second census of the stop world printed no exit status"
+  printf 'cl_resume=%s|%s|%s\n' "$r" "$(sed -n 's/^   \.\.    consumer layout: \([0-9]* of [0-9]*\) shipping.*/\1/p' "$CLW/census.$g.K2")" "$(cl_cnt '^cl-ok@consumer ' "$CLW/census.$g.K2")"
+}
+# cl_R <pool> <step> <tag>: the REAL scripts/install.sh, which refuses this world (no jq on a hermetic PATH, or no
+# scaffold-ignore.sh beside it); its log tail names its target
+cl_R() {
+  local P="$1" S="$2" g="$3" W="$CLW/$3.wr" o r t n
+  cp -Rp "$CLT" "$W" && cp -p "$ROOT/scripts/install.sh" "$W/scripts/install.sh" || broken "could not build the real-install world"
+  r="$(cl_drive "$P" "$S" "$W" "$g.R" step)"; o="$CLW/out.$g.R"
+  t="$(sed -n 's/^   FAIL  consumer-layout tree: scripts\/install\.sh \(.*\) failed, so no shipping fixture can run in the consumer layout$/\1/p' "$o")"
+  printf 'cl_inst_rc=%s|%s|%s|%s\n' "$r" "$(printf '%s' "$t" | grep -c .)" "$(awk '($1 == "ok" || $1 == "FAIL") && NF == 2' "$o" | grep -c .)" \
+    "$([ -n "$t" ] && [ ! -e "$t" ] && echo gone || echo left)"
+  n="$(sed -n 's/^ *Target project: //p; s/^ *Nothing was written to \(.*\)\.$/\1/p' "$o" | sort -u | tr '\n' ' ' | sed 's/ *$//')"
+  if [ -n "$t" ] && [ "$n" = "$t" ]; then printf 'cl_inst_arg=tree\n'; else printf 'cl_inst_arg=[%s] for [%s]\n' "$n" "$t"; fi
+}
+CL_CELLS="cl_census cl_i cl_ii cl_iii cl_arg cl_vii cl_v cl_v_ctl cl_iv cl_nl cl_ni cl_tp cl_cstore cl_entry cl_entry_ran cl_vi_out cl_vi_list cl_ref cl_fb5_sel cl_fb5_state cl_fb2 cl_fb2_ran cl_fb2_d0 cl_inst_rc cl_inst_arg cl_resume"
+CL_WANT="cl_census=1|cl-dec cl-ok cl-rd
+cl_i=1|ok|cl-bad@consumer cl-vs@consumer
+cl_ii=none|rec
+cl_iii=ok|0
+cl_arg=explicit
+cl_vii=FAIL
+cl_v=FAIL
+cl_v_ctl=1|none
+cl_iv=ok|1
+cl_nl=none|ok
+cl_ni=none|ok
+cl_tp=ok|none|none
+cl_cstore=none|rec
+cl_entry=0|0|no|0
+cl_entry_ran=cl-bad cl-dist cl-ok cl-vs
+cl_vi_out=same
+cl_vi_list=0|none
+cl_ref=1|1|0|nocl
+cl_fb5_sel=v2|nocl|3 of 3
+cl_fb5_state=#state ok
+cl_fb2=0|0|1
+cl_fb2_ran=cl-bad cl-dist cl-ok cl-vs
+cl_fb2_d0=3|unset
+cl_inst_rc=1|1|0|gone
+cl_inst_arg=tree
+cl_resume=cl-ok|3 of 4|0"
+# cl_score <pool> <step> <tag> <cells...>: drives only the stages the cells need, prints only those cells
+cl_score() {
+  local P="$1" S="$2" g="$3" c a="" b="" cc="" r=0 k=0; shift 3
+  for c in "$@"; do case "$c" in
+    cl_census|cl_i|cl_ii|cl_iii|cl_arg) a="$a 1" ;; cl_vii|cl_v|cl_v_ctl) a="$a 2" ;; cl_iv) a="$a 3" ;;
+    cl_nl) a="$a 4" ;; cl_ni) a="$a 5" ;; cl_tp) a="$a 6" ;; cl_cstore) a="$a 7" ;;
+    cl_entry|cl_entry_ran|cl_vi_out|cl_vi_list) b="$b 1" ;; cl_ref) b="$b 2" ;; cl_fb5_sel|cl_fb5_state) b="$b 3" ;;
+    cl_fb2|cl_fb2_ran) cc="$cc 1" ;; cl_fb2_d0) cc="$cc 2" ;; cl_inst_rc|cl_inst_arg) r=1 ;; cl_resume) k=1 ;; esac
+  done
+  { [ -z "$a" ] || cl_A "$P" "$S" "$g" "$a"
+    [ -z "$b" ] || cl_B "$P" "$S" "$g" "$b"
+    [ -z "$cc" ] || cl_C "$P" "$S" "$g" "$cc"
+    [ "$r" = 0 ] || cl_R "$P" "$S" "$g"
+    [ "$k" = 0 ] || cl_K "$P" "$S" "$g"; } | awk -F= -v cs=" $* " 'index(cs, " " $1 " ") > 0'
+}
+# the no-seam reference output for cl_vi_out: the same no-entry push under the block with the seam removed, in a
+# linked-worktree world as the B world is
+cl_wt "$CLW/ns.wb" || broken "could not build the no-seam linked-worktree world"
+cl_ns_rc="$(cl_drive "$CLW/noseam.sh" "$CLW/step.sh" "$CLW/ns.wb" ns.B0 step "" "" noentry)"
+grep -v '^   done ' "$CLW/out.ns.B0" | sed -E "s|[^ (]*/cl/[A-Za-z0-9._-]+\.wb(\.main)?|WORLD|g" > "$CLW/noseam.f"
+[ "$cl_ns_rc" = 0 ] && [ "$(cl_dist "$CLW/out.ns.B0")" = "cl-bad cl-dist cl-ok cl-vs" ] \
+  || broken "the no-seam reference push did not run the four fixtures green (rc $cl_ns_rc): $(tail -n 3 "$CLW/out.ns.B0" | tr '\n' ' ')"
+
+CL_GOT="$(cl_score "$CLW/pool.sh" "$CLW/step.sh" base $CL_CELLS)"
+if [ "$(printf '%s\n' "$CL_GOT" | grep -c .)" -eq "$(printf '%s\n' "$CL_WANT" | grep -c .)" ]; then
+  ok "[cl] the consumer-layout drives emitted every cell ($(printf '%s\n' "$CL_WANT" | grep -c .))"
+else
+  bad "[cl] the consumer-layout drives emitted $(printf '%s\n' "$CL_GOT" | grep -c .) cells, want $(printf '%s\n' "$CL_WANT" | grep -c .) -- a harness that died reads as clean"
+fi
+[ "$MATRIX" = 1 ] && { MX_RAN=$((MX_RAN+1)); mx_row cl-baseline "$CL_CELLS" "$(moved_of "$CL_GOT" "$CL_WANT")"; }
+clcheck() { # clcheck <label> <cell...>
+  local label="$1" k g w badk=""; shift
+  for k in "$@"; do
+    g="$(printf '%s\n' "$CL_GOT" | sed -n "s/^$k=//p")"; w="$(printf '%s\n' "$CL_WANT" | sed -n "s/^$k=//p")"
+    [ "$g" = "$w" ] || badk="$badk $k(got [$g] want [$w])"
+  done
+  if [ -z "$badk" ]; then ok "[cl] $label"; else bad "[cl] $label --$badk"; fi
+}
+clcheck "the census records only the candidates it ran green" cl_census
+clcheck "(i) a shipping fixture green in the distribution layout and red in the consumer layout FAILs the step as <fx>@consumer" cl_i
+clcheck "(ii) a fixture the census recorded green is not re-run and keeps its consumer-layout record" cl_ii
+clcheck "(iii) a .dist-only fixture red in the consumer layout is never selected (absent from the installed tree)" cl_iii
+clcheck "D2: the step passes install.sh exactly one argument, the tree it announces" cl_arg
+clcheck "(vii) a no-change re-push after a red <fx>@consumer re-selects it, and it FAILs again" cl_vii
+clcheck "(v) with the fixture's distribution pass in the verdict store, <fx>@consumer still runs and FAILs; the store skip is live for the distribution unit" cl_v cl_v_ctl
+clcheck "(iv) a push moving only an installed read-set input (no file of the fixture) selects <fx>@consumer" cl_iv
+clcheck "BL-1043: a push moving only a file install.sh never installs selects no <fx>@consumer, beside the distribution unit it runs" cl_nl
+clcheck "BL-1043: a push moving install.sh without moving an installed byte selects no <fx>@consumer" cl_ni
+clcheck "BL-1043: a push moving only a rendered template selects the reader of the rendered file, not a declared non-reader" cl_tp
+clcheck "BL-1043: a consumer-layout pass in the shared store at a unit's placement key skips <fx>@consumer and republishes its record" cl_cstore
+clcheck "the tree is built only on the hook's real entry: no PREPUSH_CL_ENTRY, no tree, no install, no @consumer row, every distribution fixture ran" cl_entry cl_entry_ran
+clcheck "(vi) switch unset: the output is the no-seam block's, with no @consumer row and no consumer-layout record" cl_vi_out cl_vi_list
+clcheck "BL-1043: a push with no consumer-layout record FAILs the step naming the census, runs no unit and writes no record" cl_ref
+clcheck "F-B5: the census over a v2 verified record and no consumer keys dir selects every candidate, and the record written is ok, not seeded" cl_fb5_sel cl_fb5_state
+clcheck "F-B2: a switch inherited at depth 1 is not honoured; exported at depth 0 it is, and no unit inherits it" cl_fb2 cl_fb2_ran cl_fb2_d0
+clcheck "a census stopped mid-run keeps every pass it made, and the next census does not run them again" cl_resume
+clcheck "D2 on the REAL scripts/install.sh: a refused install FAILs the step closed, names the step, opens no pool, leaves no tree, and was given the tree" cl_inst_rc cl_inst_arg
+# THE DRIVES' OWN OUTPUT IS SCANNED HERE, because the EXIT trap deletes it and none of it reaches this fixture's
+# stdout: a tool missing from the sandbox PATH inside the spans prints only there. The control is a line every
+# baseline step drive with the entry flag and the stub install must print.
+cl_err=0; cl_ctl=0
+for _o in "$CLW"/out.base.* "$CLW"/out.ns.* "$CLW"/census.*; do
+  [ -f "$_o" ] || continue
+  _n="$(grep -cE 'command not found|No such file or directory' "$_o")" || _n=0; cl_err=$((cl_err + _n))
+  _n="$(grep -c '^   consumer layout: scripts/install\.sh built ' "$_o")" || _n=0; cl_ctl=$((cl_ctl + _n))
+done
+if [ "$cl_ctl" -eq 8 ] && [ "$cl_err" -eq 0 ]; then ok "[cl] the baseline drives' own output: 0 'command not found' / 'No such file or directory' lines beside 8 tree-built control lines"
+else bad "[cl] the baseline drives' own output: $cl_err 'command not found' / 'No such file or directory' line(s), $cl_ctl tree-built control line(s) (want 0 and 8)"; fi
+
+cl_mutant() { # cl_mutant <name> <pool|step> <sed-expr>; decides and twins come from the header row
+  local name="$1" ex="$3" src m P S dec tw cells g moved cond=0 B_cl c
+  dec="$(mrow "$name" decides)"; tw="$(mrow "$name" twins)"
+  [ -n "$dec" ] || { bad "[cl] MUTANT $name: no MUTANT-MATRIX row in the header"; return 0; }
+  dec="${dec//,/ }"; tw="${tw//,/ }"
+  if [ "$2" = pool ]; then src="$CLW/pool.sh"; else src="$CLW/step.sh"; fi
+  m="$CLW/mut.$name.sh"
+  sed "$ex" "$src" > "$m" || { bad "[cl] MUTANT $name: sed DID NOT APPLY"; return 0; }
+  if cmp -s "$src" "$m"; then bad "[cl] MUTANT $name: the edit matched nothing, so it is not a mutant"; return 0; fi
+  P="$CLW/pool.sh"; S="$CLW/step.sh"; [ "$2" = pool ] && P="$m" || S="$m"
+  B_cl="$(for c in $dec $tw; do
+    [ "$(printf '%s\n' "$CL_GOT" | sed -n "s/^$c=//p")" = "$(printf '%s\n' "$CL_WANT" | sed -n "s/^$c=//p")" ] || { echo 0; exit 0; }
+  done; echo 1)"
+  if [ "$MATRIX" = 1 ]; then cells="$CL_CELLS"; MX_RAN=$((MX_RAN + $(printf '%s\n' $cells | grep -c .) - $(printf '%s\n' $dec $tw | grep -c .)))
+  else cells="$dec $tw"; fi
+  g="$(cl_score "$P" "$S" "m-$name" $cells)"
+  moved="$(moved_of "$g" "$CL_WANT")"
+  [ "$MATRIX" = 1 ] && mx_row "$name" "$cells" "$moved"
+  same_set "$moved" "$dec" && cond=1
+  finish_mutant "$([ "$B_cl" = 1 ] && echo 1 || echo 0)" "$name" "$cond" \
+    "[cl] MUTANT $name kill confirmed: decides [$dec] moved, twin [$tw] stayed green" \
+    "[cl] MUTANT $name moved [${moved% }], want [$dec] (twin [$tw])"
+}
+cl_mutant cl-dist-keyed      pool 's|^  ( cd "\$cl_tree" \|\| exit 1$|  ( :|'
+cl_mutant cl-select-all      pool 's|^    awk -F'"'"'\\t'"'"' '"'"'\$2 == "run" { print \$1 }'"'"' "\$c/\.kdec" > "\$out/\.cl\.sel"$|    cp "$out/.cl.all" "$out/.cl.sel"|'
+cl_mutant cl-stamp-raw       pool 's|^    if \[ -f \.claude/\.ai-dlc-version \]; then$|    if false; then|'
+cl_mutant cl-no-refusal      pool 's|^  elif \[ "\$2" != census \] && ! cl_any_record "\$kd" |  elif false \&\& ! cl_any_record "$kd" |'
+cl_mutant cl-store-dist-project pool 's|^    KEYS_DIR="\$kd"; FXROOT=|    readset_vs_store() { printf "%s" "$p"; }; KEYS_DIR="$kd"; FXROOT=|'
+cl_mutant cl-publish-late     pool 's|^  \[ -n "\$kd" \] && \[ -s "\$1/\.cl/\.k/\$2" \] \|\| return 0$|  return 0|'
+cl_mutant cl-publish-worker   pool 's|; \. "\$AI_DLC_FX_OUT/\.cl\.pub" && cl_publish "\$AI_DLC_FX_OUT" "\$cf"$||'
+cl_mutant cl-record-on-red   pool 's|^    \[ "\$(cat "\$out/\$b@consumer" 2>/dev/null)" = ok \] \|\| rm -f "\$c/\.k/\$b"$|    printf ok > "$c/$b"|'
+cl_mutant cl-depth1-honoured pool 's|^  if \[ "\$POOL_DEPTH_IN" -eq 0 \]; then cl_tree="\${AI_DLC_FX_CL_TREE:-}"; fi$|  cl_tree="${AI_DLC_FX_CL_TREE:-}"|'
+cl_mutant cl-switch-on       pool 's|cl_tree="\${AI_DLC_FX_CL_TREE:-}"; fi$|cl_tree="${AI_DLC_FX_CL_TREE:-no-tree}"; fi|'
+cl_mutant cl-no-entry        step 's|^  if \[ "\$POOL_DEPTH_IN" -eq 0 \] && \[ "\${PREPUSH_CL_ENTRY:-}" = 1 \]; then$|  if [ "$POOL_DEPTH_IN" -eq 0 ]; then|'
+cl_mutant cl-fail-open       step '/^      eval "rm -rf -- \$cl_q"; trap - EXIT INT TERM HUP$/{n;s/^      return 1$/      :/;}'
+cl_mutant cl-no-arg          step 's|bash scripts/install\.sh "\$cl_top" )|bash scripts/install.sh )|'
 
 # ------------------------------------------------- BL-924's RECEIPT, against THIS run.sh ---------
 # The receipt builds ONE scratch copy of this file, forces the two schedules BL-924 names (fx6 writes its flight

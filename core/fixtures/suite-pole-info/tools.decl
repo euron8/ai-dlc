@@ -8,3 +8,4 @@ grep
 mktemp
 rm
 sed
+cat

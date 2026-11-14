@@ -1324,6 +1324,8 @@ sandboxed() {
     sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"
   elif [ -n "$LOCAL_MAP" ]; then
     sandbox-exec -D FXTAG="$CUR_FX" -f "$PROFILE" "$@"
+  elif [ -n "${RS_NEST_PATH:-}" ] && [ "$1" = env ]; then
+    sandbox-exec -f "$PROFILE" env PATH="$RS_NEST_PATH" READSET_POOL_WIDTH=1 "${@:2}"
   else
     sandbox-exec -f "$PROFILE" "$@"
   fi
@@ -1331,6 +1333,62 @@ sandboxed() {
 readset_trip_set() {
   find /usr/bin /bin /usr/sbin /sbin /usr/libexec -maxdepth 1 -type f \( -perm -4000 -o -perm -2000 \) 2>/dev/null
   printf '%s\n' /usr/bin/log "$(command -v sandbox-exec)"
+}
+# THE ESCAPE SET, `--list`/`--all`/`--reconcile` and `both` only (the plain emitter). Inside ANY sandbox the
+# kernel refuses the exec of a setuid binary (`/bin/ps`, rc 71/126), `log` refuses to run, and a sandbox_apply
+# under a profile carrying `(with report)` is refused -- so a fixture that reads process state, opens a stream
+# or nests sandbox-exec exits nonzero under this tracer and is never mapped. The plain emitter execs exactly
+# these three `(with no-sandbox)`: ps and log read system state and no repo file; sandbox-exec is reached only
+# through the NEST SHIM below, which re-applies this profile's report clause inside the caller's profile, so a
+# nested run's reads are still reported. An escaped exec is itself reported (its message carries the trace
+# root, so the stream predicate keeps it), and a sandbox-exec exec whose pid did not first read the shim's
+# marker is a NEST BYPASS that omits the fixture. `--local-map` keeps the TRIP clause and escapes nothing.
+# The fixture launch (sandboxed's nest branch) also sets READSET_POOL_WIDTH=1, which layer-contract-conformance,
+# consumer-machinery-home and crosswalk-home-declaration read as their pool width: at full width their sweeps
+# outran `log stream` and every window dropped reports. Like the knobs on the launch line, it changes the
+# schedule, not the work.
+# A real path, never `command -v`: under a traced fixture PATH resolves sandbox-exec to the shim.
+readset_esc_set() {
+  printf '%s\n' /bin/ps /usr/bin/log /usr/bin/sandbox-exec
+}
+RS_NEST_PATH=""; RS_ESC=""
+# THE NEST SHIM: `sandbox-exec` first on the traced fixture's PATH. It takes `-p`/`-f` and `-D`, inserts the
+# report clause and the sandbox-exec escape directly after the caller's `(version N)` form -- BEFORE the
+# caller's rules, so a caller rule on the same literal (a nested deriver's TRIP) still wins, and `(allow
+# default)` cannot override a specific clause -- reads the marker (one reported read under its own pid), then
+# execs the NEXT sandbox-exec on the deriver's own PATH (resolved before the shim joins it: the real binary at
+# top level, an enclosing trace's shim or a fixture's stub when nested), so the chain ends at the real binary,
+# which the escape lets apply the composed profile. ps and log are NOT escaped in the
+# composed profile: under the caller's sandbox they must fail exactly as they do untraced. Any argument shape
+# it cannot compose execs the real binary unchanged: no marker, so the judge omits the fixture.
+readset_write_nest_shim() { # $1 shim dir, $2 one-line clause text to insert
+  mkdir -p "$1" || return 1
+  : > "$MARKDIR/.readset-nest" || return 1
+  {
+    printf '#!/bin/bash\n'
+    printf 'REAL=%q\nINS=%q\nNEST=%q\nNDIR=%q\n' "$(command -v sandbox-exec)" "$2" "$MARKDIR/.readset-nest" "$1"
+    cat <<'SHIM'
+orig=("$@"); prof=""; have=0; dargs=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -p) [ $# -ge 2 ] || exec "$REAL" "${orig[@]}"; prof="$2"; have=1; shift 2 ;;
+    -f) [ $# -ge 2 ] || exec "$REAL" "${orig[@]}"; prof="$(cat -- "$2")" || exec "$REAL" "${orig[@]}"; have=1; shift 2 ;;
+    -D) [ $# -ge 2 ] || exec "$REAL" "${orig[@]}"; dargs+=("$1" "$2"); shift 2 ;;
+    -D?*) dargs+=("$1"); shift ;;
+    --) shift; break ;;
+    -*) exec "$REAL" "${orig[@]}" ;;
+    *) break ;;
+  esac
+done
+[ "$have" = 1 ] || exec "$REAL" "${orig[@]}"
+comp="$(printf '%s\n' "$prof" | INS="$INS" awk '!d && match($0, /\(version[ \t]+[0-9]+\)/) { $0 = substr($0, 1, RSTART + RLENGTH - 1) "\n" ENVIRON["INS"] "\n" substr($0, RSTART + RLENGTH); d = 1 } { print } END { exit !d }')" \
+  || exec "$REAL" "${orig[@]}"
+tmp="$(mktemp "$NDIR/nest.XXXXXX")" || exec "$REAL" "${orig[@]}"
+printf '%s\n' "$comp" > "$tmp" || exec "$REAL" "${orig[@]}"
+: < "$NEST"
+exec "$REAL" "${dargs[@]}" -f "$tmp" "$@"
+SHIM
+  } > "$1/sandbox-exec" && chmod +x "$1/sandbox-exec"
 }
 rs_top_tree() {
 if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
@@ -1353,6 +1411,12 @@ if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
   else
     printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n(allow file-read-metadata file-test-existence (literal "%s"))\n' "$TREE" "$MARKDIR" "$TREE" > "$PROFILE" \
       || die "cannot write $PROFILE"
+    rs_esc="$(readset_esc_set | awk 'NF { printf " (literal \"%s\")", $0 }')"
+    printf '(allow process-exec%s (with no-sandbox) (with report) (with message "%s/ ESC"))\n' "$rs_esc" "$TRACE_ROOT" >> "$PROFILE" \
+      || die "cannot write $PROFILE"
+    rs_ins="$(printf '(allow file* process-exec* (subpath "%s") (subpath "%s") (with report)) (allow process-exec (literal "/usr/bin/sandbox-exec") (with no-sandbox) (with report) (with message "%s/ ESC"))' "$TREE" "$MARKDIR" "$TRACE_ROOT")"
+    RS_ESC=1; readset_write_nest_shim "$TRACE_ROOT/s" "$rs_ins" || die "cannot write the nest shim under $TRACE_ROOT/s"
+    [ "$TRACER" = both ] || RS_NEST_PATH="$TRACE_ROOT/s:$PATH"
   fi
   sandboxed true 2>"$WORK/sandbox-probe.err" </dev/null \
     || die "sandbox-exec refused the profile: $(head -1 "$WORK/sandbox-probe.err")"
@@ -1568,6 +1632,26 @@ sandbox_paths() {
     }'
 }
 # READSET_SBPATHS_END
+# THE NEST-BYPASS COUNT: escaped execs of /usr/bin/sandbox-exec in a window ($stdin) whose pid never read the
+# shim's marker ($1). The shim reads the marker and then execs under the same pid, so every exec it makes
+# pairs; an exec from anything else (an absolute /usr/bin/sandbox-exec, a fixture that reset PATH) does not.
+readset_nest_bypass() {
+  awk -v nest="$1" '
+    {
+      i = index($0, "Sandbox: "); if (i == 0) next
+      rest = substr($0, i + 9)
+      j = index(rest, ") allow "); if (j == 0) next
+      head = substr(rest, 1, j - 1); k = 0
+      for (m = length(head); m > 0; m--) if (substr(head, m, 1) == "(") { k = m; break }
+      pid = substr(head, k + 1)
+      rest = substr(rest, j + 8)
+      sp = index(rest, " "); if (sp == 0) next
+      op = substr(rest, 1, sp - 1); path = substr(rest, sp + 1)
+      if (op ~ /^process-exec/ && (path == "/usr/bin/sandbox-exec" || index(path, "/usr/bin/sandbox-exec ") == 1)) esc[pid] = 1
+      else if (op == "file-read-data" && (path == nest || index(path, nest " ") == 1)) mk[pid] = 1
+    }
+    END { n = 0; for (p in esc) if (!(p in mk)) n++; print n }'
+}
 
 # THE MAP IS WRITTEN AFTER EVERY ACCEPTED FIXTURE, NOT ONLY AT THE END. Each trace is independent,
 # and a run interrupted after N clean fixtures used to lose all N: measured, a 5-fixture run killed
@@ -1955,7 +2039,7 @@ rs_fx_judge() {
   # and a truncated path maps to the wrong file or to none, which reads exactly like a clean
   # trace.
   last="$(grep -nF "$SENT_KEY" "$raw" 2>/dev/null | tail -1 | cut -d: -f1)"; : "${last:=0}"
-  lost=0
+  lost=0; nest_bypass=0
   if [ "$TRACER" = fs_usage ]; then
     tail -n "+$(( last + 1 ))" "$raw" 2>/dev/null \
       | grep -v 'RdData\|WrData' \
@@ -1976,6 +2060,7 @@ rs_fx_judge() {
     # under a burst of a few hundred opens, and every burst that lost paths printed the notice.
     lost="$(grep -c 'dropped during' "$WORK/$fx.win" 2>/dev/null)" || lost=0
     sandbox_paths < "$WORK/$fx.win" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
+    [ -z "${RS_ESC:-}" ] || nest_bypass="$(readset_nest_bypass "$MARKDIR/.readset-nest" < "$WORK/$fx.win")" || nest_bypass=unreadable
   fi
   # THE LOSS CANARY: a file the fixture READ (its atime moved off the forced epoch) that the stream
   # never reported. Under every tracer whose $fx.fs IS the stream set -- `sandbox` and `both`. Under
@@ -1995,11 +2080,15 @@ rs_fx_judge() {
   # drop notices, and on 0 of the 16 fixtures whose windows had 0 notices. The one firing seen
   # WITHOUT a notice was a synthetic single-reader burst over 1500 files: 3 of its 4 canary paths
   # appear nowhere in the raw stream and the 4th matches only as a prefix of other names, so that
-  # was a real silent loss and not a false positive. No path class is exempted.
+  # was a real silent loss and not a false positive. `.git` is the one class compared out, below.
   # The comparison is readset_loss_canary, between sentinels above, so readset-skip drives it.
+  # `.git` and `.git/**` are compared out of BOTH sides: readset_drop_git removes them from every set below,
+  # so a lost `.git` read cannot shorten a row, and a straggler's `.git/HEAD` read after the window omitted
+  # readset-skip and readset-skip-d on every trace.
   canary=0
   if [ "$TRACER" != fs_usage ]; then
-    canary="$(readset_loss_canary "$WORK/$fx.at" "$WORK/$fx.fs" "$WORK/$fx.canary")"
+    readset_drop_git < "$WORK/$fx.at" > "$WORK/$fx.at.ng"; readset_drop_git < "$WORK/$fx.fs" > "$WORK/$fx.fs.ng"
+    canary="$(readset_loss_canary "$WORK/$fx.at.ng" "$WORK/$fx.fs.ng" "$WORK/$fx.canary")"
   fi
   # Under `both`, the fs_usage capture is extracted exactly as the fs_usage mode extracts it, from
   # its OWN last sentinel line, into $fx.fsu. $fx.fs above is then the sandbox set.
@@ -2025,6 +2114,7 @@ rs_fx_judge() {
   [ "$lost" -eq 0 ]    || why="${why:+$why; }the stream dropped reports $lost time(s) in this window"
   [ "$canary" = 0 ]    || why="${why:+$why; }LOSS CANARY: $canary path(s) the fixture read (atime) are absent from the stream -- see $WORK/$fx.canary"
   [ "$unread_moved" -eq 0 ] || why="${why:+$why; }UNREAD CONTROL: $UNREAD_CTL left the 2001 atime epoch -- the reset did not hold or something walked the tree"
+  [ "$nest_bypass" = 0 ] || why="${why:+$why; }NEST BYPASS: $nest_bypass escaped sandbox-exec exec(s) not made by the nest shim -- a nested run went unreported"
   [ "$n" -gt 0 ]      || why="${why:+$why; }empty read-set"
   [ "$dirty" -le "$DIRTY_BASE" ] || why="${why:+$why; }fixture wrote $(( dirty - DIRTY_BASE )) path(s) into the tree"
   # `--local-map` ADDS THREE CONDITIONS, because nobody reads this run's output: the hook starts it
