@@ -42942,3 +42942,67 @@ Receipt: the `verify:` line drives the shipped `readset_decl_keys`, sourced from
 Provenance: batch 257, F17; id allocated by the lead.
 
 verify: sh H=.githooks/pre-push; grep -q '^readset_decl_keys() ' "$H" || exit 9; H="$PWD/$H"; T="$(mktemp -d)" || exit 9; cd "$T" || exit 9; sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$H" > k.sh; . ./k.sh || exit 9; mkdir -p core/scripts || exit 9; printf 'f\tN\n' > p; : > l; : > t; printf 'core/scripts/hermetic-run.sh\tx\n' > n; w() { printf '%s\n# HR_SANDBOX_BEGIN\n%s\n# HR_SANDBOX_END\nf() {\n  %s\n}\n%s\n' "$1" "$2" "$3" "$4" > core/scripts/hermetic-run.sh; readset_decl_keys n l p t core/fixtures/; }; a="$(w h1 s1 x1 'exit 1')"; b="$(w h2 s1 x2 'exit 1')"; c="$(w h1 s2 x1 'exit 1')"; d="$(w h1 s1 x1 'exit 2')"; [ -n "$a" ] || exit 9; [ "$a" = "$b" ] && [ "$a" != "$c" ] && [ "$a" != "$d" ]
+
+## BL-1052 — nothing stops a change from invalidating verdicts whose read inputs it did not change
+
+**LANDED (v0.1124.0).** `scripts/invalidation-guard.sh` carries two mechanisms, and the durable channel names it as the enforcer (`.claude/rules/operator-rulings.md`, `.claude/rules/fixture-ship-decl.md`).
+- `readset_invalidation_guard`, inside FIXTURE_POOL in both pre-push hooks (I66), runs after `apply_readset_skip` and before dispatch. It takes every declared fixture the read-set key selected and attributes it to the rows that moved, then fails the push when every moved row is UNREADABLE. A row is UNREADABLE when it is the whole-file row of a `#program`, either `legacy` or implied by the composer, and every `# NAME_BEGIN`..`# NAME_END` span is byte-identical between the recorded content and the present content. The recorded content is recovered by matching sha256 against git history.
+- The pre-push step `--ratchet` refuses three things: a new whole-program or whole-directory `inputs.decl` line, a stale row in `docs/inputs-decl-whole-rows.tsv`, and a list row the base copy lacks. The list may only shrink.
+- `spans.decl` (`<path> <NAME>`) lets a fixture key a span instead of a whole program.
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: `.githooks/pre-push` read-set selection, and the `inputs.decl` grammar.
+
+A one-line edit to a shared program (the runner, either pre-push hook) re-ran most of the suite, because every declared fixture was keyed on that program's whole file. F17 (BL-1049) and F19 (BL-1051) remove today's causes, but nothing in the repo prevented the next author from re-introducing one.
+
+Receipt: the guard's self-probe and the ratchet's self-probe, both run before every corpus judgment.
+- The guard probe: a comment edit outside every span FAILs the `legacy` and implied whole-program fixtures by name. The same edit passes `whole`. It reports UNATTRIBUTED for a `legacy` directory line and for an unrecoverable record. An edit inside a span fails nothing. A short key decision is a named SKIP.
+- The ratchet probe fires r1 through r4 on a seeded corpus and stays quiet on comment, CRLF and near-miss lines.
+- The end-to-end probe runs this tree's own composer in a scratch repository. A comment edit outside every span selects only the whole-hook fixture, and the guard FAILs it by name. An edit inside the span declared in `spans.decl` selects the span fixture, and nothing fails. spanabsent, spanbad and spandir all reach the parse. Hook mutants each turn it red: span keyed whole, spans reader off, span sha not raw, spanabsent off.
+- The discriminating input is the 0.1110.0 bundle's runner edit (outside HR_SANDBOX) at 93cae636f: 223 FAIL, 21 UNATTRIBUTED, 29 READ.
+
+verify: sh bash scripts/invalidation-guard.sh --self-probe
+## BL-1053 — a hand counted run from a session's Bash tool under-counts `bash -c` starts, so an `invocations.decl` row set from it fails the push's J3
+
+**LANDED (v0.1124.0).** `scripts/seed-verdict-store.sh` runs `exec < /dev/null` before it arms the counter, so the arming and every `hermetic-run.sh` it starts read `/dev/null` on stdin, as the push's pool gives every fixture (`.githooks/pre-push`, the worker's `"$@" ... < /dev/null` under `xargs`). `scripts/pregate-self-check.sh` gives its counted `validator-fork-budget` run the same redirect. `core/scripts/hermetic-run.sh` is untouched. The receipt is `core/fixtures/seed-verdict-store-red-print` arm a4: the subject is driven from a regular file, and its stub `hermetic-run.sh` records whether each start's stdin is `/dev/null`. Mutant `m-stdin` drops the `exec` line and is killed by a4, with a3 as its twin. Nothing binds the `pregate-self-check.sh` redirect.
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: the counted-run entry points outside the push's pool, `scripts/seed-verdict-store.sh` and `scripts/pregate-self-check.sh`.
+
+bash 3.2 does not read `BASH_ENV` in a `bash -c` at shell level 1 whose stdin is an inet socket: it treats the shell as started by rshd. The invocation counter rides `BASH_ENV`. A session's Bash tool hands its commands such a stdin, and the pool hands a fixture `/dev/null`. Inside a fixture, a `bash -c` reached through `exec` (bash lowers SHLVL before an exec) or `env -i` runs at shell level 1. In the foreground, or as a `set -m` job (a job without job control gets `/dev/null`), it inherits that socket and is not counted. A row set from a hand counted run then reads low against the push. Found by ai-dlc-d5 on F18 (BL-1050): `prepush-pool-depth` read 1294 by hand and 1297 at the gate. Deterministic, not load.
+
+Fix: give every counted-run entry outside the pool stdin `/dev/null`, as the pool does. Never fix it in `core/scripts/hermetic-run.sh`: its verdict-relevant span keys every fixture.
+
+Receipt: a scratch fixture with one `bash -c` start at shell level 1, counted through the fixed entry from a socket stdin and from `/dev/null`, must read the same count; with the redirect dropped, the socket run must read one start low. In the tree: `seed-verdict-store-red-print` a4 and mutant `m-stdin`.
+
+verify: sh o="$(bash core/fixtures/seed-verdict-store-red-print/run.sh 2>&1)"; case "$o" in *"ok    a4 "*) ;; *) exit 1 ;; esac; case "$o" in *"ok    m-stdin scored by a4"*) exit 0 ;; esac; exit 1
+## BL-1055 — a cheap red surfaces only after a 30-47 minute gate, because nothing makes a pusher run the pregate self-check first
+
+**LANDED (v0.1124.0).** `.githooks/pre-push` now refuses, before any step, a push that delivers a tree unless three things hold: the work tree is clean, every delivered commit's tree equals `HEAD^{tree}`, and `scripts/pregate-self-check.sh` has recorded the tree green at `<git common dir>/ai-dlc-pregate-green/<tree>`. The self-check writes that record only on exit 0, over a work tree that was clean at its start and its end, with the same HEAD tree at both. An empty stdin delivers nothing and is not gated. `validator-fork-budget`'s `*` row was already flat after BL-1025: three counted runs read 509 on the base tree, on base plus one `scripts/*.sh`, and on base plus one fixture directory. `validator-arm-selection` and `-b` count one pass per invariant arm id. The judge's formula form cannot express that, and a judge edit would re-key every counted verdict, so they stay as plain rows. Receipt: `core/fixtures/pregate-self-check`, with cells gc (deny, empty, allow, tree, dirty, E2E) and Arec/Brec/Wd, and mutants g1-g4 and m4.
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: `.githooks/pre-push` (no gate before the suite) and `scripts/pregate-self-check.sh` (its result reaches nothing).
+
+In the batch-257 push-cost audit, 10 of 20 retained red pushes carry a J3 count row, and 7 have it as their only red. `validator-fork-budget` alone reddened 7 pushes because its plain-number `*` row drifted about 4 per added corpus file. Each red costs a 30-47 minute push. `scripts/pregate-self-check.sh` catches the hook-prefix reds, the spelling arm and that fixture in minutes, but no rule or mechanism makes anyone run it.
+
+Fix:
+1. Make the self-check mandatory by mechanism: a record keyed on the exact tree, written by the self-check and read by the hook before any step.
+2. Make drifting count rows corpus-independent.
+3. Carry stored verdicts forward.
+
+verify: sh o="$(bash core/fixtures/pregate-self-check/run.sh 2>&1)"; case "$o" in *"ok    gc control: gate receipt exit 0 on the distribution hook"*) ;; *) exit 1 ;; esac; case "$o" in *"ok    g1 mutant: gate receipt exit 1 (killed)"*) ;; *) exit 1 ;; esac; case "$o" in *"ok    m4 mutant: receipt exit 1 (killed)"*) exit 0 ;; esac; exit 1
+## BL-1057 — the counted-store key hashes the whole invocation judge, its rc and the matrix allowlist, so any edit to them voids every counted verdict, and the dead counted stores are never collected
+
+**LANDED (v0.1124.0).** The counted store is named for the judge's format, and each counted entry carries its fixture's own judge row.
+- **Per-fixture judge row.** `scripts/validate-fixture-invocations.sh --key-rows <root> [<fixture>...]` prints `<fx>\t#judge f<FXC_FORMAT> <J5 key> <listed|unlisted>`. The J5 key is the shard stub's IMPL (through `fxc_impl_of`), else the fixture, and the membership is `fxc_allowlisted`'s. In a counted run (FXCOUNT_JUDGE set), the READSET_VS span's `readset_vs_input` adds that row after `#inproc`. An uncounted digest input is unchanged. fxcount_arm writes the table once per push (FXCOUNT_KEYROWS), and the runner's writer and the hook's reader read it.
+- **Store key.** fxcount_arm names the store `counted-<vk>` from `--store-key`, the sha of FXC_FORMAT alone. The whole-judge, rc and allowlist hash is gone. A judge or allowlist edit re-runs only the fixtures whose row it moves.
+- **Judge identity.** `# FXC-IDENTITY <format> <sha> <reason>` rows pin every semantic sha of the judge (comments and blanks dropped). `--identity-check`, run in fxcount_arm, fails arming on an unpinned sha. A code edit adds a row under the current format when no judgement moves, else under a bumped FXC_FORMAT.
+- **Carry-forward.** fxcount_arm's `fxcount_legacy` pin names the last whole-judge store, `counted-cd68ce325a3d`, with the judge and allowlist blobs it hashed and format f1. The pin recomputes to its vk at every arming, or legacy lookup is OFF. `--legacy-ok` lists the fixtures whose J5-key membership under the pinned allowlist equals today's. readset_verdicts reads their entries in the legacy store, which carry no judge row, and the 3b pending step accepts them.
+- **Collector.** `scripts/collect-counted-stores.sh`, off-gate, dry run by default. It keeps the live store (`--store-key`) and the legacy store (the pin line). It lists every other `counted-<12 hex>` store and, with `--apply`, removes it by exact file listing and then rmdir. Measured on this box: 6 dead stores, 3,399 files.
+
+**DEFECT.** Filed 2026-11-13. Owner: `.githooks/pre-push` fxcount_arm and the READSET_VS span (mirrored in `core/git-hooks/pre-push`), and `scripts/validate-fixture-invocations.sh`.
+
+fxcount_arm's counted-store key vk hashed the whole judge, its generated rc and `scripts/fixture-matrix-allowlist.txt`, so any byte edit to any of them voided every counted entry. The batch-257 push-cost audit (row 11) counted this in 4 of 60 releases, and 3,399 entries sitting in six dead counted-* stores that nothing collects.
+
+Receipt: the `verify:` line drives the shipped judge. A code edit to a copy of the judge, plus an allowlist row for one fixture, leaves `--store-key` unchanged. It moves that fixture's `--key-rows` row and leaves the other fixture's row unchanged. It exits 1 at b76809dd4, where `--store-key` does not exist, and 0 at this release.
+
+Provenance: batch 257, F25; id allocated by the lead.
+
+verify: sh J=scripts/validate-fixture-invocations.sh; T="$(mktemp -d)" || exit 9; mkdir -p "$T/a/scripts" "$T/b/scripts" "$T/r/core/fixtures/f" "$T/r/core/fixtures/g" || exit 9; printf 'exit 0\n' > "$T/r/core/fixtures/f/run.sh"; printf 'exit 0\n' > "$T/r/core/fixtures/g/run.sh"; cp "$J" "$T/a/scripts/" || exit 9; { cat "$J"; printf 'FXC_RECEIPT_EDIT=1\n'; } > "$T/b/scripts/validate-fixture-invocations.sh" || exit 9; printf '# none\n' > "$T/a/scripts/fixture-matrix-allowlist.txt"; printf 'f\tS1 receipt\n' > "$T/b/scripts/fixture-matrix-allowlist.txt"; ka="$(bash "$T/a/scripts/validate-fixture-invocations.sh" --store-key 2>/dev/null)"; kb="$(bash "$T/b/scripts/validate-fixture-invocations.sh" --store-key 2>/dev/null)"; case "$ka" in counted-[0-9a-f]*) ;; *) exit 1 ;; esac; [ "$ka" = "$kb" ] || exit 1; ra="$(bash "$T/a/scripts/validate-fixture-invocations.sh" --key-rows "$T/r" 2>/dev/null)"; rb="$(bash "$T/b/scripts/validate-fixture-invocations.sh" --key-rows "$T/r" 2>/dev/null)"; [ "$(printf '%s\n' "$ra" | grep -c '^f	#judge f[0-9]* f unlisted$')" = 1 ] && [ "$(printf '%s\n' "$rb" | grep -c '^f	#judge f[0-9]* f listed$')" = 1 ] || exit 1; ga="$(printf '%s\n' "$ra" | grep '^g	')"; gb="$(printf '%s\n' "$rb" | grep '^g	')"; [ -n "$ga" ] && [ "$ga" = "$gb" ] || exit 1; exit 0

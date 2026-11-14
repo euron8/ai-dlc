@@ -19,6 +19,46 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1124.0] - 2026-11-13
+
+### BL-1052 CLOSED: a change no longer re-runs fixtures it cannot reach, and the property is enforced
+
+`scripts/invalidation-guard.sh` now enforces two things:
+- Inside the fixture pool of both pre-push hooks, it fails a push when a declared fixture is selected only because a whole-program key row moved while every span of that program is unchanged.
+- As a pre-push step (`--ratchet`), it refuses any new whole-program or whole-directory `inputs.decl` line. `docs/inputs-decl-whole-rows.tsv` lists the lines that exist and may only shrink.
+
+A fixture can declare the span it reads in `spans.decl`. The rule and its enforcer are in `.claude/rules/operator-rulings.md` and `.claude/rules/fixture-ship-decl.md`.
+### BL-1053 CLOSED: a hand counted run reads stdin /dev/null, as the push does
+
+`scripts/seed-verdict-store.sh` now runs `exec < /dev/null` before arming, and `scripts/pregate-self-check.sh` gives its counted `validator-fork-budget` run `< /dev/null`. From a session's Bash tool, stdin is an inet socket, and bash 3.2 skips `BASH_ENV` in a `bash -c` at shell level 1 on such a stdin. A fixture's `exec bash -c` or `env -i … bash -c` start, in the foreground or as a `set -m` job, therefore went uncounted, and an `invocations.decl` row set from a hand seed read low against the push's pool, which runs fixtures with `/dev/null`. `core/scripts/hermetic-run.sh` is untouched. Receipt: `seed-verdict-store-red-print` arm a4 (every `hermetic-run.sh` the subject starts reads `/dev/null`, the subject driven from a file) and mutant `m-stdin`, which drops the `exec` and is killed.
+### BL-1056 PARTIAL: one fixture contract, bound by validators
+
+`.claude/rules/fixture-contract.md` is the contract every `core/fixtures/<f>/` is built to: the run.sh skeleton, the library entry points, each declaration grammar (`inputs.decl`, `spans.decl`, `tools.decl`, `invocations.decl`, `cells.decl`, `git.decl`, `.dist-only`, `.undeclarable`), the keys, the verdict store and the runner span, in 24 clauses that each name their enforcer. `scripts/validate-claude-rules.sh` arm A7 resolves every cite and requires every declaration kind and library file to be named. New in `core/fixtures/lib/`: `report.sh` (`ok`, `bad`, `report_end`), `world.sh` (`world_git`, `world_repo`, `world_commit`, `world_install`) and `hook-drive.sh` (`hook_drive`). `scripts/validate-fixture-hygiene.sh` arms H10 (own `ok`/`bad`) and H11 (a hook run by hand) hold the 234 + 4 fixtures that predate them on the down-only `scripts/fixture-contract-allowlist.txt`. `suite-dispatch-order` moves onto all three new files. CLAUDE.md's verified-record and suite-key lines are corrected for 0.1112.0 and cite the contract. The migration of the listed fixtures is owed and named in the entry.
+### BL-1054 PARTIAL: pre-suite step keys skip git-ignored paths
+
+`.githooks/pre-push` keys each pre-suite step on what it can read, never on git-ignored paths. A new `pk_ign` turns `git ls-files -o -i --exclude-standard --directory` into prune operands for all four walks: the present key, the atime reset, the atime scan and the mtime check. So a worktree added under `.claude/worktrees/` no longer moves every step's key. `.claude/settings.json` and `.claude/agents`, which the agent-definitions step reads, stay keyed as declared inputs. A tree with no ignored path keys exactly as before, so existing records from clean worktrees carry forward. `core/fixtures/presuite-present-key` gains eight arms and six mutants, and `m_univ` is re-anchored. BL-1054 stays open for its second subject, the backlog-receipts cut, which is measured but not built: its cost is BL-878's 81 s receipt, run once in the score pass and once in R9, not a checkout per receipt.
+
+### BL-1058 filed
+
+Trees with the same path set but different content share one pre-suite record per step, so a run between two pushes overwrites the next push's skips.
+### BL-1055 CLOSED: a push is refused until the pregate self-check has passed on the exact tree it delivers
+
+`.githooks/pre-push` gains a gate (the `PREGATE_GATE` span) that runs before any step. A push that delivers a tree is refused in seconds unless three things hold: the work tree is clean, every delivered commit's tree equals `HEAD^{tree}`, and `<git common dir>/ai-dlc-pregate-green/<tree>` exists. `scripts/pregate-self-check.sh` writes that record on exit 0, and only when the work tree was clean, with an unchanged HEAD tree, at both the start and the end of its run. The self-check runs the hook's pre-suite prefix, the procsub spelling arm and the counted `validator-fork-budget` run. Its prefix run records pre-suite passes, so the push that follows skips those steps. Empty stdin is not gated, because it delivers nothing: hand runs, the self-check's own prefix run, and fixtures that drive the hook with `</dev/null`. Delete-only pushes still exit earlier. There is no environment opt-out.
+
+`validator-fork-budget`'s `*` row no longer drifts. BL-1025 made it flat, and three counted runs measure 509 on the base tree, on base plus one `scripts/*.sh`, and on base plus one fixture directory. No other J3 row moves with the number of files in the tree. `validator-arm-selection` and `-b` move with the invariant arm set: one in-process pass per arm id. The judge's formula form counts paths, not ids, and a judge edit would re-key every counted verdict, so those rows stay as they are.
+
+Receipt: `core/fixtures/pregate-self-check`.
+- The gate cases (gc, cut from the real hook): deny, empty, allow, tree and dirty, plus one whole-hook drive that stops at the gate before any step.
+- The writer worlds: A records, B (a finding) does not, and Wd (dirty) does not and says why.
+- The mutants: g1 to g4 (the record, clean-tree, tree-equality and empty-stdin tests) and m4 (the writer's condition). Each is killed by its own cell only, measured by `--matrix`.
+### BL-1057 CLOSED: a judge or allowlist edit re-runs only the fixtures whose judgement it moves, and dead counted stores can be collected
+
+- The counted store is `counted-<vk>`, with vk taken from the invocation judge's format (`--store-key`). It no longer hashes the judge, its rc and `scripts/fixture-matrix-allowlist.txt`.
+- Each counted verdict-store entry carries its fixture's own `#judge f<format> <J5 key> <listed|unlisted>` row (`--key-rows`). Uncounted entries are unchanged.
+- The judge's semantic sha is pinned by `# FXC-IDENTITY <format> <sha> <reason>` rows. Arming fails on an unpinned judge (`--identity-check`).
+- Existing counted entries carry forward from the pinned legacy store `counted-cd68ce325a3d`, per fixture, while the fixture's allowlist membership is unchanged (`--legacy-ok`). The pin re-derives its own vk at every arming.
+- `scripts/collect-counted-stores.sh` (off-gate, dry run by default) lists, and with `--apply` removes by exact listing, every counted store a push cannot read.
+
 ## [0.1122.0] - 2026-11-13
 
 ### BL-1049 CLOSED: a change re-runs only the fixtures whose inputs it moves, and stored verdicts survive comment and composition edits

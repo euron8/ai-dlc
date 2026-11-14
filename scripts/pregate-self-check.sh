@@ -38,6 +38,7 @@
 #
 # Usage: pregate-self-check.sh [<base>]     (default base: origin/main)
 # Exit: 0 = clean, 1 = at least one finding (the check and the lines are named), 2 = cannot run.
+# MANDATORY: .githooks/pre-push refuses a push of any tree this script has not recorded green (PREGATE_GATE span).
 set -uo pipefail
 export LC_ALL=C
 
@@ -88,6 +89,14 @@ git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null 2>&1 \
   || { echo "pregate-self-check: base '$BASE' does not resolve to a commit in $ROOT" >&2; exit 2; }
 
 W="$(mktemp -d)" || exit 2
+# THE PREGATE RECORD (BL-1055). .githooks/pre-push refuses a push that delivers a tree with no record written here.
+# One is written only on exit 0, and only when $ROOT's work tree is clean (no tracked change, no untracked
+# non-ignored path) at the start AND at the end of this run with the same HEAD tree, so the record names exactly the
+# tree every section judged. Path: <git common dir>/ai-dlc-pregate-green/<HEAD tree>; body `#format pg1`, then the
+# tree, the base commit and the UTC time.
+pg_state() { local t s; t="$(git rev-parse --verify --quiet 'HEAD^{tree}')" || return 1
+  s="$(GIT_OPTIONAL_LOCKS=0 git status --porcelain --untracked-files=normal)" || return 1; printf '%s\n%s' "$t" "$s"; }
+PG_START="$(pg_state)" || PG_START=""
 fail=0
 fail_checks=""
 note_fail() { fail=1; fail_checks="${fail_checks}${fail_checks:+, }$1"; }
@@ -229,7 +238,7 @@ FXRC="$(bash "$FXJ" --gen-rc "$W/fx")" && [ -s "$FXRC" ] \
   || { printf 'pregate-self-check: the invocation judge %s did not generate its rc into %s\n' "$FXJ" "$W/fx" >&2; exit 2; }
 arm_start
 FXCOUNT_RC="$FXRC" FXCOUNT_DIR="$W/fx/log" FXCOUNT_JUDGE="$FXJ" AI_DLC_VERDICT_STORE="$W/fx/vs" \
-  bash "$HR" --root "$ROOT" validator-fork-budget > "$W/d.out" 2>&1
+  bash "$HR" --root "$ROOT" validator-fork-budget > "$W/d.out" 2>&1 < /dev/null
 d_rc=$?
 arm_took
 d_judged="$(grep -c '^validator-fork-budget: invocation budget ok: ' "$W/d.out")" || d_judged=0
@@ -256,4 +265,17 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 printf 'pregate-self-check: clean against %s\n' "$BASE"
+PG_END="$(pg_state)" || PG_END=""
+# A clean state is the tree line alone (an empty status adds nothing once $( ) strips the trailing newline).
+pg_tree="${PG_START%%
+*}"
+if [ -n "$PG_START" ] && [ "$PG_START" = "$pg_tree" ] && [ "$PG_END" = "$PG_START" ]; then
+  pg_dir="$(git rev-parse --git-common-dir)/ai-dlc-pregate-green" && mkdir -p "$pg_dir" \
+    && printf '#format pg1\ntree %s\nbase %s\nwhen %s\n' "$pg_tree" "$(git rev-parse "${BASE}^{commit}")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$pg_dir/$pg_tree.tmp" \
+    && mv -f "$pg_dir/$pg_tree.tmp" "$pg_dir/$pg_tree" \
+    && printf 'pregate-self-check: recorded green for tree %s; a push delivering it may proceed\n' "$pg_tree" \
+    || printf 'pregate-self-check: could not write the pregate record for tree %s; a push of it will be refused\n' "$pg_tree" >&2
+else
+  printf 'pregate-self-check: NO RECORD written: the work tree was not clean, or moved, during this run; a push of it will be refused\n' >&2
+fi
 exit 0

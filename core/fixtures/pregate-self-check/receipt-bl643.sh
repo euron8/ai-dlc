@@ -12,7 +12,64 @@
 #   exit 1   any of those differs
 #   exit 9   the receipt cannot measure: a root could not be built (mktemp, git init, commit, a seed hook
 #            that fails bash -n) or an input file is missing
+#
+# --gate <pre-push>: the BL-1055 gate world instead. Cuts the PREGATE_GATE span out of <pre-push> (preceded by the
+#   one line that fills PUSH_LINES from stdin, followed by `echo PAST-THE-GATE`) and drives it from a two-commit repo G:
+#   deny (an update line for HEAD, clean, no record) -> 1 naming the missing record; empty (no stdin, no record) -> past;
+#   allow (record for HEAD's tree) -> past; tree (the line names HEAD~1, whose tree differs) -> 1 naming the tree;
+#   dirty (record present, an untracked file) -> 1 naming the dirty tree. Then, unless --cut-only, the WHOLE <pre-push>
+#   on the deny shape from a clean copy of G (E2E), which must stop at the gate. Prints one summary line; exit 0 when it
+#   is the expected line, 1 when it differs, 9 when the world cannot be built.
 set -uo pipefail
+if [ "${1:-}" = --gate ]; then
+  HK="${2:-}"; E2E_ON=1; [ "${3:-}" = --cut-only ] && E2E_ON=0
+  [ -s "$HK" ] || exit 9
+  case "$HK" in /*) : ;; *) HK="$PWD/$HK" ;; esac
+  W="$(mktemp -d)" || exit 9
+  trap '[ -n "$W" ] && rm -rf "$W"' EXIT
+  G="$W/g"; mkdir -p "$G" || exit 9
+  nb="$(grep -cxF '# PREGATE_GATE_BEGIN' "$HK")" || nb=0; ne="$(grep -cxF '# PREGATE_GATE_END' "$HK")" || ne=0
+  [ "$nb" = 1 ] && [ "$ne" = 1 ] || { echo "gate receipt: PREGATE_GATE_BEGIN/END occur $nb/$ne times in $HK, expected 1/1" >&2; exit 9; }
+  { printf '%s\n' '#!/usr/bin/env bash' 'PUSH_LINES="$(cat)"'
+    sed -n '/^# PREGATE_GATE_BEGIN$/,/^# PREGATE_GATE_END$/p' "$HK"
+    printf '%s\n' 'echo PAST-THE-GATE'; } > "$W/gate.sh" || exit 9
+  bash -n "$W/gate.sh" || exit 9
+  ( cd "$G" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git init -q . && echo one > f && git add -A \
+    && git -c user.email=x@x -c user.name=x commit -q -m one && echo two > f \
+    && git -c user.email=x@x -c user.name=x commit -q -am two ) || exit 9
+  gx() { ( cd "$G" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git "$@" ); }
+  H1="$(gx rev-parse HEAD)" && H0="$(gx rev-parse HEAD~1)" && TR="$(gx rev-parse 'HEAD^{tree}')" || exit 9
+  Z40=0000000000000000000000000000000000000000
+  gdrive() { # <stdin text|-> <out> -> the cut gate's exit; `-` is an empty stdin
+    if [ "$1" = - ]; then ( cd "$G" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && bash "$W/gate.sh" </dev/null >"$2" 2>&1 )
+    else printf '%s\n' "$1" | ( cd "$G" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && bash "$W/gate.sh" >"$2" 2>&1 ); fi
+  }
+  past() { grep -qxF PAST-THE-GATE "$1" && echo 0 || echo 1; }
+  E2E=skip; E2En=skip
+  if [ "$E2E_ON" = 1 ]; then
+    cp -R "$G" "$W/e" || exit 9
+    printf 'refs/heads/x %s refs/heads/x %s\n' "$H1" "$Z40" | ( cd "$W/e" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE \
+      && AI_DLC_READSET_LIVE_TRACE=0 bash "$HK" origin file:///nowhere/x.git >"$W/e.out" 2>&1 ); E2E=$?
+    E2En=no; grep -qF 'No green scripts/pregate-self-check.sh run is recorded for this tree' "$W/e.out" \
+      && ! grep -q '^── ' "$W/e.out" && E2En=yes
+  fi
+  gdrive "refs/heads/x $H1 refs/heads/x $Z40" "$W/deny.out"; gdeny=$?
+  gdenyn=no; grep -qF "No green scripts/pregate-self-check.sh run is recorded for this tree ($TR)" "$W/deny.out" && gdenyn=yes
+  gdrive - "$W/empty.out"; gempty="$(past "$W/empty.out")"
+  mkdir -p "$G/.git/ai-dlc-pregate-green" && printf '#format pg1\ntree %s\n' "$TR" > "$G/.git/ai-dlc-pregate-green/$TR" || exit 9
+  gdrive "refs/heads/x $H1 refs/heads/x $Z40" "$W/allow.out"; gallow="$(past "$W/allow.out")"
+  gdrive "refs/heads/x $H0 refs/heads/x $Z40" "$W/tree.out"; gtree=$?
+  gtreen=no; grep -qF "delivers a tree that is not this work tree's HEAD tree" "$W/tree.out" && gtreen=yes
+  echo stray > "$G/untracked.txt" || exit 9
+  gdrive "refs/heads/x $H1 refs/heads/x $Z40" "$W/dirty.out"; gdirty=$?
+  gdirtyn=no; grep -qF 'The work tree is not clean' "$W/dirty.out" && grep -qF 'untracked.txt' "$W/dirty.out" && gdirtyn=yes
+  line="Gdeny=$gdeny Gdenyn=$gdenyn Gempty=$gempty Gallow=$gallow Gtree=$gtree Gtreen=$gtreen Gdirty=$gdirty Gdirtyn=$gdirtyn E2E=$E2E E2En=$E2En"
+  echo "$line"
+  want="Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes"
+  if [ "$E2E_ON" = 1 ]; then want="$want E2E=1 E2En=yes"; else want="$want E2E=skip E2En=skip"; fi
+  [ "$line" = "$want" ] && exit 0
+  exit 1
+fi
 SC="${1:-scripts/pregate-self-check.sh}"
 FX=core/fixtures/procsub-staged-refusal
 for f in "$SC" "$FX/procsub-spell.awk" "$FX/procsub-spell-probe.diff"; do [ -s "$f" ] || exit 9; done
@@ -77,7 +134,9 @@ drive() { # <root> <out-file> -> the self-check's exit
 #   committed one (the resolved hook moved). Htree: hooksPath -> an absolute dir holding the committed bytes, the tree's
 #   own hook then edited (the tree hook moved). Habs: no core.hooksPath (a push runs no hook).
 gitin() { ( cd "$1" && shift && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git "$@" ); }
-for h in Hres Htree Hbehind Habs; do cp -R "$W/rootA" "$W/root$h" || exit 9; done
+for h in Hres Htree Hbehind Habs Wd; do cp -R "$W/rootA" "$W/root$h" || exit 9; done
+# Wd (BL-1055): root A with one untracked file, so every section is green and the pregate record must NOT be written.
+echo stray > "$W/rootWd/stray.txt" || exit 9
 mkdir -p "$W/ext-res" "$W/ext-tree" || exit 9
 { cat "$W/rootA/.githooks/pre-push"; printf '# resolved hook moved\n'; } > "$W/ext-res/pre-push" || exit 9
 cp "$W/rootA/.githooks/pre-push" "$W/ext-tree/pre-push" || exit 9
@@ -125,6 +184,16 @@ drive "$W/rootU" "$W/U.out"; u=$?
 drive "$W/rootJ" "$W/J.out"; j=$?
 unamed=no; grep -qF 'the judge printed no pass line for validator-fork-budget' "$W/U.out" && unamed=yes
 jnamed=no; grep -qF 'FAIL (J3): row "1 *"' "$W/J.out" && grep -qF 'FINDINGS in d:fork-budget' "$W/J.out" && jnamed=yes
+# The pregate record (BL-1055): A (green, clean) writes one for its HEAD tree; B (a finding) and Wd (green, dirty) do not,
+# and Wd names why.
+rec_of() { # <root> -> yes when a pg1 record names the root's HEAD tree
+  local t; t="$(gitin "$1" rev-parse 'HEAD^{tree}')" || { echo err; return; }
+  [ "$(sed -n 1p "$1/.git/ai-dlc-pregate-green/$t" 2>/dev/null)" = '#format pg1' ] && echo yes || echo no
+}
+arec="$(rec_of "$W/rootA")"; brec="$(rec_of "$W/rootB")"
+drive "$W/rootWd" "$W/Wd.out"; wd=$?
+wdrec="$(rec_of "$W/rootWd")"
+wdn=no; grep -qF 'NO RECORD written: the work tree was not clean' "$W/Wd.out" && wdn=yes
 seed_refusal() { # <name> <hook body above the marker> -> sets RC
   local T="$W/ref-$1"; mkdir -p "$T/.githooks" "$T/core/fixtures/validator-fork-budget" || exit 9
   echo 0.0.1 > "$T/VERSION"
@@ -151,8 +220,8 @@ nv=$RC
 # World A's own output, printed ABOVE the summary only when A is not clean, so a caller can read why; the
 # summary stays the last line.
 [ "$a" = 0 ] || sed 's/^/A| /' "$W/A.out"
-echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hcwd=$hcwd Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn"
-[ "$a" = 0 ] && [ "$hcwd" = 0 ] && [ "$hres" = 2 ] && [ "$hresn" = yes ] && [ "$htree" = 2 ] && [ "$htreen" = yes ] && [ "$habs" = 2 ] && [ "$habsn" = yes ] && [ "$hbehind" = 2 ] && [ "$hbehindn" = yes ] && [ "$b" = 1 ] && grep -qF 'seeded red step' "$W/B.out" && [ "$c" = 2 ] \
+echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hcwd=$hcwd Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn Arec=$arec Brec=$brec Wd=$wd Wdrec=$wdrec Wdn=$wdn"
+[ "$arec" = yes ] && [ "$brec" = no ] && [ "$wd" = 0 ] && [ "$wdrec" = no ] && [ "$wdn" = yes ] && [ "$a" = 0 ] && [ "$hcwd" = 0 ] && [ "$hres" = 2 ] && [ "$hresn" = yes ] && [ "$htree" = 2 ] && [ "$htreen" = yes ] && [ "$habs" = 2 ] && [ "$habsn" = yes ] && [ "$hbehind" = 2 ] && [ "$hbehindn" = yes ] && [ "$b" = 1 ] && grep -qF 'seeded red step' "$W/B.out" && [ "$c" = 2 ] \
   && [ "$np" = 2 ] && [ "$ns" = 2 ] && [ "$nv" = 2 ] \
   && [ "$d" = 2 ] && [ "$dran" = no ] && [ "$dnamed" = yes ] \
   && [ "$u" = 2 ] && [ "$unamed" = yes ] && [ "$j" = 1 ] && [ "$jnamed" = yes ] && exit 0

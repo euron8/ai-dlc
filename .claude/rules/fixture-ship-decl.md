@@ -29,6 +29,7 @@ means a fixture reaches no consumer while this repo's own suite stays green over
 
 **A fixture carrying `inputs.decl` is keyed on its declaration and owes no trace**: it has no
 read-set rows, and the committed map drops any it is given. A read it adds goes into `inputs.decl`.
+**Declare the files and spans a fixture reads**: `fixture-contract.md` C12-C14 and C23 own the grammar, the narrowest-read rule and its enforcers.
 **An UNdeclared new fixture has no read-set entry until someone traces it**, and the pre-push
 runner runs an unmapped fixture on every push, silently. Trace it yourself with the sandbox
 tracer, which needs no root — `bash core/scripts/derive-fixture-readsets.sh --list "<name>"

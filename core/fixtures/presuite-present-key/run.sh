@@ -28,7 +28,17 @@
 # THE ARMS (cells). Every cell is presence-shaped: a key must be 64 hex, an accept must print its exact
 # `N key(s)` line, a refusal its exact reason, a wiring push its exact PASS/skip/not-recorded lines, so a subject
 # that dies or prints nothing is RED, never GREEN.
-#   A1.create   a git-ignored `.claude/settings.json` (a .gitignore covers it) moves the present key
+#   A1.create   an untracked, unignored `.claude/new.json` moves the present key
+#   A1.ignored  a git-ignored `.claude/settings.local.json`, a tree under the ignored `.claude/worktrees/` and an ignored
+#               `stray.pyc` leave it unmoved (BL-1054: pk_ign prunes every path `git ls-files -o -i` lists)
+#   A1.ignglob  an ignored file named `g[1]*?.pyc` leaves it unmoved (its -path operand is escaped)
+#   W.ignored   after a git-ignored settings file and an ignored worktree appear, the next push skips both steps
+#   W.keep      after the git-ignored but DECLARED input `.claude/settings.json` appears, the next push runs both steps
+#               (`.claude/` holds only ignored files, so git lists it WHOLE)
+#   W.keep2     the same with an unignored `.claude/rules.md` beside it (git lists the ignored files one by one)
+#   W.partial   two steps read tracked files a and x; a content edit of a (its size moves) re-runs only a's step
+#   W.ignread   a step that reads a git-ignored file keys no row for it; its content changes and the next push skips
+#   W.ignwrite  a step that writes under a git-ignored directory is recorded, and the next push skips
 #   A1.dir      a file becoming an EMPTY directory moves it (empty, so no name is added)
 #   A1.link     a symlink retargeted between two existing files moves it
 #   A1.content  a content-only edit does NOT move it (both keys 64 hex, equal)
@@ -49,7 +59,7 @@
 #   T1.nlrename a rename inside a directory whose name holds a newline moves the key
 #   T1.linknl   a symlink whose target holds NL and TAB does not collide with the tree its unescaped lines spell
 #   W.skip      a push records two steps (`[ -f x ]`, `[ -f a ]`), and the next push skips both
-#   W.settings  after a git-ignored `.claude/settings.json` is created, the next push runs both steps
+#   W.settings  after an untracked, unignored `.claude/new.json` is created, the next push runs both steps
 #   W.collide   the same, with the old records copied to the new present key's filenames (a 16-hex prefix
 #               collision, or a shared common dir): both steps run with the present-set reason
 #   W.t2b       a path created after pk_init's walk and removed between two steps leaves no record, and the next
@@ -98,7 +108,13 @@
 #   m_nl      the walk is `-print` and pk.py splits it on newlines
 #   m_own     pk_step passes the record's own `@present` row to check
 #   m_univ    the present key is built from the universe listing `$PK_W/u/.is` (pk_present's walk replaced by
-#             it, so pk_init and pk_finish agree), not from find
+#             it, so pk_init and pk_finish agree), not from find; the listing carries no mode, so W.mode decides
+#   m_ign     pk_ign reads no ignored path, so every walk prunes only `.git` (the pre-BL-1054 walk, all four sites)
+#   m_esc     pk_ign's -path operands are not escaped
+#   m_scan    the atime scan alone walks the ignored paths
+#   m_mt      the mtime check alone walks the ignored paths
+#   m_keep    pk_ign prunes the declared ignored inputs too, in both of its layers
+#   m_size    the present row carries the file size, so a content edit moves the present key
 #   m_mmark   the moved check reverted to a per-step mark touched before each step's reset
 #   m_rewalk  pk_finish's re-walk removed
 #   m_nomode  the mode field dropped from each present row
@@ -124,7 +140,13 @@
 # MUTANT-MATRIX m_stderr decides=T1.unsearch twins=A1.create
 # MUTANT-MATRIX m_nl decides=T1.nlrename twins=A1.create
 # MUTANT-MATRIX m_own decides=W.collide twins=W.settings
-# MUTANT-MATRIX m_univ decides=W.settings twins=W.skip
+# MUTANT-MATRIX m_univ decides=W.mode twins=W.skip
+# MUTANT-MATRIX m_ign decides=A1.ignored,W.ignored,W.ignread,W.ignwrite twins=A1.create,W.skip
+# MUTANT-MATRIX m_esc decides=A1.ignglob twins=A1.ignored
+# MUTANT-MATRIX m_scan decides=W.ignread twins=W.ignored
+# MUTANT-MATRIX m_mt decides=W.ignwrite twins=W.ignored
+# MUTANT-MATRIX m_keep decides=W.keep,W.keep2 twins=W.ignored
+# MUTANT-MATRIX m_size decides=W.partial twins=W.skip
 # MUTANT-MATRIX m_mmark decides=W.t2b,W.samesec twins=W.skip
 # MUTANT-MATRIX m_rewalk decides=W.forged twins=W.skip
 # MUTANT-MATRIX m_nomode decides=W.mode,A1.chmod twins=W.modectl,A1.link
@@ -202,22 +224,30 @@ parses() { # <pk.py>: the CLI with no arguments falls through to exit 2; a copy 
 mkvar() {
   mkdir -p "$1" && cp "$2" "$1/hook" || return 1
   sed -n "/^pk_py() { cat <<'PK_PY_END'\$/,/^PK_PY_END\$/p" "$2" | sed '1d;$d' > "$1/pk.py"
-  awk '/^pk_present\(\) \{/ { on = 1 } on { print } on && /^\}$/ { exit }' "$2" > "$1/present.sh"
+  awk '/^pk_ign\(\) \{/ { on = 1 } /^pk_present\(\) \{/ { p = 1 } on { print } p && /^\}$/ { exit }' "$2" > "$1/present.sh"
   { sed -n '/^PK_ON=""; PK_TR=""/,/^PK_PY_END$/p' "$2"; printf '}\n'; } > "$1/fns.sh"
   [ -s "$1/pk.py" ] && grep -q '^def present(top):$' "$1/pk.py" && grep -q '^def prune(rec):$' "$1/pk.py" && parses "$1/pk.py" \
-    && grep -q '^pk_present() {' "$1/present.sh" && grep -q '^pk_step() {' "$1/fns.sh" && grep -q '^pk_finish() {' "$1/fns.sh" \
+    && grep -q '^pk_ign() {' "$1/present.sh" && grep -q '^pk_prune_add() {' "$1/present.sh" && grep -q '^pk_present() {' "$1/present.sh" && grep -q '^pk_step() {' "$1/fns.sh" && grep -q '^pk_finish() {' "$1/fns.sh" \
     && bash -n "$1/fns.sh"
 }
 V0="$T/v0"
 mkvar "$V0" "$HOOK" || broken "the pk_py heredoc, pk_present or the pk_* span could not be extracted from $HOOK"
 
 # ---- worlds, built once ----
-W="$T/w"; mkdir -p "$W/base/sub" "$W/base/.git"
+# Every world is its own `git init` repo: pk_present lists the ignored paths with `git ls-files`, which must answer
+# about the world and never about a repository above $T.
+W="$T/w"; mkdir -p "$W/base/sub" && git init -q "$W/base" || broken "the base world did not git init"
 printf 'alpha\n' > "$W/base/a.txt"; printf 'beta\n' > "$W/base/sub/b.txt"; printf 'n\n' > "$W/base/node"
-printf '.claude/settings.json\n' > "$W/base/.gitignore"; printf 'x\n' > "$W/base/.git/HEAD"
+printf '.claude/settings.json\n.claude/settings.local.json\n.claude/worktrees/\n*.pyc\n' > "$W/base/.gitignore"
+# An unignored file under .claude/, as the real tree's .claude/rules/, so git lists the ignored paths beneath it one
+# by one rather than .claude/ as a whole.
+mkdir "$W/base/.claude" && printf 'r\n' > "$W/base/.claude/rules.md"
 ln -s a.txt "$W/base/lnk"
-for w in create dir link content moved B chmod; do cp -Rp "$W/base" "$W/$w"; done
-mkdir "$W/create/.claude"; printf '{}\n' > "$W/create/.claude/settings.json"
+for w in create ignored ignglob dir link content moved B chmod; do cp -Rp "$W/base" "$W/$w"; done
+printf '{}\n' > "$W/create/.claude/new.json"
+mkdir -p "$W/ignored/.claude/worktrees/wt1/sub"; printf '{}\n' > "$W/ignored/.claude/settings.local.json"; printf 'w\n' > "$W/ignored/.claude/worktrees/wt1/sub/f"
+: > "$W/ignored/stray.pyc"
+: > "$W/ignglob/g[1]*?.pyc"
 rm "$W/dir/node"; mkdir "$W/dir/node"
 ln -sfn sub/b.txt "$W/link/lnk"
 chmod 0755 "$W/chmod/a.txt"
@@ -245,6 +275,9 @@ c"
 : > "$W/tb1/p	l${LM}	x"; chmod 0644 "$W/tb1/p	l${LM}	x"; ln -s "x	f644	" "$W/tb2/p"
 [ -f "$W/bs1/a\\tb" ] && [ -f "$W/bs2/a	b" ] && [ -L "$W/nl1/a" ] && [ -f "$W/nl2/b
 c" ] && [ -f "$W/tb1/p	l${LM}	x" ] && [ "$(readlink "$W/tb2/p")" = "x	f644	" ] || broken "an escape collision world did not build"
+for w in nl sa sb u bs1 bs2 nl1 nl2 tb1 tb2; do git init -q "$W/$w" || broken "world $w did not git init"; done
+[ "$(cd "$W/ignored" && git ls-files -o -i --exclude-standard --directory | sort | tr '\n' ' ')" = '.claude/settings.local.json .claude/worktrees/ stray.pyc ' ] \
+  || broken "the ignored world's ignored listing is not the three seeded paths"
 [ -L "$W/link/lnk" ] && [ "$(readlink "$W/link/lnk")" = sub/b.txt ] && [ "$(readlink "$W/base/lnk")" = a.txt ] \
   && [ -d "$W/dir/node" ] && ! cmp -s "$W/base/a.txt" "$W/content/a.txt" && [ -f "$NLD/c" ] && [ -L "$W/sa/p" ] \
   && [ ! -r "$W/u/locked" ] || broken "a world did not build"
@@ -258,10 +291,11 @@ T2="$T/t2"; mkdir -p "$T2"
 CMD=abababababababababababababababababababababababababababababababab
 PRESENT_WHY="the set of paths present under the work tree changed"
 
-# The wiring repo, built once: its own .git, a .gitignore covering .claude/settings.json, files a and x, and a copy
+# The wiring repo, built once: its own .git, a .gitignore covering .claude/settings.json, .claude/settings.local.json and
+# .claude/worktrees/, files a and x, and a copy
 # of the hook at .githooks/pre-push, the path pk_init falls back to for the READSET spans.
 R0="$T/repo0"; mkdir -p "$R0/.githooks"
-( cd "$R0" && git init -q . && printf '.claude/settings.json\n' > .gitignore && printf 'a\n' > a && printf 'x\n' > x \
+( cd "$R0" && git init -q . && printf '.claude/settings.json\n.claude/settings.local.json\n.claude/worktrees/\n' > .gitignore && printf 'a\n' > a && printf 'x\n' > x \
     && cp "$HOOK" .githooks/pre-push && git add -A && git -c user.name=f -c user.email=f@f commit -qm i ) > "$T/repo0.log" 2>&1 \
   && [ -f "$R0/.git/HEAD" ] || broken "the wiring repo did not build ($(head -1 "$T/repo0.log"))"
 # W.rewalkfail's repo, built once at a literal path: the wiring repo plus a searchable subdirectory its step locks.
@@ -327,8 +361,8 @@ cell() {
   case "$2" in
     A1.create|A1.dir|A1.link)
       k0="$(pkey "$v" "$W/base")" && k1="$(pkey "$v" "$W/${2#A1.}")" && [ "$k0" != "$k1" ] ;;
-    A1.content)
-      k0="$(pkey "$v" "$W/base")" && k1="$(pkey "$v" "$W/content")" && [ "$k0" = "$k1" ] ;;
+    A1.content|A1.ignored|A1.ignglob)
+      k0="$(pkey "$v" "$W/base")" && k1="$(pkey "$v" "$W/${2#A1.}")" && [ "$k0" = "$k1" ] ;;
     A2.holds)
       kd="$(mktemp -d "$T/kd.XXXXXX")" && k0="$(pkey "$v" "$W/base")" && r="$(mkrec "$p" "$kd" "$W/base" "$k0")" \
         && chk "$p" "$r" "$W/base" "$k0" 0 "2 key(s)" ;;
@@ -382,14 +416,47 @@ cell() {
       d="$(newrepo)" && push "$v" "$d" "$d.1" "$STEPS" && [ "$(nrec "$d")" = 2 ] && [ "$(nline "$d.1" "$SKIPLN")" = 0 ] \
         && push "$v" "$d" "$d.2" "$STEPS" && [ "$(nline "$d.2" "$SKIPLN")" = 2 ] \
         && grep -qxF '   ..    pre-suite keys: 2 of 2 step(s) skipped on a recorded pass: s1 s2' "$d.2" ;;
-    W.settings)
-      d="$(newrepo)" && push "$v" "$d" "$d.1" "$STEPS" && [ "$(nrec "$d")" = 2 ] \
-        && mkdir "$d/.claude" && printf '{}\n' > "$d/.claude/settings.json" \
-        && push "$v" "$d" "$d.2" "$STEPS" && [ "$(nline "$d.2" "$SKIPLN")" = 0 ] && [ "$(grep -cx '   PASS' "$d.2")" = 2 ] \
-        && grep -qxF '   ..    pre-suite keys: 0 of 2 step(s) skipped on a recorded pass' "$d.2" ;;
+    W.settings|W.ignored|W.keep|W.keep2)
+      # W.settings: an untracked, unignored .claude/new.json appears -- the next push runs both steps.
+      # W.keep: the git-ignored but declared input .claude/settings.json appears -- the next push runs both steps.
+      # W.ignored: a git-ignored .claude/settings.local.json and a worktree under the ignored .claude/worktrees/ appear --
+      # the next push skips both.
+      d="$(newrepo)" && mkdir "$d/.claude" || return 1
+      [ "$2" != W.keep2 ] || printf 'r\n' > "$d/.claude/rules.md" || return 1
+      push "$v" "$d" "$d.1" "$STEPS" && [ "$(nrec "$d")" = 2 ] || return 1
+      if [ "$2" = W.settings ]; then printf '{}\n' > "$d/.claude/new.json"
+      elif [ "$2" = W.keep ] || [ "$2" = W.keep2 ]; then printf '{}\n' > "$d/.claude/settings.json"
+      else printf '{}\n' > "$d/.claude/settings.local.json" && mkdir -p "$d/.claude/worktrees/wt1/sub" && printf 'w\n' > "$d/.claude/worktrees/wt1/sub/f"; fi
+      push "$v" "$d" "$d.2" "$STEPS" && [ "$(grep -cx '   PASS' "$d.2")" = 2 ] || return 1
+      if [ "$2" != W.ignored ]; then
+        [ "$(nline "$d.2" "$SKIPLN")" = 0 ] && grep -qxF '   ..    pre-suite keys: 0 of 2 step(s) skipped on a recorded pass' "$d.2"
+      else
+        [ "$(nline "$d.2" "$SKIPLN")" = 2 ] && grep -qxF '   ..    pre-suite keys: 2 of 2 step(s) skipped on a recorded pass: s1 s2' "$d.2"
+      fi ;;
+    W.ignread)
+      # A step that READS a git-ignored file is recorded with no row for it: the file's content changes and the next
+      # push still skips.
+      d="$(newrepo)" && mkdir "$d/.claude" && printf 'one\n' > "$d/.claude/settings.local.json" \
+        && push "$v" "$d" "$d.1" 'pk_step ir cat .claude/settings.local.json' && [ "$(nrec "$d")" = 1 ] \
+        && [ "$(grep -c -F -- "$CANARY" "$d.1")" = 0 ] && ! grep -q 'settings.local.json' "$d/.git/ai-dlc-presuite-keys"/ir.*.key \
+        && printf 'two\n' > "$d/.claude/settings.local.json" \
+        && push "$v" "$d" "$d.2" 'pk_step ir cat .claude/settings.local.json' && [ "$(nline "$d.2" "$SKIPLN")" = 1 ] ;;
+    W.partial)
+      # Two steps, each reading one tracked file; a content edit of a (size moves, set of paths does not) re-runs a's
+      # step alone.
+      d="$(newrepo)" && push "$v" "$d" "$d.1" 'pk_step pa cat a; pk_step px cat x' && [ "$(nrec "$d")" = 2 ] \
+        && printf 'a longer\n' > "$d/a" \
+        && push "$v" "$d" "$d.2" 'pk_step pa cat a; pk_step px cat x' \
+        && grep -qxF '   ..    pre-suite keys: 1 of 2 step(s) skipped on a recorded pass: px' "$d.2" ;;
+    W.ignwrite)
+      # A step that writes under a git-ignored directory is still recorded (no not-recorded line), and its next push skips.
+      d="$(newrepo)" && mkdir -p "$d/.claude/worktrees" && : > "$d/.claude/worktrees/keep" \
+        && push "$v" "$d" "$d.1" 'pk_step iw bash -c ": > .claude/worktrees/scratch; [ -f a ]"' && [ "$(nrec "$d")" = 1 ] \
+        && [ "$(nline "$d.1" "$NOTREC")" = 0 ] && grep -qx '   PASS' "$d.1" \
+        && push "$v" "$d" "$d.2" 'pk_step iw bash -c ": > .claude/worktrees/scratch; [ -f a ]"' && [ "$(nline "$d.2" "$SKIPLN")" = 1 ] ;;
     W.collide)
       d="$(newrepo)" && push "$v" "$d" "$d.1" "$STEPS" && [ "$(nrec "$d")" = 2 ] \
-        && mkdir "$d/.claude" && printf '{}\n' > "$d/.claude/settings.json" \
+        && mkdir "$d/.claude" && printf '{}\n' > "$d/.claude/new.json" \
         && push "$v" "$d" "$d.2" 'for r in .git/ai-dlc-presuite-keys/*.key; do b="${r##*/}"; cp "$r" ".git/ai-dlc-presuite-keys/${b%%.*}.${PK_PH:0:16}.key" 2>/dev/null; done; '"$STEPS" \
         && [ "$(nline "$d.2" "$SKIPLN")" = 0 ] && [ "$(grep -cxF "$RUNSLN" "$d.2")" = 2 ] ;;
     W.t2b)
@@ -463,7 +530,9 @@ cell() {
 }
 
 # ---- the unmutated run: every cell once, each flag set only in its passing branch ----
-if cell "$V0" A1.create; then ok "A1.create a git-ignored .claude/settings.json moves the present key"; B_A1create=1; else bad "A1.create the present key did not move on a git-ignored file"; fi
+if cell "$V0" A1.create; then ok "A1.create an untracked, unignored .claude/new.json moves the present key"; B_A1create=1; else bad "A1.create the present key did not move on an untracked unignored file"; fi
+if cell "$V0" A1.ignored; then ok "A1.ignored a git-ignored file, an ignored worktree dir and an ignored *.pyc leave the present key unmoved"; B_A1ignored=1; else bad "A1.ignored the present key moved on git-ignored paths"; fi
+if cell "$V0" A1.ignglob; then ok "A1.ignglob an ignored file whose name holds [ ] * ? leaves the present key unmoved (its -path operand is escaped)"; B_A1ignglob=1; else bad "A1.ignglob the present key moved on an ignored file whose name holds glob characters"; fi
 if cell "$V0" A1.dir; then ok "A1.dir a file becoming an empty directory moves the present key"; B_A1dir=1; else bad "A1.dir the present key did not move on file->dir"; fi
 if cell "$V0" A1.link; then ok "A1.link a symlink retarget moves the present key"; B_A1link=1; else bad "A1.link the present key did not move on a symlink retarget"; fi
 if cell "$V0" A1.content; then ok "A1.content a content-only edit leaves the present key (64 hex) unmoved"; else bad "A1.content the present key moved on a content-only edit, or was not 64 hex"; fi
@@ -483,7 +552,13 @@ if cell "$V0" T1.unsearch; then ok "T1.unsearch an unreadable directory turns th
 if cell "$V0" T1.nlrename; then ok "T1.nlrename a rename inside a newline-named directory moves the present key"; B_T1nlrename=1; else bad "T1.nlrename the present key did not move on a rename inside a newline-named directory"; fi
 if cell "$V0" T1.linknl; then ok "T1.linknl a symlink target holding NL and TAB does not collide with the tree it would spell"; B_T1linknl=1; else bad "T1.linknl a NL/TAB symlink target collided with the forged tree"; fi
 if cell "$V0" W.skip; then ok "W.skip pk_step records two steps and the next push skips both (2 of 2)"; B_Wskip=1; else bad "W.skip the wiring did not record, or the next push did not skip both steps"; fi
-if cell "$V0" W.settings; then ok "W.settings a git-ignored .claude/settings.json makes the next push run both steps"; B_Wsettings=1; else bad "W.settings a push after a git-ignored file appeared skipped a step"; fi
+if cell "$V0" W.settings; then ok "W.settings an untracked unignored .claude/new.json makes the next push run both steps"; B_Wsettings=1; else bad "W.settings a push after an untracked unignored file appeared skipped a step"; fi
+if cell "$V0" W.keep; then ok "W.keep the git-ignored but declared input .claude/settings.json appears: the next push runs both steps"; B_Wkeep=1; else bad "W.keep a push after a declared ignored input appeared skipped a step"; fi
+if cell "$V0" W.keep2; then ok "W.keep2 the same with an unignored .claude/rules.md beside it: the next push runs both steps"; B_Wkeep2=1; else bad "W.keep2 a push after a declared ignored input appeared beside an unignored file skipped a step"; fi
+if cell "$V0" W.partial; then ok "W.partial a content edit of one tracked input re-runs only the step that read it (1 of 2 skipped: px)"; B_Wpartial=1; else bad "W.partial a content edit of one tracked input did not re-run exactly its reader"; fi
+if cell "$V0" W.ignored; then ok "W.ignored a git-ignored settings file and an ignored worktree appear: the next push skips both steps (2 of 2)"; B_Wignored=1; else bad "W.ignored a push after git-ignored paths appeared ran a step"; fi
+if cell "$V0" W.ignread; then ok "W.ignread a step reading a git-ignored file keys no row for it: a content change still skips"; B_Wignread=1; else bad "W.ignread a git-ignored read was keyed, or the next push ran"; fi
+if cell "$V0" W.ignwrite; then ok "W.ignwrite a step writing under a git-ignored dir is recorded, and the next push skips"; B_Wignwrite=1; else bad "W.ignwrite a write under a git-ignored dir left the step unrecorded, or the next push ran"; fi
 if cell "$V0" W.collide; then ok "W.collide records under the new key's filenames are refused: both steps run with the present-set reason"; B_Wcollide=1; else bad "W.collide a record copied to the new key's filename was used"; fi
 if cell "$V0" W.t2b; then ok "W.t2b a path created after the walk and removed between steps leaves no record, and the next push runs (FAIL)"; B_Wt2b=1; else bad "W.t2b a step that ran while a since-removed path existed was recorded, or the next push skipped"; fi
 if cell "$V0" W.samesec; then ok "W.samesec a path created and removed in the mark's second leaves no record"; B_Wsamesec=1; else bad "W.samesec a same-second create-then-remove after the mark was recorded"; fi
@@ -502,7 +577,7 @@ if cell "$V0" T1.esc.nl; then ok "T1.esc.nl symlink to x<NL>b plus c does not co
 if cell "$V0" T1.esc.tab; then ok "T1.esc.tab file p<TAB>l<TAB>x does not collide with symlink p to x<TAB>f<TAB>"; B_T1esctab=1; else bad "T1.esc.tab the TAB pair collided"; fi
 
 # ---- mutants ----
-ALL_CELLS="L1.leak A1.create A1.dir A1.link A1.content A2.holds A2.moved A3.k2 A3.hashrow A4 A5 A6.run A6.grep T1.unsearch T1.nlrename T1.linknl T1.esc.bs T1.esc.nl T1.esc.tab W.skip W.settings W.collide W.t2b W.samesec W.forged W.multi W.rewalkfail W.empty W.emptyold W.emptyctl A1.chmod W.mode W.modectl"
+ALL_CELLS="L1.leak A1.create A1.ignored A1.ignglob W.ignored W.keep W.keep2 W.partial W.ignread W.ignwrite A1.dir A1.link A1.content A2.holds A2.moved A3.k2 A3.hashrow A4 A5 A6.run A6.grep T1.unsearch T1.nlrename T1.linknl T1.esc.bs T1.esc.nl T1.esc.tab W.skip W.settings W.collide W.t2b W.samesec W.forged W.multi W.rewalkfail W.empty W.emptyold W.emptyctl A1.chmod W.mode W.modectl"
 SELF_FILE="$HERE/run.sh"
 mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
   local n="$1" f="$2" l w c=0 v=""
@@ -594,8 +669,21 @@ hmut m_nl '-o -print0 > "$PK_W/walk"' '-o -print > "$PK_W/walk"' 'split(b"\0")' 
   && mrun m_nl && mutant_killed "${B_T1nlrename:-0}" m_nl "m_nl newline-separated walk -- T1.nlrename red, A1.create green"
 hmut m_own '"$cmdsha" "$PK_PH" 2>&1)"; rc=$?' '"$cmdsha" "$(sed -n 5p "$rec" | cut -f2)" 2>&1)"; rc=$?' \
   && mrun m_own && mutant_killed "${B_Wcollide:-0}" m_own "m_own check against the record's own @present -- W.collide red, W.settings green"
-hmut m_univ '/usr/bin/find . -path ./.git -prune -o -print0 > "$PK_W/walk"' 'sed "s|^|./|" "$PK_W/u/.is" | tr "\n" "\0" > "$PK_W/walk"' \
-  && mrun m_univ && mutant_killed "${B_Wsettings:-0}" m_univ "m_univ present key from the universe listing -- W.settings red, W.skip green"
+hmut m_univ '/usr/bin/find . \( "${PK_PRUNE[@]}" \) -prune -o -print0 > "$PK_W/walk"' 'sed "s|^|./|" "$PK_W/u/.is" | tr "\n" "\0" > "$PK_W/walk"' \
+  && mrun m_univ && mutant_killed "${B_Wmode:-0}" m_univ "m_univ present key from the universe listing -- W.mode red, W.skip green"
+hmut m_ign 'done < "$PK_W/ign"' 'done < /dev/null' \
+  && mrun m_ign && mutant_killed "$(( ${B_A1ignored:-0} && ${B_Wignored:-0} && ${B_Wignread:-0} && ${B_Wignwrite:-0} ))" m_ign "m_ign the ignored-path walk restored (only .git pruned) -- A1.ignored, W.ignored, W.ignread and W.ignwrite red, A1.create and W.skip green"
+hmut m_esc 'e="${e//\\/\\\\}"; e="${e//\*/\\*}"; e="${e//\?/\\?}"; e="${e//\[/\\[}"; e="${e//\]/\\]}"' ':' \
+  && mrun m_esc && mutant_killed "${B_A1ignglob:-0}" m_esc "m_esc -path operands unescaped -- A1.ignglob red, A1.ignored green"
+hmut m_scan '\( "${PK_PRUNE[@]}" \) -prune -o -neweram' '-path ./.git -prune -o -neweram' \
+  && mrun m_scan && mutant_killed "${B_Wignread:-0}" m_scan "m_scan the atime scan walks ignored paths -- W.ignread red, W.ignored green"
+hmut m_mt '\( "${PK_PRUNE[@]}" \) -prune -o -newer "$PK_W/start"' '-path ./.git -prune -o -newer "$PK_W/start"' \
+  && mrun m_mt && mutant_killed "${B_Wignwrite:-0}" m_mt "m_mt the mtime check walks ignored paths -- W.ignwrite red, W.ignored green"
+hmut m_keep '      .claude/settings.json|.claude/agents) continue ;;
+' '' 'case "$c" in .claude/settings.json|.claude/agents) ;; *) pk_prune_add "$c" ;; esac' 'pk_prune_add "$c"' \
+  && mrun m_keep && mutant_killed "$(( ${B_Wkeep:-0} && ${B_Wkeep2:-0} ))" m_keep "m_keep the declared ignored inputs pruned (both layers) -- W.keep and W.keep2 red, W.ignored green"
+hmut m_size 'k + b"%o" % stat.S_IMODE(st.st_mode) + b"\t"' 'k + b"%o" % stat.S_IMODE(st.st_mode) + b"s%d" % st.st_size + b"\t"' \
+  && mrun m_size && mutant_killed "${B_Wpartial:-0}" m_size "m_size the present row carries size -- W.partial red, W.skip green"
 hmut m_mmark 'mkdir "$PK_W/t2.$slug" && pk_reset_all' 'mkdir "$PK_W/t2.$slug" && touch "$PK_W/mmark" && pk_reset_all' \
   '-newer "$PK_W/start"' '-newer "$PK_W/mmark"' \
   && mrun m_mmark && mutant_killed "$(( ${B_Wt2b:-0} && ${B_Wsamesec:-0} ))" m_mmark "m_mmark per-step mark -- W.t2b and W.samesec red, W.skip green"
@@ -642,5 +730,5 @@ if scoped_pids | grep -qx "$SLP"; then ok "L1.control the scoped listing sees a 
 kill "$SLP" 2>/dev/null; wait "$SLP" 2>/dev/null
 if scoped_pids | grep -qx "$SLP"; then bad "L1.control the reaped child is still listed"; fi
 
-[ "$rc" -eq 0 ] && echo "PASS  presuite-present-key -- 36 arms, 22 mutants scored"
+[ "$rc" -eq 0 ] && echo "PASS  presuite-present-key -- 45 arms, 28 mutants scored"
 exit "$rc"

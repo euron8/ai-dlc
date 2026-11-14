@@ -23,6 +23,8 @@ core/fixtures/lib/matrix.sh
 .githooks/pre-push
 core/git-hooks/pre-push
 core/scripts/
+scripts/invalidation-guard.sh
+scripts/pregate-self-check.sh
 scripts/render-invariant-index.sh
 scripts/render-path-mapping.sh
 scripts/render-postcompact-digest.sh

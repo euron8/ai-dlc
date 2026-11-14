@@ -72,6 +72,8 @@ Re-run only what a change can move; carry the rest by byte-identity with a contr
 The push gate is the one full verification: no hand re-runs of carriers or validators, no seeds unless named,
 no repeat reading passes, and "two agreeing counted runs" is one counted run plus the gate's. A test that
 cannot be trusted to catch what it claims gets a filing against the test, never a manual re-check around it.
+A change never invalidates a verdict whose read inputs it did not change; no release forces a whole-suite
+re-run. Enforcer: `scripts/invalidation-guard.sh` (pre-push).
 
 ## Zero tests depend on load (BL-868)
 

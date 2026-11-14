@@ -5,12 +5,14 @@ cat
 cmp
 cp
 cut
+date
 dirname
 git
 grep
 head
 mkdir
 mktemp
+mv
 rm
 sed
 tail
