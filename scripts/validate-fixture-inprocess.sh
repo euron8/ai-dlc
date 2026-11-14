@@ -90,6 +90,10 @@ M4_REMEDY="do not list the fixture; build it in-process and declare its remainin
 for f in "$JUDGE" "$HYG"; do [ -f "$f" ] || { echo "validate-fixture-inprocess: REFUSED -- $f is absent" >&2; exit 2; }; done
 WORK="$(mktemp -d)" || { echo "validate-fixture-inprocess: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
+# The judge's self-probe runs once per run of this script, not once per --b2-census call: the judge memoises a green
+# probe in this run's own private directory, keyed by the judge's content (fxc_sp_memo).
+mkdir "$WORK/spmemo" || exit 2
+export FXC_SP_MEMO="$WORK/spmemo"
 
 # THE ONE SHARED m4, extracted by its own boundaries; exactly one definition between the markers, else REFUSED.
 awk '/^# M4_BEGIN$/ { on = 1; next } /^# M4_END$/ { on = 0 } on' "$HYG" > "$WORK/m4.sh"
