@@ -15366,66 +15366,6 @@ code-reviewer.md's template \`Class:\` line declares it and qa.md's \`## Finding
   fi
 fi
 
-# --- I127: the pre-push stop-early opt-out is named in exactly two tracked files ---
-# WHAT IT BINDS. The hook's stop-early (a red step above the fixture pool skips the pool) has one
-# opt-out env var, for a sandboxed COPY of the hook whose validator steps fail only because the
-# sandbox lacks scripts. A second reader of that variable is a general bypass: any fixture or script
-# could set it and push through a red. So the token may appear in the hook that reads it and in the
-# one fixture that sets it, and nowhere else. The token is built by concatenation below so that this
-# file, which is tracked, does not carry it.
-#
-# THE CONTROL IS PART OF THE ARM. Each allowed file must CARRY the token: a rename in either would
-# otherwise leave the sweep reading an empty set and reporting agreement it never tested. That control
-# is also what proves the ONE `git grep` below can return a hit on the real corpus, every run.
-#
-# ONE FORK. The classifier reads a path LIST and forks nothing, so the probe seeds lists, never a git
-# repo: the repo-backed probe this replaced measured 3376 against FORK_BUDGET=3370 (base 3364). The
-# grammar is -F, so no BSD/GNU ERE difference applies. FALSE-POSITIVE SET: EMPTY by construction --
-# the allowed set is matched by exact path.
-i127_tok="AI_DLC_PREPUSH_NO_""STOP_EARLY"
-i127_a1=".githooks/pre-push"
-i127_a2="core/fixtures/prepush-worktree-env-scrub/run.sh"
-i127_classify() { # i127_classify <newline-separated carrier paths> -> one finding per line, nothing on agreement
-  local hits="$1" p have1=0 have2=0
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    if [ "$p" = "$i127_a1" ]; then have1=1
-    elif [ "$p" = "$i127_a2" ]; then have2=1
-    else printf 'EXTRA %s\n' "$p"; fi
-  done <<EOF
-$hits
-EOF
-  [ "$have1" -eq 1 ] || printf 'MISSING %s\n' "$i127_a1"
-  [ "$have2" -eq 1 ] || printf 'MISSING %s\n' "$i127_a2"
-}
-# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS: the two allowed paths alone read quiet; a third
-# path reads EXTRA; a list lacking an allowed path reads MISSING.
-i127_nl='
-'
-i127_bad=''
-[ -z "$(i127_classify "${i127_a1}${i127_nl}${i127_a2}")" ] || i127_bad="$i127_bad allowed-pair-not-quiet"
-case "$(i127_classify "${i127_a1}${i127_nl}other/x.sh${i127_nl}${i127_a2}")" in "EXTRA other/x.sh") ;; *) i127_bad="$i127_bad third-file-not-reported" ;; esac
-case "$(i127_classify "$i127_a1")" in "MISSING $i127_a2") ;; *) i127_bad="$i127_bad missing-allowed-not-reported" ;; esac
-# SCOPE, as I77's: the subject is git's index, so the arm runs only where there IS one. Fixture
-# harnesses copy this validator into scratch trees that are not work trees, or are work trees
-# holding neither allowed file; reading MISSING there was a false red in ten fixtures at once.
-# So the arm also stands down where the index does not track the hook that READS the token: such a
-# tree has no stop-early to bypass. EXTRA and a MISSING fixture are still reported wherever it does.
-if [ -n "$i127_bad" ]; then
-  err "I127's probe failed on seed(s):$i127_bad, so the corpus was not read. A sweep that cannot report a third carrier of the token reads clean over a tree that has one."
-elif ! (cd "$REPO_ROOT" && git rev-parse --is-inside-work-tree >/dev/null 2>&1) \
-  || [ -z "$(git -C "$REPO_ROOT" ls-files -- "$i127_a1" 2>/dev/null)" ]; then
-  : # no index, or an index that does not track the hook -- not a distribution tree. Not a pass and not a failure.
-else
-  i127_hits="$(git -C "$REPO_ROOT" grep --cached -lF -- "$i127_tok")" || i127_hits=''
-  i127_out="$(i127_classify "$i127_hits")"
-  if [ -n "$i127_out" ]; then
-    err "I127: the stop-early opt-out token is not confined to the hook and its one caller:
-$i127_out
-$i127_a1 reads it and $i127_a2 sets it on a sandboxed copy. Any other carrier is a general bypass of the stop-early guard; remove it, or widen the allowed pair in this arm only with the operator's say-so."
-  fi
-fi
-
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

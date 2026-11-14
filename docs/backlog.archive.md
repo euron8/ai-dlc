@@ -42885,3 +42885,23 @@ Seven `inputs.decl` `# copy-only:` line citations move by one line to follow: ba
 
 verify: manual
 
+## BL-1048 — a red pre-suite step skips the whole fixture suite, so a push records no fixture verdicts and its re-push re-runs every fixture
+
+**LANDED (v0.1112.0).** The stop-early block is gone from `fixture_suite_step` in `.githooks/pre-push`. `step()` records each red step's title in `RED_STEPS`, and the suite step names those steps first, then runs the pool, so every pass is recorded in the verdict store and the key records; `$fail` is untouched, so the push stays BLOCKED. `AI_DLC_PREPUSH_NO_STOP_EARLY`, `SUITE_STOPPED_EARLY` and invariant I127 are retired together: the opt-out had nothing left to opt out of. The suite-key and verified records now also follow a green SUITE under a red step; they attest the suite, never the push. The receipt is `core/fixtures/prepush-worktree-env-scrub` (BL-1048 cells rec, skip, blocked, named): a world with the real `hermetic-run.sh`, one declared fixture and a seeded red step exits 1 BLOCKED and leaves the fixture's pass in the store; the re-push with the red fixed exits 0 and skips the fixture on that pass. Mutant `s1-stop-early` (the old return restored) leaves no entry and re-runs it.
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: `.githooks/pre-push`, the stop-early block after `PRESUITE_DONE` (`SUITE_STOPPED_EARLY=1`, the `SKIPPED-on-earlier-red` loop; 47c2d9e31 line 3346 onward).
+
+The operator ruling "Valid measurements are never thrown away" (`.claude/rules/operator-rulings.md`) requires every fixture verdict a gate can produce to be recorded for reuse. The stop-early block does the opposite: when any pre-suite step is red, it names every fixture `SKIPPED-on-earlier-red` and returns 1 without dispatching the pool, so a push records no fixture verdicts. The next push must run the whole selection again.
+
+Measured in batch 257 on the 0.1110.0 bundle (lead logs in session scratchpad, `r1110-push.log` and `r1110b-push.log`):
+- Push of d96597d9f, 17:07:48 to 17:16:21: three pre-suite reds (S15, H9, P2), `SKIPPED-on-earlier-red: 275 fixture(s)`, 0 verdicts recorded.
+- Push of 47c2d9e31, 17:41:28 to 18:28:52: pre-suite green, `read-set keys: 247 of 275 fixture(s) run (245 changed …)`, 245 passes recorded. Those 247 would have run, and 245 been recorded, in the first push. The second push needed about 47 minutes because the first recorded nothing.
+- F2's re-push of 36c253529 failed one pre-suite step (M8) and recorded nothing for the same reason.
+
+The block was added because a red validator "still paid for the whole pool (minutes) before the verdict could say so". That cost is the measurement, not waste: the passes are reusable by content key on the next push.
+
+Fix: when a pre-suite step is red, still dispatch the pool and record every pass, and keep the final verdict red (`$fail` unchanged, so the push is BLOCKED). The step that is red is still named first in the output. Keep `AI_DLC_PREPUSH_NO_STOP_EARLY` and I127 consistent with whatever replaces the block, or retire them together.
+
+Receipt: a scratch push whose tree carries one seeded pre-suite red and one changed fixture. It must exit non-zero AND leave that fixture's pass in the verdict store under its key; a re-push of the same tree with the red fixed must skip that fixture on the recorded pass (`verdict store: N fixture(s) skipped` names it). Mutant: restore the stop-early return; the store must then hold no entry and the receipt must fail.
+
+verify: sh o="$(PREPUSH_POOL_DEPTH=1 bash core/fixtures/prepush-worktree-env-scrub/run.sh 2>&1)"; case "$o" in *"ok    BL-1048 rec:"*) ;; *) exit 1 ;; esac; case "$o" in *"ok    BL-1048 skip:"*) exit 0 ;; esac; exit 1

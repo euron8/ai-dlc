@@ -151,6 +151,7 @@ ssh_keepalive_warn "${1:-}" "${2:-}"
 # KEEPALIVE_END
 
 fail=0
+RED_STEPS=""
 # AI_DLC_PRESUITE_SKIP=1 skips every check before the fixture suite: for a re-push of a tree
 # whose checks already passed. The suite and its judges still run. The operator's switch.
 #
@@ -653,9 +654,18 @@ step() {
     printf '\n── %s\n   SKIPPED (AI_DLC_PRESUITE_SKIP=1)\n' "$1"; return 0
   fi
   printf '\n── %s\n' "$1"
-  if [ "${PRESUITE_DONE:-0}" = 0 ]; then pk_step "$@"; return 0; fi
-  shift
-  if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+  # RED_STEPS names every step that went red, for fixture_suite_step to print before the suite runs.
+  local st_f0="$fail" st_t="$1"
+  fail=0
+  if [ "${PRESUITE_DONE:-0}" = 0 ]; then pk_step "$@"
+  else
+    shift
+    if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+  fi
+  [ "$fail" -eq 0 ] || RED_STEPS="$RED_STEPS
+     $st_t"
+  [ "$st_f0" -eq 0 ] || fail=1
+  return 0
 }
 
 # 1. The enforcement map is the index of which rule is enforced by what, and WHERE it
@@ -3329,29 +3339,12 @@ KEY_LOG="$GITDIR/ai-dlc-suite-key.log"
 key_log() { printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:-none}" >> "$KEY_LOG" 2>/dev/null || true; }
 
 fixture_suite_step() {
-  local key cached_key cached_n cached_when n_now record sk_d sk_n
+  local key cached_key cached_n cached_when n_now record
 
-  # STOP EARLY ON A RED ABOVE. step() records fail=1 and carries on, so before this guard a red
-  # validator still paid for the whole pool (minutes) before the verdict could say so. Every
-  # fixture that would have been dispatched is named `SKIPPED-on-earlier-red`, never `ok`, and the
-  # step returns non-zero so the final verdict stays red. The population is the pool's own
-  # (a directory under $FXROOT carrying run.sh, run_fixtures' first filter); the read-set skip
-  # that narrows it further runs inside the pool and is not applied here, so this names the
-  # superset. Sited OUTSIDE FIXTURE_POOL_BEGIN/END, which I66 byte-compares with the consumer hook.
-  # AI_DLC_PREPUSH_NO_STOP_EARLY=1 restores the carry-on for a sandboxed COPY of this hook whose
-  # validator steps fail only for want of scripts; the final verdict still reads $fail. Its token
-  # may appear in no other tracked file than this hook and its one caller (I127).
-  if [ "$fail" -ne 0 ] && [ "${AI_DLC_PREPUSH_NO_STOP_EARLY:-}" != 1 ]; then
-    SUITE_STOPPED_EARLY=1
-    sk_n=0
-    for sk_d in "$FXROOT"*/; do
-      [ -f "$sk_d/run.sh" ] || continue
-      sk_d="${sk_d%/}"
-      printf '   SKIPPED-on-earlier-red %s\n' "${sk_d##*/}"
-      sk_n=$((sk_n + 1))
-    done
-    printf '   SKIPPED-on-earlier-red: %s fixture(s) not run because a step above is red. Fix it and re-push; this step is FAIL, not a pass.\n' "$sk_n"
-    return 1
+  # A RED STEP ABOVE DOES NOT STOP THE SUITE. Every pass the pool makes is recorded for reuse by
+  # content key; the push stays BLOCKED because step() keeps $fail. The red steps are named first.
+  if [ -n "${RED_STEPS:-}" ]; then
+    printf '   a step above is red; this push is BLOCKED, and the suite still runs so every pass it makes is recorded:%s\n' "$RED_STEPS"
   fi
 
   # Counted the way run_fixtures counts, so the number in the announce is the
@@ -3467,8 +3460,8 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 #    asserts it equals the set in core/git-hooks/pre-push. Add a class here and the
 #    consumer hook fails until it carries the class too.
 #    SITED ABOVE THE FIXTURE POOL, not after it: it costs a second, and a syntax red found only
-#    after the whole pool is a red the pool's minutes could not have changed. A red here now
-#    stops the pool the same way any earlier step does (fixture_suite_step reads $fail).
+#    after the whole pool is a red the pool's minutes could not have changed. A red here is
+#    named before the suite, which still runs and records its passes.
 # SYNTAX_GLOB_BEGIN
 syntax_all() {
   local rc=0 f
@@ -3518,15 +3511,14 @@ step "invocation counter armed (scripts/validate-fixture-invocations.sh)" fxcoun
 
 # 2g. BL-879'S STATIC HALF: the cells.decl grammar (C2, C4), the source guard on a `cli` subject (C5), every fixture
 #     the static join refuses being an allowlist row, and scripts/fixture-inprocess-allowlist.txt down-only (M4).
-#     After PRESUITE_DONE, so an AI_DLC_PRESUITE_SKIP=1 push still runs it, and before the suite, so a red here stops
-#     the pool early. It judges GRAMMAR ONLY: C1-C3 and the stale allowlist row are the invocation judge's, per counted
+#     After PRESUITE_DONE, so an AI_DLC_PRESUITE_SKIP=1 push still runs it, and before the suite, so a red here is
+#     named before the pool runs. It judges GRAMMAR ONLY: C1-C3 and the stale allowlist row are the invocation judge's, per counted
 #     run, and step 3b below names every fixture that had none. Distribution hook only, outside FIXTURE_POOL.
 step "fixture in-process cells, static half (scripts/validate-fixture-inprocess.sh; grammar only)" \
   bash scripts/validate-fixture-inprocess.sh
 
 SUITE_SKIPPED=0
 SUITE_SKIP_CAUSE=""
-SUITE_STOPPED_EARLY=0
 FAIL_BEFORE_SUITE="$fail"
 step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 
@@ -3549,7 +3541,6 @@ step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 PENDING_N=0
 inproc_pending_step() {
   local d fx ident="" store="" rec dig e n_dec=0 n_cnt=0 n_vs=0 n_al=0 pl="" w
-  if [ "${SUITE_STOPPED_EARLY:-0}" = 1 ]; then printf '   (the suite was stopped early; nothing to account for)\n'; return 0; fi
   w="$(mktemp -d "${TMPDIR:-/tmp}/inproc-pending.XXXXXX")" || { printf '   could not make a scratch dir\n'; return 1; }
   # Armed, AI_DLC_VERDICT_STORE is <base>/counted-<vk>, so readset_vs_store resolves the counted store's project dir.
   if [ -n "${FXCOUNT_DIR:-}" ] && [ -d "$FXCOUNT_DIR" ]; then
@@ -3593,9 +3584,9 @@ step "in-process cells, dynamic half: every declared fixture judged under this j
 #     a loaded wall clock moves several-fold with the box's load (one unit's recorded cost at pool
 #     12 spans 101-681s), so any band is a picked number that reddens a push for load. No recorded
 #     instance of it catching real growth exists. A growing pole is read by whoever reads the
-#     push; this step always returns 0, and a stopped or skipped suite prints that it has no pole.
+#     push; this step always returns 0, and a skipped suite prints that it has no pole.
 pole_info_step() {
-  if [ "${SUITE_STOPPED_EARLY:-0}" = 1 ] || [ "${SUITE_SKIPPED:-0}" = 1 ] || [ ! -s "$LASTRUN_RECORD" ]; then
+  if [ "${SUITE_SKIPPED:-0}" = 1 ] || [ ! -s "$LASTRUN_RECORD" ]; then
     printf '   (no suite run, no pole)\n'
     return 0
   fi

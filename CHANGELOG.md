@@ -19,6 +19,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1112.0] - 2026-11-13
+
+### BL-1048 CLOSED: a red step above the fixture suite no longer skips it
+
+`fixture_suite_step` in `.githooks/pre-push` no longer returns early when a step above it is red. `step()` records each red step's title, the suite step names them first, and the pool runs, so every pass lands in the verdict store and the key records, and the re-push reuses them. The push stays BLOCKED: `$fail` is unchanged. `AI_DLC_PREPUSH_NO_STOP_EARLY`, `SUITE_STOPPED_EARLY` and invariant I127 are retired together; `suite-pole-info` drops its stop-early arm. The suite-key and verified records now also follow a green suite under a red step: they attest the suite, not the push. Receipt: `prepush-worktree-env-scrub` drives the real hook and `hermetic-run.sh` through a seeded red step (exit 1, BLOCKED, pass recorded) and the fixed re-push (exit 0, skipped on that pass); mutant `s1-stop-early` restores the return and is killed.
+
 ## [0.1108.0] - 2026-11-13
 
 ### BL-1021 CLOSED: FORK_BUDGET ratcheted to the drained batch's reading
