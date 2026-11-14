@@ -11,7 +11,8 @@ branch carries more than one release the release-version validator says so; that
 
 ## The build process is CLAUDE.md's "Build process", and nothing more
 
-- A step not in it is not run. Every run other than a merge goes in parallel; merges are ordered.
+- No build or release step outside it is run; the triggers CLAUDE.md names still bind. Every run other than a
+  merge goes in parallel; merges are ordered.
 - Call the advisor once immediately before every push: a hook outside the repo denies the push otherwise. The roll-call advisor
   call stays (exempt: PAUSED or CLOSABLE sessions); no pre-merge advisor call.
 
