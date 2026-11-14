@@ -120,11 +120,11 @@ mx_eval() {
 
 DURATIONS_RECORD="$T/dur"; LASTRUN_RECORD="$T/last"
 export DURATIONS_RECORD LASTRUN_RECORD
-SUITE_STOPPED_EARLY=0; SUITE_SKIPPED=0; export SUITE_STOPPED_EARLY SUITE_SKIPPED
+SUITE_SKIPPED=0; export SUITE_SKIPPED
 
-# arm_setup <n> -- the whole state arm n reads (arms 1-7), set from scratch so any arm can run on any function file.
+# arm_setup <n> -- the whole state arm n reads (arms 1-5 and 7), set from scratch so any arm can run on any function file.
 arm_setup() {
-  SUITE_STOPPED_EARLY=0; SUITE_SKIPPED=0; rm -f "$DURATIONS_RECORD.prev"
+  SUITE_SKIPPED=0; rm -f "$DURATIONS_RECORD.prev"
   case "$1" in
     # 1. A prior figure for the pole unit: the delta is signed and reads off the SAME unit.
     1) printf 'small 10\nbig-unit 467\nmid 200\n' > "$LASTRUN_RECORD"
@@ -137,8 +137,7 @@ arm_setup() {
     4) printf 'newunit 50\n' > "$LASTRUN_RECORD" ;;
     # 5. This run published no durations.
     5) : > "$LASTRUN_RECORD" ;;
-    # 6. Stop-early and 7. the content-key skip: a stale record on disk must not be read as this run's.
-    6) printf 'big-unit 467\n' > "$LASTRUN_RECORD"; SUITE_STOPPED_EARLY=1 ;;
+    # 7. The content-key skip: a stale record on disk must not be read as this run's. (Arm 6 was stop-early, which the hook no longer has.)
     7) printf 'big-unit 467\n' > "$LASTRUN_RECORD"; SUITE_SKIPPED=1 ;;
   esac
 }
@@ -147,7 +146,7 @@ arm_want() { # the exact line, whole, never a substring: a substring of the no-p
     1) printf '%s' "   pole big-unit 467s loaded (was 381s before this run, +86s)" ;;
     2) printf '%s' "   pole big-unit 300s loaded (was 381s before this run, -81s)" ;;
     3|4) printf '%s' "   pole newunit 50s loaded (no prior figure for it)" ;;
-    5|6|7) printf '%s' "   (no suite run, no pole)" ;;
+    5|7) printf '%s' "   (no suite run, no pole)" ;;
   esac
 }
 expect() { # <label> <arm n> -- the line, whole, for arm n against the extracted function
@@ -157,15 +156,13 @@ expect() { # <label> <arm n> -- the line, whole, for arm n against the extracted
 # 8. Information, never a verdict: the step returns 0 on every state. Prints the states on which it did not.
 arm8_nz() { # <fn-file>
   local st nz=""
-  SUITE_STOPPED_EARLY=0; SUITE_SKIPPED=0; rm -f "$DURATIONS_RECORD.prev"
-  for st in grow none stop; do
+  SUITE_SKIPPED=0; rm -f "$DURATIONS_RECORD.prev"
+  for st in grow none; do
     case "$st" in
       grow) printf 'u 9\n' > "$LASTRUN_RECORD"; printf 'u 1\n' > "$DURATIONS_RECORD.prev" ;;
       none) : > "$LASTRUN_RECORD" ;;
-      stop) printf 'u 9\n' > "$LASTRUN_RECORD"; SUITE_STOPPED_EARLY=1 ;;
     esac
     ( . "$1"; pole_info_step >/dev/null ) || nz="$nz $st"
-    SUITE_STOPPED_EARLY=0
   done
   printf '%s' "$nz"
 }
@@ -179,17 +176,16 @@ got4="$(run_case "$T/fn.sh")"
 if [ "$got4" = "$(arm_want 4)" ]; then ok "4 no prior record file"; B_arm4=1
 else bad "4 no prior record file -- wanted [$(arm_want 4)], got [$got4]"; fi
 expect "5 empty durations" 5
-expect "6 stop-early with a stale record on disk" 6
 expect "7 content-key skip with a stale record on disk" 7
 nz="$(arm8_nz "$T/fn.sh")"
-if [ -z "$nz" ]; then ok "8 returns 0 on growth, on no run and on stop-early"; else bad "8 returned non-zero on:$nz"; fi
+if [ -z "$nz" ]; then ok "8 returns 0 on growth and on no run"; else bad "8 returned non-zero on:$nz"; fi
 
 # mx_cell_red <mutant> <arm> -> 0 when the arm FAILS on the mutant's function file (RED), 1 when it holds (GREEN).
 mx_cell_red() {
   local f="$T/$1.sh" got
   case "$2" in
     arm8) got="$(arm8_nz "$f" 2>&1)"; mx_chk "$got"; [ -n "$got" ] ;;
-    arm[1-7]) arm_setup "${2#arm}"; got="$(run_case "$f" 2>&1)"; mx_chk "$got"; [ "$got" != "$(arm_want "${2#arm}")" ] ;;
+    arm[1-57]) arm_setup "${2#arm}"; got="$(run_case "$f" 2>&1)"; mx_chk "$got"; [ "$got" != "$(arm_want "${2#arm}")" ] ;;
     *) MX_BROKEN=1; return 0 ;;
   esac
 }
@@ -200,7 +196,7 @@ sed 's/FILENAME == ARGV\[1\] {/NR == FNR {/' "$T/fn.sh" > "$T/m1.sh"
 if cmp -s "$T/fn.sh" "$T/m1.sh"; then
   bad "m1 -- the mutation did not apply; the anchor 'FILENAME == ARGV[1]' moved"
 else
-  mx_eval m1 arm1 arm2 arm3 arm4 arm5 arm6 arm7 arm8
+  mx_eval m1 arm1 arm2 arm3 arm4 arm5 arm7 arm8
   if [ -n "$MX_DEC_GREEN" ]; then
     bad "m1 NR==FNR restored SURVIVED -- arm 4 does not discriminate it (green on:$MX_DEC_GREEN)"
   else
@@ -223,5 +219,5 @@ else
   echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
 fi
 
-[ "$rc" -eq 0 ] && echo "PASS  suite-pole-info -- 8 arms, 1 mutant scored"
+[ "$rc" -eq 0 ] && echo "PASS  suite-pole-info -- 7 arms, 1 mutant scored"
 exit "$rc"

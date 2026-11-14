@@ -6,3 +6,6 @@
 # run.sh sources ../lib/preamble.sh first; the runner copies only the fixture's own directory.
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
+# The BL-1048 receipt copies the real store writer and its sibling into its world.
+core/scripts/core-paths.sh
+core/scripts/hermetic-run.sh

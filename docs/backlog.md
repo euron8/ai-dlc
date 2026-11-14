@@ -3040,3 +3040,4 @@ Receipt: `verify: manual`. The subject is a classifier's population, and BL-1031
 Provenance: batch 257, the 0.1107.0 bundle's receipts gate; id allocated by the lead.
 
 verify: manual
+

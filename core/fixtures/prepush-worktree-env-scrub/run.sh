@@ -65,6 +65,7 @@
 # MUTANT-MATRIX s2-no-scrub decides=A2 twins=ran
 # MUTANT-MATRIX s2-comment-only decides=A2 twins=ran
 # MUTANT-MATRIX s2-scrub-after-dispatch decides=A2 twins=ran
+# MUTANT-MATRIX s1-stop-early decides=rec,skip twins=blocked
 # MUTANT-MATRIX-DYNAMIC variant-loop why=the three variants are one loop body driven once per subject, so each mutant id is built as <slug>-<variant>; every name it produces has its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-worktree-env-scrub/run.sh --matrix
 set -uo pipefail
@@ -207,9 +208,10 @@ EOF
 
   # `</dev/null` because the consumer hook drains the ref protocol from stdin and
   # would otherwise inherit whatever the suite handed this fixture.
-  # AI_DLC_PREPUSH_NO_STOP_EARLY=1: every validator step fails in this sandbox for want of scripts, and stop-early would then never dispatch aaa-probe.
-  ( cd "$sb/wt" && env GIT_DIR="$gd" AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_PREPUSH_NO_STOP_EARLY=1 \
+  # Every validator step fails in this sandbox for want of scripts; the hook still dispatches aaa-probe (BL-1048).
+  ( cd "$sb/wt" && env GIT_DIR="$gd" AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_READSET_LIVE_TRACE=0 \
       bash "$hookfile" ) </dev/null > "$sb/hook.log" 2>&1
+  printf '%s\n' "$?" > "$sb/hook.rc"
 
   git --git-dir="$gd" rev-parse HEAD > "$sb/head.after" 2>/dev/null || : > "$sb/head.after"
   git --git-dir="$gd" log -1 --format=%s > "$sb/subj.after" 2>/dev/null || : > "$sb/subj.after"
@@ -236,12 +238,14 @@ probe_ran() { [ -f "$WORK/$1/probe.ran" ]; }
 #   A1   the dispatched worker saw no GIT_DIR      (RED: it inherited one)
 #   A2   the real repository is untouched          (RED: the probe's sandbox commit landed on it)
 #   ran  the probe fixture was dispatched          (RED: it never ran)
-MX_CELLS='A1 A2 ran'
+#   rec, skip, blocked   the BL-1048 receipt's cells, defined at rcpt_red below
+MX_CELLS='A1 A2 ran rec skip blocked'
 cell_red() {
   case "$1" in
     A1)  [ "$(cat "$WORK/$2/probe.gitdir" 2>/dev/null)" != "<unset>" ] ;;
     A2)  corrupted "$2" ;;
     ran) ! probe_ran "$2" ;;
+    rec|skip|blocked) rcpt_red "$1" "$2" ;;
     *)   return 2 ;;
   esac
 }
@@ -446,6 +450,89 @@ else
   printf '  ..    %s absent in this layout — not exercised\n' "$SUBJ_LABEL_2"
 fi
 
+# ------------------------------------------------- BL-1048: a red step records --
+# A red step above the suite must not stop it: the pool still runs, every pass lands in the verdict store, and the
+# push stays BLOCKED. The world is a plain repository holding the distribution hook, the REAL core/scripts/
+# hermetic-run.sh (the store's only writer) and core-paths.sh beside it, one declared fixture aaa-rec reading
+# lib/x.txt, and a scripts/validate-fixture-inprocess.sh seeded red. Both drives run with AI_DLC_PRESUITE_SKIP=1
+# (every pre-suite validator is absent here), at PREPUSH_POOL_DEPTH=1 (no consumer-layout tree), into a world-local
+# store. Drive 1: the seeded red. Then aaa-rec's key record goes, so only the store can skip it, and the red is
+# fixed and committed. Drive 2: the re-push. Cells, read off one finished receipt <tag>:
+#   rec      drive 1 ran aaa-rec ok and left exactly one store entry       (RED: the pool did not run or record)
+#   skip     drive 2 skipped aaa-rec on that entry and did not re-run it    (RED: the pass was not reused)
+#   blocked  drive 1 exited non-zero and said BLOCKED                      (RED: the red did not hold the push)
+# The mutant s1-stop-early is a copy of the hook whose fixture_suite_step returns 1 on any red step, as before.
+# On a consumer the receipt is not run: the consumer hook has no step above its suite that this could stop.
+RC_HR="$HERE/../../scripts/hermetic-run.sh"
+RC_CP="$HERE/../../scripts/core-paths.sh"
+rcpt_drive() { # <tag> <hook-source> <pristine|stop-early>
+  local w="$WORK/$1/w" h
+  mkdir -p "$w/.githooks" "$w/core/scripts" "$w/core/fixtures/aaa-rec" "$w/lib" "$w/scripts" || return 1
+  h="$w/.githooks/pre-push"
+  case "$3" in
+    pristine) cp "$2" "$h" || return 1 ;;
+    stop-early)
+      awk '{ if (!d && /^fixture_suite_step\(\) \{$/) { print; print "  if [ -n \"${RED_STEPS:-}\" ]; then return 1; fi"; d = 1; next } print }' \
+        "$2" > "$h" || return 1 ;;
+    *) return 1 ;;
+  esac
+  cp "$RC_HR" "$RC_CP" "$w/core/scripts/" || return 1
+  printf 'x\n' > "$w/lib/x.txt"
+  printf '#!/usr/bin/env bash\n[ -f lib/x.txt ] || exit 1\nexit 0\n' > "$w/core/fixtures/aaa-rec/run.sh"
+  printf 'lib/x.txt\n' > "$w/core/fixtures/aaa-rec/inputs.decl"
+  printf '#!/usr/bin/env bash\necho seeded red; exit 1\n' > "$w/scripts/validate-fixture-inprocess.sh"
+  ( cd "$w" && git init -q . && git add -A && git -c user.email=f@x -c user.name=f -c commit.gpgsign=false commit -qm seed ) \
+    > /dev/null 2>&1 || return 1
+  rcpt_push "$1" 1
+  find "$w.vs" -type f 2>/dev/null | grep -c . > "$WORK/$1/n1"
+  rm -f "$w/.git/ai-dlc-fixture-keys/aaa-rec.key"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$w/scripts/validate-fixture-inprocess.sh"
+  ( cd "$w" && git -c user.email=f@x -c user.name=f -c commit.gpgsign=false commit -qam fix ) > /dev/null 2>&1 || return 1
+  rcpt_push "$1" 2
+  return 0
+}
+rcpt_push() { # <tag> <n>: one push of the world; log in <tag>/log.<n>, exit in <tag>/rc.<n>
+  local w="$WORK/$1/w"
+  ( cd "$w" && env -u FXCOUNT_DIR -u FXCOUNT_RC -u FXCOUNT_JUDGE -u GIT_DIR PREPUSH_POOL_DEPTH=1 AI_DLC_PRESUITE_SKIP=1 \
+      AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$w.vs" bash .githooks/pre-push ) </dev/null > "$WORK/$1/log.$2" 2>&1
+  printf '%s\n' "$?" > "$WORK/$1/rc.$2"
+}
+rcpt_red() { # <cell> <tag>: 0 RED, 1 GREEN
+  local t="$WORK/$2"
+  case "$1" in
+    rec) ! { grep -qx '   ok    aaa-rec' "$t/log.1" 2>/dev/null && [ "$(cat "$t/n1" 2>/dev/null)" = 1 ]; } ;;
+    skip) ! { grep -qx '   ..    verdict store: 1 fixture(s) skipped on a pass recorded elsewhere: aaa-rec' "$t/log.2" 2>/dev/null \
+              && ! grep -qx '   ok    aaa-rec' "$t/log.2" 2>/dev/null; } ;;
+    blocked) ! { [ "$(cat "$t/rc.1" 2>/dev/null)" != 0 ] && grep -q '^pre-push: BLOCKED' "$t/log.1" 2>/dev/null; } ;;
+    *) return 2 ;;
+  esac
+}
+if [ -f "$SUBJ_PATH_1" ] && [ -f "$SUBJ_PATH_2" ]; then
+  [ -f "$RC_HR" ] && [ -f "$RC_CP" ] || broken "BL-1048 receipt: core/scripts/hermetic-run.sh or core-paths.sh is not beside $HERE/../.."
+  RC_HOOK="$(cd "$(dirname "$SUBJ_PATH_1")" && pwd -P)/$(basename "$SUBJ_PATH_1")"
+  rcpt_drive rc-pristine "$RC_HOOK" pristine || broken "BL-1048 receipt: could not seed or drive the unmutated hook"
+  # The control: drive 2 is the red FIXED, so it must exit 0; a harness that died would not.
+  [ "$(cat "$WORK/rc-pristine/rc.2")" = 0 ] || broken "BL-1048 receipt: the re-push with the red fixed exited $(cat "$WORK/rc-pristine/rc.2"), so the world itself is red. Log: $WORK/rc-pristine/log.2"
+  if rcpt_red blocked rc-pristine; then bad "BL-1048 blocked: a red step did not hold the push (rc $(cat "$WORK/rc-pristine/rc.1"); BLOCKED required)"
+  else ok "BL-1048 blocked: under the seeded red step the push exits $(cat "$WORK/rc-pristine/rc.1"), BLOCKED"; fi
+  if awk '/^   a step above is red; this push is BLOCKED/ { n = 1; next } n && $0 == "     fixture in-process cells, static half (scripts/validate-fixture-inprocess.sh; grammar only)" { f = 1 } END { exit f ? 0 : 1 }' "$WORK/rc-pristine/log.1"
+  then ok "BL-1048 named: the suite step names the seeded red step before it runs"
+  else bad "BL-1048 named: the suite step did not name the seeded red step"; fi
+  if rcpt_red rec rc-pristine; then bad "BL-1048 rec: under a red step the suite did not run aaa-rec and record its pass ($(cat "$WORK/rc-pristine/n1") store entries)"
+  else ok "BL-1048 rec: under a red step the suite ran aaa-rec and its pass is in the verdict store"; fi
+  if rcpt_red skip rc-pristine; then bad "BL-1048 skip: the re-push with the red fixed did not skip aaa-rec on the recorded pass"
+  else ok "BL-1048 skip: the re-push with the red fixed skipped aaa-rec on the pass the red push recorded"; B_rc=1; fi
+  rcpt_drive rc-stop "$RC_HOOK" stop-early || broken "BL-1048 receipt: could not seed or drive the stop-early mutant"
+  cmp -s "$RC_HOOK" "$WORK/rc-stop/w/.githooks/pre-push" && broken "BL-1048 receipt: the stop-early mutant is byte-identical to the hook"
+  if rcpt_red rec rc-stop && rcpt_red skip rc-stop; then
+    mutant_killed "${B_rc:-0}" s1-stop-early "BL-1048: with the stop-early return restored the red push records nothing and the re-push re-runs aaa-rec -- scored"
+  else bad "s1-stop-early SURVIVED: restoring the stop-early return left a store entry or a skip"; fi
+  mx_twins s1-stop-early rc-stop
+  if [ "$MODE" = matrix ]; then mx_score s1-stop-early rc-stop; fi
+else
+  printf '  ..    BL-1048 receipt: not the distribution layout -- not exercised\n'
+fi
+
 # A fixture that reached neither subject has established nothing, and the green line
 # it would otherwise print is indistinguishable from one that checked both hooks.
 [ "$exercised" -gt 0 ] \
@@ -465,7 +552,7 @@ if [ "$MODE" = plain ]; then
 else
   # The header must name exactly the mutants this layout scored (a consumer layout scores one subject only).
   mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
-  mx_all="s1-comment-only s1-no-scrub s1-scrub-after-dispatch s2-comment-only s2-no-scrub s2-scrub-after-dispatch "
+  mx_all="s1-comment-only s1-no-scrub s1-scrub-after-dispatch s1-stop-early s2-comment-only s2-no-scrub s2-scrub-after-dispatch "
   [ "$mx_hdr" = "$mx_all" ] || { echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; exit 2; }
   echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
   fails=$((fails + MX_FAILS))
