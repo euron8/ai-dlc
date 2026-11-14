@@ -3098,23 +3098,6 @@ Receipt: `verify: manual`. The evidence is each fixture's counted run, old again
 
 verify: manual
 
-## BL-1065 — `validate-fixture-inprocess.sh --complete` re-runs the invocation judge's whole self-probe on every census call, and its corpus join takes 33 s; BL-878's receipt paces the backlog-receipts step
-
-**DEFECT.** OPEN. Filed 2026-11-13. Owner: `scripts/validate-fixture-inprocess.sh` (`judge_tree`), `scripts/validate-fixture-invocations.sh` (`--b2-census`, `fxc_static_join`, `fxc_p2_scan`).
-
-BL-878's receipt, `bash scripts/validate-fixture-inprocess.sh --complete`, is the slowest open `sh` receipt. It runs twice in the backlog-receipts step, once in the score pool and once in R9's classifier pass. Since BL-1054 those two passes run side by side, so this receipt sets the step's floor. An xtrace at a3ec19ebf took 53 s solo at load 8 (exit 1, 149 allowlist rows), in three lines:
-(1) The corpus `--static-join <root> --p2-base <base>` took 33 s. It runs `fxc_p2_scan` over the tip and the materialised push base, then a per-fixture loop with several forks per fixture.
-(2) The probe tree's `--b2-census` took 9 s, and (3) the corpus `--b2-census` took 9 s. A solo `--b2-census --root .` took 10 s, of which the census walk itself was about 2 s. The rest is `fxc_self_probe`, which line 1882 runs on EVERY `--b2-census` call. `judge_tree` makes that call twice per run, so the same self-probe runs twice over the same judge.
-
-Owed: cut both. For example, run the judge's self-probe once per `validate-fixture-inprocess.sh` run, and cost the static join's per-fixture loop. Measure the step solo, old against new, interleaved. `validate-fixture-invocations.sh` is the judge that `core/scripts/hermetic-run.sh` calls once per counted run, so an edit to it moves every fixture's runner key. The fix must carry existing verdicts forward and must not force a whole-suite rerun. F25 (bundle B1) moves the judge into a per-fixture row, which may make that possible. Predict the push set with the lead's predictor before building.
-
-Receipt: `verify: manual`. This is a wall-clock cut, and its closing evidence is a before-and-after measurement.
-
-Provenance: batch 257, G2 (ai-dlc-bf), measured while closing BL-1054; id allocated by the lead.
-
-verify: manual
-
-
 ## BL-1066 — scripts/pregate-self-check.sh runs two of its sections under a scratch verdict store, so their verdicts are thrown away
 
 **DEFECT.** OPEN. Filed 2026-11-13. Owner: `scripts/pregate-self-check.sh`. Two lines override `AI_DLC_VERDICT_STORE` with a directory under the run's own `mktemp -d`, which `on_exit` deletes. Section a runs the hook prefix as `AI_DLC_VERDICT_STORE="$W/vs" bash "$W/prefix.sh"` (line 177 at G4's tip). Section d's dirty-tree route runs `AI_DLC_VERDICT_STORE="$W/fx/vs"` (line 258), and since BL-1064 its clean-tree route already writes the counted store through `scripts/seed-verdict-store.sh`. Every verdict those two runs produce is discarded, against the operator ruling that every measurement lands in the shared content-keyed store. A hand run that copies section a's cut inherits the override.

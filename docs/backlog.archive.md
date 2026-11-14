@@ -43377,3 +43377,72 @@ Provenance: batch 257, folded into K4 by the lead; id allocated by the lead.
 
 verify: manual
 
+## BL-1075 — a TERM sent before a trapped bash's child execs is dropped, so the stage-1 wrapper's sampler sleep and its deriver can outlive their stop
+
+**LANDED (v0.1128.0).** `scripts/readset-stage1-run.sh` stops nothing by a TERM it relies on being honoured:
+- The load sampler carries no trap. It is launched under `set -m` as its own process group, keeps its foreground `sleep` in that group (`set +m` inside), and `stop_sampler` sends `kill -KILL -- "-$sp"`.
+- `finish()` sends TERM to the deriver's group, waits for the group to empty (50 x 0.1 s), and sends KILL to the group only if it is still alive. It never resends the TERM. A dead leader reads gone at once, so a normal finish pays no grace.
+
+`core/fixtures/readset-stage1-verdict` gains two in-process cells. Each seeds a process that ignores TERM, as the stand-in for a TERM lost in the window:
+- `samplerstop` (a stub `sleep` with `trap "" TERM`).
+- `killgrace` (a deriver group whose leader dies on the TERM, so finish()'s wait returns, and whose one member runs `trap '' TERM`).
+
+Each cell controls that a TERM the cell sends leaves that process alive, and killgrace controls that the member is in the leader's group. The forced PATH-walk window cannot open on the new sampler: its foreground `sleep` is looked up in the PATH by the trap-less sampler itself before the fork, so no child that holds a handler ever exists (245 of 245 attempts caught none). Green on the new code therefore rests on these stand-in cells. Mutants:
+- `sampler-term` and `sampler-pid-kill` die on samplerstop.
+- `no-kill-fallback` dies on killgrace.
+
+`groupkill`'s children now log the TERM they receive. Without that, `single-pid-kill` would survive: the KILL fallback empties the group.
+
+**DEFECT.** Filed 2026-11-14. A bash with a TERM-catching trap (an EXIT trap installs one) forks children that keep the handler until they exec. A TERM landing in that window is caught and dropped, and the child execs and runs on. ai-dlc-76's race (`cat fifo & p=$!; kill $p`) dropped 56/300 and 52/300 with an EXIT trap and 0/300 with none.
+
+Population: `git grep` over `scripts/`, `core/scripts/` and both pre-push hooks for a trap catching TERM or EXIT, a background child, and a `kill` without `-KILL`/`-9`/`-0`. That gives 60 trap files and 11 candidates (control: `readset-stage1-run.sh` present). Six carry the word only in prose, comments or awk text. `kill-matrix.sh` kills by KILL.
+- **Not sites:**
+  - The hooks' trace watchdog already has no TERM trap and is swept by group, and the subshell's TERM trap is set after both forks.
+  - `pool_stop` TERMs only pids that each worker wrote after installing its own trap.
+  - `derive-fixture-readsets.sh` kills its `log stream` children (`LOG_BIN=/usr/bin/log`, no PATH walk) only after output that only an exec'd stream produces, a failed `kill -0`, or a 10-20 s bound.
+- **Sites, all in `readset-stage1-run.sh`:**
+  - The sampler trap's TERM to its unqualified `sleep 15`.
+  - `stop_sampler`'s TERM to the sampler.
+  - `finish()`'s TERM to the deriver group.
+
+Forced on the old wrapper in scratch: PATH carried 60000 absent entries before a stub `sleep`, so the sleep's child walked PATH while still holding the sampler's handler. The child was STOPped and read as `bash` (pre-exec), the sampler was stopped, and the child was continued. It leaked a blocked `sleep` 3 of 3, each on the first attempt.
+
+Not forced: the fork-to-reset window of a `( … ) &` subshell. 0/300 in a race whose simple-command control read only 1/300 cannot discriminate.
+
+Receipt: `verify: manual`. The evidence is the fixture's counted run, which names samplerstop, killgrace and groupkill holding under the shipping wrapper, with the four mutants killed on them.
+
+Provenance: batch 257, K3 (fast track), from ai-dlc-76's K2 finding; id allocated by the lead.
+
+verify: manual
+
+## BL-1076 — a TERM between a stage-1 launch's `&` and the line that records its pid runs finish() with nothing to stop, and the launched job runs on
+
+**LANDED (v0.1128.0).** `scripts/readset-stage1-run.sh` holds INT and TERM across both launches. `stage1_hold` sets a flag in their place. `stage1_release`, run once `$!` is recorded (`DPID=$!` for the deriver, the sampler's pid file for the sampler), reinstalls the real traps and runs `finish` then `exit` with the held status.
+
+The window is forced in `core/fixtures/readset-stage1-verdict`'s `holdlaunch` and `holdsampler` cells. A copy of the wrapper carries, right after the launch's `&` line, a line that records `$!`, waits until the job's blocker has exec'd (so the stop's TERM cannot fall into a fork-to-exec window), and TERMs its own shell. Exactly one line matches, and the copy parses. The launched job is a non-bash blocker. The cell exits 143, and the job's group must be gone. Mutant `no-hold`, the TERM hold replaced by the old trap, dies on both cells.
+
+**DEFECT.** Filed 2026-11-14. The wrapper's traps run between commands. A TERM landing after the deriver's `( … ) &` and before `DPID=$!` ran `finish()` with `DPID` empty: no group kill, `exit 143`, and the deriver ran on as an orphan that would rewrite the map. The sampler had the same span before its pid file was written, and that orphan sampled forever. Found while deriving BL-1075's sites. It is a different mechanism (the wrapper's own trap timing, not a child's lost signal).
+
+Receipt: `verify: manual`. The evidence is the fixture's counted run naming holdlaunch and holdsampler with no-hold killed on both.
+
+Provenance: batch 257, K3 (fast track), found by ai-dlc-8b; id allocated by the lead.
+
+verify: manual
+
+## BL-1065 — `validate-fixture-inprocess.sh --complete` re-runs the invocation judge's whole self-probe on every census call, and its corpus join takes 33 s; BL-878's receipt paces the backlog-receipts step
+
+**LANDED (v0.1128.0).** Both cuts, with every output byte-identical. (1) `validate-fixture-inprocess.sh` makes one memo directory per run and exports it as `FXC_SP_MEMO`. The judge's `--b2-census` (`fxc_sp_memo`) skips `fxc_self_probe` when that directory holds a token keyed on the judge's own bytes, `core/fixtures/lib/mutant.sh` and the bash version, and writes the token only after a green probe. A red judge refuses on both calls (rc 2, no token), and with the variable unset or its directory missing the probe runs on every call, as before. Through `--complete` the self-probe runs once, where it ran twice. (2) `fxc_static_join` builds C5's guard table once per tree: one `fxc_guarded` call over every readable `cli` subject in `cells.decl`, replacing an `awk | sort` and one `fxc_guarded` fork per fixture and subject. The `while IFS="$(printf '\t')" read` loops in `fxc_census`, `fxc_judge` and `fxc_static_join` (5 sites) read `IFS="$T"`, dropping a fork per row. Equivalence, old (4c3a82362) against new on the real corpus: `--store-key`, `--key-rows` (276 lines), `--static-join` (910), `--static-join --p2-base` (1270), `--b2-census`, and `validate-fixture-inprocess.sh` gate (rc 0) and `--complete` (rc 1, 149 allowlist rows) are each byte-identical, with a control that the two sides' scripts differ. The real corpus has 0 C5 rows, so a crafted 12-fixture corpus with 6 C5, 7 E, 8 X and 4 P rows was compared too: byte-identical, and a mutant that reads every subject guarded differs. The judge's semantic sha moved and no judgement did, so it gains a `# FXC-IDENTITY 1` row and `FXC_FORMAT` stays 1. The counted store is `counted-b4f3542dc948` at base and tip, so no counted verdict re-keys. The memoised self-probe logs no counted start beyond its own, so no `invocations.decl` row moves. Measured on `--complete`, old against new, interleaved, two runs each at load 30-46 (the box was never solo): CPU (user+sys) 97.8 and 94.4 s old against 68.1 and 53.2 s new; wall 112 and 129 s old against 94 and 54 s new. Not cut: `fxc_p2_scan`, about 15 s of user CPU per tree, still runs over the tip and the push base.
+
+**DEFECT.** Filed 2026-11-13. Owner: `scripts/validate-fixture-inprocess.sh` (`judge_tree`), `scripts/validate-fixture-invocations.sh` (`--b2-census`, `fxc_static_join`, `fxc_p2_scan`).
+
+BL-878's receipt, `bash scripts/validate-fixture-inprocess.sh --complete`, is the slowest open `sh` receipt. It runs twice in the backlog-receipts step, once in the score pool and once in R9's classifier pass. Since BL-1054 those two passes run side by side, so this receipt sets the step's floor. An xtrace at a3ec19ebf took 53 s solo at load 8 (exit 1, 149 allowlist rows), in three lines:
+(1) The corpus `--static-join <root> --p2-base <base>` took 33 s. It runs `fxc_p2_scan` over the tip and the materialised push base, then a per-fixture loop with several forks per fixture.
+(2) The probe tree's `--b2-census` took 9 s, and (3) the corpus `--b2-census` took 9 s. A solo `--b2-census --root .` took 10 s, of which the census walk itself was about 2 s. The rest is `fxc_self_probe`, which line 1882 runs on EVERY `--b2-census` call. `judge_tree` makes that call twice per run, so the same self-probe runs twice over the same judge.
+
+Receipt: `verify: manual`. This is a wall-clock cut, and its closing evidence is a before-and-after measurement.
+
+Provenance: batch 257, G2 (ai-dlc-bf), measured while closing BL-1054; id allocated by the lead.
+
+verify: manual
+
+

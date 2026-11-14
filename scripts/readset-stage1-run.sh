@@ -125,7 +125,7 @@ stop_sampler() {
   [ -f "$SPID_FILE" ] || return 0
   sp="$(cat "$SPID_FILE")"
   case "$sp" in ''|*[!0-9]*) return 0 ;; esac
-  kill "$sp" 2>/dev/null; wait "$sp" 2>/dev/null
+  kill -KILL -- "-$sp" 2>/dev/null; wait "$sp" 2>/dev/null
   rm -f "$SPID_FILE"
 }
 
@@ -139,11 +139,23 @@ stop_sampler() {
 # launched under `set -m`, which in bash 3.2 puts the job in its own process group whose pgid is
 # $DPID, and `kill -- -$DPID` reaches every member. Measured on 3.2.57: the single-pid kill left
 # both background children of a trap-less stub alive; the group kill left neither.
+#
+# THE TERM IS FOLLOWED BY A KILL WHEN THE GROUP OUTLIVES ITS GRACE. The deriver's job is forked from
+# this shell, whose traps catch TERM, and a child keeps that handler until it execs: a TERM landing
+# in that window is caught and dropped, and the deriver then execs and runs on. Nothing resends the
+# TERM. THE BOUND (50 x 0.1s) STANDS FOR: the group emptying on the TERM it was sent. OUTCOME ON
+# HIT: KILL to the group, which no handler can drop; a group that empties first is never KILLed.
 finish() {
+  local g=0
   [ "$FINAL" -eq 0 ] || return 0
   FINAL=1
   trap '' INT TERM
-  if [ -n "$DPID" ]; then kill -TERM -- "-$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi
+  if [ -n "$DPID" ]; then
+    kill -TERM -- "-$DPID" 2>/dev/null
+    while kill -0 -- "-$DPID" 2>/dev/null && [ "$g" -lt 50 ]; do sleep 0.1; g=$((g + 1)); done
+    kill -0 -- "-$DPID" 2>/dev/null && kill -KILL -- "-$DPID" 2>/dev/null
+    wait "$DPID" 2>/dev/null
+  fi
   stop_sampler
   if [ -n "$START" ] && [ "$RECORDED" -eq 0 ]; then
     [ -f "$RUN_DIR/rc" ] || printf '%s\n' "$RC" > "$RUN_DIR/rc"
@@ -164,20 +176,37 @@ trap 'finish' EXIT
 trap 'finish; exit 130' INT
 trap 'finish; exit 143' TERM
 }
+# A LAUNCH IS HELD: INT and TERM set a flag between the `&` and the line that records `$!`, and the
+# real traps run once it is recorded. A trap run inside that span found no pid to stop and left the
+# launched job running.
+stage1_hold() {
+HELD=""
+trap 'HELD=130' INT
+trap 'HELD=143' TERM
+}
+stage1_release() {
+stage1_traps
+[ -z "$HELD" ] || { finish; exit "$HELD"; }
+}
 
-# THE SAMPLER is stopped by the pid it wrote, never by a process-table grep. Its sleep is a child
-# it waits on, so a TERM interrupts the wait and the sleep is reaped with it.
+# THE SAMPLER CARRIES NO TRAP AND IS STOPPED BY A KILL TO ITS OWN PROCESS GROUP. A handler on it is
+# inherited by its `sleep` until that execs, so a TERM forwarded in that window is caught and dropped
+# and the sleep runs on; a TERM sent to the sampler itself is open to the same loss from this
+# shell's traps. `set -m` gives it a group whose pgid is its pid, `set +m` inside keeps its sleep in
+# that group, and stop_sampler KILLs the group: the sampler has nothing to clean up.
 stage1_sampler() {
+stage1_hold
+set -m
 (
-  sp=""
-  trap '[ -n "$sp" ] && kill "$sp" 2>/dev/null; exit 0' TERM
+  set +m
   while :; do
-    sleep 15 & sp=$!
-    wait "$sp"; sp=""
+    sleep 15
     sample
   done
 ) &
 echo "$!" > "$SPID_FILE"
+set +m
+stage1_release
 sample
 }
 
@@ -197,10 +226,10 @@ START="$S_EPOCH"
 stage1_profile() {
 unset AI_DLC_READSET_SANDBOX_PROFILE
 }
-# `set -m` ONLY AROUND THIS LAUNCH: the deriver's job gets its own process group (pgid = $DPID) so
-# finish() can kill the whole tree. The sampler above was launched with it OFF and stays in the
-# wrapper's group, stopped by its own pid.
+# `set -m` ONLY AROUND EACH LAUNCH: the deriver's job gets its own process group (pgid = $DPID) so
+# finish() can kill the whole tree, as the sampler above gets its own.
 stage1_launch() {
+stage1_hold
 set -m
 (
   cd "$ROOT" || exit 2
@@ -208,6 +237,7 @@ set -m
 ) > "$RUN_DIR/deriver.log" 2>&1 < /dev/null &
 DPID=$!
 set +m
+stage1_release
 printf '%s\n' "$DPID" > "$RUN_DIR/pgid"
 wait "$DPID"
 RC=$?

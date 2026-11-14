@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1128.0] - 2026-11-14
+
+### BL-1065 CLOSED: the invocation judge's census no longer re-runs its whole self-probe on every call
+
+`scripts/validate-fixture-invocations.sh` and `scripts/validate-fixture-inprocess.sh` memoise the judge's self-probe within one `--complete` run (a wrong-key token or a missing memo directory still probes; a red judge leaves no token). The static join tests each `cells.decl` and `cli` path for readability by opening it (`{ : < f; } 2>/dev/null`), not with `-r`, so it adds no metadata-only test to a file the pre-suite steps run (arm S15). The counted store's key is unchanged (`counted-b4f3542dc948`). Measured interleaved under load, never solo: `--complete` CPU 97.8 and 94.4 s old, 68.1 and 53.2 s new.
+
+### BL-1075 and BL-1076 filed and CLOSED: the stage-1 wrapper leaves no orphan on a stop
+
+`scripts/readset-stage1-run.sh`'s load sampler carries no trap and runs as its own process group, which `stop_sampler` ends with `kill -KILL`; `finish()` TERMs the deriver group, polls it empty, then KILLs it. INT and TERM are held between each launch's `&` and its recorded pid (BL-1076). `readset-stage1-verdict` gains cells samplerstop, killgrace, holdlaunch and holdsampler, each with a killed mutant.
+
 ## [0.1127.0] - 2026-11-14
 
 ### BL-1043 CLOSED: consumer-layout units are keyed on their installed placement, and no push runs every shipping fixture

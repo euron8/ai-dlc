@@ -90,6 +90,10 @@
 # MUTANT-MATRIX no-orphan-check decides=orphan-live twins=orphan-dead
 # MUTANT-MATRIX no-restore decides=restore twins=groupkill
 # MUTANT-MATRIX single-pid-kill decides=groupkill twins=restore
+# MUTANT-MATRIX sampler-term decides=samplerstop twins=profile
+# MUTANT-MATRIX sampler-pid-kill decides=samplerstop,holdsampler twins=profile
+# MUTANT-MATRIX no-kill-fallback decides=killgrace twins=samplerstop
+# MUTANT-MATRIX no-hold decides=holdlaunch,holdsampler twins=samplerstop
 # MUTANT-MATRIX pk-bare decides=pk-site1,pk-site2 twins=clause-count
 # MUTANT-MATRIX pk-wrong-parent decides=pk-site1,pk-site2 twins=clause-count
 # MUTANT-MATRIX sb-one-emitter decides=clause-count twins=pk-sites
@@ -916,7 +920,7 @@ wrap_kill9() {
   [ -n "$pg" ] && [ "$pg" = "$sp" ] || { echo "    [$t] RUN_DIR/pgid reads '$pg', not the stub's pid '$sp'"; f=1; }
   kill -KILL "$wp"; { wait "$wp"; } 2>/dev/null; rc=$?
   [ "$rc" = 137 ] || { echo "    [$t] the SIGKILLed wrapper exited $rc, not 137"; f=1; }
-  p="$(cat "$rd/sampler.pid" 2>/dev/null)"; [ -n "$p" ] && kill "$p" 2>/dev/null
+  p="$(cat "$rd/sampler.pid" 2>/dev/null)"; [ -n "$p" ] && kill -KILL -- "-$p" 2>/dev/null
   awk -F'\t' -v rd="$rd" -v sha="$(git -C "$R/repo" rev-parse HEAD)" \
       'NR == 1 && NF == 4 && $1 == rd && $2 == "started" && $3 ~ /^[0-9]+$/ && $4 == sha { n++ } END { exit !(n == 1 && NR == 1) }' "$L" 2>/dev/null \
     || { echo "    [$t] the ledger does not hold exactly the started line after SIGKILL"; f=1; }
@@ -1054,8 +1058,10 @@ ic_groupkill() { # finish() TERMs the deriver's whole process group: a trap-less
     fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_state
     # The leader is a fresh trap-less bash with two background children, as the stub deriver is; `set -m` around
     # its launch gives it its own process group, exactly as stage1_launch does.
+    # Each child is a subshell that logs the TERM it receives before it exits, so the arm below tells the group TERM
+    # apart from finish()'s KILL fallback, which would empty the group too.
     set -m
-    PF="$2/pids" bash -c 'cat "$STUB_HANG" </dev/null >/dev/null 2>&1 & echo "$!" >> "$PF"; cat "$STUB_HANG" </dev/null >/dev/null 2>&1 & echo "$!" >> "$PF"; wait' </dev/null >/dev/null 2>&1 &
+    PF="$2/pids" bash -c 'k() { ( trap "echo T >> \"\$PF.t\"; exit 0" TERM; cat "$STUB_HANG" </dev/null >/dev/null 2>&1 & wait ) & echo "$!" >> "$PF"; }; k; k; wait' </dev/null >/dev/null 2>&1 &
     DPID=$!
     set +m
     echo "$DPID" >> "$2/pids"
@@ -1075,8 +1081,91 @@ ic_groupkill() { # finish() TERMs the deriver's whole process group: a trap-less
   while ! all_gone "$2/pids" && ! st_settled "$2/pids"; do sleep 0.1; done
   while IFS= read -r p; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done < "$2/pids"
   [ -z "$alive" ] || { echo "the deriver's process tree survived the TERM:$alive"; return 1; }
+  n="$(grep -c '^T$' "$2/pids.t" 2>/dev/null)" || n=0
+  [ "$n" = 2 ] || { echo "the deriver's process group never received the TERM: $n of 2 children logged it"; return 1; }
 }
-IC_CELLS="sample profile started orphan-live orphan-dead restore groupkill"
+# THE STAND-INS FOR A LOST TERM. A TERM caught in a child's fork-to-exec window is dropped and the child runs on;
+# from the stopping side that is a process that does not honour the TERM it was sent. Each cell below seeds one that
+# ignores TERM (its control: a TERM sent by the cell leaves it alive) and asks whether the stop still ends it.
+# A stand-in the stop leaves alive is KILLed by the cell itself: it ignores the TERM the fixture's reap sends.
+ic_samplerstop() { # stop_sampler ends the sampler's sleep although the sleep never honours a TERM
+  mkdir -p "$2/run" "$2/sl"; : > "$2/sl.pids"
+  printf '#!/bin/bash\ntrap "" TERM\necho "$$" >> "%s"\nexec cat "%s" </dev/null >/dev/null 2>&1\n' "$2/sl.pids" "$HANG" > "$2/sl/sleep" \
+    && chmod +x "$2/sl/sleep" || { echo "control: cannot write the TERM-ignoring sleep"; return 1; }
+  ( RUN_DIR="$2/run"; . "$1" || exit 9
+    [ "$1" = "$WRAPPER" ] && fx_inproc "$1"; stage1_state
+    # The stub sleep is first on PATH for this one call only: the cell's own waits sleep through PATH too.
+    [ "$1" = "$WRAPPER" ] && fx_inproc "$1"; PATH="$2/sl:$PATH" stage1_sampler; trap - EXIT INT TERM
+    sp="$(cat "$SPID_FILE")"; echo "$sp" >> "$ORPHANS"
+    await "$2" "$sp" "the sampler's sleep blocked on the hang fifo" st_settled "$2/sl.pids" \
+      || { echo "control: the sampler's sleep never blocked: $AWAIT_WHY"; exit 1; }
+    s="$(head -1 "$2/sl.pids")"; cat "$2/sl.pids" >> "$ORPHANS"
+    kill -TERM "$s" 2>/dev/null; kill -0 "$s" 2>/dev/null || { echo "control: the stub sleep $s did not ignore a TERM"; exit 1; }
+    [ "$1" = "$WRAPPER" ] && fx_inproc "$1"; stop_sampler
+    await "$2" - "the sampler's sleep ending" all_gone "$2/sl.pids" -- st_settled "$2/sl.pids" \
+      || { kill -KILL "$s" 2>/dev/null; echo "the sampler's sleep survived stop_sampler: $s"; exit 1; } )
+}
+# The deriver's group: a leader that dies on the TERM, so finish()'s wait on it returns, and one member that ignores
+# it. finish() must still end the member; with no KILL after the grace it returns and leaves the member running.
+ic_killgrace() { # finish() ends a member of the deriver's group that never honours the TERM
+  ic_repo "$2/repo" "$1"
+  : > "$2/member"
+  ( AI_DLC_READSET_STAGE1_LEDGER="$2/ledger"; export AI_DLC_READSET_STAGE1_LEDGER; . "$2/repo/scripts/readset-stage1-run.sh" || exit 9
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_state
+    set -m
+    ( ( trap '' TERM; exec cat "$STUB_HANG" </dev/null >/dev/null 2>&1 ) & echo "$!" > "$2/member"; wait ) </dev/null >/dev/null 2>&1 &
+    DPID=$!
+    set +m
+    await "$2" "$DPID" "the TERM-ignoring member blocked on the hang fifo" st_settled "$2/member" \
+      || { echo "control: the member never blocked: $AWAIT_WHY"; exit 1; }
+    m="$(cat "$2/member")"
+    [ "$(ps -o pgid= -p "$m" 2>/dev/null | tr -d ' ')" = "$DPID" ] || { echo "control: the member $m is not in the leader's group $DPID"; exit 1; }
+    kill -TERM "$m" 2>/dev/null; kill -0 "$m" 2>/dev/null || { echo "control: the member $m did not ignore a TERM"; exit 1; }
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; finish > /dev/null 2>&1 )
+  local r=$? m
+  m="$(cat "$2/member" 2>/dev/null)"
+  [ -n "$m" ] || { echo "control: no member pid was recorded (rc $r)"; return 1; }
+  [ "$r" = 0 ] || { kill -KILL "$m" 2>/dev/null; echo "finish failed in the TERM-ignoring world (rc $r)"; return 1; }
+  await "$2" - "the TERM-ignoring member ending" all_gone "$2/member" -- st_settled "$2/member" \
+    || { kill -KILL "$m" 2>/dev/null; echo "the TERM-ignoring member $m of the deriver's group survived finish()"; return 1; }
+}
+# ic_hold <wrapper copy> <dir> <launch|sampler>: a TERM landing between a launch's `&` and the line that records `$!`.
+# The window is forced, not raced: a copy of the wrapper carries, right after that `&` line, a line that records `$!`
+# for the cell and sends TERM to its own shell. The stop must still end the launched job. The launched job is a
+# blocker that runs no bash: for the deriver a `bash` stub first on PATH, for the sampler the stub sleep.
+ic_hold() {
+  local src="$2/inj.sh" pat rn j r
+  case "$3" in launch) pat=') > "$RUN_DIR/deriver.log" 2>&1 < /dev/null &' ;; *) pat=') &' ;; esac
+  # The injected line first waits for the job's blocker to exec (a `cat` in its group), so the TERM the stop sends
+  # cannot land in a fork-to-exec window: this cell asks only about the span before the pid is recorded. Its poll
+  # names /bin/sleep, because the sampler variant puts a stub `sleep` first on PATH.
+  awk -v p="$pat" -v CF="$2/inj.count" '{ print } $0 == p { print "printf %s\\\\n \"$!\" > \"$FX_JOB\"; until pgrep -g \"$!\" -x cat >/dev/null || ! kill -0 \"$!\" 2>/dev/null; do /bin/sleep 0.05; done; kill -TERM \"$(cat \"$FX_SELF\")\""; c++ }
+      END { print c + 0 > CF }' "$1" > "$src" || { echo "control: cannot write the injected copy"; return 1; }
+  [ "$(cat "$2/inj.count")" = 1 ] && bash -n "$src" || { echo "control: the injection matched $(cat "$2/inj.count") lines, not 1, or the copy does not parse"; return 1; }
+  grep -qxF 'printf %s\\n "$!" > "$FX_JOB"; until pgrep -g "$!" -x cat >/dev/null || ! kill -0 "$!" 2>/dev/null; do /bin/sleep 0.05; done; kill -TERM "$(cat "$FX_SELF")"' "$src" \
+    || { echo "control: the injected line is not the one written"; return 1; }
+  ic_repo "$2/repo" "$src"
+  mkdir -p "$2/bin"; printf '#!/usr/bin/env -S cat %s\n' "$HANG" > "$2/bin/bash" && chmod +x "$2/bin/bash" || { echo "control: cannot write the bash stub"; return 1; }
+  ( await "$2" - "the cell's own pid" is_file "$2/self"
+    AI_DLC_READSET_STAGE1_LEDGER="$2/ledger"; export AI_DLC_READSET_STAGE1_LEDGER; . "$2/repo/scripts/readset-stage1-run.sh" || exit 9
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_state
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_traps
+    FX_SELF="$2/self"; FX_JOB="$2/job"
+    if [ "$3" = launch ]; then fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; PATH="$2/bin:$PATH" stage1_launch
+    else fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; PATH="$SBIN:$PATH" stage1_sampler; fi
+    exit 0 ) > "$2/out" 2>&1 &
+  rn=$!
+  printf '%s\n' "$rn" > "$2/self.tmp" && mv "$2/self.tmp" "$2/self"
+  wait "$rn"; r=$?
+  j="$(cat "$2/job" 2>/dev/null)"; echo "$j" >> "$ORPHANS"
+  [ -n "$j" ] || { echo "control: the injected line never ran (no job pid recorded; rc $r)"; return 1; }
+  [ "$r" = 143 ] || { echo "the TERMed $3 cell exited $r, not 143: $(head -1 "$2/out")"; return 1; }
+  await "$2" - "the $3 job's group ending" group_gone "$j" -- st_group_settled "$j" \
+    || { kill -KILL -- "-$j" 2>/dev/null; echo "a TERM between the $3's & and its recorded pid left the job running: group $j"; return 1; }
+}
+IC_CELLS="sample profile started orphan-live orphan-dead restore groupkill samplerstop killgrace holdlaunch holdsampler"
 # wcell <script> <cell> <name>: 0 when the in-process cell holds under the script, else 1; the why-lines land in
 # $WORK/wr/m-<name>-<cell>.why.
 WCN=0
@@ -1086,6 +1175,8 @@ wcell() {
   case "$2" in
     orphan-live) ic_orphan "$1" "$d" live ;;
     orphan-dead) ic_orphan "$1" "$d" dead ;;
+    holdlaunch) ic_hold "$1" "$d" launch ;;
+    holdsampler) ic_hold "$1" "$d" sampler ;;
     *) "ic_$2" "$1" "$d" ;;
   esac > "$WORK/wr/m-$3-$2.why" 2>&1
 }
@@ -1101,6 +1192,10 @@ for c in $IC_CELLS; do
       orphan-dead) B_ic_orphan_dead=1 ;;
       restore) B_ic_restore=1 ;;
       groupkill) B_ic_groupkill=1 ;;
+      samplerstop) B_ic_samplerstop=1 ;;
+      killgrace) B_ic_killgrace=1 ;;
+      holdlaunch) B_ic_holdlaunch=1 ;;
+      holdsampler) B_ic_holdsampler=1 ;;
     esac
   else bad "in process: $c fails under the shipping wrapper: $(head -1 "$WORK/wr/m-shipping-$c.why")"; fi
 done
@@ -1145,9 +1240,19 @@ reap
 RESTORE='  cp -p "$SNAP" "$MAP" 2>/dev/null'
 wmut "${B_ic_restore:-0}" no-restore restore groupkill "$RESTORE" '  :'
 wmut "${B_ic_groupkill:-0}" single-pid-kill groupkill restore \
-  '  if [ -n "$DPID" ]; then kill -TERM -- "-$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi' \
-  '  if [ -n "$DPID" ]; then kill "$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi'
-if grep -q 'process tree survived' "$WORK/wr/m-single-pid-kill-groupkill.why" 2>/dev/null; then mutant_killed "${B_ic_groupkill:-0}" single-pid-kill "the single-pid-kill mutant died on the process-tree arm (orphans: $(grep 'process tree' "$WORK/wr/m-single-pid-kill-groupkill.why" | sed 's/.*TERM://'))"; else bad "the single-pid-kill mutant did not die on the process-tree arm"; fi
+  '    kill -TERM -- "-$DPID" 2>/dev/null' \
+  '    kill -TERM "$DPID" 2>/dev/null'
+if grep -q 'never received the TERM' "$WORK/wr/m-single-pid-kill-groupkill.why" 2>/dev/null; then mutant_killed "${B_ic_groupkill:-0}" single-pid-kill "the single-pid-kill mutant died on the group-TERM arm ($(grep 'never received' "$WORK/wr/m-single-pid-kill-groupkill.why" | sed 's/.*TERM: //'))"; else bad "the single-pid-kill mutant did not die on the group-TERM arm"; fi
+reap
+# BL-1075: a stop that relies on a TERM being honoured. The sampler stopped by TERM, or by a KILL to its pid alone,
+# leaves its sleep; finish() with no KILL after the grace waits forever on a leader its TERM did not end.
+SSTOP='  kill -KILL -- "-$sp" 2>/dev/null; wait "$sp" 2>/dev/null'
+wmut "${B_ic_samplerstop:-0}" sampler-term samplerstop profile "$SSTOP" '  kill -TERM -- "-$sp" 2>/dev/null; wait "$sp" 2>/dev/null'
+wmut "$(( ${B_ic_samplerstop:-0} && ${B_ic_holdsampler:-0} ))" sampler-pid-kill samplerstop,holdsampler profile "$SSTOP" '  kill -KILL "$sp" 2>/dev/null; wait "$sp" 2>/dev/null'
+wmut "${B_ic_killgrace:-0}" no-kill-fallback killgrace samplerstop '    kill -0 -- "-$DPID" 2>/dev/null && kill -KILL -- "-$DPID" 2>/dev/null' '    :'
+reap
+# BL-1076: with no hold, a TERM between a launch's `&` and its recorded pid runs finish() with nothing to stop.
+wmut "$(( ${B_ic_holdlaunch:-0} && ${B_ic_holdsampler:-0} ))" no-hold holdlaunch,holdsampler samplerstop "trap 'HELD=143' TERM" "trap 'finish; exit 143' TERM"
 reap
 
 # ------------------------------------------------------------------ the deriver's tracer reaping (BL-466) ----

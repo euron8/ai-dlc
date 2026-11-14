@@ -206,6 +206,7 @@
 # format when no fixture's judgement moves (counted entries stay valid), else under a bumped FXC_FORMAT (every
 # counted entry re-runs).
 # FXC-IDENTITY 1 cc011bb8430f348d037ed2a565be3f493f1074da7f072c919c65ef67776784ad the per-fixture judge row (BL-1057)
+# FXC-IDENTITY 1 f4035938f576baa486a7c6acd4b69d429eb974eecac63c27277279fb6af02691 cost only: per-row forks cut, C5's guard table built once, the --b2-census self-probe memoised (BL-1065); every output byte-identical
 set -u
 FXC_FORMAT=1
 
@@ -497,7 +498,7 @@ fxc_b2() {
 # (fixture, subject) PAIRS. Returns 0 no gap, 1 a gap, 2 a refusal: no run.sh listed. (The scanned == listed refusal
 # is U3's validate-fixture-inprocess.sh's; here both would be counted by one predicate over one glob and could not differ.)
 fxc_census() {
-  local root="$1" d fx listed=0 scanned=0 ex=0 und=0 gaps=0 gfx=0 nb=0 nd=0 ns=0 k p g w
+  local root="$1" d fx listed=0 scanned=0 ex=0 und=0 gaps=0 gfx=0 nb=0 nd=0 ns=0 k p g w T=$'\t'
   w="$(mktemp -d "${TMPDIR:-/tmp}/fxc-census.XXXXXX")" || return 2
   for d in "$root"/core/fixtures/*/; do [ -f "$d/run.sh" ] && listed=$((listed + 1)); done
   [ "$listed" -gt 0 ] || { printf 'b2-census: REFUSED: no core/fixtures/*/run.sh under %s\n' "$root"; rm -rf "$w"; return 2; }
@@ -512,7 +513,7 @@ fxc_census() {
     [ -f "$d/invocations.decl" ] && fxc_decl_rows "$d/invocations.decl" | awk -F'\t' '$1 != "ERR" && $1 != "INPROC" { print $4 }' > "$w/tgts"
     fxc_b2 "$root" "$w/req" "$w/tgts" > "$w/b2"
     g=0
-    while IFS="$(printf '\t')" read -r k p; do
+    while IFS="$T" read -r k p; do
       case "$k" in
         B) nb=$((nb + 1)) ;; D) nd=$((nd + 1)) ;; S) ns=$((ns + 1)) ;;
         G) printf 'B2 GAP %s %s\n' "$fx" "$p"; g=$((g + 1)) ;;
@@ -1146,6 +1147,21 @@ fxc_static_join() {
     printf 'BASEROOT\t%s\n' "$pbase"
     while IFS="$T" read -r e1 e2 e3 e4 e5; do [ "$e1" = E ] && printf 'B\t%s\t%s\t%s\n' "$e2" "$e3" "$e5"; done < "$w/base/p2.raw"
   fi
+  # C5's guard table, once over the tree: `<subject>\t<G|U>` for every `cli` subject of any cells.decl, from ONE
+  # fxc_cells_parse and ONE fxc_guarded over the subjects present as files this shell can OPEN (one awk dies on an
+  # unopenable file and drops every file after it). Openability is tested by opening, never by a mode test, which the
+  # pre-suite key does not carry (S15, BL-917). A subject absent, unopenable or empty takes no row, so the join awk
+  # reads it as unguarded, as a per-subject call printing nothing did.
+  set --
+  for cf in "$root"/core/fixtures/*/cells.decl; do [ -f "$cf" ] && { : < "$cf"; } 2>/dev/null && set -- "$@" "$cf"; done
+  : > "$w/gt"
+  if [ $# -gt 0 ]; then
+    fxc_cells_parse "$@" | awk -F'\t' '$1 == "R" && $3 == "cli" { print $4 }' | LC_ALL=C sort -u > "$w/cli"
+    set --
+    while IFS= read -r p; do [ -n "$p" ] && [ -f "$root/$p" ] && { : < "$root/$p"; } 2>/dev/null && set -- "$@" "$root/$p"; done < "$w/cli"
+    [ $# -gt 0 ] && R="$root/" awk -F'\t' 'BEGIN { r = ENVIRON["R"]; n = length(r) }
+      substr($2, 1, n) == r { print substr($2, n + 1) "\t" $1 }' <(fxc_guarded "$@") > "$w/gt"
+  fi
   for d in "$root"/core/fixtures/*/; do
     d="${d%/}"; fx="${d##*/}"
     [ -f "$d/run.sh" ] || continue
@@ -1156,7 +1172,7 @@ fxc_static_join() {
     if [ -f "$cf" ]; then fxc_cells_parse "$cf" > "$w/c"; else : > "$w/c"; fi
     : > "$w/r"; [ -f "$d/invocations.decl" ] && fxc_decl_rows "$d/invocations.decl" > "$w/r"
     : > "$w/n"
-    while IFS="$(printf '\t')" read -r c k g tgt raw; do
+    while IFS="$T" read -r c k g tgt raw; do
       [ "$c" = ERR ] && continue
       [ "$c" = INPROC ] && continue
       [ -n "$tgt" ] && [ "$tgt" != '*' ] || continue
@@ -1164,9 +1180,6 @@ fxc_static_join() {
       if [ "$g" != - ]; then n=$((c + k * $(fxc_glob_n "$root" "$g"))); fi
       printf '%s\t%s\n' "$tgt" "$n" >> "$w/n"
     done < "$w/r"
-    awk -F'\t' '$1 == "R" && $3 == "cli" { print $4 }' "$w/c" | LC_ALL=C sort -u > "$w/cli"
-    : > "$w/g"
-    while IFS= read -r p; do [ -n "$p" ] && printf '%s\t%s\n' "$p" "$(fxc_guarded "$root/$p" | cut -f1)" >> "$w/g"; done < "$w/cli"
     awk -F'\t' -v fx="$fx" '
       FILENAME == ARGV[1] { N[$1] = $2; next }
       FILENAME == ARGV[2] { G[$1] = $2; next }
@@ -1182,7 +1195,7 @@ fxc_static_join() {
               r = r (r == "" ? "" : "; ") s " declares " n " start(s) against " c " cell(s)" ((s in NEST) ? " and a nested row" : "") }
             if (r != "") print "X\t" fx "\t" r
             else if (bad) print "X\t" fx "\tstatic finding(s) above"
-            else print "P\t" fx }' "$w/n" "$w/g" "$w/p2.raw" "$w/c"
+            else print "P\t" fx }' "$w/n" "$w/gt" "$w/p2.raw" "$w/c"
   done
   rm -rf "$w"
 }
@@ -1201,7 +1214,7 @@ FXC_CELLS_REMEDY="build the fixture in-process (.claude/rules/fixture-mutants.md
 
 # fxc_judge <fixture> <decl> <log> <root>: messages on stdout; returns 0 pass, 1 FAIL, 2 BROKEN.
 fxc_judge() {
-  local fx="$1" decl="$2" log="$3" root="$4" jl fd inp w rc=0 tot kind c k g tgt raw dcl m n rows p nb nd ns
+  local fx="$1" decl="$2" log="$3" root="$4" jl fd inp w rc=0 tot kind c k g tgt raw dcl m n rows p nb nd ns T=$'\t'
   fd="$(dirname "$decl")"; inp="$fd/inputs.decl"
   w="$(mktemp -d "${TMPDIR:-/tmp}/fxc-judge.XXXXXX")" || return 2
   # The start log the judge reads is the appended rows plus one row per `<log>.lim.*` marker, the symlink a start under
@@ -1228,7 +1241,7 @@ fxc_judge() {
   else
     # J4: one normalised row per line (fxc_decl_rows).
     fxc_decl_rows "$decl" > "$w/rows"
-    while IFS="$(printf '\t')" read -r kind raw; do
+    while IFS="$T" read -r kind raw; do
       [ "$kind" = ERR ] || continue
       printf '%s: FAIL (J4): malformed invocations.decl row: %s (want `<count> *`, `<count> <path>`, or `<c>+<k>x<glob> <target>`; every row is exact)\n' "$fx" "$raw"; rc=1
     done < "$w/rows"
@@ -1241,7 +1254,7 @@ fxc_judge() {
     done <<EOF
 $(LC_ALL=C sort "$w/tgts" | uniq -d)
 EOF
-    while IFS="$(printf '\t')" read -r c k g tgt raw; do
+    while IFS="$T" read -r c k g tgt raw; do
       [ "$c" = ERR ] && continue
       [ -n "$c" ] || continue
       if [ "$c" = INPROC ]; then
@@ -1274,7 +1287,7 @@ EOF
     # J6: every `!` bash subject carries a row; `0 <path>` satisfies it. The row to add is this run's measured count.
     fxc_b2 "$root" "$w/req" "$w/tgts" > "$w/b2"
     nb=0; nd=0; ns=0
-    while IFS="$(printf '\t')" read -r kind p; do
+    while IFS="$T" read -r kind p; do
       case "$kind" in
         B) nb=$((nb + 1)) ;; D) nd=$((nd + 1)) ;; S) ns=$((ns + 1)) ;;
         G) printf '%s: FAIL (J6): %s is a `!` bash subject with no invocations.decl row -- row to add, measured on this run: %s %s\n' "$fx" "$p" "$(fxc_count "$jl" "$p")" "$p"; rc=1 ;;
@@ -1916,6 +1929,22 @@ fxc_self_probe() {
   return 2
 }
 
+# fxc_sp_memo: fxc_self_probe, run at most once per FXC_SP_MEMO directory for one content key. FXC_SP_MEMO is a
+# directory the CALLER created for its own run (validate-fixture-inprocess.sh exports its private mktemp dir); unset,
+# empty or not a directory, the probe runs every time. The key is the sha256 of this file's bytes, of
+# core/fixtures/lib/mutant.sh beside it (the probe's E2E loop sources it) and of the bash running it. Only a GREEN
+# probe writes `sp-<key>`; a red one writes nothing, so a red probe is never skipped, and a token under any other key
+# (another judge, another mutant.sh, another bash) is never read.
+fxc_sp_memo() {
+  local k
+  [ -n "${FXC_SP_MEMO:-}" ] && [ -d "$FXC_SP_MEMO" ] || { fxc_self_probe; return $?; }
+  k="$({ cat "$FXC_SELF" "${FXC_SELF%/scripts/*}/core/fixtures/lib/mutant.sh" 2>/dev/null; printf '\n%s\n%s\n' "$BASH" "$BASH_VERSION"; } | shasum -a 256 | cut -c1-64)"
+  [ -n "$k" ] && [ -f "$FXC_SP_MEMO/sp-$k" ] && return 0
+  fxc_self_probe || return $?
+  [ -n "$k" ] && : > "$FXC_SP_MEMO/sp-$k"
+  return 0
+}
+
 # ---------------------------------------------------------------------------------------------------------------
 FXC_FX=""; FXC_DECL=""; FXC_LOG=""; FXC_ROOT=""
 case "${1:-}" in
@@ -1942,7 +1971,7 @@ case "${1:-}" in
     FXC_ROOT="${FXC_SELF%/scripts/*}"
     [ "${2:-}" = --root ] && { [ -n "${3:-}" ] || { echo "usage: $0 --b2-census [--root R]" >&2; exit 2; }; FXC_ROOT="$3"; }
     [ -d "$FXC_ROOT/core/fixtures" ] || { echo "b2-census: REFUSED: no core/fixtures under $FXC_ROOT" >&2; exit 2; }
-    fxc_self_probe || { printf 'b2-census: REFUSED: the self-probe is red\n%s' "$SP_OUT"; exit 2; }
+    fxc_sp_memo || { printf 'b2-census: REFUSED: the self-probe is red\n%s' "$SP_OUT"; exit 2; }
     fxc_census "$FXC_ROOT"; exit $? ;;
 esac
 while [ $# -gt 0 ]; do
