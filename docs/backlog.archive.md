@@ -43121,7 +43121,7 @@ Two hangs, one shape: a nested hook pool at width 1 whose watcher keeps polling 
 - Plain: readset-skip, `bash core/fixtures/readset-skip/run.sh </dev/null`, AI_DLC_FIXTURE_JOBS=9, at eb4fb38ce (ai-dlc-bf). Output stopped after "ok CK MUTANT owndir is KILLED by (d)"; 47 min hung; tree xargs -P 1 > worker bash -c > watcher bash -c in its own pgid > `sleep 1`, no fixture process.
 Not caused by the deriver's depth rule: prepush-pool-depth passes 77/77 run plainly at PREPUSH_POOL_DEPTH=1, and passes traced at the next WIP. Intermittent; not reproduced on demand.
 
-Diagnosis: the watcher's only exits were its worker's death (`kill -0 "$$"`) and a refusal at POOL_STALL polls; none was keyed on its unit. A worker left blocked with no unit under it, its only child the watcher, therefore held its slot until POOL_STALL, which readset-skip sets to 99999. How the worker's `wait "$pid"` lost the unit was not established: 200 iterations of the same job shape and a run under an ignored SIGCHLD both finished. The traced capture is consistent with this shape (a `ps` a second with no unit started) but its watcher was never seen by pid. Not measured: the worker's exit code after such a release, which may not be the unit's.
+Diagnosis: the watcher's only exits were its worker's death (`kill -0 "$$"`) and a refusal at POOL_STALL polls; none was keyed on its unit. A worker left blocked with no unit under it, its only child the watcher, therefore held its slot until POOL_STALL, which readset-skip sets to 99999. How the worker's `wait "$pid"` lost the unit was not established: 200 iterations of the same job shape and a run under an ignored SIGCHLD both finished. The traced prepush-pool-depth capture was not this defect: it was BL-1083, receipt-bl924.sh's forcing (a) holding fx6 unflighted in a width-1 barrier drive while its unit and watcher lived; it recurred on 9cad095fe with this fix in and a live fx6 under the worker. bf's readset-skip capture, a worker with no unit under it, is this entry's evidence. Not measured: the worker's exit code after such a release, which may not be the unit's.
 
 Provenance: batch 257, H3 (ai-dlc-9e) trace a1 and G2 (ai-dlc-bf)'s plain run; fast track K1 (ai-dlc-a4); id allocated by the lead.
 
@@ -43144,4 +43144,236 @@ Receipt: the `verify:` line asserts the whole-rows list holds no more than 230 r
 Provenance: batch 257, F19; id allocated by the lead.
 
 verify: sh L=docs/inputs-decl-whole-rows.tsv; [ -f "$L" ] || exit 9; n="$(grep -cv '^#' "$L")" || n=0; [ "$n" -gt 0 ] && [ "$n" -le 230 ] && ! grep -qE '^[!+]*(core/git-hooks|\.githooks)/pre-push$' core/fixtures/self-update-gate/inputs.decl
+
+## BL-1081 — `readset-skip-b`'s (t4w) forced fork-to-exec window closes before the stop under load, so the sleeptrap ceiling mutant SURVIVES and (t4w) itself cannot fire
+
+**LANDED (v0.1127.0).** (t4w) now decides the property the window depends on, with no race in it. The shipped watchdog subshell is extracted from `readset_live_trace` in the pool block and run alone, with a stub `sleep` that TERMs its parent (the watchdog, blocked in `wait`) and then exits. The TERM is posted before the stub exits. So a watchdog with no TERM handler dies by it (status 143), and a handler or an ignore leaves it to run on and exit 0. The stub's marker is the control. The sleeptrap mutant is scored by the same probe. The forced-window apparatus is removed: the 15000-entry PATH shim, `fw_drive` and the at-once deriver stub `seed_fx`. Probe at 4dcea7dce: the old fixture, with the stub deriver's exit delayed 0.4 s solo, printed `CEILING MUTANT sleeptrap SURVIVED (t4w) over 10 forced-window traces: 'alive|10|10|10|0'`, the captured line, while (t4w) passed. The new fixture passes (t4w) and KILLs sleeptrap (`8|ran|0`), solo and again with the stub `sleep` delayed 0.4 s before its TERM. In a scratch harness, 50 of 50 runs each: the shipped watchdog read 143; the sleeptrap mutant, a `trap '' TERM` ignore, and a handler set after the fork each read 0.
+
+**DEFECT** (BL-868 class). Filed and closed 2026-11-14. In a 6-wide plain pool at c82d9abeb (ai-dlc-a4), `readset-skip-b` printed `FAIL  CEILING MUTANT sleeptrap SURVIVED (t4w) over 10 forced-window traces: 'alive|10|10|10|0'`. The same fixture killed the mutant in a solo run. Under `--tracer sandbox` at 933c7a520 (ai-dlc-9e), the same line made the deriver OMIT the fixture. In both, the unmutated (t4w) arm passed.
+
+**Cause.** (t4w) held the watchdog sleep's fork-to-exec window open by elapsed time: about 0.1 s of PATH walk through 15000 absent entries. The stop that had to land in it travels a chain: the deriver's exit, `kill "$wp"`, `wait "$wp"`, then the sweep `kill -TERM -- "-$sp"`. On a loaded or traced box the chain arrived after the exec, so no TERM was ever lost. The mutant then leaked 0 of 10 and SURVIVED, and the unmutated arm's "no leak" was a check that could not fire. A shell-function `sleep` cannot hold the window by condition: a forked subshell resets the trap, so a TERM kills it with or without the watchdog's handler (0 of 30 both ways). macOS `ps` has no caught-signal keyword. So the arm reads the watchdog's disposition directly.
+
+Provenance: batch 257, owner ai-dlc-76; evidence from ai-dlc-a4 and ai-dlc-9e; id allocated by the lead.
+
+verify: manual
+
+## BL-1027 — a shipping fixture's new cell can reach consumers without ever having run in the consumer layout
+
+**LANDED (v0.1127.0).** A shipping fixture now runs in the consumer layout before it ships. The distribution hook's `fixture_suite_step` builds a scratch consumer tree from `install.sh`, and the pool runs each selected fixture there as `<fx>@consumer`. This runs under the `AI_DLC_FX_CL_TREE` seam (depth 0 only, built only on `PREPUSH_CL_ENTRY=1`), and its keys are taken on installed placement, with records in the shared verdict store base (BL-1043).
+
+**DEFECT.** OPEN. Filed 2026-11-12. `remediator-shard-join` cell MKPW (added in 0.1068.0 with the seal-time seat checks) drove the real `wait-for-deliverable.sh --mark` without `AI_DLC_PROJECT_ROOT`, so its in-process join walked up from its own script directory. In the distribution that walk reaches a tree with no installed rulebook and prints the expected `NOTE: SEAT-ROWS: SKIP -- the installed`. In an installed consumer it reaches the consumer, whose tracked rulebook carries the seat-record sentence, and prints `NOTE: SEAT-ROWS: SKIP install-date-unreadable`. The cell therefore failed on every consumer while this repo's suite stayed green, and it blocked graph's delivery push (PC-S322-MKPW-SEAT-NOTE-ASSERTION-CONSUMER-LAYOUT, fixed in 0.1101.0). The process gap is that nothing runs a SHIPPING fixture in the consumer layout before it ships. Measured in the 0.1101.0 fix: `scripts/install.sh` into an empty scratch tree carrying `_bmad/`, then `scripts/ai-dlc/hermetic-run.sh --root <tree> remediator-shard-join`, reproduced the consumer's failure exactly (366 ok, 1 FAIL, MKPW) at 0.1100.0. Owed: a pre-ship consumer-layout run for any shipping fixture whose cells changed, or an arm that refuses a shipped cell which drives a root-resolving subject with no explicit root. Measure that arm's false-positive set before choosing it.
+
+**Progress, batch 257 (the entry is CLOSED by this release; the release commit adds its LANDED line).** Operator ruling, relayed by the lead: "Pool seam (S3)". The owed pre-ship consumer-layout run is built as a seam in the pool, not as an arm. Shape (b), an arm that refuses a shipped cell driving a root-resolving subject with no explicit root, was measured first and rejected on its false-positive set: 336 shipping hits with 0 known true. Its grammar cannot separate MKPW from the 16 `wfd_run "$1" --mark` drives of the same shape, and it is blind to the 1648 variable-named drives. Shape (a) was reproduced: at 64d6c9a6d the consumer tree gives 366 ok and 1 FAIL (MKPW), and at 0569579f4 it gives 367 ok and 0 FAIL. The selection was sized on a 20-release census: shipping fixtures selected had a median of 16 and a maximum of 209 (at 0.1100.0, a `hermetic-run.sh` change), and 5 releases selected 0. Recorded loaded durations, for the selected set: maximum median 880 s, worst 1567 s.
+
+The mechanism, in `.githooks/pre-push` and the identical FIXTURE_POOL span of `core/git-hooks/pre-push` (I66):
+- The switch is `AI_DLC_FX_CL_TREE`, a plain unexported shell variable that `run_fixtures` honours at depth 0 only and unsets on entry, so no unit and no nested hook inherits it. `fixture_suite_step` builds the tree (a scratch `_bmad/` tree, `git init`, `scripts/install.sh <tree>`, one commit) only when the hook's main body has set `PREPUSH_CL_ENTRY=1`, which an extracted SUITE_STEP never does.
+- The seam keeps its own records in `.git/ai-dlc-consumer-layout-keys/`, written only on a pass; a red unit's record is deleted so it is re-selected. Its decision rows are separate, in `$out/.cl/.kdec`. There is no verdict-store skip and no seeding from the verified record, so a first push selects every candidate.
+- The install key is derived from `install.sh`: 8 files, and a move in any of them selects all. (Superseded by BL-1043: the units are keyed on their INSTALLED placement, and no install-key override remains.)
+- Each selected fixture is one pool unit labelled `<fx>@consumer`, through the existing pool worker and mirroring the `inputs.decl` / `run.sh` branch.
+
+Cost. Consumer runtime: 0, the seam is dormant when the switch is unset and every new function returns at its first builtin test (0 forks). Distribution, per gating push: one serial `install.sh` of about 18 s, one extra `readset_keys` pass (208 `decl` parses), and the selected set above.
+
+CENSUS: all 210 shipping fixtures passed in the consumer layout at 4fcead4ae (210 ok, 0 FAIL, 0 REFUSED, 0 hung). Method: `scripts/install.sh` into an empty git tree with `_bmad/`, then `scripts/ai-dlc/hermetic-run.sh --root <tree> <fx>` for the 208 declared fixtures and `bash tests/fixtures/<fx>/run.sh` from the tree root for the other 2. 193 finished in the first pass. The other 17 were stalled when the census harness's own xargs job was stopped by job control (state T, stdin not redirected), and all 17 then exited 0 when run alone, each in its own process group with a watchdog at 3x its recorded duration. Only the exit codes were checked; the consumer's own pool was not used.
+
+Note to the owner: no LANDED line was added here. `verify: manual` is unchanged because the fixture hand has not landed a runner-wired receipt; the owner replaces it with that receipt when the fixture lands.
+
+Provenance: batch 256, filed by the 0.1101.0 fast-track builder at the lead's (ai-dlc-a7) brief; id allocated by the lead.
+
+verify: manual
+
+## BL-1043 — the consumer-layout seam reran every shipping fixture on a first push or on any move in the install programs
+
+**LANDED (v0.1127.0).** `<fx>@consumer` units are keyed on their installed placement. No install-key override remains, and every pass is kept the moment it happens, in the shared verdict store base. A push with no record, or with keys that cannot be built, FAILs and names `scripts/census-consumer-layout.sh`.
+
+**DEFECT.** OPEN. Filed 2026-11-13. BL-1027's seam (`cl_select` in the FIXTURE_POOL span of `.githooks/pre-push` and `core/git-hooks/pre-push`) keyed each `<fx>@consumer` unit on its DISTRIBUTION read set. It added one global override: `cl_install_key`, a hash of `scripts/install.sh` and the 7 files it names. When that key moved, or when no record existed (every first push), the seam selected all 210 shipping fixtures. The operator ruled this unacceptable however rarely it fires, and ruled that no push ever runs all 210 (operator option 3, relayed by the lead ai-dlc-a9).
+
+**Progress, batch 257 (the entry is CLOSED by this release; the release commit adds its LANDED line).** The fix keys every unit on its INSTALLED placement.
+- `cl_select` runs `readset_manifest` and `readset_keys` with the installed scratch tree as the cwd and `tests/fixtures/` as the fixture root. Every key row is therefore an installed path with its installed bytes:
+  - A declared fixture's inputs reach the key through `core-paths.sh --map`, the `cons` layout of `readset_decl_parse`, which already existed. Nothing is hand-listed.
+  - An undeclared fixture is keyed on the whole installed tree.
+- `cl_install_key` and its `.install` record are deleted.
+- The install stamp `.claude/.ai-dlc-version` is keyed on its stable fields. `installed_at`, `commit`, `skill_commit`, `version` and `skill_version` are dropped from its hash. It was measured as the only installed file that differs between two installs of one sha, and the only one carrying the sha or `VERSION`.
+
+Every pass is kept the moment it happens, in the SHARED verdict store base, which is `AI_DLC_VERDICT_STORE` with any `counted-<vk>` suffix stripped.
+- `hermetic-run.sh` files a declared unit's entry under `<base>/<the consumer tree's fixed root commit>`. `cl_tree_init` makes that root commit (empty tree, fixed identity, date and message), and the suite step and the census share it, so every consumer tree has one project id.
+- The pool worker and the census call `cl_publish` for the unit's placement record at `<base>/consumer-placement-keys/<repository root commit>/<fx>.key`. Nothing is per clone.
+- A distribution pass cannot satisfy a consumer unit, because it has a different project and different rows.
+- The two overrides BL-1027 had placed in the in-tree reader are removed: no store reads, and no seed from the verified record. Measured, removing them changed no outcome once keys are taken in the tree.
+
+A push with no record and no store entry at all FAILs the step and names `scripts/census-consumer-layout.sh`, the new one-time census. Keys that cannot be built FAIL it too, naming the cause and the census. The census drives the hook's own `cl_select`, `cl_publish` and `cl_write` over the extracted span, and records only units that passed.
+
+**Measured** with the hook's own `cl_select` over real installs at 257-F14. Every unit was first recorded green in a scratch keys dir; this measures selection only, and nothing ran:
+- an unchanged re-install selects 0 of 210;
+- an edit to `templates/QUICKSTART.md.template` selects 2;
+- a one-line edit to `core/scripts/validate-artifact-paths.sh` selects 9;
+- a comment in `scripts/install.sh` selects 0;
+- an edit to `core/scripts/hermetic-run.sh` selects 210. This is the runner row every declared unit keys on, a real shared input, which the operator ruled is kept.
+
+The 2 units an install-template edit selects are the two `.undeclarable` fixtures (`hook-registration-join`, `retro-compliance-workflow`; see BL-584). They rerun on any push that moves an installed byte and on no other. The every-push set is EMPTY.
+
+Store reuse was proven on a real install. Two real `hermetic-run.sh --root` passes were filed under the fixed root (identical across two trees). With every placement record deleted, `cl_select` skipped exactly those two through the store, while a declared fixture that never ran stayed selected. `core/fixtures/prepush-pool-depth` gains these cells:
+- `cl_nl`, `cl_ni` and `cl_tp`: a file never installed, an install-only edit, and a rendered template;
+- `cl_ref`: the refusal;
+- `cl_fb5_rerun` and `cl_cstore`: a consumer store entry skips, which is the invariant the other way from `cl_v`;
+- `cl_resume`: a census stopped mid-run keeps its passes.
+
+It also gains the mutants cl-dist-keyed, cl-select-all, cl-stamp-raw, cl-no-refusal, cl-store-dist-project and cl-publish-late. `core/fixtures/consumer-suite-pool`'s seed runs a census before its two pushes.
+
+Provenance: batch 257, cluster F14 (owner ai-dlc-d7); id allocated by the lead.
+
+verify: sh grep -q '^cl_select() ' .githooks/pre-push || exit 9; grep -q '^cl_select() ' core/git-hooks/pre-push || exit 9; grep -q '^cl_mutant() ' core/fixtures/prepush-pool-depth/run.sh || exit 9; grep -q 'BL-1043: a push moving install.sh without moving an installed byte selects no' core/fixtures/prepush-pool-depth/run.sh || exit 1; ! grep -q 'cl_install_key' .githooks/pre-push core/git-hooks/pre-push
+
+
+## BL-1046 — concurrent pushes share the per-repo gate state under the git common dir, and several of its writes were in place or read-modify-write
+
+**LANDED (v0.1127.0).**
+
+**DEFECT.** OPEN. Filed 2026-11-13. By operator ruling, pushes and pre-push suites may run concurrently; only merges are ordered. Every record the two pre-push hooks keep under `$(git rev-parse --git-common-dir)` is shared by every worktree of the repository, and therefore by every concurrent push.
+
+**Claims, enumerated (each derived from the writer at base 9a7e42060; `.githooks/pre-push` lines, I66 twins in `core/git-hooks/pre-push`).**
+- (a) `ai-dlc-fixture-verified`: written by `cp` in place (`:3204`). `readset_keys` read the path twice (`:2426` and, in seed mode, `:2491`), so a concurrent green push could hand one run path lists and hashes from two trees. That is a possible false skip, reachable only while `ai-dlc-fixture-keys/` is absent.
+- (b) `ai-dlc-fixture-durations`: a read-modify-write merge copied in place (`:3188-3192`). It loses one push's rows and lets a reader see a torn file. It steers dispatch and the trace ceiling, never a verdict.
+- (c) `ai-dlc-fixture-durations.prev` and `.last` (`:3404-3405`, `:2795`, `:3215`): truncated and copied in place, and the pole line read them back. Under concurrency the pole line could print another push's figures. Information only.
+- (d) `ai-dlc-fixture-failures` (`:3255`, `:3264`): truncated in place, then copied to this run's retained name. Another red push could overwrite the primary between the two steps, filing its failures under this run's stamp.
+- (e) `ai-dlc-pool-stall.last` (`:3281`): copied in place. Evidence only.
+- (f) The live-trace lock's pid file (`readset_lock_write`, `:1583`) is written with a truncating redirect, and `readset_lock_stale` read an empty pid file as malformed, so stale. A concurrent push could steal a live lock and race the local read-set map's read-modify-write (a lost row leaves a fixture unmapped, so it runs).
+- (g) `ai-dlc-presuite-keys/.probe/`: one atime canary shared by every push. A concurrent `touch -a` failed another push's canary, and that push then recorded nothing.
+- SAFE at base, unchanged in substance: `ai-dlc-suite-key.log` (append, one line under PIPE_BUF), `ai-dlc-fixture-keys/*` (pid temp + `mv`), the presuite key records (pid temp + `os.replace`), the local read-set map (under its lock, temp + `mv`), the retained failure copies (per-push names), `ai-dlc-r13-records/` (mktemp + `mv`) and the verdict store. `ai-dlc-suite-key` was a single small write; a torn read is a MISS. It is renamed now too. `ai-dlc-fixture-durations.last.jobs` has no writer in the tree.
+
+**What ships.** In the I66 block of both hooks: `rec_put` (copy to `<record>.tmp.<pid>`, then `mv` over the record) for the durations, verified, `.format`, `.last`, failure and stall records, and the `.last` truncation at pool entry. The failure record is built in a private temp, copied to this run's retained name from that temp, then renamed over the primary. The durations merge runs under `rec_lock`, a mkdir lock judged by `readset_lock_stale`; a held lock skips the merge and prints `durations record: another push holds`. `readset_lock_stale` judges an empty pid file by the 60s age rule, as it judges a missing one. `readset_keys` copies the verified record into its scratch dir once and reads only the copy. Distribution hook only: the suite key is written by temp + rename, the presuite canary uses `.probe.<pid>` and removes it, and the pole line reads `LASTRUN_OWN` and `POLE_PREV`, held in the hook process, rather than the shared `.last` and `.prev` files. `.prev` is no longer written.
+
+**Proof.** `core/fixtures/consumer-suite-pool` holds each seeded record open on a descriptor across a real drive of the consumer hook. A rename leaves the descriptor reading the seed (`atomic`); an in-place write makes it read the new bytes (`inplace`). A lock world holds the durations lock with a live pid. Six mutants, each killed with its twins green under `--matrix`: `at-helper`, `at-last-entry`, `at-dur`, `at-fail`, `lock-off` and `lock-empty-pid`. `core/fixtures/suite-pole-info` arm 9 seeds both shared files with another push's figures. Its mutants `m2` and `m3` put back the file reads and are killed.
+
+**Receipt.** The `verify:` line below drives the shipped consumer hook from the repo root against a scratch repository under `mktemp -d` holding one green fixture. It anchors on `FAILLOG_RECORD=` (else exit 9). It seeds `ai-dlc-fixture-durations` with `OLD` and holds it open on descriptor 3. A hook exit other than 0, or a record that never gained the fixture's row, is exit 9. The receipt exits 1 when the descriptor no longer reads `OLD`, meaning the merge wrote into the reader's file, and 0 otherwise. At base 9a7e42060's hook it exits 1; on this release's tree it exits 0.
+
+Provenance: batch 257, cluster F15; id allocated by the lead.
+
+verify: sh H=core/git-hooks/pre-push; grep -q 'FAILLOG_RECORD=' "$H" || exit 9; H="$PWD/$H"; T="$(mktemp -d)" || exit 9; R="$T/r"; git init -q "$R" || exit 9; mkdir -p "$R/.githooks" "$R/tests/fixtures/a" || exit 9; cp "$H" "$R/.githooks/pre-push" || exit 9; printf '#!/usr/bin/env bash\nexit 0\n' > "$R/tests/fixtures/a/run.sh"; printf 'OLD\n' > "$R/.git/ai-dlc-fixture-durations" || exit 9; exec 3< "$R/.git/ai-dlc-fixture-durations"; ( cd "$R" && AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push < /dev/null > "$T/out" 2>&1 ); [ $? -eq 0 ] || exit 9; grep -q '^a [0-9]' "$R/.git/ai-dlc-fixture-durations" || exit 9; [ "$(cat <&3)" = OLD ] || exit 1; exit 0
+
+## BL-1033 — `consumer-suite-pool`'s stall-world liveness arm reads a process still exiting under load as a leak, and cannot tell it from one
+
+**LANDED (v0.1127.0).** The cause was pid reuse. The stall-world leak arm read only `kill -0` and the one-letter `ps` state, so a recorded pid reused by an unrelated sleeping process read as a leak. The arm then SIGKILLed that process. `csp_own` in `core/fixtures/consumer-suite-pool/run.sh` now decides identity before anything signals a pid. A live pid whose cwd (`lsof -d cwd`) is under the run's `$WORK` is the fixture's own. One standing elsewhere is a reused pid, so the recorded process is gone. An empty cwd refuses (exit 2) only on a settled pid; a dying one goes to `csp_state`, whose STOP a SIGKILLed pid never obeys. The arm probes itself in both directions on every run. Forced probe, a stranger's pid planted in a stall world's pid file: the old arm FAILs and kills the stranger; the new arm passes and leaves it alive; with `reused` read as `ours` it FAILs again. A planted genuine leak, and the real survivors kept by removing the KILL in `st_alive` and in `st_orphan`, still FAIL, with reused 0. The entry's "still exiting" leg does not hold for a SIGKILLed pid: a KILLed busy loop sent STOP read `T` 0 of 200 times.
+
+**DEFECT** (BL-868 class). OPEN. Filed 2026-11-13. `core/fixtures/consumer-suite-pool/run.sh` failed once at 4ad29433c with `stall worlds left 53529 alive`, while validators and fork profiles ran on the box at the same time. It passed solo on the same commit and at the tip. Those three facts come from the lead's report; the failing run's output was not re-read here.
+
+What the arm asserts (`run.sh:1439`-`:1471`, read at 7203c8a89): every pid recorded in `$WORK/*/pids/*`, `$WORK/orph.*/pids` and `$WORK/trace.*/pids` (`.pgid.*` files skipped) is gone. Each pid is classified by `csp_state` (`:1040`-`:1054`):
+- `gone`: `kill -0` fails, or `ps -o stat=` starts with `Z`.
+- `settled`: the state starts with `S`, `I` or `T`.
+- `moving`: any other state (for example `R`). The arm then sends that pid `kill -STOP`.
+
+The loop exits as soon as no pid is live or every live pid is `settled`. It paces with `read -t 1` on a held fifo, so it has no time bound. If any pid is still live at exit, it reports `bad "stall worlds left ... alive"` and SIGKILLs each named pid (`:1470`).
+
+Why the verdict moves with load (from reading the code; not reproduced):
+- **The arm makes the state it then reports.** A recorded process that is still on its way out reads `R`: a bash running its TERM trap, an exit path, or a child finishing after its parent. `csp_state` STOPs it. On the next pass it reads `T`, which is `settled`, so the loop exits and the arm names it. Its header (`:1444`-`:1447`) covers only a SIGKILLed pid ("exits rather than stopping") and a leaked busy loop. It does not cover a process that was signalled with something other than KILL, or that was never signalled. How many recorded processes are still in that window when the arm reads them depends on scheduling, so it depends on box load. Solo, they have exited first.
+- **A recorded pid can be reused.** Pids are recorded over the whole run, and many are reaped long before line 1449. Nothing checks that the process now holding a pid is the one that was recorded: no start time, parent or command. Under a concurrent fork-heavy load, a reused pid reads `S` and is named a leak, and `:1470` then SIGKILLs a process this fixture does not own. `csp_state` may also STOP such a process first. The sibling arm `orphans_gone` in `core/fixtures/readset-stage1-verdict/run.sh:1240`-`:1247` states this hazard and REFUSES (exit 2) rather than FAILing. This arm FAILs.
+
+Can the arm tell a genuinely leaked process from one still exiting under load? **No.** It reads two things only, `kill -0` and the one-letter `ps` state. A real leak, such as a stub `cat` blocked on its world's fifo, reads `S`. A recycled pid that is sleeping reads `S` too. A process frozen mid-exit by the arm's own STOP reads `T`. All three are `settled`, and all three produce the same `bad` line. Which pid 53529 was, and what it was doing, is not known.
+
+Owed, not in this entry's release: a fix on the test side under BL-868. The arm must stop STOPping a process it has not shown to be leaked. It must bind each recorded pid to its identity (for example, its start time recorded at spawn and compared at the check), or decide each process from a record that process writes itself on exit. A process that is unidentifiable or still exiting must REFUSE rather than FAIL. Never a retry, a time bound, a widened wait or fewer jobs.
+
+Receipt: `verify: manual`. A runner-wired receipt that forces the interleaving would need a recorded process held in a running exit path at the moment the arm reads it. Wired into `run.sh`, that receipt would turn the fixture red for as long as the defect is open. A receipt that greps the arm for a word of the fix would be satisfied by a comment.
+
+Provenance: batch 257, cluster F6; id allocated by the lead.
+
+verify: manual
+
+## BL-1034 — fixture hangs blocked on their own hang fifo: `readset-stage1-verdict` waited 51 minutes for a release that only its own teardown sends
+
+**LANDED (v0.1127.0).** The fixture's EXIT trap makes bash catch TERM. A child forked from it holds that handler until it execs, so a TERM sent right after `cat "$HANG" & pg=$!` can be caught and dropped. Measured: 52 to 56 of 300 dropped with an EXIT trap, 0 of 300 without. The dropped child then blocks on the hang fifo, and the `wait` after it never returns. `ic_orphan`'s orphan-dead cell did exactly that, which matches the captured tree: `run.sh`'s only child was a `cat` of `hang.fifo`. Every fixture-owned hang reader that is ended and then waited on (`ic_orphan` twice, the pk decoy, the `orphans_gone` probe twice) is now ended by SIGKILL. Forced probe, a seed that ignores TERM: the old fixture hung on the orphan-dead cell twice; the new one did not; with that kill back to TERM it hung twice again. The entry's sampler path cannot hang this fixture through the sleep's stdout hold. `wrap_ok`, the one end-to-end run with the stub `sleep` on PATH, writes to a file and waits on the wrapper's exit, not on EOF. `wrap_kill9`'s `$( )` runs carry the real `sleep 15`, which delays but cannot hang. A sampler that survives its own TERM, which would leave `stop_sampler`'s `wait` unbounded, is the subject's and closes with BL-1075.
+
+**DEFECT** (BL-868 class). OPEN. Filed 2026-11-13. Instances, each as reported to the lead:
+
+- `core/fixtures/readset-stage1-verdict`: in a hand's plain hermetic run it hung 51 minutes in a `cat` on its own hang fifo. Its usual run is about 220 s. It neither runs nor declares any file that the run's change edited. The hung run's process table and output were not re-read here.
+
+The fifo (`run.sh:134`-`:142`, read at 7203c8a89) is `HANG="$WORK/hang.fifo"`, exported as `STUB_HANG`, where `$WORK` is `mktemp -d "${TMPDIR:-/tmp}/readset-stage1-fx.XXXXXX"`. Every process the fixture needs never to end on its own is a `cat` blocked opening it. The stub deriver's children (`:692`-`:693`), the orphan and group-kill seeds (`:1021`, `:1054`), the pkill stub tracer (`:1168`-`:1189`) and the wrapper's stub `sleep` (`:721`, `#!/usr/bin/env -S cat $HANG`) are all such a `cat`.
+
+**The condition that never arrives** is a writer opening that fifo. Only `hang_release` (`:141`) opens one. It runs once, at `:1303` after the last orphan check, or from the EXIT trap (`:142`). Both come after every cell. So any hang-fifo `cat` that its intended killer missed, and that the fixture waits on, blocks the fixture forever: the release is sent only from code the blocked fixture never reaches.
+
+One path that fits, from reading the code; not reproduced:
+- The wrapper's load sampler (`scripts/readset-stage1-run.sh:170`-`:182`) runs `sleep 15 & sp=$!`, then `wait "$sp"`.
+- Its TERM trap kills `$sp` only when it is non-empty (`:173`). A TERM handled after the fork and before `sp=$!` exits the sampler and leaves that `sleep` behind. Under the fixture, that `sleep` is the stub `cat` of the hang fifo.
+- The fixture's `wrap-run4` cell (`run.sh:939`) is the one cell that runs the full wrapper inside `out="$( ... 2>&1)"`. Its stub deriver is `STUB_MODE=ok` and exits at once, so `stop_sampler` TERMs a sampler only moments after it started, which is the cell where that window is hit.
+- The orphaned `cat` inherits the substitution's pipe as its stdout, so `$( )` never sees EOF.
+
+How often a TERM lands in that window depends on scheduling, and so on load. The fixture's own comment at `:719`-`:720` already records that the sampler "is sometimes TERMed before it forks its sleep".
+
+Owed, not in this entry's release: no hang-fifo reader may outlive the code path that would release it. Either the subject's sampler leaves no window in which its sleep is unowned, or the fixture drives no `$( )` and no `wait` over a process tree that holds an unreleased hang-fifo reader. A missed kill must then surface as a FIXTURE BROKEN refusal on a fact, never as an unbounded block. Never a timeout, a retry or a long sleep in place of the fifo (BL-868).
+
+Receipt: `verify: manual`. A runner-wired receipt would have to force a TERM into the sampler's fork-to-assignment window. Wired into `run.sh`, it would either hang the fixture or turn it red while the defect is open. A receipt that greps the sampler for a changed line would be satisfied by a comment.
+
+Provenance: batch 257, cluster F6; id allocated by the lead.
+
+verify: manual
+
+## BL-1083 — receipt-bl924.sh's forcing (a) hold fires in every barrier drive and deadlocks below width 6 when fx6 is dispatched first
+
+**LANDED (v0.1127.0).** The fx6 hold that `core/fixtures/prepush-pool-depth/receipt-bl924.sh` injects into its copy arms only in a six-wide barrier drive: the drive's `xargs.P` (written by its shim before xargs runs) must read 0, 6 or more, the values `pd_rendezvous` reads as six. Every other barrier drive runs fx6 straight to its flight file. Probe: the receipt's own edited copy is built (build only) and its fx6 stub run as the first unit of a barrier drive with a live poller, no count, a look at f=00 and an open gate, at widths 1, 2, 5, 6 and 12. Base 9cad095fe holds at every width (killed at 8s); the fix runs through at 1, 2 and 5 and still holds at 6 and 12. The base receipt is the mutant.
+
+**DEFECT.** Filed 2026-11-14. Owner: `core/fixtures/prepush-pool-depth/receipt-bl924.sh`, forcing (a).
+
+The hold fired in any barrier drive where PD_GATE and BL924_FORCE were set, and released only on `barrier.n`, a changed `f=05` look, or the poller's death. In the width-1 drive `grp_D1J1` (`run.sh`, `drive ... 1 1`) the poller waits for one flight file; with fx6 dispatched first and held before its flight file, the count stays 0, no look at five can come and the poller lives, so fx6 and the poller wait on each other. The same holds below width 6 whenever fx6 is among the first `width` units dispatched. Dispatch order is longest-first by recorded whole-second cost, so fx6 goes first only when its cost is strictly the largest, which makes the hang intermittent (inferred, not measured). Captured by ai-dlc-9e on 9cad095fe plus H3, plain `seed-verdict-store.sh`: `xargs -P 1`, `barrier.rej P=1 want=1 f=0`, 0 flight files, `barrier.look` still counting, fx6 alive in its own group under the worker with its watcher. Unbounded under `seed-verdict-store.sh` or `hermetic-run.sh`; inside a push the pool's stall refusal is expected to bound it (not measured). The traced prepush-pool-depth capture filed under BL-1072 was this defect.
+
+Provenance: batch 257, ai-dlc-9e's capture, diagnosis and fast track K1b (ai-dlc-a4); id allocated by the lead.
+
+verify: manual
+
+## BL-1078 — pregate-self-check's `--matrix` run exits 2: its expected header list lacks m5
+
+**LANDED (v0.1127.0).** `core/fixtures/pregate-self-check/run.sh`'s matrix header check expects `g1 g2 g3 g4 m1 m2 m3 m4 m5`. At 4dcea7dce `--matrix` exited 2 with `MATRIX BROKEN: the header rows are [g1 g2 g3 g4 m1 m2 m3 m4 m5 ], expected [g1 g2 g3 g4 m1 m2 m3 m4 ]`, with every m5 cell scoring as designed. On the fix, `--matrix` exits 0 and the plain run exits 0 (41 assertions). The mutant, m5 dropped from the list again, is the base file byte for byte, and it reads rc 2 with that line.
+
+**DEFECT.** Filed 2026-11-14. BL-1064 (0.1125.0) added the m5 mutant and its `# MUTANT-MATRIX m5` row but not m5 to the literal expected list. The plain run, which is what the gate runs, never reaches the check. The same drift shape is open in 12 other fixtures that compare `"$mx_hdr"` against a literal list: apply-restamp-theirs, artifact-section-heading-level, backlog-rotate-fence-guard, gate-series-rung, path-mapping-render, prepush-ssh-keepalive, provenance-flagless-default, push-drain-refusals, ledger-reverify-dist-only-reach, predicate-reclassification, prepush-worktree-env-scrub and readset-sandbox-root-clause.
+
+Provenance: batch 257, fast track, found by ai-dlc-0e; id allocated by the lead.
+
+verify: manual
+
+## BL-1082 — a release that edits `.githooks/pre-push` never runs the hook's pre-suite steps before READY, because `scripts/pregate-self-check.sh` refuses on every hook-editing tree
+
+**LANDED (v0.1127.0).** `scripts/pregate-self-check.sh --member [<base>]` is the member mode. Section a runs the TREE's own `.githooks/pre-push`, cut at the same place as before (the line before the single `^step "fixture suite` line, so it includes the `PRESUITE_DONE=1` tail: `fxcount_arm`, the in-process static half and the inputs.decl whole-row ratchet). The byte-identity refusal against the hook a push would run is not applied, and the output names both hooks and whether their bytes match. Sections c and d run as before. The mode never writes `<git common dir>/ai-dlc-pregate-green/<tree>`: it exits 0 before the record block and prints that its pass is not the gate. The carrier is the edited-hook refusal, which now ends "before READY run this script with --member, which runs the tree's own hook and records nothing". It fires in exactly the run a hook-editing session makes. The `pregate-self-check` fixture holds the mode with two receipt worlds and three mutants:
+- Mt is a clean, committed branch that edits its hook. It exits 0, names the tree's own hook and has no record directory.
+- Mr is root A with a red step seeded between `PRESUITE_DONE=1` and the fixture-suite marker. It exits 1 naming that step.
+- Htree's refusal names `--member`.
+- m6 (the no-record exit disabled) moves Mtrec to yes, m7 (the tree-hook switch deleted) leaves Mr's step unseen, and m8 (the `--member` clause dropped from the refusal) moves Htreem to no. Each is killed by its own cell, and its twins hold.
+
+Measured on d7's tip 5493daef0 (a hook-editing tree): the plain run refuses with rc 2 at section a. The member run (`AI_DLC_PREGATE_ROOT=<clean worktree at 5493daef0> bash scripts/pregate-self-check.sh --member`) exits 1 with `FAIL: inputs.decl whole-row ratchet (scripts/invalidation-guard.sh --ratchet)`, 1 of 27 steps, and wrote no record for that tree.
+
+**DEFECT.** Filed 2026-11-14. Owner: `scripts/pregate-self-check.sh`.
+
+The self-check refuses (rc 2) on any tree whose `.githooks/pre-push` differs from the hook git resolves for a push. That hook is the main checkout's `core.hooksPath`, so a release that edits the hook could not run the hook's pre-suite steps through the documented tool before READY. d7's tip 5493daef0 carried an `invalidation-guard --ratchet` r1 failure (two whole-program lines with no list row) that only the bundle integrator's combine found. A hand prefix cut at `PRESUITE_DONE=1` misses it: the ratchet step sits after that line.
+
+Provenance: batch 257, K6 (fast track), from ai-dlc-d7's B3 drop; id allocated by the lead.
+
+verify: sh o="$(bash core/fixtures/pregate-self-check/run.sh 2>&1)"; case "$o" in *"ok    m6 mutant: receipt exit 1 (killed)"*) ;; *) exit 1 ;; esac; case "$o" in *"ok    m7 mutant: receipt exit 1 (killed)"*) ;; *) exit 1 ;; esac; case "$o" in *"ok    m8 mutant: receipt exit 1 (killed)"*) exit 0 ;; esac; exit 1
+
+## BL-1077 — install-scaffold-ignored writes its install mutants into the real tree's `scripts/`
+
+**LANDED (v0.1127.0).** An install mutant is now a text under the fixture's mktemp work dir (`$WORK/imut/install-mut-<m>.sh`). `run_inst` runs any installer under `$WORK` as `bash -c <text> <root>/scripts/install.sh <target>`, so its `$0` is the real install.sh. install.sh locates itself only through `$0` (`SCRIPT_DIR`, line 7), so the own-repository check and both function files still resolve. The `MUT_MADE` removal list is gone, because `rm -rf "$WORK"` covers every copy. AB1/AB2 build the expected error path from the asserted-absent path rather than from the copy's directory. A new carrier control runs install.sh's unmutated text through the same carrier on E1 and E4. It must hold whole, or the E1/E4 base flags drop and no install mutant is scored.
+- Probe, at 4dcea7dce plus the fix, in a scratch worktree. `git status --porcelain --untracked-files=all --ignored` was polled every 0.2 s through a whole run and read no new path; the after-run status was byte-equal to the before-run status. A run with every file write under the tree denied by `sandbox-exec` also passed.
+- Mutant, the real-tree write restored in `write_copy`: the same poll caught 6 `scripts/install-mut-*` paths.
+- Mutant, the carrier with no `"$INSTALL"` argv: the carrier control went red and every install mutant refused to score (rc 1).
+- Cost: the `*` row of `invocations.decl` moves from 43 to 53 starts, from the carrier control's 2 installs at 5 starts each. The `scripts/install.sh` row is unchanged at 4. Measured with one counted run through `scripts/seed-verdict-store.sh`.
+- `--matrix` re-measure under the carrier: all 18 MUTANT-MATRIX rows reproduced (decides and twins as sets), none R.
+
+**DEFECT.** Filed 2026-11-14. `write_copy` wrote `$ROOT_DIR/scripts/install-mut-<name>.sh`, about 43 KB each, into the tree the fixture resolved by walking up from itself, and removed them afterwards. While it ran, any fixture reading `scripts/` in the same tree saw untracked files. That breaks the rule that a fixture builds its worlds under mktemp. ai-dlc-a4 reports that a parallel plain run at 7c9800487 left four of them behind. At 4dcea7dce, one run's 0.2 s poll saw 6 distinct copies in `scripts/`, and a second run listed 1 at the moment it started fixture-inprocess.
+- Cross-talk: none shown. fixture-inprocess was run beside the copies twice at 4dcea7dce: started 1 s into install-scaffold-ignored, and started the moment a copy appeared. It passed both times, so no fixture-inprocess red is attributed to this defect.
+- Census of the other fixtures: a static read of the 465 `core/fixtures/*/*.sh` files (`ls core/fixtures/*/*.sh | wc -l` at this unit's tip) for writes whose target resolves to the real tree (redirects, `cp`/`mv`/`ln` targets, `mkdir`/`touch`/`tee`/`chmod`/`rm`/`sed -i`, mutating `git -C`). The control was install-scaffold-ignored's `write_copy`, which it found.
+  - reconcile-blocking-list's seed is the same breach, filed as BL-1080.
+  - self-update-join-gate/seed.sh:69 (`git -C "$D_ROOT" update-ref`) was read and is guarded (:65-68). It runs only when `refs/hermetic/range-1/base` and `refs/hermetic/range-1/theirs` both resolve and `refs/heads` is empty, which is the hermetic sandbox repository. Left as is.
+  - Limit: the census is static. A real path passed through a function argument, an array or `eval` is invisible to it.
+
+Provenance: batch 257, K4 fast track, from ai-dlc-a4's K1 run; id allocated by the lead.
+
+verify: manual
+
+## BL-1080 — reconcile-blocking-list's seed writes its machinery probe into the real `core/skills/ai-dlc-update/reconcile/`
+
+**LANDED (v0.1127.0).** The probe now runs as `bash -c <probe text> <reconcile dir>/.rbl-machinery-probe.sh`. `machinery_paths()` resolves its manifest from `$(dirname "$0")`, so it reads the real `setup-sites.md`, and no file is written into the tree. The seed's non-empty control is unchanged and still guards the membership answers.
+- Probe: the fixture passes with every file write under the tree denied by `sandbox-exec`, and the before and after status agree.
+- Mutant, the base seed with its `cp` and `rm -f` into the reconcile dir: under the same deny the seed fails (`FIXTURE ERROR: seed failed`, rc 2, one `Operation not permitted`).
+
+**DEFECT.** Filed 2026-11-14. seed.sh:85-87 copied its probe into the real reconcile directory, ran it there and removed it, with no trap. A kill between the copy and the removal left the file in `core/skills/`. While it existed, any fixture reading that directory saw it, including install.sh's `cp reconcile/*`. Found by BL-1077's census.
+
+Provenance: batch 257, folded into K4 by the lead; id allocated by the lead.
+
+verify: manual
 

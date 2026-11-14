@@ -8,8 +8,12 @@
 # 258 to 305, 75 to 90 and 10 to 11, and 24 for scripts/seed-verdict-store.sh, BL-1064: run.sh gains the m5 receipt run
 # (15 more self-check starts), and a clean root's section d starts seed-verdict-store.sh instead of the judge's --gen-rc.
 # From one counted hermetic-run.sh run on the release tree.
-305 *
-90 scripts/pregate-self-check.sh
-11 core/fixtures/pregate-self-check/receipt-bl643.sh
-24 scripts/seed-verdict-store.sh
+# 305 to 544, 90 to 153, 11 to 14 and 24 to 53, BL-1082: the receipt drives two member roots (Mt, Mr) in each of its
+# runs (15 to 17 self-check starts per run) and run.sh gains the m6, m7 and m8 receipt runs (9 runs x 17 = 153); Mt and
+# Mr each reach section d's clean-tree seed, except in the m2 and m5 runs (5 per plain run, plus 4 in m3's). From one
+# counted run through scripts/seed-verdict-store.sh on the release tree.
+544 *
+153 scripts/pregate-self-check.sh
+14 core/fixtures/pregate-self-check/receipt-bl643.sh
+53 scripts/seed-verdict-store.sh
 # 75 to 161, 27 to 56 and 3 to 4, BL-1020: the receipt drives five more roots (Hcwd, Hres, Htree, Hbehind, Habs) in each of its runs, and run.sh gains the m3 mutant run. From two agreeing counted runs.

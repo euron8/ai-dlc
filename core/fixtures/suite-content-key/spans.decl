@@ -1,0 +1,3 @@
+# The runner's rc line and its verdict-store writer (the #pending entry line, BL-998), which this fixture drives and
+# reads; the sandbox span is keyed for every declared fixture by the runner row.
+core/scripts/hermetic-run.sh HR_STORE

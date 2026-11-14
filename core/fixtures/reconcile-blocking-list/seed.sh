@@ -72,8 +72,9 @@ THEIRS_ADV="$(git -C "$DIST" rev-parse HEAD)"
 # `$(dirname "$0")/setup-sites.md`, so a probe run from anywhere else resolves an EMPTY set and
 # every membership question answers 0 — including the ones that must answer non-zero. Measured
 # exactly that way while writing this: the negative read 0 beside a control that also read 0.
-# The probe is therefore written INTO the reconcile directory and the non-empty control is
-# checked before either membership answer is believed.
+# The probe therefore runs as a `bash -c` text whose $0 names a path in the reconcile directory,
+# so nothing is written into the real tree, and the non-empty control is checked before either
+# membership answer is believed.
 _msd="$(dirname "$HB")"
 _mprobe="$WORK/machinery-probe.sh"
 cat > "$_mprobe" <<'MPROBE'
@@ -82,9 +83,7 @@ eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$(dirname "$0")/preclassify.sh" 2
 command -v machinery_paths >/dev/null 2>&1 || exit 2
 machinery_paths
 MPROBE
-cp "$_mprobe" "$_msd/.rbl-machinery-probe.sh"
-_mset="$(DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS_ADV" bash "$_msd/.rbl-machinery-probe.sh" 2>/dev/null)"
-rm -f "$_msd/.rbl-machinery-probe.sh"
+_mset="$(DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS_ADV" bash -c "$(cat "$_mprobe")" "$_msd/.rbl-machinery-probe.sh" 2>/dev/null)"
 _mn="$(printf '%s\n' "$_mset" | grep -c .)" || _mn=0
 _min="$(printf '%s\n' "$_mset" | grep -cxF "core/$MACH_REL")" || _min=0
 _mout="$(printf '%s\n' "$_mset" | grep -cxF "core/$MOVED_REL")" || _mout=0

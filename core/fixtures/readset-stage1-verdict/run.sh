@@ -139,6 +139,10 @@ reap() { local p; [ -f "$ORPHANS" ] || return 0; while IFS= read -r p; do case "
 HANG="$WORK/hang.fifo"; mkfifo "$HANG" && [ -p "$HANG" ] || { echo "FIXTURE BROKEN: cannot make the hang fifo $HANG" >&2; exit 2; }
 export STUB_HANG="$HANG"
 hang_release() { [ -p "$HANG" ] || return 0; exec 9<>"$HANG"; exec 9>&-; }
+# A HANG READER THIS FILE ENDS AND THEN WAITS ON IS ENDED BY SIGKILL, NEVER SIGTERM. The EXIT trap below makes bash
+# catch TERM, and a child forked from it carries that handler until it execs: a TERM landing in that window is
+# caught and dropped, the child execs `cat` and blocks on this fifo, and the `wait` after it never returns, because
+# only hang_release, after every cell, ends it. KILL cannot be caught, so it ends the reader at any point.
 trap 'reap; hang_release' EXIT
 
 FAILS=0; ASSERTS=0
@@ -1020,10 +1024,10 @@ ic_orphan() { # <wrapper copy> <dir> <live|dead>
   mkdir -p "$2/open"; printf '%s\tstarted\t%s\t%s\n' "$2/open" "$(date +%s)" deadbeef > "$2/ledger"
   set -m; cat "$HANG" </dev/null >/dev/null 2>&1 & pg=$!; set +m
   echo "$pg" >> "$ORPHANS"; printf '%s\n' "$pg" > "$2/open/pgid"
-  if [ "$3" = dead ]; then kill "$pg" 2>/dev/null; wait "$pg" 2>/dev/null; fi
+  if [ "$3" = dead ]; then kill -KILL "$pg" 2>/dev/null; wait "$pg" 2>/dev/null; fi
   if [ "$3" = live ] && ! kill -0 -- "-$pg" 2>/dev/null; then echo "control: the seeded orphan group $pg is not alive"; return 1; fi
   out="$(pre_in "$2/repo/scripts/readset-stage1-run.sh" "$2/ledger" "$2/run")"; rc=$?
-  kill "$pg" 2>/dev/null; wait "$pg" 2>/dev/null
+  kill -KILL "$pg" 2>/dev/null; wait "$pg" 2>/dev/null
   if [ "$3" = live ]; then
     case "$rc|$out" in 2*"(process group $pg) is still alive"*) return 0 ;; esac
     echo "(a) the run beside the live orphan did not refuse on it: rc=$rc $out"; return 1
@@ -1165,18 +1169,24 @@ pk_lines() { # $1 deriver -> the uncommented lines carrying both `pkill` and `fs
 }
 # The stub tracer is `cat` of the hang fifo under the fs_usage-like name: it never ends on its own, so only a
 # kill can make a probe read `dead` (BL-868; a `sleep 60` stub died by itself on a slow enough box).
+# The extracted lines call `rs_sleep`, which the deriver defines once. It is extracted from the SAME file being
+# scored (so a mutated copy carries it) and handed to the generated deriver.sh; READSET_SLEEP_CMD=: makes it
+# add no sleep. pk_def prints the definition lines; pk_lines never matches one (no `pkill`).
+pk_def() { awk 'index($0, "rs_sleep() {") == 1' "$1"; }
 PKN="fsux$$"; PKB="$WORK/pkbin"; mkdir -p "$PKB" && ln -s /bin/cat "$PKB/$PKN" || broken "cannot build the fs_usage stub"
 # pk_probe <pkill line>: prints `child=<alive|dead> decoy=<alive|dead>`, or `child=none` if no child.
 pk_probe() {
   local d="$WORK/pk.$$.$RANDOM" dec
   mkdir -p "$d" || return 1
   printf '%s\n' "${1//fs_usage/$PKN}" > "$d/line"
+  printf '%s\n' "$2" > "$d/def"
   cat > "$d/deriver.sh" <<'PK_EOF'
 "$PKN" "$STUB_HANG" 2>/dev/null </dev/null | grep --line-buffered -F x > /dev/null &
 fs_pid=$!
 until child="$(pgrep -P $$ -x "$PKN")"; do kill -0 "$fs_pid" 2>/dev/null || break; sleep 0.01; done
 [ -n "$child" ] || { echo "child=none"; exit 0; }
 echo "$child" >> "$ORPHANS"
+eval "$(cat "$PKD/def")"
 eval "$(cat "$PKD/line")"
 while kill -0 "$child" 2>/dev/null; do
   st="$(ps -o stat= -p "$child" 2>/dev/null | tr -d ' ')"; pd="$(ps -o pending= -p "$child" 2>/dev/null | tr -d ' ')"
@@ -1188,12 +1198,14 @@ kill "$child" "$fs_pid" 2>/dev/null
 PK_EOF
   PATH="$PKB:$PATH" "$PKN" "$HANG" >/dev/null 2>&1 </dev/null & dec=$!
   echo "$dec" >> "$ORPHANS"
-  PATH="$PKB:$PATH" PKN="$PKN" PKD="$d" ORPHANS="$ORPHANS" bash "$d/deriver.sh" </dev/null
+  PATH="$PKB:$PATH" READSET_SLEEP_CMD=: PKN="$PKN" PKD="$d" ORPHANS="$ORPHANS" bash "$d/deriver.sh" </dev/null
   if kill -0 "$dec" 2>/dev/null; then echo "decoy=alive"; else echo "decoy=dead"; fi
-  kill "$dec" 2>/dev/null; wait "$dec" 2>/dev/null
+  kill -KILL "$dec" 2>/dev/null; wait "$dec" 2>/dev/null
 }
 # pk_score <deriver> -> one verdict per extracted line, joined by `;`
-pk_score() { local l; pk_lines "$1" | { [ -z "${2:-}" ] && cat || sed -n "${2}p"; } | while IFS= read -r l; do pk_probe "$l"; done | tr '\n' ';'; }
+pk_score() { local l def; def="$(pk_def "$1")"; pk_lines "$1" | { [ -z "${2:-}" ] && cat || sed -n "${2}p"; } | while IFS= read -r l; do pk_probe "$l" "$def"; done | tr '\n' ';'; }
+n="$(pk_def "$DERIVER" | grep -c .)" || n=0
+[ "$n" = 1 ] || broken "the deriver carries $n rs_sleep() definition line(s), not exactly 1"
 n="$(pk_lines "$DERIVER" | grep -c .)" || n=0
 [ "$n" = 2 ] || broken "the deriver carries $n uncommented pkill fs_usage line(s), not the 2 reaping sites"
 got="$(pk_score "$DERIVER")"
@@ -1275,7 +1287,7 @@ bash -c 'exit 0' & ogd=$!; wait "$ogd"
 printf '%s\n' "$ogl" > "$OGP.live"; printf '%s\n' "$ogd" > "$OGP.dead"
 orphans_gone "$OGP.live" 50; ogr1=$?
 orphans_gone "$OGP.dead" 50; ogr2=$?
-kill "$ogl" 2>/dev/null; wait "$ogl" 2>/dev/null
+kill -KILL "$ogl" 2>/dev/null; wait "$ogl" 2>/dev/null
 if [ "$ogr1" = 2 ] && [ "$ogr2" = 0 ]; then B_og=1; ok "orphans_gone refuses on a pid that never dies (rc $ogr1) and passes a reaped pid (rc $ogr2)"; else bad "orphans_gone probe: live pid rc=$ogr1 (want 2), reaped pid rc=$ogr2 (want 0)"; fi
 # MUTANT: the decision on a stall replaced by a pass, built as a copy of the function and scored by the same probe.
 OGM="$MD/og-pass.sh"
@@ -1288,7 +1300,7 @@ cat "$HANG" </dev/null >/dev/null 2>&1 & ogl=$!
 printf '%s\n' "$ogl" > "$OGP.live"
 ( . "$OGM"; orphans_gone "$OGP.live" 50 ); ogr1=$?
 printf '%s\n' "$ogd" > "$OGP.dead"; ( . "$OGM"; orphans_gone "$OGP.dead" 50 ); ogr2=$?
-kill "$ogl" 2>/dev/null; wait "$ogl" 2>/dev/null
+kill -KILL "$ogl" 2>/dev/null; wait "$ogl" 2>/dev/null
 if [ "$ogr1" != 2 ]; then mutant_killed "${B_og:-0}" og-pass "orphans_gone mutant og-pass KILLED (a never-dying pid read rc $ogr1; twin reaped-pid rc $ogr2)"; else bad "orphans_gone mutant og-pass SURVIVED"; fi
 [ "$ogr2" = 0 ] || bad "orphans_gone mutant og-pass is not confined: the reaped pid reads rc $ogr2, not 0"
 if [ "$MATRIX" = 1 ]; then MCELLS=$((MCELLS + 2)); echo "MATRIX og-pass og-stall:$([ "$ogr1" != 2 ] && echo 1 || echo 0) og-reaped:$([ "$ogr2" = 0 ] && echo 0 || echo 1)"; fi

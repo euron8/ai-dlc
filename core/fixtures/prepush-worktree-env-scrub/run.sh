@@ -166,8 +166,15 @@ seed_and_drive() {
   gd="$sb/main/.git/worktrees/wt"
   [ -d "$gd" ] || return 1
 
-  mkdir -p "$sb/wt/.githooks" "$sb/wt/$fxdir/aaa-probe" || return 1
+  mkdir -p "$sb/wt/.githooks" "$sb/wt/$fxdir/aaa-probe" "$sb/wt/scripts" || return 1
   hookfile="$sb/wt/.githooks/pre-push"
+  # THE WORLD CARRIES WHAT A REAL TREE CARRIES: a scripts/install.sh, here a stub that lays one shipping fixture
+  # into its target. The distribution hook builds its consumer-layout tree with it at pool depth 0, the depth the
+  # drive below runs at, and without one that build fails closed before any dispatch: removing the stub reads
+  # FIXTURE BROKEN.
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'mkdir -p "$1/tests/fixtures/stub-shipping" && printf "#!/usr/bin/env bash\nexit 0\n" > "$1/tests/fixtures/stub-shipping/run.sh"' \
+    > "$sb/wt/scripts/install.sh" || return 1
 
   case "$variant" in
     pristine)
@@ -209,7 +216,10 @@ EOF
   # `</dev/null` because the consumer hook drains the ref protocol from stdin and
   # would otherwise inherit whatever the suite handed this fixture.
   # Every validator step fails in this sandbox for want of scripts; the hook still dispatches aaa-probe (BL-1048).
-  ( cd "$sb/wt" && env GIT_DIR="$gd" AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_READSET_LIVE_TRACE=0 \
+  # The world's own verdict store: a consumer-layout pass the drive records lands here, never in the caller's store.
+  # The drive is a PUSH, so it runs at a push's pool depth 0 whatever depth this fixture runs at (plain, or in the
+  # gate's pool at depth 1): one world, one verdict and one invocation count either way.
+  ( cd "$sb/wt" && env -u PREPUSH_POOL_DEPTH GIT_DIR="$gd" AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$sb/vs" \
       bash "$hookfile" ) </dev/null > "$sb/hook.log" 2>&1
   printf '%s\n' "$?" > "$sb/hook.rc"
 

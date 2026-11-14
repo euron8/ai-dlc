@@ -53,10 +53,16 @@
 # as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
 # command below, from the repo root. It
 # scores every mutant against every emitter and prints one MATRIX line each.
+# The nest-* mutants (BL-1068) have their own cell family, scored against it alone: nb (the bypass guard over two
+# seeded windows), nm (the shim's marker read, denied on its stderr under the deny channel) and nc (the shim's
+# composed profile). The section that builds them states each.
 # MUTANT-MATRIX markdir-default decides=def twins=lm
 # MUTANT-MATRIX markdir-ov-lm decides=lm,ov twins=def
 # MUTANT-MATRIX report-default decides=def twins=ov
 # MUTANT-MATRIX report-lm decides=lm twins=ov
+# MUTANT-MATRIX nest-nomark decides=nm twins=nc
+# MUTANT-MATRIX nest-guard decides=nb twins=nm
+# MUTANT-MATRIX nest-noins decides=nc twins=nm
 # MUTANT-MATRIX-DYNAMIC score_mutant why=score_mutant is one body called once per mutant, so the mutant id reaches mutant_killed as $m; every name it produces has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/readset-sandbox-root-clause/run.sh --matrix
 set -u
@@ -120,6 +126,13 @@ mk report-default 1 "$K $P_DEF"' { if (sub(/\(literal "%s"\)\)\\n\047 "\$TREE" "
   || broken "mutant report-default DID NOT APPLY"
 mk report-lm 1 "$K $P_LM"' { if (sub(/\(literal "%s"\)\)/, "(literal \"%s\") (with report))")) c++ }' \
   || broken "mutant report-lm DID NOT APPLY"
+# The nest mutants (BL-1068): the shim's marker read deleted; the bypass guard's pairing test made to count nothing;
+# the shim's composition left without the inserted clause.
+mk nest-nomark 1 '$0 == ": < \"$NEST\"" { $0 = ":"; c++ }' || broken "mutant nest-nomark DID NOT APPLY"
+mk nest-guard 1 'index($0, "for (p in esc) if (!(p in mk)) n++") { if (sub(/if \(!\(p in mk\)\) n\+\+/, "if (0) n++")) c++ }' \
+  || broken "mutant nest-guard DID NOT APPLY"
+mk nest-noins 1 'index($0, "comp=\"$(printf") == 1 { if (sub(/"\\n" ENVIRON\["INS"\] "\\n"/, "\"\\n\"")) c++ }' \
+  || broken "mutant nest-noins DID NOT APPLY"
 
 # ------------------------------------------------------------------ text control ----
 echo " text control:"
@@ -250,7 +263,11 @@ echo " mutants:"
 # cell_red <emitter> <mutant>: RED when the emitter rendered from the mutated deriver, deny-rewritten, denies root
 # metadata/existence. Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
 cell_red() {
-  case "$1" in def|lm|ov) ;; *) return 2 ;; esac
+  case "$1" in
+    nb|nm|nc) [ -s "$R/$2/$1.red" ] || return 2; [ "$(cat "$R/$2/$1.red")" = 1 ]; return ;;
+    def|lm|ov) ;;
+    *) return 2 ;;
+  esac
   rcs "$2" "$1"
   [ "$C_CD$C_TD$C_TE" != 000 ]
 }
@@ -278,7 +295,7 @@ mx_twins() {
 }
 # mx_score <mutant>: MATRIX-ONLY. Scores the mutant against every emitter. It records itself in the ledger first (rule 9).
 mx_score() {
-  local m="$1" dec tw c r uex="" dl="" tl="" g=0 tot=0
+  local m="$1" dec tw c r uex="" dl="" tl="" g=0 tot=0 fam
   printf 'mx-score %s\n' "$m" >> "$MXL"
   dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
   for c in $(printf '%s' "$dec" | tr ',' ' '); do
@@ -289,7 +306,8 @@ mx_score() {
     cell_red "$c" "$m"; r=$?
     if [ "$r" -eq 0 ]; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
   done
-  for c in def lm ov; do
+  case "$m" in nest-*) fam="nb nm nc" ;; *) fam="def lm ov" ;; esac
+  for c in $fam; do
     case ",$dec,$tw," in *",$c,"*) continue ;; esac
     tot=$((tot + 1)); cell_red "$c" "$m" || g=$((g + 1))
   done
@@ -324,6 +342,82 @@ score_mutant "$(( ${B_ctl:-0} && ${B_lm:-0} && ${B_ov:-0} ))" markdir-ov-lm
 score_mutant "$(( ${B_ctl:-0} && ${B_def:-0} ))" report-default
 score_mutant "$(( ${B_ctl:-0} && ${B_lm:-0} ))" report-lm
 
+# ------------------------------------------------------------------ the nest shim and its guard (BL-1068) ----
+# Three cells, each written as "$R/<variant>/<cell>.red" (0 GREEN, 1 RED), from the variant deriver's OWN functions:
+#   nb  readset_nest_bypass over two windows in the kernel's line shape: an escaped sandbox-exec exec paired with the
+#       shim's marker read under the same pid reads 0, one with no marker read under its pid (a peer pid carries one)
+#       reads 1. Pure text in, a count out: no stream.
+#   nm  the shim, run under the deny-rewritten form of a tree+marker report clause (the errno channel above): its
+#       marker read is DENIED, so the read shows on the shim's stderr naming the marker, and the exec still reaches
+#       the next sandbox-exec (a recorder stub). Presence-shaped: the stub's argv record must exist.
+#   nc  the shim, run unsandboxed: the stub's profile has the caller's `(version 1)` form, then the inserted clause,
+#       then the caller's rule, and `-D` survives ahead of the stub's `-f`.
+# nest_cells <deriver> <dir> [<fix dir>]: with a fix dir whose extracted shim is byte-identical to this variant's, nm
+# and nc are that run's cells, carried by identity (one run per distinct state); nb is always computed.
+nest_cells() {
+  local d="$1" o="$2" f0="${3:-}" fn
+  mkdir -p "$o/t" "$o/m" "$o/s" "$o/stub" || return 1
+  for fn in readset_write_nest_shim readset_nest_bypass; do
+    awk -v f="$fn" '$0 == f "() {" || index($0, f "() { ") == 1 { p = 1 } p { print } p && /^}$/ { exit }' "$d" > "$o/$fn.fn" || return 1
+    [ -s "$o/$fn.fn" ] || return 1
+  done
+  printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s/args"\nwhile [ $# -gt 0 ]; do [ "$1" = -f ] && { cat "$2" > "%s/prof"; break; }; shift; done\nexit 0\n' "$o" "$o" > "$o/stub/sandbox-exec" \
+    && chmod +x "$o/stub/sandbox-exec" || return 1
+  (
+    . "$o/readset_write_nest_shim.fn"; . "$o/readset_nest_bypass.fn"
+    MARKDIR="$o/m"; L="2026-11-14 00:00:00.000000-0500 0x1 Default 0x0 0 0 kernel: [com.apple.sandbox.reporting:violation] Sandbox:"
+    printf '%s bash(101) allow file-read-data %s\n%s bash(101) allow process-exec* /usr/bin/sandbox-exec\n' "$L" "$o/m/.readset-nest" "$L" > "$o/w.paired"
+    printf '%s bash(303) allow file-read-data %s\n%s bash(202) allow process-exec* /usr/bin/sandbox-exec\n' "$L" "$o/m/.readset-nest" "$L" > "$o/w.bare"
+    nb="$(readset_nest_bypass "$o/m/.readset-nest" < "$o/w.paired")|$(readset_nest_bypass "$o/m/.readset-nest" < "$o/w.bare")"
+    [ "$nb" = "0|1" ]; printf '%s\n' "$?" > "$o/nb.red"; printf '%s\n' "$nb" > "$o/nb.val"
+    if [ -n "$f0" ] && cmp -s "$o/readset_write_nest_shim.fn" "$f0/readset_write_nest_shim.fn"; then
+      cat "$f0/nm.red" > "$o/nm.red" && cat "$f0/nc.red" > "$o/nc.red" || exit 1; : > "$o/carried"; exit 0
+    fi
+    INS="(allow file* (subpath \"$o/t\") (subpath \"$o/m\") (with report))"
+    SBX="$(command -v sandbox-exec)"; PATH="$o/stub:$PATH"; hash -r
+    readset_write_nest_shim "$o/s" "$INS" || exit 1
+    "$o/s/sandbox-exec" -D K=V -p '(version 1)(allow default)' /usr/bin/true 2> "$o/nc.err" < /dev/null
+    { [ "$(sed -n 1p "$o/args")" = -D ] && [ "$(sed -n 2p "$o/args")" = K=V ] && [ "$(sed -n 3p "$o/args")" = -f ] \
+      && [ "$(sed -n 1p "$o/prof")" = '(version 1)' ] && [ "$(sed -n 2p "$o/prof")" = "$INS" ] && [ "$(sed -n 3p "$o/prof")" = '(allow default)' ]; }
+    printf '%s\n' "$?" > "$o/nc.red"
+    rm -f "$o/args"
+    printf '(version 3)\n(allow default)\n(deny file* process-exec* (subpath "%s") (subpath "%s"))\n' "$o/t" "$o/m" > "$o/deny.sb"
+    "$SBX" -f "$o/deny.sb" "$o/s/sandbox-exec" -p '(version 1)(allow default)' /usr/bin/true 2> "$o/nm.err" < /dev/null
+    [ -s "$o/args" ] || exit 1
+    grep -qF "$o/m/.readset-nest" "$o/nm.err"; printf '%s\n' "$?" | awk '{ print ($1 == 0 ? 0 : 1) }' > "$o/nm.red"
+  ) || return 1
+  for c in nb nm nc; do [ -s "$o/$c.red" ] || return 1; done
+}
+for v in fix nest-nomark nest-guard nest-noins; do
+  dv="$DERIVER"; [ "$v" = fix ] || dv="$MD/$v.sh"
+  f0=""; [ "$v" = fix ] || f0="$R/fix"
+  nest_cells "$dv" "$R/$v" "$f0" || broken "cannot build the nest cells for $v"
+done
+echo " the nest shim and its bypass guard:"
+if [ -e "$R/nest-guard/carried" ] && [ ! -e "$R/nest-nomark/carried" ] && [ ! -e "$R/nest-noins/carried" ]; then
+  ok "carry control: only nest-guard (shim byte-identical to the fix's) took the fix run's shim cells"
+else bad "carry control: carried=[$(ls "$R"/*/carried 2>/dev/null | tr '\n' ' ')], want nest-guard alone"; fi
+nred() { [ "$(cat "$R/$2/$1.red")" = 1 ]; }
+if ! nred nb fix; then ok "guard: a shim-paired escaped exec reads 0 bypasses and an unpaired one reads 1 ($(cat "$R/fix/nb.val"))"; B_nb=1
+else bad "guard: the paired|unpaired windows read $(cat "$R/fix/nb.val"), want 0|1"; fi
+if ! nred nm fix; then ok "shim: under the deny channel its marker read is denied on its stderr before it execs the next sandbox-exec"; B_nm=1
+else bad "shim: no denied marker read on its stderr before the exec: $(tr '\n' ' ' < "$R/fix/nm.err")"; fi
+if ! nred nc fix; then ok "shim: the composed profile is the caller's (version 1), the inserted clause, then the caller's rule, with -D kept"; B_nc=1
+else bad "shim: the composed profile or argv is wrong: [$(tr '\n' ' ' < "$R/fix/prof" 2>/dev/null)]"; fi
+# score_nest <flag> <mutant>: killed when every deciding cell is RED; its twins are checked on the same run.
+score_nest() {
+  local flag="$1" m="$2" dec c miss=""
+  dec="$(mx_row "$m" decides)"
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do cell_red "$c" "$m" || miss="$miss $c"; done
+  if [ -z "$miss" ]; then mutant_killed "$flag" "$m" "mutant $m KILLED (nest cell(s) $dec RED)"
+  else bad "mutant $m SURVIVED (nest cell(s)$miss GREEN)"; fi
+  mx_twins "$m"
+  if [ "$MODE" = matrix ]; then mx_score "$m"; fi
+}
+score_nest "${B_nm:-0}" nest-nomark
+score_nest "${B_nb:-0}" nest-guard
+score_nest "${B_nc:-0}" nest-noins
+
 # RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
 # anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
 # it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
@@ -335,7 +429,7 @@ if [ "$MODE" = plain ]; then
   else ok "rule-9: a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
 else
   mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
-  [ "$mx_hdr" = "markdir-default markdir-ov-lm report-default report-lm " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
+  [ "$mx_hdr" = "markdir-default markdir-ov-lm nest-guard nest-noins nest-nomark report-default report-lm " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
   echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
   FAILS=$((FAILS + MX_FAILS))
 fi

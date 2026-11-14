@@ -905,7 +905,11 @@ lcc_run_one() {
 # exists, and a superseded sweep beside a changed constant is a rationale that argues for the
 # wrong number. The joint re-derivation of the outer width and all nine inner widths is its
 # own measured step; it is not restated here.
-LCC_JOBS=4
+# READSET_POOL_WIDTH narrows this pool when derive-fixture-readsets.sh traces the fixture (its nest launch sets 1):
+# at full width the sweeps outrun `log stream` and the trace is discarded. It changes the schedule, not the work.
+LCC_JOBS="${READSET_POOL_WIDTH:-4}"
+case "$LCC_JOBS" in ''|*[!0-9]*|????*) echo "FIXTURE BROKEN: READSET_POOL_WIDTH='$LCC_JOBS' is not an integer from 1 to 64" >&2; exit 2 ;; esac
+{ [ "$LCC_JOBS" -ge 1 ] && [ "$LCC_JOBS" -le 64 ]; } || { echo "FIXTURE BROKEN: READSET_POOL_WIDTH='$LCC_JOBS' is not an integer from 1 to 64" >&2; exit 2; }
 
 # DEAL THE NON-CONTROL RUNS OUT TO THE SHARDS IN TURN. ROUND-ROBIN, NOT CONTIGUOUS HALVES:
 # these runs are one full validator invocation each, but the CONTRACTS differ — several

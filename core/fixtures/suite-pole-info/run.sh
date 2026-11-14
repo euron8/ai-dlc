@@ -6,19 +6,27 @@
 # line: a wrong one prints on every push and nothing goes red. Its first build read the prior
 # record with `NR == FNR`, and with no prior record the first file is an empty /dev/null, so that
 # condition held through THIS run's file too and every green push after a reset printed
-# "(no suite run, no pole)". Caught only by driving the function offline. That case is arm 4 here,
-# and m1 restores the old condition to prove arm 4 can fire.
+# "(no suite run, no pole)". Caught only by driving the function offline. That case is arm 4 here.
+#
+# THIS RUN'S FIGURES ARE PROCESS STATE, NOT FILES. Pushes may run concurrently and the shared `.last`
+# and durations records can belong to another push by the time the pole line runs, so the function
+# reads LASTRUN_OWN (set by the pool) and POLE_PREV (snapshot before it). Arms 1-8 seed the shared
+# files with the same figures as the variables; arm 9 seeds them with another push's, and must still
+# print this run's pole.
 #
 # WHY THE FUNCTION IS EXTRACTED, NOT RE-WRITTEN. A probe that re-implements the awk is a second
 # opinion whose bugs nobody finds. The body below is cut from the hook between its definition line
 # and the first column-0 `}`, and the extraction is asserted non-empty and to define the function.
 #
-# THE MUTANT MATRIX. m1 is scored per push on its DECIDING arm (arm4) and its named TWIN (arm3), which
-# reads the same awk with a prior record present and must stay GREEN under it. `run.sh --matrix` scores m1
-# against all eight arms and prints one MATRIX line. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
-# command below, from the repo root.
-# MUTANT-MATRIX m1 decides=arm4 twins=arm3
+# THE MUTANT MATRIX. m2 reads this run's figures from the shared `.last` file and m3 the prior figures
+# from the shared `.prev` file, the two reads the concurrency fix removed. Each is scored per push on its
+# DECIDING arm (arm9) and its named TWIN (arm1), which seeds the files with this run's own figures and
+# must stay GREEN under it. `run.sh --matrix` scores each against all nine arms and prints one MATRIX
+# line. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Run the REMEASURE command below, from the repo root.
+# MUTANT-MATRIX-DYNAMIC mut_pole why=mut_pole passes its first argument to mutant_killed; every mut_pole call names a literal mutant that carries its own row in this block
+# MUTANT-MATRIX m2 decides=arm9 twins=arm1
+# MUTANT-MATRIX m3 decides=arm9 twins=arm1
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suite-pole-info/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -121,29 +129,38 @@ mx_eval() {
 DURATIONS_RECORD="$T/dur"; LASTRUN_RECORD="$T/last"
 export DURATIONS_RECORD LASTRUN_RECORD
 SUITE_SKIPPED=0; export SUITE_SKIPPED
+LASTRUN_OWN=""; POLE_PREV=""
 
-# arm_setup <n> -- the whole state arm n reads (arms 1-5 and 7), set from scratch so any arm can run on any function file.
+# own <last> <prev|-> -- this run's figures, and the shared files holding the SAME figures (no concurrent push).
+own() {
+  LASTRUN_OWN="$1"; printf '%s' "$1" > "$LASTRUN_RECORD"
+  if [ "$2" = - ]; then POLE_PREV=""; rm -f "$DURATIONS_RECORD.prev"
+  else POLE_PREV="$2"; printf '%s\n' "$2" > "$DURATIONS_RECORD.prev"; fi
+}
+# arm_setup <n> -- the whole state arm n reads (arms 1-5, 7 and 9), set from scratch so any arm can run on any function file.
 arm_setup() {
-  SUITE_SKIPPED=0; rm -f "$DURATIONS_RECORD.prev"
+  SUITE_SKIPPED=0
   case "$1" in
     # 1. A prior figure for the pole unit: the delta is signed and reads off the SAME unit.
-    1) printf 'small 10\nbig-unit 467\nmid 200\n' > "$LASTRUN_RECORD"
-       printf 'small 9\nbig-unit 381\nmid 210\n'  > "$DURATIONS_RECORD.prev" ;;
+    1) own "$(printf 'small 10\nbig-unit 467\nmid 200')" "$(printf 'small 9\nbig-unit 381\nmid 210')" ;;
     # 2. Shrinkage prints a negative delta, not a clamp.
-    2) printf 'big-unit 300\n' > "$LASTRUN_RECORD"; printf 'big-unit 381\n' > "$DURATIONS_RECORD.prev" ;;
+    2) own 'big-unit 300' 'big-unit 381' ;;
     # 3. The pole unit is new: the prior record exists but does not name it.
-    3) printf 'newunit 50\n' > "$LASTRUN_RECORD"; printf 'other 999\n' > "$DURATIONS_RECORD.prev" ;;
+    3) own 'newunit 50' 'other 999' ;;
     # 4. NO prior record at all -- the case the first build got wrong.
-    4) printf 'newunit 50\n' > "$LASTRUN_RECORD" ;;
+    4) own 'newunit 50' - ;;
     # 5. This run published no durations.
-    5) : > "$LASTRUN_RECORD" ;;
-    # 7. The content-key skip: a stale record on disk must not be read as this run's. (Arm 6 was stop-early, which the hook no longer has.)
-    7) printf 'big-unit 467\n' > "$LASTRUN_RECORD"; SUITE_SKIPPED=1 ;;
+    5) own '' - ;;
+    # 7. The content-key skip: a stale figure must not be read as this run's. (Arm 6 was stop-early, which the hook no longer has.)
+    7) own 'big-unit 467' - ; SUITE_SKIPPED=1 ;;
+    # 9. A CONCURRENT PUSH has replaced both shared files: this run's own figures must still decide.
+    9) own "$(printf 'small 10\nbig-unit 467\nmid 200')" "$(printf 'small 9\nbig-unit 381\nmid 210')"
+       printf 'other-push 999\n' > "$LASTRUN_RECORD"; printf 'other-push 1\n' > "$DURATIONS_RECORD.prev" ;;
   esac
 }
 arm_want() { # the exact line, whole, never a substring: a substring of the no-pole text is inside every malformed variant of it.
   case "$1" in
-    1) printf '%s' "   pole big-unit 467s loaded (was 381s before this run, +86s)" ;;
+    1|9) printf '%s' "   pole big-unit 467s loaded (was 381s before this run, +86s)" ;;
     2) printf '%s' "   pole big-unit 300s loaded (was 381s before this run, -81s)" ;;
     3|4) printf '%s' "   pole newunit 50s loaded (no prior figure for it)" ;;
     5|7) printf '%s' "   (no suite run, no pole)" ;;
@@ -156,11 +173,11 @@ expect() { # <label> <arm n> -- the line, whole, for arm n against the extracted
 # 8. Information, never a verdict: the step returns 0 on every state. Prints the states on which it did not.
 arm8_nz() { # <fn-file>
   local st nz=""
-  SUITE_SKIPPED=0; rm -f "$DURATIONS_RECORD.prev"
+  SUITE_SKIPPED=0
   for st in grow none; do
     case "$st" in
-      grow) printf 'u 9\n' > "$LASTRUN_RECORD"; printf 'u 1\n' > "$DURATIONS_RECORD.prev" ;;
-      none) : > "$LASTRUN_RECORD" ;;
+      grow) own 'u 9' 'u 1' ;;
+      none) own '' - ;;
     esac
     ( . "$1"; pole_info_step >/dev/null ) || nz="$nz $st"
   done
@@ -179,30 +196,41 @@ expect "5 empty durations" 5
 expect "7 content-key skip with a stale record on disk" 7
 nz="$(arm8_nz "$T/fn.sh")"
 if [ -z "$nz" ]; then ok "8 returns 0 on growth and on no run"; else bad "8 returned non-zero on:$nz"; fi
+# Arm 9 is the deciding arm of m2 and m3, so it sets the same-run base-pass flag in its passing branch.
+arm_setup 9
+got9="$(run_case "$T/fn.sh")"
+if [ "$got9" = "$(arm_want 9)" ]; then ok "9 a concurrent push replaced both shared files: this run's own figures decide"; B_arm9=1
+else bad "9 a concurrent push replaced both shared files -- wanted [$(arm_want 9)], got [$got9]"; fi
 
 # mx_cell_red <mutant> <arm> -> 0 when the arm FAILS on the mutant's function file (RED), 1 when it holds (GREEN).
 mx_cell_red() {
   local f="$T/$1.sh" got
   case "$2" in
     arm8) got="$(arm8_nz "$f" 2>&1)"; mx_chk "$got"; [ -n "$got" ] ;;
-    arm[1-57]) arm_setup "${2#arm}"; got="$(run_case "$f" 2>&1)"; mx_chk "$got"; [ "$got" != "$(arm_want "${2#arm}")" ] ;;
+    arm[1-579]) arm_setup "${2#arm}"; got="$(run_case "$f" 2>&1)"; mx_chk "$got"; [ "$got" != "$(arm_want "${2#arm}")" ] ;;
     *) MX_BROKEN=1; return 0 ;;
   esac
 }
 
-# m1 -- THE FIRST BUILD'S CONDITION RESTORED. Arm 4 must flag it; arm 3 (prior file present) must not,
-# which proves the mutant differs from the subject ONLY on the absent-file input.
-sed 's/FILENAME == ARGV\[1\] {/NR == FNR {/' "$T/fn.sh" > "$T/m1.sh"
-if cmp -s "$T/fn.sh" "$T/m1.sh"; then
-  bad "m1 -- the mutation did not apply; the anchor 'FILENAME == ARGV[1]' moved"
-else
-  mx_eval m1 arm1 arm2 arm3 arm4 arm5 arm7 arm8
-  if [ -n "$MX_DEC_GREEN" ]; then
-    bad "m1 NR==FNR restored SURVIVED -- arm 4 does not discriminate it (green on:$MX_DEC_GREEN)"
-  else
-    mutant_killed "${B_arm4:-0}" m1 "m1 NR==FNR restored -- scored by arm 4 and not by its twin arm 3"
+# m2 -- THIS RUN'S FIGURES READ FROM THE SHARED `.last` FILE, and m3 -- THE PRIOR FIGURES READ FROM THE
+# SHARED `.prev` FILE: each restores one of the two reads the concurrency fix removed. Arm 9 must flag each;
+# arm 1, whose files hold this run's own figures, must not, which confines each mutant to the concurrent input.
+mut_pole() { # <name> <old> <new> <message>
+  awk -v o="$2" -v n="$3" '{ i = index($0, o); if (i) $0 = substr($0, 1, i - 1) n substr($0, i + length(o)); print }' "$T/fn.sh" > "$T/$1.sh"
+  if cmp -s "$T/fn.sh" "$T/$1.sh"; then
+    bad "$1 -- the mutation did not apply; the anchor '$2' moved"; return
   fi
-fi
+  mx_eval "$1" arm1 arm2 arm3 arm4 arm5 arm7 arm8 arm9
+  if [ -n "$MX_DEC_GREEN" ]; then
+    bad "$1 SURVIVED -- arm 9 does not discriminate it (green on:$MX_DEC_GREEN)"
+  else
+    mutant_killed "${B_arm9:-0}" "$1" "$4"
+  fi
+}
+mut_pole m2 'printf '"'"'%s\\n'"'"' "$LASTRUN_OWN" |' 'cat "$LASTRUN_RECORD" |' \
+  "m2 this run's figures read from the shared .last file -- scored by arm 9 and not by its twin arm 1"
+mut_pole m3 'PP="${POLE_PREV:-}"' 'PP="$(cat "$DURATIONS_RECORD.prev" 2>/dev/null)"' \
+  "m3 the prior figures read from the shared .prev file -- scored by arm 9 and not by its twin arm 1"
 
 # RULE 9: a plain run executes NO matrix-only cell. The deciding and twin cells write the same ledger, so
 # an empty matrix count cannot come from a ledger nothing writes.
@@ -219,5 +247,5 @@ else
   echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
 fi
 
-[ "$rc" -eq 0 ] && echo "PASS  suite-pole-info -- 7 arms, 1 mutant scored"
+[ "$rc" -eq 0 ] && echo "PASS  suite-pole-info -- 8 arms, 2 mutants scored"
 exit "$rc"

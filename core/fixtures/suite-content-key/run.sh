@@ -38,8 +38,14 @@
 # REMEASURE command below, from the repo root.
 # MUTANT-MATRIX M-plus decides=k1 twins=k2
 # MUTANT-MATRIX M-docs decides=k3.plans twins=k3.backlog
-# Both mutants reach mutant_killed through one helper, as a variable:
-# MUTANT-MATRIX-DYNAMIC mx_score why=passes each mutant name of the two M- batteries as a variable and each name keeps its own row
+# BL-998: bl998-rd-hit drops the renderer on the whole-suite HIT (cells w2p, w2); bl998-ip-tail reads step 3b's record
+# rows by `tail -n +4` (cells ip.pend, ip.legacy, ip.nostore); bl998-snap-fnr narrows the green write's snapshot awk
+# to `FNR <= 3`, so it never reads a record's line-4 `#pending` (cells w1p, w1).
+# MUTANT-MATRIX bl998-rd-hit decides=w2p twins=w2
+# MUTANT-MATRIX bl998-snap-fnr decides=w1p twins=w1
+# MUTANT-MATRIX bl998-ip-tail decides=ip.pend twins=ip.legacy
+# The mutants reach mutant_killed through one helper, as a variable:
+# MUTANT-MATRIX-DYNAMIC mx_score why=passes each mutant name of the M- and bl998- batteries as a variable and each name keeps its own row
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suite-content-key/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -335,7 +341,7 @@ mx_score() {
     printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
   fi
 }
-cells_of() { case "$1" in M-plus) echo "k1 k2 k5 k6.hook" ;; M-docs) echo "k3.plans k3.backlog k4 k6.key k7 sane" ;; esac; }
+cells_of() { case "$1" in M-plus) echo "k1 k2 k5 k6.hook" ;; M-docs) echo "k3.plans k3.backlog k4 k6.key k7 sane" ;; bl998-rd-hit) echo "w2p w2" ;; bl998-snap-fnr) echo "w1p w1" ;; bl998-ip-tail) echo "ip.pend ip.legacy ip.nostore" ;; esac; }
 
 # M-plus cells, each read off the mutated span: RED when that arm's own predicate would FAIL (rc 0), GREEN when it holds (rc 1).
 cell_M-plus() {
@@ -432,15 +438,30 @@ sed -n '/^# SUITE_BANNER_BEGIN$/,/^# SUITE_BANNER_END$/p' "$hook" > "$sp/banner"
 fail=0; PENDING_N=0; SUITE_SKIPPED=0; SUITE_SKIP_CAUSE=""; pending_note=""
 . "$sp/pool" 2>/dev/null
 . "$sp/step"
-if [ "$w" = w1 ]; then
+if [ "$w" = w1 ] || [ "$w" = w1p ]; then
   # no key record; the verified record is the tree's own manifest, so every read-set is unchanged
   mkdir -p "$sp/m"; for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$sp/m/list"
   readset_manifest "$sp/m"
   cp "$sp/m/.now" "$GITDIR/ai-dlc-fixture-verified"; printf 'v2\n' > "$GITDIR/ai-dlc-fixture-verified.format"
+  if [ "$w" = w1p ]; then
+    # BL-998: the per-fixture records W1's seed published ($W1P_KEYS), each given line 4 `#pending <n>` where the
+    # producer writes it -- alpha 3, beta 0 -- so the green write's snapshot has a count to name and one to omit
+    cp -Rp "$W1P_KEYS" "$KEYS_DIR" || exit 3
+    for kp in alpha=3 beta=0; do
+      awk -v n="${kp#*=}" '{ print } FNR == 3 { print "#pending " n }' "$W1P_KEYS/${kp%=*}.key" > "$KEYS_DIR/${kp%=*}.key" || exit 3
+    done
+  fi
+elif [ "$w" = w2p ]; then
+  # BL-998: the record's line 2 snapshots alpha=3 (beta absent) while the key records say alpha 0 and beta 5
+  printf '%s %s %s\n#pending alpha=3\n' "$(bash scripts/suite-content-key.sh)" 2 2026-01-01T00:00:00Z > "$KEY_RECORD"
+  mkdir -p "$KEYS_DIR"
+  printf '#format k1\n#state ok\n#tools canonical\n#pending 0\n' > "$KEYS_DIR/alpha.key"
+  printf '#format k1\n#state ok\n#tools canonical\n#pending 5\n' > "$KEYS_DIR/beta.key"
 else
   printf '%s %s %s\n' "$(bash scripts/suite-content-key.sh)" 2 2026-01-01T00:00:00Z > "$KEY_RECORD"
 fi
 fixture_suite_step; echo "STEP-RC $?"
+echo "---REC---"; cat "$KEY_RECORD" 2>/dev/null
 echo "---BANNER---"
 ( . "$sp/banner" ) 2>&1
 echo "---LOG---"; cat "$KEY_LOG"
@@ -494,6 +515,135 @@ bl954_mut bl954-m1 "$B_W1" "s|FIXTURE SUITE SKIPPED -- %s%s\.|FIXTURE SUITE SKIP
 bl954_mut bl954-m2 "$B_W1" 's|then SUITE_SKIP_CAUSE=read-set; fi|then :; fi|' w1
 bl954_mut bl954-m3 "$B_W1" 's|SUITE_SKIP_CAUSE=content-key|SUITE_SKIP_CAUSE=SWAPTMP|; s|SUITE_SKIP_CAUSE=read-set|SUITE_SKIP_CAUSE=content-key|; s|SUITE_SKIP_CAUSE=SWAPTMP|SUITE_SKIP_CAUSE=read-set|' "w1 w2"
 bl954_mut bl954-m4 "$B_W2" 's|^      SUITE_SKIP_CAUSE=content-key$|      :|' w2
+
+# --- BL-998. A WHOLE-SUITE HIT NAMES THE PENDING FIXTURES IT SKIPPED, FROM THE RECORD'S OWN SNAPSHOT --------
+# Every fixture is skipped on a HIT, so its PENDING counts come from line 2 of the key record, written at the green
+# write beside the key. W2P's snapshot names alpha=3 and not beta while the per-fixture key records say alpha 0 and
+# beta 5: the HIT prints the snapshot (alpha recorded with 3, beta unnamed), never the records. W2, the one-line record
+# of a hook that predates the snapshot, prints no PENDING line at all (the twin). W1's green write snapshots its seeded
+# records, which carry no count, as `<fx>=-` each (count unrecorded; a zero is omitted, n > 0 is named).
+BL998_W2P='   PENDING: 1 skipped on a recorded pass that printed a PENDING row: alpha(recorded)=3'
+BRP="$(bl954_run "$BHOOK" w2p base)"
+grep -q 'STEP-RC 0' <<< "$BRP" || broken "BL-998 W2P driver: the step did not return 0: $(printf '%s' "$BRP" | tail -5 | tr '\n' '|')"
+B_W2P=0
+if bl954_okw2 "$BRP" && grep -qxF "$BL998_W2P" <<< "$BRP"; then B_W2P=1; ok "W2P a HIT prints the PENDING clause from the record's snapshot (alpha=3, beta unnamed), not from the key records (alpha 0, beta 5)"
+else bad "W2P the HIT's PENDING line is wrong: $(grep 'PENDING' <<< "$BRP" | tr '\n' '|')"; fi
+if ! grep -q '^   PENDING:' <<< "$BR2"; then ok "W2 a one-line record (no snapshot) prints no PENDING line on its HIT"
+else bad "W2 a record without a snapshot printed a PENDING line: $(grep 'PENDING:' <<< "$BR2" | tr '\n' '|')"; fi
+if [ "$(sed -n '/^---REC---$/,/^---BANNER---$/p' <<< "$BR1" | sed -n 3p)" = '#pending alpha=- beta=-' ]; then
+  ok "W1 the green write's line 2 is the snapshot line, naming each seeded record count unrecorded (alpha=- beta=-): they carry no count"
+else bad "W1 the green write's snapshot line is wrong: $(sed -n '/^---REC---$/,/^---BANNER---$/p' <<< "$BR1" | tr '\n' '|')"; fi
+# W1P: W1's world again, its KEYS_DIR holding the records W1's seed just published, each given line 4 `#pending <n>`
+# where readset_keys_write puts it (alpha 3, beta 0). Both still skip, and the green write's line 2 must read exactly
+# `#pending alpha=3`: a count on line 4 is read, a zero is omitted. W1 above is the twin, its records carrying no count.
+export W1P_KEYS="$BW/w.base.w1/.git/ai-dlc-fixture-keys"
+[ -f "$W1P_KEYS/alpha.key" ] && [ -f "$W1P_KEYS/beta.key" ] || broken "BL-998 W1P: W1's seed published no alpha/beta record at $W1P_KEYS"
+bl998_w1p_rec() { sed -n '/^---REC---$/,/^---BANNER---$/p' <<< "$1" | sed -n 3p; } # line 2 of the record
+BR1P="$(bl954_run "$BHOOK" w1p base)"
+grep -q 'STEP-RC 0' <<< "$BR1P" || broken "BL-998 W1P driver: the step did not return 0: $(printf '%s' "$BR1P" | tail -5 | tr '\n' '|')"
+B_W1P=0
+if grep -qF 'read-set keys: 0 of 2 fixture(s) run' <<< "$BR1P" && [ "$(bl998_w1p_rec "$BR1P")" = '#pending alpha=3' ]; then
+  B_W1P=1; ok "W1P the green write snapshots line 4 of the key records: line 2 reads '#pending alpha=3' (beta's 0 omitted, both records skipped)"
+else bad "W1P the green write's snapshot is wrong: $(sed -n '/^---REC---$/,/^---BANNER---$/p' <<< "$BR1P" | tr '\n' '|') $(grep 'read-set keys:' <<< "$BR1P")"; fi
+smut() { # smut <src> <dst> <old> <new>: the ONE line holding <old> gets <new>; refuses a lost or no-op anchor
+  local n
+  n="$(O="$3" awk 'index($0, ENVIRON["O"]) { c++ } END { print c + 0 }' "$1")"
+  [ "$n" = 1 ] || broken "BL-998 mutant anchor matched $n line(s) of ${1##*/}, want 1: $3"
+  O="$3" N="$4" awk '{ i = index($0, ENVIRON["O"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["N"] substr($0, i + length(ENVIRON["O"])); print }' "$1" > "$2"
+  cmp -s "$1" "$2" && broken "BL-998 mutant DID NOT APPLY: $3"
+  return 0
+}
+smut "$BHOOK" "$BW/hook.bl998-rd-hit" '        | readset_pending_line 0 "" -' '        | cat > /dev/null'
+cell_bl998-rd-hit() { # RED = that world's predicate fails under the hook with the HIT's renderer dropped
+  local r
+  case "$1" in
+    w2p) r="$(bl954_run "$BW/hook.bl998-rd-hit" w2p rdhit)"; grep -q 'STEP-RC 0' <<< "$r" || return 2
+         ! { bl954_okw2 "$r" && grep -qxF "$BL998_W2P" <<< "$r"; } ;;
+    w2)  r="$(bl954_run "$BW/hook.bl998-rd-hit" w2 rdhit)"; grep -q 'STEP-RC 0' <<< "$r" || return 2
+         ! { bl954_okw2 "$r" && ! grep -q '^   PENDING:' <<< "$r"; } ;;
+    *) return 2 ;;
+  esac
+}
+mx_score bl998-rd-hit "$B_W2P" "bl998-rd-hit scored by W2P: with the HIT's renderer dropped the snapshot's PENDING fixtures go unnamed"
+# bl998-snap-fnr: the green write's snapshot awk reads only lines 1-3 of each key record, so it never sees line 4.
+smut "$BHOOK" "$BW/hook.bl998-snap-fnr" 'FNR <= 4 && /^#pending' 'FNR <= 3 && /^#pending'
+cell_bl998-snap-fnr() { # RED = that world's snapshot-line predicate fails under the hook reading only lines 1-3
+  local r
+  case "$1" in
+    w1p) r="$(bl954_run "$BW/hook.bl998-snap-fnr" w1p snapfnr)"; grep -q 'STEP-RC 0' <<< "$r" || return 2
+         [ "$(bl998_w1p_rec "$r")" != '#pending alpha=3' ] ;;
+    w1)  r="$(bl954_run "$BW/hook.bl998-snap-fnr" w1 snapfnr)"; grep -q 'STEP-RC 0' <<< "$r" || return 2
+         [ "$(bl998_w1p_rec "$r")" != '#pending alpha=- beta=-' ] ;;
+    *) return 2 ;;
+  esac
+}
+mx_score bl998-snap-fnr "$B_W1P" "bl998-snap-fnr scored by W1P: a snapshot reading lines 1-3 of each record misses line 4's '#pending 3' and writes alpha=- (count unrecorded)"
+
+# --- BL-998. STEP 3b: A STORE-SKIPPED COUNTED FIXTURE IS NOT PENDING ----------------------------------------------
+# inproc_pending_step (distribution hook only, outside FIXTURE_POOL) vouches for a fixture this push did not run counted
+# when its key record's rows digest to an entry of the counted store. A record now carries `#pending <n>` as line 4, so
+# the rows are read through readset_key_rows; a `tail -n +4` would take the `#pending` line as a row, miss the entry,
+# and report a counted pass PENDING. One world: `dc` declared, run once through the real runner into a counted store
+# (the producer's own k2 entry, with its 2 PENDING rows), its key record composed from the runner's --key-only rows.
+# The step is cut from the hook and run in-process against three records:
+#   pend     the record with `#pending 2`   -> skipped on a counted pass, 0 PENDING
+#   legacy   the record with no `#pending`  -> the same (the twin: `tail -n +4` reads this one correctly)
+#   nostore  the record against an empty counted store -> 1 PENDING, named (the step CAN report PENDING)
+HRS="$DIST/core/scripts/hermetic-run.sh"
+[ -f "$HRS" ] || broken "no core/scripts/hermetic-run.sh at $DIST"
+echo "HERMETIC-CONSUMED core/scripts/hermetic-run.sh"
+IPW="$BW/ip"
+cp -Rp "$BW/tpl" "$IPW" && mkdir -p "$IPW/.githooks" "$IPW/core/scripts" "$IPW/core/fixtures/dc" "$IPW.vs/counted-x" "$IPW.vs0/counted-x" \
+  && cp "$BHOOK" "$IPW/.githooks/pre-push" && cp "$HRS" "$IPW/core/scripts/hermetic-run.sh" || broken "BL-998 step-3b world seed failed"
+printf '#!/usr/bin/env bash\necho "  PENDING  dc: the subject is absent"\necho "  PENDING  dc: a second part"\nexit 0\n' > "$IPW/core/fixtures/dc/run.sh"
+printf 'src/a.sh\n' > "$IPW/core/fixtures/dc/inputs.decl"
+IPH="$( cd "$IPW" && env -u FXCOUNT_DIR -u FXCOUNT_RC -u FXCOUNT_JUDGE AI_DLC_VERDICT_STORE="$IPW.vs/counted-x" bash core/scripts/hermetic-run.sh --root "$IPW" dc 2>&1)"
+( cd "$IPW" && env -u FXCOUNT_DIR -u FXCOUNT_RC -u FXCOUNT_JUDGE -u AI_DLC_VERDICT_STORE bash core/scripts/hermetic-run.sh --root "$IPW" --key-only dc ) > "$IPW.rows" 2>/dev/null
+_ipe="$(grep -lx '#fixture dc' "$IPW.vs/counted-x"/*/* 2>/dev/null)"
+[ -s "$IPW.rows" ] && [ "$(sed -n 1,2p "$_ipe" 2>/dev/null | tr '\n' ,)" = '#format k1,#state ok,' ] && [ "$(tail -n 1 "$_ipe" 2>/dev/null)" = '#pending 2' ] \
+  || broken "BL-998 step-3b world: the runner wrote no k1 entry ending '#pending 2' for dc, or --key-only printed no rows: $(printf '%s\n' "$IPH" | tail -6 | tr '\n' '|')"
+cat > "$BW/drvip.sh" <<'DRV'
+set -uo pipefail
+hook="$1"; t="$2"; v="$3"; sp="$4"
+cd "$t" || exit 3
+mkdir -p "$sp"
+sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$hook" > "$sp/pool"
+sed -n '/^inproc_vs_hit() {/,/^}$/p; /^inproc_pending_step() {$/,/^}$/p' "$hook" > "$sp/ip"
+[ -s "$sp/pool" ] && [ "$(grep -cE '^(inproc_vs_hit|inproc_pending_step)\(\) \{' "$sp/ip")" = 2 ] || { echo "DRIVER: a span is empty"; exit 3; }
+fail=0; PENDING_N=0
+. "$sp/pool" 2>/dev/null
+. "$sp/ip"
+AI_DLC_VERDICT_STORE="$t.vs/counted-x"; [ "$v" = nostore ] && AI_DLC_VERDICT_STORE="$t.vs0/counted-x"
+export AI_DLC_VERDICT_STORE
+FXCOUNT_DIR="$sp/fxc"; mkdir -p "$FXCOUNT_DIR" "$KEYS_DIR"
+{ printf '#format k1\n#state ok\n#tools canonical\n'; [ "$v" = legacy ] || printf '#pending 2\n'; cat "$t.rows"; } > "$KEYS_DIR/dc.key"
+inproc_pending_step; echo "STEP-RC $?"
+DRV
+ip_run() { bash "$BW/drvip.sh" "$1" "$IPW" "$2" "$BW/ipsp.$3.$2" 2>&1; } # <hook> <variant> <tag>
+IP_VS='   1 declared fixture(s): 0 counted this push, 1 skipped on a counted pass under this judge, 0 on scripts/fixture-inprocess-allowlist.txt, 0 PENDING'
+IP_PN='   1 declared fixture(s): 0 counted this push, 0 skipped on a counted pass under this judge, 0 on scripts/fixture-inprocess-allowlist.txt, 1 PENDING'
+ip_ok() { # ip_ok <output> <variant>: the variant's own predicate
+  grep -q 'STEP-RC 0' <<< "$1" || return 2
+  case "$2" in
+    pend|legacy) grep -qxF "$IP_VS" <<< "$1" && ! grep -q '^   PENDING (no counted run' <<< "$1" ;;
+    nostore) grep -qxF "$IP_PN" <<< "$1" && grep -qxF '   PENDING (no counted run under this judge): dc' <<< "$1" ;;
+  esac
+}
+B_IP=0
+for _v in pend legacy nostore; do
+  _o="$(ip_run "$BHOOK" "$_v" base)"
+  if ip_ok "$_o" "$_v"; then ok "step 3b $_v: $(grep -E '^   1 declared|^   PENDING \(' <<< "$_o" | tr '\n' ' ')"; [ "$_v" = pend ] && B_IP=1
+  else bad "step 3b $_v is wrong: $(printf '%s' "$_o" | tail -4 | tr '\n' '|')"; fi
+done
+smut "$BHOOK" "$BW/hook.bl998-ip-tail" 'readset_key_rows "$rec" > "$w/rows"' 'tail -n +4 "$rec" > "$w/rows"'
+cell_bl998-ip-tail() { # RED = that variant's predicate fails under the hook reading the record's rows by `tail -n +4`
+  local r rc
+  case "$1" in ip.pend|ip.legacy|ip.nostore) ;; *) return 2 ;; esac
+  r="$(ip_run "$BW/hook.bl998-ip-tail" "${1#ip.}" iptail)"
+  ip_ok "$r" "${1#ip.}"; rc=$?
+  case "$rc" in 0) return 1 ;; 1) return 0 ;; *) return 2 ;; esac
+}
+mx_score bl998-ip-tail "$B_IP" "bl998-ip-tail scored by ip.pend: reading the rows by tail -n +4 takes '#pending 2' as a row and reports a counted pass PENDING"
 
 # RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
 # empty matrix count cannot come from a ledger nothing writes.

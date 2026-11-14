@@ -10,3 +10,5 @@ core/scripts/hermetic-run.sh
 core/scripts/derive-fixture-readsets.sh
 core/skills/ai-dlc/enforcement-map.yaml
 core/fixtures/prepush-pool-depth/receipt-bl924.sh
+scripts/install.sh
+scripts/census-consumer-layout.sh

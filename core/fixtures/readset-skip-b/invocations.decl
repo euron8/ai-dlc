@@ -1,6 +1,7 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once.
 # Exact (BL-868): the fx_drive and fw_drive stop-at-first-leak drives now run a fixed number of launches.
 # +18 for the forced-day psfailpad world (BL-868): 8 pj_evals x (judge + ps stub), and 2 ps-stub writer runs.
-502 *
+# BL-1081: (t4w) and its sleeptrap mutant probe the extracted watchdog (one stub sleep start each) instead of 10 forced-window traces each (one deriver stub start per trace): 502 to 484 and 82 to 62, one counted run.
+484 *
 0 core/git-hooks/pre-push
-82 core/scripts/derive-fixture-readsets.sh
+62 core/scripts/derive-fixture-readsets.sh

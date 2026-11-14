@@ -25,3 +25,6 @@ sort
 tr
 wc
 xargs
+cksum
+env
+tail
