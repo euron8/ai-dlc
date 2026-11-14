@@ -2,4 +2,5 @@
 # Re-measured for BL-924's receipt (one scratch copy run once: the baseline arms, the not-exported mutant and the watcher cells): 400 to 492, two counted runs.
 # Re-measured for BL-985 (event-decided watcher and barrier drives, the td drive waiting out its subject's xargs): 492, unchanged, from two counted runs and a third under the forced orphan-xargs interleaving (the queued worker held past the drive's release), all three 492; base held the same way read 491.
 # Re-measured after BL-985's tip-adversary fold (one tick in flight, change-only look lines, the pn_cycle self-probe, the receipt's forcings on records): 492 and 492, two counted runs, unchanged.
+# Re-measured for BL-1050 (stdin from /dev/null): 492 with the caller's stdin forced to a socket and to /dev/null, one counted run each; base read 489 and 492 the same way.
 492 *
