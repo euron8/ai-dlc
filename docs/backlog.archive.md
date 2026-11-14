@@ -42905,3 +42905,15 @@ Fix: when a pre-suite step is red, still dispatch the pool and record every pass
 Receipt: a scratch push whose tree carries one seeded pre-suite red and one changed fixture. It must exit non-zero AND leave that fixture's pass in the verdict store under its key; a re-push of the same tree with the red fixed must skip that fixture on the recorded pass (`verdict store: N fixture(s) skipped` names it). Mutant: restore the stop-early return; the store must then hold no entry and the receipt must fail.
 
 verify: sh o="$(PREPUSH_POOL_DEPTH=1 bash core/fixtures/prepush-worktree-env-scrub/run.sh 2>&1)"; case "$o" in *"ok    BL-1048 rec:"*) ;; *) exit 1 ;; esac; case "$o" in *"ok    BL-1048 skip:"*) exit 0 ;; esac; exit 1
+
+## BL-1050 — prepush-pool-depth's counted starts depend on the caller's stdin, so a hand counted run can set a J3 row the push never reads
+
+**LANDED (v0.1114.0).** `core/fixtures/prepush-pool-depth/run.sh` runs with stdin from `/dev/null` (`exec < /dev/null` after its SIGINT check), so no launch inherits the caller's stdin. Forced both ways at 93cae636f, one counted run each: base read 489 with socket stdin and 492 with `/dev/null`; the fix read 492 with both, logging all 14 launch rows. The `492 *` row is unchanged.
+
+**DEFECT.** OPEN. Filed 2026-11-13. Counted runs of the fixture on identical content at 47c2d9e31 read 1294 or 1297 (8 runs, two exact states: `bash -c` starts directly under run.sh and nested under a `-c`, 425/33 against 419/42). The push itself was deterministic: the pool's BSD xargs gives its children `/dev/null` as stdin (an xargs child's stdin reads `Character Device` where its caller's reads `Socket`), so the gate always read the high state. The two states came from the stdin kind of hand counted runs. A row set from a socket-stdin run (1294) then failed J3 on every push (1297).
+
+**Cause.** bash 3.2 skips `BASH_ENV` in a `bash -c` whose stdin is a socket and whose env `SHLVL` is 0 (its rshd/sshd startup branch). A `set -m` job inherits its parent's stdin. The three top-level teardown launches (`td_drive` term and int, `ts_launch` sbx) are such starts, so when the caller handed the fixture a socket the counter rc never ran in them: their rows were absent and their 9 workers were attributed to run.sh (top −6, nested +9, total −3). The nested launches (`( td_run … )` for every mutant, `tl_drive`'s sub-drive) were never affected, because job control is off in a subshell and their `&` reads `/dev/null`. A capture with each start's `$1`, cwd and `-c` string named the drives: in every 1294-state log the `td.fix.term`, `td.fix.int` and `td.fix.sbx` launch rows are absent and all 11 later launches present. Reproduced at 93cae636f as 489 against 492 by forcing the stdin kind.
+
+Provenance: batch 257, fast track F18, from ai-dlc-d7's 0.1110.0 integration findings; id allocated by the lead.
+
+verify: manual

@@ -112,6 +112,11 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "prepush-pool-depth: FIXTURE BRO
 # on an ignored-at-entry signal silently does nothing, so `trap -p INT` then reads empty.
 trap ':' INT; _ti="$(trap -p INT)"; trap - INT
 [ -n "$_ti" ] || { echo "prepush-pool-depth: FIXTURE BROKEN: launched with SIGINT ignored (a plain & from a non-interactive shell); its INT cells cannot fire. Run it in the foreground or under set -m." >&2; exit 2; }
+# STDIN IS /dev/null, WHATEVER THE CALLER GAVE (BL-1050). A `set -m` job inherits this shell's stdin, and bash 3.2
+# skips BASH_ENV in a `bash -c` whose stdin is a socket and whose env SHLVL is 0 (its rshd/sshd startup branch, and
+# a subshell's exec lowers SHLVL). The top-level teardown launches (td_drive, ts_launch) are such starts, so a caller
+# handing this fixture a socket left them, and their workers' attribution, out of the invocation counter's log.
+exec < /dev/null
 MUT_LIB="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $0" >&2; exit 2; }
 . "$MUT_LIB"

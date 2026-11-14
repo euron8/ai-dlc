@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1114.0] - 2026-11-13
+
+### BL-1050 CLOSED: prepush-pool-depth's counted starts no longer depend on the caller's stdin
+
+`core/fixtures/prepush-pool-depth/run.sh` now runs with stdin from `/dev/null` (`exec < /dev/null` after its SIGINT check). bash 3.2 skips `BASH_ENV` in a `bash -c` whose stdin is a socket and whose env `SHLVL` is 0. A `set -m` job inherits its parent's stdin, so the three top-level teardown launches (`td_drive` term and int, `ts_launch` sbx) each lost their counted start whenever the fixture's caller handed it a socket, and their nine workers were attributed to `run.sh`. That gave 3 fewer starts on identical content (1294 against 1297 at 47c2d9e31, 489 against 492 at 93cae636f). The push path was never affected: the pool's BSD xargs gives each worker `/dev/null` as stdin, so the gate always read the high state. Only a hand counted run from a socket-stdin caller read low, and a row set from such a run failed J3 on every push. The nested launches (`( td_run … )`, `tl_drive`'s sub-drive) were never affected: job control is off in a subshell, so their `&` reads `/dev/null`.
+
+Forced both ways at 93cae636f, one counted run each: base with socket stdin read 489 (the three `td.fix` launch rows absent), base with `/dev/null` read 492, and the fix read 492 with both, logging all 14 launch rows. The `492 *` row is unchanged.
+
 ## [0.1112.0] - 2026-11-13
 
 ### BL-1048 CLOSED: a red step above the fixture suite no longer skips it
