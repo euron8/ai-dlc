@@ -9,16 +9,11 @@ Decisions the operator has already made. They hold across sessions; a repeated i
 No plan and no task stops to ask for merge authorization. Cut the branch, run the gate, merge it. Where a
 branch carries more than one release the release-version validator says so; that constrains branch shape.
 
-## Ready releases are bundled and gated once
+## The build process is CLAUDE.md's "Build process", and nothing more
 
-- The lead collects READY releases onto ONE integration branch and gates it once.
-- Every run other than a merge goes in parallel; merges are ordered.
+- A step not in it is not run. Every run other than a merge goes in parallel; merges are ordered.
 - Call the advisor once immediately before every push: a hook outside the repo denies the push otherwise. The roll-call advisor
   call stays (exempt: PAUSED or CLOSABLE sessions); no pre-merge advisor call.
-- A red caused only by one release drops that release from the bundle and the rest re-gate.
-- A filing that lands after a bundle starts gating rides the next bundle; it never joins a bundle that is
-  gating, and no ready release waits for one. While bundles flow, the batch keeps taking scope and assigns new
-  entries to free builders.
 
 ## A consumer pull is NOT preapproved
 
@@ -52,7 +47,7 @@ green because it looks fine.
 Spawn agents liberally and in parallel; background anything long. Where something waits on the answer, wall
 clock rules; where nothing does, cheaper tokens win even if slower. Profile the SCHEDULE per unit first:
 measurement decides the ORDER, never the membership. A hand verifies ONLY its own change: `bash -n`, its
-discriminating probe, and the READY carriers in CLAUDE.md; the gate runs everything else. Never message a
+discriminating probe, and CLAUDE.md's builder steps; the gate runs everything else. Never message a
 `graph-*` session, even read-only, without an explicit operator grant.
 
 ## The lead orchestrates the box's load
@@ -63,14 +58,17 @@ in parallel; merges are ordered.
 ## No needless timing runs
 
 Cost evidence for a routine change is the counts the gate records: invocations.decl, exec, fork and render
-counts. Where the stated goal IS wall clock or box load, measure that: wall and CPU, old against new,
-interleaved. Never ask to reconfirm a stated goal.
+counts. Where the stated goal IS wall clock or box load, the push gate that delivers the change is the
+measurement. Take no hand timing run before it, and never re-measure a quantity already on record (a gate log, the
+durations record, a verdict). Decide what to change from the code and that record. A brief, dispatch or
+instruction to another session carries no step this file forbids its executor: delegating a forbidden action is
+taking it. Never ask to reconfirm a stated goal.
 
 ## The burden of verifying a change is proportional to the change
 
 Re-run only what a change can move; carry the rest by byte-identity with a control and prove coverage by name.
-The push gate is the one full verification: no hand re-runs of carriers or validators, no seeds beyond those
-READY carries, no repeat reading passes, and "two agreeing counted runs" is one counted run plus the gate's. A
+The push gate is the one full verification: no hand re-runs of carriers or validators, no seeds,
+no repeat reading passes, and "two agreeing counted runs" is one counted run plus the gate's. A
 test that cannot be trusted to catch what it claims gets a filing against the test, never a manual re-check
 around it. A change never invalidates a verdict whose read inputs it did not change; no release forces a
 whole-suite re-run. Enforcer: `scripts/invalidation-guard.sh` (pre-push).
