@@ -39,3 +39,4 @@ scripts/validate-no-dead-doc-refs.sh
 scripts/validate-plan-shape.sh
 scripts/validate-release-version.sh
 scripts/validate-shell-portability.sh
+scripts/validate-verdict-identity.sh

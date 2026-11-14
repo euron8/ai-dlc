@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1122.0] - 2026-11-13
+
+### BL-1049 CLOSED: a change re-runs only the fixtures whose inputs it moves, and stored verdicts survive comment and composition edits
+
+- The runner rows key `hermetic-run.sh`'s HR_SANDBOX span and its exit mapping (comment-stripped), not the whole file.
+- The verdict store's `#universe` is an explicit format version, `READSET_VS_FORMAT`, not a hash of the hook's READSET_* spans. A new pre-suite step, `verdict-store identity` (`scripts/validate-verdict-identity.sh`), fails a push whose span code changed with no `# VS-IDENTITY <format> <sha> <reason>` pin row.
+- A stored pass or local record is reused when it covers the fixture's current key rows. The fixture's own `inputs.decl` row is dropped when every declared path is keyed, and own-directory rows stay exact.
+- Existing store entries and key records carry forward under the legacy identity, with no store write.
+- Narrowing the whole-hook and whole-directory declarations is BL-1051.
+
 ## [0.1114.0] - 2026-11-13
 
 ### BL-1050 CLOSED: prepush-pool-depth's counted starts no longer depend on the caller's stdin

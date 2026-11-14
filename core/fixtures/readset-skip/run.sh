@@ -6122,8 +6122,9 @@ fi
 # MUTANT-MATRIX nosubtree decides=m twins=o
 # MUTANT-MATRIX globaltools decides=n twins=g
 # MUTANT-MATRIX nosibs decides=o twins=m
-# MUTANT-MATRIX staledecl decides=stale-declared.dsame,stale-declared.unrel,stale-declared.dchg,stale-declared.rchg,stale-declared.dempty twins=stale-declared.ctl,stale-declared.beta
+# MUTANT-MATRIX staledecl decides=stale-declared.dsame,stale-declared.unrel,stale-declared.dchg,stale-declared.rchg,stale-declared.rout,stale-declared.dempty twins=stale-declared.ctl,stale-declared.beta
 # MUTANT-MATRIX runnerrow decides=stale-declared.rchg twins=stale-declared.dsame,stale-declared.beta
+# MUTANT-MATRIX wholefile decides=stale-declared.rout twins=stale-declared.dsame,stale-declared.beta
 # MUTANT-MATRIX quotedrow decides=quoted-row.qrow,quoted-local.lq twins=quoted-row.qctl,quoted-local.ctl
 # The stale-declared, runner-row and quoted-row mutants below each have ONE world, every cell of which
 # is asserted in the vector, so they have no cross-world matrix.
@@ -6256,9 +6257,11 @@ fi
 #   dsame  declared `decl`, record stale, no declared input moved       -> skip, c `v`, republished ok
 #   unrel  the same, but an input NOBODY declared moved                 -> skip
 #   dchg   the same, but the declared src/a.sh moved                    -> run, changed src/a.sh
-#   rchg   the same, but the runner core/scripts/hermetic-run.sh, which decl does NOT declare, moved by one
-#          byte -> run, changed hermetic-run.sh: every declared key carries the runner (a placeholder here,
+#   rchg   the same, but one byte INSIDE the HR_SANDBOX span of the runner core/scripts/hermetic-run.sh, which decl
+#          does NOT declare, moved -> run: every declared key carries the runner's span sha (a placeholder here,
 #          never executed -- this world only decides). Without that row it reads skip.
+#   rout   the same, but a code line added OUTSIDE that span and before the exit mapping (the HR_EXIT row) -> skip:
+#          the key carries the span and the exit mapping, never the whole runner
 #   dempty the declared fixture's stale record holds NO key rows        -> run (a missing stored key is changed)
 #   ctl    UNDECLARED alpha, record stale, nothing moved                -> run, reason stale (the near-miss)
 #   beta   undeclared and ok in the same invocation                     -> skip (proves the driver decided)
@@ -6276,7 +6279,7 @@ ckd_cell() { awk -F'\t' -v f="$2" '$1 == f && ($2 == "run" || $2 == "skip") { pr
 ckd_world() { local p="$1" x="$2" t="$3" k kd
   ck_seed "$t" "$x" || { printf SEED; return; }
   mkdir -p "$t/$x/decl" "$t/core/scripts" && printf 'exit 0\n' > "$t/$x/decl/run.sh" && printf 'src/a.sh\n' > "$t/$x/decl/inputs.decl" \
-    && printf 'r1\n' > "$t/core/scripts/hermetic-run.sh" \
+    && printf '# HR_SANDBOX_BEGIN\nr1\n# HR_SANDBOX_END\nf() {\n}\nexit 1\n' > "$t/core/scripts/hermetic-run.sh" \
     && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm decl ) >/dev/null 2>&1 || { printf SEED; return; }
   kd="$t/.git/ai-dlc-fixture-keys"; mkdir -p "$kd" || { printf SEED; return; }
   ckd_dec "$p" "$t" rec
@@ -6289,12 +6292,14 @@ ckd_world() { local p="$1" x="$2" t="$3" k kd
   ckd_dec "$p" "$t" same
   printf 'x\n' > "$t/src/c.sh"; ckd_dec "$p" "$t" unrel; printf 'v1\n' > "$t/src/c.sh"
   printf 'v2\n' > "$t/src/a.sh"; ckd_dec "$p" "$t" chg; printf 'v1\n' > "$t/src/a.sh"
-  printf 'r2\n' > "$t/core/scripts/hermetic-run.sh"; ckd_dec "$p" "$t" rchg; printf 'r1\n' > "$t/core/scripts/hermetic-run.sh"
+  printf '# HR_SANDBOX_BEGIN\nr2\n# HR_SANDBOX_END\nf() {\n}\nexit 1\n' > "$t/core/scripts/hermetic-run.sh"; ckd_dec "$p" "$t" rchg
+  printf '# HR_SANDBOX_BEGIN\nr1\n# HR_SANDBOX_END\nf() {\n  : store\n}\nexit 1\n' > "$t/core/scripts/hermetic-run.sh"; ckd_dec "$p" "$t" rout
+  printf '# HR_SANDBOX_BEGIN\nr1\n# HR_SANDBOX_END\nf() {\n}\nexit 1\n' > "$t/core/scripts/hermetic-run.sh"
   sed -n 1,3p "$kd/decl.key" > "$kd/decl.key.t" && mv "$kd/decl.key.t" "$kd/decl.key"; ckd_dec "$p" "$t" empty
-  printf 'dsame=%s unrel=%s dchg=%s rchg=%s dempty=%s ctl=%s beta=%s' "$(ckd_cell "$t.dd.same" decl)" "$(ckd_cell "$t.dd.unrel" decl)" \
-    "$(ckd_cell "$t.dd.chg" decl)" "$(ckd_cell "$t.dd.rchg" decl)" "$(ckd_cell "$t.dd.empty" decl)" "$(ckd_cell "$t.dd.same" alpha)" "$(ckd_cell "$t.dd.same" beta)"
+  printf 'dsame=%s unrel=%s dchg=%s rchg=%s rout=%s dempty=%s ctl=%s beta=%s' "$(ckd_cell "$t.dd.same" decl)" "$(ckd_cell "$t.dd.unrel" decl)" \
+    "$(ckd_cell "$t.dd.chg" decl)" "$(ckd_cell "$t.dd.rchg" decl)" "$(ckd_cell "$t.dd.rout" decl)" "$(ckd_cell "$t.dd.empty" decl)" "$(ckd_cell "$t.dd.same" alpha)" "$(ckd_cell "$t.dd.same" beta)"
 }
-CKD_WANT='dsame=skip:v:ok unrel=skip:v:ok dchg=run:k:ok rchg=run:k:ok dempty=run:s:ok ctl=run:s:stale beta=skip::ok'
+CKD_WANT='dsame=skip:v:ok unrel=skip:v:ok dchg=run:k:ok rchg=run:k:ok rout=skip:v:ok dempty=run:s:ok ctl=run:s:stale beta=skip::ok'
 # THE FIRST RESOLVED HOOK ONLY: the decision this world drives is inside the FIXTURE_POOL block, which I66 holds
 # code-identical across both hooks, and the second hook's own fixture root is proven wired by ckw's (d) arm.
 CKD_N="$CK_N"; CKD_P1="${CK_P1:-}"; CKD_X1="${CK_X1:-}"
@@ -6323,18 +6328,18 @@ if [ "$CKD_N" -ge 1 ]; then
     if cmp -s "$CKD_P1" "$CKD_M"; then bad "STALE-DECLARED MUTANT: the copy is unchanged"
     else
       _g="$(ckd_world "$CKD_M" "$CKD_X1" "$CK_W/ckd.mut" 2>/dev/null)"
-      _w='dsame=run:s:stale unrel=run:s:stale dchg=run:s:stale rchg=run:s:stale dempty=run:s:stale ctl=run:s:stale beta=skip::ok'
+      _w='dsame=run:s:stale unrel=run:s:stale dchg=run:s:stale rchg=run:s:stale rout=run:s:stale dempty=run:s:stale ctl=run:s:stale beta=skip::ok'
       if [ "$_g" = "$_w" ] && [ "$_g" != "$CKD_WANT" ]; then mutant_killed "$B_CKD" staledecl "STALE-DECLARED MUTANT (pre-fix lines) is KILLED: dsame becomes a forced run written back stale: $_g"
       else bad "STALE-DECLARED MUTANT: expected '$_w', got '$_g'"; fi
     fi
   fi
 fi
-# THE RUNNER-ROW MUTANT: the one rule keying every declared fixture on the runner's whole-file hash, deleted from the
+# THE RUNNER-ROW MUTANT: the one rule keying every declared fixture on the runner's HR_SANDBOX span sha, deleted from the
 # same hook copy. rchg alone loses its changed-runner run and reads skip; every other cell stays put.
 if [ "$CKD_N" -ge 1 ]; then
   CK_ARMS=$((CK_ARMS+1))
   CKD_R="$CK_W/ckd.rmut.sh"; cp "$CKD_P1" "$CKD_R" || bad "STALE-DECLARED RUNNER MUTANT did not apply: could not copy the hook"
-  RF='      if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh") for (f in FX) out(f, p, v)'
+  RF='      if (p in RNS) for (f in FX) out(f, p "#HR_SANDBOX", RNS[p])'
   _nr="$(grep -cxF -- "$RF" "$CKD_R")"
   if [ "$_nr" != 1 ]; then bad "STALE-DECLARED RUNNER MUTANT did not apply: the runner-row anchor matched $_nr time(s), not 1"
   else
@@ -6345,6 +6350,26 @@ if [ "$CKD_N" -ge 1 ]; then
       _w="${CKD_WANT/rchg=run:k:ok/rchg=skip:v:ok}"
       if [ "$_g" = "$_w" ] && [ "$_g" != "$CKD_WANT" ]; then mutant_killed "$B_CKD" runnerrow "STALE-DECLARED RUNNER MUTANT (runner row deleted) is KILLED: rchg becomes a skip: $_g"
       else bad "STALE-DECLARED RUNNER MUTANT: expected '$_w', got '$_g'"; fi
+    fi
+  fi
+fi
+# THE WHOLE-FILE MUTANT: the runner row keyed on the runner's WHOLE-FILE hash again, in the same hook copy. rout alone
+# loses its skip (a line outside the span moves the key) and reads run; every other cell stays put.
+if [ "$CKD_N" -ge 1 ]; then
+  CK_ARMS=$((CK_ARMS+1))
+  CKD_W="$CK_W/ckd.wmut.sh"; cp "$CKD_P1" "$CKD_W" || bad "STALE-DECLARED WHOLE-FILE MUTANT did not apply: could not copy the hook"
+  WF='      if (p in RNS) for (f in FX) out(f, p "#HR_SANDBOX", RNS[p])'
+  WT='      if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh") for (f in FX) out(f, p, v)'
+  _nw="$(grep -cxF -- "$WF" "$CKD_W")"
+  if [ "$_nw" != 1 ]; then bad "STALE-DECLARED WHOLE-FILE MUTANT did not apply: the runner-row anchor matched $_nw time(s), not 1"
+  else
+    WF="$WF" WT="$WT" awk '{ if ($0 == ENVIRON["WF"]) $0 = ENVIRON["WT"]; print }' "$CKD_W" > "$CKD_W.t" && mv "$CKD_W.t" "$CKD_W"
+    if cmp -s "$CKD_P1" "$CKD_W"; then bad "STALE-DECLARED WHOLE-FILE MUTANT: the copy is unchanged"
+    else
+      _g="$(ckd_world "$CKD_W" "$CKD_X1" "$CK_W/ckd.wmut" 2>/dev/null)"
+      _w="${CKD_WANT/rout=skip:v:ok/rout=run:k:ok}"
+      if [ "$_g" = "$_w" ] && [ "$_g" != "$CKD_WANT" ]; then mutant_killed "$B_CKD" wholefile "STALE-DECLARED WHOLE-FILE MUTANT (runner keyed whole-file) is KILLED: rout becomes a run: $_g"
+      else bad "STALE-DECLARED WHOLE-FILE MUTANT: expected '$_w', got '$_g'"; fi
     fi
   fi
 fi
@@ -7073,9 +7098,9 @@ fi
 #   a  A's hermetic pass -> B (clone, other path, identical tree) SKIPS; announced by name; the store holds entries
 #   b  one declared input byte changed in B -> RUN (the pass was recorded on a different tree)
 #   t  A's own declared input changed after its pass -> RUN; B's fixture-own file added -> RUN
-#   g  one byte added to the tree's hermetic-run.sh -> RUN; a line added inside the READSET_UNIVERSE span -> RUN;
-#      g3/g4, edits OUTSIDE the runner's HR_SANDBOX span, also RUN: every declared key carries the runner's whole-file
-#      hash (readset_decl_keys' runner row), so any runner byte moves the key before the store is consulted
+#   g  one byte added inside the runner's HR_SANDBOX span -> RUN; a line added inside the READSET_UNIVERSE span -> RUN;
+#      g3/g4, edits OUTSIDE the runner's HR_SANDBOX span (store code, a trailing comment), SKIP: the declared key
+#      carries the runner's span sha (readset_decl_keys' runner row), never its whole-file hash
 #   c  failed run, REQUIRED-sentinel-missing run, undeclared run: nothing written; their fixtures RUN in B
 #   d  an entry planted for an UNDECLARED fixture is ignored; the same plant for a declared one skips (the control)
 #   e  truncated, emptied, edited entry -> RUN; the restored entry skips (the control)
@@ -7197,11 +7222,11 @@ vs_world() { # <pool> <fixture root> <runner file> <t> [<cells>]: one vector
   cp "$t/rn.save" "$B/$rd/hermetic-run.sh"
   cp "$B/.githooks/pre-push" "$t/hk.save"
   sed 's/^# READSET_UNIVERSE_BEGIN$/&\n# one more line/' "$t/hk.save" > "$B/.githooks/pre-push"; vs_dec "$p" "$B" "$SB" g2; cp "$t/hk.save" "$B/.githooks/pre-push"
-  # g5: a COMMENT line inside the READSET_KEYROWS span of B's hook alone (the runner's bytes unchanged) moves
-  # `#universe`, so A's pass is not reused. g6, the near-miss: the same line outside every hashed span is reused.
-  # Inserted by awk, and the span must still extract with one more line, or the cell reads BADINS.
-  awk '{ print } $0 == "# READSET_KEYROWS_BEGIN" { print "# one more line" }' "$t/hk.save" > "$B/.githooks/pre-push"
-  if [ "$(sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$B/.githooks/pre-push" | grep -c .)" -eq $(( $(sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$t/hk.save" | grep -c .) + 1 )) ]; then
+  # g5: READSET_VS_FORMAT bumped in B's hook alone (the runner's bytes unchanged) moves `#universe`, so A's pass is
+  # not reused. g2, a comment line inside READSET_UNIVERSE, and g6, the same line outside every span, are reused: the
+  # identity is a format version, not a hash of code. The bump must apply to exactly one line, or the cell reads BADINS.
+  awk '/^READSET_VS_FORMAT=[0-9]+$/ { split($0, a, "="); $0 = "READSET_VS_FORMAT=" (a[2] + 1) } { print }' "$t/hk.save" > "$B/.githooks/pre-push"
+  if ! cmp -s "$t/hk.save" "$B/.githooks/pre-push" && [ "$(grep -c '^READSET_VS_FORMAT=' "$B/.githooks/pre-push")" = 1 ]; then
     vs_dec "$p" "$B" "$SB" g5; g5="$(vs_cell "$B.vd.g5" decl)"; else g5=BADINS; fi
   awk '{ print } NR == 1 { print "# one more line" }' "$t/hk.save" > "$B/.githooks/pre-push"; vs_dec "$p" "$B" "$SB" g6
   cp "$t/hk.save" "$B/.githooks/pre-push"
@@ -7242,7 +7267,7 @@ vs_sub() {
 }
 # vs_cellv <vector> <cell>: one cell's field, `<cell>=<value>`, or empty
 vs_cellv() { printf '%s\n' "$1" | tr ' ' '\n' | grep "^$2=" ; }
-VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/run/run/run/run/skip e=run/run/run/skip d=run/run/skip f=0/0/intact p=run/run/1/0'
+VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/skip/skip/skip/run/skip e=run/run/run/skip d=run/run/skip f=0/0/intact p=run/run/1/0'
 # (v) THE SPAN CANNOT GO VACUOUS: the digested runner span is non-empty and still holds the env -i line and the copy loop.
 VS_ARMS=$((VS_ARMS+1)); sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$VS_RUN" > "$WORK/vs.span"
 if [ "$(grep -c . "$WORK/vs.span")" -gt 50 ] && grep -qF 'env -i PATH=' "$WORK/vs.span" && grep -qF 'cp -Rp "$HR_FXDIR/."' "$WORK/vs.span" \
@@ -7598,9 +7623,8 @@ vs_mut() { # <name> <pool|runner> <must-move cell> <twin cell> then pairs <from>
   else bad "VS MUTANT $name SURVIVED: cell $cell still reads its want ($_g)"; fi
 }
 if [ "$VS_N" -ge 1 ]; then
-  # (b) the reader ignores the digest: serves any entry in the store and skips the body comparison.
-  vs_mut nodigest pool b f '    e="$store/$dig"' '    e="$(find "$store" -maxdepth 1 -type f ! -name ".tmp*" | head -1)"' \
-    '    cmp -s "$out/.vs.e" "$out/.vs.d" || continue' '    :'
+  # (b) the reader ignores the rows: serves any entry of the fixture, its coverage test dropped.
+  vs_mut nodigest pool b f 'm == NW[md SUBSEP fx] && own == NO[md SUBSEP fx] + 0' '1'
   # (c) the writer writes on failure (and on a missing sentinel): the store gains entries for the red runs.
   vs_mut writefail runner n f 'if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then ( hr_store_put ) 2>/dev/null; exit 0; fi' '( hr_store_put ) 2>/dev/null; if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then exit 0; fi'
   # (p) the project subdirectory dropped from the reader AND the runner's writer: C2, another project, then reads A's pass and skips.
@@ -7619,30 +7643,27 @@ if [ "$VS_N" -ge 1 ]; then
       else bad "VS MUTANT noproject SURVIVED the no-share cell (got '$_c')"; fi
     fi
   fi
-  # (g) RETIRED: the `wholefile` mutant (the ident hashing the WHOLE runner instead of its HR_SANDBOX span). The
-  # per-fixture key now carries the runner's whole-file sha for every declared fixture, so g3/g4 already read run
-  # under the shipped ident and that mutant moves no cell -- it can no longer be killed, and a mutant that cannot be
-  # killed is a check that cannot fire.
   # (d) the reader serves undeclared fixtures.
   vs_mut undeclared pool d a '    grep -qxF -- "$fx" "$out/.dfx" || continue' '    :'
-  # (g5) the READSET_KEYROWS span dropped from readset_vs_ident: a composer edit no longer moves `#universe`, so the
-  # pass recorded under the old composer is reused. Applied to the hook copy the world carries AND to the pool, so the
-  # writer and the reader still agree on every other cell (a pool-only edit would split their idents everywhere).
+  # (g5) readset_vs_ident drops the format version (the mutant keeps its name from the hashed-span identity the format
+  # replaced): a bumped READSET_VS_FORMAT no longer moves `#universe`, so the pass recorded under the old format is
+  # reused. Applied to the hook copy the world carries AND to the pool, so the writer and the reader still agree on
+  # every other cell (a pool-only edit would split their idents everywhere).
   VS_ARMS=$((VS_ARMS+1))
-  VS_IDA="sed -n '/^# READSET_KEYROWS_BEGIN\$/,/^# READSET_KEYROWS_END\$/p' \"\$hk\";"
+  VS_IDA='printf '"'"'%s f%s'"'"' "$(readset_span_sha "$rn" HR_SANDBOX)" "$f"'
   _a="$(grep -cF -- "$VS_IDA" "$HOOK")" || _a=0
   if [ "$_a" != 1 ]; then bad "VS MUTANT ident-drops-keyrows: anchor matched '$_a', not 1 -- DID NOT APPLY"
   else
-    MF="$VS_IDA" MT=':;' awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$HOOK" > "$WORK/vs.ik.hook.sh"
+    MF="$VS_IDA" MT='printf '"'"'%s f%s'"'"' "$(readset_span_sha "$rn" HR_SANDBOX)" "1"' awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$HOOK" > "$WORK/vs.ik.hook.sh"
     sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$WORK/vs.ik.hook.sh" > "$WORK/vs.ik.pool.sh"
     if cmp -s "$HOOK" "$WORK/vs.ik.hook.sh" || cmp -s "$VS_P1" "$WORK/vs.ik.pool.sh"; then bad "VS MUTANT ident-drops-keyrows: a copy is unchanged"
     else
       # The kill asserts every cell BEFORE g unmoved, so the cells before it (b, t) are driven with it; t is the twin.
       _g="$(VS_HOOK="$WORK/vs.ik.hook.sh" vs_world "$WORK/vs.ik.pool.sh" "$VS_X1" "$VS_RUN" "$WORK/vs.m.identkr" "$(vs_cells 'b t' g)" 2>/dev/null)"
       _c="$(vs_cellv "$_g" g)"
-      if [ "$_c" = "g=run/run/run/run/skip/skip" ] && [ "${_g%% g=*}" = "${VS_WANT%% g=*}" ]; then
+      if [ "$_c" = "g=run/skip/skip/skip/skip/skip" ] && [ "${_g%% g=*}" = "${VS_WANT%% g=*}" ]; then
         if vs_twin ident-drops-keyrows t "$_g"; then mutant_killed "${B_vs_world:-0}" ident-drops-keyrows "VS MUTANT ident-drops-keyrows is KILLED by cell g5 alone: $_c"; fi
-      else bad "VS MUTANT ident-drops-keyrows: want g=run/run/run/run/skip/skip and every earlier cell unmoved, got '$_g'"; fi
+      else bad "VS MUTANT ident-drops-keyrows: want g=run/skip/skip/skip/skip/skip and every earlier cell unmoved, got '$_g'"; fi
     fi
   fi
 fi
