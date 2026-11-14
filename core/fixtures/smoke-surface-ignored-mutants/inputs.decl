@@ -1,6 +1,5 @@
 # smoke-surface-ignored-mutants: sources smoke-surface-ignored/run.sh for its worlds and arms, so it declares that
 # fixture's inputs plus that file; each mutant is a copy of the validator inside a copy of the whole scripts directory.
-core/fixtures/smoke-surface-ignored-mutants/
 !core/fixtures/smoke-surface-ignored/run.sh
 core/scripts/
 !core/scripts/validate-handoff-evidence.sh

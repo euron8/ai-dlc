@@ -101,9 +101,7 @@ _tmp="${TMPDIR:-/tmp}"; _tmp="${_tmp%/}"
 WORK="$(mktemp -d "$_tmp/serial-worklist.XXXXXX")" || exit 2
 WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -412,6 +410,4 @@ fi
 echo "serial-remediation-worklist: $N_WL worklist run(s), $N_WORLD world(s) built"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "serial-remediation-worklist: PASS"; exit 0; fi
-echo "serial-remediation-worklist: $fails assertion(s) FAILED" >&2
-exit 1
+report_end serial-remediation-worklist

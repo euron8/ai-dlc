@@ -14,3 +14,4 @@ core/skills/ai-dlc/steps/_gate-procedures.md
 core/skills/ai-dlc/steps/gate-validation.md
 core/team-roles/gate-adjudicator.md
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

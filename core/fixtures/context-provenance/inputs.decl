@@ -4,3 +4,4 @@ core/hooks/ai-dlc-rules-floor.sh
 core/hooks/ai-dlc-usage-tokens.sh
 !core/hooks/ai-dlc-window.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

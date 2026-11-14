@@ -44,10 +44,8 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-asserted=0
-ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # need_base <flag> <mutant-name> and mutant_killed <flag> <mutant-name> <message> live in the
 # shared lib/mutant.sh: a mutant's kill condition is a value the UNMUTATED arm it guards would also
 # print if it were failing, so a mutant is scored only when that arm PASSED in this run (flag 1).
@@ -91,19 +89,19 @@ fi
 # Their definitions are lifted from lib/mutant.sh and the probe from THIS file into a copy; the
 # unmutated copy must exit 0 and each mutant must be refused by the probe.
 SELF_FILE="$HERE/$(basename "$0")"
-nb_lift() { # run.sh lib -> the ok()/bad() lines, need_base, mutant_killed and need_base_probe, then a probe call
-  printf 'set -uo pipefail\nfails=0\nasserted=0\n'
-  grep '^ok()  {' "$1"
-  grep '^bad() {' "$1"
+nb_lift() { # run.sh lib report-lib -> the ok()/bad() lines, need_base, mutant_killed and need_base_probe, then a probe call
+  printf 'set -uo pipefail\nfails=0\noks=0\n'
+  grep '^ok() {' "$3"
+  grep '^bad() {' "$3"
   awk '/^need_base\(\) \{$/ || /^mutant_killed\(\) \{$/ { p = 1 } p { print } p && /^\}$/ { p = 0 }' "$2"
   awk '/^need_base_probe\(\) \{$/ { p = 1 } p { print } p && /^\}$/ { p = 0 }' "$1"
   printf 'need_base_probe || exit 2\nexit 0\n'
 }
-nb_lift "$SELF_FILE" "$MUT_LIB" > "$WORK/nb-ctl.sh"
+nb_lift "$SELF_FILE" "$MUT_LIB" "$HERE/../lib/report.sh" > "$WORK/nb-ctl.sh"
 sed 's/^  \[ "\$1" = 1 \] && return 0$/  return 0/' "$WORK/nb-ctl.sh" > "$WORK/nb-mut.sh"
 sed 's/^  need_base[ ]"\$1" "\$2" || return 2$/  :/' "$WORK/nb-ctl.sh" > "$WORK/nb-mkmut.sh"
 if ! grep -q '^need_base_probe() {$' "$WORK/nb-ctl.sh" || ! grep -q '^mutant_killed() {$' "$WORK/nb-ctl.sh" \
-   || ! grep -q '^ok()  {' "$WORK/nb-ctl.sh" \
+   || ! grep -q '^ok() {' "$WORK/nb-ctl.sh" \
    || cmp -s "$WORK/nb-ctl.sh" "$WORK/nb-mut.sh" || cmp -s "$WORK/nb-ctl.sh" "$WORK/nb-mkmut.sh"; then
   bad "FIXTURE BROKEN: an NB mutant did not apply -- need_base, mutant_killed or the probe could not be lifted from $SELF_FILE and $MUT_LIB"
 else
@@ -2463,9 +2461,4 @@ rmut m5 's/^  if \[ "\$readable" = "false" \]; then$/  if [ "$readable" = "false
   "remediating V's cite increment also clears its unreadable role file"
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "check-22-spawn-ledger: PASS ($asserted assertions)"
-  exit 0
-fi
-echo "check-22-spawn-ledger: $fails of $asserted assertion(s) FAILED" >&2
-exit 1
+report_end check-22-spawn-ledger

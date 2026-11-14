@@ -108,9 +108,8 @@ done
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
-FAILS=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 . "$ROOT/core/fixtures/lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 VREL=scripts/validate-fixture-hygiene.sh
 IREL=scripts/validate-fixture-invocations.sh
@@ -407,6 +406,4 @@ h8row MH8R "$(printf 'want-only H8STALE\th8stl')" "h8stl" && mutant_killed "$([ 
 if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MH5.out" ] && [ -e "$WORK/c.MH1.out" ] && [ -e "$WORK/c.MH7.out" ] && [ -e "$WORK/c.MH8R.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"
 else bad "NM a plain run reached the matrix, or its per-push mutant drives did not run"; fi
 
-[ "$FAILS" = 0 ] || { echo "fixture-hygiene: $FAILS FAILED"; exit 1; }
-echo "fixture-hygiene: PASS"
-exit 0
+report_end fixture-hygiene

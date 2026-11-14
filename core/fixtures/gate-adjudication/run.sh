@@ -30,9 +30,7 @@ trap 'rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED $VALIDATOR"
 [ -f "$(dirname "$VALIDATOR")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED $(dirname "$VALIDATOR")/gate_adjudication.py"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
@@ -2031,6 +2029,4 @@ ga_clean_ledgers
 restore
 
 echo
-if [ "$fails" -eq 0 ]; then echo "gate-adjudication: PASS"; exit 0; fi
-echo "gate-adjudication: $fails assertion(s) FAILED" >&2
-exit 1
+report_end gate-adjudication

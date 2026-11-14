@@ -88,9 +88,7 @@ img_build() {
 OUT="$WORK/out.txt"
 ERR="$WORK/err.txt"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo; echo "stray-party-mode-provenance: FIXTURE BROKEN" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
 B_homes=0; B_region=0; B_s10c1=0; B_s10f1=0; B_s10h=0; B_s7b=0
@@ -607,6 +605,4 @@ cmp -s "$CONTROL_SCHEMA" "$NESTED/.claude/schemas/provenance-block.json" \
   || bad "the nested checkout's schema was left mutated; S7 and MUT-E were not testing what they claim"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "stray-party-mode-provenance: PASS"; exit 0; fi
-echo "stray-party-mode-provenance: $fails assertion(s) FAILED" >&2
-exit 1
+report_end stray-party-mode-provenance

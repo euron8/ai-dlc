@@ -33,9 +33,7 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # Base-pass flags for mutant_killed: each is set to 1 beside the ok of the control whose copy the mutants below are built from.
 B_sd=0; B_ur=0; B_pc=0; B_ls=0; B_lb=0
 B_a2=0; B_a5=0; B_a17=0; B_a19=0; B_a20=0; B_a21=0; B_a22=0; B_a23=0; B_a24=0; B_a25=0; B_a33=0; B_a34=0
@@ -1661,6 +1659,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "scope-confirmation: PASS"; exit 0; fi
-echo "scope-confirmation: $fails assertion(s) FAILED" >&2
-exit 1
+report_end scope-confirmation

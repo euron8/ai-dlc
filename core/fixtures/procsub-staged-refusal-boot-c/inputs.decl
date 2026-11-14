@@ -1,7 +1,9 @@
 # Shard driver: execs procsub-staged-refusal-boot/run.sh --group c, so it declares that fixture's inputs plus its directory.
-# lib rows derived from procsub-staged-refusal-boot/run.sh:2,173 (preamble.sh, mutant.sh).
+# lib rows derived from procsub-staged-refusal-boot/run.sh:2,222-224 (preamble.sh, report.sh, mutant.sh, matrix.sh).
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh
 core/skills/ai-dlc-update/reconcile/
 # reconcile-emit-report row derived from procsub-staged-refusal-boot/run.sh:147-148,530 (seed.sh only).
 core/fixtures/reconcile-emit-report/seed.sh

@@ -93,9 +93,7 @@ trap 'rm -rf "$WORK"' EXIT
 RDIR="$(dirname "$EMIT")"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/emit-report.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 echo "emit-report-refusal:"
 for _l in matrix.sh mutant.sh; do
   [ -f "$HERE/../lib/$_l" ] || { echo "FIXTURE ERROR: $HERE/../lib/$_l is absent; nothing was asserted" >&2; exit 2; }
@@ -776,6 +774,4 @@ RACE
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "emit-report-refusal: PASS"; exit 0; fi
-echo "emit-report-refusal: $fails assertion(s) FAILED" >&2
-exit 1
+report_end emit-report-refusal

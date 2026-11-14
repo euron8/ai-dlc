@@ -97,11 +97,9 @@ CORE_EXT_README="$(pick "$HERE/../../skills/ai-dlc/extensions/README.md" \
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/layer-crosswalk-home-work.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-made=0
 B_S0=0; B_S1=0; B_S2=0; B_REFUSE=0; B_PSCAF=0; B_PPRES=0; B_SSCAF=0; B_SSPRES=0; MUT_APPLY_READY=0
-ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # EXPECTED_ASSERTIONS is not bookkeeping. A sibling fixture lost an entire mutant to a missing
 # space in a helper call: `set -u` killed the `$( )` subshell, `if m="$( … )"` read that as a
@@ -718,7 +716,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
   if [ "$six_ok" = 0 ]; then
     bad "BL-978 six-arm worlds could not be built (partition md='$SIX_MD' txt='$SIX_TXT' other='$six_other', smoke dir '$SS_DIR') — every assertion and mutant below is unverified"
   else
-    six_made0="$made" # SIX_ASSERTIONS is bound below to what this block actually emits
+    six_made0="$((oks + fails))" # SIX_ASSERTIONS is bound below to what this block actually emits
     for W in G0 G1 GX GY GN GU GT; do six_run "$W" "$APPLY" base; done
     # The SECOND pull, on the consumer the first one left: every path is now present, so every arm takes
     # its `else` and asks the preserved question.
@@ -1141,7 +1139,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
     # THE SKIP'S DEDUCTION IS BOUND HERE. Only a consumer on the skip path subtracts SIX_ASSERTIONS, so a
     # wrong value would be seen nowhere else: every run that evaluates the block compares the number of
     # ok/bad lines it actually emitted against it. A match emits nothing, so the ledger is unchanged.
-    six_n=$((made - six_made0))
+    six_n=$((oks + fails - six_made0))
     [ "$six_n" = "$SIX_ASSERTIONS" ] \
       || bad "SIX_ASSERTIONS is $SIX_ASSERTIONS but the BL-978 block emitted $six_n assertion(s): a consumer that SKIPs it would deduct the wrong count"
   fi
@@ -1161,15 +1159,6 @@ esac
 # A consumer whose apply.sh predates scaffold_ignore_check SKIPs the BL-978 block by name, and its
 # assertions leave the expected count rather than reading as ran.
 [ "${SIX_SKIP:-0}" = 1 ] && EXPECTED_ASSERTIONS=$((EXPECTED_ASSERTIONS - SIX_ASSERTIONS))
-if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "  FAIL  assertion count: ran $made, expected $EXPECTED_ASSERTIONS — an arm did not execute, and one that never ran is silent, not green"
-  fails=$((fails+1))
-fi
-
 echo
-if [ "$fails" -eq 0 ]; then
-  [ "${SIX_SKIP:-0}" = 1 ] && { echo "layer-crosswalk-home: PASS ($made assertions; the BL-978 subject is not installed on this consumer yet)"; exit 0; }
-  echo "layer-crosswalk-home: PASS ($made assertions)"; exit 0
-else
-  echo "layer-crosswalk-home: FAIL ($fails of $made)"; exit 1
-fi
+[ "${SIX_SKIP:-0}" = 1 ] && echo "layer-crosswalk-home: the BL-978 subject is not installed on this consumer yet"
+report_end layer-crosswalk-home "$EXPECTED_ASSERTIONS"

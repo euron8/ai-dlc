@@ -9,3 +9,4 @@ core/hooks/ai-dlc-usage-tokens.sh
 core/scripts/sprint-status.sh
 core/schemas/sprint-status.json
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

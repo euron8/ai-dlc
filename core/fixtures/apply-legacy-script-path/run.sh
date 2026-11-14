@@ -121,9 +121,7 @@ printf '# LOCAL EDIT the consumer made while the old layout permitted it\n' \
 printf '#!/usr/bin/env bash\necho mine\n' > "$CONSUMER/scripts/audit-dormant-gates.sh"
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$CONSUMER/.claude/.ai-dlc-version"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 echo "apply-legacy-script-path:"
@@ -543,9 +541,4 @@ else
   if [ "$MX_RAN" -eq 0 ]; then ok "a plain run executed no matrix-only cell"; else bad "a plain run executed $MX_RAN matrix-only cell(s)"; fi
 fi
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "apply-legacy-script-path: PASS"
-  exit 0
-fi
-echo "apply-legacy-script-path: FAIL ($fails assertion(s))"
-exit 1
+report_end apply-legacy-script-path

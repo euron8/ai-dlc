@@ -2,3 +2,4 @@
 !core/hooks/ai-dlc-snapshot-edit-deny.sh
 # The same-run kill helper, sourced by run.sh.
 !core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

@@ -43,9 +43,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$ROOT" "$WORK"' EXIT
 FX="$ROOT/tests/fixtures"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_a1=0; B_a2=0
 
@@ -180,6 +178,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "fixture-drivability: PASS"; exit 0; fi
-echo "fixture-drivability: $fails assertion(s) FAILED" >&2
-exit 1
+report_end fixture-drivability

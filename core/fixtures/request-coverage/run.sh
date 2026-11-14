@@ -26,9 +26,7 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
 B_a1=0; B_a7=0; B_allow=0; B_legacy=0; B_nm=0
 
@@ -383,6 +381,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "request-coverage: PASS"; exit 0; fi
-echo "request-coverage: $fails assertion(s) FAILED" >&2
-exit 1
+report_end request-coverage

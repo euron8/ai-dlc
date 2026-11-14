@@ -4,3 +4,4 @@
 !core/scripts/report-propagation-fanout.sh
 # The shared mutant-kill helper the fixture sources (mutant_killed / need_base).
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

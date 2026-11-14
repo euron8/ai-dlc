@@ -13,3 +13,4 @@ core/hooks/ai-dlc-context-provenance.sh
 core/skills/ai-dlc/
 # Sourced by run.sh for mutant_killed (run.sh:62-64).
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

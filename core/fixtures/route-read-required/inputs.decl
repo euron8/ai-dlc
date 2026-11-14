@@ -1,1 +1,2 @@
 !core/hooks/ai-dlc-acknowledge.sh
+core/fixtures/lib/report.sh

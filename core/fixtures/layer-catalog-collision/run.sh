@@ -31,9 +31,7 @@ DRIFT="$(pick "${2:-}" "$HERE/../../../core/skills/ai-dlc-update/reconcile/layer
 ROOT="$(bash "$HERE/seed.sh")"
 trap 'rm -rf "$ROOT"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
@@ -448,6 +446,4 @@ mutant "restoring the kind: check scope silences ONLY the step-domain ids" \
 rm -rf "$MROOT"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "layer-catalog-collision: PASS"; exit 0; fi
-echo "layer-catalog-collision: $fails assertion(s) FAILED" >&2
-exit 1
+report_end layer-catalog-collision

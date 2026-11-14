@@ -196,9 +196,7 @@ if env PATH=/var/empty /bin/bash -c 'command -v jq' >/dev/null 2>&1; then
   echo "FIXTURE ERROR: jq resolves under PATH=/var/empty, so the NOJQ arm cannot reach the jq-absent path" >&2; exit 2
 fi
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -879,6 +877,4 @@ rmdir "$REAL/scripts/ai-dlc" "$REAL/scripts" "$REAL" "$SHIFT/scripts/ai-dlc" "$S
       "$NONE" "$MUT" "$WORK" 2>/dev/null
 
 echo
-if [ "$fails" -eq 0 ]; then echo "foreground-budget-deny: PASS"; exit 0; fi
-echo "foreground-budget-deny: $fails assertion(s) FAILED" >&2
-exit 1
+report_end foreground-budget-deny

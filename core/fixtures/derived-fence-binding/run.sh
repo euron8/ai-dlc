@@ -72,10 +72,8 @@ PRISTINE="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; e
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$PRISTINE" "$WORK"' EXIT
 
-fails=0
-asserted=0
-ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted + 1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); asserted=$((asserted + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 MUT_LIB="$D_ROOT/core/fixtures/lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
@@ -1410,13 +1408,4 @@ if ! tree_clean; then
   head -5 "$WORK/tree.diff" >&2
   exit 2
 fi
-if [ "$asserted" -ne "$EXPECTED" ]; then
-  printf '\nderived-fence-binding: FIXTURE BROKEN — %d assertions ran, %d were declared. An assertion that never ran reads exactly like one that passed.\n' "$asserted" "$EXPECTED"
-  exit 2
-fi
-if [ "$fails" -eq 0 ]; then
-  printf '\nderived-fence-binding: PASS (%d assertions)\n' "$asserted"
-  exit 0
-fi
-printf '\nderived-fence-binding: FAIL (%d of %d assertions)\n' "$fails" "$asserted"
-exit 1
+report_end derived-fence-binding "$EXPECTED"

@@ -6,3 +6,4 @@
 core/schemas/harness-origin.json
 !core/schemas/pause-routing.json
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

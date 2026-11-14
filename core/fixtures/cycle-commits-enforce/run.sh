@@ -72,9 +72,7 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
 B_carve=0; B_prior=0; B_rows=0; B_vac=0
 
@@ -557,9 +555,4 @@ if [ "$MATRIX" = 1 ]; then
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "cycle-commits-enforce: PASS"
-  exit 0
-fi
-echo "cycle-commits-enforce: FAIL ($fails assertion(s))"
-exit 1
+report_end cycle-commits-enforce

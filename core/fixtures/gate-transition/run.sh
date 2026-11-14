@@ -150,9 +150,7 @@ trap 'rm -rf "$T"' EXIT
 # PHYSICAL: the program prints ROOT-prefixed plan paths and the guard prefix-matches its project dir, so a
 # /var against /private/var split would turn JOIN's allow cell into a deny.
 T="$(cd "$T" && pwd -P)" || { echo "FIXTURE BROKEN: the scratch dir has no physical path" >&2; exit 2; }
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # world.sh reads WORK, DIR, ok and bad; it defines build_world, gitw and STORY.
 WORK="$T/work"; DIR="$HERE"; mkdir -p "$WORK"
 # shellcheck source=/dev/null
@@ -973,6 +971,4 @@ fi
 [ "$KILLS" = 22 ] && ok "MK all 22 mutants applied and scored" || bad "MK $KILLS of 22 mutants scored"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "gate-transition: PASS"; exit 0; fi
-echo "gate-transition: $fails assertion(s) FAILED" >&2
-exit 1
+report_end gate-transition

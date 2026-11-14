@@ -19,9 +19,7 @@ echo "HERMETIC-CONSUMED core/hooks/ai-dlc-subagent-probe.sh"
 # every row asserted below is the point this second declaration is consumed.
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-usage-tokens.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 chk() { [ "$2" = "$3" ] && ok "$1" || bad "$1 -- expected '$3', got '$2'"; }
 
 OUT="$PROJ/_bmad-output/subagent-context.jsonl"
@@ -536,6 +534,4 @@ chk "9f CONTROL: the directory holds final files (else the count below is vacuou
 chk "9f no .tmp.* file remains in .subagent-final after successful writes" "$(/usr/bin/find "$FDIR" "$RO/_bmad-output/.subagent-final" -name '.tmp.*' | wc -l | tr -d ' ')" "0"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "subagent-probe: PASS"; exit 0; fi
-echo "subagent-probe: $fails assertion(s) FAILED" >&2
-exit 1
+report_end subagent-probe

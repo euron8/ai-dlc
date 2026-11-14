@@ -1,4 +1,3 @@
-core/fixtures/story-evidence-scaffold/
 core/scripts/
 !core/scripts/validate-handoff-evidence.sh
 !core/scripts/sprint-status.sh

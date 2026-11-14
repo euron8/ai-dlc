@@ -5,7 +5,8 @@
 core/skills/ai-dlc-update/reconcile/
 !core/skills/ai-dlc-update/reconcile/emit-report.sh
 !core/scripts/validate-hook-registration.sh
-core/fixtures/reconcile-emit-report/
+core/fixtures/reconcile-emit-report/seed.sh
 core/fixtures/lib/matrix.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh

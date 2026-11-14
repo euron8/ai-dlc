@@ -56,10 +56,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 SELF_FILE="$HERE/$(basename "$0")"
 HOOK="$(cd "$HERE/../../.." && pwd)/.githooks/pre-push"
 
-fails=0
-asserts=0
-ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "prepush-ssh-keepalive: FIXTURE BROKEN" >&2; exit 2; }
 # The shared mutant-kill helper: a kill is emitted only through mutant_killed, behind a same-run base-pass flag.
 MUT_LIB="$HERE/../lib/mutant.sh"
@@ -447,9 +445,4 @@ done
 
 if [ "$BROKEN" -ne 0 ]; then echo "prepush-ssh-keepalive: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
-if [ "$fails" -ne 0 ]; then
-  printf 'prepush-ssh-keepalive: FAIL (%s of %s assertions)\n' "$fails" "$asserts"
-  exit 1
-fi
-printf 'prepush-ssh-keepalive: ok (%s assertions)\n' "$asserts"
-exit 0
+report_end prepush-ssh-keepalive

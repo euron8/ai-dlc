@@ -107,9 +107,7 @@ trap 'rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED $VALIDATOR"
 [ "$MATRIX" -eq 0 ] || echo "MATRIX-MODE on"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 skip() { printf '  SKIP  %s\n' "$1"; }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -1095,6 +1093,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "mutation-red-replay: PASS"; exit 0; fi
-echo "mutation-red-replay: $fails assertion(s) FAILED" >&2
-exit 1
+report_end mutation-red-replay

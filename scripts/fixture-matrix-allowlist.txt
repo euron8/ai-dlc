@@ -64,7 +64,6 @@ plan-shape	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 post-write-gates	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 preclassify-mode-bucket	no MUTANT-MATRIX block; floor: S1 run_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 process-rule-pins	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKC mutant_killed caller,MVA mutant-verdicts allowlist row
-procsub-staged-refusal-boot	no MUTANT-MATRIX block; floor: S1 mutbad(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 provenance-not-accessible	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller
 reconcile-blocking-list	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller,MVA mutant-verdicts allowlist row
 relocation-preclassify	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller

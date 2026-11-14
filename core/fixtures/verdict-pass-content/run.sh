@@ -60,9 +60,7 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/_bmad-output" || exit 2
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_vpcTok=0
 
@@ -157,9 +155,4 @@ else
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "verdict-pass-content: PASS"
-  exit 0
-fi
-echo "verdict-pass-content: FAIL ($fails assertion(s))"
-exit 1
+report_end verdict-pass-content

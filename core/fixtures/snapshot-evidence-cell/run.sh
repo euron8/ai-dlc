@@ -129,9 +129,7 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/_bmad-output/implementation-artifacts" || exit 2
 GATELOG="$WORK/_bmad-output/implementation-artifacts/gate-log.md"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # A mutant kill is emitted only through mutant_killed, behind a same-run base-pass flag (B_D for the
 # discovery battery, B_E for the selection battery), set when that battery's unmutated control ran.
 MUT_LIB="$HERE/../lib/mutant.sh"
@@ -1330,9 +1328,4 @@ else
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "snapshot-evidence-cell: PASS"
-  exit 0
-fi
-echo "snapshot-evidence-cell: FAIL ($fails assertion(s))"
-exit 1
+report_end snapshot-evidence-cell

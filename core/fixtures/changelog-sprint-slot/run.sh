@@ -54,9 +54,7 @@ GATEPROC="$SKILLDIR/steps/_gate-procedures.md"
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_a1=0; B_a3=0
 
@@ -247,9 +245,4 @@ else
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "changelog-sprint-slot: PASS"
-  exit 0
-fi
-echo "changelog-sprint-slot: FAIL ($fails assertion(s))"
-exit 1
+report_end changelog-sprint-slot

@@ -3,3 +3,4 @@ core/fixtures/lib/preamble.sh
 core/skills/ai-dlc-update/reconcile/
 !core/skills/ai-dlc-update/reconcile/apply.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

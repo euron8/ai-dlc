@@ -119,10 +119,8 @@ CONS="$ROOT/consumer"
 DOMAIN="$CONS/.claude/skills/ai-dlc/extensions/checks/domain.md"
 CROSSWALK="$CONS/.claude/skills/ai-dlc/extensions/README.md"
 
-fails=0
-made=0
-ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -739,12 +737,4 @@ got="$(vector "$ROOT/mutant-control.sh" "$CONS")"
   || bad "unmutated control: an UNEDITED copy reports [$got] — every kill above is suspect"
 
 # --- the assertion floor ------------------------------------------------------------------
-if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
-  printf '  FAIL  assertion count: ran %d, expected %d — an arm did not execute\n' "$made" "$EXPECTED_ASSERTIONS"
-  fails=$((fails+1))
-fi
-
-if [ "$fails" -eq 0 ]; then
-  printf 'PASS  (%d assertions)\n' "$made"; exit 0
-fi
-printf 'FAIL  (%d of %d assertions)\n' "$fails" "$made"; exit 1
+report_end layer-reference-resolution "$EXPECTED_ASSERTIONS"

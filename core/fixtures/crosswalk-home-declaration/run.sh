@@ -69,10 +69,8 @@ echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/crosswalk-home-decl.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-made=0
-ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # Kills route through mutant_killed behind B_ctl, set only by the passing unmutated control.
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
@@ -335,14 +333,5 @@ for _t in control:cli-pass m1:cli-refuse; do
 done
 
 # ---------------------------------------------------------------------------
-if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "  FAIL  assertion count: ran $made, expected $EXPECTED_ASSERTIONS — an arm did not execute, and one that never ran is silent, not green"
-  fails=$((fails+1))
-fi
-
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "crosswalk-home-declaration: PASS ($made assertions)"; exit 0
-else
-  echo "crosswalk-home-declaration: FAIL ($fails of $made)"; exit 1
-fi
+report_end crosswalk-home-declaration "$EXPECTED_ASSERTIONS"

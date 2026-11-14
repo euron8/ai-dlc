@@ -66,9 +66,7 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required" >&2; exi
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 # A PAUSED project with a live pipeline and no adversarial series: the tree that reaches
 # Check 3, which is the check under test. The sprint resolves and its slot exists, so
@@ -573,6 +571,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "updater-session-signals: PASS"; exit 0; fi
-echo "updater-session-signals: $fails assertion(s) FAILED" >&2
-exit 1
+report_end updater-session-signals

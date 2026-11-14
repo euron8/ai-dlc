@@ -8,3 +8,4 @@ core/team-roles/
 core/skills/ai-dlc/steps/_gate-procedures.md
 core/skills/ai-dlc/steps/implementation.md
 core/skills/ai-dlc/rule-bodies/rule-28.md
+core/fixtures/lib/report.sh

@@ -7,3 +7,4 @@ core/schemas/pause-routing.json
 # the verdict survives its absence; it is REQUIRED so the declaration cannot drop it unseen.
 !core/hooks/ai-dlc-context-provenance.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

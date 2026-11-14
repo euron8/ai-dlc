@@ -111,9 +111,7 @@ printf 'HERMETIC-CONSUMED %s\nHERMETIC-CONSUMED %s\nHERMETIC-CONSUMED %s\n' "$HO
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/inflight-row-hook.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -383,6 +381,4 @@ score m-substop2 hook '[ -n "$DL" ] && present "$DL" || exit 0' '[ -n "$DL" ] &&
 score m-wstatus waiter '  S_DONE=0; S_OUT=0' '  S_DONE=0; S_OUT=0; for _t in $TARGETS; do row_on_delivery "$_t"; done'
 score m-wnoera waiter 'rd_era_held || return 0' ':'
 
-if [ "$fails" -eq 0 ]; then echo "inflight-row-hook: PASS"; exit 0; fi
-echo "inflight-row-hook: $fails assertion(s) FAILED" >&2
-exit 1
+report_end inflight-row-hook

@@ -43094,3 +43094,54 @@ Provenance: batch 257, G4, from the push-cost audit's row 1 follow-up; id alloca
 
 verify: manual
 
+
+## BL-1073 — adversarial-shard-merge CS13 fails on a plain run under a trailing-slash TMPDIR (plain-vs-sandbox mismatch)
+
+**LANDED (v0.1126.0).** `core/fixtures/adversarial-shard-merge/lib.sh` squeezes trailing slashes off TMPDIR before it mints WORK, so a plain run and the hermetic sandbox build the same paths. On 4c3a82362 under TMPDIR=`/var/folders/.../T/`, the plain MX0 CS13/CS14 cells read `ok CS13` and `MATRIX MX0 CS13 ... verdict=GREEN` with the fix, and CS13 red with the unfixed lib.sh (3 of 3: the full run, the isolated cells, and the cells with `CLAUDE_CODE_SESSION_ID` removed).
+
+**DEFECT.** OPEN. Filed 2026-11-14. Owner: `core/fixtures/adversarial-shard-merge/lib.sh` (WORK's `mktemp -d`).
+
+macOS hands out TMPDIR with a trailing slash, so `mktemp -d "${TMPDIR:-/tmp}/$NAME.XXXXXX"` returned `.../T//adversarial-shard-merge.X`. The merge prints the path squeezed, so CS13's join on its REFUSED line (`grep -F "REFUSED: $d/2.md carries 0 provenance block opening(s)"`, run.sh:743-744) missed, CS13 failed, and MUTANT CSM-docfb was refused as FIXTURE BROKEN. `core/scripts/hermetic-run.sh` squeezes TMPDIR, so the hook's sandboxed runs were green; every plain `bash core/fixtures/adversarial-shard-merge/run.sh` from a session was red. Under `env -i` the cells read CS13 GREEN; an instrumented copy failed at run.sh:744; every input row of the fixture's last green key (29 files, 36 tools) was byte-identical to the tree. Variable: TMPDIR.
+
+content-seal sources the same lib.sh (it declares the whole directory, `core/fixtures/content-seal/inputs.decl:31`) and inherits the fix; read, not run, its merge arms join on shard tokens (`refused_clean "2.md $SS_TOKEN"`), never on a WORK path inside an output line. wait-beat-liveness neither uses nor declares this lib.
+
+Receipt: `verify: manual`. A runner-wired receipt would drive the fixture plain under a trailing-slash TMPDIR, which is the fixture's own run.
+
+Provenance: batch 257, G1 (BL-1059) baseline run; id allocated by the lead.
+
+verify: manual
+## BL-1072 — a hook pool worker at width 1 can hang with its watcher polling and no unit under it
+
+**LANDED (v0.1126.0).** The watcher in `pool_run` (`.githooks/pre-push`, mirrored in `core/git-hooks/pre-push`) checks its unit's recorded pid every poll with the builtin `kill -0 "$pid"` and exits when the unit is gone, with no sweep, as when the worker kills it after `wait`. bash reaps an exited async child at once, so the check fails as soon as the unit ends. No fork is added per poll. Probe: one trivial fixture at `AI_DLC_FIXTURE_JOBS=1` and `AI_DLC_POOL_STALL=5`, driven through the extracted FIXTURE_POOL block, with the worker's `wait` shadowed so that `wait "$pid"` reaps the unit and then blocks on the watcher (bf's end state: a worker with no unit, its only child the watcher). Base 4c3a82362 reads REFUSED (the watcher outlived its unit until the stall window). On both hooks, at 4c3a82362 and again rebased on 4dcea7dce, the fix reads ok and the fix with its code line removed (its comment kept) reads REFUSED; the unshadowed control reads ok on every copy. Residual: a unit pid reused within one poll keeps the watcher alive until the worker kills it or the stall window refuses.
+
+**DEFECT.** Filed 2026-11-14. Owner: `.githooks/pre-push`, the pool worker's watcher subshell in `pool_run` (`while :; do sleep 1; if ! kill -0 "$$"; ...; pool_walk ...`).
+
+Two hangs, one shape: a nested hook pool at width 1 whose watcher keeps polling (1/s `sleep 1`, `pool_walk`'s `ps -A`) with no unit process under the worker, until something outside stops it.
+- Traced: prepush-pool-depth under `derive-fixture-readsets.sh --list --tracer sandbox` (H3 WIP e634f23ab on a3ec19ebf, AI_DLC_FIXTURE_JOBS=9, PREPUSH_POOL_DEPTH=1). Inside its BL-924 receipt the barrier drive read `xargs.P` = 1 and `barrier.rej` `P=1 want=1 f=0`, with 0 flight files for 20 min while `pd_rendezvous` looped, and the stream showed a `/bin/ps` exec about once a second. Stopped by its task id.
+- Plain: readset-skip, `bash core/fixtures/readset-skip/run.sh </dev/null`, AI_DLC_FIXTURE_JOBS=9, at eb4fb38ce (ai-dlc-bf). Output stopped after "ok CK MUTANT owndir is KILLED by (d)"; 47 min hung; tree xargs -P 1 > worker bash -c > watcher bash -c in its own pgid > `sleep 1`, no fixture process.
+Not caused by the deriver's depth rule: prepush-pool-depth passes 77/77 run plainly at PREPUSH_POOL_DEPTH=1, and passes traced at the next WIP. Intermittent; not reproduced on demand.
+
+Diagnosis: the watcher's only exits were its worker's death (`kill -0 "$$"`) and a refusal at POOL_STALL polls; none was keyed on its unit. A worker left blocked with no unit under it, its only child the watcher, therefore held its slot until POOL_STALL, which readset-skip sets to 99999. How the worker's `wait "$pid"` lost the unit was not established: 200 iterations of the same job shape and a run under an ignored SIGCHLD both finished. The traced capture is consistent with this shape (a `ps` a second with no unit started) but its watcher was never seen by pid. Not measured: the worker's exit code after such a release, which may not be the unit's.
+
+Provenance: batch 257, H3 (ai-dlc-9e) trace a1 and G2 (ai-dlc-bf)'s plain run; fast track K1 (ai-dlc-a4); id allocated by the lead.
+
+verify: manual
+## BL-1051 — fixtures declare whole hooks and whole directories in `inputs.decl`, so a small edit anywhere in them re-runs every declarer
+
+**LANDED (v0.1126.0).** 15 declarations narrowed to their traced read sets on base `4dcea7dce`, with `docs/inputs-decl-whole-rows.tsv` rewritten to match: 249 rows to 230, 19 deleted, 81 reclassed `whole`, none added (`scripts/invalidation-guard.sh --ratchet 4dcea7dce`: none new, none stale). No narrowed fixture re-runs: BL-1049's subset match reuses its pass. Any declaration edit, these included, still re-runs the 20 declarers of `core/` and `core/fixtures/` (BL-1071).
+- Narrowed: 8 own-directory lines (the runner copies a fixture's own directory anyway); 5 sibling-fixture directory lines, each now the 1 or 2 files the fixture reads; `core/hooks/` and `core/session-driver/` in `procsub-staged-refusal-b` and `-c`; and the unread `core/git-hooks/pre-push` line in `self-update-gate` and `self-update-gate-d` (shards a and d write synthetic hooks; shards b and c keep the line `!`).
+- Kept, each on evidence from its own trace: a directory line the kernel reports listed (`file-read-data` on the directory), or one named by a real-tree `git ls-files`/`ls-tree`; a directory line with a negative lookup under it (a layout probe that only the listing row re-runs); a directory line whose narrowing would add a narrower directory line (the ratchet's r3 refuses any row its base copy lacks); every `!` line (its HERMETIC-CONSUMED sentinel, and J6's `invocations.decl` row); and a hook line when either hook spelling is read. No `core/`, `core/scripts/`, `scripts/` or `core/skills/ai-dlc-update/reconcile/` line narrowed. Of the surviving lines: `core/` 17 (6 listed in the trace, 8 no accepted trace, 2 `VERSION`, 1 reverted); `core/scripts/` 14 (8 listed, 3 `!`, 1 negative lookup, 1 no accepted trace, 1 reverted); `scripts/` 16 (7 listed, 6 no accepted trace, 2 `VERSION`, 1 reverted); the reconcile directory 39 (23 listed, 12 `!`, 1 held, 1 no accepted trace, 2 reverted); whole-hook lines 36 (7 read in the trace, 11 `!`, 16 no accepted trace, 2 `VERSION`).
+- Not narrowed: 6 fixtures declaring `VERSION` without `+` (BL-1049's `.dfull` guard would re-run them); `route-defect-classification`, whose only line was its own directory (an empty declaration refuses, exit 2); `procsub-staged-refusal`, whose declaration sits under `pregate-self-check`'s directory line, which reads no declaration (an edit would re-run it, BL-1071); `procsub-staged-refusal-boot-b` and `-c`, left wide because H4 rewrites the `procsub-staged-refusal-boot/run.sh` they read, to be traced after H4 lands; `validator-arm-selection-b`, whose trace predates B2's edit to the `.githooks/pre-push` it reads; `layer-crosswalk-home`, held because its full-tree trace read a path the old sandbox never held; and 19 with no accepted trace (whole-hook drivers that exit non-zero under the tracer, and fixtures whose own report volume overflows `log stream`), owed to BL-1068.
+
+**DEFECT.** OPEN. Filed 2026-11-14. Owner: `core/fixtures/*/inputs.decl`.
+
+Counted at 47c2d9e31 (`git grep -l -E '^[+!]*<path>' 47c2d9e31 -- 'core/fixtures/*/inputs.decl'`, control 0): `core/git-hooks/pre-push` 22, `.githooks/pre-push` 15, `core/` 17, `core/scripts/` 14, `scripts/` 16 declarers. A whole-file or whole-directory key row moves on any edit under it, so each such edit re-ran every declarer whether or not it read the edited path.
+
+Method: `bash core/scripts/derive-fixture-readsets.sh --list "<names>" --tracer sandbox` in standalone `file://` clones with each target's `inputs.decl` removed and a `.undeclarable` added (I74(e) holds the validators the fixtures run green), at the base each trace's inputs last moved: `93cae636f`, `6d3248518` (tree equal to `a3ec19ebf`), `4c3a82362`. A fixture is narrowed only from an accepted trace taken at or after its inputs' last move. Every narrowed fixture's `hermetic-run.sh --key-only` rows, less its own `inputs.decl` row, are a subset of its rows at the base, and every line keeps a key row.
+
+Receipt: the `verify:` line asserts the whole-rows list holds no more than 230 rows and `self-update-gate` declares no hook.
+
+Provenance: batch 257, F19; id allocated by the lead.
+
+verify: sh L=docs/inputs-decl-whole-rows.tsv; [ -f "$L" ] || exit 9; n="$(grep -cv '^#' "$L")" || n=0; [ "$n" -gt 0 ] && [ "$n" -le 230 ] && ! grep -qE '^[!+]*(core/git-hooks|\.githooks)/pre-push$' core/fixtures/self-update-gate/inputs.decl
+

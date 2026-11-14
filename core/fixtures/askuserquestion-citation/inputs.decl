@@ -10,3 +10,4 @@ core/fixtures/lib/mutant.sh
 !core/scripts/validate-escalation-resolution.sh
 !core/scripts/validate-gate-adjudication.sh
 !core/scripts/validate-adversarial-convergence.sh
+core/fixtures/lib/report.sh

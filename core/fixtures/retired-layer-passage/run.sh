@@ -54,9 +54,7 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -549,6 +547,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "retired-layer-passage: PASS"; exit 0; fi
-echo "retired-layer-passage: $fails assertion(s) FAILED" >&2
-exit 1
+report_end retired-layer-passage

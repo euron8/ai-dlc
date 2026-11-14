@@ -13,3 +13,4 @@
 # graph-skeleton.md and swallowed-row.md sit in the fixture's own directory, copied with it.
 # The same-run kill helper, sourced by run.sh.
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

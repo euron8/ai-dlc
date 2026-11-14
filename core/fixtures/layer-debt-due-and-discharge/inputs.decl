@@ -3,3 +3,4 @@
 !core/scripts/audit-layer-debt.sh
 # run.sh sources the shared mutant-kill helper, so the sandbox must carry it.
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

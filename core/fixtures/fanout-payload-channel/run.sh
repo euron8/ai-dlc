@@ -132,9 +132,8 @@ M6_ROOT="$WORK_P/tmproot-m6"
 mkdir -p "$A5_ROOT" "$M6_ROOT" && [ -d "$A5_ROOT" ] && [ -d "$M6_ROOT" ] \
   || { echo "FIXTURE ERROR: cannot create the private temp roots under $WORK_P" >&2; exit 2; }
 
-fails=0
-ok()     { printf '  ok    %s\n' "$1"; }
-bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { printf '  FIXTURE BROKEN  %s\n' "$1" >&2; exit 2; }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -525,9 +524,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "PASS  fanout-payload-channel"
-  exit 0
-fi
-echo "FAIL  fanout-payload-channel ($fails)"
-exit 1
+report_end fanout-payload-channel

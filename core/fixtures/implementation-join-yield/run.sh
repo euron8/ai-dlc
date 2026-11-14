@@ -64,9 +64,7 @@ STOP_HOOK="$(pick "$HERE/../../hooks/ai-dlc-continue.sh" \
 _HD="$(cd "$(dirname "$STOP_HOOK")" && pwd)"; echo "HERMETIC-CONSUMED $_HD/ai-dlc-continue.sh"
 [ -f "$_HD/ai-dlc-handoff-pending.sh" ] && echo "HERMETIC-CONSUMED $_HD/ai-dlc-handoff-pending.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_2p=0
 
@@ -654,6 +652,4 @@ done
 rm -rf "$MUT_ROOT" "$JOBS"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "implementation-join-yield: PASS"; exit 0; fi
-echo "implementation-join-yield: $fails assertion(s) FAILED" >&2
-exit 1
+report_end implementation-join-yield

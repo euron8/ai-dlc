@@ -72,10 +72,8 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-asserted=0
-ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_mrsBattery=0
 
@@ -324,13 +322,4 @@ mutate failwins \
 
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 10 ]; then
-  echo "mandatory-rules-skip-accounting: FIXTURE ERROR — ran $asserted assertions, expected 10" >&2
-  exit 2
-fi
-if [ "$fails" -eq 0 ]; then
-  echo "mandatory-rules-skip-accounting: PASS ($asserted assertions)"
-  exit 0
-fi
-echo "mandatory-rules-skip-accounting: FAIL ($fails of $asserted assertion(s))" >&2
-exit 1
+report_end mandatory-rules-skip-accounting 10

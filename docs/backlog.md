@@ -3050,6 +3050,8 @@ Owed (the migration, not done in this release by the lead's brief):
 - Reconcile, 109 fixtures: their `ok`/`bad` bodies also count `made`/`asserts`, set `rc`, or write to stderr. Map each counter onto `oks`/`fails` and `report_end <name> <expected>`, then drop the row.
 - Rewrite, 4 fixtures run a hook by hand (`agent-definition-render`, `consumer-suite-pool`, `prepush-worktree-env-scrub`, `self-update-gate`): move each drive onto `hook_drive` and re-measure `invocations.decl` by a counted run. The audit's "37 drive() fixtures" counted every function named `drive`, most of which start a validator; H11 reads 5 run.sh that run a hook, and `suite-dispatch-order` is migrated here.
 - World adoption is not bound by an arm: 66 fixtures run `git init` by hand. An arm on it needs its false-positive set measured first.
+- Migrated in G3 batch 1 (v0.1126.0): 58 mechanical fixtures (their `:report` rows dropped; names in the commit). `dispatch-model-guard` matches the mechanical pair but redefines `bad()` for its mutant count, so it needs a reconcile migration; it stays G3's. `escalation-delivery` and `process-rule-pins` run their own run.sh from a copy where lib/ does not resolve; they stay G3's for a later batch.
+- Migrated in H5 batch 1: 27 reconcile fixtures (their `:report` rows dropped from `fixture-contract-allowlist.txt`): architecture-index-cell-escaping, artifact-path-conformance, artifact-path-migration, audit-anchors-schema, census-hermetic-coverage, check-22-spawn-ledger, check5-anchor-base, crosswalk-home-declaration, derived-fence-binding, fanout-payload-channel, fixture-hygiene, fixture-inprocess, fixture-invocation-budget, fold-architect-ledger-join, gate-resume, layer-crosswalk-home, layer-debt-due-and-discharge, layer-debt-ledger, layer-extends-grain, layer-reference-resolution, layer-retired-id-crosswalk, mandatory-rules-skip-accounting, mandatory-rules-snapshot-position, mutant-kills-selfprobe, post-write-gates, pregate-self-check, prepush-ssh-keepalive.
 
 **PARTIAL (v0.1125.0; batch 257, G3 move).** The allowlist moved from `scripts/` to the repository root as `fixture-contract-allowlist.txt`, so dropping one of its rows no longer reruns the 16 fixtures that declare `scripts/` whole (`legacy` rows of `docs/inputs-decl-whole-rows.tsv`). No fixture reads the real allowlist; the validator reads its copy in each probe world. No row added or dropped. Migration owners by name: G3 the 124 mechanical rows and the 4 `:hook-drive` fixtures; H5 the 100 reconcile rows; G1 the 7 matrix fixtures it rewrites.
 
@@ -3074,6 +3076,29 @@ Owed: records that trees with different content cannot overwrite. For example, k
 Receipt: `verify: manual`. A runner-wired receipt would drive two scratch trees through the pk span, which is the fixture's job and is owed with the fix.
 
 Provenance: batch 257, F22's prefix runs; id allocated by the lead.
+
+verify: manual
+
+## BL-1059 — the heaviest fixtures pay for arms and worlds a narrower drive would answer, and one mutant battery re-runs a whole key per mutant
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: the matrix fixtures under `core/fixtures/` named below.
+
+procsub-staged-refusal-boot's plain run scores every mutant against every arm of its key, not its deciding arm and one twin. adversarial-shard-merge, backlog-receipt-binding, owed-derivations, apply-drift-refile, apply-restamp-worklist and review-shard-merge already score decides plus one twin on a plain run; their cost is in arms and worlds (fixture-mutants clauses 1, 4 and 5).
+
+**Progress (batch 257; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** Two whole-key batteries are narrowed, each kill set identical old against new by name:
+
+- procsub-staged-refusal-boot (+b, +c): its 43 mutants score their deciding arm and one twin; counted starts 3041 to 2191 (1197/763/1081 to 734/673/784).
+- story-evidence-scaffold: the five DAR-N mutants each re-scored all 28 `DARN_WORLDS`. Each now runs the worlds its own want moves plus the first world it holds (`darn_sel`), and a kill must also differ from the control there; the 28-world vector is the `DAR_FULL=1` authoring check. 140 world runs per push become 28. Counted starts are unchanged (42; the subjects run in process, so the saving is seconds, not starts): the DAR-N mutant segment of a timestamped plain run read 177 s of 691 s.
+
+The premise that every heavy fixture re-runs whole worlds per mutant did not hold: no push path passes `--matrix` (0 hits in `.githooks/pre-push`, `core/scripts/hermetic-run.sh` and `scripts/validate-fixture-invocations.sh`), and each fixture below scores decides plus one twin on a plain run. What remains is arm and world cost, owed under clauses 1, 4 and 5. Plain wall seconds on 4c3a82362, five runs in parallel at load average 36-43, so loaded and not comparable to a pool figure; counted starts from each `invocations.decl`:
+
+- adversarial-shard-merge: 2437 s, 3125 starts (its worlds already build once through `wc_get`). A timestamped plain run at load 7-23 read 1143 s: 364 s on mutant lines (deciding arm and twin already), 779 s over 208 arm lines, about 4 s each, the largest 30 s.
+- backlog-receipt-binding: 2210 s, 2851 starts; 2110 are `scripts/validate-backlog-receipts.sh`, whose `--score-one` workers start one bash per receipt per in-process drive (119 drives).
+- owed-derivations: 909 s, 1961 starts; 267 s in the timestamped run, released to G3.
+- apply-drift-refile: 913 s, 877 starts; 283 s in the timestamped run, released to H5.
+- apply-restamp-worklist (+b, +c): 157 / 288 / 149 s, pool figures from `.git/ai-dlc-fixture-durations.last` (the 23:06 run). review-shard-merge (+b): 752 / 651 s, only in the older, heavier-load durations record.
+
+Receipt: `verify: manual`. The evidence is each fixture's counted run, old against new, by name.
 
 verify: manual
 
@@ -3131,3 +3156,21 @@ Receipt: `verify: manual`. Reproducing needs a concurrent load, which a receipt 
 Provenance: batch 257, G3's hook-fixture run before READY; id allocated by the lead.
 
 verify: manual
+
+## BL-1071 — the composer keys another fixture's `inputs.decl` through any covering directory line, so every declaration edit re-runs the `core/` and `core/fixtures/` declarers
+
+**DEFECT.** OPEN. Filed 2026-11-14. Owner: `.githooks/pre-push` and `core/git-hooks/pre-push`, `readset_decl_keys` in the READSET_KEYROWS span.
+
+`readset_decl_keys` exempts only another fixture's `invocations.decl` from keying through a declared directory (the `dk` test, `.githooks/pre-push:2423` at `4c3a82362`). Another fixture's `inputs.decl` is keyed for every fixture whose directory line covers it, so any declaration edit re-selects all 20 declarers of `core/` or `core/fixtures/`. Measured on BL-1051's accepted traces, against the 20:
+- 11 genuinely read other fixtures' declarations (179 to 277 of them, through validators that scan every decl): `derived-fence-binding`, `enforcement-map-derivations`, `enforcement-map-sites`, `-c`, `-d`, `install-scaffold-ignored`, `schema-install-fallback`, `shipped-rule-version-floor`, `validator-arm-selection`, `-b`, `validator-fork-budget`.
+- 1 reads none: `vocabulary-index`.
+- 8 have no accepted trace: `consumer-machinery-home`, `crosswalk-home-declaration`, `enforcement-map-sites-b`, `fixture-git-env-seam`, `hermetic-consumption`, `layer-contract-conformance`, `-b`, `ledger-status-vocabulary`.
+
+Owed: the genuine readers declare the declarations they scan by name or by a glob row over `core/fixtures/*/inputs.decl`, and the directory-line keying of another fixture's `inputs.decl` is then exempted the way `invocations.decl` already is. A probe: a declaration edit selects the declarers of that glob and no `core/` declarer that reads no declaration.
+
+Receipt: `verify: manual`. The fix moves the READSET_KEYROWS span, so its own fixture arm is owed with it.
+
+Provenance: batch 257, F19's narrowing; id allocated by the lead.
+
+verify: manual
+

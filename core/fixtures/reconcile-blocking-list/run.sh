@@ -15,9 +15,7 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
 B_3b=0; B_3c=0; B_degctl=0
 
@@ -462,6 +460,4 @@ fi
 rm -rf "$MW"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "reconcile-blocking-list: PASS"; exit 0; fi
-echo "reconcile-blocking-list: $fails assertion(s) FAILED" >&2
-exit 1
+report_end reconcile-blocking-list

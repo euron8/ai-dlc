@@ -2,3 +2,4 @@ core/scripts/partition-document.sh
 core/fixtures/lib/mutant.sh
 core/scripts/merge-adversarial-shards.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh

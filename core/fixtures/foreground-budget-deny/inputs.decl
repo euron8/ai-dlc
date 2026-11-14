@@ -2,3 +2,4 @@
 !core/hooks/ai-dlc-foreground-budget.sh
 !core/scripts/validate-steering-budget.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

@@ -5,3 +5,4 @@
 !core/scripts/validate-provenance-block.sh
 core/schemas/provenance-block.json
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

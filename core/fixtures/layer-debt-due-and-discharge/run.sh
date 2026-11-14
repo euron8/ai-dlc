@@ -51,9 +51,8 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
 EXPECTED_ASSERTIONS=76
-fails=0; made=0
-ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 show() { sed 's/^/        /' <<<"$1"; }
@@ -1007,9 +1006,4 @@ score MK_substr "$(mkmut mk_substr "$ANCHOR_KIND" '                if d["id"] in
   present 'the register join'
 
 echo ""
-if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "layer-debt-due-and-discharge: FAIL — $made assertions ran, $EXPECTED_ASSERTIONS were written. One did not execute at all, which is not the same as one that passed."
-  exit 1
-fi
-if [ "$fails" -eq 0 ]; then echo "layer-debt-due-and-discharge: PASS ($made assertions)"; exit 0; fi
-echo "layer-debt-due-and-discharge: FAIL ($fails of $made)"; exit 1
+report_end layer-debt-due-and-discharge "$EXPECTED_ASSERTIONS"

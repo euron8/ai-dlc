@@ -68,9 +68,7 @@ fi
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_trim=0; B_ctl=0
 chk() { [ "$2" = "$3" ] && ok "$1" || bad "$1 -- expected '$3', got '$2'"; }
@@ -545,6 +543,4 @@ case "$LIB" in /*) ok "the library resolved to an ABSOLUTE path (cwd cannot chan
   || bad "  a resolved path is unreadable from another cwd; this fixture answers differently depending on where it is run"
 
 echo
-if [ "$fails" -eq 0 ]; then echo "context-provenance: PASS"; exit 0; fi
-echo "context-provenance: $fails assertion(s) FAILED" >&2
-exit 1
+report_end context-provenance

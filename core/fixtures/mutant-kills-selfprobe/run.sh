@@ -86,9 +86,8 @@ done
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
-FAILS=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
+# shellcheck source=/dev/null
+. "$ROOT/core/fixtures/lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 . "$ROOT/core/fixtures/lib/mutant.sh"
 
 # --- the world ------------------------------------------------------------------------------------------------------
@@ -231,6 +230,4 @@ if verdict_c MM4R; then bad "MM4R SURVIVED: C still holds"; elif refused MM4R; t
 if verdict_c MM4A; then bad "MM4A SURVIVED: C still holds"; elif refused MM4A; then mutant_killed "${B_C:-0}" MM4A "MM4A (m4's arm default is M7): the M4 probe case added refuses, exit 2"; else bad "MM4A: C fails but not by its self-probe refusal $(why MM4A)"; fi
 if verdict_c MM4P; then bad "MM4P SURVIVED: C still holds"; elif refused MM4P; then mutant_killed "${B_C:-0}" MM4P "MM4P (m4 hands m4cmp a fixed M4): the M4 probe case m7added refuses, exit 2"; else bad "MM4P: C fails but not by its self-probe refusal $(why MM4P)"; fi
 
-[ "$FAILS" = 0 ] || { echo "mutant-kills-selfprobe: $FAILS FAILED"; exit 1; }
-echo "mutant-kills-selfprobe: PASS"
-exit 0
+report_end mutant-kills-selfprobe

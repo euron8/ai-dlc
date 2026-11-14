@@ -67,9 +67,7 @@ echo "HERMETIC-CONSUMED $(cd "$SRCDIR" && pwd -P)/partition-document.sh"
 _tmp="${TMPDIR:-/tmp}"; _tmp="${_tmp%/}"
 WORK="$(mktemp -d "$_tmp/subject-partition.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -366,6 +364,4 @@ if [ "$MATRIX" -eq 0 ]; then
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "subject-partition: PASS"; exit 0; fi
-echo "subject-partition: $fails assertion(s) FAILED" >&2
-exit 1
+report_end subject-partition
