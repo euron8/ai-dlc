@@ -1427,9 +1427,19 @@ readset_git_exec_path() {
 # READSET_TOOLS_END
 # THE SHARED VERDICT STORE'S THREE FUNCTIONS, ONE COPY. The hook's reader and hermetic-run.sh's writer
 # (the store's ONLY writer) both source this span -- the runner at top level, the way it sources
-# READSET_TOOLS -- so the store path, the ident and the digest input cannot drift between them. The span
-# is hashed into `#universe`, so an entry written under one implementation is not reused under the next.
+# READSET_TOOLS -- so the store path, the ident and the digest input cannot drift between them.
+# THE IDENTITY IS A FORMAT VERSION, NOT A HASH OF CODE. `#universe` is `f<READSET_VS_FORMAT>` and `#runner` the
+# comment-stripped sha of the runner's HR_SANDBOX span (readset_span_sha), so a comment edit voids no stored pass.
+# READSET_VS_FORMAT changes only when what a stored entry MEANS changes. Every semantic sha of the four READSET_*
+# spans (scripts/validate-verdict-identity.sh: READSET_UNIVERSE, READSET_TOOLS, READSET_VS and READSET_KEYROWS,
+# comment and blank lines dropped) is pinned on one row, `# VS-IDENTITY <format> <sha> <reason>`. The distribution
+# hook's pre-suite step `verdict-store identity` fails a push whose current sha has no row, or whose row names a
+# format other than READSET_VS_FORMAT. A code change in those spans adds a row, in both hooks: under the CURRENT format
+# when stored entries keep their meaning (they stay valid), or under a bumped READSET_VS_FORMAT when they do not (every
+# stored verdict re-runs).
+# VS-IDENTITY 1 c77c527c060e872009059fb45f79ef173d35fba6440ccee55cd8cfa1a2e38a3c the format-versioned identity (BL-1049); the runner keyed by its span, the subset reader
 # READSET_VS_BEGIN
+READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
   local base="" root
   if [ -n "${AI_DLC_VERDICT_STORE:-}" ]; then base="$AI_DLC_VERDICT_STORE"
@@ -1440,11 +1450,12 @@ readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHI
   [ "${#root}" -eq 40 ] || return 0
   printf '%s/%s' "$base" "$root"
 }
-readset_vs_ident() { # <hook> <runner>: prints "<runner span sha> <hook spans sha>"; fails when either file is absent
-  local hk="$1" rn="$2"
+readset_vs_ident() { # <hook> <runner>: prints "<runner span id> f<the hook's READSET_VS_FORMAT>"; fails when either file
+  local hk="$1" rn="$2" f             # is absent or the hook does not carry exactly one format line
   [ -f "$hk" ] && [ -f "$rn" ] || return 1
-  printf '%s %s' "$(sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$rn" | shasum -a 256 | cut -d' ' -f1)" \
-    "$( { sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$hk"; sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$hk"; sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$hk"; sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$hk"; } | shasum -a 256 | cut -d' ' -f1)"
+  f="$(sed -n 's/^READSET_VS_FORMAT=\([0-9][0-9]*\)$/\1/p' "$hk")"
+  case "$f" in ''|*[!0-9]*) return 1 ;; esac
+  printf '%s f%s' "$(readset_span_sha "$rn" HR_SANDBOX)" "$f"
 }
 readset_vs_input() { # <fx> <ident> <rows file> [<project root>, default .]: the digest input
   printf '#fixture %s\n#runner %s\n#universe %s\n' "$1" "${2%% *}" "${2#* }"
@@ -1466,8 +1477,10 @@ readset_vs_inproc() { # <fx> <project root>
 # READSET_VS_END
 # A DECLARED FIXTURE'S KEY ROWS, ONE COMPOSER. This hook and hermetic-run.sh both source this span -- the runner at
 # top level, the way it sources READSET_TOOLS -- so the declaration is parsed, and the key rows composed, by ONE
-# implementation: there is no second composer to hold equal by a census. The span is hashed into `#universe`, so a
-# verdict-store entry written under one composer is never reused under the next.
+# implementation: there is no second composer to hold equal by a census. A code change here bumps READSET_VS_FORMAT
+# (the `verdict-store identity` step), so a verdict-store entry written under one composer is never reused under the next.
+#   readset_span_sha  <file> <NAME>: the sha256 of the `# NAME_BEGIN`..`# NAME_END` span with every comment line (first
+#     non-blank character `#`) and blank line dropped, so a comment edit moves no key and no identity.
 #   readset_decl_parse  ONE fixture's inputs.decl and tools.decl -> rows `<fx>\t<kind>\t...`:
 #     N                           the fixture is declared (always the first row)
 #     F|D <path> <req> <declared> a declared file / directory, mapped to the consumer layout where the
@@ -1497,10 +1510,20 @@ readset_vs_inproc() { # <fx> <project root>
 #     under the fixture's own directory, each T tool, and each P row (a `+` file). A declared path absent from
 #     <now> -- an excluded top, a git-ignored file -- has NO row on either side unless it is declared `+`.
 #     THE RUNNER ROW: every fixture is keyed on hermetic-run.sh (scripts/ai-dlc/ here, core/scripts/ in the
-#     distribution) whether or not its inputs.decl names it, with the runner's WHOLE-FILE manifest hash, because
-#     every declared fixture runs through it -- so a runner change moves every declared key and no fixture skips on
-#     a pass taken under the old runner. Only a runner path present in <now> is keyed, exactly as for any declared file.
+#     distribution) whether or not its inputs.decl names it, under the key `<runner path>#HR_SANDBOX` with the sha256
+#     of the runner's HR_SANDBOX span (readset_span_sha, the value readset_vs_ident digests as `#runner`), and under
+#     `<runner path>#HR_EXIT` with readset_tail_sha of the runner (its exit mapping, after its last function), because every declared
+#     fixture runs through that span -- an edit inside it moves every declared key, an edit outside it (store code,
+#     the header) moves none. Only a runner path present in <now> is keyed, read under hermetic-run.sh's HR_ROOT when
+#     it is the caller (it keys a root other than its cwd), else under the cwd. A fixture that declares the runner by
+#     name is also keyed on its whole-file hash, as for any declared file.
 # READSET_KEYROWS_BEGIN
+readset_span_sha() { # <file> <NAME>
+  sed -n "/^# ${2}_BEGIN\$/,/^# ${2}_END\$/p" "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
+}
+readset_tail_sha() { # <file>: the top-level lines after its last line that is exactly `}`, comments and blanks dropped
+  awk '{ a[NR] = $0 } $0 == "}" { e = NR } END { for (i = e + 1; i <= NR; i++) print a[i] }' "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
+}
 readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix>
   local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" t k p rq dp name found seen="|"
   printf '%s\tN\n' "$fx"
@@ -1608,9 +1631,14 @@ readset_decl_tool_hashes() { # <parse rows> <tool hash file, appended>
     | awk '{ p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" $1 }' >> "$2"
 }
 readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture root, with its trailing />
-  RK_L="$2" RK_P="$3" RK_T="$4" awk -F'\t' -v root="$5" '
+  local rk_r="" rk_p rk_d="${HR_ROOT:-.}"
+  for rk_p in core/scripts/hermetic-run.sh scripts/ai-dlc/hermetic-run.sh; do
+    [ -f "$rk_d/$rk_p" ] && rk_r="$rk_r$rk_p $(readset_span_sha "$rk_d/$rk_p" HR_SANDBOX) $(readset_tail_sha "$rk_d/$rk_p");"
+  done
+  RK_R="$rk_r" RK_L="$2" RK_P="$3" RK_T="$4" awk -F'\t' -v root="$5" '
     function out(f, k, v) { if (!((f SUBSEP k) in S)) { S[f SUBSEP k] = 1; print f "\t" k "\t" v } }
     BEGIN {
+      n = split(ENVIRON["RK_R"], a, ";"); for (j = 1; j < n; j++) { split(a[j], b, " "); RNS[b[1]] = b[2]; RNT[b[1]] = b[3] }
       while ((getline l < ENVIRON["RK_P"]) > 0) { split(l, a, "\t")
         if (a[2] == "N") FX[a[1]] = 1
         else if (a[2] == "F") FF[a[3]] = FF[a[3]] "\n" a[1]
@@ -1623,7 +1651,8 @@ readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture ro
       for (f in FX) { n = split(TL[f], a, "\n"); for (j = 2; j <= n; j++) out(f, a[j], (a[j] in TH) ? TH[a[j]] : "-")
         n = split(PL[f], a, "\n"); for (j = 2; j <= n; j++) { t = index(a[j], "\t"); out(f, substr(a[j], 1, t - 1), substr(a[j], t + 1)) } } }
     { p = $1; v = $2
-      if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh") for (f in FX) out(f, p, v)
+      if (p in RNS) for (f in FX) out(f, p "#HR_SANDBOX", RNS[p])
+      if (p in RNT) for (f in FX) out(f, p "#HR_EXIT", RNT[p])
       if (p in FF) { n = split(FF[p], a, "\n"); for (j = 2; j <= n; j++) out(a[j], p, v) }
       dk = ""
       if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1 && (substr(r, 1, i - 1) in FX)) out(substr(r, 1, i - 1), p, v)
@@ -1667,7 +1696,7 @@ readset_tools() { # <out>
 # `mapper ` or `git.decl range refused `, whose cause is not a tool), so the hermetic runner reports the refusal (exit 2). The record format is unchanged (`#format k1`).
 readset_declared() { # <list> <out>
   local list="$1" out="$2" d b p lay mp="" xp xpd
-  : > "$out/.dparse"; : > "$out/.dfx"; : > "$out/.dunres"; : > "$out/.dkeys"; : > "$out/.dtools"
+  : > "$out/.dparse"; : > "$out/.dfx"; : > "$out/.dunres"; : > "$out/.dkeys"; : > "$out/.dtools"; : > "$out/.dfull"
   lay=cons; [ -d core/scripts ] && lay=dist
   for p in scripts/ai-dlc/core-paths.sh core/scripts/core-paths.sh; do [ -f "$p" ] && { mp="$p"; break; }; done
   xp="$READSET_TOOL_XP"; [ -n "$xp" ] || xp="$(readset_git_exec_path)"; xpd="$xp:$READSET_TOOL_DIRS"
@@ -1693,7 +1722,13 @@ readset_declared() { # <list> <out>
   # `.dtools` (`<fx>\t<tool path>`) is a VIEW of the parse for diagnostics and probes; the decision reads `.dkeys`.
   awk -F'\t' '$2 == "T" { print $1 "\t" $3 }' "$out/.dparse" > "$out/.dtools"
   readset_decl_tool_hashes "$out/.dparse" "$out/.tools"
-  readset_decl_keys "$out/.now" "$out/.ls.now" "$out/.dparse" "$out/.tools" "$FXROOT" > "$out/.dkeys"
+  HR_ROOT=. readset_decl_keys "$out/.now" "$out/.ls.now" "$out/.dparse" "$out/.tools" "$FXROOT" > "$out/.dkeys"
+  # `.dfull`: the declared fixtures EVERY declared file and directory of which has a key row. Only these may drop their
+  # own inputs.decl row when compared (readset_keys, readset_verdicts): a newly declared path with no row (an excluded
+  # top or a git-ignored file, not `+`) widens the sandbox without adding a row, so its decl row must still move.
+  awk -F'\t' 'NR == FNR { K[$1 SUBSEP $2] = 1; next } $2 == "N" { n[$1] = 1 }
+    ($2 == "F" && !(($1 SUBSEP $3) in K)) || ($2 == "D" && !(($1 SUBSEP $3 "/") in K)) { bad[$1] = 1 }
+    END { for (f in n) if (!(f in bad)) print f }' "$out/.dkeys" "$out/.dparse" | LC_ALL=C sort > "$out/.dfull"
 }
 
 # THE RECORD, `$KEYS_DIR/<fx>.key`: `#format k1`, `#state ok|stale|seeded`, `#tools canonical`
@@ -1732,13 +1767,19 @@ readset_declared() { # <list> <out>
 # THE SHARED VERDICT STORE. A declared fixture's pass is keyed on content alone (the declared inputs, its own
 # files, its tools), so it is valid in any clone at any path. `${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}`
 # holds one entry per pass, NAMED for the sha256 of its body: `#format k1`, `#state ok`, then the digest input
-# (`#fixture`, `#runner`, `#universe` and the key rows). `#runner` is the sha of hermetic-run.sh and `#universe` the
-# sha of the READSET_UNIVERSE and READSET_TOOLS spans the runner sources, so a pass under an older runner is not
-# reused. The key rows themselves carry the runner's whole-file hash for every declared fixture (the RUNNER ROW of
-# readset_decl_keys), so a runner change also moves the per-fixture key decision, not only the store lookup.
+# (`#fixture`, `#runner`, `#universe`, `#inproc` and the key rows). `#runner` is the comment-stripped sha of the
+# runner's HR_SANDBOX span and `#universe` the format version (READSET_VS span), so a pass under an older runner or
+# format is not reused. The key rows carry the same span sha for every declared fixture (the RUNNER ROW of
+# readset_decl_keys), so a code edit inside that span also moves the per-fixture key decision.
+# A STORED PASS COVERS THE CURRENT ROWS, IT NEED NOT EQUAL THEM (readset_verdicts). With the fixture's OWN inputs.decl
+# row dropped from both sides when every path it declares has a row (`.dfull`), an entry is reused when every current row is in it with the same value, its rows
+# under the fixture's own directory are exactly the current ones, and its `#inproc` and identity lines match: a
+# narrowed declaration reuses the pass taken under the wider one, a widened one adds a row and runs. An entry written
+# under the LEGACY identity (`#runner` the raw span sha, `#universe` one of READSET_VS_LEGACY_UNIVERSE, the runner
+# keyed whole-file) is read the same way with the runner row as it was then keyed, at today's whole-file hash.
 # hermetic-run.sh writes the same entry on a clean pass; it is the store's ONLY writer -- this hook reads the
-# store and never writes it. A reader fails closed: no store, no entry, a malformed or truncated body, or a body that is not the
-# digest input just computed means the fixture runs. Only DECLARED fixtures are ever looked up.
+# store and never writes it. A reader fails closed: no store, no entry, a malformed body, or no entry covering the
+# current rows means the fixture runs. Only DECLARED fixtures are ever looked up.
 # PER PROJECT: `<base>/<root commit sha>`, the base being the env var or the default. The project is the repository's
 # root commit (`git rev-list --max-parents=0 HEAD`, C-sorted, first line), the same in every full clone at any path
 # and over any remote URL. A shallow clone, a failed git, or anything that is not a 40-hex sha prints NOTHING: the
@@ -1749,8 +1790,10 @@ readset_vs_ident_here() { # the ident from the cwd, both layouts, consumer runne
   for c in scripts/ai-dlc/hermetic-run.sh core/scripts/hermetic-run.sh; do [ -f "$c" ] && { rn="$c"; break; }; done
   readset_vs_ident "$hk" "$rn"
 }
-readset_verdicts() { # <out>: a DECLARED fixture decided `run` whose current key rows are in the store is decided `skip`
-  local out="$1" store ident fx dig e
+# THE LEGACY IDENTITY: the `#universe` values the distribution and consumer hooks wrote before READSET_VS_FORMAT.
+READSET_VS_LEGACY_UNIVERSE="68c5a2f2659c8bc02f3f1b087af17c0e683e0ae989392cf465350c1664aa7e47 a829a5b0f9ef73ce7a53c6e37f3321b852ba2c180b1627855590f562ff3c9335"
+readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pass covering its current key rows is decided `skip`
+  local out="$1" store ident fx rn="" c rraw
   : > "$out/.vs"
   [ -s "$out/.dfx" ] || return 0
   store="$(readset_vs_store "$PWD")"
@@ -1758,7 +1801,9 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` whose current key
   [ -d "$store" ] || return 0
   ident="$(readset_vs_ident_here)" || return 0
   [ -n "$ident" ] || return 0
-  : > "$out/.vs.hit"
+  for c in scripts/ai-dlc/hermetic-run.sh core/scripts/hermetic-run.sh; do [ -f "$c" ] && { rn="$c"; break; }; done
+  rraw="$(sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$rn" | shasum -a 256 | cut -d' ' -f1)"
+  : > "$out/.vs.hit"; : > "$out/.vs.want"
   awk -F'\t' '$2 == "run" && ($4 == "k" || $4 == "u" || $4 == "s") { print $1 }' "$out/.kdec" > "$out/.vs.cand"
   while IFS= read -r fx; do
     [ -n "$fx" ] || continue
@@ -1767,16 +1812,45 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` whose current key
     awk -F'\t' -v f="$fx" '$1 == f { x = 1 } END { exit x ? 0 : 1 }' "$out/.qfx" && continue
     [ -f "$out/.k/$fx" ] || continue
     tail -n +4 "$out/.k/$fx" > "$out/.vs.rows" 2>/dev/null && [ -s "$out/.vs.rows" ] || continue
-    readset_vs_input "$fx" "$ident" "$out/.vs.rows" > "$out/.vs.d" || continue
-    dig="$(shasum -a 256 < "$out/.vs.d" | cut -d' ' -f1)"
-    [ "${#dig}" -eq 64 ] || continue
-    e="$store/$dig"
-    [ -f "$e" ] || continue
-    [ "$(sed -n '1,2p' "$e" 2>/dev/null)" = "$(printf '#format k1\n#state ok')" ] || continue
-    tail -n +3 "$e" > "$out/.vs.e" 2>/dev/null || continue
-    cmp -s "$out/.vs.e" "$out/.vs.d" || continue
-    printf '%s\n' "$fx" >> "$out/.vs.hit"
+    { readset_vs_inproc "$fx" . | awk -v f="$fx" '{ print f "\tI\t" $0 }'; awk -v f="$fx" '{ print f "\tR\t" $0 }' "$out/.vs.rows"; } >> "$out/.vs.want"
   done < "$out/.vs.cand"
+  [ -s "$out/.vs.want" ] || return 0
+  # ONE SCAN: the entries whose `#fixture` line names a candidate, then ONE matcher over all of them.
+  awk -F'\t' '$2 == "I" { print "#fixture " $1 }' "$out/.vs.want" > "$out/.vs.pat"
+  find "$store" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null | xargs -0 grep -l -x -F -f "$out/.vs.pat" -- 2>/dev/null > "$out/.vs.files"
+  [ -s "$out/.vs.files" ] || return 0
+  tr '\n' '\000' < "$out/.vs.files" | VW="$out/.vs.want" VN="$out/.now" VF="$out/.dfull" VR="${ident%% *}" VU="${ident#* }" VL="$rraw" VLU="$READSET_VS_LEGACY_UNIVERSE" \
+    xargs -0 awk -v root="$FXROOT" '
+    function addw(md, f, r, o) { if ((md SUBSEP f SUBSEP r) in W) return; W[md SUBSEP f SUBSEP r] = 1; NW[md SUBSEP f]++; if (o) NO[md SUBSEP f]++ }
+    function fin() { if (ok && fx != "" && md != "" && !(fx in HIT) && m == NW[md SUBSEP fx] && own == NO[md SUBSEP fx] + 0) { HIT[fx] = 1; print fx } }
+    BEGIN {
+      n = split(ENVIRON["VLU"], a, " "); for (j = 1; j <= n; j++) LU[a[j]] = 1
+      while ((getline l < ENVIRON["VF"]) > 0) DF[l] = 1
+      while ((getline l < ENVIRON["VN"]) > 0) { t = index(l, "\t"); p = substr(l, 1, t - 1)
+        if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh") NOW[p] = substr(l, t + 1) }
+      while ((getline l < ENVIRON["VW"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); r = substr(l, t + 1); kd = substr(r, 1, 1); r = substr(r, 3)
+        if (kd == "I") { INP[f] = r; continue }
+        t = index(r, "\t"); k = substr(r, 1, t - 1)
+        if ((f in DF) && k == root f "/inputs.decl") continue
+        o = (index(k, root f "/") == 1)
+        addw("n", f, r, o)
+        if (k ~ /#HR_(SANDBOX|EXIT)$/) { sub(/#HR_[A-Z]+$/, "", k); if (!(k in NOW)) continue; r = k "\t" NOW[k] }
+        addw("l", f, r, o) } }
+    FNR == 1 { fin(); ok = ($0 == "#format k1"); fx = ""; md = ""; m = 0; own = 0; next }
+    FNR == 2 { ok = ok && ($0 == "#state ok"); next }
+    FNR == 3 { if (substr($0, 1, 9) == "#fixture ") fx = substr($0, 10); ok = ok && (fx in INP); next }
+    FNR == 4 { rr = $0; next }
+    FNR == 5 { if (rr == "#runner " ENVIRON["VR"] && $0 == "#universe " ENVIRON["VU"]) md = "n"
+               else if (rr == "#runner " ENVIRON["VL"] && substr($0, 1, 10) == "#universe " && (substr($0, 11) in LU)) md = "l"
+               else ok = 0
+               next }
+    FNR == 6 { ok = ok && ($0 == INP[fx]); next }
+    !ok { next }
+    { t = index($0, "\t"); k = substr($0, 1, t - 1)
+      if ((fx in DF) && k == root fx "/inputs.decl") next
+      if ((md SUBSEP fx SUBSEP $0) in W) { m++; if (index(k, root fx "/") == 1) own++ }
+      else if (index(k, root fx "/") == 1) ok = 0 }
+    END { fin() }' 2>/dev/null | awk '!s[$0]++' > "$out/.vs.hit"
   [ -s "$out/.vs.hit" ] || return 0
   awk -F'\t' 'NR == FNR { h[$1] = 1; next } ($1 in h) && $2 == "run" { print $1 "\tskip\t\tv\tok"; next } { print }' "$out/.vs.hit" "$out/.kdec" > "$out/.kdec.t" \
     && mv "$out/.kdec.t" "$out/.kdec" || return 0
@@ -1814,7 +1888,7 @@ readset_keys() { # <list> <out>
   : > "$out/.khdr"; : > "$out/.kout"
   KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
   KM="$out/.mapped.all" KLOC="$out/.local.valid" KC="$out/.krecs" KF="$out/.kl" KH="$out/.khdr" KO="$out/.kout" \
-  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" awk -v seed="$seed" -v root="$FXROOT" '
+  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" KDL="$out/.dfull" awk -v seed="$seed" -v root="$FXROOT" '
     function rd(file, arr,   l, t) { while ((getline l < file) > 0) { t = index(l, "\t"); arr[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     function kids(file, set,   l, t, p, i) { while ((getline l < file) > 0) { t = index(l, "\t"); p = (t ? substr(l, 1, t - 1) : l)
         while ((i = match(p, /\/[^\/]*$/)) > 0) { set[substr(p, 1, i - 1) SUBSEP substr(p, i + 1)] = 1; p = substr(p, 1, i - 1) } } }
@@ -1869,6 +1943,7 @@ readset_keys() { # <list> <out>
         if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1) OWN[substr(r, 1, i - 1)] = OWN[substr(r, 1, i - 1)] "\n" p } }
       while ((getline l < ENVIRON["KM"]) > 0) MAPPED[l] = 1
       while ((getline l < ENVIRON["KDF"]) > 0) DECL[l] = 1
+      while ((getline l < ENVIRON["KDL"]) > 0) DFULL[l] = 1
       while ((getline l < ENVIRON["KDK"]) > 0) { split(l, a, "\t"); DK[a[1]] = DK[a[1]] "\n" a[2]; DV[a[1] SUBSEP a[2]] = a[3] }
       while ((getline l < ENVIRON["KDU"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); if (!(f in UN)) UN[f] = substr(l, t + 1) }
       while ((getline l < ENVIRON["KQ"]) > 0) { t = index(l, "\t"); QF[substr(l, 1, t - 1)] = substr(l, t + 1) }
@@ -1895,14 +1970,23 @@ readset_keys() { # <list> <out>
           n = split(RK[f], a, "\n"); for (j = 2; j <= n; j++) R[a[j]] = RV[f SUBSEP a[j]] }
         first = ""; fch = 0; tch = 0; SB = 0
         mig = (!seed && (f in RST) && RTL[f] != "canonical")
+        # A RECORD KEYING THE RUNNER WHOLE-FILE (written before the span RUNNER ROWS): that row, equal to the current
+        # file hash, stands in for `<runner>#HR_SANDBOX` and `#HR_EXIT` (same bytes); the record is republished, c `m`.
+        lg = 0
+        if (has && (f in DECL)) for (k in K) if (k ~ /#HR_(SANDBOX|EXIT)$/ && (!(k in R) || (seed && R[k] == "-"))) { w = k; sub(/#HR_[A-Z]+$/, "", w)
+            ow = (w in R) ? R[w] : ((seed && (w in VV)) ? VV[w] : "-"); if (ow != "-" && (w in NV) && ow == NV[w]) { R[k] = cv(f, k); lg = 1 } }
+        # A DECLARED FIXTURE IS COMPARED ON THE ROWS IT HAS NOW: a recorded row it no longer keys is ignored, except under
+        # its own directory, where a recorded file now absent runs it; its own inputs.decl row is dropped when every path
+        # it declares has a row (`.dfull`: a narrowed declaration skips, a widened one gains a row and runs).
         if (has) {
-          for (k in R) { if ((f in DECL) && !(k in K)) continue
+          for (k in R) { if ((f in DFULL) && k == root f "/inputs.decl") continue
+            if ((f in DECL) && !(k in K) && index(k, root f "/") != 1) continue
             if (k ~ /\/$/) rl = 1
             if (cv(f, k) == R[k]) continue
             if (substr(k, 1, 1) == "/") { if (!mig) tch = 1; continue }
             if (k == root && sibs_only(k)) { SB = 1; continue }
             if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else fch = 1 }
-          for (k in K) if (!(k in R)) { if (substr(k, 1, 1) == "/") { if (!mig) tch = 1 } else if (first == "" || k < first) first = k } }
+          for (k in K) if (!(k in R) && !((f in DFULL) && k == root f "/inputs.decl")) { if (substr(k, 1, 1) == "/") { if (!mig) tch = 1 } else if (first == "" || k < first) first = k } }
         run = 1; why = ""; c = ""
         if (!has) { why = "unrecorded"; c = "u" }
         else if (st == "stale" && !(f in LOC) && !((f in DECL) && RK[f] != "")) { why = "stale"; c = "s" }
@@ -1913,7 +1997,7 @@ readset_keys() { # <list> <out>
         if (!run && (f in UN)) { run = 1; why = (substr(UN[f], 1, 7) == "mapper " || index(UN[f], "git.decl range refused ") == 1) ? UN[f] : "tool unresolved " UN[f]; c = "k" }
         # A STALE RECORD WITH A VALID ROW SET AND NO MOVED KEY SKIPS, and its `ok` record is published
         # on this push through `.k.always`, as a seeded one is: c `v` marks it.
-        if (!run) { if (!seed && st != "stale" && !mig && !SB) { print f "\tskip\t\t\t" st; continue }
+        if (!run) { if (!seed && st != "stale" && !mig && !SB && !lg) { print f "\tskip\t\t\t" st; continue }
                     ns = seed ? "seeded" : ((st == "stale") ? "ok" : st); if (!seed) c = (st == "stale") ? "v" : "m"
                     if (SB && !seed && st != "stale") { c = "b"; ns = "ok" }
                     if (c == "m" && rl && !(f in DECL)) for (k in R) if (substr(k, 1, 1) != "/") X[k] = 1 }

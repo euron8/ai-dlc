@@ -42917,3 +42917,28 @@ verify: sh o="$(PREPUSH_POOL_DEPTH=1 bash core/fixtures/prepush-worktree-env-scr
 Provenance: batch 257, fast track F18, from ai-dlc-d7's 0.1110.0 integration findings; id allocated by the lead.
 
 verify: manual
+
+## BL-1049 — fixture skip keys invalidate far too broadly: a whole-file runner row on every fixture, and whole-file or whole-directory inputs, re-run fixtures whose verdict the change cannot move
+
+**LANDED (v0.1122.0).** Causes 1 and 3 fixed here, both hooks I66-identical, `core/scripts/hermetic-run.sh` untouched. Cause 2 is owned by BL-1051 (narrowing the whole-hook and whole-directory `inputs.decl` declarations), which builds on the subset match below.
+- **Runner rows (cause 1).** `readset_decl_keys` keys every declared fixture on two rows. `<runner path>#HR_SANDBOX` is `readset_span_sha <runner> HR_SANDBOX`, the span's sha256 with comment and blank lines dropped. `<runner path>#HR_EXIT` is `readset_tail_sha`, the runner's exit mapping (its top-level lines after the last line that is exactly `}`). Neither uses the runner's whole-file hash. A code edit inside the span or to the exit lines re-runs every declared fixture; any other runner edit, or a comment anywhere, re-runs none. The runner is read under hermetic-run.sh's `HR_ROOT` when it is the caller, and the hook passes `HR_ROOT=.`.
+- **Store identity (cause 3).** `#universe` is `f<READSET_VS_FORMAT>` (READSET_VS span), not a hash of the four READSET_* spans. `#runner` is the comment-stripped span sha. Each semantic sha of those spans (comments dropped) carries one pin row, `# VS-IDENTITY <format> <sha> <reason>`, in both hooks. The pre-suite step `verdict-store identity` in `.githooks/pre-push` (`scripts/validate-verdict-identity.sh`) fails a push whose sha has no row, or whose row names another format. It self-probes both ways first: a code line inside READSET_KEYROWS fails it, a comment line does not. A row under the current format keeps every stored entry; a bumped format voids them.
+- **Subset match.** A declared fixture's stored pass, or its local record, is reused when every current key row is in it with the same value. Its own `inputs.decl` row is dropped when every path it declares has a key row (`.dfull`), and its own-directory rows must match exactly, so a deleted own file runs. A narrowed declaration skips; a widened one, or a new unkeyed path, runs.
+- **Carry-forward, with no store write.** The store reader also accepts an entry under the legacy identity (`#universe` in READSET_VS_LEGACY_UNIVERSE, `#runner` the raw span sha, the runner row whole-file at today's hash). A local record keying the runner whole-file at today's hash stands in for the span row and is republished (c `m`).
+
+**Owed by the paused 0.1110.0 bundle when it resumes.** Its k2 entries, `#pending` at line 3, are a meaning change under this scheme. It must pin a bumped READSET_VS_FORMAT, or carry its k1 and k2 entries forward the way READSET_VS_LEGACY_UNIVERSE does here. Its consumer-placement records key `scripts/ai-dlc/hermetic-run.sh` whole-file, so they take the same two runner rows, with carry-forward (push-cost audit row 9). It must never force a whole-suite re-run.
+
+**DEFECT.** Filed 2026-11-13. Owner: the key composer (`.githooks/pre-push` READSET_KEYROWS span, mirrored where I66 binds it, and `core/scripts/hermetic-run.sh`, which sources it) plus the fixtures' `inputs.decl` files.
+
+The operator ruled the cache "too strict" and invalidating "too broadly" (batch 257). Measured on the 0.1110.0 bundle push of 47c2d9e31 against base 93cae636f (lead log `r1110b-push.log`): `read-set keys: 247 of 275 fixture(s) run (245 changed, 2 unrecorded, 0 stale); skipping 28`. The bundle changed `core/scripts/hermetic-run.sh` and `core/git-hooks/pre-push`. The runner's raw HR_SANDBOX span sha is `c5a6447b…` at both shas, so the runner edit sat entirely outside the span.
+
+Causes, read at 47c2d9e31:
+1. Every declared fixture (273) keyed on the WHOLE-FILE hash of `hermetic-run.sh`.
+2. Whole large files and whole directories declared as inputs (`git grep -l -E '^[+!]*<path>' 47c2d9e31 -- 'core/fixtures/*/inputs.decl'`, control: an impossible path reads 0): `core/git-hooks/pre-push` 22 fixtures, `.githooks/pre-push` 15, `core/` 17, `core/scripts/` 14, `scripts/` 16. Moved to BL-1051.
+3. The store identity hashed four hook spans whole, comments included, so any edit voided every stored entry.
+
+Receipt: the `verify:` line drives the shipped `readset_decl_keys`, sourced from `.githooks/pre-push`'s READSET_KEYROWS span, over a scratch runner. An edit to the header or a function body leaves the rows equal; a code edit inside the span, or to the exit lines after the last function, moves them. It exits 1 at 93cae636f and 0 at this release.
+
+Provenance: batch 257, F17; id allocated by the lead.
+
+verify: sh H=.githooks/pre-push; grep -q '^readset_decl_keys() ' "$H" || exit 9; H="$PWD/$H"; T="$(mktemp -d)" || exit 9; cd "$T" || exit 9; sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$H" > k.sh; . ./k.sh || exit 9; mkdir -p core/scripts || exit 9; printf 'f\tN\n' > p; : > l; : > t; printf 'core/scripts/hermetic-run.sh\tx\n' > n; w() { printf '%s\n# HR_SANDBOX_BEGIN\n%s\n# HR_SANDBOX_END\nf() {\n  %s\n}\n%s\n' "$1" "$2" "$3" "$4" > core/scripts/hermetic-run.sh; readset_decl_keys n l p t core/fixtures/; }; a="$(w h1 s1 x1 'exit 1')"; b="$(w h2 s1 x2 'exit 1')"; c="$(w h1 s2 x1 'exit 1')"; d="$(w h1 s1 x1 'exit 2')"; [ -n "$a" ] || exit 9; [ "$a" = "$b" ] && [ "$a" != "$c" ] && [ "$a" != "$d" ]
