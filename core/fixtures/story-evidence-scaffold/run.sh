@@ -937,7 +937,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 1:dependency-setup-missing,full-collection-missing, 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' \
     "the on-disk dev.md is not read when none is tracked at <frozen>"
   # The inversion reverted: only a none form is a no-run claim, so N/A, TBD and an empty value pass.
-  fc_mutant fc-no-invert he '  elif ! bash "$RO" run-shape "$fc" ${ev_conv:+"$ev_conv"}; then' '  elif bash "$RO" none-reason "$fc" 2>/dev/null; [ $? -ne 2 ]; then' \
+  fc_mutant fc-no-invert he '    fc_gv="$(bash "$RO" run-gate "$fc" ${ev_conv:+"$ev_conv"})"; EV_FC_GATE=$?' '    fc_gv=""; bash "$RO" none-reason "$fc" >/dev/null 2>&1; if [ $? -ne 2 ]; then EV_FC_GATE=4; else EV_FC_GATE=0; fi' \
     '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 0: 0: 0: 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 0: 1:full-collection-none, 0: 0::W' \
     "a no-run claim spelled other than none accepted over a code diff"
   # The label's next-line continuation dropped: an empty value followed by the invocation refuses.
@@ -947,9 +947,10 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # The fenced continuation dropped: an empty label over a fenced run reads as empty (fcfence refuses).
   fc_mutant ro-no-fence ro '{ f = !f; if (cont && f && !post) inf = 1;' '{ f = !f; if (0) inf = 1;' \
     '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' "an empty label value over a fenced run refused"
-  # The bold label refusal dropped: a bold label line under an empty value is taken as the value.
+  # The bold label refusal dropped: a bold label line under an empty value is taken as the value. Since BL-1016 that
+  # value is a run RUN-FILTER refuses (`pytest-xdist` read as a path), so fcbold moves by TOKEN, none -> filtered.
   fc_mutant ro-no-bold ro ' || t ~ /^\*\*[A-Za-z][A-Za-z0-9 _-]*(:\*\*|\*\*:)/ }' ' }' \
-    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0::W' "a bold label line taken as the continued value"
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-filtered, 1:full-collection-none, 1:full-collection-none, 0::W' "a bold label line taken as the continued value"
   # The Invocation continuation dropped: `- Invocation: <cmd>` under an empty value reads as a new label.
   fc_mutant ro-no-invocation ro '             else if (s ~ /^Invocation:[ \t]/)' '             else if (0)' \
     '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' "an Invocation: line under an empty value read as a new label"
@@ -971,7 +972,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     if [ "$cv_c" = '0:' ] && [ "$cv_n" = '1:full-collection-none,' ]; then
       ok "CONVENTIONS: a runner the conventions declare canonical (tox -e all) is accepted at the dev gate, and the same value with no conventions file is refused full-collection-none"; B_conv=1
     else bad "CONVENTIONS: want [0:] and [1:full-collection-none,] got [$cv_c] and [$cv_n]"; fi
-    if cv_m="$(mkmut fc-no-conv he 'run-shape "$fc" ${ev_conv:+"$ev_conv"}; then' 'run-shape "$fc"; then')" && [ -n "$cv_m" ]; then
+    if cv_m="$(mkmut fc-no-conv he 'run-gate "$fc" ${ev_conv:+"$ev_conv"})"' 'run-gate "$fc")"')" && [ -n "$cv_m" ]; then
       cv_mv="$(verdict "$cv_m" "$WORK/world-fcconv" h)"
       if [ "$cv_mv" = '1:full-collection-none,' ]; then mutant_killed "${B_conv:-0}" fc-no-conv "MUTATION 'fc-no-conv' killed: the dev gate dropping the conventions argument refuses fcconv"
       elif [ "$cv_mv" = "$cv_c" ]; then bad "MUTATION 'fc-no-conv' SURVIVED -- the dev gate drops the conventions argument"
@@ -1003,6 +1004,342 @@ if [ "$WORLDS_OK" -eq 1 ]; then
       fi
     else bad "FIXTURE ERROR: run-record mutation 'ro-no-pointer' could not build its tree"; fi
   else bad "FIXTURE BROKEN: could not seed the pointer worlds"; fi
+
+  # --- BL-1016 RUN-FILTER AT THE DEV GATE (rf1016-*) ---------------------------------------------------------------
+  # Arm (k) reads every Full-collection value it ACCEPTS AS A RUN (by run-shape, or by the capture-heads count route)
+  # through record-only-diff.sh RUN-FILTER with the toplevel conventions file, and refuses what narrows the collection
+  # `full-collection-filtered`. Its OWN positional list, RF_WORLDS (world.sh rf_world says where each value comes
+  # from); FC_WORLDS does not grow, and fcfence (a fenced `$ pytest -q` read through the `$ ` prompt and its counts)
+  # stays asserted accepted in FCWANT. Cells in order: rf1016-s1 (graph s322 1.3's record, three files and
+  # `-m "not integration"`: refused); rf1016-s2 (graph s322 1.8's record, a watchdog run whose span precedes a later
+  # `version ok: pytest 9.1.1` span, under graph's ed61de745 wrapper declaration with `--docker` declared: accepted);
+  # rf1016-s2n (the same record under the declaration as graph wrote it, `--docker` undeclared: refused);
+  # rf1016-s3 (a repo-root `-m unit` run, the conventions declaring `<venv>/bin/python -m pytest -m unit`: accepted);
+  # rf1016-s4 (the same run, a conventions file present that declares no marker: refused); rf1016-s5
+  # (`-n 8 server/tests`, those conventions declaring `pytest -n 8 server/tests`: accepted); rf1016-s6 (the capture
+  # route, a fresh capture-heads block pasted, its cited invocation handing a test file after `--`: refused);
+  # rf1016-s7 (the plain capture cite over the same block: accepted); rf1016-s8 (a collect-only run of the declared
+  # watchdog wrapper behind leading prose and before a later `version ok: pytest` span, citing the capture with a
+  # fresh block, under the declaration carrying `--docker`: refused full-collection-none, the no-run route, because
+  # NO-TEST-RUN picks its span WITH the conventions file); rf1016-ph (a `<repo>` placeholder before
+  # `-k foo`: refused) and rf1016-ph-nm (the placeholder, no filter: accepted); rf1016-ch (`pytest -q > out.txt;
+  # pytest -k foo`: refused) and rf1016-ch-nm / rf1016-ch-nm2 (`> out.txt` alone, and `pytest -q; pytest -q`, a
+  # chain of which no command narrows: accepted). Every cell is a whole story driven through the shipped validator
+  # and read as <exit>:<REFUSED tokens>, never a count. Appended: rf1016-s2nw (graph s322 1.8's record with NO
+  # conventions file: refused, and its cell carries the refusal's reason class, which must name neither the later
+  # `version ok: pytest 9.1.1` span's `9.1.1` nor the payload's xdist count `8` as a path, and names the undeclared
+  # wrapper: +wrapper);
+  # rf1016-d1 (an unbackticked `pytest -q -k foo` beside a backticked working directory: refused) and rf1016-d1-nm
+  # (wv957rundir's value, no filter: accepted); rf1016-rd (`pytest -q 1>out.txt -k foo`, a redirection mid-command:
+  # refused; rf1016-ch-nm is its near-miss); rf1016-a1 (`--junitxml "a; b.xml"`, a quoted `;`: accepted; rf1016-ch is
+  # its real-chain pair); rf1016-a2 (`--reruns 1`, an option's value: accepted) and rf1016-a2-nm (the same plus
+  # `tests/test_x.py`: refused); rf1016-a3 (`uv pip install pytest pytest-xdist && pytest -n 8`, a pytest word inside
+  # a non-pytest chain command: accepted) and rf1016-a3-nm (`uv pip install pytest && pytest -k foo`: refused);
+  # rf1016-sp (`cd /repo` then `pytest -k foo`, a pytest span AFTER a non-pytest span: refused) and rf1016-sp-nm (the
+  # same with `pytest -q`: accepted); rf1016-bl (`bash -lc "cd backend && pytest -k x"`: refused) and rf1016-bl-nm
+  # (`... pytest -q"`: accepted); rf1016-ao (`pytest -o "addopts=-k foo"`: refused) and rf1016-ao-nm
+  # (`-o "addopts=-q; x"`: accepted); rf1016-qk (`pytest -q -v' -k foo`, an unbalanced quote: refused); rf1016-to
+  # (`timeout 600 pytest -k foo`, then `pytest -q`: refused) and rf1016-to-nm (`timeout 600 pytest -q`: accepted);
+  # rf1016-npm (`npm test -- -n 8 -q`: accepted); rf1016-ch2 (`pytest -q && cd sub && pytest -k foo`, a narrowing
+  # command after a non-pytest one: refused) and rf1016-ch2-nm (the same ending `pytest -q`: accepted); rf1016-be
+  # (`bash -lc "cd backend && pytest -k \"not slow\" -q"`, an escaped quote inside the quoted command: refused; its
+  # pair is rf1016-bl-nm); rf1016-su (`sudo -u app pytest -k foo` then `pytest -q`, a prefix carrying its own option:
+  # refused) and rf1016-su-nm (`sudo -u app pytest -q`: accepted); rf1016-to2 (`timeout -s KILL 600 pytest -k foo`
+  # then `pytest -q`, a prefix's own option skipped: refused) and rf1016-to2-nm (`timeout -s KILL 600 pytest -q`:
+  # accepted); rf1016-jx (`bash -lc "... pytest -q --junitxml \"a b.xml\""`, an escaped quote kept inside one argument:
+  # accepted); rf1016-ss (the capture route citing `bash -c "ssh h 'pytest -k x'"`, a quoted command nested in a quoted
+  # command, over a fresh block: refused) and rf1016-ss-nm (citing `bash -c "pytest -q"`: accepted); rf1016-de
+  # (`ssh host "cd app && direnv exec . pytest -k x"`, an unrecognised program before pytest inside a quoted command:
+  # refused) and rf1016-de-nm (the same with `pytest -q`: accepted); rf1016-dc (`pytest -q && direnv exec . pytest
+  # -k x`, the same in a chain step: refused) and rf1016-dc-nm (`... direnv exec . pytest -q`: accepted); rf1016-dx
+  # (`direnv exec . pytest -k x` then `pytest -q`, the same as an earlier span: refused) and rf1016-dx-nm (accepted);
+  # rf1016-gr (`pytest -q; grep pytest out.txt -c`, a pytest word in a non-runner command: accepted); rf1016-bt
+  # (`pytest -q --basetemp <tmp> tests/test_x.py`, a placeholder option value before a file: refused) and rf1016-bt-nm
+  # (`pytest -q --basetemp <tmp>`: accepted); rf1016-s9 (rf1016-s8's collect-only wrapper run followed by a
+  # `pytest -q` span, on the capture route with a fresh block: refused full-collection-none) and rf1016-s9-nm (the
+  # same wrapper run with `-- -q`: accepted).
+  RF_WORLDS='rfs1 rfs2 rfs2n rfs3 rfs4 rfs5 rfs6 rfs7 rfs8 rfph rfphnm rfch rfchnm rfchnm2 rfs2nw rfd1 rfd1nm rfrd rfa1 rfa2 rfa2n rfa3 rfa3n rfsp rfspnm rfbl rfblnm rfao rfaonm rfqk rfto rftonm rfnpm rfch2 rfch2nm rfbe rfsu rfsunm rfto2 rfto2nm rfjx rfss rfssnm rfde rfdenm rfdc rfdcnm rfdx rfdxnm rfgr rfbt rfbtnm rfs9 rfs9nm'
+  rf_ok=1
+  for v in $RF_WORLDS; do build_world "$WORK/world-$v" "$v" || { rf_ok=0; bad "FIXTURE BROKEN: could not seed git world '$v'"; }; done
+  # Seed control: each world's COMMITTED Full-collection line is rf_value's text byte for byte, so an accepted cell
+  # cannot be a mangled value read for some other reason.
+  if [ "$rf_ok" = 1 ]; then
+    for v in $RF_WORLDS; do
+      rf_l="$(gitw "$WORK/world-$v" show "$(cat "$WORK/world-$v/.T"):$STORY" | awk 'index($0, "Full-collection run: ") == 1 { print substr($0, 22) }')"
+      [ "$rf_l" = "$(rf_value "$v")" ] || { rf_ok=0; bad "FIXTURE BROKEN: world '$v' committed a Full-collection value other than rf_value's"; }
+    done
+  fi
+  # The capture-route worlds' block: rendered at the frozen sha and pasted, as the dev pastes it (wv957codar's shape).
+  if [ "$rf_ok" = 1 ]; then
+    for v in rfs6 rfs7 rfs8 rfss rfssnm rfs9 rfs9nm; do
+      rf_w="$WORK/world-$v"
+      rf_b="$(he_run "$HECTL" -C "$rf_w" --render-dar "$STORY" "$(cat "$rf_w/.T")" 2>/dev/null)" && [ -n "$rf_b" ] \
+        && printf '\n%s\n' "$rf_b" >> "$rf_w/$STORY" && gitw "$rf_w" add -A && gitw "$rf_w" commit -qm block \
+        && gitw "$rf_w" rev-parse HEAD > "$rf_w/.T" \
+        || { rf_ok=0; bad "FIXTURE BROKEN: could not render and paste $v's capture-heads block"; }
+      # The block carries the capture's count, so the count route WOULD accept the value: only the filter refuses rfs6.
+      grep -qF '1 passed' <<<"$rf_b" || { rf_ok=0; bad "FIXTURE BROKEN: $v's block renders no count, so the count route could not acquit it either way"; }
+    done
+  fi
+  if [ "$rf_ok" = 1 ]; then
+    RFWANT='1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W'
+    # rf_vec <script> [<want>]: the control runs every world. A mutant runs the worlds whose cell its want MOVES, plus
+    # every world named in RF_AUDIT; each other cell is reported as RFWANT's (fc_vec's selection, restored). RF_FULL=1
+    # runs every world (a validator mutant always does: nothing below can see past its edit).
+    # THE AUDIT (rf_audit) is what keeps that selection honest: a record-only-diff.sh mutant can move a verdict only
+    # through the answers the validator asks that file for, so rf_audit asks the mutant copy every one of them, per
+    # world (run-gate on the value with the world's conventions file, none-reason on the value, label for both labels),
+    # and once for the answers every world shares (setup-shape and none-reason on the Dependency setup value, paths on
+    # one world with and one without a conventions file), against the control's. A world whose answers moved is run;
+    # a moved shared answer runs every world. So a mutant that moves a world its row does not name is RUN there and
+    # reads as entangled, never as a kill. The RF-AUDIT probe below holds that both ways.
+    # rf_cell <script> <world>: the verdict; rfs2nw's also names its refusal's reason class (below), since its token
+    # alone cannot say WHICH span was read or whether the wrapper's `-n 8` was read as a path.
+    rf_cell() {
+      local c
+      # verdict in THIS shell (never inside `$( )`), so VERDICT_OUT is the run just made.
+      verdict "$1" "$WORK/world-$2" h > "$WORK/.rfv"; c="$(cat "$WORK/.rfv")"
+      if [ "$2" = rfs2nw ]; then
+        # The REASON alone: the refusal line after the quoted value (which itself carries `9.1.1`) and before the
+        # run-gate parenthesis. +version-path: it names 9.1.1; +eight-path: it names the xdist count 8 as a path;
+        # +wrapper: neither of those, and it reads `runs scripts/pytest-footprint-watchdog.py, a wrapper the conventions do
+        # not declare` (the refusal BY NAME);
+        # +other: any other refusal. An accepted cell carries no class.
+        rf_r="$(awk '/^REFUSED full-collection-/ { sub(/^.*'"'"' /, ""); sub(/ \(record-only-diff\.sh run-gate.*$/, ""); print; exit }' <<<"$VERDICT_OUT")"
+        if [ -n "$rf_r" ]; then
+          case "$rf_r" in
+            *9.1.1*) c="$c+version-path" ;;
+            *) if grep -qE '(^|[^0-9.])8([^0-9.]|$)' <<<"$rf_r"; then c="$c+eight-path"
+               elif grep -qF 'runs scripts/pytest-footprint-watchdog.py, a wrapper the conventions do not declare' <<<"$rf_r"; then c="$c+wrapper"
+               else c="$c+other"; fi ;;
+          esac
+        fi
+      fi
+      printf '%s' "$c"
+    }
+    rf_vec() {
+      local s="$1" w="${2:-}" o="" v i=0 a b
+      for v in $RF_WORLDS; do
+        i=$((i + 1))
+        if [ -n "$w" ] && [ -z "${RF_FULL:-}" ]; then
+          a="$(awk -v n="$i" '{print $n}' <<<"$RFWANT")"; b="$(awk -v n="$i" '{print $n}' <<<"$w")"
+          if [ "$a" = "$b" ]; then case " ${RF_AUDIT:-} " in *" $v "*) ;; *) o="$o $a"; continue ;; esac; fi
+        fi
+        rf_cell "$s" "$v" > "$WORK/.rfc"; o="$o $(cat "$WORK/.rfc")"
+      done
+      printf '%s' "${o# }"
+    }
+    # rf_answers <ro file> <world>: every answer the validator asks record-only-diff.sh for about that world's own text.
+    rf_answers() {
+      local f="$1" w="$WORK/world-$2" cv="" val o
+      [ -r "$w/docs/coding-conventions.md" ] && cv="$w/docs/coding-conventions.md"
+      val="$(rf_value "$2")"
+      o="$(ro_run "$f" run-gate "$val" ${cv:+"$cv"} 2>&1)"; printf 'g%s:%s' "$?" "$o"
+      ro_run "$f" none-reason "$val" > /dev/null 2>&1; printf '|n%s' "$?"
+      o="$(ro_run "$f" label 'Full-collection run:' < "$w/$STORY" 2>&1)"; printf '|l%s:%s' "$?" "$o"
+      o="$(ro_run "$f" label 'Dependency setup:' < "$w/$STORY" 2>&1)"; printf '|d%s:%s' "$?" "$o"
+    }
+    # rf_shared <ro file>: the answers every world shares (one Dependency setup value; the record-only partition on a
+    # world without and one with a conventions file).
+    rf_shared() {
+      local f="$1" ds o v
+      ds="$(ro_run "$f" label 'Dependency setup:' < "$WORK/world-rfs1/$STORY" 2>/dev/null)"
+      ro_run "$f" setup-shape "$ds" > /dev/null 2>&1; printf 's%s' "$?"
+      ro_run "$f" none-reason "$ds" > /dev/null 2>&1; printf '|r%s' "$?"
+      for v in rfs1 rfs2; do
+        o="$(ro_run "$f" paths -C "$WORK/world-$v" "$STORY" "$(cat "$WORK/world-$v/.B")" "$(cat "$WORK/world-$v/.T")" 2>&1)"; printf '|p%s:%s' "$?" "$o"
+      done
+    }
+    # rf_audit <ro file>: the worlds whose answers move against the control's, or ALL when a shared answer moves.
+    rf_audit() {
+      local f="$1" v out=""
+      [ "$(rf_shared "$f")" = "$RF_SH_CTL" ] || { printf 'ALL'; return 0; }
+      for v in $RF_WORLDS; do [ "$(rf_answers "$f" "$v")" = "$(cat "$WORK/.rfga-$v")" ] || out="$out $v"; done
+      printf '%s' "${out# }"
+    }
+    got="$(rf_vec "$HECTL")"
+    if [ "$got" = "$RFWANT" ]; then ok "RUN-FILTER (BL-1016): graph s322 1.3's file-and-marker run refused full-collection-filtered; 1.8's watchdog record accepted under a declaration carrying --docker and refused under graph's own; a declared -m unit run accepted, the same run refused under conventions declaring no marker, a declared server/tests path accepted; a capture-heads cite whose invocation hands a test file after -- refused, the plain cite accepted; a collect-only declared-wrapper run behind prose refused full-collection-none; a <placeholder> before -k and a ; chain ending in -k refused, their near-misses accepted"; B_rf=1
+    else bad "RUN-FILTER (BL-1016): want [$RFWANT] got [$got] for [$RF_WORLDS]"; fi
+    # The control's answers, once: per world into $WORK/.rfga-<world>, the shared ones into RF_SH_CTL.
+    RF_RO="$(dirname "$HECTL")/record-only-diff.sh"
+    for v in $RF_WORLDS; do rf_answers "$RF_RO" "$v" > "$WORK/.rfga-$v"; done
+    RF_SH_CTL="$(rf_shared "$RF_RO")"
+    # rf_score <ro|he> <script> <want> <ro file|-> -> the vector the mutant is scored on (audit applied)
+    rf_score() {
+      local aud
+      if [ "$1" = he ]; then RF_FULL=1 rf_vec "$2" "$3"; return; fi
+      aud="$(rf_audit "$4")"
+      if [ "$aud" = ALL ]; then RF_FULL=1 rf_vec "$2" "$3"; else RF_AUDIT="$aud" rf_vec "$2" "$3"; fi
+    }
+    # rf_mutant <name> <he|ro> <want> <label> <from> <to> [<from> <to> ...]: every pair must apply (a pair that matches
+    # nothing is a lost subject, FIXTURE ERROR, never a pass). A validator mutant is written beside the control's
+    # record-only-diff.sh (mkmut, one pair); a record-only-diff.sh mutant gets a tree of its own.
+    rf_mutant() {
+      local n="$1" tg="$2" w="$3" l="$4" m t f got; shift 4
+      if [ "$tg" = ro ]; then
+        t="$(mk_tree "$n")" || { bad "FIXTURE ERROR: RUN-FILTER mutation '$n' could not build its tree"; return; }
+        f="$(dirname "$t")/record-only-diff.sh"
+        while [ "$#" -ge 2 ]; do
+          FROM="$1" TO="$2" awk 'BEGIN{f=ENVIRON["FROM"]; t=ENVIRON["TO"]} !done && (p=index($0,f)) {$0=substr($0,1,p-1) t substr($0,p+length(f)); done=1} {print}' "$f" > "$f.tmp"
+          if cmp -s "$f" "$f.tmp"; then bad "FIXTURE ERROR: RUN-FILTER mutation '$n' matched nothing at [$1]"; return; fi
+          mv "$f.tmp" "$f"; shift 2
+        done
+        m="$t"
+      elif ! m="$(mkmut "$n" he "$1" "$2")" || [ -z "$m" ]; then bad "FIXTURE ERROR: RUN-FILTER mutation '$n' matched nothing"; return; fi
+      if [ "$tg" = ro ]; then got="$(rf_score ro "$m" "$w" "$f")"; else got="$(rf_score he "$m" "$w" -)"; fi
+      if [ "$got" = "$w" ]; then mutant_killed "${B_rf:-0}" "$n" "MUTATION '$n' killed, moving its own cells only: $l"
+      elif [ "$got" = "$RFWANT" ]; then bad "MUTATION '$n' SURVIVED -- $l"
+      else bad "MUTATION '$n' moved [$got], want [$w] -- the cells are entangled"; fi
+    }
+    # m1: RUN-GATE's "a run, filtered" (exit 3) acquitted on the run-shape route -- every run-shape cell the filter
+    # refuses is accepted (rf1016-s1 is the entry's instance); rf1016-s6 (the capture route, m3's) and rf1016-s8 (the
+    # no-run route) stay refused.
+    rf_mutant rf1016-unwired he \
+      '0: 0: 0: 0: 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 0: 1:full-collection-filtered,:W 0::W 0: 0: 0: 0: 0: 0: 0: 0: 0: 1:full-collection-none,:W 0::W' "the dev gate not reading the run through RUN-FILTER" \
+      '      3) ev_filter_fc "$fc" 1 "$fc_gv" ;;' '      3) ;;'
+    # m2: the conventions argument dropped from the one RUN-GATE start -- the declared wrapper (rf1016-s2) and the
+    # declared path (rf1016-s5) are refused, the undeclared marker (rf1016-s4) accepted (absent conventions accept any
+    # -m), and rf1016-s8 is refused by the filter instead of as a no-test run. fc-no-conv makes the same edit and
+    # scores the CONVENTIONS arm's fcconv.
+    rf_mutant rf1016-no-conv he \
+      '1:full-collection-filtered, 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 0::W 0::W' "RUN-GATE read without the project's conventions" \
+      'run-gate "$fc" ${ev_conv:+"$ev_conv"})"' 'run-gate "$fc")"'
+    # m3: the capture-heads count route not filtered -- the capture cite of a narrowed invocation is accepted.
+    rf_mutant rf1016-capture-unfiltered he \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0::W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 0::W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "the capture-heads route accepting a run RUN-FILTER refuses" \
+      '    [ "$EV_FC_NONE" = 1 ] || ev_filter_fc "$fc"' '    :'
+    # m4: a `<...>` placeholder read as a shell operator again, one mutant per layer. The argument reader (rf_ph):
+    # the read stops before `-k foo`, rf1016-ph accepted. The wrapper-option reader (rw_wrap): the declaration's
+    # `<prelude-file>` / `<repo-root>` values no longer stripped, so 1.8's record under the declaration carrying
+    # them is refused (rf1016-s2). rf1016-s2n stays refused under both: it is no killer of either.
+    rf_mutant rf1016-placeholder-stops ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 0: 0: 1:full-collection-none,:W 0::W' "a placeholder ending the read before a later filter" \
+      "  case \"\$1\" in *'>'*) ;; *) return 1 ;; esac" '  return 1'
+    rf_mutant rf1016-placeholder-stops-wrapper ro \
+      '1:full-collection-filtered, 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a declared wrapper's placeholder values read as tokens" \
+      'x = t; gsub(/<[^<>]+>/, "", x);' 'x = t;'
+    # m5: a chain read as one command again -- `pytest -q && cd sub && pytest -k foo` never reaches the narrowing
+    # command (rf1016-ch2 accepted). rf1016-ch no longer kills it: the redirection reading skips `> out.txt;` and reads on.
+    rf_mutant rf1016-chain-stops ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 0: 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a shell chain ending the read before a later narrowing command" \
+      '      done <<<"$rf_cl"' '      done <<<"$1"'
+    # m6: RUN-GATE's no-test reading not taken on RUN-FILTER's span (picked WITH the conventions file) -- the
+    # collect-only run of the declared wrapper behind leading prose is a run again and the count route accepts it
+    # (rf1016-s8).
+    rf_mutant rf1016-notest-no-conv ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 0::W 0::W' "NO-TEST-RUN read without the project's conventions" \
+      '         if [ $# -eq 2 ]; then RF_SPAN_S="$(rf_span "$1" "$2")"; RF_SPAN_V="$1"; fi' '         :'
+    # m7: an unbackticked invocation beside a backticked span not read as the run -- the prose `-k` acquits (rf1016-d1).
+    rf_mutant rf1016-prose-unread ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 0: 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a prose invocation beside a backticked span not read" \
+      '    rf_spanpy "$c" && s="$c"' '    :'
+    # m8: a redirection mid-command ends the read -- `-k foo` after `1>out.txt` acquits (rf1016-rd).
+    rf_mutant rf1016-redirect-stops ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 0: 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a mid-command redirection ending the read" \
+      'rf_redir "$w" || break; continue; }' 'break; }'
+    # m9: a quoted stretch split at its blanks -- the `;` inside `"a; b.xml"` reads as a chain (rf1016-a1 refused).
+    rf_mutant rf1016-quote-split ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0::W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a quoted argument split into words" \
+      "    if [ \$(( \${#n} % 2 )) = 1 ]; then q='\"'; cur=\"\$w\"; continue; fi" '    :'
+    # m10: `--reruns` taken as an option without a value -- its `1` reads as a path (rf1016-a2 refused).
+    rf_mutant rf1016-value-option-path ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a value-taking option's value read as a path" \
+      '--reruns|--reruns-delay|--only-rerun|--randomly-seed' '--NEVER-reruns'
+    # m11: every chain command read as the runner -- `uv pip install pytest pytest-xdist` reads as a pytest run whose
+    # `pytest-xdist` is a path (rf1016-a3 refused).
+    rf_mutant rf1016-command-word ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 1:full-collection-filtered, 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 0::W 0::W 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a chain command that only names pytest read as the run" \
+      '      if [ "$rf_rd" = 0 ] && rf_cmdpy "$rf_c"; then' '      if [ "$rf_rd" = 0 ] && true; then'
+    # m12: a LATER pytest span not preferred over an earlier non-pytest span -- `cd /repo` read as the run and the
+    # `-k foo` span never read (rf1016-sp accepted). Graph 1.8 cannot kill it: its first span is the one read either way.
+    rf_mutant rf1016-span-first ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "an earlier non-pytest span read as the run" \
+      '    rf_spanpy "${c:1:${#c}-2}" && { s="$c"; break; }' '    :'
+    # m13: a quoted command string handed to a shell (`bash -lc "..."`) not read -- its `-k x` acquits (rf1016-bl).
+    rf_mutant rf1016-quoted-command-unread ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 0::W 0::W 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a quoted shell command string not read" \
+      '    [ "$rf_n" != 0 ] || rf_qscan "$rf_sp" 1' '    :'
+    # m14: `-o addopts=...` not read as arguments -- its `-k foo` acquits (rf1016-ao).
+    rf_mutant rf1016-addopts-unread ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "an -o addopts value not read as arguments" \
+      '          [ "$pend" = o ] && rf_addopts "$a"' '          :'
+    # m15: an unbalanced quote swallows the rest of the command -- `-k foo` after `-v'` acquits (rf1016-qk).
+    rf_mutant rf1016-open-quote-swallows ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "an open quote swallowing the arguments after it" \
+      '    for w in "$@"; do RF_T="$RF_T$w"$'"'"'\n'"'"'; done' '    RF_T="$RF_T$cur"$'"'"'\n'"'"''
+    # m17: an undeclared wrapper not refused by name -- graph 1.8 with no conventions file is accepted (rf1016-s2nw).
+    rf_mutant rf1016-undeclared-wrapper-read ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "an undeclared wrapper run read as a plain run" \
+      '        if [ "$rf_rd" = 0 ] && rf_w="$(rf_wrapper "$rf_c")"; then' '        if false; then'
+    # m18: an escaped `\"` counted as a quote while a quoted command is scanned -- the stretch closes early and the
+    # `-k \"not slow\"` inside it is never read (rf1016-be accepted).
+    rf_mutant rf1016-escaped-quote-counted ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "an escaped quote counted as a quote" \
+      '    e="${w//\\\"/}"; e="${e//\\\'"'"'/}"' '    e="$w"'
+    # m19: the quoted command's inner text not unescaped -- `\"a b.xml\"` splits and `b.xml\"` reads as a path
+    # (rf1016-jx refused: a FALSE refusal, the mutant's only effect).
+    rf_mutant rf1016-inner-unescaped ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "an escaped quote kept escaped in the inner command" \
+      'rf_t="${rf_t//\\\"/\"}"; rf_t="${rf_t//\\\'"'"'/\'"'"'}"' ':'
+    # m20: a quoted command nested inside a quoted command not rescanned -- `ssh h 'pytest -k x'` is never read and
+    # the capture route acquits it (rf1016-ss accepted).
+    rf_mutant rf1016-nested-unscanned ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 0::W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a quoted command nested in a quoted command not rescanned" \
+      'elif [ "$2" -lt 3 ]; then rf_qscan "$rf_t" $(($2 + 1)); fi ;;' 'fi ;;'
+    # m22: a chain step whose `pytest` sits behind an unrecognised program (`direnv exec .`) not read from that word --
+    # its `-k x` acquits (rf1016-dc accepted).
+    rf_mutant rf1016-bare-chain-unread ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 0: 0: 0: 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a chain step whose pytest sits behind an unknown program not read" \
+      '        if [ "$rf_rd" = 0 ] && rf_cmdbare "$rf_c"; then rf_a="$(rf_args "$rf_c")"; rf_rd=1; fi' '        :'
+    # m23: a span whose `pytest` sits behind an unrecognised program not chosen as the run -- the later `pytest -q` span
+    # is read instead (rf1016-dx accepted).
+    rf_mutant rf1016-bare-span-unread ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 0: 0: 1:full-collection-filtered, 0: 0: 0: 0: 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a span whose pytest sits behind an unknown program not chosen" \
+      '{ rf_cmdpy "$c" || rf_cmdbare "$c"; } && return 0' 'rf_cmdpy "$c" && return 0'
+    # m24: the non-runner set (pip, grep, echo, ...) not skipped -- `grep pytest out.txt -c` reads as a pytest run whose
+    # `out.txt` is a path (rf1016-gr refused: a FALSE refusal, the mutant's only effect).
+    rf_mutant rf1016-bare-skip-list ro \
+      '1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered,:W 0::W 1:full-collection-none,:W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,+wrapper 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 0: 1:full-collection-filtered,:W 0::W 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 0: 1:full-collection-filtered, 1:full-collection-filtered, 0: 1:full-collection-none,:W 0::W' "a pytest word in a non-runner command read as a run" \
+      'case "$p" in pip|pip3|pipx|grep|egrep|fgrep|echo|printf) continue ;;' 'case "$p" in NEVER) continue ;;'
+    # RF-AUDIT probe, both directions. One record-only-diff.sh copy carries rf1016-redirect-stops' edit AND
+    # rf1016-prose-unread's, and is scored against redirect-stops' row (RFWANT with rf1016-rd accepted). With the
+    # selection alone it runs rf1016-rd only and matches the row, a false kill (the hazard is real). With the audit,
+    # rf1016-d1's answers move, so rf1016-d1 is run, and the vector does not match the row (caught, entangled).
+    if rf_pt="$(mk_tree rf1016-audit-probe)"; then
+      rf_pf="$(dirname "$rf_pt")/record-only-diff.sh"; rf_pok=1
+      for rf_pe in 'rf_redir "$w" || break; continue; }|break; }' '    rf_spanpy "$c" && s="$c"|    :'; do
+        FROM="${rf_pe%|*}" TO="${rf_pe##*|}" awk 'BEGIN{f=ENVIRON["FROM"]; t=ENVIRON["TO"]} !done && (p=index($0,f)) {$0=substr($0,1,p-1) t substr($0,p+length(f)); done=1} {print}' "$rf_pf" > "$rf_pf.tmp"
+        if cmp -s "$rf_pf" "$rf_pf.tmp"; then rf_pok=0; bad "FIXTURE ERROR: RF-AUDIT probe edit matched nothing at [${rf_pe%|*}]"; fi
+        mv "$rf_pf.tmp" "$rf_pf"
+      done
+      rf_pw=""; rf_i=0
+      for v in $RF_WORLDS; do rf_i=$((rf_i + 1))
+        if [ "$v" = rfrd ]; then rf_pw="$rf_pw 0:"; else rf_pw="$rf_pw $(awk -v n="$rf_i" '{print $n}' <<<"$RFWANT")"; fi
+      done; rf_pw="${rf_pw# }"
+      if [ "$rf_pok" = 1 ]; then
+        rf_pa="$(rf_audit "$rf_pf")"
+        rf_p0="$(RF_AUDIT="" rf_vec "$rf_pt" "$rf_pw")"; rf_p1="$(rf_score ro "$rf_pt" "$rf_pw" "$rf_pf")"
+        if [ "$rf_p0" = "$rf_pw" ] && [ "$rf_p1" != "$rf_pw" ] && case " $rf_pa " in *" rfd1 "*) true ;; *) false ;; esac; then
+          ok "RF-AUDIT control: a mutant moving rf1016-d1, a world its row does not name, matches its row under the selection alone and is caught by the audit [audited: $rf_pa]"
+        else bad "RF-AUDIT: want the selection alone to match the row and the audit to name rfd1 and not match it; got audit [$rf_pa], selection-alone match=$([ "$rf_p0" = "$rf_pw" ] && echo yes || echo no), audited match=$([ "$rf_p1" = "$rf_pw" ] && echo yes || echo no)"; fi
+      fi
+    else bad "FIXTURE ERROR: RF-AUDIT probe could not build its tree"; fi
+  fi
+
+  # OPEN-ENTRY RECEIPTS (BL-1036, BL-1037, BL-1040), each the runner of its entry's verify: line. Sourced in a fresh subshell
+  # (rcpt_run), asking the control tree's validator in process. Each carries its own two controls (a plain run accepted,
+  # a `-k` run refused full-collection-filtered) and exits 9 when either fails; 0 means the entry's fix is present, 1
+  # that the defect still reproduces. This arm holds the receipt MEASURABLE (0 or 1, with its verdict line), never its
+  # polarity: the entry turns by its own exit, and an unmeasurable receipt (9, or any other exit) fails here.
+  # Each receipt named LITERALLY (validate-fixture-hygiene E1 reads a computed receipt name as inert).
+  for rc_f in "$DIR/receipt-bl1036.sh" "$DIR/receipt-bl1037.sh" "$DIR/receipt-bl1040.sh"; do
+    rc_n="${rc_f##*/receipt-bl}"; rc_n="${rc_n%.sh}"
+    rc_o="$(rcpt_run - "$rc_f" "$HECTL" 2>&1)"; rc_x=$?
+    case "$rc_x:$rc_o" in
+      0:*FIXED:*|1:*LIVE:*) ok "RECEIPT BL-$rc_n measurable (exit $rc_x): $(grep -E '^(FIXED|LIVE):' <<<"$rc_o")" ;;
+      *) bad "RECEIPT BL-$rc_n could not measure its subject (exit $rc_x): $(tr '\n' ' ' <<<"$rc_o")" ;;
+    esac
+  done
 
   # The story line is parsed WHATEVER sprint-status.sh exits. No yaml makes the shipped
   # story-status exit non-zero portably after its story line, so the sibling's exit is
@@ -1071,9 +1408,12 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # caught by one of ro_no_test's three texts alone: refused full-collection-none); wv957-run-dir (a bare real run
   # with a backticked directory and no count: accepted); wv957-co-comma, wv957-co-semi (the token followed by `,`
   # and `;`: refused, the boundary is any character outside [A-Za-z0-9_-]); wv957-cov-comma (`--cov,`: a run,
-  # accepted); wv957-co-alias (`--collectonly`, pytest's third spelling: refused). wv_vec, as fc_vec, runs only the
+  # accepted); wv957-co-alias (`--collectonly`, pytest's third spelling: refused); wv957-co-open-run and
+  # wv957-co-dollar-run (a collect-only invocation in the value's opening, and in a `$ ` command after a backticked
+  # directory, each followed by a backticked `pytest -q` that rf_span reads: refused; since the prose-run reading these
+  # are the worlds where the opening-command text and the `$ ` text alone carry the token). wv_vec, as fc_vec, runs only the
   # worlds a mutant's want vector moves; WV_FULL=1 runs all of them for a mutant (the authoring measurement).
-  WV_WORLDS='wv957cobt wv957cobare wv957codollar wv957codar wv957cov wv957color wv957wvbase wv957wvrange wv957wvtree wv957codir wv957codollardir wv957codollarmid wv957cospan wv957rundir wv957cocomma wv957cosemi wv957covcomma wv957coalias'
+  WV_WORLDS='wv957cobt wv957cobare wv957codollar wv957codar wv957cov wv957color wv957wvbase wv957wvrange wv957wvtree wv957codir wv957codollardir wv957codollarmid wv957cospan wv957rundir wv957cocomma wv957cosemi wv957covcomma wv957coalias wv957coopenrun wv957codollarrun'
   wv_ok=1
   for v in $WV_WORLDS; do build_world "$WORK/world-$v" "$v" || { wv_ok=0; bad "FIXTURE BROKEN: could not seed git world '$v'"; }; done
   # wv957codar's block: rendered at its frozen sha and pasted, as the dev pastes it (receipt-bl843's r1 shape).
@@ -1087,7 +1427,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     grep -qF '1 passed' <<<"$wv_b" || { wv_ok=0; bad "FIXTURE BROKEN: wv957codar's block renders no count, so the count route could not acquit it either way"; }
   fi
   if [ "$wv_ok" = 1 ]; then
-    WVWANT='1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,'
+    WVWANT='1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,'
     wv_vec() { # <script> [<want>]
       local s="$1" w="${2:-}" o="" v i=0 a b
       for v in $WV_WORLDS; do
@@ -1147,47 +1487,52 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     }
     # The waiver read at <frozen>: the entry added inside the range waives (wv957-wv-range accepted).
     wv_mutant wv957-at-frozen he '"$STORY" "$BASE" "$1" 2>&1)"; wv_rc=$?' '"$STORY" "$FROZEN" "$1" 2>&1)"; wv_rc=$?' \
-      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,' \
       "the waiver read at the frozen sha, written by the party being judged"
-    # The no-test token test dropped: every collect-only value is a run again (the count route included).
+    # The no-test token test dropped: every collect-only value is a run again (the count route included). Since
+    # BL-1016 wv957-co-bare's run is one RUN-FILTER refuses (its prose read as paths): it moves by TOKEN only.
     wv_mutant wv957-no-token ro '    case " $nt_s " in *" --collect-only "*|*" --collectonly "*|*" --co "*) return 0 ;; esac' '    :' \
-      '0: 0: 0: 0::W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 0: 0: 0: 0: 0: 0:' \
+      '0: 1:full-collection-filtered, 0: 0::W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 0: 0: 0: 0: 0: 0: 1:full-collection-none, 1:full-collection-none,' \
       "a collect-only invocation read as a run"
     # The token test on the backticked spans only: the bare and `$ ` forms are runs again, and so is every form
-    # whose only collect-only text is outside a span.
+    # whose only collect-only text is outside a span (wv957-co-bare by TOKEN since BL-1016, as above).
     wv_mutant wv957-token-bt-only ro "    nt_s=\"\$(LC_ALL=C tr -c 'A-Za-z0-9_-' ' ' <<<\"\$nt_s\")\"" "    nt_s=\"\$(grep -oE '\`[^\`]*\`' <<<\"\$1\" | LC_ALL=C tr -c 'A-Za-z0-9_-' ' ')\"" \
-      '1:full-collection-none, 0: 0: 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 1:full-collection-none, 0: 0: 0: 0: 1:full-collection-none,' \
+      '1:full-collection-none, 1:full-collection-filtered, 0: 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 1:full-collection-none, 0: 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,' \
       "the no-test token read in a backticked span only"
     # The token test on rf_span's span only (the pre-fix reading): a collect-only invocation whose first backticked
     # span is its working directory is a run again, bare, after a `$ ` opening it or after a `$ ` mid-value.
     wv_mutant wv957-token-span-only ro "    nt_s=\"\$(LC_ALL=C tr -c 'A-Za-z0-9_-' ' ' <<<\"\$nt_s\")\"" "    nt_s=\"\$(rf_span \"\$1\" | LC_ALL=C tr -c 'A-Za-z0-9_-' ' ')\"" \
-      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 1:full-collection-none, 0: 0: 0: 0: 1:full-collection-none,' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 0: 0:' \
       "the no-test token read in rf_span's span only, so another run arm's text makes a collect-only value a run"
     # Each of ro_no_test's three texts dropped alone moves only the world that text alone catches.
     wv_mutant wv957-no-span-text ro '    nt_s="$(rf_span "$1")"' '    nt_s=""' \
-      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,' \
       "the no-test token not read in rf_span's span (a backticked invocation after a non-runner span is a run)"
     wv_mutant wv957-no-dollar-text ro "    nt_s=\"\$nt_s\"\$'\\n'\"\$(grep -oE" '    : "$(grep -oE' \
-      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0:' \
       "the no-test token not read in a \$ command (a \$ command after a non-runner span is a run)"
     wv_mutant wv957-no-opening-text ro "    nt_s=\"\$nt_s\"\$'\\n'\"\$(awk" '    : "$(awk' \
-      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 0: 1:full-collection-none,' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 0: 1:full-collection-none,' \
       "the no-test token not read in the value's opening (a bare invocation with a backticked directory is a run)"
-    # The token boundary restored to whitespace, a backtick or the end: `--collect-only,` and `--co;` are runs again.
+    # The token boundary restored to whitespace, a backtick or the end: `--co;` is a run again (wv957-co-semi). Since the
+    # prose-run reading (rf_span cuts an unbackticked run at `, `) wv957-co-comma's span is `pytest --collect-only`, a
+    # whole token under either boundary, so that cell stays refused under this mutant.
     wv_mutant wv957-old-boundary ro "    nt_s=\"\$(LC_ALL=C tr -c 'A-Za-z0-9_-' ' ' <<<\"\$nt_s\")\"" "    nt_s=\"\$(tr '\\t\\n\\r\`' '    ' <<<\"\$nt_s\")\"" \
-      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 0: 1:full-collection-none,' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,' \
       "the no-test token bounded by whitespace, a backtick or the end only, so punctuation after it hides it"
     # The `--collectonly` spelling dropped from the token: that spelling alone is a run again.
     wv_mutant wv957-no-alias ro '|*" --collectonly "*' '' \
-      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 0:' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 0: 1:full-collection-none, 1:full-collection-none,' \
       "pytest's --collectonly spelling of the collect-only option read as a run"
-    # D4 placed after the count route: a collect-only value borrows the block's count (wv957-co-dar accepted).
-    wv_mutant wv957-d4-after-dar he '  bash "$RO" no-test-run "$1" && return 1' '  :' \
-      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,' \
+    # D4 placed after the count route: a collect-only value borrows the block's count. Since BL-1016 the value the
+    # count route then accepts is held to RUN-GATE's verdict, and a no-test verdict there is no filter answer, so
+    # wv957-co-dar is refused full-collection-filtered (fail closed) instead of none: it moves by TOKEN.
+    wv_mutant wv957-d4-after-dar he '  [ "$EV_FC_GATE" = 1 ] && return 1' '  :' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-filtered,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,' \
       "the capture-heads count route asked before the no-test test"
     # The waiver's exit 2 read as acceptance: a story that is a tree at the base is waived.
     wv_mutant wv957-exit2-accept he "    *) refuse \"full-collection-none \$STORY: 'Full-collection run: \$1' names a canonical-run waiver" "    *) : \"full-collection-none \$STORY: 'Full-collection run: \$1' names a canonical-run waiver" \
-      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,' \
       "a waiver that cannot be read at the base accepted"
     # The waiver wired into ev_none's SHARED text: Dependency setup's refusal names a waiver it has no site for.
     # (The call alone moved into ev_none is behaviourally equivalent: every waiver spelling is a `none, <reason>`

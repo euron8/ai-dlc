@@ -22,7 +22,9 @@
 # MUTANTS (copies of the subject, each guarded by cmp -s so a sed that matched nothing cannot score)
 #   m-tail5      the filtered print restored to `tail -5`            -- killed by a1
 #   m-nofallback the whole-output fallback dropped                   -- killed by a2
-#   m-stdin      the `exec < /dev/null` line dropped                 -- killed by a4
+#   m-stdin      each unit's `< /dev/null` pointed at a regular file -- killed by a4 (xargs hands its children
+#                /dev/null, so the unit's own redirect, not the subject's `exec < /dev/null`, decides what each
+#                hermetic-run.sh reads; a mutant that only drops a redirect leaves /dev/null in place)
 # All leave a3 untouched, which is their twin: the pass path must stay green under each.
 # MUTANT-MATRIX m-tail5 decides=a1 twins=a3
 # MUTANT-MATRIX m-nofallback decides=a2 twins=a3
@@ -146,7 +148,7 @@ score() {
 }
 if mutate m-tail5 's#^.*grep -E "FAIL.*$#      tail -5 "$work/$fx.out"#'; then score m-tail5 a1 "$B_a1"; fi
 if mutate m-nofallback 's#else cat "$work/$fx.out"; fi#else :; fi#'; then score m-nofallback a2 "$B_a2"; fi
-if mutate m-stdin '/^exec < \/dev\/null$/d'; then score m-stdin a4 "$B_a4"; fi
+if mutate m-stdin 's#< /dev/null; rc=#< "$0"; rc=#'; then score m-stdin a4 "$B_a4"; fi
 
 [ "$rc" -eq 0 ] && echo "PASS  seed-verdict-store-red-print -- 4 arms, 3 mutants scored"
 exit "$rc"

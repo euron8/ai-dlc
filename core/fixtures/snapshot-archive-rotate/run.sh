@@ -201,9 +201,7 @@ _HOS=""; for _c in "$HERE/../../schemas/harness-origin.json" "$HERE/../../../.cl
 [ -n "$_HOS" ] && echo "HERMETIC-CONSUMED core/schemas/harness-origin.json"
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required to drive the hooks" >&2; exit 2; }
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -1963,8 +1961,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "snapshot-archive-rotate: PASS"
-else
-  echo "snapshot-archive-rotate: FAIL ($fails)" >&2; exit 1
-fi
+report_end snapshot-archive-rotate

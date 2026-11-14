@@ -61,9 +61,7 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 G() { git -C "$1" -c user.email=f@x -c user.name=F -c commit.gpgsign=false "${@:2}"; }
 
@@ -478,5 +476,4 @@ stdin_case nm-cat   'cat >/dev/null'   'true'  CLEAN
 # ---- the run itself is a control
 [ -n "$out1" ] && ok "the audit produced output (the run is not a silent death)" \
                || bad "the audit printed NOTHING — every assertion above is vacuous"
-if [ "$fails" -eq 0 ]; then echo "PASS trunk-audit-classes"; exit 0; fi
-echo "FAIL trunk-audit-classes ($fails)"; exit 1
+report_end trunk-audit-classes

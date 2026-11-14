@@ -5274,6 +5274,9 @@ p_wrap() {
   # wr-fallback: a pytest token before the wrapper's payload hands the span back to the plain reading, so a filtered
   # pytest run ahead of a declared wrapper run on the same line is still refused for its filter.
   wr_cell wr-fallback "$sd" run-filter '`pytest -k x ; python3 -u scripts/w.py --cwd /r -- suite/tests`' "$cv" 1 "selects tests by name (-k)"
+  # wr-fbpipe: the same ahead of a PIPE. Since the reader reads every command of a `;` chain on its own (BL-1016),
+  # wr-fallback holds without the plain reading's claim; a pipe is no chain step, so only that claim reads the `-k`.
+  wr_cell wr-fbpipe "$sd" run-filter '`pytest -k x | python3 -u scripts/w.py --cwd /r -- suite/tests`' "$cv" 1 "selects tests by name (-k)"
   # wr-artpy1 and wr-artpy2: an option VALUE ending in pytest (`--artifact /x/pytest`, `--python /v/bin/pytest`) is
   # no pytest token, so the plain reading never takes the span back and the undeclared option is refused naming it.
   wr_cell wr-artpy1 "$sd" run-filter '`python3 -u scripts/w.py --cwd /r --prelude p --artifact /x/pytest -- suite/tests`' "$cv" 1 "$WR_DW an option its conventions declaration does not carry (--prelude)"
@@ -5299,6 +5302,11 @@ p_wrap() {
   # where the base read the `>` as a redirect and passed. wr-d4w: the same on a wrapper's payload.
   wr_cell wr-d4 "$sd" run-filter "\`python -m pytest '--junitxml=x>y' suite/tests/test_one.py\`" "$cv" 1 "names a file or test node (suite/tests/test_one.py)"
   wr_cell wr-d4w "$sd" run-filter "\`$WR_W '--junitxml=x>y' suite/tests/test_one.py\`" "$cv" 1 "names a file or test node (suite/tests/test_one.py)"
+  # wr-d4q / wr-d4wq: the quoted token IS the filter (`'--deselect=x>y'`), plain and on a wrapper's payload. Since the
+  # reader skips a redirection with its target and reads on (BL-1016), wr-d4 and wr-d4w hold even when the quoted token
+  # is read as an operator; only a quoted token that itself narrows separates the quote guards from their mutants.
+  wr_cell wr-d4q "$sd" run-filter "\`python -m pytest '--deselect=x>y' suite/tests\`" "$cv" 1 "deselects tests (--deselect=x>y)"
+  wr_cell wr-d4wq "$sd" run-filter "\`$WR_W '--deselect=x>y' suite/tests\`" "$cv" 1 "deselects tests (--deselect=x>y)"
   # N5: a relative program matches by equality only, so evil/scripts/w.py is no declared wrapper (the base reading); an
   # absolute one matches by its trailing components.
   wr_cell wr-n5rel "$sd" run-filter '`python3 evil/scripts/w.py --cwd /r -- suite/tests`' "$cv" 1 "hands the runner a path after -- (suite/tests)"

@@ -152,9 +152,7 @@ mkdir -p "$WORK/xdg" "$WORK/elsewhere" || exit 2
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 XDG_CONFIG_HOME="$WORK/xdg"
 unset FXCELL
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -744,6 +742,4 @@ else
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then echo "PASS: install-scaffold-ignored"; exit 0; fi
-echo "FAIL: install-scaffold-ignored ($fails failure(s))"
-exit 1
+report_end install-scaffold-ignored

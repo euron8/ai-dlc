@@ -98,10 +98,8 @@ echo "  subject: ${SUBJECT#"$ROOT"/}"
 echo "HERMETIC-CONSUMED core/scripts/sync-transient-ignore.sh"
 echo "HERMETIC-CONSUMED core/schemas/pipeline-state-paths.json"
 
-fails=0
 echo "  mode: $MODE"
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 BEGIN="$(jq -r '.block_begin' "$SCHEMA")"
 END="$(jq -r '.block_end' "$SCHEMA")"
@@ -521,5 +519,4 @@ else
 fi
 
 echo "  $fails failed, $kills mutant(s) scored"
-[ "$fails" -eq 0 ] || exit 1
-exit 0
+report_end transient-ignore-block

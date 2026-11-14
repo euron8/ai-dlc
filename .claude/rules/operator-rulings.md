@@ -12,7 +12,7 @@ branch carries more than one release the release-version validator says so; that
 ## Ready releases are bundled and gated once
 
 - The lead collects READY releases onto ONE integration branch and gates it once.
-- Pushes stay serialized, one at a time; every other run goes in parallel.
+- Every run other than a merge goes in parallel; merges are ordered.
 - Call the advisor once immediately before every push: a hook outside the repo denies the push otherwise. The roll-call advisor
   call stays (exempt: PAUSED or CLOSABLE sessions); no pre-merge advisor call.
 - A red caused only by one release drops that release from the bundle and the rest re-gate.
@@ -52,13 +52,13 @@ green because it looks fine.
 Spawn agents liberally and in parallel; background anything long. Where something waits on the answer, wall
 clock rules; where nothing does, cheaper tokens win even if slower. Profile the SCHEDULE per unit first:
 measurement decides the ORDER, never the membership. A hand verifies ONLY its own change: `bash -n`, its
-discriminating probe, the one unit it edited; the gate runs everything else. Never message a `graph-*` session,
-even read-only, without an explicit operator grant.
+discriminating probe, and the READY carriers in CLAUDE.md; the gate runs everything else. Never message a
+`graph-*` session, even read-only, without an explicit operator grant.
 
 ## The lead orchestrates the box's load
 
-Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule. Pushes take the lead's slot one
-at a time; every other run goes in parallel.
+Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule. Every run other than a merge goes
+in parallel; merges are ordered.
 
 ## No needless timing runs
 
@@ -69,16 +69,24 @@ interleaved. Never ask to reconfirm a stated goal.
 ## The burden of verifying a change is proportional to the change
 
 Re-run only what a change can move; carry the rest by byte-identity with a control and prove coverage by name.
-The push gate is the one full verification: no hand re-runs of carriers or validators, no seeds unless named,
-no repeat reading passes, and "two agreeing counted runs" is one counted run plus the gate's. A test that
-cannot be trusted to catch what it claims gets a filing against the test, never a manual re-check around it.
-A change never invalidates a verdict whose read inputs it did not change; no release forces a whole-suite
-re-run. Enforcer: `scripts/invalidation-guard.sh` (pre-push).
+The push gate is the one full verification: no hand re-runs of carriers or validators, no seeds beyond those
+READY carries, no repeat reading passes, and "two agreeing counted runs" is one counted run plus the gate's. A
+test that cannot be trusted to catch what it claims gets a filing against the test, never a manual re-check
+around it. A change never invalidates a verdict whose read inputs it did not change; no release forces a
+whole-suite re-run. Enforcer: `scripts/invalidation-guard.sh` (pre-push).
 
 ## Zero tests depend on load (BL-868)
 
 A test whose verdict or count moves with load is a defect, fixed in the test, never tolerated with a ± row, a
 widened bound, a retry or fewer jobs.
+
+## Valid measurements are never thrown away
+
+Record every fixture, census or gate verdict in the shared, content-keyed verdict store (`AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`), keyed on what the run read, in the store a later matching run reads: a push reads only `counted-<vk>`, which `scripts/seed-verdict-store.sh` writes. A stopped or red run keeps every pass it recorded. Never record a verdict in a per-clone, per-worktree or mktemp location, or in a store no run reads, and never build a measurement whose results are discarded. Enforcer owed: BL-1045.
+
+## A release never waits for another release's landing
+
+A release never waits for another release's landing to build, rebase, verify or push; only its merge is ordered behind earlier merges.
 
 ## Read-set traces use the sandbox tracer, and the session runs them
 

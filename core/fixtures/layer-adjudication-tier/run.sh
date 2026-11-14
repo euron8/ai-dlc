@@ -70,9 +70,7 @@ ENTRY=".claude/skills/ai-dlc/extensions/adjudicable.md"
 REG="$CONS/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
 CONTRACT="$DIST/core/skills/ai-dlc/layer-contract.yaml"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
@@ -2195,9 +2193,4 @@ if [ "$MATRIX" = 0 ]; then
   else bad "a plain run executed $mx_extra matrix-only drive(s)"; fi
 fi
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "layer-adjudication-tier: PASS"
-  exit 0
-fi
-echo "layer-adjudication-tier: FAIL ($fails)"
-exit 1
+report_end layer-adjudication-tier

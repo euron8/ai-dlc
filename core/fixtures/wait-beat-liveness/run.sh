@@ -220,9 +220,7 @@ echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"
 [ -f "$(dirname "$SUBJ")/wfd-start-of.sh" ] || { echo "FIXTURE ERROR: wfd-start-of.sh is not beside $SUBJ" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/wfd-start-of.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # In a matrix cell (MX_IN_CELL) a seed guard that fires means the MUTANT changed the state the arm seeds:
 # exit 3, read as cell=SEED -- not a trip (1), not green (0), and not a fixture defect (2).
 broken() { printf 'wait-beat-liveness: FIXTURE BROKEN — %s\n' "$1" >&2; [ -n "${MX_IN_CELL:-}" ] && exit 3; exit 2; }
@@ -4453,10 +4451,4 @@ if [ "$MATRIX" = 0 ]; then
   if [ "$MX_CELLS" -eq 0 ]; then ok "matrix: a plain run executed no matrix-only cell"
   else bad "matrix: a plain run executed $MX_CELLS matrix-only cell(s)"; fi
 fi
-
-if [ "$fails" -eq 0 ]; then
-  echo "wait-beat-liveness: PASS"
-  exit 0
-fi
-echo "wait-beat-liveness: ${fails} assertion(s) FAILED" >&2
-exit 1
+report_end wait-beat-liveness

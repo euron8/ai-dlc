@@ -59,9 +59,7 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd)/${HOOK##*/}"
 
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE BROKEN: escalation-delivery needs jq and it is not on PATH -- a SKIP here would record a pass over an unrun fixture" >&2; exit 2; }
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
 # The battery's inner runs find it too: it copies lib/mutant.sh beside its copy of this script.
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -244,11 +242,12 @@ else
 # the run never opens leaves every arm green and reads exactly like an arm that cannot fire.
 # The tree keeps the subject's own relative path, so an inner run's source of its mutant copy counts under the
 # inproc: row; lib/mutant.sh sits beside the copied script because the inner run sources it (for fx_inproc) and,
-# behind .no-battery, never scores a mutant.
+# behind .no-battery, never scores a mutant; lib/report.sh because the inner run reports through it.
 MB="$(mktemp -d "${TMPDIR:-/tmp}/esc-mut-XXXXXX")"
 mkdir -p "$MB/core/hooks" "$MB/core/fixtures/escalation-delivery" "$MB/core/fixtures/lib" "$MB/mut"
 cp "$HERE/run.sh" "$MB/core/fixtures/escalation-delivery/run.sh"
 cp "$HERE/../lib/mutant.sh" "$MB/core/fixtures/lib/mutant.sh"
+cp "$HERE/../lib/report.sh" "$MB/core/fixtures/lib/report.sh"
 touch "$MB/core/fixtures/escalation-delivery/.no-battery"
 kills=0; expected=0
 
@@ -364,6 +363,4 @@ rm -rf "$MB"
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "escalation-delivery: PASS"; exit 0; fi
-echo "escalation-delivery: $fails assertion(s) FAILED" >&2
-exit 1
+report_end escalation-delivery

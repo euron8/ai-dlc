@@ -128,10 +128,8 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/settings-merge.sh"
 WORK="$(mktemp -d 2>/dev/null)" || { printf 'FIXTURE BROKEN: mktemp failed\n' >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-FAILURES=0
-ASSERTIONS=0
-ok()  { ASSERTIONS=$((ASSERTIONS + 1)); printf '  ok    %s\n' "$1"; }
-bad()  { ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { printf 'FIXTURE BROKEN: lib/mutant.sh not found beside %s\n' "$HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -407,9 +405,4 @@ else
 fi
 
 printf '\n'
-if [ "$FAILURES" -eq 0 ]; then
-  printf '%s: PASS -- %s assertion(s), 4 mutants, %s kill(s)\n' "$NAME" "$ASSERTIONS" "$KILLS"
-  exit 0
-fi
-printf '%s: %s of %s assertion(s) FAILED\n' "$NAME" "$FAILURES" "$ASSERTIONS" >&2
-exit 1
+report_end "$NAME"

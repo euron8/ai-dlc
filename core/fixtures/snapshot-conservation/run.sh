@@ -35,9 +35,7 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 printf 'HERMETIC-CONSUMED %s\n' "$VALIDATOR"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_scMoved=0; B_scFloor=0; B_scUnparse=0
 
@@ -352,8 +350,4 @@ else
 fi
 
 echo
-if [ "$fails" -ne 0 ]; then
-  echo "snapshot-conservation: $fails assertion(s) FAILED" >&2
-  exit 1
-fi
-echo "snapshot-conservation: all assertions passed"
+report_end snapshot-conservation

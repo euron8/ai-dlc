@@ -40,9 +40,7 @@
 
 set -uo pipefail
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -181,10 +179,4 @@ if [ "$(says "$NOPF" "$BIG_BAD")" = VIOLATION ]; then
 else
   bad "the piped form fails even without pipefail, so I54b's first narrowing excludes a population that DOES carry the defect and the arm is blind over every file that omits the option"
 fi
-
-if [ "$fails" -eq 0 ]; then
-  echo "early-exit-reader: PASS"
-  exit 0
-fi
-echo "early-exit-reader: $fails assertion(s) FAILED"
-exit 1
+report_end early-exit-reader

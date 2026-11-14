@@ -30,9 +30,7 @@ echo "HERMETIC-CONSUMED scripts/validate-plan-shape.sh"
 T="$(mktemp -d "${TMPDIR:-/tmp}/plan-shape.XXXXXX")"
 trap 'rm -rf "$T"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 echo "plan-shape:"
 
@@ -563,5 +561,4 @@ cp "$V" "$T/empty/scripts/validate-plan-shape.sh"
   || bad "an empty corpus exited $rc; a repo that lost its plans would report a clean run"
 
 echo ""
-if [ "$fails" -eq 0 ]; then echo "plan-shape: PASS"; exit 0; fi
-echo "plan-shape: FAIL ($fails)"; exit 1
+report_end plan-shape

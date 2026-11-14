@@ -761,16 +761,19 @@ candidate's surviving half is upstream's to file and build, never a question for
      asking for its current state and whether it is free to own a release. A session whose
      release landed is never re-assigned, and is CLOSABLE only by operator-rulings.md's test. A
      session that has not answered after one re-ask and one more timer counts as no session.
-   - **Roll call every 45 minutes, with an advisor call.** Operator instruction at batch 255: "the
+   - **Roll call every 70 minutes, with an advisor call.** Operator instruction at batch 255: "the
      lead session performs a roll call once every 45 minutes and instructs any session that isn't
      marked as closeable to call the advisor. Once all sessions return roll call advisor results
-     then the lead session calls the advisor." Every 45 minutes the lead sends each `ai-dlc-*`
-     session not yet stated CLOSABLE one `SendMessage`. It asks for one line (release, state, next
+     then the lead session calls the advisor." The batch-257 operator ruling replaces the 45-minute
+     interval: the roll call runs every 70 minutes, in staggered groups of 3, and the next group is
+     messaged only after every session in the current group has answered, to minimise advisor rate
+     limiting. Each owner still makes its roll-call advisor call. Every 70 minutes the lead sends
+     each `ai-dlc-*` session not yet stated CLOSABLE one `SendMessage`, a group of 3 at a time. It asks for one line (release, state, next
      step, anything blocked or owed) and tells the session to call `advisor`, act on it, and report
      what the call changed. When every such session has answered, the lead calls `advisor` itself.
      A session that has not answered after one re-ask and one more timer is reported to the
-     operator as silent. When designated, the lead arms ONE non-recurring job at now+45 minutes
-     (cron cannot say 45 minutes, and recurring jobs drift: measured next fires 18 then 63 minutes
+     operator as silent. When designated, the lead arms ONE non-recurring job at now+70 minutes
+     (cron cannot say 70 minutes, and recurring jobs drift: measured next fires 18 then 63 minutes
      apart); each fire re-arms the next job first. It re-arms after a compaction and stops when no
      session remains active. The advisor-call exemption is ONLY a session that is PAUSED or stated
      CLOSABLE (operator); a session holding or queued for the push turn is NOT exempt. A paused

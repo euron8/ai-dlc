@@ -181,9 +181,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/carried-findings.XXXXXX")" || exit 2
 WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MATRIX=0
 if [ "${1:-}" = --matrix ]; then MATRIX=1; fi
 MWIDE=0; MROWS=0
@@ -891,6 +889,4 @@ if [ "$MATRIX" = 0 ]; then
 else
   if [ "$MWIDE" -gt 0 ] && [ "$MROWS" -gt 0 ]; then ok "matrix run: $MWIDE mutants measured across every arm ($MROWS rows)"; else bad "matrix run: no rows were printed (wide=$MWIDE rows=$MROWS)"; fi
 fi
-
-if [ "$fails" -eq 0 ]; then echo "carried-findings: PASS"; exit 0; fi
-echo "carried-findings: $fails FAILED"; exit 1
+report_end carried-findings

@@ -118,9 +118,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/pc-rename.XXXXXX")" || { echo "FIXTURE ERROR:
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # need_base <flag> <mutant-name> and mutant_killed <flag> <mutant-name> <message> live in the shared
 # lib/mutant.sh: a mutant is scored only when the arm it guards passed in THIS run (flag 1).
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
@@ -1142,9 +1140,4 @@ if [ "$MATRIX" -eq 0 ]; then
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "preclassify-rename-row: PASS"
-  exit 0
-fi
-echo "preclassify-rename-row: FAIL ($fails assertion(s))"
-exit 1
+report_end preclassify-rename-row

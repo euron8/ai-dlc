@@ -136,9 +136,7 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -934,9 +932,4 @@ else
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "schema-install-fallback: PASS ($n_scored mutant(s) scored)"
-  exit 0
-fi
-echo "schema-install-fallback: FAIL ($fails assertion(s))"
-exit 1
+report_end schema-install-fallback

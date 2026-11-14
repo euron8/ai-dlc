@@ -211,10 +211,8 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-asserted=0
-ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 echo "retro-branch-behind-main:"
 if [ "$MATRIX" = 1 ]; then echo "MODE: FULL (--matrix, every mutant x every arm)"; else echo "MODE: PUSH (each mutant drives its deciding arm and one twin)"; fi
@@ -2034,17 +2032,7 @@ echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
 # A PENDING skip is counted, so asserted + skipped must still be the full count.
 # A distribution-layout absence is one FAILED assertion beside its skipped arms, so it is netted out.
-if [ $((asserted + SKIPPED - PENDBAD)) -ne 51 ]; then
-  echo "retro-branch-behind-main: FIXTURE ERROR — ran $asserted assertions ($PENDBAD of them distribution-absence failures) and skipped $SKIPPED as PENDING, expected 51 in all" >&2
-  exit 2
+if [ "$PENDN" -gt 0 ]; then
+  echo "retro-branch-behind-main: $PENDN PENDING row(s) skipping $SKIPPED -- their subjects have not arrived in this retro.md"
 fi
-if [ "$fails" -eq 0 ]; then
-  if [ "$PENDN" -gt 0 ]; then
-    echo "retro-branch-behind-main: PASS ($asserted assertions; $PENDN PENDING row(s) skipping $SKIPPED — their subjects have not arrived in this retro.md)"
-  else
-    echo "retro-branch-behind-main: PASS ($asserted assertions)"
-  fi
-  exit 0
-fi
-echo "retro-branch-behind-main: FAIL ($fails of $asserted assertion(s))" >&2
-exit 1
+report_end retro-branch-behind-main "$((51 - SKIPPED + PENDBAD))"

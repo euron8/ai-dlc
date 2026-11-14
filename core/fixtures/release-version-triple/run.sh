@@ -32,6 +32,9 @@
 # MUTANT-MATRIX m-exempt-all decides=R4 twins=R2
 # MUTANT-MATRIX m-exempt-none decides=R3 twins=R2
 # MUTANT-MATRIX m-search-tip decides=R5 twins=R2
+# MUTANT-MATRIX m-stack-origin-main decides=S1,S3 twins=S2
+# MUTANT-MATRIX m-no-exclude decides=S4 twins=S1
+# MUTANT-MATRIX m-fail-open decides=S5 twins=S1
 # MUTANT-MATRIX m-e-nospace decides=assertion-23 twins=assertion-2
 # MUTANT-MATRIX m-f-no-count decides=assertion-25 twins=assertion-2
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/release-version-triple/run.sh --matrix
@@ -74,7 +77,7 @@ printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
 # reporting their probes fired both ways. The arm E and arm F probe mutants score through it.
 B_A1=0
 B_assertion_2=0; B_assertion_7c=0; B_assertion_10=0; B_assertion_13=0; B_assertion_20=0
-B_R1=0; B_R3=0; B_R4=0; B_R5=0
+B_R1=0; B_R3=0; B_R4=0; B_R5=0; B_S1=0; B_S4=0; B_S5=0
 
 # EXPECTED_ASSERTIONS is not bookkeeping. A sibling fixture lost an entire mutant
 # when a helper call was mis-spaced: `set -u` killed the `$( )` subshell, the `if`
@@ -82,7 +85,7 @@ B_R1=0; B_R3=0; B_R4=0; B_R5=0
 # PASS. Every assertion below reaches the validator through `$( )`, so the same
 # shape is available here. A failed assertion is loud; one that never executed is
 # not, and this is what tells them apart.
-EXPECTED_ASSERTIONS=42
+EXPECTED_ASSERTIONS=50
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -169,6 +172,7 @@ eval_check() { # <check index> <validator file> -> 0 when the check holds under 
   case "${CK_KIND[$i]}" in
     pair) pair_ok "$ENGINE" "$v"; return $? ;;
     src)  ( cd "${CK_DIR[$i]}" && drive_src "$v" "$out" ${CK_ARGS[$i]} ); st=$? ;;
+    push) ( cd "${CK_DIR[$i]}" && drive_push "$v" "$out" ); st=$? ;;
     exec) ( cd "${CK_DIR[$i]}" && bash "$v" ${CK_ARGS[$i]} >"$out" 2>&1 ); st=$? ;;
     *) return 2 ;;
   esac
@@ -886,6 +890,157 @@ else
   bad "MUTATION m-search-tip: R5's input still fails (exit $status) with the search from the tip"; sed 's/^/        /' "$WORK/mut-r.txt"
 fi
 regmut m-search-tip "$WORK/m-search-tip.sh"
+
+# --- S1-S5. A RELEASE STACKED ON A PUSHED, UNLANDED RELEASE (BL-1047) -----------
+# The default range once ran from origin/main only, so a release stacked on another release that
+# was pushed for its own gate and had not landed read as a two-release branch and failed its push.
+# The base is now the nearest pushed release ancestor, searched only when the caller passes the
+# push's remote and ref lines, and never one the push itself names (the validator's USAGE block).
+# EVERY PUSH CELL IS A REAL `git push` to a scratch bare origin, whose pre-push hook captures "$1"
+# and its stdin -- the lines git hands .githooks/pre-push -- into .git/ and refuses, so nothing
+# lands and the cell is judged at hook time. The validator then gets them exactly as step 1c of
+# that hook passes them: --push-remote "$1" --push-refs "<stdin>". S1 the stack passes and names
+# its base; S2 the stack over a NEVER-pushed release fails; S3 two releases above the pushed base
+# fail; S4 ONE branch collecting two releases across two pushes fails, though its first push left
+# origin/<branch> containing the lower one; S5 the stack with NO push refs fails closed. The
+# capture hook is /bin/sh, so the push starts no counted bash. A FIFTH SANDBOX.
+W5="$WORK/stacked"
+mkdir -p "$W5" "$WORK/capture-hooks" && cd "$W5" || exit 2
+git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed in W5" >&2; exit 2; }
+git init -q --bare "$WORK/stacked-origin.git" 2>/dev/null || { echo "FIXTURE ERROR: git init --bare failed" >&2; exit 2; }
+git config user.email f@example.com
+git config user.name Fixture
+git config commit.gpgsign false
+git remote add origin "$WORK/stacked-origin.git"
+# git exports no GIT_DIR to a pre-push hook and runs it at the work tree's top, so .git/ is relative.
+printf '%s\n' '#!/bin/sh' 'printf %s "$1" > .git/ai-dlc-push-remote' 'cat > .git/ai-dlc-push-lines' 'exit 1' \
+  > "$WORK/capture-hooks/pre-push"
+chmod +x "$WORK/capture-hooks/pre-push"
+real_push() { git -c core.hooksPath=/dev/null push -q origin "HEAD:refs/heads/$1" >/dev/null 2>&1 || { echo "FIXTURE ERROR: setup push of $1 failed" >&2; exit 2; }; }
+# capture <branch> -- a refused push of HEAD to <branch>, leaving the hook's two inputs in .git/.
+capture() {
+  rm -f .git/ai-dlc-push-remote .git/ai-dlc-push-lines
+  git -c core.hooksPath="$WORK/capture-hooks" push -q origin "HEAD:refs/heads/$1" >/dev/null 2>&1
+  [ -s .git/ai-dlc-push-lines ] && grep -q " refs/heads/$1 " .git/ai-dlc-push-lines \
+    || { echo "FIXTURE ERROR: the capture hook recorded no ref line for $1" >&2; exit 2; }
+}
+# drive_push <validator> <outfile> -- the sourced drive, given the captured push as the hook gives it.
+drive_push() { drive_src "$1" "$2" --push-remote "$(cat .git/ai-dlc-push-remote)" --push-refs "$(cat .git/ai-dlc-push-lines)"; }
+release 0.1.0 '0.1.0 — landed'
+git branch -M main
+real_push main
+git checkout -q -b lower main
+release 0.2.0 '0.2.0 — pushed for its own gate, not landed'
+git commit -q --allow-empty -m 'a fix above the lower release commit'
+real_push lower
+git checkout -q -b local-lower main
+release 0.2.0 '0.2.0 — committed and never pushed'
+git checkout -q -b squash3 lower
+printf '0.4.0' > VERSION
+{ printf '# Changelog\n\n## [0.4.0] — 2026-01-01\n\n- entry\n\n## [0.3.0] — 2026-01-01\n\n- entry\n'
+  tail -n +2 CHANGELOG.md; } > CHANGELOG.next
+mv CHANGELOG.next CHANGELOG.md
+git add -A
+git commit -q -m '0.4.0 — squashes 0.3.0 in above the pushed release'
+git checkout -q -b stacked-local local-lower
+release 0.3.0 '0.3.0 — stacked on an unpushed release'
+git checkout -q -b samebr main
+release 0.2.0 '0.2.0 — first release on the collecting branch'
+real_push samebr
+release 0.3.0 '0.3.0 — second release on the collecting branch'
+git checkout -q -b stacked lower
+release 0.3.0 '0.3.0 — stacked on the pushed release'
+git fetch -q origin 2>/dev/null
+stack_lower="$(git rev-parse lower~1)"
+
+capture stacked
+drive_push "$VALIDATOR" "$WORK/out.txt"; status=$?
+if [ "$status" = "0" ] && grep -q "range base is the pushed release $stack_lower on origin/lower" "$WORK/out.txt" \
+   && ! grep -q 'adds 2 release headings' "$WORK/out.txt"; then
+  ok "S1: a release stacked on a pushed, unlanded release passes its push, and names that release as its range base"; B_S1=1
+else
+  bad "S1: a stacked release failed its push or did not name its pushed base -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+reg S1 push 0 "range base is the pushed release $stack_lower on origin/lower"
+
+# S5 reads the same commits with no push refs: a hand run, the old hook. It must range from origin/main.
+drive_src "$VALIDATOR" "$WORK/out.txt"; status=$?
+if [ "$status" = "1" ] && grep -q 'adds 2 release headings to CHANGELOG.md: 0.2.0 0.3.0' "$WORK/out.txt" \
+   && ! grep -q 'range base is the pushed release' "$WORK/out.txt"; then
+  ok "S5: the same stack with no push refs fails closed, as two releases from origin/main"; B_S5=1
+else
+  bad "S5: a run given no push refs took a stacked base -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+reg S5 src 1 'adds 2 release headings to CHANGELOG.md: 0.2.0 0.3.0'
+
+git checkout -q stacked-local
+capture stacked-local
+drive_push "$VALIDATOR" "$WORK/out.txt"; status=$?
+if [ "$status" = "1" ] && grep -q 'adds 2 release headings to CHANGELOG.md: 0.2.0 0.3.0' "$WORK/out.txt" \
+   && ! grep -q 'range base is the pushed release' "$WORK/out.txt"; then
+  ok "S2: the same stack over a release that was never pushed still fails its push as two releases"
+else
+  bad "S2: an unpushed lower release served as a range base -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+reg S2 push 1 'adds 2 release headings to CHANGELOG.md: 0.2.0 0.3.0'
+
+git checkout -q squash3
+capture squash3
+drive_push "$VALIDATOR" "$WORK/out.txt"; status=$?
+if [ "$status" = "1" ] && grep -q "range base is the pushed release $stack_lower" "$WORK/out.txt" \
+   && grep -q 'adds 2 release headings to CHANGELOG.md: 0.3.0 0.4.0' "$WORK/out.txt"; then
+  ok "S3: a commit squashing two releases above the pushed base fails its push from that base"
+else
+  bad "S3: two releases above a pushed base passed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+reg S3 push 1 'adds 2 release headings to CHANGELOG.md: 0.3.0 0.4.0'
+
+git checkout -q samebr
+capture samebr
+drive_push "$VALIDATOR" "$WORK/out.txt"; status=$?
+if [ "$status" = "1" ] && grep -q 'adds 2 release headings to CHANGELOG.md: 0.2.0 0.3.0' "$WORK/out.txt" \
+   && ! grep -q 'range base is the pushed release' "$WORK/out.txt" \
+   && grep -q ' refs/heads/samebr [0-9a-f]*[1-9a-f][0-9a-f]*$' .git/ai-dlc-push-lines; then
+  ok "S4: one branch collecting a second release after its first push fails, though origin/samebr holds the first"; B_S4=1
+else
+  bad "S4: the branch's own earlier push served as its range base -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+reg S4 push 1 'adds 2 release headings to CHANGELOG.md: 0.2.0 0.3.0'
+
+# The base choice reverted to origin/main only: S1's stack reads as two releases again.
+git checkout -q stacked
+capture stacked
+mkmut "$WORK/m-stack-origin-main.sh" 'STACK_BASE="$(stacked_base)"' 'STACK_BASE=""'
+drive_push "$WORK/m-stack-origin-main.sh" "$WORK/mut-s.txt"; status=$?
+if [ "$status" = "1" ] && grep -q 'adds 2 release headings to CHANGELOG.md: 0.2.0 0.3.0' "$WORK/mut-s.txt"; then
+  mutant_killed "$B_S1" m-stack-origin-main "MUTATION m-stack-origin-main: ranging from origin/main only fails S1's stacked release as two releases"
+else
+  bad "MUTATION m-stack-origin-main: S1's input did not fail as two releases (exit $status) with the base pinned to origin/main"; sed 's/^/        /' "$WORK/mut-s.txt"
+fi
+regmut m-stack-origin-main "$WORK/m-stack-origin-main.sh"
+
+# The exclusion dropped: the push's own ref is searched, and S4's first push becomes its base.
+git checkout -q samebr
+capture samebr
+mkmut "$WORK/m-no-exclude.sh" 'ref="$(grep -vxF -e "$excl" <<<"$ref")" || ref=""' ':'
+drive_push "$WORK/m-no-exclude.sh" "$WORK/mut-s.txt"; status=$?
+if [ "$status" = "0" ] && grep -q 'range base is the pushed release .* on origin/samebr' "$WORK/mut-s.txt"; then
+  mutant_killed "$B_S4" m-no-exclude "MUTATION m-no-exclude: searching the push's own ref passes S4, ranging from origin/samebr"
+else
+  bad "MUTATION m-no-exclude: S4's input did not pass (exit $status) with the exclusion dropped"; sed 's/^/        /' "$WORK/mut-s.txt"
+fi
+regmut m-no-exclude "$WORK/m-no-exclude.sh"
+
+# Fail-closed dropped: with no push refs the search runs anyway, and S5's stack passes.
+git checkout -q stacked
+mkmut "$WORK/m-fail-open.sh" '  [ -n "$excl" ] || return 0' '  :'
+drive_src "$WORK/m-fail-open.sh" "$WORK/mut-s.txt"; status=$?
+if [ "$status" = "0" ] && grep -q "range base is the pushed release $stack_lower on origin/lower" "$WORK/mut-s.txt"; then
+  mutant_killed "$B_S5" m-fail-open "MUTATION m-fail-open: searching with no push refs passes S5's stack"
+else
+  bad "MUTATION m-fail-open: S5's input did not pass (exit $status) with fail-closed dropped"; sed 's/^/        /' "$WORK/mut-s.txt"
+fi
+regmut m-fail-open "$WORK/m-fail-open.sh"
 
 # --- 23. ARM E'S OWN PROBE TREE CARRIES ITS NEAR-MISS ----------------------------
 # Assertion 1 proves the probe reports its offender; it cannot prove the near-misses were

@@ -54,9 +54,7 @@ fi
 # one is a hard error and upstream can never go green vacuously.
 IS_DIST=0; [ -d "$ROOT/core/skills/ai-dlc" ] && IS_DIST=1
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_a1pres=0; B_a2adv=0
 skip() { # skip <what> <why>
@@ -344,12 +342,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "PASS  apply-machinery-stamp: the machinery pair moves only on a run that carried the"
-  echo "      machinery slice, is withheld with the rulebook pair when a file could not be"
-  echo "      placed, is inserted rather than silently skipped when absent, and says so on a"
-  echo "      stamp that cannot take it."
-  exit 0
-fi
-echo "apply-machinery-stamp: $fails assertion(s) FAILED"
-exit 1
+report_end apply-machinery-stamp

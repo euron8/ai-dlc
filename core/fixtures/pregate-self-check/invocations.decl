@@ -12,8 +12,16 @@
 # runs (15 to 17 self-check starts per run) and run.sh gains the m6, m7 and m8 receipt runs (9 runs x 17 = 153); Mt and
 # Mr each reach section d's clean-tree seed, except in the m2 and m5 runs (5 per plain run, plus 4 in m3's). From one
 # counted run through scripts/seed-verdict-store.sh on the release tree.
-544 *
-153 scripts/pregate-self-check.sh
-14 core/fixtures/pregate-self-check/receipt-bl643.sh
-53 scripts/seed-verdict-store.sh
+# 544 to 1169, 153 to 200, 14 to 15 and 53 to 137, BL-1066 and BL-1069: the receipt drives three more roots (Er, Ts,
+# Tn) in each of its runs (17 to 20 self-check starts per run) and run.sh gains the m9 receipt run (10 runs x 20 = 200);
+# section e seeds its four stub fixtures in Mt, Mr, Er and Ts, and Wd's section d now seeds through --dirty-ok; each
+# seed starts one `bash unit.sh` per fixture. From one counted run through scripts/seed-verdict-store.sh.
+# 1169 to 875, 200 to 175, 15 to 17 and 137 to 101, BL-1069 subset path and world groups: the receipt drives world Ep,
+# run.sh gains the m10 and m11 receipt runs, and each mutant's receipt run drives only its group (RECEIPT_WORLDS):
+# the control 21 self-check starts, m1-m8 base 17 each (136), m9-m11 section e 6 each (18) = 175. Mt and Mr carry a
+# predictor naming nothing, so their section e starts no seed. From one counted run through scripts/seed-verdict-store.sh.
+875 *
+175 scripts/pregate-self-check.sh
+17 core/fixtures/pregate-self-check/receipt-bl643.sh
+101 scripts/seed-verdict-store.sh
 # 75 to 161, 27 to 56 and 3 to 4, BL-1020: the receipt drives five more roots (Hcwd, Hres, Htree, Hbehind, Habs) in each of its runs, and run.sh gains the m3 mutant run. From two agreeing counted runs.

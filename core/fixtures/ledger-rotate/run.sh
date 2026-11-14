@@ -95,9 +95,7 @@ done
 [ -n "$ROT" ] || { echo "FIXTURE ERROR: ledger-rotate.sh not found in either layout" >&2; exit 2; }
 printf 'HERMETIC-CONSUMED %s\n' "$ROT"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 entries() { grep -cE '^(## |- \*\*)' "$1" 2>/dev/null || echo 0; }
 
 # need_base / mutant_killed (core/fixtures/lib/mutant.sh): every kill below goes through
@@ -2238,8 +2236,4 @@ if [ "$MATRIX" = 0 ]; then
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "ledger-rotate: PASS"
-else
-  echo "ledger-rotate: FAIL ($fails)" >&2; exit 1
-fi
+report_end ledger-rotate

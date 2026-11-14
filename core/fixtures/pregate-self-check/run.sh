@@ -24,13 +24,22 @@
 #     records its tree (Wdrec=yes) and names nothing (Wdn=no). The control asserts A records (Arec=yes), B (a finding)
 #     does not, and Wd does not and says why.
 # m5  mutant (BL-1064): section d's clean-tree test made to match nothing; the clean world A then runs the fork-budget
-#     fixture under the scratch store (Aseed=no) instead of through seed-verdict-store.sh into its hook's counted store.
+#     fixture as a dirty tree (Aseed=no). The control asserts the dirty world Wd seeds through --dirty-ok (BL-1066).
 # m6  mutant (BL-1082): the member mode's no-record exit disabled; the clean member world Mt then writes a pregate
 #     record (Mtrec=yes) and does not say it wrote none (Mtn=no).
 # m7  mutant (BL-1082): the member mode's switch to the tree's own hook deleted, so it runs the hook a push would run;
 #     the member world Mr's red step after PRESUITE_DONE=1 then goes unseen (Mr=0, Mrn=no).
 # m8  mutant (BL-1082): the --member clause dropped from the edited-hook refusal, the member mode's carrier; Htree's
 #     refusal then no longer names it (Htreem=no).
+# m9  mutant (BL-1069): section e's trigger test replaced by `true`, so it always skips; Er's hook edit then no longer
+#     reds its hook-driving fixture (Er=0, Ern=no), and Mt and Ts run none (Mte=no, Tsn=no). The control asserts A and
+#     Tn skip.
+# m10 mutant (BL-1069): section e's prediction ignored, the whole set run; Ep, whose predictor names hookfx alone,
+#     then runs the wrapper too (Epn=no, Epall=yes), and Mt, whose predictor names nothing, runs all four (Mte=no).
+# m11 mutant (BL-1069): section e's predicted subset emptied; Ep then runs nothing (Epn=no, Epnone=yes). The control
+#     asserts Ep runs hookfx alone, Mt none, and Er, with no predictor, says so and runs all four.
+# Each mutant's receipt run drives only its world group (mx_mode): m9-m11 the section-e group, every other the base
+# group; a cell compares the summary fields that group drives.
 # gc  control (BL-1055): the PREGATE_GATE span of .githooks/pre-push, cut and driven by the receipt's --gate mode
 #     (deny, empty, allow, tree, dirty), plus one whole-hook drive (E2E) that must stop at the gate before any step.
 # g1-g4 mutants of a copy of that hook, cut-only: g1 drops the record test, g2 the clean-tree test, g3 the
@@ -47,14 +56,17 @@
 # The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
 # requires. Run the REMEASURE command below, from the repo root. It scores every mutant against every cell
 # and prints one MATRIX line each.
-# MUTANT-MATRIX m1 decides=exit1,m1-moved,differs twins=m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m6-moved,m7-moved,m8-moved
-# MUTANT-MATRIX m2 decides=exit1,m2-refused,m2-names,differs twins=m1-moved,m3-moved,m4-moved,m5-moved,m6-moved,m7-moved,m8-moved
-# MUTANT-MATRIX m3 decides=exit1,m3-moved,differs twins=m1-moved,m2-refused,m2-names,m4-moved,m5-moved,m6-moved,m7-moved,m8-moved
-# MUTANT-MATRIX m4 decides=exit1,m4-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m5-moved,m6-moved,m7-moved,m8-moved
-# MUTANT-MATRIX m5 decides=exit1,m5-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m6-moved,m7-moved,m8-moved
-# MUTANT-MATRIX m6 decides=exit1,m6-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m7-moved,m8-moved
-# MUTANT-MATRIX m7 decides=exit1,m7-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m6-moved,m8-moved
-# MUTANT-MATRIX m8 decides=exit1,m8-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m6-moved,m7-moved
+# MUTANT-MATRIX m1 decides=exit1,m1-moved,differs twins=m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m6-moved,m7-moved,m8-moved,m9-moved,m10-moved,m11-moved
+# MUTANT-MATRIX m2 decides=exit1,m2-refused,m2-names,differs twins=m1-moved,m3-moved,m4-moved,m5-moved,m6-moved,m7-moved,m8-moved,m9-moved,m10-moved,m11-moved
+# MUTANT-MATRIX m3 decides=exit1,m3-moved,differs twins=m1-moved,m2-refused,m2-names,m4-moved,m5-moved,m6-moved,m7-moved,m8-moved,m9-moved,m10-moved,m11-moved
+# MUTANT-MATRIX m4 decides=exit1,m4-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m5-moved,m6-moved,m7-moved,m8-moved,m9-moved,m10-moved,m11-moved
+# MUTANT-MATRIX m5 decides=exit1,m5-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m6-moved,m7-moved,m8-moved,m9-moved,m10-moved,m11-moved
+# MUTANT-MATRIX m6 decides=exit1,m6-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m7-moved,m8-moved,m9-moved,m10-moved,m11-moved
+# MUTANT-MATRIX m7 decides=exit1,m7-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m6-moved,m8-moved,m9-moved,m10-moved,m11-moved
+# MUTANT-MATRIX m8 decides=exit1,m8-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m6-moved,m7-moved,m9-moved,m10-moved,m11-moved
+# MUTANT-MATRIX m9 decides=exit1,m9-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m6-moved,m7-moved,m8-moved,m10-moved,m11-moved
+# MUTANT-MATRIX m10 decides=exit1,m10-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m6-moved,m7-moved,m8-moved,m9-moved,m11-moved
+# MUTANT-MATRIX m11 decides=exit1,m11-moved,differs twins=m1-moved,m2-refused,m2-names,m3-moved,m4-moved,m5-moved,m6-moved,m7-moved,m8-moved,m9-moved,m10-moved
 # MUTANT-MATRIX g1 decides=exit1,g1-moved,gdiffers twins=g2-moved,g3-moved,g4-moved
 # MUTANT-MATRIX g2 decides=exit1,g2-moved,gdiffers twins=g1-moved,g3-moved,g4-moved
 # MUTANT-MATRIX g3 decides=exit1,g3-moved,gdiffers twins=g1-moved,g2-moved,g4-moved
@@ -99,15 +111,15 @@ trap 'rm -rf "$WORK"' EXIT
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-# 53 = a1: 2 notes, m1: 3, m2: 1 anchor note and 4, m3: 1 anchor note and 3, m4-m8: 4 each on either branch, gc: 2,
+# 65 = a1: 2 notes, m1: 3, m2: 1 anchor note and 4, m3: 1 anchor note and 3, m4-m11: 4 each on either branch, gc: 2,
 # g1-g4: 4 each on either branch (applied, or DID NOT APPLY; each mutant's branches are exclusive), rule-9: 1 note.
 # The count is asserted on a plain run only; --matrix emits the same notes but no rule-9 `ok`.
-EXPECTED_ASSERTIONS=53
+EXPECTED_ASSERTIONS=65
 # The shared mutant-kill helper: a kill is emitted only through mutant_killed, behind a same-run base-pass flag.
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
-WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdscr=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes'
+WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=yes Epall=no Epnone=no'
 
 cd "$REPO" || exit 2
 
@@ -135,34 +147,61 @@ if grep -qxF "$WANT" "$WORK/a1.out"; then ok "a1 control: the line '$WANT' is pr
 # A cell is RED on a mutant's captured output when it reads as changed from the unmutated verdict. Both the
 # kills below, the per-push twin check and the --matrix score read these predicates, so they cannot drift.
 # Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
-M1_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=1 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdscr=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes'
-M2_WANT='A=2 B=2 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=no J=2 Jnamed=no Hcwd=2 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=no Brec=no Wd=2 Wdrec=no Wdn=no Aseed=no Wdscr=no Mt=2 Mtn=no Mtrec=no Mr=2 Mrn=no Htreem=yes'
-M3_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=0 Hresn=no Htree=0 Htreen=no Habs=0 Habsn=no Hbehind=0 Hbehindn=no Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdscr=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=no'
-M4_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=yes Wdn=no Aseed=yes Wdscr=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes'
-M5_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=no Wdscr=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes'
-M6_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdscr=yes Mt=0 Mtn=no Mtrec=yes Mr=1 Mrn=yes Htreem=yes'
-M7_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdscr=yes Mt=0 Mtn=yes Mtrec=no Mr=0 Mrn=no Htreem=yes'
-M8_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdscr=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=no'
+M1_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=1 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=yes Epall=no Epnone=no'
+M2_WANT='A=2 B=2 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=no J=2 Jnamed=no Hcwd=2 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=no Brec=no Wd=2 Wdrec=no Wdn=no Aseed=no Wdseed=no Mt=2 Mtn=no Mtrec=no Mr=2 Mrn=no Htreem=yes Eskip=no Mte=no Er=2 Ern=no Ts=2 Tsn=no Tn=2 Tnn=no Ep=2 Epn=no Epall=no Epnone=yes'
+M3_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=0 Hresn=no Htree=0 Htreen=no Habs=0 Habsn=no Hbehind=0 Hbehindn=no Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=no Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=yes Epall=no Epnone=no'
+M4_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=yes Wdn=no Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=yes Epall=no Epnone=no'
+M5_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=no Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=yes Epall=no Epnone=no'
+M6_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=no Mtrec=yes Mr=1 Mrn=yes Htreem=yes Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=yes Epall=no Epnone=no'
+M7_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=0 Mrn=no Htreem=yes Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=yes Epall=no Epnone=no'
+M8_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=no Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=yes Epall=no Epnone=no'
+M9_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes Eskip=yes Mte=no Er=0 Ern=no Ts=0 Tsn=no Tn=0 Tnn=yes Ep=0 Epn=no Epall=no Epnone=yes'
+M10_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes Eskip=yes Mte=no Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=no Epall=yes Epnone=no'
+M11_WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=no Epall=no Epnone=yes'
 GWANT='Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes E2E=1 E2En=yes'
 GCUT='Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes E2E=skip E2En=skip'
 G1_WANT='Gdeny=0 Gdenyn=no Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes E2E=skip E2En=skip'
 G2_WANT='Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=0 Gdirtyn=no E2E=skip E2En=skip'
 G3_WANT='Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=0 Gtreen=no Gdirty=1 Gdirtyn=yes E2E=skip E2En=skip'
 G4_WANT='Gdeny=1 Gdenyn=yes Gempty=1 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes E2E=skip E2En=skip'
-MX_CELLS='exit1 m1-moved m2-refused m2-names m3-moved m4-moved m5-moved m6-moved m7-moved m8-moved differs g1-moved g2-moved g3-moved g4-moved gdiffers'
+MX_CELLS='exit1 m1-moved m2-refused m2-names m3-moved m4-moved m5-moved m6-moved m7-moved m8-moved m9-moved m10-moved m11-moved differs g1-moved g2-moved g3-moved g4-moved gdiffers'
+# THE WORLD GROUP EACH MUTANT DRIVES (the receipt's RECEIPT_WORLDS): m9-m11 mutate section e and read only A, Mt and
+# section e's worlds; every other mutant reads none of section e's worlds. The control a1 drives all of them.
+mx_mode() { case "$1" in m9|m10|m11) echo e ;; *) echo base ;; esac; }
+# A summary line reduced to the fields its group drives: base drops section e's worlds, e drops every world it skips.
+mx_mask() { # <mode>: reads one summary line on stdin
+  awk -v mode="$1" 'BEGIN {
+      nb = split("Er Ern Ts Tsn Tn Tnn Ep Epn Epall Epnone", B, " "); for (i = 1; i <= nb; i++) DB[B[i]] = 1
+      ne = split("B C noparse nostep noverdict D Dran Dnamed U Unamed J Jnamed Hcwd Hres Hresn Htree Htreen Habs Habsn Hbehind Hbehindn Brec Wd Wdrec Wdn Wdseed Mr Mrn Htreem", E, " ")
+      for (i = 1; i <= ne; i++) DE[E[i]] = 1 }
+    { o = ""; for (i = 1; i <= NF; i++) { k = $i; sub(/=.*/, "", k)
+        if ((mode == "base" && (k in DB)) || (mode == "e" && (k in DE))) continue
+        o = o (o == "" ? "" : " ") $i }
+      print o }'
+}
+sum_is() { # <want line> <mutant>: the mutant's last summary line equals <want> on the fields its group drives
+  local md got want
+  md="$(mx_mode "$2")"
+  got="$(grep '^A=' "$WORK/$2.out" | tail -1 | mx_mask "$md")"
+  want="$(printf '%s\n' "$1" | mx_mask "$md")"
+  [ -n "$got" ] && [ "$got" = "$want" ]
+}
 cell_red() { # cell_red <cell> <mutant>: the mutant's output and receipt exit are in $WORK/<mutant>.out and .rc
   local c="$1" m="$2" rc
   rc="$(cat "$WORK/$m.rc")" || return 2
   case "$c" in
     exit1)      [ "$rc" -eq 1 ] ;;
-    m1-moved)   grep -qxF "$M1_WANT" "$WORK/$m.out" ;;
-    m2-refused) grep -qxF "$M2_WANT" "$WORK/$m.out" ;;
-    m3-moved)   grep -qxF "$M3_WANT" "$WORK/$m.out" ;;
-    m4-moved)   grep -qxF "$M4_WANT" "$WORK/$m.out" ;;
-    m5-moved)   grep -qxF "$M5_WANT" "$WORK/$m.out" ;;
-    m6-moved)   grep -qxF "$M6_WANT" "$WORK/$m.out" ;;
-    m7-moved)   grep -qxF "$M7_WANT" "$WORK/$m.out" ;;
-    m8-moved)   grep -qxF "$M8_WANT" "$WORK/$m.out" ;;
+    m1-moved)   sum_is "$M1_WANT" "$m" ;;
+    m2-refused) sum_is "$M2_WANT" "$m" ;;
+    m3-moved)   sum_is "$M3_WANT" "$m" ;;
+    m4-moved)   sum_is "$M4_WANT" "$m" ;;
+    m5-moved)   sum_is "$M5_WANT" "$m" ;;
+    m6-moved)   sum_is "$M6_WANT" "$m" ;;
+    m7-moved)   sum_is "$M7_WANT" "$m" ;;
+    m8-moved)   sum_is "$M8_WANT" "$m" ;;
+    m9-moved)   sum_is "$M9_WANT" "$m" ;;
+    m10-moved)  sum_is "$M10_WANT" "$m" ;;
+    m11-moved)  sum_is "$M11_WANT" "$m" ;;
     g1-moved)   grep -qxF "$G1_WANT" "$WORK/$m.out" ;;
     g2-moved)   grep -qxF "$G2_WANT" "$WORK/$m.out" ;;
     g3-moved)   grep -qxF "$G3_WANT" "$WORK/$m.out" ;;
@@ -170,7 +209,7 @@ cell_red() { # cell_red <cell> <mutant>: the mutant's output and receipt exit ar
     gdiffers)   grep -q '^Gdeny=' "$WORK/$m.out" && ! grep -qxF "$GCUT" "$WORK/$m.out" ;;
     m2-names)   grep -qF 'A| pregate-self-check: the run died before its verdict' "$WORK/$m.out" \
                   && grep -qF 'ai_dlc_m2_unbound: unbound variable' "$WORK/$m.out" ;;
-    differs)    ! grep -qxF "$WANT" "$WORK/$m.out" ;;
+    differs)    ! sum_is "$WANT" "$m" ;;
     *)          return 2 ;;
   esac
 }
@@ -235,7 +274,7 @@ mx_matrix_only() { if [ "$MODE" = matrix ]; then mx_score "$1"; fi; }
 MUT="$WORK/m1-pregate-self-check.sh"
 sed 's/^if \[ "\$nv" -ne "\$ns" \]; then$/if false; then/' "$SUBJECT" > "$MUT" 2>/dev/null
 if [ -s "$MUT" ] && ! cmp -s "$SUBJECT" "$MUT"; then
-  bash "$RECEIPT" "$MUT" > "$WORK/m1.out" 2>&1; echo $? > "$WORK/m1.rc"; m1="$(cat "$WORK/m1.rc")"
+  RECEIPT_WORLDS="$(mx_mode m1)" bash "$RECEIPT" "$MUT" > "$WORK/m1.out" 2>&1; echo $? > "$WORK/m1.rc"; m1="$(cat "$WORK/m1.rc")"
   if cell_red exit1 m1; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} ))" m1 "m1 mutant: receipt exit 1 (killed)"; else bad "m1 mutant SURVIVED: receipt exit $m1, expected 1"; fi
   if cell_red m1-moved m1; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} ))" m1 "m1 mutant: only noverdict moved, to 1"; else bad "m1 mutant SURVIVED: expected the line '$M1_WANT' (got: $(tail -1 "$WORK/m1.out"))"; fi
   if cell_red differs m1; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} ))" m1 "m1 mutant: output differs from the control"; else bad "m1 mutant SURVIVED: output equals the control"; fi
@@ -249,14 +288,14 @@ else
 fi
 
 # --- m2: an early death after the cut, by a route other than NUL --------------------------------
-M2_ANCHOR='AI_DLC_VERDICT_STORE="$W/vs" bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1'
+M2_ANCHOR='bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1'
 n_anchor="$(grep -cxF "$M2_ANCHOR" "$SUBJECT")" || n_anchor=0
 if [ "$n_anchor" -eq 1 ]; then ok "m2 mutant: the anchor line occurs exactly once in the subject"; B_m2_anchor=1
 else bad "m2 mutant: the anchor line occurs $n_anchor times in the subject, expected exactly 1"; fi
 MUT2="$WORK/m2-pregate-self-check.sh"
-sed 's/^AI_DLC_VERDICT_STORE="\$W\/vs" bash "\$W\/prefix\.sh" < \/dev\/null > "\$W\/a\.out" 2>&1$/: "$ai_dlc_m2_unbound"; &/' "$SUBJECT" > "$MUT2" 2>/dev/null
+sed 's/^bash "\$W\/prefix\.sh" < \/dev\/null > "\$W\/a\.out" 2>&1$/: "$ai_dlc_m2_unbound"; &/' "$SUBJECT" > "$MUT2" 2>/dev/null
 if [ "$n_anchor" -eq 1 ] && [ -s "$MUT2" ] && ! cmp -s "$SUBJECT" "$MUT2"; then
-  bash "$RECEIPT" "$MUT2" > "$WORK/m2.out" 2>&1; echo $? > "$WORK/m2.rc"; m2="$(cat "$WORK/m2.rc")"
+  RECEIPT_WORLDS="$(mx_mode m2)" bash "$RECEIPT" "$MUT2" > "$WORK/m2.out" 2>&1; echo $? > "$WORK/m2.rc"; m2="$(cat "$WORK/m2.rc")"
   if cell_red exit1 m2; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m2_anchor:-0} ))" m2 "m2 mutant: receipt exit 1 (killed)"; else bad "m2 mutant SURVIVED: receipt exit $m2, expected 1"; fi
   if cell_red m2-refused m2; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m2_anchor:-0} ))" m2 "m2 mutant: every world refused with exit 2"; else bad "m2 mutant SURVIVED: expected the line '$M2_WANT' (got: $(tail -1 "$WORK/m2.out"))"; fi
   if cell_red m2-names m2; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m2_anchor:-0} ))" m2 "m2 mutant: world A names the early-death refusal and the unbound variable"; else bad "m2 mutant SURVIVED: world A's output lacks the early-death refusal or the unbound variable"; fi
@@ -282,7 +321,7 @@ awk '$0 == "# HOOK-RESOLVE-BEGIN" { print "HOOK=\"$ROOT/.githooks/pre-push\""; s
      $0 == "# HOOK-RESOLVE-END" { skip = 0; next }
      !skip { print }' "$SUBJECT" > "$MUT3" 2>/dev/null
 if [ "$n_h3" -eq 1 ] && [ -s "$MUT3" ] && ! cmp -s "$SUBJECT" "$MUT3"; then
-  bash "$RECEIPT" "$MUT3" > "$WORK/m3.out" 2>&1; echo $? > "$WORK/m3.rc"; m3="$(cat "$WORK/m3.rc")"
+  RECEIPT_WORLDS="$(mx_mode m3)" bash "$RECEIPT" "$MUT3" > "$WORK/m3.out" 2>&1; echo $? > "$WORK/m3.rc"; m3="$(cat "$WORK/m3.rc")"
   if cell_red exit1 m3; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m3_anchor:-0} ))" m3 "m3 mutant: receipt exit 1 (killed)"; else bad "m3 mutant SURVIVED: receipt exit $m3, expected 1"; fi
   if cell_red m3-moved m3; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m3_anchor:-0} ))" m3 "m3 mutant: Hres, Htree and Habs each ran the hook (0) and named nothing"; else bad "m3 mutant SURVIVED: expected the line '$M3_WANT' (got: $(tail -1 "$WORK/m3.out"))"; fi
   if cell_red differs m3; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m3_anchor:-0} ))" m3 "m3 mutant: output differs from the control"; else bad "m3 mutant SURVIVED: output equals the control"; fi
@@ -307,7 +346,7 @@ mut_line() { # mut_line <src> <dst> <exact line> <replacement|--delete> -> 0 whe
 MUT4="$WORK/m4-pregate-self-check.sh"
 if mut_line "$SUBJECT" "$MUT4" 'if [ -n "$PG_START" ] && [ "$PG_START" = "$pg_tree" ] && [ "$PG_END" = "$PG_START" ]; then' 'if true; then'; then
   ok "m4 mutant applied: the record condition occurs exactly once in the subject"; B_m4_anchor=1
-  bash "$RECEIPT" "$MUT4" > "$WORK/m4.out" 2>&1; echo $? > "$WORK/m4.rc"; m4="$(cat "$WORK/m4.rc")"
+  RECEIPT_WORLDS="$(mx_mode m4)" bash "$RECEIPT" "$MUT4" > "$WORK/m4.out" 2>&1; echo $? > "$WORK/m4.rc"; m4="$(cat "$WORK/m4.rc")"
   if cell_red exit1 m4; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m4_anchor:-0} ))" m4 "m4 mutant: receipt exit 1 (killed)"; else bad "m4 mutant SURVIVED: receipt exit $m4, expected 1"; fi
   if cell_red m4-moved m4; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m4_anchor:-0} ))" m4 "m4 mutant: the dirty world Wd recorded its tree and named nothing"; else bad "m4 mutant SURVIVED: expected the line '$M4_WANT' (got: $(tail -1 "$WORK/m4.out"))"; fi
   if cell_red differs m4; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m4_anchor:-0} ))" m4 "m4 mutant: output differs from the control"; else bad "m4 mutant SURVIVED: output equals the control"; fi
@@ -325,7 +364,7 @@ fi
 MUT5="$WORK/m5-pregate-self-check.sh"
 if mut_line "$SUBJECT" "$MUT5" 'if [ -n "$PG_START" ] && [ "$PG_START" = "${PG_START%%' 'if false && [ "$PG_START" = "${PG_START%%'; then
   ok "m5 mutant applied: the clean-tree test of section d occurs exactly once in the subject"; B_m5_anchor=1
-  bash "$RECEIPT" "$MUT5" > "$WORK/m5.out" 2>&1; echo $? > "$WORK/m5.rc"; m5="$(cat "$WORK/m5.rc")"
+  RECEIPT_WORLDS="$(mx_mode m5)" bash "$RECEIPT" "$MUT5" > "$WORK/m5.out" 2>&1; echo $? > "$WORK/m5.rc"; m5="$(cat "$WORK/m5.rc")"
   if cell_red exit1 m5; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m5_anchor:-0} ))" m5 "m5 mutant: receipt exit 1 (killed)"; else bad "m5 mutant SURVIVED: receipt exit $m5, expected 1"; fi
   if cell_red m5-moved m5; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m5_anchor:-0} ))" m5 "m5 mutant: the clean world A ran section d under the scratch store"; else bad "m5 mutant SURVIVED: expected the line '$M5_WANT' (got: $(tail -1 "$WORK/m5.out"))"; fi
   if cell_red differs m5; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m5_anchor:-0} ))" m5 "m5 mutant: output differs from the control"; else bad "m5 mutant SURVIVED: output equals the control"; fi
@@ -343,7 +382,7 @@ fi
 MUT6="$WORK/m6-pregate-self-check.sh"
 if mut_line "$SUBJECT" "$MUT6" 'if [ "$MEMBER" = 1 ]; then # member: no pregate record' 'if false; then'; then
   ok "m6 mutant applied: the member mode's no-record exit occurs exactly once in the subject"; B_m6_anchor=1
-  bash "$RECEIPT" "$MUT6" > "$WORK/m6.out" 2>&1; echo $? > "$WORK/m6.rc"; m6="$(cat "$WORK/m6.rc")"
+  RECEIPT_WORLDS="$(mx_mode m6)" bash "$RECEIPT" "$MUT6" > "$WORK/m6.out" 2>&1; echo $? > "$WORK/m6.rc"; m6="$(cat "$WORK/m6.rc")"
   if cell_red exit1 m6; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m6_anchor:-0} ))" m6 "m6 mutant: receipt exit 1 (killed)"; else bad "m6 mutant SURVIVED: receipt exit $m6, expected 1"; fi
   if cell_red m6-moved m6; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m6_anchor:-0} ))" m6 "m6 mutant: the member world Mt wrote a pregate record and did not say it wrote none"; else bad "m6 mutant SURVIVED: expected the line '$M6_WANT' (got: $(tail -1 "$WORK/m6.out"))"; fi
   if cell_red differs m6; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m6_anchor:-0} ))" m6 "m6 mutant: output differs from the control"; else bad "m6 mutant SURVIVED: output equals the control"; fi
@@ -361,7 +400,7 @@ fi
 MUT7="$WORK/m7-pregate-self-check.sh"
 if mut_line "$SUBJECT" "$MUT7" '  HOOK="$ROOT/.githooks/pre-push"' --delete; then
   ok "m7 mutant applied: the member mode's tree-hook assignment occurs exactly once in the subject"; B_m7_anchor=1
-  bash "$RECEIPT" "$MUT7" > "$WORK/m7.out" 2>&1; echo $? > "$WORK/m7.rc"; m7="$(cat "$WORK/m7.rc")"
+  RECEIPT_WORLDS="$(mx_mode m7)" bash "$RECEIPT" "$MUT7" > "$WORK/m7.out" 2>&1; echo $? > "$WORK/m7.rc"; m7="$(cat "$WORK/m7.rc")"
   if cell_red exit1 m7; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m7_anchor:-0} ))" m7 "m7 mutant: receipt exit 1 (killed)"; else bad "m7 mutant SURVIVED: receipt exit $m7, expected 1"; fi
   if cell_red m7-moved m7; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m7_anchor:-0} ))" m7 "m7 mutant: the member world Mr's red step after PRESUITE_DONE=1 went unseen"; else bad "m7 mutant SURVIVED: expected the line '$M7_WANT' (got: $(tail -1 "$WORK/m7.out"))"; fi
   if cell_red differs m7; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m7_anchor:-0} ))" m7 "m7 mutant: output differs from the control"; else bad "m7 mutant SURVIVED: output equals the control"; fi
@@ -380,7 +419,7 @@ MUT8="$WORK/m8-pregate-self-check.sh"
 if mut_line "$SUBJECT" "$MUT8" '        else remedy="; the branch edited the hook, but the push will run ${HOOK}, not the edit: update the checkout holding it (the main checkout) or push from that checkout; before READY run this script with --member, which runs the tree'"'"'s own hook and records nothing"; fi' \
      '        else remedy="; the branch edited the hook, but the push will run ${HOOK}, not the edit: update the checkout holding it (the main checkout) or push from that checkout"; fi'; then
   ok "m8 mutant applied: the edited-hook remedy occurs exactly once in the subject"; B_m8_anchor=1
-  bash "$RECEIPT" "$MUT8" > "$WORK/m8.out" 2>&1; echo $? > "$WORK/m8.rc"; m8="$(cat "$WORK/m8.rc")"
+  RECEIPT_WORLDS="$(mx_mode m8)" bash "$RECEIPT" "$MUT8" > "$WORK/m8.out" 2>&1; echo $? > "$WORK/m8.rc"; m8="$(cat "$WORK/m8.rc")"
   if cell_red exit1 m8; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m8_anchor:-0} ))" m8 "m8 mutant: receipt exit 1 (killed)"; else bad "m8 mutant SURVIVED: receipt exit $m8, expected 1"; fi
   if cell_red m8-moved m8; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m8_anchor:-0} ))" m8 "m8 mutant: Htree's edited-hook refusal no longer names --member"; else bad "m8 mutant SURVIVED: expected the line '$M8_WANT' (got: $(tail -1 "$WORK/m8.out"))"; fi
   if cell_red differs m8; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m8_anchor:-0} ))" m8 "m8 mutant: output differs from the control"; else bad "m8 mutant SURVIVED: output equals the control"; fi
@@ -391,6 +430,59 @@ else
   bad "m8 mutant: DID NOT APPLY (no kill line to check)"
   bad "m8 mutant: DID NOT APPLY (no moved line to check)"
   bad "m8 mutant: DID NOT APPLY (no differential)"
+  BROKEN=$((BROKEN + 1))
+fi
+
+# --- m9: section e's trigger never fires (BL-1069) -----------------------------------------------------------
+MUT9="$WORK/m9-pregate-self-check.sh"
+if mut_line "$SUBJECT" "$MUT9" 'if [ -z "$e_hits" ]; then' 'if true; then'; then
+  ok "m9 mutant applied: section e's trigger test occurs exactly once in the subject"; B_m9_anchor=1
+  RECEIPT_WORLDS="$(mx_mode m9)" bash "$RECEIPT" "$MUT9" > "$WORK/m9.out" 2>&1; echo $? > "$WORK/m9.rc"; m9="$(cat "$WORK/m9.rc")"
+  if cell_red exit1 m9; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m9_anchor:-0} ))" m9 "m9 mutant: receipt exit 1 (killed)"; else bad "m9 mutant SURVIVED: receipt exit $m9, expected 1"; fi
+  if cell_red m9-moved m9; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m9_anchor:-0} ))" m9 "m9 mutant: Er's hook edit no longer reds its hook-driving fixture, and Mt and Ts run none"; else bad "m9 mutant SURVIVED: expected the line '$M9_WANT' (got: $(tail -1 "$WORK/m9.out"))"; fi
+  if cell_red differs m9; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m9_anchor:-0} ))" m9 "m9 mutant: output differs from the control"; else bad "m9 mutant SURVIVED: output equals the control"; fi
+  mx_twins m9
+  mx_matrix_only m9
+else
+  bad "m9 mutant: DID NOT APPLY (section e's trigger test is not exactly one line of the subject, or awk died)"
+  bad "m9 mutant: DID NOT APPLY (no kill line to check)"
+  bad "m9 mutant: DID NOT APPLY (no moved line to check)"
+  bad "m9 mutant: DID NOT APPLY (no differential)"
+  BROKEN=$((BROKEN + 1))
+fi
+
+# --- m10 and m11: section e ignores its prediction (runs all) or empties it (runs none) (BL-1069) -------------
+E_SUBSET='    awk '"'"'NR == FNR { R[$0] = 1; next } ($0 in R)'"'"' "$W/e/predrun" "$W/e/set" > "$W/e/torun"'
+MUT10="$WORK/m10-pregate-self-check.sh"
+if mut_line "$SUBJECT" "$MUT10" "$E_SUBSET" '    cp "$W/e/set" "$W/e/torun"'; then
+  ok "m10 mutant applied: section e's subset line occurs exactly once in the subject"; B_m10_anchor=1
+  RECEIPT_WORLDS="$(mx_mode m10)" bash "$RECEIPT" "$MUT10" > "$WORK/m10.out" 2>&1; echo $? > "$WORK/m10.rc"; m10="$(cat "$WORK/m10.rc")"
+  if cell_red exit1 m10; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m10_anchor:-0} ))" m10 "m10 mutant: receipt exit 1 (killed)"; else bad "m10 mutant SURVIVED: receipt exit $m10, expected 1"; fi
+  if cell_red m10-moved m10; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m10_anchor:-0} ))" m10 "m10 mutant: Ep ran the whole set past its prediction"; else bad "m10 mutant SURVIVED: expected the line '$M10_WANT' (got: $(tail -1 "$WORK/m10.out"))"; fi
+  if cell_red differs m10; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m10_anchor:-0} ))" m10 "m10 mutant: output differs from the control"; else bad "m10 mutant SURVIVED: output equals the control"; fi
+  mx_twins m10
+  mx_matrix_only m10
+else
+  bad "m10 mutant: DID NOT APPLY (section e's subset line is not exactly one line of the subject, or awk died)"
+  bad "m10 mutant: DID NOT APPLY (no kill line to check)"
+  bad "m10 mutant: DID NOT APPLY (no moved line to check)"
+  bad "m10 mutant: DID NOT APPLY (no differential)"
+  BROKEN=$((BROKEN + 1))
+fi
+MUT11="$WORK/m11-pregate-self-check.sh"
+if mut_line "$SUBJECT" "$MUT11" "$E_SUBSET" '    : > "$W/e/torun"'; then
+  ok "m11 mutant applied: section e's subset line occurs exactly once in the subject"; B_m11_anchor=1
+  RECEIPT_WORLDS="$(mx_mode m11)" bash "$RECEIPT" "$MUT11" > "$WORK/m11.out" 2>&1; echo $? > "$WORK/m11.rc"; m11="$(cat "$WORK/m11.rc")"
+  if cell_red exit1 m11; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m11_anchor:-0} ))" m11 "m11 mutant: receipt exit 1 (killed)"; else bad "m11 mutant SURVIVED: receipt exit $m11, expected 1"; fi
+  if cell_red m11-moved m11; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m11_anchor:-0} ))" m11 "m11 mutant: Ep ran none of its predicted subset"; else bad "m11 mutant SURVIVED: expected the line '$M11_WANT' (got: $(tail -1 "$WORK/m11.out"))"; fi
+  if cell_red differs m11; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m11_anchor:-0} ))" m11 "m11 mutant: output differs from the control"; else bad "m11 mutant SURVIVED: output equals the control"; fi
+  mx_twins m11
+  mx_matrix_only m11
+else
+  bad "m11 mutant: DID NOT APPLY (section e's subset line is not exactly one line of the subject, or awk died)"
+  bad "m11 mutant: DID NOT APPLY (no kill line to check)"
+  bad "m11 mutant: DID NOT APPLY (no moved line to check)"
+  bad "m11 mutant: DID NOT APPLY (no differential)"
   BROKEN=$((BROKEN + 1))
 fi
 
@@ -452,7 +544,7 @@ if [ "$MODE" = plain ]; then
 else
   # The header is bound to the measured set both ways: one MUTANT-MATRIX row per mutant, one mutant per row.
   mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
-  [ "$mx_hdr" = "g1 g2 g3 g4 m1 m2 m3 m4 m5 m6 m7 m8 " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr], expected [g1 g2 g3 g4 m1 m2 m3 m4 m5 m6 m7 m8 ]"; }
+  [ "$mx_hdr" = "g1 g2 g3 g4 m1 m10 m11 m2 m3 m4 m5 m6 m7 m8 m9 " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr], expected [g1 g2 g3 g4 m1 m10 m11 m2 m3 m4 m5 m6 m7 m8 m9 ]"; }
   echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
   [ "$MX_FAILS" -eq 0 ] || fails=$((fails + MX_FAILS))
 fi

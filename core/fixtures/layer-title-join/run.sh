@@ -58,9 +58,7 @@ ROOT="$(mktemp -d "${TMPDIR:-/tmp}/layer-title-join.XXXXXX")"
 trap 'rm -rf "$ROOT"' EXIT
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 echo "layer-title-join:"
@@ -900,5 +898,4 @@ elif [ "$MXN" -gt 0 ]; then ok "MATRIX mode executed $MXN matrix-only cell(s)"
 else bad "MATRIX mode executed no matrix-only cell, so --matrix measured nothing beyond the per-push cells"; fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then echo "layer-title-join: PASS"; exit 0; fi
-echo "layer-title-join: FAIL ($fails)"; exit 1
+report_end layer-title-join

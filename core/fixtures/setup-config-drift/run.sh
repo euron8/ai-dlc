@@ -23,9 +23,7 @@ CF="$CONSUMER/.claude/$REL"
 BASECONTENT="$WORK/base.md"
 git -C "$DIST" show "$BASE:core/$REL" > "$BASECONTENT"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 status_of() { # status_of [rel] -> the STATUS token unregistered-drift.sh emits for that core file
   bash "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" 2>/dev/null \
@@ -383,6 +381,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "setup-config-drift: PASS"; exit 0; fi
-echo "setup-config-drift: $fails assertion(s) FAILED" >&2
-exit 1
+report_end setup-config-drift

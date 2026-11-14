@@ -19,3 +19,4 @@ core/skills/ai-dlc-update/reconcile/consumer-read.sh
 # BL-706: the B7 cells and mutants drive apply.sh, which resolves preclassify.sh and every other reconcile sibling beside itself, and each mutant copies the whole directory.
 core/skills/ai-dlc-update/reconcile/
 core/fixtures/owed-derivations/receipt-bl706.sh
+core/fixtures/lib/report.sh

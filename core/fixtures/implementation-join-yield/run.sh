@@ -647,6 +647,8 @@ while [ "$_i" -lt "$JOB_N" ]; do
   cat "$_vf"
   _nf="$(grep -c '^  FAIL' "$_vf")" || _nf=0
   fails=$((fails + _nf))
+  _no="$(grep -c '^  ok    ' "$_vf")" || _no=0
+  oks=$((oks + _no))
 done
 [ "$JOB_N" -eq "$JOBS_WANT" ] || bad "sections 8-9 dispatched $JOB_N jobs, expected $JOBS_WANT -- a job line was lost"
 rm -rf "$MUT_ROOT" "$JOBS"

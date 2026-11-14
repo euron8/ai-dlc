@@ -266,10 +266,8 @@ done
 WORK="$(mktemp -d)" || { echo "$NAME: FIXTURE BROKEN — mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
 B391=1   # every probe runs the full BL-391 predicate; the corpus may lower it, see below
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf '  FAIL  FIXTURE BROKEN — %s\n' "$1"; echo; echo "$NAME: FIXTURE BROKEN" >&2; exit 2; }
 
 MUT_LIB="$HERE/../lib/mutant.sh"
@@ -1310,9 +1308,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "$NAME: PASS"
-  exit 0
-fi
-echo "$NAME: $fails FAILED" >&2
-exit 1
+report_end "$NAME"

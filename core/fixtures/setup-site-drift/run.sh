@@ -29,9 +29,8 @@ SSD="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/setup-site-drift.sh" \
 RECONCILE="$(cd "$(dirname "$SSD")" && pwd)"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/setup-site-drift.sh"
 
-fails=0; asserts=0
-ok()  { asserts=$((asserts+1)); printf '  ok    %s\n' "$1"; }
-bad() { asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  %s\n' "$1"; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_clean=0; B_scanned=0; B_defect=0; B_nexth=0
 
@@ -270,12 +269,12 @@ mutate() {
   if [ "$which" = ssd ]; then src="$SSD"; dst="$d/m.sh"; else src="$RECONCILE/setup-sites.md"; dst="$d/setup-sites.md"; fi
   sed -E "$prog" "$src" > "$dst.new" && mv "$dst.new" "$dst"
   if cmp -s "$src" "$dst"; then
-    asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  MUTANT %-18s sed matched NOTHING — the mutant IS the original\n' "$tag"; return
+    bad "$(printf 'MUTANT %-18s sed matched NOTHING — the mutant IS the original' "$tag")"; return
   fi
   "$seeder"
   out="$(bash "$d/m.sh" "$DIST" "$CONS" "$THEIRS" 2>&1)"; rc=$?
   if eval "$test_expr"; then mutant_killed "$7" "$tag" "$(printf 'MUTANT %-18s %s' "$tag" "$claim")"
-  else asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  MUTANT %-18s did NOT flip: %s\n' "$tag" "$claim"; fi
+  else bad "$(printf 'MUTANT %-18s did NOT flip: %s' "$tag" "$claim")"; fi
 }
 
 seed_defect() {
@@ -319,7 +318,7 @@ mutate_nexth() {
   lay "$d"
   sed -E 's@^        if \[ -z "\$e" \]; then$@        if false; then e="$(grep -c "" "$TMP/theirs")"; fi; if false; then@' "$SSD" > "$d/m.sh.new" && mv "$d/m.sh.new" "$d/m.sh"
   if cmp -s "$SSD" "$d/m.sh"; then
-    asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  MUTANT %-18s sed matched NOTHING — the mutant IS the original\n' eof-widening; return
+    bad "$(printf 'MUTANT %-18s sed matched NOTHING — the mutant IS the original' eof-widening)"; return
   fi
   sed -E 's@^        if false; then e="\$\(grep -c "" "\$TMP/theirs"\)"; fi; if false; then$@        [ -n "$e" ] || e="$(grep -c "" "$TMP/theirs")"; if false; then@' "$d/m.sh" > "$d/m.sh.new" && mv "$d/m.sh.new" "$d/m.sh"
   seed_nexth_world
@@ -327,13 +326,12 @@ mutate_nexth() {
   if [ "$rc" -eq 0 ] && ! grep -q 'SETUP-SITE-ANCHOR-LOST' <<<"$out" && grep -q 'SETUP-SITE-OK' <<<"$out"; then
     mutant_killed "$B_nexth" eof-widening "$(printf 'MUTANT %-18s %s' eof-widening 'widening a lost next_heading to EOF reads OK and loses ANCHOR-LOST')"
   else
-    asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  MUTANT %-18s did NOT flip (rc=%s)\n' eof-widening "$rc"
+    bad "$(printf 'MUTANT %-18s did NOT flip (rc=%s)' eof-widening "$rc")"
   fi
 }
 mutate_nexth
 
 # UNMUTATED CONTROL, from the same directory.
-asserts=$((asserts+1))
 lay "$MUT/control"
 seed_defect
 ctl_out="$(bash "$MUT/control/m.sh" "$DIST" "$CONS" "$THEIRS" 2>&1)"; ctl_rc=$?
@@ -344,6 +342,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "setup-site-drift: PASS ($asserts assertions)"; exit 0; fi
-echo "setup-site-drift: $fails of $asserts assertion(s) FAILED" >&2
-exit 1
+report_end setup-site-drift

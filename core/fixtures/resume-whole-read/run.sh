@@ -233,9 +233,7 @@ if [ -n "$MUTANT" ]; then
   ROUTE="$MUT"
 fi
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 # Wrapped prose: collapse to one line before matching, so a re-wrap of the same
 # sentence is not read as its removal.
@@ -499,10 +497,4 @@ if [ -n "$MUTANT" ]; then
   echo "  not test what it claims." >&2
   exit 1
 fi
-
-if [ "$fails" -gt 0 ]; then
-  echo "$fails assertion(s) failed"
-  exit 1
-fi
-echo "all assertions hold"
-exit 0
+report_end resume-whole-read

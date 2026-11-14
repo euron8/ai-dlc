@@ -7,3 +7,4 @@
 # sourced lib is no subject. run.sh refuses (FIXTURE ERROR, exit 2) when either is absent.
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/matrix.sh
+core/fixtures/lib/report.sh

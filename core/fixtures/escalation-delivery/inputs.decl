@@ -2,3 +2,4 @@
 # and also copies as the base of its mutants. Map rows under core/ and core/fixtures are walk-up probes.
 !core/hooks/ai-dlc-escalation-delivery.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

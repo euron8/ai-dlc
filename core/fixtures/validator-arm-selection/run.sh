@@ -222,10 +222,10 @@ inproc_source() { # inproc_source <validator> -- the one source of a worker or a
 }
 # THE CHUNK WORKERS COUNT THEIR PASSES. Each vem_entry call below is one in-process pass, logged by fx_inproc
 # (lib/mutant.sh) for the invocation judge. A worker re-enters this file and exits before the top level defines
-# ok/bad and sources that library, so it sources it here behind no-op stubs (the library refuses to load without them).
+# ok/bad and sources that library, so it sources it here after lib/report.sh (the library refuses to load without ok/bad).
 case "${1:-}" in
   --attrib-chunk|--sweep-chunk)
-    ok() { :; }; bad() { :; }
+    . "$DIR/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
     . "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; } ;;
 esac
 if [ "${1:-}" = "--attrib-chunk" ]; then
@@ -295,10 +295,8 @@ echo "$NAME fixture"
 echo "inner pool width: $JOBS"
 echo
 
-fails=0
+. "$DIR/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 RAN=""
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 broke() { printf '  FIXTURE BROKEN  %s\n' "$1"; exit 2; }
 . "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_i66_fork=0; B_i66_deriver=0
@@ -1097,9 +1095,4 @@ if [ "$MX_BROKEN" -ne 0 ]; then
   echo "MATRIX BROKEN: a mutated run crashed or printed a crash shape, so no cell verdict on it means anything"
   exit 2
 fi
-if [ "$fails" -eq 0 ]; then
-  echo "$NAME: PASS"
-  exit 0
-fi
-echo "$NAME: $fails FAILED"
-exit 1
+report_end "$NAME"

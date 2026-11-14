@@ -69,9 +69,7 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_rfoCtl=0
 
@@ -372,10 +370,4 @@ expect_set remedy-unusable 1 'does not name a removable consumer path' \
 expect_set guard-too-wide 1 'arm A went silent with arm B' \
   's@      \[ "$rf_t" -eq 0 \] || continue@      [ "$rf_t" -eq 0 ] || continue\
       [ "$(git -C "$DIST" rev-parse --is-shallow-repository 2>/dev/null)" = true ] \&\& continue@'
-
-if [ "$fails" -eq 0 ]; then
-  echo "PASS retired-fixture-orphan"
-  exit 0
-fi
-echo "FAIL retired-fixture-orphan ($fails)"
-exit 1
+report_end retired-fixture-orphan

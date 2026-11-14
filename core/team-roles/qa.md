@@ -100,6 +100,13 @@ further when any of these is absent:
   `## Strategy Test IDs`;
 - a `Kind` and a `Resolves to` on every `## Strategy Test IDs` row. For
   each `test` row, confirm the node id collects at the go-signal SHA.
+- a recorded full-collection invocation that `record-only-diff.sh run-filter`
+  does not refuse against the project's `docs/coding-conventions.md`. A refused
+  one, which is a `-k` or `--deselect` in any spelling, a file or node-id
+  argument, or a `-m` marker, path argument or wrapper option the conventions do
+  not declare canonical, is a partial run and not the full collection. It is
+  the rule your own `Canonical run:` is held to, and
+  `validate-handoff-evidence.sh` refuses it as `full-collection-filtered`.
 
 Do not compare Dev Agent Record prose to capture headers — the capture-heads
 block is rendered and validator-checked; a capture header that is wrong about

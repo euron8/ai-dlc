@@ -194,10 +194,36 @@
 #
 # USAGE
 #   scripts/validate-release-version.sh [--range A..B] [--commit SHA]
+#                                       [--push-remote NAME --push-refs LINES]
 #
-#   default range   origin/main..HEAD -- the branch's own commits, which is what a
-#                   push adds. Falls back to HEAD alone when that range is empty or
-#                   origin/main is not present (a fresh clone, a detached head).
+#   default range   <base>..HEAD -- the branch's own commits, which is what a push
+#                   adds. <base> is origin/main, EXCEPT when a first-parent ancestor
+#                   of HEAD^ that origin/main lacks is a release commit (subject opens
+#                   `X.Y.Z — `) contained in a remote-tracking ref under
+#                   refs/remotes/origin/: then the nearest such commit is <base>, and a
+#                   NOTE line names it and the ref. That is a release STACKED on
+#                   another release that was pushed for its own gate and has not
+#                   landed (`.claude/rules/operator-rulings.md`, "A release never
+#                   waits for another release's landing"). Arms A, B and C then judge the
+#                   commits above that release only; the pushed release was judged by
+#                   its own push. The base cannot be manufactured by committing: a
+#                   remote-tracking ref moves only on a fetch or a push, so a LOCAL
+#                   branch carrying two unpushed releases still ranges from
+#                   origin/main and arm C fails it, and a branch that adds two releases
+#                   above a pushed one fails from that base.
+#                   THE REFS THIS PUSH NAMES ARE NOT A BASE. One branch collecting two
+#                   releases across two pushes leaves origin/<branch> containing the
+#                   lower one after its first push, indistinguishable by ancestry from
+#                   another branch's release. So the search runs ONLY when the caller
+#                   passes the push (--push-remote origin and --push-refs, the stdin
+#                   lines git hands a pre-push hook, which .githooks/pre-push forwards
+#                   at step 1c), and it skips every refs/remotes/origin/<X> whose
+#                   refs/heads/<X> those lines name. With no push refs (a hand run, any
+#                   other caller) or another remote it FAILS CLOSED: <base> is
+#                   origin/main and a stack fails as before. Arm D keeps
+#                   origin/main..HEAD: its question is local main, not the stack.
+#                   Falls back to HEAD alone when the range is empty or origin/main is
+#                   not present (a fresh clone, a detached head).
 #
 # EXIT
 #   0  every checked commit's three names agree, the range carries one release
@@ -225,10 +251,15 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null)" || {
 RANGE=""
 COMMIT=""
 SUBJECT_NOTE=""
+STACK_BASE=""
+PUSH_REMOTE=""
+PUSH_REFS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --range)  RANGE="${2:-}"; shift 2 ;;
     --commit) COMMIT="${2:-}"; shift 2 ;;
+    --push-remote) PUSH_REMOTE="${2:-}"; shift 2 ;;
+    --push-refs)   PUSH_REFS="${2:-}"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -239,7 +270,16 @@ if [ -n "$COMMIT" ]; then
 elif [ -n "$RANGE" ]; then
   COMMITS="$(git rev-list --no-merges "$RANGE" 2>/dev/null)"
 else
-  COMMITS="$(git rev-list --no-merges origin/main..HEAD 2>/dev/null || true)"
+  # The stacked-release base; the USAGE block says how it is chosen and why a local
+  # commit cannot supply one. Empty means origin/main, exactly as before it existed.
+  STACK_BASE="$(stacked_base)"
+  if [ -n "$STACK_BASE" ]; then
+    echo "NOTE  range base is the pushed release ${STACK_BASE%% *} on ${STACK_BASE#* }, not origin/main -- a release stacked on an unlanded one"
+    STACK_BASE="${STACK_BASE%% *}"
+    COMMITS="$(git rev-list --no-merges "${STACK_BASE}..HEAD" 2>/dev/null || true)"
+  else
+    COMMITS="$(git rev-list --no-merges origin/main..HEAD 2>/dev/null || true)"
+  fi
   # EMPTY RANGE FALLS BACK TO HEAD, AND THE VERDICT MUST SAY SO. With no commits of
   # its own a branch's HEAD is origin/main's tip -- the PREVIOUS release, whose triple
   # agrees by construction because it was validated when it merged. Reporting that as
@@ -274,6 +314,40 @@ arm_f_ran=0
 }
 
 semver_of() { printf '%s' "$1" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; }
+
+# push_excluded -> the remote-tracking refs this push names, one per line: refs/remotes/origin/<X>
+# for every `<local ref> <local sha> refs/heads/<X> <remote sha>` line of --push-refs, the lines
+# git hands a pre-push hook. Nothing when the push remote is not origin or no branch is named.
+push_excluded() {
+  [ "$PUSH_REMOTE" = origin ] || return 0
+  awk '$3 ~ /^refs\/heads\/./ { print "refs/remotes/origin/" substr($3, 12) }' <<<"$PUSH_REFS"
+}
+
+# stacked_base -> "<sha> <remote ref>" for the nearest first-parent ancestor of HEAD^, absent
+# from origin/main, whose subject opens `X.Y.Z — ` and which some refs/remotes/origin/ ref
+# contains OTHER THAN the refs this push names; nothing when there is none. HEAD^, never HEAD:
+# a branch's own release commit is not its own base. FAILS CLOSED: with no push refs (a hand
+# run, any caller but the distribution pre-push hook) there is no stacked base and the range is
+# origin/main's, because without the pushed ref a branch's own earlier push is indistinguishable
+# from another branch's release.
+stacked_base() {
+  local log cands sha ref excl
+  excl="$(push_excluded)"
+  [ -n "$excl" ] || return 0
+  git rev-parse -q --verify origin/main >/dev/null 2>&1 || return 0
+  log="$(git log --first-parent --format='%H %s' origin/main..HEAD^ 2>/dev/null)" || return 0
+  [ -n "$log" ] || return 0
+  cands="$(grep -E '^[0-9a-f]+ [0-9]+\.[0-9]+\.[0-9]+ — ' <<<"$log")" || return 0
+  while IFS= read -r sha; do
+    sha="${sha%% *}"
+    [ -n "$sha" ] || continue
+    ref="$(git for-each-ref --format='%(refname)' --contains "$sha" refs/remotes/origin/ 2>/dev/null)"
+    [ -n "$ref" ] || continue
+    ref="$(grep -vxF -e "$excl" <<<"$ref")" || ref=""
+    ref="${ref%%$'\n'*}"
+    if [ -n "$ref" ]; then printf '%s %s\n' "$sha" "${ref#refs/remotes/}"; return 0; fi
+  done <<<"$cands"
+}
 
 # ---------------------------------------------------------------------------
 # C. THE RANGE CARRIES AT MOST ONE RELEASE.
@@ -314,6 +388,9 @@ elif [ -n "$RANGE" ]; then
       range_base="$(git rev-parse -q --verify "${RANGE}^" 2>/dev/null)" || range_base=""
       [ -n "$range_base" ] || range_why="$RANGE is a root commit" ;;
   esac
+elif [ -n "$STACK_BASE" ]; then
+  range_tip="HEAD"
+  range_base="$STACK_BASE"
 elif git rev-parse -q --verify origin/main >/dev/null 2>&1; then
   range_tip="HEAD"
   range_base="$(git merge-base origin/main HEAD 2>/dev/null)" || range_base=""

@@ -65,9 +65,7 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 # The exit code goes to a FILE, not to a variable: every caller here is `out="$(run …)"`, and an
 # assignment inside `$( )` dies with the subshell — this repo's recorded trap.
@@ -512,5 +510,4 @@ grep -q '"status"' "$SCHEMA" \
 # ---- the run itself is a control
 [ -n "$out1" ] && ok "the mode produced output (the run is not a silent death)" \
                || bad "the mode printed NOTHING — every assertion above is vacuous"
-if [ "$fails" -eq 0 ]; then echo "PASS story-fields-derive"; exit 0; fi
-echo "FAIL story-fields-derive ($fails)"; exit 1
+report_end story-fields-derive

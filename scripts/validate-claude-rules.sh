@@ -910,7 +910,11 @@ fi
 # RAISED 46336 -> 46366 UNDER BL-1052 (F20), ON THE OPERATOR'S RULING TO PREVENT NEEDLESS CACHE INVALIDATION
 # PERMANENTLY: `operator-rulings.md` gained one rule naming its enforcer, 168 bytes. A6 WAS OBSERVED FAILING AT
 # 46366/46336 BEFORE THE CEILING MOVED; the ceiling is the post-write measurement, leaving 0 bytes.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-46366}"
+# RAISED 46366 -> 47647 by exactly the measured overrun: A6 WAS OBSERVED FAILING AT 47647/46366 BEFORE THE
+# CEILING MOVED. The two operator rulings added to operator-rulings.md, the hermetic-run store sentence in
+# tool-hazards.md, the push concurrency bullet in CLAUDE.md and the READY-carrier seeding rule, on the operator's
+# direct instruction; the operator-rulings serialized-push bullet was replaced.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-47666}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

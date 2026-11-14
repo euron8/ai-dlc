@@ -46,9 +46,7 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq required" >&2; exit 2
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
 
 ROOT="$(bash "$HERE/seed.sh")"
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -1251,10 +1249,14 @@ fi
 # BL-574/BL-562: the directed-handoff authorisation sentence sits beside the prescribed push in
 # steps/handoff.md step 3, steps/_gate-procedures.md auto-handoff step 3 and steps/retro.md 6b, and
 # the --no-verify prohibition beside the first two (proximity-keyed; push-authorised.sh owns why).
-if bash "$HERE/push-authorised.sh"; then ok "push-authorised: all three push sites carry the authorisation sentence, and two carry the --no-verify prohibition"
+# Its own ok lines are counted here too, so the summary equals the ok lines printed.
+_pa="$(bash "$HERE/push-authorised.sh")"; _parc=$?
+printf '%s\n' "$_pa"
+_no="$(grep -c '^  ok    ' <<< "$_pa")" || _no=0
+oks=$((oks + _no))
+if [ "$_parc" -eq 0 ]; then ok "push-authorised: all three push sites carry the authorisation sentence, and two carry the --no-verify prohibition"
 else bad "push-authorised: a prescribed handoff push lacks the authorisation sentence beside it"; fi
 
 rm -rf "$ROOT"
 echo ""
-[ "$fails" -eq 0 ] && { echo "handoff-resume-guard: PASS"; exit 0; }
-echo "handoff-resume-guard: FAIL ($fails)"; exit 1
+report_end handoff-resume-guard

@@ -61,8 +61,10 @@ PD_EOF
 }
 # PUSH_DELETE_END
 # stdin is read only when git's two arguments are present and it is not a terminal: a hand run passes no arguments,
-# and a terminal read would wait forever. The lines are kept in PUSH_LINES for the pregate gate below.
-PUSH_LINES=""
+# and a terminal read would wait forever. The lines are kept in PUSH_LINES for the pregate gate below, and step 1c
+# hands them, with the remote name, to validate-release-version.sh, which excludes the refs this push names from
+# its stacked-base search (BL-1047).
+PUSH_REMOTE="${1:-}"; PUSH_LINES=""
 if [ "$#" -ge 2 ] && [ ! -t 0 ] && { PUSH_LINES="$(cat)"; push_delete_only "$PUSH_LINES"; }; then
   printf 'pre-push: every ref in this push is a delete (all-zero local sha): no tree is delivered, so no step runs.\n'
   exit 0
@@ -823,8 +825,21 @@ step "no dead doc refs (core/ cites no unshipped dev-repo doc)" \
 #     top heading -- and until v0.125.0 nothing joined them. v0.124.1 was committed
 #     with a subject one patch ahead of both. Push is the right seam: it is the last
 #     point before the version becomes a claim other people read.
-step "release version triple (subject == VERSION == CHANGELOG heading)" \
-  bash scripts/validate-release-version.sh
+#     The push's own remote and ref lines go in as arguments, never the environment: the
+#     keyed step hashes its argv, so a skip can never reuse a verdict taken for other refs.
+#     ONLY to a validator whose parser takes them: this hook judges the PUSHING tree, and a
+#     tree cut before they existed refuses them as an unknown argument. Such a tree gets the
+#     bare call, which is the origin/main range it was built against.
+#     ONE column-0 step line (the pre-suite step parser reads only those): the choice lives in rv_triple, and the
+#     remote and ref lines still reach the step's argv as its arguments.
+rv_triple() { # <push remote> <push ref lines>
+  if grep -qF -e '--push-refs)' scripts/validate-release-version.sh 2>/dev/null; then
+    bash scripts/validate-release-version.sh --push-remote "$1" --push-refs "$2"
+  else
+    bash scripts/validate-release-version.sh
+  fi
+}
+step "release version triple (subject == VERSION == CHANGELOG heading)" rv_triple "$PUSH_REMOTE" "$PUSH_LINES"
 
 # 1d. A plan in docs/plans/ is a handoff to a session that has never seen this one. Push
 #     is the seam: it is the last point before the file becomes the thing someone else is

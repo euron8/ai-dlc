@@ -61,9 +61,7 @@ esac
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DIST="$(cd "$HERE/../../.." && pwd)"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "suite-content-key: FIXTURE BROKEN" >&2; exit 2; }
 
 MUT_LIB="$HERE/../lib/mutant.sh"
@@ -657,8 +655,4 @@ else
 fi
 
 echo
-if [ "$fails" -ne 0 ]; then
-  echo "suite-content-key: $fails assertion(s) FAILED" >&2
-  exit 1
-fi
-echo "suite-content-key: all assertions passed"
+report_end suite-content-key

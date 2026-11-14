@@ -51,9 +51,7 @@ echo "HERMETIC-CONSUMED core/scripts/core-paths.sh"
 OUT="$WORK/out.txt"
 ESC="$PROJ/docs/escalations/pending.md"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo; echo "core-paths-audit-diff: FIXTURE BROKEN" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
@@ -608,9 +606,4 @@ audit "$M" "$BASE" "$NASQB"
 [ "$RC" -eq 1 ] || bad "MUTATION 24 ENTANGLED: it also changed the verdict on a one-byte-off NFC squash"
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "core-paths-audit-diff: PASS"
-  exit 0
-fi
-echo "core-paths-audit-diff: FAIL ($fails)" >&2
-exit 1
+report_end core-paths-audit-diff

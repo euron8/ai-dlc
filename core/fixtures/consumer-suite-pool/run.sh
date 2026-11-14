@@ -99,11 +99,9 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/hook-drive.sh" || { echo "FIXTURE BROKEN: cannot source lib/hook-drive.sh" >&2; exit 2; }
 
-fails=0
-asserts=0
-ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "consumer-suite-pool: FIXTURE BROKEN" >&2; exit 2; }
 
 echo "consumer-suite-pool:"
@@ -284,7 +282,7 @@ new_retained() {               # new_retained <tree>
 # `[ -t 0 ]` guard leaves PUSH_REFS empty and arm 0 says so, which is a different run
 # from the one a real push makes.
 drive() {                      # drive <tree> <outfile>  -> rc
-  ( cd "$1" && AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+  hook_drive "$1" "$2"
 }
 
 # ------------------------------------------------- world cells, builders and the drive ---
@@ -700,7 +698,7 @@ B_pool=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
 T="$WORK/serial"; seed "$T" "$HOOK" || broken "seed failed"
 export CSP_OBSERVE="$T/observe" CSP_BARRIER_N=12; mkdir -p "$CSP_OBSERVE"
 for n in alpha bravo charlie delta; do mkfx_observe "$T" "$n"; done
-rc="$( cd "$T" && AI_DLC_FIXTURE_JOBS=1 AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$WORK/serial.out" 2>&1; echo $? )"
+rc="$(hook_drive "$T" "$WORK/serial.out" AI_DLC_FIXTURE_JOBS=1)"
 max_ser="$(sort -n "$T/observe/../seen" 2>/dev/null | tail -1)"
 if [ "$rc" = 0 ] && [ "${max_ser:-0}" = 1 ]; then
   ok "AI_DLC_FIXTURE_JOBS=1 runs them one at a time (max observed in flight: 1) — the knob is live and the observation is real"
@@ -1042,7 +1040,7 @@ st_world() {                   # st_world <tree> <hook> <stubs...> : seed, expor
   export CSP_PIDS="$t/pids" CSP_FIFO="$t/fifo" CSP_STALL="$ST" CSP_GATE="$t/gate"
 }
 st_drive() {                   # st_drive <tree> <outfile> -> rc
-  ( cd "$1" && PATH="$GBIN:$PATH" AI_DLC_POOL_STALL="$ST" AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+  hook_drive "$1" "$2" "PATH=$GBIN:$PATH" "AI_DLC_POOL_STALL=$ST"
 }
 # st_alive <tree> <stub>: count the stub's RECORDED pids still alive, and kill each by that pid.
 st_alive() {
@@ -1452,8 +1450,7 @@ bl_mk() {                      # bl_mk <tree> <hook> <runner>: the declared, com
   ( cd "$1" && git add -A && git commit -qm seed ) >/dev/null 2>&1
 }
 bl_drv() {                     # bl_drv <tree> <outfile> -> rc; the store is <tree>.vs, the counter never armed inside
-  ( cd "$1" && env -u FXCOUNT_DIR -u FXCOUNT_RC -u FXCOUNT_JUDGE AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$1.vs" \
-      bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+  ( unset FXCOUNT_DIR FXCOUNT_RC FXCOUNT_JUDGE; hook_drive "$1" "$2" AI_DLC_VERDICT_STORE="$1.vs" )
 }
 bl_entry() { grep -lx '#fixture pend' "$1.vs"/*/* 2>/dev/null; }   # bl_entry <tree>: pend's store entry
 bl_p1() {                      # bl_p1 <prefix> <hook> <runner>: builds and drives P1 at <prefix>.p1
@@ -1513,8 +1510,8 @@ cl_seed() {                    # cl_seed <prefix> <post-P1 tree> [<hook>]: the c
   grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.cl0.out" \
     || broken "BL-998 seed cl: the census did not select both fixtures: $(tr '\n' '|' < "$p.cl0.out" | tail -c 300)"
   for i in a b; do
-    ( cd "$t" && env -u FXCOUNT_DIR -u FXCOUNT_RC -u FXCOUNT_JUDGE PREPUSH_POOL_DEPTH=0 AI_DLC_FIXTURE_JOBS=2 AI_DLC_FX_CL_TREE="$t.ct$i" \
-        AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$t.vs" bash .githooks/pre-push </dev/null >"$p.cl$i.out" 2>&1; echo $? ) > "$p.cl$i.rc"
+    ( unset FXCOUNT_DIR FXCOUNT_RC FXCOUNT_JUDGE
+      hook_drive "$t" "$p.cl$i.out" PREPUSH_POOL_DEPTH=0 AI_DLC_FIXTURE_JOBS=2 AI_DLC_FX_CL_TREE="$t.ct$i" AI_DLC_VERDICT_STORE="$t.vs" ) > "$p.cl$i.rc"
   done
   grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.cla.out" \
     || broken "BL-998 seed cl: push a did not run both fixtures in the consumer layout, so push b measures nothing: $(grep -E 'consumer layout|FAIL' "$p.cla.out" | tr '\n' '|' | tail -c 300)"
@@ -1744,19 +1741,8 @@ fi
 
 
 # ------------------------------------------------------------------- floor ---------
-# EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are
+# The expected count (report_end's second argument), mandatory since v0.217.0 for any fixture whose arms are
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=85
-if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
-  printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
-    "$asserts" "$EXPECTED_ASSERTIONS"
-  fails=$((fails+1))
-fi
-
-if [ "$fails" -ne 0 ]; then
-  printf '  consumer-suite-pool: %s FAILED\n' "$fails"
-  exit 1
-fi
-printf '  consumer-suite-pool: %s assertions, all green\n' "$asserts"
+report_end consumer-suite-pool 85

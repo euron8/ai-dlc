@@ -38,9 +38,7 @@ SCHEMA="$(pick "$HERE/../../schemas/pause-routing.json" \
                "$HERE/../../../.claude/schemas/pause-routing.json")"
 
 ROOT="$(bash "$HERE/seed.sh")"
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 # THE SUBJECT MAY BE ABSENT, AND THAT MUST NOT READ AS GREEN. A core fixture ships one pull
 # ahead of the code it guards, so on the pull that delivers this file the hook beside it may
@@ -252,5 +250,4 @@ fi
 
 rm -rf "$ROOT"
 echo ""
-[ "$fails" -eq 0 ] && { echo "pause-question-in-prose: PASS"; exit 0; }
-echo "pause-question-in-prose: FAIL ($fails)"; exit 1
+report_end pause-question-in-prose

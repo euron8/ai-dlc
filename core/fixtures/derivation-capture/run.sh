@@ -57,9 +57,7 @@ trap 'rm -rf "$WORK" $NOROOT_DIRS' EXIT
 
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required to build payloads" >&2; exit 2; }
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
@@ -1286,9 +1284,4 @@ if grep -q '^99$' "$ART"; then
 else
   bad "the artifact's recorded output changed under the hook — overwrite is the rejected design"
 fi
-
-if [ "$fails" -gt 0 ]; then
-  printf '  %s assertion(s) failed\n' "$fails"
-  exit 1
-fi
-exit 0
+report_end derivation-capture

@@ -4,3 +4,4 @@ core/fixtures/lib/mutant.sh
 core/skills/ai-dlc-update/reconcile/
 !core/skills/ai-dlc-update/reconcile/apply.sh
 !core/git-hooks/pre-push
+core/fixtures/lib/report.sh

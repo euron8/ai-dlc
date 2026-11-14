@@ -64,9 +64,7 @@ fi
 [ -s "$CORPUS" ] && [ "$(wc -c < "$CORPUS")" -ge "$(wc -c < "$SKILL")" ] \
   || { echo "FIXTURE ERROR: corpus is smaller than SKILL.md -- the read failed" >&2; exit 2; }
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 # <claim label> <literal that carries it>. The literal is the SHORTEST span that cannot survive
 # the claim being removed, so a rewrap or a retitle does not fire this and a deletion does.
@@ -152,6 +150,4 @@ for i in 0 1 2 3 4 5; do
 done
 
 echo
-if [ "$fails" -eq 0 ]; then echo "absorbed-specifics-survive: PASS"; exit 0; fi
-echo "absorbed-specifics-survive: $fails assertion(s) FAILED" >&2
-exit 1
+report_end absorbed-specifics-survive

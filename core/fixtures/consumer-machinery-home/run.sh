@@ -108,9 +108,7 @@ case "${1:-}" in "") : ;; --matrix) MATRIX=1 ;; *) echo "usage: run.sh [--matrix
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # fx_inproc (one row per in-process vem_entry pass, BL-982) comes from lib/mutant.sh, exported because every
 # pass runs in an xargs bash -c worker below.
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -366,9 +364,4 @@ if [ -z "$MATRIX" ]; then
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "consumer-machinery-home: all assertions hold"
-  exit 0
-fi
-echo "consumer-machinery-home: $fails assertion(s) FAILED" >&2
-exit 1
+report_end consumer-machinery-home

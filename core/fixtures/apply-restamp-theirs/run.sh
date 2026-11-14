@@ -168,9 +168,7 @@ printf '#!/usr/bin/env bash\n# driver v1\n' > "$CONSUMER/.claude/session-driver/
 STAMP="$CONSUMER/.claude/.ai-dlc-version"
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$STAMP"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # A kill is emitted only through mutant_killed, behind a same-run base-pass flag (B_*).
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: no lib/mutant.sh beside $HERE" >&2; exit 2; }
@@ -755,13 +753,4 @@ fi
 if [ "${BROKEN:-0}" -ne 0 ]; then echo "apply-restamp-theirs: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "PASS  apply-restamp-theirs: the stamp is computed from theirs, so a distribution"
-  echo "      checkout on any other ref cannot make it claim a version the tree lacks;"
-  echo "      a changed fixture is written after its subject; and the in-flight marker"
-  echo "      clears with the stamp, survives a withheld one, and is what pre-push"
-  echo "      refuses on so a mid-pull tree is never judged by its own fixtures."
-  exit 0
-fi
-echo "apply-restamp-theirs: $fails assertion(s) FAILED"
-exit 1
+report_end apply-restamp-theirs

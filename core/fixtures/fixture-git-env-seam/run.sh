@@ -64,10 +64,9 @@
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-git-env-seam/run.sh --matrix
 set -u
 
-FAILS=0
-ok()   { printf '  ok    %s\n' "$1"; }
-fail() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
-bad()  { fail "$1"; }
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+fail() { bad "$1"; }
 broken() { printf 'FIXTURE BROKEN: %s\n' "$1"; exit 9; }
 
 # Resolve the repo root by walking UP for a marker. Counting `..` hops answers
@@ -836,9 +835,4 @@ else
 fi
 
 echo
-if [ "$FAILS" -eq 0 ]; then
-  echo "fixture-git-env-seam: PASS"
-  exit 0
-fi
-echo "fixture-git-env-seam: $FAILS FAILED"
-exit 1
+report_end fixture-git-env-seam

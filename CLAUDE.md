@@ -42,9 +42,12 @@ consolidate them here.
 - The unit commit carries its own backlog edit (its LANDED line at the version the integrator assigns, and the
   rotation); the release commit adds `VERSION` and the heading and runs `scripts/backlog-rotate.sh --apply`
   (it owns the PENDING rule).
-- Pushes run one at a time; every other run goes in parallel.
-- Pre-seed with `scripts/seed-verdict-store.sh`; a push reads only `counted-<vk>`. Before READY,
-  `scripts/predict-push-set.sh <tree> <empty dir>` prints, read-only, the set a push runs.
+- Pushes and pre-push suites may run concurrently. A release rebases onto the current main, and re-checks its release triple there, before it merges.
+- Before READY, a release's final commit carries `scripts/pregate-self-check.sh` green on its exact tree
+  (`--member` when it edits `.githooks/pre-push`) and a counted `scripts/seed-verdict-store.sh` run of exactly
+  the fixtures `scripts/predict-push-set.sh` says its own change moves. The integrator seeds nothing; the push
+  gate runs only what the combination moved. `scripts/predict-push-set.sh <tree> <empty dir>` prints,
+  read-only, the set a push runs.
 - After a red push the failing set is in `.git/ai-dlc-fixture-failures`; a re-push re-runs those and any
   whose key moved.
 - Clear the shared verdict store by EXACT LISTING before a gate, never by glob or `rm -rf`.
@@ -59,9 +62,9 @@ consolidate them here.
   decision appends `<utc stamp> HIT|MISS|FORCED|UNAVAILABLE <key>` to `.git/ai-dlc-suite-key.log`; count with
   `awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c`.
 - A push is judged on the PUSHING worktree's working tree, never on the sha the push names: `core.hooksPath`
-  is the main checkout's `.githooks`, which does `cd "$(git rev-parse --show-toplevel)"` and never reads the
-  `<local sha>` stdin. Push from a clean worktree detached at the exact sha, with `git rev-parse HEAD` equal
-  to it.
+  is the main checkout's `.githooks`, which does `cd "$(git rev-parse --show-toplevel)"` and reads the
+  `<local sha>` stdin only in `push_delete_only` and `pregate_gate`. Push from a clean worktree whose
+  `git rev-parse HEAD` is the exact sha.
 - `scripts/suite-content-key.sh` declares which paths cannot change a fixture verdict, as the names between
   `# EXCLUDE_BEGIN` and `# EXCLUDE_END`. Both skips in `.githooks/pre-push` read it (the whole-suite key, and
   `readset_excluded_re` for the per-fixture read-set skip). A `+`-declared fixture input (e.g.

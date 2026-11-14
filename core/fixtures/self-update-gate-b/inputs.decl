@@ -18,3 +18,4 @@ core/fixtures/self-update-gate-d/run.sh
 # The shards exec the parent run.sh and the parent seeds from its own seed.sh; a sibling directory is not copied unless declared.
 core/fixtures/self-update-gate/run.sh
 core/fixtures/self-update-gate/seed.sh
+core/fixtures/lib/hook-drive.sh
