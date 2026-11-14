@@ -39,14 +39,7 @@ consolidate them here.
 - A unit's push is its gate: a green push delivers that exact sha, merged as pushed, and fills the verdict
   store (`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`) and the key records
   (`.git/ai-dlc-fixture-keys/<fx>.key`). Never push to a throwaway ref.
-- The unit commit carries its own backlog edit (its LANDED line at the version the integrator assigns, and the
-  rotation); the release commit adds `VERSION` and the heading and runs `scripts/backlog-rotate.sh --apply`
-  (it owns the PENDING rule).
-- Pushes and pre-push suites may run concurrently. A release rebases onto the current main, and re-checks its release triple there, before it merges.
-- Before READY, a release's final commit carries `scripts/pregate-self-check.sh` green on its exact tree
-  (`--member` when it edits `.githooks/pre-push`) and a counted `scripts/seed-verdict-store.sh` run of exactly
-  the fixtures `scripts/predict-push-set.sh` says its own change moves. The integrator seeds nothing; the push
-  gate runs only what the combination moved. `scripts/predict-push-set.sh <tree> <empty dir>` prints,
+- Pushes and pre-push suites may run concurrently. `scripts/predict-push-set.sh <tree> <empty dir>` prints,
   read-only, the set a push runs.
 - After a red push the failing set is in `.git/ai-dlc-fixture-failures`; a re-push re-runs those and any
   whose key moved.
@@ -161,6 +154,28 @@ form.
 ## Before adding a check, measure its false-positive set
 
 Ship it only if you have run it and the set is empty or enumerated.
+
+## Build process
+
+Builder:
+1. Create a worktree outside the repo, detached at `origin/main`.
+2. Decide the change from the code and the record (gate logs, `.git/ai-dlc-fixture-durations`, the backlog entry).
+3. Make one commit on `origin/main`, carrying the entry's LANDED or PARTIAL line. When the change alters what
+   `install.sh` ships, the subject, `VERSION` and the CHANGELOG heading name the next version and the commit
+   runs `scripts/backlog-rotate.sh --apply`; otherwise the subject names no version.
+4. Run `bash -n` on every edited script, one probe that fails without the change plus a mutant it kills, and
+   each fixture you edited, once.
+5. Run `bash scripts/pregate-self-check.sh` on the exact tree (`--member` when it edits `.githooks/pre-push`).
+6. Send the lead the sha and remove your worktree.
+
+Lead:
+1. Squash commits that ship together into one commit on `origin/main`; rerun builder step 5 on that tree.
+2. Call the advisor in its own message, then push from a clean worktree at that sha, backgrounded, to a named
+   branch, with the exit written to a file.
+3. On a red, send each failing unit from the log to its owner.
+4. `gh pr create`, then `gh pr merge --squash`, subject and body from files.
+5. Verify once: `origin/main`'s tree equals the pushed tree, with the previous main tree as a DIFF control.
+6. Detach the main checkout at the new `origin/main`.
 
 ## Releases
 

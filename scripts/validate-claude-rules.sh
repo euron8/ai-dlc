@@ -914,7 +914,15 @@ fi
 # CEILING MOVED. The two operator rulings added to operator-rulings.md, the hermetic-run store sentence in
 # tool-hazards.md, the push concurrency bullet in CLAUDE.md and the READY-carrier seeding rule, on the operator's
 # direct instruction; the operator-rulings serialized-push bullet was replaced.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-47666}"
+# RAISED 47666 -> 47996 by exactly the measured overrun, ON THE OPERATOR'S DIRECT ORDER: `operator-rulings.md`'s
+# "No needless timing runs" was rewritten so the push gate is the wall-clock measurement, on-record data is never
+# re-measured, and an instruction to another session carries no step the file forbids. A6 WAS OBSERVED FAILING AT
+# 47996/47666 BEFORE THE CEILING MOVED.
+# RAISED 47996 -> 48265 by exactly the measured overrun, ON THE OPERATOR'S DIRECT ORDER: CLAUDE.md gained the
+# numbered "Build process" (builder and lead steps), replacing the READY-seed and integrator bullets, and
+# operator-rulings.md's bundle section became a pointer to it. A6 WAS OBSERVED FAILING AT 48265/47996 BEFORE THE
+# CEILING MOVED.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48265}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
