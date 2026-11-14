@@ -12,3 +12,6 @@ scripts/suite-content-key.sh
 # preamble.sh, and mutant.sh: sourced here, copied into every subject tree and every probe.
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
+# The dead-store collector (BL-1057), REQUIRED: run.sh prints HERMETIC-CONSUMED for it once arm K6 held. Arm K6 drives it
+# from every subject tree, and MCOL mutates that copy.
+!scripts/collect-counted-stores.sh

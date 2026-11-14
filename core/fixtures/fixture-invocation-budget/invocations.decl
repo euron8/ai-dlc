@@ -2,6 +2,11 @@
 # 54 -> 67 with arm A9 and mutants MC1 and MTAG: A9's base drive and the four per-push mutant drives (MC1 on A9 and A3,
 # MTAG on A1 and A3), each one runner start, its rc generation and its judge start.
 # 67 -> 76 with arm A10 and mutant MREL: A10's base drive and MREL's two per-push drives (A10, A1), three starts each.
-76 *
-48 scripts/validate-fixture-invocations.sh
-25 core/scripts/hermetic-run.sh
+# 76 -> 191 with arms K1-K6 and mutants MKEY, MIDC, MLEG, MUNC, MJROW, MLOK, MLDIR and MCOL (BL-1057): the six base
+# K drives and the sixteen per-push mutant drives (each on its deciding K arm and twin K1, or K4 for MKEY). The judge
+# starts are --key-rows, --identity-check, --legacy-ok and --store-key calls and the K5 counted write; the runner starts
+# are K5's two runner drives per world; the collector starts are K6 and MCOL's dry run and apply.
+191 *
+107 scripts/validate-fixture-invocations.sh
+33 core/scripts/hermetic-run.sh
+4 scripts/collect-counted-stores.sh

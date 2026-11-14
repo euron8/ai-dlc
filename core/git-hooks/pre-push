@@ -1438,6 +1438,9 @@ readset_git_exec_path() {
 # when stored entries keep their meaning (they stay valid), or under a bumped READSET_VS_FORMAT when they do not (every
 # stored verdict re-runs).
 # VS-IDENTITY 1 c77c527c060e872009059fb45f79ef173d35fba6440ccee55cd8cfa1a2e38a3c the format-versioned identity (BL-1049); the runner keyed by its span, the subset reader
+# VS-IDENTITY 1 80230747ff4dec972f5bcc189a9553edfc36c87bbfe6d80243609789adbe36d6 spans.decl declares a span row (BL-1052); no existing row changes meaning
+# VS-IDENTITY 1 8b2bbb45754df4ddb6d99683679caa2c78bbf3f17f04c1d36df177a971d8ea6f a counted entry carries the judge's #judge row (BL-1057); uncounted digest inputs unchanged
+# VS-IDENTITY 1 3fc1c587525156eff1e5435a3cdcbe69102eb22d6c2df8f01d396caa35454186 bundle B1: the BL-1052 span rows and the BL-1057 counted #judge row together; neither changes an existing entry
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -1460,6 +1463,7 @@ readset_vs_ident() { # <hook> <runner>: prints "<runner span id> f<the hook's RE
 readset_vs_input() { # <fx> <ident> <rows file> [<project root>, default .]: the digest input
   printf '#fixture %s\n#runner %s\n#universe %s\n' "$1" "${2%% *}" "${2#* }"
   readset_vs_inproc "$1" "${4:-.}"
+  [ -z "${FXCOUNT_JUDGE:-}" ] || readset_vs_judge "$1" "${4:-.}" || return 1
   cat "$3"
 }
 # THIS FIXTURE'S OWN in-process-cells STATE, one row, read under <project root>: `listed` or `unlisted` on
@@ -1473,6 +1477,19 @@ readset_vs_inproc() { # <fx> <project root>
     && F="$1" awk -F'\t' '$0 !~ /^[[:space:]]*(#|$)/ && $1 == ENVIRON["F"] { f = 1 } END { exit f ? 0 : 1 }' "$2/scripts/fixture-inprocess-allowlist.txt" \
     && l=listed
   printf '#inproc %s %s\n' "$l" "$c"
+}
+# A COUNTED RUN'S JUDGE ROW (FXCOUNT_JUDGE set, the distribution hook's fxcount_arm): the invocation judge's own
+# `#judge f<format> <J5 key> <listed|unlisted>` row for <fx> (its --key-rows), read from the FXCOUNT_KEYROWS table
+# the arming wrote once per push, else from one judge call under <project root>. No row: no digest input, so nothing
+# is recorded or reused. Uncounted (a consumer, a nested pool), no row is written and the digest input is unchanged.
+readset_vs_judge() { # <fx> <project root>
+  local r
+  if [ -n "${FXCOUNT_KEYROWS:-}" ] && [ -f "$FXCOUNT_KEYROWS" ]; then
+    r="$(F="$1" awk -F'\t' '$1 == ENVIRON["F"] { print $2; exit }' "$FXCOUNT_KEYROWS")"
+  else
+    r="$(bash "$FXCOUNT_JUDGE" --key-rows "$2" "$1" 2>/dev/null | F="$1" awk -F'\t' '$1 == ENVIRON["F"] { print $2; exit }')"
+  fi
+  case "$r" in '#judge f'*) printf '%s\n' "$r" ;; *) return 1 ;; esac
 }
 # READSET_VS_END
 # A DECLARED FIXTURE'S KEY ROWS, ONE COMPOSER. This hook and hermetic-run.sh both source this span -- the runner at
@@ -1518,7 +1535,8 @@ readset_vs_inproc() { # <fx> <project root>
 #     it is the caller (it keys a root other than its cwd), else under the cwd. A fixture that declares the runner by
 #     name is also keyed on its whole-file hash, as for any declared file.
 # READSET_KEYROWS_BEGIN
-readset_span_sha() { # <file> <NAME>
+readset_span_sha() { # <file> <NAME> [raw]: `raw` keeps comment and blank lines (a declared span: its reader may read them)
+  if [ "${3:-}" = raw ]; then sed -n "/^# ${2}_BEGIN\$/,/^# ${2}_END\$/p" "$1" | shasum -a 256 | cut -d' ' -f1; return 0; fi
   sed -n "/^# ${2}_BEGIN\$/,/^# ${2}_END\$/p" "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
 }
 readset_tail_sha() { # <file>: the top-level lines after its last line that is exactly `}`, comments and blanks dropped
@@ -1563,6 +1581,7 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
       if [ "${#dp}" -eq 64 ]; then printf '%s\tP\t%s\t%s\n' "$fx" "$p" "$dp"; else printf '%s\tX\tplushash\t%s\n' "$fx" "$p"; fi
     done < "$w.pf"
   fi
+  [ ! -f "$fd/spans.decl" ] || readset_decl_spans "$fx" "$fd" "$lay" "$mp" "$w"
   [ ! -f "$fd/git.decl" ] || readset_decl_ranges "$fx" "$fd" "$w"
   [ -f "$fd/tools.decl" ] || return 0
   while IFS= read -r t || [ -n "$t" ]; do
@@ -1583,6 +1602,36 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
     seen="$seen${found##*/}=$found|"; printf '%s\tT\t%s\n' "$fx" "$found"
   done < "$fd/tools.decl"
   return 0
+}
+# readset_decl_spans: each `<path> <NAME>` line of a fixture's spans.decl keys ONE span of a file instead of the whole
+#   file. Per line: an F row (the sandbox copies the file; its <declared> field is `<path>#<NAME>`, which
+#   readset_decl_keys never keys whole) and a P row `<path>#<NAME>` valued `readset_span_sha <path> <NAME> raw`.
+#   `#` and blank lines dropped, a trailing CR stripped; a core/ path is mapped onto the consumer layout as in
+#   inputs.decl. Refusals: spanbad (not exactly two fields, or NAME outside [A-Z0-9_]), abs, spandir (a directory),
+#   absf (the file is absent), spanabsent (no `# NAME_BEGIN` or no `# NAME_END` line, so the key would hash nothing).
+readset_decl_spans() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <scratch prefix>
+  local fx="$1" fd="$2" lay="$3" mp="$4" w="$5" p n dp
+  awk -v fx="$fx" -v d="$w.s" 'BEGIN { printf "" > d } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
+      if (NF != 2 || $2 !~ /^[A-Z0-9_]+$/) { print fx "\tX\tspanbad\t" $0; next }
+      if ($1 ~ /^\// || $1 ~ /(^|\/)\.\.(\/|$)/) { print fx "\tX\tabs\t" $1; next }
+      if ($1 ~ /\/$/) { print fx "\tX\tspandir\t" $1; next }
+      print $1 "\t" $2 > d }' "$fd/spans.decl"
+  [ -s "$w.s" ] || return 0
+  if [ "$lay" = cons ] && awk -F'\t' '$1 == "core" || index($1, "core/") == 1 { f = 1 } END { exit f ? 0 : 1 }' "$w.s"; then
+    if [ -z "$mp" ] || [ ! -f "$mp" ]; then printf '%s\tX\tnomap\t%s\n' "$fx" "$mp"; return 0; fi
+    cut -f1 "$w.s" | bash "$mp" --map 2> "$w.e" > "$w.sm" \
+      || { printf '%s\tX\tmaprefuse\t%s\n' "$fx" "$(sed -n 1p "$w.e" | tr '\t' ' ')"; return 0; }
+    [ "$(awk 'END { print NR }' "$w.sm")" = "$(awk 'END { print NR }' "$w.s")" ] || { printf '%s\tX\tmapcount\t-\n' "$fx"; return 0; }
+  else
+    cut -f1 "$w.s" > "$w.sm"
+  fi
+  awk -F'\t' 'NR == FNR { m[FNR] = $0; next } { print m[FNR] "\t" $2 "\t" $1 }' "$w.sm" "$w.s" > "$w.sr"
+  while IFS="$(printf '\t')" read -r p n dp; do
+    [ -f "$p" ] || { printf '%s\tX\tabsf\t%s\t%s\n' "$fx" "$p" "$dp"; continue; }
+    grep -q "^# ${n}_BEGIN\$" "$p" && grep -q "^# ${n}_END\$" "$p" || { printf '%s\tX\tspanabsent\t%s#%s\n' "$fx" "$p" "$n"; continue; }
+    printf '%s\tF\t%s\t0\t%s#%s\n' "$fx" "$p" "$dp" "$n"
+    printf '%s\tP\t%s#%s\t%s\n' "$fx" "$p" "$n" "$(readset_span_sha "$p" "$n" raw)"
+  done < "$w.sr"
 }
 # readset_decl_ranges: each `range` line of a fixture's git.decl -> one G row, or one X row carrying the line.
 #   range <ref-expr> <path>...   <ref-expr> is `<rev>..<rev>`, or `@<file>`: a bare file name in the fixture's own
@@ -1641,7 +1690,7 @@ readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture ro
       n = split(ENVIRON["RK_R"], a, ";"); for (j = 1; j < n; j++) { split(a[j], b, " "); RNS[b[1]] = b[2]; RNT[b[1]] = b[3] }
       while ((getline l < ENVIRON["RK_P"]) > 0) { split(l, a, "\t")
         if (a[2] == "N") FX[a[1]] = 1
-        else if (a[2] == "F") FF[a[3]] = FF[a[3]] "\n" a[1]
+        else if (a[2] == "F") { if (!index(a[5], "#")) FF[a[3]] = FF[a[3]] "\n" a[1] }
         else if (a[2] == "D") DD[a[3]] = DD[a[3]] "\n" a[1]
         else if (a[2] == "T") TL[a[1]] = TL[a[1]] "\n" a[3]
         else if (a[2] == "P") PL[a[1]] = PL[a[1]] "\n" a[3] "\t" a[4]
@@ -1718,6 +1767,7 @@ readset_declared() { # <list> <out>
     $3 == "plusbang" { print $1 "\t+ and ! on one inputs.decl line (a line carries one marker): " $4; next }
     $3 == "plushash" { print $1 "\t+ file could not be hashed " $4; next }
     $3 == "rnopath" || $3 == "rabs" || $3 == "rderive" || $3 == "rref" || $3 == "rempty" { print $1 "\tgit.decl range refused (" $3 "): " $4; next }
+    $3 == "spanbad" || $3 == "spandir" || $3 == "spanabsent" { print $1 "\tspans.decl refused (" $3 "): " $4; next }
     { print $1 "\t" $4 }' "$out/.dparse" > "$out/.dunres"
   # `.dtools` (`<fx>\t<tool path>`) is a VIEW of the parse for diagnostics and probes; the decision reads `.dkeys`.
   awk -F'\t' '$2 == "T" { print $1 "\t" $3 }' "$out/.dparse" > "$out/.dtools"
@@ -1793,12 +1843,23 @@ readset_vs_ident_here() { # the ident from the cwd, both layouts, consumer runne
 # THE LEGACY IDENTITY: the `#universe` values the distribution and consumer hooks wrote before READSET_VS_FORMAT.
 READSET_VS_LEGACY_UNIVERSE="68c5a2f2659c8bc02f3f1b087af17c0e683e0ae989392cf465350c1664aa7e47 a829a5b0f9ef73ce7a53c6e37f3321b852ba2c180b1627855590f562ff3c9335"
 readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pass covering its current key rows is decided `skip`
-  local out="$1" store ident fx rn="" c rraw
+  local out="$1" store ident fx rn="" c rraw vld vlok vj
   : > "$out/.vs"
   [ -s "$out/.dfx" ] || return 0
   store="$(readset_vs_store "$PWD")"
   if [ -z "$store" ]; then printf '   ..    verdict store OFF: no store base, or the project root commit cannot be resolved (shallow clone or git failure)\n'; return 0; fi
-  [ -d "$store" ] || return 0
+  # COUNTED (FXCOUNT_JUDGE set): an entry of the counted store carries the fixture's `#judge` row after `#inproc`; an
+  # entry of FXCOUNT_LEGACY_STORE (the last whole-judge store, fxcount_arm) carries none and is read only for a fixture
+  # FXCOUNT_LEGACY_OK lists, and is read while the counted store has no directory yet. Uncounted, both are empty and
+  # every entry is read as before.
+  vld=""; vlok=""; vj=""
+  if [ -n "${FXCOUNT_JUDGE:-}" ]; then
+    vj=1
+    if [ -n "${FXCOUNT_LEGACY_STORE:-}" ] && [ -n "${FXCOUNT_LEGACY_OK:-}" ] && [ -s "$FXCOUNT_LEGACY_OK" ] && [ -d "$FXCOUNT_LEGACY_STORE/${store##*/}" ]; then
+      vld="$FXCOUNT_LEGACY_STORE/${store##*/}"; vlok="$FXCOUNT_LEGACY_OK"
+    fi
+  fi
+  [ -d "$store" ] || [ -n "$vld" ] || return 0
   ident="$(readset_vs_ident_here)" || return 0
   [ -n "$ident" ] || return 0
   for c in scripts/ai-dlc/hermetic-run.sh core/scripts/hermetic-run.sh; do [ -f "$c" ] && { rn="$c"; break; }; done
@@ -1812,39 +1873,46 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
     awk -F'\t' -v f="$fx" '$1 == f { x = 1 } END { exit x ? 0 : 1 }' "$out/.qfx" && continue
     [ -f "$out/.k/$fx" ] || continue
     tail -n +4 "$out/.k/$fx" > "$out/.vs.rows" 2>/dev/null && [ -s "$out/.vs.rows" ] || continue
-    { readset_vs_inproc "$fx" . | awk -v f="$fx" '{ print f "\tI\t" $0 }'; awk -v f="$fx" '{ print f "\tR\t" $0 }' "$out/.vs.rows"; } >> "$out/.vs.want"
+    { readset_vs_inproc "$fx" . | awk -v f="$fx" '{ print f "\tI\t" $0 }'
+      [ -z "${FXCOUNT_JUDGE:-}" ] || readset_vs_judge "$fx" . | awk -v f="$fx" '{ print f "\tJ\t" $0 }'
+      awk -v f="$fx" '{ print f "\tR\t" $0 }' "$out/.vs.rows"; } >> "$out/.vs.want"
   done < "$out/.vs.cand"
   [ -s "$out/.vs.want" ] || return 0
   # ONE SCAN: the entries whose `#fixture` line names a candidate, then ONE matcher over all of them.
   awk -F'\t' '$2 == "I" { print "#fixture " $1 }' "$out/.vs.want" > "$out/.vs.pat"
-  find "$store" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null | xargs -0 grep -l -x -F -f "$out/.vs.pat" -- 2>/dev/null > "$out/.vs.files"
+  { find "$store" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null
+    [ -z "$vld" ] || find "$vld" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null; } | xargs -0 grep -l -x -F -f "$out/.vs.pat" -- 2>/dev/null > "$out/.vs.files"
   [ -s "$out/.vs.files" ] || return 0
-  tr '\n' '\000' < "$out/.vs.files" | VW="$out/.vs.want" VN="$out/.now" VF="$out/.dfull" VR="${ident%% *}" VU="${ident#* }" VL="$rraw" VLU="$READSET_VS_LEGACY_UNIVERSE" \
+  tr '\n' '\000' < "$out/.vs.files" | VW="$out/.vs.want" VN="$out/.now" VF="$out/.dfull" VR="${ident%% *}" VU="${ident#* }" VL="$rraw" VLU="$READSET_VS_LEGACY_UNIVERSE" VJ="$vj" VLD="$vld" VLOK="$vlok" \
     xargs -0 awk -v root="$FXROOT" '
     function addw(md, f, r, o) { if ((md SUBSEP f SUBSEP r) in W) return; W[md SUBSEP f SUBSEP r] = 1; NW[md SUBSEP f]++; if (o) NO[md SUBSEP f]++ }
     function fin() { if (ok && fx != "" && md != "" && !(fx in HIT) && m == NW[md SUBSEP fx] && own == NO[md SUBSEP fx] + 0) { HIT[fx] = 1; print fx } }
     BEGIN {
       n = split(ENVIRON["VLU"], a, " "); for (j = 1; j <= n; j++) LU[a[j]] = 1
       while ((getline l < ENVIRON["VF"]) > 0) DF[l] = 1
+      if (ENVIRON["VLOK"] != "") while ((getline l < ENVIRON["VLOK"]) > 0) LOK[l] = 1
+      vj = (ENVIRON["VJ"] != ""); vld = ENVIRON["VLD"]
       while ((getline l < ENVIRON["VN"]) > 0) { t = index(l, "\t"); p = substr(l, 1, t - 1)
         if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh") NOW[p] = substr(l, t + 1) }
       while ((getline l < ENVIRON["VW"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); r = substr(l, t + 1); kd = substr(r, 1, 1); r = substr(r, 3)
         if (kd == "I") { INP[f] = r; continue }
+        if (kd == "J") { JR[f] = r; continue }
         t = index(r, "\t"); k = substr(r, 1, t - 1)
         if ((f in DF) && k == root f "/inputs.decl") continue
         o = (index(k, root f "/") == 1)
         addw("n", f, r, o)
         if (k ~ /#HR_(SANDBOX|EXIT)$/) { sub(/#HR_[A-Z]+$/, "", k); if (!(k in NOW)) continue; r = k "\t" NOW[k] }
         addw("l", f, r, o) } }
-    FNR == 1 { fin(); ok = ($0 == "#format k1"); fx = ""; md = ""; m = 0; own = 0; next }
+    FNR == 1 { fin(); ok = ($0 == "#format k1"); fx = ""; md = ""; m = 0; own = 0; leg = (vld != "" && index(FILENAME, vld "/") == 1); next }
     FNR == 2 { ok = ok && ($0 == "#state ok"); next }
-    FNR == 3 { if (substr($0, 1, 9) == "#fixture ") fx = substr($0, 10); ok = ok && (fx in INP); next }
+    FNR == 3 { if (substr($0, 1, 9) == "#fixture ") fx = substr($0, 10); ok = ok && (fx in INP) && (!leg || (fx in LOK)); next }
     FNR == 4 { rr = $0; next }
     FNR == 5 { if (rr == "#runner " ENVIRON["VR"] && $0 == "#universe " ENVIRON["VU"]) md = "n"
                else if (rr == "#runner " ENVIRON["VL"] && substr($0, 1, 10) == "#universe " && (substr($0, 11) in LU)) md = "l"
                else ok = 0
                next }
     FNR == 6 { ok = ok && ($0 == INP[fx]); next }
+    FNR == 7 && vj && !leg { ok = ok && (fx in JR) && ($0 == JR[fx]); next }
     !ok { next }
     { t = index($0, "\t"); k = substr($0, 1, t - 1)
       if ((fx in DF) && k == root fx "/inputs.decl") next
@@ -1994,7 +2062,7 @@ readset_keys() { # <list> <out>
         else if (first != "") { why = um ? "unmapped: closure changed" : "changed " first; c = "k" }
         else run = 0
         if (!run && (f in QF)) { run = 1; why = "read set names a quoted path " QF[f]; c = "k" }
-        if (!run && (f in UN)) { run = 1; why = (substr(UN[f], 1, 7) == "mapper " || index(UN[f], "git.decl range refused ") == 1) ? UN[f] : "tool unresolved " UN[f]; c = "k" }
+        if (!run && (f in UN)) { run = 1; why = (substr(UN[f], 1, 7) == "mapper " || index(UN[f], "git.decl range refused ") == 1 || index(UN[f], "spans.decl refused ") == 1) ? UN[f] : "tool unresolved " UN[f]; c = "k" }
         # A STALE RECORD WITH A VALID ROW SET AND NO MOVED KEY SKIPS, and its `ok` record is published
         # on this push through `.k.always`, as a seeded one is: c `v` marks it.
         if (!run) { if (!seed && st != "stale" && !mig && !SB && !lg) { print f "\tskip\t\t\t" st; continue }
@@ -2176,6 +2244,17 @@ pool_stop() { # pool_stop <exit status>
   exit "$1"
 }
 
+# THE INVALIDATION GUARD (BL-1052): scripts/invalidation-guard.sh, distribution only, fails the push before dispatch when a
+# declared fixture is selected only by a change it cannot read. Absent (a consumer tree, a probe world): no-op.
+readset_invalidation_guard() { # <out>
+  [ -d core/scripts ] && [ -f scripts/invalidation-guard.sh ] || return 0
+  if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" ]; then
+    printf '   ..    invalidation guard: SKIP -- AI_DLC_FIXTURE_NO_SKIP=1 dispatches every fixture, so no selection is judged\n'; return 0
+  fi
+  [ "${READSET_NO_CHANGE:-0}" = "1" ] && return 0
+  bash scripts/invalidation-guard.sh --out "$1" --keys "$KEYS_DIR"
+}
+
 run_fixtures() {
   local rc=0 rf_hard=0 d b out out_q n_expected n_actual n_ordered verdict fx_root fx_s fx_err fx_m fx_p fx_t fx_e pool_xp=""
   if [ "$POOL_DEPTH_IN" -ge 2 ]; then
@@ -2263,6 +2342,7 @@ run_fixtures() {
   READSET_NO_CHANGE=0
   apply_readset_skip "$out/list" "$out"
   readset_trace_report "$out"
+  readset_invalidation_guard "$out" || { rm -rf "$out"; trap - EXIT INT TERM HUP; return 1; }
 
   # A WHOLE-SUITE SKIP CANNOT BE SIGNALLED BY AN EMPTY LIST, and the guard four lines down is
   # why: an empty list is a hard FAIL here, deliberately, because "an empty suite passes every

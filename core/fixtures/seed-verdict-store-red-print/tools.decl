@@ -11,6 +11,7 @@ git
 grep
 mkdir
 mktemp
+mv
 rm
 sed
 tr

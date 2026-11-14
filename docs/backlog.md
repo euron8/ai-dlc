@@ -3041,3 +3041,57 @@ Provenance: batch 257, the 0.1107.0 bundle's receipts gate; id allocated by the 
 
 verify: manual
 
+## BL-1056 — fixtures have no written contract, so each is built bespoke and every builder rediscovers how the fixture system works
+
+**PARTIAL (v0.1124.0; batch 257, F24).** The contract is written and bound; the migration of existing fixtures onto it is owed. `.claude/rules/fixture-contract.md` (scoped to `core/fixtures/**`) states the run.sh skeleton, the library entry points, every declaration grammar, the keys, the verdict store and the runner span in 24 clauses, each ending with its enforcer. `scripts/validate-claude-rules.sh` arm A7 resolves every cite (an arm header, a span marker, a function, or a cell or mutant word in a fixture) and fails the push on a clause with no enforcer, on a cite that names nothing, and on a declaration kind or `core/fixtures/lib/*.sh` the contract never names. New library entry points: `core/fixtures/lib/report.sh` (`ok`, `bad`, `report_end <name> [<expected>]`), `world.sh` (`world_git`, `world_repo`, `world_commit`, `world_install`) and `hook-drive.sh` (`hook_drive`: stdin `/dev/null`, `GIT_*` unset, `AI_DLC_READSET_LIVE_TRACE=0`, store `<tree>.verdicts`). `scripts/validate-fixture-hygiene.sh` arms H10 (a run.sh defining its own `ok`/`bad`) and H11 (a run.sh running a pre-push hook by hand) are down-only over `scripts/fixture-contract-allowlist.txt` (arm H10-M4). `core/fixtures/suite-dispatch-order` is migrated onto all three new files and is the contract's reference fixture. CLAUDE.md's verified-record and suite-key lines now say what F16 made true (both follow a green suite under a red step) and point at the contract.
+
+Owed (the migration, not done in this release by the lead's brief):
+- Mechanical, 125 fixtures: run.sh carries exactly the standard pair (`ok()  { printf '  ok    %s\n' "$1"; }`, `bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }`). Source `lib/report.sh`, end with `report_end`, declare the file, drop the `:report` row.
+- Reconcile, 109 fixtures: their `ok`/`bad` bodies also count `made`/`asserts`, set `rc`, or write to stderr. Map each counter onto `oks`/`fails` and `report_end <name> <expected>`, then drop the row.
+- Rewrite, 4 fixtures run a hook by hand (`agent-definition-render`, `consumer-suite-pool`, `prepush-worktree-env-scrub`, `self-update-gate`): move each drive onto `hook_drive` and re-measure `invocations.decl` by a counted run. The audit's "37 drive() fixtures" counted every function named `drive`, most of which start a validator; H11 reads 5 run.sh that run a hook, and `suite-dispatch-order` is migrated here.
+- World adoption is not bound by an arm: 66 fixtures run `git init` by hand. An arm on it needs its false-positive set measured first.
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: `core/fixtures/` (the authoring surface) and `core/fixtures/lib/`.
+
+The batch-257 push-cost audit (lead scratch `push-cost-audit.md`, row 10 and report J) found 11 of 15 fixture-system facts only in code comments (9) or nowhere (2: the run.sh structure and how to drive the hook). 37 fixtures define their own `drive()` (34 distinct bodies); `ok` has 46 distinct bodies across 235 definitions and `bad` 51; 226 of 273 declarers name a directory or a file over 1,000 lines. With no written contract, every fixture is a new place to get keying, reporting or hook driving wrong, and builders reread the runner and the hook to learn each grammar.
+
+Fix: one contract, rules and directions only, with its enforcer beside each clause; the library entry points it names; each clause bound to a validator arm, ratcheted by a down-only allowlist so existing fixtures are not broken; CLAUDE.md cites the contract instead of restating it.
+
+Receipt: the migration is complete when `scripts/fixture-contract-allowlist.txt` holds no row. The contract and its arms are held by A7, H10, H11 and H10-M4 on every push.
+
+verify: manual
+
+## BL-1054 — pre-suite steps never skip: their key walks git-ignored paths, and the backlog-receipts step is half the pre-suite
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: `.githooks/pre-push`, the pre-suite step keys (`pk_init`, `pk_present`, `pk_reset_all`, `pk_step`); `scripts/validate-backlog-receipts.sh` for subject (2).
+
+Two subjects, from the batch 257 push-cost audit (row 2 and "Pre-suite per-step cost"):
+(1) The present key hashed the raw walk `/usr/bin/find . -path ./.git -prune -o -print0`, git-ignored paths included. The main checkout holds about 169k paths under `.claude/worktrees/` (agent worktrees), so adding or removing a worktree anywhere moved every record's key, and 0 of 23 steps skipped: 6.5-10 min per push instead of about 1.5.
+(2) The backlog-receipts step is about half the pre-suite (136 s in the audit).
+
+**PARTIAL (v0.1124.0) — subject (1) shipped; subject (2) is OPEN, so this entry carries no `**LANDED` line.** `pk_ign` in `.githooks/pre-push` lists the git-ignored paths with `git ls-files -z -o -i --exclude-standard --directory`: an ignored directory once and never descended into, a tracked path never. It turns them into escaped `-path` prune operands, `PK_PRUNE`, which all four walks use: the present key (`pk_present`, from `pk_init` and `pk_finish`), the atime reset, the atime scan and the mtime check. So a worktree added under `.claude/worktrees/`, a `.DS_Store` or a rewritten `.claude/settings.local.json` moves no key and leaves no read row. Untracked unignored paths stay in the key. Two ignored paths are DECLARED INPUTS and stay walked and keyed, because the agent-definitions step tests and reads them: `.claude/settings.json` and `.claude/agents`. When git lists `.claude/` whole, its other children are pruned one by one. The present-row encoding is unchanged, so a tree with no ignored path keys exactly as before. Measured on a clean worktree at e00a0b111: the old and new walks both read `eb7fdc709c953ec4…`, the key of 23 existing step records, which carry forward. The tip's first prefix run in the shared store skipped 10 of 23 steps on them. Evidence: `core/fixtures/presuite-present-key`, with arms A1.ignored, A1.ignglob, W.ignored, W.ignread, W.ignwrite, W.keep, W.keep2 and W.partial (a content edit of one tracked file re-runs only its reader). Mutants `m_ign` (the walk prunes only `.git`), `m_esc`, `m_scan`, `m_mt`, `m_keep` and `m_size` are each killed by their own arm. The stray party-mode step now skips when only ignored content changed; what it judges is the distribution tree. A push from a checkout where something under a non-ignored directory such as `.claude/` is created or removed DURING the push still goes unrecorded; that guard is unchanged.
+
+Subject (2), measured and not built. An xtrace of the validator's main process on 0.1112.0 read 224 s wall on a box loaded by peer pushes. The audit's premise, a detached checkout per open receipt, does not hold: there are 5 open `sh` receipts, and the run makes 68 `git worktree add` calls, about 6 s of git time. Two lines hold 194 of the 224 s: the live score pool (`scripts/validate-backlog-receipts.sh:2029`, 89 s) and R9's classifier pass over the live ledger (`:2751`, 105 s). Both are paced by BL-878's receipt, `bash scripts/validate-fixture-inprocess.sh --complete`, which takes 81 s solo and runs once in each. There are two candidate cuts. If R9's join reads nothing exit-dependent from the classifier's rows, R9 reuses the exit and stderr the score pass recorded for the same receipt text at the same HEAD, stored under `$WORK` only and never across runs. Otherwise R9's classifier pass runs alongside the score pool instead of after it. Read `r9_judge` first to decide between them.
+
+Owed: subject (2), the cut and its measured wall clock, old against new, interleaved.
+
+Receipt: `verify: manual`. Subject (1)'s evidence is the presuite-present-key fixture named above; subject (2) is a wall-clock cut whose closing evidence is a before-and-after measurement, which no predicate over the tree can test.
+
+Provenance: batch 257, F22; id allocated by the lead.
+
+verify: manual
+
+## BL-1058 — trees with the same path set but different content share one pre-suite record per step, so a run between pushes overwrites the next push's skips
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: `.githooks/pre-push`, `pk_step`'s record name `<slug>.<first 16 hex of the present key>.key` under the shared `<git common dir>/ai-dlc-presuite-keys/`.
+
+A record's filename carries only the present key, which hashes the set of paths, never their content. Every tree with the same path set therefore reads and writes the same record for a step. Clean worktrees of consecutive releases usually share a path set, and since BL-1054 so does the main checkout when it holds no untracked unignored file. Measured in batch 257: F22's prefix run at its tip wrote `shell-syntax-every-shipped-script-and-hook.eb7fdc709c953ec4.key`, F17's push from another tree with the same path set overwrote it at 20:55:47, and F22's next run read F17's record (`runs: changed .githooks/pre-push`) instead of its own. Any builder's self-check or prefix run between two pushes can cost the next push its skips in the same way. The prune keeps the newest 4 records per slug, so the collision also evicts records that other trees would have used.
+
+Owed: records that trees with different content cannot overwrite. For example, keep several records per (slug, present key) and check each, or add a content discriminator to the name that every reader can compute. A probe: two trees with the same path set and one differing tracked file each record, and each tree's next run skips on its own record.
+
+Receipt: `verify: manual`. A runner-wired receipt would drive two scratch trees through the pk span, which is the fixture's job and is owed with the fix.
+
+Provenance: batch 257, F22's prefix runs; id allocated by the lead.
+
+verify: manual
+

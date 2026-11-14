@@ -195,7 +195,19 @@
 # inside that span, so this mechanism's own landing is such an edit.
 #
 # Distribution-only: repo-root scripts/ is never installed, and nothing on a consumer sets the three variables.
+#
+# THE JUDGE'S IDENTITY IS A FORMAT VERSION, NOT A HASH OF ITS BYTES. A counted verdict-store entry carries one
+# `#judge f<FXC_FORMAT> <J5 key> <listed|unlisted>` row for its fixture (--key-rows, read by the hook's READSET_VS
+# span), and the counted store is named for FXC_FORMAT alone, so a judge or allowlist edit re-runs only the fixtures
+# whose row it moves. FXC_FORMAT changes only when what the judge DECIDES for a fixture changes. Every semantic sha of
+# this file (comment and blank lines dropped, readset_span_sha's rule) is pinned on one row,
+# `# FXC-IDENTITY <format> <sha> <reason>`; --identity-check, run by the hook's fxcount_arm, fails arming when the
+# current sha has no row or its row names a format other than FXC_FORMAT. A code edit adds a row: under the CURRENT
+# format when no fixture's judgement moves (counted entries stay valid), else under a bumped FXC_FORMAT (every
+# counted entry re-runs).
+# FXC-IDENTITY 1 cc011bb8430f348d037ed2a565be3f493f1074da7f072c919c65ef67776784ad the per-fixture judge row (BL-1057)
 set -u
+FXC_FORMAT=1
 
 FXC_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
 FXC_REMEDY_TAIL="otherwise this is the regrowth fixture-mutants.md 'One run per distinct state' forbids"
@@ -316,6 +328,53 @@ FXC_ALLOW="${FXC_SELF%/*}/fixture-matrix-allowlist.txt"
 fxc_allowlisted() {
   [ -f "$FXC_ALLOW" ] || return 1
   F="$1" awk -F'\t' '$0 ~ /^[[:space:]]*(#|$)/ { next } $1 == ENVIRON["F"] { f = 1 } END { exit f ? 0 : 1 }' "$FXC_ALLOW"
+}
+
+# fxc_key_rows <root> [<fixture>...]: one `<fixture>\t#judge f<FXC_FORMAT> <J5 key> <listed|unlisted>` row per fixture
+# (every core/fixtures/*/run.sh under <root> when none is named): everything this judge decides for a fixture that the
+# fixture's own content key does not hold. The J5 key is fxc_judge's (the shard stub's IMPL through fxc_impl_of, else
+# the fixture), and its membership is fxc_allowlisted's. One awk resolves every stub, one awk reads the allowlist.
+fxc_key_rows() {
+  local root="$1" w f; shift
+  w="$(mktemp -d "${TMPDIR:-/tmp}/fxc-keyrows.XXXXXX")" || return 2
+  if [ $# -eq 0 ]; then
+    for f in "$root"/core/fixtures/*/run.sh; do [ -f "$f" ] && printf '%s\n' "$f"; done > "$w/runs"
+  else
+    for f in "$@"; do [ -f "$root/core/fixtures/$f/run.sh" ] && printf '%s\n' "$root/core/fixtures/$f/run.sh"; done > "$w/runs"
+  fi
+  set --
+  while IFS= read -r f; do set -- "$@" "$f"; done < "$w/runs"
+  fxc_impl_of "$@" > "$w/impl" 2>/dev/null || :
+  : > "$w/allow"
+  [ -f "$FXC_ALLOW" ] && awk -F'\t' '$0 ~ /^[[:space:]]*(#|$)/ { next } { print $1 }' "$FXC_ALLOW" > "$w/allow"
+  FMT="$FXC_FORMAT" awk -F'\t' 'FILENAME == ARGV[1] { A[$0] = 1; next } FILENAME == ARGV[2] { I[$1] = $2; next }
+    { fx = $0; sub(/\/run\.sh$/, "", fx); sub(/.*\//, "", fx); k = ($0 in I && I[$0] != "") ? I[$0] : fx
+      printf "%s\t#judge f%s %s %s\n", fx, ENVIRON["FMT"], k, ((k in A) ? "listed" : "unlisted") }' "$w/allow" "$w/impl" "$w/runs"
+  rm -rf "$w"
+}
+
+# fxc_store_key: the counted store's directory name, `counted-<vk>`, vk the first 12 hex of the sha256 of FXC_FORMAT
+# alone. The hook's fxcount_arm and scripts/collect-counted-stores.sh both read it here.
+fxc_store_key() { printf 'counted-%s\n' "$(printf 'fxcount judge format f%s\n' "$FXC_FORMAT" | shasum -a 256 | cut -c1-12)"; }
+
+# fxc_legacy_ok <old allowlist> <key rows> <format>: the fixtures whose --key-rows row carries <format> and whose J5 key
+# has the same membership in <old allowlist> (an allowlist as fxc_allowlisted reads one) as the row records: the
+# fixtures whose judgement a store written under <old allowlist> and <format> still holds.
+fxc_legacy_ok() {
+  [ -f "$1" ] && [ -f "$2" ] || return 2
+  LF="$3" awk -F'\t' 'FILENAME == ARGV[1] { if ($0 !~ /^[[:space:]]*(#|$)/) A[$1] = 1; next }
+    { split($2, j, " "); if (j[1] == "#judge" && j[2] == ENVIRON["LF"] && (((j[3] in A) ? "listed" : "unlisted") == j[4])) print $1 }' "$1" "$2"
+}
+
+# fxc_identity_check: 0 when this file's semantic sha is pinned on a `# FXC-IDENTITY <FXC_FORMAT> <sha> <reason>` row.
+fxc_identity_sha() { grep -v -E '^[[:space:]]*(#|$)' "$FXC_SELF" | shasum -a 256 | cut -d' ' -f1; }
+fxc_identity_check() {
+  local s
+  s="$(fxc_identity_sha)"
+  S="$s" F="$FXC_FORMAT" awk '$1 == "#" && $2 == "FXC-IDENTITY" && NF >= 5 && $4 == ENVIRON["S"] { n++; if ($3 == ENVIRON["F"]) ok = 1 }
+    END { exit (ok && n == 1) ? 0 : 1 }' "$FXC_SELF" && { printf 'judge identity f%s %s pinned\n' "$FXC_FORMAT" "$s"; return 0; }
+  printf '   %s: semantic sha %s has no `# FXC-IDENTITY %s <sha> <reason>` row: add one under the current FXC_FORMAT if no fixture'"'"'s judgement moves, else under a bumped FXC_FORMAT\n' "$FXC_SELF" "$s" "$FXC_FORMAT"
+  return 1
 }
 
 # fxc_mutant_rows <run.sh> <root>: print `M <name>` and `C <name>` rows, following a shard stub to its IMPL.
@@ -1871,6 +1930,10 @@ case "${1:-}" in
     fi
     fxc_static_join "$2"; exit $? ;;
   --gen-rc) [ $# -eq 2 ] || { echo "usage: $0 --gen-rc <dir>" >&2; exit 2; }; fxc_gen_rc "$2"; exit $? ;;
+  --key-rows) [ $# -ge 2 ] && [ -d "$2" ] || { echo "usage: $0 --key-rows <root> [<fixture>...]" >&2; exit 2; }; shift; fxc_key_rows "$@"; exit $? ;;
+  --identity-check) fxc_identity_check; exit $? ;;
+  --store-key) fxc_store_key; exit $? ;;
+  --legacy-ok) [ $# -eq 4 ] || { echo "usage: $0 --legacy-ok <old allowlist> <key rows> <format>" >&2; exit 2; }; fxc_legacy_ok "$2" "$3" "$4"; exit $? ;;
   --self-probe)
     SP_VERBOSE=1; fxc_self_probe; r=$?
     if [ "$r" = 0 ]; then printf 'self-probe: %s cells, all green\n' "$SP_N"; exit 0; fi

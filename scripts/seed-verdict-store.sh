@@ -21,6 +21,12 @@
 # passed; exit 1 on any red; exit 2 on a refusal (dirty tree, no fixture, wrong cwd, arming not extractable or
 # failed). Honours AI_DLC_VERDICT_STORE as the BASE (default ~/.cache/ai-dlc/verdicts), like the hook.
 set -u
+# STDIN IS /dev/null FOR THE WHOLE RUN, as the push's pool gives every fixture (xargs children, and its worker's
+# `< /dev/null`). bash 3.2 skips BASH_ENV in a `bash -c` at shell level 1 whose stdin is an inet socket, and the
+# counter rides BASH_ENV. A session's Bash tool hands its commands such a stdin; inside a fixture, a `bash -c` reached
+# through `exec` (which lowers SHLVL) or `env -i`, run in the foreground or as a `set -m` job, inherits it and goes
+# uncounted, so an invocations.decl row set from a hand seed reads low against the push (BL-1053).
+exec < /dev/null
 [ "$#" -gt 0 ] || { echo "usage: bash scripts/seed-verdict-store.sh <fixture> [<fixture> ...]" >&2; exit 2; }
 HOOK="$PWD/.githooks/pre-push"
 [ -f "$HOOK" ] && [ -f "$PWD/core/scripts/hermetic-run.sh" ] \

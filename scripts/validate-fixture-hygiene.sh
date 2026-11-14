@@ -470,6 +470,19 @@
 #     rows; the raw rows are byte-identical to the receipt's own. With the receipt deleted: 457 scanned, the same 8
 #     rows. FALSE POSITIVES: 0; the 8 allowlisted sites are enumerated in scripts/bl868-wait-allowlist.txt, each with
 #     its reason.
+# H10 a run.sh code line (masked: never a comment, a string or a heredoc body) DEFINING `ok` or `bad`, in a fixture that
+#     is not a `<fixture>:report` row of scripts/fixture-contract-allowlist.txt -> FAIL, naming the first such line.
+#     The contract (.claude/rules/fixture-contract.md) reports through core/fixtures/lib/report.sh.
+# H11 a run.sh code line whose command-position `bash` (the word unmasked at the column the raw line carries it) runs a
+#     path ending `.githooks/pre-push` or `git-hooks/pre-push`, in a fixture that is not a `<fixture>:hook-drive` row
+#     -> FAIL. A hook is run through hook_drive (core/fixtures/lib/hook-drive.sh); core/fixtures/lib is not scanned.
+#     The list's own findings, both arms: a listed key that no longer offends, names no tracked run.sh, or names a
+#     clause other than report/hook-drive is H10STALE; a duplicate is H10DUP; a reasonless row H10NOREASON; a row not
+#     on the list at origin/main FAILs H10-M4 (the shared m4, M4's two SKIPs). `--derive-h10` prints the rows.
+#     FP SET, how it reached its value: over the 275 run.sh at e00a0b111, H10 reads 235 fixtures and H11 5; every H11
+#     line was read by hand and is a real hook run (agent-definition-render, consumer-suite-pool, prepush-worktree-
+#     env-scrub, self-update-gate, suite-dispatch-order, the last migrated onto hook_drive in the change that adds the
+#     arm). A raw-text grep also hits printf lines that WRITE a stub hook; the unmasked-`bash` column test drops them.
 #
 # ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
 # rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
@@ -495,7 +508,8 @@ case "${1:-}" in
   "") ;;
   --derive) MODE=derive ;;
   --derive-h8) MODE=derive8 ;;
-  *) echo "usage: validate-fixture-hygiene.sh [--derive | --derive-h8]" >&2; exit 2 ;;
+  --derive-h10) MODE=derive10 ;;
+  *) echo "usage: validate-fixture-hygiene.sh [--derive | --derive-h8 | --derive-h10]" >&2; exit 2 ;;
 esac
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -510,6 +524,7 @@ ALLOW_REL="scripts/fixture-matrix-allowlist.txt"
 E1_ALLOW_REL="scripts/inert-receipt-allowlist.txt"
 H7_ALLOW_REL="scripts/twin-built-allowlist.txt"
 H8_ALLOW_REL="scripts/env-scrub-allowlist.txt"
+H10_ALLOW_REL="scripts/fixture-contract-allowlist.txt"
 H9_ALLOW_REL="scripts/bl868-wait-allowlist.txt"
 MKA_REL="scripts/mutant-kills-allowlist.txt"
 MVA_REL="scripts/mutant-verdicts-allowlist.txt"
@@ -1082,6 +1097,16 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
       if (t8 ~ /hooks\/ai-dlc|\$HOOK/) { HK8[FX] = 1; print "HK8\t" FX "\t" REL ":" i }
     }
     if (!HDL[i]) { h6(i); h7(i) }
+    # H10/H11 facts (the fixture contract's skeleton): a run.sh code line DEFINING ok or bad, and a run.sh code line
+    # whose command-position `bash` runs a pre-push hook. Both read the masked line, so a comment, a string (a
+    # printf writing a stub hook) and a heredoc body are never a fact.
+    if (ISRUN && !HDL[i]) {
+      if (s ~ /^[[:space:]]*(function[[:space:]]+)?(ok|bad)[[:space:]]*\(\)/) print "OB\t" FX "\t" REL ":" i
+      if (match(O[i], /(^|[[:space:];&|(])bash[[:space:]]+[^[:space:];&|]*(\.githooks|git-hooks)\/pre-push/)) {
+        st = RSTART; while (substr(O[i], st, 4) != "bash") st++
+        if (substr(s, st, 4) == "bash") print "HD\t" FX "\t" REL ":" i
+      }
+    }
     # H5 facts
     if (s ~ /(^|[^A-Za-z0-9_])cmp[[:space:]]+-s([[:space:]]|$)/) CMP[FX] = 1
     if (O[i] ~ /[Mm][Uu][Tt][Aa][Nn][Tt]/) { MUTW[FX] = 1; t5 = O[i]; gsub(/lib\/mutant\.sh/, "", t5); if (t5 ~ /[Mm][Uu][Tt][Aa][Nn][Tt]/) MUTX[FX] = 1 }
@@ -1301,6 +1326,37 @@ END {
 }
 AWK
 
+# --- the H10/H11 judge: the fixture contract's skeleton (.claude/rules/fixture-contract.md) ----------------------
+# ARGV[1] the allowlist, rows `<fixture>:<clause>\t<reason>`, clause `report` (H10) or `hook-drive` (H11); ARGV[2] the
+# scan. Rows: H10 <fx> <where> / H11 <fx> <where> (an unlisted offender's FIRST line); H10LISTED <key>; H10STALE <key>
+# <why>; H10DUP <key>; H10NOREASON <key>.
+read -r -d '' H10_JUDGE_AWK <<'AWK'
+FILENAME == ARGV[1] {
+  if ($0 ~ /^[[:space:]]*(#|$)/) next
+  x = $1; gsub(/[[:space:]]/, "", x); r = (NF >= 2) ? $2 : ""; gsub(/[[:space:]]/, "", r)
+  if (x in LISTED) print "H10DUP\t" x
+  LISTED[x] = 1
+  if (r == "") print "H10NOREASON\t" x
+  next
+}
+$1 == "F" { n = split($2, a, "/"); if (n == 4 && a[4] == "run.sh" && a[3] != "lib") FXS[a[3]] = 1; next }
+$1 == "OB" { if (!(($2 ":report") in HIT)) HIT[$2 ":report"] = $3; next }
+$1 == "HD" { if (!(($2 ":hook-drive") in HIT)) HIT[$2 ":hook-drive"] = $3; next }
+END {
+  for (k in HIT) {
+    if (k in LISTED) { print "H10LISTED\t" k; continue }
+    f = k; sub(/:[^:]*$/, "", f)
+    print ((k ~ /:report$/) ? "H10" : "H11") "\t" f "\t" HIT[k]
+  }
+  for (x in LISTED) {
+    if (x !~ /:(report|hook-drive)$/) { print "H10STALE\t" x "\tthe clause after `:` is neither report nor hook-drive"; continue }
+    f = x; sub(/:[^:]*$/, "", f)
+    if (!(f in FXS)) { print "H10STALE\t" x "\tno core/fixtures/" f "/run.sh is tracked"; continue }
+    if (!(x in HIT)) print "H10STALE\t" x "\tthe fixture no longer offends; drop the row"
+  }
+}
+AWK
+
 # run_all <root> <out-prefix>: list, resolve, scan, judge. Writes <out>.scan and <out>.verdict; returns 2 on a broken
 # corpus with the reason on stdout.
 run_all() {
@@ -1334,6 +1390,9 @@ run_all() {
   [ -f "$r/$H8_ALLOW_REL" ] && cp "$r/$H8_ALLOW_REL" "$o.h8allow" || : > "$o.h8allow"
   awk -F'\t' "$H8_JUDGE_AWK" "$o.stubs" "$o.list" "$o.scan" "$o.h8allow" | LC_ALL=C sort -u > "$o.h8" \
     || { echo "BROKEN: the H8 judge awk failed, so its verdict is empty rather than clean"; return 2; }
+  [ -f "$r/$H10_ALLOW_REL" ] && cp "$r/$H10_ALLOW_REL" "$o.h10allow" || : > "$o.h10allow"
+  awk -F'\t' "$H10_JUDGE_AWK" "$o.h10allow" "$o.scan" | LC_ALL=C sort -u > "$o.h10" \
+    || { echo "BROKEN: the H10/H11 judge awk failed, so its verdict is empty rather than clean"; return 2; }
   return 0
 }
 
@@ -2139,6 +2198,60 @@ printf '%s\n' '# probe' m5h > "$P/$MKA_REL"
 # m5n is a member through the M8 verdict list alone (MVA); the commented row names nothing
 printf '# probe\nm5n\t2\n# m5o\t1\n' > "$P/$MVA_REL"
 printf '# probe allowlist\nm5b\tS1\nm5f\tS1\nm5e\tS1\ngone\tS1\nm5b\tdup\nm5x\n' > "$P/$ALLOW_REL"
+# H10/H11 seeds. FIRE: h10own (ok() at :3), h10fn (`function bad ()` at :2), h10hd (a hook run at :3; the second at :4
+# is not its first). QUIET: h10q (ok() in a comment, a string, a heredoc body; okay()), h10hq (a printf writing a
+# stub hook, a comment, a heredoc body, a cp of the hook, a script whose name only starts with pre-push). Listed:
+# h10lst:report (offends: H10LISTED; listed twice: H10DUP), h10stl:report (no offence: STALE), h10lst:bogus (STALE
+# clause), h10nr:hook-drive (no reason: NOREASON; no run.sh: STALE).
+seed core/fixtures/h10own/run.sh <<'EOF'
+#!/usr/bin/env bash
+x=1
+ok() { printf '  ok    %s\n' "$1"; }
+EOF
+seed core/fixtures/h10fn/run.sh <<'EOF'
+#!/usr/bin/env bash
+function bad () { echo "$1"; }
+EOF
+seed core/fixtures/h10hd/run.sh <<'EOF'
+#!/usr/bin/env bash
+t="$1"
+( cd "$t" && AI_DLC_READSET_LIVE_TRACE=0 bash @G@/pre-push </dev/null )
+r="$(cd "$t" && bash @C@/pre-push origin x)"
+EOF
+seed core/fixtures/h10q/run.sh <<'EOF'
+#!/usr/bin/env bash
+# ok() { the comment form }
+echo "ok() {"
+cat > "$T/x.sh" <<'BODY'
+ok() { :; }
+BODY
+okay() { :; }
+EOF
+seed core/fixtures/h10hq/run.sh <<'EOF'
+#!/usr/bin/env bash
+printf '#!/usr/bin/env bash\nbash @G@/pre-push\n' > "$d/x"
+# bash @G@/pre-push
+cat > "$d/y" <<'BODY'
+bash @G@/pre-push
+BODY
+cp @G@/pre-push "$d/z"
+bash scripts/pre-push-helper.sh
+EOF
+# The two hook-run seeds carry @G@ / @C@ for the hook directories, so this file's own text never names a hook
+# path (validate-shell-portability.sh S15 reads a named hook path as a run of that hook); expanded here.
+for _h in h10hd h10hq; do
+  _c="$(cat "$P/core/fixtures/$_h/run.sh")"; _c="${_c//@G@/.githooks}"; _c="${_c//@C@/core/git-hooks}"
+  printf '%s\n' "$_c" > "$P/core/fixtures/$_h/run.sh"
+done
+seed core/fixtures/h10lst/run.sh <<'EOF'
+#!/usr/bin/env bash
+bad() { echo "$1"; }
+EOF
+seed core/fixtures/h10stl/run.sh <<'EOF'
+#!/usr/bin/env bash
+echo clean
+EOF
+printf '# probe\nh10lst:report\tlisted\nh10lst:report\ttwice\nh10stl:report\tclean, so stale\nh10lst:bogus\tr\nh10nr:hook-drive\n' > "$P/$H10_ALLOW_REL"
 { pgit init -q "$P" && pgit -C "$P" add -A; } >/dev/null 2>&1 \
   || { echo "validate-fixture-hygiene: REFUSED -- could not build the probe repository under $WORK" >&2; exit 2; }
 
@@ -2193,6 +2306,20 @@ if cmp -s "$WORK/got.H8" "$WORK/want.H8"; then sp_line H8 "ok (8 seeds fire -- n
 else
   SP_RED=1; sp_line H8 "FAIL -- verdict rows differ from the seeded set:"
   diff "$WORK/want.H8" "$WORK/got.H8" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
+fi
+# H10/H11: the h10* rows, kind and key. Every FIRE seed must be a row and every QUIET one absent, so a scan that emits
+# nothing fails the probe as surely as one that accepts everything.
+[ -f "$WORK/p.h10" ] || : > "$WORK/p.h10"
+cut -f1-3 "$WORK/p.h10" | LC_ALL=C sort > "$WORK/got.H10"
+{ printf 'H10\th10own\tcore/fixtures/h10own/run.sh:3\nH10\th10fn\tcore/fixtures/h10fn/run.sh:2\n'
+  printf 'H11\th10hd\tcore/fixtures/h10hd/run.sh:3\nH10LISTED\th10lst:report\nH10DUP\th10lst:report\nH10NOREASON\th10nr:hook-drive\n'
+  printf 'H10STALE\th10stl:report\tthe fixture no longer offends; drop the row\n'
+  printf 'H10STALE\th10lst:bogus\tthe clause after `:` is neither report nor hook-drive\n'
+  printf 'H10STALE\th10nr:hook-drive\tno core/fixtures/h10nr/run.sh is tracked\n'; } | LC_ALL=C sort > "$WORK/want.H10"
+if cmp -s "$WORK/got.H10" "$WORK/want.H10"; then sp_line H10 "ok (3 seeds fire -- ok(), function bad (), a hook run by hand; a comment, a string, a heredoc body, okay(), a stub-hook printf, a cp and a pre-push-prefixed script stay quiet; listed, duplicate, reasonless and three stale rows read as such)"
+else
+  SP_RED=1; sp_line H10 "FAIL -- verdict rows differ from the seeded set:"
+  diff "$WORK/want.H10" "$WORK/got.H10" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
 fi
 der="$(awk -F'\t' '$1 == "DERIVE" { print $2 }' "$WORK/p.verdict" | LC_ALL=C sort | tr '\n' ' ')"
 if [ "$der" = "m5a m5b m5f m5g m5h m5i m5l m5n " ]; then sp_line DERIVE "ok (derived rows m5a m5b m5f m5g m5h m5i m5l m5n; the stubs m5f-b and m5f-c mapped to their IMPL)"
@@ -2493,6 +2620,16 @@ if [ "$MODE" = derive ]; then
   awk -F'\t' '$1 == "DERIVE" { print $2 "\t" $3 }' "$WORK/c.verdict"
   exit 0
 fi
+if [ "$MODE" = derive10 ]; then
+  # Every H10/H11 offender and every listed one still offending, one `<fixture>:<clause>\t<reason>` row; a committed
+  # row keeps its reason (keyed on field 1).
+  [ "$SP_RED" = 0 ] || { echo "validate-fixture-hygiene: REFUSED -- the self-probe is red, so the derived set is unattributable" >&2; exit 2; }
+  awk -F'\t' 'FILENAME == ARGV[1] { if ($0 !~ /^[[:space:]]*(#|$)/ && NF >= 2) { x = $1; gsub(/[[:space:]]/, "", x); R[x] = $2 } next }
+    $1 == "H10LISTED" { k = $2 } $1 == "H10" { k = $2 ":report" } $1 == "H11" { k = $2 ":hook-drive" }
+    $1 ~ /^H1[01](LISTED)?$/ { print k "\t" ((k in R) ? R[k] : (k ~ /:report$/ ? "defines its own ok/bad; predates lib/report.sh" : "runs a pre-push hook by hand; predates lib/hook-drive.sh")) }' \
+    "$WORK/c.h10allow" "$WORK/c.h10" | LC_ALL=C sort
+  exit 0
+fi
 if [ "$MODE" = derive8 ]; then
   # Every not-SCRUBBED fixture, one `<fixture>\t<reason>` row. A fixture already a row of the committed list keeps
   # its reason (keyed on field 1, so a re-derive on a later tip never rewrites a hand-written reason); a new row gets
@@ -2554,6 +2691,17 @@ fi
 h8m4_out="$(m4 "$ROOT" "$ROOT/$H8_ALLOW_REL" "$WORK/h8m4-root-base.txt" "$H8_ALLOW_REL" H8-M4 \
   "do not list the fixture; give its run.sh the env-derived AI_DLC_* scrub above every start, and drop the row.")" || rc=1
 echo "$h8m4_out"
+n10l="$(grep -c '^H10LISTED	' "$WORK/c.h10")" || n10l=0
+echo "validate-fixture-hygiene: H10/H11 $n10l allowlisted skeleton deviation(s)"
+if grep -qE '^(H10|H11|H10STALE|H10DUP|H10NOREASON)	' "$WORK/c.h10"; then
+  rc=1; echo "FAIL H10/H11:"
+  awk -F'\t' '$1 ~ /^H1[01](STALE|DUP|NOREASON)?$/ { print "    " $1 " " $2 (NF >= 3 ? ": " $3 : "") }' "$WORK/c.h10"
+  echo "  H10: report through core/fixtures/lib/report.sh (ok, bad, report_end); a run.sh defines no ok() or bad() of its own. H11: run a pre-push hook through hook_drive (core/fixtures/lib/hook-drive.sh), never \`bash <hook>\` by hand. The contract is .claude/rules/fixture-contract.md. H10STALE/H10DUP/H10NOREASON: fix $H10_ALLOW_REL."
+fi
+h10m4_out="$(m4 "$ROOT" "$ROOT/$H10_ALLOW_REL" "$WORK/h10m4-root-base.txt" "$H10_ALLOW_REL" H10-M4 \
+  "do not list the fixture; move it onto core/fixtures/lib/report.sh or hook_drive, and drop the row." \
+  "<fixture>:<clause> key")" || rc=1
+echo "$h10m4_out"
 e1_out="$(e1_run "$ROOT" "$WORK/e1c")"; e1rc=$?
 if [ "$e1rc" -ne 0 ]; then echo "validate-fixture-hygiene: REFUSED -- E1: $e1_out" >&2; exit 2; fi
 ne1="$(awk 'END { print NR }' "$WORK/e1c.e1list")"; ni1="$(awk 'END { print NR }' "$WORK/e1c.inert")"

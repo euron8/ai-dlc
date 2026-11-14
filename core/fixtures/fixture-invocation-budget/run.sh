@@ -37,17 +37,25 @@
 # THE MUTANTS are copies of the whole subject tree (judge, runner, its core-paths.sh, mutant.sh), one line changed,
 # guarded by cmp -s and an exactly-one-match rewrite. Per push each runs its deciding arm and one twin; the full
 # mutant x arm matrix is `--matrix`, measured from a real run and recorded here:
-# MUTANT-MATRIX MJ3 decides=A2,A8,SP twins=A3
+# MUTANT-MATRIX MJ3 decides=A2,A8,SP,K2 twins=A3
 # MUTANT-MATRIX MGATE decides=A1,A2,A4,A5,A7,A9,A10 twins=A3
-# MUTANT-MATRIX MPASS decides=A1,A2,A4,A5,A7,A9,A10 twins=A3
-# MUTANT-MATRIX MEXEMPT decides=A7,A8,SP twins=A4
+# MUTANT-MATRIX MPASS decides=A1,A2,A4,A5,A7,A9,A10,K5 twins=A3
+# MUTANT-MATRIX MEXEMPT decides=A7,A8,SP,K2 twins=A4
 # MUTANT-MATRIX MARM decides=A8 twins=A1
-# MUTANT-MATRIX MNRM decides=A8,SP twins=A3
-# MUTANT-MATRIX MJ6 decides=A8,SP twins=A3
-# MUTANT-MATRIX MC1 decides=A8,A9,SP twins=A3
-# MUTANT-MATRIX MTAG decides=A1,A7,A8,A10,SP twins=A3
-# MUTANT-MATRIX MREL decides=A8,A10,SP twins=A1
-# MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; the names are the seven literals above
+# MUTANT-MATRIX MNRM decides=A8,SP,K2 twins=A3
+# MUTANT-MATRIX MJ6 decides=A8,SP,K2 twins=A3
+# MUTANT-MATRIX MC1 decides=A8,A9,SP,K2 twins=A3
+# MUTANT-MATRIX MTAG decides=A1,A7,A8,A10,SP,K2 twins=A3
+# MUTANT-MATRIX MREL decides=A8,A10,SP,K2 twins=A1
+# MUTANT-MATRIX MKEY decides=A8,K1,K2 twins=K4
+# MUTANT-MATRIX MIDC decides=K2 twins=K1
+# MUTANT-MATRIX MLEG decides=A8,K2,K4 twins=K1
+# MUTANT-MATRIX MUNC decides=K3,K5 twins=K1
+# MUTANT-MATRIX MJROW decides=K5 twins=K1
+# MUTANT-MATRIX MLOK decides=K5 twins=K1
+# MUTANT-MATRIX MLDIR decides=K5 twins=K1
+# MUTANT-MATRIX MCOL decides=K6 twins=K1
+# MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; the names are the MUTANT-MATRIX literals above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-invocation-budget/run.sh --matrix
 # The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
 # The matrix also shows A1, A4, A5, A6 and A7 green
@@ -69,6 +77,16 @@
 #            tags the same way, and SP's real-rc leg and A8 decide it too
 #   MREL     the rc logs a relative BASH_SOURCE as spelled (no `$PWD/` prefix) -> A10's cd-relative start matches no
 #            row, so J3 reads 1 for 2 (twin A1); SP's relative-start cells and A8 decide it too
+#   The K arms' mutants each run their deciding arm and twin K1 per push (twin K4 for MKEY, which moves K1):
+#   MKEY     fxc_key_rows keys every fixture on itself, never its stub's IMPL -> K1's s-b row does not move
+#   MIDC     fxc_identity_check passes every sha -> K2's code-edited copy passes
+#   MLEG     fxc_legacy_ok drops the membership compare -> K4 lists s-b, whose membership changed
+#   MUNC     readset_vs_input adds the judge row uncounted too -> K3's uncounted digest input fails
+#   MJROW    readset_verdicts never compares the `#judge` row -> K5 reuses a counted pass under a moved row (d)
+#   MLOK     readset_verdicts reads a legacy entry for any fixture -> K5 reuses one FXCOUNT_LEGACY_OK does not list (b)
+#   MLDIR    readset_verdicts returns when the counted store has no directory -> K5's legacy reads (a) run
+#   MCOL     the collector keeps the live store only -> K6 lists the legacy store dead
+#   A judge mutant also reads red on K2 (its copy's sha is unpinned) and on A8 (arming checks the pin).
 #
 # Usage: run.sh [--matrix]     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "fixture-invocation-budget: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
@@ -103,7 +121,8 @@ mk_subject() { # <dir>; the H5 allowlist beside the judge is SEEDED, listing onl
     && cp -p "$ROOT/$JREL" "$1/scripts/" \
     && cp -p "$ROOT/$RREL" "$ROOT/core/scripts/core-paths.sh" "$1/core/scripts/" \
     && cp -p "$ROOT/core/fixtures/lib/mutant.sh" "$1/core/fixtures/lib/" \
-    && mkdir -p "$1/.githooks" && cp -p "$ROOT/.githooks/pre-push" "$1/.githooks/"
+    && mkdir -p "$1/.githooks" && cp -p "$ROOT/.githooks/pre-push" "$1/.githooks/" \
+    && cp -p "$ROOT/scripts/collect-counted-stores.sh" "$1/scripts/"
 }
 SUBJ="$WORK/subj"
 mk_subject "$SUBJ" && cmp -s "$ROOT/$JREL" "$SUBJ/$JREL" && cmp -s "$ROOT/$RREL" "$SUBJ/$RREL" \
@@ -138,6 +157,22 @@ mk_mutant MREL "$JREL" '*) __fxcp="$PWD/$__fxcp" ;;' '*) ;;' \
   || { echo "FIXTURE BROKEN: mutant MREL DID NOT APPLY (the rc's relative-path prefix moved in $JREL)" >&2; exit 2; }
 mk_mutant MARM .githooks/pre-push 'export FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE' 'export FXCOUNT_RC FXCOUNT_JUDGE' \
   || { echo "FIXTURE BROKEN: mutant MARM DID NOT APPLY (the arming export moved in .githooks/pre-push)" >&2; exit 2; }
+mk_mutant MKEY "$JREL" '? I[$0] : fx' '? fx : fx' \
+  || { echo "FIXTURE BROKEN: mutant MKEY DID NOT APPLY (fxc_key_rows' stub resolution moved in $JREL)" >&2; exit 2; }
+mk_mutant MIDC "$JREL" 'END { exit (ok && n == 1) ? 0 : 1 }' 'END { exit 0 }' \
+  || { echo "FIXTURE BROKEN: mutant MIDC DID NOT APPLY (fxc_identity_check's verdict moved in $JREL)" >&2; exit 2; }
+mk_mutant MLEG "$JREL" ' && (((j[3] in A) ? "listed" : "unlisted") == j[4])' '' \
+  || { echo "FIXTURE BROKEN: mutant MLEG DID NOT APPLY (fxc_legacy_ok's membership compare moved in $JREL)" >&2; exit 2; }
+mk_mutant MUNC .githooks/pre-push '  [ -z "${FXCOUNT_JUDGE:-}" ] || readset_vs_judge "$1"' '  readset_vs_judge "$1"' \
+  || { echo "FIXTURE BROKEN: mutant MUNC DID NOT APPLY (readset_vs_input's counted-only judge row moved in .githooks/pre-push)" >&2; exit 2; }
+mk_mutant MJROW .githooks/pre-push 'FNR == 7 && vj && !leg {' 'FNR == 0 {' \
+  || { echo "FIXTURE BROKEN: mutant MJROW DID NOT APPLY (readset_verdicts' judge-row compare moved in .githooks/pre-push)" >&2; exit 2; }
+mk_mutant MLOK .githooks/pre-push ' && (!leg || (fx in LOK))' '' \
+  || { echo "FIXTURE BROKEN: mutant MLOK DID NOT APPLY (readset_verdicts' legacy gate moved in .githooks/pre-push)" >&2; exit 2; }
+mk_mutant MLDIR .githooks/pre-push '  [ -d "$store" ] || [ -n "$vld" ] || return 0' '  [ -d "$store" ] || return 0' \
+  || { echo "FIXTURE BROKEN: mutant MLDIR DID NOT APPLY (readset_verdicts' store-directory gate moved in .githooks/pre-push)" >&2; exit 2; }
+mk_mutant MCOL scripts/collect-counted-stores.sh '[ "$s" = "$live" ] || [ "$s" = "$legacy" ] && continue' '[ "$s" = "$live" ] && continue' \
+  || { echo "FIXTURE BROKEN: mutant MCOL DID NOT APPLY (the collector's legacy keep moved in scripts/collect-counted-stores.sh)" >&2; exit 2; }
 
 # --- A8's driver: fxcount_arm, extracted from the subject tree's hook by its own boundaries, under a stub `step` ---
 # a8.sh <subject dir> <scratch dir>. Three modes, each in a subshell with the FXCOUNT variables unset and the verdict
@@ -205,6 +240,113 @@ for v in FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE; do ev c "$v" > /dev/null && { bad
 exit "$bad"
 A8
 
+# --- the K arms: the counted store's per-fixture judge row (BL-1057) ----------------------------------------------
+# k.sh <arm> <subject dir> <scratch dir>; K_ROOT names the repo root. Each arm prints one `K<n> ...` vector line.
+#   K1 the judge's --key-rows over a stub s-b (IMPL s), s and u, under an allowlist without and with `s`: the stub's
+#      row follows its IMPL's membership, u's does not move
+#   K2 --identity-check: the judge as shipped passes, a copy with one code line added fails naming FXC-IDENTITY, a copy
+#      with one comment line added passes
+#   K3 READSET_VS's readset_vs_input from the subject hook: uncounted, no `#judge` row (line 5 is the first key row);
+#      counted, line 5 is the judge's own row (one judge call), or the FXCOUNT_KEYROWS table's; a table without the
+#      fixture gives no digest input
+#   K4 --legacy-ok: membership changed (s-b) is not eligible, unchanged (u, x) is; the format must match (v under f2)
+#   K5 the store reader end to end on a git world: an UNCOUNTED runner pass in the legacy store is reused for a fixture
+#      FXCOUNT_LEGACY_OK lists (a) and not for one it does not (b); a COUNTED runner pass carries the `#judge` row (jl)
+#      and is reused under the same row (c, through the judge call) and not under a moved one (d, through the table).
+#      a and b run with the counted store's project directory absent, as on the first push after the store is renamed
+#   K6 scripts/collect-counted-stores.sh on a seeded base: the dry run lists only the dead counted-<12 hex> store; the
+#      apply removes it and keeps the live, the legacy and four near-miss names
+cat > "$WORK/k.sh" <<'K'
+#!/usr/bin/env bash
+set -u
+a="$1"; s="$2"; t="$3"; mkdir -p "$t" || exit 2
+J="$s/scripts/validate-fixture-invocations.sh"
+case "$a" in
+K1)
+  R="$t/r"; mkdir -p "$R/core/fixtures/s" "$R/core/fixtures/s-b" "$R/core/fixtures/u" "$t/j0/scripts" "$t/j1/scripts" || exit 2
+  printf 'exit 0\n' > "$R/core/fixtures/s/run.sh"; printf 'exit 0\n' > "$R/core/fixtures/u/run.sh"
+  printf '%s\n' 'HERE="$(cd "$(dirname "$0")" && pwd)"' 'IMPL="$HERE/../s/run.sh"' 'exec bash "$IMPL" --group b' > "$R/core/fixtures/s-b/run.sh"
+  cp "$J" "$t/j0/scripts/" && cp "$J" "$t/j1/scripts/" || exit 2
+  printf '# none listed\n' > "$t/j0/scripts/fixture-matrix-allowlist.txt"; printf 's\tS1 seeded\n' > "$t/j1/scripts/fixture-matrix-allowlist.txt"
+  bash "$t/j0/scripts/validate-fixture-invocations.sh" --key-rows "$R" > "$t/k0"; r0=$?
+  bash "$t/j1/scripts/validate-fixture-invocations.sh" --key-rows "$R" > "$t/k1"; r1=$?
+  row() { awk -F'\t' -v f="$2" '$1 == f { split($2, j, " "); printf "%s:%s:%s", j[2], j[3], j[4] }' "$1"; }
+  printf 'K1 rc=%s/%s s-b=%s>%s u=%s>%s s=%s>%s n=%s\n' "$r0" "$r1" "$(row "$t/k0" s-b)" "$(row "$t/k1" s-b)" \
+    "$(row "$t/k0" u)" "$(row "$t/k1" u)" "$(row "$t/k0" s)" "$(row "$t/k1" s)" "$(awk 'END { print NR }' "$t/k1")" ;;
+K2)
+  for v in a b c; do mkdir -p "$t/$v/scripts" || exit 2; done
+  cp "$J" "$t/a/scripts/x.sh" || exit 2
+  awk '{ print } $0 == "set -u" && !d { print "FXC_K2_EXTRA=1"; d = 1 }' "$J" > "$t/b/scripts/x.sh"
+  awk '{ print } $0 == "set -u" && !d { print "# one comment line the identity drops"; d = 1 }' "$J" > "$t/c/scripts/x.sh"
+  { cmp -s "$J" "$t/b/scripts/x.sh" || cmp -s "$J" "$t/c/scripts/x.sh"; } && { echo "K2 BROKEN: a copy did not change"; exit 2; }
+  for v in a b c; do bash "$t/$v/scripts/x.sh" --identity-check > "$t/$v.out" 2>&1; echo $? > "$t/$v.rc"; done
+  printf 'K2 a=%s b=%s c=%s named=%s\n' "$(cat "$t/a.rc")" "$(cat "$t/b.rc")" "$(cat "$t/c.rc")" \
+    "$(grep -c 'has no `# FXC-IDENTITY 1 <sha> <reason>` row' "$t/b.out")" ;;
+K3)
+  sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$s/.githooks/pre-push" > "$t/vs.sh"
+  grep -q '^readset_vs_input() ' "$t/vs.sh" || { echo "K3 BROKEN: no READSET_VS span with readset_vs_input"; exit 2; }
+  R="$t/r"; mkdir -p "$R/core/fixtures/probe" && printf 'exit 0\n' > "$R/core/fixtures/probe/run.sh" || exit 2
+  printf 'k\tv\n' > "$t/rows"; printf 'probe\t#judge f1 probe listed\n' > "$t/kr"; printf 'other\t#judge f1 other listed\n' > "$t/kr2"
+  ( . "$t/vs.sh"; unset FXCOUNT_JUDGE FXCOUNT_KEYROWS; readset_vs_input probe "r f1" "$t/rows" "$R" ) > "$t/u" 2>/dev/null; ru=$?
+  ( . "$t/vs.sh"; unset FXCOUNT_KEYROWS; FXCOUNT_JUDGE="$J"; readset_vs_input probe "r f1" "$t/rows" "$R" ) > "$t/c" 2>/dev/null; rc=$?
+  ( . "$t/vs.sh"; FXCOUNT_JUDGE="$J"; FXCOUNT_KEYROWS="$t/kr"; readset_vs_input probe "r f1" "$t/rows" "$R" ) > "$t/k" 2>/dev/null; rk=$?
+  ( . "$t/vs.sh"; FXCOUNT_JUDGE="$J"; FXCOUNT_KEYROWS="$t/kr2"; readset_vs_input probe "r f1" "$t/rows" "$R" ) > /dev/null 2>&1; rm2=$?
+  l5() { sed -n 5p "$1" | tr '\t' '|'; }
+  printf 'K3 unc=%s:%s:%s cnt=%s:%s tab=%s:%s miss=%s\n' "$ru" "$(grep -c '^#judge' "$t/u")" "$(l5 "$t/u")" "$rc" "$(l5 "$t/c")" "$rk" "$(l5 "$t/k")" "$rm2" ;;
+K4)
+  printf 's-b\t#judge f1 s unlisted\nu\t#judge f1 u unlisted\nx\t#judge f1 x listed\nv\t#judge f2 v unlisted\n' > "$t/kr"
+  printf '# old\ns\tS1 seeded\nx\tS1 seeded\n' > "$t/old"
+  o1="$(bash "$J" --legacy-ok "$t/old" "$t/kr" f1)"; r1=$?; o2="$(bash "$J" --legacy-ok "$t/old" "$t/kr" f2)"; r2=$?
+  printf 'K4 rc=%s/%s f1=%s f2=%s\n' "$r1" "$r2" "$(printf '%s\n' "$o1" | tr '\n' ',')" "$(printf '%s\n' "$o2" | tr '\n' ',')" ;;
+K5)
+  W="$t/w"; mkdir -p "$W/.githooks" "$W/core/scripts" "$W/core/fixtures/decl" "$W/src" "$W/scripts" || exit 2
+  cp "$s/.githooks/pre-push" "$W/.githooks/" && cp "$s/core/scripts/hermetic-run.sh" "$s/core/scripts/core-paths.sh" "$W/core/scripts/" \
+    && cp "$K_ROOT/scripts/suite-content-key.sh" "$W/scripts/" || exit 2
+  printf 'v1\n' > "$W/src/a.sh"
+  printf '%s\n' 'if [ -f src/a.sh ]; then echo "HERMETIC-CONSUMED src/a.sh"; fi' 'exit 0' > "$W/core/fixtures/decl/run.sh"
+  printf '!src/a.sh\n' > "$W/core/fixtures/decl/inputs.decl"; printf '1 *\n0 src/a.sh\n' > "$W/core/fixtures/decl/invocations.decl"
+  ( cd "$W" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm k5 ) > /dev/null 2>&1 || exit 2
+  root="$(cd "$W" && git rev-list --max-parents=0 HEAD)"
+  env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE AI_DLC_VERDICT_STORE="$t/L" bash "$W/core/scripts/hermetic-run.sh" --root "$W" decl > "$t/hr.l" 2>&1; rl=$?
+  nl="$(/usr/bin/find "$t/L" -type f | wc -l | tr -d ' ')"
+  git clone -q "file://$W" "$t/B" > /dev/null 2>&1 || exit 2
+  # The counted store has NO directory for this project until the counted write below, as on the first push after
+  # the store is renamed: a and b read the legacy store with the counted one absent.
+  [ ! -e "$t/S/$root" ] || { echo "K5 BROKEN: the counted store exists before any counted write"; exit 2; }
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$s/.githooks/pre-push" > "$t/pool.sh"
+  printf '%s\n' '. "$1" 2>/dev/null' 'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$2/list"' \
+    'apply_readset_skip "$2/list" "$2" > "$2/ann" 2>&1' > "$t/drv.sh"
+  printf 'decl\t#judge f1 decl unlisted\n' > "$t/kr.same"; printf 'decl\t#judge f1 decl listed\n' > "$t/kr.moved"
+  printf 'decl\n' > "$t/lok.in"; printf 'other\n' > "$t/lok.out"
+  dec() { # <tag> <keyrows file or -> <legacy-ok file or ->
+    mkdir -p "$t/d.$1"
+    ( cd "$t/B" || exit 2
+      unset FXCOUNT_KEYROWS FXCOUNT_LEGACY_STORE FXCOUNT_LEGACY_OK
+      [ "$2" = - ] || { FXCOUNT_KEYROWS="$2"; export FXCOUNT_KEYROWS; }
+      [ "$3" = - ] || { FXCOUNT_LEGACY_STORE="$t/L"; FXCOUNT_LEGACY_OK="$3"; export FXCOUNT_LEGACY_STORE FXCOUNT_LEGACY_OK; }
+      FXCOUNT_JUDGE="$J" AI_DLC_VERDICT_STORE="$t/S" AI_DLC_READSET_LIVE_TRACE=0 bash "$t/drv.sh" "$t/pool.sh" "$t/d.$1" ) > "$t/d.$1.log" 2>&1
+    awk -F'\t' '$1 == "decl" && ($2 == "run" || $2 == "skip") { printf "%s", $2 }' "$t/d.$1/.kdec" 2>/dev/null
+  }
+  da="$(dec a "$t/kr.same" "$t/lok.in")"; db="$(dec b "$t/kr.same" "$t/lok.out")"
+  rcf="$(bash "$J" --gen-rc "$t/rc")" && mkdir -p "$t/fxd" || exit 2
+  env FXCOUNT_RC="$rcf" FXCOUNT_DIR="$t/fxd" FXCOUNT_JUDGE="$J" AI_DLC_VERDICT_STORE="$t/S" bash "$W/core/scripts/hermetic-run.sh" --root "$W" decl > "$t/hr.c" 2>&1; rw=$?
+  jl="$(cat "$t/S/$root"/* 2>/dev/null | grep -cx '#judge f1 decl unlisted')"
+  dc="$(dec c - -)"; dd="$(dec d "$t/kr.moved" -)"
+  printf 'K5 rl=%s nl=%s a=%s b=%s rw=%s jl=%s c=%s d=%s\n' "$rl" "$nl" "$da" "$db" "$rw" "$jl" "$dc" "$dd" ;;
+K6)
+  B="$t/base"
+  for d in counted-0123456789ab/r counted-cd68ce325a3d/r counted-b4f3542dc948/r counted-0123456789a counted-v2 counted-ABCDEF012345 notcounted-0123456789ab; do
+    mkdir -p "$B/$d" && printf 'x\n' > "$B/$d/e1" || exit 2
+  done
+  printf 'x\n' > "$B/counted-0123456789ab/r/.tmp.1"
+  ( cd "$s" && bash scripts/collect-counted-stores.sh --base "$B" ) > "$t/dry" 2>&1; rd=$?
+  ( cd "$s" && bash scripts/collect-counted-stores.sh --apply --base "$B" ) > "$t/app" 2>&1; ra=$?
+  printf 'K6 dry=%s:%s apply=%s:%s left=%s gone=%s\n' "$rd" "$(grep '^dead: ' "$t/dry" | tr '\n' ';')" "$ra" "$(grep '^removed: ' "$t/app" | tr '\n' ';')" \
+    "$(/usr/bin/find "$B" -type f | wc -l | tr -d ' ')" "$([ -e "$B/counted-0123456789ab" ] && echo 0 || echo 1)" ;;
+*) echo "k.sh: unknown arm $a"; exit 2 ;;
+esac
+K
+
 # --- the probe worlds, each built once --------------------------------------------------------------------------
 mk_world() { # <dir> <invocations.decl rows joined by |, or -> <Mx header row 1|0> [fixture name, default probe] [tag 1|0] [rel 1|0]
   # Tagged (the default) the two sub.sh starts carry FXCELL=a and FXCELL=b and the fixture declares both as e2e cells;
@@ -247,6 +389,9 @@ drive() {
   if [ "$2" = A8 ]; then
     bash "$WORK/a8.sh" "$s" "$WORK/a8.$t" > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0
   fi
+  case "$2" in K[1-6])
+    K_ROOT="$ROOT" bash "$WORK/k.sh" "$2" "$s" "$WORK/k.$t" > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0 ;;
+  esac
   local fx=probe
   case "$2" in A1) w=ok ;; A2|A3|A6) w=mis ;; A4) w=nohdr ;; A5) w=nodecl ;; A7) w=held; fx=held ;; A9) w=untag ;; A10) w=rel ;; esac
   rcf="$(bash "$s/$JREL" --gen-rc "$WORK/rc.$t")" || return 1
@@ -283,16 +428,23 @@ verdict() {
     SP) rcis "$t" 0 && has "$t" 'self-probe: 118 cells, all green' ;;
     A8) rcis "$t" 0 && has "$t" 'A8 CHECK-OK call:' && has "$t" 'A8 CHECK-OK a-armed:' && has "$t" 'A8 CHECK-OK b-judge-absent:' \
           && has "$t" 'A8 CHECK-OK c-nested:' && ! has "$t" 'A8 CHECK-BAD' ;;
+    K1) rcis "$t" 0 && has "$t" 'K1 rc=0/0 s-b=f1:s:unlisted>f1:s:listed u=f1:u:unlisted>f1:u:unlisted s=f1:s:unlisted>f1:s:listed n=3' ;;
+    K2) rcis "$t" 0 && has "$t" 'K2 a=0 b=1 c=0 named=1' ;;
+    K3) rcis "$t" 0 && has "$t" 'K3 unc=0:0:k|v cnt=0:#judge f1 probe unlisted tab=0:#judge f1 probe listed miss=1' ;;
+    K4) rcis "$t" 0 && has "$t" 'K4 rc=0/0 f1=u,x, f2=v,' ;;
+    K5) rcis "$t" 0 && has "$t" 'K5 rl=0 nl=1 a=skip b=run rw=0 jl=1 c=skip d=run' ;;
+    K6) rcis "$t" 0 && has "$t" 'K6 dry=0:dead: counted-0123456789ab (2 file(s)); apply=0:removed: counted-0123456789ab (2 file(s)); left=6 gone=1' ;;
     *) return 1 ;;
   esac
 }
-ARMS="A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 SP"
-MUTANTS="MJ3 MGATE MPASS MEXEMPT MARM MNRM MJ6 MC1 MTAG MREL"
+ARMS="A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 SP K1 K2 K3 K4 K5 K6"
+MUTANTS="MJ3 MGATE MPASS MEXEMPT MARM MNRM MJ6 MC1 MTAG MREL MKEY MIDC MLEG MUNC MJROW MLOK MLDIR MCOL"
 
 if [ "$MODE" = matrix ]; then
   # THE MATRIX: every mutant against every arm, never on a plain run (arm NM asserts that).
   : > "$WORK/mx.ran"
-  for m in $MUTANTS; do for a in $ARMS; do drive "$m.$a" "$a" "$WORK/mut-$m" & done; done; wait
+  # One mutant's arms at a time, so at most one row of drives runs at once.
+  for m in $MUTANTS; do for a in $ARMS; do drive "$m.$a" "$a" "$WORK/mut-$m" & done; wait; done
   for m in $MUTANTS; do
     dec=""; tw=""
     for a in $ARMS; do if verdict "$a" "$m.$a"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
@@ -312,6 +464,7 @@ if [ -e "$WORK/base.A1" ] && [ -e "$WORK/base.A2" ]; then
   echo "HERMETIC-CONSUMED $JREL"
   echo "HERMETIC-CONSUMED $RREL"
 fi
+[ -e "$WORK/base.K6" ] && echo "HERMETIC-CONSUMED scripts/collect-counted-stores.sh"
 
 # --- the mutants, each on its deciding arm and one twin ---------------------------------------------------------
 # score <mutant> <deciding arm> <twin arm> <the text the deciding arm's failure must carry>
@@ -333,6 +486,14 @@ drive MJ6.SP SP "$WORK/mut-MJ6" & drive MJ6.A3 A3 "$WORK/mut-MJ6" &
 drive MC1.A9 A9 "$WORK/mut-MC1" & drive MC1.A3 A3 "$WORK/mut-MC1" &
 drive MTAG.A1 A1 "$WORK/mut-MTAG" & drive MTAG.A3 A3 "$WORK/mut-MTAG" &
 drive MREL.A10 A10 "$WORK/mut-MREL" & drive MREL.A1 A1 "$WORK/mut-MREL" &
+drive MKEY.K1 K1 "$WORK/mut-MKEY" & drive MKEY.K4 K4 "$WORK/mut-MKEY" &
+drive MIDC.K2 K2 "$WORK/mut-MIDC" & drive MIDC.K1 K1 "$WORK/mut-MIDC" &
+drive MLEG.K4 K4 "$WORK/mut-MLEG" & drive MLEG.K1 K1 "$WORK/mut-MLEG" &
+drive MUNC.K3 K3 "$WORK/mut-MUNC" & drive MUNC.K1 K1 "$WORK/mut-MUNC" &
+drive MJROW.K5 K5 "$WORK/mut-MJROW" & drive MJROW.K1 K1 "$WORK/mut-MJROW" &
+drive MLOK.K5 K5 "$WORK/mut-MLOK" & drive MLOK.K1 K1 "$WORK/mut-MLOK" &
+drive MLDIR.K5 K5 "$WORK/mut-MLDIR" & drive MLDIR.K1 K1 "$WORK/mut-MLDIR" &
+drive MCOL.K6 K6 "$WORK/mut-MCOL" & drive MCOL.K1 K1 "$WORK/mut-MCOL" &
 wait
 score MJ3 SP A3 'FAIL  self-probe J3 a * row off by one'
 score MGATE A2 A3 'probe: verdict recorded in'
@@ -344,6 +505,14 @@ score MJ6 SP A3 'FAIL  self-probe J6 an unrowed .sh bash subject FIRES'
 score MC1 A9 A3 'probe: invocation budget ok: 3 start(s)'
 score MTAG A1 A3 'probe: FAIL (C1): core/scripts/sub.sh started as a separate program with no FXCELL tag'
 score MREL A10 A1 'probe: FAIL (J3): row "2 core/scripts/sub.sh": measured 1, declared 2'
+score MKEY K1 K4 'K1 rc=0/0 s-b=f1:s-b:unlisted>f1:s-b:unlisted'
+score MIDC K2 K1 'K2 a=0 b=0 c=0'
+score MLEG K4 K1 'K4 rc=0/0 f1=s-b,u,x,'
+score MUNC K3 K1 'K3 unc=1:0:'
+score MJROW K5 K1 'c=skip d=skip'
+score MLOK K5 K1 'a=skip b=skip'
+score MLDIR K5 K1 'a=run b=run'
+score MCOL K6 K1 'dead: counted-cd68ce325a3d (1 file(s))'
 
 # NM: a plain run reached no matrix-only cell, and its per-push mutant drives did run.
 if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MPASS.A1.out" ] && [ -e "$WORK/c.MJ3.SP.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"

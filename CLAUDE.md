@@ -35,8 +35,7 @@ consolidate them here.
 
 - `.githooks/pre-push` is the runner: worker pool, content-keyed skip, and a check that every dispatched
   fixture gave a verdict. Invariant **I66** binds that runner to be one program across both pre-push hooks.
-  Never loop over fixtures by hand, and never `cd` into a fixture dir to run it — fixtures resolve the repo
-  root from the working directory; run `bash core/fixtures/<fx>/run.sh` from the repo root.
+  Never loop over fixtures by hand; run one as `bash core/fixtures/<fx>/run.sh` from the repo root.
 - A unit's push is its gate: a green push delivers that exact sha, merged as pushed, and fills the verdict
   store (`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`) and the key records
   (`.git/ai-dlc-fixture-keys/<fx>.key`). Never push to a throwaway ref.
@@ -52,10 +51,10 @@ consolidate them here.
 - Pool width is `AI_DLC_FIXTURE_JOBS` (default 12; not `FIXTURE_JOBS`), read at the top of the hook's pool
   block. A nested pool (depth 1 or more) is capped at two workers. Re-measure on a smaller box.
 - `.git/ai-dlc-fixture-verified` (with its `.format` sidecar, which must read `v2`) is the per-file
-  verified-state record: written only after a fully green run, as a copy of that run's file-content manifest;
-  the read-set skip reads it to decide which fixtures' inputs moved. A red run never writes it; an unstamped
-  record means "run everything"; deleting it forces a full run.
-- `.git/ai-dlc-suite-key` is the whole-suite content key: when key and fixture count match the last green,
+  verified-state record: written after a green fixture suite, even under a red step, as a copy of that run's
+  file-content manifest; the read-set skip reads it to decide which fixtures' inputs moved. A red suite never
+  writes it; an unstamped record means "run everything"; deleting it forces a full run.
+- `.git/ai-dlc-suite-key` is the whole-suite content key: when key and fixture count match the last green suite,
   the push prints `SKIPPED -- this exact tree already passed the whole suite` and runs no fixtures. Each
   decision appends `<utc stamp> HIT|MISS|FORCED|UNAVAILABLE <key>` to `.git/ai-dlc-suite-key.log`; count with
   `awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c`.
@@ -109,7 +108,8 @@ enforcer), [`resident-context.md`](.claude/rules/resident-context.md) (what may 
 [`operator-rulings.md`](.claude/rules/operator-rulings.md) (standing decisions, including that merges are
 preapproved and that every claim is ground-truth sourced).
 
-**The scoped rules**: [`fixture-mutants.md`](.claude/rules/fixture-mutants.md),
+**The scoped rules**: [`fixture-contract.md`](.claude/rules/fixture-contract.md),
+[`fixture-mutants.md`](.claude/rules/fixture-mutants.md),
 [`fixture-ship-decl.md`](.claude/rules/fixture-ship-decl.md), [`plan-shape.md`](.claude/rules/plan-shape.md),
 [`plan-shape-measured.md`](.claude/rules/plan-shape-measured.md). Arms A1–A4 of
 `scripts/validate-claude-rules.sh` bind both directions (a rule with no reader, a pointer with no rule). That

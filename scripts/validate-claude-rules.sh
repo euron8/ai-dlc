@@ -907,7 +907,10 @@ fi
 # RAISED 45312 -> 46336 UNDER BL-1042 (F13b): eight rules the rewrite dropped were restored as one-liners,
 # plus the operator rulings on the push and roll-call advisor calls (measured total 46198 bytes, rounded up
 # to the next multiple of 256).
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-46336}"
+# RAISED 46336 -> 46366 UNDER BL-1052 (F20), ON THE OPERATOR'S RULING TO PREVENT NEEDLESS CACHE INVALIDATION
+# PERMANENTLY: `operator-rulings.md` gained one rule naming its enforcer, 168 bytes. A6 WAS OBSERVED FAILING AT
+# 46366/46336 BEFORE THE CEILING MOVED; the ceiling is the post-write measurement, leaving 0 bytes.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-46366}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
@@ -927,6 +930,142 @@ elif [ "$d_total" -gt "$DURABLE_MAX" ]; then
   printf '%s' "$d_list" >&2
 else
   say "  A6  ok  -- compaction-durable channel ${d_total}/${DURABLE_MAX} bytes across $(durable_files | grep -c .) file(s)"
+fi
+
+# ---------------------------------------------------------------------------
+# A7 -- the fixture contract's clauses each name an enforcer that exists, and it names every declaration kind and
+# every library file the fixture tree carries.
+#
+# THE SUBJECT is `.claude/rules/fixture-contract.md`. A clause opens on a line `- **C<n>** ...`; its continuation lines
+# are indented, and it closes at a blank line, a heading or the next `- ` line. A7 FAILs:
+#   a clause with no `Enforcer:`, or two; a clause number used twice; no clause at all;
+#   an enforcer item (the text after `Enforcer:`, split on `;`) that is neither a backticked repo-relative path nor a
+#     bold **I<n>** (A5 resolves those);
+#   a cited path that is not a file under the root (counted: awk's getline reads an unopenable file as empty);
+#   a cited ID (a word after the path) that the file does not DECLARE: a comment line opening with the ID (an arm
+#     header, `# H10 ...`, `#   M1  ...`), the span marker `# <ID>_BEGIN`, or a function definition `<ID>()`; under
+#     core/fixtures/ (a cell or mutant name) the ID as a whole word on any line;
+#   a declaration kind (a tracked core/fixtures/<f>/<x>.decl, `.dist-only` or `.undeclarable`) or a tracked
+#     core/fixtures/lib/<x>.sh that the contract never names in backticks.
+# A tree with no contract file is not judged: the CLAUDE.md pointer to it is A4's subject, so deleting the contract
+# fails A4 in this repository, and a seeded probe tree with neither is quiet.
+# One awk reads the contract, the cited files and the tracked list; the probe below runs that awk on a seeded tree
+# in both directions before the corpus.
+# ---------------------------------------------------------------------------
+A7_CONTRACT=".claude/rules/fixture-contract.md"
+# a7_judge <root> <contract> <tracked-list file> -> one `A7<TAB><finding>` row per finding, nothing when clean
+a7_judge() {
+  awk -v R="$1/" '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    function word(l, id,   p, b, a, rest) {
+      rest = l
+      while ((p = index(rest, id)) > 0) {
+        b = (p == 1) ? "" : substr(rest, p - 1, 1); a = substr(rest, p + length(id), 1)
+        if (b !~ /[A-Za-z0-9_-]/ && a !~ /[A-Za-z0-9_-]/) return 1
+        rest = substr(rest, p + 1)
+      }
+      return 0
+    }
+    function declares(l, id, fx,   t) {
+      if (l == "# " id "_BEGIN") return 1
+      t = l; sub(/^[[:space:]]+/, "", t)
+      if (t ~ /^#/) { sub(/^#+[[:space:]]*/, "", t); nx = substr(t, length(id) + 1, 1); if (index(t, id) == 1 && (nx == "" || nx == ":" || nx ~ /[[:space:]]/)) return 1 }
+      t = l; sub(/^[[:space:]]+/, "", t); sub(/^function[[:space:]]+/, "", t)
+      if (index(t, id) == 1 && substr(t, length(id) + 1) ~ /^[[:space:]]*\(\)/) return 1
+      return fx && word(l, id)
+    }
+    function close_clause() {
+      if (CL == "") return
+      n = split(CT, parts, "Enforcer:")
+      if (n == 1) print "A7\t" CL " names no Enforcer:"
+      else if (n > 2) print "A7\t" CL " carries Enforcer: more than once"
+      else {
+        m = split(parts[2], items, ";")
+        for (k = 1; k <= m; k++) {
+          it = trim(items[k]); sub(/\.$/, "", it)
+          if (it ~ /^\*\*I[0-9]+[a-c]?\*\*$/) continue
+          if (it !~ /^`[^`]+`/) { print "A7\t" CL " enforcer item is neither a backticked path nor a bold invariant: " it; continue }
+          p = substr(it, 2); p = substr(p, 1, index(p, "`") - 1)
+          idl = substr(it, length(p) + 3); gsub(/,/, " ", idl)
+          NC++; CP[NC] = p; CC[NC] = CL; CI[NC] = trim(idl)
+        }
+      }
+      CL = ""; CT = ""
+    }
+    FILENAME == ARGV[1] {
+      TEXT = TEXT "\n" $0
+      if ($0 ~ /^- \*\*C[0-9]+\*\*/) {
+        close_clause(); c = $0; sub(/^- \*\*/, "", c); sub(/\*\*.*/, "", c)
+        if (c in SEEN) print "A7\tclause " c " is numbered twice"
+        SEEN[c] = 1; NCL++; CL = "clause " c; CT = $0; next
+      }
+      if (CL != "" && $0 ~ /^[[:space:]]+[^[:space:]]/) { CT = CT " " trim($0); next }
+      close_clause(); next
+    }
+    {
+      n = split($0, a, "/")
+      if (n == 4 && a[1] == "core" && a[2] == "fixtures" && a[3] != "lib" && (a[4] ~ /\.decl$/ || a[4] == ".dist-only" || a[4] == ".undeclarable")) NEED[a[4]] = 1
+      if (n == 4 && a[1] == "core" && a[2] == "fixtures" && a[3] == "lib" && a[4] ~ /\.sh$/) NEED[a[4]] = 1
+      NT++
+    }
+    END {
+      close_clause()
+      if (NCL == 0) print "A7\tthe contract declares no clause (no line opens `- **C<n>**`)"
+      if (NT == 0) print "A7\tthe tracked list is empty, so no declaration kind or library file could be checked"
+      for (x in NEED) if (index(TEXT, "`" x "`") == 0) print "A7\tthe contract never names `" x "`, which the fixture tree carries"
+      for (k = 1; k <= NC; k++) {
+        f = CP[k]
+        if (!(f in READ)) {
+          READ[f] = 0; NL[f] = 0
+          while ((r = (getline l < (R f))) > 0) { NL[f]++; L[f, NL[f]] = l }
+          close(R f); READ[f] = (r == 0 && NL[f] > 0) ? 1 : -1
+        }
+        if (READ[f] < 0) { print "A7\t" CC[k] " cites `" f "`, which is not a readable non-empty file"; continue }
+        m = split(CI[k], ids, /[[:space:]]+/)
+        for (j = 1; j <= m; j++) {
+          if (ids[j] == "") continue
+          hit = 0; fx = (index(f, "core/fixtures/") == 1)
+          for (i = 1; i <= NL[f] && !hit; i++) if (declares(L[f, i], ids[j], fx)) hit = 1
+          if (!hit) print "A7\t" CC[k] " cites " ids[j] " in `" f "`, which declares no such arm, span, function" (fx ? " or word" : "")
+        }
+      }
+    }' "$2" "$3"
+}
+a7p="$probe/a7"; mkdir -p "$a7p/scripts" "$a7p/core/fixtures/zf"
+printf '#!/usr/bin/env bash\n# Z1  the arm\n# ZS_BEGIN\nzfn() { :; }\n# ZS_END\n' > "$a7p/scripts/z.sh"
+printf 'echo zcell\n' > "$a7p/core/fixtures/zf/run.sh"
+printf '%s\n' '- **C1** fine. Enforcer: `scripts/z.sh` Z1, ZS, zfn; `core/fixtures/zf/run.sh` zcell; **I1**.' \
+  '- **C2** names `x.decl` and `run.sh`, no enforcer.' \
+  '- **C3** Enforcer: `scripts/gone.sh`.' \
+  '- **C4** Enforcer: `scripts/z.sh` Z2,' '  zfx; plain words.' \
+  '- **C4** Enforcer: `scripts/z.sh`. Enforcer: `scripts/z.sh`.' \
+  '- **C5** comment-only id. Enforcer: `scripts/z.sh` the; `core/fixtures/zf/run.sh` zce.' > "$a7p/contract.md"
+printf '%s\n' core/fixtures/zf/x.decl core/fixtures/zf/y.decl core/fixtures/lib/run.sh core/fixtures/zf/.dist-only > "$a7p/ls"
+a7_judge "$a7p" "$a7p/contract.md" "$a7p/ls" | LC_ALL=C sort > "$a7p/got"
+printf 'A7\t%s\n' 'clause C2 names no Enforcer:' \
+  'clause C3 cites `scripts/gone.sh`, which is not a readable non-empty file' \
+  'clause C4 cites Z2 in `scripts/z.sh`, which declares no such arm, span, function' \
+  'clause C4 cites zfx in `scripts/z.sh`, which declares no such arm, span, function' \
+  'clause C4 enforcer item is neither a backticked path nor a bold invariant: plain words' \
+  'clause C4 is numbered twice' 'clause C4 carries Enforcer: more than once' \
+  'clause C5 cites the in `scripts/z.sh`, which declares no such arm, span, function' \
+  'clause C5 cites zce in `core/fixtures/zf/run.sh`, which declares no such arm, span, function or word' \
+  'the contract never names `.dist-only`, which the fixture tree carries' \
+  'the contract never names `y.decl`, which the fixture tree carries' | LC_ALL=C sort > "$a7p/want"
+if ! cmp -s "$a7p/got" "$a7p/want"; then
+  err "A7's own probe did not fire as seeded (a clean clause citing an arm header, a span, a function, a fixture word and an invariant; seven seeded findings and two coverage gaps). The contract verdict below is unreadable. Differences:"
+  diff "$a7p/want" "$a7p/got" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
+elif [ ! -f "$A7_CONTRACT" ]; then
+  say "  A7  ok  -- no $A7_CONTRACT in this tree, so nothing to join (probe fired)"
+else
+  git ls-files -- 'core/fixtures/*' > "$probe/a7.ls" 2>/dev/null || : > "$probe/a7.ls"
+  a7_out="$(a7_judge "$ROOT" "$A7_CONTRACT" "$probe/a7.ls")"
+  if [ -n "$a7_out" ]; then
+    err "A7: $A7_CONTRACT does not join to the tree. Fix the clause or its cite; an enforcer named here must exist:"
+    printf '%s\n' "$a7_out" | cut -f2- | sed 's/^/  /' >&2
+  else
+    say "  A7  ok  -- every fixture-contract clause names an enforcer that exists; every declaration kind and library file is named (probe fired)"
+  fi
 fi
 
 if [ "$fail" = "0" ]; then

@@ -15,14 +15,19 @@
 # ARMS   a1 the J3 row is printed, the noise is not, and the trailer is printed
 #        a2 with no verdict line the WHOLE output is printed (first line included)
 #        a3 the pass path prints its `rc=0` line and none of the fixture's output
+#        a4 every hermetic-run.sh the subject starts reads /dev/null on stdin, as the push's pool gives it, though the
+#           subject itself is driven from a regular file (BL-1053: a counted run inheriting a session's socket stdin
+#           leaves a `bash -c` at shell level 1 uncounted)
 #
 # MUTANTS (copies of the subject, each guarded by cmp -s so a sed that matched nothing cannot score)
 #   m-tail5      the filtered print restored to `tail -5`            -- killed by a1
 #   m-nofallback the whole-output fallback dropped                   -- killed by a2
-# Both leave a3 untouched, which is their twin: the pass path must stay green under either.
+#   m-stdin      the `exec < /dev/null` line dropped                 -- killed by a4
+# All leave a3 untouched, which is their twin: the pass path must stay green under each.
 # MUTANT-MATRIX m-tail5 decides=a1 twins=a3
 # MUTANT-MATRIX m-nofallback decides=a2 twins=a3
-# MUTANT-MATRIX-DYNAMIC score why=score() passes its first argument "$m" to mutant_killed; its two callers name m-tail5 and m-nofallback, each of which carries its own row above
+# MUTANT-MATRIX m-stdin decides=a4 twins=a3
+# MUTANT-MATRIX-DYNAMIC score why=score() passes its first argument "$m" to mutant_killed; its three callers name m-tail5, m-nofallback and m-stdin, each of which carries its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/seed-verdict-store-red-print/run.sh --matrix
 #
 # Usage: run.sh [--matrix]     Exit 0 = every arm and mutant hold, 1 = one regressed, 2 = fixture broken.
@@ -66,6 +71,8 @@ EOF
 cat > "$T/w/core/scripts/hermetic-run.sh" <<'EOF'
 #!/bin/bash
 fx="$1"; n=1
+# a4's record: one line per start, `devnull` when stdin is /dev/null. The cwd is the scratch root, so ../ is outside it.
+if [ /dev/stdin -ef /dev/null ]; then echo "$fx devnull" >> ../stdin.rec; else echo "$fx other" >> ../stdin.rec; fi
 case "$fx" in
   red-filter) echo "J3 mismatch: cell-x counted 9, declared 4"; while [ "$n" -le 8 ]; do echo "noise $n"; n=$((n + 1)); done; r=1 ;;
   red-plain)  while [ "$n" -le 8 ]; do echo "plain $n"; n=$((n + 1)); done; r=1 ;;
@@ -81,9 +88,14 @@ EOF
     && git -c core.hooksPath=/dev/null -c user.name=fx -c user.email=fx@example.invalid commit -q -m world
 ) >/dev/null 2>&1 || { echo "FIXTURE BROKEN: could not build the scratch repo" >&2; exit 2; }
 
-# drive <variant file> <out file> -- one run of the subject over all three stub fixtures, from the scratch root.
+# drive <variant file> <out file> -- one run of the subject over all three stub fixtures, from the scratch root, with a
+# regular file on stdin (never /dev/null, so a4 can tell the subject's redirect from the caller's). The stubs' stdin
+# record is moved to <out file>.stdin.
+printf 'not-devnull\n' > "$T/feed"
 drive() {
-  ( cd "$T/w" && TMPDIR="$T/tmp" bash "$1" red-filter red-plain green > "$2" 2>&1; echo "exit=$?" >> "$2" )
+  rm -f "$T/stdin.rec"
+  ( cd "$T/w" && TMPDIR="$T/tmp" bash "$1" red-filter red-plain green > "$2" 2>&1 < "$T/feed"; echo "exit=$?" >> "$2" )
+  if [ -f "$T/stdin.rec" ]; then mv "$T/stdin.rec" "$2.stdin"; else : > "$2.stdin"; fi
 }
 has() { grep -qF -- "$2" "$1"; }
 cell() { # <arm> <out file> -> 0 when the arm holds on that output
@@ -91,6 +103,7 @@ cell() { # <arm> <out file> -> 0 when the arm holds on that output
     a1) has "$2" "J3 mismatch: cell-x counted 9" && ! has "$2" "noise 3" && has "$2" "hermetic-run: red-filter: rc=1" ;;
     a2) has "$2" "plain 1" && has "$2" "plain 8" && has "$2" "hermetic-run: red-plain: rc=1" ;;
     a3) has "$2" "green rc=0" && ! has "$2" "okline-must-not-print" ;;
+    a4) [ "$(grep -c ' devnull$' "$2.stdin")" = 3 ] && [ "$(grep -c . "$2.stdin")" = 3 ] ;;
   esac
 }
 
@@ -102,13 +115,15 @@ if has "$T/control.out" "counted store: $T/store/counted-aaaaaaaaaaaa" && has "$
 else
   echo "FIXTURE BROKEN: the subject did not run against the scratch world"; sed 's/^/  | /' "$T/control.out"; exit 2
 fi
-B_a1=0; B_a2=0; B_a3=0
+B_a1=0; B_a2=0; B_a3=0; B_a4=0
 if cell a1 "$T/control.out"; then ok "a1 a red prints the J3 row above five trailing lines, not the noise, and the trailer"; B_a1=1
 else bad "a1 the J3 row, the absence of noise, or the trailer is wrong"; sed 's/^/  | /' "$T/control.out"; fi
 if cell a2 "$T/control.out"; then ok "a2 a red with no verdict line prints the whole output"; B_a2=1
 else bad "a2 the whole-output fallback did not print"; sed 's/^/  | /' "$T/control.out"; fi
 if cell a3 "$T/control.out"; then ok "a3 the pass path prints its rc line and none of the fixture's output"; B_a3=1
 else bad "a3 the pass path changed"; sed 's/^/  | /' "$T/control.out"; fi
+if cell a4 "$T/control.out"; then ok "a4 every hermetic-run.sh the subject starts reads /dev/null on stdin, the subject itself driven from a file"; B_a4=1
+else bad "a4 a hermetic-run.sh the subject started did not read /dev/null on stdin"; sed 's/^/  | /' "$T/control.out.stdin"; fi
 
 # mutate <name> <sed expr> -> builds $T/v/<name>.sh, refusing a mutation that applied to nothing or whose sed died.
 mutate() {
@@ -125,12 +140,13 @@ score() {
   if ! cell a3 "$T/$m.out"; then bad "$m tripped its twin a3 -- the mutant is not confined"; return; fi
   mutant_killed "$flag" "$m" "$m scored by $dec and not by its twin a3"
   if [ "$MODE" = matrix ]; then
-    for a in a1 a2 a3; do if cell "$a" "$T/$m.out"; then g="$g,$a"; else r="$r,$a"; fi; done
+    for a in a1 a2 a3 a4; do if cell "$a" "$T/$m.out"; then g="$g,$a"; else r="$r,$a"; fi; done
     printf 'MATRIX %s decides=%s twins=a3:GREEN green=%s red=%s\n' "$m" "$dec" "${g#,}" "${r#,}"
   fi
 }
 if mutate m-tail5 's#^.*grep -E "FAIL.*$#      tail -5 "$work/$fx.out"#'; then score m-tail5 a1 "$B_a1"; fi
 if mutate m-nofallback 's#else cat "$work/$fx.out"; fi#else :; fi#'; then score m-nofallback a2 "$B_a2"; fi
+if mutate m-stdin '/^exec < \/dev\/null$/d'; then score m-stdin a4 "$B_a4"; fi
 
-[ "$rc" -eq 0 ] && echo "PASS  seed-verdict-store-red-print -- 3 arms, 2 mutants scored"
+[ "$rc" -eq 0 ] && echo "PASS  seed-verdict-store-red-print -- 4 arms, 3 mutants scored"
 exit "$rc"

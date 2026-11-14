@@ -61,11 +61,53 @@ PD_EOF
 }
 # PUSH_DELETE_END
 # stdin is read only when git's two arguments are present and it is not a terminal: a hand run passes no arguments,
-# and a terminal read would wait forever.
-if [ "$#" -ge 2 ] && [ ! -t 0 ] && push_delete_only "$(cat)"; then
+# and a terminal read would wait forever. The lines are kept in PUSH_LINES for the pregate gate below.
+PUSH_LINES=""
+if [ "$#" -ge 2 ] && [ ! -t 0 ] && { PUSH_LINES="$(cat)"; push_delete_only "$PUSH_LINES"; }; then
   printf 'pre-push: every ref in this push is a delete (all-zero local sha): no tree is delivered, so no step runs.\n'
   exit 0
 fi
+
+# PREGATE_GATE_BEGIN
+# A PUSH IS REFUSED UNTIL scripts/pregate-self-check.sh HAS PASSED ON THE EXACT TREE IT DELIVERS (BL-1055). That
+# script runs this hook's pre-suite prefix, the procsub spelling arm and the counted validator-fork-budget run in
+# minutes; the suite below finds the same reds only after the whole pool. On exit 0 over a clean work tree it writes
+# `<git common dir>/ai-dlc-pregate-green/<HEAD tree>`; this gate reads that record and nothing else. It exits before
+# any step, so a refusal costs seconds. It applies to every push that delivers a tree (a ref line with a non-zero
+# local sha): the work tree must be clean, every delivered commit's tree must equal HEAD's (the hook judges the work
+# tree, not the pushed sha), and the record must exist. An empty stdin (a hand run, the self-check's own prefix run,
+# a fixture driving this hook with </dev/null) delivers nothing and is not gated. A delete-only push exited above.
+pregate_gate() { # <ref lines>: 0 = the push may proceed; 1 = refused, the reason printed
+  local lr ls rr rs n=0 tree st gcd rec
+  tree="$(git rev-parse --verify --quiet 'HEAD^{tree}')" || tree=""
+  while read -r lr ls rr rs; do
+    [ -n "$lr" ] || continue
+    case "$ls" in ''|*[!0]*) : ;; *) continue ;; esac
+    n=$((n + 1))
+    if [ "$(git rev-parse --verify --quiet "${ls}^{tree}")" != "$tree" ] || [ -z "$tree" ]; then
+      printf 'pre-push: REFUSED. %s (%s) delivers a tree that is not this work tree'"'"'s HEAD tree; push from a clean worktree detached at that sha.\n' "$lr" "$ls"
+      return 1
+    fi
+  done <<PG_EOF
+$1
+PG_EOF
+  [ "$n" -gt 0 ] || return 0 # an empty stdin delivers nothing: not gated
+  st="$(GIT_OPTIONAL_LOCKS=0 git status --porcelain --untracked-files=normal 2>&1)" || st="git status failed: $st"
+  if [ -n "$st" ]; then
+    printf 'pre-push: REFUSED. The work tree is not clean, so no pregate record can name it:\n%s\n   Push from a clean worktree detached at the sha, after running bash scripts/pregate-self-check.sh there.\n' "$(printf '%s\n' "$st" | head -5 | sed 's/^/     /')"
+    return 1
+  fi
+  gcd="$(git rev-parse --git-common-dir 2>/dev/null)" || gcd=""
+  rec="$gcd/ai-dlc-pregate-green/$tree"
+  if [ -z "$gcd" ] || [ ! -f "$rec" ] || [ "$(sed -n 1p "$rec" 2>/dev/null)" != '#format pg1' ]; then
+    printf 'pre-push: REFUSED. No green scripts/pregate-self-check.sh run is recorded for this tree (%s).\n   Run `bash scripts/pregate-self-check.sh` in this worktree (minutes), fix what it names, and push again.\n' "$tree"
+    return 1
+  fi
+  printf 'pre-push: pregate-self-check passed on this tree (%s).\n' "$tree"
+  return 0
+}
+pregate_gate "$PUSH_LINES" || exit 1
+# PREGATE_GATE_END
 
 # 0. A GREEN GATE IS NOT A LANDED PUSH, and the cause is a dotfile, not this tree. `git push`
 #    opens the SSH connection BEFORE this hook runs; the suite below then idles it for minutes,
@@ -171,7 +213,7 @@ RED_STEPS=""
 #
 # THE KEY SET IS TRACED ON EVERY RECORDED RUN, NEVER WRITTEN BY HAND. A step that runs is traced
 # by two instruments with disjoint blind spots, and its record is the union:
-#   * FILES: every path under the work tree (outside `.git`) is forced to an atime of 2000 before
+#   * FILES: every path under the work tree (outside `.git` and the git-ignored paths) is forced to an atime of 2000 before
 #     the step, and every path whose atime moved during it was READ (the `-newerat` technique of
 #     derive-fixture-readsets.sh; APFS is relatime-like, so the forced epoch is what makes a second
 #     read visible). A read file is keyed on its `.now` hash from the hook's own READSET_UNIVERSE
@@ -194,8 +236,9 @@ RED_STEPS=""
 #     moves no atime and runs no git, so a step that asks `[ -f x ]` of nothing would skip on a stale
 #     pass once x appears. No tracer is used for these: the kernel's sandbox reports reach `log stream`
 #     incompletely and with no reliable drop signal. Instead every record carries the PRESENT KEY, the
-#     sha256 of the raw NUL-separated walk `/usr/bin/find . -path ./.git -prune -o -print0` taken in
-#     pk_present from pk_init (git-ignored paths included, never the universe listing), one C-sorted
+#     sha256 of the raw NUL-separated walk `/usr/bin/find . \( <PK_PRUNE> \) -prune -o -print0` taken in
+#     pk_present from pk_init (git-ignored paths pruned by pk_ign, untracked unignored paths kept, never the universe
+#     listing; a tree with no ignored path keys exactly as the unpruned walk did), one C-sorted
 #     line per path, `<path>\t<f|d|l|o><octal permission bits>\t<symlink target or empty>` (lstat; the mode rides in the kind field so the row keeps three fields and the escaping pairs stay injective; the mode is keyed, size and mtime deliberately are not, and neither is the owner), with
 #     backslash, TAB and newline escaped in the path and the target so no name spells another tree's
 #     lines. A walk that find could not finish (non-zero exit, or anything on its stderr, such as an
@@ -272,17 +315,51 @@ pk_init() {
   # `-r` from a coarser source): every later mtime check compares against it, so a path created or removed anywhere
   # under the tree after the walk -- even created and removed again in the same second -- moves its parent's mtime
   # past this mark.
+  # PK_PRUNE is set HERE, in this shell, for the reset, scan and mtime walks; pk_present lists the ignored paths again
+  # inside its own subshell, so pk_finish's re-walk prunes what is ignored at the end.
+  pk_ign || { pk_off "git ls-files could not list the ignored paths"; return 1; }
   : > "$PK_W/start" || { pk_off "no start mark"; return 1; }
   PK_PH="$(pk_present)" || { pk_off "could not hash the present set of the work tree ($(head -1 "$PK_W/walk.err" 2>/dev/null))"; return 1; }
   PK_ON=1
   [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = 1 ] && printf '   ..    pre-suite keys: skip OFF (AI_DLC_FIXTURE_NO_SKIP=1) -- every step runs and is recorded on a pass\n'
   return 0
 }
+# GIT-IGNORED PATHS ARE NO STEP'S INPUT. pk_ign sets PK_PRUNE to the find operands that prune `.git` and every path
+# `git ls-files -o -i --exclude-standard --directory` lists (an ignored directory once, never descended; a tracked
+# path is never listed), so the present walk, the atime reset, the atime scan and the mtime check all skip them and a
+# worktree added under an ignored directory moves no key. Each -path operand has its fnmatch characters escaped.
+# DECLARED IGNORED INPUTS stay walked and keyed: `.claude/settings.json` and `.claude/agents`, which the agent
+# definitions step tests and reads.
+# A `.claude` git lists WHOLE (no tracked file beneath it) is walked, and each of its children but those two is pruned.
+pk_ign() {
+  local e c
+  git ls-files -z -o -i --exclude-standard --directory > "$PK_W/ign" 2> /dev/null || return 1
+  PK_PRUNE=(-path ./.git)
+  while IFS= read -r -d '' e; do
+    e="${e%/}"; [ -n "$e" ] || continue
+    case "$e" in
+      .claude/settings.json|.claude/agents) continue ;;
+      .claude)
+        for c in .claude/* .claude/.[!.]* .claude/..?*; do
+          { [ -e "$c" ] || [ -L "$c" ]; } || continue
+          case "$c" in .claude/settings.json|.claude/agents) ;; *) pk_prune_add "$c" ;; esac
+        done
+        continue ;;
+    esac
+    pk_prune_add "$e"
+  done < "$PK_W/ign"
+}
+pk_prune_add() { # <path relative to the top>: one escaped -path operand appended to PK_PRUNE
+  local e="$1"
+  e="${e//\\/\\\\}"; e="${e//\*/\\*}"; e="${e//\?/\\?}"; e="${e//\[/\\[}"; e="${e//\]/\\]}"
+  PK_PRUNE=("${PK_PRUNE[@]}" -o -path "./$e")
+}
 pk_present() { # prints the 64-hex present key; non-zero when the walk was partial or could not be hashed
   # find's status and its stderr are both read: a dir it cannot search yields a PARTIAL walk that hashes the same on
   # every push. The walk goes to a file first, so find's own exit is captured with no pipeline.
   local rc ph
-  /usr/bin/find . -path ./.git -prune -o -print0 > "$PK_W/walk" 2> "$PK_W/walk.err"; rc=$?
+  pk_ign || { printf 'git ls-files could not list the ignored paths\n' > "$PK_W/walk.err"; return 1; }
+  /usr/bin/find . \( "${PK_PRUNE[@]}" \) -prune -o -print0 > "$PK_W/walk" 2> "$PK_W/walk.err"; rc=$?
   [ "$rc" = 0 ] || { [ -s "$PK_W/walk.err" ] || printf 'find exited %s\n' "$rc" > "$PK_W/walk.err"; return 1; }
   [ -s "$PK_W/walk.err" ] && return 1
   ph="$(python3 -I "$PK_W/pk.py" present "$PK_TOP" < "$PK_W/walk" 2>> "$PK_W/walk.err")" || return 1
@@ -295,7 +372,7 @@ pk_present() { # prints the 64-hex present key; non-zero when the walk was parti
 # (find tests an entry before it descends into it), and only then the mtime check. A verification walk after the
 # reset would itself mark every directory read.
 pk_reset_all() { # force every work-tree atime to the epoch
-  /usr/bin/find . -path ./.git -prune -o -exec touch -a -h -t 200001010000 {} + 2>/dev/null
+  /usr/bin/find . \( "${PK_PRUNE[@]}" \) -prune -o -exec touch -a -h -t 200001010000 {} + 2>/dev/null
 }
 pk_trace_init() { # the two controls, once per push; true when a traced run can be recorded
   [ -z "$PK_TR" ] || { [ "$PK_TR" = 1 ]; return; }
@@ -341,11 +418,11 @@ pk_step() { # <title> <cmd...>: the keyed form of step(); prints the verdict and
   ( export GIT_TRACE2_EVENT="$PK_W/t2.$slug" GIT_TRACE2_ENV_VARS="PWD,GIT_INDEX_FILE"
     bash -c '. "$1"; shift; "$@"' pk-step "$PK_W/fns.sh" "$@" ); rc=$?
   if [ "$rc" = 0 ]; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
-  /usr/bin/find . -path ./.git -prune -o -neweram "$PK_W/mark" -print 2>/dev/null | sed 's|^\./||' > "$PK_W/r.$slug"
+  /usr/bin/find . \( "${PK_PRUNE[@]}" \) -prune -o -neweram "$PK_W/mark" -print 2>/dev/null | sed 's|^\./||' > "$PK_W/r.$slug"
   # THE MTIME CHECK IS AGAINST THE START MARK, not a per-step one: a path created after pk_init's walk and removed
   # again before this step ended is in neither walk, yet this step may have run while it existed. Its creation or
   # removal moved its parent directory's mtime past the mark, so it is caught here.
-  moved="$(/usr/bin/find . -path ./.git -prune -o -newer "$PK_W/start" -print 2>/dev/null | sed -n 1,3p | tr '\n' ' ')"
+  moved="$(/usr/bin/find . \( "${PK_PRUNE[@]}" \) -prune -o -newer "$PK_W/start" -print 2>/dev/null | sed -n 1,3p | tr '\n' ' ')"
   # A RED OR UNRECORDABLE RUN DELETES THE OLD RECORD: a pass recorded on these same keys would otherwise
   # skip the step next time over a verdict this run just contradicted.
   if [ -n "$moved" ]; then
@@ -2069,6 +2146,9 @@ readset_git_exec_path() {
 # when stored entries keep their meaning (they stay valid), or under a bumped READSET_VS_FORMAT when they do not (every
 # stored verdict re-runs).
 # VS-IDENTITY 1 c77c527c060e872009059fb45f79ef173d35fba6440ccee55cd8cfa1a2e38a3c the format-versioned identity (BL-1049); the runner keyed by its span, the subset reader
+# VS-IDENTITY 1 80230747ff4dec972f5bcc189a9553edfc36c87bbfe6d80243609789adbe36d6 spans.decl declares a span row (BL-1052); no existing row changes meaning
+# VS-IDENTITY 1 8b2bbb45754df4ddb6d99683679caa2c78bbf3f17f04c1d36df177a971d8ea6f a counted entry carries the judge's #judge row (BL-1057); uncounted digest inputs unchanged
+# VS-IDENTITY 1 3fc1c587525156eff1e5435a3cdcbe69102eb22d6c2df8f01d396caa35454186 bundle B1: the BL-1052 span rows and the BL-1057 counted #judge row together; neither changes an existing entry
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -2091,6 +2171,7 @@ readset_vs_ident() { # <hook> <runner>: prints "<runner span id> f<the hook's RE
 readset_vs_input() { # <fx> <ident> <rows file> [<project root>, default .]: the digest input
   printf '#fixture %s\n#runner %s\n#universe %s\n' "$1" "${2%% *}" "${2#* }"
   readset_vs_inproc "$1" "${4:-.}"
+  [ -z "${FXCOUNT_JUDGE:-}" ] || readset_vs_judge "$1" "${4:-.}" || return 1
   cat "$3"
 }
 # THIS FIXTURE'S OWN BL-879 STATE, one row, read under <project root>: `listed` or `unlisted` on
@@ -2106,6 +2187,19 @@ readset_vs_inproc() { # <fx> <project root>
     && F="$1" awk -F'\t' '$0 !~ /^[[:space:]]*(#|$)/ && $1 == ENVIRON["F"] { f = 1 } END { exit f ? 0 : 1 }' "$2/scripts/fixture-inprocess-allowlist.txt" \
     && l=listed
   printf '#inproc %s %s\n' "$l" "$c"
+}
+# A COUNTED RUN'S JUDGE ROW (FXCOUNT_JUDGE set, the distribution hook's fxcount_arm): the invocation judge's own
+# `#judge f<format> <J5 key> <listed|unlisted>` row for <fx> (its --key-rows), read from the FXCOUNT_KEYROWS table
+# the arming wrote once per push, else from one judge call under <project root>. No row: no digest input, so nothing
+# is recorded or reused. Uncounted (a consumer, a nested pool), no row is written and the digest input is unchanged.
+readset_vs_judge() { # <fx> <project root>
+  local r
+  if [ -n "${FXCOUNT_KEYROWS:-}" ] && [ -f "$FXCOUNT_KEYROWS" ]; then
+    r="$(F="$1" awk -F'\t' '$1 == ENVIRON["F"] { print $2; exit }' "$FXCOUNT_KEYROWS")"
+  else
+    r="$(bash "$FXCOUNT_JUDGE" --key-rows "$2" "$1" 2>/dev/null | F="$1" awk -F'\t' '$1 == ENVIRON["F"] { print $2; exit }')"
+  fi
+  case "$r" in '#judge f'*) printf '%s\n' "$r" ;; *) return 1 ;; esac
 }
 # READSET_VS_END
 # A DECLARED FIXTURE'S KEY ROWS, ONE COMPOSER. This hook and hermetic-run.sh both source this span -- the runner at
@@ -2156,7 +2250,8 @@ readset_vs_inproc() { # <fx> <project root>
 #     the caller (it keys a root other than its cwd), else under the cwd. A fixture that declares the runner by name
 #     is also keyed on its whole-file hash, as for any declared file.
 # READSET_KEYROWS_BEGIN
-readset_span_sha() { # <file> <NAME>
+readset_span_sha() { # <file> <NAME> [raw]: `raw` keeps comment and blank lines (a declared span: its reader may read them)
+  if [ "${3:-}" = raw ]; then sed -n "/^# ${2}_BEGIN\$/,/^# ${2}_END\$/p" "$1" | shasum -a 256 | cut -d' ' -f1; return 0; fi
   sed -n "/^# ${2}_BEGIN\$/,/^# ${2}_END\$/p" "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
 }
 readset_tail_sha() { # <file>: the top-level lines after its last line that is exactly `}`, comments and blanks dropped
@@ -2201,6 +2296,7 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
       if [ "${#dp}" -eq 64 ]; then printf '%s\tP\t%s\t%s\n' "$fx" "$p" "$dp"; else printf '%s\tX\tplushash\t%s\n' "$fx" "$p"; fi
     done < "$w.pf"
   fi
+  [ ! -f "$fd/spans.decl" ] || readset_decl_spans "$fx" "$fd" "$lay" "$mp" "$w"
   [ ! -f "$fd/git.decl" ] || readset_decl_ranges "$fx" "$fd" "$w"
   [ -f "$fd/tools.decl" ] || return 0
   while IFS= read -r t || [ -n "$t" ]; do
@@ -2221,6 +2317,36 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
     seen="$seen${found##*/}=$found|"; printf '%s\tT\t%s\n' "$fx" "$found"
   done < "$fd/tools.decl"
   return 0
+}
+# readset_decl_spans: each `<path> <NAME>` line of a fixture's spans.decl keys ONE span of a file instead of the whole
+#   file. Per line: an F row (the sandbox copies the file; its <declared> field is `<path>#<NAME>`, which
+#   readset_decl_keys never keys whole) and a P row `<path>#<NAME>` valued `readset_span_sha <path> <NAME> raw`.
+#   `#` and blank lines dropped, a trailing CR stripped; a core/ path is mapped onto the consumer layout as in
+#   inputs.decl. Refusals: spanbad (not exactly two fields, or NAME outside [A-Z0-9_]), abs, spandir (a directory),
+#   absf (the file is absent), spanabsent (no `# NAME_BEGIN` or no `# NAME_END` line, so the key would hash nothing).
+readset_decl_spans() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <scratch prefix>
+  local fx="$1" fd="$2" lay="$3" mp="$4" w="$5" p n dp
+  awk -v fx="$fx" -v d="$w.s" 'BEGIN { printf "" > d } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
+      if (NF != 2 || $2 !~ /^[A-Z0-9_]+$/) { print fx "\tX\tspanbad\t" $0; next }
+      if ($1 ~ /^\// || $1 ~ /(^|\/)\.\.(\/|$)/) { print fx "\tX\tabs\t" $1; next }
+      if ($1 ~ /\/$/) { print fx "\tX\tspandir\t" $1; next }
+      print $1 "\t" $2 > d }' "$fd/spans.decl"
+  [ -s "$w.s" ] || return 0
+  if [ "$lay" = cons ] && awk -F'\t' '$1 == "core" || index($1, "core/") == 1 { f = 1 } END { exit f ? 0 : 1 }' "$w.s"; then
+    if [ -z "$mp" ] || [ ! -f "$mp" ]; then printf '%s\tX\tnomap\t%s\n' "$fx" "$mp"; return 0; fi
+    cut -f1 "$w.s" | bash "$mp" --map 2> "$w.e" > "$w.sm" \
+      || { printf '%s\tX\tmaprefuse\t%s\n' "$fx" "$(sed -n 1p "$w.e" | tr '\t' ' ')"; return 0; }
+    [ "$(awk 'END { print NR }' "$w.sm")" = "$(awk 'END { print NR }' "$w.s")" ] || { printf '%s\tX\tmapcount\t-\n' "$fx"; return 0; }
+  else
+    cut -f1 "$w.s" > "$w.sm"
+  fi
+  awk -F'\t' 'NR == FNR { m[FNR] = $0; next } { print m[FNR] "\t" $2 "\t" $1 }' "$w.sm" "$w.s" > "$w.sr"
+  while IFS="$(printf '\t')" read -r p n dp; do
+    [ -f "$p" ] || { printf '%s\tX\tabsf\t%s\t%s\n' "$fx" "$p" "$dp"; continue; }
+    grep -q "^# ${n}_BEGIN\$" "$p" && grep -q "^# ${n}_END\$" "$p" || { printf '%s\tX\tspanabsent\t%s#%s\n' "$fx" "$p" "$n"; continue; }
+    printf '%s\tF\t%s\t0\t%s#%s\n' "$fx" "$p" "$dp" "$n"
+    printf '%s\tP\t%s#%s\t%s\n' "$fx" "$p" "$n" "$(readset_span_sha "$p" "$n" raw)"
+  done < "$w.sr"
 }
 # readset_decl_ranges: each `range` line of a fixture's git.decl -> one G row, or one X row carrying the line.
 #   range <ref-expr> <path>...   <ref-expr> is `<rev>..<rev>`, or `@<file>`: a bare file name in the fixture's own
@@ -2279,7 +2405,7 @@ readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture ro
       n = split(ENVIRON["RK_R"], a, ";"); for (j = 1; j < n; j++) { split(a[j], b, " "); RNS[b[1]] = b[2]; RNT[b[1]] = b[3] }
       while ((getline l < ENVIRON["RK_P"]) > 0) { split(l, a, "\t")
         if (a[2] == "N") FX[a[1]] = 1
-        else if (a[2] == "F") FF[a[3]] = FF[a[3]] "\n" a[1]
+        else if (a[2] == "F") { if (!index(a[5], "#")) FF[a[3]] = FF[a[3]] "\n" a[1] }
         else if (a[2] == "D") DD[a[3]] = DD[a[3]] "\n" a[1]
         else if (a[2] == "T") TL[a[1]] = TL[a[1]] "\n" a[3]
         else if (a[2] == "P") PL[a[1]] = PL[a[1]] "\n" a[3] "\t" a[4]
@@ -2356,6 +2482,7 @@ readset_declared() { # <list> <out>
     $3 == "plusbang" { print $1 "\t+ and ! on one inputs.decl line (a line carries one marker): " $4; next }
     $3 == "plushash" { print $1 "\t+ file could not be hashed " $4; next }
     $3 == "rnopath" || $3 == "rabs" || $3 == "rderive" || $3 == "rref" || $3 == "rempty" { print $1 "\tgit.decl range refused (" $3 "): " $4; next }
+    $3 == "spanbad" || $3 == "spandir" || $3 == "spanabsent" { print $1 "\tspans.decl refused (" $3 "): " $4; next }
     { print $1 "\t" $4 }' "$out/.dparse" > "$out/.dunres"
   # `.dtools` (`<fx>\t<tool path>`) is a VIEW of the parse for diagnostics and probes; the decision reads `.dkeys`.
   awk -F'\t' '$2 == "T" { print $1 "\t" $3 }' "$out/.dparse" > "$out/.dtools"
@@ -2431,12 +2558,23 @@ readset_vs_ident_here() { # the ident from the cwd, both layouts, consumer runne
 # THE LEGACY IDENTITY: the `#universe` values the distribution and consumer hooks wrote before READSET_VS_FORMAT.
 READSET_VS_LEGACY_UNIVERSE="68c5a2f2659c8bc02f3f1b087af17c0e683e0ae989392cf465350c1664aa7e47 a829a5b0f9ef73ce7a53c6e37f3321b852ba2c180b1627855590f562ff3c9335"
 readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pass covering its current key rows is decided `skip`
-  local out="$1" store ident fx rn="" c rraw
+  local out="$1" store ident fx rn="" c rraw vld vlok vj
   : > "$out/.vs"
   [ -s "$out/.dfx" ] || return 0
   store="$(readset_vs_store "$PWD")"
   if [ -z "$store" ]; then printf '   ..    verdict store OFF: no store base, or the project root commit cannot be resolved (shallow clone or git failure)\n'; return 0; fi
-  [ -d "$store" ] || return 0
+  # COUNTED (FXCOUNT_JUDGE set): an entry of the counted store carries the fixture's `#judge` row after `#inproc`; an
+  # entry of FXCOUNT_LEGACY_STORE (the last whole-judge store, fxcount_arm) carries none and is read only for a fixture
+  # FXCOUNT_LEGACY_OK lists, and is read while the counted store has no directory yet. Uncounted, both are empty and
+  # every entry is read as before.
+  vld=""; vlok=""; vj=""
+  if [ -n "${FXCOUNT_JUDGE:-}" ]; then
+    vj=1
+    if [ -n "${FXCOUNT_LEGACY_STORE:-}" ] && [ -n "${FXCOUNT_LEGACY_OK:-}" ] && [ -s "$FXCOUNT_LEGACY_OK" ] && [ -d "$FXCOUNT_LEGACY_STORE/${store##*/}" ]; then
+      vld="$FXCOUNT_LEGACY_STORE/${store##*/}"; vlok="$FXCOUNT_LEGACY_OK"
+    fi
+  fi
+  [ -d "$store" ] || [ -n "$vld" ] || return 0
   ident="$(readset_vs_ident_here)" || return 0
   [ -n "$ident" ] || return 0
   for c in scripts/ai-dlc/hermetic-run.sh core/scripts/hermetic-run.sh; do [ -f "$c" ] && { rn="$c"; break; }; done
@@ -2450,39 +2588,46 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
     awk -F'\t' -v f="$fx" '$1 == f { x = 1 } END { exit x ? 0 : 1 }' "$out/.qfx" && continue
     [ -f "$out/.k/$fx" ] || continue
     tail -n +4 "$out/.k/$fx" > "$out/.vs.rows" 2>/dev/null && [ -s "$out/.vs.rows" ] || continue
-    { readset_vs_inproc "$fx" . | awk -v f="$fx" '{ print f "\tI\t" $0 }'; awk -v f="$fx" '{ print f "\tR\t" $0 }' "$out/.vs.rows"; } >> "$out/.vs.want"
+    { readset_vs_inproc "$fx" . | awk -v f="$fx" '{ print f "\tI\t" $0 }'
+      [ -z "${FXCOUNT_JUDGE:-}" ] || readset_vs_judge "$fx" . | awk -v f="$fx" '{ print f "\tJ\t" $0 }'
+      awk -v f="$fx" '{ print f "\tR\t" $0 }' "$out/.vs.rows"; } >> "$out/.vs.want"
   done < "$out/.vs.cand"
   [ -s "$out/.vs.want" ] || return 0
   # ONE SCAN: the entries whose `#fixture` line names a candidate, then ONE matcher over all of them.
   awk -F'\t' '$2 == "I" { print "#fixture " $1 }' "$out/.vs.want" > "$out/.vs.pat"
-  find "$store" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null | xargs -0 grep -l -x -F -f "$out/.vs.pat" -- 2>/dev/null > "$out/.vs.files"
+  { find "$store" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null
+    [ -z "$vld" ] || find "$vld" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null; } | xargs -0 grep -l -x -F -f "$out/.vs.pat" -- 2>/dev/null > "$out/.vs.files"
   [ -s "$out/.vs.files" ] || return 0
-  tr '\n' '\000' < "$out/.vs.files" | VW="$out/.vs.want" VN="$out/.now" VF="$out/.dfull" VR="${ident%% *}" VU="${ident#* }" VL="$rraw" VLU="$READSET_VS_LEGACY_UNIVERSE" \
+  tr '\n' '\000' < "$out/.vs.files" | VW="$out/.vs.want" VN="$out/.now" VF="$out/.dfull" VR="${ident%% *}" VU="${ident#* }" VL="$rraw" VLU="$READSET_VS_LEGACY_UNIVERSE" VJ="$vj" VLD="$vld" VLOK="$vlok" \
     xargs -0 awk -v root="$FXROOT" '
     function addw(md, f, r, o) { if ((md SUBSEP f SUBSEP r) in W) return; W[md SUBSEP f SUBSEP r] = 1; NW[md SUBSEP f]++; if (o) NO[md SUBSEP f]++ }
     function fin() { if (ok && fx != "" && md != "" && !(fx in HIT) && m == NW[md SUBSEP fx] && own == NO[md SUBSEP fx] + 0) { HIT[fx] = 1; print fx } }
     BEGIN {
       n = split(ENVIRON["VLU"], a, " "); for (j = 1; j <= n; j++) LU[a[j]] = 1
       while ((getline l < ENVIRON["VF"]) > 0) DF[l] = 1
+      if (ENVIRON["VLOK"] != "") while ((getline l < ENVIRON["VLOK"]) > 0) LOK[l] = 1
+      vj = (ENVIRON["VJ"] != ""); vld = ENVIRON["VLD"]
       while ((getline l < ENVIRON["VN"]) > 0) { t = index(l, "\t"); p = substr(l, 1, t - 1)
         if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh") NOW[p] = substr(l, t + 1) }
       while ((getline l < ENVIRON["VW"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); r = substr(l, t + 1); kd = substr(r, 1, 1); r = substr(r, 3)
         if (kd == "I") { INP[f] = r; continue }
+        if (kd == "J") { JR[f] = r; continue }
         t = index(r, "\t"); k = substr(r, 1, t - 1)
         if ((f in DF) && k == root f "/inputs.decl") continue
         o = (index(k, root f "/") == 1)
         addw("n", f, r, o)
         if (k ~ /#HR_(SANDBOX|EXIT)$/) { sub(/#HR_[A-Z]+$/, "", k); if (!(k in NOW)) continue; r = k "\t" NOW[k] }
         addw("l", f, r, o) } }
-    FNR == 1 { fin(); ok = ($0 == "#format k1"); fx = ""; md = ""; m = 0; own = 0; next }
+    FNR == 1 { fin(); ok = ($0 == "#format k1"); fx = ""; md = ""; m = 0; own = 0; leg = (vld != "" && index(FILENAME, vld "/") == 1); next }
     FNR == 2 { ok = ok && ($0 == "#state ok"); next }
-    FNR == 3 { if (substr($0, 1, 9) == "#fixture ") fx = substr($0, 10); ok = ok && (fx in INP); next }
+    FNR == 3 { if (substr($0, 1, 9) == "#fixture ") fx = substr($0, 10); ok = ok && (fx in INP) && (!leg || (fx in LOK)); next }
     FNR == 4 { rr = $0; next }
     FNR == 5 { if (rr == "#runner " ENVIRON["VR"] && $0 == "#universe " ENVIRON["VU"]) md = "n"
                else if (rr == "#runner " ENVIRON["VL"] && substr($0, 1, 10) == "#universe " && (substr($0, 11) in LU)) md = "l"
                else ok = 0
                next }
     FNR == 6 { ok = ok && ($0 == INP[fx]); next }
+    FNR == 7 && vj && !leg { ok = ok && (fx in JR) && ($0 == JR[fx]); next }
     !ok { next }
     { t = index($0, "\t"); k = substr($0, 1, t - 1)
       if ((fx in DF) && k == root fx "/inputs.decl") next
@@ -2632,7 +2777,7 @@ readset_keys() { # <list> <out>
         else if (first != "") { why = um ? "unmapped: closure changed" : "changed " first; c = "k" }
         else run = 0
         if (!run && (f in QF)) { run = 1; why = "read set names a quoted path " QF[f]; c = "k" }
-        if (!run && (f in UN)) { run = 1; why = (substr(UN[f], 1, 7) == "mapper " || index(UN[f], "git.decl range refused ") == 1) ? UN[f] : "tool unresolved " UN[f]; c = "k" }
+        if (!run && (f in UN)) { run = 1; why = (substr(UN[f], 1, 7) == "mapper " || index(UN[f], "git.decl range refused ") == 1 || index(UN[f], "spans.decl refused ") == 1) ? UN[f] : "tool unresolved " UN[f]; c = "k" }
         # A STALE RECORD WITH A VALID ROW SET AND NO MOVED KEY SKIPS, and its `ok` record is published
         # on this push through `.k.always`, as a seeded one is: c `v` marks it.
         if (!run) { if (!seed && st != "stale" && !mig && !SB && !lg) { print f "\tskip\t\t\t" st; continue }
@@ -2814,6 +2959,17 @@ pool_stop() { # pool_stop <exit status>
   exit "$1"
 }
 
+# THE INVALIDATION GUARD (BL-1052): scripts/invalidation-guard.sh, distribution only, fails the push before dispatch when a
+# declared fixture is selected only by a change it cannot read. Absent (a consumer tree, a probe world): no-op.
+readset_invalidation_guard() { # <out>
+  [ -d core/scripts ] && [ -f scripts/invalidation-guard.sh ] || return 0
+  if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" ]; then
+    printf '   ..    invalidation guard: SKIP -- AI_DLC_FIXTURE_NO_SKIP=1 dispatches every fixture, so no selection is judged\n'; return 0
+  fi
+  [ "${READSET_NO_CHANGE:-0}" = "1" ] && return 0
+  bash scripts/invalidation-guard.sh --out "$1" --keys "$KEYS_DIR"
+}
+
 run_fixtures() {
   local rc=0 rf_hard=0 d b out out_q n_expected n_actual n_ordered verdict fx_root fx_s fx_err fx_m fx_p fx_t fx_e pool_xp=""
   if [ "$POOL_DEPTH_IN" -ge 2 ]; then
@@ -2905,6 +3061,7 @@ run_fixtures() {
   READSET_NO_CHANGE=0
   apply_readset_skip "$out/list" "$out"
   readset_trace_report "$out"
+  readset_invalidation_guard "$out" || { rm -rf "$out"; trap - EXIT INT TERM HUP; return 1; }
 
   # A WHOLE-SUITE SKIP CANNOT BE SIGNALLED BY AN EMPTY LIST, and the guard four lines down is
   # why: an empty list is a hard FAIL here, deliberately, because "an empty suite passes every
@@ -3565,32 +3722,58 @@ PRESUITE_DONE=1
 # 2f. THE INVOCATION BUDGET. Every declared fixture's bash starts are counted by an rc generated into a private run
 #     dir and judged by scripts/validate-fixture-invocations.sh inside hermetic-run.sh, before its verdict-store
 #     write, so a budget mismatch is that fixture's own FAIL. Armed at depth 0 only: a nested copy of this hook is
-#     inert. The judge's self-probe runs HERE, once per push, and a red one FAILs arming. Counted passes live in a
-#     store derived from the judge, rc and scripts/fixture-matrix-allowlist.txt bytes, ALWAYS, even under a preset
-#     AI_DLC_VERDICT_STORE: a changed J-arm, rc or allowlist row voids them, and counted and uncounted entries never share a store. The judge absent is a FAIL here, never an
-#     uncounted pass. The run dir holds only the per-fixture start logs and is left in TMPDIR.
+#     inert. The judge's self-probe runs HERE, once per push, and a red one FAILs arming, as does a judge whose
+#     semantic sha has no `# FXC-IDENTITY` row (--identity-check). Counted passes live in counted-<vk>, ALWAYS, even
+#     under a preset AI_DLC_VERDICT_STORE, so counted and uncounted entries never share a store. vk hashes the judge's
+#     FXC_FORMAT alone; what the judge decides for ONE fixture is that entry's `#judge` row (READSET_VS's
+#     readset_vs_judge, from the FXCOUNT_KEYROWS table written here), so a judge or allowlist edit re-runs only the
+#     fixtures whose row it moves. The judge absent is a FAIL here, never an uncounted pass. The run dir holds the
+#     per-fixture start logs and the key-row tables and is left in TMPDIR.
+#     THE LEGACY COUNTED STORE: `fxcount_legacy` names the last whole-judge store (its vk, the judge and allowlist blobs
+#     it hashed, the judge format they judged under). A fixture whose current row has that format and whose J5 key has
+#     the same allowlist membership under that blob as now is listed in FXCOUNT_LEGACY_OK, and readset_verdicts reads
+#     its entries in FXCOUNT_LEGACY_STORE, which carry no `#judge` row. The blob unreadable: legacy lookup OFF.
+#     scripts/collect-counted-stores.sh reads this line to keep that store and the live one.
 fxcount_arm() {
-  local run sp vk allow
+  local run sp vk idc fmt base lv lj la lf
+  local fxcount_legacy="cd68ce325a3d 8c11cb854c0456316b215bfb3c841a43a9f363fc aae7a5b3907faf325ecfd92473bb272aa7b314ec f1"
   [ "$POOL_DEPTH_IN" -eq 0 ] || { printf '   nested pool (depth %s): the outer hook arms the counter; this copy stays inert\n' "$POOL_DEPTH_IN"; return 0; }
   FXCOUNT_JUDGE="$PWD/scripts/validate-fixture-invocations.sh"
   [ -f "$FXCOUNT_JUDGE" ] || { printf '   the invocation judge %s is absent: the suite cannot be counted, and an uncounted suite is not a pass\n' "$FXCOUNT_JUDGE"; return 1; }
   sp="$(bash "$FXCOUNT_JUDGE" --self-probe 2>&1)" || { printf '%s\n   the invocation judge'"'"'s self-probe is red: no fixture is judged by a judge that cannot fire\n' "$sp"; return 1; }
+  idc="$(bash "$FXCOUNT_JUDGE" --identity-check 2>&1)" || { printf '%s\n' "$idc"; return 1; }
+  fmt="$(printf '%s\n' "$idc" | awk '$1 == "judge" && $2 == "identity" && $3 ~ /^f[0-9]+$/ { print $3; exit }')"
+  [ -n "$fmt" ] || { printf '   the invocation judge printed no format: %s\n' "$idc"; return 1; }
   run="$(mktemp -d "${TMPDIR:-/tmp}/fxcount.XXXXXX")" && mkdir "$run/log" || return 1
   FXCOUNT_RC="$(bash "$FXCOUNT_JUDGE" --gen-rc "$run")" && [ -s "$FXCOUNT_RC" ] || { printf '   the invocation judge did not generate its rc file into %s\n' "$run"; return 1; }
   FXCOUNT_DIR="$run/log"
-  # The key's population is every file whose bytes change a judge verdict that no fixture's own content key holds:
-  # the judge, the rc, and the H5 allowlist beside the judge (J5 exempts its rows). An absent allowlist exempts
-  # nothing, so it hashes a framed sentinel distinct from an empty or present one, never an empty string.
-  allow="${FXCOUNT_JUDGE%/*}/fixture-matrix-allowlist.txt"
-  vk="$({ cat "$FXCOUNT_JUDGE" "$FXCOUNT_RC" || exit 1
-          if [ -f "$allow" ]; then printf '\n#fxcount-allowlist-present\n'; cat "$allow" || exit 1
-          else printf '\n#fxcount-allowlist-ABSENT\n'; fi; } | shasum -a 256 | cut -c1-12)" \
-    || { printf '   could not read the judge, the rc or %s into a counted-store key\n' "$allow"; return 1; }
-  case "$vk" in *[!0-9a-f]*|'') printf '   could not hash the judge, the rc and the allowlist into a counted-store key\n'; return 1 ;; esac
+  FXCOUNT_KEYROWS="$run/keyrows"
+  bash "$FXCOUNT_JUDGE" --key-rows "$PWD" > "$FXCOUNT_KEYROWS" || { printf '   the invocation judge could not write its per-fixture key rows\n'; return 1; }
+  vk="$(bash "$FXCOUNT_JUDGE" --store-key)"; vk="${vk#counted-}"
+  case "$vk" in *[!0-9a-f]*|'') printf '   the invocation judge printed no counted-store key\n'; return 1 ;; esac
   [ "${#vk}" -eq 12 ] || return 1
-  AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}/counted-$vk"
+  base="${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}"
+  AI_DLC_VERDICT_STORE="$base/counted-$vk"
   export FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE AI_DLC_VERDICT_STORE
-  printf '   %s\n   counting into %s; verdict store %s\n' "$(printf '%s\n' "$sp" | tail -1)" "$FXCOUNT_DIR" "$AI_DLC_VERDICT_STORE"
+  FXCOUNT_LEGACY_STORE=""; FXCOUNT_LEGACY_OK="$run/legacy.ok"; : > "$FXCOUNT_LEGACY_OK"
+  read -r lv lj la lf <<EOF
+$fxcount_legacy
+EOF
+  # The pin binds itself: the legacy vk is recomputed by the whole-judge formula that named it (the judge blob, the rc
+  # that blob generates, the framed allowlist blob) and must equal lv, else legacy lookup is OFF.
+  if [ "$lf" = "$fmt" ] && git cat-file blob "$la" > "$run/legacy.allow" 2>/dev/null \
+    && git cat-file blob "$lj" > "$run/legacy.judge" 2>/dev/null \
+    && [ "$({ cat "$run/legacy.judge" "$(bash "$run/legacy.judge" --gen-rc "$run/legacy")" && printf '\n#fxcount-allowlist-present\n' && cat "$run/legacy.allow"; } 2>/dev/null | shasum -a 256 | cut -c1-12)" = "$lv" ] \
+    && bash "$FXCOUNT_JUDGE" --legacy-ok "$run/legacy.allow" "$FXCOUNT_KEYROWS" "$lf" > "$FXCOUNT_LEGACY_OK"; then
+    FXCOUNT_LEGACY_STORE="$base/counted-$lv"
+  else : > "$FXCOUNT_LEGACY_OK"; fi
+  export FXCOUNT_KEYROWS FXCOUNT_LEGACY_STORE FXCOUNT_LEGACY_OK
+  printf '   %s\n   %s\n   counting into %s; verdict store %s\n' "$(printf '%s\n' "$sp" | tail -1)" "$(printf '%s\n' "$idc" | tail -1)" "$FXCOUNT_DIR" "$AI_DLC_VERDICT_STORE"
+  if [ -n "$FXCOUNT_LEGACY_STORE" ]; then
+    printf '   legacy counted store %s: %s of %s fixture(s) eligible\n' "$FXCOUNT_LEGACY_STORE" "$(awk 'END { print NR }' "$FXCOUNT_LEGACY_OK")" "$(awk 'END { print NR }' "$FXCOUNT_KEYROWS")"
+  else
+    printf '   legacy counted store OFF (format %s against %s, a blob unreadable, or the pin does not recompute to %s)\n' "$fmt" "$lf" "$lv"
+  fi
 }
 step "invocation counter armed (scripts/validate-fixture-invocations.sh)" fxcount_arm
 
@@ -3602,6 +3785,16 @@ step "invocation counter armed (scripts/validate-fixture-invocations.sh)" fxcoun
 step "fixture in-process cells, static half (scripts/validate-fixture-inprocess.sh; grammar only)" \
   bash scripts/validate-fixture-inprocess.sh
 
+# 2g. THE WHOLE-ROW RATCHET (BL-1052). No new inputs.decl line declares a whole shared program or a whole directory:
+#     docs/inputs-decl-whole-rows.tsv lists the ones that exist and may only shrink against origin/main. Distribution
+#     hook only, outside FIXTURE_POOL. The push-time half is readset_invalidation_guard inside the pool.
+#     A tree without the script (a fixture world running this hook) is a named SKIP, not a red.
+inputs_decl_ratchet() {
+  [ -f scripts/invalidation-guard.sh ] || { printf '   SKIP  scripts/invalidation-guard.sh absent: not the distribution tree\n'; return 0; }
+  bash scripts/invalidation-guard.sh --ratchet
+}
+step "inputs.decl whole-row ratchet (scripts/invalidation-guard.sh --ratchet)" inputs_decl_ratchet
+
 SUITE_SKIPPED=0
 SUITE_SKIP_CAUSE=""
 FAIL_BEFORE_SUITE="$fail"
@@ -3610,8 +3803,9 @@ step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 # 3b. PENDING, NEVER GREEN. The dynamic in-process arms (C1-C3, the stale allowlist row) run only inside a COUNTED
 #     run: validate-fixture-invocations.sh's fxc_judge, called by hermetic-run.sh. A fixture this push did not run
 #     counted carries a verdict from that judge only if it was skipped on a counted-store entry written under its
-#     CURRENT per-fixture key, the store being counted-<vk> (vk hashes the judge and the rc) and the key carrying the
-#     fixture's own `#inproc` row. Both other skip paths can skip WITHOUT one: the read-set key-record skip (a
+#     CURRENT per-fixture key, the store being counted-<vk> (vk hashes the judge's format) and the key carrying the
+#     fixture's own `#inproc` and `#judge` rows, or on an entry of the legacy counted store for a fixture
+#     FXCOUNT_LEGACY_OK lists. Both other skip paths can skip WITHOUT one: the read-set key-record skip (a
 #     `.git/ai-dlc-fixture-keys/<fx>.key` whose keys still hold -- the judge is no declared input of most fixtures, so
 #     a pass recorded under an older judge or none skips) and the whole-suite content-key SKIP. So this step, per
 #     declared fixture (inputs.decl, no .undeclarable) that is not an allowlist row:
@@ -3624,6 +3818,12 @@ step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 #     hook wrote, never the pool's temp dir, so it sits outside FIXTURE_POOL in this hook alone. Information, not a
 #     verdict: it returns 0, and the final banner names the count it could not vouch for.
 PENDING_N=0
+inproc_vs_hit() { # <store dir>: 0 when the entry named for the digest of $w/d holds exactly that digest input
+  local dig e
+  dig="$(shasum -a 256 < "$w/d" | cut -d' ' -f1)"; e="$1/$dig"
+  [ "${#dig}" -eq 64 ] && [ -f "$e" ] && [ "$(sed -n '1,2p' "$e" 2>/dev/null)" = "$(printf '#format k1\n#state ok')" ] \
+    && tail -n +3 "$e" > "$w/e" 2>/dev/null && cmp -s "$w/e" "$w/d"
+}
 inproc_pending_step() {
   local d fx ident="" store="" rec dig e n_dec=0 n_cnt=0 n_vs=0 n_al=0 pl="" w
   w="$(mktemp -d "${TMPDIR:-/tmp}/inproc-pending.XXXXXX")" || { printf '   could not make a scratch dir\n'; return 1; }
@@ -3642,11 +3842,12 @@ inproc_pending_step() {
     fi
     if [ -n "${FXCOUNT_DIR:-}" ] && [ -e "$FXCOUNT_DIR/$fx" ]; then n_cnt=$((n_cnt + 1)); continue; fi
     rec="$KEYS_DIR/$fx.key"
-    if [ -n "$store" ] && [ -n "$ident" ] && [ -f "$rec" ] && tail -n +4 "$rec" > "$w/rows" 2>/dev/null && [ -s "$w/rows" ] \
-      && readset_vs_input "$fx" "$ident" "$w/rows" > "$w/d" 2>/dev/null; then
-      dig="$(shasum -a 256 < "$w/d" | cut -d' ' -f1)"; e="$store/$dig"
-      if [ "${#dig}" -eq 64 ] && [ -f "$e" ] && [ "$(sed -n '1,2p' "$e" 2>/dev/null)" = "$(printf '#format k1\n#state ok')" ] \
-        && tail -n +3 "$e" > "$w/e" 2>/dev/null && cmp -s "$w/e" "$w/d"; then n_vs=$((n_vs + 1)); continue; fi
+    if [ -n "$store" ] && [ -n "$ident" ] && [ -f "$rec" ] && tail -n +4 "$rec" > "$w/rows" 2>/dev/null && [ -s "$w/rows" ]; then
+      if readset_vs_input "$fx" "$ident" "$w/rows" > "$w/d" 2>/dev/null && inproc_vs_hit "$store"; then n_vs=$((n_vs + 1)); continue; fi
+      # The legacy counted store (fxcount_arm): its entries carry no `#judge` row, and only a listed fixture reads it.
+      if [ -n "${FXCOUNT_LEGACY_STORE:-}" ] && [ -f "${FXCOUNT_LEGACY_OK:-}" ] && grep -qxF -- "$fx" "$FXCOUNT_LEGACY_OK" \
+        && ( unset FXCOUNT_JUDGE; readset_vs_input "$fx" "$ident" "$w/rows" ) > "$w/d" 2>/dev/null \
+        && inproc_vs_hit "$FXCOUNT_LEGACY_STORE/${store##*/}"; then n_vs=$((n_vs + 1)); continue; fi
     fi
     pl="$pl $fx"; PENDING_N=$((PENDING_N + 1))
   done

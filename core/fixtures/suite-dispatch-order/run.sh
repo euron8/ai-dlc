@@ -61,10 +61,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/suite-dispatch-order/matrix.sh"
 
-fails=0
-asserts=0
-ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+for _lib in report.sh world.sh hook-drive.sh; do [ -f "$HERE/../lib/$_lib" ] || { echo "FIXTURE ERROR: lib/$_lib not found beside $HERE" >&2; exit 2; }; done
+. "$HERE/../lib/report.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/report.sh"
+. "$HERE/../lib/world.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/world.sh"
+. "$HERE/../lib/hook-drive.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/hook-drive.sh"
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -91,7 +94,7 @@ seed() {                       # seed <dir> <hookfile>
   mkdir -p "$t/.githooks" "$t/tests/fixtures" || return 1
   cp "$h" "$t/.githooks/pre-push" || return 1
   chmod +x "$t/.githooks/pre-push"
-  git -C "$t" init -q >/dev/null 2>&1 || return 1
+  world_git init -q "$t" >/dev/null 2>&1 || return 1
   git -C "$t" config user.email f@x >/dev/null 2>&1
   git -C "$t" config user.name  f   >/dev/null 2>&1
   return 0
@@ -117,13 +120,13 @@ FX
 # NO_SKIP: every drive here re-runs one tree and expects the whole suite dispatched. Without it the
 # per-fixture key records the first green drive writes would skip every unit on the next one.
 drive() {                      # drive <tree> <outfile>  -> rc
-  ( cd "$1" && AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+  hook_drive "$1" "$2" AI_DLC_FIXTURE_NO_SKIP=1
 }
 
 # THE READ-SET SKIP ON, for the arms whose subject is a unit the skip did not dispatch while its
 # directory stayed on disk. The verdict store is a sibling of the tree, never `$HOME/.cache`.
 drive_skip() {                 # drive_skip <tree> <outfile>  -> rc
-  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+  hook_drive "$1" "$2" AI_DLC_VERDICT_STORE="$1.vs"
 }
 
 # A committed read-set map giving aaa, mmm and zzz one source file each, so changing src/mmm.txt
@@ -160,7 +163,7 @@ narrow_by_skip() {             # narrow_by_skip <tree> <label> <seed record>  ->
 # order, so the trace reads the schedule directly rather than inferring it from a wall
 # clock — the timing-sensitive assertion §7's gate warns about.
 drive1() {                     # drive1 <tree> <outfile>  -> rc
-  ( cd "$1" && AI_DLC_FIXTURE_JOBS=1 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+  hook_drive "$1" "$2" AI_DLC_FIXTURE_JOBS=1 AI_DLC_FIXTURE_NO_SKIP=1
 }
 
 SEEDREC="$WORK/seed.durations"
@@ -454,15 +457,4 @@ fi
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are emitted from inside a
 # conditional: an assertion that never executed prints nothing, and a short green report reads exactly
 # like a complete one. 11 shipped-hook arms + 1 control + 1 base + 8 kills + 8 twins + 1 plain-run arm.
-EXPECTED_ASSERTIONS=30
-if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
-  printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
-    "$asserts" "$EXPECTED_ASSERTIONS"
-  fails=$((fails+1))
-fi
-
-if [ "$fails" -ne 0 ]; then
-  printf '  suite-dispatch-order: %s FAILED\n' "$fails"
-  exit 1
-fi
-printf '  suite-dispatch-order: %s assertions, all green\n' "$asserts"
+report_end suite-dispatch-order 30
