@@ -39,9 +39,7 @@ ROLE="$(find_one team-roles/code-reviewer.md)"
 [ -n "$GATE" ] || { echo "FIXTURE ERROR: gate-validation.md not found in either layout" >&2; exit 2; }
 [ -n "$ROLE" ] || { echo "FIXTURE ERROR: code-reviewer.md not found in either layout" >&2; exit 2; }
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_bounds=0; B_live=0
 
@@ -585,6 +583,4 @@ nm-rename|the comparand renamed on BOTH sides keeps the join intact, so the arms
 GVNEARMISS
 
 echo
-if [ "$fails" -eq 0 ]; then echo "gate-verdict-grep-shape: PASS"; exit 0; fi
-echo "gate-verdict-grep-shape: $fails assertion(s) FAILED" >&2
-exit 1
+report_end gate-verdict-grep-shape

@@ -4,3 +4,4 @@
 # run.sh sources the preamble (unsets inherited GIT_* variables) before any git call.
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh

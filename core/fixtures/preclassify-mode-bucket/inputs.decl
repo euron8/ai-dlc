@@ -9,3 +9,4 @@ core/skills/ai-dlc-update/fixture-manifest.md
 # lib rows derived from run.sh:2,98 (preamble.sh, mutant.sh).
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

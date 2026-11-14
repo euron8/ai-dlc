@@ -48,9 +48,7 @@ echo "gate-adjudication-rotate: resolved guard   = ${GUARD}"
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$ROT")" && pwd)/$(basename "$ROT")"
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$GUARD")" && pwd)/$(basename "$GUARD")"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
 B_a=0; B_d=0; B_g=0; B_h1=0; B_j=0; B_j0=0; B_j5c=0; B_j9=0; B_j10=0; B_j11=0; B_j12=0; B_j13=0; B_j14=0; B_j15=0; B_l2=0; B_wv1=0; B_wv2=0
 
@@ -1169,8 +1167,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "gate-adjudication-rotate: PASS"
-else
-  echo "gate-adjudication-rotate: FAIL ($fails)" >&2; exit 1
-fi
+report_end gate-adjudication-rotate

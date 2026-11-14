@@ -88,9 +88,7 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # H2_A=1 only beside assertion A's ok: the C mutation is scored only when the unmutated drive
@@ -1214,15 +1212,4 @@ b351-star|1|inside other text"
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "h2-attest-scripts-dir: PASS"
-  echo "  --attest drives its fixture from an installed consumer layout; a wrong explicit"
-  echo "  --scripts is fatal; the pre-relocation derivation is one. --verify admits a"
-  echo "  transcribed line in a table cell and at column 1, refuses a non-token prefix,"
-  echo "  and reaches the CHANGED branch from either placement. A span quoted inside other"
-  echo "  text — the consumer's bullet, seven FAIL sentences — grants nothing and is LOCATED,"
-  echo "  and so does a table row under no header, no verdict column or a verdict not PASS."
-  exit 0
-fi
-echo "h2-attest-scripts-dir: FAIL ($fails assertion(s))" >&2
-exit 1
+report_end h2-attest-scripts-dir

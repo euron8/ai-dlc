@@ -291,19 +291,19 @@
 # MUTANT-MATRIX m988-w2 decides=wrap.rr-w-undecl twins=wrap.wr-ok
 # MUTANT-MATRIX m988-w3 decides=wrap.wr-pos twins=wrap.wr-adm
 # MUTANT-MATRIX m988-w4 decides=wrap.wr-subpath twins=wrap.wr-kpay
-# MUTANT-MATRIX m988-quote decides=wrap.wr-d4 twins=wrap.wr-d4w
+# MUTANT-MATRIX m988-quote decides=wrap.wr-d4q twins=wrap.wr-d4wq
 # MUTANT-MATRIX m988-loop decides=wrap.wr-term twins=wrap.wr-loop-twin
 # MUTANT-MATRIX m988-n2 decides=wrap.wr-prelude twins=wrap.wr-prelude-f
 # MUTANT-MATRIX m988-w6 decides=wrap.rr-w-kfoo twins=wrap.rr-w-shape
 # MUTANT-MATRIX m988-w6s decides=wrap.rr-w-shape twins=wrap.wr-receipt
 # MUTANT-MATRIX m988-d3 decides=wrap.wr-d3git twins=wrap.wr-d4
-# MUTANT-MATRIX m988-fb decides=wrap.wr-fallback twins=wrap.wr-artpy1
+# MUTANT-MATRIX m988-fb decides=wrap.wr-fbpipe twins=wrap.wr-artpy1
 # MUTANT-MATRIX m988-st2 decides=wrap.wr-artpy1 twins=wrap.wr-ph
 # MUTANT-MATRIX m988-prefix decides=wrap.wr-prefix twins=wrap.wr-fallback
 # MUTANT-MATRIX m988-arity decides=wrap.wr-arity twins=wrap.wr-slash
 # MUTANT-MATRIX m988-ph decides=wrap.wr-ph twins=wrap.wr-arity
 # MUTANT-MATRIX m988-slash decides=wrap.wr-slash twins=wrap.wr-artpy2
-# MUTANT-MATRIX m988-oper decides=wrap.wr-d4w twins=wrap.wr-n5rel
+# MUTANT-MATRIX m988-oper decides=wrap.wr-d4wq twins=wrap.wr-n5rel
 # MUTANT-MATRIX m988-1041 decides=run_rec.rr-nosum twins=run_rec.rr-sum-log
 # MUTANT-MATRIX M77 decides=worst.w-disc twins=worst.w-ok
 # MUTANT-MATRIX M78 decides=miss_ord.miss-ord twins=cs.partcite
@@ -1620,8 +1620,8 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # BL-988, THE DECLARED WRAPPER and RECORD = CHECK. m988-w2 matches any program to a declaration (W2), so an undeclared
   # wrapper is recorded, its sentinel written. m988-w3 reads only the `-*` tokens before the bare -- (W3), so a positional
   # there passes. m988-w4 reads a wrapper's payload flags-only, as the no-pytest branch reads every token (W4), so an
-  # undeclared payload sub-path passes. m988-quote drops the quote guard, so `'--junitxml=x>y'` reads as a redirect and
-  # the test file after it is never read. m988-loop advances the conventions line AFTER decl(), whose own match() reset
+  # undeclared payload sub-path passes. m988-quote drops the quote guard, so `'--deselect=x>y'` reads as a redirect (and is
+  # skipped with it) instead of as the deselect it is. m988-loop advances the conventions line AFTER decl(), whose own match() reset
   # RSTART and RLENGTH: the non-consuming loop an earlier draft shipped, ended by wr_ask's CPU bound (SIGXCPU).
   # m988-n2 restores RUN-SHAPE's refusal of a declared wrapper outside its declaration, so --prelude beside a count is
   # no run. m988-w6 removes --record-run's pre-check (its RUN-FILTER ask answers 0 unasked), so a -k run is recorded;
@@ -1634,8 +1634,8 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   CS_ONLY=wr-subpath mut_run m988-w4 record-only-diff.sh "        ok\$'\\n'*) rf_a=\"\${RW#ok\$'\\n'}\" ;;" \
     "        ok\$'\\n'*) rf_a=\"\$(printf '%s' \"\${RW#ok\$'\\n'}\" | awk '/^-/ && \$0 != \"-m\" && \$0 != \"-c\"')\" ;;" \
     wrap "wr-subpath{rc=0" "W4 reading a wrapper's payload flags-only, as the all-branch reads"
-  CS_ONLY=wr-d4 mut_run m988-quote record-only-diff.sh "        case \"\$w\" in \\'*|\\\"*) ;; '|'|" "        case \"\$w\" in '|'|" \
-    wrap "wr-d4{rc=0" "rf_args reading a quoted token as a shell operator"
+  CS_ONLY=wr-d4q mut_run m988-quote record-only-diff.sh "        case \"\$w\" in \\'*|\\\"*) ;; '|'|" "        case \"\$w\" in '|'|" \
+    wrap "wr-d4q{rc=0" "rf_args reading a quoted token as a shell operator"
   CS_ONLY=wr-term mut_run m988-loop record-only-diff.sh 'line = substr(line, RSTART + RLENGTH); decl(sp) }' 'decl(sp); line = substr(line, RSTART + RLENGTH) }' \
     wrap "wr-term{rc=1 [" "the conventions-line loop advancing after decl() clobbered RSTART and RLENGTH"
   CS_ONLY=wr-prelude mut_run m988-n2 record-only-diff.sh "      case \"\$RW\" in ok|ok\$'\\n'*) exit 0 ;; esac" "      case \"\$RW\" in ok|ok\$'\\n'*) exit 0 ;; x*) exit 1 ;; esac" \
@@ -1647,12 +1647,12 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     wrap "rr-w-shape{rc=2 sentinel=absent" "--record-run's pre-check also applying RUN-SHAPE"
   # m988-d3 drops the rule that a declaration's placeholders after -- name pytest, so `git checkout -- <file>` declares
   # git. m988-fb removes the plain reading's claim on a span with a pytest token before the payload, so a filtered
-  # pytest run ahead of a wrapper run on one line passes. m988-prefix matches an option by prefix, so `--pyth` is --python.
+  # pytest run piped into a wrapper run passes (a `;` chain step is read on its own, so the pipe is the deciding case). m988-prefix matches an option by prefix, so `--pyth` is --python.
   CS_ONLY=wr-d3git mut_run m988-d3 record-only-diff.sh 'if (!nt || !py) return' 'if (!nt) return' \
     wrap "wr-d3git{rc=0" "a placeholder-only span declaring a wrapper whether or not a placeholder names pytest"
-  CS_ONLY=wr-fallback mut_run m988-fb record-only-diff.sh '        if (st == 0 && t ~ /^(.*\/)?(pytest|py\.test)$/) { print "none"; exit 0 }' \
+  CS_ONLY=wr-fbpipe mut_run m988-fb record-only-diff.sh '        if (st == 0 && t ~ /^(.*\/)?(pytest|py\.test)$/) { print "none"; exit 0 }' \
     '        if (0 && st == 0 && t ~ /^(.*\/)?(pytest|py\.test)$/) { print "none"; exit 0 }' \
-    wrap "wr-fallback{rc=0" "a pytest token before the payload left to the wrapper reading"
+    wrap "wr-fbpipe{rc=0" "a pytest token before the payload left to the wrapper reading"
   # m988-st2 widens that claim to every token before the payload (`st < 2`, the shipped defect), so a declared option's
   # VALUE ending in pytest (`--artifact /x/pytest`) hands the span to the plain reading and the undeclared option passes.
   CS_ONLY=wr-artpy1 mut_run m988-st2 record-only-diff.sh '        if (st == 0 && t ~ /^(.*\/)?(pytest|py\.test)$/) { print "none"; exit 0 }' \
@@ -1665,15 +1665,15 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # m988-ph drops the rule that every token after a declaration's -- is a placeholder, so `-- --watch <pytest args>`
   # declares scripts/w2.py. m988-slash matches an absolute program by a bare suffix, so /x/evilscripts/w.py is
   # scripts/w.py. m988-oper drops the quote guard of the wrapper reader's own operator test, so a wrapper payload's
-  # `'--junitxml=x>y'` ends the payload and the test file after it is never read.
+  # `'--deselect=x>y'` is skipped as a redirection instead of read as the deselect it is.
   CS_ONLY=wr-arity mut_run m988-arity record-only-diff.sh '        o = t; ar = 0' '        o = t; ar = 1' \
     wrap "wr-arity{rc=0" "every declared wrapper option read as taking a value"
   CS_ONLY=wr-ph mut_run m988-ph record-only-diff.sh 'nt++; if (!ph(t)) return;' 'nt++;' \
     wrap "wr-ph{rc=0" "a declaration's tokens after -- not held to placeholders"
   CS_ONLY=wr-slash mut_run m988-slash record-only-diff.sh 'substr(r, length(r) - length(d)) == "/" d' 'substr(r, length(r) - length(d) + 1) == d' \
     wrap "wr-slash{rc=0" "an absolute wrapper program matched by a bare suffix, not by path components"
-  CS_ONLY=wr-d4w mut_run m988-oper record-only-diff.sh 'function oper(t) { if (quoted(t)) return 0; return' 'function oper(t) { return' \
-    wrap "wr-d4w{rc=0" "the wrapper reader taking a quoted token for a shell operator"
+  CS_ONLY=wr-d4wq mut_run m988-oper record-only-diff.sh 'function oper(t) { if (quoted(t)) return 0; return' 'function oper(t) { return' \
+    wrap "wr-d4wq{rc=0" "the wrapper reader taking a quoted token for a shell operator"
   CS_ONLY=rr-nosum mut_run m988-1041 merge-review-shards.sh '    || refuse "--record-run: the run exited $rr_rc_ and its output' '    || : "--record-run: the run exited $rr_rc_ and its output' \
     run_rec "rr-nosum{rc=0" "a run whose output carries no summary line recorded"
   # BL-918, THE FOUR CLAIMS (header: WHAT IS AT STAKE), one mutant each in the merge. M77 the last shard's verdict

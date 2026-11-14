@@ -140,9 +140,8 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 EXPECTED_ASSERTIONS=78
-fails=0; made=0
-ok()   { printf '  ok    %s\n' "$1"; made=$((made+1)); }
-bad()  { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 show() { sed 's/^/        /' <<<"$1"; }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -1483,9 +1482,4 @@ fi
 echo ""
 
 echo ""
-if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "upstream-routing: FAIL — $made assertions ran, $EXPECTED_ASSERTIONS were written. One did not execute at all, which is not the same as one that passed."
-  exit 1
-fi
-if [ "$fails" -eq 0 ]; then echo "upstream-routing: PASS ($made assertions)"; exit 0; fi
-echo "upstream-routing: FAIL ($fails of $made)"; exit 1
+report_end upstream-routing "$EXPECTED_ASSERTIONS"

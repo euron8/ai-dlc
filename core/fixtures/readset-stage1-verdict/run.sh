@@ -149,9 +149,8 @@ hang_release() { [ -p "$HANG" ] || return 0; exec 9<>"$HANG"; exec 9>&-; }
 # only hang_release, after every cell, ends it. KILL cannot be caught, so it ends the reader at any point.
 trap 'reap; hang_release' EXIT
 
-FAILS=0; ASSERTS=0
-ok()     { printf '  ok    %s\n' "$1"; ASSERTS=$((ASSERTS + 1)); }
-bad()    { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); ASSERTS=$((ASSERTS + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { echo "readset-stage1-verdict: FIXTURE BROKEN: $*" >&2; echo "  (work kept at $WORK)" >&2; exit 2; }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -1427,10 +1426,6 @@ else
 fi
 
 echo
-if [ "$FAILS" -ne 0 ]; then
-  echo "readset-stage1-verdict: $FAILS of $ASSERTS FAILED (work kept at $WORK)"
-  exit 1
-fi
-case "$WORK" in */readset-stage1-fx.??????) rm -rf "$WORK" ;; esac
-echo "readset-stage1-verdict: all $ASSERTS assertions hold"
-exit 0
+if [ "$fails" -ne 0 ]; then echo "readset-stage1-verdict: work kept at $WORK"
+else case "$WORK" in */readset-stage1-fx.??????) rm -rf "$WORK" ;; esac; fi
+report_end readset-stage1-verdict

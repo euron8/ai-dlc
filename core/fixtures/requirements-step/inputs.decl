@@ -26,3 +26,4 @@ core/schemas/harness-origin.json
 # its pause-routing declaration beside itself.
 !core/hooks/ai-dlc-answer-capture.sh
 core/schemas/pause-routing.json
+core/fixtures/lib/report.sh

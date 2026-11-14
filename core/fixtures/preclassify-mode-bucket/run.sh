@@ -92,9 +92,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/pc-mode.XXXXXX")" || { echo "FIXTURE ERROR: m
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # PM_U=1 only beside the --untangle cells' own ok: a BL-100 mutant is scored only when the
@@ -818,9 +816,4 @@ PY
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "preclassify-mode-bucket: PASS"
-  exit 0
-fi
-echo "preclassify-mode-bucket: FAIL ($fails assertion(s))"
-exit 1
+report_end preclassify-mode-bucket

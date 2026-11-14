@@ -13,3 +13,4 @@ core/fixtures/check-h1-recursion/
 core/fixtures/check-manifest-bypass/
 # validate-h2-attestation.sh:63 only tests that core/skills/ai-dlc exists (-d); one stable file makes the directory exist in the sandbox.
 core/skills/ai-dlc/SKILL.md
+core/fixtures/lib/report.sh

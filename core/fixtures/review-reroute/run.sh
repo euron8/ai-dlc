@@ -161,9 +161,7 @@ grep -q '^Class: ' "$QR/tpl/core/team-roles/qa.md" && ! grep -q '^Class:' "$QR/n
   || { echo "FIXTURE BROKEN: the tpl root's qa.md carries no Class template, or the none root's still carries one" >&2; exit 2; }
 rr_qserial "$W/qserial-evidence.md" EVIDENCE; rr_qserial "$W/qserial-foo.md" FOO
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -454,5 +452,4 @@ if [ "$MATRIX" = 1 ]; then echo "review-reroute: MATRIX measured, $MCELLS cells 
 # A plain run drives only deciding and twin cells: no matrix-only cell ran, and the cell count is exactly the 41 named by the MUTANT-MATRIX header (deciding arms plus twins).
 if [ "$MCELLS" -eq 0 ] && [ "$CELLS" -eq 41 ]; then ok "MODE PUSH: no matrix-only cell ran; $CELLS mutant cells driven (deciding arms plus twins)"
 else bad "MODE PUSH: a plain run drove $MCELLS matrix-only cell(s) and $CELLS mutant cells (want 0 and 41)"; fi
-if [ "$fails" -eq 0 ]; then echo "review-reroute: PASS"; exit 0; fi
-echo "review-reroute: $fails FAILED"; exit 1
+report_end review-reroute

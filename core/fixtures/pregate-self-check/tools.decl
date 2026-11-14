@@ -13,8 +13,11 @@ head
 mkdir
 mktemp
 mv
+paste
 rm
 sed
+sort
 tail
 touch
 tr
+xargs

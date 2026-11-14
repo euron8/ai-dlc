@@ -55,9 +55,7 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_7u=0
 
@@ -356,9 +354,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "extract-push-flag-decision: PASS"
-  exit 0
-fi
-echo "extract-push-flag-decision: $fails FAILED" >&2
-exit 1
+report_end extract-push-flag-decision

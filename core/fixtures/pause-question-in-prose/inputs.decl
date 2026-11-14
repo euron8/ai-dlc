@@ -3,3 +3,4 @@
 !core/hooks/ai-dlc-continue.sh
 !core/hooks/ai-dlc-handoff-pending.sh
 !core/schemas/pause-routing.json
+core/fixtures/lib/report.sh

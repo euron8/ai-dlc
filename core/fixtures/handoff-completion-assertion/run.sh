@@ -153,9 +153,7 @@ SCHEMA="$(pick "$HERE/../../schemas/pause-routing.json" \
                "$HERE/../../../core/schemas/pause-routing.json" \
                "$HERE/../../../.claude/schemas/pause-routing.json")"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1"; echo ""; echo "handoff-completion-assertion: FIXTURE BROKEN" >&2; exit 2; }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
@@ -3055,5 +3053,4 @@ esac
 
 rm -rf "$ROOT"
 echo ""
-[ "$fails" -eq 0 ] && { echo "handoff-completion-assertion: PASS"; exit 0; }
-echo "handoff-completion-assertion: FAIL ($fails)"; exit 1
+report_end handoff-completion-assertion

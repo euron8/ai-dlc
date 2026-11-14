@@ -59,9 +59,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # this file resolves nothing but itself.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -468,9 +466,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "story-corpus-sprint-slot: PASS"
-  exit 0
-fi
-echo "story-corpus-sprint-slot: $fails assertion(s) FAILED" >&2
-exit 1
+report_end story-corpus-sprint-slot

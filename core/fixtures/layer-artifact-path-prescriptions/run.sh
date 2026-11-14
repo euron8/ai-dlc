@@ -44,9 +44,7 @@ ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$ROOT"' EXIT
 CONS="$ROOT/consumer"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_lappPlace=0; B_lappSlot=0; B_lappStory=0
 
@@ -214,9 +212,4 @@ fi
 cp "$ROOT/schema.bak" "$SCHEMA"
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "layer-artifact-path-prescriptions: PASS"
-  exit 0
-fi
-echo "layer-artifact-path-prescriptions: FAIL ($fails)"
-exit 1
+report_end layer-artifact-path-prescriptions

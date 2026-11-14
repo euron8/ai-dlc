@@ -16,9 +16,7 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 echo "HERMETIC-CONSUMED $RV"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_lruGood=0; B_lruNearmiss=0; B_lruShapes=0
 
@@ -531,8 +529,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "ledger-reverify-unfalsifiable: PASS"
-else
-  echo "ledger-reverify-unfalsifiable: FAIL ($fails)" >&2; exit 1
-fi
+report_end ledger-reverify-unfalsifiable

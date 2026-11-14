@@ -187,8 +187,10 @@ printf '\nexit $fail\n' >> "$W/prefix.sh"
 bash -n "$W/prefix.sh" 2> "$W/prefix.err" || { printf 'pregate-self-check: the extracted hook prefix does not parse: %s\n' "$(head -1 "$W/prefix.err")" >&2; exit 2; }
 ns="$(grep -cE '^[[:space:]]*step "' "$W/prefix.sh")" || ns=0
 [ "$ns" -ge 1 ] || { printf 'pregate-self-check: no step calls above the fixture suite in %s\n' "$HOOK" >&2; exit 2; }
+# No store override (BL-1066): the prefix runs under the caller's verdict store, as a push runs it. No step above
+# the cut writes a verdict (hermetic-run.sh is the store's only writer and runs below it), so this writes none.
 arm_start
-AI_DLC_VERDICT_STORE="$W/vs" bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1
+bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1
 a_rc=$?
 arm_took
 # One verdict per step: the hook prints "── <name>" then, after the step's own output, "   PASS" or "   FAIL".
@@ -242,9 +244,9 @@ fi
 # ON A CLEAN TREE THE PASS IS THE PUSH'S OWN (BL-1064): the run goes through this script's own tree's
 # scripts/seed-verdict-store.sh from $ROOT, which arms with the hook's fxcount_arm (extracted from $ROOT's hook,
 # never restated) and so records the pass in the counted store the push reads; the push then skips the fixture.
-# On a dirty tree (seed refuses one) the run is armed here with the judge's rc in this run's scratch dir and a
-# scratch verdict store, so nothing reaches the shared store; the judge's self-probe is not repeated on that path:
-# section a runs the hook's arming step, which runs it.
+# ON A DIRTY TREE THE SAME SEED RUNS WITH --dirty-ok (BL-1066): hermetic-run.sh copies the sandbox from the work tree
+# and keys the entry on that same work tree, so the pass lands in the counted store under the content that ran, and
+# only a push of a tree holding the same bytes reuses it.
 printf '== d. validator fork budget (core/fixtures/validator-fork-budget, counted, about 40s)\n'
 FB="$ROOT/core/fixtures/validator-fork-budget/run.sh"
 HR="$ROOT/core/scripts/hermetic-run.sh"
@@ -255,26 +257,19 @@ for f in "$FB" "$HR" "$FXJ" "$SEED"; do
 done
 if [ -n "$PG_START" ] && [ "$PG_START" = "${PG_START%%
 *}" ]; then
-  mkdir -p "$W/fx/keep" || exit 2
-  arm_start
-  bash "$SEED" --keep "$W/fx/keep" validator-fork-budget > "$W/d.seed" 2>&1
-  arm_took
-  d_rc="$(sed -n 's/^validator-fork-budget rc=\([0-9][0-9]*\)$/\1/p' "$W/d.seed")"
-  [ -n "$d_rc" ] || d_rc=2
-  if [ -f "$W/fx/keep/validator-fork-budget.out" ]; then cp "$W/fx/keep/validator-fork-budget.out" "$W/d.out" || exit 2
-  else cp "$W/d.seed" "$W/d.out" || exit 2; fi
-  printf '   %s (clean tree: a pass is the push'"'"'s own)\n' "$(sed -n 's/^counted store: /counted store /p' "$W/d.seed")"
+  d_dok=""; d_tree="clean tree: a pass is the push's own"
 else
-  mkdir -p "$W/fx/log" "$W/fx/vs" || exit 2
-  FXRC="$(bash "$FXJ" --gen-rc "$W/fx")" && [ -s "$FXRC" ] \
-    || { printf 'pregate-self-check: the invocation judge %s did not generate its rc into %s\n' "$FXJ" "$W/fx" >&2; exit 2; }
-  arm_start
-  FXCOUNT_RC="$FXRC" FXCOUNT_DIR="$W/fx/log" FXCOUNT_JUDGE="$FXJ" AI_DLC_VERDICT_STORE="$W/fx/vs" \
-    bash "$HR" --root "$ROOT" validator-fork-budget > "$W/d.out" 2>&1 < /dev/null
-  d_rc=$?
-  arm_took
-  printf '   scratch store (dirty tree: the push cannot reuse this run)\n'
+  d_dok="--dirty-ok"; d_tree="dirty tree: a pass is keyed on the work tree's bytes"
 fi
+mkdir -p "$W/fx/keep" || exit 2
+arm_start
+bash "$SEED" --keep "$W/fx/keep" ${d_dok:+"$d_dok"} validator-fork-budget > "$W/d.seed" 2>&1
+arm_took
+d_rc="$(sed -n 's/^validator-fork-budget rc=\([0-9][0-9]*\)$/\1/p' "$W/d.seed")"
+[ -n "$d_rc" ] || d_rc=2
+if [ -f "$W/fx/keep/validator-fork-budget.out" ]; then cp "$W/fx/keep/validator-fork-budget.out" "$W/d.out" || exit 2
+else cp "$W/d.seed" "$W/d.out" || exit 2; fi
+printf '   %s (%s)\n' "$(sed -n 's/^counted store: /counted store /p' "$W/d.seed")" "$d_tree"
 d_judged="$(grep -c '^validator-fork-budget: invocation budget ok: ' "$W/d.out")" || d_judged=0
 if [ "$d_rc" -eq 0 ] && [ "$d_judged" -eq 1 ]; then
   printf '   ok: %s\n' "$(grep '^validator-fork-budget: invocation budget ok: ' "$W/d.out")"
@@ -290,6 +285,128 @@ else
   printf '   FAIL (exit %s):\n' "$d_rc"
   grep -Ev '^HERMETIC-CONSUMED|^ *ok ' "$W/d.out" | tail -12 | sed 's/^/     /'
   note_fail "d:fork-budget"
+fi
+
+# --- (e) the hook-driving fixtures, when the diff touches a hook or a script a hook names (BL-1069) -------------
+# A change to either pre-push hook, or to a script either hook names, can break a fixture world that drives the
+# hook, and the gate finds that only in the bundle. So when the diff from the merge-base with <base> to the work
+# tree touches one of them, every hook-driving fixture runs here, through this tree's seed-verdict-store.sh at
+# AI_DLC_FIXTURE_JOBS (the hook's default 12), and any red is a finding. Every pass lands in the counted store.
+#   TRIGGER: .githooks/pre-push, core/git-hooks/pre-push, and every tracked path under scripts/ or core/scripts/
+#     that either hook of $ROOT names (core/scripts/<x> also when named as the consumer's scripts/ai-dlc/<x>). A
+#     name is a whole path: a letter, digit, `_`, `.` or `-` on either side, or a `/` after it, makes it part of a
+#     longer name; a `/` before it is a directory prefix (`$ROOT/`). Its self-probe runs first.
+#   SET: the fixtures whose shell files name a pre-push hook, plus backlog-real-ledger and hermetic-runner, kept
+#     only where core/fixtures/<name>/run.sh exists; then, until a round adds none, every fixture whose shell files
+#     name `<member>/run.sh` (a wrapper drives the hook through another fixture's run.sh).
+printf '== e. hook-driving fixtures (when the diff touches a pre-push hook or a script one names)\n'
+E_AWK='FNR == NR { C[++n] = $0; next }
+{ T = T $0 "\n" }
+function named(t, p,   s, k, b, a) {
+  s = t
+  while ((k = index(s, p)) > 0) {
+    b = (k > 1) ? substr(s, k - 1, 1) : ""; a = substr(s, k + length(p), 1)
+    if (b !~ /[A-Za-z0-9_.-]/ && a !~ /[A-Za-z0-9_.-]/) return 1
+    s = substr(s, k + 1)
+  }
+  return 0
+}
+END { for (i = 1; i <= n; i++) { p = C[i]; q = p; if (sub(/^core\/scripts\//, "scripts/ai-dlc/", q) == 0) q = ""
+        if (named(T, p) || (q != "" && named(T, q))) print p } }'
+mkdir -p "$W/e/keep" || exit 2
+printf '%s\n' core/scripts/x.sh core/scripts/y.sh core/scripts/z.sh core/scripts/w.sh > "$W/e/probe.cand"
+printf '%s\n' 'bash core/scripts/x.sh' '"$ROOT/scripts/ai-dlc/y.sh" --check' 'cat core/scripts/z.shx' 'bash xcore/scripts/w.sh' > "$W/e/probe.hook"
+e_probe="$(awk "$E_AWK" "$W/e/probe.cand" "$W/e/probe.hook" | tr '\n' ' ')"
+if [ "$e_probe" != "core/scripts/x.sh core/scripts/y.sh " ]; then
+  printf '   cannot run: the path matcher read "%s" on its seeded probe, expected "core/scripts/x.sh core/scripts/y.sh " -- it cannot be trusted on the hooks\n' "$e_probe" >&2
+  exit 2
+fi
+E_MB="$(git merge-base HEAD "$BASE" 2>/dev/null)" \
+  || { printf 'pregate-self-check: no merge-base between HEAD and %s, so the diff section e reads is unknown\n' "$BASE" >&2; exit 2; }
+git diff --name-only "$E_MB" -- > "$W/e/changed" 2> "$W/e/err" \
+  || { printf 'pregate-self-check: git diff against %s failed: %s\n' "$E_MB" "$(head -1 "$W/e/err")" >&2; exit 2; }
+git ls-files -- scripts core/scripts > "$W/e/cand" || exit 2
+: > "$W/e/hooks"
+for h in .githooks/pre-push core/git-hooks/pre-push; do [ -f "$ROOT/$h" ] && printf '%s\n' "$h" >> "$W/e/hooks"; done
+if [ -s "$W/e/cand" ]; then
+  ( cd "$ROOT" && awk "$E_AWK" "$W/e/cand" $(cat "$W/e/hooks") ) > "$W/e/named" || exit 2
+else : > "$W/e/named"; fi
+e_hits="$(cat "$W/e/hooks" "$W/e/named" | awk 'NR == FNR { T[$0] = 1; next } ($0 in T)' - "$W/e/changed" | tr '\n' ' ')"
+if [ -z "$e_hits" ]; then
+  printf '   SKIPPED: the diff from %s touches neither pre-push hook nor any of the %s script(s) they name\n' \
+    "$(git rev-parse --short "$E_MB")" "$(awk 'END { print NR }' "$W/e/named")"
+else
+  printf '   triggered by: %s\n' "$e_hits"
+  git ls-files -- 'core/fixtures/*/run.sh' > "$W/e/runs" || exit 2
+  e_ctl="$(git grep -l -e '' -- 'core/fixtures/*/run.sh' | awk 'END { print NR }')"
+  if [ ! -s "$W/e/runs" ] || [ "$e_ctl" -ne "$(awk 'END { print NR }' "$W/e/runs")" ]; then
+    printf '   cannot run: git grep over core/fixtures/*/run.sh read %s file(s), git lists %s\n' "$e_ctl" "$(awk 'END { print NR }' "$W/e/runs")" >&2
+    exit 2
+  fi
+  { git grep -l -E 'githooks/pre-push|git-hooks/pre-push' -- 'core/fixtures/*/run.sh' 'core/fixtures/*/*.sh' | awk -F/ '{ print $3 }'
+    printf '%s\n' backlog-real-ledger hermetic-runner
+  } | sort -u | while IFS= read -r n; do [ -f "core/fixtures/$n/run.sh" ] && printf '%s\n' "$n"; done > "$W/e/set"
+  e_base="$(awk 'END { print NR }' "$W/e/set")"
+  [ "$e_base" -ge 1 ] || { printf '   cannot run: no fixture names a pre-push hook\n' >&2; exit 2; }
+  # The wrapper pattern's self-probe, both directions: it must flag the two spellings a wrapper uses and pass over a
+  # longer name and a different file.
+  printf '%s\n' 'IMPL="$HERE/../m-1/run.sh"' '. "$EDIR/../m-1/run.sh"' 'x core/fixtures/m-1/run.sh' 'IMPL="$HERE/../m-1x/run.sh"' 'cat ../m-1/seed.sh' > "$W/e/probe.wrap"
+  e_wp="$(grep -nE "(\.\./|core/fixtures/)(m-1)/run\.sh" "$W/e/probe.wrap" | cut -d: -f1 | tr '\n' ' ')"
+  [ "$e_wp" = "1 2 3 " ] || { printf '   cannot run: the wrapper pattern read lines "%s" of its seeded probe, expected "1 2 3 "\n' "$e_wp" >&2; exit 2; }
+  e_rounds=0
+  while :; do
+    e_pat="$(sed 's/[.]/\\./g' "$W/e/set" | paste -sd '|' -)"
+    git grep -l -E "(\.\./|core/fixtures/)(${e_pat})/run\.sh" -- 'core/fixtures/*/*.sh' | awk -F/ '{ print $3 }' \
+      | sort -u | while IFS= read -r n; do [ -f "core/fixtures/$n/run.sh" ] && printf '%s\n' "$n"; done > "$W/e/wrap"
+    sort -u "$W/e/set" "$W/e/wrap" > "$W/e/next"
+    e_rounds=$((e_rounds + 1))
+    cmp -s "$W/e/next" "$W/e/set" && break
+    mv "$W/e/next" "$W/e/set" || exit 2
+  done
+  e_n="$(awk 'END { print NR }' "$W/e/set")"
+  E_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
+  printf '   %s fixture(s): %s naming a hook or named by the ruling, %s wrapper(s) in %s round(s); %s-way\n' \
+    "$e_n" "$e_base" "$((e_n - e_base))" "$e_rounds" "$E_JOBS"
+  # ONLY WHAT THE PUSH WOULD RUN: $ROOT's scripts/predict-push-set.sh decides with the hook's own composer which of
+  # the set lack a counted pass on their current key rows; the rest reuse theirs, as the push does. With no
+  # prediction the whole set runs, and the line says so.
+  E_PRED="$ROOT/scripts/predict-push-set.sh"
+  if [ -f "$E_PRED" ] && bash "$E_PRED" "$ROOT" "$W/e/pred" > "$W/e/pred.out" 2> "$W/e/pred.err" < /dev/null \
+     && grep -q '^RUN [0-9][0-9]*$' "$W/e/pred.out"; then
+    sed -n 's/^run //p' "$W/e/pred.out" | sort -u > "$W/e/predrun"
+    awk 'NR == FNR { R[$0] = 1; next } ($0 in R)' "$W/e/predrun" "$W/e/set" > "$W/e/torun"
+    e_k="$(awk 'END { print NR }' "$W/e/torun")"
+    printf '   predict-push-set.sh: %s of %s hold a counted pass on their current key rows (reused); %s to run\n' \
+      "$((e_n - e_k))" "$e_n" "$e_k"
+  else
+    cp "$W/e/set" "$W/e/torun" || exit 2
+    e_k="$e_n"
+    printf '   PREDICTION UNAVAILABLE (%s): running all %s\n' \
+      "$( [ -f "$E_PRED" ] && { head -1 "$W/e/pred.err" 2>/dev/null; true; } || echo "no $E_PRED")" "$e_n"
+  fi
+  arm_start
+  if [ "$e_k" -gt 0 ]; then
+    bash "$SEED" --keep "$W/e/keep" --jobs "$E_JOBS" ${d_dok:+"$d_dok"} $(cat "$W/e/torun") > "$W/e/seed" 2>&1
+    e_rc=$?
+  else
+    : > "$W/e/seed"; e_rc=0
+  fi
+  arm_took
+  e_red=""; e_rec=0
+  while IFS= read -r n; do
+    r="$(sed -n "s/^${n} rc=\([0-9][0-9]*\)\$/\1/p" "$W/e/seed")"
+    [ -n "$r" ] || { printf '   cannot run: seed-verdict-store.sh (exit %s) gave %s no rc:\n' "$e_rc" "$n" >&2; tail -5 "$W/e/seed" | sed 's/^/     /' >&2; exit 2; }
+    printf '     %s rc=%s\n' "$n" "$r"
+    [ "$r" = 0 ] || e_red="$e_red $n"
+    grep -q "^hermetic-run: ${n}: verdict recorded in " "$W/e/keep/$n.out" 2>/dev/null && e_rec=$((e_rec + 1))
+  done < "$W/e/torun"
+  if [ -n "$e_red" ]; then
+    printf '   FAIL: red:%s\n' "$e_red"
+    grep -vE '^[A-Za-z0-9._-]+ rc=[0-9]+$|^counted store: ' "$W/e/seed" | tail -20 | sed 's/^/     /'
+    note_fail "e:hook-fixtures"
+  else
+    printf '   ok: %s fixture(s) run green; %s pass(es) recorded in the counted store (%s)\n' "$e_k" "$e_rec" "$(sed -n 's/^counted store: //p' "$W/e/seed")"
+  fi
 fi
 
 printf '\n'

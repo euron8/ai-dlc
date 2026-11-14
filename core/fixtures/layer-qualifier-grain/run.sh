@@ -41,9 +41,7 @@ DIST="$ROOT/dist"; CONS="$ROOT/consumer"; BAD="$ROOT/bad-consumer"
 BASE="$(git -C "$DIST" rev-parse --short HEAD~1)"
 THEIRS="$(git -C "$DIST" rev-parse --short HEAD)"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 echo "layer-qualifier-grain:"
 [ "$MATRIX" = 1 ] && echo "MATRIX-MODE on"
@@ -352,9 +350,4 @@ if [ "$WANT_MATRIX" = 0 ]; then
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "layer-qualifier-grain: PASS"
-  exit 0
-fi
-echo "layer-qualifier-grain: $fails assertion(s) failed"
-exit 1
+report_end layer-qualifier-grain

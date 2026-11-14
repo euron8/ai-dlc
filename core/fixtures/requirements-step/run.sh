@@ -565,9 +565,7 @@ for cand in "$ROOT/core/scripts/validate-draft-stamps.sh" "$ROOT/scripts/ai-dlc/
   [ -f "$cand" ] && { DRAFTSTAMPS="$cand"; break; }
 done
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -1348,9 +1346,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "PASS  requirements-step: all arms hold."
-  exit 0
-fi
-echo "FAIL  requirements-step: $fails assertion(s) violated." >&2
-exit 1
+report_end requirements-step

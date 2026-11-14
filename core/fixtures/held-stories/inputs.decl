@@ -8,3 +8,4 @@
 core/skills/ai-dlc/steps/implementation.md
 core/hooks/ai-dlc-recover.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

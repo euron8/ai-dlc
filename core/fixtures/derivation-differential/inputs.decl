@@ -14,3 +14,4 @@ core/fixtures/lib/preamble.sh
 !core/fixtures/lib/mutant.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 !core/skills/ai-dlc-update/reconcile/template-sites.md
+core/fixtures/lib/report.sh

@@ -106,9 +106,7 @@ VALIDATOR="$(pick "$HERE/../../scripts/validate-artifact-derivations.sh" \
 # The REQUIRED input of inputs.decl: every assertion below drives this file.
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -2498,10 +2496,4 @@ else
 fi
 
 echo
-if [ "$fails" -gt 0 ]; then
-  echo "FAIL: $fails assertion(s) wrong."
-  exit 1
-fi
-echo "PASS: all assertions correct."
-exit 0
-
+report_end artifact-derivations

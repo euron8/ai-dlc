@@ -9,3 +9,5 @@ core/fixtures/lib/preamble.sh
 # The BL-1048 receipt copies the real store writer and its sibling into its world.
 core/scripts/core-paths.sh
 core/scripts/hermetic-run.sh
+core/fixtures/lib/hook-drive.sh
+core/fixtures/lib/report.sh

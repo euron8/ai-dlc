@@ -4,3 +4,4 @@ core/team-roles/code-reviewer.md
 core/fixtures/lib/matrix.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh

@@ -75,9 +75,7 @@ export AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/held-stories.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 NOW=1793200000
@@ -261,6 +259,4 @@ if [ "$MATRIX" = 0 ]; then
   if [ "$MX_FULL_RUNS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (MX_FULL_RUNS=0)"
   else bad "a plain run executed $MX_FULL_RUNS matrix-only cell(s)"; fi
 fi
-
-if [ "$fails" -eq 0 ]; then echo "held-stories: PASS"; exit 0; fi
-echo "held-stories: $fails FAILED"; exit 1
+report_end held-stories

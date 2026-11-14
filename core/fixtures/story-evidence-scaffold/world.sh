@@ -85,6 +85,125 @@ rv_line() { # <cell> -> the story line for that cell
     *) return 1 ;;
   esac
 }
+# --- BL-1016 RUN-FILTER worlds (rf_*) ---------------------------------------------------------------------------
+# The dev's Full-collection value is read by record-only-diff.sh RUN-FILTER, with the toplevel conventions file, once
+# it is accepted as a run. Values are the PRODUCER's text, never the reader's accept-set: rfs1 is graph s322 story
+# 1.3's record line (graph c6ebe5c96, _bmad-output/planning-artifacts/s322/stories/story-1-3-smoke-nav-button-count-
+# derived.md:144), rfs2/rfs2n story 1.8's (graph 613d4aa8d, .../story-1-8-xdist-crash-admission-controls.md:312), both
+# after `Full-collection run: ` and byte for byte. The conventions excerpts are graph's own lines: rf_conv decl is
+# docs/coding-conventions.md:833-841 at graph ed61de745 (the watchdog declaration; graph's file at 613d4aa8d declares
+# no wrapper, and no version declares `--docker`, so rfs2 adds `--prelude <prelude-file> --docker` before `--`, the
+# arity graph s322 1.1/1.2/1.5/1.8 spell them: `--prelude` one value, `--docker` none), unit is :809-816 at 613d4aa8d (the root `-m unit` run), server is :808 at 613d4aa8d (the server suite,
+# which declares `pytest -n 8 server/tests` and no marker).
+# rf_value <variant> -> the Full-collection value on stdout
+rf_value() {
+  case "$1" in
+    rfs1) cat <<'EOV'
+`.venv/bin/python -m pytest --tb=short -m "not integration" server/tests/test_s317_4_3b_fixture_predicate_twin.py server/tests/test_s315_4_base_binding.py server/tests/test_s322_1_3_nav_count_derivation_twin.py -q` from the repo root (the ci-local lane 15a invocation; .venv = the dependency setup below): 25 passed, 0 failed, 0 deselected, 0 skipped, 0 xfailed (capture test-results/s322-1-3/twin-lane-15a-run.txt). The repo-wide suite was not run: the story changes only lane 15a files.
+EOV
+    ;;
+    rfs2|rfs2n|rfs2nw) cat <<'EOV'
+FINAL proof (head 5fdcb390c, certifies the tree to merge); `python3 -u scripts/pytest-footprint-watchdog.py --cwd <worktree> --python <worktree>/.venv-ci/bin/python --artifact test-results/s322-1-8-proof-n8.txt --docker -- -n 8 -q --tb=short` (repo root, full suite, no selection flags). Guard ADMITTED (`version ok: pytest 9.1.1`; `8 x 1.25 + 16 = 26.00 GiB <= headroom 57.44 GiB`; limit 28.720 GiB); `workers-observed: 8 distinct worker pids` (82128 82176 82237 82289 82325 82354 82378 82426); `peak-tree-rss-gib: 4.955`, `peak-single-rss-gib: 1.341`; `aborted-by-watchdog: false`; no sampler errors; 537.7 s; counts: 2 failed, 9234 passed, 534 skipped, 469 xfailed, 309 subtests passed; `pytest-exit-code: 1`. The run is NOT green solely because of the two PRE-EXISTING failures named in the classification block. Artifacts: `test-results/s322-1-8-proof-n8.txt` (+ `.txt.log`, `.stdout`).
+EOV
+    ;;
+    rfs3|rfs4) printf '%s\n' '`.venv/bin/python -m pytest -m unit` from the repo root: 3 passed' ;;
+    rfs5) printf '%s\n' '`.venv/bin/python -m pytest -n 8 server/tests` from the repo root: 3 passed' ;;
+    rfs6) printf '%s\n' '`python3 scripts/other-wrapper.py -- server/tests/test_x.py`, capture `test-results/full.txt`, counts: capture-heads block' ;;
+    rfs7) printf '%s\n' '`test-results/full.txt`, counts: capture-heads block' ;;
+    rfs8) printf '%s\n' 'ran `python3 scripts/pytest-footprint-watchdog.py --cwd /w --python /w/py --artifact a.txt --docker -- --co -q` (`version ok: pytest 9.1.1`), capture `test-results/full.txt`, counts: capture-heads block' ;;
+    rfph) printf '%s\n' '`.venv/bin/python -m pytest --rootdir <repo> -k foo` 3 passed' ;;
+    rfphnm) printf '%s\n' '`pytest -q --rootdir <repo>` 3 passed' ;;
+    rfch) printf '%s\n' '`pytest -q > out.txt; pytest -k foo` 3 passed' ;;
+    rfchnm) printf '%s\n' '`pytest -q > out.txt` 3 passed' ;;
+    rfchnm2) printf '%s\n' '`pytest -q; pytest -q` 3 passed' ;;
+    rfd1) printf '%s\n' 'pytest -q -k foo, working directory `backend/`, 12 passed' ;;
+    rfd1nm) printf '%s\n' 'pytest -q, working directory `backend/`' ;;
+    rfrd) printf '%s\n' '`pytest -q 1>out.txt -k foo` 3 passed' ;;
+    rfa1) printf '%s\n' '`pytest -q --junitxml "a; b.xml"` 3 passed' ;;
+    rfa2) printf '%s\n' '`pytest -q --reruns 1` 3 passed' ;;
+    rfa2n) printf '%s\n' '`pytest -q --reruns 1 tests/test_x.py` 3 passed' ;;
+    rfa3) printf '%s\n' '`uv pip install pytest pytest-xdist && pytest -n 8` 3 passed' ;;
+    rfa3n) printf '%s\n' '`uv pip install pytest && pytest -k foo` 3 passed' ;;
+    rfsp) printf '%s\n' '`cd /repo` then `pytest -k foo` 3 passed' ;;
+    rfspnm) printf '%s\n' '`cd /repo` then `pytest -q` 3 passed' ;;
+    rfbl) printf '%s\n' '`bash -lc "cd backend && pytest -k x"` 3 passed' ;;
+    rfblnm) printf '%s\n' '`bash -lc "cd backend && pytest -q"` 3 passed' ;;
+    rfao) printf '%s\n' '`pytest -o "addopts=-k foo"` 3 passed' ;;
+    rfaonm) printf '%s\n' '`pytest -o "addopts=-q; x"` 3 passed' ;;
+    rfqk) printf '%s\n' "\`pytest -q -v' -k foo\` 3 passed" ;;
+    rfto) printf '%s\n' '`timeout 600 pytest -k foo`, then `pytest -q` 3 passed' ;;
+    rftonm) printf '%s\n' '`timeout 600 pytest -q` 3 passed' ;;
+    rfnpm) printf '%s\n' '`npm test -- -n 8 -q` 3 passed' ;;
+    rfch2) printf '%s\n' '`pytest -q && cd sub && pytest -k foo` 3 passed' ;;
+    rfch2nm) printf '%s\n' '`pytest -q && cd sub && pytest -q` 3 passed' ;;
+    rfbe) printf '%s\n' '`bash -lc "cd backend && pytest -k \"not slow\" -q"` 3 passed' ;;
+    rfsu) printf '%s\n' '`sudo -u app pytest -k foo` then `pytest -q` 3 passed' ;;
+    rfsunm) printf '%s\n' '`sudo -u app pytest -q` 3 passed' ;;
+    rfto2) printf '%s\n' '`timeout -s KILL 600 pytest -k foo` then `pytest -q` 3 passed' ;;
+    rfto2nm) printf '%s\n' '`timeout -s KILL 600 pytest -q` 3 passed' ;;
+    rfjx) printf '%s\n' '`bash -lc "cd backend && pytest -q --junitxml \"a b.xml\""` 3 passed' ;;
+    rfss) printf '%s\n' "\`bash -c \"ssh h 'pytest -k x'\"\`, capture \`test-results/full.txt\`, counts: capture-heads block" ;;
+    rfssnm) printf '%s\n' '`bash -c "pytest -q"`, capture `test-results/full.txt`, counts: capture-heads block' ;;
+    rfde) printf '%s\n' '`ssh host "cd app && direnv exec . pytest -k x"` 3 passed' ;;
+    rfdenm) printf '%s\n' '`ssh host "cd app && direnv exec . pytest -q"` 3 passed' ;;
+    rfdc) printf '%s\n' '`pytest -q && direnv exec . pytest -k x` 3 passed' ;;
+    rfdcnm) printf '%s\n' '`pytest -q && direnv exec . pytest -q` 3 passed' ;;
+    rfdx) printf '%s\n' '`direnv exec . pytest -k x` then `pytest -q` 3 passed' ;;
+    rfdxnm) printf '%s\n' '`direnv exec . pytest -q` then `pytest -q` 3 passed' ;;
+    rfgr) printf '%s\n' '`pytest -q; grep pytest out.txt -c` 3 passed' ;;
+    rfbt) printf '%s\n' '`pytest -q --basetemp <tmp> tests/test_x.py` 3 passed' ;;
+    rfbtnm) printf '%s\n' '`pytest -q --basetemp <tmp>` 3 passed' ;;
+    rfs9) printf '%s\n' 'ran `python3 scripts/pytest-footprint-watchdog.py --cwd /w --python /w/py --artifact a.txt --docker -- --co -q` then `pytest -q`, capture `test-results/full.txt`, counts: capture-heads block' ;;
+    rfs9nm) printf '%s\n' 'ran `python3 scripts/pytest-footprint-watchdog.py --cwd /w --python /w/py --artifact a.txt --docker -- -q` then `pytest -q`, capture `test-results/full.txt`, counts: capture-heads block' ;;
+    *) return 1 ;;
+  esac
+}
+# rf_conv <decl|decl-docker|unit|server> -> a conventions file on stdout
+rf_conv() {
+  printf '# Coding Conventions\n\n'
+  case "$1" in
+    decl|decl-docker)
+      cat <<'EOC' | if [ "$1" = decl-docker ]; then awk '{ i = index($0, " -- <pytest args>`"); if (i) $0 = substr($0, 1, i - 1) " --prelude <prelude-file> --docker" substr($0, i); print }'; else cat; fi
+## Suite-Launch Admission and Watchdog (pytest)
+
+Every dev and QA launch of a pytest or xdist suite MUST pass the admission check; a launch outside it is a QA reject.
+
+- **Canonical watchdog form.** A proof run, and any honest-green run cited as gate evidence, MUST be wrapped by
+  `scripts/pytest-footprint-watchdog.py`:
+  `python3 scripts/pytest-footprint-watchdog.py --cwd <repo-root> --python <venv>/bin/python --artifact test-results/<name>.txt -- <pytest args>`.
+  The two honest-green invocations take these pytest args: `rebalancer/tests -q -n 8` (rebalancer suite) and
+  `-n 8 server/tests` (server suite). The wrapper changes neither selection nor collection count, so the
+EOC
+      ;;
+    unit) cat <<'EOC'
+- **Root `-m unit` honest-green (`S284`).** "Honest-green" for the repo-root
+  `-m unit` marker selection is the canonical invocation
+  `<venv>/bin/python -m pytest -m unit` run from the repository root, full
+  collection, `tee`'d to a `test-results/` artifact. The pass/skip/fail counts
+  MUST describe the WHOLE collected unit set; a collection error is a RED suite,
+  not a footnote. Clean collection (0 collection errors) is the standing
+  expectation: the canonical `-m unit` run collects the full tree with 0
+  collection errors WITHOUT `--continue-on-collection-errors`.
+EOC
+      ;;
+    server) cat <<'EOC'
+- **Server-suite honest-green canonical invocation (`S320-3.3`, declared at gate 2).** "Honest-green" for the `server/tests` suite is the canonical invocation `pytest -n 8 server/tests` run from the repository root, full collection, with NO `-k`, NO `-m`, and NO `--deselect`, `tee`'d to a `test-results/` artifact. The integration-marker guard still drops unguarded integration-marked tests from that run; a reduced `-m` run is diagnostic-only and MUST NOT be cited as evidence.
+EOC
+      ;;
+    *) return 1 ;;
+  esac
+}
+# rf_world <world> <variant>: the value into the story's Full-collection line (through ENVIRON, so no byte of it is
+# an awk replacement metacharacter), and the conventions file where the variant names one. run.sh's seed control
+# reads the line back from the COMMITTED story and compares it with rf_value.
+rf_world() {
+  local w="$1" v="$2" cv="" val
+  val="$(rf_value "$v")" && [ -n "$val" ] || return 1
+  RFV="$val" story_awk "$w" '/^Full-collection run: /{ print "Full-collection run: " ENVIRON["RFV"]; next } {print}' || return 1
+  case "$v" in rfs2|rfs8|rfs9|rfs9nm) cv=decl-docker ;; rfs2n) cv=decl ;; rfs3) cv=unit ;; rfs4|rfs5) cv=server ;; esac
+  if [ -n "$cv" ]; then mkdir -p "$w/docs" && rf_conv "$cv" > "$w/docs/coding-conventions.md" || return 1; fi
+  return 0
+}
 build_world() { # <dir> <variant>
   local w="$1" v="$2" b c
   mkdir -p "$w/tests" "$w/test-results" "$w/stories" "$w/tools" || return 2
@@ -307,6 +426,11 @@ EOS
     # character outside [A-Za-z0-9_-]) -- refused. wv957covcomma: `--cov,` the same way, a run -- accepted.
     # wv957coalias: `--collectonly`, pytest's third spelling of the one option, with its count -- refused.
     wv957coalias) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest --collectonly -q` 12 tests collected"); print }' || return 2 ;;
+    # wv957coopenrun: a bare collect-only invocation opening the value, then a backticked real run that rf_span reads
+    # (`pytest -q`): only the opening-command text carries the token. wv957codollarrun: a backticked directory, a `$ `
+    # collect-only command, then the backticked real run: only the `$ ` text carries it. Each refused full-collection-none.
+    wv957coopenrun) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --co -q, then `pytest -q` from the root, 3 passed"); print }' || return 2 ;;
+    wv957codollarrun) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `backend/` $ pytest --co -q; then `pytest -q` 3 passed"); print }' || return 2 ;;
     wv957cocomma) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --collect-only, working directory `backend/`"); print }' || return 2 ;;
     wv957cosemi) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --co; in `backend/`"); print }' || return 2 ;;
     wv957covcomma) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --cov, working directory `backend/`"); print }' || return 2 ;;
@@ -423,6 +547,10 @@ EOS
     # that does not commit .claude/team-roles/): the on-disk copy decides. Written after the commit.
     diskold|disknew)
            story_awk "$w" '/^(Full-collection run|Dependency setup): /{next} {print}' || return 2 ;;
+    # BL-1016, driven by run.sh's RUN-FILTER block (its own list RF_WORLDS), never by CASES or FC_WORLDS. Each is
+    # the work commit's code diff with ONE Full-collection value (rf_value) and, where named, ONE conventions file
+    # (rf_conv) at the toplevel; rf_world writes both.
+    rfs1|rfs2|rfs2n|rfs2nw|rfs3|rfs4|rfs5|rfs6|rfs7|rfs8|rfph|rfphnm|rfch|rfchnm|rfchnm2|rfd1|rfd1nm|rfrd|rfa1|rfa2|rfa2n|rfa3|rfa3n|rfsp|rfspnm|rfbl|rfblnm|rfao|rfaonm|rfqk|rfto|rftonm|rfnpm|rfch2|rfch2nm|rfbe|rfsu|rfsunm|rfto2|rfto2nm|rfjx|rfss|rfssnm|rfde|rfdenm|rfdc|rfdcnm|rfdx|rfdxnm|rfgr|rfbt|rfbtnm|rfs9|rfs9nm) rf_world "$w" "$v" || return 2 ;;
     *) return 2 ;;
   esac
   gitw "$w" add -A && gitw "$w" commit -qm "$v" --allow-empty || return 2

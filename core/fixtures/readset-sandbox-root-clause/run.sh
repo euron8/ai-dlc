@@ -85,9 +85,8 @@ DERIVER="$ROOT/core/scripts/derive-fixture-readsets.sh"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-sandbox-root-clause.XXXXXX")" || { echo "FIXTURE BROKEN: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"
 
-FAILS=0; ASSERTS=0
-ok()     { printf '  ok    %s\n' "$1"; ASSERTS=$((ASSERTS + 1)); }
-bad()    { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); ASSERTS=$((ASSERTS + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { echo "readset-sandbox-root-clause: FIXTURE BROKEN: $*" >&2; echo "  (work kept at $WORK)" >&2; exit 2; }
 echo "readset-sandbox-root-clause:"
 echo "HERMETIC-CONSUMED core/scripts/derive-fixture-readsets.sh"
@@ -151,10 +150,10 @@ if [ -n "$SB_WHY" ]; then
   printf '  SKIP  rendered sandbox arms: %s\n' "$SB_WHY"
   if [ "$MODE" = matrix ]; then echo "readset-sandbox-root-clause: MATRIX BROKEN: the rendered arms are SKIPPED here ($SB_WHY), so nothing was measured" >&2; exit 2; fi
   echo
-  if [ "$FAILS" -ne 0 ]; then echo "readset-sandbox-root-clause: $FAILS of $ASSERTS FAILED (work kept at $WORK)"; exit 1; fi
-  case "$WORK" in */readset-sandbox-root-clause.??????) rm -rf "$WORK" ;; esac
-  echo "readset-sandbox-root-clause: all $ASSERTS assertions hold (rendered arms SKIPPED: $SB_WHY)"
-  exit 0
+  if [ "$fails" -ne 0 ]; then echo "readset-sandbox-root-clause: work kept at $WORK"
+  else case "$WORK" in */readset-sandbox-root-clause.??????) rm -rf "$WORK" ;; esac; fi
+  echo "readset-sandbox-root-clause: rendered arms SKIPPED: $SB_WHY"
+  report_end readset-sandbox-root-clause
 fi
 
 # ------------------------------------------------------------------ rendering ----
@@ -431,15 +430,11 @@ else
   mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
   [ "$mx_hdr" = "markdir-default markdir-ov-lm nest-guard nest-noins nest-nomark report-default report-lm " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
   echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
-  FAILS=$((FAILS + MX_FAILS))
+  fails=$((fails + MX_FAILS))
 fi
 if [ "$BROKEN" -ne 0 ]; then echo "readset-sandbox-root-clause: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 echo
-if [ "$FAILS" -ne 0 ]; then
-  echo "readset-sandbox-root-clause: $FAILS of $ASSERTS FAILED (work kept at $WORK)"
-  exit 1
-fi
-case "$WORK" in */readset-sandbox-root-clause.??????) rm -rf "$WORK" ;; esac
-echo "readset-sandbox-root-clause: all $ASSERTS assertions hold"
-exit 0
+if [ "$fails" -ne 0 ]; then echo "readset-sandbox-root-clause: work kept at $WORK"
+else case "$WORK" in */readset-sandbox-root-clause.??????) rm -rf "$WORK" ;; esac; fi
+report_end readset-sandbox-root-clause

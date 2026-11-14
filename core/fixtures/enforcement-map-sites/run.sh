@@ -237,10 +237,8 @@ seed_tree() {
   declare -F vem_entry >/dev/null || { echo "FIXTURE ERROR: sourcing $V defined no vem_entry" >&2; exit 2; }
 }
 
-fails=0
 broken=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # Every kill below is emitted through mutant_killed, behind a same-run test over CTL_RC (the exit
 # status the shard driver captured from this shard's A00 control run, read from the file named
 # in --run-one's slot 6), or behind a same-cell flag: B_a25m3/B_a35m1/B_a39m1 are set only after
@@ -3875,9 +3873,7 @@ if [ "$GROUP" = eq ]; then
     bad "EQUIVALENCE: the eq group printed $eq_got per-tag verdict line(s) for $eq_want tag(s) (expected 3 and 3), so a pair never reached a verdict"
   fi
   echo
-  if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
-  echo "$NAME: $fails assertion(s) FAILED" >&2
-  exit 1
+  report_end "$NAME"
 fi
 DCY="$(mktemp -d "${TMPDIR:-/tmp}/enforcement-map-sites-decoy.XXXXXX")" || { echo "$NAME: FIXTURE ERROR — mktemp failed for the decoy" >&2; exit 2; }
 cp -RX "$TPL/." "$DCY/" && printf 'seeded\n' > "$DCY/VERSION" \
@@ -3919,6 +3915,9 @@ bash "$SELF" --run-one "$CTL" "$OUT/$CTL.vrun" "$CELL_TPL" "$CELL_DCY" "" "$RUN_
 ctl_rc=$?
 printf '%s\n' "$ctl_rc" > "$OUT/ctl.rc" || { echo "$NAME: FIXTURE ERROR — could not record the control's exit status" >&2; exit 2; }
 cat "$OUT/$CTL"
+# The control's ok lines count too, so the summary equals the ok lines printed.
+_wok="$(grep -c '^  ok    ' "$OUT/$CTL")" || _wok=0
+oks=$((oks + _wok))
 if [ "$ctl_rc" -ne 0 ]; then
   [ -s "$OUT/$CTL.err" ] && cat "$OUT/$CTL.err" >&2
   echo
@@ -3992,6 +3991,9 @@ while IFS= read -r n; do
     continue
   fi
   cat "$OUT/$n"
+  # A worker's ok lines count here, as its FAIL lines do below, so the summary equals the ok lines printed.
+  _wok="$(grep -c '^  ok    ' "$OUT/$n")" || _wok=0
+  oks=$((oks + _wok))
   [ -s "$OUT/$n.err" ] && cat "$OUT/$n.err" >&2
   wrc="$(cat "$OUT/$n.rc")"
   # 2 IS NOT 1. `FIXTURE BROKEN` (a failed seed, an unbuildable mutant) and `an assertion
@@ -4069,6 +4071,4 @@ if [ "$broken" -ne 0 ]; then
   echo "$NAME: FIXTURE BROKEN — an assertion could not run to a verdict" >&2
   exit 2
 fi
-if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
-echo "$NAME: $fails assertion(s) FAILED" >&2
-exit 1
+report_end "$NAME"

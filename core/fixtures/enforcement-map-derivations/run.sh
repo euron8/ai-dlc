@@ -97,10 +97,8 @@ fi
 # The validator is present and about to be driven; inputs.decl marks it REQUIRED.
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 
-fails=0
 broken=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 # The mutant helpers (mutant_killed, need_base) and the matrix-row printer. Sourced, so no
 # `killed` token sits on a code line of this file (validate-mutant-kills.sh M1).
@@ -2445,6 +2443,9 @@ CTL="$(printf '%s\n' "$NAMES" | head -1)"
 ( emd_run_one "$CTL" ) > "$OUT/$CTL" 2>"$OUT/$CTL.err" < /dev/null
 ctl_rc=$?
 cat "$OUT/$CTL"
+# The control's ok lines count too, so the summary equals the ok lines printed.
+_wok="$(grep -c '^  ok    ' "$OUT/$CTL")" || _wok=0
+oks=$((oks + _wok))
 if [ "$ctl_rc" -ne 0 ]; then
   [ -s "$OUT/$CTL.err" ] && cat "$OUT/$CTL.err" >&2
   echo
@@ -2513,6 +2514,9 @@ while IFS= read -r n; do
     continue
   fi
   cat "$OUT/$n"
+  # A worker's ok lines count here, as its FAIL lines do below, so the summary equals the ok lines printed.
+  _wok="$(grep -c '^  ok    ' "$OUT/$n")" || _wok=0
+  oks=$((oks + _wok))
   [ -s "$OUT/$n.err" ] && cat "$OUT/$n.err" >&2
   wrc="$(cat "$OUT/$n.rc")"
   # 2 IS NOT 1. `FIXTURE BROKEN` (a failed seed, an unbuildable mutant) and `an assertion
@@ -2572,7 +2576,7 @@ fi
 
 # A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL. MX_CELLS is counted only by the --matrix branch above.
 if [ "$MX_CELLS" -eq 0 ]; then
-  printf '  ok    PUSH: no matrix-only cell ran (0 cells); each mutant ran on its deciding arm plus its one named twin\n'
+  ok "PUSH: no matrix-only cell ran (0 cells); each mutant ran on its deciding arm plus its one named twin"
 else
   printf '  FAIL  PUSH: %s matrix cell(s) ran in a plain run\n' "$MX_CELLS"
   fails=$((fails + 1))
@@ -2583,9 +2587,4 @@ if [ "$broken" -ne 0 ]; then
   echo "$NAME: FIXTURE BROKEN — an assertion could not run to a verdict" >&2
   exit 2
 fi
-if [ "$fails" -eq 0 ]; then
-  echo "$NAME: PASS"
-  exit 0
-fi
-echo "$NAME: $fails assertion(s) FAILED" >&2
-exit 1
+report_end "$NAME"

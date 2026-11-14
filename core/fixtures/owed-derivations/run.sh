@@ -191,9 +191,7 @@ printf 'HERMETIC-CONSUMED core/scripts/sprint-status.sh\n'
 printf 'HERMETIC-CONSUMED core/schemas/sprint-status.json\n'
 
 g() { local d="$1"; shift; git -C "$d" -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 ck() { if grep -qF -- "$2" <<<"$3"; then ok "$1"; else bad "$1 -- expected to find: $2"; printf '%s\n' "$3" | sed 's/^/        | /' | head -12; fi; }
 nk() { if grep -qF -- "$2" <<<"$3"; then bad "$1 -- must NOT contain: $2"; else ok "$1"; fi; }
 rc_is() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 -- exit was $3, expected $2"; fi; }
@@ -1209,9 +1207,9 @@ RS_H="$WORK/rset.harness.sh"; sed -n '/^# ---- lw-harness: begin/,/^# ---- lw-ha
 RS_VARS="$(sed -n 's/^LW_RESET_VARS="\(.*\)"$/\1/p' "$SELF" | head -1)"
 rset_pair() { # <LW_RESET_VARS value> -> the verdict of arms PA and PB
   ( . "$RS_H"; LW_RESET_VARS="$1"; LW_MODE=real
-    ok() { echo "ok $1"; }; bad() { echo "bad $1"; }
     if lw_world pa; then RC=7; lw_arm PA "pa sets RC" 0; lw_end; fi
-    if lw_world pb; then lw_arm PB "pb reads RC set by pa" "$([ "$RC" = 7 ] && echo 0 || echo 1)"; lw_end; fi ) 2>&1 | awk '/^(ok|bad) P[AB] /{ print $1 " " $2 }' | tr '\n' ' '
+    if lw_world pb; then lw_arm PB "pb reads RC set by pa" "$([ "$RC" = 7 ] && echo 0 || echo 1)"; lw_end; fi ) 2>&1 \
+    | awk '/^  (ok    |FAIL  )P[AB] /{ print (($1 == "ok") ? "ok" : "bad") " " $2 }' | tr '\n' ' '
 }
 rc_is "RSETr reset probe: with the reset, world pb's arm reading pa's RC FAILS, and without the reset it PASSES (same run, same worlds)" "ok PA bad PB ok PA ok PB " "$(rset_pair "$RS_VARS")$(rset_pair "")"
 
@@ -1582,9 +1580,4 @@ co="$(gate_site "$R" "$WORK/b7.tsv" >/dev/null; rd "$R" "$WORK/b7.tsv"; awk -F'\
 rc_is "Gf sprint-close: three open rows are three carried-forward items, none dropped" 3 "$co"
 rd "$R2" "$WORK/b1e.tsv"
 rc_is "Gg sprint-close control: with the record's rows all closed nothing is carried" 0 "$(awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$OUT")"
-
-if [ "$fails" -ne 0 ]; then
-  printf '  %s assertion(s) FAILED\n' "$fails"; exit 1
-fi
-printf '  all assertions hold\n'
-exit 0
+report_end owed-derivations

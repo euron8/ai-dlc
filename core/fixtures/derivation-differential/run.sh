@@ -128,9 +128,7 @@ g() { # g <dir> <git args...> -- hermetic identity, no hooks, no signing
     -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
 }
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # HERE-STRINGS, NEVER `printf | grep -q` (I54/I54b).
 ck() { if grep -qF -- "$2" <<<"$3"; then ok "$1"; else bad "$1 -- expected to find: $2"; printf '%s\n' "$3" | sed 's/^/        | /' | head -20; fi; }
 nk() { if grep -qF -- "$2" <<<"$3"; then bad "$1 -- must NOT contain: $2"; else ok "$1"; fi; }
@@ -1676,9 +1674,4 @@ fi
 left="$(find "$DDTMP" -mindepth 1 -maxdepth 1 2>/dev/null | awk 'END { print NR + 0 }')"
 rc_is "A10c the helper left nothing under its TMPDIR" 0 "$left"
 [ "$left" = 0 ] || find "$DDTMP" -mindepth 1 -maxdepth 3 2>/dev/null | sed 's/^/        | /' | head -10
-
-if [ "$fails" -ne 0 ]; then
-  printf '  %s assertion(s) FAILED\n' "$fails"; exit 1
-fi
-printf '  all assertions hold\n'
-exit 0
+report_end derivation-differential

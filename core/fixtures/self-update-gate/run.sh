@@ -136,6 +136,7 @@ set -u
 # gate_record_open), so an operator's exported value would change what every cell measures.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$DIR/../lib/hook-drive.sh" || { echo "FIXTURE BROKEN: cannot source lib/hook-drive.sh" >&2; exit 2; }
 
 GATE=""; LOOKED=""
 for cand in \
@@ -5212,7 +5213,7 @@ hu_post() { # hu_post <world> -> the post-write hook's exit
       core/scripts/*) git -C "$1/dist" show "$(cat "$1/T"):$p" > "$c/scripts/ai-dlc/${p#core/scripts/}" ;;
     esac
   done < "$c.slice"
-  ( cd "$c" && bash .githooks/pre-push origin x < /dev/null > /dev/null 2>&1 ); printf '%s' "$?"
+  hook_drive "$c" /dev/null -- origin x
 }
 hu_sig() { # hu_sig <gate> [<worlds>] -> one token per world, `+absent` when the row names the absence
   local n r out=""

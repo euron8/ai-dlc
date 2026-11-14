@@ -1037,9 +1037,7 @@ lead_files() { # the install-scoped markdown corpus, sorted; no path carries a b
   find $(range_scope) -type f -name '*.md' 2>/dev/null | LC_ALL=C sort
 }
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 # corpus_report — the verdict over the resolved tree. Printed identically by --report.
 corpus_report() {
@@ -1136,6 +1134,9 @@ echo "process-rule-pins"
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
+# The copies of this script driven below sit one directory under $WORK and source $HERE/../lib/report.sh.
+mkdir -p "$WORK/lib" && cp "$HERE/../lib/report.sh" "$WORK/lib/report.sh" \
+  || { echo "FIXTURE ERROR: cannot place lib/report.sh beside the driven copies" >&2; exit 2; }
 
 # --- 1. resolver probes, every root shape --------------------------------------
 LAY="$WORK/lay"
@@ -3249,6 +3250,7 @@ REP_HERE="$(bash "$SELF" --report 2>&1)"; rc_here=$?
 printf '%s\n' "$REP_HERE"
 n_ok="$(grep -c '^  ok ' <<<"$REP_HERE")" || n_ok=0
 n_bad="$(grep -c '^  FAIL ' <<<"$REP_HERE")" || n_bad=0
+oks=$((oks + n_ok))   # the --report child's ok lines, printed above, so the summary equals the ok lines printed
 fails=$((fails + n_bad))
 [ "$rc_here" -eq 0 ] || [ "$n_bad" -gt 0 ] || bad "corpus: --report exited $rc_here with no FAIL line"
 n_want=$(( $(pins | wc -l) + 3 ))
@@ -3286,9 +3288,4 @@ else
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "process-rule-pins: PASS"
-  exit 0
-fi
-echo "process-rule-pins: FAIL ($fails assertion(s))"
-exit 1
+report_end process-rule-pins

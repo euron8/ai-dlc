@@ -14,3 +14,4 @@ core/scripts/core-paths.sh
 core/hooks/ai-dlc-context-provenance.sh
 # The shared mutant-kill helper the fixture sources (mutant_killed / need_base), run.sh:146-149.
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

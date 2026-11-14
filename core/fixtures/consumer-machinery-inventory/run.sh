@@ -62,9 +62,7 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_ctl=0
 
@@ -389,6 +387,4 @@ expect_set no-unread-home-refusal 2 'UNREADABLE manifest: no finding|MISSPELLED 
 # assertion would notice the loss of, and it would silently widen back.
 expect_set refusal-ignores-file-presence 1 'ABSENT manifest: reported' \
   's@^if \[ -z "\$MACHINERY_HOME" \] && \[ -f "\$SKILL_DIR/core-manifest.md" \]; then@if [ -z "$MACHINERY_HOME" ]; then@'
-
-if [ "$fails" -eq 0 ]; then echo "PASS consumer-machinery-inventory"; exit 0; fi
-echo "FAIL consumer-machinery-inventory ($fails)"; exit 1
+report_end consumer-machinery-inventory

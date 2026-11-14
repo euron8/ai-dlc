@@ -347,9 +347,7 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/architecture.md"
 GVMD="$STEPS/gate-validation.md"
 REQMD="$STEPS/requirements.md"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 echo "architecture-fast-track: running arms against the corpus"
 echo
@@ -415,9 +413,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "PASS  architecture-fast-track: all arms hold."
-  exit 0
-fi
-echo "FAIL  architecture-fast-track: $fails assertion(s) violated." >&2
-exit 1
+report_end architecture-fast-track

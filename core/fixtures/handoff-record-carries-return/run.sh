@@ -54,9 +54,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="handoff-record-carries-return"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 B_d_exclusion=0
 broken() { printf '%s: FIXTURE BROKEN — %s\n' "$NAME" "$1" >&2; exit 2; }
@@ -444,9 +442,4 @@ if [ "$MODE" = "full" ]; then
 fi
 
 echo ""
-if [ "$fails" -eq 0 ]; then
-  echo "$NAME: PASS"
-  exit 0
-fi
-echo "$NAME: FAIL ($fails assertion(s))"
-exit 1
+report_end handoff-record-carries-return

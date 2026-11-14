@@ -129,9 +129,7 @@ fi
 echo "  subject: ${SUBJECT#"$ROOT"/}"
 echo "HERMETIC-CONSUMED ${SUBJECT#"$ROOT"/}"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$ROOT/core/fixtures/lib/mutant.sh"
 [ -f "$MUT_LIB" ] || MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -837,8 +835,13 @@ hook_world() { # <hook> -> a scratch consumer project with the renderer and the 
   cp "$h" "$p/.githooks/pre-push" || return 1
   printf '%s\n' "$p"
 }
+. "$HERE/../lib/hook-drive.sh" || { echo "FIXTURE BROKEN: cannot source lib/hook-drive.sh" >&2; exit 2; }
 drive_hook() { # <project> -> the hook's combined output; exit = the hook's
-  ( cd "$1" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null 2>&1 )
+  local o rc
+  o="$(mktemp)" || return 125
+  rc="$(hook_drive "$1" "$o")"
+  cat "$o"; rm -f "$o"
+  return "$rc"
 }
 agents_digest() { ( cd "$1/.claude/agents" 2>/dev/null && shasum -a 256 -- *.md 2>/dev/null ) }
 
@@ -1001,5 +1004,4 @@ else
   if [ "$MATRIX_CELLS" -eq 0 ]; then ok "a plain run executes no matrix-only cell"; else bad "a plain run executed $MATRIX_CELLS matrix-only cell(s)"; fi
 fi
 echo "  $fails failed, $kills mutant kill(s)"
-[ "$fails" -eq 0 ] || exit 1
-exit 0
+report_end agent-definition-render

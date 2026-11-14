@@ -13,3 +13,4 @@ core/team-roles/qa.md
 core/fixtures/lib/mutant.sh
 core/scripts/partition-document.sh
 core/scripts/content-seal.sh
+core/fixtures/lib/report.sh

@@ -1,3 +1,5 @@
 # Measured by a counted run through scripts/seed-verdict-store.sh (stdin /dev/null), the judge's own J3 output: 13 -> 17 for arm a4's mutant drive.
-17 *
+# 17 -> 29, BL-1069: each of the four subject drives starts one `bash unit.sh` per fixture (three), the unit the
+# subject hands xargs. From one counted run through scripts/seed-verdict-store.sh.
+29 *
 0 scripts/seed-verdict-store.sh

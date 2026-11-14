@@ -104,9 +104,7 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/lr-dist-only-reach.XXXXXX")" || { echo "FIXTURE 
 [ -n "$W" ] && [ -d "$W" ] || { echo "FIXTURE ERROR: mktemp returned no directory" >&2; exit 2; }
 trap 'rm -rf "$W"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # A kill is emitted only through mutant_killed, behind a same-run base-pass flag (B_*).
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: no lib/mutant.sh beside $HERE" >&2; exit 2; }
@@ -788,5 +786,4 @@ fi
 if [ "$BROKEN" -ne 0 ]; then echo "ledger-reverify-dist-only-reach: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "ledger-reverify-dist-only-reach: PASS"; exit 0; fi
-echo "ledger-reverify-dist-only-reach: $fails assertion(s) FAILED" >&2; exit 1
+report_end ledger-reverify-dist-only-reach

@@ -90,10 +90,8 @@ esac
 SEED="$HERE/seed.sh"
 [ -f "$SEED" ] || { echo "FIXTURE ERROR: cannot locate seed.sh" >&2; exit 2; }
 
-fails=0
 broken=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # PRECONDITIONS ARE NOT TARGETS. A precondition (the beats ran in their own shells, A was asleep when the
 # marker was read, the kill came early enough, ...) is a fact about the HARNESS. pre_bad counts one, and a
 # --run-one worker that saw any exits 2 (FIXTURE BROKEN), never 1 (an assertion regressed), so a mutant
@@ -1463,9 +1461,4 @@ if [ "$broken" -ne 0 ]; then
   echo "wait-stale-deliverable: FIXTURE BROKEN — a case could not run to a verdict" >&2
   exit 2
 fi
-if [ "$fails" -eq 0 ]; then
-  echo "wait-stale-deliverable: PASS"
-  exit 0
-fi
-echo "wait-stale-deliverable: ${fails} assertion(s) FAILED" >&2
-exit 1
+report_end wait-stale-deliverable

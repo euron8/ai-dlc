@@ -93,12 +93,10 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/hook-drive.sh" || { echo "FIXTURE BROKEN: cannot source lib/hook-drive.sh" >&2; exit 2; }
 SELF_FILE="$HERE/${0##*/}"
 
-fails=0
-asserts=0
-ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() {
   printf '  FAIL  %s\n' "$1" >&2
   echo "prepush-worktree-env-scrub: FIXTURE BROKEN" >&2
@@ -503,9 +501,8 @@ rcpt_drive() { # <tag> <hook-source> <pristine|stop-early>
 }
 rcpt_push() { # <tag> <n>: one push of the world; log in <tag>/log.<n>, exit in <tag>/rc.<n>
   local w="$WORK/$1/w"
-  ( cd "$w" && env -u FXCOUNT_DIR -u FXCOUNT_RC -u FXCOUNT_JUDGE -u GIT_DIR PREPUSH_POOL_DEPTH=1 AI_DLC_PRESUITE_SKIP=1 \
-      AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$w.vs" bash .githooks/pre-push ) </dev/null > "$WORK/$1/log.$2" 2>&1
-  printf '%s\n' "$?" > "$WORK/$1/rc.$2"
+  ( unset FXCOUNT_DIR FXCOUNT_RC FXCOUNT_JUDGE
+    hook_drive "$w" "$WORK/$1/log.$2" PREPUSH_POOL_DEPTH=1 AI_DLC_PRESUITE_SKIP=1 AI_DLC_VERDICT_STORE="$w.vs" ) > "$WORK/$1/rc.$2"
 }
 rcpt_red() { # <cell> <tag>: 0 RED, 1 GREEN
   local t="$WORK/$2"
@@ -568,9 +565,4 @@ else
   fails=$((fails + MX_FAILS))
 fi
 
-if [ "$fails" -ne 0 ]; then
-  printf 'prepush-worktree-env-scrub: FAIL (%s of %s assertions)\n' "$fails" "$asserts"
-  exit 1
-fi
-printf 'prepush-worktree-env-scrub: ok (%s assertions)\n' "$asserts"
-exit 0
+report_end prepush-worktree-env-scrub

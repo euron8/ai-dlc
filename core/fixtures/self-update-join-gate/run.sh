@@ -107,9 +107,7 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -631,8 +629,4 @@ if [ "$MATRIX" = 1 ]; then
 elif [ "$MX_CELLS" -eq 0 ]; then ok "MX0 per-push run: matrix-only cells run = 0 (cells scored: $MX_RUN)"
 else bad "MX0 per-push run: $MX_CELLS matrix-only cell(s) ran"; fi
 echo
-if [ "$fails" -ne 0 ]; then
-  echo "self-update-join-gate: $fails assertion(s) FAILED" >&2
-  exit 1
-fi
-echo "self-update-join-gate: all assertions passed"
+report_end self-update-join-gate

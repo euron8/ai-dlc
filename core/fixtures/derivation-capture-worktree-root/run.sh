@@ -58,9 +58,7 @@ trap 'rm -rf "$WORK"' EXIT
 # Physical: git reports physical toplevels, and the hook compares them.
 WORK="$(cd "$WORK" && pwd -P)"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
@@ -345,5 +343,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "PASS: derivation-capture-worktree-root"; exit 0; fi
-echo "FAIL: derivation-capture-worktree-root ($fails)"; exit 1
+report_end derivation-capture-worktree-root

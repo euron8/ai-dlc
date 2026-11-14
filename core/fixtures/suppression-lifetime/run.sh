@@ -142,9 +142,7 @@ trap 'chmod -R u+rwX "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 VERDICT="$(dirname "$VALIDATOR")/verdict.sh"
 [ -f "$VERDICT" ] && echo "HERMETIC-CONSUMED $VERDICT"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -1305,8 +1303,4 @@ fi
 echo "DRIVE-COUNT validator runs=$DRIVES mutants=$NM"
 
 echo
-if [ "$fails" -ne 0 ]; then
-  echo "suppression-lifetime: $fails assertion(s) FAILED" >&2
-  exit 1
-fi
-echo "suppression-lifetime: all assertions passed"
+report_end suppression-lifetime

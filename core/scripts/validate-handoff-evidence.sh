@@ -462,6 +462,17 @@
 #       any other exit refuses `full-collection-none` naming the waiver error. That is this arm's only
 #       waiver site: (l) shares the exemption and has none. A no-test invocation (NO-TEST-RUN,
 #       `--collect-only`/`--co`) is a no-run claim, decided before the (o) capture-heads count route.
+#       The value is decided by ONE start, `record-only-diff.sh run-gate <value> [<conventions>]` (its RUN-GATE
+#       header: RUN-SHAPE, NO-TEST-RUN and RUN-FILTER answered together). A value ACCEPTED AS A RUN, by RUN-SHAPE or
+#       by the (o) capture-heads count route, is held to that start's RUN-FILTER verdict, the rule merge-review-shards.sh holds QA's
+#       `Canonical run:` to (its grammar is that file's header, RUN-FILTER, not restated here): a refusing filter is
+#       refused `full-collection-filtered` with run-filter's reason and the remedy (the invocation in backticks; a path,
+#       marker or wrapper run made canonical by naming it in `docs/coding-conventions.md`); an unevaluable filter, or
+#       any run-gate exit outside its table, is refused `full-collection-filtered` as unevaluable, never acquitted. A
+#       no-run claim keeps its route above, unfiltered.
+#       <conventions> is `$TOP/docs/coding-conventions.md` when readable, the file RUN-SHAPE receives, read from
+#       DISK at the toplevel and not as committed at <frozen>, as merge-review-shards.sh reads it for QA's run: a
+#       conventions edit left uncommitted in the worktree decides the verdict (a known gap, shared with QA's run).
 #   (l) DEPENDENCY-SETUP. No `Dependency setup:` label: refused `dependency-setup-missing`. A bare
 #       `none`: refused `dependency-setup-none`. `none, <reason>` is accepted whatever the diff
 #       (dev.md allows it: "no setup needed" is a fact about the project); every other no-run claim
@@ -1149,9 +1160,10 @@ dar_legacy() {
   else DL=legacy; DL_WHY="the story's first commit ${sfirst:0:12} predates ${vadd:0:12}, the commit that added --render-dar"; fi
 }
 # dar_counts_ok <value>: the (k) acceptance for a value citing the block's counts (header: (o)). A
-# no-test invocation (record-only-diff.sh NO-TEST-RUN) is refused this route first: its count is not its own.
+# no-test invocation (record-only-diff.sh NO-TEST-RUN) is refused this route first: its count is not its own. The
+# answer is the (k) site's one RUN-GATE start (EV_FC_GATE 1), made with ev_conv on the span RUN-FILTER reads.
 dar_counts_ok() {
-  bash "$RO" no-test-run "$1" && return 1
+  [ "$EV_FC_GATE" = 1 ] && return 1
   case "$1" in *"counts: capture-heads block"*) ;; *) return 1 ;; esac
   [ "$DAR_STATE" = ok ] && [ "$DAR_NCOUNT" -gt 0 ]
 }
@@ -1174,11 +1186,24 @@ ev_none() {
 # here, at THIS site only (Dependency setup shares ev_none and has no waiver), with the gate-1 base the lead
 # passed, never <frozen>: 0 accepts, 1 falls through to ev_none's record-only exemption, any other exit refuses.
 ev_none_fc() {
+  EV_FC_NONE=1
   wv_out="$(bash "$RO" waiver -C "$REPO" "$STORY" "$BASE" "$1" 2>&1)"; wv_rc=$?
   case "$wv_rc" in
     0) ;;
     1) ev_none 'Full-collection run:' "$1" full-collection-none "; or, when the story at the base ${BASE:0:12} carries a '## Canonical-run waivers' entry '- **<AC-id>** waives the canonical run: <reason>' (written at planning), write 'Full-collection run: none, <AC-id> waives it'" ;;
     *) refuse "full-collection-none $STORY: 'Full-collection run: $1' names a canonical-run waiver that cannot be read at the base ${BASE:0:12} (record-only-diff.sh waiver exit $wv_rc: ${wv_out}); run the full collection and record the invocation and counts" ;;
+  esac
+}
+# ev_filter_fc <value> <verdict> <text>: a full-collection value accepted as a run (run-shape, or the dar_counts_ok
+# capture-cite route) is held to RUN-FILTER's verdict from the (k) site's RUN-GATE start (header: (k)): <verdict> 0
+# accepts, 1 refuses with run-filter's reason <text>, any other refuses as unevaluable (fail closed).
+ev_filter_fc() {
+  ef_cv="${ev_conv:-no docs/coding-conventions.md at $TOP}"
+  ef_fix="; put the invocation in backticks and run the canonical full collection (repo root, no -k, --deselect, file or node-id argument), or, to make a path, marker or wrapper run canonical, name it as a backticked \`pytest\` invocation (or a wrapper declaration \`<program> <options> -- <pytest args>\`) in docs/coding-conventions.md"
+  case "$2" in
+    0) ;;
+    1) refuse "full-collection-filtered $STORY: 'Full-collection run: $1' ${3} (record-only-diff.sh run-gate, RUN-FILTER, conventions: ${ef_cv})${ef_fix}" ;;
+    *) refuse "full-collection-filtered $STORY: 'Full-collection run: $1' cannot be evaluated by record-only-diff.sh run-gate (${3}; conventions: ${ef_cv}), and an unevaluable filter never acquits${ef_fix}" ;;
   esac
 }
 # ------------------------------------------------------------------------- bookkeeping
@@ -1681,12 +1706,24 @@ else
   fc="$(ev_label 'Full-collection run:')"; fc_rc=$?
   if [ "$fc_rc" -ne 0 ]; then
     refuse "full-collection-missing $STORY: no 'Full-collection run:' line at ${FROZEN:0:12}; write one at column 0 with the canonical run's invocation, working directory and counts, or 'Full-collection run: none, <reason>' when the story's diff is record-only"
-  elif ! bash "$RO" run-shape "$fc" ${ev_conv:+"$ev_conv"}; then
-    # A value citing the full-collection capture plus `counts: capture-heads block` is a run when
-    # the block is fresh and rendered that capture's count (header: (o)). A no-test invocation
-    # (record-only-diff.sh NO-TEST-RUN, `--collect-only`) is decided BEFORE that route, inside
-    # dar_counts_ok, so it cannot borrow an unrelated capture's count.
-    dar_counts_ok "$fc" || ev_none_fc "$fc"
+  else
+    # ONE record-only-diff.sh start decides the value: RUN-GATE (its header) answers run-shape, NO-TEST-RUN and
+    # RUN-FILTER, each with ev_conv. 0/3/2: a run, its filter passing, refusing, or unevaluable.
+    fc_gv="$(bash "$RO" run-gate "$fc" ${ev_conv:+"$ev_conv"})"; EV_FC_GATE=$?
+    case "$EV_FC_GATE" in
+      0) ;;
+      3) ev_filter_fc "$fc" 1 "$fc_gv" ;;
+      1|4|5|6)
+        # Not a run. A value citing the full-collection capture plus `counts: capture-heads block` is a run when
+        # the block is fresh and rendered that capture's count (header: (o)). A no-test invocation
+        # (record-only-diff.sh NO-TEST-RUN, `--collect-only`; RUN-GATE 1) is decided BEFORE that route, inside
+        # dar_counts_ok, so it cannot borrow an unrelated capture's count. A value it accepts is a run,
+        # held to RUN-FILTER's verdict (RUN-GATE 4/5/6) as a run-shape value is; a no-run claim (ev_none_fc) is not.
+        EV_FC_NONE=0
+        dar_counts_ok "$fc" || ev_none_fc "$fc"
+        [ "$EV_FC_NONE" = 1 ] || ev_filter_fc "$fc" "$((EV_FC_GATE - 4))" "$fc_gv" ;;
+      *) ev_filter_fc "$fc" 2 "$fc_gv" ;;
+    esac
   fi
   ds="$(ev_label 'Dependency setup:')"; ds_rc=$?
   if [ "$ds_rc" -ne 0 ]; then
