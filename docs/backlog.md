@@ -2739,9 +2739,7 @@ verify: manual
 - self-update-gate's assertion sites each call `ok` or `bad` once, with the label formatted by `printf -v` into the same bytes as before. The sites are `ss_assert`, `sd_assert`, `row`, the seed-fails pair, summary-defer, exit-code and hu2-signature. Each shard ends with `report_end`. `lib/report.sh` is a declared input of all four shards.
 - Counts are unchanged from base to tip, on plain runs: hermetic-runner 322 assertion lines; self-update-gate shards a 94, b 66, c 27, d 39.
 
-Remainder: the 9 rows still in `fixture-contract-allowlist.txt` (apply-restamp-worklist, backlog-receipt-traced-removal, ledger-reverify, ledger-status-vocabulary, plan-rotate, procsub-staged-refusal, readset-skip, reconcile-emit-report, suite-pole-info).
-
-**PARTIAL (v0.1141.0; batch 257, W7-05).** ledger-status-vocabulary, procsub-staged-refusal and suite-pole-info now report through `core/fixtures/lib/report.sh`, and their 3 `:report` rows are dropped. `fixture-contract-allowlist.txt` is its header plus `validate-fixture-hygiene.sh --derive-h10` on the edited tree: 8 rows.
+**PARTIAL (v0.1141.0; batch 257, W7-05).** ledger-status-vocabulary, procsub-staged-refusal and suite-pole-info now report through `core/fixtures/lib/report.sh`, and their 3 `:report` rows are dropped.
 - ledger-status-vocabulary was a counter reconcile, not a rewrite. Its 15 printf ok/FAIL sites now go through `ok`/`bad` over the same `%-20s` text, and it ends with `report_end ledger-status-vocabulary 12`. `ASSERTIONS` stays as the registry-against-runs control, and BROKEN still exits 2. The `ok(){ :; }` stubs around its `lib/mutant.sh` source are gone: `mutant.sh` defines only `fx_inproc` and needs neither.
 - suite-pole-info ends with `report_end suite-pole-info 11`.
 - procsub-staged-refusal: `ok`/`bad` no longer call `stub_clear`. `run_arm` clears after every arm, and `mkstub` clears before it builds the next stub. A probe of the base `ok`/`bad` found a live stub at only two places outside `run_arm`: `pf_expect_fail` and the pre-fix discriminator cell. No explicit clear was kept at either.
@@ -2752,7 +2750,7 @@ Remainder: the 9 rows still in `fixture-contract-allowlist.txt` (apply-restamp-w
 - `core/fixtures/lib/report.sh` is declared by all three fixtures and by procsub-staged-refusal-b and -c. The stale `run.sh:2023` cite in the three procsub declarations reads `:2022`; ledger-status-vocabulary's `run.sh:106` reads `:79`.
 - Each unit's verdict, ok count and normalised ok/FAIL/SKIP line set are identical at base and tip, procsub per shard (a/b/c: 76/106/97).
 
-Remainder (8 rows): apply-restamp-worklist, backlog-receipt-traced-removal, hermetic-runner, ledger-reverify, plan-rotate, readset-skip, reconcile-emit-report, self-update-gate.
+Remainder, W7-04 and W7-05 together: `fixture-contract-allowlist.txt` at v0.1141.0 is its header plus `validate-fixture-hygiene.sh --derive-h10` (cmp equal), 6 rows: apply-restamp-worklist, backlog-receipt-traced-removal, ledger-reverify, plan-rotate, readset-skip, reconcile-emit-report.
 
 **PARTIAL (v0.1138.0; batch 257, W6-09).** 49 more fixtures now report through `core/fixtures/lib/report.sh`, and their 49 `:report` rows are dropped from `fixture-contract-allowlist.txt`. The file is rebuilt as its header plus `validate-fixture-hygiene.sh --derive-h10` on the edited tree, so it adds no row. The 49: apply-drift-refile, artifact-section-heading-level, backlog-ledger, backlog-real-ledger, backlog-rotate-fence-guard, backlog-size-ceiling, bmad-invocation-resolve, budget-summary-verdict, check-31-ac-falsifiability, ci-gates-resolution, claude-rules-joins, context-sensor, deploy-validate-smoke-classification, dist-clone, escalation-citation, extension-check-adoption, file-mtime, gate-remediation-deny, gate-series-rung, hook-registration-join, invariant-index, layer-conforms-to, layer-contract-conformance, layer-entry-unreadable, layer-readopt-gate, party-wave-barrier, path-mapping-render, predicate-reclassification, prepush-pool-depth, provenance-flagless-default, push-drain-refusals, retro-compliance-workflow, review-carry-over-clauses, seed-verdict-store-red-print, self-update-reinvoke-liveness, shadowed-local-validators, shell-portability, smoke-surface-ignored, snapshot-supersession-marker, span-of-containment, spec-adoption-floor, spec-join-integrity, story-evidence-receipts, story-evidence-scaffold, story-provenance, taught-schema, trunk-push-bound, validator-fork-budget, vocabulary-index.
 - Each one sources the library through its own fixture-directory variable; `prepush-pool-depth`, which has none, uses `$(cd "$(dirname "$0")/../lib" && pwd)`. Its own counters (`rc`, `FAILS`, `ASSERTIONS`/`FAILURES`, `asserts`, `made`) map onto `oks`/`fails`. Its verdict tail is `report_end`, which keeps the expected count where the fixture checked one: layer-conforms-to 20, layer-entry-unreadable 23, layer-contract-conformance 5 or 1 per shard, and invariant-index 2.
@@ -2995,6 +2993,25 @@ Width 12, re-derived on r1135 (0.1135.0's first push, 12-way, 156 units, every u
 - No dollar figure: the box's compute has no recorded rate.
 - The twins are not a step with no measured value. A static join would make pw2's catch without running them: a shipping fixture's declarations name no `.dist-only` fixture's files. Owed: that join, then the twin set weighed again against what remains.
 
+**PARTIAL (v0.1142.0) — (d)'s deriver fix and 6 of its 8 fixtures shipped; the install pair, (c)'s cut and (e) stay owed.**
+
+(d):
+- The deriver fix. `derive-fixture-readsets.sh --declared-out <file>` keeps a declared fixture's accepted set as `<fx>\t<path>` and an omitted one as `<fx>\t#omitted\t<why>`. It writes per fixture by temp + mv and exits before the map is written. It takes `--list` only, and it refuses an undeclared name before any trace. Without the flag, the deriver is unchanged.
+- The trace. `--list "<the 8>" --tracer sandbox --declared-out` ran in the main checkout at b53b3d642: rc 0, 155 s. It kept 6 of the 8: vocabulary-index 270 paths, hermetic-consumption 1026, finding-grammar-binding 114, procsub-staged-refusal 173, validator-path-resolution 92, bmad-invocation-resolve 69.
+- Narrowed. hermetic-consumption's `core/fixtures/` line (1615 tracked files) is now `core/fixtures/*/run.sh`, `core/fixtures/*/.dist-only` and three `lib/` files, beside the existing `*/inputs.decl` glob. Under `hermetic-run.sh` the old and new declarations give the same assertion lines, arm C reads `scanned=196` both times, and `required_missing=0`. Arm C (`scripts/validate-hermetic-consumption.sh:236`) skips a directory holding none of the globbed names.
+- Reclassed `legacy` → `whole`, 11 rows. The trace read every tracked file under each line, or every file of the type the fixture enumerates:
+  - bmad-invocation-resolve `!core/skills/ai-dlc/`
+  - finding-grammar-binding `!core/scripts/`, `!core/hooks/`
+  - procsub-staged-refusal `core/hooks/`, `core/scripts/`, `core/session-driver/`
+  - validator-path-resolution `!core/scripts/`
+  - vocabulary-index `scripts/`, `.githooks/`, `templates/`
+  - schema-install-fallback `patterns/` (`install.sh:436` copies `patterns/*.md`; run.sh:140 requires install rc 0)
+- Legacy rows: 96 → 84. `scripts/invalidation-guard.sh --ratchet` is rc 0.
+- A reclass changes how the guard classes a moved row (READ rather than UNATTRIBUTED); it does not change selection. Only the narrowing removes dispatches.
+- Still owed:
+  - install-scaffold-ignored (`core/`, `patterns/`, `templates/`) and schema-install-fallback (`core/`, `templates/`). Both OMITTED again on stream drops, solo as well (6 and 9 drops).
+  - procsub-staged-refusal `core/skills/` (39 of 88 files read) and vocabulary-index `core/` (167 of 1841) stay `legacy`. Their narrowing needs subdirectory rows, which the shrink-only list refuses.
+
 verify: manual
 
 ## BL-1119 — two fixtures' counted starts move with pool width, and divergence-hard-block's cached world loses objects mid-copy
@@ -3071,6 +3088,10 @@ Reported by ai-dlc-67's BL-1115 report, not verified here: one prepush-pool-dept
 
 Owed: one mechanism, with its false-positive set measured on the B12 tree before it ships. Candidates are a fixture-hygiene arm (a world that drives the hook sets its own store), per-run stores in hermetic-run, or a post-suite check that every root under the real store is ai-dlc's or a declared consumer's. Removing the stray `0196bbccd` root is part of the fix.
 
+**PARTIAL (v0.1142.0; batch 257, W7-06).** prepush-pool-depth now extracts both its FIXTURE_POOL spans through `pool_span` (`run.sh:291`, `:1412`), and its row is dropped from `scripts/pool-span-allowlist.txt`. Its verdict and its 66 assertions are the same at base and tip. Whether a plain run at base left records in the real store was not measured.
+
+Remaining: the 4 rows still in `scripts/pool-span-allowlist.txt` (fixture-invocation-budget, pregate-self-check, readset-skip, suite-content-key), and the three non-fixture items under the v0.1138.0 "Remaining" list below.
+
 **PARTIAL (v0.1141.0; batch 257, W7-04).** hermetic-runner, seed-verdict-store-red-print and self-update-gate now extract FIXTURE_POOL through `pool_span`, and their 3 rows are dropped from `scripts/pool-span-allowlist.txt`.
 - self-update-gate-c's pu-readset world was a live writer. Its world sourced the hand-extracted pool and ran `run_fixtures` with no store, because the preamble's `AI_DLC_*` unset loop had cleared it. A plain run with its own scratch HOME left 4 records in that HOME's default store at base, all under one throwaway root: `fixture-keys/<root>/fa.key` and `.prev`, and `fixture-verified/<root>` and `.format`. At tip the same run leaves 0.
 - hermetic-runner pins its own store (`run.sh:106`), and every census drive in seed-verdict-store-red-print sets one. Both left 0 records at base, so for them the migration is clause C25 only. The `AI_DLC_VERDICT_STORE=""` in seed-verdict-store-red-print's `pw_run` drives a hand-written stub hook, not a `pool_span` output, so that cell still gets its empty store.
@@ -3094,7 +3115,7 @@ Remaining:
 - scripts that load a record-binding span themselves rather than through a fixture (`scripts/pregate-self-check.sh:432` writes pregate-green through `rec_home`); H13 reads only fixture files;
 - the `REC_ROOT` inheritance effect stated above was never reproduced; no stray under `89857cfe9` was observed.
 
-Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b from ai-dlc-67's BL-1115 report; id allocated by the lead. W6-14 by ai-dlc-b7.
+Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b from ai-dlc-67's BL-1115 report; id allocated by the lead. W6-14 by ai-dlc-b7. W7-06 by ai-dlc-bf.
 
 verify: manual
 

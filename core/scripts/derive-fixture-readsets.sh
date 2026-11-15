@@ -184,8 +184,8 @@ die() { echo "ERROR: $*" >&2; exit "$DIE_RC"; }
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 
 rs_top_parse() {
-USAGE="usage: bash ${BASH_SOURCE[0]} [--all | --list \"<fixtures>\" | --reconcile] [--tracer fs_usage|sandbox|both] [--local-map <file>] [--in-pool <dir> | --merge-pool <dir>]   (fs_usage and both need sudo)"
-MODE=""; LIST_ARG=""; TRACER="fs_usage"; LOCAL_MAP=""; RECONCILE=0; IN_POOL=""; MERGE_POOL=""
+USAGE="usage: bash ${BASH_SOURCE[0]} [--all | --list \"<fixtures>\" | --reconcile] [--tracer fs_usage|sandbox|both] [--local-map <file>] [--in-pool <dir> | --merge-pool <dir>] [--declared-out <file>]   (fs_usage and both need sudo)"
+MODE=""; LIST_ARG=""; TRACER="fs_usage"; LOCAL_MAP=""; RECONCILE=0; IN_POOL=""; MERGE_POOL=""; DECLARED_OUT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --all)       MODE="--all"; shift ;;
@@ -196,9 +196,21 @@ while [ $# -gt 0 ]; do
     --local-map) LOCAL_MAP="${2:-}"; shift; [ $# -gt 0 ] && shift; [ -n "$LOCAL_MAP" ] || die "--local-map needs a file. $USAGE" ;;
     --in-pool)   IN_POOL="${2:-}"; shift; [ $# -gt 0 ] && shift; [ -n "$IN_POOL" ] || die "--in-pool needs a directory. $USAGE" ;;
     --merge-pool) MERGE_POOL="${2:-}"; shift; [ $# -gt 0 ] && shift; [ -n "$MERGE_POOL" ] || die "--merge-pool needs a directory. $USAGE" ;;
+    --declared-out) DECLARED_OUT="${2:-}"; shift; [ $# -gt 0 ] && shift; [ -n "$DECLARED_OUT" ] || die "--declared-out needs a file. $USAGE" ;;
     *)           die "$USAGE" ;;
   esac
 done
+# `--declared-out <file>` TRACES DECLARED FIXTURES FOR THEIR inputs.decl (C13). The merge drops a declared
+# fixture's rows from the map (BL-897), so a plain --list trace of one is discarded. This mode keeps each
+# accepted set in <file> as `<fx>\t<path>`, an omitted one as `<fx>\t#omitted\t<why>`, replacing that fixture's
+# rows (temp + mv) after every fixture, and exits before the committed map is written. Every listed fixture
+# must carry an inputs.decl; the refusals below and after the fixture root run before any trace.
+if [ -n "$DECLARED_OUT" ]; then
+  [ "$MODE" = --list ] && [ "$RECONCILE" = 0 ] && [ -z "$LOCAL_MAP" ] && [ -z "$IN_POOL" ] && [ -z "$MERGE_POOL" ] \
+    || die "--declared-out needs --list and takes no --local-map, --in-pool, --merge-pool or --reconcile. $USAGE"
+  [ "$TRACER" != both ] || die "--declared-out takes no --tracer both: that mode compares tracers and records nothing. $USAGE"
+  case "$DECLARED_OUT" in /*) ;; *) DECLARED_OUT="$PWD/$DECLARED_OUT" ;; esac
+fi
 # LW_GATE: a LINKED worktree (whose .git is a file) runs only the pool's two modes, decided on the PARSED
 # arguments, and before --in-pool creates or clears anything.
 [ -d "$REPO_ROOT/.git" ] || [ -n "$IN_POOL" ] || [ -n "$MERGE_POOL" ] || {
@@ -300,6 +312,11 @@ FIXTURE_ROOT="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$RUNNER" | sor
 N_ROOT="$(printf '%s\n' "$FIXTURE_ROOT" | grep -c .)"
 [ "$N_ROOT" -eq 1 ] || die "read $N_ROOT fixture root(s) from $RUNNER, need exactly 1 (got: $(printf '%s' "$FIXTURE_ROOT" | tr '\n' ' ')). Zero means its fixture glob has changed shape and this producer is now guessing; more than one means a basename key cannot name a directory."
 [ -d "$REPO_ROOT/$FIXTURE_ROOT" ] || die "$RUNNER drives '$FIXTURE_ROOT/' and no such directory exists under $REPO_ROOT."
+if [ -n "$DECLARED_OUT" ]; then
+  _nd=""
+  for _f in $LIST_ARG; do [ -f "$REPO_ROOT/$FIXTURE_ROOT/$_f/inputs.decl" ] || _nd="$_nd $_f"; done
+  [ -z "$_nd" ] || die "--declared-out traces declared fixtures only; no $FIXTURE_ROOT/<fx>/inputs.decl for:$_nd"
+fi
 
 # THE RUNNER'S OWN UNIVERSE, SOURCED, NEVER RESTATED. The `# digest <fx> <sha>` line this script writes
 # for a traced fixture is recomputed by the runner over its own `.now` to decide whether a stale record
@@ -2181,7 +2198,16 @@ rs_fx_judge() {
     fi
   fi
 
-  if [ -n "$why" ]; then
+  if [ -n "$DECLARED_OUT" ]; then
+    if [ -n "$why" ]; then
+      OMITTED="${OMITTED}${OMITTED:+ }$fx"
+      printf '  %-32s OMITTED (%s)\n' "$fx" "$why"
+    else
+      MAPPED=$(( MAPPED + 1 )); TOTAL_PATHS=$(( TOTAL_PATHS + n ))
+      printf '  %-32s %5s paths\n' "$fx" "$n"
+    fi
+    rs_declared_write "$fx" "$why" || die "could not write $DECLARED_OUT after tracing $fx"
+  elif [ -n "$why" ]; then
     OMITTED="${OMITTED}${OMITTED:+ }$fx"
     [ "$TRACER" = both ] || printf '  %-32s OMITTED (%s) -- will always run\n' "$fx" "$why"
     if [ -n "$LOCAL_MAP" ]; then
@@ -2208,6 +2234,16 @@ rs_fx_judge() {
         || say "  per-fixture map write refused after $fx (the previous map stands): $(tail -1 "$WORK/$fx.write")"
     fi
   fi
+}
+
+# rs_declared_write <fx> <why>: replace <fx>'s rows in DECLARED_OUT with its accepted set ($WORK/<fx>.set) when
+# <why> is empty, else with one `#omitted` row. A temp file beside it, then mv.
+rs_declared_write() {
+  local _t="$DECLARED_OUT.tmp.$$"
+  { [ ! -f "$DECLARED_OUT" ] || awk -F'\t' -v f="$1" '$1 != f' "$DECLARED_OUT"
+    if [ -z "$2" ]; then awk -v f="$1" 'NF { print f "\t" $0 }' "$WORK/$1.set"
+    else printf '%s\t#omitted\t%s\n' "$1" "$(printf '%s' "$2" | tr '\t\n' '  ')"; fi
+  } > "$_t" && mv -f "$_t" "$DECLARED_OUT" || { rm -f "$_t"; return 1; }
 }
 
 rs_fx_record() {
@@ -2242,6 +2278,10 @@ if [ -n "$IN_POOL" ]; then
 fi
 if [ -n "$LOCAL_MAP" ]; then
   say "wrote $LOCAL_MAP -- $MAPPED of $N_SUBJECT traced fixture(s) recorded${OMITTED:+; discarded: $OMITTED}"
+  exit 0
+fi
+if [ -n "$DECLARED_OUT" ]; then
+  say "wrote $DECLARED_OUT -- $MAPPED of $N_SUBJECT declared fixture(s) recorded, $TOTAL_PATHS path(s)${OMITTED:+; omitted: $OMITTED}; the map was NOT written"
   exit 0
 fi
 

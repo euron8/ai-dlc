@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1142.0] - 2026-11-15
+
+### BL-1124 PARTIAL: a trace keeps a declared fixture's read set
+
+`core/scripts/derive-fixture-readsets.sh --declared-out <file>` (with `--list` only) writes each declared fixture's traced set as `<fx>\t<path>`, or an `#omitted` row, and exits before the tracked map is written. Without the flag, its behaviour is unchanged. hermetic-consumption's `core/fixtures/` line is narrowed to the file types it reads, and its `legacy` row is dropped. 11 `legacy` rows of `docs/inputs-decl-whole-rows.tsv` become `whole`: 10 from traces, and schema-install-fallback's `patterns/` from the code, because the fixture installs into an empty target and `install.sh` copies every `patterns/*.md`. That leaves 84 legacy rows (from 96). install-scaffold-ignored and schema-install-fallback omitted on stream drops in every trace, so their other rows stay `legacy`.
+
+### BL-1130 PARTIAL: prepush-pool-depth extracts the pre-push pool through `pool_span`
+
+Both of prepush-pool-depth's FIXTURE_POOL extractions call `core/fixtures/lib/pool-span.sh`, and its row is dropped from `scripts/pool-span-allowlist.txt`, leaving 4 rows.
+
+### BL-1056 remainder restated
+
+BL-1056's remainder is restated as the 6 rows in `fixture-contract-allowlist.txt`.
+
 ## [0.1141.0] - 2026-11-15
 
 ### BL-1130 PARTIAL: three more fixtures extract the pre-push pool through `pool_span`
