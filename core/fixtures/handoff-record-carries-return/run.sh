@@ -4,7 +4,6 @@
 #
 # Usage: run.sh            full run: every arm's self-probe, then the seeded wfd arm, then the corpus
 #        run.sh --probes   self-probes and the seeded wfd arm (a) only; no corpus file is read
-#        run.sh --matrix   as --probes, plus one MATRIX row per (d) self-probe mutant
 # Exit:  0 = every assertion holds, 1 = an assertion failed, 2 = fixture broken.
 #
 # THE SUBJECT. Three beat-joined roles now write into their deliverable what they previously
@@ -41,22 +40,12 @@
 # and never from the cwd. The subject program is core/scripts/ or scripts/ai-dlc/ accordingly.
 #
 # Not in validate-enforcement-map.sh: that validator is invoked by the suite pole.
-#
-# The mutant by arm matrix, measured from one hermetic run (core/scripts/hermetic-run.sh with
-# AI_DLC_VERDICT_STORE set to a fresh mktemp dir). Both mutants live in arm (d)'s self-probe:
-# a layer contract that no longer names crosswalk.md consumer-owned (probe arm d-exclusion), and
-# a d_file blind to b.md while a.md carries two sites (probe arm d-per-file).
-# MUTANT-MATRIX contract-not-naming-crosswalk decides=d-exclusion twins=- why=one d_verdict run on the pd-ok probe tree, read only by the exclusion probe arm
-# MUTANT-MATRIX d_file-blind-to-b.md decides=d-per-file twins=- why=one d_verdict run on the pd-miss probe tree, read only by the per-file probe arm
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/handoff-record-carries-return/run.sh --matrix
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="handoff-record-carries-return"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_d_exclusion=0
 broken() { printf '%s: FIXTURE BROKEN — %s\n' "$NAME" "$1" >&2; exit 2; }
 
 resolve_root() {  # <start-dir> -> "<layout> <root>", or rc 1
@@ -81,17 +70,8 @@ MODE="full"
 case "${1:-}" in
   "") : ;;
   --probes) MODE="probes" ;;
-  --matrix) MODE="matrix" ;;
   *) broken "unknown argument: $1" ;;
 esac
-# --matrix: the --probes run plus one MATRIX row per (d) self-probe mutant, read off the d_verdict output its
-# arm already scored: fires=yes when that output is a FAIL naming the arm's site. No corpus file is read.
-mx_d() {  # mx_d <name> <deciding arm> <site the arm requires> ; reads $out
-  [ "$MODE" = "matrix" ] || return 0
-  local f=no
-  case "$out" in FAIL*"$3"*) f=yes ;; esac
-  printf 'MATRIX %s decides=%s fires=%s twins=-\n' "$1" "$2" "$f"
-}
 
 WORK="$(mktemp -d 2>/dev/null)" || broken "mktemp failed"
 WORK="$(cd "$WORK" && pwd)"
@@ -365,7 +345,7 @@ probe_d() {
   printf 'report it under `gaps`; the lead routes that to a dev.\n' > "$T/ro/protected-path-editor.md"
   printf 'Put the blocker in your return and finish.\n' > "$T/sk/crosswalk.md"
   if out="$(d_verdict "$T/sk" "$T/ro")"; then
-    case "$out" in "PASS R3: 1 of 1 "*) ok "(d) probe: near-miss (shape wrapped onto a \`## Gaps\` line) passes; protected-path-editor.md excluded"; B_d_exclusion=1 ;;
+    case "$out" in "PASS R3: 1 of 1 "*) ok "(d) probe: near-miss (shape wrapped onto a \`## Gaps\` line) passes; protected-path-editor.md excluded" ;;
       *) bad "(d) probe: near-miss passed with the wrong site count: $out" ;; esac
   else bad "(d) probe: the near-miss carrying S5 failed: $out"; fi
   printf 'returning only `{artifact_path, summary, gaps}`. Then resume.\n' > "$T/sk/steps/offender.md"
@@ -389,31 +369,6 @@ probe_d() {
     case "$out" in *"no consumer_*_file key derivable"*) ok "(d) probe: no consumer_*_file key refuses (the exclusion is the derivation, not a hand list)" ;;
       *) bad "(d) probe: the keyless contract failed for the wrong reason: $out" ;; esac
   fi
-  printf 'consumer_other_file: .claude/skills/ai-dlc/other.md\n' > "$T/sk/layer-contract.yaml"
-  if out="$(d_verdict "$T/sk" "$T/ro")"; then bad "(d) probe: crosswalk.md passed although the contract no longer names it consumer-owned"
-  else
-    case "$out" in *"sk/crosswalk.md:1"*) mutant_killed "$B_d_exclusion" contract-not-naming-crosswalk "(d) probe: MUTANT contract not naming crosswalk.md flags it (the exclusion discriminates)" ;;
-      *) bad "(d) probe: crosswalk.md mutant failed for the wrong reason: $out" ;; esac
-  fi
-  mx_d contract-not-naming-crosswalk d-exclusion "sk/crosswalk.md:1"
-  rm -f "$T/sk/crosswalk.md"
-  printf 'consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md\n' > "$T/sk/layer-contract.yaml"
-  # The scan misses a file grep finds: a mutant d_file blind to b.md, while a.md carries two sites. A total
-  # floor (sites >= files) passes this; the per-file assertion must fail it.
-  T="$WORK/pd-miss"; mkdir -p "$T/sk" "$T/ro" || broken "mkdir failed"
-  printf 'consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md\n' > "$T/sk/layer-contract.yaml"
-  printf 'returning `{artifact_path, summary, gaps}` with `## Gaps`.\n\nreturning `{artifact_path, summary, gaps}` with `## Gaps`.\n' > "$T/sk/a.md"
-  printf 'returning `{artifact_path, summary, gaps}` with `## Gaps`.\n' > "$T/sk/b.md"
-  if out="$(d_verdict "$T/sk" "$T/ro")"; then :; else bad "(d) probe: the unmutated two-file tree failed: $out"; fi
-  eval "$(declare -f d_file | sed '1s/^d_file/d_file_real/')"
-  d_file() { case "$1" in */b.md) return 0 ;; esac; d_file_real "$1"; }
-  if out="$(d_verdict "$T/sk" "$T/ro")"; then bad "(d) probe: a file the scan misses but grep finds passed"
-  else
-    case "$out" in *"b.md carries the shape by grep and yields no scanned site"*) ok "(d) probe: a scan-missed file fails per file although total sites meet the floor" ;;
-      *) bad "(d) probe: the scan-missed file failed for the wrong reason: $out" ;; esac
-  fi
-  mx_d d_file-blind-to-b.md d-per-file "b.md carries the shape by grep and yields no scanned site"
-  unset -f d_file; eval "$(declare -f d_file_real | sed '1s/^d_file_real/d_file/')"; unset -f d_file_real
   T="$WORK/pd-empty"; mkdir -p "$T/sk" "$T/ro" || broken "mkdir failed"
   printf 'consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md\n' > "$T/sk/layer-contract.yaml"
   printf 'nothing here restates the return\n' > "$T/sk/plain.md"

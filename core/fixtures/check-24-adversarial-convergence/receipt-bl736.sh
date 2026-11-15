@@ -7,7 +7,7 @@
 #   exit 0   the fix is present        exit 1   it is not        exit 9   the receipt cannot measure
 #
 # The subject is resolved from this file's tree (core/scripts/ in the distribution, scripts/ai-dlc/
-# installed); an argument names another copy, which is how the base and a mutant are scored.
+# installed); an argument names another copy of the validator.
 #
 # Each world is its own git repository whose strategy rows take graph s319's real shape
 # (`| ST319-2.3-01 | 2.3a | AC1 | ...`), stamped at the validator's own J2T_RELEASE:
@@ -22,10 +22,6 @@
 #   legacy   split, the first pass dated BEFORE the J2T_RELEASE stamp            PENDING Legacy, exit 0
 #   nostamp  split, .claude/.ai-dlc-version on disk and in NO commit             PENDING not owed yet, exit 0
 #   pred     split, the repo stamped only at J2T_RELEASE's predecessor          PENDING not owed yet, exit 0
-#
-# The era worlds are stamped at the J2T_RELEASE of RCPT_STAMP_FROM when it is set (the shipped
-# validator, so a mutant whose constant was lowered or raised is dated against the real stamp: raised,
-# split reads not-owed; lowered, pred FAILs), else of the subject.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
@@ -42,9 +38,7 @@ fi
 command -v git >/dev/null 2>&1 || { echo "receipt: git is not on PATH" >&2; exit 9; }
 # The era stamp is the validator's own constant; a copy without one (the base) is stamped at the
 # release after which every series is owed under any later constant.
-STAMP_FROM="${RCPT_STAMP_FROM:-$SUBJ}"
-[ -f "$STAMP_FROM" ] || { echo "receipt: RCPT_STAMP_FROM names no file ($STAMP_FROM)" >&2; exit 9; }
-REL="$(sed -n 's/^J2T_RELEASE="\([0-9.]*\)"$/\1/p' "$STAMP_FROM")"; [ -n "$REL" ] || REL="99.0.0"
+REL="$(sed -n 's/^J2T_RELEASE="\([0-9.]*\)"$/\1/p' "$SUBJ")"; [ -n "$REL" ] || REL="99.0.0"
 IFS=. read -r r_ma r_mi r_pa <<EOF
 $REL
 EOF
@@ -60,20 +54,6 @@ else
   B="$(mktemp -d "${TMPDIR:-/tmp}/bl736-receipt-XXXXXX")" || exit 9
 fi
 B="$(cd "$B" && pwd -P)"
-# RCPT_ARMS (optional): passed to the validator as --arms, its fixture seam (the named gate-only arms only).
-# RCPT_WORLDS (optional): judge only the named worlds; a name this receipt does not judge is exit 9. A world
-# left out never runs the subject, reads rc=99, and is dropped from the verdict.
-want() { [ -z "${RCPT_WORLDS:-}" ] && { RAN="$RAN $1 "; return 0; }; case " $RCPT_WORLDS " in *" $1 "*) RAN="$RAN $1 "; return 0 ;; esac; return 1; }
-RAN=""
-rcpt_filter() {
-  [ -n "${RCPT_WORLDS:-}" ] || return 0
-  local x kept=""
-  for x in $RCPT_WORLDS; do
-    case "$RAN" in *" $x "*) ;; *) echo "receipt: RCPT_WORLDS names '$x', which this receipt does not judge" >&2; exit 9 ;; esac
-  done
-  for x in $bad; do case "$x" in *"(rc=99)") ;; *) kept="$kept $x" ;; esac; done
-  bad="$kept"
-}
 TS=_bmad-output/planning-artifacts/s1/test-strategy.md
 D=_bmad-output/planning-artifacts/s1
 lg() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=r -c user.email=r@example.invalid \
@@ -155,8 +135,7 @@ strat lsplit > "$B/m-before"; [ "$(ids_all "$B/m-before")" = "$(ids_all "$B/merg
   || { echo "receipt: nostamp/pred stamp shape wrong" >&2; exit 9; }
 
 run() { # world -> RC, OUT
-  want "$1" || { OUT="__RCPT_SKIPPED__"; RC=99; return 0; }
-  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" ${RCPT_ARMS:+--arms "$RCPT_ARMS"} --series "$B/$1/$D/test-strategy-adversarial-p" \
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/$D/test-strategy-adversarial-p" \
          --transcript "$B/transcript.jsonl" 2>&1)"; RC=$?
 }
 bad=""
@@ -169,8 +148,6 @@ run norows;  [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ 
 run legacy;  [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"Legacy series."* ]] && [[ "$OUT" != *"FAIL (J2"* ]] || bad="$bad legacy(rc=$RC)"
 run nostamp; [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"not owed yet"* ]] && [[ "$OUT" != *"FAIL (J2"* ]] || bad="$bad nostamp(rc=$RC)"
 run pred;    [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"not owed yet"* ]] && [[ "$OUT" != *"FAIL (J2"* ]] || bad="$bad pred(rc=$RC)"
-rcpt_filter
-[ -z "${RCPT_REPORT:-}" ] || echo "receipt worlds judged:$(echo $RAN)" >&2
 if [ -n "$bad" ]; then echo "receipt BL-736: NOT FIXED --$bad"; exit 1; fi
 echo "receipt BL-736: fixed (reword silent, split and merge FAIL by story column, reopen silent, unreachable PENDING, legacy, unstamped and predecessor-stamped PENDING by era)"
 exit 0

@@ -28,7 +28,7 @@
 # on the reference consumer `git ls-files` alone is 607945 bytes across 10146 paths against
 # an ARG_MAX of 1048576, so 58% of the ceiling is spent before a byte of diff exists. The
 # first filing's own prescribed remedy — "pass the diff via a temp file instead of an
-# exported env var" — was built as a mutant and scored: it leaves that 58% in place. A
+# exported env var" — leaves that 58% in place. A
 # remedy taken at face value would have closed the filing and not the defect.
 #
 # So assertion 2 names each channel that leaked, and assertion 3 asks the question no
@@ -37,11 +37,10 @@
 # a name nothing here greps for.
 #
 # THEY OVERLAP, AND ASSERTION 3 STANDS DOWN FOR ASSERTION 2 RATHER THAN FIRING BESIDE IT.
-# Putting any of the three payloads back on the environment breaks both, and a mutant that
+# Putting any of the three payloads back on the environment breaks both, and a change that
 # fails two arms means one of them is vacuous. Assertion 3 therefore asserts only when all
 # three signatures are absent — which makes its subject exactly the UNNAMED channel, the
-# one thing assertion 2 structurally cannot see, and gives it a mutant of its own (m4)
-# that carries no known signature.
+# one thing assertion 2 structurally cannot see.
 #
 # WHY THE UNREADABLE-PAYLOAD ARM IS DRIVEN THROUGH A python3 SHIM THAT RE-EXECS.
 #
@@ -76,8 +75,6 @@ done
   echo "  looked in: $ROOT/core/scripts (distribution), $ROOT/scripts/ai-dlc (consumer)" >&2
   exit 2
 }
-# Printed because a mutant applied to a copy the run never loads leaves every arm green,
-# and that reads exactly like an arm that cannot fire.
 echo "  subject resolved: $SUBJ"
 echo "HERMETIC-CONSUMED $SUBJ"
 
@@ -98,9 +95,7 @@ trap 'rm -rf "$WORK"' EXIT
 # 'fanout.*'` returns 0 UNCONDITIONALLY whenever TMPDIR is `/tmp`, which is exactly what
 # `sudo` sets: measured, `find /tmp` -> 0 against `find /tmp/` -> 4, `find -H /tmp` -> 4 and
 # `find /private/tmp` -> 4, in one invocation with a control that drops when a directory is
-# removed. Arm 5 and its m6-trap mutant both read that count, so under sudo the arm could
-# never fire and the mutant SURVIVED -- the fixture failed, and it failed for a reason that
-# has nothing to do with its subject.
+# removed. Arm 5 reads that count, so under sudo the arm could never fire.
 #
 # THIS IS WHY THE FIXTURE WAS NEVER MAPPED. `derive-fixture-readsets.sh` runs each fixture as
 # `sudo -n -u "$RUN_AS"`, whose TMPDIR is `/tmp` where an interactive shell's is a real
@@ -114,31 +109,24 @@ trap 'rm -rf "$WORK"' EXIT
 TMP_ROOT="$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P)" \
   || { echo "FIXTURE ERROR: cannot resolve TMPDIR" >&2; exit 2; }
 # A MISSING SUBJECT IS NOT A PASS, AND NEITHER IS AN UNRESOLVABLE TEMP ROOT: if the line above
-# ever yields a path `find` cannot descend, arms 5 and m6 go quiet and report success.
+# ever yields a path `find` cannot descend, arm 5 goes quiet and report success.
 [ -d "$TMP_ROOT" ] || { echo "FIXTURE ERROR: TMP_ROOT is not a directory: $TMP_ROOT" >&2; exit 2; }
 
-# --- ARM 5 AND m6 COUNT IN A PRIVATE TEMP ROOT, NEVER IN THE SHARED ONE ---------------------
+# --- ARM 5 COUNTS IN A PRIVATE TEMP ROOT, NEVER IN THE SHARED ONE ---------------------------
 # The subject names its payload directory `fanout.XXXXXX` with no per-run segment, so a count
 # of `fanout.*` in the ambient TMPDIR cannot tell this run's directory from a concurrent one's.
-# The suite pool runs two other fanout fixtures beside this one: a foreign directory appearing
-# between the two counts failed arm 5 and faked m6's kill, and m6's sweep deleted the live
-# payload of whatever run shared the root. Each counting run gets its own directory under
-# $WORK, the subject is run with TMPDIR pointed at it, and only that directory is counted and
-# swept. Resolved with `pwd -P` for the same symlink reason as TMP_ROOT above.
+# The counting run gets its own directory under $WORK, the subject is run with TMPDIR pointed
+# at it, and only that directory is counted. Resolved with `pwd -P` for the same symlink
+# reason as TMP_ROOT above.
 WORK_P="$(cd "$WORK" 2>/dev/null && pwd -P)" \
   || { echo "FIXTURE ERROR: cannot resolve WORK" >&2; exit 2; }
 A5_ROOT="$WORK_P/tmproot-arm5"
-M6_ROOT="$WORK_P/tmproot-m6"
-mkdir -p "$A5_ROOT" "$M6_ROOT" && [ -d "$A5_ROOT" ] && [ -d "$M6_ROOT" ] \
-  || { echo "FIXTURE ERROR: cannot create the private temp roots under $WORK_P" >&2; exit 2; }
+mkdir -p "$A5_ROOT" && [ -d "$A5_ROOT" ] \
+  || { echo "FIXTURE ERROR: cannot create the private temp root under $WORK_P" >&2; exit 2; }
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { printf '  FIXTURE BROKEN  %s\n' "$1" >&2; exit 2; }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # ============================================================================
 # THE SIGNATURES
@@ -256,7 +244,6 @@ s_rc="$(sed -n 's/^rc=//p' <<<"$S_OUT")"
 s_rows="$(rows "$S_OUT")"
 if [ "$s_rc" = 0 ] && [ "$s_rows" -ge 1 ]; then
   ok "1. the subject resolves its scope and emits a worklist (rc=0, $s_rows rows)"
-  B_BASE=1
 else
   bad "1. the subject did not produce a usable baseline: rc=$s_rc rows=$s_rows — every arm below is about a run that did not happen"
   printf '%s\n' "$S_OUT" | sed 's/^/        /' >&2
@@ -372,155 +359,6 @@ if [ "$after" -le "$before" ]; then
   ok "5. the payload directory does not survive the run (fanout.* dirs before $before, after $after)"
 else
   bad "5. the run left $(( after - before )) fanout.* directories behind — the cleanup trap is gone and every gate-loop invocation leaks a copy of the corpus"
-fi
-
-# ============================================================================
-# MUTANTS
-# ============================================================================
-# Every arm above except 1 and 4 is ABSENCE-shaped, which is exactly the shape that passes
-# for a program that never ran. Each mutant is a COPY with one edit; `cmp -s` guards
-# against a `sed` that matched nothing and scored a kill it never earned.
-echo "  --- mutants ---"
-kills=0
-
-# `mutate <name> <sed-args...>` — builds the copy and sets $MUT to its path. It reports
-# through the GLOBAL `fails` rather than through a command substitution: a `bad` call
-# inside `$( )` writes its finding to the caller's variable instead of the log, and its
-# increment of `fails` dies with the subshell — a battery that could not report.
-MUT=""
-mutate() {
-  local name="$1"; shift
-  local out="$WORK/m-$name.sh"
-  MUT=""
-  sed "$@" "$SUBJ" > "$out" || return 1
-  if cmp -s "$SUBJ" "$out"; then
-    bad "MUTANT [$name] IS A NO-OP: the edit matched nothing, so any kill below is unearned and any pass is meaningless"
-    return 1
-  fi
-  bash -n "$out" 2>/dev/null || {
-    bad "MUTANT [$name] does not parse — a kill would be a syntax error rather than a disarmed guard"
-    return 1
-  }
-  MUT="$out"
-}
-
-# `expect_leak <name> <mutant> <channel-word>` — the mutant must put a payload back on the
-# environment, AND must still produce the baseline worklist, so "no output" cannot score.
-expect_leak() {
-  # Declared on separate lines on purpose: `local a=$1 b=$WORK/$a` expands every word
-  # BEFORE any assignment lands, so the second one reads an unset `a` and `set -u` kills
-  # the run inside the function.
-  local name="$1" m="$2" want="$3"
-  local e="$WORK/m-$name.env" out
-  out="$(run "$m" "$SMALL" "$SBASE")"
-  if [ "$(sed -n 's/^rc=//p' <<<"$out")" != 0 ] || [ "$(rows "$out")" -lt 1 ]; then
-    bad "MUTANT HARNESS BROKEN [$name]: the copy no longer produces a worklist, so it is not running and the kill below is unreadable"
-    return
-  fi
-  capture "$m" "$SMALL" "$SBASE" "$e" || {
-    bad "MUTANT HARNESS BROKEN [$name]: the shim captured nothing from the copy"; return; }
-  if grep -qE -- "$want" "$e"; then
-    mutant_killed "${B_BASE:-0}" "$name" "  mutant [$name] KILLED by assertion 2: the $name payload is back on the environment"
-    kills=$((kills+1))
-  else
-    bad "MUTANT SURVIVED [$name]: assertion 2 did not see the payload it re-exported, so it does not depend on the code it claims to guard"
-  fi
-}
-
-# m1 — THE FIRST FILING'S OWN PRESCRIBED REMEDY, INVERTED: the diff back on the
-# environment. Assertion 2 must name the diff channel by itself.
-if mutate m1-diff \
-    -e 's|^export FANOUT_DIFF_FILE=|export FANOUT_DIFF="$DIFF" FANOUT_DIFF_FILE=|'; then
-  expect_leak m1-diff "$MUT" "$SIG_DIFF"
-fi
-
-# m2 — the corpus back on the environment. This is the 58% the filed remedy would have
-# left in place, and it is the reason assertion 2 names three channels and not one.
-if mutate m2-corpus \
-    -e 's|^export FANOUT_DIFF_FILE=|export FANOUT_FILES="$CORPUS_FILES" FANOUT_DIFF_FILE=|'; then
-  expect_leak m2-corpus "$MUT" "$SIG_CORPUS"
-fi
-
-# m3 — the untracked half back on the environment. It is a separate variable from the
-# corpus and a fix that moves two of three reads exactly like one that moved all three.
-if mutate m3-untracked \
-    -e 's|^export FANOUT_DIFF_FILE=|export FANOUT_UNTRACKED="$CORPUS_UNTRACKED" FANOUT_DIFF_FILE=|'; then
-  expect_leak m3-untracked "$MUT" "$SIG_UNTRACKED"
-fi
-
-# m4 — THE ARM-3 MUTANT, and the reason arm 3 is not redundant with arm 2. A tree-sized
-# payload under a name nothing above greps for, whose CONTENT carries none of the three
-# signatures: commit shas, one per tracked file. Assertion 2 is structurally blind to it.
-if mutate m4-unnamed \
-    -e 's|^export FANOUT_DIFF_FILE=|FANOUT_PAD="$(git ls-files \| sed "s/.*/0123456789abcdef0123456789abcdef01234567/")"\nexport FANOUT_PAD FANOUT_DIFF_FILE=|'; then
-  m="$MUT"
-  m4e="$WORK/m4-small.env"; m4l="$WORK/m4-large.env"
-  if capture "$m" "$SMALL" "$SBASE" "$m4e" && capture "$m" "$LARGE" "$LBASE" "$m4l"; then
-    m4_leak=""
-    grep -qF "$SIG_CORPUS" "$m4e" && m4_leak=1
-    grep -qF "$SIG_UNTRACKED" "$m4e" && m4_leak=1
-    grep -qE "$SIG_DIFF" "$m4e" && m4_leak=1
-    m4g=$(( $(wc -c < "$m4l" | tr -d ' ') - $(wc -c < "$m4e" | tr -d ' ') ))
-    if [ -n "$m4_leak" ]; then
-      bad "MUTANT [m4-unnamed] IS ENTANGLED: its padding carries one of assertion 2's signatures, so it cannot show that assertion 3 fires on its own"
-    elif [ "$m4g" -ge 4096 ]; then
-      mutant_killed "${B_BASE:-0}" m4-unnamed "  mutant [m4-unnamed] KILLED by assertion 3 alone: +$m4g bytes with every named signature still absent"
-      kills=$((kills+1))
-    else
-      bad "MUTANT SURVIVED [m4-unnamed]: an unnamed tree-sized export grew the environment by only $m4g bytes, so assertion 3 cannot resolve the channel it exists for"
-    fi
-  else
-    bad "MUTANT HARNESS BROKEN [m4-unnamed]: the shim captured nothing"
-  fi
-fi
-
-# m5 — THE PERMISSIVE READ. This is the spelling that turns a broken payload into a clean
-# empty worklist, and only arm 4 can see it: every other arm is about where the data
-# travelled, not about what happens when it is not there.
-if mutate m5-permissive \
-    -e 's|^    except OSError as exc:|    except OSError:\n        return ""\n    except RuntimeError as exc:|'; then
-  m="$MUT"
-  mk="$WORK/m5shim"
-  mkshim "$mk" "FANOUT_DIFF_FILE=$WORK/does-not-exist"
-  mout="$( cd "$SMALL" && PATH="$mk:$PATH" AI_DLC_PROJECT_ROOT="$SMALL" bash "$m" "$SBASE" 2>&1 )"
-  mrc=$?
-  # Positive conjunct: the copy must still work on a GOOD payload, or the kill is silence.
-  gout="$(run "$m" "$SMALL" "$SBASE")"
-  if [ "$(sed -n 's/^rc=//p' <<<"$gout")" != 0 ] || [ "$(rows "$gout")" -lt 1 ]; then
-    bad "MUTANT HARNESS BROKEN [m5-permissive]: the copy fails on a good payload too, so arm 4b would fire for the wrong reason"
-  elif [ "$mrc" != 3 ]; then
-    mutant_killed "${B_BASE:-0}" m5-permissive "  mutant [m5-permissive] KILLED by assertion 4b: a missing payload now exits $mrc instead of 3"
-    kills=$((kills+1))
-  else
-    bad "MUTANT SURVIVED [m5-permissive]: a permissive read still exited 3, so assertion 4b is not reading the payload guard"
-  fi
-fi
-
-# m6 — the cleanup trap removed. Arm 5 owns this and nothing else can see it.
-if mutate m6-trap -e 's|^trap .rm -rf "\$FANOUT_TMP". EXIT|: # trap removed|'; then
-  m="$MUT"
-  # Its own private root, so a foreign `fanout.*` cannot fake this kill and the sweep below
-  # cannot reach another run's live payload.
-  b=$(find "$M6_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
-  gout="$( export TMPDIR="$M6_ROOT"; run "$m" "$SMALL" "$SBASE" )"
-  a=$(find "$M6_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$(sed -n 's/^rc=//p' <<<"$gout")" != 0 ] || [ "$(rows "$gout")" -lt 1 ]; then
-    bad "MUTANT HARNESS BROKEN [m6-trap]: the copy no longer produces a worklist"
-  elif [ "$a" -gt "$b" ]; then
-    mutant_killed "${B_BASE:-0}" m6-trap "  mutant [m6-trap] KILLED by assertion 5: the copy left $(( a - b )) payload directories behind"
-    kills=$((kills+1))
-    find "$M6_ROOT" -maxdepth 1 -name 'fanout.*' -type d -exec rm -rf {} + 2>/dev/null
-  else
-    bad "MUTANT SURVIVED [m6-trap]: removing the cleanup trap left nothing behind, so assertion 5 is watching a directory the subject does not create"
-  fi
-fi
-
-# The battery's own floor. A run where every mutant silently failed to apply reports the
-# same six `ok` lines as a run where the arms are inert.
-if [ "$kills" -ge 6 ]; then
-  ok "mutant battery: $kills of 6 scored dead"
-else
-  bad "mutant battery: only $kills of 6 scored dead — the arms above cannot be read as evidence"
 fi
 
 echo

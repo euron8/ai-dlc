@@ -20,37 +20,6 @@
 #
 # Usage: run.sh [readopt-override.sh] [unregistered-drift.sh]
 # Exit:  0 = every assertion holds, 1 = a gate regressed.
-#
-# MUTANT BATTERY. The E2 mutants (e2-M*) were measured as a full mutant x arm matrix (8 mutants x
-# the 16 E2 arms, one MATRIX line per cell) by the re-measure command below; per push each runs only
-# its deciding arms plus its named twins (arms that stay green under it). Every other mutant is
-# scored by ONE drive, so its matrix is that drive's own cells and a plain run already reads all of
-# them. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
-# state") requires.
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-readopt-gate/run.sh --matrix
-# MUTANT-MATRIX e2-M1 decides=a twins=n,e
-# MUTANT-MATRIX e2-M1plus decides=a twins=e,c
-# MUTANT-MATRIX e2-M2 decides=d twins=a,e
-# MUTANT-MATRIX e2-M3 decides=c twins=a,e
-# MUTANT-MATRIX e2-M4 decides=x twins=s,e
-# MUTANT-MATRIX e2-M5 decides=y twins=x,s
-# MUTANT-MATRIX e2-M6 decides=o twins=t,e
-# MUTANT-MATRIX e2-M7 decides=t twins=o,e
-# MUTANT-MATRIX plain-continue decides=B4b-continuation twins=B4b-line1,B4b-single-line
-# MUTANT-MATRIX clip-notice decides=B4c-notice twins=B4c-head,B4c-tail-clipped
-# MUTANT-MATRIX panel-guard decides=B5-bare-heading twins=- why=one observable: the bare heading is the only cell the drive scores
-# MUTANT-MATRIX flatten decides=flatten-wrapped twins=flatten-single-line
-# MUTANT-MATRIX noun-set decides=noun-set-file-claim twins=- why=one observable: the Rule-14 file claim is the only cell the drive scores
-# MUTANT-MATRIX loose-arm decides=loose-row twins=double-shadow-rows
-# MUTANT-MATRIX dup-threshold decides=double-shadow-rows twins=loose-row
-# MUTANT-MATRIX unclaimed-silence decides=unclaimed-row twins=double-shadow-rows
-# MUTANT-MATRIX unclaimed-widen decides=unclaimed-nested twins=unclaimed-single-anchor
-# MUTANT-MATRIX no-since decides=nosince-key-lost twins=nosince-with-since
-# MUTANT-MATRIX surplus-comparison decides=nosurplus-zero twins=surplus-row-emitted
-# MUTANT-MATRIX multi-anchor decides=multi-anchor-entry twins=single-anchor-entry
-# MUTANT-MATRIX wrap decides=H-wrapped twins=H-absent-path-refused
-# MUTANT-MATRIX reflow-M1 decides=J-containment twins=J-bad-refused
-# MUTANT-MATRIX reflow-M2 decides=J-negation twins=J-ok-passes
 set -uo pipefail
 
 # HERMETIC — scrub the operator's tuning before invoking any hook.
@@ -72,13 +41,38 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 
-# --matrix is the ONLY way into matrix mode (see the MUTANT-MATRIX block in the header): parsed and
-# shifted before any positional argument. A plain run executes no matrix-only cell.
-MATRIX=0
-if [ "${1:-}" = --matrix ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
-# mcell <mutant> <cell> <rc> -- one MATRIX line per scored cell, matrix mode only. rc 0 = the cell's own
-# (unmutated-expected) assertion HOLDS under the mutant (ok); non-zero = it FAILS under it (FAIL).
-mcell() { if [ "$MATRIX" = 1 ]; then printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$2" "$([ "$3" = 0 ] && echo ok || echo FAIL)"; fi; return 0; }
+# SHARDS. THIS FILE IS FIVE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
+# BOUNDARY. Every section below is a UNIT guarded by `if sg <unit>; then ... fi`; `--group <x>` runs the units
+# dealt to shard <x>. `layer-readopt-gate-{b,c,d,e}/run.sh` are one-line drivers that `exec bash` this file with their
+# group, so the pre-push pool starts each on its own. No `--group` runs shard 'a'. The seed and the helpers above
+# the first unit are not units: every shard pays them. The coverage join below runs in EVERY shard: the declared
+# units are DERIVED from this file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their
+# union exact, and every declared shard needs a driver; it proves it can fire first on a seeded duplicate and omission.
+#   a  main f   arms A-E (the re-adoption gate, dossier, merge, register-drift), F (absorbed delta)
+#   b  e2       E2: register-drift refusals and the world battery
+#   c  c3       C3: layer-drift delegation, survival, loose and double-shadow arms
+#   d  gh j     G and H (additive / wrap-insensitive) and J (re-flowed paragraph)
+#   e  sup      OVERRIDE-SUPERSEDED: the supersession and surplus arms
+SHARDS="a b c d e"
+UNITS_a="main f"
+UNITS_b="e2"
+UNITS_c="c3"
+UNITS_d="gh j"
+UNITS_e="sup"
+GROUP=a; GROUP_SET=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --group) GROUP="${2:-}"; GROUP_SET=1; [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }; shift 2 ;;
+    *) break ;;
+  esac
+done
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${UNITS_$GROUP:-}\""
+NAME="layer-readopt-gate"; [ "$GROUP" = a ] || NAME="layer-readopt-gate-$GROUP"
+sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -97,7 +91,67 @@ UNREG="$(pick "${2:-}" \
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$READOPT")" && pwd -P)/$(basename "$READOPT")"
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$UNREG")" && pwd -P)/$(basename "$UNREG")"
 
+# THE COVERAGE JOIN, in every shard before anything is built.
+lr_broken() { echo "  FAIL  $1" >&2; echo "$NAME: FIXTURE BROKEN" >&2; exit 2; }
+[ -n "$MINE" ] || lr_broken "shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked"
+lr_partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d "${TMPDIR:-/tmp}/lrgate-join.XXXXXX")" || lr_broken "mktemp failed"
+printf '%s\n' u1 u2 u3 > "$JW/pd"; printf '%s\n' u1 u2 u2 u3 > "$JW/pdup"; printf '%s\n' u1 u3 > "$JW/pmiss"; printf '%s\n' u3 u1 u2 > "$JW/pok"
+if lr_partition_ok "$JW/pd" "$JW/pdup" >/dev/null || lr_partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! lr_partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  rm -rf "$JW"; lr_broken "the coverage join's self-probe did not discriminate (duplicate, omission, exact)"
+fi
+sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$0" > "$JW/declared"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  rm -rf "$JW"; lr_broken "$ndecl unit guards derived from $0 ($ndupdecl declared twice)"
+fi
+if ! _why="$(lr_partition_ok "$JW/declared" "$JW/dealt")"; then
+  rm -rf "$JW"; lr_broken "the shard partition does not cover the guarded units exactly -- $_why"
+fi
+# THE DIST-ONLY SHARDS: DIST_SHARDS reach no consumer. Each carries a non-empty .dist-only and no other shard does,
+# and a consumer holds none of their directories, so only a DIST_SHARDS shard, whose inputs.decl declares its
+# dist-only siblings, checks their drivers and markers; a shipped shard declares none and skips them.
+DIST_SHARDS="b d e"
+case " $DIST_SHARDS " in *" $GROUP "*) _me=dist ;; *) _me=ship ;; esac
+[ ! -e "$HERE/.dist-only" ] || { rm -rf "$JW"; lr_broken "shard 'a' carries $HERE/.dist-only, but shard a ships"; }
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  case " $DIST_SHARDS " in *" $_s "*) _do=1 ;; *) _do=0 ;; esac
+  [ "$_do" = 1 ] && [ "$_me" = ship ] && continue
+  _drv="$HERE/../layer-readopt-gate-$_s/run.sh"
+  if [ ! -f "$_drv" ] || ! grep -qF -- "--group $_s" "$_drv"; then
+    rm -rf "$JW"; lr_broken "shard '$_s' is declared but $_drv does not drive it"
+  fi
+  if [ "$_do" = 1 ] && [ ! -s "${_drv%/run.sh}/.dist-only" ]; then
+    rm -rf "$JW"; lr_broken "shard '$_s' is in DIST_SHARDS but ${_drv%/run.sh}/.dist-only is absent or empty"
+  fi
+  if [ "$_do" = 0 ] && [ -e "${_drv%/run.sh}/.dist-only" ]; then
+    rm -rf "$JW"; lr_broken "shard '$_s' carries ${_drv%/run.sh}/.dist-only but is not in DIST_SHARDS"
+  fi
+done
+rm -rf "$JW"
+echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
+
 ROOT="$(bash "$HERE/seed.sh")"
+# layer-drift.sh is resolved here as well: units C3 and SUP (two shards) drive it.
+DRIFT="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/layer-drift.sh" \
+              "$HERE/../../../core/skills/ai-dlc-update/reconcile/layer-drift.sh" \
+              "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/layer-drift.sh")"
+# register-drift.sh is resolved here, not inside unit E: unit E2 (another shard) drives it too.
+REG="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/register-drift.sh" \
+            "$HERE/../../../core/skills/ai-dlc-update/reconcile/register-drift.sh" \
+            "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/register-drift.sh")"
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 OVR="$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md"
 BASE="$(git -C "$DIST" rev-parse --short HEAD~1)"
@@ -106,9 +160,8 @@ THEIRS="$(git -C "$DIST" rev-parse --short HEAD)"
 fails=0
 ok()   { printf '  ok    %s\n' "$1"; }
 bad()  { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_B4b_continuation=0 B_B4c_notice=0 B_B5_bare_heading=0 B_H_wrapped=0 B_J_containment=0 B_J_negation=0 B_double_shadow_rows=0 B_flatten_wrapped=0 B_loose_row=0 B_multi_anchor_entry=0 B_nosince_key_lost=0 B_noun_set_file_claim=0 B_unclaimed_nested=0 B_unclaimed_row=0
 
+if sg main; then
 echo "== A. the stale-core-text gate fires on the real shape =="
 
 out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --check 2>&1)"; rc=$?
@@ -310,7 +363,7 @@ else
   bad "the dossier rendered nothing for a plain scalar reason at all — the common path is broken, and every verdict below is about an empty panel"
 fi
 if grep -q 'PLAIN-CONT-SENTINEL' <<<"$pm_out" && grep -q 'PLAIN-TAIL-SENTINEL' <<<"$pm_out"; then
-  ok "  ...and BOTH continuation lines beneath it — a reason that runs past line 1 is not silently truncated to a fragment that reads whole"; B_B4b_continuation=1
+  ok "  ...and BOTH continuation lines beneath it — a reason that runs past line 1 is not silently truncated to a fragment that reads whole"
 else
   bad "the dossier rendered only line 1 of a PLAIN multi-line reason (cont=$(grep -c 'PLAIN-CONT-SENTINEL' <<<"$pm_out") tail=$(grep -c 'PLAIN-TAIL-SENTINEL' <<<"$pm_out"), want 1 and 1) — step 7's decision is taken against a fragment ending in a complete sentence, which is worse than the blank field B4 fixed"
 fi
@@ -375,7 +428,7 @@ else
 fi
 clip_n="$(grep -oE '\[\.\.\. [0-9]+ further line' <<<"$clip_out" | grep -oE '[0-9]+' | head -1)"
 if [ -n "$clip_n" ] && [ "$clip_n" -gt 0 ]; then
-  ok "  ...and the clip ANNOUNCES itself with a COUNT ($clip_n further line(s)) — the operator is told the field is partial instead of reading a fragment as whole"; B_B4c_notice=1
+  ok "  ...and the clip ANNOUNCES itself with a COUNT ($clip_n further line(s)) — the operator is told the field is partial instead of reading a fragment as whole"
 else
   bad "the reason panel clipped with NO notice and no count — this is the shipped defect: a truncated rationale is indistinguishable from a complete one, and the retire/readopt/reaffirm decision is taken on it"
 fi
@@ -405,76 +458,6 @@ else
 fi
 rm -f "$SHORT"
 
-# --- MUTANTS: the plain-continuation arm and the clip notice ------------------------------
-# B4b's stop-assertion and B4c's near-miss are both ABSENCE-shaped, and an absence passes
-# against a copy that emits nothing. Both mutants are copies of the WHOLE reconcile directory
-# (a lone script dies sourcing its siblings and prints nothing, which would score as a kill for
-# every arm here), `cmp -s`-guarded, keyed on the LINE THAT DECIDES rather than on any wording.
-# A FRESH `mktemp -d` RATHER THAN A REUSED-AND-CLEARED NAME. The sibling batteries in this file
-# open with `rm -rf "$VAR"` on a path they just assigned; a fresh directory reaches the same state
-# without a recursive delete on a computed path, and it cannot inherit a previous battery's
-# leftovers — which is the failure that makes a mutant read a file nobody in this block wrote.
-PMUT="$(mktemp -d "${TMPDIR:-/tmp}/lrg-plainmut.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
-cp "$(dirname "$READOPT")"/*.sh "$PMUT/" 2>/dev/null || true
-cp "$(dirname "$READOPT")"/*.md "$PMUT/" 2>/dev/null || true
-
-cp "$READOPT" "$PMUT/readopt-override.sh"
-pctl="$(bash "$PMUT/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$PM" 2>&1)"
-if grep -q 'PLAIN-CONT-SENTINEL' <<<"$pctl" && grep -q 'PLAIN-FIRST-SENTINEL' <<<"$pctl"; then
-  ok "  mutation-control-plain: an unmutated copy in a fresh directory still renders both lines of the plain reason"
-else
-  bad "  mutation control: the unmutated copy rendered first=$(grep -c 'PLAIN-FIRST-SENTINEL' <<<"$pctl") cont=$(grep -c 'PLAIN-CONT-SENTINEL' <<<"$pctl") — a copy that cannot run scores every kill below unearned"
-fi
-
-# MUTANT 1 — the plain arm back to `print v; exit`, which is the shipped-before behaviour
-# exactly. The multi-line entry must lose its continuation and the SINGLE-line form must not
-# move: one reads the same either way, so a mutant that took both would be testing whether the
-# reader runs at all rather than whether it continues.
-sed 's@^      print v; inb = 1; next$@      print v; exit@' "$READOPT" > "$PMUT/readopt-override.sh"
-if cmp -s "$READOPT" "$PMUT/readopt-override.sh"; then
-  bad "  mutation plain-continue: the mutation matched nothing (cmp -s guard) — the continuation arm has been respelled and B4b proves nothing"
-else
-  m_multi="$(bash "$PMUT/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$PM" 2>&1)"
-  cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__PlainOne.md" <<EOF
----
-shadows: SKILL.md#Rule 7
-base_sha: ${BASE}
-reason: ONELINE-SENTINEL a single-line plain reason.
----
-Body.
-EOF
-  m_one="$(bash "$PMUT/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$CONS/.claude/skills/ai-dlc/overrides/SKILL__PlainOne.md" 2>&1)"
-  grep -q 'PLAIN-CONT-SENTINEL' <<<"$m_multi"; mcell plain-continue B4b-continuation $?
-  grep -q 'PLAIN-FIRST-SENTINEL' <<<"$m_multi"; mcell plain-continue B4b-line1 $?
-  grep -q 'ONELINE-SENTINEL' <<<"$m_one"; mcell plain-continue B4b-single-line $?
-  if grep -q 'PLAIN-FIRST-SENTINEL' <<<"$m_multi" && ! grep -q 'PLAIN-CONT-SENTINEL' <<<"$m_multi" \
-     && grep -q 'ONELINE-SENTINEL' <<<"$m_one"; then
-    mutant_killed "$B_B4b_continuation" plain-continue "  mutation plain-continue: with the arm back to \`print v; exit\` the continuation VANISHES while line 1 and the single-line form both still render — B4b is reading the continuation and not the run"
-  else
-    bad "  mutation plain-continue: multi first=$(grep -c 'PLAIN-FIRST-SENTINEL' <<<"$m_multi") (want 1) cont=$(grep -c 'PLAIN-CONT-SENTINEL' <<<"$m_multi") (want 0) single=$(grep -c 'ONELINE-SENTINEL' <<<"$m_one") (want 1) — the arm is vacuous, or the mutant broke the reader and silence scored as a kill"
-  fi
-  rm -f "$CONS/.claude/skills/ai-dlc/overrides/SKILL__PlainOne.md"
-fi
-
-# MUTANT 2 — the announcement deleted, the BOUND left in place: `head -20`'s exact behaviour.
-# This is the one that could not be caught by any arm reading the panel's CONTENT, because the
-# shown lines are byte-identical either way — the notice is the whole observable. The short
-# control is the positive conjunct, so a mutant that killed the panel cannot score this.
-sed 's@ | awk .NR<=20{print} END{if (NR>20) printf "  \[\.\.\. %d further line(s) NOT SHOWN\. Read the override file named above for the whole reason\.\]\\n", NR-20}.@ | head -20@' "$READOPT" > "$PMUT/readopt-override.sh"
-if cmp -s "$READOPT" "$PMUT/readopt-override.sh"; then
-  bad "  mutation clip-notice: the mutation matched nothing (cmp -s guard) — the announcing awk has been respelled and B4c proves nothing"
-else
-  mc_long="$(bash "$PMUT/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$CLIP" 2>&1)"
-  grep -q 'NOT SHOWN' <<<"$mc_long"; mcell clip-notice B4c-notice $?
-  grep -q 'CLIP-HEAD-SENTINEL' <<<"$mc_long"; mcell clip-notice B4c-head $?
-  ! grep -q 'CLIP-TAIL-SENTINEL' <<<"$mc_long"; mcell clip-notice B4c-tail-clipped $?
-  if ! grep -q 'NOT SHOWN' <<<"$mc_long" && grep -q 'CLIP-HEAD-SENTINEL' <<<"$mc_long" \
-     && ! grep -q 'CLIP-TAIL-SENTINEL' <<<"$mc_long"; then
-    mutant_killed "$B_B4c_notice" clip-notice "  mutation clip-notice: with the announcement removed the SAME twenty lines are shown and the tail is SILENTLY dropped — the notice is the only observable, which is why no content arm could have caught this"
-  else
-    bad "  mutation clip-notice: notice=$(grep -c 'NOT SHOWN' <<<"$mc_long") (want 0) head=$(grep -c 'CLIP-HEAD-SENTINEL' <<<"$mc_long") (want 1) tail=$(grep -c 'CLIP-TAIL-SENTINEL' <<<"$mc_long") (want 0) — either the notice is not load-bearing, or the mutant changed the bound too and the two properties are entangled"
-  fi
-fi
 rm -f "$PM" "$CLIP"
 
 echo "== B5. the dossier's upstream-change panel must SAY when nothing drifted =="
@@ -492,9 +475,8 @@ echo "== B5. the dossier's upstream-change panel must SAY when nothing drifted =
 # panel is internally consistent in both cases.
 #
 # THE ARM IS PRESENCE-SHAPED IN BOTH DIRECTIONS, and that is deliberate. Asserting only
-# "no bare heading appears" would pass against a subject that emits nothing at all --
-# `fixture-mutants.md`'s rule that an absence-shaped arm scores silence as a kill. So the
-# quiet direction DEMANDS the explicit sentence, and the loud direction DEMANDS a real
+# "no bare heading appears" would pass against a subject that emits nothing at all.
+# So the quiet direction DEMANDS the explicit sentence, and the loud direction DEMANDS a real
 # diff hunk. Rule 7 is byte-identical BASE..THEIRS in this seed and Rule 8 is not, so the
 # two directions are driven by two different anchors of the same seeded core file — a
 # single anchor could not produce both.
@@ -524,7 +506,7 @@ if grep -qE '^[[:space:]]*## ' <<<"$qp"; then
   bad "an unchanged anchor still rendered a bare '## <id>' heading under a title asserting it CHANGED"
   printf '%s\n' "$qp" | sed 's/^/        /'
 else
-  ok "no bare anchor heading is printed for a section that did not drift"; B_B5_bare_heading=1
+  ok "no bare anchor heading is printed for a section that did not drift"
 fi
 
 # -- LOUD DIRECTION, the non-vacuity control. Same panel, an anchor that DID drift.
@@ -550,51 +532,6 @@ else
 fi
 rm -f "$PANEL"
 
-# --- MUTANT: restore the defect (heading emitted before the diff is known) --------------
-# The second quiet assertion above is ABSENCE-shaped -- "no bare `## ` heading appears" --
-# and `fixture-mutants.md` is explicit that such an arm scores SILENCE as a kill. A copy of
-# this script that cannot source lib.sh prints nothing and would satisfy it. So the arm gets
-# a mutant that makes the panel LOUD in exactly the old way, plus an unmutated control in the
-# same directory so a broken copy is reported as broken rather than as a pass.
-#
-# The mutation deletes the emptiness guard, which is the whole of the fix on the quiet path:
-# every anchor's heading is then emitted whether or not its section moved.
-MUTP="$ROOT/mutpanel"; rm -rf "$MUTP"; mkdir -p "$MUTP"
-cp "$(dirname "$READOPT")"/*.sh "$MUTP/" 2>/dev/null || true
-cat > "$PANEL" <<EOF
----
-shadows: SKILL.md#Rule 7
-base_sha: ${BASE}
-reason: shadows a section upstream did not touch in this range.
----
-Body that restates nothing.
-EOF
-
-cp "$READOPT" "$MUTP/readopt-override.sh"
-cpanel="$(bash "$MUTP/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$PANEL" 2>&1 \
-          | awk '/WHAT UPSTREAM CHANGED/{p=1} /SUPERSEDED CORE TEXT/{p=0} p')"
-if grep -qE '\(none -- all [0-9]+ compared anchor' <<<"$cpanel"; then
-  ok "  mutation-control-panel: an unmutated copy still prints the 'nothing drifted' sentence"
-else
-  bad "  mutation control: unmutated copy printed no sentence — a copy that cannot run scores as a kill"
-fi
-
-sed 's@^  \[ -n "\$_d" \] || continue$@@' "$READOPT" > "$MUTP/readopt-override.sh"
-if cmp -s "$READOPT" "$MUTP/readopt-override.sh"; then
-  bad "  mutation panel-guard: the mutation matched nothing, so the bare-heading assertion is unproven"
-else
-  mpanel="$(bash "$MUTP/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$PANEL" 2>&1 \
-            | awk '/WHAT UPSTREAM CHANGED/{p=1} /SUPERSEDED CORE TEXT/{p=0} p')"
-  ! grep -qE '^[[:space:]]*## Rule 7' <<<"$mpanel"; mcell panel-guard B5-bare-heading $?
-  if grep -qE '^[[:space:]]*## Rule 7' <<<"$mpanel"; then
-    mutant_killed "$B_B5_bare_heading" panel-guard "  mutation panel-guard: without it an UNCHANGED anchor prints a bare heading again (the arm can fire)"
-  else
-    bad "  mutation panel-guard: the mutant did NOT reproduce the bare heading, so the arm above proves nothing"
-    printf '%s\n' "$mpanel" | sed 's/^/        /'
-  fi
-fi
-rm -rf "$MUTP"
-rm -f "$PANEL"
 
 echo "== C0. --merge re-adopts MECHANICALLY (no hand edit) =="
 
@@ -873,6 +810,8 @@ else
   else bad "register-drift invented an override for a hook -- overrides shadow headings, hooks have none"; fi
 fi
 
+fi
+if sg e2; then
 echo "== E2. register-drift REFUSES rather than revert an edit it did not carry =="
 
 # register-drift ends in a revert: core overwrites the consumer's file. Every step before it
@@ -912,11 +851,12 @@ echo "== E2. register-drift REFUSES rather than revert an edit it did not carry 
 # number and text), a shim `.fired` marker where there is a shim, and the consumer file
 # cmp-identical. A subject that emits nothing fails all of them.
 # Worlds are fresh `mktemp -d` directories under $ROOT, one per drive: every --apply mutates its
-# world, and a mutant must never read a file a previous drive left.
+# world, so a drive never reads a file a previous drive left.
 E2_REALDIFF="$(command -v diff)"; E2_REALMK="$(command -v mktemp)"
 if [ -z "$REG" ] || [ -z "$E2_REALDIFF" ] || [ -z "$E2_REALMK" ]; then
   bad "E2: cannot locate register-drift.sh ($REG), diff ($E2_REALDIFF) or mktemp ($E2_REALMK)"
 else
+  echo "HERMETIC-CONSUMED $(cd "$(dirname "$REG")" && pwd -P)/$(basename "$REG")"
   # Each world SHAPE is built once (one git init) as a template under $E2_TPL and copied per drive:
   # every --apply mutates its world, so a drive still gets a world nobody else touched, and the
   # subject sees the same bytes and the same base sha it would in a freshly initialised one.
@@ -1009,7 +949,7 @@ else
   # whole-file conservation diff, which takes two real paths. That operand was a `/dev/fd/*`
   # process substitution until 0.647.0 and is `-` (the staged section piped in) since, because the
   # `<( )` spelling races under concurrent bash 3.2; both are keyed. So Alpha is classified, Beta alone
-  # is not, and the conservation check still runs for real: a mutant of layer 1 is then answered
+  # is not, and the conservation check still runs for real: layer 1 is then answered
   # by layer 2's positional check, not by a shim that happened to fail both.
   e2_diffshim() {
     local d
@@ -1149,29 +1089,6 @@ EOF
           && grep -q "$beta" "$o" && cmp -s "$w/dist/core/team-roles/x.md" "$w/cons/.claude/team-roles/x.md" ;;
     esac
   }
-  # The DAMAGE a killed arm must show, read off the world e2_arm just drove. A mutant scores a
-  # kill only by reproducing the loss the arm exists to prevent -- never by merely not refusing,
-  # which a copy that died would also do.
-  e2_damage() { # <arm>
-    local w="$E2_W" o="$E2_W/cons/.claude/skills/ai-dlc/overrides/team-roles__x__consumer-drift.md"
-    case "$1" in
-      a) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && ! grep -rq KEEPME "$w/cons" ;;
-      b) [ "$(cat "$w/rc")" = 0 ] && grep -q 'DRY RUN' "$w/out" && grep -q '^── skipped.*Beta' "$w/out" ;;
-      c) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && [ -d "$o" ] && [ "$(ls -A "$o" | wc -l | tr -d ' ')" = 1 ] ;;
-      d) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && ! grep -rq E2-ALPHA-EDIT "$w/cons" ;;
-      s|u|p|y|g) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && ! grep -rq "$(e2_marker "$1")" "$w/cons" ;;
-      # A deleted core section is lost the other way round: the revert writes it BACK, and no
-      # override shadows it, so the consumer's deletion is undone.
-      x) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && grep -q E2S-COREBETA "$w/cons/.claude/team-roles/x.md" \
-           && ! grep -q 'x.md#Beta' "$o" ;;
-      # eof's damage is a FALSE REFUSAL, not a loss: the separator blank before the appended section
-      # is charged, and a registrable, common shape is refused at the blank consumer line 10.
-      o) [ "$(cat "$w/rc")" = 2 ] && grep -qF 'conservation: consumer line 10 ()' "$w/err" \
-           && cmp -s "$w/orig.md" "$w/cons/.claude/team-roles/x.md" ;;
-      t) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && ! grep -rq E2S-REVIEW "$w/cons" ;;
-      *) return 1 ;;
-    esac
-  }
 
   e2_label() { case "$1" in
     a) echo "(a) MIXED diff failure, --apply" ;;   b) echo "(b) MIXED diff failure, dry run" ;;
@@ -1187,9 +1104,6 @@ EOF
     j) echo "(j) an UNCHANGED unaddressable ## 概要, dry run" ;;
     o) echo "(eof) an edit plus a section appended at EOF" ;;
     t) echo "(tok) a token site coalesced with a real edit in one hunk" ;;
-  esac; }
-  e2_marker() { case "$1" in
-    s) echo E2S-REVIEW ;; u) echo E2S-NOTES ;; p) echo E2S-INTRO ;; y) echo E2S-ADDREVIEW ;; g) echo E2S-GAIYOU ;;
   esac; }
   e2_ok() { case "$1" in
     a) echo "refused naming Beta (rc 2), the diff shim fired, no override written, the consumer file cmp-identical" ;;
@@ -1214,168 +1128,10 @@ EOF
     else bad "$(e2_label "$e2a"): $E2_WHY (verdict $e2r)"; fi
   done
 
-  # --- MUTANTS. A copy of the WHOLE reconcile directory (the script sources lib.sh; a lone copy
-  # dies, prints nothing, and would score every arm as a kill). Each mutation is a fixed-string
-  # line replacement whose key must occur EXACTLY once before and zero times after, plus a
-  # `cmp -s` that the copy differs -- a respelled line reports DID NOT APPLY, never a kill.
-  #   M1  layer 1 reverted ALONE: substitution_only two-valued again (no `unknown`, an empty
-  #       stream reads `yes`) and the caller refusal gone. Since the conservation check became
-  #       positional it no longer re-asks the classifier, so it CATCHES the skipped Beta by
-  #       position: core's Beta line is removed and nothing shadows it. M1 therefore moves (a) and
-  #       (b) -- the Beta-naming refusal is gone -- and must NOT reproduce the loss: it is scored
-  #       as COVERED, and the refusal it gets instead must be layer 2's, naming core line 9.
-  #   M1+ every layer reverted: M1 plus M2. Reproduces the loss in (a) and (b). It necessarily
-  #       also moves every arm M2 owns, and exactly those, so it is scored against that set.
-  #   M2  the conservation check's verdict replaced by a no-op. Owns (d) and every resolver-shape
-  #       arm: nothing else reads the written files back against the consumer's.
-  #   M3  the not-a-regular-file guard removed. Owns (c): `mv` onto a directory SUCCEEDS by
-  #       moving the file inside it, so the run registers and reverts.
-  #   M4  the CORE side of the check off (removed core lines never tested against `shadows:`).
-  #       Owns (x) alone: every other shape the core side sees, the consumer side sees too.
-  #   M5  the CONSUMER side of the check off (added consumer lines never tested for a carrier).
-  #       Owns (y) and (d): a pure addition and a lost body have no unshadowed removed line.
-  #   M6  the blank-line skip removed. Owns (eof): the blank separator before an EOF-appended
-  #       section lands in the last core section's span, which nothing carries, so a common
-  #       registrable shape is FALSELY refused (rc 2 at consumer line 10). Its damage is a refusal,
-  #       not a loss.
-  #   M7  BOTH token-free loops removed (substitution_only's endh() and the check's token_only()).
-  #       Owns (tok): a hunk with any token line is exempt again, Beta is skipped, and the edit
-  #       beside the token is reverted away at rc 0. Measured, and NOT committed as mutants:
-  #       removing the endh() loop ALONE gives rc 2 on (tok) -- the check's loop refuses it, no
-  #       loss -- and removing the token_only() loop ALONE changes nothing, because the classifier
-  #       already calls Beta changed and the override carries it. The token_only() loop is a
-  #       backstop no world isolates today: it can only fire on a hunk the classifier skipped.
-  # NOT a mutant here, measured and recorded: leaving the whole-file diff's exit status unchecked
-  # SURVIVES every world, because the awk refuses a hunkless stream on its own (`hunks 0`) --
-  # the two guards cover each other, and no world separates them without faking a diff that
-  # exits non-zero while printing hunks.
-  EMUT="$(mktemp -d "$ROOT/e2mut.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
-  cp "$(dirname "$REG")"/*.sh "$EMUT/" 2>/dev/null || true
-  cp "$(dirname "$REG")"/*.md "$EMUT/" 2>/dev/null || true
-  cp "$REG" "$EMUT/register-drift.sh"
-  e2_ctl=0
-  # The control drives all 16 arms on the unmutated COPY: the live loop above drove the shipped
-  # path, and only this run shows the copy in a fresh directory holds every arm a mutant is scored on.
-  E2_CTL_ARMS="$E2_ARMS"
-  if [ -f "$EMUT/lib.sh" ] && cmp -s "$REG" "$EMUT/register-drift.sh"; then
-    for e2a in $E2_CTL_ARMS; do
-      e2_arm "$e2a" "$EMUT/register-drift.sh" || { e2_ctl=1; bad "  mutation control: the unmutated copy fails $(e2_label "$e2a"): $E2_WHY"; }
-    done
-  else
-    e2_ctl=1; bad "  mutation control: lib.sh is not beside the copied register-drift.sh -- every verdict below would be a dead copy"
-  fi
-  [ "$e2_ctl" = 0 ] && ok "  mutation-control-e2: an unmutated copy in a fresh directory holds every E2 arm ($E2_ARMS), including REGISTERED through the keyed shim on the unkeyed seed and the unaddressable-heading allow twins"
-
-  e2_mutate() { # <key> <replacement> [<key> <replacement>]... -> builds $EMUT/register-drift.sh
-    local dst="$EMUT/register-drift.sh"
-    cp "$REG" "$dst" || return 1
-    while [ $# -ge 2 ]; do
-      [ "$(grep -cF -- "$1" "$dst")" = 1 ] || return 1
-      K="$1" R="$2" awk 'index($0, ENVIRON["K"]) { print ENVIRON["R"]; next } { print }' "$dst" > "$dst.next" || return 1
-      mv "$dst.next" "$dst" || return 1
-      [ "$(grep -cF -- "$1" "$dst")" = 0 ] || return 1
-      shift 2
-    done
-    ! cmp -s "$REG" "$dst"
-  }
-  # Arms are space-delimited in <owned> / <also>, so a one-letter arm matches only itself.
-  # Per push a mutant drives only E2_CELLS (its deciding arms plus its twins); --matrix drives all 16.
-  e2_cell() { # <mutant> <arm> <verdict> -- one MATRIX line per cell, matrix mode only
-    if [ "$MATRIX" = 1 ]; then printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$2" "$([ "$3" = 1 ] && echo FAIL || echo ok)"; fi
-  }
-  e2_in() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; }
-  e2_score() { # <name> <owned-arms> [<also-moved-arms>]
-    local a r others="" moved=""
-    for a in ${E2_CELLS:-$E2_ARMS}; do
-      e2_arm "$a" "$EMUT/register-drift.sh"; r=$?
-      e2_cell "$1" "$a" "$r"
-      if e2_in "$a" "$2"; then
-        if [ "$r" = 1 ] && e2_damage "$a"; then
-          if [ "$a" = o ]; then ok "  mutation $1 KILLS $(e2_label "$a"): a registrable shape is FALSELY refused at its blank separator line -- $E2_WHY"
-          else ok "  mutation $1 KILLS $(e2_label "$a"): the edit is lost exactly as before the fix -- $E2_WHY"; fi
-        else
-          bad "  mutation $1 did NOT kill $(e2_label "$a") with the loss reproduced (verdict $r): $E2_WHY"
-        fi
-      elif e2_in "$a" "${3:-}"; then
-        { [ "$r" = 1 ] && e2_damage "$a"; } || others="$others $a(expected to move with the loss, verdict $r: $E2_WHY)"
-        moved="$moved $a"
-      else
-        [ "$r" = 0 ] || others="$others $a($E2_WHY)"
-      fi
-    done
-    if [ -z "$others" ]; then
-      if [ -n "$moved" ]; then ok "  mutation $1: beyond its own it moves exactly{$moved } (M2's set, with the loss) and every other arm holds"
-      else ok "  mutation $1: every arm it does not own still holds -- it fails only its own"; fi
-    else bad "  mutation $1 ALSO moved:$others -- the arms are entangled"; fi
-  }
-  # M1 alone: the owned arms must FAIL (the Beta-naming refusal is layer 1's) while the edit is
-  # KEPT -- refused by layer 2 at Beta's core line, consumer cmp-identical, nothing written.
-  e2_score_covered() { # <name> <owned-arms>
-    local a r others="" want="conservation: core line 9 (beta core text.) was changed or removed by the consumer"
-    for a in ${E2_CELLS:-$E2_ARMS}; do
-      e2_arm "$a" "$EMUT/register-drift.sh"; r=$?
-      e2_cell "$1" "$a" "$r"
-      if e2_in "$a" "$2"; then
-        if [ "$r" = 1 ] && [ "$(cat "$E2_W/rc")" = 2 ] && grep -qF "$want" "$E2_W/err" \
-             && cmp -s "$E2_W/orig.md" "$E2_W/cons/.claude/team-roles/x.md" && [ "$(e2_novr "$E2_W")" = 0 ]; then
-          ok "  mutation $1 moves $(e2_label "$a") and is COVERED: layer 2 refuses at Beta's core line 9, the consumer file cmp-identical"
-        else
-          bad "  mutation $1 on $(e2_label "$a"): want the arm to fail AND layer 2 to refuse naming core line 9 with the edit kept (verdict $r): $E2_WHY err=$(head -1 "$E2_W/err" | cut -c1-140)"
-        fi
-      else
-        [ "$r" = 0 ] || others="$others $a($E2_WHY)"
-      fi
-    done
-    if [ -z "$others" ]; then ok "  mutation $1: every arm it does not own still holds -- it fails only its own"
-    else bad "  mutation $1 ALSO moved:$others -- the arms are entangled"; fi
-  }
-  E2_M1="then printf 'unknown'; return 0; fi"
-  E2_M1R="  :"
-  E2_M1B='if (!nh) { print "unknown"; exit } '
-  E2_M1BR='    END      { endh(); print (bad ? "no" : "yes") }'
-  E2_M1C='refuse "cannot classify section'
-  E2_M1CR="    # M1: the unknown arm removed; a non-yes answer falls through to changed"
-  E2_M2='1) refuse_fixed "conservation: ${cons_check}" ;;'
-  E2_M2R='  1) : ;;'
-  # The two token-free loops: substitution_only's endh() and the check's token_only().
-  E2_M7A='for (k = 1; k <= ntf; k++) if (!(TF[k] in GT)) { bad = 1; return }'
-  E2_M7B='for (k = 1; k <= ntf; k++) if (!(TF[k] in GT)) return 0'
-  if [ "$e2_ctl" = 0 ]; then
-    if e2_mutate "$E2_M1" "$E2_M1R" "$E2_M1B" "$E2_M1BR" "$E2_M1C" "$E2_M1CR"; then
-      E2_CELLS="a n e"; [ "$MATRIX" = 1 ] && E2_CELLS=""
-      e2_score_covered e2-M1 "a b"
-    else bad "  mutation M1 DID NOT APPLY: a layer-1 anchor in substitution_only or its caller was respelled -- (a) and (b) are unproven"; fi
-    if e2_mutate "$E2_M1" "$E2_M1R" "$E2_M1B" "$E2_M1BR" "$E2_M1C" "$E2_M1CR" "$E2_M2" "$E2_M2R"; then
-      E2_CELLS="a e c"; [ "$MATRIX" = 1 ] && E2_CELLS=""
-      e2_score e2-M1plus "a b" "d s u p x y g"
-    else bad "  mutation M1+ DID NOT APPLY: a layer-1 anchor or the conservation verdict line was respelled -- (a) and (b) are unproven"; fi
-    if e2_mutate "$E2_M2" "$E2_M2R"; then
-      E2_CELLS="d a e"; [ "$MATRIX" = 1 ] && E2_CELLS=""
-      e2_score e2-M2 "d s u p x y g"
-    else bad "  mutation M2 DID NOT APPLY: the conservation verdict line was respelled -- (d) and the resolver-shape arms are unproven"; fi
-    if e2_mutate '[ ! -e "$1" ] || [ -f "$1" ] || refuse' "    :"; then
-      E2_CELLS="c a e"; [ "$MATRIX" = 1 ] && E2_CELLS=""
-      e2_score e2-M3 c
-    else bad "  mutation M3 DID NOT APPLY: the not-a-regular-file guard was respelled -- (c) is unproven"; fi
-    if e2_mutate 'for (k = 1; k <= nlost; k++) if (!shadowed(LOST[k])) {' '    for (k = 1; k <= nlost; k++) if (0) {'; then
-      E2_CELLS="x s e"; [ "$MATRIX" = 1 ] && E2_CELLS=""
-      e2_score e2-M4 x
-    else bad "  mutation M4 DID NOT APPLY: the core-side loop of the conservation check was respelled -- (x) is unproven"; fi
-    if e2_mutate 'if (!covered(L)) {' '      if (0) {'; then
-      E2_CELLS="y x s"; [ "$MATRIX" = 1 ] && E2_CELLS=""
-      e2_score e2-M5 "y d"
-    else bad "  mutation M5 DID NOT APPLY: the consumer-side test of the conservation check was respelled -- (y) and (d) are unproven"; fi
-    if e2_mutate 'if (C[L] == "" || C[L] == "\r") continue' '      ;'; then
-      E2_CELLS="o t e"; [ "$MATRIX" = 1 ] && E2_CELLS=""
-      e2_score e2-M6 o
-    else bad "  mutation M6 DID NOT APPLY: the blank-line skip was respelled -- (eof) is unproven"; fi
-    if e2_mutate "$E2_M7A" '      ;' "$E2_M7B" '    ;'; then
-      E2_CELLS="t o e"; [ "$MATRIX" = 1 ] && E2_CELLS=""
-      e2_score e2-M7 t
-    else bad "  mutation M7 DID NOT APPLY: a token-free loop was respelled -- (tok) is unproven"; fi
-  fi
 fi
 
+fi
+if sg f; then
 echo "== F. upstream ABSORBED the consumer's in-place delta =="
 
 # Extensions have had this signal since v0.34.0 (EXTENSION-RETIRE-CANDIDATE). Core drift
@@ -1415,6 +1171,8 @@ case "$st_theirs" in
   *)      bad "absorption downgraded out of HARD- — apply would silently delete the consumer's hook" ;;
 esac
 
+fi
+if sg c3; then
 echo "== C3. an override that delegates INTO the section it shadows =="
 
 # Precedence is overrides > extensions > core, so a whole-section shadow deletes every
@@ -1491,7 +1249,7 @@ else
   # real instance splits. A line-based predicate returns zero here, which reads identically
   # to compliance. Nothing else in this file would notice the flattening being removed.
   if grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES <<<"$(st_of 'SKILL__Rule-16-wrapped\.md$')"; then
-    ok "  and a claim WRAPPING across a newline is still found (the body is flattened)"; B_flatten_wrapped=1
+    ok "  and a claim WRAPPING across a newline is still found (the body is flattened)"
   else
     bad "  the wrapped claim was missed — a line-based scan reports a false zero on the real shape"
   fi
@@ -1502,7 +1260,7 @@ else
   # The state is what an LC-O15 narrowing LEAVES BEHIND when it removes an anchor and keeps
   # the text, so the two clauses have to be read together.
   if grep -qx OVERRIDE-BODY-UNCLAIMED <<<"$(st_of 'SKILL__Rule-18-unclaimed\.md$')"; then
-    ok "a body section no shadows: anchor claims is REPORTED"; B_unclaimed_row=1
+    ok "a body section no shadows: anchor claims is REPORTED"
   else
     bad "the unclaimed body section went undetected — it is applied by nothing while every mechanical check reports green"
   fi
@@ -1513,7 +1271,7 @@ else
   if grep -qx OVERRIDE-BODY-UNCLAIMED <<<"$(st_of 'SKILL__Rule-19-nested\.md$')"; then
     bad "a sub-heading NESTED inside the claimed section was reported — the claim is being read as a heading set, not a span, and every override with a child heading is a false positive"
   else
-    ok "  and a sub-heading nested inside a claimed section stays silent"; B_unclaimed_nested=1
+    ok "  and a sub-heading nested inside a claimed section stays silent"
   fi
 
   # The single-anchor shape: a body restating NO shadowed heading is the WHOLE span of its
@@ -1546,7 +1304,7 @@ else
   if grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES <<<"$(st_of 'SKILL__Rule-14-file-claim\.md$')"; then
     bad "an override correctly saying the rest of the FILE is unchanged was reported — the noun restriction is gone and every honest scoping sentence now fires"
   else
-    ok "  and a true claim about the rest of the FILE stays silent"; B_noun_set_file_claim=1
+    ok "  and a true claim about the rest of the FILE stays silent"
   fi
 
   # CONTROL 2 — the measured false-positive class: survival vocabulary whose subject is a
@@ -1574,7 +1332,7 @@ else
   # E7 resolves against the consumer's on-disk core and this resolves against THEIRS — the
   # incoming distribution — so they answer the same question about two different trees.
   if grep -qx OVERRIDE-LOOSE-ANCHOR <<<"$(st_of 'SKILL__Rule-11-loose\.md$')"; then
-    ok "an anchor that CONTAINS its heading is REPORTED at pull time"; B_loose_row=1
+    ok "an anchor that CONTAINS its heading is REPORTED at pull time"
   else
     bad "the loose anchor went undetected — the entry shadows the whole section while the operator believes it shadowed a paragraph"
   fi
@@ -1602,7 +1360,7 @@ else
   ds_a="$(printf '%s\n' "$(st_of 'SKILL__Rule-7-dup-a\.md$')" | grep -cx OVERRIDE-DOUBLE-SHADOW || true)"
   ds_b="$(printf '%s\n' "$(st_of 'SKILL__Rule-7-dup-b\.md$')" | grep -cx OVERRIDE-DOUBLE-SHADOW || true)"
   if [ "$ds_a" -eq 1 ] && [ "$ds_b" -eq 1 ]; then
-    ok "two entries claiming one (file, anchor) are BOTH reported"; B_double_shadow_rows=1
+    ok "two entries claiming one (file, anchor) are BOTH reported"
   else
     bad "double shadow filed under a=$ds_a b=$ds_b (want 1 and 1) — a row under only one of them leaves the other reading clean on the finding it is half of"
   fi
@@ -1623,158 +1381,11 @@ else
     ok "  and both new statuses are report-only, never blockers"
   fi
 
-  # --- MUTANTS: the two discriminators this predicate was MEASURED into ----------------
-  # Both are the difference between a shippable check and the 5-of-13 keyword scan that was
-  # rejected. Each is a COPY guarded by `cmp -s`, asserts a POSITIVE outcome, and is aimed
-  # so that exactly one seeded entry changes verdict -- the others are the proof of that.
-  MUTD="$ROOT/mut"; rm -rf "$MUTD"; mkdir -p "$MUTD"
-  cp "$(dirname "$DRIFT")"/*.sh "$MUTD/" 2>/dev/null || true
-
-  # THE UNMUTATED CONTROL. Both mutants are copies into a fresh directory; a copy that
-  # cannot source lib.sh emits nothing, and "no rows" would otherwise score as a kill for
-  # both mutations below.
-  cp "$DRIFT" "$MUTD/layer-drift.sh"
-  ctl_n="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
-           | awk -F'\t' '$1=="OVERRIDE-ASSERTS-SHADOW-SURVIVES"{c++} END{print c+0}')"
-  if [ "$ctl_n" -eq 2 ]; then
-    ok "  mutation-control-layer-drift: an unmutated copy still reports both seeded claims"
-  else
-    bad "  mutation control: unmutated copy reported $ctl_n of 2 — a copy that cannot run scores as a kill"
-  fi
-
-  # The same control for the two new statuses. The mutants below assert an ABSENCE, and a
-  # copy that cannot run produces the same absence.
-  ctl_l="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
-           | awk -F'\t' '$1=="OVERRIDE-LOOSE-ANCHOR"{c++} END{print c+0}')"
-  ctl_d="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
-           | awk -F'\t' '$1=="OVERRIDE-DOUBLE-SHADOW"{c++} END{print c+0}')"
-  if [ "$ctl_l" -eq 1 ] && [ "$ctl_d" -eq 2 ]; then
-    ok "  mutation-control-layer-drift: and the same copy reports 1 loose anchor and 2 double-shadow rows"
-  else
-    bad "  mutation control: unmutated copy reported loose=$ctl_l (want 1) double=$ctl_d (want 2)"
-  fi
-
-  # MUTANT 1 — drop the flattening. The wrapped entry must go silent and the single-line
-  # entry must NOT, or the two are entangled and the wrap assertion proves nothing. Two anchors,
-  # one per shape of the flattening line: the `_flat=` assignment, and the pipe continuation it
-  # replaced. This fixture ships, and a consumer can hold it beside an installed layer-drift.sh
-  # of either shape, so the mutation must apply to both.
-  sed -e "s@| tr '\\\\n' ' ' | tr -s ' ')\"@| tr -s ' ')\"@" \
-      -e "s@| tr '\\\\n' ' ' | tr -s ' ' \\\\@| tr -s ' ' \\\\@" "$DRIFT" > "$MUTD/layer-drift.sh"
-  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
-    bad "  mutation flatten: the mutation matched nothing, so the flattening assertion is unproven"
-  else
-    m1="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
-    m1w="$(printf '%s\n' "$m1" | awk -F'\t' '$1=="OVERRIDE-ASSERTS-SHADOW-SURVIVES" && $2 ~ /Rule-16-wrapped/{c++} END{print c+0}')"
-    m1s="$(printf '%s\n' "$m1" | awk -F'\t' '$1=="OVERRIDE-ASSERTS-SHADOW-SURVIVES" && $2 ~ /Rule-13-survives/{c++} END{print c+0}')"
-    [ "$m1w" -ge 1 ]; mcell flatten flatten-wrapped $?
-    [ "$m1s" -eq 1 ]; mcell flatten flatten-single-line $?
-    if [ "$m1w" -eq 0 ] && [ "$m1s" -eq 1 ]; then
-      mutant_killed "$B_flatten_wrapped" flatten "  mutation flatten: without it the WRAPPED claim vanishes and the single-line one does not"
-    else
-      bad "  mutation flatten: wrapped=$m1w (want 0) single-line=$m1s (want 1) — the flattening assertion is vacuous or the two entries are entangled"
-    fi
-  fi
-
-  # MUTANT 2 — widen the noun set to include `file`. The legitimate rest-of-the-FILE claim
-  # must start firing, and the two real claims must keep firing. This is the 3-of-5
-  # false-positive set returning, and it is the only assertion that can catch it.
-  sed 's@(section|check|rule|clause)@(section|check|rule|clause|file)@' "$DRIFT" > "$MUTD/layer-drift.sh"
-  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
-    bad "  mutation noun-set: the mutation matched nothing, so the noun restriction is unproven"
-  else
-    m2="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
-          | awk -F'\t' '$1=="OVERRIDE-ASSERTS-SHADOW-SURVIVES"{print $2}')"
-    ! grep -q 'Rule-14-file-claim' <<<"$m2"; mcell noun-set noun-set-file-claim $?
-    if grep -q 'Rule-14-file-claim' <<<"$m2"; then
-      mutant_killed "$B_noun_set_file_claim" noun-set "  mutation noun-set: widening it to \`file\` re-fires the true claim — the restriction is load-bearing"
-    else
-      bad "  mutation noun-set: the honest rest-of-the-FILE claim stayed silent even with \`file\` in the noun set, so the control above is vacuous"
-    fi
-  fi
-
-  # MUTANT 3 — delete the REVERSE arm, which is the whole loose-anchor predicate. The loose
-  # row must vanish and the double-shadow rows must NOT: they are computed from a different
-  # accumulator and a mutant that took both would prove neither.
-  awk '!/^      REVERSE:\*\) loose=/' "$DRIFT" > "$MUTD/layer-drift.sh"
-  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
-    bad "  mutation loose-arm: the mutation matched nothing, so the loose-anchor assertion is unproven"
-  else
-    m3="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
-    m3l="$(printf '%s\n' "$m3" | awk -F'\t' '$1=="OVERRIDE-LOOSE-ANCHOR"{c++} END{print c+0}')"
-    m3d="$(printf '%s\n' "$m3" | awk -F'\t' '$1=="OVERRIDE-DOUBLE-SHADOW"{c++} END{print c+0}')"
-    [ "$m3l" -eq 1 ]; mcell loose-arm loose-row $?
-    [ "$m3d" -eq 2 ]; mcell loose-arm double-shadow-rows $?
-    if [ "$m3l" -eq 0 ] && [ "$m3d" -eq 2 ]; then
-      mutant_killed "$B_loose_row" loose-arm "  mutation loose-arm: without the REVERSE arm the loose anchor goes silent, and only that"
-    else
-      bad "  mutation loose-arm: loose=$m3l (want 0) double=$m3d (want 2) — the assertion is vacuous or the two statuses are entangled"
-    fi
-  fi
-
-  # MUTANT 4 — require THREE claimants instead of two, which is the off-by-one a duplicate
-  # check is most likely to ship with. The double-shadow rows must vanish and the loose row
-  # must not.
-  sed 's/if (n\[key\] > 1)/if (n[key] > 2)/' "$DRIFT" > "$MUTD/layer-drift.sh"
-  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
-    bad "  mutation dup-threshold: the mutation matched nothing, so the double-shadow assertion is unproven"
-  else
-    m4="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
-    m4d="$(printf '%s\n' "$m4" | awk -F'\t' '$1=="OVERRIDE-DOUBLE-SHADOW"{c++} END{print c+0}')"
-    m4l="$(printf '%s\n' "$m4" | awk -F'\t' '$1=="OVERRIDE-LOOSE-ANCHOR"{c++} END{print c+0}')"
-    [ "$m4d" -eq 2 ]; mcell dup-threshold double-shadow-rows $?
-    [ "$m4l" -eq 1 ]; mcell dup-threshold loose-row $?
-    if [ "$m4d" -eq 0 ] && [ "$m4l" -eq 1 ]; then
-      mutant_killed "$B_double_shadow_rows" dup-threshold "  mutation dup-threshold: raising the duplicate threshold silences the pair, and only that"
-    else
-      bad "  mutation dup-threshold: double=$m4d (want 0) loose=$m4l (want 1) — the assertion is vacuous or the two statuses are entangled"
-    fi
-  fi
-
-  # MUTANT 5 — silence the unclaimed arm by resolving NO span. Two of the three LC-O16
-  # assertions are ABSENCE-shaped and would pass against a subject that emits nothing, which
-  # is the exact shape a near-miss cannot distinguish. The PRESENCE arm must die here and
-  # only it; the positive conjunct is a baseline row that must survive, so a mutant that
-  # broke the whole script cannot score this as a kill.
-  sed 's|_sp="$(span_of "$_id" < "$_b")"|_sp=""|' "$DRIFT" > "$MUTD/layer-drift.sh"
-  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
-    bad "  mutation unclaimed-silence: the mutation matched nothing, so the unclaimed presence assertion is unproven"
-  else
-    m5="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
-    m5u="$(printf '%s\n' "$m5" | awk -F'\t' '$1=="OVERRIDE-BODY-UNCLAIMED"{c++} END{print c+0}')"
-    m5d="$(printf '%s\n' "$m5" | awk -F'\t' '$1=="OVERRIDE-DOUBLE-SHADOW"{c++} END{print c+0}')"
-    [ "$m5u" -ge 1 ]; mcell unclaimed-silence unclaimed-row $?
-    [ "$m5d" -eq 2 ]; mcell unclaimed-silence double-shadow-rows $?
-    if [ "$m5u" -eq 0 ] && [ "$m5d" -eq 2 ]; then
-      mutant_killed "$B_unclaimed_row" unclaimed-silence "  mutation unclaimed-silence: with no span resolved the unclaimed row vanishes, and only that"
-    else
-      bad "  mutation unclaimed-silence: unclaimed=$m5u (want 0) double=$m5d (want 2) — the presence assertion is vacuous, or the script died and silence scored as a kill"
-    fi
-  fi
-
-  # MUTANT 6 — WIDEN instead of silence, because the two narrowings are what make this arm
-  # something other than a heading counter, and only a widening mutant can prove them. BOTH
-  # layers come out together: dropping either one alone changes nothing on this seed, which
-  # is a partial revert proving the layer left in place. The NESTED entry must now be
-  # reported, and the single-anchor entry must still not be -- it resolves no span either way.
-  sed -e '/if (covered) next/d' \
-      -e 's/if (olvl\[i\] in claimed) print otxt\[i\]/print otxt[i]/' "$DRIFT" > "$MUTD/layer-drift.sh"
-  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
-    bad "  mutation unclaimed-widen: the mutation matched nothing, so the two narrowings are unproven"
-  else
-    m6="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
-    m6n="$(printf '%s\n' "$m6" | awk -F'\t' '$1=="OVERRIDE-BODY-UNCLAIMED" && $2 ~ /Rule-19-nested/{c++} END{print c+0}')"
-    m6s="$(printf '%s\n' "$m6" | awk -F'\t' '$1=="OVERRIDE-BODY-UNCLAIMED" && $2 ~ /Rule-13-survives/{c++} END{print c+0}')"
-    [ "$m6n" -eq 0 ]; mcell unclaimed-widen unclaimed-nested $?
-    [ "$m6s" -eq 0 ]; mcell unclaimed-widen unclaimed-single-anchor $?
-    if [ "$m6n" -eq 1 ] && [ "$m6s" -eq 0 ]; then
-      mutant_killed "$B_unclaimed_nested" unclaimed-widen "  mutation unclaimed-widen: without the span and level narrowings the NESTED child is reported — both are load-bearing"
-    else
-      bad "  mutation unclaimed-widen: nested=$m6n (want 1) single-anchor=$m6s (want 0) — the near-miss assertion is vacuous, or the widening reached an entry it should not"
-    fi
-  fi
 fi
 
+fi
+if sg sup; then
+[ -z "$DRIFT" ] || echo "HERMETIC-CONSUMED $(cd "$(dirname "$DRIFT")" && pwd -P)/$(basename "$DRIFT")"
 # --- OVERRIDE-SUPERSEDED: core declaring an entry is no longer NEEDED ------------------
 #
 # Every other status asks whether the override is still CORRECT. This one asks whether it
@@ -1846,8 +1457,8 @@ YML
   # base_sha -- so an arm that fires on both is matching "is an override", not "is superseded".
   #
   # SUP__multi and SUP__multictl are the MULTI-ANCHOR pair, and they are the case the join was
-  # blind to. The declared anchor is deliberately FIRST in SUP__multi's list -- see the mutant
-  # below, which keeps only the LAST part and must therefore silence THIS entry while leaving
+  # blind to. The declared anchor is deliberately FIRST in SUP__multi's list, so a reader that keeps only the LAST part misses THIS entry
+  # while single-anchor SUP__match still fires.
   # single-anchor SUP__match firing. Their own difference is one anchor: SUP__multictl bundles
   # two anchors core declares nothing about, so an arm that fires on it is matching "shadows more
   # than one thing", not "shadows something core superseded".
@@ -1984,7 +1595,7 @@ EOF
   sup_nosince="$(printf '%s\n' "$sup_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__nosince\.md$/ {print $4}')"
   case "$sup_nosince" in
     "replaces_with=AI_DLC_WIDGET_NOSINCE ::"*)
-      ok "  a declaration with a settings_env_key and NO since_core_version keeps the key in its own field"; B_nosince_key_lost=1 ;;
+      ok "  a declaration with a settings_env_key and NO since_core_version keeps the key in its own field" ;;
     "") bad "the no-since supersession produced no detail at all" ;;
     *"nothing to configure"*) bad "the no-since declaration read as an adoption needing no configuration -- its env key moved into the since field: ${sup_nosince:0:100}" ;;
     *)  bad "the no-since declaration did not carry replaces_with=AI_DLC_WIDGET_NOSINCE: ${sup_nosince:0:100}" ;;
@@ -1994,30 +1605,6 @@ EOF
     *) bad "CONTROL: the with-since declaration lost its env key: ${sup_detail:0:80}" ;;
   esac
 
-  # MUTANT: restore the IFS read of the three-field row. The two parameter-expansion assignments go
-  # with it, or they would overwrite what the read filled. cmp -s guards a sed that matched nothing.
-  NSMUT="$ROOT/nosincemut"; rm -rf "$NSMUT"; mkdir -p "$NSMUT"
-  cp "$(dirname "$DRIFT")"/*.sh "$NSMUT/" 2>/dev/null || true
-  sed -e 's@^  while IFS= read -r s_row; do$@  while IFS="$TAB" read -r s_shadows s_since s_env; do@' \
-      -e '/^    s_shadows="\${s_row%%/d' -e '/^    s_since="\${s_rest%%/d' "$DRIFT" > "$NSMUT/layer-drift.sh"
-  if cmp -s "$DRIFT" "$NSMUT/layer-drift.sh" || ! grep -qF 'read -r s_shadows s_since s_env' "$NSMUT/layer-drift.sh" || grep -qF 's_row' "$NSMUT/layer-drift.sh"; then
-    bad "the no-since MUTANT did not apply -- the supersession read has been respelled, so it proves nothing"
-  else
-    nsm_out="$(bash "$NSMUT/layer-drift.sh" "$DIST" "$BASE" "$THEIRS2" "$CONS" 2>/dev/null)"
-    nsm_ctl="$(printf '%s\n' "$nsm_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__match\.md$/ {print $4}')"
-    nsm="$(printf '%s\n' "$nsm_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__nosince\.md$/ {print $4}')"
-    case "$nsm" in "replaces_with=AI_DLC_WIDGET_NOSINCE ::"*) mcell no-since nosince-key-lost 0 ;; *) mcell no-since nosince-key-lost 1 ;; esac
-    case "$nsm_ctl" in "replaces_with=AI_DLC_WIDGET_EXTRA ::"*) mcell no-since nosince-with-since 0 ;; *) mcell no-since nosince-with-since 1 ;; esac
-    case "$nsm_ctl" in
-      "replaces_with=AI_DLC_WIDGET_EXTRA ::"*)
-        case "$nsm" in
-          "replaces_with=AI_DLC_WIDGET_NOSINCE ::"*) bad "  MUTANT no-since: the IFS read still carried the env key -- the arm cannot see the collapse" ;;
-          "") bad "  MUTANT no-since: the mutant emitted no row for the declaration, so it broke the arm rather than the read" ;;
-          *) mutant_killed "$B_nosince_key_lost" no-since "  MUTANT no-since: with the IFS read restored the no-since declaration loses its key, so the arm is load-bearing" ;;
-        esac ;;
-      *) bad "  MUTANT no-since: the with-since control did not survive the mutant, so its verdict is unreadable" ;;
-    esac
-  fi
 
   # THE LIST MUST NOT BLEED. Its items begin with a dash, exactly like the rows of the
   # block itself, so a loose item pattern would swallow the next `- shadows:` and attribute
@@ -2073,26 +1660,6 @@ EOF
     *)  bad "an entry whose span does not resolve carries neither a measurement nor the unmeasurable notice: ${sup_still:0:200}" ;;
   esac
 
-  # MUTATION — drop the comparison and count the whole span. The surplus entry still looks right
-  # (8 lines, and 8 would be reported), so ONLY the control can see this; that is why it is paired.
-  MUTS="$ROOT/drift-mutant-surplus"; rm -rf "$MUTS"; mkdir -p "$MUTS"
-  cp "$(dirname "$DRIFT")"/* "$MUTS"/ 2>/dev/null
-  sed 's/| grep -Fxv -f "\$LD_T\/sup-core-span" | grep -c \./| grep -c ./' "$DRIFT" > "$MUTS/layer-drift.sh"
-  if cmp -s "$DRIFT" "$MUTS/layer-drift.sh"; then
-    bad "  mutation surplus-comparison: the mutation matched nothing, so the control above proves nothing"
-  else
-    ms="$(bash "$MUTS/layer-drift.sh" "$DIST" "$BASE" "$THEIRS2" "$CONS" 2>/dev/null \
-          | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__nosurplus\.md$/ {print $4}')"
-    [ -n "$ms" ]; mcell surplus-comparison surplus-row-emitted $?
-    grep -qF "and 0 of yours appear nowhere" <<<"$ms"; mcell surplus-comparison nosurplus-zero $?
-    if [ -z "$ms" ]; then
-      bad "  mutation surplus-comparison: the mutant emitted no row for the control, so it broke the arm rather than the comparison"
-    elif grep -qF "and 0 of yours appear nowhere" <<<"$ms"; then
-      bad "  mutation surplus-comparison: counting the WHOLE span still reported 0 consumer-only lines — the control is not reading the number it claims to"
-    else
-      ok "surplus-comparison: without the comparison the identical span reports a non-zero surplus, so the control is load-bearing"
-    fi
-  fi
 
   # --- A MULTI-ANCHOR OVERRIDE IS THE CASE THIS ARM WAS BLIND TO ------------------------------
   #
@@ -2104,7 +1671,7 @@ EOF
   # retro anchors, one of which core declared superseded at 0.281.0. Whole-string join on the
   # real tree over the real pull range: 0 rows. Same tree, that anchor alone in `shadows:`: 1.
   if grep -qx OVERRIDE-SUPERSEDED <<<"$(sup_st 'SUP__multi\.md$')"; then
-    ok "a MULTI-anchor override is reported when core supersedes ONE of its anchors"; B_multi_anchor_entry=1
+    ok "a MULTI-anchor override is reported when core supersedes ONE of its anchors"
   else
     bad "a multi-anchor override naming a declared supersession went unreported — the join reads the whole shadows: string, so the entries that freeze the most core text are the ones it cannot see"
   fi
@@ -2146,44 +1713,10 @@ EOF
     *)                ok "  and the single-anchor detail is unchanged: no token, so its remedy is still the retire stamp" ;;
   esac
 
-  # --- MUTANT: the entry side back to ONE part ------------------------------------------------
-  # A COPY of the whole reconcile directory (layer-drift sources lib.sh from beside it, and a
-  # lone script copy dies before printing anything), `cmp -s`-guarded so a sed that matched
-  # nothing cannot pass as a mutation. Dropping the accumulator keeps only the LAST harvested
-  # part, and SUP__multi lists its declared anchor FIRST — so this mutant must silence SUP__multi
-  # while leaving single-anchor SUP__match firing. Two verdicts from one mutant, and they are the
-  # disentanglement: a mutation that killed both would be testing "the arm runs", not the join.
-  SMUT="$ROOT/supmut"; rm -rf "$SMUT"; mkdir -p "$SMUT"
-  cp "$(dirname "$DRIFT")"/*.sh "$SMUT/" 2>/dev/null || true
-  cp "$DRIFT" "$SMUT/layer-drift.sh"
-  sctl="$(bash "$SMUT/layer-drift.sh" "$DIST" "$BASE" "$THEIRS2" "$CONS" 2>/dev/null | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED"' | wc -l | tr -d ' ')"
-  if [ "$sctl" -ge 2 ]; then
-    ok "CONTROL: an unmutated copy in a fresh directory still reports both the single- and multi-anchor entries ($sctl rows)"
-  else
-    bad "CONTROL: the unmutated copy reported $sctl supersession row(s) — the mutant verdict below would be unreadable"
-  fi
-
-  sed 's@^    ent_keys="\${ent_keys}\$(norm @    ent_keys="$(norm @' "$DRIFT" > "$SMUT/layer-drift.sh"
-  if cmp -s "$DRIFT" "$SMUT/layer-drift.sh"; then
-    bad "the multi-anchor MUTANT did not apply — the ent_keys accumulator has been respelled, so it proves nothing"
-  else
-    smut_out="$(bash "$SMUT/layer-drift.sh" "$DIST" "$BASE" "$THEIRS2" "$CONS" 2>/dev/null)"
-    smut_st() { printf '%s\n' "$smut_out" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
-    grep -qx OVERRIDE-SUPERSEDED <<<"$(smut_st 'SUP__multi\.md$')"; mcell multi-anchor multi-anchor-entry $?
-    grep -qx OVERRIDE-SUPERSEDED <<<"$(smut_st 'SUP__match\.md$')"; mcell multi-anchor single-anchor-entry $?
-    if grep -qx OVERRIDE-SUPERSEDED <<<"$(smut_st 'SUP__multi\.md$')"; then
-      bad "MUTANT SURVIVED: SUP__multi is still reported with only its last anchor harvested, so the multi-anchor assertion is not testing the per-part join"
-    else
-      mutant_killed "$B_multi_anchor_entry" multi-anchor "MUTANT multi-anchor (entry side keeps one part): the multi-anchor entry goes silent — the accumulation is what makes every anchor joinable"
-    fi
-    if grep -qx OVERRIDE-SUPERSEDED <<<"$(smut_st 'SUP__match\.md$')"; then
-      ok "  and the single-anchor entry still fires under it — the two arms are not entangled"
-    else
-      bad "  the mutant also silenced the single-anchor entry: it is testing whether the arm RUNS, not how it joins"
-    fi
-  fi
 fi
 
+fi
+if sg gh; then
 # ---------------------------------------------------------------------------
 # G / H. THE OTHER DIRECTION OF THE SET DIFFERENCE, AND THE WRAP.
 # ---------------------------------------------------------------------------
@@ -2289,10 +1822,6 @@ The adjudication order, the freeze semantics, and the record format live
 here, in the paragraphs an override of this rule silently
 drops.
 EOF
-# EVERY core line is BROKEN by this wrapping, and that is what makes the mutant below
-# readable. Core's paragraph is two lines; if the body re-wrapped only the first, the
-# second would survive whole inside one body line and a substring test would find it
-# with the flattening removed -- the mutant would then survive an arm that is correct.
 
 HOK="$CONS/.claude/skills/ai-dlc/overrides/H__clean.md"
 cat > "$HOK" <<EOF
@@ -2420,7 +1949,7 @@ rm -f "$GFM" "$GHC"
 echo "== H. the body test is WRAP-INSENSITIVE in the superseded direction too =="
 out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$HOVR" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out"; then
-  ok "--check RED: a superseded core sentence carried at a DIFFERENT wrap is still found"; B_H_wrapped=1
+  ok "--check RED: a superseded core sentence carried at a DIFFERENT wrap is still found"
 else
   bad "--check missed a superseded sentence the body demonstrably carries, re-wrapped (rc=$rc) -- and an override of a consumer-rewritten section is a re-wrap by definition"
   printf '%s\n' "$out" | sed 's/^/    /'
@@ -2431,47 +1960,10 @@ else
   bad "CONTROL FAILED: an override reproducing no core text was reported -- the containment test matches anything"
 fi
 
-# --- MUTANT: put the containment test back on whole LINES -------------------------------
-# A copy of the whole reconcile directory (a lone script dies sourcing lib.sh, and no
-# output otherwise scores as a kill), `cmp -s`-guarded. The mutation flattens nothing,
-# which is exactly the shipped-before behaviour, and it must kill H while leaving G
-# firing: G's subject is absent from the body at ANY wrap, so it does not depend on the
-# flattening at all. Two verdicts from one mutant, and their disagreement is the proof
-# the two guards are separable.
-#
-# THE ANCHOR IS THE SHIPPED SPELLING, and a re-spelling of the flattening MUST re-anchor
-# it here rather than relax this arm. Scored while building it: an implementation that
-# flattens with `awk` instead is behaviourally identical and satisfies the entry's
-# receipt, and this mutation then matches nothing — which the `cmp -s` guard reports as
-# an un-applied mutant rather than passing it off as a kill.
-RMUT="$ROOT/readoptmut"; rm -rf "$RMUT"; mkdir -p "$RMUT"
-cp "$(dirname "$READOPT")"/*.sh "$RMUT/" 2>/dev/null || true
-cp "$READOPT" "$RMUT/readopt-override.sh"
-if bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$GOK" --check >/dev/null 2>&1 \
-   && ! bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$HOVR" --check >/dev/null 2>&1; then
-  ok "CONTROL: the unmutated copy in a fresh directory still passes the near-miss and still reports the re-wrap"
-else
-  bad "CONTROL: the unmutated copy does not reproduce the two baseline verdicts -- the mutant below would be unreadable"
-fi
-sed "s@| tr '\\\\n' ' ' | tr -s ' ')\"@)\"@" "$READOPT" > "$RMUT/readopt-override.sh"
-if cmp -s "$READOPT" "$RMUT/readopt-override.sh"; then
-  bad "the wrap MUTANT did not apply -- the body-flattening line has been respelled, so the H arm proves nothing"
-else
-  ! bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$HOVR" --check >/dev/null 2>&1; mcell wrap H-wrapped $?
-  ! bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$GOVR.absent" --check >/dev/null 2>&1; mcell wrap H-absent-path-refused $?
-  if bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$HOVR" --check >/dev/null 2>&1; then
-    mutant_killed "$B_H_wrapped" wrap "MUTANT wrap (body compared un-flattened): the re-wrapped superseded sentence goes UNFOUND -- flattening is what finds it"
-  else
-    bad "MUTANT SURVIVED: the H arm still fires with the flattening removed, so it is not testing wrap-insensitivity"
-  fi
-  if bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$GOVR.absent" --check >/dev/null 2>&1; then
-    bad "  the mutant accepted a non-existent override path, so its verdicts say nothing about the subject"
-  else
-    ok "  and it still refuses a path naming no file, so the mutant runs rather than dying early"
-  fi
-fi
 rm -f "$GOK" "$HOVR" "$HOK"
 
+fi
+if sg j; then
 # ---------------------------------------------------------------------------
 # J. UPSTREAM RE-FLOWED A PARAGRAPH, AND A FAITHFUL ADOPTION MUST NOT BE REFUSED.
 # ---------------------------------------------------------------------------
@@ -2627,8 +2119,8 @@ its own body. The control for the measured false-positive class.
 EOF
 # The seed must be a NEGATION IN PLACE: the base line's words survive INSIDE one theirs
 # line and not as a whole line. The first cut lowercased a letter after `Never`, so the
-# base line was not contained at all and every implementation refused JNEG -- the M2
-# mutant then survived, and only this assertion separates that from a real kill.
+# base line was not contained at all and every implementation refused JNEG, so this
+# assertion is what separates a real negation-in-place from a lowercased one.
 jn_base="Shadowed by an override whose survival vocabulary names a DIFFERENT unit (Rule 9) and"
 jn_theirs="$(git -C "$DIST" show "${JTH}:core/skills/ai-dlc/SKILL.md" | awk '/^## Rule 15/{f=1;next} /^## /{f=0} f' | tr -s ' ')"
 if ! grep -qxF -- "$jn_base" <<<"$jn_theirs" && grep -qF -- "$jn_base" <<<"$jn_theirs"; then
@@ -2640,7 +2132,7 @@ fi
 echo "== J. a RE-FLOWED core paragraph, faithfully adopted, is not superseded text =="
 out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JOK" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ] && ! grep -q 'STALE-CORE-TEXT' <<<"$out"; then
-  ok "--check OK: a body carrying theirs' re-flowed paragraph verbatim is not refused"; B_J_containment=1
+  ok "--check OK: a body carrying theirs' re-flowed paragraph verbatim is not refused"
 else
   bad "--check refused a faithful adoption of a RE-FLOWED paragraph (rc=$rc) -- the suffix false positive: the only stamp left is reaffirm, which records a readopt under the wrong name"
   printf '%s\n' "$out" | sed 's/^/    /'
@@ -2668,7 +2160,7 @@ else
 fi
 out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JNEG" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out" && grep -q 'survival vocabulary names a DIFFERENT unit' <<<"$out"; then
-  ok "NEGATED IN PLACE: a body carrying only the line core prefixed with Never is REFUSED, naming it"; B_J_negation=1
+  ok "NEGATED IN PLACE: a body carrying only the line core prefixed with Never is REFUSED, naming it"
 else
   bad "NEGATED IN PLACE: a body teaching the rule core INVERTED was not refused (rc=$rc) -- bare containment acquitted it because the old words survive inside the new line"
   printf '%s\n' "$out" | sed 's/^/    /'
@@ -2681,71 +2173,10 @@ else
   printf '%s\n' "$out" | sed 's/^/    /'
 fi
 
-# --- MUTANT: put the base-side test back on WHOLE LINES ----------------------------------
-# The shipped-before shape: a set difference over whole trimmed lines. Restoring it must
-# make JOK REFUSE (the suffix line scores as deleted) while JBAD still refuses -- one cell
-# moves. Built as a whole-directory copy, cmp -s guarded, with the unmutated control first.
-#
-# THE STAMP ABOVE ADVANCED JOK'S base_sha TO THEIRS, and against a degenerate range every
-# implementation reports OK -- the first cut of this mutant "survived" for exactly that
-# reason, with its control passing beside it. Put the range back and assert it is back.
-sed -i.bak "s/^base_sha:.*/base_sha: ${JPRE}/" "$JOK" && rm -f "$JOK.bak"
-if [ "$(sed -n 's/^base_sha:[[:space:]]*//p' "$JOK" | head -1)" = "$JPRE" ] && [ "$JPRE" != "$JTH" ]; then
-  ok "  JOK's base_sha reset to $JPRE for the mutant (theirs is $JTH, so the range is not degenerate)"
-else
-  bad "  could not reset JOK's base_sha -- the mutant below would compare theirs against itself"
-fi
-JMUT="$ROOT/reflowmut"; rm -rf "$JMUT"; mkdir -p "$JMUT"
-cp "$(dirname "$READOPT")"/*.sh "$JMUT/" 2>/dev/null || true
-cp "$(dirname "$READOPT")"/*.md "$JMUT/" 2>/dev/null || true
-if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JOK" --check >/dev/null 2>&1 \
-   && ! bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JBAD" --check >/dev/null 2>&1; then
-  ok "CONTROL: the unmutated copy in a fresh directory passes JOK and refuses JBAD"
-else
-  bad "CONTROL: the unmutated copy does not reproduce the two baseline verdicts -- the mutant below would be unreadable"
-fi
-# TWO MUTANTS, one per half of the predicate. M1 drops the containment acquittal, so
-# `changed_lines` is the whole-line set difference again: JOK must be REFUSED, JBAD still
-# refused. M2 drops the context test, so bare containment acquits: JNEG must PASS (the
-# false pass the first cut shipped), JOK still passes. Each is anchored on the clause it
-# removes, which no other line in the file carries.
-sed 's@    carries "\$to_flat" "\$line" \&\& carried_in_context "\$2" "\$3" "\$line" \&\& continue@    :@' "$READOPT" > "$JMUT/readopt-override.sh"
-if cmp -s "$READOPT" "$JMUT/readopt-override.sh"; then
-  bad "the re-flow MUTANT (M1) did not apply -- the containment line in changed_lines has been respelled, so arm J proves nothing"
-else
-  bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JOK" --check >/dev/null 2>&1; mcell reflow-M1 J-containment $?
-  ! bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JBAD" --check >/dev/null 2>&1; mcell reflow-M1 J-bad-refused $?
-  if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JOK" --check >/dev/null 2>&1; then
-    bad "MUTANT M1 SURVIVED: with the containment acquittal removed, the faithful re-flow adoption still passes -- arm J is not testing containment"
-  else
-    mutant_killed "$B_J_containment" reflow-M1 "MUTANT reflow-M1 (whole-line set difference restored): the faithful re-flow adoption is REFUSED -- containment is what clears it"
-  fi
-  if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JBAD" --check >/dev/null 2>&1; then
-    bad "  M1 passed JBAD, so it is not the whole-line form -- its JOK verdict says nothing"
-  else
-    ok "  and M1 still refuses JBAD, so exactly one cell moved"
-  fi
-fi
-sed 's@    carries "\$to_flat" "\$line" \&\& carried_in_context "\$2" "\$3" "\$line" \&\& continue@    carries "$to_flat" "$line" \&\& continue@' "$READOPT" > "$JMUT/readopt-override.sh"
-if cmp -s "$READOPT" "$JMUT/readopt-override.sh"; then
-  bad "the bare-containment MUTANT (M2) did not apply -- the context clause in changed_lines has been respelled, so the negation arm proves nothing"
-else
-  ! bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JNEG" --check >/dev/null 2>&1; mcell reflow-M2 J-negation $?
-  bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JOK" --check >/dev/null 2>&1; mcell reflow-M2 J-ok-passes $?
-  if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JNEG" --check >/dev/null 2>&1; then
-    mutant_killed "$B_J_negation" reflow-M2 "MUTANT reflow-M2 (bare containment, no context test): the body teaching the INVERTED rule PASSES -- the context test is what refuses it"
-  else
-    bad "MUTANT M2 SURVIVED: bare containment still refuses the negated-in-place body, so the context test is not what is doing the work"
-  fi
-  if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JOK" --check >/dev/null 2>&1; then
-    ok "  and M2 still passes the faithful re-flow, so exactly one cell moved"
-  else
-    bad "  M2 refused JOK, so it is not bare containment -- its JNEG verdict says nothing"
-  fi
-fi
 rm -f "$JOK" "$JBAD" "$JNEG" "$JNEGOK"
 
+fi
 rm -rf "$ROOT"
 echo ""
-if [ "$fails" -eq 0 ]; then echo "layer-readopt-gate: PASS"; exit 0; fi
-echo "layer-readopt-gate: FAIL ($fails)"; exit 1
+if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
+echo "$NAME: FAIL ($fails)"; exit 1

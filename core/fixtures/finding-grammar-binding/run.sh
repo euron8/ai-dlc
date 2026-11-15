@@ -4,14 +4,14 @@
 # join-remediator-shards.sh src_ids and validate-adversarial-convergence.sh j3_keys (J3). When they disagree, the merge
 # counts a finding J3 cannot key, and the gate can never close it. This fixture holds the three copies to one text.
 #
-# Usage: run.sh [--matrix]   (--matrix also prints the MATRIX row of the one mutant)
+# Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = the binding regressed, 2 = fixture broken.
 #
 # ARMS. BB0 self-probes FIRST, in a mktemp tree, both directions. BB1 binds the ID RULE, the FENCE RULE, sev() and the
 # `## Findings` match across the three functions. BB2 counts every fence-rule copy in core/scripts/*.sh against an
 # enumeration, so a fourth hand-copied grammar in a NEW file fails, and refuses a scanned set under a floor, so a sandbox
 # that copies only the named carriers cannot pass it by counting four files. BIND3 (with its self-probes BIND0,
-# BINDm-third, BINDQ3, BINDQ4, BINDF-BINDF5) counts every carrier of the join's SAME and DOUBLE-WRITE refusal phrases
+# BINDQ3, BINDQ4, BINDF-BINDF5) counts every carrier of the join's SAME and DOUBLE-WRITE refusal phrases
 # across core/scripts/*.sh and core/hooks/*.sh, so a third copy in any script or hook fails; its header is above it.
 #
 # WHY A FIXTURE OF ITS OWN. These arms were first written into adversarial-shard-merge, the suite's slowest fixture.
@@ -20,27 +20,16 @@
 # from remediator-shard-join for the same reason (BL-967): it reads the whole of core/scripts/ and core/hooks/, which
 # that fixture does not declare, so in the sandbox it counted only the declared files.
 #
-# MUTANT-MATRIX BINDm-third decides=BIND3 twins=- why=the third-carrier world is read by BIND3 alone; BIND0 is the unmutated control over the same tree
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/finding-grammar-binding/run.sh --matrix
-#
 # `.dist-only`: the reason is in the marker beside this file.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 . "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-MATRIX=0
-[ "${1:-}" = --matrix ] && MATRIX=1
-N_MROWS=0
-mrow() { [ "$MATRIX" = 1 ] || return 0; N_MROWS=$((N_MROWS + 1)); echo "  MATRIX $*"; }
 
 echo "finding-grammar-binding"
 
 # The subject, found by walking UP from this file's directory for core/scripts/ -- never by counting `..`.
 HERE="$(cd "$(dirname "$0")" && pwd)"
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE; nothing was asserted" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$MUT_LIB"
 MERGE=""
 _d="$HERE"
 while [ -n "$_d" ] && [ "$_d" != "/" ]; do
@@ -218,9 +207,8 @@ else bad "BB2: the fence-rule copies drifted from the enumeration, or the scanne
 # LIMIT: a paraphrase of either phrase evades the count.
 #
 # SELF-PROBES run BEFORE the real check, in mktemp trees holding copies of the merge and the join, never the real
-# directories. BIND0 asserts the unmutated tree passes over exactly its 2 files (the base the kill is gated on).
-#   BINDm-third  a third carrier seeded as a scripts-dir x.sh                     -> BIND3 (KILLED)
-#   BINDQ3       both phrases on a `#` comment line of a scripts-dir x.sh         -> quiet, scanned (3 files)
+# directories. BIND0 asserts the base tree passes over exactly its 2 files.
+#   BINDQ3      both phrases on a `#` comment line of a scripts-dir x.sh         -> quiet, scanned (3 files)
 #   BINDQ4       an EMPTY .sh in the hooks dir, counted (an empty file has no FNR==1 record) -> quiet (3 files)
 #   BINDF        an empty scripts and hooks dir                                  -> REFUSES
 #   BINDF2       an unopenable listed .sh (chmod 000, non-root)                   -> REFUSES (awk read 2 of 3)
@@ -286,26 +274,15 @@ bd_run() {
   BD_FAILED="$(awk '$1 == "FAIL" { printf "%s%s", s, $2; s = "," }' "$BD_OUT")"
 }
 
-B_BIND0=0
 t0="$(bd_tree base)" || { echo "FIXTURE BROKEN: no BIND3 probe tree" >&2; exit 2; }
 bd_run "$t0"
-if [ -z "$BD_FAILED" ] && grep -qx 'PASS BIND3 over 2 file(s)' "$BD_OUT"; then ok "BIND0: the unmutated probe tree (the merge and the join) passes BIND3 over its 2 files"; B_BIND0=1
-else bad "BIND0: the unmutated probe tree did not pass BIND3 over 2 files: $(tr '\n' ' ' < "$BD_OUT")"; fi
-
-if [ "$B_BIND0" != 1 ]; then
-  bad "FIXTURE BROKEN: BINDm-third and BINDQ3 not scored -- the unmutated probe tree did not pass (BIND0), so the mutant cell would read the base failing"
-else
-t="$(bd_tree third)" && printf '%s\n' '#!/usr/bin/env bash' "  refuse \"--rerun x: y wrote z $BD_P1 w, after it\"" > "$t/core/scripts/x.sh" \
-  && { bd_run "$t"; mrow BINDm-third "BIND3=$([ "$BD_FAILED" = BIND3 ] && echo 1 || echo 0)"; [ "$BD_FAILED" = BIND3 ]; } \
-  && grep -q '^FAIL BIND3 x\.sh carries the SAME phrase on 1 line(s);$' "$BD_OUT" \
-  && mutant_killed "$B_BIND0" BINDm-third "BINDm-third a third carrier seeded as a scripts-dir x.sh: KILLED by [BIND3], naming x.sh" \
-  || bad "BINDm-third: SURVIVED or not applied (failed=${BD_FAILED:-none}, want BIND3 naming x.sh): $(tr '\n' ' ' < "$BD_OUT")"
+if [ -z "$BD_FAILED" ] && grep -qx 'PASS BIND3 over 2 file(s)' "$BD_OUT"; then ok "BIND0: the probe tree (the merge and the join) passes BIND3 over its 2 files"
+else bad "BIND0: the probe tree did not pass BIND3 over 2 files: $(tr '\n' ' ' < "$BD_OUT")"; fi
 
 t="$(bd_tree q3)" && printf '%s\n' '#!/usr/bin/env bash' "  # quoting the refusal: $BD_P1, and $BD_P2" > "$t/core/scripts/x.sh" \
   && bd_run "$t" && [ -z "$BD_FAILED" ] && grep -qx 'PASS BIND3 over 3 file(s)' "$BD_OUT" \
   && ok "BINDQ3: both phrases on a comment line of a scripts-dir x.sh, scanned (3 files) -> BIND3 stays green" \
   || bad "BINDQ3: a comment-line carrier fired BIND3, or x.sh was not scanned (failed=${BD_FAILED:-none}): $(tr '\n' ' ' < "$BD_OUT")"
-fi
 
 t="$(mktemp -d "$WORK/bind-floor.XXXXXX")" && mkdir -p "$t/s" "$t/h" \
   && bd_carriers "$t/s" "$t/h" "$MB" "$JB" 0 0 > "$BD_OUT" && grep -q '^FAIL BIND3 REFUSED: the corpus glob' "$BD_OUT" \
@@ -346,10 +323,6 @@ case "$(< "$BD_OUT")" in
   "FAIL BIND3"*) bad "BIND3:$(sed 's/^FAIL BIND3//' "$BD_OUT")" ;;
   *) bad "BIND3: FIXTURE BROKEN -- unreadable verdict [$(tr '\n' ' ' < "$BD_OUT")]" ;;
 esac
-
-if [ "$MATRIX" = 1 ]; then echo "  (matrix mode: $N_MROWS MATRIX row(s) printed)"
-elif [ "$N_MROWS" -eq 0 ]; then ok "PLAIN: a plain run printed no matrix-only cell"
-else bad "PLAIN: a plain run printed $N_MROWS matrix row(s)"; fi
 
 echo
 report_end finding-grammar-binding

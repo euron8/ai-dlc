@@ -24,8 +24,7 @@
 #
 # The crosswalk carries its two rows in the two forms the table accepts — bare (`34`) and
 # namespaced (`Check 12`) — because the resolver reads both and a seed carrying only one form
-# leaves the other branch inert. That is not hypothetical: the first cut of this fixture seeded
-# only the bare form, and the mutant that deletes the namespaced branch came back GREEN.
+# leaves the other branch inert.
 #
 # `Check 34` is the load-bearing silent case. Without the crosswalk join the arm reports it,
 # and reporting it would mean core demanding a repair for a citation the consumer has already
@@ -125,8 +124,7 @@ chmod +x "$CONS/scripts/present.sh"
 # W7's HOOK NAMESPACE. A check implemented in a shipped hook is defined in no rendered-rulebook
 # file and no crosswalk row, so before the hook resolver existed a CORRECT citation of one was
 # reported as dangling. Two hooks, because the join is per-hook and a single-hook world cannot
-# tell "resolves against the hook the line names" from "resolves against any hook at all" —
-# `fixture-mutants.md`'s seeded-set rule, met in the id namespace.
+# tell "resolves against the hook the line names" from "resolves against any hook at all".
 #
 # THE IDS HERE ARE NUMERIC-LEADING BECAUSE W7'S HARVEST GRAMMAR IS. A first cut of this seed
 # used `hk1`-style ids; `grep -Eoh 'Check[ -][0-9]+[a-z-]*'` cannot spell them, so every cell

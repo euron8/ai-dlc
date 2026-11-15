@@ -7,6 +7,6 @@
 # inproc rows (fx_inproc, one per in-process beat): the base arms' beats, the mutant and MX0 cells' beats (each copy
 # keeps the declared suffix, $MUTDIR/<m>/core/scripts/wait-for-deliverable.sh), C31's relaunch of C23, and C48's
 # three in-process sides. Each is counted in the call site's foreground before any background (BL-868).
-404 *
+213 *
 3 core/scripts/wait-for-deliverable.sh
-56 inproc:core/scripts/wait-for-deliverable.sh
+26 inproc:core/scripts/wait-for-deliverable.sh

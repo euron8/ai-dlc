@@ -8,7 +8,7 @@
 #        e.g. a historical one saved to a temp file, to prove the arm fires. It is POSITIONAL, not
 #        an environment variable, because the hermetic scrub below unsets every AI_DLC_* name.
 # Exit:  0 = every plain value is clean, 1 = an offending value (each named by line and key), or
-#        the map is absent in both layouts, 2 = fixture broken (self-probe or mutant failed).
+#        the map is absent in both layouts, 2 = fixture broken (self-probe failed).
 #
 # WHY THIS FIXTURE EXISTS. The map is read by about forty-five tracked files, and every one of
 # them parses it with a LINE grammar (awk, sed, a Python regex block-parser, a JS line loop) —
@@ -87,14 +87,9 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# B_FOLD=1 only beside the unmutated grammar's own ok on the folded near-miss: the mutant is scored only if that base arm passed.
-B_FOLD=0
 
 # =============================================================================
-# THE GRAMMAR — one program, used by the self-probe, the mutant and the real map.
+# THE GRAMMAR — one program, used by the self-probe and the real map.
 # =============================================================================
 # Output: one `HIT<TAB>value-start-line<TAB>key<TAB>offending-line` per offending value (a value
 # is reported ONCE, at its first offending line), then `SCANNED<TAB>plain<TAB>block` — the count
@@ -191,44 +186,13 @@ for f in nm-dquote nm-squote nm-folded nm-literal nm-nested nm-url nm-comment; d
   fi
 done
 
-# =============================================================================
-# 2. MUTANT: block-scalar tracking disabled must turn the folded near-miss red.
-# =============================================================================
-# The tracking is the narrowing that removed the measured false positive (a colon-space inside a
-# `why: >-` body). A grammar without it would still report all seven real offenders, so only a
-# mutant shows the line is load-bearing. Anchor: the one line that opens a block scalar.
-ANCHOR='if (c1 == "|" || c1 == ">") {'
-n_anchor="$(grep -cF -- "$ANCHOR" "$WORK/scan.awk")" || n_anchor=0
-if [ "$n_anchor" -ne 1 ]; then
-  bad "MUTANT: the block-scalar anchor matches $n_anchor line(s), not 1 -- re-anchor it, never relax the arm"
-else
-  awk -v a="$ANCHOR" '{ p = index($0, a); if (p) $0 = substr($0, 1, p - 1) "if (0) {" substr($0, p + length(a)); print }' \
-    "$WORK/scan.awk" > "$WORK/scan-mut.awk"
-  if cmp -s "$WORK/scan.awk" "$WORK/scan-mut.awk"; then
-    bad "MUTANT DID NOT APPLY: disabling block-scalar tracking changed no bytes"
-  else
-    h_base="$(hits "$WORK/scan.awk" "$P/nm-folded.yaml")"
-    if [ -z "$h_base" ]; then ok "BASE: the unmutated grammar keeps the folded near-miss quiet"; B_FOLD=1
-    else bad "BASE: the unmutated grammar reported the folded near-miss '$(tr '\n' ' ' <<<"$h_base")' -- the mutant below would be scored against a grammar that already fails"; fi
-    h_mut="$(hits "$WORK/scan-mut.awk" "$P/nm-folded.yaml")"
-    h_off="$(hits "$WORK/scan-mut.awk" "$P/off-cont.yaml")"
-    # Positive control on the SAME mutant: it still runs and still reports the offender, so a
-    # kill below is the folded body being misread, not a program that died.
-    if [ "$h_off" = "5" ] && [ "$h_mut" = "5" ]; then
-      mutant_killed "$B_FOLD" "block-scalar-tracking" "MUTANT killed: without block-scalar tracking the folded near-miss is REPORTED at line 5 (and the mutant still reports the real offender)"
-    else
-      bad "MUTANT survived or broke: folded near-miss read '$(tr '\n' ' ' <<<"$h_mut")', offender read '$(tr '\n' ' ' <<<"$h_off")' -- wanted 5 and 5"
-    fi
-  fi
-fi
-
 if [ "$fails" -ne 0 ]; then
-  echo; echo "enforcement-map-yaml-plain: FIXTURE BROKEN -- the self-probe or the mutant failed, so the real map is not read" >&2
+  echo; echo "enforcement-map-yaml-plain: FIXTURE BROKEN -- the self-probe failed, so the real map is not read" >&2
   exit 2
 fi
 
 # =============================================================================
-# 3. THE REAL MAP.
+# 2. THE REAL MAP.
 # =============================================================================
 if [ -z "$MAP" ] || [ ! -f "$MAP" ]; then
   echo "  FAIL  enforcement-map.yaml not found${MAP:+ at $MAP} -- looked for core/skills/ai-dlc/ and .claude/skills/ai-dlc/ under the project root walked up from $HERE. The map ships in both layouts; its absence is a broken install, not a pass."
@@ -239,8 +203,8 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$MAP")" && pwd)/${MAP##*/}"
 out="$(scan "$WORK/scan.awk" "$MAP")" || { echo "FIXTURE ERROR: awk failed on $MAP" >&2; exit 2; }
 np="$(awk -F'\t' '$1=="SCANNED"{print $2}' <<<"$out")"
 nb="$(awk -F'\t' '$1=="SCANNED"{print $3}' <<<"$out")"
-# Plain values only: a map with no block scalars is legal YAML, and the mutant above already
-# proves the block-scalar branch runs.
+# Plain values only: a map with no block scalars is legal YAML, and the folded near-miss above
+# already proves the block-scalar branch runs.
 if [ "${np:-0}" -gt 0 ]; then
   ok "CONTROL: the map was read -- ${np} plain and ${nb:-0} block-scalar value(s) classified"
 else

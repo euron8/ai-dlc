@@ -13,9 +13,9 @@
 # real operator steer — the failure Rule 29 exists to prevent. Assertion 3 is therefore the
 # load-bearing one: it is the assertion that would catch a predicate scoped too widely.
 #
-# THE SECOND SUBJECT. Assertions 8 and 9 are about the FLOW LOG this hook opens, not about
-# the origin predicate, and they read all three hooks that can open it rather than this one.
-# They live here because assertion 6 is the arm they correct: it asserts the legend from the
+# THE SECOND SUBJECT. Assertion 8 is about the FLOW LOG this hook opens, not about
+# the origin predicate, and it reads all five hooks that can open it rather than this one.
+# It lives here because assertion 6 is the arm it corrects: it asserts the legend from the
 # log THIS hook produced, which is a per-hook reading of a cross-hook property, and it cannot
 # see the hooks disagreeing. Their own reasoning is at assertion 8.
 set -uo pipefail
@@ -43,14 +43,6 @@ _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.cla
 [ -n "$_PRS" ] && echo "HERMETIC-CONSUMED core/schemas/pause-routing.json"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# Base-pass flags for the mutant kills below, each raised only beside the ok of the arm its
-# mutants break: PH_A1 assertion 1, PH_BIND the session-test control, PH_R10 the resume control.
-PH_A1=0; PH_BIND=0; PH_R10=0
-# B_LEG=1 only beside the battery control's own ok: a legend mutant is scored only if the unmutated copies read SAME.
-B_LEG=0
 
 # Drive the hook exactly as the harness does: JSON on stdin, CLAUDE_PROJECT_DIR set.
 fire() { # <prompt-json-string>
@@ -74,7 +66,7 @@ fi
 # --- Assertion 1: an EMPTY prompt does not pause ------------------------------
 fire '""'
 if [ ! -f "$FLAG" ]; then
-  ok "empty prompt: no pause flag created"; PH_A1=1
+  ok "empty prompt: no pause flag created"
 else
   bad "an empty prompt still created the pause flag — the lead blocks on a pause no human initiated"
 fi
@@ -128,23 +120,6 @@ else
   bad "PAUSE_SKIPPED entries are written into a log whose legend never mentions them"
 fi
 
-# --- Assertion 7: MUTANT — remove the predicate and assertion 1 must fail ------
-MUT="$WORK/pause-mutant.sh"
-sed 's|^if \[ -z "\$PROMPT_STRIPPED" \]; then|if [ -n "$PROMPT_STRIPPED" ] \&\& false; then|' \
-  "$HOOK" > "$MUT"
-if ! grep -q 'PROMPT_STRIPPED" \] && false' "$MUT"; then
-  bad "FIXTURE STALE: could not build the no-predicate mutant — the guard's condition was reworded"
-else
-  rm -f "$FLAG"
-  printf '{"session_id":"fixture","prompt":""}' \
-    | CLAUDE_PROJECT_DIR="$PROJECT" bash "$MUT" >/dev/null 2>&1
-  if [ -f "$FLAG" ]; then
-    mutant_killed "${PH_A1:-0}" no-predicate "mutant: with the predicate disabled an empty prompt pauses again — the fixture can fail"
-  else
-    bad "MUTANT DID NOT FAIL — an empty prompt creates no flag even with the guard disabled, so assertion 1 proves nothing"
-  fi
-fi
-
 # --- Assertion 10: only an /ai-dlc session's prose pauses ---------------------
 # THE DEFECT. Once the pipeline was active the hook raised the project-wide pause flag for
 # operator prose typed in ANY session of the project, so a message typed into a second window
@@ -160,8 +135,7 @@ fi
 # escapes the quotes -- the shape that turned a session into an "updater" once before.
 #
 # One fresh project per cell, seven cells, each PRESENCE-shaped on the side that matters (a
-# flag, or a PAUSE_SKIPPED row plus a capture). The unmutated COPY is driven too, from the
-# directory the mutants sit in, so a kill is never a copy that cannot run.
+# flag, or a PAUSE_SKIPPED row plus a capture).
 T_TYPED='{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc</command-message>\n<command-name>/ai-dlc</command-name>\n<command-args>Sprint 9</command-args>"}}'
 T_TYPED_UPD='{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc-update</command-message>\n<command-name>/ai-dlc-update</command-name>"}}'
 T_SKILL='{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu-1","name":"Skill","input":{"skill":"ai-dlc","args":"pasted brief"}}]}}'
@@ -246,44 +220,6 @@ else
   bad "SESSION TEST WRONG — cells LEAD SKILLTU OTHER UPDATER RESUME NOTRANS NEWSESS LOSTDIR UNREADABLE read [$B_REAL], expected [$B_EXPECT]"
 fi
 
-# --- Assertion 11: MUTANTS — each cell can fail ------------------------------
-BM="$WORK/bind-mutants"; mkdir -p "$BM"
-cp "$HOOK" "$BM/control.sh"
-B_CTRL="$(b_world "$BM/control.sh")"
-if [ "$B_CTRL" = "$B_EXPECT" ]; then
-  ok "session-test mutant control: an unmutated copy under $BM reads [$B_CTRL]"; PH_BIND=1
-else
-  bad "SESSION-TEST MUTANT HARNESS BROKEN — the unmutated copy reads [$B_CTRL], so no kill below is readable"
-fi
-# <name> <expected-vector> <sed-expr>
-b_mut() {
-  local name="$1" want="$2" expr="$3" got
-  sed "$expr" "$HOOK" > "$BM/$name.sh" || { bad "FIXTURE STALE: mutant $name: sed did not apply"; return; }
-  if cmp -s "$HOOK" "$BM/$name.sh"; then
-    bad "FIXTURE STALE: session-test mutant $name matched nothing in $HOOK"; return
-  fi
-  got="$(b_world "$BM/$name.sh")"
-  if [ "$got" = "$want" ]; then
-    mutant_killed "${PH_BIND:-0}" "session-$name" "session-test mutant $name: [$got]"
-  else
-    bad "SESSION-TEST MUTANT $name read [$got], expected [$want] — the arm cannot fire, or the cells are entangled"
-  fi
-}
-# The skip never taken: every session pauses again -- the filed defect.
-b_mut noskip    "y y n n y y y y y" 's#^  none|ai-dlc-update)$#  NEVER-MATCHES)#'
-# The updater counted as a lead.
-b_mut updlead   "y y y n y y y y y" 's#^  none|ai-dlc-update)$#  none)#'
-# The Skill tool_use alternative dropped: a lead activated through Skill(ai-dlc) stops pausing.
-b_mut notooluse "y n y y y y y y y" 's#|"name":"Skill","input":\\{"skill":"ai-dlc(-update)?"##'
-# The typed marker un-anchored from the harness's user record: a MENTION makes a session a lead.
-b_mut bare      "y y n y y y y y y" 's#"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\\\n##'
-# The current /ai-dlc prompt not consulted: a resume in a new session does not pause.
-b_mut nocurrent "y y y y n y y y y" 's#^  /ai-dlc|/ai-dlc\[\[:space:\]\]\*)  *SESSION_SKILL="ai-dlc" ;;$#  /ai-dlc-NEVER) SESSION_SKILL="ai-dlc" ;;#'
-# The default inverted: no readable transcript reads as "not a lead" and skips.
-b_mut nodefault "y y y y y n y n n" 's#^    SESSION_SKILL="unknown"$#    SESSION_SKILL="none"#'
-# The new-session branch deleted: a brand-new session's first prompt pauses the lead again.
-b_mut nonewbranch "y y y y y y n y y" '/^  elif \[ -n "\$TRANSCRIPT" \] && \[ ! -e/,/SESSION_SKILL="new-session"/d'
-
 # --- Assertion 8: the THREE hooks seed the SAME legend -------------------------
 # WHY THIS LIVES HERE, AND WHY ASSERTION 6 IS NOT ENOUGH. Assertion 6 reads the log this
 # fixture's own run produced, so it sees whichever legend `ai-dlc-pause.sh` happens to carry.
@@ -300,8 +236,8 @@ b_mut nonewbranch "y y y y y y n y y" '/^  elif \[ -n "\$TRANSCRIPT" \] && \[ ! 
 # this arm on a dead instrument, which is the exact shape assertion 6 already failed in. The
 # verdict function refuses to compare until each hook has exactly ONE legend opener and a
 # NON-EMPTY body, and the byte counts are printed so a human can see the arm had a subject.
-# Canonicalised, because the mutation battery below is required to print the path it edits
-# and a path carrying `../..` is not one a human can compare against the file they changed.
+# Canonicalised, because a path carrying `../..` is not one a human can compare against the
+# file they changed.
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] \
   && { printf '%s/%s' "$(cd "$(dirname "$c")" && pwd)" "$(basename "$c")"; return; }; done; }
 CONT_HOOK="$(pick "$HERE/../../hooks/ai-dlc-continue.sh" \
@@ -394,136 +330,6 @@ else
   fi
 fi
 
-# --- Assertion 9: MUTANTS — prove assertion 8 and its anti-vacuity guard can fire
-# Every mutant is a COPY under $WORK; the real hooks are never edited. Each `sed`/`awk`
-# rewrite is guarded with `cmp -s` so a rewrite that matched nothing reports FIXTURE STALE
-# instead of scoring a kill, and the resolved path of every mutated file is printed. The
-# battery opens with an UNMUTATED control from the same directory: if the copies themselves
-# were what broke, the control says so rather than the kills reading as clean.
-#
-# IT STANDS DOWN WHEN ASSERTION 8 ALREADY FAILED, and that is an ownership decision, not a
-# convenience. Every mutant here is built from the same three hooks assertion 8 read, so a
-# genuinely divergent subject makes the battery's own baseline divergent: measured against
-# the real pre-fix tree the battery added three more FAILs — a broken control, a stale
-# anchor, and a short kill count — on top of the one true finding. Assertion 8 OWNS a
-# divergent subject; the battery only ever answers "can assertion 8 fire", which is a
-# question with no meaning while it IS firing. The stand-down cannot hide anything: it is
-# reachable only on a path that has already failed the fixture, and it says so out loud.
-if [ "$V8" != "SAME" ]; then
-  printf '        legend battery: STOOD DOWN — assertion 8 owns this case and already failed (%s)\n' "$V8"
-elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}" ] && [ -n "${ESC_HOOK:-}" ] && [ -n "${ANS_HOOK:-}" ]; then
-  MUT="$WORK/legend-mutants"; mkdir -p "$MUT"
-  cp "$CONT_HOOK" "$MUT/continue.sh"
-  cp "$ACK_HOOK"  "$MUT/acknowledge.sh"
-  cp "$PAUSE_HOOK" "$MUT/pause.sh"
-  cp "$ESC_HOOK"  "$MUT/escalation.sh"
-  cp "$ANS_HOOK"  "$MUT/answer.sh"
-  kills=0
-
-  # 9a. CONTROL — unmutated copies in the mutant directory still read SAME.
-  VC="$(legend_verdict "$MUT" "$MUT/continue.sh" "$MUT/acknowledge.sh" "$MUT/pause.sh" "$MUT/escalation.sh" "$MUT/answer.sh")"
-  if [ "$VC" = "SAME" ]; then
-    ok "mutant control: unmutated copies under $MUT read SAME — the battery's harness is alive"; B_LEG=1
-  else
-    bad "MUTANT HARNESS BROKEN — unmutated copies read $VC, so every kill below is unreadable"
-  fi
-
-  # 9b. ONE BYTE in ONE hook's legend — `:` -> `;` inside the BACKOFF entry — and it runs
-  # ONCE PER HOOK. The verdict is one comparison per position against legend.1, so mutating a
-  # single hook exercises only one of them and leaves the rest unproven; a divergence in hook 2
-  # is caught by an expression a pause.sh-only mutant never reaches. One pass per position is
-  # what makes every comparison load-bearing — including the FOURTH, which is the one the
-  # hard-coded `legend.1..3` comparison used to skip while still guarding it.
-  for pos in 1 2 3 4 5; do
-    case "$pos" in 1) src=continue ;; 2) src=acknowledge ;; 3) src=pause ;; 4) src=escalation ;; 5) src=answer ;; esac
-    sed 's/^- `BACKOFF`: rapid-fire/- `BACKOFF`; rapid-fire/' "$MUT/$src.sh" > "$MUT/$src.1byte.sh"
-    if cmp -s "$MUT/$src.sh" "$MUT/$src.1byte.sh"; then
-      bad "FIXTURE STALE: the one-byte legend mutation matched nothing in $src.sh — the BACKOFF entry was reworded"
-      continue
-    fi
-    c="$MUT/continue.sh"; a="$MUT/acknowledge.sh"; p="$MUT/pause.sh"; e="$MUT/escalation.sh"; n="$MUT/answer.sh"
-    case "$pos" in
-      1) c="$MUT/continue.1byte.sh" ;;
-      2) a="$MUT/acknowledge.1byte.sh" ;;
-      3) p="$MUT/pause.1byte.sh" ;;
-      4) e="$MUT/escalation.1byte.sh" ;;
-      5) n="$MUT/answer.1byte.sh" ;;
-    esac
-    printf '        mutant 9b/%s edits: %s\n' "$src" "$MUT/$src.1byte.sh"
-    V9B="$(legend_verdict "$MUT" "$c" "$a" "$p" "$e" "$n")"
-    if [ "$V9B" = "DIFFER" ]; then
-      mutant_killed "$B_LEG" "9b/$src" "mutant 9b/$src: one byte changed in $src's legend -> DIFFER (assertion 8 can fire on this hook)" && kills=$((kills+1))
-    else
-      bad "MUTANT 9b/$src DID NOT FAIL — a one-byte divergence in $src read as $V9B, so assertion 8 is blind to that hook"
-    fi
-  done
-
-  # 9c. The extractor loses its anchor in ALL THREE. Renaming the heredoc delimiter is the
-  # realistic shape of a broken extractor: nothing matches, three empty bodies, and a naive
-  # arm compares them equal and prints ok. The opener guard must catch it FIRST.
-  for m in continue acknowledge pause; do
-    sed "s/^\\( *cat > \"\\\$LOG_FILE\" <<\\)'EOF'\$/\\1'HDR'/" "$MUT/$m.sh" > "$MUT/$m.noanchor.sh"
-  done
-  if cmp -s "$MUT/pause.sh" "$MUT/pause.noanchor.sh"; then
-    bad "FIXTURE STALE: the anchor-removal mutation matched nothing — the heredoc opener changed shape"
-  else
-    printf '        mutant 9c edits: %s %s %s\n' \
-      "$MUT/continue.noanchor.sh" "$MUT/acknowledge.noanchor.sh" "$MUT/pause.noanchor.sh"
-    V9C="$(legend_verdict "$MUT" "$MUT/continue.noanchor.sh" "$MUT/acknowledge.noanchor.sh" "$MUT/pause.noanchor.sh")"
-    case "$V9C" in
-      NO-SINGLE-OPENER:*)
-        mutant_killed "$B_LEG" "9c" "mutant 9c: extractor anchor gone in all three -> $V9C (the guard fires, not the comparison)" && kills=$((kills+1)) ;;
-      SAME)
-        bad "MUTANT 9c DID NOT FAIL — three unextractable legends compared EQUAL and assertion 8 would have printed ok" ;;
-      *)
-        bad "MUTANT 9c: expected the opener guard, got $V9C" ;;
-    esac
-  fi
-
-  # 9d. The opener SURVIVES but the body is emptied in all three. This is the branch 9c
-  # cannot reach: one opener each, extraction succeeds, and three empty bodies are equal.
-  for m in continue acknowledge pause; do
-    LC_ALL=C awk '
-      /^[[:space:]]*cat > "\$LOG_FILE" <<.EOF.$/ { print; ins=1; next }
-      ins && /^EOF$/                             { print; ins=0; next }
-      ins                                        { next }
-                                                 { print }
-    ' "$MUT/$m.sh" > "$MUT/$m.emptybody.sh"
-  done
-  if cmp -s "$MUT/pause.sh" "$MUT/pause.emptybody.sh"; then
-    bad "FIXTURE STALE: the empty-body mutation matched nothing — the legend heredoc moved"
-  else
-    printf '        mutant 9d edits: %s %s %s\n' \
-      "$MUT/continue.emptybody.sh" "$MUT/acknowledge.emptybody.sh" "$MUT/pause.emptybody.sh"
-    V9D="$(legend_verdict "$MUT" "$MUT/continue.emptybody.sh" "$MUT/acknowledge.emptybody.sh" "$MUT/pause.emptybody.sh")"
-    case "$V9D" in
-      EMPTY-LEGEND:*)
-        mutant_killed "$B_LEG" "9d" "mutant 9d: three EMPTY legend bodies -> $V9D (the anti-vacuity guard fires)" && kills=$((kills+1)) ;;
-      SAME)
-        bad "MUTANT 9d DID NOT FAIL — three empty legends compared EQUAL, which is assertion 8 closing on a dead instrument" ;;
-      *)
-        bad "MUTANT 9d: expected the empty-body guard, got $V9D" ;;
-    esac
-  fi
-
-  # A mutation applied to a copy the verdict never loads leaves every arm green and reads
-  # exactly like an arm that cannot fire. Assert the kill count directly.
-  #
-  # DERIVED FROM THE HOOK COUNT, NOT HAND-WRITTEN. This total was the literal `5` and a
-  # FOURTH seeding hook made it 6, so adding a hook failed this arm with a number rather than
-  # a reason — the count is one per hook plus the two whole-battery mutants (anchor-loss,
-  # empty-body). Deriving it means the next hook to seed a legend extends the battery instead
-  # of tripping it, and a SHRUNKEN battery still fails: expected moves down with `LEGEND_HOOKS`
-  # only because the loop above walks the same set.
-  LEGEND_HOOKS=5
-  EXPECT_KILLS=$(( LEGEND_HOOKS + 2 ))
-  if [ "$kills" -eq "$EXPECT_KILLS" ]; then
-    ok "legend battery: $kills of $EXPECT_KILLS mutants scored ($LEGEND_HOOKS one-byte, 1 anchor-loss, 1 empty-body)"
-  else
-    bad "LEGEND BATTERY SCORED $kills OF $EXPECT_KILLS — a mutant that scored nothing is indistinguishable from an arm that cannot fire"
-  fi
-fi
-
 # --- Assertion 10: the resume CLEAR is its own call, and its absence is VERIFIED --------------
 # A denied Bash call runs none of its parts. A pause-flag rm chained into a compound call that
 # another hook refused for its OTHER part never ran, the flag stayed, and nothing told the lead
@@ -585,49 +391,6 @@ else
     printf '  PENDING  the hook and SKILL.md resume spans disagree (%s) on a consumer -- mid-pull, the hook lands before the rulebook merge\n' "$V10"
   else
     bad "THE RESUME CLEAR IS NOT BOUND ($V10): both emitters must carry the rm as its own call and the separate [ ! -e ] verify, byte-identically"
-  fi
-
-  # 10b. MUTANTS, on copies; each guarded by cmp -s. An unmutated control from the same
-  # directory reads SAME first, so a kill below is the edit and not a copy that cannot run.
-  if [ "$V10" = "SAME" ]; then
-    RM10="$WORK/resume-mutants"; mkdir -p "$RM10"
-    cp "$ACK_HOOK" "$RM10/ack.sh"; cp "$SKILL_FILE" "$RM10/SKILL.md"
-    VC10="$(resume_verdict "$RM10" "$RM10/ack.sh" "$RM10/SKILL.md")"
-    if [ "$VC10" = "SAME" ]; then
-      ok "resume mutant control: unmutated copies under $RM10 read SAME"; PH_R10=1
-    else
-      bad "RESUME MUTANT HARNESS BROKEN — unmutated copies read $VC10"
-    fi
-    # The verify dropped from the hook: the regression this arm exists for.
-    sed 's/then run \\`\[ ! -e _bmad-output\/pipeline-paused\.flag \]\\` as a separate call that must exit 0 before anything advances; on a non-zero exit, repeat the rm alone\. //' \
-      "$RM10/ack.sh" > "$RM10/ack.noverify.sh"
-    if cmp -s "$RM10/ack.sh" "$RM10/ack.noverify.sh"; then
-      bad "FIXTURE STALE: the drop-the-verify mutation matched nothing in the hook"
-    else
-      printf '        mutant 10b edits: %s\n' "$RM10/ack.noverify.sh"
-      VM10="$(resume_verdict "$RM10" "$RM10/ack.noverify.sh" "$RM10/SKILL.md")"
-      if [ "$VM10" = "NO-VERIFY:hook" ]; then
-        mutant_killed "${PH_R10:-0}" 10b "mutant 10b: the hook without its [ ! -e ] verify -> $VM10 (assertion 10 can fire)"
-      else
-        bad "MUTANT 10b DID NOT FAIL AS EXPECTED — the hook without its verify read $VM10"
-      fi
-    fi
-    # Near-miss: verify and own-call clause both present, one word of the pair changed.
-    sed 's/on a non-zero exit, repeat the rm alone\. A denied call/on a non-zero exit, repeat the rm. A denied call/' \
-      "$RM10/ack.sh" > "$RM10/ack.reworded.sh"
-    if cmp -s "$RM10/ack.sh" "$RM10/ack.reworded.sh"; then
-      bad "FIXTURE STALE: the near-miss rewording matched nothing in the hook"
-    else
-      printf '        mutant 10c edits: %s\n' "$RM10/ack.reworded.sh"
-      VN10="$(resume_verdict "$RM10" "$RM10/ack.reworded.sh" "$RM10/SKILL.md")"
-      if [ "$VN10" = "DIFFER" ]; then
-        mutant_killed "${PH_R10:-0}" 10c "mutant 10c: verify present, pair reworded in the hook -> DIFFER (the byte-compare can fire)"
-      else
-        bad "MUTANT 10c DID NOT FAIL AS EXPECTED — a reworded pair with its verify read $VN10"
-      fi
-    fi
-  else
-    printf '        resume battery: STOOD DOWN — assertion 10 already reported %s\n' "$V10"
   fi
 fi
 

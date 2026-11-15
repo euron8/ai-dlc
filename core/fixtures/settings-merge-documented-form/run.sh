@@ -44,13 +44,6 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# Kills go through mutant_killed (scripts/validate-mutant-kills.sh): scored only when the unmutated
-# arm passed in THIS run, so a mutant cannot score a kill by the seed failing.
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-B_smW1=0
 
 echo "settings-merge-documented-form:"
 
@@ -124,21 +117,19 @@ else
   bad "FIXTURE STALE: templates/settings.json.template not found in either layout"
 fi
 
-# --- Assertion 4: MUTANT — the historical bare form must FAIL ---------------
+# --- Assertion 4: the historical bare form must FAIL ---------------
 # If the bare form still exited 0, assertion 1 would be guarding nothing.
 bash "$MERGE" --check >/dev/null 2>&1
 if [ "$?" -ne 0 ]; then
   ok "the bare '--check' form exits nonzero (assertion 1 guards a real failure)"
 else
-  bad "MUTANT NOT DETECTED: bare '--check' now exits 0, so assertion 1 cannot distinguish a runnable doc from an unrunnable one"
+  bad "bare '--check' now exits 0, so assertion 1 cannot distinguish a runnable doc from an unrunnable one"
 fi
 
 # --- Assertion 5: bashOutputMaxChars is DELIVERED, and the consumer's value wins -----
 # The template's cap on inline Bash output is the one non-hook scalar the merge must carry
 # to an EXISTING consumer; "every other key preserved" would leave every installed tree
-# uncapped forever. Three worlds, each read as a VALUE rather than a presence, plus a
-# mutant that widens the merge to unconditional-template so the consumer-wins arm cannot
-# pass by accident. Both template shapes are synthesised here so the arm does not depend
+# uncapped forever. Three worlds, each read as a VALUE rather than a presence. Both template shapes are synthesised here so the arm does not depend
 # on what the live template happens to declare.
 if [ -n "$TMPL" ]; then
   T_CAP="$WORK/tmpl-cap.json"; T_NOCAP="$WORK/tmpl-nocap.json"
@@ -152,7 +143,7 @@ if [ -n "$TMPL" ]; then
   printf '{"bashOutputMaxChars":12000,"permissions":{"allow":[]}}\n' > "$WORK/w1.json"
   bash "$MERGE" --consumer "$WORK/w1.json" --template "$T_CAP" >/dev/null 2>&1
   v="$(jq -r '.bashOutputMaxChars' "$WORK/w1.json")"
-  if [ "$v" = "12000" ]; then ok "bashOutputMaxChars: consumer's 12000 survives a template declaring 8000"; B_smW1=1
+  if [ "$v" = "12000" ]; then ok "bashOutputMaxChars: consumer's 12000 survives a template declaring 8000"
   else bad "bashOutputMaxChars: consumer's 12000 was replaced (read $v) — the merge must never overwrite a consumer scalar"; fi
 
   # World 2: consumer silent, template declares 8000 -> 8000 lands.
@@ -168,26 +159,6 @@ if [ -n "$TMPL" ]; then
   v="$(jq -r 'has("bashOutputMaxChars")' "$WORK/w3.json")"
   if [ "$v" = "false" ]; then ok "bashOutputMaxChars: absent on both sides stays absent"
   else bad "bashOutputMaxChars: a key neither side declared appeared (has=$v) — the guard is gone"; fi
-
-  # Mutant: template-wins. Built as a copy, guarded by cmp so a sed that matched nothing
-  # cannot pass as a mutation. It must fail World 1 ONLY.
-  MUT="$WORK/merge-template-wins.sh"
-  sed 's/(\$u\.bashOutputMaxChars \/\/ \$t\.bashOutputMaxChars)/($t.bashOutputMaxChars \/\/ $u.bashOutputMaxChars)/' "$MERGE" > "$MUT"
-  if cmp -s "$MERGE" "$MUT"; then
-    bad "MUTANT DID NOT APPLY: the consumer-wins expression is no longer where assertion 5 keys it"
-  else
-    printf '{"bashOutputMaxChars":12000,"permissions":{"allow":[]}}\n' > "$WORK/m1.json"
-    bash "$MUT" --consumer "$WORK/m1.json" --template "$T_CAP" >/dev/null 2>&1
-    m1="$(jq -r '.bashOutputMaxChars' "$WORK/m1.json")"
-    printf '{"permissions":{"allow":[]}}\n' > "$WORK/m3.json"
-    bash "$MUT" --consumer "$WORK/m3.json" --template "$T_NOCAP" >/dev/null 2>&1
-    m3="$(jq -r 'has("bashOutputMaxChars")' "$WORK/m3.json")"
-    if [ "$m1" = "8000" ] && [ "$m3" = "false" ]; then
-      mutant_killed "$B_smW1" template-wins "MUTANT (template wins) fails World 1 only — the consumer-wins arm discriminates"
-    else
-      bad "MUTANT (template wins) scored w1=$m1 w3=$m3 — expected 8000/false; the arm is not keyed on precedence"
-    fi
-  fi
 fi
 
 # --- Assertion 6: the SHIPPED template's seat tiers (BL-838, BL-971) ---------
@@ -201,13 +172,12 @@ tpl_tiers() {
   jq -r '.aiDlcRoles | "\(.dev.model)/\(.dev.effort) \(.["dev-escalated"].model)/\(.["dev-escalated"].effort)"' "$1" 2>/dev/null
 }
 TPL_WANT="sonnet/medium opus/medium"
-B_TPL=0
 if [ -z "$TMPL" ] || [ ! -r "$TMPL" ]; then
   bad "6 FIXTURE BROKEN: the shipped template is not readable — the seat-tier arm asserts nothing"
 else
   TPL_GOT="$(tpl_tiers "$TMPL")"
   if [ "$TPL_GOT" = "$TPL_WANT" ]; then
-    B_TPL=1; ok "6 the shipped template pins dev sonnet/medium and dev-escalated opus/medium"
+    ok "6 the shipped template pins dev sonnet/medium and dev-escalated opus/medium"
   else
     bad "6 the shipped template pins '$TPL_GOT', expected '$TPL_WANT' (dev, dev-escalated)"
   fi
@@ -221,19 +191,6 @@ else
       && ok "6 a re-ordered, re-spaced spelling of the same values reads identically (the arm keys on values)" \
       || bad "6 a correct re-spelling of the template read '$(tpl_tiers "$TPL_RESPELL")', expected '$TPL_WANT'"
   fi
-  # tpl_mut <tag> <jq filter> <expected reading> <label>
-  tpl_mut() {
-    local m="$WORK/tpl-mut-$1.json" got
-    jq "$2" "$TMPL" > "$m" 2>/dev/null
-    if cmp -s "$TMPL" "$m" || [ ! -s "$m" ]; then bad "6 MUTANT $1 DID NOT APPLY (cmp -s / empty)"; return; fi
-    got="$(tpl_tiers "$m")"
-    if [ "$got" = "$3" ] && [ "$got" != "$TPL_WANT" ]; then mutant_killed "$B_TPL" "$1" "6 MUTANT $1 killed: $4"
-    else bad "6 MUTANT $1 read '$got', expected '$3' (and not '$TPL_WANT') — $4"; fi
-  }
-  tpl_mut dev-haiku '.aiDlcRoles.dev.model = "haiku"' "haiku/medium opus/medium" \
-    "dev reverted to haiku moves the reading off the ruled value"
-  tpl_mut esc-sonnet-high '.aiDlcRoles["dev-escalated"] |= (.model = "sonnet" | .effort = "high")' "sonnet/medium sonnet/high" \
-    "dev-escalated reverted to sonnet/high moves the reading off the ruled value"
 fi
 
 echo

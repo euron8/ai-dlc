@@ -2,8 +2,8 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # dist-clone -- the update skill's private, main-only, bare distribution clone (BL-685).
 #
-# Usage: run.sh [--matrix]
-# Exit:  0 = every arm and mutant behaved, 1 = one did not, 2 = fixture broken.
+# Usage: run.sh
+# Exit:  0 = every arm behaved, 1 = one did not, 2 = fixture broken.
 #
 # THE SUBJECT. reconcile/dist-clone.sh builds `<dist>` in the consumer's git common dir from the
 # stamp's `upstream:`, carries `main` and only the refs a pull names, prints the path and the
@@ -31,28 +31,7 @@
 #        upstream deleted the branch and pruned (gc --prune=now)
 #   DC9  the clone that fetched that sha still reads it, and passes fsck, after the upstream prune
 #   DCP  SKILL.md carries the R3 theirs-default sentence and the full-sha re-invoke sentence
-# MUTANTS run the arm suite (all but DCP) against a COPY of dist-clone.sh with one line
-# edited, and each must fail EXACTLY its expected kill set, written beside it.
-#
-# THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). Each mutant is scored on its EXACT FAIL set
-# over the whole suite, so every arm is part of its decision -- a kill set of one arm is only exact if every other
-# arm reads ok on the same copy -- and each is a FULL row whose worlds are the suite's arms. `--matrix` prints one
-# `MATRIX <mutant> FULL <FAIL set>` row per mutant; the per-push score is the same run. The matrix is re-measured
-# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run it from the repo root:
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/dist-clone/run.sh --matrix
-# MUTANT-MATRIX-FULL M-shared worlds=DC1,DC17,DC3,DC2,DC13,DC10,DC11,DC19,DC4,DC16,DC5,DC5b,DC6,DC7,DC18,DC20,DC14,DC12,DC9 why=score asserts the FAIL set is exactly DC9 across the whole suite
-# MUTANT-MATRIX-FULL M-allbranches worlds=DC1,DC17,DC3,DC2,DC13,DC10,DC11,DC19,DC4,DC16,DC5,DC5b,DC6,DC7,DC18,DC20,DC14,DC12,DC9 why=score asserts the FAIL set is exactly DC3 across the whole suite
-# MUTANT-MATRIX-FULL M-nopin worlds=DC1,DC17,DC3,DC2,DC13,DC10,DC11,DC19,DC4,DC16,DC5,DC5b,DC6,DC7,DC18,DC20,DC14,DC12,DC9 why=score asserts the FAIL set is exactly DC14 across the whole suite
-# MUTANT-MATRIX-FULL M-fallback worlds=DC1,DC17,DC3,DC2,DC13,DC10,DC11,DC19,DC4,DC16,DC5,DC5b,DC6,DC7,DC18,DC20,DC14,DC12,DC9 why=score asserts the FAIL set is exactly DC4 DC5 DC7 DC12 DC16 DC18 DC20 across the whole suite
-# MUTANT-MATRIX-DYNAMIC score why=score passes each mutant name above to mutant_killed as its first argument
 set -uo pipefail
-MATRIX=0
-for _a in "$@"; do
-  case "$_a" in
-    --matrix) MATRIX=1 ;;
-    *) echo "FIXTURE ERROR: unknown argument '$_a' (only --matrix)" >&2; exit 2 ;;
-  esac
-done
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do [ "$_v" = AI_DLC_PROJECT_ROOT ] || unset "$_v"; done
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 unset GIT_CONFIG_COUNT
@@ -111,15 +90,14 @@ mkup "$TPL/up" && mkcons "$TPL/c" || { echo "FIXTURE BROKEN: could not build the
 newup() { cp -Rp "$TPL/up" "$1"; }      # newup <dir> -- a copy of the template upstream
 newcons() { cp -Rp "$TPL/c" "$1"; }     # newcons <dir> -- a copy of the template consumer
 
-# IN PROCESS (BL-878). Each copy of the subject -- the real one and each mutant -- is SOURCED ONCE into this shell
-# by src_dc at the top of its suite (its guard returns after defining dcl_main; one fx_inproc pass each), and dc
+# IN PROCESS (BL-878). The subject is SOURCED ONCE into this shell
+# by src_dc at the top of its suite (its guard returns after defining dcl_main; one fx_inproc pass), and dc
 # calls the dcl_main sourced last inside the `$( )` that captures its stdout, so the subject's `exit`, EXIT trap,
 # exports and its own G() stay in that subshell. The env words a drive carries are exported in that subshell, which
 # is what `env VAR=x bash` gave the program. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with neither the
 # `dcl_main() {` line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an ok); exactly
 # one half is a respelled subject and FAILs. The distribution cannot reach the SKIP unnoticed: C5
 # (validate-fixture-inprocess.sh) refuses a cli subject without the guard, and J3 refuses the start count moving.
-MP=core/skills/ai-dlc-update/reconcile/dist-clone.sh
 src_dc() { # src_dc <script>
   unset -f dcl_main
   fx_inproc "$1"
@@ -324,43 +302,6 @@ done
 n="$(grep -cF -- 'ZZ-NEVER-IN-SKILL-ZZ' "$SKILL")" || n=0
 [ "$n" -eq 0 ] && ok "DCP control: an impossible phrase is absent from SKILL.md" || bad "DCP control matched $n"
 
-# ---- mutants -------------------------------------------------------------------------------------
-# mut <name> <literal anchor> <replacement line> -- a copy of dist-clone.sh, at $d/$MP so its fx_inproc row counts under the inproc: row, with the ONE line holding
-# the anchor replaced. dist-clone.sh resolves no sibling, so a lone copy runs as the original does;
-# DC1's ok in every mutant run is the control that the copy ran.
-mut() {
-  local d="$W/mut/$1" n
-  mkdir -p "$d/${MP%/*}"
-  n="$(grep -cF -- "$2" "$SUBJ")" || n=0
-  [ "$n" -eq 1 ] || { bad "$1 anchor matches $n lines, not 1 -- re-anchor it; do NOT relax the assertion"; return 1; }
-  ANCH="$2" REPL="$3" awk 'index($0, ENVIRON["ANCH"]) { print ENVIRON["REPL"]; next } { print }' "$SUBJ" > "$d/$MP"
-  cmp -s "$SUBJ" "$d/$MP" && { bad "$1 DID NOT APPLY"; return 1; }
-  return 0
-}
-# base_ok_count <ids> -- how many of the named arms the UNMUTATED subject passed in this run (its verdicts file).
-base_ok_count() { awk -v ids="$1" 'BEGIN { n = split(ids, a, " "); for (i = 1; i <= n; i++) w[a[i]] = 1 } $1 == "ok" && ($2 in w) { c++ } END { print c + 0 }' "$W/real/verdicts"; }
-BV_shared="$(base_ok_count "DC9")"
-BV_allbranches="$(base_ok_count "DC3")"
-BV_nopin="$(base_ok_count "DC14")"
-BV_fallback="$(base_ok_count "DC4 DC5 DC7 DC12 DC16 DC18 DC20")"
-score() { # score <name> <expected kill set, space separated> <flag: 1 when the unmutated subject passed every arm in the set>
-  local d="$W/mut/$1" got want
-  suite "$d/$MP" "$d/run"
-  grep -q '^ok DC1 ' "$d/run/verdicts" || { bad "$1 BROKEN: the mutant copy failed DC1, so it did not run as a dist clone"; return; }
-  got="$(awk '$1=="FAIL"{print $2}' "$d/run/verdicts" | sort | tr '\n' ' ')"
-  want="$(printf '%s\n' $2 | sort | tr '\n' ' ')"
-  [ "$MATRIX" = 1 ] && printf 'MATRIX %s FULL [%s]\n' "$1" "$got"
-  if [ "$got" = "$want" ]; then mutant_killed "$3" "$1" "$1 KILLED by exactly [$got]"; else bad "$1 moved [$got], expected exactly [$want]"; fi
-}
-CLONE_ANCHOR='git clone --bare --single-branch --branch main --no-tags "$UP_ARG" "$TMP/c"'
-mut M-shared "$CLONE_ANCHOR" '  git clone --shared --bare --single-branch --branch main --no-tags "$UP_ARG" "$TMP/c" 2>"$ERR" >/dev/null \' \
-  && score M-shared "DC9" "$([ "$BV_shared" -eq 1 ] && echo 1 || echo 0)"
-mut M-allbranches "$CLONE_ANCHOR" '  git clone --bare --branch main --no-tags "$UP_ARG" "$TMP/c" 2>"$ERR" >/dev/null \' \
-  && score M-allbranches "DC3" "$([ "$BV_allbranches" -eq 1 ] && echo 1 || echo 0)"
-mut M-nopin 'G update-ref "refs/ai-dlc-pin/$1" "$1"' '  true' \
-  && score M-nopin "DC14" "$([ "$BV_nopin" -eq 1 ] && echo 1 || echo 0)"
-mut M-fallback 'stop() { echo "dist-clone: STOP -- $*" >&2; exit 1; }' 'stop() { printf '"'"'%s\n'"'"' "$UPSTREAM"; exit 0; }' \
-  && score M-fallback "DC4 DC5 DC7 DC12 DC16 DC18 DC20" "$([ "$BV_fallback" -eq 7 ] && echo 1 || echo 0)"
 
 if [ "$FAILS" -eq 0 ]; then echo "PASS dist-clone"; exit 0; fi
 echo "FAILED dist-clone: $FAILS"; exit 1

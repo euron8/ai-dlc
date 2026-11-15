@@ -8,6 +8,4 @@
 # BIND3 counts the join refusal phrases in EVERY core script and hook, so a third carrier in any of them fails:
 # the whole hooks directory too, or the sandbox holds no hook and the hooks floor refuses.
 !core/hooks/
-# BIND3 scores its mutant through the shared kill helper.
-core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh

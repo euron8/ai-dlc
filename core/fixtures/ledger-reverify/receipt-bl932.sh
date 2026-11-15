@@ -21,8 +21,8 @@
 # the BULLET form the reference consumer files (`- **<label>** <body>` then `  verify: manual`); the
 # label is the row's ENTRY column.
 # SEED RULE: NO naming commit's message carries an id immediately followed by `.`. A message that did
-# would let a lib.sh that keeps the trailing dot find its dotted id in `git log`, and the U1-reverted
-# mutant would survive. Each message names its id bare, at the end of the subject.
+# would let a lib.sh that keeps the trailing dot find its dotted id in `git log`, and the dotted
+# cells would pass for the wrong reason. Each message names its id bare, at the end of the subject.
 #   c0   `PC-S1200-BARE-CONTROL`                       -> NAMED-UPSTREAM citing its commit (form (a),
 #        asked under every engine: the positive control that the engine ran)
 #   d1   `<id>.`                                       -> NAMED-UPSTREAM citing its commit

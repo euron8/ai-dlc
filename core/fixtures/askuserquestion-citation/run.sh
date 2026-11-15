@@ -14,42 +14,14 @@
 # string would let a lead cite its own words and pass the provenance check — reintroducing
 # S290 through the repair of its mirror image. Assertion 2 is the one that guards that.
 #
-# The mutant matrix replaces an exact-vector assertion per mutant: per push each mutant runs its
-# deciding arm and its twin. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2
-# ("One run per distinct state") requires.
 # Arm names are A1-A5 (assertions 1-5), P1-P6 (the pruned-world arms), F1-F17 (the --accept-captured worlds) and D1-D8 (the
-# disposition-shaped quotes, BL-950); they are the column names `--matrix` prints.
-# MUTANT-MATRIX whole-string decides=A2 twins=A1
-# MUTANT-MATRIX substring-on-joined decides=D2 twins=D1
-# MUTANT-MATRIX exact-vs-joined decides=D4 twins=D1
-# MUTANT-MATRIX exact-for-all decides=D5 twins=D1
-# MUTANT-MATRIX option-followed-by-space-prefix decides=D3 twins=D2
-# MUTANT-MATRIX substring-kept-for-prose decides=D6 twins=D2
-# MUTANT-MATRIX no-badge-strip decides=D7 twins=D1
-# MUTANT-MATRIX no-needle-strip decides=D8 twins=D7
-# MUTANT-MATRIX no-token decides=P1 twins=P2
-# MUTANT-MATRIX quote-anywhere decides=P4 twins=P1
-# MUTANT-MATRIX scan-list decides=P3 twins=P4
-# MUTANT-MATRIX no-disk-check decides=P2 twins=P1
-# MUTANT-MATRIX cwd-root decides=P6 twins=P1
-# MUTANT-MATRIX no-window decides=F3 twins=F1
-# MUTANT-MATRIX acc-off decides=F1 twins=F4
-# MUTANT-MATRIX includes decides=F7 twins=F1
-# MUTANT-MATRIX disk-window decides=F13 twins=F4
-# MUTANT-MATRIX no-contradict decides=F8 twins=F1
-# MUTANT-MATRIX auth-guard decides=F5 twins=F1
-# MUTANT-MATRIX env-flag decides=F10 twins=F1
-# MUTANT-MATRIX auth-seconds decides=F14 twins=F1
-# MUTANT-MATRIX zl-seconds decides=F17 twins=F1
-# MUTANT-MATRIX-DYNAMIC mutant_score-name why=mutant_score() passes its first argument "$n" to mutant_killed; each mutant_score call (whole-string, no-token, ...) names a literal mutant that carries its own row in this block
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/askuserquestion-citation/run.sh --matrix
-#
+# disposition-shaped quotes, BL-950).
 # G1 holds the four --cite callers to never passing --accept-captured. Its population is the
 # declared caller set (G1_CALLERS, mirrored in inputs.decl); RESIDUAL: a new caller outside that
 # set is not covered until it is declared. The completeness half runs only on a git-readable
 # distribution tree, never inside the hermetic sandbox.
 #
-# Usage: run.sh [--matrix]
+# Usage: run.sh
 set -uo pipefail
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -65,12 +37,6 @@ trap 'rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED $VALIDATOR"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-MATRIX=0; MROWS=0; GREEN=""
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-. "$HERE/matrix.sh" || { echo "FIXTURE ERROR: matrix.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/askuserquestion-citation/matrix.sh"
 # Capture, never pipe. --cite exits 2 on NOMATCH, and under `set -o pipefail` a
 # `cite ... | grep -q NOMATCH` pipeline inherits that 2 even when grep matched — so every
 # assertion expecting NOMATCH would take its else branch and report a failure that did not
@@ -121,17 +87,11 @@ else
   bad "Check B counted $COUNT on an AskUserQuestion the lead itself solicited — every operator checkpoint now reads as a steamroll"
 fi
 
-# --- Assertion 6: MUTANT — answer-side extraction is what makes 2 hold ---------
-# Widen the extraction to the whole tool_result string, exactly as a naive fix would, and the
-# lead-authored question MUST become citable. If it does not, assertion 2 is passing for some
-# other reason and proves nothing about the extraction.
-# (The whole-string mutant is scored with the others in the MUTANTS section below.)
-
 # --- The pruned-session world: NOMATCH-TRANSCRIPT-PRUNED ------------------------
 # An answer the capture hook logged, whose transcript Claude Code has since deleted, used to
 # read NOMATCH -- the verdict a fabricated authorization gets. It now reads its own token, with
 # exit 2 unchanged so no reader is acquitted by it. Every arm asserts the stdout VALUE and the
-# exit, and each has a mutant below that flips it.
+# exit.
 # pc <validator> <cwd> <quote> [extra args] -> "<rc> <stdout>"; the root comes from the caller.
 pc() { local v="$1" d="$2" q="$3"; shift 3; local o r
   o="$(cd "$d" && bash "$v" --dir "$CORPUS" --cite "$q" "$@" 2>/dev/null)"; r=$?
@@ -140,7 +100,6 @@ pc() { local v="$1" d="$2" q="$3"; shift 3; local o r
 # resolves the REPO; the root is handed over explicitly. Arm P6 covers the walk.
 pr() { local v="$1"; shift; AI_DLC_PROJECT_ROOT="$PROJ" pc "$v" "$PROJ" "$@"; }
 p_arms() { # p_arms <validator> [letters] -> one letter per arm asked for (default ABCDE), upper case = holds
-  # A mutant is scored over the arms its pattern constrains, not all five: each arm is one node run.
   local v="$1" sel="${2:-ABCDE}" s=""
   case "$sel" in *A*) [ "$(pr "$v" "$Q_PRUNED")" = "2 NOMATCH-TRANSCRIPT-PRUNED" ] && s="${s}A" || s="${s}a" ;; esac
   case "$sel" in *B*) [ "$(pr "$v" "$Q_LIVE")" = "2 NOMATCH" ] && s="${s}B" || s="${s}b" ;; esac
@@ -251,14 +210,7 @@ g1_path() { # <dist path> -> the path in this layout, or empty
   esac; }
 # Controls first: both seeded flag-carrying calls found (one-line and continued), the near-miss not.
 GC1="$(gcall "$WORK/guard/hit1.sh")"; GC2="$(gcall "$WORK/guard/hit2.sh")"; GCN="$(gcall "$WORK/guard/near.sh")"; GSN="$(gsites "$WORK/guard/near.sh")"
-# Mutant probe: a scratch copy of the escalation gate with the flag added at its --cite call.
-G1_ESC="$(g1_path core/scripts/validate-escalation-resolution.sh)"
-GMUT=x
-if [ -n "$G1_ESC" ]; then
-  awk '!d && /bash "\$STEER_SCRIPT".*--cite/ { sub(/--cite/, "--accept-captured --cite"); d = 1 } { print }' "$G1_ESC" > "$WORK/guard/esc-mut.sh"
-  cmp -s "$G1_ESC" "$WORK/guard/esc-mut.sh" || GMUT="$(gcall "$WORK/guard/esc-mut.sh")"
-fi
-if [ "$GC1" = 1 ] && [ "$GC2" = 1 ] && [ "$GCN" = 0 ] && [ "$GSN" = 1 ] && [ "$GMUT" = 1 ]; then
+if [ "$GC1" = 1 ] && [ "$GC2" = 1 ] && [ "$GCN" = 0 ] && [ "$GSN" = 1 ]; then
   ghits=""; gsum=0; gn=0; gmiss=""
   for c in $G1_CALLERS; do
     p="$(g1_path "$c")"; [ -n "$p" ] || { gmiss="$gmiss $c"; continue; }
@@ -269,8 +221,8 @@ if [ "$GC1" = 1 ] && [ "$GC2" = 1 ] && [ "$GCN" = 0 ] && [ "$GSN" = 1 ] && [ "$G
   done
   if [ -n "$gmiss" ]; then bad "G1: declared caller(s) absent or no longer calling --cite:$gmiss -- the population moved, re-derive it"
   elif [ -n "$ghits" ]; then bad "G1: caller(s) of validate-steering-budget --cite carry --accept-captured:$ghits -- Check 9's flag leaked into automation"
-  else ok "G1: 0 of $gn declared callers ($gsum --cite calls) pass --accept-captured (controls: one-line and continued seeded calls found, near-miss not, escalation-gate mutant flagged)"; fi
-else bad "G1: the guard cannot fire (one-line $GC1/1, continued $GC2/1, near-miss $GCN/0 of $GSN/1 call, escalation-gate mutant $GMUT/1) -- its zero would mean nothing"; fi
+  else ok "G1: 0 of $gn declared callers ($gsum --cite calls) pass --accept-captured (controls: one-line and continued seeded calls found, near-miss not)"; fi
+else bad "G1: the guard cannot fire (one-line $GC1/1, continued $GC2/1, near-miss $GCN/0 of $GSN/1 call) -- its zero would mean nothing"; fi
 # COMPLETENESS, distribution only and only where the tree is git-readable: re-derive the caller set
 # and compare. Inside the hermetic sandbox the tree holds only declared inputs, so the half is
 # skipped with a printed note and no ok row.
@@ -282,51 +234,16 @@ if [ -d "$G1_ROOT/core/scripts" ] && git -C "$G1_ROOT" rev-parse --show-toplevel
     || bad "G1-completeness: the tree's --cite callers ($gder) differ from the declared set ($gdecl)"
 else echo "  note  G1-completeness: not run -- no git-readable distribution tree here (hermetic sandbox or consumer); the declared caller set is the population"; fi
 
-# MUTANTS. Each is one plausible wrong build of the same feature and must flip exactly the arm
-# written against it. Built by literal string replacement; a mutant that does not apply is a
-# stale fixture, never a pass.
-mut() { # mut <out> <from> <to>
-  node -e 'const fs=require("fs");const [f,o,a,b]=process.argv.slice(1);const s=fs.readFileSync(f,"utf8");if(!s.includes(a))process.exit(3);fs.writeFileSync(o,s.split(a).join(b));' \
-    "$VALIDATOR" "$1" "$2" "$3"; }
-
-# ARMS, as one function of (arm, validator) -> "<rc> <stdout>". A1-A5 are assertions 1-5 above and
-# P1-P6 the pruned-world arms; every mutant is scored through the same function the shipped
-# validator is, so a verdict is comparable cell for cell. P6 installs the validator it is handed.
-ARMS="A1 A2 A3 A4 A5 P1 P2 P3 P4 P5 P6 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 F16 F17 D1 D2 D3 D4 D5 D6 D7 D8"
+# --- D1-D8: a disposition-shaped quote verifies only as ONE WHOLE AskUserQuestion answer (BL-950) ---
+# `Strike|Reword|Confirm LR-S<n>-<m>` names an option the LEAD wrote, so the substring test let it
+# verify against a longer answer, a longer id, the joined text of several answers, or typed prose.
+# Each refusal cell has an allow cell one property apart; each cell is one transcript, read once.
+D_OK="0 MATCH 2026-07-21T02:05:00Z"
 # dc <validator> <transcript> <quote> -> "<rc> <stdout>" for the disposition-shaped cells.
 dc() { local o r; o="$(bash "$1" --transcript "$WORK/$2" --cite "$3" 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o"; }
-arm_out() { # arm_out <arm> <validator>
-  local a="$1" v="$2" o r
+d_out() { # d_out <arm> <validator>
+  local a="$1" v="$2"
   case "$a" in
-    A1) o="$(bash "$v" --transcript "$ASK" --cite "$ANSWER" 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o" ;;
-    A2) o="$(bash "$v" --transcript "$ASK" --cite "$QUESTION" 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o" ;;
-    A3) o="$(bash "$v" --transcript "$OTHER" --cite "$ANSWER" 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o" ;;
-    A4) o="$(bash "$v" --transcript "$TYPED" --cite "$ANSWER" 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o" ;;
-    A5) o="$(bash "$v" --transcript "$ASK" --count 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o" ;;
-    P1) pr "$v" "$Q_PRUNED" ;;
-    P2) pr "$v" "$Q_LIVE" ;;
-    P3) pr "$v" "$Q_OLD" --since 2010-01-01T00:00:00Z ;;
-    P4) pr "$v" "$Q_ASKED" ;;
-    P5) pr "$v" "a phrase nobody logged or typed" ;;
-    P6) cp "$v" "$PROJ/scripts/ai-dlc/mx-p6.sh" || { printf 'COPY-FAILED'; return 0; }
-        env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR bash -c 'o="$(cd "$1" && bash "$2" --dir "$3" --cite "$4" 2>/dev/null)"; printf "%s %s" "$?" "$o"' _ "$PROJ/sub" "$PROJ/scripts/ai-dlc/mx-p6.sh" "$CORPUS" "$Q_PRUNED" ;;
-    F1)  fr "$v" w1 "$FQ" "$FAUTH" --accept-captured ;;
-    F2)  fr "$v" w1 "a sentence nobody captured" "$FAUTH" --accept-captured ;;
-    F3)  fr "$v" w3 "$FQ" "$FAUTH" --accept-captured ;;
-    F4)  fr "$v" w1 "$FQ" "$FAUTH" ;;
-    F5)  fr "$v" w1 "$FQ" "" --accept-captured ;;
-    F6)  fr "$v" w1 "$FQ" "2026-07-21" --accept-captured ;;
-    F7)  fr "$v" w7 "$FQ" "$FAUTH" --accept-captured ;;
-    F8)  fr "$v" w8 "$FQ" "$FAUTH" --accept-captured ;;
-    F9)  fr "$v" w9 "$FQ" "$FAUTH" --accept-captured ;;
-    F10) FENV=AI_DLC_ACC=1 fr "$v" w1 "$FQ" "$FAUTH" ;;
-    F11) o="$(cd "$FW/w1/proj" && AI_DLC_PROJECT_ROOT="$FW/w1/proj" bash "$v" --dir "$CORPUS" --accept-captured 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o" ;;
-    F12) fr "$v" w12 "$FQ" "$FAUTH" --accept-captured ;;
-    F13) fr "$v" w13 "$FQ" "$FAUTH" --accept-captured ;;
-    F14) fr "$v" w1 "$FQ" "$FAUTH_MIN" --accept-captured ;;
-    F15) fr "$v" w1 "$Q_TURN" "$TURN_MIN" --accept-captured ;;
-    F16) fr "$v" w1 "$FQ" "2026-07-21T~" --accept-captured ;;
-    F17) FENV=TZ=America/New_York fr "$v" w1 "$FQ" "${FAUTH_MIN%Z}" --accept-captured ;;
     D1) dc "$v" disp-exact.jsonl "Strike LR-S7-2" ;;
     D2) dc "$v" disp-more.jsonl "Strike LR-S7-2" ;;
     D3) dc "$v" disp-prefix.jsonl "Strike LR-S7-2" ;;
@@ -337,36 +254,16 @@ arm_out() { # arm_out <arm> <validator>
     D8) dc "$v" disp-exact.jsonl "Strike LR-S7-2 (Recommended)" ;;
   esac
 }
-arm_holds() { # arm_holds <arm> <arm_out>: does the arm's own expectation hold on that output
+d_holds() { # d_holds <arm> <output>: does the arm's own expectation hold on that output
   case "$1:$2" in
-    A1:[0-9]" MATCH"*|A4:[0-9]" MATCH"*) return 0 ;;
-    A2:[0-9]" NOMATCH"*|A3:[0-9]" NOMATCH"*) return 0 ;;
-    A5:[0-9]" 0") return 0 ;;
-    P1:"2 NOMATCH-TRANSCRIPT-PRUNED"|P6:"2 NOMATCH-TRANSCRIPT-PRUNED") return 0 ;;
-    F1:"$F_OK"|F13:"$F_OK"|F14:"$F_OK"|F17:"$F_OK") return 0 ;;
-    F15:"0 MATCH $TURN_TS") return 0 ;;
-    F2:"2 NOMATCH") return 0 ;;
-    F3:"$F_PR"|F4:"$F_PR"|F7:"$F_PR"|F8:"$F_PR"|F9:"$F_PR"|F10:"$F_PR"|F12:"$F_PR") return 0 ;;
-    F5:"1 "|F6:"1 "|F11:"1 "|F16:"1 ") return 0 ;;
-    P2:"2 NOMATCH"|P3:"2 NOMATCH"|P4:"2 NOMATCH"|P5:"2 NOMATCH") return 0 ;;
     D1:"$D_OK"|D4:"$D_OK"|D5:"$D_OK"|D7:"$D_OK"|D8:"$D_OK") return 0 ;;
     D2:"2 NOMATCH"|D3:"2 NOMATCH"|D6:"2 NOMATCH") return 0 ;;
   esac
   return 1
 }
-# ship_get <arm> sets SHIPV to the shipped validator's output for the arm, computed once per arm.
-ship_get() { local a="$1" v; eval "v=\${SHIP_$a-__unset__}"
-  if [ "$v" = __unset__ ]; then v="$(arm_out "$a" "$VALIDATOR")"; printf -v "SHIP_$a" '%s' "$v"; fi
-  SHIPV="$v"; }
-
-# --- D1-D7: a disposition-shaped quote verifies only as ONE WHOLE AskUserQuestion answer (BL-950) ---
-# `Strike|Reword|Confirm LR-S<n>-<m>` names an option the LEAD wrote, so the substring test let it
-# verify against a longer answer, a longer id, the joined text of several answers, or typed prose.
-# Each refusal cell has an allow cell one property apart; each cell is one transcript, read once.
-D_OK="0 MATCH 2026-07-21T02:05:00Z"
 dcell() { # dcell <arm> <what>
-  ship_get "$1"
-  if arm_holds "$1" "$SHIPV"; then ok "$1: $2"; else bad "$1: $2 -- got ($SHIPV)"; fi; }
+  local o; o="$(d_out "$1" "$VALIDATOR")"
+  if d_holds "$1" "$o"; then ok "$1: $2"; else bad "$1: $2 -- got ($o)"; fi; }
 dcell D1 "a disposition quote equal to one whole AskUserQuestion answer verifies"
 dcell D2 "the same quote against the answer 'Strike LR-S7-2 but keep the index' is refused (option plus more text)"
 dcell D3 "'Strike LR-S7-2' against only 'Strike LR-S7-20' is refused (prefix of a longer id)"
@@ -375,104 +272,6 @@ dcell D5 "a non-disposition quote that is a substring of an answer still verifie
 dcell D6 "'Strike LR-S7-2' typed as prose, with no AskUserQuestion answer, is refused"
 dcell D7 "bare 'Confirm LR-S7-2' verifies against the answer 'Confirm LR-S7-2 (Recommended)' (badge stripped)"
 dcell D8 "badged 'Strike LR-S7-2 (Recommended)' verifies against the bare answer 'Strike LR-S7-2' (badge stripped from the quote too)"
-
-# mutant_score <name> <deciding arm> <twin arm> <what the mutant does> <from> <to>
-# Per push: the deciding arm must diverge from the shipped verdict and no longer hold, and the twin
-# must answer exactly as the shipped validator does. With --matrix: every arm against the mutant.
-mutant_score() {
-  local n="$1" d="$2" tw="$3" m="$WORK/mut-$1.sh" a o w kd base
-  if ! mut "$m" "$5" "$6"; then bad "FIXTURE STALE: mutant $n did not apply -- the line it rewrites moved"; return; fi
-  if [ "$MATRIX" = 1 ]; then
-    for a in $ARMS; do
-      ship_get "$a"; o="$(arm_out "$a" "$m")"
-      if arm_holds "$a" "$o"; then w=GREEN; else w=TRIPPED; fi
-      if [ "$o" = "$SHIPV" ]; then kd=no; else kd=yes; fi
-      matrix_row "$n" "$a" "${o%% *}" "$w" "$kd"; MROWS=$((MROWS + 1))
-    done
-    ok "MATRIX $n measured against $ARMS"
-    return 0
-  fi
-  ship_get "$d"; base="$(arm_holds "$d" "$SHIPV" && echo 1 || echo 0)"
-  o="$(arm_out "$d" "$m")"
-  if [ "$o" != "$SHIPV" ] && ! arm_holds "$d" "$o"; then mutant_killed "$([ "$base" = 1 ] && echo 1 || echo 0)" "$n" "mutant $n: $4 ($d)"
-  else bad "MUTANT $n SURVIVED on $d ($o) -- $4"; fi
-  ship_get "$tw"; o="$(arm_out "$tw" "$m")"
-  if [ "$o" = "$SHIPV" ]; then ok "T-$n twin $tw stays GREEN under mutant $n (the change is confined to its deciding arm)"
-  else bad "T-$n twin $tw changed under mutant $n ($o vs shipped $SHIPV) -- the matrix row for this mutant moved"; fi
-}
-
-# The unmutated-copy control (a copy in the mutant directory, three arms spanning the cite path, the
-# token path and the installed-copy path): the harness must itself run the shipped behaviour green.
-CTL="$WORK/mut-control.sh"; cp "$VALIDATOR" "$CTL" || { echo "FIXTURE ERROR: cannot copy the validator" >&2; exit 2; }
-cn=0
-for a in A2 P1 P6; do
-  ship_get "$a"; o="$(arm_out "$a" "$CTL")"
-  if arm_holds "$a" "$o" && [ "$o" = "$SHIPV" ]; then cn=$((cn + 1)); fi
-done
-[ "$cn" -eq 3 ] && ok "CONTROL: an unmutated copy of the validator holds arms A2, P1 and P6 and answers as the shipped one does -- the mutant harness is not what fails" \
-  || bad "CONTROL: an unmutated copy held $cn of 3 arms -- the mutant harness, not the mutants, is broken"
-
-mutant_score whole-string A2 A1 "accepting the whole tool_result makes the lead's own question citable -- assertion 2 has teeth" \
-  'for (const m of raw.matchAll(/"\s*=\s*"([^"]*)"/g)) out.push(m[1]);' 'out.push(raw);'
-mutant_score no-token P1 P2 "emitting plain NOMATCH instead of the token fails P1" \
-  'console.log("NOMATCH-TRANSCRIPT-PRUNED")' 'console.log("NOMATCH")'
-mutant_score quote-anywhere P4 P1 "matching the quote anywhere in an entry fails P4" \
-  '!norm(body).includes(needle)) continue;' '!norm(e).includes(needle)) continue;'
-mutant_score scan-list P3 P4 "judging absence on the --since-filtered scan list fails P3" \
-  'if (!fs.existsSync(path.join(tdir, sid + ".jsonl"))) pruned.add(sid);' \
-  'if (!files.some(f => path.basename(f) === sid + ".jsonl")) pruned.add(sid);'
-mutant_score no-disk-check P2 P1 "skipping the on-disk check fails P2" \
-  'if (!fs.existsSync(path.join(tdir, sid + ".jsonl"))) pruned.add(sid);' 'pruned.add(sid);'
-mutant_score cwd-root P6 P1 "reading the log from CLAUDE_PROJECT_DIR or cwd fails P6" \
-  'const LOGROOT = process.env.AI_DLC_LOGROOT || "/nonexistent";' \
-  'const LOGROOT = process.env.CLAUDE_PROJECT_DIR || ".";'
-
-mutant_score no-window F3 F1 "dropping the +/-7200s window check accepts an out-of-window entry" \
-  '        if (Math.abs(hMs - authMs) > authTolMs) continue;
-' ''
-mutant_score acc-off F1 F4 "ignoring the flag (always off) refuses the in-window exact entry" \
-  'if (pruned.size && ACC) {' 'if (pruned.size && false) {'
-mutant_score includes F7 F1 "relaxing exact equality to includes accepts a substring needle" \
-  'norm(body) !== needle' '!norm(body).includes(needle)'
-mutant_score disk-window F13 F4 "judging the contradiction on any on-disk needle entry, in window or not, refuses a clean accept" \
-  'if (Math.abs(hMs - authMs) > authTolMs) continue;' \
-  'if (Math.abs(hMs - authMs) > authTolMs && !(sid && fs.existsSync(path.join(tdir, sid + ".jsonl")))) continue;'
-mutant_score no-contradict F8 F1 "dropping the on-disk contradiction accepts an entry the transcript refutes" \
-  'if (onDisk) { contradicted = true; continue; }' 'if (onDisk) continue;'
-mutant_score auth-guard F5 F1 "dropping the full-ISO --authorized-at guard lets an empty bound through" \
-  'if ! [[ "$AUTH_AT" =~ $ACC_ISO_RE ]]; then' 'if false; then'
-mutant_score env-flag F10 F1 "reading the flag from the environment accepts with no argv flag" \
-  'AI_DLC_ACC="$ACC" node' 'AI_DLC_ACC="${AI_DLC_ACC:-$ACC}" node'
-mutant_score auth-seconds F14 F1 "requiring seconds in --authorized-at refuses a minute-precision authorization" \
-  '[0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?(Z|' '[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|'
-mutant_score zl-seconds F17 F1 "treating only a full-second zone-less value as UTC reads a zone-less minute in local time" \
-  'const zl = ACC ?' 'const zl = false ?'
-
-# BL-950: the disposition-shaped exact compare, one wrong build per mutant.
-DISP_ANY='askUserQuestionAnswerList(r, askIds).some(a => unbadge(norm(a)) === dispNeedle)'
-mutant_score substring-on-joined D2 D1 "keeping the substring test on the joined answers accepts an option followed by more text" \
-  'const carriesQuote = (r, txt) => DISPOSITION' 'const carriesQuote = (r, txt) => false'
-mutant_score exact-vs-joined D4 D1 "comparing exactly against the JOINED answers refuses one answer of a multi-answer result" \
-  "$DISP_ANY" 'unbadge(norm(txt)) === dispNeedle'
-mutant_score exact-for-all D5 D1 "an exact compare for every needle refuses a plain quote that is a substring of an answer" \
-  ': norm(txt).includes(needle);' ': norm(txt) === needle;'
-mutant_score option-followed-by-space-prefix D3 D2 "refusing only an answer that starts with the quote plus a space accepts a longer id through the joined substring" \
-  "$DISP_ANY" '(!askUserQuestionAnswerList(r, askIds).some(a => norm(a).startsWith(needle + " ")) && norm(txt).includes(needle))'
-mutant_score substring-kept-for-prose D6 D2 "keeping the substring test for typed prose accepts a disposition the operator only typed" \
-  "$DISP_ANY" "($DISP_ANY || (!askUserQuestionAnswerList(r, askIds).length && norm(txt).includes(needle)))"
-mutant_score no-badge-strip D7 D1 "not stripping the (Recommended) badge refuses a bare quote of a badged answer" \
-  'const unbadge = (s) => s.replace(/ \(recommended\)$/, "");' 'const unbadge = (s) => s;'
-mutant_score no-needle-strip D8 D7 "stripping the badge from the answers only sends a badged quote down the substring path, which a bare answer cannot carry" \
-  'const dispNeedle = unbadge(needle);' 'const dispNeedle = needle;'
-# A plain run executes no matrix-only cell; --matrix executes one row per mutant per arm.
-MX_WANT=$(( 22 * $(set -- $ARMS; echo $#) ))
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
-  else bad "MX plain run executed $MROWS matrix-only rows"; fi
-else
-  if [ "$MROWS" -eq "$MX_WANT" ]; then ok "MX matrix run measured $MX_WANT mutant x arm cells (22 mutants x every arm)"
-  else bad "MX matrix run measured $MROWS cells, $MX_WANT expected"; fi
-fi
 
 echo
 report_end askuserquestion-citation

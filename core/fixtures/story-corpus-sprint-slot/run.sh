@@ -27,32 +27,14 @@
 # sprint's stories beside an empty current slot SKIP, byte-identically to the tree without them.
 #
 # SHAPE. Every arm is a function that builds the world it needs, drives the tools it is handed, and
-# prints `A<n> PASS|FAIL`. The shipping tools run every arm. A mutant is a copy of the tools; per
-# push it drives only its DECIDING arm(s) plus one named TWIN the measured matrix shows green.
+# prints `A<n> PASS|FAIL`. The shipping tools run every arm.
 #
-# MUTANT MATRIX. "A mutant fails only its own assertion" (.claude/rules/fixture-mutants.md) is a
-# test-quality property, measured ONCE for every mutant against EVERY arm and recorded below; per
-# push each mutant runs its deciding arm(s) (must flip) and one twin (must stay green). The matrix
-# is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
-# Run the REMEASURE command below.
-# Outside its declared decides set, each mutant co-trips no other arm, measured at authoring.
-# MUTANT-MATRIX a4-corpus-control-narrowed-to-slot decides=A4 twins=A3
-# MUTANT-MATRIX a7-flat-count-counts-other-slots decides=A7 twins=A5
-# MUTANT-MATRIX a6-unresolved-skips-instead-of-failing decides=A6 twins=A5
-# MUTANT-MATRIX a8-capital-s-key-unrecognised decides=A8 twins=A1
-# MUTANT-MATRIX a9-index-glob-prefix-widened decides=A9 twins=A1
-# MUTANT-MATRIX a10-corpus-literal-restated decides=A10 twins=A1
-# MUTANT-MATRIX a12-waiver-window-crosses-entry decides=A12 twins=A11
-# MUTANT-MATRIX a13-a14-process-stays-in-invoking-dir decides=A13,A14 twins=A2
-# MUTANT-MATRIX a14-escalations-read-from-invoking-dir decides=A14 twins=A11
-# MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/story-corpus-sprint-slot/run.sh --matrix
 set -uo pipefail
 
 # HERMETIC -- scrub the operator's tuning before invoking anything (I10). The tools under test
 # take AI_DLC_PROJECT_ROOT ahead of their own walk (sprint-status.sh), and every arm below drives
 # a copy INSTALLED INTO a seeded tree; an inherited override points them at some other tree and
-# A10, which moves the declaration inside the seed, then fails on the control and every mutant.
+# A10, which moves the declaration inside the seed, then fails.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 # No distribution-root walk here: this file needs none. The seed names its sources in both layouts;
@@ -61,17 +43,6 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-
-# --matrix is an ARGV flag (never an env var, never via hermetic-run.sh): it replaces the per-push
-# mutant stage with the full mutant x arm matrix. A plain run executes no matrix-only cell.
-MATRIX=0; [ "${1:-}" = "--matrix" ] && MATRIX=1
-MX_FULL_RUNS=0     # incremented ONLY by matrix-only cells; a plain run must leave it at 0
-if [ "$MATRIX" = 1 ]; then echo "MODE FULL (--matrix)"; else echo "MODE PUSH"; fi
 
 PRISTINE="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 # The seed exits 2 above unless it found and copied the subject, so this line is reached only
@@ -86,14 +57,13 @@ trap 'rm -rf "$PRISTINE" "$WORK"' EXIT
 # THE TOOLS ARE INSTALLED INTO THE TREE, not driven from beside it, and that is not tidiness. Both
 # of them resolve the schema RELATIVE TO THE TREE THEY ARE IN; a copy run from outside resolves
 # the pristine seed's schema instead, so A10 — which moves the declaration — silently tested
-# nothing, and every mutant copy resolved no schema at all and failed four arms for a reason that
-# had nothing to do with its mutation. The control caught it, which is what the control is for.
+# nothing.
 WN=0
 fresh() { # <dir holding the two tools>  -> a new world dir, never reused
   WN=$((WN+1))
   local d="$WORK/w$WN"
   cp -R "$PRISTINE" "$d"
-  basename "$1" > "$d/.tools-tag"   # which tools directory (ship, control or mutant) this world serves
+  basename "$1" > "$d/.tools-tag"   # which tools directory this world serves
   cp "$1/sprint-status.sh" "$1/validate-mandatory-rules.sh" "$d/scripts/ai-dlc/"
   chmod +x "$d/scripts/ai-dlc"/*.sh
   FRESH_DIR="$d"
@@ -302,9 +272,8 @@ ESC
 # arm key -> ids it prints; id -> arm key
 ALL_KEYS="mig flat A5 A6 A7 A8 A9 A10 waiver A12"
 ids_of() { case "$1" in mig) echo "A1 A2 A13" ;; flat) echo "A3 A4" ;; waiver) echo "A11 A14" ;; *) echo "$1" ;; esac; }
-ALL_IDS=""; ID_KEY=" "
-for _k in $ALL_KEYS; do for _i in $(ids_of "$_k"); do ALL_IDS="$ALL_IDS $_i"; ID_KEY="$ID_KEY$_i:$_k "; done; done
-key_of() { local e; for e in $ID_KEY; do [ "${e%%:*}" = "$1" ] && { printf '%s' "${e#*:}"; return 0; }; done; return 1; }
+ALL_IDS=""
+for _k in $ALL_KEYS; do for _i in $(ids_of "$_k"); do ALL_IDS="$ALL_IDS $_i"; done; done
 arm() { "arm_$1" "$2"; } # <key> <tools dir>
 sets_from() { # <RES text> -> PASS_OUT FAIL_OUT, space padded; no forks
   local i v
@@ -330,140 +299,6 @@ else
   bad "battery failed on the SHIPPING tools:$ship_bad"
 fi
 
-# =============================================================================
-# MUTANTS. Each is a COPY of the tools dir with one change, guarded by `cmp -s` so a sed that matched
-# nothing cannot pass as a mutation. Name | decides arms | twin arm | target | sed expr.
-# =============================================================================
-MN=(); MD=(); MT=(); MW=(); ME=(); NM=0
-defm() { MN[$NM]="$1"; MD[$NM]="$2"; MT[$NM]="$3"; MW[$NM]="$4"; ME[$NM]="$5"; NM=$((NM+1)); }
-
-# A4: narrow Check 6's corpus control back to the declared slot — the blind spot the arm exists
-# for. The unmigrated tree then reports an empty corpus and SKIPs.
-defm a4-corpus-control-narrowed-to-slot A4 A3 vmr \
-  's/^  CHECK6_AREA_CORPUS=\$((CHECK6_FLAT_CORPUS + CHECK6_MATCHED))$/  CHECK6_AREA_CORPUS=$((CHECK6_MATCHED))/'
-# A7: drop the sprint-slot exclusion from the flat count, so every sprint's slot is counted again
-# -- the history-dependent control this arm exists for. A past s301 then reads FAIL while the
-# same tree with s301 deleted reads SKIP. A2 stays green (its s302 stories are both matched and
-# counted), and A4 and A5 do not move, so the kill is A7's alone.
-defm a7-flat-count-counts-other-slots A7 A5 vmr \
-  '/if (is_slot(part\[i]))  *next$/d'
-# A6: turn the unresolvable-location failure into a skip, which is what it used to be.
-defm a6-unresolved-skips-instead-of-failing A6 A5 vmr \
-  's/^if \[ "\$CHECK6_UNRESOLVED" -eq 1 \]; then$/if [ "$CHECK6_UNRESOLVED" -eq 2 ]; then/'
-# A8: drop the optional sprint-token prefix from the key matcher, so only a BARE number is
-# stripped. Deliberately narrower than "stop stripping at all", which was the first mutant here
-# and was ENTANGLED: it also broke A1 and A10, both of which already assert the stripping. What
-# A8 alone claims is that a capital-S legacy key resolves, so that is what this removes.
-defm a8-capital-s-key-unrecognised A8 A1 ss \
-  's/r"\[sS\]?0\*%d"/r"0*%d"/'
-# A9: widen the index glob to a prefix match, the collision that compares story-1 against story-10.
-defm a9-index-glob-prefix-widened A9 A1 ss \
-  's/stories.glob(stem + "-\*.md")/stories.glob(stem + "*.md")/'
-# A10: put the corpus literal back into sprint-status.sh instead of resolving the template, which
-# is the restatement I84 bans. It then cannot follow the declaration when it moves.
-defm a10-corpus-literal-restated A10 A1 ss \
-  's|^    return STORIES_DIR_T.replace(SPRINT_SLOT, str(sprint))$|    return "_bmad-output/planning-artifacts/s%s/stories" % sprint|'
-# A12: delete the one line that closes the match window at an entry boundary. What is left is the
-# proximity match this release replaced -- same 5 lines, now free to run into the next entry. The
-# mutation is exactly the layer under test, and A11 staying green is what says so.
-defm a12-waiver-window-crosses-entry A12 A11 vmr \
-  '/^          \/\^## \/ { win = 0 }/d'
-# A13 + A14: the BL-328 fix reverted whole -- the process no longer moves to the walked-up root, so
-# every read resolves against the invoking directory again. Both subdirectory arms fail and that is
-# declared, not entangled: A14 reads everything A13 reads (schema, corpus) plus the escalations
-# file, so no mutant can fail A13 without A14. A14's own subject is the mutant below.
-defm a13-a14-process-stays-in-invoking-dir A13,A14 A2 vmr \
-  's|^if \[ -n "\$VMR_ROOT" \] && \[ "\$VMR_ROOT" != "\$VMR_CALLER_CWD" \]; then$|if false; then|'
-# A14: ONE read restored to the invoking directory -- the escalations file -- with the schema and
-# corpus still rooted. That is the partial re-root this arm exists for: the story is found, its
-# waiver is not, and Check 6 fails with a wrong reason. A11 (root run) must stay green.
-defm a14-escalations-read-from-invoking-dir A14 A11 vmr \
-  's|^ESCALATIONS_FILE="docs/escalations/pending.md"$|ESCALATIONS_FILE="${VMR_CALLER_CWD}/docs/escalations/pending.md"|'
-
-MUT_OK=" "
-mut_i=0
-while [ "$mut_i" -lt "$NM" ]; do
-  n="${MN[$mut_i]}"; mdir="$WORK/mut-$n"
-  cp -R "$TD_REAL" "$mdir"
-  case "${MW[$mut_i]}" in
-    ss)  target="$mdir/sprint-status.sh" ;;
-    vmr) target="$mdir/validate-mandatory-rules.sh" ;;
-    *)   bad "FIXTURE BROKEN — unknown mutant target '${MW[$mut_i]}'"; mut_i=$((mut_i+1)); continue ;;
-  esac
-  sed "${ME[$mut_i]}" "$target" > "$target.mut"
-  if cmp -s "$target" "$target.mut"; then
-    bad "FIXTURE BROKEN — MUTANT $n changed nothing; the assertion below would test the original"
-    rm -f "$target.mut"
-  else
-    mv "$target.mut" "$target"; chmod +x "$target"
-    MUT_OK="$MUT_OK$n "
-  fi
-  mut_i=$((mut_i+1))
-done
-
-# --- Unmutated control -------------------------------------------------------
-# A copy of the tools directory in another location, mutated not at all. It proves ONE property: the
-# tools resolve their schema and corpus when installed from a copied directory (A5, one Check 6 run).
-# Everything else is the shipping run's, and each mutant's own green twin proves its copy runs.
-CTRL="$WORK/mutant-control"
-cp -R "$TD_REAL" "$CTRL"
-RES=""; arm A5 "$CTRL"; sets_from "$RES"
-CTRL_OK=0
-if in_set A5 "$PASS_OUT"; then
-  ok "CONTROL: a copy of the tools directory resolves its schema and corpus as the shipping tools do (A5)"; CTRL_OK=1
-else
-  bad "CONTROL: an unmutated copy failed A5 — the harness itself is what breaks a copy, so every mutant verdict below is meaningless"
-fi
-base_ok() { [ "$CTRL_OK" = 1 ] && in_set "$1" "$SHIP_PASS"; }
-join_set() { local o="" x; for x in "$@"; do o="$o,$x"; done; printf '%s' "${o#,}"; }
-
-if [ "$MATRIX" = 1 ]; then
-  # FULL MATRIX: every mutant driven against EVERY arm; every cell printed, 1 = the arm FAILS under the mutant.
-  mut_i=0
-  while [ "$mut_i" -lt "$NM" ]; do
-    n="${MN[$mut_i]}"
-    case "$MUT_OK" in *" $n "*) ;; *) mut_i=$((mut_i+1)); continue ;; esac
-    RES=""; MX_FULL_RUNS=$((MX_FULL_RUNS + 1))
-    for k in $ALL_KEYS; do arm "$k" "$WORK/mut-$n"; done
-    sets_from "$RES"
-    cells=""; tripped=""
-    for i in $ALL_IDS; do
-      if in_set "$i" "$FAIL_OUT"; then cells="$cells,$i:1"; tripped="$tripped $i"; else cells="$cells,$i:0"; fi
-    done
-    decl="$(printf '%s' " ${MD[$mut_i]//,/ } " | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
-    meas="$(printf '%s' "$tripped" | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
-    st=match; [ "$decl" = "$meas" ] || st=DIFFERS
-    tw=green; for _t in ${MT[$mut_i]//,/ }; do in_set "$_t" "$FAIL_OUT" && tw=TRIPPED; done
-    printf 'MATRIX %s decides=%s cells=%s tripped=[%s] declared=%s twins=%s\n' "$n" "${MD[$mut_i]}" "${cells#,}" "$(join_set $tripped)" "$st" "$tw"
-    mut_i=$((mut_i+1))
-  done
-else
-  # PER PUSH: each mutant drives its DECIDING arm(s) and its measured-green TWIN only.
-  mut_i=0
-  while [ "$mut_i" -lt "$NM" ]; do
-    n="${MN[$mut_i]}"
-    case "$MUT_OK" in *" $n "*) ;; *) mut_i=$((mut_i+1)); continue ;; esac
-    dec=" ${MD[$mut_i]//,/ } "; twn=" ${MT[$mut_i]//,/ } "
-    flag="$(r=1; for a in $dec $twn; do base_ok "$a" || r=0; done; echo "$r")"
-    keys=" "
-    for a in $dec $twn; do _k="$(key_of "$a")"; case "$keys" in *" $_k "*) ;; *) keys="$keys$_k " ;; esac; done
-    RES=""
-    for k in $keys; do arm "$k" "$WORK/mut-$n"; done
-    sets_from "$RES"
-    wrong=""
-    for a in $dec; do in_set "$a" "$FAIL_OUT" || wrong="$wrong $a-did-not-flip"; done
-    for i in $FAIL_OUT; do case "$dec" in *" $i "*) ;; *) wrong="$wrong $i-tripped-outside-decides" ;; esac; done
-    for a in $twn; do in_set "$a" "$PASS_OUT" || wrong="$wrong $a-twin-not-green"; done
-    if [ -n "$wrong" ]; then
-      if [ "$flag" = 1 ]; then bad "MUTANT $n failed wrongly [$wrong ], expected decides=[${MD[$mut_i]}] with twin [${MT[$mut_i]}] green — entangled assertions, or the mutation is not reached"; else need_base "$([ "$flag" = 1 ] && echo 1 || echo 0)" "$n" || true; fi
-    else
-      mutant_killed "$([ "$flag" = 1 ] && echo 1 || echo 0)" "$n" "MUTANT $n dies on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
-    fi
-    mut_i=$((mut_i+1))
-  done
-  if [ "$MX_FULL_RUNS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (MX_FULL_RUNS=0)"
-  else bad "a plain run executed $MX_FULL_RUNS matrix-only cell(s)"; fi
-fi
 
 echo
 report_end story-corpus-sprint-slot

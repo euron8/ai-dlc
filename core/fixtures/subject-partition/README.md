@@ -5,9 +5,8 @@ Whether it ships is decided by the absence of a `.dist-only` marker
 script every consumer has at `scripts/ai-dlc/`. The fixture resolves it by walking up in either
 layout.
 
-- `run.sh` — arms S1–S8 and R, then the mutant battery. Every world is a mktemp git repository
-  with trunk `main` and the sprint on a branch; the header states which input separates which
-  mutant.
+- `run.sh` — arms S1–S8, X1–X9 and R. Every world is a mktemp git repository
+  with trunk `main` and the sprint on a branch; the header states the discriminating inputs.
 - `receipt.sh <tree>` — BL-458's receipt. It builds its own world, takes every program from
   `<tree>`, and exits 0 only when the subject is mapped (brief, SPEC, architecture-impact, ≥3 PRD
   parts including an edited earlier section), merged with `--subject`, and held by Check 24 arm

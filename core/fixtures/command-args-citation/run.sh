@@ -34,12 +34,9 @@ trap 'rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED $VALIDATOR"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_a2=0; B_a3=0
 # Capture, never pipe. --cite exits 2 on NOMATCH, and under `set -o pipefail` a
 # `cite ... | grep -q NOMATCH` pipeline inherits that 2 even when grep matched.
 cite()  { bash "$VALIDATOR" --transcript "$1" --cite "$2" 2>/dev/null || true; }
-citeV() { bash "$1" --transcript "$2" --cite "$3" 2>/dev/null || true; }
 
 echo "command-args-citation:"
 
@@ -57,13 +54,13 @@ esac
 # which says nothing about the extraction; the seeded name is fourteen characters so it cannot.
 CMDNAME_NLEN="$(printf '%s' "$CMDNAME" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//' | wc -c | tr -d ' ')"
 if [ "$CMDNAME_NLEN" -ge 12 ]; then
-  ok "the cited command name '$CMDNAME' is $CMDNAME_NLEN characters, above the citation floor, so assertions 2 and 5 and mutant A reach the extraction"
+  ok "the cited command name '$CMDNAME' is $CMDNAME_NLEN characters, above the citation floor, so assertions 2 and 5 reach the extraction"
 else
   bad "FIXTURE BROKEN: the cited command name '$CMDNAME' is $CMDNAME_NLEN characters, under the floor of 12 -- every assertion citing it is decided by NOMATCH-SHORT, not by the extraction"
 fi
 R="$(cite "$CMD" "$CMDNAME")"
 case "$R" in
-  NOMATCH) ok "the harness-written <command-name> is NOT citable (plain NOMATCH) — only the args side is read"; B_a2=1 ;;
+  NOMATCH) ok "the harness-written <command-name> is NOT citable (plain NOMATCH) — only the args side is read" ;;
   *)       bad "FABRICATION VECTOR OPEN or WRONG REASON ($R): want the plain NOMATCH a read corpus gives" ;;
 esac
 
@@ -71,7 +68,7 @@ esac
 # Its bytes are an envelope's bytes. Only the record's own opening tag decides provenance.
 R="$(cite "$FORGED" "$FORGERY")"
 case "$R" in
-  NOMATCH*) ok "an args tag quoted inside a task-notification is rejected — the record's own opening tag decides, not the bytes"; B_a3=1 ;;
+  NOMATCH*) ok "an args tag quoted inside a task-notification is rejected — the record's own opening tag decides, not the bytes" ;;
   *)        bad "FABRICATION VECTOR OPEN ($R): any agent that can emit a task notification can now mint operator authorization" ;;
 esac
 
@@ -106,61 +103,6 @@ if [ "$COUNT" = "0" ]; then
   ok "Check B counts 0 on /ai-dlc -> advance (the predicate was split, not widened)"
 else
   bad "Check B counted $COUNT on a sprint kickoff the operator invoked to be executed — every sprint start now reads as a steamroll"
-fi
-
-# --- Assertion 8: UNMUTATED CONTROL -------------------------------------------
-# The mutants below are copies. This validator is bash wrapping a node heredoc, and a copy that
-# dies before reaching node emits nothing — which every NOMATCH assertion would score as a kill.
-# An unmutated copy must behave exactly like the original, or the two mutant results are noise.
-CTL="$WORK/validator-control.sh"
-cp "$VALIDATOR" "$CTL"
-R="$(citeV "$CTL" "$CMD" "$ARGS")"
-case "$R" in
-  MATCH*) ok "control: an unmutated copy still MATCHes — the copies below can actually run" ;;
-  *)      bad "CONTROL FAILED ($R): an unmutated copy does not behave like the original, so neither mutant result means anything" ;;
-esac
-
-# --- Assertion 9: MUTANT A — args-only extraction is what makes 2 hold ---------
-# Return the whole envelope instead of the args, exactly as a naive fix would. The
-# harness-written command name MUST become citable. If it does not, assertion 2 passes for some
-# other reason and proves nothing about the extraction.
-MUT_A="$WORK/validator-mutant-a.sh"
-sed 's|.*matchAll(/<command-args>.*|  out.push(txt);|' "$VALIDATOR" > "$MUT_A"
-if cmp -s "$VALIDATOR" "$MUT_A"; then
-  bad "FIXTURE STALE: mutant A is byte-identical to the original — commandArgsText's extraction line was reworded"
-else
-  R="$(citeV "$MUT_A" "$CMD" "$CMDNAME")"
-  case "$R" in
-    MATCH*) mutant_killed "$B_a2" mutant-a-whole-envelope "mutant A: accepting the whole envelope makes <command-name> citable — assertion 2 has teeth" ;;
-    *)      bad "MUTANT A DID NOT FAIL ($R) — the command name is uncitable even when the whole envelope is accepted, so assertion 2 is not testing the extraction" ;;
-  esac
-  # Mutant A must fail ONLY its own assertion. If it also breaks assertion 3, the two are
-  # entangled and one of them is vacuous.
-  R="$(citeV "$MUT_A" "$FORGED" "$FORGERY")"
-  case "$R" in
-    NOMATCH*) ok "mutant A leaves assertion 3 intact — the two assertions are not entangled" ;;
-    *)        bad "mutant A ALSO broke assertion 3 ($R) — the extraction and the provenance guard are entangled, so one of the two assertions is vacuous" ;;
-  esac
-fi
-
-# --- Assertion 10: MUTANT B — the provenance guard is what makes 3 hold --------
-# Drop the `^<command-` guard. A quoted args tag in a task-notification MUST become citable.
-MUT_B="$WORK/validator-mutant-b.sh"
-sed 's|  if (!/\^<command-/.test(txt)) return "";||' "$VALIDATOR" > "$MUT_B"
-if cmp -s "$VALIDATOR" "$MUT_B"; then
-  bad "FIXTURE STALE: mutant B is byte-identical to the original — commandArgsText's envelope guard was reworded"
-else
-  R="$(citeV "$MUT_B" "$FORGED" "$FORGERY")"
-  case "$R" in
-    MATCH*) mutant_killed "$B_a3" mutant-b-guard-dropped "mutant B: without the envelope guard a quoted args tag cites — assertion 3 has teeth" ;;
-    *)      bad "MUTANT B DID NOT FAIL ($R) — the forgery stays uncitable even without the guard, so assertion 3 is not testing it" ;;
-  esac
-  # Mutant B must fail ONLY its own assertion.
-  R="$(citeV "$MUT_B" "$CMD" "$CMDNAME")"
-  case "$R" in
-    NOMATCH) ok "mutant B leaves assertion 2 intact — the two assertions are not entangled" ;;
-    *)        bad "mutant B ALSO broke assertion 2 ($R) — the guard and the extraction are entangled, so one of the two assertions is vacuous" ;;
-  esac
 fi
 
 echo

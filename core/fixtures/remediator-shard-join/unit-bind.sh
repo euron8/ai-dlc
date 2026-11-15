@@ -2,8 +2,7 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 # remediator-shard-join/unit-bind.sh -- BIND1-BIND2: the join's SAME and DOUBLE-WRITE refusal text bound to the
-# merge's. Driven by run.sh, which passes its own arguments through (--matrix prints this file's MATRIX rows; the
-# header block is run.sh's). The merge (merge-adversarial-shards.sh) is the REFERENCE: its text is fixed and the
+# merge's. Driven by run.sh; the header block is run.sh's. The merge (merge-adversarial-shards.sh) is the REFERENCE: its text is fixed and the
 # join's is held to it.
 #
 # BIND1, the SAME pin. Each script carries exactly one `SAME) refuse "` line. The text from `refuse "` to the
@@ -33,31 +32,13 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # finding-grammar-binding: it reads the whole core/scripts/ and core/hooks/ directories, which this fixture does
 # not declare, so inside hermetic-run's sandbox it could only ever have counted the declared files (BL-967).
 #
-# SELF-PROBES run BEFORE the real check, on mktemp copies of the two scripts, never on the real files. BIND0 asserts
-# the unmutated copies pass (the base every kill is gated on). Each mutant must fail its own arm and only it:
-#   BINDm-strip   the merge copy's SAME line loses `${REC_PREFIX}`       -> BIND1
-#   BINDm-prefix  the join copy's SAME line gains `${REC_PREFIX}`        -> BIND1
-#   BINDm-same    one word of the join copy's SAME text changed          -> BIND1
-#   BINDm-dw      one word of the join copy's shared DW clause changed   -> BIND2
-#   BINDm-dwdel   the join copy's DW line deleted                        -> BIND2
-# and the near-miss must stay QUIET:
-#   BINDQ1  a comment line inserted in the case arm and the SAME and DW lines re-indented (never the prefix).
-#
 # Exit: 0 every cell passed, 1 a cell failed, 2 the fixture could not run.
 set -u
 NAME="remediator-shard-join-bind"
-MATRIX=0
-[ "${1:-}" = --matrix ] && MATRIX=1
 UBD_HERE="$(cd "$(dirname "$0")" && pwd)"
 [ -f "$UBD_HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $NAME: lib.sh is absent beside $0; nothing was asserted" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$UBD_HERE/lib.sh" > /dev/null || { echo "FIXTURE BROKEN: $NAME: sourcing lib.sh failed" >&2; exit 2; }
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE BROKEN: $NAME: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$MUT_LIB"
-N_MROWS=0
-mrow() { [ "$MATRIX" = 1 ] || return 0; N_MROWS=$((N_MROWS + 1)); echo "  MATRIX $*"; }
 
 MERGE="$SRCDIR/merge-adversarial-shards.sh"
 [ -f "$MERGE" ] || { echo "FIXTURE BROKEN: $NAME: $MERGE is not beside the join; nothing was asserted" >&2; exit 2; }
@@ -108,72 +89,6 @@ bd_check() {
 }
 BD_OUT="$WORK/bind.out"
 
-# ------------------------------------------------------------------------- the self-probes, before the real check
-bd_tree() { # <name> -- a fresh probe tree holding copies of the two real scripts; prints its root
-  local _t
-  _t="$(mktemp -d "$WORK/bind-$1.XXXXXX")" || return 1
-  mkdir -p "$_t/core/scripts" || return 1
-  cp "$MERGE" "$_t/core/scripts/" && cp "$JOIN" "$_t/core/scripts/" || return 1
-  printf '%s\n' "$_t"
-}
-MB="$(basename "$MERGE")"; JB="$(basename "$JOIN")"
-# bd_mut <tree> <file> <awk program> -- rewrite one copy through awk; refuses (rc 1) when nothing changed.
-bd_mut() {
-  awk -v PFX='${REC_PREFIX}' "$3" "$1/core/scripts/$2" > "$1/core/scripts/$2.new" || return 1
-  if cmp -s "$1/core/scripts/$2" "$1/core/scripts/$2.new"; then return 1; fi
-  mv "$1/core/scripts/$2.new" "$1/core/scripts/$2"
-}
-bd_run() { bd_check "$1/core/scripts/$MB" "$1/core/scripts/$JB"; }
-
-B_BIND0=0
-t0="$(bd_tree base)" || { echo "FIXTURE BROKEN: $NAME: no probe tree" >&2; exit 2; }
-bd_run "$t0"
-if [ -z "$BD_FAILED" ] && [ "$(grep -c '^PASS ' "$BD_OUT")" = 2 ]; then ok "BIND0: the unmutated probe copies of the merge and the join pass BIND1 and BIND2"; B_BIND0=1
-else bad "BIND0: the unmutated probe copies did not pass every bind arm (failed=$BD_FAILED): $(tr '\n' ' ' < "$BD_OUT")"; fi
-
-# bd_score <tree> <want failing codes> -- 0 when exactly the wanted arms failed
-bd_score() { bd_run "$1"; [ "$BD_FAILED" = "$2" ]; }
-bd_cells() { # <decides list> -- the 0/1 cells of BIND1..BIND2 for an mrow
-  local _a _o=""
-  for _a in BIND1 BIND2; do case ",$BD_FAILED," in *",$_a,"*) _o="$_o $_a=1" ;; *) _o="$_o $_a=0" ;; esac; done
-  printf '%s' "$_o"
-}
-
-if [ "$B_BIND0" != 1 ]; then
-  bad "FIXTURE BROKEN: BINDm-* and BINDQ1 not scored -- the unmutated probe copies did not pass (BIND0), so every mutant cell would read the base failing"
-else
-t="$(bd_tree strip)" &&bd_mut "$t" "$MB" '/^[[:space:]]*SAME\) refuse "/ { i = index($0, PFX); if (i) $0 = substr($0, 1, i - 1) substr($0, i + length(PFX)) } { print }' \
-  && { bd_score "$t" BIND1; _r=$?; mrow BINDm-strip $(bd_cells); [ "$_r" = 0 ]; } \
-  && mutant_killed "$B_BIND0" BINDm-strip "BINDm-strip the merge copy's SAME line without \${REC_PREFIX}: KILLED by [BIND1], BIND2 stays green" \
-  || bad "BINDm-strip: SURVIVED, entangled or not applied (failed=${BD_FAILED:-none}, want BIND1)"
-
-t="$(bd_tree prefix)" && bd_mut "$t" "$JB" '/^[[:space:]]*SAME\) refuse "/ { i = index($0, "wrote ${_c}"); if (i) $0 = substr($0, 1, i + 5) PFX substr($0, i + 6) } { print }' \
-  && { bd_score "$t" BIND1; _r=$?; mrow BINDm-prefix $(bd_cells); [ "$_r" = 0 ]; } \
-  && mutant_killed "$B_BIND0" BINDm-prefix "BINDm-prefix the join copy's SAME line given \${REC_PREFIX}: KILLED by [BIND1], BIND2 stays green" \
-  || bad "BINDm-prefix: SURVIVED, entangled or not applied (failed=${BD_FAILED:-none}, want BIND1)"
-
-t="$(bd_tree same)" && bd_mut "$t" "$JB" '/^[[:space:]]*SAME\) refuse "/ { sub(/NEW dispatch/, "fresh dispatch") } { print }' \
-  && { bd_score "$t" BIND1; _r=$?; mrow BINDm-same $(bd_cells); [ "$_r" = 0 ]; } \
-  && mutant_killed "$B_BIND0" BINDm-same "BINDm-same one word of the join copy's SAME text changed: KILLED by [BIND1], BIND2 stays green" \
-  || bad "BINDm-same: SURVIVED, entangled or not applied (failed=${BD_FAILED:-none}, want BIND1)"
-
-t="$(bd_tree dw)" && bd_mut "$t" "$JB" 'index($0, "refuse \"DOUBLE-WRITE ") { sub(/stop directive not honored/, "stop directive ignored") } { print }' \
-  && { bd_score "$t" BIND2; _r=$?; mrow BINDm-dw $(bd_cells); [ "$_r" = 0 ]; } \
-  && mutant_killed "$B_BIND0" BINDm-dw "BINDm-dw one word of the join copy's shared DOUBLE-WRITE clause changed: KILLED by [BIND2], BIND1 stays green" \
-  || bad "BINDm-dw: SURVIVED, entangled or not applied (failed=${BD_FAILED:-none}, want BIND2)"
-
-t="$(bd_tree dwdel)" && bd_mut "$t" "$JB" 'index($0, "refuse \"DOUBLE-WRITE ") { next } { print }' \
-  && { bd_score "$t" BIND2; _r=$?; mrow BINDm-dwdel $(bd_cells); [ "$_r" = 0 ]; } \
-  && mutant_killed "$B_BIND0" BINDm-dwdel "BINDm-dwdel the join copy's DOUBLE-WRITE line deleted: KILLED by [BIND2], BIND1 stays green" \
-  || bad "BINDm-dwdel: SURVIVED, entangled or not applied (failed=${BD_FAILED:-none}, want BIND2)"
-
-# the near-miss: it must leave every arm green
-t="$(bd_tree q1)" && bd_mut "$t" "$JB" '/^[[:space:]]*SAME\) refuse "/ || index($0, "refuse \"DOUBLE-WRITE ") { print "        # a near-miss comment inside the case arm"; $0 = "    " $0 } { print }' \
-  && bd_run "$t" && [ -z "$BD_FAILED" ] \
-  && ok "BINDQ1: a comment line inserted in the join copy's case arm and its SAME and DW lines re-indented -> every bind arm stays green" \
-  || bad "BINDQ1: a whitespace and comment edit in the case arm fired a bind arm (failed=${BD_FAILED:-none}): $(tr '\n' ' ' < "$BD_OUT")"
-fi
-
 # ------------------------------------------------------------------------- the real check
 bd_check "$MERGE" "$JOIN"
 while read -r _v _arm _rest; do
@@ -186,8 +101,5 @@ while read -r _v _arm _rest; do
 done < "$BD_OUT"
 [ "$(grep -c '^PASS \|^FAIL ' "$BD_OUT")" = 2 ] || bad "BIND: FIXTURE BROKEN -- the real check printed $(grep -c . "$BD_OUT") verdict line(s), want 2"
 
-if [ "$MATRIX" = 1 ]; then echo "  (matrix mode, unit-bind.sh: $N_MROWS MATRIX row(s) printed)"
-elif [ "$N_MROWS" -eq 0 ]; then ok "PLAIN-BIND: a plain run of unit-bind.sh printed no matrix-only cell"
-else bad "PLAIN-BIND: a plain run of unit-bind.sh printed $N_MROWS matrix row(s)"; fi
 echo "$NAME: $fails failure(s)"
 [ "$fails" -eq 0 ]

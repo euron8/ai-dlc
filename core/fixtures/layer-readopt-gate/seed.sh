@@ -116,7 +116,7 @@ EOF
 # classifier hides inside the hunk the substitution already creates, and the
 # fixture cannot see it. Real core files end with unchanged prose, which is what
 # turns a stripped trailing newline into a NEW, token-less hunk -- and every
-# substituted file then reads as unregistered drift. Verified by mutation: with
+# substituted file then reads as unregistered drift. With
 # the tokens at EOF this fixture passes against the bug.
 cat > "$DIST/core/team-roles/dev.md" <<'EOF'
 # Role: Developer
@@ -418,7 +418,7 @@ EOF
 #
 # The claim sits entirely on ONE line here, so this entry stays reportable whether or not
 # the detector flattens. That keeps it independent of the wrap entry below -- otherwise one
-# mutation would fail two assertions and one of them would be vacuous.
+# defect would fail two assertions and one of them would be vacuous.
 cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-13-survives.md" <<EOF
 ---
 shadows: SKILL.md#Rule 13
@@ -511,7 +511,7 @@ EOF
 # mistaken for a drift row.
 #
 # Both bodies are deliberately plain: a backticked construct would also trip the delegation arm
-# and survival vocabulary would trip the assertion arm, and either would make one mutation fail
+# and survival vocabulary would trip the assertion arm, and either would make one defect fail
 # two assertions.
 cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-7-dup-a.md" <<EOF
 ---

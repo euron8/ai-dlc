@@ -9,274 +9,68 @@ paths:
      the invocation budget's J3 remedy text names that section by its title, so
      the rule reaches whoever the budget refuses. -->
 
-# Mutants
+# Building good arms
 
-- Build the mutant as a **copy**, never an in-place edit, and guard with `cmp -s`
-  so a `sed` that matched nothing cannot pass as a mutation.
-- **Revert every layer of a layered fix.** A partial revert produces a mutant
-  that proves the layer you left in place, and it comes out green.
-- Add an **unmutated control** from the same directory whenever the harness
-  itself could be what fails — a lone script copy that dies sourcing `lib.sh`
-  emits nothing, and "no output" otherwise scores as a kill. **The control is
-  NECESSARY AND NOT SUFFICIENT, and believing otherwise is how a battery certifies
-  silence.** Measured independently by two hands on two batteries: a control
-  asserting rc=0-and-no-findings PASSES against a subject replaced by `exit 0`,
-  because rc=0 with nothing reported is exactly what a clean copy looks like. What
-  stops silence scoring as a kill is that every arm is PRESENCE-shaped — each one
-  requiring a specific row or message to APPEAR — so a subject that emits nothing
-  fails them by construction. Give the control a positive conjunct too: it must
-  assert a baseline row is THERE, not merely that nothing went wrong.
-- Assert a **positive outcome**, not the absence of the old failure message. A
-  mutation that WIDENS a guard to match everything often produces the same
-  output as the unmutated original, so it scores a kill it did not earn —
-  measured on a `case` pattern widened to `*)`. Make the guard match NOTHING.
-- **A DENY arm alone cannot tell a correctly-keyed guard from one that denies
-  unconditionally.** The mirror of the bullet above, and it is the direction that
-  looks finished: a probe asserting "this tool is denied" passes identically
-  whether the guard reads its key or refuses everything. Every denied cell needs
-  its ALLOW twin in the SAME run, one property apart. Measured on a hook arm whose
-  surface had just grown a tool: the DENY half was written, the near-miss half was
-  not, and nothing in the battery could have caught the tool being denied for the
-  wrong reason.
-- **An ABSENCE-shaped arm is the one that REQUIRES a mutant, and a seeded
-  near-miss is not a substitute.** Both-directions controls establish that the
-  arm discriminates between two inputs; only a mutant establishes that it
-  discriminates at all. Measured: a release shipped four fixtures whose new arms
-  all had an offender and a near-miss, and with the subject replaced by
-  `exit 0` two of them still printed `ok` — an absence passing for a program
-  that never ran, one arm after the mutant written to prevent exactly that. Ask
-  of every new arm whether it would pass against a subject that emits nothing;
-  if yes, it needs a committed mutant, not a hand-run one.
-- A mutant must fail **only** its own assertion. Two failures mean the
-  assertions are entangled and one of them is vacuous. When both findings are
-  genuinely true, the arms overlap rather than the mutant being wrong: decide
-  which arm OWNS the case and make the other stand down for it.
-- **Two guards that COVER each other read exactly like two guards that do not
-  work, and the symptom is ZERO failures rather than two.** The rule above
-  catches entangled assertions by their extra failure; this is the mirror and it
-  is silent. Measured: a two-line lookback and a section-wide rebuttal were added
-  in one change against ONE seeded subject, and each reached it — so disabling
-  either changed no cell and BOTH mutants came back green, which is
-  indistinguishable from two guards that never fired. Give every guard a subject
-  the OTHER guards cannot see: here the lookback's had to sit outside the section
-  the rebuttal joins, and the rebuttal's needed three lines of separation so the
-  lookback could not reach its qualifier. Ask of each new guard which existing one
-  would still cover its subject; if the answer is any, the seed cannot kill it.
-- **When two arms open with byte-identical text, anchor the mutation on what
-  SEPARATES them, not on the shared line.** A `sed` keyed on the common condition
-  edits both, moves two cells, and scores a kill the arm did not earn. Three times
-  in one series: a crosswalk line shared with a sibling clause (fixed by anchoring
-  on the indent), and a branch condition shared with the guard beside it (fixed by
-  anchoring on the trailing `; then` one of them carries and the other does not).
-- **Keep the fixture's author different from the arm's, deliberately.** An arm
-  and a battery written by the same hand cannot disagree — they encode one
-  understanding twice, and a false pass has an unreachable half nobody sees.
-- **Never seed from what the reader accepts.** Seed from what the real producer
-  emits. A seed derived from the reader's accept-set proves the reader accepts
-  its own grammar and nothing else, and it stays green through a change to both.
-- **A near-miss must carry every property a feared regression would KEY on.** A
-  near-miss one property short of the offender discriminates against nothing that
-  requires that property. Measured: a regex near-miss ending without a period
-  passed a trailing-word regression that REQUIRED one, in the receipt and in the
-  battery, caught only by a byte-lock mutant. Build the regression, then read which
-  property of the offender the near-miss lacks, and seed a second near-miss that has it.
-- **A fixture whose tree cannot EXPRESS the defect proves nothing.** Check the
-  seed can actually reach the branch under test, exercise a layout-conditional
-  resolver against every root shape it claims to handle, and give the unit a
-  positive control so a harness that died reports as broken rather than as clean.
-  Two shapes measured while building one seed: the detector already had a guard
-  covering the case (so the obvious seed was classified before it reached the
-  branch), and `diff` COALESCED the exempt line and the offending line into one
-  hunk, so an exemption keyed on the first swallowed the second.
-- **When a guard flips no verdict, arm it on COST — and the signal is the first
-  observable that guard actually gates.** Some guards are fast paths: deleting
-  them changes no decision, so a verdict-flip arm can never fire on one, and
-  `mechanism-design.md` would have you delete a line that is load-bearing for
-  time rather than for behaviour. Give it a subject instead. Measured, on a
-  `PreToolUse` gate whose marker check returns before any parsing: the obvious
-  signal was `jq`, and it was WRONG — `command -v jq` executes nothing and the
-  first real `jq` sat BELOW the guard, so the arm passed against its own mutant.
-  `sed` was the first thing past the line that forks. Pick the signal, then let
-  the mutant tell you whether you picked it right; an arm that survives deleting
-  its own subject is watching the wrong thing.
-- **A PRESENCE-shaped arm catches quoting bugs an absence-shaped one hides.** Backticks
-  inside a double-quoted assertion string ran the id as a COMMAND, so the arm was
-  searching for the text either side of a hole. It failed loudly only because it DEMANDED
-  a string; the same bug in an arm asserting an absence would have passed forever.
-- **Killing a backgrounded subject means reaping its TREE.** A bare `kill -9` on the
-  wrapper leaves the grandchild reparented to init and spinning — measured at 21 leaked
-  `awk` processes at ~99% CPU, and one level of `pkill -P` was not enough because the
-  chain is wrapper → subshell → awk. Under the 16-way pool that is sixteen burned cores
-  per run, and the fixture still reports PASS. It also corrupts the next timing you take:
-  a 17s unit read 32–43s while the leaks stole CPU, which is a self-inflicted false
-  measurement that only `ps` reveals.
+No fixture carries a mutation battery; `scripts/validate-fixture-hygiene.sh` arm H12 fails the push on one. That an
+arm can fail is proved once, by hand, at authoring (`CLAUDE.md`, "Build process", builder step 4).
 
-- **A MUTATION THAT MATCHES NOTHING IS A LOST SUBJECT, AND THE REPAIR IS A NEW
-  SUBJECT — NEVER A RELAXED ASSERTION.** A refactor that single-sources a predicate
-  DELETES the literal block a mutation anchors on, and `mkmut` then correctly refuses
-  to let the no-op pass. The fixture goes red **on the commit that fixes the defect**,
-  which reads exactly like the fix being wrong. Measured: lifting a coercion into a
-  helper so two arms could stop restating it took two assertions with it, and the
-  mutations had to be re-anchored inside the helper asserting the identical
-  observable. Score a re-anchored mutation three ways before believing it — the anchor
-  is UNIQUE in the file (control: an impossible anchor returns 0), the mutant produces
-  the right observable FOR THE RIGHT REASON, and it fails ONLY its own assertion.
-- **A MUTATION THAT APPLIES CAN STILL BE INSUFFICIENT, AND `cmp -s` CANNOT SEE IT.** The
-  bullet above catches a mutation that matches NOTHING. This is the half that matches
-  something and does not remove the whole property: an arm that hand-named the two sites
-  documenting a mode stripped both, the file still documented it a THIRD time in prose a
-  later release added, the invariant correctly stayed silent, and the arm failed the push
-  reading exactly like a regression in the change under test. Key the mutation on the
-  SUBJECT'S OWN predicate rather than on a list of sites, and assert the post-mutation
-  count is 0 against a non-zero unmutated count — a hand-written site list goes vacuous
-  the release somebody adds a site, and nothing announces it.
-- **A mutant of a program that resolves SIBLINGS beside itself is built in a copy of
-  its whole directory, and carries a control saying it ran.** A lone `sed … > $WORK/mutant.sh`
-  of a detector that shells to `$SELF/preclassify.sh` finds no sibling, reads zero rows on
-  every input, and is silent for that reason — measured on a shipped fixture whose
-  comment-strip mutant had scored its kill that way since it was written, exposed only when
-  five new mutants all scored the same vector. Assert the sibling is present in the copy,
-  and give the mutant a positive stderr or row control that a copy which never ran cannot print.
-- **Hardening worlds DISPLACE the motivating world; keep it as its own case, asserted as a
-  number.** Seeding a listed-but-unopened file (so listed > opened) and a token-surviving file
-  (so retiring can be 0) removed the only world where nothing is listed at all — the filed
-  incident — and a one-line wrong fix (`[ "$listed" -gt 0 ] || exit 0`) passed every arm.
-  Every count a message prints is hardcodable until a world exists where it differs.
-- **`exit` inside `$( )` ends the subshell, not the fixture, and a predicate that returns
-  early leaves its last world on disk.** A builder that refuses a lost anchor with `exit 2`
-  from inside a command substitution hands the caller an empty path, `bash ""` fails every
-  predicate, and BROKEN scores as a `0000` regression — check the captured value at the call
-  site. And a seed must define the WHOLE consumer state, removing what it does not write: a
-  predicate that failed at its second world left that world's files behind and the next
-  predicate read a shape nobody seeded, a two-cell flip that read as entanglement.
-- **A subject that CACHES its answer scores every mutant of the fetch as SURVIVED, and the
-  cache key will not say so.** Two hook variants driven in one workspace computed the same
-  key (escalations file, sibling, timeline — never the hook itself), so the mutant read the
-  original's cached rows and never asked the sibling; measured on `gate-remediation-deny`,
-  where a `M10` kill read SURVIVED twice for that reason. Give every drive of a fetch mutant a
-  fresh workspace, and ask of any new hook mutant whether its edit is upstream or downstream
-  of the cache read — the existing decision mutants are safe only because they sit below it.
-- **Mutate the file the fixture RESOLVES, which is not always the one you are
-  changing.** A fixture that names candidates in both install layouts takes the
-  first that exists, and in this repo `core/git-hooks/pre-push` is found before
-  `.githooks/pre-push`. Mutating the other copy leaves every arm green, and a
-  mutant that killed nothing reads exactly like an arm that cannot fire —
-  measured, three in a row, on a change that was in fact correct. `cmp -s` does
-  not catch it: the mutation applied cleanly, to a file the run never loaded.
-  Print the resolved path, or assert the kill count is non-zero.
-- **A fixture with more than one world records each world's refs IN the world.** A
-  `build_world` that sets `$B`/`$T` globally is overwritten by the next build, and a
-  helper then drives world A with world B's refs — which resolve to NOTHING in A's
-  dist and read as a withheld stamp, not as an error. Measured on one fixture, two
-  verdicts wrong in opposite directions: a correct arm red (manifest expansion empty
-  under the foreign ref) and a mutant green (the gate compared two regions rendered
-  against the same garbage). Write `.B`/`.T` beside the world and have every helper
-  read those.
-- **A mutation whose `sed` DIES is a mutant that never existed, and `if mut_copy ...`
-  then skips its arms with no verdict.** The `cmp -s` guard sees only a `sed` that ran
-  and matched nothing. Measured: BSD `sed` refused an `a\` spelled across two `-e`s,
-  the copy helper returned 1 silently, and the fixture printed PASS over a mutant no
-  arm ever scored. Report a failing `sed` as DID NOT APPLY, and spell `a\` text on the
-  next line of the same script argument with `$'...'`.
-- **A PARTIAL COPY TREE MAKES EVERY MUTANT SURVIVE AND THE UNMUTATED CONTROL PASS, BECAUSE TWO
-  INERT RUNS COMPARE EQUAL.** The bullet above covers a mutated PROGRAM that cannot find its
-  siblings; this is the case where the tree is fine and the fixture you DRIVE through it bails at
-  its own startup check before reaching the behaviour under test. Measured: a battery copied only
-  the subject-under-test and the driven fixture, that fixture exited `FIXTURE ERROR: cannot locate
-  <validator>` before its first `git init`, and all four mutants scored SURVIVED against an
-  untouched victim — which reads exactly like a fix that works. **The tell was that the unmutated
-  arm passed too**, so the usual control could not see it: it was comparing two runs of nothing.
-  Copy the WHOLE tree, and add an arm that drives the unmutated subject and REFUSES on
-  `FIXTURE ERROR`/`FIXTURE BROKEN` before any mutant verdict is read. Ask of every battery what its
-  driven subject needs on disk, and prove it got there — a mutant verdict is evidence only about a
-  subject that ran.
-
-- **A seeded SET with one member cannot tell "scanned the set" from "scanned its first
-  member", and a one-row ledger makes its own row the epoch.** Measured twice in one batch:
-  every transcript corpus a fixture seeded held one `.jsonl`, so a verifier that read the
-  first file and stopped satisfied the receipt and every case while reading NOMATCH on the
-  consumer's real 250-file corpus; and a spawn ledger seeded with only the dispatch under
-  test made that dispatch the earliest row, so every "binds" arm passed by the pre-migration
-  EXEMPTION rather than by binding. Seed the discriminating member NOT first, and seed an
-  epoch row that is not the subject, then ask which arm dies when the subject scans one
-  member — if none does, the set is not being scanned.
-
-- **"UNPROVABLE TODAY" IS USUALLY A CLAIM ABOUT THE CORPUS, AND THE ANSWER IS TO SYNTHESISE
-  THE WORLD.** A conjunct the shipped data cannot exercise gets filed as a loaded gun and
-  left, because its mutant survives for a reason that has nothing to do with the predicate.
-  Measured, with three hands agreeing on the wrong verdict: a filter over a declaration was
-  scored unprovable because NO entry of the excluded class carried the field it keys on —
-  true of that declaration, not of the predicate. A seed that MANUFACTURES one entry of the
-  excluded class makes the two predicates separate and the mutant die. **A fact about what
-  the corpus contains TODAY is not a fact about what the mechanism must HANDLE.**
-
-  **THE TEST IS REACHABILITY UNDER THE MECHANISM'S OWN CONTRACT, NOT ABSENCE FROM THE
-  CORPUS**, and this clause is load-bearing: read without it the rule argues for
-  synthesising EVERY absent world, and most absent worlds are absent because they are
-  genuinely unconstructible. Both directions measured in one file. A durable entry gaining
-  an `ignore` is REACHABLE — the declaration is hand-edited and the renderer already models
-  the field — so a seed may manufacture one. A declaration with no transient members is NOT:
-  `sync-transient-ignore.sh:96` refuses it and exits 2, so a seed asserting anything about
-  that world is asserting about a state the program forbids. Ask what the subject would DO
-  with the synthesised world before building it; if the answer is "refuse it", the absence
-  was the contract and not a gap.
-- **SHARED LOGIC IS A REASON TO GO READ THE OTHER SIDE'S SEEDS, NEVER A REASON TO SKIP
-  THEM.** The same episode, and the failure was not a missed pointer — it was the RIGHT
-  observation drawing the INVERSE conclusion. The identical filter lived in two programs,
-  one of which already had a mutant synthesising exactly the missing world. Noticing the
-  duplication should have prompted *"so how is it tested over there"*; it was read instead
-  as evidence the risk was already handled. Noticing that two programs share a predicate
-  tells you where to look, and never that you need not.
-- **ASK WHAT A WRONG OUTPUT MAKES SOMEONE DO, NOT WHAT IT MAKES THE PROGRAM SAY.** The same
-  mutant was filed as a latent miscount — a wrong number in a message — and is a wrong
-  REMEDY: it names a durable artifact as scratch state to untrack, in the channel an
-  operator is contracted to act on. Severity read off the message is a different figure
-  from severity read off the action, and only the second one is the cost.
+- Make every arm **PRESENCE-shaped**: it requires a specific row or message to APPEAR, so a subject that emits nothing
+  fails it by construction. A control asserting rc=0-and-no-findings passes against a subject replaced by `exit 0`;
+  give every control a positive conjunct that a baseline row is THERE.
+- Assert a **positive outcome**, not the absence of the old failure message. A regression that WIDENS a guard to match
+  everything often produces the same output as the original. Make the guard match NOTHING.
+- **A DENY arm alone cannot tell a correctly-keyed guard from one that denies unconditionally.** Every denied cell
+  needs its ALLOW twin in the SAME run, one property apart.
+- **An ABSENCE-shaped arm passes against a subject that emits nothing.** Ask of every new arm whether it would pass
+  against `exit 0`; if yes, reshape it to require a row.
+- **Two guards that COVER each other read exactly like two guards that do not work.** Give every guard a subject the
+  OTHER guards cannot see; ask of each new guard which existing one would still cover its subject.
+- **Keep the fixture's author different from the arm's.** An arm and a fixture written by the same hand encode one
+  understanding twice.
+- **Never seed from what the reader accepts.** Seed from what the real producer emits.
+- **A near-miss must carry every property a feared regression would KEY on.** Read which property of the offender the
+  near-miss lacks, and seed a second near-miss that has it.
+- **A fixture whose tree cannot EXPRESS the defect proves nothing.** Check the seed reaches the branch under test,
+  exercise a layout-conditional resolver against every root shape it claims to handle, and give the unit a positive
+  control so a harness that died reports as broken rather than as clean.
+- **When a guard flips no verdict, arm it on COST**, on the first observable that guard actually gates. An arm that
+  survives deleting its own subject is watching the wrong thing.
+- **A PRESENCE-shaped arm catches quoting bugs an absence-shaped one hides.** Backticks inside a double-quoted
+  assertion string run as a command.
+- **Killing a backgrounded subject means reaping its TREE**, by its recorded process group, never one level of
+  `pkill -P`.
+- **Hardening worlds DISPLACE the motivating world; keep it as its own case, asserted as a number.** Every count a
+  message prints is hardcodable until a world exists where it differs.
+- **`exit` inside `$( )` ends the subshell, not the fixture.** Check the captured value at the call site. A seed
+  defines the WHOLE consumer state, removing what it does not write.
+- **A fixture with more than one world records each world's refs IN the world.** Write `.B`/`.T` beside the world
+  and have every helper read those.
+- **Print the path the fixture RESOLVES.** A fixture that names candidates in both install layouts takes the first that
+  exists (`core/git-hooks/pre-push` before `.githooks/pre-push`).
+- **A seeded SET with one member cannot tell "scanned the set" from "scanned its first member".** Seed the
+  discriminating member NOT first, and seed an epoch row that is not the subject.
+- **A fact about what the corpus contains TODAY is not a fact about what the mechanism must HANDLE.** Synthesise a
+  world the corpus lacks when it is REACHABLE under the mechanism's own contract; a world the subject refuses is the
+  contract, not a gap.
+- **Shared logic is a reason to go read the other side's seeds, never a reason to skip them.**
+- **Ask what a wrong output makes someone DO, not what it makes the program say.**
 
 ## One run per distinct state
 
-A fixture pays for each run of its subject, so the number of runs is part of its design. Seven
-clauses; they bind every fixture, and clause 2 binds every mutant battery.
+A fixture pays for each run of its subject, so the number of runs is part of its design. These clauses bind every
+fixture.
 
-1. **One subject run per distinct state.** Assertions about one state read one run's output; they
-   do not each re-run the subject. Measured: `reconcile-emit-report` rendered the full report
-   about 200 times where one or two renders carried every assertion.
-2. **A mutant runs only the world where its arm decides, plus its named twins.** The mutant by
-   arm matrix is recorded in the fixture's header, with the command that re-measures it. When an
-   arm or a mutant changes, the REQUIRED evidence is the fixture's counted run, showing each
-   declared mutant killed by its deciding arm with its twin holding, by name. Where a fixture's
-   counted run does not itself score each mutant's deciding arm and twin, the change re-measures
-   only the changed mutants' rows by running the fixture's `--matrix` narrowed to those mutants;
-   a fixture whose `--matrix` takes no mutant list runs it whole. Apart from the case in the
-   previous sentence, a full or partial `--matrix` is an operator instrument and never a
-   per-change duty. A matrix row records only
-   `decides=` and `twins=`, so a cell outside a row is not re-measured by the counted run. A battery change re-measures `invocations.decl` beside the matrix. "Killed by its own arm alone" is a test-quality property established at
-   authoring and never re-checked per push; on a change it is re-measured only as the sentences
-   above require. Measured: `readset-skip`
-   scored 15 mutants against 15 worlds on every push. The block forms are `MUTANT-MATRIX`,
-   `MUTANT-MATRIX-FULL` (a whole world vector, with its reason), `MUTANT-MATRIX-CONTROL` (a
-   knock-out control that must survive), `MUTANT-MATRIX-DYNAMIC` (a loop whose names are not
-   literals), `twins=-` with a `why=` (a row dead in every cell), and one
-   `MUTANT-MATRIX-REMEASURE` line. Their exact grammar is the header of
-   `scripts/validate-fixture-hygiene.sh`. An arm token is one opaque id matching
-   `[A-Za-z0-9_.+-]+` (`+`: cell labels are `<dir>+<tag>`), no escaping, a dot only between
-   two other characters; a MUTANT NAME additionally admits `:`; whitespace and `=` are never in either;
-   `<label>.<cell>` is the form where one ok label scores several cells (H5 does not split it).
-3. **No unmutated control is re-run per mutant.** Run the control once and compare each mutant
-   against its output.
-4. **Build each world once and copy it.** A world constructed per assertion is a world built
-   many times.
-5. **Use the subject's cheap mode.** Where none exists for a one-piece question, add a seam
-   that calls the SAME function the subject calls, never a copy of it.
-6. **One end-to-end run per distinct outcome proves the wiring.** The remaining cells exercise
-   the function directly.
-7. **A fixture never SKIPs with exit 0 on a condition true in normal use**, such as a
-   linked-worktree `.git` or a missing declared tool. The skip reads as a pass. Exit 2 with
-   FIXTURE BROKEN instead.
+1. **One subject run per distinct state.** Assertions about one state read one run's output; they do not each re-run
+   the subject.
+2. Retired: no fixture carries a mutation battery.
+3. **No control is re-run per variant.** Run the control once and compare each variant against its output.
+4. **Build each world once and copy it.** A world constructed per assertion is a world built many times.
+5. **Use the subject's cheap mode.** Where none exists for a one-piece question, add a seam that calls the SAME
+   function the subject calls, never a copy of it.
+6. **One end-to-end run per distinct outcome proves the wiring.** The remaining cells exercise the function directly.
+7. **A fixture never SKIPs with exit 0 on a condition true in normal use**, such as a linked-worktree `.git` or a
+   missing declared tool. The skip reads as a pass. Exit 2 with FIXTURE BROKEN instead.
 
-Enforcement, stated honestly. Clauses 1 through 6 have ONE mechanism, the invocation budget
-(`scripts/validate-fixture-invocations.sh`, run inside `core/scripts/hermetic-run.sh`): it
-refuses the regrowth of a fixture's start count and does not attribute it to a clause. Clause
-2's header block is checked for shape, not truth, by `scripts/validate-fixture-hygiene.sh` arm
-H5; that the recorded matrix is the measured one is the integrator's check against the matrix
-run. Clause 7 is held by that validator's H1, H2 and H3.
+Clauses 1 and 3 through 6 have one mechanism, the invocation budget (`scripts/validate-fixture-invocations.sh`, run
+inside `core/scripts/hermetic-run.sh`): it refuses the regrowth of a fixture's start count. Clause 7 is held by
+`scripts/validate-fixture-hygiene.sh` arms H1, H2 and H3.

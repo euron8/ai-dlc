@@ -25,21 +25,8 @@
 # after-the-one-shot dispatch of the wrong role. A seeded world written by hand alone found none
 # of batch 145's discriminating cases; the epoch row here is not the subject (S313 has 106 rows).
 #
-# THE OLD MUTATION BATTERY HAS BEEN RETIRED. One mutant is scored here, of the --probe-from-caller seam.
-# Per push it runs on its DECIDING arm plus one TWIN that must stay green; the full mutant x arm
-# matrix is MEASURED by the --matrix argv mode. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. The recorded
-# matrix plus the twin replaces an exact-vector assertion of every arm.
-# MUTANT-MATRIX SEAM-INVERTED decides=SEAM-mutant twins=SEAM-verdict
-# MUTANT-MATRIX PROBE-STUB decides=PROBE-refuses twins=PROBE-seam-skip
-# MUTANT-MATRIX st-nostate decides=NET-frozen twins=NET-changing
-# MUTANT-MATRIX st-noconfirm decides=NET-changing twins=NET-frozen
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/fold-architect-ledger-join/run.sh --matrix
 set -uo pipefail
 
-MATRIX=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
-MROWS=0
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -95,12 +82,6 @@ stood=0
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 sd()  { printf '  --    %s\n' "$1"; stood=$((stood+1)); }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-. "$HERE/../lib/matrix.sh" || { echo "FIXTURE ERROR: lib/matrix.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 . "$HERE/../lib/settled-net.sh" || { echo "FIXTURE ERROR: lib/settled-net.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/settled-net.sh"
 
@@ -543,7 +524,6 @@ else
     ok "[NET-e2e] a self-stopped subject is refused (net rc 2) and its tree reaped; a subject that exits (rc 3) is not refused"
   else bad "[NET-e2e] the settled-tree net: stopped stub rc=$st_e2e left=[$st_left], exiting stub rc=$st_e2t recorded=$(cat "$WORK/st-exit.rc" 2>/dev/null)"; fi
 fi
-B_NET=0
 
 # THE NET'S TWO GUARDS, EACH WITH A SUBJECT THE OTHER CANNOT SEE. A copy of lib/settled-net.sh
 # is driven over SCRIPTED trees (st_alive/st_members replaced, pacing a no-op), so each cell is a
@@ -569,28 +549,8 @@ st_cells() { # <block file> -> "<frozen rc><changing rc><stuck rc>"
 cp "$HERE/../lib/settled-net.sh" "$WORK/st-block.sh"
 grep -q '^st_net()' "$WORK/st-block.sh" || { echo "FIXTURE BROKEN: lib/settled-net.sh holds no st_net" >&2; exit 2; }
 ST_BASE="$(st_cells "$WORK/st-block.sh")"
-if [ "$ST_BASE" = 002 ]; then ok "[NET-cells] the cut net reads frozen-running 0, changing-settled 0, stuck 2"; B_NET=1
+if [ "$ST_BASE" = 002 ]; then ok "[NET-cells] the cut net reads frozen-running 0, changing-settled 0, stuck 2"
 else bad "[NET-cells] the cut net read '$ST_BASE', want 002"; fi
-st_mut() { # <name> <sed> <want vector> <claim>
-  sed "$2" "$WORK/st-block.sh" > "$WORK/st-$1.sh"
-  if cmp -s "$WORK/st-block.sh" "$WORK/st-$1.sh"; then bad "[NET-$1] mutant DID NOT APPLY"; return; fi
-  local got; got="$(st_cells "$WORK/st-$1.sh")"
-  if [ "$MATRIX" = 1 ]; then
-    local i=0 c v
-    for c in NET-frozen NET-changing NET-stuck; do
-      v="$(printf '%s' "$got" | cut -c$((i + 1)))"; i=$((i + 1))
-      if [ "$v" = "$(printf '%s' "$ST_BASE" | cut -c"$i")" ]; then matrix_row "$1" "$c" "$v" GREEN no; else matrix_row "$1" "$c" "$v" TRIPPED yes; fi
-      MROWS=$((MROWS + 1))
-    done
-  fi
-  if [ "$got" = "$3" ]; then
-    if [ "$1" = st-nostate ]; then mutant_killed "${B_NET:-0}" st-nostate "[NET-$1] $4 (cells $got, base 002)"
-    else mutant_killed "${B_NET:-0}" st-noconfirm "[NET-$1] $4 (cells $got, base 002)"; fi
-  else bad "[NET-$1] mutant read '$got', want '$3'"; fi
-}
-st_mut st-nostate 's/\$2 !~ \/\^\[SIT\]\/ || //' 202 "a net that ignores process STATE refuses a running tree that merely shows no change"
-st_mut st-noconfirm 's/\[ "\$prev" = "\$sz|\$cur" \] && return 2/return 2/' 022 "a net that refuses on ONE settled poll refuses a tree whose members are still changing"
-
 for flag in --ledger --sprint --settings --probe --variant --route --snapshot; do
   o="$WORK/d6${flag}.out"; s="$WORK/d6${flag}.rc"
   d6_metered "$o" "$s" bash "$VSL" --fold-architect "$WORK/x/fold-architecture-z.md" "$WORK/x/bug-fix-oneshot-z.md" "$flag"
@@ -943,78 +903,27 @@ expect Dc-reader-lives 2 "FAIL: variant disagreement: snapshot says carry-over, 
 mkworld 313; oneshot "$SLOT/$ONE"
 ( cd "$W" && bash "$VSL" --probe-from-caller --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s1.seam" 2>&1
 ( cd "$W" && bash "$VSL" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s1.e2e" 2>&1
-# B_SEAM, the base flag both seam mutants are gated on, is raised only by this arm's pass (BL-828): the
-# unmutated gate carries the banner on the seam run and none end to end.
-B_SEAM=0
 if [ "$(sed -n 1p "$WORK/s1.seam")" = "$SEAM_BANNER" ] && [ "$(sed -n 2p "$WORK/s1.seam")" = "$(sed -n 1p "$WORK/s1.e2e")" ] \
    && ! grep -qF 'PROBE-SKIPPED-BY-CALLER' "$WORK/s1.e2e"; then
-  ok "[SEAM-banner] --probe-from-caller prints the banner as line 1 and then the gate's own verdict; the end-to-end run carries no banner"; B_SEAM=1
+  ok "[SEAM-banner] --probe-from-caller prints the banner as line 1 and then the gate's own verdict; the end-to-end run carries no banner"
 else bad "[SEAM-banner] --probe-from-caller banner on the seam run and none end to end -- seam1='$(sed -n 1p "$WORK/s1.seam")' e2e1='$(sed -n 1p "$WORK/s1.e2e")'"; fi
 
 # S2 (no shipped caller passes --probe-from-caller) lives in derived-fence-binding, which is
 # .dist-only and seeds core/ and scripts/ whole; this fixture ships and cannot declare them.
 
-# S3, THE MUTANT: the flag test inverted, so the probe is skipped WITHOUT the flag. Built in a copy
-# of the whole scripts directory (the subject resolves siblings beside itself), guarded by cmp -s.
-# An end-to-end run of it carries the banner, which the real gate never does -- the arm dies here.
-MUTD="$WORK/mutsd"; mkdir -p "$MUTD"; cp "$SD"/*.sh "$MUTD"/
-sed 's/"\${FA_SKIP_PROBE:-0}" = 1/"${FA_SKIP_PROBE:-0}" != 1/' "$VSL" > "$MUTD/validate-spawn-ledger.sh"
-if cmp -s "$VSL" "$MUTD/validate-spawn-ledger.sh"; then echo "FIXTURE BROKEN: the SEAM mutant's sed did not apply" >&2; exit 1; fi
-[ -f "$MUTD/validate-provenance-block.sh" ] || { echo "FIXTURE BROKEN: the mutant copy lacks its sibling" >&2; exit 1; }
-( cd "$W" && bash "$MUTD/validate-spawn-ledger.sh" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s3.mut" 2>&1
-# Cells. SEAM-mutant: the end-to-end run of the mutant carries the banner. SEAM-verdict (the twin): with
-# the banner line dropped, the mutant's output equals the real end-to-end output, so the verdict itself is intact.
-c_mutant=0; [ "$(sed -n 1p "$WORK/s3.mut")" = "$SEAM_BANNER" ] && c_mutant=1
-c_verdict=0; [ "$(sed 1d "$WORK/s3.mut")" = "$(cat "$WORK/s1.e2e")" ] && c_verdict=1
-# S4, THE SECOND MUTANT: fa_self_probe stubbed to FAIL, in a copy of the shipped script. The gate must
-# refuse (exit 2) because its probe did not hold; a gate whose probe call was deleted, or whose probe was
-# stubbed to succeed, would answer rc 0 here and survive S1 and S3. The twin is the same stub driven WITH
-# the flag: the probe is skipped, so the stubbed probe is never reached and the run stays rc 0 with a banner.
-cp "$SD"/*.sh "$MUTD"/
-awk '$0 == "fa_self_probe() {" { print "fa_self_probe() { return 1; }"; print "fa_self_probe_unused() {"; next } { print }' "$VSL" > "$MUTD/validate-spawn-ledger.sh"
-if cmp -s "$VSL" "$MUTD/validate-spawn-ledger.sh"; then echo "FIXTURE BROKEN: the PROBE-STUB mutant's awk did not apply" >&2; exit 1; fi
 FOLDARGS=(--fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl")
-( cd "$W" && bash "$MUTD/validate-spawn-ledger.sh" "${FOLDARGS[@]}" $VARF ) > "$WORK/s4.e2e" 2>&1; s4rc=$?
-( cd "$W" && bash "$MUTD/validate-spawn-ledger.sh" --probe-from-caller "${FOLDARGS[@]}" $VARF ) > "$WORK/s4.seam" 2>&1; s4src=$?
-( cd "$W" && bash "$VSL" "${FOLDARGS[@]}" $VARF >/dev/null 2>&1 ); real_rc=$?
-c_stub=0; [ "$s4rc" = 2 ] && grep -qF 'the fold-architect self-probe did not hold' "$WORK/s4.e2e" && c_stub=1
-c_stubtwin=0; [ "$s4src" = "$real_rc" ] && [ "$(sed -n 1p "$WORK/s4.seam")" = "$SEAM_BANNER" ] && c_stubtwin=1
 # ENV: an inherited FA_SKIP_PROBE must not skip the probe. The end-to-end run under it equals the plain one.
 ( cd "$W" && env FA_SKIP_PROBE=1 bash "$VSL" "${FOLDARGS[@]}" $VARF ) > "$WORK/s5.env" 2>&1
 c_env=0; [ "$(sed -n 1p "$WORK/s5.env")" != "$SEAM_BANNER" ] && cmp -s "$WORK/s5.env" "$WORK/s1.e2e" && c_env=1
 # NONFOLD: the flag outside fold mode is a usage fault.
 ( cd "$W" && bash "$VSL" --probe-from-caller --ledger "$W/_bmad-output/spawn-ledger.jsonl" --sprint 313 --settings "$W/none.json" ) > "$WORK/s6.nf" 2>&1; nfrc=$?
 c_nf=0; [ "$nfrc" = 2 ] && grep -qF -- '--probe-from-caller applies to --fold-architect only' "$WORK/s6.nf" && c_nf=1
-if [ "$MATRIX" = 1 ]; then
-  s1rc=0
-  kd() { [ "$1" = 1 ] && echo yes || echo no; }
-  matrix_row SEAM-INVERTED SEAM-mutant 0 "$([ "$c_mutant" = 1 ] && echo TRIPPED || echo GREEN)" "$(kd "$c_mutant")"
-  matrix_row SEAM-INVERTED SEAM-verdict 0 "$([ "$c_verdict" = 1 ] && echo GREEN || echo TRIPPED)" "$([ "$c_verdict" = 1 ] && echo no || echo yes)"
-  matrix_row PROBE-STUB PROBE-refuses "$s4rc" "$([ "$c_stub" = 1 ] && echo TRIPPED || echo GREEN)" "$(kd "$c_stub")"
-  matrix_row PROBE-STUB PROBE-seam-skip "$s4src" "$([ "$c_stubtwin" = 1 ] && echo GREEN || echo TRIPPED)" "$([ "$c_stubtwin" = 1 ] && echo no || echo yes)"
-  MROWS=$((MROWS + 4))
-fi
-if [ "$c_stub" = 1 ]; then
-  mutant_killed "$B_SEAM" PROBE-STUB "[PROBE-refuses] a gate whose self-probe fails refuses with exit 2 and says so end to end; a gate that skipped or deleted the probe call would answer rc 0"
-else bad "[PROBE-refuses] PROBE-STUB SURVIVED: a stubbed-to-fail probe did not make the end-to-end run exit 2 -- rc=$s4rc"; fi
-if [ "$c_stubtwin" = 1 ]; then ok "[PROBE-seam-skip] twin of PROBE-STUB stays green: with the flag the stubbed probe is never reached (banner, rc $s4src)"
-else bad "[PROBE-seam-skip] the twin tripped: the stubbed probe was reached under the flag, rc=$s4src"; fi
 if [ "$c_env" = 1 ]; then ok "[SEAM-env] an inherited FA_SKIP_PROBE=1 with no flag does NOT skip the probe: no banner, output identical to the plain end-to-end run"
 else bad "[SEAM-env] FA_SKIP_PROBE=1 in the environment changed the end-to-end run -- line 1='$(sed -n 1p "$WORK/s5.env")'"; fi
 if [ "$c_nf" = 1 ]; then ok "[SEAM-nonfold] --probe-from-caller outside --fold-architect exits 2 with a usage message"
 else bad "[SEAM-nonfold] --probe-from-caller outside fold mode -- rc=$nfrc"; fi
-if [ "$c_mutant" = 1 ]; then
-  mutant_killed "$B_SEAM" SEAM-INVERTED "[SEAM-mutant] a gate that skips its self-probe WITHOUT the flag is caught: its end-to-end run carries the banner, the real one does not"
-else bad "[SEAM-mutant] SEAM-INVERTED SURVIVED: a gate skipping the probe without the flag -- mutant line 1='$(sed -n 1p "$WORK/s3.mut")'"; fi
-if [ "$c_verdict" = 1 ]; then ok "[SEAM-verdict] twin of SEAM-INVERTED stays green: the mutant's verdict (banner dropped) equals the real end-to-end output"
-else bad "[SEAM-verdict] the twin tripped: the mutant changed more than the banner"; fi
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
-else
-  if [ "$MROWS" -eq 10 ]; then ok "[MX] the matrix run measured 10 cells for the 4 mutants"; else bad "[MX] matrix rows=$MROWS, 10 expected"; fi
-fi
 
 # --- verdict ---------------------------------------------------------------------------------
-EXPECTED_ARMS=86
+EXPECTED_ARMS=79
 echo "fold-architect-ledger-join: $stood stood down"
 report_end fold-architect-ledger-join "$((EXPECTED_ARMS - stood))"

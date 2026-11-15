@@ -25,15 +25,11 @@
 # against both hooks. That establishes a line EXISTS. It cannot establish that the
 # line executes, that it executes in the PARENT shell, or that it executes BEFORE
 # the dispatch — and textual line order is not execution order in a file that
-# defines functions at the top and invokes them at the bottom. The
-# `scrub-after-dispatch` near-miss below SATISFIES that regex exactly once and
-# still corrupts the repository, which is the whole of the difference.
+# defines functions at the top and invokes them at the bottom.
 #
 # WHAT IT DRIVES. The shipping hook itself, run end to end, in a sandbox that is a
 # real repository with a real linked worktree, with GIT_DIR exported the way git
-# exports it. Nothing here re-implements the hook. Every mutant is a COPY guarded
-# by `cmp -s`, and the UNMUTATED copy is driven in the same battery through the
-# same harness, so a harness that broke cannot let a mutant score a kill.
+# exports it. Nothing here re-implements the hook.
 #
 # BOTH SUBJECTS, NAMED FROM THIS FIXTURE'S OWN LOCATION. install.sh splits what
 # shares a parent in this repo: the hook a consumer runs is `core/git-hooks/pre-push`
@@ -49,34 +45,7 @@
 # absolute from there; nothing below reads the process working directory. The
 # suite runs this from the repository root; it behaves identically from its own
 # directory.
-#
-# THE MUTANT MATRIX. A cell is one reading of a finished drive: A1 (the dispatched worker saw no GIT_DIR), A2 (the
-# real repository was not corrupted) or ran (the probe fixture was dispatched), RED on a drive when that reading
-# fails. A mutant's row names the cell that kills it (decides) and the cell it could plausibly co-trip but must
-# leave GREEN (twins). A1 also goes RED on every mutant, since each lets GIT_DIR reach the worker; it is a second
-# killer, not a twin, and shows in the others= figure of the REMEASURE command. A plain run scores each mutant on its
-# deciding cell and its twin only, off the one drive it already makes; every mutant is named <subject>-<variant>
-# (s1 the distribution runner, s2 the consumer hook). The matrix is re-measured as .claude/rules/fixture-mutants.md
-# clause 2 ("One run per distinct state") requires. Run the REMEASURE command below, from the repo root. It scores
-# every mutant on every cell.
-# MUTANT-MATRIX s1-no-scrub decides=A2 twins=ran
-# MUTANT-MATRIX s1-comment-only decides=A2 twins=ran
-# MUTANT-MATRIX s1-scrub-after-dispatch decides=A2 twins=ran
-# MUTANT-MATRIX s2-no-scrub decides=A2 twins=ran
-# MUTANT-MATRIX s2-comment-only decides=A2 twins=ran
-# MUTANT-MATRIX s2-scrub-after-dispatch decides=A2 twins=ran
-# MUTANT-MATRIX s1-stop-early decides=rec,skip twins=blocked
-# MUTANT-MATRIX-DYNAMIC variant-loop why=the three variants are one loop body driven once per subject, so each mutant id is built as <slug>-<variant>; every name it produces has its own row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-worktree-env-scrub/run.sh --matrix
 set -uo pipefail
-# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed below. Anything else
-# as an argument is a usage error, never a silent plain run.
-MODE=plain
-case "${1:-}" in
-  "") ;;
-  --matrix) MODE=matrix ;;
-  *) echo "prepush-worktree-env-scrub: usage: run.sh [--matrix]" >&2; exit 2 ;;
-esac
 
 # HERMETICITY, in both of the directions that can lie here.
 #
@@ -94,7 +63,6 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../lib/hook-drive.sh" || { echo "FIXTURE BROKEN: cannot source lib/hook-drive.sh" >&2; exit 2; }
-SELF_FILE="$HERE/${0##*/}"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() {
@@ -102,12 +70,6 @@ broken() {
   echo "prepush-worktree-env-scrub: FIXTURE BROKEN" >&2
   exit 2
 }
-# The shared mutant-kill helper: a kill is emitted only through mutant_killed, behind a same-run base-pass flag.
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || broken "no lib/mutant.sh beside $HERE"
-# shellcheck source=/dev/null
-. "$MUT_LIB"
-
 echo "prepush-worktree-env-scrub:"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/prepush-worktree-env-scrub.XXXXXX")" || broken "mktemp failed"
@@ -132,11 +94,6 @@ if [ -f "$SUBJ_PATH_1" ] && [ ! -f "$SUBJ_PATH_2" ]; then
   SUBJ_FXDIR_1="tests/fixtures"
   SUBJ_LABEL_1=".githooks/pre-push (installed consumer hook)"
 fi
-
-# The token every mutation below is keyed on, and the regex the receipt this replaces
-# used. Held in one place so the near-miss arm can state what it satisfies.
-ANCHOR_RE='^[[:space:]]*unset[[:space:]].*GIT_OBJECT_DIRECTORY'
-SCRUB_LINE='unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY'
 
 # ------------------------------------------------------------------ the harness --
 # seed_and_drive <tag> <hook-source> <fixture-dir> <variant>
@@ -177,18 +134,6 @@ seed_and_drive() {
   case "$variant" in
     pristine)
       cp "$hooksrc" "$hookfile" || return 1
-      ;;
-    no-scrub)
-      awk '!/^unset .*GIT_OBJECT_DIRECTORY/' "$hooksrc" > "$hookfile" || return 1
-      ;;
-    comment-only)
-      awk '{ if ($0 ~ /^unset .*GIT_OBJECT_DIRECTORY/)
-               print "# we deliberately do not unset GIT_OBJECT_DIRECTORY here"
-             else print }' "$hooksrc" > "$hookfile" || return 1
-      ;;
-    scrub-after-dispatch)
-      { awk '!/^unset .*GIT_OBJECT_DIRECTORY/' "$hooksrc"; printf '%s\n' "$SCRUB_LINE"; } \
-        > "$hookfile" || return 1
       ;;
     *) return 1 ;;
   esac
@@ -241,92 +186,24 @@ corrupted() {
 
 probe_ran() { [ -f "$WORK/$1/probe.ran" ]; }
 
-# --- THE MATRIX CELLS, single-sourced. A cell is one reading of a finished drive <tag>; it is RED when the reading
-# fails. cell_red <cell> <tag> returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
-#   A1   the dispatched worker saw no GIT_DIR      (RED: it inherited one)
-#   A2   the real repository is untouched          (RED: the probe's sandbox commit landed on it)
-#   ran  the probe fixture was dispatched          (RED: it never ran)
-#   rec, skip, blocked   the BL-1048 receipt's cells, defined at rcpt_red below
-MX_CELLS='A1 A2 ran rec skip blocked'
-cell_red() {
-  case "$1" in
-    A1)  [ "$(cat "$WORK/$2/probe.gitdir" 2>/dev/null)" != "<unset>" ] ;;
-    A2)  corrupted "$2" ;;
-    ran) ! probe_ran "$2" ;;
-    rec|skip|blocked) rcpt_red "$1" "$2" ;;
-    *)   return 2 ;;
-  esac
-}
-# The header IS the decides/twins list: nothing else in this file restates it.
-mx_row() { # mx_row <mutant> <decides|twins>
-  awk -v n="$1" -v f="$2" '
-    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
-      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
-    }
-    END { if (c == 1) print v }' "$SELF_FILE"
-}
-MXL="$WORK/mx.ledger"; : > "$MXL"
-MX_SEEN=""; MX_FAILS=0
-# mx_twins <mutant> <tag>: per-push, every twin cell must stay GREEN on the SAME drive the kill read.
-mx_twins() {
-  local m="$1" tag="$2" tw t r
-  tw="$(mx_row "$m" twins)"
-  [ -n "$tw" ] || broken "$m: no single MUTANT-MATRIX row names its twins"
-  printf 'plain-twins %s\n' "$m" >> "$MXL"
-  for t in $(printf '%s' "$tw" | tr ',' ' '); do
-    cell_red "$t" "$tag"; r=$?
-    if [ "$r" -eq 2 ]; then broken "$m: twin $t names no cell"
-    elif [ "$r" -eq 0 ]; then bad "$m: its twin $t also went RED on this mutant's drive, so the kill is not confined to its own cell"; fi
-  done
-}
-# mx_score <mutant> <tag>: MATRIX-ONLY. Scores the finished drive against EVERY cell. It records itself in the
-# ledger first (rule 9).
-mx_score() {
-  local m="$1" tag="$2" dec tw c dl="" tl="" uex="" g=0 tot=0
-  printf 'mx-score %s\n' "$m" >> "$MXL"
-  MX_SEEN="$MX_SEEN $m"
-  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
-  for c in $(printf '%s' "$dec" | tr ',' ' '); do
-    if cell_red "$c" "$tag"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
-  done
-  for c in $(printf '%s' "$tw" | tr ',' ' '); do
-    if cell_red "$c" "$tag"; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
-  done
-  for c in $MX_CELLS; do
-    case ",$dec,$tw," in *",$c,"*) continue ;; esac
-    tot=$((tot + 1)); cell_red "$c" "$tag" || g=$((g + 1))
-  done
-  if [ -n "$uex" ]; then
-    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
-    MX_FAILS=$((MX_FAILS + 1))
-  else
-    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
-  fi
-}
-
 # ------------------------------------------------------------------ the battery --
 exercised=0
 resolved_paths=""
 
 run_subject() { # run_subject <slug> <hook-source> <fixture-dir> <label>
   local slug="$1" hooksrc="$2" fxdir="$3" label="$4"
-  local n_anchor n_token kills=0
 
   case "$hooksrc" in
     /*) ;;
     *) broken "$label: subject path is not absolute ($hooksrc) — this fixture would read a different file from a different cwd" ;;
   esac
 
-  # PRINT THE FILE THIS BATTERY ACTUALLY RESOLVED. A fixture that names candidates in
-  # both install layouts can mutate a copy the run never loads: `cmp -s` is satisfied
-  # because the mutation applied cleanly, every arm stays green, and a mutant that
-  # killed nothing reads exactly like an arm that cannot fire. The resolved path is
-  # printed, the SAME path is what `seed_and_drive` copies into the sandbox, and the
-  # sandbox copy is what `bash` is handed by absolute path — so the file mutated and
-  # the file executed are one file by construction, not by convention.
+  # PRINT THE FILE THIS RUN ACTUALLY RESOLVED. The resolved path is printed, the SAME
+  # path is what `seed_and_drive` copies into the sandbox, and the sandbox copy is what
+  # `bash` is handed by absolute path.
   printf '  ..    %s: RESOLVED %s\n' "$label" "$hooksrc"
 
-  # AND THE SAME SUBJECT MUST NOT BE BATTERED TWICE. Two candidates that resolved to
+  # AND THE SAME SUBJECT MUST NOT BE DRIVEN TWICE. Two candidates that resolved to
   # one file would print two sets of greens over one hook and leave the other
   # unguarded — a coverage claim of 2 backed by 1.
   case "$resolved_paths" in
@@ -335,16 +212,16 @@ run_subject() { # run_subject <slug> <hook-source> <fixture-dir> <label>
   resolved_paths="$resolved_paths|$hooksrc|"
 
   seed_and_drive "$slug-pristine" "$hooksrc" "$fxdir" pristine \
-    || broken "$label: could not seed or drive the UNMUTATED hook"
+    || broken "$label: could not seed or drive the shipped hook"
 
   # THE CONTROL, AND IT COMES FIRST. The pristine arm below is absence-shaped: it
   # claims the repository was not touched. A probe that was never dispatched leaves
   # exactly the same evidence, so establish the dispatch happened before reading the
   # absence.
   if probe_ran "$slug-pristine"; then
-    ok "$label: the probe fixture WAS dispatched by the unmutated hook (the absence arm below has a subject)"
+    ok "$label: the probe fixture WAS dispatched by the shipped hook (the absence arm below has a subject)"
   else
-    broken "$label: the unmutated hook never dispatched the probe fixture — every arm below would pass over a hook that ran nothing. Hook log: $WORK/$slug-pristine/hook.log"
+    broken "$label: the shipped hook never dispatched the probe fixture — every arm below would pass over a hook that ran nothing. Hook log: $WORK/$slug-pristine/hook.log"
   fi
 
   # A1. With the scrub present, the dispatched worker sees no GIT_DIR at all. This is
@@ -357,86 +234,9 @@ run_subject() { # run_subject <slug> <hook-source> <fixture-dir> <label>
 
   # A2. The consequence: the real repository is exactly as the drive found it.
   if corrupted "$slug-pristine"; then
-    bad "$label: the probe's sandbox commit landed on the REAL repository under an UNMUTATED hook"
+    bad "$label: the probe's sandbox commit landed on the REAL repository under the shipped hook"
   else
     ok "$label: the real repository is untouched — HEAD $(cut -c1-8 < "$WORK/$slug-pristine/head.before") still at subject '$(cat "$WORK/$slug-pristine/subj.after")'"
-    # The base-pass flag for this subject's mutants, bound per subject and set only here, in the passing branch.
-    case "$slug" in
-      s1) B_a2_s1=1 ;;
-      s2) B_a2_s2=1 ;;
-    esac
-  fi
-
-  # AND IF THE SUBJECT IS ALREADY BROKEN, THE MUTANTS ARE MOOT AND SAYING SO IS NOT
-  # OPTIONAL. Mutating a hook that already lacks the scrub produces a byte-identical
-  # file, `cmp -s` refuses it, and the fixture would exit 2 shouting FIXTURE BROKEN —
-  # which reads as a defect in this harness rather than in the subject, the exact
-  # misreading a red suite can least afford. The mutants exist to prove this arm
-  # discriminates; an arm that just fired on the unmutated subject has proved that.
-  if corrupted "$slug-pristine"; then
-    printf '  ..    %s: mutant battery NOT run — the unmutated subject already redirects the sandbox commit, so no mutation of it could discriminate. The arm above already fired.\n' "$label"
-    exercised=$((exercised + 1))
-    return 0
-  fi
-
-  # A3-A5. Three mutants, each a copy, each guarded by `cmp -s` BEFORE its verdict is
-  # read — a `sed`/`awk` that matched nothing produces a byte-identical file, and a
-  # differential whose two sides are the same program reads as "no regression".
-  for variant in no-scrub comment-only scrub-after-dispatch; do
-    seed_and_drive "$slug-$variant" "$hooksrc" "$fxdir" "$variant" \
-      || broken "$label/$variant: could not seed or drive the mutant"
-
-    if cmp -s "$hooksrc" "$WORK/$slug-$variant/wt/.githooks/pre-push"; then
-      broken "$label/$variant: the mutation produced a BYTE-IDENTICAL file. Both sides of this differential are the same program, so the comparison below would report agreement whatever the subject does."
-    fi
-
-    if ! probe_ran "$slug-$variant"; then
-      broken "$label/$variant: the mutant never dispatched the probe fixture, so its failure below would be an artefact of the mutation rather than the defect"
-    fi
-
-    # The near-miss controls carry their own claim about what a TEXT anchor would
-    # have said, because that is the entire reason they are here.
-    if [ "$variant" = comment-only ]; then
-      n_token="$(grep -c 'GIT_OBJECT_DIRECTORY' "$WORK/$slug-$variant/wt/.githooks/pre-push" 2>/dev/null)"
-      case "$n_token" in ''|*[!0-9]*) n_token=0 ;; esac
-      if [ "$n_token" -ge 1 ]; then
-        ok "$label/$variant: the near-miss still CARRIES the token GIT_OBJECT_DIRECTORY ($n_token line(s)) — a token-presence check would accept it"
-      else
-        broken "$label/$variant: the comment-only near-miss does not carry the token, so it is not a near-miss for anything"
-      fi
-    fi
-    if [ "$variant" = scrub-after-dispatch ]; then
-      n_anchor="$(grep -cE "$ANCHOR_RE" "$WORK/$slug-$variant/wt/.githooks/pre-push" 2>/dev/null)"
-      case "$n_anchor" in ''|*[!0-9]*) n_anchor=0 ;; esac
-      if [ "$n_anchor" -eq 1 ]; then
-        ok "$label/$variant: the near-miss SATISFIES the presence-only receipt regex exactly once, with the scrub moved below the dispatch"
-      else
-        broken "$label/$variant: expected the presence-only regex to match exactly once and it matched $n_anchor — this near-miss is not exercising the presence-vs-execution distinction it exists for"
-      fi
-    fi
-
-    kmsg="$label/$variant: the probe's sandbox commit landed on the REAL repository (worktree HEAD moved to 'PROBE-SANDBOX-COMMIT') — scored"
-    if corrupted "$slug-$variant"; then
-      case "$slug" in
-        s1) mutant_killed "${B_a2_s1:-0}" "$slug-$variant" "$kmsg" && kills=$((kills + 1)) ;;
-        s2) mutant_killed "${B_a2_s2:-0}" "$slug-$variant" "$kmsg" && kills=$((kills + 1)) ;;
-      esac
-    else
-      bad "$label/$variant: SURVIVED. With the scrub $variant the sandbox commit should have been redirected onto the repository under test and it was not. This arm cannot distinguish a fixed hook from a broken one, so it is asserting nothing."
-    fi
-    mx_twins "$slug-$variant" "$slug-$variant"
-    if [ "$MODE" = matrix ]; then mx_score "$slug-$variant" "$slug-$variant"; fi
-  done
-
-  # THE KILL COUNT IS THE ARM THAT WATCHES THE OTHER ARMS. Three mutants that all
-  # SURVIVE is the signature of a battery mutating a file the run never loads: every
-  # mutation applied, `cmp -s` was satisfied, and the subject under test was some
-  # other copy. Zero kills is therefore not "the hook is very robust" — it is this
-  # fixture having established nothing about this subject.
-  if [ "$kills" -gt 0 ]; then
-    ok "$label: kill count $kills of 3 — the battery reached the file it resolved ($hooksrc)"
-  else
-    bad "$label: kill count ZERO of 3. Every mutation applied cleanly and none changed the outcome, which is what mutating a file the run never loaded looks like. Resolved: $hooksrc"
   fi
 
   exercised=$((exercised + 1))
@@ -469,19 +269,15 @@ fi
 #   rec      drive 1 ran aaa-rec ok and left exactly one store entry       (RED: the pool did not run or record)
 #   skip     drive 2 skipped aaa-rec on that entry and did not re-run it    (RED: the pass was not reused)
 #   blocked  drive 1 exited non-zero and said BLOCKED                      (RED: the red did not hold the push)
-# The mutant s1-stop-early is a copy of the hook whose fixture_suite_step returns 1 on any red step, as before.
 # On a consumer the receipt is not run: the consumer hook has no step above its suite that this could stop.
 RC_HR="$HERE/../../scripts/hermetic-run.sh"
 RC_CP="$HERE/../../scripts/core-paths.sh"
-rcpt_drive() { # <tag> <hook-source> <pristine|stop-early>
+rcpt_drive() { # <tag> <hook-source> <pristine>
   local w="$WORK/$1/w" h
   mkdir -p "$w/.githooks" "$w/core/scripts" "$w/core/fixtures/aaa-rec" "$w/lib" "$w/scripts" || return 1
   h="$w/.githooks/pre-push"
   case "$3" in
     pristine) cp "$2" "$h" || return 1 ;;
-    stop-early)
-      awk '{ if (!d && /^fixture_suite_step\(\) \{$/) { print; print "  if [ -n \"${RED_STEPS:-}\" ]; then return 1; fi"; d = 1; next } print }' \
-        "$2" > "$h" || return 1 ;;
     *) return 1 ;;
   esac
   cp "$RC_HR" "$RC_CP" "$w/core/scripts/" || return 1
@@ -517,7 +313,7 @@ rcpt_red() { # <cell> <tag>: 0 RED, 1 GREEN
 if [ -f "$SUBJ_PATH_1" ] && [ -f "$SUBJ_PATH_2" ]; then
   [ -f "$RC_HR" ] && [ -f "$RC_CP" ] || broken "BL-1048 receipt: core/scripts/hermetic-run.sh or core-paths.sh is not beside $HERE/../.."
   RC_HOOK="$(cd "$(dirname "$SUBJ_PATH_1")" && pwd -P)/$(basename "$SUBJ_PATH_1")"
-  rcpt_drive rc-pristine "$RC_HOOK" pristine || broken "BL-1048 receipt: could not seed or drive the unmutated hook"
+  rcpt_drive rc-pristine "$RC_HOOK" pristine || broken "BL-1048 receipt: could not seed or drive the shipped hook"
   # The control: drive 2 is the red FIXED, so it must exit 0; a harness that died would not.
   [ "$(cat "$WORK/rc-pristine/rc.2")" = 0 ] || broken "BL-1048 receipt: the re-push with the red fixed exited $(cat "$WORK/rc-pristine/rc.2"), so the world itself is red. Log: $WORK/rc-pristine/log.2"
   if rcpt_red blocked rc-pristine; then bad "BL-1048 blocked: a red step did not hold the push (rc $(cat "$WORK/rc-pristine/rc.1"); BLOCKED required)"
@@ -528,14 +324,7 @@ if [ -f "$SUBJ_PATH_1" ] && [ -f "$SUBJ_PATH_2" ]; then
   if rcpt_red rec rc-pristine; then bad "BL-1048 rec: under a red step the suite did not run aaa-rec and record its pass ($(cat "$WORK/rc-pristine/n1") store entries)"
   else ok "BL-1048 rec: under a red step the suite ran aaa-rec and its pass is in the verdict store"; fi
   if rcpt_red skip rc-pristine; then bad "BL-1048 skip: the re-push with the red fixed did not skip aaa-rec on the recorded pass"
-  else ok "BL-1048 skip: the re-push with the red fixed skipped aaa-rec on the pass the red push recorded"; B_rc=1; fi
-  rcpt_drive rc-stop "$RC_HOOK" stop-early || broken "BL-1048 receipt: could not seed or drive the stop-early mutant"
-  cmp -s "$RC_HOOK" "$WORK/rc-stop/w/.githooks/pre-push" && broken "BL-1048 receipt: the stop-early mutant is byte-identical to the hook"
-  if rcpt_red rec rc-stop && rcpt_red skip rc-stop; then
-    mutant_killed "${B_rc:-0}" s1-stop-early "BL-1048: with the stop-early return restored the red push records nothing and the re-push re-runs aaa-rec -- scored"
-  else bad "s1-stop-early SURVIVED: restoring the stop-early return left a store entry or a skip"; fi
-  mx_twins s1-stop-early rc-stop
-  if [ "$MODE" = matrix ]; then mx_score s1-stop-early rc-stop; fi
+  else ok "BL-1048 skip: the re-push with the red fixed skipped aaa-rec on the pass the red push recorded"; fi
 else
   printf '  ..    BL-1048 receipt: not the distribution layout -- not exercised\n'
 fi
@@ -546,23 +335,5 @@ fi
   || broken "neither pre-push hook was found from $HERE (looked for ../../../.githooks/pre-push and ../../git-hooks/pre-push) — nothing was exercised"
 
 printf '  ..    subjects exercised: %s\n' "$exercised"
-
-# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
-# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
-# it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
-mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
-mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
-if [ "$MODE" = plain ]; then
-  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
-  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
-  else ok "rule-9: a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
-else
-  # The header must name exactly the mutants this layout scored (a consumer layout scores one subject only).
-  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
-  mx_all="s1-comment-only s1-no-scrub s1-scrub-after-dispatch s1-stop-early s2-comment-only s2-no-scrub s2-scrub-after-dispatch "
-  [ "$mx_hdr" = "$mx_all" ] || { echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; exit 2; }
-  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
-  fails=$((fails + MX_FAILS))
-fi
 
 report_end prepush-worktree-env-scrub

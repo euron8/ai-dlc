@@ -28,22 +28,11 @@
 # origin/main, and the snapshot's two open driver receipts (BL-868, BL-878) name scripts the seed does not carry;
 # at j1's own commit those drivers are absent at HEAD and at the base, so M1 counts them EXCLUDED and j1-m1x
 # asserts the VALUE `M1-EXCLUDED: 2`. Not the root commit: a root base would make every LANDED entry of the
-# snapshot an R8 close of this branch and run its receipt. The mutant m-j1-nobase drops --base, so L3 (d) fires and
-# the count reads 0; it is decided on a three-entry world (BL-868, BL-878 and j1's anchor; no size validator), not a second j1.
+# snapshot an R8 close of this branch and run its receipt.
 #
 # Usage: run.sh
 # Exit:  0 = both arms hold, 1 = one regressed, 2 = fixture broken.
-# The mutant x arm matrix is MEASURED by the --matrix argv mode. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. The recorded
-# matrix plus the twin replaces the exact-vector assertion.
-# MUTANT-MATRIX m-r9call decides=r9-call twins=j1-pop
-# MUTANT-MATRIX m-j1-nobase decides=j1-m1x twins=m1x-pop
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-real-ledger/run.sh --matrix
 set -u
-
-MATRIX=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
-MROWS=0
 
 # CLEAR EVERY AMBIENT AI_DLC_* KEY (I87): b16 passes its ceiling as a double-quoted `env` word,
 # which is not an assignment for the probes that do not set it.
@@ -56,7 +45,6 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 unset BR_RECEIPTS_RUNNING
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-[ -f "$DIR/../lib/mutant.sh" ] && [ -f "$DIR/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh or lib/matrix.sh not found" >&2; exit 2; }
 find_one() { # find_one <relative path>... -> the first candidate that is a file, both layouts
   local c
   for c in "$@"; do [ -f "$c" ] && { printf '%s' "$c"; return 0; }; done
@@ -92,11 +80,6 @@ rc=0
 note() { printf '%s\n' "$*"; }
 ok()  { note "ok    $1"; }
 bad() { note "FAIL  $1"; rc=1; }
-. "$DIR/../lib/mutant.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-. "$DIR/../lib/matrix.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
-B_R9=0
 
 # ===== p3: THE GATE NEVER NAMES A PROBE RECORD (BL-880). ===================================
 # scripts/validate-backlog-receipts.sh replays R1 and R7/R8 from a record only when its caller sets
@@ -406,7 +389,7 @@ if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ -n "$j1_arm" ]; then
   r9_want2="b16 the ceiling and the classifier agree at $(( b16_arm + 1 )) entries"
   r9_line="$(printf '%s\n' "$j1_out" | grep '^R9: ')" || r9_line=""
   if grep -qF "$r9_want" <<<"$r9_line" && grep -qF "$r9_want2" <<<"$r9_line" && grep -q '^R9: OK -- ' <<<"$r9_line"; then
-    ok "r9 -- the validator's live-ledger arm R9 ran in the world carrying the ceiling and agrees with this fixture ($j1_arm sh, $(( b16_arm + 1 )) entries)"; B_R9=1
+    ok "r9 -- the validator's live-ledger arm R9 ran in the world carrying the ceiling and agrees with this fixture ($j1_arm sh, $(( b16_arm + 1 )) entries)"
   else
     bad "r9 -- the validator's R9 line in the world carrying the ceiling is '${r9_line}', want R9: OK carrying '${r9_want}' and '${r9_want2}'"
   fi
@@ -415,98 +398,18 @@ if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ -n "$j1_arm" ]; then
   else
     bad "r9 -- the world with no size validator did not print R9: NOT RUN (got '$(printf '%s\n' "$j1p_anch_out" | grep '^R9' )')"
   fi
-  # m-r9call: the CALL SITE of R9 neutered (`r9_run; _r9_rc=$?` -> `_r9_rc=0`), in a copy of the j1 world
-  # that carries the ceiling. The call line is the only place R9 prints, so the mutated validator prints no
-  # `R9:` line at all; the r9 OK arm above is presence-shaped and is what decides. Twin j1-pop: the same
-  # mutated tree still prints a SUMMARY whose sh population equals the unmutated world's.
-  cp -R "$TMP/j1" "$TMP/r9m"
-  r9m_v="$TMP/r9m/scripts/validate-backlog-receipts.sh"
-  # r9_start, R9's first half (BL-1054), is neutered with it, so the mutated world starts no R9 program.
-  sed -e 's/^r9_run; _r9_rc=\$?$/_r9_rc=0/' -e 's/^r9_start$/:/' "$RECEIPTS" > "$r9m_v"
-  if [ "$(diff "$RECEIPTS" "$r9m_v" | grep -c '^>')" != 2 ]; then
-    note "FAIL  r9 m-r9call -- the call-site mutation DID NOT APPLY to both R9 call sites"; rc=1
-  else
-    r9m_out="$(run_r "" "$TMP/r9m" $J1_ARGS)"
-    r9m_sum="$(j1_read "$r9m_out")"
-    if ! grep -q '^R9: ' <<<"$r9m_out"; then
-      mutant_killed "$B_R9" m-r9call "m-r9call [r9-call]: with the R9 call site neutered the validator prints no R9 line at all"
-    else
-      bad "r9 m-r9call SURVIVED: the validator with its R9 call replaced still printed '$(printf '%s\n' "$r9m_out" | grep '^R9: ')'"
-    fi
-    if [ -n "$r9m_sum" ] && [ "${r9m_sum%% *}" = "$j1_arm" ]; then
-      ok "[j1-pop] twin of m-r9call stays green: the mutated validator still reads the sh population $j1_arm"
-    else
-      bad "[j1-pop] the twin TRIPPED: the mutated validator read '${r9m_sum}', want population $j1_arm"
-    fi
-    if [ "$MATRIX" = 1 ]; then
-      r9_t=GREEN; r9_k=no; grep -q '^R9: ' <<<"$r9m_out" || { r9_t=TRIPPED; r9_k=yes; }
-      j1p_t=GREEN; j1p_k=no; [ -n "$r9m_sum" ] && [ "${r9m_sum%% *}" = "$j1_arm" ] || { j1p_t=TRIPPED; j1p_k=yes; }
-      matrix_row m-r9call r9-call 0 "$r9_t" "$r9_k"
-      matrix_row m-r9call j1-pop 0 "$j1p_t" "$j1p_k"
-      MROWS=$(( MROWS + 2 ))
-    fi
-  fi
 fi
 
 # j1-m1x (BL-899, lead ruling A): the snapshot holds exactly TWO open receipts whose first command is `bash <P>` --
 # BL-868 (`bash scripts/check-no-provisional-invocations.sh`) and BL-878 (`bash scripts/validate-fixture-inprocess.sh
 # --complete`), derived by reading ledger.snapshot -- and seed_r carries neither script. With j1's --base at its own
 # commit both drivers are absent at HEAD and at the base, so M1 counts them EXCLUDED (L3 (b)).
-# m-j1-nobase: --base dropped, so L3 (d) fires (DRIVER-ABSENT-UNRESOLVED-BASE) and the count is 0 -- decided on the
-# smallest world that separates the two (below), not on a second full j1 run.
 M1X_WANT="M1-EXCLUDED: 2 open sh receipt(s) EXCLUDED-DRIVER-ABSENT-AT-BASE"
-B_M1X=0
 if grep -qF "$M1X_WANT" <<<"$j1_out"; then
-  ok "j1-m1x -- the validator counted BL-868 and BL-878 EXCLUDED-DRIVER-ABSENT-AT-BASE under j1's --base"; B_M1X=1
+  ok "j1-m1x -- the validator counted BL-868 and BL-878 EXCLUDED-DRIVER-ABSENT-AT-BASE under j1's --base"
 else
   bad "j1-m1x -- the M1 line is '$(printf '%s\n' "$j1_out" | grep '^M1-EXCLUDED' )', want '$M1X_WANT'"
 fi
-# THE SMALLEST WORLD THAT SEPARATES --base FROM NO --base: a seed_r repository whose ledger is the snapshot's two driver
-# entries (BL-868, BL-878, cut from ledger.snapshot by heading) plus j1's own anchor entry, and no size validator, so
-# R9 says NOT RUN. THE ANCHOR IS LOAD-BEARING: with only the two driver receipts every row is OUT-OF-POPULATION, R2
-# scores nothing and exits 1 at its ZERO-scored refusal (vbr_sec_corpus, before `M1-EXCLUDED` prints), which is why the
-# two-entry world printed no M1 line at all; the anchor's grep receipt is scored, so R2 passes and the run reaches the
-# M1 line. CONTROL j1nb-base: the same world WITH --base at its own commit prints `M1-EXCLUDED: 2`, or the world is
-# FIXTURE BROKEN and the mutant is not scored. Twin m1x-pop: the mutant's capture reads the sh population 3.
-seed_r "$TMP/j1nb"
-awk '/^## BL-/ { keep = ($2 == "BL-868" || $2 == "BL-878") } keep' "$REAL_LEDGER" > "$TMP/j1nb/docs/backlog.md"
-printf '\n## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1nb/docs/backlog.md"
-( cd "$TMP/j1nb" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m small >/dev/null 2>&1 )
-B_M1XS=0
-# shellcheck disable=SC2086
-j1nbb_out="$(run_r "" "$TMP/j1nb" $J1_ARGS --base "$(git -C "$TMP/j1nb" rev-parse HEAD)")"
-if grep -qF "$M1X_WANT" <<<"$j1nbb_out"; then
-  ok "j1nb-base -- the small world WITH --base counts BL-868 and BL-878 EXCLUDED (M1-EXCLUDED: 2), so it reaches the M1 line"; B_M1XS=1
-else
-  note "FAIL  FIXTURE BROKEN: j1nb-base -- the small world with --base printed '$(printf '%s\n' "$j1nbb_out" | grep '^M1-EXCLUDED')', not '$M1X_WANT'; m-j1-nobase is not scored on it"; rc=1
-fi
-# shellcheck disable=SC2086
-j1nb_out="$(run_r "" "$TMP/j1nb" $J1_ARGS)"
-j1nb_sum="$(j1_read "$j1nb_out")"
-if [ "$B_M1XS" != 1 ]; then
-  : # the world is broken (above); no verdict is read off it
-elif ! grep -qF "$M1X_WANT" <<<"$j1nb_out" && grep -q '^M1-EXCLUDED: 0 ' <<<"$j1nb_out"; then
-  mutant_killed "$B_M1X" m-j1-nobase "m-j1-nobase [j1-m1x]: with --base dropped L3 (d) fires and M1-EXCLUDED reads 0"
-else
-  bad "m-j1-nobase SURVIVED: with --base dropped the M1 line read '$(printf '%s\n' "$j1nb_out" | grep '^M1-EXCLUDED')'"
-fi
-if [ -n "$j1nb_sum" ] && [ "${j1nb_sum%% *}" = 3 ]; then
-  ok "[m1x-pop] twin of m-j1-nobase stays green: the small world reads the sh population 3"
-else
-  bad "[m1x-pop] the twin of m-j1-nobase TRIPPED: read '${j1nb_sum}', want population 3"
-fi
-if [ "$MATRIX" = 1 ]; then
-  m1x_t=GREEN; m1x_k=no; grep -qF "$M1X_WANT" <<<"$j1nb_out" || { m1x_t=TRIPPED; m1x_k=yes; }
-  j1q_t=GREEN; j1q_k=no; [ -n "$j1nb_sum" ] && [ "${j1nb_sum%% *}" = 3 ] || { j1q_t=TRIPPED; j1q_k=yes; }
-  matrix_row m-j1-nobase j1-m1x 0 "$m1x_t" "$m1x_k"
-  matrix_row m-j1-nobase m1x-pop 0 "$j1q_t" "$j1q_k"
-  MROWS=$(( MROWS + 2 ))
-fi
-
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
-elif [ "$MROWS" -eq 4 ]; then ok "[MX] the matrix run measured 4 cells for the 2 mutants"
-else bad "[MX] matrix rows=$MROWS, 4 expected"; fi
 
 if [ "$rc" -eq 0 ]; then
   note "PASS  backlog-real-ledger -- j1 and b16 hold on the frozen ledger snapshot"

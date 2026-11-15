@@ -132,9 +132,7 @@ git -C "$DIST" branch -f "$MOVEREF" "$THEIRS"
 
 # A PUSH-CANDIDATE LEDGER. Without one, `ledger-reverify.sh` short-circuits on a missing file
 # and the region's ledger section renders `none` — so every assertion about that section passes
-# on an empty string, which is how two label defects and a dropped DETAIL field shipped. Set
-# LEDGER_SEEDED=0 in the environment to omit it: run.sh uses that as its vacuity mutant, and its
-# ledger assertions must go RED when the section is `none`, not quietly stay green.
+# on an empty string, which is how two label defects and a dropped DETAIL field shipped.
 #
 # Two entries, both mechanical faults rather than manual declarations, because HAND-REVIEW is
 # the one status whose detail the report deliberately does not carry:
@@ -144,9 +142,8 @@ git -C "$DIST" branch -f "$MOVEREF" "$THEIRS"
 # that used to be clipped mid-word: the split leaves more than seventy characters, so the clip
 # fired on text that was already correct. Copied from the reference consumer, where the real
 # heading's pre-dash text is 105 characters.
-if [ "${LEDGER_SEEDED:-1}" != "0" ]; then
-  mkdir -p "$CONSUMER/_bmad-output/ai-dlc-update"
-  cat > "$CONSUMER/_bmad-output/ai-dlc-update/push-candidate-ledger.md" <<'LEDGER'
+mkdir -p "$CONSUMER/_bmad-output/ai-dlc-update"
+cat > "$CONSUMER/_bmad-output/ai-dlc-update/push-candidate-ledger.md" <<'LEDGER'
 # Push-candidate ledger (fixture)
 
 ## PC-FIXTURE-EMIT-UNKNOWN-VERB (a parenthetical this long pushes the pre-dash text past seventy characters) — the verb is not one of the four
@@ -164,7 +161,6 @@ ADOPTED UPSTREAM (v0.130.0, verified 2026-07-22)
 ## PC-OPEN-KEEP — validate-keepprobe.sh: divergence
 Prose about core/scripts/validate-keepprobe.sh — still diverging.
 LEDGER
-fi
 
 # THE SHADOWED-LOCAL-VALIDATOR STATE LIVES IN THE SEED, so the seed render is the ONE render of it.
 # It used to be written into the consumer by run.sh after the first assertions, which forced a second

@@ -1,0 +1,16 @@
+# story-evidence-scaffold-b runs the sibling's run.sh --group b: its subjects, the sibling's own files.
+# No whole core/scripts/ line: a group reads the validator, record-only-diff.sh, sprint-status.sh and the schema, each declared.
+!core/scripts/validate-handoff-evidence.sh
+!core/scripts/sprint-status.sh
+!core/scripts/record-only-diff.sh
+!core/schemas/sprint-status.json
+core/fixtures/story-evidence-scaffold/run.sh
+core/fixtures/story-evidence-scaffold/world.sh
+core/fixtures/story-evidence-scaffold/he-inproc.sh
+# The sibling groups' drivers: the coverage join (run by every dist-only group) reads each one.
+core/fixtures/story-evidence-scaffold-c/run.sh
+core/fixtures/story-evidence-scaffold-c/.dist-only
+core/fixtures/story-evidence-scaffold-d/run.sh
+core/fixtures/story-evidence-scaffold-d/.dist-only
+core/fixtures/story-evidence-scaffold-g/run.sh
+core/fixtures/story-evidence-scaffold-g/.dist-only

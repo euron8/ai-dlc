@@ -41,9 +41,7 @@ the marked emission must be that same byte string with a prefix.
 
 Every predicate is self-probed in both directions, under `mktemp`, before any of them is
 pointed at the subject. Every absence-shaped assertion carries a control in the same arm
-that must come back the other way. The three absence-shaped ARMS — no reuse-mint, no
-restated contract, no line past the bound — each carry a committed mutant of the library,
-copied and `cmp -s` guarded, beside an unmutated control with a positive conjunct.
+that must come back the other way.
 
 Resolution is rooted at this file's own directory and names both install layouts
 (`core/hooks/` and `.claude/hooks/`). There is deliberately no walk up for a `VERSION`

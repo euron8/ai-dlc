@@ -1,6 +1,5 @@
-# retired-contract-token sources the shared preamble and drives retired-tokens.sh, cp -R-ing the whole reconcile directory for its mutants.
+# retired-contract-token sources the shared preamble and drives retired-tokens.sh.
 !core/skills/ai-dlc-update/reconcile/retired-tokens.sh
 core/skills/ai-dlc-update/reconcile/
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh

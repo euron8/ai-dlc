@@ -2,6 +2,6 @@
 # are run.sh itself (1), the three cli cells of cells.decl (3), and the counting git shim, a #!/bin/bash script every
 # git call in the five suites and the cli cells goes through. inproc rows (fx_inproc, one per source): the real
 # subject and the four mutant copies, each copy at $W/mut/<name>/core/skills/ai-dlc-update/reconcile/dist-clone.sh.
-696 *
+170 *
 3 core/skills/ai-dlc-update/reconcile/dist-clone.sh
-5 inproc:core/skills/ai-dlc-update/reconcile/dist-clone.sh
+1 inproc:core/skills/ai-dlc-update/reconcile/dist-clone.sh

@@ -1,7 +1,8 @@
 #!/bin/bash
 # census-consumer-layout.sh -- the ONE-TIME consumer-layout census the push gate reuses (BL-1043).
 #
-#   bash scripts/census-consumer-layout.sh [--jobs N] [--pool <extracted FIXTURE_POOL span>]
+#   bash scripts/census-consumer-layout.sh [--jobs N] [--pool <extracted FIXTURE_POOL span>] [--only "<fx> ..."]
+#                                          [--dirty-ok] [--predict]
 #
 # Run from the ROOT of a clean worktree detached at the exact sha to be pushed. It builds the consumer-layout
 # tree the way the hook's suite step does (scripts/install.sh into a fresh scratch tree with `_bmad/` over the
@@ -21,16 +22,27 @@
 # installed inputs moved. Re-running it is safe, and so is stopping it: a unit already recorded at these inputs
 # is not selected again, from this clone or any other.
 #
-# Output: the tree, the selection line cl_select prints, one `<fx>@consumer ok|FAIL` line per unit run, and a
-# summary. Exit 0 when every selected unit passed, 1 on any red (each named), 2 on a refusal (wrong cwd, dirty
+# --predict selects and prints `run <fx>@consumer` for every unit a push of this tree would run, then stops: nothing is
+# run, no record or store entry is written, and the clean-tree refusal does not apply (scripts/predict-push-set.sh
+# calls it). --only "<fx> ..." runs just the named units of that selection (a name the selection does not hold is
+# reported `not selected`: its record is current), which is how scripts/seed-verdict-store.sh seeds `<fx>@consumer`
+# names. --dirty-ok lets a dirty tree run; the keys are built from the tree that ran. Before any unit runs the script
+# waits while a push gate runs (scripts/gate-wait.sh).
+#
+# Output: the tree, the selection line cl_select prints with its verdict-store line naming every `<fx>@consumer` unit
+# skipped on a store entry or an unconfirmed placement record, one `<fx>@consumer ok|FAIL` line per unit run, and a summary. Exit 0 when every selected unit passed, 1 on any red (each named), 2 on a refusal (wrong cwd, dirty
 # tree, the span not extractable, the install failed, the keys could not be built).
 set -u
-jobs=4; pool=""
+jobs=4; pool=""; only=""; dirty_ok=0; predict=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --jobs) jobs="${2:-}"; shift 2 || { echo "census-consumer-layout: --jobs needs a value" >&2; exit 2; } ;;
     --pool) pool="${2:-}"; shift 2 || { echo "census-consumer-layout: --pool needs a file" >&2; exit 2; } ;;
-    *) echo "usage: bash scripts/census-consumer-layout.sh [--jobs N] [--pool <span file>]" >&2; exit 2 ;;
+    --only) only="${2:-}"; shift 2 || { echo "census-consumer-layout: --only needs a name list" >&2; exit 2; }
+            [ -n "$only" ] || { echo "census-consumer-layout: --only needs a name list" >&2; exit 2; } ;;
+    --dirty-ok) dirty_ok=1; shift ;;
+    --predict) predict=1; shift ;;
+    *) echo "usage: bash scripts/census-consumer-layout.sh [--jobs N] [--pool <span file>] [--only \"<fx> ...\"] [--dirty-ok] [--predict]" >&2; exit 2 ;;
   esac
 done
 case "$jobs" in ''|*[!0-9]*|0) echo "census-consumer-layout: --jobs must be a positive integer" >&2; exit 2 ;; esac
@@ -38,7 +50,7 @@ HOOK="$PWD/.githooks/pre-push"
 [ -f "$HOOK" ] && [ -f "$PWD/scripts/install.sh" ] \
   || { echo "census-consumer-layout: run from the root of a worktree (no .githooks/pre-push or scripts/install.sh here)" >&2; exit 2; }
 st="$(git status --porcelain)" || { echo "census-consumer-layout: git status failed" >&2; exit 2; }
-[ -z "$st" ] || { echo "census-consumer-layout: worktree is dirty; run from a clean worktree detached at the pushed sha" >&2; exit 2; }
+[ -z "$st" ] || [ "$dirty_ok" = 1 ] || [ "$predict" = 1 ] || { echo "census-consumer-layout: worktree is dirty; run from a clean worktree detached at the pushed sha" >&2; exit 2; }
 work="$(mktemp -d "${TMPDIR:-/tmp}/clcensus.XXXXXX")" || exit 2
 tree="$(mktemp -d /tmp/cl.XXXXXX)" || exit 2
 cleanup() { rm -rf -- "$work" "$tree"; }
@@ -69,6 +81,21 @@ out="$work/out"; mkdir -p "$out" || exit 2
 cl_tree="$tree"
 cl_select "$out" census
 if [ -s "$out/.cl.refused" ]; then echo "census-consumer-layout: $(sed -n 1p "$out/.cl.refused")" >&2; exit 2; fi
+if [ "$predict" = 1 ]; then
+  n_sel="$(grep -c . "$out/.cl.sel")" || n_sel=0
+  echo "CONSUMER $n_sel"
+  awk '{ print "run " $0 "@consumer" }' "$out/.cl.sel"
+  exit 0
+fi
+if [ -n "$only" ]; then
+  : > "$out/.cl.only"
+  for b in $only; do
+    b="${b%@consumer}"
+    if grep -qxF "$b" "$out/.cl.sel"; then printf '%s\n' "$b" >> "$out/.cl.only"; else printf '%s@consumer not selected: its record is current\n' "$b"; fi
+  done
+  cp "$out/.cl.only" "$out/.cl.sel"
+fi
+if [ -f "$PWD/scripts/gate-wait.sh" ]; then . "$PWD/scripts/gate-wait.sh" && gate_wait census-consumer-layout; else echo "census-consumer-layout: wait skipped, no scripts/gate-wait.sh here, so a running push gate is not checked"; fi
 # Each selected unit, as the pool runs `<fx>@consumer`: from the tree, with its own TMPDIR and a scratch store.
 mkdir -p "$out/.log" || exit 2
 cat > "$work/unit.sh" <<'UNIT'
@@ -85,7 +112,7 @@ printf '%s' "$v" > "$out/$cf@consumer"
 printf '%s@consumer %s\n' "$cf" "$v"
 rm -rf -- "$t"
 UNIT
-tr '\n' '\000' < "$out/.cl.sel" | xargs -0 -n 1 -P "$jobs" bash "$work/unit.sh" "$tree" "$out"
+[ ! -s "$out/.cl.sel" ] || tr '\n' '\000' < "$out/.cl.sel" | xargs -0 -n 1 -P "$jobs" bash "$work/unit.sh" "$tree" "$out"
 n_sel="$(grep -c . "$out/.cl.sel")" || n_sel=0
 n_ok=0; n_fail=0; n_none=0; reds=""
 while IFS= read -r b; do

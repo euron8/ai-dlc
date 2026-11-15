@@ -46,12 +46,6 @@ the harness writes them.
 | `sib-g` | `sib-a` with the sibling's record written before the AskUserQuestion's | **0** |
 | `sib-h` | an unanswered AskUserQuestion beside a Bash that blocks 600s | **1** |
 
-Mutants, each a copy of the validator asserted as an exact eight-case vector: Bash added
-to EXEMPT, keyed on the record's `uuid`, an unbounded sibling exemption, a 2s
-result-proximity window, the first answer instead of the latest, a join admitting only a
-`Bash` sibling, a single pass that joins only siblings written after the AskUserQuestion,
-and an unanswered AskUserQuestion acquitting its siblings.
-
 ## Run
 
     bash core/fixtures/check-25-steering-conduct/run.sh

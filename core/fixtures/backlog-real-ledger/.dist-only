@@ -8,8 +8,7 @@ scripts/validate-backlog-size.sh and scripts/backlog-reverify.sh, none of which 
 copies: its copy loop derives from core/fixtures/ and core/scripts/ and never touches the
 repo-root scripts/. On a consumer this fixture would resolve no validator and no ledger.
 
-It holds the two real-ledger joins that used to be arm j1 of core/fixtures/backlog-receipt-binding/
-and arm b16 of core/fixtures/backlog-size-ceiling/. BL-872 froze the ledger they read into
+It holds the two real-ledger joins, j1 (the receipts validator's sh population against the classifier's)
+and b16 (the size ceiling's entry count against the classifier's). BL-872 froze the ledger they read into
 ledger.snapshot; against the live docs/backlog.md they run as arm R9 of
-scripts/validate-backlog-receipts.sh at pre-push. Those two fixtures carry the same declaration for
-the same reason.
+scripts/validate-backlog-receipts.sh at pre-push. The joins came from batteries since deleted.

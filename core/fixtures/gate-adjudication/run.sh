@@ -31,8 +31,6 @@ echo "HERMETIC-CONSUMED $VALIDATOR"
 [ -f "$(dirname "$VALIDATOR")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED $(dirname "$VALIDATOR")/gate_adjudication.py"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 run() { # run <verdict_path> -> sets RC to the validator's exit code
   AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
@@ -773,8 +771,8 @@ fi
 
 # ============================================================================
 # FW0-FW5: FAIL_WAIVED — a waived FAIL is NOT a pass, and passes the GATE only through a
-# waiver that resolves and verifies. Each predicate takes a validator path so the mutants below
-# score these same bodies. Every one is PRESENCE-shaped: it demands a line only its path prints.
+# waiver that resolves and verifies. Each predicate takes a validator path.
+# Every one is PRESENCE-shaped: it demands a line only its path prints.
 # ============================================================================
 fw_set() { # fw_set <verdict> [<waiver_id>] — check X only; an absent second arg writes no field
   python3 - "$VERDICT" "$X" "$@" <<'PY'
@@ -835,15 +833,11 @@ fw_p7() { fw_sp "$1" "$FW_E7" "$FW_I7"
 fw_p8() { fw_sp "$1" "$FW_E8" "$FW_I8"
   [ "$RC" -eq 1 ] && has "UNWAIVED — check '$X'" && has "carries sprint S40 " && has "$BLOCK_X"; }
 FW_PREDS="1 2 3 4 5 6 7 8 9 10"
-fw_score() { # <label> <validator> <expected dead, e.g. "1 2 5" | NONE>
+fw_score() { # <label> <validator>
   local p dead=""
   for p in $FW_PREDS; do "fw_p$p" "$2" || dead="$dead $p"; done
   dead="${dead# }"
-  if [ "$3" = "NONE" ]; then
-    if [ -z "$dead" ]; then ok "$1: FW1-FW5 all hold"; B_FW=1; else bad "$1: FW predicate(s) [$dead] failed"; B_FW=0; fi
-  elif [ "$dead" = "$3" ]; then mutant_killed "${B_FW:-0}" "$1" "$1: KILLED by FW[$3] and nothing else"
-  elif [ -z "$dead" ]; then bad "$1 SURVIVED — no FW arm watches the line it edits"
-  else bad "$1 failed FW[$dead], expected exactly FW[$3]"; fi
+  if [ -z "$dead" ]; then ok "$1: FW1-FW10 all hold"; else bad "$1: FW predicate(s) [$dead] failed"; fi
 }
 # FW9/FW10: a waiver header carrying U+2028 mid-line. The sibling's rows are split on "\n" only, as
 # the remediation guard splits them; splitlines() would cut the header at the U+2028. FW9: waiver_id is
@@ -864,13 +858,7 @@ fw_p9() { fw_sp "$1" "$FW_E9" "$FW_I9"
   [ "$RC" -eq 0 ] && has "$FW_WAIVED_LINE" && has "1 FAIL_WAIVED under a verified waiver"; }
 fw_p10() { fw_sp "$1" "$FW_E9" "$FW_I10"
   [ "$RC" -eq 1 ] && has "UNWAIVED — check '$X'" && has "$BLOCK_X"; }
-FW_BASE=0
-fw_score "FW1-FW5 (the shipped validator)" "$VALIDATOR" NONE
-# FW6-FW8 gate the base too: FW-MS and FW-MR are scored on them, so a mutant verdict on those arms
-# is about its mutation only when they held unmutated in this run.
-fw_p1 "$VALIDATOR" && fw_p2 "$VALIDATOR" && fw_p5 "$VALIDATOR" \
-  && fw_p6 "$VALIDATOR" && fw_p7 "$VALIDATOR" && fw_p8 "$VALIDATOR" \
-  && fw_p9 "$VALIDATOR" && fw_p10 "$VALIDATOR" && FW_BASE=1
+fw_score "FW1-FW10 (the shipped validator)" "$VALIDATOR"
 
 # FW0: the consumer-shaped rows. Check 12 writes the adopted FAIL_WAIVED into gate-metrics in
 # BOTH spacings; the sibling reads them. A RESOLVED entry naming X FIRES over them (a waived
@@ -889,8 +877,6 @@ if [ "$fw0a" -eq 1 ] && [ "$fw0a_m" -eq 1 ] && [ "$fw0b" -eq 1 ] && [ "$fw0b_m" 
 else
   bad "FW0: a FAIL_WAIVED gate-metrics row read as PASS (spaced rc=$fw0a/$fw0a_m unspaced rc=$fw0b/$fw0b_m pass-twin rc=$fw0c)"
 fi
-
-# The two FAIL_WAIVED mutants run at the end of this file, after cv_mutdir and cv_apply exist.
 
 # --- restore, once more, after the carve-out arms ---------------------------
 restore
@@ -1072,10 +1058,7 @@ run "$VERDICT"
 # mode that never ran, or a flag silently ignored, produces; each exit-0 arm therefore demands
 # the `COVERAGE-OK` line, which only this mode's own print statement emits.
 #
-# THE ARMS ARE WRITTEN AS PREDICATES OVER A VALIDATOR PATH, not as inline bodies, because the
-# mutant battery at the end of this section scores each mutant against the SAME predicate the
-# arm asserts. A battery that re-implements the arm's check proves only that the copy
-# discriminates; running the arm's own function against the mutant is what says the ARM kills it.
+# THE ARMS ARE WRITTEN AS PREDICATES OVER A VALIDATOR PATH, not as inline bodies.
 CV_OUT="$WORK/coverage.out"
 CV_ERR="$WORK/coverage.err"
 
@@ -1310,170 +1293,7 @@ else
   bad "C8: an unbound verdict that is ALSO short passed --coverage (rc=$CV_C8) — the mode is exiting 0 for whatever the binding arm would have refused, which is exactly the masking this mode exists to lift"
 fi
 
-# ============================================================================
-# THE COVERAGE MUTANTS — MA, MB, MC, and an unmutated control.
-# ============================================================================
-# WHY A BATTERY HERE AND NOT MORE ARMS. C3, C6 and C7 are each, in substance, a claim that ONE
-# named arm of the mode owns one input. Each of them would pass against a mode that reached the
-# right exit for the wrong reason, and C7 in particular asserts an exit 0, which is what a flag
-# that was silently ignored also produces. Only a mutant says the line doing the work is the
-# line anybody thinks it is.
-#
-# EACH MUTANT IS SCORED WITH THE ARM'S OWN PREDICATE, never a second copy of it. A battery that
-# re-implements the check establishes that the copy discriminates and nothing about the arm.
-# And each is scored against ALL THREE predicates: a mutant that fails more than its own has an
-# entangled assertion somewhere, and one that fails none has not been built.
 CV_SRCDIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
-
-cv_mutdir() { # cv_mutdir <name> — the validator AND the siblings it resolves beside itself
-  # A LONE SCRIPT COPY IS NOT THE PROGRAM. This validator resolves
-  # `validate-suppression-lifetime.sh`, `validate-steering-budget.sh` and
-  # `validate-adversarial-convergence.sh` from its own directory; a copy that finds none of
-  # them takes a different branch for a reason that has nothing to do with the mutation, and
-  # its silence scores as a kill.
-  #
-  # NAMED, NOT GLOBBED, and the reason is the read-set map. `.ai-dlc-fixture-readsets.tsv`
-  # records what this fixture opens and the runner cannot see a fixture that starts opening
-  # more; a `*.sh` copy of the whole scripts directory would read every validator in the
-  # distribution and silently expire that entry. These four are the ones the map already
-  # carries, and the copy is ASSERTED below rather than assumed.
-  local d="$WORK/cv-mut-$1" s
-  rm -rf "$d"; mkdir -p "$d"
-  for s in validate-gate-adjudication.sh gate_adjudication.py validate-suppression-lifetime.sh \
-           validate-steering-budget.sh validate-adversarial-convergence.sh; do
-    [ -f "$CV_SRCDIR/$s" ] && cp "$CV_SRCDIR/$s" "$d/"
-  done
-  printf '%s' "$d"
-}
-cv_apply() { # cv_apply <file> <old> <new> — literal replace, occurrence count asserted at 1
-  CV_OLD="$2" CV_NEW="$3" python3 - "$1" <<'PY'
-import os, sys
-p = sys.argv[1]
-old, new = os.environ["CV_OLD"], os.environ["CV_NEW"]
-t = open(p, encoding="utf-8").read()
-n = t.count(old)
-if n != 1:
-    sys.stderr.write("ANCHOR MATCHED %d TIMES, EXPECTED 1\n" % n)
-    sys.exit(3)
-open(p, "w", encoding="utf-8").write(t.replace(old, new))
-PY
-}
-
-# The score: run all three predicates against a validator and print which held.
-cv_score() { # cv_score <label> <validator> <expected-dead: MISSING|NONCE|BINDING|NONE>
-  local label="$1" v="$2" want="$3" dead=""
-  cv_p_missing "$v" || dead="$dead MISSING"
-  cv_p_nonce   "$v" || dead="$dead NONCE"
-  cv_p_binding "$v" || dead="$dead BINDING"
-  dead="${dead# }"
-  if [ "$want" = "NONE" ]; then
-    if [ -z "$dead" ]; then
-      ok "$label: all three coverage predicates HOLD against an unmutated copy in the sandbox — the copy runs, so every kill below is attributable to its mutation and not to a broken harness"; B_CV=1
-    else
-      bad "$label: the UNMUTATED copy failed [$dead]. The sandbox copy is not running the program this fixture scores, so every mutant verdict below is a verdict about nothing."; B_CV=0
-    fi
-    return
-  fi
-  if [ -z "$dead" ]; then
-    bad "$label SURVIVED — all three predicates still hold with that property removed, so no arm in this section is watching the line the mutation edited"
-  elif [ "$dead" = "$want" ]; then
-    mutant_killed "${B_CV:-0}" "$label" "$label: KILLED by $want, and by $want ALONE (the other two predicates still hold, so the arms are not entangled)"
-  else
-    bad "$label failed [$dead], expected exactly [$want] — either it failed an arm that does not own this property, or it reached an arm it has no business reaching and that arm's assertion is entangled"
-  fi
-}
-
-# --- the unmutated control, FIRST -------------------------------------------
-# NECESSARY AND NOT SUFFICIENT, so it is given a positive conjunct: it is the same three
-# predicates, two of which DEMAND a specific sentence. A copy replaced by `exit 0` fails
-# MISSING and NONCE by construction and cannot pass this.
-CV_M0="$(cv_mutdir m0)"
-cv_m0_missing=""
-for _s in validate-gate-adjudication.sh gate_adjudication.py validate-suppression-lifetime.sh \
-          validate-steering-budget.sh validate-adversarial-convergence.sh; do
-  [ -f "$CV_M0/$_s" ] || cv_m0_missing="$cv_m0_missing $_s"
-done
-if [ -n "$cv_m0_missing" ]; then
-  bad "CV-M0: FIXTURE BROKEN — the sandbox is missing$cv_m0_missing. A copy that cannot resolve its siblings runs a different program, and its silence would score as a kill."
-else
-  ok "CV-M0-pre: the sandbox carries the validator and the three siblings it resolves beside itself"
-  cv_score "CV-M0 control (unmutated copy)" "$CV_M0/validate-gate-adjudication.sh" NONE
-fi
-
-# --- MA: the coverage join skipped — `_cov_fails = []` ----------------------
-# The shape anybody writes when wiring a new mode: run the envelope, print the line, never ask
-# the question. Owned by C3.
-CV_MA="$(cv_mutdir ma)"
-if ! cv_apply "$CV_MA/gate_adjudication.py" \
-     '    _cov_fails = coverage_arms()
-' '    _cov_fails = []
-'; then
-  bad "CV-MA: the mutation DID NOT APPLY — its anchor is absent from the validator or appears more than once. A mutant that was never built produces a green run that reads exactly like a surviving arm."
-elif cmp -s "$CV_SRCDIR/gate_adjudication.py" "$CV_MA/gate_adjudication.py"; then
-  bad "CV-MA: the mutated copy is byte-identical to the subject — that mutant discriminates nothing"
-else
-  cv_score "CV-MA (--coverage skips the join: _cov_fails = [])" "$CV_MA/validate-gate-adjudication.sh" MISSING
-fi
-
-# --- MB: the nonce/stem arm skipped in this mode ----------------------------
-# The wrong-path hole: with it gone, an adjudicator that self-checks a NEIGHBOURING verdict
-# gets exit 0 about the neighbour. Owned by C6.
-CV_MB="$(cv_mutdir mb)"
-if ! cv_apply "$CV_MB/gate_adjudication.py" \
-     'if V["gate_nonce"] != stem:
-' 'if mode != "coverage" and V["gate_nonce"] != stem:
-'; then
-  bad "CV-MB: the mutation DID NOT APPLY — the nonce/stem anchor is absent or not unique"
-elif cmp -s "$CV_SRCDIR/gate_adjudication.py" "$CV_MB/gate_adjudication.py"; then
-  bad "CV-MB: the mutated copy is byte-identical to the subject"
-else
-  cv_score "CV-MB (--coverage returns before the nonce/stem arm)" "$CV_MB/validate-gate-adjudication.sh" NONCE
-fi
-
-# --- MC: the mode's exit moved BELOW the dispatch binding -------------------
-# The reshape that reads as a simplification — one exit point, further down — and re-imposes on
-# the adjudicator an exit no edit to its own file can clear, while re-masking the coverage
-# defects the binding arm hides. Owned by C7.
-#
-# TWO EDITS, AND BOTH ARE THE MUTATION. Deleting the block alone leaves the mode falling
-# through to the full program, which is a different mutant; the insert is what puts the same
-# exit below the binding arm. The insert's anchor carries a LEADING NEWLINE because
-# `fails = coverage_arms()` appears TWICE in the file — measured, 2 — and the bare form would
-# edit whichever came first.
-CV_MC="$(cv_mutdir mc)"
-# Both texts sit inside gate_adjudication.py's main(), so every line carries main()'s 4-space indent.
-CV_MC_BLOCK='    if mode == "coverage":
-        # The envelope arms above have already run, the nonce/stem arm among them, so the path
-        # named below is a path whose file agrees with its own filename about which gate pass it
-        # reports. Everything after this point is the LEAD'"'"'s question, not the adjudicator'"'"'s.
-        _cov_fails = coverage_arms()
-        print(f"VALIDATE-GATE-ADJUDICATION: COVERAGE-OK ({verdict_path}, {len(E)} escalated "
-              f"check(s) for {gate_type} all present, {len(_cov_fails)} FAIL verdict(s) not "
-              f"adjudicated by this mode)")
-        sys.exit(0)
-'
-CV_MC_LATE='    if mode == "coverage":
-        _cov_fails = coverage_arms()
-        print(f"VALIDATE-GATE-ADJUDICATION: COVERAGE-OK ({verdict_path}, {len(E)} escalated "
-              f"check(s) for {gate_type} all present, {len(_cov_fails)} FAIL verdict(s) not "
-              f"adjudicated by this mode)")
-        sys.exit(0)
-'
-if ! cv_apply "$CV_MC/gate_adjudication.py" "$CV_MC_BLOCK" ""; then
-  bad "CV-MC: the DELETE half did not apply — the coverage block is absent from the validator or appears more than once"
-elif ! cv_apply "$CV_MC/gate_adjudication.py" '
-    fails = coverage_arms()
-' "
-$CV_MC_LATE
-    fails = coverage_arms()
-"; then
-  bad "CV-MC: the INSERT half did not apply — the full mode's coverage_arms() call site is absent or not unique. A half-applied mutation is a different mutant from the one declared."
-elif cmp -s "$CV_SRCDIR/gate_adjudication.py" "$CV_MC/gate_adjudication.py"; then
-  bad "CV-MC: the mutated copy is byte-identical to the subject"
-else
-  cv_score "CV-MC (--coverage runs the dispatch-binding arm)" "$CV_MC/validate-gate-adjudication.sh" BINDING
-fi
-
 ga_clean_ledgers
 restore
 run "$VERDICT"
@@ -1551,7 +1371,7 @@ P1() { printf '%s' "$1/$NONCE.part-1of$D4_N.jsonl"; }
 P2() { printf '%s' "$1/$NONCE.part-2of$D4_N.jsonl"; }
 P3() { printf '%s' "$1/$NONCE.part-3of$D4_N.jsonl"; }
 
-# The four merge predicates, over a validator path, so the mutants below score the arm's own body.
+# The merge predicates, over a validator path.
 d4_p_merge() {
   local d; d="$(d4_dir)"; d4_parts "$d"
   d4_merge "$1" "$d" "$(P1 "$d")" "$(P2 "$d")" "$(P3 "$d")"
@@ -1581,7 +1401,6 @@ d4_p_union() { # indices complete, part 3 one check short: only the union join s
   d4_merge "$1" "$d" "$(P1 "$d")" "$(P2 "$d")" "$(P3 "$d")"
   d4_refused "$d" "union is not --expected"
 }
-D4_PREDS="merge missing dup nonce union"
 
 if [ "$D4_OK" -eq 1 ]; then
   # D4-shard: the N slices concatenate to the bare list, and each is non-empty.
@@ -1627,28 +1446,6 @@ if [ "$D4_OK" -eq 1 ]; then
   else
     bad "D4-series: parts=$D4_NPART, outputs equal=$([ "$D4_OA" = "$D4_OB" ] && echo yes || echo no), stray-json rc=$D4_RC -- the parts disturb the stall rung, or the comparison cannot see a difference"
   fi
-
-  # D4 mutants: a copy of the validator and its siblings (cv_mutdir), one literal edit each.
-  d4_score() { # <label> <validator> <expected dead>
-    local dead="" p
-    for p in $D4_PREDS; do "d4_p_$p" "$2" || dead="$dead $p"; done
-    dead="${dead# }"
-    if [ "$3" = "NONE" ]; then
-      if [ -z "$dead" ]; then ok "$1: all five merge predicates hold on the unmutated sandbox copy"; B_D4=1
-      else bad "$1: the UNMUTATED copy failed [$dead] -- every D4 mutant verdict is about a broken harness"; B_D4=0; fi
-    elif [ "$dead" = "$3" ]; then mutant_killed "${B_D4:-0}" "$1" "$1: KILLED by [$3] and nothing else"
-    elif [ -z "$dead" ]; then bad "$1 SURVIVED -- no D4 arm watches the line it edits"
-    else bad "$1 failed [$dead], expected exactly [$3]"; fi
-  }
-  d4_score "D4-M0 control (unmutated copy)" "$(cv_mutdir d4m0)/validate-gate-adjudication.sh" NONE
-  D4_MU="$(cv_mutdir d4mu)"
-  if cv_apply "$D4_MU/gate_adjudication.py" '        if got != want:' '        if False:'; then
-    d4_score "D4-MU (the union-equality refusal removed)" "$D4_MU/validate-gate-adjudication.sh" union
-  else bad "D4-MU: FIXTURE STALE -- the union anchor is not in the validator exactly once"; fi
-  D4_MD="$(cv_mutdir d4md)"
-  if cv_apply "$D4_MD/gate_adjudication.py" '        if twice:' '        if False:'; then
-    d4_score "D4-MD (the duplicate-id refusal removed)" "$D4_MD/validate-gate-adjudication.sh" dup
-  else bad "D4-MD: FIXTURE STALE -- the duplicate anchor is not in the validator exactly once"; fi
 
   # --------------------------------------------------------------------------
   # D5: `--check-part <part>` -- THE SHARD'S SELF-CHECK AGAINST THE MERGE'S OWN PER-ROW CONTRACT
@@ -1698,7 +1495,6 @@ open(p, "w", encoding="utf-8").write("".join(json.dumps(r) + "\n" for r in rows)
     sed '1s/"verdict": "PASS"/"verdict": "MAYBE"/' "$(P2 "$d")" > "$d/p2" && mv "$d/p2" "$(P2 "$d")"
     d5_agree "$1" "$d" "has verdict 'MAYBE', not one of"
   }
-  D5_PREDS="cpok cp10 cpenum"
   d4_p_cpok "$VALIDATOR" && ok "D5-ok: a conforming 7-key part -> --check-part PART-OK, exit 0" \
     || bad "D5-ok: a conforming part was not PART-OK (rc=$RC): $(cat "$D4_OUT")"
   d4_p_cp10 "$VALIDATOR" && ok "D5-10key: envelope fields added (10 keys per row, the graph incident) -> --check-part AND --merge both REFUSED 'carries fields', exit 2, one refusal body" \
@@ -1706,37 +1502,15 @@ open(p, "w", encoding="utf-8").write("".join(json.dumps(r) + "\n" for r in rows)
   d4_p_cpenum "$VALIDATOR" && ok "D5-enum: a 7-key part with verdict MAYBE -> --check-part AND --merge both REFUSED 'not one of', exit 2, one refusal body" \
     || bad "D5-enum: a bad-enum part was not refused by both modes with one body (rc=$RC): $(cat "$D4_OUT")"
 
-  # D5-M: --check-part reading a HAND-LISTED key set, one field short. Anchored inside the
-  # check-part branch, so --merge keeps the schema-derived set and every D4 predicate holds.
-  d5_score() { # <label> <validator> <expected dead>
-    local dead="" p
-    for p in $D4_PREDS $D5_PREDS; do "d4_p_$p" "$2" || dead="$dead $p"; done
-    dead="${dead# }"
-    if [ "$3" = "NONE" ]; then
-      if [ -z "$dead" ]; then ok "$1: all eight merge and check-part predicates hold on the unmutated sandbox copy"; B_D5=1
-      else bad "$1: the UNMUTATED copy failed [$dead] -- every D5 mutant verdict is about a broken harness"; B_D5=0; fi
-    elif [ "$dead" = "$3" ]; then mutant_killed "${B_D5:-0}" "$1" "$1: KILLED by [$3] and nothing else"
-    elif [ -z "$dead" ]; then bad "$1 SURVIVED -- no D5 arm watches the line it edits"
-    else bad "$1 failed [$dead], expected exactly [$3]"; fi
-  }
-  d5_score "D5-M0 control (unmutated copy)" "$(cv_mutdir d5m0)/validate-gate-adjudication.sh" NONE
-  D5_MK="$(cv_mutdir d5mk)"
-  if cv_apply "$D5_MK/gate_adjudication.py" '        cp_nonce, _, _ = part_name(cp_part, "--check-part")' \
-       '        PART_LINE_KEYS = {"gate_nonce", "gate_series_id", "catalog", "adjudicator_agent_id", "check_id", "verdict"}
-        cp_nonce, _, _ = part_name(cp_part, "--check-part")'; then
-    d5_score "D5-MK (--check-part on a hand-listed key set missing evidence)" "$D5_MK/validate-gate-adjudication.sh" "cpok cp10 cpenum"
-  else bad "D5-MK: FIXTURE STALE -- the check-part anchor is not in the validator exactly once"; fi
 fi
 
 # D5-one-site: the part line's key set is ASSIGNED once in the validator, so --merge and
-# --check-part cannot each carry their own copy. A count of exactly 1, so an absent one fails too;
-# the D5-MK copy (a second, hand-listed assignment) must count 2, which proves the pin can fire.
+# --check-part cannot each carry their own copy. A count of exactly 1, so an absent one fails too.
 d5_sites() { local n; n="$(grep -cE '^[[:space:]]*PART_LINE_KEYS[[:space:]]*=' "$1")" || n=0; printf '%s' "$n"; }
 D5_SITES="$(d5_sites "$CV_SRCDIR/gate_adjudication.py")"
-D5_MSITES=0; [ "$D4_OK" -eq 1 ] && [ -f "${D5_MK:-}/gate_adjudication.py" ] && D5_MSITES="$(d5_sites "$D5_MK/gate_adjudication.py")"
-[ "$D5_SITES" -eq 1 ] && [ "$D5_MSITES" -eq 2 ] \
-  && ok "D5-one-site: PART_LINE_KEYS is assigned at exactly one site in the validator, and at two in the D5-MK copy (the pin can fire)" \
-  || bad "D5-one-site: PART_LINE_KEYS assigned $D5_SITES time(s) (expected 1), $D5_MSITES in the D5-MK copy (expected 2) -- the key set has a second copy or none, or the pin cannot see one"
+[ "$D5_SITES" -eq 1 ] \
+  && ok "D5-one-site: PART_LINE_KEYS is assigned at exactly one site in the validator" \
+  || bad "D5-one-site: PART_LINE_KEYS assigned $D5_SITES time(s) (expected 1) -- the key set has a second copy or none"
 
 # D5-role: the shard branch of gate-adjudicator.md names `--check-part`, and says the check is
 # per-row only. Both layouts, first existing candidate; absent is BROKEN, never skipped.
@@ -1985,46 +1759,6 @@ else
     || bad "corpus: Gate Failure step 4's stall rung is not '--series --sprint <N>' on exactly one line with <N> named as the sprint_id line of _bmad-output/pipeline-snapshot.md — an unscoped rung fails on every closed sprint's stall and its exit 0 is unreachable"
 fi
 
-# ============================================================================
-# THE FAIL_WAIVED MUTANTS — scored on FW1-FW5 in a sibling-complete copy, after an unmutated
-# control on the same predicates, and only when the shipped validator passed them in this run.
-# ============================================================================
-if [ "$FW_BASE" -ne 1 ]; then
-  bad "FW mutants: FW1/FW2/FW5/FW6/FW7/FW8 did not pass unmutated in this run, so no mutant verdict below would be about its mutation"
-else
-  fw_score "FW-M0 control (unmutated sandbox copy)" "$(cv_mutdir fwm0)/validate-gate-adjudication.sh" NONE
-  # FW-MP: FAIL_WAIVED read as PASS by the coverage arm. A waived FAIL then reaches no carve-out
-  # and the gate prints all-PASS, so every arm that needs it to be failing dies.
-  FW_MP="$(cv_mutdir fwmp)"
-  if cv_apply "$FW_MP/gate_adjudication.py" '        if vd in ("FAIL", "FAIL_WAIVED"):
-            fails.append(cid)' '        if vd == "FAIL":
-            fails.append(cid)'; then
-    fw_score "FW-MP (FAIL_WAIVED read as PASS)" "$FW_MP/validate-gate-adjudication.sh" "1 2 5 6 7 8 9 10"
-  else bad "FW-MP DID NOT APPLY: the coverage arm's fails anchor is absent or not unique"; fi
-  # FW-MR: waiver resolution skipped — any FAIL_WAIVED passes. FW2, FW5 and FW10 die; FW1 and FW9 hold.
-  FW_MR="$(cv_mutdir fwmr)"
-  if cv_apply "$FW_MR/gate_adjudication.py" \
-       '    return bool(w) and waiver_sprint_ok(wid, vsprint) and (' \
-       '    return True or bool(w) and waiver_sprint_ok(wid, vsprint) and ('; then
-    fw_score "FW-MR (waiver resolution skipped)" "$FW_MR/validate-gate-adjudication.sh" "2 5 6 7 8 10"
-  else bad "FW-MR DID NOT APPLY: the waiver-resolution anchor is absent or not unique"; fi
-  # FW-MS: the sprint join dropped. FW6, FW7 and FW8 die; FW1 (right sprint) and FW2/FW5 hold.
-  FW_MS="$(cv_mutdir fwms)"
-  if cv_apply "$FW_MS/gate_adjudication.py" \
-       '    return vsprint is not None and re.search(r"[Ss]%s(?![0-9])" % vsprint, wid) is not None' \
-       '    return True'; then
-    fw_score "FW-MS (sprint join dropped)" "$FW_MS/validate-gate-adjudication.sh" "6 7 8"
-  else bad "FW-MS DID NOT APPLY: the sprint-join anchor is absent or not unique"; fi
-  # FW-MU: both sibling-row readers restored to splitlines(). The header is cut at the U+2028, so FW9
-  # (full header) goes UNWAIVED and FW10 (the fragment) is waived; every other arm holds.
-  FW_MU="$(cv_mutdir fwmu)"
-  if cv_apply "$FW_MU/gate_adjudication.py" '    for line in raw.split("\n"):' '    for line in raw.splitlines():' \
-     && cv_apply "$FW_MU/gate_adjudication.py" 'os.environ.get("GA_IN_FORCE", "").split("\n"):' 'os.environ.get("GA_IN_FORCE", "").splitlines():'; then
-    FW_PREDS_SAVE="$FW_PREDS"; FW_PREDS="9 10"
-    fw_score "FW-MU (sibling rows split with splitlines)" "$FW_MU/validate-gate-adjudication.sh" "9 10"
-    FW_PREDS="$FW_PREDS_SAVE"
-  else bad "FW-MU DID NOT APPLY: a sibling-row split anchor is absent or not unique"; fi
-fi
 ga_clean_ledgers
 restore
 

@@ -1,0 +1,6 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge's own J3 output), once, after the owed-derivations shard split.
+200 *
+0 core/scripts/check-owed-derivations.sh
+0 core/scripts/core-paths.sh
+0 core/scripts/validate-artifact-derivations.sh
+0 core/scripts/sprint-status.sh

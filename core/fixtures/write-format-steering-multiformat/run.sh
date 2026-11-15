@@ -16,9 +16,9 @@
 # header comment. Both are real substrings, both pass, and a declaration pointing at the wrong
 # thing reads as covered. What closes that gap is the `:: anchor=<literal>` column `--report` now
 # prints, read by a RECEIPT-SHAPED check that compares it literal-equal to the declared anchor.
-# The two MUTANT 1 / MUTANT 2 arms below are that check, and they are the reason this fixture
-# exists: they are the worlds an earlier, unbuilt version of this fix could not distinguish from a
-# correct one.
+# The two MUTANT 1 / MUTANT 2 worlds below are that check, and they are the reason this fixture
+# exists: they are the worlds in which the validator passes and only the printed anchor column
+# separates a wrong anchor from the right one.
 #
 # SEVEN INDEPENDENT TREES, ONE PROPERTY APART. seed.sh builds each world separately. Sharing one
 # tree across two supposedly-different mutants is how two guards come to cover each other, whose
@@ -59,8 +59,6 @@ mkdir -p "$OUTDIR" || { echo "write-format-steering-multiformat: FIXTURE ERROR �
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-B_sane=0; B_arm1=0; B_arm3=0; B_arm4=0; B_m4=0
 
 echo "write-format-steering-multiformat:"
 
@@ -106,15 +104,15 @@ has_in() {   # <capture-file> <fixed-needle>  -> 0 if present
 
 # ==============================================================================================
 # ARM 0 — SANITY. The base world is a real tree and the base run is not a broken one.
-# A fixture whose every arm is "the mutant was caught" passes identically when the harness itself
+# A fixture whose every arm compares two worlds passes identically when the harness itself
 # is what failed: two inert runs compare equal. This arm is PRESENCE-shaped on purpose.
 # ==============================================================================================
 drive base "$W_BASE"
 BASE_F="$(txt_of base)"; BASE_RC="$(rc_of base)"
 if [ "$BASE_RC" -eq 0 ] && [ -s "$BASE_F" ] && ! has_in "$BASE_F" 'FIXTURE BROKEN'; then
-  ok "SANITY: the unmutated world runs and exits 0"; B_sane=1
+  ok "SANITY: the base world runs and exits 0"
 else
-  bad "SANITY: the unmutated world did not run cleanly (rc=$BASE_RC) — every verdict below is about a broken harness, not about the subject"
+  bad "SANITY: the base world did not run cleanly (rc=$BASE_RC) — every verdict below is about a broken harness, not about the subject"
 fi
 
 # ==============================================================================================
@@ -124,7 +122,7 @@ fi
 # ==============================================================================================
 N_NAME="$(count_in "$BASE_F" "declared   $CODE_NAME ")"
 if [ "$N_NAME" -eq 2 ]; then
-  ok "one artifact name carries TWO declared-format rows (declared is a LIST, not last-write-wins)"; B_arm1=1
+  ok "one artifact name carries TWO declared-format rows (declared is a LIST, not last-write-wins)"
 else
   bad "expected exactly 2 'declared   $CODE_NAME' rows, got $N_NAME — a second format under an existing name was dropped"
 fi
@@ -147,7 +145,7 @@ fi
 # ==============================================================================================
 BASE_ANCHOR="$(receipt_anchor "$BASE_F")"
 if [ "$BASE_ANCHOR" = "$CODE_ANCHOR" ]; then
-  ok "--report prints the anchor column, and it is the declared literal [$CODE_ANCHOR]"; B_arm3=1
+  ok "--report prints the anchor column, and it is the declared literal [$CODE_ANCHOR]"
 else
   bad "the anchor column read [${BASE_ANCHOR:-<absent>}], wanted [$CODE_ANCHOR] — a receipt cannot bind on a column that is not there"
 fi
@@ -172,7 +170,7 @@ if [ -z "$CLAIMED_COVERED" ] || [ -z "$CLAIMED_POP" ]; then
 elif [ "$DERIVED_ROWS" -le "$DERIVED_COVERED" ]; then
   bad "FIXTURE STALE: $DERIVED_ROWS row(s) over $DERIVED_COVERED name(s) — with rows == names a row-summing reader prints the same number and this arm proves nothing"
 elif [ "$CLAIMED_COVERED" -eq "$DERIVED_COVERED" ]; then
-  ok "the PASS line counts DISTINCT names ($CLAIMED_COVERED of $CLAIMED_POP) over $DERIVED_ROWS rows, not rows"; B_arm4=1
+  ok "the PASS line counts DISTINCT names ($CLAIMED_COVERED of $CLAIMED_POP) over $DERIVED_ROWS rows, not rows"
 else
   bad "the PASS line claims $CLAIMED_COVERED covered; distinct names = $DERIVED_COVERED, rows = $DERIVED_ROWS — coverage is being summed over rows"
 fi
@@ -195,7 +193,7 @@ else
   bad "MUTANT 1: the validator exited $M1_RC; this world is a legal declaration by its own rules and must not fail"
 fi
 if [ -n "$M1_READ" ] && [ "$M1_READ" != "$CODE_ANCHOR" ]; then
-  mutant_killed "$B_arm3" M1 "MUTANT 1: the receipt-shaped check REJECTS it (read [$M1_READ], wanted [$CODE_ANCHOR])"
+  ok "MUTANT 1: the receipt-shaped check REJECTS it (read [$M1_READ], wanted [$CODE_ANCHOR])"
 else
   bad "MUTANT 1: the receipt-shaped check read [${M1_READ:-<absent>}] and did not reject — a wrong-substring anchor is indistinguishable from the right one"
 fi
@@ -217,7 +215,7 @@ else
   bad "MUTANT 2: the validator exited $M2_RC; a present substring is a legal declaration by its own rules"
 fi
 if [ -n "$M2_READ" ] && [ "$M2_READ" != "$CODE_ANCHOR" ]; then
-  mutant_killed "$B_arm3" M2 "MUTANT 2: the receipt-shaped check REJECTS it (read [$M2_READ], wanted [$CODE_ANCHOR])"
+  ok "MUTANT 2: the receipt-shaped check REJECTS it (read [$M2_READ], wanted [$CODE_ANCHOR])"
 else
   bad "MUTANT 2: the receipt-shaped check read [${M2_READ:-<absent>}] and did not reject — a comment-anchored declaration reads as covered"
 fi
@@ -228,12 +226,12 @@ fi
 # The near-miss is the BASE world, which carries two entries under ONE name with DIFFERENT
 # declared_in and must stay silent (arm 1 above). Without that pairing this arm cannot tell a
 # correctly-keyed duplicate check from one that fires on any repeated name at all — which is
-# exactly the behaviour the fix removed, and which MUTATION B below builds and scores.
+# exactly the behaviour the fix removed.
 # ==============================================================================================
 drive m3 "$W_M3"
 M3_F="$(txt_of m3)"; M3_RC="$(rc_of m3)"
 if [ "$M3_RC" -ne 0 ] && has_in "$M3_F" 'same name and declared_in repeated'; then
-  mutant_killed "$B_arm1" M3 "MUTANT 3 (same name AND same declared_in twice): FAILS with 'same name and declared_in repeated'"
+  ok "MUTANT 3 (same name AND same declared_in twice): FAILS with 'same name and declared_in repeated'"
 else
   bad "MUTANT 3: rc=$M3_RC and no 'same name and declared_in repeated' — a copy-paste duplicate is accepted"
 fi
@@ -250,7 +248,7 @@ M4_F="$(txt_of m4)"; M4_RC="$(rc_of m4)"
 M4_SKIP=0; grep -qE '^  SKIP ' "$M4_F" && M4_SKIP=1
 M4_MISSING=0; has_in "$M4_F" 'and no file is there in any layout' && M4_MISSING=1
 if [ "$M4_RC" -eq 0 ] && [ "$M4_SKIP" -eq 1 ] && [ "$M4_MISSING" -eq 0 ]; then
-  ok "MUTANT 4 (consumer, skills component absent): exit 0 with a SKIP row, not MISSING — an unpulled component does not wedge the push"; B_m4=1
+  ok "MUTANT 4 (consumer, skills component absent): exit 0 with a SKIP row, not MISSING — an unpulled component does not wedge the push"
 else
   bad "MUTANT 4: rc=$M4_RC skip=$M4_SKIP missing=$M4_MISSING — a consumer between two pulls is being failed for a component it has not pulled"
 fi
@@ -272,7 +270,7 @@ drive m5 "$W_M5"
 M5_F="$(txt_of m5)"; M5_RC="$(rc_of m5)"
 M5_SKIP=0; grep -qE '^  SKIP ' "$M5_F" && M5_SKIP=1
 if [ "$M5_RC" -ne 0 ] && [ "$M5_SKIP" -eq 0 ] && has_in "$M5_F" 'and no file is there in any layout'; then
-  mutant_killed "$B_m4" M5 "MUTANT 5 (component PRESENT, declared file absent): FAILS as MISSING — the directory-present/file-absent case still discriminates"
+  ok "MUTANT 5 (component PRESENT, declared file absent): FAILS as MISSING — the directory-present/file-absent case still discriminates"
 else
   bad "MUTANT 5: rc=$M5_RC skip=$M5_SKIP — a real broken pointer was acquitted as an unpulled component, so the SKIP narrowing acquits everything"
 fi
@@ -306,136 +304,6 @@ else
   bad "--self-probe rc=$SP_RC: $(cat "$SP_F" 2>/dev/null)"
 fi
 
-# ==============================================================================================
-# THE MUTATION ARMS. Everything above asserts what the SUBJECT does; these assert that the arms
-# above can FAIL. An absence-shaped arm passes against a subject that emits nothing, and most arms
-# above read a value out of a report — so each mutation removes ONE property and the fixture
-# asserts that exactly the arm owning it dies.
-#
-# Each mutant is a COPY of the whole package, never an in-place edit, guarded by `cmp -s` so a sed
-# that matched nothing cannot pass as a mutation.
-# ==============================================================================================
-MUT="$WORK/mut"
-mkdir -p "$MUT" || { echo "write-format-steering-multiformat: FIXTURE ERROR — cannot build the mutant area" >&2; exit 2; }
-
-MUT_APPLIED=0
-mutate() {   # <tag> <sed-expr> <source-world>   -> capture in $OUTDIR/<tag>.txt/.rc
-  local tag="$1" expr="$2" src="$3" dst="$MUT/$1" target
-  MUT_APPLIED=0
-  rm -rf "$dst"
-  cp -R "$src" "$dst" || return 1
-  if   [ -f "$dst/core/scripts/validate-write-format-steering.sh" ]; then
-    target="$dst/core/scripts/validate-write-format-steering.sh"
-  elif [ -f "$dst/scripts/ai-dlc/validate-write-format-steering.sh" ]; then
-    target="$dst/scripts/ai-dlc/validate-write-format-steering.sh"
-  else
-    printf 'FIXTURE ERROR: no validator in the mutant copy %s\n' "$tag" >&2; return 1
-  fi
-  sed "$expr" "$target" > "$target.new" || { printf 'DID NOT APPLY (sed died): %s\n' "$tag" >&2; return 1; }
-  if cmp -s "$target" "$target.new"; then
-    printf 'DID NOT APPLY (matched nothing): %s\n' "$tag" >&2
-    return 1
-  fi
-  mv "$target.new" "$target" || return 1
-  MUT_APPLIED=1
-  AI_DLC_PROJECT_ROOT="$dst" bash "$target" --report > "$OUTDIR/$tag.txt" 2>&1
-  printf '%s\n' "$?" > "$OUTDIR/$tag.rc"
-  return 0
-}
-
-# MUTATION A — revert the LIST half: declared goes back to last-write-wins. Arm 1 must die.
-if mutate mutA 's/declared\.setdefault(nm, \[\])\.append(e)/declared[nm] = [e]/' "$W_BASE"; then
-  N="$(count_in "$OUTDIR/mutA.txt" "declared   $CODE_NAME ")"
-  if [ "$N" -eq 1 ]; then
-    mutant_killed "$B_arm1" mutA "MUTATION A (declared back to last-write-wins): drops to $N row for the shared name — arm 1 can fire"
-  else
-    bad "MUTATION A: still $N rows — arm 1 would pass against a reader that keeps only one format per name"
-  fi
-else
-  bad "MUTATION A did not apply — arm 1 is unproven"
-fi
-
-# MUTATION B — revert the PAIR key: duplicates keyed on the name alone. The BASE world (two entries,
-# one name, DIFFERENT declared_in) must then be rejected as a duplicate. That is the false positive
-# the fix removed, and it is what makes MUTANT 3's near-miss load-bearing.
-#
-# THE SECOND TUPLE MEMBER IS KEPT, EMPTY, AND THAT IS THE WHOLE CARE THIS MUTATION NEEDS. Written
-# as `pair = (nm,)` the mutation is INSUFFICIENT rather than wrong: the duplicate branch below
-# reads `pair[1]`, the one-tuple raises IndexError, the reader dies before printing its population
-# and the run reports `PASS — 0 of 0`. A crashed subject is not a subject with the property
-# removed, and `cmp -s` cannot tell them apart — the sed applied cleanly both ways. Measured while
-# building this fixture: the arm read rc=0 with no duplicate report and scored a working key as
-# dead. `(nm, '')` removes the declared_in from the KEY and leaves the tuple's shape intact.
-if mutate mutB "s/pair = (nm, (e.get('declared_in') or '').strip())/pair = (nm, '')/" "$W_BASE"; then
-  if [ "$(rc_of mutB)" -ne 0 ] && has_in "$OUTDIR/mutB.txt" 'same name and declared_in repeated'; then
-    mutant_killed "$B_sane" mutB "MUTATION B (duplicate keyed on name alone): the BASE world is rejected — the (name, declared_in) key is load-bearing"
-  else
-    bad "MUTATION B: rc=$(rc_of mutB) and no duplicate report — the pair key changes no outcome, so MUTANT 3's near-miss proves nothing"
-  fi
-else
-  bad "MUTATION B did not apply — the duplicate key is unproven"
-fi
-
-# MUTATION C — make the SKIP test unconditional. MUTANT 5's real broken pointer must then be
-# acquitted, which is the acquittal that arm exists to catch.
-if mutate mutC 's/if not any(os\.path\.isdir(d) for d in owner_tops):/if True:/' "$W_M5"; then
-  if [ "$(rc_of mutC)" -eq 0 ] && grep -qE '^  SKIP ' "$OUTDIR/mutC.txt"; then
-    mutant_killed "$([ "$M5_RC" -ne 0 ] && echo 1)" mutC "MUTATION C (SKIP made unconditional): MUTANT 5's broken pointer is acquitted — that arm can fire"
-  else
-    bad "MUTATION C: rc=$(rc_of mutC) — the SKIP condition changes no outcome on a broken pointer, so the near-miss is vacuous"
-  fi
-else
-  bad "MUTATION C did not apply — the SKIP narrowing is unproven"
-fi
-
-# MUTATION D — sum coverage over ROWS instead of distinct names. Arm 4 must die.
-if mutate mutD 's/DECLARED_OK="\$(sort -u "\$OK_NAMES_FILE" | grep -c \.)" || DECLARED_OK=0/DECLARED_OK="$ROW_COUNT"/' "$W_BASE"; then
-  MD_LINE="$OUTDIR/mutD-pass.txt"
-  grep -F 'PASS —' "$OUTDIR/mutD.txt" > "$MD_LINE" 2>/dev/null
-  MC="$(sed -n 's/.*PASS — \([0-9][0-9]*\) of .*/\1/p' "$MD_LINE")"
-  if [ -n "$MC" ] && [ "$MC" -ne "$DERIVED_COVERED" ] && [ "$MC" -eq "$DERIVED_ROWS" ]; then
-    mutant_killed "$B_arm4" mutD "MUTATION D (coverage summed over rows): the PASS line reads $MC (= rows), not $DERIVED_COVERED (= names) — arm 4 can fire"
-  else
-    bad "MUTATION D: the PASS line reads [${MC:-<absent>}] against $DERIVED_COVERED names / $DERIVED_ROWS rows — arm 4 cannot tell rows from names"
-  fi
-else
-  bad "MUTATION D did not apply — the distinct-name coverage count is unproven"
-fi
-
-# MUTATION E — stop printing the anchor column. Arm 3 and both receipt-shaped rejections must die.
-#
-# THE FORMAT ARGUMENT GOES WITH THE PLACEHOLDER, for the same reason MUTATION B keeps its tuple
-# shape. Removing `anchor=%s` alone leaves five arguments for four placeholders, the reader raises
-# on the first OK row, and the run reports `PASS — 0 of 0` — a dead program, not a program that
-# stopped printing a column. The rows must still be THERE and only the column gone, which is what
-# the arm's `E_ROWS -eq 2` conjunct asserts.
-if mutate mutE "s/ :: %s :: anchor=%s' % (tag, nm, where, e.get('kind', '?'), anchor))/ :: %s' % (tag, nm, where, e.get('kind', '?')))/" "$W_BASE"; then
-  A="$(receipt_anchor "$OUTDIR/mutE.txt")"
-  E_ROWS="$(count_in "$OUTDIR/mutE.txt" "declared   $CODE_NAME ")"
-  if [ -z "$A" ] && [ "$E_ROWS" -eq 2 ]; then
-    mutant_killed "$B_arm3" mutE "MUTATION E (anchor column removed): the rows are still there and the receipt reads nothing — arms 3/M1/M2 can fire"
-  else
-    bad "MUTATION E: receipt read [${A:-<empty>}] over $E_ROWS row(s) — the anchor column is not what those arms bind on"
-  fi
-else
-  bad "MUTATION E did not apply — the anchor column is unproven"
-fi
-
-# CONTROL — UNMUTATED, built by the same copy path as every mutation above. A partial copy tree
-# makes every mutant survive AND this control pass — two inert runs compare equal — so the control
-# carries POSITIVE conjuncts: a baseline row must be THERE, with the right anchor.
-CTL="$MUT/control"
-rm -rf "$CTL"; cp -R "$W_BASE" "$CTL" || { echo "write-format-steering-multiformat: FIXTURE ERROR — control copy failed" >&2; exit 2; }
-AI_DLC_PROJECT_ROOT="$CTL" bash "$CTL/core/scripts/validate-write-format-steering.sh" --report > "$OUTDIR/control.txt" 2>&1
-CTL_RC=$?
-CTL_ANCHOR="$(receipt_anchor "$OUTDIR/control.txt")"
-CTL_ROWS="$(count_in "$OUTDIR/control.txt" "declared   $CODE_NAME ")"
-if [ "$CTL_RC" -eq 0 ] && [ "$CTL_ANCHOR" = "$CODE_ANCHOR" ] && [ "$CTL_ROWS" -eq 2 ]; then
-  ok "CONTROL (unmutated copy, same copy path): exit 0, 2 rows for the shared name, anchor [$CODE_ANCHOR] — the mutation harness runs a real subject"
-else
-  bad "CONTROL: rc=$CTL_RC rows=$CTL_ROWS anchor=[${CTL_ANCHOR:-<absent>}] — every mutation verdict above is about a subject that may never have run"
-fi
-
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-report_end write-format-steering-multiformat 21
+report_end write-format-steering-multiformat 15

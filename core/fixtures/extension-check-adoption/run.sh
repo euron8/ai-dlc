@@ -14,9 +14,6 @@
 #   - re-running --apply is a no-op (level-triggered, idempotent)
 #   - NON-VACUITY: stripping the written `gate_types:` back out turns the tree ORPHAN,
 #     which is what proves the atomicity requirement is real rather than decoration
-#   - MUTATION: each half of the write is load-bearing, and each mutant fails ONLY its
-#     own assertion — asserted on the emitted CODE, not on exit status, because both
-#     halves fail with exit 1 and would otherwise entangle
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -41,8 +38,6 @@ done
 rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
-. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_anchor=0; B_gts=0; B_scope=0
 
 fresh() { bash "$DIR/seed.sh"; }
 # The operator's answer to the NEEDS DECISION row: the entry really is a check and its
@@ -164,17 +159,17 @@ a=$?
 grep -q 'CHECK_LOADED: 915'  "$S/extensions/checks/numeric.md" && \
 grep -q 'CHECK_LOADED: 919b' "$S/extensions/checks/numeric.md" && \
 grep -q 'CHECK_LOADED: XVH'  "$S/extensions/checks/alpha.md" \
-  && { ok "APPLY wrote the anchors, alphabetic id included"; B_anchor=1; } \
+  && ok "APPLY wrote the anchors, alphabetic id included" \
   || bad "APPLY did not write every anchor"
 
 grep -q '^gate_types: \[planning\]' "$S/extensions/checks/numeric.md" && \
 grep -q '^gate_types: \[planning\]' "$S/extensions/checks/alpha.md" \
-  && { ok "APPLY wrote gate_types: into the entry frontmatter"; B_gts=1; } \
+  && ok "APPLY wrote gate_types: into the entry frontmatter" \
   || bad "APPLY did not write gate_types:"
 
 grep -q 'CHECK_LOADED: 940' "$S/extensions/checks/out-of-scope.md" \
   && bad "APPLY rewrote the out-of-scope entry" \
-  || { ok "APPLY left the out-of-scope entry untouched"; B_scope=1; }
+  || ok "APPLY left the out-of-scope entry untouched"
 
 # GM1 cannot be clear yet: the kind-mismatch entry's heading is still UNLOADABLE and
 # the tool REFUSED to write it. That refusal is correct, and asserting it here is what
@@ -212,95 +207,6 @@ else
   bad "NON-VACUITY: stripping gate_types: left the tree green (exit $g) — the atomicity claim is unfounded"
 fi
 rm -rf "$R"
-
-# --- 8. MUTANTS: one per half of the write, each failing only its own assertion -----
-# Asserted on the CODE the manifest resolver emits, not on exit status: both halves
-# fail at exit 1, so an exit-status assertion would let these two entangle and one
-# would be vacuous.
-# mutate <name> <literal-substring> <replacement> -> prints the mutant path, or empty
-# if the substring matched nothing. LITERAL, via python: the subject lines are python
-# source full of regex metacharacters, and a sed/perl spelling of them is a second
-# escaping problem whose failure mode is a mutant identical to the subject — which then
-# "fails as expected" for the wrong reason. `cmp -s` is what catches that, and it did:
-# the first draft of these three matched nothing and the fixture refused to score them.
-mutate() {
-  local name="$1" M
-  M="$(mktemp "${TMPDIR:-/tmp}/adopt-mutant-$name.XXXXXX")"
-  cp "$T" "$M"
-  MUT_OLD="$2" MUT_NEW="$3" python3 - "$M" <<'MPY'
-import os, sys
-p = sys.argv[1]
-s = open(p).read()
-old, new = os.environ["MUT_OLD"], os.environ["MUT_NEW"]
-open(p, "w").write(s.replace(old, new, 1))
-MPY
-  if cmp -s "$T" "$M"; then rm -f "$M"; printf ''; else printf '%s' "$M"; fi
-}
-
-code_of() { # run the manifest resolver, echo the code it emits
-  local root="$1" out
-  out="$(bash "$V" "$root/.claude/skills/ai-dlc/steps/gate-validation.md" 2>&1)"
-  if   grep -q 'FAIL GM1' <<<"$out"; then echo GM1
-  elif grep -q 'FAIL GM2' <<<"$out"; then echo GM2
-  elif grep -q 'ORPHAN  (anchor, no manifest claim): [^n]' <<<"$out"; then echo ORPHAN
-  elif grep -q 'PASS' <<<"$out"; then echo PASS
-  else echo OTHER; fi
-}
-
-# M1 — neuter the ANCHOR write. `gate_types:` lands, the anchors do not, so the entry
-# declares loading for an id that exists nowhere: GM2, "the declaration claims loading
-# for nothing". M2 below neuters the other half and produces ORPHAN. TWO DIFFERENT
-# CODES from the two halves is the point — it is what proves the assertions are not
-# entangled, and it is why these assert on the code rather than on exit status, which
-# is 1 for both.
-M1="$(mutate anchor ' + f"<!-- CHECK_LOADED: {i} -->\n"' ' + ""')"
-if [ -z "$M1" ]; then
-  bad "FIXTURE ERROR: the anchor-write mutation matched nothing — assertion 5 proves nothing"
-else
-  R1="$(fresh)"; decide "$R1"; bash "$M1" "$R1" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
-  c="$(code_of "$R1")"
-  [ "$c" = "GM2" ] && mutant_killed "$B_anchor" anchor-write "MUTANT anchor-write: without the anchor the declaration claims loading for nothing — GM2" \
-                   || bad "MUTANT anchor-write: expected GM2, got $c"
-  rm -rf "$R1" "$M1"
-fi
-
-# M2 — neuter the gate_types WRITE. Anchors land, declaration does not: ORPHAN.
-M2="$(mutate gts '        if not declared:' '        if False:')"
-if [ -z "$M2" ]; then
-  bad "FIXTURE ERROR: the gate_types-write mutation matched nothing — assertion 5 proves nothing"
-else
-  R2="$(fresh)"; decide "$R2"; bash "$M2" "$R2" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
-  c="$(code_of "$R2")"
-  [ "$c" = "ORPHAN" ] && mutant_killed "$B_gts" gate_types-write "MUTANT gate_types-write: without the declaration the anchors become ORPHANs (a DIFFERENT code, so the two assertions are not entangled)" \
-                      || bad "MUTANT gate_types-write: expected ORPHAN, got $c"
-  rm -rf "$R2" "$M2"
-fi
-
-# M3 — neuter the kind guard. The seeded `step-domain` entry hooks the SAME manifest,
-# so the guard is the only thing between it and a written `gate_types:`. Without the
-# guard the tool picks one of two opposite fixes by accident.
-M3="$(mutate kind '        if frontmatter(t, "kind") != "check":' '        if False:')"
-if [ -z "$M3" ]; then
-  bad "FIXTURE ERROR: the entry-filter mutation matched nothing"
-else
-  R3="$(fresh)"; bash "$M3" "$R3" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
-  if grep -q 'CHECK_LOADED: 940' "$R3/.claude/skills/ai-dlc/extensions/checks/out-of-scope.md" 2>/dev/null; then
-    mutant_killed "$B_scope" entry-filter "MUTANT entry-filter: ignoring \`kind:\` rewrites a \`step-domain\` entry (that filter is load-bearing)"
-  else
-    bad "MUTANT entry-filter: the out-of-scope entry survived — the scope assertion proves nothing"
-  fi
-  rm -rf "$R3" "$M3"
-fi
-
-# --- unmutated control -------------------------------------------------------------
-# A mutant copy that dies for its own reasons emits nothing, and "no output" would
-# otherwise score as a kill.
-MC="$(mktemp "${TMPDIR:-/tmp}/adopt-control.XXXXXX")"; cp "$T" "$MC"
-RC="$(fresh)"; decide "$RC"; bash "$MC" "$RC" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
-c="$(code_of "$RC")"
-[ "$c" = "PASS" ] && ok "CONTROL: an UNMUTATED copy still clears GM1 (the mutants died of their edits, not of being copies)" \
-                  || bad "CONTROL: the unmutated copy produced $c — every mutant verdict above is unattributable"
-rm -rf "$RC" "$MC"
 
 # --- 9. THE MAP->ROW DIRECTION OF THE GATE_MANIFEST JOIN ----------------------------
 # Subject: the live GATE_MANIFEST region and the live enforcement-map.yaml, joined in the
@@ -431,7 +337,7 @@ else
   # neither shipped file — declared on BOTH sides so the base stays clean. It is what lets
   # the LIVE arm below prove it read the LIVE files: the two are byte-identical whenever
   # the corpus is clean, so an arm silently repointed at the probe base would otherwise be
-  # green forever and its mutant would survive for a corpus reason.
+  # green forever.
   PW="$(mktemp -d "${TMPDIR:-/tmp}/gate-manifest-join.XXXXXX")"
   SENT_GT="probe-only-gate"; SENT_ID="PROBE-SENTINEL"
   row_edit "$EM_GV" sprint-review 20 add > "$PW/gv-pre.md"

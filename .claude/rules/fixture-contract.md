@@ -8,7 +8,7 @@ paths:
 Every `core/fixtures/<f>/` is built to this contract. Each clause ends with its enforcer, and
 `scripts/validate-claude-rules.sh` A7 fails the push on a clause with none or on a cite that resolves to nothing. A
 fixture that predates a clause is a row of its arm's down-only allowlist: migrate it and drop the row in the same
-change. Mutant mechanics are `fixture-mutants.md`'s; shipping is `fixture-ship-decl.md`'s.
+change. Building good arms is `fixture-mutants.md`'s; shipping is `fixture-ship-decl.md`'s.
 
 ## The run.sh skeleton
 
@@ -17,7 +17,7 @@ change. Mutant mechanics are `fixture-mutants.md`'s; shipping is `fixture-ship-d
 - **C2** Its first command sources `lib/preamble.sh`; the first statement after `set -uo pipefail` is the
   env-derived `AI_DLC_*` unset loop. Enforcer: `scripts/validate-fixture-git-env.sh`;
   `scripts/validate-fixture-hygiene.sh` H8.
-- **C3** It sources `lib/report.sh` before `lib/mutant.sh`, asserts only through `ok` and `bad`, and ends with
+- **C3** It sources `lib/report.sh` before any `lib/mutant.sh` it uses for `fx_inproc`, asserts only through `ok` and `bad`, and ends with
   `report_end <f> [<expected count>]`. Enforcer: `scripts/validate-fixture-hygiene.sh` H10.
 - **C4** Every `lib/*.sh` source is guarded: a missing file exits non-zero. Enforcer:
   `scripts/validate-fixture-hygiene.sh` H6.
@@ -34,15 +34,12 @@ change. Mutant mechanics are `fixture-mutants.md`'s; shipping is `fixture-ship-d
   `world_install <root> <dir>`. `hook-drive.sh`: `hook_drive [--hook <path>] <tree> <out> [NAME=value ...] [--
   <args>]`, which prints the hook's status and runs it with `GIT_*` unset, stdin `/dev/null`,
   `AI_DLC_READSET_LIVE_TRACE=0` and the store `<tree>.verdicts`; it sets no `AI_DLC_FIXTURE_JOBS` (a nested pool is
-  capped at two workers). `inproc.sh`: `inproc_load`, `inproc_run`. `mutant.sh`: `need_base`, `mutant_killed`,
-  `fx_inproc`. `matrix.sh`: `matrix_row`. `settled-net.sh`: `st_net`, `st_reap`. Enforcer:
-  `core/fixtures/suite-dispatch-order/run.sh` hook_drive, world_git, report_end; `scripts/validate-fixture-hygiene.sh`
-  H10, H11.
-- **C9** A mutant kill is emitted only by `mutant_killed <flag> <name> <message>`, its flag a value the unmutated run
-  set. Enforcer: `scripts/validate-mutant-kills.sh` M1, M5.
-- **C10** A matrix row is printed only by `matrix_row`; every scored mutant has a `MUTANT-MATRIX` row naming its
-  deciding arm and twin. Enforcer: `scripts/validate-fixture-hygiene.sh` H5, H7;
-  `scripts/validate-fixture-invocations.sh` J5.
+  capped at two workers). `inproc.sh`: `inproc_load`, `inproc_run`. `mutant.sh`: `fx_inproc`. `settled-net.sh`:
+  `st_net`, `st_reap`. Enforcer: `core/fixtures/suite-dispatch-order/run.sh` hook_drive, world_git, report_end;
+  `scripts/validate-fixture-hygiene.sh` H10, H11.
+- **C9** No fixture carries a mutation battery: no `run.sh` or `lib.sh` calls or defines `mutant_killed`, `need_base`,
+  `matrix_row`, `mkmut`, `mut_copy` or `mutate_file`, carries a `# MUTANT-MATRIX` line or sources `lib/matrix.sh`.
+  That an arm can fail is proved once, by hand, at authoring. Enforcer: `scripts/validate-fixture-hygiene.sh` H12.
 - **C11** An in-process pass is `inproc_load` then `inproc_run`, or a source paired with `fx_inproc`, and is counted
   on an `inproc:` row. Enforcer: `scripts/validate-fixture-invocations.sh` P2, J7.
 
@@ -78,14 +75,14 @@ change. Mutant mechanics are `fixture-mutants.md`'s; shipping is `fixture-ship-d
 - **C20** A declared fixture's key is the rows of its declarations, every file of its own directory, and the
   runner's `<runner>#HR_SANDBOX` and `<runner>#HR_EXIT` rows; the runner is keyed whole only for a fixture that
   declares it by name. One composer, the READSET_KEYROWS span, serves the hook and the runner. Enforcer:
-  `core/fixtures/readset-skip/run.sh` runnerrow, wholefile; `core/fixtures/hermetic-runner/run.sh`; **I66**.
+  `core/fixtures/readset-skip/run.sh` rchg, rout; `core/fixtures/hermetic-runner/run.sh`; **I66**.
 - **C21** The store identity is `#universe f<READSET_VS_FORMAT>` plus `#runner`; a code change in a `READSET_*` span
   carries a `# VS-IDENTITY <format> <sha> <reason>` pin row. A push reads only `counted-<vk>`. Enforcer:
-  `scripts/validate-verdict-identity.sh`; `core/fixtures/readset-skip/run.sh` ident-drops-keyrows.
+  `scripts/validate-verdict-identity.sh`; `core/fixtures/readset-skip/run.sh` vs_world.
 - **C22** A recorded pass is reused when every current key row is in it with the same value, so narrowing a
   declaration with no other change to the fixture reuses its pass. Enforcer: `core/fixtures/readset-skip/run.sh`
-  nodigest.
+  vs_world.
 - **C23** No change invalidates a verdict whose read inputs it did not change: a fixture selected only by a change it
   cannot read fails the push. Enforcer: `.githooks/pre-push` readset_invalidation_guard; `scripts/invalidation-guard.sh`.
 - **C24** A counted run outside the pool gives the fixture stdin `/dev/null`, as the pool does; seed a push with
-  `scripts/seed-verdict-store.sh`. Enforcer: `core/fixtures/seed-verdict-store-red-print/run.sh` a4, m-stdin.
+  `scripts/seed-verdict-store.sh`. Enforcer: `core/fixtures/seed-verdict-store-red-print/run.sh` a4.

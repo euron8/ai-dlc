@@ -245,7 +245,7 @@ grep -q 'does not carry its own resume one-liner' <<<"$(run "$T/p10c.md")" \
 # THE SEED IS A DELETION OF THE INSTRUCTION, WHICH IS THE REAL OFFENDER SHAPE, and it is
 # anchored on the sentence rather than on a numbered-list prefix DELIBERATELY. P2's seed
 # strips `^[12]\. ` to prove a plan with nothing to follow fires; if this arm's subject were
-# a numbered action, that one seed would remove both subjects and a single mutant would fail
+# a numbered action, that one seed would remove both subjects and a single seed would fail
 # two assertions -- entangled arms, one of which is then vacuous. Each arm gets a subject the
 # other cannot see.
 conforming p11.md | grep -v 're-derive this plan' > "$T/p11.md"
@@ -308,7 +308,7 @@ grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$T/p13b.md")" \
 
 # --- P13 re-keyed: the handoff ACTION carries ListAgents, not just the file ------------------
 # Seed A removes ONLY the handoff action's ListAgents; the 0. action still names it, so a
-# file-wide key (mutant m3) is satisfied and P13 stays silent. P14 has nothing to say: the
+# file-wide key is satisfied and P13 stays silent. P14 has nothing to say: the
 # marker action is intact. Seed B (above, p13.md) strips every ListAgents, so no other copy
 # can rescue it -- P14 also fires there because the marker action loses its own conjunct,
 # which is why P14's quiet-on-P13 cell is asserted on seed A alone.
@@ -367,7 +367,7 @@ p14 "$T/p14p.md" \
 # 4. bleed: the pointer-only 0. is followed, after a blank line, by col-0 prose that carries
 # EVERY conjunct P14 checks. A window that runs to the next ACTION scores the pointer by that
 # prose, so the arm fires only if the window stops at the blank line. The prose must carry every
-# conjunct: one missing keeps P14 firing under the bleed mutant too, and the arm kills nothing.
+# conjunct: one missing keeps P14 firing whatever the window does, and the arm discriminates nothing.
 awk '
   /^1\. Do the first thing/ {
     print "ListAgents is the roll call; the lead never builds and owners work through hands."
@@ -379,7 +379,7 @@ awk '
 cmp -s "$T/p14bl.md" "$T/p14p.md" && bad "FIXTURE STALE: the bleed seed matched nothing"
 grep -q '^ListAgents is the roll call' "$T/p14bl.md" || bad "FIXTURE STALE: the bleed seed lost its col-0 prose"
 grep -qxF 'Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better.' "$T/p14bl.md" \
-  || bad "FIXTURE STALE: the bleed prose lacks the time sentence, so P14 fires under the bleed mutant too"
+  || bad "FIXTURE STALE: the bleed prose lacks the time sentence, so P14 fires whatever the window does"
 p14 "$T/p14bl.md" \
   && ok "P14 fires on bleed: a pointer-only action is not scored by col-0 prose after a blank line" \
   || bad "P14 silent on bleed — the window runs past the blank line into prose the action does not own"
@@ -396,7 +396,7 @@ p14 "$T/p14w.md" \
 # 6. the marker on a wrapped 236. line OUTSIDE the Next actions section, none on the action.
 # The 236. line carries EVERY conjunct and sits BEFORE the Next actions heading. After the
 # section it would be a later window, and the order rule would fire even when the whole file is
-# scanned, so the arm would kill nothing. Before it, a whole-file scan makes 236. the first
+# scanned, so the arm would discriminate nothing. Before it, a whole-file scan makes 236. the first
 # window with every conjunct present, and only the section bound keeps P14 firing.
 conforming p14h.md | sed 's/DESIGNATE THE LEAD\. //' | awk '
   { print }
@@ -551,7 +551,7 @@ p14 "$T/p14kc.md" \
 mkdir -p "$T/empty/docs/plans" "$T/empty/scripts"
 # COPY UNDER THE CANONICAL BASENAME, never `cp "$V" dir/`. The line below invokes
 # `scripts/validate-plan-shape.sh` by name, so driving this fixture with an
-# alternately-named copy of the validator -- which is exactly what a mutation run does --
+# alternately-named copy of the validator
 # left nothing at that path and the arm exited 127. A 127 scored as "the empty corpus did
 # not exit 2", so a harness failure read as the defect this arm exists to catch.
 cp "$V" "$T/empty/scripts/validate-plan-shape.sh"

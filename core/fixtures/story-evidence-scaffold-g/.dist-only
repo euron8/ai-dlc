@@ -1,0 +1,3 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is a shard of a shipped fixture: group g of story-evidence-scaffold drives DAR-N and the WAIVER (BL-957) worlds. The arms read a copy of core's own validate-handoff-evidence.sh, record-only-diff.sh and sprint-status.sh (written beside their siblings in a copy of core/scripts/), whose bytes are the same in both layouts. A consumer runs the shipped story-evidence-scaffold, which keeps the arms that can depend on placement.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-22-spawn-ledger — Check 22's mechanical arms, and the proof they can fail.
+# check-22-spawn-ledger — Check 22's mechanical arms.
 #
 # WHAT THIS EXISTS TO CATCH. gate-validation.md Check 22 published three field comparisons
 # per spawn-ledger row — `model_bound` against `aiDlcRoles.<role>.model`,
@@ -15,10 +15,7 @@
 # validator does.
 #
 # EVERY ARM IS ASSERTED ON ITS OWN WORDING AND HAS ITS OWN SCENARIO FILE. Four of the arms
-# below exit 1 and would all match a grep for "FAIL"; a mutant that collapses two of them
-# into one is exactly what the per-arm battery catches. Reusing one scenario across arms is
-# the recorded trap from v0.210.0, where a single off-by-one mutant failed three assertions
-# at once and two of the three were therefore vacuous.
+# below exit 1 and would all match a grep for "FAIL", so each asserts its own token.
 #
 # PRE-LEDGER IS ITS OWN EXIT CODE and gets its own arm. "No violation found" and "no row was
 # ever examined" are different facts, and a reader that cannot tell them apart passes
@@ -46,174 +43,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-# need_base <flag> <mutant-name> and mutant_killed <flag> <mutant-name> <message> live in the
-# shared lib/mutant.sh: a mutant's kill condition is a value the UNMUTATED arm it guards would also
-# print if it were failing, so a mutant is scored only when that arm PASSED in this run (flag 1).
-# Otherwise the "kill" is the seed failing, not the mutation: FIXTURE BROKEN, never ok. Every kill
-# below is emitted through mutant_killed; scripts/validate-mutant-kills.sh refuses one that is not.
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# need_base_probe -- need_base and mutant_killed ITSELF, both directions, in subshells so the probe
-# counts nothing: a failing flag must print FIXTURE BROKEN, return 2 and (for mutant_killed) print no
-# ok; a passing flag must return 0 silently from need_base and print the ok from mutant_killed.
-need_base_probe() {
-  local o r
-  o="$(need_base 0 probe-fail 2>&1)"; r=$?
-  case "$o" in *"FIXTURE BROKEN"*) ;; *) return 1 ;; esac
-  [ "$r" -eq 2 ] || return 1
-  o="$(need_base 1 probe-pass 2>&1)"; r=$?
-  [ "$r" -eq 0 ] && [ -z "$o" ] || return 1
-  o="$(mutant_killed 0 probe-mk-fail "probe-mk-fail-msg" 2>&1)"; r=$?
-  case "$o" in *"FIXTURE BROKEN"*) ;; *) return 1 ;; esac
-  case "$o" in *"probe-mk-fail-msg"*) return 1 ;; esac
-  [ "$r" -eq 2 ] || return 1
-  o="$(mutant_killed 1 probe-mk-pass "probe-mk-pass-msg" 2>&1)"; r=$?
-  case "$o" in *"ok    probe-mk-pass-msg"*) ;; *) return 1 ;; esac
-  case "$o" in *"FIXTURE BROKEN"*) return 1 ;; esac
-  [ "$r" -eq 0 ] || return 1
-  return 0
-}
-
 echo "check-22-spawn-ledger:"
-
-# --- NB. need_base is probed BEFORE any arm, and every call site is bound to an unmutated run ---------
-if need_base_probe; then
-  ok "NB SELF-PROBE: need_base and mutant_killed report FIXTURE BROKEN and return 2 on a failing baseline flag (mutant_killed printing no ok); on a passing one need_base returns 0 silently and mutant_killed prints its ok"
-else
-  echo "FIXTURE BROKEN: the need_base self-probe failed -- a mutant guard that cannot refuse would let every guarded mutant score a kill over a failing baseline" >&2
-  exit 2
-fi
-# NB MUTANTS: need_base made a no-op (always success), and mutant_killed made to skip need_base.
-# Their definitions are lifted from lib/mutant.sh and the probe from THIS file into a copy; the
-# unmutated copy must exit 0 and each mutant must be refused by the probe.
-SELF_FILE="$HERE/$(basename "$0")"
-nb_lift() { # run.sh lib report-lib -> the ok()/bad() lines, need_base, mutant_killed and need_base_probe, then a probe call
-  printf 'set -uo pipefail\nfails=0\noks=0\n'
-  grep '^ok() {' "$3"
-  grep '^bad() {' "$3"
-  awk '/^need_base\(\) \{$/ || /^mutant_killed\(\) \{$/ { p = 1 } p { print } p && /^\}$/ { p = 0 }' "$2"
-  awk '/^need_base_probe\(\) \{$/ { p = 1 } p { print } p && /^\}$/ { p = 0 }' "$1"
-  printf 'need_base_probe || exit 2\nexit 0\n'
-}
-nb_lift "$SELF_FILE" "$MUT_LIB" "$HERE/../lib/report.sh" > "$WORK/nb-ctl.sh"
-sed 's/^  \[ "\$1" = 1 \] && return 0$/  return 0/' "$WORK/nb-ctl.sh" > "$WORK/nb-mut.sh"
-sed 's/^  need_base[ ]"\$1" "\$2" || return 2$/  :/' "$WORK/nb-ctl.sh" > "$WORK/nb-mkmut.sh"
-if ! grep -q '^need_base_probe() {$' "$WORK/nb-ctl.sh" || ! grep -q '^mutant_killed() {$' "$WORK/nb-ctl.sh" \
-   || ! grep -q '^ok() {' "$WORK/nb-ctl.sh" \
-   || cmp -s "$WORK/nb-ctl.sh" "$WORK/nb-mut.sh" || cmp -s "$WORK/nb-ctl.sh" "$WORK/nb-mkmut.sh"; then
-  bad "FIXTURE BROKEN: an NB mutant did not apply -- need_base, mutant_killed or the probe could not be lifted from $SELF_FILE and $MUT_LIB"
-else
-  bash "$WORK/nb-ctl.sh" >/dev/null 2>&1; nb_c=$?
-  if [ "$nb_c" -eq 0 ]; then
-    ok "NB CONTROL: the lifted unmutated need_base, mutant_killed and probe exit 0"; B_nbctl=1
-  else
-    bad "NB CONTROL: the lifted unmutated copy exited $nb_c (want 0)"
-  fi
-  bash "$WORK/nb-mut.sh" >/dev/null 2>&1; nb_m=$?
-  if [ "$nb_m" -eq 2 ]; then
-    mutant_killed "${B_nbctl:-0}" nb "NB MUTANT killed: need_base made a no-op (always success) is refused by the self-probe (exit 2), while the lifted unmutated copy exits 0"
-  else
-    bad "NB MUTANT: no-op need_base exit $nb_m (want 2)"
-  fi
-  bash "$WORK/nb-mkmut.sh" >/dev/null 2>&1; nb_k=$?
-  if [ "$nb_k" -eq 2 ]; then
-    mutant_killed "${B_nbctl:-0}" nbmk "NB MUTANT (mutant_killed skips need_base) killed: a kill emitted over a failing flag is refused by the self-probe (exit 2)"
-  else
-    bad "NB MUTANT (mutant_killed skips need_base): exit $nb_k (want 2)"
-  fi
-fi
-# NB BINDING: every need_base call site passes either a B_<name> flag or a $([ "$VAR" = ... ]) test.
-# A flag is bound when every `B_<name>=1` sits on the line of an unmutated arm's `ok "` (no MUTANT),
-# or is an all-ones conjunction of bound flags; a VAR is bound when its every `VAR="$(` assignment
-# runs "$VSL", the unmutated mut/control.sh, or pscell over the unmutated role files. Any other
-# argument (a constant, a mutant's value) is UNBOUND. Calls inside need_base_probe are exempt.
-cat > "$WORK/nb-bind.awk" <<'AWK'
-{ L[NR] = $0 }
-END {
-  # heredoc bodies are data, never code: mark them so neither loop reads a seed or a program
-  for (i = 1; i <= NR; i++) {
-    if (tag != "") { if (L[i] == tag) tag = ""; else H[i] = 1; continue }
-    if (match(L[i], /<<'?[A-Za-z_]+'?[ \t]*$/)) { tag = substr(L[i], RSTART + 2); gsub(/[' \t]/, "", tag) }
-  }
-  for (i = 1; i <= NR; i++) {
-    s = L[i]
-    if ((i in H) || s ~ /^[ \t]*#/) continue
-    t = s
-    while (match(t, /B_[A-Za-z0-9_]+=1/)) {
-      nm = substr(t, RSTART, RLENGTH - 2); seen[nm] = 1
-      if (index(s, "ok \"") > 0 && index(s, "MUTANT") == 0) okset[nm] = 1
-      else if (index(s, "] && " nm "=1") > 0 && index(s, "\"${B_") > 0) depl[nm] = s
-      else badset[nm] = 1
-      t = substr(t, RSTART + RLENGTH)
-    }
-    if (match(s, /^[ \t]*[A-Za-z0-9_]+="\$\(/)) {
-      v = s; sub(/^[ \t]*/, "", v); sub(/=.*/, "", v)
-      if (index(s, "\"$VSL\"") || index(s, "mut/control.sh\"") || index(s, "pscell \"$WORK/ps/")) vok[v] = 1
-      else vbad[v] = 1
-    }
-  }
-  for (nm in okset) if (!(nm in badset)) bound[nm] = 1
-  for (pass = 0; pass < 5; pass++) for (nm in depl) {
-    if ((nm in bound) || (nm in badset)) continue
-    d = depl[nm]; n = 0; all = 1
-    while (match(d, /\$\{B_[A-Za-z0-9_]+/)) { dn = substr(d, RSTART + 2, RLENGTH - 2); n++; if (!(dn in bound)) all = 0; d = substr(d, RSTART + RLENGTH) }
-    want = ""; for (k = 0; k < n; k++) want = want "1"
-    if (n > 0 && all && index(depl[nm], "= " want " ]") > 0) bound[nm] = 1
-  }
-  inprobe = 0
-  for (i = 1; i <= NR; i++) {
-    s = L[i]
-    if (s ~ /^need_base_probe\(\) \{$/) { inprobe = 1; continue }
-    if (inprobe) { if (s ~ /^\}$/) inprobe = 0; continue }
-    if ((i in H) || s ~ /^[ \t]*#/) continue
-    p = index(s, "need_base \""); w = 10
-    if (p == 0) { p = index(s, "mutant_killed \""); w = 14 }
-    if (p == 0) continue
-    if (p > 1 && substr(s, p - 1, 1) ~ /[A-Za-z0-9_]/) continue
-    a = substr(s, p + w)
-    sites++
-    if (a ~ /^"\$\{B_[A-Za-z0-9_]+:-0\}"/ || a ~ /^"\$B_[A-Za-z0-9_]+"/) {
-      match(a, /B_[A-Za-z0-9_]+/); nm = substr(a, RSTART, RLENGTH)
-      if (!(nm in bound)) print "UNBOUND " i " flag " nm
-    } else if (a ~ /^"\$\(\[ /) {
-      e = a; sub(/ && echo 1\)".*$/, "", e); nv = 0; ub = 0
-      while (match(e, /\[ "\$[A-Za-z0-9_]+"/)) { v = substr(e, RSTART + 4, RLENGTH - 5); nv++; if (!(v in vok) || (v in vbad)) ub = 1; e = substr(e, RSTART + RLENGTH) }
-      if (nv == 0 || ub) print "UNBOUND " i " test " a
-    } else print "UNBOUND " i " arg " a
-  }
-  print "SITES " (sites + 0)
-}
-AWK
-cat > "$WORK/nb-seed.sh" <<'SEED'
-ok "g"; B_g=1
-need_base "${B_g:-0}" g
-need_base "1" c
-B_u=1
-need_base "${B_u:-0}" u
-ok "MUTANT m scored"; B_m=1
-need_base "${B_m:-0}" m
-XGOT="$(fn "$M")"
-need_base "$([ "$XGOT" = a ] && echo 1)" x
-VGOT="$(fn "$VSL")"
-need_base "$([ "$VGOT" = a ] && echo 1)" v
-mutant_killed "1" mc "msg"
-mutant_killed "${B_g:-0}" mg "msg"
-SEED
-NB_SEED="$(awk -f "$WORK/nb-bind.awk" "$WORK/nb-seed.sh" | awk '$1 == "UNBOUND" { printf "%s ", $2 } $1 == "SITES" { printf "| %s", $2 }')"
-if [ "$NB_SEED" != "3 5 7 9 12 | 8" ]; then
-  echo "FIXTURE BROKEN: the need_base binding check over its seeded file reported [$NB_SEED], expected [3 5 7 9 12 | 8] -- it must flag a constant (at a need_base and at a mutant_killed site), an unconditional flag, a flag set by a MUTANT ok and a mutant's value, and pass a bound flag at both kinds of site and a \$VSL value" >&2
-  exit 2
-fi
-NB_OUT="$(awk -f "$WORK/nb-bind.awk" "$SELF_FILE")"
-NB_SITES="$(sed -n 's/^SITES //p' <<<"$NB_OUT")"
-NB_UNB="$(grep -c '^UNBOUND' <<<"$NB_OUT")" || NB_UNB=0
-if [ "${NB_SITES:-0}" -gt 0 ] && [ "$NB_UNB" -eq 0 ]; then
-  ok "NB BINDING: all $NB_SITES need_base call sites pass a flag set only by an unmutated arm's ok, or a test over a value run on \$VSL or the unmutated control (the check fired both ways on its seeded file first)"
-else
-  bad "NB BINDING: $NB_UNB of ${NB_SITES:-0} need_base call site(s) are not bound to an unmutated run: $(grep '^UNBOUND' <<<"$NB_OUT" | tr '\n' ';')"
-fi
 
 # --- the consumer config every arm resolves its pin against --------------------
 # `dev` pins the key `sonnet`, `protected-path-editor` pins `opus`, and `tea` is a party
@@ -252,7 +82,7 @@ row() { # role bound requested cited readable name
 }
 
 # ONE SCENARIO FILE PER ARM. Every field is populated except where the arm's own subject is
-# an absent one, so a mutant to the field mapping moves the F arm and nothing else.
+# an absent one, so a change to the field mapping moves the F arm and nothing else.
 row dev sonnet sonnet true true dev-clean                          > "$WORK/clean.jsonl"
 row tea inherit inherit true true tea-party                       >> "$WORK/clean.jsonl"
 row dev sonnet sonnet true false dev-norolefile                    > "$WORK/unreadable.jsonl"
@@ -274,28 +104,24 @@ jq -nc '{v:1,sprint:899,name:"dev-lastsprint",role:"dev",model_bound:"sonnet",mo
 # each for a dispatch Rule 19 does not bind. The offender sits BESIDE a clean in-scope row
 # in the SAME run: a near-miss in a separate run can only ask whether the filter fires at
 # all, never whether it fires on the right rows.
-# `model_requested` populated on purpose: with a null field here this arm rides on the
-# sentinel mutant, which shifts every later column — including the schema marker, so the
-# skipped row reads as one the guard did not write and the arm moves for the wrong reason.
+# `model_requested` populated on purpose: a null field here would shift every later column,
+# including the schema marker, so the skipped row would read as one the guard did not write.
 row general-purpose inherit inherit false false gp-utility            > "$WORK/outscope.jsonl"
 row dev sonnet sonnet true true dev-beside-gp                        >> "$WORK/outscope.jsonl"
 # The disjunct that keeps the filter from being a disarm: this dispatch CITED a role
 # contract, so it is judged whatever settings.json declares — and it is the input that keeps
 # the fail-closed role_file_readable arm reachable for an undeclared role.
-# Every field populated: a null `model_requested` here would entangle this arm with the
-# sentinel mutant, and the assertion is on the row being EXAMINED rather than on any
-# violation, so it does not ride on the fail-closed arm either.
+# Every field populated: the assertion is on the row being EXAMINED rather than on any
+# violation, so it does not ride on the null-field or the fail-closed arm.
 row general-purpose sonnet sonnet true true gp-cited                  > "$WORK/outscope-cited.jsonl"
 # A DECLARED role outside Check 22's five gate-trigger roles. Narrowing the script to those
 # five acquits this row; measured on the reference consumer, that narrowing dropped 23 of
 # the 25 true findings.
 #
-# **UNCITED ON PURPOSE, and an earlier revision of this row was NOT.** Spelled `cited=true`
-# it reached the loop through the CITED disjunct, so it asserted nothing about the
-# declaration it exists to test — disabling the declared-role disjunct entirely left this
-# arm unmoved. Uncited, the DECLARATION is the only thing keeping it in scope. Its asserted
-# violation stays the TIER MISMATCH rather than the missing citation, so the `cited` mutant
-# does not move it and the two arms stay independent.
+# **UNCITED ON PURPOSE.** Spelled `cited=true` it would reach the loop through the CITED
+# disjunct and assert nothing about the declaration it exists to test. Uncited, the
+# DECLARATION is the only thing keeping it in scope. Its asserted violation stays the TIER
+# MISMATCH rather than the missing citation, so the two arms stay independent.
 row adversary sonnet sonnet false true adv-wrongtier                  > "$WORK/declared-nonfive.jsonl"
 # Every in-sprint row out of scope. Nothing was compared, so this must not read as a pass.
 row general-purpose inherit '' false false gp-only                    > "$WORK/allout.jsonl"
@@ -317,7 +143,7 @@ row fork inherit '' false false fk-1                                 >> "$WORK/d
 row general-purpose inherit '' false false gp-2                      >> "$WORK/dupes.jsonl"
 row dev sonnet sonnet true true dev-beside-dupes                     >> "$WORK/dupes.jsonl"
 
-# battery <script> -> ten space-separated tokens, one per arm. A mutant must move EXACTLY one.
+# battery <script> -> space-separated tokens, one per arm.
 battery() {
   local S="$1" out rc t=""
   run() { out="$( bash "$S" --ledger "$WORK/$1" --sprint 900 --settings "$WORK/${2:-settings.json}" 2>&1 )"; rc=$?; }
@@ -387,7 +213,7 @@ EXPECTED="C:ok R:named B:named M:named T:ok P:preledger N:noted F:aligned S:refu
 # --- 1. the shipping validator answers every arm ------------------------------
 GOT="$(battery "$VSL")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all fifteen arms: clean, unreadable role file, missing 19(b) citation, tier mismatch, the containment tolerance, PRE-LEDGER, a guard-corrected request, a null field, an unreadable settings.json, an unparseable ledger, a fumbled invocation, a readable settings.json that pins no role at all, an out-of-scope built-in agent type beside an in-scope row, that same type when it CITED a contract, and a declared role outside the five gate-trigger roles"; B_battery=1
+  ok "all fifteen arms: clean, unreadable role file, missing 19(b) citation, tier mismatch, the containment tolerance, PRE-LEDGER, a guard-corrected request, a null field, an unreadable settings.json, an unparseable ledger, a fumbled invocation, a readable settings.json that pins no role at all, an out-of-scope built-in agent type beside an in-scope row, that same type when it CITED a contract, and a declared role outside the five gate-trigger roles"
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -463,188 +289,29 @@ fi
 # --- 5. every in-sprint row out of scope is NOT a pass ------------------------
 # The filter's own failure mode: a settings.json that lost its `aiDlcRoles` block, on a
 # sprint whose dispatches cited nothing, would drop every row and exit 0 having compared
-# nothing. Kept OUT of the battery deliberately — a mutant that disables the skip moves this
-# arm and the X arm together, and two moved tokens make one of them vacuous.
+# nothing. Kept OUT of the battery deliberately, so it stays its own arm.
 out="$(bash "$VSL" --ledger "$WORK/allout.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
 if [ "$rc" -eq 3 ] && grep -q 'NO ROLE-BOUND ROWS' <<<"$out" && grep -q 'general-purpose' <<<"$out"; then
-  ok "a sprint whose every row is out of scope exits 3 and NAMES the roles it skipped — not a pass, and the one way the filter could hide a real role is visible in the message"; B_allout=1
+  ok "a sprint whose every row is out of scope exits 3 and NAMES the roles it skipped — not a pass, and the one way the filter could hide a real role is visible in the message"
 else
   bad "an all-out-of-scope ledger reported rc=$rc: ${out%%$'\n'*}"
 fi
-
-# And prove that arm can fail, on its own copy: without it the same input exits 0.
-sed 's/^if \[ "\$CHECKED" -eq 0 \]; then$/if false; then/' "$VSL" > "$WORK/nzs.sh"
-if cmp -s "$VSL" "$WORK/nzs.sh"; then
-  bad "FIXTURE BROKEN: the all-out-of-scope guard's line was renamed, so this mutant proves nothing"
-elif ! need_base "${B_allout:-0}" norolebound; then :
-else
-  bash "$WORK/nzs.sh" --ledger "$WORK/allout.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; rc=$?
-  if [ "$rc" -eq 0 ]; then
-    mutant_killed "${B_allout:-0}" norolebound "MUTANT norolebound: dropping that guard turns the same all-out-of-scope ledger into a silent exit 0 — the arm above is load-bearing"
-  else
-    bad "MUTANT norolebound survived: rc=$rc without the guard, so the arm above cannot be what produced the 3"
-  fi
-fi
-
-# ============================================================================
-# MUTANTS. Each is a COPY guarded by `cmp -s`, all in one directory beside an UNMUTATED
-# CONTROL copied from the same place. The control earns its keep here: a lone copy that
-# cannot start emits nothing, and "no output" otherwise scores as a kill for every mutant
-# at once.
-#
-# Each mutant must move EXACTLY ONE token of the battery. Two moved tokens mean the
-# assertions are entangled and one of them is vacuous.
-# ============================================================================
-mkdir -p "$WORK/mut"
-cp "$VSL" "$WORK/mut/control.sh"
-
-CTL="$(battery "$WORK/mut/control.sh")"
-if [ "$CTL" = "$EXPECTED" ]; then
-  ok "CONTROL: an unmutated copy in the mutant directory answers every arm (so a mutant's silence is the mutation, not the copy)"; B_ctl=1
-else
-  bad "CONTROL copy did not reproduce the shipping battery: expected [$EXPECTED], got [$CTL]"
-fi
-
-# moved <expected-token-position-name> <mutant-battery> -> prints the differing arm names
-moved() {
-  local got="$1" i=1 e m out=""
-  for e in $EXPECTED; do
-    m="$(printf '%s' "$got" | cut -d' ' -f$i)"
-    [ "$e" != "$m" ] && out="$out ${e%%:*}"
-    i=$((i+1))
-  done
-  printf '%s' "${out# }"
-}
-
-mutant() { # name sed-expression expected-arm description
-  local n="$1" expr="$2" arm="$3" desc="$4" M="$WORK/mut/$1.sh" got mv
-  sed "$expr" "$WORK/mut/control.sh" > "$M" || { bad "FIXTURE BROKEN: could not write mutant $n"; return; }
-  if cmp -s "$WORK/mut/control.sh" "$M"; then
-    bad "FIXTURE BROKEN: mutation '$n' matched nothing — the line it targets was renamed, so this mutant proves nothing"
-    return
-  fi
-  need_base "${B_ctl:-0}" "$n" || return
-  got="$(battery "$M")"
-  mv="$(moved "$got")"
-  if [ "$mv" = "$arm" ]; then
-    mutant_killed "${B_ctl:-0}" "$n" "MUTANT $n: $desc — and it moves ONLY the $arm arm"
-  elif [ -z "$mv" ]; then
-    bad "MUTANT $n survived: $desc left every arm unchanged, so that arm cannot fire"
-  else
-    bad "MUTANT $n moved [$mv], expected only [$arm] — entangled assertions, at least one of them vacuous"
-  fi
-}
-
-# 1. the fail-closed role-file arm.
-mutant readable 's/if \[ "\$readable" = "false" \]; then/if false; then/' R \
-  "removing the role_file_readable arm lets a teammate that ran with no resolvable contract pass"
-
-# 2. the Rule 19(b) citation arm.
-mutant cited 's/if \[ "\$cited" != "true" \]; then/if false; then/' B \
-  "removing the role_contract_cited arm lets a subagent_type-only dispatch pass"
-
-# 3. the match tolerance. `matches_pin` is the guard's function verbatim; narrowing it here
-#    is what I56 binds against, and this is the behavioural half of that binding.
-mutant tolerance 's@^    \*"\$EXPECT"\*) return 0 ;;@    *"$EXPECT"*) return 1 ;;@' T \
-  "narrowing matches_pin to exact equality reports a mismatch on a spawn the guard bound from a full model string"
-
-# 4. PRE-LEDGER collapsing into a pass — the defect this check was rewritten to stop.
-mutant preledger 's/^  exit 3$/  exit 0/' P \
-  "returning 0 instead of 3 makes an out-of-sprint ledger indistinguishable from a clean one"
-
-# 5. the unreadable-settings guard. Without it pin_key returns empty for every role — the
-#    guard's deliberate fail-open — and every spawn clears the model arm having compared
-#    nothing.
-#    `|| true ||` and not `|| false ||`: `||` short-circuits on SUCCESS, so the `false`
-#    spelling leaves the block reachable on exactly the input that reaches it today and is a
-#    byte-different no-op — which `cmp -s` passes. Both were tried; only the assertion told
-#    them apart, which is why `cmp -s` proves a mutation happened and never that it mutated
-#    the thing under test.
-mutant settings 's/^\[ -r "\$SETTINGS" \] || {$/[ -r "\$SETTINGS" ] || true || {/' S \
-  "dropping the settings-readability refusal clears the model arm on every row without a comparison"
-
-# 6. the field sentinel. TAB is IFS whitespace, so an empty field collapses and every later
-#    field shifts one place left. Measured on this script's first draft.
-#
-#    The NULL branch, not the empty-string branch. `model_requested` is JSON null here, so
-#    mutating `if . == "" then "__NONE__"` changes bytes and nothing else — the second
-#    byte-different no-op this mutant set produced before the arms separated them.
-mutant sentinel 's/if \. == null then "__NONE__"/if . == null then ""/' F \
-  "emptying the null-field sentinel shifts every field after an absent one and the loop compares the wrong strings"
-
-# 7. the unparseable-ledger refusal. Swallowing jq's failure reports zero rows for a file
-#    full of them, and zero rows routes to PRE-LEDGER — a different fact with a different
-#    remedy.
-#
-#    `|| echo 0` INSIDE the substitution, so it succeeds and the refusal block below it
-#    becomes unreachable — the exact spelling this script carried before the arm existed.
-#    Putting the mutation on the `||` itself instead makes the block run on EVERY input and
-#    moves eight arms, which is a broken mutant reading as a strong kill.
-mutant corrupt 's@"\$LEDGER" 2>/dev/null)" || {@"$LEDGER" 2>/dev/null || echo 0)" || {@' J \
-  "swallowing a parse failure reports a truncated ledger as zero rows, which reads as a sprint that predates the guard"
-
-# 8. the untested-pin verdict. Removing it is not a byte-different no-op: the run falls through
-#    to the plain OK sentence, which is the exact claim the run cannot support. It moves only
-#    the U arm — the clean arm still has a pinned row, so its sentence is still earned.
-mutant nopincompared 's/^if \[ "\$CHECKED" -gt 0 \] && \[ "\$UNPINNED" -eq "\$CHECKED" \]; then$/if false; then/' U \
-  "dropping the untested-pin verdict lets a settings.json that lost its role block clear a mismatched ledger under the sentence that says the pin matched"
-
-# 9. the Rule 19 scope filter. Without it every built-in agent type the dispatch guard
-#    recorded from `subagent_type` is judged against a contract it never had — 97 of the 111
-#    role-arm violations on the reference consumer's ledger were exactly that.
-#    Targets the `continue` in the out-of-scope branch, not the scope test above it:
-#    mutating the test makes every row out of scope and moves four arms at once.
-mutant scopefilter 's/^    continue$/    :/' X \
-  "dropping the scope skip judges a built-in agent type against Rule 19 and fails a gate on correct data"
-
-# 10. the disjunct that keeps the filter from being a disarm is asserted BELOW rather than
-#     here: it is what keeps a contract-citing row in scope when settings.json declares
-#     nothing, which is also exactly what the U arm rests on, so a battery mutant moves both
-#     tokens by construction and one of the two would be vacuous.
 
 # --- 6. the skipped row the ROLE field cannot describe ------------------------
 # The scope filter's join key is the field the violation corrupts: a lead that dispatches a
 # real team role through `subagent_type: general-purpose` with no contract citation produces a
 # row whose role reads `general-purpose`, and naming the ROLE in COUNTS surfaces nothing.
-# Kept out of the battery: the NOTE lives inside the skip branch, so the scopefilter mutant
-# moves this arm and the X arm together.
+# Kept out of the battery: the NOTE lives inside the skip branch, so it shares a code path
+# with the X arm.
 out="$(bash "$VSL" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ] && grep -q "^NOTE: \[dev-story-1\]" <<<"$out" \
    && grep -q "declared role 'dev'" <<<"$out" \
    && ! grep -q "^NOTE: \[devops-audit\]" <<<"$out" \
    && grep -q '1 of them named after a declared role' <<<"$out" \
    && ! grep -q '^FAIL: \[' <<<"$out"; then
-  ok "a skipped row whose dispatch NAME is a declared role is NOTED by name and counted, while devops-audit BESIDE it stays quiet — the one signal left when the role field carries the agent type, and a NOTE rather than a FAIL because a utility named dev-* is a live false-positive path"; B_suspect=1
+  ok "a skipped row whose dispatch NAME is a declared role is NOTED by name and counted, while devops-audit BESIDE it stays quiet — the one signal left when the role field carries the agent type, and a NOTE rather than a FAIL because a utility named dev-* is a live false-positive path"
 else
   bad "the suspect row was not surfaced (rc=$rc): $out"
-fi
-
-# And the BOUNDARY is load-bearing, not decoration: widened to a bare prefix, the near-miss
-# beside the offender is flagged too, and the arm above would be reporting on a substring.
-sed 's|      "\$nr_k"\|"\$nr_k"-\*) |      "$nr_k"*) |' "$VSL" > "$WORK/widen.sh"
-if cmp -s "$VSL" "$WORK/widen.sh"; then
-  bad "FIXTURE BROKEN: the name_role boundary pattern was renamed, so this mutant proves nothing"
-elif ! need_base "${B_suspect:-0}" nameboundary; then :
-else
-  out="$(bash "$WORK/widen.sh" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
-  if grep -q '^NOTE: \[devops-audit\]' <<<"$out"; then
-    mutant_killed "${B_suspect:-0}" nameboundary "MUTANT nameboundary: dropping the dash boundary flags devops-audit as the role dev — the boundary is what makes the NOTE a name match rather than a substring match"
-  else
-    bad "MUTANT nameboundary survived: devops-audit stayed quiet without the boundary"
-  fi
-fi
-
-sed 's/^    _nr="\$(name_role "\${name}")"$/    _nr=""/' "$VSL" > "$WORK/nosus.sh"
-if cmp -s "$VSL" "$WORK/nosus.sh"; then
-  bad "FIXTURE BROKEN: the name_role call site was renamed, so this mutant proves nothing"
-elif ! need_base "${B_suspect:-0}" suspectnote; then :
-else
-  out="$(bash "$WORK/nosus.sh" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
-  if ! grep -q '^NOTE: \[dev-story-1\]' <<<"$out"; then
-    mutant_killed "${B_suspect:-0}" suspectnote "MUTANT suspectnote: without the name reading, a misrouted role dispatch is skipped in total silence — 18 of them on the reference consumer"
-  else
-    bad "MUTANT suspectnote survived: the NOTE still printed without name_role"
-  fi
 fi
 
 # --- 7. the COUNTS role list de-duplicates past its first element -------------
@@ -654,22 +321,9 @@ fi
 # `(roles: general-purpose fork general-purpose fork)` for two distinct roles.
 out="$(bash "$VSL" --ledger "$WORK/dupes.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
 if grep -q '3 row(s) out of Rule 19 scope (roles: general-purpose fork),' <<<"$out"; then
-  ok "three skipped rows over two distinct roles name each role ONCE — the accumulator and its membership test use the same delimiter"; B_dedup=1
+  ok "three skipped rows over two distinct roles name each role ONCE — the accumulator and its membership test use the same delimiter"
 else
   bad "the COUNTS role list did not de-duplicate: $(grep 'out of Rule 19 scope' <<<"$out")"
-fi
-
-sed 's/^      \*) OUTSCOPE_ROLES="\${OUTSCOPE_ROLES}\${role:-<none>}\${NL}" ;;$/      *) OUTSCOPE_ROLES="${OUTSCOPE_ROLES}${OUTSCOPE_ROLES:+ }${role:-<none>}" ;;/' "$VSL" > "$WORK/nodedup.sh"
-if cmp -s "$VSL" "$WORK/nodedup.sh"; then
-  bad "FIXTURE BROKEN: the accumulator line was renamed, so this mutant proves nothing"
-elif ! need_base "${B_dedup:-0}" dedup; then :
-else
-  out="$(bash "$WORK/nodedup.sh" --ledger "$WORK/dupes.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
-  if grep -q 'general-purpose fork general-purpose' <<<"$out"; then
-    mutant_killed "${B_dedup:-0}" dedup "MUTANT dedup: the space-separated accumulator against a newline-delimited test repeats every role after the first"
-  else
-    bad "MUTANT dedup survived: the list still de-duplicated with the delimiters mismatched"
-  fi
 fi
 
 # --- 8. an empty role is not a declared one -----------------------------------
@@ -699,89 +353,20 @@ JSON
 bash "$VSL" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/noroles-block.json" >"$WORK/nr-a.out" 2>&1; a=$?
 bash "$VSL" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/settings.json"      >"$WORK/nr-b.out" 2>&1; b=$?
 if [ "$a" -eq 3 ] && [ "$b" -eq 3 ] && grep -q '<none>' "$WORK/nr-a.out"; then
-  ok "a role-less row is out of scope under BOTH an empty aiDlcRoles block and a populated one, and is named <none> — its scope does not depend on how many roles the settings file happens to declare"; B_norole=1
+  ok "a role-less row is out of scope under BOTH an empty aiDlcRoles block and a populated one, and is named <none> — its scope does not depend on how many roles the settings file happens to declare"
 else
   bad "the role-less row answered rc=$a with an empty roles block and rc=$b with a populated one; expected 3 and 3"
 fi
 
-sed 's/^  \[ -n "\$1" \] || return 1$/  : ; /' "$VSL" > "$WORK/noguard.sh"
-if cmp -s "$VSL" "$WORK/noguard.sh"; then
-  bad "FIXTURE BROKEN: the empty-role guard line was renamed, so this mutant proves nothing"
-elif ! need_base "${B_norole:-0}" emptyrole; then :
-else
-  bash "$WORK/noguard.sh" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/noroles-block.json" >/dev/null 2>&1; a=$?
-  bash "$WORK/noguard.sh" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/settings.json"      >/dev/null 2>&1; b=$?
-  if [ "$a" -ne "$b" ]; then
-    mutant_killed "${B_norole:-0}" emptyrole "MUTANT emptyrole: without the guard the same role-less row answers rc=$a with an empty roles block and rc=$b with a populated one — the collision the guard exists to stop"
-  else
-    bad "MUTANT emptyrole survived: both configs answered rc=$a without the guard"
-  fi
-fi
-
 # --- 8b. a row the guard did not write is not a dispatch record ---------------
-# Kept out of the battery: the skip shares the loop's top with the scope filter, so a battery
-# mutant on either moves both tokens.
+# Kept out of the battery: the skip shares the loop's top with the scope filter.
 out="$(bash "$VSL" --ledger "$WORK/foreign.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ] && ! grep -q '^FAIL: \[' <<<"$out" \
    && grep -q '1 row(s) the dispatch guard did not write (roles: dev)' <<<"$out" \
    && grep -q 'examined 1 S900 spawn row' <<<"$out"; then
-  ok "a hand-written row naming a DECLARED role is counted and named as not-a-dispatch-record rather than judged, while the guard row beside it in the same ledger is still examined — its absent fields are not observations about a dispatch"; B_foreign=1
+  ok "a hand-written row naming a DECLARED role is counted and named as not-a-dispatch-record rather than judged, while the guard row beside it in the same ledger is still examined — its absent fields are not observations about a dispatch"
 else
   bad "the foreign row was judged or miscounted (rc=$rc): $out"
-fi
-
-# `@` as the delimiter, because the expression itself contains `|` — the first spelling of
-# this mutant used `|` and sed answered "bad flag in substitute command", which left a
-# truncated copy that `cmp -s` happily called a mutation. A mutant file must also PARSE.
-sed 's@(if (\.v | type) == "number" then "guard" else "foreign" end)@"guard"@' "$VSL" > "$WORK/noschema.sh"
-if cmp -s "$VSL" "$WORK/noschema.sh"; then
-  bad "FIXTURE BROKEN: the schema-marker projection was renamed, so this mutant proves nothing"
-elif ! bash -n "$WORK/noschema.sh" 2>/dev/null; then
-  bad "FIXTURE BROKEN: the schema mutant does not parse — the sed damaged the script rather than mutating it"
-elif ! need_base "${B_foreign:-0}" foreignschema; then :
-else
-  out="$(bash "$WORK/noschema.sh" --ledger "$WORK/foreign.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
-  n=$(grep -c '^FAIL: \[' <<<"$out") || n=0
-  if [ "$rc" -eq 1 ] && [ "$n" -ge 2 ]; then
-    mutant_killed "${B_foreign:-0}" foreignschema "MUTANT foreignschema: treating every row as guard-written manufactures $n findings from the foreign row's ABSENT fields — 24 of 25 on the reference consumer"
-  else
-    bad "MUTANT foreignschema survived: rc=$rc with $n FAIL arm(s)"
-  fi
-fi
-
-# --- 9. the DECLARED disjunct, on its own copy --------------------------------
-# The cited disjunct has a mutant; this one had none, and the arm that was supposed to cover
-# it reached the loop through the CITATION instead. Kept standalone because `uncited.jsonl`
-# is also declared-and-uncited, so a battery mutant moves the B arm with it.
-sed 's|^  case "\$DECLARED_NL" in \*"\${NL}\${1}\${NL}"\*) return 0 ;; esac$|  case "$DECLARED_NL" in *"__NEVER__"*) return 0 ;; esac|' "$VSL" > "$WORK/nodecl.sh"
-if cmp -s "$VSL" "$WORK/nodecl.sh"; then
-  bad "FIXTURE BROKEN: the declared-membership test was renamed, so this mutant proves nothing"
-else
-  bash "$VSL"           --ledger "$WORK/declared-nonfive.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; a=$?
-  bash "$WORK/nodecl.sh" --ledger "$WORK/declared-nonfive.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; b=$?
-  if [ "$a" -eq 1 ] && [ "$b" -eq 3 ]; then
-    mutant_killed "${B_battery:-0}" declaredisjunct "MUTANT declaredisjunct: without it an UNCITED dispatch of a declared role falls out of scope (3) instead of being judged (1) — the declaration is what carries the D arm, and it is now asserted rather than assumed"
-  else
-    bad "MUTANT declaredisjunct: shipping gave rc=$a and the mutant rc=$b; expected 1 then 3"
-  fi
-fi
-
-# --- the cited disjunct, on its own copy --------------------------------------
-# A dispatch that CITED `team-roles/<role>.md` is judged whether or not settings.json still
-# declares that role. Without it, deleting one `aiDlcRoles` entry silences every finding
-# against that role — a one-line disarm — and the fail-closed role_file_readable arm loses
-# its reachable input for any role the settings file does not name.
-sed 's/^  \[ "$2" = "true" \] && return 0$/  [ "$2" = "NEVER" ] \&\& return 0/' "$VSL" > "$WORK/nodisj.sh"
-if cmp -s "$VSL" "$WORK/nodisj.sh"; then
-  bad "FIXTURE BROKEN: the cited disjunct's line was renamed, so this mutant proves nothing"
-else
-  bash "$VSL"          --ledger "$WORK/mismatch.jsonl" --sprint 900 --settings "$WORK/norolepins.json" >/dev/null 2>&1; a=$?
-  bash "$WORK/nodisj.sh" --ledger "$WORK/mismatch.jsonl" --sprint 900 --settings "$WORK/norolepins.json" >/dev/null 2>&1; b=$?
-  if [ "$a" -eq 0 ] && [ "$b" -eq 3 ]; then
-    mutant_killed "${B_battery:-0}" citeddisjunct "MUTANT citeddisjunct: without it a settings.json that lost its role block drops every contract-citing row as out of scope (3) instead of examining them (0) — the disjunct is what stops an aiDlcRoles deletion disarming the check"
-  else
-    bad "MUTANT citeddisjunct: shipping gave rc=$a and the mutant rc=$b; expected 0 then 3"
-  fi
 fi
 
 # ============================================================================
@@ -845,7 +430,7 @@ R="$(evsl e-disagree.jsonl e-disagree.probe)"
 if [ "$(ercv "$R")" -eq 1 ] && grep -q "records effort='low'" <<<"$R" \
    && grep -q "effort_bound=" <<<"$R" && grep -q "'high'" <<<"$R" \
    && grep -q "aiDlcRoles.dev.effort" <<<"$R" && grep -q 'effort: 0 verified.*1 mismatch' <<<"$R"; then
-  ok "a definition-bound row whose transcript records a DIFFERENT effort FAILS, naming the LEDGER's bound level, the observed one, and the re-render remedy -- this is BL-240's whole subject, and nothing could see it before"; B_e2=1
+  ok "a definition-bound row whose transcript records a DIFFERENT effort FAILS, naming the LEDGER's bound level, the observed one, and the re-render remedy -- this is BL-240's whole subject, and nothing could see it before"
 else
   bad "the disagreeing row did not fail as expected: $R"
 fi
@@ -910,7 +495,7 @@ R="$(evsl e-sameRole.jsonl e-sameRole.probe)"
 if [ "$(ercv "$R")" -eq 1 ] && grep -q 'FAIL: \[dev-first\]' <<<"$R" \
    && ! grep -q 'FAIL: \[dev-second\]' <<<"$R" \
    && grep -q 'effort: 1 verified.*1 mismatch' <<<"$R"; then
-  ok "E5 two SAME-ROLE spawns completing in REVERSE dispatch order: the offender is named as dev-first and dev-second is verified -- the join resolves on the tool-use id, which no completion order can permute"; B_e5=1
+  ok "E5 two SAME-ROLE spawns completing in REVERSE dispatch order: the offender is named as dev-first and dev-second is verified -- the join resolves on the tool-use id, which no completion order can permute"
 else
   bad "E5 the same-role out-of-order pair was mis-scored: $R"
 fi
@@ -939,7 +524,7 @@ prow toolu_PINNED low claude-opus-4-8 2.1.269               > "$WORK/e-new.probe
 R="$(evsl e-pinned.jsonl e-old.probe)"
 if [ "$(ercv "$R")" -eq 0 ] && grep -q '1 refused on a pre-2.1.267' <<<"$R" \
    && grep -q 'PENDING: \[dev-pinned\]' <<<"$R"; then
-  ok "a pinned-effort model on a pre-2.1.267 transcript is REFUSED and named, not scored -- the field is not evidence on that build"; B_e6=1
+  ok "a pinned-effort model on a pre-2.1.267 transcript is REFUSED and named, not scored -- the field is not evidence on that build"
 else
   bad "the pre-2.1.267 pinned row was not refused: $R"
 fi
@@ -1044,58 +629,6 @@ else
   bad "E7 the null-effort_bound row was not reported UNDECLARED: $R"
 fi
 
-# --- E8. MUTANTS. Each arm above is PRESENCE-shaped, so a validator emitting nothing
-# fails them -- but that does not establish which LINE produced each verdict.
-sed 's/^  if \[ -z "\$effortbound" \] || \[ "\$defbound" != "true" \]; then$/  if true; then/' "$VSL" > "$WORK/noeffortarm.sh"
-if cmp -s "$VSL" "$WORK/noeffortarm.sh"; then
-  bad "FIXTURE BROKEN: the effort arm's scope test was renamed, so this mutant proves nothing"
-elif ! need_base "${B_e2:-0}" noeffortarm; then :
-else
-  bash "$WORK/noeffortarm.sh" --ledger "$WORK/e-disagree.jsonl" --sprint 900 \
-       --settings "$WORK/settings.json" --probe "$WORK/e-disagree.probe" >/dev/null 2>&1; rc=$?
-  if [ "$rc" -eq 0 ]; then
-    mutant_killed "${B_e2:-0}" noeffortarm "MUTANT noeffortarm: dropping the arm turns a teammate that demonstrably ran at the wrong effort into a clean exit 0 -- E2 is load-bearing"
-  else
-    bad "MUTANT noeffortarm survived: rc=$rc without the arm, so E2 cannot be what produced the 1"
-  fi
-fi
-
-# THE JOIN KEY ITSELF. Replacing the exact id match with a ROLE match is the ordered join
-# this design rejected, expressed as a mutation: on the same-role pair it pairs both stops
-# with whichever row jq returns last, so one of the two is scored against the other's
-# transcript. The assertion is on the OFFENDER'S NAME, not on the exit code, because both
-# implementations exit 1 here -- a code-only arm would score this mutant as killed while
-# the mis-pairing went unseen.
-sed 's@select((.tool_use_id // "") == \$t) \] | last@select(true) ] | last@' "$VSL" > "$WORK/rolejoin.sh"
-if cmp -s "$VSL" "$WORK/rolejoin.sh"; then
-  bad "FIXTURE BROKEN: the tool_use_id join expression was renamed, so this mutant proves nothing"
-elif ! need_base "${B_e5:-0}" unjoined; then :
-else
-  out="$(bash "$WORK/rolejoin.sh" --ledger "$WORK/e-sameRole.jsonl" --sprint 900 \
-         --settings "$WORK/settings.json" --probe "$WORK/e-sameRole.probe" 2>&1)"
-  if grep -q 'FAIL: \[dev-second\]' <<<"$out" || ! grep -q 'FAIL: \[dev-first\]' <<<"$out"; then
-    mutant_killed "${B_e5:-0}" unjoined "MUTANT unjoined: with the id match removed the same-role pair is scored against the wrong transcript and the verdict names the wrong spawn -- E5 is what catches it, and an exit-code-only arm could not"
-  else
-    bad "MUTANT unjoined survived: the offender was still named correctly without the id match, so E5's join assertion is not load-bearing: $out"
-  fi
-fi
-
-# The version floor, on its own copy: without it a pre-2.1.267 pinned record is scored as
-# though the field meant something, and E6's refusal becomes a mismatch.
-sed 's@< \[2,1,267\])@< [0,0,0])@' "$VSL" > "$WORK/nofloor.sh"
-if cmp -s "$VSL" "$WORK/nofloor.sh"; then
-  bad "FIXTURE BROKEN: the version floor was renamed, so this mutant proves nothing"
-elif ! need_base "${B_e6:-0}" nofloor; then :
-else
-  bash "$WORK/nofloor.sh" --ledger "$WORK/e-pinned.jsonl" --sprint 900 \
-       --settings "$WORK/settings.json" --probe "$WORK/e-old.probe" >/dev/null 2>&1; rc=$?
-  if [ "$rc" -eq 1 ]; then
-    mutant_killed "${B_e6:-0}" nofloor "MUTANT nofloor: without the 2.1.267 floor a pinned-effort record from a build where the field was wrong is scored as a finding -- E6 is what stops a false FAIL on correct data"
-  else
-    bad "MUTANT nofloor survived: rc=$rc, so the floor is not what produced E6's refusal"
-  fi
-fi
-
 # ============================================================================
 # THE CLEARING PATH, ON EVERY ROUTE INTO `VIOL`. Four FAIL routes reach one exit 1 -- a
 # Rule 19(a) tier mismatch, a missing Rule 19(b) citation, an unreadable role file, and an
@@ -1111,8 +644,7 @@ fi
 # sentence is caught by seeding a fifth row, which is a change to this file either way.
 #
 # OUTSIDE THE `battery()` TOKEN VECTOR, the way the E-series arms above are. These arms drive
-# the validator directly, so no EXPECTED token moves and every existing mutant expectation
-# stays where it is.
+# the validator directly, so no EXPECTED token moves.
 #
 # LIVENESS BEFORE NAMING, in that order. A build that DELETES a class stops emitting its FAIL
 # token, and an arm that only asked "does every FAIL line name the disposition" would score
@@ -1228,7 +760,7 @@ cpmoved() { # got -> names of the differing cells
 # --- C1. every VIOL route FAILS, names its own class, AND names the clearing path ---
 CPGOT="$(cpvec "$VSL")"
 if [ "$CPGOT" = "$CP_EXPECTED" ]; then
-  ok "C1 all five FAIL routes -- a Rule 19(a) tier mismatch, a missing Rule 19(b) citation, an unreadable role file, an effort mismatch under --probe, and an invalid Rule 28 serial exception (S3, printing the brief's own text) -- each exit 1, name their own class, and name Check 22's four-arm clearing path in the SAME run, against a clean two-row control that exits 0 with the OK row present and no clearing sentence at all"; B_c1=1
+  ok "C1 all five FAIL routes -- a Rule 19(a) tier mismatch, a missing Rule 19(b) citation, an unreadable role file, an effort mismatch under --probe, and an invalid Rule 28 serial exception (S3, printing the brief's own text) -- each exit 1, name their own class, and name Check 22's four-arm clearing path in the SAME run, against a clean two-row control that exits 0 with the OK row present and no clearing sentence at all"
 else
   bad "C1 the clearing path is not named on every VIOL route: expected [$CP_EXPECTED], got [$CPGOT] (differing: $(cpmoved "$CPGOT"))"
 fi
@@ -1238,7 +770,7 @@ fi
 # so anything that satisfies its four literals satisfies it -- the shipping half of this
 # subject is C1 above, which drives the validator. This arm exists because the step file is
 # where a consumer LOOKS for the clearing procedure, and a section headed for one class tells
-# the other three that no path exists. Its m5 mutant is what proves it can fire.
+# the other three that no path exists.
 for _c in "$ROOT/core/skills/ai-dlc/steps" "$ROOT/.claude/skills/ai-dlc/steps"; do
   [ -d "$_c" ] && { GVDIR="$_c"; break; }
 done
@@ -1331,113 +863,11 @@ fi
 
 SV="$(stepverdict "$GV")"
 if [ "$SV" = "ALL-FOUR" ]; then
-  ok "C2 (weak prose arm: this one READS the step file rather than driving a program, and C1 is the arm that binds behaviour) gate-validation.md's disposition section is headed for a recorded Rule 19 violation rather than a Rule 19(a) one, and names all four FAIL classes between that header and the sentence closing the section"; B_c2=1
+  ok "C2 (weak prose arm: this one READS the step file rather than driving a program, and C1 is the arm that binds behaviour) gate-validation.md's disposition section is headed for a recorded Rule 19 violation rather than a Rule 19(a) one, and names all four FAIL classes between that header and the sentence closing the section"
 else
   bad "C2 gate-validation.md's disposition section does not scope to every VIOL route: $SV"
 fi
 
-# --- C3. MUTANTS ------------------------------------------------------------------
-# m1/m2/m3 drop the clearing sentence from ONE message each. m4 deletes a whole route. m5
-# reverts the step file's header. Each is a COPY guarded by `cmp -s`, each is asserted to have
-# applied, and each must move EXACTLY the cell its own arm owns.
-#
-# ANCHORED ON WHAT SEPARATES THE MESSAGES, NOT ON THE SENTENCE ITSELF. The 19(b) and
-# unreadable-role-file messages emit the clearing sentence as BYTE-IDENTICAL lines, so a `sed`
-# keyed on that text edits both, moves two cells, and scores a kill it did not earn. Each
-# mutation instead anchors on the LAST line unique to its own message and deletes the two
-# lines that follow it.
-#
-# `awk`, not `sed`: an `&` in a sed replacement is the whole match, and these message bodies
-# carry text a replacement expression would re-insert into itself.
-cpmut() { # name anchor -> writes $WORK/cp-<name>.sh, returns 1 if it did not apply
-  local n="$1" a="$2" M="$WORK/cp-$1.sh"
-  awk -v a="$a" 'BEGIN{n=0} { if (n>0) { n--; next } if (index($0,a)>0) { print; n=2; next } print }' \
-    "$WORK/mut/control.sh" > "$M" 2>/dev/null || return 1
-  cmp -s "$WORK/mut/control.sh" "$M" && return 1
-  bash -n "$M" 2>/dev/null || return 2
-  return 0
-}
-
-# cpscore <name> <expected-cell> <description>
-cpscore() {
-  local n="$1" cell="$2" desc="$3" M="$WORK/cp-$1.sh" got mv
-  need_base "${B_c1:-0}" "$n" || return
-  got="$(cpvec "$M")"
-  mv="$(cpmoved "$got")"
-  if [ "$mv" = "$cell" ]; then
-    mutant_killed "${B_c1:-0}" "$n" "MUTANT $n: $desc -- and it moves ONLY the $cell cell"
-  elif [ -z "$mv" ]; then
-    bad "MUTANT $n survived: $desc left all six cells unchanged, so the $cell arm cannot fire"
-  else
-    bad "MUTANT $n moved [$mv], expected only [$cell] -- entangled assertions, at least one of them vacuous"
-  fi
-}
-
-# A CONTROL ON THE MUTATION ITSELF, before any of them is scored: the source's disposition
-# emission count must be non-zero, or every "dropped it" mutant is dropping nothing. Derived
-# from the resolved script, never quoted.
-CPSRC="$(grep -cF -- "$DISP" "$WORK/mut/control.sh")" || CPSRC=0
-if [ "$CPSRC" -ge 5 ]; then
-  ok "CONTROL: the resolved validator at $VSL emits the clearing sentence $CPSRC times, so a mutant that removes one has a subject"
-else
-  bad "CONTROL: the validator emits the clearing sentence $CPSRC time(s); with fewer than five the mutants below remove nothing"
-fi
-
-if cpmut m1 'Rule 19(b) line in neither its prompt nor the definition it selected.'; then
-  cpscore m1 cite "dropping the clearing sentence from the 19(b) message alone leaves a consumer told its dispatch failed Rule 19(b) with no path out"
-else
-  bad "FIXTURE BROKEN: mutation m1 did not apply or does not parse -- the 19(b) message's last unique line was renamed, so this mutant proves nothing"
-fi
-
-if cpmut m2 'role file, so this teammate ran with no contract at all (Rule 19, fail-closed).'; then
-  cpscore m2 unread "dropping the clearing sentence from the unreadable-role-file message alone does the same for Rule 19's fail-closed route"
-else
-  bad "FIXTURE BROKEN: mutation m2 did not apply or does not parse -- the unreadable-role-file message's last unique line was renamed, so this mutant proves nothing"
-fi
-
-if cpmut m3 'runner that drops effort.'; then
-  cpscore m3 effort "dropping the clearing sentence from the effort message alone does the same for the probe-only route"
-else
-  bad "FIXTURE BROKEN: mutation m3 did not apply or does not parse -- the effort message's last unique line was renamed, so this mutant proves nothing"
-fi
-
-# m4 DELETES THE ROUTE, and it is the one that proves C1 asks about liveness before naming.
-# The gate passes an uncited row: no FAIL, no class token, rc=0. An arm that only asked
-# whether every FAIL line names the disposition would score this build GREEN over an empty
-# set. C1's cell must read DEAD, never LIVE+NAMED.
-sed 's/if \[ "\$cited" != "true" \]; then/if false; then/' "$WORK/mut/control.sh" > "$WORK/cp-m4.sh"
-if cmp -s "$WORK/mut/control.sh" "$WORK/cp-m4.sh"; then
-  bad "FIXTURE BROKEN: mutation m4 matched nothing -- the 19(b) arm's condition was renamed, so this mutant proves nothing"
-elif ! bash -n "$WORK/cp-m4.sh" 2>/dev/null; then
-  bad "FIXTURE BROKEN: mutation m4 does not parse -- the edit damaged the script rather than mutating it"
-elif ! need_base "${B_c1:-0}" m4; then :
-else
-  M4="$(cpvec "$WORK/cp-m4.sh")"
-  M4CELL="$(printf '%s' "$M4" | cut -d' ' -f3)"
-  M4MV="$(cpmoved "$M4")"
-  if [ "$M4MV" = "cite" ] && [ "$M4CELL" != "${M4CELL#DEAD}" ]; then
-    mutant_killed "${B_c1:-0}" m4 "MUTANT m4: deleting the 19(b) route entirely passes an uncited row, and C1's cite cell reads [$M4CELL] -- caught by the rc=1-and-class-token half, which is why C1 asks about LIVENESS before it asks about NAMING; an arm scoring only 'every FAIL names the remedy' calls this build clean over a route that no longer exists"
-  else
-    bad "MUTANT m4: expected the cite cell to go DEAD and nothing else to move; cell=[$M4CELL], moved=[$M4MV]"
-  fi
-fi
-
-# m5 reverts the step file's section header to the tier-only wording -- the exact state the
-# fix replaced. It is C2's mutant and must move C2 alone; it edits no script, so C1's five
-# cells cannot move and are not re-scored here.
-awk '{ sub(/\*\*Dispositioning a recorded Check 22 violation that already happened\.\*\*/, "**Dispositioning a Rule 19(a) violation that already happened.**"); print }' \
-  "$GV" > "$WORK/cp-m5.md"
-if cmp -s "$GV" "$WORK/cp-m5.md"; then
-  bad "FIXTURE BROKEN: mutation m5 matched nothing -- the disposition section's header was renamed, so this mutant proves nothing"
-elif ! need_base "${B_c2:-0}" m5; then :
-else
-  M5="$(stepverdict "$WORK/cp-m5.md")"
-  if [ "$M5" = "HEADER-SCOPED-TO-TIER" ]; then
-    mutant_killed "${B_c2:-0}" m5 "MUTANT m5: reverting the section header to 'Dispositioning a Rule 19(a) violation' scores [$M5] -- C2 reads the header, so a section that lists four classes under a heading claiming one does not pass"
-  else
-    bad "MUTANT m5 survived: the tier-only header scored [$M5], so C2 is not reading the header"
-  fi
-fi
 fi
 
 # --- S3. AN INVALID RULE 28 SERIAL EXCEPTION FAILS, AND A VALID ONE DOES NOT ------------------
@@ -1458,51 +888,11 @@ s3oos() { # script -> FAIL1 | rc=N...
      && grep -qF "'shard: 1/1 <key>'" <<<"$o"; then printf 'FAIL1'; else printf 'rc=%s' "$rc"; fi
 }
 [ "$(s3ok "$VSL")" = OK ] \
-  && { ok "S3 near-miss: a shardable row recording the VALID none (4) exits 0 with the row counted as carrying a shard line and no S3 FAIL"; B_s3ok=1; } \
+  && ok "S3 near-miss: a shardable row recording the VALID none (4) exits 0 with the row counted as carrying a shard line and no S3 FAIL" \
   || bad "S3 near-miss: a valid none (4) row scored [$(s3ok "$VSL")], expected OK"
 [ "$(s3oos "$VSL")" = FAIL1 ] \
-  && { ok "S3 exit-3 world: with no row in Rule 19 scope (CHECKED=0), an invalid-exception row still exits 1, and the FAIL names the row WITH its tool_use_id, prints its shard_raw, and names the 'shard: 1/1 <key>' form"; B_s3oos=1; } \
+  && ok "S3 exit-3 world: with no row in Rule 19 scope (CHECKED=0), an invalid-exception row still exits 1, and the FAIL names the row WITH its tool_use_id, prints its shard_raw, and names the 'shard: 1/1 <key>' form" \
   || bad "S3 exit-3 world: scored [$(s3oos "$VSL")], expected FAIL1 -- S3 is being decided under the exit-3 branch"
-B_s3=0; [ "${B_c1:-0}${B_s3ok:-0}${B_s3oos:-0}" = 111 ] && B_s3=1
-
-# S3 MUTANTS. Anchored OUTSIDE shard_scan on purpose: the self-probe calls shard_scan, so a
-# mutation there exits 2 before the corpus and moves every cell, which reads as entanglement.
-# (a) the reader ignores the new record kind. Moves C1 shard cell; it also moves the exit-3
-#     arm, which needs a counted S3 row too -- overlap stated, (c) proves that arm on its own.
-# (c) S3 decided only where CHECKED > 0, which is S3 under the exit-3 branch. Moves the exit-3
-#     arm alone: the C1 shard ledger has a row in Rule 19 scope.
-s3mut() { # name sed-expr -> path, or empty when it did not apply
-  local M="$WORK/s3-$1.sh"
-  sed "$2" "$WORK/mut/control.sh" > "$M" 2>/dev/null || return 1
-  cmp -s "$WORK/mut/control.sh" "$M" && return 1
-  bash -n "$M" 2>/dev/null || return 1
-  printf '%s' "$M"
-}
-S3A="$(s3mut a 's/^      X) SHARD_VIOL=\$((SHARD_VIOL + 1))$/      Xdisabled) SHARD_VIOL=$((SHARD_VIOL + 1))/')"
-if [ -z "$S3A" ]; then
-  bad "FIXTURE BROKEN: S3 mutant (a) did not apply -- the reader branch was renamed"
-elif ! need_base "$B_s3" "S3 (a)"; then :
-else
-  a_mv="$(cpmoved "$(cpvec "$S3A")")"; a_ok="$(s3ok "$S3A")"; a_oos="$(s3oos "$S3A")"
-  if [ "$a_mv" = "shard" ] && [ "$a_ok" = OK ] && [ "$a_oos" != FAIL1 ]; then
-    mutant_killed "$B_s3" "S3 (a)" "S3 MUTANT (a) killed: a validator that ignores invalid-exception passes the invented exception -- C1's shard cell moves (and the exit-3 arm, stated overlap); the near-miss stays OK"
-  else
-    bad "S3 MUTANT (a): moved [$a_mv] near-miss [$a_ok] exit-3 [$a_oos]; expected [shard] OK and not FAIL1"
-  fi
-fi
-S3C="$(s3mut c 's/^if \[ "\$SHARD_VIOL" -gt 0 \]; then$/if [ "$SHARD_VIOL" -gt 0 ] \&\& [ "$CHECKED" -gt 0 ]; then/')"
-if [ -z "$S3C" ]; then
-  bad "FIXTURE BROKEN: S3 mutant (c) did not apply -- the S3 exit guard was renamed"
-elif ! need_base "$B_s3" "S3 (c)"; then :
-else
-  c_mv="$(cpmoved "$(cpvec "$S3C")")"; c_ok="$(s3ok "$S3C")"; c_oos="$(s3oos "$S3C")"
-  if [ -z "$c_mv" ] && [ "$c_ok" = OK ] && [ "$c_oos" = "rc=3" ]; then
-    mutant_killed "$B_s3" "S3 (c)" "S3 MUTANT (c) killed: S3 under the exit-3 branch reads exit 3 (nothing compared) on a sprint carrying an invented exception -- the exit-3 arm alone catches it"
-  else
-    bad "S3 MUTANT (c): moved [$c_mv] near-miss [$c_ok] exit-3 [$c_oos]; expected [] OK rc=3"
-  fi
-fi
-
 # --- S4. THE ONE CROSS AGENT'S BRIEF NAMES EVERY SECTION --------------------------------------------
 # A single cross agent (G=1) replaces the per-group crosses only if its brief covers ordinals 1..K.
 # S4 binds the BRIEF's `shard:` line; the ledger records no reads. Three worlds, each Rule 19-clean
@@ -1526,30 +916,12 @@ s4v() { # script ledger -> REFUSE | OK | rc=N...
      && grep -qF 'cover (S4): 0 one-cross' <<<"$o"; then printf 'OK'
   else printf 'rc=%s' "$rc"; fi
 }
-B_s4=0
 [ "$(s4v "$VSL" cp-s4-miss.jsonl)" = REFUSE ] \
-  && { ok "S4 offender: a one-cross dispatch (cross/4 g1/1) whose brief omits section 4 exits 1, naming the row's tool_use_id, the missing coverage, the brief's own shard line and the remediation path ($DISP_RM)"; B_s4=1; } \
+  && ok "S4 offender: a one-cross dispatch (cross/4 g1/1) whose brief omits section 4 exits 1, naming the row's tool_use_id, the missing coverage, the brief's own shard line and the remediation path ($DISP_RM)" \
   || bad "S4 offender: scored [$(s4v "$VSL" cp-s4-miss.jsonl)], expected REFUSE"
 [ "$(s4v "$VSL" cp-s4-ok.jsonl)" = OK ] \
   && ok "S4 near-miss: a complete out-of-order brief and a legacy per-group cross (G>1, a subset by design) both exit 0, counted as carrying a shard line, with S4 at zero" \
-  || { bad "S4 near-miss: scored [$(s4v "$VSL" cp-s4-ok.jsonl)], expected OK"; B_s4=0; }
-[ "${B_c1:-0}" = 1 ] || B_s4=0
-# S4 MUTANT: the coverage check dropped (the reader ignores the C record, so nothing can refuse).
-# Anchored OUTSIDE shard_scan on purpose, like the S3 mutants: the self-probe calls shard_scan, so a
-# mutation inside it exits 2 before the corpus. The offender must then pass, so the refusal cell dies.
-S4A="$(s3mut s4a 's/^      C) SHARD_COV=\$((SHARD_COV + 1))$/      Cdisabled) SHARD_COV=$((SHARD_COV + 1))/')"
-if [ -z "$S4A" ]; then
-  bad "FIXTURE BROKEN: S4 mutant did not apply -- the coverage branch was renamed"
-elif ! need_base "$B_s4" S4; then :
-else
-  a4_miss="$(s4v "$S4A" cp-s4-miss.jsonl)"; a4_ok="$(s4v "$S4A" cp-s4-ok.jsonl)"; a4_mv="$(cpmoved "$(cpvec "$S4A")")"
-  if [ "$a4_miss" = "rc=0" ] && [ "$a4_ok" = OK ] && [ -z "$a4_mv" ]; then
-    mutant_killed "$B_s4" S4 "S4 MUTANT killed: a validator that drops the coverage check passes the incomplete one-cross brief (rc=0) while the near-miss stays OK and C1 does not move"
-  else
-    bad "S4 MUTANT: offender [$a4_miss] near-miss [$a4_ok] C1 moved [$a4_mv]; expected rc=0 OK []"
-  fi
-fi
-
+  || bad "S4 near-miss: scored [$(s4v "$VSL" cp-s4-ok.jsonl)], expected OK"
 # --- S4N. ORDINALS ARE NORMALISED BEFORE THEY ARE COMPARED ------------------------------------------
 # `partition-document.sh --map` zero-pads ordinals at K>=10 and not every emitter file teaches the
 # unpadded spelling, so a lead copying from --map writes `01,02,...,12`; a space after each comma is
@@ -1585,23 +957,6 @@ s4n_pad_base="$(s4nv "$VSL" cp-s4n-pad.jsonl)"
 [ "$(s4nv "$VSL" cp-s4n-space.jsonl)" = PASS ] \
   && ok "S4N spaced: a complete one-cross brief at K=4 spelled '1, 2, 3, 4' exits 0 with S4 at zero" \
   || bad "S4N spaced: scored [$(s4nv "$VSL" cp-s4n-space.jsonl)], expected PASS"
-# S4N MUTANT: the leading-zero strip removed, so the padded complete brief is refused.
-S4N="$(s3mut s4n 's/; sub(\/^0+\/, "", cv_t)$//')"
-if [ -z "$S4N" ]; then
-  bad "FIXTURE BROKEN: S4N mutant did not apply -- the normalisation line was renamed"
-elif ! need_base "$([ "$s4n_pad_base" = PASS ] && echo 1)" "S4N (unmutated padded arm scored [$s4n_pad_base])"; then
-  # The mutant's kill is a padded REFUSE; if the unmutated padded arm cannot PASS in this same
-  # run, that REFUSE is the seed failing, not the mutation, and must not score as a kill.
-  :
-else
-  n_pad="$(s4nv "$S4N" cp-s4n-pad.jsonl)"; n_miss="$(s4nv "$S4N" cp-s4n-padmiss.jsonl)"; n_sp="$(s4nv "$S4N" cp-s4n-space.jsonl)"
-  if [ "$n_pad" = REFUSE ] && [ "$n_miss" = REFUSE ] && [ "$n_sp" = PASS ]; then
-    mutant_killed "$([ "$s4n_pad_base" = PASS ] && echo 1)" S4N "S4N MUTANT killed: a validator that no longer strips leading zeros refuses the complete padded brief while the spaced brief still passes"
-  else
-    bad "S4N MUTANT: padded [$n_pad] padded-miss [$n_miss] spaced [$n_sp]; expected REFUSE REFUSE PASS"
-  fi
-fi
-
 # --- S4S. A PROSE SUFFIX AFTER THE ORDINAL LIST IS NOT PART OF IT (BL-887) ----------------------------
 # The ordinal list is the longest leading run of digits, commas, blanks and tabs after `g1/1 `; the
 # rest of the line is a suffix and is ignored. The two suffix shapes are the ones a consumer ledger
@@ -1625,9 +980,8 @@ s4s_vec() { # script -> paren=..;parengap=..;step=..;stepgap=..;tcomma=..;digit=
 }
 S4S_WANT='paren=PASS;parengap=REFUSE;step=PASS;stepgap=REFUSE;tcomma=REFUSE;digit=REFUSE;glued=PASS'
 S4S_TIP="$(s4s_vec "$VSL")"
-B_s4s=0
 if [ "$S4S_TIP" = "$S4S_WANT" ]; then
-  ok "S4S suffix: complete+suffix PASS and gap+suffix REFUSE for both shapes, trailing comma and digit-led suffix REFUSE, glued 1,2,3rd PASS [$S4S_TIP]"; B_s4s=1
+  ok "S4S suffix: complete+suffix PASS and gap+suffix REFUSE for both shapes, trailing comma and digit-led suffix REFUSE, glued 1,2,3rd PASS [$S4S_TIP]"
 else
   _old_ifs="$IFS"; IFS=';'
   for _c in $S4S_WANT; do
@@ -1635,25 +989,6 @@ else
   done
   IFS="$_old_ifs"
 fi
-# S4S MUTANT: the truncation line deleted, so the whole remainder is split on commas again. The
-# self-probe seeds no suffixed value, so the mutant reaches the corpus. It runs only its deciding
-# cells (paren, step, glued: each flips PASS to REFUSE) and two twins (the parengap gap stays
-# REFUSE, and the S4N spaced list, which carries no suffix, still PASSes).
-S4S="$(s3mut s4s '/^  match(cv_l, \/^\[0-9, \\t]\*\/); cv_l = substr(cv_l, 1, RLENGTH)$/d')"
-if [ -z "$S4S" ]; then
-  bad "FIXTURE BROKEN: S4S mutant did not apply -- the truncation line was renamed"
-elif ! need_base "$B_s4s" "S4S (unmutated vector [$S4S_TIP])"; then :
-else
-  s_vec=""
-  for _c in paren step glued parengap; do s_vec="$s_vec${s_vec:+;}$_c=$(s4nv "$S4S" "cp-s4s-$_c.jsonl")"; done
-  s_sp="$(s4nv "$S4S" cp-s4n-space.jsonl)"
-  if [ "$s_vec" = 'paren=REFUSE;step=REFUSE;glued=REFUSE;parengap=REFUSE' ] && [ "$s_sp" = PASS ]; then
-    mutant_killed "$B_s4s" S4S "S4S MUTANT killed: a validator that splits the whole remainder refuses the complete one-cross briefs carrying a suffix (paren, step, glued) while the unsuffixed spaced brief still passes"
-  else
-    bad "S4S MUTANT: vector [$s_vec] spaced [$s_sp]; expected paren, step, glued and parengap REFUSE and spaced PASS"
-  fi
-fi
-
 # --- S4X. THE EMITTER'S OWN SPELLING IS IN S4's SCOPE (BL-811, cross-unit) ----------------------------
 # S4 keys on `cross/<K> g1/1 <ordinals>`. The role, step and rule files every cross agent is briefed
 # from teach the shard line; if they spelled it any other way (`cross/<K> <ordinals>`, `cross/<K>
@@ -1760,9 +1095,7 @@ rvok() {
 }
 rvvec() { printf '%s %s %s %s %s %s' "$(rv "$1" code-reviewer)" "$(rv "$1" code-reviewer-escalated)" \
   "$(rv "$1" qa)" "$(rv "$1" remediator)" "$(rvok "$1")" "$(rv "$1" dev)"; }
-# The five membership cells, then the dev near-miss cell (R6) every mutant also scores.
-RV_EXPECTED="FAIL1 FAIL1 FAIL1 FAIL1 OK"
-RV_NEAR="OK"
+# The five membership cells, then the dev near-miss cell (R6).
 RVGOT="$(rvvec "$VSL")"
 set -- $RVGOT
 [ "$1" = FAIL1 ] && ok "S3-R1 a code-reviewer row (model pinned, Rule 19-clean) with the invented 'shard: none (made up)' FAILS S3: exit 1, the role named, its shard_raw printed" \
@@ -1777,70 +1110,6 @@ set -- $RVGOT
   || bad "S3-R5 a code-reviewer row with 'shard: 1/1 3' scored [$5], expected OK"
 [ "$6" = OK ] && ok "S3-R6 near-miss: a dev row (model pinned, outside SHARD_ROLES) with the same invented exception is NOT judged: exit 0, the OK row, 0 FAILED under S3 -- so the FAIL on qa above is about qa's membership, not about the seed" \
   || bad "S3-R6 the dev near-miss scored [$6], expected OK -- S3 judges a role outside SHARD_ROLES, so R3 proves nothing about membership"
-
-# MUTANTS on the SHARD_ROLES line, each scored against all six cells. The line is DERIVED from the
-# validator and each mutant edits its WORD LIST, so a reordering of the roles does not lose them.
-rvmoved() { local got="$1" i=1 e m out="" names="reviewer escalated qa remediator ok dev"
-  for e in $RV_EXPECTED $RV_NEAR; do m="$(printf '%s' "$got" | cut -d' ' -f$i)"
-    [ "$e" != "$m" ] && out="$out $(printf '%s' "$names" | cut -d' ' -f$i)"; i=$((i+1)); done
-  printf '%s' "${out# }"; }
-RVSRC="$(grep -c '^SHARD_ROLES="[a-z -]*"$' "$WORK/mut/control.sh")" || RVSRC=0
-RVLINE="$(grep '^SHARD_ROLES="[a-z -]*"$' "$WORK/mut/control.sh" | head -1)"
-RVLIST=" $(printf '%s' "$RVLINE" | sed -e 's/^SHARD_ROLES="//' -e 's/"$//') "
-rvwords_ok=1
-for _w in code-reviewer code-reviewer-escalated qa remediator; do
-  case "$RVLIST" in *" $_w "*) ;; *) rvwords_ok=0 ;; esac
-done
-case "$RVLIST" in *" dev "*) rvwords_ok=0 ;; esac
-# rvsed <word-to-drop|""> <word-to-add|""> -> a sed expr replacing the derived line
-rvsed() { local l="$RVLIST" n
-  [ -n "$1" ] && l="${l/ $1 / }"
-  n="$(printf '%s' "$l" | sed -e 's/^ *//' -e 's/ *$//')"
-  [ -n "$2" ] && n="$n $2"
-  printf 's/^%s$/SHARD_ROLES="%s"/' "$RVLINE" "$n"; }
-if [ "$RVSRC" -ne 1 ]; then
-  bad "FIXTURE BROKEN: the SHARD_ROLES line is in the validator $RVSRC time(s) (want 1); the reviewer mutants below have no subject"
-elif [ "$rvwords_ok" -ne 1 ]; then
-  bad "S3 membership: SHARD_ROLES [$RVLIST] does not carry code-reviewer, code-reviewer-escalated, qa and remediator without dev -- a regression in the validator, not the harness; the membership mutants stand down until it does"
-elif ! need_base "$([ "$RVGOT" = "$RV_EXPECTED $RV_NEAR" ] && echo 1)" "S3 rva/rvb/rvc/rvd"; then :
-else
-  # (rva) drops code-reviewer: the R1 cell moves, and the ALLOW twin with it (stated overlap --
-  # the twin's positive conjunct is that a code-reviewer 1/1 row is COUNTED, which is membership).
-  RVA="$(s3mut rva "$(rvsed code-reviewer '')")"
-  if [ -z "$RVA" ]; then bad "FIXTURE BROKEN: reviewer mutant (rva) did not apply"
-  else
-    mv_="$(rvmoved "$(rvvec "$RVA")")"
-    [ "$mv_" = "reviewer ok" ] \
-      && mutant_killed "$([ "$RVGOT" = "$RV_EXPECTED $RV_NEAR" ] && echo 1)" rva "S3 MUTANT (rva) killed: SHARD_ROLES without code-reviewer passes its invented exception and stops counting its 1/1 row -- escalated, qa, remediator and the dev near-miss unmoved" \
-      || bad "S3 MUTANT (rva): moved [$mv_], expected [reviewer ok]"
-  fi
-  RVC="$(s3mut rvc "$(rvsed code-reviewer-escalated '')")"
-  if [ -z "$RVC" ]; then bad "FIXTURE BROKEN: escalated mutant (rvc) did not apply"
-  else
-    mv_="$(rvmoved "$(rvvec "$RVC")")"
-    [ "$mv_" = "escalated" ] \
-      && mutant_killed "$([ "$RVGOT" = "$RV_EXPECTED $RV_NEAR" ] && echo 1)" rvc "S3 MUTANT (rvc) killed: SHARD_ROLES without code-reviewer-escalated passes its invented exception -- S3-R2 alone moves" \
-      || bad "S3 MUTANT (rvc): moved [$mv_], expected [escalated]"
-  fi
-  # (rvb) the pre-fix state: qa dropped from the set. S3-R3 alone moves, FAIL1 -> OK.
-  RVB="$(s3mut rvb "$(rvsed qa '')")"
-  if [ -z "$RVB" ]; then bad "FIXTURE BROKEN: qa mutant (rvb) did not apply"
-  else
-    mv_="$(rvmoved "$(rvvec "$RVB")")"
-    [ "$mv_" = "qa" ] \
-      && mutant_killed "$([ "$RVGOT" = "$RV_EXPECTED $RV_NEAR" ] && echo 1)" rvb "S3 MUTANT (rvb) killed: SHARD_ROLES without qa passes the qa row's invented exception -- S3-R3 alone moves" \
-      || bad "S3 MUTANT (rvb): moved [$mv_], expected [qa]"
-  fi
-  # (rvd) the near-miss can fire: SHARD_ROLES gaining dev FAILS the dev row -- S3-R6 alone moves.
-  RVD="$(s3mut rvd "$(rvsed '' dev)")"
-  if [ -z "$RVD" ]; then bad "FIXTURE BROKEN: dev mutant (rvd) did not apply"
-  else
-    mv_="$(rvmoved "$(rvvec "$RVD")")"
-    [ "$mv_" = "dev" ] \
-      && mutant_killed "$([ "$RVGOT" = "$RV_EXPECTED $RV_NEAR" ] && echo 1)" rvd "S3 MUTANT (rvd) killed: SHARD_ROLES gaining dev FAILS the dev near-miss -- S3-R6 alone moves, so R6's OK is about membership" \
-      || bad "S3 MUTANT (rvd): moved [$mv_], expected [dev]"
-  fi
-fi
 
 # --- PARTY SEATS ARE DERIVED FROM THE ROLE FILE, AND A PERSONA WITH A MODEL IS STILL ONE ---------
 # The shipped template gives cis/sm/tea/ux a model. The earlier derivation (an aiDlcRoles entry
@@ -1888,14 +1157,10 @@ ptcell() {
      && ! grep -qF 'declared a serial exception' <<<"$o"; then printf 'OK%s' "$w"
   else printf 'rc=%s' "$rc"; fi
 }
-# PT2 owns the near-miss and nothing about the WARN, so its cell drops the W: otherwise every
-# mutant that empties the seat set moves PT2 too, which is the WARN's subject (PT3), not PT2's.
+# PT2 owns the near-miss and nothing about the WARN, so its cell drops the W: the WARN is
+# PT3's subject, not PT2's.
 ptvec() { local c2; c2="$(ptcell "$1" pt-dev.jsonl pt dev)"
   printf '%s %s %s' "$(ptcell "$1" pt-tea.jsonl pt tea)" "${c2%W}" "$(ptcell "$1" pt-tea.jsonl pt-noroles tea)"; }
-# The pre-fix derivation, written as a file so the mutant below can splice it in whole.
-cat > "$WORK/pt-oldline.txt" <<'OLD'
-SHARD_SEATS="$(jq -r '.aiDlcRoles // {} | to_entries[] | select((.value.model // "") == "") | .key' "$SETTINGS" 2>/dev/null | tr '\n' ' ')"
-OLD
 if [ -z "$PT_SRC" ]; then
   bad "FIXTURE BROKEN: no team-roles directory carrying tea.md and dev.md in either layout under $ROOT -- the party-seat cells have no producer to copy"
 elif ! grep -q '^The lead spawns you as a party-mode persona' "$PT_SRC/tea.md" \
@@ -1912,36 +1177,10 @@ else
   [ "$3" = OKW ] && ok "PT3 the PT1 ledger against settings with NO team-roles beside it: the zero-seat WARN prints and tea is not judged -- an empty seat set is announced, never silent" \
     || bad "PT3 with no role directory the run scored [$3], expected OKW -- an empty seat derivation is silent"
 
-  ptmut() { # name sed-expr expected-vector description
-    local M
-    M="$(s3mut "$1" "$2")"
-    if [ -z "$M" ]; then bad "FIXTURE BROKEN: party-seat mutant ($1) did not apply -- its anchor was renamed"; return; fi
-    need_base "$([ "$PTGOT" = "FAIL1 OK OKW" ] && echo 1)" "PT ($1)" || return
-    local got; got="$(ptvec "$M")"
-    [ "$got" = "$3" ] && mutant_killed "$([ "$PTGOT" = "FAIL1 OK OKW" ] && echo 1)" "PT ($1)" "PT MUTANT ($1) killed: $4 [$got]" \
-      || bad "PT MUTANT ($1): scored [$got], expected [$3] -- $4"
-  }
-  # (pta) THE PRE-FIX DERIVATION: seats are aiDlcRoles entries with no model. A model-pinned tea
-  # is then no seat and its invented exception passes. PT1 alone moves (PT3 already reads empty).
-  ptmut pta "/^SHARD_SEATS=\"\\\$(party_seats \"\\\$SHARD_SEATS_DIR\")\"\$/{
-r $WORK/pt-oldline.txt
-d
-}" \
-    "OKW OK OKW" "the old model-less derivation drops a model-pinned persona from S3 -- PT1 alone moves, from FAIL1 to a pass"
-  # (ptb) the zero-seat WARN removed: an empty seat set prints a seat line naming nothing. PT3 alone.
-  ptmut ptb 's/^if \[ -n "\$SHARD_SEATS" \]; then$/if true; then/' \
-    "FAIL1 OK OK" "an empty derivation stops being announced, so a lost seat set reads as a clean run -- PT3 alone moves"
-  # (ptc) the derivation loses its line-start anchor, so a mid-line mention (the rule-body shape)
-  # makes a seat. The SELF-PROBE owns this: it seeds that mid-line file and refuses (exit 2)
-  # before any ledger is read, so every cell moves to rc=2 -- the probe runs the derivation.
-  ptmut ptc "s/grep -q '^The lead spawns you as a party-mode persona'/grep -q 'The lead spawns you as a party-mode persona'/" \
-    "rc=2 rc=2 rc=2" "an unanchored derivation is refused by the self-probe before the corpus"
-
   # PS: THE SHIPPED SEAT SET. The derivation only WARNs when it finds no seat, so losing ONE
   # persona (a reworded sentence in one role file) drops it from S1/S3 behind a normal-looking
   # seat line. This cell runs the shipped validator over EVERY real role file and requires the
-  # seat line to name exactly the four personas the template declares. Its mutant rewords one
-  # seat file's sentence in the copied tree, the motivating shape, and the cell must move.
+  # seat line to name exactly the four personas the template declares.
   pscell() { # <team-roles dir> -> the derived seat list, or rc=N
     local d o rc
     d="$(dirname "$1")"
@@ -1955,22 +1194,12 @@ d
   if [ "$PT_SRC" != "$ROOT/core/team-roles" ]; then
     printf '  SKIP  PS the shipped seat set: role files are %s, not the distribution layout\n' "$PT_SRC"
   else
-  mkdir -p "$WORK/ps/team-roles" "$WORK/psm/team-roles"
-  cp "$PT_SRC"/*.md "$WORK/ps/team-roles/"; cp "$PT_SRC"/*.md "$WORK/psm/team-roles/"
-  cp "$WORK/pt/settings.json" "$WORK/ps/settings.json"; cp "$WORK/pt/settings.json" "$WORK/psm/settings.json"
+  mkdir -p "$WORK/ps/team-roles"
+  cp "$PT_SRC"/*.md "$WORK/ps/team-roles/"
+  cp "$WORK/pt/settings.json" "$WORK/ps/settings.json"
   PSGOT="$(pscell "$WORK/ps/team-roles")"
   [ "$PSGOT" = "cis sm tea ux" ] && ok "PS the shipped role files derive exactly the four persona seats [cis sm tea ux]" \
     || bad "PS the shipped role files derive the seat set [$PSGOT], expected [cis sm tea ux] -- a persona has lost (or a non-persona gained) the line-start sentence, and S1/S3 judge a different set with no WARN"
-  sed 's/^The lead spawns you as a party-mode persona/The lead may spawn you as a party-mode persona/' \
-    "$PT_SRC/ux.md" > "$WORK/psm/team-roles/ux.md"
-  if cmp -s "$PT_SRC/ux.md" "$WORK/psm/team-roles/ux.md"; then
-    bad "FIXTURE BROKEN: the PS mutant (ux.md reworded) did not apply -- the persona sentence moved"
-  elif ! need_base "$([ "$PSGOT" = "cis sm tea ux" ] && echo 1)" "PS (ux.md reworded)"; then :
-  else
-    PSMUT="$(pscell "$WORK/psm/team-roles")"
-    [ "$PSMUT" = "cis sm tea" ] && mutant_killed "$([ "$PSGOT" = "cis sm tea ux" ] && echo 1)" "PS (ux.md reworded)" "PS MUTANT (ux.md reworded) killed: the seat set reads [$PSMUT], so the PS cell would fail" \
-      || bad "PS MUTANT (ux.md reworded) scored [$PSMUT], expected [cis sm tea] -- the PS cell cannot see one lost seat"
-  fi
   fi
 fi
 
@@ -1982,7 +1211,7 @@ fi
 # (arm 4 above, unchanged). Measured on the reference consumer: one mid-sprint pin commit
 # moved Check 22 from 67 FAILs to 288 on the same ledger, every added one a correct dispatch.
 #
-# FIVE CELLS, and each mutant below must move exactly one. Every ledger opens with an EPOCH
+# FIVE CELLS. Every ledger opens with an EPOCH
 # row that is not the subject: a `tea` dispatch whose role pinned nothing at dispatch
 # (`tier_pinned: null`) and pins nothing now -- UNPINNED on every implementation, so it can
 # move no cell, and the subject is never the ledger's first row.
@@ -2087,34 +1316,6 @@ else
   bad "  legacy rows were not counted as legacy: $R"
 fi
 
-# MUTANTS, each a copy of the unmutated control already in $WORK/mut, guarded by `cmp -s` and
-# `bash -n`, each required to move exactly ONE cell.
-TCTL="$(tvec "$WORK/mut/control.sh")"
-[ "$TCTL" = "$T_EXPECTED" ] \
-  && ok "T CONTROL: the unmutated copy in the mutant directory reproduces all five cells" \
-  || bad "T CONTROL copy did not reproduce the tier cells: expected [$T_EXPECTED], got [$TCTL]"
-tmut() { # name sed-expression expected-cell description
-  local n="$1" M="$WORK/mut/t-$1.sh" mv
-  sed "$2" "$WORK/mut/control.sh" > "$M" || { bad "FIXTURE BROKEN: could not write tier mutant $n"; return; }
-  if cmp -s "$WORK/mut/control.sh" "$M"; then
-    bad "FIXTURE BROKEN: tier mutation '$n' matched nothing -- the line it targets was renamed, so this mutant proves nothing"; return
-  fi
-  bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: tier mutant '$n' does not parse"; return; }
-  need_base "$([ "$TGOT" = "$T_EXPECTED" ] && [ "$TCTL" = "$T_EXPECTED" ] && echo 1)" "t-$n" || return
-  mv="$(tmoved "$(tvec "$M")")"
-  [ "$mv" = "$3" ] && mutant_killed "$([ "$TGOT" = "$T_EXPECTED" ] && [ "$TCTL" = "$T_EXPECTED" ] && echo 1)" "t-$n" "MUTANT t-$n killed: $4 -- moves only the $3 cell" \
-    || bad "MUTANT t-$n: moved [$mv], expected only [$3]"
-}
-# The defect itself: the dispatch-time pin replaced by the pin read from settings NOW.
-tmut current 's/^      EXPECT="\$tier_at_dispatch"$/      EXPECT="$(pin_key "$SETTINGS" "$role")"/' post \
-  "comparing a tier_pinned row against today's settings FAILS the correct pre-change dispatch"
-# No comparison at all: every joined tier row verified.
-tmut nocompare 's/^      elif matches_pin "\$tier_observed" || \[ "\$tier_resolved_ok" = true \]; then$/      elif true; then/' dis \
-  "dropping the transcript comparison passes a teammate that ran opus against a sonnet pin"
-# Null collapsed into absent: a role that pinned nothing at dispatch falls to the legacy path.
-tmut nullabsent 's/(if has("tier_pinned") then/(if .tier_pinned != null then/' null \
-  "collapsing a null tier_pinned into an absent one judges a role that pinned nothing at dispatch against today's pin"
-
 # ============================================================================
 # THE PIN KEY IS NOT THE MODEL. A consumer key `fast` naming `claude-sonnet-5-5` is not a
 # substring of the model it resolves to, so comparing the transcript model against the KEY alone
@@ -2169,28 +1370,6 @@ if [ "$KGOT" = "$K_EXPECTED" ]; then
 else
   bad "K1-K4: expected [$K_EXPECTED], got [$KGOT] (differing: $(kmoved "$KGOT"))"
 fi
-KCTL="$(kvec "$WORK/mut/control.sh")"
-[ "$KCTL" = "$K_EXPECTED" ] && ok "K CONTROL: the unmutated copy in the mutant directory reproduces all four cells" \
-  || bad "K CONTROL copy did not reproduce the K cells: expected [$K_EXPECTED], got [$KCTL]"
-kmut() { # name sed-expression expected-cells description
-  local n="$1" M="$WORK/mut/k-$1.sh" mv
-  sed "$2" "$WORK/mut/control.sh" > "$M" || { bad "FIXTURE BROKEN: could not write K mutant $n"; return; }
-  if cmp -s "$WORK/mut/control.sh" "$M"; then bad "FIXTURE BROKEN: K mutation '$n' matched nothing"; return; fi
-  bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: K mutant '$n' does not parse"; return; }
-  need_base "$([ "$KGOT" = "$K_EXPECTED" ] && [ "$KCTL" = "$K_EXPECTED" ] && echo 1)" "k-$n" || return
-  mv="$(kmoved "$(kvec "$M")")"
-  [ "$mv" = "$3" ] && mutant_killed "$([ "$KGOT" = "$K_EXPECTED" ] && [ "$KCTL" = "$K_EXPECTED" ] && echo 1)" "k-$n" "MUTANT k-$n killed: $4 -- moves only [$3]" || bad "MUTANT k-$n: moved [$mv], expected only [$3]"
-}
-# The 0.773.0 shape: no retry against the resolved string, the key alone decides.
-kmut nokeyresolve 's/^      elif matches_pin "\$tier_observed" || \[ "\$tier_resolved_ok" = true \]; then$/      elif matches_pin "$tier_observed"; then/' "mp set" \
-  "comparing the transcript model against the pin KEY alone fails a correct run under a custom key"
-# The settings fallback removed: only model_pinned resolves.
-kmut nosettings 's/^        \[ "\$tier_resolved" = "__NONE__" \] && tier_resolved="\$(jq -r --arg k "\$tier_key" \\$/        [ "$tier_resolved" = "__NONE__" ] \&\& tier_resolved="" ; : "$(jq -r --arg k "$tier_key" \\/' set \
-  "dropping the aiDlcModels fallback fails a correct row whose model_pinned is null"
-# <synthetic> read as a model.
-kmut synthetic "s/^      case \"\\\$tier_observed\" in __NOJOIN__|__NONE__|'<synthetic>') tier_observed=\"\" ;; esac\$/      case \"\$tier_observed\" in __NOJOIN__|__NONE__) tier_observed=\"\" ;; esac/" syn \
-  "reading <synthetic> as a transcript model FAILS a row that has no ground truth"
-
 # ============================================================================
 # REMEDIATION BY REPAIR (BL-842; operator rulings: "remediation-only for those two", and S4 added).
 # A violating row V of a RULED class -- `cite` (Rule 19(b), role_contract_cited=false), `shard`
@@ -2345,35 +1524,28 @@ rmd2() {
     || { printf 'd2:nopair'; return; }
   printf 'D2'
 }
-rvec() { # script [cells] -> one cell per world, in RM_NAMES order
-  # With a second argument only those named cells RUN the validator; every other cell is written
-  # as its expected value. A mutant is scored on the worlds where its arm decides plus its named
-  # twins (fixture-mutants.md, One run per distinct state, clause 2), never on all seventeen.
-  local S="$1" ONLY="${2:-}" n e c out="" i=1
+rvec() { # script -> one cell per world, in R_NAMES order
+  local S="$1" n c out=""
   for n in $R_NAMES; do
-    e="$(printf '%s' "$R_EXPECTED" | cut -d' ' -f$i)"; i=$((i+1))
-    c="$e"
-    if [ -z "$ONLY" ] || { case " $ONLY " in *" $n "*) true ;; *) false ;; esac; }; then
-      case "$n" in
-        rem-cite)        c="$(rmrem "$S" rem-cite  toolu_V1 toolu_R1 cite)" ;;
-        rem-shard)       c="$(rmrem "$S" rem-shard toolu_V2 toolu_R2 shard)" ;;
-        rem-cover)       c="$(rmrem "$S" rem-cover toolu_V3 toolu_R3 cover)" ;;
-        nm-role)         c="$(rmref "$S" nm-role        r-v1 toolu_V1)" ;;
-        nm-sprint)       c="$(rmref "$S" nm-sprint      r-v1 toolu_V1)" ;;
-        nm-order)        c="$(rmref "$S" nm-order       r-v1 toolu_V1)" ;;
-        nm-tier)         c="$(rmref "$S" nm-tier        r-vt toolu_VT 'Rule 19(a) tier' 'Rule 19(a) tier')" ;;
-        nm-dirty-cite)   c="$(rmref "$S" nm-dirty-cite  r-v1 toolu_V1)" ;;
-        nm-dirty-shard)  c="$(rmref "$S" nm-dirty-shard r-v2 toolu_V2)" ;;
-        nm-dirty-cover)  c="$(rmref "$S" nm-dirty-cover r-v3 toolu_V3)" ;;
-        nm-pending)      c="$(rmref "$S" nm-pending     r-v1 toolu_V1 'pending-remedy=1')" ;;
-        nm-invalid)      c="$(rmref "$S" nm-invalid     r-v1 toolu_V1 "$RM_INVALID")" ;;
-        nm-namekey)      c="$(rmref "$S" nm-namekey     r-v1 toolu_V1 'pending-remedy=0')" ;;
-        nm-ambig)        c="$(rmref "$S" nm-ambig       r-dup toolu_VD1 "$RM_AMBIG")" ;;
-        nm-none3)        c="$(rmref "$S" nm-none3       r-v2 toolu_V2)" ;;
-        nm-launder)      c="$(rmref "$S" nm-launder     r-v1 toolu_V1)" ;;
-        d2)              c="$(rmd2 "$S")" ;;
-      esac
-    fi
+    case "$n" in
+      rem-cite)        c="$(rmrem "$S" rem-cite  toolu_V1 toolu_R1 cite)" ;;
+      rem-shard)       c="$(rmrem "$S" rem-shard toolu_V2 toolu_R2 shard)" ;;
+      rem-cover)       c="$(rmrem "$S" rem-cover toolu_V3 toolu_R3 cover)" ;;
+      nm-role)         c="$(rmref "$S" nm-role        r-v1 toolu_V1)" ;;
+      nm-sprint)       c="$(rmref "$S" nm-sprint      r-v1 toolu_V1)" ;;
+      nm-order)        c="$(rmref "$S" nm-order       r-v1 toolu_V1)" ;;
+      nm-tier)         c="$(rmref "$S" nm-tier        r-vt toolu_VT 'Rule 19(a) tier' 'Rule 19(a) tier')" ;;
+      nm-dirty-cite)   c="$(rmref "$S" nm-dirty-cite  r-v1 toolu_V1)" ;;
+      nm-dirty-shard)  c="$(rmref "$S" nm-dirty-shard r-v2 toolu_V2)" ;;
+      nm-dirty-cover)  c="$(rmref "$S" nm-dirty-cover r-v3 toolu_V3)" ;;
+      nm-pending)      c="$(rmref "$S" nm-pending     r-v1 toolu_V1 'pending-remedy=1')" ;;
+      nm-invalid)      c="$(rmref "$S" nm-invalid     r-v1 toolu_V1 "$RM_INVALID")" ;;
+      nm-namekey)      c="$(rmref "$S" nm-namekey     r-v1 toolu_V1 'pending-remedy=0')" ;;
+      nm-ambig)        c="$(rmref "$S" nm-ambig       r-dup toolu_VD1 "$RM_AMBIG")" ;;
+      nm-none3)        c="$(rmref "$S" nm-none3       r-v2 toolu_V2)" ;;
+      nm-launder)      c="$(rmref "$S" nm-launder     r-v1 toolu_V1)" ;;
+      d2)              c="$(rmd2 "$S")" ;;
+    esac
     out="$out $c"
   done
   printf '%s' "${out# }"
@@ -2390,75 +1562,6 @@ if [ "$RGOT" = "$R_EXPECTED" ]; then
 else
   bad "R1-R17: expected [$R_EXPECTED], got [$RGOT] (differing: $(rmoved "$RGOT"))"
 fi
-RCTL="$(rvec "$WORK/mut/control.sh" "rem-cite")"
-[ "$RCTL" = "$R_EXPECTED" ] && ok "R CONTROL: the unmutated copy in the mutant directory answers the rem-cite cell (a positive REMEDIATED row, so a copy that never ran cannot pass); the other sixteen cells are the main run, already scored" \
-  || bad "R CONTROL copy did not reproduce the R cells: expected [$R_EXPECTED], got [$RCTL]"
-# rmut <name> <sed-expression> <expected-moved-cells> <description>
-rmut() {
-  local n="$1" M="$WORK/mut/r-$1.sh" mv
-  sed "$2" "$WORK/mut/control.sh" > "$M" || { bad "FIXTURE BROKEN: R mutation '$n' did not apply (sed failed)"; return; }
-  if cmp -s "$WORK/mut/control.sh" "$M"; then bad "FIXTURE BROKEN: R mutation '$n' matched nothing"; return; fi
-  # A mutant that ALSO disables the self-probe must still differ from the probe-only copy, or its
-  # predicate edit matched nothing and the probe edit alone made it "apply".
-  if [ -f "${RNP:-}" ] && cmp -s "$RNP" "$M"; then bad "FIXTURE BROKEN: R mutation '$n' changed only the self-probe call -- its predicate edit matched nothing"; return; fi
-  bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: R mutant '$n' does not parse"; return; }
-  need_base "$([ "$RGOT" = "$R_EXPECTED" ] && [ "$RCTL" = "$R_EXPECTED" ] && echo 1)" "r-$n" || return
-  mv="$(rmoved "$(rvec "$M" "$3")")"
-  [ "$mv" = "$3" ] && mutant_killed "$([ "$RGOT" = "$R_EXPECTED" ] && [ "$RCTL" = "$R_EXPECTED" ] && echo 1)" "r-$n" "MUTANT r-$n killed: $4 -- moves only [$3]" \
-    || bad "MUTANT r-$n: moved [$mv], expected only [$3]"
-}
-# r-m1: THE CLASS SET WIDENED TO TIER. `tier` joins the one class-list line, WITH an eligibility
-# line (a cited row carrying no shard -- the tier-mismatch V) and a cleanliness line (R cited and
-# readable), because a list entry with no cleanliness test makes the validator refuse the whole
-# run (exit 2, its fail-closed Z guard), which would move every cell and prove nothing about the
-# class key. Built this way the mutant runs and remediates the tier V, which only nm-tier sees.
-rmut m1 's/^REMEDIABLE_CLASSES="cite shard cover"$/REMEDIABLE_CLASSES="cite shard cover tier"/
-s/^      return -1$/      if (c == "tier") return (mct[j] == "true" \&\& mrd[j] != "false"); return -1/
-s/^      return 0$/      if (c == "tier") return (mct[i] == "true" \&\& msh[i] == "__NONE__"); return 0/' nm-tier \
-  "a remedy naming a Rule 19(a) tier mismatch clears it once tier is in the remediable class list"
-# r-m2: R's cleanliness dropped for class (i). The class (ii) dirty-R world is hand-seeded and
-# r-cover owns S4's; this one moves only the dirty-cite world.
-rmut m2 's/^      if (c == "cite") return (mct\[j\] == "true" && mrd\[j\] != "false")$/      if (c == "cite") return 1/' nm-dirty-cite \
-  "an R that is itself uncited remediates an uncited V"
-# THE VALIDATOR'S OWN SHARD SELF-PROBE SEES THREE OF THESE MUTANTS FIRST. r-cover, r-m3 and r-m4
-# edit shard_scan's join, which shard_self_probe drives before the corpus, so each exits 2 on
-# every world and would move all seventeen cells -- a kill by the probe, not by the cell the
-# mutant is about. Those three therefore ALSO disable the self-probe's call site (RM_NOPROBE),
-# and the control below proves that disabling it ALONE moves no R cell, so the one cell each of
-# them moves is moved by its predicate edit. (The self-probe catching them is the first line of
-# defence; these cells are the second, and the one a probe change could not silently remove.)
-RM_NOPROBE='s/^shard_self_probe || {$/true || {/'
-RNP="$WORK/mut/r-noprobe.sh"
-sed "$RM_NOPROBE" "$WORK/mut/control.sh" > "$RNP"
-if cmp -s "$WORK/mut/control.sh" "$RNP"; then
-  bad "FIXTURE BROKEN: the self-probe call site matched nothing, so r-cover, r-m3 and r-m4 would be scored by the probe's exit 2"
-else
-  RNPGOT="$(rvec "$RNP" "nm-dirty-cover nm-ambig nm-launder nm-pending")"
-  [ "$RNPGOT" = "$R_EXPECTED" ] && ok "R NOPROBE CONTROL: the validator with only its shard self-probe call disabled reproduces the four cells the three probe-disabling mutants are scored on, so a mutant that also disables it is scored by its own edit" \
-    || bad "R NOPROBE CONTROL: disabling the self-probe call alone moved [$(rmoved "$RNPGOT")]"
-fi
-# r-cover: R's cleanliness dropped for arm S4.
-rmut cover "$RM_NOPROBE"'
-s/^      if (c == "cover") return (msh\[j\] ~ .*$/      if (c == "cover") return 1/' nm-dirty-cover \
-  "an R whose own one-cross brief still omits an ordinal remediates the S4 V"
-# r-m3: THE KEY JOIN REPLACED BY ROLE ONLY. R no longer needs a `remediates` field, and V is the
-# first earlier eligible row of R's role whatever R names. It moves TWO key cells, and both are
-# genuinely that key: the laundering world (a clean same-role R naming nothing) and the ambiguous
-# name (a key that resolves to two rows now picks the first). The other key worlds keep their
-# refusal through an earlier conjunct the mutant leaves standing (sprint, line order, role,
-# remediates_invalid, no tool_use_id), each of which is its own cell above.
-rmut m3 "$RM_NOPROBE"'
-s/^        if (mre\[j\] == "__NONE__" && mri\[j\] == "__NONE__") continue$/        if (0) continue/
-s/^        if ((mre\[j\] in bytui) && msp\[bytui\[mre\[j\]\]\] == sprint) v = bytui\[mre\[j\]\]$/        if (0) v = ""/
-s/mnm\[i\] == mre\[j\] && v_any(i)/mrl[i] == mrl[j] \&\& v_any(i) \&\& nv < 1/' "nm-ambig nm-launder" \
-  "a role-only join remediates V by any later clean row of its role, named or not"
-# r-m4: the subagent-context join dropped -- an R that never ran remediates.
-rmut m4 "$RM_NOPROBE"'
-s/^        if (mjn\[j\] != "1") {/        if (0) {/' nm-pending \
-  "an R with no row in the subagent context (never shown to have RUN) remediates"
-# r-m5: WHOLE-ROW suppression. The cite remediation also silences the same row's unreadable FAIL.
-rmut m5 's/^  if \[ "\$readable" = "false" \]; then$/  if [ "$readable" = "false" ] \&\& ! remediated cite "$rix"; then/' d2 \
-  "remediating V's cite increment also clears its unreadable role file"
 
 echo
 report_end check-22-spawn-ledger

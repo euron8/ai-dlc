@@ -1,4 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-9 *
+7 *
 3 core/scripts/verdict.sh
-3 core/scripts/validate-artifact-budget.sh
+2 core/scripts/validate-artifact-budget.sh

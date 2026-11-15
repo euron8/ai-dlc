@@ -31,8 +31,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 [ "$#" -ge 1 ] && [ "$#" -le 2 ] && [ -f "$1" ] && [ "$(basename "$1")" = merge-review-shards.sh ] \
   || { echo "REFUSED: usage: bash receipt-bl956.sh <path to merge-review-shards.sh> [<project root>]" >&2; exit 9; }
 MRS="$(cd "$(dirname "$1")" && pwd)/merge-review-shards.sh"
-# A pass is logged only for a subject at its own path (a core/scripts directory); a mutant script directory's
-# copy is no pass of the subject.
+# A pass is logged only for a subject at its own path (a core/scripts directory).
 case "${MRS%/*}" in */core/scripts) MRS_PASS=1 ;; *) MRS_PASS=0 ;; esac
 # The project root: given, else the working directory (the tree root a `verify:` runs from); it must hold qa.md where
 # the subject reads it.

@@ -1,11 +1,10 @@
 # reconcile-emit-report reads the reconcile directory: seed.sh locates emit-report.sh in place and
-# run.sh copies the whole directory (cp -R) to build its mutants, so the directory is declared whole.
+# run.sh copies the whole directory (cp -R) to build its stubbed-detector and forced-classifier copies, so the directory is declared whole.
 # The subject under test is emit-report.sh. The seeded trees (dist, consumer, VERSION) are built under
 # mktemp by seed.sh; nothing walks up for VERSION.
 !core/skills/ai-dlc-update/reconcile/emit-report.sh
 core/skills/ai-dlc-update/reconcile/
-# lib rows derived from run.sh:2,242,3202 (preamble.sh, mutant.sh).
+# lib rows derived from run.sh:2 (preamble.sh).
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/mutant.sh
 core/fixtures/reconcile-emit-report-b/run.sh
 core/fixtures/reconcile-emit-report-c/run.sh

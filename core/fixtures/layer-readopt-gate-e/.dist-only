@@ -1,0 +1,3 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Shard e of layer-readopt-gate runs unit sup: layer-drift.sh in place over synthetic dist/cons worlds the fixture builds itself. The subject takes every world path as an argument and resolves its siblings from its own path, so its verdict is a function of its bytes and the world, not of where it is installed. A consumer runs the shipped shard c, which resolves layer-drift.sh in either layout and drives it in place.

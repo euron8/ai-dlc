@@ -40,85 +40,15 @@
 # forks almost nothing and sails under any ceiling; an unbounded-below gate reads that as an
 # infinitely fast validator and prints the same green line it prints for a healthy one.
 #
-# THE VERDICT IS TWO FUNCTIONS, `judge` and `marker_verdict`, and the mutants below drive those
-# same functions rather than a second copy of their logic. m0 and m1 drive the WHOLE pipeline,
-# because neither function can see a tracer that stopped tracing: m0 profiles a subject that
-# runs almost nothing, which is the "would this arm pass against a program that emits nothing"
-# question this repository's mutant rule asks of every absence-shaped arm, and m1 profiles with
-# the PS4 marker neutered. m2-m6 drive `judge`, one per arm, each with exactly one field moved
-# and its own budget derived from the live reading, so no mutant can fail on another's arm.
-# m7 drives `marker_verdict` with a profiler whose classifier reads field 1 only. m8 and m9
-# drive `judge` at the COMMITTED budget: m8 inside A4's window, m9 one fork above the floor.
-# m10-m12 drive the profiler's own assignment probe with its classifier mutated three ways --
-# reverted, `+=` dropped, widened -- so the classifier fix cannot be undone without a red. m13
-# widens the trace marker to drop its `+` run, the near-miss direction of m7. m15 drives `judge`
-# at the COMMITTED budget with a total inside the headroom margin, and again with the margin
-# dropped, so A3b is proven to fire and to be the only thing that makes it fire.
+# Exit 0 iff every arm is green.
 #
-# WHERE THIS FIXTURE'S TIME GOES, because it became the suite's second-longest unit and the
-# obvious guess is wrong. Instrumented solo, 32.2s wall / 36.0 CPU-seconds: the corpus reading
-# was 31 of the 32, and everything else -- the self-probe, all six arms, and all eight mutants
-# together -- is the remaining second. m1 costs nothing because the profiler's own self-probe
-# refuses before it ever reaches the validator, and m0 profiles a three-line script. So there
-# is no mutant to trim and no arm to shard: the unit IS the corpus reading, which is now ONE
-# profile rather than a batch of re-reads, because a single reading is exact.
-#
-# Exit 0 iff the live verdict is PASS and every mutant is scored by its own arm.
-#
-# THE MUTANT MATRIX. A CELL is one arm's message read off the text a mutant produced: Jfloor, Jexit, Jlast, Jceil,
-# Jhead and Jstale are the six arms of `judge` (floor, exit, last arm, ceiling, headroom, stale-high), Agap and
-# Adisp are the two clauses of `marker_verdict`, Psplice, Passign and Pbase are the profiler's own probes (splice,
-# assignment, and the positive or fork-free pair), and Mpipe is the whole-pipeline refusal of a neutered marker.
-# PER PUSH a mutant is scored on its DECIDING cell, which must show the arm's message on the mutated input, and
-# its named TWIN, a different cell it could plausibly co-trip but must leave GREEN. Every cell is a text match on
-# the one mutated reading the mutant already produces, so a cell costs no profiler run and no validator run.
-# `run.sh --matrix` scores each mutant against every cell in MX_CELLS (eighteen) and prints one MATRIX line per mutant. The matrix
-# is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the
-# REMEASURE command below, from the repo root.
-# m7-field-1 decides two cells because its one fault, a classifier that reads field 1 only, is aimed at both the
-# profiler's splice probe and the A2 gap clause.
-# also trips: m1-marker-neutered -> Pbase
-# also trips: m7-field-1 -> Jfloor,Mpipe
-# also trips: m13-marker-widened -> Mpipe
-# also trips: m10-asg-preBL417, m11-asg-no-plus and m12-asg-widened -> Mpipe
-# MUTANT-MATRIX m0-empty-subject decides=Jfloor twins=Jstale
-# MUTANT-MATRIX m1-marker-neutered decides=Mpipe twins=Jstale
-# MUTANT-MATRIX m2-ceiling decides=Jceil twins=Jhead
-# MUTANT-MATRIX m3-stale-high decides=Jstale twins=Jhead
-# MUTANT-MATRIX m4-floor decides=Jfloor twins=Jstale
-# MUTANT-MATRIX m5-wholeness-lastarm decides=Jlast twins=Jexit
-# MUTANT-MATRIX m6-wholeness-exit decides=Jexit twins=Jlast
-# MUTANT-MATRIX m7-field-1 decides=Psplice,Agap twins=Pbase
-# MUTANT-MATRIX m8-A4-reachable decides=Jstale twins=Jhead
-# MUTANT-MATRIX m9-floor-tight decides=Jstale twins=Jfloor
-# MUTANT-MATRIX m10-asg-preBL417 decides=Passign twins=Pbase
-# MUTANT-MATRIX m11-asg-no-plus decides=Passign twins=Pbase
-# MUTANT-MATRIX m12-asg-widened decides=Passign twins=Pbase
-# MUTANT-MATRIX m13-marker-widened decides=Psplice twins=Pbase
-# MUTANT-MATRIX m14-displaced decides=Adisp twins=Agap
-# MUTANT-MATRIX m15-A3b-headroom decides=Jhead twins=Jstale
-# MUTANT-MATRIX m16-i84-reads-per-file decides=Rcount twins=Rsel
-# MUTANT-MATRIX m17-unread-flag-dropped decides=Runread twins=Rsel
-# MUTANT-MATRIX m18-self-reader decides=Rsel twins=Runread
-# MUTANT-MATRIX m19-unread-probe-return decides=Rprobe twins=Rcount
-# m20 drives a copy of A7's a7_verdict relaxed to accept receipt exit 1; R7fail and R7pass read its two A7PROBE lines.
-# MUTANT-MATRIX m20-a7-accepts-exit-1 decides=R7fail twins=R7pass
-# Every mutant reaches mutant_killed through one helper, as a variable:
-# MUTANT-MATRIX-DYNAMIC mx_score why=passes the mutant name as a variable for all twenty-one mutants and every name keeps its own row
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/validator-fork-budget/run.sh --matrix
-#
-# Usage: run.sh [--matrix]
+# Usage: run.sh
 set -u
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset CLAUDE_PROJECT_DIR
 
-MODE=plain
-case "${1:-}" in
-  "") ;;
-  --matrix) MODE=matrix ;;
-  *) echo "validator-fork-budget: usage: run.sh [--matrix]" >&2; exit 2 ;;
-esac
+if [ "${1:-}" != "" ]; then echo "validator-fork-budget: usage: run.sh" >&2; exit 2; fi
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -145,16 +75,7 @@ echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 rc=0
-# EVERY `ok    m<n>` LINE COUNTS ITSELF, so the closing tally cannot go stale.
-#
-# It read `8/8 mutants killed` as a literal, and the release that added `m8` left it saying
-# 8 while nine had run -- a hardcoded count decaying silently inside the fixture whose entire
-# subject is a hardcoded count decaying silently. Derived from the notes actually emitted.
-N_SCORED=0
-note() {
-  case "$1" in ok*m[0-9]*) N_SCORED=$((N_SCORED + 1)) ;; esac
-  printf '%s\n' "$*"
-}
+note() { printf '%s\n' "$*"; }
 ok()  { note "ok    $1"; }
 bad() { note "FAIL  $1"; rc=1; }
 MUT_LIB="$DIR/../lib/mutant.sh"
@@ -193,7 +114,7 @@ NFX="$(find "$FXROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -c .)"
 # Measured: fork-profile TOTAL read the same count in 5 of 5 interleaved base/tip reps (spread 0), so
 # no part of the margin covers noise. 2 is policy: the smallest margin that still warns one release
 # ahead of A3, chosen against a deterministic count and not fitted to the headroom left.
-# It must stay under 30% of the budget, or A3b would meet A4's window; m15 asserts that.
+# It must stay under 30% of the budget, or A3b would meet A4's window; the A3b reachability check below asserts that.
 # False-positive set, replayed over the WHOLE recorded history: 65 paragraphs that set or re-confirm the
 # budget (63 in the validator's history above its pointer, 2 in fork-budget.txt; the count is checked
 # against a second, independent grep of the openers), each paired with the reading it was set from.
@@ -221,7 +142,7 @@ HEADROOM_MARGIN=2
 # evaluated after A4 it read "stale-high, lower the budget", a broken subject with a remedy
 # that would ratchet the budget onto it. A3b sits between A3 and A4: after A3 so an over-budget
 # reading keeps A3's message, before A4 because the two windows are disjoint by construction
-# (`t > b - margin` against `t*10 < b*7`) and m15 asserts it.
+# (`t > b - margin` against `t*10 < b*7`) and the A3b reachability check below asserts it.
 judge() {
   local t="$1" ex="$2" mx="$3" la="$4" b="$5"
   case "$t" in ''|*[!0-9]*) echo "BROKEN the profiler reported no numeric TOTAL ('$t'); a tracer that produced nothing is not a validator that forked nothing"; return ;; esac
@@ -233,18 +154,14 @@ judge() {
   # IT WAS A HARDCODED 5000, SIZED WHEN THE VALIDATOR FORKED 8225, AND IT BROKE TWICE OVER.
   # First directly: the release that took I59 and I60 from 1724 forks to 66 landed the true
   # reading at 4767, BELOW the constant, so the fixture reported the subject's own improvement
-  # as `BROKEN ... a broken tracer, an unmatched marker or a validator that exited early`, and
-  # m2/m3/m5/m6 all went off on this arm instead of their own -- five failures from one
-  # correct change, which is this file's own sign that an assertion is vacuous.
+  # as `BROKEN ... a broken tracer, an unmatched marker or a validator that exited early`.
   #
   # Second, and silently, it took A4 WITH IT. A4 fires only when `t*10 < b*7`, so with a
   # constant floor it needs `5000 < t < 0.7*b`, which is EMPTY for every budget at or below
   # 7143. Measured across the budgets this file has actually carried: b=8225 (0.583.0) left a
   # window of 5001..5756; b=6431 (0.587.0) left NONE. So A4 -- the arm whose whole subject is
   # "a ceiling nothing can reach reads exactly like one that passed" -- had itself become a
-  # check that could not fire, one release before this one, and nothing said so. `m3` could
-  # not see it because it drives `judge` with a budget derived from `$T1`, where the window
-  # is never empty; a mutant wired to a derived value keeps a dead arm looking alive.
+  # check that could not fire, one release before this one, and nothing said so.
   #
   # The next form was 40% of the budget, which fixed both of those and was still a fraction of
   # the CEILING standing in for a property of the TRACER. Nothing joined `4/10` to what a broken
@@ -255,13 +172,13 @@ judge() {
   # broken subjects, profiled below: a script that forks nothing, and a copy of the validator
   # cut at line 400 that dies at its required-input check. Measured: 0 and 1. The third broken
   # case, the PS4 marker neutered, yields no TOTAL at all because the profiler's self-probe
-  # refuses first (m1), so it cannot contribute a number. A deeper truncation reads hundreds or
+  # refuses first, so it cannot contribute a number. A deeper truncation reads hundreds or
   # thousands of forks and is not this arm's subject: it exits non-zero or stops short of the
   # last arm, and A5 refuses it.
   #
   # A4's window is `FLOOR < t < 0.7b`, non-empty for every budget above 10*FLOOR/7 -- a
-  # handful of forks today. m8 constructs its midpoint at the committed budget, so a floor
-  # that ever rises to meet the ceiling fails the push rather than silencing A4.
+  # handful of forks today. The A4 reachability check below fails the push when a floor rises
+  # to meet the ceiling, rather than silencing A4.
   if [ "$t" -le "$FLOOR" ]; then
     echo "BROKEN measured $t fork(s), at or below the floor of $FLOOR (the most a broken subject reads under this profiler, measured this run). That is a broken tracer, an unmatched marker or a validator that exited early -- not a fast validator. An unbounded-below gate reads a dead subject as an infinitely fast one."
     return
@@ -302,7 +219,7 @@ judge() {
 
 field() { awk -v k="$2" '$1 == k { print $2; exit }' "$1"; }
 
-# --- A2's predicate, factored out so its mutant can drive the same code -------------------
+# --- A2's predicate, factored out -----------------------------------------------------------
 # marker_verdict <tracelines> <markers> <displaced> -> "OK" | "BROKEN <why>"
 marker_verdict() {
   case "${3:-}" in ''|*[!0-9]*)
@@ -353,20 +270,14 @@ note "ok    A0 self-probe   -- a known-50 script counts 50, a fork-free one coun
 
 # ==========================================================================================
 # THE FLOOR -- what a BROKEN subject reads under THIS profiler, measured before the corpus.
-# `judge`'s A1 explains why it is a measurement and not a fraction. Two subjects: a script that
-# runs almost nothing (also m0's subject, so m0 reads this same profile), and the validator cut
-# at line 400 under $TMP, where its root resolves to nowhere and it dies at its required-input
-# check. Both must yield a numeric TOTAL; a floor taken from a profile that produced none is
-# a floor of zero by accident.
+# `judge`'s A1 explains why it is a measurement and not a fraction. The subject is a script that
+# runs almost nothing; it must yield a numeric TOTAL, since a floor taken from a profile that
+# produced none is a floor of zero by accident.
 # ==========================================================================================
 printf '%s\n' '#!/usr/bin/env bash' 'x=1' 'exit 0' > "$TMP/tiny.sh"
-mkdir -p "$TMP/cut/scripts"
-head -400 "$VAL" > "$TMP/cut/scripts/validate-enforcement-map.sh"
 FLOOR=""
-# NECESSITY: A1's floor is what a broken subject reads under THIS profiler in THIS run, so both broken subjects are
-# profiled here. The cut copy is the only broken subject that reads above zero, and the tiny script is also m0's
-# subject, so its profile is reused below rather than taken twice. Two invocations, as before.
-for fs in tiny:"$TMP/tiny.sh" cut:"$TMP/cut/scripts/validate-enforcement-map.sh"; do
+# NECESSITY: A1's floor is what a broken subject reads under THIS profiler in THIS run, so it is profiled here, once.
+for fs in tiny:"$TMP/tiny.sh"; do
   fs_name="${fs%%:*}"; fs_path="${fs#*:}"
   if ! FXCELL="fp-floor-$fs_name" bash "$PROFILER" --target "$fs_path" --section total > "$TMP/floor-$fs_name.out" 2>"$TMP/floor-$fs_name.err"; then
     note "FIXTURE BROKEN: the profiler could not profile the broken subject '$fs_name' at all, so the floor is unknown."
@@ -380,13 +291,12 @@ for fs in tiny:"$TMP/tiny.sh" cut:"$TMP/cut/scripts/validate-enforcement-map.sh"
   esac
   if [ -z "$FLOOR" ] || [ "$fs_t" -gt "$FLOOR" ]; then FLOOR="$fs_t"; fi
 done
-cp "$TMP/floor-tiny.out" "$TMP/m0.out"
 
 # ==========================================================================================
 # THE CORPUS -- ONE reading of the real validator, checked against itself by A2.
 # ==========================================================================================
 # NECESSITY: this ONE reading of the real validator supplies the total, exit, highest line and last-arm line that
-# the live verdict judges and that every judge mutant below derives its inputs from; no cheaper call yields a real
+# the live verdict judges; no cheaper call yields a real
 # total, and a second reading would add nothing because A2 proves the one reading exact. It is 31 of the fixture's
 # 32 seconds and is the subject itself, so it stays at exactly one invocation.
 if ! FXCELL=fp-corpus bash "$PROFILER" --section total > "$TMP/r1.out" 2>"$TMP/r1.err"; then
@@ -437,280 +347,30 @@ case "$VERDICT" in
 esac
 
 # ==========================================================================================
-# THE MUTANTS. Each must be scored, and by its own arm.
+# A3b AND A4 MUST BE REACHABLE AT THE COMMITTED BUDGET.
 # ==========================================================================================
-# ---- matrix plumbing. The header rows are the only source of a mutant's deciding cells and twin. ----
-# MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
-MXL="$TMP/mx.ledger"; : > "$MXL"
-MX_CELLS="Jfloor Jexit Jlast Jceil Jhead Jstale Agap Adisp Psplice Passign Pbase Mpipe Rcount Runread Rsel Rprobe R7fail R7pass"
-mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
-  awk -v n="$1" -v f="$2" '
-    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
-      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
-    }
-    END { if (c == 1) print v }' "$DIR/run.sh"
-}
-mx_count() { local n; n="$(grep -c "^$1 " "$MXL")" || n=0; printf '%s' "$n"; }
-# mx_red <cell> <text file> -> 0 RED (that arm's message is in the mutated text), 1 GREEN, 2 unknown cell.
-mx_red() {
-  local f="$2"
-  case "$1" in
-    Jfloor)   grep -q '^BROKEN' "$f" && grep -qF 'floor' "$f" ;;
-    Jexit)    grep -q '^BROKEN' "$f" && grep -qF 'traced run exited' "$f" ;;
-    Jlast)    grep -q '^BROKEN' "$f" && grep -qF 'never reached the final arm' "$f" ;;
-    Jceil)    grep -q '^RED measured' "$f" && grep -qF ' over)' "$f" ;;
-    Jhead)    grep -q '^RED headroom' "$f" ;;
-    Jstale)   grep -q '^RED' "$f" && grep -qF 'stale-high' "$f" ;;
-    Agap)     grep -q '^BROKEN' "$f" && grep -qF 'gap of' "$f" ;;
-    Adisp)    grep -q '^BROKEN' "$f" && grep -qF 'carry no command word' "$f" ;;
-    Psplice)  grep -qF 'the splice probe must score' "$f" ;;
-    Passign)  grep -qF 'the assignment probe must score' "$f" ;;
-    Pbase)    grep -qE 'positive probe|fork-free probe' "$f" ;;
-    # The PIPELINE BROKEN disjunct was removed: it reads true on an UNMUTATED profiler, because `--section total` reports LASTARM 0.
-    Mpipe)    grep -qF 'SELF-PROBE FAILED' "$f" ;;
-    # The receipt cells read RED on the receipt's own FAIL line for that cell; a cell the run never printed is GREEN.
-    Rcount)   grep -q '^CELL count FAIL' "$f" ;;
-    Runread)  grep -q '^CELL unread FAIL' "$f" ;;
-    Rsel)     grep -q '^CELL selfreader FAIL' "$f" ;;
-    Rprobe)   grep -q '^CELL clean FAIL' "$f" && grep -qF "own probe: i84_reads scored a corpus holding one unreadable file as fully read" "$f" ;;
-    # A7's cells read the A7PROBE lines m20 writes: a failing receipt run read OK, and the live run read other than OK.
-    R7fail)   grep -qx 'A7PROBE fail OK' "$f" ;;
-    R7pass)   grep -q '^A7PROBE pass ' "$f" && ! grep -qx 'A7PROBE pass OK' "$f" ;;
-    *) return 2 ;;
-  esac
-}
-# mx_score <mutant> <base-pass flag> <message> -- the mutated text is in $TMP/mx.<mutant>.txt. The deciding cells and
-# the twin per push; every other cell under --matrix.
-mx_score() {
-  local m="$1" fl="$2" msg="$3" f="$TMP/mx.$1.txt" dec tw c a r allred=1 shown="" t=GREEN g=0 tot=0 u="" rd=""
-  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
-  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: mutant $m has no single MUTANT-MATRIX row naming its deciding cells and twin"; return; fi
-  if [ ! -s "$f" ]; then bad "FIXTURE BROKEN: mutant $m produced no text to read its cells from"; return; fi
-  for c in ${dec//,/ }; do
-    printf 'dec %s %s\n' "$m" "$c" >> "$MXL"
-    mx_red "$c" "$f"; r=$?
-    if [ "$r" -eq 2 ]; then bad "FIXTURE BROKEN: $c is not a cell"; return; fi
-    if [ "$r" -eq 0 ]; then shown="$shown $c:RED"; else shown="$shown $c:GREEN"; allred=0; fi
-  done
-  if [ "$allred" = 1 ]; then mutant_killed "$fl" "$m" "$msg -- scored by its own arm alone, cell(s)$shown"
-  else bad "$m SURVIVED or was scored by another arm:$shown (wanted its own arm's message)"; fi
-  if [ "$tw" != - ]; then
-    printf 'dec %s %s\n' "$m" "$tw" >> "$MXL"
-    if mx_red "$tw" "$f"; then t=RED; bad "$m is entangled: its twin $tw also fired"; fi
-  fi
-  if [ "$MODE" = matrix ]; then # mx-all-cells
-    for a in $MX_CELLS; do
-      case ",$dec,$tw," in *",$a,"*) continue ;; esac
-      printf 'mx %s %s\n' "$m" "$a" >> "$MXL"
-      tot=$((tot + 1)); if mx_red "$a" "$f"; then rd="$rd,$a"; else g=$((g + 1)); fi
-    done
-    if [ "$allred" != 1 ]; then u=" UNEXPECTED=$dec:GREEN"; fi
-    if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; rc=1; fi
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$(if [ "$allred" = 1 ]; then echo RED; else echo GREEN; fi)" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
-  fi
-}
-# kill_j <mutant> <flag> <message> <judge args...> -- the judge's own output is the mutated text.
-kill_j() {
-  local n="$1" fl="$2" msg="$3"; shift 3
-  judge "$@" > "$TMP/mx.$n.txt"
-  mx_score "$n" "$fl" "$msg"
-}
-
-# m0 -- THE WHOLE PIPELINE against a subject that runs almost nothing. This is the mutant the
-# repository's rule demands of any absence-shaped arm: would the gate print `ok` for a program
-# that emits nothing? It must not. It reads the profile the floor derivation already took of
-# the same subject, so the subject is profiled once.
-kill_j m0-empty-subject "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m0-empty-subject: a subject that forks nothing is BROKEN, not a pass" \
-       "$(field "$TMP/m0.out" TOTAL)" "$(field "$TMP/m0.out" EXIT)" \
-       "$(field "$TMP/m0.out" MAXLINE)" "$(field "$TMP/m0.out" LASTARM)" "$BUDGET"
-
-# m1 -- THE MARKER NEUTERED. `PS4` is what separates trace from the subject's own stderr, and
-# there is no fd to separate them by on bash 3.2. A profiler whose marker no longer matches
-# sees an empty trace and would report a very small number -- which, without A1, is
-# indistinguishable from a validator that got faster. judge cannot see this one, so the mutant
-# drives the whole pipeline.
-#
-# THE COPY NEEDS A ROOT OR IT DIES BEFORE IT CAN BE WRONG. The profiler walks up for a VERSION
-# marker, so a copy dropped in a bare temp dir exits 2 with "no VERSION marker" -- which is a
-# refusal, not the neutered-marker reading this mutant is about, and scoring it as a kill would
-# credit the arm for a failure it never tested. The sandbox carries a VERSION and the real
-# validator is named absolutely.
-mkdir -p "$TMP/fake/scripts"
-echo "0.0.0" > "$TMP/fake/VERSION"
-cp "$PROFILER" "$TMP/fake/scripts/fp-neutered.sh"
-if sed "s/PS4='+@\${LINENO}@ '/PS4='+ '/" "$TMP/fake/scripts/fp-neutered.sh" > "$TMP/fp-n2.sh" \
-   && ! cmp -s "$TMP/fake/scripts/fp-neutered.sh" "$TMP/fp-n2.sh"; then
-  mv "$TMP/fp-n2.sh" "$TMP/fake/scripts/fp-neutered.sh"
-  # NECESSITY: the neutered profiler is invoked on the real validator so that the WHOLE pipeline, not a function of
-  # it, is what reads the neutered marker. Its own self-probe refuses before it reaches the validator, so this call
-  # costs a probe and not a corpus reading. One invocation, as before.
-  if bash "$TMP/fake/scripts/fp-neutered.sh" --section total --target "$VAL" > "$TMP/m1.out" 2>"$TMP/m1.err"; then
-    m1_v="$(judge "$(field "$TMP/m1.out" TOTAL)" "$(field "$TMP/m1.out" EXIT)" \
-                  "$(field "$TMP/m1.out" MAXLINE)" "$(field "$TMP/m1.out" LASTARM)" "$BUDGET")"
-    printf 'PIPELINE %s\n' "$m1_v" > "$TMP/mx.m1-marker-neutered.txt"
-  else
-    cat "$TMP/m1.err" > "$TMP/mx.m1-marker-neutered.txt"
-    [ -s "$TMP/mx.m1-marker-neutered.txt" ] || echo "(the profiler failed with no stderr)" > "$TMP/mx.m1-marker-neutered.txt"
-  fi
-  mx_score m1-marker-neutered "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m1-marker-neutered: a neutered PS4 is refused by the profiler's own self-probe"
-else
-  bad "m1-marker-neutered DID NOT APPLY -- the PS4 sed matched nothing; no mutation occurred, so nothing was proven"
-fi
-
-# m2-m6 -- one per judge arm, driven with the REAL readings and exactly one field moved.
-#
-# EVERY ONE OF THEM PASSES ITS OWN BUDGET, DERIVED FROM `$T1`, NEVER THE COMMITTED ONE. These
-# mutants exist to prove that each ARM of `judge` discriminates; whether today's FORK_BUDGET
-# happens to be satisfied is a different question, owned by the live verdict above. Wiring them
-# to `$BUDGET` entangled them with it -- MEASURED, by setting FORK_BUDGET below the truth to
-# demonstrate a red: m5 and m6 both went off on the CEILING arm instead of their own, because
-# the ceiling fires first. Two failures from one mutation is this repository's sign that an
-# assertion is vacuous, and it was.
-kill_j m2-ceiling "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m2-ceiling: budget one below the truth" \
-       "$T1" "$EX" "$MX" "$LA" "$((T1 - 1))"
-kill_j m3-stale-high "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m3-stale-high: budget at twice the truth" \
-       "$T1" "$EX" "$MX" "$LA" "$((T1 * 2))"
-kill_j m4-floor "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m4-floor: a measurement AT the floor" \
-       "$FLOOR" "$EX" "$MX" "$LA" "$T1"
-kill_j m5-wholeness-lastarm "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m5-wholeness-lastarm: trace stops before the last arm" \
-       "$T1" "$EX" "$((LA - 1))" "$LA" "$T1"
-kill_j m6-wholeness-exit "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m6-wholeness-exit: the traced run exited non-zero" \
-       "$T1" "2" "$MX" "$LA" "$T1"
-
-# m8 -- A4 IS REACHABLE AT THE COMMITTED BUDGET, and this is the one mutant that must be
-# wired to `$BUDGET` rather than to `$T1`.
-#
-# THE ARM ABOVE SAYS WHY. A1 and A4 bound `t` from opposite sides, so whether A4 has any
-# window at all is a property of the FLOOR and the BUDGET together -- and m3, driven at
-# `$T1 * 2`, has a window under any floor and therefore cannot see the window at the
-# committed budget closing. That is exactly what happened: with the old constant floor, A4
-# was unreachable at every budget at or below 7143, `m3` stayed green through it, and the
-# arm whose subject is "a ceiling nothing can reach reads exactly like one that passed" had
-# become one itself.
-#
-# Constructed rather than asserted: the midpoint of A4's window at the LIVE budget. If the
-# window is empty the midpoint is not inside it, no arm fires, and the mutant reads as
-# unscored -- which is the reading this mutant exists to produce.
+# A4 IS REACHABLE AT THE COMMITTED BUDGET. A1 and A4 bound `t` from opposite sides, so whether A4 has any window at all is
+# a property of the FLOOR and the BUDGET together: with a floor that meets the ceiling, the arm whose subject is "a ceiling
+# nothing can reach reads exactly like one that passed" would itself be a check that cannot fire. The midpoint of A4's
+# window at the LIVE budget must lie inside it.
 M8_LO="$FLOOR"
 M8_HI="$((BUDGET * 7 / 10))"
 M8_T="$(( (M8_LO + M8_HI) / 2 ))"
 if [ "$M8_LO" -lt "$M8_HI" ] && [ "$M8_T" -gt "$M8_LO" ] && [ "$M8_T" -lt "$M8_HI" ]; then
-  kill_j m8-A4-reachable "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m8-A4-reachable: a total inside A4's window at the LIVE budget" \
-         "$M8_T" "$EX" "$MX" "$LA" "$BUDGET"
+  ok "A4 reachable -- a total of $M8_T lies inside A4's window ($M8_LO to $M8_HI) at FORK_BUDGET=$BUDGET"
 else
-  bad "m8-A4-reachable -- A4 has NO window at FORK_BUDGET=$BUDGET (floor $M8_LO, stale-high below $M8_HI). The stale-high arm cannot fire for any measurement whatsoever, and a check that cannot fire reads exactly like one that passed."
+  bad "A4 reachable -- A4 has NO window at FORK_BUDGET=$BUDGET (floor $M8_LO, stale-high below $M8_HI). The stale-high arm cannot fire for any measurement whatsoever, and a check that cannot fire reads exactly like one that passed."
 fi
 
-# m9 -- THE FLOOR IS THE MEASURED ONE, NOT A FRACTION OF THE CEILING. One fork above what a
-# broken subject reads, at the committed budget, must clear A1 and land on A4. Any fraction of
-# the budget puts the floor in the hundreds or thousands and refuses this input as BROKEN, so
-# respelling the old `4/10` in any form fails here. That is the input m4 and m8 cannot supply:
-# m4 sits at the floor, and m8 sits at a midpoint every fraction below 0.7 also clears.
-kill_j m9-floor-tight "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m9-floor-tight: one fork above the measured floor" \
-       "$((FLOOR + 1))" "$EX" "$MX" "$LA" "$BUDGET"
-
-# m7 -- THE CLASSIFIER REVERTED TO FIELD 1, the reader that produced the spread. Without this, A2
-# is a guard with no subject on an unspliced trace, where both readers agree by construction. The
-# copy's own splice self-probe must refuse it before any corpus reading -- that is the kill. A2's
-# predicate is ALSO driven directly with the counts the field-1 reader produced on the measured
-# lossy trace (90450 of 90452), so the arm itself is proven to discriminate, not only the probe.
-# Both readings land in one text, so its two deciding cells and its twin are read off the one run.
-M7_ANCHOR='  while (match(s, /\++@[0-9]+@([ \t]|$)/)) {'
-mkdir -p "$TMP/fake2/scripts"
-echo "0.0.0" > "$TMP/fake2/VERSION"
-if [ "$(grep -cxF -- "$M7_ANCHOR" "$PROFILER")" != "1" ]; then
-  bad "m7-field-1 -- the classifier's record loop is not exactly one line in $PROFILER; no mutation can be trusted"
-elif sed 's|^  while (match(s, /\\++@\[0-9\]+@(\[ \\t\]\|\$)/)) {$|  while (match(s, /^\\++@[0-9]+@([ \\t]\|$)/)) {|' "$PROFILER" > "$TMP/fake2/scripts/fp-field1.sh" \
-   && ! cmp -s "$PROFILER" "$TMP/fake2/scripts/fp-field1.sh"; then
-  bash "$TMP/fake2/scripts/fp-field1.sh" --target "$TMP/tiny.sh" --probe-only > "$TMP/m7.out" 2>"$TMP/m7.err"
-  { cat "$TMP/m7.err"; marker_verdict 90450 90452 0; } > "$TMP/mx.m7-field-1.txt"
-  mx_score m7-field-1 "$([ "$P_POS" = 50 ] && [ "$A2V" = OK ] && echo 1 || echo 0)" "m7-field-1: the splice probe refuses a field-1 classifier and A2 reads the measured 90450/90452 gap as BROKEN"
-else
-  bad "m7-field-1 DID NOT APPLY -- the field-1 sed matched nothing; no mutation occurred, so nothing was proven"
-fi
-
-# m13 -- THE MARKER WIDENED to `@<n>@` with the `+` run optional: the near-miss direction. It reads
-# an argument carrying `@9@` as a record and scores it a fork, so it reads HIGH; the splice probe's
-# near-miss line must refuse it, by that probe and no other.
-if [ "$(grep -cxF -- "$M7_ANCHOR" "$PROFILER")" = "1" ] \
-   && sed 's|^  while (match(s, /\\++@\[0-9\]+@(\[ \\t\]\|\$)/)) {$|  while (match(s, /\\+*@[0-9]+@([ \\t]\|$)/)) {|' "$PROFILER" > "$TMP/fake2/scripts/fp-wide.sh" \
-   && ! cmp -s "$PROFILER" "$TMP/fake2/scripts/fp-wide.sh"; then
-  bash "$TMP/fake2/scripts/fp-wide.sh" --target "$TMP/tiny.sh" --probe-only > "$TMP/m13.out" 2>"$TMP/m13.err"
-  cat "$TMP/m13.err" > "$TMP/mx.m13-marker-widened.txt"
-  [ -s "$TMP/mx.m13-marker-widened.txt" ] || echo "(the widened classifier passed the self-probe with no stderr)" > "$TMP/mx.m13-marker-widened.txt"
-  mx_score m13-marker-widened "$([ "$P_POS" = 50 ] && echo 1 || echo 0)" "m13-marker-widened: the splice probe's near-miss refuses a classifier reading the marker without its + run"
-else
-  bad "m13-marker-widened DID NOT APPLY -- the widening sed matched nothing; no mutation occurred, so nothing was proven"
-fi
-
-# m14 -- A DISPLACED HOST WITH THE READERS IN AGREEMENT. The one splice shape TRACELINES == MARKERS
-# cannot see; A2 must still read it as BROKEN, on its DISPLACED clause and not on a count gap.
-marker_verdict 90452 90452 1 > "$TMP/mx.m14-displaced.txt"
-mx_score m14-displaced "$([ "$A2V" = OK ] && echo 1 || echo 0)" "m14-displaced: equal readers with one displaced host read BROKEN"
-
-# m15 -- A3b IS REACHABLE AND LOAD-BEARING AT THE COMMITTED BUDGET. A total one fork inside the
-# margin (`b - margin + 1`) passes A3 and must be refused by A3b alone. The same total with the
-# margin dropped must PASS: that is the proof that no other arm was holding the input back, and
-# that A3b is what made the first call red. A3b's window is `t > b - margin` and A4's is
-# `t*10 < b*7`; they are disjoint iff `b - margin >= b*7/10`, asserted here so a margin that
-# grows into A4's window fails the push rather than silently shadowing m8.
+# A3b's window is `t > b - margin` and A4's is `t*10 < b*7`; they are disjoint iff `b - margin >= b*7/10`. A total one
+# fork inside the margin (`b - margin + 1`) must be a reachable A3b input at the committed budget, outside A4's window, so
+# a margin that grows into A4's window fails the push rather than silently shadowing A4.
 M15_T="$((BUDGET - HEADROOM_MARGIN + 1))"
 if [ "$M15_T" -gt "$FLOOR" ] && [ "$M15_T" -le "$BUDGET" ] \
    && [ "$((BUDGET - HEADROOM_MARGIN))" -ge "$((BUDGET * 7 / 10))" ]; then
-  kill_j m15-A3b-headroom "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m15-A3b-headroom: a total one fork inside the margin at the LIVE budget" \
-         "$M15_T" "$EX" "$MX" "$LA" "$BUDGET"
-  m15_off="$(HEADROOM_MARGIN=0; judge "$M15_T" "$EX" "$MX" "$LA" "$BUDGET")"
-  if [ "$m15_off" != "PASS" ]; then
-    bad "m15-A3b-headroom -- with the margin dropped the same total produced '$m15_off', not PASS, so A3b is not what made it red"
-  fi
+  ok "A3b reachable -- a total of $M15_T is inside the margin of $HEADROOM_MARGIN at FORK_BUDGET=$BUDGET and outside A4's window"
 else
-  bad "m15-A3b-headroom -- total $M15_T (budget $BUDGET, margin $HEADROOM_MARGIN, floor $FLOOR) is not a reachable A3b input disjoint from A4's window"
-fi
-
-# m10-m12 -- THE ASSIGNMENT CLASSIFIER IS LOAD-BEARING, IN BOTH DIRECTIONS. Each is a copy of
-# the profiler with `is_assign` changed one way, run `--probe-only` from a root that carries a
-# VERSION, and each must be refused by the ASSIGNMENT probe and by nothing else -- a refusal from
-# the positive or negative probe would be a kill this arm did not earn.
-#   m10  the classifier before the fix: one regex, brackets holding no `]`, an `=` tail only
-#   m11  balanced brackets kept, the `+=` tail dropped
-#   m12  widened: anything after a bracket, then an `=` -- scores the near-miss `a[1]x=3` as
-#        an assignment, which is the direction a too-generous fix would take
-# The unmutated copy in the same root must PASS and print PROBEASG 3 first, so a root the
-# profiler cannot run from cannot score three kills.
-mkdir -p "$TMP/fake3/scripts"
-echo "0.0.0" > "$TMP/fake3/VERSION"
-cp "$PROFILER" "$TMP/fake3/scripts/fp-ctl.sh"
-# `--target` names a file that exists: the profiler refuses a missing target before any probe.
-if bash "$TMP/fake3/scripts/fp-ctl.sh" --target "$TMP/tiny.sh" --probe-only > "$TMP/asgctl.out" 2>"$TMP/asgctl.err" \
-   && [ "$(field "$TMP/asgctl.out" PROBEASG)" = "3" ]; then
-  B_asg=1
-  ASG_LINE='    if (is_assign(cmd)) continue'
-  if [ "$(grep -cxF -- "$ASG_LINE" "$PROFILER")" != "1" ] \
-     || [ "$(grep -cxF -- '  if (substr(w, i, 2) == "+=") return 1' "$PROFILER")" != "1" ]; then
-    bad "m10-m12 -- an anchor line is not unique in $PROFILER; no mutation can be trusted"
-  else
-    asg_mut() { # asg_mut <mutant> <sed-expression>
-      local n="$1" f="$TMP/fake3/scripts/fp-$1.sh"
-      if ! sed "$2" "$PROFILER" > "$f" || cmp -s "$PROFILER" "$f"; then
-        bad "$n DID NOT APPLY -- the sed did not apply; no mutation occurred, so nothing was proven"; return
-      fi
-      # NECESSITY: each assignment-classifier mutant is a different copy of the profiler and the only observable is
-      # that copy's own probe refusal, so each needs its own --probe-only run. Three invocations, as before.
-      bash "$f" --target "$TMP/tiny.sh" --probe-only > "$TMP/$n.out" 2>"$TMP/$n.err"
-      cat "$TMP/$n.err" > "$TMP/mx.$n.txt"
-      [ -s "$TMP/mx.$n.txt" ] || echo "(the mutated classifier passed the self-probe with no stderr)" > "$TMP/mx.$n.txt"
-      # The twin cell Pbase is the guard against a reordering that would let one mutant trip two probes and be
-      # credited to this one; it has no subject while the assignment probe runs last (the profiler exits at its
-      # first failing probe).
-      mx_score "$n" "${B_asg:-0}" "$n: the assignment probe refuses the mutated classifier"
-    }
-    asg_mut "m10-asg-preBL417" 's|^    if (is_assign(cmd)) continue$|    if (cmd ~ /^[A-Za-z_][A-Za-z0-9_]*(\\[[^]]*\\])?=/) continue|'
-    asg_mut "m11-asg-no-plus"  '/^  if (substr(w, i, 2) == "+=") return 1$/d'
-    asg_mut "m12-asg-widened"  's|^    if (is_assign(cmd)) continue$|    if (cmd ~ /^[A-Za-z_][A-Za-z0-9_]*(\\[.*)?=/) continue|'
-  fi
-else
-  bad "m10-m12 -- the UNMUTATED profiler copy did not pass --probe-only with PROBEASG 3 from its sandbox root, so no mutant verdict means anything"
-  sed 's/^/      /' "$TMP/asgctl.err" | head -3
+  bad "A3b reachable -- total $M15_T (budget $BUDGET, margin $HEADROOM_MARGIN, floor $FLOOR) is not a reachable A3b input disjoint from A4's window"
 fi
 
 # ==========================================================================================
@@ -728,7 +388,7 @@ RCPT="$DIR/receipt-bl898.sh"
 # world runs in process (vem_entry); only the two cli cells start the validator as a program.
 bash "$RCPT" "$VAL" > "$TMP/rcpt.out" 2>"$TMP/rcpt.err"; rcpt_rc=$?
 if [ "$rcpt_rc" = 0 ] && [ "$(grep -c '^CELL [a-z]* PASS' "$TMP/rcpt.out")" = 5 ]; then
-  note "ok    A6 BL-898      -- $(grep '^CELL count ' "$TMP/rcpt.out" | cut -d' ' -f4-); the unread and self-reader cells pass"; B_rcpt=1
+  note "ok    A6 BL-898      -- $(grep '^CELL count ' "$TMP/rcpt.out" | cut -d' ' -f4-); the unread and self-reader cells pass"
 elif [ "$rcpt_rc" = 9 ]; then
   bad "FIXTURE BROKEN: receipt-bl898.sh refused to measure: $(head -1 "$TMP/rcpt.err")"
 else
@@ -742,38 +402,6 @@ else
   bad "A6 equivalence -- the in-process and command-line runs differ or did not run: $(grep '^EQUIV ' "$TMP/rcpt.out" | tr '\n' ' ')"
 fi
 
-# m16-m19 -- each a copy of the validator with ONE layer of the BL-898 fix reverted, scored by the receipt on its
-# deciding cell and its twin only. Every copy is cmp -s guarded, so a sed that matched nothing is DID NOT APPLY.
-#   m16  i84_reads back to one grep per corpus file, with the same interface -> the count cell alone, in the
-#        receipt's small world (a fixed corpus, so the mutant's per-file greps do not track the tree)
-#   m17  the corpus-level unread flag dropped in both arms (the functions still return 2) -> the unread cell alone
-#   m18  the self-reader exemption removed -> the selfreader cell alone
-#   m19  i84_reads returns 0 whatever grep answered, so a read failure is lost -> the validator's own unread probe,
-#        read off the clean cell
-rcpt_mut() { # <mutant> <cells> <copy> <message> [<world>]
-  local n="$1" c="$2" f="$3" msg="$4" w="${5:-tree}"
-  if [ ! -s "$f" ] || cmp -s "$VAL" "$f"; then bad "$n DID NOT APPLY -- the copy is empty or identical to the validator; no mutation occurred, so nothing was proven"; return; fi
-  # NECESSITY: each mutant is a different validator copy, and the receipt runs only its deciding and twin worlds.
-  bash "$RCPT" --cells "$c" --world "$w" "$f" > "$TMP/mx.$n.txt" 2>&1
-  mx_score "$n" "${B_rcpt:-0}" "$msg"
-}
-awk '
-/^  grep -lE "\^\[\[:blank:\]\]\*\(\[\^#\[:blank:\]\]\.\*\)\?stories_dir" -- "\$@"$/ {
-  print "  i84_r=0; for i84_g in \"$@\"; do grep -qE \"^[[:blank:]]*([^#[:blank:]].*)?stories_dir\" \"$i84_g\"; i84_s=$?; [ \"$i84_s\" -eq 0 ] && printf \"%s\\n\" \"$i84_g\"; [ \"$i84_s\" -ge 2 ] && i84_r=2; done; return \"$i84_r\""; n++; next }
-{ print } END { if (n != 1) exit 3 }' "$VAL" > "$TMP/m16.sh" || : > "$TMP/m16.sh"
-# m16 runs in the receipt's SMALL world (BL-1025): its grep count is the corpus size, so on the real tree every
-# file added to the I84 corpus -- core/**/*.sh outside core/fixtures/, scripts/**, .githooks/** -- cost 4 counted
-# starts of the receipt's grep shim (k0, kK, kC, selfreader), and this fixture's `*` row moved with unrelated
-# releases. The small world's corpus is fixed, so its K=6 differential still kills m16 and the row does not move.
-rcpt_mut m16-i84-reads-per-file count,selfreader "$TMP/m16.sh" "m16-i84-reads-per-file: one grep per file for i84_reads makes the count move with the corpus" small
-sed -e 's/^    i83_extracts "\${i83_list\[@\]}" > "\$i83_probe_dir\/hits" || i83_unread=1$/    i83_extracts "${i83_list[@]}" > "$i83_probe_dir\/hits"/' \
-    -e 's/^\(      i84_[a-z]*s "\${i84_list\[@\]}" > "\$i84_probe_dir\/[a-z]*"\) || i84_unread=1$/\1/' "$VAL" > "$TMP/m17.sh" || : > "$TMP/m17.sh"
-rcpt_mut m17-unread-flag-dropped unread,selfreader "$TMP/m17.sh" "m17-unread-flag-dropped: a corpus with a mode-000 file reads clean"
-sed '/^        \[ "\${i84_f#"\$REPO_ROOT\/"}" = "\$I84_SELF" \] && continue$/d' "$VAL" > "$TMP/m18.sh" || : > "$TMP/m18.sh"
-rcpt_mut m18-self-reader selfreader,unread "$TMP/m18.sh" "m18-self-reader: the validator counted as its own reader hides a tree with none"
-sed '/^i84_reads() {/,/^}/s/^  \[ "\$?" -le 1 \] || return 2$/  return 0/' "$VAL" > "$TMP/m19.sh" || : > "$TMP/m19.sh"
-rcpt_mut m19-unread-probe-return clean,count "$TMP/m19.sh" "m19-unread-probe-return: an i84_reads that loses grep's read failure is refused by the validator's own unread probe"
-
 # ==========================================================================================
 # A7 -- BL-981's RECEIPT, as the CLOSING GUARD. It counts git starts from GIT_TRACE2_EVENT:
 # release-version's arm_ab per commit in a scratch repository, and this validator's `--arms I14` run
@@ -785,8 +413,7 @@ RCPT981="$DIR/receipt-bl981.sh"
 [ -f "$RCPT981" ] || { echo "FIXTURE ERROR: missing $RCPT981" >&2; exit 2; }
 # NECESSITY: one `--arms I14` run of the validator is the only call that shows I14's per-hook git starts.
 R981_TAG=bl981 R981_EQUIV=1 bash "$DIR/receipt-bl981.sh" > "$TMP/r981.out" 2>"$TMP/r981.err"; r981_rc=$?
-# a7_verdict <receipt exit> <receipt stdout> -> OK | BROKEN | RED <why>. A7's whole condition, one implementation,
-# which m20 below drives in a relaxed copy.
+# a7_verdict <receipt exit> <receipt stdout> -> OK | BROKEN | RED <why>. A7's whole condition, one implementation.
 a7_verdict() {
   local rvp emp cells
   rvp="$(grep -c '^CELL rv PASS ' "$2")" || rvp=0
@@ -810,66 +437,7 @@ else
   bad "A7 equivalence -- the in-process and command-line I14 runs differ or did not run: $(grep '^EQUIV ' "$TMP/r981.out" | tr '\n' ' ')"
 fi
 
-# m20 -- A7 RELAXED BACK to the open-entry form (exit 0 OR 1 with both CELL lines). Its deciding cell R7fail feeds the
-# relaxed copy ONE FAILING receipt run, the real receipt-bl981.sh in a scratch root whose enforcement-map validator is a
-# stub making three git starts, so em reads FAIL and the receipt exits 1 with both CELL lines; R7fail is RED when the
-# copy reads that run OK. Its twin R7pass is RED when the copy reads the live receipt run above anything but OK. The
-# control: the unmutated a7_verdict must read the failing run RED, and that run must be exit 1 with an em FAIL line.
-R7S="$TMP/r981m"
-mkdir -p "$R7S/scripts" "$R7S/templates" "$R7S/core/hooks" "$R7S/core/fixtures/validator-fork-budget"
-cp "$RCPT981" "$R7S/core/fixtures/validator-fork-budget/receipt-bl981.sh"
-cp "$REPO/scripts/validate-release-version.sh" "$R7S/scripts/validate-release-version.sh"
-printf '%s\n' 'git rev-parse HEAD >/dev/null; git rev-parse HEAD >/dev/null; git rev-parse HEAD >/dev/null' 'echo "OK: stub"' > "$R7S/scripts/validate-enforcement-map.sh"
-for h in a b c; do printf '#!/bin/sh\n' > "$R7S/core/hooks/ai-dlc-r7$h.sh"; done
-printf 'ai-dlc-r7a.sh ai-dlc-r7b.sh ai-dlc-r7c.sh\n' > "$R7S/templates/settings.json.template"
-{ git init -q "$R7S" && git -C "$R7S" add -A && git -C "$R7S" -c user.name=r -c user.email=r@r -c commit.gpgsign=false \
-    -c core.hooksPath=/dev/null commit -qm r7; } >/dev/null 2>&1
-# NECESSITY: one receipt run over a seeded failing subject is the only input on which the relaxed A7 and the shipped A7 differ.
-R981_TAG=bl981m20 bash "$R7S/core/fixtures/validator-fork-budget/receipt-bl981.sh" > "$TMP/r981m.out" 2>"$TMP/r981m.err"; r981m_rc=$?
-B_a7=0
-if [ "$r981m_rc" = 1 ] && grep -q '^CELL em FAIL ' "$TMP/r981m.out" && case "$(a7_verdict 1 "$TMP/r981m.out")" in RED*) true ;; *) false ;; esac; then
-  B_a7=1
-else
-  bad "m20 control -- the seeded failing receipt run read exit $r981m_rc, $(grep '^CELL ' "$TMP/r981m.out" | tr '\n' ' ')$(head -1 "$TMP/r981m.err"); it must exit 1 with an em FAIL line that the shipped A7 reads RED"
-fi
-a7_m20_src="$(declare -f a7_verdict)"
-a7_m20_old='[ "$1" = 0 ] && [ "$rvp" = 1 ] && [ "$emp" = 1 ]'
-a7_m20_new='{ [ "$1" = 0 ] || [ "$1" = 1 ]; } && [ "$cells" = 2 ]'
-# The replacement carries `&&`, which bash 5.2's patsub_replacement would read as the matched text; bash 3.2 has
-# no such option, so the shopt is silent there.
-shopt -u patsub_replacement 2>/dev/null
-a7_m20_mut="${a7_m20_src/"$a7_m20_old"/$a7_m20_new}"
-if [ "$a7_m20_mut" = "$a7_m20_src" ]; then
-  bad "m20-a7-accepts-exit-1 DID NOT APPLY -- the A7 condition was not found in a7_verdict, so no mutation occurred"
-else
-  eval "${a7_m20_mut/a7_verdict/a7_verdict_m20}"
-  { echo "A7PROBE fail $(a7_verdict_m20 "$r981m_rc" "$TMP/r981m.out")"
-    echo "A7PROBE pass $(a7_verdict_m20 "$r981_rc" "$TMP/r981.out")"; } > "$TMP/mx.m20-a7-accepts-exit-1.txt"
-  mx_score m20-a7-accepts-exit-1 "$B_a7" "m20-a7-accepts-exit-1: an A7 that accepts receipt exit 1 reads a failing receipt run OK"
-fi
-
-# RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
-# empty matrix count cannot come from a ledger nothing writes.
-mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
-if [ "$MODE" = plain ]; then
-  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
-  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
-  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
-else
-  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
-fi
-
-# THE MUTANT FLOOR. `rc` is 0 when every mutant that RAN was killed, which is also what it
-# reads when a refactor deletes the mutants -- two inert runs compare equal. The floor is the
-# count this file is known to carry; it rises with a new mutant and refuses a run that
-# silently lost one.
-EXPECTED_MUTANTS=21
-if [ "$rc" -eq 0 ] && [ "$N_SCORED" -lt "$EXPECTED_MUTANTS" ]; then
-  note "FAIL  validator-fork-budget -- only $N_SCORED of $EXPECTED_MUTANTS mutants were scored. A battery that lost a mutant reports the same green line as one that scored them all."
-  rc=1
-fi
-
 if [ "$rc" -eq 0 ]; then
-  note "PASS  validator-fork-budget -- $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs; 9 arms green, $N_SCORED/$EXPECTED_MUTANTS mutants scored"
+  note "PASS  validator-fork-budget -- $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs; 9 arms green"
 fi
 exit "$rc"

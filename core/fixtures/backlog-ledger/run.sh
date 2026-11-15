@@ -25,37 +25,6 @@
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = one regressed, 2 = fixture broken.
-# THE MUTANT BATTERY IS SCORED ON ONE DECIDING ARM PER MUTANT PLUS ONE NAMED TWIN. A mutant is a
-# mutated copy of one component (the classifier, the rotator, lib.sh or the receipt library); an ARM
-# is one seeded world plus its predicate, run against a root assembled from the real components with
-# that one substituted. Per push each mutant runs its deciding arm (it must trip) and its twin (it must
-# stay green, which proves the effect is confined). The full mutant x arm matrix is MEASURED by the
-# --matrix argv mode. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One
-# run per distinct state") requires. The recorded
-# matrix plus the twin replaces the exact-vector assertion that a mutant fails only its own assertion.
-# MUTANT-MATRIX mutation-no-parse decides=parse twins=route
-# MUTANT-MATRIX mutation-parse-bare decides=parse twins=route
-# MUTANT-MATRIX mutation-9-close decides=route twins=stdin
-# MUTANT-MATRIX mutation-9-hand decides=route twins=stdin
-# MUTANT-MATRIX mutation-stdin decides=stdin twins=route
-# MUTANT-MATRIX mutation-memo-export decides=memo twins=stdin
-# MUTANT-MATRIX mutation-memo-diffonly decides=memo twins=stdin
-# MUTANT-MATRIX mutation-memo-fns decides=memo twins=stdin
-# MUTANT-MATRIX mutation-stderr-route decides=cm twins=stdin
-# MUTANT-MATRIX mutation-no-prefix decides=cm twins=route
-# MUTANT-MATRIX mutation-check-empty decides=checkempty twins=sha
-# MUTANT-MATRIX mutation-apply-marker decides=applymarker twins=sha
-# MUTANT-MATRIX mutation-marker-presence decides=quoted twins=sha
-# MUTANT-MATRIX mutation-no-census decides=census twins=sha
-# MUTANT-MATRIX mutation-apply-unvalidated decides=declvalid twins=sha
-# MUTANT-MATRIX mutation-sha-greedy decides=sha twins=census
-# MUTANT-MATRIX mutation-loose decides=phantom twins=parse
-# MUTANT-MATRIX mutation-heading-only decides=phantom twins=route
-# MUTANT-MATRIX mutation-shaless-unbound decides=shaless twins=sha
-# MUTANT-MATRIX mutation-shaless-absent decides=shaless twins=sha
-# MUTANT-MATRIX mutation-pending-applied decides=pending twins=sha
-# MUTANT-MATRIX-DYNAMIC score-mut-name why=score_route_mut() and score_leak_mut() pass their first argument "$1" to mutant_killed; each call (mutation-9-close, mutation-memo-export, ...) names a literal mutant that carries its own row in this block
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-ledger/run.sh --matrix
 set -uo pipefail
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "backlog-ledger: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
 # Ambient AI_DLC_* cleared, as the suite does: seed E sets AI_DLC_RECONCILE_MEMO itself on the
@@ -104,20 +73,6 @@ echo
 
 ok()   { printf '  ok    %-18s %s\n' "$1" "${2-}"; }
 bad()  { printf '  FAIL  %-18s %s\n' "$1" "${2-}"; FAIL=1; }
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-. "$(cd "$HERE/../lib" && pwd)/matrix.sh" || { echo "FIXTURE ERROR: lib/matrix.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
-MATRIX=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
-MROWS=0
-# keep_mut <id> <rv|rt|lib|rlib> <file> -- save the mutated component of one mutant so any arm can be
-# run against it later without rebuilding it.
-KM="$WORK/km"; mkdir -p "$KM"
-KM_IDS=""
-keep_mut() { cp "$3" "$KM/$1.$2" && KM_IDS="$KM_IDS $1"; }
 want() { # want <arm> <expected-status> <entry> <output>
   if grep -qE "^$2	$3	" <<<"$4"; then ok "$3" "$2  ($1)"
   else bad "$3" "expected $2, got: $(grep -E "	$3	" <<<"$4" | cut -f1 | tr "\n" " ")"; fi
@@ -254,69 +209,9 @@ want "open heredoc"       NEEDS-REVIEW    BL-116 "$OUT"
 # brace-wrapped parse it read CLOSE-CANDIDATE: a live entry proposed for close on half a receipt.
 BL113_ROW="$(grep -E '	BL-113	' <<<"$OUT")"
 if grep -q "MALFORMED sh receipt" <<<"$BL113_ROW"; then
-  ok "malformed-named" "the two-line receipt's refusal names it MALFORMED"; B_malformed=1
+  ok "malformed-named" "the two-line receipt's refusal names it MALFORMED"
 else
   bad "malformed-named" "BL-113's detail does not say MALFORMED: $(cut -c1-120 <<<"$BL113_ROW")"
-fi
-# The base-pass control the two parse-guard mutants below are scored on: the cells they move, read off the
-# unmutated engine's run in one assertion (the generic `want` rows above carry no flag).
-if grep -qE '^NEEDS-REVIEW	BL-115	' <<<"$OUT" && grep -qE '^NEEDS-REVIEW	BL-116	' <<<"$OUT" && grep -qE '^CLOSE-CANDIDATE	BL-114	' <<<"$OUT"; then
-  ok "parse-base" "unmutated: BL-115 and BL-116 read NEEDS-REVIEW, BL-114 CLOSE-CANDIDATE"; B_parse=1
-else
-  bad "parse-base" "unmutated: BL-115/BL-116 are not NEEDS-REVIEW or BL-114 is not CLOSE-CANDIDATE, so the parse-guard mutants below have no base"
-fi
-
-# TWO MUTANTS. Whole-file copy, `cmp -s` refuses a sed that matched nothing. THE COPY NEEDS A
-# ROOT: the engine walks up from its own directory for `VERSION` and sources reconcile/lib.sh
-# beneath that root, so a bare copy in $WORK reports INPUT-UNRESOLVED and every row is absent —
-# which scored as "the mutant broke the engine" on this arm's first run. Build the two markers.
-MROOT="$WORK/mut-root"
-mkdir -p "$MROOT/scripts" "$MROOT/core/skills/ai-dlc-update/reconcile"
-printf '0.0.0\n' > "$MROOT/VERSION"
-cp "$(dirname "$RV")/../core/skills/ai-dlc-update/reconcile/lib.sh" "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh" 2>/dev/null \
-  || cp "$(dirname "$RV")/../../core/skills/ai-dlc-update/reconcile/lib.sh" "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
-cp "$RLIB" "$MROOT/scripts/backlog-receipt-lib.sh"
-MUT="$MROOT/scripts/backlog-reverify.sh"
-# The guard line is the anchor for both; assert it is unique so a sed cannot edit a second copy.
-GN="$(grep -c '^ *if ! bash -n -c "\$SH_PROG" >/dev/null 2>&1; then$' "$RV")" || GN=0
-if [ "$GN" -eq 1 ]; then ok "parse-anchor" "the parse guard line is unique in the engine"
-else bad "parse-anchor" "the parse guard line appears $GN times; the mutations below need exactly one"; fi
-# 1. THE GUARD DISARMED. BL-115 regresses to CLOSE-CANDIDATE (the false close) and BL-113 loses
-#    its MALFORMED naming; BL-114 stays CLOSE-CANDIDATE, the control. BL-113 no longer falls to
-#    STILL-LIVE: the stderr route (seed F) also catches an eval-time syntax error, so the two
-#    guards OVERLAP on that seed and the parse guard's own contribution there is the diagnosis
-#    that the receipt was cut at a newline. BL-115 is the subject only the parse guard can see —
-#    its fragment exits 0 and writes nothing to stderr.
-sed 's/^\( *\)if ! bash -n -c "\$SH_PROG" >\/dev\/null 2>&1; then$/\1if false; then/' "$RV" > "$MUT"
-if cmp -s "$RV" "$MUT"; then
-  bad "mutation-no-parse" "the mutation matched nothing, so the parse guard is unproven"
-else
-  keep_mut mutation-no-parse rv "$MUT"
-  MOUT="$(bash "$MUT" "$LA" 2>&1)"
-  if ! grep -qE '^CLOSE-CANDIDATE	BL-114	' <<<"$MOUT"; then
-    bad "mutation-no-parse" "the control row (BL-114 CLOSE-CANDIDATE) is gone — the mutant broke the engine, not the guard"
-  elif M113="$(grep -E '	BL-113	' <<<"$MOUT")" && ! grep -q "MALFORMED sh receipt" <<<"$M113" \
-       && grep -qE '^CLOSE-CANDIDATE	BL-115	' <<<"$MOUT"; then
-    mutant_killed "$(( ${B_malformed:-0} && ${B_parse:-0} ))" mutation-no-parse "mutation-no-parse: with the guard disarmed the cut-quote receipt loses its MALFORMED diagnosis and the backslash one CLOSES — the guard is load-bearing in both directions"
-  else
-    bad "mutation-no-parse" "SURVIVED: guard disarmed and the seeds did not regress: $(grep -E '	BL-11[35]	' <<<"$MOUT" | cut -f1,2 | tr '\n' ' ')"
-  fi
-fi
-# 2. THE BARE RECEIPT PARSED instead of the brace-wrapped copy — the first cut. BL-115's fragment
-#    parses clean and exits 0, so it CLOSES; BL-113 is still refused, the control.
-sed 's/^\( *\)if ! bash -n -c "\$SH_PROG" >\/dev\/null 2>&1; then$/\1if ! bash -n -c "$REST" >\/dev\/null 2>\&1; then/' "$RV" > "$MUT"
-if cmp -s "$RV" "$MUT"; then
-  bad "mutation-parse-bare" "the mutation matched nothing, so the brace wrap is unproven"
-else
-  keep_mut mutation-parse-bare rv "$MUT"
-  MOUT="$(bash "$MUT" "$LA" 2>&1)"
-  if ! grep -qE '^NEEDS-REVIEW	BL-113	' <<<"$MOUT"; then
-    bad "mutation-parse-bare" "the control row (BL-113 NEEDS-REVIEW) is gone — the mutant broke the engine, not the wrap"
-  elif grep -qE '^CLOSE-CANDIDATE	BL-115	' <<<"$MOUT" && grep -qE '^STILL-LIVE	BL-116	' <<<"$MOUT"; then
-    mutant_killed "$(( ${B_malformed:-0} && ${B_parse:-0} ))" mutation-parse-bare "mutation-parse-bare: parsing the bare receipt acquits the backslash fragment (CLOSES) and the heredoc opener (STILL-LIVE) — the brace wrap is what catches them"
-  else
-    bad "mutation-parse-bare" "SURVIVED: bare parse and the seeds did not regress: $(grep -E '	BL-11[56]	' <<<"$MOUT" | cut -f1,2 | tr '\n' ' ')"
-  fi
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -378,63 +273,13 @@ route_ok() {
   return 0
 }
 
-cp "$LC" "$LC_ROUTE"
 COUT="$(bash "$RV" "$LC" 2>&1)"
 if why="$(route_ok "$COUT")"; then
-  ok "exit-9-routing" "exit 9 reads NEEDS-REVIEW unresolved:, beside 0 CLOSE-CANDIDATE and 1/126/bare-127 STILL-LIVE"; B_route=1
+  ok "exit-9-routing" "exit 9 reads NEEDS-REVIEW unresolved:, beside 0 CLOSE-CANDIDATE and 1/126/bare-127 STILL-LIVE"
 else
   bad "exit-9-routing" "$why"
 fi
 
-# THREE COPIES OF THE ENGINE, SAME ROOT AS THE MUTANTS ABOVE. The unmutated control runs FIRST:
-# a copy that cannot find VERSION or lib.sh emits INPUT-UNRESOLVED and no rows, and every mutant
-# driven through that root would then fail route_ok for THAT reason and score a kill it did not
-# earn. So the control must PASS route_ok, which requires the baseline rows to be there.
-[ -f "$MROOT/VERSION" ] && [ -f "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh" ] \
-  || bad "exit-9-mut-root" "the mutant root lacks VERSION or reconcile/lib.sh, so no mutant verdict below means anything"
-cp "$RV" "$MUT"
-MOUT="$(bash "$MUT" "$LC" 2>&1)"
-if why="$(route_ok "$MOUT")" && grep -qE '^STILL-LIVE	BL-122	' <<<"$MOUT"; then
-  ok "exit-9-control" "the unmutated copy in the mutant root routes seed C correctly (baseline BL-122 STILL-LIVE present)"; B_route_ctl=1
-else
-  bad "exit-9-control" "the unmutated copy fails seed C, so the mutant root is broken and the verdicts below are void: $why"
-fi
-# Each mutant must fail route_ok while its baseline row (BL-122 STILL-LIVE) is still there —
-# that row proves the copy RAN, so the failure is the mutation and not a dead engine.
-score_route_mut() { # <arm> <description-of-regression> <base-pass flag>
-  local mo why
-  keep_mut "$1" rv "$MUT"
-  mo="$(bash "$MUT" "$LC" 2>&1)"
-  if ! grep -qE '^STILL-LIVE	BL-122	' <<<"$mo"; then
-    bad "$1" "the baseline row (BL-122 STILL-LIVE) is gone — the mutant broke the engine, not the routing"
-  elif why="$(route_ok "$mo")"; then
-    bad "$1" "SURVIVED: with $2 the arm still passes"
-  else
-    mutant_killed "$3" "$1" "$1: killed: $2 — $why"
-  fi
-}
-# Anchors, each asserted unique so a sed cannot edit a second copy.
-A0N="$(grep -c '^ *if \[ "\$SH_RC" -eq 0 \]; then$' "$RV")" || A0N=0
-A9N="$(grep -c '^ *emit "NEEDS-REVIEW" "\$LABEL" "unresolved: the sh receipt exited 9,' "$RV")" || A9N=0
-if [ "$A0N" -eq 1 ] && [ "$A9N" -eq 1 ]; then ok "exit-9-anchors" "both routing anchors are unique in the engine"
-else bad "exit-9-anchors" "routing anchors appear $A0N and $A9N times; the mutations below need exactly one each"; fi
-# 1. 9 ROUTED TO CLOSE-CANDIDATE — the false close proposed outright.
-if ! sed 's/^\( *\)if \[ "\$SH_RC" -eq 0 \]; then$/\1if [ "$SH_RC" -eq 0 ] || [ "$SH_RC" -eq 9 ]; then/' "$RV" > "$MUT"; then
-  bad "mutation-9-close" "DID NOT APPLY: sed failed"
-elif cmp -s "$RV" "$MUT"; then
-  bad "mutation-9-close" "DID NOT APPLY: the mutation matched nothing, so the exit-0 guard is unproven"
-else
-  score_route_mut "mutation-9-close" "exit 9 routed to CLOSE-CANDIDATE" "$(( ${B_route:-0} && ${B_route_ctl:-0} ))"
-fi
-# 2. 9 ROUTED TO HAND-REVIEW — the false close backlog-rotate.sh accepts. The detail is kept, so
-#    only the STATUS moves and the kill cannot come from the `unresolved:` conjunct.
-if ! sed 's/^\( *\)emit "NEEDS-REVIEW" "\$LABEL" "unresolved: the sh receipt exited 9,/\1emit "HAND-REVIEW" "$LABEL" "unresolved: the sh receipt exited 9,/' "$RV" > "$MUT"; then
-  bad "mutation-9-hand" "DID NOT APPLY: sed failed"
-elif cmp -s "$RV" "$MUT"; then
-  bad "mutation-9-hand" "DID NOT APPLY: the mutation matched nothing, so the NEEDS-REVIEW route is unproven"
-else
-  score_route_mut "mutation-9-hand" "exit 9 routed to HAND-REVIEW" "$(( ${B_route:-0} && ${B_route_ctl:-0} ))"
-fi
 
 # ---------------------------------------------------------------------------------------
 # Seed D — an `sh` receipt that READS STDIN must not swallow the entries after it.
@@ -479,37 +324,9 @@ stdin_ok() { # <output> — 0 when all four rows are present, once each, with th
 }
 DOUT="$(bash "$RV" "$LD" 2>&1)"
 if why="$(stdin_ok "$DOUT")"; then
-  ok "stdin-receipt" "a receipt reading stdin leaves all four rows with their verdicts"; B_stdin=1
+  ok "stdin-receipt" "a receipt reading stdin leaves all four rows with their verdicts"
 else
   bad "stdin-receipt" "a stdin-reading receipt swallowed later entries: $why"
-fi
-# THE MUTANT: the redirect removed. Same mutant root as above, and its unmutated control runs
-# first on the same seed so a dead root cannot score the kill. The kill needs BL-131's row
-# PRESENT (the copy ran) and the rows after it missing.
-DAN="$(grep -c '^ *( unset \$LIB_VARS; unset -f \$LIB_FNS; cd "\$REPO_ROOT" && eval "\$REST" </dev/null ) >/dev/null 2>"\$ERRF"$' "$RV")" || DAN=0
-if [ "$DAN" -eq 1 ]; then ok "stdin-anchor" "the receipt eval line is unique in the engine"
-else bad "stdin-anchor" "the receipt eval line appears $DAN times; the mutation below needs exactly one"; fi
-cp "$RV" "$MUT"
-MOUT="$(bash "$MUT" "$LD" 2>&1)"
-if why="$(stdin_ok "$MOUT")"; then
-  ok "stdin-control" "the unmutated copy in the mutant root keeps all four rows"; B_stdin_ctl=1
-else
-  bad "stdin-control" "the unmutated copy fails seed D, so the mutant verdict below is void: $why"
-fi
-if ! sed 's@^\( *( unset \$LIB_VARS; unset -f \$LIB_FNS; cd "\$REPO_ROOT" && eval "\$REST"\) </dev/null ) >/dev/null 2>"\$ERRF"$@\1 ) >/dev/null 2>"$ERRF"@' "$RV" > "$MUT"; then
-  bad "mutation-stdin" "DID NOT APPLY: sed failed"
-elif cmp -s "$RV" "$MUT"; then
-  bad "mutation-stdin" "DID NOT APPLY: the mutation matched nothing, so the closed stdin is unproven"
-else
-  keep_mut mutation-stdin rv "$MUT"
-  MOUT="$(bash "$MUT" "$LD" 2>&1)"
-  if ! grep -qE '	BL-131	' <<<"$MOUT"; then
-    bad "mutation-stdin" "the reader's own row (BL-131) is gone -- the mutant broke the engine, not the redirect"
-  elif why="$(stdin_ok "$MOUT")"; then
-    bad "mutation-stdin" "SURVIVED: with the receipt's stdin inherited, seed D still keeps every row"
-  else
-    mutant_killed "$(( ${B_stdin:-0} && ${B_stdin_ctl:-0} ))" mutation-stdin "mutation-stdin: killed: with the receipt's stdin inherited the reader swallows the later entries -- $why"
-  fi
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -578,65 +395,12 @@ leak_both() { # <engine> — both drives; prints the first failure
   return 0
 }
 if why="$(leak_both "$RV")"; then
-  ok "memo-leak" "engine verdicts equal bare verdicts for BL-141/142, with and without a caller-exported memo"; B_memo=1
+  ok "memo-leak" "engine verdicts equal bare verdicts for BL-141/142, with and without a caller-exported memo"
 else
   bad "memo-leak" "$why"
 fi
 [ -d "$INMEMO" ] && ok "memo-caller-owned" "a caller's memo directory survives the engine run" \
   || bad "memo-caller-owned" "the engine removed a memo directory its caller owns"
-cp "$RV" "$MUT"
-if why="$(leak_both "$MUT")"; then ok "memo-control" "the unmutated copy in the mutant root passes seed E both ways"; B_memo_ctl=1
-else bad "memo-control" "the unmutated copy fails seed E, so the mutant verdicts below are void: $why"; fi
-score_leak_mut() { # <arm> <description> <base-pass flag>
-  local why o
-  keep_mut "$1" rv "$MUT"
-  o="$(env -u AI_DLC_RECONCILE_MEMO bash "$MUT" "$LE" 2>&1)"
-  if ! grep -qE '^STILL-LIVE	BL-140	' <<<"$o"; then
-    bad "$1" "the baseline row (BL-140 STILL-LIVE) is gone — the mutant broke the engine, not the unset"
-  else
-    # The no-inbound-memo drive was already run above as `o`; leak_ok on it is leak_both's first
-    # drive, so only the caller-exported drive is run here (one engine run fewer per mutant).
-    if why="$(leak_ok "$o")"; then
-      o="$(AI_DLC_RECONCILE_MEMO="$INMEMO" bash "$MUT" "$LE" 2>&1)"
-      why="$(leak_ok "$o")" && why="" || why="caller-exported memo: $why"
-    else
-      why="no inbound memo: $why"
-    fi
-    if [ -z "$why" ]; then
-      bad "$1" "SURVIVED: with $2 seed E still passes"
-    else
-      mutant_killed "$3" "$1" "$1: killed: $2 — $why"
-    fi
-  fi
-}
-UVN="$(grep -c '^ *( unset \$LIB_VARS; unset -f \$LIB_FNS; cd ' "$RV")" || UVN=0
-NMN="$(grep -c '^LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_rv_added ' "$RV")" || NMN=0
-if [ "$UVN" -eq 1 ] && [ "$NMN" -eq 1 ]; then ok "memo-anchors" "the unset line and the named-variable line are unique in the engine"
-else bad "memo-anchors" "anchors appear $UVN and $NMN times; the mutations below need exactly one each"; fi
-# 1. THE VARIABLES RE-EXPORTED to the receipt: the unset of lib.sh's variables removed.
-if ! sed 's/^\( *\)( unset \$LIB_VARS; unset -f \$LIB_FNS; cd /\1( unset -f $LIB_FNS; cd /' "$RV" > "$MUT"; then
-  bad "mutation-memo-export" "DID NOT APPLY: sed failed"
-elif cmp -s "$RV" "$MUT"; then
-  bad "mutation-memo-export" "DID NOT APPLY: the mutation matched nothing"
-else
-  score_leak_mut "mutation-memo-export" "lib.sh's variables left exported to every receipt" "$(( ${B_memo:-0} && ${B_memo_ctl:-0} ))"
-fi
-# 2. DIFF-ONLY: the variable is no longer named outright, so a CALLER's memo leaks through.
-if ! sed 's/^LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_rv_added /LIB_VARS="$(_rv_added /' "$RV" > "$MUT"; then
-  bad "mutation-memo-diffonly" "DID NOT APPLY: sed failed"
-elif cmp -s "$RV" "$MUT"; then
-  bad "mutation-memo-diffonly" "DID NOT APPLY: the mutation matched nothing"
-else
-  score_leak_mut "mutation-memo-diffonly" "only the variables lib.sh ADDED removed, a caller-exported memo kept" "$(( ${B_memo:-0} && ${B_memo_ctl:-0} ))"
-fi
-# 3. THE FUNCTIONS LEFT DEFINED in the receipt's shell.
-if ! sed 's/^\( *\)( unset \$LIB_VARS; unset -f \$LIB_FNS; cd /\1( unset $LIB_VARS; cd /' "$RV" > "$MUT"; then
-  bad "mutation-memo-fns" "DID NOT APPLY: sed failed"
-elif cmp -s "$RV" "$MUT"; then
-  bad "mutation-memo-fns" "DID NOT APPLY: the mutation matched nothing"
-else
-  score_leak_mut "mutation-memo-fns" "lib.sh's functions left defined in every receipt" "$(( ${B_memo:-0} && ${B_memo_ctl:-0} ))"
-fi
 
 # ---------------------------------------------------------------------------------------
 # Seed F — a receipt that exits non-zero having MEASURED NOTHING (BL-089, second subject).
@@ -682,58 +446,10 @@ cm_ok() {
 }
 FOUT="$(bash "$RV" "$LF" 2>&1)"
 if why="$(cm_ok "$FOUT")"; then
-  ok "cant-measure" "missing helper and eval-time syntax error read NEEDS-REVIEW; three subject-side near-misses stay STILL-LIVE"; B_cm=1
+  ok "cant-measure" "missing helper and eval-time syntax error read NEEDS-REVIEW; three subject-side near-misses stay STILL-LIVE"
 else
   bad "cant-measure" "$why"
 fi
-cp "$RV" "$MUT"
-MOUT="$(bash "$MUT" "$LF" 2>&1)"
-if why="$(cm_ok "$MOUT")"; then ok "cant-measure-control" "the unmutated copy in the mutant root passes seed F — its own name differs, so the prefix is derived, not fixed"; B_cm_ctl=1
-else bad "cant-measure-control" "the unmutated copy fails seed F, so the mutant verdict below is void: $why"; fi
-CMN="$(grep -c '^ *elif \[ -n "\$SH_WHY" \]; then$' "$RV")" || CMN=0
-if [ "$CMN" -eq 1 ]; then ok "cant-measure-anchor" "the stderr routing line is unique in the engine"
-else bad "cant-measure-anchor" "the stderr routing line appears $CMN times; the mutation below needs exactly one"; fi
-# THE STDERR ROUTING DROPPED: every could-not-measure receipt falls back to STILL-LIVE.
-if ! sed 's/^\( *\)elif \[ -n "\$SH_WHY" \]; then$/\1elif false; then/' "$RV" > "$MUT"; then
-  bad "mutation-stderr-route" "DID NOT APPLY: sed failed"
-elif cmp -s "$RV" "$MUT"; then
-  bad "mutation-stderr-route" "DID NOT APPLY: the mutation matched nothing"
-else
-  keep_mut mutation-stderr-route rv "$MUT"
-  MOUT="$(bash "$MUT" "$LF" 2>&1)"
-  if ! grep -qE '^STILL-LIVE	BL-150	' <<<"$MOUT"; then
-    bad "mutation-stderr-route" "the baseline row (BL-150 STILL-LIVE) is gone — the mutant broke the engine, not the routing"
-  elif why="$(cm_ok "$MOUT")"; then
-    bad "mutation-stderr-route" "SURVIVED: with the stderr routing dropped seed F still passes"
-  else
-    mutant_killed "$(( ${B_cm:-0} && ${B_cm_ctl:-0} ))" mutation-stderr-route "mutation-stderr-route: killed: stderr routing dropped — $why"
-  fi
-fi
-# THE OWN-PREFIX DROPPED: the three strings matched on any stderr line. The near-misses must die.
-# The prefix rule lives in scripts/backlog-receipt-lib.sh, which the engine sources from beside
-# itself, so the mutation edits the mutant root's COPY of that helper and drives an unmutated engine.
-PFN="$(grep -c '^      "\$SELF_NAME: line "\*|"\$SELF_NAME: eval: line "\*) ;;$' "$RLIB")" || PFN=0
-if [ "$PFN" -eq 1 ]; then ok "prefix-anchor" "the own-interpreter prefix line is unique in the helper"
-else bad "prefix-anchor" "the own-interpreter prefix line appears $PFN times; the mutation below needs exactly one"; fi
-cp "$RV" "$MUT"
-MLIB="$MROOT/scripts/backlog-receipt-lib.sh"
-if ! sed 's/^\(      \)"\$SELF_NAME: line "\*|"\$SELF_NAME: eval: line "\*) ;;$/\1*) ;;/' "$RLIB" > "$MLIB"; then
-  bad "mutation-no-prefix" "DID NOT APPLY: sed failed"
-elif cmp -s "$RLIB" "$MLIB"; then
-  bad "mutation-no-prefix" "DID NOT APPLY: the mutation matched nothing"
-else
-  keep_mut mutation-no-prefix rlib "$MLIB"
-  MOUT="$(bash "$MUT" "$LF" 2>&1)"
-  if ! grep -qE '^STILL-LIVE	BL-150	' <<<"$MOUT"; then
-    bad "mutation-no-prefix" "the baseline row (BL-150 STILL-LIVE) is gone — the mutant broke the engine, not the prefix"
-  elif why="$(cm_ok "$MOUT")"; then
-    bad "mutation-no-prefix" "SURVIVED: with any stderr line counted, seed F still passes"
-  else
-    mutant_killed "$(( ${B_cm:-0} && ${B_cm_ctl:-0} ))" mutation-no-prefix "mutation-no-prefix: killed: any stderr line counted — $why"
-  fi
-fi
-# Restore the mutant root's helper: every later drive through this root must use the clean rule.
-cp "$RLIB" "$MLIB"
 
 # The preamble and the `## Receipts` prose section must contribute NO row. A parser that
 # treated any heading as an entry produced a phantom `Receipts` entry that came back
@@ -838,7 +554,7 @@ MARK="$(bash "$RV" --print-marker 2>/dev/null)"
   || bad "marker-source" "backlog-reverify.sh --print-marker returned nothing; no arm below can be built"
 # B (above) rotated with entries remaining: no marker may have been written.
 if [ -z "$MARK" ] || ! grep -qF -- "$MARK" "$LB"; then
-  ok "no-marker-with-entries" "a rotation that left live entries wrote no marker"; B_nomarker=1
+  ok "no-marker-with-entries" "a rotation that left live entries wrote no marker"
 else
   bad "no-marker-with-entries" "a rotation that left live entries wrote the empty marker"
 fi
@@ -889,14 +605,14 @@ if grep -qE '^INPUT-UNRESOLVED	.*ZERO entries' <<<"$GHV" && ! grep -q '^DECLARED
   ok "hand-emptied" "the same remainder emptied by hand reads INPUT-UNRESOLVED"
 else bad "hand-emptied" "a hand-emptied ledger reads: $(cut -f1 <<<"$GHV" | tr '\n' ' ')"; fi
 
-# TWO ROTATOR MUTANTS, in a root of their own. `scripts/backlog-reverify.sh` there is a WRAPPER
+# THE ROTATOR DRIFT AND MARKER ARMS, in a root of their own. `scripts/backlog-reverify.sh` there is a WRAPPER
 # over a real copy that adds one live row for the ledger named in DRIFT_LEDGER, and only in row
 # mode: the drift --check exists to catch, which the shipped pair cannot produce (arm `subset`
 # pins rotate's closed set inside reverify's). Unset, it is a passthrough.
 RR="$WORK/rot-root"
 mkdir -p "$RR/scripts" "$RR/core/skills/ai-dlc-update/reconcile"
 printf '0.0.0\n' > "$RR/VERSION"
-cp "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh" "$RR/core/skills/ai-dlc-update/reconcile/lib.sh"
+cp "$LR/core/skills/ai-dlc-update/reconcile/lib.sh" "$RR/core/skills/ai-dlc-update/reconcile/lib.sh"
 cp "$RLIB" "$RR/scripts/backlog-receipt-lib.sh"
 cp "$RV" "$RR/scripts/backlog-reverify.real.sh"
 cat > "$RR/scripts/backlog-reverify.sh" <<'EOW'
@@ -917,44 +633,15 @@ mkdir -p "$WORK/h"; LH="$WORK/h/backlog.md"; cp "$LG.orig" "$LH"
 cp "$RT" "$RRT"
 HC="$(DRIFT_LEDGER="$LH" bash "$RRT" "$LH" --check 2>&1)"; HC_RC=$?
 if [ "$HC_RC" -eq 2 ] && grep -q "check FAIL" <<<"$HC" && grep -q "BL-999" <<<"$HC"; then
-  ok "drift-control" "the unmutated rotator fails --check when the original carries a live row and the remainder is DECLARED-EMPTY"; B_drift=1
+  ok "drift-control" "the unmutated rotator fails --check when the original carries a live row and the remainder is DECLARED-EMPTY"
 else
-  bad "drift-control" "the unmutated rotator exited $HC_RC on the drift seed; the mutant below would be scored against nothing"
-fi
-# 1. --check ACCEPTS DECLARED-EMPTY UNCONDITIONALLY: the `BEFORE is empty` conjunct removed.
-DCN="$(grep -c '^  elif \[ -z "\$BEFORE" \] && \[ "\$AFTER_N" = 1 \] && \[ "\$AFTER_ST" = "DECLARED-EMPTY" \]; then$' "$RT")" || DCN=0
-if [ "$DCN" -ne 1 ]; then bad "mutation-check-empty" "the --check acceptance line appears $DCN times; the mutation needs exactly one"
-elif ! sed 's/^  elif \[ -z "\$BEFORE" \] && \[ "\$AFTER_N" = 1 \] && /  elif /' "$RT" > "$RRT"; then
-  bad "mutation-check-empty" "DID NOT APPLY: sed failed"
-elif cmp -s "$RT" "$RRT"; then bad "mutation-check-empty" "DID NOT APPLY: the mutation matched nothing"
-else
-  keep_mut mutation-check-empty rt "$RRT"
-  HM="$(DRIFT_LEDGER="$LH" bash "$RRT" "$LH" --check 2>&1)"; HM_RC=$?
-  if [ "$HM_RC" -eq 0 ] && grep -q "check PASS" <<<"$HM"; then
-    mutant_killed "${B_drift:-0}" mutation-check-empty "mutation-check-empty: killed: accepting DECLARED-EMPTY whatever BEFORE holds passes a rotation that loses a live row"
-  else bad "mutation-check-empty" "SURVIVED: the widened acceptance still exited $HM_RC"; fi
-fi
-# 2. --apply WRITES THE MARKER UNCONDITIONALLY: the zero-entry guard removed. Seed B's shape
-#    (entries remain) must then end in the marker, where the shipped rotator writes none.
-MKN="$(grep -c '^if \[ "\$LIVE_ENTRIES" -eq 0 \]; then$' "$RT")" || MKN=0
-if [ "$MKN" -ne 1 ]; then bad "mutation-apply-marker" "the zero-entry guard appears $MKN times; the mutation needs exactly one"
-elif ! sed 's/^if \[ "\$LIVE_ENTRIES" -eq 0 \]; then$/if true; then/' "$RT" > "$RRT"; then
-  bad "mutation-apply-marker" "DID NOT APPLY: sed failed"
-elif cmp -s "$RT" "$RRT"; then bad "mutation-apply-marker" "DID NOT APPLY: the mutation matched nothing"
-else
-  keep_mut mutation-apply-marker rt "$RRT"
-  mkdir -p "$WORK/i"; LI="$WORK/i/backlog.md"
-  printf '# Probe\n\n## BL-501 — open\n\nverify: has VERSION "."\n\n## BL-502 — closed\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n' > "$LI"
-  bash "$RRT" "$LI" --apply >/dev/null 2>&1
-  if grep -q '^## BL-501' "$LI" && [ -n "$MARK" ] && grep -qF -- "$MARK" "$LI"; then
-    mutant_killed "${B_nomarker:-0}" mutation-apply-marker "mutation-apply-marker: killed: with the guard removed a rotation that leaves BL-501 live writes the empty marker"
-  else bad "mutation-apply-marker" "SURVIVED: the unguarded rotator left no marker (or lost BL-501)"; fi
+  bad "drift-control" "the unmutated rotator exited $HC_RC on the drift seed"
 fi
 
-# 3. THE ROTATOR ASKS --marker-last BEFORE APPENDING, so a presence-keyed position rule in the
+# THE ROTATOR ASKS --marker-last BEFORE APPENDING, so a presence-keyed position rule in the
 #    classifier makes it skip the marker whenever the preamble QUOTES it. Seed: the last entry,
 #    below a preamble that quotes the marker on its own line followed by more prose. Control: the
-#    unmutated pair appends it. Mutant: the classifier's marker_last swapped for a whole-file grep.
+#    pair appends it.
 mkdir -p "$WORK/q"; LQ="$WORK/q/backlog.md"
 { printf '# Probe backlog — the marker quoted\n\nThe rotator writes this line when the ledger empties:\n\n%s\n\nIt is a declaration, not prose.\n\n' "$MARK"
   printf '## BL-601 — closed, the last live entry\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n'; } > "$LQ"
@@ -963,25 +650,8 @@ cp "$RT" "$RRT"
 bash "$RRT" "$LQ" --apply >/dev/null 2>&1
 Q_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LQ")"
 if [ -n "$MARK" ] && [ "$Q_LAST" = "$MARK" ]; then
-  ok "quoted-marker" "a preamble quoting the marker still gets it appended as the last line"; B_quoted=1
+  ok "quoted-marker" "a preamble quoting the marker still gets it appended as the last line"
 else bad "quoted-marker" "with the marker quoted in the preamble the last line is '$Q_LAST'"; fi
-MPN="$(grep -cF 'END { exit (last == m) ? 0 : 1 }' "$RV")" || MPN=0
-if [ "$MPN" -ne 1 ]; then bad "mutation-marker-presence" "the position rule's line appears $MPN times; the mutation needs exactly one"
-elif ! sed 's@^  awk -v m="\$EMPTY_MARKER" .*END { exit (last == m) ? 0 : 1 }.*$@  grep -qF -- "$EMPTY_MARKER" "$1"@' "$RV" > "$RR/scripts/backlog-reverify.real.sh"; then
-  bad "mutation-marker-presence" "DID NOT APPLY: sed failed"
-elif cmp -s "$RV" "$RR/scripts/backlog-reverify.real.sh"; then bad "mutation-marker-presence" "DID NOT APPLY: the mutation matched nothing"
-else
-  keep_mut mutation-marker-presence rv "$RR/scripts/backlog-reverify.real.sh"
-  cp "$LQ.orig" "$LQ"
-  bash "$RRT" "$LQ" --apply >/dev/null 2>&1
-  Q_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LQ")"
-  if grep -q '^## BL-601' "$LQ"; then
-    bad "mutation-marker-presence" "the entry was not rotated under the mutant — the root broke, not the rule"
-  elif [ "$Q_LAST" != "$MARK" ]; then
-    mutant_killed "${B_quoted:-0}" mutation-marker-presence "mutation-marker-presence: killed: a presence-keyed position rule leaves a zero-entry ledger without its trailing marker"
-  else bad "mutation-marker-presence" "SURVIVED: the presence-keyed rule still appended the marker"; fi
-fi
-cp "$RV" "$RR/scripts/backlog-reverify.real.sh"
 
 # ---------------------------------------------------------------------------------------
 # Seed J — a LIVE entry the parser cannot see, below the last entry it can.
@@ -1005,7 +675,6 @@ for j_i in 1 2 3 4; do
   if [ "$JC_RC" -eq 2 ] && grep -q "entry-like id lines" <<<"$JC" && grep -qF "BL-501" <<<"$JC" \
      && [ "$JA_RC" -eq 2 ] && cmp -s "$LJ" "$LJ.orig" && [ ! -e "$WORK/j/archive-$j_i.md" ]; then
     ok "census-$j_i" "'$j_sp' below the last parseable entry: --check exits 2 naming it, --apply writes nothing"
-    case "$j_i" in 1) B_census_1=1 ;; esac
   else
     bad "census-$j_i" "'$j_sp': --check rc=$JC_RC, --apply rc=$JA_RC, ledger $(cmp -s "$LJ" "$LJ.orig" && echo unchanged || echo CHANGED), archive $([ -e "$WORK/j/archive-$j_i.md" ] && echo WRITTEN || echo absent)"
   fi
@@ -1016,22 +685,8 @@ mkdir -p "$WORK/jc"; cp "$LG.orig" "$WORK/jc/backlog.md"
 # EPIPE under pipefail and reads NOT-FOUND on output that contains the pattern.
 JCC="$(bash "$RT" "$WORK/jc/backlog.md" --check 2>&1)"
 if grep -q "check PASS" <<<"$JCC"; then
-  ok "census-control" "a plain last-entry rotation still passes --check with the census in place"; B_census_ctl=1
+  ok "census-control" "a plain last-entry rotation still passes --check with the census in place"
 else bad "census-control" "the census fires on a plain last-entry rotation"; fi
-# MUTANT: the census removed. The backticked spelling must then pass --check (the sweep).
-CSN="$(grep -c '^  if \[ "\$CENSUS_N" -gt "\$MOVED_COUNT" \]; then$' "$RT")" || CSN=0
-if [ "$CSN" -ne 1 ]; then bad "mutation-no-census" "the census line appears $CSN times; the mutation needs exactly one"
-elif ! sed 's/^  if \[ "\$CENSUS_N" -gt "\$MOVED_COUNT" \]; then$/  if false; then/' "$RT" > "$RRT"; then
-  bad "mutation-no-census" "DID NOT APPLY: sed failed"
-elif cmp -s "$RT" "$RRT"; then bad "mutation-no-census" "DID NOT APPLY: the mutation matched nothing"
-else
-  keep_mut mutation-no-census rt "$RRT"
-  LJ="$WORK/j/backlog-1.md"
-  JM="$(bash "$RRT" "$LJ" --check 2>&1)"; JM_RC=$?
-  if [ "$JM_RC" -eq 0 ] && grep -q "check PASS" <<<"$JM"; then
-    mutant_killed "$(( ${B_census_1:-0} && ${B_census_ctl:-0} ))" mutation-no-census "mutation-no-census: killed: without the census a backticked live heading passes --check and would be archived"
-  else bad "mutation-no-census" "SURVIVED: with the census removed --check still exited $JM_RC"; fi
-fi
 
 # --apply WITHOUT --check must not write an invalid declaration: a preamble mentioning BL-1 leaves
 # a zero-entry remainder the classifier will not call declared, so --apply refuses before writing.
@@ -1041,21 +696,8 @@ mkdir -p "$WORK/k"; LK="$WORK/k/backlog.md"
 cp "$LK" "$LK.orig"
 KA="$(bash "$RT" "$LK" --apply 2>&1)"; KA_RC=$?
 if [ "$KA_RC" -eq 2 ] && grep -q "declared-empty answers" <<<"$KA" && cmp -s "$LK" "$LK.orig" && [ ! -e "$WORK/k/backlog.archive.md" ]; then
-  ok "apply-declares-valid" "--apply refuses a zero-entry remainder whose preamble carries a BL- id, and writes nothing"; B_declvalid=1
+  ok "apply-declares-valid" "--apply refuses a zero-entry remainder whose preamble carries a BL- id, and writes nothing"
 else bad "apply-declares-valid" "--apply exited $KA_RC on a remainder that cannot be declared; ledger $(cmp -s "$LK" "$LK.orig" && echo unchanged || echo CHANGED)"; fi
-DVN="$(grep -c '^  if \[ "\$DE" -ne 0 \]; then$' "$RT")" || DVN=0
-if [ "$DVN" -ne 1 ]; then bad "mutation-apply-unvalidated" "the --apply validation line appears $DVN times; the mutation needs exactly one"
-elif ! sed 's/^  if \[ "\$DE" -ne 0 \]; then$/  if false; then/' "$RT" > "$RRT"; then
-  bad "mutation-apply-unvalidated" "DID NOT APPLY: sed failed"
-elif cmp -s "$RT" "$RRT"; then bad "mutation-apply-unvalidated" "DID NOT APPLY: the mutation matched nothing"
-else
-  keep_mut mutation-apply-unvalidated rt "$RRT"
-  cp "$LK.orig" "$LK"
-  bash "$RRT" "$LK" --apply >/dev/null 2>&1; KM_RC=$?
-  if [ "$KM_RC" -eq 0 ] && ! cmp -s "$LK" "$LK.orig"; then
-    mutant_killed "${B_declvalid:-0}" mutation-apply-unvalidated "mutation-apply-unvalidated: killed: without the check --apply writes a declaration the classifier refuses"
-  else bad "mutation-apply-unvalidated" "SURVIVED: the unvalidated --apply exited $KM_RC and left the ledger unchanged"; fi
-fi
 
 # SHA READ ANCHORED ON THE ANNOTATION FORM. The ledger must live in a GIT repo, or the rotator's sha arm
 # SKIPS and nothing below can fire. Seeds: A = LANDED line whose LATER prose says "was verified against"
@@ -1073,26 +715,8 @@ LS="$GS/backlog.md"
 SA="$(bash "$RT" "$LS" --check 2>&1)"
 n_res="$(grep -c "\[sha $GSHA resolves\]" <<<"$SA")" || n_res=0
 if [ "$n_res" -eq 4 ] &&! grep -q "DOES NOT RESOLVE" <<<"$SA"; then
-  ok "sha-anchored" "all four LANDED lines resolve their OWN sha, including the one whose later prose says \"verified against\" and the archive form ending \"<sha>.)**\""; B_sha=1
+  ok "sha-anchored" "all four LANDED lines resolve their OWN sha, including the one whose later prose says \"verified against\" and the archive form ending \"<sha>.)**\""
 else bad "sha-anchored" "$n_res of 4 LANDED lines resolved $GSHA; output: $(grep -E 'sha ' <<<"$SA" | tr '\n' '|')"; fi
-# MUTANT: the greedy read restored.
-SHN="$(grep -cF 'verified \([0-9a-f]\{7,\}\)[^0-9a-f].*/\2/p' "$RT")" || SHN=0
-if [ "$SHN" -ne 1 ]; then bad "mutation-sha-greedy" "the anchored sha read appears $SHN times; the mutation needs exactly one"
-else
-  # ENVIRON carries both strings, because awk -v would strip one level of backslash escaping.
-  MUT_NEEDLE='verified \([0-9a-f]\{7,\}\)[^0-9a-f].*/\2/p' \
-  MUT_LINE='  SHA="$(printf '"'"'%s\n'"'"' "$ANN" | sed -n '"'"'s/.*verified \([0-9a-f][0-9a-f]*\).*/\1/p'"'"')"' \
-    awk 'index($0, ENVIRON["MUT_NEEDLE"]) { print ENVIRON["MUT_LINE"]; next } { print }' "$RT" > "$RRT"
-  if cmp -s "$RT" "$RRT"; then bad "mutation-sha-greedy" "DID NOT APPLY: the mutation matched nothing"
-  elif ! grep -qF 's/.*verified \([0-9a-f][0-9a-f]*\).*/\1/p' "$RRT"; then bad "mutation-sha-greedy" "DID NOT APPLY: the greedy read is absent from the mutant"
-  else
-    keep_mut mutation-sha-greedy rt "$RRT"
-    SM="$(bash "$RRT" "$LS" --check 2>&1)"
-    if grep -q "sha a DOES NOT RESOLVE" <<<"$SM"; then
-      mutant_killed "${B_sha:-0}" mutation-sha-greedy "mutation-sha-greedy: killed: the greedy read takes \`a\` from the later prose and refuses a correct entry"
-    else bad "mutation-sha-greedy" "SURVIVED: the greedy read still resolved every sha"; fi
-  fi
-fi
 
 # ---------------------------------------------------------------------------------------
 # Seed P — a PROSE LEAD-IN BULLET inside an entry body is not an entry (BL-820).
@@ -1100,8 +724,7 @@ fi
 # rule opens a phantom BL-632 there, the phantom takes the receipt, and BL-150 reads
 # NEEDS-REVIEW "carries no 'verify:'". BL-151 is the legitimate list form, `- **BL-151** — t`,
 # which must keep parsing: a rule that stopped labelling bullets at all would pass the phantom
-# arm and lose it. Two mutants of the label rule in reconcile/lib.sh, each in its own root with
-# the unmutated engine copied beside it, and each guarded by `cmp -s`.
+# arm and lose it.
 # ---------------------------------------------------------------------------------------
 LP="$WORK/p.md"
 printf '# Probe ledger\n\n## BL-150 — host\n\nBody.\n\n- **BL-632 is LANDED** prose about another entry\n\nverify: sh true\n\n- **BL-151** — a list entry\n\nverify: sh true\n' > "$LP"
@@ -1113,109 +736,9 @@ p_ok() { # p_ok <output> — 0 when the host keeps its receipt, the list entry p
   return 0
 }
 PO="$(bash "$RV" "$LP" 2>&1)"
-if pm="$(p_ok "$PO")"; then ok "phantom-bullet" "a '- **BL-632 is LANDED**' lead-in inside BL-150 opens no entry; BL-150 keeps its receipt and the list entry BL-151 parses (2 rows)"; B_phantom=1
+if pm="$(p_ok "$PO")"; then ok "phantom-bullet" "a '- **BL-632 is LANDED**' lead-in inside BL-150 opens no entry; BL-150 keeps its receipt and the list entry BL-151 parses (2 rows)"
 else bad "phantom-bullet" "$pm"; fi
-LIBP="$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
-LN="$(grep -c 'if (line !~ /^BL-' "$LIBP")" || LN=0
-LZ="$(grep -c 'ZQ-NEVER-IN-LIB-QZ' "$LIBP")" || LZ=0
-if [ "$LN" -eq 1 ] && [ "$LZ" -eq 0 ]; then ok "label-anchor" "the strict bullet test is unique in lib.sh (control: an impossible token reads 0)"
-else bad "label-anchor" "the strict bullet test appears $LN times (control $LZ); the mutations below need exactly one"; fi
-p_mut() { # p_mut <name> <sed-expr> -> echoes the mutated engine path, empty when the sed did not apply
-  local r="$WORK/$1"
-  mkdir -p "$r/scripts" "$r/core/skills/ai-dlc-update/reconcile"
-  printf '0.0.0\n' > "$r/VERSION"
-  cp "$RV" "$r/scripts/backlog-reverify.sh"
-  cp "$RLIB" "$r/scripts/backlog-receipt-lib.sh"
-  sed "$2" "$LIBP" > "$r/core/skills/ai-dlc-update/reconcile/lib.sh" || return 1
-  cmp -s "$LIBP" "$r/core/skills/ai-dlc-update/reconcile/lib.sh" && return 1
-  printf '%s' "$r/scripts/backlog-reverify.sh"
-}
-# m-loose: the strict test deleted, so the label rule is the loose one the defect shipped with.
-PM="$(p_mut mut-loose '/if (line !~ \/^BL-/d')"
-if [ -z "$PM" ]; then bad "mutation-loose" "DID NOT APPLY: the strict bullet test was not found"
-else
-  keep_mut mutation-loose lib "$(dirname "$(dirname "$PM")")/core/skills/ai-dlc-update/reconcile/lib.sh"
-  MO="$(bash "$PM" "$LP" 2>&1)"
-  if grep -qE '^CLOSE-CANDIDATE	BL-151	' <<<"$MO" && grep -qE '	BL-632	' <<<"$MO" \
-     && grep -qE '^NEEDS-REVIEW	BL-150	' <<<"$MO"; then
-    mutant_killed "${B_phantom:-0}" mutation-loose "mutation-loose: killed: the loose rule opens a phantom BL-632 that takes BL-150's receipt (BL-150 NEEDS-REVIEW), while BL-151 still parses"
-  else bad "mutation-loose" "SURVIVED: $(cut -f1,2 <<<"$MO" | tr '\n' ' ')"; fi
-fi
-# m-heading-only: bullets never take a label, so the list entry vanishes.
-PM="$(p_mut mut-heading-only 's/if (line !~ /if (1 || line !~ /')"
-if [ -z "$PM" ]; then bad "mutation-heading-only" "DID NOT APPLY: the strict bullet test was not found"
-else
-  keep_mut mutation-heading-only lib "$(dirname "$(dirname "$PM")")/core/skills/ai-dlc-update/reconcile/lib.sh"
-  MO="$(bash "$PM" "$LP" 2>&1)"
-  if grep -qE '^CLOSE-CANDIDATE	BL-150	' <<<"$MO" && ! grep -qE '	BL-151	' <<<"$MO"; then
-    mutant_killed "${B_phantom:-0}" mutation-heading-only "mutation-heading-only: killed: with bullets never labelled the list entry BL-151 has no row, while BL-150 still parses"
-  else bad "mutation-heading-only" "SURVIVED: $(cut -f1,2 <<<"$MO" | tr '\n' ' ')"; fi
-fi
 
-# =======================================================================================
-# ARMS, TWINS AND THE MATRIX. An arm = a seeded world + a predicate, run against a root built from the
-# REAL components with at most one substituted by a kept mutant copy. Every arm returns 0 when it is
-# GREEN (the behaviour holds) and non-zero when it TRIPS. Each arm owns a fresh directory per cell.
-# =======================================================================================
-AX="$WORK/ax"; mkdir -p "$AX"
-AXN=0
-mk_root() { # mk_root <mutant id or -> -> prints the root dir; components default to the real ones
-  local id="$1" r f
-  r="$(mktemp -d "$AX/r.XXXXXX")"
-  mkdir -p "$r/scripts" "$r/core/skills/ai-dlc-update/reconcile"
-  printf '0.0.0\n' > "$r/VERSION"
-  cp "$RV" "$r/scripts/backlog-reverify.real.sh"
-  cp "$RT" "$r/scripts/backlog-rotate.sh"
-  cp "$RLIB" "$r/scripts/backlog-receipt-lib.sh"
-  cp "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh" "$r/core/skills/ai-dlc-update/reconcile/lib.sh"
-  if [ "$id" != "-" ]; then
-    [ -f "$KM/$id.rv" ]   && cp "$KM/$id.rv"   "$r/scripts/backlog-reverify.real.sh"
-    [ -f "$KM/$id.rt" ]   && cp "$KM/$id.rt"   "$r/scripts/backlog-rotate.sh"
-    [ -f "$KM/$id.rlib" ] && cp "$KM/$id.rlib" "$r/scripts/backlog-receipt-lib.sh"
-    [ -f "$KM/$id.lib" ]  && cp "$KM/$id.lib"  "$r/core/skills/ai-dlc-update/reconcile/lib.sh"
-  fi
-  cat > "$r/scripts/backlog-reverify.sh" <<'EOW'
-#!/usr/bin/env bash
-H="$(cd "$(dirname "$0")" && pwd)"
-out="$(bash "$H/backlog-reverify.real.sh" "$@")"; rc=$?
-[ -n "$out" ] && printf '%s\n' "$out"
-case " $* " in *" --"*) exit "$rc" ;; esac
-if [ -n "${DRIFT_LEDGER:-}" ] && [ "${1:-}" = "$DRIFT_LEDGER" ]; then
-  printf 'STILL-LIVE\tBL-999\ta live row the rotation would lose, seeded by the fixture\n'
-fi
-exit "$rc"
-EOW
-  printf '%s' "$r"
-}
-last_nonblank() { awk '/[^ \t]/ { l = $0 } END { print l }' "$1"; }
-arm_parse() { local r o; r="$(mk_root "$1")"; o="$(bash "$r/scripts/backlog-reverify.real.sh" "$LA" 2>&1)"
-  grep -q "MALFORMED sh receipt" <<<"$(grep -E '	BL-113	' <<<"$o")" \
-    && grep -qE '^NEEDS-REVIEW	BL-115	' <<<"$o" && grep -qE '^NEEDS-REVIEW	BL-116	' <<<"$o" \
-    && grep -qE '^CLOSE-CANDIDATE	BL-114	' <<<"$o"; }
-arm_route()   { local r; r="$(mk_root "$1")"; route_ok "$(bash "$r/scripts/backlog-reverify.real.sh" "$LC_ROUTE" 2>&1)" >/dev/null; }
-arm_stdin()   { local r; r="$(mk_root "$1")"; stdin_ok "$(bash "$r/scripts/backlog-reverify.real.sh" "$LD" 2>&1)" >/dev/null; }
-arm_memo()    { local r; r="$(mk_root "$1")"; leak_both "$r/scripts/backlog-reverify.real.sh" >/dev/null; }
-arm_cm()      { local r; r="$(mk_root "$1")"; cm_ok "$(bash "$r/scripts/backlog-reverify.real.sh" "$LF" 2>&1)" >/dev/null; }
-arm_phantom() { local r; r="$(mk_root "$1")"; p_ok "$(bash "$r/scripts/backlog-reverify.real.sh" "$LP" 2>&1)" >/dev/null; }
-arm_checkempty() { local r d o rcv; r="$(mk_root "$1")"; d="$(mktemp -d "$AX/ce.XXXXXX")"; cp "$LG.orig" "$d/backlog.md"
-  o="$(DRIFT_LEDGER="$d/backlog.md" bash "$r/scripts/backlog-rotate.sh" "$d/backlog.md" --check 2>&1)"; rcv=$?
-  [ "$rcv" -eq 2 ] && grep -q "check FAIL" <<<"$o" && grep -q "BL-999" <<<"$o"; }
-arm_applymarker() { local r d; r="$(mk_root "$1")"; d="$(mktemp -d "$AX/am.XXXXXX")"
-  printf '# Probe\n\n## BL-501 — open\n\nverify: has VERSION "."\n\n## BL-502 — closed\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n' > "$d/backlog.md"
-  bash "$r/scripts/backlog-rotate.sh" "$d/backlog.md" --apply >/dev/null 2>&1
-  grep -q '^## BL-501' "$d/backlog.md" && ! grep -qF -- "$MARK" "$d/backlog.md"; }
-arm_quoted() { local r d; r="$(mk_root "$1")"; d="$(mktemp -d "$AX/qu.XXXXXX")"; cp "$LQ.orig" "$d/backlog.md"
-  bash "$r/scripts/backlog-rotate.sh" "$d/backlog.md" --apply >/dev/null 2>&1
-  [ "$(last_nonblank "$d/backlog.md")" = "$MARK" ] && ! grep -q '^## BL-601' "$d/backlog.md"; }
-arm_census() { local r d o rcv; r="$(mk_root "$1")"; d="$(mktemp -d "$AX/ce2.XXXXXX")"; cp "$WORK/j/backlog-1.md.orig" "$d/backlog.md"
-  o="$(bash "$r/scripts/backlog-rotate.sh" "$d/backlog.md" --check 2>&1)"; rcv=$?
-  [ "$rcv" -eq 2 ] && grep -q "entry-like id lines" <<<"$o"; }
-arm_declvalid() { local r d rcv; r="$(mk_root "$1")"; d="$(mktemp -d "$AX/dv.XXXXXX")"; cp "$LK.orig" "$d/backlog.md"
-  bash "$r/scripts/backlog-rotate.sh" "$d/backlog.md" --apply >/dev/null 2>&1; rcv=$?
-  [ "$rcv" -eq 2 ] && cmp -s "$d/backlog.md" "$LK.orig" && [ ! -e "$d/backlog.archive.md" ]; }
-arm_sha() { local r o n; r="$(mk_root "$1")"; o="$(bash "$r/scripts/backlog-rotate.sh" "$LS" --check 2>&1)"
-  n="$(grep -c "\[sha $GSHA resolves\]" <<<"$o")" || n=0
-  [ "$n" -eq 4 ] && ! grep -q "DOES NOT RESOLVE" <<<"$o"; }
 # SHA-LESS LANDED LINES ARE BOUND TO A RELEASE (BL-874). The ledger's tree is a git repository whose
 # VERSION is 0.995.0 and whose CHANGELOG.md carries `## [0.995.0]` and `## [0.990.0]`. ACCEPT ledger:
 # a heading below VERSION, VERSION itself (a heading), and v0.1000.0 -- PENDING, greater than VERSION only when
@@ -1230,34 +753,14 @@ sl_entry() { printf '## %s — closed\n\nbody\n\n**LANDED (v%s).** Done.\n\nveri
   printf '## BL-814 — live\n\nbody\n\nverify: manual\n'; } > "$GSL/acc.md"
 { printf '# Probe\n\n'; sl_entry BL-811 0.990.0; sl_entry BL-815 0.991.0
   printf '## BL-814 — live\n\nbody\n\nverify: manual\n'; } > "$GSL/ref.md"
-arm_shaless() { local r o rcv; r="$(mk_root "$1")"
-  o="$(bash "$r/scripts/backlog-rotate.sh" "$GSL/acc.md" --check 2>&1)"; rcv=$?
+arm_shaless() { local o rcv
+  o="$(bash "$RT" "$GSL/acc.md" --check 2>&1)"; rcv=$?
   [ "$rcv" -eq 0 ] && grep -qF '[sha-less, v0.990.0]' <<<"$o" && grep -qF '[sha-less, v0.995.0]' <<<"$o" \
     && grep -qF 'BL-813  PENDING, not moved: v0.1000.0 is not yet released (VERSION 0.995.0)' <<<"$o" || return 1
-  o="$(bash "$r/scripts/backlog-rotate.sh" "$GSL/ref.md" --check 2>&1)"; rcv=$?
+  o="$(bash "$RT" "$GSL/ref.md" --check 2>&1)"; rcv=$?
   [ "$rcv" -eq 2 ] && grep -qF 'BL-815  sha-less LANDED v0.991.0 names no release in CHANGELOG.md or VERSION.' <<<"$o"; }
-# MUTANTS, each a copy guarded by `cmp -s`: the CHANGELOG/VERSION binding dropped (every sha-less line
-# accepted, so v0.991.0 rotates), and the sha-less form dropped (the line reads `sha ABSENT` and is refused).
-SL_NEEDLE='  elif [ -z "$SHA" ] && [ -n "$SLV" ]; then SHAV="$(shaless_verdict "$SLV")"'
-SLN="$(grep -cxF -- "$SL_NEEDLE" "$RT")" || SLN=0
-if [ "$SLN" -ne 1 ]; then bad "mutation-shaless" "the sha-less dispatch line appears $SLN times in the rotator; the mutations need exactly one"
-else
-  sl_mut() { # sl_mut <id> <replacement line, empty = delete>
-    SL_NEEDLE="$SL_NEEDLE" SL_REPL="$2" awk 'index($0, ENVIRON["SL_NEEDLE"]) == 1 && length($0) == length(ENVIRON["SL_NEEDLE"]) { if (ENVIRON["SL_REPL"] != "") print ENVIRON["SL_REPL"]; next } { print }' "$RT" > "$WORK/sl/$1.sh"
-    if cmp -s "$RT" "$WORK/sl/$1.sh"; then bad "$1" "DID NOT APPLY: the mutation matched nothing"; return 1; fi
-    keep_mut "$1" rt "$WORK/sl/$1.sh"
-  }
-  if arm_shaless -; then ok "shaless-bound" "sha-less LANDED lines: a CHANGELOG heading and VERSION accept, v0.1000.0 is PENDING, v0.991.0 is refused"; B_shaless=1
-  else bad "shaless-bound" "the unmutated rotator did not give the three sha-less outcomes"; fi
-  if sl_mut mutation-shaless-unbound '  elif [ -z "$SHA" ] && [ -n "$SLV" ]; then SHAV="sha-less, v$SLV"'; then
-    if arm_shaless mutation-shaless-unbound; then bad "mutation-shaless-unbound" "SURVIVED: with the binding dropped the arm stayed green"
-    else mutant_killed "${B_shaless:-0}" mutation-shaless-unbound "mutation-shaless-unbound: killed: without the CHANGELOG/VERSION binding a version that names no release rotates"; fi
-  fi
-  if sl_mut mutation-shaless-absent ''; then
-    if arm_shaless mutation-shaless-absent; then bad "mutation-shaless-absent" "SURVIVED: with the sha-less form dropped the arm stayed green"
-    else mutant_killed "${B_shaless:-0}" mutation-shaless-absent "mutation-shaless-absent: killed: without the sha-less form every release line reads sha ABSENT and is refused"; fi
-  fi
-fi
+if arm_shaless; then ok "shaless-bound" "sha-less LANDED lines: a CHANGELOG heading and VERSION accept, v0.1000.0 is PENDING, v0.991.0 is refused"
+else bad "shaless-bound" "the rotator did not give the three sha-less outcomes"; fi
 
 # A PENDING SHA-LESS LINE IS KEPT, NEVER ARCHIVED (BL-874). Each run builds its own git tree (VERSION
 # 0.995.0, CHANGELOG `## [0.995.0]`), because cell (b) moves VERSION. (a) BL-821 at v9.9.9 alone under
@@ -1266,130 +769,28 @@ fi
 # bumped to 9.9.9 and `## [9.9.9]` added: the next --apply on (a)'s ledger moves the held BL-821, archive 1 -> 2.
 pd_n() { local n; n="$(grep -c '^## BL-' "$1" 2>/dev/null)" || n=0; printf '%s' "$n"; }
 pd_live() { printf '## BL-823 — live\n\nbody\n\nverify: manual\n'; }
-arm_pending() { local r d o rcv; r="$(mk_root "$1")"; d="$(mktemp -d "$AX/pd.XXXXXX")"
+arm_pending() { local d o rcv; d="$(mktemp -d "$WORK/pd.XXXXXX")"
   git -C "$d" init -q . || return 1
   mkdir "$d/a" "$d/c"
   printf '0.995.0\n' > "$d/VERSION"
   printf '# Changelog\n\n## [0.995.0] - 2026-11-02\n' > "$d/CHANGELOG.md"
   printf '# Archive\n\n## BL-800 — old\n\nbody\n' > "$d/a/backlog.archive.md"
   { printf '# Probe\n\n'; sl_entry BL-821 9.9.9; pd_live; } > "$d/a/backlog.md"
-  o="$(bash "$r/scripts/backlog-rotate.sh" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
+  o="$(bash "$RT" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
   [ "$rcv" -eq 0 ] && grep -qF 'BL-821  PENDING, not moved: v9.9.9 is not yet released (VERSION 0.995.0)' <<<"$o" \
     && grep -q '^## BL-821 ' "$d/a/backlog.md" && [ "$(pd_n "$d/a/backlog.archive.md")" = 1 ] || return 1
   { printf '# Probe\n\n'; sl_entry BL-821 9.9.9; sl_entry BL-822 0.995.0; pd_live; } > "$d/c/backlog.md"
-  o="$(bash "$r/scripts/backlog-rotate.sh" "$d/c/backlog.md" --check --apply 2>&1)"; rcv=$?
+  o="$(bash "$RT" "$d/c/backlog.md" --check --apply 2>&1)"; rcv=$?
   [ "$rcv" -eq 0 ] && grep -q '^## BL-821 ' "$d/c/backlog.md" && ! grep -q '^## BL-822 ' "$d/c/backlog.md" \
     && grep -q '^## BL-822 ' "$d/c/backlog.archive.md" && [ "$(pd_n "$d/c/backlog.archive.md")" = 1 ] || return 1
   printf '9.9.9\n' > "$d/VERSION"
   printf '# Changelog\n\n## [9.9.9] - 2026-11-03\n\n## [0.995.0] - 2026-11-02\n' > "$d/CHANGELOG.md"
-  o="$(bash "$r/scripts/backlog-rotate.sh" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
+  o="$(bash "$RT" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
   [ "$rcv" -eq 0 ] && ! grep -q '^## BL-821 ' "$d/a/backlog.md" && grep -q '^## BL-821 ' "$d/a/backlog.archive.md" \
     && [ "$(pd_n "$d/a/backlog.archive.md")" = 2 ]; }
-# MUTANT mutation-pending-applied: --apply takes PENDING lines. Both layers reverted on one copy: the split
-# still REPORTS the entry PENDING but moves it, and the release binding accepts any version it reported, so
-# the v9.9.9 entry is archived with rc 0 -- the tip adversary's seeded defect. Killed by cell (a).
-PD_ND="$WORK/sl/pd.needles"
-cat > "$PD_ND" <<'EON'
-  if (closed && pend) { print label "\t" pendv > PENDING; closed = 0 }
-  if (closed && pend) print label "\t" pendv > PENDING
-     && awk -v h="## [$1]" 'index($0, h) == 1 { f = 1; exit } END { exit !f }' "$LEDGER_TOP/CHANGELOG.md"; then
-     && { awk -v h="## [$1]" 'index($0, h) == 1 { f = 1; exit } END { exit !f }' "$LEDGER_TOP/CHANGELOG.md" || grep -qF "$1" "$AWKF.pending"; }; then
-EON
-pd_u1="$(grep -cxF -- "$(sed -n 1p "$PD_ND")" "$RT")" || pd_u1=0
-pd_u2="$(grep -cxF -- "$(sed -n 3p "$PD_ND")" "$RT")" || pd_u2=0
-if arm_pending -; then ok "pending-kept" "a v9.9.9 sha-less line is kept and reported PENDING under --check --apply; beside it a VERSION line moves alone; once VERSION and a heading reach v9.9.9 it moves"; B_pending=1
-else bad "pending-kept" "the unmutated rotator did not keep the PENDING entry, move the released one, and move the held one once VERSION reached it"; fi
-if [ "$pd_u1" -ne 1 ] || [ "$pd_u2" -ne 1 ]; then bad "mutation-pending-applied" "DID NOT APPLY: the two anchors appear $pd_u1 and $pd_u2 times in the rotator; each must appear once"
-else
-  awk -v NF0="$PD_ND" 'BEGIN { while ((getline l < NF0) > 0) nd[++k] = l }
-    $0 == nd[1] { print nd[2]; c++; next } $0 == nd[3] { print nd[4]; c++; next } { print }
-    END { if (c != 2) exit 1 }' "$RT" > "$WORK/sl/mutation-pending-applied.sh"; pd_rc=$?
-  if [ "$pd_rc" -ne 0 ] || cmp -s "$RT" "$WORK/sl/mutation-pending-applied.sh"; then bad "mutation-pending-applied" "DID NOT APPLY: the two-layer mutation did not replace both anchors"
-  else
-    keep_mut mutation-pending-applied rt "$WORK/sl/mutation-pending-applied.sh"
-    if arm_pending mutation-pending-applied; then bad "mutation-pending-applied" "SURVIVED: with --apply taking PENDING lines the arm stayed green"
-    else mutant_killed "${B_pending:-0}" mutation-pending-applied "mutation-pending-applied: killed: an --apply that takes a PENDING line archives the unreleased v9.9.9 entry"; fi
-  fi
-fi
+if arm_pending; then ok "pending-kept" "a v9.9.9 sha-less line is kept and reported PENDING under --check --apply; beside it a VERSION line moves alone; once VERSION and a heading reach v9.9.9 it moves"
+else bad "pending-kept" "the rotator did not keep the PENDING entry, move the released one, and move the held one once VERSION reached it"; fi
 
-ARMS="parse route stdin memo cm phantom checkempty applymarker quoted census declvalid sha shaless pending"
-arm_run() { "arm_$1" "$2"; }   # arm_run <arm> <mutant id or -> -> 0 green, non-zero tripped
-twin_of() {
-  case "$1" in
-    mutation-no-parse) echo route ;;
-    mutation-parse-bare) echo route ;;
-    mutation-9-close) echo stdin ;;
-    mutation-9-hand) echo stdin ;;
-    mutation-stdin) echo route ;;
-    mutation-memo-export) echo stdin ;;
-    mutation-memo-diffonly) echo stdin ;;
-    mutation-memo-fns) echo stdin ;;
-    mutation-stderr-route) echo stdin ;;
-    mutation-no-prefix) echo route ;;
-    mutation-check-empty) echo sha ;;
-    mutation-apply-marker) echo sha ;;
-    mutation-marker-presence) echo sha ;;
-    mutation-no-census) echo sha ;;
-    mutation-apply-unvalidated) echo sha ;;
-    mutation-sha-greedy) echo census ;;
-    mutation-loose) echo parse ;;
-    mutation-heading-only) echo route ;;
-    mutation-shaless-unbound) echo sha ;;
-    mutation-shaless-absent) echo sha ;;
-    mutation-pending-applied) echo sha ;;
-  esac
-}
-decider_of() {
-  case "$1" in
-    mutation-no-parse) echo parse ;;
-    mutation-parse-bare) echo parse ;;
-    mutation-9-close) echo route ;;
-    mutation-9-hand) echo route ;;
-    mutation-stdin) echo stdin ;;
-    mutation-memo-export) echo memo ;;
-    mutation-memo-diffonly) echo memo ;;
-    mutation-memo-fns) echo memo ;;
-    mutation-stderr-route) echo cm ;;
-    mutation-no-prefix) echo cm ;;
-    mutation-check-empty) echo checkempty ;;
-    mutation-apply-marker) echo applymarker ;;
-    mutation-marker-presence) echo quoted ;;
-    mutation-no-census) echo census ;;
-    mutation-apply-unvalidated) echo declvalid ;;
-    mutation-sha-greedy) echo sha ;;
-    mutation-loose) echo phantom ;;
-    mutation-heading-only) echo phantom ;;
-    mutation-shaless-unbound) echo shaless ;;
-    mutation-shaless-absent) echo shaless ;;
-    mutation-pending-applied) echo pending ;;
-  esac
-}
-# The unmutated control: every arm is GREEN on the real components. A harness that tripped here would
-# make every kill below the harness failing and not the mutation.
-ctl_bad=""
-for a in $ARMS; do arm_run "$a" - || ctl_bad="$ctl_bad $a"; done
-if [ -z "$ctl_bad" ]; then ok "mutant-control" "the UNMUTATED copy of every component is green on all 14 arms, so the roots below run the shipped behaviour"; B_matrix_ctl=1
-else bad "mutant-control" "the unmutated roots trip these arms:$ctl_bad -- every twin and matrix verdict below is void"; fi
-# PER PUSH: each mutant's deciding arm TRIPS and its twin stays GREEN.
-for m in $KM_IDS; do
-  da="$(decider_of "$m")"; tw="$(twin_of "$m")"
-  if arm_run "$da" "$m"; then bad "[$da] $m" "the deciding arm stayed GREEN on the mutant: it does not decide it"
-  else ok "[$da] $m" "deciding arm trips on the mutant's component copy"; fi
-  if arm_run "$tw" "$m"; then ok "[$tw] $m" "twin stays green: the effect of $m is confined to $da"
-  else bad "[$tw] $m" "the twin TRIPPED on $m, so the kill is not confined to its deciding arm"; fi
-done
-if [ "$MATRIX" = 1 ]; then
-  for m in $KM_IDS; do
-    for a in $ARMS; do
-      if arm_run "$a" "$m"; then matrix_row "$m" "$a" 0 GREEN no; else matrix_row "$m" "$a" 1 TRIPPED yes; fi
-      MROWS=$((MROWS + 1))
-    done
-  done
-  n_km="$(printf '%s\n' $KM_IDS | grep -c .)"
-  if [ "$n_km" -eq 21 ] && [ "$MROWS" -eq 294 ]; then ok "[MX]" "the matrix run measured $MROWS cells for $n_km mutants"; else bad "[MX]" "matrix rows=$MROWS for $n_km mutants, 294 for 21 expected"; fi
-else
-  if [ "$MROWS" -eq 0 ]; then ok "[MX]" "a plain run executed no matrix-only cell (rows=0)"; else bad "[MX]" "a plain run executed $MROWS matrix rows"; fi
-fi
 
 echo
 if [ "$FAIL" -eq 0 ]; then

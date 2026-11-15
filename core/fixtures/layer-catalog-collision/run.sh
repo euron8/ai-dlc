@@ -32,11 +32,6 @@ ROOT="$(bash "$HERE/seed.sh")"
 trap 'rm -rf "$ROOT"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# B_CTRL=1 only beside the control's own ok: a mutant is scored only if the unmutated linter copy reproduced the shipped vector.
-B_CTRL=0
 
 echo "layer-catalog-collision:"
 
@@ -361,89 +356,6 @@ grep -q "RETIRED-ID HISTORY UNREADABLE" <<<"$out" \
 grep -q "not inside a git work tree" <<<"$out" \
   && ok "  and it names WHY it could not read it, so the operator can tell a refusal from a pass" \
   || bad "  but it did not name the reason, so a refusal is indistinguishable from a finding-free run"
-
-# --- Part 6: every arm of the partition is load-bearing, proved by mutation ------
-#
-# Part 5 proves the partition FIRES. What it cannot prove is that each ARM is doing its
-# own work — and three of the four exclusions this release removed were unfalsifiable in
-# exactly that way. The suffix exclusion is the worked example: with it removed but the
-# numeric comparison unchanged, `[ 40b -lt 900 ]` ERRORS and reports nothing, which is
-# indistinguishable from excluding it on purpose. Only a mutation that moves a NAMED CELL
-# tells the two apart.
-#
-# ONE ASSERTION PER MUTANT: the complete expected vector, stated positively and distinct
-# from every other mutant's. A mutant that broke the linter outright fails its own
-# assertion instead of passing it.
-#
-# MUTATION DISCIPLINE. Every mutant is a COPY of the linter, `cmp -s`-guarded so a sed
-# that matched nothing cannot pass as a mutation, run against a FRESH seed (Part 4b's
-# `--apply` rewrote the shared one), with an unmutated control copy from the same
-# directory so a copy that simply fails to run cannot score as a kill.
-MROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: mutant seed failed" >&2; exit 2; }
-MDIR="$MROOT/.fixture-mutants"
-mkdir -p "$MDIR"
-
-cp "$LINTER" "$MDIR/control.sh"
-CTRL="$(band_vector "$MDIR/control.sh" "$MROOT")"
-if [ "$CTRL" = "$BAND_WANT" ]; then
-  ok "CONTROL: an unmutated copy reproduces the shipped vector (the mutants below run against a live linter)"; B_CTRL=1
-else
-  bad "CONTROL FAILED — an unmutated COPY of the linter does not reproduce the shipped vector.
-          copy '$CTRL'
-          ship '$BAND_WANT'
-        Every mutant below would be scored against a linter that is not working, and a copy that cannot run scores as a kill for all of them."
-fi
-
-mutant() { # mutant <label> <sed> <want-vector> <why>
-  local label="$1" prog="$2" want="$3" why="$4" f="$MDIR/m.sh" got
-  sed "$prog" "$LINTER" > "$f"
-  if cmp -s "$LINTER" "$f"; then
-    bad "MUTATION VACUOUS ($label) — the sed matched nothing in the linter, so the assertion below would score an unchanged run as a kill"
-    return
-  fi
-  got="$(band_vector "$f" "$MROOT")"
-  if [ "$got" = "$want" ]; then
-    mutant_killed "$B_CTRL" "$label" "MUTANT killed: $label"
-  else
-    bad "MUTANT '$label' did not produce its expected vector, so what it is meant to prove is unproven.
-          got  '$got'
-          want '$want'
-        $why"
-  fi
-}
-
-# M1 — the floor is what decides, not a hardcoded subject list. Raising it past 933 must
-# pull the two in-band NUMERIC controls in and leave the alphabetic one out, because the
-# alphabetic half is a prefix and has no floor.
-mutant "raising BAND_FLOOR past 933 pulls in the in-band numeric controls and ONLY those" \
-  's|^BAND_FLOOR=900$|BAND_FLOOR=1000|' \
-  "5=COLLIDED 24=COLLIDED 30=OOB 33=OOB 40b=OOB 933=OOB AP=OOB XQ=- 0=OOB 7a-post=COLLIDED Rule 8=COLLIDED Rule 29=COLLIDED Rule 30=COLLIDED Rule 44=OOB Rule 931=OOB" \
-  "If 933 and Rule 931 do not move, the arm is keyed on something other than BAND_FLOOR and I45's binding to the same constant proves nothing. If XQ moves too, the alphabetic half is reading the floor, which it must not."
-
-# M2 — the alphabetic half is a real arm, not decoration. Without it `AP` goes silent and
-# nothing else moves: the numeric cells are produced by a different branch entirely.
-mutant "removing the alphabetic branch silences 'AP' and nothing else" \
-  's|^    \[A-Za-z\]\*) printf .*|    [A-Za-z]*) return 1 ;;|' \
-  "5=COLLIDED 24=COLLIDED 30=OOB 33=OOB 40b=OOB 933=- AP=- XQ=- 0=OOB 7a-post=COLLIDED Rule 8=COLLIDED Rule 29=COLLIDED Rule 30=COLLIDED Rule 44=OOB Rule 931=-" \
-  "A band is numeric and cannot order 'AP', so the alphabetic half is a reserved prefix instead. This is the arm that found the reference consumer's own 'H1' colliding with core's after four releases of a numeric-only band."
-
-# M3 — the already-collided split is a real split. Forcing the membership test false must
-# turn every COLLIDED cell into a plain OOB while the verdict itself is unchanged: the
-# two messages are one clause, and the difference is what has already happened, not
-# whether it is reported.
-mutant "forcing the core-membership test false turns every COLLIDED cell into OOB and changes no verdict" \
-  's#if grep -Fxq -- "\$a" <<<"\$core_anchors"; then#if false; then#; s#if grep -Fxq -- "\$n" <<<"\$core_rules"; then#if false; then#' \
-  "5=OOB 24=OOB 30=OOB 33=OOB 40b=OOB 933=- AP=OOB XQ=- 0=OOB 7a-post=OOB Rule 8=OOB Rule 29=OOB Rule 30=OOB Rule 44=OOB Rule 931=-" \
-  "Every cell must stay reported. If one goes to '-', the membership test is gating the VERDICT and not just the message — which is the exclusion this release removed, growing back."
-
-# M4 — the step-domain scope really is gone. Restoring `kind: check` must silence exactly
-# the two ids that come from step-domain entries and leave every check-side cell alone.
-mutant "restoring the kind: check scope silences ONLY the step-domain ids" \
-  's|^  while IFS= read -r a; do$|  if [ "$kind" = check ]; then while IFS= read -r a; do|; s|^  done < "\$VLE_T/ext-anchors-e6"$|  done < "$VLE_T/ext-anchors-e6"; fi|; s|^  done < "\$VLE_T/ext-anchors-e15"$|  done < "$VLE_T/ext-anchors-e15"; fi|' \
-  "5=COLLIDED 24=COLLIDED 30=OOB 33=OOB 40b=OOB 933=- AP=OOB XQ=- 0=- 7a-post=- Rule 8=COLLIDED Rule 29=COLLIDED Rule 30=COLLIDED Rule 44=OOB Rule 931=-" \
-  "'0.' and '7a-post.' are prose.md's, which is kind: step-domain. The rule cells must not move — rules were never kind-scoped — and no check-side cell may move either, or the scope is doing more than it claims."
-
-rm -rf "$MROOT"
 
 echo
 report_end layer-catalog-collision

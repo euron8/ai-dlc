@@ -1,0 +1,3 @@
+# presuite-units starts no counted subject as a separate program: .githooks/pre-push is read as text and two of its spans
+# are SOURCED into subshells, never executed as the hook. Each queued stub step runs in a fork of that subshell, not as
+# the subject. No cell to declare.

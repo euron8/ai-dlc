@@ -58,104 +58,11 @@
 # bound to the shipped file three ways: it differs from it by exactly one line, the shipped detector's
 # own self-probe passes end to end, and the shipped detector and the copy print byte-identical stdout
 # and (self-probe line aside) stderr over a two-transcript list. The shipped detector is therefore
-# run twice per push; every mutant arm and every base arm runs the copy at ~0.06s a call.
-#
-# MUTANTS, each a copy of the detector with the self-probe call removed, guarded by an exact anchor
-# count and `cmp -s`. Each mutant is driven through its DECIDING arm (which must FAIL under it) and its
-# named TWIN arm(s) (which must HOLD), and its kill is emitted through mutant_killed behind the
-# same-run base-pass flags of those very arms. M1 additionally keeps one end-to-end self-probe
-# refusal per push, as the representative; for the other mutants the probe cell lives in the matrix.
-#   M1  the free-slot test removed                 M2  a dispatch no longer answers a delivery
-#   M3  an unknown cap judged as a finding         M4  an empty corpus returns 0
-#   M5  the cap read from assistant prose          M6  the attachment delivery carrier dropped
-#   M7  the user delivery carrier dropped          M8  an enqueue judged as a delivery
-#   M9  the response cut to the next assistant record (no turn)
-#   M10 a rejected call no longer answers          M11 a re-send counted as a new member
-#   M12 the printenv cap source dropped            M13 the round's last stretch judged too
-#   M14 the environment ranked above the rejection M15 the loud unknown-cap line silenced
-#   MB  rejected spawns counted as RUNNING         ME  two cap values take the HIGHER
-#   MF  the isSidechain filter removed             MD  error results dropped by the prefilter
-#   MC  a compaction summary ends a turn again
-#   MK  the member key reverted to "first cited path, any subagent_type" (the BL-732 defect); the
-#       former MK-arm was this same mutation scored on the rem/adv/gp cells, which are now MK's
-#       decides arms, so it has no row of its own
-#   MX  the member key is the FIRST cited path's seat only (MC is taken, so this one is MX)
-#   MG  the delegated file is not followed          MH  the sidechain filter kept on the followed file
-#   MI  the lead's cap not inherited                MW  a followed file's WAIT ignored (turn bound only)
-#   MY  the WAIT bound applied to lead files too    MN  any foreground Bash call is a WAIT
-#   MS  the coordinator's own slot not counted
-#   MSEG a command is one segment (no split on ; && || | newline)
-#   MMODE the non-blocking wait-for-deliverable modes no longer excluded
-#   MSLP sleep only by its bare name (no path)     MLAST every delivery written during a wait closed at its return
-#   MIF/MUN/MWH  if / until / while no longer stripped as a keyword   MSUBW/MSUBS  `$(` splits only before sleep / only before scripts
-#   MWHOLE  wsegs cuts at `$(` instead of keeping the outer segment whole   MBR  bmode no longer accepts `)` after its flag   MIFANY  any `if` segment is a WAIT   MSUBANY  any `NAME=$(` segment is a WAIT
-#   Extra FAIL cells that are the SAME property the mutant removes, not entanglement; every row's
-#   decides and twins hold. M2 also FAILs v, y, vmark and vgin: each is quiet only because a dispatch
-#   answers the delivery. M6 also FAILs u, v, x, y and the six WAIT-shape arms: a coordinator's
-#   deliveries arrive only by the attachment carrier M6 drops. M9 also FAILs mark and vmark: each puts a
-#   message of its own between the delivery and the refill. MG and MH FAIL every delegated arm, which
-#   need the follow and the filter off. MI and MS also FAIL binsleep, bashc and stat2, which are u's
-#   finding world with one command changed, judged on the inherited cap and the own slot; MW also FAILs
-#   them because they fire only through the WAIT. MSEG, MMODE and MSLP's probe cells read ok because
-#   their subjects are fixture arms, not self-probe cases.
-#
-# MATRIX. Measured by `bash core/fixtures/party-wave-barrier/run.sh --matrix`: every mutant against
-# every base arm (plus the `probe` cell, the mutant with its self-probe left in). A cell is FAIL when
-# the arm fails under the mutant. decides = the arm that kills it; twins = arms that stay green under
-# it. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
-# state") requires.
-# MUTANT-MATRIX M1 decides=m twins=l
-# MUTANT-MATRIX M2 decides=b twins=a
-# MUTANT-MATRIX M3 decides=d twins=dcap
-# MUTANT-MATRIX M4 decides=refuse-empty twins=refuse-unread
-# MUTANT-MATRIX M5 decides=bprose twins=b
-# MUTANT-MATRIX M6 decides=h twins=i
-# MUTANT-MATRIX M7 decides=a twins=n
-# MUTANT-MATRIX M8 decides=g twins=l
-# MUTANT-MATRIX M9 decides=k twins=l
-# MUTANT-MATRIX M10 decides=c twins=b
-# MUTANT-MATRIX M11 decides=n twins=m
-# MUTANT-MATRIX M12 decides=f twins=g
-# MUTANT-MATRIX M13 decides=e twins=g
-# MUTANT-MATRIX M14 decides=cenv twins=c
-# MUTANT-MATRIX M15 decides=d twins=dcap
-# MUTANT-MATRIX MB decides=p twins=o
-# MUTANT-MATRIX ME decides=s twins=p
-# MUTANT-MATRIX MF decides=r twins=a
-# MUTANT-MATRIX MD decides=o twins=p
-# MUTANT-MATRIX MC decides=q twins=qmeta
-# MUTANT-MATRIX MK decides=t twins=remseat
-# MUTANT-MATRIX MX decides=cross twins=remseat
-# MUTANT-MATRIX MG decides=u twins=r
-# MUTANT-MATRIX MH decides=u twins=w
-# MUTANT-MATRIX MI decides=u twins=v
-# MUTANT-MATRIX MW decides=x twins=y
-# MUTANT-MATRIX MY decides=k twins=l
-# MUTANT-MATRIX MN decides=y twins=x
-# MUTANT-MATRIX MS decides=u twins=v
-# MUTANT-MATRIX MSEG decides=stat2 twins=binsleep
-# MUTANT-MATRIX MMODE decides=vmark twins=stat2
-# MUTANT-MATRIX MSLP decides=binsleep twins=bashc
-# MUTANT-MATRIX MLAST decides=vgin twins=v
-# MUTANT-MATRIX MIF decides=ifw twins=ifpg
-# MUTANT-MATRIX MUN decides=untilw twins=ifw
-# MUTANT-MATRIX MWH decides=whilesl twins=ifw
-# MUTANT-MATRIX MSUBW decides=subw twins=subsl
-# MUTANT-MATRIX MSUBS decides=subsl twins=subw
-# MUTANT-MATRIX MBR decides=stsub twins=datesub
-# MUTANT-MATRIX MWHOLE decides=stpwd twins=stsub
-# MUTANT-MATRIX MIFANY decides=ifpg twins=ifw
-# MUTANT-MATRIX MSUBANY decides=datesub twins=subw
-# MUTANT-MATRIX-DYNAMIC score why=every mutant is passed to mutant_killed by name from the one score() driver
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/party-wave-barrier/run.sh --matrix
+# run twice per push; every arm runs the copy at ~0.06s a call.
 #
 # Exit: 0 = every assertion holds, 1 = an assertion failed, 2 = the fixture could not run.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 set -uo pipefail
-# --matrix is parsed and shifted first. A plain run executes no matrix-only cell (asserted at the end).
-MATRIX=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
-MATRIX_CELLS=0
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # Both layouts named, never a single walk-up (I33c). The subject is distribution-only.
@@ -166,7 +73,6 @@ done
 [ -n "$ROOT" ] || { echo "FIXTURE ERROR: could not locate scripts/audit-party-wave-barrier.sh from $HERE" >&2; exit 2; }
 DET="$ROOT/scripts/audit-party-wave-barrier.sh"
 echo "HERMETIC-CONSUMED scripts/audit-party-wave-barrier.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required" >&2; exit 2; }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/pwb-fx.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
@@ -178,9 +84,6 @@ bad() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
 eq()  { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (got '$2', want '$3')"; fi; }
 has() { if grep -qF -- "$3" <<<"$2"; then ok "$1"; else bad "$1 (absent: $3)"; fi; }
 hasnt() { if grep -qF -- "$3" <<<"$2"; then bad "$1 (present: $3)"; else ok "$1"; fi; }
-MUT_LIB="$ROOT/core/fixtures/lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
-. "$MUT_LIB"
 echo "party-wave-barrier:"
 
 # --- seeds ---------------------------------------------------------------------------------------
@@ -198,10 +101,10 @@ n="$(grep -c 'task-notification>' "$T"/*.jsonl | grep -vc ':0$')" || n=0
 eq "seeds: no seed carries the envelope tag" "$n" 0
 n="$(grep -c '<task-id>' "$T/a.jsonl")" || n=0
 [ "$n" -gt 0 ] && ok "seeds control: (a) carries <task-id> children ($n)" || bad "seeds control: (a) carries no <task-id>"
-# (b') refill with an env cap written only as assistant PROSE (M5's subject); its real cap line is 2.
+# (b') refill with an env cap written only as assistant PROSE; its real cap line is 2.
 sed 's|"text":"The other three seats|"text":"CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=42\\nThe other three seats|' "$T/b.jsonl" > "$T/bprose.jsonl"
 cmp -s "$T/b.jsonl" "$T/bprose.jsonl" && { echo "FIXTURE ERROR: seed (b') did not apply" >&2; exit 2; }
-# (c') (c) with an env line of 4 ahead of it (M14's subject): rejection 2 and env 4 disagree.
+# (c') (c) with an env line of 4 ahead of it: rejection 2 and env 4 disagree.
 bash "$DET" --seed a "$T/a-env.jsonl" || exit 2
 head -n 2 "$T/a-env.jsonl" > "$T/cenv.jsonl" && cat "$T/c.jsonl" >> "$T/cenv.jsonl" || exit 2
 grep -qF 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=4"' "$T/cenv.jsonl" || { echo "FIXTURE ERROR: seed (c') carries no env line of 4" >&2; exit 2; }
@@ -232,10 +135,10 @@ cmp -s "$T/q.jsonl" "$T/qmeta.jsonl" && { echo "FIXTURE ERROR: seed (q') did not
 UC="$T/u/subagents/agent-ac01.jsonl"
 [ -s "$UC" ] && [ -s "$T/v/subagents/agent-ac01.jsonl" ] && [ -s "$T/x/subagents/agent-ac01.jsonl" ] && [ -s "$T/y/subagents/agent-ac01.jsonl" ] || { echo "FIXTURE ERROR: a delegated seed wrote no coordinator file" >&2; exit 2; }
 [ -e "$T/w/subagents/agent-ac01.jsonl" ] && { echo "FIXTURE ERROR: seed (w) wrote a coordinator file" >&2; exit 2; }
-# MH's subject: every record of the followed file is a sidechain record, so a kept filter drops all of it.
+# Every record of the followed file is a sidechain record, so a kept filter drops all of it.
 n1="$(grep -c . "$UC")" || n1=0; n2="$(grep -c '^{"isSidechain":true,' "$UC")" || n2=0
 [ "$n1" -gt 0 ] && [ "$n1" = "$n2" ] && ok "seeds: every one of (u)'s $n1 coordinator records is isSidechain:true" || bad "seeds: (u)'s coordinator records are not all isSidechain:true ($n2 of $n1)"
-# MI's subject: the coordinator carries no cap of its own and the lead carries the env line, so the
+# The coordinator carries no cap of its own and the lead carries the env line, so the
 # inherited cap is the only one (u judged against UNKNOWN-CAP differs).
 n1="$(grep -c -e MAX_CONCURRENT -e 'subagents at once' "$UC")" || n1=0
 n2="$(grep -c 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=4"' "$T/u.jsonl")" || n2=0
@@ -280,7 +183,7 @@ awk '/"tool_use_id":"tw1"/ { held = $0; next } { print } held != "" && /"type":"
 n1="$(grep -n '"type":"attachment"' "$T/vgin/subagents/agent-ac01.jsonl" | grep aa01 | cut -d: -f1)"; n2="$(grep -n '"tool_use_id":"tw1"' "$T/vgin/subagents/agent-ac01.jsonl" | cut -d: -f1)"
 [ -n "$n1" ] && [ -n "$n2" ] && [ "$n1" -lt "$n2" ] || { echo "FIXTURE ERROR: seed vgin does not write the delivery before the wait's result ($n1/$n2)" >&2; exit 2; }
 
-# ADET is the detector the arms below drive: BASE_DET live, a mutant's copy when scored.
+# ADET is the detector the arms below drive: BASE_DET.
 # R_OUT, R_ERR, R_RC: run <detector> <args...>
 run() { local d="$1"; shift; R_OUT="$(bash "$d" "$@" 2>"$WORK/err")"; R_RC=$?; R_ERR="$(cat "$WORK/err")"; }
 nfind() { local n; n="$(grep -c '^FINDING ' <<<"$R_OUT")" || n=0; printf '%s' "$n"; }
@@ -302,12 +205,12 @@ n1="$(grep -cvxFf "$DET" "$BASE_DET")" || n1=0
 n2="$(grep -cvxFf "$BASE_DET" "$DET")" || n2=0
 eq "base copy differs from the shipped detector by exactly one line (copy side, shipped side)" "$n1/$n2" "1/1"
 
-# Control: the SHIPPED detector's self-probe, end to end. Run once; it is the only per-push self-probe
-# replay besides the two below.
+# Control: the SHIPPED detector's self-probe, end to end. Run once; with the traced two-transcript call below it is
+# the only self-probe replay.
 PROBE_OK='self-probe: ok (25 cases)'
 run "$DET" "$T/a.jsonl"
 if ! grep -qF "$PROBE_OK" <<<"$R_ERR"; then
-  echo "FIXTURE BROKEN: the unmutated detector's self-probe did not pass; no verdict below would mean anything" >&2
+  echo "FIXTURE BROKEN: the shipped detector's self-probe did not pass; no verdict below would mean anything" >&2
   printf '%s\n' "$R_ERR" | head -10 >&2; exit 2
 fi
 eq "control: the shipped detector with its self-probe exits 1 on (a)" "$R_RC" 1
@@ -327,7 +230,7 @@ eq  "baseline: the same over a traced two-transcript list (stdout)" "$R_OUT" "$S
 eq  "baseline: the same over a traced two-transcript list (stderr)" "$R_ERR" "$S_ERR"
 
 # --- base arms -----------------------------------------------------------------------------------
-# Every arm is a function over the global ADET, so the live pass and a mutant score the same code.
+# Every arm is a function over the global ADET, the base copy of the detector.
 arm_a() {
   run "$ADET" "$T/a.jsonl"
   eq  "a: an exit answered by --status only exits 1" "$R_RC" 1
@@ -559,27 +462,12 @@ arm_refuse_emptyfile() {
   eq  "refuse: an empty transcript beside a clean one exits 2, never 0" "$R_RC" 2
   has "refuse: scanned is counted short of given" "$R_ERR" "given=2 scanned=1"
 }
-# Arm ids as the header spells them; an id's function is arm_<id with - as _>.
 ARMS="a b c cenv d dcap e f g h i j k l m n o p q qmeta r s t u v w x y binsleep bashc stat2 ifw untilw whilesl subw subsl stsub stpwd ifpg datesub mark vmark vgin rem remseat adv deliv gp cross bprose set refuse-empty refuse-unread refuse-emptyfile"
 armfn() { printf 'arm_%s' "${1//-/_}"; }
-# armrc <arm> <detector>: 0 when the arm passes against that detector. A subshell, so FAILS is untouched.
-armrc() { ( ADET="$2"; FAILS=0; "$(armfn "$1")" >/dev/null 2>&1; [ "$FAILS" -eq 0 ] ); }
-# The live pass over the SHIPPED subject's base copy: every arm, every assertion. B_<arm>=1 when it passed.
-BASE_PASS=""
-base_missing() { # base_missing <arm>... -> the arms that did not pass in the live pass
-  local x
-  for x in "$@"; do
-    case " $BASE_PASS " in
-      *" $x "*) : ;;
-      *) printf '%s ' "$x" ;;
-    esac
-  done
-}
+# The live pass over the SHIPPED subject's base copy: every arm, every assertion.
 for a in $ARMS; do
-  f0="$FAILS"; ADET="$BASE_DET"; "$(armfn "$a")"
-  if [ "$FAILS" -eq "$f0" ]; then BASE_PASS="$(printf '%s %s' "$BASE_PASS" "$a")"; fi
+  ADET="$BASE_DET"; "$(armfn "$a")"
 done
-ADET="$BASE_DET"
 
 # --- the BL-695 receipt ---------------------------------------------------------------------------
 # receipt-bl695.sh drives the SHIPPED detector (passed, so the one this fixture resolved is the one
@@ -598,162 +486,6 @@ else
   bad "BL-695 receipt: exit $r695_rc with $r695_pass of 5 CELL PASS lines: $(cat "$WORK/r695.out" "$WORK/r695.err" | head -c 600 | tr '\n' ' ')"
 fi
 
-# --- mutants -------------------------------------------------------------------------------------
-mkdir -p "$WORK/mut"
-# mut <name> [<count> <old> <new>]... -> prints the mutant path; each <old> must occur exactly <count> times.
-mut() {
-  local name="$1" dst c; shift
-  dst="$WORK/mut/$name.sh"; cp "$DET" "$dst" || return 1
-  while [ $# -ge 3 ]; do
-    c="$(MO="$2" MN="$3" awk 'BEGIN { o = ENVIRON["MO"]; n = ENVIRON["MN"] }
-      { s = $0; out = ""; while ((i = index(s, o)) > 0) { out = out substr(s, 1, i - 1) n; s = substr(s, i + length(o)); k++ } print out s }
-      END { print k + 0 > "/dev/stderr" }' "$dst" 2>&1 >"$dst.t")" || { echo "DID NOT APPLY: $name (awk failed)" >&2; return 1; }
-    [ "$c" = "$1" ] || { echo "DID NOT APPLY: $name (anchor matched $c times, want $1): $2" >&2; return 1; }
-    cat "$dst.t" > "$dst"; rm -f "$dst.t"; shift 3
-  done
-  cmp -s "$DET" "$dst" && { echo "DID NOT APPLY: $name (copy unchanged)" >&2; return 1; }
-  printf '%s' "$dst"
-}
-NP_O='wave_selfprobe || exit 2'; NP_N=': wave_selfprobe skipped'
-
-# score <id> "<decides arms>" "<twin arms or ->" <mut args...>
-# Per push: the mutant (self-probe call removed) is driven through its deciding arm(s), which must FAIL,
-# and its twins, which must HOLD; the kill goes through mutant_killed behind the same-run base-pass flags
-# of exactly those arms. With --matrix: every arm, plus the `probe` cell (the mutant with its self-probe
-# left in), one MATRIX line per cell.
-score() {
-  local id="$1" dec="$2" tw="$3" P Pp a c nobase good=1 want
-  shift 3
-  if ! P="$(mut "$id" "$@" 1 "$NP_O" "$NP_N")"; then bad "$id: DID NOT APPLY"; return; fi
-  if [ "$MATRIX" = 1 ]; then
-    for a in $ARMS; do
-      if armrc "$a" "$P"; then c=ok; else c=FAIL; fi
-      printf 'MATRIX\t%s\t%s\t%s\n' "$id" "$a" "$c"; MATRIX_CELLS=$((MATRIX_CELLS + 1))
-    done
-    if Pp="$(mut "$id-probe" "$@")"; then
-      run "$Pp" "$T/a.jsonl"
-      if [ "$R_RC" = 2 ] && grep -qF 'self-probe FAILED' <<<"$R_ERR"; then c=FAIL; else c=ok; fi
-      printf 'MATRIX\t%s\t%s\t%s\n' "$id" probe "$c"; MATRIX_CELLS=$((MATRIX_CELLS + 1))
-    else bad "$id-probe: DID NOT APPLY"; fi
-    return
-  fi
-  [ "$tw" = "-" ] && tw=""
-  nobase="$(base_missing $dec $tw)"
-  for a in $dec; do armrc "$a" "$P" && good=0; done
-  for a in $tw; do armrc "$a" "$P" || good=0; done
-  if [ "$good" = 1 ]; then
-    mutant_killed "$([ "$nobase" = "" ] && echo 1 || echo 0)" "$id" "$id killed: arm(s) $dec FAIL under it and twin(s) ${tw:--} hold"
-  else
-    bad "$id SURVIVED or is entangled: arm(s) $dec must FAIL and twin(s) ${tw:--} must HOLD"
-  fi
-}
-score M1 m l \
-  1 '    else if (grun[i] >= cap) v = "SLOTS-FULL"' '    else if (0) v = "SLOTS-FULL"'
-score M2 b a \
-  1 '  for (i = 1; i <= gn; i++) if (gr[i] == r) gans[i] = 1' '  gans[0] = 0'
-score M3 d dcap \
-  1 '    else if (cap == "") { v = "NO-CAP"; if (!snocap[r]) { snts[r] = gts[i]; snrun[r] = grun[i] } snocap[r]++ }' \
-    '    else if (cap == "") { v = "UNREFILLED"; if (!sunref[r]) { suts[r] = gts[i]; suep[r] = gep[i]; surun[r] = grun[i] } sunref[r]++ }'
-score M4 refuse-empty refuse-unread \
-  1 '[ "${#FILES[@]}" -gt 0 ] || usage "no transcript given"' '[ "${#FILES[@]}" -gt 0 ] || exit 0'
-score M5 bprose b \
-  1 '       | if (.name == "Agent" or .name == "Task") then' '       | if .type == "text" then (["R", $e, $ts, "-", "", "ok", "", ([(.text // "") | split("\n")[] | select(test("^CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=[0-9]+$"))] | .[0] // "" | sub("^[^=]*="; "")), "", "fg", ""])
-         elif (.name == "Agent" or .name == "Task") then' \
-  1 '       | select(type == "object" and .type == "tool_use")' '       | select(type == "object" and (.type == "tool_use" or .type == "text"))'
-score M6 h i \
-  1 '  elif .type == "attachment" and akind == "task-notification" then' '  elif false then'
-score M7 a n \
-  1 '(if nkind == "task-notification" then ($c | exitrec("d"; $e; $ts)) else empty end)' 'empty'
-score M8 g l \
-  1 'if ($4 == "d" && !(id in adel)) adel[id] = FNR' 'if (!(id in adel)) adel[id] = FNR'
-score M9 k l \
-  1 '$1 == "M" { if (follow) close_seen($4); for (i = 1; i <= gn; i++) gseen[i] = 1; next }' '$1 == "M" { if (follow) close_seen($4); close_seen(""); for (i = 1; i <= gn; i++) gseen[i] = 1; next }'
-score M10 c b \
-  1 '  for (i = 1; i <= gn; i++) if (gr[i] == r) gans[i] = 1' '  if (ast[id] != "rej" && ast[id] != "err") for (i = 1; i <= gn; i++) if (gr[i] == r) gans[i] = 1'
-score M11 n m \
-  1 '  if ((r SUBSEP bn) in mem) next' '  mem[0] = 0'
-score M12 f g \
-  1 'v = $8; if (v == "" && ($5 in envcmd)) v = $11' 'v = $8'
-score M13 e g \
-  1 '  close_seen(""); for (i = 1; i <= gn; i++) gseen[i] = 1; close_seen("")' \
-    '  close_seen(""); for (i = 1; i <= gn; i++) gseen[i] = 1; close_seen(""); for (r in sunref) if (sunref[r] > 0) { nfind++; printf "FINDING %s round=%s batch=end\n", name, r }'
-score M14 cenv c \
-  1 '  else if (rejmin != "") {' '  else if (rejmin != "" && envmin == "") {'
-score M15 d dcap \
-  1 'read -r _ ur un <<<"$line"; echo' 'read -r _ ur un <<<"$line"; : echo'
-score MB p o \
-  1 'if (ast[id] == "rej" || ast[id] == "err") continue' 'if (ast[id] == "err") continue'
-score ME s p \
-  1 '$7 + 0 < rejmin + 0' '$7 + 0 > rejmin + 0'
-score MF r a \
-  1 '| select(type == "object" and ($side == 1 or .isSidechain != true))' '| select(type == "object")'
-score MD o p \
-  1 '"is_error": ?true' 'Concurrent subagent limit'
-score MC q qmeta \
-  1 '(if .isCompactSummary != true then ["T", $e, $ts] else empty end),' '["T", $e, $ts],'
-score MK t remseat \
-  1 '      mp = memberpath($7, $6)' '      mp = $7; sub(/ .*/, "", mp)'
-score MX cross remseat \
-  1 '      mp = memberpath($7, $6)' '      mp = $7; sub(/ .*/, "", mp); if (!seatmember(mp, $6)) mp = ""'
-score MG u r \
-  1 '  for id in $(sed -n '"'"'s/^DELEG //p'"'"' <<<"$out"); do' '  for id in ; do'
-score MH u w \
-  1 'jq -R -r --argjson side "$fo"' 'jq -R -r --argjson side 0'
-score MI u v \
-  1 '  else if (leadcap != "") {' '  else if (0) {'
-score MW x y \
-  1 '$1 == "W" { if (follow) {' '$1 == "W" { if (0) {'
-score MY k l \
-  1 '$1 == "M" { if (follow) close_seen($4);' '$1 == "M" { close_seen($4);' \
-  1 '$1 == "W" { if (follow) {' '$1 == "W" { if (1) {' \
-  1 '$1 == "R" && follow && wopen' '$1 == "R" && wopen'
-score MN y x \
-  1 '              and ((.input.command // "") | tostring | iswait) then' '              then'
-score MS u v \
-  1 '  return n + selfslot' '  return n'
-score MSEG stat2 binsleep \
-  1 'def wsegs: [splits("\n|;|&&|\\|\\||\\|") | (., ([splits("\\$\\(")] | .[1:][]))];' 'def wsegs: [.];'
-score MMODE vmark stat2 \
-  1 'and (bmode | not)' 'and true'
-score MSLP binsleep bashc \
-  1 '(cmdw | test("(^|/)sleep$"))' '(cmdw | test("^sleep$"))'
-score MLAST vgin v \
-  1 '{ for (i = gn; i >= 1; i--) if (gin[i]) { gin[i] = 0; gseen[i] = 0; gwait[i] = ""; break }; close_seen("", 1);' '{ close_seen("", 1);'
-score MIF ifw ifpg \
-  1 '|elif|if|' '|elif|'
-score MUN untilw ifw \
-  1 '|until|' '|'
-score MWH whilesl ifw \
-  1 '|while|' '|'
-score MSUBW subw subsl \
-  1 '[splits("\\$\\(")]' '[splits("\\$\\((?=sleep)")]'
-score MSUBS subsl subw \
-  1 '[splits("\\$\\(")]' '[splits("\\$\\(scripts")]'
-score MWHOLE stpwd stsub \
-  1 'def wsegs: [splits("\n|;|&&|\\|\\||\\|") | (., ([splits("\\$\\(")] | .[1:][]))];' 'def wsegs: [splits("\n|;|&&|\\|\\||\\||\\$\\(")];'
-score MBR stsub datesub \
-  1 '|=|\\)|$)' '|=|$)'
-score MIFANY ifpg ifw \
-  1 'def iswait: wsegs | any(.[]; ' 'def iswait: wsegs | any(.[]; test("^\\s*if\\s") or '
-score MSUBANY datesub subw \
-  1 'def iswait: wsegs | any(.[]; ' 'def iswait: wsegs | any(.[]; test("^\\s*[A-Za-z_]+=\\$\\(") or '
-
-# M1's self-probe refusal, end to end, once per push: the probe is the shipped detector's own defence and
-# one representative proves it still fires. The other mutants' probe cells are in the matrix.
-if [ "$MATRIX" = 0 ]; then
-  if P="$(mut M1-probe 1 '    else if (grun[i] >= cap) v = "SLOTS-FULL"' '    else if (0) v = "SLOTS-FULL"')"; then
-    run "$P" "$T/a.jsonl"
-    eq  "M1: the self-probe refuses the mutant (exit 2)" "$R_RC" 2
-    has "M1: the self-probe names case m" "$R_ERR" "self-probe FAILED: case m"
-  else bad "M1-probe: DID NOT APPLY"; fi
-fi
-
 echo
-if [ "$MATRIX" = 1 ]; then
-  echo "MATRIX cells=$MATRIX_CELLS"
-  [ "$MATRIX_CELLS" -gt 0 ] || bad "matrix mode measured no cell"
-else
-  eq "a plain run executed no matrix-only cell" "$MATRIX_CELLS" 0
-fi
 if [ "$FAILS" -eq 0 ]; then echo "party-wave-barrier: PASS"; exit 0; fi
 echo "party-wave-barrier: $FAILS assertion(s) FAILED"; exit 1

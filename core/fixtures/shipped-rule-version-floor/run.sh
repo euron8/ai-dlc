@@ -30,15 +30,13 @@
 #   H  a full install -> uninstall round trip, in a fresh world and in one seeded with a
 #      consumer-authored hook, schema, agent, rule and settings.json, leaves only what the
 #      consumer wrote: no ai-dlc hook, schema, driver, rule, stamp or generated agent, no
-#      ai-dlc registration in settings.json, and the consumer's own entries intact. A
-#      committed mutant drops the hook loop and must fail H1 alone.
+#      ai-dlc registration in settings.json, and the consumer's own entries intact.
 #   I  a shipping fixture carrying a SUBDIRECTORY installs whole (BL-892): install exits 0,
 #      the nested executable lands executable OVER a stale 0644 copy, the nested data file
 #      lands non-executable, and uninstall removes them. Driven in a copy of the distribution
 #      whose only fixture is lib/ plus a seeded sub/, so arm I's verdict rests on that seed
 #      alone and not on the shape of every other fixture the sandbox carries (BL-871 measured
-#      that shape deciding the main install). A committed mutant restores the flat
-#      `cp <fixture>/*` and must fail I.
+#      that shape deciding the main install).
 #      `run.sh --nested-only` runs arm I alone; it is BL-892's receipt.
 #
 # WHY E IS NOT PARANOIA. An unresolvable version is the same epistemic state as one below
@@ -102,8 +100,7 @@ nested_dist() {
 # ARM I ALSO HOLDS, beyond the header: only TRACKED files ship (an ignored and an untracked file
 # beside the nested pair must not land), a fixture holding only a top-level dotfile installs with
 # rc 0, and a distribution copy that is not its own git work tree makes install REFUSE before it
-# writes anything. A second committed mutant restores the directory copy `cp -pR <fixture>/*`
-# and must fail the not-landed and dotfile-only sub-arms and nothing else.
+# writes anything.
 # nested_index <dir> -- make the copy a git work tree with everything above in its INDEX (no commit:
 # ls-files reads the index, and a commit would need the operator's identity and signing config), then
 # seed one IGNORED file (by .git/info/exclude, not a .gitignore, which would itself be a stray dotfile)
@@ -296,8 +293,7 @@ fi
 
 # --- H: a full install -> uninstall round trip leaves ONLY consumer-authored content ------
 # The expected-gone set is DERIVED from core/, never listed here, so a hook, schema, rule or
-# driver added to core later is covered the moment it ships. Each property is its own arm so
-# the mutant below can fail exactly one of them.
+# driver added to core later is covered the moment it ships. Each property is its own arm.
 EXP_HOOKS=0; for f in "$ROOT/core/hooks/"ai-dlc-*.sh; do [ -f "$f" ] && EXP_HOOKS=$((EXP_HOOKS+1)); done
 [ "$EXP_HOOKS" -gt 0 ] || { echo "run.sh: core/hooks/ai-dlc-*.sh matched nothing -- H cannot assert" >&2; exit 2; }
 
@@ -402,9 +398,6 @@ printf '%s\n' '{"edited":"by the consumer"}' > "$hs/.claude/schemas/audit-anchor
 jq -e '.aiDlcRoles.dev.model == "opus" and .aiDlcRoles.pm.model == "sonnet" and has("aiDlcModels")' \
   "$hs/.claude/settings.json" >/dev/null 2>&1 \
   || { echo "run.sh: seeded install did not keep the tuned dev role beside untuned template roles -- H7/H8 cannot discriminate" >&2; exit 2; }
-# Copies of the installed tree for the mutants and their control, before anything uninstalls it.
-hc="$TMP/seeded-control"; hm="$TMP/seeded-mutant"; hm2="$TMP/seeded-mutant-roles"
-cp -R "$hs" "$hc"; cp -R "$hs" "$hm"; cp -R "$hs" "$hm2"; cp -R "$hs" "$hc.pre"
 
 bash "$UNINSTALL" "$hs" --force > "$TMP/uninstall-h.log" 2>&1
 grep -q 'aiDlcRoles.dev' "$TMP/uninstall-h.log" && grep -q 'aiDlcRoles.qa' "$TMP/uninstall-h.log" \
@@ -416,108 +409,9 @@ h_seed="$(h_check "$hs" seeded)"
 if [ -z "$h_seed" ]; then note "ok    H seeded install -> uninstall removed every AI/DLC file and registration, kept every consumer-authored one"
 else note "FAIL  H seeded-world arms failed: $(echo $h_seed)"; rc=1; fi
 
-# --- H mutant: drop the hook prefix loop; ONLY H1 may fail --------------------------------
-# uninstall.sh resolves core/ and templates/ beside itself, so the mutant runs from a copy of
-# the distribution shape it reads, and an UNMUTATED control from the same copy must pass
-# clean first -- otherwise a partial copy scores as a kill.
-MD="$TMP/mutdist"; mkdir -p "$MD/scripts" "$MD/core/scripts" "$MD/core/skills/ai-dlc-update/reconcile" "$MD/templates"
-cp -R "$ROOT/core/rules" "$ROOT/core/schemas" "$ROOT/core/session-driver" "$MD/core/"
-cp "$ROOT/core/scripts/render-agent-definitions.sh" "$MD/core/scripts/"
-cp "$ROOT/core/skills/ai-dlc-update/reconcile/settings-merge.sh" "$MD/core/skills/ai-dlc-update/reconcile/"
-cp "$ROOT/templates/settings.json.template" "$MD/templates/"
-cp "$UNINSTALL" "$MD/scripts/uninstall.sh"
-bash "$MD/scripts/uninstall.sh" "$hc" --force > "$TMP/uninstall-hc.log" 2>&1
-h_ctl="$(h_check "$hc" seeded)"
-if [ -n "$h_ctl" ] || ! grep -q 'Un-merged AI/DLC hooks' "$TMP/uninstall-hc.log"; then
-  note "FAIL  H mutant control: the unmutated uninstall run from the copied tree failed ($(echo $h_ctl)) -- the mutant verdict below would mean nothing"; rc=1
-else
-  # The loop's APPEND is neutralised rather than the loop deleted: deleting it leaves an empty
-  # `then ... fi`, a syntax error, and a script that never ran fails every arm at once.
-  sed 's|^    FILES_TO_REMOVE+=(".claude/hooks/$(basename "$hook_file")")$|    :|' \
-    "$UNINSTALL" > "$MD/scripts/uninstall-mut.sh"
-  if cmp -s "$UNINSTALL" "$MD/scripts/uninstall-mut.sh"; then
-    note "FAIL  H mutant DID NOT APPLY: the hook-loop anchor matched nothing"; rc=1
-  else
-    bash "$MD/scripts/uninstall-mut.sh" "$hm" --force > "$TMP/uninstall-hm.log" 2>&1
-    h_mut="$(h_check "$hm" seeded | sort -u | tr '\n' ' ')"
-    if ! grep -q 'Uninstall complete' "$TMP/uninstall-hm.log"; then
-      note "FAIL  H mutant did not run to completion, so its verdict says nothing about the hook loop"; rc=1
-    elif [ "$h_mut" = "H1 " ]; then note "ok    H mutant without the hook loop fails H1 and only H1"
-    else note "FAIL  H mutant without the hook loop scored '$h_mut', expected exactly 'H1'"; rc=1; fi
-  fi
-  # Second mutant: aiDlcModels/aiDlcRoles removed UNCONDITIONALLY, tuned or not. ONLY H7 may fail.
-  sed 's|^            reduce ("aiDlcModels", "aiDlcRoles") as \$ns (\.;$|            del(.aiDlcModels, .aiDlcRoles) \| reduce ("aiDlcModels", "aiDlcRoles") as $ns (.;|' \
-    "$UNINSTALL" > "$MD/scripts/uninstall-mut2.sh"
-  if cmp -s "$UNINSTALL" "$MD/scripts/uninstall-mut2.sh"; then
-    note "FAIL  H mutant 2 DID NOT APPLY: the aiDlc* un-merge anchor matched nothing"; rc=1
-  else
-    bash "$MD/scripts/uninstall-mut2.sh" "$hm2" --force > "$TMP/uninstall-hm2.log" 2>&1
-    h_mut2="$(h_check "$hm2" seeded | sort -u | tr '\n' ' ')"
-    if ! grep -q 'Uninstall complete' "$TMP/uninstall-hm2.log"; then
-      note "FAIL  H mutant 2 did not run to completion, so its verdict says nothing about the aiDlc* un-merge"; rc=1
-    elif [ "$h_mut2" = "H7 " ]; then note "ok    H mutant removing aiDlcModels/aiDlcRoles unconditionally fails H7 and only H7"
-    else note "FAIL  H mutant removing aiDlcModels/aiDlcRoles unconditionally scored '$h_mut2', expected exactly 'H7'"; rc=1; fi
-  fi
-  # Third mutant: remove by NAME alone, as the first cut of BL-002 did. ONLY H9 may fail.
-  hm3="$TMP/seeded-mutant-name"; cp -R "$hc.pre" "$hm3" 2>/dev/null || true
-  sed 's|^    if cmp -s "$core_file" "$PROJECT_ROOT/.claude/$sub/$name"; then$|    if true; then|' \
-    "$UNINSTALL" > "$MD/scripts/uninstall-mut3.sh"
-  if cmp -s "$UNINSTALL" "$MD/scripts/uninstall-mut3.sh"; then
-    note "FAIL  H mutant 3 DID NOT APPLY: the byte-compare anchor matched nothing"; rc=1
-  elif [ ! -d "$hm3" ]; then
-    note "FAIL  H mutant 3 has no pre-uninstall copy of the seeded world"; rc=1
-  else
-    bash "$MD/scripts/uninstall-mut3.sh" "$hm3" --force > "$TMP/uninstall-hm3.log" 2>&1
-    h_mut3="$(h_check "$hm3" seeded | sort -u | tr '\n' ' ')"
-    if ! grep -q 'Uninstall complete' "$TMP/uninstall-hm3.log"; then
-      note "FAIL  H mutant 3 did not run to completion, so its verdict says nothing about the byte compare"; rc=1
-    elif [ "$h_mut3" = "H9 " ]; then note "ok    H mutant removing same-named files by name alone fails H9 and only H9"
-    else note "FAIL  H mutant removing same-named files by name alone scored '$h_mut3', expected exactly 'H9'"; rc=1; fi
-  fi
-fi
 
-# --- I, then its mutant: the flat `cp <fixture>/*` restored ---------------------------------
-# Anchored on the two stable lines that BRACKET the copy (the per-fixture mkdir and the *.sh
-# chmod), never on the copy line itself, so a second correct spelling of the copy still mutates.
+# --- I --------------------------------------------------------------------------------------
 arm_i
-MI="$TMP/nested-dist/scripts/install-mut.sh"
-awk '
-  /^    mkdir -p "\$PROJECT_ROOT\/tests\/fixtures\/\$fixture_dir"$/ {
-    print; print "    cp \"$SCRIPT_DIR/../core/fixtures/$fixture_dir/\"* \"$PROJECT_ROOT/tests/fixtures/$fixture_dir/\""; skip = 1; next }
-  /^    chmod \+x "\$PROJECT_ROOT\/tests\/fixtures\/\$fixture_dir\/"\*\.sh / { skip = 0 }
-  !skip { print }
-' "$INSTALL" > "$MI"
-if cmp -s "$INSTALL" "$MI" || ! grep -q '^    chmod +x "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"\*\.sh ' "$MI"; then
-  note "FAIL  I mutant DID NOT APPLY: the mkdir/chmod brackets around the fixture copy matched nothing"; rc=1
-else
-  tmi="$(mktemp -d "$TMP/nested-mut.XXXXXX")"; nested_target "$tmi"
-  r_mut="$(nested_check "$MI" "$tmi" "$TMP/install-imut.log")"
-  if [ -z "$r_mut" ]; then note "FAIL  I mutant restoring the flat cp <fixture>/* SURVIVED -- arm I cannot see a non-recursive copy"; rc=1
-  else note "ok    I mutant restoring the flat cp <fixture>/* fails I ($(echo $r_mut))"; fi
-fi
-# Mutant 2: the U8 directory copy `cp -pR <fixture>/*` restored between the same brackets. It
-# installs the nested pair whole, so it must fail the not-landed sub-arms and ONLY those.
-MI2="$TMP/nested-dist/scripts/install-mut2.sh"
-awk '
-  /^    mkdir -p "\$PROJECT_ROOT\/tests\/fixtures\/\$fixture_dir"$/ {
-    print; print "    cp -pR \"$SCRIPT_DIR/../core/fixtures/$fixture_dir/\"* \"$PROJECT_ROOT/tests/fixtures/$fixture_dir/\""; skip = 1; next }
-  /^    chmod \+x "\$PROJECT_ROOT\/tests\/fixtures\/\$fixture_dir\/"\*\.sh / { skip = 0 }
-  !skip { print }
-' "$INSTALL" > "$MI2"
-if cmp -s "$INSTALL" "$MI2" || ! grep -q '^    cp -pR "$SCRIPT_DIR' "$MI2"; then
-  note "FAIL  I mutant 2 DID NOT APPLY: the mkdir/chmod brackets around the fixture copy matched nothing"; rc=1
-else
-  tmi2="$(mktemp -d "$TMP/nested-mut2.XXXXXX")"; nested_target "$tmi2"
-  r_mut2="$(nested_check "$MI2" "$tmi2" "$TMP/install-imut2.log" | tr '\n' ' ')"
-  if [ "$r_mut2" = "I-ignored-landed I-untracked-landed " ]; then
-    note "ok    I mutant 2 restoring the directory copy cp -pR <fixture>/* fails the not-landed sub-arms and only those"
-  else note "FAIL  I mutant 2 restoring cp -pR <fixture>/* scored '$r_mut2', expected exactly 'I-ignored-landed I-untracked-landed'"; rc=1; fi
-  cp "$MI2" "$TMP/nested-dot/scripts/install-mut2.sh"
-  r_mut2d="$(dotonly_check "$TMP/nested-dot/scripts/install-mut2.sh" "$TMP/install-imut2-dot.log" | tr '\n' ' ')"
-  if [ "$r_mut2d" = "I-dotonly-rc " ]; then
-    note "ok    I mutant 2 restoring cp -pR <fixture>/* aborts the install on a dotfile-only fixture (I-dotonly-rc only)"
-  else note "FAIL  I mutant 2 on the dotfile-only world scored '$r_mut2d', expected exactly 'I-dotonly-rc'"; rc=1; fi
-fi
 
 [ "$rc" -eq 0 ] && note "PASS  shipped-rule-version-floor -- detector correct on both sides of the boundary, no copy-time gate, uninstall scoped by prefix"
 exit "$rc"

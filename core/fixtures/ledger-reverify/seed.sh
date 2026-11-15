@@ -11,7 +11,7 @@
 #
 # A and B carry IDENTICAL verify directives except the substring; the only reason they
 # classify differently is what `theirs` holds. A closer that reads `base` (not `theirs`)
-# sees neither marker and calls BOTH still-live — which is the mutation the fixture catches.
+# sees neither marker and calls BOTH still-live — which is the defect the fixture catches.
 #
 # Usage: seed.sh   -> prints "<dist> <base> <consumer> <theirs>" on one line.
 set -eu
@@ -49,7 +49,7 @@ printf '#!/bin/sh\necho thing\n' > "$DIST/core/skills/ai-dlc/validate-thing.sh"
 # is what makes that difference testable. On the reference consumer every measured absorption
 # predated the pull's own base, so a bounded search fires on exactly one pull and then goes
 # silent forever if the operator missed it. Placing the naming commit before base means a
-# mutant that re-bounds the search loses the row, and nothing else changes.
+# search re-bounded to BASE..THEIRS loses the row, and nothing else changes.
 #
 # The message also names Entry A's PROSE label verbatim. That is the id-shape guard's control:
 # a label is whatever precedes the first em dash, and for a bullet with no em dash that is its
@@ -90,9 +90,9 @@ git -C "$DIST" commit -q -m 'feat(v0.099.0): land two consumer-filed entries' \
 #            fires on the right commits.
 #   PC-S905  ONE naming commit -- the single-commit branch, which the list must leave alone.
 #
-# ALL OF THEM SIT BEFORE base, for the same reason the commit above does: the bounded-search
-# mutant must lose every named row together, and a naming commit inside `BASE..THEIRS` would
-# survive it and make that arm report a partial revert.
+# ALL OF THEM SIT BEFORE base, for the same reason the commit above does: a search bounded to
+# `BASE..THEIRS` must lose every named row together, and a naming commit inside that range would
+# survive the bound.
 #
 # EACH ABSORBING COMMIT TOUCHES A FILE OF ITS OWN. "Which commit did the work" is then derivable
 # from the repo, so the fixture's precondition arm does not have to read it off the row it is
@@ -555,8 +555,8 @@ verify: theirs_lacks core/scripts/s811-subject.sh "MARKER_A"
 <!-- Each PC-S904..S906 and PC-S950..S959 entry anchors its receipt on a file its OWN naming commit
 (or, for S954, its release span) touches. A naming set that reaches code and changes none of the
 entry's receipt paths reads NAMED-UPSTREAM-OFF-SUBJECT, so a receipt left on SKILL.md moves the
-plain-kind rows to that kind -- and the docs-only and cited-only entries too, under every mutant
-that lifts them back to the plain kind (reach-off, filter-off, reach-unfiltered, cited-fail-open).
+plain-kind rows to that kind -- and the docs-only and cited-only entries too, for any engine
+that lifts them back to the plain kind.
 The subject test reads the RESIDUE after the citation filter, so S958 anchors on the docs file its
 residue (the ordinary docs mention) touches, not on the core file its filtered-out form commit
 touches. Every substring stays MARKER_A, which none of those files carries, so each STILL-LIVE
@@ -763,7 +763,7 @@ the subject predicate does not read. -->
 - **Entry SH-DIST-BARE-CORE names a distribution path OUTSIDE a rev-spec.** `core/scripts/<x>` here
   is a `git diff` pathspec, so no rev-spec strip can remove it: only the whitelist's
   first-character test keeps it out. SH-DIST-PATH above lost that role once rev-specs were
-  stripped whole, which is why the anchoring mutant reads this entry.
+  stripped whole, which is why the prefix-anchoring arm reads this entry.
   verify: sh git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- core/scripts/validate-artifact-derivations.sh; exit 1
 
 ---
@@ -943,8 +943,8 @@ the subject predicate does not read. -->
   subject.
   <br>IT NAMES `$DIST` EXACTLY ONCE, and that is what makes it a near-miss rather than a second
   offender. Written `cd "$DIST" …; cat "$DIST/VERSION"` it carries a SECOND `$DIST` that the
-  refusal catches on its own merits, so a mutant widening the `cd` exemption would leave the
-  verdict unmoved and the arm would score a kill it did not earn — measured, exactly that, on
+  refusal catches on its own merits, so a widened `cd` exemption would leave the
+  verdict unmoved and the arm would pass without discriminating — measured, exactly that, on
   this battery's first cut. The read after the `cd` is therefore RELATIVE, which is also how the
   shape appears in the wild.
   verify: sh cd "$DIST" || exit 127; [ "$(cat VERSION)" = "0.103.0" ]

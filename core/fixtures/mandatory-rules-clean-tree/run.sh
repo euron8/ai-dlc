@@ -7,13 +7,7 @@
 # THE DEFECT THIS EXISTS TO CATCH. A clean-tree check that required retro-prereq (a
 # consumer-provided sibling core does not ship) would FAIL on every stock install — a gate
 # that can never pass. And a floor that never fails (does not check the required siblings)
-# would pass a broken install; the mutation control below pins it.
-#
-# The mutant by arm matrix, measured from one hermetic run (core/scripts/hermetic-run.sh with
-# AI_DLC_VERDICT_STORE set to a fresh mktemp dir). Arms: floor-present (section 1), sibling-missing
-# (section 2). The one mutant deletes the required validate-retro-evidence.sh sibling.
-# MUTANT-MATRIX required-sibling-missing decides=sibling-missing twins=- why=the mutation is one drive of the copied validator read by its one arm, so no other arm runs against it
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/mandatory-rules-clean-tree/run.sh --matrix
+# would pass a broken install; section 2 pins it (a missing required sibling FAILs).
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -32,8 +26,6 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_sibling_missing=0
 
 # Isolated SCRIPT_DIR: the real validator + sibling stubs (--check-clean-tree tests
 # existence only, never executes them). retro-prereq is deliberately absent.
@@ -50,24 +42,19 @@ echo "mandatory-rules-clean-tree"
 bash "$WORK/bin/validate-mandatory-rules.sh" --check-clean-tree >"$WORK/out.txt" 2>&1
 rc=$?
 if [ "$rc" = "0" ] && grep -q 'toolchain present' "$WORK/out.txt"; then
-  ok "PASSes with retro-evidence + cycle-commits present, retro-prereq absent (not part of the floor)"; B_sibling_missing=1
+  ok "PASSes with retro-evidence + cycle-commits present, retro-prereq absent (not part of the floor)"
 else
   bad "clean-tree did not PASS with the toolchain floor present (exit $rc)"; sed 's/^/        /' "$WORK/out.txt"
 fi
 
-# --- 2. MUTATION: a REQUIRED sibling missing -> FAIL --------------------------
+# --- 2. a REQUIRED sibling missing -> FAIL --------------------------
 rm -f "$WORK/bin/validate-retro-evidence.sh"
 bash "$WORK/bin/validate-mandatory-rules.sh" --check-clean-tree >"$WORK/out.txt" 2>&1
 rc=$?
 if [ "$rc" = "1" ] && grep -q 'toolchain incomplete' "$WORK/out.txt"; then
-  mutant_killed "$B_sibling_missing" required-sibling-missing "MUTATION: a missing required sibling FAILs (the floor is real, not vacuous)"
+  ok "a missing required sibling FAILs (the floor is real, not vacuous)"
 else
   bad "a missing required sibling did not FAIL (exit $rc)"; sed 's/^/        /' "$WORK/out.txt"
-fi
-# --matrix: one MATRIX row, read off the section 2 run its arm already scored.
-if [ "${1:-}" = "--matrix" ]; then
-  mx=no; [ "$rc" = "1" ] && grep -q 'toolchain incomplete' "$WORK/out.txt" && mx=yes
-  printf 'MATRIX %s decides=%s fires=%s twins=-\n' required-sibling-missing sibling-missing "$mx"
 fi
 
 echo

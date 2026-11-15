@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
-# remediator-shard-join/unit-reader-b.sh -- the reader-level cells of half B, asked IN PROCESS. Driven by run.sh,
-# which passes its own arguments through (--matrix prints this file's MATRIX rows; the header block is run.sh's).
+# remediator-shard-join/unit-reader-b.sh -- the reader-level cells of half B, asked IN PROCESS. Driven by run.sh;
+# the header block is run.sh's.
 #
-# Families: L1-L4 and HX, J, D, A, U1-U5, B2 and SJ0 (one subject world), PS5 PS6 PS9 PS12, SP1-SP11, AW, CP/CP2,
-# D5/D6 and DX1, H1/H2, UF/UFm, PLAIN-B. Each cell asserts the decision its end-to-end cell in run.sh asserted, through
+# Families: L1-L4, J, D, A, B2 and SJ0 (one subject world), PS5 PS6 PS9 PS12, SP1-SP11, AW, CP1/CP3/CP4, MKP,
+# D5/D6, H1/H2, UF1. Each cell asserts the decision its end-to-end cell in run.sh asserted, through
 # the SAME lib.sh predicate, unchanged. What changes is how a predicate's `bash <subject>` runs: the `bash` function
 # below catches the five subjects by path and runs each in a subshell of this process --
-#   the join (and any mutated copy)     join_main, the join sourced once here (a copy is sourced in its subshell)
-#   the remediation guard hook (+copy)  hook_pretool_head, the hook sourced in the subshell (its top level reads
+#   the join                            join_main, the join sourced once here
+#   the remediation guard hook         hook_pretool_head, the hook sourced in the subshell (its top level reads
 #                                       CLAUDE_PROJECT_DIR and stamps TIMESTAMP through `date`, so per call)
-#   the derivation-capture hook (+copy) the hook sourced in the subshell with no arguments, as its CLI has
+#   the derivation-capture hook         the hook sourced in the subshell with no arguments, as its CLI has
 #   validate-artifact-derivations.sh    sourced in the subshell with the CLI's arguments
 #   validate-adversarial-convergence.sh the same (H1/H2); it resolves its siblings from BASH_SOURCE, not $0
 # -- and every other program, and every program a subject itself starts, as a child, exactly as before. The subshell
@@ -27,15 +27,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # CLI-B cells keep ONE end-to-end pass and refusal per join mode this half owns (clause 6): UB_CLI=1 in front of
 # the same predicate runs every subject as a child.
 #
-# MUTANTS. Each mutant is a mutated copy in a copy of its program's directory, cmp -s guarded, and scores only the
-# cells its MUTANT-MATRIX row in run.sh names (the deciding cell and its twin), in process: a join copy is sourced
-# inside the subshell of each join call the owning predicate makes, a hook copy likewise.
-#
 # Exit: 0 every cell passed, 1 a cell failed, 2 the fixture could not run.
 set -u
 NAME="remediator-shard-join-reader-b"
-MATRIX=0
-[ "${1:-}" = --matrix ] && MATRIX=1
 UB_HERE="$(cd "$(dirname "$0")" && pwd)"
 [ -f "$UB_HERE/lib.sh" ] || { echo "FIXTURE BROKEN: lib.sh is absent beside $0; nothing was asserted" >&2; exit 2; }
 # shellcheck source=/dev/null
@@ -46,8 +40,6 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 . "$MUT_LIB"
 # each in-process pass of a subject below is logged by fx_inproc (lib/mutant.sh) under its root-relative path
 RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
-N_MROWS=0
-mrow() { [ "$MATRIX" = 1 ] || return 0; N_MROWS=$((N_MROWS + 1)); echo "  MATRIX $*"; }
 
 # ------------------------------------------------------------------------- the in-process route
 UB_V0=" $(compgen -v | tr '\n' ' ') "; UB_F0=" $(compgen -A function | tr '\n' ' ') "
@@ -77,7 +69,6 @@ bash() {
   if [ -n "${UB_IN:-}" ] || [ -n "${UB_CLI:-}" ]; then command bash "$@"; return; fi
   case "${1:-}" in
     "$JOIN") UB_K=join ;;
-    */join-remediator-shards.sh) UB_K=jcopy ;;
     */ai-dlc-gate-remediation-guard.sh) UB_K=hook ;;
     */ai-dlc-derivation-capture.sh) UB_K=cap ;;
     */validate-artifact-derivations.sh|*/validate-adversarial-convergence.sh) UB_K=dval ;;
@@ -88,7 +79,6 @@ bash() {
     UB_IN=1; set +o pipefail
     case "$UB_K" in
       join) fx_inproc $RSJ_J; ub_scrub "$UB_JV" "$UB_JF"; join_main "$@" ;;
-      jcopy) fx_inproc $RSJ_J; ub_scrub "" ""; . "$UB_F"; join_main "$@" ;;
       hook) fx_inproc $RSJ_H; ub_scrub "" ""; set --; ( . "$UB_F"; hook_pretool_head ) ;;
       cap) ub_scrub "" ""; set --; . "$UB_F" ;;
       dval) ub_scrub "" ""
@@ -193,9 +183,9 @@ else
 fi
 three_writers() { ub_tw_copy "$1"; }
 
-# WORLDS BUILT ONCE (fixture-mutants.md clause 4). The world each mutant's owning predicate joins is built by one
+# WORLDS BUILT ONCE (fixture-mutants.md clause 4). The world a predicate joins is built by one
 # lib.sh builder (unwm_build, uw_build, uwamb_build, uwshard_build, sibw_build, untilfut_build, deriv_world,
-# subj_world); the predicate itself is unchanged and the join it runs is the mutant's. ub_tpl builds a world the
+# subj_world). ub_tpl builds a world the
 # first time its key is asked and snapshots it beside it; every later ask moves the used world aside and restores the
 # snapshot AT THE SAME PATH, because the ledger's root and transcript_path and the split manifests are absolute. A CLI-B
 # run (UB_CLI set) builds every world afresh, so its hook rows come from the CLI hook.
@@ -260,7 +250,7 @@ fi
 # transcript_path -> the row carries that id and path; agent_transcript true exactly when
 # <transcript minus .jsonl>/subagents/agent-<id>.jsonl exists; a payload with no tool_use_id -> the key
 # present and EMPTY. The allow is unchanged: hook stdout and rc are byte-equal for the keyed and the
-# keyless payload of the same write. A function of the hook, so the HX mutants below score it.
+# keyless payload of the same write.
 l4_check() { # <hook> -> 0 when every property holds; L4_MSG names what was read
   local HOOK="$1" w tp L V l4 l4v want l4k l4n
   w="$(new_world)"; tp="$w/projects/sess-9.jsonl"; mkdir -p "$w/projects/sess-9/subagents"
@@ -281,27 +271,10 @@ l4_check() { # <hook> -> 0 when every property holds; L4_MSG names what was read
   [ "$l4" = "$want" ] && [ "$l4v" = "toolu_L4V,true" ] && [ "$l4k" -eq 0 ] && [ "$l4n" -eq 0 ] && cmp -s "$WORK/l4k.out" "$WORK/l4n.out"
 }
 if l4_check "$HOOK"; then
-  ok "L4: tool_use_id and transcript_path recorded from the payload on both ledgers, an absent id an EMPTY key, agent_transcript true only where the agent's own transcript exists; the allow byte-identical with and without the keys"; B_L4=1
+  ok "L4: tool_use_id and transcript_path recorded from the payload on both ledgers, an absent id an EMPTY key, agent_transcript true only where the agent's own transcript exists; the allow byte-identical with and without the keys"
 else
   bad "L4: $L4_MSG"
 fi
-# HX1/HX2: L4's failing direction, on copies of the hook. tool_use_id never read from the payload
-# (both ledgers), and agent_transcript never true -- each must turn L4 red.
-for hx in 'HX1|s/tool_use_id: (\.tool_use_id \/\/ "")/tool_use_id: ""/g|tool_use_id never read' \
-          'HX2|s/^    _rev_at=true$/    _rev_at=false/|agent_transcript never true'; do
-  _id="${hx%%|*}"; _r="${hx#*|}"; _e="${_r%%|*}"; _lab="${_r#*|}"
-  _hd="$(mktemp -d "$WORK/$_id.XXXXXX")" || exit 2
-  sed "$_e" "$HOOK" > "$_hd/ai-dlc-gate-remediation-guard.sh"
-  if cmp -s "$HOOK" "$_hd/ai-dlc-gate-remediation-guard.sh"; then
-    bad "$_id: FIXTURE STALE -- the hook mutation ($_lab) matched nothing; re-anchor it, never relax the assertion"
-  elif ! l4_check "$_hd/ai-dlc-gate-remediation-guard.sh"; then
-    mrow "$_id" L4=1
-    mutant_killed "${B_L4:-0}" "$_id" "$_id $_lab: KILLED by [L4]"
-  else
-    mrow "$_id" L4=0
-    bad "$_id $_lab: SURVIVED -- L4 holds against a hook that does not record the key"
-  fi
-done
 
 p_disjoint "$JOIN"  && ok "J1: three disjoint writers and three parts (real s305 repair blocks, no agent id) -> JOINED, 3 parts / 3 writers" \
   || bad "J1: a disjoint shard set did not join (rc=$RC): $(cat "$JO")"
@@ -337,10 +310,10 @@ p_absdouble "$JOIN"  && ok "A7: an absolute citation carrying a doubled slash (a
   || bad "A7: a doubled-slash absolute citation did not join (rc=$RC): $(cat "$JO")"
 p_basecite "$JOIN"   && ok "A5: control -- a bare basename citation still resolves -> JOINED" \
   || bad "A5: a basename citation stopped resolving (rc=$RC): $(cat "$JO")"
-if p_unwrittenmsg "$JOIN"; then ok "A6: the UNWRITTEN refusal names the Bash cause and the re-dispatch, and not hand-assembly"; B_A6=1
+if p_unwrittenmsg "$JOIN"; then ok "A6: the UNWRITTEN refusal names the Bash cause and the re-dispatch, and not hand-assembly"
 else bad "A6: the UNWRITTEN refusal line does not name the Bash cause and the re-dispatch, or names hand-assembly: $(cat "$JO")"; fi
 # A8-A11 (BL-803): the UNWRITTEN remedy read from the ledger with the time filter dropped; A6 is the NONE control.
-if p_uwbefore "$JOIN"; then ok "A8: the cited file written only BEFORE --since, at three ts by two agents neither of them the part's writer -> the LATEST row's ts and agent, the record-rewrite remedy, and no Bash cause"; B_A8=1
+if p_uwbefore "$JOIN"; then ok "A8: the cited file written only BEFORE --since, at three ts by two agents neither of them the part's writer -> the LATEST row's ts and agent, the record-rewrite remedy, and no Bash cause"
 else bad "A8: the before-window remedy is not the latest row's, or still names the Bash cause (rc=$RC): $(cat "$JO")"; fi
 p_uwafter "$JOIN" && ok "A9: the cited file written only AFTER --until -> the EARLIEST after-window row and the new --until remedy" \
   || bad "A9: the after-window remedy is absent or not the earliest row's (rc=$RC): $(cat "$JO")"
@@ -348,98 +321,14 @@ p_uwaside "$JOIN" && ok "A10: a --rerun part citing a file whose only in-window 
   || bad "A10: the set-aside remedy is absent (rc=$RC): $(cat "$JO")"
 p_uwboth "$JOIN" && ok "A11: a before- and an after-window row -> the BEFORE clause, then '; also ' and the AFTER clause" \
   || bad "A11: both window sides were not named, joined by '; also ' (rc=$RC): $(cat "$JO")"
-if p_uwamb "$JOIN"; then ok "A12: a cited basename resolving to two paths once the time filter is dropped -> exactly the NONE clause"; B_A12=1
+if p_uwamb "$JOIN"; then ok "A12: a cited basename resolving to two paths once the time filter is dropped -> exactly the NONE clause"
 else bad "A12: the ambiguous-once-untimed remedy is not exactly the NONE clause (rc=$RC): $(cat "$JO")"; fi
 p_sjaside "$JOIN" && ok "A13: subject mode, a part citing the prd.md written IN PLACE, no --rerun -> the no-rerun set-aside clause, and no '(a --rerun supersedes it)'" \
   || bad "A13: the subject-mode set-aside remedy is not the no-rerun text (rc=$RC): $(cat "$JO")"
-if p_uwshard "$JOIN"; then ok "A14: a token that is a /-suffix only of a path under shards/, written in the window -> exactly the NONE clause"; B_A14=1
+if p_uwshard "$JOIN"; then ok "A14: a token that is a /-suffix only of a path under shards/, written in the window -> exactly the NONE clause"
 else bad "A14: the shards/ row reached the remedy lookup (rc=$RC): $(cat "$JO")"; fi
-if p_sjrraside "$JOIN"; then ok "A15: subject mode WITH --rerun (A13's in-place prd.md row, another section re-run) -> exactly the rerun set-aside clause, '(a --rerun supersedes it)' included"; B_A15=1
+if p_sjrraside "$JOIN"; then ok "A15: subject mode WITH --rerun (A13's in-place prd.md row, another section re-run) -> exactly the rerun set-aside clause, '(a --rerun supersedes it)' included"
 else bad "A15: the subject-mode --rerun set-aside remedy is not the rerun text (rc=$RC): $(cat "$JO")"; fi
-# U5: the ASIDE branch keyed on SUBJMODE instead of RERUN -> A15 dies, A6 unchanged. A10 (files, --rerun)
-# and A13 (subject, none) cannot see it: across them the two flags vary together. The anchor is the
-# ASIDE branch's own 6-space indent; the re-run narrowing's `if [ -n "$RERUN" ]` sits at column 0.
-_ud="$(mktemp -d "$WORK/U5.XXXXXX")" || exit 2
-cp "$(dirname "$JOIN")"/*.sh "$_ud/" || { echo "FIXTURE BROKEN: U5 could not copy the join's sibling scripts" >&2; exit 2; }
-sed 's@^      if \[ -n "\$RERUN" \]; then$@      if [ "$SUBJMODE" != 1 ]; then@' "$JOIN" > "$_ud/join-remediator-shards.sh" \
-  || { echo "FIXTURE BROKEN: U5 could not write the mutated join" >&2; exit 2; }
-if cmp -s "$JOIN" "$_ud/join-remediator-shards.sh"; then
-  bad "U5: FIXTURE STALE -- the ASIDE-branch mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
-elif [ "$(diff "$JOIN" "$_ud/join-remediator-shards.sh" | grep -c '^>')" != 1 ]; then
-  bad "U5: the ASIDE-branch mutation edited more than one line of $JOIN; re-anchor it on the ASIDE branch alone"
-elif [ ! -f "$_ud/validate-adversarial-convergence.sh" ] || ! bash -n "$_ud/join-remediator-shards.sh" 2>/dev/null; then
-  bad "U5: the sibling validator is absent from the copy or the mutated join does not parse"
-elif p_sjrraside "$_ud/join-remediator-shards.sh"; then
-  mrow U5 A15=0
-  bad "U5 ASIDE keyed on SUBJMODE: SURVIVED -- A15 holds against the mutated join"
-elif ! grep -qF "$SJPA/prd.md was written in the window at " "$JO"; then
-  bad "U5: A15 failed for another reason than its remedy text (rc=$RC): $(cat "$JO")"
-elif p_unwrittenmsg "$_ud/join-remediator-shards.sh"; then
-  mrow U5 A15=1 A6=0
-  mutant_killed "$(( ${B_A15:-0} && ${B_A6:-0} ))" U5 "U5 ASIDE keyed on SUBJMODE: KILLED by [A15], and A6 is UNCHANGED"
-else
-  mrow U5 A15=1 A6=1
-  bad "U5: the NONE control A6 also moved under the mutant -- the arms are entangled"
-fi
-# U3: the lookup's resolution keeps a token resolving to MORE than one path -> A12 dies, A6 unchanged.
-# U4: the lookup's SHARD_REL clause deleted (a shards/ row reaches it) -> A14 dies, A6 unchanged.
-# Each is a copy in a copy of the join's directory, guarded by cmp -s. U4 deletes the clause only
-# inside the lookup's jq program, which opens on the one `jq -rn --arg ap "$APATH"` line; ROWS and
-# DROWS carry the same clause and are left alone.
-for um in 'U3%s@^        if (n != 1) continue$@        if (n == 0) continue@%ambiguous token resolved%p_uwamb' \
-          'U4%/jq -rn --arg ap "\$APATH" --arg sh/,/startswith(\$sh/{/startswith(\$sh/d;}%SHARD_REL clause deleted%p_uwshard'; do
-  _id="${um%%\%*}"; _r="${um#*\%}"; _e="${_r%%\%*}"; _r="${_r#*\%}"; _lab="${_r%%\%*}"; _p="${_r#*\%}"
-  case "$_p" in p_uwamb) _a=A12 ;; *) _a=A14 ;; esac
-  _ud="$(mktemp -d "$WORK/$_id.XXXXXX")" || exit 2
-  cp "$(dirname "$JOIN")"/*.sh "$_ud/" || { echo "FIXTURE BROKEN: $_id could not copy the join's sibling scripts" >&2; exit 2; }
-  sed "$_e" "$JOIN" > "$_ud/join-remediator-shards.sh" || { echo "FIXTURE BROKEN: $_id could not write the mutated join" >&2; exit 2; }
-  if cmp -s "$JOIN" "$_ud/join-remediator-shards.sh"; then
-    bad "$_id: FIXTURE STALE -- the $_lab mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
-  elif [ ! -f "$_ud/validate-adversarial-convergence.sh" ] || ! bash -n "$_ud/join-remediator-shards.sh" 2>/dev/null; then
-    bad "$_id: the sibling validator is absent from the copy or the mutated join does not parse"
-  elif "$_p" "$_ud/join-remediator-shards.sh"; then
-    mrow "$_id" "$_a=0"
-    bad "$_id $_lab: SURVIVED -- $_p holds against the mutated join"
-  elif [ -z "$UW_L" ]; then
-    bad "$_id: $_p failed for another reason than its remedy text (rc=$RC): $(cat "$JO")"
-  elif p_unwrittenmsg "$_ud/join-remediator-shards.sh"; then
-    mrow "$_id" "$_a=1" A6=0
-    case "$_a" in
-      A12) mutant_killed "$(( ${B_A12:-0} && ${B_A6:-0} ))" "$_id" "$_id $_lab: KILLED by [$_a], and A6 is UNCHANGED" ;;
-      *)   mutant_killed "$(( ${B_A14:-0} && ${B_A6:-0} ))" "$_id" "$_id $_lab: KILLED by [$_a], and A6 is UNCHANGED" ;;
-    esac
-  else
-    mrow "$_id" "$_a=1" A6=1
-    bad "$_id: the NONE control A6 also moved under the mutant -- the arms are entangled"
-  fi
-done
-# U1: the lookup disabled (every UNWRITTEN takes the NONE text) -> A8 dies, A6 unchanged.
-# U2: the EARLIEST before-window row kept instead of the latest -> A8 dies, A6 unchanged.
-# Each is a copy in a copy of the join's directory, guarded by cmp -s.
-# The list separator is `%`: U2's expression carries `||`.
-for um in 'U1%s@^if \[ -n "\$_uw" \]; then$@if false; then@%lookup disabled' \
-          'U2%s@ || ts > bt\[p\]) { bt\[p\] = ts@ || ts < bt[p]) { bt[p] = ts@%earliest before-window row'; do
-  _id="${um%%\%*}"; _r="${um#*\%}"; _e="${_r%%\%*}"; _lab="${_r#*\%}"
-  _ud="$(mktemp -d "$WORK/$_id.XXXXXX")" || exit 2
-  cp "$(dirname "$JOIN")"/*.sh "$_ud/" || { echo "FIXTURE BROKEN: $_id could not copy the join's sibling scripts" >&2; exit 2; }
-  sed "$_e" "$JOIN" > "$_ud/join-remediator-shards.sh" || { echo "FIXTURE BROKEN: $_id could not write the mutated join" >&2; exit 2; }
-  if cmp -s "$JOIN" "$_ud/join-remediator-shards.sh"; then
-    bad "$_id: FIXTURE STALE -- the $_lab mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
-  elif [ ! -f "$_ud/validate-adversarial-convergence.sh" ] || ! bash -n "$_ud/join-remediator-shards.sh" 2>/dev/null; then
-    bad "$_id: the sibling validator is absent from the copy or the mutated join does not parse"
-  elif p_uwbefore "$_ud/join-remediator-shards.sh"; then
-    mrow "$_id" A8=0
-    bad "$_id $_lab: SURVIVED -- A8 holds against the mutated join"
-  elif ! uw_line >/dev/null; then
-    bad "$_id: A8 failed for another reason than its remedy text (rc=$RC): $(cat "$JO")"
-  elif p_unwrittenmsg "$_ud/join-remediator-shards.sh"; then
-    mrow "$_id" A8=1 A6=0
-    mutant_killed "$(( ${B_A8:-0} && ${B_A6:-0} ))" "$_id" "$_id $_lab: KILLED by [A8], and A6 is UNCHANGED"
-  else
-    mrow "$_id" A8=1 A6=1
-    bad "$_id: the NONE control A6 also moved under the mutant -- the arms are entangled"
-  fi
-done
 
 # ---- subject mode. B2 first: a dispatched Write of the SPEC under specs/s9/ is a ledger row, and a
 # Write under specs/ outside a sprint slot is not (the near-miss).
@@ -496,59 +385,19 @@ p_sjspecnone "$JOIN" && ok "SP8: --subject, the SPEC part's memlog does not exis
 p_agentwrites "$JOIN" && ok "AW1: --agent-writes <subject> over a ledger where a joined writer edited A, B and (earlier) D, a post-join non-subject edited F and the subject edited C and D -> exactly C, D and the not-covered trailer; an unknown agent -> the trailer alone, rc 0; an extra flag -> REFUSED rc 2" \
   || bad "AW1: --agent-writes did not print exactly the subject's paths plus the trailer, or the zero-row and extra-flag cases failed (rc=$RC): $(cat "$JO")"
 
-if p_checkpart "$JOIN"; then ok "CP1: --check-part on the near-miss 'siblings: checked' part -> rc 2 with the join's own BADSIB line byte-for-byte; a well-formed text-fence part -> rc 0 and it joins; no field -> the re-check remedy, never a re-dispatch; an extra flag -> REFUSED"; B_CP1=1
+if p_checkpart "$JOIN"; then ok "CP1: --check-part on the near-miss 'siblings: checked' part -> rc 2 with the join's own BADSIB line byte-for-byte; a well-formed text-fence part -> rc 0 and it joins; no field -> the re-check remedy, never a re-dispatch; an extra flag -> REFUSED"
 else bad "CP1: --check-part did not reproduce the join's classifier (rc=$RC): $(cat "$JO")"; fi
 
-# CP2: --check-part with contract_check removed from a copy of the join (the mode then exits 0 without
-# classifying the part) -- CP1 must die. The copy sits beside its sibling scripts, which the join
-# resolves from its own directory.
-CPM="$(mktemp -d "$WORK/cp2.XXXXXX")" || exit 2
-cp "$(dirname "$JOIN")"/*.sh "$CPM/" \
-  || { echo "FIXTURE BROKEN: CP2 could not copy the join's sibling scripts into $CPM; a join run without them fails p_checkpart for that reason alone, which would read as a kill" >&2; exit 2; }
-sed 's/^  contract_refusals 0 "\$(contract_check 0 "\$CHKPART")"$/  contract_refusals 0 ""/' "$JOIN" > "$CPM/join-remediator-shards.sh" \
-  || { echo "FIXTURE BROKEN: CP2 could not write the mutated join into $CPM" >&2; exit 2; }
-if cmp -s "$JOIN" "$CPM/join-remediator-shards.sh"; then
-  bad "CP2: FIXTURE STALE -- the --check-part mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
-elif ! p_checkpart "$CPM/join-remediator-shards.sh"; then
-  mrow CP2 CP1=1
-  mutant_killed "${B_CP1:-0}" CP2 "CP2 --check-part with contract_check skipped: KILLED by [CP1]"
-else
-  mrow CP2 CP1=0
-  bad "CP2: SURVIVED -- CP1 holds against a --check-part that never runs contract_check"
-fi
 
 # CP3 / CP4: --check-part's two tree arms (CHECK-PART-MARK v1). The live run joins each offender world once
-# (the join's own refusal is the reference); the predicates and the mutants ask --check-part only.
-if cp_party_build "$JOIN" && p_cpparty "$JOIN"; then ok "CP3: --check-part on a party part sourcing the round-one part file 01.md#F-1 -> rc 2 with the join's own NOFILE line byte-for-byte; the seat-file source architecture-dev-1.md#F-1 -> rc 0, CHECK-PART:"; B_CP3=1
+# (the join's own refusal is the reference); the predicates ask --check-part only.
+if cp_party_build "$JOIN" && p_cpparty "$JOIN"; then ok "CP3: --check-part on a party part sourcing the round-one part file 01.md#F-1 -> rc 2 with the join's own NOFILE line byte-for-byte; the seat-file source architecture-dev-1.md#F-1 -> rc 0, CHECK-PART:"
 else bad "CP3: --check-part did not resolve a party part's sources as the join does (rc=$RC, join line '${CP3_JL:-}'): $(cat "$JO")"; fi
-if cp_ledger_build "$JOIN" && p_cpledger "$JOIN"; then ok "CP4: --check-part on an edit: line whose note carries the bare token CLAUDE.md (the join refuses it UNWRITTEN) -> rc 2 naming CLAUDE.md and no other token; the same note naming no file -> rc 0, CHECK-PART:"; B_CP4=1
+if cp_ledger_build "$JOIN" && p_cpledger "$JOIN"; then ok "CP4: --check-part on an edit: line whose note carries the bare token CLAUDE.md (the join refuses it UNWRITTEN) -> rc 2 naming CLAUDE.md and no other token; the same note naming no file -> rc 0, CHECK-PART:"
 else bad "CP4: --check-part did not refuse an edit: token no ledger row names (rc=$RC): $(cat "$JO")"; fi
-# CP3m: the party-source call removed from --check-part; CP4m: the ledger-citation refusal made a no-op.
-# Each in a copy of the join's whole directory, cmp -s guarded; each must kill its own arm and leave the other's.
-cp_mut() { # <name> <sed program> -> CPMD, rc 1 when the copy could not be built or the sed matched nothing
-  CPMD="$(mktemp -d "$WORK/$1.XXXXXX")" || return 1
-  cp "$(dirname "$JOIN")"/*.sh "$CPMD/" || return 1
-  sed "$2" "$JOIN" > "$CPMD/join-remediator-shards.sh" || return 1
-  ! cmp -s "$JOIN" "$CPMD/join-remediator-shards.sh"
-}
-if cp_mut cp3m 's/^      src_refusals "\$(src_check "\$SEAT_DIR" "\$CHKPART")"$/      :/'; then
-  c3=0; p_cpparty "$CPMD/join-remediator-shards.sh" || c3=1
-  c4=0; p_cpledger "$CPMD/join-remediator-shards.sh" || c4=1
-  mrow CP3m "CP3=$c3" "CP4=$c4"
-  if [ "$c3$c4" = 10 ]; then mutant_killed "$(( ${B_CP3:-0} && ${B_CP4:-0} ))" CP3m "CP3m --check-part's party-source call removed: KILLED by [CP3] and not CP4"
-  else bad "CP3m --check-part's party-source call removed: CP3 dead=$c3, CP4 dead=$c4 (expected 1 and 0)"; fi
-else bad "CP3m: FIXTURE STALE -- the party-source anchor did not apply to a copy of $JOIN; re-anchor it, never relax the assertion"; fi
-if cp_mut cp4m '/^          refuse "\${_cpb} cites \${_t} on an edit: line/s/^          refuse /          : /'; then
-  c3=0; p_cpparty "$CPMD/join-remediator-shards.sh" || c3=1
-  c4=0; p_cpledger "$CPMD/join-remediator-shards.sh" || c4=1
-  mrow CP4m "CP3=$c3" "CP4=$c4"
-  if [ "$c3$c4" = 01 ]; then mutant_killed "$(( ${B_CP3:-0} && ${B_CP4:-0} ))" CP4m "CP4m --check-part's ledger-citation refusal made a no-op: KILLED by [CP4] and not CP3"
-  else bad "CP4m --check-part's ledger-citation refusal made a no-op: CP3 dead=$c3, CP4 dead=$c4 (expected 0 and 1)"; fi
-else bad "CP4m: FIXTURE STALE -- the ledger-citation anchor did not apply to a copy of $JOIN; re-anchor it, never relax the assertion"; fi
 # MKP: END TO END. CP3's and CP4's offenders, marked through the REAL wait-for-deliverable.sh --mark, whose sibling
 # is the REAL join (header terms 5 and 8), never a stand-in: exit 64, the part byte-unchanged (cmp), the join's own
-# refusal line relayed with the mark's remedy; each corrected near-miss MARKED. <wfd> is the mark to drive, so a
-# mutant is a copy of the whole script dir with only wait-for-deliverable.sh changed.
+# refusal line relayed with the mark's remedy; each corrected near-miss MARKED. <wfd> is the mark to drive.
 mkp_go() { # <wfd> <part> -> RC, $JO, $WORK/mkp.before
   cp "$2" "$WORK/mkp.before" || return 1
   wfd_run "$1" --mark "$2" stories remediator 01 findings=1 > "$JO" 2>&1; RC=$?
@@ -577,56 +426,15 @@ p_mkpart() { # <wfd> -> 0 iff both offenders refuse and both near-misses mark
   [ "$ok" = 1 ]
 }
 MKP_WFD="$SRCDIR/wait-for-deliverable.sh"
-if p_mkpart "$MKP_WFD"; then ok "MKP: END TO END through the real wait-for-deliverable.sh --mark and the real join --check-part: a party part sourcing 01.md#F-1 and an edit: line carrying the bare token CLAUDE.md -> exit 64, the part byte-unchanged, the join's own refusal line relayed with the mark's remedy; the seat-file source and the note naming no file -> MARKED"; B_MKP=1
+if p_mkpart "$MKP_WFD"; then ok "MKP: END TO END through the real wait-for-deliverable.sh --mark and the real join --check-part: a party part sourcing 01.md#F-1 and an edit: line carrying the bare token CLAUDE.md -> exit 64, the part byte-unchanged, the join's own refusal line relayed with the mark's remedy; the seat-file source and the note naming no file -> MARKED"
 else bad "MKP: a real --check-part refusal did not flow through --mark (rc=$RC): $(head -5 "$JO")"; fi
-# MKPm-call: the mark never runs the sibling's check; MKPm-relay: it refuses but relays none of the join's lines.
-# Each a copy of the whole script dir with wait-for-deliverable.sh alone mutated (cmp -s guarded); CP3 (the join
-# asked directly) is the twin that must hold.
-mkp_mut() { # <name> <old line> <new line> -> MKPD, rc 1 when the copy could not be built or the anchor is not there once
-  MKPD="$(mktemp -d "$WORK/$1.XXXXXX")" || return 1
-  cp "$SRCDIR"/*.sh "$MKPD/" || return 1
-  M_OLD="$2" M_NEW="$3" python3 - "$MKP_WFD" "$MKPD/wait-for-deliverable.sh" <<'PY' || return 1
-import os, sys
-t = open(sys.argv[1], encoding="utf-8").read(); o = os.environ["M_OLD"]
-if t.count(o) != 1: sys.exit(3)
-open(sys.argv[2], "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
-PY
-  ! cmp -s "$MKP_WFD" "$MKPD/wait-for-deliverable.sh" && bash -n "$MKPD/wait-for-deliverable.sh" && [ -f "$MKPD/join-remediator-shards.sh" ]
-}
-for _mk in call relay; do
-  if [ "$_mk" = call ]; then _mo='      if [ -z "$MK_JS" ] || [ ! -f "$MK_JS" ]; then :'; _mn='      if :; then :'
-  else _mo="          2) mk_jr_=\"\$(printf '%s\\n' \"\$MK_JO\" | grep '^REFUSED:')\" || mk_jr_=\"\$MK_JO\""; _mn='          2) mk_jr_=""'; fi
-  if mkp_mut "mkpm-$_mk" "$_mo" "$_mn"; then
-    cm=0; p_mkpart "$MKPD/wait-for-deliverable.sh" || cm=1
-    c3=0; p_cpparty "$JOIN" || c3=1
-    mrow "MKPm-$_mk" "MKP=$cm" "CP3=$c3"
-    if [ "$cm$c3" = 10 ]; then mutant_killed "$(( ${B_MKP:-0} && ${B_CP3:-0} ))" "MKPm-$_mk" "MKPm-$_mk the mark's check $_mk removed: KILLED by [MKP] and not CP3"
-    else bad "MKPm-$_mk the mark's check $_mk removed: MKP dead=$cm, CP3 dead=$c3 (expected 1 and 0)"; fi
-  else bad "MKPm-$_mk: FIXTURE STALE -- the anchor did not apply to a copy of $MKP_WFD; re-anchor it, never relax the assertion"; fi
-done
 
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-derivation-capture.sh"
-if p_derivdoc "$DHOOK"; then ok "D5: a part whose derivation names the DOCUMENT -> the capture hook accepts it (a stale control in the same world refused), the join assembles, the sprint-dir re-run skips the 2 frozen records -> rc 0, and the joined record named as a file reproduces"; B_D5=1
+if p_derivdoc "$DHOOK"; then ok "D5: a part whose derivation names the DOCUMENT -> the capture hook accepts it (a stale control in the same world refused), the join assembles, the sprint-dir re-run skips the 2 frozen records -> rc 0, and the joined record named as a file reproduces"
 else bad "D5: a document-naming part derivation did not survive capture, join and the gate re-run (hook rc=${CAP_RC:-?}, join rc=$RC, derivations rc=${DV_RC:-?}): $(cat "$CAP_ERR" "$JO" "$DV_OUT" 2>/dev/null)"; fi
-if p_derivsec "$DHOOK"; then ok "D6: a part whose derivation names the SECTION FILE -> the capture hook refuses it 'reads the section copy'; written past the hook, the joined record run as a file -> rc 1, and --all over the sprint dir -> rc 1, 2 stale"; B_D6=1
+if p_derivsec "$DHOOK"; then ok "D6: a part whose derivation names the SECTION FILE -> the capture hook refuses it 'reads the section copy'; written past the hook, the joined record run as a file -> rc 1, and --all over the sprint dir -> rc 1, 2 stale"
 else bad "D6: a section-file part derivation was accepted at write time, or did not go stale at the join (hook rc=${CAP_RC:-?}, join rc=$RC, derivations rc=${DV_RC:-?}): $(cat "$CAP_ERR" "$JO" "$DV_OUT" 2>/dev/null)"; fi
 
-# DX1: the part exemption removed from a copy of the capture hook -- a part whose fence names the
-# document is then refused at write time, so D5 must die and D6 must hold.
-DX="$(mktemp -d "$WORK/dx1.XXXXXX")" || exit 2
-sed 's/^      SEC_DIR="\${PART_DIR}\/sections"$/      SEC_DIR="${PART_DIR}\/sections"; SELF_DOC=""/' "$DHOOK" > "$DX/ai-dlc-derivation-capture.sh"
-if cmp -s "$DHOOK" "$DX/ai-dlc-derivation-capture.sh"; then
-  bad "DX1: FIXTURE STALE -- the part-exemption mutation matched nothing in $DHOOK; re-anchor it, never relax the assertion"
-else
-  dx5=ok; p_derivdoc "$DX/ai-dlc-derivation-capture.sh" || dx5=dead
-  dx6=ok; p_derivsec "$DX/ai-dlc-derivation-capture.sh" || dx6=dead
-  mrow DX1 "D5=$([ "$dx5" = dead ] && echo 1 || echo 0)" "D6=$([ "$dx6" = dead ] && echo 1 || echo 0)"
-  if [ "$dx5" = dead ] && [ "$dx6" = ok ]; then
-    mutant_killed "$(( ${B_D5:-0} && ${B_D6:-0} ))" DX1 "DX1 the capture hook's part exemption removed: KILLED by [D5] and nothing else"
-  else
-    bad "DX1 the capture hook's part exemption removed: D5 $dx5, D6 $dx6 (expected D5 dead, D6 ok)"
-  fi
-fi
 
 # H1/H2: arm H before and after the join, on a series the record repairs.
 w="$(new_world)"; three_writers "$w"
@@ -678,29 +486,11 @@ ub_cli agent-writes p_agentwrites
 p_untilfut "$JOIN" 3600
 if [ "$RC" -eq 2 ] && has "$JO" "$FUT_TXT" && ! has "$JO" "JOINED:"; then
   p_untilfut "$JOIN" 60; _u60=$RC; p_untilfut "$JOIN" 0; _u0=$RC
-  if [ "$_u60$_u0" = 00 ]; then ok "UF1: --until now+1h -> REFUSED with the take-it-from-date remedy; now+60s and now -> JOINED"; B_UF1=1
+  if [ "$_u60$_u0" = 00 ]; then ok "UF1: --until now+1h -> REFUSED with the take-it-from-date remedy; now+60s and now -> JOINED"
   else bad "UF1: an --until inside the slack did not join (now+60s rc=$_u60, now rc=$_u0)"; fi
 else
   bad "UF1: an --until one hour ahead was not refused (rc=$RC): $(head -2 "$JO" | tr '\n' ' ')"
 fi
 
-# UFm: the future-until guard removed, in a copy of the join's whole directory, cmp -s guarded.
-UFM="$(mktemp -d "$WORK/ufm.XXXXXX")" || exit 2
-cp "$(dirname "$JOIN")"/*.sh "$UFM/" || { echo "FIXTURE BROKEN: UFm could not copy the join's sibling scripts" >&2; exit 2; }
-sed 's/^  true) die "--until /  true) : "--until /' "$JOIN" > "$UFM/join-remediator-shards.sh" \
-  || { echo "FIXTURE BROKEN: UFm could not write the mutated join" >&2; exit 2; }
-if cmp -s "$JOIN" "$UFM/join-remediator-shards.sh" || ! command bash -n "$UFM/join-remediator-shards.sh" 2>/dev/null; then
-  bad "UFm: FIXTURE STALE -- the guard mutation matched nothing in $JOIN, or the mutant does not parse; re-anchor it, never relax the assertion"
-else
-  _ufm="$UFM/join-remediator-shards.sh"
-  p_untilfut "$_ufm" 0; _c=$RC; p_untilfut "$_ufm" 3600
-  if [ "$_c" -ne 0 ]; then mrow UFm UF1.now=1; bad "UFm: the unmutated-shape control (until now) did not join under the mutant copy (rc=$_c)"
-  elif [ "$RC" -eq 0 ] && has "$JO" "JOINED:"; then mrow UFm UF1=1 UF1.now=0; mutant_killed "${B_UF1:-0}" UFm "UFm the future-until guard removed: KILLED by [UF1] (now+1h JOINED under the mutant), the now control unchanged"
-  else mrow UFm UF1=0 UF1.now=0; bad "UFm: SURVIVED or broke -- now+1h under the guardless copy rc=$RC: $(head -1 "$JO")"; fi
-fi
-# PLAIN-B: a plain run of this file prints no matrix-only cell; --matrix prints one row per mutant.
-if [ "$MATRIX" = 1 ]; then echo "  (matrix mode, unit-reader-b.sh: $N_MROWS MATRIX row(s) printed)"
-elif [ "$N_MROWS" -eq 0 ]; then ok "PLAIN-B: a plain run of unit-reader-b.sh printed no matrix-only cell"
-else bad "PLAIN-B: a plain run of unit-reader-b.sh printed $N_MROWS matrix row(s)"; fi
 echo "$NAME: $fails failure(s)"
 [ "$fails" -eq 0 ]

@@ -163,6 +163,8 @@ core_manifest:
   - fixtures/adversarial-citation/**
   - fixtures/apply-drift-after-write/**
   - fixtures/apply-drift-refile/**
+  - fixtures/apply-drift-refile-b/**
+  - fixtures/apply-drift-refile-c/**
   - fixtures/apply-legacy-script-path/**
   - fixtures/apply-restamp-theirs/**
   - fixtures/apply-restamp-worklist/**
@@ -196,7 +198,6 @@ core_manifest:
   - fixtures/check-24-adversarial-convergence/**
   - fixtures/check-24-adversarial-convergence-b/**
   - fixtures/check-24-adversarial-convergence-c/**
-  - fixtures/check-24-adversarial-convergence-d/**
   - fixtures/check-25-steering-conduct/**
   - fixtures/check-31-ac-falsifiability/**
   - fixtures/check-3b-locked-anchor/**
@@ -240,9 +241,14 @@ core_manifest:
   - fixtures/gate-remediation-deny/**
   - fixtures/gate-repair-record/**
   - fixtures/adversarial-shard-merge/**
+  - fixtures/adversarial-shard-merge-c/**
+  - fixtures/adversarial-shard-merge-d/**
   - fixtures/review-shard-merge/**
   - fixtures/review-shard-merge-b/**
+  - fixtures/review-shard-merge-c/**
+  - fixtures/review-shard-merge-d/**
   - fixtures/remediator-shard-join/**
+  - fixtures/remediator-shard-join-b/**
   - fixtures/content-seal/**
   - fixtures/document-partition/**
   - fixtures/subject-partition/**
@@ -271,6 +277,7 @@ core_manifest:
   - fixtures/layer-debt-due-and-discharge/**
   - fixtures/layer-debt-ledger/**
   - fixtures/layer-readopt-gate/**
+  - fixtures/layer-readopt-gate-c/**
   - fixtures/ledger-reverify/**
   - fixtures/ledger-reverify-unfalsifiable/**
   - fixtures/ledger-reverify-dist-only-reach/**
@@ -298,6 +305,8 @@ core_manifest:
   - fixtures/predicate-reclassification/**
   - fixtures/derivation-differential/**
   - fixtures/owed-derivations/**
+  - fixtures/owed-derivations-b/**
+  - fixtures/owed-derivations-c/**
   - fixtures/deploy-validate-smoke-classification/**
   - fixtures/story-evidence-scaffold/**
   - fixtures/smoke-surface-ignored/**

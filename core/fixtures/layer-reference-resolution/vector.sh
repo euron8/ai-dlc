@@ -1,29 +1,12 @@
-# vector() — the scoring function, sourced by run.sh AND by worker.sh.
-#
-# IT LIVES IN ITS OWN FILE BECAUSE TWO PROCESSES SCORE WITH IT. The mutants run under an
-# inner `xargs -P` pool (run.sh Part 5), so the worker is a separate process and cannot
-# inherit a function defined in run.sh. Restating it in the worker would be two copies of
-# one grammar drifting apart — the failure `mechanism-design.md` names — so it is defined
-# once here and sourced by both. A cell added here is scored by both readers or by neither.
+# vector() — the scoring function, sourced by run.sh.
 #
 # Requires in scope: DOMAIN (the seeded domain.md, read by the applicability cells).
 #
-# TWO ENTRY POINTS, ONE DEFINITION OF EVERY CELL. `vector` scores every cell (the live pass
-# over the shipped linter and the `--matrix` measurement). `vector_cells` scores only the cells
-# it is handed, so a per-push mutant run pays for the linter runs its deciding cell and its twin
-# need and no more. Both go through `_vc`, so a cell is the same code in both.
+# TWO ENTRY POINTS, ONE DEFINITION OF EVERY CELL. `vector` scores every cell; `vector_cells`
+# scores only the cells it is handed. Both go through `_vc`, so a cell is the same code in both.
 # A linter run is fetched on first need and cached for ONE vector_cells call.
 
 VECTOR_CELLS="d19b r19b r11b c34 c12 c7 alpha hk61 hk62 hk64 hk65 apform dotform w9miss w9dot w9ovr w9ok w9fence w9dist w9rdme w12t26 w12g24 w12q17 w12w19b w12x34 w12n8 w12p20 w12amb w12stem w12x26amb w12note w12self w12shadow5 w12wrap21 w12sect23"
-
-# cell_of <vector-string> <cell> -> sets _R to that cell's value; returns 1 when absent
-cell_of() {
-  local _t; _R=''
-  for _t in $1; do
-    case "$_t" in "$2="*) _R="${_t#*=}"; return 0 ;; esac
-  done
-  return 1
-}
 
 _vc_fetch_out() { [ -n "${_vc_out+x}" ] || _vc_out="$(bash "$_vc_l" "$_vc_r" 2>&1)"; }
 # I54: the listing is captured once and both readers get a here-string; `grep -q` never
@@ -31,8 +14,7 @@ _vc_fetch_out() { [ -n "${_vc_out+x}" ] || _vc_out="$(bash "$_vc_l" "$_vc_r" 2>&
 _vc_fetch_refs() { [ -n "${_vc_refs+x}" ] || _vc_refs="$(bash "$_vc_l" "$_vc_r" --check-refs 2>&1)"; }
 
 # three-state cell: W when the default output cites the check, else A when the --check-refs
-# listing carries it as ambiguous, else -. `-` is also what a subject nothing reached looks like,
-# so each mutant has to move its cell to W/A rather than merely leave it silent.
+# listing carries it as ambiguous, else -. `-` is also what a subject nothing reached looks like.
 _vc_three() { # _vc_three <check-number>
   _vc_fetch_out
   if grep -q "cites \"Check $1\"" <<<"$_vc_out"; then _R=W; return 0; fi
@@ -124,7 +106,7 @@ _vc() {
 
 # vector_cells <linter> <root> <cell>... -> "cell=value" per requested cell, in the order given.
 # Scored as a VECTOR rather than per row: several of these cells are served by one branch, and
-# per-row scoring reports entanglement on every mutant in that shape.
+# per-row scoring reports entanglement in that shape.
 vector_cells() {
   local _vc_l="$1" _vc_r="$2" _c _v='' _vc_out _vc_refs apf='' dotf=''
   unset _vc_out _vc_refs

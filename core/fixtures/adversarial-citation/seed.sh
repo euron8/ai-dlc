@@ -139,7 +139,7 @@ cp "$ROOT/silent.jsonl" "$ROOT/dir-silent/session-a.jsonl"
 
 # A REAL CORPUS carrying the genuine operator turn, in a file whose name is NOT the one any
 # caller would pass as --transcript. This is the positive outcome of the dir branch; without
-# it, a mutant that disables the branch entirely leaves every other dir arm green.
+# it, disabling the branch entirely leaves every other dir arm green.
 mkdir -p "$ROOT/dir-real"
 cp "$ROOT/real.jsonl" "$ROOT/dir-real/session-monday.jsonl"
 

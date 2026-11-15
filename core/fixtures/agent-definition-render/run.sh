@@ -28,56 +28,6 @@
 # every consumer push.
 #
 #
-# MUTANT MATRIX (measured once, in a granted run slot, with every one of the 14 arms driven against
-# every mutant). Per push each mutant now runs its DECIDING arm plus ONE named TWIN. The matrix
-# recorded here REPLACES the exact-vector assertion that the other 12 arms stayed green: every
-# mutant tripped its deciding arm and NO other arm (a 12 x 14 matrix of one 1 per row), so the
-# twin is the arm nearest the mutant in subject, and mut() asserts the deciding arm FAILS and the
-# twin PASSES. A change in co-tripping on the twin is still caught; co-tripping on the other
-# twelve arms is no longer scored per push.
-#   mutant                          | deciding arm                          | twin                                  | arms that tripped
-#   renders-model-less-roles        | no_file_for_model_less_role           | renders_model_bearing_roles           | deciding only
-#   accepts-any-effort-level        | invalid_effort_omitted_and_reported   | effort_line_tracks_the_declaration    | deciding only
-#   check-is-presence-only          | check_joins_declaration_to_projection | check_never_writes                    | deciding only
-#   no-stale-sweep                  | stale_projection_is_caught_and_cleared| foreign_definition_untouched          | deciding only
-#   sweeps-foreign-definitions      | foreign_definition_untouched          | stale_projection_is_caught_and_cleared| deciding only
-#   not-applicable-reads-as-pass    | three_states_are_distinct             | check_joins_declaration_to_projection | deciding only
-#   check-creates-the-missing-file  | check_never_writes                    | check_joins_declaration_to_projection | deciding only
-#   drops-omit-line                 | omit_claude_md_tracks_the_declaration | marker_sits_below_the_frontmatter     | deciding only
-#   emits-omit-line-unconditionally | omit_claude_md_tracks_the_declaration | effort_line_tracks_the_declaration    | deciding only
-#   accepts-any-omit-value          | omit_claude_md_tracks_the_declaration | invalid_effort_omitted_and_reported   | deciding only
-#   skips-persona-names             | persona_with_model_is_defined         | renders_model_bearing_roles           | deciding only
-#   drops-protected-read-line       | body_carries_protected_read_line      | marker_sits_below_the_frontmatter     | deciding only
-# The unmutated CONTROL still drives all 14 arms.
-#
-# MUTANT-MATRIX renders-model-less-roles decides=no_file_for_model_less_role twins=renders_model_bearing_roles
-# MUTANT-MATRIX accepts-any-effort-level decides=invalid_effort_omitted_and_reported twins=effort_line_tracks_the_declaration
-# MUTANT-MATRIX check-is-presence-only decides=check_joins_declaration_to_projection twins=check_never_writes
-# MUTANT-MATRIX no-stale-sweep decides=stale_projection_is_caught_and_cleared twins=foreign_definition_untouched
-# MUTANT-MATRIX sweeps-foreign-definitions decides=foreign_definition_untouched twins=stale_projection_is_caught_and_cleared
-# MUTANT-MATRIX not-applicable-reads-as-pass decides=three_states_are_distinct twins=check_joins_declaration_to_projection
-# MUTANT-MATRIX check-creates-the-missing-file decides=check_never_writes twins=check_joins_declaration_to_projection
-# MUTANT-MATRIX drops-omit-line decides=omit_claude_md_tracks_the_declaration twins=marker_sits_below_the_frontmatter
-# MUTANT-MATRIX emits-omit-line-unconditionally decides=omit_claude_md_tracks_the_declaration twins=effort_line_tracks_the_declaration
-# MUTANT-MATRIX accepts-any-omit-value decides=omit_claude_md_tracks_the_declaration twins=invalid_effort_omitted_and_reported
-# MUTANT-MATRIX skips-persona-names decides=persona_with_model_is_defined twins=renders_model_bearing_roles
-# MUTANT-MATRIX drops-protected-read-line decides=body_carries_protected_read_line twins=marker_sits_below_the_frontmatter
-# MUTANT-MATRIX never-render decides=hook-world-A twins=hook-world-D
-# MUTANT-MATRIX render-unconditionally decides=hook-world-D twins=hook-world-U
-# MUTANT-MATRIX mkdir-before-render decides=hook-world-U twins=hook-world-A
-# MUTANT-MATRIX-FULL skip-the-arm worlds=hook-world-A,hook-world-D,hook-world-C,hook-world-U why=measured: a skipped arm moves all four worlds (A unrendered, D unrefused, C no OK line, U exits 0), so no world is left green to serve as a twin
-# MUTANT-MATRIX-DYNAMIC mut-hmut-label why=mut() and hmut() pass their first argument "$label" to mutant_killed; every caller (mut renders-model-less-roles ..., hmut never-render ...) names a literal mutant that carries its own row in this block
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/agent-definition-render/run.sh --matrix
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
-# state") requires. Under --matrix every
-# mutant runs ALL 14 arms (or all four hook worlds) and prints one "MATRIX <mutant> ..." row per
-# mutant, one cell per arm or world written <name>:<value>(killed=yes|no); the names in decides= and
-# twins= are exactly those cell names (arms by their function suffix, worlds as hook-world-A, -D, -C
-# and -U), and killed=yes means the arm FAILS, or the world's outcome DIFFERS from the shipped
-# hook's. Every name above carries exactly one form. mut and hmut pass their first argument to
-# mutant_killed as a variable, and every caller names it literally; hence the DYNAMIC line above. The exact-vector assertion (no other arm trips) is REPLACED by this recorded
-# matrix plus the per-push twin.
-#
 # Exit: 0 = every assertion holds (or the subject is not installed yet), 1 = a regression,
 #       2 = fixture broken.
 set -uo pipefail
@@ -86,19 +36,6 @@ set -uo pipefail
 # a script while inheriting them tests the CONFIG, not the code (I10).
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
-# --matrix (argv, never an env var) re-measures the mutant x arm matrix recorded in the header.
-# A plain run executes NO matrix-only cell; MATRIX_CELLS counts the ones that ran and an arm at the
-# foot asserts it is 0 on a plain run (and non-zero under --matrix, so the counter can fire).
-MATRIX=0
-for _a in "$@"; do [ "$_a" = "--matrix" ] && MATRIX=1; done
-MATRIX_CELLS=0
-# The --matrix row printers live in matrix.sh, beside this file: they spell the per-cell polarity,
-# and a kill-token on a run.sh line must be routed through mutant_killed, which a printer is not.
-MATRIX_SH="$(cd "$(dirname "$0")" && pwd)/matrix.sh"
-[ -f "$MATRIX_SH" ] || { echo "FIXTURE BROKEN: matrix.sh not found beside run.sh" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/agent-definition-render/matrix.sh"
-# shellcheck source=/dev/null
-. "$MATRIX_SH"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
@@ -130,12 +67,6 @@ echo "  subject: ${SUBJECT#"$ROOT"/}"
 echo "HERMETIC-CONSUMED ${SUBJECT#"$ROOT"/}"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-MUT_LIB="$ROOT/core/fixtures/lib/mutant.sh"
-[ -f "$MUT_LIB" ] || MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# shellcheck source=/dev/null
-. "$MUT_LIB"
 
 # fresh -> the PROJECT root of a new scratch world. seed.sh prints the `mktemp` directory it
 # created; the project lives one level inside it, and `drop` removes exactly what the seed
@@ -566,22 +497,6 @@ while IFS=: read -r name rc; do
   esac
   if [ "$rc" -eq 0 ]; then
     ok "$msg"
-    case "$name" in
-      renders_model_bearing_roles) B_renders_model_bearing_roles=1 ;;
-      persona_with_model_is_defined) B_persona_with_model_is_defined=1 ;;
-      marker_sits_below_the_frontmatter) B_marker_sits_below_the_frontmatter=1 ;;
-      no_file_for_model_less_role) B_no_file_for_model_less_role=1 ;;
-      effort_line_tracks_the_declaration) B_effort_line_tracks_the_declaration=1 ;;
-      invalid_effort_omitted_and_reported) B_invalid_effort_omitted_and_reported=1 ;;
-      omit_claude_md_tracks_the_declaration) B_omit_claude_md_tracks_the_declaration=1 ;;
-      check_joins_declaration_to_projection) B_check_joins_declaration_to_projection=1 ;;
-      foreign_definition_untouched) B_foreign_definition_untouched=1 ;;
-      stale_projection_is_caught_and_cleared) B_stale_projection_is_caught_and_cleared=1 ;;
-      check_never_writes) B_check_never_writes=1 ;;
-      three_states_are_distinct) B_three_states_are_distinct=1 ;;
-      idempotent) B_idempotent=1 ;;
-      body_carries_protected_read_line) B_body_carries_protected_read_line=1 ;;
-    esac
   else
     bad "$msg"
   fi
@@ -589,206 +504,6 @@ done <<EOF
 $LIVE
 EOF
 
-# ---------------------------------------------------------------------------------------
-# MUTANTS. Each is a COPY of the WHOLE core/scripts directory -- the subject resolves no
-# siblings today, but a copy of one file is how a battery scores silence as a kill the day it
-# does. Each mutation is guarded with `cmp -s` so a sed that matched nothing cannot pass as a
-# mutation, and each names the ONE arm it must move.
-# ---------------------------------------------------------------------------------------
-MUTROOT="$(mktemp -d)"
-trap 'rm -rf "$MUTROOT"' EXIT
-SUBJ_DIR="$(dirname "$SUBJECT")"
-SUBJ_BASE="$(basename "$SUBJECT")"
-kills=0
-
-mut() { # <label> <sed-expr> <deciding-arm> <twin-arm> <base-pass-flag>
-  local label="$1" expr="$2" want="$3" twin="$4" base="$5"
-  local dir="$MUTROOT/$label"
-  local copy out rc rc_twin
-  mkdir -p "$dir"
-  cp "$SUBJ_DIR"/* "$dir/" 2>/dev/null
-  copy="$dir/$SUBJ_BASE"
-  [ -f "$copy" ] || { bad "MUTANT $label: the directory copy did not carry the subject"; return; }
-  if ! sed -e "$expr" "$SUBJECT" > "$copy.new" 2>/dev/null; then
-    # NO BACKTICKS IN THIS STRING. It is double-quoted, so a backticked word runs as a COMMAND
-    # and the message becomes the text either side of a hole. This branch fires only when a sed
-    # DIES, so it is never exercised on a green run and the defect would have shipped invisible.
-    bad "MUTANT $label DID NOT APPLY: the sed died, so no mutant ever existed and the caller would have skipped its arms with no verdict"
-    return
-  fi
-  mv "$copy.new" "$copy"
-  if cmp -s "$SUBJECT" "$copy"; then
-    bad "MUTANT $label: the sed matched NOTHING, so the subject was never mutated and this kill would have been fictional"
-    return
-  fi
-  # A MUTATION MUST NOT PUT A NON-READING COMMAND ON THE RIGHT OF A PIPE. The subject runs
-  # `set -uo pipefail`; a sink such as `true`, `:` or `false` exits without reading, the writer on
-  # the left can then take EPIPE, and pipefail turns that into a failed pipeline -- whether it does
-  # is a race between the two processes, so the mutant's behaviour changes with machine load.
-  # Measured on M3: `printf ... | true` scored the role DRIFTED and made --check return 1 whenever
-  # the writer lost the race, which killed arms that never own the comparison (the entanglement
-  # verdict) and sometimes let arm 5's red cells pass (the SURVIVED verdict), at ~90% of runs under
-  # the pool and 0 of 9 solo. Keyed on the lines the mutation INTRODUCED into the copy, so a pipe
-  # the subject itself already carries is never scored against the mutant. A single `|` only: the
-  # `[^|]` before it keeps `cmd || true`, which is not a pipe, out of the set.
-  local introduced
-  introduced="$(grep -Fvx -f "$SUBJECT" "$copy")" || introduced=""
-  if [ -n "$introduced" ] && grep -Eq '(^|[^|])\|[[:blank:]]*(true|false|:)([[:blank:];)&|]|$)' <<<"$introduced"; then
-    bad "MUTANT $label DID NOT APPLY CLEANLY: it pipes into a command that never reads its input, so under pipefail the writer's EPIPE decides the verdict and no kill it scores is about the mutated property. Use a draining sink such as cat >/dev/null. Introduced line(s): $(tr '\n' ' ' <<<"$introduced")"
-    return
-  fi
-  chmod +x "$copy"
-  if [ "$MATRIX" = 1 ]; then out="$(run_arms "$copy")"; else out="$(run_arms "$copy" "$want" "$twin")"; fi
-  # THE OBSERVED arm:rc SET, carried by every verdict below. A verdict naming only which arms
-  # fired cannot say which world moved, and a load-dependent kill is diagnosed from the rcs.
-  local observed
-  observed="$(printf '%s\n' "$out" | tr '\n' ' ')"
-  [ "$MATRIX" != 1 ] || matrix_row "$label" "$(arm_cells "$out")"
-  rc="$(printf '%s\n' "$out" | sed -n "s/^${want}://p")"
-  rc_twin="$(printf '%s\n' "$out" | sed -n "s/^${twin}://p")"
-  if [ "$rc" != "1" ]; then
-    bad "MUTANT $label SURVIVED: $want still passes against a subject that no longer does the thing that arm asserts. observed arm:rc = $observed"
-  elif [ "$rc_twin" != "0" ]; then
-    bad "MUTANT $label tripped its twin $twin too (rc=$rc_twin): the confinement recorded in the header matrix no longer holds. observed arm:rc = $observed"
-  else
-    mutant_killed "$base" "$label" "MUTANT $label killed by $want, while its twin $twin stays green" && kills=$((kills+1))
-  fi
-}
-
-# M1: render a definition for EVERY declared role, model or not. This is the wrong fix a reader
-# reaches for on seeing four roles in the config and fourteen files on disk -- and it binds an
-# effort onto the party personas, whose spawns the dispatch guard is told to leave alone.
-#
-# TWO LINES, AND THE FIRST SPELLING MUTATED ONLY ONE OF THEM AND SURVIVED. Replacing the counter
-# left the `continue` beneath it in place, so the branch still skipped and the mutant did nothing
-# -- `cmp -s` saw a changed file and reported the mutation applied, correctly. The branch is
-# `skipped_nomodel=...` FOLLOWED BY `continue`, and removing the property means removing both;
-# the address is the counter, which is unique, and `n` carries the edit onto the `continue`,
-# which is not (the unresolvable-key branch below carries one too).
-mut renders-model-less-roles \
-  '/^    skipped_nomodel=\$((skipped_nomodel+1))$/{s/.*/    mkey=opus/
-n
-s/^    continue$/    mstr=synthesised/
-}' \
-  no_file_for_model_less_role renders_model_bearing_roles "${B_no_file_for_model_less_role:-0}"
-
-# M2: accept any effort level, so a typo is written into the frontmatter as though it bound
-# something. Keyed on the vocabulary case itself.
-mut accepts-any-effort-level \
-  's/^    low|medium|high|xhigh|max) return 0 ;;$/    *) return 0 ;;/' \
-  invalid_effort_omitted_and_reported effort_line_tracks_the_declaration "${B_invalid_effort_omitted_and_reported:-0}"
-
-# M3: --check compares nothing -- it reports current whenever the file EXISTS. A presence-only
-# check is what a reader writes first, and it passes a definition whose settings entry moved.
-#
-# ANCHORED ON `cmp -s - "$target"`, NOT ON THE WHOLE LINE. The first spelling wrote the line out
-# in full and matched NOTHING: a `|` inside a BRE is a literal pipe, not an alternation, but the
-# `printf '%s\n'` in it carries quotes and a backslash that have to survive two levels of shell
-# quoting, and they did not. The fixture caught it -- `cmp -s` reported the subject unmutated --
-# rather than scoring a kill against a copy nothing had edited. A short unique anchor is both
-# safer to quote and immune to reflowing the line around it.
-#
-# THE REPLACEMENT DRAINS ITS INPUT, AND `true` WAS WRONG. The comparison sits on the right of a
-# pipe from `printf`, in a subject running under `set -uo pipefail`. `true` exits without reading,
-# so the printf can take EPIPE, pipefail fails the pipeline, and the role is scored DRIFTED -- the
-# mutant then compared nothing only when the writer happened to win the race. Measured by delaying
-# the writer 20ms: arm 10 read `3 1 1` with `true` and `3 1 0` with the real `cmp`, which is the
-# pool-only entanglement this battery kept reporting. `cat >/dev/null` means the same thing --
-# compare nothing, succeed -- and reads to EOF, so the writer cannot lose. The pipe guard in
-# `mut()` refuses a non-reading sink from any future mutation.
-mut check-is-presence-only \
-  's#cmp -s - "$target"#cat >/dev/null#' \
-  check_joins_declaration_to_projection check_never_writes "${B_check_joins_declaration_to_projection:-0}"
-
-# M4: drop the stale-projection sweep, so a role that left `aiDlcRoles` keeps its definition and
-# keeps binding a model and an effort nobody configured. Anchored on the marker grep, which is
-# the line that makes the sweep discriminate generated files from a consumer's own.
-mut no-stale-sweep \
-  's#^    grep -qF -- "\$GEN_PREFIX" "\$f" || continue$#    continue#' \
-  stale_projection_is_caught_and_cleared foreign_definition_untouched "${B_stale_projection_is_caught_and_cleared:-0}"
-
-# M5: sweep EVERY .md in the agents directory rather than only the generated ones, so a
-# consumer's hand-written definition is reported as stale and deleted. The mirror of M4, and
-# the direction that destroys someone else's file. This is why the marker grep is load-bearing
-# in both directions and why one mutation of it cannot stand for both.
-mut sweeps-foreign-definitions \
-  's#^    grep -qF -- "\$GEN_PREFIX" "\$f" || continue$#    :#' \
-  foreign_definition_untouched stale_projection_is_caught_and_cleared "${B_foreign_definition_untouched:-0}"
-
-# M6: collapse NOT APPLICABLE into a pass. The single most likely "simplification", and it makes
-# the gate print the same line for a project that pins no roles and one whose definitions are
-# verified current.
-mut not-applicable-reads-as-pass \
-  's/^  echo "NOT APPLICABLE: \$SETTINGS declares no aiDlcRoles, so no roles are pinned here."$/  echo "OK: agent definitions current"; exit 0/' \
-  three_states_are_distinct check_joins_declaration_to_projection "${B_three_states_are_distinct:-0}"
-
-# M7: make --check CREATE a missing definition while still reporting it missing. "Write it if it
-# is not there" reads as helpfulness and is a gate mutating the tree it was called to read.
-#
-# SCOPED TO THE MISSING CASE ON PURPOSE. A mutant that re-rendered every file would also repair
-# the DRIFTED ones and kill arms 5, 6 and 10 -- four cells for one mutation, which is
-# entanglement rather than a kill. This one writes only where the file is absent, so the drift
-# arms see an unchanged subject and arm 9 is the only cell that moves.
-mut check-creates-the-missing-file \
-  '/^      missing="\$missing \$role"$/i\
-      printf '"'"'%s\\n'"'"' "$want" > "$target"
-' \
-  check_never_writes check_joins_declaration_to_projection "${B_check_never_writes:-0}"
-
-# M8: render_one stops emitting the omitClaudeMd line at all. The arm's PRESENCE conjunct is
-# what this dies on -- an arm that only asserted the near-miss absence would score this a kill
-# it never earned (the harness rule: absence arms require the offender direction too).
-mut drops-omit-line \
-  '/omitClaudeMd: true/d' \
-  omit_claude_md_tracks_the_declaration marker_sits_below_the_frontmatter "${B_omit_claude_md_tracks_the_declaration:-0}"
-
-# M9: emit the line UNCONDITIONALLY, ignoring the declaration -- the wrong fix that flags every
-# role for a consumer who flagged three. The anchor is the guard, not the printf: the same printf
-# text stays in the line, so the mutant is exactly `[ "${4:-}" = "true" ] &&` deleted. It must
-# fail the near-miss world (and the invalid world), which only arm 4b reads.
-mut emits-omit-line-unconditionally \
-  's/^  \[ "${4:-}" = "true" \] && /  /' \
-  omit_claude_md_tracks_the_declaration effort_line_tracks_the_declaration "${B_omit_claude_md_tracks_the_declaration:-0}"
-
-# M10: accept any omitClaudeMd value. Mirrors M2 one vocabulary over, and its observable is the
-# REPORT vanishing, not a line appearing: a harness-unaccepted value passes validation, is still
-# not `true` so renders nothing, and the silently-accepted typo reads as a settled declaration.
-mut accepts-any-omit-value \
-  's/^    true|false) return 0 ;;$/    *) return 0 ;;/' \
-  omit_claude_md_tracks_the_declaration invalid_effort_omitted_and_reported "${B_omit_claude_md_tracks_the_declaration:-0}"
-
-# M11: the persona-name special case -- the old reading ("personas carry no model, skip them")
-# written as code. A persona that SETS a model then gets no definition. Arm 1c alone moves:
-# arm 1's set excludes the persona names, and arm 2 asserts only the model-less roles.
-mut skips-persona-names \
-  's/^  mkey="\$(jq -r --arg r "\$role" '"'"'.aiDlcRoles\[\$r\].model \/\/ empty'"'"' "\$SETTINGS" 2>\/dev\/null)"$/&; case "$role" in cis|sm|tea|ux) mkey="" ;; esac/' \
-  persona_with_model_is_defined renders_model_bearing_roles "${B_persona_with_model_is_defined:-0}"
-
-# M12: delete the protected-path printf, so a rendered body never tells a teammate that context-mode reads of a protected path are denied.
-mut drops-protected-read-line \
-  '/^  printf .A path `.claude\/hooks\/ai-dlc-protect.sh` protects/d' \
-  body_carries_protected_read_line marker_sits_below_the_frontmatter "${B_body_carries_protected_read_line:-0}"
-
-# UNMUTATED CONTROL, with a POSITIVE conjunct. A control asserting only "nothing went wrong"
-# passes against a subject replaced by `exit 0`, because rc=0 with nothing reported is exactly
-# what a clean copy looks like. This one requires a named arm to be THERE and passing, and it is
-# built the same way the mutants are -- a whole-directory copy -- so a partial tree that made
-# every mutant survive would make this fail rather than agree with them.
-mkdir -p "$MUTROOT/control"
-cp "$SUBJ_DIR"/* "$MUTROOT/control/" 2>/dev/null
-chmod +x "$MUTROOT/control/$SUBJ_BASE"
-CTL="$(run_arms "$MUTROOT/control/$SUBJ_BASE")"
-CTL_FAILS="$(printf '%s\n' "$CTL" | grep -c ':1$')"
-CTL_FIRST="$(printf '%s\n' "$CTL" | sed -n 's/^renders_model_bearing_roles://p')"
-if [ "$CTL_FAILS" -eq 0 ] && [ "$CTL_FIRST" = "0" ]; then
-  ok "CONTROL: an unmutated whole-directory copy passes every arm, and renders_model_bearing_roles is affirmatively green"
-else
-  bad "CONTROL: an unmutated copy failed $CTL_FAILS arm(s) (renders_model_bearing_roles=$CTL_FIRST) — the harness is what is broken, not the subject, and every kill above is suspect"
-fi
-
-# ASSERT THE KILL COUNT IS NON-ZERO. A battery whose mutants all applied to a file the run never
-# loaded reports the same silence as one whose arms cannot fire.
-[ "$kills" -eq 0 ] && bad "NO MUTANT SCORED A KILL. Either the mutations landed in a copy nothing executes, or none of these arms is load-bearing."
 
 # ---------------------------------------------------------------------------------------
 # THE CONSUMER HOOK. `.claude/agents/` is gitignored and derived, so a fresh `git worktree add`
@@ -915,93 +630,15 @@ else
   fi
 
   HGOT="$(hook_battery "$HOOK")"
-  B_hook=0
   if [ "$HGOT" = "$HOOK_EXPECTED" ]; then
-    ok "consumer pre-push: an ABSENT .claude/agents/ is rendered and the push passes; a DRIFTED definition blocks the push and is left byte-identical; a CURRENT tree is checked and not written; UNPARSEABLE settings block with no directory created"; B_hook=1
+    ok "consumer pre-push: an ABSENT .claude/agents/ is rendered and the push passes; a DRIFTED definition blocks the push and is left byte-identical; a CURRENT tree is checked and not written; UNPARSEABLE settings block with no directory created"
   else
     bad "consumer pre-push battery: expected [$HOOK_EXPECTED], got [$HGOT]"
   fi
 
-
-  # hmut <label> <sed-expr> <deciding world> <twin world> <deciding world's mutated token> <claim>
-  # Per push the mutant runs its DECIDING world and one TWIN world, asserting the deciding world
-  # reads the mutated token and the twin stays at its unmutated value. Under --matrix all four
-  # worlds run and a MATRIX row carries the whole vector.
-  hmut() {
-    local label="$1" expr="$2" dw="$3" tw="$4" want="$5" claim="$6" d="$MUTROOT/hook-$1" got gd gt
-    mkdir -p "$d"
-    if ! sed -e "$expr" "$HOOK" > "$d/pre-push" 2>/dev/null; then
-      bad "HOOK MUTANT $label DID NOT APPLY: the sed died"; return
-    fi
-    if cmp -s "$HOOK" "$d/pre-push"; then
-      bad "HOOK MUTANT $label: the sed matched NOTHING, so no mutant existed"; return
-    fi
-    if [ "$tw" = FULL ]; then
-      # No single world decides this mutant: the whole four-world vector is asserted exactly.
-      got="$(hook_battery "$d/pre-push")"
-      [ "$MATRIX" != 1 ] || matrix_row "$label" "$(hook_cells "$got")"
-      if [ "$got" = "$want" ]; then
-        mutant_killed "$B_hook" "$label" "HOOK MUTANT $label killed, full vector [$want]: $claim" && kills=$((kills+1))
-      elif [ "$got" = "$HOOK_EXPECTED" ]; then bad "HOOK MUTANT $label SURVIVED: $claim"
-      else bad "HOOK MUTANT $label ($claim): expected [$want], got [$got]"; fi
-      return
-    fi
-    if [ "$MATRIX" = 1 ]; then got="$(hook_battery "$d/pre-push")"; matrix_row "$label" "$(hook_cells "$got")"
-    else got="$(hook_battery "$d/pre-push" "$dw" "$tw")"; fi
-    gd="$(hook_cell "$got" "$dw")"; gt="$(hook_cell "$got" "$tw")"
-    if [ "$gd" = "$(hook_cell "$HOOK_EXPECTED" "$dw")" ]; then
-      bad "HOOK MUTANT $label SURVIVED: $claim"
-    elif [ "$gd" != "$want" ]; then
-      bad "HOOK MUTANT $label ($claim): world $dw expected [$want], got [$gd]"
-    elif [ "$gt" != "$(hook_cell "$HOOK_EXPECTED" "$tw")" ]; then
-      bad "HOOK MUTANT $label tripped its twin world $tw too (got [$gt]): the confinement recorded in the header matrix no longer holds"
-    else
-      mutant_killed "$B_hook" "$label" "HOOK MUTANT $label killed by world $dw, while twin world $tw stays green: $claim" && kills=$((kills+1))
-    fi
-  }
-
-  # The tip's behaviour: never render. Only the absent world moves.
-  hmut never-render \
-    's/^    if \[ ! -d \.claude\/agents \]; then$/    if false; then/' \
-    A D "A:blocked" \
-    "without the absent-directory render a fresh worktree's first push is blocked on every pinned role, and only the absent world sees it"
-
-  # WRONG FIX: render on every push. It clears the absent world AND erases a drifted definition,
-  # so the push goes green over a hand edit nobody reviewed. The D world reads the write that
-  # destroys evidence and decides it alone; C (a write on a tree that needed none) moves with it
-  # and is recorded in the matrix, not scored per push.
-  hmut render-unconditionally \
-    's/^    if \[ ! -d \.claude\/agents \]; then$/    if true; then/' \
-    D U "D:overwritten" \
-    "rendering on every push overwrites a drifted definition and passes"
-
-  # WRONG FIX: "make sure the directory exists" before rendering. A renderer that then refuses
-  # leaves an EMPTY directory, which every later push reads as present and check-only.
-  hmut mkdir-before-render \
-    '/^      out="\$(bash scripts\/ai-dlc\/render-agent-definitions.sh --root \. 2>&1)"$/i\
-      mkdir -p .claude/agents
-' \
-    U A "U:dir-created" \
-    "creating the directory before the renderer decides leaves an empty .claude/agents/ behind a refused render, and only the unparseable world sees it"
-
-  # WRONG FIX: skip the arm. MEASURED: all four worlds move (a skipped arm renders nothing, refuses
-  # nothing, prints no OK line, and exits 0 on unparseable settings), so no world is left green to
-  # be a twin and the full vector is asserted. C is the world that proves the arm RAN.
-  hmut skip-the-arm \
-    's/^    agent_definitions$/    true/' \
-    - FULL "A:green-unrendered D:rc0 C:rc0 U:rc0" \
-    "a hook that stops running the arm passes all four worlds' exit codes wrongly or not at all; C is the world that proves the arm RAN"
 fi
 
 [ -z "${HT:-}" ] || drop "$HT"
 
-# A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL. The counter is bumped by the one function that prints a
-# MATRIX row, so a cell enabled outside --matrix moves it. Under --matrix the same counter must be
-# non-zero, which proves the counter can fire.
-if [ "$MATRIX" = 1 ]; then
-  if [ "$MATRIX_CELLS" -gt 0 ]; then ok "--matrix executed $MATRIX_CELLS matrix cell(s) (the counter fires)"; else bad "--matrix executed no matrix cell: the counter cannot fire"; fi
-else
-  if [ "$MATRIX_CELLS" -eq 0 ]; then ok "a plain run executes no matrix-only cell"; else bad "a plain run executed $MATRIX_CELLS matrix-only cell(s)"; fi
-fi
-echo "  $fails failed, $kills mutant kill(s)"
+echo "  $fails failed"
 report_end agent-definition-render

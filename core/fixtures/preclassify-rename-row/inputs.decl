@@ -1,12 +1,10 @@
-# preclassify-rename-row reads the reconcile directory (cp -R into control and mutant copies,
-# every mutant a rewrite of lib.sh or preclassify.sh) and the shared fixture preamble.
+# preclassify-rename-row reads the reconcile directory and the shared fixture preamble.
 !core/skills/ai-dlc-update/reconcile/preclassify.sh
 !core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 core/skills/ai-dlc-update/reconcile/setup-sites.md
 core/skills/ai-dlc-update/reconcile/template-sites.md
 core/skills/ai-dlc-update/fixture-manifest.md
-# lib rows derived from run.sh:2,125 (preamble.sh, mutant.sh).
+# lib rows: the shared preamble and report library.
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh

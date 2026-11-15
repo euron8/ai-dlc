@@ -21,7 +21,7 @@
 #   qtrk     test row, backticked `tests/test_t.py::test_x` and `tests/test_t.py:12`, tracked -> -  (one token: the :line twin of qln)
 #   qkind    the qoff row with Kind `predicate`, `tests/test_pred.py::test_x` untracked -> -  (test rows only)
 #   The decoy rows below lead with `see`, a word with no extension, so the leading word is never a path
-#   and a mutant that judges every path (path-always) trips only qtrk, the one row whose citation is tracked.
+#   and a validator that judged every path would trip only qtrk, the one row whose citation is tracked.
 #   qbare    bare basename `bm-ev.evidence.md`, tracked as evidence/bm-ev.evidence.md   -> -  (basename rule)
 #   qbareoff bare basename `bm-gone.evidence.md`, tracked nowhere                       -> q (basename)
 #   qext     bare `result.tx_hashes`, an extension no tracked file carries              -> -  (not a path)
@@ -55,7 +55,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
   || { echo "REFUSED: usage: bash receipt-bl809.sh <path to validate-handoff-evidence.sh> [<cells>]" >&2; exit 9; }
 HE="$1"; CELLS="${2:-}"
 # With <cells> only story-1's run (every cell but rc and qrc, and the ctl cell), for rc story-2's run and for qrc
-# story-3's: a mutant run names the one cell that decides it. Without it every cell runs.
+# story-3's: a narrowed run names the one cell it needs. Without it every cell runs.
 want() { [ -z "$CELLS" ] && return 0; case " $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
 # ran <cell>: printed inside each want-gated block, once per cell whose assertion that block evaluates.
 ran() { echo "RAN $1"; }

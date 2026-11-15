@@ -23,77 +23,10 @@
 # against the FIRST resolved hook only, and the second hook keeps ONE end-to-end nest chain over its own
 # fixture root. Measured by trace on the second hook's watcher drives: every traced line came from the
 # block itself, none from outside it, so a second copy of those drives could only repeat the first.
-#
-# THE MUTANTS are cmp -s guarded COPIES of the resolved block. Each mutant is a row of the matrix below:
-# the arm cells it moves (decides) and a cell of another arm that stays green (twins).
-# The one exception is td-life-fd, which re-defines the fixture's own ts_launch with its single ' 9>&- &' removed instead of copying the block.
-#
-# MUTANT-MATRIX not-exported decides=raw_d0,raw_d1,nest_started,nest_depths,nest_b_present,nest_refusal_line twins=scrub_same
-# MUTANT-MATRIX not-incremented decides=raw_d0,raw_d1,nest_started,nest_depths,nest_refusal_line twins=scrub_same
-# MUTANT-MATRIX cap-ignored decides=width_d1_j12,width_d1_j12x,width_d1_j0,width_d1_jabc,width_d2_j12,width_d1_jlong,obs_d1_max twins=width_d1_j1
-# MUTANT-MATRIX zero-admitted decides=width_d1_j0 twins=width_d1_jabc
-# MUTANT-MATRIX nonnum-admitted decides=width_d1_jabc twins=width_d1_j0
-# MUTANT-MATRIX jlong-admitted decides=width_d1_jlong twins=width_d1_jabc
-# MUTANT-MATRIX depth-long-admitted decides=depth_long twins=depth_nonnum
-# MUTANT-MATRIX depth-nonnum-zero decides=depth_nonnum twins=depth_long
-# MUTANT-MATRIX octal-08 decides=depth_08 twins=depth_long
-# MUTANT-MATRIX ai-dlc-named decides=scrub_same,nest_started,nest_depths,nest_b_present,nest_refusal_line twins=raw_d1
-# MUTANT-MATRIX notice-at-load decides=notice_load twins=width_d1_j12
-# MUTANT-MATRIX no-refusal decides=refuse_rc,refuse_line,refuse_ran,refuse_d5_rc,nest_started,nest_depths,nest_refusal_line twins=nest_b_present
-# MUTANT-MATRIX leaks decides=leak twins=raw_d0
-# MUTANT-MATRIX pool-capped-5 decides=obs_d0_max twins=raw_d0
-# MUTANT-MATRIX i66-fork-seed decides=i66_seeded twins=i66_clean
-# MUTANT-MATRIX m-appendreg decides=pn_ord twins=pn_grow
-# MUTANT-MATRIX m-nofifoguard decides=pn_fifo twins=pn_ord
-# MUTANT-MATRIX m-nomark decides=pn_grow twins=pn_ord
-# MUTANT-MATRIX m-noread decides=pn_grow twins=pn_ord
-# MUTANT-MATRIX m-novalidate decides=pn_hlink,pn_hout twins=pn_ord
-# MUTANT-MATRIX td-old-traps decides=td_term,td_intp twins=td_queue
-# MUTANT-MATRIX td-no-stop decides=td_term,td_queue twins=td_rc
-# MUTANT-MATRIX td-no-pgid decides=td_decoy twins=td_term
-# MUTANT-MATRIX td-ps-pgid decides=td_sbx_stub,td_sbx_gc,td_sbx_orph,td_sbx_lead,td_sbx_sent twins=td_sbx_rc
-# MUTANT-MATRIX td-no-tree decides=td_sbx_gc,td_sbx_lead twins=td_sbx_stub
-# MUTANT-MATRIX td-no-pidgrp decides=td_sbx_orph twins=td_sbx_lead
-# MUTANT-MATRIX td-no-memgrp decides=td_sbx_lead twins=td_sbx_orph
-# MUTANT-MATRIX td-no-mem decides=td_sbx_lead twins=td_sbx_orph
-# MUTANT-MATRIX td-life-fd decides=td_life twins=td_life_alive
-# MUTANT-MATRIX ps-rewait decides=ps_sig twins=ps_exit
-# MUTANT-MATRIX cl-dist-keyed decides=cl_nl,cl_ni,cl_tp twins=cl_iv
-# MUTANT-MATRIX cl-select-all decides=cl_ii,cl_nl,cl_ni,cl_tp twins=cl_i
-# MUTANT-MATRIX cl-stamp-raw decides=cl_ii,cl_nl,cl_ni twins=cl_tp
-# MUTANT-MATRIX cl-no-refusal decides=cl_ref,cl_fb5_sel twins=cl_fb5_state
-# MUTANT-MATRIX cl-store-dist-project decides=cl_cstore twins=cl_v,cl_v_ctl
-# MUTANT-MATRIX cl-publish-late decides=cl_resume,cl_census twins=cl_entry
-# MUTANT-MATRIX cl-publish-worker decides=cl_nl twins=cl_iv
-# MUTANT-MATRIX cl-record-on-red decides=cl_census,cl_i,cl_vii,cl_v twins=cl_ii
-# MUTANT-MATRIX cl-depth1-honoured decides=cl_fb2 twins=cl_fb2_ran
-# MUTANT-MATRIX cl-switch-on decides=cl_vi_out,cl_vi_list twins=cl_entry_ran
-# MUTANT-MATRIX cl-no-entry decides=cl_entry twins=cl_iii
-# MUTANT-MATRIX cl-fail-open decides=cl_inst_rc twins=cl_inst_arg
-# MUTANT-MATRIX cl-no-arg decides=cl_inst_arg twins=cl_inst_rc
-# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the thirty-nine literal callers (mutant, pn_eval, td_eval, the I66 arm, the pool_stop arm, the td-life-fd lifeline arm and cl_mutant) has its own row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-pool-depth/run.sh --matrix
-#
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
-# requires. Run the command above, from the repository root; its log names every mutant's dead cells.
-# Each mutant co-trips no other arm
-# than the ones it decides, measured at authoring. The decides and twins of a mutant are READ FROM THE
-# ROWS ABOVE at run time (mrow), so the header cannot drift from what runs. A plain run drives, per
-# mutant, only its decides cells and its twin cells, and requires that every cell it is SCORED ON (its
-# decides and twins) which moved is in decides. A group drive prints every cell of its group, and a cell
-# the mutant is not scored on is dropped before the verdict: a barrier drive run for raw_d0 also prints
-# obs_d0_max, the poller's count at the barrier rendezvous (pd_rendezvous), which no marker mutant can
-# change, so not-exported, not-incremented and leaks are decided on the marker the child received (raw_*,
-# absent reads `_`) and never on that count. --matrix scores every cell it prints, on
-# purpose: co-trips are its job. --matrix drives every cell of the mutant's family: the arm cells for the pool mutants, the
-# watcher cells (pn_*) for the m-* mutants. The pool mutants are not driven through the watcher cells and
-# the m-* mutants are not driven through the pool cells.
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset PREPUSH_POOL_DEPTH
-MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
-MX_RAN=0
 # NO WALL CLOCK, NO ps SAMPLE AND NO COUNT OF POLLS DECIDES OR BOUNDS ANYTHING HERE (BL-868, BL-985). Every cell is
 # read at a state its subjects WRITE: a pool's width at the barrier rendezvous (pd_rendezvous: the flight files the
 # workers wrote reaching the width xargs was GIVEN, read off its own argv), a watcher verdict at its verdict file, and
@@ -122,7 +55,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "prepush-pool-depth: FIXTURE BRO
 # SIGINT IGNORED ON ENTRY IS A REFUSAL, NOT A RED. A plain `&` from a non-interactive shell starts this
 # fixture with SIGINT ignored, every drive inherits that, and bash cannot re-enable a signal ignored at
 # entry: the hook's `trap 'pool_stop 130' INT` and the workers' `trap pool_abort INT` never fire, so the
-# INT cell (td_intp, after its worker-INT step) and the mutants they score read red against a correct hook. Setting a trap
+# INT cell (td_intp, after its worker-INT step) reads red against a correct hook. Setting a trap
 # on an ignored-at-entry signal silently does nothing, so `trap -p INT` then reads empty.
 trap ':' INT; _ti="$(trap -p INT)"; trap - INT
 [ -n "$_ti" ] || { echo "prepush-pool-depth: FIXTURE BROKEN: launched with SIGINT ignored (a plain & from a non-interactive shell); its INT cells cannot fire. Run it in the foreground or under set -m." >&2; exit 2; }
@@ -131,13 +64,8 @@ trap ':' INT; _ti="$(trap -p INT)"; trap - INT
 # a subshell's exec lowers SHLVL). The top-level teardown launches (td_drive, ts_launch) are such starts, so a caller
 # handing this fixture a socket left them, and their workers' attribution, out of the invocation counter's log.
 exec < /dev/null
-MUT_LIB="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $0" >&2; exit 2; }
-. "$MUT_LIB"
 
 echo "prepush-pool-depth:"
-if [ "$MATRIX" = 1 ]; then echo "  mode: FULL (--matrix: every mutant against every cell of its family)"
-else echo "  mode: PUSH (each mutant drives its decides cells and its twin cells only)"; fi
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || broken "not in a git repo"
 HOOKS=""
@@ -218,11 +146,6 @@ pd_gate_sleep() {
   export -f sleep
 }
 
-# the header rows are the single source of decides and twins
-mrow() { # mrow <mutant> decides|twins -> the comma list from the MUTANT-MATRIX row
-  awk -v n="$1" -v f="$2" '$1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n { for (i = 4; i <= NF; i++) { split($i, kv, "="); if (kv[1] == f) print kv[2] } }' "$0"
-}
-
 # A probe world: a git repository whose fixture root holds stub fixtures.
 # Each stub records, to $PD_LOG, the marker it was handed (name-agnostic: any *POOL_DEPTH variable),
 # the same after the scrub idiom every real fixture opens with, and how many stubs were in flight.
@@ -259,7 +182,7 @@ FX
 # count short, a look appends one line to barrier.rej only when the count CHANGED (a record of the look, never a
 # decider; a stuck barrier writes nothing, so the outer pool's stall refusal can see it). A drive whose pool
 # finished first is read as it stands. NO BOUND AND NO DEADLOCK VERDICT ARE OWED HERE, BY A DESIGN ARGUMENT (F-B4):
-# every hook mutant that narrows the pool does so through `-P`, which moves the width read here with it, and a pool
+# every hook edit that narrows the pool does so through `-P`, which moves the width read here with it, and a pool
 # narrower than its own argv is real xargs failing its contract, which no subject here can construct. A cycle verdict
 # keyed on records would be UNSOUND: the fork xargs is about to make is recorded nowhere (a worker's `.pr/<unit>.k`
 # lands only after it starts), so "every dispatched worker holds at the gate, short of the width" is the ordinary
@@ -376,7 +299,7 @@ done
 # THREE LEVELS OF STUB IN ONE WORLD: the outer pool dispatches stub A; A drives the block over its own
 # tree holding stub B; B drives it again over a tree holding stub C. Count which stubs STARTED.
 # Guarded: A runs, B runs (depth 1), C never starts (B's pool refuses at depth 2). The same world is
-# driven for every block and every mutant: the stubs read the block to source from NEST_BLK, and sit
+# driven for every block: the stubs read the block to source from NEST_BLK, and sit
 # under EVERY hook's fixture root, so each block's pool sees its own root's stubs.
 NW="$WORK/nestworld"
 nest_stub() { # nest_stub <lvl> <next-lvl or empty>
@@ -403,7 +326,7 @@ nest_build "$NW" $FXRS
 
 # ------------------------------------------------------------------ the arm cells ---------------
 ARM_CELLS="width_d0_j12 width_d1_j12 width_d1_j1 width_d1_j12x width_d1_j0 width_d1_jabc width_d2_j12 width_unset depth_long depth_nonnum depth_08 width_d1_jlong notice_load obs_d1_rc obs_d1_max raw_d1 scrub_same notice_dispatch obs_d1_j1_max obs_d0_max raw_d0 notice_d0 leak refuse_rc refuse_line refuse_ran refuse_d5_rc nest_started nest_depths nest_b_present nest_refusal_line"
-# Expected value per cell. One owner per cell: the matrix above says which mutant moves which.
+# Expected value per cell.
 WANT="width_d0_j12=12
 width_d1_j12=2
 width_d1_j1=1
@@ -456,7 +379,7 @@ inproc_cell() { # inproc_cell <block> <cell>
     # a marker SET to a non-number, or to 20 digits, FAILS CLOSED to depth 2. 18446744073709551616 is
     # 2^64: bash arithmetic wraps it to 0, so without the length guard it reads as depth 0 and opens a
     # full pool -- the value that discriminates (99999999999999999999 wraps to a large positive depth
-    # and refuses either way, so it could not kill the mutant). 08 is eight, not an octal error.
+    # and refuses either way, so it could not discriminate). 08 is eight, not an octal error.
     depth_long)
       r="$( cd "$W" && export PREPUSH_POOL_DEPTH=18446744073709551616 AI_DLC_FIXTURE_JOBS=12; . "$b" >/dev/null 2>&1; printf '%s' "${POOL_DEPTH_IN:-}" )" ;;
     depth_nonnum)
@@ -531,17 +454,6 @@ moved_of() {
   awk -F= 'NR == FNR { if ($0 != "") { k = $1; w[k] = substr($0, length(k) + 2) } next }
            $0 != "" { k = $1; v = substr($0, length(k) + 2); if (!(k in w) || v != w[k]) printf "%s ", k }' <(printf '%s\n' "$2") <(printf '%s\n' "$1")
 }
-same_set() { [ "$(printf '%s\n' $1 | grep . | sort | tr '\n' ' ')" = "$(printf '%s\n' $2 | grep . | sort | tr '\n' ' ')" ]; }
-mx_row() { # mx_row <name> <cells> <moved>: the matrix row, one format for every mutant
-  local c d=" $3 " line="" dead
-  for c in $2; do case "$d" in *" $c "*) line="$line $c:1" ;; *) line="$line $c:0" ;; esac; done
-  dead="$(printf '%s' "$3" | tr -s ' ' ',' | sed 's/^,//; s/,$//')"
-  printf '  MATRIX-ROW %s dead=%s |%s\n' "$1" "${dead:-none}" "$line"
-}
-# the only emission of a kill; a loop-free site that receives the name as a variable
-finish_mutant() { # finish_mutant <base-pass flag> <name> <cond 0|1> <ok-message> <fail-message>
-  if [ "$3" = 1 ]; then mutant_killed "$1" "$2" "$4"; else bad "$5"; fi
-}
 
 # ------------------------------------------------------------------ hook loop -------------------
 HN=0
@@ -563,15 +475,13 @@ for HOOK in $HOOKS; do
   W="$WORK/w$HN"; mkworld "$W" "$(cat "$WORK/block$HN.fxr")" 6 || broken "could not seed the probe world"
 
   GOT="$(score "$BLK" $ARM_CELLS)"
-  # BASELINE ASSERTED BEFORE ANY MUTANT: a harness that died prints nothing and would score every
-  # mutant as a kill.
+  # BASELINE ASSERTED FIRST: a harness that died prints nothing.
   if [ "$(printf '%s\n' "$GOT" | grep -c .)" -eq "$(printf '%s\n' "$WANT" | grep -c .)" ]; then
     ok "[$TAG] the probe emitted every arm ($(printf '%s\n' "$WANT" | grep -c .) cells)"
   else
     bad "[$TAG] the probe emitted $(printf '%s\n' "$GOT" | grep -c .) cells, want $(printf '%s\n' "$WANT" | grep -c .) -- a harness that died reads as clean"
   fi
-  [ "$MATRIX" = 1 ] && { MX_RAN=$((MX_RAN+1)); mx_row baseline "$ARM_CELLS" "$(moved_of "$GOT" "$WANT")"; }
-  # the depth-0 barrier, named on its own: the baseline only (a mutant timing out is expected)
+  # the depth-0 barrier, named on its own: the baseline
   B0="$(printf '%s\n' "$GOT" | sed -n 's/^obs_d0_max=//p')"
   if [ "$B0" = 6 ]; then ok "[$TAG] depth-0 barrier: 6 of 6 entered together"
   else bad "[$TAG] depth-0 barrier: $B0 of 6 in flight at the rendezvous"; fi
@@ -600,53 +510,6 @@ for HOOK in $HOOKS; do
   armcheck "a non-numeric depth fails closed to depth 2" depth_nonnum
   armcheck "a depth of 08 is eight, not an octal error" depth_08
 
-  # ---------------------------------------------------------------- mutants ------------------
-  # mutate <name> <sed-expr>: copy the block, apply one edit, refuse a no-op.
-  MUTN=0
-  # MUTANTS RUN AGAINST THE FIRST RESOLVED HOOK ONLY: I66 holds both blocks to one program.
-  mutant() { # mutant <name> <sed-expr>; decides and twins come from the header row
-    local name="$1" ex="$2" m="$WORK/mut$HN.$1.sh" dec tw cells g moved B_mut c cond=0 n_all n_run
-    dec="$(mrow "$name" decides)"; tw="$(mrow "$name" twins)"
-    [ -n "$dec" ] || { bad "[$TAG] MUTANT $name: no MUTANT-MATRIX row in the header"; return 0; }
-    dec="${dec//,/ }"; tw="${tw//,/ }"; [ "$tw" = - ] && tw=""
-    sed "$ex" "$BLK" > "$m" || { bad "[$TAG] MUTANT $name: sed did not apply"; return 0; }
-    MUTN=$((MUTN+1))
-    if cmp -s "$BLK" "$m"; then bad "[$TAG] MUTANT $name: the edit matched nothing, so it is not a mutant"; return 0; fi
-    # the base-pass flag: the unmutated run held every cell this mutant is judged on
-    B_mut="$(for c in $dec $tw; do
-      [ "$(printf '%s\n' "$GOT" | sed -n "s/^$c=//p")" = "$(printf '%s\n' "$WANT" | sed -n "s/^$c=//p")" ] || { echo 0; exit 0; }
-    done; echo 1)"
-    if [ "$MATRIX" = 1 ]; then
-      cells="$ARM_CELLS"; n_all="$(printf '%s\n' $cells | grep -c .)"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"
-      MX_RAN=$((MX_RAN + n_all - n_run))
-    else cells="$dec $tw"; fi
-    g="$(score "$m" $cells)"
-    # only the cells this mutant is scored on reach the verdict (a no-op under --matrix, where cells is every arm cell)
-    g="$(printf '%s\n' "$g" | awk -F= -v cs=" $cells " 'index(cs, " " $1 " ") > 0')"
-    moved="$(moved_of "$g" "$WANT")"
-    [ "$MATRIX" = 1 ] && mx_row "$name" "$cells" "$moved"
-    same_set "$moved" "$dec" && cond=1
-    finish_mutant "$([ "$B_mut" = 1 ] && echo 1 || echo 0)" "$name" "$cond" \
-      "[$TAG] MUTANT $name kill confirmed: decides [$dec] moved, twin [${tw:--}] stayed green" \
-      "[$TAG] MUTANT $name moved [${moved% }], want [$dec] (twin [${tw:--}])"
-  }
-  mutant not-exported    's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))" //'
-  mutant not-incremented 's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))"/PREPUSH_POOL_DEPTH="$POOL_DEPTH_IN"/'
-  mutant cap-ignored     's/^if \[ "\$POOL_DEPTH_IN" -ge 1 \]; then$/if false; then/'
-  # each half of the depth-1 cap admitted alone: zero passes the range test, a non-number skips the case
-  mutant zero-admitted   's/^  if \[ "\$FIXTURE_JOBS" -lt 1 \] || /  if [ "$FIXTURE_JOBS" -lt 0 ] || /'
-  mutant nonnum-admitted 's/^  case "\$FIXTURE_JOBS" in '"''"'|\*\[!0-9\]\*|/  case "$FIXTURE_JOBS" in '"''"'|/'
-  mutant jlong-admitted  's/|??????\*) FIXTURE_JOBS=2 ;; esac$/) FIXTURE_JOBS=2 ;; esac/'
-  mutant depth-long-admitted 's/^case "\$POOL_DEPTH_IN" in \*\[!0-9\]\*|??????\*) POOL_DEPTH_IN=2 ;; esac$/case "$POOL_DEPTH_IN" in *[!0-9]*) POOL_DEPTH_IN=2 ;; esac/'
-  mutant depth-nonnum-zero 's/^case "\$POOL_DEPTH_IN" in \*\[!0-9\]\*|??????\*) POOL_DEPTH_IN=2 ;; esac$/case "$POOL_DEPTH_IN" in *[!0-9]*) POOL_DEPTH_IN=0 ;; ??????*) POOL_DEPTH_IN=2 ;; esac/'
-  mutant octal-08        's/^POOL_DEPTH_IN=\$((10#\$POOL_DEPTH_IN))$/POOL_DEPTH_IN=$((POOL_DEPTH_IN))/'
-  mutant ai-dlc-named    's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))"/AI_DLC_POOL_DEPTH="$((POOL_DEPTH_IN + 1))"/'
-  mutant notice-at-load  's/^POOL_DEPTH_IN="\${PREPUSH_POOL_DEPTH:-0}"$/&; [ "$POOL_DEPTH_IN" -ge 1 ] \&\& printf "   nested: depth %s\\n" "$POOL_DEPTH_IN"/'
-  # with the refusal removed the same chain starts c as well: the nest builds and the count can move
-  mutant no-refusal      's/if \[ "\$POOL_DEPTH_IN" -ge 2 \]; then/if false; then/'
-  mutant leaks           's/^POOL_DEPTH_IN=\$((10#\$POOL_DEPTH_IN))$/&; export PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))"/'
-  # a depth-0 pool capped at 5 never holds six: the barrier reads 5 at the rendezvous, five held and one queued
-  mutant pool-capped-5   's/xargs -P "\$FIXTURE_JOBS" -I{}/xargs -P "$(( FIXTURE_JOBS < 5 ? FIXTURE_JOBS : 5 ))" -I{}/'
 done
 
 # ------------------------------------------------- the nested root is watched (BL-691) ------
@@ -676,7 +539,7 @@ done
 #     written. After stub B is gone the call returns only once its worker is gone too (else the worker kills it).
 #     Its open is the rendezvous itself, so it is not held: each side retries an open a signal interrupted.
 # No wait has a bound, and none needs one: every lockstep wait is a read of a token its peer always writes.
-#   pn_grow   -- fix: ok. base (the three edits reverted): REFUSED. The pair must DIFFER in this run.
+#   pn_grow   -- ok: the nested pool's scratch is the outer unit's progress.
 #   pn_silent -- B takes its steps and writes nothing: REFUSED under the fix (a registered root is not progress).
 #   pn_hlink  -- A lists a symlink (spelled bare and with a trailing slash) to a dir it grows, whose
 #                .pool-parent names A's own root: REFUSED under the fix.
@@ -687,12 +550,6 @@ done
 # for the whole section); the inner root a killed inner pool leaves is removed by the drive only after its
 # basename matches fx.?????? literally.
 PN_ALL="pn_grow pn_silent pn_hlink pn_hout pn_fifo pn_ord"
-WANT_PN="pn_grow=ok
-pn_silent=REFUSED
-pn_hlink=REFUSED
-pn_hout=REFUSED
-pn_fifo=REFUSED
-pn_ord=inwin"
 PB="$WORK/block1.sh"; PFXR="$(cat "$WORK/block1.fxr")"
 PNT="$WORK/pn.tpl"
 mkdir -p "$PNT/a/$PFXR/stub-a" "$PNT/b/$PFXR/stub-b" "$PNT/ord/w/$PFXR/s" || broken "could not build the watcher template"
@@ -846,8 +703,7 @@ pn_val() { # pn_val <set> <cell> -> the cell's value after pn_settle
 # or `hung pn.<tag>`, which the FIFO's writer (pn_drive) writes once a watcher has opened the FIFO and so hangs
 # reading it. A hung drive cannot be done first: a hung watcher never polls again, so its unit never ends. pf.<tag>.at
 # records `hung`, else the verdict -- the cell pn_fifo reads. A hung drive is then RELEASED: a `q` on its step gate
-# ends the unit, its worker kills the watcher, and it writes the verdict it reaches released (the m-nofifoguard
-# control: a hung drive was only blocked, and reaches `ok`). Every drive is then reaped by `wait`, and only then are
+# ends the unit, its worker kills the watcher, and it writes the verdict it reaches released. Every drive is then reaped by `wait`, and only then are
 # the FIFO writers ended.
 # A DEADLOCK IS A VERDICT, DECIDED BY A WAIT-FOR CYCLE IN RECORDS THE PARTIES WRITE (F-B5), never by a count or a
 # clock. Each lockstep party appends `<party> <enter|leave> <read|write> <fifo> <seq> [rc]` to $WORK/pn.<tag>.rec --
@@ -872,7 +728,7 @@ pn_val() { # pn_val <set> <cell> -> the cell's value after pn_settle
 #                          waits for its worker's exit and still never polls, so the inner bookkeeping does not move.
 #   pn_settle's read    <- every drive's outer subshell (written on any exit of the drive) and the witness's `hung`
 #   a watcher's read of a FIFO .pool-parent <- nobody, on purpose: the hang the witness reports and `q` releases
-# KNOWN ROUTE, NOT BOUNDED HERE: a SUBJECT (the block or a mutant of it) that blocks forever outside the lockstep hangs
+# KNOWN ROUTE, NOT BOUNDED HERE: a SUBJECT (the block) that blocks forever outside the lockstep hangs
 # its drive and so this fixture; nothing in the fixture turns that into FIXTURE BROKEN, and only the runner outside it
 # bounds it: the outer pool's stall refusal, which fires because a stuck fixture writes nothing new (below). The witness's own open has no peer by design and is ended by pn_reap_writers. The ps-table settle this
 # replaced bounded each drive by 200 rejected settles of one table: a lockstep a signal had deadlocked (an interrupted
@@ -942,57 +798,6 @@ pn_settle() {
   pn_reap_writers
   PN_PIDS=""
 }
-# pn_mut <name> <sed-expr> <source block> -> writes $WORK/pn.mut.<name>.sh, or returns 1 (reported) on a
-# sed failure or a no-op. Never called inside $( ): `bad` must count in this shell.
-pn_mut() {
-  PN_M="$WORK/pn.mut.$1.sh"
-  sed "$2" "$3" > "$PN_M" || { bad "MUTANT $1: sed did not apply"; return 1; }
-  if cmp -s "$3" "$PN_M"; then bad "MUTANT $1: the edit matched nothing, so it is not a mutant"; return 1; fi
-}
-# the base block: all three edits reverted (marker write, registration, watcher read), plus their locals
-PN_BASE_EX='/^      : > "\$wr\/.pool-unit"; wp=/d
-/^  # A NESTED POOL REGISTERS ITS ROOT/,/^  done$/d
-/^          set --; nn=0$/,/^          done < "\$wr\/.pool-nested"$/d
-s/ \${1+"\$@"} -type f -ls/ -type f -ls/
-s/ fx_m fx_p fx_t fx_e$//
-s/^      local lg="\$1" rc wr wp$/      local lg="$1" rc wr/'
-PN_OK=1
-pn_mut base "$PN_BASE_EX" "$PB" || PN_OK=0; PBASE="$PN_M"
-if [ "$PN_OK" = 1 ]; then
-  # the base must carry none of the three subjects, or it is not the base
-  PN_CODE="$(grep -v '^ *#' "$PBASE")"
-  if grep -q 'pool-unit\|pool-nested\|pool-parent' <<< "$PN_CODE"; then bad "the watcher base block still names a subject"; PN_OK=0; fi
-fi
-[ "$PN_OK" = 1 ] && { bash -n "$PBASE" || { bad "the watcher base block does not parse"; PN_OK=0; }; }
-# the registration as a plain append: the pruned rewrite (two lines) becomes one `>>` of the new root
-pn_mut m-appendreg '/^            { printf .%s\\n. "\$fx_p"$/{N;s/.*/            printf "%s\\n" "$fx_p" >> "$fx_m\/.pool-nested"; rm -f "$fx_t"/;}' "$PB" || PN_OK=0
-# the pre-fix watcher line: the regular-file check on .pool-parent dropped, so the read opens the FIFO
-pn_mut m-nofifoguard 's/ \[ -f "\$e\/.pool-parent" \] && \[ ! -L "\$e\/.pool-parent" \] &&//' "$PB" || PN_OK=0
-pn_mut m-nomark 's/^      : > "\$wr\/.pool-unit"; /      /' "$PB" || PN_OK=0
-pn_mut m-noread 's/ \${1+"\$@"} -type f -ls/ -type f -ls/' "$PB" || PN_OK=0
-pn_mut m-novalidate 's/case "\${e##\*\/}" in fx\.??????) .* ;; esac$/set -- ${1+"$@"} "$e"/' "$PB" || PN_OK=0
-[ "$PN_OK" = 1 ] || broken "the watcher section could not build its blocks"
-
-wantpn() { printf '%s\n' "$WANT_PN" | sed -n "s/^$1=//p"; }
-# pn_eval <mutant>: the mutant's cells against the fix set's values; decides moved, twins stayed
-pn_eval() {
-  local name="$1" dec tw cells c got="" moved B_mut cond=0 ctl=1 n_run
-  dec="$(mrow "$name" decides)"; tw="$(mrow "$name" twins)"
-  [ -n "$dec" ] || { bad "MUTANT $name: no MUTANT-MATRIX row in the header"; return 0; }
-  dec="${dec//,/ }"; tw="${tw//,/ }"; [ "$tw" = - ] && tw=""
-  if [ "$MATRIX" = 1 ]; then cells="$PN_ALL"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"; MX_RAN=$((MX_RAN + 6 - n_run)); else cells="$dec $tw"; fi
-  for c in $cells; do got="$got$c=$(pn_val "$name" "$c")"$'\n'; done
-  B_mut="$(for c in $dec $tw; do [ "$(pn_val fix "$c")" = "$(wantpn "$c")" ] || { echo 0; exit 0; }; done; echo 1)"
-  moved="$(moved_of "$got" "$WANT_PN")"
-  [ "$MATRIX" = 1 ] && mx_row "$name" "$cells" "$moved"
-  # released once its FIFO writer saw the open, the hung unit then reaches ok: the drive ran and was only blocked
-  if [ "$name" = m-nofifoguard ] && [ "$(pn_v m-nofifoguard_fifo)" != ok ]; then ctl=0; fi
-  same_set "$moved" "$dec" && [ "$ctl" = 1 ] && cond=1
-  finish_mutant "$([ "$B_mut" = 1 ] && echo 1 || echo 0)" "$name" "$cond" \
-    "MUTANT $name kill confirmed: decides [$dec] moved, twin [${tw:--}] stayed green" \
-    "MUTANT $name moved [${moved% }], want [$dec] (twin [${tw:--}]); released-fifo control read $(pn_v m-nofifoguard_fifo)"
-}
-PN_MUTS="m-appendreg m-nofifoguard m-nomark m-noread m-novalidate"
 # PN_CYCLE'S SELF-PROBE, before any drive: three seeded record files, each a state its verdict must match. A cycle
 # (a lost token: each party entered a write on a different FIFO, nothing in flight) must fire; a buffered token (sent >
 # received on w) and both parties on the SAME FIFO must not. A detector that cannot fire, or fires on a transient, is
@@ -1015,27 +820,14 @@ case "$(pn_cycle "$WORK/probe.buffered.rec")" in none) ok "[watcher] pn_cycle se
 case "$(pn_cycle "$WORK/probe.samefifo.rec")" in none) ok "[watcher] pn_cycle self-probe: both parties on the same FIFO is not a cycle" ;;
   *) bad "[watcher] pn_cycle self-probe: two parties on one FIFO read as a cycle" ;; esac
 mkfifo "$WORK/pn.ev" && exec 4<> "$WORK/pn.ev" || broken "could not make or hold the watcher section's event FIFO"
-if [ "$MATRIX" = 1 ]; then
-  pn_launch fix "$PB" $PN_ALL; pn_launch base "$PBASE" pn_grow; pn_settle
-  for _m in $PN_MUTS; do
-    pn_launch "$_m" "$WORK/pn.mut.$_m.sh" $PN_ALL; pn_settle
-    PN_NOW="$_m"
-  done
-else
-  pn_launch fix "$PB" $PN_ALL; pn_launch base "$PBASE" pn_grow
-  for _m in $PN_MUTS; do
-    _cells="$(mrow "$_m" decides),$(mrow "$_m" twins)"; _cells="${_cells//,/ }"
-    pn_launch "$_m" "$WORK/pn.mut.$_m.sh" $_cells
-  done
-  pn_settle
-fi
+pn_launch fix "$PB" $PN_ALL; pn_settle
 exec 4<&-
 
 T="nested-root:${PB##*/}"; T="nested-root:$(basename "$(dirname "$(printf '%s\n' $HOOKS | sed -n 1p)")")/pre-push"
-f="$(pn_val fix pn_grow)"; b="$(pn_v base_grow)"
-if [ "$f" = ok ] && [ "$b" = REFUSED ]; then
-  ok "[$T] an outer unit whose only progress is its nested pool's scratch is ok under the fix and REFUSED on the base block, in one run"
-else bad "[$T] forced nested arm: fix=$f base=$b, want fix=ok base=REFUSED"; fi
+f="$(pn_val fix pn_grow)"
+if [ "$f" = ok ]; then
+  ok "[$T] an outer unit whose only progress is its nested pool's scratch is ok"
+else bad "[$T] forced nested arm: fix=$f, want ok"; fi
 for _c in pn_silent pn_hlink pn_hout; do
   v="$(pn_val fix "$_c")"
   [ "$v" = REFUSED ] && ok "[$T] $_c: REFUSED (a registered root that writes nothing, a listed symlink to a growing dir, and a listed outer pool root are never progress)" \
@@ -1047,60 +839,6 @@ v="$(pn_val fix pn_ord)"
 v="$(pn_val fix pn_fifo)"
 [ "$v" = REFUSED ] && ok "[$T] a listed entry whose .pool-parent is a FIFO is never read: the silent unit is REFUSED on the drive's own polls" \
                    || bad "[$T] a listed FIFO .pool-parent: the unit read ${v:-none}$([ "$v" = hung ] && printf ' (hung: its watcher opened the FIFO)'), want REFUSED (a watcher blocked on the FIFO never refuses)"
-for _m in $PN_MUTS; do pn_eval "$_m"; done
-
-# ------------------------------------------------- I66 binds the two blocks (once per push) ------
-# The hook-2 watcher and mutant drives were deleted on the strength of I66, which byte-compares the two
-# FIXTURE_POOL blocks (comments and blanks stripped, fixture root mapped). This arm proves I66 can fail:
-# the validator is driven with `--arms I66` over two trees of the eleven files it needs, one clean and one
-# with a single non-FXROOT byte added on an executable line of hook 2's block. The clean tree is a hard
-# precondition: a dependency missing from the copy set would fail I66 there too, and the seeded failure
-# would then read as a catch. It runs outside the mutant loop, once per push, and drives no pool.
-# I66_STUBS are prose files the validator's preamble requires to EXIST and I66 never reads: measured, an
-# empty stub for each leaves the clean tree at rc 0 and the seeded tree at rc 1 with `FAIL: I66`, and the
-# file absent is rc 2 (`tool-fail: required input not found`). They are seeded empty, so an edit to that
-# prose cannot move this fixture's verdict and the fixture does not key on them.
-I66_FILES="scripts/validate-enforcement-map.sh scripts/render-invariant-index.sh .githooks/pre-push core/git-hooks/pre-push core/scripts/hermetic-run.sh core/scripts/derive-fixture-readsets.sh core/skills/ai-dlc/enforcement-map.yaml"
-I66_STUBS="core/skills/ai-dlc/steps/gate-validation.md core/skills/ai-dlc/core-manifest.md core/skills/ai-dlc-update/fixture-manifest.md core/skills/ai-dlc-update/reconcile/setup-sites.md"
-i66_tree() { # i66_tree <dir>
-  local d="$1" f
-  for f in $I66_FILES; do
-    [ -f "$ROOT/$f" ] || broken "I66 copy set: $f is absent from $ROOT"
-    mkdir -p "$d/$(dirname "$f")" && cp -p "$ROOT/$f" "$d/$f" || broken "I66 copy set: could not copy $f"
-  done
-  for f in $I66_STUBS; do
-    mkdir -p "$d/$(dirname "$f")" && : > "$d/$f" || broken "I66 copy set: could not stub $f"
-  done
-}
-i66_run() { # i66_run <tree> -> rc in $I66_RC, output in $WORK/i66.<name>.out; cwd is outside the tree
-  ( cd "$WORK" && bash "$1/scripts/validate-enforcement-map.sh" --arms I66 ) > "$1.out" 2>&1; I66_RC=$?
-}
-I66_C="$WORK/i66.clean"; I66_S="$WORK/i66.seeded"
-i66_tree "$I66_C"; i66_tree "$I66_S"
-# the seed: one byte after the first executable POOL_DEPTH_IN= assignment inside hook 2's block
-awk '/^# FIXTURE_POOL_BEGIN$/ { inb = 1 } /^# FIXTURE_POOL_END$/ { inb = 0 }
-     inb && !done && /^POOL_DEPTH_IN=/ { sub(/^POOL_DEPTH_IN=/, "POOL_DEPTH_IN= "); done = 1 } { print }' \
-  "$I66_S/core/git-hooks/pre-push" > "$I66_S/hook2.t" && cat "$I66_S/hook2.t" > "$I66_S/core/git-hooks/pre-push" && rm -f "$I66_S/hook2.t"
-B_i66=0
-if cmp -s "$I66_C/core/git-hooks/pre-push" "$I66_S/core/git-hooks/pre-push"; then bad "I66 seed: the edit matched nothing, so it is not a seed"
-else
-  i66_run "$I66_C"
-  if [ "$I66_RC" -ne 0 ]; then
-    cat "$I66_C.out" >&2; echo "FIXTURE BROKEN: the I66 copy set is incomplete" >&2; exit 2
-  fi
-  if grep -q "$ROOT" "$I66_C.out"; then bad "[I66] the clean copy's output names the real tree $ROOT, so it did not run on the copy"
-  elif grep -q 'FAIL: I66' "$I66_C.out"; then bad "[I66] the clean copy reports an I66 FAIL"
-  else ok "[I66] i66_clean: on a clean copy of the eleven files the validator's I66 arm passes (rc 0)"; B_i66=1; fi
-  i66_run "$I66_S"
-  i66_cond=0
-  [ "$I66_RC" -eq 1 ] && grep -q 'FAIL: I66' "$I66_S.out" && ! grep -q "$ROOT" "$I66_S.out" && i66_cond=1
-  if [ "$MATRIX" = 1 ]; then
-    if [ "$i66_cond" = 1 ]; then mx_row i66-fork-seed "i66_clean i66_seeded" "i66_seeded"; else mx_row i66-fork-seed "i66_clean i66_seeded" ""; fi
-  fi
-  finish_mutant "$B_i66" i66-fork-seed "$i66_cond" \
-    "MUTANT i66-fork-seed kill confirmed: decides [i66_seeded] moved (rc 1, FAIL: I66), twin [i66_clean] stayed green" \
-    "MUTANT i66-fork-seed: a one-byte fork of hook 2's block read rc $I66_RC with no I66 FAIL line"
-fi
 
 # ------------------------------------------------- an interrupt tears the pool down (BL-881) ------
 # xargs runs in the background under `set -m` and the parent waits on it; INT/TERM/HUP reach the parent's
@@ -1150,8 +888,8 @@ TD_ALL="td_term td_queue td_rc td_decoy td_intp"
 #                  both did. THE FROZEN SLEEP NEVER RETURNS INTO THE WATCHER: the release does not end it, so no
 #                  watcher polls again after the teardown begins, and every start in this drive happens a fixed
 #                  number of times (a frozen sleep that returned on the release raced the worker's group KILL to
-#                  one more poll, measured 11 and 12 ps starts under td-ps-pgid). It ends when its watcher's group
-#                  is KILLed -- by pool_abort under the fix, by the worker once its unit exits under every mutant
+#                  one more poll, measured 11 and 12 ps starts). It ends when its watcher's group
+#                  is KILLed -- by pool_abort under the fix, by the worker once its unit exits
 #                  -- and otherwise at the lifeline lock's release: the drive closes fd 9 after the parent's exit, or
 #                  dies, and the shim KILLs its own watcher and exits; a seam that cannot be set up execs the real
 #                  sleep, so it degrades to the hook's own cadence and never spins, and first notes the fallback
@@ -1162,7 +900,7 @@ TD_ALL="td_term td_queue td_rc td_decoy td_intp"
 # NO CLOCK DECIDES A CELL (BL-868). Every wait ends on an event: a stub record, the parent's exit, a third stub, a
 # cleared `.k`, or the END RECORD -- a pid planted in `.pr/zz-end.k`, after every worker record in glob order, and
 # a `ps` PATH shim that runs the real ps and, AFTER it answers, writes `end.seen` when asked about that pid. A
-# pool_stop that tests each record with ps (td-ps-pgid) therefore marks the end of its kill loop, and the drive
+# pool_stop that tests each record with ps therefore marks the end of its kill loop, and the drive
 # reads its cells there instead of waiting for a parent that will not exit until the release. The fix never asks
 # ps about a record (pgrep is declared), so for it the event is the parent's exit.
 # LIVENESS, ps-free (sandbox-exec denies the setuid /bin/ps to the observer too, when the whole run is sandboxed):
@@ -1276,7 +1014,7 @@ td_orph() { # td_orph <stub pids> <orphan pids>: orphans listed in their stubs' 
   td_inl "$l" $2
 }
 td_stubs() { cat "$1"/s.* 2>/dev/null | cut -d' ' -f1 | tr '\n' ' '; }
-td_wait2() { # td_wait2 <stub dir>: until two stubs have recorded; every stub starts (no mutant touches dispatch)
+td_wait2() { # td_wait2 <stub dir>: until two stubs have recorded; every stub starts
   while [ "$(ls "$1" | grep -c '^s\.')" -lt 2 ]; do sleep 0.1; done
 }
 # td_xwait <dir> <pids>: records the pids it waits on in <dir>/xwait, then blocks until each is gone, paced, with no
@@ -1285,7 +1023,7 @@ td_xwait() { local x d="$1"; shift; [ "$#" -gt 0 ] || { [ "${blk:-}" = "$PB" ] &
 # td_drive <block> <set> <term|int> -> appends the mode's cells to $WORK/td.<set>.v
 # EVERY DRIVE ENDS WITH ITS SUBJECT'S xargs GONE (BL-985). xargs is the parent's only child once both stubs have
 # recorded (the parent then sits in its wait for it), so it is read there, once, by `pgrep -P`. A parent that exits
-# without tearing the pool down (td-old-traps: `exit 143` in place of pool_stop) leaves xargs orphaned, and after the
+# without tearing the pool down (`exit 143` in place of pool_stop) leaves xargs orphaned, and after the
 # release it dispatches the queued unit -- one more worker started -- after this drive had stopped waiting: whether
 # that start was counted then depended on the fixture outliving it. So each mode waits for xargs to be gone before it
 # records its cells, and every start the drive causes has happened by then.
@@ -1389,7 +1127,7 @@ ts_hold() {
   perl -e 'use Fcntl ":flock"; open(my $f, "<&=", 9) or exit 3; flock($f, LOCK_EX | LOCK_NB) or exit 4; exit 0'
 }
 # ts_launch <drive dir> <block> -> the sandboxed run_fixtures launch, its pid in p. It CLOSES fd 9, the lifeline,
-# so nothing under the subject can hold the lifeline lock after the drive has gone (td-life-fd).
+# so nothing under the subject can hold the lifeline lock after the drive has gone.
 ts_launch() {
   set -m
   ( cd "$1/w" && unset PREPUSH_POOL_DEPTH && export PATH="$1/shim:$PATH" TD_SLP="$slp" AI_DLC_FIXTURE_JOBS=2 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 TD_DIR="$1/s" \
@@ -1557,64 +1295,6 @@ for _c in $TD_ALL $TS_ALL $TL_ALL; do
   if [ "$v" = "$(wanttd "$_c")" ]; then ok "[$T] teardown $_c=$v"
   else bad "[$T] teardown $_c read [${v:-none}], want [$(wanttd "$_c")]"; fi
 done
-# td_mut <name> <sed-expr>: a copy of the block, one edit, exactly one line changed
-td_eval() {
-  local name="$1" m="$WORK/td.mut.$1.sh" dec tw cells c got="" moved bm cond=0 n_run fam="$TD_ALL"
-  dec="$(mrow "$name" decides)"; tw="$(mrow "$name" twins)"
-  [ -n "$dec" ] || { bad "MUTANT $name: no MUTANT-MATRIX row in the header"; return 0; }
-  dec="${dec//,/ }"; tw="${tw//,/ }"
-  sed "$2" "$PB" > "$m" || { bad "MUTANT $name: sed did not apply"; return 0; }
-  if cmp -s "$PB" "$m"; then bad "MUTANT $name: the edit matched nothing, so it is not a mutant"; return 0; fi
-  # the edit removed or changed exactly one line of the block (a multiset count, so a duplicate line elsewhere still counts)
-  [ "$(awk 'NR == FNR { c[$0]++; next } { c[$0]-- } END { for (k in c) if (c[k] > 0) n += c[k]; print n + 0 }' "$PB" "$m")" -eq 1 ] \
-    || { bad "MUTANT $name: the edit did not change exactly one line"; return 0; }
-  # a mutant whose decides are sandboxed cells has the sandboxed drive as its family; every other td mutant has the plain drives
-  case " $dec " in *" td_sbx_"*) fam="$TS_ALL" ;; esac
-  if [ "$MATRIX" = 1 ]; then cells="$fam"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"; MX_RAN=$((MX_RAN + $(printf '%s\n' $fam | grep -c .) - n_run)); else cells="$dec $tw"; fi
-  ( td_run "$m" "$name" $cells )
-  for c in $cells; do got="$got$c=$(td_val "$name" "$c")"$'\n'; done
-  # the base-pass flag is COMPUTED in this run: 1 only when every decides and twin cell read its want on the unmutated block
-  bm="$(for c in $dec $tw; do [ "$(td_val fix "$c")" = "$(wanttd "$c")" ] || { echo 0; exit 0; }; done; echo 1)"
-  moved="$(moved_of "$got" "$WANT_TD")"
-  [ "$MATRIX" = 1 ] && mx_row "$name" "$cells" "$moved"
-  same_set "$moved" "$dec" && cond=1
-  finish_mutant "$([ "$bm" = 1 ] && echo 1 || echo 0)" "$name" "$cond" \
-    "MUTANT $name kill confirmed: decides [$dec] moved, twin [${tw:--}] stayed green" \
-    "MUTANT $name moved [${moved% }], want [$dec] (twin [${tw:--}])"
-}
-td_eval td-old-traps "s/trap 'pool_stop 130' INT; trap 'pool_stop 143' TERM; trap 'pool_stop 129' HUP$/trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP/"
-td_eval td-no-stop '/^    \[ -f "\$AI_DLC_FX_OUT\/.pr\/.stop" \] && { : > "\$pr.k"; exit 255; }$/d'
-# the group guard removed: pool_stop TERMs every recorded pid, the planted stale record included
-TS_CASE='^      case .*"\$pg".*) \(kill -TERM "\$p" 2>\/dev\/null\) ;; esac$'
-td_eval td-no-pgid "s/$TS_CASE/      \\1/"
-# the ps group test restored (BL-881): with ps failing it is always false and no worker is TERMed; the drive
-# reads its cells on the END RECORD's ps mark, which this pool_stop makes after deciding every earlier record
-td_eval td-ps-pgid "s/$TS_CASE/      [ \"\$(ps -o pgid= -p \"\$p\" 2>\\/dev\\/null | tr -d ' ')\" = \"\$pool_xp\" ] \\&\\& \\1/"
-# pool_kill's ps-free walk removed: with ps failing it kills only the unit pid and the unit's own group
-td_eval td-no-tree 's/^      \[ -n "\$2" \] || { pool_kill_tree "\$1" "\$3" "\$4"; return 0; }$/      [ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }/'
-# pool_kill_tree's per-pid group KILL removed: a unit-group orphan (ppid 1) is reached by nothing else
-td_eval td-no-pidgrp '/^      for p in \$l; do kill -KILL -- "-\$p"; done$/d'
-# the remembered-group KILL removed: an orphaned group leader the watcher remembered is reached by nothing else
-td_eval td-no-memgrp '/^      for g in \$3; do case " \$l " in/d'
-# the ps-free memory removed (the 8713fbf6f shape): the watcher never writes the orphaned leader's group to `.g`, so
-# the stub reads `unremembered` after its frozen poll and the leader survives; it must be KILLED, never hang
-td_eval td-no-mem '/^          \[ -n "\$self" \] || { pool_mem "\$pid"/d'
-# the lifeline's closure on the subject launch dropped: the mutant is ts_launch's own text, re-defined in a subshell
-# with its one `9>&-` removed, so every process of the subject inherits fd 9's open file description and the EX
-# lock stays held after the drive dies; td_life reads leaked:held by one non-blocking lock attempt, so no wait can hang
-tl_m="$(declare -f ts_launch)"
-if [ "$(printf '%s\n' "$tl_m" | grep -c ' 9>&- &')" != 1 ]; then bad "MUTANT td-life-fd: ts_launch carries no single ' 9>&- &', so it is not a mutant"
-else
-  ( eval "$(printf '%s\n' "$tl_m" | sed 's/ 9>&- &/ \&/')"; td_run "$PB" td-life-fd $TL_ALL )
-  tl_got=""; for _c in $TL_ALL; do tl_got="$tl_got$_c=$(td_val td-life-fd "$_c")"$'\n'; done
-  tl_bm="$(for _c in $TL_ALL; do [ "$(td_val fix "$_c")" = "$(wanttd "$_c")" ] || { echo 0; exit 0; }; done; echo 1)"
-  tl_moved="$(moved_of "$tl_got" "$WANT_TD")"
-  [ "$MATRIX" = 1 ] && mx_row td-life-fd "$TL_ALL" "$tl_moved"
-  tl_cond=0; same_set "$tl_moved" "$(mrow td-life-fd decides)" && tl_cond=1
-  finish_mutant "$([ "$tl_bm" = 1 ] && echo 1 || echo 0)" td-life-fd "$tl_cond" \
-    "MUTANT td-life-fd kill confirmed: decides [td_life] moved ($(td_val td-life-fd td_life)), twin [td_life_alive] stayed green" \
-    "MUTANT td-life-fd moved [${tl_moved% }], want [td_life] (read ${tl_got//$'\n'/ })"
-fi
 
 # ------------------------------------------------- pool_stop waits for xargs ONCE (BL-881) ---------
 # pool_stop has set INT/TERM/HUP to '' before it waits, so a status above 128 can only mean xargs itself died
@@ -1656,21 +1336,6 @@ for _c in sig exit; do
   if [ "$v" = "$PS_WANT" ]; then ok "[$T] pool_stop ps_$_c=$v"
   else bad "[$T] pool_stop ps_$_c read [$v], want [$PS_WANT]"; fi
 done
-B_ps="$([ "$ps_fix_sig" = "$PS_WANT" ] && [ "$ps_fix_exit" = "$PS_WANT" ] && echo 1 || echo 0)"
-PS_M="$WORK/ps.mut.sh"
-sed 's/^    wait "\$pool_xp"$/    while :; do wait "$pool_xp"; [ "$?" -gt 128 ] || break; done/' "$PB" > "$PS_M"
-if cmp -s "$PB" "$PS_M"; then bad "MUTANT ps-rewait: the edit matched nothing, so it is not a mutant"
-else
-  ps_m_sig="$(ps_drive "$PS_M" sig)"; ps_m_exit="$(ps_drive "$PS_M" exit)"
-  ps_moved=""
-  [ "$ps_m_sig" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_sig "
-  [ "$ps_m_exit" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_exit "
-  [ "$MATRIX" = 1 ] && mx_row ps-rewait "ps_sig ps_exit" "$ps_moved"
-  ps_cond=0; same_set "$ps_moved" "$(mrow ps-rewait decides)" && ps_cond=1
-  finish_mutant "$([ "$B_ps" = 1 ] && echo 1 || echo 0)" ps-rewait "$ps_cond" \
-    "MUTANT ps-rewait kill confirmed: decides [ps_sig] moved ($ps_m_sig), twin [ps_exit] stayed green" \
-    "MUTANT ps-rewait moved [${ps_moved% }], want [ps_sig] (sig read $ps_m_sig, exit read $ps_m_exit)"
-fi
 
 # ------------------------------------------------- consumer-layout jobs (BL-1027, BL-1043) -----
 # The distribution hook's fixture_suite_step installs the tree into a scratch consumer tree and names it in the
@@ -1713,7 +1378,10 @@ fi
 #              (keyed on the distribution lib/rd.txt, which did not move) does not either
 #   cl_cstore  a no-change push with cl-dec's CONSUMER-LAYOUT store entry (the fixed consumer root's project, cl-dec's
 #              installed-path rows) seeded and its record removed: "<cl-dec@consumer>|<record>": the store skips the
-#              unit and the record is republished. With cl_v (a DISTRIBUTION entry never skips <fx>@consumer) this is
+#              unit and the record is republished; "<count>": the verdict-store line names exactly cl-dec@consumer, and
+#              cl-ok@consumer and cl-rd@consumer, skipped on records an earlier completed push confirmed (A1 named and
+#              cleared cl-ok's census record, A6's pool passed cl-rd), are not on it (BL-1100).
+#              With cl_v (a DISTRIBUTION entry never skips <fx>@consumer) this is
 #              the invariant both ways: only a consumer-layout pass at the unit's placement satisfies it
 #   cl_entry   PREPUSH_CL_ENTRY absent: rc 0, no tree announced, install.sh never ran, no @consumer row
 #   cl_entry_ran  the same push: every distribution fixture ran (its positive conjunct)
@@ -1726,7 +1394,7 @@ fi
 #               "<verified format>|<keys dir>|<census selection>": every candidate is selected (F-B5)
 #   cl_fb5_state  the consumer record that census writes for cl-ok reads `#state ok`, never `#state seeded`
 #               (A seed from the v2 record cannot skip a unit here: its keys are distribution paths, and every unit
-#               is keyed on installed ones, so it is not guarded and not mutated.)
+#               is keyed on installed ones, so it is not guarded.)
 #   cl_fb2     run_fixtures at depth 1 with the switch inherited (exported) over a valid tree: rc 0, no @consumer row,
 #              and the depth-1 notice printed (F-B2)
 #   cl_fb2_ran the same drive: every distribution fixture ran
@@ -1735,9 +1403,7 @@ fi
 #   cl_inst_rc   the REAL install.sh refusing the tree: "<rc>|<FAIL line naming scripts/install.sh>|<unit rows>|<tree
 #                removed>" -- fails closed, the pool never opens, the tree does not leak (D2)
 #   cl_inst_arg  the target the real install.sh's log names is the tree the FAIL line names (D2)
-#   cl_resume  a census stopped mid-run keeps the passes it made (cl_K)
-# MUTANTS (rows in the header), each a cmp -s guarded copy of the span it edits, driven over only the stages its
-# decides and twins need, each drive on a fresh copy of the template.
+#   cl_resume  a census stopped mid-run keeps the passes it made, and the next selection names them (cl_K)
 CLH="$ROOT/.githooks/pre-push"
 CLC="$ROOT/scripts/census-consumer-layout.sh"
 [ -f "$CLH" ] || broken "the consumer-layout section needs the distribution hook .githooks/pre-push"
@@ -1903,7 +1569,8 @@ cl_A() {
   esac
   case " $4 " in *" 7 "*)
     if cl_seed_cstore "$P" "$W" cl-dec; then r="$(cl_drive "$P" "$S" "$W" "$g.A7" step)"; o="$CLW/out.$g.A7"
-      printf 'cl_cstore=%s|%s\n' "$(cl_row "$o" cl-dec@consumer)" "$([ -f "$(cl_kdir "$W")/cl-dec.key" ] && echo rec || echo norec)"
+      printf 'cl_cstore=%s|%s|%s\n' "$(cl_row "$o" cl-dec@consumer)" "$([ -f "$(cl_kdir "$W")/cl-dec.key" ] && echo rec || echo norec)" \
+        "$(cl_cnt '^   \.\.    verdict store: 1 fixture(s) skipped on a pass recorded elsewhere: cl-dec@consumer$' "$o")"
     else printf 'cl_cstore=noseed\n'; fi ;;
   esac
 }
@@ -1919,7 +1586,8 @@ cl_B() {
   # Every spelling of the world path (a resolved /private/var form, a doubled slash from TMPDIR): the world dirs are
   # named `<tag>.wb` under $CLW/, so the path is matched by that shape rather than by one literal spelling.
   grep -v '^   done ' "$o" | sed -E "s|[^ (]*/cl/[A-Za-z0-9._-]+\.wb(\.main)?|WORLD|g" > "$o.f"
-  if [ -s "$o.f" ] && cmp -s "$o.f" "$CLW/noseam.f"; then printf 'cl_vi_out=same\n'; else printf 'cl_vi_out=differs\n'; fi
+  if [ -s "$o.f" ] && cmp -s "$o.f" "$CLW/noseam.f"; then printf 'cl_vi_out=same\n'
+  else printf 'cl_vi_out=differs\n'; { echo "  note  cl_vi_out: diff of the no-seam reference (<) against this drive (>):"; diff "$CLW/noseam.f" "$o.f" | head -n 20; } >&2; fi
   printf 'cl_vi_list=%s|%s\n' "$(cl_cnt '@consumer' "$o")" "$([ -e "$(cl_kdir "$W")" ] && echo cl-keys || echo none)"
   case " $4 " in *" 2 "*|*" 3 "*)
     r="$(cl_drive "$P" "$S" "$W" "$g.B1" step)"; o="$CLW/out.$g.B1"
@@ -1955,6 +1623,8 @@ cl_C() {
 # finished when the sentinel appears; the drive then TERMs that group. cl_resume = "<records left by the stopped
 # census>|<the second census's selection>|<cl-ok@consumer lines in the second census>": cl-ok's pass survived the
 # stop and is not run again. Kept only at the end, the stop would lose it and the second census would read 4 of 4.
+# "|<count>": the second census names cl-ok@consumer on the verdict-store line, its record still unconfirmed because
+# no run that reached its end cleared the mark (BL-1100; cl_cstore holds the confirmed near-miss).
 cl_K() {
   local P="$1" g="$3" W="$CLW/$3.wk" pid r h="$CLW/hold.$3"
   cp -Rp "$CLT" "$W" && mkdir -p "$W/core/fixtures/cl-zhold" || broken "could not build the stop world"
@@ -1970,7 +1640,8 @@ cl_K() {
   kill -TERM -- "-$pid" 2>/dev/null; wait "$pid" 2>/dev/null; : > "$h.go"
   r="$(cl_recs "$(cl_kdir "$W")")"
   [ "$(cl_census "$P" "$W" "$g.K2")" != "" ] || broken "the second census of the stop world printed no exit status"
-  printf 'cl_resume=%s|%s|%s\n' "$r" "$(sed -n 's/^   \.\.    consumer layout: \([0-9]* of [0-9]*\) shipping.*/\1/p' "$CLW/census.$g.K2")" "$(cl_cnt '^cl-ok@consumer ' "$CLW/census.$g.K2")"
+  printf 'cl_resume=%s|%s|%s|%s\n' "$r" "$(sed -n 's/^   \.\.    consumer layout: \([0-9]* of [0-9]*\) shipping.*/\1/p' "$CLW/census.$g.K2")" "$(cl_cnt '^cl-ok@consumer ' "$CLW/census.$g.K2")" \
+    "$(cl_cnt '^   \.\.    verdict store: 1 fixture(s) skipped on a pass recorded elsewhere: cl-ok@consumer$' "$CLW/census.$g.K2")"
 }
 # cl_R <pool> <step> <tag>: the REAL scripts/install.sh, which refuses this world (no jq on a hermetic PATH, or no
 # scaffold-ignore.sh beside it); its log tail names its target
@@ -1997,7 +1668,7 @@ cl_iv=ok|1
 cl_nl=none|ok
 cl_ni=none|ok
 cl_tp=ok|none|none
-cl_cstore=none|rec
+cl_cstore=none|rec|1
 cl_entry=0|0|no|0
 cl_entry_ran=cl-bad cl-dist cl-ok cl-vs
 cl_vi_out=same
@@ -2010,7 +1681,7 @@ cl_fb2_ran=cl-bad cl-dist cl-ok cl-vs
 cl_fb2_d0=3|unset
 cl_inst_rc=1|1|0|gone
 cl_inst_arg=tree
-cl_resume=cl-ok|3 of 4|0"
+cl_resume=cl-ok|3 of 4|0|1"
 # cl_score <pool> <step> <tag> <cells...>: drives only the stages the cells need, prints only those cells
 cl_score() {
   local P="$1" S="$2" g="$3" c a="" b="" cc="" r=0 k=0; shift 3
@@ -2040,7 +1711,6 @@ if [ "$(printf '%s\n' "$CL_GOT" | grep -c .)" -eq "$(printf '%s\n' "$CL_WANT" | 
 else
   bad "[cl] the consumer-layout drives emitted $(printf '%s\n' "$CL_GOT" | grep -c .) cells, want $(printf '%s\n' "$CL_WANT" | grep -c .) -- a harness that died reads as clean"
 fi
-[ "$MATRIX" = 1 ] && { MX_RAN=$((MX_RAN+1)); mx_row cl-baseline "$CL_CELLS" "$(moved_of "$CL_GOT" "$CL_WANT")"; }
 clcheck() { # clcheck <label> <cell...>
   local label="$1" k g w badk=""; shift
   for k in "$@"; do
@@ -2080,68 +1750,22 @@ done
 if [ "$cl_ctl" -eq 8 ] && [ "$cl_err" -eq 0 ]; then ok "[cl] the baseline drives' own output: 0 'command not found' / 'No such file or directory' lines beside 8 tree-built control lines"
 else bad "[cl] the baseline drives' own output: $cl_err 'command not found' / 'No such file or directory' line(s), $cl_ctl tree-built control line(s) (want 0 and 8)"; fi
 
-cl_mutant() { # cl_mutant <name> <pool|step> <sed-expr>; decides and twins come from the header row
-  local name="$1" ex="$3" src m P S dec tw cells g moved cond=0 B_cl c
-  dec="$(mrow "$name" decides)"; tw="$(mrow "$name" twins)"
-  [ -n "$dec" ] || { bad "[cl] MUTANT $name: no MUTANT-MATRIX row in the header"; return 0; }
-  dec="${dec//,/ }"; tw="${tw//,/ }"
-  if [ "$2" = pool ]; then src="$CLW/pool.sh"; else src="$CLW/step.sh"; fi
-  m="$CLW/mut.$name.sh"
-  sed "$ex" "$src" > "$m" || { bad "[cl] MUTANT $name: sed DID NOT APPLY"; return 0; }
-  if cmp -s "$src" "$m"; then bad "[cl] MUTANT $name: the edit matched nothing, so it is not a mutant"; return 0; fi
-  P="$CLW/pool.sh"; S="$CLW/step.sh"; [ "$2" = pool ] && P="$m" || S="$m"
-  B_cl="$(for c in $dec $tw; do
-    [ "$(printf '%s\n' "$CL_GOT" | sed -n "s/^$c=//p")" = "$(printf '%s\n' "$CL_WANT" | sed -n "s/^$c=//p")" ] || { echo 0; exit 0; }
-  done; echo 1)"
-  if [ "$MATRIX" = 1 ]; then cells="$CL_CELLS"; MX_RAN=$((MX_RAN + $(printf '%s\n' $cells | grep -c .) - $(printf '%s\n' $dec $tw | grep -c .)))
-  else cells="$dec $tw"; fi
-  g="$(cl_score "$P" "$S" "m-$name" $cells)"
-  moved="$(moved_of "$g" "$CL_WANT")"
-  [ "$MATRIX" = 1 ] && mx_row "$name" "$cells" "$moved"
-  same_set "$moved" "$dec" && cond=1
-  finish_mutant "$([ "$B_cl" = 1 ] && echo 1 || echo 0)" "$name" "$cond" \
-    "[cl] MUTANT $name kill confirmed: decides [$dec] moved, twin [$tw] stayed green" \
-    "[cl] MUTANT $name moved [${moved% }], want [$dec] (twin [$tw])"
-}
-cl_mutant cl-dist-keyed      pool 's|^  ( cd "\$cl_tree" \|\| exit 1$|  ( :|'
-cl_mutant cl-select-all      pool 's|^    awk -F'"'"'\\t'"'"' '"'"'\$2 == "run" { print \$1 }'"'"' "\$c/\.kdec" > "\$out/\.cl\.sel"$|    cp "$out/.cl.all" "$out/.cl.sel"|'
-cl_mutant cl-stamp-raw       pool 's|^    if \[ -f \.claude/\.ai-dlc-version \]; then$|    if false; then|'
-cl_mutant cl-no-refusal      pool 's|^  elif \[ "\$2" != census \] && ! cl_any_record "\$kd" |  elif false \&\& ! cl_any_record "$kd" |'
-cl_mutant cl-store-dist-project pool 's|^    KEYS_DIR="\$kd"; FXROOT=|    readset_vs_store() { printf "%s" "$p"; }; KEYS_DIR="$kd"; FXROOT=|'
-cl_mutant cl-publish-late     pool 's|^  \[ -n "\$kd" \] && \[ -s "\$1/\.cl/\.k/\$2" \] \|\| return 0$|  return 0|'
-cl_mutant cl-publish-worker   pool 's|; \. "\$AI_DLC_FX_OUT/\.cl\.pub" && cl_publish "\$AI_DLC_FX_OUT" "\$cf"$||'
-cl_mutant cl-record-on-red   pool 's|^    \[ "\$(cat "\$out/\$b@consumer" 2>/dev/null)" = ok \] \|\| rm -f "\$c/\.k/\$b"$|    printf ok > "$c/$b"|'
-cl_mutant cl-depth1-honoured pool 's|^  if \[ "\$POOL_DEPTH_IN" -eq 0 \]; then cl_tree="\${AI_DLC_FX_CL_TREE:-}"; fi$|  cl_tree="${AI_DLC_FX_CL_TREE:-}"|'
-cl_mutant cl-switch-on       pool 's|cl_tree="\${AI_DLC_FX_CL_TREE:-}"; fi$|cl_tree="${AI_DLC_FX_CL_TREE:-no-tree}"; fi|'
-cl_mutant cl-no-entry        step 's|^  if \[ "\$POOL_DEPTH_IN" -eq 0 \] && \[ "\${PREPUSH_CL_ENTRY:-}" = 1 \]; then$|  if [ "$POOL_DEPTH_IN" -eq 0 ]; then|'
-cl_mutant cl-fail-open       step '/^      eval "rm -rf -- \$cl_q"; trap - EXIT INT TERM HUP$/{n;s/^      return 1$/      :/;}'
-cl_mutant cl-no-arg          step 's|bash scripts/install\.sh "\$cl_top" )|bash scripts/install.sh )|'
-
 # ------------------------------------------------- BL-924's RECEIPT, against THIS run.sh ---------
 # The receipt builds ONE scratch copy of this file, forces the two schedules BL-924 names (fx6 writes its flight
 # file only after the barrier poller has counted or looked again after a look at five, read off barrier.look; the
 # first step of fix_hlink, fix_fifo and fix_silent records `unit hold` and waits until the fixture has recorded that
 # drive or written a new look line for it in pn.rej), and prints a `CELL <name> PASS|FAIL` line per cell. Its copy
-# ends at the watcher mutant loop, so it never reaches this arm. Exit 9 is a refusal to measure: FIXTURE BROKEN.
+# ends at the watcher cells, so it never reaches this arm. Exit 9 is a refusal to measure: FIXTURE BROKEN.
 # NECESSITY: the forced schedules are states no unforced drive above reaches, so no cheaper call shows them.
 RCPT924="$(dirname "$0")/receipt-bl924.sh"
 [ -f "$RCPT924" ] || { echo "FIXTURE ERROR: missing $RCPT924" >&2; exit 2; }
 bash "$RCPT924" "$0" > "$WORK/rcpt924.out" 2> "$WORK/rcpt924.err"; rcpt924_rc=$?
-if [ "$rcpt924_rc" = 0 ] && [ "$(grep -c '^CELL [a-z_0-9-]* PASS' "$WORK/rcpt924.out")" = 5 ]; then
-  ok "[$T] BL-924 receipt: under the forced late-flight-file and late-writer schedules, $(grep '^CELL barrier ' "$WORK/rcpt924.out" | cut -d' ' -f4-9); pn_hlink, pn_fifo and pn_silent REFUSED; not-exported moves only its own decides"
+if [ "$rcpt924_rc" = 0 ] && [ "$(grep -c '^CELL [a-z_0-9-]* PASS' "$WORK/rcpt924.out")" = 4 ]; then
+  ok "[$T] BL-924 receipt: under the forced late-flight-file and late-writer schedules, $(grep '^CELL barrier ' "$WORK/rcpt924.out" | cut -d' ' -f4-9); pn_hlink, pn_fifo and pn_silent REFUSED"
 elif [ "$rcpt924_rc" = 9 ]; then
   broken "receipt-bl924.sh refused to measure: $(sed -n 1p "$WORK/rcpt924.err")"
 else
   bad "[$T] BL-924 receipt exited $rcpt924_rc against this run.sh: $(grep '^CELL [a-z_0-9-]* FAIL' "$WORK/rcpt924.out" | cut -d' ' -f2 | tr '\n' ' ')"
-fi
-
-# a plain run executes no matrix-only cell: the counter moves only on the --matrix path
-if [ "$MATRIX" = 1 ]; then
-  ok "matrix mode: $MX_RAN matrix-only cells were driven beyond the per-push decides and twins"
-elif [ "$MX_RAN" -eq 0 ]; then
-  ok "a plain run executed no matrix-only cell"
-else
-  bad "a plain run executed $MX_RAN matrix-only cells"
 fi
 
 echo

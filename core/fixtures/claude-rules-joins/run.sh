@@ -3,70 +3,11 @@
 # Exercise scripts/validate-claude-rules.sh -- the join between CLAUDE.md and the
 # path-scoped authoring rules under `.claude/rules/`.
 #
-# Six mutants plus an UNMUTATED CONTROL, each a throwaway repo under a temp dir.
-# Exit 0 iff the control is green AND all six mutants are killed by their own arm.
-#
-#   control  clean seed tree                                    -> must PASS
-#   m1  A1  a tracked `.claude/settings.json`                    -> must FAIL
-#   m2  A2  a `paths:` glob typo'd to match nothing              -> must FAIL
-#   m3  A3  frontmatter `globs:` instead of `paths:`             -> must FAIL
-#   m4  A4  CLAUDE.md pointing at a rule file that is not there  -> must FAIL
-#   m5  A4  a rule with neither pointer nor no-stub marker       -> must FAIL
-#   m6  A4  a no-stub marker with an EMPTY reason                -> must FAIL
-#   m7  A3b a rule declaring neither paths: nor unconditional:   -> must FAIL
-#   m8  A3b a rule declaring BOTH                                -> must FAIL
-#   m9  A3b an `unconditional:` marker with an EMPTY reason      -> must FAIL
-#   m10 A5  a bold **I<n>** citation the index does not list     -> must FAIL
-#   m11 A6  durable channel over its byte ceiling                -> must FAIL
-#   mA1 A1  the probe seeds no `.claude/settings.json`           -> must FAIL (A1's own probe)
-#   mA2 A2  the probe's typo-glob prefix judgement inverted      -> must FAIL (A2's own probe)
-#   mA2b A2 glob_matches ignores its pattern (every tracked path) -> must FAIL (A2's own probe)
-#
-# WHY THE CONTROL IS NOT DECORATION. Each mutant is a fresh seed plus one edit, and the
-# validator resolves its own root by walking up for VERSION. A seed that fails to build
-# -- no VERSION, no git -- makes the validator exit 2 and print nothing, and "no output"
-# would otherwise score as a kill on all six. The control is what separates "the arm
-# fired" from "the harness died".
-#
-# WHY `cmp -s` GUARDS EVERY sed. A `sed` whose pattern stopped matching produces a
-# byte-identical copy; the validator then correctly passes and the arm reports SURVIVED
-# for a mutation that never happened. The guard turns that into an explicit SKIP.
-#
-# A mutant must fail ONLY its own assertion. Two FAIL lines mean the arms are entangled
-# and one of them is vacuous, so the count is asserted, not just the message.
-#
-# Usage: run.sh [--matrix]
-#
-# THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). One run of a mutated tree's copy answers every
-# arm the validator carries (A1 A2 A3 A3b A4 A5 A6), and kill_check asserts the FAIL lines are exactly one, its own:
-# the whole arm vector is each mutant's decision, so each is a FULL row whose worlds are those arms. `--matrix` prints
-# one `MATRIX <mutant> FULL [<arms that FAILed>]` row per mutant; the per-push score is the same run. The mutant name
-# mutant_killed carries is the label's first word (m1, mA2b, ...). The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run it from the repo root:
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/claude-rules-joins/run.sh --matrix
-# MUTANT-MATRIX-FULL m1 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A1's, across every arm
-# MUTANT-MATRIX-FULL m2 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A2's, across every arm
-# MUTANT-MATRIX-FULL m3 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A3's, across every arm
-# MUTANT-MATRIX-FULL m4 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A4's, across every arm
-# MUTANT-MATRIX-FULL m5 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A4's, across every arm
-# MUTANT-MATRIX-FULL m6 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A4's, across every arm
-# MUTANT-MATRIX-FULL m7 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A3b's, across every arm
-# MUTANT-MATRIX-FULL m8 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A3b's, across every arm
-# MUTANT-MATRIX-FULL m9 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A3b's, across every arm
-# MUTANT-MATRIX-FULL m10 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A5's, across every arm
-# MUTANT-MATRIX-FULL m11 worlds=A1,A2,A3,A3b,A4,A5,A6 why=the m11 arm asserts exactly one FAIL line, A6's, across every arm
-# MUTANT-MATRIX-FULL mA1 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A1's own probe, across every arm
-# MUTANT-MATRIX-FULL mA2 worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A2's own probe, across every arm
-# MUTANT-MATRIX-FULL mA2b worlds=A1,A2,A3,A3b,A4,A5,A6 why=kill_check asserts exactly one FAIL line, A2's own probe, across every arm
-# MUTANT-MATRIX-DYNAMIC kill_check why=kill_check passes the first word of each label above to mutant_killed by variable
+# Behavioural arms over throwaway repos under a temp dir: the control tree passes, the cli cells
+# (pass, finding, usage) agree byte for byte with the in-process call, the no-VERSION refusal names
+# the running copy, and the probe builds and reads its own repository under an inherited git
+# environment (m12, m12b, m13).
 set -u
-MATRIX=0
-for _a in "$@"; do
-  case "$_a" in
-    --matrix) MATRIX=1 ;;
-    *) echo "FIXTURE ERROR: unknown argument '$_a' (only --matrix)" >&2; exit 2 ;;
-  esac
-done
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset CLAUDE_PROJECT_DIR
@@ -109,9 +50,6 @@ ok()  { note "ok    $1"; }
 bad() { note "FAIL  $1"; rc=1; }
 # shellcheck source=/dev/null
 . "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-# B_CTRL=1 only beside the unmutated control's own ok: every mutant below is scored only if it passed.
-B_CTRL=0
-
 seed() {
   local d="$1"
   mkdir -p "$d/.claude/rules" "$d/scripts" "$d/core/fixtures/demo" "$d/docs/plans"
@@ -180,13 +118,13 @@ eq_rc() { cat "$EQ/$1.cl.rc"; }
 eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
   "$(tail -c 300 "$EQ/$1.ip.out")" "$(tail -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(tail -c 300 "$EQ/$1.cl.out")" "$(tail -c 300 "$EQ/$1.cl.err")"; }
 
-# --- unmutated control ------------------------------------------------------
+# --- control ------------------------------------------------------
 seed "$TMP/control"
 src_vcr "$TMP/control"
 if out="$(run_v "$TMP/control")" && [ -n "$out" ]; then
-  ok "control -- clean tree passes, harness is live"; B_CTRL=1
+  ok "control -- clean tree passes, harness is live"
 else
-  note "FIXTURE BROKEN: the unmutated control did NOT pass. Every mutant verdict below is meaningless."
+  note "FIXTURE BROKEN: the control did NOT pass. Every verdict below is meaningless."
   printf '%s\n' "$out" | sed 's/^/      /'
   exit 1
 fi
@@ -198,30 +136,28 @@ if eqv cli-usage "$TMP/control" --no-such-flag && [ "$(eq_rc cli-usage)" = 2 ] &
   ok "cli-usage: the program refuses an unknown argument exactly as the in-process call does (stderr, exit 2)"
 else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-usage))"; fi
 
-# --- mutant driver ----------------------------------------------------------
-kill_check() { # kill_check <name> <dir> <expected-substring>
+# --- bad-input arms ----------------------------------------------------------
+# rejects <name> <dir> <expected-substring>: the unmodified validator must exit non-zero on the seeded bad tree, print
+# the expected substring, and print exactly one FAIL line (its own arm's), so two arms speaking means they are entangled.
+rejects() {
   local n="$1" d="$2" pat="$3" out rc_v nfail
   src_vcr "$d"
   out="$(run_v "$d")"; rc_v=$?
   nfail="$(printf '%s\n' "$out" | grep -c '^FAIL:')"
-  [ "$MATRIX" = 1 ] && printf 'MATRIX %s FULL [%s]\n' "${n%% *}" "$(fail_arms "$out")"
   if [ "$rc_v" -eq 0 ]; then
-    note "FAIL  $n -- mutant SURVIVED (validator exited 0)"; rc=1; return
+    bad "$n -- validator exited 0 on a bad tree"; return
   fi
   if ! grep -qF "$pat" <<<"$out"; then
-    note "FAIL  $n -- validator failed, but not on its own assertion (wanted: $pat)"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return
+    bad "$n -- validator failed, but not on its own assertion (wanted: $pat)"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4; return
   fi
   if [ "$nfail" -ne 1 ]; then
-    note "FAIL  $n -- $nfail FAIL lines; a mutant must fail ONLY its own assertion, so the arms are entangled"
-    rc=1; return
+    bad "$n -- $nfail FAIL lines; a bad tree must fail ONLY its own assertion, so the arms are entangled"; return
   fi
-  mutant_killed "${B_CTRL:-0}" "${n%% *}" "$n -- killed by its own arm, and only its own"
+  ok "$n -- rejected by its own arm, and only its own"
 }
-# fail_arms <validator output> -> the arm id each FAIL line opens with (A1, A3b, ...), sorted, space-separated
-fail_arms() { sed -n "s/^FAIL: \(A[0-9][a-z]*\)[:'].*/\1/p" <<<"$1" | LC_ALL=C sort | tr '\n' ' '; }
 
-mutate() { # mutate <file> <sed-expr> ; guarded so a no-op sed cannot pass as a mutation
+edit_seed() { # edit_seed <file> <sed-expr> ; seeds a bad input; guarded so a no-op sed cannot pass as an edit
   local f="$1" expr="$2"
   cp "$f" "$f.orig"
   sed "$expr" "$f.orig" > "$f"
@@ -229,10 +165,10 @@ mutate() { # mutate <file> <sed-expr> ; guarded so a no-op sed cannot pass as a 
   rm -f "$f.orig"; return 0
 }
 
-# m1 -- A1 tracked non-rule path
+# m1 -- A1 tracked non-rule path, also the finding tree for cli-finding
 seed "$TMP/m1"; printf '{}\n' > "$TMP/m1/.claude/settings.json"
 ( cd "$TMP/m1" && git add -f .claude/settings.json >/dev/null 2>&1 )
-kill_check "m1 A1 tracked non-rule path" "$TMP/m1" "A1: tracked path(s) under .claude/"
+rejects "m1 A1 tracked non-rule path" "$TMP/m1" "A1: tracked path(s) under .claude/"
 if eqv cli-finding "$TMP/m1" && [ "$(eq_rc cli-finding)" = 1 ] && grep -qF 'A1: tracked path(s) under .claude/' "$EQ/cli-finding.cl.err"; then
   ok "cli-finding: the program convicts m1's tracked non-rule path exactly as the in-process call does (exit 1)"
 else bad "cli-finding: the program and the in-process call differ, or the outcome is not exit 1 naming A1 ($(eq_twin cli-finding))"; fi
@@ -251,82 +187,82 @@ else bad "cli cells do not discriminate: two of cli-pass, cli-finding, cli-usage
 
 # m2 -- A2 orphan glob
 seed "$TMP/m2"
-if mutate "$TMP/m2/.claude/rules/scoped.md" 's|core/fixtures/\*\*|core/fixture/**|'; then
+if edit_seed "$TMP/m2/.claude/rules/scoped.md" 's|core/fixtures/\*\*|core/fixture/**|'; then
   ( cd "$TMP/m2" && git add -A >/dev/null 2>&1 )
-  kill_check "m2 A2 orphan glob" "$TMP/m2" "matches NO tracked path"
-else note "SKIP  m2 -- sed matched nothing; no mutation occurred"; rc=1; fi
+  rejects "m2 A2 orphan glob" "$TMP/m2" "matches NO tracked path"
+else bad "m2 -- sed matched nothing; no edit occurred"; fi
 
 # m3 -- A3 Cursor frontmatter
 seed "$TMP/m3"
-if mutate "$TMP/m3/.claude/rules/scoped.md" 's|^paths:|globs:|'; then
+if edit_seed "$TMP/m3/.claude/rules/scoped.md" 's|^paths:|globs:|'; then
   ( cd "$TMP/m3" && git add -A >/dev/null 2>&1 )
-  kill_check "m3 A3 Cursor globs: key" "$TMP/m3" "silently UNCONDITIONAL"
-else note "SKIP  m3 -- sed matched nothing; no mutation occurred"; rc=1; fi
+  rejects "m3 A3 Cursor globs: key" "$TMP/m3" "silently UNCONDITIONAL"
+else bad "m3 -- sed matched nothing; no edit occurred"; fi
 
 # m4 -- A4 dangling pointer
 seed "$TMP/m4"
-if mutate "$TMP/m4/CLAUDE.md" 's|scoped\.md|ghost.md|'; then
+if edit_seed "$TMP/m4/CLAUDE.md" 's|scoped\.md|ghost.md|'; then
   ( cd "$TMP/m4" && git add -A >/dev/null 2>&1 )
-  kill_check "m4 A4 dangling pointer" "$TMP/m4" "which does not exist"
-else note "SKIP  m4 -- sed matched nothing; no mutation occurred"; rc=1; fi
+  rejects "m4 A4 dangling pointer" "$TMP/m4" "which does not exist"
+else bad "m4 -- sed matched nothing; no edit occurred"; fi
 
 # m5 -- A4 unreachable rule
 seed "$TMP/m5"
 printf -- '---\npaths:\n  - "docs/plans/**"\n---\n# Orphan\nNo pointer, no marker.\n' \
   > "$TMP/m5/.claude/rules/orphan.md"
 ( cd "$TMP/m5" && git add -A >/dev/null 2>&1 )
-kill_check "m5 A4 unreachable rule" "$TMP/m5" "no CLAUDE.md pointer and no"
+rejects "m5 A4 unreachable rule" "$TMP/m5" "no CLAUDE.md pointer and no"
 
 # m6 -- A4 empty no-stub reason
 seed "$TMP/m6"
 printf -- '---\npaths:\n  - "docs/plans/**"\n---\n<!-- no-stub: -->\n# Orphan\n' \
   > "$TMP/m6/.claude/rules/orphan.md"
 ( cd "$TMP/m6" && git add -A >/dev/null 2>&1 )
-kill_check "m6 A4 empty no-stub reason" "$TMP/m6" "EMPTY"
+rejects "m6 A4 empty no-stub reason" "$TMP/m6" "EMPTY"
 
 # m7 -- A3b a rule declaring NEITHER scope. It carries a CLAUDE.md pointer so A4 stays
-# quiet: a mutant that trips two arms proves neither of them.
+# quiet: a tree that trips two arms proves neither of them.
 seed "$TMP/m7"
 printf -- '# Unscoped\nNo frontmatter at all.\n' > "$TMP/m7/.claude/rules/noscope.md"
 printf 'Also read `.claude/rules/noscope.md`.\n' >> "$TMP/m7/CLAUDE.md"
 ( cd "$TMP/m7" && git add -A >/dev/null 2>&1 )
-kill_check "m7 A3b no scope declared" "$TMP/m7" "declares no scope"
+rejects "m7 A3b no scope declared" "$TMP/m7" "declares no scope"
 
 # m8 -- A3b BOTH declarations. Added to the file that already carries a no-stub marker,
 # so A4 is satisfied and only the scope arm can speak.
 seed "$TMP/m8"
-if mutate "$TMP/m8/.claude/rules/scoped.md" 's|^# Scoped|<!-- unconditional: also claimed resident -->\n# Scoped|'; then
+if edit_seed "$TMP/m8/.claude/rules/scoped.md" 's|^# Scoped|<!-- unconditional: also claimed resident -->\n# Scoped|'; then
   ( cd "$TMP/m8" && git add -A >/dev/null 2>&1 )
-  kill_check "m8 A3b both declarations" "$TMP/m8" "carries BOTH"
-else note "SKIP  m8 -- sed matched nothing; no mutation occurred"; rc=1; fi
+  rejects "m8 A3b both declarations" "$TMP/m8" "carries BOTH"
+else bad "m8 -- sed matched nothing; no edit occurred"; fi
 
 # m9 -- A3b an unconditional marker with no reason. Carries a no-stub so A4 is quiet.
 seed "$TMP/m9"
 printf -- '<!-- no-stub: pointed at from nowhere on purpose -->\n<!-- unconditional: -->\n# Empty reason\n' \
   > "$TMP/m9/.claude/rules/uncond.md"
 ( cd "$TMP/m9" && git add -A >/dev/null 2>&1 )
-kill_check "m9 A3b empty unconditional reason" "$TMP/m9" "EMPTY \`unconditional:\` marker"
+rejects "m9 A3b empty unconditional reason" "$TMP/m9" "EMPTY \`unconditional:\` marker"
 
 # m10 -- A5 a bold citation naming an id the index does not list.
 seed "$TMP/m10"
-if mutate "$TMP/m10/CLAUDE.md" 's|\*\*I74\*\*|**I999**|'; then
+if edit_seed "$TMP/m10/CLAUDE.md" 's|\*\*I74\*\*|**I999**|'; then
   ( cd "$TMP/m10" && git add -A >/dev/null 2>&1 )
-  kill_check "m10 A5 dead invariant citation" "$TMP/m10" "as a live mechanism, and no arm declares it"
-else note "SKIP  m10 -- sed matched nothing; no mutation occurred"; rc=1; fi
+  rejects "m10 A5 dead invariant citation" "$TMP/m10" "as a live mechanism, and no arm declares it"
+else bad "m10 -- sed matched nothing; no edit occurred"; fi
+
 
 # m11 -- A6 over the ceiling. Driven by the documented override rather than by writing a
 # 32 KB file, so the arm is tested at its real comparison and not at its file arithmetic.
 seed "$TMP/m11"
 src_vcr "$TMP/m11"
 out="$(run_v_env AI_DLC_DURABLE_BYTES=10 "$TMP/m11")"
-[ "$MATRIX" = 1 ] && printf 'MATRIX %s FULL [%s]\n' m11 "$(fail_arms "$out")"
 if [ -z "$out" ] || ! grep -qF "against a ceiling of 10" <<<"$out"; then
-  note "FAIL  m11 A6 over ceiling -- mutant SURVIVED or failed on another arm"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
+  bad "m11 A6 over ceiling -- validator accepted the tree or failed on another arm"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -4
 elif [ "$(printf '%s\n' "$out" | grep -c '^FAIL:')" -ne 1 ]; then
-  note "FAIL  m11 A6 over ceiling -- more than one FAIL line; the arms are entangled"; rc=1
+  bad "m11 A6 over ceiling -- more than one FAIL line; the arms are entangled"
 else
-  mutant_killed "${B_CTRL:-0}" "m11" "m11 A6 over ceiling -- killed by its own arm, and only its own"
+  ok "m11 A6 over ceiling -- rejected by its own arm, and only its own"
 fi
 
 # m12 -- THE PROBE MUST BUILD ITS OWN REPOSITORY, NOT WRITE THE CALLER'S.
@@ -502,28 +438,5 @@ else
   fi
 fi
 
-# mA1 -- A1's OWN PROBE cannot fire. The probe's offender is dropped from its seeded index, so
-# the extraction finds no `settings.json` and the arm must say so rather than report a clean
-# corpus. m1 seeds the CORPUS; this seeds the probe.
-seed "$TMP/mA1"
-if mutate "$TMP/mA1/scripts/validate-claude-rules.sh" 's|--cacheinfo 100644,e69de29bb2d1d6434b8b29ae775ad8c2e48c5391,\.claude/settings\.json||'; then
-  kill_check "mA1 A1 probe seeds no offender" "$TMP/mA1" "A1's own probe did not fire"
-else note "SKIP  mA1 -- sed matched nothing; no mutation occurred"; rc=1; fi
-
-# mA2 -- A2's OWN PROBE cannot fire. The prefix judgement for the typo glob is inverted onto the
-# real glob's prefix, so the typo reads as matching. m2 types the CORPUS glob; this breaks the probe.
-seed "$TMP/mA2"
-if mutate "$TMP/mA2/scripts/validate-claude-rules.sh" "s|a2_typo=\"\$(grep -v -m1 '^core/fixtures/'|a2_typo=\"\$(grep -m1 '^core/fixtures/'|"; then
-  kill_check "mA2 A2 probe typo judgement inverted" "$TMP/mA2" "A2's own probe did not fire"
-else note "SKIP  mA2 -- sed matched nothing; no mutation occurred"; rc=1; fi
-
-# mA2b -- the pattern-ignoring subject: glob_matches returns EVERY tracked path whatever it is
-# asked. The real glob still "matches", and the typo glob returns paths outside the real prefix;
-# a prefix filter keyed on the typo's own spelling would stay silent here.
-seed "$TMP/mA2b"
-if mutate "$TMP/mA2b/scripts/validate-claude-rules.sh" 's|^glob_matches() {.*|glob_matches() { git ls-files 2>/dev/null; }|'; then
-  kill_check "mA2b A2 probe glob_matches ignores its pattern" "$TMP/mA2b" "A2's own probe did not fire"
-else note "SKIP  mA2b -- sed matched nothing; no mutation occurred"; rc=1; fi
-
-if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 16/16 mutants refused by their own arm"; fi
+if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- every arm held"; fi
 exit "$rc"

@@ -9,8 +9,7 @@
 # and the S9 dashed case run the subject in process.
 # BL-975 delta fold: 374 -> 375, two agreeing counted runs on a clean detached worktree. The new mutant
 # failed-per-agent-key (M73) costs mutant()'s one `bash -n` (+1); the new seed S17 (S29q) runs the subject in process.
-375 *
-0 core/fixtures/lib/mutant.sh
+216 *
 33 core/scripts/merge-adversarial-shards.sh
 0 core/scripts/validate-adversarial-convergence.sh
 5 core/scripts/wait-for-deliverable.sh

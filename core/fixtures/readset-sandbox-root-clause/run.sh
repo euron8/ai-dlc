@@ -12,8 +12,7 @@
 # block is sourced with the trip set stubbed, and the override branch is eval'd against a SCOPED
 # override profile (an `allow default (with report)` override would become `deny default` below, and
 # sandbox-exec then refuses to exec the workload at all, rc 71). A text count of the clause is kept as
-# a CONTROL only: a mutant moving the override and `--local-map` clauses onto `$MARKDIR` keeps that
-# count at 3, and only the rendered runs see it.
+# a CONTROL only.
 #
 # THE CHANNEL IS THE WORKLOAD'S OWN ERRNO, NOT THE KERNEL LOG STREAM (BL-868, BL-616's MAXATT retry).
 # `/usr/bin/log stream` drops reports under load, so the stream judging needed a 30-attempt retry, a
@@ -24,56 +23,20 @@
 # workload sees it as a non-zero rc, synchronously, and nothing can drop it. The root-literal clause
 # carries no `(with report)`, so it stays an ALLOW after the clause it follows and re-admits root
 # metadata/existence. The workload runs each operation separately and prints one rc per operation.
-# The scored ops: root `cd`, `[ -d ]`, `[ -e ]` (metadata/existence: rc 0 under the fix, non-zero
-# under every mutant of the clause), root `ls` (file-read-data: must stay DENIED, i.e. still reported),
+# The scored ops: root `cd`, `[ -d ]`, `[ -e ]` (metadata/existence: rc 0 under the fix), root `ls`
+# (file-read-data: must stay DENIED, i.e. still reported),
 # a read and a test below the root (DENIED), and an `ls /` outside the tree (ALLOWED, the positive
 # control that the sandbox is not denying everything). The same workload unsandboxed reads 0 on every
 # op, so a non-zero rc is the profile's, not a missing file.
-# MEASURED EQUIVALENT BEFORE THE STREAM ARMS WERE DELETED: `--matrix` on the stream channel (its last
-# revision, run at 47102ad20, window judged on attempt 1 of 30) and on this errno channel printed the
-# four MATRIX lines below byte-identically (`cmp` of the extracted MATRIX lines: equal), twins included:
-#   MATRIX markdir-default decides=def:RED twins=lm:GREEN others=1/1
-#   MATRIX markdir-ov-lm decides=lm:RED,ov:RED twins=def:GREEN others=0/0
-#   MATRIX report-default decides=def:RED twins=ov:GREEN others=1/1
-#   MATRIX report-lm decides=lm:RED twins=ov:GREEN others=1/1
 #
 # WHY A SEPARATE FIXTURE. Carried inside readset-stage1-verdict, its old stream arms SKIPped under the
 # sandbox tracer and made that fixture's traced verdict differ from its untraced one. This fixture carries
 # `inputs.decl`, so it is keyed on its declaration and never traced; its own sandbox-exec runs nested too
 # (measured: a sandbox-exec under an allow-default profile ran a nested one, rc 0).
 #
-# Usage: run.sh [--matrix]
-# Exit:  0 = every arm and mutant holds (or SKIP, stated), 1 = one regressed, 2 = fixture broken.
-#
-# THE MUTANT MATRIX. A cell is one EMITTER of the deriver (def = the default profile, lm = the `--local-map`
-# profile, ov = the AI_DLC_READSET_SANDBOX_PROFILE override), RED on a mutant when that emitter, rendered from the
-# mutated deriver, deny-rewritten and run under the sandbox, denies root metadata/existence. A mutant's row lists the
-# emitters it breaks (decides) and the emitter it could plausibly co-trip but must leave GREEN (twins). Every rendering
-# runs once and every cell reads that run's rc file, so a twin costs no extra render and no extra run. The matrix is re-measured
-# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
-# command below, from the repo root. It
-# scores every mutant against every emitter and prints one MATRIX line each.
-# The nest-* mutants (BL-1068) have their own cell family, scored against it alone: nb (the bypass guard over two
-# seeded windows), nm (the shim's marker read, denied on its stderr under the deny channel) and nc (the shim's
-# composed profile). The section that builds them states each.
-# MUTANT-MATRIX markdir-default decides=def twins=lm
-# MUTANT-MATRIX markdir-ov-lm decides=lm,ov twins=def
-# MUTANT-MATRIX report-default decides=def twins=ov
-# MUTANT-MATRIX report-lm decides=lm twins=ov
-# MUTANT-MATRIX nest-nomark decides=nm twins=nc
-# MUTANT-MATRIX nest-guard decides=nb twins=nm
-# MUTANT-MATRIX nest-noins decides=nc twins=nm
-# MUTANT-MATRIX-DYNAMIC score_mutant why=score_mutant is one body called once per mutant, so the mutant id reaches mutant_killed as $m; every name it produces has its own MUTANT-MATRIX row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/readset-sandbox-root-clause/run.sh --matrix
+# Usage: run.sh
+# Exit:  0 = every arm holds (or SKIP, stated), 1 = one regressed, 2 = fixture broken.
 set -u
-# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed below. Anything else
-# as an argument is a usage error, never a silent plain run.
-MODE=plain
-case "${1:-}" in
-  "") ;;
-  --matrix) MODE=matrix ;;
-  *) echo "readset-sandbox-root-clause: usage: run.sh [--matrix]" >&2; exit 2 ;;
-esac
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
@@ -90,56 +53,14 @@ WORK="$(cd "$WORK" && pwd -P)"
 broken() { echo "readset-sandbox-root-clause: FIXTURE BROKEN: $*" >&2; echo "  (work kept at $WORK)" >&2; exit 2; }
 echo "readset-sandbox-root-clause:"
 echo "HERMETIC-CONSUMED core/scripts/derive-fixture-readsets.sh"
-SELF_FILE="$HERE/$(basename "$0")"
-# The shared mutant-kill helper: a kill is emitted only through mutant_killed, behind a same-run base-pass flag.
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "readset-sandbox-root-clause: FIXTURE BROKEN: no lib/mutant.sh beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
 
 CLAUSE='(allow file-read-metadata file-test-existence (literal "%s"))'
 cl_count() { awk -v k="$CLAUSE" '{ l = $0; sub(/^[ \t]+/, "", l) } substr(l, 1, 1) != "#" && index($0, k) { n++ } END { print n + 0 }' "$1"; }
-
-# ------------------------------------------------------------------ mutants, as copies ----
-# mk <name> <awk program>: a copy of the deriver edited by the program; the program prints the number of
-# lines it changed to "$dst.count". DID NOT APPLY unless the copy differs and the count is as wanted.
-MD="$WORK/mut"; mkdir -p "$MD" || broken "mkdir $MD"
-mk() { # mk <name> <want-count> <awk program>
-  local dst="$MD/$1.sh"
-  awk -v CF="$dst.count" "$3"' { print } END { print c + 0 > CF }' "$DERIVER" > "$dst" || return 1
-  [ "$(cat "$dst.count")" = "$2" ] || return 1
-  if cmp -s "$DERIVER" "$dst"; then return 1; fi
-  bash -n "$dst" 2>/dev/null
-}
-# The emitter lines, keyed on what SEPARATES them: the default line carries `> "$PROFILE" \`, the
-# override line `>> "$PROFILE"`, the `--local-map` line neither and a six-space indent.
-P_DEF='index($0, "> \"$PROFILE\" \\") && index($0, k)'
-P_OV='index($0, ">> \"$PROFILE\"") && index($0, k)'
-P_LM='index($0, "      printf \047" k) == 1'
-K='BEGIN { k = "(allow file-read-metadata file-test-existence (literal \"%s\"))"; q = sprintf("%c", 39) }'
-# The default line's argument list is `"$TREE" "$MARKDIR" "$TREE" > "$PROFILE"`; its clause's arg is the third.
-mk markdir-default 1 "$K $P_DEF"' { if (sub(/"\$MARKDIR" "\$TREE" > "\$PROFILE"/, "\"$MARKDIR\" \"$MARKDIR\" > \"$PROFILE\"")) c++ }' \
-  || broken "mutant markdir-default DID NOT APPLY"
-mk markdir-ov-lm 2 "$K"' ('"$P_OV"') || ('"$P_LM"') { if (sub(/\047 "\$TREE"/, q " \"$MARKDIR\"")) c++ }' \
-  || broken "mutant markdir-ov-lm DID NOT APPLY"
-mk report-default 1 "$K $P_DEF"' { if (sub(/\(literal "%s"\)\)\\n\047 "\$TREE" "\$MARKDIR" "\$TREE"/, "(literal \"%s\") (with report))\\n" q " \"$TREE\" \"$MARKDIR\" \"$TREE\"")) c++ }' \
-  || broken "mutant report-default DID NOT APPLY"
-mk report-lm 1 "$K $P_LM"' { if (sub(/\(literal "%s"\)\)/, "(literal \"%s\") (with report))")) c++ }' \
-  || broken "mutant report-lm DID NOT APPLY"
-# The nest mutants (BL-1068): the shim's marker read deleted; the bypass guard's pairing test made to count nothing;
-# the shim's composition left without the inserted clause.
-mk nest-nomark 1 '$0 == ": < \"$NEST\"" { $0 = ":"; c++ }' || broken "mutant nest-nomark DID NOT APPLY"
-mk nest-guard 1 'index($0, "for (p in esc) if (!(p in mk)) n++") { if (sub(/if \(!\(p in mk\)\) n\+\+/, "if (0) n++")) c++ }' \
-  || broken "mutant nest-guard DID NOT APPLY"
-mk nest-noins 1 'index($0, "comp=\"$(printf") == 1 { if (sub(/"\\n" ENVIRON\["INS"\] "\\n"/, "\"\\n\"")) c++ }' \
-  || broken "mutant nest-noins DID NOT APPLY"
 
 # ------------------------------------------------------------------ text control ----
 echo " text control:"
 n="$(cl_count "$DERIVER")"
 if [ "$n" = 3 ]; then ok "the root-literal clause is on 3 uncommented emitter lines (control only; the rendered arms below decide)"; else bad "the root-literal clause is on $n uncommented emitter line(s), not 3"; fi
-n="$(cl_count "$MD/markdir-ov-lm.sh")"
-[ "$n" = 3 ] && ok "the markdir-ov-lm mutant keeps the text count at 3, so only a rendered run can kill it" \
-  || bad "the markdir-ov-lm mutant moved the text count to $n; it no longer shows why the rendered arms exist"
 
 # ------------------------------------------------------------------ the gate ----
 # A missing sandbox-exec is not normal use here (this fixture's subject is a macOS tracer), so it SKIPs. A
@@ -148,7 +69,6 @@ SB_WHY=""
 if ! command -v sandbox-exec >/dev/null 2>&1; then SB_WHY="no sandbox-exec (not macOS)"; fi
 if [ -n "$SB_WHY" ]; then
   printf '  SKIP  rendered sandbox arms: %s\n' "$SB_WHY"
-  if [ "$MODE" = matrix ]; then echo "readset-sandbox-root-clause: MATRIX BROKEN: the rendered arms are SKIPPED here ($SB_WHY), so nothing was measured" >&2; exit 2; fi
   echo
   if [ "$fails" -ne 0 ]; then echo "readset-sandbox-root-clause: work kept at $WORK"
   else case "$WORK" in */readset-sandbox-root-clause.??????) rm -rf "$WORK" ;; esac; fi
@@ -206,7 +126,6 @@ render3 "$DERIVER" "$R/fix" || broken "cannot render the deriver's three emitter
 for e in def lm ov; do
   grep -qF "(literal \"$R/fix/$e/t\")" "$R/fix/$e.sb" || broken "the rendered $e profile carries no root literal: $(tr '\n' ' ' < "$R/fix/$e.sb")"
 done
-for m in markdir-default markdir-ov-lm report-default report-lm; do render3 "$MD/$m.sh" "$R/$m" || broken "cannot render mutant $m"; done
 # The clause-less control: the default profile as it was before BL-470, which MUST deny root md/exist once rewritten.
 mkdir -p "$R/base/def/t/d" "$R/base/def/m" && echo x > "$R/base/def/t/d/f" && echo y > "$R/base/def/t/g" || broken "base tree"
 printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n' "$R/base/def/t" "$R/base/def/m" > "$R/base/def.sb"
@@ -246,100 +165,16 @@ rcs() {
 echo " the deriver's three emitters, rendered, deny-rewritten and run:"
 rcs base def
 if [ "$C_CD" != 0 ] && [ "$C_TD" != 0 ] && [ "$C_TE" != 0 ] && [ "$C_LSO" = 0 ]; then
-  ok "control: the clause-less default profile denies root cd/test-d/test-e ($C_CD $C_TD $C_TE) and allows ls / ($C_LSO)"; B_ctl=1
+  ok "control: the clause-less default profile denies root cd/test-d/test-e ($C_CD $C_TD $C_TE) and allows ls / ($C_LSO)"
 else bad "control: the clause-less profile read root cd/test-d/test-e $C_CD $C_TD $C_TE, ls / $C_LSO (want non-zero x3, then 0), so a 0 below proves nothing"; fi
 for e in def lm ov; do
   rcs fix "$e"
   if [ "$C_CD$C_TD$C_TE" = 000 ] && [ "$C_LSR" != 0 ] && [ "$C_CATB" != 0 ] && [ "$C_TB" != 0 ] && [ "$C_LSO" = 0 ]; then
     ok "$e emitter: root cd/test-d/test-e allowed (0 0 0), root ls denied ($C_LSR), below-root read and test denied ($C_CATB $C_TB), ls / allowed"
-    case "$e" in def) B_def=1 ;; lm) B_lm=1 ;; ov) B_ov=1 ;; esac
   else
     bad "$e emitter: root cd/test-d/test-e $C_CD $C_TD $C_TE (want 0 0 0), root ls $C_LSR, below read $C_CATB, below test $C_TB (each want non-zero), ls / $C_LSO (want 0)"
   fi
 done
-
-echo " mutants:"
-# cell_red <emitter> <mutant>: RED when the emitter rendered from the mutated deriver, deny-rewritten, denies root
-# metadata/existence. Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
-cell_red() {
-  case "$1" in
-    nb|nm|nc) [ -s "$R/$2/$1.red" ] || return 2; [ "$(cat "$R/$2/$1.red")" = 1 ]; return ;;
-    def|lm|ov) ;;
-    *) return 2 ;;
-  esac
-  rcs "$2" "$1"
-  [ "$C_CD$C_TD$C_TE" != 000 ]
-}
-# The header IS the decides/twins list: nothing else in this file restates it.
-mx_row() { # mx_row <mutant> <decides|twins>
-  awk -v n="$1" -v f="$2" '
-    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
-      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
-    }
-    END { if (c == 1) print v }' "$SELF_FILE"
-}
-MXL="$WORK/mx.ledger"; : > "$MXL"
-BROKEN=0; MX_FAILS=0
-# mx_twins <mutant>: per-push, every twin emitter must be GREEN on the SAME run's rc files, which costs no render.
-mx_twins() {
-  local m="$1" tw t r
-  tw="$(mx_row "$m" twins)"
-  if [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m"; return; fi
-  printf 'plain-twins %s\n' "$m" >> "$MXL"
-  for t in $(printf '%s' "$tw" | tr ',' ' '); do
-    cell_red "$t" "$m"; r=$?
-    if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t"
-    elif [ "$r" -eq 0 ]; then bad "mutant $m: its twin $t also denied root metadata/existence, so the kill is not confined to its own emitter"; fi
-  done
-}
-# mx_score <mutant>: MATRIX-ONLY. Scores the mutant against every emitter. It records itself in the ledger first (rule 9).
-mx_score() {
-  local m="$1" dec tw c r uex="" dl="" tl="" g=0 tot=0 fam
-  printf 'mx-score %s\n' "$m" >> "$MXL"
-  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
-  for c in $(printf '%s' "$dec" | tr ',' ' '); do
-    cell_red "$c" "$m"; r=$?
-    if [ "$r" -eq 0 ]; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
-  done
-  for c in $(printf '%s' "$tw" | tr ',' ' '); do
-    cell_red "$c" "$m"; r=$?
-    if [ "$r" -eq 0 ]; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
-  done
-  case "$m" in nest-*) fam="nb nm nc" ;; *) fam="def lm ov" ;; esac
-  for c in $fam; do
-    case ",$dec,$tw," in *",$c,"*) continue ;; esac
-    tot=$((tot + 1)); cell_red "$c" "$m" || g=$((g + 1))
-  done
-  if [ -n "$uex" ]; then
-    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
-    MX_FAILS=$((MX_FAILS + 1))
-  else
-    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
-  fi
-}
-# score_mutant <flag> <mutant>: the flag is the same-run base pass of the control and of every deciding emitter.
-# The mutant is killed when every deciding emitter, deny-rewritten, denies root metadata/existence. Its twins are
-# checked on the same run. Only the passing branch of the unmutated arms ever sets a flag.
-score_mutant() {
-  local flag="$1" m="$2" dec c ran=1 miss=""
-  # RAN: every emitter's rendering still denies the below-root read and allows `ls /`, so the profile was in force
-  # and scoped, and a RED cell is the clause's doing rather than a profile that denied nothing or everything.
-  for c in def lm ov; do
-    rcs "$m" "$c"
-    [ "$C_CATB" != 0 ] && [ "$C_LSO" = 0 ] || ran=0
-  done
-  dec="$(mx_row "$m" decides)"
-  for c in $(printf '%s' "$dec" | tr ',' ' '); do cell_red "$c" "$m" || miss="$miss $c"; done
-  if [ "$ran" = 0 ]; then bad "mutant $m did not run: an emitter allowed the below-root read or denied ls /"
-  elif [ -z "$miss" ]; then mutant_killed "$flag" "$m" "mutant $m KILLED (root metadata/existence denied by emitter(s) $dec)"
-  else bad "mutant $m SURVIVED (emitter(s)$miss allowed root metadata/existence)"; fi
-  mx_twins "$m"
-  if [ "$MODE" = matrix ]; then mx_score "$m"; fi
-}
-score_mutant "$(( ${B_ctl:-0} && ${B_def:-0} ))" markdir-default
-score_mutant "$(( ${B_ctl:-0} && ${B_lm:-0} && ${B_ov:-0} ))" markdir-ov-lm
-score_mutant "$(( ${B_ctl:-0} && ${B_def:-0} ))" report-default
-score_mutant "$(( ${B_ctl:-0} && ${B_lm:-0} ))" report-lm
 
 # ------------------------------------------------------------------ the nest shim and its guard (BL-1068) ----
 # Three cells, each written as "$R/<variant>/<cell>.red" (0 GREEN, 1 RED), from the variant deriver's OWN functions:
@@ -351,10 +186,9 @@ score_mutant "$(( ${B_ctl:-0} && ${B_lm:-0} ))" report-lm
 #       the next sandbox-exec (a recorder stub). Presence-shaped: the stub's argv record must exist.
 #   nc  the shim, run unsandboxed: the stub's profile has the caller's `(version 1)` form, then the inserted clause,
 #       then the caller's rule, and `-D` survives ahead of the stub's `-f`.
-# nest_cells <deriver> <dir> [<fix dir>]: with a fix dir whose extracted shim is byte-identical to this variant's, nm
-# and nc are that run's cells, carried by identity (one run per distinct state); nb is always computed.
+# nest_cells <deriver> <dir>
 nest_cells() {
-  local d="$1" o="$2" f0="${3:-}" fn
+  local d="$1" o="$2" fn
   mkdir -p "$o/t" "$o/m" "$o/s" "$o/stub" || return 1
   for fn in readset_write_nest_shim readset_nest_bypass; do
     awk -v f="$fn" '$0 == f "() {" || index($0, f "() { ") == 1 { p = 1 } p { print } p && /^}$/ { exit }' "$d" > "$o/$fn.fn" || return 1
@@ -369,9 +203,6 @@ nest_cells() {
     printf '%s bash(303) allow file-read-data %s\n%s bash(202) allow process-exec* /usr/bin/sandbox-exec\n' "$L" "$o/m/.readset-nest" "$L" > "$o/w.bare"
     nb="$(readset_nest_bypass "$o/m/.readset-nest" < "$o/w.paired")|$(readset_nest_bypass "$o/m/.readset-nest" < "$o/w.bare")"
     [ "$nb" = "0|1" ]; printf '%s\n' "$?" > "$o/nb.red"; printf '%s\n' "$nb" > "$o/nb.val"
-    if [ -n "$f0" ] && cmp -s "$o/readset_write_nest_shim.fn" "$f0/readset_write_nest_shim.fn"; then
-      cat "$f0/nm.red" > "$o/nm.red" && cat "$f0/nc.red" > "$o/nc.red" || exit 1; : > "$o/carried"; exit 0
-    fi
     INS="(allow file* (subpath \"$o/t\") (subpath \"$o/m\") (with report))"
     SBX="$(command -v sandbox-exec)"; PATH="$o/stub:$PATH"; hash -r
     readset_write_nest_shim "$o/s" "$INS" || exit 1
@@ -387,53 +218,15 @@ nest_cells() {
   ) || return 1
   for c in nb nm nc; do [ -s "$o/$c.red" ] || return 1; done
 }
-for v in fix nest-nomark nest-guard nest-noins; do
-  dv="$DERIVER"; [ "$v" = fix ] || dv="$MD/$v.sh"
-  f0=""; [ "$v" = fix ] || f0="$R/fix"
-  nest_cells "$dv" "$R/$v" "$f0" || broken "cannot build the nest cells for $v"
-done
+nest_cells "$DERIVER" "$R/fix" || broken "cannot build the nest cells for the deriver"
 echo " the nest shim and its bypass guard:"
-if [ -e "$R/nest-guard/carried" ] && [ ! -e "$R/nest-nomark/carried" ] && [ ! -e "$R/nest-noins/carried" ]; then
-  ok "carry control: only nest-guard (shim byte-identical to the fix's) took the fix run's shim cells"
-else bad "carry control: carried=[$(ls "$R"/*/carried 2>/dev/null | tr '\n' ' ')], want nest-guard alone"; fi
 nred() { [ "$(cat "$R/$2/$1.red")" = 1 ]; }
-if ! nred nb fix; then ok "guard: a shim-paired escaped exec reads 0 bypasses and an unpaired one reads 1 ($(cat "$R/fix/nb.val"))"; B_nb=1
+if ! nred nb fix; then ok "guard: a shim-paired escaped exec reads 0 bypasses and an unpaired one reads 1 ($(cat "$R/fix/nb.val"))"
 else bad "guard: the paired|unpaired windows read $(cat "$R/fix/nb.val"), want 0|1"; fi
-if ! nred nm fix; then ok "shim: under the deny channel its marker read is denied on its stderr before it execs the next sandbox-exec"; B_nm=1
+if ! nred nm fix; then ok "shim: under the deny channel its marker read is denied on its stderr before it execs the next sandbox-exec"
 else bad "shim: no denied marker read on its stderr before the exec: $(tr '\n' ' ' < "$R/fix/nm.err")"; fi
-if ! nred nc fix; then ok "shim: the composed profile is the caller's (version 1), the inserted clause, then the caller's rule, with -D kept"; B_nc=1
+if ! nred nc fix; then ok "shim: the composed profile is the caller's (version 1), the inserted clause, then the caller's rule, with -D kept"
 else bad "shim: the composed profile or argv is wrong: [$(tr '\n' ' ' < "$R/fix/prof" 2>/dev/null)]"; fi
-# score_nest <flag> <mutant>: killed when every deciding cell is RED; its twins are checked on the same run.
-score_nest() {
-  local flag="$1" m="$2" dec c miss=""
-  dec="$(mx_row "$m" decides)"
-  for c in $(printf '%s' "$dec" | tr ',' ' '); do cell_red "$c" "$m" || miss="$miss $c"; done
-  if [ -z "$miss" ]; then mutant_killed "$flag" "$m" "mutant $m KILLED (nest cell(s) $dec RED)"
-  else bad "mutant $m SURVIVED (nest cell(s)$miss GREEN)"; fi
-  mx_twins "$m"
-  if [ "$MODE" = matrix ]; then mx_score "$m"; fi
-}
-score_nest "${B_nm:-0}" nest-nomark
-score_nest "${B_nb:-0}" nest-guard
-score_nest "${B_nc:-0}" nest-noins
-
-# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
-# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
-# it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
-mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
-mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
-if [ "$MODE" = plain ]; then
-  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
-  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
-  else ok "rule-9: a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
-else
-  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
-  [ "$mx_hdr" = "markdir-default markdir-ov-lm nest-guard nest-noins nest-nomark report-default report-lm " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
-  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
-  fails=$((fails + MX_FAILS))
-fi
-if [ "$BROKEN" -ne 0 ]; then echo "readset-sandbox-root-clause: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
-
 echo
 if [ "$fails" -ne 0 ]; then echo "readset-sandbox-root-clause: work kept at $WORK"
 else case "$WORK" in */readset-sandbox-root-clause.??????) rm -rf "$WORK" ;; esac; fi

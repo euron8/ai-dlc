@@ -30,10 +30,10 @@
 #   (g) validate-draft-stamps.sh DRAFTS= contains requirements-context.
 #   (h) every step file carrying the prior-decision disposition vocabulary (derived,
 #       at least two) agrees on the four members and states the deferred-unfiled
-#       filing mandate; two committed mutants on a copy of the steps dir.
+#       filing mandate.
 #   (i) requirements.md section 5 names partition-subject.sh and no longer says Rule 28
 #       has no axis for a multi-artifact subject; 4(c) carries the `###` subheading
-#       mandate. Two committed mutants (restore-sentence, drop-mandate) on a copy.
+#       mandate.
 #   (j) gate-validation.md names `s<N>/requirements-adversarial-p` at BOTH Check 24 sites
 #       (the invocation paragraph and the post-planning sweep), each read as its own
 #       region; requirements.md's series-naming bullet carries the B4 refusal sentence
@@ -45,69 +45,20 @@
 #       moved from check-24 unit j3).
 #   (m) BL-723: Check 24's test-strategy prefix runs stories-test-strategy.md §5's series through
 #       the shipping validator; §5 names no bmad-review (control: bug-investigation.md does) and
-#       names its dispatches and step 3's precondition. Four committed mutants plus an unmutated
-#       control, each row scored whole (moved from check-24 unit tstrat).
+#       names its dispatches and step 3's precondition (moved from check-24 unit tstrat).
 #   (n) BL-936: requirements.md §3's lead-interpretation bullet form, driven through the three shipped LR
 #       parsers (request-coverage, spec-join's declared population, Check 3b); each parser scored on a
 #       near-miss (label after the id) and an offender (label before it, or stripped).
 #   (o) BL-936: requirements.md §3's derivation program (UNANSWERED / CONFIRMED / DESCOPE / UNDECIDED), read from its
-#       fence and run over a history the shipped capture hook wrote; eleven committed mutants of the program.
+#       fence and run over a history the shipped capture hook wrote.
 #
-# THE MUTANT MATRIX. A CELL is one corpus predicate: h (the disposition vocabulary agrees across a steps dir),
-# i-axis and i-mandate (requirements.md section 5 and 4(c)), j-check and j-sweep (the two Check 24 sites of
-# gate-validation.md) and j-refuse (the B4 refusal bullet of requirements.md). PER PUSH a mutant is scored on
-# its DECIDING cell, which must fail on it, and its named TWIN, a different cell it could plausibly co-trip but
-# must leave GREEN. `run.sh --matrix` scores each mutant against all six cells and prints one MATRIX line per
-# mutant. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
-# state") requires. Run the REMEASURE command below, from the repo root. The (i) and (j) mutants carry an i-
-# or j- prefix because the bare names are
-# prefixes of drop-from-one and drop-from-all.
-# MUTANT-MATRIX drop-from-one decides=h twins=i-axis
-# MUTANT-MATRIX drop-from-all decides=h twins=i-axis
-# MUTANT-MATRIX i-restore decides=i-axis twins=i-mandate
-# MUTANT-MATRIX i-drop decides=i-mandate twins=i-axis
-# MUTANT-MATRIX j-check decides=j-check twins=j-sweep
-# MUTANT-MATRIX j-sweep decides=j-sweep twins=j-check
-# MUTANT-MATRIX j-refuse decides=j-refuse twins=i-axis
-# Each of the three mutant loops passes its mutant name to mutant_killed as a variable, via one helper:
-# The (m) rows: each is three cells (bind absent names), its deciding cell plus its twins ARE the row, and the whole
-# row runs on every push, so the per-push match IS the matrix measurement.
-# MUTANT-MATRIX MUTATION-ts-bmad-restored decides=MUTATION-ts-bmad-restored.cell2 twins=MUTATION-ts-bmad-restored.cell1,MUTATION-ts-bmad-restored.cell3
-# MUTANT-MATRIX MUTATION-ts-bmad-restored-new decides=MUTATION-ts-bmad-restored-new.cell2 twins=MUTATION-ts-bmad-restored-new.cell1,MUTATION-ts-bmad-restored-new.cell3
-# MUTANT-MATRIX MUTATION-ts-gate-prefix-dropped decides=MUTATION-ts-gate-prefix-dropped.cell1 twins=MUTATION-ts-gate-prefix-dropped.cell2,MUTATION-ts-gate-prefix-dropped.cell3
-# MUTANT-MATRIX MUTATION-ts-precondition-deleted decides=MUTATION-ts-precondition-deleted.cell3 twins=MUTATION-ts-precondition-deleted.cell1,MUTATION-ts-precondition-deleted.cell2
-# Arm (o) (BL-936): each mutant of §3's derivation program decides on the ids it breaks and names the exact-id
-# confirm cell as its twin, which every mutant must leave reading CONFIRMED. All sixteen ids are read per mutant.
-# MUTANT-MATRIX o-any-answer decides=o-strike twins=o-confirm
-# MUTANT-MATRIX o-unbounded decides=o-unlabelled twins=o-confirm
-# MUTANT-MATRIX o-multi-id decides=o-two twins=o-confirm
-# MUTANT-MATRIX o-first-wins decides=o-newest twins=o-confirm
-# MUTANT-MATRIX o-exact-only decides=o-badged twins=o-confirm
-# MUTANT-MATRIX o-prefix decides=o-badge-digit twins=o-confirm
-# MUTANT-MATRIX o-any-nonconfirm-descope decides=o-freetext twins=o-confirm
-# MUTANT-MATRIX o-first-line-only decides=o-confirm-tail twins=o-confirm
-# MUTANT-MATRIX o-no-reword decides=o-reword-exact twins=o-confirm
-# MUTANT-MATRIX o-count-own decides=o-self-repeat twins=o-confirm
-# MUTANT-MATRIX o-strip-unbounded decides=o-self-prefix twins=o-confirm
-# MUTANT-MATRIX-DYNAMIC o_mut why=passes each arm (o) mutant name to mutant_killed as a variable; every name keeps its own row
-# MUTANT-MATRIX-CONTROL CONTROL-ts-unmutated why=the shipped documents must score ok on all three test-strategy cells
-# MUTANT-MATRIX-CONTROL MUTATION-ts-anchor why=the test-strategy step-2 anchor is unique against an impossible-anchor control
-# MUTANT-MATRIX-DYNAMIC rs_score why=reads every mutant name of the (h), (i) and (j) loops as a variable and every name keeps its own row
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/requirements-step/run.sh --matrix
-#
-# Usage: run.sh [--matrix]
+# Usage: run.sh
 # Exit:  0 = every assertion holds (or subject not installed), 1 = a regression,
 #        2 = fixture broken (a probe could not be proven in either direction).
 set -uo pipefail
 # Arm (o) drives the capture hook, so no inherited AI_DLC_* tunable may reach it (H8).
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
-MODE=plain
-case "${1:-}" in
-  "") ;;
-  --matrix) MODE=matrix ;;
-  *) echo "requirements-step: usage: run.sh [--matrix]" >&2; exit 2 ;;
-esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -566,10 +517,6 @@ for cand in "$ROOT/core/scripts/validate-draft-stamps.sh" "$ROOT/scripts/ai-dlc/
 done
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "requirements-step: running arms against the corpus"
 echo
@@ -692,171 +639,29 @@ fi
 
 # --- (h) the disposition vocabulary agrees across every derived carrier ---
 if dispositions_agree "$STEPS"; then
-  ok "(h) every step file carrying the prior-decision disposition vocabulary agrees on the four members, and carries the deferred-unfiled filing mandate"; B_h=1
+  ok "(h) every step file carrying the prior-decision disposition vocabulary agrees on the four members, and carries the deferred-unfiled filing mandate"
 else
   bad "(h) prior-decision disposition vocabulary: $DISPO_WHY"
 fi
-# ---- matrix plumbing. The header rows are the only source of a mutant's deciding cell and twin. ----
-MXL="$(mktemp)"; : > "$MXL"
-RS_CELLS="h i-axis i-mandate j-check j-sweep j-refuse"
-mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
-  local n="$1" f="$2" l w c=0 v=""
-  while IFS= read -r l; do
-    case "$l" in
-      "# MUTANT-MATRIX $n "*)
-        c=$((c + 1))
-        for w in ${l#"# MUTANT-MATRIX $n "}; do case "$w" in "$f="*) v="${w#"$f="}" ;; esac; done ;;
-    esac
-  done < "$HERE/run.sh"
-  [ "$c" -eq 1 ] && printf '%s' "$v"
-}
-mx_count() { local k="$1" l n=0; while IFS= read -r l; do case "$l" in "$k "*) n=$((n + 1)) ;; esac; done < "$MXL"; printf '%s' "$n"; }
-# rs_red <cell> <requirements.md> <gate-validation.md> <steps dir> -> 0 when the predicate FAILS (RED), 1 when it holds (GREEN).
-rs_red() {
-  case "$1" in
-    h) ! dispositions_agree "$4" ;;
-    i-axis) ! subject_axis_ok "$2" ;;
-    i-mandate) ! mandate_ok "$2" ;;
-    j-check) ! j_check_ok "$3" ;;
-    j-sweep) ! j_sweep_ok "$3" ;;
-    j-refuse) ! j_refuse_ok "$2" ;;
-    *) echo "MATRIX BROKEN unknown cell $1"; exit 2 ;;
-  esac
-}
-# rs_cell <cell> <req> <gv> <steps> -> RED|GREEN; a crashed predicate is BROKEN, never GREEN.
-RS_WHY=""
-rs_cell() {
-  local r e="$MXL.err"
-  # Each predicate sets only its own reason variable, so all three are cleared first: a stale reason from the
-  # previous cell must not be read as this cell's.
-  DISPO_WHY=""; I_WHY=""; J_WHY=""
-  { rs_red "$1" "$2" "$3" "$4"; r=$?; } 2>"$e"
-  case "$1" in h) RS_WHY="$DISPO_WHY" ;; i-*) RS_WHY="$I_WHY" ;; *) RS_WHY="$J_WHY" ;; esac
-  case "$(cat "$e")" in
-    *"unbound variable"*|*"command not found"*|*"syntax error"*)
-      if [ "$MODE" = matrix ]; then echo "MATRIX BROKEN $1"; exit 2; fi
-      bad "FIXTURE BROKEN: cell $1 crashed, which reads as GREEN" ;;
-  esac
-  if [ "$r" -eq 0 ]; then RS_COLOR=RED; else RS_COLOR=GREEN; fi
-}
-# rs_score <mutant> <base-pass flag> <message> <req> <gv> <steps> -- the deciding cell and the twin per push, every cell under --matrix.
-rs_score() {
-  local m="$1" fl="$2" msg="$3" req="$4" gv="$5" st="$6" dec tw d t why a g=0 tot=0 u="" rd=""
-  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
-  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "MUTANT $m has no single MUTANT-MATRIX row naming its deciding cell and twin"; return; fi
-  printf 'dec %s %s\n' "$m" "$dec" >> "$MXL"; printf 'dec %s %s\n' "$m" "$tw" >> "$MXL"
-  rs_cell "$dec" "$req" "$gv" "$st"; d="$RS_COLOR"; why="$RS_WHY"
-  rs_cell "$tw" "$req" "$gv" "$st"; t="$RS_COLOR"
-  if [ "$d" = RED ]; then
-    mutant_killed "$fl" "$m" "$msg$why"
-  else
-    bad "MUTANT $m SURVIVED: the $dec predicate passed on the mutated copy"
-  fi
-  if [ "$t" = RED ]; then bad "MUTANT $m is entangled: its twin $tw also failed"; fi
-  if [ "$MODE" = matrix ]; then # mx-all-cells
-    for a in $RS_CELLS; do
-      if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
-      printf 'mx %s %s\n' "$m" "$a" >> "$MXL"
-      tot=$((tot + 1)); rs_cell "$a" "$req" "$gv" "$st"; if [ "$RS_COLOR" = GREEN ]; then g=$((g + 1)); else rd="$rd,$a"; fi
-    done
-    if [ "$d" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
-    if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
-  fi
-}
-
-# Mutants, each on a COPY of the steps dir, each guarded by cmp -s so a sed that
-# matched nothing reads DID NOT APPLY rather than as a scored mutant.
-DISPO_CARRIERS=""
-for f in "$STEPS"/*.md; do [ -n "$(disposition_set "$f")" ] && DISPO_CARRIERS="$DISPO_CARRIERS $(basename "$f")"; done
-set -- $DISPO_CARRIERS
-if [ "$#" -lt 2 ]; then
-  bad "(h) mutants: fewer than two carriers derived ($#), nothing to mutate"
-else
-  MUT="$(mktemp -d)"
-  for which in one all; do
-    mkdir "$MUT/$which"; cp -R "$STEPS" "$MUT/$which/steps"
-    MS="$MUT/$which/steps"
-    applied=1
-    for c in "$@"; do
-      [ "$which" = one ] && [ "$c" != "$1" ] && continue
-      sed 's| / `deferred-unfiled`)|)|' "$STEPS/$c" > "$MS/$c"
-      cmp -s "$STEPS/$c" "$MS/$c" && applied=0
-    done
-    if [ "$applied" -eq 0 ]; then
-      bad "(h) MUTANT drop-from-$which DID NOT APPLY"
-    else
-      rs_score "drop-from-$which" "${B_h:-0}" "(h) MUTANT drop-from-$which scored by h: " "$REQMD" "$GVMD" "$MS"
-    fi
-  done
-  rm -rf "$MUT"
-fi
-
 # --- (i) subject axis in section 5; `###` mandate in 4(c) ---
 if subject_axis_ok "$REQMD"; then
-  ok "(i) requirements.md section 5 names $SUBJ_TOOL and no longer says it '$OLD_SENT'"; B_axis=1
+  ok "(i) requirements.md section 5 names $SUBJ_TOOL and no longer says it '$OLD_SENT'"
 else
   bad "(i) requirements.md: $I_WHY"
 fi
 if mandate_ok "$REQMD"; then
-  ok "(i) requirements.md 4(c) carries the \`###\` subheading mandate"; B_mand=1
+  ok "(i) requirements.md 4(c) carries the \`###\` subheading mandate"
 else
   bad "(i) requirements.md: $I_WHY"
 fi
-# Mutants on a COPY, cmp -s guarded. Each must fail ONLY its own predicate: the other
-# predicate is asserted to still hold on the same mutant.
-IMUT="$(mktemp -d)"
-# restore-sentence: re-insert the old sentence directly after the `### 5. ` heading.
-awk -v s="  Rule 28 \"Split dispatch\" $OLD_SENT, so the round keeps one agent per seat." \
-  '{ print } index($0, "### 5. ") == 1 { print s }' "$REQMD" > "$IMUT/restore.md"
-# drop-mandate: delete every line carrying the mandate sentence.
-awk -v m="$MANDATE" '!index($0, m)' "$REQMD" > "$IMUT/drop.md"
-for m in restore drop; do
-  if cmp -s "$REQMD" "$IMUT/$m.md"; then bad "(i) MUTANT i-$m DID NOT APPLY"; continue; fi
-  if [ "$m" = restore ]; then
-    rs_score "i-$m" "${B_axis:-0}" "(i) MUTANT i-$m scored by its own predicate alone: " "$IMUT/$m.md" "$GVMD" "$STEPS"
-  else
-    rs_score "i-$m" "${B_mand:-0}" "(i) MUTANT i-$m scored by its own predicate alone: " "$IMUT/$m.md" "$GVMD" "$STEPS"
-  fi
-done
-rm -rf "$IMUT"
-
 # --- (j) the requirements series named at both Check 24 sites; B4's refusal in requirements.md ---
 if [ -f "$GVMD" ]; then
-  if j_check_ok "$GVMD"; then ok "(j) gate-validation.md's Check 24 invocation paragraph names $J_TOK"; B_jcheck=1; else bad "(j) gate-validation.md: $J_WHY"; fi
-  if j_sweep_ok "$GVMD"; then ok "(j) gate-validation.md's post-planning sweep paragraph names $J_TOK"; B_jsweep=1; else bad "(j) gate-validation.md: $J_WHY"; fi
+  if j_check_ok "$GVMD"; then ok "(j) gate-validation.md's Check 24 invocation paragraph names $J_TOK"; else bad "(j) gate-validation.md: $J_WHY"; fi
+  if j_sweep_ok "$GVMD"; then ok "(j) gate-validation.md's post-planning sweep paragraph names $J_TOK"; else bad "(j) gate-validation.md: $J_WHY"; fi
 else
   bad "(j) gate-validation.md not found at $GVMD"
 fi
-if j_refuse_ok "$REQMD"; then ok "(j) requirements.md's series bullet says B4 refuses a --document merge of a subject file"; B_jrefuse=1; else bad "(j) requirements.md: $J_WHY"; fi
-# Mutants on COPIES, cmp -s guarded, each keyed on its own predicate's REGION (every occurrence of
-# the token inside it removed, so a third mention a later release adds cannot leave it vacuous),
-# and each must fail ONLY its own predicate.
-JMUT="$(mktemp -d)"
-j_strip() { # <file> <start> <stop> <literal> -> the file with <literal> removed inside the region
-  awk -v a="$2" -v b="$3" -v t="$4" '
-    function strip(s,  i, o) { o = ""; while ((i = index(s, t)) > 0) { o = o substr(s, 1, i - 1); s = substr(s, i + length(t)) } return o s }
-    !on && !done && index($0, a) { on = 1 }
-    on && index($0, b) && !index($0, a) { on = 0; done = 1 }
-    { print (on ? strip($0) : $0) }' "$1"
-}
-j_strip "$GVMD" "$J_CHECK_A" "$J_SWEEP_A" "$J_TOK" > "$JMUT/check.md"
-j_strip "$GVMD" "$J_SWEEP_A" "$J_SWEEP_Z" "$J_TOK" > "$JMUT/sweep.md"
-j_strip "$REQMD" "$J_REQ_A" "$J_REQ_Z" "$J_REFUSE_2" > "$JMUT/refuse.md"
-for m in check sweep refuse; do
-  case "$m" in
-    check)  src="$GVMD";  rq="$REQMD";         gv="$JMUT/$m.md" ;;
-    sweep)  src="$GVMD";  rq="$REQMD";         gv="$JMUT/$m.md" ;;
-    refuse) src="$REQMD"; rq="$JMUT/$m.md";    gv="$GVMD" ;;
-  esac
-  if cmp -s "$src" "$JMUT/$m.md"; then bad "(j) MUTANT j-$m DID NOT APPLY"; continue; fi
-  case "$m" in
-    check)  rs_score "j-$m" "${B_jcheck:-0}"  "(j) MUTANT j-$m scored by its own predicate alone: " "$rq" "$gv" "$STEPS" ;;
-    sweep)  rs_score "j-$m" "${B_jsweep:-0}"  "(j) MUTANT j-$m scored by its own predicate alone: " "$rq" "$gv" "$STEPS" ;;
-    refuse) rs_score "j-$m" "${B_jrefuse:-0}" "(j) MUTANT j-$m scored by its own predicate alone: " "$rq" "$gv" "$STEPS" ;;
-  esac
-done
-rm -rf "$JMUT"
+if j_refuse_ok "$REQMD"; then ok "(j) requirements.md's series bullet says B4 refuses a --document merge of a subject file"; else bad "(j) requirements.md: $J_WHY"; fi
 
 # =====================================================================
 # (k) (l) (m): Check 24's prose bound to validate-adversarial-convergence.sh. Moved here from
@@ -939,17 +744,16 @@ fi
 #           dispatch", and step 3's precondition (the highest pass "does not stamp
 #           `verdict: EXIT_CONDITION_MET`" -> return to step 2), each once-unique in §5 today.
 # Arm L's silence on this series is a CHARACTERIZATION (L keys on stories-adversarial-p only), not
-# a kill. THE ABSENCE ARM IS WHY THE MUTANTS ARE COMMITTED: an absence passes for a span that read
-# nothing, so the unmutated docs must score `ok ok ok` (the positive control) and each mutant must
-# move exactly its own cell. Each validator start is an e2e cell of cells.decl, tagged by ts_eval.
+# a kill. An absence passes for a span that read nothing, so each cell is PRESENCE-shaped toward `ok`
+# and the absence arm carries a same-invocation control. Each validator start is an e2e cell of cells.decl,
+# tagged by ts_eval.
 TS_GATE="$GVMD"; TS_STEP="$STEPS/stories-test-strategy.md"; TS_CTL="$STEPS/bug-investigation.md"
 [ -f "$TS_STEP" ] && [ -f "$TS_CTL" ] || broken "BL-723: stories-test-strategy.md and bug-investigation.md are not beside gate-validation.md in $STEPS"
 TS_TOKEN='_bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p'
 TS_RE='_bmad-output/planning-artifacts/s<N>/test-strategy[A-Za-z0-9_-]*-p'
 # The one-shot runs under its current name, `bmad-review` (BMAD 6.11 renamed it from
 # bmad-review-adversarial-general). The current name is a SUBSTRING of the old one, so one fixed-string
-# count sees both spellings: the old-name mutant below still kills, and the new-form mutant beside it
-# proves the absence arm reads the current call-site spelling too.
+# count sees both spellings.
 TS_BMAD='bmad-review'
 ts_span() { awk -v s="$2" -v e="$3" 'index($0, s) == 1 { f = 1; next } index($0, e) == 1 { f = 0 } f' "$1"; }
 ts_prefixes() { ts_span "$1" "$2" "$3" | grep -oE -- "$TS_RE" | sort -u; }
@@ -1067,77 +871,6 @@ if [ "$TS_BIND" = ok ]; then
   fi
 fi
 
-# --- MUTATION: one per cell the subject fix carries, each built as a COPY, cmp -s guarded ----------
-#                               bind  absent  names
-#   shipped (control)           ok    ok      ok
-#   bmad restored in §5 step 2  ok    FAIL    ok   (old name, and again in the current lenses= form)
-#   Check 24 drops the prefix   FAIL  ok      ok
-#   step 3 precondition deleted ok    ok      FAIL
-ts_score() { # <label> <gate doc> <step doc> <expected row>
-  local got
-  ts_eval "$1" "$2" "$3"; got="$TS_BIND $TS_ABS $TS_NAMES"
-  if [ "$got" = "$4" ]; then
-    ok "(m) $1 [$got]"
-  else
-    bad "(m) $1 got [$got] want [$4]"
-  fi
-}
-ts_mut() { # <label> <python re> <replacement> <source doc> <copy> -> 0 when the mutation applied and is complete
-  MUT_RE="$2" MUT_NEW="$3" python3 -c 'import os,re,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(re.sub(os.environ["MUT_RE"],os.environ["MUT_NEW"],s,count=1 if os.environ["MUT_NEW"] else 0))' "$4" "$5"
-  if [ ! -s "$5" ] || cmp -s "$4" "$5"; then
-    bad "(m) MUTATION $1 DID NOT APPLY -- the mutation matched nothing; this assertion proves nothing"
-    return 1
-  fi
-  return 0
-}
-TSM="$TSW/mut"; mkdir -p "$TSM" || broken "cannot create $TSM"
-ts_score "CONTROL ts unmutated" "$TS_GATE" "$TS_STEP" "ok ok ok"
-# M1: the one-shot comes back as §5 step 2. Anchored on step 2's own opening, which must be unique.
-ts_a="$(grep -c '^2\. \*\*Converge the test strategy\.\*\*' "$TS_STEP")" || ts_a=0
-ts_actl="$(grep -c '^2\. \*\*Converge the test strategy no-such-line' "$TS_STEP")" || ts_actl=0
-if [ "$ts_a" -ne 1 ] || [ "$ts_actl" -ne 0 ]; then
-  bad "(m) MUTATION ts-anchor: step 2 anchor matches $ts_a line(s) (want 1; impossible-anchor control $ts_actl, want 0)"
-else
-  ok "(m) MUTATION ts-anchor: step 2 anchor is unique (impossible-anchor control: 0)"
-fi
-if ts_mut ts-bmad-restored '(?m)^2\. \*\*Converge the test strategy\.\*\*' \
-     '2. `/bmad-review-adversarial-general` — review test strategy. **Converge the test strategy.**' \
-     "$TS_STEP" "$TSM/stories-test-strategy.m1.md"; then
-  ts_score "MUTATION ts-bmad-restored" "$TS_GATE" "$TSM/stories-test-strategy.m1.md" "ok FAIL ok"
-fi
-# M1b: the same step restored in the CURRENT call-site spelling, the directive form the rulebook now
-# writes everywhere else. Without this the absence arm is proven only against the old name.
-if ts_mut ts-bmad-restored-new '(?m)^2\. \*\*Converge the test strategy\.\*\*' \
-     '2. `/bmad-review lenses=adversarial` — review test strategy. **Converge the test strategy.**' \
-     "$TS_STEP" "$TSM/stories-test-strategy.m1b.md"; then
-  ts_score "MUTATION ts-bmad-restored-new" "$TS_GATE" "$TSM/stories-test-strategy.m1b.md" "ok FAIL ok"
-fi
-# M2: Check 24 stops naming the series. Keyed on the extractor's own grammar over the whole file, and
-# the copy must carry ZERO matches against a non-zero original.
-if ts_mut ts-gate-prefix-dropped "$TS_RE" '' "$TS_GATE" "$TSM/gate-validation.m2.md"; then
-  ts_m2="$(grep -cE -- "$TS_RE" "$TSM/gate-validation.m2.md")" || ts_m2=0
-  ts_m2o="$(grep -cE -- "$TS_RE" "$TS_GATE")" || ts_m2o=0
-  if [ "$ts_m2" -ne 0 ] || [ "$ts_m2o" -eq 0 ]; then
-    bad "(m) MUTATION ts-gate-prefix-dropped: the copy keeps $ts_m2 match(es) (original $ts_m2o) -- an incomplete mutation"
-  else
-    ts_score "MUTATION ts-gate-prefix-dropped" "$TSM/gate-validation.m2.md" "$TS_STEP" "FAIL ok ok"
-  fi
-fi
-# M3: step 3's precondition paragraph is deleted, from its own opening line up to the bind paragraph
-# that follows it. The em dash is matched by `.` so the pattern stays ASCII. The copy must carry
-# ZERO precondition stamps against exactly one in the original, or the mutation is incomplete.
-TS_PRE='does not stamp `verdict: EXIT_CONDITION_MET`'
-if ts_mut ts-precondition-deleted \
-     '(?ms)^3\. \*\*Precondition . the step-2 series has exited\.\*\*.*?(?=^   \*\*Bind every strategy case)' '' \
-     "$TS_STEP" "$TSM/stories-test-strategy.m3.md"; then
-  ts_m3="$(grep -cF -- "$TS_PRE" "$TSM/stories-test-strategy.m3.md")" || ts_m3=0
-  ts_m3o="$(grep -cF -- "$TS_PRE" "$TS_STEP")" || ts_m3o=0
-  if [ "$ts_m3" -ne 0 ] || [ "$ts_m3o" -ne 1 ]; then
-    bad "(m) MUTATION ts-precondition-deleted: the copy keeps $ts_m3 precondition stamp(s) (original $ts_m3o, want 1) -- an incomplete mutation"
-  else
-    ts_score "MUTATION ts-precondition-deleted" "$TS_GATE" "$TSM/stories-test-strategy.m3.md" "ok ok FAIL"
-  fi
-fi
 
 # --- (n) BL-936: a lead-interpretation bullet keeps its id at line start, through the SHIPPED parsers ---
 # requirements.md §3 fixes `- LR-S<N>-<m> (lead interpretation, of LR-S<N>-<k>): <clause>` because the readers
@@ -1230,7 +963,7 @@ fi
 # 23 UNANSWERED (its question opens with LR-S42-23 and also names LR-S42-230, another id); 24 CONFIRMED (its question
 # restates its own id, once bare and once inside a HARD_BLOCK name, as 3 of 8 real S321 LR questions do); 25 UNANSWERED
 # (its question opens with the exact id but carries no `(lead interpretation)` label; 13 is held by the label AND by the
-# residual-id guard, so o-unbounded is scored here, where only the label guard can see it).
+# residual-id guard, so only the label guard decides this id).
 O_HOOK=""
 for cand in "$ROOT/core/hooks" "$ROOT/.claude/hooks"; do
   [ -f "$cand/ai-dlc-answer-capture.sh" ] && { O_HOOK="$cand/ai-dlc-answer-capture.sh"; break; }
@@ -1279,13 +1012,10 @@ else
     printf '%s' "${r# }"
   }
   o_want() { o_cell "$O_WANT" "$@"; }
-  B_o=0
   if [ "$o_rec" -ne 16 ]; then
     bad "(o) the capture hook wrote $o_rec record(s), want 16 (one per question/answer pair) -- the seed is not the producer's"
   else
     O_BASE="$(o_states "$O_PROG")"
-    if [ "$O_BASE" = "$O_WANT" ]; then ok "(o) control: the unmutated derivation reads every one of the sixteen ids as expected"; B_o=1
-    else bad "(o) CONTROL: the unmutated derivation reads '$O_BASE', want $O_WANT, so no mutant verdict below is attributable"; fi
     o_check() { # <cell> <ids...>
       local nm="$1"; shift
       if [ "$(o_cell "$O_BASE" "$@")" = "$(o_want "$@")" ]; then ok "$nm: §3's derivation reads $(o_want "$@") over the hook-written history"
@@ -1306,44 +1036,9 @@ else
     o_check o-self-prefix 23
     o_check o-self-repeat 24
     o_check o-unlabelled 25
-    # Mutants of the program, each on a copy of the extracted text, each guarded so a substitution that matched
-    # nothing reads DID NOT APPLY.
-    o_mut() { # <name> <decides ids> <twin ids> <sed expr>
-      local m="$1" d="$2" t="$3" mp ms
-      mp="$(printf '%s' "$O_PROG" | sed "$4")"
-      if [ "$mp" = "$O_PROG" ]; then bad "(o) MUTANT $m DID NOT APPLY"; return; fi
-      ms="$(o_states "$mp")"
-      # shellcheck disable=SC2086 # the id lists are blank-separated on purpose
-      if [ "$(o_cell "$ms" $d)" != "$(o_want $d)" ]; then
-        mutant_killed "$B_o" "$m" "(o) MUTANT $m killed: ids $d read '$(o_cell "$ms" $d)'"
-      else bad "(o) MUTANT $m SURVIVED: ids $d still read $(o_want $d)"; fi
-      # shellcheck disable=SC2086
-      [ "$(o_cell "$ms" $t)" = "$(o_want $t)" ] || bad "(o) MUTANT $m is entangled: its twin ids $t also moved"
-    }
-    o_mut o-any-answer "11" "10" 's/(c == "Confirm " id) ? "CONFIRMED" : (c == "Strike " id || c == "Reword " id) ? "DESCOPE" : "UNDECIDED"/"CONFIRMED"/'
-    o_mut o-unbounded "25" "10" 's/id " (lead interpretation): "/id/'
-    o_mut o-multi-id "14 15" "10" 's/if (t !~ \/LR-S\[0-9\]+-\[0-9\]+\/) { f = 1; next }/f = 1; next/'
-    o_mut o-count-own "24" "10" 's/{ t = \$0 " "; gsub(id "\[^0-9\]", " ", t); if (t !~ \/LR-S\[0-9\]+-\[0-9\]+\/)/{ if (gsub(\/LR-S[0-9]+-[0-9]+\/, "\&") == 1)/'
-    o_mut o-strip-unbounded "23" "10" 's/gsub(id "\[^0-9\]", " ", t)/gsub(id, " ", t)/'
-    o_mut o-exact-only "18" "10" 's/sub(\/ \[(\]Recommended\[)\]\$\/, "", c); //'
-    o_mut o-prefix "19" "10" 's/(c == "Confirm " id)/(index(c, "Confirm " id) == 1)/'
-    o_mut o-any-nonconfirm-descope "20" "10" 's/(c == "Strike " id || c == "Reword " id) ? "DESCOPE" : "UNDECIDED"/"DESCOPE"/'
-    o_mut o-first-line-only "21" "10" 's/f == 2 { b = b s \$0;/f == 2 { if (s == "") b = $0;/'
-    o_mut o-no-reword "22" "10" 's/ || c == "Reword " id//'
-    o_mut o-first-wins "17" "10" 's/f == 1 \&\& \$0 == "```text" {/f == 1 \&\& v == "UNANSWERED" \&\& $0 == "```text" {/'
   fi
 fi
 
-# RULE 9: a plain run executes NO matrix-only cell. The deciding and twin cells write the same ledger, so
-# an empty matrix count cannot come from a ledger nothing writes.
-mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
-if [ "$MODE" = plain ]; then
-  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
-  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
-  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
-else
-  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
-fi
 
 echo
 report_end requirements-step

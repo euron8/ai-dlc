@@ -32,7 +32,7 @@ pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] \
 
 # Both install layouts. `../../hooks/` is the distribution (core/fixtures/<x>/ ->
 # core/hooks/); `../../../.claude/hooks/` is the consumer (tests/fixtures/<x>/ ->
-# .claude/hooks/). Canonicalised by pick(), so the mutant battery below can print a path a
+# .claude/hooks/). Canonicalised by pick(), so the printed path is one a
 # human can compare against the file they changed.
 HOOK="$(pick "$HERE/../../hooks/ai-dlc-answer-capture.sh" \
              "$HERE/../../../.claude/hooks/ai-dlc-answer-capture.sh" \
@@ -50,8 +50,6 @@ ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$ROOT"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_a1=0; B_a6c=0
 
 echo "answer-handoff-routing:"
 
@@ -106,7 +104,7 @@ Q_REAL="How should I dispose of gate-3 Check 16?"
 
 # --- Assertion 1: a handoff answer creates the pause flag ------------------------------
 newcase yes; OUT="$(fire "$Q_REAL" "handoff")"
-[ "$(flag)" = yes ] && { ok "answer 'handoff' -> pause flag created"; B_a1=1; } \
+[ "$(flag)" = yes ] && ok "answer 'handoff' -> pause flag created" \
   || bad "an answer of 'handoff' left NO pause flag — the pipeline runs on through the operator's request, which is the s305 defect verbatim"
 
 # --- Assertion 2: it is RECORDED, and the record names the channel ---------------------
@@ -197,29 +195,15 @@ newcase yes; OUT="$(fire "$Q_REAL" "continue. Note for retro that you weren't su
 # MIDDLE line ends in the terse form -- the operator pasting the incident row into a longer
 # reply -- matched on that line alone and paused the pipeline. The hook matches a collapsed
 # copy now (the record keeps the newlines). The sibling is the same shape with the request on
-# the LAST line, which routes whether or not it is collapsed. Killed by the mutant below.
+# the LAST line, which routes whether or not it is collapsed.
 A_PASTED="$(printf 'Look at this row:\nI am solving this issue. handoff.\nIs the fix right?')"
 A_LASTLINE="$(printf 'Everything is committed.\nI am solving this issue. handoff.')"
 newcase yes; OUT="$(fire "$Q_REAL" "$A_PASTED")"
-[ "$(flag)" = no ] && { ok "a three-line answer whose MIDDLE line ends in the terse form routes nothing (one field, not a set of lines)"; B_a6c=1; } \
+[ "$(flag)" = no ] && ok "a three-line answer whose MIDDLE line ends in the terse form routes nothing (one field, not a set of lines)" \
   || bad "a pasted row on a middle line PAUSED the pipeline (flag=$(flag)) — the answer is matched per line, so quoting a request on its own line routes"
 newcase yes; OUT="$(fire "$Q_REAL" "$A_LASTLINE")"
 [ "$(flag)" = yes ] && ok "control: the same shape with the terse form on the LAST line -> pause flag created (collapsing did not disarm the alternative)" \
   || bad "a two-line answer ending in the terse request routed NOTHING (flag=$(flag)) — the collapse broke the final-sentence alternative, or the arm is dead and 6c is unreadable"
-MUT_PERLINE="$ROOT/answer-capture-perline.sh"
-sed 's#^  ANSWER_FLAT=$(tr .\\n. . . <<<"\$ANSWER")$#  ANSWER_FLAT="$ANSWER"#' "$HOOK" > "$MUT_PERLINE"
-if cmp -s "$HOOK" "$MUT_PERLINE"; then
-  bad "FIXTURE STALE: the per-line mutation matched nothing in $HOOK — the collapse line was reworded, so this battery is editing a file it does not understand"
-elif ! bash -n "$MUT_PERLINE" 2>/dev/null; then
-  bad "FIXTURE STALE: the per-line mutant does not parse — a kill would be a syntax error rather than a disarmed collapse"
-else
-  newcase yes; OUT="$(fire "$Q_REAL" "$A_PASTED" "$MUT_PERLINE")"
-  [ "$(flag)" = yes ] && mutant_killed "$B_a6c" perline-collapse "mutant: with the collapse gone, the middle line matches on its own and the pasted row PAUSES — assertion 6c depends on the collapse" \
-    || bad "MUTANT SURVIVED: the pasted row still routes nothing (flag=$(flag)) under a per-line copy — 6c does not depend on the collapse, so it proves nothing"
-  newcase yes; OUT="$(fire "$Q_REAL" "$A_LASTLINE" "$MUT_PERLINE")"
-  [ "$(flag)" = yes ] && ok "mutant control: the last-line request still routes under the same copy — it loads and runs, so the kill above is real" \
-    || bad "MUTANT HARNESS BROKEN — the copy routes nothing at all (flag=$(flag)); it is not running, and the kill above is unreadable"
-fi
 
 # --- Assertion 7: intent is read from the ANSWER, never the QUESTION --------------------
 # The question is text the LEAD authored. A hook that matched on it would route on the
@@ -247,38 +231,6 @@ fi
 newcase yes; OUT="$(fire "$Q_REAL" "handoff")"
 [ "$(captured)" = "1" ] && ok "a ROUTED answer is still written to operator-answers-history.md" \
   || bad "the routed answer was not captured (rows=$(captured)) — routing has displaced provenance, which is the thing this hook was built for"
-
-# --- Assertion 10: MUTANT — remove the routing and assertion 1 must fail ---------------
-# Assertions 5 through 8 are ABSENCE-shaped: they assert nothing happened. Both-directions
-# seeding shows the hook discriminates between two inputs; only a mutant shows it discriminates
-# at all. Built as a COPY, guarded with `cmp -s` so a `sed` that matched nothing reports
-# FIXTURE STALE rather than scoring a kill, and the edited path is printed.
-#
-# ANCHORED ON THE ASSIGNMENT INSIDE THE CAPTURE LOOP, not on the arm's `|| exit 0` entry
-# condition. That condition is a one-line `[ ... ] || exit 0`, and a `sed` expression
-# carrying `||` on both sides needs a delimiter that is not `|` -- which is a way to get the
-# expression subtly wrong and score a kill from a mutation that did something else. The
-# assignment is one line, unique, and disabling it is exactly "the hook saw no handoff".
-MUT="$ROOT/answer-capture-noroute.sh"
-sed 's#^    HANDOFF_ANSWER="\$ANSWER"$#    HANDOFF_ANSWER=""#' "$HOOK" > "$MUT"
-if cmp -s "$HOOK" "$MUT"; then
-  bad "FIXTURE STALE: the routing-arm mutation matched nothing in $HOOK — the arm's entry condition was reworded, so this battery is editing a file it does not understand"
-elif ! bash -n "$MUT" 2>/dev/null; then
-  bad "FIXTURE STALE: the routing mutant does not parse — a kill would be a syntax error rather than a disarmed arm"
-else
-  printf '        mutant edits: %s (from %s)\n' "$MUT" "$HOOK"
-  newcase yes; OUT="$(fire "$Q_REAL" "handoff" "$MUT")"
-  if [ "$(flag)" = no ] && [ -z "$OUT" ]; then
-    mutant_killed "$B_a1" routing-arm-shut "mutant: with the routing arm pinned shut, 'handoff' creates no flag — the arm is what produced assertions 1-4"
-  else
-    bad "MUTANT DID NOT FAIL — 'handoff' still routed (flag=$(flag) stdout=${#OUT}B) with the arm disabled, so assertions 1-4 are measuring something else"
-  fi
-  # CONTROL, with a POSITIVE conjunct. A copy that died on load emits nothing and writes no
-  # flag, which is byte-for-byte what the kill above looks like. Requiring that the mutant
-  # still CAPTURES the answer is what separates a disarmed arm from a dead script.
-  [ "$(captured)" = "1" ] && ok "mutant control: the same copy still captures the answer — it loads and runs, so the kill above is real" \
-    || bad "MUTANT HARNESS BROKEN — the copy captured nothing either (rows=$(captured)); it is not running, and the kill above is unreadable"
-fi
 
 echo ""
 report_end answer-handoff-routing

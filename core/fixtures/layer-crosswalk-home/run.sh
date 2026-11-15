@@ -25,56 +25,10 @@
 # never fire on it. A worked example that satisfies the clause it illustrates is a check that
 # cannot fire, and assertion 9 is what keeps core's files at zero.
 #
-# MUTANTS. Each is a copy of the subject, scored per push on its DECIDING arm (which must FAIL under it)
-# and its TWIN arm(s) (which must HOLD); the live pass over the shipped subject keeps every world. The
-# four linter arms are the four worlds S0 (no row anywhere), S1 (row in the declared file), S2 (row in
-# the retired location) and REFUSE (declaration removed); PSCAF and PPRES are the pull-side scaffold and
-# preserve arms. `bash core/fixtures/layer-crosswalk-home/run.sh --matrix` measures every mutant against
-# every arm of its subject and prints one MATRIX line per cell. A twin is an arm the matrix shows green
-# under the mutant. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
-# per distinct state") requires.
-# MUTANT-MATRIX fence decides=S0 twins=S2
-# MUTANT-MATRIX warn decides=S2 twins=S0
-# MUTANT-MATRIX refuse decides=REFUSE twins=S0
-# MUTANT-MATRIX union decides=S2 twins=S1
-# MUTANT-MATRIX apply-scaffold decides=PSCAF twins=PPRES
-# MUTANT-MATRIX ss-overwrite decides=SSPRES twins=SSCAF
-# The BL-978 worlds (G0 non-git, G1 no rule, GX `*.md`, GY `*.txt`, GN negated, GU symlinked parent, GX2/GY2
-# the second pull, NB the next pull with an exact-path line, LM the reconcile copy without scaffold-ignore.sh)
-# score the scaffold-ignore mutants: each runs ONE apply, in the world its decides cell names before the `.`, and
-# reads two cells there. A SIXI.<world> twin is (i)'s property, all six RESOLVED rows printed, read in that run.
-# MUTANT-MATRIX drop-call-crosswalk decides=GX.crosswalk twins=SIXI.GX
-# MUTANT-MATRIX drop-call-machinery decides=GX.machinery twins=SIXI.GX
-# MUTANT-MATRIX drop-call-pr-class decides=GX.pr-class twins=SIXI.GX
-# MUTANT-MATRIX drop-call-story-fields decides=GX.story-fields twins=SIXI.GX
-# MUTANT-MATRIX drop-call-artifact-paths decides=GX.artifact-paths twins=SIXI.GX
-# MUTANT-MATRIX drop-call-smoke-surface decides=GY.smoke-surface twins=SIXI.GY
-# MUTANT-MATRIX ignore-verbose decides=GN.ignored twins=SIXI.GN
-# MUTANT-MATRIX ignore-ungated decides=G0.unchecked twins=SIXI.G0
-# MUTANT-MATRIX drop-preserved-crosswalk decides=GX2.crosswalk twins=GX2.rows
-# MUTANT-MATRIX drop-preserved-machinery decides=GX2.machinery twins=GX2.rows
-# MUTANT-MATRIX drop-preserved-pr-class decides=GX2.pr-class twins=GX2.rows
-# MUTANT-MATRIX drop-preserved-story-fields decides=GX2.story-fields twins=GX2.rows
-# MUTANT-MATRIX drop-preserved-artifact-paths decides=GX2.artifact-paths twins=GX2.rows
-# MUTANT-MATRIX drop-preserved-smoke-surface decides=GY2.smoke-surface twins=GY2.rows
-# MUTANT-MATRIX preserved-to-note decides=GX2.worklist twins=GX2.notes
-# MUTANT-MATRIX unchecked-to-note decides=GU.worklist twins=GU.notes
-# MUTANT-MATRIX drop-exact-exit decides=NB.exact twins=NB.ended
-# MUTANT-MATRIX lib-missing-silent decides=LM.decision twins=LM.ended
-# MUTANT-MATRIX drop-default-arm decides=ST.unchecked twins=ST.resolved
-# MUTANT-MATRIX finish-rederives decides=FIN.restamp twins=FIN.rows
-# MUTANT-MATRIX-DYNAMIC mscore why=every mutant is passed to mutant_killed by name from the one mscore() driver, and each name keeps its own row above
-# MUTANT-MATRIX-DYNAMIC sixmut why=the BL-978 mutants reach mutant_killed through a loop variable, and each name keeps its own row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-crosswalk-home/run.sh --matrix
-#
-# Usage: run.sh [--matrix] [path-to-validate-layer-entries.sh]
+# Usage: run.sh [path-to-validate-layer-entries.sh]
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = fixture broken.
 set -uo pipefail
 
-RAW_ARGV=" $* "
-MATRIX=0
-if [ "${1:-}" = --matrix ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
-MATRIX_CELLS=0
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -97,35 +51,24 @@ CORE_EXT_README="$(pick "$HERE/../../skills/ai-dlc/extensions/README.md" \
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/layer-crosswalk-home-work.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
-B_S0=0; B_S1=0; B_S2=0; B_REFUSE=0; B_PSCAF=0; B_PPRES=0; B_SSCAF=0; B_SSPRES=0; MUT_APPLY_READY=0
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
-# EXPECTED_ASSERTIONS is not bookkeeping. A sibling fixture lost an entire mutant to a missing
-# space in a helper call: `set -u` killed the `$( )` subshell, `if m="$( … )"` read that as a
-# false branch, and the arm silently did not run — green lines, a PASS, and the mutant proving
-# the load-bearing branch gone. Counting what actually ran is what closes it.
+# EXPECTED_ASSERTIONS is not bookkeeping. `set -u` killing a `$( )` subshell that `if m="$( … )"` reads as a false
+# branch makes an arm silently not run — green lines and a PASS. Counting what actually ran is what closes it.
 # 2 premises + 2 state vectors + 1 message content + 1 difference + 1 declaration-is-read + 1 refusal
 # + 2 core-yields-zero (claim + control)
 # + 3 pull-side (scaffold, preserve, refusal)
-# + 3 smoke-surface pull-side (scaffold, preserve, undeclared) + 1 smoke-surface mutant (overwrite)
-# + 1 unmutated control + 5 mutants (4 linter + the pull scaffold) + 1 plain-run arm   = 24
-# + BL-978's scaffold-ignore block, SIX_ASSERTIONS = 40: 20 arms (the G0 premise, (i)-(v), the GU
+# + 3 smoke-surface pull-side (scaffold, preserve, undeclared)                                  = 16
+# + BL-978's scaffold-ignore block, SIX_ASSERTIONS = 20: the G0 premise, (i)-(v), the GU
 #   unchecked control, (vi) second-pull WORKLIST, (vii) G1 second pull, (viii) tracked path, (F1)
 #   the ordinary pull and (F2) --finish over undisposed rows, the next-pull cells (a) (b) (c), the
 #   near-misses, exact-plus-negation, LM lib-missing reached, LN lib-missing unreached, ST an
-#   undocumented state) and 20 mutants (6 drop-call, ignore-verbose, ignore-ungated,
-#   6 drop-preserved, preserved-to-note, unchecked-to-note, drop-exact-exit, lib-missing-silent,
-#   drop-default-arm, finish-rederives)                                                         = 64
+#   undocumented state                                                                         = 36
 # The 2 installer arms (scaffold + preserve) moved to schema-install-fallback, which declares
 # scripts/install.sh; this fixture ships and cannot.
-EXPECTED_ASSERTIONS=64
+EXPECTED_ASSERTIONS=36
 
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
-
-# shellcheck disable=SC1090
-. "$MUT_LIB"
 echo "layer-crosswalk-home:"
 
 # ---------------------------------------------------------------------------
@@ -183,7 +126,7 @@ write_legacy() { # write_legacy <root>
 
 # vector <linter> <root> -> "e16=<n> w8=<n> rc=<n>"
 #
-# Counts rather than booleans: a mutant that makes an arm fire TWICE is a different defect
+# Counts rather than booleans: a defect that makes an arm fire TWICE is a different defect
 # from one that silences it, and a boolean would score both as the same cell.
 vector() { # vector <linter> <root>
   local out rc
@@ -202,7 +145,7 @@ R0="$(fresh)" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 V0="$(vector "$LINTER" "$R0")"
 [ "$V0" = "e16=1 w8=0 rc=1" ] \
-  && { B_S0=1; ok "premise: a consumer with a retired id and NO row anywhere reports E16 and is silent on W8 ($V0)"; } \
+  && { ok "premise: a consumer with a retired id and NO row anywhere reports E16 and is silent on W8 ($V0)"; } \
   || bad "premise: expected 'e16=1 w8=0 rc=1' on the pristine seed, got '$V0'"
 
 # The seed's retired id must really be retired, or every cell below is measuring nothing.
@@ -220,13 +163,13 @@ fi
 R1="$WORK/w1"; cp -R "$R0" "$R1"; write_new_home "$R1"
 V1="$(vector "$LINTER" "$R1")"
 [ "$V1" = "e16=0 w8=0 rc=0" ] \
-  && { B_S1=1; ok "the row in the DECLARED crosswalk file clears E16, says nothing about the retired location, exits 0"; } \
+  && { ok "the row in the DECLARED crosswalk file clears E16, says nothing about the retired location, exits 0"; } \
   || bad "row in the declared crosswalk file: expected 'e16=0 w8=0 rc=0', got '$V1'"
 
 R2="$WORK/w2"; cp -R "$R0" "$R2"; write_legacy "$R2"
 V2="$(vector "$LINTER" "$R2")"
 [ "$V2" = "e16=0 w8=1 rc=0" ] \
-  && { B_S2=1; ok "the SAME row in the retired location still RESOLVES — no wedge — and is reported once by W8"; } \
+  && { ok "the SAME row in the retired location still RESOLVES — no wedge — and is reported once by W8"; } \
   || bad "row in the retired location: expected 'e16=0 w8=1 rc=0', got '$V2'"
 
 # W8 must name what it found, or an operator cannot act on it without diffing two files.
@@ -273,7 +216,7 @@ grep -v '^consumer_crosswalk_file:' "$R4/consumer/.claude/skills/ai-dlc/layer-co
   && mv "$R4/lc.new" "$R4/consumer/.claude/skills/ai-dlc/layer-contract.yaml"
 O4="$(bash "$LINTER" "$R4/consumer" 2>&1)"
 if grep -q "could not read 'consumer_crosswalk_file:'" <<<"$O4"; then
-  B_REFUSE=1; ok "an UNDECLARED crosswalk path is REFUSED by name, not silently treated as an empty table"
+  ok "an UNDECLARED crosswalk path is REFUSED by name, not silently treated as an empty table"
 else
   bad "removing the declaration did not produce a refusal — E16 and W7 would clear against a set nothing read"
 fi
@@ -339,7 +282,7 @@ APPLY="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/apply.sh" \
               "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/apply.sh")"
 if [ -z "$APPLY" ]; then
   bad "cannot locate ai-dlc-update/reconcile/apply.sh from $HERE — the pull-side scaffold arms did not run, and an arm that never ran is silent rather than green"
-  bad "  (scaffold-on-pull, preserve-on-pull, refusal and the mutant are all unverified)"
+  bad "  (scaffold-on-pull, preserve-on-pull, refusal are all unverified)"
   bad "  "
   bad "  "
 else
@@ -396,7 +339,7 @@ else
   bash "$APPLY" "$SD" "$SB" "$SC" "$ST" > "$WORK/apply1.out" 2>&1
   if [ -f "$SC/$CW_REL" ] \
      && cmp -s "$SC/$CW_REL" "$SD/core/skills/ai-dlc/templates/$(basename "$CW_REL")"; then
-    B_PSCAF=1; ok "the PULL scaffolds the declared crosswalk file, byte-identical to the template THEIRS ships"
+    ok "the PULL scaffolds the declared crosswalk file, byte-identical to the template THEIRS ships"
   else
     bad "apply left '$CW_REL' absent or unlike the template — this is the defect the 0.227.0 pull shipped: a declared path nothing creates"
   fi
@@ -405,7 +348,7 @@ else
   # pull says so with its RESOLVED row.
   if [ -f "$SC/$SS_REL" ] && cmp -s "$SC/$SS_REL" "$SS_TPL" \
      && [ "$(awk -F'\t' -v p="$SS_REL" '$1=="RESOLVED" && $2=="smoke-surface-scaffold" && $3==p' "$WORK/apply1.out" | grep -c .)" = 1 ]; then
-    B_SSCAF=1; ok "the PULL scaffolds the declared smoke surface ($SS_REL), byte-identical to the shipped template, with RESOLVED smoke-surface-scaffold"
+    ok "the PULL scaffolds the declared smoke surface ($SS_REL), byte-identical to the shipped template, with RESOLVED smoke-surface-scaffold"
   else
     bad "apply left the declared smoke surface '$SS_REL' absent, unlike the template, or unreported: $(grep 'smoke-surface' "$WORK/apply1.out" | tr '\n' ' ' | cut -c1-200)"
   fi
@@ -416,10 +359,10 @@ else
   printf 'web/src/**\n' >> "$SC/$SS_REL"; cp "$SC/$SS_REL" "$WORK/ss.kept"
   bash "$APPLY" "$SD" "$SB" "$SC" "$ST" > "$WORK/apply1b.out" 2>&1
   [ "$(cksum < "$SC/$CW_REL")" = "$SUM" ] \
-    && { B_PPRES=1; ok "a SECOND pull preserves a populated crosswalk file — the rows are the consumer's"; } \
+    && { ok "a SECOND pull preserves a populated crosswalk file — the rows are the consumer's"; } \
     || bad "a second pull overwrote the populated crosswalk file, which is the whole ownership claim"
   if cmp -s "$SC/$SS_REL" "$WORK/ss.kept" && ! grep -q 'smoke-surface-scaffold' "$WORK/apply1b.out"; then
-    B_SSPRES=1; ok "a SECOND pull leaves a smoke surface the consumer wrote byte-for-byte unchanged, and reports no scaffold"
+    ok "a SECOND pull leaves a smoke surface the consumer wrote byte-for-byte unchanged, and reports no scaffold"
   else
     bad "a second pull rewrote the consumer's smoke surface '$SS_REL' or reported scaffolding it again"
   fi
@@ -446,165 +389,8 @@ else
     bad "an undeclared smoke surface was written, reported, or the world did not ship the template it must ignore"
   fi
 
-  # --- MUTANT: the write itself. Without it every reading above still looks like a pull ---
-  # The whole reconcile directory is copied, not the one script: apply.sh reads its sibling
-  # setup-sites.md for the manifest, and a lone copy would fail for that reason instead.
-  MUTDIR="$WORK/apply-mut"
-  cp -R "$(dirname "$APPLY")" "$MUTDIR" 2>/dev/null
-  # THE BRANCH CONDITION, not the write and not the line: making the guard unreachable
-  # reproduces exactly the state v0.227.0 shipped — a pull that completes, re-stamps, and
-  # leaves the declared path empty.
-  #
-  # THREE GUARDS, because this arm has already passed twice for the wrong reason. The first
-  # cut mutated the wrong line and the file appeared anyway; the second's expression was
-  # malformed, the tool died mid-write, and the "mutant" was a truncated script that could
-  # not create anything — `cmp -s` calls a truncated file different, so it scored a kill it
-  # had not earned. DELETING the line has the same defect in a subtler form: it leaves an
-  # `if` with a dangling body, and a mutant that does not parse proves only that bash
-  # refused it. So the copy must differ, still parse, and still carry the rest of the block.
-  sed 's|^elif \[ ! -f .* \]; then$|elif false; then|' "$APPLY" > "$MUTDIR/apply.sh"
-  if cmp -s "$APPLY" "$MUTDIR/apply.sh"; then
-    bad "MUTANT apply-scaffold did not apply (the branch condition was not found) — a mutation that changes nothing scores a kill it has not earned"
-  elif ! bash -n "$MUTDIR/apply.sh" 2>/dev/null || ! grep -q 'crosswalk-scaffold' "$MUTDIR/apply.sh"; then
-    bad "MUTANT apply-scaffold produced a script that does not parse or lost the block it was meant to reach — the copy is damaged rather than mutated, so anything it fails to do is unattributable"
-  else
-    MUT_APPLY_READY=1
-  fi
 fi
 
-# ---------------------------------------------------------------------------
-# mutants — each a COPY, each guarded by cmp -s, each red on exactly one cell
-# ---------------------------------------------------------------------------
-# Scored by exact VECTOR rather than per-row. Two cells of one branch scored separately report
-# entanglement on every mutant in that shape; the vector states the whole expected outcome
-# positively and distinctly for each.
-MUT="$WORK/mut"; mkdir -p "$MUT"
-
-# One arm = one world, built ONCE above and only read by the linter. armv <arm> <linter> prints 1
-# when the arm's expected outcome holds under that linter copy.
-armv() { # armv <arm> <linter>
-  case "$1" in
-    S0)     [ "$(vector "$2" "$R0")" = "e16=1 w8=0 rc=1" ] && echo 1 || echo 0 ;;
-    S1)     [ "$(vector "$2" "$R1")" = "e16=0 w8=0 rc=0" ] && echo 1 || echo 0 ;;
-    S2)     [ "$(vector "$2" "$R2")" = "e16=0 w8=1 rc=0" ] && echo 1 || echo 0 ;;
-    REFUSE) [ "$(bash "$2" "$R4/consumer" 2>&1 | grep -c "could not read 'consumer_crosswalk_file:'")" = 1 ] && echo 1 || echo 0 ;;
-  esac
-}
-armb() { eval "printf '%s' \"\$B_$1\""; } # armb <arm> -> the live base-pass flag of that arm
-
-# mscore <mutant> <description> <linter-copy> <deciding-arm> <twin>... : the deciding arm must FAIL under
-# the copy and every twin must HOLD. --matrix runs every linter arm and prints one MATRIX line per cell.
-ARMS_LINTER="S0 S1 S2 REFUSE"
-armsall() { local t; for t in "$@"; do [ "$(armb "$t")" = 1 ] || { echo 0; return; }; done; echo 1; } # 1 iff every named arm's base flag is live
-mscore() {
-  local m="$1" desc="$2" lin="$3" dec="$4" t a v dv held=1 flag=0; shift 4
-  if [ "$(armsall "$dec" "$@")" = 1 ]; then flag=1; else bad "MUTANT $m: an arm it drives ($dec $*) did not pass unmutated in this run, so its kill cannot score"; fi
-  if [ "$MATRIX" = 1 ]; then
-    for a in $ARMS_LINTER; do
-      v="$(armv "$a" "$lin")"; eval "CELL_$a=\$v"
-      printf 'MATRIX\t%s\t%s\t%s\n' "$m" "$a" "$([ "$v" = 1 ] && echo ok || echo FAIL)"
-      MATRIX_CELLS=$((MATRIX_CELLS + 1))
-    done
-  else
-    for a in "$dec" "$@"; do v="$(armv "$a" "$lin")"; eval "CELL_$a=\$v"; done
-  fi
-  eval "dv=\$CELL_$dec"
-  for t in "$@"; do eval "v=\$CELL_$t"; [ "$v" = 1 ] || held=0; done
-  if [ "$dv" != 1 ] && [ "$held" = 1 ]; then
-    mutant_killed "$flag" "$m" "MUTANT killed: $desc"
-  else
-    bad "MUTANT $m: deciding arm $dec failed=$([ "$dv" != 1 ] && echo yes || echo no), twins held=$held — $desc"
-  fi
-}
-
-# THE UNMUTATED CONTROL, FIRST AND SERIAL. A lone copy that dies for an unrelated reason emits
-# nothing, and "no output" otherwise scores as a kill on every mutant below it.
-cp "$LINTER" "$MUT/control.sh"
-CTRL=""; for a in $ARMS_LINTER; do CTRL="$CTRL $a=$(armv "$a" "$MUT/control.sh")"; done
-[ "$CTRL" = " S0=1 S1=1 S2=1 REFUSE=1" ] \
-  && ok "CONTROL: an unmutated copy holds all four linter arms (the mutants below run against a live linter)" \
-  || bad "CONTROL: unmutated copy gave '$CTRL', expected all four arms to hold — every mutant verdict below is meaningless"
-
-mkmut() { # mkmut <name> <sed-expr> -> 0 when the copy differs
-  sed "$2" "$LINTER" > "$MUT/$1.sh"
-  if cmp -s "$LINTER" "$MUT/$1.sh"; then
-    bad "MUTANT $1 did not apply (sed matched nothing) — a mutation that changes nothing scores a kill it has not earned"
-    return 1
-  fi
-}
-
-# M1 — the fence skip. Without it the seed's FENCED worked example contributes its id, so an
-# unmigrated tree reports rows it does not have, which is exactly how core shipped `24`
-# pre-resolved to every consumer. Other cells it trips: S1.
-mkmut fence '/fence = !fence/d' && mscore fence \
-  'dropping the fenced-block skip makes a WORKED EXAMPLE count as a crosswalk row' "$MUT/fence.sh" S0 S2
-
-# M2 — W8 itself. The rows still resolve, so nothing errors; the only thing lost is the
-# consumer ever being told, which is the silent dual-read the spec forbids.
-mkmut warn '/^  warn W8 /d' && mscore warn \
-  'deleting W8 makes a migrated and an unmigrated consumer print the same thing' "$MUT/warn.sh" S2 S0
-
-# M3 — the refusal. A missing declaration falling through to an empty set is two ERROR/WARN
-# clauses becoming unconditional passes with nothing to say so.
-mkmut refuse "/could not read 'consumer_crosswalk_file:'/d" && mscore refuse \
-  'deleting the refusal lets an UNDECLARED path read as an empty table' "$MUT/refuse.sh" REFUSE S0
-
-# M4 — the legacy union. Dropping it wedges every consumer that has not migrated yet, which is
-# the state this release found the reference consumer in.
-mkmut union 's#"\$CROSSWALK_IDS" "\$CROSSWALK_LEGACY_IDS"#"$CROSSWALK_IDS" ""#' && mscore union \
-  'dropping the retired location from the resolvable set WEDGES an unmigrated consumer' "$MUT/union.sh" S2 S1
-
-# M5 — the pull scaffold: one synthetic world; the mutated apply runs once for the scaffold arm and a
-# second time for the preserve arm, whose twin holds because the consumer's appended row survives.
-if [ "$MUT_APPLY_READY" = 1 ]; then
-  read -r MD MB MC MT <<<"$(synth yes)"
-  bash "$MUTDIR/apply.sh" "$MD" "$MB" "$MC" "$MT" >/dev/null 2>&1
-  m_sc=0; if [ -f "$MC/$CW_REL" ] && cmp -s "$MC/$CW_REL" "$MD/core/skills/ai-dlc/templates/$(basename "$CW_REL")"; then m_sc=1; fi
-  mkdir -p "$(dirname "$MC/$CW_REL")"; printf '%s\n' "$ROW" >> "$MC/$CW_REL"; MSUM="$(cksum < "$MC/$CW_REL")"
-  bash "$MUTDIR/apply.sh" "$MD" "$MB" "$MC" "$MT" >/dev/null 2>&1
-  m_pp=0; [ "$(cksum < "$MC/$CW_REL")" = "$MSUM" ] && m_pp=1
-  if [ "$MATRIX" = 1 ]; then
-    printf 'MATRIX\tapply-scaffold\tPSCAF\t%s\nMATRIX\tapply-scaffold\tPPRES\t%s\n' \
-      "$([ "$m_sc" = 1 ] && echo ok || echo FAIL)" "$([ "$m_pp" = 1 ] && echo ok || echo FAIL)"
-    MATRIX_CELLS=$((MATRIX_CELLS + 2))
-  fi
-  if [ "$m_sc" = 0 ] && [ "$m_pp" = 1 ]; then
-    mutant_killed "$(( ${B_PSCAF:-0} && ${B_PPRES:-0} ))" apply-scaffold "MUTANT killed: with the scaffold removed the pull completes and the declared path stays EMPTY — which is exactly what shipped"
-  else
-    bad "MUTANT apply-scaffold: scaffold arm failed=$([ "$m_sc" = 0 ] && echo yes || echo no), preserve twin held=$m_pp — the file appeared anyway or the arms are entangled"
-  fi
-fi
-
-# M6 — the smoke-surface scaffold overwrites a present file: its own guard (the one `$SS_REL` line;
-# M5's sed reaches every `elif [ ! -f ... ]` and so cannot isolate it) made always-true. The scaffold
-# twin still holds on the first pull; the preserve arm must fail on the second.
-SSMUT="$WORK/ss-mut"
-if [ -n "$APPLY" ]; then
-  cp -R "$(dirname "$APPLY")" "$SSMUT" 2>/dev/null
-  SS_A='elif [ ! -f "$CONSUMER/$SS_REL" ]; then'
-  if [ "$(grep -cF -- "$SS_A" "$APPLY")" = 1 ] \
-     && SS_A="$SS_A" awk '{ i = index($0, ENVIRON["SS_A"]); if (i) $0 = "elif true; then"; print }' "$APPLY" > "$SSMUT/apply.sh" \
-     && ! cmp -s "$APPLY" "$SSMUT/apply.sh" && bash -n "$SSMUT/apply.sh" 2>/dev/null && [ -f "$SSMUT/preclassify.sh" ]; then
-    read -r MD MB MC MT <<<"$(synth yes)"
-    bash "$SSMUT/apply.sh" "$MD" "$MB" "$MC" "$MT" >/dev/null 2>&1
-    m_sc=0; [ -f "$MC/$SS_REL" ] && cmp -s "$MC/$SS_REL" "$SS_TPL" && m_sc=1
-    printf 'web/src/**\n' >> "$MC/$SS_REL"; cp "$MC/$SS_REL" "$WORK/ss.mkept"
-    bash "$SSMUT/apply.sh" "$MD" "$MB" "$MC" "$MT" >/dev/null 2>&1
-    m_pp=0; cmp -s "$MC/$SS_REL" "$WORK/ss.mkept" && m_pp=1
-    if [ "$MATRIX" = 1 ]; then
-      printf 'MATRIX\tss-overwrite\tSSCAF\t%s\nMATRIX\tss-overwrite\tSSPRES\t%s\n' \
-        "$([ "$m_sc" = 1 ] && echo ok || echo FAIL)" "$([ "$m_pp" = 1 ] && echo ok || echo FAIL)"
-      MATRIX_CELLS=$((MATRIX_CELLS + 2))
-    fi
-    if [ "$m_pp" = 0 ] && [ "$m_sc" = 1 ]; then
-      mutant_killed "$(( ${B_SSCAF:-0} && ${B_SSPRES:-0} ))" ss-overwrite "MUTANT killed: a smoke-surface scaffold that ignores a present file overwrites the consumer's surface on the second pull"
-    else
-      bad "MUTANT ss-overwrite: preserve arm failed=$([ "$m_pp" = 0 ] && echo yes || echo no), scaffold twin held=$m_sc"
-    fi
-  else
-    bad "MUTANT ss-overwrite did not apply (the smoke-surface guard is not in apply.sh exactly once, or the copy does not parse)"
-  fi
-fi
 
 # ---------------------------------------------------------------------------
 # A SCAFFOLDED PATH THE CONSUMER IGNORES (BL-978): all six create-once arms, one `synth six` world each
@@ -636,7 +422,7 @@ fi
 # "subject regressed", so on a CONSUMER layout this block prints one named SKIP and its SIX_ASSERTIONS
 # leave the expected count. In the DISTRIBUTION the subject is always present, so its absence is a
 # `bad` and the arms run anyway.
-SIX_ASSERTIONS=40 # this block's own: 20 arms and 20 mutants -- the ledger above
+SIX_ASSERTIONS=20 # this block's own: its 20 arms -- the ledger above
 IS_DIST=0; [ -d "$HERE/../../../core/skills/ai-dlc" ] && IS_DIST=1
 SIX_SKIP=0
 if [ -n "$APPLY" ] && { ! grep -q '^scaffold_ignore_check() {' "$APPLY" || ! grep -q 'scaffold-ignore\.sh' "$APPLY"; }; then
@@ -644,11 +430,10 @@ if [ -n "$APPLY" ] && { ! grep -q '^scaffold_ignore_check() {' "$APPLY" || ! gre
     bad "BL-978: the resolved apply.sh ($APPLY) defines no scaffold_ignore_check, or does not load scaffold-ignore.sh. HARD in the distribution; the arms below run anyway"
   else
     SIX_SKIP=1
-    printf '  SKIP  %s\n' "SUBJECT-ABSENT: apply.sh predates scaffold_ignore_check or scaffold-ignore.sh; BL-978 arms not evaluated ($SIX_ASSERTIONS assertions: 20 arms and 20 mutants). They land with the pull that carries the machinery slice."
+    printf '  SKIP  %s\n' "SUBJECT-ABSENT: apply.sh predates scaffold_ignore_check or scaffold-ignore.sh; BL-978 arms not evaluated ($SIX_ASSERTIONS assertions: 20 arms). They land with the pull that carries the machinery slice."
   fi
 fi
 if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
-  B_GX2=0; B_GY2=0; B_GU=0; B_NB=0; B_LM=0; B_ST=0; B_FIN=0
   SIX_RELS="$CW_REL $MC_REL $PC_REL $SF_REL $AP_REL $SS_REL"
   # The partition by real extension: GX's rule must hide exactly the .md paths, GY's the .txt ones.
   SIX_MD=""; SIX_TXT=""; six_other=""
@@ -775,7 +560,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
     # G0's premise: with the ceiling at its parent, the consumer is not inside ANY repository, so its
     # zero rows are about a non-git consumer and not about an enclosing checkout's rules.
     if ! GIT_CEILING_DIRECTORIES="$WORK/six-G0" git -C "$WORK/six-G0/cons-base" rev-parse --git-dir >/dev/null 2>&1; then
-      g0_pre=1; B_SIXPRE=1; ok "premise: the G0 consumer is in no git repository (rev-parse refuses under a ceiling at its parent)"
+      g0_pre=1; ok "premise: the G0 consumer is in no git repository (rev-parse refuses under a ceiling at its parent)"
     else
       g0_pre=0; bad "premise: the G0 consumer resolves a git directory under its ceiling — an enclosing repository would be read, so G0 proves nothing"
     fi
@@ -789,7 +574,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
       [ "$(cut -f2,3 "$WORK/six-$W.res")" = "$SIX_KINDS" ] || { i_ok=0; i_why="$i_why $W:not-all-six"; }
     done
     [ "$i_ok" = 1 ] \
-      && { B_SIXI=1; ok "(i) the six *-scaffold RESOLVED rows are byte-identical across G0, G1, GX, GY and GN, and each world prints all six"; } \
+      && { ok "(i) the six *-scaffold RESOLVED rows are byte-identical across G0, G1, GX, GY and GN, and each world prints all six"; } \
       || bad "(i) the scaffold RESOLVED rows moved or are incomplete:$i_why"
 
     # (ii) the scaffold-ignored set is EXACTLY the hidden paths, and empty where nothing hides one
@@ -800,7 +585,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
       [ "$g" = "$e" ] || { ii_ok=0; ii_why="$ii_why $W:[$(printf '%s' "$g" | tr '\n' ' ')]"; }
     done
     [ "$ii_ok" = 1 ] \
-      && { B_SIXII=1; ok "(ii) scaffold-ignored names exactly the .md paths in GX and the .txt path in GY, and nothing in G0, G1 or GN"; } \
+      && { ok "(ii) scaffold-ignored names exactly the .md paths in GX and the .txt path in GY, and nothing in G0, G1 or GN"; } \
       || bad "(ii) the scaffold-ignored row set is wrong:$ii_why"
 
     # (iii) every such row: four tab fields, the literal force-add of its own path, the matching provenance,
@@ -818,7 +603,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
       done <<<"$(awk -F'\t' '$1=="WORKLIST" && $2=="scaffold-ignored"' "$WORK/six-$W/base.out")"
     done
     [ "$iii_ok" = 1 ] && [ "$iii_n" = 6 ] \
-      && { B_SIXIII=1; ok "(iii) all 6 scaffold-ignored rows carry 4 tab fields, 'git add -f <their path>', the .gitignore:1:<pattern> that hides it and the exact-path exit"; } \
+      && { ok "(iii) all 6 scaffold-ignored rows carry 4 tab fields, 'git add -f <their path>', the .gitignore:1:<pattern> that hides it and the exact-path exit"; } \
       || bad "(iii) scaffold-ignored rows malformed or missing (read $iii_n of 6):$iii_why"
 
     # (iv) the rows hand the stamp back: the withheld row's count moves by exactly the hidden paths
@@ -837,14 +622,14 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
       [ -z "$(six_unc "$WORK/six-$W/base.out")" ] && [ -z "$(six_notes "$WORK/six-$W/base.out")" ] || v_bad="$v_bad $W"
     done
     [ -z "$v_bad" ] \
-      && { B_SIXV=1; ok "(v) no scaffold-ignore-unchecked row and no BL-978 NOTE row in G0, G1, GX, GY or GN"; } \
+      && { ok "(v) no scaffold-ignore-unchecked row and no BL-978 NOTE row in G0, G1, GX, GY or GN"; } \
       || bad "(v) scaffold-ignore-unchecked or a NOTE row printed in:$v_bad"
 
     o="$WORK/six-GU/base.out"
     six_res "$o" > "$WORK/six-GU.res"
     if [ "$(six_unc "$o")" = "$SS_REL" ] && [ -z "$(six_ign "$o")" ] && [ -z "$(six_notes "$o")" ] \
        && cmp -s "$WORK/six-G0.res" "$WORK/six-GU.res"; then
-      B_GU=1; ok "GU: a symlinked '$SS_DIR' makes check-ignore exit outside 0/1 inside a checkout, and the arm prints ONE WORKLIST scaffold-ignore-unchecked for '$SS_REL', no NOTE, the six RESOLVED rows unchanged"
+      ok "GU: a symlinked '$SS_DIR' makes check-ignore exit outside 0/1 inside a checkout, and the arm prints ONE WORKLIST scaffold-ignore-unchecked for '$SS_REL', no NOTE, the six RESOLVED rows unchanged"
     else
       bad "GU: expected one WORKLIST scaffold-ignore-unchecked for '$SS_REL' and nothing else: unchecked=[$(six_unc "$o" | tr '\n' ' ')] notes=[$(six_notes "$o" | tr '\n' ' ')] ignored=[$(six_ign "$o" | tr '\n' ' ')]"
     fi
@@ -861,7 +646,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
       [ -z "$(six_res "$o")" ] && six_withheld "$o" || { vi_ok=0; vi_why="$vi_why $W:not-a-withheld-preserving-run"; }
     done
     if [ "$vi_ok" = 1 ]; then
-      B_GX2=1; B_GY2=1; ok "(vi) a second pull over present, untracked, glob-ignored files prints WORKLIST scaffold-ignored for exactly GX's and GY's hidden paths, no NOTE, and withholds the stamp"
+      ok "(vi) a second pull over present, untracked, glob-ignored files prints WORKLIST scaffold-ignored for exactly GX's and GY's hidden paths, no NOTE, and withholds the stamp"
     else
       bad "(vi) the preserved case is wrong on the second pull:$vi_why"
     fi
@@ -900,7 +685,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
         || { f2_ok=0; f2_why="$f2_why $wt:[$(grep 'restamp\|scaffold' "$o" | cut -f1,2 | tr '\n' ' ')]"; }
     done
     [ "$f2_ok" = 1 ] \
-      && { B_FIN=1; ok "(F2) apply.sh --finish over the undisposed rows re-stamps with 0 scaffold rows: GX, the G1 control, and GX with exact-path lines"; } \
+      && { ok "(F2) apply.sh --finish over the undisposed rows re-stamps with 0 scaffold rows: GX, the G1 control, and GX with exact-path lines"; } \
       || bad "(F2) --finish did not re-stamp cleanly:$f2_why"
 
     # THE NEXT-PULL CELLS, over GY's first-pull consumer (the smoke surface present and hidden by `*.txt`).
@@ -917,7 +702,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
       git -C "$WORK/six-GY/cons-next-$t" check-ignore -q -- "$SS_REL" 2>/dev/null || { b_ok=0; b_why="$b_why $t:not-ignored"; }
     done
     [ "$b_ok" = 1 ] \
-      && { B_NB=1; ok "(b) an exact-path line ('$SS_REL' or '/$SS_REL') beside the glob keeps the file ignored and ends the row: no BL-978 row"; } \
+      && { ok "(b) an exact-path line ('$SS_REL' or '/$SS_REL') beside the glob keeps the file ignored and ends the row: no BL-978 row"; } \
       || bad "(b) the exact-path exit did not end the row:$b_why"
     # (c) the glob alone: the row persists
     o="$WORK/six-GY/again.out"
@@ -947,7 +732,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
     if [ "$lm_pre" = 1 ] && [ "$(awk -F'\t' '$1=="DECISION" && $2=="scaffold-ignore-lib-missing"' "$o" | grep -c .)" = 1 ] \
        && [ "$(six_res "$o" | cut -f2,3)" = "$SIX_KINDS" ] && [ -z "$(six_any "$o")" ] && six_withheld "$o" \
        && ! grep -q '^RESOLVED	restamp	' "$o"; then
-      B_LM=1; ok "LM: apply.sh copied without scaffold-ignore.sh, on a run that reaches the scaffold arms, prints ONE DECISION scaffold-ignore-lib-missing, all six RESOLVED rows, no check row, DECISION restamp-withheld and no RESOLVED restamp"
+      ok "LM: apply.sh copied without scaffold-ignore.sh, on a run that reaches the scaffold arms, prints ONE DECISION scaffold-ignore-lib-missing, all six RESOLVED rows, no check row, DECISION restamp-withheld and no RESOLVED restamp"
     else
       bad "LM: precondition=$lm_pre, expected one DECISION scaffold-ignore-lib-missing and a withheld stamp: $(grep 'scaffold-ignore\|restamp' "$o" | cut -f1,2 | tr '\n' ' ' | cut -c1-200)"
     fi
@@ -968,173 +753,11 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
     if [ "$st_pre" = 1 ] && [ "$(six_unc "$o")" = "$SIX_EXP_ALL" ] && [ -z "$(six_ign "$o")" ] && [ -z "$(six_notes "$o")" ] \
        && [ "$(awk -F'\t' '$2=="scaffold-ignore-unchecked" && index($4, "answered the state '"'"'bogus'"'"'")' "$o" | grep -c .)" = 6 ] \
        && [ "$(six_res "$o" | cut -f2,3)" = "$SIX_KINDS" ]; then
-      B_ST=1; ok "ST: a library answering the undocumented state 'bogus' makes all six arms print WORKLIST scaffold-ignore-unchecked naming it, never an acquittal"
+      ok "ST: a library answering the undocumented state 'bogus' makes all six arms print WORKLIST scaffold-ignore-unchecked naming it, never an acquittal"
     else
       bad "ST: precondition=$st_pre, unchecked=[$(six_unc "$o" | tr '\n' ' ')] ignored=[$(six_ign "$o" | tr '\n' ' ')]"
     fi
 
-    # --- MUTANTS: each a copy of the whole reconcile directory with ONE line of ONE file replaced, run once
-    # in the world where its arm decides. The anchor is the exact line, asserted to occur once; the copy
-    # must differ, parse, and carry its siblings, or the mutant is a `bad` and never a kill.
-    six_mut() { # six_mut <name> <file in the reconcile dir> <exact line> <replacement> [<source dir>]
-      local d="$WORK/sixmut-$1" src="${5:-$(dirname "$APPLY")}"
-      if [ "$(grep -cxF -- "$3" "$src/$2")" != 1 ]; then bad "MUTANT $1 did not apply (its anchor is not exactly one line of $2)"; return 1; fi
-      cp -R "$src" "$d" 2>/dev/null
-      A_LINE="$3" R_LINE="$4" awk '$0 == ENVIRON["A_LINE"] { print ENVIRON["R_LINE"]; next } { print }' "$src/$2" > "$d/$2"
-      if cmp -s "$src/$2" "$d/$2" || ! bash -n "$d/$2" 2>/dev/null || [ ! -f "$d/preclassify.sh" ]; then
-        bad "MUTANT $1 did not apply (the copy is unchanged, does not parse, or lost its siblings)"; return 1
-      fi
-    }
-    six_cell() { # six_cell <mutant> <cell> <1|0 holds>
-      [ "$MATRIX" = 1 ] || return 0
-      printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$2" "$([ "$3" = 1 ] && echo ok || echo FAIL)"; MATRIX_CELLS=$((MATRIX_CELLS + 1))
-    }
-    six_score() { # six_score <mutant> <dec 0|1> <twin 0|1> <flag> <kill text> <bad text>
-      if [ "$2" = 0 ] && [ "$3" = 1 ]; then mutant_killed "$4" "$1" "MUTANT killed: $5"
-      else bad "MUTANT $1: deciding cell failed=$([ "$2" = 0 ] && echo yes || echo no), twins held=$3 -- $6"; fi
-    }
-    # The six drop-the-call mutants. Each kind's world is the one whose rule hides its path; under the
-    # mutant that kind's RESOLVED row must still print (the copy ran through the arm) and the world's
-    # ignored set must lose exactly that path (the other kinds' rows are the twin).
-    for kv in "crosswalk CW_REL" "machinery MC_REL" "pr-class PC_REL" "story-fields SF_REL" "artifact-paths AP_REL" "smoke-surface SS_REL"; do
-      k="${kv%% *}"; var="${kv#* }"; eval "rel=\$$var"; m="drop-call-$k"
-      case "$rel" in *.md) W=GX; e="$SIX_EXP_MD" ;; *) W=GY; e="$SIX_EXP_TXT" ;; esac
-      if six_mut "$m" apply.sh "    scaffold_ignore_check \"\$$var\" scaffolded" "    :"; then
-        six_run "$W" "$WORK/sixmut-$m/apply.sh" "$m"
-        e_less="$(printf '%s\n' "$e" | grep -vxF -- "$rel")"
-        got="$(six_ign "$WORK/six-$W/$m.out")"
-        r_in=0; [ "$(six_res "$WORK/six-$W/$m.out" | cut -f2,3)" = "$SIX_KINDS" ] && r_in=1
-        dec=1; grep -qxF -- "$rel" <<<"$got" || dec=0
-        twin=0; [ "$got" = "$e_less" ] && [ "$r_in" = 1 ] && twin=1
-        six_cell "$m" "$W.$k" "$dec"; six_cell "$m" "SIXI.$W" "$twin"
-        six_score "$m" "$dec" "$twin" "$(( ${B_SIXI:-0} && ${B_SIXII:-0} && ${B_SIXIII:-0} ))" \
-          "without the $k arm's check-ignore call its RESOLVED row prints and '$rel' gets no scaffold-ignored row in $W, the other rows unchanged" \
-          "$W.$k (ignored=[$(printf '%s' "$got" | tr '\n' ' ')])"
-      fi
-    done
-
-    # -q to -v: -v answers 0 on a negation match, so GN's six negated paths all read as ignored.
-    m=ignore-verbose
-    if six_mut "$m" scaffold-ignore.sh '  rc=0; git -C "$root" check-ignore -q -- "$rel" 2>/dev/null || rc=$?' '  rc=0; git -C "$root" check-ignore -v -- "$rel" >/dev/null 2>&1 || rc=$?'; then
-      six_run GN "$WORK/sixmut-$m/apply.sh" "$m"
-      dec=1; [ "$(six_ign "$WORK/six-GN/$m.out")" = "$SIX_EXP_ALL" ] && dec=0
-      twin=0; [ "$(six_res "$WORK/six-GN/$m.out" | cut -f2,3)" = "$SIX_KINDS" ] && twin=1
-      six_cell "$m" GN.ignored "$dec"; six_cell "$m" SIXI.GN "$twin"
-      six_score "$m" "$dec" "$twin" "$(( ${B_SIXI:-0} && ${B_SIXII:-0} ))" \
-        "deciding on check-ignore -v tells GN to force-add all six paths its negations already admit" "GN.ignored"
-    fi
-
-    # The rev-parse gate dropped: G0's 128 then reads as "could not check" on every arm.
-    m=ignore-ungated
-    if six_mut "$m" scaffold-ignore.sh '  if ! git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then' '  if false; then'; then
-      six_run G0 "$WORK/sixmut-$m/apply.sh" "$m"
-      dec=1; [ "$(six_unc "$WORK/six-G0/$m.out")" = "$SIX_EXP_ALL" ] && dec=0
-      twin=0; [ "$(six_res "$WORK/six-G0/$m.out" | cut -f2,3)" = "$SIX_KINDS" ] && twin=1
-      six_cell "$m" G0.unchecked "$dec"; six_cell "$m" SIXI.G0 "$twin"
-      six_score "$m" "$dec" "$twin" "$(( ${B_SIXPRE:-0} && ${B_SIXI:-0} && ${B_SIXV:-0} ))" \
-        "without the rev-parse gate a non-git consumer prints WORKLIST scaffold-ignore-unchecked on all six arms" "G0.unchecked"
-    fi
-
-    # The six drop-the-PRESERVED-call mutants, each run once as the second pull over its kind's world:
-    # that path loses its WORKLIST, the other kinds' rows are the twin, and the stamp decision proves the
-    # copy ran to its end (a dead copy prints none, so a short row set alone could not score).
-    for kv in "crosswalk CW_REL" "machinery MC_REL" "pr-class PC_REL" "story-fields SF_REL" "artifact-paths AP_REL" "smoke-surface SS_REL"; do
-      k="${kv%% *}"; var="${kv#* }"; eval "rel=\$$var"; m="drop-preserved-$k"
-      case "$rel" in *.md) W=GX; e="$SIX_EXP_MD" ;; *) W=GY; e="$SIX_EXP_TXT" ;; esac
-      if six_mut "$m" apply.sh "  scaffold_ignore_check \"\$$var\" preserved" "  :"; then
-        six_run "$W" "$WORK/sixmut-$m/apply.sh" "$m" base
-        o="$WORK/six-$W/$m.out"
-        e_less="$(printf '%s\n' "$e" | grep -vxF -- "$rel")"
-        got="$(six_ign "$o")"
-        dec=1; grep -qxF -- "$rel" <<<"$got" || dec=0
-        twin=0; [ "$got" = "$e_less" ] && [ -z "$(six_notes "$o")" ] && six_ended "$o" && twin=1
-        six_cell "$m" "${W}2.$k" "$dec"; six_cell "$m" "${W}2.rows" "$twin"
-        six_score "$m" "$dec" "$twin" "$(( ${B_GX2:-0} && ${B_GY2:-0} ))" \
-          "without the $k arm's preserved call a present, ignored '$rel' gets no WORKLIST scaffold-ignored on the second pull in $W, the other rows unchanged" \
-          "${W}2.$k (worklist=[$(printf '%s' "$got" | tr '\n' ' ')])"
-      fi
-    done
-
-    # The preserved tier sent to NOTE: a consumer with a glob-hidden surface would then be told nothing that
-    # holds the stamp, every pull. Killed by (vi)'s WORKLIST half, in GX's second pull.
-    m=preserved-to-note
-    if six_mut "$m" apply.sh '      say WORKLIST scaffold-ignored "$rel" "$(scaffold_ignore_remedy "$rel" "$prov")" ;;' \
-         '      if [ "$tier" = preserved ]; then say NOTE scaffold-ignored "$rel" "$(scaffold_ignore_remedy "$rel" "$prov")"; else say WORKLIST scaffold-ignored "$rel" "$(scaffold_ignore_remedy "$rel" "$prov")"; fi ;;'; then
-      six_run GX "$WORK/sixmut-$m/apply.sh" "$m" base
-      o="$WORK/six-GX/$m.out"
-      dec=1; [ "$(six_ign "$o")" = "$SIX_EXP_MD" ] || dec=0
-      twin=0; [ "$(six_notes "$o" | cut -f2)" = "$SIX_EXP_MD" ] && six_ended "$o" && twin=1
-      six_cell "$m" GX2.worklist "$dec"; six_cell "$m" GX2.notes "$twin"
-      six_score "$m" "$dec" "$twin" "$B_GX2" \
-        "a preserved, glob-ignored path demoted to NOTE leaves GX's second pull with no WORKLIST scaffold-ignored row" "GX2.worklist"
-    fi
-
-    # The unchecked tier sent to NOTE: GU's symlinked parent would then hand nothing back. Killed by GU.
-    m=unchecked-to-note
-    if six_mut "$m" apply.sh '      say WORKLIST scaffold-ignore-unchecked "$rel" \' '      say NOTE scaffold-ignore-unchecked "$rel" \'; then
-      six_run GU "$WORK/sixmut-$m/apply.sh" "$m"
-      o="$WORK/six-GU/$m.out"
-      dec=1; [ "$(six_unc "$o")" = "$SS_REL" ] || dec=0
-      twin=0; [ "$(six_notes "$o")" = "$(printf 'scaffold-ignore-unchecked\t%s' "$SS_REL")" ] && twin=1
-      six_cell "$m" GU.worklist "$dec"; six_cell "$m" GU.notes "$twin"
-      six_score "$m" "$dec" "$twin" "$B_GU" \
-        "an unchecked path demoted to NOTE leaves GU with no WORKLIST scaffold-ignore-unchecked row" "GU.worklist"
-    fi
-
-    # The exact-path exit dropped: (b)'s deliberate disposition would print the row forever. Killed by (b).
-    m=drop-exact-exit
-    if six_mut "$m" scaffold-ignore.sh '  if [ -n "$prov" ] && { [ "$pat" = "$rel" ] || [ "$pat" = "/$rel" ]; }; then' '  if false; then'; then
-      six_cell_run "$m" "$WORK/sixmut-$m/apply.sh" b
-      o="$WORK/six-GY/$m.out"
-      dec=1; [ "$(six_ign "$o")" = "$SS_REL" ] && dec=0
-      twin=0; six_ended "$o" && twin=1
-      six_cell "$m" NB.exact "$dec"; six_cell "$m" NB.ended "$twin"
-      six_score "$m" "$dec" "$twin" "$B_NB" \
-        "without the exact-path exit an exact '$SS_REL' line beside the glob still prints WORKLIST scaffold-ignored" "NB.exact"
-    fi
-
-    # The missing-sibling DECISION silenced: a pull without scaffold-ignore.sh would skip every check
-    # unannounced. Built from LM's directory, so the sibling is absent as it is there. Killed by LM.
-    m=lib-missing-silent
-    if [ -f "$LMDIR/apply.sh" ] && six_mut "$m" apply.sh '      say DECISION scaffold-ignore-lib-missing "$SCAFFOLD_IGNORE_LIB" \' '      : \' "$LMDIR"; then
-      six_run GX "$WORK/sixmut-$m/apply.sh" "$m"
-      o="$WORK/six-GX/$m.out"
-      dec=1; [ "$(awk -F'\t' '$2=="scaffold-ignore-lib-missing"' "$o" | grep -c .)" = 1 ] || dec=0
-      twin=0; [ "$(six_res "$o" | cut -f2,3)" = "$SIX_KINDS" ] && six_ended "$o" && twin=1
-      six_cell "$m" LM.decision "$dec"; six_cell "$m" LM.ended "$twin"
-      six_score "$m" "$dec" "$twin" "$B_LM" \
-        "with the missing-sibling DECISION silenced the run skips every check and says nothing" "LM.decision"
-    elif [ ! -f "$LMDIR/apply.sh" ]; then
-      bad "MUTANT $m did not apply (LM's reconcile copy is absent)"
-    fi
-
-    # The default arm dropped: an undocumented state would then be an acquittal. Built from ST's directory,
-    # so its stub answers `bogus` as it does there. Killed by ST.
-    m=drop-default-arm
-    if [ -f "$STDIR/apply.sh" ] && six_mut "$m" apply.sh "    *) say WORKLIST scaffold-ignore-unchecked \"\$rel\" \"scaffold-ignore.sh answered the state '\${st}' for this \${tier} path, which is none it documents, so whether it is ignored was not decided. Run 'git check-ignore -v -- \${rel}'; if it names a rule, commit the file with 'git add -f \${rel}', or ignore it by its exact path.\" ;;" '    *) : ;;' "$STDIR"; then
-      six_run G1 "$WORK/sixmut-$m/apply.sh" "$m"
-      o="$WORK/six-G1/$m.out"
-      dec=1; [ "$(six_unc "$o")" = "$SIX_EXP_ALL" ] || dec=0
-      twin=0; [ "$(six_res "$o" | cut -f2,3)" = "$SIX_KINDS" ] && six_ended "$o" && twin=1
-      six_cell "$m" ST.unchecked "$dec"; six_cell "$m" ST.resolved "$twin"
-      six_score "$m" "$dec" "$twin" "$B_ST" \
-        "without the default arm a library answering 'bogus' acquits all six paths with no row" "ST.unchecked"
-    elif [ ! -f "$STDIR/apply.sh" ]; then
-      bad "MUTANT $m did not apply (ST's reconcile copy is absent)"
-    fi
-
-    # --finish re-derives the scaffold rows through the library and withholds again. Killed by (F2).
-    m=finish-rederives
-    if six_mut "$m" apply.sh 'if [ "$FINISH" = 1 ]; then outstanding="$worklist_n"; else outstanding="$handback"; fi' \
-         'if [ "$FINISH" = 1 ] && [ "$scaffold_ignore_loaded" = 1 ]; then for _r in $(sed -n "s/^consumer_[a-z_]*_file:[[:space:]]*//p" "$CONSUMER/.claude/skills/ai-dlc/layer-contract.yaml"); do case "$(scaffold_ignore_state "$CONSUMER" "$_r")" in ignored*) say WORKLIST scaffold-ignored "$_r" "re-derived on --finish" ;; esac; done; fi; if [ "$FINISH" = 1 ]; then outstanding="$worklist_n"; else outstanding="$handback"; fi'; then
-      six_finish GX "$WORK/sixmut-$m/apply.sh" "$m" base
-      o="$WORK/six-GX/$m.out"
-      dec=1; grep -q '^RESOLVED	restamp	' "$o" && ! six_withheld "$o" || dec=0
-      twin=0; [ "$(six_ign "$o")" = "$SIX_EXP_MD" ] && six_withheld "$o" && twin=1
-      six_cell "$m" FIN.restamp "$dec"; six_cell "$m" FIN.rows "$twin"
-      six_score "$m" "$dec" "$twin" "$B_FIN" \
-        "a --finish that re-derives the scaffold rows withholds the stamp over GX's undisposed rows" "FIN.restamp"
-    fi
 
     # THE SKIP'S DEDUCTION IS BOUND HERE. Only a consumer on the skip path subtracts SIX_ASSERTIONS, so a
     # wrong value would be seen nowhere else: every run that evaluates the block compares the number of
@@ -1144,16 +767,6 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
       || bad "SIX_ASSERTIONS is $SIX_ASSERTIONS but the BL-978 block emitted $six_n assertion(s): a consumer that SKIPs it would deduct the wrong count"
   fi
 fi
-
-# THE PLAIN-RUN ARM: keyed on the RAW argument vector, not on the parsed flag, so a guard broken open
-# (MATRIX forced on) cannot hide itself. A plain run must have executed no matrix-only cell.
-case "$RAW_ARGV" in
-  *" --matrix "*)
-    if [ "$MATRIX_CELLS" -gt 0 ]; then ok "matrix mode measured $MATRIX_CELLS cells"; else bad "matrix mode measured no cell"; fi ;;
-  *)
-    if [ "$MATRIX_CELLS" -eq 0 ]; then ok "a plain run executed no matrix-only cell"; else bad "a plain run executed $MATRIX_CELLS matrix-only cells — the matrix guard is open"; fi ;;
-esac
-[ "$MATRIX" = 1 ] && echo "MATRIX cells=$MATRIX_CELLS"
 
 # ---------------------------------------------------------------------------
 # A consumer whose apply.sh predates scaffold_ignore_check SKIPs the BL-978 block by name, and its

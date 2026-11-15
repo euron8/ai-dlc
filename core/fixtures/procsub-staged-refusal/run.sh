@@ -20,12 +20,7 @@
 # EVERY FORCED ARM HAS A HEALTHY TWIN: the same seed, no stub, the ordinary verdict. Without it a
 # script that refuses EVERYTHING passes every forced arm.
 #
-# THE ARMS ARE FUNCTIONS OF THE SCRIPT PATH, so each mutant below drives the identical arm against a
-# copy that restores the base `<( )` spelling at one site (or drops the status read the fix added),
-# and must FAIL the arms it declares while its script's healthy arm still PASSES -- the positive
-# conjunct that proves the mutant copy ran at all. Mutants are copies beside their siblings, guarded
-# by an exact-once anchor match, `cmp -s` and `bash -n`; one that does not apply is a FAIL, never a
-# survivor.
+# THE ARMS ARE FUNCTIONS OF THE SCRIPT PATH, so each arm drives against the script path it is handed.
 #
 # THE SPELLING ARM reads lines ADDED to shipped `core/*.sh` since the pinned base and refuses the
 # four respellings that would reintroduce a discarded status. It needs this repository's history;
@@ -49,169 +44,7 @@
 # rows against preclassify's `machinery_paths()` -- which must list with `core.quotePath=false` too.
 #
 # Usage: run.sh [<tree-root>]  -- drive the scripts of another tree (for example an extracted base
-#                                 commit). The spelling arm and the mutants run only on this tree.
-# THE MUTANT TABLE. One MUTANT-MATRIX row per mutant: decides= is the minimal set of arms the mutant TARGETS (the arm whose question the
-# mutant is about), twins= one arm that stays green under it. The rows are READ BACK by this file (mt_parse) to drive each mutant.
-# Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
-# co-trip: RT-SUBTRACT also trips lw_trstatus,rt_cmt_all (not targeted; measured, not asserted per push)
-# co-trip: RT-OURS also trips rt_cmt_ours (not targeted; measured, not asserted per push)
-# co-trip: RO-FROM also trips ro_span (not targeted; measured, not asserted per push)
-# co-trip: RO-SUBSHELL also trips ro_span,fx_ro (not targeted; measured, not asserted per push)
-# co-trip: LD-SUBSHELL also trips ld_fxv (not targeted; measured, not asserted per push)
-# co-trip: PB-WALK also trips pb_zero (not targeted; measured, not asserted per push)
-# co-trip: RT-NUL also trips nw_cmt,lw_trstatus (not targeted; measured, not asserted per push)
-# co-trip: RT-NUL-GREPA also trips lw_trstatus,rt_cmt_all,rt_cmt_ours (not targeted; measured, not asserted per push)
-# co-trip: RT-BLOBS-ALL also trips fx_rt,r5 (not targeted; measured, not asserted per push)
-# co-trip: QP-MEMO-FILL also trips qf_rf (not targeted; measured, not asserted per push)
-# co-trip: QP-FB-RF also trips qd_cafe,qd_direct (not targeted; measured, not asserted per push)
-# co-trip: RD-SECTION also trips fx_rdo (not targeted; measured, not asserted per push)
-# co-trip: RD-WHOLEFILE also trips fx_rds (not targeted; measured, not asserted per push)
-# co-trip: HB-HEREDOC also trips fx_hb_print (not targeted; measured, not asserted per push)
-# MUTANT-MATRIX CI-RETRO decides=ci_retro twins=ci_healthy
-# MUTANT-MATRIX CI-SURFACE decides=ci_surface twins=ci_healthy
-# MUTANT-MATRIX CI-SUBSHELL decides=ci_surface twins=ci_healthy
-# MUTANT-MATRIX RX-WALK decides=rx_walk twins=rx_healthy
-# MUTANT-MATRIX RLP-WALK decides=rw_walk twins=rlp_healthy
-# MUTANT-MATRIX RLC-WALK decides=rw_walk twins=rlc_healthy
-# MUTANT-MATRIX RT-SUBTRACT decides=rt_all,rt_base twins=rt_healthy
-# MUTANT-MATRIX RT-PIPE decides=rt_base twins=rt_healthy
-# MUTANT-MATRIX RT-OURS decides=rt_ours twins=rt_healthy
-# MUTANT-MATRIX RO-FROM decides=ro_sort,ro_git twins=ro_healthy
-# MUTANT-MATRIX RO-SUBSHELL decides=ro_sort,ro_git twins=ro_healthy
-# MUTANT-MATRIX RO-SECTION decides=ro_git twins=ro_healthy
-# MUTANT-MATRIX UD-SITE decides=ud_absorbed twins=ud_healthy
-# MUTANT-MATRIX UD-SUBSHELL decides=ud_absorbed twins=ud_healthy
-# MUTANT-MATRIX UD-MEMO decides=ud_memo2 twins=ud_healthy
-# MUTANT-MATRIX MG-LS decides=mg_ls twins=mg_healthy
-# MUTANT-MATRIX AC-SEGMENT decides=ac_segment twins=ac_healthy
-# MUTANT-MATRIX LD-WALK decides=ld_walk twins=ld_healthy
-# MUTANT-MATRIX LD-SUP decides=ld_sup twins=ld_healthy
-# MUTANT-MATRIX LD-SUBSHELL decides=ld_sup twins=ld_healthy
-# MUTANT-MATRIX PB-WALK decides=pb_walk2,pb_walk127 twins=pb_healthy
-# MUTANT-MATRIX PB-EMPTY2 decides=pb_walk2,pb_zero twins=pb_healthy
-# MUTANT-MATRIX CV-SORT decides=cv_sort twins=cv_healthy
-# MUTANT-MATRIX LE-CENSUS decides=le_census twins=le_healthy
-# MUTANT-MATRIX LE-OVERRIDES decides=le_overrides twins=le_healthy
-# MUTANT-MATRIX LE-LIVE decides=le_live twins=le_healthy
-# MUTANT-MATRIX LE-EXT decides=le_ext twins=le_healthy
-# MUTANT-MATRIX LE-W9 decides=le_w9 twins=le_healthy
-# MUTANT-MATRIX LE-W11 decides=le_w11 twins=le_healthy
-# MUTANT-MATRIX RLP-NORMLINES decides=rlp_norm,rlp_removed twins=rlp_healthy
-# MUTANT-MATRIX RLP-REMOVED decides=rlp_removed twins=rlp_healthy
-# MUTANT-MATRIX RLP-LOCALE decides=rlp_latin1 twins=rlp_healthy
-# MUTANT-MATRIX LE-DEFRULES decides=lr_rules twins=lr_healthy
-# MUTANT-MATRIX LE-DEFANCHORS decides=la_anchors twins=la_healthy
-# MUTANT-MATRIX LE-PROV decides=wt_prov twins=wt_healthy
-# MUTANT-MATRIX LE-LINE decides=wt_line twins=wt_healthy
-# MUTANT-MATRIX RT-TOKS decides=rt_cmt_all,rt_cmt_ours twins=rt_healthy
-# MUTANT-MATRIX RT-NUL decides=nw_both,nw_theirs twins=rt_healthy
-# MUTANT-MATRIX RT-NUL-GREPA decides=nw_cmt twins=rt_healthy
-# MUTANT-MATRIX RT-TR-STATUS decides=lw_trstatus twins=rt_healthy
-# MUTANT-MATRIX RT-TR-LOCALE decides=lw_utf8 twins=rt_healthy
-# MUTANT-MATRIX LW-GUARD-SKIP decides=lw_guard_owns twins=lw_guard_other
-# MUTANT-MATRIX LW-CALL-DELETED decides=lw_guard_called twins=lw_guard_called_present
-# MUTANT-MATRIX LW-CALL-IFFALSE decides=lw_guard_called twins=lw_guard_called_present
-# MUTANT-MATRIX LW-CALL-HEREDOC decides=lw_guard_called twins=lw_guard_called_present
-# MUTANT-MATRIX LW-CALL-OVERRIDE decides=lw_guard_called twins=lw_guard_called_present
-# MUTANT-MATRIX LW-CALL-MOVED decides=lw_guard_called twins=lw_guard_called_present
-# MUTANT-MATRIX LW-GATE-NO-SG decides=lw_guard_b3 twins=lw_guard_b3_none
-# MUTANT-MATRIX RLT-CODETOKS decides=rlt_cmt twins=rlt_healthy
-# MUTANT-MATRIX RLC-SHAPES decides=rlc_shapes twins=rlc_healthy
-# MUTANT-MATRIX RLC-TOKENS decides=rlc_tokens twins=rlc_healthy
-# MUTANT-MATRIX RT-VERIFY decides=ta_verify twins=rt_healthy
-# MUTANT-MATRIX RT-LS decides=ta_ls twins=rt_healthy
-# MUTANT-MATRIX RT-SHOW decides=ta_show twins=rt_healthy
-# MUTANT-MATRIX RT-BLOBS-ALL decides=ta_verify,ta_ls,ta_show twins=rt_healthy
-# MUTANT-MATRIX RLC-TREE decides=rg_theirs_ls twins=rg_healthy
-# MUTANT-MATRIX RLC-SHOW decides=rg_base_show twins=rg_healthy
-# MUTANT-MATRIX RLC-READS-ALL decides=rg_theirs_ls,rg_base_show twins=rg_healthy
-# MUTANT-MATRIX LD-FXV decides=ld_fxv twins=ld_healthy
-# MUTANT-MATRIX RO-SECTIONOF decides=ro_span twins=ro_healthy
-# MUTANT-MATRIX HB-HEREDOC decides=fx_hb_check twins=fx_hb_healthy
-# MUTANT-MATRIX RX-HERESTRING decides=fx_rx,fx_rxr,fx_rx_apply,r5 twins=fx_rx_healthy
-# MUTANT-MATRIX RLC-HERESTRING decides=fx_rlc,r5 twins=rlc_healthy
-# MUTANT-MATRIX WS-HEREDOC decides=fx_ws_closed twins=fx_ws_healthy
-# MUTANT-MATRIX WS-EMITTER decides=fx_ws_emitter twins=fx_ws6_healthy
-# MUTANT-MATRIX RT-HERESTRING decides=fx_rt,r5 twins=rt_healthy
-# MUTANT-MATRIX RLC-STATUS decides=fx_rls twins=fx_rls_healthy
-# MUTANT-MATRIX RLC-HEREDOC decides=fx_rls twins=fx_rls_healthy
-# MUTANT-MATRIX RLC-CAT decides=rlc_unread_layer twins=rlc_healthy
-# MUTANT-MATRIX RX-ORDER decides=fx_rxo_apply twins=fx_rx_healthy
-# MUTANT-MATRIX RO-STATUS decides=fx_ro twins=fx_ro_healthy
-# MUTANT-MATRIX RO-HERESTRING decides=r5 twins=ro_healthy
-# MUTANT-MATRIX EM-NRM decides=em_nrm,lh twins=em_ledger
-# MUTANT-MATRIX EM-LEDGER decides=em_ledger,lh twins=em_nrm
-# MUTANT-MATRIX EM-LABEL decides=em_label,lh twins=em_nrm
-# MUTANT-MATRIX QP-DIFF decides=qa_cafe twins=qa_plain
-# MUTANT-MATRIX QP-MEMO-FILL decides=qd_cafe twins=qd_plain
-# MUTANT-MATRIX QP-MEMO-DIRECT decides=qd_direct twins=qd_plain
-# MUTANT-MATRIX QP-FB-RF decides=qf_rf twins=qd_plain
-# MUTANT-MATRIX QP-FB-UD decides=qf_ud twins=ud_healthy
-# MUTANT-MATRIX QP-FB-LT decides=qf_lt twins=rlt_healthy
-# MUTANT-MATRIX QP-FB-LC decides=qf_lc twins=rlc_healthy
-# MUTANT-MATRIX QP-LSTREE decides=qb_cafe twins=qb_plain
-# MUTANT-MATRIX QP-MACH decides=qc_cafe twins=qc_plain
-# MUTANT-MATRIX DD-HERESTRING decides=r5 twins=dd_usage
-# MUTANT-MATRIX RD-SECTION decides=fx_rds,r5 twins=fx_rds_healthy
-# MUTANT-MATRIX RD-HEADINGS decides=fx_rdh,r5 twins=fx_rdh_healthy
-# MUTANT-MATRIX RD-WHOLEFILE decides=fx_rdw,r5 twins=fx_rdw_healthy
-# MUTANT-MATRIX RD-LEAK decides=fx_rdo twins=fx_rds_healthy
-# MUTANT-MATRIX SM-VALIDATE decides=fx_smw,r5 twins=sm_stage
-# MUTANT-MATRIX AD-STDIN decides=fx_adw,r5 twins=lh
-# MUTANT-MATRIX RO-DOSSIER decides=fx_rod,r5 twins=ro_healthy
-# MUTANT-MATRIX RO-INPLACE decides=fx_rom twins=fx_rom_healthy
-# MUTANT-MATRIX RO-APPEND decides=rom_cat twins=ro_healthy
-# MUTANT-MATRIX SM-TMPDIR decides=sm_stage twins=fx_smw
-# MUTANT-MATRIX NOSTUB-ac_segment decides=ac_segment twins=ac_healthy
-# MUTANT-MATRIX NOSTUB-ci_retro decides=ci_retro twins=ci_healthy
-# MUTANT-MATRIX NOSTUB-ci_surface decides=ci_surface twins=ci_healthy
-# MUTANT-MATRIX NOSTUB-cv_sort decides=cv_sort twins=cv_healthy
-# MUTANT-MATRIX NOSTUB-la_anchors decides=la_anchors twins=la_healthy
-# MUTANT-MATRIX NOSTUB-ld_fxv decides=ld_fxv twins=ld_healthy
-# MUTANT-MATRIX NOSTUB-ld_sup decides=ld_sup twins=ld_healthy
-# MUTANT-MATRIX NOSTUB-ld_walk decides=ld_walk twins=ld_healthy
-# MUTANT-MATRIX NOSTUB-le_all decides=le_all twins=le_healthy
-# MUTANT-MATRIX NOSTUB-le_census decides=le_census twins=le_healthy
-# MUTANT-MATRIX NOSTUB-le_ext decides=le_ext twins=le_healthy
-# MUTANT-MATRIX NOSTUB-le_live decides=le_live twins=le_healthy
-# MUTANT-MATRIX NOSTUB-le_overrides decides=le_overrides twins=le_healthy
-# MUTANT-MATRIX NOSTUB-le_w11 decides=le_w11 twins=le_healthy
-# MUTANT-MATRIX NOSTUB-le_w9 decides=le_w9 twins=le_healthy
-# MUTANT-MATRIX NOSTUB-lr_rules decides=lr_rules twins=lr_healthy
-# MUTANT-MATRIX NOSTUB-lw_trstatus decides=lw_trstatus twins=rt_healthy
-# MUTANT-MATRIX NOSTUB-mg_ls decides=mg_ls twins=mg_healthy
-# MUTANT-MATRIX NOSTUB-pb_walk127 decides=pb_walk127 twins=pb_healthy
-# MUTANT-MATRIX NOSTUB-pb_walk2 decides=pb_walk2 twins=pb_healthy
-# MUTANT-MATRIX NOSTUB-rg_base_show decides=rg_base_show twins=rlc_healthy
-# MUTANT-MATRIX NOSTUB-rg_theirs_ls decides=rg_theirs_ls twins=rlc_healthy
-# MUTANT-MATRIX NOSTUB-rlc_shapes decides=rlc_shapes twins=rlc_healthy
-# MUTANT-MATRIX NOSTUB-rlc_tokens decides=rlc_tokens twins=rlc_healthy
-# MUTANT-MATRIX NOSTUB-rlp_norm decides=rlp_norm twins=rlp_healthy
-# MUTANT-MATRIX NOSTUB-rlp_removed decides=rlp_removed twins=rlp_healthy
-# MUTANT-MATRIX NOSTUB-rlt_cmt decides=rlt_cmt twins=rlt_healthy
-# MUTANT-MATRIX NOSTUB-ro_git decides=ro_git twins=ro_healthy
-# MUTANT-MATRIX NOSTUB-ro_sort decides=ro_sort twins=ro_healthy
-# MUTANT-MATRIX NOSTUB-ro_span decides=ro_span twins=ro_healthy
-# MUTANT-MATRIX NOSTUB-rt_all decides=rt_all twins=rt_healthy
-# MUTANT-MATRIX NOSTUB-rt_base decides=rt_base twins=rt_healthy
-# MUTANT-MATRIX NOSTUB-rt_cmt_all decides=rt_cmt_all twins=rt_healthy
-# MUTANT-MATRIX NOSTUB-rt_cmt_ours decides=rt_cmt_ours twins=rt_healthy
-# MUTANT-MATRIX NOSTUB-rt_ours decides=rt_ours twins=rt_healthy
-# MUTANT-MATRIX NOSTUB-rw_walk decides=rw_walk twins=rlp_healthy
-# MUTANT-MATRIX NOSTUB-rx_walk decides=rx_walk twins=rx_healthy
-# MUTANT-MATRIX NOSTUB-ta_ls decides=ta_ls twins=rt_healthy
-# MUTANT-MATRIX NOSTUB-ta_show decides=ta_show twins=rt_healthy
-# MUTANT-MATRIX NOSTUB-ta_verify decides=ta_verify twins=rt_healthy
-# MUTANT-MATRIX NOSTUB-ud_absorbed decides=ud_absorbed twins=ud_healthy
-# MUTANT-MATRIX NOSTUB-ud_memo2 decides=ud_memo2 twins=ud_healthy
-# MUTANT-MATRIX NOSTUB-wt_line decides=wt_line twins=wt_healthy
-# MUTANT-MATRIX NOSTUB-wt_prov decides=wt_prov twins=wt_healthy
-# MUTANT-MATRIX-DYNAMIC score-mutant-id why=score_mutant passes its "$id" argument to mutant_killed, and its callers mutant, libmutant, lmutant, the self-update-gate preclassify mutant function and nostub (as NOSTUB-<arm>) are each called with a mutant name; score_mutant reads that id's decides and twins from the MUTANT-MATRIX rows via mt_get and reports it as bad when the block has no row for it, so every id mutant_killed is called with carries its own MUTANT-MATRIX row in this block
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/procsub-staged-refusal/run.sh --matrix
-# The matrix is measured by that command (every mutant against every arm of its subject's battery, one MATRIX row per cell). The
-# matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. A plain run drives
-# each mutant's decides arms and its twin only, and
-# one arm asserts that a plain run executed no matrix-only cell.
+#                                 commit). The spelling arm runs only on this tree.
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -226,10 +59,10 @@ OWN="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 # pre-push pool can start each on its own and the suite's makespan stops tracking one 2600-line
 # directory. No `--group` runs shard 'a', so `bash core/fixtures/procsub-staged-refusal/run.sh` is shard a.
 #
-# THE SEED, EVERY ARM FUNCTION, THE CALIBRATIONS, THE MUTATION HARNESS AND THE SUBJECT COPY ARE NOT
-# UNITS: every shard pays them, because a shard that skipped them would score its mutants against a
+# THE SEED, EVERY ARM FUNCTION, THE CALIBRATIONS AND THE NO-LIB COPY ARE NOT
+# UNITS: every shard pays them, because a shard that skipped them would drive its arms against a
 # harness that never ran. A shard other than 'a' refuses a foreign tree root, since the spelling arm and
-# the mutants are the units that need this repository's own tree.
+# the spelling arm is the unit that needs this repository's own tree.
 #
 # THE COVERAGE JOIN runs in EVERY shard before anything else: the declared units are DERIVED from this
 # file's own guard lines, the dealt lists must be disjoint and their union must equal the declared set
@@ -239,8 +72,8 @@ SHARDS="a b c"
 UNITS_a="spell"
 UNITS_b="bl b3"
 UNITS_c="pf rh"
-# THE FAMILY DEAL. The arm table, the r5 and LH floors and every mutant are not units: they run in EVERY shard,
-# filtered by the SUBJECT SCRIPT they drive (its basename, the "family"), so a mutant and the base-pass flag that
+# THE FAMILY DEAL. The arm table, the r5 and LH floors are not units: they run in EVERY shard,
+# filtered by the SUBJECT SCRIPT they drive (its basename, the "family"), so an arm and the family it drives
 # gates it are always scored in the same shard. Each family is dealt to exactly one shard; `fam_join` below derives
 # the declared set from the families the calls actually name and refuses a family dealt twice, to nobody, or dealt
 # but never named.
@@ -248,8 +81,6 @@ FAMS_a="retired-tokens.sh validate-layer-entries.sh preclassify.sh self-update-g
 FAMS_b="retired-layer-contract.sh readopt-override.sh relabel-extension-checks.sh hard-blockers.sh adopt-extension-checks.sh warn-shadowed-local-validators.sh settings-merge.sh"
 FAMS_c="register-drift.sh retired-layer-passage.sh lib.sh layer-drift.sh validate-provenance-block.sh retired-fixtures.sh retired-layer-token.sh unregistered-drift.sh validate-ci-gates.sh"
 GROUP=a
-MATRIX=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; fi
 if [ "${1:-}" = "--group" ]; then
   GROUP="${2:-}"
   [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
@@ -261,7 +92,6 @@ case " $SHARDS " in
 esac
 eval "MINE=\"\${UNITS_$GROUP:-}\""
 eval "FAMS=\"\${FAMS_$GROUP:-}\""
-[ "$MATRIX" -eq 1 ] && { MINE=" "; FAMS=""; }
 NAME="procsub-staged-refusal"; [ "$GROUP" = a ] || NAME="procsub-staged-refusal-$GROUP"
 [ -n "$MINE" ] || { echo "FIXTURE ERROR: shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
 sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
@@ -306,14 +136,12 @@ fi
 nfam="$(grep -c . "$JW/funiq")" || nfam=0
 rm -rf "$JW"
 echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; $nfam subject families dealt once each; this shard runs {$MINE}"
-if [ "$MATRIX" -eq 1 ]; then echo "  mode: FULL (--matrix: every mutant against every arm of its battery)"; else echo "  mode: PUSH (each mutant drives its deciding arm(s) and its twin(s) only)"; fi
 TREE="${1:-$OWN}"
 TREE="$(cd "$TREE" 2>/dev/null && pwd || true)"
 [ -n "$TREE" ] && [ -f "$TREE/core/scripts/validate-ci-gates.sh" ] \
   || { echo "FIXTURE ERROR: no core/scripts/validate-ci-gates.sh under '${1:-$OWN}'" >&2; exit 2; }
 SELF_TREE=0; [ "$TREE" = "$OWN" ] && SELF_TREE=1
 [ "$SELF_TREE" -ne 1 ] && FAMS="$FAMS_a $FAMS_b $FAMS_c"
-[ "$SELF_TREE" -ne 1 ] && [ "$MATRIX" -eq 1 ] && { echo "FIXTURE ERROR: --matrix measures this fixture's own tree, not '$TREE'" >&2; exit 2; }
 if [ "$SELF_TREE" -ne 1 ] && [ "$GROUP" != a ]; then echo "FIXTURE ERROR: shard '$GROUP' runs only against this fixture's own tree, not '$TREE' -- a shard that cannot run its units passes everything it never checked" >&2; exit 2; fi
 SC="$TREE/core/scripts"
 RC_="$TREE/core/skills/ai-dlc-update/reconcile"
@@ -334,24 +162,6 @@ fails=0
 ok()   { printf '  ok    %s\n' "$1"; declare -F stub_clear >/dev/null 2>&1 && stub_clear; return 0; }
 bad()  { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); declare -F stub_clear >/dev/null 2>&1 && stub_clear; return 0; }
 skip() { printf '  SKIP  %s\n' "$1"; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$HERE/../lib/matrix.sh" || { echo "FIXTURE ERROR: lib/matrix.sh not found beside $HERE" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
-# armreg: "<subject basename> <arm>" for every arm run_arm drove; basepass: the same pair when the arm PASSED on the
-# unmutated script in this run. A mutant is scored behind basepass, so a kill can never be the seed failing.
-: > "$W/armreg"; : > "$W/basepass"; : > "$W/pcache"
-# The mutant table is this file's own header: one MUTANT-MATRIX row per mutant, read back here, so the deciding arms and
-# the twins live in exactly one place.
-mt_parse() { awk '$1 == "#" && $2 == "MUTANT-MATRIX" { d = ""; t = ""; for (i = 4; i <= NF; i++) { split($i, kv, "="); if (kv[1] == "decides") d = kv[2]; if (kv[1] == "twins") t = kv[2] } print $3, d, t }' "$1"; }
-MT_TAG=MUTANT-MATRIX
-printf '# %s probe-a decides=x,y twins=z\n# %s probe-b decides=x twins=- why=all dead\n# %s-FULL probe-c worlds=w why=none\n%s probe-d decides=x twins=z\n' "$MT_TAG" "$MT_TAG" "$MT_TAG" "$MT_TAG" > "$W/mt-probe"
-if [ "$(mt_parse "$W/mt-probe" | tr '\n' '|')" != "probe-a x,y z|probe-b x -|" ]; then
-  echo "FIXTURE ERROR: the mutant-table reader did not discriminate (two rows, a no-twin row; a FULL row and an unprefixed line must not read)" >&2; exit 2
-fi
-mt_parse "$SELF" > "$W/mtab"
-if [ "$MATRIX" -eq 0 ] && [ ! -s "$W/mtab" ]; then echo "FIXTURE ERROR: no MUTANT-MATRIX rows in $SELF's header" >&2; exit 2; fi
-MROWS=0
 
 gitq() { git -c user.email=f@x -c user.name=fixture -c commit.gpgsign=false "$@"; }
 
@@ -360,19 +170,17 @@ gitq() { git -c user.email=f@x -c user.name=fixture -c commit.gpgsign=false "$@"
 # Sets STUB to a fresh directory holding the stub; claimed calls are logged, one per line, to
 # "$STUB/LOG". A fresh directory per call is what makes the index mean "the Nth call of THIS run".
 # ------------------------------------------------------------------------------------------------
-# famrun <subject basename> -- 0 when this shard owns that subject family (every shard under --matrix). A family dealt
+# famrun <subject basename> -- 0 when this shard owns that subject family A family dealt
 # to no shard is a FIXTURE ERROR at its first call, so no subject can fall out of every shard.
 famrun() {
-  [ "$MATRIX" -eq 1 ] && return 0
   case " $FAMS " in *" $1 "*) return 0 ;; esac
   case " $FAMS_a $FAMS_b $FAMS_c " in *" $1 "*) return 1 ;; esac
   echo "FIXTURE ERROR: the subject family '$1' is dealt to no shard" >&2; exit 2
 }
 # wantw <families...> -- <units...> -- 0 when this shard drives one of those subject families or runs one of those differential
-# units, or under --matrix. A seed world no family and no unit of this shard drives is never built (each shard used to build all 21).
+# units. A seed world no family and no unit of this shard drives is never built (each shard used to build all 21).
 wantw() {
   local f u side=f
-  [ "$MATRIX" -eq 1 ] && return 0
   [ "$SELF_TREE" -ne 1 ] && return 0
   for f in "$@"; do
     if [ "$f" = "--" ]; then side=u; continue; fi
@@ -383,7 +191,7 @@ wantw() {
 }
 # Top-level flags the seed worlds would set, defaulted so a shard that builds no such world still reads a defined value.
 LW_UTF8=0; QD_ROOT=0; LE_CV=""
-# THE en_US.UTF-8 REQUIREMENT (BL-941), decided before this shard's first arm. arm_lw_utf8 and mutant RT-TR-LOCALE
+# THE en_US.UTF-8 REQUIREMENT (BL-941), decided before this shard's first arm. arm_lw_utf8
 # (the retired-tokens.sh family, shard a) and the 322ef42c differential (unit b3, shard b) need a UTF-8 `tr`. This
 # fixture is .dist-only, so a missing locale is never a consumer's host: a SKIP would move the counted start total
 # with the box, and the invocation judge would fail a fixture that printed PASS. So a shard that owns either refuses,
@@ -398,7 +206,7 @@ lw_locale_guard() {
   case "$nl$1$nl" in *"${nl}en_US.UTF-8${nl}"*) LW_UTF8=1 ;; esac
   [ "$2" = 1 ] || return 0
   [ "$LW_UTF8" -eq 1 ] && return 0
-  printf 'procsub-staged-refusal: FIXTURE BROKEN -- capability absent: locale en_US.UTF-8 is not listed by `locale -a`, so arm_lw_utf8, mutant RT-TR-LOCALE and the 322ef42c differential cannot drive a UTF-8 tr. In the distribution a missing capability is a broken fixture, not a skip: the counted start total would move with the box. Remedy: install or enable the en_US.UTF-8 locale so `locale -a` lists it.\n'
+  printf 'procsub-staged-refusal: FIXTURE BROKEN -- capability absent: locale en_US.UTF-8 is not listed by `locale -a`, so arm_lw_utf8 and the 322ef42c differential cannot drive a UTF-8 tr. In the distribution a missing capability is a broken fixture, not a skip: the counted start total would move with the box. Remedy: install or enable the en_US.UTF-8 locale so `locale -a` lists it.\n'
   return 2
 }
 # LWCALL-BEGIN  (the call region the lw_guard_called cells evaluate, through LWCALL-END)
@@ -408,27 +216,16 @@ LW_LOCALES=""
 [ "$LW_OWNS" = 1 ] && { LW_LOCALES="$(locale -a 2>/dev/null)" || LW_LOCALES=""; }
 lw_locale_guard "$LW_LOCALES" "$LW_OWNS" >&2 || exit 2
 # LWCALL-END
-# The guard's own cells: forced inputs, no process started. The mutant makes the guard stand down when it owns the cells.
-B_lwg=0; B_lwc=0
+# The guard's own cells: forced inputs, no process started.
 _r="$(lw_locale_guard 'C
 POSIX' 1)"; _rc=$?
 if [ "$_rc" = 2 ] && grep -qF 'capability absent: locale en_US.UTF-8 is not listed by `locale -a`' <<<"$_r"; then
-  ok "lw_guard_owns -- a shard owning the UTF-8 cells refuses (exit 2) when en_US.UTF-8 is absent, naming it and the remedy"; B_lwg=1
+  ok "lw_guard_owns -- a shard owning the UTF-8 cells refuses (exit 2) when en_US.UTF-8 is absent, naming it and the remedy"
 else bad "lw_guard_owns -- an owning shard did not refuse an absent en_US.UTF-8 (rc $_rc: $_r)"; fi
 _r="$(lw_locale_guard 'C
 POSIX' 0)"; _rc=$?
-if [ "$_rc" = 0 ] && [ -z "$_r" ]; then ok "lw_guard_other -- a shard owning none of them is unaffected by an absent en_US.UTF-8"; B_lwc=1
+if [ "$_rc" = 0 ] && [ -z "$_r" ]; then ok "lw_guard_other -- a shard owning none of them is unaffected by an absent en_US.UTF-8"
 else bad "lw_guard_other -- a shard owning none of the UTF-8 cells refused (rc $_rc: $_r)"; fi
-_lwm="$(declare -f lw_locale_guard)"
-_lwa='[ "$2" = 1 ] || return 0'
-_lwm2="$(F="$_lwa" awk 'BEGIN { f = ENVIRON["F"] } { i = index($0, f); if (i > 0) { n++; $0 = substr($0, 1, i - 1) "return 0" substr($0, i + length(f)) } print } END { exit (n == 1 ? 0 : 1) }' <<<"$_lwm")" || _lwm2="$_lwm"
-if [ "$_lwm2" != "$_lwm" ]; then
-  _r="$( eval "$_lwm2"; lw_locale_guard 'C' 1; printf '|%s' "$?" )"
-  _r2="$( eval "$_lwm2"; lw_locale_guard 'C' 0; printf '|%s' "$?" )"
-  if [ "$_r" = "|0" ] && [ "$_r2" = "|0" ]; then
-    mutant_killed "$(( ${B_lwg:-0} && ${B_lwc:-0} ))" LW-GUARD-SKIP "MUTANT LW-GUARD-SKIP (the guard stands down in an owning shard) is killed by lw_guard_owns; twin lw_guard_other still holds"
-  else bad "MUTANT LW-GUARD-SKIP: want lw_guard_owns |0 and lw_guard_other |0, got [$_r] [$_r2]"; fi
-else bad "FIXTURE BROKEN: mutant LW-GUARD-SKIP DID NOT APPLY (its anchor is not in lw_locale_guard)"; fi
 # THE CALL SITE, BY BEHAVIOUR. lw_region <file text> prints LWCALL-BEGIN through LWCALL-END. lwcallcell evaluates it in
 # a subshell with `locale` and `famrun` overridden as functions (a function shadows the command, so no process starts)
 # and `exit` reported as the region's status. No bash is started.
@@ -444,60 +241,24 @@ lwcallcell() {
     sg() { [ "$_fown" = sg ] && [ "$1" = b3 ]; }
     o="$(eval "$local_reg" 2>&1)"; printf '%s|%s' "$?" "$o" )
 }
-lwcallmut() { # <file text> <kind> -> the file with its guard call mutated; exit 1 unless the call occurs exactly once
-  K="$2" awk 'BEGIN { c = "lw_locale_guard \"$LW_LOCALES\" \"$LW_OWNS\" >&2 || exit 2"; k = ENVIRON["K"] }
-    $0 == c { n++
-      if (k == "del") next
-      if (k == "iffalse") { print "if false; then"; print; print "fi"; next }
-      if (k == "heredoc") { print ": <<'"'"'DEAD'"'"'"; print; print "DEAD"; next }
-      if (k == "override") { print "lw_locale_guard() { return 0; }"; print; next }
-      if (k == "moved") { held = 1; next } }
-    k == "moved" && held == 1 && /^run_arm arm_/ { print c; held = 2 }
-    { print }
-    END { exit (n == 1 && (k != "moved" || held == 2)) ? 0 : 1 }' <<<"$1"
-}
 LW_SELF="$(cat "$SELF")"
-B_lwk=0; B_lwkp=0
 _r="$(lwcallcell "$LW_SELF" 'C
 POSIX')"
 if [ "${_r%%|*}" = 2 ] && grep -qF 'capability absent: locale en_US.UTF-8 is not listed by `locale -a`' <<<"$_r"; then
-  ok "lw_guard_called -- the shipped call region, evaluated in an owning shard with en_US.UTF-8 forced absent, refuses (exit 2) naming it"; B_lwk=1
+  ok "lw_guard_called -- the shipped call region, evaluated in an owning shard with en_US.UTF-8 forced absent, refuses (exit 2) naming it"
 else bad "lw_guard_called -- the shipped call region did not refuse a forced-absent en_US.UTF-8 in an owning shard (got ${_r%%|*}: ${_r#*|})"; fi
 _r="$(lwcallcell "$LW_SELF" 'C
 en_US.UTF-8')"
-if [ "$_r" = "0|" ]; then ok "lw_guard_called_present -- the shipped call region with en_US.UTF-8 forced present runs through (exit 0)"; B_lwkp=1
+if [ "$_r" = "0|" ]; then ok "lw_guard_called_present -- the shipped call region with en_US.UTF-8 forced present runs through (exit 0)"
 else bad "lw_guard_called_present -- the shipped call region refused a present en_US.UTF-8 (got ${_r%%|*}: ${_r#*|})"; fi
-for _k in del iffalse heredoc override moved; do
-  if ! _m="$(lwcallmut "$LW_SELF" "$_k")" || [ "$_m" = "$LW_SELF" ]; then bad "FIXTURE BROKEN: mutant LW-CALL-$_k DID NOT APPLY"; continue; fi
-  _r="$(lwcallcell "$_m" 'C')"; _r2="$(lwcallcell "$_m" 'en_US.UTF-8')"
-  if [ "${_r%%|*}" != 2 ] && [ "$_r2" = "0|" ]; then
-    case "$_k" in
-      del) mutant_killed "$(( ${B_lwk:-0} && ${B_lwkp:-0} ))" LW-CALL-DELETED "MUTANT LW-CALL-DELETED (the call removed) is killed by lw_guard_called; twin lw_guard_called_present still holds" ;;
-      iffalse) mutant_killed "$(( ${B_lwk:-0} && ${B_lwkp:-0} ))" LW-CALL-IFFALSE "MUTANT LW-CALL-IFFALSE (the call inside if false) is killed by lw_guard_called; twin lw_guard_called_present still holds" ;;
-      heredoc) mutant_killed "$(( ${B_lwk:-0} && ${B_lwkp:-0} ))" LW-CALL-HEREDOC "MUTANT LW-CALL-HEREDOC (the call inside a dead heredoc) is killed by lw_guard_called; twin lw_guard_called_present still holds" ;;
-      override) mutant_killed "$(( ${B_lwk:-0} && ${B_lwkp:-0} ))" LW-CALL-OVERRIDE "MUTANT LW-CALL-OVERRIDE (lw_locale_guard redefined as return 0 before the call) is killed by lw_guard_called; twin lw_guard_called_present still holds" ;;
-      moved) mutant_killed "$(( ${B_lwk:-0} && ${B_lwkp:-0} ))" LW-CALL-MOVED "MUTANT LW-CALL-MOVED (the call moved below the first run_arm) is killed by lw_guard_called; twin lw_guard_called_present still holds" ;;
-    esac
-  else bad "MUTANT LW-CALL-$_k: want lw_guard_called not 2 and lw_guard_called_present 0|, got [${_r%%|*}] [$_r2]"; fi
-done
 # The b3 owner, ALONE: famrun owns nothing and sg b3 is true (shard b), so only the gate's `|| sg b3` arm can make it refuse.
-B_lwsg=0; B_lwno=0
 _r="$(lwcallcell "$LW_SELF" 'C' sg)"
 if [ "${_r%%|*}" = 2 ] && grep -qF 'capability absent: locale en_US.UTF-8 is not listed by `locale -a`' <<<"$_r"; then
-  ok "lw_guard_b3 -- the shipped call region in a shard owning only unit b3, en_US.UTF-8 forced absent, refuses (exit 2) naming it"; B_lwsg=1
+  ok "lw_guard_b3 -- the shipped call region in a shard owning only unit b3, en_US.UTF-8 forced absent, refuses (exit 2) naming it"
 else bad "lw_guard_b3 -- a shard owning only unit b3 did not refuse a forced-absent en_US.UTF-8 (got ${_r%%|*}: ${_r#*|})"; fi
 _r="$(lwcallcell "$LW_SELF" 'C' none)"
-if [ "$_r" = "0|" ]; then ok "lw_guard_b3_none -- the shipped call region in a shard owning neither, en_US.UTF-8 forced absent, runs through (exit 0) with no refusal"; B_lwno=1
+if [ "$_r" = "0|" ]; then ok "lw_guard_b3_none -- the shipped call region in a shard owning neither, en_US.UTF-8 forced absent, runs through (exit 0) with no refusal"
 else bad "lw_guard_b3_none -- a shard owning neither refused (got ${_r%%|*}: ${_r#*|})"; fi
-_lwg='if famrun retired-tokens.sh || sg b3; then LW_OWNS=1; fi'
-_m="$(G="$_lwg" awk 'BEGIN { g = ENVIRON["G"] } $0 == g { n++; print "if famrun retired-tokens.sh; then LW_OWNS=1; fi"; next } { print } END { exit n == 1 ? 0 : 1 }' <<<"$LW_SELF")" || _m="$LW_SELF"
-if [ "$_m" = "$LW_SELF" ]; then bad "FIXTURE BROKEN: mutant LW-GATE-NO-SG DID NOT APPLY (the ownership gate line does not occur exactly once)"
-else
-  _r="$(lwcallcell "$_m" 'C' sg)"; _r2="$(lwcallcell "$_m" 'C' none)"
-  if [ "${_r%%|*}" != 2 ] && [ "$_r2" = "0|" ]; then
-    mutant_killed "$(( ${B_lwsg:-0} && ${B_lwno:-0} ))" LW-GATE-NO-SG "MUTANT LW-GATE-NO-SG (the gate's || sg b3 dropped) is killed by lw_guard_b3; twin lw_guard_b3_none still holds"
-  else bad "MUTANT LW-GATE-NO-SG: want lw_guard_b3 not 2 and lw_guard_b3_none 0|, got [${_r%%|*}] [$_r2]"; fi
-fi
 # STUB_FNS names every stub function mkstub (and arm_ld_sup's mktemp) defined and exported. stub_clear unsets them all: a function
 # stub left defined after its arm ends leaks into every later arm, and `command -v <tool>` then prints the bare name instead of a path.
 STUB_FNS=""
@@ -526,11 +287,7 @@ mkstub() {
     printf '      if [ %s -eq 0 ] || [ %s -eq "$n" ]; then echo "%s: forced failure" >&2; return %s; fi ;;\n' "$idx" "$idx" "$tool" "$rc"
     printf '  esac\n  command %s "$@"\n}\n' "$tool"
   } > "$STUB/fn.sh"
-  # NOSTUB_ARM names the arm whose stub is replaced by a no-op (the nostub mutants below): the function then claims nothing,
-  # counts nothing and logs nothing, so the arm's own fired-assertion is the only thing left to fail.
-  local f; for f in "${FUNCNAME[@]}"; do
-    if [ -n "${NOSTUB_ARM:-}" ] && [ "$f" = "$NOSTUB_ARM" ]; then printf '%s() { command %s "$@"; }\n' "$tool" "$tool" > "$STUB/fn.sh"; fi
-  done
+  local f
   # PATH_STUB_ARMS lists the arms that keep a PATH SCRIPT stub. bash 3.2 resets BASH_SOURCE[0] to empty once an imported function has
   # run, and validate-layer-entries.sh reads "${BASH_SOURCE[0]}" under set -u at its W11 arm after the stubbed walks, so the W11 arm
   # cannot take a function (measured: "BASH_SOURCE[0]: unbound variable"). Its stub is the old script, and its starts stay as measured.
@@ -539,16 +296,12 @@ mkstub() {
       # type -P, never command -v: command -v prints the bare NAME of an exported stub function left by an earlier arm, and a script
       # stub that execs its own name re-execs itself forever. type -P resolves the file on PATH, skipping functions.
       local real; real="$(type -P "$tool")" || { echo "FIXTURE ERROR: no file named $tool on PATH" >&2; exit 2; }
-      if [ -n "${NOSTUB_ARM:-}" ] && [ "$f" = "$NOSTUB_ARM" ]; then
-        printf '#!/bin/bash\nexec "%s" "$@"\n' "$real" > "$STUB/$tool"
-      else
-        { printf '#!/bin/bash\ncase "$*" in\n  %s)\n' "$pat"
-          printf '    n=$(( $(wc -l < "%s/LOG") + 1 ))\n' "$STUB"
-          printf '    printf "%%s %%s\\n" "$n" "$(printf "%%s" "$*" | tr "\\n" " ")" >> "%s/LOG"\n' "$STUB"
-          printf '    if [ %s -eq 0 ] || [ %s -eq "$n" ]; then echo "%s: forced failure" >&2; exit %s; fi ;;\n' "$idx" "$idx" "$tool" "$rc"
-          printf 'esac\nexec "%s" "$@"\n' "$real"
-        } > "$STUB/$tool"
-      fi
+      { printf '#!/bin/bash\ncase "$*" in\n  %s)\n' "$pat"
+        printf '    n=$(( $(wc -l < "%s/LOG") + 1 ))\n' "$STUB"
+        printf '    printf "%%s %%s\\n" "$n" "$(printf "%%s" "$*" | tr "\\n" " ")" >> "%s/LOG"\n' "$STUB"
+        printf '    if [ %s -eq 0 ] || [ %s -eq "$n" ]; then echo "%s: forced failure" >&2; exit %s; fi ;;\n' "$idx" "$idx" "$tool" "$rc"
+        printf 'esac\nexec "%s" "$@"\n' "$real"
+      } > "$STUB/$tool"
       chmod +x "$STUB/$tool"; return 0 ;;
     esac
   done
@@ -561,7 +314,7 @@ fired() { local n; n="$(grep -c . "$STUB/LOG")" || n=0; printf '%s' "$n"; }
 failed_call() { local idx="$1" n; n="$(fired)"; if [ "$idx" -eq 0 ]; then [ "$n" -gt 0 ]; else [ "$n" -ge "$idx" ]; fi; }
 
 # ================================================================================================
-# SEEDS. Every seed is read-only to the arms below, so one seed serves every arm and every mutant.
+# SEEDS. Every seed is read-only to the arms below, so one seed serves every arm.
 # ================================================================================================
 if wantw validate-ci-gates.sh -- ; then
 # --- CI: a retro declaring one gate, a surface that wires it ------------------------------------
@@ -761,7 +514,7 @@ PBU="$W/pbu"; cp -R "$PB" "$PBU"; printf 'locked\n' > "$PBU/docs/locked.md"; chm
 # with nothing listed -- indistinguishable from a walk that failed -- and the scan refuses.
 # THE SCHEMA ITSELF CARRIES THE MARKER, so a project holding `.claude/schemas/provenance-block.json`
 # has at least one carrier by construction. This world drops it; the script then resolves its schema
-# beside itself (`<scripts>/../schemas/`), which the mutant copies below also provide.
+# beside itself (`<scripts>/../schemas/`), which the arm then resolves.
 PBZ="$W/pbz"; cp -R "$PB" "$PBZ"; rm -f "$PBZ/server/handler.py" "$PBZ/.claude/schemas/provenance-block.json"
 printf 'plain\n' > "$PBZ/server/plain.py"
 printf 'locked\n' > "$PBZ/docs/locked.md"; chmod 000 "$PBZ/docs/locked.md"
@@ -1170,13 +923,11 @@ arm_ld_walk() { local rc=0; mkstub find "$LFPAT" 1 1; ld_run "$1" "$STUB" || rc=
 # `sup-core-span` inside it as a directory, and logs the plant. Only that one call is claimed.
 arm_ld_sup() { local rc=0
   mkstub mktemp '*"/layer-drift.XXXXXX"*' -1 1
-  if [ "${NOSTUB_ARM:-}" != arm_ld_sup ]; then
   { printf "mktemp() {\n  local IFS=' '\n"; printf '  case ":$PATH:" in *":%s:"*) ;; *) command mktemp "$@"; return $? ;; esac\n' "$STUB"
     printf '  case "$*" in\n    *"/layer-drift.XXXXXX"*)\n      local d; d="$(command mktemp "$@")" || return $?\n'
     printf '      mkdir "$d/sup-core-span" && echo "planted $d" >> "%s/LOG"\n      printf "%%s\\n" "$d"; return 0 ;;\n  esac\n  command mktemp "$@"\n}\n' "$STUB"
   } > "$STUB/fn.sh"
   . "$STUB/fn.sh"; export -f mktemp; STUB_FNS="$STUB_FNS mktemp"
-  fi
   ld_run "$1" "$STUB" || rc=$?
   ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-120)"
   failed_call 0 && [ "$rc" -eq 1 ] && grep -q 'surplus measure' "$ERR" && ! grep -q 'appear nowhere in core' "$OUT"; }
@@ -1432,7 +1183,7 @@ cut -f1,2 "$FW/hb-ud" > "$FW/hb-payload"
 # --- relabel: 700 core check anchors, and separately 700 core rules; one colliding extension -----
 # Its OWN, lower limit: relabel greps the extension once per anchor, so a world big enough to pass
 # 16 blocks cost 14 s a run (measured, 4000 anchors) and this world is run by four cells, their
-# controls, a mutant and the base copy. 700 anchors are 2.6 KB, above a 2-block limit.
+# controls and the base copy. 700 anchors are 2.6 KB, above a 2-block limit.
 FX_RX_N=2
 RXF="$FW/rx"; mkdir -p "$RXF/.claude/skills/ai-dlc/extensions"
 awk 'BEGIN { for (i = 1; i <= 700; i++) printf "### %d. Check title\nbody\n", i }' > "$RXF/.claude/skills/ai-dlc/gate-validation.md"
@@ -1484,7 +1235,7 @@ if [ "$FX_L" -gt 0 ]; then
   git -C "$RTD" show "${FXRT_B}:core/scripts/b.sh" > "$RTC/scripts/ai-dlc/b.sh"
   # THE CONSUMER COPY IS SMALL ON PURPOSE: two lines, both tokens the arm reads. The engine stages it
   # (`cr_read … > "$RT_T/ours"`) AFTER the two blob feeds, so a copy as large as the blob refused
-  # there under the cap on BOTH the engine and a here-string mutant, and the mutant's false row never
+  # there under the cap on the engine, and a here-string copy's false row never
   # printed. Small, it lands whole, the feeds are the only site the cap can reach, and the calibration
   # below asserts it fits.
   printf 'x=$ROOT/old-z\nuses $ROOT/old-b too\n' > "$RTC/scripts/ai-dlc/z.sh"
@@ -1855,11 +1606,6 @@ RT_ROW='core/scripts/z\.sh.\$ROOT/old-z$'
 arm_fx_rt_healthy() { fx_healthy "$1" 0 "$RT_ROW" --bucket-rows "$FW/rt-rows" "$RTD" "$FXRT_B" "$FXRT_T" "$RTC" \
   && ! grep -q 'core/scripts/z\.sh.\$ROOT/old-b' "$FW/h.out"; }
 arm_fx_rt() { fx_cell "$1" "$FX_N" 0 "$RT_ROW" 2 '^retired-tokens: .*no verdict' --bucket-rows "$FW/rt-rows" "$RTD" "$FXRT_B" "$FXRT_T" "$RTC"; }
-# derivation-differential has no forced cell (its sites are held by r5 alone); this is the positive
-# conjunct its spelling mutant needs -- the copy parses and RUNS as far as its argument check.
-arm_dd_usage() { local rc=0; bash "$1" > "$OUT" 2> "$ERR" || rc=$?
-  ARM_WHY="rc=$rc: $(head -1 "$OUT" | cut -c1-80)"
-  [ "$rc" -eq 2 ] && grep -q 'usage.*expected four arguments' "$OUT"; }
 
 # --- lib.sh's awk EMITTERS under a write limit. Each arm takes a lib.sh PATH. The capture runs in
 # /bin/bash with `trap '' XFSZ; ulimit -f 0` set AFTER lib.sh is sourced, as `x="$(emitter)"`, and
@@ -1888,11 +1634,6 @@ em_cell() { # em_cell <lib> <fn>
 arm_em_nrm()    { em_cell "$1" nrm_awk; }
 arm_em_ledger() { em_cell "$1" ledger_entry_awk; }
 arm_em_label()  { em_cell "$1" backlog_entry_label_awk; }
-# Each emitter mutant's healthy twin: the OTHER two cells still pass on it, so a mutant that kills
-# its own cell and not its neighbours shows each cell sees its own emitter and no other.
-arm_em_hx_nrm()    { arm_em_ledger "$1" && arm_em_label "$1"; }
-arm_em_hx_ledger() { arm_em_nrm "$1" && arm_em_label "$1"; }
-arm_em_hx_label()  { arm_em_nrm "$1" && arm_em_ledger "$1"; }
 
 # --- the NON-ASCII path worlds. The ASCII row is the control, required in every run: a copy that
 # never reached its loop has no plain.sh row either, and fails the healthy arm.
@@ -1938,7 +1679,7 @@ arm_qd_direct() { local rc=0; qd_run "$1" direct || rc=$?; qd_why "$rc"
 # QF arms: one runner per detector, then a PLAIN arm (the positive conjunct alone) and a BOTH arm.
 # Each is run on the tree's script (memo path) and on the same script in QF_NL (fallback path).
 qf_run() { # qf_run <kind> <script> -> stdout to $OUT. Keyed on the KIND, never the basename: a
-  # mutant is `_m_<id>.sh` and would match no detector name.
+  # copy under another name would match no detector name.
   case "$1" in
     rf) bash "$2" "$QF/rf/d" "$QF_RF_T" "$QF/rf/c" ;;
     ud) bash "$2" "$QF/ud/d" "$QF_UD_B" "$QF/ud/c" ;;
@@ -1962,8 +1703,6 @@ arm_qf_rf_plain() { qf_arm rf "$1" plain; }; arm_qf_rf() { qf_arm rf "$1" both; 
 arm_qf_ud_plain() { qf_arm ud "$1" plain; }; arm_qf_ud() { qf_arm ud "$1" both; }
 arm_qf_lt_plain() { qf_arm lt "$1" plain; }; arm_qf_lt() { qf_arm lt "$1" both; }
 arm_qf_lc_plain() { qf_arm lc "$1" plain; }; arm_qf_lc() { qf_arm lc "$1" both; }
-arm_qd_hx_fill()   { arm_qd_plain "$1" && arm_qd_direct "$1"; }
-arm_qd_hx_direct() { arm_qd_plain "$1" && arm_qd_cafe "$1"; }
 
 # --- r5: NO NON-COMMENT HERE-STRING in a file this release converted ------------------------------
 # The seven files 2f598a86 converted, and only those: the bootstrapping files (apply.sh, lib.sh,
@@ -1990,7 +1729,7 @@ S_RLP="$RC_/retired-layer-passage.sh"; S_RLC="$RC_/retired-layer-contract.sh"
 S_RT="$RC_/retired-tokens.sh"; S_RO="$RC_/readopt-override.sh"; S_UD="$RC_/unregistered-drift.sh"
 S_MG="$SC/migrate-artifact-paths.sh"; S_AC="$SC/validate-ac-falsifiability.sh"; S_LE="$SC/validate-layer-entries.sh"
 S_LD="$RC_/layer-drift.sh"; S_RLT="$RC_/retired-layer-token.sh"; S_PB="$SC/validate-provenance-block.sh"; S_CV="$SC/validate-adversarial-convergence.sh"
-S_HB="$RC_/hard-blockers.sh"; S_WS="$RC_/warn-shadowed-local-validators.sh"; S_DD="$RC_/derivation-differential.sh"
+S_HB="$RC_/hard-blockers.sh"; S_WS="$RC_/warn-shadowed-local-validators.sh"
 S_RD="$RC_/register-drift.sh"; S_SM="$RC_/settings-merge.sh"; S_AD="$RC_/adopt-extension-checks.sh"
 S_LIB="$RC_/lib.sh"; S_PC="$RC_/preclassify.sh"
 S_SUG="$RC_/self-update-gate.sh"
@@ -1998,8 +1737,7 @@ S_RF="$RC_/retired-fixtures.sh"
 
 run_arm() { # run_arm <fn> <script> <text>
   famrun "${2##*/}" || return 0
-  printf '%s %s\n' "${2##*/}" "$1" >> "$W/armreg"
-  if "$1" "$2"; then ok "$1: $3"; printf '%s %s\n' "${2##*/}" "$1" >> "$W/basepass"; else bad "$1: $3 -- $ARM_WHY"; fi
+  if "$1" "$2"; then ok "$1: $3"; else bad "$1: $3 -- $ARM_WHY"; fi
   stub_clear
 }
 echo "== a staging write that fails ($FBASH, trap '' XFSZ; ulimit -f): the calibration, which never runs a subject =="
@@ -2092,170 +1830,12 @@ RH_FILES="register-drift.sh settings-merge.sh readopt-override.sh adopt-extensio
 # hard-blockers.sh and warn-shadowed-local-validators.sh fed their loops from `<<EOF` heredocs, not
 # `<<<`, so r5 does not score them; their forced cells do.
 # ================================================================================================
-# mkmut <src> <dst> <find> <replace> [<find> <replace>]... -- every find must match EXACTLY once.
-mkmut() {
-  python3 - "$@" <<'PY'
-import sys
-src, dst, pairs = sys.argv[1], sys.argv[2], sys.argv[3:]
-s = open(src, encoding="utf-8").read()
-for i in range(0, len(pairs), 2):
-    f, r = pairs[i], pairs[i + 1]
-    n = s.count(f)
-    if n != 1:
-        print("anchor %d matched %d time(s)" % (i // 2 + 1, n)); sys.exit(1)
-    s = s.replace(f, r)
-open(dst, "w", encoding="utf-8").write(s)
-PY
-}
-# THE HEREDOC EMITTERS, restored one emitter at a time: the `printf` literal becomes `cat <<'AWK'`
-# again, and ledger_entry_awk's body apostrophe loses its `'\''` spelling. Used by the EM-* mutants
-# and, all three at once, to build HL -- a reconcile/ copy whose lib.sh can fail to emit, which is
-# the only place warn-shadowed-local-validators.sh's emitter refusal still has a subject.
-EM_NRM=( $'  printf \'%s\\n\' \'function nrm(s){' $'  cat <<\'AWK\'\nfunction nrm(s){'
-         $'return s }\'\n}' $'return s }\nAWK\n}' )
-EM_LEDGER=( $'  printf \'%s\\n\' \'function ledger_entry_id(label) {' $'  cat <<\'AWK\'\nfunction ledger_entry_id(label) {'
-            $'consumer\'\\\'\'s' $'consumer\'s'
-            $'  return sh\n}\'\n}' $'  return sh\n}\nAWK\n}' )
-EM_LABEL=( $'  printf \'%s\\n\' \'function backlog_entry_label(l,' $'  cat <<\'AWK\'\nfunction backlog_entry_label(l,'
-           $'  return ""\n}\'\n}' $'  return ""\n}\nAWK\n}' )
-HL="$W/hl"; HL_OK=0
-if cp -R "$RC_" "$HL" && _hl_why="$(mkmut "$RC_/lib.sh" "$HL/lib.sh" "${EM_NRM[@]}" "${EM_LEDGER[@]}" "${EM_LABEL[@]}")" \
-   && bash -n "$HL/lib.sh" && [ "$(lh_scan "$HL/lib.sh" | cut -d' ' -f2)" -eq 3 ]; then
-  HL_OK=1; ok "heredoc lib.sh (HL): all three emitters restored to the quoted-AWK heredoc form, it parses, and LH reads exactly 3 openers in it"
-else
-  bad "heredoc lib.sh (HL) could not be built: ${_hl_why:-copy, parse or LH count failed}"
-fi
-# ================================================================================================
-# MUTANTS. One copy of each subject directory; each mutant is a sibling file in that copy, so the
-# script finds lib.sh, setup-sites.md, preclassify.sh and artifact-path-config.sh beside it.
-# ================================================================================================
-MT="$W/mt"; mkdir -p "$MT"
-cp -R "$SC" "$MT/scripts" && cp -R "$RC_" "$MT/reconcile" && mkdir -p "$MT/schemas" && cp "$TREE/core/schemas/provenance-block.json" "$MT/schemas/" \
-  || { echo "FIXTURE BROKEN: could not copy the subject directories" >&2; exit 2; }
-# THE NO-LIB DIRECTORY IS BUILT ONCE. The arm table's QF fallback cells and the QP-FB mutants both need a copy of reconcile/ with
-# lib.sh removed; they only READ it (a mutant adds its own _m_ sibling), so one copy serves both instead of two.
-mkdir -p "$MT/nolib" && cp -R "$MT/reconcile/." "$MT/nolib/" && rm -f "$MT/nolib/lib.sh"
-QF_NL="$MT/nolib"
-# The heredoc-lib copy is shared: the control (shard b) and the WS-EMITTER mutant (shard c) both drive it.
-if [ "$HL_OK" -eq 1 ]; then cp -R "$HL" "$MT/hl" || { echo "FIXTURE BROKEN: could not copy the heredoc lib.sh directory" >&2; exit 2; }; fi
-# THE COPY CONTROLS. Every mutant runs from a COPY, and a copy that cannot run reads as a kill. Two distinct location properties are
-# proved, once each, on a copy that is byte-identical to the shipped script (cmp -s): (1) a SIBLING copy under another basename in the
-# same directory runs (every `_m_<id>.sh` mutant is one), driven through validate-ci-gates.sh; (2) a whole-DIRECTORY copy of
-# reconcile/ relocated under another path runs with its own lib.sh beside it (every libmutant and pcmutant is one), driven through
-# retired-tokens.sh. The old unit repeated these across 33 script/arm lists on identical worlds, so each repeat read the base run.
-if famrun validate-ci-gates.sh; then
-  cp "$MT/scripts/validate-ci-gates.sh" "$MT/scripts/_m_ctl.sh"
-  if cmp -s "$MT/scripts/validate-ci-gates.sh" "$MT/scripts/_m_ctl.sh" && arm_ci_healthy "$MT/scripts/_m_ctl.sh"; then
-    ok "control sibling copy: a byte-identical copy of validate-ci-gates.sh under another basename runs and reads the healthy verdict"
-  else bad "control sibling copy: the byte-identical sibling copy failed -- $ARM_WHY"; fi
-fi
-if famrun retired-tokens.sh; then
-  cp -R "$MT/reconcile" "$MT/lib_ctl"
-  if diff -rq "$MT/reconcile" "$MT/lib_ctl" >/dev/null && arm_rt_healthy "$MT/lib_ctl/retired-tokens.sh"; then
-    ok "control directory copy: a byte-identical copy of reconcile/ under another path runs retired-tokens.sh against its own lib.sh"
-  else bad "control directory copy: the byte-identical directory copy failed -- $ARM_WHY"; fi
-fi
-# ud_memo2 IS NOT EXPRESSIBLE ON THE NO-LIB COPY, and the matrix reports it as MATRIX-BASE-RED there on purpose: the arm fails the
-# second memo serve of the theirs blob, and the memo cache is served by lib.sh's memo helpers, which that copy removes, so the stub
-# can never fire (the arm demands fired >= 1). unregistered-drift.sh reads blobs through lib.sh's memo_show only (its git_show falls
-# back to plain git show without it), so it is a precondition the copy cannot meet, not a defect of the subject.
-# THE MUTANT HARNESS. Every mutant is scored by score_mutant, which reads its deciding arms and twins from the MUTANT-MATRIX
-# row in this file's header (never restated here). Per push a mutant drives its twins first (they must stay green on the copy,
-# the proof the copy ran), then its deciding arms (every one must trip), and the kill is emitted only through mutant_killed,
-# behind the base-pass of each deciding arm on the unmutated script. Under --matrix the same mutant is driven against EVERY arm
-# of its subject's battery, each also driven on the pristine copy first: a cell red on the pristine copy is not the mutant's.
-mt_get() { awk -v m="$1" -v f="$2" '$1 == m { print (f == "d" ? $2 : $3); exit }' "$W/mtab"; }
-cellname() { printf '%s' "${1#arm_}"; }
-# mut_pristine <arm> <pristine script> -> 0 when the arm passes on the pristine copy (memoised for the run)
-mut_pristine() {
-  local k="$2 $1" v
-  v="$(awk -v k="$k" 'index($0, k " ") == 1 { print $NF; exit }' "$W/pcache")"
-  if [ -z "$v" ]; then if "$1" "$2"; then v=0; else v=1; fi; stub_clear; printf '%s %s\n' "$k" "$v" >> "$W/pcache"; fi
-  [ "$v" -eq 0 ]
-}
-# mut_matrix <id> <family> <mutant script> <pristine script>
-mut_matrix() {
-  local id="$1" fam="$2" m="$3" pr="$4" a cells trip="" green="" hd ht rc c
-  cells="$( { awk -v f="$fam" '$1 == f { print $2 }' "$W/armreg"; for a in $(mt_get "$id" d | tr ',' ' ') $(mt_get "$id" t | tr ',' ' '); do [ "$a" = "-" ] || printf 'arm_%s\n' "$a"; done; } | awk '!seen[$0]++')"
-  if [ -z "$cells" ]; then bad "mutant $id: no arm is registered for the subject $fam, so there is no battery to measure"; return; fi
-  for a in $cells; do
-    c="$(cellname "$a")"
-    if ! mut_pristine "$a" "$pr"; then printf '  MATRIX-BASE-RED %s %s (red on the pristine copy of %s: not scored)\n' "$id" "$c" "$fam"; continue; fi
-    rc=0; "$a" "$m" || rc=1
-    stub_clear
-    if [ "$rc" -eq 0 ]; then matrix_row "$id" "$c" 0 GREEN no; green="$green $c"; else matrix_row "$id" "$c" 1 TRIPPED yes; trip="$trip $c"; fi
-    MROWS=$((MROWS+1))
-  done
-  hd="$(mt_get "$id" d)"; ht="$(mt_get "$id" t)"
-  if [ -z "$hd" ]; then printf '  MATRIX-NOHEADER %s decides=%s\n' "$id" "$(printf '%s' "$trip" | sed 's/^ //; s/ /,/g')"; return; fi
-  for c in $(printf '%s' "$hd" | tr ',' ' '); do
-    case " $trip " in *" $c "*) ;; *) bad "mutant $id: header decides cell $c did not trip in the measured row (tripped:$trip) -- re-measure and rewrite the header row"; return ;; esac; done
-  if [ "$ht" != "-" ]; then for c in $(printf '%s' "$ht" | tr ',' ' '); do
-    case " $green " in *" $c "*) ;; *) bad "mutant $id: header twin $c is not green in the measured row"; return ;; esac; done; fi
-  ok "matrix $id: decides=$hd measured tripped, twins=$ht green; $(printf '%s\n' $cells | grep -c .) cell(s) driven"
-}
-# score_mutant <id> <family> <mutant script> <pristine script> [strict]
-# The base-pass flag B_mut is 1 only when EVERY deciding arm passed on the unmutated script in this run: from the arm table's
-# own drive of the tree script, or, for a mutant whose pristine copy is not the tree script (strict: the heredoc-lib copy) or
-# whose row has no twin, from a drive of the pristine copy itself.
-score_mutant() {
-  local id="$1" fam="$2" m="$3" pr="$4" strict="${5:-}" dec twn c basegood=1 survived="" tfail="" BG
-  if [ "$MATRIX" -eq 1 ]; then mut_matrix "$id" "$fam" "$m" "$pr"; return; fi
-  dec="$(mt_get "$id" d)"; twn="$(mt_get "$id" t)"
-  if [ -z "$dec" ]; then bad "mutant $id has no MUTANT-MATRIX row in the header -- re-measure with: bash core/fixtures/procsub-staged-refusal/run.sh --matrix"; return; fi
-  if [ "$twn" != "-" ]; then for c in $(printf '%s' "$twn" | tr ',' ' '); do "arm_$c" "$m" || tfail="$tfail $c"; stub_clear; done; fi
-  if [ -n "$tfail" ]; then bad "mutant $id: its twin arm(s)$tfail failed on the mutant, so no kill can be read -- $ARM_WHY"; return; fi
-  for c in $(printf '%s' "$dec" | tr ',' ' '); do
-    grep -qxF -- "$fam arm_$c" "$W/basepass" || basegood=0
-    if [ "$twn" = "-" ] || [ -n "$strict" ]; then mut_pristine "arm_$c" "$pr" || basegood=0; fi
-    "arm_$c" "$m" && survived="$survived $c"
-    stub_clear
-  done
-  # The base-pass flag is read back from a file as a captured value: it is the loop above's own result, computed in this run.
-  printf '%s' "$basegood" > "$W/basegood"
-  BG="$(cat "$W/basegood")"
-  if [ -z "$survived" ]; then
-    mutant_killed "$([ "$BG" = 1 ] && echo 1)" "$id" "mutant $id killed by: $(printf '%s' "$dec" | tr ',' ' '); twin(s) $twn stay green"
-  else bad "mutant $id SURVIVED$survived -- that arm cannot see its own site"; fi
-}
-# mutant <id> <dir> <src-basename> <find> <replace> ... -- mutate a sibling copy of one subject script.
-mutant() {
-  local id="$1" dir="$2" src="$3" m why
-  shift 3
-  famrun "$src" || return 0
-  m="$MT/$dir/_m_$id.sh"
-  if ! why="$(mkmut "$MT/$dir/$src" "$m" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
-  if cmp -s "$MT/$dir/$src" "$m"; then bad "mutant $id DID NOT APPLY (the copy is byte-identical)"; return; fi
-  bash -n "$m" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated copy does not parse)"; return; }
-  if [ "$dir" = hl ]; then score_mutant "$id" "$src" "$m" "$MT/$dir/$src" strict; else score_mutant "$id" "$src" "$m" "$MT/$dir/$src"; fi
-}
-# libmutant <id> <script> <find> <replace>... -- mutate reconcile/lib.sh.
-# Every reconcile script sources "$SELF/lib.sh", so a lib.sh mutant is a WHOLE copy of the directory
-# whose lib.sh is mutated, and <script> is driven from inside that copy. The copy is asserted to
-# carry the mutation before any arm is read.
-# nostub <arm> <family> -- the knock-out for ONE forced arm: its stub function is replaced by a no-op (NOSTUB_ARM), the subject is the
-# pristine script, and the arm must FAIL on its own fired-assertion while its healthy twin stays green. This proves the arm cannot
-# pass on a stub that never fired.
-nostub() {
-  local a="$1" fam="$2" sc
-  famrun "$fam" || return 0
-  sc="$MT/scripts/$fam"; [ -f "$sc" ] || sc="$MT/reconcile/$fam"
-  NOSTUB_ARM="arm_$a"
-  score_mutant "NOSTUB-$a" "$fam" "$sc" "$sc"
-  NOSTUB_ARM=""
-}
-libmutant() {
-  local id="$1" scr="$2" d why
-  shift 2
-  famrun "$scr" || return 0
-  d="$MT/lib_$id"
-  cp -R "$MT/reconcile" "$d" || { bad "mutant $id DID NOT APPLY (could not copy reconcile/)"; return; }
-  if ! why="$(mkmut "$MT/reconcile/lib.sh" "$d/lib.sh" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
-  if cmp -s "$MT/reconcile/lib.sh" "$d/lib.sh"; then bad "mutant $id DID NOT APPLY (lib.sh is byte-identical)"; return; fi
-  bash -n "$d/lib.sh" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated lib.sh does not parse)"; return; }
-  score_mutant "$id" "$scr" "$d/$scr" "$MT/reconcile/$scr"
-}
 
+# THE NO-LIB DIRECTORY: a copy of reconcile/ with lib.sh removed, so `command -v memo_ls_tree` fails and each QF detector runs its own
+# `git ls-tree` fallback. The arm table's QF fallback cells read it and never write to it.
+QF_NL="$W/nolib"
+mkdir -p "$QF_NL" && cp -R "$RC_/." "$QF_NL/" && rm -f "$QF_NL/lib.sh" \
+  || { echo "FIXTURE BROKEN: could not build the no-lib.sh copy of reconcile/" >&2; exit 2; }
 echo "== healthy twins (same seed, no stub, the ordinary verdict) =="
 run_arm arm_ci_healthy  "$S_CI"  "validate-ci-gates reads 1 declared gate, 0 dormant, exit 0"
 run_arm arm_rx_healthy  "$S_RX"  "relabel previews the core-number collision, exit 1"
@@ -2267,7 +1847,6 @@ run_arm arm_ro_absent   "$S_RO"  "readopt-override: an anchor file absent at the
 run_arm arm_ud_healthy  "$S_UD"  "unregistered-drift reads HARD-CORE-DRIFT-ABSORBED"
 run_arm arm_mg_healthy  "$S_MG"  "migrate-artifact-paths plans the move, exit 0"
 run_arm arm_ac_healthy  "$S_AC"  "validate-ac-falsifiability reads 1 AC block, PASS"
-run_arm arm_dd_usage    "$S_DD"  "derivation-differential with no arguments refuses with its usage line, exit 2 (the copy parses and runs)"
 run_arm arm_le_healthy  "$S_LE"  "validate-layer-entries reports the missing receipt (E17), exit 1"
 run_arm arm_ld_healthy  "$S_LD"  "layer-drift reports OVERRIDE-SUPERSEDED with a MEASURED surplus of 3, exit 0"
 run_arm arm_pb_healthy  "$S_PB"  "validate-provenance-block --strays reports the stray, exit 1"
@@ -2397,7 +1976,7 @@ else
 fi
 
 if [ "$SELF_TREE" -ne 1 ]; then
-  skip "spelling arm and mutants -- they run only against this fixture's own tree, not $TREE"
+  skip "spelling arm -- it runs only against this fixture's own tree, not $TREE"
   echo
   if [ "$fails" -eq 0 ]; then echo "procsub-staged-refusal: PASS"; exit 0; fi
   echo "procsub-staged-refusal: $fails assertion(s) FAILED" >&2; exit 1
@@ -2637,14 +2216,6 @@ else
     b3_fail arm_fx_rx_apply   relabel-extension-checks.sh "rc 0 and the heading never labelled"
     b3_fail arm_fx_rlc        retired-layer-contract.sh "the 20 KB layer file's row lost at rc 0"
     b3_fail arm_fx_ws_closed  warn-shadowed-local-validators.sh "0 rows at rc 0"
-    # The emitter cell needs an emitter that CAN fail, and the tree's lib.sh emits a literal: this
-    # one base copy runs beside the HEREDOC lib.sh (HL, staged below), or the cell passes vacuously.
-    if [ "$HL_OK" -eq 1 ] && git -C "$OWN" show "${B3_PIN}:core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh" > "$HL/_b3_ws.sh"; then
-      if arm_fx_ws_emitter "$HL/_b3_ws.sh"; then bad "322ef42c differential: arm_fx_ws_emitter PASSED against the base warn-shadowed-local-validators.sh beside the heredoc lib.sh -- $ARM_WHY"
-      else ok "322ef42c differential: arm_fx_ws_emitter FAILS against the base warn-shadowed-local-validators.sh beside the heredoc lib.sh (awk died on an undefined function, 0 rows at rc 0) -- $ARM_WHY"; fi
-    else
-      bad "322ef42c differential: arm_fx_ws_emitter has no heredoc lib.sh to run beside"
-    fi
     b3_fail arm_fx_rt         retired-tokens.sh         "a FALSE z -> old-b row and the true one lost"
     b3_fail arm_fx_rls        retired-layer-contract.sh "the spellings heredoc failed to stage, 0 rows at rc 0"
     b3_fail arm_fx_ro         readopt-override.sh       "the id here-string failed to stage, no scan ran"
@@ -2705,7 +2276,7 @@ else
     rhb_fail arm_fx_adw adopt-extension-checks.sh "python never ran and the script exited 1, 'adoptable checks found'"
     rhb_fail arm_fx_rod readopt-override.sh     "the dossier lost its header and THE ONE QUESTION at exit 1"
     rhb_fail arm_fx_rom readopt-override.sh     "the override rewritten in place and cut short"
-    rhb_fail arm_rom_cat readopt-override.sh    "base names its merge file by bare mktemp, so the shim never fires and base rewrites in place at rc 0 -- no refusal; the pre-fix group itself is mutant RO-APPEND"
+    rhb_fail arm_rom_cat readopt-override.sh    "base names its merge file by bare mktemp, so the shim never fires and base rewrites in place at rc 0 -- no refusal"
     rhb_fail arm_sm_stage settings-merge.sh     "the merge staged in TMPDIR, so mv is copy-then-unlink across volumes, at mode 0600"
     for _rh in $RH_FILES; do
       if arm_r5 "$RHB/$_rh" && arm_lh "$RHB/$_rh"; then
@@ -2716,428 +2287,8 @@ else
 fi
 
 fi
-echo "== mutants (each restores a discarded status at one site) =="
-mutant CI-RETRO scripts validate-ci-gates.sh \
-  'find "${RETRO_DIR}" -type f -name '"'"'*.md'"'"' 2>/dev/null > "$CI_T/retro-walk" || walk_rc=$?' ':' \
-  'done < "$CI_T/retro-walk"' 'done < <(find "${RETRO_DIR}" -type f -name '"'"'*.md'"'"' 2>/dev/null)'
-mutant CI-SURFACE scripts validate-ci-gates.sh \
-  'find "$target" -type f 2>/dev/null > "$CI_T/surface-walk" || walk_rc=$?' ':' \
-  'done < "$CI_T/surface-walk"' 'done < <(find "$target" -type f 2>/dev/null)'
-mutant CI-SUBSHELL scripts validate-ci-gates.sh \
-  'surface_hits="$(code_hits "${WORKFLOW_DIR}" "$gate")" || exit 2' \
-  'surface_hits="$(code_hits "${WORKFLOW_DIR}" "$gate")" || surface_hits=0'
-mutant RX-WALK reconcile relabel-extension-checks.sh \
-  'cr_walk "$CONSUMER" "$EXT_REL" -name '"'"'*.md'"'"' -type f | sort > "$RX_T/ext-walk" || ext_walk_rc=$?' ':' \
-  'done < "$RX_T/ext-walk"' 'done < <(cr_walk "$CONSUMER" "$EXT_REL" -name '"'"'*.md'"'"' -type f | sort)'
-mutant RLP-WALK reconcile retired-layer-passage.sh \
-  'cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f -name '"'"'*.md'"'"' 2>/dev/null > "$RLP_T/walk-$dir" || _rlp_rc=$?' ':' \
-  'sort "$RLP_T/walk-$dir" > "$RLP_T/walk-$dir.sorted" || rlp_refuse "sorting the layer walk of $LAYERS/$dir" "$?"' ':' \
-  'done < "$RLP_T/walk-$dir.sorted"' 'done < <(cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f -name '"'"'*.md'"'"' 2>/dev/null | sort)'
-mutant RLC-WALK reconcile retired-layer-contract.sh \
-  'cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f \( -name '"'"'*.md'"'"' -o -name '"'"'*.json'"'"' \) 2>/dev/null > "$RLC_T/walk-$dir" || _rlc_rc=$?' ':' \
-  'sort "$RLC_T/walk-$dir" > "$RLC_T/walk-$dir.sorted" || rlc_refuse "sorting the layer walk of $LAYERS/$dir" "$?"' ':' \
-  'done < "$RLC_T/walk-$dir.sorted"' 'done < <(cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f \( -name '"'"'*.md'"'"' -o -name '"'"'*.json'"'"' \) 2>/dev/null | sort)'
-# The three below anchor on the rt_toks feeds as the here-string conversion left them: each reads
-# the blob rt_blob staged, and refuses on a failed read. The observable is unchanged.
-RT_FEED_B='rt_toks "${cp}@${BASE}" "$RT_T/toks-base" < "$RT_T/blob-base" || rt_refuse "reading the staged base blob of $cp" "$?"'
-RT_FEED_T='rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" < "$RT_T/blob-theirs" || rt_refuse "reading the staged theirs blob of $cp" "$?"'
-mutant RT-SUBTRACT reconcile retired-tokens.sh \
-  "  $RT_FEED_B"$'\n'"  $RT_FEED_T"$'\n  retired="$(comm -23 "$RT_T/toks-base" "$RT_T/toks-theirs")" || rt_refuse "the retired-token subtraction for $cp" "$?"' \
-  $'  retired="$(comm -23 <(printf \'%s\\n\' "$b" | toks) <(printf \'%s\\n\' "$t" | toks))"'
-mutant RT-PIPE reconcile retired-tokens.sh \
-  "$RT_FEED_B" 'printf '"'"'%s\n'"'"' "$b" | rt_toks "${cp}@${BASE}" "$RT_T/toks-base"'
-mutant RT-OURS reconcile retired-tokens.sh \
-  $'  rt_toks "$cons" "$RT_T/toks-ours" < "$RT_T/ours" || rt_refuse "reading $cons" "$?"\n  comm -12 "$RT_T/retired" "$RT_T/toks-ours" > "$RT_T/spoken" || rt_refuse "the consumer-token intersection for $cp" "$?"\n' '' \
-  '  done < "$RT_T/spoken"' $'  done < <(comm -12 <(printf \'%s\\n\' "$retired") <(toks < "$RT_T/ours"))'
-mutant RO-FROM reconcile readopt-override.sh \
-  $'  section_lines "$1" "$3" "$4-from" > "$RO_T/$4-from-lines" || return 3\n' '' \
-  '  done < "$RO_T/$4-from-lines"' '  done < <(section_lines "$1" "$3" "$4-from")'
-mutant RO-SUBSHELL reconcile readopt-override.sh \
-  '[ "$_ro_rc" -ne 3 ] || ro_refuse "the superseded-line scan' 'true || ro_refuse "the superseded-line scan'
-mutant RO-SECTION reconcile readopt-override.sh \
-  $'    128) : > "$RO_T/$3.raw" ;;\n    *) return 3 ;;' $'    *) : > "$RO_T/$3.raw" ;;'
-mutant UD-SITE reconcile unregistered-drift.sh \
-  $'  ud_trim_floor "$cons" "$t/ap-cons" || return 3\n  ud_trim_floor "$t/blob-base" "$t/ap-base" || return 3\n  comm -23 "$t/ap-cons" "$t/ap-base" > "$t/ap-only" || return 3\n  only="$(cat "$t/ap-only")"' \
-  $'  only="$(comm -23 \\\n    <(sed \'s/^[[:space:]]*//; s/[[:space:]]*$//\' "$cons" | grep -vE \'^.{0,24}$\' | sort -u) \\\n    <(git_show "${BASE}" "${cp}" | sed \'s/^[[:space:]]*//; s/[[:space:]]*$//\' | grep -vE \'^.{0,24}$\' | sort -u))"'
-mutant UD-SUBSHELL reconcile unregistered-drift.sh \
-  'if ! ap_out="$(absorbed_pct "$cp" "$cons")"; then' 'if ! ap_out="$(absorbed_pct "$cp" "$cons")" && false; then'
-# absorbed_pct reads both blobs through git_show a second time again (the base's shape, BL-422).
-mutant UD-MEMO reconcile unregistered-drift.sh \
-  '  ud_trim_floor "$t/blob-base" "$t/ap-base" || return 3' \
-  $'  git_show "${BASE}" "${cp}" > "$t/ap-base-blob" || return 3\n  ud_trim_floor "$t/ap-base-blob" "$t/ap-base" || return 3' \
-  $'sed \'s/^[[:space:]]*//; s/[[:space:]]*$//\' "$t/blob-theirs" | sort -u' \
-  $'git_show "${THEIRS}" "${cp}" > "$t/ap-theirs-blob" || return 3\n  sed \'s/^[[:space:]]*//; s/[[:space:]]*$//\' "$t/ap-theirs-blob" | sort -u'
-mutant MG-LS scripts migrate-artifact-paths.sh \
-  'git ls-files -z -- $(printf '"'"'%s '"'"' $SCAN_ROOTS) 2>/dev/null > "$TMP/tracked" || LS_RC=$?' ':' \
-  'done < "$TMP/tracked"' 'done < <(git ls-files -z -- $(printf '"'"'%s '"'"' $SCAN_ROOTS) 2>/dev/null)'
-mutant AC-SEGMENT scripts validate-ac-falsifiability.sh \
-  $'  _acf_rc=0\n  awk \'' \
-  $'  while IFS=\'|\' read -r ac_id start end; do\n    [ -n "$ac_id" ] && block_ids+=("$ac_id|$start|$end")\n  done < <(awk \'' \
-  $'  \' "$story" > "$ACF_T/ac-blocks" || _acf_rc=$?\n  [ "$_acf_rc" -eq 0 ] || acf_refuse "segmenting $story into AC blocks" "$_acf_rc"\n  while IFS=\'|\' read -r ac_id start end; do\n    [ -n "$ac_id" ] && block_ids+=("$ac_id|$start|$end")\n  done < "$ACF_T/ac-blocks"' \
-  $'  \' "$story")'
-mutant LD-WALK reconcile layer-drift.sh \
-  $'layer_files "$OVR_DIR" > "$LD_T/overrides" || _lw_rc=$?\n' '' \
-  'done < "$LD_T/overrides"' 'done < <(layer_files "$OVR_DIR")'
-mutant LD-SUP reconcile layer-drift.sh \
-  $'        printf \'%s\\n\' "$cs" > "$LD_T/sup-core-span" || return 3\n' '' \
-  'grep -Fxv -f "$LD_T/sup-core-span"' 'grep -Fxv -f <(printf '"'"'%s\n'"'"' "$cs")'
-mutant LD-SUBSHELL reconcile layer-drift.sh \
-  'sup_surplus="$(sup_measure "$sup_raw")" || ld_refuse' 'sup_surplus="$(sup_measure "$sup_raw")" || true || ld_refuse'
-mutant PB-WALK scripts validate-provenance-block.sh \
-  $'    _pb_rc=0\n    grep -rlI "${GREP_ARGS[@]}" -- "$STRAY_MARKER" "${STRAY_SCAN_PATHS[@]}" 2>/dev/null \\\n        > "$PB_T/candidates" || _pb_rc=$?' \
-  '    _pb_rc=0' \
-  '    done < "$PB_T/candidates"' \
-  '    done < <(grep -rlI "${GREP_ARGS[@]}" -- "$STRAY_MARKER" "${STRAY_SCAN_PATHS[@]}" 2>/dev/null)'
-mutant PB-EMPTY2 scripts validate-provenance-block.sh \
-  'if [ "$_pb_rc" -gt 2 ] || { [ "$_pb_rc" -eq 2 ] && [ ! -s "$PB_T/candidates" ]; }; then' \
-  'if [ "$_pb_rc" -gt 2 ]; then'
-mutant CV-SORT scripts validate-adversarial-convergence.sh \
-  $'sort -k1,1n "$AC_T/keyed" > "$AC_T/sorted" || _ac_rc=$?\n' '' \
-  'done < "$AC_T/sorted"' $'done < <(printf \'%s\\n\' "${KEYED[@]:-}" | sort -k1,1n)'
-le_mut() { # le_mut <id> <site> <base producer>
-  mutant "$1" scripts validate-layer-entries.sh \
-    "vle_layer_list $2 " ": $2 " \
-    "done < \"\$VLE_T/$2\"" "done < <($3)"
-}
-le_mut LE-CENSUS census-layers   'layer_files "$EXT_DIR"; layer_files "$OVR_DIR"'
-le_mut LE-OVERRIDES overrides       'layer_files "$OVR_DIR"'
-le_mut LE-LIVE live-extensions 'layer_files "$EXT_DIR"'
-le_mut LE-EXT extensions      'layer_files "$EXT_DIR"'
-le_mut LE-W9 w9-layers       '{ layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; }'
-le_mut LE-W11 w11-layers      '{ layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; }'
-
-echo "== mutants: a staged FUNCTION whose body is a pipeline (each restores the v0.650.0 status) =="
-# norm_lines returns `tr`'s status again: a dead sed reads as a normalised EMPTY file. Since sed's
-# output is STAGED (the iconv-gated case fold reads it twice), the mutation drops the staged sed's
-# own status read, which leaves `tr` folding an empty file at 0 -- the same observable.
-libmutant RLP-NORMLINES retired-layer-passage.sh \
-  $'          s/[.[:space:]]+$//\' >&3 || _rc=$?\n' $'          s/[.[:space:]]+$//\' >&3\n'
-# The deleted-line side read through a pipeline again, so its status is the LAST stage's.
-mutant RLP-REMOVED reconcile retired-layer-passage.sh \
-  'norm_lines < "$RLP_T/removed-raw" > "$RLP_T/removed-norm" || _rlp_rc=$?' \
-  'norm_lines < "$RLP_T/removed-raw" | cat > "$RLP_T/removed-norm" || _rlp_rc=$?'
-# The caller's locale reaches norm_lines' BSD sed again: a Latin-1 layer file is refused instead
-# of read. The C locale is scoped onto that sed in lib.sh, not exported by the passage script, so
-# the mutant is built there.
-libmutant RLP-LOCALE retired-layer-passage.sh \
-  $'  LC_ALL=C sed -E \'s/^[[:space:]]+//; s/[[:space:]]+$//\n' $'  sed -E \'s/^[[:space:]]+//; s/[[:space:]]+$//\n'
-# defined_rules is one pipeline ending in `grep -E '.'` again: a dead harvest presents as its 1.
-mutant LE-DEFRULES scripts validate-layer-entries.sh \
-  $'  local _raw _rc=0\n  _raw="$(grep -Eho "$RULE_RE" "$1" 2>/dev/null)" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_raw" ] || return 0\n  printf \'%s\\n\' "$_raw" \\\n' \
-  $'  grep -Eho "$RULE_RE" "$1" 2>/dev/null \\\n' \
-  $'    | sed \'/^$/d\' | sort -u\n}\n\nrule_title' $'    | grep -E \'.\' | sort -u\n}\n\nrule_title'
-# defined_anchors is one brace-group pipeline again: its status is bold_anchors_of_file's.
-mutant LE-DEFANCHORS scripts validate-layer-entries.sh \
-  $'  local _raw _ids="" _bold _rc=0\n  _raw="$(grep -Eho "$CHECK_HEAD_RE" "$1" 2>/dev/null)" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  if [ -n "$_raw" ]; then\n    _ids="$(printf \'%s\\n\' "$_raw" \\\n      | sed' \
-  $'  { grep -Eho "$CHECK_HEAD_RE" "$1" 2>/dev/null \\\n      | sed' \
-  $')$//\')" || return\n  fi\n  _bold="$(bold_anchors_of_file "$1")" || return\n  printf \'%s\\n%s\\n\' "$_ids" "$_bold" | sed \'/^$/d\' | sort -u\n' \
-  $')$//\'\n    bold_anchors_of_file "$1"\n  } | sort -u\n'
-# prov_tokens / line_tokens are grep pipelines again: a dead first grep presents as a later grep's 1.
-mutant LE-PROV scripts validate-layer-entries.sh \
-  $'  _t="$(tok_chain "$1" -oE \'\\[[^]]*\\]|\\([^)]*\\)\')" || return\n  [ -n "$_t" ] || return 0\n  _t="$(tok_chain "$_t" -oE \'[A-Za-z0-9]+(-[A-Za-z0-9]+)*\')" || return\n  [ -n "$_t" ] || return 0\n  tok_tail "$_t"\n' \
-  $'  printf \'%s\\n\' "$1" | grep -oE \'\\[[^]]*\\]|\\([^)]*\\)\' 2>/dev/null \\\n    | grep -oE \'[A-Za-z0-9]+(-[A-Za-z0-9]+)*\' 2>/dev/null \\\n    | grep -E \'[A-Z]\' | grep -E \'[0-9]\' | awk \'length($0) >= 3\' | sort -u\n'
-mutant LE-LINE scripts validate-layer-entries.sh \
-  $'line_tokens() {\n  local _t\n  _t="$(tok_chain "$1" -oE \'[A-Za-z0-9]+(-[A-Za-z0-9]+)*\')" || return\n  [ -n "$_t" ] || return 0\n  tok_tail "$_t"\n}' \
-  $'line_tokens() {\n  printf \'%s\\n\' "$1" | grep -oE \'[A-Za-z0-9]+(-[A-Za-z0-9]+)*\' 2>/dev/null \\\n    | grep -E \'[A-Z]\' | grep -E \'[0-9]\' | awk \'length($0) >= 3\' | sort -u\n}'
-# retired-tokens' toks is one pipeline again.
-mutant RT-TOKS reconcile retired-tokens.sh \
-  $'  _code="$(printf \'%s\\n\' "$_raw" | grep -vE \'^[[:space:]]*#\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_code" ] || return 0\n  _t="$(printf \'%s\\n\' "$_code" | grep -oE \'\\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_t" ] || return 0\n  printf \'%s\\n\' "$_t" | sort -u\n' \
-  $'  printf \'%s\\n\' "$_raw" | grep -vE \'^[[:space:]]*#\' \\\n  | grep -oE \'\\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+\' \\\n  | sort -u\n'
-# retired-tokens: the NUL strip removed, so the comment strip reads the staged blob raw again and BSD
-# grep answers `Binary file (standard input) matches`: the true nul.sh row is lost, and q.sh's NUL
-# at theirs alone reads its base tokens as retired.
-# Not `_raw="$(cat)"`: a `$( )` drops the NUL itself, and that mutant is the fix spelled again.
-RT_NUL_STRIP=$'  _raw="$(LC_ALL=C tr -d \'\\000\')" || return 2\n  [ -n "$_raw" ] || return 0\n'
-mutant RT-NUL reconcile retired-tokens.sh \
-  "$RT_NUL_STRIP" '' \
-  $'  _code="$(printf \'%s\\n\' "$_raw" | grep -vE' $'  _code="$(grep -vE'
-# The `grep -a` repair the tip adversary proposed: it recovers both rows above, and reads a NUL
-# before a comment `#` as a live line, so h.sh's commented token becomes a FALSE row.
-mutant RT-NUL-GREPA reconcile retired-tokens.sh \
-  "$RT_NUL_STRIP" '' \
-  $'  _code="$(printf \'%s\\n\' "$_raw" | grep -vE' $'  _code="$(grep -avE'
-# retired-tokens: the NUL strip's status dropped. Pinned to C the real `tr` never fails on the
-# Latin-1 blob, so only the FORCED strip failure sees this: theirs reads tokenless, FALSE keep rows.
-RT_TR_LINE=$'  _raw="$(LC_ALL=C tr -d \'\\000\')" || return 2\n'
-mutant RT-TR-STATUS reconcile retired-tokens.sh \
-  "$RT_TR_LINE" $'  _raw="$(LC_ALL=C tr -d \'\\000\')" || true\n'
-# retired-tokens: the NUL strip back in the caller's locale (b5e5b610's spelling). A UTF-8 caller's
-# `tr` refuses the Latin-1 theirs blob, so the detector refuses a file 322ef42c read correctly.
-mutant RT-TR-LOCALE reconcile retired-tokens.sh \
-  "$RT_TR_LINE" $'  _raw="$(tr -d \'\\000\')" || return 2\n'
-# retired-layer-token: BOTH layers -- code_toks pipes into toks, and toks ends in a grep. Reverting
-# code_toks alone leaves toks returning 0 on empty input, and pipefail then reports the strip's 2.
-mutant RLT-CODETOKS reconcile retired-layer-token.sh \
-  $'  local _w _t _rc=0\n  _w="$(tr -c \'A-Za-z0-9_-\' \'\\n\')" || return\n  _t="$(printf \'%s\\n\' "$_w" | grep -E \'^[A-Z][A-Z0-9_]{3,}(-[A-Z0-9_]+)*$\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_t" ] || return 0\n  printf \'%s\\n\' "$_t" | sort -u\n' \
-  $'  tr -c \'A-Za-z0-9_-\' \'\\n\' \\\n  | grep -E \'^[A-Z][A-Z0-9_]{3,}(-[A-Z0-9_]+)*$\' \\\n  | sort -u\n' \
-  $'  local _code _rc=0\n  _code="$(grep -vE \'^[[:space:]]*#\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_code" ] || return 0\n  printf \'%s\\n\' "$_code" | toks\n' \
-  $'  grep -vE \'^[[:space:]]*#\' | toks\n'
-# retired-layer-contract: each harvest's status is discarded again (v0.650.0's `|| true`).
-mutant RLC-SHAPES reconcile retired-layer-contract.sh \
-  $'  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_h" ] || return 0\n  for _l in $_h; do' \
-  $'  [ -n "$_h" ] || return 0\n  for _l in $_h; do'
-mutant RLC-TOKENS reconcile retired-layer-contract.sh \
-  $'  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h"\n}' \
-  $'  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h"\n}'
-# retired-tokens' blob reads, one mutant per layer of the fix, and one reverting EVERY layer to the
-# base `$(git show … || true)` spelling. Each layer is killed by its own arm.
-mutant RT-VERIFY reconcile retired-tokens.sh \
-  '[ "$_rt_rc" -eq 0 ] || rt_refuse "resolving' 'true || rt_refuse "resolving'
-mutant RT-LS reconcile retired-tokens.sh \
-  '[ "$rc" -eq 0 ] || rt_refuse "listing $2 at $1" "$rc"' 'true || rt_refuse "listing $2 at $1" "$rc"'
-mutant RT-SHOW reconcile retired-tokens.sh \
-  '[ "$rc" -eq 0 ] || rt_refuse "reading $2 at $1" "$rc"' 'true || rt_refuse "reading $2 at $1" "$rc"'
-mutant RT-BLOBS-ALL reconcile retired-tokens.sh \
-  '[ "$_rt_rc" -eq 0 ] || rt_refuse "resolving' 'true || rt_refuse "resolving' \
-  $'  rt_blob "$BASE" "$cp" "$RT_T/blob-base" || continue\n  rt_blob "$THEIRS" "$cp" "$RT_T/blob-theirs" || continue\n  b="$(cat "$RT_T/blob-base")" || rt_refuse "reading the staged base blob of $cp" "$?"\n  t="$(cat "$RT_T/blob-theirs")" || rt_refuse "reading the staged theirs blob of $cp" "$?"\n' \
-  $'  b="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null || true)"\n  t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null || true)"\n' \
-  "$RT_FEED_B" 'rt_toks "${cp}@${BASE}" "$RT_T/toks-base" <<<"$b"' \
-  "$RT_FEED_T" 'rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" <<<"$t"'
-# retired-layer-contract: the tree listing's status and the blob read's status, each dropped, and both.
-mutant RLC-TREE reconcile retired-layer-contract.sh \
-  '[ "$rc" -eq 0 ] || { RLC_WHY="the rulebook tree listing' 'true || { RLC_WHY="the rulebook tree listing'
-mutant RLC-SHOW reconcile retired-layer-contract.sh \
-  '[ "$rc" -eq 0 ] || { RLC_WHY="reading $f at $ref"' 'true || { RLC_WHY="reading $f at $ref"'
-mutant RLC-READS-ALL reconcile retired-layer-contract.sh \
-  '[ "$rc" -eq 0 ] || { RLC_WHY="the rulebook tree listing' 'true || { RLC_WHY="the rulebook tree listing' \
-  '[ "$rc" -eq 0 ] || { RLC_WHY="reading $f at $ref"' 'true || { RLC_WHY="reading $f at $ref"'
-# layer-drift: sup_measure's count reads no stage's status again.
-mutant LD-FXV reconcile layer-drift.sh \
-  $' | grep -c .\n              for _ps in "${PIPESTATUS[@]}"; do [ "$_ps" -le 1 ] || exit 3; done)" || return 3\n' \
-  $' | grep -c .)"\n'
-# section_of returns `rm`'s status again: a span_of that died reads as "no such section".
-libmutant RO-SECTIONOF readopt-override.sh \
-  $'  local _t _s="" _rc=0\n  _t="$(mktemp)" || return 1\n  cat > "$_t" || _rc=$?\n  if [ "$_rc" -eq 0 ]; then _s="$(span_of "$1" < "$_t")" || _rc=$?; fi\n  if [ "$_rc" -eq 0 ] && [ -n "$_s" ]; then LC_ALL=C sed -n "${_s%% *},${_s##* }p" "$_t" || _rc=$?; fi\n  rm -f "$_t"\n  return "$_rc"\n' \
-  $'  local _t _s\n  _t="$(mktemp)" || return 1\n  cat > "$_t"\n  _s="$(span_of "$1" < "$_t")"\n  [ -n "$_s" ] && LC_ALL=C sed -n "${_s%% *},${_s##* }p" "$_t"\n  rm -f "$_t"\n'
-
-echo "== mutants: one 322ef42c staging spelling per converted file (each restores a here-string or heredoc feed) =="
-# hard-blockers: the staged list and its refusal removed, both loops fed from the `<<EOF` heredoc again.
-mutant HB-HEREDOC reconcile hard-blockers.sh \
-  $'  printf \'%s\\n\' "$BLOCKERS" > "$HB_T/blockers" || _hb_rc=$?\n  [ "$_hb_rc" -eq 0 ] || hb_refuse_staging "the blocking list" "$_hb_rc"\n' '' \
-  $'      printf \'%-32s %s\\n\' "$st" "$path"\n    done < "$HB_T/blockers"' $'      printf \'%-32s %s\\n\' "$st" "$path"\n    done <<EOF\n$BLOCKERS\nEOF' \
-  $'      missing=1\n    fi\n  done < "$HB_T/blockers"' $'      missing=1\n    fi\n  done <<EOF\n$BLOCKERS\nEOF'
-# relabel: both anchor sets fed from `<<<` again, their staging and refusal removed.
-mutant RX-HERESTRING reconcile relabel-extension-checks.sh \
-  $'  _rx_rc=0\n  printf \'%s\\n\' "$core_nums" > "$RX_T/core-nums" || _rx_rc=$?\n' '' \
-  $'  printf \'%s\\n\' "$core_rules" > "$RX_T/core-rules" || _rx_rc=$?\n' '' \
-  '[ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core check-anchor set' 'true || { echo "relabel: REFUSED — the core check-anchor set' \
-  '[ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core rule-number set' 'true || { echo "relabel: REFUSED — the core rule-number set' \
-  '  done < "$RX_T/core-nums"' '  done <<< "$core_nums"' \
-  '  done < "$RX_T/core-rules"' '  done <<< "$core_rules"'
-# retired-layer-contract: the path arm's substring test is the `grep -qF` here-string again.
-mutant RLC-HERESTRING reconcile retired-layer-contract.sh \
-  '        case "$body" in *"$_sp"*) _hit=yes; break ;; esac' $'        grep -qF -- "$_sp" <<< "$body" || continue\n        _hit=yes; break'
-# warn-shadowed: the closed-basename loop is the `<<EOF` heredoc again, its staging removed.
-mutant WS-HEREDOC reconcile warn-shadowed-local-validators.sh \
-  $'printf \'%s\\n\' "$closed_basenames" > "$WS_T/closed" || _ws_rc=$?\n[ "$_ws_rc" -eq 0 ] || ws_refuse_staging "the closed-entry basename set" "$_ws_rc"\n' '' \
-  'done < "$WS_T/closed"' $'done <<EOF\n$closed_basenames\nEOF'
-# warn-shadowed: the lib emitter's capture and the closed-entry scan read no status again.
-mutant WS-EMITTER hl warn-shadowed-local-validators.sh \
-  'LEA="$(ledger_entry_awk)" || { echo' 'LEA="$(ledger_entry_awk)"; true || { echo' \
-  '[ -n "$LEA" ] || { echo' 'true || { echo' \
-  '[ "$_ws_rc" -eq 0 ] || { echo "warn-shadowed-local-validators: REFUSED — the closed-entry scan' 'true || { echo "warn-shadowed-local-validators: REFUSED — the closed-entry scan'
-# retired-tokens: the two rt_toks feeds are here-strings again, with no status read (322ef42c's spelling).
-mutant RT-HERESTRING reconcile retired-tokens.sh \
-  "$RT_FEED_B" 'rt_toks "${cp}@${BASE}" "$RT_T/toks-base" <<<"$b"' \
-  "$RT_FEED_T" 'rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" <<<"$t"'
-# retired-layer-contract's path arm, its own staging. RLC-STATUS keeps both writes and drops both
-# statuses; RLC-HEREDOC is the 322ef42c spelling in full -- the staging block removed and both loops
-# fed from heredocs again, the spellings one with a `$(spellings_of …)` body; RLC-CAT reads a layer
-# file `|| true` again.
-RLC_STAGE_RP='printf '"'"'%s\n'"'"' "$RETIRED_PATHS" > "$RLC_T/retired-paths" || rlc_refuse "staging the retired rulebook path set" "$?"'
-RLC_STAGE_SP='  printf '"'"'%s\n'"'"' "$_rlc_sps" > "$RLC_T/spellings-$_rlc_n" || rlc_refuse "staging the spellings of $_rp" "$?"'
-mutant RLC-STATUS reconcile retired-layer-contract.sh \
-  "$RLC_STAGE_RP" 'printf '"'"'%s\n'"'"' "$RETIRED_PATHS" > "$RLC_T/retired-paths" || true' \
-  "$RLC_STAGE_SP" '  printf '"'"'%s\n'"'"' "$_rlc_sps" > "$RLC_T/spellings-$_rlc_n" || true'
-# Not arm_fx_rlc: its oversize payload is the layer body, which is no longer staged, so under its
-# limit both heredocs land whole and it passes this mutant (measured).
-mutant RLC-HEREDOC reconcile retired-layer-contract.sh \
-  "$RLC_STAGE_RP"$'\n_rlc_n=0\nwhile IFS= read -r _rp; do\n  [ -n "$_rp" ] || continue\n  _rlc_n=$((_rlc_n + 1))\n  _rlc_sps="$(spellings_of "$_rp")"\n'"$RLC_STAGE_SP"$'\ndone < "$RLC_T/retired-paths"\n' '' \
-  $'    _rlc_i=0\n    while IFS= read -r _rp; do\n      [ -n "$_rp" ] || continue\n      _rlc_i=$((_rlc_i + 1))\n' \
-  $'    while IFS= read -r _rp; do\n      [ -n "$_rp" ] || continue\n' \
-  $'      done < "$RLC_T/spellings-$_rlc_i"\n' $'      done <<EOF\n$(spellings_of "$_rp")\nEOF\n' \
-  $'    done < "$RLC_T/retired-paths"\n' $'    done <<EOF\n$RETIRED_PATHS\nEOF\n'
-if [ "$(id -u)" -eq 0 ]; then
-  skip "mutant RLC-CAT: its killing cell needs a mode-000 file root can read (this is not a pass)"
-else
-  mutant RLC-CAT reconcile retired-layer-contract.sh \
-    'body="$(cr_read "$CONSUMER" "$f")" || _rlc_rc=$?' 'body="$(cr_read "$CONSUMER" "$f" 2>/dev/null || true)"'
-fi
-# relabel: the rule-set staging and its refusal moved AFTER the check pass, which may already have
-# moved the extension. The refusal line is unchanged, so only the extension's bytes can kill it.
-RX_STAGE_RULES=$'  printf \'%s\\n\' "$core_rules" > "$RX_T/core-rules" || _rx_rc=$?\n  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core rule-number set for ${ext} could not be staged (exit $_rx_rc); no verdict" >&2; exit 2; }\n'
-mutant RX-ORDER reconcile relabel-extension-checks.sh \
-  "$RX_STAGE_RULES" '' \
-  $'  done < "$RX_T/core-nums"\n' $'  done < "$RX_T/core-nums"\n'"$RX_STAGE_RULES"
-# readopt-override: the two scans' id staging keeps its write and loses its status.
-mutant RO-STATUS reconcile readopt-override.sh \
-  '  shadow_ids stale-ids || return 3' '  shadow_ids stale-ids || true' \
-  '  shadow_ids unadopted-ids || return 3' '  shadow_ids unadopted-ids || true'
-# readopt-override and derivation-differential: r5 holds their one converted here-string site each.
-mutant RO-HERESTRING reconcile readopt-override.sh \
-  'ro_has_line "$to_lines" "$line" && continue' 'grep -qxF -- "$line" <<<"$to_lines" && continue'
-echo "== mutants: lib.sh's emitters and the non-ASCII path readers =="
-# lmutant <id> <find> <replace>... -- mutate a COPY of reconcile/lib.sh and drive the lib-path arms against that file.
-lmutant() {
-  local id="$1" d why
-  shift 1
-  famrun lib.sh || return 0
-  d="$MT/lm_$id"
-  mkdir -p "$d"
-  if ! why="$(mkmut "$MT/reconcile/lib.sh" "$d/lib.sh" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
-  if cmp -s "$MT/reconcile/lib.sh" "$d/lib.sh"; then bad "mutant $id DID NOT APPLY (lib.sh is byte-identical)"; return; fi
-  bash -n "$d/lib.sh" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated lib.sh does not parse)"; return; }
-  score_mutant "$id" lib.sh "$d/lib.sh" "$MT/reconcile/lib.sh"
-}
-lmutant EM-NRM    "${EM_NRM[@]}"
-lmutant EM-LEDGER "${EM_LEDGER[@]}"
-lmutant EM-LABEL  "${EM_LABEL[@]}"
-# memo_diff_name_status reads names under the default core.quotePath again, on BOTH its git calls.
-libmutant QP-DIFF retired-tokens.sh \
-  $'{ git -C "$_dist" -c core.quotePath=false diff' $'{ git -C "$_dist" diff' \
-  $'    git -C "$_dist" -c core.quotePath=false diff' $'    git -C "$_dist" diff'
-# memo_ls_tree lists under the default core.quotePath again, one git call per mutant: each must be
-# killed by the cell that reaches that call and by no other (the healthy twin is the other cell).
-if [ "$QD_ROOT" -eq 1 ]; then
-  skip "mutants QP-MEMO-FILL / QP-MEMO-DIRECT -- the direct line cannot be forced as root (this is not a pass)"
-else
-  libmutant QP-MEMO-FILL retired-fixtures.sh \
-    $'    git -C "$_dist" -c core.quotePath=false ls-tree -r --name-only "$_ref" > "$_t"' $'    git -C "$_dist" ls-tree -r --name-only "$_ref" > "$_t"'
-  libmutant QP-MEMO-DIRECT retired-fixtures.sh \
-    $'{ git -C "$_dist" -c core.quotePath=false ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }' $'{ git -C "$_dist" ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }'
-fi
-# Each detector's FALLBACK listing loses its flag again, one mutant per file, built in a no-lib.sh copy
-# so the fallback is the path that runs. The healthy twin is that detector's plain row on the mutant;
-# the kill is the non-ASCII row. A control first: the unmutated no-lib copy passes every QF arm.
-if [ -e "$MT/nolib/lib.sh" ] || [ ! -f "$MT/nolib/preclassify.sh" ]; then bad "FIXTURE BROKEN: the no-lib.sh mutant directory could not be built"
-else
-  mutant QP-FB-RF nolib retired-fixtures.sh \
-    'rf_tree="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$THEIRS" -- core/fixtures' \
-    'rf_tree="$(git -C "$DIST" ls-tree -r --name-only "$THEIRS" -- core/fixtures'
-  mutant QP-FB-UD nolib unregistered-drift.sh \
-    '    git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$BASE" -- \' \
-    '    git -C "$DIST" ls-tree -r --name-only "$BASE" -- \'
-  mutant QP-FB-LT nolib retired-layer-token.sh \
-    'else tree="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$ref"' \
-    'else tree="$(git -C "$DIST" ls-tree -r --name-only "$ref"'
-  mutant QP-FB-LC nolib retired-layer-contract.sh \
-    'else git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$1" > "$2"' \
-    'else git -C "$DIST" ls-tree -r --name-only "$1" > "$2"'
-fi
-# preclassify's relocation listing reads names under the default core.quotePath again.
-mutant QP-LSTREE reconcile preclassify.sh \
-  'git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$THEIRS" core/scripts/' \
-  'git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/'
-# pcmutant <id> <find> <replace>... -- mutate reconcile/preclassify.sh inside a
-# WHOLE copy of the directory and drive self-update-gate.sh from it: the gate loads machinery_paths()
-# out of "$(dirname "$0")/preclassify.sh", so a sibling `_m_` file would never be read.
-pcmutant() {
-  local id="$1" d why
-  shift 1
-  famrun self-update-gate.sh || return 0
-  d="$MT/pc_$id"
-  cp -R "$MT/reconcile" "$d" || { bad "mutant $id DID NOT APPLY (could not copy reconcile/)"; return; }
-  if ! why="$(mkmut "$MT/reconcile/preclassify.sh" "$d/preclassify.sh" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
-  if cmp -s "$MT/reconcile/preclassify.sh" "$d/preclassify.sh"; then bad "mutant $id DID NOT APPLY (preclassify.sh is byte-identical)"; return; fi
-  bash -n "$d/preclassify.sh" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated preclassify.sh does not parse)"; return; }
-  score_mutant "$id" self-update-gate.sh "$d/self-update-gate.sh" "$MT/reconcile/self-update-gate.sh"
-}
-# machinery_paths() lists the machinery set under the default core.quotePath again, on BOTH refs --
-# the 9783bd6e state, where the rows were raw and the set they join against was C-quoted.
-pcmutant QP-MACH \
-  '_mb="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$BASE"' '_mb="$(git -C "$DIST" ls-files --with-tree="$BASE"' \
-  '_mt="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS"' '_mt="$(git -C "$DIST" ls-files --with-tree="$THEIRS"'
-mutant DD-HERESTRING reconcile derivation-differential.sh \
-  '  case "$NL$1" in *"${NL}skill_commit:"*) ;; *) return 0 ;; esac' $'  awk \'/^skill_commit:/ { f = 1 } END { exit !f }\' <<<"$1" || return 0'
-echo "== mutants: BL-360's R-H sites, each restoring the base's staged input at ONE site =="
-# register-drift: substitution_only's hunk feed back on a here-string.
-mutant RD-SECTION reconcile register-drift.sh \
-  $'  printf \'%s\\n\' "$d" | awk \'' $'  awk \'' \
-  $'print (bad ? "no" : "yes") }\n  \'\n}' $'print (bad ? "no" : "yes") }\n  \' <<<"$d"\n}'
-# register-drift: the heading loop fed by a here-string again.
-mutant RD-HEADINGS reconcile register-drift.sh \
-  $'rd_lines "$hl"\nfor line in ${RD_L[@]+"${RD_L[@]}"}; do' 'while IFS= read -r line; do' \
-  $'  changed="${changed}${changed:+$\'\\n\'}${h}"\ndone' $'  changed="${changed}${changed:+$\'\\n\'}${h}"\ndone <<<"$hl"'
-# register-drift: the conservation check's whole-file diff on a here-string again.
-mutant RD-WHOLEFILE reconcile register-drift.sh \
-  $'cons_check="$(printf \'%s\\n\' "$core_d" | awk -v' 'cons_check="$(awk -v' \
-  $'${EXT_TMP:+"$EXT_TMP"} -)"; crc=$?' $'${EXT_TMP:+"$EXT_TMP"} - <<<"$core_d")"; crc=$?'
-# register-drift: the override's write out of its subshell, so a failed printf leaks onto the refusal.
-mutant RD-LEAK reconcile register-drift.sh \
-  '( render ) > "$OUT_TMP" || refuse' 'render > "$OUT_TMP" || refuse'
-# settings-merge: the validation fed by a here-string again.
-mutant SM-VALIDATE reconcile settings-merge.sh \
-  $'printf \'%s\\n\' "$BASE_JSON" | jq -e . >/dev/null 2>&1 ||' 'jq -e . >/dev/null 2>&1 <<<"$BASE_JSON" ||'
-# adopt-extension-checks: the program handed to python on staged stdin again (the same single-quoted
-# word, so its escapes are untouched).
-mutant AD-STDIN reconcile adopt-extension-checks.sh \
-  "python3 -c 'import os, re, sys, glob" "python3 - <<<'import os, re, sys, glob"
-# readopt-override: THE ONE QUESTION's block fed through a staged here-string again.
-mutant RO-DOSSIER reconcile readopt-override.sh \
-  $'printf \'%s\\n\' \\\n  \'\' \\\n  \'--- THE ONE QUESTION' $'cat <<<"$(printf \'%s\\n\' \\\n  \'\' \\\n  \'--- THE ONE QUESTION' \
-  $'refused while the body is stale.\' \\\n  \'================================================================================\'' \
-  $'refused while the body is stale.\' \\\n  \'================================================================================\')"'
-# readopt-override: --merge writes the override IN PLACE again, truncating it before the write.
-mutant RO-INPLACE reconcile readopt-override.sh \
-  $'    cp -p "$OVR" "$staged" || ro_merge_refuse "stage a copy of the override"\n' '' \
-  $'    cat "$fmf" "$out" > "$staged" || ro_merge_refuse "write the merged override"\n    mv -f "$staged" "$OVR" || ro_merge_refuse "move the merged override into place"' \
-  $'    cat "$fmf" "$out" > "$OVR"'
-# readopt-override: the append group's failed cat unseen again (a { } group, cat's status discarded).
-mutant RO-APPEND reconcile readopt-override.sh \
-  $'      ( i=0; while [ "$i" -lt "$lead" ]; do echo || exit 1; i=$((i + 1)); done\n        cat "$merged" || exit 1\n        i=0; while [ "$i" -lt "$tail_n" ]; do echo || exit 1; i=$((i + 1)); done\n      ) >> "$out"' \
-  $'      { i=0; while [ "$i" -lt "$lead" ]; do echo; i=$((i + 1)); done\n        cat "$merged"\n        i=0; while [ "$i" -lt "$tail_n" ]; do echo; i=$((i + 1)); done\n      } >> "$out"'
-# settings-merge: the merge staged in TMPDIR again.
-mutant SM-TMPDIR reconcile settings-merge.sh \
-  'OUT="$(mktemp "${CONSUMER}.merge.XXXXXX" 2>/dev/null)" ||' 'OUT="$(mktemp 2>/dev/null)" ||'
-
-echo "== nostub mutants: each forced arm's stub replaced by a no-op must turn that arm red =="
-nostub ac_segment validate-ac-falsifiability.sh
-nostub ci_retro validate-ci-gates.sh
-nostub ci_surface validate-ci-gates.sh
-nostub cv_sort validate-adversarial-convergence.sh
-nostub la_anchors validate-layer-entries.sh
-nostub ld_fxv layer-drift.sh
-nostub ld_sup layer-drift.sh
-nostub ld_walk layer-drift.sh
-nostub le_all validate-layer-entries.sh
-nostub le_census validate-layer-entries.sh
-nostub le_ext validate-layer-entries.sh
-nostub le_live validate-layer-entries.sh
-nostub le_overrides validate-layer-entries.sh
-nostub le_w11 validate-layer-entries.sh
-nostub le_w9 validate-layer-entries.sh
-nostub lr_rules validate-layer-entries.sh
-nostub lw_trstatus retired-tokens.sh
-nostub mg_ls migrate-artifact-paths.sh
-nostub pb_walk127 validate-provenance-block.sh
-nostub pb_walk2 validate-provenance-block.sh
-nostub rg_base_show retired-layer-contract.sh
-nostub rg_theirs_ls retired-layer-contract.sh
-nostub rlc_shapes retired-layer-contract.sh
-nostub rlc_tokens retired-layer-contract.sh
-nostub rlp_norm retired-layer-passage.sh
-nostub rlp_removed retired-layer-passage.sh
-nostub rlt_cmt retired-layer-token.sh
-nostub ro_git readopt-override.sh
-nostub ro_sort readopt-override.sh
-nostub ro_span readopt-override.sh
-nostub rt_all retired-tokens.sh
-nostub rt_base retired-tokens.sh
-nostub rt_cmt_all retired-tokens.sh
-nostub rt_cmt_ours retired-tokens.sh
-nostub rt_ours retired-tokens.sh
-nostub rw_walk retired-layer-passage.sh
-nostub rx_walk relabel-extension-checks.sh
-nostub ta_ls retired-tokens.sh
-nostub ta_show retired-tokens.sh
-nostub ta_verify retired-tokens.sh
-nostub ud_absorbed unregistered-drift.sh
-nostub ud_memo2 unregistered-drift.sh
-nostub wt_line validate-layer-entries.sh
-nostub wt_prov validate-layer-entries.sh
 
 echo
-if [ "$MATRIX" -eq 1 ]; then ok "matrix: $MROWS cell(s) measured"; elif [ "$MROWS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (rows=0)"; else bad "a plain run executed $MROWS matrix-only cell(s)"; fi
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
 echo "$NAME: $fails assertion(s) FAILED" >&2
 exit 1

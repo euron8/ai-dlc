@@ -27,8 +27,8 @@
 #   V12 reason-short     — a reason over the density floor, under the length     (element 4)
 #   V5  honest           — the positive control. Satisfies all four.
 #
-# V5 is what makes this fixture able to fail. Without it, an element check mutated to
-# reject everything would still look correct: all four adversaries would be rejected and
+# V5 is what makes this fixture able to fail. Without it, an element check that
+# rejected everything would still look correct: all four adversaries would be rejected and
 # the fixture would report success.
 #
 # `scripts/ai-dlc/validate-stub-audit.sh` is the elements' one home and run.sh drives it,
@@ -120,7 +120,7 @@ printf '%s\n' \
 
 # ---- V6: a file reference with no DIGITS after the colon ---------------------
 # Element 3 is explicitly digit-only ("rejects `file:FIXME`"). Without this variant a
-# loosened `\S+:\S+` element 3 passes the whole fixture — a mutation run proved it.
+# loosened `\S+:\S+` element 3 passes the whole fixture.
 # The marker (`FIXME`) is deliberately the LAST line so the 5-line window still covers
 # the item reference and the deferral-reason, leaving element 3 the only failure.
 cat > "$TREE/src/v6_file_no_digits.py" <<'EOF'
@@ -133,7 +133,7 @@ EOF
 
 # ---- V7: cites a CLOSED backlog item -----------------------------------------
 # Element 2 accepts OPEN or IN SPRINT only. Without this variant an element 2 widened
-# to accept CLOSED passes the whole fixture — the same mutation run proved it. V1
+# to accept CLOSED passes the whole fixture. V1
 # covers an ABSENT item, which is a different hole in the same element.
 cat > "$TREE/src/v7_item_closed.py" <<'EOF'
 def retire_ack_shim():
@@ -331,7 +331,7 @@ EOF
 # shapes the reference consumer's gate hit that the comment gate does not reach: a comment
 # using `stub` to DENY a deferral, and a comment naming a TEST DOUBLE.
 #
-# BOTH CARVE-OUTS ARE ABSENCE-SHAPED (V23, V24), so each has a mutant at the end of run.sh.
+# BOTH CARVE-OUTS ARE ABSENCE-SHAPED (V23, V24).
 # What makes the six positive variants beside them load-bearing is that each is one property
 # short of an acquittal, and a different wrong fix acquits each one:
 #
@@ -443,9 +443,8 @@ EOF
 
 # V32: a negation THREE words from the token -- one past the bound. Strict adjacency allows
 # at most two intervening words; a real denial is written adjacent (`no inline stub`), and a
-# negation further back qualifies something else. MUST FIRE. Flips under a bound of five. The
-# first cut of this seed put the negation SIX words out, which no plausible widening reaches,
-# and the mutant survived for that reason: a boundary seed sits ONE past the boundary.
+# negation further back qualifies something else. MUST FIRE. A boundary seed sits ONE past
+# the boundary; a negation SIX words out is reached by no plausible widening.
 cat > "$TREE/src/v32_neg_three_words_out.py" <<'EOF'
 def render_v32():
     # no other module may touch stub
@@ -534,7 +533,7 @@ cp "$MANIFEST_SRC" "$TREE/.claude/skills/ai-dlc/core-manifest.md"
 # THE OWNERSHIP PAIRS CARRY A `TODO`, NOT A PHASE REFERENCE, AND THAT IS DELIBERATE.
 # They were seeded on a bare `Phase 3`, which coupled a question about OWNERSHIP to a
 # question about the marker VOCABULARY: narrowing the phase alternative moved V9 and V11
-# as well as its own arms, so one mutation failed three assertions and two of the three
+# as well as its own arms, so one change failed three assertions and two of the three
 # were reporting someone else's defect. An ownership arm must survive every legitimate
 # change to the marker set, so its payload is the least ambiguous marker in the set.
 #

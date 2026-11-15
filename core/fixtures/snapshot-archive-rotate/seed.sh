@@ -113,7 +113,7 @@ NOBOUND="$PROJ/_bmad-output/no-boundaries-history.md"
 # --- the absorb worlds: pristine templates, copied fresh for every drive ---------------------
 # Each is a whole consumer state on its own: a git repo holding `_bmad-output/`, with exactly
 # the files named and nothing else. run.sh never drives a template; it copies one first, so a
-# mutant or an earlier arm can never leave a file behind for the next reader.
+# an earlier arm can never leave a file behind for the next reader.
 #
 #   nohist  — stale snapshot, NO history file (a fresh consumer: the only path it ever takes)
 #   floor   — stale snapshot, history with exactly 10 cut points = the default --keep-entries,

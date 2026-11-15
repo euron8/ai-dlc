@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-24-adversarial-convergence-c -- shard 'c' of the check-24-adversarial-convergence fixture.
 #
-# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. Every case, mutant and control lives in the
+# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. Every case lives in the
 # sibling's run.sh; what this directory buys is a unit the pre-push pool can start on its own, because
 # that suite is POLE-BOUND and the unsharded fixture was its longest directory. The shard split, the units
 # each shard runs and the coverage join over them are declared in the sibling, and every shard runs that
@@ -10,7 +10,7 @@
 #
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree.
 #
-# Usage: run.sh [--matrix]   (--matrix is forwarded: the mutant-matrix measurement)
+# Usage: run.sh
 # Exit:  0 = every unit dealt to this shard passes, 1 = one does not, 2 = fixture broken.
 set -uo pipefail
 

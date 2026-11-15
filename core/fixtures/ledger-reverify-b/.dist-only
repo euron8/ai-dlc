@@ -1,0 +1,3 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Shard b of ledger-reverify runs units sh_base_control, sh_missing_subject, midline_receipt, consumer_root, fenced_entries, bootstrap_window, caller_error, short_id and inproc_seam: the located engine over synthetic mktemp ledgers and copies of its directory, with no B2_ISDIST branch and no in-place receipt. A consumer runs the shipped shard a, which locates the engine in either layout, renders the baseline and holds every unit that branches on the layout or runs a receipt over the installed reconcile directory.

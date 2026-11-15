@@ -110,6 +110,25 @@ PG_EOF
 }
 pregate_gate "$PUSH_LINES" || exit 1
 # PREGATE_GATE_END
+# GATE_HELD_BEGIN
+# A RUNNING PUSH GATE IS VISIBLE TO A SEEDER. A push that delivers a tree, at depth 0, writes
+# `<git common dir>/ai-dlc-gate-held.<pid>` ("<pid> <ps lstart>"); an EXIT trap removes it until the suite step replaces that
+# trap, after which the file outlives the hook and is dead by its pid. scripts/gate-wait.sh, which
+# scripts/seed-verdict-store.sh and scripts/census-consumer-layout.sh source, waits while a marker's pid is alive with
+# that start time. A stale marker (dead pid, or a reused one) is ignored and deleted by the waiter, so it never wedges.
+# A new gate deletes the dead ones it finds.
+if [ -n "$PUSH_LINES" ] && [ "${PREPUSH_POOL_DEPTH:-0}" = 0 ]; then
+  gate_held_d="$(git rev-parse --git-common-dir 2>/dev/null)" || gate_held_d=""
+  case "$gate_held_d" in /*) ;; *) gate_held_d="$PWD/$gate_held_d" ;; esac
+  if [ -d "$gate_held_d" ]; then
+    for gate_held_f in "$gate_held_d"/ai-dlc-gate-held.*; do
+      [ -f "$gate_held_f" ] && ! kill -0 "${gate_held_f##*.}" 2>/dev/null && rm -f -- "$gate_held_f"
+    done
+    gate_held_f="$gate_held_d/ai-dlc-gate-held.$$"
+    printf '%s %s\n' "$$" "$(ps -o lstart= -p "$$" 2>/dev/null)" > "$gate_held_f" 2>/dev/null && trap 'rm -f -- "$gate_held_f"' EXIT
+  fi
+fi
+# GATE_HELD_END
 
 # 0. A GREEN GATE IS NOT A LANDED PUSH, and the cause is a dotfile, not this tree. `git push`
 #    opens the SSH connection BEFORE this hook runs; the suite below then idles it for minutes,
@@ -199,558 +218,151 @@ RED_STEPS=""
 # AI_DLC_PRESUITE_SKIP=1 skips every check before the fixture suite: for a re-push of a tree
 # whose checks already passed. The suite and its judges still run. The operator's switch.
 #
-# PRE-SUITE STEP KEYS: A STEP RUNS ONLY WHEN SOMETHING IT READ MOVED SINCE ITS LAST PASS. Each
-# pre-suite step (every `step` before PRESUITE_DONE=1) is keyed the way a fixture is, in a record
-# grammar of its own (`#format k3`, `#state ok`, `#tools canonical`, `#cmd <sha256>`, then the
-# row `@present\t<sha256>`, then `<path>\t<sha256>`, `<dir>/\t#listing:<sha256>`,
-# `<tool path>\t<sha256>`), records under `<git common dir>/ai-dlc-presuite-keys/`, named
-# `<step slug>.<first 16 hex of the present key>.key`, and skipped on a recorded pass when every
-# key still holds. The filename hash is advisory; the `@present` row is what the check compares. A
-# k1 record (`<step slug>.key`, written by an older hook in the same common dir) is never read,
-# and an older hook refuses a k3 record as malformed. A k2 record is refused here as malformed too, so its step
-# re-runs and records k3: k2 records were written before the SIGPIPE span (BL-999), some by hand-run prefixes under
-# the default disposition git never runs a hook with, and a pass recorded under that disposition is not trusted. A skipped step prints `skipped on a recorded pass` and then PASS, the way
-# the suite's content-key skip prints SKIPPED and then PASS, so the verdict count per step is
-# unchanged; one `pre-suite keys:` line at PRESUITE_DONE names every step skipped.
-#
-# THE KEY SET IS TRACED ON EVERY RECORDED RUN, NEVER WRITTEN BY HAND. A step that runs is traced
-# by two instruments with disjoint blind spots, and its record is the union:
-#   * FILES: every path under the work tree (outside `.git` and the git-ignored paths) is forced to an atime of 2000 before
-#     the step, and every path whose atime moved during it was READ (the `-newerat` technique of
-#     derive-fixture-readsets.sh; APFS is relatime-like, so the forced epoch is what makes a second
-#     read visible). A read file is keyed on its `.now` hash from the hook's own READSET_UNIVERSE
-#     span (readset_manifest, with the content key's excluded tops put BACK: docs/, VERSION,
-#     CHANGELOG.md and CLAUDE.md are read by these steps and must move their keys); a read file
-#     outside that universe (git-ignored) is hashed directly; a read directory is keyed on its
-#     listing (readset_listings), and so is every ANCESTOR of every read path, so a file created
-#     beside one the step read moves the key. Tools are keyed through readset_tools' `.ftools` for
-#     every read `.sh` file and every word of the step's argv.
-#   * GIT: the step runs with GIT_TRACE2_EVENT pointed at a directory, and every git process whose
-#     repository is THIS work tree is replayed after the step with GIT_OPTIONAL_LOCKS=0; the key is
-#     the sha256 of its exit code and stdout. So `git show HEAD:x` keys the blob, `rev-list
-#     origin/main..HEAD` keys the range, `ls-files` keys the tracked set. A `worktree add <dir>
-#     <rev>` is keyed as `rev-parse --verify <rev>^{tree}`; object construction on a private index
-#     (hash-object, commit-tree, write-tree, and read-tree/update-index under GIT_INDEX_FILE) and
-#     worktree housekeeping are not keyed. ANY OTHER git subcommand against this repository, or a
-#     git command elsewhere that names it, makes the step UNRECORDABLE: it runs on every push and
-#     says why.
-#   * ABSENT PATHS, BY THE PRESENT KEY: an existence test or a stat of a path that does not exist
-#     moves no atime and runs no git, so a step that asks `[ -f x ]` of nothing would skip on a stale
-#     pass once x appears. No tracer is used for these: the kernel's sandbox reports reach `log stream`
-#     incompletely and with no reliable drop signal. Instead every record carries the PRESENT KEY, the
-#     sha256 of the raw NUL-separated walk `/usr/bin/find . \( <PK_PRUNE> \) -prune -o -print0` taken in
-#     pk_present from pk_init (git-ignored paths pruned by pk_ign, untracked unignored paths kept, never the universe
-#     listing; a tree with no ignored path keys exactly as the unpruned walk did), one C-sorted
-#     line per path, `<path>\t<f|d|l|o><octal permission bits>\t<symlink target or empty>` (lstat; the mode rides in the kind field so the row keeps three fields and the escaping pairs stay injective; the mode is keyed, size and mtime deliberately are not, and neither is the owner), with
-#     backslash, TAB and newline escaped in the path and the target so no name spells another tree's
-#     lines. A walk that find could not finish (non-zero exit, or anything on its stderr, such as an
-#     unsearchable directory) turns the keys off rather than hash a partial set. Creating, deleting or
-#     renaming any path, a file becoming a directory, a symlink retarget, or a chmod moves it, and a record
-#     whose `@present` row differs is not used. pk_init writes a START MARK immediately before that
-#     walk, and after every traced step any path under the work tree newer than the mark makes the
-#     run unrecordable (the NEVER RECORDED clause below), so a path created after the walk -- still
-#     present, or created and removed again before the step ended -- moves its parent directory's
-#     mtime past the mark and leaves no record keyed on the tree without it. When the push recorded
-#     anything, pk_finish walks again with the same function and, if the key moved, deletes every
-#     record this push wrote, for a path created by a writer that restored its parent's mtime and
-#     still present when the pre-suite steps end. A content-only edit does not move the present key;
-#     the read keys above carry content. Residual, unkeyed: an mtime test on any present file
-#     (a read row keys content, sha256, only), a size test on a present file the step never read, and an
-#     owner test (-O/-G); a mode test (-x/-w/-r) is keyed only through the permission BITS the
-#     present key carries -- a macOS ACL or file flag (chflags uchg) can change -r/-w without moving
-#     the mode and is not keyed.
-#     Residual false skip: a path created and removed during the pre-suite steps by a writer that restores its parent directory's mtime both times is seen by neither check; see BL-919.
-#   * COMMAND: the step's argv and the body of the wrapper function it calls, so a ceiling edited in
-#     this hook moves that step's key.
-# NEVER RECORDED: a step that failed or was interrupted; a step at whose end any path under the
-# work tree has an mtime newer than pk_init's start mark (and then no later step on this push is
-# skipped or recorded either, because the manifest every decision reads is the pre-run one); and
-# any run whose controls failed -- the atime canary (a read file moves, an unread one stays) or the
-# trace sentinel (a git call writes a trace file); and every record of a push whose present key,
-# walked again at pk_finish, differs from pk_init's (deleted there). The former clause about sandbox-exec or `log stream` refusing is now vacuous:
-# neither is used, so a push from inside a sandbox records like any other. Without python3, or when
-# the tree cannot be hashed, nothing is skipped and the hook says so. AI_DLC_FIXTURE_NO_SKIP=1 runs
-# every step (and still records). A successful record deletes the step's k1 `<slug>.key` and its
-# `.key.absent` sidecar and keeps the newest 4 `<slug>.<hash>.key`; a red, unrecordable or
-# tree-moving run deletes only the record at its own present key.
-PK_ON=""; PK_TR=""; PK_DIRTY=0; PK_NSKIP=0; PK_NSTEP=0; PK_SKIPPED=""; PK_PH=""
-pk_off() { PK_ON=0; printf '   ..    pre-suite keys OFF: %s -- every step runs\n' "$1"; return 1; }
-pk_init() {
-  [ -z "$PK_ON" ] || { [ "$PK_ON" = 1 ]; return; }
-  local gcd
-  command -v python3 >/dev/null 2>&1 || { pk_off "python3 not found"; return 1; }
-  gcd="$(git rev-parse --git-common-dir 2>/dev/null)" && gcd="$(cd "$gcd" 2>/dev/null && pwd -P)" && [ -n "$gcd" ] \
-    || { pk_off "the git common dir did not resolve"; return 1; }
-  PK_DIR="$gcd/ai-dlc-presuite-keys"
-  mkdir -p "$PK_DIR" 2>/dev/null || { pk_off "cannot create $PK_DIR"; return 1; }
-  PK_TOP="$(pwd -P)"
-  PK_W="$(mktemp -d "${TMPDIR:-/tmp}/presuite-keys.XXXXXX")" && PK_W="$(cd "$PK_W" && pwd -P)" \
-    || { pk_off "no scratch dir"; return 1; }
-  pk_py > "$PK_W/pk.py"
-  # THE HOOK'S OWN SPANS, SOURCED OUT OF THIS FILE as hermetic-run.sh sources them, so there is one universe filter,
-  # one listing grammar and one tool resolver. The content key's excluded tops are put back by overriding the one
-  # function that drops them, inside this subshell only.
-  # A PREFIX of this hook run alone (scripts/pregate-self-check.sh cuts it at the fixture suite) carries neither span,
-  # so the work tree's own hook is read instead.
-  PK_SELF="$0"
-  { grep -q '^# READSET_UNIVERSE_END$' "$PK_SELF" && grep -q '^readset_tools() {' "$PK_SELF"; } 2>/dev/null || PK_SELF=.githooks/pre-push
-  { grep -q '^# READSET_UNIVERSE_END$' "$PK_SELF" && grep -q '^readset_tools() {' "$PK_SELF"; } 2>/dev/null \
-    || { pk_off "neither this hook nor .githooks/pre-push carries the READSET_UNIVERSE span and readset_tools"; return 1; }
-  sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$PK_SELF" > "$PK_W/universe.sh"
-  { sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$PK_SELF"
-    awk '/^readset_tools\(\) \{/ { on = 1 } on { print } on && /^\}$/ { exit }' "$PK_SELF"; } > "$PK_W/tools.sh"
-  ( READSET_MAP=/dev/null; READSET_LOCAL=/dev/null
-    . "$PK_W/universe.sh" && . "$PK_W/tools.sh" || exit 1
+# PRESUITE_UNITS_BEGIN
+# PRE-SUITE STEPS ARE UNITS OF THE FIXTURE MECHANISM. A `step` before PRESUITE_DONE is QUEUED, never run where it is
+# written; ps_flush (called once, at PRESUITE_DONE) decides every queued step from ONE key pass and runs the steps that
+# must run CONCURRENTLY, then prints each step's title, output, verdict and elapsed seconds in declaration order, so a
+# gate log reads as a serial one. The key pass is the fixture mechanism's own: a step that declares its inputs in
+# scripts/presuite/<slug>/inputs.decl (the inputs.decl grammar, directories allowed) is keyed by readset_manifest,
+# readset_declared and readset_keys with FXROOT=scripts/presuite/, exactly as cl_select keys the consumer layout, and
+# its pass is a record under <verdict store base>/presuite-keys/<root commit>, published the moment the step passes. A
+# step with no declaration has no key and runs on every push. A step that reads git state (HEAD, origin/main, the push
+# refs, ls-files, log) declares nothing: a declared file cannot express it. Nor does one that reads a git-ignored path
+# (agent definitions: .claude/settings.json) or walks the whole tree (stray party-mode: a new top-level file).
+# `slug` is the title lower-cased with every run of non-alphanumerics a single `-`, cut at 80.
+# AI_DLC_PRESUITE_SKIP=1 skips every step before the suite except one queued with PS_ALWAYS=1.
+# AI_DLC_FIXTURE_NO_SKIP=1 runs every step. The width is FIXTURE_JOBS (two in a nested pool).
+PS_N=0; PS_W=""; PS_ALWAYS=0
+ps_slug() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//' | cut -c1-80; }
+ps_enqueue() { # <title> <cmd...>
+  local n
+  if [ -z "$PS_W" ]; then PS_W="$(mktemp -d "${TMPDIR:-/tmp}/presuite.XXXXXX")" || PS_W=""; fi
+  if [ -z "$PS_W" ]; then
+    printf '\n── %s\n' "$1"; shift
+    if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+    return 0
+  fi
+  PS_N=$((PS_N + 1)); n=$PS_N
+  printf '%s' "$1" > "$PS_W/$n.title"; printf '%s\n' "$PS_ALWAYS" > "$PS_W/$n.always"
+  shift; printf '%s\0' "$@" > "$PS_W/$n.argv"
+}
+ps_run() { # <n>: one queued step in a forked subshell (a fork, never a new bash start): output, verdict and seconds into $PS_W
+  local n="$1" s="$SECONDS" a
+  set --; while IFS= read -r -d '' a; do set -- "$@" "$a"; done < "$PS_W/$n.argv"
+  ( "$@" ) > "$PS_W/$n.out" 2>&1 < /dev/null 7>&-
+  echo $? > "$PS_W/$n.rc"
+  echo $((SECONDS - s)) > "$PS_W/$n.sec"
+}
+ps_select() { # decides every keyed step in the runlist from the fixture mechanism's own key pass; a skip leaves `<n>.keyskip`
+  local c="$PS_W/k" n slug base pr kd keyed=0
+  PS_KD=""
+  mkdir -p "$c" || return 0
+  : > "$c/.list"; : > "$c/.mapped.all"; : > "$c/.kdec"
+  for n in $(cat "$PS_W/runlist"); do
+    slug="$(ps_slug "$(cat "$PS_W/$n.title")")"; printf '%s' "$slug" > "$PS_W/$n.slug"
+    [ -f "scripts/presuite/$slug/inputs.decl" ] || continue
+    printf 'scripts/presuite/%s/\n' "$slug" >> "$c/.list"; printf '%s\n' "$slug" >> "$c/.mapped.all"; keyed=1
+  done
+  [ "$keyed" = 1 ] || return 0
+  base="${AI_DLC_VERDICT_STORE:-${HOME:-}/.cache/ai-dlc/verdicts}"
+  case "${base##*/}" in counted-????????????) base="${base%/*}" ;; esac
+  case "$base" in /*) ;; *) base="$PWD/$base" ;; esac
+  pr="$(AI_DLC_VERDICT_STORE="$base" readset_vs_store "$PWD")"
+  if [ -n "$pr" ]; then kd="$base/presuite-keys/${pr##*/}"; else kd="$GITDIR/ai-dlc-presuite-unit-keys"; case "$kd" in /*) ;; *) kd="$PWD/$kd" ;; esac; fi
+  PS_KD="$kd"
+  ( KEYS_DIR="$kd"; FXROOT="scripts/presuite/"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; VERIFIED_RECORD=/dev/null
     readset_drop_excluded() { cat; }
-    mkdir -p "$PK_W/u" && readset_manifest "$PK_W/u" || exit 1
-    [ -s "$PK_W/u/.now" ] || { cat "$PK_W/u/.now.why" 2>/dev/null; exit 1; }
-    # readset_tools' exit is its last pipeline's, which the fixture path ignores too; its files are the answer.
-    cut -f1 "$PK_W/u/.now" > "$PK_W/u/.is" && readset_listings "$PK_W/u/.is" "$PK_W/u/.ls.now" || exit 1
-    readset_tools "$PK_W/u"
-    [ -s "$PK_W/u/.ls.now" ] && [ -s "$PK_W/u/.pathcmds" ] && [ -f "$PK_W/u/.ftools" ] && [ -f "$PK_W/u/.tools" ] \
-      || { echo "the listing or tool tables came out empty"; exit 1; }
-  ) > "$PK_W/init.log" 2>&1 || { pk_off "could not hash the working tree ($(head -1 "$PK_W/init.log"))"; return 1; }
-  # THE PRESENT KEY: every path under the work tree when the push began, hashed with its kind and symlink target.
-  # Walked HERE, before any atime reset, so the walk is never read as a step's readdir. The answer is validated
-  # by shape, never by the pipeline's status.
-  # THE START MARK is written immediately BEFORE the walk, with a plain redirect (nanosecond mtime; never `touch -t` or
-  # `-r` from a coarser source): every later mtime check compares against it, so a path created or removed anywhere
-  # under the tree after the walk -- even created and removed again in the same second -- moves its parent's mtime
-  # past this mark.
-  # PK_PRUNE is set HERE, in this shell, for the reset, scan and mtime walks; pk_present lists the ignored paths again
-  # inside its own subshell, so pk_finish's re-walk prunes what is ignored at the end.
-  pk_ign || { pk_off "git ls-files could not list the ignored paths"; return 1; }
-  : > "$PK_W/start" || { pk_off "no start mark"; return 1; }
-  PK_PH="$(pk_present)" || { pk_off "could not hash the present set of the work tree ($(head -1 "$PK_W/walk.err" 2>/dev/null))"; return 1; }
-  PK_ON=1
-  [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = 1 ] && printf '   ..    pre-suite keys: skip OFF (AI_DLC_FIXTURE_NO_SKIP=1) -- every step runs and is recorded on a pass\n'
-  return 0
+    readset_manifest "$c"
+    [ -s "$c/.now" ] || exit 1
+    : > "$c/.local.valid"
+    readset_keys "$c/.list" "$c" ) > "$c/.log" 2>&1 || { : > "$c/.kdec"; printf '   ..    pre-suite keys: the step keys could not be built (%s) -- every step runs\n' "$(sed -n 1p "$c/.log")"; }
+  [ "${AI_DLC_FIXTURE_NO_SKIP:-}" != 1 ] || return 0
+  for n in $(cat "$PS_W/runlist"); do
+    awk -F'\t' -v s="$(cat "$PS_W/$n.slug")" '$1 == s && $2 == "skip" { f = 1 } END { exit f ? 0 : 1 }' "$c/.kdec" && : > "$PS_W/$n.keyskip"
+  done
 }
-# GIT-IGNORED PATHS ARE NO STEP'S INPUT. pk_ign sets PK_PRUNE to the find operands that prune `.git` and every path
-# `git ls-files -o -i --exclude-standard --directory` lists (an ignored directory once, never descended; a tracked
-# path is never listed), so the present walk, the atime reset, the atime scan and the mtime check all skip them and a
-# worktree added under an ignored directory moves no key. Each -path operand has its fnmatch characters escaped.
-# DECLARED IGNORED INPUTS stay walked and keyed: `.claude/settings.json` and `.claude/agents`, which the agent
-# definitions step tests and reads.
-# A `.claude` git lists WHOLE (no tracked file beneath it) is walked, and each of its children but those two is pruned.
-pk_ign() {
-  local e c
-  git ls-files -z -o -i --exclude-standard --directory > "$PK_W/ign" 2> /dev/null || return 1
-  PK_PRUNE=(-path ./.git)
-  while IFS= read -r -d '' e; do
-    e="${e%/}"; [ -n "$e" ] || continue
-    case "$e" in
-      .claude/settings.json|.claude/agents) continue ;;
-      .claude)
-        for c in .claude/* .claude/.[!.]* .claude/..?*; do
-          { [ -e "$c" ] || [ -L "$c" ]; } || continue
-          case "$c" in .claude/settings.json|.claude/agents) ;; *) pk_prune_add "$c" ;; esac
-        done
-        continue ;;
-    esac
-    pk_prune_add "$e"
-  done < "$PK_W/ign"
+ps_stop() { # <exit status>: an interrupted flush stops the step forks it started, by their recorded pids
+  local p
+  trap '' INT TERM HUP
+  for p in $PS_PIDS; do kill -TERM "$p" 2>/dev/null; done
+  wait $PS_PIDS
+  case "$PS_W" in */presuite.*) rm -rf -- "$PS_W" ;; esac
+  exit "$1"
 }
-pk_prune_add() { # <path relative to the top>: one escaped -path operand appended to PK_PRUNE
-  local e="$1"
-  e="${e//\\/\\\\}"; e="${e//\*/\\*}"; e="${e//\?/\\?}"; e="${e//\[/\\[}"; e="${e//\]/\\]}"
-  PK_PRUNE=("${PK_PRUNE[@]}" -o -path "./$e")
-}
-pk_present() { # prints the 64-hex present key; non-zero when the walk was partial or could not be hashed
-  # find's status and its stderr are both read: a dir it cannot search yields a PARTIAL walk that hashes the same on
-  # every push. The walk goes to a file first, so find's own exit is captured with no pipeline.
-  local rc ph
-  pk_ign || { printf 'git ls-files could not list the ignored paths\n' > "$PK_W/walk.err"; return 1; }
-  /usr/bin/find . \( "${PK_PRUNE[@]}" \) -prune -o -print0 > "$PK_W/walk" 2> "$PK_W/walk.err"; rc=$?
-  [ "$rc" = 0 ] || { [ -s "$PK_W/walk.err" ] || printf 'find exited %s\n' "$rc" > "$PK_W/walk.err"; return 1; }
-  [ -s "$PK_W/walk.err" ] && return 1
-  ph="$(python3 -I "$PK_W/pk.py" present "$PK_TOP" < "$PK_W/walk" 2>> "$PK_W/walk.err")" || return 1
-  case "$ph" in *[!0-9a-f]*|"") return 1 ;; esac
-  [ "${#ph}" = 64 ] || return 1
-  printf '%s\n' "$ph"
-}
-# EVERY WALK OF THE TREE IS A READDIR, AND A READDIR MOVES A DIRECTORY'S ATIME. So the reset runs immediately before
-# each traced step and nothing walks the tree between it and the step; after the step the atime scan walks FIRST
-# (find tests an entry before it descends into it), and only then the mtime check. A verification walk after the
-# reset would itself mark every directory read.
-pk_reset_all() { # force every work-tree atime to the epoch
-  /usr/bin/find . \( "${PK_PRUNE[@]}" \) -prune -o -exec touch -a -h -t 200001010000 {} + 2>/dev/null
-}
-pk_trace_init() { # the two controls, once per push; true when a traced run can be recorded
-  [ -z "$PK_TR" ] || { [ "$PK_TR" = 1 ]; return; }
-  PK_TR=0
-  touch -t 200001010001 "$PK_W/mark" || return 1
-  # THE CANARY DIRECTORY IS THIS PUSH'S OWN (`.probe.<pid>`), removed after the check: a shared one let a
-  # concurrent push's `touch -a` fail this push's canary.
-  local pd="$PK_DIR/.probe.$$" cn=0
-  mkdir -p "$pd" && printf 'r\n' > "$pd/read" && printf 'u\n' > "$pd/unread" \
-    && touch -a -t 200001010000 "$pd/read" "$pd/unread" && cat "$pd/read" > /dev/null \
-    && [ -n "$(/usr/bin/find "$pd/read" -neweram "$PK_W/mark" 2>/dev/null)" ] \
-    && [ -z "$(/usr/bin/find "$pd/unread" -neweram "$PK_W/mark" 2>/dev/null)" ] && cn=1
-  rm -rf "$pd"
-  [ "$cn" = 1 ] \
-    || { printf '   ..    pre-suite keys: the atime canary failed (a read did not move atime, or an unread file moved) -- nothing is recorded on this push\n'; return 1; }
-  mkdir -p "$PK_W/t2.probe" && GIT_TRACE2_EVENT="$PK_W/t2.probe" git rev-parse --git-dir > /dev/null 2>&1
-  [ -n "$(ls "$PK_W/t2.probe" 2>/dev/null)" ] \
-    || { printf '   ..    pre-suite keys: the git trace sentinel wrote no trace file -- nothing is recorded on this push\n'; return 1; }
-  PK_TR=1
-}
-pk_step() { # <title> <cmd...>: the keyed form of step(); prints the verdict and sets fail
-  local title="$1" slug rec cmdsha why rc moved
-  shift; PK_NSTEP=$((PK_NSTEP + 1))
-  if ! pk_init || [ "$PK_DIRTY" = 1 ]; then
-    if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
-    return 0
-  fi
-  slug="$(printf '%s' "$title" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//' | cut -c1-80)"
-  rec="$PK_DIR/$slug.${PK_PH:0:16}.key"
-  cmdsha="$( { printf '%s\n' "$@"; declare -f "$1" 2>/dev/null; } | shasum -a 256 | cut -d' ' -f1)"
-  if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" != 1 ] && [ -f "$rec" ]; then
-    why="$(python3 -I "$PK_W/pk.py" check "$rec" "$PK_W/u" "$PK_TOP" "$cmdsha" "$PK_PH" 2>&1)"; rc=$?
-    if [ "$rc" = 0 ]; then
-      printf '   skipped on a recorded pass: none of its %s changed\n   PASS\n' "$why"
-      PK_NSKIP=$((PK_NSKIP + 1)); PK_SKIPPED="$PK_SKIPPED $slug"
-      return 0
-    fi
-    printf '   ..    runs: %s\n' "$why"
-  fi
-  if ! pk_trace_init; then
-    if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
-    return 0
-  fi
-  # THE STEP RUNS in a fresh bash that sources every function this hook defines, so a wrapper function is run
-  # exactly as written.
-  declare -f > "$PK_W/fns.sh"
-  mkdir "$PK_W/t2.$slug" && pk_reset_all
-  ( export GIT_TRACE2_EVENT="$PK_W/t2.$slug" GIT_TRACE2_ENV_VARS="PWD,GIT_INDEX_FILE"
-    bash -c '. "$1"; shift; "$@"' pk-step "$PK_W/fns.sh" "$@" ); rc=$?
-  if [ "$rc" = 0 ]; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
-  /usr/bin/find . \( "${PK_PRUNE[@]}" \) -prune -o -neweram "$PK_W/mark" -print 2>/dev/null | sed 's|^\./||' > "$PK_W/r.$slug"
-  # THE MTIME CHECK IS AGAINST THE START MARK, not a per-step one: a path created after pk_init's walk and removed
-  # again before this step ended is in neither walk, yet this step may have run while it existed. Its creation or
-  # removal moved its parent directory's mtime past the mark, so it is caught here.
-  moved="$(/usr/bin/find . \( "${PK_PRUNE[@]}" \) -prune -o -newer "$PK_W/start" -print 2>/dev/null | sed -n 1,3p | tr '\n' ' ')"
-  # A RED OR UNRECORDABLE RUN DELETES THE OLD RECORD: a pass recorded on these same keys would otherwise
-  # skip the step next time over a verdict this run just contradicted.
-  if [ -n "$moved" ]; then
-    PK_DIRTY=1; rm -f "$rec"
-    printf '   ..    not recorded: the work tree changed since the present walk (%s); no later step is skipped or recorded on this push\n' "$moved"
-  elif [ "$rc" = 0 ]; then
-    if why="$(python3 -I "$PK_W/pk.py" record "$rec" "$PK_W/u" "$PK_TOP" "$cmdsha" "$PK_PH" "$PK_W/r.$slug" "$PK_W/t2.$slug" "$@" 2>&1)"; then
-      printf '%s\n' "$rec" >> "$PK_W/wrote"
-    else
-      rm -f "$rec"; printf '   ..    not recorded: %s\n' "$why"
-    fi
+ps_flush() {
+  local n slug title jobs why rc ps_nskip=0 p
+  [ "$PS_N" -gt 0 ] || return 0
+  : > "$PS_W/runlist"
+  n=0
+  while [ "$n" -lt "$PS_N" ]; do
+    n=$((n + 1))
+    if [ "${AI_DLC_PRESUITE_SKIP:-0}" = 1 ] && [ "$(cat "$PS_W/$n.always")" != 1 ]; then : > "$PS_W/$n.skipped"; continue; fi
+    printf '%s\n' "$n" >> "$PS_W/runlist"
+  done
+  ps_select
+  for n in $(cat "$PS_W/runlist"); do [ -f "$PS_W/$n.keyskip" ] || printf '%s\n' "$n"; done > "$PS_W/runlist.run"
+  jobs="$FIXTURE_JOBS"; case "$jobs" in ''|*[!0-9]*|0) jobs=2 ;; esac
+  # THE POOL: fd 7 is a fifo holding $jobs tokens. A step starts only on a token it read, and its fork writes the token
+  # back when the step ends, so at most $jobs steps are live and a freed slot is taken the moment it frees; nothing
+  # polls and no elapsed time decides admission. Without a fifo the steps run one after another, and the hook says so.
+  PS_PIDS=""
+  if mkfifo "$PS_W/slots" 2>/dev/null && exec 7<>"$PS_W/slots"; then
+    p=0; while [ "$p" -lt "$jobs" ]; do printf 't\n' >&7; p=$((p + 1)); done
+    trap 'ps_stop 130' INT; trap 'ps_stop 143' TERM; trap 'ps_stop 129' HUP
+    for n in $(cat "$PS_W/runlist.run"); do
+      read -r -u 7 p
+      { ps_run "$n"; printf 't\n' >&7; } &
+      PS_PIDS="$PS_PIDS $!"
+    done
+    wait $PS_PIDS
+    trap - INT TERM HUP
+    exec 7>&-
   else
-    rm -f "$rec"
+    printf '   ..    pre-suite pool OFF: no fifo under %s -- the steps run one after another\n' "$PS_W"
+    for n in $(cat "$PS_W/runlist.run"); do ps_run "$n"; done
   fi
-  return 0
-}
-pk_finish() { # the end-of-prefix re-walk, the one summary line and the scratch dir
-  local ph2 r
-  # THE PRESENT SET IS RE-WALKED ONCE THIS PUSH HAS RECORDED ANYTHING. The start-mark check in pk_step catches every
-  # creation or removal that moves an mtime; this catches the one that does not -- a path created by a writer that
-  # restores its parent's mtime (`cp -p` plus `touch -m -r`, `rsync -a` into an existing dir, `tar x` of `./`) and
-  # still present here, which would otherwise leave a record keyed on a tree its step never ran against.
-  if [ "$PK_ON" = 1 ] && [ -s "$PK_W/wrote" ]; then
-    ph2="$(pk_present)" || ph2=""
-    if [ "$ph2" != "$PK_PH" ]; then
-      while IFS= read -r r; do rm -f -- "$r"; done < "$PK_W/wrote"
-      [ -n "$ph2" ] || ph2="(the re-walk failed)"
-      printf '   ..    pre-suite keys: a path was created, deleted or retyped during the pre-suite steps (present key %s at the start, %s at the end) -- every record this push wrote is deleted: %s\n' \
-        "${PK_PH:0:16}" "${ph2:0:20}" "$(grep -c . "$PK_W/wrote")"
+  n=0
+  while [ "$n" -lt "$PS_N" ]; do
+    n=$((n + 1))
+    title="$(cat "$PS_W/$n.title")"
+    printf '\n── %s\n' "$title"
+    if [ -f "$PS_W/$n.skipped" ]; then printf '   SKIPPED (AI_DLC_PRESUITE_SKIP=1)\n'; continue; fi
+    if [ -f "$PS_W/$n.keyskip" ]; then
+      printf '   skipped on a recorded pass: none of its declared inputs changed\n   PASS\n'; ps_nskip=$((ps_nskip + 1)); continue
     fi
+    why="$(awk -F'\t' -v s="$(cat "$PS_W/$n.slug" 2>/dev/null)" '$1 == s && $2 == "run" { print $3; exit }' "$PS_W/k/.kdec" 2>/dev/null)"
+    [ -z "$why" ] || printf '   ..    runs: %s\n' "$why"
+    if [ ! -f "$PS_W/$n.rc" ]; then printf '   no verdict was recorded for this step\n   FAIL\n'; rc=1
+    else cat "$PS_W/$n.out"; rc="$(cat "$PS_W/$n.rc")"; if [ "$rc" = 0 ]; then printf '   PASS\n'; else printf '   FAIL\n'; fi; fi
+    [ "$rc" = 0 ] || { fail=1; RED_STEPS="$RED_STEPS
+     $title"; }
+    [ "$rc" != 0 ] || printf '%s\n' "$(cat "$PS_W/$n.slug" 2>/dev/null)" >> "$PS_W/k/.passed"
+    printf '   ..    step elapsed %ss\n' "$(cat "$PS_W/$n.sec" 2>/dev/null || echo 0)"
+  done
+  # A PASS IS PUBLISHED THROUGH THE FIXTURE MECHANISM'S OWN WRITER: a verdict file named for the step, then readset_keys_write.
+  if [ -n "$PS_KD" ] && [ -s "$PS_W/k/.passed" ]; then
+    while IFS= read -r slug; do printf ok > "$PS_W/k/$slug"; done < "$PS_W/k/.passed"
+    readset_keys_write "$PS_W/k" "$PS_KD"
   fi
-  if [ "$PK_ON" = 1 ]; then
-    printf '\n   ..    pre-suite keys: %s of %s step(s) skipped on a recorded pass%s\n' "$PK_NSKIP" "$PK_NSTEP" "${PK_SKIPPED:+:$PK_SKIPPED}"
-  fi
-  case "${PK_W:-}" in */presuite-keys.*) rm -rf -- "$PK_W" ;; esac
-  return 0
-}
-pk_py() { cat <<'PK_PY_END'
-import hashlib, json, os, re, stat, subprocess, sys
-REPLAY = set("rev-parse show cat-file ls-files ls-tree log rev-list merge-base grep diff status symbolic-ref for-each-ref diff-files diff-index diff-tree check-ignore show-ref describe name-rev var".split())
-CFG_READ = set(["--get", "--get-all", "--get-regexp", "--list", "-l"])
-IGNORED = set(["maintenance", "hash-object", "commit-tree", "write-tree", "mktree"])
-TOK = "@TOP@"
-def h(b):
-    return hashlib.sha256(b).hexdigest()
-def totop(s, top, rtop):
-    for t in (rtop, top):
-        if s == t or s.startswith(t + "/") or ("=" + t) in s:
-            return s.replace(t, TOK)
-    return s
-def untop(s, top):
-    return s.replace(TOK, top)
-def hfile(p):
-    try:
-        with open(p, "rb") as f:
-            return h(f.read())
-    except OSError:
-        return "-"
-def rows(path):
-    out = {}
-    for l in open(path, encoding="utf-8", errors="surrogateescape"):
-        l = l.rstrip("\n")
-        if "\t" in l:
-            k, v = l.split("\t", 1)
-            out[k] = v
-    return out
-class Tree:
-    def __init__(self, u, top):
-        self.top = top
-        self.now = rows(os.path.join(u, ".now"))
-        self.ls = rows(os.path.join(u, ".ls.now"))
-        self.tools = rows(os.path.join(u, ".tools"))
-        names = sorted(set(p.split("/", 1)[0] for p in self.now))
-        self.ls["./"] = "#listing:" + h("".join(n + "\n" for n in names).encode("utf-8", "surrogateescape"))
-        self.git = {}
-    def cur(self, k):
-        if k.startswith("/"):
-            return self.tools.get(k) or hfile(k)
-        if k.endswith("/"):
-            return self.ls.get(k, "-")
-        if k in self.now:
-            return self.now[k]
-        p = os.path.join(self.top, k)
-        return hfile(p) if os.path.isfile(p) else "-"
-    def replay(self, spec):
-        if spec not in self.git:
-            gitbin, cwd, argv = json.loads(spec)
-            # ROOT-RELATIVE IN THE RECORD: the key dir is the COMMON dir, shared by every worktree, so a replay
-            # answers about the work tree pushing now, never the one that recorded.
-            cwd = untop(cwd, self.top); argv = [untop(a, self.top) for a in argv]
-            env = dict((a, b) for a, b in os.environ.items() if not a.startswith("GIT_TRACE2"))
-            env["GIT_OPTIONAL_LOCKS"] = "0"
-            try:
-                r = subprocess.run([gitbin] + argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                self.git[spec] = h(str(r.returncode).encode() + b"\n" + r.stdout)
-            except OSError:
-                self.git[spec] = "-"
-        return self.git[spec]
-def check(rec, u, top, cmdsha, present):
-    # Order: header, command, present key, and only then the tree, so a refusal never depends on the hashes.
-    lines = open(rec, encoding="utf-8", errors="surrogateescape").read().split("\n")
-    if lines[:3] != ["#format k3", "#state ok", "#tools canonical"]:
-        print("malformed record"); return 1
-    if len(lines) < 4 or lines[3] != "#cmd " + cmdsha:
-        print("the command, its declaration or its wrapper body changed"); return 1
-    if len(lines) < 5 or not lines[4].startswith("@present\t"):
-        print("malformed record"); return 1
-    if lines[4] != "@present\t" + present:
-        print("the set of paths present under the work tree changed"); return 1
-    t = Tree(u, top)
-    specs = {}; n = 0
-    for l in lines[5:]:
-        if l.startswith("#gitcmd "):
-            k, s = l[8:].split("\t", 1); specs[k] = s; continue
-        if not l or l.startswith("#"):
-            continue
-        k, v = l.split("\t", 1); n += 1
-        if k.startswith("@git:"):
-            if k[5:] not in specs:
-                print("malformed record"); return 1
-            if t.replay(specs[k[5:]]) != v:
-                print("git " + " ".join(json.loads(specs[k[5:]])[2])[:160] + " answers differently"); return 1
-        elif t.cur(k) != v:
-            print("changed " + k); return 1
-    if n == 0:
-        print("empty record"); return 1
-    print("%d key(s)" % n)
-    return 0
-def anc(p):
-    out = ["./"]
-    parts = p.split("/")
-    for i in range(1, len(parts)):
-        out.append("/".join(parts[:i]) + "/")
-    return out
-def trace(t2, top):
-    procs = {}
-    for f in sorted(os.listdir(t2)):
-        for l in open(os.path.join(t2, f), encoding="utf-8", errors="surrogateescape"):
-            try:
-                e = json.loads(l)
-            except ValueError:
-                continue
-            d = procs.setdefault(e.get("sid"), {"env": {}})
-            ev = e.get("event")
-            if ev == "start": d["argv"] = e.get("argv") or []
-            elif ev == "def_repo": d["wt"] = e.get("worktree")
-            elif ev == "cmd_name": d["name"] = e.get("name")
-            elif ev == "cmd_ancestry": d["anc"] = e.get("ancestry") or []
-            elif ev == "def_param": d["env"][e.get("param")] = e.get("value")
-    specs = set(); bad = []
-    rtop = os.path.realpath(top)
-    for d in procs.values():
-        argv = d.get("argv")
-        if not argv:
-            continue
-        mine = d.get("wt") is not None and os.path.realpath(d["wt"]) == rtop
-        if not mine:
-            if any(rtop in a or top in a for a in argv[1:]):
-                bad.append("a git command in another repository names this one: git " + " ".join(argv[1:])[:120])
-            continue
-        if (d.get("anc") or [""])[0] == "git":
-            continue
-        name = d.get("name") or ""
-        args = argv[1:]
-        cwd = d["env"].get("PWD") or top
-        if name in IGNORED:
-            continue
-        if name in ("read-tree", "update-index"):
-            if d["env"].get("GIT_INDEX_FILE"):
-                continue
-            bad.append("git " + name + " on the real index"); continue
-        if name == "worktree":
-            i = args.index("worktree") if "worktree" in args else -1
-            sub = args[i + 1] if 0 <= i < len(args) - 1 else ""
-            if sub in ("list", "prune", "remove"):
-                continue
-            if sub == "add":
-                specs.add(json.dumps([argv[0], totop(cwd, top, rtop), [totop(a, top, rtop) for a in args[:i]] + ["rev-parse", "--verify", "-q", args[-1] + "^{tree}"]])); continue
-            bad.append("git worktree " + sub); continue
-        if name == "config" and not CFG_READ.intersection(args):
-            bad.append("git config without a read option"); continue
-        if name not in REPLAY and name != "config":
-            bad.append("git " + name + " against this repository"); continue
-        # A command naming a scratch path that is gone (a probe config under mktemp) reads that scratch, not this tree.
-        if any(a.startswith("/") and not a.startswith(rtop) and not a.startswith(top) and not os.path.exists(a) for a in args):
-            continue
-        if not os.path.isdir(cwd):
-            if "-C" in args and args[args.index("-C") + 1:][:1] and args[args.index("-C") + 1].startswith("/"):
-                cwd = top
-            else:
-                bad.append("git " + name + " ran from a directory that is gone"); continue
-        specs.add(json.dumps([argv[0], totop(cwd, top, rtop), [totop(a, top, rtop) for a in args]]))
-    return specs, bad
-def present(top):
-    # The PRESENT KEY over the raw NUL-separated walk `/usr/bin/find . -path ./.git -prune -o -print0` on stdin: one
-    # line per path but the root, `<rel path>\t<f|d|l|o><octal mode>\t<readlink target or empty>`, sorted as bytes (C order),
-    # sha256 printed. Path and target are escaped (`\` -> `\\`, TAB -> `\t`, LF -> `\n`) so the encoding is injective:
-    # a name or target holding a TAB or newline cannot spell another tree's lines. The mode is lstat's permission bits
-    # (`stat.S_IMODE`, octal; a symlink's own). No size, no mtime, no owner: content is keyed by the read rows. A path that cannot be lstat-ed (it vanished mid-walk) fails the whole key, exit 1, so
-    # the caller turns the keys off rather than hash a partial set.
-    def esc(b):
-        return b.replace(b"\\", b"\\\\").replace(b"\t", b"\\t").replace(b"\n", b"\\n")
-    btop = os.fsencode(top); out = []
-    for l in sys.stdin.buffer.read().split(b"\0"):
-        if not l or l == b"." or not l.startswith(b"./"):
-            continue
-        rel = l[2:]; p = btop + b"/" + rel
-        try:
-            st = os.lstat(p)
-        except OSError:
-            return 1
-        if stat.S_ISLNK(st.st_mode):
-            try:
-                k, tgt = b"l", os.readlink(p)
-            except OSError:
-                return 1
-        elif stat.S_ISDIR(st.st_mode): k, tgt = b"d", b""
-        elif stat.S_ISREG(st.st_mode): k, tgt = b"f", b""
-        else: k, tgt = b"o", b""
-        out.append(esc(rel) + b"\t" + k + b"%o" % stat.S_IMODE(st.st_mode) + b"\t" + esc(tgt) + b"\n")
-    out.sort()
-    print(h(b"".join(out)))
-    return 0
-def prune(rec):
-    # After a successful record: the k1 record and its sidecar go, and the newest 4 hash-addressed records stay.
-    d, b = os.path.split(rec)
-    slug = b[:-len(".0123456789abcdef.key")]
-    for x in (slug + ".key", slug + ".key.absent"):
-        try:
-            os.remove(os.path.join(d, x))
-        except OSError:
-            pass
-    pat = re.compile("^" + re.escape(slug) + r"\.[0-9a-f]{16}\.key$")
-    mine = []
-    for x in os.listdir(d):
-        if pat.match(x):
-            try:
-                mine.append((os.stat(os.path.join(d, x)).st_mtime, x))
-            except OSError:
-                pass
-    mine.sort(reverse=True)
-    for _, x in mine[4:]:
-        try:
-            os.remove(os.path.join(d, x))
-        except OSError:
-            pass
-def record(rec, u, top, cmdsha, presentkey, readlist, t2, argv):
-    t = Tree(u, top)
-    specs, bad = trace(t2, top)
-    if bad:
-        print("unrecordable, it runs on every push: " + bad[0]); return 3
-    keys = set()
-    ftools = {}
-    for l in open(os.path.join(u, ".ftools"), encoding="utf-8", errors="surrogateescape"):
-        l = l.rstrip("\n")
-        if "\t" in l:
-            a, b = l.split("\t", 1); ftools.setdefault(a, set()).add(b)
-    reads = [l.rstrip("\n") for l in open(readlist, encoding="utf-8", errors="surrogateescape") if l.strip()]
-    for p in reads:
-        if p == ".":
-            keys.add("./"); continue
-        keys.update(anc(p))
-        if os.path.isdir(os.path.join(top, p)) and not os.path.islink(os.path.join(top, p)):
-            keys.add(p + "/")
-        else:
-            keys.add(p)
-            keys.update(ftools.get(p, ()))
-    tl = {}
-    for l in open(os.path.join(u, ".pathcmds"), encoding="utf-8", errors="surrogateescape"):
-        l = l.rstrip("\n")
-        if "\t" in l:
-            a, b = l.split("\t", 1); tl.setdefault(b, a + "/" + b)
-    for w in argv:
-        if w in tl: keys.add(tl[w])
-        elif w.startswith("/") and os.path.isfile(w): keys.add(w)
-    out = ["#format k3", "#state ok", "#tools canonical", "#cmd " + cmdsha, "@present\t" + presentkey]
-    body = []
-    for i, s in enumerate(sorted(specs)):
-        out.append("#gitcmd %d\t%s" % (i, s))
-        body.append("@git:%d\t%s" % (i, t.replay(s)))
-    for k in sorted(keys):
-        body.append(k + "\t" + t.cur(k))
-    tmp = rec + ".tmp.%d" % os.getpid()
-    with open(tmp, "w", encoding="utf-8", errors="surrogateescape") as f:
-        f.write("\n".join(out + body) + "\n")
-    os.replace(tmp, rec)
-    prune(rec)
-    print("%d key(s), %d git" % (len(body), len(specs)))
-    return 0
-# CLI (the fixture calls these from this heredoc's own bytes):
-#   present <top>                                            stdin: the raw -print0 walk; prints the 64-hex present key
-#   check <rec> <u> <top> <cmdsha> <present>                 exit 0 = the record holds; else prints why, exit 1
-#   record <rec> <u> <top> <cmdsha> <present> <readlist> <t2> <argv...>
-m = sys.argv[1] if len(sys.argv) > 1 else ""
-if m == "present" and len(sys.argv) == 3:
-    sys.exit(present(sys.argv[2]))
-if m == "check" and len(sys.argv) == 7:
-    sys.exit(check(*sys.argv[2:7]))
-if m == "record" and len(sys.argv) >= 9:
-    sys.exit(record(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9:]))
-sys.exit(2)
-PK_PY_END
+  printf '\n   ..    pre-suite keys: %s of %s step(s) skipped on a recorded pass\n' "$ps_nskip" "$PS_N"
+  case "$PS_W" in */presuite.*) rm -rf -- "$PS_W" ;; esac
+  PS_N=0; PS_W=""
 }
 step() {
-  if [ "${AI_DLC_PRESUITE_SKIP:-0}" = 1 ] && [ "${PRESUITE_DONE:-0}" = 0 ]; then
-    printf '\n── %s\n   SKIPPED (AI_DLC_PRESUITE_SKIP=1)\n' "$1"; return 0
-  fi
+  if [ "${PRESUITE_DONE:-0}" = 0 ]; then ps_enqueue "$@"; return 0; fi
   printf '\n── %s\n' "$1"
   # RED_STEPS names every step that went red, for fixture_suite_step to print before the suite runs.
-  local st_f0="$fail" st_t="$1"
+  local st_f0="$fail" st_t="$1" st_s="$SECONDS"
   fail=0
-  if [ "${PRESUITE_DONE:-0}" = 0 ]; then pk_step "$@"
-  else
-    shift
-    if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
-  fi
+  shift
+  if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
   [ "$fail" -eq 0 ] || RED_STEPS="$RED_STEPS
      $st_t"
   [ "$st_f0" -eq 0 ] || fail=1
+  printf '   ..    step elapsed %ss\n' "$((SECONDS - st_s))"
   return 0
 }
+# PRESUITE_UNITS_END
 
 # 1. The enforcement map is the index of which rule is enforced by what, and WHERE it
 #    is invoked. I9/W1: a script enforcer with no declared call site is a rule guarded
@@ -980,18 +592,10 @@ step "write-format steering (every shared append-only artifact declares its entr
 step "fixture git-env scrub (a directly-run fixture cannot clobber the caller's index)" \
   bash scripts/validate-fixture-git-env.sh --max-unscrubbed 0
 
-# 2b'. A mutant kill is emitted only through mutant_killed (core/fixtures/lib/mutant.sh), which
-#     refuses unless the same run asserted the unmutated arm passed. A kill printed any other way
-#     can be the SEED failing rather than the mutation -- measured on check-22, 41 of 43 arms.
-#     The allowlist is DOWN-ONLY: an unlisted unrouted kill fails, and so does a stale row.
-#     Standalone, one awk over the corpus, deliberately NOT an arm of validate-enforcement-map.sh.
-step "mutant kills route through mutant_killed (down-only allowlist)" \
-  bash scripts/validate-mutant-kills.sh
-
 # 2b''. Fixture hygiene: no `-d …/.git` or declared-tool check that SKIPs with exit 0 (H1/H2), no `sh` start the
-#     invocation counter cannot see (H3), and a mutant battery declares its MUTANT-MATRIX block (H5) or sits on the
-#     derived down-only scripts/fixture-matrix-allowlist.txt. Standalone, NOT an arm of validate-enforcement-map.sh.
-step "fixture hygiene (false skips, sh starts, mutant-matrix blocks)" \
+#     invocation counter cannot see (H3), and no fixture carries a mutation battery (H12). Standalone, NOT an arm of
+#     validate-enforcement-map.sh.
+step "fixture hygiene (false skips, sh starts, no mutation battery)" \
   bash scripts/validate-fixture-hygiene.sh
 
 # 2d. THE SHIPPED RENDERER, DRIVEN AGAINST THIS TREE. `.claude/agents/<role>.md` frontmatter is
@@ -3034,6 +2638,8 @@ readset_keys_write() { # <out> [<keys dir>, default $KEYS_DIR]
 # run_fixtures reads. Only AI_DLC_FIXTURE_NO_SKIP=1 (`all`) runs every candidate.
 # cl_select <out> <all|keys|census>: writes <out>/.cl.sel, the bare names this push runs as `<fx>@consumer`.
 # `census` is scripts/census-consumer-layout.sh's mode, the only one that selects with no record present.
+# It prints the selection line, up to ten `<fx>@consumer: <reason>` rows, and the verdict-store line naming every
+# `<fx>@consumer` unit skipped on a store entry or on an unconfirmed placement record.
 cl_select() {
   local out="$1" c b n_c n_s why="" kd vh base p
   [ -n "${cl_tree:-}" ] || return 0
@@ -3089,6 +2695,17 @@ cl_select() {
   n_s="$(grep -c . "$out/.cl.sel")"; case "$n_s" in ''|*[!0-9]*) n_s=0 ;; esac
   printf '   ..    consumer layout: %s of %s shipping fixture(s) run as <fx>@consumer in %s%s\n' "$n_s" "$n_c" "$cl_tree" "${why:+ -- every one, because $why}"
   [ -n "$why" ] || awk -F'\t' '$2 == "run" && n < 10 { n++; print "   ..      " $1 "@consumer: " $3 }' "$c/.kdec"
+  # EVERY UNIT SKIPPED ON A PASS RECORDED ELSEWHERE IS NAMED, in the distribution's own verdict-store line: a store hit
+  # (`.vs`, readset_verdicts' hit list) and a record skip whose record is still UNCONFIRMED (`.vs.u`: cl_publish marked
+  # it and no run that reached its end has cleared the mark, so a stopped run or a census wrote it). A record a
+  # completed run published or confirmed is counted on the selection line and not named, as the distribution counts
+  # its key-record skips.
+  if [ -z "$why" ]; then
+    awk -F'\t' '$2 == "skip" && $4 != "v" { print $1 }' "$c/.kdec" > "$c/.rskip"
+    while IFS= read -r b; do [ ! -f "$kd/.unconfirmed/$b" ] || printf '%s\n' "$b"; done < "$c/.rskip" > "$c/.vs.u"
+    cat "$c/.vs" "$c/.vs.u" > "$c/.vs.all" 2>/dev/null
+  fi
+  [ -n "$why" ] || [ ! -s "$c/.vs.all" ] || printf '   ..    verdict store: %s fixture(s) skipped on a pass recorded elsewhere: %s\n' "$(grep -c . "$c/.vs.all")" "$(sed 's/$/@consumer/' "$c/.vs.all" | tr '\n' ' ' | sed 's/ $//')"
   return 0
 }
 # cl_tree_init <dir>: `git init` and the consumer tree's FIXED root commit (empty tree, fixed identity, date and
@@ -3113,11 +2730,13 @@ cl_any_record() {
 # cl_publish <out> <fx>: publishes <fx>'s consumer-layout record THE MOMENT its unit passed, so a run stopped or red
 # later keeps every pass it made. cl_select writes this definition to <out>/.cl.pub, which the pool worker and the
 # census unit source: ONE implementation. hermetic-run.sh writes a declared unit's store entry at the same moment.
+# The record lands UNCONFIRMED (`<keys dir>/.unconfirmed/<fx>`, written first) until cl_confirm clears the mark.
 cl_publish() {
   local kd=""
   read -r kd 2>/dev/null < "$1/.cl.keys" || return 0
   [ -n "$kd" ] && [ -s "$1/.cl/.k/$2" ] || return 0
-  mkdir -p "$kd" 2>/dev/null && cp "$1/.cl/.k/$2" "$kd/$2.key.tmp.$$" 2>/dev/null && mv "$kd/$2.key.tmp.$$" "$kd/$2.key" 2>/dev/null
+  mkdir -p "$kd/.unconfirmed" 2>/dev/null && : > "$kd/.unconfirmed/$2" 2>/dev/null \
+    && cp "$1/.cl/.k/$2" "$kd/$2.key.tmp.$$" 2>/dev/null && mv "$kd/$2.key.tmp.$$" "$kd/$2.key" 2>/dev/null
   return 0
 }
 # cl_write <out>: publishes the remaining consumer-layout records through
@@ -3136,6 +2755,24 @@ cl_write() {
     [ "$(cat "$out/$b@consumer" 2>/dev/null)" = ok ] || rm -f "$c/.k/$b"
   done < "$out/.cl.sel"
   readset_keys_write "$c" "$CL_KEYS_DIR"
+  return 0
+}
+# cl_confirm <out>: at the end of a hook run, red or green (the distribution publishes its key records on a red run
+# too), clears the unconfirmed mark of every unit this run passed or named on its verdict-store line. Only the hook's
+# run calls it, so a stopped run's passes and a census's stay marked and are named once by the next push.
+cl_confirm() {
+  local out="$1" c="$1/.cl" kd="" b v
+  [ -n "${cl_tree:-}" ] && [ -d "$c" ] && [ ! -e "$out/.cl.refused" ] && [ -s "$out/.cl.keys" ] || return 0
+  read -r kd < "$out/.cl.keys"
+  [ -n "$kd" ] && [ -d "$kd/.unconfirmed" ] || return 0
+  set --
+  while IFS= read -r b; do
+    [ -n "$b" ] || continue
+    v=""; read -r v < "$out/$b@consumer" 2>/dev/null
+    [ "$v" != ok ] || set -- "$@" "$kd/.unconfirmed/$b"
+  done < "$out/.cl.sel"
+  while IFS= read -r b; do [ -z "$b" ] || set -- "$@" "$kd/.unconfirmed/$b"; done < "$c/.vs.all" 2>/dev/null
+  [ "$#" -eq 0 ] || rm -f -- "$@" 2>/dev/null
   return 0
 }
 
@@ -3444,6 +3081,7 @@ run_fixtures() {
     # A seed that skips every fixture still publishes its records, so it lands once.
     readset_keys_write "$out"
     cl_write "$out"
+    cl_confirm "$out"
     readset_pending_recorded "$out"
     readset_pending_line 0 "" "$out/.precorded"
     rm -rf "$out"; trap - EXIT INT TERM HUP
@@ -3830,7 +3468,7 @@ run_fixtures() {
     if rec_lock "$DURATIONS_RECORD.lock"; then
       { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
         | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
-        | while read -r k v; do [ -f "${FXROOT}${k}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
+        | while read -r k v; do [ -f "${FXROOT}${k%@consumer}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
         | sort > "$out/.merged"
       [ -s "$out/.merged" ] && rec_put "$out/.merged" "$DURATIONS_RECORD"
       rec_unlock "$DURATIONS_RECORD.lock"
@@ -3853,6 +3491,7 @@ run_fixtures() {
   # PER-FIXTURE KEY RECORDS ARE PUBLISHED ON A RED RUN TOO: each one is gated on its own verdict.
   readset_keys_write "$out"
   cl_write "$out"
+  cl_confirm "$out"
 
   # PUBLISH THIS RUN'S UNMERGED COSTS WHATEVER `rc` IS, and copy the PRE-MERGE file:
   # "$out/.durations" is exactly the units this pool timed, while "$out/.merged" one block up
@@ -4180,7 +3819,27 @@ syntax_all() {
 # SYNTAX_GLOB_END
 step "shell syntax (every shipped script and hook)" syntax_all
 step "verdict-store identity (a code change in the READSET_* spans needs a VS-IDENTITY pin)" bash scripts/validate-verdict-identity.sh
-pk_finish
+# 2g. BL-879'S STATIC HALF: the cells.decl grammar (C2, C4), the source guard on a `cli` subject (C5), every fixture
+#     the static join refuses being an allowlist row, and scripts/fixture-inprocess-allowlist.txt down-only (M4).
+#     Queued with PS_ALWAYS=1, so an AI_DLC_PRESUITE_SKIP=1 push still runs it, and before the suite, so a red here is
+#     named before the pool runs. It judges GRAMMAR ONLY: C1-C3 and the stale allowlist row are the invocation judge's, per counted
+#     run, and step 3b below names every fixture that had none. Distribution hook only, outside FIXTURE_POOL.
+PS_ALWAYS=1
+step "fixture in-process cells, static half (scripts/validate-fixture-inprocess.sh; grammar only)" \
+  bash scripts/validate-fixture-inprocess.sh
+
+# 2g. THE WHOLE-ROW RATCHET (BL-1052). No new inputs.decl line declares a whole shared program or a whole directory:
+#     docs/inputs-decl-whole-rows.tsv lists the ones that exist and may only shrink against origin/main. Distribution
+#     hook only, outside FIXTURE_POOL. The push-time half is readset_invalidation_guard inside the pool.
+#     A tree without the script (a fixture world running this hook) is a named SKIP, not a red.
+inputs_decl_ratchet() {
+  [ -f scripts/invalidation-guard.sh ] || { printf '   SKIP  scripts/invalidation-guard.sh absent: not the distribution tree\n'; return 0; }
+  bash scripts/invalidation-guard.sh --ratchet
+}
+step "inputs.decl whole-row ratchet (scripts/invalidation-guard.sh --ratchet)" inputs_decl_ratchet
+PS_ALWAYS=0
+
+ps_flush
 PRESUITE_DONE=1
 
 # 2f. THE INVOCATION BUDGET. Every declared fixture's bash starts are counted by an rc generated into a private run
@@ -4240,24 +3899,6 @@ EOF
   fi
 }
 step "invocation counter armed (scripts/validate-fixture-invocations.sh)" fxcount_arm
-
-# 2g. BL-879'S STATIC HALF: the cells.decl grammar (C2, C4), the source guard on a `cli` subject (C5), every fixture
-#     the static join refuses being an allowlist row, and scripts/fixture-inprocess-allowlist.txt down-only (M4).
-#     After PRESUITE_DONE, so an AI_DLC_PRESUITE_SKIP=1 push still runs it, and before the suite, so a red here is
-#     named before the pool runs. It judges GRAMMAR ONLY: C1-C3 and the stale allowlist row are the invocation judge's, per counted
-#     run, and step 3b below names every fixture that had none. Distribution hook only, outside FIXTURE_POOL.
-step "fixture in-process cells, static half (scripts/validate-fixture-inprocess.sh; grammar only)" \
-  bash scripts/validate-fixture-inprocess.sh
-
-# 2g. THE WHOLE-ROW RATCHET (BL-1052). No new inputs.decl line declares a whole shared program or a whole directory:
-#     docs/inputs-decl-whole-rows.tsv lists the ones that exist and may only shrink against origin/main. Distribution
-#     hook only, outside FIXTURE_POOL. The push-time half is readset_invalidation_guard inside the pool.
-#     A tree without the script (a fixture world running this hook) is a named SKIP, not a red.
-inputs_decl_ratchet() {
-  [ -f scripts/invalidation-guard.sh ] || { printf '   SKIP  scripts/invalidation-guard.sh absent: not the distribution tree\n'; return 0; }
-  bash scripts/invalidation-guard.sh --ratchet
-}
-step "inputs.decl whole-row ratchet (scripts/invalidation-guard.sh --ratchet)" inputs_decl_ratchet
 
 SUITE_SKIPPED=0
 SUITE_SKIP_CAUSE=""

@@ -45,8 +45,6 @@ echo "HERMETIC-CONSUMED core/scripts/validate-artifact-budget.sh"
 rc=0
 ok()  { echo "ok: $1"; }
 bad() { echo "FAIL: $1" >&2; rc=1; }
-. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_ssmBlock=0; B_ssmNeg=0
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "run.sh: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -114,7 +112,7 @@ fi
 # would offer two remedies for one line.
 snap '- 13/14 WONTFIX/SUPERSEDED items closed; the section was superseded by an experiment.'
 if run --warn-only --fail-on pipeline-snapshot.md; then
-  ok "NEGATIVE CONTROL: lowercase prose and WONTFIX/SUPERSEDED do not fire"; B_ssmNeg=1
+  ok "NEGATIVE CONTROL: lowercase prose and WONTFIX/SUPERSEDED do not fire"
 else
   bad "NEGATIVE CONTROL fired — the detector reds ordinary prose, which reds every clean retro run"
 fi
@@ -138,7 +136,7 @@ fi
 if run --warn-only --fail-on pipeline-snapshot.md; then
   bad "--fail-on did not harden the verdict; the flag is decoration"
 else
-  ok "--fail-on pipeline-snapshot.md turns the same marker into a BLOCK (exit 1)"; B_ssmBlock=1
+  ok "--fail-on pipeline-snapshot.md turns the same marker into a BLOCK (exit 1)"
 fi
 
 # The basename match must not be a substring match. Hardening an artifact the operator
@@ -147,50 +145,6 @@ if run --warn-only --fail-on snapshot.md; then
   ok "--fail-on matches whole basenames: 'snapshot.md' does not harden pipeline-snapshot.md"
 else
   bad "--fail-on 'snapshot.md' hardened pipeline-snapshot.md — the match is a substring match"
-fi
-
-# --- MUTATION: the marker arm is what rejects, not some other check ----------------
-# The stories above show the marked snapshot is rejected, but a rejection is evidence
-# for THIS arm only if removing the arm makes it pass. Build the mutant as a COPY and
-# guard with cmp -s, so a sed that matched nothing cannot score as a kill.
-MUT="$WORK/mut-no-marker-arm.sh"; cp "$V" "$MUT"
-sed -i.bak 's|^      check_supersession_markers "\$f" "\$rel"$|      :|' "$MUT" && rm -f "$MUT.bak"
-if cmp -s "$V" "$MUT"; then
-  bad "MUTATION setup — the marker call site was not mutated, so the arm below proves nothing"
-else
-  snap '- prior estimate is SUPERSEDED.'
-  if bash "$MUT" --root "$WORK" --only pipeline-snapshot.md --warn-only --fail-on pipeline-snapshot.md >/dev/null 2>&1; then
-    mutant_killed "$B_ssmBlock" marker-arm-removed "MUTATION — with the marker arm removed, the marked snapshot goes GREEN (the arm is what catches it)"
-  else
-    bad "MUTATION — the marked snapshot is still red without the marker arm; some OTHER check is doing the work"
-  fi
-fi
-
-# --- MUTATION: the casing guard is what spares ordinary prose ---------------------
-# Reverting the discriminator must red the NEGATIVE control. Without this the casing
-# rationale is a comment nothing tests, and a later edit could drop it silently.
-MUT2="$WORK/mut-case-insensitive.sh"; cp "$V" "$MUT2"
-sed -i.bak 's|SUPERSEDED(\[^A-Za-z0-9\\/\]|[Ss][Uu][Pp][Ee][Rr][Ss][Ee][Dd][Ee][Dd]([^A-Za-z0-9\\/]|' "$MUT2" && rm -f "$MUT2.bak"
-if cmp -s "$V" "$MUT2"; then
-  bad "MUTATION setup — the casing guard was not mutated, so the arm below proves nothing"
-else
-  snap '- 13/14 WONTFIX/SUPERSEDED items closed; the section was superseded by an experiment.'
-  if bash "$MUT2" --root "$WORK" --only pipeline-snapshot.md --warn-only --fail-on pipeline-snapshot.md >/dev/null 2>&1; then
-    bad "MUTATION — the case-insensitive mutant still spares ordinary prose; the casing guard is not what does it"
-  else
-    mutant_killed "$B_ssmNeg" case-insensitive "MUTATION — case-insensitively, ordinary prose goes RED (the casing guard is the false-positive defence)"
-  fi
-fi
-
-# --- Unmutated control from the same directory ------------------------------------
-# If a lone copy of the validator dies for its own reasons -- failing to resolve a
-# root, say -- it emits nothing, and "no output" would otherwise score as a kill.
-CTRL="$WORK/control-unmutated.sh"; cp "$V" "$CTRL"
-snap '- 13/14 WONTFIX/SUPERSEDED items closed; the section was superseded by an experiment.'
-if bash "$CTRL" --root "$WORK" --only pipeline-snapshot.md --warn-only --fail-on pipeline-snapshot.md >/dev/null 2>&1; then
-  ok "CONTROL: an UNMUTATED copy still accepts the clean snapshot (the mutants died of their edits)"
-else
-  bad "CONTROL: the unmutated copy rejected a clean snapshot — every mutant verdict above is unattributable"
 fi
 
 [ "$rc" -eq 0 ] && echo "snapshot-supersession-marker fixture: PASS"

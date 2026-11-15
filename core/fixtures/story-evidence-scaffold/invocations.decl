@@ -1,5 +1,5 @@
-# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J2 output).
-42 *
-10 core/scripts/validate-handoff-evidence.sh
-5 core/scripts/sprint-status.sh
-25 core/scripts/record-only-diff.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge's own J2 output). Every subject is asked in process (he-inproc.sh), so the starts are the run's own bash and, in group b, EQUIV's CLI rows.
+2 *
+0 core/scripts/validate-handoff-evidence.sh
+0 core/scripts/sprint-status.sh
+0 core/scripts/record-only-diff.sh

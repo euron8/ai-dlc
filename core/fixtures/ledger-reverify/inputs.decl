@@ -1,4 +1,4 @@
-# ledger-reverify reads four engine files, derived by ablation (scratchpad ablate.sh): ledger-reverify.sh sources consumer-read.sh and lib.sh, and lifts map_consumer from preclassify.sh; the closer over the seeded ledger from these four is byte-identical to a run from the whole reconcile directory, and dropping any one changes it. The fixture sources preamble.sh and inproc.sh from core/fixtures/lib.
+# ledger-reverify reads four engine files, derived by ablation (scratchpad ablate.sh): ledger-reverify.sh sources consumer-read.sh and lib.sh, and lifts map_consumer from preclassify.sh; the closer over the seeded ledger from these four is byte-identical to a run from the whole reconcile directory, and dropping any one changes it. The fixture sources preamble.sh, inproc.sh and mutant.sh (the fx_inproc counter) from core/fixtures/lib.
 !core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
@@ -6,3 +6,4 @@ core/skills/ai-dlc-update/reconcile/preclassify.sh
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/inproc.sh
 core/fixtures/lib/mutant.sh
+# The dist-only shards (b, c) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.

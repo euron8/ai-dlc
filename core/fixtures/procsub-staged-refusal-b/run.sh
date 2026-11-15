@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# procsub-staged-refusal-b -- shard 'b' of the procsub-staged-refusal mutation battery.
+# procsub-staged-refusal-b -- shard 'b' of the procsub-staged-refusal fixture.
 #
-# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. Every arm, mutant and control lives in the
+# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. Every arm and control lives in the
 # sibling's run.sh; this directory is a unit the pre-push pool can start on its own, because the
-# unsharded fixture was one 2600-line directory. The partition is declared in the sibling and joined
+# unsharded fixture was one very large directory. The partition is declared in the sibling and joined
 # there (J0) against the sibling's own unit guards, in every shard.
 #
 # Resolved as a SIBLING inside core/fixtures/. Run from the project root, never from this directory.

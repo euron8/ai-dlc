@@ -31,170 +31,7 @@
 # auto-resolution path — and that one builds a synthetic HOME rather than using the
 # real one, because an arm that passes only on the machine that wrote it is an arm
 # that cannot fail anywhere else.
-#
-# MUTANT BATTERY. Per push each mutant drives its deciding arm (its M function) plus its named
-# twin: an arm that stays GREEN under the mutant, proving the kill stays confined to the deciding
-# arm. The matrix (mode FULL) samples three non-deciding arms per mutant from a fixed pool and
-# prints every sampled cell as arm:0 (green) or arm:1 (tripped). The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Re-measure from
-# the repo root:
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/wait-beat-liveness/run.sh --matrix
-# Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
-# Wide co-trips (arms other than the targeted one that also read 1; plain comment, not a row):
-#   collapse-unavailable also trips s9 s10 s13h own
-#   threshold-always also trips s4 s7b s8 s10 s13h s18a s23a s23b s23c s27a own
-#   max-not-min also trips s10 s13h s23c own
-#   waiting-no-clock also trips s13h own
-#   chained-no-beat also trips s13h own
-#   glob-widened also trips s13h own
-#   session-id-ignored also trips s13h own
-#   settle-dropped also trips s13h s15a s15d s16 s17d own
-#   unfinished-reads-absent also trips s10 s13h s13f s14a s15a s16 own
-#   fence-ignored also trips s10 s13h s15a s24b own
-#   crlf-ignored also trips s10 s13h s15a own
-#   fence-closes-on-any-run also trips s10 s13h own
-#   settle-is-poll also trips s10 s13h
-#   arming-note-ungated also trips s10 s13h s13g own
-#   marker-not-required also trips s10 s13b s13h s13c s13d s13e s13f s14a s15a s15d s16 s17a s17b s17c s17d s24a s24c own
-#   global-progress-grant also trips s13h own
-#   marker-anywhere also trips s10 s13h s14a s15a s24b
-#   trailing-blank-hides also trips s10 s13h s15a own
-#   repair-token-is-seat also trips s10 s13h s24b s24c own
-#   repair-either-token also trips s10 s13h own
-#   repair-token-no-serial also trips s10 s13h s24b own
-#   marker-not-col0 also trips s10 s13h own
-#   repair-both-flags also trips s10 s13h own
-#   mark-name-fixed also trips s10 s13h own
-#   status-last-line-tail also trips s10 s13h own
-#   status-no-delivered-record also trips s10 s13h own
-#   revised-deleted-on-delivery also trips s10 s13h s16c own
-#   revised-status-silent also trips s10 s13h own
-#   revised-round-kept also trips s10 s13h own
-#   status-absent-delivered also trips s10 s13h s15c own
-#   status-missing-record-ancient also trips s10 s13h s15a s15d own
-#   status-reset-accepted also trips s10 s13h own
-#   status-creates-state-dir also trips s10 s13h s28 own
-#   status-arms-join also trips s10 s13h s16c own
-#   status-nojoin-epoch-zero also trips s10 s13h own
-#   revised-bump-dropped also trips s13h s16b s16c own
-#   revised-loss-uncounted also trips s10 s13h own
-#   revised-presweep-silent also trips s10 s13h own
-#   revised-postpoll-silent also trips s10 s13h s16b s16c own
-#   shard-check-exit-ignored also trips s10 s13h s17b s17c own
-#   dispatch-noglob-leaks also trips s10 s13h s23c s27a s27b s27d own
-#   dispatch-toolu-only also trips s10 s13h own
-#   since-warn-unconditional also trips s10 s13h own
-#   since-warn-dropped also trips s10 s13h own
-#   since-warn-ignores-dispatch also trips s10 s13h own
-#   lease-not-first also trips s10 s13h s20b own
-#   registrations-in-state-dir also trips s10 s13h s21 own
-#   lease-in-state-dir also trips s13h s21b own
-#   silent-clock-fallback also trips s13h own
-#   start-time-no-fallback also trips s10 s13h s26
-#   start-time-unpinned also trips s10 s13h s26
-#   chained-by-clock also trips s10 s13h s22b s22c own
-#   quiet-from-mtime also trips s10 s13h s23c own
-#   stall-counts-blobs also trips s10 s13h own
-#   run-never-resets also trips s10 s13h own
-#   seal-ignored also trips s10 s13h s24c own
-#   mark-repair-seat-token also trips s10 s13h s24b own
-#   part-complete-ignored also trips s10 s13a s13b s13h s13c s13d s13e s13f s14a s15a s15b s15d s16 s17a s17b s17c s17d s24a own
-#   dispatch-live-gate-restored also trips s13h own
-#   dispatch-live-widened also trips s10 s13h s27a s27c own
-#   dispatch-ts-no-meta-lookup also trips s10 s13h s19a s27a s27b s27c s27d own
-#   dispatch-ts-first-row also trips s10 s13h s20a own
-#   dispatch-ts-multi-id also trips s13h own
-#   open-request-on-mtime also trips s13h s29b s29c s29d s29g s29h s29i s29j s29k s29l s29m s29n s29o s29p s29q own
-#   attachment-closes-request also trips s13h s29h own
-#   failed-gate-removed also trips s13h own
-#   failed-no-resume-acquittal also trips s13h own
-#   failed-no-early-break also trips s13h s29a s29b s29c s29d s29e s29i s29p s29q own
-#   failed-no-refund also trips s13h s29p s29q own
-#   failed-acquit-from-row also trips s13h own
-#   failed-precedence-removed also trips s13h s29o own
-#   failed-clear-on-not-failed also trips s13h s29e own
-#   open-request-bound-480 also trips s13h s29a s29b s29c s29d s29i s29n own
-#   dashed-id-skipped also trips s13h own
-#   failed-per-agent-key also trips s13h s29e s29i s29m s29p own
-#   (the twelve rows above were measured with --matrix <name> for those twelve mutants only, after section 29's
-#   sidecar was keyed per target and S17 (s29q) added; every cell BROKEN-free and s1 read 0 in each. The 61 earlier
-#   mutants were not re-measured against the section 29 arms, so their rows are silent about s29a-s29q, not clean on them)
-# MUTANT-MATRIX collapse-unavailable decides=s1 twins=s2
-# MUTANT-MATRIX threshold-always decides=s2 twins=s1
-# MUTANT-MATRIX max-not-min decides=s4 twins=s1
-# MUTANT-MATRIX waiting-no-clock decides=s7a twins=s1
-# MUTANT-MATRIX chained-no-beat decides=s7b twins=s1
-# MUTANT-MATRIX glob-widened decides=s10 twins=s1
-# MUTANT-MATRIX session-id-ignored decides=s9 twins=s1
-# MUTANT-MATRIX settle-dropped decides=s13c twins=s1
-# MUTANT-MATRIX unfinished-reads-absent decides=s13d twins=s1
-# MUTANT-MATRIX fence-ignored decides=s13e twins=s1
-# MUTANT-MATRIX crlf-ignored decides=s13e twins=s1
-# MUTANT-MATRIX fence-closes-on-any-run decides=s13e twins=s1
-# MUTANT-MATRIX settle-is-poll decides=own twins=s1
-# MUTANT-MATRIX arming-note-ungated decides=s13f twins=s1
-# MUTANT-MATRIX marker-not-required decides=s13a twins=s1
-# MUTANT-MATRIX global-progress-grant decides=s13b twins=s1
-# MUTANT-MATRIX marker-anywhere decides=own twins=s1
-# MUTANT-MATRIX trailing-blank-hides decides=s13a twins=s1
-# MUTANT-MATRIX repair-token-is-seat decides=s14a twins=s1
-# MUTANT-MATRIX repair-either-token decides=s14a twins=s1
-# MUTANT-MATRIX repair-token-no-serial decides=s14a twins=s1
-# MUTANT-MATRIX marker-not-col0 decides=s14a twins=s1
-# MUTANT-MATRIX repair-both-flags decides=s14a twins=s1
-# MUTANT-MATRIX mark-name-fixed decides=s14a twins=s1
-# MUTANT-MATRIX status-last-line-tail decides=s15a twins=s1
-# MUTANT-MATRIX status-no-delivered-record decides=s15d twins=s1
-# MUTANT-MATRIX revised-deleted-on-delivery decides=s16b twins=s1
-# MUTANT-MATRIX revised-status-silent decides=s16c twins=s1
-# MUTANT-MATRIX revised-round-kept decides=s16c twins=s1
-# MUTANT-MATRIX status-absent-delivered decides=s15b twins=s1
-# MUTANT-MATRIX status-missing-record-ancient decides=s15b twins=s1
-# MUTANT-MATRIX status-reset-accepted decides=s15b twins=s1
-# MUTANT-MATRIX status-creates-state-dir decides=s15c twins=s1
-# MUTANT-MATRIX status-arms-join decides=s15c twins=s1
-# MUTANT-MATRIX status-nojoin-epoch-zero decides=s15c twins=s1
-# MUTANT-MATRIX revised-bump-dropped decides=s16 twins=s1
-# MUTANT-MATRIX revised-loss-uncounted decides=s16 twins=s1
-# MUTANT-MATRIX revised-presweep-silent decides=s16 twins=s1
-# MUTANT-MATRIX revised-postpoll-silent decides=s16 twins=s1
-# MUTANT-MATRIX shard-check-exit-ignored decides=s17a twins=s1
-# MUTANT-MATRIX dispatch-noglob-leaks decides=s18a,s18b twins=s1
-# MUTANT-MATRIX dispatch-toolu-only decides=s19a twins=s1
-# MUTANT-MATRIX since-warn-unconditional decides=s19c twins=s1
-# MUTANT-MATRIX since-warn-dropped decides=s19c twins=s1
-# MUTANT-MATRIX since-warn-ignores-dispatch decides=s19c twins=s1
-# MUTANT-MATRIX lease-not-first decides=s20a twins=s1
-# MUTANT-MATRIX registrations-in-state-dir decides=s21b twins=s1
-# MUTANT-MATRIX lease-in-state-dir decides=s21 twins=s1
-# MUTANT-MATRIX silent-clock-fallback decides=s22c twins=s1
-# MUTANT-MATRIX start-time-no-fallback decides=own twins=s1
-# MUTANT-MATRIX start-time-unpinned decides=own twins=s1
-# MUTANT-MATRIX chained-by-clock decides=s22 twins=s1
-# MUTANT-MATRIX quiet-from-mtime decides=s23a twins=s1
-# MUTANT-MATRIX stall-counts-blobs decides=s23a twins=s1
-# MUTANT-MATRIX run-never-resets decides=s23a twins=s1
-# MUTANT-MATRIX seal-ignored decides=s24a twins=s1
-# MUTANT-MATRIX mark-repair-seat-token decides=s24c twins=s1
-# MUTANT-MATRIX part-complete-ignored decides=s25 twins=s1
-# MUTANT-MATRIX dispatch-live-gate-restored decides=s27d twins=s1
-# MUTANT-MATRIX dispatch-live-widened decides=s27d twins=s1
-# MUTANT-MATRIX dispatch-ts-no-meta-lookup decides=s28 twins=s1
-# MUTANT-MATRIX dispatch-ts-first-row decides=s28 twins=s1
-# MUTANT-MATRIX dispatch-ts-multi-id decides=s28 twins=s1
-# MUTANT-MATRIX open-request-on-mtime decides=s29a twins=s1
-# MUTANT-MATRIX attachment-closes-request decides=s29b twins=s1
-# MUTANT-MATRIX failed-gate-removed decides=s29g twins=s1
-# MUTANT-MATRIX failed-no-resume-acquittal decides=s29e twins=s1
-# MUTANT-MATRIX failed-no-early-break decides=s29m twins=s1
-# MUTANT-MATRIX failed-no-refund decides=s29m twins=s1
-# MUTANT-MATRIX failed-acquit-from-row decides=s29j twins=s1
-# MUTANT-MATRIX failed-precedence-removed decides=s29f twins=s1
-# MUTANT-MATRIX failed-clear-on-not-failed decides=s29p twins=s1
-# MUTANT-MATRIX open-request-bound-480 decides=s29o twins=s1
-# MUTANT-MATRIX dashed-id-skipped decides=s29i twins=s1
-# MUTANT-MATRIX failed-per-agent-key decides=s29q twins=s1
-#
+
 set -uo pipefail
 
 # HERMETIC — scrub the operator's tuning BEFORE this fixture sets its own (I10).
@@ -221,15 +58,7 @@ echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"
 echo "HERMETIC-CONSUMED core/scripts/wfd-start-of.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# In a matrix cell (MX_IN_CELL) a seed guard that fires means the MUTANT changed the state the arm seeds:
-# exit 3, read as cell=SEED -- not a trip (1), not green (0), and not a fixture defect (2).
-broken() { printf 'wait-beat-liveness: FIXTURE BROKEN — %s\n' "$1" >&2; [ -n "${MX_IN_CELL:-}" ] && exit 3; exit 2; }
-# Every mutant kill goes through mutant_killed, behind the base-pass flag of the section it guards
-# (B_<case>=1, set at the end of that case only when the case added no failure in this run).
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+broken() { printf 'wait-beat-liveness: FIXTURE BROKEN — %s\n' "$1" >&2; exit 2; }
 
 TMPROOT="$(mktemp -d)" || broken "mktemp failed"
 trap 'rm -rf "$TMPROOT"' EXIT
@@ -426,7 +255,7 @@ fx_clock_copy() {  # $1 = source world, $2 = destination world: the destination 
 # tuning at source time and the callers vary that tuning per call. The CLI itself is still run, once
 # per distinct outcome, by wiring_e2e (below), which also holds the two answers byte-identical.
 #   pipefail is off, as the CLI runs it. wfd_start_of is unset first: S26 defines the helper's copy in
-#   this shell, and a lone mutant copy must take its own inline fallback, as its CLI run did.
+#   this shell, and a lone copy with no helper beside it must take its own inline fallback, as its CLI run did.
 #   date and sleep are FUNCTIONS here -- THE INJECTED CLOCK in process. The same arithmetic as the PATH
 #   shims above, keyed on the same clock file: `date +%s` is base + offset, `sleep N` adds N and then
 #   sources the world's poll hook in a subshell (so the hook's `exit` ends only the hook). A world with
@@ -927,154 +756,6 @@ S10_only_transcripts() {
 }
 
 # ===========================================================================
-# 11. MUTANTS.
-#     Sections 1, 2, 4, 5, 9 and 10 all assert an ABSENCE somewhere, and an
-#     absence-shaped arm passes against a subject that emits nothing. A seeded
-#     near-miss establishes that an arm DISCRIMINATES; only a mutant establishes that
-#     it discriminates AT ALL. Each mutant is a COPY — the subject is never edited —
-#     and `cmp -s` fails the fixture on a sed that matched nothing, because a mutation
-#     that did not apply reads exactly like an arm that cannot fire.
-# ===========================================================================
-MUTDIR=""
-mutant() {  # $1 = name; rest = sed args. Prints nothing; sets $MUT
-  m_name="$1"; shift
-  # EVERY mutant drive, per push and matrix cell alike, runs with FX_UNDER_MUTANT set: a mutant that
-  # delivers on first sight never polls, so the never-fired churn guard (which protects the UNMUTATED
-  # subject) must not abort it. The driver unsets it after each case; an unmutated run never sees it.
-  FX_UNDER_MUTANT=1
-  MUT_LOG="${MUT_LOG:-}${m_name}|${MUTDIR:-$TMPROOT/mutants}/${m_name}.sh
-"
-  [ -n "$MUTDIR" ] || { MUTDIR="$TMPROOT/mutants"; mkdir -p "$MUTDIR"; }
-  MUT="$MUTDIR/$m_name.sh"
-  sed "$@" "$SUBJ" > "$MUT" || broken "sed failed building mutant $m_name"
-  if cmp -s "$MUT" "$SUBJ"; then
-    bad "MUTANT $m_name: the mutation matched NOTHING — the anchor moved, and a mutant that changes nothing scores every kill it is asked for"
-    return 1
-  fi
-  bash -n "$MUT" 2>/dev/null || { bad "MUTANT $m_name: the mutant does not parse, so its 'kill' would be a syntax error"; return 1; }
-  return 0
-}
-
-M1_collapse_unavailable() {
-  mutant collapse-unavailable \
-    -e 's@\[ -n "$TEAMMATE_DIR" \] \&\& \[ -d "$TEAMMATE_DIR" \] || return 1@[ -n "$TEAMMATE_DIR" ] \&\& [ -d "$TEAMMATE_DIR" ] || { printf 0; return 0; }@' || return
-  W="$(mk_work)"
-  beat "$MUT" "$W" 60 "$TMPROOT/does-not-exist"
-  if has "$LIVE_LINE" && ! has "$UNAVAIL_LINE"; then
-    mutant_killed "${B_s1:-0}" collapse-unavailable "MUTANT collapse-unavailable: folding NO SIGNAL into 'quiet for 0s' reports a dead sensor as a live teammate — section 1 catches it"
-  else bad "MUTANT collapse-unavailable: section 1 survives the two answers being collapsed, so it is not asserting the distinction: $OUT"; fi
-  rm -rf "$W"
-}
-
-M2_threshold_always() {
-  mutant threshold-always \
-    -e 's|if \[ "$sl_q_" -ge "$IDLE_SECS" \]; then|if [ "$sl_q_" -ge 0 ]; then|' || return
-  W="$(mk_work)"
-  TD="$TMPROOT/m2-td"; mk_transcript "$TD" 0 agent-aone-1.jsonl
-  beat "$MUT" "$W" 3600 "$TD"
-  if has "$IDLE_BANNER"; then
-    mutant_killed "${B_s2:-0}" threshold-always "MUTANT threshold-always: dropping the threshold accuses a teammate that just took a turn — section 2's near-miss catches it"
-  else bad "MUTANT threshold-always: the banner did not fire with the threshold removed, so section 2's near-miss arm is not load-bearing: $OUT"; fi
-  rm -rf "$W"
-}
-
-M3_max_not_min() {
-  mutant max-not-min \
-    -e 's|\[ "$tq_a_" -lt "$tq_best_" \]|[ "$tq_a_" -gt "$tq_best_" ]|' || return
-  W="$(mk_work)"
-  TD="$TMPROOT/m3-td"
-  mk_transcript "$TD" 7200 agent-astale-1.jsonl
-  mk_transcript "$TD" 0    agent-afresh-2.jsonl
-  beat "$MUT" "$W" 60 "$TD"
-  if has "$IDLE_BANNER"; then
-    mutant_killed "${B_s4:-0}" max-not-min "MUTANT max-not-min: taking the OLDEST turn accuses a session that has a live teammate — section 4 catches the over-report"
-  else bad "MUTANT max-not-min: section 4 survives the aggregation being inverted, so it is not asserting the error direction: $OUT"; fi
-  rm -rf "$W"
-}
-
-M4_waiting_no_clock() {
-  mutant waiting-no-clock \
-    -e 's|.*human_age.*since this join armed, not yet delivered. Beat again.*|    say "WAITING   $t -- beat $b/$MAX_BEATS, not yet delivered. Beat again."|' || return
-  W="$(mk_work)"
-  TD="$TMPROOT/m4-td"; mk_transcript "$TD" 0 agent-aone-1.jsonl
-  beat "$MUT" "$W" 3600 "$TD"
-  if has "WAITING   deliv.md" && ! has "since this join armed"; then
-    mutant_killed "${B_s7a:-0}" waiting-no-clock "MUTANT waiting-no-clock: removing the elapsed clock from the sleeping emitter — section 7a catches it"
-  else bad "MUTANT waiting-no-clock: section 7a survives the clock being removed: $OUT"; fi
-  rm -rf "$W"
-}
-
-M5_chained_no_beat() {
-  mutant chained-no-beat \
-    -e 's|.*(no beat charged).*|    echo "WAITING   $t -- not yet delivered."|' \
-    -e '/this join armed, not yet delivered\."$/d' || return
-  W="$(mk_work)"
-  TD="$TMPROOT/m5-td"; mk_transcript "$TD" 0 agent-aone-1.jsonl
-  beat "$MUT" "$W" 3600 "$TD"          # prime the bound; see section 7b
-  chained_beat "$MUT" "$W" 3600 "$TD"
-  if has "WAITING   deliv.md -- not yet delivered." && ! has "(no beat charged)"; then
-    mutant_killed "${B_s7b:-0}" chained-no-beat "MUTANT chained-no-beat: restoring the byte-identical chained line — section 7b catches it"
-  else bad "MUTANT chained-no-beat: section 7b survives the chained line losing its beat count: $OUT"; fi
-  rm -rf "$W"
-}
-
-M6_glob_widened() {
-  mutant glob-widened \
-    -e 's|for tq_f_ in "$TEAMMATE_DIR"/\*.jsonl; do|for tq_f_ in "$TEAMMATE_DIR"/*; do|' || return
-  W="$(mk_work)"
-  TD="$TMPROOT/m6-td"
-  mk_transcript "$TD" 7200 agent-aone-1.jsonl
-  printf '{"name":"one"}\n' > "$TD/agent-aone-1.meta.json"
-  beat "$MUT" "$W" 60 "$TD"
-  if ! has "$IDLE_BANNER"; then
-    mutant_killed "${B_s10:-0}" glob-widened "MUTANT glob-widened: counting every file makes a spawn-time sidecar look like a turn, so the banner can never fire — section 10 catches it"
-  else bad "MUTANT glob-widened: section 10 survives the glob being widened past .jsonl: $OUT"; fi
-  rm -rf "$W"
-}
-
-# THE MUTANT THIS REPLACED IS WORTH RECORDING. The resolver first carried a second
-# `[ -d "$td_" ]` existence test, and the mutant that dropped it came back GREEN --
-# because the session id sits INSIDE the glob, so the pattern expands to at most one
-# existing path and the test could never change an outcome. That is a vacuous guard,
-# and the mutant is what proved it: the guard was deleted rather than the mutant
-# weakened. What the resolver actually decides is WHICH SESSION, so that is the
-# subject here.
-M7_session_id_ignored() {
-  mutant session-id-ignored \
-    -e 's@/"${CLAUDE_CODE_SESSION_ID}"/subagents; do@/*/subagents; do@' || return
-  W="$(mk_work)"
-  H="$TMPROOT/m7home"
-  SID="11111111-2222-3333-4444-555555555555"
-  mk_transcript "$H/.claude/projects/aaa-first-project/other-session/subagents" 0 agent-adecoy-9.jsonl
-  mk_transcript "$H/.claude/projects/zzz-second-project/$SID/subagents" 7200 agent-aone-1.jsonl
-  ( cd "$W" && export HOME="$H" CLAUDE_CODE_SESSION_ID="$SID" \
-        AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
-        AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_IDLE_SECS=60 \
-    AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$MUT" deliv.md ) > "$BEATOUT" 2>&1
-  OUT="$(cat "$BEATOUT")"
-  if has "$LIVE_LINE" && ! has "$IDLE_BANNER"; then
-    mutant_killed "${B_s9:-0}" session-id-ignored "MUTANT session-id-ignored: a resolver that wildcards the session lands on another session's live decoy and reports it as this join's teammate — section 9 catches it"
-  else bad "MUTANT session-id-ignored: section 9 survives the session id being dropped from the glob, so it is not asserting WHICH session was resolved: $OUT"; fi
-  rm -rf "$W"
-}
-
-# THE UNMUTATED CONTROL, WITH A POSITIVE CONJUNCT. `rc=0 and nothing went wrong` is
-# also exactly what a subject replaced by `exit 0` produces, so this asserts that a
-# baseline banner IS present, not merely that no failure appeared.
-M8_control() {
-  MUT="$TMPROOT/mutants/control.sh"
-  mkdir -p "$TMPROOT/mutants"
-  cp "$SUBJ" "$MUT" || broken "cannot copy the subject"
-  W="$(mk_work)"
-  TD="$TMPROOT/m8-td"; mk_transcript "$TD" 7200 agent-aone-1.jsonl
-  beat "$MUT" "$W" 60 "$TD"
-  if has "$IDLE_BANNER" && has "WAITING   deliv.md" && [ "$RC" -eq 0 ]; then
-    ok "MUTANT CONTROL: an unmutated copy reports the banner AND the waiting line at rc=0, so the kills above are the mutations and not the harness"
-  else bad "MUTANT CONTROL: the unmutated copy does not reach a verdict (rc=$RC) — every kill above is unattributable: $OUT"; fi
-  rm -rf "$W"
-}
-
-# ===========================================================================
 # 12. CWD INVARIANCE. The suite runs this from the repo root, so every arm above has
 #     been observed at exactly one cwd. That cuts both ways here: a fixture can be
 #     green only from the root, and it can be green only because decoy files happen to
@@ -1203,16 +884,13 @@ churn() {  # $1 = file, $2 = world
   CHURN_FILE="$1"; CHURN_W="$2"; printf '0' > "$1.revs"
   fx_onsleep "$2" "i_=0; read -r i_ < '$1.revs'; i_=\$(( i_ + 1 )); printf '%s' \"\$i_\" > '$1.revs'; printf '%s\n- an in-place edit, revision %d\n%s\n' '$SKELETON' \"\$i_\" '$MARKER' > '$1'; fx_vtouch '$1'"
 }
-churn_stop() {  # [$1 = may-not-fire: a mutant that delivers on first sight never polls]
+churn_stop() {
   fx_onsleep_off "$CHURN_W"
-  [ "${1:-}" = may-not-fire ] && return 0
-  [ -n "${FX_UNDER_MUTANT:-}" ] && return 0
   cs_n_=0; read -r cs_n_ < "$CHURN_FILE.revs"
   [ "${cs_n_:-0}" -gt 0 ] || broken "the churn hook never fired, so the file the arms read as being edited was static"
 }
 # THE REFUSAL, PROBED BOTH WAYS: a churn no beat ever polled must refuse (exit 2); one a beat polled must not.
 S13h_churn_refuses_when_never_fired() {
-  unset FX_UNDER_MUTANT   # this arm IS the guard: a matrix cell sets the variable, and the guard would be bypassed
   ( W="$(mk_work)"; churn "$W/cap.md" "$W"; churn_stop ) 2>/dev/null; cp1=$?
   ( W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 )); churn "$W/cap.md" "$W"; CB_BEAT=6 CB_SETTLE=4 cbeat "$SUBJ" "$W" --complete cap.md; churn_stop ) >/dev/null 2>&1; cp2=$?
   if [ "$cp1" = 2 ] && [ "$cp2" = 0 ]; then ok "churn: a writer no poll ever fired refuses (rc $cp1); one the beat's poll fired does not (rc $cp2)"
@@ -1321,88 +999,6 @@ S13e_complete_marker_not_fenced_not_crlf() {
   rm -rf "$W"
 }
 
-M13_settle_dropped() {
-  mutant settle-dropped -e 's@^  settled "\$1" "\$id_st_"$@  return 0@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/churn.md"
-  churn "$W/churn.md" "$W"
-  CB_BEAT=6 CB_SETTLE=4 cbeat "$MUT" "$W" --complete churn.md
-  churn_stop may-not-fire
-  if has "DELIVERED churn.md"; then mutant_killed "${B_s13c:-0}" settle-dropped "MUTANT settle-dropped: a file still being edited delivers — section 13c catches it"
-  else bad "MUTANT settle-dropped: section 13c survives the settle check being dropped: $OUT"; fi
-  rm -rf "$W"
-}
-
-M14_unfinished_reads_absent() {
-  mutant unfinished-reads-absent \
-    -e 's@^  \[ "\$COMPLETE" -eq 1 \] && \[ -s "\$1" \] && \[ "\$(mtime_of "\$1")" -ge "\$2" \] && ! has_marker "\$1"$@  false@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n' "$SKELETON" > "$W/u.md"
-  cbeat "$MUT" "$W" --complete u.md
-  cbeat "$MUT" "$W" --complete u.md
-  if has "NON-DELIVERY u.md -- absent after" && ! has "UNFINISHED u.md"; then
-    mutant_killed "${B_s13d:-0}" unfinished-reads-absent "MUTANT unfinished-reads-absent: a present seat file is called absent — section 13d catches it"
-  else bad "MUTANT unfinished-reads-absent: section 13d survives UNFINISHED being folded into absent: $OUT"; fi
-  rm -rf "$W"
-}
-
-M15_fence_ignored() {
-  mutant fence-ignored -e 's@(fc == "" && l !~@(l !~@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n```text\n%s\n' "$SKELETON" "$MARKER" > "$W/fenced.md"
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete fenced.md
-  if has "DELIVERED fenced.md"; then mutant_killed "${B_s13e:-0}" fence-ignored "MUTANT fence-ignored: a fenced marker delivers — section 13e catches it"
-  else bad "MUTANT fence-ignored: section 13e survives the fence test being dropped: $OUT"; fi
-  rm -rf "$W"
-}
-
-M16_crlf_ignored() {
-  mutant crlf-ignored -e 's@ && l !~ /\\r/ && @ \&\& @' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\r\n%s\r\n' "$SKELETON" "$MARKER" > "$W/crlf.md"
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete crlf.md
-  if has "DELIVERED crlf.md"; then mutant_killed "${B_s13e:-0}" crlf-ignored "MUTANT crlf-ignored: a CRLF marker delivers — section 13e catches it"
-  else bad "MUTANT crlf-ignored: section 13e survives the CRLF test being dropped: $OUT"; fi
-  rm -rf "$W"
-}
-
-M17_fence_closes_on_any_run() {
-  mutant fence-closes-on-any-run \
-    -e 's@else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^\[ \\t\\r\]\*\$/) { fc = ""; fl = 0 }@else { fc = ""; fl = 0 }@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n````text\nquoted\n```\n%s\n' "$SKELETON" "$MARKER" > "$W/short.md"
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete short.md
-  if has "DELIVERED short.md"; then mutant_killed "${B_s13e:-0}" fence-closes-on-any-run "MUTANT fence-closes-on-any-run: a \`\`\`\` fence closed by \`\`\` delivers — section 13e catches it"
-  else bad "MUTANT fence-closes-on-any-run: section 13e survives any fence run closing a fence: $OUT"; fi
-  rm -rf "$W"
-}
-
-M18_settle_is_poll() {
-  # D1's defect restored: the window read from POLL, not SETTLE. This arm tests that settle age is
-  # compared against SETTLE, not against POLL -- and nothing else, so it needs no writer. A static
-  # marked file, SETTLE=600, POLL=1, a 5s beat with no margin: the sweep records the settle epoch
-  # t0, and the deadline is an EPOCH (t0 + 4 or later), so the post-deadline re-check (wfd's
-  # "is_delivered" after the poll loop) runs at least 4 whole seconds after t0 however long load
-  # stretches any step. The mutant (age > POLL=1) therefore always delivers -- in the loop or at
-  # that re-check -- and the subject (age > 600) never does. The old arm raced a writer editing
-  # every 4s against the poll cadence, and a stretched poll left the mutant no quiet window (BL-703).
-  mutant settle-is-poll -e 's@-gt "\$SETTLE" \] && return 0@-gt "$POLL" ] \&\& return 0@' || return
-  W="$(mk_work)"
-  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/slow.md"
-  for s in "$SUBJ" "$MUT"; do
-    ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=5 AI_DLC_WAIT_SETTLE_SECS=600 \
-        AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=3 \
-        AI_DLC_STATE_DIR="_bmad-output/$(basename "$s")" AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-        AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$s" --since "$(( $(date +%s) - 30 ))" --complete slow.md ) > "$BEATOUT.$(basename "$s")" 2>&1
-  done
-  OUT="$(cat "$BEATOUT.$(basename "$SUBJ")")"; o_s="$OUT"
-  OUT="$(cat "$BEATOUT.$(basename "$MUT")")"
-  if has "DELIVERED slow.md" && case "$o_s" in *"DELIVERED slow.md"*) false ;; *) true ;; esac; then
-    mutant_killed "${B_s13c:-0}" settle-is-poll "MUTANT settle-is-poll: a static marked file delivers under a POLL window and not under SETTLE=600 — the window is SETTLE's"
-  else bad "MUTANT settle-is-poll: the settle window does not separate SETTLE from POLL (subject: $o_s) (mutant: $OUT)"; fi
-  rm -rf "$W"
-}
-
 S13f_arming_note_only_for_pre_arm_files() {
   # D2: under --complete a POST-arm undelivered file did not "already have content".
   W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
@@ -1419,91 +1015,6 @@ S13f_arming_note_only_for_pre_arm_files() {
     ok "complete: NEAR-MISS — a pre-arm file under --complete still gets the NOTE"
   else bad "complete: NEAR-MISS FAILED — a pre-arm file lost the arming NOTE: $OUT"; fi
   rm -rf "$W" "$W2"
-}
-
-S13g_no_flag_output_byte_identical() {
-  # D2's clause must not move a byte of no-flag output: the same pre-arm world beaten by HEAD's
-  # subject and by a copy with the clause removed, timing words masked, compared whole.
-  W="$(mktemp -d)" || broken "mktemp failed"
-  OLD="$W/old-subject.sh"
-  sed 's@ && \[ "\$(mtime_of "\$t")" -lt "\$j" \] && PREEXISTING=@ \&\& PREEXISTING=@' "$SUBJ" > "$OLD"
-  if cmp -s "$OLD" "$SUBJ"; then bad "no-flag byte identity: FIXTURE STALE — the D2 clause was not found to remove"; rm -rf "$W"; return; fi
-  for s in "$SUBJ" "$OLD"; do
-    d="$W/$(basename "$s" .sh)"; mkdir -p "$d/_bmad-output"
-    # A world built outside mk_work had no clock, so its beat polled on the REAL clock and the number of
-    # date/sleep shim starts moved with timing. On the injected clock the two-second quantum is exactly two
-    # one-second polls, every run.
-    fx_clock_on "$d"
-    printf 'stale\n' > "$d/x.md"; fx_backdate "$d/x.md" 3600 || broken "cannot backdate"
-    # BOTH beats carry the short quantum: an env prefix binds one command, and a bare second
-    # `bash` would sleep the 600s default.
-    # Two calls from ONE shell, as the CLI pair shared a parent: the second is chained (WBL_CHAIN keeps
-    # the marker the first wrote).
-    ( cd "$d" && export AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
-        AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" AI_DLC_PROJECT_ROOT="$PWD" && unset CLAUDE_CODE_SESSION_ID \
-        && { ( wbl_ip "$s" x.md y.md ); ( WBL_CHAIN=1 wbl_ip "$s" x.md y.md ); } ) > "$d.raw" 2>&1
-    sed -E 's/[0-9]+[smhd] (old|since|ago)/N \1/g' "$d.raw" > "$d.out"
-  done
-  a="$(cat "$W/$(basename "$SUBJ" .sh).out")"; b="$(cat "$W/old-subject.out")"
-  case "$a" in *"already had content"*) : ;; *) bad "no-flag byte identity: CONTROL FAILED — the world never printed the arming NOTE: $a"; rm -rf "$W"; return ;; esac
-  if [ "$a" = "$b" ]; then ok "no-flag byte identity: a pre-arm and an absent target print byte-identical output with and without the D2 clause"
-  else bad "no-flag byte identity: the D2 clause changed no-flag output: [$a] vs [$b]"; fi
-  rm -rf "$W"
-}
-
-M19_arming_note_ungated() {
-  mutant arming-note-ungated -e 's@ && \[ "\$(mtime_of "\$t")" -lt "\$j" \] && PREEXISTING=@ \&\& PREEXISTING=@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n' "$SKELETON" > "$W/post.md"
-  CB_BEAT=2 cbeat "$MUT" "$W" --complete post.md
-  if has "already had content when this join armed"; then mutant_killed "${B_s13f:-0}" arming-note-ungated "MUTANT arming-note-ungated: a post-arm file gets the false NOTE — section 13f catches it"
-  else bad "MUTANT arming-note-ungated: section 13f survives the D2 clause being removed: $OUT"; fi
-  rm -rf "$W"
-}
-
-M9_marker_not_required() {
-  mutant marker-not-required -e 's@^  \[ "\$COMPLETE" -eq 1 \] || return 0$@  return 0@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n' "$SKELETON" > "$W/b.md"
-  cbeat "$MUT" "$W" --complete b.md
-  if has "DELIVERED b.md"; then mutant_killed "${B_s13a:-0}" marker-not-required "MUTANT marker-not-required: a skeleton is delivered under --complete — section 13a catches it"
-  else bad "MUTANT marker-not-required: section 13a survives the marker test being dropped: $OUT"; fi
-  rm -rf "$W"
-}
-
-M10_global_progress_grant() {
-  mutant global-progress-grant \
-    -e 's@^    target_progressed "\$t" "\$pg" && PROGRESSED=1$@    for t2_ in $TARGETS; do target_progressed "$t2_" "$pg" \&\& PROGRESSED=1; done@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n' "$SKELETON" > "$W/grow.md"; printf '%s\n' "$SKELETON" > "$W/static.md"
-  cbeat "$MUT" "$W" --complete grow.md static.md
-  fx_advance "$W" 1; printf -- '- a second finding\n' >> "$W/grow.md"; fx_settime "$W/grow.md" "$(fx_now "$W")"
-  cbeat "$MUT" "$W" --complete grow.md static.md
-  if has "PROGRESS  static.md" && ! has "NON-DELIVERY static.md"; then
-    mutant_killed "${B_s13b:-0}" global-progress-grant "MUTANT global-progress-grant: one target's writes extend the other's wait — section 13b catches it"
-  else bad "MUTANT global-progress-grant: section 13b survives a cross-grant: $OUT"; fi
-  rm -rf "$W"
-}
-
-M11_marker_anywhere() {
-  mutant marker-anywhere -e 's@NF { l = \$0 }@/^seat-complete: / { l = $0 }@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n%s\n- a finding appended after the marker\n' "$SKELETON" "$MARKER" > "$W/d.md"
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete d.md
-  if has "DELIVERED d.md"; then mutant_killed "${B_s13a:-0}" marker-anywhere "MUTANT marker-anywhere: a marker followed by a finding delivers — section 13a catches it"
-  else bad "MUTANT marker-anywhere: section 13a survives the marker being matched anywhere: $OUT"; fi
-  rm -rf "$W"
-}
-
-M12_trailing_blank_hides_marker() {
-  mutant trailing-blank-hides -e 's@NF { l = \$0 }@{ l = $0 }@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n%s\n\n   \n\n' "$SKELETON" "$MARKER" > "$W/e.md"
-  cbeat "$MUT" "$W" --complete e.md
-  if has "WAITING   e.md" && ! has "DELIVERED e.md"; then
-    mutant_killed "${B_s13a:-0}" trailing-blank-hides "MUTANT trailing-blank-hides: blank lines after the marker block delivery — section 13a catches it"
-  else bad "MUTANT trailing-blank-hides: section 13a survives blank lines being read as the last line: $OUT"; fi
-  rm -rf "$W"
 }
 
 # ===========================================================================
@@ -1554,71 +1065,6 @@ S14a_complete_repair_token() {
   cbeat "$SUBJ" "$W" --complete-repair --complete r1.md
   if [ "$r1" -eq 64 ] && [ "$RC" -eq 64 ]; then ok "repair: --complete with --complete-repair is refused (exit 64), in either order"
   else bad "repair: --complete with --complete-repair was accepted (rc=$r1 / $RC): $OUT"; fi
-  rm -rf "$W"
-}
-
-M20_repair_token_is_seat() {
-  mutant repair-token-is-seat -e 's@MARK_TOKEN="repair-complete: serial "@MARK_TOKEN="seat-complete: "@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\nseat-complete: part 3\n' "$SKELETON" > "$W/r2.md"
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete-repair r2.md
-  if has "DELIVERED r2.md"; then mutant_killed "${B_s14a:-0}" repair-token-is-seat "MUTANT repair-token-is-seat: --complete-repair keyed on seat-complete: consumes a part's record — section 14a catches it"
-  else bad "MUTANT repair-token-is-seat: section 14a survives --complete-repair accepting the part marker: $OUT"; fi
-  rm -rf "$W"
-}
-
-M21_repair_either_token() {
-  mutant repair-either-token \
-    -e 's@index(l, ENVIRON\["MT_"\]) == 1)@(index(l, ENVIRON["MT_"]) == 1 || index(l, "seat-complete: ") == 1 || index(l, "repair-complete: serial ") == 1))@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\nseat-complete: part 3\n' "$SKELETON" > "$W/r2.md"
-  printf '%s\nrepair-complete: serial x\n' "$SKELETON" > "$W/s1.md"
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete-repair r2.md; o1="$OUT"
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete s1.md
-  if has "DELIVERED s1.md" && case "$o1" in *"DELIVERED r2.md"*) true ;; *) false ;; esac; then
-    mutant_killed "${B_s14a:-0}" repair-either-token "MUTANT repair-either-token: a marker test accepting either token delivers the part record AND the repair line under --complete — section 14a catches both"
-  else bad "MUTANT repair-either-token: section 14a survives an either-token marker test (repair beat: $o1) (complete beat: $OUT)"; fi
-  rm -rf "$W"
-}
-
-M22_repair_token_no_space() {
-  mutant repair-token-no-serial -e 's@MARK_TOKEN="repair-complete: serial "@MARK_TOKEN="repair-complete: "@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\nrepair-complete: done\n' "$SKELETON" > "$W/r3.md"
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete-repair r3.md
-  if has "DELIVERED r3.md"; then mutant_killed "${B_s14a:-0}" repair-token-no-serial "MUTANT repair-token-no-serial: the token without 'serial ' delivers 'repair-complete: done' — section 14a's near-miss catches it"
-  else bad "MUTANT repair-token-no-serial: section 14a's bare-prefix near-miss survives: $OUT"; fi
-  rm -rf "$W"
-}
-
-M23_repair_marker_not_col0() {
-  mutant marker-not-col0 -e 's@index(l, ENVIRON\["MT_"\]) == 1@index(l, ENVIRON["MT_"]) > 0@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n- %s\n' "$SKELETON" "$REPAIR_MARKER" > "$W/r4.md"
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete-repair r4.md
-  if has "DELIVERED r4.md"; then mutant_killed "${B_s14a:-0}" marker-not-col0 "MUTANT marker-not-col0: a marker matched anywhere in the line delivers a list item — section 14a's near-miss catches it"
-  else bad "MUTANT marker-not-col0: section 14a's list-item near-miss survives: $OUT"; fi
-  rm -rf "$W"
-}
-
-M24_repair_both_flags_accepted() {
-  mutant repair-both-flags -e 's@^if \[ "\$SEAT_FLAG" -eq 1 \] && \[ "\$COMPLETE_REPAIR" -eq 1 \]; then$@if false; then@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  cbeat "$MUT" "$W" --complete --complete-repair r1.md
-  if [ "$RC" -ne 64 ] && has "WAITING   r1.md"; then mutant_killed "${B_s14a:-0}" repair-both-flags "MUTANT repair-both-flags: the refusal removed, both flags run a beat — section 14a's exit-64 arm catches it"
-  else bad "MUTANT repair-both-flags: section 14a's exit-64 arm survives the refusal being removed (rc=$RC): $OUT"; fi
-  rm -rf "$W"
-}
-
-M25_mark_name_fixed() {
-  mutant mark-name-fixed -e 's@^MARK_NAME="\${MARK_TOKEN% }"$@MARK_NAME="seat-complete:"@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\nseat-complete: part 3\n' "$SKELETON" > "$W/r2.md"
-  cbeat "$MUT" "$W" --complete-repair r2.md
-  if has "UNFINISHED r2.md -- present, last non-blank line is not seat-complete:" \
-     && ! grep -qxF 'UNFINISHED r2.md -- present, last non-blank line is not repair-complete: serial' "$BEATOUT"; then
-    mutant_killed "${B_s14a:-0}" mark-name-fixed "MUTANT mark-name-fixed: the UNFINISHED line naming seat-complete: under --complete-repair — section 14a catches it"
-  else bad "MUTANT mark-name-fixed: section 14a survives the repair UNFINISHED line naming the wrong token: $OUT"; fi
   rm -rf "$W"
 }
 
@@ -1727,21 +1173,6 @@ S15a_status_matches_beat() {
   rm -rf "$W"
 }
 
-M26_status_last_line_tail() {
-  mutant status-last-line-tail \
-    -e 's@^status_marked() { has_marker "\$1"; }$@status_marked() { grep -q '\''^seat-complete'\'' <<<"$(tail -1 "$1")"; }@' || return
-  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
-  mk_parity_world "$W"
-  obeat "$SUBJ" "$W" "$BEATOUT" 2 60 "$SI" --complete $PARITY_FILES; bt="$(cat "$BEATOUT")"
-  CB_SETTLE=60 scall "$SUBJ" "$W" --complete --since "$SI" $PARITY_FILES; parity "$bt" "$OUT" "$W"; m_ctl="$MISMATCH"
-  CB_SETTLE=60 scall "$MUT" "$W" --complete --since "$SI" $PARITY_FILES; parity "$bt" "$OUT" "$W"; m_mut="$MISMATCH"
-  case "$m_mut" in *p-trail.md:*p-crlf.md:*|*p-crlf.md:*p-trail.md:*) km=1 ;; *) km=0 ;; esac
-  if [ -z "$m_ctl" ] && [ "$km" -eq 1 ]; then
-    mutant_killed "${B_s15a:-0}" status-last-line-tail "MUTANT status-last-line-tail: a hand-rolled tail -1 marker test disagrees with the beat on trailing-blank and CRLF — section 15a catches it"
-  else bad "MUTANT status-last-line-tail: section 15a survives (control mismatches:${m_ctl:- none}) (mutant mismatches:${m_mut:- none})"; fi
-  rm -rf "$W"
-}
-
 S15b_status_absent_and_unsettled() {
   W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
   printf 'answer\n' > "$W/present.md"
@@ -1792,12 +1223,6 @@ S15d_status_after_delivery() {
     *"WAITING   done.md"*) ok "status-after-delivery: --reset clears the consumed record" ;;
     *) bad "status-after-delivery: after --reset the seat read neither: $SAD_RESET" ;; esac
 }
-M34_status_no_delivered_record() {
-  mutant status-no-delivered-record -e 's@^    record_delivered "\$t" "\$c"$@    :@' || return
-  status_after_delivery "$MUT"
-  case "$SAD_PLAIN$SAD_SINCE" in *"DELIVERED done.md"*) bad "MUTANT status-no-delivered-record: a consumed seat still read DELIVERED without the record — something else carries it" ;;
-    *) mutant_killed "${B_s15d:-0}" status-no-delivered-record "MUTANT status-no-delivered-record: without the record a consumed seat reads unarmed or UNSETTLED — section 15d catches it" ;; esac
-}
 
 # The REVISED-AFTER-MARKER count must outlive DELIVERED: a beat's printed line is read once and
 # gone, so `<key>.revised` is the record a repair brief reads. Only --reset (or a new round) clears it.
@@ -1832,18 +1257,6 @@ S16b_revised_survives_delivery() {
   if [ "$RS_RESET" = ABSENT ]; then ok "revised-survives: --reset clears .revised"
   else bad "revised-survives: .revised survived --reset"; fi
 }
-M35_revised_deleted_on_delivery() {
-  mutant revised-deleted-on-delivery \
-    -e 's@^    rm -f "\$c" "\$s" "\$pg" "\$gr" "\${c}\.settle" "\${COUNTER_DIR}/failed-"\*"-\${c##\*/}" 2>/dev/null || true$@    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" "${COUNTER_DIR}/failed-"*"-${c##*/}" 2>/dev/null || true@' \
-    -e 's@^    rm -f "\$c" "\$s" "\${c}\.progress" "\${c}\.grants" "\${c}\.settle" "\${COUNTER_DIR}/failed-"\*"-\${c##\*/}" 2>/dev/null || true$@    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" "${c}.revised" "${COUNTER_DIR}/failed-"*"-${c##*/}" 2>/dev/null || true@' || return
-  revised_survives "$MUT"
-  # The control S16b carries: a world in which the beat saw no revision has no count to delete,
-  # and ABSENT would then acquit nothing.
-  case "$RS_BEAT" in *"REVISED-AFTER-MARKER 1 rv.md"*) ;;
-    *) broken "MUTANT revised-deleted-on-delivery: CONTROL — the mutant's beat did not report rv.md revised once, so ABSENT below would mean nothing" ;; esac
-  if [ "$RS_AFTER" = ABSENT ]; then mutant_killed "${B_s16b:-0}" revised-deleted-on-delivery "MUTANT revised-deleted-on-delivery: DELIVERED takes the count with it — section 16b catches it"
-  else bad "MUTANT revised-deleted-on-delivery: .revised ('$RS_AFTER') survived the restored rm — something else rewrites it"; fi
-}
 
 # --status SURFACES the persisted count, so a repair brief never computes a cksum key by hand; and
 # the count is ROUND-SCOPED: a later round re-arms with `--since <round epoch>` (never --reset), so
@@ -1873,55 +1286,6 @@ S16c_revised_status_and_rounds() {
     *) ok "revised-rounds: --status for a later round withholds the earlier round's count" ;; esac
   if [ "$RR_DISK" = ABSENT ]; then ok "revised-rounds: a beat armed for the later round drops round one's .revised"
   else bad "revised-rounds: round one's .revised survived a beat armed with a later --since — it leaks into the next round"; fi
-}
-M36_revised_rounds_mutants() {
-  mutant revised-status-silent -e 's@^      say_revised "\$t" "\$sd_c"$@      :@' || return; M_RS="$MUT"
-  mutant revised-round-kept -e 's@^    \[ -f "\$rr_" \] && \[ "\$(mtime_of "\$rr_")" -lt "\$j" \] && rm -f "\$rr_" 2>/dev/null$@    :@' || return; M_RK="$MUT"
-  # Each mutant run carries S16c's control: in a world whose beat saw no revision there is no count
-  # for --status to withhold and no round-one .revised to leak, so both verdicts would be acquittals.
-  revised_rounds "$M_RS"
-  case "$RR_BEAT" in *"REVISED-AFTER-MARKER 1 rv.md"*) ;;
-    *) broken "MUTANT revised-status-silent: CONTROL — the mutant's round one did not report rv.md revised once" ;; esac
-  case "$RR_STATUS1" in *"REVISED-AFTER-MARKER"*) bad "MUTANT revised-status-silent: --status still printed the count — something else carries it" ;;
-    *) mutant_killed "${B_s16c:-0}" revised-status-silent "MUTANT revised-status-silent: --status no longer surfaces the count — section 16c catches it" ;; esac
-  revised_rounds "$M_RK"
-  case "$RR_BEAT" in *"REVISED-AFTER-MARKER 1 rv.md"*) ;;
-    *) broken "MUTANT revised-round-kept: CONTROL — the mutant's round one did not report rv.md revised once, so no .revised existed to leak" ;; esac
-  if [ "$RR_DISK" = PRESENT ]; then mutant_killed "${B_s16c:-0}" revised-round-kept "MUTANT revised-round-kept: round one's .revised leaks past a later --since — section 16c catches it"
-  else bad "MUTANT revised-round-kept: .revised was dropped without the round clear — something else removes it"; fi
-}
-
-M27_status_absent_delivered() {
-  mutant status-absent-delivered \
-    -e 's@^      echo "WAITING   \$t -- absent or empty"$@      S_V="DELIVERED"; echo "DELIVERED $t"@' || return
-  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
-  printf 'answer\n' > "$W/present.md"
-  scall "$MUT" "$W" --since "$SI" present.md gone.md
-  if has "DELIVERED gone.md" && has "STATUS -- 2 delivered, 0 not."; then
-    mutant_killed "${B_s15b:-0}" status-absent-delivered "MUTANT status-absent-delivered: an absent seat counted as closed (graph s319) — section 15b catches it"
-  else bad "MUTANT status-absent-delivered: section 15b survives the absent branch printing DELIVERED: $OUT"; fi
-  rm -rf "$W"
-}
-
-M28_status_missing_record_ancient() {
-  mutant status-missing-record-ancient \
-    -e 's@\.settle" 2>/dev/null || echo '\'''\'')"$@.settle" 2>/dev/null || echo "$(content_hash "$t") 0")"@' || return
-  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
-  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/sealed.md"
-  scall "$MUT" "$W" --complete --since "$SI" sealed.md
-  if has "DELIVERED sealed.md"; then mutant_killed "${B_s15b:-0}" status-missing-record-ancient "MUTANT status-missing-record-ancient: a missing settle record read as an ancient one says DELIVERED — section 15b catches it"
-  else bad "MUTANT status-missing-record-ancient: section 15b survives a missing record reading as settled: $OUT"; fi
-  rm -rf "$W"
-}
-
-M29_status_reset_accepted() {
-  mutant status-reset-accepted -e 's@^if \[ "\$STATUS" -eq 1 \] && \[ "\$RESET" -eq 1 \]; then$@if false; then@' || return
-  W="$(mk_work)"; SI=$(( $(date +%s) - 30 ))
-  printf 'answer\n' > "$W/present.md"
-  scall "$MUT" "$W" --reset --since "$SI" present.md
-  if [ "$RC" -ne 64 ] && has "STATUS --"; then mutant_killed "${B_s15b:-0}" status-reset-accepted "MUTANT status-reset-accepted: --status --reset runs — section 15b's exit-64 arm catches it"
-  else bad "MUTANT status-reset-accepted: section 15b's exit-64 arm survives (rc=$RC): $OUT"; fi
-  rm -rf "$W"
 }
 
 fx_snap() {  # $1 = tree, $2 = out file: the listing and every file's hash, in find order
@@ -1983,39 +1347,6 @@ S15c_status_read_only() {
   rm -rf "$W" "$W2"
 }
 
-M30_status_creates_state_dir() {
-  mutant status-creates-state-dir -e 's@^if \[ "\$STATUS" -eq 0 \]; then   # --status creates nothing@if :; then   # --status creates nothing@' || return
-  W2="$(mktemp -d)" || broken "mktemp failed"
-  printf 'x\n' > "$W2/f.md"
-  scall "$MUT" "$W2" --since "$(( $(date +%s) - 30 ))" f.md
-  if [ -d "$W2/_bmad-output" ]; then mutant_killed "${B_s15c:-0}" status-creates-state-dir "MUTANT status-creates-state-dir: the guard disabled, --status creates _bmad-output — section 15c catches it"
-  else bad "MUTANT status-creates-state-dir: section 15c survives the mkdir guard being disabled: $OUT"; fi
-  rm -rf "$W2"
-}
-
-M31_status_arms_join() {
-  mutant status-arms-join \
-    -e 's@^  \[ -n "\$sj_s_" \] || return 1$@  [ -n "$sj_s_" ] || return 1; printf "%s" "$sj_s_" > "$sj_f_" 2>/dev/null@' || return
-  W="$(mk_work)"; mkdir -p "$W/_bmad-output/.wait-beats"
-  printf 'x\n' > "$W/nojoin.md"
-  fx_snap "$W" "$TMPROOT/snap-m1"
-  scall "$MUT" "$W" --since "$(( $(date +%s) - 30 ))" nojoin.md
-  fx_snap "$W" "$TMPROOT/snap-m2"
-  if ! cmp -s "$TMPROOT/snap-m1" "$TMPROOT/snap-m2"; then mutant_killed "${B_s15c:-0}" status-arms-join "MUTANT status-arms-join: --status writing a .since changes the tree — section 15c's snapshot catches it"
-  else bad "MUTANT status-arms-join: section 15c's snapshot survives --status arming a join"; fi
-  rm -rf "$W"
-}
-
-M32_status_nojoin_epoch_zero() {
-  mutant status-nojoin-epoch-zero -e 's@^  \[ -n "\$sj_s_" \] || return 1$@  [ -n "$sj_s_" ] || sj_s_=0@' || return
-  W="$(mk_work)"
-  printf 'x\n' > "$W/nojoin.md"
-  scall "$MUT" "$W" nojoin.md
-  if has "DELIVERED nojoin.md" && ! has "no join armed"; then mutant_killed "${B_s15c:-0}" status-nojoin-epoch-zero "MUTANT status-nojoin-epoch-zero: an unjoined path given epoch 0 reads DELIVERED — section 15c's 'no join armed' arm catches it"
-  else bad "MUTANT status-nojoin-epoch-zero: section 15c survives an unjoined path getting an epoch: $OUT"; fi
-  rm -rf "$W"
-}
-
 # ===========================================================================
 # 16. REVISED-AFTER-MARKER: A SEAT THAT EDITS A FILE IT DECLARED FINAL IS NAMED, AT BOTH PLACES
 #     A PATH IS DELIVERED.
@@ -2026,7 +1357,6 @@ M32_status_nojoin_epoch_zero() {
 #       f4    (iv)  revised during a beat that times out (.revised left on disk), delivered at
 #                   the PRE-SWEEP site of the next beat (a pre-sweep delivery prints no BEAT
 #                   COMPLETE line; a post-poll one does -- that is the site discriminator)
-#     The world writes its outputs to files so the mutant battery can run four copies at once.
 # ===========================================================================
 revised_world() {  # $1 = subject, $2 = fresh workdir
   rw_s="$1" rw_w="$2"; rw_si=$(( $(date +%s) - 30 ))
@@ -2075,38 +1405,6 @@ S16_revised_after_marker() {
     ok "revised (ii): a marker removed then restored byte-identical still prints REVISED-AFTER-MARKER n>=1"
   else bad "revised (ii): a withdrawn-and-restored marker printed no REVISED line: $OUT"; fi
   rm -rf "$W"
-}
-
-# FOUR MUTANTS, ONE WORLD EACH, RUN IN SEQUENCE (the clocked worlds cost no wall time). Each must kill its own arm and leave the arm
-# it does not touch standing -- the marker-loss mutant in particular must kill (ii) and NOT (i),
-# or the two counting sites are not separately observed.
-M33_revised_mutants() {
-  rv_lines="$(grep -n '^    say_revised "\$t" "\$c"$' "$SUBJ" | cut -d: -f1)"
-  rv_pre="$(printf '%s\n' "$rv_lines" | sed -n 1p)"; rv_post="$(printf '%s\n' "$rv_lines" | sed -n 2p)"
-  [ -n "$rv_pre" ] && [ -n "$rv_post" ] && [ -z "$(printf '%s\n' "$rv_lines" | sed -n 3p)" ] \
-    || { bad "MUTANT revised-*: expected exactly two say_revised delivery sites, found: $rv_lines"; return; }
-  mutant revised-bump-dropped -e 's@^  rb_f_="\${1%\.settle}\.revised"$@  return 0@' || return; M_BUMP="$MUT"
-  mutant revised-loss-uncounted -e 's@^    if settle_record "\$id_st_" >/dev/null; then revised_bump "\$id_st_"; fi$@    :@' || return; M_LOSS="$MUT"
-  mutant revised-presweep-silent -e "${rv_pre}s@.*@    :@" || return; M_PRE="$MUT"
-  mutant revised-postpoll-silent -e "${rv_post}s@.*@    :@" || return; M_POST="$MUT"
-  for mn in BUMP LOSS PRE POST; do
-    eval "ms=\$M_$mn"
-    mkdir -p "$TMPROOT/rv-$mn"; revised_world "$ms" "$TMPROOT/rv-$mn"
-  done
-  r_has() { rw_out "$TMPROOT/rv-$1" "$2"; has "$3"; }
-  if ! r_has BUMP b2 "REVISED-AFTER-MARKER 1 f1.md" && ! r_has BUMP b5 " f2.md -- its content changed" && r_has BUMP b2 "DELIVERED f1.md"; then
-    mutant_killed "${B_s16:-0}" revised-bump-dropped "MUTANT revised-bump-dropped: no counter, no REVISED line for (i) or (ii) — section 16 catches it"
-  else bad "MUTANT revised-bump-dropped: section 16 (i)/(ii) survive the counter being dropped"; fi
-  if ! r_has LOSS b5 " f2.md -- its content changed" && r_has LOSS b5 "DELIVERED f2.md" && r_has LOSS b2 "REVISED-AFTER-MARKER 1 f1.md"; then
-    mutant_killed "${B_s16:-0}" revised-loss-uncounted "MUTANT revised-loss-uncounted: a marker loss not counted kills (ii) and leaves (i) standing — the two counting sites are separately observed"
-  else bad "MUTANT revised-loss-uncounted: expected (ii) failing and (i) standing — b2: $(cat "$TMPROOT/rv-LOSS/o.b2") b5: $(cat "$TMPROOT/rv-LOSS/o.b5")"; fi
-  if ! r_has PRE b4 "REVISED-AFTER-MARKER 1 f4.md" && r_has PRE b4 "DELIVERED f4.md" && r_has PRE b2 "REVISED-AFTER-MARKER 1 f1.md"; then
-    mutant_killed "${B_s16:-0}" revised-presweep-silent "MUTANT revised-presweep-silent: the pre-sweep site printing no REVISED line kills (iv) and leaves (i) — section 16 catches it"
-  else bad "MUTANT revised-presweep-silent: expected (iv) failing and (i) standing — b2: $(cat "$TMPROOT/rv-PRE/o.b2") b4: $(cat "$TMPROOT/rv-PRE/o.b4")"; fi
-  if ! r_has POST b2 "REVISED-AFTER-MARKER 1 f1.md" && r_has POST b2 "DELIVERED f1.md" && r_has POST b4 "REVISED-AFTER-MARKER 1 f4.md"; then
-    mutant_killed "${B_s16:-0}" revised-postpoll-silent "MUTANT revised-postpoll-silent: the post-poll site printing no REVISED line kills (i) and leaves (iv) — section 16 catches it"
-  else bad "MUTANT revised-postpoll-silent: expected (i) failing and (iv) standing — b2: $(cat "$TMPROOT/rv-POST/o.b2") b4: $(cat "$TMPROOT/rv-POST/o.b4")"; fi
-  rm -rf "$TMPROOT"/rv-*
 }
 
 # ===========================================================================
@@ -2275,20 +1573,6 @@ S17e_shard_header_refusals() {
   rm -rf "$W" "$LONE"
 }
 
-M37_shard_check_exit_ignored() {
-  mutant shard-check-exit-ignored \
-    -e 's@^  if \[ -n "\$SHARD_AXIS" \] && header_refused "\$1"; then return 1; fi$@  if [ -n "$SHARD_AXIS" ]; then header_refused "$1"; fi@' || return
-  cp "$MERGE" "$MUTDIR/merge-adversarial-shards.sh" || broken "cannot copy the merge beside the mutant"
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  mk_shard "$W/s-nov.md" "$CV" ""                 ""
-  mk_shard "$W/s-ok.md"  "$CV" EXIT_CONDITION_MET ""
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete --shard-header convergence s-nov.md s-ok.md
-  if has "DELIVERED s-nov.md" && has "DELIVERED s-ok.md"; then
-    mutant_killed "${B_s17a:-0}" shard-check-exit-ignored "MUTANT shard-check-exit-ignored: a join ignoring the check's exit delivers the no-verdict shard — section 17a (1) catches it"
-  else bad "MUTANT shard-check-exit-ignored: section 17a (1) survives the check's exit being ignored (or the mutant never ran): $OUT"; fi
-  rm -rf "$W"
-}
-
 # ===========================================================================
 # 18. --dispatch MUST NOT SWITCH GLOBBING OFF FOR THE REST OF THE BEAT.
 #     The id split runs under `set -f`. Left on, every later glob in the subject iterates once
@@ -2362,7 +1646,7 @@ wait_until() {  # $1 = pid of the producer, rest = command
 # The first `.asleep-<t>` means the beat is past its arming lease, its sweep and its post-sweep lease,
 # and inside its poll loop -- an event the subject's own loop produces, not a clock. Once `.go-<t>`
 # exists every later poll returns at once and the beat runs out its quantum in virtual seconds, so a
-# released beat always ends, under any mutant.
+# released beat always ends.
 # Each poll is also numbered: poll <n> writes `.asleep-<t>.<n>` and is released by `.go-<t>.<n>` as well
 # as by `.go-<t>`, so a fixture can let a beat take exactly one more poll and wait for the next.
 beat_gate() {  # $1 = world
@@ -2396,20 +1680,6 @@ S18b_dispatch_holder_hands_off() {
   else bad "dispatch-heir: CONTROL FAILED — B ('$HEIR_B_PID') did not hold the marker apart from A ('$HEIR_A_PID')"; fi
   if [ -n "$HEIR_AFTER" ] && [ "$HEIR_AFTER" = "$HEIR_A_PID" ]; then ok "dispatch-heir: a --dispatch holder that exits hands the marker to the live sibling"
   else bad "dispatch-heir: after the --dispatch holder exited the marker names '$HEIR_AFTER', not the live sibling $HEIR_A_PID — its heir scan never globbed"; fi
-  rm -rf "$W"
-}
-M38_dispatch_noglob_leaks() {
-  mutant dispatch-noglob-leaks -e 's@^  \[ "\$dp_noglob_" = 1 \] || set +f$@  :@' || return
-  SD="$(sib_dir "$MUT")"
-  dispatch_live_world "$SD/wait-for-deliverable.sh"
-  if [ "$RC" -eq 0 ] && has "$UNAVAIL_LINE" && ! has "$LIVE_LINE"; then
-    mutant_killed "$(( ${B_s18a:-0} && ${B_s18b:-0} ))" dispatch-noglob-leaks "MUTANT dispatch-noglob-leaks: with the restore deleted a --dispatch beat reads a fresh transcript as no signal — section 18a catches it"
-  else bad "MUTANT dispatch-noglob-leaks: section 18a survives noglob leaking (rc=$RC): $OUT"; fi
-  rm -rf "$W"
-  heir_world "$SD/wait-for-deliverable.sh"
-  if [ -n "$HEIR_B_PID" ] && [ "$HEIR_AFTER" != "$HEIR_A_PID" ]; then
-    mutant_killed "$(( ${B_s18a:-0} && ${B_s18b:-0} ))" dispatch-noglob-leaks "MUTANT dispatch-noglob-leaks: the leaked noglob makes the exiting holder drop the marker under its sibling — section 18b catches it"
-  else bad "MUTANT dispatch-noglob-leaks: section 18b survives noglob leaking (marker after: '$HEIR_AFTER', sibling '$HEIR_A_PID')"; fi
   rm -rf "$W"
 }
 
@@ -2472,14 +1742,6 @@ S19b_dispatch_grammar_missing_refuses() {
   else bad "dispatch-call: a duplicated declaration was accepted (rc=$RC): $OUT"; fi
   rm -rf "$W" "$LONE649"
 }
-M39_dispatch_toolu_only() {
-  mutant dispatch-toolu-only -e 's@^  for dp_p_ in \$DP_PREFIXES; do@  for dp_p_ in toolu_; do@' || return
-  call_world "$(sib_dir "$MUT")/wait-for-deliverable.sh"
-  if [ "$RC" -eq 64 ] && ! has "DELIVERED deliv.md"; then
-    mutant_killed "${B_s19a:-0}" dispatch-toolu-only "MUTANT dispatch-toolu-only: a prefix list hardwired to toolu_ refuses the call_ id — section 19a catches it"
-  else bad "MUTANT dispatch-toolu-only: section 19a survives the prefix list being hardwired (rc=$RC): $OUT"; fi
-  rm -rf "$W"
-}
 
 # ===========================================================================
 # 19c. THE --since-WITHOUT---dispatch WARN FIRES ON A BEAT THAT ARMS A TARGET, AND ONLY THEN.
@@ -2531,30 +1793,6 @@ S19c_since_warn_fires_on_arming_only() {
   case "$W19C_8OUT" in *"pend.md"*) : ;; *) bad "since-warn: CONTROL FAILED — the --dispatch arming beat did not run (rc=$W19C_8RC): $W19C_8OUT" ;; esac
   [ "$W19C_8" -eq 0 ] && ok "since-warn: an arming beat that passes --dispatch is silent" || bad "since-warn: an arming beat with --dispatch printed $W19C_8 WARN line(s), want 0"
 }
-M59_since_warn_unconditional() {
-  mutant since-warn-unconditional \
-    -e 's@^SINCE_WARNED=0$@SINCE_WARNED=0; [ -n "$SINCE" ] \&\& [ -z "$DISPATCH" ] \&\& echo "WARN: wait-for-deliverable: --since without --dispatch (restored)" >\&2@' || return
-  s19c_world "$MUT"
-  if [ "$W19C_2" -ge 1 ] && [ "$W19C_6" -ge 1 ]; then
-    mutant_killed "${B_s19c:-0}" since-warn-unconditional "MUTANT since-warn-unconditional: the warn on every --since-only invocation is caught — section 19c catches it"
-  else bad "MUTANT since-warn-unconditional: section 19c survives the emission being unconditional (continuation=$W19C_2 status=$W19C_6)"; fi
-}
-M60_since_warn_dropped() {
-  mutant since-warn-dropped \
-    -e 's@^    echo "WARN: wait-for-deliverable: --since without@    : "WARN: wait-for-deliverable: --since without@' || return
-  s19c_world "$MUT"
-  if [ "$W19C_1" -eq 0 ] && [ "$W19C_5" -eq 0 ] && [ "$W19C_7" -eq 0 ]; then
-    mutant_killed "${B_s19c:-0}" since-warn-dropped "MUTANT since-warn-dropped: the emission removed outright is caught — section 19c catches it"
-  else bad "MUTANT since-warn-dropped: section 19c survives the emission being dropped (first=$W19C_1 delivered=$W19C_5 rearm=$W19C_7)"; fi
-}
-M61_since_warn_ignores_dispatch() {
-  mutant since-warn-ignores-dispatch \
-    -e 's@ && \[ -z "\$DISPATCH" \] && \[ "\$SINCE_WARNED" -eq 0 \]@ \&\& [ "$SINCE_WARNED" -eq 0 ]@' || return
-  s19c_world "$MUT"
-  if [ "$W19C_8" -ge 1 ]; then
-    mutant_killed "${B_s19c:-0}" since-warn-ignores-dispatch "MUTANT since-warn-ignores-dispatch: the warn on a --dispatch arming beat is caught — section 19c catches it"
-  else bad "MUTANT since-warn-ignores-dispatch: section 19c survives the -z DISPATCH conjunct being deleted (dispatch beat=$W19C_8)"; fi
-}
 
 # ===========================================================================
 # 20. THE LEASE IS HELD BEFORE ANY STEP THAT CAN BLOCK.
@@ -2567,12 +1805,10 @@ M61_since_warn_ignores_dispatch() {
 #     FIXTURE BROKEN, exit 2, never a FAIL. Nothing here reads a clock, and nothing is bounded by one.
 # ===========================================================================
 BLK_PID=""; BLK_MARK=""
-# THE SECOND OPEN CANNOT BLOCK. A mutant that re-reads the FIFO ledger once found no writer and blocked for
-# ever (a matrix cell hung 33 minutes), so the beat was once given 30s of real time and then killed -- an
-# elapsed-time bound that decided BLK_MARK, the arm's own assertion (BL-868). Instead, before the release the
-# path is replaced by a REGULAR file holding the same line: the beat already blocked in read() keeps the
-# FIFO it opened, and every later open of the path reads the file and returns. The beat then always ends,
-# and is waited for plainly.
+# THE SECOND OPEN CANNOT BLOCK. Before the release the path is replaced by a REGULAR file holding the same
+# line: the beat already blocked in read() keeps the FIFO it opened, and every later open of the path reads
+# the file and returns. The beat then always ends, and is waited for plainly -- no elapsed-time bound decides
+# BLK_MARK, the arm's own assertion (BL-868).
 fifo_hold() {  # $1 = fifo, $2 = reached file, $3 = release file, $4 = the line: opens the writer, records it, holds until released
   printf '%s\n' "${4:-}" > "$1.after" || broken "lease: cannot write the FIFO's replacement"
   ( exec 3> "$1"; : > "$2"; while [ ! -e "$3" ] && [ -d "${3%/*}" ]; do "$WBL_REAL_SLEEP" 0.1; done; printf '%s\n' "${4:-}" >&3 ) &
@@ -2625,14 +1861,6 @@ S20b_lease_before_shard_check() {
   else bad "lease-early: a beat blocked in the sweep's header check held no lease"; fi
   rm -rf "$W"
 }
-M40_lease_after_dispatch() {
-  mutant lease-not-first -e "/^trap 'lease_release' EXIT\$/{n;/^beat_alive\$/d;}" || return
-  ledger_fifo_world "$(sib_dir "$MUT")/wait-for-deliverable.sh"
-  if [ "$BLK_MARK" -eq 0 ] && has "WAITING   deliv.md"; then
-    mutant_killed "${B_s20a:-0}" lease-not-first "MUTANT lease-not-first: without the lease at arming a beat blocked on the ledger holds none — section 20a catches it"
-  else bad "MUTANT lease-not-first: section 20a survives the early lease being deleted (mark=$BLK_MARK): $OUT"; fi
-  rm -rf "$W"
-}
 
 # ===========================================================================
 # 21. THE LEASE IS WHERE THE STOP HOOK LOOKS, WHATEVER AI_DLC_STATE_DIR SAYS.
@@ -2644,7 +1872,7 @@ M40_lease_after_dispatch() {
 cs_counter_written() { for cw_ in "$1"/_bmad-output/seat-q/.wait-beats/*; do [ -f "$cw_" ] && return 0; done; return 1; }
 # Read once, at the beat's first poll sleep (beat_gate): by then the beat has armed its lease, swept (its
 # counters are written) and re-stamped the lease before the loop, so the marker is where it will ever be.
-# A 5s poll for the marker once decided the mutant's kill by timing out (BL-868); there is no wait now.
+# There is no wait on the marker (BL-868).
 custom_state_world() {  # $1 = subject; leaves W, sets CS_MARK (holder pid at root, or ''), CS_LEASE, CS_CTR
   W="$(mk_work)"; CS_MARK=""; CS_LEASE=0; CS_CTR=0
   beat_gate "$W"
@@ -2672,14 +1900,14 @@ S21_lease_at_root_under_custom_state_dir() {
 # THE REGISTRATIONS MOVE WITH THE MARKER. Beat B (default state dir) holds the marker; beat A,
 # armed with a custom state dir, registers behind it; B's target lands and B exits. B's heir scan
 # must find A, so A's `.lease-<pid>` has to sit where B scans. A's post-sweep beat_alive (the one
-# before its poll loop) CAN re-take the marker -- under the mutant it sees no registration for B
-# and does -- so b.md is written only once A is past it and blocked in its first poll sleep, and only
+# before its poll loop) CAN re-take the marker when it sees no registration for B, so b.md is
+# written only once A is past it and blocked in its first poll sleep, and only
 # once the marker names B again (B's next poll re-takes a marker A took).
 # ON THE WORLD'S CLOCK, GATED PER POLL (BL-868). Both beats share the world's injected clock and its poll
 # hook (beat_gate), each under its own tag, so the order is fixed by events and no real second passes in
 # any sleep. In virtual seconds from B's arming t0: B arms, sweeps, holds the marker (epoch t0+3) and
 # blocks in poll 1 at t0+1; A arms at t0+1 (B's registration is live, so the fixed A leaves the marker
-# alone; the mutant's A, seeing no registration where it scans, takes it), and blocks in its 30s poll at
+# alone), and blocks in its 30s poll at
 # t0+31; B's poll 1 is released, B re-takes the now-expired marker and blocks in poll 2 at t0+32; b.md is
 # written and B released, delivers and exits. A's registration reads t0+91 > t0+32 and A is alive, so the
 # heir scan finds it exactly when it scans the directory A registered in. The real clock enters only as
@@ -2714,22 +1942,6 @@ S21b_heir_across_state_dirs() {
   cross_heir_world "$SUBJ"
   if [ "$XH_AFTER" = "$XH_A" ]; then ok "custom-state: a holder that exits hands the marker to a live beat armed with a different state dir"
   else bad "custom-state: after the holder exited the marker names '$XH_AFTER', not the live custom-state beat $XH_A — the heir scan cannot see its registration"; fi
-  rm -rf "$W"
-}
-M42_registrations_left_in_state_dir() {
-  mutant registrations-in-state-dir -e 's@^LEASE_DIR="\${LEASE_HOME}/.wait-beats"$@LEASE_DIR="${COUNTER_DIR}"@' || return
-  cross_heir_world "$MUT"
-  if [ "$XH_AFTER" != "$XH_A" ]; then
-    mutant_killed "${B_s21b:-0}" registrations-in-state-dir "MUTANT registrations-in-state-dir: a marker moved without its registrations is dropped under a live custom-state beat — section 21b catches it"
-  else bad "MUTANT registrations-in-state-dir: section 21b survives the registrations staying in the state dir"; fi
-  rm -rf "$W"
-}
-M41_lease_in_state_dir() {
-  mutant lease-in-state-dir -e 's@^LEASE_HOME="\${WD_ROOT}/_bmad-output"$@LEASE_HOME="${STATE_DIR}"@' || return
-  custom_state_world "$MUT"
-  if [ "$CS_CTR" -eq 1 ] && [ -z "$CS_MARK" ]; then
-    mutant_killed "${B_s21:-0}" lease-in-state-dir "MUTANT lease-in-state-dir: a lease kept in the custom state dir is absent where the hook reads — section 21 catches it"
-  else bad "MUTANT lease-in-state-dir: section 21 survives the lease following the state dir (root marker '$CS_MARK')"; fi
   rm -rf "$W"
 }
 
@@ -2794,12 +2006,11 @@ nops_stubs() {  # -> $TMPROOT/nops (a `ps` that exits 1) and $TMPROOT/nops/both 
     || broken "cannot write the ps/perl stubs"
   [ "$(PATH="$sb_d_:$PATH" command -v ps)" = "$sb_d_/ps" ] || broken "the ps stub is not first on PATH"
 }
-# PERL IS OPTIONAL (BL-686). S22b, M49 and M50 need the fallback to read what `ps` reads, and need
+# PERL IS OPTIONAL (BL-686). S22b needs the fallback to read what `ps` reads, and needs
 # de_DE.UTF-8 to move an unpinned `ps`. Probed ONCE, through the SUBJECT's own INLINE wfd_start_of
-# (the fallback under `if ! declare -F`) -- the copy every mutant runs, because mutant() writes the
-# mutant alone into $TMPROOT/mutants with no wfd-start-of.sh beside it. S22b and S22c drive $SUBJ
+# (the fallback under `if ! declare -F`). S22b and S22c drive $SUBJ
 # in place, beside its helper, so they exercise the helper's copy; S26 holds the two ranges
-# byte-identical. On a miss the three print SKIP by name -- never `broken`, never a false kill.
+# byte-identical. On a miss S22b prints SKIP by name -- never `broken`.
 # FB_OK caches the answer.
 FB_OK=""
 fb_probe() {
@@ -2874,40 +2085,6 @@ S22c_no_perl_states_clock_fallback() {
   if [ "$np_n_" = 0 ] && has "a sibling beat already ran in this same Bash call"; then
     ok "no perl: CONTROL — with ps working the line is absent and identity decides"
   else bad "no perl: CONTROL FAILED — with ps working the clock-fallback line appeared $np_n_ time(s): $OUT"; fi
-  rm -rf "$W"
-}
-M51_silent_clock_fallback() {
-  noperl_path; mutant silent-clock-fallback -e '/^\[ -n "\$SHELL_START" \] || printf .NOTE: start time of shell/d' || return
-  W="$(mk_work)"; aged_shell_beat "$MUT" "$W" same "=$TMPROOT/noperl"
-  if [ "$(np_count)" != 1 ]; then
-    mutant_killed "${B_s22c:-0}" silent-clock-fallback "MUTANT silent-clock-fallback: a beat with no start time that falls back silently -- section 22c catches it"
-  else bad "MUTANT silent-clock-fallback: section 22c survives the fallback line being removed: $OUT"; fi
-  rm -rf "$W"
-}
-M49_start_time_no_fallback() {
-  fb_skip M49_start_time_no_fallback && return
-  nops_stubs; mutant start-time-no-fallback -e 's@^  \[ -n "\$ss_" \] || ss_="\$(perl -e@  [ -n "$ss_" ] || ss_="$(false -e@' || return
-  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"
-  if ! has "a sibling beat already ran in this same Bash call"; then
-    mutant_killed "${B_s22b:-0}" start-time-no-fallback "MUTANT start-time-no-fallback: with no perl fallback a refused ps sleeps a same-shell sibling -- section 22b catches it"
-  else bad "MUTANT start-time-no-fallback: section 22b survives the fallback being removed: $OUT"; fi
-  rm -rf "$W"
-}
-M50_start_time_unpinned() {
-  fb_skip M50_start_time_unpinned && return
-  nops_stubs; mutant start-time-unpinned -e 's@^  ss_="\$(LC_ALL=C ps -o lstart=@  ss_="$(ps -o lstart=@' || return
-  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"
-  if ! has "a sibling beat already ran in this same Bash call"; then
-    mutant_killed "${B_s22b:-0}" start-time-unpinned "MUTANT start-time-unpinned: an unpinned ps writes a German marker the English fallback cannot match -- section 22b catches it"
-  else bad "MUTANT start-time-unpinned: section 22b survives ps losing its LC_ALL=C pin: $OUT"; fi
-  rm -rf "$W"
-}
-M43_chained_by_clock() {
-  mutant chained-by-clock -e 's@^  if \[ -n "\$LAST_START" \] && \[ -n "\$SHELL_START" \]; then$@  if false; then@' || return
-  W="$(mk_work)"; aged_shell_beat "$MUT" "$W" same
-  if ! has "a sibling beat already ran in this same Bash call"; then
-    mutant_killed "${B_s22:-0}" chained-by-clock "MUTANT chained-by-clock: deciding by age alone sleeps a same-shell sibling stamped past BUDGET — section 22 catches it"
-  else bad "MUTANT chained-by-clock: section 22 survives the identity test being removed: $OUT"; fi
   rm -rf "$W"
 }
 
@@ -3009,33 +2186,6 @@ S23c_dispatch_judges_its_own_transcript() {
   else bad "stalled: CONTROL FAILED — the whole-session reading is not the live sibling's: $OUT"; fi
   rm -rf "$W" "$TD"
 }
-M44_quiet_from_mtime() {
-  mutant quiet-from-mtime -e 's@^    tq_m_=""; \[ "\$tq_t_" = "-" \] || tq_m_=.*$@    tq_m_=""@' || return
-  W="$(mk_work)"; TD="$TMPROOT/m44.$$"; mk_wedged "$TD" agent-awedge.jsonl 3 api-request
-  beat "$MUT" "$W" 60 "$TD"
-  if has "$LIVE_LINE" && ! has "$IDLE_BANNER"; then
-    mutant_killed "${B_s23a:-0}" quiet-from-mtime "MUTANT quiet-from-mtime: reading quiet from mtime reports a wedged teammate as a live turn — section 23a catches it"
-  else bad "MUTANT quiet-from-mtime: section 23a survives quiet being read from mtime: $OUT"; fi
-  rm -rf "$W" "$TD"
-}
-M45_stall_counts_blobs() {
-  mutant stall-counts-blobs -e 's@index(\$0, "{\\"type\\":\\"api-request\\"") == 1@index($0, "{\\"type\\":\\"api-request") == 1@' || return
-  W="$(mk_work)"; TD="$TMPROOT/m45.$$"; mk_wedged "$TD" agent-ablob.jsonl 5 api-request-blob
-  beat "$MUT" "$W" 60 "$TD"
-  if has "$STALL_LINE"; then mutant_killed "${B_s23a:-0}" stall-counts-blobs "MUTANT stall-counts-blobs: matching without the closing quote counts blob lines as requests — section 23a catches it"
-  else bad "MUTANT stall-counts-blobs: section 23a survives the closing quote being dropped: $OUT"; fi
-  rm -rf "$W" "$TD"
-}
-# The reset dropped: every request in the file counts, so a recovered teammate reads STALLED and
-# the lead is told to stop a healthy one.
-M47_run_never_resets() {
-  mutant run-never-resets -e 's@^    NF { run = 0 }$@    NF { }@' || return
-  W="$(mk_work)"; TD="$TMPROOT/m47.$$"; mk_recovered "$TD" agent-arecov.jsonl
-  beat "$MUT" "$W" 60 "$TD"
-  if has "$STALL_LINE"; then mutant_killed "${B_s23a:-0}" run-never-resets "MUTANT run-never-resets: an answered run still counted reads a recovered teammate STALLED -- section 23a catches it"
-  else bad "MUTANT run-never-resets: section 23a survives the run never resetting: $OUT"; fi
-  rm -rf "$W" "$TD"
-}
 
 # ===========================================================================
 # 24. --mark: THE SEAL DECIDES, WITH NO WINDOW, AND A LEGACY MARKER STILL SETTLES.
@@ -3106,18 +2256,6 @@ S24b_mark_refusals() {
   rm -rf "$W"
 }
 
-# The digest ignored: every marker is judged as legacy. The sealed file then waits on SETTLE=600
-# and the broken one settles and DELIVERS -- section 24a must catch it.
-M46_seal_ignored() {
-  mutant seal-ignored -e 's@^  seal_of "\$1"; id_sv_=\$?$@  seal_of "$1"; id_sv_=2@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  seal_world "$SUBJ" "$W"
-  CB_BEAT=3 cbeat "$MUT" "$W" --complete x.md b.md
-  if has "DELIVERED x.md"; then mutant_killed "${B_s24a:-0}" seal-ignored "MUTANT seal-ignored: a beat ignoring the digest DELIVERS the edited file -- section 24a catches it"
-  else bad "MUTANT seal-ignored: section 24a survives the digest being ignored (or the mutant never ran): $OUT"; fi
-  rm -rf "$W"
-}
-
 # --mark-repair seals the serial remediator's record the same way: a sealed record DELIVERS under
 # --complete-repair at SETTLE=600, an edit above its marker is UNFINISHED, and the CONTROL is a
 # bare `repair-complete: serial` record settling in that same beat under SETTLE=1.
@@ -3140,18 +2278,6 @@ S24c_mark_repair_seals() {
   if ! has "DELIVERED rx.md" && has "UNFINISHED rx.md" && has "changed after it was marked"; then
     ok "seal: a sealed repair record edited above its marker is UNFINISHED"
   else bad "seal: a broken repair seal was delivered or not named UNFINISHED: $OUT"; fi
-  rm -rf "$W"
-}
-# --mark-repair writing the seat token: the record ends in `seat-complete:`, which --complete-repair
-# must refuse -- section 24c's sealed record then never delivers.
-M48_mark_repair_seat_token() {
-  mutant mark-repair-seat-token -e 's@MARK_TOKEN="repair-complete: serial "; MK_F="\$1"; MK_TAIL=""@MARK_TOKEN="seat-complete: "; MK_F="$1"; MK_TAIL=""@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '### e\n- edit: x\n' > "$W/rs.md"
-  markcall "$MUT" --mark-repair "$W/rs.md" requirements
-  CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete-repair rs.md
-  if ! has "DELIVERED rs.md"; then mutant_killed "${B_s24c:-0}" mark-repair-seat-token "MUTANT mark-repair-seat-token: a repair record sealed under the seat token is not delivered -- section 24c catches it"
-  else bad "MUTANT mark-repair-seat-token: section 24c survives --mark-repair writing seat-complete: $OUT"; fi
   rm -rf "$W"
 }
 
@@ -3189,22 +2315,11 @@ S25_part_marked_join() {
   else bad "part: a marked repair part was not delivered under --complete: $OUT"; fi
   rm -rf "$W"
 }
-# --complete ignored: the flag parses but never sets COMPLETE, so the unmarked part is DELIVERED
-# under the part join beat -- section 25 must catch it.
-M52_part_complete_ignored() {
-  mutant part-complete-ignored -e 's@^    --complete) COMPLETE=1; SEAT_FLAG=1; shift ;;$@    --complete) SEAT_FLAG=1; shift ;;@' || return
-  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
-  printf '%s\n' "$PART_BODY" > "$W/04.md"
-  scall "$MUT" "$W" --complete --since "$CBEAT_SINCE" 04.md
-  if has "DELIVERED 04.md"; then mutant_killed "${B_s25:-0}" part-complete-ignored "MUTANT part-complete-ignored: an ignored --complete DELIVERS the unmarked part -- section 25 catches it"
-  else bad "MUTANT part-complete-ignored: section 25 survives --complete being ignored (or the mutant never ran): $OUT"; fi
-  rm -rf "$W"
-}
 
 # ===========================================================================
 # 26. ONE START-TIME DEFINITION: THE SUBJECT'S FALLBACK IS THE HELPER'S, WHOLE RANGE.
 #     wfd-start-of.sh owns wfd_start_of; the subject carries a fallback copy under
-#     `if ! declare -F` for a lone copy with no sibling (every mutant this file builds is one).
+#     `if ! declare -F` for a lone copy with no sibling.
 #     The shell-identity markers store and compare its value, so the two copies must agree.
 # ===========================================================================
 START_OF_HELPER="$(dirname "$SUBJ")/wfd-start-of.sh"
@@ -3371,8 +2486,7 @@ S27c_complete_present_is_unchanged() {
 #      live or finished writer. Seeds: a two-row ledger with the subject NOT first, and a
 #      meta.json joining the agentId to the dispatch's toolu_ id.
 #      AI_DLC_MAX_WAIT_BEATS=1 with the counters seeded at the cap. Both id spellings are driven.
-#      The near-miss without --dispatch keeps the bare remedy; that is what the widened mutant
-#      breaks, and the gate-restored mutant breaks the LIVE and STOPPED arms.
+#      The near-miss without --dispatch keeps the bare remedy.
 # ===========================================================================
 R27D_AG=a721c8dcd555207b8; R27D_TUI=toolu_01Bl721SubjectDispatchAAAA; R27D_TUI_E=toolu_01Bl721EpochRowBBBBBBBBB
 r27d_world() {  # $1 = age of the transcript's last turn (s) -> W
@@ -3430,23 +2544,6 @@ S27d_plain_dispatch_remedy() {
   else bad "plain-dispatch: NEAR-MISS FAILED — without --dispatch the beat lost the bare remedy or printed a dispatch block (rc=$RC): $OUT"; fi
   rm -rf "$W"
 }
-M54_dispatch_live_gate_restored() {
-  mutant dispatch-live-gate-restored -e 's@^  dl_a_="\${DP_AGENTS_:-}"$@  [ "$COMPLETE_REPAIR" -eq 1 ] || return 1\
-  dl_a_="${DP_AGENTS_:-}"@' || return
-  SD="$(sib_dir "$MUT")"
-  if ! r27d_live_arm "$SD/wait-for-deliverable.sh" "$R27D_AG" && has "$R27_REMEDY"; then
-    mutant_killed "${B_s27d:-0}" dispatch-live-gate-restored "MUTANT dispatch-live-gate-restored: with dispatch_live gated on --complete-repair again a plain --dispatch gets the bare remedy — section 27d catches it"
-  else bad "MUTANT dispatch-live-gate-restored: section 27d survives the gate being restored (rc=$RC): $OUT"; fi
-  rm -rf "$W"
-}
-M55_dispatch_live_widened() {
-  mutant dispatch-live-widened -e 's@^  dl_a_="\${DP_AGENTS_:-}"$@  dl_a_="${DP_AGENTS_:-}"; [ -n "$dl_a_" ] || for dl_x_ in "$TEAMMATE_DIR"/agent-*.jsonl; do dl_a_="${dl_x_##*/agent-}"; dl_a_="${dl_a_%.jsonl}"; done@' || return
-  SD="$(sib_dir "$MUT")"
-  if ! r27d_nodispatch_arm "$SD/wait-for-deliverable.sh" && has "$R27D_LIVE"; then
-    mutant_killed "${B_s27d:-0}" dispatch-live-widened "MUTANT dispatch-live-widened: reading a transcript with no --dispatch drops the bare remedy from a session-wide beat — section 27d's near-miss catches it"
-  else bad "MUTANT dispatch-live-widened: section 27d survives the remedy being widened to beats without --dispatch (rc=$RC): $OUT"; fi
-  rm -rf "$W"
-}
 
 # ===========================================================================
 # 28. --dispatch-ts PRINTS THE DISPATCH'S OWN LEDGER ts, VERBATIM, AND REFUSES EVERY OTHER ANSWER
@@ -3460,9 +2557,6 @@ M55_dispatch_live_widened() {
 #     dispatch_refuse's text and print nothing on stdout. The mode takes the --status no-write
 #     path, so the tree is byte-for-byte the same file list after every call. stdout and stderr
 #     are captured apart: the stamp is the whole of stdout, and a refusal must not leak one there.
-#     The mutants: the meta.json lookup dropped (an agentId cannot resolve), and the ts read from
-#     the ledger's FIRST row rather than the subject's (killed only because the subject is not first),
-#     and the multi-id guard never matching (two ids that each resolve alone then print a stamp).
 # ===========================================================================
 R28_D="2026-10-16T05:00:03Z"; R28_LATE="2026-10-16T05:01:00Z"; R28_E="2026-10-16T04:58:41Z"
 R28_TUI=toolu_01Bl605SubjectDispatchAAAA; R28_TUI_E=toolu_01Bl605EpochRowBBBBBBBBB; R28_AG=a7ffc8dcd555207b8
@@ -3560,45 +2654,6 @@ S28_dispatch_ts_contract() {
   else bad "dispatch-ts: --dispatch-ts wrote into the tree: before=[$r28_before_] after=[$r28_after_]"; fi
   rm -rf "$W"
 }
-M56_dispatch_ts_no_meta_lookup() {
-  mutant dispatch-ts-no-meta-lookup \
-    -e 's@^        && dp_m_="\$TEAMMATE_DIR/agent-\${dp_id_}.meta.json"$@        \&\& dp_m_=""@' || return
-  SD="$(sib_dir "$MUT")"; CD="$(sib_dir "$SUBJ")"
-  r28_world
-  if r28_stamp_arm "$CD/wait-for-deliverable.sh" "$R28_AG" "$R28_D"; then
-    ok "MUTANT dispatch-ts-no-meta-lookup: CONTROL — the unmutated sibling copy prints $R28_D for agentId $R28_AG"; B_m56c=1
-  else bad "MUTANT dispatch-ts-no-meta-lookup: CONTROL FAILED — the unmutated sibling copy did not print $R28_D: $OUT"; fi
-  if ! r28_stamp_arm "$SD/wait-for-deliverable.sh" "$R28_AG" "$R28_D" && [ "$RC" -eq 64 ] \
-     && r28_stamp_arm "$SD/wait-for-deliverable.sh" "$R28_TUI" "$R28_D"; then
-    mutant_killed "$(( ${B_s28:-0} && ${B_m56c:-0} ))" dispatch-ts-no-meta-lookup "MUTANT dispatch-ts-no-meta-lookup: without the meta.json lookup agentId $R28_AG is refused (rc 64) while the toolu_ id still prints — section 28's agentId arm catches it"
-  else bad "MUTANT dispatch-ts-no-meta-lookup: section 28's agentId arm survives the meta.json lookup being dropped: $OUT"; fi
-  rm -rf "$W"
-}
-M57_dispatch_ts_first_row() {
-  mutant dispatch-ts-first-row \
-    -e 's@^  dp_ts_="\$(printf .%s. "\$dp_rows_" | sed@  dp_ts_="$(sed -n 1p "$SPAWN_LEDGER" | sed@' || return
-  SD="$(sib_dir "$MUT")"
-  r28_world
-  if ! r28_stamp_arm "$SD/wait-for-deliverable.sh" "$R28_AG" "$R28_D" && [ "$R28_OUT" = "$R28_E" ] \
-     && r28_stamp_arm "$SD/wait-for-deliverable.sh" "$R28_TUI_E" "$R28_E"; then
-    mutant_killed "${B_s28:-0}" dispatch-ts-first-row "MUTANT dispatch-ts-first-row: reading the ledger's first row prints $R28_E for the second-row subject — section 28's subject-not-first arm catches it"
-  else bad "MUTANT dispatch-ts-first-row: section 28 survives the ts being read from the first ledger row: $OUT"; fi
-  rm -rf "$W"
-}
-M58_dispatch_ts_multi_id() {
-  mutant dispatch-ts-multi-id \
-    -e "s@^  case \"\\\$DISPATCH_TS_ONLY\" in \\*' '\\*)\$@  case \"\$DISPATCH_TS_ONLY\" in *NEVERMATCH605*)@" || return
-  SD="$(sib_dir "$MUT")"
-  r28_world
-  r28_argv "$SD/wait-for-deliverable.sh" "$W/sub" --dispatch-ts "$R28_TUI" --dispatch-ts "$R28_TUI_E"
-  if [ "$RC" -eq 0 ] && [ -n "$R28_OUT" ] \
-     && ! r28_argshape_arm "$SD/wait-for-deliverable.sh" "FAIL: --dispatch-ts takes exactly one id (got '$R28_TUI $R28_TUI_E'); one row, one stamp." \
-          --dispatch-ts "$R28_TUI" --dispatch-ts "$R28_TUI_E"; then
-    mutant_killed "${B_s28:-0}" dispatch-ts-multi-id "MUTANT dispatch-ts-multi-id: with the multi-id guard never matching, two ids print a guessed stamp [$R28_OUT] with rc 0 — section 28's two-id arm catches it"
-  else bad "MUTANT dispatch-ts-multi-id: section 28's two-id arm survives the multi-id guard never matching: $OUT"; fi
-  rm -rf "$W"
-}
-
 
 # ===========================================================================
 # 29. DISPATCH FAILED: A DISPATCHED AGENT THAT DIED BEFORE DELIVERING IS NAMED (BL-975).
@@ -3616,10 +2671,7 @@ M58_dispatch_ts_multi_id() {
 #     polls move the clock, and DF_EL is the virtual seconds a beat took -- never the real clock.
 #     The quantum is 300 s with a 30 s poll and no margin, so a beat that runs out its deadline
 #     takes exactly 270 virtual seconds, and one that breaks on its first poll takes 0.
-#     S8 compares the no---dispatch output against the BASE script (the commit before BL-975,
-#     pinned optionally in git.decl), never against a golden taken from the script under test.
 # ===========================================================================
-DF_PIN=edcfbe2422194860c4d0c72834d9d60df9823094
 DF_DEAD=a975dead00000d001; DF_LIVE=a975cafe00000c002; DF_LIVE2=a975beef00000b003
 DF_HDR='DISPATCH FAILED agent-'
 DF_EARLY='This beat ended early on that report: its beat charge was refunded, and the time already waited is not charged.'
@@ -3704,25 +2756,6 @@ df_nsc() {  # -> the number of early-break sidecars of any agent and target in W
 df_count() {  # $1 = text -> the number of output lines that open with it
   dc_n_="$(printf '%s\n' "$OUT" | grep -c "^$1")" || dc_n_=0; printf '%s' "$dc_n_"
 }
-# THE BASE SCRIPT, staged once: the pinned commit's wait-for-deliverable.sh beside the same siblings.
-# A consumer has no such commit, so git.decl pins it optionally; absent, DF_BASE stays empty and every
-# arm that needs it prints a SKIP that says it is not a pass. git runs with the GIT_* variables a hook
-# exports dropped, so it reads the tree the fixture sits in.
-DF_BASE=""; DF_BASE_STATE=""
-df_git() { ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES; git -C "$HERE" "$@" ); }
-df_base() {
-  [ -z "$DF_BASE_STATE" ] || return 0
-  DF_BASE_STATE=absent
-  df_git cat-file -e "${DF_PIN}^{commit}" 2>/dev/null || return 0
-  dbs_d_="$(sib_dir "$SUBJ")"
-  df_git show "${DF_PIN}:core/scripts/wait-for-deliverable.sh" > "$dbs_d_/wait-for-deliverable.sh" 2>/dev/null \
-    || broken "the pinned base script cannot be read at $DF_PIN"
-  grep -q 'BASH_SOURCE\[0\]' "$dbs_d_/wait-for-deliverable.sh" && grep -q '^wfd_beat_main "\$@"' "$dbs_d_/wait-for-deliverable.sh" \
-    || broken "the pinned base script has no BASH_SOURCE guard or wfd_beat_main, so wbl_ip cannot run it in process"
-  DF_BASE="$dbs_d_/wait-for-deliverable.sh"; DF_BASE_STATE=staged
-}
-df_skip_base() { printf '  SKIP  %s -- the base pin %s is not in this tree'"'"'s history (a consumer, or a shallow clone); this is not a pass\n' "$1" "$DF_PIN"; }
-
 # S1. Dead, its one open request 1500 s old, and the transcript's MTIME at the virtual now: the file looks
 # fresh, the request does not. FAILED by arm B, and the beat breaks on its first poll and is refunded.
 S29a_failed_open_request_breaks_early() {
@@ -3844,48 +2877,6 @@ S29g_all_delivered_is_not_failed() {
     ok "dispatch-failed: TWIN — the same world with p2.md absent prints the block, so the silence above is the gate's"
   else bad "dispatch-failed: TWIN FAILED — with a target out the block did not print (rc=$RC): $OUT"; fi
 }
-# S8. No --dispatch: the output is the BASE script's on the same world, byte for byte, rc included.
-# Each pair restores the world and its clock between the two runs. Control: with --dispatch the same
-# world's two outputs DIFFER and the tip names the dead agent -- the differential can resolve the change.
-df_pair() {  # $1 = label; rest = argv -> 0 when base and tip answer alike; DFP_<label>_TIP holds the tip's output
-  dp_l_="$1"; shift
-  # A fresh snapshot dir per pair: a fixed name is reused by a matrix cell that re-runs this arm, and cp -Rp
-  # into an existing dir nests the copy, so the restore would hand the tip a different world.
-  dp_s_="$(mktemp -d "$TMPROOT/df8-snap.$dp_l_.XXXXXX")" || broken "mktemp failed"
-  cp -Rp "$W" "$dp_s_/w" || broken "S8: cannot snapshot $W"
-  dp_o_="$(fx_offset "$W")"
-  df_beat "$DF_BASE" "$@"; dp_b_="$RC|$OUT"
-  mv "$W" "$dp_s_/after-base" && cp -Rp "$dp_s_/w" "$W" || broken "S8: cannot restore $W"
-  printf '%s' "$dp_o_" > "$(fx_clock_file "$W")"
-  df_beat "$DFS" "$@"; dp_t_="$RC|$OUT"
-  [ -n "$OUT" ] || broken "S8: the tip printed nothing for $dp_l_"
-  [ "$dp_b_" = "$dp_t_" ]
-}
-df_nodispatch_world() {
-  df_world; df_agent "$DF_DEAD" 8; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500 attach:0; df_notice "$DF_DEAD" 8 500
-  df_snapshot "$DF_DEAD:p1.md"; printf 'part 2\n' > "$W/p2.md" || broken "cannot write p2.md"
-}
-S29h_no_dispatch_matches_base() {
-  df_base
-  if [ -z "$DF_BASE" ]; then df_skip_base "dispatch-failed: the no---dispatch differential against the base script"; return 0; fi
-  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
-  if ! cmp -s "$DF_BASE" "$DFS"; then ok "dispatch-failed: S8 CONTROL — the base copy (at ${DF_PIN%"${DF_PIN#????????????}"}) and the script under test differ"
-  else bad "dispatch-failed: S8 CONTROL FAILED — the base copy is the script under test, so the differential compares a file with itself"; fi
-  df8_bad_=""
-  df_nodispatch_world; df_pair wait p1.md p2.md || df8_bad_="$df8_bad_ wait"
-  has "WAITING   p1.md" || df8_bad_="$df8_bad_ wait-shape"
-  df_nodispatch_world; df_cap p1.md; df_pair cap p1.md || df8_bad_="$df8_bad_ cap"
-  has "NON-DELIVERY p1.md" || df8_bad_="$df8_bad_ cap-shape"
-  df_nodispatch_world; df_pair status --status --since "$(( $(fx_now "$W") - 800 ))" p1.md p2.md || df8_bad_="$df8_bad_ status"
-  has "STATUS -- 1 delivered, 1 not." || df8_bad_="$df8_bad_ status-shape"
-  if [ -z "$df8_bad_" ]; then
-    ok "dispatch-failed: with no --dispatch the waiting beat, the cap and --status answer byte-for-byte as the base script does over a dead agent's world"
-  else bad "dispatch-failed: with no --dispatch the output differs from the base script's [${df8_bad_# }]: $OUT"; fi
-  df_nodispatch_world
-  if ! df_pair dispatch --dispatch "toolu_df_$DF_DEAD" p1.md p2.md && has "${DF_HDR}$DF_DEAD"; then
-    ok "dispatch-failed: S8 CONTROL — the same world WITH --dispatch answers differently from the base, and the tip names the dead agent"
-  else bad "dispatch-failed: S8 CONTROL FAILED — with --dispatch the base and the tip agree, so the equality above cannot fail: $OUT"; fi
-}
 # S9. Three dispatched agents, the dead one in the middle of the dispatch order and of the ledger. Then a
 # dead agent whose id carries '-': its id is read as a literal, never skipped.
 df_dash_beat() {  # $1 = subject -> OUT, RC over a live agent and a dead one with a dashed id
@@ -3948,9 +2939,7 @@ S29l_present_unsealed_is_not_delivered() {
   else bad "dispatch-failed: a present unsealed deliverable acquitted the dead agent under --complete (rc=$RC): $OUT"; fi
 }
 # S13. Repeated beats, the dead agent never resumed, a live sibling's target out too. Beat 1 breaks on its
-# first poll and is refunded (beat 0/3); beats 2-4 run out their deadline and are charged; the cap is beat
-# 5. The base script charges every beat, so it reaches the cap at beat 4: the sibling is never NON-DELIVERY
-# earlier than under the base.
+# first poll and is refunded (beat 0/3); beats 2-4 run out their deadline and are charged; the cap is beat 5.
 df_sequence() {  # $1 = subject -> DFQ_N (the beat that exited 1), DFQ_EL (virtual seconds per beat), DFQ_B1 (beat 1's output)
   df_world; df_agent "$DF_LIVE" 1; df_agent "$DF_DEAD" 2
   df_tx "$DF_LIVE" user:60 req:55 assistant:50; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
@@ -3971,12 +2960,6 @@ S29m_dead_agent_breaks_once() {
      && has "NON-DELIVERY p1.md" && has "${DF_HDR}$DF_DEAD" && ! has "$DF_EARLY"; then
     ok "dispatch-failed: a never-resumed dead agent breaks beat 1 only (0s, refunded to beat 0/3); beats 2-4 run 270s each and the cap is beat 5, still naming it"
   else bad "dispatch-failed: repeated beats over a dead agent broke more than once, charged the early beat, or capped at beat $DFQ_N (virtual seconds:$DFQ_EL): $DFQ_B1 ... $OUT"; fi
-  df_base
-  if [ -z "$DF_BASE" ]; then df_skip_base "dispatch-failed: the sibling's cap against the base script"; return 0; fi
-  dq_tip_="$DFQ_N"; df_sequence "$DF_BASE"
-  if [ "$DFQ_N" -eq 4 ] && [ "$dq_tip_" -gt "$DFQ_N" ]; then
-    ok "dispatch-failed: the base script caps the same sibling at beat $DFQ_N, the tip at beat $dq_tip_ -- never earlier"
-  else bad "dispatch-failed: the sibling's cap under the tip (beat $dq_tip_) is not later than under the base (beat $DFQ_N)"; fi
 }
 # S14. --status over a dead dispatch with a target out prints the whole block, and writes no sidecar.
 S29n_status_prints_block() {
@@ -4078,107 +3061,7 @@ S29q_agent_reused_in_new_join_breaks_again() {
     ok "dispatch-failed: an agent id reused in a later join on a fresh path breaks that join early and is refunded (beat 0/3), after join 1 closed on a beat with no --dispatch and took its sidecar with it (virtual seconds: $DFX_EL)"
   else bad "dispatch-failed: an agent reused in a new join lost its early break or refund, or join 1 kept its sidecar [${dfx_bad_# }] (rc=$RC, virtual seconds: $DFX_EL): $OUT"; fi
 }
-# The mutants, one per layer of the mechanism. Each runs the world of the arm named for it, in a sibling dir.
-M62_open_request_on_mtime() {
-  mutant open-request-on-mtime -e 's@^      ds_e_="\$(to_epoch "\${ds_open_:0:19}Z")" || ds_e_=""$@      ds_e_="$(mtime_of "$ds_f_")" || ds_e_=""@' || return
-  df_world; df_agent "$DF_DEAD" 1; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
-  fx_settime "$TD/agent-$DF_DEAD.jsonl" "$(fx_now "$W")"
-  df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --dispatch "toolu_df_$DF_DEAD" p1.md
-  if ! has "$DF_HDR" && [ "$DF_EL" -eq 270 ]; then
-    mutant_killed "${B_s29a:-0}" open-request-on-mtime "MUTANT open-request-on-mtime: aging the open request by the file's mtime misses a dead request under a fresh file and the beat runs 270s — section 29 S1 catches it"
-  else bad "MUTANT open-request-on-mtime: S1 survives arm B keyed on mtime (rc=$RC, ${DF_EL}s virtual): $OUT"; fi
-}
-M63_attachment_closes_request() {
-  mutant attachment-closes-request -e 's@^\(      index(\$0, "\\"type\\":\\"assistant\\"") || index(\$0, "\\"type\\":\\"user\\"")\) { open = "" }$@\1 || index($0, "\\"type\\":\\"attachment\\"") { open = "" }@' || return
-  df_world; df_agent "$DF_DEAD" 2; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500 attach:5 attach:0
-  df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --dispatch "toolu_df_$DF_DEAD" p2.md
-  if [ "$RC" -eq 0 ] && ! has "$DF_HDR" && has "WAITING   p2.md"; then
-    mutant_killed "${B_s29b:-0}" attachment-closes-request "MUTANT attachment-closes-request: letting a harness attachment close the open request hides the dead agent — section 29 S2 catches it"
-  else bad "MUTANT attachment-closes-request: S2 survives an attachment closing the request (rc=$RC): $OUT"; fi
-}
-M64_failed_gate_removed() {
-  mutant failed-gate-removed -e 's@^  \[ -n "\$DP_ROW_AGENTS_" \] && \[ -n "\${1:-}" \] || return 0$@  [ -n "$DP_ROW_AGENTS_" ] || return 0@' || return
-  df_status_world 1
-  df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --status --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
-  if has "STATUS -- 2 delivered, 0 not." && has "${DF_HDR}$DF_DEAD"; then
-    mutant_killed "${B_s29g:-0}" failed-gate-removed "MUTANT failed-gate-removed: without the not-delivered gate --status names a dead agent whose every target is delivered — section 29 S7 catches it"
-  else bad "MUTANT failed-gate-removed: S7 survives the not-delivered gate being removed (rc=$RC): $OUT"; fi
-}
-M65_failed_no_resume_acquittal() {
-  mutant failed-no-resume-acquittal -e 's@^      if \[ "\$ds_max_" = "-" \] || ! \[\[ "\$ds_max_" > "\$dn_t_" \]\]; then$@      if :; then@' || return
-  DFM="$(sib_dir "$MUT")/wait-for-deliverable.sh"
-  df_world; df_agent "$DF_DEAD" 5; df_tx "$DF_DEAD" user:900 req:880 assistant:870; df_notice "$DF_DEAD" 5 600
-  df_beat "$DFM" --dispatch "toolu_df_$DF_DEAD" p5.md
-  df_tx "$DF_DEAD" user:300 req:295 assistant:290
-  df_beat "$DFM" --dispatch "toolu_df_$DF_DEAD" p5.md
-  if has "${DF_HDR}$DF_DEAD (Repair part 5 brief) -- the harness reported it failed"; then
-    mutant_killed "${B_s29e:-0}" failed-no-resume-acquittal "MUTANT failed-no-resume-acquittal: without the newer-record acquittal a resumed agent is still named FAILED — section 29 S5 catches it"
-  else bad "MUTANT failed-no-resume-acquittal: S5 survives the resume acquittal being removed (rc=$RC): $OUT"; fi
-}
-M66_failed_no_early_break() {
-  mutant failed-no-early-break -e 's@^  df_early_break "\$lp_now_" && break$@  :@' || return
-  df_sequence "$(sib_dir "$MUT")/wait-for-deliverable.sh"
-  if [ "$DFQ_N" -eq 4 ] && [ "$DFQ_EL" = " 270 270 270 0" ]; then
-    mutant_killed "${B_s29m:-0}" failed-no-early-break "MUTANT failed-no-early-break: with no early break beat 1 runs its whole 270s over a dead agent — section 29 S13 catches it"
-  else bad "MUTANT failed-no-early-break: S13 survives the early break being removed (cap at beat $DFQ_N, virtual seconds:$DFQ_EL)"; fi
-}
-M67_failed_no_refund() {
-  mutant failed-no-refund -e 's@^    \[ "\$eb_b_" -gt 0 \] && eb_b_=\$(( eb_b_ - 1 ))$@    :@' || return
-  df_sequence "$(sib_dir "$MUT")/wait-for-deliverable.sh"
-  case "$DFQ_B1" in *"WAITING   p1.md -- beat 1/3"*) dq_m_=1 ;; *) dq_m_=0 ;; esac
-  if [ "$DFQ_N" -eq 4 ] && [ "$DFQ_EL" = " 0 270 270 0" ] && [ "$dq_m_" = 1 ]; then
-    mutant_killed "${B_s29m:-0}" failed-no-refund "MUTANT failed-no-refund: the early beat keeps its charge (beat 1/3) and the live sibling caps one beat sooner — section 29 S13 catches it"
-  else bad "MUTANT failed-no-refund: S13 survives the refund being removed (cap at beat $DFQ_N, virtual seconds:$DFQ_EL)"; fi
-}
-M68_failed_acquit_from_row() {
-  mutant failed-acquit-from-row -e 's@^    sf_d_=""$@    sf_c_=""; while IFS=\\| read -r ir_a_ ir_s_ ir_d_; do [ "$ir_a_" = "$sf_a_" ] \&\& { sf_c_="$ir_d_"; break; }; done <<< "$sf_rows_"; [ -n "$sf_c_" ] \&\& case " $sf_nd_ " in *" $sf_c_ "*) ;; *) continue ;; esac; sf_d_=""@' || return
-  df_world; df_agent "$DF_LIVE" 1; df_agent "$DF_DEAD" 2
-  df_tx "$DF_LIVE" user:300 req:295 assistant:290; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
-  df_snapshot "$DF_LIVE:p2.md" "$DF_DEAD:p1.md"; printf 'part 1\n' > "$W/p1.md" || broken "cannot write p1.md"
-  df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --dispatch "toolu_df_$DF_LIVE" --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
-  if [ "$RC" -eq 0 ] && ! has "$DF_HDR" && has "WAITING   p2.md"; then
-    mutant_killed "${B_s29j:-0}" failed-acquit-from-row "MUTANT failed-acquit-from-row: acquitting an agent whose row names a delivered path hides the mis-mapped dead agent — section 29 S10 catches it"
-  else bad "MUTANT failed-acquit-from-row: S10 survives a row acquitting its agent (rc=$RC): $OUT"; fi
-}
-M69_failed_precedence_removed() {
-  mutant failed-precedence-removed -e 's@^  df_is_failed "\$dl_a_" && return 1$@  :@' || return
-  df_world; df_agent "$DF_DEAD" 6; df_tx "$DF_DEAD" user:20 req:15 apierr:10; df_notice "$DF_DEAD" 6 5; df_cap rec.md
-  DF_BUDGET=30 df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --complete-repair --dispatch "toolu_df_$DF_DEAD" rec.md
-  if [ "$RC" -eq 0 ] && has "PROGRESS  rec.md -- work observed in agent-$DF_DEAD.jsonl" && has "${DF_HDR}$DF_DEAD"; then
-    mutant_killed "${B_s29f:-0}" failed-precedence-removed "MUTANT failed-precedence-removed: with a FAILED agent allowed to read LIVE, an API-error death is granted a beat (rc 0, PROGRESS) — section 29 S6 catches it"
-  else bad "MUTANT failed-precedence-removed: S6 survives the FAILED-before-LIVE precedence being removed (rc=$RC): $OUT"; fi
-}
-M70_failed_clear_on_not_failed() {
-  mutant failed-clear-on-not-failed -e 's@^\(    if \[ "\$ds_hit_" -eq 1 \]; then DF_FAILED="\${DF_FAILED}\${DF_FAILED:+ }\$ds_a_"\); fi$@\1; elif [ "$STATUS" -eq 0 ]; then rm -f "${COUNTER_DIR}/failed-${ds_a_}-"*; fi@' || return
-  df_flap "$(sib_dir "$MUT")/wait-for-deliverable.sh"
-  case "$DFF_O3" in *"$DF_EARLY"*) dfm_r_=1 ;; *) dfm_r_=0 ;; esac
-  if [ "$dfm_r_" = 1 ] && [ "$DFF_EL" = " 0 270 0 0" ]; then
-    mutant_killed "${B_s29p:-0}" failed-clear-on-not-failed "MUTANT failed-clear-on-not-failed: clearing the sidecar when one scan sees the agent answered refunds the same join twice — section 29 S16 catches it"
-  else bad "MUTANT failed-clear-on-not-failed: S16 survives the sidecar being cleared on a not-FAILED scan (virtual seconds:$DFF_EL): $DFF_O3"; fi
-}
-M71_open_request_bound_480() {
-  mutant open-request-bound-480 -e 's@^OPEN_REQUEST_SECS="\${AI_DLC_OPEN_REQUEST_SECS:-1200}"$@OPEN_REQUEST_SECS="${AI_DLC_OPEN_REQUEST_SECS:-480}"@' || return
-  df_open_interval_world 853
-  fx_onsleep "$W" "df_on_sleep '$TD/agent-$DF_LIVE.jsonl' '$DF_LIVE' reply"
-  DF_BUDGET=1400 df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --complete-repair --dispatch "toolu_df_$DF_LIVE" rec.md
-  if [ "$RC" -eq 1 ] && has "${DF_HDR}$DF_LIVE" && has "sent 853s ago with no reply (bound 480s)" && ! has "PROGRESS"; then
-    mutant_killed "${B_s29o:-0}" open-request-bound-480 "MUTANT open-request-bound-480: the send-to-reply bound names a live 853s open interval FAILED and takes its grant (rc 1) — section 29 S15 catches it"
-  else bad "MUTANT open-request-bound-480: S15 survives the bound being 480 (rc=$RC): $OUT"; fi
-}
-M72_dashed_id_skipped() {
-  mutant dashed-id-skipped -e 's@^    case "\$ds_a_" in \*\[!A-Za-z0-9_-\]\*) continue ;; esac$@    case "$ds_a_" in *[!A-Za-z0-9_]*) continue ;; esac@' || return
-  df_dash_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh"
-  if [ "$RC" -eq 0 ] && ! has "$DF_HDR" && has "WAITING   p4.md"; then
-    mutant_killed "${B_s29i:-0}" dashed-id-skipped "MUTANT dashed-id-skipped: an id guard without '-' skips a dashed dead agent silently — section 29 S9 catches it"
-  else bad "MUTANT dashed-id-skipped: S9 survives a guard that skips dashed ids (rc=$RC): $OUT"; fi
-}
-M73_failed_per_agent_key() {
-  mutant failed-per-agent-key -e 's@^df_sc_() { DF_SC_="\${COUNTER_DIR}/failed-\$1-\$2"; }$@df_sc_() { DF_SC_="${COUNTER_DIR}/failed-$1"; }@' || return
-  df_crossjoin "$(sib_dir "$MUT")/wait-for-deliverable.sh"
-  if [ "$RC" -eq 0 ] && ! has "$DF_EARLY" && has "WAITING   q2.md -- beat 1/3" && has "${DF_HDR}$DF_DEAD"; then
-    mutant_killed "${B_s29q:-0}" failed-per-agent-key "MUTANT failed-per-agent-key: a sidecar keyed per agent outlives join 1, so join 2 on a fresh path runs its whole beat charged (beat 1/3) — section 29 S17 catches it"
-  else bad "MUTANT failed-per-agent-key: S17 survives the sidecar keyed per agent (rc=$RC, virtual seconds: $DFX_EL): $OUT"; fi
-}
+
 # ---------------------------------------------------------------------------
 # THE WIRING, END TO END: ONE CLI RUN PER DISTINCT OUTCOME, EACH HELD BYTE-IDENTICAL TO wbl_ip.
 # Every cell above calls the subject in process. This is where `bash wait-for-deliverable.sh` still
@@ -4187,7 +3070,7 @@ M73_failed_per_agent_key() {
 # clock are restored to the snapshot, and wbl_ip runs on it at the same path, the same instant. Its
 # stdout, its stderr and its exit code must be equal byte for byte, and the six outcomes must be six
 # different answers, so the equality is shown able to fail. Not an S function: it runs once, in the
-# driver, never under a mutant.
+# driver.
 # ---------------------------------------------------------------------------
 wr_env() {  # the tuning both sides run under
   unset CLAUDE_CODE_SESSION_ID
@@ -4259,11 +3142,7 @@ if [ "${1:-}" = "--run-one" ]; then
   exit 0
 fi
 
-MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
-MX_ONLY="${2:-}"
-MX_CELLS=0
-if [ "$MATRIX" = 1 ]; then echo "wait-beat-liveness: mode FULL (mutant x arm matrix; not a push run)"
-else echo "wait-beat-liveness: mode PUSH"; fi
+echo "wait-beat-liveness: mode PUSH"
 
 probe
 clock_probe
@@ -4273,182 +3152,15 @@ wiring_e2e
 # THE CASE LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order, with a
 # zero guard. A hand-written list is the defect the subject itself is about: a case
 # dropped from it runs nothing, prints nothing, and N-1 greens read exactly like N.
-NAMES="$(grep -oE '^(S[0-9]+[a-z]?|M[0-9]+)_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
+NAMES="$(grep -oE '^S[0-9]+[a-z]?_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
 N_LISTED="$(printf '%s\n' "$NAMES" | grep -c . || true)"
 if [ "$N_LISTED" -lt 15 ]; then
   echo "FIXTURE ERROR: derived $N_LISTED case(s) from this file — the naming grammar moved" >&2
   exit 2
 fi
 
-# A case function named S<section>_... owns the base-pass flag B_<section> (lower-case): set after it
-# ran and added no failure in this run. A mutant scored by that section's arm routes through
-# mutant_killed behind it, so a kill can never be the seed failing.
-#
-# THE MATRIX. Each mutant's `decides=` arm drives it through its M function (above); its `twins=` arms
-# are OTHER arms that must stay green under it. The header rows are the single source: this driver reads
-# them from this file. A twin is driven against the mutant file itself (SUBJ replaced in a subshell).
-arm_fn() { for af_ in $NAMES; do case "$af_" in S*) [ "$(printf '%s' "${af_%%_*}" | tr 'A-Z' 'a-z')" = "$1" ] && { printf '%s' "$af_"; return 0; } ;; esac; done; return 1; }
-twin_cell() {  # $1 = arm token, $2 = mutant file -> 0 green, 1 tripped
-  tc_fn_="$(arm_fn "$1")" || broken "matrix: no arm named $1"
-  # the mutant is driven from its own dir WITH the subject's three siblings beside it, as the real subject is
-  tc_d_="$(mktemp -d "$TMPROOT/mxd.XXXXXX")" || broken "mktemp failed"
-  cp "$2" "$tc_d_/wait-for-deliverable.sh" && cp "$MERGE" "$GRAMMAR" "$(dirname "$SUBJ")/wfd-start-of.sh" "$tc_d_/" || broken "cannot build the matrix cell dir"
-  # Returns 0 green, 1 tripped, 2 BROKEN (the cell could not run: the arm exited 2). A broken cell is never
-  # a trip and is never retried. FX_UNDER_MUTANT tells churn_stop that the subject under the cell is a
-  # mutant, which may deliver on first sight and so never poll -- the arm's own assertions then fail, which
-  # is the trip; without it the churn guard refuses a hook no poll fired and the cell exits 2.
-  ( SUBJ="$tc_d_/wait-for-deliverable.sh"; FX_UNDER_MUTANT=1; MX_IN_CELL=1; fx_shims_on; fails=0; "$tc_fn_" >/dev/null 2>&1; [ "$fails" -eq 0 ] || exit 1; exit 0 ); tc_rc_=$?
-  return "$tc_rc_"
-}
-mx_row() { grep -m1 "^# MUTANT-MATRIX $1 " "$0"; }
-MX_NARMS=0; for af_ in $NAMES; do case "$af_" in S*) MX_NARMS=$((MX_NARMS+1)) ;; esac; done   # the arm count MATRIX-WIDE halves
 for n in $NAMES; do
-  f_before=$fails; MUT_LOG=""; fx_shims_on
+  fx_shims_on
   "$n"
-  unset FX_UNDER_MUTANT
-  # The base-pass flag of an S arm is a LITERAL assignment in the passing (else) branch of its own failure
-  # test, one case arm per S function: scripts/validate-mutant-kills.sh M5 reads literal `B_x=1` only.
-  # A failing base arm already counted its own failure; the `bad` in its case arm adds a SECOND one on top, so
-  # the tally is arm failures + 1 per failed S function. The catch-all arm refuses an S function with no flag
-  # arm (a new S function would otherwise score its mutants against a flag nothing sets), and the case-arm
-  # set is compared with the defined S-function set in the arm "flags:" below.
-  case "$n" in
-    S1_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S1 added a failure, so its mutants are not scored"; else B_s1=1; fi ;;
-    S2_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S2 added a failure, so its mutants are not scored"; else B_s2=1; fi ;;
-    S3_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S3 added a failure, so its mutants are not scored"; else B_s3=1; fi ;;
-    S4_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S4 added a failure, so its mutants are not scored"; else B_s4=1; fi ;;
-    S5_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S5 added a failure, so its mutants are not scored"; else B_s5=1; fi ;;
-    S6_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S6 added a failure, so its mutants are not scored"; else B_s6=1; fi ;;
-    S7a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S7a added a failure, so its mutants are not scored"; else B_s7a=1; fi ;;
-    S7b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S7b added a failure, so its mutants are not scored"; else B_s7b=1; fi ;;
-    S8_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S8 added a failure, so its mutants are not scored"; else B_s8=1; fi ;;
-    S9_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S9 added a failure, so its mutants are not scored"; else B_s9=1; fi ;;
-    S10_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S10 added a failure, so its mutants are not scored"; else B_s10=1; fi ;;
-    S12_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S12 added a failure, so its mutants are not scored"; else B_s12=1; fi ;;
-    S13a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S13a added a failure, so its mutants are not scored"; else B_s13a=1; fi ;;
-    S13b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S13b added a failure, so its mutants are not scored"; else B_s13b=1; fi ;;
-    S13c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S13c added a failure, so its mutants are not scored"; else B_s13c=1; fi ;;
-    S13d_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S13d added a failure, so its mutants are not scored"; else B_s13d=1; fi ;;
-    S13e_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S13e added a failure, so its mutants are not scored"; else B_s13e=1; fi ;;
-    S13f_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S13f added a failure, so its mutants are not scored"; else B_s13f=1; fi ;;
-    S13g_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S13g added a failure, so its mutants are not scored"; else B_s13g=1; fi ;;
-    S13h_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S13h added a failure, so its mutants are not scored"; else B_s13h=1; fi ;;
-    S14a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S14a added a failure, so its mutants are not scored"; else B_s14a=1; fi ;;
-    S15a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S15a added a failure, so its mutants are not scored"; else B_s15a=1; fi ;;
-    S15b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S15b added a failure, so its mutants are not scored"; else B_s15b=1; fi ;;
-    S15c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S15c added a failure, so its mutants are not scored"; else B_s15c=1; fi ;;
-    S15d_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S15d added a failure, so its mutants are not scored"; else B_s15d=1; fi ;;
-    S16_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S16 added a failure, so its mutants are not scored"; else B_s16=1; fi ;;
-    S16b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S16b added a failure, so its mutants are not scored"; else B_s16b=1; fi ;;
-    S16c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S16c added a failure, so its mutants are not scored"; else B_s16c=1; fi ;;
-    S17a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S17a added a failure, so its mutants are not scored"; else B_s17a=1; fi ;;
-    S17b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S17b added a failure, so its mutants are not scored"; else B_s17b=1; fi ;;
-    S17c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S17c added a failure, so its mutants are not scored"; else B_s17c=1; fi ;;
-    S17d_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S17d added a failure, so its mutants are not scored"; else B_s17d=1; fi ;;
-    S17e_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S17e added a failure, so its mutants are not scored"; else B_s17e=1; fi ;;
-    S18a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S18a added a failure, so its mutants are not scored"; else B_s18a=1; fi ;;
-    S18b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S18b added a failure, so its mutants are not scored"; else B_s18b=1; fi ;;
-    S19a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S19a added a failure, so its mutants are not scored"; else B_s19a=1; fi ;;
-    S19b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S19b added a failure, so its mutants are not scored"; else B_s19b=1; fi ;;
-    S19c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S19c added a failure, so its mutants are not scored"; else B_s19c=1; fi ;;
-    S20a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S20a added a failure, so its mutants are not scored"; else B_s20a=1; fi ;;
-    S20b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S20b added a failure, so its mutants are not scored"; else B_s20b=1; fi ;;
-    S21_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S21 added a failure, so its mutants are not scored"; else B_s21=1; fi ;;
-    S21b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S21b added a failure, so its mutants are not scored"; else B_s21b=1; fi ;;
-    S22_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S22 added a failure, so its mutants are not scored"; else B_s22=1; fi ;;
-    S22b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S22b added a failure, so its mutants are not scored"; else B_s22b=1; fi ;;
-    S22c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S22c added a failure, so its mutants are not scored"; else B_s22c=1; fi ;;
-    S23a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S23a added a failure, so its mutants are not scored"; else B_s23a=1; fi ;;
-    S23b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S23b added a failure, so its mutants are not scored"; else B_s23b=1; fi ;;
-    S23c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S23c added a failure, so its mutants are not scored"; else B_s23c=1; fi ;;
-    S24a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S24a added a failure, so its mutants are not scored"; else B_s24a=1; fi ;;
-    S24b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S24b added a failure, so its mutants are not scored"; else B_s24b=1; fi ;;
-    S24c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S24c added a failure, so its mutants are not scored"; else B_s24c=1; fi ;;
-    S25_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S25 added a failure, so its mutants are not scored"; else B_s25=1; fi ;;
-    S26_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S26 added a failure, so its mutants are not scored"; else B_s26=1; fi ;;
-    S27a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S27a added a failure, so its mutants are not scored"; else B_s27a=1; fi ;;
-    S27b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S27b added a failure, so its mutants are not scored"; else B_s27b=1; fi ;;
-    S27c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S27c added a failure, so its mutants are not scored"; else B_s27c=1; fi ;;
-    S27d_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S27d added a failure, so its mutants are not scored"; else B_s27d=1; fi ;;
-    S28_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S28 added a failure, so its mutants are not scored"; else B_s28=1; fi ;;
-    S29a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29a added a failure, so its mutants are not scored"; else B_s29a=1; fi ;;
-    S29b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29b added a failure, so its mutants are not scored"; else B_s29b=1; fi ;;
-    S29c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29c added a failure, so its mutants are not scored"; else B_s29c=1; fi ;;
-    S29d_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29d added a failure, so its mutants are not scored"; else B_s29d=1; fi ;;
-    S29e_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29e added a failure, so its mutants are not scored"; else B_s29e=1; fi ;;
-    S29f_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29f added a failure, so its mutants are not scored"; else B_s29f=1; fi ;;
-    S29g_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29g added a failure, so its mutants are not scored"; else B_s29g=1; fi ;;
-    S29h_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29h added a failure, so its mutants are not scored"; else B_s29h=1; fi ;;
-    S29i_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29i added a failure, so its mutants are not scored"; else B_s29i=1; fi ;;
-    S29j_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29j added a failure, so its mutants are not scored"; else B_s29j=1; fi ;;
-    S29k_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29k added a failure, so its mutants are not scored"; else B_s29k=1; fi ;;
-    S29l_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29l added a failure, so its mutants are not scored"; else B_s29l=1; fi ;;
-    S29m_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29m added a failure, so its mutants are not scored"; else B_s29m=1; fi ;;
-    S29n_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29n added a failure, so its mutants are not scored"; else B_s29n=1; fi ;;
-    S29o_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29o added a failure, so its mutants are not scored"; else B_s29o=1; fi ;;
-    S29p_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29p added a failure, so its mutants are not scored"; else B_s29p=1; fi ;;
-    S29q_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29q added a failure, so its mutants are not scored"; else B_s29q=1; fi ;;
-    S*) bad "base arm $n has no literal flag arm; add one" ;;
-  esac
-  case "$n" in M*)
-    dead_=no; [ "$fails" -eq "$f_before" ] && dead_=yes
-    while IFS='|' read -r mn_ mp_; do
-      [ -n "$mn_" ] || continue
-      row_="$(mx_row "$mn_")"
-      [ -z "$MX_ONLY" ] || [ "$MX_ONLY" = "$mn_" ] || continue
-      if [ "$MATRIX" = 1 ]; then
-        dec_="$(printf '%s' "$row_" | sed -n 's/.* decides=\([^ ]*\).*/\1/p')"
-        cells_=""
-        for mx_af_ in $NAMES; do
-          case "$mx_af_" in S*) ;; *) continue ;; esac
-          mx_p_="$(printf '%s' "${mx_af_%%_*}" | tr 'A-Z' 'a-z')"
-          twin_cell "$mx_p_" "$mp_"; c_=$?; MX_CELLS=$((MX_CELLS+1))
-          if [ "$c_" -eq 3 ]; then c_="SEED"
-          elif [ "$c_" -ge 2 ]; then c_="BROKEN"; bad "matrix: mutant $mn_ cell $mx_p_ cell=BROKEN (the arm exited 2: the cell could not run)"; fi
-          cells_="$cells_ $mx_p_:$c_"
-        done
-        if [ "$dead_" = yes ]; then cells_="$cells_ own:1"; else cells_="$cells_ own:0"; fi
-        printf '  MATRIX %s decides=%s dead=%s cells:%s\n' "$mn_" "$dec_" "$dead_" "$cells_"
-        # THE HEADER JOIN. The arms reading 1 ARE the mutant's decides set (a co-trip kills it too, so it
-        # is a decider, never a twin); the header row must name exactly that set, and its twins must read 0.
-        mx_trip_=""; mx_green_=""
-        for mx_c_ in $cells_; do
-          case "$mx_c_" in *:1) mx_trip_="$mx_trip_ ${mx_c_%%:*}" ;; *:0) mx_green_="$mx_green_ ${mx_c_%%:*}" ;; esac
-        done
-        mx_nt_=0; for mx_c_ in $mx_trip_; do mx_nt_=$((mx_nt_+1)); done
-        [ "$mx_nt_" -le $(( MX_NARMS / 2 )) ] || printf '  MATRIX-WIDE %s trips %d arms (more than half of %d): it may break the subject wholesale\n' "$mn_" "$mx_nt_" "$MX_NARMS"
-        for mx_d1_ in $(printf '%s' "$dec_" | tr ',' ' '); do
-          case " $mx_trip_ " in *" $mx_d1_ "*) ;; *) bad "matrix: $mn_ decides arm $mx_d1_ does not read 1 in the full row" ;; esac
-        done
-        ok "matrix: $mn_ decides [$dec_] each read 1; $mx_nt_ arm(s) tripped in all"
-        for mx_t_ in $(printf '%s' "$row_" | sed -n 's/.* twins=\([^ ]*\).*/\1/p' | tr ',' ' '); do
-          case " $mx_green_ " in *" $mx_t_ "*) ;; *) bad "matrix: $mn_ twin $mx_t_ does not read 0 in the full row" ;; esac
-        done
-      else
-        [ -n "$row_" ] || { bad "matrix: mutant $mn_ has no # MUTANT-MATRIX row in the header"; continue; }
-        tw_="$(printf '%s' "$row_" | sed -n 's/.* twins=\([^ ]*\).*/\1/p')"
-        for t_ in $(printf '%s' "$tw_" | tr ',' ' '); do
-          [ "$t_" = - ] && continue
-          if twin_cell "$t_" "$mp_"; then ok "twin: mutant $mn_ leaves arm $t_ green"
-          else bad "twin: mutant $mn_ tripped arm $t_ -- it co-trips an arm the header says stays green"; fi
-        done
-      fi
-    done <<EOM
-$MUT_LOG
-EOM
-  ;; esac
 done
-# flags: every defined S function has exactly one literal flag arm in the driver's case, and no arm names an
-# S function that is not defined. Both sets are derived from this file; a count control (the defined set must
-# be non-empty) keeps an empty derivation from reading as equal.
-fl_def_="$(grep -oE '^S[0-9]+[a-z]?_' "$0" | tr -d _ | sort -u)"
-fl_arm_="$(grep -oE '^    S[0-9]+[a-z]?_\*\) if' "$0" | sed 's/^ *//; s/_\*) if$//' | sort -u)"
-fl_nd_="$(printf '%s\n' "$fl_def_" | grep -c .)" || fl_nd_=0
-fl_na_="$(printf '%s\n' "$fl_arm_" | grep -c .)" || fl_na_=0
-if [ "$fl_nd_" -gt 0 ] && [ "$fl_def_" = "$fl_arm_" ]; then ok "flags: $fl_nd_ defined S functions, $fl_na_ literal flag arms, the sets are equal"
-else bad "flags: defined S functions ($fl_nd_) and literal flag arms ($fl_na_) differ: $(printf '%s\n' "$fl_def_" "$fl_arm_" | sort | uniq -u | tr '\n' ' ')"; fi
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MX_CELLS" -eq 0 ]; then ok "matrix: a plain run executed no matrix-only cell"
-  else bad "matrix: a plain run executed $MX_CELLS matrix-only cell(s)"; fi
-fi
 report_end wait-beat-liveness

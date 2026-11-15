@@ -6,7 +6,6 @@
 !core/skills/ai-dlc-update/reconcile/apply.sh
 core/skills/ai-dlc-update/reconcile/
 core/skills/ai-dlc/
-# lib rows derived from run.sh:2,93 (preamble.sh, mutant.sh).
+# lib rows derived from run.sh:2,55 (preamble.sh, report.sh).
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh

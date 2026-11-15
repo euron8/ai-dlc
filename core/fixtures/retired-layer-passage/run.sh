@@ -11,41 +11,16 @@
 # and no detector in the directory opened them. The sibling could not have: on that pull
 # its retired set was empty, so it exited before reading a layer file.
 #
-# THE MUTANT MATRIX. A CELL is one probe of the detector or of lib.sh run against a COPY of the reconcile
+# THE CELLS. A CELL is one probe of the detector or of lib.sh run against a COPY of the reconcile
 # directory: X1 (the unreadable-free run still flags restates.md), X5 (a release deleting nothing says it
 # opened no layer file), X6 (a scanned-but-no-match run reports its denominator), X7b (an unreadable
 # setup-sites.md refuses with exit 2 and no row), N0-N3 (BL-355's four fold cells), K0-K1 (BL-403(c)'s two
-# SIGKILL cells) and F0-F1 (the fd-limit fold cells). PER PUSH a mutant is scored on its DECIDING cell, which
-# must fail on it, and its named TWIN, a different cell it could plausibly co-trip but must leave GREEN.
-# `run.sh --matrix` scores each mutant against every cell and prints one MATRIX line per mutant. The BL-355
-# mutants no-probe and no-awk decide N3 on a host whose `tr` folds a multibyte capital; on a host whose `tr`
-# does not, the deciding cell is N1 instead (the run derives it from the same host probe, and the header
-# names the host the matrix was measured on). The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
-# command below, from the repo root.
-# also trips: c-fold -> F0,F1
-# MUTANT-MATRIX rlp-exit0 decides=X7b twins=X1
-# MUTANT-MATRIX c-fold decides=N1 twins=N0
-# MUTANT-MATRIX no-gate decides=N2 twins=N0
-# MUTANT-MATRIX no-probe decides=N3 twins=N0
-# MUTANT-MATRIX no-awk decides=N3 twins=N0
-# MUTANT-MATRIX late-rm decides=K1 twins=K0
-# MUTANT-MATRIX norm-fallthrough decides=F1 twins=F0
-# Every mutant reaches mutant_killed through one helper, as a variable:
-# MUTANT-MATRIX-DYNAMIC mx_score why=passes the mutant name as a variable for all seven mutants and every name keeps its own row
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/retired-layer-passage/run.sh --matrix
+# SIGKILL cells) and F0-F1 (the fd-limit fold cells).
 #
-# Usage: run.sh [--matrix]
+# Usage: run.sh
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
-
-MODE=plain
-case "${1:-}" in
-  "") ;;
-  --matrix) MODE=matrix ;;
-  *) echo "retired-layer-passage: usage: run.sh [--matrix]" >&2; exit 2 ;;
-esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
@@ -55,11 +30,6 @@ trap 'rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "retired-layer-passage:"
 
@@ -160,83 +130,16 @@ rlp_unreadable() { # rlp_unreadable <reconcile-dir-copy> -> 0 when the copy refu
   RLP_WHY="rc=$rc rows=$(printf '%s' "$out" | grep -c .) err=$(printf '%s' "$err" | head -1 | cut -c1-100)"
   [ "$rc" -eq 2 ] && [ -z "$out" ] && grep -q 'could not read the rulebook list from setup-sites.md' <<<"$err"
 }
-rlp_copy() { # rlp_copy <dir> -> a whole copy of the reconcile directory whose unmutated run still flags the row
+rlp_copy() { # rlp_copy <dir> -> a whole copy of the reconcile directory whose run still flags the row
   mkdir -p "$1" && cp -R "$RLP_SRC"/. "$1"/ && [ -f "$1/lib.sh" ] && [ -f "$1/setup-sites.md" ]
 }
 UNR="$WORK/unreadable-sites"
 if ! rlp_copy "$UNR"; then
   bad "FIXTURE BROKEN — could not copy the reconcile directory for the unreadable-setup-sites.md arm"
-elif ! grep -q 'extensions/restates.md' <<<"$(bash "$UNR/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; then
-  bad "FIXTURE BROKEN — the unmutated directory copy does not flag restates.md, so a refusal below would be the copy failing, not the read"
 elif rlp_unreadable "$UNR"; then
-  ok "a setup-sites.md that exists and cannot be read refuses with exit 2 and no row ($RLP_WHY)"; B_x7b=1
+  ok "a setup-sites.md that exists and cannot be read refuses with exit 2 and no row ($RLP_WHY)"
 else
   bad "a setup-sites.md that cannot be read did not refuse with exit 2 and no row ($RLP_WHY) — apply.sh reads exit 0 as a clean run"
-fi
-
-# ---- matrix plumbing. The header rows are the only source of a mutant's deciding cell and twin. ----
-# MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
-MXL="$WORK/mx.ledger"; : > "$MXL"; MXQ="$WORK/mx.queue"; : > "$MXQ"
-mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
-  awk -v n="$1" -v f="$2" '
-    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
-      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
-    }
-    END { if (c == 1) print v }' "$HERE/run.sh"
-}
-mx_count() { local n; n="$(grep -c "^$1 " "$MXL")" || n=0; printf '%s' "$n"; }
-# mx_score <mutant> <base-pass flag> <message> <failing cells of its family> <want exactly, or empty> <mutated file> <mutant dir>
-# The failing-cell string comes from the family's own score, which already ran once per push: the deciding
-# cell must be in it and the twin must not. Both are ledgered "dec".
-mx_score() {
-  local m="$1" fl="$2" msg="$3" fc="$4" want="$5" dec tw
-  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
-  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: MUTANT $m has no single MUTANT-MATRIX row naming its deciding cell and twin"; return; fi
-  printf 'dec %s %s\ndec %s %s\n' "$m" "$dec" "$m" "$tw" >> "$MXL"
-  printf '%s\t%s\t%s\n' "$m" "$6" "$7" >> "$MXQ"
-  case " $fc " in
-    *" $dec "*)
-      if [ -n "$want" ] && [ "$fc" != "$want" ]; then bad "MUTANT [$m] failed [$fc], expected exactly [$want]"
-      else mutant_killed "$fl" "$m" "$msg"; fi ;;
-    *) bad "MUTANT SURVIVED [$m]: its deciding cell $dec still passed (failing: [${fc:-none}])" ;;
-  esac
-  case " $fc " in *" $tw "*) bad "MUTANT [$m] is entangled: its twin $tw also failed" ;; esac
-}
-split2() { printf '%s' "${1%.}" | sed 's/\(..\)/\1 /g;s/ *$//'; } # "N1N3." -> "N1 N3"
-# fam_cells <family> <dir> -> the FAILING cells of that family on <dir>, space separated, or BROKEN.
-fam_cells() {
-  local fam="$1" d="$2" out="" c
-  case "$fam" in
-    x) grep -q 'extensions/restates.md' <<<"$(bash "$d/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)" || out="$out X1"
-       rlp_unreadable "$d" 2>/dev/null || out="$out X7b" ;;
-    n) out="$(split2 "$(score_355 "$d")")" ;;
-    k) c="$(k_score "$d")"; case "$c" in BROKEN*) echo BROKEN; return ;; esac; out="$(split2 "$c")" ;;
-    f) out="$(split2 "$(f_score "$d")")" ;;
-  esac
-  printf '%s' "$out" | sed 's/^ *//;s/ *$//'
-}
-
-# --- Mutant for 7/7b: the refusal's `exit 2` restored to the base `exit 0` -------
-# Both arms are EXIT-shaped, and the refusal line prints either way, so only a mutant shows the
-# exit is what they read. Built in a whole directory copy (lib.sh beside it), anchored on the
-# `exit` that follows the refusal line, guarded by `cmp -s` and `bash -n`, and given a PRESENCE
-# control: the mutant copy must still flag restates.md with a readable list, so a copy that never
-# ran cannot score the kill.
-MUT="$WORK/mut-exit0"
-if ! rlp_copy "$MUT"; then
-  bad "MUTANT HARNESS BROKEN [rlp-exit0]: could not copy the reconcile directory"
-elif ! sed '/could not read the rulebook list from setup-sites.md/{n;s/^  exit 2$/  exit 0/;}' \
-       "$RLP_SRC/retired-layer-passage.sh" > "$MUT/retired-layer-passage.sh"; then
-  bad "MUTANT DID NOT APPLY [rlp-exit0]: sed exited non-zero, so no mutant exists"
-elif cmp -s "$RLP_SRC/retired-layer-passage.sh" "$MUT/retired-layer-passage.sh"; then
-  bad "FIXTURE STALE [rlp-exit0]: the mutation matched nothing in retired-layer-passage.sh. Re-anchor on the exit after the refusal line, never relax the assertion"
-elif ! bash -n "$MUT/retired-layer-passage.sh" 2>/dev/null; then
-  bad "FIXTURE STALE [rlp-exit0]: the mutant does not parse"
-elif ! grep -q 'extensions/restates.md' <<<"$(bash "$MUT/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; then
-  bad "MUTANT HARNESS BROKEN [rlp-exit0]: the mutant copy does not flag restates.md with a readable list, so it is not running"
-else
-  if rlp_unreadable "$MUT"; then fc=""; else fc="X7b"; fi
-  mx_score rlp-exit0 "${B_x7b:-0}" "mutant [rlp-exit0] scored by 7b: with the base exit 0 restored, the unreadable list reads as a clean run ($RLP_WHY)" "$fc" "" retired-layer-passage.sh "$MUT"
 fi
 
 # --- BL-355: an accented capital still folds to its lower-case form ----------------
@@ -250,8 +153,8 @@ fi
 #   N0 control: a same-case accented reproduction, under a C caller -> its row
 #   N3 the N1 run with a BYTE-WISE `tr` stub first on PATH -> the same rows and exit as the system `tr`
 N_SKIP=0
-# Keyed on the PROBED fold, the newest subject these cells and mutants need: an engine carrying the
-# iconv gate without the probe would run N3 and STALE every re-anchored mutant on a consumer.
+# Keyed on the PROBED fold, the newest subject these cells need: an engine carrying the
+# iconv gate without the probe would run N3 on a consumer.
 if ! grep -qF 'then _nf="$(_norm_fold_probe)"; fi' "$RLP_SRC/lib.sh"; then
   case "$RLP_SRC" in
     */core/skills/ai-dlc-update/reconcile) echo "  --    (BL-355: this lib.sh carries no probed locale fold; in the distribution N0-N3 run anyway and must go red)" ;;
@@ -331,48 +234,10 @@ if [ "$N_SKIP" = 0 ]; then
   # POSITIVE CONTROL for N3: the subject's fold reached the stub, or N3 compared two system-tr runs.
   [ -s "$NW/stub.hits" ] || bad "FIXTURE BROKEN -- the byte-wise tr stub was never invoked, so N3 compared two system-tr runs"
   case "$got" in
-    .) ok "BL-355 N0-N3: an accented capital folds under a UTF-8 caller, a same-case control matches under C, a Latin-1 layer file is still read (exit 0), and a byte-wise tr first on PATH changes no verdict"; B_n=1 ;;
+    .) ok "BL-355 N0-N3: an accented capital folds under a UTF-8 caller, a same-case control matches under C, a Latin-1 layer file is still read (exit 0), and a byte-wise tr first on PATH changes no verdict"  ;;
     *.) bad "BL-355 cell(s) [${got%.}] failed: an accented reproduction is missed, a Latin-1 file refuses the run, or the verdict depends on which tr resolves" ;;
     *) bad "FIXTURE BROKEN -- the BL-355 cells did not complete" ;;
   esac
-  n355_mut() { # n355_mut <name> <want> <find> <replace>
-    local _d="$WORK/bl355-$1"
-    if ! rlp_copy "$_d"; then bad "MUTANT HARNESS BROKEN [BL-355 $1]: could not copy the reconcile directory"; return; fi
-    if ! python3 - "$RLP_SRC/lib.sh" "$_d/lib.sh" "$3" "$4" <<'PY'
-import sys
-src, dst, f, r = sys.argv[1:5]
-s = open(src, encoding="utf-8").read()
-if s.count(f) != 1: sys.exit(1)
-open(dst, "w", encoding="utf-8").write(s.replace(f, r))
-PY
-    then bad "FIXTURE STALE [BL-355 $1]: its anchor did not match exactly once in lib.sh -- re-anchor on the same observable"; return; fi
-    if cmp -s "$RLP_SRC/lib.sh" "$_d/lib.sh" || ! bash -n "$_d/lib.sh" 2>/dev/null; then
-      bad "FIXTURE STALE [BL-355 $1]: the mutation did not apply or does not parse"; return; fi
-    got="$(score_355 "$_d")"
-    mx_score "$1" "${B_n:-0}" "MUTANT (BL-355 $1) scored by $2 alone: failing cells exactly [$2]" "$(split2 "$got")" "$(split2 "$2.")" lib.sh "$_d"
-  }
-  # THE HOST's `tr` DECIDES WHAT TWO OF THESE MUTANTS CAN EXPRESS, so their vectors are derived from
-  # it, never hardcoded. Measured with GNU tr 9.11 first on PATH: it folds byte by byte (so trusting it
-  # misses N1 as well) and passes a Latin-1 byte through rather than dying (so dropping the C locale
-  # from the fallback breaks nothing on that host). Both facts are probed here, in the cells' locale.
-  H_TR_FOLDS=0; H_TR_REFUSES=0
-  [ "$(printf '\303\211' | LC_ALL=en_US.UTF-8 tr '[:upper:]' '[:lower:]' 2>/dev/null)" = "$(printf '\303\251')" ] && H_TR_FOLDS=1
-  [ "$(printf 'caf\351\n' | LC_ALL=en_US.UTF-8 tr '[:upper:]' '[:lower:]' 2>/dev/null)" = "$(printf 'caf\351')" ] || H_TR_REFUSES=1
-  echo "  --    (BL-355 host: tr=$(command -v tr) folds-multibyte=$H_TR_FOLDS refuses-latin1=$H_TR_REFUSES)"
-  # the 0.652.0 shape: the fold always byte-wise
-  n355_mut c-fold N1 '; then _nf="$(_norm_fold_probe)"; fi' '; then _nf=c; fi'
-  # the ungated fix: LC_ALL=C dropped from the C fold, so a Latin-1 file is folded in the caller's locale
-  if [ "$H_TR_REFUSES" = 1 ]; then
-    n355_mut no-gate N2 "      c)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=\$? ;;" "      c)   tr '[:upper:]' '[:lower:]' <&5 || _rc=\$? ;;"
-  else
-    echo "  SKIP  MUTANT (BL-355 no-gate) -- this host's tr reads a Latin-1 byte under UTF-8 without refusing, so the mutant expresses nothing here"
-  fi
-  # the unprobed fold: the locale `tr` trusted whatever resolves on PATH (the tip shape GNU tr broke)
-  if [ "$H_TR_FOLDS" = 1 ]; then w_np=N3; else w_np=N1N3; fi
-  n355_mut no-probe "$w_np" '; then _nf="$(_norm_fold_probe)"; fi' '; then _nf=tr; fi'
-  # the probe without its awk candidate: a byte-wise tr falls to the C fold and misses the accent
-  if [ "$H_TR_FOLDS" = 1 ]; then w_na=N3; else w_na=N1; fi
-  n355_mut no-awk "$w_na" '  [ "$_got" = "$_want" ] && { echo awk; return 0; }' '  :'
 fi
 
 # --- BL-403(c): norm_lines leaves no staged file behind when it is KILLED mid-sed ----------------
@@ -414,32 +279,10 @@ k_score() { # k_score <reconcile-dir> -> failing cells (K0, K1) then `.`, or BRO
 }
 got="$(k_score "$RLP_SRC")"
 case "$got" in
-  .)  ok "BL-403(c) K0-K1: norm_lines hit by SIGKILL mid-sed leaves 0 norm-lines.* files; undisturbed it still normalises and leaves 0"; B_k=1 ;;
+  .)  ok "BL-403(c) K0-K1: norm_lines hit by SIGKILL mid-sed leaves 0 norm-lines.* files; undisturbed it still normalises and leaves 0" ;;
   *.) bad "BL-403(c) cell(s) [${got%.}] failed: a norm_lines hit by SIGKILL left its staged file, or the healthy run broke" ;;
   *)  bad "FIXTURE BROKEN -- BL-403(c): $got" ;;
 esac
-# MUTANT: the early unlink removed, so the name lives until the normal-path `rm` -- the base shape.
-# K1 must die and K0 must not: the healthy path still cleans up after itself.
-KM="$WORK/k-mut"
-if ! rlp_copy "$KM"; then bad "MUTANT HARNESS BROKEN [BL-403c late-rm]: could not copy the reconcile directory"
-elif ! python3 - "$RLP_SRC/lib.sh" "$KM/lib.sh" <<'PY'
-import sys
-src, dst = sys.argv[1:3]
-s = open(src, encoding="utf-8").read()
-f = '  _no=1; rm -f "$_nt"\n'
-if s.count(f) != 1: sys.exit(1)
-open(dst, "w", encoding="utf-8").write(s.replace(f, '  _no=1\n'))
-PY
-then bad "FIXTURE STALE [BL-403c late-rm]: the early-unlink anchor did not match exactly once in lib.sh -- re-anchor on the same observable"
-elif cmp -s "$RLP_SRC/lib.sh" "$KM/lib.sh" || ! bash -n "$KM/lib.sh" 2>/dev/null; then
-  bad "FIXTURE STALE [BL-403c late-rm]: the mutation did not apply or does not parse"
-else
-  got="$(k_score "$KM")"
-  case "$got" in
-    BROKEN*) bad "FIXTURE BROKEN -- BL-403c late-rm: $got" ;;
-    *) mx_score late-rm "${B_k:-0}" "MUTANT (BL-403c late-rm) scored by K1 alone: without the early unlink a SIGKILL leaves norm-lines.*" "$(split2 "$got")" "K1" lib.sh "$KM" ;;
-  esac
-fi
 
 # --- norm_lines near the fd limit: an unanswered fold probe is a refusal, never a silent C fold -----
 # With fds 3-5 held, `$(_norm_fold_probe)` cannot fork at `ulimit -n 7`, and `_nf` came back EMPTY.
@@ -449,9 +292,8 @@ fi
 #   F0 control: the same driver with no limit folds it, rc 0 -- so F1 is not a driver that never folds.
 # THE DRIVER CLOSES FDS 3-9 BEFORE IT LOWERS THE LIMIT. The cell assumes norm_lines' own 3-5 are the
 # only fds held; a caller that hands down open 3-9 (the consumer's pre-push pool does) leaves no fd
-# for even norm_lines' `mktemp` substitution, so the real lib.sh and the mutant both refuse 125 and
-# the mutant survives. Measured on the reference consumer's 16-way pool at 0.691.0, 1 of 199 units
-# red. The held-fds arm below drives both cells with 3-9 open to prove the close holds.
+# for even norm_lines' `mktemp` substitution, so the real lib.sh refuses 125 on F0. The held-fds arm
+# below drives both cells with 3-9 open to prove the close holds.
 f_drive() { # f_drive <reconcile-dir> <limit or -> -> "<rc>|<output, cat -v>"
   local t
   t="$(mktemp -d "$WORK/f-tmp.XXXXXX")" || { echo BROKEN; return; }
@@ -469,81 +311,21 @@ f_score() { # f_score <reconcile-dir> -> failing cells then `.`
   case "$o" in 'rc=125|'|'M-CM-)lan x|rc=0|') ;; *) r="${r}F1" ;; esac
   printf '%s.' "$r"
 }
-B_f=0
 if ! grep -qx 'en_US.UTF-8' <<<"$N_LOCALES"; then
   bad "FIXTURE BROKEN -- en_US.UTF-8 is not installed here, so the fd-limit fold cell cannot be expressed"
 else
   got="$(f_score "$RLP_SRC")"
   case "$got" in
-    .)  ok "norm_lines F0-F1: at ulimit -n 7 the unanswered fold probe refuses (125) or folds correctly, never a silent C fold; unlimited it folds"; B_f=1 ;;
+    .)  ok "norm_lines F0-F1: at ulimit -n 7 the unanswered fold probe refuses (125) or folds correctly, never a silent C fold; unlimited it folds" ;;
     *.) bad "norm_lines cell(s) [${got%.}] failed: an unanswered fold probe was taken as the C fold ($(f_drive "$RLP_SRC" 7))" ;;
   esac
-  # MUTANT: the fallthrough restored -- the C fold is the `case` default again.
-  FM="$WORK/f-mut"
-  if ! rlp_copy "$FM"; then bad "MUTANT HARNESS BROKEN [norm-fallthrough]: could not copy the reconcile directory"
-  elif ! python3 - "$RLP_SRC/lib.sh" "$FM/lib.sh" <<'PY'
-import sys
-src, dst = sys.argv[1:3]
-s = open(src, encoding="utf-8").read()
-f = "      c)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=$? ;;\n      *)   _rc=125 ;;\n"
-if s.count(f) != 1: sys.exit(1)
-open(dst, "w", encoding="utf-8").write(s.replace(f, "      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=$? ;;\n"))
-PY
-  then bad "FIXTURE STALE [norm-fallthrough]: the refusal arm anchor did not match exactly once in lib.sh"
-  elif cmp -s "$RLP_SRC/lib.sh" "$FM/lib.sh" || ! bash -n "$FM/lib.sh" 2>/dev/null; then
-    bad "FIXTURE STALE [norm-fallthrough]: the mutation did not apply or does not parse"
-  else
-    got="$(f_score "$FM")"
-    mx_score norm-fallthrough "${B_f:-0}" "MUTANT (norm-fallthrough) scored by F1 alone: the C-fold default returns rc 0 with the capital unfolded" "$(split2 "$got")" "F1" lib.sh "$FM"
-    # HELD FDS: the same two scores with fds 3-9 already open in the caller, as a pool hands them down.
-    # Without the driver's close the mutant scores `.` here and survives; with it, the scores match above.
-    held="$( exec 3</dev/null 4</dev/null 5</dev/null 6</dev/null 7</dev/null 8</dev/null 9</dev/null
-             printf '%s/%s' "$(f_score "$RLP_SRC")" "$(f_score "$FM")" )"
-    case "$held" in
-      ./F1.) mutant_killed "$B_f" norm-fallthrough "norm_lines F0-F1 with fds 3-9 inherited: real lib.sh passes and the norm-fallthrough mutant still fails exactly [F1]" ;;
-      *)     bad "norm_lines cells depend on inherited fds: with 3-9 held, real/mutant scored [$held], expected [./F1.]" ;;
-    esac
-  fi
-fi
-
-# ---- MATRIX-ONLY: every mutant scored against EVERY family of cells, on a fresh copy of the reconcile directory
-# carrying only that mutant's file. Per push this loop does not run, and the rule-9 arm below asserts it.
-if [ "$MODE" = matrix ]; then
-  while IFS="$(printf '\t')" read -r m mf md; do
-    dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
-    fresh="$WORK/mxf.$RANDOM$RANDOM"
-    if ! rlp_copy "$fresh" || ! cp "$md/$mf" "$fresh/$mf"; then echo "MATRIX BROKEN $m"; exit 2; fi
-    allf=""; all="X1 X7b"
-    for fam in n k f x; do
-      if [ "$fam" = n ] && [ "$N_SKIP" != 0 ]; then continue; fi
-      if [ "$fam" = n ]; then all="$all N0 N1 N2 N3"; fi
-      if [ "$fam" = k ]; then all="$all K0 K1"; fi
-      if [ "$fam" = f ]; then all="$all F0 F1"; fi
-      printf 'mx %s %s\n' "$m" "$fam" >> "$MXL"
-      r="$(fam_cells "$fam" "$fresh")"
-      case "$r" in BROKEN*) echo "MATRIX BROKEN $m"; exit 2 ;; esac
-      allf="$allf $r"
-    done
-    g=0; tot=0; u=""; rd=""
-    for c in $all; do
-      if [ "$c" = "$dec" ] || [ "$c" = "$tw" ]; then continue; fi
-      tot=$((tot + 1)); case " $allf " in *" $c "*) rd="$rd,$c" ;; *) g=$((g + 1)) ;; esac
-    done
-    case " $allf " in *" $dec "*) d=RED ;; *) d=GREEN; u=" UNEXPECTED=$dec:GREEN" ;; esac
-    case " $allf " in *" $tw "*) t=RED; u="$u UNEXPECTED=$tw:RED" ;; *) t=GREEN ;; esac
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
-  done < "$MXQ"
-fi
-
-# RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
-# empty matrix count cannot come from a ledger nothing writes.
-mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
-if [ "$MODE" = plain ]; then
-  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
-  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
-  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
-else
-  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
+  # HELD FDS: the same two scores with fds 3-9 already open in the caller, as a pool hands them down.
+  held="$( exec 3</dev/null 4</dev/null 5</dev/null 6</dev/null 7</dev/null 8</dev/null 9</dev/null
+           f_score "$RLP_SRC" )"
+  case "$held" in
+    .) ok "norm_lines F0-F1 with fds 3-9 inherited: the real lib.sh still scores clean" ;;
+    *) bad "norm_lines cells depend on inherited fds: with 3-9 held, the real lib.sh scored [$held], expected [.]" ;;
+  esac
 fi
 
 echo

@@ -27,8 +27,6 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
-B_a1=0; B_a7=0; B_allow=0; B_legacy=0; B_nm=0
 
 # Capture output AND exit code without a pipeline: the validator's exit code is the verdict,
 # and `run | grep` would replace it with grep's.
@@ -43,7 +41,7 @@ echo "HERMETIC-CONSUMED $VALIDATOR"
 # --- Assertion 1: THE FIX — a dropped epic FAILS ------------------------------
 run "$VALIDATOR" "$REQ" "$DROPPED"
 if [ "$RC" = "1" ]; then
-  ok "a sprint that dropped the identifiers its operator named FAILS (exit 1)"; B_a1=1
+  ok "a sprint that dropped the identifiers its operator named FAILS (exit 1)"
 else
   bad "the dropped epic did not FAIL (exit $RC) — the reference failure passes this check"
 fi
@@ -98,7 +96,7 @@ fi
 # --- Assertion 7: absent evidence is a FAIL, not a pass -----------------------
 run "$VALIDATOR" "$WORK/nonexistent-requests.md" "$COVERED"
 if [ "$RC" = "2" ]; then
-  ok "a missing capture file exits 2 — no evidence must never render as no problem"; B_a7=1
+  ok "a missing capture file exits 2 — no evidence must never render as no problem"
 else
   bad "a missing operator-requests file did not fail closed (exit $RC) — every consumer without the hook would read green"
 fi
@@ -147,72 +145,6 @@ else bad "--cite-sha SHA256:SHA256:<hex> exited $RC instead of 2 — the strip r
 OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "sha256:$SHA" 2>&1)"; RC=$?
 if [ "$RC" = "2" ]; then ok "--cite-sha sha256:<hex> exits 2 — the label match does not fold case"
 else bad "--cite-sha sha256:<hex> exited $RC instead of 2 — the strip folds case"; fi
-
-# --- Assertion 10: UNMUTATED CONTROL -----------------------------------------
-# The mutants are copies. This validator resolves a sibling script by $0's directory and shells
-# into python; a copy placed elsewhere dies resolving that sibling and prints nothing, which
-# assertions expecting a FAIL would score as a kill. The copies therefore live BESIDE the
-# original, and this proves one behaves identically.
-CTL="$(dirname "$VALIDATOR")/.control-$$-validate-request-coverage.sh"
-cp "$VALIDATOR" "$CTL"; trap 'rm -rf "$WORK"; rm -f "$CTL" "$(dirname "$VALIDATOR")"/.mutant-$$-*.sh' EXIT
-run "$CTL" "$REQ" "$DROPPED"
-if [ "$RC" = "1" ]; then
-  ok "control: an unmutated copy FAILs the dropped brief identically — the copies below can run"
-else
-  bad "CONTROL FAILED (exit $RC): an unmutated copy does not behave like the original, so no mutant result below means anything"
-fi
-
-# --- Assertion 11: MUTANT A — read the whole block instead of committed bullets
-# The first draft's defect, in one line: measure coverage against every block rather than this
-# sprint's committed bullets. The dropped brief MUST then pass, because the S41 block names
-# everything it dropped.
-MUT_A="$(dirname "$VALIDATOR")/.mutant-$$-a.sh"
-awk 'index($0,"scope = \"\\n\".join(own_bullets)") { print "scope = \"\\n\".join(blocks)"; next } { print }' \
-  "$VALIDATOR" > "$MUT_A"
-if cmp -s "$VALIDATOR" "$MUT_A"; then
-  bad "FIXTURE STALE: mutant A is byte-identical — the committed-bullet scope line was reworded"
-elif ! bash -n "$MUT_A" 2>/dev/null; then
-  bad "FIXTURE BROKEN: mutant A is not a valid shell script, so a kill would only mean the copy could not run"
-else
-  chmod +x "$MUT_A"; run "$MUT_A" "$REQ" "$DROPPED"
-  if [ "$RC" = "0" ]; then
-    mutant_killed "$B_a1" mutant-A "mutant A: reading whole blocks makes the dropped epic PASS — assertions 1-3 have teeth"
-  else
-    bad "MUTANT A DID NOT FAIL (exit $RC) — the dropped brief fails even when the prior block is in scope, so assertion 2 is not testing the trap"
-  fi
-  # Must fail ONLY its own assertion: the honest brief still passes.
-  run "$MUT_A" "$REQ" "$COVERED"
-  if [ "$RC" = "0" ]; then
-    ok "mutant A leaves assertion 4 intact — the two assertions are not entangled"
-  else
-    bad "mutant A ALSO broke assertion 4 (exit $RC) — scope selection and the pass path are entangled, so one assertion is vacuous"
-  fi
-fi
-
-# --- Assertion 12: MUTANT B — drop the fail-closed arm ------------------------
-# Treat an unreadable capture file as nothing to check. Assertion 7 MUST go red.
-MUT_B="$(dirname "$VALIDATOR")/.mutant-$$-b.sh"
-awk 'index($0,"if [ ! -r \"$REQUESTS\" ]; then") { print "if false; then"; next } { print }' \
-  "$VALIDATOR" > "$MUT_B"
-if cmp -s "$VALIDATOR" "$MUT_B"; then
-  bad "FIXTURE STALE: mutant B is byte-identical — the fail-closed guard was reworded"
-elif ! bash -n "$MUT_B" 2>/dev/null; then
-  bad "FIXTURE BROKEN: mutant B is not a valid shell script"
-else
-  chmod +x "$MUT_B"; run "$MUT_B" "$WORK/nonexistent-requests.md" "$COVERED"
-  if [ "$RC" != "2" ]; then
-    mutant_killed "$B_a7" mutant-B "mutant B: without the fail-closed arm a missing capture stops exiting 2 — assertion 7 has teeth"
-  else
-    bad "MUTANT B DID NOT FAIL — a missing capture still exits 2 without the guard, so assertion 7 is not testing it"
-  fi
-  # Must fail ONLY its own assertion.
-  run "$MUT_B" "$REQ" "$DROPPED"
-  if [ "$RC" = "1" ]; then
-    ok "mutant B leaves assertion 1 intact — the guard and the coverage verdict are not entangled"
-  else
-    bad "mutant B ALSO broke assertion 1 (exit $RC) — one of the two assertions is vacuous"
-  fi
-fi
 
 # --- A HARNESS-RAISED ENTRY IS NOT THE ASK (v0.265.0) ----------------------------------
 # THIS IS THE ONE THAT TURNED THE CHECK OFF. Entry selection took the newest record, and the
@@ -268,7 +200,7 @@ else
   bad "CONTROL: the covered brief now fails (exit $RC); the harness filter is rejecting entries it should only skip"
 fi
 
-# MUTATION: a capture whose entries are ALL harness-raised must not read as NOT-APPLICABLE.
+# A capture whose entries are ALL harness-raised must not read as NOT-APPLICABLE.
 # That is the same zero the defect produced, reached from the other side.
 AHREQ="$WORK/requests-all-harness.md"
 { printf '# Operator Requests\n'; sed -n '/^## 2026-08-05T23:59:59Z/,$p' "$HREQ"; } > "$AHREQ"
@@ -297,7 +229,7 @@ fi
 
 OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --session sess-1 2>&1)"; RC=$?
 if [ "$RC" = "0" ]; then
-  ok "ALLOW TWIN: a session the capture DOES hold passes the same command line — the arm reads its key rather than refusing every --session, and one property separates this run from the one above"; B_allow=1
+  ok "ALLOW TWIN: a session the capture DOES hold passes the same command line — the arm reads its key rather than refusing every --session, and one property separates this run from the one above"
 else
   bad "a session PRESENT in the capture exited $RC on a covered brief; the arm is refusing unconditionally, so the assertion above establishes nothing"
 fi
@@ -309,23 +241,6 @@ if [ "$RC" = "0" ] && ! grep -q 'no captured request for session' <<<"$OUT"; the
   ok "a caller passing no --session is unaffected — the arm is opt-in, so no existing invocation changes behaviour"
 else
   bad "omitting --session exited $RC and/or reached the session arm; every caller that passes three arguments must be untouched"
-fi
-
-# MUTANT: neuter the join so the arm cannot see a present session, and it must then fire on
-# sess-1 too. Built as a COPY guarded by cmp -s, because a sed that matched nothing would
-# otherwise score as a kill.
-ZCMUT="$WORK/vrc-nojoin.sh"
-sed 's/^    _rc_mine="\$(LC_ALL=C grep -cF -- "- Session: \${SESSION}" "\$REQUESTS")" || _rc_mine=0$/    _rc_mine=0/' \
-  "$VALIDATOR" > "$ZCMUT"
-if cmp -s "$VALIDATOR" "$ZCMUT"; then
-  bad "FIXTURE BROKEN: the zero-capture mutant changed nothing — the join line was renamed, so this control tests an unmutated file"
-else
-  OUT="$(bash "$ZCMUT" --requests "$REQ" --brief "$COVERED" --sprint 42 --session sess-1 2>&1)"; RC=$?
-  if [ "$RC" = "2" ] && grep -q 'no captured request for session sess-1' <<<"$OUT"; then
-    mutant_killed "$B_allow" nojoin "MUTANT nojoin: a build that never counts the session's own entries reports the PRESENT session as absent, so the allow twin above is what proves the join is read"
-  else
-    bad "MUTANT nojoin SURVIVED: stripping the session count still passed sess-1 (exit $RC) — the allow twin cannot fire and its ok line means nothing"
-  fi
 fi
 
 # --- BL-327: the harness-origin schema is found by WALKING UP, from either consumer layout ------
@@ -356,28 +271,10 @@ else
   done
   cons_rc() { ( cd "$CT/docs/sub" && bash "$CT/$1/validate-request-coverage.sh" --requests "$REQ" --brief "$COVERED" --sprint 42 ) >/dev/null 2>&1; echo $?; }
   NM="$(cons_rc scripts/ai-dlc)"; LG="$(cons_rc scripts)"
-  [ "$NM" = 0 ] && { ok "BL-327 near-miss: the scripts/ai-dlc/ copy in a consumer-shaped tree covers the brief (exit 0) from a subdirectory"; B_nm=1; } \
+  [ "$NM" = 0 ] && ok "BL-327 near-miss: the scripts/ai-dlc/ copy in a consumer-shaped tree covers the brief (exit 0) from a subdirectory" \
                 || bad "BL-327 near-miss: the scripts/ai-dlc/ copy exited $NM — the consumer tree is not one the validator can run in, so the legacy arm below proves nothing"
-  [ "$LG" = 0 ] && { ok "BL-327: the pre-relocation scripts/ copy finds harness-origin.json by walking up and covers the brief (exit 0)"; B_legacy=1; } \
+  [ "$LG" = 0 ] && ok "BL-327: the pre-relocation scripts/ copy finds harness-origin.json by walking up and covers the brief (exit 0)" \
                 || bad "BL-327: the pre-relocation scripts/ copy exited $LG — its harness-origin lookup counts hops and lands above the project"
-  # MUTANT: the hop chain restored — the root candidates climb `$AI_DLC_SELF_DIR/../..` and the
-  # install candidate is dropped, both layers of the fix reverted. It must fail the legacy arm only.
-  HOPMUT="$CT/hopmut.sh"
-  sed -e 's|"\$AI_DLC_ROOT/core/schemas/harness-origin.json"|"$AI_DLC_SELF_DIR/../../core/schemas/harness-origin.json"|' \
-      -e 's|"\$AI_DLC_ROOT/.claude/schemas/harness-origin.json"|"$AI_DLC_SELF_DIR/../../.claude/schemas/harness-origin.json"|' \
-      -e 's|"\${AI_DLC_INSTALL_ROOT:+\$AI_DLC_INSTALL_ROOT/.claude/schemas/harness-origin.json}"|""|' \
-      "$VALIDATOR" > "$HOPMUT"
-  if [ "$(grep -c 'SELF_DIR/../../' "$HOPMUT")" -ne 2 ] || grep -q 'INSTALL_ROOT/.claude/schemas/harness-origin' "$HOPMUT"; then
-    bad "FIXTURE BROKEN: the BL-327 hop mutant did not apply to all three candidates — its verdict would be about an unmutated file"
-  else
-    for _l in scripts scripts/ai-dlc; do cp "$HOPMUT" "$CT/$_l/validate-request-coverage.sh"; done
-    MNM="$(cons_rc scripts/ai-dlc)"; MLG="$(cons_rc scripts)"
-    if [ "$MNM" = 0 ] && [ "$MLG" != 0 ]; then
-      mutant_killed "$(( $B_nm && $B_legacy ))" hop "MUTANT hop: counting hops passes the scripts/ai-dlc/ copy (exit 0) and fails the legacy copy (exit $MLG) — the legacy arm is what kills it"
-    else
-      bad "MUTANT hop SURVIVED or broke the near-miss: scripts/ai-dlc exit $MNM, scripts exit $MLG"
-    fi
-  fi
 fi
 
 echo

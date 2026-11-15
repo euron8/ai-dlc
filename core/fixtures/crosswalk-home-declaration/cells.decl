@@ -1,2 +1,1 @@
 cli scripts/validate-enforcement-map.sh cli-pass
-cli scripts/validate-enforcement-map.sh cli-refuse

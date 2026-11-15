@@ -32,22 +32,13 @@
 # So V1 below is the assertion that matters, and it is not "the parser works." It is:
 # THE EXAMPLE THE DOC TEACHES, PARSED BY THE PARSER THE GATE RUNS.
 #
-# The mutant by arm matrix, measured from one hermetic run (core/scripts/hermetic-run.sh with
-# AI_DLC_VERDICT_STORE set to a fresh mktemp dir). The two schema mutants are V4b's and V4c's
-# MUTATION controls. V4c's runs the validator twice, on the decorated block (its own arm) and on
-# the bare placeholder, which must stay refused (V4b's property), so V4b is its twin. V6's schema
-# edit is that arm's own seeded offender, not a mutant of a guard, and carries no row.
-# MUTANT-MATRIX V4b-strip-forbidden decides=V4b twins=- why=the mutated schema is driven once, on the bare placeholder block, and only the V4b MUTATION arm reads that run
-# MUTANT-MATRIX V4c-exact-match decides=V4c twins=V4b
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/taught-schema/run.sh --matrix
 
 set -uo pipefail
-MATRIX_MODE=0; [ "${1:-}" = "--matrix" ] && MATRIX_MODE=1
 
 # HERMETIC -- scrub the operator's tuning before invoking anything (I10). The validator takes
 # AI_DLC_PROJECT_ROOT ahead of its script-relative walk when choosing the schema, so an inherited
-# override points the COPY under test at a schema outside its package, and the arms that mutate
-# the package's schema (V4b's and V4c's mutation controls) then prove nothing.
+# override points the COPY under test at a schema outside its package, and the arm that edits
+# the package's schema (V6) then proves nothing.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -90,22 +81,9 @@ trap 'rm -rf "$TMP"' EXIT
 # ---------------------------------------------------------------------------------------
 # EVERYTHING BELOW RUNS AGAINST A COPY. THE FIXTURE DOES NOT WRITE INTO THE TREE IT TESTS.
 #
-# THE DEFECT THIS REPLACES, measured 2026-07-29. Three of this fixture's assertions mutate
-# the package to prove a check fires: V4b strips the forbidden list out of the schema, V5
-# drops a hand-written probe into team-roles/, V6 edits the schema again. Every one of those
-# writes landed in the LIVE tree and was undone a few lines later. Under the 16-way suite
-# that is a writer racing fifteen readers:
-#
-#   cp: core/team-roles/zz-taught-schema-fixture-probe.md: No such file or directory
-#
-# -- `enforcement-map-sites`' seed enumerating team-roles/ and then finding the probe gone,
-# which under `set -e` kills the seed and reports FIXTURE BROKEN on whichever of its 31
-# assertions happened to be seeding at that instant. Observed on three different assertions
-# in three rounds, which is why it never looked like one reproducible defect.
-#
-# The schema window is the worse half and produced no error at all: for the length of two
-# assertions the real provenance-block.json is missing its forbidden list, and any fixture
-# reading it in that window adjudicates against a schema no release ever shipped.
+# V5 drops a hand-written probe into team-roles/ and V6 edits the schema. Writing those into the
+# LIVE tree races every concurrent reader under the parallel suite (a seed enumerating team-roles/
+# finds the probe gone; a reader sees a schema no release shipped), so they run against a copy.
 #
 # Copying is cheap here -- scripts/, schemas/, skills/ and team-roles/, not the fixtures
 # tree -- and `sync-taught-schema.sh` resolves its root SCRIPT-RELATIVE first, so the copy's
@@ -146,8 +124,6 @@ PASS=0
 FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "$1" >&2; }
-. "$FIXTURE_DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_V4b=0; B_V4c=0
 
 # ---------------------------------------------------------------------------------------
 # V1. THE ROUND TRIP. Lift the example adversary.md TEACHES, feed it to the parser the gate
@@ -288,7 +264,7 @@ sed 's/^tool_use_id: .*/tool_use_id: toolu_PLACEHOLDER/' "$TMP/taught.md" >"$TMP
 if bash "$VALIDATOR" "$TMP/placeholder.md" >"$TMP/v4b" 2>&1; then
     bad "V4b a placeholder tool_use_id (toolu_PLACEHOLDER) PASSED — a forged evidence cell is unpoliced"
 elif grep -q "is forbidden" "$TMP/v4b"; then
-    ok "V4b a placeholder tool_use_id is refused as forbidden (clears the charset, not from the run)"; B_V4b=1
+    ok "V4b a placeholder tool_use_id is refused as forbidden (clears the charset, not from the run)"
 else
     bad "V4b failed, but not as forbidden — the diagnosis is wrong: $(head -1 "$TMP/v4b")"
 fi
@@ -313,87 +289,8 @@ elif ! grep -q "is forbidden" "$TMP/v4c"; then
 elif ! bash "$VALIDATOR" "$TMP/nearmiss.md" >"$TMP/v4c.near" 2>&1; then
     bad "V4c NEAR-MISS a real-shaped tool_use_id was REJECTED — the match is too wide: $(head -2 "$TMP/v4c.near" | tail -1)"
 else
-    ok "V4c a decorated placeholder is refused and a real-shaped id is not (the match is by prefix, and it discriminates)"; B_V4c=1
+    ok "V4c a decorated placeholder is refused and a real-shaped id is not (the match is by prefix, and it discriminates)"
 fi
-
-# MUTATION control for V4b: strip the tool_use_id `forbidden` list from the schema and
-# require the SAME placeholder block to go green. The FAIL above is evidence for the
-# forbidden list only if removing it removes the FAIL. Anti-vacuity is STRUCTURAL (not cmp,
-# and no longer a whole-file grep): json.dump reformats the whole file, so a byte diff would
-# report "changed" even for a no-op strip — and a whole-file grep for the token is satisfied
-# by any PROSE that quotes it. That is not hypothetical: this arm failed the moment the
-# schema's own `forbidden_match_reason` began naming `toolu_PLACEHOLDER_LEAD_TO_FILL` to
-# explain why the match is by prefix, because the token survived a strip that had in fact
-# removed the whole list. Ask the parsed schema whether the FIELD still carries the key.
-# --matrix: under the mutated schema, run the validator on each V4 block and print one MATRIX row:
-# V4b's cell is the bare placeholder (red = it passes), V4c's the decorated one (red = it passes).
-# A plain run returns at once and drives nothing.
-mx_row() {  # mx_row <name> <deciding arm>
-    [ "$MATRIX_MODE" = 1 ] || return 0
-    local b=GREEN c=GREEN f
-    bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1 && b=TRIPPED
-    bash "$VALIDATOR" "$TMP/decorated.md" >/dev/null 2>&1 && c=TRIPPED
-    if [ "$2" = V4b ]; then f=$b; else f=$c; fi
-    [ "$f" = TRIPPED ] && f=yes || f=no
-    printf 'MATRIX %s decides=%s fires=%s cells=V4b:%s,V4c:%s\n' "$1" "$2" "$f" "$b" "$c"
-}
-field_has() {  # field_has <schema> <field> <key> -> 0 if that field carries that key
-    python3 -c 'import json,sys
-S=json.load(open(sys.argv[1]))
-sys.exit(0 if any(f["name"]==sys.argv[2] and sys.argv[3] in f for f in S["fields"]) else 1)' "$@"
-}
-cp "$SCHEMA" "$TMP/schema.v4b.bak"
-python3 - "$SCHEMA" <<'PYEOF'
-import json, sys
-p = sys.argv[1]
-S = json.load(open(p))
-for f in S["fields"]:
-    if f["name"] == "tool_use_id":
-        f.pop("forbidden", None)
-        f.pop("forbidden_reason", None)
-json.dump(S, open(p, "w"), indent=2, ensure_ascii=False)
-PYEOF
-if ! field_has "$TMP/schema.v4b.bak" tool_use_id forbidden; then
-    bad "V4b MUTATION setup — the real schema has no tool_use_id forbidden list to strip"
-elif field_has "$SCHEMA" tool_use_id forbidden; then
-    bad "V4b MUTATION matched nothing — the tool_use_id forbidden list survived the strip"
-elif bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1; then
-    mutant_killed "$B_V4b" V4b-strip-forbidden "V4b MUTATION — removing the forbidden list lets the placeholder pass (the list is what fires)"
-else
-    bad "V4b MUTATION — placeholder still refused without the forbidden list; V4b proves nothing"
-fi
-mx_row V4b-strip-forbidden V4b
-cp "$TMP/schema.v4b.bak" "$SCHEMA"
-
-# MUTATION control for V4c, and it is a DIFFERENT mutation from V4b's on purpose. Stripping
-# the whole forbidden list kills V4b and V4c together, so it establishes that the list
-# fires and says nothing about the MATCH MODE — which is the property V4c owns. This one
-# reverts `forbidden_match` to exact, leaving the list intact, and requires the DECORATED
-# block to go green while the BARE one stays refused. That pair is the whole finding: under
-# exact matching the two inputs are scored differently, and only decoration separates them.
-cp "$SCHEMA" "$TMP/schema.v4c.bak"
-python3 - "$SCHEMA" <<'PYEOF'
-import json, sys
-p = sys.argv[1]
-S = json.load(open(p))
-for f in S["fields"]:
-    if f["name"] == "tool_use_id":
-        f.pop("forbidden_match", None)
-json.dump(S, open(p, "w"), indent=2, ensure_ascii=False)
-PYEOF
-if ! field_has "$TMP/schema.v4c.bak" tool_use_id forbidden_match; then
-    bad "V4c MUTATION setup — the real schema declares no forbidden_match on tool_use_id to revert"
-elif field_has "$SCHEMA" tool_use_id forbidden_match; then
-    bad "V4c MUTATION matched nothing — tool_use_id's forbidden_match survived the revert"
-elif ! bash "$VALIDATOR" "$TMP/decorated.md" >/dev/null 2>&1; then
-    bad "V4c MUTATION — the decorated placeholder is STILL refused under exact matching; V4c proves nothing about the match mode"
-elif bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1; then
-    bad "V4c MUTATION — the BARE literal also passed, so the mutation removed the list rather than the match mode"
-else
-    mutant_killed "$B_V4c" V4c-exact-match "V4c MUTATION — reverting forbidden_match to exact lets the DECORATED placeholder pass while the bare one stays refused (prefix matching is what fires)"
-fi
-mx_row V4c-exact-match V4c
-cp "$TMP/schema.v4c.bak" "$SCHEMA"
 
 # ---------------------------------------------------------------------------------------
 # V5. INVARIANT: no hand-written example may exist in an agent-read file. This is the one

@@ -12,14 +12,8 @@
 # canonical envelope `close` writes. Check 2 now ships in core and keys its SKIP on the PRODUCER
 # (no validation-cycle-log.md -> SKIP), not on the validator's presence; Check 4's sibling stays
 # consumer-provided (SKIP when absent). Regression lock below: the SKIPs must hold, Check 3 must
-# PASS on a closed envelope, and the MUTANT (un-closed) must FAIL Check 3 — else the check is vacuous.
+# PASS on a closed envelope, and an un-closed envelope must FAIL Check 3.
 #
-# The mutant by arm matrix, measured from one hermetic run (core/scripts/hermetic-run.sh with
-# AI_DLC_VERDICT_STORE set to a fresh mktemp dir). Arms on the compliant run: check2-skip,
-# check4-skip, check5-skip, check3-pass; on the mutant run: check3-fail. The one mutant rewrites
-# the envelope's `status: done` to `status: in_progress`.
-# MUTANT-MATRIX unclosed-envelope decides=check3-fail twins=- why=the mutant is one validator run read only by the Check 3 FAIL arm, and the four compliant-tree arms read the earlier unmutated run
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/validate-mandatory-rules-revive/run.sh --matrix
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -38,8 +32,6 @@ export AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA"
 IMPL_YAML="$P/_bmad-output/implementation-artifacts/sprint-status.yaml"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_check3_fail=0
 
 echo "validate-mandatory-rules-revive:"
 
@@ -59,20 +51,14 @@ grep -q 'CHECK 5: SKIP' <<<"$OUT" \
   && ok "Check 5 SKIPs (no audit-anchors.md — diff base unresolvable on this clean tree)" \
   || bad "Check 5 did not SKIP"
 grep -q 'CHECK 3: PASS' <<<"$OUT" \
-  && { ok "Check 3 PASSes on a closed envelope (close wrote the housekeeping block)"; B_check3_fail=1; } \
+  && ok "Check 3 PASSes on a closed envelope (close wrote the housekeeping block)" \
   || bad "Check 3 did not PASS on a closed envelope"
 
-# MUTANT: un-close the envelope -> Check 3 must FAIL (proves it is not vacuous).
+# Un-close the envelope -> Check 3 must FAIL.
 sed 's/^status: done/status: in_progress/' "$IMPL_YAML" > "$IMPL_YAML.tmp" && mv "$IMPL_YAML.tmp" "$IMPL_YAML"
 MUT="$(cd "$P" && bash "$VMR" 900 2>/dev/null)"
 grep -q 'CHECK 3: FAIL' <<<"$MUT" \
-  && mutant_killed "$B_check3_fail" unclosed-envelope "MUTANT: an un-closed envelope FAILS Check 3 (enforcement is real, not vacuous)" \
-  || bad "MUTANT: Check 3 did not FAIL on an un-closed envelope"
-# --matrix: one MATRIX row, read off the $MUT run its arm already scored.
-if [ "${1:-}" = "--matrix" ]; then
-  mx=no; grep -q 'CHECK 3: FAIL' <<<"$MUT" && mx=yes
-  printf 'MATRIX %s decides=%s fires=%s twins=-\n' unclosed-envelope check3-fail "$mx"
-fi
-
+  && ok "an un-closed envelope FAILS Check 3" \
+  || bad "Check 3 did not FAIL on an un-closed envelope"
 echo
 report_end validate-mandatory-rules-revive

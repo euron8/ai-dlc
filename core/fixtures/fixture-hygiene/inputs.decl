@@ -3,7 +3,6 @@
 # arms D1 and C held on them.
 !scripts/validate-fixture-hygiene.sh
 !scripts/validate-fixture-invocations.sh
-# preamble.sh and mutant.sh, sourced here.
-core/fixtures/lib/mutant.sh
+# preamble.sh and report.sh, sourced here.
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh

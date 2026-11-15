@@ -5,8 +5,7 @@
 # WHAT IS BEING PROVEN, and why each arm has to exist. The skip decides which fixtures do not
 # run. Its failure mode is not a slow suite -- it is a SILENTLY SHORT one: a fixture that never
 # ran reports nothing and the summary still says green. So every arm below asserts a POSITIVE
-# outcome (this exact set was selected) rather than the absence of an old failure, and the
-# mutants each declare the exact arms they must move.
+# outcome (this exact set was selected) rather than the absence of an old failure.
 #
 # THE DEFECT THIS FIXTURE EXISTS BECAUSE OF. During development the selection injected each
 # changed path's synthesised PARENT DIRECTORY into the `.changed` set, which then failed the
@@ -14,194 +13,6 @@
 # scenario while announcing it in wording that read like caution. It was inert, green, and
 # indistinguishable from a working skip by any test asserting "nothing regressed". Arm 2 is
 # the one that catches it, and it catches it only because it asserts a subset was selected.
-#
-# THE MUTANT MATRIX of the tracer, rc, vs and slot units: one line per mutant, its DECIDING arm and the
-# TWIN arm(s) that stay green under it. Per push a mutant runs its deciding arm and its twin only;
-# READSET_SKIP_MATRIX=1 drives every arm of its world (slot: all twelve scenarios; vs: every cell; the
-# in-pool canary mutant: every scenario) and prints a `matrix` row per mutant. The matrix is re-measured
-# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. tk and dg carry no mutants.
-# MUTANT-MATRIX-DYNAMIC copy-mutants why=one loop over the three whole-function wrong copies cprm, archive and rsync, each scored on its own named member
-# MUTANT-MATRIX-DYNAMIC pseudo-mutants why=one loop over the ten wrong pseudo-path filters, each scored on the 11-seed signature
-# MUTANT-MATRIX-DYNAMIC both-width-mutants why=one loop over the three wrong --tracer both width injections m2, m4 and prefix
-# MUTANT-MATRIX-DYNAMIC canary-span-mutants why=one loop over the two fail-open builds c1 and c2 of readset_loss_canary
-# MUTANT-MATRIX-DYNAMIC foreign-mutants why=one loop over the three bare-marker cuts bare-start, bare-end and bare-flush
-# MUTANT-MATRIX-DYNAMIC lm_mut why=one helper scoring the four --local-map guard deletions notrip, noverdict, nolive and notrap
-# MUTANT-MATRIX-DYNAMIC rc-mutants why=one loop over the two dropped reconcile reasons rc-nochanged and rc-nostale
-# MUTANT-MATRIX-DYNAMIC vs_cmut why=one helper scoring the three one-side census edits on the ctl or cen shape
-# MUTANT-MATRIX-DYNAMIC vs_mut why=one helper scoring the three whole-world store edits nodigest, writefail and undeclared on their cell
-# MUTANT-MATRIX-DYNAMIC slot_mut why=one helper scoring the fourteen deriver slot edits on their own scenarios plus one twin
-# F2-B ROWS -- the arms, ign, man, merge, loc and hr units. Every mutant there runs ONE drive scored by ONE arm, so its matrix
-# row is that mutant against its own drive's cells, read from the run that already happens; the twin is the UNMUTATED arm on the
-# same drive (the base arm whose same-run flag gates the kill, or for a no-flag unit the unit's CONTROL), which stays green by
-# its own assertion in the same run. A control-only twin is the whole row in these units: no mutant there drives a second world.
-# MUTANT-MATRIX-DYNAMIC man_kill why=one helper scoring the five manifest literal-edit mutants noz, nofailclosed, noquote, nodashdash on their drive plus aposdrop inline
-# MUTANT-MATRIX-DYNAMIC pm_lw why=one helper scoring the two local-map hash mutants hash and dsha on the local world
-# MUTANT-MATRIX-DYNAMIC pm_l why=one helper scoring the four launcher mutants knob, lockall, locknone and linked
-# MUTANT-MATRIX-DYNAMIC pm_rf why=one helper scoring the run_fixtures mutants nocall, sync, fold and redrun
-# MUTANT-MATRIX-DYNAMIC pm_rt why=one helper scoring the three lock-writer mutants parentpid, nostartline and ppidwriter on the round trip
-# MUTANT-MATRIX-DYNAMIC pj_mut why=one helper scoring the seven lock start-time mutants, each on the one world it must move
-# MUTANT-MATRIX-DYNAMIC rp_mut why=one helper scoring the four trace-report mutants held3, twoline, notcause and bucket on (r1)
-# MUTANT-MATRIX-DYNAMIC ct_mut why=one helper scoring the five ceiling mutants noceil, pidonly, nolock and asfinish on (t1)
-# MUTANT-MATRIX-DYNAMIC pt_kill why=one helper scoring the two in-pool prep mutants ptknob and ptlinked2
-# MUTANT-MATRIX-DYNAMIC hr_mut why=one helper scoring the two readset_hash_rows mutants lastpath and nocount
-# MUTANT-MATRIX-DYNAMIC cs-mutants why=one loop over the three deriver call-site mutants cs-inline, cs-nocall and cs-warn
-# MUTANT-MATRIX-DYNAMIC flag_mutant why=one helper scoring the two whole-suite flag mutants nochange_off and untracked_blind, each on its own arm flag
-# MUTANT-MATRIX-DYNAMIC ign_mutant why=one helper scoring the three ignored-path mutants gitignore_grep, fail_open and no_gitlink_guard, each on its own world
-# MUTANT-MATRIX noskip-pool decides=arms-no-skip twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX unnamed decides=arms-unnamed-announce twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX nochange_off decides=arms-nochange-flag twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX untracked_blind decides=arms-untracked twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX gitignore_grep decides=ign-d twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX fail_open decides=ign-e twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX no_gitlink_guard decides=ign-f twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX noz decides=man-n2 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX nofailclosed decides=man-n6,man-n7 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX aposdrop decides=man-n1 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX noquote decides=man-n7 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX nodashdash decides=man-n9 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX rewrite decides=merge-arm1 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX keepstale decides=merge-arm2 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX unanchored decides=merge-g twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX no-helper decides=merge-g twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX old-map-only decides=merge-h twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX keeps-digest decides=merge-h twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX newline-join decides=allist-no-newline twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX tab-join decides=allist-middle twins=allist-no-newline
-# MUTANT-MATRIX no-run.sh-check decides=allist-exact twins=allist-middle
-# MUTANT-MATRIX no-arg-normalisation decides=untraced-m2 twins=untraced-m2-space-list
-# MUTANT-MATRIX substring-membership decides=untraced-m3 twins=untraced-m2
-# MUTANT-MATRIX empty-guard decides=untraced-m2 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX no-normalisation decides=merge-newline-list twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX m1 decides=control-d twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX alwayspass decides=control-b twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX splitsource decides=control-b twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX cs-inline decides=callsite-f twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX cs-nocall decides=callsite-f twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX cs-warn decides=callsite-f twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX stub-noreap decides=stub-reap-live twins=stub-pid-recorded
-# MUTANT-MATRIX-CONTROL sandbox-detector why=the SANDBOX MUTANT forces the detector to sandboxed on a run where ps works and its correct outcome is a refusal (FIXTURE BROKEN, exit 2), asserted per push as an ordinary ok line; it is a refusal probe, not a kill
-# MUTANT-MATRIX hash decides=loc-lc1 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX dsha decides=loc-lc2 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX held decides=loc-h3 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX nostart decides=loc-pj-wrong twins=loc-pj-right
-# MUTANT-MATRIX nopin decides=loc-pj-split twins=loc-pj-right
-# MUTANT-MATRIX psstale decides=loc-pj-bothfail twins=loc-pj-right
-# MUTANT-MATRIX nofallback decides=loc-pj-psfail,loc-pj-psfailpad twins=loc-pj-right
-# MUTANT-MATRIX silentempty decides=loc-pw twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX nonorm decides=loc-pj-right,loc-pj-psfailpad twins=loc-pj-wrong
-# MUTANT-MATRIX readerself decides=loc-pj-right,loc-pj-psfail,loc-pj-psfailpad twins=loc-pj-wrong
-# MUTANT-MATRIX helperself decides=loc-pj-right twins=loc-pj-wrong
-# MUTANT-MATRIX knob decides=loc-k0 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX lockall decides=loc-lk1 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX locknone decides=loc-lk2 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX linked decides=loc-e twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX ptknob decides=loc-pt0 twins=loc-pt1
-# MUTANT-MATRIX ptlinked2 decides=loc-ptw twins=loc-pt1
-# MUTANT-MATRIX nocall decides=loc-a twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX sync decides=loc-a twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX fold decides=loc-f twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX redrun decides=loc-rr twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX parentpid decides=loc-k twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX nostartline decides=loc-k twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX ppidwriter decides=loc-k twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX held3 decides=loc-r1 twins=loc-r2
-# MUTANT-MATRIX twoline decides=loc-r1 twins=loc-r2
-# MUTANT-MATRIX notcause decides=loc-r1 twins=loc-r2
-# MUTANT-MATRIX bucket decides=loc-r1 twins=loc-r2
-# MUTANT-MATRIX noreport decides=loc-r7 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX nostop decides=loc-r9 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX sleeptrap decides=loc-t4w twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX nosweep decides=loc-t4 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX noceil decides=loc-t1 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX pidonly decides=loc-t1 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX nolock decides=loc-t1 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX asfinish decides=loc-t1 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX lastpath decides=hr-h1 twins=hr-h2
-# MUTANT-MATRIX nocount decides=hr-h2 twins=hr-h1
-# MUTANT-MATRIX cprm decides=copy-population twins=copy-exec-bit
-# MUTANT-MATRIX archive decides=copy-population twins=copy-exec-bit
-# MUTANT-MATRIX rsync decides=copy-population twins=copy-exec-bit
-# MUTANT-MATRIX nogitlink decides=drop-submodule twins=drop-tracked-row
-# MUTANT-MATRIX quotename decides=drop-quotename twins=drop-tracked-row
-# MUTANT-MATRIX width decides=width-sandbox twins=width-fxa-ok
-# MUTANT-MATRIX gitprefix decides=both-compare twins=both-compare-miss-row
-# MUTANT-MATRIX noignore decides=both-compare twins=both-compare-miss-row
-# MUTANT-MATRIX direction decides=both-compare twins=both-compare-counts
-# MUTANT-MATRIX partial decides=both-refusal twins=both-clean-verdict
-# MUTANT-MATRIX nofilter decides=pseudo twins=pseudo-real-token
-# MUTANT-MATRIX nofilter-dash decides=pseudo-dash twins=pseudo-real-token
-# MUTANT-MATRIX wholepath decides=pseudo-seam twins=pseudo-real-token
-# MUTANT-MATRIX unanch decides=pseudo-seam twins=pseudo-real-token
-# MUTANT-MATRIX existonly decides=pseudo-seam twins=pseudo-real-token
-# MUTANT-MATRIX sbonly decides=pseudo twins=pseudo-real-token
-# MUTANT-MATRIX eonly decides=pseudo-seam twins=pseudo-real-token
-# MUTANT-MATRIX firststrip decides=pseudo-seam twins=pseudo-real-token
-# MUTANT-MATRIX nonempty decides=pseudo-seam twins=pseudo-real-token
-# MUTANT-MATRIX dashgone decides=pseudo-seam twins=pseudo-real-token
-# MUTANT-MATRIX dashany decides=pseudo-seam twins=pseudo-real-token
-# MUTANT-MATRIX m2 decides=both-width twins=both-s1-compare
-# MUTANT-MATRIX m4 decides=both-width twins=both-s1-compare
-# MUTANT-MATRIX prefix decides=both-width twins=both-s1-compare
-# MUTANT-MATRIX cboth decides=both-canary twins=both-map-unchanged
-# MUTANT-MATRIX nowrite decides=both-nowrite twins=both-fxa-line
-# MUTANT-MATRIX nocanary decides=canary twins=canary-drop-notices
-# MUTANT-MATRIX c1 decides=canary-unreadable twins=canary-readable-count
-# MUTANT-MATRIX c2 decides=canary-unreadable twins=canary-readable-count
-# MUTANT-MATRIX mappedctl decides=omitted-list twins=omitted-list-other-rows
-# MUTANT-MATRIX inline decides=all-world-o twins=all-merge-dropped
-# MUTANT-MATRIX noskip decides=all-world-s twins=all-merge-dropped
-# MUTANT-MATRIX notab decides=all-world-s twins=all-merge-dropped
-# MUTANT-MATRIX nounread decides=unread-control twins=unread-control-row
-# MUTANT-MATRIX bare-start decides=local-foreign twins=local-zz-kept
-# MUTANT-MATRIX bare-end decides=local-foreign twins=local-zz-kept
-# MUTANT-MATRIX bare-flush decides=local-foreign twins=local-zz-kept
-# MUTANT-MATRIX notrip decides=local-trip twins=local-zz-kept
-# MUTANT-MATRIX noverdict decides=local-verdict twins=local-zz-kept
-# MUTANT-MATRIX nolive decides=local-liveness twins=local-zz-kept
-# MUTANT-MATRIX notrap decides=local-clean twins=local-zz-kept
-# MUTANT-MATRIX copyfirst decides=local-copy-order twins=local-zz-kept
-# MUTANT-MATRIX noghost decides=local-ghost twins=local-zz-kept
-# MUTANT-MATRIX ipnocanary decides=in-pool-canary twins=in-pool-clean
-# MUTANT-MATRIX endonly decides=interrupted twins=interrupted-other-rows
-# MUTANT-MATRIX reapfirst decides=interrupted-reap-fresh twins=interrupted-reap-survivor
-# MUTANT-MATRIX nocarry decides=digest-carry twins=digest-fxa-written
-# MUTANT-MATRIX nodeclfilter decides=digest-declared twins=digest-undeclared-written
-# MUTANT-MATRIX nolmt decides=local-listing twins=local-zz-kept
-# MUTANT-MATRIX lmtswap decides=local-listing twins=local-zz-kept
-# MUTANT-MATRIX rc-nochanged decides=reconcile-list twins=reconcile-unmapped
-# MUTANT-MATRIX rc-nostale decides=reconcile-list twins=reconcile-unmapped
-# MUTANT-MATRIX snap-nosort decides=vs-snap-receipt twins=vs-snap-one-entry
-# MUTANT-MATRIX runner-drops-tools decides=vs-census-ctl twins=vs-census-inj
-# MUTANT-MATRIX hook-drops-tools decides=vs-census-ctl twins=vs-census-ref
-# MUTANT-MATRIX hook-carries-declared decides=vs-census-cen twins=vs-census-ctl
-# MUTANT-MATRIX hook-decl-bypass decides=vs-partition-hook twins=vs-partition-runner
-# MUTANT-MATRIX runner-private-span decides=vs-partition-runner twins=vs-partition-hook
-# MUTANT-MATRIX parse-one-slash decides=vs-norm-dsl twins=vs-norm-crlf
-# MUTANT-MATRIX nodigest decides=vs-cell-b twins=vs-cell-f
-# MUTANT-MATRIX writefail decides=vs-cell-n twins=vs-cell-f
-# MUTANT-MATRIX undeclared decides=vs-cell-d twins=vs-cell-a
-# MUTANT-MATRIX noproject decides=vs-cell-p twins=vs-cell-a
-# MUTANT-MATRIX ident-drops-keyrows decides=vs-cell-g twins=vs-cell-t
-# MUTANT-MATRIX skew-refuses decides=vs-skew twins=vs-skew-key-only
-# MUTANT-MATRIX noreap decides=slot-reaped twins=slot-file
-# MUTANT-MATRIX reapdrop decides=slot-kill twins=- why=one world: the SIGKILLed hold world is the only state where the caller's reap is the sole reaper, every other world reaps itself
-# MUTANT-MATRIX liveunrec decides=slot-kill twins=- why=one world: the SIGKILLed hold world is the only state where an unrecorded group has no other reaper
-# MUTANT-MATRIX selfrec decides=slot-forkkill twins=- why=one world: the hold world SIGKILLed on the statement after deriver A's launch is the only state where A's self-record is its group's sole record
-# MUTANT-MATRIX pktnowalk decides=slot-shellkill twins=- why=one world: the hold world torn down by the hook's pool_kill_tree is the only state the extracted teardown runs in, every other world reaps itself or is reaped by slot_reap
-# MUTANT-MATRIX-FULL noacq worlds=slot-beat,slot-file,slot-foreign,slot-nested,slot-noparent,slot-oldempty,slot-order,slot-rebreak,slot-stale,slot-stalemark,slot-stray why=the kill asserts the exact eleven-scenario failing set; with no acquire every slotted scenario moves, so no single scenario decides it
-# MUTANT-MATRIX-FULL nostale worlds=slot-oldempty,slot-rebreak,slot-stale,slot-stray why=the kill asserts the exact failing set of the four scenarios reached only through a stale break; none alone separates it from nobound or normdir
-# MUTANT-MATRIX noreent decides=slot-nested twins=slot-order
-# MUTANT-MATRIX-FULL anymark worlds=slot-foreign,slot-stalemark why=the kill asserts the exact pair: one marker shape alone would also be moved by a mutant that honours only that shape
-# MUTANT-MATRIX nobeat decides=slot-beat twins=slot-order
-# MUTANT-MATRIX nogate decides=slot-plain twins=slot-order
-# MUTANT-MATRIX normdir decides=slot-stray twins=slot-oldempty
-# MUTANT-MATRIX nodir decides=slot-file twins=slot-noparent
-# MUTANT-MATRIX noparent decides=slot-noparent twins=slot-file
-# MUTANT-MATRIX nobound decides=slot-rebreak twins=slot-stale
-# MUTANT-MATRIX nobrksleep decides=slot-rebreak twins=slot-stale
-# MUTANT-MATRIX-FULL noline worlds=slot-file,slot-noparent,slot-rebreak,slot-stray why=the kill asserts all four fail-open scenarios, the one thing they share being the deleted line; each alone is also moved by its own single-test mutant
-# MUTANT-MATRIX-FULL late worlds=slot-foreign,slot-order,slot-stalemark why=late and early move the identical three-scenario vector, the three in which B waits behind A, so no single scenario decides either
-# MUTANT-MATRIX-FULL early worlds=slot-foreign,slot-order,slot-stalemark why=late and early move the identical three-scenario vector, the three in which B waits behind A, so no single scenario decides either
 set -u
 
 # A consumer that tunes AI_DLC_FIXTURE_JOBS or AI_DLC_FIXTURE_NO_SKIP in settings.json would
@@ -214,7 +25,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # trace and report worlds) runs seeded units whose run.sh is a printf and an exit, through the real pool_run, whose
 # watcher refuses a unit after POOL_STALL consecutive one-second polls with no new bytes. The scrub above leaves the
 # default, 600, so a unit left unreaped for 600 polls was REFUSED, went unrecorded, and re-ran on the next push --
-# measured at load ~119, the fileentries mutant's world (c) read p2=delta|0 beside `REFUSED delta` in its push 1.
+# measured at load ~119, a checksum-key world read p2=delta|0 beside `REFUSED delta` in its push 1.
 # A test whose verdict moves with load is a defect, so the window is pinned to the block's own ceiling (99999 is the
 # largest value :527 of the hook accepts; a six-digit value is rejected to stderr, which these drives discard, and
 # falls back to 600). ck_push and tk_push record the value their block computed, and the (no-refusal) arm after the
@@ -242,12 +53,11 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 # file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal
 # the declared set exactly, so no unit can fall out of every shard, and every declared shard must have
 # a driver directory. The join proves it can fire first, on a seeded duplicate and a seeded omission.
-#   a  arms ign man merge ckm1 slot   pool selection worlds, the manifest, the deriver's merge and control, checksum-key mutants a-g, the trace-window slot (slot-world.sh)
-#   b  loc hr tk dg ckm2         local map and trace report, hash rows, tool keys, committed digests, checksum-key mutants h-i
+#   a  arms ign man merge slot   pool selection worlds, the manifest, the deriver's merge and control, the trace-window slot (slot-world.sh)
+#   b  loc hr tk dg              local map and trace report, hash rows, tool keys, committed digests
 #   c  tracer rc                 trace tree, lossy window, --tracer both and its stub worlds, --reconcile
-#   d  ckw ckm3 vs               shared verdict store (vs), checksum-key worlds (fifteen against the first hook, one wiring world on the second) and checksum-key mutants j-o (two on k)
-# The per-fixture checksum-key section (contract k1) is four units: ckw its worlds, ckm1..ckm3 its fifteen mutants dealt in
-# three runs. Each mutant drives its own world and one twin world, so the mutants carry the cost and are what is dealt.
+#   d  ckw vs                    shared verdict store (vs), checksum-key worlds (fifteen against the first hook, one wiring world on the second)
+# The per-fixture checksum-key section (contract k1) is the unit ckw, its worlds.
 # `rc` rides with `tracer` because it drives the stub `sandbox-exec` and deriver copy that `tracer` builds.
 # IN PROCESS. The deriver carries a BASH_SOURCE guard over its top level (rs_main); hermetic-run.sh and the decision
 # drivers are plain scripts. Every world that ran one as `env ... bash <script>` now runs it through inproc (defined beside
@@ -258,50 +68,36 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 # derivers slot-world starts (the slot's holder is the deriver's `$$`), the (args) self-invocations, and the one
 # end-to-end CLI run per outcome in the equivalence cell.
 SHARDS="a b c d"
-UNITS_a="arms ign man merge ckm1 slot"
-UNITS_b="loc hr tk dg ckm2"
+UNITS_a="arms ign man merge slot"
+UNITS_b="loc hr tk dg"
 UNITS_c="tracer rc"
-UNITS_d="ckw ckm3 vs"
-GROUP=a; MATRIX=0; _grp=0
-# THE MATRIX SWITCH HAS ONE ENTRANCE: `--matrix`. A READSET_SKIP_MATRIX inherited from the caller is dropped here, so a
-# plain run (and every hook-driven run) can never execute a matrix-only cell; the end-of-run arm asserts it.
-unset READSET_SKIP_MATRIX
+UNITS_d="ckw vs"
+GROUP=a
 while [ $# -gt 0 ]; do
   case "$1" in
-    --group) _grp=1; GROUP="${2:-}"
+    --group) GROUP="${2:-}"
       [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
       shift; shift ;;
-    --matrix) MATRIX=1; shift ;;
-    *) echo "FIXTURE ERROR: unknown argument '$1' (usage: [--group <shard> | --matrix])" >&2; exit 2 ;;
+    *) echo "FIXTURE ERROR: unknown argument '$1' (usage: [--group <shard>])" >&2; exit 2 ;;
   esac
 done
-if [ "$MATRIX" = 1 ] && [ "$_grp" = 1 ]; then
-  echo "FIXTURE ERROR: --matrix runs every unit and replaces --group; the two together are a usage error" >&2; exit 2
-fi
-[ "$MATRIX" = 1 ] && { READSET_SKIP_MATRIX=1; export READSET_SKIP_MATRIX; }
 case " $SHARDS " in
   *" $GROUP "*) ;;
   *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
 esac
 eval "MINE=\"\${UNITS_$GROUP:-}\""
-[ "$MATRIX" = 1 ] && MINE="$UNITS_a $UNITS_b $UNITS_c $UNITS_d"
 NAME="readset-skip"; [ "$GROUP" = a ] || NAME="readset-skip-$GROUP"
 [ -n "$MINE" ] || broken "shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked"
 sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
 SELF="$0"
 [ -f "$SELF" ] || broken "cannot read $SELF for the coverage join"
-# PREAMBLE SELF-CHECK of the argument parser, run before anything is built: an unknown flag refuses, and --matrix beside
-# --group refuses, each with exit 2 and a message naming the cause. The reach of --matrix into the checksum-key section
-# is asserted by the end-of-run arm that counts the CK-MATRIX rows the run printed.
+# PREAMBLE SELF-CHECK of the argument parser, run before anything is built: an unknown flag refuses with exit 2 and a
+# message naming the cause.
 PRE_ARMS=0
 _ru="$(bash "$SELF" --no-such-flag 2>&1 >/dev/null)"; _rcu=$?
 PRE_ARMS=$((PRE_ARMS+1))
 if [ "$_rcu" = 2 ] && case "$_ru" in *"unknown argument '--no-such-flag'"*) true ;; *) false ;; esac; then ok "(args) an unknown flag refuses with exit 2 and names itself"
 else bad "(args) an unknown flag must exit 2 naming it; got rc=$_rcu '$_ru'"; fi
-_rb="$(bash "$SELF" --matrix --group a 2>&1 >/dev/null)"; _rcb=$?
-PRE_ARMS=$((PRE_ARMS+1))
-if [ "$_rcb" = 2 ] && case "$_rb" in *"--matrix runs every unit"*) true ;; *) false ;; esac; then ok "(args) --matrix together with --group refuses with exit 2"
-else bad "(args) --matrix with --group must exit 2 as a usage error; got rc=$_rcb '$_rb'"; fi
 HERE="$(cd "$(dirname "$SELF")" && pwd)"
 partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
   local dup miss extra
@@ -357,8 +153,8 @@ for c in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$c" ] && { HOOK="$c"; break; }
 done
 [ -n "$HOOK" ] || broken "no pre-push hook found in either layout"
-# PRINT THE RESOLVED HOOK. Every mutant below edits a copy of THIS file's pool block; a mutation
-# made to the other layout's copy would leave every arm green.
+# PRINT THE RESOLVED HOOK. Every world below runs THIS file's pool block; a run against the other
+# layout's copy would score a different program.
 echo "  hook: ${HOOK#"$ROOT"/}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-skip.XXXXXX")" || broken "mktemp failed"
@@ -371,7 +167,7 @@ export AI_DLC_READSET_SLOT="$WORK/window-slot"
 # the wrong reason and survives. Its fds are closed so it cannot hold the runner's output pipe open.
 # It is killed by its literal recorded pid on exit, never found through the process table.
 # `tail -f /dev/null`, NOT `sleep 600`: it lives until the exit trap kills it, so a run longer than any
-# fixed bound (a loaded box, or --matrix running every unit in one process) cannot outlive its lock pid.
+# fixed bound (a loaded box) cannot outlive its lock pid.
 tail -f /dev/null </dev/null >/dev/null 2>&1 &
 LOCKPID=$!
 # disowned so the exit trap's kill does not print a job-termination line over the verdict line.
@@ -386,7 +182,7 @@ trap 'kill '"$LOCKPID"' 2>/dev/null; rm -rf "$WORK"' EXIT
 #   0  the event happened (a file appeared, a lock dir went, a pid or a group is gone)
 #   1  the party that OWES the event is dead and the event did not happen -- the state is final and
 #      the caller judges it as it stands. The owner is a pid the subject or a stub RECORDED (the status
-#      file's `pid`, a stub's own `$$`), never the lock's line 1: the lock-writer mutants make that a
+#      file's `pid`, a stub's own `$$`), never the lock's line 1, which can name a
 #      live process that never releases anything.
 #   2  FINAL: the caller's final predicate holds -- a fact about KERNEL STATE that no amount of waiting
 #      changes, never a count of polls: aw_group_settled (every live member of a group is blocked with
@@ -609,7 +405,7 @@ seed() {
   for f in alpha beta gamma; do printf 'exit 0\n' > "$t/core/fixtures/$f/run.sh"; done
   # beta also names the src/ DIRECTORY, the way a fixture that globs a directory records it.
   # Without a directory entry anywhere in the map, `.match` and `.changed` are equivalent and
-  # the parentdir mutant below cannot move -- it would report a kill for the wrong reason.
+  # an injected parent directory would be unobservable.
   printf 'alpha\tsrc/a.sh\nalpha\tsrc/shared.sh\nbeta\tsrc/b.sh\nbeta\tsrc/shared.sh\nbeta\tsrc\n' \
     > "$t/.ai-dlc-fixture-readsets.tsv"
   for f in a b shared orphan; do printf 'v1\n' > "$t/src/$f.sh"; done
@@ -723,7 +519,6 @@ inproc() {
 rs_drive() { inproc "$@"; }
 
 if sg arms; then
-B_arms_no_skip=0; B_arms_nochange_flag=0; B_arms_untracked=0; B_arms_unnamed_announce=0
 # ------------------------------------------------------------------------- arm 1-6 ----
 T="$WORK/t1"; f2b_world seed "$T" || broken "seed failed"
 R="$(select_in "$T" 'printf v2 > src/a.sh')"; R1="$R"
@@ -758,7 +553,7 @@ fi
 T="$WORK/t4"; f2b_world seed "$T" || broken "seed failed"
 R="$(AI_DLC_FIXTURE_NO_SKIP=1 select_in "$T" 'printf v2 > src/a.sh')"
 if [ "$(sel_of "$R")" = "alpha beta gamma" ]; then
-  ok "AI_DLC_FIXTURE_NO_SKIP=1 runs everything — the drift sweep the map cannot check itself with"; B_arms_no_skip=1
+  ok "AI_DLC_FIXTURE_NO_SKIP=1 runs everything — the drift sweep the map cannot check itself with"
 else
   bad "AI_DLC_FIXTURE_NO_SKIP=1 still skipped: '$(sel_of "$R")'"
 fi
@@ -791,7 +586,7 @@ else
 fi
 
 # SHARED DRIVE: t8 and t13 ask about the SAME state t1 built (the seed, then src/a.sh edited, through the
-# unmutated pool), so the subject's output is identical; each reads its own property off t1's result.
+# pool), so the subject's output is identical; each reads its own property off t1's result.
 R="$R1"
 if [ "$(sel_of "$R")" = "alpha gamma" ]; then
   ok "  and EDITING the same file does NOT select beta — a parent rides along only on appearance"
@@ -838,7 +633,7 @@ fi
 T="$WORK/t10"; f2b_world seed "$T" || broken "seed failed"
 R="$(select_in "$T" ':')"
 if [ "$(flag_of "$R")" = "1" ] && printf '%s' "$(msg_of "$R")" | grep -qF '0 of 3 fixture(s) run'; then
-  ok "NOTHING changed since the last green run — the suite is SKIPPED WHOLE, not run whole"; B_arms_nochange_flag=1
+  ok "NOTHING changed since the last green run — the suite is SKIPPED WHOLE, not run whole"
 else
   bad "an unchanged tree did not skip the suite (flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
 fi
@@ -846,7 +641,7 @@ fi
 T="$WORK/t11"; f2b_world seed "$T" || broken "seed failed"
 R="$(select_in "$T" 'printf v1 > src/untracked-newcomer.sh')"
 if [ "$(flag_of "$R")" = "0" ] && [ "$(sel_of "$R")" = "beta gamma" ]; then
-  ok "  an UNTRACKED, unignored new file is NOT nothing — it moves src/'s listing (beta) and the unmapped closure (gamma)"; B_arms_untracked=1
+  ok "  an UNTRACKED, unignored new file is NOT nothing — it moves src/'s listing (beta) and the unmapped closure (gamma)"
 else
   bad "  an untracked file was invisible to the manifest (flag $(flag_of "$R"), sel '$(sel_of "$R")') — the skip would run over a tree nobody hashed"
 fi
@@ -876,7 +671,7 @@ fi
 R="$R1"   # t1's drive: the same seed and the same edit, read for the staleness announce
 case "$(msg_of "$R")" in
   *"1 of 3 fixture dir(s) UNMAPPED (keyed on the whole tree): gamma"*)
-    ok "the run ANNOUNCES the map's coverage gap by count and by name — an unmapped fixture is not a silent always-run"; B_arms_unnamed_announce=1 ;;
+    ok "the run ANNOUNCES the map's coverage gap by count and by name — an unmapped fixture is not a silent always-run" ;;
   *)
     bad "the coverage gap was not announced (expected '1 of 3 ... UNMAPPED ... gamma'): $(msg_of "$R" | tr -d '\n')" ;;
 esac
@@ -895,105 +690,14 @@ else
   bad "  a fully-mapped tree did not announce 'derived at <sha>, 0 commit(s) ago; 0 of 3 ... UNMAPPED' cleanly: $(printf '%s' "$M14" | tr -d '\n')"
 fi
 
-# -------------------------------------------------------------------------- mutants ----
-# Each mutant is a COPY, guarded by `cmp -s` so a sed that matched nothing cannot pass as a
-# mutation, and each declares the EXACT arm it must move. A mutant that moves an arm it did
-# not declare means the assertions are entangled and at least one of them is vacuous.
-mutant() {
-  local name="$1" expr="$2" want="$3" t m out
-  m="$WORK/pool.$name.sh"
-  sed "$expr" "$POOL" > "$m"
-  if cmp -s "$POOL" "$m"; then
-    bad "MUTANT $name: the edit matched nothing, so this mutant tests the unmutated program"
-    return
-  fi
-  t="$WORK/m.$name"; f2b_world seed "$t" || { bad "MUTANT $name: seed failed"; return; }
-  local saved="$POOL"; POOL="$m"
-  # DRIVEN UNDER THE CONDITION ITS ARM TESTS. The arm (t4) sets AI_DLC_FIXTURE_NO_SKIP=1 and wants the full
-  # set; driven without it, the unmutated pool also skips, so the kill below could not fail on any subject.
-  out="$(AI_DLC_FIXTURE_NO_SKIP=1 select_in "$t" "$4")"
-  POOL="$saved"
-  if [ "$(sel_of "$out")" = "$want" ]; then
-    bad "MUTANT $name: still produced '$want' — the arm it should break does not depend on the mutated line"
-  else
-    mutant_killed "$B_arms_no_skip" noskip-pool "MUTANT $name moves its arm: '$want' became '$(sel_of "$out")'"
-  fi
-}
-
-# NO MUTANT FOR THE .git EXCLUSION, and the reason is structural rather than an omission.
-# The exclusion is applied in TWO places that must agree. Removing it from the universe alone
-# changes nothing -- the path is already absent from the manifest, so it is never hashed.
-# Removing it from the manifest alone makes `.git/HEAD` an ORPHAN, which forces a full run and
-# therefore produces the SAME selection a working exclusion produces. A mutant scored on the
-# selected set cannot tell those apart. The t9 arm above carries the falsifiability instead: it
-# asserts the MESSAGE ('nothing changed') as well as the set, and honouring .git would make
-# gamma -- which that arm maps to `.git/HEAD` -- the only selected fixture.
-# Remove the NO_SKIP escape hatch.
-mutant noskip-pool 's|if \[ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" \]; then|if false; then|' \
-  "alpha beta gamma" 'printf v2 > src/a.sh'
-
-# THESE TWO ARE SCORED ON THE FLAG, NOT THE SELECTED SET, because both failure modes leave the
-# set at the full list -- which is exactly why `mutant()` above cannot express them.
-flag_mutant() { # <base flag> <name> <sed expr> <want flag> <mutation>
-  local bf="$1"; shift
-  local name="$1" expr="$2" want="$3" mut="$4" t m out
-  m="$WORK/pool.$name.sh"
-  sed "$expr" "$POOL" > "$m"
-  if cmp -s "$POOL" "$m"; then
-    bad "FLAG MUTANT $name: the edit matched nothing, so this mutant tests the unmutated program"
-    return
-  fi
-  t="$WORK/fm.$name"; f2b_world seed "$t" || { bad "FLAG MUTANT $name: seed failed"; return; }
-  local saved="$POOL"; POOL="$m"
-  out="$(select_in "$t" "$mut")"
-  POOL="$saved"
-  if [ "$(flag_of "$out")" = "$want" ]; then
-    bad "FLAG MUTANT $name: flag is still '$want' — the arm it should break does not depend on the mutated line"
-  else
-    mutant_killed "$bf" "$name" "FLAG MUTANT $name moves its arm: flag '$want' became '$(flag_of "$out")'"
-  fi
-}
-# SCORED ON THE MESSAGE, because the staleness announce changes no decision -- it is the only
-# arm whose whole subject is a line of output, so its mutant must be too. Keyed on the line
-# that EMITS the unmapped names: with it gone the count still prints, the name does not, and
-# arm 13 (which demands the name) is the only one that moves; arm 14 names nothing and stays.
-msg_mutant() {
-  local name="$1" expr="$2" needle="$3" mut="$4" t m out
-  m="$WORK/pool.$name.sh"
-  sed "$expr" "$POOL" > "$m"
-  if cmp -s "$POOL" "$m"; then
-    bad "MSG MUTANT $name: the edit matched nothing, so this mutant tests the unmutated program"
-    return
-  fi
-  t="$WORK/mm.$name"; f2b_world seed "$t" || { bad "MSG MUTANT $name: seed failed"; return; }
-  local saved="$POOL"; POOL="$m"
-  out="$(select_in "$t" "$mut")"
-  POOL="$saved"
-  case "$(msg_of "$out")" in
-    *"$needle"*) bad "MSG MUTANT $name: the announce still carries '$needle' — arm 13 does not depend on the mutated line" ;;
-    *)           mutant_killed "$B_arms_unnamed_announce" unnamed "MSG MUTANT $name moves arm 13: '$needle' is gone from the announce" ;;
-  esac
-}
-msg_mutant unnamed "s|printf ': %s' \"\$unmapped_names\"|:|" "UNMAPPED (keyed on the whole tree): gamma" 'printf v2 > src/a.sh'
-
-# Keyed on the EMITTING line, not on a spelling of the announce: the flag is the decision.
-flag_mutant "$B_arms_nochange_flag" nochange_off 's|READSET_NO_CHANGE=1|READSET_NO_CHANGE=0|' "1" ':'
-# Drop untracked files from the universe: arm 11's newcomer goes invisible and the suite skips
-# over a tree nobody hashed. This is the soundness half of the change.
-# The optional `-c core.quotePath=false` keeps the anchor matching whether or not the listing
-# disables git's path quoting; without it the mutant matched nothing on the hook that does.
-flag_mutant "$B_arms_untracked" untracked_blind 's|git \(-c core\.quotePath=false \)\{0,1\}ls-files --others --exclude-standard 2>/dev/null||' \
-  "0" 'printf v1 > src/untracked-newcomer.sh'
-
-# UNMUTATED CONTROL, from the same directory and driven the same way. Without it a mutant that
-# dies for a harness reason -- a copy that cannot source, a seed that failed -- emits nothing,
-# and "no output" otherwise scores as a kill.
+# CONTROL, from the same directory and driven the same way: a baseline selection must APPEAR, so a drive that
+# died for a harness reason -- a seed that failed -- cannot pass as the clean case.
 T="$WORK/ctl"; f2b_world seed "$T" || broken "seed failed"
 R="$(select_in "$T" 'printf v2 > src/a.sh')"
 if [ "$(sel_of "$R")" = "alpha gamma" ]; then
-  ok "CONTROL: an unmutated copy still selects 'alpha gamma', so the kills above are attributable"
+  ok "CONTROL: a fresh seed and drive still selects 'alpha gamma'"
 else
-  bad "CONTROL: the unmutated copy did not reproduce the baseline ('$(sel_of "$R")') — every mutant above is unattributable"
+  bad "CONTROL: a fresh seed and drive did not reproduce the baseline ('$(sel_of "$R")')"
 fi
 
 fi
@@ -1065,13 +769,12 @@ IGN_B='printf v2 > src/x.bin && printf v2 > src/a.sh'
 IGN_C='rm -f src/a.sh'
 IGN_D='printf v2 > src/x.bin'
 IGN_E='PATH="$SHIM:$PATH"; printf v2 > src/a.sh'
-B_ign_d=0; B_ign_e=0; B_ign_f=0
 ign_arm() { # <label> <seed mode> <mutation> <want sel> <want flag> <message needle> <ok text>
   local t; t="$(mktemp -d "$WORK/ig.XXXXXX")" || broken "mktemp failed"
   f2b_world seed_ign "$t/w" "$2" || broken "ignored-path seed ($2) failed"
   R="$(select_in "$t/w" "$3")"
   if [ "$(sel_of "$R")" = "$4" ] && [ "$(flag_of "$R")" = "$5" ] && msg_of "$R" | grep -qF "$6"; then
-    ok "$7"; case "$1" in "(d)") B_ign_d=1 ;; "(e)") B_ign_e=1 ;; "(f)") B_ign_f=1 ;; esac
+    ok "$7"
   else
     bad "$1: expected '$4' flag $5 with '$6', got '$(sel_of "$R")' flag $(flag_of "$R"): $(msg_of "$R" | tr -d '\n')"
   fi
@@ -1094,43 +797,6 @@ ign_arm "(f)" sub 'printf v2 > src/a.sh' "alpha gamma" 0 "read-set keys:" \
 ign_arm "(g)" forced "$IGN_G" "beta gamma" 0 "read-set keys:" \
   "(g) a FORCE-ADDED ignored file in a v2 record, then git rm'd, is a VANISH — its directory's lister and the unmapped fixture run, never a whole skip"
 
-# Each mutant is scored on the ONE world whose arm it must break, against the same worlds the
-# arms above just passed on unmutated -- those passes are this battery's control.
-# An optional sixth argument is the arm's correct FLAG, and then the mutant survives only if
-# both the set and the flag still match: a whole-suite skip leaves the set untouched, so a
-# mutant that turns "ran everything" into "skipped everything" moves the flag and nothing else.
-ign_mutant() { # <base flag> <name> <sed expr> <seed mode> <mutation> <arm's correct sel> [arm's correct flag]
-  local bf="$1"; shift
-  local name="$1" m t out wantflag="${6:-}"
-  m="$WORK/pool.ign.$name.sh"
-  if ! sed "$2" "$POOL" > "$m"; then bad "IGN MUTANT $name: DID NOT APPLY (sed failed)"; IGN_ARMS=$((IGN_ARMS+1)); return; fi
-  if cmp -s "$POOL" "$m"; then
-    bad "IGN MUTANT $name: the edit matched nothing, so this mutant tests the unmutated program"
-    IGN_ARMS=$((IGN_ARMS+1)); return
-  fi
-  t="$(mktemp -d "$WORK/igm.XXXXXX")" || broken "mktemp failed"
-  f2b_world seed_ign "$t/w" "$3" || broken "ignored-path seed ($3) failed"
-  local saved="$POOL"; POOL="$m"
-  out="$(select_in "$t/w" "$4")"
-  POOL="$saved"
-  if [ -z "$(sel_of "$out")" ]; then
-    bad "IGN MUTANT $name: selected NOTHING — the mutated copy did not run"
-  elif [ "$(sel_of "$out")" = "$5" ] && { [ -z "$wantflag" ] || [ "$(flag_of "$out")" = "$wantflag" ]; }; then
-    bad "IGN MUTANT $name: still produced '$5'${wantflag:+ flag $wantflag} — the arm it should break does not depend on the mutated line"
-  else
-    mutant_killed "$bf" "$name" "IGN MUTANT $name moves its arm: '$5'${wantflag:+ flag $wantflag} became '$(sel_of "$out")' flag $(flag_of "$out")"
-  fi
-  IGN_ARMS=$((IGN_ARMS+1))
-}
-ign_mutant "$B_ign_d" gitignore_grep \
-  's|git -c core.quotePath=false check-ignore --stdin < "$res.q"|grep -xF -f .gitignore < "$res.q"|' \
-  forced "$IGN_D" "alpha gamma"
-ign_mutant "$B_ign_e" fail_open \
-  's|if \[ "$ci_rc" -ne 0 \] && \[ "$ci_rc" -ne 1 \]; then : > "$res"; return 1; fi|:|' \
-  none "$IGN_E" "alpha beta gamma"
-ign_mutant "$B_ign_f" no_gitlink_guard \
-  's|^  cut -f1 "$in" \| awk -v gl="$res.gl" |  cut -f1 "$in" \| awk -v gl=/dev/null |' \
-  sub 'printf v2 > src/a.sh' "alpha gamma"
 
 fi
 
@@ -1155,8 +821,6 @@ CAFE="src/caf$(printf '\303\251').md"
 BK='printf "version: 2\n" > .claude/.ai-dlc-version; printf "l2\n" >> _bmad-output/ai-dlc-update/ledger.md; printf "r\n" > _bmad-output/ai-dlc-update/reconcile-log-1.md'
 ALL5="alpha apos beta delta stamp"
 NEW_ARMS=0
-# Same-run base-pass flags: each is set to 1 ONLY in the passing branch of the unmutated arm its mutants guard.
-B_MAN_N1=0; B_MAN_N2=0; B_MAN_N6=0; B_MAN_N7=0; B_MAN_N9=0
 seed2() {
   local t="$1" i=0 f
   mkdir -p "$t/aaa" "$t/src" "$t/zzz" "$t/.claude" "$t/sub/.claude" "$t/_bmad-output/ai-dlc-update/sub" || return 1
@@ -1243,7 +907,6 @@ WHY="$(id -u)"
 R="$(drive "$POOL" n1 'printf "q2\n" > "$APOS"')"
 NEW_ARMS=$((NEW_ARMS+1))
 if hashed "$WORK/x.n1"; then
-  B_MAN_N1=1
   ok "the APOSTROPHE-named file is hashed, and so is zzz/b.sh after it — the manifest has a row for every file it listed ($(grep -c . "$WORK/x.n1/seed.now"))"
 else
   bad "the manifest lost the apostrophe file or what sorts after it: $(grep -c . "$WORK/x.n1/seed.now") hashed of $(grep -c . "$WORK/x.n1/seed.files") listed, apostrophe rows $(grep -cF "$APOS	" "$WORK/x.n1/seed.now")"
@@ -1258,7 +921,6 @@ fi
 R="$(drive "$POOL" n2 'printf "v2\n" > zzz/b.sh')"
 NEW_ARMS=$((NEW_ARMS+1))
 if holds "$R" "beta delta" 0 "read-set keys:"; then
-  B_MAN_N2=1
   ok "an edit to a mapped file sorting AFTER the apostrophe selects its reader (beta) — it was hashed, so it is not 'nothing changed'"
 else
   bad "an edit to zzz/b.sh did not select 'beta delta' (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -1329,12 +991,11 @@ fi
 # subdirectory ENDS like the real one and must still run all.
 
 if [ "$WHY" = 0 ]; then
-  printf '  SKIP  unreadable-file arm and its mutant: running as root, where chmod 000 does not stop a read\n'
+  printf '  SKIP  unreadable-file arm: running as root, where chmod 000 does not stop a read\n'
 else
   R="$(drive "$POOL" n6 'chmod 000 aaa/f5')"
   NEW_ARMS=$((NEW_ARMS+1))
   if holds "$R" "$ALL5" 0 "$UNHASH"; then
-    B_MAN_N6=1
     ok "an UNREADABLE file fails the hash and the manifest is emptied — 'could not hash', all run"
   else
     bad "an unreadable file did not fail closed through 'could not hash' (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -1344,7 +1005,6 @@ fi
 R="$(drive "$POOL" n7 'printf "v2\n" > src/a.sh' stale "printf t > 'src/tab	name'")"
 NEW_ARMS=$((NEW_ARMS+1))
 if holds "$R" "$ALL5" 0 "$UNHASH"; then
-  B_MAN_N7=1
   ok "a TAB-named file git still quotes fails closed — 'could not hash', all run"
 else
   bad "a tab-named file did not fail closed (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -1362,88 +1022,19 @@ DASH_SEED='printf t > ./-x.sh'
 R="$(drive "$POOL" n9 'printf "v2\n" > src/a.sh' "" "$DASH_SEED")"
 NEW_ARMS=$((NEW_ARMS+1))
 if [ -f "$WORK/w.n9/-x.sh" ] && holds "$R" "alpha delta" 0 "read-set keys:"; then
-  B_MAN_N9=1
   ok "a top-level file named -x.sh is hashed as a file, and an edit to a mapped sibling still selects its reader (alpha) plus delta"
 else
   bad "with a top-level -x.sh present an edit to src/a.sh did not select 'alpha delta', or -x.sh was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
 fi
 
-# MUTANTS of the manifest and the exemption, each a LITERAL replacement with an exact expected
-# occurrence count, so a lost anchor reads as DID NOT APPLY rather than as a kill. The strings
-# travel through ENVIRON, not `-v`, which would strip a level of backslashes. Every mutant run
-# must also print the map announce, so a copy that could not be sourced cannot score a kill.
-lit_mut() { # <name> <count> <from> <to>; sets LM. Never call it inside $( ): its `bad` must count.
-  local m="$WORK/pool.lit.$1.sh"; LM=""
-  MF="$3" MT="$4" MC="$WORK/lit.$1.n" awk '
-    BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
-    { line = $0; o = ""
-      while ((p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
-      print o line }
-    END { print n > ENVIRON["MC"] }' "$POOL" > "$m" || { bad "MANIFEST MUTANT $1: awk DID NOT APPLY"; return 1; }
-  if [ "$(cat "$WORK/lit.$1.n" 2>/dev/null)" != "$2" ] || cmp -s "$POOL" "$m"; then
-    bad "MANIFEST MUTANT $1: anchor matched $(cat "$WORK/lit.$1.n" 2>/dev/null) time(s), not $2 — DID NOT APPLY"; return 1
-  fi
-  LM="$m"
-}
-# man_kill <base flag> <mutant> <arm label> <result> <sel> <flag> <needle>
-man_kill() {
-  local bf="$1"; shift
-  if ! grep -q 'read-set map: derived at' <<< "$(msg_of "$3")"; then
-    bad "MANIFEST MUTANT $1: the copy never reached apply_readset_skip — no verdict, not a kill"
-  elif holds "$3" "$4" "$5" "$6"; then
-    bad "MANIFEST MUTANT $1 SURVIVED $2: '$(sel_of "$3")' flag $(flag_of "$3")"
-  else
-    mutant_killed "$bf" "$1" "MANIFEST MUTANT $1 is KILLED by $2: got '$(sel_of "$3")' flag $(flag_of "$3") — $(grep -v 'derived at' <<< "$(msg_of "$3")" | sed 's/^ *\.\. *//' | tr -d '\n' | cut -c1-90)"
-  fi
-}
-
-NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut noz 1 "tr '\\n' '\\000' < \"\$out/.files\" | xargs -0 -n 200 shasum -a 256 --" \
-                    "xargs -n 200 shasum -a 256 -- < \"\$out/.files\""; then M="$LM"
-  man_kill "$B_MAN_N2" noz "the after-apostrophe arm" "$(drive "$M" m.noz 'printf "v2\n" > zzz/b.sh')" "beta delta" 0 "read-set keys:"
-fi
-if lit_mut nofailclosed 1 ': > "$out/.now"' ':'; then M="$LM"
-  if [ "$WHY" != 0 ]; then
-    NEW_ARMS=$((NEW_ARMS+1))
-    man_kill "$B_MAN_N6" nofailclosed "the unreadable-file arm" "$(drive "$M" m.nfc6 'chmod 000 aaa/f5')" "$ALL5" 0 "$UNHASH"
-  fi
-  NEW_ARMS=$((NEW_ARMS+1))
-  man_kill "$B_MAN_N7" nofailclosed "the tab-name arm" "$(drive "$M" m.nfc7 'printf "v2\n" > src/a.sh' stale "printf t > 'src/tab	name'")" "$ALL5" 0 "$UNHASH"
-else
-  NEW_ARMS=$((NEW_ARMS+1))
-fi
-NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut aposdrop 1 '| readset_universe_paths | sort -u > "$out/.paths.all"' \
-                         "| grep -v \"'\" | readset_universe_paths | sort -u > \"\$out/.paths.all\""; then M="$LM"
-  if [ -n "$(drive "$M" m.aposdrop ':')" ] && ! hashed "$WORK/x.m.aposdrop"; then
-    mutant_killed "$B_MAN_N1" aposdrop "MANIFEST MUTANT aposdrop is KILLED by the apostrophe-hashed arm: $(grep -cF "$APOS	" "$WORK/x.m.aposdrop/seed.now") apostrophe row(s) in the manifest"
-  else
-    bad "MANIFEST MUTANT aposdrop SURVIVED the apostrophe-hashed arm, or never ran"
-  fi
-fi
-# ONLY ONE HOOK WIDENED is not proven here: this fixture SHIPS, and the binding (I66) is a
-# distribution-only validator a consumer does not hold. The .dist-only fixture
-# validator-arm-selection carries that arm, phase `i66-onehook`, with its mutant.
-# Without the quoted-path test a tab-named file is listed in its quoted spelling, never reaches
-# `.files`, and the line counts still agree, so the manifest is NOT emptied.
-NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut noquote 1 "elif grep -q '^\"' \"\$out/.lsf\"; then" "elif false; then"; then M="$LM"
-  man_kill "$B_MAN_N7" noquote "the tab-name arm" "$(drive "$M" m.noquote 'printf "v2\n" > src/a.sh' stale "printf t > 'src/tab	name'")" "$ALL5" 0 "$UNHASH"
-fi
-# Without `--`, a top-level -x.sh is an unknown option to shasum and the manifest is emptied.
-NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut nodashdash 1 "shasum -a 256 -- >" "shasum -a 256 >"; then M="$LM"
-  man_kill "$B_MAN_N9" nodashdash "the option-shaped-name arm" "$(drive "$M" m.nodashdash 'printf "v2\n" > src/a.sh' "" "$DASH_SEED")" "alpha delta" 0 "read-set keys:"
-fi
-
-# UNMUTATED CONTROL for the battery above, driven by the same helper: a baseline row must be
+# CONTROL for the arms above, driven by the same helper: a baseline row must be
 # THERE, so a drive that died for a harness reason cannot pass as the clean case.
 R="$(drive "$POOL" ctl2 'printf "v2\n" > zzz/b.sh')"
 NEW_ARMS=$((NEW_ARMS+1))
 if holds "$R" "beta delta" 0 "read-set keys:" && grep -q 'read-set map: derived at' <<< "$(msg_of "$R")"; then
-  ok "CONTROL: the unmutated block, driven the same way, selects 'beta delta' and announces the map — the manifest kills are attributable"
+  ok "CONTROL: the block, driven through drive(), selects 'beta delta' and announces the map"
 else
-  bad "CONTROL: the unmutated block did not reproduce 'beta delta' through drive() — every manifest mutant is unattributable"
+  bad "CONTROL: the block did not reproduce 'beta delta' through drive()"
 fi
 
 fi
@@ -1454,8 +1045,7 @@ fi
 # row and no valid local row, and the rows it records under the git dir are read at every site that
 # reads the committed map. These arms drive the extracted pool block with a STUB deriver (it records
 # its argv and appends a row), so they need no sandbox; the deriver's own `--local-map` mode is
-# driven further down, in the stub-stream world. Every arm below is presence-shaped or carries a
-# mutant, and every mutant is a count-checked literal edit of a copy of the block.
+# driven further down, in the stub-stream world. Every arm below is presence-shaped.
 #   (a) a green run starts the trace for the unmapped fixture, detached, and a row lands
 #   (b) a valid local row maps the fixture: skipped on an unrelated change, selected on its own input
 #   (c) a moved run.sh (or deriver) invalidates the set: unmapped, and taken by the next trace
@@ -1464,12 +1054,12 @@ fi
 #   (f) the gate's exit is never the trace's: a failing deriver leaves the green run green
 #   (g) the orphan universe and the manifest read local rows, so a local-only path is not an orphan
 # WHAT THE LOC UNIT STILL COSTS, AND WHY NO CHEAPER CALL ANSWERS IT. The remaining wall clock is the real-time waits of the
-# ceiling worlds (t1, t2, t3 and the four ct_mut mutants), each ending on the subject's own events. The longest, noceil, waits
-# for a watchdog that sleeps 600s against a 3s promise: the fixture reads `start`, `ceiling` and the 5s TERM-to-KILL grace from the
+# ceiling worlds (t1, t2, t3), each ending on the subject's own events. The longest, t1, waits
+# for a hung deriver against a 3s ceiling: the fixture reads `start`, `ceiling` and the 5s TERM-to-KILL grace from the
 # status file the subject wrote and calls the stall FINAL only once `start + ceiling + 5` has passed on the REAL clock (ct_final).
 # That deadline is the question: "did the watchdog fire within its own promise?" It cannot be answered by calling a function,
 # because the subject's `sleep "$cl"` is a real child and the verdict is whether it ended the deriver's group; injecting the clock would
-# make ct_final stop waiting for a watchdog that has not yet had its promised time, which scores a correct slow watchdog as noceil.
+# make ct_final stop waiting for a watchdog that has not yet had its promised time, which scores a correct slow watchdog as a missing ceiling.
 # The one seam the subject honours, AI_DLC_READSET_TRACE_CEILING, is already at 3s, and the 5s grace is the hook's own constant. The
 # stall window (AW_STALL polls of 0.1s) is NOT the cost here: a lower window gives false failures on a loaded box (the waits count
 # polls, so load widens them), and every wait that can end on an event already does. Shortening any of these reads a slow correct
@@ -1477,10 +1067,6 @@ fi
 LT_ARMS=0
 lt_arm() { LT_ARMS=$((LT_ARMS+1)); }
 if sg loc; then
-# Same-run base-pass flags (RULE 8): each is set to 1 ONLY in the passing branch of the unmutated arm its mutants guard.
-B_LOC_lc1=0; B_LOC_lc2=0; B_LOC_h3=0; B_LOC_pw=0; B_LOC_k0=0; B_LOC_lk1=0; B_LOC_lk2=0; B_LOC_e=0; B_LOC_pt0=0; B_LOC_pt1=0; B_LOC_ptw=0
-B_LOC_a=0; B_LOC_f=0; B_LOC_rr=0; B_LOC_k=0; B_LOC_r9=0; B_LOC_r1=0; B_LOC_r7=0; B_LOC_t1=0; B_LOC_t4=0; B_LOC_t4w=0
-B_PJ_wrong=0; B_PJ_right=0; B_PJ_legacylive=0; B_PJ_legacydead=0; B_PJ_psfail=0; B_PJ_psfailpad=0; B_PJ_bothfail=0; B_PJ_split=0
 LT_CAN=1
 { command -v sandbox-exec >/dev/null 2>&1 && [ -x /usr/bin/log ] && command -v python3 >/dev/null 2>&1; } || LT_CAN=0
 sha_of() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
@@ -1497,14 +1083,14 @@ lt_wait() { # <lock dir>
 # give up after 50 ticks and finish anyway, so under load a correct launcher's trace finished BEFORE
 # run_fixtures returned and (a) read the lock released. Now it waits for STUB_GO while STUB_GO_OWNER,
 # the process that will write it, is alive. One launch can never write GO while the stub waits: a
-# SYNCHRONOUS one (mutant `sync`), whose caller is blocked on this very stub. That launch is told apart
+# SYNCHRONOUS one, whose caller is blocked on this very stub. That launch is told apart
 # by an order fact, not a clock: a detached launcher writes `<lock>/pid` right after the fork, while
 # the stub waits; a synchronous one cannot write it until the stub has returned, and meanwhile the
 # owner is BLOCKED (state S, nothing pending) waiting on a child that is this stub's own ancestor, with
 # no other child alive. A detached owner is running, or blocked on some other child (a command
 # substitution inside readset_lock_write), so that state is never read for it. The stub leaves on that
 # fact and records why it left in <GO>.left: `go`, `orphan` (its owner died) or `nolockpid` -- which the
-# unmutated (a) arm refuses on.
+# (a) arm refuses on.
 # ONLY THE DETACHED TRACE WAITS. The in-pool trace invokes this stub with `--in-pool` and no
 # `--local-map`, inside run_fixtures, where no lock exists to hold; it skips the wait and writes no
 # `.left`, so the record is the detached stub's alone.
@@ -1606,7 +1192,7 @@ lw_run() { # <pool> <name> <mutation> [sub]: a fresh local world, driven through
   f2b_world seed_lw "$t" "${4:-}" || { printf 'SEED FAILED\n'; return 1; }
   POOL="$1"; lsel_in "$t" "$3"; POOL="$saved"
 }
-# Each result is scored by a predicate over it, so a mutant is scored by the SAME predicate.
+# Each result is scored by a predicate over it.
 lb1() { [ "$(sel_of "$1")" = "alpha" ] && [ "$(trace_of "$1")" = "" ] && msg_of "$1" | grep -qF '0 of 3 fixture dir(s) UNMAPPED'; }
 lb2() { [ "$(sel_of "$1")" = "gamma" ] && [ "$(lflag_of "$1")" = 0 ] && msg_of "$1" | grep -qF 'SKIPPING' && ! msg_of "$1" | grep -qF 'NO fixture read-set'; }
 lc1() { [ "$(trace_of "$1")" = "gamma" ] && msg_of "$1" | grep -qF 'UNMAPPED (keyed on the whole tree): gamma'; }
@@ -1630,7 +1216,7 @@ LM_GC='printf v2 > src/zonly.sh'
 lt_case() { # <label> <predicate> <mutation> <ok text> [sub] [result of an identical drive already taken]
   local r; if [ -n "${6:-}" ]; then r="$6"; else r="$(lw_run "$POOL" "$1" "$3" "${5:-}")"; fi; lt_arm
   LT_LAST="$r"
-  if "$2" "$r"; then ok "$4"; eval "B_LOC_$1=1"
+  if "$2" "$r"; then ok "$4"
   else bad "$1: got sel '$(sel_of "$r")' flag $(lflag_of "$r") trace '$(trace_of "$r")': $(msg_of "$r" | tr -d '\n')"; fi
 }
 lt_case lc1 lc1 "$LM_C1" "(c) gamma's run.sh moved: its local set is ignored, it reads UNMAPPED, and the next trace takes it"; LC1_R="$LT_LAST"
@@ -1638,7 +1224,7 @@ lt_case lc2 lc2 "$LM_C2" "(c) the DERIVER moved: every local set it recorded is 
 # THE REMEDY TEXT. Both announce lines tell the reader the next green push traces what is unmapped,
 # and name the hand command beside it. Presence-shaped: each demands its own emitting line's text.
 lrm() { msg_of "$1" | grep -qF 'UNMAPPED (keyed on the whole tree): gamma -- the next green push traces them automatically; by hand, with no sudo: bash core/scripts/derive-fixture-readsets.sh --list "gamma" --tracer sandbox'; }
-# SHARED DRIVE: lrm reads lc1's state (the local world, gamma's run.sh moved, the unmutated pool), so it
+# SHARED DRIVE: lrm reads lc1's state (the local world, gamma's run.sh moved, the pool), so it
 # scores lc1's result rather than building and driving an identical world again.
 lt_case lrm lrm "$LM_C1" "(c) the unmapped line names gamma, says the next green push traces it automatically, and gives the hand command" "" "$LC1_R"
 # (h) GHOST ROWS. A fixture deleted or renamed after its trace keeps its local rows, and a committed
@@ -1663,7 +1249,7 @@ lt_held() { # <label> <discards> <key: cur|old> <want trace> <want held>
   printf '%s|%s' "$(trace_of "$r")" "$(held_of "$r")"
 }
 LH3="$(lt_held h3 3 cur)"; lt_arm
-[ "$LH3" = "|gamma" ] && { ok "(M5) three consecutive discards on gamma's current key HOLD it: no trace until the key changes"; B_LOC_h3=1; } \
+[ "$LH3" = "|gamma" ] && { ok "(M5) three consecutive discards on gamma's current key HOLD it: no trace until the key changes"; } \
   || bad "(M5) three discards on the current key did not hold gamma back: trace|held '$LH3'"
 LH2="$(lt_held h2 2 cur)"; lt_arm
 [ "$LH2" = "gamma|" ] && ok "  two discards do not hold it — it is traced again" || bad "  two discards held gamma back: '$LH2'"
@@ -1704,7 +1290,7 @@ else
   lt_l() { # <label> <setup> <want: invoked|not> <needle> <ok text>
     local r; r="$(lt_drive "$POOL" "$(lt_fresh "$1")" "$2")"; lt_arm
     case "$r" in
-      *"$4"*"|$3") ok "$5"; eval "B_LOC_$1=1" ;;
+      *"$4"*"|$3") ok "$5" ;;
       *) bad "$1: expected '$4' and $3, got '$r'" ;;
     esac
   }
@@ -1720,13 +1306,13 @@ else
   LW_T="$(lt_fresh lw)"; ( cd "$LW_T" && git worktree add -q "$LW_T.wt" -b lwt ) >/dev/null 2>&1 || broken "could not add a linked worktree to the launcher seed"
   R="$(lt_drive "$POOL" "$LW_T.wt" ':')"; lt_arm
   case "$R" in
-    *"skipped ("*"a linked worktree"*"|not") { ok "(e) from a LINKED worktree the launcher starts nothing and says so in one line"; B_LOC_e=1; } ;;
+    *"skipped ("*"a linked worktree"*"|not") { ok "(e) from a LINKED worktree the launcher starts nothing and says so in one line"; } ;;
     *) bad "(e) a linked worktree started a trace or said nothing: '$R'" ;;
   esac
   # THE IN-POOL PREP (readset_pool_trace_prep), driven directly like the launcher: a seeded `$out/.trace`
   # naming gamma. It prints "<message>|<PT_LIST>". Two refusals share lines with readset_live_trace -- the
   # knob and the linked-worktree check -- so each is scored by its OWN arm, with a near-miss control that
-  # lists gamma, and the mutants below are confined to this function by PM_FN.
+  # lists gamma.
   pt_drive() { # <pool> <world> <setup>; prints "<message>|<PT_LIST>"
     local p="$1" t="$2" setup="$3" o
     o="$(mktemp -d "$WORK/pt.XXXXXX")" || return 1
@@ -1741,12 +1327,12 @@ else
   }
   R="$(pt_drive "$POOL" "$(lt_fresh pt1)" ':')"; lt_arm
   case "$R" in
-    *"read-set in-pool trace: 1 fixture(s) traced in the pool: gamma"*"|gamma") { ok "(pt1) near-miss control: with AI_DLC_READSET_LIVE_TRACE=1 the in-pool prep announces gamma and lists it"; B_LOC_pt1=1; } ;;
+    *"read-set in-pool trace: 1 fixture(s) traced in the pool: gamma"*"|gamma") { ok "(pt1) near-miss control: with AI_DLC_READSET_LIVE_TRACE=1 the in-pool prep announces gamma and lists it"; } ;;
     *) bad "(pt1) near-miss control failed, the prep did not list gamma with the knob at 1: '$R'" ;;
   esac
   R="$(pt_drive "$POOL" "$(lt_fresh pt0)" 'export AI_DLC_READSET_LIVE_TRACE=0')"; lt_arm
   case "$R" in
-    "|") { ok "(pt0) AI_DLC_READSET_LIVE_TRACE=0: the in-pool prep prints nothing and PT_LIST is empty"; B_LOC_pt0=1; } ;;
+    "|") { ok "(pt0) AI_DLC_READSET_LIVE_TRACE=0: the in-pool prep prints nothing and PT_LIST is empty"; } ;;
     *) bad "(pt0) the knob at 0 did not silence the in-pool prep: '$R'" ;;
   esac
   # BL-701: the in-pool prep TRACES from a linked worktree (the deriver builds the clone's .git standalone),
@@ -1754,7 +1340,7 @@ else
   R="$(pt_drive "$POOL" "$LW_T.wt" ':')"; lt_arm
   case "$R" in
     *"a linked worktree"*|*"skipped ("*) bad "(ptw) the in-pool prep still skips a LINKED worktree: '$R'" ;;
-    *"read-set in-pool trace: 1 fixture(s) traced in the pool: gamma"*"|gamma") { ok "(ptw) from a LINKED worktree the in-pool prep announces gamma and lists it, as in the main checkout"; B_LOC_ptw=1; } ;;
+    *"read-set in-pool trace: 1 fixture(s) traced in the pool: gamma"*"|gamma") { ok "(ptw) from a LINKED worktree the in-pool prep announces gamma and lists it, as in the main checkout"; } ;;
     *) bad "(ptw) from a linked worktree the in-pool prep did not list gamma: '$R'" ;;
   esac
   R="$(pt_drive "$POOL" "$(lt_fresh ptm)" ':')"; lt_arm
@@ -1796,17 +1382,17 @@ else
   }
   RA="$(rf_drive "$POOL" a "export STUB_GO=\"$WORK/rf.go.a\"")"; lt_arm
   # THE STUB LEFT BY GO, OR THIS DRIVE PROVES NOTHING ABOUT DETACHMENT. `orphan` or `nolockpid` on the
-  # unmutated launcher is a harness that lost its order fact, never a verdict on the launcher.
+  # launcher is a harness that lost its order fact, never a verdict on the launcher.
   [ "$(cat "$WORK/rf.go.a.left" 2>/dev/null)" = go ] \
-    || broken "(a) the unmutated launcher's stub left its GO wait as '$(cat "$WORK/rf.go.a.left" 2>/dev/null)', not 'go' -- the detached-launch order fact was not observed"
+    || broken "(a) the launcher's stub left its GO wait as '$(cat "$WORK/rf.go.a.left" 2>/dev/null)', not 'go' -- the detached-launch order fact was not observed"
   case "$RA" in
     "0|yes|invoked|verified|stashed|1|--list gamma --tracer sandbox --local-map .git/ai-dlc-fixture-readsets.local")
-      ok "(a) a GREEN run_fixtures returns while the trace is still running, having started it for gamma with --tracer sandbox --local-map, stashed gamma's log, and the row lands"; B_LOC_a=1 ;;
+      ok "(a) a GREEN run_fixtures returns while the trace is still running, having started it for gamma with --tracer sandbox --local-map, stashed gamma's log, and the row lands" ;;
     *) bad "(a) the green run did not start a detached trace that recorded a row: '$RA' — $(tail -3 "$WORK/rfo.a/out" | tr '\n' ' ')" ;;
   esac
   RF="$(rf_drive "$POOL" f 'export STUB_RC=1')"; lt_arm
   case "$RF" in
-    "0|"*"|invoked|verified|"*) ok "(f) a deriver that FAILS leaves the gate green and the verified record written — the trace never decides the push"; B_LOC_f=1 ;;
+    "0|"*"|invoked|verified|"*) ok "(f) a deriver that FAILS leaves the gate green and the verified record written — the trace never decides the push" ;;
     *) bad "(f) a failing trace changed the gate: '$RF'" ;;
   esac
   # A RED PUSH TRACES THE FIXTURE WHOSE OWN VERDICT IS ok (operator ruling: a good fixture run is a good fixture
@@ -1816,7 +1402,7 @@ else
   RR="$(rf_drive "$POOL" r "printf 'exit 1\n' > $FXROOT/alpha/run.sh")"; lt_arm
   case "$RR" in
     "1|no|invoked|none|stashed|1|--list gamma --tracer sandbox --local-map .git/ai-dlc-fixture-readsets.local")
-      ok "(f) a RED push still traces the unmapped fixture whose own verdict is ok (gamma), never the failing alpha, and writes no whole-tree verified record"; B_LOC_rr=1 ;;
+      ok "(f) a RED push still traces the unmapped fixture whose own verdict is ok (gamma), never the failing alpha, and writes no whole-tree verified record" ;;
     *) bad "(f) a red push did not trace exactly gamma without a verified record: '$RR'" ;;
   esac
   RRG="$(rf_drive "$POOL" rg "printf 'exit 1\n' > $FXROOT/gamma/run.sh")"; lt_arm
@@ -1836,7 +1422,7 @@ else
   # the stub deriver, so the trace subshell is alive when the pid file is read. A verdict alone cannot
   # tell a right writer from a wrong one -- a lock with no start line reads HELD by design, and a
   # parent and its child share a start second -- so the arm is on the pid file's CONTENT: line 2 is
-  # non-empty, line 2 is the normalised start of line 1's pid (computed by the UNMUTATED hook's
+  # non-empty, line 2 is the normalised start of line 1's pid (computed by the hook's
   # readset_pid_start), and line 1 is not the pid of the process that ran the hook copy. HELD is a
   # conjunct. The driver is a separate `bash` launched with `&`, so `$!` here IS its `$$` (asserted).
   # After release the lock is gone, or stale.
@@ -1847,8 +1433,8 @@ else
   # so the trace subshell starts in a later second than the driver, and the control (sdiff) asserts
   # start($$) != start(the stub's recorded pid) in the same invocation, read by the fixture's own `ps`,
   # not the block's helper, which is a subject. The control is keyed on the
-  # STUB's pid, not on line 1: under `parentpid` line 1 IS `$$`, and a control on it would read
-  # "equal" for a mutant that must read as killed, not as a broken harness.
+  # STUB's pid, not on line 1: a lock naming `$$` would make a control on line 1 read
+  # "equal" for the wrong reason.
   RT_DRIVER="$WORK/rt-driver.sh"
   cat > "$RT_DRIVER" <<'RT'
 pool="$1"; t="$2"; o="$3"; ref="$4"
@@ -1906,7 +1492,7 @@ RT
     RK="$(rt_drive "$POOL" k)"; lt_arm
     case "$RK" in
       $RT_OK) case "$RK" in *"|gone|"*|*"|stale|"*)
-           ok "(k) the real launcher's lock names the trace subshell's pid with its own start time, reads HELD while it runs, and is gone or stale after: '$RK'"; B_LOC_k=1 ;;
+           ok "(k) the real launcher's lock names the trace subshell's pid with its own start time, reads HELD while it runs, and is gone or stale after: '$RK'" ;;
          *) bad "(k) the lock outlived its trace as HELD: '$RK'" ;; esac ;;
       *) bad "(k) the launcher's lock is not the trace subshell's pid with its start time, HELD: '$RK' -- $(tr '\n' '/' < "$WORK/rto.k/pidfile" 2>/dev/null)" ;;
     esac
@@ -1917,7 +1503,7 @@ RT
   # a map temp, and then sleeps forever (hang) or until told to finish (finish). Every liveness read is
   # `kill -0` on a pid or group the subject or the stub RECORDED, each beside a LIVE control read in the
   # same drive before the ceiling, never a process-table grep. The driver's wait is bounded; on expiry
-  # it reaps by those recorded groups and still scores, so a mutant that never kills cannot hang the shard.
+  # it reaps by those recorded groups and still scores, so a watchdog that never kills cannot hang the shard.
   #   (t1) hang, ceiling 3s: grandchild, deriver group and subshell group gone; status `exit timeout`;
   #        lock released; trace root and map temp removed; map unchanged; report reads TIMED OUT
   #   (t2) finish, ceiling 900s: the normal path -- `exit 0`, lock released, and group `$tp` empty,
@@ -2000,7 +1586,7 @@ printf '%s,%s,%s,%s,%s,%s,%s' "$([ -d "$lk" ] && echo held || echo released)" "$
   "$(cmp -s "$o/map.before" "$READSET_LOCAL" && echo same || echo moved)" > "$o/after"
 sed -n 's/^exit //p' "$READSET_LOCAL.status" 2>/dev/null > "$o/exit"
 readset_trace_report "" > "$o/rep" 2>&1
-# REAP BY RECORDED PID AND GROUP ONLY. A mutant may have left all three alive; the kill is not scored.
+# REAP BY RECORDED PID AND GROUP ONLY. A watchdog that never kills may have left all three alive; the kill is not scored.
 [ "$dp" != 0 ] && kill -KILL -- "-$dp" 2>/dev/null; [ "$gc" != 0 ] && kill -KILL "$gc" 2>/dev/null
 [ "$tp" != 0 ] && kill -KILL -- "-$tp" 2>/dev/null
 :
@@ -2027,8 +1613,8 @@ CT
   # `kill -0 -- -<trace pid>` once that pid is gone reads it directly: the group must empty. The trace
   # pid is the status file's `pid`, written by the subject. FX_REPS clean launches are required of the
   # fix. The traps it replaced leaked here too rarely for a verdict (the KILL-to-`jobs -p` trap 0 of 800
-  # idle, 18 of 3600 under 12 concurrent drives), so this arm guards the post-reap sweep, whose mutant
-  # (nosweep, below) leaks on every launch; a handler restored on the watchdog is scored on (t4w).
+  # idle, 18 of 3600 under 12 concurrent drives), so this arm guards the post-reap sweep, which leaks on every
+  # launch without it; a handler restored on the watchdog is scored on (t4w).
   # Control, same drive: a group this driver started under `set -m` reads alive by the same
   # `kill -0 -- -<pgid>` before it is killed by that pgid.
   FX_REPS=30
@@ -2096,7 +1682,7 @@ FX
   }
   RT4="$(fx_drive "$POOL" t4 "$FX_REPS" 0)"; lt_arm
   case "$RT4" in
-    "alive|$FX_REPS|$FX_REPS|$FX_REPS|0") ok "(t4) $FX_REPS fast traces (deriver exits once the watchdog's sleep is up, ceiling 777s): every one finished exit 0 and its process group was empty once its pid was gone -- the watchdog's sleep was never left behind (control: a live group read alive)"; B_LOC_t4=1 ;;
+    "alive|$FX_REPS|$FX_REPS|$FX_REPS|0") ok "(t4) $FX_REPS fast traces (deriver exits once the watchdog's sleep is up, ceiling 777s): every one finished exit 0 and its process group was empty once its pid was gone -- the watchdog's sleep was never left behind (control: a live group read alive)" ;;
     *) bad "(t4) a fast trace left its watchdog's sleep alive, or the drive did not run: control|reps|started|exit0|leaks = '$RT4'" ;;
   esac
   # (t4w) THE WATCHDOG CARRIES NO TERM HANDLER WHILE ITS SLEEP RUNS. The forked child of the watchdog's
@@ -2128,7 +1714,7 @@ FX
   }
   RT4W="$(wd_probe "$POOL" t4w)"; lt_arm
   case "$RT4W" in
-    [1-9]*"|ran|143") ok "(t4w) the shipped watchdog, TERMed by its own sleep while it waits on it, dies by that TERM (status 143): it carries no handler that its sleep's fork-to-exec window could lose a sweep TERM to (control: the stub sleep ran)"; B_LOC_t4w=1 ;;
+    [1-9]*"|ran|143") ok "(t4w) the shipped watchdog, TERMed by its own sleep while it waits on it, dies by that TERM (status 143): it carries no handler that its sleep's fork-to-exec window could lose a sweep TERM to (control: the stub sleep ran)" ;;
     *) bad "(t4w) the shipped watchdog did not die by the TERM its sleep sent, or the probe did not run: lines|stub|status = '$RT4W'" ;;
   esac
   CT_LIVE='alive,alive,alive,tr,tmp'
@@ -2136,7 +1722,6 @@ FX
   RT1="$(ct_drive "$POOL" t1 3 hang)"; lt_arm
   if [ "$RT1" = "$CT_T1" ]; then
     ok "(t1) at a 3s ceiling a hung deriver's GRANDCHILD, its group and the subshell's group are gone (each alive in the same drive before it), status reads exit timeout, the lock is released, the trace root and map temp are removed, the map is unchanged, and the report says TIMED OUT"
-    B_LOC_t1=1
   else
     bad "(t1) the ceiling did not end a hung trace cleanly: want '$CT_T1', got '$RT1'"
   fi
@@ -2151,48 +1736,6 @@ FX
     *) bad "(t3) a TERM to the lock's group left the deriver or its child running, or wrote no exit: '$RT3'" ;;
   esac
   aw_gate
-fi
-
-# MUTANTS of the block, each a count-checked literal edit of a copy, scored by the arm's own predicate.
-pm_copy() { # <name> then triples <count> <from> <to>; sets PM, or reports DID NOT APPLY
-  # PM_FN, when set, confines every anchor search to the body of that one function (from its `name() {`
-  # line to the next line that is exactly `}`), so a line that two functions both carry is mutated in
-  # the intended one only and the anchor still has to match exactly <count> times inside it.
-  local name="$1" dst="$WORK/pool.pm.$1.sh" n; shift; PM=""
-  cp "$POOL" "$dst" || return 1
-  while [ $# -ge 3 ]; do
-    MF="$2" MT="$3" MC="$WORK/pm.$name.n" MFN="${PM_FN:-}" awk '
-      BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; fn = ENVIRON["MFN"]; n = 0; inf = (fn == "") }
-      { if (fn != "") {
-          if (index($0, fn "() {") == 1) inf = 1
-          else if (inf && $0 == "}") { inf = 2 }
-        }
-        line = $0; o = ""
-        while (inf && (p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
-        print o line
-        if (inf == 2) inf = 0 }
-      END { print n > ENVIRON["MC"] }' "$dst" > "$dst.t" && mv "$dst.t" "$dst"
-    n="$(cat "$WORK/pm.$name.n" 2>/dev/null)"
-    if [ "$n" != "$1" ]; then lt_arm; bad "BL-452 MUTANT $name: anchor matched ${n:-nothing} time(s), not $1 — DID NOT APPLY"; return 1; fi
-    shift 3
-  done
-  if cmp -s "$POOL" "$dst"; then lt_arm; bad "BL-452 MUTANT $name: the copy is unchanged"; return 1; fi
-  PM="$dst"
-}
-pm_lw() { # <name> <predicate> <mutation> [sub] -- scored on a local world; the copy must reach the announce
-  local r bf; lt_arm
-  bf="$(eval "printf %s \"\${B_LOC_$2:-0}\"")"
-  r="$(lw_run "$PM" "pm.$1" "$3" "${4:-}")"
-  if ! msg_of "$r" | grep -qE 'read-set map|no read-set map'; then bad "BL-452 MUTANT $1: the copy never reached apply_readset_skip — no verdict"
-  elif "$2" "$r"; then bad "BL-452 MUTANT $1 SURVIVED $2: sel '$(sel_of "$r")' trace '$(trace_of "$r")'"
-  else mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$1" "BL-452 MUTANT $1 is KILLED by $2: sel '$(sel_of "$r")' flag $(lflag_of "$r") trace '$(trace_of "$r")'"; fi
-}
-pm_copy hash 1 'else if (!(($2 in now) && now[$2] == $3)) bad[f] = 1' 'else if (0) bad[f] = 1' && pm_lw hash lc1 "$LM_C1"
-pm_copy dsha 1 '$2 == "#deriver" { dok[$1] = ($3 == dsha); next }' '$2 == "#deriver" { dok[$1] = 1; next }' && pm_lw dsha lc2 "$LM_C2"
-if pm_copy held 1 '$3 >= 3 && $4 == k' '$3 >= 99 && $4 == k'; then
-  lt_arm; _s="$POOL"; POOL="$PM"; _h="$(lt_held pm.h3 3 cur)"; POOL="$_s"
-  if [ "$_h" = "|gamma" ]; then bad "BL-452 MUTANT held SURVIVED: three discards still held gamma"
-  else mutant_killed "$B_LOC_h3" held "BL-452 MUTANT held is KILLED by (M5): trace|held '$_h'"; fi
 fi
 
 # THE LOCK'S START TIME (BL-463). `kill -0` alone reads a REUSED pid as a live trace, so the lock
@@ -2215,10 +1758,9 @@ fi
 # invocation that its own start differs from the lock pid's (ctl). A judge sharing the lock pid's
 # start second cannot tell a reader or helper that reads `$$` from a right one: the fixture refuses.
 #
-# EVERY SEED COMES FROM THE UNMUTATED BLOCK. The seed lib is readset_pid_start plus the block's own
+# EVERY SEED COMES FROM THE BLOCK'S OWN WRITER. The seed lib is readset_pid_start plus the block's own
 # writer line, extracted, so the right-start lock is what the real writer emits, never a string typed
-# here; and a mutant of the judge cannot also move its seed, which would let a normalisation mutant
-# survive by symmetry.
+# here, so the seed and the judge cannot agree by symmetry.
 #   wrong       a LIVE pid with a start time it never had (a reused pid)              -> stale
 #   right       the real writer's lock for that pid, judged under LC_ALL=C TZ=UTC0     -> held, silent
 #   legacylive  `pid epoch` only, as an older hook wrote it, live pid                  -> held, silent
@@ -2229,30 +1771,29 @@ fi
 #   psfailpad   the same with the fallback's day FORCED to 5                          -> held, silent
 # THE FALLBACK'S DAY IS FORCED, NEVER THE CLOCK'S (BL-868). `perl`'s scalar gmtime pads a day of 1-9
 # ("Nov  5") and not 10-31 ("Nov 19"), so whether the helper's word re-join matters on the fallback
-# path is a property of the lock pid's start date. Left to the clock, mutant nonorm moved `psfail` on
+# path is a property of the lock pid's start date. Left to the clock, a helper that kept the padding moved `psfail` on
 # days 1-9 only. PJDay.pm (built below, loaded through PERL5OPT in these two worlds alone) shifts the
 # fallback's gmtime to a chosen day of the same month, so every run holds one padded and one unpadded
 # fallback string, and a guard refuses unless the padded raw string differs from its re-joined form
 # and the unpadded one does not.
 #   bothfail    the same, with a PATH `perl` that exits 1 as well                    -> held, announced
 #   split       written under de_DE/Asia/Tokyo, judged under fr_FR/America/Los_Angeles -> whatever `right` reads
-# `split` is scored RELATIVE to `right` under the same lib, so a mutant that breaks every held-with-
-# start world is owned by `right` alone, and one that breaks only the cross-env case (no pin) is owned
-# by `split` alone. On the unmutated block `right` is asserted held and silent, so `split` is too.
-# SANDBOX MUTANT: the detector forced to "inside a sandbox" on a run where `ps` works must refuse
+# `split` is scored RELATIVE to `right` under the same lib: on the shipped block `right` is asserted
+# held and silent, so `split` is too.
+# SANDBOX PROBE: the detector forced to "inside a sandbox" on a run where `ps` works must refuse
 # (`broken`, exit 2), never SKIP. Run on every ordinary run; inside a real sandbox `ps` fails, so the
 # refusal it proves cannot be reached there and the arm is not counted.
 if [ "$IN_SANDBOX" = 0 ]; then
   lt_arm
-  _sm="$( ( IN_SANDBOX=1; ps_sandbox_skip "mutant probe" ) 2>&1 >/dev/null; echo "rc=$?" )"
-  [ -d "$WORK" ] && kill -0 "$LOCKPID" 2>/dev/null || broken "the SANDBOX MUTANT subshell's exit ran the EXIT trap: WORK or the lock-pid sleep is gone"
+  _sm="$( ( IN_SANDBOX=1; ps_sandbox_skip "forced-detector probe" ) 2>&1 >/dev/null; echo "rc=$?" )"
+  [ -d "$WORK" ] && kill -0 "$LOCKPID" 2>/dev/null || broken "the SANDBOX PROBE subshell's exit ran the EXIT trap: WORK or the lock-pid sleep is gone"
   case "$_sm" in
     *"yet ps -o lstart= -p \$\$ works"*"FIXTURE BROKEN"*"rc=2")
       ok "CONTROL sandbox-detector: the detector forced to 'sandboxed' where ps works refuses (FIXTURE BROKEN, exit 2) instead of skipping the start-time worlds" ;;
     *) bad "CONTROL sandbox-detector: the detector forced to 'sandboxed' where ps works did not refuse: '$(printf '%s' "$_sm" | tr '\n' ' ')'" ;;
   esac
 fi
-if ! ps_sandbox_skip "lock start-time worlds and their six reader mutants (BL-463)"; then
+if ! ps_sandbox_skip "lock start-time worlds (BL-463)"; then
 PJW="$WORK/pj"; mkdir -p "$PJW" || broken "could not create the lock-start world"
 pj_lib() { # <pool copy> <out>: the reader and its helper, as the hook defines them
   { awk '/^readset_pid_start\(\) \{/,/^}/' "$1"; awk '/^readset_lock_stale\(\) \{/,/^}/' "$1"; } > "$2"
@@ -2300,7 +1841,7 @@ _pf="$( . "$PJ_SEEDLIB"; PATH="$PJW/psbin:$PATH"; readset_pid_start "$LOCKPID" )
 PJ_PERL=1
 if [ "$_pf" != "$PJ_LIVE" ]; then
   PJ_PERL=0
-  printf '  SKIP  psfail and psfailpad worlds, BL-686 MUTANT nofallback, and the psfail cells of BL-463 MUTANTs readerself and nonorm: with ps stubbed the perl fallback read '"'"'%s'"'"' for the lock pid, not its start -- no usable perl here (it is optional)\n' "$_pf"
+  printf '  SKIP  psfail and psfailpad worlds: with ps stubbed the perl fallback read '"'"'%s'"'"' for the lock pid, not its start -- no usable perl here (it is optional)\n' "$_pf"
 fi
 # THE FORCED FALLBACK DAY (BL-868). PJDay.pm shifts perl's gmtime to day N of the same month, so the
 # psfail world (N=19) and the psfailpad world (N=5) hold an unpadded and a padded fallback string on
@@ -2323,7 +1864,7 @@ sub import {
 PM
 if [ "$PJ_PERL" = 1 ]; then
   # DISCRIMINATION GUARD: the padded day's raw fallback text must differ from its re-joined form, and the
-  # unpadded day's must not -- else the two worlds no longer separate a re-join mutant from a right helper.
+  # unpadded day's must not -- else the two worlds no longer separate a re-joining helper from one that does not.
   _r5="$(PERL5LIB="$PJW/psbin/p5" PERL5OPT=-MPJDay=5 perl -e 'print scalar gmtime')"
   _r19="$(PERL5LIB="$PJW/psbin/p5" PERL5OPT=-MPJDay=19 perl -e 'print scalar gmtime')"
   _n5="$(set -f; set -- $_r5; printf '%s' "$*")"; _n19="$(set -f; set -- $_r19; printf '%s' "$*")"
@@ -2344,8 +1885,8 @@ fi
 lt_arm
 _uname_s="$(uname -s 2>/dev/null)" || broken "anti-SKIP: uname -s failed, so the Darwin gate would read 'not Darwin' and print ok vacuously"
 if command -v perl >/dev/null 2>&1 && [ "$_uname_s" = Darwin ]; then
-  [ "$PJ_PERL" = 1 ] && ok "anti-SKIP: perl is on PATH on Darwin, and the psfail and psfailpad worlds, BL-686 MUTANT nofallback, and the psfail cells of BL-463 MUTANTs readerself and nonorm run" \
-    || bad "anti-SKIP: perl is on PATH on Darwin, yet the psfail and psfailpad worlds, BL-686 MUTANT nofallback, and the psfail cells of BL-463 MUTANTs readerself and nonorm were SKIPPED -- the fallback detector is broken"
+  [ "$PJ_PERL" = 1 ] && ok "anti-SKIP: perl is on PATH on Darwin, and the psfail and psfailpad worlds run" \
+    || bad "anti-SKIP: perl is on PATH on Darwin, yet the psfail and psfailpad worlds were SKIPPED -- the fallback detector is broken"
 else
   ok "anti-SKIP: no perl on PATH, or not Darwin -- the BL-686 SKIP is allowed here"
 fi
@@ -2367,10 +1908,10 @@ pw_drive() { # <pool copy> <tag> -> the writer's outcome, then the reader's rc o
 }
 PW_OK='1|none|ann|1'
 lt_arm; _pw="$(pw_drive "$POOL" real)"
-[ "$_pw" = "$PW_OK" ] && { ok "lock writer, no perl and an empty ps: records NO empty start line, announces on stderr, and the reader judges the lock HELD (BL-686)"; B_LOC_pw=1; } \
+[ "$_pw" = "$PW_OK" ] && { ok "lock writer, no perl and an empty ps: records NO empty start line, announces on stderr, and the reader judges the lock HELD (BL-686)"; } \
   || bad "lock writer, no perl and an empty ps: got '$_pw', want '$PW_OK' (lines|line 2|announced|reader rc)"
 # The judge: a fresh process. ctl is computed before any world's env by the fixture's OWN `ps` call,
-# never the block's helper: the control is a fact about the harness, and a helper mutant reading `$$`
+# never the block's helper: the control is a fact about the harness, and a helper reading `$$`
 # would otherwise blind the control that exists to separate it from a right helper.
 PJ_JUDGE="$PJW/judge.sh"
 cat > "$PJ_JUDGE" <<'PJ'
@@ -2424,7 +1965,7 @@ pj_eval() { # <lib>: sets PJ_R_<world> and PJ_FLIP, the worlds whose result is n
 pj_eval "$PJ_LIB"
 pj_arm() { # <world> <text>
   local r; lt_arm; eval "r=\$PJ_R_$1"
-  if [ "$r" = "$(pj_want "$1" "$PJ_R_right")" ]; then ok "$2"; eval "B_PJ_$1=1"; else bad "$2 -- got '$r', want '$(pj_want "$1" "$PJ_R_right")'"; fi
+  if [ "$r" = "$(pj_want "$1" "$PJ_R_right")" ]; then ok "$2"; else bad "$2 -- got '$r', want '$(pj_want "$1" "$PJ_R_right")'"; fi
 }
 pj_arm wrong "lock start: a LIVE pid whose recorded start time is not its own (a reused pid) is STALE"
 pj_arm right "  the real writer's lock for a live pid is HELD, with no ps-fallback announcement"
@@ -2434,148 +1975,13 @@ pj_arm legacydead "  a two-field lock from an older hook with a dead pid is STAL
 [ "$PJ_PERL" = 1 ] && pj_arm psfailpad "  the same with the fallback's day forced to 5, which perl pads ('Nov  5'): HELD, silent -- the helper re-joins the fallback's words too (BL-868)"
 pj_arm bothfail "  a ps AND a perl that fail leave a live lock HELD and say so in one line"
 pj_arm split "  written under de_DE/Asia/Tokyo and judged under fr_FR/America/Los_Angeles, the lock reads as it does under C/UTC0"
-# Each mutant is a pm_copy of the pool block -- the one mutation path every mutant here uses -- with
-# the two functions re-extracted from it, scored against ALL six worlds, and must move exactly its own.
-pj_mut() { # <name> <from> <to> <the one world it must move>
-  local m="$PJW/m.$1.sh" bf w
-  bf="$(b=1; for w in $4; do eval "[ \"\${B_PJ_$w:-0}\" = 1 ]" || b=0; done; printf %s "$b")"
-  pm_copy "pj.$1" 1 "$2" "$3" || return 0
-  lt_arm
-  pj_lib "$PM" "$m"
-  if cmp -s "$PJ_LIB" "$m"; then bad "BL-463 MUTANT $1: applied to the block but not inside the two extracted functions"; return 0; fi
-  pj_eval "$m"
-  if [ "$PJ_FLIP" = "$4" ]; then mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$1" "BL-463 MUTANT $1 is KILLED by '$4' alone: '$(eval "printf '%s' \"\$PJ_R_$4\"")'"
-  else bad "BL-463 MUTANT $1 moved '${PJ_FLIP:-nothing}', want exactly '$4'"; fi
-}
-pj_mut nostart '    [ "$c" != "$s" ] && return 0' '    :' wrong
-pj_mut nopin 'LC_ALL=C TZ=UTC0 ps -o lstart=' 'ps -o lstart=' split
-pj_mut psstale "alone\\n' \"\$p\"" "alone\\n' \"\$p\"; return 0" bothfail
-# BL-686: the perl sysctl fallback removed -- a failing ps is then announced, as under sandbox-exec before.
-[ "$PJ_PERL" = 1 ] && pj_mut nofallback '  [ -n "$x" ] || x="$(perl -e' '  [ -n "$x" ] || x="$(false -e' 'psfail psfailpad'
-# BL-686: the writer's guard removed -- it writes `pid epoch` and an EMPTY start line, silently, as
-# both writers did under a sandbox before. Killed by the no-perl writer arm.
-if PM_FN=readset_lock_write pm_copy silentempty 1 '  if s="$(readset_pid_start "$2")"; then' '  s="$(readset_pid_start "$2")"; if :; then'; then
-  lt_arm; _pw="$(pw_drive "$PM" silentempty)"
-  [ "$_pw" != "$PW_OK" ] && mutant_killed "$B_LOC_pw" silentempty "BL-686 MUTANT silentempty is KILLED by the no-perl writer arm: '$_pw'" \
-    || bad "BL-686 MUTANT silentempty SURVIVED the no-perl writer arm: '$_pw'"
-fi
-# nonorm keeps `ps`'s column padding (always, so `right` dies) and perl's day padding, which exists only
-# on days 1-9: psfailpad (forced day 5) dies and psfail (forced day 19) does not, on every calendar day.
-pj_mut nonorm '  set -- $x' '  set -- "$x"' "$([ "$PJ_PERL" = 1 ] && echo 'right psfailpad' || echo right)"
-# readerself and helperself read the start of `$$` -- the judge -- in place of the lock pid. They
-# die on `right` only because the lock pid is the sleep and the judge's start is asserted different.
-# readerself dies on `psfail` and `psfailpad` too (BL-686): with ps stubbed the fallback still reads the
-# judge's start there, so the comparison is reached in all three worlds. helperself does not, because the fallback reads
-# its own `$1` and so the stubbed-ps world never runs the mutated `ps` line.
-pj_mut readerself 'if ! c="$(readset_pid_start "$p")"; then' 'if ! c="$(readset_pid_start "$$")"; then' "$([ "$PJ_PERL" = 1 ] && echo 'right psfail psfailpad' || echo right)"
-pj_mut helperself 'ps -o lstart= -p "$1"' 'ps -o lstart= -p "$$"' right
 fi # end of the ps-dependent start-time worlds
-if [ "$LT_CAN" = 1 ]; then
-  pm_l() { # <name> <arm label> <setup> <correct result glob> [world]
-    local r bf; lt_arm
-    bf="$(eval "printf %s \"\${B_LOC_$2:-0}\"")"
-    r="$(lt_drive "$PM" "${5:-$(lt_fresh "pm.$1")}" "$3")"
-    case "$r" in
-      $4) bad "BL-452 MUTANT $1 SURVIVED $2: '$r'" ;;
-      *) mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$1" "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
-    esac
-  }
-  PM_FN=readset_live_trace pm_copy knob 1 '  [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0' '  :' && pm_l knob k0 'export AI_DLC_READSET_LIVE_TRACE=0' '*"|not"'
-  pm_copy lockall 1 '  local lk="$1" p="" e="" now' '  return 0' && pm_l lockall lk1 "$LK_LIVE" '*"another trace holds"*"|not"'
-  pm_copy locknone 1 '  local lk="$1" p="" e="" now' '  return 1' && pm_l locknone lk2 "$LK_DEAD" '*"started detached"*"|invoked"'
-  PM_FN=readset_live_trace pm_copy linked 1 '  [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] \' '  true \' \
-    && pm_l linked e ':' '*"a linked worktree"*"|not"' "$LW_T.wt"
-  # The in-pool prep carries the knob line readset_live_trace carries; PM_FN confines the mutant to the
-  # prep, and it is scored by pt0 alone. The prep has no linked-worktree check since BL-701; ptlinked2
-  # puts the old one back and ptw alone must kill it.
-  pt_kill() { # <name> <arm that must fail> <setup> <world> -- every arm is scored, only <arm> may move
-    local m="$1" want="$2" r0 r1 rw flips="" w bf
-    bf="$( { eval "[ \"\${B_LOC_$want:-0}\" = 1 ]" && [ "${B_LOC_pt1:-0}" = 1 ]; } && echo 1 || echo 0)"
-    r0="$(pt_drive "$PM" "$(lt_fresh pm.$m.0)" 'export AI_DLC_READSET_LIVE_TRACE=0')"
-    r1="$(pt_drive "$PM" "$(lt_fresh pm.$m.1)" ':')"
-    rw="$(pt_drive "$PM" "$LW_T.wt" ':')"; lt_arm
-    case "$r0" in "|") ;; *) flips="$flips pt0" ;; esac
-    case "$r1" in *"traced in the pool: gamma"*"|gamma") ;; *) flips="$flips pt1/ptw-main" ;; esac
-    case "$rw" in *"skipped ("*) flips="$flips ptw" ;; *"traced in the pool: gamma"*"|gamma") ;; *) flips="$flips ptw" ;; esac
-    PT_MATRIX="${PT_MATRIX}${m} -> ${flips:- none}\n"
-    case "$want" in pt0) w=" pt0" ;; ptw) w=" ptw" ;; esac
-    if [ "$flips" = "$w" ]; then mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$m" "BL-452 MUTANT $m (in-pool prep) is KILLED by $want alone: knob0 '$r0' main '$r1' linked '$rw'"
-    else bad "BL-452 MUTANT $m (in-pool prep) moved '${flips:-nothing}', want exactly '$want': knob0 '$r0' main '$r1' linked '$rw'"; fi
-  }
-  PT_MATRIX=""
-  PM_FN=readset_pool_trace_prep pm_copy ptknob 1 '  [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0' '  :' && pt_kill ptknob pt0
-  PM_FN=readset_pool_trace_prep pm_copy ptlinked2 1 '  command -v python3 >/dev/null 2>&1 || why="${why:+$why; }no python3"' '  command -v python3 >/dev/null 2>&1 || why="${why:+$why; }no python3"; [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] || why="${why:+$why; }a linked worktree"' \
-    && pt_kill ptlinked2 ptw
-  printf 'in-pool prep kill matrix (mutant -> arms that failed):\n%b' "$PT_MATRIX"
-  pm_rf() { # <name> <arm> <setup> <correct result glob> [base-flag suffix, default <arm>]
-    local r bf; lt_arm
-    bf="$(eval "printf %s \"\${B_LOC_${5:-$2}:-0}\"")"
-    r="$(rf_drive "$PM" "pm.$1" "$3")"
-    case "$r" in
-      $4) bad "BL-452 MUTANT $1 SURVIVED $2: '$r'" ;;
-      *) mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$1" "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
-    esac
-  }
-  pm_copy nocall 1 '  readset_live_trace "$out"' '  :' \
-    && pm_rf nocall a "export STUB_GO=\"$WORK/rf.go.nocall\"" '"0|yes|invoked|"*'
-  # sync and fold drop the `&`, so `$!` is replaced by a literal pid in the copy too: with no
-  # background job `$!` is unset, and bash 3.2 under `set -u` rejects even `${!:-0}`, so the drive
-  # aborts and the mutant dies for a reason that is not its own (an empty rc field, measured).
-  # The writer reads `$!` once, into `tp` (BL-463), and that line is the anchor; RT_ANCHOR_N asserts
-  # it is the block's ONLY `$!`, so no second reader is left unset.
-  RT_ANCHOR_N="$(grep -cF '"$!"' "$POOL")" || RT_ANCHOR_N=0; lt_arm
-  [ "$RT_ANCHOR_N" = 1 ] && ok "the pool block reads \"\$!\" exactly once (the writer's tp=), so sync and fold replace every reader" \
-    || bad "the pool block reads \"\$!\" $RT_ANCHOR_N time(s), not 1 -- sync and fold no longer replace every reader"
-  RT_TP_N="$(grep -cF '  tp="$!"' "$POOL")" || RT_TP_N=0
-  RT_NEVER_N="$(grep -cF 'B463-NEVER-ANCHOR' "$POOL")" || RT_NEVER_N=0; lt_arm
-  [ "$RT_TP_N" = 1 ] && [ "$RT_NEVER_N" = 0 ] && ok "  the anchor '  tp=\"\$!\"' occurs once, and the impossible-anchor control 0 times" \
-    || bad "  the anchor '  tp=\"\$!\"' occurs $RT_TP_N time(s) and the impossible-anchor control $RT_NEVER_N -- want 1 and 0"
-  # A SYNCHRONOUS LAUNCH CANNOT WRITE THE LOCK'S PID WHILE ITS STUB WAITS, so the stub leaves its GO
-  # wait as `nolockpid` -- the positive fact this kill must carry, beside the moved (a) result.
-  if pm_copy sync 1 '  ) </dev/null >"$logf" 2>&1 &' '  ) </dev/null >"$logf" 2>&1' \
-                1 '  tp="$!"' '  tp=0'; then
-    pm_rf sync a "export STUB_GO=\"$WORK/rf.go.sync\"" '"0|yes|invoked|"*'
-    lt_arm
-    [ "$(cat "$WORK/rf.go.sync.left" 2>/dev/null)" = nolockpid ] \
-      && ok "  and its stub left the GO wait because no lock pid was written while it ran -- the launch was synchronous" \
-      || bad "BL-452 MUTANT sync: the stub left its GO wait as '$(cat "$WORK/rf.go.sync.left" 2>/dev/null)', not 'nolockpid' -- the kill is not the synchronous launch"
-  fi
-  pm_copy fold 1 'AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL"' \
-                   'AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL" || { rm -f "$lk/pid"; rmdir "$lk"; exit 1; }' \
-                1 '  ) </dev/null >"$logf" 2>&1 &' '  ) </dev/null >"$logf" 2>&1 || return 1' \
-                1 '  tp="$!"' '  tp=0' \
-                1 '  readset_live_trace "$out"' '  readset_live_trace "$out" || rc=1' \
-    && pm_rf fold f 'export STUB_RC=1' '"0|"*"|invoked|verified|"*'
-  # The lock WRITER's mutants (BL-463), each scored on the round trip (k), the one arm that reads
-  # the pid file's content: the parent's pid in place of the trace subshell's, and no start line.
-  # A mutant whose drive lost its control (no stub pid recorded, or the driver and the trace subshell
-  # sharing a start) is NO VERDICT, never a kill.
-  pm_rt() { # <name>
-    local r; lt_arm
-    r="$(rt_drive "$PM" "pm.$1")"
-    case "$r" in
-      $RT_OK) bad "BL-463 MUTANT $1 SURVIVED k: '$r'" ;;
-      *"|noppid(none)|"*|*"|nosdiff"*) bad "BL-463 MUTANT $1: the drive's control failed, NO VERDICT: '$r'" ;;
-      # The drive record carries pids, so it goes on its own non-ok line: an ok line holds no run-varying value.
-      *) mutant_killed "$B_LOC_k" "$1" "BL-463 MUTANT $1 is KILLED by k"; printf '        (drive: %s)\n' "$r" ;;
-    esac
-  }
-  if ! ps_sandbox_skip "the lock writer's three mutants scored on (k) (BL-463)"; then
-    pm_copy parentpid 1 '  tp="$!"' '  tp="$$"' && pm_rt parentpid
-    PM_FN=readset_lock_write pm_copy nostartline 1 '"$s" > "$1/pid"' '"" > "$1/pid"' && pm_rt nostartline
-    # ppidwriter names a LIVE process that is not the trace subshell and records that process's start
-    # correctly, so the file agrees with itself; only the join to the stub's recorded pid (ppid) sees it.
-    pm_copy ppidwriter 1 '  tp="$!"' '  tp="$PPID"' && pm_rt ppidwriter
-  fi
-  pm_copy redrun 1 '  readset_live_trace "$out"' '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' \
-    && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|invoked|none|stashed|"*' rr
-fi
-# UNMUTATED CONTROL, driven the same way as the local-world mutants: a baseline selection must APPEAR.
+# CONTROL, driven through lw_run: a baseline selection must APPEAR.
 R="$(lw_run "$POOL" ctl3 "$LM_C1")"; lt_arm
 if lc1 "$R" && msg_of "$R" | grep -q 'read-set map: derived at'; then
-  ok "CONTROL: the unmutated block, driven through lw_run, maps gamma locally and selects alpha alone — the kills above are attributable"
+  ok "CONTROL: the block, driven through lw_run, maps gamma locally and selects alpha alone"
 else
-  bad "CONTROL: the unmutated block did not reproduce (b) through lw_run — every local-map mutant is unattributable"
+  bad "CONTROL: the block did not reproduce (b) through lw_run"
 fi
 
 # ----------------------------------------------------------- the read-set trace report ----
@@ -2620,7 +2026,7 @@ printf "  alpha                            OMITTED (the stream dropped reports 5
 printf "start %s\npid 1\nlist alpha eps zeta\nexit 0\nfinish %s\n" '"$RP_T0"' '"$((RP_T0 + 10))"' > "$RL.status"
 printf "alpha\trun\tstale\ts\tstale\nbeta\trun\tunrecorded\tu\tok\ngamma\tskip\t\t\tok\n" > "$o/.kdec"
 printf "alpha\nbeta\ngamma\n" > "$o/.kl"; printf "alpha\ngamma\n" > "$o/.mapped.all"'
-# The (r1) lines, each NAMED, so a mutant is scored on which of them it moved and nothing else.
+# The (r1) lines, each NAMED, so a missing line is named.
 RP_N_OUTCOME='trace-report last trace outcome: 3 given, 1 recorded, 1 discarded, 1 traced cleanly but NOT recorded;'
 RP_N_OCAUSE='NOT recorded; causes stream-drop 1, not-hashed 1'
 RP_N_DISC='trace-report discards: 4 fixture(s) carry a #discards row (at 1: 1, at 2: 1, at 3 or more: 2); causes stream-drop 1, verdict 2, loss-canary 1, trip 1, fixture-exit 1'
@@ -2641,7 +2047,6 @@ RP_R1="$(rp_world "$POOL" r1 "$RP_FULL")"; lt_arm
 RP_R1_MISS="$(rp_score "$RP_R1")"
 if [ -z "$RP_R1_MISS" ]; then
   ok "(r1) the report names every count and fixture: the outcome of the last trace with the two-line hash failure counted as NOT recorded, the discard buckets and causes, alpha at 2 of 3, beta HELD on its current key (gamma's moved key is not held), eps not recorded, and this push's uncleared stale and unmapped"
-  B_LOC_r1=1
 else
   bad "(r1) the report is missing line(s) [$RP_R1_MISS]: $(tr '\n' '|' <<< "$RP_R1")"
 fi
@@ -2690,7 +2095,7 @@ rp_stop_world() { # <pool> <name> <status pid> <deriver> <ceiling> <age>
 }
 RP_R9="$(rp_stop_world "$POOL" r9 "$SDEAD" "$SDG" 900 5)"; lt_arm
 case "$RP_R9" in
-  *"deriver group $SDG is still running and its trace subshell (pid $SDEAD) is gone; $RP_STOP"*) ok "(r9) a live deriver group whose trace subshell is gone: one WARN line naming kill -TERM -- -<deriver pgid>"; B_LOC_r9=1 ;;
+  *"deriver group $SDG is still running and its trace subshell (pid $SDEAD) is gone; $RP_STOP"*) ok "(r9) a live deriver group whose trace subshell is gone: one WARN line naming kill -TERM -- -<deriver pgid>" ;;
   *) bad "(r9) an orphaned deriver group was not named with its stop command: $(tr '\n' '|' <<< "$RP_R9")" ;;
 esac
 RP_R10="$(rp_stop_world "$POOL" r10 "$LOCKPID" "$SDG" 10 100)"; lt_arm
@@ -2710,14 +2115,6 @@ case "$RP_R12" in
   *"DIED without writing its exit"*) ok "(r12) near-miss: a gone deriver group gets no stop line (the trace still reads DIED)" ;;
   *) bad "(r12) the near-miss report did not read DIED: $(tr '\n' '|' <<< "$RP_R12")" ;;
 esac
-if PM_FN=readset_trace_report pm_copy nostop 1 '[ -n "$why" ] && printf' '[ -n "$why" ] && false && printf'; then
-  lt_arm; R="$(rp_stop_world "$PM" pm.nostop "$SDEAD" "$SDG" 900 5)"
-  case "$R" in
-    *"$RP_STOP"*) bad "MUTANT nostop SURVIVED (r9)" ;;
-    *"trace-report last trace: started"*"DIED"*) mutant_killed "$B_LOC_r9" nostop "MUTANT nostop (the stop line dropped) is KILLED by (r9)" ;;
-    *) bad "MUTANT nostop: the copy printed no report -- NO VERDICT: $(tr '\n' '|' <<< "$R")" ;;
-  esac
-fi
 # THE CALL SITE: run_fixtures prints the report on a push that runs the suite, before the suite runs.
 rp_run() { # <pool> <name>; prints the run's output, also kept with its POOL_STALL in $WORK/rpo.<name>/
   local p="$1" t="$WORK/rpr.$2" o="$WORK/rpo.$2"
@@ -2737,135 +2134,29 @@ rp_called() { awk '/trace-report last trace:/ { r = NR } /^  *ok  *(alpha|beta|g
 RP_RUN="$(rp_run "$POOL" call)"; lt_arm
 if rp_called "$RP_RUN"; then
   ok "(r7) run_fixtures prints the trace report on every push that builds its list, BEFORE the first fixture verdict"
-  B_LOC_r7=1
 else
   bad "(r7) run_fixtures printed no trace report before the suite: $(tr '\n' '|' <<< "$RP_RUN" | cut -c1-600)"
 fi
-# MUTANTS of the report, each scored on (r1)'s named lines (and the call site on r7): each must move
-# exactly its own line.
-rp_mut() { # <name> <want missing>
-  local r m; lt_arm
-  r="$(rp_world "$PM" "pm.$1" "$RP_FULL")"; m="$(rp_score "$r")"
-  if [ "$m" = "$2" ]; then mutant_killed "$B_LOC_r1" "$1" "MUTANT $1 is KILLED by (r1), on exactly [$2]"
-  elif [ -z "$m" ]; then bad "MUTANT $1 SURVIVED (r1)"
-  else bad "MUTANT $1 moved [$m], not exactly [$2] -- entangled lines"; fi
-}
-# held only on the push that reaches 3 (the old behaviour): a held fixture must also be in the last
-# trace's discards, which a held fixture never is.
-pm_copy held3 1 'if (c >= 3 && x[4] == cur) HELD[f] = 1' 'if (c >= 3 && x[4] == cur && (f in DROP)) HELD[f] = 1' && rp_mut held3 HELD
-# the two-line parser: `<fx>  N paths` counted as recorded although `could not hash <fx>` follows it.
-pm_copy twoline 1 'nrec = 0; for (f in CLEAN) if (!(f in NH)) nrec++' 'nrec = 0; for (f in CLEAN) nrec++' && rp_mut twoline OUTCOME
-# a cause miscount: the hash failures are not counted as a cause of the last trace.
-pm_copy notcause 1 'for (f in NH) { TC["not-hashed"]++ }' 'for (f in NH) { }' && rp_mut notcause OCAUSE
-# a bucket miscount: a row at 2 counted at 3.
-pm_copy bucket 1 'if (c >= 3) at3++; else if (c == 2) at2++; else at1++' 'if (c >= 2) at3++; else at1++' && rp_mut bucket DISC
-# the report removed from run_fixtures.
-if pm_copy noreport 1 '  readset_trace_report "$out"' '  :'; then
-  lt_arm; R="$(rp_run "$PM" pm.noreport)"
-  if rp_called "$R"; then bad "MUTANT noreport SURVIVED (r7)"
-  elif grep -q '^  *ok  *alpha' <<< "$R"; then mutant_killed "$B_LOC_r7" noreport "MUTANT noreport is KILLED by (r7): the suite ran and no report preceded it"
-  else bad "MUTANT noreport: the copy never ran the suite -- NO VERDICT"; fi
-fi
-# MUTANTS of the ceiling, each driven through (t1)'s world and scored on the (t1) field it must move.
-# A drive whose LIVE control did not read alive is no verdict: the stub never ran under that copy.
-ct_mut() { # <name> <want: a glob over (t1)'s result>
-  local r; lt_arm
-  r="$(ct_drive "$PM" "pm.$1" 3 hang)"
-  case "$r" in
-    "$CT_LIVE|"*) ;;
-    *) bad "CEILING MUTANT $1: the live control did not read alive -- NO VERDICT: '$r'"; return ;;
-  esac
-  if [ "$r" = "$CT_T1" ]; then bad "CEILING MUTANT $1 SURVIVED (t1): '$r'"
-  else case "$r" in
-    $2) mutant_killed "$B_LOC_t1" "$1" "CEILING MUTANT $1 is KILLED by (t1): '$r'" ;;
-    *) bad "CEILING MUTANT $1 moved (t1) but not as expected: '$r'" ;;
-  esac; fi
-}
-if [ "$LT_CAN" = 1 ]; then
-  # the ceiling never armed: the watchdog sleeps far past it.
-  # a TERM handler restored on the watchdog, which the child still between fork and exec inherits, so the
-  # sweep's TERM is handled and lost there. (t4w) reads the handler itself: the watchdog outlives its sleep's TERM.
-  if PM_FN=readset_live_trace pm_copy sleeptrap 1 '      sleep "$cl" & s=$!; wait "$s"' "      trap 'exit 0' TERM; sleep \"\$cl\" & s=\$!; wait \"\$s\""; then
-    lt_arm; R="$(wd_probe "$PM" pm.sleeptrap)"
-    case "$R" in
-      [1-9]*"|ran|143") bad "CEILING MUTANT sleeptrap SURVIVED (t4w): the watchdog still died by its sleep's TERM: '$R'" ;;
-      [1-9]*"|ran|"*) mutant_killed "$B_LOC_t4w" sleeptrap "CEILING MUTANT sleeptrap (a TERM handler on the watchdog) is KILLED by (t4w): the watchdog outlived the TERM its sleep sent ('$R')" ;;
-      *) bad "CEILING MUTANT sleeptrap: the stub sleep did not run or the watchdog was not extracted -- NO VERDICT: '$R'" ;;
-    esac
-  fi
-  # the post-reap sweep removed: the stop kills the watchdog and nothing ends its sleep. Measured: 30 of 30
-  # leaked on an idle box, so (t4) scores it, stopping at the first leak.
-  if PM_FN=readset_live_trace pm_copy nosweep 1 '    kill -TERM -- "-$sp" 2>/dev/null' '    :'; then
-    lt_arm; R="$(fx_drive "$PM" pm.nosweep "$FX_REPS" 1)"
-    case "$R" in
-      alive\|*\|*\|*\|0) bad "CEILING MUTANT nosweep SURVIVED (t4) over $FX_REPS fast traces: '$R'" ;;
-      alive\|*) mutant_killed "$B_LOC_t4" nosweep "CEILING MUTANT nosweep (no TERM to the subshell's group after the reap) is KILLED by (t4): a fast trace left its sleep in the group"
-        printf '        (drive: %s)\n' "$R" ;;
-      *) bad "CEILING MUTANT nosweep: the control did not read alive -- NO VERDICT: '$R'" ;;
-    esac
-  fi
-  PM_FN=readset_live_trace pm_copy noceil 1 '      sleep "$cl" & s=$!; wait "$s"' '      sleep 600 & s=$!; wait "$s"' \
-    && ct_mut noceil "$CT_LIVE|held,alive,alive,alive,*"
-  # every kill aimed at the deriver's PID, not its group -- all four sites, TERM, the grace probe, KILL
-  # and the forwarded TERM, so no group kill is left to cover for the others.
-  PM_FN=readset_live_trace pm_copy pidonly 4 '-- "-$dp"' '"$dp"' \
-    && ct_mut pidonly "$CT_LIVE|released,gone,*,alive,*|timeout|*"
-  # the lock never released after the trace.
-  PM_FN=readset_live_trace pm_copy nolock 1 '    rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null || { sleep 1; rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null; }' '    :' \
-    && ct_mut nolock "$CT_LIVE|held,gone,gone,gone,*"
-  # D1: a timed-out trace reported as an ordinary finish -- both layers, the state line and the WARN.
-  PM_FN=readset_trace_report pm_copy asfinish 1 '  if [ "$s_exit" = timeout ]; then' '  if false; then' \
-    1 '      else if (ENVIRON["RS_FIN"] == "timeout") printf' '      else if (0) printf' \
-    && ct_mut asfinish "$CT_LIVE|released,gone,gone,gone,notr,notmp,same|timeout|finished-timeout"
-fi
 
 fi
-
-# F2-C HELPERS -- shared by the tracer, rc, vs and slot units. At top level, ABOVE the deriver block,
-# because vs and slot run whether or not the deriver resolves and tracer runs inside that block.
-# A KILL IS EMITTED ONLY THROUGH mutant_killed (lib/mutant.sh), behind a B_<arm> flag that the
-# UNMUTATED arm the mutant guards set in its passing branch in THIS run. A mutant whose base arm did not
-# pass is FIXTURE BROKEN, never a kill.
-# EACH MUTANT IS SCORED ON ITS DECIDING ARM AND ONE NAMED TWIN: a sibling cell of the same drive's vector
-# (or, where the vector has one cell, a positive conjunct of that drive) that must stay at want under the
-# mutant. A mutant that moves its twin over-reached, and is a FAIL, not a kill. The twin per mutant is
-# the `# MUTANT-MATRIX` line in this file's header.
-# READSET_SKIP_MATRIX=1 is the opt-in full-matrix mode: slot runs every mutant through all twelve
-# scenarios and vs re-drives every cell of its vector per mutant; each prints a `matrix` line (no `ok`).
-# It reaches this file only on a direct run: hermetic-run.sh starts the fixture under `env -i`.
-[ -f "$HERE/../lib/mutant.sh" ] || broken "no lib/mutant.sh beside this fixture, so no kill can be emitted"
-# shellcheck disable=SC1091
-. "$HERE/../lib/mutant.sh"
-F2C_MATRIX="${READSET_SKIP_MATRIX:-0}"
-f2c_mx() { printf '  matrix  MUTANT %s: %s\n' "$1" "$2"; } # <mutant> <vector>: informational, never an assertion
-# f2c_twin <mutant> <twin name> <twin at want: 1|0> -- 0 when the twin stayed at want. Otherwise a FAIL and 1:
-# a mutant that moved its twin over-reached. Every kill line reads `if f2c_twin ...; then mutant_killed ...`.
-f2c_twin() {
-  [ "$3" = 1 ] && return 0
-  bad "MUTANT $1 moved its twin $2, which must stay at want under it -- not its deciding arm's alone"
-  return 1
-}
 
 # stub_live <pid file>: how many of the recorded pids answer `kill -0`.
 stub_live() { local p n=0; [ -f "$1" ] || { echo 0; return 0; }; while read -r p; do [ -n "$p" ] && kill -0 "$p" 2>/dev/null && n=$((n+1)); done < "$1"; echo "$n"; }
 # stub_reap <world dir> -- moves <dir>/pids to pids.last (and appends it to pids.all), kills each recorded pid by number,
-# waits up to 3s for them to go, and logs "<recorded> <live>" to <dir>/reap.log. REAP_MUT=1 is the mutant that drops the
-# kill. Only a pid recorded by a stub this world started is ever signalled; nothing is found by pattern.
+# waits up to 3s for them to go, and logs "<recorded> <live>" to <dir>/reap.log. Only a pid recorded by a stub this world started is ever signalled; nothing is found by pattern.
 stub_reap() {
   local d="${1:-}" p i=0 n live
   [ -d "$d" ] || return 0
   [ -f "$d/pids" ] || : > "$d/pids"
   cat "$d/pids" > "$d/pids.last"; cat "$d/pids" >> "$d/pids.all"; : > "$d/pids"
-  if [ "${REAP_MUT:-0}" != 1 ]; then
-    while read -r p; do [ -n "$p" ] && kill "$p" 2>/dev/null; done < "$d/pids.last"
-    # GONE, OR NEVER GOING: a killed stub is dying and never reads blocked; one the kill missed blocks forever.
-    while :; do
-      live=0; i=1
-      while read -r p; do [ -n "$p" ] && kill -0 "$p" 2>/dev/null || continue; live=1; aw_blocked "$p" || i=0; done < "$d/pids.last"
-      [ "$live" = 0 ] || [ "$i" = 1 ] && break
-      sleep 0.1
-    done
-  fi
+  while read -r p; do [ -n "$p" ] && kill "$p" 2>/dev/null; done < "$d/pids.last"
+  # GONE, OR NEVER GOING: a killed stub is dying and never reads blocked; one the kill missed blocks forever.
+  while :; do
+    live=0; i=1
+    while read -r p; do [ -n "$p" ] && kill -0 "$p" 2>/dev/null || continue; live=1; aw_blocked "$p" || i=0; done < "$d/pids.last"
+    [ "$live" = 0 ] || [ "$i" = 1 ] && break
+    sleep 0.1
+  done
   # A reaped stream's STUB_STREAM registration goes with it, so a later reuse of its pid cannot pass for a live
   # stream. The stub of one world may have registered under another world's feed (sbx_run uses $SB's stubs on $SX's feed).
   while read -r p; do [ -n "$p" ] && rm -f "$WORK"/*/feed.streams/"$p"; done < "$d/pids.last"
@@ -2890,17 +2181,6 @@ stub_reap() {
 # ships ahead of its subject: this fixture reaches a consumer in one pull and the deriver in
 # the next, so an installed tree between those two pulls has the fixture and not the file. A
 # SKIP says so; passing silently would make a vanished arm and a satisfied arm identical.
-  # mut_line <src> <dst> <exact old line> <new text> -- an exact-line replacement, never `sed`: the
-  # deriver lines mutated below carry `&&`, `$(` and quotes a sed replacement would re-expand. The
-  # caller derives <old> from the file by an anchored grep and guards with cmp -s, so a vanished
-  # anchor reads as DID NOT APPLY rather than as a kill.
-  mut_line() {
-    local l
-    : > "$2"
-    while IFS= read -r l || [ -n "$l" ]; do
-      if [ -n "$3" ] && [ "$l" = "$3" ]; then printf '%s\n' "$4"; else printf '%s\n' "$l"; fi
-    done < "$1" >> "$2"
-  }
 
 MERGE_ARMS=0
 CONTROL_ARMS=0
@@ -2919,8 +2199,6 @@ if [ -z "$DERIVER" ]; then
   printf '  SKIP  map-merge arms: derive-fixture-readsets.sh is in neither layout yet (core fixtures ship ahead of their subject)\n'
 else
   if sg merge; then
-  B_merge_arm1=0; B_merge_arm2=0; B_merge_newline_list=0; B_merge_g=0; B_merge_h=0; B_allist_no_newline=0; B_allist_middle=0; B_allist_exact=0
-  B_untraced_m2=0; B_untraced_m3=0; B_control_d=0; B_callsite_f=0
   M="$WORK/merge.sh"
   sed -n '/# READSET_MERGE_BEGIN/,/# READSET_MERGE_END/p' "$DERIVER" > "$M"
   grep -q 'readset_merge_map()' "$M" || broken "extracted no readset_merge_map from $DERIVER"
@@ -2933,13 +2211,13 @@ else
   G="$(readset_merge_map "$WORK/old.map" "$WORK/new.map" "alpha" | LC_ALL=C sort | tr '\n' ' ')"
   MERGE_ARMS=$((MERGE_ARMS+1))
   case "$G" in
-    *"beta	src/b"*) ok "a --list run leaves an UNTRACED fixture's entries alone — refreshing one fixture does not cost the rest of the map"; B_merge_arm1=1 ;;
+    *"beta	src/b"*) ok "a --list run leaves an UNTRACED fixture's entries alone — refreshing one fixture does not cost the rest of the map" ;;
     *) bad "merging dropped an untraced fixture's entries: $G" ;;
   esac
   MERGE_ARMS=$((MERGE_ARMS+1))
   case "$G" in
     *"alpha	src/x"*) bad "merging kept a STALE entry for the fixture it just re-traced: $G" ;;
-    *"alpha	src/NEW"*) ok "  and it REPLACES the traced fixture's entries rather than adding to them"; B_merge_arm2=1 ;;
+    *"alpha	src/NEW"*) ok "  and it REPLACES the traced fixture's entries rather than adding to them" ;;
     *) bad "the traced fixture's new entry is missing after the merge: $G" ;;
   esac
   # The case that matters most: a fixture that WAS mapped and is now omitted must lose its
@@ -2970,32 +2248,10 @@ else
       *"beta	src/b"*)
         case "$G3" in
           *"alpha	src/x"*) bad "newline-separated list: the re-traced fixture kept a stale entry: $G3" ;;
-          *) ok "a NEWLINE-separated traced list behaves as a space-separated one — untraced entries kept, traced ones replaced"; B_merge_newline_list=1 ;;
+          *) ok "a NEWLINE-separated traced list behaves as a space-separated one — untraced entries kept, traced ones replaced" ;;
         esac ;;
       *) bad "a NEWLINE-separated traced list dropped an untraced fixture's entries — the whole rest of the map: $G3" ;;
     esac
-  fi
-
-  # MUTANTS on the merge, each a cmp -s guarded copy of the extracted block.
-  merge_mutant() {
-    local name="$1" expr="$2" mm="$WORK/merge.$1.sh"
-    sed "$expr" "$M" > "$mm"
-    if cmp -s "$M" "$mm"; then bad "MERGE MUTANT $name: the edit matched nothing"; return; fi
-    ( . "$mm"; readset_merge_map "$WORK/old.map" "$WORK/new.map" "alpha" | LC_ALL=C sort | tr '\n' ' ' ) > "$WORK/mm.out" 2>/dev/null
-  }
-  MERGE_ARMS=$((MERGE_ARMS+1))
-  merge_mutant rewrite 's|if \[ -s "$old" \]; then|if false; then|'
-  if grep -q 'beta' "$WORK/mm.out"; then
-    bad "MERGE MUTANT rewrite: untraced entries survived a merge that no longer reads the old map — arm 1 does not depend on that read"
-  else
-    mutant_killed "$B_merge_arm1" rewrite "MERGE MUTANT rewrite moves arm 1: dropping the old-map read loses every untraced fixture"
-  fi
-  MERGE_ARMS=$((MERGE_ARMS+1))
-  merge_mutant keepstale 's|if (index(traced, " " fx " ") == 0 \&\& (decl == "" |if ((decl == "" |'
-  if grep -q 'src/x' "$WORK/mm.out"; then
-    mutant_killed "$B_merge_arm2" keepstale "MERGE MUTANT keepstale moves arm 2: without the traced filter the re-traced fixture keeps its stale entry"
-  else
-    bad "MERGE MUTANT keepstale: the stale entry did not survive — arm 2 does not depend on the traced filter"
   fi
 
   # ------------------------------ the write pipeline drops `.git` through the hook's own predicate ----
@@ -3038,7 +2294,7 @@ else
     dg_pipe "$DG/wline" "$DG/univ.span" > "$DG/out.hook"
     dg_pipe "$DG/wline" - > "$DG/out.fallback"
     if [ "$(dg_verdict "$DG/out.hook")" = exact ]; then
-      ok "(g) the shipped write pipeline over .git/objects/ab/cd, .git/HEAD, a bare .git, sub/.git/HEAD, .gitignore and core/x.sh leaves exactly sub/.git/HEAD, .gitignore and core/x.sh, with the hook's predicate sourced"; B_merge_g=1
+      ok "(g) the shipped write pipeline over .git/objects/ab/cd, .git/HEAD, a bare .git, sub/.git/HEAD, .gitignore and core/x.sh leaves exactly sub/.git/HEAD, .gitignore and core/x.sh, with the hook's predicate sourced"
     else
       bad "(g) the write pipeline left [$(tr '\n' ' ' < "$DG/out.hook")], wanted exactly [$(tr '\n' ' ' < "$DG/want")]"
     fi
@@ -3066,28 +2322,6 @@ else
     elif cmp -s "$DG/body.drift" "$DG/body.fb"; then bad "(g) SEEDED MISMATCH: a drifted hook predicate still compared equal to the fallback, so the byte-compare cannot fail"
     else ok "(g) a seeded drift in the hook's predicate FAILS the fallback byte-compare"
     fi
-    # MUTANT (a): the anchor is dropped, so the nested sub/.git/HEAD goes too. The edit is the exact predicate line.
-    _o="$(grep -m1 -F "awk '\$0 != \".git\" && index(\$0, \".git/\") != 1'" "$DG/univ.span")"
-    mut_line "$DG/univ.span" "$DG/univ.mutA" "$_o" "  awk '\$0 != \".git\" && index(\$0, \".git/\") == 0'"
-    MERGE_ARMS=$((MERGE_ARMS+1))
-    if [ -z "$_o" ] || cmp -s "$DG/univ.span" "$DG/univ.mutA"; then bad "WRITE-PIPELINE MUTANT unanchored: the edit matched nothing"
-    else
-      dg_pipe "$DG/wline" "$DG/univ.mutA" > "$DG/out.mutA"
-      if [ "$(dg_verdict "$DG/out.mutA")" = wrong ] && ! grep -qx 'sub/.git/HEAD' "$DG/out.mutA"; then
-        mutant_killed "$B_merge_g" unanchored "WRITE-PIPELINE MUTANT unanchored moves (g): the nested sub/.git/HEAD is dropped"
-      else bad "WRITE-PIPELINE MUTANT unanchored: the pipeline still left [$(tr '\n' ' ' < "$DG/out.mutA")]"
-      fi
-    fi
-    # MUTANT (b): the write line omits the helper, so .git/HEAD survives.
-    sed 's/ | readset_drop_git//' "$DG/wline" > "$DG/wline.mutB"
-    MERGE_ARMS=$((MERGE_ARMS+1))
-    if cmp -s "$DG/wline" "$DG/wline.mutB"; then bad "WRITE-PIPELINE MUTANT no-helper: the edit matched nothing"
-    else
-      dg_pipe "$DG/wline.mutB" "$DG/univ.span" > "$DG/out.mutB"
-      if grep -qx '.git/HEAD' "$DG/out.mutB"; then mutant_killed "$B_merge_g" no-helper "WRITE-PIPELINE MUTANT no-helper moves (g): .git/HEAD survives"
-      else bad "WRITE-PIPELINE MUTANT no-helper: .git/HEAD did not survive, so (g) does not depend on the helper in the write line"
-      fi
-    fi
   fi
 
 
@@ -3108,7 +2342,7 @@ else
   grep -v '^alpha' "$DM/out.4" | grep -v '^# digest alpha' > /dev/null
   MERGE_ARMS=$((MERGE_ARMS+1))
   if ! grep -q 'alpha' "$DM/out.4" && grep -q 'beta' "$DM/out.4"; then
-    ok "(h) readset_merge_map with the fixture root: the declared alpha has no row and no digest line, from the old map or the new rows"; B_merge_h=1
+    ok "(h) readset_merge_map with the fixture root: the declared alpha has no row and no digest line, from the old map or the new rows"
   else bad "(h) the 4-argument merge left alpha or lost beta: $(tr '\n' ' ' < "$DM/out.4")"
   fi
   MERGE_ARMS=$((MERGE_ARMS+1))
@@ -3145,29 +2379,6 @@ else
   if [ "$_al" = beta ]; then ok "(h) readset_all_list skips the declared alpha (control: beta, which has a run.sh and no declaration, is listed)"
   else bad "(h) readset_all_list on a root with one declared and one undeclared fixture gave [$_al], wanted [beta]"
   fi
-  # MUTANTS on the filter.
-  _o="$(grep -m1 -F 'if [ -n "$decl" ]; then' "$M")"
-  mut_line "$M" "$DM/merge.mutA.sh" "$_o" '    if false; then'
-  MERGE_ARMS=$((MERGE_ARMS+1))
-  if [ -z "$_o" ] || cmp -s "$M" "$DM/merge.mutA.sh"; then bad "MERGE MUTANT old-map-only: the edit matched nothing"
-  else
-    dm_merge "$DM/merge.mutA.sh" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.mutA"
-    if grep -q 'alpha	src/NEW' "$DM/out.mutA" && ! cmp -s "$DM/out.mutA" "$DM/beta.want"; then
-      mutant_killed "$B_merge_h" old-map-only "MERGE MUTANT old-map-only moves (h): a filter that reads only the old map lets the declared fixture's NEW rows through"
-    else bad "MERGE MUTANT old-map-only: alpha's new row did not survive ($(tr '\n' ' ' < "$DM/out.mutA"))"
-    fi
-  fi
-  _o="$(grep -m1 -F '$1 == "#" && $2 == "digest" && NF == 4 { if (index(traced, " " $3 " ") == 0 && (decl' "$M")"
-  mut_line "$M" "$DM/merge.mutB.sh" "$_o" '      $1 == "#" && $2 == "digest" && NF == 4 { if (index(traced, " " $3 " ") == 0) print; next }'
-  MERGE_ARMS=$((MERGE_ARMS+1))
-  if [ -z "$_o" ] || cmp -s "$M" "$DM/merge.mutB.sh"; then bad "MERGE MUTANT keeps-digest: the edit matched nothing"
-  else
-    dm_merge "$DM/merge.mutB.sh" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.mutB"
-    if grep -q '# digest alpha aaaa' "$DM/out.mutB" && ! grep -q 'alpha	src' "$DM/out.mutB"; then
-      mutant_killed "$B_merge_h" keeps-digest "MERGE MUTANT keeps-digest moves (h): the rows go but the declared fixture's digest line stays"
-    else bad "MERGE MUTANT keeps-digest: expected rows gone and the digest kept, got $(tr '\n' ' ' < "$DM/out.mutB")"
-    fi
-  fi
 
 
   # ------------------------- the --all subject list and the untraced-loss guard ----
@@ -3176,7 +2387,7 @@ else
   # untraced: one OMITTED fixture made the merge check die "merge dropped" and discard every good
   # trace, and the plan-shape controls never ran on any `--all` derivation. Three layers normalise
   # the list now -- the builder, the loss guard's own argument, and the merge -- and each is driven
-  # here from its own sentinels with its own mutant, because a layered fix with one layer reverted
+  # here from its own sentinels, because a layered fix with one layer reverted
   # passes on the layers left in place.
   #
   # The SEED is the consumer's fixture-root shape, `tests/fixtures`, and it carries a directory with
@@ -3196,8 +2407,7 @@ else
     NLC='
 '
     allist_with() { ( . "$1"; readset_all_list "$ALR" ) 2>/dev/null; }
-    # al_newline / al_middle / al_exact: one verdict word each, so a mutant is scored by the SAME
-    # predicate as the arm it must move.
+    # al_newline / al_middle / al_exact: one verdict word each.
     al_newline() { case "$1" in *"$NLC"*) echo newline ;; '') echo empty ;; *) echo clean ;; esac; }
     al_middle()  { case " $1 " in *" mid "*) echo member ;; *) echo absent ;; esac; }
     al_exact()   { if [ "$1" = "aa mid zz" ]; then echo exact; else echo wrong; fi; }
@@ -3205,19 +2415,19 @@ else
     AV="$(cat "$WORK/al.raw")"
     MERGE_ARMS=$((MERGE_ARMS+1))
     if [ "$(al_newline "$AV")" = clean ] && [ "$(wc -c < "$WORK/al.raw" | tr -d ' ')" -eq "${#AV}" ]; then
-      ok "readset_all_list on a tests/fixtures root: the command-substitution value carries no newline, and the raw output has no trailing one either"; B_allist_no_newline=1
+      ok "readset_all_list on a tests/fixtures root: the command-substitution value carries no newline, and the raw output has no trailing one either"
     else
       bad "readset_all_list output is not one newline-free line ('$AV', $(wc -c < "$WORK/al.raw" | tr -d ' ') raw bytes for ${#AV} chars) — every case \" \$LIST \" membership test in the deriver misses"
     fi
     MERGE_ARMS=$((MERGE_ARMS+1))
     if [ "$(al_middle "$AV")" = member ]; then
-      ok "  and its MIDDLE member is space-delimited on both sides — case \" \$LIST \" in *\" mid \"*) matches"; B_allist_middle=1
+      ok "  and its MIDDLE member is space-delimited on both sides — case \" \$LIST \" in *\" mid \"*) matches"
     else
       bad "  the middle member 'mid' is not space-delimited in '$AV' — a list joined by another separator passes the first and last names only"
     fi
     MERGE_ARMS=$((MERGE_ARMS+1))
     if [ "$(al_exact "$AV")" = exact ]; then
-      ok "  and it is EXACTLY 'aa mid zz': the directory with no run.sh is excluded"; B_allist_exact=1
+      ok "  and it is EXACTLY 'aa mid zz': the directory with no run.sh is excluded"
     else
       bad "  expected exactly 'aa mid zz' (norun/ has no run.sh), got '$AV'"
     fi
@@ -3244,14 +2454,14 @@ else
     MERGE_ARMS=$((MERGE_ARMS+1))
     U2="$(ul_with "$UL" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")"
     if [ "$U2" = "0|keep" ]; then
-      ok "m2: an UNTOUCHED fixture missing from the merged map is printed ('keep') — the guard still fires"; B_untraced_m2=1
+      ok "m2: an UNTOUCHED fixture missing from the merged map is printed ('keep') — the guard still fires"
     else
       bad "m2: expected rc 0 printing exactly 'keep', got '$U2' — a merge losing an untraced fixture would be written"
     fi
     MERGE_ARMS=$((MERGE_ARMS+1))
     U3="$(ul_with "$UL" "$WORK/ul.old3" "$WORK/ul.m3" "fx-b")"
     if [ "$U3" = "0|fx" ]; then
-      ok "m3: traced 'fx-b' does not count 'fx' as traced — membership is by exact name, so the lost 'fx' is printed"; B_untraced_m3=1
+      ok "m3: traced 'fx-b' does not count 'fx' as traced — membership is by exact name, so the lost 'fx' is printed"
     else
       bad "m3: expected 'fx' printed with only 'fx-b' traced, got '$U3' — a substring membership test reports 'fx' kept while it is gone"
     fi
@@ -3270,92 +2480,6 @@ else
       bad "  the space-separated list answers '$U5' where the newline-separated one answers '$U2'"
     fi
 
-    # D4 -- ONE MUTANT PER NORMALISATION LAYER, plus the emptied guard (W1) and the two wrong shapes
-    # D2 names. Each is scored by the predicate of the arm it must move; a mutant whose value does
-    # not carry the property it was built to inject is reported as such, not as a kill.
-    MERGE_ARMS=$((MERGE_ARMS+1))
-    _o="$(grep -m1 '^    out="\${out}\${out:+ }' "$AL")"
-    mut_line "$AL" "$WORK/al.newline.sh" "$_o" '    out="${out}${out:+'"$NLC"'}${d##*/}"'
-    if cmp -s "$AL" "$WORK/al.newline.sh"; then bad "ALLLIST MUTANT newline-join did not apply"
-    else
-      _v="$(allist_with "$WORK/al.newline.sh")"
-      case "$(al_newline "$_v")" in
-        newline) mutant_killed "$B_allist_no_newline" newline-join "ALLLIST MUTANT newline-join (the base builder's shape) moves the no-newline arm: its value carries a newline" ;;
-        *) bad "ALLLIST MUTANT newline-join: the value '$_v' carries no newline, so the no-newline arm is not what it moves" ;;
-      esac
-    fi
-    MERGE_ARMS=$((MERGE_ARMS+1))
-    mut_line "$AL" "$WORK/al.tab.sh" "$_o" '    out="${out}${out:+	}${d##*/}"'
-    if cmp -s "$AL" "$WORK/al.tab.sh"; then bad "ALLLIST MUTANT tab-join did not apply"
-    else
-      _v="$(allist_with "$WORK/al.tab.sh")"
-      if [ "$(al_newline "$_v")" = clean ] && [ "$(al_middle "$_v")" = absent ]; then
-        mutant_killed "$B_allist_middle" tab-join "ALLLIST MUTANT tab-join moves the middle-member arm only: no newline, but ' mid ' no longer matches"
-      else
-        bad "ALLLIST MUTANT tab-join: expected a newline-free value whose middle member does not match, got '$_v'"
-      fi
-    fi
-    MERGE_ARMS=$((MERGE_ARMS+1))
-    _o="$(grep -m1 '^    \[ -f "\${d}run.sh" \] || continue$' "$AL")"
-    mut_line "$AL" "$WORK/al.norun.sh" "$_o" '    :'
-    if cmp -s "$AL" "$WORK/al.norun.sh"; then bad "ALLLIST MUTANT no-run.sh-check did not apply"
-    else
-      _v="$(allist_with "$WORK/al.norun.sh")"
-      case "$(al_exact "$_v"):$(al_middle "$_v")" in
-        wrong:member) mutant_killed "$B_allist_exact" no-run.sh-check "ALLLIST MUTANT no-run.sh-check moves the exact-list arm: '$_v' names the directory with no run.sh" ;;
-        *) bad "ALLLIST MUTANT no-run.sh-check: expected a list naming norun with mid still a member, got '$_v'" ;;
-      esac
-    fi
-    MERGE_ARMS=$((MERGE_ARMS+1))
-    _o="$(grep -m1 '^  traced="\$(printf .%s. "\$traced" | tr .\\n\\t. .  .)"$' "$UL")"
-    mut_line "$UL" "$WORK/ul.nonorm.sh" "$_o" '  :'
-    if cmp -s "$UL" "$WORK/ul.nonorm.sh"; then bad "UNTRACED MUTANT no-arg-normalisation did not apply"
-    else
-      _v="$(ul_with "$WORK/ul.nonorm.sh" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")"
-      _s="$(ul_with "$WORK/ul.nonorm.sh" "$WORK/ul.old" "$WORK/ul.m2" "traced-a fx-om traced-c")"
-      if [ "$_v" != "0|keep" ] && [ "$_s" = "0|keep" ]; then
-        mutant_killed "$B_untraced_m2" no-arg-normalisation "UNTRACED MUTANT no-arg-normalisation moves m2 for the NEWLINE list only ('$_v'), the space list still answering '$_s' — the guard's own normalisation is load-bearing"
-      else
-        bad "UNTRACED MUTANT no-arg-normalisation: newline list '$_v', space list '$_s' — expected the newline list alone to lose 'keep'"
-      fi
-    fi
-    MERGE_ARMS=$((MERGE_ARMS+1))
-    _o="$(grep -m1 '^      if (index(traced, " " \$1 " ") == 0 && (\$1 in have) == 0 && (decl == "" || index(decl, " " \$1 " ") == 0)) print \$1$' "$UL")"
-    mut_line "$UL" "$WORK/ul.substr.sh" "$_o" '      if (index(traced, $1) == 0 && ($1 in have) == 0 && (decl == "" || index(decl, " " $1 " ") == 0)) print $1'
-    if cmp -s "$UL" "$WORK/ul.substr.sh"; then bad "UNTRACED MUTANT substring-membership did not apply"
-    else
-      _v="$(ul_with "$WORK/ul.substr.sh" "$WORK/ul.old3" "$WORK/ul.m3" "fx-b")"
-      if [ "$_v" != "0|fx" ] && [ "$(ul_with "$WORK/ul.substr.sh" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")" = "0|keep" ]; then
-        mutant_killed "$B_untraced_m3" substring-membership "UNTRACED MUTANT substring-membership moves m3 only ('$_v'): 'fx' inside 'fx-b' reads as traced, while m2 still prints 'keep'"
-      else
-        bad "UNTRACED MUTANT substring-membership: m3 answered '$_v' — expected it to lose 'fx' with m2 unmoved"
-      fi
-    fi
-    MERGE_ARMS=$((MERGE_ARMS+1))
-    mut_line "$UL" "$WORK/ul.empty.sh" "$_o" '      next'
-    if cmp -s "$UL" "$WORK/ul.empty.sh"; then bad "UNTRACED MUTANT empty-guard (W1) did not apply"
-    else
-      _v="$(ul_with "$WORK/ul.empty.sh" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")"
-      if [ "$_v" = "0|" ]; then
-        mutant_killed "$B_untraced_m2" empty-guard "UNTRACED MUTANT empty-guard (W1) moves m2: a guard that prints nothing writes a merge that lost 'keep'"
-      else
-        bad "UNTRACED MUTANT empty-guard (W1): expected rc 0 and nothing printed, got '$_v'"
-      fi
-    fi
-    # The merge layer: driven with the NEWLINE list, the shape G3 drives -- merge_mutant above passes
-    # a single token, which no normalisation can move.
-    MERGE_ARMS=$((MERGE_ARMS+1))
-    _o="$(grep -m1 '^  traced="\$(printf .%s. "\$traced" | tr .\\n. . .)"$' "$M")"
-    mut_line "$M" "$WORK/merge.nonorm.sh" "$_o" '  :'
-    if cmp -s "$M" "$WORK/merge.nonorm.sh"; then bad "MERGE MUTANT no-normalisation did not apply"
-    else
-      _v="$( . "$WORK/merge.nonorm.sh"; readset_merge_map "$WORK/old.map" "$WORK/new.map" "$(printf 'alpha\ndelta')" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ' )"
-      case "$_v" in
-        *"beta	src/b"*) bad "MERGE MUTANT no-normalisation: the newline-list merge still kept beta ('$_v'), so the newline arm does not depend on the merge's normalisation" ;;
-        *"alpha	src/NEW"*) mutant_killed "$B_merge_newline_list" no-normalisation "MERGE MUTANT no-normalisation moves the newline-list merge arm: the untraced fixture's entries are lost" ;;
-        *) bad "MERGE MUTANT no-normalisation: the merge emitted neither beta nor the traced entry ('$_v'), so the mutant scored nothing" ;;
-      esac
-    fi
   fi
 
   # ------------------------------------------- the deriver's discrimination control ----
@@ -3420,11 +2544,11 @@ else
     || broken "the all-cover seed is not all-cover; arm (b) would be asserting a refusal of an input that ought to pass"
   [ "$(ctl_fixtures_of "$WORK/ctl.single.map")" -eq 1 ] \
     || broken "the single-fixture seed names more than one fixture; arm (c) tests the wrong shape"
-  # THE PROPERTY ARM (d) AND MUTANT m1 TURN ON. If the two maps' unions were equal, driving the
+  # THE PROPERTY ARM (d) TURNS ON. If the two maps' unions were equal, driving the
   # control on the merged map and on the traced map would return the same verdict and neither
   # arm could tell base from tip.
   [ "$(ctl_universe_of "$WORK/ctl.old.map")" -gt "$(ctl_universe_of "$WORK/ctl.new.map")" ] \
-    || broken "the --list seeds' unions do not differ ($(ctl_universe_of "$WORK/ctl.old.map") vs $(ctl_universe_of "$WORK/ctl.new.map")); arm (d) and mutant m1 would agree on every implementation"
+    || broken "the --list seeds' unions do not differ ($(ctl_universe_of "$WORK/ctl.old.map") vs $(ctl_universe_of "$WORK/ctl.new.map")); arm (d) would agree on every implementation"
   [ "$(ctl_proper_by_hand "$WORK/ctl.new.map")" -eq 0 ] \
     || broken "the traced-alone seed already discriminates, so the base defect it stands in for cannot be expressed"
 
@@ -3459,8 +2583,8 @@ else
 
   # (d) THE MOTIVATING CASE, COMPOSED FROM THE TWO SHIPPED BLOCKS. `--list "<one fixture>"`
   # traces one fixture, merges its entries over the committed map, and the control judges the
-  # map the run will WRITE. Judged on the traced entries alone -- the base behaviour, which
-  # mutant m1 below reproduces -- this returns 1 and refuses a refresh that is entirely correct.
+  # map the run will WRITE. Judged on the traced entries alone -- the base behaviour -- this
+  # returns 1 and refuses a refresh that is entirely correct.
   CONTROL_ARMS=$((CONTROL_ARMS+1))
   readset_merge_map "$WORK/ctl.old.map" "$WORK/ctl.new.map" "alpha" | LC_ALL=C sort -u > "$WORK/ctl.merged.map"
   if [ "$(ctl_fixtures_of "$WORK/ctl.merged.map")" -lt 2 ]; then
@@ -3468,61 +2592,12 @@ else
   else
     CD="$(readset_discrimination_control "$WORK/ctl.merged.map" 2>&1)"; CD_RC=$?
     case "$CD_RC:$CD" in
-      0:*"PASS  CONTROL"*) ok "a --list refresh of ONE fixture is judged on the MERGED map and passes — the mode the deriver advertises is reachable"; B_control_d=1 ;;
+      0:*"PASS  CONTROL"*) ok "a --list refresh of ONE fixture is judged on the MERGED map and passes — the mode the deriver advertises is reachable" ;;
       *) bad "a --list refresh of one fixture was refused on its merged map (rc $CD_RC): $(printf '%s' "$CD" | tr -d '\n')" ;;
     esac
   fi
 
-  # MUTANT m1 -- THE BASE DEFECT, REPRODUCED AS AN INPUT RATHER THAN AN EDIT. The base built the
-  # universe from the traced entries; driving the shipped function on the traced map alone is
-  # exactly that computation. It must refuse, or arm (d) is passing for a reason that has
-  # nothing to do with the merge and would have been green before the fix.
-  CONTROL_ARMS=$((CONTROL_ARMS+1))
-  CM1="$(readset_discrimination_control "$WORK/ctl.new.map" 2>&1)"; CM1_RC=$?
-  if [ "$CM1_RC" -eq 0 ]; then
-    bad "MUTANT m1: the traced map ALONE was accepted, so arm (d) cannot tell the merged judgement from the base one and would have been green at base"
-  else
-    mutant_killed "$B_control_d" m1 "MUTANT m1 moves arm (d): judged on the TRACED entries alone the same refresh is refused — which is the base behaviour, and the arm discriminates base from tip"
-  fi
-
-  # MUTANT m2 -- AN ALWAYS-ACCEPTING CONTROL. Keyed on the verdict the function RETURNS, not on
-  # a spelling: a control that cannot refuse is the failure mode every arm above would otherwise
-  # score as a pass.
-  CONTROL_ARMS=$((CONTROL_ARMS+1))
-  CM2="$WORK/control.alwayspass.sh"
-  sed 's|exit 1|exit 0|' "$CTL" > "$CM2"
-  if cmp -s "$CTL" "$CM2"; then
-    bad "CONTROL MUTANT alwayspass: the edit matched nothing, so this mutant tests the unmutated function"
-  else
-    CM2_OUT="$( . "$CM2"; readset_discrimination_control "$WORK/ctl.cover.map" 2>&1 )"; CM2_RC=$?
-    if [ "$CM2_RC" -eq 0 ]; then
-      ok "CONTROL MUTANT alwayspass moves arm (b): a control that cannot refuse accepts the map that covers everything"
-    else
-      bad "CONTROL MUTANT alwayspass: the all-cover map was still refused (rc $CM2_RC) — arm (b) does not depend on the verdict the function returns"
-    fi
-  fi
-
-  # MUTANT m3 -- THE mC SHAPE: each fixture's own path count taken from a SMALLER map while the
-  # universe comes from the merged one. That is not a subset test at all. The smaller count is
-  # below the larger union for every input, so the mutant accepts the very map arm (b) refuses,
-  # and the fix would have shipped a control that judges nothing while reading as repaired.
-  CONTROL_ARMS=$((CONTROL_ARMS+1))
-  CM3="$WORK/control.splitsource.sh"
-  sed 's|if ((($1 SUBSEP $2) in seen) == 0)|if (FNR != NR) if ((($1 SUBSEP $2) in seen) == 0)|; s|if (($2 in path) == 0)|if (FNR == NR) if (($2 in path) == 0)|; s|"\$1"$|"$1" "${2:-$1}"|' "$CTL" > "$CM3"
-  if cmp -s "$CTL" "$CM3"; then
-    bad "CONTROL MUTANT splitsource: the edit matched nothing, so this mutant tests the unmutated function"
-  else
-    printf 'alpha\tsrc/a\n' > "$WORK/ctl.traced.map"
-    CM3_OUT="$( . "$CM3"; readset_discrimination_control "$WORK/ctl.cover.map" "$WORK/ctl.traced.map" 2>&1 )"; CM3_RC=$?
-    if [ "$CM3_RC" -eq 0 ]; then
-      ok "CONTROL MUTANT splitsource moves arm (b): counting each fixture's own paths from a smaller map than the universe ACQUITS the map that covers everything"
-    else
-      bad "CONTROL MUTANT splitsource: the all-cover map was still refused (rc $CM3_RC) — arm (b) does not depend on both counts coming from one file"
-    fi
-  fi
-
-  # AND THE SHIPPED FUNCTION'S OWN ANSWER IS DERIVED FROM ONE FILE. The mutant above proves the
-  # split-source shape is reachable; this proves the shipped one is not in it, by comparing the
+  # AND THE SHIPPED FUNCTION'S OWN ANSWER IS DERIVED FROM ONE FILE, shown by comparing the
   # number the function PRINTS against the same number recomputed in shell over the same map --
   # two independently derived values rather than one value read twice.
   CONTROL_ARMS=$((CONTROL_ARMS+1))
@@ -3534,20 +2609,19 @@ else
     bad "  the reported proper-subset count ('$CP_FN') does not match the hand-derived one ($CP_HAND) over the same map — the two sides are not being counted from the same file"
   fi
 
-  # UNMUTATED CONTROL FOR THE MUTANTS ABOVE, re-sourced from the extracted span after the
-  # mutants have been sourced in subshells. Presence-shaped on purpose: a function replaced by
+  # CONTROL, re-sourced from the extracted span. Presence-shaped on purpose: a function replaced by
   # nothing returns 0 and prints nothing, which is what a `bad` here catches and an rc-only
   # assertion would not.
   CONTROL_ARMS=$((CONTROL_ARMS+1))
   CTL_OUT="$( . "$CTL"; readset_discrimination_control "$WORK/ctl.disc.map" 2>&1 )"; CTL_RC=$?
   case "$CTL_RC:$CTL_OUT" in
     0:*"PROPER subset of the 4-path universe"*)
-      ok "CONTROL: the unmutated span still reports the baseline verdict over the 4-path universe, so the kills above are attributable" ;;
+      ok "CONTROL: the span still reports the baseline verdict over the 4-path universe" ;;
     *)
-      bad "CONTROL: the unmutated span did not reproduce the baseline (rc $CTL_RC): $(printf '%s' "$CTL_OUT" | tr -d '\n') — every control mutant above is unattributable" ;;
+      bad "CONTROL: the span did not reproduce the baseline (rc $CTL_RC): $(printf '%s' "$CTL_OUT" | tr -d '\n')" ;;
   esac
 
-  # (e) THE CALL SITE, WHICH EVERY ARM ABOVE IS BLIND TO. Arms (a)-(d) and the three mutants
+  # (e) THE CALL SITE, WHICH EVERY ARM ABOVE IS BLIND TO. Arms (a)-(d)
   # all drive the EXTRACTED function; none of them reads the line that CALLS it. A non-fix that
   # leaves the function byte-identical and passes the TRACED map at the call site --
   # `readset_discrimination_control "$WORK/map"` instead of `"$MERGED"` -- reproduces the
@@ -3717,28 +2791,9 @@ EOF
   CSN="$(rs_callscan "$DERIVER")"
   CSV="$(rs_callverdict "$CSN")"
   case "$CSV" in
-    "AL:bound UL:bound") ok "(f) the deriver's only readset_all_list call (line $(cs_get "$CSN" ALLINE)) builds LIST under --all from \$TREE/\$FIXTURE_ROOT, and its only readset_untraced_lost call (line $(cs_get "$CSN" ULLINE)) compares the merged map after the merge (line $(cs_get "$CSN" RLINE)), refuses on a failed compare (line $(cs_get "$CSN" CLINE)) and dies 'merge dropped' (line $(cs_get "$CSN" DLINE)) before the write (line $(cs_get "$CSN" WLINE))"; B_callsite_f=1 ;;
+    "AL:bound UL:bound") ok "(f) the deriver's only readset_all_list call (line $(cs_get "$CSN" ALLINE)) builds LIST under --all from \$TREE/\$FIXTURE_ROOT, and its only readset_untraced_lost call (line $(cs_get "$CSN" ULLINE)) compares the merged map after the merge (line $(cs_get "$CSN" RLINE)), refuses on a failed compare (line $(cs_get "$CSN" CLINE)) and dies 'merge dropped' (line $(cs_get "$CSN" DLINE)) before the write (line $(cs_get "$CSN" WLINE))" ;;
     *) bad "(f) the call sites of the two new spans are not bound: $CSV — scan: $(printf '%s' "$CSN" | tr '\n\t' ' =')" ;;
   esac
-  # Three deriver-copy mutants, each scored by the scan: --all back on the base inline loop (W2/W4
-  # shape: the builder exists and nothing calls it), the loss check's call deleted, and its die
-  # demoted to a warning (W1).
-  _o="$(grep -m1 '^  --all)  LIST="\$(readset_all_list ' "$DERIVER")"
-  mut_line "$DERIVER" "$WORK/cs.cs-inline.sh" "$_o" '  --all)  LIST="$(cd "$TREE" && for d in "$FIXTURE_ROOT"/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;'
-  _o2="$(grep -m1 '^  readset_untraced_lost "\$MAP" "\$MERGED" "\$LIST" "\$TREE/\$FIXTURE_ROOT" > ' "$DERIVER")"
-  mut_line "$DERIVER" "$WORK/cs.cs-nocall.sh" "$_o2" '  : > "$WORK/untraced.lost" \'
-  _o3="$(grep -m1 "^    die \"merge dropped '" "$DERIVER")"
-  mut_line "$DERIVER" "$WORK/cs.cs-warn.sh" "$_o3" "    echo \"WARNING: merge dropped '\$f'\" >&2"
-  for _cm in cs-inline:AL:calls=0 cs-nocall:UL:calls=0 cs-warn:UL:nodie; do
-    _n="${_cm%%:*}"; _want="${_cm#*:}"
-    CONTROL_ARMS=$((CONTROL_ARMS+1))
-    if cmp -s "$DERIVER" "$WORK/cs.$_n.sh"; then bad "CALL-SITE MUTANT $_n did not apply"; continue; fi
-    _cv="$(rs_callverdict "$(rs_callscan "$WORK/cs.$_n.sh")")"
-    case " $_cv " in
-      *" $_want "*) mutant_killed "$B_callsite_f" "$_n" "CALL-SITE MUTANT $_n moves (f): the scan reads '$_cv'" ;;
-      *) bad "CALL-SITE MUTANT $_n: expected '$_want' in the scan verdict, got '$_cv'" ;;
-    esac
-  done
 
   fi
   if sg tracer; then
@@ -3749,13 +2804,8 @@ EOF
   # repo carrying one member per property the copy must get right, and the population is
   # compared EXACTLY -- a count or a presence check would accept a copy that carries extra files.
   #
-  # THREE PLAUSIBLE WRONG COPIES ARE KILLED, EACH BY A NAMED MEMBER, which is what shows the seed
-  # can express every way the copy goes wrong:
-  #   `cp -a` then remove the ignored files -- the populated SUBMODULE's files survive
-  #   `git archive HEAD`                      -- the untracked-not-ignored file is missing
-  #   `rsync --exclude-from=.gitignore`       -- the `.claude/rules/` NEGATION is not honoured
-  # A mutant that survives means the seed lacks the input that separates it; the repair is a
-  # member, never a dropped mutant.
+  # THE SEED CARRIES ONE MEMBER PER WAY THE COPY CAN GO WRONG: the populated SUBMODULE's files, the
+  # untracked-not-ignored file, and the `.claude/rules/` NEGATION.
   CP="$WORK/copy.sh"
   sed -n '/# READSET_COPY_BEGIN/,/# READSET_COPY_END/p' "$DERIVER" > "$CP"
   CSEED="$WORK/copyseed"
@@ -3778,7 +2828,7 @@ EOF
         && echo u > untracked.txt && echo i > ignored.log && rm deleted.txt \
         && touch -m -t 200501010000 tracked.txt ) >/dev/null 2>&1 || broken "could not seed the copy's source repo"
     # THE SEED MUST CARRY EVERY PROPERTY BEFORE ANY VERDICT IS READ: a submodule that was not
-    # populated cannot kill `cp -a`+rm, and an unignored settings file cannot test the negation.
+    # populated cannot test the gitlink handling, and an unignored settings file cannot test the negation.
     [ -f "$CSEED/src/lib/sub/in.txt" ] && [ -f "$CSEED/src/.claude/settings.local.json" ] \
       && [ -f "$CSEED/src/untracked.txt" ] && [ -f "$CSEED/src/ignored.log" ] \
       && ( cd "$CSEED/src" && git ls-files -s | grep -q '^160000' ) \
@@ -3810,7 +2860,6 @@ EOF
     CV="$(copy_with "$CP" shipped)"
     if [ -z "$CV" ]; then
       ok "the shipped copy lands EXACTLY the tracked and untracked-not-ignored files — exec bit, mtime, a space in a name, a symlink and a dangling symlink kept; the ignored file, the ignored .claude/settings.local.json and the submodule's contents absent; the negated .claude/rules/x.md present; .git/ whole"
-      B_copy=1
     else
       bad "the shipped copy's population is wrong: $CV"
     fi
@@ -3850,42 +2899,6 @@ EOF
       bad "  the linked-worktree copy is not a standalone repository answering like its source (dst '$LW_DST', src HEAD '$LW_SRC_HEAD'): $(tr '\n' ' ' < "$CSEED/lw.out")"
     fi
 
-    # The three wrong copies, each written as a whole replacement of the function.
-    cat > "$CSEED/m.cprm.sh" <<'MUT'
-readset_copy_tree() {
-  cp -a "$1/." "$2/" || return 1
-  ( cd "$2" && git ls-files -z --others --ignored --exclude-standard | xargs -0 rm -f )
-  echo "copied"
-}
-MUT
-    cat > "$CSEED/m.archive.sh" <<'MUT'
-readset_copy_tree() {
-  ( cd "$1" && git archive HEAD ) | ( cd "$2" && tar -xf - ) || return 1
-  cp -a "$1/.git" "$2/.git" || return 1
-  echo "copied"
-}
-MUT
-    cat > "$CSEED/m.rsync.sh" <<'MUT'
-readset_copy_tree() {
-  rsync -a --exclude-from="$1/.gitignore" "$1/" "$2/" || return 1
-  echo "copied"
-}
-MUT
-    for _m in "cprm:./lib/sub/in.txt:EXTRA" "archive:./untracked.txt:MISSING" "rsync:./.claude/rules/x.md:MISSING"; do
-      _n="${_m%%:*}"; _rest="${_m#*:}"; _member="${_rest%:*}"; _dir="${_rest##*:}"
-      TRACE_ARMS=$((TRACE_ARMS+1))
-      if [ "$_n" = rsync ] && ! command -v rsync >/dev/null 2>&1; then
-        bad "COPY MUTANT rsync: no rsync on PATH, so this mutant cannot be built and its kill is unproven"; continue
-      fi
-      _v="$(copy_with "$CSEED/m.$_n.sh" "$_n")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx "$_n" "${_v:-none}"
-      # TWIN: the exec bit, a property every one of the three wrong copies still carries over.
-      _tw=0; case " $_v " in *exec-bit-lost*) ;; *) _tw=1 ;; esac
-      case " $_v " in
-        *"$_dir:$_member"*) if f2c_twin "$_n" exec-bit "$_tw"; then mutant_killed "${B_copy:-0}" "$_n" "COPY MUTANT $_n is killed by its named member ($_dir $_member)"; fi ;;
-        *) bad "COPY MUTANT $_n SURVIVED $_dir $_member — the seed lacks the input that separates it (defects seen: ${_v:-none})" ;;
-      esac
-    done
   fi
 
   # ---------------------------------------------- submodule rows and the ignore filter ----
@@ -3910,23 +2923,8 @@ MUT
     DO="$( TREE="$CSEED/src"; . "$DR"; drop_ignored < "$CSEED/batch" )"
     if [ "$(printf '%s\n' "$DO" | LC_ALL=C sort)" = "$(cat "$CSEED/batch.expected")" ]; then
       ok "a batch carrying a SUBMODULE row still filters (raw check-ignore exits $CI_RC on it): both ignored rows dropped, tracked, untracked and negated rows kept, the inner row collapsed to the gitlink"
-      B_drop=1
     else
       bad "the submodule batch did not filter to exactly the non-ignored rows (raw check-ignore rc $CI_RC): got $(printf '%s' "$DO" | tr '\n' ' ')"
-    fi
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    sed 's|substr($1, 1, 7) == "160000 "|0|' "$DR" > "$CSEED/drop.mut.sh"
-    if cmp -s "$DR" "$CSEED/drop.mut.sh"; then
-      bad "DROP MUTANT nogitlink: the edit matched nothing"
-    else
-      DM="$( TREE="$CSEED/src"; . "$CSEED/drop.mut.sh"; drop_ignored < "$CSEED/batch" )"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx nogitlink "$(printf '%s' "$DM" | tr '\n' ' ')"
-      # TWIN: the tracked row, which the fail-open branch keeps as the shipped filter does.
-      _tw=0; grep -qx tracked.txt <<< "$DM" && _tw=1
-      case "$DM" in
-        *ignored.log*) if f2c_twin nogitlink tracked.txt "$_tw"; then mutant_killed "${B_drop:-0}" nogitlink "DROP MUTANT nogitlink: without the gitlink collapse the batch is refused and the ignored rows survive — the arm above depends on it"; fi ;;
-        *) bad "DROP MUTANT nogitlink: the ignored row was still dropped, so the arm above does not depend on the gitlink collapse: $(printf '%s' "$DM" | tr '\n' ' ')" ;;
-      esac
     fi
     # A TRACED NAME GIT MUST QUOTE NEVER BECOMES A ROW. check-ignore hands a tab-bearing name back
     # C-quoted, and the runner's manifest empties `.now` on any `"`-led path -- one such map row ran
@@ -3944,21 +2942,6 @@ MUT
       bad "the quote-name batch did not filter to exactly the plain and the unquoted non-ASCII row: $(printf '%s' "$DQ" | tr '\n' ' ')"
     else
       ok "a tab-bearing traced name is dropped and a non-ASCII one survives unquoted: no row the runner's manifest refuses can reach a map"
-      B_dropq=1
-    fi
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    grep -vxF '    /[\t"\\]/ { next }' "$DR" | sed 's|git -c core.quotePath=false check-ignore|git check-ignore|' > "$CSEED/drop.qmut.sh"
-    if [ "$(grep -cxF '    /[\t"\\]/ { next }' "$DR")" != 1 ] || [ "$(( $(wc -l < "$DR") - $(wc -l < "$CSEED/drop.qmut.sh") ))" != 1 ] \
-       || ! grep -q 'core.quotePath=false check-ignore' "$DR" || grep -q 'core.quotePath=false check-ignore' "$CSEED/drop.qmut.sh"; then
-      bad "DROP MUTANT quotename: the edit did not remove both layers (name filter and quotePath)"
-    else
-      DQM="$( TREE="$CSEED/src"; . "$CSEED/drop.qmut.sh"; drop_ignored < "$CSEED/qbatch" )"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx quotename "$(printf '%s' "$DQM" | tr '\n' ' ')"
-      _tw=0; grep -qx tracked.txt <<< "$DQM" && _tw=1
-      case "$DQM" in
-        *'"RESOLVED\t'*) if f2c_twin quotename tracked.txt "$_tw"; then mutant_killed "${B_dropq:-0}" quotename "DROP MUTANT quotename: without the filter the C-quoted row is emitted — the arm above depends on it"; fi ;;
-        *) bad "DROP MUTANT quotename: no quoted row without the filter, so the arm above does not depend on it: $(printf '%s' "$DQM" | tr '\n' ' ')" ;;
-      esac
     fi
   fi
 
@@ -3995,7 +2978,6 @@ MUT
     BOTH_ARMS=$((BOTH_ARMS+1))
     if [ "$BC" = "1 1|src/miss.sh " ]; then
       ok "a sandbox miss is fs_usage MINUS sandbox, outside .git/** and the ignored set: exactly src/miss.sh (1 sandbox-missed, 1 fs_usage-missed)"
-      B_bothcmp=1
     else
       bad "the comparison did not isolate exactly src/miss.sh as the one sandbox miss: got '$BC'"
     fi
@@ -4022,7 +3004,7 @@ MUT
     V="$(both_verdict_with "$BOTH_SPAN" "fa fb fc" "$BW/res.part")"
     BOTH_ARMS=$((BOTH_ARMS+1))
     case "$V" in
-      "2|REFUSED: compared 1 of 3"*"fb (sandbox set empty)"*"fc (no result row"*) ok "compared < listed REFUSES at exit 2, naming the uncompared fixture with its reason AND the one the loop never reached"; B_bothpart=1 ;;
+      "2|REFUSED: compared 1 of 3"*"fb (sandbox set empty)"*"fc (no result row"*) ok "compared < listed REFUSES at exit 2, naming the uncompared fixture with its reason AND the one the loop never reached" ;;
       *) bad "a partial comparison was not refused at exit 2 naming fb and fc: '$V'" ;;
     esac
     V="$(both_verdict_with "$BOTH_SPAN" "" "$BW/res.clean")"
@@ -4031,51 +3013,6 @@ MUT
       "2|REFUSED: EXAMINED NOTHING -- no fixture was listed"*) ok "an empty fixture list REFUSES at exit 2 rather than reading clean over nothing" ;;
       *) bad "an empty list was not refused at exit 2: '$V'" ;;
     esac
-    # MUTANTS on the span, each a cmp -s guarded copy. Each names the one arm it must move.
-    both_mut() { # $1 name  $2 sed expr; leaves $BW/m.$1.sh or reports DID NOT APPLY
-      sed "$2" "$BOTH_SPAN" > "$BW/m.$1.sh" 2>/dev/null || { bad "BOTH MUTANT $1: sed DID NOT APPLY"; return 1; }
-      cmp -s "$BOTH_SPAN" "$BW/m.$1.sh" && { bad "BOTH MUTANT $1: the edit matched nothing"; return 1; }
-      return 0
-    }
-    # TWINS. gitprefix and noignore ADD rows to the sandbox-miss set, so the real miss src/miss.sh stays in
-    # it; direction swaps WHICH set is counted, so the 1 1 count pair it prints stays at want; partial removes
-    # one guard, so the clean comparison still reads SANDBOX-MISSES-NOTHING at exit 0.
-    BOTH_ARMS=$((BOTH_ARMS+1))
-    if both_mut gitprefix 's|$0 != ".git" && index($0, ".git/") != 1|$0 != ""|'; then
-      _r="$(both_compare_with "$BW/m.gitprefix.sh")"; [ "$F2C_MATRIX" = 1 ] && f2c_mx gitprefix "$_r"
-      _tw=0; case "$_r" in *"src/miss.sh "*) _tw=1 ;; esac
-      case "$_r" in
-        "1 1|"*) bad "BOTH MUTANT gitprefix: dropping the .git prefix exclusion left the miss count at 1 — the arm does not depend on it" ;;
-        *) if f2c_twin gitprefix src/miss.sh "$_tw"; then mutant_killed "${B_bothcmp:-0}" gitprefix "BOTH MUTANT gitprefix moves the comparison arm: without the prefix exclusion .git rows count as sandbox misses"; fi ;;
-      esac
-    fi
-    BOTH_ARMS=$((BOTH_ARMS+1))
-    if both_mut noignore 's/ | drop_ignored$//'; then
-      _r="$(both_compare_with "$BW/m.noignore.sh")"; [ "$F2C_MATRIX" = 1 ] && f2c_mx noignore "$_r"
-      _tw=0; case "$_r" in *"src/miss.sh "*) _tw=1 ;; esac
-      case "$_r" in
-        *build.log*) if f2c_twin noignore src/miss.sh "$_tw"; then mutant_killed "${B_bothcmp:-0}" noignore "BOTH MUTANT noignore moves the comparison arm: without the ignore filter an ignored path counts as a sandbox miss"; fi ;;
-        *) bad "BOTH MUTANT noignore: the ignored path still did not count — the arm does not depend on drop_ignored" ;;
-      esac
-    fi
-    BOTH_ARMS=$((BOTH_ARMS+1))
-    if both_mut direction 's|comm -23 "$out.fs.cmp" "$out.sb.cmp" > "$out.sbmiss"|comm -13 "$out.fs.cmp" "$out.sb.cmp" > "$out.sbmiss"|'; then
-      _r="$(both_compare_with "$BW/m.direction.sh")"; [ "$F2C_MATRIX" = 1 ] && f2c_mx direction "$_r"
-      _tw=0; case "$_r" in "1 1|"*) _tw=1 ;; esac
-      case "$_r" in
-        *"|src/miss.sh "*) bad "BOTH MUTANT direction: reversing the miss direction still named src/miss.sh — the arm reads a count, not the set" ;;
-        *) if f2c_twin direction "the 1 1 count pair" "$_tw"; then mutant_killed "${B_bothcmp:-0}" direction "BOTH MUTANT direction moves the comparison arm: a reversed miss names what the SANDBOX alone saw"; fi ;;
-      esac
-    fi
-    BOTH_ARMS=$((BOTH_ARMS+1))
-    if both_mut partial 's|if (c < n) {|if (0) {|'; then
-      _r="$(both_verdict_with "$BW/m.partial.sh" "fa fb fc" "$BW/res.part")"; [ "$F2C_MATRIX" = 1 ] && f2c_mx partial "$_r"
-      _tw=0; case "$(both_verdict_with "$BW/m.partial.sh" "fa fb" "$BW/res.clean")" in "0|SANDBOX-MISSES-NOTHING"*"2 of 2"*) _tw=1 ;; esac
-      case "$_r" in
-        2*) bad "BOTH MUTANT partial: without the compared < listed guard the partial run was still refused — the arm does not depend on it" ;;
-        *) if f2c_twin partial "the clean verdict" "$_tw"; then mutant_killed "${B_bothpart:-0}" partial "BOTH MUTANT partial moves the refusal arm: without compared < listed, a run that compared one of three reads as a verdict"; fi ;;
-      esac
-    fi
   fi
 
   # Arguments and refusals, driven through the WHOLE script in a seeded repo, as a normal user.
@@ -4234,8 +3171,6 @@ d/-p'
     STUB_DERIVER="$BR/core/scripts/derive-fixture-readsets.sh"
     sed "s|^LOG_BIN=/usr/bin/log\$|LOG_BIN=\"$SB/logstream\"|" "$DERIVER" > "$SB/deriver.sh"
     cmp -s "$DERIVER" "$SB/deriver.sh" && broken "the LOG_BIN line is gone from $DERIVER, so the stub world cannot point the stream at a stub"
-    sed '/^  exit "\$BOTH_RC"$/d' "$SB/deriver.sh" > "$SB/deriver.nowrite.sh"
-    cmp -s "$SB/deriver.sh" "$SB/deriver.nowrite.sh" && broken "the both-mode exit line is gone, so the no-write mutant cannot be built"
     sum_of() { md5 -q "$1" 2>/dev/null || cksum < "$1"; }
     stub_run() { # $1 deriver copy  $2 sandbox path list; prints "<rc>|<verdict line>|<fxa line>|<map moved?>"
       local before after r
@@ -4255,11 +3190,11 @@ d/-p'
     BOTH_ARMS=$((BOTH_ARMS+1))
     case "$S1" in
       "1|SANDBOX-MISSES 1 path(s) across 1 fixture(s)"*"| fxa sandbox-missed 1 fs_usage-missed 0|same")
-        ok "a full stub-world --tracer both run reports 'fxa sandbox-missed 1 fs_usage-missed 0', reads SANDBOX-MISSES at exit 1, and leaves the map's md5 unchanged"; B_stub=1 ;;
+        ok "a full stub-world --tracer both run reports 'fxa sandbox-missed 1 fs_usage-missed 0', reads SANDBOX-MISSES at exit 1, and leaves the map's md5 unchanged" ;;
       *) bad "the stub-world --tracer both run did not read exactly one miss with the map unchanged: '$S1' — $(tail -3 "$WORK/stub.out" | tr '\n' ' ')" ;;
     esac
-    # S1's own fxa log, captured NOW: the pseudo mutants below each re-run the stub world, and the
-    # width arm further down must read the UNMUTATED run, not whichever mutant ran last.
+    # S1's own fxa log, captured NOW: later drives re-run the stub world, and the
+    # width arm further down must read S1's run, not a later one.
     S1_LOG="$WORK/s1.fxa.log"; cp "$BOTH_TR/w/fxa.log" "$S1_LOG" 2>/dev/null || : > "$S1_LOG"
     # THE PSEUDO-PATH FILTER, read off the set the S1 run just wrote, where all three tracers' sets
     # meet. Nine seeds, in seed order: `<string>` and `sub/<unknown>` (absent, last component a whole
@@ -4283,95 +3218,9 @@ d/-p'
     BOTH_ARMS=$((BOTH_ARMS+1))
     if [ "$PS0" = 00111110001 ]; then
       ok "PSEUDO: the merged set drops '<string>' and 'sub/<unknown>' (absent whole-<...> last component) and keeps src/missing.sh, a<b>c, d/<real>, e<f>g.sh and the dangling <link>; x/y/<z> and <> go too; absent option-shaped q/-x goes and present d/-p stays"
-      B_pseudo=1
     else
       bad "PSEUDO: expected seed signature 00111110001 in fxa.set, got '$PS0' (order: <string> sub/<unknown> src/missing.sh a<b>c d/<real> e<f>g.sh <link> x/y/<z> <> q/-x d/-p) — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')"
     fi
-    # TEN MUTANTS, each a cmp -s guarded copy of the stub-world deriver, each a wrong filter:
-    #   nofilter   the call removed from the meeting point;
-    #   wholepath  the anchor on the whole path, `^<...>$`, so `sub/<unknown>` survives;
-    #   unanch     an unanchored `<[^/]*>` inside the last component, so absent `e<f>g.sh` goes too;
-    #   existonly  the existence test with no shape test, so absent `src/missing.sh` goes too;
-    #   sbonly     the filter on the sandbox set only, so the fs_usage set carries the pseudo rows back.
-    sed 's/ | readset_drop_pseudo | readset_drop_git | drop_ignored > / | readset_drop_git | drop_ignored > /' "$SB/deriver.sh" > "$SB/deriver.p.nofilter.sh"
-    sed 's/^    case "\${p##\*\/}" in$/    case "$p" in/' "$SB/deriver.sh" > "$SB/deriver.p.wholepath.sh"
-    sed "s/^      '<'\*'>') if /      *'<'*'>'*) if /" "$SB/deriver.sh" > "$SB/deriver.p.unanch.sh"
-    sed "s/^      '<'\*'>') if /      *) if /" "$SB/deriver.sh" > "$SB/deriver.p.existonly.sh"
-    sed -e 's/ | readset_drop_pseudo | readset_drop_git | drop_ignored > / | readset_drop_git | drop_ignored > /' \
-        -e 's/^    sandbox_paths < "\$WORK\/\$fx.win" | grep -v /    sandbox_paths < "$WORK\/$fx.win" | readset_drop_pseudo | grep -v /' \
-        "$SB/deriver.sh" > "$SB/deriver.p.sbonly.sh"
-    #   eonly      `-e` without `-L`, so the dangling `<link>` goes;
-    #   firststrip `${p#*/}` strips only the FIRST component, so `x/y/<z>` survives;
-    #   nonempty   `'<'?*'>'`, so the empty token `<>` survives;
-    #   dashgone   the `-*` arm deleted, so the absent option-shaped `q/-x` survives;
-    #   dashany    the `-*` arm dropping with no existence test, so the present `d/-p` goes too.
-    # eonly is ADDRESSED to the `'<'*'>') if ` line: the `-*` arm carries the identical existence
-    # test, and an unaddressed edit would rewrite both arms and score a kill on two subjects.
-    sed "/^      '<'\*'>') if /s/if \[ -e \"\$TREE\/\$p\" \] || \[ -L \"\$TREE\/\$p\" \]; then/if [ -e \"\$TREE\/\$p\" ]; then/" "$SB/deriver.sh" > "$SB/deriver.p.eonly.sh"
-    sed 's/^    case "\${p##\*\/}" in$/    case "${p#*\/}" in/' "$SB/deriver.sh" > "$SB/deriver.p.firststrip.sh"
-    sed "s/^      '<'\*'>') if /      '<'?*'>') if /" "$SB/deriver.sh" > "$SB/deriver.p.nonempty.sh"
-    sed '/^      -\*) if /d' "$SB/deriver.sh" > "$SB/deriver.p.dashgone.sh"
-    sed 's/^      -\*) if .*$/      -*) ;;/' "$SB/deriver.sh" > "$SB/deriver.p.dashany.sh"
-    # THE SEAM. Eight of the ten mutants edit only readset_drop_pseudo's BODY, which sits between the
-    # deriver's READSET_PSEUDO sentinels. Each is the SAME edit applied to the deriver copy AND to that span,
-    # and the span is driven on the seeds, against $BR, the tree the stub world copies its trace tree from.
-    # The seeds are all committed, so presence there is presence in the trace copy, and no seed is a .git
-    # path or an ignored one, so readset_drop_git and drop_ignored -- the two filters after it in the
-    # pipeline -- drop none of them. A seam CONTROL asserts the unmutated span reads the end-to-end
-    # signature, so a seam that diverges from the real call site fails here before any mutant is scored.
-    # nofilter and sbonly edit the CALL SITES, which the span does not hold: they stay end to end.
-    PSPAN="$WORK/pseudo.span"
-    sed -n '/^# READSET_PSEUDO_BEGIN$/,/^# READSET_PSEUDO_END$/p' "$SB/deriver.sh" > "$PSPAN"
-    grep -q '^readset_drop_pseudo() {' "$PSPAN" || broken "no readset_drop_pseudo between the deriver's READSET_PSEUDO sentinels"
-    pseudo_seam() { # <span file>: the 11-seed signature readset_drop_pseudo writes against $BR
-      local o s out=""
-      o="$( TREE="$BR"; . "$1"; printf '%s\n' "$PSEUDO_SEEDS" | readset_drop_pseudo )"
-      while IFS= read -r s; do
-        if grep -qxF -- "$s" <<< "$o"; then out="${out}1"; else out="${out}0"; fi
-      done <<< "$PSEUDO_SEEDS"
-      printf '%s' "$out"
-    }
-    BOTH_ARMS=$((BOTH_ARMS+1))
-    PSEAM0="$(pseudo_seam "$PSPAN")"
-    if [ "$PSEAM0" = 00111110001 ] && [ "$PSEAM0" = "$PS0" ]; then
-      ok "PSEUDO SEAM: the shipped READSET_PSEUDO span, driven on the seeds against the tree the stub world copies, reads the end-to-end signature 00111110001"
-      B_pseam=1
-    else
-      bad "PSEUDO SEAM: the span reads '$PSEAM0' where the end-to-end run read '$PS0' (want 00111110001), so the seam does not stand for the call site"
-    fi
-    # TWIN: bit 5, d/<real> -- present, a whole <...> last component -- kept by the shipped filter and by
-    # every one of the ten (no edit below drops a present whole-token row). A mutant that clears it over-reached.
-    for _pm in nofilter wholepath unanch existonly sbonly eonly firststrip nonempty dashgone dashany; do
-      BOTH_ARMS=$((BOTH_ARMS+1))
-      if cmp -s "$SB/deriver.sh" "$SB/deriver.p.$_pm.sh"; then
-        bad "PSEUDO MUTANT $_pm did not apply: the edit matched nothing in the deriver copy"
-        continue
-      fi
-      case "$_pm" in
-        nofilter|sbonly) stub_run "$SB/deriver.p.$_pm.sh" "$SB/sb.list" >/dev/null; _ps="$(pseudo_sig)"; _pfv="$(printf %s "${B_pseudo:-0}")" ;;
-        *) sed -n '/^# READSET_PSEUDO_BEGIN$/,/^# READSET_PSEUDO_END$/p' "$SB/deriver.p.$_pm.sh" > "$PSPAN.$_pm"
-           if cmp -s "$PSPAN" "$PSPAN.$_pm" || ! bash -n "$PSPAN.$_pm" 2>/dev/null; then
-             bad "PSEUDO MUTANT $_pm did not apply inside the READSET_PSEUDO span, or the span copy does not parse"; continue
-           fi
-           _ps="$(pseudo_seam "$PSPAN.$_pm")"; _pfv="$(( ${B_pseudo:-0} && ${B_pseam:-0} ))" ;;
-      esac
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx "$_pm" "$_ps"
-      _tw=0; case "$_ps" in ????1??????) _tw=1 ;; esac
-      case "$_ps" in
-        00111110001) bad "PSEUDO MUTANT $_pm: the set still reads 00111110001, so the pseudo arm does not depend on what this mutant removed" ;;
-        *1*) if f2c_twin "$_pm" "d/<real> (bit 5)" "$_tw"; then mutant_killed "$([ "$_pfv" = 1 ] && echo 1 || echo 0)" "$_pm" "PSEUDO MUTANT $_pm: the set reads '$_ps', not 00111110001 — the pseudo arm refuses it"; fi ;;
-        *) bad "PSEUDO MUTANT $_pm: the set carries none of the seeds ('$_ps'), so the run wrote no set and scored nothing — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')" ;;
-      esac
-      # With no filter at all the absent option-shaped seed must reach the set: otherwise its drop
-      # in the unmutated run came from somewhere other than the `-*` arm, and the arm is unproven.
-      if [ "$_pm" = nofilter ]; then
-        BOTH_ARMS=$((BOTH_ARMS+1))
-        case "$_ps" in
-          ?????????1?) if f2c_twin nofilter-dash "d/<real> (bit 5)" "$_tw"; then mutant_killed "${B_pseudo:-0}" nofilter-dash "PSEUDO MUTANT nofilter: the absent option-shaped q/-x reaches fxa.set ('$_ps'), so its drop in the unmutated run is the filter's"; fi ;;
-          *) bad "PSEUDO MUTANT nofilter: the absent q/-x did not reach fxa.set even with the filter removed ('$_ps'), so the -* arm's drop is not proven to be its own" ;;
-        esac
-      fi
-    done
     # THE WIDTH KNOB UNDER `--tracer both`. This path runs the fixture through `sudo -n -u ...
     # sandbox-exec`, and the stub sudo strips VAS_INNER_POOL_WIDTH the way env_reset does, so only an
     # `env KNOB=1` placed AFTER sudo reaches the fixture. The log is read straight after each run,
@@ -4385,40 +3234,9 @@ d/-p'
     SW0="$(stub_width "$S1_LOG")"
     BOTH_ARMS=$((BOTH_ARMS+1))
     case "$SW0" in
-      "width=1|ems=1|1") ok "WIDTH under --tracer both: the stub-world run of fxa, launched through sudo's env_reset, logs width=1 and ems=1"; B_bwidth=1 ;;
+      "width=1|ems=1|1") ok "WIDTH under --tracer both: the stub-world run of fxa, launched through sudo's env_reset, logs width=1 and ems=1" ;;
       *) bad "WIDTH under --tracer both: fxa's log did not read width=1 and ems=1 with 'fxa ok' present: '$SW0' — a knob does not survive the sudo launch" ;;
     esac
-    # THREE MUTANT DERIVERS, each a cmp -s guarded copy of the stub-world deriver, each a wrong
-    # fix that the --tracer sandbox width arm above cannot see because no sudo sits on that path:
-    #   m2      the injection moved in FRONT of sudo: into both branches of sandboxed(), ahead of
-    #           `sudo -n -u` and ahead of the bare `sandbox-exec`, and ahead of sudo on the fs_usage
-    #           line, so --tracer sandbox still reads width=1;
-    #   m4      the `sandboxed` launch dropping the knob under `--tracer both` only;
-    #   prefix  `VAS_INNER_POOL_WIDTH=1 sandboxed ...`, a prefix in front of the function.
-    # Each must log width=unset and ems=unset with `fxa ok` present: both knobs move together.
-    sed -e 's|sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|' \
-        -e 's|^    sandbox-exec -f "$PROFILE" "$@"$|    env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandbox-exec -f "$PROFILE" "$@"|' \
-        -e 's|sudo -n -u "$RUN_AS" env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sudo -n -u "$RUN_AS" bash |' \
-        -e 's|sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m2.sh"
-    sed 's|( cd "$TREE" \&\& sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" )|( cd "$TREE" \&\& if [ "$TRACER" = both ]; then sandboxed bash "$FIXTURE_ROOT/$fx/run.sh"; else sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh"; fi )|' \
-      "$SB/deriver.sh" > "$SB/deriver.m4.sh"
-    sed 's|sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.prefix.sh"
-    for _wm in m2 m4 prefix; do
-      BOTH_ARMS=$((BOTH_ARMS+1))
-      if cmp -s "$SB/deriver.sh" "$SB/deriver.$_wm.sh"; then
-        bad "BOTH WIDTH MUTANT $_wm did not apply: the edit matched nothing in the deriver copy"
-        continue
-      fi
-      _sr="$(stub_run "$SB/deriver.$_wm.sh" "$SB/sb.list")"
-      _sw="$(stub_width)"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx "$_wm" "$_sw | $_sr"
-      # TWIN: the same run's comparison still reads one sandbox miss with the map unchanged (S1's want).
-      _tw=0; case "$_sr" in "1|SANDBOX-MISSES 1 path(s) across 1 fixture(s)"*"|same") _tw=1 ;; esac
-      case "$_sw" in
-        "width=unset|ems=unset|1") if f2c_twin "$_wm" "the S1 comparison" "$_tw"; then mutant_killed "${B_bwidth:-0}" "$_wm" "BOTH WIDTH MUTANT $_wm: the stub-world run logs width=unset and ems=unset with 'fxa ok' present — the --tracer both width arm refuses it"; fi ;;
-        *) bad "BOTH WIDTH MUTANT $_wm: expected width=unset and ems=unset with 'fxa ok' present, got '$_sw' — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')" ;;
-      esac
-    done
     S2="$(stub_run "$SB/deriver.sh" "$SB/empty.list")"
     BOTH_ARMS=$((BOTH_ARMS+1))
     case "$S2" in
@@ -4427,36 +3245,11 @@ d/-p'
     esac
     # THE LOSS CANARY UNDER `--tracer both`. The same empty-stream run: fxa really read run.sh and
     # src/a.sh, the stream reported neither, so its reason must also carry `LOSS CANARY: 2 path(s)`
-    # -- a read both tracers lost would otherwise be invisible to the fs_usage comparison. The
-    # mutant scopes the canary back to `--tracer sandbox` and must lose the token.
+    # -- a read both tracers lost would otherwise be invisible to the fs_usage comparison.
     BOTH_ARMS=$((BOTH_ARMS+1))
     case "$S2" in
-      *"fxa (LOSS CANARY: 2 path(s)"*) ok "CANARY under --tracer both: the empty-stream run's UNCOMPARED reason names 'LOSS CANARY: 2 path(s)'"; B_cboth=1 ;;
+      *"fxa (LOSS CANARY: 2 path(s)"*) ok "CANARY under --tracer both: the empty-stream run's UNCOMPARED reason names 'LOSS CANARY: 2 path(s)'" ;;
       *) bad "CANARY under --tracer both: the empty-stream run's reason does not name 'LOSS CANARY: 2 path(s)': '$S2'" ;;
-    esac
-    sed 's/^  if \[ "\$TRACER" != fs_usage \]; then$/  if [ "$TRACER" = sandbox ]; then/' "$SB/deriver.sh" > "$SB/deriver.cboth.sh"
-    BOTH_ARMS=$((BOTH_ARMS+1))
-    if cmp -s "$SB/deriver.sh" "$SB/deriver.cboth.sh"; then
-      bad "CANARY BOTH MUTANT did not apply: scoping the canary to --tracer sandbox changed nothing"
-    else
-      S2M="$(stub_run "$SB/deriver.cboth.sh" "$SB/empty.list")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx cboth "$S2M"
-      # TWIN: the map's md5 stays unchanged (the `|same` field), as in S2.
-      _tw=0; case "$S2M" in *"|same") _tw=1 ;; esac
-      case "$S2M" in
-        *"LOSS CANARY"*) bad "CANARY BOTH MUTANT: scoped to --tracer sandbox, the --tracer both run still names the canary: '$S2M'" ;;
-        "2|REFUSED: compared 0 of 1"*"fxa (sandbox set empty)"*) if f2c_twin cboth "the map unchanged" "$_tw"; then mutant_killed "${B_cboth:-0}" cboth "CANARY BOTH MUTANT: scoped to --tracer sandbox, the --tracer both run is refused for the empty set alone, with no canary — the arm above depends on the scope"; fi ;;
-        *) bad "CANARY BOTH MUTANT: the scoped-back run did not read a plain empty-set refusal: '$S2M'" ;;
-      esac
-    fi
-    S3="$(stub_run "$SB/deriver.nowrite.sh" "$SB/sb.list")"
-    BOTH_ARMS=$((BOTH_ARMS+1))
-    [ "$F2C_MATRIX" = 1 ] && f2c_mx nowrite "$S3"
-    # TWIN: the per-fixture line still reads `fxa sandbox-missed 1 fs_usage-missed 0`, as S1 did.
-    _tw=0; case "$S3" in *"| fxa sandbox-missed 1 fs_usage-missed 0|"*) _tw=1 ;; esac
-    case "$S3" in
-      *"|MOVED") if f2c_twin nowrite "the fxa comparison line" "$_tw"; then mutant_killed "${B_stub:-0}" nowrite "NOWRITE MUTANT: with the both-mode exit deleted the same run WRITES the map (md5 moved) — that exit is the guard the arm above depends on"; fi ;;
-      *) bad "NOWRITE MUTANT: the map did not move with the exit deleted, so the no-write arm proves nothing about it: '$S3' — $(tail -3 "$WORK/stub.out" | tr '\n' ' ')" ;;
     esac
 
     # THE LOSS CANARY, DETERMINISTICALLY, UNDER `--tracer sandbox`. This arm needs no real `log stream`,
@@ -4466,8 +3259,7 @@ d/-p'
     # stub sandbox-exec reports ONLY the paths in the list it is handed, while fxa really reads
     # run.sh and src/a.sh, so the atime leg sees both:
     #   lossy list  run.sh alone      -> fxa OMITTED naming `LOSS CANARY: 1 path(s)`, 0 drop notices;
-    #   whole list  run.sh + src/a.sh -> fxa MAPPED;
-    #   mutant      the canary guard deleted, lossy list -> fxa MAPPED, so the arm depends on it.
+    #   whole list  run.sh + src/a.sh -> fxa MAPPED.
     # Its own PATH dir carries ONLY the sandbox-exec stub: the `id` stub above answers uid 0, which
     # `--tracer sandbox` refuses.
     SX="$WORK/sbxstub"; mkdir -p "$SX" || broken "mkdir failed"
@@ -4487,7 +3279,6 @@ d/-p'
       d="$(grep -c 'dropped during' "$SX_TR/w/fxa.win" 2>/dev/null)" || d=0
       printf '%s|%s' "$(grep -m1 -E '^  fxa ' "$WORK/sbx.out" | tr -s ' ')" "$d"
     }
-    sed '/^  \[ "\$canary" = 0 \]    || why=/d' "$SB/deriver.sh" > "$SX/deriver.nocanary.sh"
     CL="$(sbx_run "$SB/deriver.sh" "$SX/lossy.list")"
     cp "$WORK/sbx.out" "$WORK/eq.l.in"; cp "$WORK/sbx.rc" "$WORK/eq.l.in.rc"; cp "$SX_TR/w/fxa.set" "$WORK/eq.l.in.set" 2>/dev/null || : > "$WORK/eq.l.in.set"
     CW="$(sbx_run "$SB/deriver.sh" "$SX/whole.list")"
@@ -4522,7 +3313,7 @@ d/-p'
     fi
     TRACE_ARMS=$((TRACE_ARMS+1))
     case "$CL" in
-      " fxa OMITTED ("*"LOSS CANARY: 1 path(s)"*"|0") ok "CANARY: a sandbox-tracer window that lost a read with NO drop notice OMITS the fixture, naming 'LOSS CANARY: 1 path(s)'"; B_canary=1 ;;
+      " fxa OMITTED ("*"LOSS CANARY: 1 path(s)"*"|0") ok "CANARY: a sandbox-tracer window that lost a read with NO drop notice OMITS the fixture, naming 'LOSS CANARY: 1 path(s)'" ;;
       *) bad "CANARY: the lossy stub window was not omitted naming 'LOSS CANARY: 1 path(s)' with 0 drop notices: '$CL' — $(tail -2 "$WORK/sbx.out" | tr '\n' ' ')" ;;
     esac
     TRACE_ARMS=$((TRACE_ARMS+1))
@@ -4530,19 +3321,6 @@ d/-p'
       " fxa "*" paths|0") ok "CANARY CONTROL: the same run with the stream reporting every read MAPS fxa — the canary does not fire on a whole window" ;;
       *) bad "CANARY CONTROL: the whole stub window did not map fxa: '$CW' — atime extras: $(LC_ALL=C comm -23 "$SX_TR/w/fxa.at" "$SX_TR/w/fxa.fs" 2>/dev/null | tr '\n' ' ')" ;;
     esac
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SB/deriver.sh" "$SX/deriver.nocanary.sh"; then
-      bad "CANARY MUTANT did not apply: deleting the canary guard changed nothing in the deriver copy"
-    else
-      CM="$(sbx_run "$SX/deriver.nocanary.sh" "$SX/lossy.list")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx nocanary "$CM"
-      # TWIN: the window's drop-notice count stays 0 -- the mutant removes the canary, not the drop guard.
-      _tw=0; case "$CM" in *"|0") _tw=1 ;; esac
-      case "$CM" in
-        " fxa "*" paths|"*) if f2c_twin nocanary "drop notices 0" "$_tw"; then mutant_killed "${B_canary:-0}" nocanary "CANARY MUTANT: with the guard deleted the lossy window MAPS fxa — the canary arm depends on that line"; fi ;;
-        *) bad "CANARY MUTANT: with the guard deleted the lossy window did not map fxa: '$CM' — $(tail -2 "$WORK/sbx.out" | tr '\n' ' ')" ;;
-      esac
-    fi
 
     # ------------------------------ the deriver runs a traced fixture at inner pool width 1 ----
     # BL-375: validator-arm-selection's 6-way inner pool outruns `log stream` and its trace drops
@@ -4557,7 +3335,6 @@ d/-p'
     TRACE_ARMS=$((TRACE_ARMS+1))
     if grep -qx 'fxa ok' "$WORK/width.log" && grep -qx 'width=1' "$WORK/width.log" && grep -qx 'ems=1' "$WORK/width.log"; then
       ok "WIDTH: the deriver ran the traced fxa with VAS_INNER_POOL_WIDTH=1 and EMS_POOL_WIDTH=1 (its captured log reads width=1, ems=1)"
-      B_width=1
     else
       bad "WIDTH: the deriver's traced run of fxa did not see VAS_INNER_POOL_WIDTH=1 and EMS_POOL_WIDTH=1 with 'fxa ok' present: '$(tr '\n' ' ' < "$WORK/width.log" | cut -c1-120)'. validator-arm-selection would trace at full width and drop reports"
     fi
@@ -4567,23 +3344,6 @@ d/-p'
       *"width=unset"*"ems=unset"*"fxa ok"*) ok "WIDTH CONTROL: fxa run outside the deriver reads width=unset and ems=unset, so the 1 above is the deriver's" ;;
       *) bad "WIDTH CONTROL: fxa run outside the deriver did not read width=unset and ems=unset: '$(printf '%s' "$W_OUT" | tr '\n' ' ')'" ;;
     esac
-    sed 's| env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash | bash |' "$SB/deriver.sh" > "$SX/deriver.nowidth.sh"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SB/deriver.sh" "$SX/deriver.nowidth.sh"; then
-      bad "WIDTH MUTANT did not apply: removing the env injection changed nothing in the deriver copy, so this control would test an unmutated deriver"
-    else
-      sbx_run "$SX/deriver.nowidth.sh" "$SX/whole.list" > /dev/null
-      cp "$SX_TR/w/fxa.log" "$WORK/widthmut.log" 2>/dev/null || : > "$WORK/widthmut.log"
-      # TWIN: `fxa ok`, fxa completing under the mutant exactly as under the shipped deriver.
-      _tw=0; grep -qx 'fxa ok' "$WORK/widthmut.log" && _tw=1
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx width "$(tr '\n' ' ' < "$WORK/widthmut.log" | cut -c1-120)"
-      if grep -qx 'width=unset' "$WORK/widthmut.log" && grep -qx 'ems=unset' "$WORK/widthmut.log" && f2c_twin width "fxa ok" "$_tw"; then
-        mutant_killed "${B_width:-0}" width "WIDTH MUTANT: with the env injection removed from the launch line the traced fxa reads width=unset — the arm above depends on that line"
-      elif grep -qx 'width=unset' "$WORK/widthmut.log" && grep -qx 'ems=unset' "$WORK/widthmut.log"; then :
-      else
-        bad "WIDTH MUTANT: the injection-free deriver's traced fxa did not read width=unset with 'fxa ok' present: '$(tr '\n' ' ' < "$WORK/widthmut.log" | cut -c1-120)' — $(tail -2 "$WORK/sbx.out" | tr '\n' ' ')"
-      fi
-    fi
 
     # ----------------------- the deriver loads AI_DLC_READSET_SANDBOX_PROFILE when it is set ----
     # The override replaces the deriver's own profile: its @TREE@ is substituted with the trace tree and
@@ -4640,31 +3400,14 @@ d/-p'
     CU="$(can_with "$CAN_SPAN")"; CUW="$(can_why "$CU")"
     if [ "$CU" = unreadable ] && case "$CUW" in "LOSS CANARY: unreadable path(s)"*) true ;; *) false ;; esac; then
       ok "CANARY UNREADABLE: a missing stream set makes readset_loss_canary print 'unreadable', and the deriver's guard omits the fixture for it"
-      B_canu=1
     else
       bad "CANARY UNREADABLE: expected 'unreadable' and an omission reason, got '$CU' / '$CUW' (span lines: $(grep -c . "$CAN_SPAN"))"
     fi
-    sed 's/^    printf .unreadable\\n.$/    printf '"'"'0\\n'"'"'/' "$CAN_SPAN" > "$WORK/canary.c1.sh"
-    sed 's/^  if LC_ALL=C comm -23 "\$1" "\$2" > "\$3" 2>\/dev\/null; then$/  if LC_ALL=C comm -23 "$1" "$2" > "$3" 2>\/dev\/null || :; then/' "$CAN_SPAN" > "$WORK/canary.c2.sh"
-    for _cm in c1 c2; do
-      TRACE_ARMS=$((TRACE_ARMS+1))
-      if cmp -s "$CAN_SPAN" "$WORK/canary.$_cm.sh"; then bad "CANARY MUTANT $_cm did not apply"; continue; fi
-      _cv="$(can_with "$WORK/canary.$_cm.sh")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx "$_cm" "$_cv"
-      # TWIN: a READABLE stream set missing one of the two atime reads still counts 1 under the mutant.
-      printf 'a\n' > "$WORK/can.fs1"
-      _tw=0; [ "$( ( . "$WORK/canary.$_cm.sh"; readset_loss_canary "$WORK/can.at" "$WORK/can.fs1" "$WORK/can.o1" ) 2>/dev/null )" = 1 ] && _tw=1
-      case "$_cv" in
-        0) if f2c_twin "$_cm" "a readable set counts 1" "$_tw"; then mutant_killed "${B_canu:-0}" "$_cm" "CANARY MUTANT $_cm: a missing stream set reads '0', which maps the fixture — the unreadable arm refuses it"; fi ;;
-        *) bad "CANARY MUTANT $_cm: expected the fail-open '0', got '$_cv'" ;;
-      esac
-    done
 
     # A ONE-FIXTURE `--list` WHOSE FIXTURE IS OMITTED STILL WRITES THE MAP, DROPPING ITS STALE ROWS.
     # Seed a stale `fxa` row the trace can never produce, trace fxa with a lossy stream (the canary
     # omits it), and read the map: the stale row must be GONE, `other`'s rows kept, and the header
-    # must name fxa as OMITTED. The mutant restores the traced-count control under --list and must
-    # leave the stale row in place (the run dies before the write).
+    # must name fxa as OMITTED.
     printf 'other\tsrc/other.sh\nother\tcore/fixtures/other/run.sh\nthird\tcore/fixtures/third/run.sh\nfxa\tsrc/STALE-ROW\n' > "$BR/.ai-dlc-fixture-readsets.tsv"
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm stale ) >/dev/null 2>&1 || broken "could not seed the stale map row"
     omit_run() { # $1 deriver copy; prints "<stale rows>|<other rows>|<OMITTED header rows>"
@@ -4679,27 +3422,12 @@ d/-p'
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
       printf '%s|%s|%s' "$s" "$o" "$h"
     }
-    sed 's/^if \[ "\$MODE" != --list \]; then$/if true; then/' "$SB/deriver.sh" > "$SX/deriver.mappedctl.sh"
     TRACE_ARMS=$((TRACE_ARMS+1))
     OR="$(omit_run "$SB/deriver.sh")"
     if [ "$OR" = "0|2|1" ]; then
       ok "OMITTED --list: a one-fixture refresh whose fixture is omitted writes the map, drops its stale row, keeps the other fixture's rows and names it OMITTED"
-      B_omit=1
     else
       bad "OMITTED --list: expected stale 0, other 2, OMITTED header 1, got '$OR' — $(tail -2 "$WORK/omit.out" | tr '\n' ' ')"
-    fi
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SB/deriver.sh" "$SX/deriver.mappedctl.sh"; then
-      bad "OMITTED --list MUTANT did not apply"
-    else
-      OM="$(omit_run "$SX/deriver.mappedctl.sh")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx mappedctl "$OM"
-      # TWIN: the middle cell, other's 2 rows, which the mutant must leave at want.
-      _tw=0; case "$OM" in *"|2|"*) _tw=1 ;; esac
-      case "$OM" in
-        "1|"*"|0") if f2c_twin mappedctl "other rows 2" "$_tw"; then mutant_killed "${B_omit:-0}" mappedctl "OMITTED --list MUTANT: with the traced-count control restored under --list the run dies unwritten and the stale row survives — the arm depends on that change"; fi ;;
-        *) bad "OMITTED --list MUTANT: expected stale 1, other 2, header 0, got '$OM'" ;;
-      esac
     fi
 
     # `--all` WITH ONE FIXTURE OMITTED, END TO END. The function arms above drive the extracted spans;
@@ -4717,8 +3445,8 @@ d/-p'
     #            line and writes the map naming plan-shape OMITTED.
     #            A MAPPED `plan-shape-x` sibling sits in both worlds: its rows begin with the string
     #            `plan-shape`, so a D1 guard that greps `^plan-shape` without the tab reads them as
-    #            plan-shape's own and runs the pair on an omitted plan-shape. Without the sibling
-    #            that mutant passed every arm.
+    #            plan-shape's own and runs the pair on an omitted plan-shape, so the sibling
+    #            is seeded.
     mkdir -p "$BR/core/fixtures/plan-shape" "$BR/core/fixtures/plan-shape-x" "$BR/scripts" || broken "mkdir failed"
     printf '#!/bin/bash\ncat scripts/validate-plan-shape.sh >/dev/null\n' > "$BR/core/fixtures/plan-shape/run.sh"
     printf '#!/bin/bash\nexit 0\n' > "$BR/core/fixtures/plan-shape-x/run.sh"
@@ -4746,7 +3474,6 @@ d/-p'
     AO="$(all_run "$SB/deriver.sh" "$SX/allO.list" fxa)"
     if [ "$AO" = "0|1|1|0|0" ]; then
       ok "--all, fxa OMITTED: the deriver writes the map with the OMITTED header naming fxa, and the plan-shape pair RUNS under --all (its presence line printed)"
-      B_allO=1
     else
       bad "--all, fxa OMITTED: expected rc 0, OMITTED header 1, plan-shape presence 1, skip 0, merge-dropped 0; got '$AO' — $(grep -m1 -E 'ERROR|merge dropped' "$WORK/all.out" | tr '\n' ' ')$(tail -2 "$WORK/all.out" | tr '\n' ' ')"
     fi
@@ -4754,67 +3481,13 @@ d/-p'
     AS="$(all_run "$SB/deriver.sh" "$SX/allS.list" plan-shape)"
     if [ "$AS" = "0|1|0|1|0" ]; then
       ok "--all, plan-shape OMITTED: the deriver prints the exact SKIP line for the plan-shape pair and writes the map naming plan-shape OMITTED"
-      B_allS=1
     else
       bad "--all, plan-shape OMITTED: expected rc 0, header 1, presence 0, SKIP line 1, merge-dropped 0; got '$AS' — $(tail -2 "$WORK/all.out" | tr '\n' ' ')"
-    fi
-    # Two whole-deriver mutants. inline: `--all` back on the base newline loop while the fixed guard
-    # stays -- the merge no longer dies, so only the plan-shape PRESENCE line separates it (W2/W4).
-    # noskip: the D1 guard disabled, so an omitted plan-shape fails its own positive control and the
-    # whole --all run dies unwritten.
-    _o="$(grep -m1 '^  --all)  LIST="\$(readset_all_list ' "$SB/deriver.sh")"
-    mut_line "$SB/deriver.sh" "$SX/deriver.inline.sh" "$_o" '  --all)  LIST="$(cd "$TREE" && for d in "$FIXTURE_ROOT"/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;'
-    _o="$(grep -m1 '^if \[ "\${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes \] && ! grep -q ' "$SB/deriver.sh")"
-    mut_line "$SB/deriver.sh" "$SX/deriver.noskip.sh" "$_o" 'if false; then'
-    # notab: the D1 guard greps `^plan-shape` without the tab, so plan-shape-x's rows count as
-    # plan-shape's and the pair runs on an omitted plan-shape -- the world S arm refuses it.
-    mut_line "$SB/deriver.sh" "$SX/deriver.notab.sh" "$_o" "$(printf '%s' "$_o" | sed "s/'^plan-shape	'/'^plan-shape'/")"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SB/deriver.sh" "$SX/deriver.inline.sh"; then bad "--all MUTANT inline did not apply"
-    else
-      AM="$(all_run "$SX/deriver.inline.sh" "$SX/allO.list" fxa)"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx inline "$AM"
-      # TWIN (all three --all mutants): the merge-dropped cell, the last field, stays 0.
-      _tw=0; case "$AM" in *"|0") _tw=1 ;; esac
-      case "$AM" in
-        "0|1|0|0|"*) if f2c_twin inline "merge-dropped 0" "$_tw"; then mutant_killed "${B_allO:-0}" inline "--all MUTANT inline: with --all back on the newline loop the map is still written, but the plan-shape presence line is gone — the pair is skipped on every --all run, and the world O arm refuses it"; fi ;;
-        *) bad "--all MUTANT inline: expected rc 0, header 1, presence 0; got '$AM'" ;;
-      esac
-    fi
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SB/deriver.sh" "$SX/deriver.noskip.sh"; then bad "--all MUTANT noskip did not apply"
-    else
-      AN="$(all_run "$SX/deriver.noskip.sh" "$SX/allS.list" plan-shape)"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx noskip "$AN"
-      _tw=0; case "$AN" in *"|0") _tw=1 ;; esac
-      case "$AN" in
-        [1-9]*"|0|0|0|"*) if grep -q 'controls failed' "$WORK/all.out" && f2c_twin noskip "merge-dropped 0" "$_tw"; then
-            mutant_killed "${B_allS:-0}" noskip "--all MUTANT noskip: with the D1 guard disabled an omitted plan-shape fails its own control and the --all run dies 'controls failed', unwritten — the world S arm refuses it"
-          elif grep -q 'controls failed' "$WORK/all.out"; then :
-          else bad "--all MUTANT noskip: the run died ('$AN') but not on 'controls failed'"; fi ;;
-        *) bad "--all MUTANT noskip: expected a non-zero exit with no header, presence or SKIP line; got '$AN'" ;;
-      esac
-    fi
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SB/deriver.sh" "$SX/deriver.notab.sh"; then bad "--all MUTANT notab did not apply"
-    else
-      AT="$(all_run "$SX/deriver.notab.sh" "$SX/allS.list" plan-shape)"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx notab "$AT"
-      _tw=0; case "$AT" in *"|0") _tw=1 ;; esac
-      case "$AT" in
-        "0|1|0|1|0") bad "--all MUTANT notab SURVIVED: the tab-less D1 guard still printed the SKIP line, so the plan-shape-x sibling did not discriminate ('$AT')" ;;
-        *"|0|"*) if grep -q 'controls failed' "$WORK/all.out" && f2c_twin notab "merge-dropped 0" "$_tw"; then
-            mutant_killed "${B_allS:-0}" notab "--all MUTANT notab: with the D1 guard grepping '^plan-shape' untabbed, plan-shape-x's rows pass for plan-shape's, the pair runs on an omitted plan-shape and the run dies 'controls failed' — the world S arm refuses it"
-          elif grep -q 'controls failed' "$WORK/all.out"; then :
-          else bad "--all MUTANT notab: no SKIP line, but the run did not die on 'controls failed' ('$AT')"; fi ;;
-        *) bad "--all MUTANT notab: expected no SKIP line and a 'controls failed' death; got '$AT'" ;;
-      esac
     fi
 
     # THE UNREAD CONTROL. A fixture that reads the planted control file is the stand-in for a reset
     # that did not hold (the file's atime moves either way): it must be OMITTED naming the control.
-    # The ordinary stub run above is the near-miss and already maps (CANARY CONTROL). The mutant
-    # deletes the guard line and must map the reading fixture.
+    # The ordinary stub run above is the near-miss and already maps (CANARY CONTROL).
     mkdir -p "$BR/core/fixtures/fxu" || broken "mkdir failed"
     printf '#!/bin/bash\ncat .git/readset-unread-control >/dev/null\ncat src/a.sh >/dev/null\n' > "$BR/core/fixtures/fxu/run.sh"
     printf '%s\n' core/fixtures/fxu/run.sh src/a.sh > "$SX/fxu.list"
@@ -4827,26 +3500,12 @@ d/-p'
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
       grep -m1 -E '^  fxu ' "$WORK/unread.out" | tr -s ' '
     }
-    sed '/^  \[ "\$unread_moved" -eq 0 \] || why=/d' "$SB/deriver.sh" > "$SX/deriver.nounread.sh"
     TRACE_ARMS=$((TRACE_ARMS+1))
     UR="$(unread_run "$SB/deriver.sh")"
     case "$UR" in
-      " fxu OMITTED ("*"UNREAD CONTROL"*) ok "UNREAD CONTROL: a fixture whose window moved the planted control's atime is OMITTED naming the control"; B_unread=1 ;;
+      " fxu OMITTED ("*"UNREAD CONTROL"*) ok "UNREAD CONTROL: a fixture whose window moved the planted control's atime is OMITTED naming the control" ;;
       *) bad "UNREAD CONTROL: expected fxu OMITTED naming the UNREAD CONTROL, got '$UR' — $(tail -2 "$WORK/unread.out" | tr '\n' ' ')" ;;
     esac
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SB/deriver.sh" "$SX/deriver.nounread.sh"; then
-      bad "UNREAD CONTROL MUTANT did not apply"
-    else
-      UM="$(unread_run "$SX/deriver.nounread.sh")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx nounread "$UM"
-      # TWIN: the control file's row never enters the set -- it is still stripped before the set is built.
-      _tw=0; grep -qxF '.git/readset-unread-control' "$SX_TR/w/fxu.set" 2>/dev/null || _tw=1
-      case "$UM" in
-        " fxu "*" paths") if f2c_twin nounread "control row absent from the set" "$_tw"; then mutant_killed "${B_unread:-0}" nounread "UNREAD CONTROL MUTANT: with the guard deleted the same fixture MAPS — the arm depends on that line"; fi ;;
-        *) bad "UNREAD CONTROL MUTANT: expected fxu mapped, got '$UM'" ;;
-      esac
-    fi
 
     # `--local-map`, THE DERIVER HALF, DRIVEN WHOLE IN THE STUB-STREAM WORLD. The hook starts this mode
     # detached and nobody reads its output, so each condition below is scored on what it WRITES to the
@@ -4888,7 +3547,7 @@ STUB
     SL_TR="$(cd "$WORK" && pwd -P)/lm.tr"
     LMF="$BR/.git/ai-dlc-fixture-readsets.local"
     # `other` is the COMMITTED fixture whose local row the committed-wins prune drops. Its directory
-    # is present, so the present-set prune cannot also drop that row and cover the noprune mutant.
+    # is present, so the present-set prune cannot also drop that row.
     mkdir -p "$BR/core/fixtures/fxl" "$BR/core/fixtures/zz" "$BR/core/fixtures/other" || broken "mkdir failed"
     printf '#!/bin/bash\nexit 0\n' > "$BR/core/fixtures/other/run.sh"
     printf '#!/bin/bash\ncat src/a.sh >/dev/null\necho "  ok    one"\necho "  ok    two"\n' > "$BR/core/fixtures/fxl/run.sh"
@@ -4933,18 +3592,11 @@ STUB
       TRACE_ARMS=$((TRACE_ARMS+1))
       case "$2" in $3) ok "$4"; return 0 ;; *) bad "$1: expected '$3', got '$2' — $(tail -2 "$WORK/lm.out" | tr '\n' ' ')"; return 1 ;; esac
     }
-    # lm_twin <mutant> <lm_run vector>: the twin of every --local-map mutant is field 6, zz's own rows kept --
-    # a present fixture the trace never names, whose rows no mutant below may touch.
-    lm_twin() { local t=0; [ "$(printf '%s' "$2" | cut -d'|' -f6)" = yes ] && t=1; f2c_twin "$1" "zz kept (field 6)" "$t"; }
     lm_seed; L1="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same)"
     L1_COPY="$(grep -c 'copying the tree to' "$WORK/lm.out")" || L1_COPY=0
     TRACE_ARMS=$((TRACE_ARMS+1))
-    B_lclean_v="$(printf %s no)"
     if [ "$(grep -c '^gh	' "$LMF" 2>/dev/null)" = 0 ] && [ "$(grep -c '^zz	' "$LMF" 2>/dev/null)" = 2 ]; then
       ok "  and a fixture with NO directory loses every local row, while the untraced zz, whose directory is present, keeps both of its rows"
-      B_lghost=1
-      # The clean trace also removed its trace root (field 7), which the notrap mutant must break.
-      B_lclean_v="$(printf '%s' "$L1" | cut -d'|' -f7)"
     else
       bad "  the ghost fixture gh kept local rows, or zz lost its own: $(cut -f1,2 "$LMF" | tr '\t\n' ': ')"
     fi
@@ -4957,7 +3609,7 @@ STUB
     fi
     lm_seed; L2="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1)"
     L2B="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1)"
-    lm_arm "LOCAL TRIP x2" "$L2B" "0|0|no|2|*" "  and a second discard on the same key counts 2 — the hook holds the fixture back at 3"; B_ltrip_rc=$?
+    lm_arm "LOCAL TRIP x2" "$L2B" "0|0|no|2|*" "  and a second discard on the same key counts 2 — the hook holds the fixture back at 3"
     L2C="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same)"
     lm_arm "LOCAL recover" "$L2C" "0|2|yes|-|*" "  and a clean trace after it records the rows and clears the discard count"
     lm_seed; L3="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_DROP=1)"
@@ -5005,38 +3657,21 @@ fi
 exec "$@"
 STUB
     chmod +x "$SG/sandbox-exec"
-    sed 's|last="$(grep -nF "$SENT_KEY" "$raw"|last="$(grep -n readset-sentinel "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-start.sh"
-    sed 's|endl="$(grep -nF "$ENDMARK" "$raw"|endl="$(grep -n readset-end "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-end.sh"
-    sed 's|grep -qF "$ENDMARK" "$raw"|grep -q readset-end "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-flush.sh"
     fg_run() { rm -f "$SG/endn"; lm_seed; lm_run "$1" "$SL/whole.list" same PATH="$SG:$SL:$PATH" FG_COUNT="$SG/endn"; }
     FG0="$(fg_run "$SL/deriver.sh")"
-    lm_arm "FOREIGN markers" "$FG0" "0|2|yes|-|*" "LOCAL: a foreign deriver's sentinel and end lines (same FXTAG, another MARKDIR), the end ahead of this run's own, leave the window cut at THIS run's markers — fxl maps both reads"; B_foreign_rc=$?
-    for _fm in bare-start bare-end bare-flush; do
-      TRACE_ARMS=$((TRACE_ARMS+1))
-      if cmp -s "$SL/deriver.sh" "$SG/deriver.$_fm.sh"; then
-        bad "FOREIGN MUTANT $_fm did not apply: the edit matched nothing in the deriver copy"
-        continue
-      fi
-      FGM="$(fg_run "$SG/deriver.$_fm.sh")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx "$_fm" "$FGM"
-      case "$FGM" in
-        "0|0|no|1|"*) if lm_twin "$_fm" "$FGM"; then mutant_killed "$([ "$B_foreign_rc" = 0 ] && echo 1 || echo 0)" "$_fm" "FOREIGN MUTANT $_fm: keyed on the bare marker name the run is cut or flushed at the foreign marker and fxl is discarded — the arm above depends on the full path"; fi ;;
-        *) bad "FOREIGN MUTANT $_fm: expected fxl discarded ('0|0|no|1|*'), got '$FGM' — $(tail -2 "$WORK/lm.out" | tr '\n' ' ')" ;;
-      esac
-    done
+    lm_arm "FOREIGN markers" "$FG0" "0|2|yes|-|*" "LOCAL: a foreign deriver's sentinel and end lines (same FXTAG, another MARKDIR), the end ahead of this run's own, leave the window cut at THIS run's markers — fxl maps both reads"
     lm_seed; L5="$(lm_run "$SL/deriver.sh" "$SL/whole.list" diff)"
-    lm_arm "LOCAL verdict" "$L5" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: the sandboxed run's verdict lines differ*" "LOCAL: a sandboxed run whose verdict lines differ from the normal run's is discarded"; B_lverdict_rc=$?
+    lm_arm "LOCAL verdict" "$L5" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: the sandboxed run's verdict lines differ*" "LOCAL: a sandboxed run whose verdict lines differ from the normal run's is discarded"
     lm_seed; L6="$(lm_run "$SL/deriver.sh" "$SL/whole.list" none)"
     lm_arm "LOCAL nolog" "$L6" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: no normal-run log*" "  and so is one with no stashed normal-run log to compare against"
     lm_seed; L7="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_DEADLIVE=1)"
     L7_COPY="$(grep -c 'copying the tree to' "$WORK/lm.out")" || L7_COPY=0
-    lm_arm "LOCAL liveness" "$L7" "1|0|no|-|yes|yes|yes|ERROR: LIVENESS*" "LOCAL: a stream that never sees the 1s liveness probe REFUSES before tracing — the local map is untouched and the trace root is removed"; B_llive_rc=$?
+    lm_arm "LOCAL liveness" "$L7" "1|0|no|-|yes|yes|yes|ERROR: LIVENESS*" "LOCAL: a stream that never sees the 1s liveness probe REFUSES before tracing — the local map is untouched and the trace root is removed"
     # THE REFUSAL PAYS NO TREE COPY. A consumer whose stream never delivers refuses on every green
     # push, so the copy must come after the probe. The clean run above is the control: it copies.
     TRACE_ARMS=$((TRACE_ARMS+1))
     if [ "$L7_COPY" = 0 ] && [ "$L1_COPY" = 1 ]; then
       ok "  and it refuses BEFORE copying the tree, while the clean trace above copies it once"
-      B_lcopy=1
     else
       bad "  liveness refusal copied the tree (${L7_COPY}x), or the clean trace did not (${L1_COPY}x)"
     fi
@@ -5063,59 +3698,6 @@ STUB
       ok "LOCAL: from a LINKED worktree --merge-pool and --in-pool pass the worktree gate that still refuses --local-map"
     else
       bad "LOCAL: a linked worktree refused a pool mode (merge rc $LW_MRC, in-pool rc $LW_IRC): $(printf '%s %s' "$LW_M" "$LW_I" | head -3 | tr '\n' ' ')"
-    fi
-    # Six mutant derivers, each a cmp -s guarded copy, each scored on the arm it must break.
-    sed '/^    \[ "\$trip" -eq 0 \] || why=/d' "$SL/deriver.sh" > "$SL/d.notrip.sh"
-    sed 's/^    elif \[ "\$(readset_verdict_sig "\$WORK\/\$fx.log"/    elif false \&\& [ "$(readset_verdict_sig "$WORK\/$fx.log"/' "$SL/deriver.sh" > "$SL/d.noverdict.sh"
-    sed 's/^  \[ "\$lv_ok" -eq 1 \] || die /  : || die /' "$SL/deriver.sh" > "$SL/d.nolive.sh"
-    sed '/^\[ -z "\$LOCAL_MAP" \] || \[ -n "\$IN_POOL" \] || trap /d' "$SL/deriver.sh" > "$SL/d.notrap.sh"
-    lm_mut() { # <name> <copy> <stream list> <stash> <arm> <killing glob> <flag> [env...]
-      local n="$1" c="$2" sl="$3" st="$4" arm="$5" g="$6" fl="$7" r; shift 7
-      TRACE_ARMS=$((TRACE_ARMS+1))
-      if cmp -s "$SL/deriver.sh" "$c"; then bad "LOCAL MUTANT $n did not apply"; return; fi
-      [ "$n" = nocount ] || lm_seed
-      r="$(lm_run "$c" "$sl" "$st" "$@")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx "$n" "$r"
-      case "$r" in
-        $g) if lm_twin "$n" "$r"; then mutant_killed "$fl" "$n" "LOCAL MUTANT $n is KILLED by $arm: '$r'"; fi ;;
-        *) bad "LOCAL MUTANT $n SURVIVED $arm: '$r'" ;;
-      esac
-    }
-    lm_mut notrip "$SL/d.notrip.sh" "$SL/whole.list" same "LOCAL TRIP" "0|2|yes|*" "$([ "$B_ltrip_rc" = 0 ] && echo 1 || echo 0)" STUB_TRIP=1
-    lm_mut noverdict "$SL/d.noverdict.sh" "$SL/whole.list" diff "LOCAL verdict" "0|2|yes|*" "$([ "$B_lverdict_rc" = 0 ] && echo 1 || echo 0)"
-    lm_mut nolive "$SL/d.nolive.sh" "$SL/whole.list" same "LOCAL liveness" "0|2|yes|*" "$([ "$B_llive_rc" = 0 ] && echo 1 || echo 0)" STUB_DEADLIVE=1
-    lm_mut notrap "$SL/d.notrap.sh" "$SL/whole.list" same "LOCAL clean" "0|2|yes|-|*|*|no|*" "$([ "$B_lclean_v" = yes ] && echo 1 || echo 0)"
-    # copyfirst: the WHOLE copy block -- from its announce through the sentinel exclude -- moved back
-    # ahead of the liveness probe's comment block, the order this replaced. The refusal then pays it.
-    awk '/^say "copying the tree to \$TREE"$/ { inb = 1 }
-         inb { blk = blk $0 "\n"; if ($0 ~ /^printf .\.readset-sentinel/) inb = 0; next }
-         /^# `--local-map` PRECONDITIONS THAT NEED THE PROFILE/ { held = 1 }
-         held { rest = rest $0 "\n"; next }
-         { print }
-         END { printf "%s%s", blk, rest }' "$SL/deriver.sh" > "$SL/d.copyfirst.sh"
-    bash -n "$SL/d.copyfirst.sh" 2>/dev/null || : > "$SL/d.copyfirst.sh"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SL/deriver.sh" "$SL/d.copyfirst.sh"; then bad "LOCAL MUTANT copyfirst did not apply"
-    else
-      lm_seed; CF="$(lm_run "$SL/d.copyfirst.sh" "$SL/whole.list" same STUB_DEADLIVE=1)"
-      CF_COPY="$(grep -c 'copying the tree to' "$WORK/lm.out")" || CF_COPY=0
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx copyfirst "$CF|$CF_COPY"
-      case "$CF|$CF_COPY" in
-        "1|"*"ERROR: LIVENESS"*"|1") if lm_twin copyfirst "$CF"; then mutant_killed "${B_lcopy:-0}" copyfirst "LOCAL MUTANT copyfirst is KILLED: with the copy's announce moved ahead of the probe, the refusal prints it"; fi ;;
-        *) bad "LOCAL MUTANT copyfirst SURVIVED or did not run: '$CF' copies $CF_COPY" ;;
-      esac
-    fi
-    # noghost: the present-set prune deleted. The trace still succeeds; gh's rows survive it.
-    sed '/^      if (!(\$2 in here)) next$/d' "$SL/deriver.sh" > "$SL/d.noghost.sh"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SL/deriver.sh" "$SL/d.noghost.sh"; then bad "LOCAL MUTANT noghost did not apply"
-    else
-      lm_seed; NG="$(lm_run "$SL/d.noghost.sh" "$SL/whole.list" same)"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx noghost "$NG"
-      case "$NG|$(grep -c '^gh	' "$LMF" 2>/dev/null)" in
-        "0|2|yes|"*"|2") if lm_twin noghost "$NG"; then mutant_killed "${B_lghost:-0}" noghost "LOCAL MUTANT noghost is KILLED: with the prune gone a clean trace keeps the absent fixture gh's 2 local rows"; fi ;;
-        *) bad "LOCAL MUTANT noghost SURVIVED or did not run: '$NG' gh rows $(grep -c '^gh	' "$LMF" 2>/dev/null)" ;;
-      esac
     fi
 
     # `--in-pool` AND `--merge-pool`, DRIVEN IN THE SAME STUB-STREAM WORLD. The worker traces ONE
@@ -5182,53 +3764,24 @@ STUB
       IPW_ENMSG=no; grep -q 'no in-pool trace to merge' "$WORK/mp.out" && IPW_ENMSG=yes
     }
     ip_world "$SL/deriver.sh"
-    ip_arm "IN-POOL clean" "$IPW_A" "0|2|yes|0|yes|no|no|-" "IN-POOL: a clean trace of fxl writes rows naming its paths with sha256 values, rc 0 and a log, and no discard or trip"; B_ipclean_rc=$?
+    ip_arm "IN-POOL clean" "$IPW_A" "0|2|yes|0|yes|no|no|-" "IN-POOL: a clean trace of fxl writes rows naming its paths with sha256 values, rc 0 and a log, and no discard or trip"
     ip_arm "MERGE-POOL clean" "$IPW_AM" "0|2|yes|-|2|1" "MERGE-POOL: the rows land in the local map with a #deriver row, while the untraced zz and other keep theirs"
     ip_arm "IN-POOL drop" "$IPW_B" "0|0|no|0|yes|yes|no|fxl" "IN-POOL: a drop notice in the window writes a discard and no rows"
     ip_arm "MERGE-POOL drop" "$IPW_BM" "0|0|no|1|2|1" "MERGE-POOL: the discard lands as a #discards row and no fxl path rows"
-    ip_arm "IN-POOL canary" "$IPW_C" "0|0|no|0|yes|yes|no|fxl" "IN-POOL: the LOSS CANARY (a read the stream never reported) discards the trace"; B_ipcanary_rc=$?
+    ip_arm "IN-POOL canary" "$IPW_C" "0|0|no|0|yes|yes|no|fxl" "IN-POOL: the LOSS CANARY (a read the stream never reported) discards the trace"
     ip_arm "MERGE-POOL canary" "$IPW_CM" "0|0|no|1|2|1" "  and the merge records that discard"
     ip_arm "IN-POOL trip" "$IPW_D" "0|*|*|0|yes|*|yes|*" "IN-POOL: a refused exec leaves <dir>/trip and still writes rc"
     ip_arm "MERGE-POOL empty dirs" "$IPW_EM" "0|2|yes|-|2|1" "MERGE-POOL: a subdirectory with neither rows nor discard changes nothing, so zz and other keep their rows"
     ip_arm "MERGE-POOL nothing" "$IPW_EN|$IPW_ENMSG" "0|*|*|*|*|*|same|yes" "MERGE-POOL: a pool holding only an empty directory says so and writes nothing"
-    # nocanary: the loss canary disabled in the in-pool path only (the --local-map path keeps it). It must
-    # move arm C and nothing else: every other scenario's result is byte-identical to the clean world's.
-    awk '{ print } /^    canary="\$\(readset_loss_canary / { print "    [ -z \"$IN_POOL\" ] || canary=0" }' "$SL/deriver.sh" > "$SL/d.ipnocanary.sh"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SL/deriver.sh" "$SL/d.ipnocanary.sh" || ! bash -n "$SL/d.ipnocanary.sh" 2>/dev/null; then
-      bad "IN-POOL MUTANT nocanary did not apply"
-    else
-      # Per push the mutant runs its deciding scenario C and ONE twin, A (the clean trace and its merge); the
-      # twin must be byte-identical to the clean world's. READSET_SKIP_MATRIX=1 runs every scenario and holds
-      # all of them to byte-identity, which is what the kill text states and what the matrix established.
-      if [ "$F2C_MATRIX" = 1 ]; then
-        C_A="$IPW_A|$IPW_AM|$IPW_B|$IPW_BM|$IPW_D|$IPW_EM|$IPW_EN"; C_C="$IPW_C|$IPW_CM"
-        ip_world "$SL/d.ipnocanary.sh"
-        M_A="$IPW_A|$IPW_AM|$IPW_B|$IPW_BM|$IPW_D|$IPW_EM|$IPW_EN"
-        f2c_mx ipnocanary "C=$IPW_C|$IPW_CM rest-identical=$([ "$C_A" = "$M_A" ] && echo yes || echo no)"
-      else
-        C_A="$IPW_A|$IPW_AM"; C_C="$IPW_C|$IPW_CM"
-        ip_world "$SL/d.ipnocanary.sh" "A C"
-        M_A="$IPW_A|$IPW_AM"
-      fi
-      if [ "$C_C" != "$IPW_C|$IPW_CM" ] && [ "$(printf '%s' "$IPW_C" | cut -d'|' -f6)" = no ] \
-         && f2c_twin ipnocanary "scenario A byte-identical" "$([ "$C_A" = "$M_A" ] && echo 1 || echo 0)"; then
-        mutant_killed "$([ "$B_ipclean_rc" = 0 ] && [ "$B_ipcanary_rc" = 0 ] && echo 1 || echo 0)" ipnocanary "IN-POOL MUTANT nocanary is KILLED by the canary arm alone: the lossy fixture is no longer discarded ('$IPW_C'), and every other arm's result is byte-identical"
-      elif [ "$C_C" != "$IPW_C|$IPW_CM" ] && [ "$(printf '%s' "$IPW_C" | cut -d'|' -f6)" = no ]; then :
-      else
-        bad "IN-POOL MUTANT nocanary: moved the wrong arms or none. rest clean '$C_A' mutant '$M_A'; canary clean '$C_C' mutant '$IPW_C|$IPW_CM'"
-      fi
-    fi
 
     # THE MAP IS WRITTEN AFTER EACH ACCEPTED FIXTURE, SO AN INTERRUPTED RUN KEEPS WHAT IT TRACED.
     # Three fixtures with OLD committed rows; a `--list "fxw1 fxw2 fxw3"` run is SIGKILLed while
     # fxw3 runs (fxw3 touches <flag>.at and waits; the fixture then kills the deriver's whole process
     # group, and removes the flag). The map must hold fxw1's and
-    # fxw2's NEW rows, none of their OLD ones, fxw3's OLD row and no fxw3 NEW row. The mutant
-    # deletes the per-fixture call, restoring end-only writing: the kill then leaves the map as seeded.
+    # fxw2's NEW rows, none of their OLD ones, fxw3's OLD row and no fxw3 NEW row.
     # The identity arm runs the same three UNINTERRUPTED, with fxw2 omitted by the canary (its read
     # of src/w2.sh is unreported), so the final map carries an OMITTED line and drops a mid-list
-    # fixture's rows -- and the per-fixture map must be byte-identical to the end-only mutant's.
+    # fixture's rows.
     mkdir -p "$BR/core/fixtures/fxw1" "$BR/core/fixtures/fxw2" "$BR/core/fixtures/fxw3" || broken "mkdir failed"
     printf '#!/bin/bash\ncat src/w1.sh >/dev/null\n' > "$BR/core/fixtures/fxw1/run.sh"
     printf '#!/bin/bash\ncat src/w2.sh >/dev/null\n' > "$BR/core/fixtures/fxw2/run.sh"
@@ -5238,7 +3791,6 @@ STUB
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxw ) >/dev/null 2>&1 || broken "could not seed fxw1-3"
     printf '%s\n' core/fixtures/fxw1/run.sh core/fixtures/fxw2/run.sh core/fixtures/fxw3/run.sh src/w1.sh src/w2.sh src/w3.sh > "$SX/fxw.list"
     printf '%s\n' core/fixtures/fxw1/run.sh core/fixtures/fxw2/run.sh core/fixtures/fxw3/run.sh src/w1.sh src/w3.sh > "$SX/fxw.omit.list"
-    sed '/^    if \[ -z "\$LOCAL_MAP" \] && \[ "\$TRACER" != both \]; then$/,/^    fi$/d' "$SB/deriver.sh" > "$SX/deriver.endonly.sh"
     # THE KILL REAPS THE RUN'S WHOLE PROCESS GROUP (BL-900). The run starts under `set -m`, so it leads a group
     # whose id is its recorded pid, and the kill is `kill -9 -- -<pid>` until no member answers. A one-level
     # `pkill -P <pid>; kill <pid>` left any process the deriver forked BETWEEN the two signals alive: killing its
@@ -5349,35 +3901,19 @@ STUB
     IWS="$(iw_sig "$WORK/iw.sigk.tsv")"
     if [ "$IW|$IWS" = "sigkill|yes|101001|2|0" ]; then
       ok "INTERRUPTED: a 3-fixture --list run SIGKILLed during fxw3 leaves a map holding fxw1's and fxw2's new rows, fxw3's old row, the untraced fixture's rows, and no temp file"
-      B_iw=1
     else
       bad "INTERRUPTED: expected 'sigkill|yes|101001|2|0' (rc|reached fxw3|new/old rows fxw1..3|other rows|tmp files), got '$IW|$IWS' — $(tail -3 "$WORK/iw.sigk.out" | tr '\n' ' ')"
     fi
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SB/deriver.sh" "$SX/deriver.endonly.sh"; then
-      bad "INTERRUPTED MUTANT endonly did not apply: deleting the per-fixture write changed nothing in the deriver copy"
-    else
-      IWM="$(iw_run "$SX/deriver.endonly.sh" "$SX/fxw.list" yes "$WORK/iw.sigk.endonly.tsv")"
-      aw_gate
-      IWMS="$(iw_sig "$WORK/iw.sigk.endonly.tsv")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx endonly "$IWM|$IWMS"
-      # TWIN: the untraced fixture's 2 rows and no temp file -- the tail of the vector, at want.
-      _tw=0; case "$IWMS" in *"|2|0") _tw=1 ;; esac
-      case "$IWM|$IWMS" in
-        "sigkill|yes|010101|"*) if f2c_twin endonly "other rows 2, no temp file" "$_tw"; then mutant_killed "${B_iw:-0}" endonly "INTERRUPTED MUTANT endonly is KILLED: with end-only writing the same SIGKILL leaves every fixture's OLD row and none of the new ones"; fi ;;
-        *) bad "INTERRUPTED MUTANT endonly: expected 'sigkill|yes|010101|2|0', got '$IWM|$IWMS' — $(tail -3 "$WORK/iw.sigk.endonly.out" | tr '\n' ' ')" ;;
-      esac
-    fi
-    # THE KILLED RUNS' GROUPS ARE EMPTY BEFORE IU STARTS (BL-900). Both SIGKILLed runs share IU's trace root and feed,
-    # so an orphan of either could read a marker in IU's fxw3 window. Presence-shaped on both sides: each recorded
+    # THE KILLED RUN'S GROUP IS EMPTY BEFORE IU STARTS (BL-900). The SIGKILLed run shares IU's trace root and feed,
+    # so an orphan of it could read a marker in IU's fxw3 window. Presence-shaped on both sides: the recorded
     # group answered `kill -0` BEFORE its kill (1), so a group never created cannot pass as reaped, and none of it
     # answers AFTER the reap (0), read while fxw3's kill flag still holds its poller in the loop.
     TRACE_ARMS=$((TRACE_ARMS+1))
-    IWG="$(cat "$WORK/iw.sigk.grp" 2>/dev/null) $(cat "$WORK/iw.sigk.endonly.grp" 2>/dev/null)"
-    if [ "$IWG" = "1|0 1|0" ]; then
-      ok "INTERRUPTED GROUP: each interrupted run's recorded process group was alive before the kill and empty after the reap ('1|0 1|0', before|after for the run and the endonly run), so no orphan reaches IU's trace root"
+    IWG="$(cat "$WORK/iw.sigk.grp" 2>/dev/null)"
+    if [ "$IWG" = "1|0" ]; then
+      ok "INTERRUPTED GROUP: the interrupted run's recorded process group was alive before the kill and empty after the reap ('1|0', before|after), so no orphan reaches IU's trace root"
     else
-      bad "INTERRUPTED GROUP: expected '1|0 1|0' (recorded group alive before the kill | alive after the reap, for the run and the endonly run), got '$IWG'"
+      bad "INTERRUPTED GROUP: expected '1|0' (recorded group alive before the kill | alive after the reap), got '$IWG'"
     fi
     # THE REAP REFUSES A SURVIVOR, AND ITS REFUSAL REACHES THE FIXTURE'S OWN SHELL (BL-900). A real group the kill cannot empty
     # is not constructible here: a zombie never answers `kill -0 -- -<pgid>` on Darwin. So the cell starts one `sleep`
@@ -5388,7 +3924,7 @@ STUB
     # records into the cell's own file (never the real AW_STALL_LOG, which the fixture's final aw_gate reads). The
     # shipped aw_gate then runs in a separate `( )` reading that file, as the call site's does, and must exit 2 with
     # FIXTURE BROKEN naming the pid and its `ps` state: the refusal crossed the `$( )` boundary as a file.
-    # Its twins are INTERRUPTED GROUP above (the unseamed reap emptied both real groups) and INTERRUPTED REAP FRESH
+    # Its twins are INTERRUPTED GROUP above (the unseamed reap emptied the real group) and INTERRUPTED REAP FRESH
     # below (seven settled reads of seven DIFFERENT members, then gone, is a reap that ends 0 -- no read count refuses).
     TRACE_ARMS=$((TRACE_ARMS+1))
     # A member that never exits on its own (BL-868): a `sleep 30` that ran out before `ps` read it left no state to name.
@@ -5410,8 +3946,7 @@ STUB
     # gone: the reap must end 0 with no BROKEN line. The 5-round count this replaced refused this sequence on its sixth
     # read, so a chain deeper than the count, or one whose in-flight members kept settling, read FIXTURE BROKEN. The
     # reads are driven through the same IW_GROUP_STATE seam, one per call, by a counter in a file (the seam runs in
-    # `$( )`). MUTANT reapfirst refuses on the FIRST settled read, the count-free form of a bound; it must refuse here
-    # and still refuse the survivor above (the twin).
+    # `$( )`).
     TRACE_ARMS=$((TRACE_ARMS+1))
     IWF_P=""; for _i in 1 2 3 4 5 6 7; do tail -f /dev/null </dev/null >/dev/null 2>&1 & IWF_P="$IWF_P $!"; done
     iwf_seq() { local k; k="$(grep -c . "$WORK/iwf.n")" || k=0; echo x >> "$WORK/iwf.n"; set -- $IWF_P
@@ -5422,42 +3957,23 @@ STUB
       printf '%s|%s|%s' "$r" "$(grep -c BROKEN "$WORK/iwf.reap")" "$(grep -c . "$WORK/iwf.n")"
     }
     IWF="$(iwf_drive iw_reap)"
-    B_iwfresh=0
-    if [ "$IWF" = "0|0|8" ]; then B_iwfresh=1
+    if [ "$IWF" = "0|0|8" ]; then
       ok "INTERRUPTED REAP FRESH: seven settled reads of seven different members, then gone, end iw_reap at 0 with no BROKEN line ('$IWF' rc|BROKEN|reads) -- no read count refuses"
     else bad "INTERRUPTED REAP FRESH: expected '0|0|8' (rc|BROKEN lines|reads), got '$IWF' -- the reaper refused on a count, not on a survivor"; fi
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    _rf_src="$(declare -f iw_reap)"
-    _rf_mut="$(sed -e 's/^iw_reap ()/iw_reap_first ()/' -e 's/^\( *\)\*" \$p "\*)$/\1*)/' <<< "$_rf_src")"
-    if [ "$(sed 's/^iw_reap_first ()/iw_reap ()/' <<< "$_rf_mut")" = "$_rf_src" ] || ! eval "$_rf_mut"; then
-      bad "INTERRUPTED REAP MUTANT reapfirst did not apply: the survivor test in iw_reap was not found"
-    else
-      IWF_M="$(iwf_drive iw_reap_first)"
-      IWB_M="$(IW_GROUP_STATE=iwb_stuck; : > "$WORK/iwb.mreap"; iw_reap_first "$IWB_P" "$WORK/iwb.mreap"; echo "$?")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx reapfirst "fresh $IWF_M stuck $IWB_M"
-      _tw=0; [ "$IWB_M" = 1 ] && _tw=1
-      case "$IWF_M" in
-        "1|1|1") if f2c_twin reapfirst "the survivor refusal" "$_tw"; then mutant_killed "${B_iwfresh:-0}" reapfirst "INTERRUPTED REAP MUTANT reapfirst is KILLED: refusing on the first settled read refuses the fresh-member sequence ('$IWF_M') while the survivor still refuses"; fi ;;
-        *) bad "INTERRUPTED REAP MUTANT reapfirst: expected '1|1|1' (rc|BROKEN lines|reads), got '$IWF_M'" ;;
-      esac
-    fi
     for _i in $IWF_P; do kill -9 "$_i" 2>/dev/null; wait "$_i" 2>/dev/null; done
     # The identity arm. The fix's run must have written per fixture and reached a map that MOVED (new
-    # rows, fxw2's OLD row dropped, the OMITTED line), so the cmp is not two untouched seeds agreeing;
-    # the mutant must have written none. The per-fixture call's output lands in $WORK/fxw1.write; it
+    # rows, fxw2's OLD row dropped, the OMITTED line). The per-fixture call's output lands in $WORK/fxw1.write; it
     # prints the controls but no `wrote` line (that `say` follows only the final call), so the
     # evidence it ran is the discrimination control's PASS line, which precedes the write.
     TRACE_ARMS=$((TRACE_ARMS+1))
     IU="$(iw_run "$SB/deriver.sh" "$SX/fxw.omit.list" no "$WORK/iw.full.tsv")"
     IU_W="$(grep -c '^  PASS  CONTROL: ' "$SX_TR/w/fxw1.write" 2>/dev/null)" || IU_W=0
-    IUE="$(iw_run "$SX/deriver.endonly.sh" "$SX/fxw.omit.list" no "$WORK/iw.full.endonly.tsv")"
-    IUE_W=0; [ -e "$SX_TR/w/fxw1.write" ] && IUE_W=1
     IUS="$(iw_sig "$WORK/iw.full.tsv")"
     IUH="$(grep -cx '# OMITTED by the last run (always run): fxw2' "$WORK/iw.full.tsv")" || IUH=0
-    if [ "$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH" = "0|no|0|no|1|0|100010|2|0|1" ] && cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv"; then
-      ok "IDENTITY: an uninterrupted run that wrote after each fixture ends on a map byte-identical (cmp -s) to the end-only write's, including the OMITTED line for the mid-list fxw2"
+    if [ "$IU|$IU_W|$IUS|$IUH" = "0|no|1|100010|2|0|1" ]; then
+      ok "IDENTITY: an uninterrupted run that wrote after each fixture ends on a map holding fxw1's and fxw3's new rows, none of the old ones, the untraced fixture's rows, and the OMITTED line for the mid-list fxw2"
     else
-      bad "IDENTITY: expected '0|no|0|no|1|0|100010|2|0|1' and identical maps, got '$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH' cmp=$(cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" && echo same || echo DIFFER) — $(diff "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" | head -4 | tr '\n' ' ') — the fix run's omissions: $(grep -E '^  [a-z0-9_.-]+ +OMITTED \(' "$WORK/iw.full.out" | tr -s ' ' | tr '\n' ' ')"
+      bad "IDENTITY: expected '0|no|1|100010|2|0|1' (rc|reached fxw3|per-fixture controls|new/old rows fxw1..3|other rows|tmp files|OMITTED header), got '$IU|$IU_W|$IUS|$IUH' — the fix run's omissions: $(grep -E '^  [a-z0-9_.-]+ +OMITTED \(' "$WORK/iw.full.out" | tr -s ' ' | tr '\n' ' ')"
     fi
 
     # THE DIGEST WRITER (BL-471), DRIVEN WHOLE. The BR runner carries only an FXROOT line, so it has no
@@ -5469,7 +3985,6 @@ STUB
     #   matches   the hook, sourced from the same span, recomputes fxa's digest over the tree and
     #             reads it `match` -- the producer and the consumer agree on the value;
     #   counted   the header's fixture count does not count a digest line as a fixture.
-    # Mutant nocarry deletes the merge's carry line, so the untraced digest is lost.
     TRACE_ARMS=$((TRACE_ARMS+1))
     printf 'other\tsrc/other.sh\nother\tcore/fixtures/other/run.sh\nkeep\tsrc/other.sh\n# digest keep 1111111111111111111111111111111111111111111111111111111111111111\n# digest fxa 2222222222222222222222222222222222222222222222222222222222222222\n' > "$BR/.ai-dlc-fixture-readsets.tsv"
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm digests ) >/dev/null 2>&1 || broken "could not seed the digest map"
@@ -5508,31 +4023,15 @@ STUB
       && readset_manifest "$s" && readset_committed_digests "$s" && awk -F'\t' '$1 == "fxa" { print $2 }' "$s/.cdig"; git checkout -q -- . 2>/dev/null )"
     if [ "$DW1" = "0|1|1|0|0|3" ] && [ "$DW_V" = match ]; then
       ok "DIGEST: with the hook's span the run writes ONE fxa digest the hook recomputes as 'match', replaces the stale one, carries the untraced one, and counts 3 fixtures, not digest lines"
-      B_digest=1
     else
       bad "DIGEST: expected '0|1|1|0|0|3' and fxa 'match', got '$DW1' / '$DW_V' — $(tail -2 "$WORK/dw.out" | tr '\n' ' ')"
-    fi
-    sed '/^      \$1 == "#" && \$2 == "digest" && NF == 4 { if (index(traced, " " \$3 " ") == 0 && (decl == "" || index(decl, " " \$3 " ") == 0)) print; next }$/d' "$SB/deriver.sh" > "$SX/deriver.nocarry.sh"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$SB/deriver.sh" "$SX/deriver.nocarry.sh"; then bad "DIGEST MUTANT nocarry did not apply"
-    else
-      DWM="$(dw_run "$SX/deriver.nocarry.sh")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx nocarry "$DWM"
-      # TWIN: the third cell, exactly one fxa digest written -- the traced fixture's own digest is untouched.
-      _tw=0; [ "$(printf '%s' "$DWM" | cut -d'|' -f3)" = 1 ] && _tw=1
-      case "$DWM" in
-        "0|0|"*"|0|0|3") if f2c_twin nocarry "one fxa digest (cell 3)" "$_tw"; then mutant_killed "${B_digest:-0}" nocarry "DIGEST MUTANT nocarry: with the merge's carry line deleted the untraced fixture's digest is LOST — the carried cell depends on it"; fi ;;
-        *) bad "DIGEST MUTANT nocarry: expected '0|0|1|0|0|3', got '$DWM'" ;;
-      esac
     fi
 
     # A DECLARED FIXTURE GETS NO DIGEST (BL-897). The hook maps a fixture carrying inputs.decl before it reads the map,
     # so a `# digest` line for one is dead weight; the merge already drops its rows and its carried digest, and the
     # digests this run writes must pass the same filter. Two seeds in ONE --list run: fxd is DECLARED (its inputs.decl
     # committed into BR, so the trace copy carries it) and fxa is not. Both read src/a.sh, so the path is in the
-    # runner's universe through fxa's row and fxd's digest IS computable: without the filter it is written. Mutant
-    # nodeclfilter deletes the filter, and the same run must then write fxd's digest (the kill), with fxa's still
-    # written (the twin). The commit is undone after the arm, so every later world sees BR as it was.
+    # runner's universe through fxa's row and fxd's digest IS computable: without the filter it is written. The commit is undone after the arm, so every later world sees BR as it was.
     mkdir -p "$BR/core/fixtures/fxd" || broken "mkdir failed"
     printf '#!/bin/bash\ncat src/a.sh >/dev/null\n' > "$BR/core/fixtures/fxd/run.sh"
     printf 'src/a.sh\n' > "$BR/core/fixtures/fxd/inputs.decl"
@@ -5556,28 +4055,8 @@ STUB
     DD="$(dd_run "$SB/deriver.sh")"
     if [ "$DD" = "0|1|0|1" ]; then
       ok "DIGEST DECLARED: one --list run tracing a declared fixture (fxd) and an undeclared one (fxa) that share src/a.sh writes fxa's digest and none for fxd, and carries the untraced one ('$DD' rc|fxa|fxd|keep)"
-      B_ddecl=1
     else
       bad "DIGEST DECLARED: expected '0|1|0|1' (rc|fxa digests|fxd digests|keep), got '$DD' — $(tail -2 "$WORK/dd.out" | tr '\n' ' ')"
-    fi
-    DD_L1='      readset_merge_map /dev/null "$WORK/digest.new" "" "$TREE/$FIXTURE_ROOT" > "$WORK/digest.new.f" \'
-    DD_L2='        && mv -f "$WORK/digest.new.f" "$WORK/digest.new" || die "could not filter the declared fixtures out of the new digests"'
-    DD_N="$(grep -cxF -- "$DD_L1" "$SB/deriver.sh")" || DD_N=0
-    DD_Z="$(grep -cxF -- "$DD_L1 NEVER-IN-THE-DERIVER" "$SB/deriver.sh")" || DD_Z=0
-    L1="$DD_L1" L2="$DD_L2" awk '$0 == ENVIRON["L1"] { s = 1; next } s == 1 && $0 == ENVIRON["L2"] { s = 0; next } { s = 0; print }' \
-      "$SB/deriver.sh" > "$SX/deriver.nodeclfilter.sh"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if [ "$DD_N" != 1 ] || [ "$DD_Z" != 0 ] || [ "$(grep -cxF -- "$DD_L2" "$SX/deriver.nodeclfilter.sh")" != 0 ] || cmp -s "$SB/deriver.sh" "$SX/deriver.nodeclfilter.sh"; then
-      bad "DIGEST MUTANT nodeclfilter: the filter's anchor matched $DD_N time(s) (impossible-anchor control $DD_Z), not 1 and 0, or the edit left it in place -- DID NOT APPLY"
-    else
-      DDM="$(dd_run "$SX/deriver.nodeclfilter.sh")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx nodeclfilter "$DDM"
-      # TWIN: the undeclared fixture's own digest (cell 2) is still written.
-      _tw=0; [ "$(printf '%s' "$DDM" | cut -d'|' -f2)" = 1 ] && _tw=1
-      case "$DDM" in
-        "0|"*"|1|1") if f2c_twin nodeclfilter "fxa's digest (cell 2)" "$_tw"; then mutant_killed "${B_ddecl:-0}" nodeclfilter "DIGEST MUTANT nodeclfilter: with the declared filter deleted the same run writes a digest for the declared fixture fxd ('$DDM')"; fi ;;
-        *) bad "DIGEST MUTANT nodeclfilter: expected '0|1|1|1' (the unfiltered deriver writes fxd's digest), got '$DDM' — $(tail -2 "$WORK/dd.out" | tr '\n' ' ')" ;;
-      esac
     fi
     ( cd "$BR" && git reset -q --hard HEAD^ ) >/dev/null 2>&1 || broken "could not undo the declared seed's commit in BR"
     [ ! -e "$BR/core/fixtures/fxd" ] || broken "the declared seed fxd is still in BR after the undo, so later worlds would see it"
@@ -5586,8 +4065,7 @@ STUB
     # runs before the BR runner gained the span (:3608), so it sees only the fallback. Here the runner carries
     # it, fxl's stream reports a read of the DIRECTORY src, and the local map must record that row by its
     # listing -- `fxl<TAB>src<TAB>#listing:<sha256>` -- which only a caller that hands readset_local_rows a
-    # manifest of the trace copy can write. The mutant hands it empty manifests, and the same run must then
-    # record `fxl<TAB>src<TAB>-`, so the arm is shown to read the caller and not the span.
+    # manifest of the trace copy can write.
     #
     # THE SHAPE ALONE CANNOT SEE A WRONG CALLER, so the arm also recomputes the value. A call site that
     # swaps `.now` and `.paths`, manifests another tree, or manifests after the loop still yields SOME
@@ -5596,8 +4074,8 @@ STUB
     # from), lists `cut -f1 .now` through the same span, and the row must equal its `src/` value byte for
     # byte. THE GHOST ROW is the discriminating input for the swap: a committed map row naming a file
     # that is absent on disk enters `.paths` and never `.now`, so a listing taken off `.paths` gains
-    # `ghost.sh`. Without it every BR path is a regular file, the two lists are identical, and the
-    # lmtswap mutant below survives for the corpus's sake rather than the arm's.
+    # `ghost.sh`. Without it every BR path is a regular file, the two lists are identical, so a call
+    # site that swapped them would pass.
     printf 'other\tsrc/ghost.sh\n' >> "$BR/.ai-dlc-fixture-readsets.tsv"
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm ghost ) >/dev/null 2>&1 || broken "could not commit the ghost map row"
     [ ! -e "$BR/src/ghost.sh" ] || broken "src/ghost.sh exists on disk, so the ghost row cannot separate .paths from .now"
@@ -5618,49 +4096,11 @@ STUB
       "0|3|yes|"*"|#listing:SHA")
         if [ "$LD_RAW" = "$LD_WANT" ]; then
           ok "LOCAL: with the runner's UNIVERSE span a --local-map trace records the directory src as 'fxl	src	#listing:<sha256>', byte-identical to the listing of the tree's own manifest"
-          B_listing=1
         else
           bad "LOCAL: the src row has the listing SHAPE but not the tree's listing: row '$LD_RAW', oracle '$LD_WANT'"
         fi ;;
       *) bad "LOCAL: expected a '#listing:<sha256>' row for src from a 3-row clean trace, got '$LD' row '$LD_ROW' — $(tail -2 "$WORK/lm.out" | tr '\n' ' ')" ;;
     esac
-    LD_ANCH='readset_local_rows "$TREE" "$fx" "$WORK/$fx.set" "$WORK/lmt/.now" "$WORK/lmt/.paths"'
-    LD_N="$(grep -cF -- "$LD_ANCH" "$SL/deriver.sh")" || LD_N=0
-    LD_Z="$(grep -cF -- 'readset_local_rows "$TREE" "$fx" NEVER-IN-THE-DERIVER' "$SL/deriver.sh")" || LD_Z=0
-    MF="$LD_ANCH" MT='readset_local_rows "$TREE" "$fx" "$WORK/$fx.set" /dev/null /dev/null' awk 'BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"] }
-      { l = $0; o = ""; while ((p = index(l, f)) > 0) { o = o substr(l, 1, p - 1) t; l = substr(l, p + length(f)) } print o l }' "$SL/deriver.sh" > "$SL/d.nolmt.sh"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if [ "$LD_N" != 1 ] || [ "$LD_Z" != 0 ] || cmp -s "$SL/deriver.sh" "$SL/d.nolmt.sh"; then
-      bad "LOCAL MUTANT nolmt: anchor matched $LD_N time(s) (impossible-anchor control $LD_Z), not 1 and 0 -- DID NOT APPLY"
-    else
-      lm_seed; LDM="$(lm_run "$SL/d.nolmt.sh" "$SL/dir.list" same)"; LDM_ROW="$(lmd_row)"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx nolmt "$LDM|$LDM_ROW"
-      case "$LDM|$LDM_ROW" in
-        "0|3|yes|"*"|-") if lm_twin nolmt "$LDM"; then mutant_killed "${B_listing:-0}" nolmt "LOCAL MUTANT nolmt is KILLED: with the trace copy's manifest withheld from the call site, the same trace records src as '-'"; fi ;;
-        *) bad "LOCAL MUTANT nolmt SURVIVED or did not run: '$LDM' row '$LDM_ROW'" ;;
-      esac
-    fi
-    # Mutant lmtswap hands the call site `.paths` where it wants `.now` and the reverse. Both are
-    # non-empty, so the row keeps its listing SHAPE; only the byte conjunct above can kill it.
-    MF="$LD_ANCH" MT='readset_local_rows "$TREE" "$fx" "$WORK/$fx.set" "$WORK/lmt/.paths" "$WORK/lmt/.now"' awk 'BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"] }
-      { l = $0; o = ""; while ((p = index(l, f)) > 0) { o = o substr(l, 1, p - 1) t; l = substr(l, p + length(f)) } print o l }' "$SL/deriver.sh" > "$SL/d.lmtswap.sh"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if [ "$LD_N" != 1 ] || [ "$LD_Z" != 0 ] || cmp -s "$SL/deriver.sh" "$SL/d.lmtswap.sh"; then
-      bad "LOCAL MUTANT lmtswap: anchor matched $LD_N time(s) (impossible-anchor control $LD_Z), not 1 and 0 -- DID NOT APPLY"
-    else
-      lm_seed; LDS="$(lm_run "$SL/d.lmtswap.sh" "$SL/dir.list" same)"; LDS_ROW="$(lmd_row)"; LDS_RAW="$(lmd_raw)"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx lmtswap "$LDS|$LDS_RAW"
-      case "$LDS|$LDS_ROW" in
-        "0|3|yes|"*"|#listing:SHA")
-          if [ "$LDS_RAW" != "$LD_WANT" ] && lm_twin lmtswap "$LDS"; then
-            mutant_killed "${B_listing:-0}" lmtswap "LOCAL MUTANT lmtswap is KILLED: with .now and .paths swapped the row keeps its listing shape but reads '$LDS_RAW', not the tree's '$LD_WANT'"
-          elif [ "$LDS_RAW" != "$LD_WANT" ]; then :
-          else
-            bad "LOCAL MUTANT lmtswap SURVIVED: the swapped call wrote the tree's own listing '$LDS_RAW'"
-          fi ;;
-        *) bad "LOCAL MUTANT lmtswap did not keep the listing shape (row '$LDS_ROW', run '$LDS'), so it tests the shape and not the byte conjunct" ;;
-      esac
-    fi
   fi
     if [ -d "${SB:-/nonexistent}" ] || [ -d "${SL:-/nonexistent}" ]; then
 
@@ -5687,38 +4127,28 @@ STUB
     }
     [ -n "${SB:-}" ] && [ -d "$SB" ] && reap_world "bothstub" "$SB"
     [ -n "${SL:-}" ] && [ -d "$SL" ] && reap_world "lmstub" "$SL"
-    # The reap arm must be able to FAIL: a stub left running by its starter is reaped (control), and with the
-    # reap dropped (REAP_MUT=1) the same stub stays live (mutant). The probe world holds a copy of the stub, so
-    # its pid file is its own and the leak the mutant makes never reaches the worlds asserted above.
+    # The reap arm must be able to FAIL: a stub left running by its starter is recorded and reaped. The probe
+    # world holds a copy of the stub, so its pid file is its own.
     RM="$WORK/reapprobe"; mkdir -p "$RM" || broken "mkdir failed"
     cp "${SB:-/nonexistent}/logstream" "$RM/logstream" 2>/dev/null || cp "${SL:-/nonexistent}/logstream" "$RM/logstream" || broken "no logstream stub to probe the reap with"
     : > "$RM/feed"
-    reap_drive() { # <mutant 0|1>; prints "<recorded>|<live>" for one stub its starter left running
+    reap_drive() { # prints "<recorded>|<live>" for one stub its starter left running
       local i rec live
       : > "$RM/pids"
       ( STUB_FEED="$RM/feed" "$RM/logstream" </dev/null >/dev/null 2>&1 & )
       # THE STUB'S OWN RECORD, ON A CONDITION WITH NO BOUND (BL-868): a 50-poll cap read a stub slow to start as
       # one never recorded ('0|0'). A stub that never records hangs until the gate's watchdog, never a verdict.
       until [ -s "$RM/pids" ]; do sleep 0.1; done
-      REAP_MUT="$1" stub_reap "$RM"
+      stub_reap "$RM"
       rec="$(grep -c . "$RM/pids.last")" || rec=0
       live="$(stub_live "$RM/pids.last")"
       while read -r i; do [ -n "$i" ] && kill "$i" 2>/dev/null; done < "$RM/pids.last"
       printf '%s|%s' "$rec" "$live"
     }
-    B_stubreap=0
     TRACE_ARMS=$((TRACE_ARMS+1))
-    RP_C="$(reap_drive 0)"
-    if [ "$RP_C" = "1|0" ]; then B_stubreap=1; ok "REAP probe: one stub left running by its starter is recorded (1) and reaped (0 live): '$RP_C'"
+    RP_C="$(reap_drive)"
+    if [ "$RP_C" = "1|0" ]; then ok "REAP probe: one stub left running by its starter is recorded (1) and reaped (0 live): '$RP_C'"
     else bad "REAP probe: expected '1|0' (recorded|live), got '$RP_C'"; fi
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    RP_M="$(reap_drive 1)"
-    case "$RP_M" in
-      "1|1") _tw=0; [ "${RP_M%%|*}" = 1 ] && _tw=1
-        if f2c_twin stub-noreap "the recorded pid" "$_tw"; then mutant_killed "$B_stubreap" stub-noreap "STUB REAP MUTANT stub-noreap is KILLED: with the reap dropped the recorded stub stays live ('$RP_M' recorded|live)"; fi ;;
-      *) bad "STUB REAP MUTANT stub-noreap: expected '1|1' (recorded|live), got '$RP_M'" ;;
-    esac
-    [ "$F2C_MATRIX" = 1 ] && f2c_mx stub-noreap "recorded|live $RP_M against $RP_C"
     fi
   fi
 fi
@@ -5738,16 +4168,14 @@ fi
 # candidate at the top of this file that exists; the second hook's FIXTURE_POOL block is held
 # code-identical to the first's by I66 (scripts/validate-enforcement-map.sh) after comment strip, with
 # the fixture root the one mapped difference, so it runs one world, (d), end to end with its own root.
-# Every world is scored as ONE vector of cells against a want string, and each mutant is scored on
-# its own world's MOVED vector plus one named twin world held at want (the table above ck_mut).
+# Every world is scored as ONE vector of cells against a want string.
 #
 # Dispatch is pinned to one worker (AI_DLC_FIXTURE_JOBS=1 on the drive) because world (l) kills a
 # worker: BSD xargs stops dispatching when an invocation dies by signal, so the fixture after the
 # killed one has no verdict -- which is the no-verdict half of (l), deterministic only serially.
-CK_ARMS=0; CK_MX_ROWS=0; B_CKD=0; B_CKQ=0; B_CKQL=0
+CK_ARMS=0
 CK_W="$WORK/ck"; mkdir -p "$CK_W" || broken "could not create the checksum-key worlds"
-# CK_HELPERS_BEGIN -- a retired mutation battery sourced this span and the DG span below, so its
-# mutants were scored by the worlds this fixture ships, never by a restatement of them.
+# CK_HELPERS_BEGIN -- the helpers the ck, tk and dg worlds share.
 ck_sha() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
 # THE SEED IS BUILT ONCE PER SHAPE AND COPIED. A shape is (fixture root, extra fixture); ck_seed_build writes
 # the git world into a template under $CK_W the first time a shape is asked for, and every later ck_seed of
@@ -5812,7 +4240,7 @@ ck_w_a() { local p="$1" x="$2" t="$3" k
   ck_seed "$t" "$x" || { printf SEED; return; }
   ck_push "$p" "$t" 1; ck_push "$p" "$t" 2; k="$(ck_k "$t" alpha)"
   # The own-directory row belongs to (d) and the listing row to (c); asserting them here as well
-  # would make those worlds' mutants move this one too.
+  # would entangle the worlds.
   printf 'p1=%s p2=%s hdr=%s tools=%s trow=%s row=%s sorted=%s ann=%s' "$(ck_r "$t" 1)" "$(ck_r "$t" 2)" \
     "$(sed -n '1,3p' "$k" 2>/dev/null | tr '\n' ',')" \
     "$(grep -cxF "$t.bin/cktool	$(ck_sha "$t.bin/cktool")" "$k" 2>/dev/null)" \
@@ -5918,8 +4346,7 @@ CK_WANT_h='p2=alpha|0 s2=#state stale p3=alpha|0 why=1 s3=#state stale p4=|0 s4=
 # are NOT walked into its keys because X is a fixture, not an input (0.748.0, BL-482). The cell that
 # needs grow()'s subtree walk is a NON-fixture directory appearing under a directory the walker
 # lists: here `src/d/sub` under src/d, which beta lists. A new directory inside a listed directory is
-# walked into beta's keys so a later edit under it reruns beta; mutant `nosubtree` drops that walk
-# and p3 stays 0. Which fixtures run on the sibling push is (o)'s subject; which run on a plain new
+# walked into beta's keys so a later edit under it reruns beta; (p3=1). Which fixtures run on the sibling push is (o)'s subject; which run on a plain new
 # file is (c)'s; neither is scored here.
 ck_w_m() { local p="$1" x="$2" t="$3" k
   ck_seed "$t" "$x" || { printf SEED; return; }
@@ -5934,7 +4361,7 @@ CK_WANT_m='p2=1 st=#state ok row=1 p3=1'
 # (o) THE SIBLING EXCLUSION, owned alone: a walker that keys the fixture root SKIPS on the push that
 # adds a sibling fixture directory X (p2=0), is republished `#state ok` with the new root listing
 # (sib=1, the hook's own message), does not carry X's files as keys (row=0), and stays skipped on a
-# later edit to X/run.sh alone (p4=0). Mutant `nosibs` deletes the exclusion: p2 flips to 1.
+# later edit to X/run.sh alone (p4=0).
 ck_w_o() { local p="$1" x="$2" t="$3" k
   ck_seed "$t" "$x" walker || { printf SEED; return; }
   printf 'walker\t%s\n' "$x" >> "$t/.ai-dlc-fixture-readsets.tsv"
@@ -5959,8 +4386,8 @@ ck_w_i() { local p="$1" x="$2" t="$3"
   ( cd "$t" && mkdir -p "$t.v2" && . "$p" 2>/dev/null && readset_manifest "$t.v2" \
     && [ -s "$t.v2/.now" ] && cp "$t.v2/.now" .git/ai-dlc-fixture-verified && printf 'v2\n' > .git/ai-dlc-fixture-verified.format ) \
     || { printf V2SEED; return; }
-  # A new DIRECTORY entry, not a file: (c)'s mutant drops file entries from listings, and this world
-  # must not move with it.
+  # A new DIRECTORY entry, not a file: so this world stays independent of (c)'s
+  # file-entry listing.
   printf 'v2\n' > "$t/src/a.sh"; mkdir -p "$t/src/d/sub" && printf '2\n' > "$t/src/d/sub/two.txt"; ck_push "$p" "$t" 1
   printf 'p1=%s delta=%s' "$(ck_r "$t" 1)" "$(ck_st "$t" delta)"
 }
@@ -6059,179 +4486,6 @@ if sg ckw; then
   [ "$CK_N" -ge 1 ] && ok "the checksum-key worlds ran against the first of $CK_N hook(s)" || bad "no pre-push hook was found for the checksum-key worlds"
 fi
 
-# MUTANTS on the FIRST resolved hook's block, one per world, each a count-checked literal edit
-# (pm_copy's grammar). Each runs its OWN world, which must read the exact moved vector stated at the
-# call, and ONE twin world, which must read its want. The twin is the world sharing the mutated line's
-# code path that must NOT move, so a mutation reaching past its own subject still fails here:
-#   mutant      own  twin  shared path
-#   rowsort     a    b     the record writer's row sort; (b) reads its record's rows back
-#   reason      b    e     the one `why = um ? ... : "changed " first` line; (e) takes its other arm
-#   fileentries c    i     listing entries; (i)'s listing change is a new DIRECTORY, not a file
-#   owndir      d    o     a fixture's own directory as keys; (o)'s walker keys the fixture root
-#   closure     e    b     the changed-key class for a mapped fixture beside the unmapped one
-#   redblocks   f    l     the verdict read that records a pass; (l) has a killed and a missing verdict
-#   notools     g    n     the tools-changed class; (n) moves a tool only alpha names
-#   staleclears h    m     the state written back; (m) republishes `#state ok` on a listing change
-#   nov2        i    c     the v2 seed's listing; (c) lists without a v2 record
-#   hashrunall  j    a     the empty-.now run-all guard; (a) hashes a clean tree and skips
-#   anyformat   k    a     the record reader's format line; (a) pins `#format k1` and skips on it
-#   notfail     l    f     the same verdict-read line as redblocks; (f) carries a FAIL verdict
-#   nosubtree   m    o     grow()'s walk under a listed directory; (o) adds a sibling fixture instead
-#   globaltools n    g     per-fixture tool keys; (g) moves a tool every fixture names
-#   nosibs      o    m     the sibling exclusion; (m) adds a non-fixture directory under a listing
-# TRADE: "a mutant moves ONLY its own world" across all fifteen is no longer re-proven per push. It is
-# a property of the battery, not of the hook, so it is measured at authoring by running every mutant
-# over all fifteen worlds against the first hook (.githooks/pre-push in this repo) and recorded below;
-# X = the world's vector differed from the unmutated run in the same process, . = identical.
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
-# The rows below are replaced with the printed ones. The command, from the repo root, runs every unit in one
-# process (`--matrix` replaces `--group`):
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/readset-skip/run.sh --matrix
-# and `sed -n 's/^CK-MATRIX //p'` over its log prints these rows. It is a direct run, not
-# core/scripts/hermetic-run.sh, because the hermetic runner forwards no argument. A plain run executes no
-# matrix-only cell: the end-of-run arm asserts zero CK-MATRIX rows without the flag and fifteen with it.
-# The mode changes only what ck_mut drives; every per-push verdict is still scored on the own world and the twin.
-# MUTANT-MATRIX-DYNAMIC ck_mut why=the one mutant driver hands its name argument to mutant_killed; each of the fifteen names it receives has its own row below
-# MUTANT-MATRIX rowsort decides=a twins=b
-# MUTANT-MATRIX reason decides=b twins=e
-# MUTANT-MATRIX fileentries decides=c twins=i
-# MUTANT-MATRIX owndir decides=d twins=o
-# MUTANT-MATRIX closure decides=e twins=b
-# MUTANT-MATRIX redblocks decides=f twins=l
-# MUTANT-MATRIX notools decides=g twins=n
-# MUTANT-MATRIX staleclears decides=h twins=m
-# MUTANT-MATRIX nov2 decides=i twins=c
-# MUTANT-MATRIX hashrunall decides=j twins=a
-# MUTANT-MATRIX anyformat decides=k twins=a
-# MUTANT-MATRIX notfail decides=l twins=f
-# MUTANT-MATRIX nosubtree decides=m twins=o
-# MUTANT-MATRIX globaltools decides=n twins=g
-# MUTANT-MATRIX nosibs decides=o twins=m
-# MUTANT-MATRIX staledecl decides=stale-declared.dsame,stale-declared.unrel,stale-declared.dchg,stale-declared.rchg,stale-declared.rout,stale-declared.dempty twins=stale-declared.ctl,stale-declared.beta
-# MUTANT-MATRIX runnerrow decides=stale-declared.rchg twins=stale-declared.dsame,stale-declared.beta
-# MUTANT-MATRIX wholefile decides=stale-declared.rout twins=stale-declared.dsame,stale-declared.beta
-# MUTANT-MATRIX quotedrow decides=quoted-row.qrow,quoted-local.lq twins=quoted-row.qctl,quoted-local.ctl
-# The stale-declared, runner-row and quoted-row mutants below each have ONE world, every cell of which
-# is asserted in the vector, so they have no cross-world matrix.
-#               a b c d e f g h i j k l m n o
-#   rowsort     X . . . . . . . . . . . . . .
-#   reason      . X . . . . . . . . . . . . .
-#   fileentries . . X . . . . . . . . . . . .
-#   owndir      . . . X . . . . . . . . . . .
-#   closure     . . . . X . . . . . . . . . .
-#   redblocks   . . . . . X . . . . . . . . .
-#   notools     . . . . . . X . . . . . . . .
-#   staleclears . . . . . . . X . . . . . . .
-#   nov2        . . . . . . . . X . . . . . .
-#   hashrunall  . . . . . . . . . X . . . . .
-#   anyformat   . . . . . . . . . . X . . . .
-#   notfail     . . . . . . . . . . . X . . .
-#   nosubtree   . . . . . . . . . . . . X . .
-#   globaltools . . . . . . . . . . . . . X .
-#   nosibs      . . . . . . . . . . . . . . X
-# The same run read all fifteen unmutated worlds identical across the two hooks.
-ck_base() { # <world>: the UNMUTATED block's world, once per process; sets CKB_<w>=1 only when it reads its want
-  local w="$1" g
-  [ -f "$CK_W/base.$w.done" ] && return 0
-  if [ "${READSET_SKIP_MATRIX:-}" = 1 ]; then
-    [ -f "$CK_W/mx.h1.done" ] || { ck_all "$CK_P1" "$CK_X1" mx.h1; : > "$CK_W/mx.h1.done"; }
-    g="$(cat "$CK_W/mx.h1.$w.got" 2>/dev/null)"
-  else
-    g="$("ck_w_$w" "$CK_P1" "$CK_X1" "$CK_W/base.$w" 2>/dev/null)"
-  fi
-  : > "$CK_W/base.$w.done"
-  if [ "$g" = "$(ck_want "$w")" ]; then eval "CKB_$w=1"; fi
-}
-ck_mut() { # <world> <twin> <name> <moved vector> then triples <count> <from> <to>
-  local w="$1" tw="$2" name="$3" mv="$4" dst="$CK_W/mut.$3.sh" n o moved="" cb; shift 4
-  CK_ARMS=$((CK_ARMS+1)); ck_base "$w"; cb="$(eval "printf %s \"\${CKB_$w:-0}\"")"; cp "$CK_P1" "$dst" || { bad "CK MUTANT $name: copy failed"; return; }
-  while [ $# -ge 3 ]; do
-    MF="$2" MT="$3" MC="$CK_W/mut.$name.n" awk '
-      BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
-      { line = $0; o = ""
-        while ((p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
-        print o line }
-      END { print n > ENVIRON["MC"] }' "$dst" > "$dst.t" && mv "$dst.t" "$dst"
-    n="$(cat "$CK_W/mut.$name.n" 2>/dev/null)"
-    [ "$n" = "$1" ] || { bad "CK MUTANT $name: anchor matched ${n:-nothing} time(s), not $1 — DID NOT APPLY"; return; }
-    shift 3
-  done
-  cmp -s "$CK_P1" "$dst" && { bad "CK MUTANT $name: the copy is unchanged"; return; }
-  if [ "${READSET_SKIP_MATRIX:-}" = 1 ]; then
-    # MATRIX MODE: every world under the mutant, each compared with the unmutated block's vector taken in
-    # this same process (once), printed as one header row. The verdict below reads the same .got files.
-    [ -f "$CK_W/mx.h1.done" ] || { ck_all "$CK_P1" "$CK_X1" mx.h1; : > "$CK_W/mx.h1.done"; }
-    ck_all "$dst" "$CK_X1" "m.$name"; local row=""
-    for o in $CK_WORLDS; do cmp -s "$CK_W/m.$name.$o.got" "$CK_W/mx.h1.$o.got" && row="$row ." || row="$row X"; done
-    printf 'CK-MATRIX #   %-12s%s\n' "$name" "${row# }"; CK_MX_ROWS=$((CK_MX_ROWS+1))
-  else
-    for o in $w $tw; do "ck_w_$o" "$dst" "$CK_X1" "$CK_W/m.$name.$o" > "$CK_W/m.$name.$o.got" 2>/dev/null; done
-  fi
-  [ "$(cat "$CK_W/m.$name.$w.got")" = "$mv" ] || moved="$moved $w"
-  [ "$(cat "$CK_W/m.$name.$tw.got")" = "$(ck_want "$tw")" ] || moved="$moved $tw"
-  if [ -z "$moved" ] && [ "$mv" != "$(ck_want "$w")" ]; then mutant_killed "$([ "$cb" = 1 ] && echo 1 || echo 0)" "$name" "CK MUTANT $name is KILLED by ($w), twin ($tw) at want: $mv"
-  else
-    bad "CK MUTANT $name: ($w) must read its stated vector and twin ($tw) its want; off: '${moved# }'"
-    # EVERY MOVED WORLD'S VECTOR PAIR IS PRINTED (BL-616): a red read only as a set of world letters left
-    # no evidence of WHICH field moved, and the load-borne red this was added for could not be diagnosed.
-    # A DROPPED VERDICT is the one forced state that moves (f) under `notfail` and not under the unmutated
-    # block (a TERM to beta's pool worker in push 1), so each push's pool lines naming a unit with no
-    # verdict are printed beside the pair: the next red says whether the pool lost a verdict.
-    for o in $moved; do printf '          (%s) under %s: want %s\n          (%s) under %s: got  %s\n' \
-      "$o" "$name" "$( [ "$o" = "$w" ] && printf '%s' "$mv" || ck_want "$o")" "$o" "$name" "$(cat "$CK_W/m.$name.$o.got" 2>/dev/null)"
-      for _po in "$CK_W/m.$name.$o".o.*/out; do
-        [ -f "$_po" ] || continue
-        grep -E 'no verdict recorded|produced a verdict|REFUSED' "$_po" 2>/dev/null | sed "s|^|          ($o) push ${_po%/out}: |; s|$CK_W/m\.$name\.$o\.o\.||"
-      done
-    done
-  fi
-}
-# One mutant per world. Each anchor must be unique in the block; ck_mut refuses any other count.
-if sg ckm1; then
-  [ "$CK_N" -ge 1 ] || bad "no pre-push hook was found for the checksum-key mutants"
-  if [ "$CK_N" -ge 1 ]; then
-    ck_mut a b rowsort 'p1=alpha beta delta|0 p2=|0 hdr=#format k1,#state ok,#tools canonical, tools=1 trow=y row=1 sorted=n ann=1' \
-      1 '-k1,1 -k2 "$out/.kout"' '-k1,1 -k2r "$out/.kout"'
-    ck_mut b e reason 'p2=beta|0 ann=1 why=0' \
-      1 'why = um ? "unmapped: closure changed" : "changed " first;' 'why = um ? "unmapped: closure changed" : "changed";'
-    ck_mut c i fileentries 'p2=|0 p3=|0' \
-      1 "  awk '{ p = \$0; while ((i = match(p," "  awk '{ p = \$0; sub(/\\/[^\\/]*\$/, \"\", p); while ((i = match(p,"
-    ck_mut d o owndir 'p2=|0' \
-      1 '               n = split(OWN[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }' '               }'
-    ck_mut e b closure 'p1=alpha beta delta gamma|0 p2=gamma|0 p3=delta gamma|0 why=0' \
-      1 '        if (um) { for (p in NV) K[p] = 1 }' '        if (um) { }'
-    ck_mut f l redblocks 'p1=alpha beta delta|1 keys= p2=alpha beta delta|0' \
-      1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "${rc:-1}" = 0 ] && [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||'
-    ck_mut g n notools 'p2=|0 why=0 st=#state ok' \
-      1 'else if (tch) { why = "tools changed"; c = "k" }' 'else if (0) { why = "tools changed"; c = "k" }'
-  fi
-fi
-if sg ckm2; then
-  [ "$CK_N" -ge 1 ] || bad "no pre-push hook was found for the checksum-key mutants"
-  if [ "$CK_N" -ge 1 ]; then
-    ck_mut h m staleclears 'p2=alpha|0 s2=#state stale p3=alpha|0 why=1 s3=#state ok p4=|0 s4=#state ok p5=|0' \
-      1 '        else if (st == "stale" && !(f in DECL)) ns = ((f in LOC) ? "ok" : "stale")' '        else if (st == "stale") ns = "ok"'
-    ck_mut i c nov2 'p1=alpha beta delta|0 delta=#state stale' \
-      1 '      if (seed) rd(ENVIRON["KV2"], VV)' '      if (0) rd(ENVIRON["KV2"], VV)'
-  fi
-fi
-if sg ckm3; then
-  [ "$CK_N" -ge 1 ] || bad "no pre-push hook was found for the checksum-key mutants"
-  if [ "$CK_N" -ge 1 ]; then
-    ck_mut j a hashrunall 'p2=alpha beta delta|0 why=0' \
-      1 "  [ -s \"\$out/.now\" ] || { printf '   ..    could not hash" "  : || { printf '   ..    could not hash"
-    ck_mut k a anyformat 'p2=|0 why=0 pu=1' \
-      1 'FNR == 1 { ok = ($0 == "#format k1");' 'FNR == 1 { ok = 1;'
-    ck_mut l f notfail 'p1=alpha beta|1 bad=2' \
-      1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "$(cat "$out/$b" 2>/dev/null)" != FAIL ] ||'
-    ck_mut m o nosubtree 'p2=1 st=#state ok row=0 p3=0' \
-      1 '        subtree(d "/" a[j]) }' '        }'
-    ck_mut n g globaltools 'others=2 rc=0' \
-      1 '(!(f in DECL)) for (k in K) if (k in FT) {' '(!(f in DECL)) for (k in FT) {'
-    ck_mut o m nosibs 'p2=1 st=#state ok row=1 sib=0 p3=0 p4=1' \
-      1 'if (k == root && sibs_only(k)) { SB = 1; continue }' 'if (0) { SB = 1; continue }'
-  fi
-fi
 
 # ------------------------------------ a DECLARED fixture's stale record is decided on its keys ----
 # A fixture carrying `inputs.decl` has its declaration as its read set, so a record reading `#state stale`
@@ -6250,8 +4504,6 @@ fi
 #   dempty the declared fixture's stale record holds NO key rows        -> run (a missing stored key is changed)
 #   ctl    UNDECLARED alpha, record stale, nothing moved                -> run, reason stale (the near-miss)
 #   beta   undeclared and ok in the same invocation                     -> skip (proves the driver decided)
-# The mutant reverts BOTH decision lines to their pre-fix text and must lose the dsame cell, and ONLY it
-# and the cells that read the same line.
 if sg ckw && true; then
 CKD_DRV="$WORK/ckd.drive.sh"
 printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
@@ -6290,74 +4542,11 @@ CKD_WANT='dsame=skip:v:ok unrel=skip:v:ok dchg=run:k:ok rchg=run:k:ok rout=skip:
 CKD_N="$CK_N"; CKD_P1="${CK_P1:-}"; CKD_X1="${CK_X1:-}"
 if [ "$CKD_N" -ge 1 ]; then
   CK_ARMS=$((CK_ARMS+1)); _g="$(ckd_world "$CKD_P1" "$CKD_X1" "$CK_W/ckd.h1" 2>/dev/null)"
-  if [ "$_g" = "$CKD_WANT" ]; then B_CKD=1; ok "(stale-declared) ${CK_H1#"$ROOT"/}: $_g"
+  if [ "$_g" = "$CKD_WANT" ]; then ok "(stale-declared) ${CK_H1#"$ROOT"/}: $_g"
   else bad "(stale-declared) ${CK_H1#"$ROOT"/}: want '$CKD_WANT' got '$_g'"; fi
 fi
 CK_ARMS=$((CK_ARMS+1))
 [ "$CKD_N" -ge 1 ] && ok "the stale-declared world ran against the first of $CKD_N hook(s)" || bad "no pre-push hook was found for the stale-declared world"
-# THE MUTANT: both decision lines back to their pre-fix text. dsame must flip to a forced run, with the
-# record written back stale; the undeclared control and every other cell stay put. Count-checked, cmp-guarded.
-if [ "$CKD_N" -ge 1 ]; then
-  CK_ARMS=$((CK_ARMS+1))
-  CKD_M="$CK_W/ckd.mut.sh"; cp "$CKD_P1" "$CKD_M"
-  MF1='else if (st == "stale" && !(f in LOC) && !((f in DECL) && RK[f] != "")) { why = "stale"; c = "s" }'
-  MT1='else if (st == "stale" && !(f in LOC)) { why = "stale"; c = "s" }'
-  MF2='else if (st == "stale" && !(f in DECL)) ns = ((f in LOC) ? "ok" : "stale")'
-  MT2='else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")'
-  _n1="$(grep -cF -- "$MF1" "$CKD_M")"; _n2="$(grep -cF -- "$MF2" "$CKD_M")"
-  if [ "$_n1" != 1 ] || [ "$_n2" != 1 ]; then bad "STALE-DECLARED MUTANT did not apply: anchors matched $_n1 and $_n2 time(s), not 1 and 1"
-  else
-    MF1="$MF1" MT1="$MT1" MF2="$MF2" MT2="$MT2" awk '{ if (index($0, ENVIRON["MF1"])) { i = index($0, ENVIRON["MF1"]); $0 = substr($0, 1, i - 1) ENVIRON["MT1"] substr($0, i + length(ENVIRON["MF1"])) }
-      if (index($0, ENVIRON["MF2"])) { i = index($0, ENVIRON["MF2"]); $0 = substr($0, 1, i - 1) ENVIRON["MT2"] substr($0, i + length(ENVIRON["MF2"])) }
-      print }' "$CKD_M" > "$CKD_M.t" && mv "$CKD_M.t" "$CKD_M"
-    if cmp -s "$CKD_P1" "$CKD_M"; then bad "STALE-DECLARED MUTANT: the copy is unchanged"
-    else
-      _g="$(ckd_world "$CKD_M" "$CKD_X1" "$CK_W/ckd.mut" 2>/dev/null)"
-      _w='dsame=run:s:stale unrel=run:s:stale dchg=run:s:stale rchg=run:s:stale rout=run:s:stale dempty=run:s:stale ctl=run:s:stale beta=skip::ok'
-      if [ "$_g" = "$_w" ] && [ "$_g" != "$CKD_WANT" ]; then mutant_killed "$B_CKD" staledecl "STALE-DECLARED MUTANT (pre-fix lines) is KILLED: dsame becomes a forced run written back stale: $_g"
-      else bad "STALE-DECLARED MUTANT: expected '$_w', got '$_g'"; fi
-    fi
-  fi
-fi
-# THE RUNNER-ROW MUTANT: the one rule keying every declared fixture on the runner's HR_SANDBOX span sha, deleted from the
-# same hook copy. rchg alone loses its changed-runner run and reads skip; every other cell stays put.
-if [ "$CKD_N" -ge 1 ]; then
-  CK_ARMS=$((CK_ARMS+1))
-  CKD_R="$CK_W/ckd.rmut.sh"; cp "$CKD_P1" "$CKD_R" || bad "STALE-DECLARED RUNNER MUTANT did not apply: could not copy the hook"
-  RF='      if (p in RNS) for (f in FX) out(f, p "#HR_SANDBOX", RNS[p])'
-  _nr="$(grep -cxF -- "$RF" "$CKD_R")"
-  if [ "$_nr" != 1 ]; then bad "STALE-DECLARED RUNNER MUTANT did not apply: the runner-row anchor matched $_nr time(s), not 1"
-  else
-    RF="$RF" awk '$0 != ENVIRON["RF"] { print }' "$CKD_R" > "$CKD_R.t" && mv "$CKD_R.t" "$CKD_R"
-    if cmp -s "$CKD_P1" "$CKD_R"; then bad "STALE-DECLARED RUNNER MUTANT: the copy is unchanged"
-    else
-      _g="$(ckd_world "$CKD_R" "$CKD_X1" "$CK_W/ckd.rmut" 2>/dev/null)"
-      _w="${CKD_WANT/rchg=run:k:ok/rchg=skip:v:ok}"
-      if [ "$_g" = "$_w" ] && [ "$_g" != "$CKD_WANT" ]; then mutant_killed "$B_CKD" runnerrow "STALE-DECLARED RUNNER MUTANT (runner row deleted) is KILLED: rchg becomes a skip: $_g"
-      else bad "STALE-DECLARED RUNNER MUTANT: expected '$_w', got '$_g'"; fi
-    fi
-  fi
-fi
-# THE WHOLE-FILE MUTANT: the runner row keyed on the runner's WHOLE-FILE hash again, in the same hook copy. rout alone
-# loses its skip (a line outside the span moves the key) and reads run; every other cell stays put.
-if [ "$CKD_N" -ge 1 ]; then
-  CK_ARMS=$((CK_ARMS+1))
-  CKD_W="$CK_W/ckd.wmut.sh"; cp "$CKD_P1" "$CKD_W" || bad "STALE-DECLARED WHOLE-FILE MUTANT did not apply: could not copy the hook"
-  WF='      if (p in RNS) for (f in FX) out(f, p "#HR_SANDBOX", RNS[p])'
-  WT='      if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh") for (f in FX) out(f, p, v)'
-  _nw="$(grep -cxF -- "$WF" "$CKD_W")"
-  if [ "$_nw" != 1 ]; then bad "STALE-DECLARED WHOLE-FILE MUTANT did not apply: the runner-row anchor matched $_nw time(s), not 1"
-  else
-    WF="$WF" WT="$WT" awk '{ if ($0 == ENVIRON["WF"]) $0 = ENVIRON["WT"]; print }' "$CKD_W" > "$CKD_W.t" && mv "$CKD_W.t" "$CKD_W"
-    if cmp -s "$CKD_P1" "$CKD_W"; then bad "STALE-DECLARED WHOLE-FILE MUTANT: the copy is unchanged"
-    else
-      _g="$(ckd_world "$CKD_W" "$CKD_X1" "$CK_W/ckd.wmut" 2>/dev/null)"
-      _w="${CKD_WANT/rout=skip:v:ok/rout=run:k:ok}"
-      if [ "$_g" = "$_w" ] && [ "$_g" != "$CKD_WANT" ]; then mutant_killed "$B_CKD" wholefile "STALE-DECLARED WHOLE-FILE MUTANT (runner keyed whole-file) is KILLED: rout becomes a run: $_g"
-      else bad "STALE-DECLARED WHOLE-FILE MUTANT: expected '$_w', got '$_g'"; fi
-    fi
-  fi
-fi
 
 # A QUOTED MAP ROW MUST NOT TURN KEYING OFF FOR THE PUSH. The quoted-path guard in readset_manifest used to read
 # `.paths`, which carries every committed-map and local-map path, so one C-quoted row emptied `.now` and the push
@@ -6420,28 +4609,11 @@ CKQL_WANT='ctl=skip::ok,skip::ok,skip::ok,skip::ok lq=run:k:ok,skip::ok,skip::ok
 CKQ_WANT='qctl=skip::ok,skip::ok,skip::ok qrow=run:k:ok,skip::ok,skip::ok qpath=,, why=1 qloc=skip::ok,skip::ok,skip::ok'
 if [ "$CKD_N" -ge 1 ]; then
   CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_world "$CKD_P1" "$CKD_X1" "$CK_W/ckq.h1" 2>/dev/null)"
-  if [ "$_g" = "$CKQ_WANT" ]; then B_CKQ=1; ok "(quoted-row) a quoted map row runs its own fixture only, a quoted ls-files path still empties keying and is NAMED: $_g"
+  if [ "$_g" = "$CKQ_WANT" ]; then ok "(quoted-row) a quoted map row runs its own fixture only, a quoted ls-files path still empties keying and is NAMED: $_g"
   else bad "(quoted-row) want '$CKQ_WANT' got '$_g'"; fi
   CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_local_world "$CKD_P1" "$CKD_X1" "$CK_W/ckq.loc" 2>/dev/null)"
-  if [ "$_g" = "$CKQL_WANT" ]; then B_CKQL=1; ok "(quoted-local) a quoted LOCAL row on a fixture with no committed rows runs that fixture only; keying stays on for the rest: $_g"
+  if [ "$_g" = "$CKQL_WANT" ]; then ok "(quoted-local) a quoted LOCAL row on a fixture with no committed rows runs that fixture only; keying stays on for the rest: $_g"
   else bad "(quoted-local) want '$CKQL_WANT' got '$_g'"; fi
-  CK_ARMS=$((CK_ARMS+1))
-  CKQ_M="$CK_W/ckq.mut.sh"; cp "$CKD_P1" "$CKQ_M"
-  _a1="$(grep -cF -- "    readset_rows \"\$out\" paths | grep -v '^\"'" "$CKQ_M")"; _a2="$(grep -cF -- "grep -q '^\"' \"\$out/.lsf\"" "$CKQ_M")"
-  if [ "$_a1" != 1 ] || [ "$_a2" != 1 ]; then bad "QUOTED-ROW MUTANT did not apply: anchors matched $_a1 and $_a2 time(s), not 1 and 1"
-  else
-    sed -e "s#^    readset_rows \"\$out\" paths | grep -v '^\"'\$#    readset_rows \"\$out\" paths#" \
-        -e "s#grep -q '^\"' \"\$out/.lsf\"#grep -q '^\"' \"\$out/.paths\"#" "$CKQ_M" > "$CKQ_M.t" && mv "$CKQ_M.t" "$CKQ_M"
-    if cmp -s "$CKD_P1" "$CKQ_M"; then bad "QUOTED-ROW MUTANT: the copy is unchanged"
-    else
-      _g="$(ckq_world "$CKQ_M" "$CKD_X1" "$CK_W/ckq.mut" 2>/dev/null)"
-      if [ "$_g" != "$CKQ_WANT" ] && case "$_g" in *"qrow=,,"*) true ;; *) false ;; esac; then mutant_killed "$B_CKQ" quotedrow "QUOTED-ROW MUTANT (unscoped guard) is KILLED by the qrow arm: the quoted map row empties keying for every fixture: $_g"
-      else bad "QUOTED-ROW MUTANT: expected qrow=,, in '$_g'"; fi
-      CK_ARMS=$((CK_ARMS+1)); _g="$(ckq_local_world "$CKQ_M" "$CKD_X1" "$CK_W/ckq.locmut" 2>/dev/null)"
-      if [ "$_g" != "$CKQL_WANT" ] && case "$_g" in *"lq=,,,"*) true ;; *) false ;; esac; then mutant_killed "$B_CKQL" quotedrow "QUOTED-ROW MUTANT (unscoped guard) is KILLED by the quoted-local cell: keying goes off for every fixture: $_g"
-      else bad "QUOTED-ROW MUTANT: quoted-local cell expected lq=,,, in '$_g'"; fi
-    fi
-  fi
 fi
 fi
 
@@ -6464,7 +4636,7 @@ fi
 #           rows and no old one, the next push migrates nothing, and a later binary change reruns alpha.
 #   migrun  the amnesty never covers a tree key: an old-format record whose FILE moved runs, for that file.
 if sg tk; then
-# TK_WORLDS_BEGIN -- a retired mutation battery sourced this span after CK_HELPERS, to score the tool-key mutants.
+# TK_WORLDS_BEGIN -- the tool-key worlds, defined after CK_HELPERS.
 TK_ARMS=0
 TK_FX="$WORK/tk.xp"; mkdir -p "$TK_FX" || broken "could not create the fake exec-path dir"
 TK_GIT="$(command -v git)" || broken "no git on PATH"
@@ -6608,7 +4780,7 @@ fi
 #   (h1) a set ending on a directory hashes, under pipefail, with a `-` row for the directory
 #   (h2) a set holding an UNREADABLE regular file still refuses, under pipefail AND without it -- the
 #        second is the count assertion's own world: there the pipeline's status is awk's
-# Each arm is driven on the deriver's own READSET_LOCALMAP span; the mutants edit a copy of it.
+# Each arm is driven on the deriver's own READSET_LOCALMAP span.
 if sg hr; then
 HR_SPAN="$WORK/hr.span.sh"
 hr_drive() { # <span> <pipefail|nopipefail> <last|unread>: prints "<rc>|<rows>"
@@ -6633,27 +4805,14 @@ else
     printf '%s %s %s' "$([ "$a" = '0|3' ] && echo ok || echo "h1=$a")" "$([ "${b%%|*}" != 0 ] && echo ok || echo "h2p=$b")" "$([ "${c%%|*}" != 0 ] && echo ok || echo "h2n=$c")"
   }
   HR="$(hr_arms "$HR_SPAN")"; lt_arm
-  B_HR_h1=0; B_HR_h2=0   # same-run base-pass flags, set only in the passing branch of the unmutated arm
-  case "$HR" in "ok "*) ok "(h1) a set whose LAST path is a directory hashes under pipefail, its directory a '-' row: 3 rows"; B_HR_h1=1 ;;
+  case "$HR" in "ok "*) ok "(h1) a set whose LAST path is a directory hashes under pipefail, its directory a '-' row: 3 rows" ;;
     *) bad "(h1) a set ending on a directory did not hash: $HR" ;; esac
   if [ "$HR_UNREAD_CAN" = 0 ]; then
     printf '  SKIP  (h2) an unreadable regular file: chmod 000 does not stop this user reading it (root?)\n'
   else
     lt_arm
-    case "$HR" in *" ok ok") ok "(h2) a set holding an UNREADABLE regular file refuses, with pipefail and without it"; B_HR_h2=1 ;;
+    case "$HR" in *" ok ok") ok "(h2) a set holding an UNREADABLE regular file refuses, with pipefail and without it" ;;
       *) bad "(h2) an unreadable file did not refuse in both shells: $HR" ;; esac
-    # MUTANTS: the base loop's spelling, and the count assertion removed. Each must move only its cell.
-    hr_mut() { # <name> <from> <to> <want cells>
-      local m="$WORK/hr.m.$1.sh" n r; lt_arm
-      MF="$2" MT="$3" awk 'BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"] } { l = $0; o = ""; while ((p = index(l, f)) > 0) { o = o substr(l, 1, p - 1) t; l = substr(l, p + length(f)); n++ } print o l } END { print n + 0 > "/dev/stderr" }' "$HR_SPAN" > "$m" 2> "$m.n"
-      n="$(cat "$m.n")"
-      if [ "$n" != 1 ] || cmp -s "$HR_SPAN" "$m"; then bad "MUTANT $1: anchor matched ${n:-nothing} time(s), not 1 -- DID NOT APPLY"; return; fi
-      r="$(hr_arms "$m")"
-      if [ "$r" = "$4" ]; then mutant_killed "$(( ${B_HR_h1:-0} && ${B_HR_h2:-0} ))" "$1" "MUTANT $1 is KILLED, on exactly its own cell: $r"
-      else bad "MUTANT $1 moved '$r', want '$4'"; fi
-    }
-    hr_mut lastpath "if [ -f \"\$p\" ]; then printf '%s\\0' \"\$p\"; n=\$((n + 1)); fi" "[ -f \"\$p\" ] && printf '%s\\0' \"\$p\" && n=\$((n + 1))" 'h1=1|0 ok ok'
-    hr_mut nocount '  [ "$(cat "$set.nreg" 2>/dev/null)" = "$nsha" ] || return 1' '  :' 'ok ok h2n=0|2'
   fi
 fi
 
@@ -6667,9 +4826,7 @@ fi
 # before digests), never clear. Every digest seeded here is computed by the SHIPPED producer: the
 # deriver's readset_hash_rows over the pool's own manifest, through the pool's readset_digests -- the
 # function the deriver sources out of the hook -- so the seed is what a real trace writes.
-# Each world is one vector against a want string, run against both hooks like the CK worlds. The
-# mutants that killed these worlds lived in a retired battery, which sourced this span: run
-# here they would multiply the worlds onto this fixture, which is already the suite's pole.
+# Each world is one vector against a want string, run against both hooks like the CK worlds.
 DG_ARMS=0
 # DG_WORLDS_BEGIN
 DG_HASH="$WORK/dg.hashrows.sh"
@@ -6701,8 +4858,8 @@ dg_deriver() { # <t>: a tracked deriver for readset_deriver_path to resolve and 
 }
 # dg_local_rows <pool> <t> <fixture>: print <fixture>'s local rows the way the deriver's --local-map writes
 # them -- its readset_local_rows over a manifest of <t> taken with no local map, as the deriver takes one of
-# the trace copy. The UNIVERSE span comes from the POOL UNDER TEST (as dg_digest sources it), so a mutant
-# of that pool's readset_dir_values reaches the seed too. Fails closed on an empty row set.
+# the trace copy. The UNIVERSE span comes from the POOL UNDER TEST (as dg_digest sources it), so a change to
+# that pool's readset_dir_values reaches the seed too. Fails closed on an empty row set.
 dg_local_rows() {
   local p="$1" t="$2" fx="$3" s
   s="$(mktemp -d "$WORK/dgl.XXXXXX")" || return 1
@@ -6952,7 +5109,7 @@ fi
 #       be judged changed, and listing it would trace every pre-digest fixture on every reconcile.
 # The list is driven from the deriver's READSET_RECONCILE span; the whole deriver is then driven through
 # the stub stream, and must name exactly those three and trace exactly those three. A clean repo prints
-# `nothing to reconcile`, exits 0 and never creates its trace root. Mutants drop reasons (c) and (b).
+# `nothing to reconcile`, exits 0 and never creates its trace root.
 if sg rc; then
 RC_ARMS=0
 if [ -z "$DERIVER" ] || [ -z "${SX:-}" ]; then
@@ -6997,7 +5154,6 @@ else
   RL="$(rc_list "$RCS" "$RC")"
   if [ "$RL" = "ch:changed st:stale un:unmapped" ]; then
     ok "RECONCILE: the list names exactly the changed (ch, non-stale), stale (st) and unmapped (un) fixtures, and neither the clean control cl nor the digest-less nd"
-    B_rclist=1
   else
     bad "RECONCILE: expected 'ch:changed st:stale un:unmapped', got '$RL'"
   fi
@@ -7050,20 +5206,6 @@ else
         else bad "RECONCILE: a span-less runner exited 1 without naming the span: $(tail -2 "$WORK/rc.out" | tr '\n' ' ')"; fi ;;
     *) bad "RECONCILE: a span-less runner did not refuse: '$RR4'" ;;
   esac
-  # Two wrong builds of the list, each a cmp-guarded copy of the span, each dying on the list arm.
-  sed '/^    elif grep -qxF "\$b" "\$s\/changed"; then printf/d' "$RCS" > "$WORK/rc.nochanged.span"
-  sed '/^    elif grep -qxF "\$b" "\$s\/stale"; then printf/d' "$RCS" > "$WORK/rc.nostale.span"
-  for _m in nochanged:"st:stale un:unmapped" nostale:"ch:changed un:unmapped"; do
-    RC_ARMS=$((RC_ARMS+1)); _n="${_m%%:*}"; _w="${_m#*:}"
-    if cmp -s "$RCS" "$WORK/rc.$_n.span"; then bad "RECONCILE MUTANT $_n did not apply"; continue; fi
-    _g="$(rc_list "$WORK/rc.$_n.span" "$RC")"
-    [ "$F2C_MATRIX" = 1 ] && f2c_mx "$_n" "$_g"
-    # TWIN: un:unmapped, the reason neither mutant touches, still listed.
-    _tw=0; case " $_g " in *" un:unmapped "*) _tw=1 ;; esac
-    if [ "$_g" = "$_w" ] && f2c_twin "rc-$_n" un:unmapped "$_tw"; then mutant_killed "${B_rclist:-0}" "rc-$_n" "RECONCILE MUTANT $_n is KILLED by the list arm: it derives '$_g'"
-    elif [ "$_g" = "$_w" ]; then :
-    else bad "RECONCILE MUTANT $_n: expected '$_w', got '$_g'"; fi
-  done
 fi
 
 fi
@@ -7105,12 +5247,9 @@ VS_REAL_HOME="$(eval "printf '%s' ~$(id -un)")"
 # argument order, so the set, the order and the digest are the per-file loop's (the receipt below).
 vs_snap() { find "$1/.cache/ai-dlc/verdicts" -type f -print0 2>/dev/null | LC_ALL=C sort -z | xargs -0 grep -lxE '#fixture (decl|bad|nosent|undecl)' 2>/dev/null | while IFS= read -r _f; do printf '%s ' "$_f"; md5 -q "$_f"; done | md5 -q; }
 # THE RECEIPT: on a seeded store carrying an empty file, a name with a space, a nested directory and a
-# non-matching entry, vs_snap equals the per-file loop it replaced -- and a copy of vs_snap with its sort
-# removed does NOT, so the order is observed. The mutant is cut from vs_snap's OWN text and must apply once.
-# That arm can only discriminate where `find` returns the seed out of C order, so the seed is CREATED in a
+# non-matching entry, vs_snap equals the per-file loop it replaced. The seed is CREATED in a
 # fixed shuffle -- neither C order nor its reverse, which a creation-order or newest-first listing would
-# return sorted -- and the unsorted order is asserted to differ from the sorted one BEFORE the mutant is
-# scored. Where it does not, the arm FAILS: a mutant that cannot fire must never read as a pass.
+# return sorted -- so the order the sort imposes is observed.
 vs_snap_ref() { find "$1/.cache/ai-dlc/verdicts" -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do grep -lxE '#fixture (decl|bad|nosent|undecl)' "$_f" 2>/dev/null; done | while IFS= read -r _f; do printf '%s ' "$_f"; md5 -q "$_f"; done | md5 -q; }
 VS_SR="$WORK/vs.snaprcpt"; _v="$VS_SR/.cache/ai-dlc/verdicts"
 mkdir -p "$_v/sub dir" || broken "could not seed the vs_snap receipt store"
@@ -7118,28 +5257,8 @@ for _i in 13 24 02 19 07 22 11 04 16 09 21 01 18 06 14 23 03 12 20 08 15 05 17 1
 printf '#fixture bad\n' > "$_v/sub dir/with space"; : > "$_v/empty"; printf '#fixture other\n' > "$_v/nomatch"
 _sel="$(vs_snap_ref "$VS_SR")"; _nsel="$(find "$_v" -type f | LC_ALL=C sort | while IFS= read -r _f; do grep -lxE '#fixture (decl|bad|nosent|undecl)' "$_f" || :; done | grep -c .)" || _nsel=0
 VS_ARMS=$((VS_ARMS+1))
-if [ "$(vs_snap "$VS_SR")" = "$_sel" ] && [ "$_nsel" -eq 25 ]; then ok "vs_snap equals the per-file loop on a 27-entry store (25 selected; an empty file, a space, a subdirectory, a non-match)"; B_vs_snap=1
+if [ "$(vs_snap "$VS_SR")" = "$_sel" ] && [ "$_nsel" -eq 25 ]; then ok "vs_snap equals the per-file loop on a 27-entry store (25 selected; an empty file, a space, a subdirectory, a non-match)"
 else bad "vs_snap differs from the per-file loop on the seeded store (selected $_nsel, want 25)"; fi
-_raw="$(find "$_v" -type f)"
-VS_ARMS=$((VS_ARMS+1))
-if [ "$(printf '%s\n' "$_raw" | grep -c .)" -ne 27 ] || [ "$_raw" = "$(printf '%s\n' "$_raw" | LC_ALL=C sort)" ]; then
-  bad "VS MUTANT snap-nosort CANNOT FIRE: find returned the shuffled 27-entry seed in C order (or not all of it), so dropping the sort is unobservable here"
-else
-  ok "the seed's unsorted find order differs from C order, so the no-sort edit below can fire"
-  VS_ARMS=$((VS_ARMS+1))
-  _mt="$(declare -f vs_snap | sed 's/^vs_snap ()/vs_snap_nosort ()/')"
-  _mn="$(printf '%s\n' "$_mt" | grep -c 'LC_ALL=C sort -z | ')" || _mn=0
-  _mt="$(printf '%s\n' "$_mt" | sed 's/LC_ALL=C sort -z | //')"
-  if [ "$_mn" -ne 1 ] || grep -q 'sort -z' <<< "$_mt"; then bad "VS MUTANT snap-nosort DID NOT APPLY (anchor matched $_mn time(s), want 1)"
-  elif ! eval "$_mt" 2>/dev/null; then bad "VS MUTANT snap-nosort does not parse"
-  elif [ "$(vs_snap_nosort "$VS_SR")" != "$_sel" ]; then
-    # TWIN: the order is the only thing the mutant drops, so where there is one order it must agree.
-    # A ONE-ENTRY store has one order, so the mutant's digest must still equal the reference there.
-    VS_SR1="$WORK/vs.snaprcpt1"; mkdir -p "$VS_SR1/.cache/ai-dlc/verdicts" && cp "$_v/k13" "$VS_SR1/.cache/ai-dlc/verdicts/k13"
-    _tw=0; [ "$(vs_snap_nosort "$VS_SR1")" = "$(vs_snap_ref "$VS_SR1")" ] && _tw=1
-    if f2c_twin snap-nosort one-entry-store "$_tw"; then mutant_killed "${B_vs_snap:-0}" snap-nosort "VS MUTANT snap-nosort is KILLED by the receipt: without the sort the digest moves"; fi
-  else bad "VS MUTANT snap-nosort SURVIVED the receipt: the order is not observed"; fi
-fi
 VS_SNAP0="$(vs_snap "$VS_REAL_HOME")"; VS_SNAPH0="$(vs_snap "$HOME")"
 VS_DRV="$WORK/vs.drive.sh"
 printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
@@ -7156,7 +5275,7 @@ vs_n() { find "$1" -maxdepth 1 -type f ! -name '.tmp*' 2>/dev/null | grep -c . |
 vs_mk() { # <t> <fixture root> <runner file>: a git repo holding the hook, the runner and four fixtures
   local t="$1" x="$2" f rd
   mkdir -p "$t/.githooks" "$t/src" || return 1
-  cp "${VS_HOOK:-$HOOK}" "$t/.githooks/pre-push" || return 1
+  cp "$HOOK" "$t/.githooks/pre-push" || return 1
   case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
   mkdir -p "$t/$rd" && cp "$3" "$t/$rd/hermetic-run.sh" || return 1
   printf 'v1\n' > "$t/src/a.sh"
@@ -7244,13 +5363,6 @@ vs_world() { # <pool> <fixture root> <runner file> <t> [<cells>]: one vector
   v="$v p=$(vs_cell "$t/C2.vd.p1" decl)/$(vs_cell "$t/Sh.vd.p2" decl)/$(grep -c 'verdict store OFF' "$t/Sh.vd.p2/ann" 2>/dev/null)/$(ls -A "$t.S3" 2>/dev/null | grep -c .)" ;; esac
   printf '%s' "$v"
 }
-# vs_sub <vector> <cells>: the base fields plus the named later cells, in vector order -- the want a
-# cell-selected vs_world prints. Cell names: rcd rcb rcn rcu a n ann always, then the named ones.
-vs_sub() {
-  printf '%s\n' "$1" | tr ' ' '\n' | awk -v c=" rcd rcb rcn rcu a n ann $2 " '{ k = $0; sub(/=.*/, "", k); if (index(c, " " k " ")) print }' | tr '\n' ' ' | sed 's/ $//'
-}
-# vs_cellv <vector> <cell>: one cell's field, `<cell>=<value>`, or empty
-vs_cellv() { printf '%s\n' "$1" | tr ' ' '\n' | grep "^$2=" ; }
 VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/skip/skip/skip/run/skip e=run/run/run/skip d=run/run/skip f=0/0/intact p=run/run/1/0'
 # (v) THE SPAN CANNOT GO VACUOUS: the digested runner span is non-empty and still holds the env -i line and the copy loop.
 VS_ARMS=$((VS_ARMS+1)); sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$VS_RUN" > "$WORK/vs.span"
@@ -7265,7 +5377,7 @@ for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   VS_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$VS_P" | sort -u)"
   [ "$VS_N" -eq 1 ] && { VS_P1="$VS_P"; VS_X1="$VS_X"; }
   VS_ARMS=$((VS_ARMS+1)); _g="$(vs_world "$VS_P" "$VS_X" "$VS_RUN" "$WORK/vs.h$VS_N" 2>/dev/null)"
-  if [ "$_g" = "$VS_WANT" ]; then ok "(verdict store) ${_h#"$ROOT"/}: $_g"; [ "$VS_N" -eq 1 ] && B_vs_world=1
+  if [ "$_g" = "$VS_WANT" ]; then ok "(verdict store) ${_h#"$ROOT"/}: $_g"
   else bad "(verdict store) ${_h#"$ROOT"/}: want '$VS_WANT' got '$_g'"; fi
 done
 # (h) the hook writes NO store entry: the runner is the store's only writer. Control: the runner writes one for the same tree.
@@ -7297,8 +5409,7 @@ fi
 #   cen  a declared file, a declared dir with a nested subdir (listing keys), a declared dir under an excluded top, a tool
 #   ctl  a declared file and two tools, no listing key: the shape on which the two sides agree (the inverse control).
 #        Its second tool, cksum, is named by NO `.sh` in the world, so only the declared-tool hashing can key it (a
-#        tool some world `.sh` mentions is hashed by readset_tools anyway, and a mutant dropping that hashing is
-#        equivalent on it); the census arm proves the world's `.sh` files name cksum 0 times against awk's non-zero.
+#        tool some world `.sh` mentions is hashed by readset_tools anyway).
 #   ref  `src/a.sh` and `lib/`: the normalisation reference
 #   dsl  the same with `lib//`: the shared parse strips EVERY trailing slash, so it keys exactly as ref
 #   crlf the same with CRLF line ends: the shared parse strips the CR, so it keys exactly as ref
@@ -7319,7 +5430,7 @@ vs_cmk() { # <t> <fixture root> <runner file> <hook file>
   printf 'src/a.sh\nlib/\n' > "$t/$x/ref/inputs.decl"; printf 'src/a.sh\nlib//\n' > "$t/$x/dsl/inputs.decl"
   printf 'src/a.sh\r\nlib/\r\n' > "$t/$x/crlf/inputs.decl"
   if [ "$rd" = scripts/ai-dlc ]; then
-    # The mapper comes from beside the REAL runner, never beside <runner file>: a runner mutant is a lone copy.
+    # The mapper comes from beside the REAL runner, never beside <runner file>.
     cp "${VS_RUN%/*}/core-paths.sh" "$t/$rd/core-paths.sh" || return 1
     mkdir -p "$t/$x/cons" "$t/.claude/skills/mk/in" || return 1
     printf 'm\n' > "$t/$rd/m.sh"; printf 'k\n' > "$t/.claude/skills/mk/in/k.txt"; printf 'j\n' > "$t/.claude/skills/mk/j.txt"
@@ -7340,10 +5451,7 @@ vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh)
     for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf '%s\n' "$d"; done > "$o/list"
     readset_manifest "$o/d1" && readset_local_validate "$o/list" "$o/d1" && readset_keys "$o/list" "$o/d1" || exit 1
     # The runner's rows for THIS tree, taken per pass, because the tree changes between them (below).
-    # VS_KO_FROM=<census world>: the runner side is SHARED from that world's run rather than re-run -- only for a
-    # mutant that edits the pool alone, whose world, hook file and runner are that world's byte for byte.
-    if [ -n "${VS_KO_FROM:-}" ]; then for f in $fl; do cp "$VS_KO_FROM.cd/d1/ko.$f" "$o/d1/ko.$f" 2>/dev/null; done
-    else for f in $fl; do ( inproc -u AI_DLC_VERDICT_STORE -- "$3" --root "$2" --key-only "$f" ) > "$o/d1/ko.$f" 2>/dev/null; done; fi
+    for f in $fl; do ( inproc -u AI_DLC_VERDICT_STORE -- "$3" --root "$2" --key-only "$f" ) > "$o/d1/ko.$f" 2>/dev/null; done
     mkdir -p "$KEYS_DIR" || exit 1
     for f in "$o/d1/.k"/*; do [ -f "$f" ] || continue; b="${f##*/}"
       { sed -n 1p "$f"; printf '#state ok\n'; sed -n 3p "$f"; tail -n +4 "$f"; printf 'zz-foreign/%s\t0000\n' "$b"; } > "$KEYS_DIR/$b.key"; done
@@ -7353,8 +5461,7 @@ vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh)
     # which publishes nothing and leaves no rows to compare. Both shapes declare src/a.sh.
     printf 'v2\n' > src/a.sh
     readset_manifest "$o/d2" && readset_local_validate "$o/list" "$o/d2" && readset_keys "$o/list" "$o/d2" || exit 1
-    if [ -n "${VS_KO_FROM:-}" ]; then for f in $fl; do cp "$VS_KO_FROM.cd/d2/ko.$f" "$o/d2/ko.$f" 2>/dev/null; done
-    else for f in $fl; do ( inproc -u AI_DLC_VERDICT_STORE -- "$3" --root "$2" --key-only "$f" ) > "$o/d2/ko.$f" 2>/dev/null; done; fi ) >/dev/null 2>&1
+    for f in $fl; do ( inproc -u AI_DLC_VERDICT_STORE -- "$3" --root "$2" --key-only "$f" ) > "$o/d2/ko.$f" 2>/dev/null; done ) >/dev/null 2>&1
 }
 vs_census() { # <pool> <fixture root> <runner file> <t> <hook file>: "inj=<n> ctl=<fresh>/<carry> cen=<fresh>/<carry>"
   local p="$1" x="$2" t="$4" W="$4/W" rd f ps v n c
@@ -7416,80 +5523,33 @@ for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   VS_CN=$((VS_CN+1)); VS_CP="$WORK/vscpool.$VS_CN.sh"
   sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$VS_CP"
   VS_CX="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$VS_CP" | sort -u)"
-  [ "$VS_CN" -eq 1 ] && { VS_CP1="$VS_CP"; VS_CX1="$VS_CX"; VS_CH1="$_h"; }
+  [ "$VS_CN" -eq 1 ] && { VS_CX1="$VS_CX"; VS_CH1="$_h"; }
   _g="$(vs_census "$VS_CP" "$VS_CX" "$VS_RUN" "$WORK/vs.c$VS_CN" "$_h" 2>/dev/null)"
   VS_ARMS=$((VS_ARMS+1))
   case "$_g" in *" ctl=same/same "*) ok "(verdict store, k) ${_h#"$ROOT"/}: the agreeing shape (ctl) is identical fresh and after the carry -- the census can pass" ;;
     *) bad "(verdict store, k) ${_h#"$ROOT"/}: the control shape ctl does not agree: $_g" ;; esac
   VS_ARMS=$((VS_ARMS+1)); _w="$(vs_cwant "$VS_CX")"
-  if [ "$_g" = "$_w" ]; then ok "(verdict store, k) ${_h#"$ROOT"/}: hook key rows equal --key-only for every declared shape, fresh and carried: $_g"; [ "$VS_CN" -eq 1 ] && B_vs_census=1
+  if [ "$_g" = "$_w" ]; then ok "(verdict store, k) ${_h#"$ROOT"/}: hook key rows equal --key-only for every declared shape, fresh and carried: $_g"
   else bad "(verdict store, k) ${_h#"$ROOT"/}: hook key rows differ from --key-only (fixture=fresh/carry, differ:<rows>:<first row>): want '$_w' got '$_g'"; fi
   VS_ARMS=$((VS_ARMS+1)); _n="$(vs_cnorm "$WORK/vs.c$VS_CN" "$VS_CX")"; _w="$(vs_cnwant "$VS_CX")"
-  if [ "$_n" = "$_w" ]; then ok "(verdict store, k-norm) ${_h#"$ROOT"/}: lib// and a CRLF declaration key exactly as lib/ on both sides, with the listing keys present$( [ "$VS_CX" = core/fixtures ] || printf ', and the consumer world keys the MAPPED core/ file and directory and no core/ row'): $_n"; [ "$VS_CN" -eq 1 ] && B_vs_norm=1
+  if [ "$_n" = "$_w" ]; then ok "(verdict store, k-norm) ${_h#"$ROOT"/}: lib// and a CRLF declaration key exactly as lib/ on both sides, with the listing keys present$( [ "$VS_CX" = core/fixtures ] || printf ', and the consumer world keys the MAPPED core/ file and directory and no core/ row'): $_n"
   else bad "(verdict store, k-norm) ${_h#"$ROOT"/}: want '$_w' got '$_n'"; fi
 done
-# THE TOOL SEED IS DISCRIMINATING: ctl declares cksum, which no `.sh` in the census world names, so readset_tools can
-# never hash it and only the declared-tool hashing keys it. awk, named by the runner the world carries, is the control.
-if [ "$VS_CN" -ge 1 ]; then
-  VS_ARMS=$((VS_ARMS+1))
-  _a="$(find "$WORK/vs.c1/W" -name '*.sh' -type f ! -path '*/.git/*' -exec grep -lw awk {} + 2>/dev/null | grep -c .)" || _a=0
-  _k="$(find "$WORK/vs.c1/W" -name '*.sh' -type f ! -path '*/.git/*' -exec grep -lw cksum {} + 2>/dev/null | grep -c .)" || _k=0
-  if [ "$_k" = 0 ] && [ "$_a" -gt 0 ]; then ok "(verdict store, k) the census world's .sh files name cksum 0 times and awk in $_a file(s): ctl's cksum row is keyed by the declared-tool hashing alone"
-  else bad "(verdict store, k) the census world's .sh files name cksum in $_k file(s) (want 0) and awk in $_a (want >0): the hook-drops-tools mutant would be equivalent"; fi
-fi
-# THE SHARED RUNNER SIDE CAN DISCRIMINATE AND IS PATH-INDEPENDENT: the UNMUTATED pool in a fresh world whose
-# --key-only rows are copied from vs.c1 must still read the want. Without this, a share that copied rows keyed on
-# vs.c1's own paths would read `differ` for every pool mutant for that reason, not for the mutation.
-if [ "$VS_CN" -ge 1 ]; then
-  VS_ARMS=$((VS_ARMS+1))
-  _g="$(VS_KO_FROM="$WORK/vs.c1/W" vs_census "$VS_CP1" "$VS_CX1" "$VS_RUN" "$WORK/vs.cshare" "$VS_CH1" 2>/dev/null)"
-  if [ "$_g" = "$(vs_cwant "$VS_CX1")" ]; then ok "(verdict store, k-share) the unmutated pool reads the want against --key-only rows SHARED from the reference census world: $_g"; B_vs_share=1
-  else bad "(verdict store, k-share) the unmutated pool against the shared --key-only rows does not read the want, so a pool mutant cannot share them: $_g"; fi
-fi
-# (k) MUTANTS, each editing ONE side: the agreeing shape ctl must stop agreeing. <twin> is a shape that must
-# still read same/same under the mutant. A pool mutant shares the runner side (k-share above).
-vs_cmut() { # <name> <pool|runner> <from> <to> <deciding shape> <twin shape>
-  local name="$1" kind="$2" dst _g n d="${5:-ctl}" tw=0
-  VS_ARMS=$((VS_ARMS+1))
-  if [ "$kind" = pool ]; then cp "$VS_CP1" "$WORK/vs.cm.$name"; else cp "$VS_RUN" "$WORK/vs.cm.$name"; fi
-  dst="$WORK/vs.cm.$name"
-  n="$(grep -cF -- "$3" "$dst")" || n=0
-  [ "$n" = 1 ] || { bad "VS CENSUS MUTANT $name: anchor matched $n time(s), not 1 -- DID NOT APPLY"; return; }
-  MF="$3" MT="$4" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$dst" > "$dst.t" && mv "$dst.t" "$dst"
-  if [ "$kind" = pool ]; then cmp -s "$VS_CP1" "$dst" && { bad "VS CENSUS MUTANT $name: the copy is unchanged"; return; }
-    _g="$(VS_KO_FROM="$WORK/vs.c1/W" vs_census "$dst" "$VS_CX1" "$VS_RUN" "$WORK/vs.cm.$name.w" "$VS_CH1" 2>/dev/null)"
-  else cmp -s "$VS_RUN" "$dst" && { bad "VS CENSUS MUTANT $name: the copy is unchanged"; return; }
-    _g="$(vs_census "$VS_CP1" "$VS_CX1" "$dst" "$WORK/vs.cm.$name.w" "$VS_CH1" 2>/dev/null)"; fi
-  [ "$F2C_MATRIX" = 1 ] && f2c_mx "$name" "$_g"
-  # <twin> is a shape that reads same/same, or `inj`: the hook side's injected-row count at its want.
-  case "$6" in
-    inj) [ "${_g%% *}" = "$(vs_cwant "$VS_CX1" | cut -d' ' -f1)" ] && tw=1 ;;
-    *) case " $_g " in *" $6=same/same "*) tw=1 ;; esac ;;
-  esac
-  case "$_g" in
-    *" $d=differ"*|*" $d=same/differ"*)
-      # A pool mutant reads the SHARED runner side, so it is scored only when the share arm passed too.
-      if [ "$kind" = pool ]; then
-        if f2c_twin "$name" "shape $6" "$tw"; then mutant_killed "$(( ${B_vs_census:-0} && ${B_vs_share:-0} ))" "$name" "VS CENSUS MUTANT $name is KILLED: $_g"; fi
-      elif f2c_twin "$name" "shape $6" "$tw"; then mutant_killed "${B_vs_census:-0}" "$name" "VS CENSUS MUTANT $name is KILLED: $_g"; fi ;;
-    *) bad "VS CENSUS MUTANT $name SURVIVED: $_g" ;;
-  esac
-}
-# A HOOK-FILE MUTANT for an edit the runner must SEE too. The runner sources READSET_KEYROWS out of the world's own
+# A HOOK-FILE PROBE EDIT, for an edit the runner must SEE too. The runner sources READSET_KEYROWS out of the world's own
 # hook, which vs_cmk copies from <hook file>, while the decision sources the pool; an edit made to the pool alone would
-# leave the runner on the clean span and the census would differ for that reason. So the edit is made to a copy of the
-# whole hook and the pool is re-extracted from it: both sides then run the edited span. Sets VS_HM (hook) and VS_HMP
+# leave the runner on the clean span. So the edit is made to a copy of the
+# whole hook and the pool is re-extracted from it: both sides then run the edited span. Sets VS_HP (hook) and VS_HPP
 # (its pool); returns 1 with a FAIL when the anchor is not unique or the pool did not change.
-vs_hmut() { # <name> <from> <to> [<source hook>]
+vs_hprobe() { # <name> <from> <to> [<source hook>]
   local s="${4:-$VS_CH1}" n
-  VS_HM="$WORK/vs.hm.$1.hook"; VS_HMP="$WORK/vs.hm.$1.pool"
+  VS_HP="$WORK/vs.hm.$1.hook"; VS_HPP="$WORK/vs.hm.$1.pool"
   n="$(grep -cF -- "$2" "$s")" || n=0
-  [ "$n" = 1 ] || { bad "VS CENSUS MUTANT $1: anchor matched $n time(s) in ${s##*/}, not 1 -- DID NOT APPLY"; return 1; }
-  MF="$2" MT="$3" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$s" > "$VS_HM" \
-    || { bad "VS CENSUS MUTANT $1: awk DID NOT APPLY"; return 1; }
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$s" > "$VS_HMP.src"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$VS_HM" > "$VS_HMP"
-  if cmp -s "$s" "$VS_HM" || cmp -s "$VS_HMP.src" "$VS_HMP"; then bad "VS CENSUS MUTANT $1: the hook copy or its pool is unchanged"; return 1; fi
+  [ "$n" = 1 ] || { bad "VS PROBE $1: anchor matched $n time(s) in ${s##*/}, not 1 -- DID NOT APPLY"; return 1; }
+  MF="$2" MT="$3" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$s" > "$VS_HP" \
+    || { bad "VS PROBE $1: awk DID NOT APPLY"; return 1; }
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$s" > "$VS_HPP.src"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$VS_HP" > "$VS_HPP"
+  if cmp -s "$s" "$VS_HP" || cmp -s "$VS_HPP.src" "$VS_HPP"; then bad "VS PROBE $1: the hook copy or its pool is unchanged"; return 1; fi
   return 0
 }
 # How many of the census world's declared fixtures carry the probe row `zz-tag<TAB>1` in the hook's fresh record and
@@ -7503,18 +5563,6 @@ vs_ctag() { # <census t>
   printf 'tag=%s/%s' "$h" "$k"
 }
 if [ "$VS_CN" -ge 1 ]; then
-  # Tool rows, each side alone. Re-anchored on the shared span's tool hashing: the runner calls it for its one
-  # fixture, readset_declared for the whole declared set; neither call sits inside the span, so one side moves.
-  # Twins. hook-drops-tools: ref, which declares awk alone, a tool a world .sh names, so the hook's
-  # readset_tools keys it anyway. runner-drops-tools moves EVERY shape (the runner keys awk only through
-  # the declared-tool hashing), so its twin is inj, the hook side's injected-row count, which no runner
-  # edit can reach.
-  vs_cmut runner-drops-tools runner 'readset_decl_tool_hashes "$HR_WORK/parse" "$HR_WORK/th"' ':' ctl inj
-  vs_cmut hook-drops-tools pool 'readset_decl_tool_hashes "$out/.dparse" "$out/.tools"' ':' ctl ref
-  # The carry re-enabled for declared fixtures: an `ok` record's rows flow back into the published key, so the
-  # carried pass of the listing-keyed shape (cen) gains the foreign row. Fresh stays same; only the carry differs.
-  # Twin ctl: it holds no listing key, so the re-enabled carry never reaches it.
-  vs_cmut hook-carries-declared pool 'if (rl && !(f in DECL)) for (k in R)' 'if (rl) for (k in R)' cen ctl
   # (k-part) THE PARTITION. Equal rows do not prove ONE composer: two composers can agree on every seeded shape. So a
   # probe edit makes the span's readset_decl_keys emit one extra row, `zz-tag<TAB>1`, for every fixture it keys; a
   # side composing its rows anywhere else cannot carry it. Both sides must carry it for every declared fixture, and the
@@ -7522,133 +5570,11 @@ if [ "$VS_CN" -ge 1 ]; then
   VS_TAGA='for (f in FX) { n = split(TL[f], a, "\n");'
   VS_TAGB='for (f in FX) out(f, "zz-tag", "1"); for (f in FX) { n = split(TL[f], a, "\n");'
   VS_ARMS=$((VS_ARMS+1))
-  if vs_hmut probe "$VS_TAGA" "$VS_TAGB"; then
-    VS_PH="$VS_HM"; VS_PP="$VS_HMP"
+  if vs_hprobe probe "$VS_TAGA" "$VS_TAGB"; then
+    VS_PH="$VS_HP"; VS_PP="$VS_HPP"
     _g="$(vs_census "$VS_PP" "$VS_CX1" "$VS_RUN" "$WORK/vs.cp" "$VS_PH" 2>/dev/null)"; _t="$(vs_ctag "$WORK/vs.cp")"; VS_TN="$(wc -w < "$WORK/vs.cp/W.fx" 2>/dev/null | tr -d " ")"; VS_TW="$(vs_cwant "$VS_CX1")"
-    if [ -n "$VS_TN" ] && [ "$VS_TN" -gt 0 ] && [ "$_t" = "tag=$VS_TN/$VS_TN" ] && [ "$_g" = "$VS_TW" ]; then ok "(verdict store, k-part) a row only the READSET_KEYROWS span emits reaches the hook's record AND --key-only for all $VS_TN declared fixtures, census unmoved: one composer, $_t"; B_vs_part=1
+    if [ -n "$VS_TN" ] && [ "$VS_TN" -gt 0 ] && [ "$_t" = "tag=$VS_TN/$VS_TN" ] && [ "$_g" = "$VS_TW" ]; then ok "(verdict store, k-part) a row only the READSET_KEYROWS span emits reaches the hook's record AND --key-only for all $VS_TN declared fixtures, census unmoved: one composer, $_t"
     else bad "(verdict store, k-part) the span's probe row did not reach both sides for every fixture (want tag=$VS_TN/$VS_TN and '$VS_TW'): $_t $_g"; fi
-    # m2: the hook's DECL branch bypassed, so a declared fixture is keyed through ROWS/OWN like a traced one: the
-    # hook side loses the probe row, the runner keeps it.
-    VS_ARMS=$((VS_ARMS+1))
-    if vs_hmut hook-decl-bypass 'else if (f in DECL) { n = split(DK[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }' 'else if (0) { }' "$VS_PH"; then
-      # TWIN: the runner half of the tag (it still composes from the span), read off the same run.
-      _t="$(vs_census "$VS_HMP" "$VS_CX1" "$VS_RUN" "$WORK/vs.cm2" "$VS_HM" >/dev/null 2>&1; vs_ctag "$WORK/vs.cm2")"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx hook-decl-bypass "$_t"
-      _tw=0; [ "${_t#*/}" = "$VS_TN" ] && _tw=1
-      if [ "$_t" = "tag=0/$VS_TN" ] && f2c_twin hook-decl-bypass "the runner's tag" "$_tw"; then mutant_killed "${B_vs_part:-0}" hook-decl-bypass "VS CENSUS MUTANT hook-decl-bypass is KILLED by the partition arm: $_t"
-      elif [ "$_t" = "tag=0/$VS_TN" ]; then :
-      else bad "VS CENSUS MUTANT hook-decl-bypass SURVIVED the partition arm (want tag=0/$VS_TN): $_t"; fi
-    fi
-    # The runner composing from a PRIVATE copy of the span (the unprobed hook) instead of the world's own hook: the
-    # runner side loses the probe row, the hook keeps it.
-    VS_ARMS=$((VS_ARMS+1)); cp "$VS_RUN" "$WORK/vs.cm.rpriv"
-    _n="$(grep -cF '"$HR_HOOK" > "$HR_WORK/keyrows.sh"' "$WORK/vs.cm.rpriv")" || _n=0
-    if [ "$_n" != 1 ]; then bad "VS CENSUS MUTANT runner-private-span: anchor matched $_n time(s), not 1 -- DID NOT APPLY"
-    else
-      MF='"$HR_HOOK" > "$HR_WORK/keyrows.sh"' MT="\"$VS_CH1\" > \"\$HR_WORK/keyrows.sh\"" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$VS_RUN" > "$WORK/vs.cm.rpriv"
-      if cmp -s "$VS_RUN" "$WORK/vs.cm.rpriv"; then bad "VS CENSUS MUTANT runner-private-span: the copy is unchanged"
-      else _t="$(vs_census "$VS_PP" "$VS_CX1" "$WORK/vs.cm.rpriv" "$WORK/vs.cmr" "$VS_PH" >/dev/null 2>&1; vs_ctag "$WORK/vs.cmr")"
-        [ "$F2C_MATRIX" = 1 ] && f2c_mx runner-private-span "$_t"
-        # TWIN: the hook half of the tag, which the runner's private span cannot touch.
-        _h="${_t#tag=}"; _tw=0; [ "${_h%/*}" = "$VS_TN" ] && _tw=1
-        if [ "$_t" = "tag=$VS_TN/0" ] && f2c_twin runner-private-span "the hook's tag" "$_tw"; then mutant_killed "${B_vs_part:-0}" runner-private-span "VS CENSUS MUTANT runner-private-span is KILLED by the partition arm: $_t"
-        elif [ "$_t" = "tag=$VS_TN/0" ]; then :
-        else bad "VS CENSUS MUTANT runner-private-span SURVIVED the partition arm (want tag=$VS_TN/0): $_t"; fi; fi
-    fi
-  fi
-  # m1: the shared PARSE strips ONE trailing slash instead of all of them. Both sides run the edited span, so the census
-  # stays equal for dsl (the mutation reached both: a one-side edit would move it) and only the normalisation cell dies.
-  VS_ARMS=$((VS_ARMS+1))
-  if vs_hmut parse-one-slash 'k = "F"; if ($0 ~ /\/$/) { k = "D"; sub(/\/+$/, "") }' 'k = "F"; if ($0 ~ /\/$/) { k = "D"; sub(/\/$/, "") }'; then
-    _g="$(vs_census "$VS_HMP" "$VS_CX1" "$VS_RUN" "$WORK/vs.cm1" "$VS_HM" 2>/dev/null)"; _n="$(vs_cnorm "$WORK/vs.cm1" "$VS_CX1")"
-    [ "$F2C_MATRIX" = 1 ] && f2c_mx parse-one-slash "$_g / $_n"
-    case "$_g:$_n" in
-      # TWIN: crlf, keyed through the same parse with one slash, still equals ref on both sides.
-      *" dsl=same/same "*:"hk: dsl=ne"*" ko: dsl=ne"*)
-        _tw=0; case "$_n" in "hk: dsl=ne crlf=eq"*" ko: dsl=ne crlf=eq"*) _tw=1 ;; esac
-        if f2c_twin parse-one-slash crlf=eq "$_tw"; then mutant_killed "${B_vs_norm:-0}" parse-one-slash "VS CENSUS MUTANT parse-one-slash is KILLED by the normalisation cell, with the census still equal on dsl (both sides ran the edit): $_n"; fi ;;
-      *) bad "VS CENSUS MUTANT parse-one-slash: want dsl=same/same in the census and dsl=ne on both sides, got '$_g' / '$_n'" ;; esac
-  fi
-fi
-# MUTANTS. Each is a count-checked literal edit; the world is re-driven on the base, its deciding cell and its
-# twin cell only (vs_world's cell list), and the twin must read its want. READSET_SKIP_MATRIX=1 re-drives every
-# cell and prints the whole vector as the matrix row.
-# vs_twin <name> <twin cell> <vector>: prints the matrix row in matrix mode; 0 when the twin cell reads its want.
-vs_twin() {
-  local tw=0
-  [ "$F2C_MATRIX" = 1 ] && f2c_mx "$1" "$3"
-  [ -n "$(vs_cellv "$3" "$2")" ] && [ "$(vs_cellv "$3" "$2")" = "$(vs_cellv "$VS_WANT" "$2")" ] && tw=1
-  f2c_twin "$1" "cell $2" "$tw"
-}
-vs_cells() { [ "$F2C_MATRIX" = 1 ] && return 0; printf '%s %s' "$1" "$2"; } # <deciding> <twin>: the cell list to drive
-vs_mut() { # <name> <pool|runner> <must-move cell> <twin cell> then pairs <from> <to>
-  local name="$1" kind="$2" cell="$3" twin="$4" dst="$WORK/vs.mut.$1.sh" n _g _cs; shift 4
-  VS_ARMS=$((VS_ARMS+1))
-  if [ "$kind" = pool ]; then cp "$VS_P1" "$dst"; else cp "$VS_RUN" "$dst"; fi
-  while [ $# -ge 2 ]; do
-    MF="$1" MT="$2" MC="$WORK/vs.mut.$name.n" awk '
-      BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
-      { line = $0; o = ""
-        while ((p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
-        print o line }
-      END { print n > ENVIRON["MC"] }' "$dst" > "$dst.t" && mv "$dst.t" "$dst"
-    n="$(cat "$WORK/vs.mut.$name.n" 2>/dev/null)"
-    [ "$n" = 1 ] || { bad "VS MUTANT $name: anchor matched ${n:-nothing} time(s), not 1 -- DID NOT APPLY"; return; }
-    shift 2
-  done
-  # A base field (rcd..ann) is printed by every run, so only a later cell needs naming in the list.
-  _cs="$(vs_cells "$cell" "$twin")"
-  if [ "$kind" = pool ]; then cmp -s "$VS_P1" "$dst" && { bad "VS MUTANT $name: the copy is unchanged"; return; }
-    _g="$(vs_world "$dst" "$VS_X1" "$VS_RUN" "$WORK/vs.m.$name" "$_cs" 2>/dev/null)"
-  else cmp -s "$VS_RUN" "$dst" && { bad "VS MUTANT $name: the copy is unchanged"; return; }
-    _g="$(vs_world "$VS_P1" "$VS_X1" "$dst" "$WORK/vs.m.$name" "$_cs" 2>/dev/null)"; fi
-  if [ -n "$(vs_cellv "$_g" "$cell")" ] && [ "$(vs_cellv "$_g" "$cell")" != "$(vs_cellv "$VS_WANT" "$cell")" ]; then
-    if vs_twin "$name" "$twin" "$_g"; then mutant_killed "${B_vs_world:-0}" "$name" "VS MUTANT $name is KILLED by cell $cell: $(vs_cellv "$_g" "$cell")"; fi
-  else bad "VS MUTANT $name SURVIVED: cell $cell still reads its want ($_g)"; fi
-}
-if [ "$VS_N" -ge 1 ]; then
-  # (b) the reader ignores the rows: serves any entry of the fixture, its coverage test dropped.
-  vs_mut nodigest pool b f 'm == NW[md SUBSEP fx] && own == NO[md SUBSEP fx] + 0' '1'
-  # (c) the writer writes on failure (and on a missing sentinel): the store gains entries for the red runs.
-  vs_mut writefail runner n f 'if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then ( hr_store_put ) 2>/dev/null; exit 0; fi' '( hr_store_put ) 2>/dev/null; if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then exit 0; fi'
-  # (p) the project subdirectory dropped from the reader AND the runner's writer: C2, another project, then reads A's pass and skips.
-  VS_ARMS=$((VS_ARMS+1)); cp "$HOOK" "$WORK/vs.np.hook.sh"
-  _a="$(grep -cF '  printf '"'"'%s/%s'"'"' "$base" "$root"' "$WORK/vs.np.hook.sh")"
-  if [ "$_a" != 1 ]; then bad "VS MUTANT noproject: anchor matched '$_a', not 1 -- DID NOT APPLY"
-  else
-    sed 's|^  printf .%s/%s. "\$base" "\$root"$|  printf "%s" "$base"|' "$WORK/vs.np.hook.sh" > "$WORK/vs.np.hook.t" && mv "$WORK/vs.np.hook.t" "$WORK/vs.np.hook.sh"
-    sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$WORK/vs.np.hook.sh" > "$WORK/vs.np.pool.sh"
-    if cmp -s "$HOOK" "$WORK/vs.np.hook.sh" || cmp -s "$VS_P1" "$WORK/vs.np.pool.sh"; then bad "VS MUTANT noproject: a copy is unchanged"
-    else
-      _g="$(VS_HOOK="$WORK/vs.np.hook.sh" vs_world "$WORK/vs.np.pool.sh" "$VS_X1" "$VS_RUN" "$WORK/vs.m.noproject" "$(vs_cells p a)" 2>/dev/null)"
-      _c="$(vs_cellv "$_g" p)"
-      if [ "$_c" = "p=skip/run/1/0" ] || { [ -n "$_c" ] && [ "${_c%%/*}" = "p=skip" ]; }; then
-        if vs_twin noproject a "$_g"; then mutant_killed "${B_vs_world:-0}" noproject "VS MUTANT noproject is KILLED by the no-share cell: $_c"; fi
-      else bad "VS MUTANT noproject SURVIVED the no-share cell (got '$_c')"; fi
-    fi
-  fi
-  # (d) the reader serves undeclared fixtures.
-  vs_mut undeclared pool d a '    grep -qxF -- "$fx" "$out/.dfx" || continue' '    :'
-  # (g5) readset_vs_ident drops the format version (the mutant keeps its name from the hashed-span identity the format
-  # replaced): a bumped READSET_VS_FORMAT no longer moves `#universe`, so the pass recorded under the old format is
-  # reused. Applied to the hook copy the world carries AND to the pool, so the writer and the reader still agree on
-  # every other cell (a pool-only edit would split their idents everywhere).
-  VS_ARMS=$((VS_ARMS+1))
-  VS_IDA='printf '"'"'%s f%s'"'"' "$(readset_span_sha "$rn" HR_SANDBOX)" "$f"'
-  _a="$(grep -cF -- "$VS_IDA" "$HOOK")" || _a=0
-  if [ "$_a" != 1 ]; then bad "VS MUTANT ident-drops-keyrows: anchor matched '$_a', not 1 -- DID NOT APPLY"
-  else
-    MF="$VS_IDA" MT='printf '"'"'%s f%s'"'"' "$(readset_span_sha "$rn" HR_SANDBOX)" "1"' awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$HOOK" > "$WORK/vs.ik.hook.sh"
-    sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$WORK/vs.ik.hook.sh" > "$WORK/vs.ik.pool.sh"
-    if cmp -s "$HOOK" "$WORK/vs.ik.hook.sh" || cmp -s "$VS_P1" "$WORK/vs.ik.pool.sh"; then bad "VS MUTANT ident-drops-keyrows: a copy is unchanged"
-    else
-      # The kill asserts every cell BEFORE g unmoved, so the cells before it (b, t) are driven with it; t is the twin.
-      _g="$(VS_HOOK="$WORK/vs.ik.hook.sh" vs_world "$WORK/vs.ik.pool.sh" "$VS_X1" "$VS_RUN" "$WORK/vs.m.identkr" "$(vs_cells 'b t' g)" 2>/dev/null)"
-      _c="$(vs_cellv "$_g" g)"
-      if [ "$_c" = "g=run/skip/skip/skip/skip/skip" ] && [ "${_g%% g=*}" = "${VS_WANT%% g=*}" ]; then
-        if vs_twin ident-drops-keyrows t "$_g"; then mutant_killed "${B_vs_world:-0}" ident-drops-keyrows "VS MUTANT ident-drops-keyrows is KILLED by cell g5 alone: $_c"; fi
-      else bad "VS MUTANT ident-drops-keyrows: want g=run/skip/skip/skip/skip/skip and every earlier cell unmoved, got '$_g'"; fi
-    fi
   fi
 fi
 # (s) VERSION SKEW: a runner newer than the hook it finds. With the READSET_KEYROWS span deleted from the world's hook,
@@ -7672,29 +5598,11 @@ vs_skew() { # <runner file> <t> <strip 0|1>: "rc=<n> ran=<n> off=<n> n=<entries>
 }
 if [ -n "${VS_X1:-}" ]; then
   VS_ARMS=$((VS_ARMS+1)); _c="$(vs_skew "$VS_RUN" "$WORK/vs.sk0" 0 2>/dev/null)"
-  case "$_c" in "rc=0 ran=1 off=0 n=1 ko=0/"[1-9]*) ok "(verdict store, s) CONTROL: with the span the run passes, records 1 entry and --key-only prints rows at rc 0: $_c"; B_vs_skew0=1 ;;
+  case "$_c" in "rc=0 ran=1 off=0 n=1 ko=0/"[1-9]*) ok "(verdict store, s) CONTROL: with the span the run passes, records 1 entry and --key-only prints rows at rc 0: $_c" ;;
     *) bad "(verdict store, s) CONTROL: want rc=0 ran=1 off=0 n=1 ko=0/<rows>, got '$_c'" ;; esac
   VS_ARMS=$((VS_ARMS+1)); _s="$(vs_skew "$VS_RUN" "$WORK/vs.sk1" 1 2>/dev/null)"
-  if [ "$_s" = "rc=0 ran=1 off=1 n=0 ko=2/0" ]; then ok "(verdict store, s) a hook with no READSET_KEYROWS span: the sandbox run still runs the fixture with the store OFF and records nothing, and --key-only exits 2: $_s"; B_vs_skew=1
+  if [ "$_s" = "rc=0 ran=1 off=1 n=0 ko=2/0" ]; then ok "(verdict store, s) a hook with no READSET_KEYROWS span: the sandbox run still runs the fixture with the store OFF and records nothing, and --key-only exits 2: $_s"
   else bad "(verdict store, s) want 'rc=0 ran=1 off=1 n=0 ko=2/0' got '$_s'"; fi
-  # The skew refused like --key-only: the sandbox run exits 2 where it should run the fixture.
-  VS_ARMS=$((VS_ARMS+1)); VS_SKA="  printf 'hermetic-run: %s: verdict store OFF: %s carries no READSET_KEYROWS span"
-  _a="$(grep -cF -- "$VS_SKA" "$VS_RUN")" || _a=0
-  if [ "$_a" != 1 ]; then bad "VS MUTANT skew-refuses: anchor matched '$_a', not 1 -- DID NOT APPLY"
-  else
-    mkdir -p "$WORK/vs.skm" && MF="$VS_SKA" MT="  exit 2; printf 'hermetic-run: %s: verdict store OFF: %s carries no READSET_KEYROWS span" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$VS_RUN" > "$WORK/vs.skm/hermetic-run.sh"
-    cp "${VS_RUN%/*}/core-paths.sh" "$WORK/vs.skm/core-paths.sh" 2>/dev/null
-    if cmp -s "$VS_RUN" "$WORK/vs.skm/hermetic-run.sh"; then bad "VS MUTANT skew-refuses: the copy is unchanged"
-    else _m="$(vs_skew "$WORK/vs.skm/hermetic-run.sh" "$WORK/vs.sk2" 1 2>/dev/null)"
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx skew-refuses "$_m"
-      # TWIN: --key-only still exits 2 with no rows on the span-less hook (ko=2/0), as the unmutated skew arm reads.
-      _tw=0; case "$_m" in *" ko=2/0") _tw=1 ;; esac
-      case "$_m" in
-        "rc=2 ran=0 "*) if f2c_twin skew-refuses ko=2/0 "$_tw"; then mutant_killed "${B_vs_skew:-0}" skew-refuses "VS MUTANT skew-refuses is KILLED by the skew arm: $_m"; fi ;;
-        *) bad "VS MUTANT skew-refuses SURVIVED the skew arm: $_m" ;;
-      esac
-    fi
-  fi
 fi
 fi
 # THE REAL DEFAULT STORE IS UNCHANGED BY THE UNIT, in the home this run sees and in the account's own.
@@ -7710,66 +5618,18 @@ if sg slot; then
 # BL-584: the deriver's `--local-map`/`--in-pool` windows take a per-uid slot so no two overlap. Driven
 # WHOLE by slot-world.sh, beside this file, in a stub-stream world with no real `log stream` and no clock:
 # every property is read off an ordering record the traced fixtures write or a line the deriver must
-# print. The same driver is BL-584's evidence. Twelve scenarios (see its header), then one mutant per
-# property, each a cmp -s guarded copy that must fail EXACTLY its own scenarios:
-#   noacq      the acquire call deleted               -> every scenario but plain
-#   nostale    the stale break never fires             -> stale, oldempty, stray and rebreak
-#   noreent    no marker is ever honoured              -> nested
-#   anymark    any marker naming this slot is honoured -> stalemark and foreign
-#   nobeat     the heartbeat line deleted              -> beat
-#   nogate     the slot taken without --local-map      -> plain
-#   normdir    a failed rmdir after a break unchecked  -> stray
-#   nodir      the not-a-directory test removed        -> file
-#   noparent   the missing-path test removed           -> noparent
-#   nobound    the per-acquire break bound removed     -> rebreak
-#   nobrksleep the break path's sleep deleted          -> rebreak
-#   noline     the UNSLOTTED reason line deleted       -> file, stray, noparent and rebreak
-#   late       acquire moved to just before the fixture run, after the stream start and settle
-#                                                      -> order, stalemark and foreign
-#   early      release moved to just after the fixture run, before the flush and stream stop
-#                                                      -> order, stalemark and foreign
-# noacq moves `nested` too, and is right to: with no acquire there is no holder, so the nested deriver's
-# marker names nobody and the "nested" line never prints; with no acquire nothing ever fails open either.
-# nostale moves oldempty, stray and rebreak because each is reached only through a stale break. noline moves
-# all four fail-open scenarios because the line is the one thing they share. late and early move exactly
-# the three scenarios in which B waits behind A, which are the ones whose order record places two windows.
-#
-# EACH MUTANT RUNS ITS OWN SCENARIOS PLUS ONE NAMED NEAR-MISS TWIN, never all twelve. The shipped deriver
-# (S0) still runs all twelve, once: that is the one end-to-end run per outcome. A mutant's verdict is the
-# sorted set of scenarios that failed among those it ran, so "failing exactly {own}" with the twin PASSING
-# is the same `ok` text the all-twelve run printed. The twin is the scenario sharing the most code path with
-# the mutated line that the mutant must NOT move, so a mutant that over-reaches onto that path still fails:
-#   mutant     own set                                     twin (must PASS)
-#   noacq      all but plain                               plain     (the one scenario that takes no slot)
-#   nostale    oldempty rebreak stale stray                beat      (a LIVE holder: the not-stale branch)
-#   noreent    nested                                      order     (the same pair, no marker)
-#   anymark    foreign stalemark                           nested    (the one marker that IS honoured)
-#   nobeat     beat                                        order     (the same wait loop, no heartbeat read)
-#   nogate     plain                                       order     (an --in-pool run that does take the slot)
-#   normdir    stray                                       oldempty  (the break whose rmdir succeeds)
-#   nodir      file                                        noparent  (the neighbouring fail-open test)
-#   noparent   noparent                                    file      (the neighbouring fail-open test)
-#   nobound    rebreak                                     stale     (one break, under the bound)
-#   nobrksleep rebreak                                     stale     (one break, no second to separate)
-#   noline     file noparent rebreak stray                 oldempty  (the break that does not fail open)
-#   late       foreign order stalemark                     nested    (the pair whose windows nest)
-#   early      foreign order stalemark                     nested    (the pair whose windows nest)
-# THE TRADE: "fails ONLY its own scenarios across all twelve" is no longer re-proven on every push. It was
-# proven once, all 14 mutants x 12 scenarios, on the deriver this table was written against: every mutant
-# failed exactly the set in the left column and passed the other twelve-minus-own. A mutant whose twin
-# moves still fails here, and a deriver change that moves a mutant onto an unlisted scenario is visible
-# only when this table is re-measured.
+# print. The same driver is BL-584's evidence. Twelve scenarios (see its header) and a reaped line.
 SLOT_ARMS=0
 SLOT_W="$HERE/slot-world.sh"
 if [ -z "$DERIVER" ] || [ ! -f "$SLOT_W" ]; then
   broken "the slot unit needs the deriver and $SLOT_W"
 fi
 SLOT_T="$WORK/slot"; mkdir -p "$SLOT_T" || broken "mkdir failed"
-SLOT_WV="$SLOT_W"   # the slot-world program a score runs; the noreap mutant points it at a copy
+SLOT_WV="$SLOT_W"   # the slot-world program a score runs
 # THE CALLER'S REAP (BL-875). slot-world appends every process group it starts, its live-pid control's included, to
 # the SW_GROUPS file this caller names, and this caller kills every recorded group after the world returns, however
 # it ended: a world taken down by SIGKILL runs no EXIT trap, and its groups are not its own, so they outlive it. A
-# group the world already reaped is gone, and the kill finds nothing. A lib file, so the reapdrop mutant is a copy.
+# group the world already reaped is gone, and the kill finds nothing.
 SLOT_REAP_LIB="$SLOT_T/reap.sh"
 cat > "$SLOT_REAP_LIB" <<'SR'
 slot_reap() { # <group record>: kill every recorded group, then its leader by pid
@@ -7799,7 +5659,6 @@ S0="$(slot_score "$DERIVER")"
 # The shipped run is every scenario plus the reaped line: 13 scenarios and `reaped`, 14 PASS lines.
 if [ "$S0" = "0|" ] && [ "$(grep -c '^PASS ' "$SLOT_T/last.out")" = 14 ]; then
   ok "SLOT: all twelve slot-world scenarios PASS on the shipped deriver (order, nested, stalemark, foreign, stale, beat, plain, file, stray, noparent, rebreak, oldempty)"
-  B_slot=1
 else
   bad "SLOT: the shipped deriver did not pass all twelve slot-world scenarios: '$S0' — $(grep -m1 '^FAIL' "$SLOT_T/last.out" | sed 's/^.*-- A: /A: /' | cut -c1-400)"
 fi
@@ -7809,46 +5668,9 @@ fi
 SLOT_ARMS=$((SLOT_ARMS+1))
 if grep -qx 'PASS hold' "$SLOT_T/last.out" && grep -qE '^PASS reaped \([1-9][0-9]* group\(s\), none alive\)$' "$SLOT_T/last.out"; then
   ok "SLOT REAPED: a deriver taken down by SIGKILL with its stream stub live leaves no member of any process group the world recorded ($(grep '^PASS reaped' "$SLOT_T/last.out" | sed 's/^PASS reaped //'))"
-  B_slot_reaped=1
 else
   bad "SLOT REAPED: the hold scenario or the reaped line did not PASS: $(grep -E '^(FAIL|PASS) (hold|reaped)' "$SLOT_T/last.out" | tr '\n' ' ' | cut -c1-300)"
 fi
-# <name> <sed expr | awk:<awk program>> <expected failed set> <twin scenario>: the mutant runs its own set
-# plus the twin; under READSET_SKIP_MATRIX=1 it runs the twelve, prints the matrix row, and the kill is
-# judged on the whole set exactly as before the narrowing.
-slot_mut() {
-  local m="$SLOT_T/d.$1.sh" got sc src="$DERIVER"
-  SLOT_ARMS=$((SLOT_ARMS+1))
-  case "$2" in
-    awk:*) awk "${2#awk:}" "$src" > "$m" ;;
-    *)     sed "$2" "$src" > "$m" ;;
-  esac
-  if cmp -s "$src" "$m"; then bad "SLOT MUTANT $1 did not apply: the edit matched nothing in the deriver"; return; fi
-  # The twin must be a scenario the mutant does NOT own, or it is not a near-miss and proves nothing.
-  case " $3 " in *" $4 "*) broken "SLOT MUTANT $1: its twin '$4' is in its own failing set {$3}" ;; esac
-  sc="$3 $4"; [ "$F2C_MATRIX" = 1 ] && sc="$SLOT_TWELVE"
-  # shellcheck disable=SC2086
-  got="$(slot_score "$m" $sc)"
-  [ "$F2C_MATRIX" = 1 ] && f2c_mx "$1" "failed {${got#*|}} of all scenarios"
-  if [ "$got" = "1|$3" ]; then mutant_killed "${B_slot:-0}" "$1" "SLOT MUTANT $1 is KILLED, failing exactly {$3}"
-  else bad "SLOT MUTANT $1: expected '1|$3', got '$got'"; fi
-}
-# noreap: slot-world's group kill reduced to a kill of the leader's pid alone -- the shape that left the
-# stream stub's `tail -f` alive under init. The mutant edits a COPY of slot-world.sh (it resolves no
-# sibling), run against the shipped deriver. Its exit trap still kills every recorded group, so the
-# mutant run itself leaks nothing onto the box; the reaped line is read before that trap runs.
-SLOT_ARMS=$((SLOT_ARMS+1))
-SLOT_WV="$SLOT_T/slot-world.noreap.sh"
-sed 's/^kill_tree() { kill -KILL -- "-\$1" 2>\/dev\/null; kill -KILL "\$1" 2>\/dev\/null; return 0; }$/kill_tree() { kill -KILL "$1" 2>\/dev\/null; return 0; }/' "$SLOT_W" > "$SLOT_WV"
-if cmp -s "$SLOT_W" "$SLOT_WV"; then bad "SLOT MUTANT noreap did not apply: the edit matched nothing in slot-world.sh"
-else
-  # hold is the deciding scenario's seed and file the twin (a fail-open run whose deriver exits on its own).
-  _g="$(slot_score "$DERIVER" hold file)"
-  [ "$F2C_MATRIX" = 1 ] && f2c_mx noreap "failed {${_g#*|}} of hold file"
-  if [ "$_g" = "1|reaped" ]; then mutant_killed "${B_slot_reaped:-0}" noreap "SLOT MUTANT noreap is KILLED, failing exactly {reaped}"
-  else bad "SLOT MUTANT noreap: expected '1|reaped', got '$_g'"; fi
-fi
-SLOT_WV="$SLOT_W"
 # (slot-kill) THE WORLD ITSELF TAKEN DOWN BY SIGKILL (BL-875). The world runs `hold` in the background in a TMPDIR of its
 # own; once the fixture has recorded `a-hold`, the world writes SW_KILL_GATE and blocks with deriver A's tree still up (no
 # clock: left unblocked, the world's own hold kill races the caller's), then it is SIGKILLed, so its EXIT trap never runs, and the caller's
@@ -7893,29 +5715,7 @@ SLOT_ARMS=$((SLOT_ARMS+1))
 _k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB")"
 if [ "$_k" = "1|2|0|0" ]; then
   ok "SLOT KILL: slot-world SIGKILLed mid-hold leaves no member of its 2 recorded groups (deriver A, live control) alive after the caller's reap ('$_k' pre|groups|surviving|live)"
-  B_slot_kill=1
 else bad "SLOT KILL: expected '1|2|0|0' (pre|groups|surviving|live), got '$_k'"; fi
-# reapdrop: the caller's reap deleted from a COPY of the reap lib -> both recorded groups survive the KILL, live included.
-SLOT_ARMS=$((SLOT_ARMS+1))
-sed '/^    kill -KILL -- "-\$g" 2>\/dev\/null; kill -KILL "\$g" 2>\/dev\/null$/d' "$SLOT_REAP_LIB" > "$SLOT_T/reap.reapdrop.sh"
-if cmp -s "$SLOT_REAP_LIB" "$SLOT_T/reap.reapdrop.sh"; then bad "SLOT MUTANT reapdrop did not apply: the edit matched nothing in $SLOT_REAP_LIB"
-else
-  _k="$(slot_kill_drive "$SLOT_W" "$SLOT_T/reap.reapdrop.sh")"
-  [ "$F2C_MATRIX" = 1 ] && f2c_mx reapdrop "pre|groups|surviving|live $_k"
-  if [ "$_k" = "1|2|2|1" ]; then mutant_killed "${B_slot_kill:-0}" reapdrop "SLOT MUTANT reapdrop is KILLED: with the caller's reap deleted both recorded groups outlive the SIGKILLed world ('$_k')"
-  else bad "SLOT MUTANT reapdrop: expected '1|2|2|1' (pre|groups|surviving|live), got '$_k'"; fi
-fi
-# liveunrec: the live-pid control's group record deleted from a COPY of slot-world -> the reap misses it, and the pid
-# the world's fixture wrote reads it alive.
-SLOT_ARMS=$((SLOT_ARMS+1))
-sed '/^bash -c .echo \$\$ >> "\$1"; kill -0 \$PPID /s/echo \$\$ >> "\$1"; //' "$SLOT_W" > "$SLOT_T/slot-world.liveunrec.sh"
-if cmp -s "$SLOT_W" "$SLOT_T/slot-world.liveunrec.sh"; then bad "SLOT MUTANT liveunrec did not apply: the edit matched nothing in slot-world.sh"
-else
-  _k="$(slot_kill_drive "$SLOT_T/slot-world.liveunrec.sh" "$SLOT_REAP_LIB")"
-  [ "$F2C_MATRIX" = 1 ] && f2c_mx liveunrec "pre|groups|surviving|live $_k"
-  if [ "$_k" = "1|1|0|1" ]; then mutant_killed "${B_slot_kill:-0}" liveunrec "SLOT MUTANT liveunrec is KILLED: with the live control unrecorded it outlives the SIGKILLed world ('$_k')"
-  else bad "SLOT MUTANT liveunrec: expected '1|1|0|1' (pre|groups|surviving|live), got '$_k'"; fi
-fi
 # (slot-forkkill) THE WORLD SIGKILLed BETWEEN A LAUNCH AND THE STATEMENT AFTER IT (BL-875 item 5). The world once appended
 # deriver A's `$!` on the statement after its launch, so a KILL between the fork and that append left a group nobody
 # recorded. Now the launched child records itself. SW_FORK_GATE blocks the world on exactly that statement, once the child
@@ -7944,19 +5744,7 @@ SLOT_ARMS=$((SLOT_ARMS+1))
 _k="$(slot_fork_drive "$SLOT_W")"
 if [ "$_k" = "1|2|0" ]; then
   ok "SLOT FORKKILL: slot-world SIGKILLed on the statement after deriver A's launch leaves A's group recorded by A itself and reaped ('$_k' pre|groups|A surviving)"
-  B_slot_forkkill=1
 else bad "SLOT FORKKILL: expected '1|2|0' (pre|groups|A surviving), got '$_k'"; fi
-# selfrec: deriver A's self-record deleted from a COPY of slot-world -> nobody records A's group, the reap misses it, and
-# the pid file A wrote reads it alive after the SIGKILLed world.
-SLOT_ARMS=$((SLOT_ARMS+1))
-sed 's/^      bash -c .echo \$\$ >> "\$SW_REC"; echo/      bash -c '"'"'echo/' "$SLOT_W" > "$SLOT_T/slot-world.selfrec.sh"
-if cmp -s "$SLOT_W" "$SLOT_T/slot-world.selfrec.sh"; then bad "SLOT MUTANT selfrec did not apply: the edit matched nothing in slot-world.sh"
-else
-  _k="$(slot_fork_drive "$SLOT_T/slot-world.selfrec.sh")"
-  [ "$F2C_MATRIX" = 1 ] && f2c_mx selfrec "pre|groups|A surviving $_k"
-  if [ "$_k" = "1|1|1" ]; then mutant_killed "${B_slot_forkkill:-0}" selfrec "SLOT MUTANT selfrec is KILLED: with A's self-record deleted A's group outlives the SIGKILLed world ('$_k')"
-  else bad "SLOT MUTANT selfrec: expected '1|1|1' (pre|groups|A surviving), got '$_k'"; fi
-fi
 # (slot-shellkill) THE WORLD TORN DOWN BY THE HOOK'S OWN TEARDOWN (BL-875). The same gated hold world as slot-kill, but the
 # KILL is the pre-push hook's pool_kill_tree applied to the world's shell pid, as the hook's xargs worker applies it to a
 # unit's, and the fixture's slot_reap does NOT run before the census: the hook's teardown alone must leave no member of any
@@ -7973,42 +5761,7 @@ SLOT_ARMS=$((SLOT_ARMS+1))
 _k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB" "$SLOT_PKT_LIB")"
 if [ "$_k" = "1|2|0|0" ]; then
   ok "SLOT SHELLKILL: slot-world torn down mid-hold by the hook's own pool_kill_tree on its shell pid, no caller reap, leaves no member of its 2 recorded groups alive ('$_k' pre|groups|surviving|live)"
-  B_slot_shellkill=1
 else bad "SLOT SHELLKILL: expected '1|2|0|0' (pre|groups|surviving|live), got '$_k'"; fi
-# pktnowalk: pool_tree's descendant walk disabled in a COPY of the extracted functions -> pool_kill_tree lists the world's
-# shell pid alone, kills it, and both recorded groups (deriver A, live control) outlive the teardown, live included.
-# WHY NOT THE GROUP-KILL LINE: deleting `kill -KILL -- "-$p"` was measured and SURVIVES here ('1|2|0|0'), because every
-# member of both groups is still parented inside the world's tree when the KILL lands, so the walk lists each one and the
-# per-pid KILL after it covers them; that line is load-bearing only for a member the walk cannot reach, which this
-# gated world does not build. The walk is what this world's teardown depends on.
-SLOT_PKT_WALK='      while [ -n "$q" ]; do'
-SLOT_ARMS=$((SLOT_ARMS+1))
-if [ "$(grep -cxF -- "$SLOT_PKT_WALK" "$SLOT_PKT_LIB")" != 1 ]; then bad "SLOT MUTANT pktnowalk did not apply: the walk loop line is not in $SLOT_PKT_LIB exactly once"
-else
-  awk -v w="$SLOT_PKT_WALK" '$0 == w { print "      while false; do"; next } { print }' "$SLOT_PKT_LIB" > "$SLOT_T/pool-kill-tree.pktnowalk.sh"
-  if cmp -s "$SLOT_PKT_LIB" "$SLOT_T/pool-kill-tree.pktnowalk.sh"; then bad "SLOT MUTANT pktnowalk did not apply: the edit matched nothing in $SLOT_PKT_LIB"
-  else
-    _k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB" "$SLOT_T/pool-kill-tree.pktnowalk.sh")"
-    [ "$F2C_MATRIX" = 1 ] && f2c_mx pktnowalk "pre|groups|surviving|live $_k"
-    if [ "$_k" = "1|2|2|1" ]; then mutant_killed "${B_slot_shellkill:-0}" pktnowalk "SLOT MUTANT pktnowalk is KILLED: with the descendant walk disabled both recorded groups outlive the hook's teardown ('$_k')"
-    else bad "SLOT MUTANT pktnowalk: expected '1|2|2|1' (pre|groups|surviving|live), got '$_k'"; fi
-  fi
-fi
-SLOT_TWELVE="order nested stalemark foreign stale beat plain file stray noparent rebreak oldempty"
-slot_mut noacq   '/^  rs_slot_acquire$/d' 'beat file foreign nested noparent oldempty order rebreak stale stalemark stray' plain
-slot_mut nostale 's/^    if readset_lock_stale "\$RS_SLOT" >\/dev\/null; then$/    if false; then/' 'oldempty rebreak stale stray' beat
-slot_mut noreent 's/^    \*:"\$RS_SLOT")$/    __never__)/' 'nested' order
-slot_mut anymark 's/^      if \[ -n "\$hp" \] \&\& \[ "\$rp" = "\$hp" \] \&\& ! readset_lock_stale "\$RS_SLOT" >\/dev\/null; then$/      if [ -n "$hp" ]; then/' 'foreign stalemark' nested
-slot_mut nobeat  '/slot: heartbeat, still waiting/d' 'beat' order
-slot_mut nogate  '/^  \[ -n "\$LOCAL_MAP" \] || return 0$/d' 'plain' order
-slot_mut normdir 's/^      if \[ "\$rmrc" -ne 0 \] && \[ -d "\$RS_SLOT" \] && \[ ! -f "\$RS_SLOT\/pid" \]; then$/      if false; then/' 'stray' oldempty
-slot_mut nodir   's/^    if \[ ! -d "\$RS_SLOT" \]; then$/    if false; then/' 'file' noparent
-slot_mut noparent 's/^    if \[ ! -e "\$RS_SLOT" \] && \[ ! -L "\$RS_SLOT" \]; then$/    if false; then/' 'noparent' file
-slot_mut nobound 's/^      if \[ "\$b" -ge "\$RS_SLOT_BREAKS" \]; then$/      if false; then/' 'rebreak' stale
-slot_mut nobrksleep '/^      sleep 0\.2$/d' 'rebreak' stale
-slot_mut noline  '/^    say "slot: UNSLOTTED -- /d' 'file noparent rebreak stray' oldempty
-slot_mut late    'awk:/^  rs_slot_acquire$/ {next} /^  # Run it the way the pre-push runner runs it/ {print "  rs_slot_acquire"} {print}' 'foreign order stalemark' nested
-slot_mut early   'awk:/^    rs_slot_release$/ {next} /^  flushed=1$/ {print "  rs_slot_release"} {print}' 'foreign order stalemark' nested
 fi
 
 # (no-refusal) NO CK OR TK PUSH WAS DECIDED BY THE WATCHDOG (the pin is at the scrub, at the top of this file). Every
@@ -8036,7 +5789,7 @@ if [ "${_nr%%|*}" -gt 0 ]; then
   CK_ARMS=$((CK_ARMS+1))
   if [ "${_nr#*|}" = '0|0' ]; then ok "(no-refusal) all ${_nr%%|*} ck/tk push(es) ran under the pinned window 99999 and none was REFUSED by the pool watchdog"
   else bad "(no-refusal) ck/tk pushes|unpinned|REFUSED verdict lines = $_nr; a push decided by the load-bound watchdog is no verdict on the subject"; fi
-elif sg ckw || sg ckm1 || sg ckm2 || sg ckm3 || sg tk; then
+elif sg ckw || sg tk; then
   CK_ARMS=$((CK_ARMS+1)); bad "(no-refusal) this shard runs ck/tk worlds and the scan found no push directory under $CK_W"
 fi
 # (no-refusal, loc) THE SAME FOR THE loc UNIT'S run_fixtures DRIVES: rf_drive's $WORK/rfo.<name>/ and rp_run's
@@ -8057,14 +5810,7 @@ aw_gate
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-BASE_ARMS=0; sg arms && BASE_ARMS=18
-# (matrix reach) --matrix reaches the checksum-key section and prints one CK-MATRIX row per checksum-key mutant; a plain run prints none.
-PRE_ARMS=$((PRE_ARMS+1))
-if [ "$MATRIX" = 1 ]; then
-  [ "$CK_MX_ROWS" -eq 15 ] && ok "(args) --matrix reached the checksum-key section: $CK_MX_ROWS CK-MATRIX rows" || bad "(args) --matrix printed $CK_MX_ROWS CK-MATRIX rows, want 15"
-else
-  [ "$CK_MX_ROWS" -eq 0 ] && ok "(args) a plain run executed no matrix-only cell: 0 CK-MATRIX rows" || bad "(args) a plain run printed $CK_MX_ROWS CK-MATRIX rows, want 0"
-fi
+BASE_ARMS=0; sg arms && BASE_ARMS=16
 EXPECTED=$(( BASE_ARMS + PRE_ARMS + ${IGN_ARMS:-0} + ${NEW_ARMS:-0} + ${MERGE_ARMS:-0} + ${CONTROL_ARMS:-0} + ${TRACE_ARMS:-0} + ${BOTH_ARMS:-0} + ${LT_ARMS:-0} + ${CK_ARMS:-0} + ${TK_ARMS:-0} + ${DG_ARMS:-0} + ${RC_ARMS:-0} + ${VS_ARMS:-0} + ${SLOT_ARMS:-0} ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"

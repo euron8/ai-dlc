@@ -15,12 +15,12 @@
 # 40000. A7 forces that interleaving rather than sampling it.
 #
 # WHY A SEPARATE UNIT. reconcile-emit-report is the suite's heaviest reconcile unit; these arms
-# re-render the seed world roughly fifty times across the mutant programs, and added there they
+# re-render the seed world many times, and added there they
 # would move a pole-adjacent directory. The seed is SHARED, not copied: this unit runs the
 # sibling's own `seed.sh`, so both units read one world.
 #
-# ARMS (each runs against every program in its group; the ctl copy must pass all of them):
-#   A0  CONTROL: an unmutated copy of reconcile/ renders the seed world byte-identically to the
+# ARMS (each runs against the ctl copy of reconcile/):
+#   A0  CONTROL: a copy of reconcile/ renders the seed world byte-identically to the
 #       seed's own region, with positive rows in every section the stub arms later refuse.
 #   A1  per site (retired-tokens, relabel, ledger-reverify, predicate-differential,
 #       retired-fixtures, retired-layer-contract, retired-layer-passage): a stub exiting
@@ -36,47 +36,7 @@
 #       UNDECIDED, one DETECTOR-REFUSED line (an indented refusal reads rc 3 BLOCKERS-RESOLVED).
 #   A7  the race itself, FORCED on the engine's own orientation-diff text (a `diff` shadowed by one fork),
 #       against two reference spellings that must split 5/5 and 0/5 first.
-#
-# MUTANTS. Each is a copy of the whole reconcile/ directory with ONE edit. A UNIT is one render or scenario of one program,
-# run as a background job that writes only under its own directory; nothing is asserted in a job.
-#   - PER PUSH the unmutated copy runs EVERY unit (the base pass), and each mutant runs the units of its
-#     DECIDING arm, which must FAIL, and of one named TWIN, an arm the measured matrix shows GREEN for it,
-#     which must PASS. The kill is emitted through mutant_killed behind the same-run base pass of both arms
-#     and of the whole unmutated copy. The twin proves the kill stays confined to the deciding arm.
-#   - `--matrix` runs every unit of every program and prints one MATRIX row per (program, arm) cell,
-#     `killed=yes` iff THAT arm tripped under THAT program.
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
-# requires. Run it from the repo root, by the command on the MUTANT-MATRIX-REMEASURE line, with
-# AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is
-# not run through hermetic-run.sh, which forwards no argument.
-# also trips beyond decides= (measured, --matrix at the committed tip): m-diff-rc A6; m-samp-rc A4b; a8-stable-filter A0; a9-counts-in-projection A0 A8
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/emit-report-refusal/run.sh --matrix
-# MUTANT-MATRIX-DYNAMIC mutant-table-loop why=one loop over the MT table passes each mutant name to mutant_killed as a variable, and every name it produces has its own MUTANT-MATRIX row below
-# MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy of the reconcile engine must trip no arm; it is the base pass every kill is gated on
-# MUTANT-MATRIX m-diff-rc decides=A3 twins=A4a
-# MUTANT-MATRIX m-diff-indent decides=A6 twins=A3
-# MUTANT-MATRIX m-samp-rc decides=A4a twins=A3
-# MUTANT-MATRIX m-samp-nonnum decides=A4b twins=A3
-# MUTANT-MATRIX m-lstree decides=A5 twins=A3
-# MUTANT-MATRIX m-rt decides=A1-retired-tokens.sh twins=A2
-# MUTANT-MATRIX m-rl-refuse decides=A1-relabel-extension-checks.sh twins=A2
-# MUTANT-MATRIX m-rl-one decides=A2 twins=A1-ledger-reverify.sh
-# MUTANT-MATRIX m-lr decides=A1-ledger-reverify.sh twins=A2
-# MUTANT-MATRIX m-pd decides=A1-predicate-differential.sh twins=A2
-# MUTANT-MATRIX m-rf decides=A1-retired-fixtures.sh twins=A2
-# MUTANT-MATRIX m-rlc decides=A1-retired-layer-contract.sh twins=A2
-# MUTANT-MATRIX m-rlp decides=A1-retired-layer-passage.sh twins=A2
-# MUTANT-MATRIX h1-unstable decides=H1 twins=A8
-# MUTANT-MATRIX a8-stable-filter decides=A8 twins=A9
-# MUTANT-MATRIX a9-counts-in-projection decides=A9 twins=H1
 set -uo pipefail
-MATRIX=0; MATRIX_ROWS=0
-for _a in "$@"; do
-  case "$_a" in
-    --matrix) MATRIX=1 ;;
-    *) echo "FIXTURE ERROR: unknown argument '$_a' (usage: run.sh [--matrix])" >&2; exit 2 ;;
-  esac
-done
 
 # HERMETIC -- scrub the operator's tuning before reading anything (I10). H1 below drives a world
 # carrying an ai-dlc hook through the hook-registration validator.
@@ -95,12 +55,6 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/emit-report.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 echo "emit-report-refusal:"
-for _l in matrix.sh mutant.sh; do
-  [ -f "$HERE/../lib/$_l" ] || { echo "FIXTURE ERROR: $HERE/../lib/$_l is absent; nothing was asserted" >&2; exit 2; }
-  . "$HERE/../lib/$_l"
-done
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 R="$WORK/err"; mkdir -p "$R/sh" "$R/prog" "$R/out"
 REAL_DIFF="$(command -v diff)"; REAL_AWK="$(command -v awk)"; REAL_GIT="$(command -v git)"
@@ -115,8 +69,7 @@ ZE='core/skills/ai-dlc/templates/zeta.md'
 # `/dev/fd/*` process substitution until 0.647.0, `-` (the staged side piped in) since. EVERY
 # FIRING APPENDS A LINE TO "$SHIM_FIRED", and every forced-failure arm below refuses as FIXTURE
 # BROKEN when that file is empty: a shim that silently stopped matching the engine's call shape
-# would otherwise read exactly like an engine that stopped refusing -- or, under a mutant, like a
-# kill.
+# would otherwise read exactly like an engine that stopped refusing.
 shim() { # shim <dir> <binary-name> <body-lines...>
   local d="$R/sh/$1" b="$2"; shift 2
   mkdir -p "$d"; printf '%s\n' '#!/bin/bash' "$@" > "$d/$b"; chmod +x "$d/$b"
@@ -174,70 +127,16 @@ grep -q 'HARD-UNREGISTERED-CORE-DRIFT' "$R/a6-region.md" && ! cmp -s "$C3/.claud
 
 # --- PROGRAMS -----------------------------------------------------------------------------
 # Every program is a copy of the WHOLE reconcile/ directory (emit-report.sh resolves $SELF
-# beside itself), guarded for its siblings. Mutants overwrite the copy's emit-report.sh.
-MUTS=""
+# beside itself), guarded for its siblings.
 mkprog() { # mkprog <name> -> copies reconcile/, refuses a copy missing its siblings
   local d="$R/prog/$1"
   rm -rf "$d"; cp -R "$RDIR" "$d" || { bad "HARNESS BROKEN [$1]: copy of reconcile/ failed"; return 1; }
   [ -f "$d/preclassify.sh" ] && [ -f "$d/ledger-reverify.sh" ] \
     || { bad "HARNESS BROKEN [$1]: the copy lacks its siblings, so it would render nothing and every arm would read as a kill"; return 1; }
 }
-mkmut() { # mkmut <name> <anchor-regex> <want-hits> <sed-args...>
-  local n="$1" anch="$2" want="$3" hits; shift 3
-  mkprog "$n" || return 1
-  hits="$(grep -c -e "$anch" "$EMIT")" || hits=0
-  if [ "$hits" -ne "$want" ]; then
-    bad "MUTANT STALE [$n]: its anchor matches $hits line(s) in emit-report.sh, not $want — re-anchor it on the same observable; never relax the assertion"; return 1
-  fi
-  if ! sed "$@" "$EMIT" > "$R/prog/$n/emit-report.sh"; then
-    bad "MUTANT DID NOT APPLY [$n]: sed failed"; return 1
-  fi
-  if cmp -s "$EMIT" "$R/prog/$n/emit-report.sh"; then
-    bad "MUTANT DID NOT APPLY [$n]: the sed matched nothing"; return 1
-  fi
-  bash -n "$R/prog/$n/emit-report.sh" 2>/dev/null || { bad "MUTANT STALE [$n]: the mutant does not parse"; return 1; }
-  MUTS="$MUTS $n"
-}
 mkprog ctl
-if ! diff -rq "$RDIR" "$R/prog/ctl" >/dev/null 2>&1 || [ "$(ls "$R/prog/ctl" | wc -l | tr -d ' ')" -lt 20 ]; then
-  bad "HARNESS BROKEN: the unmutated copy differs from reconcile/ or holds fewer than 20 files"
-fi
 
-# Orientation group.
-mkmut m-diff-rc     '^          if \[ "\$d_rc" = staging-failed \] || \[ "\$d_rc" -ge 2 \]; then$' 1 \
-  -e 's/^          if \[ "\$d_rc" = staging-failed \] || \[ "\$d_rc" -ge 2 \]; then$/          if false; then/'
-mkmut m-diff-indent '^            echo "DETECTOR-REFUSED  orientation diff exited' 1 \
-  -e 's/^            echo "DETECTOR-REFUSED  orientation diff exited/            echo "    DETECTOR-REFUSED  orientation diff exited/'
-mkmut m-samp-rc     '^              \[!0\]\*|0:|0:\*\[!0-9\]\*)$' 1 \
-  -e 's/^              \[!0\]\*|0:|0:\*\[!0-9\]\*)$/              ZZ-NEVER-ZZ)/'
-mkmut m-samp-nonnum '^              \[!0\]\*|0:|0:\*\[!0-9\]\*)$' 1 \
-  -e 's/^              \[!0\]\*|0:|0:\*\[!0-9\]\*)$/              [!0]*|0:)/'
-mkmut m-lstree      '^        if \[ "\$t_ls_rc" -ne 0 \] || \[ "\$t_rc" -ne 0 \]; then$' 1 \
-  -e 's/^        if \[ "\$t_ls_rc" -ne 0 \] || \[ "\$t_rc" -ne 0 \]; then$/        if false; then/'
-# Stub group.
-mkmut m-rt          '^          if \[ "\$rt_rc" != 0 \]; then$' 1 \
-  -e 's/^          if \[ "\$rt_rc" != 0 \]; then$/          if false; then/'
-mkmut m-rl-refuse   '^  if \[ "\$rl_rc" = 0 \] || \[ "\$rl_rc" = 1 \]; then none_or "\$rl"; else$' 1 \
-  -e 's/^  if \[ "\$rl_rc" = 0 \] || \[ "\$rl_rc" = 1 \]; then none_or "\$rl"; else$/  if true; then none_or "$rl"; else/'
-mkmut m-rl-one      '^  if \[ "\$rl_rc" = 0 \] || \[ "\$rl_rc" = 1 \]; then none_or "\$rl"; else$' 1 \
-  -e 's/^  if \[ "\$rl_rc" = 0 \] || \[ "\$rl_rc" = 1 \]; then none_or "\$rl"; else$/  if [ "$rl_rc" = 0 ]; then none_or "$rl"; else/'
-mkmut m-lr          '^  if \[ "\$lr_rc" -eq 0 \]; then none_or "\$lr"; else$' 1 \
-  -e 's/^  if \[ "\$lr_rc" -eq 0 \]; then none_or "\$lr"; else$/  if true; then none_or "$lr"; else/'
-# The four "0 ALWAYS" sites share a0_render; each mutant zeroes ONE site's rc, addressed by the
-# range from that site's own call line to the rc read after it. The count of intact rc reads
-# must drop from 4 to 3, or the range reached the wrong site (or none).
-for _s in predicate-differential:m-pd retired-fixtures:m-rf retired-layer-contract:m-rlc retired-layer-passage:m-rlp; do
-  _d="${_s%%:*}"; _m="${_s#*:}"
-  if mkmut "$_m" "bash \"\\\$SELF/${_d}\\.sh\"" 1 -e "/bash \"\\\$SELF\\/${_d}\\.sh\"/,/^  a0_rc=\\\$?\$/ s/^  a0_rc=\\\$?\$/  a0_rc=0/"; then
-    _n="$(grep -c '^  a0_rc=\$?$' "$R/prog/$_m/emit-report.sh")" || _n=0
-    _n0="$(grep -c '^  a0_rc=\$?$' "$EMIT")" || _n0=0
-    if [ "$_n0" -ne 4 ] || [ "$_n" -ne 3 ]; then
-      bad "MUTANT STALE [$_m]: intact a0 rc reads went $_n0 -> $_n, not 4 -> 3"
-      MUTS="$(printf '%s\n' $MUTS | grep -vx "$_m" | tr '\n' ' ')"
-    fi
-  fi
-done
-# --- THE ENGINE-DRIVEN ARMS H1, A8, A9: their worlds, constants and mutants --------------------------
+# --- THE ENGINE-DRIVEN ARMS H1, A8, A9: their worlds and constants --------------------------
 # H1: THE HOOK VALIDATOR'S FIX LINE NAMES A STABLE PATH, SO TWO RENDERS ARE ONE. The validator prints
 # `bash <its own path> --root …` at the foot of its FIX block, and emit-report runs THEIRS' copy out of a
 # fresh mktemp file -- so with any ai-dlc hook unregistered every render differed in that line, `--verify`
@@ -317,45 +216,10 @@ a9_run() { # a9_run <dir> -> "<rc-before-write> <rc-after-write>"
   printf '%s %s' "$r1" "$r2"
 }
 
-# The three mutants of these arms, each a program (a whole reconcile/ copy, one emit-report.sh edited) built by
-# whole-line replacement (awk, ENVIRON), so no sed escaping can make it a no-op; each must apply to one line.
-EMUTS=""
-if [ "$H1_STATE" = on ] && mkprog h1-unstable; then
-  # MUTANT: the rewrite removed, so the FIX line names the mktemp copy again.
-  A='             print }'"'"')" && [ -n "$hrs" ] && hro="$hrs"' B='             print }'"'"')"' \
-    awk '$0 == ENVIRON["A"] { print ENVIRON["B"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' "$EMIT" > "$R/prog/h1-unstable/emit-report.sh"
-  _arc=$?
-  if [ "$_arc" -ne 0 ] || cmp -s "$EMIT" "$R/prog/h1-unstable/emit-report.sh"; then
-    bad "H1 mutant DID NOT APPLY, so the stable-path arm is unproven"
-  else EMUTS="$EMUTS h1-unstable"; fi
-fi
-# The mutant restores the pre-fix projection (STABLE rows filtered out).
-A8_OLD="  a0_render \"\$a0_rc\" \"\$a0_raw\" '\$1!=\"PREDICATE-STABLE\"{print \$1\"  \"\$2\"  \"\$3}' \"predicate-differential.sh <dist> <base> <theirs> <consumer>\""
-A8_KEY='  a0_render "$a0_rc" "$a0_raw" '"'"'$1!="PREDICATE-STABLE"{print $1"  "$2"  "$3; next}'
-if mkprog a8-stable-filter; then
-  A8_OLD="$A8_OLD" A8_KEY="$A8_KEY" awk 'index($0, ENVIRON["A8_KEY"]) == 1 { print ENVIRON["A8_OLD"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
-    "$EMIT" > "$R/prog/a8-stable-filter/emit-report.sh"
-  _arc=$?
-  if [ "$_arc" -ne 0 ] || cmp -s "$EMIT" "$R/prog/a8-stable-filter/emit-report.sh"; then
-    bad "A8 mutant DID NOT APPLY (the projection line moved), so the STABLE arm is unproven -- re-anchor on the same line"
-  else EMUTS="$EMUTS a8-stable-filter"; fi
-fi
-# The mutant puts the counts back into the projection: the match runs to end of line again.
-A9_NEW='match($3, /population: root=`[^`]*` corpus=`[^`]*` series=`[^`]*`/){print $1"  "$2"  "substr($3, RSTART, RLENGTH); next}'
-A9_OLD='match($3, /population: .*$/){print $1"  "$2"  "substr($3, RSTART); next}'
-if mkprog a9-counts-in-projection; then
-  A9_NEW="$A9_NEW" A9_OLD="$A9_OLD" awk '{ i = index($0, ENVIRON["A9_NEW"]); if (i) { $0 = substr($0, 1, i - 1) ENVIRON["A9_OLD"] substr($0, i + length(ENVIRON["A9_NEW"])); n++ } print }
-    END { exit (n == 1) ? 0 : 3 }' "$EMIT" > "$R/prog/a9-counts-in-projection/emit-report.sh"
-  _arc=$?
-  if [ "$_arc" -ne 0 ] || cmp -s "$EMIT" "$R/prog/a9-counts-in-projection/emit-report.sh"; then
-    bad "A9 mutant DID NOT APPLY (the projection line moved), so the verify arm is unproven -- re-anchor on the same line"
-  else EMUTS="$EMUTS a9-counts-in-projection"; fi
-fi
-
 # --- UNITS ----------------------------------------------------------------------------------------
 # A unit is one render or scenario of one program. It is a background job that writes ONLY under
 # $R/out/<prog>/, is idempotent through its .done file, and asserts nothing; every verdict is
-# read in the foreground, where `bad` counts. Which units run is decided by the mode (see the header).
+# read in the foreground, where `bad` counts.
 STUBS="retired-tokens.sh:2 relabel-extension-checks.sh:2 ledger-reverify.sh:3 predicate-differential.sh:1 retired-fixtures.sh:3 retired-layer-contract.sh:2 retired-layer-passage.sh:1"
 ren() { # ren <prog> <arm> <shim-or-> <theirs> <consumer> [<emit>]
   local o="$R/out/$1" p="$PATH" e="${6:-$R/prog/$1/emit-report.sh}"
@@ -503,7 +367,7 @@ judge() { # judge <arm> -> reason on stdout, rc
 }
 arm_text() {
   case "$1" in
-    a0) echo "A0 CONTROL the unmutated copy renders the seed world byte-identically, with every section the stub arms refuse carrying its baseline row, and the seed's only refusal is retired-layer-token.sh" ;;
+    a0) echo "A0 CONTROL the copy renders the seed world byte-identically, with every section the stub arms refuse carrying its baseline row, and the seed's only refusal is retired-layer-token.sh" ;;
     a1:*) echo "A1 ${1#a1:} exiting non-zero renders ONE column-0 DETECTOR-REFUSED naming it and its rc in place of its section, render rc 0, the unstubbed sections intact" ;;
     a2) echo "A2 relabel exiting 1 is its FINDING: the row renders and no refusal does" ;;
     a3) echo "A3 the orientation diff failing on the SECOND CLASSIFY file refuses that file only; the first keeps its complete sample and no 'ONLY IN …: none' renders" ;;
@@ -536,57 +400,14 @@ emit_verdict() { # <program> <arm>
 }
 armv() { emit_verdict "$1" "$2"; } # <program> <arm>
 
-# --- THE MUTANT TABLE: name | program | deciding arm | twin arm ---------------------------------------
-# The deciding arm is the one arm the base's exact-vector assertion named first (the minimal one); the twin
-# is an arm the measured matrix shows GREEN for the mutant. Re-measure with --matrix after any change.
-MT="m-diff-rc|m-diff-rc|A3|A4a
-m-diff-indent|m-diff-indent|A6|A3
-m-samp-rc|m-samp-rc|A4a|A3
-m-samp-nonnum|m-samp-nonnum|A4b|A3
-m-lstree|m-lstree|A5|A3
-m-rt|m-rt|A1-retired-tokens.sh|A2
-m-rl-refuse|m-rl-refuse|A1-relabel-extension-checks.sh|A2
-m-rl-one|m-rl-one|A2|A1-ledger-reverify.sh
-m-lr|m-lr|A1-ledger-reverify.sh|A2
-m-pd|m-pd|A1-predicate-differential.sh|A2
-m-rf|m-rf|A1-retired-fixtures.sh|A2
-m-rlc|m-rlc|A1-retired-layer-contract.sh|A2
-m-rlp|m-rlp|A1-retired-layer-passage.sh|A2
-h1-unstable|h1-unstable|H1|A8
-a8-stable-filter|a8-stable-filter|A8|A9
-a9-counts-in-projection|a9-counts-in-projection|A9|H1
-"
-# A kill is evidence only if the mutant produced the observable its defect names, for the right reason: a
-# unit that died for another reason also reads TRIPPED. These three arms assert the exact observable.
-kobs_ok() { # <mutant> <program>
-  case "$1" in
-    h1-unstable)             [ "$(cat "$R/out/$2/H1.v" 2>/dev/null)" = "no 1 yes" ] ;;
-    a8-stable-filter)        [ "$(cat "$R/out/$2/A8.s" 2>/dev/null)" = none ] ;;
-    a9-counts-in-projection) [ "$(cat "$R/out/$2/A9.v" 2>/dev/null)" = "0 1" ] ;;
-    *) true ;;
-  esac
-}
-
 EUNITS="w0 a1 a2 a3 a4a a4b a5 a6"
 [ "$H1_STATE" = on ] && EUNITS="$EUNITS H1"
 EUNITS="$EUNITS A8 A9"
-ARMS_ALL="A0 A1-retired-tokens.sh A1-relabel-extension-checks.sh A1-ledger-reverify.sh A1-predicate-differential.sh A1-retired-fixtures.sh A1-retired-layer-contract.sh A1-retired-layer-passage.sh A2 A3 A4a A4b A5 A6"
-[ "$H1_STATE" = on ] && ARMS_ALL="$ARMS_ALL H1"
-ARMS_ALL="$ARMS_ALL A8 A9"
-in_set() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; } # <word> <space-separated set>
 
-# --- SCHEDULE: every unit the mode needs, 4 at a time ------------------------------------------------
+# --- SCHEDULE: every unit, 4 at a time ------------------------------------------------
 NEEDS=""
 need() { NEEDS="$NEEDS $1:$2"; }
 for _u in $EUNITS; do need ctl "$_u"; done
-while IFS='|' read -r _n _p _d _t; do
-  [ -n "$_n" ] || continue
-  in_set "$_p" "$MUTS $EMUTS" || continue
-  if [ "$MATRIX" -eq 1 ]; then for _u in $EUNITS; do need "$_p" "$_u"; done
-  else need "$_p" "$(unit_of "$_d")"; need "$_p" "$(unit_of "$_t")"; fi
-done <<EOF
-$MT
-EOF
 _n=0
 for _x in $(printf '%s\n' $NEEDS | sort -u); do
   ( unit_run "${_x%%:*}" "${_x#*:}" ) &
@@ -596,22 +417,22 @@ wait
 N_UNITS="$(printf '%s\n' $NEEDS | sort -u | grep -c .)" || N_UNITS=0
 printf '  units run: %s\n' "$N_UNITS"
 
-# --- EVERY FORCED FAILURE MUST HAVE FIRED, IN EVERY PROGRAM THAT RAN IT ------------------------------
+# --- EVERY FORCED FAILURE MUST HAVE FIRED, ------------------------------
 # Checked apart from the verdicts and before any is read: an arm whose shim never matched the engine's
-# call shape measures a healthy render, which the ctl judges read as a failure and a mutant's judges read
-# as a kill. A5's shim has two call shapes (ls-tree on one file, show on another), so it fires at least twice.
+# call shape measures a healthy render, which the ctl judges read as a failure.
+# A5's shim has two call shapes (ls-tree on one file, show on another), so it fires at least twice.
 _unfired=""
-for _p in ctl $MUTS $EMUTS; do
+for _p in ctl; do
   for _f in a3:1 a4a:1 a4b:1 a5:2 a6:1; do
     [ -f "$R/out/$_p/${_f%%:*}.done" ] || continue
     _k="$(grep -c . "$R/out/$_p/${_f%%:*}.fired" 2>/dev/null)" || _k=0
     [ "$_k" -ge "${_f#*:}" ] || _unfired="$_unfired $_p/${_f%%:*}($_k)"
   done
 done
-[ -z "$_unfired" ] && ok "every forced-failure shim FIRED in every program that ran it (a marker line per firing)" \
+[ -z "$_unfired" ] && ok "every forced-failure shim FIRED (a marker line per firing)" \
   || bad "FIXTURE BROKEN — these forced failures never fired, so their renders are healthy and every verdict on them is void:$_unfired — the engine's call shape moved away from the shim; re-key the shim, never relax this"
 
-# --- VERDICTS: the unmutated copy (MX0) -------------------------------------------------------------
+# --- VERDICTS ---------------------------------------------------------------------------------------
 CTLBAD=""
 O="$R/out/ctl"
 for _a in a0 $STUB_ARMS $ORIENT_ARMS; do
@@ -636,53 +457,6 @@ else
   bad "A9 verify before/after the corpus write read [$(cat "$R/out/ctl/A9.v" 2>/dev/null)], want [0 0]"; CTLBAD="$CTLBAD A9"
 fi
 CTLBAD="${CTLBAD# }"
-mrow() { matrix_row "$1" "$2" 0 "$3" "$4"; MATRIX_ROWS=$((MATRIX_ROWS + 1)); } # <id> <arm> <GREEN|TRIPPED> <yes|no>
-mx_cells() { # <id> <program>
-  local a v
-  for a in $ARMS_ALL; do
-    v="$(armv "$2" "$a")"
-    case "$v" in 0) mrow "$1" "$a" GREEN no ;; 1) mrow "$1" "$a" TRIPPED yes ;; *) bad "$1: arm $a on program $2 never ran" ;; esac
-  done
-}
-B_MX0=0
-if [ -z "$CTLBAD" ]; then
-  B_MX0=1
-  [ "$MATRIX" -eq 1 ] && mx_cells MX0 ctl
-  ok "CONTROL MX0 (unmutated copy): every one of the $(printf '%s\n' $ARMS_ALL | grep -c .) arms HOLDS on it, tripped=[]"
-else
-  bad "unmutated copy fails [$CTLBAD] -- the harness, not a mutant, is what fails"
-fi
-
-# --- VERDICTS: each mutant on its deciding arm and its twin -----------------------------------------
-n_scored=0; n_exp=0
-while IFS='|' read -r name p dec twin; do
-  [ -n "$name" ] || continue
-  [ "$name" = h1-unstable ] && [ "$H1_STATE" != on ] && continue
-  n_exp=$((n_exp + 1))
-  in_set "$p" "$MUTS $EMUTS" || continue
-  n_scored=$((n_scored + 1))
-  [ "$MATRIX" -eq 1 ] && mx_cells "$name" "$p"
-  dv="$(armv "$p" "$dec")"; tv="$(armv "$p" "$twin")"
-  if [ "$dv" = X ] || [ "$tv" = X ]; then bad "mutant [$name]: deciding [$dec]=$dv or twin [$twin]=$tv never ran"
-  elif [ "$dv" = 0 ]; then bad "mutant [$name] SURVIVED its deciding arm [$dec] -- the kill moved; re-measure with --matrix"
-  elif [ "$tv" = 1 ]; then bad "mutant [$name]: twin [$twin] FAILS too -- the kill spread past the recorded matrix; re-measure with --matrix"
-  elif ! kobs_ok "$name" "$p"; then bad "mutant [$name] tripped [$dec] without its defect's observable -- the kill is the harness's, not the mutation's"
-  elif [ "$(armv ctl "$dec")" != 0 ] || [ "$(armv ctl "$twin")" != 0 ]; then
-    bad "FIXTURE BROKEN: MUTANT $name not scored -- the unmutated copy does not hold its deciding [$dec] or twin [$twin] arm, so its kill would read the seed failing"
-  else
-    mutant_killed "${B_MX0:-0}" "$name" "mutant [$name] KILLED by [$dec]; twin [$twin] holds"
-  fi
-done <<EOF
-$MT
-EOF
-[ "$n_scored" -eq "$n_exp" ] && ok "all $n_exp mutants were built (anchor count, cmp -s, bash -n) and scored" \
-  || bad "only $n_scored of $n_exp mutants were scored — an unbuilt mutant leaves its arm unproven"
-_na="$(printf '%s\n' $ARMS_ALL | grep -c .)" || _na=0
-if [ "$MATRIX" -eq 0 ]; then
-  [ "$MATRIX_ROWS" -eq 0 ] && ok "PLAIN-RUN: no MATRIX row printed -- the full matrix runs only under --matrix" || bad "PLAIN-RUN printed $MATRIX_ROWS MATRIX row(s)"
-else
-  [ "$MATRIX_ROWS" -eq $(( (n_scored + 1) * _na )) ] && ok "MATRIX: $MATRIX_ROWS rows printed ($_na arms x (every mutant plus MX0))" || bad "MATRIX printed $MATRIX_ROWS rows, expected $(( (n_scored + 1) * _na ))"
-fi
 
 # --- A7: THE RACE, FORCED, ON THE ENGINE'S OWN ORIENTATION-DIFF TEXT --------------------------
 # The body is cut from emit-report.sh between the THEIRS line and the rc test, so whatever
@@ -695,17 +469,8 @@ fi
 # interleaving is forced instead: `diff` is shadowed by a shell FUNCTION that runs one external
 # command before the real fork, which makes bash reap the substitution first. The process-substitution
 # spelling then fails EVERY call (`/dev/fd/63: Bad file descriptor`) and a temp-file spelling
-# fails none. Two reference bodies prove that split on this machine before the engine's body is
-# read, and a counter proves the shadow was the `diff` that ran, so a body that bypasses it
+# fails none. A counter proves the shadow was the `diff` that ran, so a body that bypasses it
 # (`command diff`, `/usr/bin/diff`) cannot pass by never meeting the delay.
-#
-# THE SAMPLED HALF IS GONE (BL-868, operator ruling: zero tests depend on load). It ran the engine's
-# body beside the unfixed `<( )` spelling in 8 concurrent workers, 10000 calls each, and its printed
-# outcome (ok, or INCONCLUSIVE when load never reached the race) moved with load. Before it was cut
-# the forced half was shown to carry everything it asserted, in one run, three repeats: the unfixed
-# spelling refuses 5 of 5 under the forced order, the temp-file spelling and the shipped engine body
-# 0 of 5, and an engine body spelled as the unfixed `<( )` reads 5 of 5 refused, the forced half's
-# FAIL branch. The mutant table holds no A7 row, so no named mutant was killed by the sampled half.
 #
 # THE ENGINE'S BODY NEEDS ITS HELPER. Since 0.647.0 the site stages THEIRS into "$_er_tmp" and
 # pipes it through `er_pdiff`; both are cut from emit-report.sh here, so the arm drives the
@@ -726,9 +491,6 @@ if [ "$_rbc" -ne 1 ] || { [ "$_rbu" -gt 0 ] && [ "$_rfc" -ne 1 ]; } || { [ "$_rb
   bad "A7 HARNESS BROKEN: the cut from emit-report.sh carries $_rbc 'd_rc=\$?' reads (want 1), calls er_pdiff $_rbu time(s) with $_rfc definition(s) cut and er_stage $_rbs time(s) with $_rsc cut — re-anchor the cut, never relax it"
 else
   printf 'shared line\nSENTINEL-OURS-ONLY consumer domain class\n' > "$R/race-ours"
-  printf '%s\n' 'd="$(diff <(printf '"'"'%s\n'"'"' "$t") "$local_ours" 2>/dev/null)"; d_rc=$?' > "$R/ref-procsub.sh"
-  printf '%s\n' '_tf="$(mktemp)"; printf '"'"'%s\n'"'"' "$t" > "$_tf"' \
-    'd="$(diff "$_tf" "$local_ours" 2>/dev/null)"; d_rc=$?' 'rm -f "$_tf"' > "$R/ref-tmpfile.sh"
   # THE FORCING IS A FORK, NOT A DELAY (BL-868). The shadow used to `sleep 0.05` before the real diff,
   # which read as "give the substitution's child time to exit". Measured on bash 3.2.57, that is not
   # what closes the fd: a FOREGROUND EXTERNAL command run in the shell that owns the substitution
@@ -747,29 +509,13 @@ n=0; i=0
 while [ "$i" -lt "$3" ]; do i=$((i+1)); . "$1"; case "$d_rc" in 0|1) : ;; *) n=$((n+1)) ;; esac; done
 rm -rf "$_er_tmp"; echo "$n $(grep -c . "$CALLS")"
 RACE
-  _rp="$(bash "$R/race.sh" "$R/ref-procsub.sh" "$R/race-ours" 5 "$R/calls.p" "$RF")"
-  _rf="$(bash "$R/race.sh" "$R/ref-tmpfile.sh" "$R/race-ours" 5 "$R/calls.f" "$RF")"
-  # THE RACE IS A PROPERTY OF BASH 3.2, NOT OF EVERY BASH. Measured in `bash:5.2` against local
-  # 3.2.57 on the same cut bodies: bash 5 holds the substitution's fd open across the call, so the
-  # process-substitution reference reads `0 5` there and `5 5` here. A consumer whose PATH resolves
-  # a newer bash has no race for this arm to force, which is a fact about that shell and not a
-  # broken harness, so that one reading is INCONCLUSIVE. The harness is still BROKEN when the
-  # shadow was not the diff that ran (calls != 5) or the temp-file reference refused at all.
-  if [ "$_rf" != "0 5" ] || [ "${_rp#* }" != 5 ]; then
-    bad "A7 HARNESS BROKEN: the forced interleaving is not measuring what it claims (process-substitution reference '$_rp', want '5 5'; temp-file reference '$_rf', want '0 5'), so the engine's result below would mean nothing"
-  elif [ "$_rp" = "0 5" ]; then
-    printf '  INCONCLUSIVE  A7 forced: this bash (%s) keeps a process substitution'"'"'s fd open across the call, so the forced interleaving cannot reproduce the bash 3.2 race here and the engine'"'"'s result would discriminate nothing\n' "$BASH_VERSION"
-  elif [ "$_rp" != "5 5" ]; then
-    bad "A7 HARNESS BROKEN: the process-substitution reference refused ${_rp% *} of 5 under the forcing (a fork, cat </dev/null), neither every call (bash 3.2) nor none (a bash that holds the fd), so the fork forcing is not deterministic here"
+  _rs="$(bash "$R/race.sh" "$RB" "$R/race-ours" 5 "$R/calls.s" "$RF")"
+  if [ "${_rs#* }" != 5 ]; then
+    bad "A7 the engine's orientation diff did not call the shadowed diff (calls: '${_rs#* }', want 5) — it bypasses \`diff\` by path or \`command\`, so this arm cannot reach it; re-point the arm, never relax it"
+  elif [ "${_rs% *}" = 0 ]; then
+    ok "A7 forced: the engine's orientation diff survives a forced interleaving 5 of 5"
   else
-    _rs="$(bash "$R/race.sh" "$RB" "$R/race-ours" 5 "$R/calls.s" "$RF")"
-    if [ "${_rs#* }" != 5 ]; then
-      bad "A7 the engine's orientation diff did not call the shadowed diff (calls: '${_rs#* }', want 5) — it bypasses \`diff\` by path or \`command\`, so this arm cannot reach it; re-point the arm, never relax it"
-    elif [ "${_rs% *}" = 0 ]; then
-      ok "A7 forced: the engine's orientation diff survives a forced interleaving 5 of 5 (the process-substitution reference fails 5 of 5 and the temp-file reference 0 of 5 under the same delay)"
-    else
-      bad "A7 forced: the engine's orientation diff refused ${_rs% *} of 5 under a forced interleaving that a temp file survives — an operand is a process substitution whose /dev/fd can close before diff opens it, which under load is the BL-230 transient"
-    fi
+    bad "A7 forced: the engine's orientation diff refused ${_rs% *} of 5 under a forced interleaving — an operand is a process substitution whose /dev/fd can close before diff opens it, which under load is the BL-230 transient"
   fi
 fi
 

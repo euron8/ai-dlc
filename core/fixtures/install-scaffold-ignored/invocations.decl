@@ -5,6 +5,6 @@
 # mutants (10 x 5 = 50), and the 2 absent-file texts (2). The in-process cells and the 14 lib mutants source the
 # function files and start nothing (the 0 row). A mutant text runs as a `bash -c` start, never as a start of
 # scripts/install.sh, so that row counts the 4 world installs only.
-53 *
+23 *
 4 scripts/install.sh
 0 scripts/install-scaffold-ignore.sh

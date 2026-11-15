@@ -40,8 +40,6 @@ ROLE="$(find_one team-roles/code-reviewer.md)"
 [ -n "$ROLE" ] || { echo "FIXTURE ERROR: code-reviewer.md not found in either layout" >&2; exit 2; }
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_bounds=0; B_live=0
 
 # --- Derive, never hardcode -------------------------------------------------
 # The pattern is read out of the rule file's own `grep -inE '<pattern>'` directive. A
@@ -139,16 +137,6 @@ table header|RESPONSE field? | Verdict |
 prose with decision|the decision to defer for one sprint was recorded
 PROSE
 
-# --- Assertion 4: MUTANT — the fixture must fail on the historical defect ----
-# The pattern that shipped, verbatim. If this fixture cannot tell it from the current one,
-# it proves nothing: a green run would mean only that the assertions cannot fire.
-OLD='^(Verdict|Decision):'
-if matches "$OLD" "$HEADING"; then
-  bad "MUTANT NOT DETECTED: the historical pattern '$OLD' matches '$HEADING', so assertion 1 cannot distinguish the defect from the fix"
-else
-  ok "the historical pattern '$OLD' fails on the template heading (assertion 1 can fire)"
-fi
-
 # --- Assertion 5: the second half of the fix ---------------------------------
 # Widening the pattern alone leaves the hole open: an unmatched file still falls back to
 # recollection, just less often. The rule must make a zero-match terminal.
@@ -161,36 +149,8 @@ fi
 # --- Assertion 6: the producer-side severity rule states its evidence --------
 if grep -qF '**Evidence required:**' <<<"$(RULE_SEC "$ROLE")"; then
   ok "the Missing Pre-Deploy Field Verification rule carries an \`**Evidence required:**\` clause"
-  a6=present
 else
   bad "\`### Missing Pre-Deploy Field Verification\` carries no \`**Evidence required:**\` clause — every other rule in its contiguous severity run does. Without one a reviewer who observes the trigger is told nothing about what to record, and the classification cannot be checked by anyone downstream"
-  a6=absent
-fi
-
-# --- Assertion 7: MUTANT — assertion 6 must fail on the historical defect ----
-# ASSERTION 6 OWNS THE ABSENT CASE and this arm stands down for it. A mutation that deletes a
-# clause already missing changes no bytes, and reporting that as a broken mutant on top of the
-# real finding prints two failures for one defect — which is how a battery starts looking
-# entangled. Measured against the true pre-fix file at 941021d^, where both fired.
-if [ "$a6" = absent ]; then
-  ok "MUTANT stands down — assertion 6 already reports the clause absent, and it owns that case"
-else
-  # A COPY, never an in-place edit, guarded by `cmp -s` so a sed that matched nothing cannot
-  # pass as a mutation. The clause is deleted as a range because it spans two lines; keying the
-  # range end on `in the review doc.` is safe only because the search runs FORWARD from the
-  # start line — an identical tail sits earlier in the file, at Evidence/Assertion Separation.
-  MUT="$(mktemp)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
-  trap 'rm -f "$MUT"' EXIT
-  cp "$ROLE" "$MUT"
-  LC_ALL=C sed -i.bak '/^\*\*Evidence required:\*\* Include the query diff, the added field names, and$/,/^the deployed-schema source consulted, in the review doc\.$/d' "$MUT"
-  rm -f "$MUT.bak"
-  if cmp -s "$ROLE" "$MUT"; then
-    bad "MUTANT changed no bytes — its sed matched nothing, so an unmutated copy would score as a kill and assertion 6 would be proving nothing"
-  elif grep -qF '**Evidence required:**' <<<"$(RULE_SEC "$MUT")"; then
-    bad "MUTANT NOT DETECTED: with the clause deleted, assertion 6 still reads it as present — the extraction is picking up an \`**Evidence required:**\` from a neighbouring rule, so a green assertion 6 means nothing"
-  else
-    ok "with the clause deleted from a copy, assertion 6 goes red (it can fire)"
-  fi
 fi
 
 # --- CHECK 5's COMPARAND IS A FIELD CHECK 12 WRITES, AND THE SPANS ARE BOUNDED -------
@@ -221,7 +181,7 @@ fi
 # condition on a non-comment line, and written as a schema bullet in Check 12. That is the
 # `steering_violations:` shape this file already uses — a field Check 12 writes because a
 # later check reads it — and keying on the shape rather than the name means a rename that
-# keeps the join intact stays green, which arm A12 asserts directly.
+# keeps the join intact stays green.
 #
 # THE BOUNDS RUN BEFORE THE JOIN AND REFUSE IT. A span whose closing anchor is gone runs
 # to EOF, and every join question then has the whole file to answer from. Measured at this
@@ -230,7 +190,7 @@ fi
 # trip them, and a blown bound reports MEASURED NOTHING — a third verdict that is neither
 # the pass nor the finding, because a span that was never delimited has not been read.
 GV_WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
-trap 'rm -rf "$GV_WORK"; rm -f "${MUT:-}" "${MUT:-}.bak"' EXIT
+trap 'rm -rf "$GV_WORK"' EXIT
 
 # The join oracle. One program, three verdicts: GREEN (the join holds), RED (it does not),
 # BLOWN (a span was not delimited, so nothing was measured).
@@ -355,232 +315,20 @@ v, why = join(lines) if mode == "join" else bounds(lines)
 print("%s %s" % (v, why))
 GVJOINPY
 
-# The seed builder. Every seed is located by the SAME derivation the oracle uses -- the
-# joined field, its bullet region, the anchors -- so none of them is keyed on a spelling,
-# and a rename moves every seed with the file.
-cat > "$GV_WORK/seed.py" <<'GVSEEDPY'
-import re
-import sys
-
-src, dst, mode = sys.argv[1], sys.argv[2], sys.argv[3]
-L = open(src, encoding="utf-8").read().split("\n")
-SCHEMA_RE = re.compile(r"^- `([a-z][a-z0-9_]*):", re.M)
-FIELD_RE = re.compile(r"`([a-z][a-z0-9_]*):")
-
-
-def at(n):
-    w = "<!-- CHECK_LOADED: %d -->" % n
-    for i, ln in enumerate(L):
-        if ln.strip() == w:
-            return i
-    raise SystemExit("FIXTURE STALE: no CHECK_LOADED: %d anchor" % n)
-
-
-i5, i6, i12, i13 = at(5), at(6), at(12), at(13)
-write = set(SCHEMA_RE.findall("\n".join(L[i12:i13])))
-
-
-def joined_field():
-    for j in range(i5, i6):
-        if L[j].lstrip().startswith("<!--"):
-            continue
-        for f in FIELD_RE.findall(L[j]):
-            if f in write:
-                return f, j
-    raise SystemExit("FIXTURE STALE: no joined field in the Check 5 span")
-
-
-def region(j):
-    # The SAME walk the oracle uses, including the clause that stops at a column-0
-    # non-bullet line. A seed built with a different region than the one the oracle reads
-    # deletes a span nobody was scoring.
-    if L[j] and not L[j][0].isspace() and not L[j].startswith("- "):
-        return j, j + 1
-    st = j
-    while st > i5 and not L[st].startswith("- "):
-        if L[st] and not L[st][0].isspace():
-            return j, j + 1
-        st -= 1
-    if not L[st].startswith("- "):
-        return j, j + 1
-    en = st + 1
-    while en < i6 and not L[en].startswith("- "):
-        if L[en] and not L[en][0].isspace():
-            break
-        en += 1
-    return st, en
-
-
-out = None
-if mode == "comment":
-    # THE FALSE CLOSE THE RECEIPT MEASURED, AND IT IS A REPLACEMENT RATHER THAN AN
-    # INSERTION. Adding a comment BESIDE a correct comparand leaves the comparand
-    # correct, so the arm rightly stays green and the seed tests nothing. The state the
-    # receipt could not tell from the fix is the one where the comment is ALL there is:
-    # the reader's bullet region is gone and an HTML comment naming the file, the field
-    # and the failure sits in its place. The receipt's grep closes on it; nobody is
-    # instructed by it.
-    f, j = joined_field()
-    st, en = region(j)
-    out = L[:st] + [
-        "<!-- see also gate-log.md, `%s:` and Gate FAILS -->" % f
-    ] + L[en:]
-elif mode == "bare-mention":
-    # The other measured false close, replacing the comparand for the same reason: a
-    # prose sentence naming the file and the field, stating no condition.
-    f, j = joined_field()
-    st, en = region(j)
-    out = L[:st] + [
-        "The gate log records `%s:` for each story of the sprint, at "
-        "`_bmad-output/implementation-artifacts/gate-log.md`." % f
-    ] + L[en:]
-elif mode == "read-commented":
-    # Both halves survive; the READ is demoted to a comment. This is the seed that
-    # separates "the token is in the span" from "an executor is instructed".
-    f, _ = joined_field()
-    out = list(L)
-    for j in range(i5, i6):
-        if ("`%s:" % f) in out[j] and not out[j].lstrip().startswith("<!--"):
-            out[j] = "<!-- " + out[j].strip() + " -->"
-elif mode == "no-fail-condition":
-    # Both halves survive and the read is prose; nothing FAILS the gate. A comparand
-    # nobody is told to act on is the unreachable-criterion shape.
-    out = list(L)
-    for j in range(i5, i6):
-        if re.search(r"gate\s+fails", out[j], re.I):
-            out[j] = re.sub(r"[Gg]ate FAILS", "the lead is warned", out[j])
-elif mode == "no-read":
-    # Delete the reader half: the comparand's whole bullet region in Check 5.
-    _, j = joined_field()
-    st, en = region(j)
-    out = L[:st] + L[en:]
-elif mode == "no-write":
-    # Delete the writer half: the schema bullet in Check 12. The read then consults a
-    # field no gate writes, which is the unreachable criterion the fix exists to avoid.
-    f, _ = joined_field()
-    st = None
-    for j in range(i12, i13):
-        if re.match(r"^- `%s:" % re.escape(f), L[j]):
-            st = j
-            break
-    if st is None:
-        raise SystemExit("FIXTURE STALE: no Check 12 schema bullet for '%s'" % f)
-    en = st + 1
-    while en < i13 and not L[en].startswith("- "):
-        en += 1
-    out = L[:st] + L[en:]
-elif mode == "no-anchor6":
-    out = [ln for j, ln in enumerate(L) if j != i6]
-elif mode == "no-anchor13":
-    out = [ln for j, ln in enumerate(L) if j != i13]
-elif mode == "nm-unrelated":
-    # NEAR MISS. A non-comment line added to Check 5 that says nothing about any field.
-    out = L[:i5 + 1] + ["Record the operator who ran this gate."] + L[i5 + 1:]
-elif mode == "nm-rename":
-    # NEAR MISS, and the one that proves the arms are not keyed on a spelling: the field
-    # is renamed on BOTH sides. The join is intact, so this must stay GREEN.
-    f, _ = joined_field()
-    out = [ln.replace("`%s:" % f, "`%s_renamed:" % f) for ln in L]
-    out = [ln.replace("%s comparand" % f, "%s_renamed comparand" % f) for ln in out]
-else:
-    raise SystemExit("FIXTURE ERROR: unknown seed mode %s" % mode)
-
-open(dst, "w", encoding="utf-8").write("\n".join(out))
-GVSEEDPY
-
 gv_join() { python3 "$GV_WORK/join.py" "$1" join; }
 
-# --- Assertion 8: THE POSITIVE CONTROL, and it runs first -------------------
-# Every arm below reads a verdict off a seeded copy. If the oracle cannot return GREEN on
-# the real file, every RED beside it is a broken program rather than a finding.
+# --- Assertion 8: the spans are bounded, and the join holds on the live file ----
 GV_BOUNDS="$(python3 "$GV_WORK/join.py" "$GATE" bounds)"
 case "$GV_BOUNDS" in
-  OK*) ok "the Check 5 and Check 12 spans are both delimited and within bounds (${GV_BOUNDS#OK })"; B_bounds=1 ;;
+  OK*) ok "the Check 5 and Check 12 spans are both delimited and within bounds (${GV_BOUNDS#OK })" ;;
   *)   bad "the spans are not measurable, so nothing below is measuring anything: $GV_BOUNDS" ;;
 esac
 GV_LIVE="$(gv_join "$GATE")"
 case "$GV_LIVE" in
-  GREEN*) ok "Check 5's comparand is a field Check 12's schema writes — ${GV_LIVE#GREEN }"; B_live=1 ;;
+  GREEN*) ok "Check 5's comparand is a field Check 12's schema writes — ${GV_LIVE#GREEN }" ;;
   *) bad "Check 5 states no comparand that Check 12 writes: ${GV_LIVE}. Its two remaining comparands are a record and a derivation of that record — the repair for a disagreement regenerates the second FROM the first — so a status wrong at the source agrees with itself and the check passes" ;;
 esac
 
-# --- Assertion 9: the MUTANTS, each asserted to have applied ----------------
-# Six seeds, each built as a COPY and compared against the original in the same run, so a
-# builder that matched nothing cannot score as a kill. The first two are the measured
-# false closes; the middle two are the near-miss shapes a looser predicate would admit;
-# the last two delete one half of the join each.
-while IFS='|' read -r gvm gvwant gvwhy; do
-  [ -n "$gvm" ] || continue
-  python3 "$GV_WORK/seed.py" "$GATE" "$GV_WORK/$gvm.md" "$gvm" || {
-    bad "SEED $gvm did not build — the arm below scores nothing"
-    continue
-  }
-  if cmp -s "$GATE" "$GV_WORK/$gvm.md"; then
-    bad "SEED $gvm changed no bytes, so an unmutated copy would score as a kill and the arm proves nothing"
-    continue
-  fi
-  gvgot="$(gv_join "$GV_WORK/$gvm.md")"
-  case "$gvgot" in
-    "$gvwant"*) mutant_killed "$B_live" "$gvm" "MUTANT $gvm reads $gvwant — $gvwhy" ;;
-    *) bad "MUTANT $gvm reads '${gvgot%% *}', expected $gvwant — $gvwhy. The arm cannot tell this from the shipped file, so a green run over it means nothing: $gvgot" ;;
-  esac
-done <<'GVMUTANTS'
-comment|RED|an HTML comment naming the file, the field and the failure closes the entry's grep and instructs nobody
-bare-mention|RED|a prose sentence naming the field states no condition an executor can act on
-read-commented|RED|both halves present, the READ demoted to a comment — the token is in the span and no executor is instructed
-no-fail-condition|RED|both halves present, prose, and nothing FAILS the gate — a comparand with no verdict attached
-no-read|RED|the reader half deleted: Check 12 writes a field Check 5 never consults
-no-write|RED|the writer half deleted: Check 5 reads a field no gate ever writes, which is an unreachable criterion
-GVMUTANTS
-
-# --- Assertion 10: THE SPAN BOUNDS, and a blown bound is not a pass ---------
-# A deleted closing anchor runs the span to EOF. BOTH spans are bounded, because a Check
-# 13 anchor deletion is invisible to a Check 5 bound: the join's WRITE side would then be
-# answered from the rest of the file, and Check 5's own prose names the field.
-while IFS='|' read -r gvm gvwhy; do
-  [ -n "$gvm" ] || continue
-  python3 "$GV_WORK/seed.py" "$GATE" "$GV_WORK/$gvm.md" "$gvm" || {
-    bad "SEED $gvm did not build — the bound below scores nothing"
-    continue
-  }
-  if cmp -s "$GATE" "$GV_WORK/$gvm.md"; then
-    bad "SEED $gvm changed no bytes — the anchor it deletes was already gone, so the bound proves nothing"
-    continue
-  fi
-  gvgot="$(gv_join "$GV_WORK/$gvm.md")"
-  case "$gvgot" in
-    BLOWN*) mutant_killed "$B_bounds" "$gvm" "MUTANT $gvm reports MEASURED NOTHING — $gvwhy" ;;
-    GREEN*) bad "MUTANT $gvm reads GREEN — $gvwhy. An undelimited span answers from the whole file, and that reads exactly like a check that passed: $gvgot" ;;
-    *) bad "MUTANT $gvm reads '${gvgot%% *}', expected BLOWN — $gvwhy: $gvgot" ;;
-  esac
-done <<'GVBOUNDS'
-no-anchor6|Check 5's span would run to EOF and Check 12's own write site would satisfy it from 1800 lines away
-no-anchor13|Check 12's span would run to EOF and every later schema in the file would count as a field this gate writes
-GVBOUNDS
-
-# --- Assertion 11: THE NEAR MISSES — the arms must stay quiet ---------------
-# An arm that reds every edit discriminates against nothing. `nm-rename` is the
-# load-bearing one: it renames the field on BOTH sides, so the join survives and only a
-# predicate keyed on the literal token `story_status` would go red on it.
-while IFS='|' read -r gvm gvwhy; do
-  [ -n "$gvm" ] || continue
-  python3 "$GV_WORK/seed.py" "$GATE" "$GV_WORK/$gvm.md" "$gvm" || {
-    bad "NEAR MISS $gvm did not build"
-    continue
-  }
-  if cmp -s "$GATE" "$GV_WORK/$gvm.md"; then
-    bad "NEAR MISS $gvm changed no bytes, so it is the positive control again and not a near miss"
-    continue
-  fi
-  gvgot="$(gv_join "$GV_WORK/$gvm.md")"
-  case "$gvgot" in
-    GREEN*) ok "NEAR MISS $gvm stays GREEN — $gvwhy" ;;
-    *) bad "NEAR MISS $gvm reads '${gvgot%% *}' — $gvwhy. The arm reds an edit that preserves the join, so its findings above are not attributable: $gvgot" ;;
-  esac
-done <<'GVNEARMISS'
-nm-unrelated|an unrelated non-comment line in Check 5 names no field and must not move the verdict
-nm-rename|the comparand renamed on BOTH sides keeps the join intact, so the arms are keyed on the shape and not on one spelling
-GVNEARMISS
 
 echo
 report_end gate-verdict-grep-shape

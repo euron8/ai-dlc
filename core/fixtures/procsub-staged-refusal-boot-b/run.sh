@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # procsub-staged-refusal-boot-b -- shard 'b' of the procsub-staged-refusal-boot fixture.
 #
-# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. Every world, cell and mutant lives in the
+# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. Every world and cell lives in the
 # sibling's run.sh; this directory is a unit the pre-push pool can start on its own, because that suite
 # is POLE-BOUND. The shard split and the coverage join over it are declared in the sibling, and every
 # shard runs that join, so a shard declared with no driver directory fails the join in all three.

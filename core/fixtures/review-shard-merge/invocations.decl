@@ -1,22 +1,18 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run.
-# BL-988 (* 550->565, two agreeing counted runs, per-path diffs of the start logs): +1 the bash start of
-# receipt-bl988.sh, which GM1's receipt-bl980.sh drives as it drives every receipt-*.sh in this directory (listed
-# receipt-bl988.sh:nogit); +14 receipt-bl980.sh's nogit self-probe: 4 starts (its three probe receipts and sp2's
-# helper) in each of its 3 self-probe runs (its own, and its text and trace conjunct mutants run --self-probe-only),
-# plus the 2 mutant copies' own starts. No other shard-a arm moved.
-565 *
+# Measured by one counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge's own J3
+# and J7 output) after the BL-1095 split dealt this shard its units; every row is that run's count for this shard alone.
+66 *
 4 core/scripts/partition-review-diff.sh
 7 core/scripts/merge-review-shards.sh
-21 core/scripts/content-seal.sh
+6 core/scripts/content-seal.sh
 2 core/scripts/wait-for-deliverable.sh
 2 core/hooks/ai-dlc-content-seal.sh
 0 core/scripts/record-only-diff.sh
 0 core/scripts/sprint-status.sh
-# BL-982 (one counted run): the in-process passes fx_inproc logs in lib.sh's ip_run and ip_load and in the receipts,
-# each at a subject's own path; a mutant script directory's copy is no pass.
-144 inproc:core/scripts/partition-review-diff.sh
-472 inproc:core/scripts/merge-review-shards.sh
-18 inproc:core/scripts/content-seal.sh
-48 inproc:core/scripts/wait-for-deliverable.sh
-36 inproc:core/hooks/ai-dlc-content-seal.sh
-69 inproc:core/scripts/record-only-diff.sh
+# The in-process passes fx_inproc logs in lib.sh's ip_run and ip_load and in the receipts, each at a subject's own path;
+# a mutant script directory's copy is no pass.
+14 inproc:core/scripts/partition-review-diff.sh
+22 inproc:core/scripts/merge-review-shards.sh
+8 inproc:core/scripts/content-seal.sh
+4 inproc:core/scripts/wait-for-deliverable.sh
+7 inproc:core/hooks/ai-dlc-content-seal.sh
+47 inproc:core/scripts/record-only-diff.sh

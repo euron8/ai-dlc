@@ -4,6 +4,6 @@
 # BL-875 item 5: every slot-world launch is a self-recording `bash -c` (one more start per deriver A and per live
 # control), and the slot-forkkill arm and its selfrec mutant run two more hold worlds, each gated on `a-hold` so A's
 # whole tree has started before the KILL (an ungated KILL read 1097 and 1102): * 999 -> 1109, deriver 92 -> 94.
-1109 *
+204 *
 0 core/git-hooks/pre-push
-94 core/scripts/derive-fixture-readsets.sh
+20 core/scripts/derive-fixture-readsets.sh

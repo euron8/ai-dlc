@@ -1,10 +1,9 @@
 # backlog-rotate-fence-guard reads the rotator under test, its sibling reverifier, and the shared
-# reconcile library the rotator sources; run.sh copies all three into mktemp roots to build mutants.
+# reconcile library the rotator sources.
 # VERSION is the marker run.sh, the rotator and the reverifier each walk up for, declared plain so
 # the walk resolves inside the sandbox.
-# copy-only: core/fixtures/backlog-rotate-fence-guard/run.sh:80 run.sh walks up for the marker; nothing reads its content
+# copy-only: core/fixtures/backlog-rotate-fence-guard/run.sh:42 run.sh walks up for the marker; nothing reads its content
 VERSION
-core/fixtures/lib/mutant.sh
 !scripts/backlog-rotate.sh
 scripts/backlog-reverify.sh
 core/skills/ai-dlc-update/reconcile/lib.sh

@@ -37,11 +37,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
-if [ -n "${AI_DLC_SFD_SCRIPT:-}" ] && [ -f "${AI_DLC_SFD_SCRIPT}" ]; then
-  # The mutant battery re-executes this script with a mutated copy. Without reading the override
-  # here every mutant would exercise the real script, report zero reds, and score a survival.
-  VAL="${AI_DLC_SFD_SCRIPT}"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/sprint-status.sh" ]; then
+if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/sprint-status.sh" ]; then
   VAL="$ROOT/core/scripts/sprint-status.sh"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/sprint-status.sh" ]; then
   VAL="$ROOT/scripts/ai-dlc/sprint-status.sh"

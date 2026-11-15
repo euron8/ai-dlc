@@ -52,8 +52,6 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_a5=0
 
 # A minimal layered consumer: the guard's activation gate needs all three.
 mkdir -p "$WORK/.claude/skills/ai-dlc/overrides" \
@@ -147,7 +145,7 @@ expect allow "scripts/ai-dlc/not-in-manifest.sh" \
 reason="$(guard_out Edit scripts/ai-dlc/verdict.sh | jq -r '.hookSpecificOutput.permissionDecisionReason')"
 if grep -q 'CORE validator' <<<"$reason" \
    && grep -q 'ai-dlc-local' <<<"$reason"; then
-  ok "the deny names it a validator and points consumer scripts at scripts/ai-dlc-local/"; B_a5=1
+  ok "the deny names it a validator and points consumer scripts at scripts/ai-dlc-local/"
 else
   bad "the deny fell through to the generic overrides/extensions text -- wrong advice for machinery"
 fi
@@ -158,22 +156,6 @@ fi
 got="$(decision scripts/ai-dlc/verdict.sh Bash)"
 [ "$got" = "allow" ] && ok "Bash is out of scope (the pull writes core through the shell)" \
                      || bad "Bash was denied ($got) -- /ai-dlc-update cannot write core"
-
-# --- 7. THE MUTATION TEST — prove assertion 1's deny is the manifest entry's ----
-# Drop the scripts/ arm from to_consumer_glob() on a COPY. The entry then resolves
-# to .claude/skills/ai-dlc/scripts/ai-dlc/verdict.sh, matches nothing, and the real
-# path goes allow. If it still denied, something else was producing the deny.
-MUTANT="$WORK/mutant.sh"
-sed "s@^    scripts/\*)        printf '%s\\\\n' \"\$e\" ;;@    scripts/DISABLED*) : ;;@" "$GUARD" > "$MUTANT" || exit 2
-if cmp -s "$GUARD" "$MUTANT"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- to_consumer_glob's scripts/ arm was rewritten" >&2
-  exit 2
-fi
-mout="$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s/scripts/ai-dlc/verdict.sh"}}' "$WORK" \
-  | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTANT" 2>/dev/null)"
-if [ -z "$mout" ]; then got=allow; else got="$(printf '%s' "$mout" | jq -r '.hookSpecificOutput.permissionDecision // "allow"')"; fi
-[ "$got" = "allow" ] && mutant_killed "$B_a5" scripts-arm-removed "MUTATION: removing the scripts/ path arm makes assertion 1 go allow" \
-                     || bad "MUTATION: still $got without the scripts/ arm -- assertion 1 proves nothing"
 
 # --- 8. THE SHIPPED GLOB FORM CLAIMS THE WHOLE DIRECTORY ------------------------
 # v0.160.0 replaced the manifest's 27 filenames with `scripts/ai-dlc/*`. Under that

@@ -4,7 +4,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # content-seal/merge-arms.sh -- the content seal at merge-adversarial-shards.sh. Driven by run.sh.
 # Worlds, shards and harness records come from adversarial-shard-merge/lib.sh (one copy of the shard
 # grammar, never a second); every seal row comes from driving the REAL recorder with a PostToolUse
-# payload. Each arm's label is its id, so the battery reads its kill set off the FAIL lines.
+# payload. Each arm's label is its id.
 NAME="content-seal-merge"
 CS_HERE="$(cd "$(dirname "$0")" && pwd)"
 _asm="$CS_HERE/../adversarial-shard-merge/lib.sh"
@@ -90,8 +90,8 @@ else bad "CS-M2: the motivating perl -0pi was not refused by the seal (rc=$RC): 
 
 # The library's answers on session seals (CS-U-M3, CS-U-M3b), the newest row after an Edit (CS-U-M4), the
 # near-miss path (CS-U-M5), stories-elicitation/ (CS-U-M6), a program-sealed shard amended through Bash
-# (CS-U-K5), the last tool row's remaining cases (CS-U-S1, CS-U-L1), the admission's role states and mutants
-# (CS-U-A1, CS-U-A3, CS-U-A4) and the remedy text (CS-U-R1) are asked in process by unit-arms.sh. This file
+# (CS-U-K5), the last tool row's remaining cases (CS-U-S1, CS-U-L1), the admission's role states
+# (CS-U-A1) and the remedy text (CS-U-R1) are asked in process by unit-arms.sh. This file
 # keeps one end-to-end run per distinct outcome of the merge itself.
 
 # ---- BL-669: a shard whose LAST TOOL write was the top-level session's is refused. Every seal row from
@@ -217,7 +217,7 @@ else bad "CS-K3: --mark on an unsealed shard: rc=$MRC, its row ${rk3:-none}, row
 kw_restore; dk4="$KW"; re4="$(race_engine "$WORK/race-m")" || { echo "FIXTURE BROKEN: CS-K4 race engine" >&2; exit 2; }
 mark_one "$re4" "$dk4/2.md"
 # The race is forced only when the shard carries a seal row, so --mark reaches --record-expect and the
-# stub fires. Its absence is a verdict on this arm (a mutant that leaves no row), never a broken fixture.
+# stub fires. Its absence is a verdict on this arm, never a broken fixture.
 if grep -q 'written through Bash after the move' "$dk4/2.md"; then ok "CS-K4r: race forced: the shard carried a seal row and the stub wrote after --mark's move"
 else bad "CS-K4r: race not forced: no seal row, so --mark never reached --record-expect and the stub never wrote"; fi
 sk seal_check "$(hr_state "$dk4/1.md")" "$dk4"/*.md > "$WORK/k4.chk" 2>&1; RC=$?
@@ -266,7 +266,7 @@ else bad "CS-K7: in-process wfd_mark_main differs from the CLI: refuse same=$sk1
 # re-seeds it. The CURRENT state is the shipped role file itself, never a hand-written one.
 #
 # ONE WORLD PER DISTINCT STATE. The admission arms (CS-A1..A6) ask about six states and one extra, and every
-# driver of a state -- the shipped merge, the two admission mutants, the stubbed awk, the belt mutants --
+# driver of a state -- the shipped merge and the stubbed awk --
 # runs against the SAME world, ordered so that a driver which WRITES the merged output goes last (or has the
 # output removed before the next driver). The states:
 #   dA  CURRENT role, bare markers, unsealed      dN  NO role file, bare markers, unsealed
@@ -297,34 +297,6 @@ role_state() { # <shard dir> <legacy|current|none> -- the world's installed adve
 mark_all() { # <shard dir> -> 0 when every shard was closed with --mark
   local f; for f in "$1"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || return 1; done
 }
-mut_seal() { # <id> <old> <new> -> prints the mutated merge path; empty when the anchor is not there once
-  local md="$WORK/mut-$1" n
-  [ ! -e "$md" ] && cp -R "$SRCDIR" "$md" || return 0
-  n="$(OLD="$2" awk 'BEGIN { o = ENVIRON["OLD"] } { s = $0; while ((i = index(s, o)) > 0) { n++; s = substr(s, i + length(o)) } } END { print n + 0 }' "$md/content-seal.sh")"
-  [ "$n" = 1 ] || return 0
-  OLD="$2" NEW="$3" awk 'BEGIN { o = ENVIRON["OLD"]; w = ENVIRON["NEW"] } { i = index($0, o); if (i > 0) $0 = substr($0, 1, i - 1) w substr($0, i + length(o)); print }' \
-    "$md/content-seal.sh" > "$md/content-seal.sh.mut" && ! cmp -s "$md/content-seal.sh" "$md/content-seal.sh.mut" \
-    && cat "$md/content-seal.sh.mut" > "$md/content-seal.sh" && rm -f "$md/content-seal.sh.mut" || return 0
-  [ -f "$md/merge-adversarial-shards.sh" ] && [ -f "$md/wait-for-deliverable.sh" ] || return 0
-  printf '%s' "$md/merge-adversarial-shards.sh"
-}
-mut_belt() { # <id> <old> <new> ... -> the mutated merge path; empty unless every anchor is in the merge script exactly once
-  local md="$WORK/mut-$1" f="$WORK/mut-$1/merge-adversarial-shards.sh" n o w; shift
-  [ ! -e "$md" ] && cp -R "$SRCDIR" "$md" || return 0
-  while [ "$#" -ge 2 ]; do
-    o="$1"; w="$2"; shift 2
-    n="$(OLD="$o" awk 'BEGIN { o = ENVIRON["OLD"] } { s = $0; while ((i = index(s, o)) > 0) { n++; s = substr(s, i + length(o)) } } END { print n + 0 }' "$f")"
-    [ "$n" = 1 ] || return 0
-    OLD="$o" NEW="$w" awk 'BEGIN { o = ENVIRON["OLD"]; w = ENVIRON["NEW"] } { i = index($0, o); if (i > 0) $0 = substr($0, 1, i - 1) w substr($0, i + length(o)); print }' "$f" > "$f.mut" \
-      && ! cmp -s "$f" "$f.mut" && cat "$f.mut" > "$f" && rm -f "$f.mut" || return 0
-  done
-  printf '%s' "$f"
-}
-A6MISS=''\''$1 == k { print $2; exit }'\'' "$T/shards" >> "$T/admit-in"'
-A6MISSW=''\''$1 == k && $2 !~ /\/1\.md$/ { print $2; exit }'\'' "$T/shards" >> "$T/admit-in"'
-A6CHK='[ "$_nk" = "$_ni" ] ||'
-mA6miss="$(mut_belt A6miss "$A6MISS" "$A6MISSW")"
-mA6="$(mut_belt A6 "$A6MISS" "$A6MISSW" "$A6CHK" 'true ||')"
 
 # The six worlds. dA, dN, dL also serve CS-A2 and are read by it BEFORE any merge touches them.
 dA="$(clean_world)"; role_state "$dA" current; bare_marks "$dA"; rA="$(world_root "$dA")"
@@ -372,19 +344,8 @@ if [ "$a2a$a2n$a2l$a2e" = 1111 ] && [ "$eset" = no ] && [ "$nrole" = 0 ]; then
   ok "CS-A2: --status: in-set CURRENT and NONE -> UNFINISHED naming the admission; LEGACY -> UNSETTLED; an outside-set epics part with no role file anywhere -> UNSETTLED"
 else bad "CS-A2: current=[$sA] none=[$sN] legacy=[$sL] epics=[$sE] (epics in set: $eset, role files in that world: $nrole)"; fi
 
-# ---- THE SHIPPED merge over every world, FIRST. These verdicts are the base every mutant cell below is
-# compared against (rule: a cell is `killed=yes` when the mutant's verdict diverges from the shipped verdict on
-# the SAME world). Order: refusals (they write nothing), then the merging runs, each followed by removing the
+# ---- THE SHIPPED merge over every world, FIRST. Order: refusals (they write nothing), then the merging runs, each followed by removing the
 # merged output so the next driver of that world reads it clean.
-MX=0; [ "${1:-}" = --matrix ] && MX=1
-mx_pp=0; mx_only=0
-vrd() { # <merge> <world dir> -> VRD (MERGED|REFUSED), RSN; asked IN PROCESS (ip), or end to end when MXE=1, whose merged output is removed afterwards
-  if [ "${MXE:-0}" = 1 ]; then run_merge "$1" "$2"; else ip "$1" "$2"; fi
-  if [ "$RC" -eq 0 ]; then VRD=MERGED; RSN=-
-  else VRD=REFUSED; RSN="$(grep -m1 -o 'legacy window is closed\|no readable role file\|is not the body above it\|marker admission input holds\|cannot resolve the path' "$MO")" || RSN=other; fi
-  [ "${MXE:-0}" = 1 ] && rm -f "$(out_of "$2")"
-  return 0
-}
 sv() { # <world name> -- record the verdict of the run_merge just made as the shipped one
   if [ "$RC" -eq 0 ]; then eval "SV_$1=MERGED"; else eval "SV_$1=REFUSED"; fi
 }
@@ -437,11 +398,9 @@ rm -f "$(out_of "$dE")"
 # string. One run per program, three dirs each, one stdout line per dir:
 #   dashx  -x/planning-artifacts/s1/shards/arch-p1  OK, the decider (REFUSED "not under a shards/" without `--`)
 #   dashn  -n                                       REFUSED for its real reason (no shards/ parent), nothing on stderr
-#   plain  planning-artifacts/s1/shards/arch-p1     OK under both programs: the twin, and the proof the mutant ran
+#   plain  planning-artifacts/s1/shards/arch-p1     OK under both programs: the twin
 #   stderr the run's stderr is empty (it holds every dir, so -n's stderr is read here; its stdout line is the
 #          same REFUSED text with or without `--`)
-# The mutant CSD drops `--` from EVERY basename/dirname that carries it (keyed on the predicate, not a site list:
-# the copy must hold none). A planning-artifacts/s1/shards/-n cell is NOT here: it answers SKIP with or without `--`.
 CSD_X='-x/planning-artifacts/s1/shards/arch-p1'; CSD_N='-n'; CSD_P='planning-artifacts/s1/shards/arch-p1'
 csd_run() { # <merge> <tag> -> $WORK/csd.<tag>.out, .err, .rc
   bash "$1" --check-shard-dir "$CSD_X" "$CSD_N" "$CSD_P" > "$WORK/csd.$2.out" 2> "$WORK/csd.$2.err"; echo $? > "$WORK/csd.$2.rc"
@@ -456,34 +415,10 @@ csd_cell() { # <tag> <cell> -> 0 when the cell's stdout line is the shipped answ
     *) return 1 ;;
   esac
 }
-csd_md="$WORK/mut-CSD"; mCSD=""; csd_n0=0; csd_n1=1
-if [ ! -e "$csd_md" ] && cp -R "$SRCDIR" "$csd_md"; then
-  csd_n0="$(grep -c -e 'basename -- ' -e 'dirname -- ' "$SRCDIR/merge-adversarial-shards.sh")" || csd_n0=0
-  sed -e 's/basename -- /basename /g' -e 's/dirname -- /dirname /g' "$SRCDIR/merge-adversarial-shards.sh" > "$csd_md/merge-adversarial-shards.sh"
-  csd_n1="$(grep -c -e 'basename -- ' -e 'dirname -- ' "$csd_md/merge-adversarial-shards.sh")" || csd_n1=0
-  [ "$csd_n0" -gt 0 ] && [ "$csd_n1" = 0 ] && ! cmp -s "$SRCDIR/merge-adversarial-shards.sh" "$csd_md/merge-adversarial-shards.sh" \
-    && mCSD="$csd_md/merge-adversarial-shards.sh"
-fi
 csd_run "$MERGE" ship
-[ -n "$mCSD" ] && csd_run "$mCSD" mut
-if [ "$MX" = 1 ]; then
-  [ -n "$mCSD" ] || { echo "MATRIX CSD DID-NOT-APPLY"; exit 2; }
-  _trip=""
-  for _cw in dashx dashn plain stderr; do
-    if csd_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
-    if csd_cell mut "$_cw"; then _mv=ok; else _mv=FAIL; fi
-    if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
-    echo "MATRIX CSD $_cw shipped=$_sh mutant=$_mv killed=$_k"
-  done
-  echo "MATRIX-ROW CSD tripped=[${_trip# }]"
-fi
 s_csd=0; [ "$(cat "$WORK/csd.ship.rc")" = 1 ] && csd_cell ship dashx && csd_cell ship dashn && csd_cell ship plain && csd_cell ship stderr && s_csd=1
 if [ "$s_csd" = 1 ]; then ok "CS-CSD: --check-shard-dir answers OK for a -x/ dir, REFUSED for -n on its placement alone, OK for the plain dir, and writes nothing to stderr"
 else bad "CS-CSD: --check-shard-dir over -x/, -n and a plain dir (rc=$(cat "$WORK/csd.ship.rc")): $(head -3 "$WORK/csd.ship.out" | tr '\t\n' '  ') stderr: $(head -2 "$WORK/csd.ship.err" | tr '\n' ' ')"; fi
-if [ -z "$mCSD" ]; then bad "CS-CSD-mut: DID NOT APPLY -- the copy still carries basename/dirname \`--\` ($csd_n1 of $csd_n0 lines) or did not change"
-elif ! csd_cell mut dashx && ! csd_cell mut stderr && csd_cell mut plain; then
-  mutant_killed "$s_csd" CSD "CS-CSD-mut: killed -- without \`--\` the -x/ dir is refused for the wrong reason with stderr; the plain dir (twin) still answers OK"
-else bad "CS-CSD-mut: the mutant without \`--\` was not killed at dashx with the plain twin OK: $(head -3 "$WORK/csd.mut.out" | tr '\t\n' '  ')"; fi
 
 # CS-CSL: merge_locate ENTERS a RELATIVE shard dir whose first component begins with `-` (BL-976 follow-up). Its cd
 # takes a relative operand as ./<dir>; a bare `cd -x…/…` reads `-x` as an option and the merge refuses a real dir as
@@ -491,9 +426,9 @@ else bad "CS-CSD-mut: the mutant without \`--\` was not killed at dashx with the
 # root path rewritten), side by side under WORK, one property apart: the root's NAME begins with `-x` or with `y`.
 # Each is asked IN PROCESS (ip: locate, record paths, seal phase, marker-set check, admission) from a subshell cd'd
 # to WORK with the RELATIVE dir, and must pass every phase and print exactly `LOCATED <WORK>/<that relative dir>`:
-#   locx  -x<root>/<shard dir>  the decider (the mutant refuses it, `cd: -x: invalid option` then "not enterable")
-#   locy  y<root>/<shard dir>   the twin: the same answer under both programs, and the proof the mutant ran
-# The mutant CSL deletes the ./ line, restoring the bare `cd "$SHARD_DIR"`. --check-shard on a relative -x… shard
+#   locx  -x<root>/<shard dir>  the decider (a bare `cd` reads -x as an option: `cd: -x: invalid option`, then "not enterable")
+#   locy  y<root>/<shard dir>   the twin
+# merge_locate's ./ line is what keeps the cd from reading -x as an option. --check-shard on a relative -x… shard
 # FILE is CS-CSF's cell (below): check_shard_main hands that path to basename and dirname before merge_locate.
 csl_old="${d0#"$WORK"/}"; csl_old="${csl_old%%/*}"; csl_rest="${d0#"$WORK/$csl_old"/}"
 csl_copy() { # <prefix> [<root name>] -> 0 when $WORK/<prefix><root> is a copy of that world (default d0's) with its recorded root rewritten
@@ -514,49 +449,11 @@ csl_cell() { # <tag> <cell> -> 0 when the run passed every phase and located the
   [ "$(cat "$WORK/csl.$1.$2.rc" 2>/dev/null)" = 0 ] && [ "$(cat "$WORK/csl.$1.$2.out")" = "LOCATED $csl_cwd/$p$csl_old/$csl_rest" ]
 }
 csl_cwd="$(cd "$WORK" && pwd)" # the cell's cwd as pwd spells it: a TMPDIR ending in / leaves WORK holding a //
-csl_md="$WORK/mut-CSL"; mCSL=""; csl_n0=0; csl_n1=1
-if [ -n "$csl_old" ] && [ -d "$WORK/$csl_old/$csl_rest" ] && csl_copy -x && csl_copy y && [ ! -e "$csl_md" ] && cp -R "$SRCDIR" "$csl_md"; then
-  csl_n0="$(grep -c -F 'SHARD_DIR="./$SHARD_DIR"' "$SRCDIR/merge-adversarial-shards.sh")" || csl_n0=0
-  sed -e '/SHARD_DIR="\.\/\$SHARD_DIR"/d' "$SRCDIR/merge-adversarial-shards.sh" > "$csl_md/merge-adversarial-shards.sh"
-  csl_n1="$(grep -c -F 'SHARD_DIR="./$SHARD_DIR"' "$csl_md/merge-adversarial-shards.sh")" || csl_n1=0
-  [ "$csl_n0" = 1 ] && [ "$csl_n1" = 0 ] && ! cmp -s "$SRCDIR/merge-adversarial-shards.sh" "$csl_md/merge-adversarial-shards.sh" \
-    && mCSL="$csl_md/merge-adversarial-shards.sh"
-fi
+[ -n "$csl_old" ] && [ -d "$WORK/$csl_old/$csl_rest" ] && csl_copy -x && csl_copy y
 csl_run "$MERGE" -x ship.locx; csl_run "$MERGE" y ship.locy
-if [ -n "$mCSL" ]; then csl_run "$mCSL" -x mut.locx; csl_run "$mCSL" y mut.locy; fi
-if [ "$MX" = 1 ]; then
-  [ -n "$mCSL" ] || { echo "MATRIX CSL DID-NOT-APPLY"; exit 2; }
-  csd_run "$mCSL" csl; csl_run "$mCSD" -x csd.locx; csl_run "$mCSD" y csd.locy
-  _trip=""
-  for _cw in locx locy; do
-    if csl_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
-    if csl_cell mut "$_cw"; then _mv=ok; else _mv=FAIL; fi
-    if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
-    echo "MATRIX CSL $_cw shipped=$_sh mutant=$_mv killed=$_k"
-  done
-  for _cw in dashx dashn plain stderr; do
-    if csd_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
-    if csd_cell csl "$_cw"; then _mv=ok; else _mv=FAIL; fi
-    if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
-    echo "MATRIX CSL $_cw shipped=$_sh mutant=$_mv killed=$_k"
-  done
-  echo "MATRIX-ROW CSL tripped=[${_trip# }]"
-  _trip=""
-  for _cw in locx locy; do
-    if csl_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
-    if csl_cell csd "$_cw"; then _mv=ok; else _mv=FAIL; fi
-    if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
-    echo "MATRIX CSD $_cw shipped=$_sh mutant=$_mv killed=$_k"
-  done
-  echo "MATRIX-ROW CSD+loc tripped=[${_trip# }]"
-fi
 s_csl=0; csl_cell ship locx && csl_cell ship locy && s_csl=1
 if [ "$s_csl" = 1 ]; then ok "CS-CSL: merge_locate enters a relative -x… shard dir and passes every phase, locating the same dir its y… twin locates"
 else bad "CS-CSL: merge_locate over a relative -x… dir and its y… twin (rc=$(cat "$WORK/csl.ship.locx.rc" 2>/dev/null)/$(cat "$WORK/csl.ship.locy.rc" 2>/dev/null)): $(head -3 "$WORK/csl.ship.locx.out" 2>/dev/null | tr '\n' ' ') | $(head -3 "$WORK/csl.ship.locy.out" 2>/dev/null | tr '\n' ' ')"; fi
-if [ -z "$mCSL" ]; then bad "CS-CSL-mut: DID NOT APPLY -- the ./ line is not in merge-adversarial-shards.sh exactly once ($csl_n0, $csl_n1 after), the copy did not change, or the -x…/y… world copies were not made"
-elif ! csl_cell mut locx && csl_cell mut locy; then
-  mutant_killed "$s_csl" CSL "CS-CSL-mut: killed -- with the bare cd the relative -x… dir is refused as not enterable; the y… twin still locates"
-else bad "CS-CSL-mut: the bare-cd mutant was not killed at locx with the locy twin passing: $(head -3 "$WORK/csl.mut.locx.out" 2>/dev/null | tr '\n' ' ')"; fi
 
 # CS-CSF: the three modes that take a shard FILE, a pass file or a document as a CLI operand, handed a RELATIVE path
 # whose first component begins with `-` (BL-976). check_shard_main passes the shard file to basename and dirname (the
@@ -571,12 +468,6 @@ else bad "CS-CSL-mut: the bare-cd mutant was not killed at locx with the locy tw
 #   dsy   the same, y<d0>                       twin
 #   docx  --document -x<d0>/…/<story> <dir>    rc 2 naming the document's resolved path (`… does not partition`), empty stderr
 #   docy  the same, y<d0>                       twin
-# Mutant CSF drops `--` from check_shard_main's shard-name basename and merge_locate's dirname only (csfx; csfy twin).
-# Mutant CSFD drops the ./ prefix lines of --derived-set and --document only (dsx, docx; dsy, docy twins).
-# CSD (every `--`) also decides csfx, dsx and docx, and CSL (merge_locate's bare cd) also decides csfx and docx (the
-# --document cell hands merge_locate its relative shard dir before the partition refusal): --matrix measures both, and
-# that CSF and CSFD trip no CSD or CSL cell. csfx's world reaches the agreement's `reff=` dirname: a copy dropping
-# only that `--` was measured killed at csfx (`dirname: illegal option -- x` on stderr), csfy holding.
 csf_old="${dE#"$WORK"/}"; csf_old="${csf_old%%/*}"; csf_rest="${dE#"$WORK/$csf_old"/}"
 csf_pass="$(out_of "$d0")"; csf_pass="${csf_pass#"$WORK/$csl_old"/}"
 csf_doc=""; for _f in "$(dirname "$WORK/$csl_old/$csf_pass")"/stories/*.md; do [ -f "$_f" ] && { csf_doc="${_f#"$WORK/$csl_old"/}"; break; }; done
@@ -605,71 +496,11 @@ csf_cell() { # <tag> <cell> -> 0 when the cell gave the shipped answer
     *) return 1 ;;
   esac
 }
-csf_mut() { # <dir> <old> <new> [<old> <new>] -> prints the mutated merge path; empty unless each anchor is there exactly once and gone after
-  local md="$1" f="$1/merge-adversarial-shards.sh" n; shift
-  [ ! -e "$md" ] && cp -R "$SRCDIR" "$md" || return 0
-  while [ $# -ge 2 ]; do
-    n="$(grep -c -F -- "$1" "$f")" || n=0; [ "$n" = 1 ] || return 0
-    OLD="$1" NEW="$2" awk 'BEGIN { o = ENVIRON["OLD"]; w = ENVIRON["NEW"] } { i = index($0, o); if (i > 0) $0 = substr($0, 1, i - 1) w substr($0, i + length(o)); print }' "$f" > "$f.mut" \
-      && mv "$f.mut" "$f" || return 0
-    n="$(grep -c -F -- "$1" "$f")" || n=0; [ "$n" = 0 ] || return 0
-    shift 2
-  done
-  cmp -s "$SRCDIR/merge-adversarial-shards.sh" "$f" && return 0
-  printf '%s' "$f"
-}
-mCSF=""; mCSFD=""
-if [ -n "$csf_old" ] && [ -f "$WORK/$csf_old/$csf_rest/1.md" ] && [ -n "$csf_doc" ] && [ -f "$WORK/$csl_old/$csf_pass" ] && csl_copy -x "$csf_old" && csl_copy y "$csf_old"; then
-  mCSF="$(csf_mut "$WORK/mut-CSF" 'bn="$(basename -- "$sf")"' 'bn="$(basename "$sf")"' 'merge_locate "$(dirname -- "$sf")"' 'merge_locate "$(dirname "$sf")"')"
-  mCSFD="$(csf_mut "$WORK/mut-CSFD" 'case "$SPRINT_DIR" in /*) ;; *) SPRINT_DIR="./$SPRINT_DIR" ;; esac' ':' 'case "$DOC_DIR" in /*) ;; *) DOC_DIR="./$DOC_DIR" ;; esac' ':')"
-fi
+[ -n "$csf_old" ] && [ -f "$WORK/$csf_old/$csf_rest/1.md" ] && [ -n "$csf_doc" ] && [ -f "$WORK/$csl_old/$csf_pass" ] && csl_copy -x "$csf_old" && csl_copy y "$csf_old"
 csf_run "$MERGE" ship csfx csfy dsx dsy docx docy
-[ -z "$mCSF" ] || csf_run "$mCSF" mut csfx csfy
-[ -z "$mCSFD" ] || csf_run "$mCSFD" mutd dsx dsy docx docy
-if [ "$MX" = 1 ]; then
-  [ -n "$mCSF" ] || { echo "MATRIX CSF DID-NOT-APPLY"; exit 2; }
-  [ -n "$mCSFD" ] || { echo "MATRIX CSFD DID-NOT-APPLY"; exit 2; }
-  csf_run "$mCSF" mut dsx dsy docx docy; csf_run "$mCSFD" mutd csfx csfy
-  csf_run "$mCSD" csd csfx csfy dsx dsy docx docy; csf_run "$mCSL" csl csfx csfy dsx dsy docx docy
-  for _mm in CSF:mut CSFD:mutd CSD:csd CSL:csl; do
-    _trip=""
-    for _cw in csfx csfy dsx dsy docx docy; do
-      if csf_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
-      if csf_cell "${_mm#*:}" "$_cw"; then _mv=ok; else _mv=FAIL; fi
-      if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
-      echo "MATRIX ${_mm%%:*} $_cw shipped=$_sh mutant=$_mv killed=$_k"
-    done
-    echo "MATRIX-ROW ${_mm%%:*}+csf tripped=[${_trip# }]"
-  done
-  for _mm in CSF:"$mCSF" CSFD:"$mCSFD"; do
-    _p="${_mm#*:}"; _n="${_mm%%:*}"; _trip=""
-    csd_run "$_p" "x$_n"; csl_run "$_p" -x "x$_n.locx"; csl_run "$_p" y "x$_n.locy"
-    for _cw in dashx dashn plain stderr; do
-      if csd_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
-      if csd_cell "x$_n" "$_cw"; then _mv=ok; else _mv=FAIL; fi
-      if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
-      echo "MATRIX $_n $_cw shipped=$_sh mutant=$_mv killed=$_k"
-    done
-    for _cw in locx locy; do
-      if csl_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
-      if csl_cell "x$_n" "$_cw"; then _mv=ok; else _mv=FAIL; fi
-      if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
-      echo "MATRIX $_n $_cw shipped=$_sh mutant=$_mv killed=$_k"
-    done
-    echo "MATRIX-ROW $_n+csdcsl tripped=[${_trip# }]"
-  done
-fi
 s_csf=1; for _cw in csfx csfy dsx dsy docx docy; do csf_cell ship "$_cw" || s_csf=0; done
 if [ "$s_csf" = 1 ]; then ok "CS-CSF: --check-shard, --derived-set and --document handed a relative -x… operand answer as their y… twins do (SHARD-OK; rc 3; the resolved document named), each with nothing on stderr"
 else bad "CS-CSF: a relative -x…/y… operand (rc csfx=$(cat "$WORK/csf.ship.csfx.rc") csfy=$(cat "$WORK/csf.ship.csfy.rc") dsx=$(cat "$WORK/csf.ship.dsx.rc") dsy=$(cat "$WORK/csf.ship.dsy.rc") docx=$(cat "$WORK/csf.ship.docx.rc") docy=$(cat "$WORK/csf.ship.docy.rc")): $(head -2 "$WORK/csf.ship.csfx.out" | tr '\n' ' ') | $(head -2 "$WORK/csf.ship.csfx.err" | tr '\n' ' ') | $(head -1 "$WORK/csf.ship.docx.out")"; fi
-if [ -z "$mCSF" ]; then bad "CS-CSF-mut: DID NOT APPLY -- check_shard_main's basename/dirname \`--\` sites are not each there exactly once, the copy did not change, or the -x…/y… dE copies were not made"
-elif ! csf_cell mut csfx && csf_cell mut csfy; then
-  mutant_killed "$s_csf" CSF "CS-CSF-mut: killed -- without \`--\` --check-shard reads the -x… shard file as an option and SKIPs it with stderr; the y… twin still answers SHARD-OK"
-else bad "CS-CSF-mut: the mutant without check_shard_main's \`--\` was not killed at csfx with csfy OK: $(head -2 "$WORK/csf.mut.csfx.out" | tr '\n' ' ')"; fi
-if [ -z "$mCSFD" ]; then bad "CS-CSFD-mut: DID NOT APPLY -- the ./ prefix lines of --derived-set and --document are not each there exactly once, or the copy did not change"
-elif ! csf_cell mutd dsx && ! csf_cell mutd docx && csf_cell mutd dsy && csf_cell mutd docy; then
-  mutant_killed "$s_csf" CSFD "CS-CSFD-mut: killed -- without the ./ prefix --derived-set and --document hand cd a -x… operand as an option; the y… twins still answer"
-else bad "CS-CSFD-mut: the mutant without the ./ prefixes was not killed at dsx and docx with dsy and docy OK: $(head -1 "$WORK/csf.mutd.dsx.out") | $(head -1 "$WORK/csf.mutd.docx.out")"; fi
 
 # CS-CSA: resolve_artifact hands the shard-WRITTEN relative `artifact:` token to basename, so a token whose first component
 # begins with `-` takes `--` (BL-976). One document world (adversarial-shard-merge's doc_b3_world): the document is copied
@@ -678,7 +509,6 @@ else bad "CS-CSFD-mut: the mutant without the ./ prefixes was not killed at dsx 
 #   rx  1.md  SHARD-OK alone on stdout, rc 0, empty stderr (document mode); without `--` the token reads as an option,
 #             the artifact resolves to a directory, no document mode is found, and the check SKIPs with stderr
 #   ry  2.md  the same answer under both programs: the twin
-# Mutant CSA drops that one `--`; it is killed at rx, ry holding.
 csa_d="$(doc_b3_world)"; csa_s="$(dirname "$(dirname "$csa_d")")"
 csa_ok=0
 if [ -f "$csa_s/test-strategy.md" ] && mkdir -p "$csa_s/-xdoc" "$csa_s/ydoc" && cp "$csa_s/test-strategy.md" "$csa_s/-xdoc/" && cp "$csa_s/test-strategy.md" "$csa_s/ydoc/"; then
@@ -696,55 +526,10 @@ csa_run() { # <merge> <tag> <cell>... -> $WORK/csa.<tag>.<cell>.out, .err, .rc
 csa_cell() { # <tag> <cell> -> 0 when the cell answered SHARD-OK, rc 0, nothing on stderr
   [ "$(cat "$WORK/csa.$1.$2.rc")" = 0 ] && [ "$(cat "$WORK/csa.$1.$2.out")" = SHARD-OK ] && [ ! -s "$WORK/csa.$1.$2.err" ]
 }
-mCSA=""
-[ "$csa_ok" = 1 ] && mCSA="$(csf_mut "$WORK/mut-CSA" 'pwd -P)/$(basename -- "$t")"; return 0; fi' 'pwd -P)/$(basename "$t")"; return 0; fi')"
 if [ "$csa_ok" = 1 ]; then csa_run "$MERGE" ship rx ry; fi
-[ -z "$mCSA" ] || csa_run "$mCSA" mut rx ry
 if [ "$csa_ok" = 1 ] && csa_cell ship rx && csa_cell ship ry; then ok "CS-CSA: --check-shard on a document shard whose artifact: token begins with -x answers SHARD-OK as its y… twin does, with nothing on stderr"
 else bad "CS-CSA: the -x…/y… artifact: token world (built=$csa_ok): rx rc=$(cat "$WORK/csa.ship.rx.rc" 2>/dev/null) $(head -1 "$WORK/csa.ship.rx.out" 2>/dev/null) err=$(head -1 "$WORK/csa.ship.rx.err" 2>/dev/null) | ry rc=$(cat "$WORK/csa.ship.ry.rc" 2>/dev/null) $(head -1 "$WORK/csa.ship.ry.out" 2>/dev/null)"; fi
-if [ -z "$mCSA" ]; then bad "CS-CSA-mut: DID NOT APPLY -- resolve_artifact's basename \`--\` is not there exactly once, the copy did not change, or the world was not built"
-elif ! csa_cell mut rx && csa_cell mut ry; then
-  mutant_killed "$([ "$csa_ok" = 1 ] && csa_cell ship rx && csa_cell ship ry && echo 1)" CSA "CS-CSA-mut: killed -- without \`--\` the -x… artifact: token reads as a basename option and the shard SKIPs with stderr; the y… twin still answers SHARD-OK"
-else bad "CS-CSA-mut: the mutant without resolve_artifact's \`--\` was not killed at rx with ry OK: $(head -1 "$WORK/csa.mut.rx.out") err=$(head -1 "$WORK/csa.mut.rx.err")"; fi
 
-# ---- THE MUTANT x CASE MATRIX. A cell is one mutant's merge over one world; it prints `killed=yes` when its
-# verdict diverges from the shipped one on the same world. `--matrix` (argv, never the environment) runs EVERY
-# cell and prints one MATRIX row each, then stops; a plain run executes only the deciding and twin cells below.
-mx_cell() { # <mutant name> <merge path> <world name> -> VRD, RSN, KILL (matrix-only when MX=1)
-  local wd sh; eval "wd=\$$3"; eval "sh=\$SV_$3"
-  vrd "$2" "$wd"
-  if [ "$VRD" != "$sh" ]; then KILL=yes; else KILL=no; fi
-}
-if [ "$MX" = 1 ]; then
-  for _mm in A6 A6miss; do
-    case "$_mm" in A6) _mp="$mA6" ;; A6miss) _mp="$mA6miss" ;; esac
-    [ -n "$_mp" ] || { echo "MATRIX $_mm DID-NOT-APPLY"; exit 2; }
-    _trip=""
-    for _mw in dA dN dL dD dLs dE dF; do
-      mx_cell "$_mm" "$_mp" "$_mw"; mx_only=$((mx_only + 1)); eval "_sh=\$SV_$_mw"
-      echo "MATRIX $_mm $_mw shipped=$_sh mutant=$VRD reason=$RSN killed=$KILL"
-      [ "$KILL" = yes ] && _trip="$_trip $_mw"
-    done
-    echo "MATRIX-ROW $_mm tripped=[${_trip# }]"
-  done
-  exit 0
-fi
-
-# The admission mutants A3 and A4 edit content-seal.sh alone, so unit-arms.sh scores them in process
-# against the library's own admission answer (CS-U-A3, CS-U-A4).
-
-# ---- the belt's mutants. The belt mutant drops the admission's count check AND forces one key (shard 1) to
-# miss the path lookup, so the admission judges a list one shorter and (d) MERGES.
-if [ -z "$mA6miss" ] || [ -z "$mA6" ]; then
-  bad "CS-A6: DID NOT APPLY -- the path-lookup or count-check anchor is not in merge-adversarial-shards.sh exactly once"
-else
-  mx_cell A6miss "$mA6miss" dE; mx_pp=$((mx_pp + 1)); d_k=$KILL; d_v=$VRD; d_r=$RSN; d_m="$(head -3 "$MO")"
-  d_names=0; { has "$MO" "path(s) for" && has "$MO" "marked shard(s)"; } && d_names=1
-  mx_cell A6miss "$mA6miss" dF; mx_pp=$((mx_pp + 1)); t_k=$KILL; t_r=$RSN
-  s_6e=0; [ "$d_k" = yes ] && [ "$d_v" = REFUSED ] && [ "$d_r" = "marker admission input holds" ] && [ "$d_names" = 1 ] && [ "$t_k" = no ] && [ "$t_r" = "marker admission input holds" ] && s_6e=1
-  mx_cell A6 "$mA6" dF; mx_pp=$((mx_pp + 1)); a_k=$KILL; a_v=$VRD; a_m="$(head -2 "$MO")"
-  mx_cell A6 "$mA6" dE; mx_pp=$((mx_pp + 1)); b_k=$KILL
-fi
 
 if [ "$s_a" = 1 ] && [ "$s_b" = 1 ] && [ "$s_c" = 1 ] && [ "$d_chk" = 0 ] && [ "$s_d" = 1 ] && [ "$s_e" = 1 ] && [ "$f_mrc" = 0 ] && [ "$s_f" = 1 ] && [ "$e_a" = 1 ] && [ "$e_f" = 1 ] && [ "$e_e" = 1 ]; then
   ok "CS-A1: bare markers under the CURRENT role file -> REFUSED; under NO role file -> REFUSED; under the LEGACY file -> MERGED; a bare line then sealed by Edit under CURRENT -> REFUSED; a --mark set under CURRENT -> MERGED; a sha= digest broken with no seal row -> REFUSED"
@@ -762,14 +547,6 @@ else bad "CS-A5: a failed admission input build was not refused (stubbed refused
 if [ "$s_6a" = 1 ] && [ "$s_d" = 1 ] && [ "$s_e" = 1 ] && [ "$s_6c_sha" = 1 ] && [ "$s_f" = 1 ]; then
   ok "CS-A6a-d: the real merge over a sealed set -> legacy role + bare markers MERGED; current role + bare markers REFUSED; a correct sha= digest under the current role MERGED; a broken one REFUSED"
 else bad "CS-A6a-d: a=$s_6a b=$s_d c=$s_e (sha line $s_6c_sha) d=$s_f did not all hold on the shipped merge: a[$m_6a] b[$m_d] c[$m_e] d[$m_f]"; fi
-if [ -n "${mA6miss:-}" ] && [ -n "${mA6:-}" ]; then
-  # The mutant with the same forced miss under the INTACT count check must refuse on the count, naming both numbers.
-  if [ "$s_6e" = 1 ]; then mutant_killed "$([ "$s_e" = 1 ] && [ "$s_f" = 1 ] && echo 1)" A6miss "CS-A6e: a forced key miss under the intact count check -> REFUSED naming both counts (dE decides; dF twin stays refused on the same line)"
-  else bad "CS-A6e: a missing admission path was not refused on the count: killed=$d_k $d_v [$d_r], twin killed=$t_k [$t_r]: $d_m"; fi
-  if [ "$a_k" = yes ] && [ "$a_v" = MERGED ] && [ "$b_k" = no ]; then
-    mutant_killed "$([ "$s_f" = 1 ] && [ "$s_e" = 1 ] && echo 1)" A6 "CS-A6: killed -- without the count check and with one key missing, case (d) (dF) MERGES a broken digest; twin (c) (dE) stays green"
-  else bad "CS-A6: the belt mutant did not die at (d) with (c) green: (d) killed=$a_k $a_v, (c) killed=$b_k: $a_m"; fi
-fi
 
 # CS-IP1: THE SEAM. The phases asked in process answer byte-for-byte as the CLI does. Refusing inputs: the seal
 # check (CS-M2's world), the admission (dA) and the lookup failure (dE under the stub); passing input: dE, where the
@@ -783,9 +560,6 @@ cmp -s "$WORK/ip.dA" "$WORK/ip.dE" && ipx=0
 if [ "$ipx" = 1 ]; then ok "CS-IP1: the in-process phases answer byte-identically to the CLI on three refusals (seal, admission, lookup) and a pass, and the refusal differs from the pass"
 else bad "CS-IP1: the in-process answer differs from the CLI's (seal ip rc=$m2iprc cli rc=$m2rc; admission cli rc=$cli_a; stub cli rc=$cli_5; pass cli rc=$cli_e)"; fi
 
-# CS-MX: a PLAIN run executes no matrix-only cell, and exactly the per-push cells (2 mutants: A6miss 2, A6 2).
-if [ "$MX" = 0 ] && [ "$mx_only" = 0 ] && [ "$mx_pp" = 4 ]; then ok "CS-MX: a plain run executed $mx_pp deciding/twin cells and 0 matrix-only cells"
-else bad "CS-MX: a plain run executed $mx_pp deciding/twin cells (want 4) and $mx_only matrix-only cells (want 0)"; fi
 
 echo "$NAME: $fails failure(s)"
 [ "$fails" -eq 0 ]

@@ -1,9 +1,7 @@
 # Shard driver: execs procsub-staged-refusal/run.sh --group c, so it declares that fixture's inputs plus its directory.
-# lib rows derived from procsub-staged-refusal/run.sh:2,329,330 (preamble.sh, mutant.sh, matrix.sh).
+# lib rows derived from procsub-staged-refusal/run.sh:2 (preamble.sh).
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/mutant.sh
-core/fixtures/lib/matrix.sh
-# reason: core/scripts/ is enumerated by the parent this shard execs -- git diff over core/*.sh, core/fixtures/procsub-staged-refusal/run.sh:1967, and cp -R "$SC", run.sh:1702.
+# reason: core/scripts/ is enumerated by the parent this shard execs -- git diff over core/*.sh, core/fixtures/procsub-staged-refusal/run.sh:2023.
 core/scripts/
 core/skills/
 core/schemas/provenance-block.json

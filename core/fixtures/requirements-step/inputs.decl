@@ -6,7 +6,6 @@
 !core/scripts/validate-draft-stamps.sh
 core/skills/ai-dlc/steps/
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/mutant.sh
 # Arm (l) reads the validator's J3_SUCCESSORS text and arm (m) runs it over its seeded test-strategy series; the
 # siblings it resolves beside itself (steering predicate, partitioner, merge, budgets, provenance and its schema).
 !core/scripts/validate-adversarial-convergence.sh

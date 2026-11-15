@@ -1,0 +1,5 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
+# Re-measured for BL-1099 (units re-dealt so the dist-only shards hold no placement-dependent unit): one counted run (scripts/seed-verdict-store.sh).
+37 *
+1 core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+4 inproc:core/skills/ai-dlc-update/reconcile/ledger-reverify.sh

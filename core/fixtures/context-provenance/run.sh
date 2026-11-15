@@ -54,8 +54,7 @@ LIB="$(resolve ai-dlc-context-provenance.sh)" || LIB=""
 FLOOR="$(resolve ai-dlc-rules-floor.sh)" || FLOOR=""
 SENSOR="$(resolve ai-dlc-context-sensor.sh)" || SENSOR=""
 # The sensor sources its token-extraction def from this sibling and exits 0 WITHOUT EMITTING when
-# it is absent, so every mutant hook directory below must carry it beside the sensor copy, or the
-# sensor-driven arms read as silent mutants rather than as the mutation under test.
+# it is absent, so it must be resolved beside the sensor or the sensor-driven arms read as silence.
 USAGE="$(resolve ai-dlc-usage-tokens.sh)" || USAGE=""
 [ -r "$(dirname "$SENSOR")/ai-dlc-window.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-window.sh"
 
@@ -69,12 +68,10 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_trim=0; B_ctl=0
 chk() { [ "$2" = "$3" ] && ok "$1" || bad "$1 -- expected '$3', got '$2'"; }
 
 echo "context-provenance:"
-# Print the RESOLVED paths. A fixture that mutated or measured the copy it never loaded
+# Print the RESOLVED paths. A fixture that measured a copy it never loaded
 # reads exactly like one whose arms cannot fire.
 printf '  ..    lib=%s\n' "$LIB"
 printf '  ..    drivers=%s , %s\n' "$FLOOR" "$SENSOR"
@@ -410,127 +407,11 @@ chk "a mint TRIMS the store to its bound" "$(nlines "$STORE_D")" "40"
 member "$STORE_D" "$N_D"     && ok "  and the nonce just minted survived its own trim" \
                              || bad "  THE TRIM DROPPED THE NONCE IT JUST MINTED -- every block marked this session fails verification"
 member "$STORE_D" "$OLDEST"  && bad "  the oldest seeded nonce survived a trim of a 101-line store; the bound is not being applied" \
-                             || { ok "  the oldest seeded nonce was dropped (the bound is real, not a no-op)"; B_trim=1; }
+                             || ok "  the oldest seeded nonce was dropped (the bound is real, not a no-op)"
 member "$STORE_D" "$KEPT"    && ok "  the newest 40 are retained exactly (boundary line kept)" \
                              || bad "  the retained window is not the newest 40"
 member "$STORE_D" "$DROPPED" && bad "  one line beyond the window was retained; the window is off by one or wider than 40" \
                              || ok "  the line one beyond the window was dropped (boundary line dropped)"
-
-# --- MUTANTS ------------------------------------------------------------------
-# Three of the arms above are ABSENCE-shaped -- no contract paragraph at a non-SessionStart
-# event, no second nonce minted on a reuse, no line surviving past the bound. A seeded
-# near-miss establishes that such an arm DISCRIMINATES between two inputs; only a mutant
-# establishes that it discriminates at all. Each mutant is a COPY of the library, guarded
-# by `cmp -s` so a sed that matched nothing cannot pass as a mutation, and each asserts a
-# POSITIVE outcome: the property the shipped arm demands is OBSERVABLY GONE.
-#
-# The hooks are copied beside the mutated library because they resolve it as a sibling of
-# their own path, so no edit to a hook is needed and none is made.
-MUT_UNLANDED="$WORK/mutations-that-did-not-land"
-: > "$MUT_UNLANDED"
-
-mutlib() {  # <name> <sed program|-> -> prints the mutant hook DIRECTORY
-  local name="$1" prog="$2" md="$WORK/mut-$1"
-  mkdir -p "$md"
-  cp "$FLOOR" "$SENSOR" "$USAGE" "$md/"
-  if [ "$prog" = "-" ]; then
-    cp "$LIB" "$md/ai-dlc-context-provenance.sh"
-  else
-    sed "$prog" "$LIB" > "$md/ai-dlc-context-provenance.sh"
-    if cmp -s "$LIB" "$md/ai-dlc-context-provenance.sh"; then
-      printf '%s\n' "$name" >> "$MUT_UNLANDED"; rm -rf "$md"; return 1
-    fi
-  fi
-  printf '%s' "$md"
-}
-# mfire_floor / mfire_sensor -- the same two drivers, taken from a mutant directory.
-mfire_floor()  { printf '{"hook_event_name":"SessionStart"}' \
-                   | CLAUDE_PROJECT_DIR="$2" AI_AGENT=claude-code_1-0-0_agent \
-                     bash "$1/ai-dlc-rules-floor.sh" > "$3" 2>/dev/null; }
-mfire_sensor() { rm -f "$2/_bmad-output/.context-sensor-state"
-                 printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"Stop"}' "$TRANSCRIPT" \
-                   | CLAUDE_CONFIG_DIR="$2/home" CLAUDE_PROJECT_DIR="$2" \
-                     bash "$1/ai-dlc-context-sensor.sh" > "$3" 2>/dev/null; }
-
-# CONTROL -- an UNMUTATED library, copied and driven exactly like the mutants. A copy that
-# dies of its own accord emits nothing, and "no contract paragraph" is what silence looks
-# like, so every mutant below could be scoring the copy mechanism instead of the mutation.
-# It carries a POSITIVE conjunct: the marker must be THERE, not merely undisturbed.
-if MD="$(mutlib control -)"; then
-  MC="$WORK/mp-control"; mkproj "$MC"
-  mfire_floor  "$MD" "$MC" "$WORK/mc1.json"; ctx_of "$WORK/mc1.json" "$WORK/mc1.ctx"
-  mfire_sensor "$MD" "$MC" "$WORK/mc2.json"; ctx_of "$WORK/mc2.json" "$WORK/mc2.ctx"
-  if [ "$(countF "$WORK/mc1.ctx" "$TOKEN")" = "1" ] \
-  && [ "$(countF "$WORK/mc1.ctx" 'AI/DLC PROVENANCE CONTRACT')" = "1" ] \
-  && [ "$(countF "$WORK/mc2.ctx" 'AI/DLC PROVENANCE CONTRACT')" = "0" ] \
-  && [ "$(nonce_of "$WORK/mc2.ctx")" = "$(nonce_of "$WORK/mc1.ctx")" ]; then
-    ok "CONTROL: an unmutated library copy still marks, still states the contract once, and still reuses (the mutants below score the mutation, not the copy)"; B_ctl=1
-  else
-    bad "FIXTURE BROKEN -- an unmutated library copy did not reproduce the shipped behaviour; every mutant below is a false kill"
-  fi
-fi
-
-# MUTANT 1 -- the reuse branch can never be taken, so EVERY event mints. Kills arm 3's
-# "a non-SessionStart event REUSES it" and its store-unchanged partner, and nothing else:
-# the contract branch and the trim are untouched.
-if MD="$(mutlib m1 's@if \[ "$event" != "SessionStart" \] && \[ -r "$file" \]; then@if false; then@')"; then
-  M1P="$WORK/mp-m1"; mkproj "$M1P"
-  mfire_floor  "$MD" "$M1P" "$WORK/m1a.json"; ctx_of "$WORK/m1a.json" "$WORK/m1a.ctx"
-  mfire_sensor "$MD" "$M1P" "$WORK/m1b.json"; ctx_of "$WORK/m1b.json" "$WORK/m1b.ctx"
-  if [ "$(countF "$WORK/m1b.ctx" "$TOKEN")" = "1" ] \
-  && [ "$(nonce_of "$WORK/m1b.ctx")" != "$(nonce_of "$WORK/m1a.ctx")" ] \
-  && [ "$(nlines "$M1P/$STORE_REL")" = "2" ] \
-  && [ "$(countF "$WORK/m1b.ctx" 'AI/DLC PROVENANCE CONTRACT')" = "0" ]; then
-    mutant_killed "$B_ctl" reuse-unreachable "MUTANT 1: with the reuse branch unreachable a non-SessionStart event MINTS -- the reuse arm is load-bearing, and the contract arm is unmoved by it"
-  else
-    bad "MUTANT 1 did not isolate the reuse branch (either the nonce was still reused, or the contract arm moved with it)"
-  fi
-fi
-
-# MUTANT 2 -- the contract is emitted whether or not the caller asked for it, so every event
-# restates it. Kills arm 4's absence half. The nonce must still be REUSED, so arm 3 is unmoved.
-#
-# RE-ANCHORED ONTO `wrap`'S 4th-ARGUMENT TEST. The contract used to live behind an event test
-# inside `tag`, and attaching it to every SessionStart emission put the post-compaction recovery
-# block past its size bound -- so it moved behind an opt-in that exactly one hook passes. The old
-# expression matched nothing after that move, and the fixture reported the mutation as matching
-# nothing rather than scoring a kill it had not earned.
-if MD="$(mutlib m2 's@if \[ -n "${4:-}" \]; then@if true; then@')"; then
-  M2P="$WORK/mp-m2"; mkproj "$M2P"
-  mfire_floor  "$MD" "$M2P" "$WORK/m2a.json"; ctx_of "$WORK/m2a.json" "$WORK/m2a.ctx"
-  mfire_sensor "$MD" "$M2P" "$WORK/m2b.json"; ctx_of "$WORK/m2b.json" "$WORK/m2b.ctx"
-  if [ "$(countF "$WORK/m2b.ctx" 'AI/DLC PROVENANCE CONTRACT')" = "1" ] \
-  && [ "$(nonce_of "$WORK/m2b.ctx")" = "$(nonce_of "$WORK/m2a.ctx")" ]; then
-    mutant_killed "$B_ctl" contract-always "MUTANT 2: with the contract branch always taken a Stop event restates it -- the SessionStart-only arm is load-bearing, and the reuse arm is unmoved by it"
-  else
-    bad "MUTANT 2 did not isolate the contract branch (either the paragraph stayed absent, or the nonce stopped being reused with it)"
-  fi
-fi
-
-# MUTANT 3 -- the trim keeps everything. Kills arm 6's bound and its "oldest was dropped"
-# control. The mint itself is untouched, so the fresh nonce is still a member.
-if MD="$(mutlib m3 's@tail -n 40 "$file"@tail -n 100000 "$file"@')"; then
-  M3P="$WORK/mp-m3"; mkproj "$M3P"
-  awk 'BEGIN{for(i=1;i<=100;i++) printf "2020-01-01T00:00:00Z %016x\n", i}' > "$M3P/$STORE_REL"
-  mfire_floor "$MD" "$M3P" "$WORK/m3.json"; ctx_of "$WORK/m3.json" "$WORK/m3.ctx"
-  if [ "$(nlines "$M3P/$STORE_REL")" = "101" ] \
-  && member "$M3P/$STORE_REL" "$OLDEST" \
-  && member "$M3P/$STORE_REL" "$(nonce_of "$WORK/m3.ctx")"; then
-    mutant_killed "$B_trim" trim-unbounded "MUTANT 3: with the bound widened the store keeps all 101 lines and the oldest survives -- arm 6's bound and its drop-control are both load-bearing"
-  else
-    bad "MUTANT 3 did not isolate the trim (the store was still bounded, or the fresh nonce stopped being recorded with it)"
-  fi
-fi
-
-# CONTROL: every mutation landed. Each mutant sits behind `if MD="$(mutlib ...)"`, so a sed
-# that matched nothing takes the false branch and its assertion vanishes with no
-# diagnostic -- a fixture one arm shorter, still reporting PASS. mutlib() records to a FILE
-# because this is the only scope `$( )` cannot swallow.
-if [ ! -s "$MUT_UNLANDED" ]; then
-  ok "control: every mutation landed (a sed matching nothing cannot skip its assertion in silence)"
-else
-  bad "mutation(s) matched nothing and their assertions were SKIPPED, not failed: $(tr '\n' ' ' < "$MUT_UNLANDED")-- each leaves a branch scoring as load-bearing when nothing tested it"
-fi
 
 # --- CWD INVARIANCE -----------------------------------------------------------
 # A fixture that is green only from the repo root may be asserting nothing, because that

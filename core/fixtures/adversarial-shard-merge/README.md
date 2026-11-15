@@ -6,8 +6,8 @@ either layout.
 
 - `run.sh` — the behavioural arms; the header states what each proves. The mutation battery
   that proved each arm can fail has been retired.
-- `lib.sh` — the resolution, seeds, worlds and predicates, sourced by `run.sh` and by the
-  battery, so a mutant is scored by the predicate bodies the shipped arms run.
+- `lib.sh` — the resolution, seeds, worlds and predicates, sourced by `run.sh` and by
+  `content-seal/merge-arms.sh`.
 - `seed.<story>.md` — the first 12 lines of three real story files from one reference-consumer
   sprint, chosen so two NON-`story-` names sort to ordinals 1 and 2.
 - `seed.finding-headings.txt` — the finding headings of a real multi-story adversarial pass.

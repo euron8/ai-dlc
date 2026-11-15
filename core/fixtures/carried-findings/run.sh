@@ -9,9 +9,7 @@
 # touched drops out of the review silently unless something carries it. The validator's verdicts
 # are ABSENCE-shaped (no prior finding left unanswered, no open finding under an approval), so
 # every arm below is paired: a seeded offender that must FAIL and a near-miss one property away
-# that must PASS. Every mutant at the bottom (a copy of the validator with one rule removed) is
-# scored against EVERY arm and must flip exactly the arms it names. A validator replaced by
-# `exit 0` fails every arm.
+# that must PASS.
 #
 # THE SEEDS ARE THE PRODUCER'S GRAMMAR, NOT THE READER'S. The prior files carry what
 # merge-review-shards.sh writes for a sharded review (`## Shard: <k>`, the shard's own `# ` title,
@@ -24,7 +22,7 @@
 # consumer reviews in: a story is reviewed in its own worktree and checked by the MAIN checkout's
 # copy of the validator. A bound pair carries every finding and must read `PASS:`; a pre-migration
 # pair must read `PENDING:`. Keying them on PASS-versus-PENDING rather than on a failure keeps the
-# rule mutants (a missing carry not counted, ...) off these arms.
+# missing-carry rule off these arms.
 #   P1 a pass 2 committed on the main branch before the pull           -> PENDING
 #   P2 a pass 3 committed after the pull                               -> PASS (binds)
 #   P3 an untracked pass 4 (being written now)                         -> PASS (binds)
@@ -100,62 +98,6 @@
 #      s308/1-code-review.md given the marker reads its line-67 Critical as lead-in before, FAIL after.
 #   Every B/B2 failure is a review written before the rule existed, re-committed after it on
 #   purpose; none is a false positive against a review written under the rule.
-# MUTANT MATRIX. "Each mutant is killed by exactly its own arms" is a test-quality property, not a per-push
-# one. Per push each mutant runs its deciding arm (must trip) and its twin (an arm the measured matrix shows
-# GREEN under that mutant, must pass). `--matrix` runs every arm against every mutant, enforces the exact vector
-# the base asserted (every named arm dead, the rest green) and prints one MATRIX row per mutant and arm.
-# That recorded matrix plus the twin replaces the per-push exact-vector assertion. The unmutated pass and the
-# exit-0 stub still run every arm. The matrix is re-measured as .claude/rules/fixture-mutants.md
-# clause 2 ("One run per distinct state") requires.
-# selfloc's vector is W1 S6 G1 G2 H1, not W1 alone, ON PURPOSE: the mutated property is location-dependence (the copy
-# returns 1 from locate() when it does not sit under the review's TOP), and one sourced copy -- placed in R -- sits
-# under one TOP, so every arm whose review lives in another world trips on it. Do not narrow it back to W1; the
-# reason and the vacuity cell that keeps it distinct from an unconditional `return 1` sit at its score call.
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/carried-findings/run.sh --matrix
-# MUTANT-MATRIX nocarry decides=F1 twins=F2
-# MUTANT-MATRIX appr decides=F2 twins=N2
-# MUTANT-MATRIX anyopen decides=N2 twins=F2
-# MUTANT-MATRIX unparsed decides=F3 twins=S4
-# MUTANT-MATRIX boldlead decides=S7 twins=S5
-# MUTANT-MATRIX leadfail decides=S3 twins=S5
-# MUTANT-MATRIX wrapoff decides=WR1 twins=WR3
-# MUTANT-MATRIX wrapany decides=WR3 twins=WR1
-# MUTANT-MATRIX nonebul decides=N3 twins=S5
-# MUTANT-MATRIX sep decides=F4 twins=F1
-# MUTANT-MATRIX cfence decides=F5 twins=F4
-# MUTANT-MATRIX sect decides=F6 twins=C
-# MUTANT-MATRIX vaddbinds decides=W1 twins=W2
-# MUTANT-MATRIX descends decides=P1 twins=P2
-# MUTANT-MATRIX untracked decides=P3 twins=P2
-# MUTANT-MATRIX pmalways decides=P2 twins=P1
-# MUTANT-MATRIX recent decides=D1 twins=P2
-# MUTANT-MATRIX selfloc decides=W1 twins=W2
-# MUTANT-MATRIX ignpend decides=G1 twins=W1
-# MUTANT-MATRIX shallow decides=H1 twins=H2
-# MUTANT-MATRIX alwayslabels decides=F3 twins=S6
-# MUTANT-MATRIX markonly decides=S6 twins=L1
-# MUTANT-MATRIX earlyonly decides=L1 twins=S6
-# MUTANT-MATRIX nolabel decides=S1 twins=S4
-# MUTANT-MATRIX anybold decides=S1 twins=K1
-# MUTANT-MATRIX notefail decides=S1 twins=WR3
-# MUTANT-MATRIX exactspan decides=K1 twins=K3
-# MUTANT-MATRIX idprefix decides=K2 twins=K1
-# MUTANT-MATRIX nopunct decides=K3 twins=K1
-# MUTANT-MATRIX dupid decides=K5 twins=K2
-# MUTANT-MATRIX listnone decides=LIST twins=K1
-# MUTANT-MATRIX nokey decides=QL twins=F1
-# MUTANT-MATRIX qaacquit decides=QU1 twins=QU3
-# MUTANT-MATRIX noline decides=V1 twins=V4
-# MUTANT-MATRIX twoval decides=V3 twins=V2
-# MUTANT-MATRIX prefix decides=V5 twins=V1
-# MUTANT-MATRIX subonly decides=TA twins=TB
-# MUTANT-MATRIX topany decides=TB twins=TA
-# MUTANT-MATRIX topnotes decides=TC twins=TA
-# MUTANT-MATRIX-DYNAMIC role-loop why=the template-mutation loop passes role-bullet and role-nosha as one variable
-# MUTANT-MATRIX-CONTROL unmutated-copy why=an unmutated copy of the validator, installed like every mutant, must pass the arms the mutants are scored on
-# MUTANT-MATRIX role-bullet decides=T twins=C
-# MUTANT-MATRIX role-nosha decides=T twins=C
-# MUTANT-MATRIX-FULL stub worlds=C,F1,F2,N2,F3,N3,F4,F5,F6,T,P1,P2,P3,W1,W2,D1,S1,S3,L1,S4,S5,S6,S7,WR1,WR2,WR3,K1,K2,K3,K4,K5,G1,G2,H1,H2,LIST why=an exit-0 validator must trip every arm, so no single arm decides it
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -182,19 +124,12 @@ WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-MATRIX=0
-if [ "${1:-}" = --matrix ]; then MATRIX=1; fi
-MWIDE=0; MROWS=0
-. "$HERE/../lib/matrix.sh" || { echo "FIXTURE BROKEN: cannot source lib/matrix.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# IN PROCESS (BL-878). Each copy of the validator -- the real one, each mutant, the unmutated control and the exit-0
-# stub -- is SOURCED ONCE into this shell by src (its guard returns after defining vcf_main; one fx_inproc pass each),
+# IN PROCESS (BL-878). The validator is SOURCED ONCE into this shell by src (its guard returns after defining vcf_main; one fx_inproc pass),
 # and every arm calls the vcf_main sourced last inside the `$( )` that captures its output, so the validator's `exit`,
 # its `set -u`, `export LC_ALL=C` and `unset GIT_DIR ...` stay in that subshell. The validator reads no file beside
-# itself (its one self-read is --help), so where a copy sits changes no verdict except the selfloc mutant's, whose
-# measured --matrix vector is recorded at its score call. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with neither the `vcf_main() {`
+# itself (its one self-read is --help), so where a copy sits changes no verdict. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with neither the `vcf_main() {`
 # line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an ok); exactly one half is a
 # respelled subject and FAILs. The distribution cannot reach the SKIP unnoticed: C5 (validate-fixture-inprocess.sh)
 # refuses a cli subject without the guard, and J3 refuses the start count moving.
@@ -217,13 +152,6 @@ src() { # src <copy> -- source one copy of the validator; every arm drives the c
 LOADED=""
 # own <copy>: an arm names the copy it scores, and refuses to read any other one's verdict.
 own() { [ "$1" = "$LOADED" ] || { echo "FIXTURE BROKEN: an arm drove $1 while the vcf_main sourced last is ${LOADED:-none}" >&2; exit 2; }; }
-# mcell <mutant> <arm> <result 0 green|1 tripped>: one matrix row, printed by the sourced matrix_row, and only
-# under --matrix (a plain run prints none and counts none).
-mcell() {
-  [ "$MATRIX" = 1 ] || return 0
-  MROWS=$((MROWS + 1))
-  if [ "$3" = 1 ]; then matrix_row "$1" "$2" 1 TRIPPED yes; else matrix_row "$1" "$2" 0 GREEN no; fi
-}
 EM="$(printf '\342\200\224')"
 H1='The full-suite capture records no command, seed or head sha'
 H2='AC6(c) discriminator depends on the process cwd'
@@ -661,11 +589,11 @@ arm_V5() { run "$1" "$RQ/docs/reviews/s15/6-qa-validation.md" "$RQ/docs/reviews/
 ARMS="C F1 F2 N2 F3 N3 F4 F5 F6 T P1 P2 P3 W1 W2 D1 S1 S3 L1 S4 S5 S6 S7 WR1 WR2 WR3 K1 K2 K3 K4 K5 G1 G2 H1 H2 QL QF QP LIST TA TQ TB TC QU1 QU2 QU3 V1 V2 V3 V4 V5"
 cp "$V" "$VI" || { echo "FIXTURE ERROR: cannot place the gitignored program at $VI" >&2; exit 2; }
 src "$V"
-B_all=0; arms_bad=0
+arms_bad=0
 for a in $ARMS; do
   if "arm_$a" "$V"; then ok "$a"; else arms_bad=$((arms_bad + 1)); bad "$a: rc=$rc out=$(head -2 <<<"$out" | tr '\n' ' ')"; fi
 done
-if [ "$arms_bad" -eq 0 ]; then ok "every arm green on the unmutated validator"; B_all=1; fi
+if [ "$arms_bad" -eq 0 ]; then ok "every arm green on the validator"; fi
 
 # ---- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome ------------------
 # Outcomes, exit x output class: 0 a PASS line on stdout; 1 FAIL lines on stdout; 2 a REFUSED usage line on stdout;
@@ -708,185 +636,4 @@ if ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-fail.cl.out" && ! cmp -s "$EQ/cli-pas
   ok "cli cells discriminate: the passing and the refusing input give different stdout and exit"
 else bad "cli cells do not discriminate: cli-pass and cli-fail gave the same stdout or exit"; fi
 
-# ---- mutants: each removes one rule and must flip exactly the arms it names --------------------
-M="$WORK/mut"; mkdir -p "$M" || exit 2
-# mut <name> <sed expression> -> path of the mutated copy, or empty when the sed matched nothing. The copy sits at
-# $M/<name>/core/scripts/validate-carried-findings.sh, the subject's own relative path, so its fx_inproc pass counts
-# under the inproc: row; score sources it once.
-mut() {
-  local dst="$M/$1/core/scripts/validate-carried-findings.sh"
-  mkdir -p "${dst%/*}" || { echo ""; return; }
-  sed -e "$2" "$V" > "$dst" || { echo ""; return; }
-  if cmp -s "$V" "$dst"; then echo ""; else echo "$dst"; fi
-}
-# mut_after <name> <exact anchor line> <line to insert after it>
-mut_after() {
-  local dst="$M/$1/core/scripts/validate-carried-findings.sh"
-  mkdir -p "${dst%/*}" || { echo ""; return; }
-  CF_A="$2" CF_X="$3" awk '{ print } $0 == ENVIRON["CF_A"] { print ENVIRON["CF_X"] }' "$V" > "$dst" || { echo ""; return; }
-  if cmp -s "$V" "$dst"; then echo ""; else echo "$dst"; fi
-}
-same_set() { # <arms a> <arms b> -> 0 when the two blank-separated arm lists name the same arms (no arm repeats)
-  local x n=0 m=0
-  for x in $1; do n=$((n + 1)); case " $2 " in *" $x "*) ;; *) return 1 ;; esac; done
-  for x in $2; do m=$((m + 1)); done
-  [ "$n" -eq "$m" ]
-}
-score() { # <mutant path> "<arms that trip>" <description> <twin arm> <mutant name>
-  # Per push: the deciding arm (the first arm named) must trip under the mutant and the twin, an arm the matrix
-  # shows GREEN for it, must pass. Under --matrix every arm runs against the mutant, the exact vector is
-  # enforced, and a row is printed per arm. The kill is emitted only through mutant_killed, gated on B_all,
-  # which is set only when every unmutated arm held in this run.
-  local mv="$1" want="$2" desc="$3" twin="$4" name="$5" a dec why="" died=""
-  dec="${want%% *}"
-  [ -n "$mv" ] || { bad "MUTANT $desc: the mutation did not apply"; return; }
-  [ "$mv" = "$LOADED" ] || src "$mv"   # selfloc's copy is sourced (once) before its differ cell, never twice
-  if [ "$MATRIX" = 1 ]; then
-    MWIDE=$((MWIDE + 1))
-    for a in $ARMS; do if "arm_$a" "$mv"; then mcell "$name" "$a" 0; else died="$died $a"; mcell "$name" "$a" 1; fi; done
-    # The vector is compared as a SET: want names the per-push deciding arm first, died lists arms in ARMS order.
-    if same_set "$died" "$want"; then mutant_killed "$B_all" "$name" "MUTANT $name ($desc): deciding arm $dec dead, twin $twin green, vector exact: $want"
-    else bad "MUTANT $name ($desc): arms that died:${died:- none} (want exactly $want)"; fi
-    return
-  fi
-  if "arm_$dec" "$mv"; then why="deciding arm $dec survived"; fi
-  "arm_$twin" "$mv" || why="$why twin $twin died"
-  if [ -z "$why" ]; then mutant_killed "$B_all" "$name" "MUTANT $name ($desc): deciding arm $dec dead, twin $twin green"
-  else bad "MUTANT $name ($desc): $why"; fi
-}
-# Every arm whose verdict IS a missing carry dies: F1, the id near-misses K2/K5, the ignored G1.
-score "$(mut nocarry '/has no carried: line in/{n;s/fails=\$((fails + 1))/:/;}')" "F1 K2 K5 G1 QF TQ QU1 QU2" "a missing carry is not counted" F2 nocarry
-# Gate 2: the qa.md key removed, so a pass run against a qa.md without the section is checked.
-score "$(mut nokey 's/\*-qa-validation-p\[0-9\]\*\.md) G2=1 ;;/*-qa-validation-p[0-9]*.md) G2=0 ;;/')" "QL QU3" "the gate-2 qa.md key removed" F1 nokey
-# Gate 2 fail-closed: qa.md unreadable at the reviewed-sha acquits (the on-disk read and the
-# no-qa.md bind both pre-empted). QU1 and QU2 die; the QU3 near-miss is LEGACY either way.
-score "$(mut qaacquit 's/^  QA_SRC=""; QA_SEC=""; QWHY=""$/  QA_SRC="none"; QA_SEC=0; QWHY=""/')" "QU1 QU2" "an unreadable qa.md acquits a gate-2 pass" QU3 qaacquit
-score "$(mut appr 's/NEEDS_REWORK|BLOCKED) ;;/NEEDS_REWORK|BLOCKED|APPROVED) ;;/')" F2 "an open carried finding under APPROVED is accepted" N2 appr
-score "$(mut anyopen 's/^    NEEDS_REWORK|BLOCKED) ;;/    __NEVER__) ;;/')" "N2 V1 V4" "an open carried finding fails under every verdict" F2 anyopen
-# The verdict reader: the one-line qa.md form dropped (V1 dies: refused, no verdict read); two
-# different values not refused; a suffixed value read as its prefix.
-score "$(mut noline 's/^    \/\^Verdict:\/ { rec(val(substr(t, 9))) }/    0 { rec(val(substr(t, 9))) }/')" "V1 V2 V3 V5" "the one-line Verdict: form is not read" V4 noline
-score "$(mut twoval 's/^    \*"\$NL"\*) refuse "\$CUR carries \$n_open open carried finding(s) and more than one/    __never__) refuse "\$CUR carries \$n_open open carried finding(s) and more than one/')" V3 "two different verdict values are not refused" V2 twoval
-score "$(mut prefix 's/if (c == "" || c ~ \/\[ .,()\*\]\/) return r }/return r }/')" V5 "a suffixed verdict reads as its prefix" V1 prefix
-# The UNPARSED rule binds a dropped finding in a post-rule prior: a bullet outside a repository
-# (F3), a bullet after the pull (S3), a bullet in a lead-in (S5), a bold id line in a lead-in (S7).
-score "$(mut unparsed 's/lab != "") print "UNPARSED\\t" sev/lab != "") print "LEADIN\\t" sev/')" "F3 S3 S5 S7" "a dropped finding in a post-rule prior is read as lead-in prose" S4 unparsed
-score "$(mut boldlead 's/ || lab != "") print "UNPARSED/) print "UNPARSED/')" S7 "a bold finding-id line in a post-rule lead-in is prose" S5 boldlead
-score "$(mut leadfail 's/else print "LEADIN\\t" sev/else print "UNPARSED\\t" sev/')" "S3 S4 WR3" "lead-in prose in a post-rule prior fails" S5 leadfail
-# The wrapped-label rule: reverted, a marked wrapped label is lead-in prose and carries nothing
-# (WR1); widened to any unclosed bold span, a wrapped non-id span fails (WR3).
-score "$(mut wrapoff 's/else if (wrap) print "UNPARSED/else if (0) print "UNPARSED/')" WR1 "a wrapped finding-id label in a post-rule prior is lead-in prose" WR3 wrapoff
-score "$(mut wrapany 's/else if (e == 0 && norm(b) ~ .*) wrap = 1/else if (e == 0) wrap = 1/')" WR3 "any unclosed bold span in a post-rule prior is a wrapped label" WR1 wrapany
-# The None rule is read by both a None-only prior (N3) and a lead-in opening with "None." (S4).
-score "$(mut nonebul 's/^    if (l ~ \/\^none(\[\^a-z\]|\$)\/) next/    if (0) next/')" "N3 S4" "a None line is read as an unparsed finding" S5 nonebul
-score "$(mut sep 's/if (st == "" || h == "") print "BAD/if (0) print "BAD/')" F4 "a malformed carried line is silently ignored" F1 sep
-# The fence rule in the CARRIED reader only: the second fence line of the file is that reader's.
-score "$(mut cfence '/^carried="/,/^                else print/{/fence != "" {/s/fence != "" {/0 {/;}')" F5 "a fenced carried line counts as an answer" F4 cfence
-score "$(mut sect 's/if ((fs && sev != "") || top) { d = norm/if (sev != "" || top) { d = norm/')" F6 "a heading outside ## Findings is a prior finding" C sect
-# Top-level findings: the subsection-only read restored (TA, TQ die); a top level opened by every
-# `## ` (TB dies); a `### Notes` that keeps the top level open (TC dies).
-score "$(mut subonly 's/if ((fs && sev != "") || top) { d = norm/if (fs \&\& sev != "") { d = norm/')" "TA TQ" "a #### directly under ## Findings is not a finding (subsection-only read)" TB subonly
-score "$(mut topany 's/sev = ""; top = fs; next }/sev = ""; top = 1; next }/')" TB "a #### directly under any ## section is a finding" TA topany
-score "$(mut topnotes 's/sub(\/\^\\\*\*\/, "", h); top = 0$/sub(\/^\\**\/, "", h); top = (h ~ \/^notes\/ ? top : 0)/')" TC "a #### under ### Notes keeps the top level open" TA topnotes
-# Pre-migration, one mutant per branch of the rule.
-score "$(mut vaddbinds 's/adds validate-carried-findings.sh'"'"' "\$TOP"; return 0; }/adds validate-carried-findings.sh'"'"' "$TOP"; return 1; }/')" W1 "a branch that never received the program binds" W2 vaddbinds
-score "$(mut descends 's/^  git -C "\$TOP" merge-base --is-ancestor "\$VADD" "\$r" 2>\/dev\/null && return 1/  return 1/')" P1 "a review committed before the pull binds" P2 descends
-score "$(mut untracked 's/^  \[ -n "\$r" \] || return 1/  [ -n "$r" ] || return 0/')" P3 "an untracked review is exempt" P2 untracked
-# Exempt every committed review: the ancestry test is the one line every bound, committed arm
-# reads, so this mutant names all of them.
-score "$(mut pmalways 's/^  git -C "\$TOP" merge-base --is-ancestor "\$VADD" "\$r" 2>\/dev\/null && return 1/  :/')" "P2 W2 D1 S1 S3 L1 S6 H2 QL QF QP TQ QU1 QU2 QU3 V1 V2 V3 V4 V5" "every committed review is exempt" P1 pmalways
-score "$(mut recent 's/log --diff-filter=A --reverse --format=%H HEAD/log --diff-filter=A --format=%H HEAD/')" D1 "the MOST RECENT add is the epoch (revert and re-add acquits)" P2 recent
-# The unmutated copy: the mutant harness (install of a byte-identical copy) running the shipped behaviour green, on
-# C, F1 and K2 and on the topology arms the selfloc cells below read (P1 S6 G1 G2 H1 W1 W2).
-CTL="$M/ctl/core/scripts/validate-carried-findings.sh"
-mkdir -p "${CTL%/*}" && cp "$V" "$CTL" && cmp -s "$V" "$CTL" || { echo "FIXTURE ERROR: cannot copy the unmutated control" >&2; exit 2; }
-src "$CTL"
-arm_C "$CTL" && arm_F1 "$CTL" && arm_K2 "$CTL" \
-  && ok "CONTROL unmutated-copy: arms C, F1 and K2 pass against a byte-identical installed copy" \
-  || bad "CONTROL unmutated-copy: an unmutated installed copy did not pass arms C, F1 and K2"
-TOPO="P1 S6 G1 G2 H1 W1 W2"
-topo_vec() { local a v=""; for a in $TOPO; do if "arm_$a" "$1"; then v="$v $a:pass"; else v="$v $a:FAIL"; fi; done; printf '%s' "${v# }"; }
-CTL_TOPO="$(topo_vec "$CTL")"; own "$CTL"
-if [ "$CTL_TOPO" = "P1:pass S6:pass G1:pass G2:pass H1:pass W1:pass W2:pass" ]; then
-  ok "CONTROL unmutated-copy: the topology arms P1 S6 G1 G2 H1 W1 W2 all pass against the unmutated copy"
-else bad "CONTROL unmutated-copy: the unmutated copy did not pass every topology arm ($CTL_TOPO)"; fi
-# selfloc: the running copy must sit inside the review's checkout. Its copy is sourced from R, base VR's checkout, at
-# the subject's declared path ($R/core/scripts/validate-carried-findings.sh: R tracks the program at scripts/ai-dlc/,
-# so this untracked copy never reaches locate's untracked-program branch). WHY THE WANT IS "W1 S6 G1 G2 H1", NOT W1:
-# the mutated property is LOCATION-DEPENDENCE -- the copy returns 1 from locate() whenever it does not sit under the
-# review's TOP -- and one sourced copy sits under one TOP. Every arm whose review lives in another world trips on
-# exactly that property: W1 (WT), S6 (WS), G1/G2 (RI), H1 (the shallow clone). At the command line each topology arm
-# ran a copy installed in its own checkout, which confined it to W1; restoring that needs one copy per world, re-sourced
-# as the arms switch worlds, for one mutant. Do not narrow the want back to W1. P1 (TOP = R) is where the mutant
-# differs from an unconditional `return 1`, and the vacuity cell after the score holds that by name.
-SLR="$R/core/scripts/validate-carried-findings.sh"
-SLM="$(mut_after selfloc '  TOP="$(cd "$TOP" && pwd -P)" || return 1' '  case "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/" in "$TOP"/*) ;; *) return 1 ;; esac')"
-R1M="$(mut_after ret1 '  TOP="$(cd "$TOP" && pwd -P)" || return 1' '  return 1')"
-[ -n "$SLM" ] && [ -n "$R1M" ] && mkdir -p "${SLR%/*}" && cp "$SLM" "$SLR" \
-  || { echo "FIXTURE ERROR: the selfloc or return-1 copy did not apply, or could not be placed at $SLR" >&2; exit 2; }
-src "$SLR"
-SL_TOPO="$(topo_vec "$SLR")"; own "$SLR"
-# Before any kill is read: the mutated copy must ANSWER DIFFERENTLY from the unmutated one on the widened control.
-if [ "$SL_TOPO" != "$CTL_TOPO" ]; then ok "selfloc differs from the unmutated copy on the topology arms ($SL_TOPO)"
-else bad "selfloc answers exactly as the unmutated copy on every topology arm -- a mutant that changes nothing there"; fi
-score "$SLR" "W1 S6 G1 G2 H1" "the running copy must sit inside the review's checkout" W2 selfloc
-# THE VACUITY CELL: a copy that returns 1 unconditionally after TOP= is resolved, sourced from the SAME path. It must
-# FAIL P1 where selfloc PASSES P1 -- named arm against named arm -- or selfloc is indistinguishable from it.
-cp "$R1M" "$SLR" || { echo "FIXTURE ERROR: cannot place the return-1 copy at $SLR" >&2; exit 2; }
-src "$SLR"
-if arm_P1 "$SLR"; then R1_P1=pass; else R1_P1=FAIL; fi
-case " $SL_TOPO " in *" P1:pass "*) SL_P1=pass ;; *) SL_P1=FAIL ;; esac
-if [ "$SL_P1" = pass ] && [ "$R1_P1" = FAIL ]; then
-  ok "VACUITY selfloc: selfloc passes P1 and an unconditional return 1 after TOP= fails P1, both sourced from R's core/scripts/validate-carried-findings.sh"
-else bad "VACUITY selfloc: selfloc P1=$SL_P1, return-1 P1=$R1_P1 -- selfloc is not distinguished from an unconditional return 1"; fi
-rm -f "$SLR"
-# The ignored program binds; the mutant reads it as pre-migration.
-score "$(mut ignpend 's/^  \[ -z "\$UNC" \] || return 1$/  :/')" "G1 G2" "a gitignored program reads PENDING" W1 ignpend
-score "$(mut shallow 's/= "true" \] &&$/= "__never__" ] \&\&/')" H1 "a shallow repository is read, not refused" H2 shallow
-# Which prior is held to the heading form: marker AND not committed before the add.
-score "$(mut alwayslabels 's/\[ "\$EARLY" -eq 0 \] && POST=1$/[ "$EARLY" -eq 0 ] \&\& POST=0/')" "F3 S3 S4 S5 S7 WR1 WR3" "every prior is read by label (the post-rule marker ignored)" S6 alwayslabels
-score "$(mut markonly 's/^\[ "\$MARK" = "1" \] && \[ "\$EARLY" -eq 0 \] && POST=1$/[ "$MARK" = "1" ] \&\& POST=1/')" S6 "a marked prior committed before the pull is held to the form" L1 markonly
-score "$(mut earlyonly 's/^\[ "\$MARK" = "1" \] && \[ "\$EARLY" -eq 0 \] && POST=1$/[ "$EARLY" -eq 0 ] \&\& POST=1/')" "L1 WR2 K1 K2 K3 K4 K5 LIST" "a prior committed after the add is held to the form whatever it carries" S6 earlyonly
-# The label reading.
-score "$(mut nolabel 's/lab = c; id = substr(c, 1, RLENGTH)/lab = ""; id = ""/')" "S1 L1 S6 S7 K1 K2 K3 K4 K5 H2 LIST" "a bold-labelled finding is not carried" S4 nolabel
-# Only the id-boundary guard is removed: match() still runs, so a non-id span gets an empty id.
-score "$(mut anybold 's/if (match(c, \/\^\[A-Za-z\]+-?\[0-9\]+\/) && substr(c, RLENGTH + 1, 1) !~ \/\[A-Za-z0-9\]\/)/if (match(c, \/^[A-Za-z]+-?[0-9]+\/) || 1)/')" "S1 L1 S6 H2 LIST" "any bold span is a finding label" K1 anybold
-score "$(mut notefail 's/if (!labd) print "NOTE\\t"/if (!labd) print "UNPARSED\\t"/')" "S1 L1 S6 WR2 H2 LIST" "an unlabelled pre-rule line fails" WR3 notefail
-score "$(mut exactspan 's/uid="\$id"; fi$/uid=""; fi/')" K1 "a label prior is carried only by its exact span" K3 exactspan
-score "$(mut idprefix 's/(ENVIRON\["CF_I"\] != "" && \$3 == ENVIRON\["CF_I"\])/(ENVIRON["CF_I"] != "" \&\& index($3, ENVIRON["CF_I"]) == 1)/')" K2 "an id answers any carried string it prefixes" K1 idprefix
-score "$(mut nopunct 's/function key(s) { s = norm(s); sub(\/\[.:;, \\t\]+\$\/, "", s); return s }/function key(s) { return norm(s) }/')" K3 "trailing punctuation is significant" K1 nopunct
-score "$(mut dupid 's/if (n\[i\] == 1) print i/print i/')" K5 "an id two labels share answers both" K2 dupid
-score "$(mut listnone 's/printf .%s\\n. "\$disp"/:/')" "LIST TA" "--list prints no carry strings" K1 listnone
-# A validator replaced by `exit 0` must fail every arm: its vcf_main is `exit 0`, behind the same guard.
-STUB="$M/stub/core/scripts/validate-carried-findings.sh"
-mkdir -p "${STUB%/*}" || exit 2
-printf '#!/usr/bin/env bash\nvcf_main() { exit 0; }\n[ "${BASH_SOURCE[0]}" = "$0" ] || return 0\nvcf_main "$@"\n' > "$STUB"
-src "$STUB"
-died=""; for a in $ARMS; do if "arm_$a" "$STUB"; then mcell stub "$a" 0; else died="$died $a"; mcell stub "$a" 1; fi; done
-src "$V"
-if [ "$died" = " $ARMS" ]; then mutant_killed "$B_all" stub "MUTANT exit-0 stub: every arm dies"; else bad "MUTANT exit-0 stub: arms that died:${died:- none}"; fi
-# The role file's template, mutated back to the bullet form it had and stripped of reviewed-sha:
-# arm T alone reads it, so each must kill T.
-for rm_ in bullet nosha; do
-  case "$rm_" in
-    bullet) sed -e 's/^#### <finding title>$/- [finding]/' "$ROLE" > "$M/role-$rm_.md" ;;
-    nosha)  sed -e '/^reviewed-sha: <full frozen sha>$/d' "$ROLE" > "$M/role-$rm_.md" ;;
-  esac
-  if cmp -s "$ROLE" "$M/role-$rm_.md"; then bad "MUTANT role $rm_: the mutation did not apply"; continue; fi
-  tpl_of "$M/role-$rm_.md" > "$S/template.md"
-  if arm_T "$V"; then bad "MUTANT role $rm_: arm T survived"; mcell "role-$rm_" T 0
-  else
-    mcell "role-$rm_" T 1
-    if arm_C "$V"; then mutant_killed "$B_all" "role-$rm_" "MUTANT role $rm_: dead by arm T, twin C green"; else bad "MUTANT role $rm_: twin C died"; fi
-  fi
-done
-tpl_of "$ROLE" > "$S/template.md"
-arm_T "$V" && ok "T restored" || bad "T did not hold after restoring the template"
-
-# Plain-run arm: a plain run executes no matrix-only cell, and a --matrix run executes some.
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MWIDE" -eq 0 ] && [ "$MROWS" -eq 0 ]; then ok "plain run: no matrix-only cell ran and no matrix row was printed"; else bad "plain run: matrix-only cells ran (wide=$MWIDE rows=$MROWS)"; fi
-else
-  if [ "$MWIDE" -gt 0 ] && [ "$MROWS" -gt 0 ]; then ok "matrix run: $MWIDE mutants measured across every arm ($MROWS rows)"; else bad "matrix run: no rows were printed (wide=$MWIDE rows=$MROWS)"; fi
-fi
 report_end carried-findings

@@ -31,8 +31,6 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/setup-site-drift.sh"
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_clean=0; B_scanned=0; B_defect=0; B_nexth=0
 
 echo "setup-site-drift:"
 
@@ -122,14 +120,14 @@ run() { bash "$SSD" "$DIST" "$CONS" "$THEIRS" 2>&1; }
 # 1. THE CLEAN CASE. Values filled in at every declared site, nothing else moved.
 # =============================================================================
 OUT="$(run)"; RC=$?
-[ "$RC" -eq 0 ] && { ok "a correctly-reinjected consumer exits 0"; B_clean=1; } \
+[ "$RC" -eq 0 ] && { ok "a correctly-reinjected consumer exits 0"; } \
                 || { bad "a correct consumer exited $RC"; printf '%s\n' "$OUT" | sed 's/^/        /'; }
 grep -q 'SETUP-SITE-DRIFT' <<<"$OUT" && bad "a correct consumer was reported as drifted" \
                                      || ok "...and reports no drift"
 # THE CONTROL ON THAT ZERO. A run that resolved no site, or compared no file, prints the same
 # clean sheet.
 grep -qE 'SETUP-SITE-SCANNED.*[1-9][0-9]* declared site' <<<"$OUT" \
-  && { ok "the scanned count is reported and non-zero — the control on the clean sheet above"; B_scanned=1; } \
+  && { ok "the scanned count is reported and non-zero — the control on the clean sheet above"; } \
   || bad "no non-zero scanned count: the clean sheet above could be a run that read nothing"
 grep -q 'deploy-validate.md' <<<"$OUT" && ok "the sited file appears in the verdict rows" \
                                        || bad "the sited file is absent from the output entirely"
@@ -147,7 +145,7 @@ if cmp -s "$CONS/.claude/skills/ai-dlc/steps/deploy-validate.md.bak" \
 else
   rm -f "$CONS/.claude/skills/ai-dlc/steps/deploy-validate.md.bak"
   OUT="$(run)"; RC=$?
-  [ "$RC" -eq 1 ] && { ok "a line retained from OURS outside every declared span exits 1"; B_defect=1; } \
+  [ "$RC" -eq 1 ] && { ok "a line retained from OURS outside every declared span exits 1"; } \
                   || bad "the reproduced defect exited $RC, expected 1"
   if grep -qE 'SETUP-SITE-DRIFT.*deploy-validate\.md:6' <<<"$OUT"; then
     ok "...and names the exact LINE, not just the file"
@@ -212,7 +210,7 @@ seed_nexth() {
 seed_nexth
 OUT="$(bash "$SSD" --file core/team-roles/dev.md "$DIST" "$CONS" "$NEXTH" 2>&1)"; RC=$?
 if [ "$RC" -eq 1 ] && grep -qE 'SETUP-SITE-ANCHOR-LOST.*dev\.md#dev-ownership-paths.*next_heading' <<<"$OUT"; then
-  ok "a theirs rename of a heading-block's next_heading is ANCHOR-LOST, exit 1"; B_nexth=1
+  ok "a theirs rename of a heading-block's next_heading is ANCHOR-LOST, exit 1"
 else
   bad "a lost next_heading exited $RC without ANCHOR-LOST"; printf '%s\n' "$OUT" | sed 's/^/        /'
 fi
@@ -250,96 +248,6 @@ OUT_F="$(bash "$SSD" --file core/team-roles/nonexistent.md "$DIST" "$CONS" "$THE
 OUT_F="$(bash "$SSD" --ours "$W/dv.drifted" "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
 [ "$RC_F" -eq 2 ] && ok "--ours without --file is a usage error (2)" \
                   || bad "--ours without --file exited $RC_F"
-
-# =============================================================================
-# 5. MUTANTS. Each removes ONE mechanism and must flip exactly its own arm.
-#    Every mutant is a guarded COPY laid down beside the reconcile/ files it
-#    reads — the declaration AND preclassify.sh, which owns map_consumer().
-#    A lone copy dies at its first resolution and emits nothing, and "no output"
-#    otherwise scores as a kill.
-# =============================================================================
-MUT="$W/mut"
-lay() { mkdir -p "$1"; cp "$RECONCILE/setup-sites.md" "$RECONCILE/preclassify.sh" "$1/"; cp "$SSD" "$1/m.sh"; }
-
-# $1 tag  $2 file to mutate: ssd|sites  $3 sed  $4 seeder  $5 test over $out/$rc  $6 claim  $7 base-pass flag
-mutate() {
-  local tag="$1" which="$2" prog="$3" seeder="$4" test_expr="$5" claim="$6"
-  local d="$MUT/$tag" src dst out rc
-  lay "$d"
-  if [ "$which" = ssd ]; then src="$SSD"; dst="$d/m.sh"; else src="$RECONCILE/setup-sites.md"; dst="$d/setup-sites.md"; fi
-  sed -E "$prog" "$src" > "$dst.new" && mv "$dst.new" "$dst"
-  if cmp -s "$src" "$dst"; then
-    bad "$(printf 'MUTANT %-18s sed matched NOTHING — the mutant IS the original' "$tag")"; return
-  fi
-  "$seeder"
-  out="$(bash "$d/m.sh" "$DIST" "$CONS" "$THEIRS" 2>&1)"; rc=$?
-  if eval "$test_expr"; then mutant_killed "$7" "$tag" "$(printf 'MUTANT %-18s %s' "$tag" "$claim")"
-  else bad "$(printf 'MUTANT %-18s did NOT flip: %s' "$tag" "$claim")"; fi
-}
-
-seed_defect() {
-  seed_good
-  sed -i.bak 's|`_bmad-output/implementation-artifacts/s<N>/\*\.md` files|`_bmad-output/implementation-artifacts/sprint-<N>-*.md` files|' \
-    "$CONS/.claude/skills/ai-dlc/steps/deploy-validate.md"
-  rm -f "$CONS/.claude/skills/ai-dlc/steps/deploy-validate.md.bak"
-}
-
-# Check only the `c` hunks whose line is a site, i.e. stop reporting anything else. This is the
-# shape §7v criterion 5 failed in for real: confirm the values look right and declare pass.
-mutate 'values-only' ssd \
-  's@^          grep -qxF "\$l" "\$TMP/allow" \&\& continue@          continue@' \
-  seed_defect \
-  '[ "$rc" -eq 0 ]' \
-  'checking only that the values look right passes a tree that lost an upstream line' \
-  "$B_defect"
-
-# Drop the after_line narrowing. The `^(.+)$` site then resolves to seven candidates, and the
-# script must say UNLOCATABLE rather than pick one.
-mutate 'no-anchor-narrowing' sites \
-  's@^    after_line: .*$@    anchor_note: removed@' \
-  seed_good \
-  '[ "$rc" -eq 1 ] && grep -q "SETUP-SITE-UNLOCATABLE" <<<"$out"' \
-  'a site whose match cannot pin one line is reported UNLOCATABLE, never guessed at' \
-  "$B_clean"
-
-# Empty the declaration. Every span goes away, so a correctly-reinjected consumer would read as
-# drifted everywhere — and a parser that silently returned nothing would do the same.
-mutate 'no-sites-parsed' ssd \
-  's@^  /\^sites:\$/ \{ f=1; next \}@  /^NEVER-MATCHES-THIS:$/ { f=1; next }@' \
-  seed_good \
-  '[ "$rc" -eq 2 ] && grep -q "parsed ZERO sites" <<<"$out"' \
-  'a declaration that parses to nothing refuses to answer instead of reporting a clean tree' \
-  "$B_scanned"
-
-# Restore the EOF widening for a missing next_heading. Run against NEXTH, where it is missing.
-seed_nexth_world() { seed_nexth; }
-mutate_nexth() {
-  local d="$MUT/eof-widening" out rc
-  lay "$d"
-  sed -E 's@^        if \[ -z "\$e" \]; then$@        if false; then e="$(grep -c "" "$TMP/theirs")"; fi; if false; then@' "$SSD" > "$d/m.sh.new" && mv "$d/m.sh.new" "$d/m.sh"
-  if cmp -s "$SSD" "$d/m.sh"; then
-    bad "$(printf 'MUTANT %-18s sed matched NOTHING — the mutant IS the original' eof-widening)"; return
-  fi
-  sed -E 's@^        if false; then e="\$\(grep -c "" "\$TMP/theirs"\)"; fi; if false; then$@        [ -n "$e" ] || e="$(grep -c "" "$TMP/theirs")"; if false; then@' "$d/m.sh" > "$d/m.sh.new" && mv "$d/m.sh.new" "$d/m.sh"
-  seed_nexth_world
-  out="$(bash "$d/m.sh" --file core/team-roles/dev.md "$DIST" "$CONS" "$NEXTH" 2>&1)"; rc=$?
-  if [ "$rc" -eq 0 ] && ! grep -q 'SETUP-SITE-ANCHOR-LOST' <<<"$out" && grep -q 'SETUP-SITE-OK' <<<"$out"; then
-    mutant_killed "$B_nexth" eof-widening "$(printf 'MUTANT %-18s %s' eof-widening 'widening a lost next_heading to EOF reads OK and loses ANCHOR-LOST')"
-  else
-    bad "$(printf 'MUTANT %-18s did NOT flip (rc=%s)' eof-widening "$rc")"
-  fi
-}
-mutate_nexth
-
-# UNMUTATED CONTROL, from the same directory.
-lay "$MUT/control"
-seed_defect
-ctl_out="$(bash "$MUT/control/m.sh" "$DIST" "$CONS" "$THEIRS" 2>&1)"; ctl_rc=$?
-if [ "$ctl_rc" -eq 1 ] && grep -q 'SETUP-SITE-DRIFT' <<<"$ctl_out"; then
-  ok "CONTROL: an unmutated copy beside the same reconcile/ files still reports the defect"
-else
-  bad "CONTROL: an unmutated copy FAILED (rc=$ctl_rc) — the harness is what is broken, not the mutants"
-fi
 
 echo
 report_end setup-site-drift

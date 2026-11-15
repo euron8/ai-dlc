@@ -18,24 +18,17 @@
 #       enforcement-map list (`[tests/fixtures/bmad-x]`), and the line-start form
 #       where no leading path character exists and only the trailing separator
 #       distinguishes it
-#   - MUTATION: neutering the load-target resolution turns the dead shim green
 #   - G611: the SHIPPED rulebook (less overrides/ and extensions/) against a BMAD 6.11 skills tree
 #       (deep-recon, review with the adversarial lens, sprint-planning with the readiness gate; the
 #       five removed names absent) PASSES (0); one old slash call restored FAILS (1) naming it; the
 #       old name kept without its `/` PASSES; a review with no adversarial lens and a sprint-planning
 #       with no readiness-gate.md each FAIL (1) with the 6.11.0 floor sentence
-#   - MUTATION: reverting the call-site grammar reds the clean run — and the
-#       dangling-name assertion stays GREEN under it, which is what proves the
-#       grammar narrowed the scan without neutering the check
 #   - EXT: a FILENAME token (`s<N>/bmad-x.yaml`, `/bmad-x.json`, `/bmad-x.Yaml`) is not a
 #       call site (rc 0, PASS, none named), while a sentence-final dot still ends one
 #       (line end; dot-space-word; a dot directly before a second call site) -- rc 1 naming
 #       all three near-misses and none of the offenders
-#   - MUTATION EXT-M: deleting the extension prefilter reds the offender run naming all
-#       three, and the near-misses are still named under it
 #   - EXT-ilseq: under en_US.UTF-8 a latin-1 byte on the line before a dangling name does
-#       not stop the scan (rc 1 naming it); MUTATION EXT-ilseq-M: without LC_ALL=C on the
-#       prefilter sed the same world loses the name
+#       not stop the scan (rc 1 naming it)
 #   - G611 independent: the 6.11 skill list is derived by a tokenizer over the rulebook
 #       copy, never from the validator's output; it excludes bmad-sprint-status while the
 #       copy still carries bmad-sprint-status.yaml, so G611-clean tests the extension rule
@@ -61,15 +54,13 @@ R="$ROOT/rules"
 rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
-. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $DIR" >&2; exit 2; }
-B_adj=0; B_adjnm=0; B_clean=0; B_deadshim=0
 # Run, then read $?. Never `out=$(...)` for a verdict.
 rcof() { bash "$V" --skills-root "$S" --rules-root "$R" >/dev/null 2>&1; echo $?; }
 
 echo "bmad-invocation-resolve:"
 
 g=$(rcof)
-[ "$g" -eq 0 ] && { ok "OVER-FIRE CONTROL: healthy names pass (a self-contained skill and a loader whose target exists)"; B_clean=1; } \
+[ "$g" -eq 0 ] && { ok "OVER-FIRE CONTROL: healthy names pass (a self-contained skill and a loader whose target exists)"; } \
                || bad "the clean rulebook exited $g, expected 0"
 
 # --- the path segment is not a call site --------------------------------------
@@ -103,7 +94,7 @@ rm -f "$R/steps/dangling.md"
 
 printf 'Invoke `/bmad-dead-shim` here.\n' > "$R/steps/shim.md"
 g=$(rcof)
-[ "$g" -eq 1 ] && { ok "a DEAD SHIM FAILS — directory and SKILL.md exist, LOAD target absent"; B_deadshim=1; } \
+[ "$g" -eq 1 ] && { ok "a DEAD SHIM FAILS — directory and SKILL.md exist, LOAD target absent"; } \
                || bad "a dead shim exited $g, expected 1 — a directory-existence check would have passed it"
 if bash "$V" --skills-root "$S" --rules-root "$R" 2>&1 | grep -q 'is a loader for'; then
   ok "the failure names the missing load target, not just the skill"
@@ -111,54 +102,7 @@ else
   bad "the dead-shim failure did not name the absent load target"
 fi
 
-# --- MUTATION control: the load-target resolution is what fails the shim -------
-# Copy, then assert with cmp -s that the edit matched something. A sed that matches
-# nothing yields a mutant identical to the subject, which then "fails as expected"
-# for the wrong reason.
-M="$ROOT/mutant.sh"
-cp "$V" "$M"
-sed -i.bak 's/if \[ -n "\$proot" \] \&\& \[ -e "\$proot\/\$t" \]; then/if true; then/' "$M" 2>/dev/null \
-  || sed -i '' 's/if \[ -n "\$proot" \] \&\& \[ -e "\$proot\/\$t" \]; then/if true; then/' "$M" 2>/dev/null
-rm -f "$M.bak"
-if cmp -s "$V" "$M"; then
-  bad "FIXTURE ERROR: mutation matched nothing — the dead-shim assertion above proves nothing"
-else
-  bash "$M" --skills-root "$S" --rules-root "$R" >/dev/null 2>&1
-  if [ $? -eq 0 ]; then
-    mutant_killed "$B_deadshim" load-target "MUTATION: neutering load-target resolution turns the dead shim green (that resolution is what fails it)"
-  else
-    bad "MUTATION: the mutant still rejected the dead shim — something other than load-target resolution produced the FAIL"
-  fi
-fi
 rm -f "$R/steps/shim.md"
-
-# --- MUTATION control: the call-site GRAMMAR is what excludes the path segment ---
-# Revert the enumerator to the slash-only form. The clean rulebook must go RED,
-# because the path segments become invented invocations. And the dangling-name
-# assertion must stay GREEN under the same mutant -- that pairing is the whole
-# claim: the grammar narrowed the scan without neutering the check. A mutant that
-# reds both would mean the two assertions are entangled and one is vacuous.
-MG="$ROOT/mutant-grammar.sh"
-cp "$V" "$MG"
-# Both sides passed through the environment and quoted with \Q..\E, so neither the
-# bracket classes nor the `$` anchor is re-read as a regex by the mutator itself.
-MUT_OLD='if ((p == "" || p !~ /[A-Za-z0-9_.-]/) && (n == "" || n !~ /[A-Za-z0-9_\/-]/))' \
-MUT_NEW='if (1)' \
-  perl -0pi -e 's/\Q$ENV{MUT_OLD}\E/$ENV{MUT_NEW}/' "$MG"
-if cmp -s "$V" "$MG"; then
-  bad "FIXTURE ERROR: the grammar mutation matched nothing — the path-segment assertions above prove nothing"
-else
-  bash "$MG" --skills-root "$S" --rules-root "$R" >/dev/null 2>&1
-  [ $? -ne 0 ] && mutant_killed "$B_clean" slash-only-grammar "MUTATION: the slash-only enumerator reds the clean rulebook (the grammar is what excludes the path segment)" \
-               || bad "MUTATION: the slash-only enumerator still passed — something other than the grammar is excluding the path segment"
-
-  # The anti-neutering pairing. Same mutant, a genuinely dangling name.
-  printf 'Invoke `/bmad-no-such-skill` here.\n' > "$R/steps/dangling2.md"
-  bash "$MG" --skills-root "$S" --rules-root "$R" >/dev/null 2>&1
-  [ $? -eq 1 ] && ok "MUTATION PAIRING: a dangling name still FAILS under the mutant (the two assertions are not entangled)" \
-               || bad "MUTATION PAIRING: the mutant stopped catching a dangling name — the two assertions are entangled"
-  rm -f "$R/steps/dangling2.md"
-fi
 
 # --- EXT: a filename extension after a /bmad- name is not a call site -----------
 # Offenders, none a call site: the route.md shape (`>`-led, lowercase extension), a backtick-led
@@ -197,26 +141,6 @@ hitn="$(names_in "$ROOT/ext-n.out" $EXT_N)"; hito="$(names_in "$ROOT/ext-n.out" 
   && ok "EXT-near-miss: a sentence-final dot still ends a call site (rc 1 naming -b, -c and -d, the one after /bmad-live-one. included; no offender named)" \
   || bad "EXT-near-miss: rc=$en, near-misses named: [$hitn], offenders named: [$hito]"
 
-# EXT-M: delete the prefilter stage. The validator sources no sibling, so a copy of the file alone
-# is the program; the unmutated control below runs from the same directory, and the near-miss run
-# naming b, c and d is the mutant's own positive output.
-MX="$ROOT/mutant-ext.sh"
-cp "$V" "$MX"
-MUT_OLD="  | LC_ALL=C sed -E 's#(/bmad-[a-z0-9-]+)\\.([A-Za-z0-9_])#\\1_\\2#g' \\
-" perl -0pi -e 's/\Q$ENV{MUT_OLD}\E//' "$MX"
-if cmp -s "$V" "$MX"; then
-  bad "EXT-M: DID NOT APPLY -- the prefilter stage was not found, the EXT arm above proves nothing"
-else
-  extrun "$MX" extm
-  mo="$(cat "$ROOT/extm-o.rc")"; mn="$(cat "$ROOT/extm-n.rc")"
-  mho="$(names_in "$ROOT/extm-o.out" $EXT_O)"; mhn="$(names_in "$ROOT/extm-n.out" $EXT_N)"
-  [ "$mo" -eq 1 ] && [ "$mho" = "bmad-no-such-skill bmad-no-such-skill-e bmad-no-such-skill-g " ] \
-    && ok "EXT-M: deleting the prefilter reds the offender run naming all three filename tokens (the prefilter is what excludes them)" \
-    || bad "EXT-M: with the prefilter deleted the offender run gave rc=$mo naming [$mho]"
-  [ "$mn" -eq 1 ] && [ "$mhn" = "bmad-no-such-skill-b bmad-no-such-skill-c bmad-no-such-skill-d " ] \
-    && ok "EXT-M PAIRING: the near-misses are still named under the mutant (the prefilter removes only extensions)" \
-    || bad "EXT-M PAIRING: with the prefilter deleted the near-miss run gave rc=$mn naming [$mhn]"
-fi
 rm -f "$R/steps/ext-o.md" "$R/steps/ext-n.md"
 
 # --- EXT-ilseq: an invalid UTF-8 byte must not end the scan --------------------
@@ -232,24 +156,6 @@ grep -qF "FAIL: the pipeline invokes '/bmad-no-such-skill-h' and no such skill e
 [ "$il" -eq 1 ] && [ "$ilh" = 1 ] \
   && ok "EXT-ilseq: under en_US.UTF-8 a latin-1 byte on the line before /bmad-no-such-skill-h does not stop the scan (rc 1 naming it)" \
   || bad "EXT-ilseq: under en_US.UTF-8 rc=$il, /bmad-no-such-skill-h named=$ilh: $(grep -m1 -E 'FAIL|error' "$ROOT/ilseq.out")"
-# EXT-ilseq-M: the prefilter's sed without `LC_ALL=C`. The same world must then lose the name, which
-# proves the arm above can fire.
-MI="$ROOT/mutant-ilseq.sh"
-cp "$V" "$MI"
-MUT_OLD="  | LC_ALL=C sed -E 's#" MUT_NEW="  | sed -E 's#" perl -0pi -e 's/\Q$ENV{MUT_OLD}\E/$ENV{MUT_NEW}/' "$MI"
-if cmp -s "$V" "$MI"; then
-  bad "EXT-ilseq-M: DID NOT APPLY -- LC_ALL=C was not found on the prefilter sed, EXT-ilseq above proves nothing"
-else
-  LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 bash "$MI" --skills-root "$S" --rules-root "$R" > "$ROOT/ilseqm.out" 2>&1
-  ilm=$?
-  grep -qF "FAIL: the pipeline invokes '/bmad-no-such-skill-h' and no such skill exists" "$ROOT/ilseqm.out" && ilmh=1 || ilmh=0
-  # Positive conjunct: sed's own stderr is in the capture, so a mutant whose edit broke the pipe
-  # (rc 2, nothing extracted) cannot score as a kill by silence.
-  grep -qF "illegal byte sequence" "$ROOT/ilseqm.out" && ilms=1 || ilms=0
-  { [ "$ilm" -eq 0 ] || [ "$ilm" -eq 2 ]; } && [ "$ilmh" = 0 ] && [ "$ilms" = 1 ] \
-    && ok "EXT-ilseq-M: without LC_ALL=C the same world loses /bmad-no-such-skill-h (rc $ilm, not named, sed said illegal byte sequence; the C locale is what keeps it)" \
-    || bad "EXT-ilseq-M: without LC_ALL=C rc=$ilm, /bmad-no-such-skill-h named=$ilmh, illegal-byte-sequence seen=$ilms -- the arm cannot discriminate"
-fi
 rm -f "$R/steps/ilseq.md"
 
 # --- ADJ: two call sites sharing ONE separator are both call sites -------------
@@ -268,7 +174,7 @@ adjrun() {  # <validator> <line> -> sets ADJ_RC and ADJ_NAMED (1 when adj-b is n
 }
 adjrun "$V" 'Run /bmad-live-one /bmad-adj-b next'
 [ "$ADJ_RC" -eq 1 ] && [ "$ADJ_NAMED" = 1 ] \
-  && { ok "ADJ: '/bmad-live-one /bmad-adj-b' FAILS (rc 1) naming /bmad-adj-b (the shared space is not consumed)"; B_adj=1; } \
+  && { ok "ADJ: '/bmad-live-one /bmad-adj-b' FAILS (rc 1) naming /bmad-adj-b (the shared space is not consumed)"; } \
   || bad "ADJ: space-adjacent pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 1 naming it"
 adjrun "$V" 'Run /bmad-live-one, /bmad-adj-b next'
 [ "$ADJ_RC" -eq 1 ] && [ "$ADJ_NAMED" = 1 ] \
@@ -276,57 +182,12 @@ adjrun "$V" 'Run /bmad-live-one, /bmad-adj-b next'
   || bad "ADJ control: comma-space pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 1 naming it"
 adjrun "$V" 'Run /bmad-live-one/bmad-adj-b next'
 [ "$ADJ_RC" -eq 0 ] && [ "$ADJ_NAMED" = 0 ] \
-  && { ok "ADJ near-miss: '/bmad-live-one/bmad-adj-b' does not name /bmad-adj-b (a path, rc 0)"; B_adjnm=1; } \
+  && { ok "ADJ near-miss: '/bmad-live-one/bmad-adj-b' does not name /bmad-adj-b (a path, rc 0)"; } \
   || bad "ADJ near-miss: slash-joined pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 0 and not named"
 adjrun "$V" 'Run x /bmad-live-one-/bmad-adj-b next'
 [ "$ADJ_RC" -eq 0 ] && [ "$ADJ_NAMED" = 0 ] \
   && ok "ADJ near-miss: 'x /bmad-live-one-/bmad-adj-b' does not name /bmad-adj-b (rc 0)" \
   || bad "ADJ near-miss: dash-slash pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 0 and not named"
-
-# ADJ-M1: the consuming grep pair restored in place of the scanner. Offender must then lose /bmad-adj-b
-# (rc 0, not named); the comma control still names it, so the mutant is the consuming shape and not a
-# dead copy. ADJ-M2: offsets measured from a cut remainder; the slash-joined near-miss must then
-# name /bmad-adj-b while the offender still does. ADJ-MG: the context test removed.
-MA1="$ROOT/mutant-adj-grep.sh"; MA2="$ROOT/mutant-adj-rem.sh"; MA3="$ROOT/mutant-adj-ctx.sh"
-cp "$V" "$MA1"; cp "$V" "$MA2"; cp "$V" "$MA3"
-GREP_NEW=$'  | grep -oE \'(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)\' \\\n  | grep -oE \'/bmad-[a-z0-9-]+\' \\\n'
-GREP_NEW="$GREP_NEW" perl -0pi -e 's/  \| LC_ALL=C awk \x27\{.*?\n    \}\x27 \\\n/$ENV{GREP_NEW}/s' "$MA1"
-MUT_OLD='        off = en' MUT_NEW='        s = substr(s, en + 1); off = 0' \
-  perl -0pi -e 's/\Q$ENV{MUT_OLD}\E/$ENV{MUT_NEW}/' "$MA2"
-MUT_OLD='if ((p == "" || p !~ /[A-Za-z0-9_.-]/) && (n == "" || n !~ /[A-Za-z0-9_\/-]/))' MUT_NEW='if (1)' \
-  perl -0pi -e 's/\Q$ENV{MUT_OLD}\E/$ENV{MUT_NEW}/' "$MA3"
-if cmp -s "$V" "$MA1" || cmp -s "$V" "$MA2" || cmp -s "$V" "$MA3"; then
-  bad "ADJ-M: DID NOT APPLY -- a scanner mutation matched nothing (grep=$(cmp -s "$V" "$MA1" && echo no || echo yes) rem=$(cmp -s "$V" "$MA2" && echo no || echo yes) ctx=$(cmp -s "$V" "$MA3" && echo no || echo yes)), the ADJ arms above prove nothing"
-else
-  adjrun "$MA1" 'Run /bmad-live-one /bmad-adj-b next'; m1o=$ADJ_RC; m1on=$ADJ_NAMED
-  adjrun "$MA1" 'Run /bmad-live-one, /bmad-adj-b next'; m1c=$ADJ_RC; m1cn=$ADJ_NAMED
-  [ "$m1o" -eq 0 ] && [ "$m1on" = 0 ] \
-    && mutant_killed "$B_adj" ADJ-M1 "MUTATION ADJ-M1: the consuming grep loses /bmad-adj-b on the space-adjacent pair (rc 0, not named; the scanner is what keeps it)" \
-    || bad "MUTATION ADJ-M1: the consuming grep gave rc=$m1o named=$m1on on the space-adjacent pair, expected rc 0 not named"
-  [ "$m1c" -eq 1 ] && [ "$m1cn" = 1 ] \
-    && ok "MUTATION ADJ-M1 PAIRING: the consuming grep still names /bmad-adj-b after a comma (rc 1; the mutant ran and is not a dead copy)" \
-    || bad "MUTATION ADJ-M1 PAIRING: the consuming grep gave rc=$m1c named=$m1cn on the comma pair, expected rc 1 naming it"
-  adjrun "$MA2" 'Run /bmad-live-one/bmad-adj-b next'; m2n=$ADJ_RC; m2nn=$ADJ_NAMED
-  adjrun "$MA2" 'Run /bmad-live-one /bmad-adj-b next'; m2o=$ADJ_RC; m2on=$ADJ_NAMED
-  [ "$m2n" -eq 1 ] && [ "$m2nn" = 1 ] \
-    && mutant_killed "$B_adjnm" ADJ-M2 "MUTATION ADJ-M2: offsets measured from the cut remainder name /bmad-adj-b in the slash-joined near-miss (rc 1; line-start offsets are what reject it)" \
-    || bad "MUTATION ADJ-M2: the remainder-relative scanner gave rc=$m2n named=$m2nn on the slash-joined pair, expected rc 1 naming it"
-  [ "$m2o" -eq 1 ] && [ "$m2on" = 1 ] \
-    && ok "MUTATION ADJ-M2 PAIRING: the remainder-relative scanner still names the space-adjacent offender (rc 1; the mutant ran)" \
-    || bad "MUTATION ADJ-M2 PAIRING: the remainder-relative scanner gave rc=$m2o named=$m2on on the offender, expected rc 1 naming it"
-  adjrun "$MA3" 'Run /bmad-live-one/bmad-adj-b next'; m3n=$ADJ_RC; m3nn=$ADJ_NAMED
-  [ "$m3n" -eq 1 ] && [ "$m3nn" = 1 ] \
-    && mutant_killed "$B_adjnm" ADJ-MG "MUTATION ADJ-MG: with the context test removed the slash-joined near-miss names /bmad-adj-b (rc 1; the context test is what rejects it)" \
-    || bad "MUTATION ADJ-MG: the context-free scanner gave rc=$m3n named=$m3nn on the slash-joined pair, expected rc 1 naming it"
-fi
-
-# Unmutated control from the same directory. A mutant copy that dies for its own
-# reasons emits nothing, and "no output" would otherwise score as a kill.
-MC="$ROOT/control-unmutated.sh"
-cp "$V" "$MC"
-bash "$MC" --skills-root "$S" --rules-root "$R" >/dev/null 2>&1
-[ $? -eq 0 ] && ok "CONTROL: an UNMUTATED copy in the same directory still passes (the mutants died of their edits, not of being copies)" \
-             || bad "CONTROL: the unmutated copy failed — every mutant verdict above is unattributable"
 
 printf 'Invoke `/bmad-deprecated-one` here.\n' > "$R/steps/dep.md"
 g=$(rcof)

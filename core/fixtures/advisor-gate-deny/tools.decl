@@ -3,7 +3,6 @@ awk
 bash
 cat
 chmod
-cmp
 cp
 date
 dirname

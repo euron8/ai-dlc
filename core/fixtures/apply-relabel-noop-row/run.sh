@@ -57,8 +57,6 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-relabel-noop.XXXXXX")" || { echo "FIXTU
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_clean=0
 
 DIST="$WORK/dist"
 GV="skills/ai-dlc/steps/gate-validation.md"
@@ -164,7 +162,7 @@ fi
 # 1. A CLEAN CATALOG PRODUCES NO ROW.
 # =============================================================================
 if [ -z "$(relabel_row "$OUT_CLEAN")" ]; then
-  ok "a consumer whose catalog has NO unlabelled collisions gets no \`RESOLVED relabel\` row"; B_clean=1
+  ok "a consumer whose catalog has NO unlabelled collisions gets no \`RESOLVED relabel\` row"
 else
   bad "the clean tree still claims a relabel: $(relabel_row "$OUT_CLEAN" | tr '\t' '|') — this is PC-S332, the row asserting work that did not occur"
 fi
@@ -210,41 +208,6 @@ if grep -qE '^### 26\. \[ext:mydomain\] ' "$C_HIT/.claude/skills/ai-dlc/extensio
   ok "the heading really was rewritten to '### 26. [ext:mydomain] …' — the row reports work that occurred"
 else
   bad "the row claims a relabel but the extension heading is unchanged — the count is as false as the old bare row"
-fi
-
-# =============================================================================
-# 4. THE MUTANT — assertions 1 and 2 must be able to go RED.
-# =============================================================================
-# Reverts the guard to the permissive direction, which is exactly the old behaviour: a row on
-# every tree, collisions or not. Built as a COPY of the whole reconcile directory, because
-# apply.sh sources its siblings from `$SELF`, and `cmp -s`-guarded so a sed that matched nothing
-# cannot score a kill it never earned.
-MUT="$WORK/mut"
-mkdir -p "$MUT" && cp "$(dirname "$APPLY")"/* "$MUT/" 2>/dev/null
-sed 's/^if \[ "\$relabel_n" -gt 0 \]; then$/if [ "$relabel_n" -ge 0 ]; then/' "$APPLY" > "$MUT/apply.sh.new"
-if cmp -s "$APPLY" "$MUT/apply.sh.new"; then
-  bad "MUTANT relabel-guard-widened: the sed matched nothing, so assertions 1 and 2 are unproven — an absence nothing can turn into a presence is not an assertion"
-else
-  mv -f "$MUT/apply.sh.new" "$MUT/apply.sh"
-  C_MUT="$WORK/c-mut"; mkconsumer "$C_MUT" clean || { echo "FIXTURE ERROR: mkconsumer failed" >&2; exit 2; }
-  OUT_MUT="$(bash "$MUT/apply.sh" "$DIST" "$BASE" "$C_MUT" "$THEIRS" 2>&1)"
-  if [ -n "$(relabel_row "$OUT_MUT")" ]; then
-    mutant_killed "$B_clean" relabel-guard-widened "MUTANT relabel-guard-widened puts the row back on a clean tree — assertions 1 and 2 are falsifiable"
-  else
-    bad "MUTANT relabel-guard-widened produced no row either: assertions 1 and 2 pass over a program that never emits this row at all, and would keep passing if the arm were deleted"
-  fi
-fi
-
-# ...and the unmutated control from the same directory. A copy that dies sourcing its siblings
-# emits no rows, and "no row" is precisely what assertions 1 and 2 score green.
-CTL="$WORK/ctl"
-mkdir -p "$CTL" && cp "$(dirname "$APPLY")"/* "$CTL/" 2>/dev/null
-C_CTL="$WORK/c-ctl"; mkconsumer "$C_CTL" collide || { echo "FIXTURE ERROR: mkconsumer failed" >&2; exit 2; }
-OUT_CTL="$(bash "$CTL/apply.sh" "$DIST" "$BASE" "$C_CTL" "$THEIRS" 2>&1)"
-if [ -n "$(relabel_row "$OUT_CTL")" ]; then
-  ok "CONTROL: an unmutated copy in the same directory still emits the row on a colliding tree — the mutant's copy mechanism is sound"
-else
-  bad "CONTROL: an unmutated copy emits no row on a colliding tree — the copy, not the mutation, is what the arm above measured"
 fi
 
 echo

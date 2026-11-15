@@ -28,7 +28,10 @@
 #       a declared bash subject (a call of a guarded subject's entry function, a source of an unguarded one) with no
 #       fx_inproc call on it -> FAIL, allowlisted or not, when THE P2 RATCHET (p2_ratchet, below) reads the row NEW
 #       against the push base (merge-base of HEAD and origin/main, scanned); a row already present there prints as `OWED P2 ...` with a count line and never fails, and a
-#       fixture refused for P2 rows alone takes no R row and no --derive allowlist row. Its counting unit, pairing rule,
+#       fixture refused for P2 rows alone takes no R row and no --derive allowlist row. A fixture `<family>-<letter>`
+#       whose run.sh passes M4's shard-driver predicate (sf_driver, below) is judged under <family>'s name, each
+#       (family, file:line) counted once (p2_shard_map): a shard reads its family's OWED baseline and acquits nothing new.
+#       Its counting unit, pairing rule,
 #       blind routes and false-positive floor are ARM P2's, above fxc_p2_scan in the judge. It subsumes P1.
 #   NP  a `nested` row whose parent path lies under core/fixtures/ -> FAIL, allowlisted or not: one e2e cell on a
 #       fixture-local driver plus one nested row would cover any number of the child's starts. The parent must be
@@ -40,6 +43,15 @@
 #       against origin/main (field 1), through THE ONE SHARED m4() extracted from scripts/validate-fixture-hygiene.sh
 #       between its `# M4_BEGIN` and `# M4_END` lines. M4 SKIPs while origin/main carries no allowlist -- the release
 #       that first ships it is the one seeding window.
+#       ONE NARROWING, by m4sf below: a row `<family>-<letter>` is not an ADDED row when (1) `<family>` is on the
+#       origin/main list, (2) core/fixtures/<family>-<letter>/run.sh is a shard driver of that family -- exactly the eight
+#       non-comment lines sf_driver names, ending in `exec bash "$IMPL" --group <letter>`, no other command -- and (3) the
+#       family's own row is still on the current list. A shard split of a listed subject is a scheduling boundary and
+#       starts it no more often than the family did; any other new row is still refused. Each condition has a mutant in
+#       the self-probe (sf_famlisted, sf_driver, sf_famrow each forced true must flip the case that needs it, read off m4's own list of refused names).
+#       HOW ITS FALSE-POSITIVE SET REACHED ZERO: the first shape accepted any run.sh whose last line was an exec of the
+#       sibling; a body of real commands before that exec passed it. The shape is now the whole file, line by line, and the
+#       message line may carry no quote, `$`, backtick or backslash, so no second command rides in the echo.
 #   N   scanned == listed: the join's per-fixture F rows must equal the count of core/fixtures/*/run.sh this script
 #       listed, else REFUSED (an awk that never opened a file reads exactly like a clean one). Zero listed is REFUSED.
 #   EXEMPT (undeclarable): printed from `validate-fixture-invocations.sh --b2-census`, the static walk over
@@ -160,11 +172,34 @@ p2_ratchet() {
     awk -F'\t' '$1 == "E" && $3 == "P2" { print "NEW\t" $2 "\t" $4 }' "$o.join" > "$o.p2cls"; return 0
   fi
   [ "$hb" = 1 ] || { echo "REFUSED P2 ratchet: $n P2 row(s) and no push base under $r (origin/main or its merge-base with HEAD does not resolve), so no row can be judged new or owed" >&2; return 2; }
+  p2_shard_map "$r" "$o" || { echo "REFUSED P2 ratchet: the shard map could not be built" >&2; return 2; }
   LC_ALL=C awk -F'\t' 'function fl(l) { sub(/:[0-9]+$/, "", l); return l }
-    $1 == "B" { BC[$2 SUBSEP fl($3) SUBSEP $4]++; next }
-    $1 == "E" && $3 == "P2" { k = $2 SUBSEP fl($4) SUBSEP $6; TC[k]++; N++; RK[N] = k; RF[N] = $2; RL[N] = $4 }
-    END { for (i = 1; i <= N; i++) print ((TC[RK[i]] > BC[RK[i]] + 0) ? "NEW" : "OWED") "\t" RF[i] "\t" RL[i] }' "$o.join" > "$o.p2cls" \
+    FILENAME == ARGV[1] { SM[$1 SUBSEP $2] = $3; next }
+    $1 == "B" { f = (("B" SUBSEP $2) in SM) ? SM["B" SUBSEP $2] : $2; if ((f SUBSEP $3) in BS) next; BS[f SUBSEP $3] = 1
+      BC[f SUBSEP fl($3) SUBSEP $4]++; next }
+    $1 == "E" && $3 == "P2" { f = (("T" SUBSEP $2) in SM) ? SM["T" SUBSEP $2] : $2; k = f SUBSEP fl($4) SUBSEP $6
+      if (!((f SUBSEP $4) in TS)) { TS[f SUBSEP $4] = 1; TC[k]++ }; N++; RK[N] = k; RF[N] = $2; RL[N] = $4 }
+    END { for (i = 1; i <= N; i++) print ((TC[RK[i]] > BC[RK[i]] + 0) ? "NEW" : "OWED") "\t" RF[i] "\t" RL[i] }' "$o.p2map" "$o.join" > "$o.p2cls" \
     || { echo "REFUSED P2 ratchet: the ratchet awk failed" >&2; return 2; }
+  return 0
+}
+# p2_shard_map <root> <out prefix>: writes <o>.p2map, one `T|B\t<fx>\t<family>` row per fixture named by a P2 row (T, at
+# the tip <root>) or a B row (B, in the materialised push base, the BASEROOT dir) whose run.sh passes M4's shard-driver
+# predicate sf_driver for `<family>-<letter>` in THAT tree. The ratchet then judges the row under the family's name and
+# counts each (family, file:line) once, so a shard's scan of its family's file reads the family's OWED baseline and
+# adds no count of its own: a drive newly unpaired in the family file still reads NEW, in the family and in every shard.
+p2_shard_map() {
+  local r="$1" o="$2" T=$'\t' a fx f loc rest br="" fam
+  : > "$o.p2map" || return 1
+  while IFS="$T" read -r a fx f loc rest; do [ "$a" = BASEROOT ] && br="$fx"; done < "$o.join"
+  awk -F'\t' '($1 == "E" && $3 == "P2") || $1 == "B" { print ($1 == "E" ? "T" : "B") "\t" $2 }' "$o.join" | LC_ALL=C sort -u > "$o.p2cand" || return 1
+  while IFS="$T" read -r a fx; do
+    case "$fx" in *-[a-z]) ;; *) continue ;; esac
+    fam="${fx%-?}"
+    if [ "$a" = T ]; then sf_driver "$r/core/fixtures/$fx/run.sh" "$fam" "${fx##*-}" || continue
+    else [ -n "$br" ] && sf_driver "$br/core/fixtures/$fx/run.sh" "$fam" "${fx##*-}" || continue; fi
+    printf '%s\t%s\t%s\n' "$a" "$fx" "$fam" >> "$o.p2map"
+  done < "$o.p2cand"
   return 0
 }
 # np_rows <root>: arm NP, one awk over every <root>/core/fixtures/*/cells.decl. Prints `NP <fx>:<line>: ...` for a
@@ -277,6 +312,17 @@ for x in rt2 rt3 rt4 rt5; do mkf "$x" "1 *|$Z" -; printf '%s\n' 'fx_inproc u' "$
 mkf rt6 "1 *|$Z" -; printf '%s\n' 'fx_inproc u' "$U1 p" "$U1 q" > "$P/core/fixtures/rt6/run.sh"
 mkf rt7 "1 *|$Z" -; printf '%s\n' '. "$d/core/scripts/v.sh" z' > "$P/core/fixtures/rt7/run.sh"
 mkf rt8 "1 *|$Z" -; printf '%s\n' "$U1 r" > "$P/core/fixtures/rt8/run.sh"
+# The SHARD worlds: families sh and shx each carry an owed drive at the base; the tip adds a NEW unpaired drive to sh, a
+# shard driver sh-b (M4's exact shape) and a near-miss shx-b, the same shape with one real command before the exec.
+mkf sh "1 *|$Z" -; printf '%s\n' "$U1 s" > "$P/core/fixtures/sh/run.sh"
+mkf shx "1 *|$Z" -; printf '%s\n' "$U1 s" > "$P/core/fixtures/shx/run.sh"
+p2_drv() { # <name> <family> <letter> [extra line]: an M4-shape shard driver in the probe tree
+  mkf "$1" "1 *|$Z" -
+  { printf '#!/usr/bin/env bash\nset -uo pipefail\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../%s/run.sh"\n' "$2"
+    printf '[ -f "$IMPL" ] || {\n  echo "FIXTURE ERROR: sibling not found" >&2\n  exit 2\n}\n'
+    [ -z "${4:-}" ] || printf '%s\n' "$4"
+    printf 'exec bash "$IMPL" --group %s\n' "$3"; } > "$P/core/fixtures/$1/run.sh"
+}
 rtok=0
 { pgit -C "$P" init -q && pgit -C "$P" add -A && pgit -C "$P" commit -qm A \
   && printf '%s\n' 'fx_inproc u' "$U1 r" > "$P/core/fixtures/rt8/run.sh" && pgit -C "$P" commit -qam M \
@@ -288,6 +334,7 @@ printf '%s\n' 'fx_inproc u' 'echo hi' "$U1 p" > "$P/core/fixtures/rt4/run.sh"
 printf '%s\n' 'fx_inproc u' "$U1 n" "$U1 p" > "$P/core/fixtures/rt5/run.sh"
 printf '%s\n' "$U1 q" > "$P/core/fixtures/rt6/run.sh"
 printf '!core/scripts/v.sh\n' >> "$P/core/fixtures/rt7/inputs.decl"; printf '0 core/scripts/v.sh\n' >> "$P/core/fixtures/rt7/invocations.decl"
+printf '%s\n' "$U1 s" "$U1 t" > "$P/core/fixtures/sh/run.sh"; p2_drv sh-b sh b; p2_drv shx-b shx b 'echo hi'
 pbok=0; p2_base "$P" "$WORK/pbase" pgit || pbok=1
 PBD=""; [ "$pbok" = 0 ] && PBD="$WORK/pbase"
 if judge_tree "$P" "$WORK/p" "$PBD"; then
@@ -312,6 +359,12 @@ if judge_tree "$P" "$WORK/p" "$PBD"; then
     "P2 rt:rt/run.sh:3: $P2W" \
     "P2 rt:rt/run.sh:4: $P2W" \
     "P2 rt:rt/run.sh:5: $P2W" \
+    "P2 sh-b:sh/run.sh:1: $P2W" \
+    "P2 sh-b:sh/run.sh:2: $P2W" \
+    "P2 sh:sh/run.sh:1: $P2W" \
+    "P2 sh:sh/run.sh:2: $P2W" \
+    "P2 shx-b:shx/run.sh:1: $P2W" \
+    "P2 shx:shx/run.sh:1: $P2W" \
     'R adata: static finding(s) above' \
     'R adup: core/scripts/g.sh declares 2 start(s) against 1 cell(s)' \
     'R aextra: core/scripts/g.sh declares 2 start(s) against 1 cell(s)' \
@@ -349,6 +402,49 @@ judge_tree "$WORK/empty" "$WORK/e"; [ $? = 3 ] && spl ok "N: zero run.sh listed 
 # `added` case wrote. The remedy check reads the `added` case's own whole-m4 output, so m4's hand-off of this file's
 # remedy to m4cmp is what it reads. A whole-m4 case drops GIT_DIR and its siblings, as validate-fixture-hygiene.sh's
 # M4 cases do: a pushing linked worktree exports GIT_DIR, and `git -C <probe repo>` then reads the real repository.
+# THE SHARD NARROWING of M4 (header above). m4sf <git repo> <fixture root> <current list> <out list> writes the current
+# list minus every row that qualifies, and m4 then judges the OUT list. It filters only; a row that does not qualify
+# stays in the list and m4 refuses it as before.
+sf_listed() { grep -qxF -- "$1" "$2"; }        # <name> <file of base field-1 names>: the row is not an added one
+sf_famlisted() { grep -qxF -- "$1" "$2"; }     # condition 1: <family> <file of base field-1 names>
+sf_famrow() { grep -qxF -- "$1" "$2"; }        # <family> <file of current field-1 names>
+sf_driver() { # <run.sh> <family> <letter> -> 0 when the file is exactly a shard driver of <family> for <letter>
+  local l n=0 msg
+  [ -f "$1" ] || return 1
+  while IFS= read -r l; do
+    n=$((n + 1))
+    case "$n" in
+      1) [ "$l" = 'set -uo pipefail' ] || return 1 ;;
+      2) [ "$l" = 'HERE="$(cd "$(dirname "$0")" && pwd)"' ] || return 1 ;;
+      3) [ "$l" = "IMPL=\"\$HERE/../$2/run.sh\"" ] || return 1 ;;
+      4) [ "$l" = '[ -f "$IMPL" ] || {' ] || return 1 ;;
+      5) case "$l" in '  echo "'*'" >&2') ;; *) return 1 ;; esac
+         msg="${l#  echo \"}"; msg="${msg%\" >&2}"
+         case "$msg" in *'"'*|*'$'*|*'`'*|*'\'*) return 1 ;; esac ;;
+      6) [ "$l" = '  exit 2' ] || return 1 ;;
+      7) [ "$l" = '}' ] || return 1 ;;
+      8) [ "$l" = "exec bash \"\$IMPL\" --group $3" ] || return 1 ;;
+      *) return 1 ;;
+    esac
+  done < <(grep -v -E '^[[:space:]]*(#|$)' "$1")
+  [ "$n" = 8 ]
+}
+m4sf() {
+  local repo="$1" fx="$2" cur="$3" out="$4" base="$WORK/sf-base.$$" names="$WORK/sf-names.$$" f fam ltr
+  if [ -f "$cur" ]; then cp "$cur" "$out" || return 1; else : > "$out" || return 1; fi
+  git -C "$repo" cat-file -e "origin/main:$ALLOW_REL" 2>/dev/null || return 0
+  git -C "$repo" show "origin/main:$ALLOW_REL" 2>/dev/null | awk -F'\t' '/^[[:space:]]*(#|$)/ { next } { x = $1; gsub(/[[:space:]]/, "", x); print x }' > "$base"
+  awk -F'\t' '/^[[:space:]]*(#|$)/ { next } { x = $1; gsub(/[[:space:]]/, "", x); print x }' "$out" > "$names"
+  while IFS= read -r f; do
+    case "$f" in *-[a-z]) ;; *) continue ;; esac
+    sf_listed "$f" "$base" && continue
+    fam="${f%-?}"; ltr="${f##*-}"
+    sf_famlisted "$fam" "$base" && sf_famrow "$fam" "$names" && sf_driver "$fx/core/fixtures/$f/run.sh" "$fam" "$ltr" || continue
+    awk -F'\t' -v n="$f" '{ x = $1; gsub(/[[:space:]]/, "", x); if (x != n) print }' "$out" > "$out.t" && mv "$out.t" "$out"
+  done < "$names"
+  rm -f "$base" "$names"
+  return 0
+}
 R="$WORK/m4-base"; RN="$WORK/m4-nofile"; RX="$WORK/m4-noorigin"
 { m4_probe_repo "$R" "$ALLOW_REL" $'# base\na\tr1\nb\tr2\n' && m4_probe_repo "$RN" other $'x\n' && m4_probe_repo "$RX"; } >/dev/null 2>&1 \
   || { echo "validate-fixture-inprocess: REFUSED -- could not build the M4 probe repos" >&2; exit 2; }
@@ -374,6 +470,45 @@ m4c reworded - 0 "$M4O" "$(printf 'a\tother words')" "$(printf 'b\tr2')" || m4ok
 m4c nofile "$RN" 0 "SKIP M4: origin/main carries no $ALLOW_REL -- this is the release that first ships it" "$(printf 'c\tr')" || m4ok=1
 m4c noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there is no base allowlist to compare against" "$(printf 'c\tr')" || m4ok=1
 [ "$m4ok" = 0 ] && spl ok "M4 on $ALLOW_REL: added and swapped rows refused with this list's remedy; shrink and a reworded reason pass; both no-base states SKIP"
+# M4's SHARD NARROWING, in both directions and one mutant per condition, in mktemp. The base list holds the family `fam`
+# and `other`; the fixture root holds drivers built from the shipped shape. A case runs m4sf then the whole m4.
+SFX="$WORK/sf-fx"; SFR="$WORK/sf-base-repo"
+sf_drv() { # <name> <family> <letter> [extra line]: writes core/fixtures/<name>/run.sh
+  mkdir -p "$SFX/core/fixtures/$1"
+  { printf '#!/usr/bin/env bash\n# shard driver\nset -uo pipefail\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../%s/run.sh"\n' "$2"
+    printf '[ -f "$IMPL" ] || {\n  echo "FIXTURE ERROR: sibling not found -- shard has nothing to run" >&2\n  exit 2\n}\n'
+    [ -z "${4:-}" ] || printf '%s\n' "$4"
+    printf 'exec bash "$IMPL" --group %s\n' "$3"; } > "$SFX/core/fixtures/$1/run.sh"
+}
+sf_drv fam-b fam b; sf_drv fam-c fam c "rm -rf /"; sf_drv nofam-b nofam b; sf_drv fam-d fam c; sf_drv gone-b gone b
+m4_probe_repo "$SFR" "$ALLOW_REL" $'# base\nfam\tr1\nother\tr2\ngone\tr3\n' >/dev/null 2>&1 || { echo "validate-fixture-inprocess: REFUSED -- could not build the shard-narrowing probe repo" >&2; exit 2; }
+sf_case() { # <cur rows...> -> prints m4's rc and its refused names over the narrowed list, as `rc:a,b`
+  local o rc
+  printf '# probe list\n' > "$WORK/sf-cur.txt"; printf '%s\n' "$@" >> "$WORK/sf-cur.txt"
+  o="$( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+        m4sf "$SFR" "$SFX" "$WORK/sf-cur.txt" "$WORK/sf-out.txt" || exit 2
+        m4 "$SFR" "$WORK/sf-out.txt" "$WORK/sf-b.txt" "$ALLOW_REL" M4 "$M4_REMEDY"; echo "rc=$?" )"
+  rc="${o##*rc=}"
+  printf '%s:%s\n' "$rc" "$(printf '%s\n' "$o" | sed -n 's/^    //p' | tr '\n' ',' | sed 's/,$//')"
+}
+sf_matrix() { # the five cases in order: pass, real body, unlisted family, family row dropped, wrong letter
+  local a=$'\t'
+  printf '%s ' "$(sf_case "fam${a}r1" "other${a}r2" "fam-b${a}x")" "$(sf_case "fam${a}r1" "other${a}r2" "fam-c${a}x")" \
+    "$(sf_case "fam${a}r1" "other${a}r2" "nofam${a}r" "nofam-b${a}x")" "$(sf_case "other${a}r2" "gone-b${a}x")" "$(sf_case "fam${a}r1" "other${a}r2" "fam-d${a}x")"
+  echo
+}
+sfok=0
+SFW="0: 1:fam-c 1:nofam,nofam-b 1:gone-b 1:fam-d "
+[ "$(sf_matrix)" = "$SFW" ] || { spl FAIL "M4 shard narrowing: want [$SFW], got [$(sf_matrix)]"; sfok=1; }
+[ "$( sf_famlisted() { return 0; }; sf_matrix)" = "0: 1:fam-c 1:nofam 1:gone-b 1:fam-d " ] || { spl FAIL "M4 shard narrowing: the unlisted-family mutant (condition 1) was not killed"; sfok=1; }
+[ "$( sf_driver() { return 0; }; sf_matrix)" = "0: 0: 1:nofam,nofam-b 1:gone-b 0: " ] || { spl FAIL "M4 shard narrowing: the real-body mutant (condition 2) was not killed"; sfok=1; }
+[ "$( sf_famrow() { return 0; }; sf_matrix)" = "0: 1:fam-c 1:nofam,nofam-b 0: 1:fam-d " ] || { spl FAIL "M4 shard narrowing: the family-row-dropped mutant (condition 3) was not killed: [$( sf_famrow() { return 0; }; sf_matrix)]"; sfok=1; }
+# A tree with NO current allowlist (a fixture world) reads as an empty list: m4sf returns 0 and writes an empty out list.
+rm -f "$WORK/sf-none.txt" "$WORK/sf-none.out"
+( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY; m4sf "$SFR" "$SFX" "$WORK/sf-none.txt" "$WORK/sf-none.out" ) 2> "$WORK/sf-none.err"; sfn=$?
+[ "$sfn" = 0 ] && [ -f "$WORK/sf-none.out" ] && [ ! -s "$WORK/sf-none.out" ] && [ ! -s "$WORK/sf-none.err" ] \
+  || { spl FAIL "M4 shard narrowing: an absent current allowlist gave rc $sfn: $(head -c 200 "$WORK/sf-none.err")"; sfok=1; }
+[ "$sfok" = 0 ] && spl ok "M4 shard narrowing: an absent current list reads as empty; a shard driver of a listed family passes; a real body, an unlisted family, a dropped family row and a wrong letter are refused; each condition forced true flips exactly its own cases"
 # THE P2 RATCHET in ONE run, over the probe tree's own join and its scanned merge-base (the rt worlds above). Then the
 # same rows with no push base are REFUSED (rc 2), never acquitted, and p2_base reports no base once origin/main is gone.
 if [ "$rtok" = 0 ] && [ "$pbok" = 0 ] && [ -f "$WORK/p.join" ]; then
@@ -383,6 +518,17 @@ if [ "$rtok" = 0 ] && [ "$pbok" = 0 ] && [ -f "$WORK/p.join" ]; then
   [ "$rr" = 0 ] && [ "$got" = "$wnt" ] \
     && spl ok "P2 RATCHET: NEW an added drive, an edited owed one, a deleted fx_inproc, one left as a comment, an echo between, a new drive taking the pairing, a subject newly declared; OWED a moved re-indented one, an owed drive beside a paired drive deleted with its fx_inproc, and one a later main paired (base = merge-base); a pure deletion prints nothing" \
     || spl FAIL "P2 RATCHET: rc $rr, classified [$got], want [$wnt]"
+  # THE SHARD RULE: sh-b (an M4 shard driver) is judged under its family sh, whose owed drive stays OWED and whose new
+  # drive stays NEW in both; the near-miss shx-b is not a driver, so its scan of shx's owed drive reads NEW. Mutants:
+  # sf_driver forced false turns sh-b's owed row NEW; forced true acquits shx-b.
+  sh_cls() { p2_ratchet "$P" "$WORK/p" base > /dev/null 2>&1; awk -F'\t' '$2 ~ /^shx?(-b)?$/' "$WORK/p.p2cls" | LC_ALL=C sort | tr '\t\n' ' |'; }
+  shw="NEW sh sh/run.sh:2|NEW sh-b sh/run.sh:2|NEW shx-b shx/run.sh:1|OWED sh sh/run.sh:1|OWED sh-b sh/run.sh:1|OWED shx shx/run.sh:1|"
+  shg="$(sh_cls)"; shf="$( sf_driver() { return 1; }; sh_cls)"; sht="$( sf_driver() { return 0; }; sh_cls)"
+  [ "$shg" = "$shw" ] && [ "$shf" != "$shw" ] && case "$shf" in *"NEW sh-b sh/run.sh:1"*) true ;; *) false ;; esac \
+    && [ "$sht" != "$shw" ] && case "$sht" in *"OWED shx-b shx/run.sh:1"*) true ;; *) false ;; esac \
+    && spl ok "P2 RATCHET shard rule: a shard driver reads its family's OWED baseline and a drive new in the family reads NEW in both; a near-miss non-driver shard reads NEW; sf_driver forced false and forced true are each killed" \
+    || spl FAIL "P2 RATCHET shard rule: got [$shg] want [$shw]; sf_driver false [$shf]; sf_driver true [$sht]"
+  p2_ratchet "$P" "$WORK/p" base > /dev/null 2>&1
   awk -F'\t' '$1 != "BASEROOT" && $1 != "B"' "$WORK/p.join" > "$WORK/nb.join"
   p2_ratchet "$P" "$WORK/nb" base > "$WORK/rt.msg" 2>&1; rr=$?
   pgit -C "$P" update-ref -d refs/remotes/origin/main >/dev/null 2>&1
@@ -436,7 +582,8 @@ if [ "$vr" = 1 ]; then
   sed 's/^/  FAIL  /' "$WORK/c.v"
   echo "  Remedy: $(sed -n 's/^FXC_CELLS_REMEDY="\(.*\)"$/\1/p' "$JUDGE" | sed 's/\\`/`/g'). An R row is a fixture whose declared starts of a subject differ from its declared cells; A rows are the allowlist's own shape."
 fi
-m4 "$ROOT" "$ROOT/$ALLOW_REL" "$WORK/m4-root.txt" "$ALLOW_REL" M4 "$M4_REMEDY" > "$WORK/m4.out"; [ $? = 0 ] || rc=1
+m4sf "$ROOT" "$ROOT" "$ROOT/$ALLOW_REL" "$WORK/m4-narrowed.txt" || rc=1
+m4 "$ROOT" "$WORK/m4-narrowed.txt" "$WORK/m4-root.txt" "$ALLOW_REL" M4 "$M4_REMEDY" > "$WORK/m4.out"; [ $? = 0 ] || rc=1
 cat "$WORK/m4.out"
 if [ "$MODE" = complete ]; then
   if [ "$nsc" -eq 0 ]; then echo "  INCOMPLETE  zero fixtures scanned"; rc=1

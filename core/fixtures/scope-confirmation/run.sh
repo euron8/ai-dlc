@@ -34,15 +34,6 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# Base-pass flags for mutant_killed: each is set to 1 beside the ok of the control whose copy the mutants below are built from.
-B_sd=0; B_ur=0; B_pc=0; B_ls=0; B_lb=0
-B_a2=0; B_a5=0; B_a17=0; B_a19=0; B_a20=0; B_a21=0; B_a22=0; B_a23=0; B_a24=0; B_a25=0; B_a33=0; B_a34=0
-
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 sha_of() { printf '%s' "$1" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1; }
 
@@ -76,7 +67,7 @@ fi
 # --- Assertion 2: a MISSING field fails, it does not excuse itself as legacy ---
 r=$(rc_of "$VALIDATOR" "$WORK/snap-nofield.md" "$ANSWERS")
 if [ "$r" = "1" ]; then
-  ok "a missing scope_confirmed FAILS when the capture hook is installed — it is a skipped pause point, not a legacy consumer"; B_a2=1
+  ok "a missing scope_confirmed FAILS when the capture hook is installed — it is a skipped pause point, not a legacy consumer"
 else
   bad "a missing scope_confirmed returned rc=$r instead of 1 — the check reads a skipped pause point as a consumer that predates the release, which is the fail-open direction and excuses the exact conduct it exists to catch"
 fi
@@ -100,7 +91,7 @@ fi
 # --- Assertion 5: `none` cannot paper over a capture file that has entries -----
 r=$(rc_of "$VALIDATOR" "$WORK/snap-citenone.md" "$ANSWERS")
 if [ "$r" = "1" ]; then
-  ok "cite 'none' FAILS while the capture file holds entries — 'none' is not a way past the check"; B_a5=1
+  ok "cite 'none' FAILS while the capture file holds entries — 'none' is not a way past the check"
 else
   bad "cite 'none' returned rc=$r against a NON-empty capture file — the cheapest route past this check is now to write 'none', and every fabrication takes it"
 fi
@@ -181,80 +172,6 @@ else
   bad "the recorded hash spans the lead-authored question — a lead can now cite its own words as operator provenance"
 fi
 
-# --- Assertion 14: UNMUTATED CONTROL ------------------------------------------
-# The mutants below are copies. This validator resolves its own root by walking up for a
-# marker, so a copy placed in a temp tree could resolve somewhere unexpected and die
-# before asserting anything — and "no output" would otherwise score as a kill.
-CTL="$WORK/validator-control.sh"; cp "$VALIDATOR" "$CTL"
-r=$(rc_of "$CTL" "$WORK/snap-good.md" "$ANSWERS")
-r2=$(rc_of "$CTL" "$WORK/snap-nofield.md" "$ANSWERS")
-if [ "$r" = "0" ] && [ "$r2" = "1" ]; then
-  ok "control: an unmutated copy reproduces both verdicts — the copies below can actually run"
-else
-  bad "CONTROL FAILED: an unmutated copy returned rc=$r/$r2 instead of 0/1, so neither mutant result means anything"
-fi
-
-# --- Assertion 15: MUTANT A — the fail-open migration reading -----------------
-# Read a missing scope_confirmed as "predates the release" instead of "skipped". This is
-# the single most tempting wrong design, and it is one exit code away. Assertion 2 MUST go
-# red and nothing else.
-MUT_A="$WORK/validator-mutant-a.sh"
-anchor_a='pause point that did not happen rather than a consumer that predates it.'
-if [ "$(grep -cF "$anchor_a" "$VALIDATOR")" != "1" ]; then
-  bad "FIXTURE STALE: mutant A's anchor is not unique in the validator, so the mutation could land on another arm and come out green"
-else
-  awk -v a="$anchor_a" 'index($0,a){seen=1} seen && /^  exit 1$/ && !done {print "  exit 3"; done=1; next} {print}' \
-    "$VALIDATOR" > "$MUT_A"
-  if cmp -s "$VALIDATOR" "$MUT_A"; then
-    bad "FIXTURE STALE: mutant A is byte-identical to the original — the missing-field arm was reworded"
-  elif ! bash -n "$MUT_A" 2>/dev/null; then
-    bad "FIXTURE BROKEN: mutant A is not a valid shell script, so a 'kill' below would only mean the copy could not run"
-  else
-    r=$(rc_of "$MUT_A" "$WORK/snap-nofield.md" "$ANSWERS")
-    if [ "$r" = "3" ]; then
-      mutant_killed "$B_a2" A "mutant A: excusing a missing field as legacy makes it PENDING — assertion 2 has teeth"
-    else
-      bad "MUTANT A DID NOT FAIL — a missing field still returns rc=$r, so assertion 2 is not testing the migration discriminator"
-    fi
-    r=$(rc_of "$MUT_A" "$WORK/snap-good.md" "$ANSWERS")
-    r2=$(rc_of "$MUT_A" "$WORK/snap-citenone.md" "$ANSWERS")
-    if [ "$r" = "0" ] && [ "$r2" = "1" ]; then
-      ok "mutant A leaves assertions 1 and 5 intact — the arms are not entangled"
-    else
-      bad "mutant A ALSO broke assertion 1 or 5 (rc=$r/$r2) — two failures mean the assertions are entangled and one of them is vacuous"
-    fi
-  fi
-fi
-
-# --- Assertion 16: MUTANT B — `none` becomes an unconditional escape ----------
-# Drop the guard that makes `none` honest only against an empty capture file. Assertion 5
-# MUST go red and assertion 6 must NOT.
-MUT_B="$WORK/validator-mutant-b.sh"
-anchor_b='  if [ "$ENTRIES" -gt 0 ]; then'
-if [ "$(grep -cF "$anchor_b" "$VALIDATOR")" != "1" ]; then
-  bad "FIXTURE STALE: mutant B's anchor is not unique in the validator, so the mutation could silently land on another arm"
-else
-  awk -v a="$anchor_b" 'index($0,a)==1{print "  if false; then"; next} {print}' "$VALIDATOR" > "$MUT_B"
-  if cmp -s "$VALIDATOR" "$MUT_B"; then
-    bad "FIXTURE STALE: mutant B is byte-identical to the original — the none-guard was reworded"
-  elif ! bash -n "$MUT_B" 2>/dev/null; then
-    bad "FIXTURE BROKEN: mutant B is not a valid shell script, so a 'kill' below would only mean the copy could not run"
-  else
-    r=$(rc_of "$MUT_B" "$WORK/snap-citenone.md" "$ANSWERS")
-    if [ "$r" = "0" ]; then
-      mutant_killed "$B_a5" B "mutant B: without the guard 'none' passes against a populated capture file — assertion 5 has teeth"
-    else
-      bad "MUTANT B DID NOT FAIL — 'none' still returns rc=$r against entries, so assertion 5 is not testing the guard"
-    fi
-    r=$(rc_of "$MUT_B" "$WORK/snap-citenone.md" "$ANSWERS_EMPTY")
-    if [ "$r" = "0" ]; then
-      ok "mutant B leaves assertion 6 intact — the guard and the honest-none path are not entangled"
-    else
-      bad "mutant B ALSO broke assertion 6 (rc=$r) — the two assertions are entangled and one of them is vacuous"
-    fi
-  fi
-fi
-
 # --- Assertion 17: the grammar the real consumer writes ------------------------
 # The first version of this check parsed only the line-anchored `- field: value` form
 # that the synthetic snapshots above use, and reported "no routing record" against the
@@ -263,59 +180,13 @@ fi
 # assertion written against this fixture's own synthetic grammar could have caught it.
 r=$(rc_of "$VALIDATOR" "$WORK/snap-inline.md" "$ANSWERS")
 if [ "$r" = "0" ]; then
-  ok "the inline backticked grammar the reference consumer actually writes is parsed, cite and value both"; B_a17=1
+  ok "the inline backticked grammar the reference consumer actually writes is parsed, cite and value both"
 else
   bad "the consumer's real inline grammar returned rc=$r instead of 0 — the check is anchored to a grammar only this fixture uses, and reads every real snapshot as having no routing record: $LAST_OUT"
 fi
 
-# --- Assertion 18: MUTANT C — re-anchor the extractor to line starts -----------
-# Assertion 17 MUST go red and the line-anchored cases must NOT.
-MUT_C="$WORK/validator-mutant-c.sh"
-# The anchor carries NO backslash, deliberately. The first version of this mutant
-# anchored on the extractor's own regex, which is dense with them, and passed the string
-# through `awk -v` — which processes escape sequences in an assigned value, so `\{` and
-# the escaped backtick arrived at index() as `{` and a bare backtick and matched nothing.
-# The mutation was a silent no-op and `cmp -s` is what caught it. Anchor on the function
-# header and rewrite the line after it.
-#
-# THE GUARD IS LINE-ANCHORED, AND IT WAS NOT. It read `grep -cF 'field_of() {'`, a
-# whole-line-agnostic substring count, while the mutation it guards matches
-# `/^field_of\(\) \{$/` -- a WEAKER pattern guarding a STRICTER one, which is a guard that
-# can fire on text the mutation could never touch. It went off the moment the validator's
-# own comment block quoted `sed -n '/^field_of() {/,/^}/p'` (the receipt's lift boundaries),
-# taking the count to 2 and reporting FIXTURE STALE against a validator whose definition
-# line is still unique. Measured on that tree: `-cF` = 2, the anchored form = 1.
-anchor_c='^field_of\(\) \{$'
-if [ "$(grep -cE "$anchor_c" "$VALIDATOR")" != "1" ]; then
-  bad "FIXTURE STALE: mutant C's anchor is not unique in the validator, so the mutation could land on another arm"
-else
-  awk '/^field_of\(\) \{$/ {
-         print; getline
-         print "  grep -o \"^[[:space:]]*[-*][[:space:]]*$1[[:space:]]*:[[:space:]]*[^[:space:]]\\{1,\\}\" \"$2\" 2>/dev/null \\"
-         next
-       } {print}' "$VALIDATOR" > "$MUT_C"
-  if cmp -s "$VALIDATOR" "$MUT_C"; then
-    bad "FIXTURE STALE: mutant C is byte-identical to the original — the extractor was reworded"
-  elif ! bash -n "$MUT_C" 2>/dev/null; then
-    bad "FIXTURE BROKEN: mutant C is not a valid shell script, so a 'kill' below would only mean the copy could not run"
-  else
-    r=$(rc_of "$MUT_C" "$WORK/snap-inline.md" "$ANSWERS")
-    if [ "$r" = "1" ]; then
-      mutant_killed "$B_a17" C "mutant C: anchoring the extractor to line starts blinds it to the consumer's real grammar — assertion 17 has teeth"
-    else
-      bad "MUTANT C DID NOT FAIL — the inline grammar still returns rc=$r when the extractor is anchored, so assertion 17 is not testing the extractor"
-    fi
-    r=$(rc_of "$MUT_C" "$WORK/snap-good.md" "$ANSWERS")
-    if [ "$r" = "0" ]; then
-      ok "mutant C leaves the line-anchored cases intact — the two grammars are separately asserted"
-    else
-      bad "mutant C ALSO broke assertion 1 (rc=$r) — the assertions are entangled and one of them is vacuous"
-    fi
-  fi
-fi
-
 # =============================================================================
-# THE PRODUCER'S GRAMMAR (assertions 19-26) AND THE LAYER BATTERY (27-31).
+# THE PRODUCER'S GRAMMAR (assertions 19-26).
 # =============================================================================
 # WHY THESE EXIST. Assertions 1-18 seed exactly the two grammars `field_of` was written to
 # accept -- re-derived here rather than taken on trust: 0 bold-form `scope_confirmed` lines
@@ -355,7 +226,7 @@ out_has() { grep -qF "$1" <<<"$LAST_OUT"; }
 # --- Assertion 19: the producer's dominant form -------------------------------
 run_v "$VALIDATOR" "$WORK/snap-prod-bold.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "0" ] && out_has "scope_confirmed: confirmed"; then
-  ok "the producer's own grammar passes — bold name, colon inside the span, prose after the value, and a bold+backticked cite that resolves"; B_a19=1
+  ok "the producer's own grammar passes — bold name, colon inside the span, prose after the value, and a bold+backticked cite that resolves"
 else
   bad "the producer's dominant grammar returned rc=$r — this is the form the reference consumer writes on every routing-record field, so the check now reports a malformed value on a well-formed snapshot: $LAST_OUT"
 fi
@@ -363,10 +234,10 @@ fi
 # --- Assertion 20: colon OUTSIDE the span, and the value is `corrected` --------
 # THE VALUE-FIDELITY ARM. Its expected value is `corrected`, so it cannot pass against a
 # parser that answers `confirmed` unconditionally — which is the hole in BL-065's own
-# receipt, and mutant E below is that stub.
+# receipt.
 run_v "$VALIDATOR" "$WORK/snap-prod-boldout.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "0" ] && out_has "scope_confirmed: corrected"; then
-  ok "colon-outside bold passes and reports 'corrected' — the value is read, not assumed, and the cite written before it is not mistaken for it"; B_a20=1
+  ok "colon-outside bold passes and reports 'corrected' — the value is read, not assumed, and the cite written before it is not mistaken for it"
 else
   bad "colon-outside bold returned rc=$r without reporting 'corrected' — the pre-fix returned EMPTY here and accused the lead of a Rule 3(d) pause point that did not happen: $LAST_OUT"
 fi
@@ -374,7 +245,7 @@ fi
 # --- Assertion 21: a BACKTICKED value -----------------------------------------
 run_v "$VALIDATOR" "$WORK/snap-prod-btval.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "0" ] && out_has "scope_confirmed: confirmed"; then
-  ok "a backticked value parses — the value class no longer excludes the character the producer wraps hashes and enums in"; B_a21=1
+  ok "a backticked value parses — the value class no longer excludes the character the producer wraps hashes and enums in"
 else
   bad "a backticked value returned rc=$r — the pre-fix value class excluded a backtick, so this returned empty and became the same accusation: $LAST_OUT"
 fi
@@ -382,7 +253,7 @@ fi
 # --- Assertion 22: `__underscore bold__` --------------------------------------
 run_v "$VALIDATOR" "$WORK/snap-prod-uscore.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "0" ] && out_has "scope_confirmed: confirmed"; then
-  ok "doubled-underscore emphasis parses — the doubled form CAN be normalized even though the single one cannot, and the validator names that boundary"; B_a22=1
+  ok "doubled-underscore emphasis parses — the doubled form CAN be normalized even though the single one cannot, and the validator names that boundary"
 else
   bad "__scope_confirmed__ returned rc=$r — a second established bold spelling reads as a skipped pause point: $LAST_OUT"
 fi
@@ -390,7 +261,7 @@ fi
 # --- Assertion 23: a bold span wrapping the whole pair ------------------------
 run_v "$VALIDATOR" "$WORK/snap-prod-boldpair.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "0" ] && out_has "scope_confirmed: confirmed"; then
-  ok "a bold span wrapping name and value together parses — the pre-fix read the value as 'confirmed**' and called it malformed"; B_a23=1
+  ok "a bold span wrapping name and value together parses — the pre-fix read the value as 'confirmed**' and called it malformed"
 else
   bad "a whole-pair bold span returned rc=$r: $LAST_OUT"
 fi
@@ -403,7 +274,7 @@ fi
 # parser, so the message is what this reads.
 run_v "$VALIDATOR" "$WORK/snap-prod-nofield.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "1" ] && out_has "carries no 'scope_confirmed' field"; then
-  ok "a bold routing record with no scope_confirmed FAILS with the missing-field accusation — normalizing wrappers does not manufacture a field that is not there"; B_a24=1
+  ok "a bold routing record with no scope_confirmed FAILS with the missing-field accusation — normalizing wrappers does not manufacture a field that is not there"
 else
   bad "a bold record missing scope_confirmed returned rc=$r without the missing-field accusation — either the normalizer invented a value or the FAIL is arriving for the wrong reason, and both read identically from the exit code: $LAST_OUT"
 fi
@@ -414,7 +285,7 @@ fi
 # field from one that read the markdown around it.
 run_v "$VALIDATOR" "$WORK/snap-prod-badvalue.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "1" ] && out_has "scope_confirmed is 'n-a'" && ! out_has "scope_confirmed is '**'"; then
-  ok "a bold field carrying a value outside the closed set is reported as 'n-a', not as '**' — the operator is told what the record actually says"; B_a25=1
+  ok "a bold field carrying a value outside the closed set is reported as 'n-a', not as '**' — the operator is told what the record actually says"
 else
   bad "a bold out-of-set value returned rc=$r and did not name 'n-a' — reporting the markup as the value sends an operator to look for a field that reads correctly: $LAST_OUT"
 fi
@@ -428,226 +299,6 @@ if [ -n "${CAND_DIST:-}" ] && [ -n "${CAND_CONS:-}" ] && [ "$VALIDATOR" = "$CAND
   ok "both layout candidates named and one resolved: $VALIDATOR"
 else
   bad "the resolved validator '$VALIDATOR' is neither named candidate ('${CAND_DIST:-}' | '${CAND_CONS:-}') — a fixture that resolves somewhere it did not name is asserting against a file nobody chose"
-fi
-
-# --- the field_of mutation harness --------------------------------------------
-# Mutants are COPIES with the body of `field_of` swapped for a replacement read from a
-# file. The body arrives through a FILE rather than through `awk -v`: mutant C's first
-# version passed a regex through `awk -v`, which processes escape sequences in an assigned
-# value, so `\{` and the escaped backtick reached index() as `{` and a bare backtick and
-# matched nothing. Only `cmp -s` caught it. A path carries no backslashes.
-MUT_PATH=""
-build_field_of_mutant() {   # $1 = label, $2 = file holding the replacement body
-  MUT_PATH=""
-  _out="$WORK/validator-mutant-$1.sh"
-  # Line-anchored, matching the awk program below. A substring count would go off on the
-  # validator's own comment quoting the receipt's `/^field_of() {/,/^}/p` lift boundaries.
-  if [ "$(grep -cE '^field_of\(\) \{$' "$VALIDATOR")" != "1" ]; then
-    bad "FIXTURE STALE: mutant $1's anchor '^field_of() {' is not unique in the validator, so the mutation could land somewhere else"
-    return 1
-  fi
-  awk -v bf="$2" '
-    /^field_of\(\) \{$/ { print; while ((getline l < bf) > 0) print l; close(bf); skip=1; next }
-    skip && /^\}$/      { print; skip=0; next }
-    skip                { next }
-                        { print }
-  ' "$VALIDATOR" > "$_out"
-  if cmp -s "$VALIDATOR" "$_out"; then
-    bad "FIXTURE STALE: mutant $1 is byte-identical to the original — the mutation matched nothing and a green run below would prove only that"
-    return 1
-  fi
-  if ! bash -n "$_out" 2>/dev/null; then
-    bad "FIXTURE BROKEN: mutant $1 is not a valid shell script, so a 'kill' below would only mean the copy could not run"
-    return 1
-  fi
-  # The swap must be confined to the function. Everything else has to survive, or a kill
-  # below could be a truncated file rather than a changed parser.
-  if ! grep -qF "carries no 'scope_confirmed' field" "$_out" \
-     || ! grep -qF 'cite resolves to a hook-written answer record' "$_out"; then
-    bad "FIXTURE BROKEN: mutant $1 lost text outside field_of — the mutation is not confined to the function body"
-    return 1
-  fi
-  MUT_PATH="$_out"
-  return 0
-}
-
-kills=0
-
-# --- Assertion 27: MUTANT D — the PRE-FIX field_of, restored verbatim ---------
-# Lifted from the blob this remediation replaced. Assertions 19-25 MUST go red; assertions
-# 1 and 17 -- the two grammars the pre-fix was written to accept -- MUST stay green. That
-# second half is the fixture's own blindness, made executable: it is exactly the state in
-# which this directory shipped green over six misparsed grammars.
-cat > "$WORK/body-d.sh" <<'BODY'
-  grep -o "\`\{0,1\}$1\`\{0,1\}[[:space:]]*:[[:space:]]*[^[:space:]\`]\{1,\}" "$2" 2>/dev/null \
-    | head -1 \
-    | sed -e "s/^.*$1\`\{0,1\}[[:space:]]*:[[:space:]]*//" -e 's/[`.,;:]\{1,\}$//'
-BODY
-if build_field_of_mutant d "$WORK/body-d.sh"; then
-  red=0
-  for s in bold boldout btval uscore boldpair; do
-    run_v "$MUT_PATH" "$WORK/snap-prod-$s.md" "$ANSWERS"; r=$LAST_RC
-    [ "$r" = "0" ] || red=$((red+1))
-  done
-  run_v "$MUT_PATH" "$WORK/snap-prod-badvalue.md" "$ANSWERS"; r=$LAST_RC
-  out_has "scope_confirmed is '**'" && red=$((red+1))
-  if [ "$red" -eq 6 ]; then
-    kills=$((kills+1))
-    mutant_killed "$(( $B_a19 && $B_a20 && $B_a21 && $B_a22 && $B_a23 && $B_a25 ))" D "mutant D: the pre-fix extractor fails all five producer grammars and reports the markup as the value — assertions 19-25 have teeth"
-  else
-    bad "MUTANT D CAUGHT ONLY $red OF 6 — the pre-fix extractor still satisfies assertions 19-25, so they are not testing the extractor"
-  fi
-  run_v "$MUT_PATH" "$WORK/snap-good.md" "$ANSWERS"; r=$LAST_RC
-  run_v "$MUT_PATH" "$WORK/snap-inline.md" "$ANSWERS"; r2=$LAST_RC
-  run_v "$MUT_PATH" "$WORK/snap-prod-nofield.md" "$ANSWERS"; r3=$LAST_RC
-  if [ "$r" = "0" ] && [ "$r2" = "0" ] && [ "$r3" = "1" ]; then
-    ok "mutant D leaves assertions 1, 17 and 24 intact — the pre-fix accepted its own two grammars and correctly refused a missing field, which is why this fixture shipped green over the defect"
-  else
-    bad "mutant D ALSO broke assertion 1, 17 or 24 (rc=$r/$r2/$r3) — the new arms are entangled with the old ones and one of them is vacuous"
-  fi
-fi
-
-# --- Assertion 28: MUTANT D2 — the `**`/`__` normalization layer removed ------
-# THE FIX IS LAYERED AND EVERY LAYER IS REVERTED SEPARATELY. A partial revert that left a
-# layer in place would prove that layer and come out green. Layer 1 is the emphasis strip.
-# Assertions 19, 20 and 22 MUST go red; 21 must NOT — the backtick layer is still there.
-cat > "$WORK/body-d2.sh" <<'BODY'
-  sed -e 's/`//g' "$2" 2>/dev/null \
-    | grep -o "$1[[:space:]]*:[[:space:]]*[^[:space:]]\{1,\}" \
-    | head -1 \
-    | sed -e "s/^.*$1[[:space:]]*:[[:space:]]*//" -e 's/[.,;:]\{1,\}$//'
-BODY
-if build_field_of_mutant d2 "$WORK/body-d2.sh"; then
-  red=0
-  for s in bold boldout uscore; do
-    run_v "$MUT_PATH" "$WORK/snap-prod-$s.md" "$ANSWERS"; r=$LAST_RC
-    [ "$r" = "0" ] || red=$((red+1))
-  done
-  if [ "$red" -eq 3 ]; then
-    kills=$((kills+1))
-    mutant_killed "$(( $B_a19 && $B_a20 && $B_a22 ))" D2 "mutant D2: dropping the emphasis strip breaks all three bold spellings — that layer is separately load-bearing"
-  else
-    bad "MUTANT D2 CAUGHT ONLY $red OF 3 — the emphasis-strip layer is not what assertions 19, 20 and 22 are testing"
-  fi
-  run_v "$MUT_PATH" "$WORK/snap-prod-btval.md" "$ANSWERS"; r=$LAST_RC
-  run_v "$MUT_PATH" "$WORK/snap-inline.md" "$ANSWERS"; r2=$LAST_RC
-  if [ "$r" = "0" ] && [ "$r2" = "0" ]; then
-    ok "mutant D2 leaves assertions 21 and 17 intact — the backtick layer is asserted separately from the emphasis layer"
-  else
-    bad "mutant D2 ALSO broke assertion 21 or 17 (rc=$r/$r2) — the two layers are asserted by one arm and neither is independently proved"
-  fi
-fi
-
-# --- Assertion 29: MUTANT D3 — the `__` half of the emphasis strip removed ----
-# Layer 1 splits again. Assertion 22 MUST go red and NOTHING else may.
-cat > "$WORK/body-d3.sh" <<'BODY'
-  sed -e 's/\*\*//g' -e 's/`//g' "$2" 2>/dev/null \
-    | grep -o "$1[[:space:]]*:[[:space:]]*[^[:space:]]\{1,\}" \
-    | head -1 \
-    | sed -e "s/^.*$1[[:space:]]*:[[:space:]]*//" -e 's/[.,;:]\{1,\}$//'
-BODY
-if build_field_of_mutant d3 "$WORK/body-d3.sh"; then
-  run_v "$MUT_PATH" "$WORK/snap-prod-uscore.md" "$ANSWERS"; r=$LAST_RC
-  if [ "$r" = "1" ]; then
-    kills=$((kills+1))
-    mutant_killed "$B_a22" D3 "mutant D3: dropping only the __ strip breaks only the underscore spelling — assertion 22 owns a layer of its own"
-  else
-    bad "MUTANT D3 DID NOT FAIL — __scope_confirmed__ still returns rc=$r without the __ strip, so assertion 22 is proved by the ** strip and is vacuous"
-  fi
-  red=0
-  for s in bold boldout btval boldpair; do
-    run_v "$MUT_PATH" "$WORK/snap-prod-$s.md" "$ANSWERS"; r=$LAST_RC
-    [ "$r" = "0" ] || red=$((red+1))
-  done
-  if [ "$red" -eq 0 ]; then
-    ok "mutant D3 leaves assertions 19, 20, 21 and 23 intact — it fails only its own assertion"
-  else
-    bad "mutant D3 ALSO broke $red of assertions 19, 20, 21, 23 — the arms are entangled and some of them are vacuous"
-  fi
-fi
-
-# --- Assertion 30: MUTANT D4 — the backtick layer reverted to its pre-fix form -
-# Layer 2, reverted alone: no backtick strip, the pre-fix's backtick-EXCLUDING value class,
-# and the backtick back in the trailing-strip class. Assertion 21 MUST go red and nothing
-# else — including assertion 17, whose inline grammar survives on the excluding value class
-# exactly as it did before the fix.
-#
-# THE THIRD LAYER HAS NO MUTANT, DELIBERATELY, AND THAT IS A MEASUREMENT. Reverting the
-# widened value class ALONE while keeping the backtick strip changes NO answer on any of
-# the nine grammars driven here — the strip removes the character the class excluded, so
-# the exclusion has nothing left to exclude. It is subsumed, not separable, and a mutant
-# for it would kill nothing and read exactly like an arm that cannot fire.
-cat > "$WORK/body-d4.sh" <<'BODY'
-  sed -e 's/\*\*//g' -e 's/__//g' "$2" 2>/dev/null \
-    | grep -o "$1[[:space:]]*:[[:space:]]*[^[:space:]\`]\{1,\}" \
-    | head -1 \
-    | sed -e "s/^.*$1[[:space:]]*:[[:space:]]*//" -e 's/[`.,;:]\{1,\}$//'
-BODY
-#
-# D4 KILLS TWO ARMS AND THE OVERLAP IS DECLARED, NOT DISCOVERED. Assertion 19's snapshot is
-# the producer's own routing record, and the producer writes a BACKTICKED value for cite
-# fields under a BOLD name — `- **user_request_cite:** ` + backticked hex — so that one
-# snapshot depends on both layers at once. That is the corpus being faithful, not the arms
-# being entangled: assertion 21 ISOLATES the backtick layer (D4 kills it, D2 leaves it
-# green) and assertions 20/22/23 isolate the emphasis layer (D2 kills them, D4 leaves them
-# green), so each layer still has an arm that only it can kill. Assertion 21 OWNS the
-# backtick case; assertion 19 stands with it rather than instead of it.
-if build_field_of_mutant d4 "$WORK/body-d4.sh"; then
-  run_v "$MUT_PATH" "$WORK/snap-prod-btval.md" "$ANSWERS"; r=$LAST_RC
-  run_v "$MUT_PATH" "$WORK/snap-prod-bold.md" "$ANSWERS"; r2=$LAST_RC
-  if [ "$r" = "1" ] && [ "$r2" = "1" ]; then
-    kills=$((kills+1))
-    mutant_killed "$(( $B_a21 && $B_a19 ))" D4 "mutant D4: reverting the backtick handling alone breaks the backticked value and the producer's backticked cite — assertion 21 owns a layer of its own and assertion 19 stands with it"
-  else
-    bad "MUTANT D4 DID NOT FAIL (rc=$r/$r2) — a backticked value or cite still parses with the pre-fix backtick handling, so assertion 21 is proved by the emphasis strip and is vacuous"
-  fi
-  red=0
-  for s in boldout uscore boldpair; do
-    run_v "$MUT_PATH" "$WORK/snap-prod-$s.md" "$ANSWERS"; r=$LAST_RC
-    [ "$r" = "0" ] || red=$((red+1))
-  done
-  run_v "$MUT_PATH" "$WORK/snap-inline.md" "$ANSWERS"; r=$LAST_RC
-  [ "$r" = "0" ] || red=$((red+1))
-  if [ "$red" -eq 0 ]; then
-    ok "mutant D4 leaves assertions 20, 22, 23 and 17 intact — the emphasis layer is asserted by arms the backtick layer cannot reach"
-  else
-    bad "mutant D4 ALSO broke $red of assertions 20, 22, 23, 17 — those carry no backtick, so the two layers are not separately asserted"
-  fi
-fi
-
-# --- Assertion 31: MUTANT E — the constant-return stub ------------------------
-# `field_of() { echo confirmed; }` is a "fix" that closes the check by breaking it, and
-# BL-065's own receipt ACCEPTS it: the receipt asserts only that the two bold forms yield
-# `confirmed`, which a parser that always says `confirmed` satisfies perfectly. This arm is
-# the negative half that receipt lacks.
-#
-# ARM OWNERSHIP IS DECLARED RATHER THAN ASSUMED. A constant-return parser breaks the file
-# globally, so several arms go red together; that is genuine overlap, not entanglement.
-# Assertion 20 (the value must read `corrected`) and assertion 24 (a missing field must
-# still be the missing-field accusation) OWN this case, and they are the two read here.
-cat > "$WORK/body-e.sh" <<'BODY'
-  echo confirmed
-BODY
-if build_field_of_mutant e "$WORK/body-e.sh"; then
-  run_v "$MUT_PATH" "$WORK/snap-prod-boldout.md" "$ANSWERS"; r=$LAST_RC
-  out20=0; { [ "$r" = "0" ] && out_has "scope_confirmed: corrected"; } || out20=1
-  run_v "$MUT_PATH" "$WORK/snap-prod-nofield.md" "$ANSWERS"; r=$LAST_RC
-  out24=0; { [ "$r" = "1" ] && out_has "carries no 'scope_confirmed' field"; } || out24=1
-  if [ "$out20" -eq 1 ] && [ "$out24" -eq 1 ]; then
-    kills=$((kills+1))
-    mutant_killed "$(( $B_a20 && $B_a24 ))" E "mutant E: a parser that answers 'confirmed' unconditionally is caught by assertion 20 (the value must read 'corrected') and by assertion 24 (a missing field must stay a missing field)"
-  else
-    bad "MUTANT E SURVIVED assertion 20 and/or 24 ($out20/$out24) — this fixture accepts a fix that closes the check by breaking the parser, which is the hole in BL-065's own receipt"
-  fi
-fi
-
-# --- Assertion 32: the battery killed something -------------------------------
-# A mutant that kills nothing reads exactly like an arm that cannot fire, and `cmp -s` does
-# not separate them: the mutation applies cleanly to a file the run never loaded.
-if [ "$kills" -eq 5 ]; then
-  ok "all 5 field_of mutants died against the resolved validator $VALIDATOR — the arms above are running against the code they name"
-else
-  bad "only $kills of 5 field_of mutants died — a surviving mutant means either the arm cannot fire or the mutation landed on a copy this run never executed"
 fi
 
 # =============================================================================
@@ -665,7 +316,7 @@ fi
 # mktemp corpora seeded with the same bytes; the outputs must DIFFER **and** each must
 # carry ITS OWN two paths. Those are separate requirements and the second is the load-
 # bearing one: a nonce, a PID or a timestamp makes two runs differ while naming nothing,
-# and mutant G below is exactly that fix. No label text is grepped, so re-wording
+# and that is the fix a differ-only check would accept. No label text is grepped, so re-wording
 # `snapshot:` leaves this working; what is demanded is the resolved path, and the roots
 # are mktemp names, so no implementation can hardcode the literal.
 #
@@ -715,7 +366,7 @@ sc_ident_holds() {
 
 # --- Assertion 33: the passing run names both corpora --------------------------
 if sc_ident_holds "$VALIDATOR"; then
-  ok "a passing run names the snapshot it read and the capture file it counted, and two identical corpora in different trees are distinguishable"; B_a33=1
+  ok "a passing run names the snapshot it read and the capture file it counted, and two identical corpora in different trees are distinguishable"
 else
   bad "a passing run carries no corpus identity — $SC_IDENT_WHY. Two sprints' worth of identical content produce one verdict, and the operator cannot tell which tree it is about"
 fi
@@ -735,90 +386,9 @@ SC_DOUT="$(AI_DLC_PROJECT_ROOT="$SC_D" bash "$VALIDATOR" 2>&1)"; SC_DRC=$?
 if [ "$SC_DRC" = "0" ] \
    && grep -qF "$SC_D/_bmad-output/pipeline-snapshot.md" <<<"$SC_DOUT" \
    && grep -qF "$SC_D/_bmad-output/operator-answers-history.md" <<<"$SC_DOUT"; then
-  ok "a run with NO path arguments names the two files it resolved for itself — the identity is the resolved value, not an echo of argv"; B_a34=1
+  ok "a run with NO path arguments names the two files it resolved for itself — the identity is the resolved value, not an echo of argv"
 else
   bad "a defaulted run (rc=$SC_DRC) did not name the snapshot and capture file it resolved — the identity lines could be satisfied by echoing the argument vector, which says nothing about a run that was given no arguments: $SC_DOUT"
-fi
-
-# --- Assertion 35: UNMUTATED CONTROL for the identity mutants ------------------
-# Positive conjunct included: `sc_ident_holds` demands the PASS line and two paths, so this
-# control cannot pass against a copy replaced by `exit 0`.
-SC_CTL="$WORK/ident-control.sh"; cp "$VALIDATOR" "$SC_CTL"
-SC_CTL_OK=0
-if sc_ident_holds "$SC_CTL"; then
-  ok "control: an unmutated copy reproduces the identity lines, so a mutant's silence below means mutation and not breakage"
-  SC_CTL_OK=1
-else
-  bad "CONTROL FAILED ($SC_IDENT_WHY) — the two identity mutants below are uninterpretable"
-fi
-
-if [ "$SC_CTL_OK" = "1" ]; then
-  # --- Assertion 36: MUTANT F — the identity lines deleted --------------------
-  # The state this release replaced. Assertion 33 MUST go red; the arms above must not.
-  MUT_F="$WORK/validator-mutant-f.sh"
-  anchor_f1='say "  snapshot: '
-  anchor_f2='say "  answers:  '
-  if [ "$(grep -cF "$anchor_f1" "$VALIDATOR")" != "1" ] \
-     || [ "$(grep -cF "$anchor_f2" "$VALIDATOR")" != "1" ]; then
-    bad "FIXTURE STALE: mutant F's anchors are not unique in the validator, so the deletion could land on another emitter"
-  else
-    awk -v s="$anchor_f1" -v n="$anchor_f2" \
-      'index($0,s) || index($0,n) { next } { print }' "$VALIDATOR" > "$MUT_F"
-    if cmp -s "$VALIDATOR" "$MUT_F"; then
-      bad "FIXTURE STALE: mutant F is byte-identical to the original — the identity lines were reworded and the deletion matched nothing"
-    elif ! bash -n "$MUT_F" 2>/dev/null; then
-      bad "FIXTURE BROKEN: mutant F is not a valid shell script, so a 'kill' below would only mean the copy could not run"
-    else
-      if sc_ident_holds "$MUT_F"; then
-        bad "MUTANT F SURVIVED — a validator that names neither corpus still satisfies assertion 33, so that assertion is not testing the identity lines"
-      else
-        mutant_killed "$B_a33" F "mutant F: deleting the identity lines makes two different trees indistinguishable ($SC_IDENT_WHY) — assertion 33 has teeth"
-      fi
-      # And nothing else moves. The identity lines are additive; every verdict arm above
-      # must survive their removal, or assertion 33 is entangled with the ones that matter.
-      r=$(rc_of "$MUT_F" "$WORK/snap-good.md" "$ANSWERS")
-      r2=$(rc_of "$MUT_F" "$WORK/snap-nofield.md" "$ANSWERS")
-      r3=$(rc_of "$MUT_F" "$WORK/snap-citenone.md" "$ANSWERS")
-      if [ "$r" = "0" ] && [ "$r2" = "1" ] && [ "$r3" = "1" ]; then
-        ok "mutant F leaves assertions 1, 2 and 5 intact — corpus identity is asserted by an arm no verdict arm covers"
-      else
-        bad "mutant F ALSO moved a verdict (rc=$r/$r2/$r3) — the identity lines are not additive and assertion 33 is entangled with the verdict arms"
-      fi
-      # Assertion 34 gets its teeth from the same mutant. Without this cell that arm is
-      # never driven against a subject that fails it, and an arm nothing can falsify reads
-      # exactly like one that passed.
-      SC_FOUT="$(AI_DLC_PROJECT_ROOT="$SC_D" bash "$MUT_F" 2>&1)"
-      if grep -qF "$SC_D/_bmad-output/pipeline-snapshot.md" <<<"$SC_FOUT"; then
-        bad "MUTANT F SURVIVED assertion 34 — the defaulted run still names its resolved snapshot with the identity lines deleted, so assertion 34 is reading a path emitted somewhere else"
-      else
-        mutant_killed "$B_a34" F.a34 "mutant F also kills assertion 34 — the defaulted run's resolved paths come from the identity lines and nowhere else"
-      fi
-    fi
-  fi
-
-  # --- Assertion 37: MUTANT G — identity replaced by a per-run NONCE ----------
-  # THE FIX THAT DISCRIMINATES WITHOUT NAMING. `$$-$RANDOM` is evaluated by the mutant at
-  # run time, so its two runs differ from each other exactly as the real validator's do,
-  # and neither carries a path. An arm keyed only on "the outputs differ" passes against
-  # it. This is the arm's own false-fix control, and it is why assertion 33 demands the
-  # resolved path rather than a difference.
-  MUT_G="$WORK/validator-mutant-g.sh"
-  awk -v s="$anchor_f1" -v n="$anchor_f2" '
-    index($0,s) { print "say \"  snapshot: nonce-$$-$RANDOM\""; next }
-    index($0,n) { print "say \"  answers:  nonce-$$-$RANDOM\""; next }
-                { print }
-  ' "$VALIDATOR" > "$MUT_G"
-  if cmp -s "$VALIDATOR" "$MUT_G"; then
-    bad "FIXTURE STALE: mutant G is byte-identical to the original — the nonce substitution matched nothing and assertion 33's nonce-resistance is unproved"
-  elif ! bash -n "$MUT_G" 2>/dev/null; then
-    bad "FIXTURE BROKEN: mutant G is not a valid shell script, so a 'kill' below would only mean the copy could not run"
-  else
-    if sc_ident_holds "$MUT_G"; then
-      bad "MUTANT G SURVIVED — a per-run nonce that names no corpus satisfies assertion 33, so that assertion is a differ-check and not a naming check"
-    else
-      mutant_killed "$B_a33" G "mutant G: a per-run nonce varies the output exactly as the real paths do and still fails assertion 33 ($SC_IDENT_WHY) — the arm demands the corpus be NAMED"
-    fi
-  fi
 fi
 
 # =============================================================================
@@ -982,8 +552,7 @@ sd_has() { grep -qF -- "$1" <<<"$SD_OUT"; }
 REPO_STD="$SD/repo-std"
 
 # sd_verdicts <validator> -> one token per arm, in a fixed order. Every arm below reads its
-# own position, and every mutant is scored against the same vector, so a mutant that moves
-# a cell it does not own is visible as entanglement rather than hidden as a kill.
+# own position.
 SD_CELLS="none one spell2 two second malformed closed live reopened archived archclosed prefix nostatus emptylist unclosed bold block absent-early absent-late nogit nostamp tzgap lex first absentnone duphash"
 sd_verdicts() {
   local v="$1" out=""
@@ -1074,95 +643,6 @@ else
   bad "run from / the archived id returned rc=$SD_CWD_RC — the archive is located relative to the working directory: $SD_CWD_OUT"
 fi
 
-# --- the deferred-items mutation battery ----------------------------------------
-# Each mutant is a COPY with ONE anchored substitution. It must move the cells it OWNS and
-# NO other cell, against a control copy that reproduces the whole expected vector. The
-# anchors carry no backslash, because `awk -v` would eat one and the mutation would match
-# nothing — `cmp -s` refuses that, and so does the anchor-count guard.
-SD_MUT_KILLS=0; SD_MUT_BUILT=0
-sd_mut() {   # $1 label, $2 anchor, $3 replacement, $4 expected anchor count, $5 owned cells
-  local label="$1" anchor="$2" repl="$3" want_n="$4" owned="$5" out n got c w g moved stray
-  out="$SD/mutant-$label.sh"
-  n="$(grep -cF -- "$anchor" "$VALIDATOR")" || n=0
-  if [ "$n" != "$want_n" ]; then
-    bad "FIXTURE STALE: mutant $label's anchor occurs $n times, not $want_n — the mutation could land on the wrong line"
-    return
-  fi
-  awk -v a="$anchor" -v r="$repl" '{
-      i = index($0, a)
-      if (i) { $0 = substr($0, 1, i - 1) r substr($0, i + length(a)) }
-      print
-    }' "$VALIDATOR" > "$out"
-  if cmp -s "$VALIDATOR" "$out"; then
-    bad "FIXTURE STALE: mutant $label is byte-identical to the validator — the substitution matched nothing"; return
-  fi
-  if ! bash -n "$out" 2>/dev/null; then
-    bad "FIXTURE BROKEN: mutant $label is not a valid shell script, so a kill would only mean the copy could not run"; return
-  fi
-  SD_MUT_BUILT=$((SD_MUT_BUILT + 1))
-  got="$(sd_verdicts "$out")"
-  moved=""; stray=""
-  for c in $SD_CELLS; do
-    w="$(sd_cell_of "$SD_EXPECT" "$c")"; g="$(sd_cell_of "$got" "$c")"
-    case " $owned " in
-      *" $c "*) [ "$w" != "$g" ] && moved="$moved $c" ;;
-      *)        [ "$w" != "$g" ] && stray="$stray $c=$g" ;;
-    esac
-  done
-  if [ -n "$stray" ]; then
-    bad "mutant $label moved cells it does not own:$stray — the arms are entangled and one of them is vacuous"
-  elif [ "$(echo $moved | wc -w)" -ne "$(echo $owned | wc -w)" ]; then
-    bad "MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: $owned) — those cells are not testing what this mutant removes"
-  else
-    SD_MUT_KILLS=$((SD_MUT_KILLS + 1))
-    mutant_killed "$B_sd" "$label" "mutant $label killed on exactly its own cells:$moved"
-  fi
-}
-
-# Control: an unmutated copy reproduces the whole vector, so a mutant verdict means mutation.
-SD_CTL="$SD/control.sh"; cp "$VALIDATOR" "$SD_CTL"
-SD_CTL_GOT="$(sd_verdicts "$SD_CTL")"
-if [ "$SD_CTL_GOT" = "$SD_EXPECT" ]; then
-  ok "control: an unmutated copy reproduces all $(echo $SD_CELLS | wc -w) deferred-items cells, PASS, FAIL and PENDING alike"
-  B_sd=1
-
-  # REGRESSION 1 — field_of reused: it stops at the first space, so a list collapses to its
-  # FIRST id once the brackets and comma are stripped, and a second unfiled id rides along.
-  sd_mut fieldof 'SDI_RAW="$(deferred_items_of "$SNAPSHOT")"' \
-    'SDI_RAW="$(v="$(field_of scope_deferred_items "$SNAPSHOT" | tr -d "[],")"; if [ "$v" = none ]; then echo "@none"; elif [ -n "$v" ]; then echo "@[$v]"; fi)"' \
-    1 "two second unclosed bold"
-  # REGRESSION 2 — the absent field read as PENDING unconditionally: the FAIL branch
-  # reports PENDING instead, so every post-release cell sees it. `duphash` is one of them
-  # by construction; `oldestanswer` below is what isolates it.
-  sd_mut absentpending 'which owes it." >&2' 'which owes it." >&2; exit 3' 1 "absent-late first duphash"
-  # `two` and `bold` each carry a second-spelling id, so they are owned here too — the
-  # corpus being faithful, not the arms being entangled: `spell2` isolates the spelling.
-  sd_mut spelling 'found && index($0, "**Status: ")' 'found && 0 && index($0, "**Status: ")' 1 "spell2 two bold"
-  sd_mut noarchive '[ "$st" = "NOHEAD" ] && [ -f "$ARCHIVE" ]' 'false' 1 "archived"
-  sd_mut noclosed '            CLOSED*)' '            CLOSED-NEVER-A-STATUS*)' 1 "closed archclosed"
-  sd_mut nogrammar "if ! grep -Eq '^CO-S[0-9]+-[A-Z0-9-]+\$' <<<\"\$tok\"; then" 'if false; then' 1 "malformed"
-  sd_mut prefixmatch '!found && $1 == "###" && $2 == id' '!found && $1 == "###" && index($2, id) == 1' 1 "prefix"
-  sd_mut emptyok '    if [ "$SDI_N" -eq 0 ]; then' '    if false; then' 1 "emptylist"
-  sd_mut strversion 'ge(v, rel) && (best' '(v >= rel) && (best' 1 "lex"
-  sd_mut laststamp '(best == "" || t < best)' '(best == "" || t > best)' 1 "first"
-  sd_mut oldestanswer '$0 == c { t = h } END { print t }' '$0 == c { print h; exit }' 1 "duphash"
-  if TZ=UTC date -j -u -f '%Y-%m-%dT%H:%M:%SZ' 2026-01-01T00:00:00Z +%s >/dev/null 2>&1; then
-    # BSD date only: GNU `date -d` honours the trailing Z whatever TZ says, so this mutant
-    # cannot express the defect there and is not built.
-    sd_mut localzone "TZ=UTC date -j -u -f" "date -j -f" 1 "tzgap"
-    SD_MUT_WANT=12
-  else
-    ok "GNU date: the zone mutant is not built here — GNU parses the trailing Z itself, so the defect it seeds is unconstructible on this platform"
-    SD_MUT_WANT=11
-  fi
-  if [ "$SD_MUT_KILLS" -eq "$SD_MUT_WANT" ]; then
-    ok "all $SD_MUT_WANT deferred-items mutants died against the resolved validator $VALIDATOR"
-  else
-    bad "only $SD_MUT_KILLS of $SD_MUT_WANT deferred-items mutants died ($SD_MUT_BUILT built) — a surviving mutant is an arm that cannot fire"
-  fi
-else
-  bad "CONTROL FAILED: an unmutated copy returned [$SD_CTL_GOT], expected [$SD_EXPECT] — every mutant verdict below would be uninterpretable"
-fi
 
 # =============================================================================
 # THE UNREADABLE CORPUS -- a backlog or archive that exists and cannot be read REFUSES (exit 2).
@@ -1171,16 +651,14 @@ fi
 # exits before END, so `st` came back EMPTY, and the verdict case's catch-all arm acquitted the
 # empty string as "found, not CLOSED": a CLOSED id and an id never filed both passed at exit 0
 # against a mode-000 backlog. The fix is three layers, and each cell below is the subject of ONE
-# of them, because layers that reach the same subject cover each other and no mutant of either
-# can die:
+# of them:
 #   precheck  -- an existing, unreadable (or non-regular) backlog/archive refuses before any
 #                lookup. Its own subjects: the archive unreadable while the id resolves in the
 #                backlog (never looked up), and a backlog path that is a DIRECTORY (root-proof).
 #   lookuprc  -- the lookup's exit status. Subject: a stub awk that prints `S OPEN` and exits 2.
 #   verdict   -- only `S <status>` is FOUND. Subject: a stub awk that exits 0 printing nothing.
 # The mode-000 cells cannot express unreadable under root (or any host that reads a mode-000
-# file). They are then INCONCLUSIVE -- `S` in the vector, never `ok` -- and the directory and stub
-# cells still carry every mutant.
+# file). They are then INCONCLUSIVE -- `S` in the vector, never `ok`.
 UR="$SD/ur"; mkdir -p "$UR/ok" "$UR/b0" "$UR/a0" "$UR/dir" "$UR/stub"
 SD_ARCH="$SD/pa/carry-over-backlog-archive.md"
 for w in ok b0 a0; do cp "$SD_BL" "$UR/$w/carry-over-backlog.md"; cp "$SD_ARCH" "$UR/$w/carry-over-backlog-archive.md"; done
@@ -1258,73 +736,6 @@ for c in $UR_CELLS; do
   fi
 done
 
-UR_MUT_KILLS=0; UR_MUT_WANT=0
-ur_mut() {   # $1 label, $2 owned cells, then anchor/replacement pairs; every anchor occurs exactly once
-  local label="$1" owned="" c prev out n got moved stray w g
-  for c in $2; do
-    case " $UR_MODE000 " in *" $c "*) [ -n "$UR_SKIP" ] && continue ;; esac
-    owned="$owned $c"
-  done
-  owned="${owned# }"; shift 2
-  UR_MUT_WANT=$((UR_MUT_WANT + 1))
-  out="$UR/mutant-$label.sh"; cp "$VALIDATOR" "$out"
-  while [ $# -ge 2 ]; do
-    n="$(grep -cF -- "$1" "$out")" || n=0
-    if [ "$n" != "1" ]; then
-      bad "FIXTURE STALE: unreadable-corpus mutant $label's anchor '$1' occurs $n times, not 1"; return
-    fi
-    prev="$out.prev"; cp "$out" "$prev"
-    awk -v a="$1" -v r="$2" '{ i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) r substr($0, i + length(a)) } print }' "$prev" > "$out"
-    if cmp -s "$prev" "$out"; then
-      bad "FIXTURE STALE: unreadable-corpus mutant $label's substitution for '$1' matched nothing"; return
-    fi
-    shift 2
-  done
-  if ! bash -n "$out" 2>/dev/null; then
-    bad "FIXTURE BROKEN: unreadable-corpus mutant $label is not a valid shell script"; return
-  fi
-  got="$(ur_verdicts "$out")"
-  moved=""; stray=""
-  for c in $UR_CELLS; do
-    w="$(sd_cell_of "$UR_EXPECT" "$c")"; g="$(sd_cell_of "$got" "$c")"
-    case " $owned " in
-      *" $c "*) [ "$w" != "$g" ] && moved="$moved $c" ;;
-      *)        [ "$w" != "$g" ] && stray="$stray $c=$g" ;;
-    esac
-  done
-  if [ -n "$stray" ]; then
-    bad "unreadable-corpus mutant $label moved cells it does not own:$stray — the layers are entangled"
-  elif [ -z "$owned" ] || [ "$(echo $moved | wc -w)" -ne "$(echo $owned | wc -w)" ]; then
-    bad "UNREADABLE-CORPUS MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: ${owned:-none})"
-  else
-    UR_MUT_KILLS=$((UR_MUT_KILLS + 1))
-    mutant_killed "$B_ur" "$label" "unreadable-corpus mutant $label killed on exactly its own cells:$moved"
-  fi
-}
-
-UR_CTL="$UR/control.sh"; cp "$VALIDATOR" "$UR_CTL"
-UR_CTL_GOT="$(ur_verdicts "$UR_CTL")"
-if [ "$UR_CTL_GOT" = "$UR_EXPECT" ]; then
-  ok "control: an unmutated copy reproduces every unreadable-corpus cell, the readable CLOSED twins at 1 included"
-  B_ur=1
-  UR_A1='if [ -e "$sdi_f" ] && {'; UR_R1='if false && {'
-  UR_A2='      if [ "$sdi_lrc" -ne 0 ]; then'; UR_R2='      if false; then'
-  UR_A3='        "S "*)'; UR_R3='        *)'
-  ur_mut precheck "ar-unreached dir" "$UR_A1" "$UR_R1"
-  ur_mut lookuprc "stub-failok" "$UR_A2" "$UR_R2"
-  ur_mut verdict "stub-silent" "$UR_A3" "$UR_R3"
-  # The pre-fix shape: every layer reverted, so an unopenable file's empty answer falls through
-  # to the catch-all and is acquitted.
-  ur_mut fallthrough "bl-closed bl-unfiled ar-only ar-unreached dir stub-failok stub-silent" \
-    "$UR_A1" "$UR_R1" "$UR_A2" "$UR_R2" "$UR_A3" "$UR_R3"
-  if [ "$UR_MUT_KILLS" -eq "$UR_MUT_WANT" ] && [ "$UR_MUT_WANT" -eq 4 ]; then
-    ok "all 4 unreadable-corpus mutants died against the resolved validator $VALIDATOR"
-  else
-    bad "only $UR_MUT_KILLS of $UR_MUT_WANT unreadable-corpus mutants died (4 expected)"
-  fi
-else
-  bad "CONTROL FAILED: an unmutated copy returned [$UR_CTL_GOT], expected [$UR_EXPECT] — every unreadable-corpus mutant verdict would be uninterpretable"
-fi
 chmod 644 "$UR/b0/carry-over-backlog.md" "$UR/a0/carry-over-backlog-archive.md" 2>/dev/null
 
 # --- A non-UTF-8 byte in a READABLE item is not an unreadable corpus ---------------------------
@@ -1354,27 +765,8 @@ else
   r_open="$(lb_run "$VALIDATOR" open)"; r_closed="$(lb_run "$VALIDATOR" closed)"
   if [ "$r_open" = "0" ] && [ "$r_closed" = "1" ]; then
     ok "a Latin-1 byte in a readable item under $LB_LOC: OPEN passes (0), its CLOSED twin fails (1)"
-    B_lb=1
   else
     bad "a Latin-1 byte in a readable item under $LB_LOC: OPEN rc=$r_open (want 0), CLOSED rc=$r_closed (want 1) — an encoding read as an unreadable corpus, or a CLOSED item acquitted"
-  fi
-  LB_MUT="$LB/mutant-unpinned.sh"
-  n="$(grep -cF -- '  LC_ALL=C awk -v id="$1"' "$VALIDATOR")" || n=0
-  if [ "$n" != "1" ]; then
-    bad "FIXTURE STALE: the latin1 mutant's anchor occurs $n times in $VALIDATOR, not 1"
-  else
-    awk '{ i = index($0, "  LC_ALL=C awk -v id=\"$1\""); if (i) $0 = "  awk -v id=\"$1\"" substr($0, i + length("  LC_ALL=C awk -v id=\"$1\"")); print }' \
-      "$VALIDATOR" > "$LB_MUT"
-    if cmp -s "$VALIDATOR" "$LB_MUT"; then
-      bad "FIXTURE STALE: the latin1 mutant (locale pin removed) matched nothing"
-    else
-      m_open="$(lb_run "$LB_MUT" open)"; m_closed="$(lb_run "$LB_MUT" closed)"
-      if [ "$m_open" != "0" ] && [ "$m_closed" != "0" ]; then
-        mutant_killed "$B_lb" latin1-unpinned "latin1 mutant (locale pin removed) killed: OPEN rc=$m_open under $LB_LOC"
-      else
-        bad "LATIN1 MUTANT SURVIVED: with the locale pin removed the OPEN item still passed (rc=$m_open) — the cell cannot see the abort"
-      fi
-    fi
   fi
 fi
 
@@ -1391,13 +783,6 @@ fi
 # reaches the validator as `SHA256` -- field_of strips trailing punctuation -- so the hex arm
 # refuses it, not the empty-cite arm. `pc-bare-absent` is the bare-hex twin of `pc-absent`.
 #
-# STRIP-DELETED KILLS THREE CELLS AND THE OVERLAP IS DECLARED. Every prefixed cell whose
-# deciding arm lies PAST the hex arm depends on the strip: pc-real (resolve), pc-fab (resolve,
-# by its message) and pc-absent (the timestamp join). No seed can separate them, because a cite
-# the strip did not reach is refused by the hex arm before any later arm reads it. What the
-# OTHER mutants need is that each owns a cell nothing else moves: `widened` owns pc-foo,
-# `repeated` owns pc-dbl, and `moved` (the strip scoped to the resolve branch, leaving the
-# global prefixed for the deferred-items join) owns pc-absent alone.
 sd_snap pc-real   none "SHA256:$SHA"
 sd_snap pc-fab    none "SHA256:$(printf 'd%.0s' $(seq 1 64))"
 sd_snap pc-foo    none "foo:$SHA"
@@ -1448,66 +833,6 @@ for c in $PC_CELLS; do
   fi
 done
 
-# --- Assertion 71: assertion 14's unmutated copy reproduces the labelled-cite vector ---
-PC_CTL_GOT="$(pc_verdicts "$CTL")"
-PC_MUT_KILLS=0; PC_MUT_WANT=0
-pc_mut() {   # $1 label, $2 owned cells, then anchor/replacement pairs; every anchor occurs exactly once
-  local label="$1" owned="$2" out prev n got moved stray c w g
-  shift 2
-  PC_MUT_WANT=$((PC_MUT_WANT + 1))
-  out="$SD/pc-mutant-$label.sh"; cp "$VALIDATOR" "$out"
-  while [ $# -ge 2 ]; do
-    n="$(grep -cF -- "$1" "$out")" || n=0
-    if [ "$n" != "1" ]; then
-      bad "FIXTURE STALE: labelled-cite mutant $label's anchor '$1' occurs $n times, not 1"; return
-    fi
-    prev="$out.prev"; cp "$out" "$prev"
-    awk -v a="$1" -v r="$2" '{ i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) r substr($0, i + length(a)) } print }' "$prev" > "$out"
-    if cmp -s "$prev" "$out"; then
-      bad "FIXTURE STALE: labelled-cite mutant $label's substitution for '$1' matched nothing"; return
-    fi
-    shift 2
-  done
-  if ! bash -n "$out" 2>/dev/null; then
-    bad "FIXTURE BROKEN: labelled-cite mutant $label is not a valid shell script"; return
-  fi
-  got="$(pc_verdicts "$out")"
-  moved=""; stray=""
-  for c in $PC_CELLS; do
-    w="$(sd_cell_of "$PC_EXPECT" "$c")"; g="$(sd_cell_of "$got" "$c")"
-    case " $owned " in
-      *" $c "*) [ "$w" != "$g" ] && moved="$moved $c" ;;
-      *)        [ "$w" != "$g" ] && stray="$stray $c=$g" ;;
-    esac
-  done
-  if [ -n "$stray" ]; then
-    bad "labelled-cite mutant $label moved cells it does not own:$stray — the arms are entangled"
-  elif [ "$(echo $moved | wc -w)" -ne "$(echo $owned | wc -w)" ]; then
-    bad "LABELLED-CITE MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: $owned)"
-  else
-    PC_MUT_KILLS=$((PC_MUT_KILLS + 1))
-    mutant_killed "$B_pc" "$label" "labelled-cite mutant $label killed on exactly its own cells:$moved"
-  fi
-}
-if [ "$PC_CTL_GOT" = "$PC_EXPECT" ]; then
-  ok "control: assertion 14's unmutated copy reproduces all $(echo $PC_CELLS | wc -w) labelled-cite cells"
-  B_pc=1
-  PC_A='CITE="${CITE#SHA256:}"'
-  # --- Assertions 72-75: the four mutants ------------------------------------
-  pc_mut stripdeleted "pc-real pc-fab pc-absent" "$PC_A" 'CITE="$CITE"'
-  pc_mut widened "pc-foo" "$PC_A" 'CITE="${CITE#*:}"'
-  pc_mut repeated "pc-dbl" "$PC_A" 'while case "$CITE" in SHA256:*) true ;; *) false ;; esac; do CITE="${CITE#SHA256:}"; done'
-  pc_mut moved "pc-absent" "$PC_A" 'CITE="$CITE"' \
-    '  case "$CITE" in' '  case "${CITE#SHA256:}" in' \
-    'grep -q "^- SHA256: ${CITE}' 'grep -q "^- SHA256: ${CITE#SHA256:}'
-  if [ "$PC_MUT_KILLS" -eq "$PC_MUT_WANT" ] && [ "$PC_MUT_WANT" -eq 4 ]; then
-    ok "all 4 labelled-cite mutants died against the resolved validator $VALIDATOR"
-  else
-    bad "only $PC_MUT_KILLS of $PC_MUT_WANT labelled-cite mutants died (4 expected)"
-  fi
-else
-  bad "CONTROL FAILED: assertion 14's unmutated copy returned [$PC_CTL_GOT], expected [$PC_EXPECT] — every labelled-cite mutant verdict would be uninterpretable"
-fi
 
 # =============================================================================
 # LOCKED-SCOPE DEFERRAL ARM: a live DEFERRAL_REQUEST may not name a confirmed item.
@@ -1612,51 +937,6 @@ for c in $LS_CELLS; do
   if [ "$want" = "$got" ]; then ok "locked-scope cell '$c': rc=$got as required"
   else bad "locked-scope cell '$c': got '$got', expected '$want' — $(ls_why "$c")"; fi
 done
-LS_MUT_KILLS=0; LS_MUT_WANT=0
-ls_mut() {   # $1 label, $2 owned cells, $3 anchor (must occur once), $4 replacement
-  local label="$1" owned="$2" out n got moved="" stray="" c w g
-  LS_MUT_WANT=$((LS_MUT_WANT + 1))
-  out="$LS/mutant-$label.sh"
-  n="$(grep -cF -- "$3" "$VALIDATOR")" || n=0
-  [ "$n" = "1" ] || { bad "FIXTURE STALE: locked-scope mutant $label's anchor occurs $n times, not 1"; return; }
-  awk -v a="$3" -v r="$4" '{ i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) r substr($0, i + length(a)) } print }' "$VALIDATOR" > "$out"
-  cmp -s "$VALIDATOR" "$out" && { bad "FIXTURE STALE: locked-scope mutant $label matched nothing"; return; }
-  bash -n "$out" 2>/dev/null || { bad "FIXTURE BROKEN: locked-scope mutant $label is not a valid shell script"; return; }
-  got="$(ls_verdicts "$out")"
-  for c in $LS_CELLS; do
-    w="$(sd_cell_of "$LS_EXPECT" "$c")"; g="$(sd_cell_of "$got" "$c")"
-    case " $owned " in
-      *" $c "*) [ "$w" != "$g" ] && moved="$moved $c" ;;
-      *)        [ "$w" != "$g" ] && stray="$stray $c=$g" ;;
-    esac
-  done
-  if [ -n "$stray" ]; then bad "locked-scope mutant $label moved cells it does not own:$stray"
-  elif [ "$(echo $moved | wc -w)" -ne "$(echo $owned | wc -w)" ]; then
-    bad "LOCKED-SCOPE MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: $owned)"
-  else LS_MUT_KILLS=$((LS_MUT_KILLS + 1)); mutant_killed "$B_ls" "$label" "locked-scope mutant $label killed on exactly its own cells:$moved"; fi
-}
-LS_CTL_GOT="$(ls_verdicts "$CTL")"
-if [ "$LS_CTL_GOT" = "$LS_EXPECT" ]; then
-  ok "control: assertion 14's unmutated copy reproduces all $(echo $LS_CELLS | wc -w) locked-scope cells"
-  B_ls=1
-  ls_mut sprintleg "fire"      '(sprint != "" && index(id, "CO-S" sprint "-") == 1) || ' ''
-  ls_mut askleg    "fireask"   ' || index(ask, " " id " ")' ''
-  ls_mut status    "resolved"  'st != "DEFERRAL_REQUEST") return' 'st != "DEFERRAL_REQUEST" && st != "RESOLVED") return'
-  ls_mut window    "before recur" 'if (ts != "" && from != "" && ts < from) return' ''
-  ls_mut oldest    "recur"     '$0 == c { t = h } END { print t }' '$0 == c && t == "" { t = h } END { print t }'
-  ls_mut ratified  "ratified"  'if (hit != "" && !ratified)' 'if (hit != "")'
-  ls_mut noskip    "noask badhash" 'say "SKIP  locked-scope ask leg' ': "SKIP  locked-scope ask leg'
-  ls_mut noexit    "fire fireask" '[ "$LS_RC" -eq 1 ] && exit 1' 'true'
-  ls_mut fullpass  "noask badhash" 'elif [ "$LS_ASK_LEG" = ran ] && [ -n "$LS_SPRINT" ]; then' 'elif true; then'
-  ls_mut resolve   "badhash"   'grep -qxF -- "- SHA256: ${LS_REQ_CITE}" "$REQUESTS" 2>/dev/null' 'true'
-  if [ "$LS_MUT_KILLS" -eq "$LS_MUT_WANT" ] && [ "$LS_MUT_WANT" -eq 10 ]; then
-    ok "all 10 locked-scope mutants died against the resolved validator $VALIDATOR"
-  else
-    bad "only $LS_MUT_KILLS of $LS_MUT_WANT locked-scope mutants died (10 expected)"
-  fi
-else
-  bad "CONTROL FAILED: assertion 14's unmutated copy returned [$LS_CTL_GOT], expected [$LS_EXPECT] — every locked-scope mutant verdict would be uninterpretable"
-fi
 
 echo
 report_end scope-confirmation

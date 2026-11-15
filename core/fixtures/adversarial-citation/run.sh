@@ -16,32 +16,11 @@
 #   (e) TWO-TIER  the hook fails OPEN on a missing transcript (never wedge) but LOGS it; the
 #                 gate fails CLOSED. And when a transcript IS present, the hook denies a
 #                 fabricated citation too.
-# MUTANT MATRIX. --matrix prints a MATRIX row per mutant over every cell. Each mutant is scored on its deciding arm (which must go red) and on its named twins
-# (arms the measured matrix shows GREEN under it); the exact vector this file scores per mutant is the
-# recorded matrix. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
-# per distinct state") requires.
-# Arms: dir-empty, dir-sidecar, dir-silent, dir-real, both-flags (std cells); gate-padded, gate-blank,
-# gate-whole, hook-padded, hook-blank, hook-whole (the six floor cells). R also reddens dir-sidecar.
-# MUTANT-MATRIX R decides=dir-empty twins=dir-silent,dir-real,dir-empty+silent.jsonl
-# MUTANT-MATRIX W decides=dir-empty+silent.jsonl twins=dir-empty,dir-silent,dir-real
-# MUTANT-MATRIX F-m2 decides=gate-padded twins=gate-whole,hook-padded,hook-blank,hook-whole
-# MUTANT-MATRIX F-m1+m2 decides=gate-padded twins=gate-whole,hook-whole
-# BL-923 cells (seeded K2/K3/L worlds): bl923-k2-accept, bl923-k2-refuse, bl923-k3-accept, bl923-k3-refuse,
-# bl923-l-accept, bl923-l-refuse.
-# MUTANT-MATRIX BL923-K2 decides=bl923-k2-refuse twins=bl923-k2-accept,bl923-k3-accept,bl923-k3-refuse,bl923-l-accept,bl923-l-refuse
-# MUTANT-MATRIX BL923-K3 decides=bl923-k3-refuse twins=bl923-k2-accept,bl923-k2-refuse,bl923-k3-accept,bl923-l-accept,bl923-l-refuse
-# MUTANT-MATRIX BL923-L decides=bl923-l-refuse twins=bl923-k2-accept,bl923-k2-refuse,bl923-k3-accept,bl923-k3-refuse,bl923-l-accept
-# MUTANT-MATRIX-CONTROL BL923-control why=the unmutated whole-directory copy must score all six BL-923 cells before any mutant is read
-# MUTANT-MATRIX-CONTROL F-m1 why=the predicate floor is removed but the caller's normalised-length refusal fires first, so all six floor cells hold and survival is the pass
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/adversarial-citation/run.sh --matrix
 set -u
 # Inherited AI_DLC_* tunables (e.g. AI_DLC_TRUNK) change what the seeded worlds and the validator resolve; scrub them so the run is the same under any caller environment. AI_DLC_SCRUB_PROBE is exported on the scrub line and arm SCRUB-RAN asserts it is gone after (BL-965): under hermetic-run.sh an undeclared `env` is command-not-found, the loop iterates zero times, and no other arm sees it.
 export AI_DLC_SCRUB_PROBE=1; for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 SCRUB_RAN=0; [ -z "${AI_DLC_SCRUB_PROBE+x}" ] && SCRUB_RAN=1
 unset CLAUDE_PROJECT_DIR
-MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
-MX_RAN=0
-mx() { MX_RAN=$((MX_RAN + 1)); echo "$@"; }
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 VALIDATOR=""
@@ -64,7 +43,7 @@ else FAIL=$((FAIL + 1)); printf '  FAIL %-38s AI_DLC_SCRUB_PROBE survived the sc
 # One validator invocation per distinct (validator, argv). Several assertions below ask
 # DIFFERENT questions of the SAME run (exit code, stdout state, a stderr marker, a message
 # substring); each used to pay its own invocation. The key is the validator path plus its full
-# argv, so a mutant copy never shares an entry with the original and every assertion still reads
+# argv, so every assertion reads
 # the real stdout/stderr/exit of a real run. Sets VC_OUT, VC_ERR, VC_RC.
 vcall() {
   local k f line
@@ -140,7 +119,7 @@ logs() {
 # whole reason an empty --transcript-dir reached the release surface unmeasured: not one arm
 # in this file could EXPRESS a corpus, so the branch that ranks above the fail-open path had
 # no reader. These three take a directory, a file, or both, plus an optional validator
-# override so the mutants at the bottom reuse exactly these assertions.
+# override.
 
 # hook tier. $1 case  $2 dir-or-""  $3 transcript-or-""  $4 want-state  $5 want-rc  $6 why
 # $7 optional validator override.
@@ -195,7 +174,7 @@ $VC_ERR"; got=$VC_RC
 echo "adversarial-citation proof (arm F6)"
 # The candidate list above spans both install layouts and takes the first that EXISTS, so
 # the file this unit loads is not necessarily the one an author just edited. Print it: a
-# mutant applied to the other copy leaves every arm green and reads exactly like an arm
+# edit applied to the other copy leaves every arm green and reads exactly like an arm
 # that cannot fire.
 echo "adversarial-citation: resolved subject = $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
 # The REQUIRED input of inputs.decl: the validator under test, resolved above and driven by every
@@ -231,8 +210,7 @@ g    resolved 1 "gate fail-closed: no transcript to verify against"
 # `--transcript-dir` was tested for EXISTENCE only, never for CONTENT, so an empty corpus
 # outranked the fail-open branch below it and DENIED every dispatch at rc 3 -- while passing
 # NO flag at all allowed it at rc 0. Passing the flag wedged the pipeline; passing nothing did
-# not. These two arms return DIVERGENT/3 against the pre-fix predicate, and the mutant at the
-# bottom of this file is what holds that true rather than my word for it.
+# not. These two arms return DIVERGENT/3 against the pre-fix predicate.
 echo
 echo "  -- an EMPTY corpus is ABSENT ground truth, not a forgery --"
 std   terminal dir-empty   "" RESOLVED 0 "empty corpus -> fail OPEN at the hook, exactly as no flag does"
@@ -253,8 +231,7 @@ std terminal dir-real   "" RESOLVED  0 "a corpus holding the genuine turn RESOLV
 # (h) THE WRONG FIX SHAPE. `steps/gate-validation.md` instructs the operator to pass BOTH
 # flags. A narrowing applied AFTER the if/elif chain -- clearing STEER_FLAG once the dir
 # branch has already set it -- skips the `-r "$TRANSCRIPT"` fallback entirely and turns rc 3
-# into rc 0 for exactly that caller. These are the arms that catch it; mutant W below is the
-# proof they can.
+# into rc 0 for exactly that caller. These are the arms that catch it.
 echo "  -- BOTH flags: the fallthrough must reach the named file, not the fail-open path --"
 std terminal dir-empty silent.jsonl DIVERGENT 3 "empty dir + a forgery -> falls through to the file and DENIES"
 std terminal dir-empty real.jsonl   RESOLVED  0 "empty dir + the genuine turn -> falls through and RESOLVES"
@@ -264,85 +241,6 @@ std terminal dir-empty real.jsonl   RESOLVED  0 "empty dir + the genuine turn ->
 # reporting the operator as having said nothing when the true state is "no corpus" is an
 # accusation the gate has no evidence for.
 gd resolved dir-empty 1 "no readable transcript was provided" "appears in NO genuine"
-
-# --- mutants --------------------------------------------------------------------------------
-# COPIES, guarded by `cmp -s` so a sed that matched nothing cannot pass as a mutation, and by
-# `bash -n` so a mutant that is no longer a program cannot score its silence as a kill. The
-# validator resolves its steering sibling from `dirname "$0"` (:120), so BOTH files are
-# copied -- a lone copy dies with "no validator", fails OPEN at the hook tier, and that
-# fail-open would be read as the mutant working.
-echo
-MWORK="$(mktemp -d)"; trap 'rm -rf "$ROOT" "$MEMO" "$MWORK"' EXIT
-SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
-cp "$SRC_DIR/validate-steering-budget.sh" "$MWORK/" 2>/dev/null \
-  || { echo "  FAIL mutants: cannot copy the steering sibling from $SRC_DIR"; FAIL=$((FAIL + 1)); }
-cp "$VALIDATOR" "$MWORK/control.sh"
-KILLS=0
-
-mutate() {  # mutate <name> <sed-expr>  -> prints the mutant path
-  local name="$1" expr="$2"
-  cp "$VALIDATOR" "$MWORK/m-$name.sh" || { echo "  FAIL mutant $name: copy failed"; return 1; }
-  sed -i.bak "$expr" "$MWORK/m-$name.sh" && rm -f "$MWORK/m-$name.sh.bak"
-  if cmp -s "$VALIDATOR" "$MWORK/m-$name.sh"; then
-    echo "  FAIL mutant $name changed no bytes -- its sed matched nothing and would score as a kill"; return 1
-  fi
-  bash -n "$MWORK/m-$name.sh" || { echo "  FAIL mutant $name does not parse; its silence would score as a kill"; return 1; }
-  printf '%s\n' "$MWORK/m-$name.sh"
-}
-
-# THE UNMUTATED CONTROL, from the same directory, and it is NECESSARY AND NOT SUFFICIENT: a
-# control asserting only "nothing went wrong" passes against a subject replaced by `exit 0`.
-# Every arm here is PRESENCE-shaped -- a named STATE must appear on stdout -- so a copy that
-# emits nothing fails them by construction rather than by intention.
-echo "  -- unmutated control copy --"
-std terminal dir-empty  "" RESOLVED  0 "control reproduces the empty-corpus fail-open" "$MWORK/control.sh"
-std terminal dir-silent "" DIVERGENT 3 "control reproduces the corpus deny"            "$MWORK/control.sh"
-std terminal dir-real   "" RESOLVED  0 "control reproduces the corpus allow"           "$MWORK/control.sh"
-
-# MUTANT R -- the narrowing REVERTED to the shipped-defect predicate, byte for byte. This is
-# the one mutant that reproduces the wedge, and (f) is red against it in both shapes.
-echo "  -- mutant R: the pre-fix predicate restored (expect the empty-corpus arms to go red) --"
-MR="$(mutate revert-existence-only 's@steer_dir_has_transcript "\$TRANSCRIPT_DIR"; then@[ -n "$TRANSCRIPT_DIR" ] \&\& [ -d "$TRANSCRIPT_DIR" ]; then@')" || FAIL=$((FAIL + 1))
-ac_cells() {  # ac_cells <validator> -> the five std cells as a PASS/FAIL row (--matrix only)
-  local v="$1" r="" c d t ws wr
-  for c in "dir-empty::RESOLVED:0" "dir-sidecar::RESOLVED:0" "dir-silent::DIVERGENT:3" "dir-real::RESOLVED:0" "dir-empty:silent.jsonl:DIVERGENT:3"; do
-    d="${c%%:*}"; c="${c#*:}"; t="${c%%:*}"; c="${c#*:}"; ws="${c%%:*}"; wr="${c#*:}"
-    local args=(--series "$ROOT/terminal/s-adversarial-p" --cycle-state --transcript-dir "$ROOT/$d")
-    [ -n "$t" ] && args+=(--transcript "$ROOT/$t")
-    vcall "$v" "${args[@]}"
-    if [ "$(printf '%s' "$VC_OUT" | cut -f1)" = "$ws" ] && [ "$VC_RC" -eq "$wr" ]; then r="$r ${d}${t:++$t}=PASS"; else r="$r ${d}${t:++$t}=FAIL"; fi
-  done
-  printf '%s' "$r"
-}
-if [ "$MATRIX" = 1 ]; then
-  mx "  MATRIX control (std cells):$(ac_cells "$MWORK/control.sh")"
-fi
-if [ -n "${MR:-}" ]; then
-  [ "$MATRIX" != 1 ] || mx "  MATRIX R (std cells):$(ac_cells "$MR")"
-  std terminal dir-empty   "" DIVERGENT 3 "R: an empty corpus DENIES -- the shipped wedge, reproduced" "$MR" && KILLS=$((KILLS + 1))
-  std terminal dir-sidecar "" DIVERGENT 3 "R: a sidecar-only corpus DENIES too"                        "$MR" && KILLS=$((KILLS + 1))
-  # ...and nothing else moves. A mutant that fails more than its own assertions means the
-  # arms are entangled and one of them is vacuous.
-  std terminal dir-silent  "" DIVERGENT 3 "R: the corpus deny is UNCHANGED"  "$MR"
-  std terminal dir-real    "" RESOLVED  0 "R: the corpus allow is UNCHANGED" "$MR"
-  std terminal dir-empty silent.jsonl DIVERGENT 3 "R: both flags still DENY -- pre-fix kept its teeth here" "$MR"
-fi
-
-# MUTANT W -- the WRONG FIX SHAPE the entry's own prose lists as a legitimate option: the
-# existence-only predicate back at the head of the chain, and the narrowing moved BELOW it as
-# a clearing of STEER_FLAG. It fixes the empty-corpus wedge and silently loses the deny for a
-# caller passing both flags, which is the caller `steps/gate-validation.md` creates.
-echo "  -- mutant W: the narrowing moved below the chain (expect ONLY the both-flags deny to go red) --"
-MW="$(mutate clear-after-chain 's@steer_dir_has_transcript "\$TRANSCRIPT_DIR"; then@[ -n "$TRANSCRIPT_DIR" ] \&\& [ -d "$TRANSCRIPT_DIR" ]; then@; s@^  if \[ -z "\$STEER_FLAG" \]; then@  [ "$STEER_FLAG" = "--dir" ] \&\& ! steer_dir_has_transcript "$STEER_ARG" \&\& { STEER_FLAG=""; STEER_ARG=""; }; if [ -z "$STEER_FLAG" ]; then@')" || FAIL=$((FAIL + 1))
-if [ -n "${MW:-}" ]; then
-  [ "$MATRIX" != 1 ] || mx "  MATRIX W (std cells):$(ac_cells "$MW")"
-  std terminal dir-empty silent.jsonl RESOLVED 0 "W: both flags, empty dir + a FORGERY -> ALLOWED. The teeth are gone." "$MW" && KILLS=$((KILLS + 1))
-  # W is a plausible fix everywhere else, which is exactly why it is dangerous: every other
-  # arm in this file stays green against it.
-  std terminal dir-empty   "" RESOLVED  0 "W: the empty-corpus wedge is fixed (that is why it looks like a fix)" "$MW"
-  std terminal dir-silent  "" DIVERGENT 3 "W: the corpus deny is UNCHANGED"  "$MW"
-  std terminal dir-real    "" RESOLVED  0 "W: the corpus allow is UNCHANGED" "$MW"
-fi
 
 # --- the citation FLOOR is measured on the NORMALISED needle --------------------------------
 # The caller compared bash `${#auth_quote}` against 12 while `--cite` collapses whitespace and
@@ -397,63 +295,6 @@ for nm in $fl_names; do
   else FAIL=$((FAIL + 1)); printf '  FAIL %-38s floor cell %s does not hold (cells=%s)\n' "${nm#*:}" "${nm%%:*}" "$FL_CELLS"; fi
 done
 
-# --- floor mutants, each in a copy of the WHOLE scripts dir ------------------------------------
-# The validator resolves its predicate beside itself; a copy without it fails OPEN at the hook and
-# that would read as a mutant working. The unmutated copy must score all six cells first.
-FL_MW="$(mktemp -d)"; trap 'rm -rf "$ROOT" "$MEMO" "$MWORK" "$FL_MW"' EXIT
-FL_WHY=""
-fl_mk() {  # $1 name  then pairs of <target basename> <anchor> <replacement> -> FL_DIR
-  local d="$FL_MW/$1" n t
-  FL_DIR=""
-  shift
-  cp -R "$FL_SRC_DIR" "$d" || { FL_WHY="could not copy $FL_SRC_DIR"; return 1; }
-  [ -f "$d/validate-steering-budget.sh" ] && [ -f "$d/$FL_BASE" ] || { FL_WHY="the copy lacks the validator or its predicate"; return 1; }
-  while [ "$#" -ge 3 ]; do
-    t="$1"
-    n="$(grep -cF -- "$2" "$FL_SRC_DIR/$t")" || n=0
-    [ "$n" -eq 1 ] || { FL_WHY="anchor matches $n line(s) in $t, not 1 -- re-anchor it, never relax the arm"; return 1; }
-    A="$2" R="$3" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
-      "$FL_SRC_DIR/$t" > "$d/$t" || { FL_WHY="awk died"; return 1; }
-    cmp -s "$FL_SRC_DIR/$t" "$d/$t" && { FL_WHY="changed no bytes in $t -- it would score as a kill"; return 1; }
-    bash -n "$d/$t" 2>/dev/null || { FL_WHY="$t does not parse"; return 1; }
-    shift 3
-  done
-  FL_DIR="$d"
-}
-fl_score() {  # $1 label  $2 expected cells  $3 name  [<target> <anchor> <replacement>]...
-  local label="$1" want="$2"
-  shift 2
-  N=$((N + 1))
-  if ! fl_mk "$@"; then FAIL=$((FAIL + 1)); printf '  FAIL %-38s DID NOT APPLY: %s\n' "$label" "$FL_WHY"; return 1; fi
-  fl_cells "$FL_DIR/$FL_BASE"
-  if [ "$MATRIX" = 1 ]; then
-    _mr=""; _k=0
-    for _nm in $fl_names; do _k=$((_k + 1)); if [ "$(printf '%s' "$FL_CELLS" | cut -c"$_k")" = 1 ]; then _mr="$_mr ${_nm#*:}=PASS"; else _mr="$_mr ${_nm#*:}=FAIL"; fi; done
-    mx "  MATRIX $label:$_mr"
-  fi
-  if [ "$FL_CELLS" = "$want" ]; then
-    case "$label" in
-      F-m1) printf '  ok   CONTROL F-m1: predicate floor removed and the caller'"'"'s normalised-length refusal FIRED -- gate-padded refused rc 1 with "(3 chars once whitespace is collapsed)", gate-blank rc 1 with "(0 chars once whitespace is collapsed)", so all six floor cells hold (%s)\n' "$FL_CELLS" ;;
-      *)    printf '  ok   %-38s %s -> %s\n' "$label" "$want" "$FL_CELLS"; [ "$want" != 111111 ] && KILLS=$((KILLS + 1)) ;;
-    esac
-    return 0
-  else FAIL=$((FAIL + 1)); printf '  FAIL %-38s scored %s, wanted %s\n' "$label" "$FL_CELLS" "$want"; return 1; fi
-}
-FL_M2_A='  auth_nquote="$(cite_norm "$auth_quote")"'
-FL_M2_R='  auth_nquote="$auth_quote"'
-FL_M1_A='  if (needle.length < CITE_MIN_NORM_CHARS) {'
-fl_score "F-control" 111111 ctl
-# m2: this caller measures the bash length again. The predicate still refuses the short needle
-# (NOMATCH-SHORT), so the verdicts hold and ONLY the gate's normalised-length message is lost.
-fl_score "F-m2" 001111 m2 "$FL_BASE" "$FL_M2_A" "$FL_M2_R"
-# m1: the predicate's floor removed. The caller refuses on the normalised length before asking,
-# so NOTHING here moves -- this is the defence in depth, and it is asserted, not assumed.
-fl_score "F-m1" 111111 m1 validate-steering-budget.sh "$FL_M1_A" '  if (false) {'
-# m1+m2: EVERY layer reverted, which is the shipped defect. Padded and blank now verify at both
-# tiers; the whole-quote twin is unmoved.
-fl_score "F-m1+m2" 001001 m12 "$FL_BASE" "$FL_M2_A" "$FL_M2_R" \
-  validate-steering-budget.sh "$FL_M1_A" '  if (false) {'
-
 # --- BL-923: the gate-only arms K2, K3 and L, each on its own seeded world --------------------------
 # seed.sh builds six stamped git repositories (an ACCEPT and a REFUSE twin per arm, one property apart)
 # and drops `bl923-built` only when all six built. Each world is driven with `--arms <its arm>`, so a
@@ -490,29 +331,9 @@ $VC_ERR"
   done
   BL_CELLS="$c"
 }
-# bl_silent <validator> <world index 1..6> -> 0 when that world's run under <validator> is a WELL-FORMED
-# silent pass: rc 0, the converged line, and no line of the world's arm. A mutant's refuse cell must read
-# this way to score as a kill -- a crash, an exit 2 self-probe or a PENDING is BROKEN, not KILLED.
-bl_silent() {
-  local v="$1" e wn arm stem tok o
-  e="$(printf '%s\n' $BL_WORLDS | sed -n "${2}p")"
-  wn="${e%%:*}"; arm="${e#*:}"; stem="${arm#*:}"; arm="${arm%%:*}"
-  case "$arm" in K2) tok="K2 -- SECTIONS" ;; K3) tok="K3 -- SUBJECT" ;; *) tok="L -- ELICITATION" ;; esac
-  vcall "$v" --series "$ROOT/$wn/$stem" --transcript "$ROOT/silent.jsonl" --arms "$arm"
-  o="$VC_OUT
-$VC_ERR"
-  [ "$VC_RC" -eq 0 ] && grep -qF -- "PASS: the cycle converged" <<<"$o" && ! grep -qF -- "$tok" <<<"$o"
-}
-bl_names="k2-accept k2-refuse k3-accept k3-refuse l-accept l-refuse"
-bl_row() {  # $1 cells -> " bl923-<world>=PASS|FAIL ..."
-  local r="" i=0 nm
-  for nm in $bl_names; do i=$((i + 1)); if [ "$(printf '%s' "$1" | cut -c"$i")" = 1 ]; then r="$r bl923-$nm=PASS"; else r="$r bl923-$nm=FAIL"; fi; done
-  printf '%s' "$r"
-}
-BL_BAD=""
 N=$((N + 1))
 if [ ! -f "$ROOT/bl923-built" ]; then
-  FAIL=$((FAIL + 1)); BL_BAD="$BL_BAD worlds"
+  FAIL=$((FAIL + 1))
   printf '  FAIL %-38s FIXTURE BROKEN: seed.sh did not build the six BL-923 worlds under %s\n' "bl923-worlds" "$ROOT"
   BL_BASE=000000
 else
@@ -523,72 +344,12 @@ i=0
 for bl_lb in bl923-k2-accept bl923-k2-refuse bl923-k3-accept bl923-k3-refuse bl923-l-accept bl923-l-refuse; do
   nm="${bl_lb#bl923-}"; i=$((i + 1)); N=$((N + 1))
   if [ "$(printf '%s' "$BL_BASE" | cut -c"$i")" = 1 ]; then printf '  ok   %-38s its arm'"'"'s own verdict\n' "bl923-$nm"
-  else FAIL=$((FAIL + 1)); BL_BAD="$BL_BAD $nm"; printf '  FAIL %-38s its arm did not print its own verdict (cells=%s)\n' "bl923-$nm" "$BL_BASE"
+  else FAIL=$((FAIL + 1)); printf '  FAIL %-38s its arm did not print its own verdict (cells=%s)\n' "bl923-$nm" "$BL_BASE"
     e="$(printf '%s\n' $BL_WORLDS | sed -n "${i}p")"; a="${e#*:}"
     vcall "$VALIDATOR" --series "$ROOT/${e%%:*}/${a#*:}" --transcript "$ROOT/silent.jsonl" --arms "${a%%:*}"
     printf '%s\n%s\n' "$VC_OUT" "$VC_ERR" | sed 's/^/       | /'
   fi
 done
-
-# THE MUTANTS, each a copy of the validator's WHOLE directory (partition-document.sh, partition-subject.sh
-# and merge-adversarial-shards.sh beside it, or K2, K3 and L read PENDING "not installed beside this
-# validator"), each disabling exactly one arm's decision at that arm's own predicate, through fl_mk
-# (unique anchor, `cmp -s`, `bash -n`). An unmutated copy from the same directory scores all six first.
-# A mutant is KILLED when its own refuse cell, and only that cell, reads as a well-formed silent pass.
-BL_KILLS=0
-bl_score() {  # $1 label  $2 expected cells  $3 decides-index ("" = control)  then fl_mk's name [<target> <anchor> <replacement>]
-  local label="$1" want="$2" dix="$3"
-  shift 3
-  N=$((N + 1))
-  if ! fl_mk "$@"; then FAIL=$((FAIL + 1)); BL_BAD="$BL_BAD $label"; printf '  FAIL %-38s DID NOT APPLY: %s\n' "$label" "$FL_WHY"; return 1; fi
-  bl_cells "$FL_DIR/$FL_BASE"
-  [ "$MATRIX" != 1 ] || mx "  MATRIX $label:$(bl_row "$BL_CELLS")"
-  if [ "$BL_CELLS" != "$want" ]; then
-    FAIL=$((FAIL + 1)); BL_BAD="$BL_BAD $label"; printf '  FAIL %-38s scored %s, wanted %s\n' "$label" "$BL_CELLS" "$want"; return 1
-  fi
-  if [ -n "$dix" ]; then
-    if ! bl_silent "$FL_DIR/$FL_BASE" "$dix"; then
-      FAIL=$((FAIL + 1)); BL_BAD="$BL_BAD $label"
-      printf '  FAIL %-38s BROKEN, no kill scored: its refuse cell is not a well-formed silent pass (rc=%s)\n' "$label" "$VC_RC"; return 1
-    fi
-    BL_KILLS=$((BL_KILLS + 1))
-  fi
-  printf '  ok   %-38s %s -> %s\n' "$label" "$want" "$BL_CELLS"
-}
-if [ -f "$ROOT/bl923-built" ]; then
-  bl_score "BL923-control" 111111 "" blctl
-  bl_score "BL923-K2" 101111 2 blk2 "$FL_BASE" \
-    '  if [ -n "$K2_FILE" ] && ! k_has_ids "$k2s"; then' '  if false; then'
-  bl_score "BL923-K3" 111011 4 blk3 "$FL_BASE" \
-    '            if [ "$k3_have" != "$k3_want_s" ]; then' '            if false; then'
-  bl_score "BL923-L" 111110 6 bll "$FL_BASE" \
-    '      FAIL)' '      FAIL-DISABLED)'
-fi
-
-# THE RECEIPT. PASS only when all six cells hold on the real validator AND each of the three mutants was
-# killed by its own arm alone; otherwise it names what did not hold, and the fixture is red.
-N=$((N + 1))
-[ "$BL_BASE" = 111111 ] || BL_BAD="$BL_BAD base-cells=$BL_BASE"
-[ "$BL_KILLS" -eq 3 ] || BL_BAD="$BL_BAD kills=$BL_KILLS/3"
-if [ -z "$BL_BAD" ]; then
-  echo "receipt-bl923: PASS"
-else
-  FAIL=$((FAIL + 1))
-  echo "receipt-bl923: FAIL$BL_BAD"
-fi
-
-N=$((N + 1))
-if [ "$MATRIX" = 1 ]; then
-  if [ "$MX_RAN" -gt 0 ]; then printf '  ok   %-38s %s matrix-only row(s) measured\n' "MATRIX-MODE" "$MX_RAN"; else FAIL=$((FAIL + 1)); printf '  FAIL %-38s matrix mode measured no row\n' "MATRIX-MODE"; fi
-else
-  if [ "$MX_RAN" -eq 0 ]; then printf '  ok   %-38s a plain run executed no matrix-only cell\n' "MATRIX-PLAIN"; else FAIL=$((FAIL + 1)); printf '  FAIL %-38s a plain run executed %s matrix-only cell(s)\n' "MATRIX-PLAIN" "$MX_RAN"; fi
-fi
-
-# KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
-# like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
-N=$((N + 1))
-if [ "$KILLS" -ge 4 ]; then printf '  ok   %-38s %s mutant kill(s) -- the arms above can fire\n' "KILL-COUNT" "$KILLS"
-else FAIL=$((FAIL + 1)); printf '  FAIL %-38s %s kill(s); the mutants changed bytes in a file these arms never loaded\n' "KILL-COUNT" "$KILLS"; fi
 
 echo
 if [ "$FAIL" -gt 0 ]; then

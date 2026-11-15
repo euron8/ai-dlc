@@ -3,6 +3,6 @@
 # process or not, starts as a program, five times), and the four cli cells of cells.decl. inproc rows (fx_inproc, one
 # per source): the shipped validator, and the ship, control and five mutant pairs' copies, each pair laid at
 # $MUT/<name>/core/scripts/ so the copy keeps the subject's relative path.
-162 *
+71 *
 4 core/scripts/validate-artifact-paths.sh
-8 inproc:core/scripts/validate-artifact-paths.sh
+1 inproc:core/scripts/validate-artifact-paths.sh

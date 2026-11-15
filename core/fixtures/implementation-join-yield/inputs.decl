@@ -1,8 +1,7 @@
-# implementation-join-yield drives the Stop hook, and mutants of a copy of its directory.
-# ai-dlc-handoff-pending.sh is sourced by the hook from beside itself and required by mk_copy.
+# implementation-join-yield drives the Stop hook.
+# ai-dlc-handoff-pending.sh is sourced by the hook from beside itself.
 !core/hooks/ai-dlc-continue.sh
 !core/hooks/ai-dlc-handoff-pending.sh
 # arm 8 hands the pause-routing vocabulary to the hook through AI_DLC_PAUSE_ROUTING_SCHEMA.
 core/schemas/pause-routing.json
-core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh

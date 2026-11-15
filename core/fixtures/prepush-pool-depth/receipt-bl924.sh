@@ -40,16 +40,11 @@
 #   `validate-backlog-receipts.sh --archive` (the only gate step reading the archive) exits after its efficiency arms,
 #   before vbr_sec_corpus, the one section that executes `verify:` receipts.
 #
-# The copy keeps one pool mutant (not-exported) and no watcher mutant, and ends just after the watcher cells with its
-# values printed. Every cell prints `CELL <name> PASS|FAIL <detail>`:
+# The copy ends just after the watcher cells with its values printed. Every cell prints
+# `CELL <name> PASS|FAIL <detail>`:
 #
 #   barrier        the depth-0 barrier's count, B0, is 6
-#   not-exported   `MUTANT not-exported kill confirmed`: its depth-0 drive is forced (fx6 held), so a mutant scored
-#                  on a cell it cannot move, obs_d0_max, fails here
 #   pn_hlink, pn_fifo, pn_silent   the fix set's value is REFUSED
-#
-# cap-ignored and pool-capped-5 are left out. cap-ignored reads the same before and after the fix. pool-capped-5's
-# drive is one the forcing does not reach: its width is five, so the hold never arms, and the copy re-runs the fixture's arm.
 #
 # Exit 0 when every cell passes, 1 when one fails, 9 when it cannot measure: no root, no subject, an anchor not found
 # exactly once, a copy that did not run to its value line, the copy's baseline missing, a forcing that provably did
@@ -62,7 +57,7 @@ refuse() { echo "receipt-bl924: $1" >&2; exit 9; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 root=""; d="$HERE"
 while [ -n "$d" ] && [ "$d" != "/" ]; do
-  if [ -f "$d/core/fixtures/lib/mutant.sh" ] && { [ -f "$d/.githooks/pre-push" ] || [ -f "$d/core/git-hooks/pre-push" ]; }; then root="$d"; break; fi
+  if [ -f "$d/core/fixtures/lib/preamble.sh" ] && { [ -f "$d/.githooks/pre-push" ] || [ -f "$d/core/git-hooks/pre-push" ]; }; then root="$d"; break; fi
   d="$(dirname "$d")"
 done
 [ -n "$root" ] || refuse "cannot locate the repo root from $HERE"
@@ -85,18 +80,14 @@ once() { # once <label> <fixed string>
 }
 A_FLIGHT=': > "$PD_FLIGHT/$$"'
 A_STEP='  [ -z "$1" ] || printf x >> "$1"'
-A_EVAL='for _m in $PN_MUTS; do pn_eval "$_m"; done'
-once flight "$A_FLIGHT"; once step "$A_STEP"; once pn_eval "$A_EVAL"
-[ "$(grep -c '^PN_MUTS="' "$SUBJ")" = 1 ] || refuse "anchor 'PN_MUTS=' not found exactly once in $SUBJ"
+A_CUT='# ------------------------------------------------- an interrupt tears the pool down (BL-881) ------'
+once flight "$A_FLIGHT"; once step "$A_STEP"; once cut "$A_CUT"
 [ "$(grep -c '^\[ -n "\$_ti" \] ||' "$SUBJ")" = 1 ] || refuse "anchor 'SIGINT guard' not found exactly once in $SUBJ"
-[ "$(grep -c '^  mutant not-exported ' "$SUBJ")" = 1 ] || refuse "anchor 'mutant not-exported' not found exactly once in $SUBJ"
 
 # THE EDIT, one awk pass. The SIGINT guard protects only cells after the cut, so the copy drops it: a receipt run from
 # a backgrounded caller must not refuse for a cell it never drives.
-awk -v aflight="$A_FLIGHT" -v astep="$A_STEP" -v aeval="$A_EVAL" '
+awk -v aflight="$A_FLIGHT" -v astep="$A_STEP" -v acut="$A_CUT" '
   /^\[ -n "\$_ti" \] \|\|/ { print ":"; next }
-  /^  mutant [a-z]/ { if ($2 != "not-exported") next }
-  /^PN_MUTS="/ { print "PN_MUTS=\"\""; next }
   $0 == aflight {
     print "case \"$0\" in */fx6/run.sh|*/fx6//run.sh) pw=\"${PD_FLIGHT:-}\"; pw=\"${pw%/flight}\"; xp=\"\"; [ -s \"$pw/xargs.P\" ] && read -r xp < \"$pw/xargs.P\"; case \"$xp\" in 0|6|7|8|9|[1-9][0-9]*) xw=6 ;; *) xw=\"\" ;; esac"
     print "  if [ -n \"${PD_GATE:-}\" ] && [ -n \"${BL924_FORCE:-}\" ] && [ \"$xw\" = 6 ]; then [ -p \"$pw/force.fifo\" ] || mkfifo \"$pw/force.fifo\""
@@ -113,16 +104,14 @@ awk -v aflight="$A_FLIGHT" -v astep="$A_STEP" -v aeval="$A_EVAL" '
     print "    while :; do pf_s=-1; if [ -f \"$pf_w/pn.looked\" ]; then read -r pf_s < \"$pf_w/pn.looked\"; pf_s=$((10#${pf_s#looks=})); [ \"$pf_s0\" -ge 0 ] || pf_s0=$pf_s; fi; [ -e \"$pf_w/pf.$pf_t.at\" ] && { pf_b=at; break; }; pf_g=\"$(grep -F \"$pf_t looked\" \"$pf_w/pn.rej\" 2>/dev/null)\"; grep -q -F \"unit [$pf_h]\" <<< \"$pf_g\" && { pf_b=hold; break; }; [ \"$pf_s\" -ge 0 ] && [ \"$pf_s\" -ge $((pf_s0 + 2)) ] && { pf_b=ended; break; }; pf_fw=$((pf_fw + 1)); read -t 1 _ <> \"$PN_DIR/force.fifo\"; done"
     print "    printf \"%s waits=%s by=%s\\n\" \"$pf_t\" \"$pf_fw\" \"$pf_b\" >> \"$BL924_FORCE/step.log\"; fi ;; esac"
     next }
-  $0 == aeval {
-    print
+  $0 == acut {
     print "printf \"RCPT B0=%s\\n\" \"${B0:-_}\""
     print "for _c in pn_hlink pn_fifo pn_silent; do printf \"RCPT %s=%s\\n\" \"$_c\" \"$(pn_val fix \"$_c\")\"; done"
     print "printf \"RCPT END fails=%s asserts=%s\\n\" \"$fails\" \"$asserts\""
     print "exit 0"; cut = 1; exit }
   { print }
   END { if (!cut) exit 3 }
-' "$SUBJ" > "$F/run.sh" || refuse "the edit did not reach the pn_eval anchor"
-[ "$(grep -c '^  mutant [a-z]' "$F/run.sh")" = 1 ] || refuse "the copy keeps $(grep -c '^  mutant [a-z]' "$F/run.sh") pool mutants, want 1"
+' "$SUBJ" > "$F/run.sh" || refuse "the edit did not reach the cut anchor"
 [ "$(grep -c 'BL924_FORCE' "$F/run.sh")" -ge 2 ] || refuse "the forcing edits did not land in the copy"
 bash -n "$F/run.sh" || refuse "the edited copy does not parse"
 
@@ -156,8 +145,6 @@ cell() { # cell <name> <0 pass|1 fail> <detail>
 val() { awk -v k="RCPT $1=" 'index($0, k) == 1 { print substr($0, length(k) + 1); exit }' "$OUT"; }
 B0="$(val B0)"
 cell barrier "$([ "$B0" = 6 ] && echo 0 || echo 1)" "depth-0 barrier read $B0 of 6 (fx6: $BL)"
-L="$(grep -m1 "MUTANT not-exported " "$OUT" | sed 's/^ *//')"
-cell not-exported "$(grep -q "MUTANT not-exported kill confirmed" "$OUT" && echo 0 || echo 1)" "${L:-no line for MUTANT not-exported}"
 for c in pn_hlink pn_fifo pn_silent; do
   v="$(val "$c")"
   cell "$c" "$([ "$v" = REFUSED ] && echo 0 || echo 1)" "read ${v:-_}, want REFUSED"

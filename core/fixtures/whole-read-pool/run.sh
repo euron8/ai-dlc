@@ -93,8 +93,6 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/_bmad-output/planning-artifacts" "$WORK/docs" "$WORK/.claude/team-roles" || exit 2
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-B_a2b=0; B_a2e=0; B_a2f=0; B_a2d_penv=0; B_a2d_env=0; B_a4=0; B_a4b=0; B_a8d=0; B_a10=0; B_a10b=0
 
 # The consumer's config block, in the layout install.sh writes. `aiDlcRoles.<role>.model`
 # is a KEY into `aiDlcModels`, never a model string -- the same two-hop resolution
@@ -165,7 +163,7 @@ fi
 settings 'sonnet' 'sonnet'
 run >/dev/null
 if [ "$(pool_of)" = "330000" ]; then
-  ok "a bare 'sonnet' analyst resolves to a 330000-tok pool (bare-alias default)"; B_a2b=1
+  ok "a bare 'sonnet' analyst resolves to a 330000-tok pool (bare-alias default)"
 else
   bad "a bare 'sonnet' analyst resolved to '$(pool_of)', expected 330000"
 fi
@@ -191,7 +189,7 @@ for full in 'claude-sonnet-4-5' 'global.anthropic.claude-sonnet-4-6' \
   settings 'a' "$full"
   run >/dev/null
   if [ "$(pool_of)" = "66000" ]; then
-    ok "a full id '$full' without [1m] resolves to 66000"; B_a2e=1
+    ok "a full id '$full' without [1m] resolves to 66000"
   else
     bad "a full id '$full' resolved to '$(pool_of)', expected 66000 -- substring defaulting is back"
   fi
@@ -212,7 +210,7 @@ fi
 settings 'haiku' 'claude-haiku-4-5'
 AI_DLC_MODEL_HAIKU_WINDOW=1m bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "330000" ]; then
-  ok "process env AI_DLC_MODEL_HAIKU_WINDOW=1m overrides the family default"; B_a2d_penv=1
+  ok "process env AI_DLC_MODEL_HAIKU_WINDOW=1m overrides the family default"
 else
   bad "process env override gave pool '$(pool_of)', expected 330000"
 fi
@@ -223,7 +221,7 @@ settings_env() { # settings_env <key> <model> <declared HAIKU window>
 settings_env 'haiku' 'claude-haiku-4-5' '1000000'
 run >/dev/null
 if [ "$(pool_of)" = "330000" ]; then
-  ok "settings.json .env AI_DLC_MODEL_HAIKU_WINDOW overrides the default with no process env"; B_a2d_env=1
+  ok "settings.json .env AI_DLC_MODEL_HAIKU_WINDOW overrides the default with no process env"
 else
   bad "settings .env override gave pool '$(pool_of)', expected 330000"
 fi
@@ -241,7 +239,7 @@ settings 'haiku' 'claude-haiku-4-5'
 for v in 99 99999999999999999999; do
   AI_DLC_MODEL_HAIKU_WINDOW="$v" bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
   if [ "$(pool_of)" = "66000" ] && grep -q "rejected env AI_DLC_MODEL_HAIKU_WINDOW=$v" "$WORK/out.txt"; then
-    ok "a declared window of $v is rejected, named in the source, and falls to 66000"; B_a2f=1
+    ok "a declared window of $v is rejected, named in the source, and falls to 66000"
   else
     bad "a declared window of $v gave pool '$(pool_of)' and/or was not named as rejected"
   fi
@@ -283,7 +281,7 @@ fi
 rm -f "$WORK/.claude/settings.json"
 run >/dev/null
 if [ "$(pool_of)" = "66000" ]; then
-  ok "a missing settings.json falls back to 66000 -- unknown tightens, never opens"; B_a4=1
+  ok "a missing settings.json falls back to 66000 -- unknown tightens, never opens"
 else
   bad "a missing settings.json resolved to '$(pool_of)' -- unknown opened the gate"
 fi
@@ -295,7 +293,7 @@ fi
 printf '{\n  "aiDlcModels": { "sonnet": "claude-sonnet-5[1m]" }\n}\n' > "$WORK/.claude/settings.json"
 run >/dev/null
 if [ "$(pool_of)" = "66000" ]; then
-  ok "a settings.json with no aiDlcRoles.analyst falls back to 66000"; B_a4b=1
+  ok "a settings.json with no aiDlcRoles.analyst falls back to 66000"
 else
   bad "a missing analyst entry resolved to '$(pool_of)' -- unknown opened the gate"
 fi
@@ -369,46 +367,7 @@ else
   bad "--only pipeline-snapshot.md exit $only_status and/or reported the pool -- gates would fail on the wrong artifact"
 fi
 
-# --- 8. THE MUTATION TEST — prove assertions 3/4/4b measure the resolver -------
-# Flip EVERY fallback site to 1M on a COPY and demand each unknown input now reports
-# 330000. There are four -- unreadable settings.json, no jq, no aiDlcRoles.analyst,
-# and an unrecognised model falling through the case -- and a mutation covering only
-# some leaves the rest's green unexplained. An earlier draft of this fixture mutated
-# one arm and this assertion correctly refused to pass.
-#
-# THE FAMILY DEFAULT IS NO LONGER IN THIS FILE. The validator-side fallbacks (no file, no
-# jq, no analyst, and the library-absent `[1m]`-or-200000 body) are mutated here; the
-# HAIKU/OTHER default lives in ai-dlc-window.sh and is mutated on a library copy in 8c.
-# The third case runs WITHOUT the library (the mutant sits in $WORK, where neither its
-# own ../hooks/ nor $WORK/.claude/hooks/ exists), so it exercises the validator's own
-# fallback body rather than the library's table.
-MUTANT="$WORK/mutant.sh"
-sed "s/printf '200000|/printf '1000000|/g" "$VALIDATOR" > "$MUTANT" || exit 2
-if cmp -s "$VALIDATOR" "$MUTANT"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- resolve_reader_window was rewritten" >&2
-  echo "  update the sed pattern in assertion 8 to match the real fallback arms" >&2
-  exit 2
-fi
-if [ "$(grep -c "printf '1000000|" "$MUTANT")" -lt 4 ]; then
-  echo "FIXTURE ERROR: mutation hit fewer than 4 fallback sites -- a path is uncovered" >&2
-  exit 2
-fi
 artifacts 1
-mut_fails=0
-rm -f "$WORK/.claude/settings.json"
-bash "$MUTANT" --root "$WORK" >"$WORK/out.txt" 2>&1
-[ "$(pool_of)" = "330000" ] || { mut_fails=1; printf '        missing settings.json still reports %s\n' "$(pool_of)"; }
-printf '{\n  "aiDlcModels": { "sonnet": "claude-sonnet-5[1m]" }\n}\n' > "$WORK/.claude/settings.json"
-bash "$MUTANT" --root "$WORK" >"$WORK/out.txt" 2>&1
-[ "$(pool_of)" = "330000" ] || { mut_fails=1; printf '        missing analyst entry still reports %s\n' "$(pool_of)"; }
-settings 'haiku' 'claude-haiku-4-5'
-env -u AI_DLC_WINDOW_LIB bash "$MUTANT" --root "$WORK" >"$WORK/out.txt" 2>&1
-[ "$(pool_of)" = "330000" ] || { mut_fails=1; printf '        library-absent non-1m model still reports %s\n' "$(pool_of)"; }
-if [ "$mut_fails" -eq 0 ]; then
-  mutant_killed "$(( $B_a4 && $B_a4b ))" fallback-1m "MUTATION: pinning every validator fallback to 1M makes ALL THREE unknown cases report 330000"
-else
-  bad "MUTATION: an unknown case is not produced by the fallback -- assertions 3-4b prove nothing there"
-fi
 
 # --- 8b'. THE LIBRARY ABSENT: THE OLD PATH, NEVER AN EXIT -----------------------
 # retired-contract-token copies this validator ALONE, so an unreadable library must not
@@ -432,74 +391,13 @@ else
   bad "  library absent, bare alias read '$(pool_of)', expected 66000"
 fi
 
-# --- 8c. MUTANTS OF THE SHARED LIBRARY ------------------------------------------
-# Built as library COPIES and handed to the unmutated validator through AI_DLC_WINDOW_LIB.
-libmut() { # libmut <name> <sed expr> -> path, or empty when the sed matched nothing
-  sed "$2" "$WINLIB" > "$WORK/$1.sh" || return 1
-  cmp -s "$WINLIB" "$WORK/$1.sh" && return 1
-  printf '%s' "$WORK/$1.sh"
-}
-# (a) [1m]-only: the bare-alias 1M default deleted, so only `[1m]` reaches 1M.
-M_SUB="$(libmut lib-substr 's/^    fable|opus|sonnet) printf .1000000|/    NONE) printf '"'"'200000|/')" \
-  || { echo "FIXTURE ERROR: [1m]-only library mutation matched nothing" >&2; exit 2; }
-settings 'sonnet' 'sonnet'
-AI_DLC_WINDOW_LIB="$M_SUB" bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
-if [ "$(pool_of)" = "66000" ]; then
-  mutant_killed "$B_a2b" lib-substr "MUTATION: a [1m]-only resolver reads bare 'sonnet' at 66000 -- arm 2b catches it"
-else
-  bad "MUTATION: a [1m]-only library still read '$(pool_of)' -- 2b proves nothing"
-fi
-# (a') substring DEFAULTING restored: the 1M default keyed on the family substring.
-M_SUBD="$(libmut lib-subdefault 's/^    fable|opus|sonnet) printf/    *fable*|*opus*|*sonnet*) printf/')" \
-  || { echo "FIXTURE ERROR: substring-default library mutation matched nothing" >&2; exit 2; }
-sd_kills=0
-for full in 'claude-sonnet-4-5' 'global.anthropic.claude-sonnet-4-6'; do
-  settings 'a' "$full"
-  AI_DLC_WINDOW_LIB="$M_SUBD" bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
-  [ "$(pool_of)" = "330000" ] && sd_kills=$((sd_kills+1))
-done
-if [ "$sd_kills" = "2" ]; then
-  mutant_killed "$B_a2e" lib-subdefault "MUTATION: substring defaulting reads both full ids at 330000 -- arm 2e catches it"
-else
-  bad "MUTATION: substring defaulting moved only $sd_kills of 2 full ids -- 2e proves nothing"
-fi
-# (a'') the declaration range check removed: a declared 99 is taken.
-M_RNG="$(libmut lib-norange 's/^  \[ "\$1" -ge "\$AI_DLC_WINDOW_MIN" \] 2>\/dev\/null \&\& \[ "\$1" -le "\$AI_DLC_WINDOW_MAX" \] 2>\/dev\/null$/  [ "$1" -gt 0 ]/')" \
-  || { echo "FIXTURE ERROR: range library mutation matched nothing" >&2; exit 2; }
-settings 'haiku' 'claude-haiku-4-5'
-AI_DLC_WINDOW_LIB="$M_RNG" AI_DLC_MODEL_HAIKU_WINDOW=99 bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
-if [ "$(pool_of)" = "32" ]; then
-  mutant_killed "$B_a2f" lib-norange "MUTATION: with the range check gone a declared 99 gives a 32-token pool -- arm 2f catches it"
-else
-  bad "MUTATION: the range-less library read '$(pool_of)' -- 2f proves nothing"
-fi
-# (b) the settings .env layer ignored.
-M_ENV="$(libmut lib-noenv 's/^\( *\)val="\$(jq -r --arg k "\$var" .*/\1val=""/')" \
-  || { echo "FIXTURE ERROR: settings-env library mutation matched nothing" >&2; exit 2; }
-settings_env 'haiku' 'claude-haiku-4-5' '1000000'
-AI_DLC_WINDOW_LIB="$M_ENV" bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
-if [ "$(pool_of)" = "66000" ]; then
-  mutant_killed "$B_a2d_env" lib-noenv "MUTATION: with the settings .env ignored the .env arm reads 66000 -- arm 2d catches it"
-else
-  bad "MUTATION: the .env-ignoring library still read '$(pool_of)' -- 2d proves nothing"
-fi
-# (c) process env ignored: the case statement reads nothing.
-M_PENV="$(libmut lib-nopenv 's/^    HAIKU)  val="\${AI_DLC_MODEL_HAIKU_WINDOW:-}"  ;;$/    HAIKU)  val="" ;;/')" \
-  || { echo "FIXTURE ERROR: process-env library mutation matched nothing" >&2; exit 2; }
-settings 'haiku' 'claude-haiku-4-5'
-AI_DLC_WINDOW_LIB="$M_PENV" AI_DLC_MODEL_HAIKU_WINDOW=1m bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
-if [ "$(pool_of)" = "66000" ]; then
-  mutant_killed "$B_a2d_penv" lib-nopenv "MUTATION: with process env ignored the env arm reads 66000 -- arm 2d catches it"
-else
-  bad "MUTATION: the env-ignoring library still read '$(pool_of)' -- 2d proves nothing"
-fi
-# Unmutated control through the same channel, with a positive conjunct.
+# --- 8c. THE SHARED LIBRARY THROUGH AI_DLC_WINDOW_LIB ----------------------------
 settings 'sonnet' 'sonnet'
 AI_DLC_WINDOW_LIB="$WINLIB" bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "330000" ] && grep -q 'bare alias sonnet default' "$WORK/out.txt"; then
-  ok "  control: the unmutated library through AI_DLC_WINDOW_LIB reads 330000 from the bare-alias default"
+  ok "  the shared library through AI_DLC_WINDOW_LIB reads 330000 from the bare-alias default"
 else
-  bad "  control: the unmutated library read '$(pool_of)' -- 8c's kills are the harness"
+  bad "  the shared library through AI_DLC_WINDOW_LIB read '$(pool_of)'"
 fi
 
 # --- 8d. THE TWO READERS AGREE ---------------------------------------------------
@@ -550,23 +448,9 @@ else
 fi
 diffs="$(agree "$VALIDATOR" 2>"$WORK/agree.err")"
 if [ "$diffs" = "0" ]; then
-  ok "the context sensor and this validator return the same window for every id in the set"; B_a8d=1
+  ok "the context sensor and this validator return the same window for every id in the set"
 else
   bad "the two readers disagree on $diffs id(s)"; sed 's/^/  /' "$WORK/agree.err"
-fi
-# MUTANT: the validator bypassing the library (its source step neutralised), so it takes
-# the pre-library fallback while the sensor keeps the shared policy.
-MUTB="$WORK/mutant-bypass.sh"
-sed 's/^command -v ai_dlc_model_window >\/dev\/null 2>&1 || WINDOW_LIB=""$/WINDOW_LIB=""/' "$VALIDATOR" > "$MUTB" || exit 2
-if cmp -s "$VALIDATOR" "$MUTB"; then
-  echo "FIXTURE ERROR: bypass mutation matched nothing -- the library guard was rewritten" >&2
-  exit 2
-fi
-mdiffs="$(agree "$MUTB" 2>/dev/null)"
-if [ "${mdiffs:-0}" -gt 0 ]; then
-  mutant_killed "$B_a8d" bypass "MUTATION: a validator bypassing the library disagrees with the sensor on $mdiffs id(s) -- 8d catches it"
-else
-  bad "MUTATION: a library-bypassing validator still agreed with the sensor -- 8d proves nothing"
 fi
 
 # --- 8b. THE ROLE-FILE GREP IS GONE, ASSERTED ON THE SOURCE --------------------
@@ -624,7 +508,7 @@ run >/dev/null
 pool_rows() { awk '/^whole-read pool/{i=1;next} i&&/^$/{exit} i' "$WORK/out.txt"; }
 
 if ! grep -qE 's251/architecture\.md|s271/party-mode-transcripts/prd\.md' <<<"$(pool_rows)"; then
-  ok "an archived s<N>/ copy is excluded from the pool"; B_a10=1
+  ok "an archived s<N>/ copy is excluded from the pool"
 else
   bad "an archived s<N>/ copy was summed into the pool -- the migration's basenames are being counted"
   sed 's/^/        /' <<<"$(pool_rows)"
@@ -677,7 +561,7 @@ head -c 120000 /dev/zero | tr '\0' 'x' > "$WORK/_bmad-output/planning-artifacts/
 head -c 120000 /dev/zero | tr '\0' 'x' > "$WORK/_bmad-output/planning-artifacts/s288/locked-requirements.md"
 run >/dev/null
 if grep -q 's302/locked-requirements\.md' <<<"$(pool_rows)"; then
-  ok "the LIVE sprint's locked-requirements.md is pooled"; B_a10b=1
+  ok "the LIVE sprint's locked-requirements.md is pooled"
 else
   bad "the live sprint's locked-requirements.md was NOT pooled -- the move would grade itself"
   sed 's/^/        /' <<<"$(pool_rows)"
@@ -705,21 +589,17 @@ mv "$WORK/_bmad-output/planning-artifacts/s1" "$WORK/_bmad-output/planning-artif
 sprint_status 302
 rm -f "$WORK/_bmad-output/planning-artifacts/s288/locked-requirements.md"
 
-# --- 10d. MUTATION: revert the sprint arm --------------------------------------
-# Prove 10b measures the arm rather than the file merely existing. Built as a COPY
-# and guarded with cmp -s.
+# --- 10d. A staged copy of the validator pools the live sprint slot ------------
 #
 # THE COPY NEEDS A SIBLING. The arm resolves the live sprint through
 # `$AI_DLC_SELF_DIR/sprint-status.sh`, so a lone copy in a scratch directory would
-# find no resolver, contribute nothing, and score as a kill for the wrong reason.
-# Both the mutant and its control are therefore staged in a scratch BIN directory
+# find no resolver and contribute nothing.
+# The control is therefore staged in a scratch BIN directory
 # holding a copy of sprint-status.sh -- outside the repo tree, so a crashed run
 # cannot leave a stray script where the core-script-boundary checks would read it.
 # AND THE SIBLING HAS A SIBLING OF ITS OWN. sprint-status.sh loads
 # sprint-status.json and refuses to guess without it, so a BIN holding only the two
-# scripts makes the resolver exit 1 -- the control then pools nothing and the mutation
-# above scores a kill it did not earn. This was the state this arm was first written
-# in; the unmutated control is what caught it.
+# scripts makes the resolver exit 1 and the control pools nothing.
 #
 # THE SCHEMA IS RESOLVED FROM $ROOT, IN BOTH LAYOUTS, AND NEVER BY WALKING UP FROM
 # $VALIDATOR. This arm shipped at v0.322.0 resolving the schema as the validator's
@@ -749,59 +629,16 @@ fi
 
 cp "$SPRINT_STATUS" "$BIN/sprint-status.sh" || exit 2
 cp "$SPRINT_SCHEMA" "$WORK/schemas/sprint-status.json" || exit 2
-MUTANT3="$BIN/validate-artifact-budget.sh"
-sed 's/^SPRINT_WHOLE_READ_SET=.*/SPRINT_WHOLE_READ_SET=""/' "$VALIDATOR" > "$MUTANT3" || exit 2
-if cmp -s "$VALIDATOR" "$MUTANT3"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- SPRINT_WHOLE_READ_SET was rewritten" >&2
-  echo "  update the sed pattern in assertion 10d to match the real declaration" >&2
-  exit 2
-fi
-bash "$MUTANT3" --root "$WORK" >"$WORK/out.txt" 2>&1
-if ! grep -q 's302/locked-requirements\.md' <<<"$(pool_rows)"; then
-  mutant_killed "$B_a10b" sprint-set-empty "MUTATION: emptying the sprint set drops the live slot from the pool"
-else
-  bad "MUTATION: the live slot was pooled with the sprint set empty -- 10b proves nothing"
-fi
-# UNMUTATED control, staged the same way in the same directory, so a mutant that
-# died of the staging cannot score as a kill.
+# A copy staged the same way in the same directory still pools the live slot.
 CONTROL3="$BIN/control-budget.sh"
 cp "$VALIDATOR" "$CONTROL3" || exit 2
 bash "$CONTROL3" --root "$WORK" >"$WORK/out.txt" 2>&1
 if grep -q 's302/locked-requirements\.md' <<<"$(pool_rows)"; then
   ok "  control: an unmutated copy staged the same way still pools the live slot"
 else
-  bad "  the unmutated copy did not pool it -- 10d's kill is the harness, not the mutation"
+  bad "  the unmutated copy did not pool it"
 fi
 run >/dev/null
-
-# --- 11. THE MUTATION TEST — prove assertion 10 measures the exclusion ---------
-# Drop the exclusion call on a COPY and demand the archived copies come back. An
-# arm asserting an ABSENCE is exactly the shape that passes when the files were
-# never written, and this is what separates the two.
-MUTANT2="$WORK/mutant2.sh"
-sed 's/^\([[:space:]]*\)is_sprint_slotted "\${f#"\$ROOT"\/}" \&\& continue$/\1:/' "$VALIDATOR" > "$MUTANT2" || exit 2
-if cmp -s "$VALIDATOR" "$MUTANT2"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- the pool's exclusion call was rewritten" >&2
-  echo "  update the sed pattern in assertion 11 to match the real call site" >&2
-  exit 2
-fi
-bash "$MUTANT2" --root "$WORK" >"$WORK/out.txt" 2>&1
-if grep -q 's251/architecture\.md' <<<"$(pool_rows)"; then
-  mutant_killed "$B_a10" exclusion-removed "MUTATION: removing the exclusion brings the archived copy back into the pool"
-else
-  bad "MUTATION: the archived copy stayed out with the exclusion removed -- assertion 10 proves nothing"
-  sed 's/^/        /' <<<"$(pool_rows)"
-fi
-# An UNMUTATED control from the same copy step. A mutant that dies sourcing
-# anything emits no rows at all, and "no rows" would otherwise score as a kill.
-CONTROL="$WORK/control.sh"
-cp "$VALIDATOR" "$CONTROL" || exit 2
-bash "$CONTROL" --root "$WORK" >"$WORK/out.txt" 2>&1
-if grep -q 'planning-artifacts/prd\.md' <<<"$(pool_rows)"; then
-  ok "  and an unmutated copy run the same way still emits pool rows"
-else
-  bad "  the unmutated copy emitted no pool rows -- assertion 11's kill is the harness, not the mutation"
-fi
 
 echo ""
 report_end whole-read-pool

@@ -9,5 +9,3 @@ cli scripts/validate-enforcement-map.sh eq-arms-refuse
 cli scripts/validate-enforcement-map.sh cwd-rel-I91
 cli scripts/validate-enforcement-map.sh cwd-rel-I81
 cli scripts/validate-enforcement-map.sh cwd-env-I81
-e2e scripts/validate-enforcement-map.sh cwd-rel-I81-M3 why=M3 un-absolutises the self path, which only a program started by a RELATIVE path has: vem_entry refuses a relative source path, so no in-process call can reach the defect
-e2e scripts/validate-enforcement-map.sh cwd-env-I81-M4 why=M4 deletes the prologue guard that discards a VEM_SELF inherited across exec: vem_entry unsets VEM_SELF before the guard runs, so no in-process call can reach the defect

@@ -201,8 +201,8 @@ mk _bmad-output/planning-artifacts/s71-cooldown-sentinel-followbait.md "no sprin
 # A story ALREADY on the grammar, whose basename happens to lead with a number. It must not be
 # touched: the `s<N>/` above it is what says so, and without that test the leading number would be
 # re-read as a sprint. The number MATCHES the parent slot deliberately — with any other value the
-# path would name two sprints and the mutant would produce an AMBIGUOUS refusal instead of a move,
-# and this fixture's mutants assert on the TREE, never on the report.
+# path would name two sprints and a regression would produce an AMBIGUOUS refusal instead of a move,
+# and this fixture's assertions read the TREE, never the report.
 mk _bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md     "story"
 
 if [ -n "$GRAMMAR_SRC" ]; then

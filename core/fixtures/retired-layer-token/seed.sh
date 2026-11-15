@@ -50,7 +50,7 @@ EOF
 
 # VACUOUS is written BARE — no code span — because that is how the motivating base wrote
 # it, and it is why the derivation cannot key on backticks. Every OTHER word here is
-# backticked, so the backtick mutant flips the two incident arms and nothing else.
+# backticked, so a backtick-keyed derivation would flip the two incident arms and nothing else.
 cat > "$DIST/core/skills/ai-dlc/steps/demo.md" <<'EOF'
 # Demo step
 
@@ -188,7 +188,7 @@ git -C "$DIST2" init -q . 2>/dev/null
 git -C "$DIST2" config user.email f@f
 git -C "$DIST2" config user.name f
 # `ALWAYS` is backticked at BOTH refs so this dist's theirs side is non-empty under every
-# grammar a mutant below can impose. A theirs side that empties trips the theirs guard, and
+# grammar. A theirs side that empties trips the theirs guard, and
 # this world would then be measuring that guard instead of the acquittal it exists for.
 cat > "$DIST2/core/skills/ai-dlc/SKILL.md" <<'EOF'
 # Engine skill
@@ -332,7 +332,7 @@ EOF
 
 # A JSON layer file is scanned; a .txt one is not. It carries a word from EACH witness
 # branch, so the arm asserting the .json half is about the file EXTENSION and does not fall
-# whenever a mutant un-retires one token.
+# whenever one token is un-retired.
 cat > "$EX/layer.json" <<'EOF'
 {
   "note": "stock exits 78 VACUOUS after APPROVED-WITH-FIXES"

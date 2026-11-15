@@ -1,0 +1,6 @@
+# The inputs of the pre-suite step whose title slugs to this directory name, in the inputs.decl grammar the fixtures use
+# (.githooks/pre-push, ps_flush). A directory is keyed by its listing and every file under it, so a path added to it moves the key.
+# Each top-level directory the step read is declared whole; the hook file is declared because it holds the step command and its flags.
+.githooks/pre-push
+docs/
+scripts/

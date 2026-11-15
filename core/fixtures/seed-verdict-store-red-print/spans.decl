@@ -1,0 +1,3 @@
+# BL-1092: the span the census sources (cl_select and its helpers) and the GATE_HELD marker span the cells drive.
+.githooks/pre-push FIXTURE_POOL
+.githooks/pre-push GATE_HELD

@@ -81,42 +81,13 @@
 # stubs answering PASS (one refuses on demand, GT_FX_REFUSE); gate-transition.sh and gate-checkpoint.sh
 # in that copy are the real files. A real gate-3 world needs a sprint canonical, a spawn ledger, settings
 # and an H2 attestation, none of which is the subject's decision.
-#
-# THE MUTANTS, each a copy of the whole scripts directory with gate-transition.sh edited and cmp-checked;
-# per push each runs only its deciding world, scored against that step's base flag (lib/mutant.sh).
-# Measured by the --matrix run below (22 mutants x 30 arms, 660 cells, every other cell GREEN).
-# MUTANT-MATRIX m-early decides=DAR,PRIORD,PRIORX,FENCEC,QAD,RAX,RAA,G3X,CLOSEX,CLOSEMX twins=- why=per push it runs only G3X, and its one cheap green twin G3 would mint a second gate-3 nonce in the same second as the real G3 run, blinding that run's OPEN-moved check
-# MUTANT-MATRIX m-pre3 decides=G3P,G3N twins=G3Q
-# MUTANT-MATRIX m-open12 decides=OPEN12 twins=MAP
-# MUTANT-MATRIX m-noxcap decides=MAPX twins=OPEN12
-# MUTANT-MATRIX m-norm decides=DAR twins=OPEN12
-# MUTANT-MATRIX m-close26 decides=CLOSEX twins=CLOSE
-# MUTANT-MATRIX m-pdir decides=JOIN twins=MAP
-# MUTANT-MATRIX m-fixed3 decides=G3N twins=G3P
-# MUTANT-MATRIX m-slugok decides=CLOSEMX twins=- why=its cheap green twin CLOSEM seeds a newer storyless verdict that hides the slugged decoy, so it runs only the CLOSEMX start
-# MUTANT-MATRIX m-nosprint decides=CLOSEM,CLOSEMX twins=- why=its one cheap green twin CLOSEP needs a story-3-1 world the CLOSEM start does not leave, so a twin would add a second start for no new cell
-# MUTANT-MATRIX m-skipolder decides=CLOSEMX twins=- why=its cheap green twin CLOSEM seeds a newer storyless verdict carrying 26 PASS, which the mutant takes like the original, so it runs only the CLOSEMX start
-# MUTANT-MATRIX m-rs1 decides=PRIORM,PRIORD,PRIORX,FENCE,QAM,QAD,RAM twins=- why=per push it runs only the PRIORM start; its one green cell FENCEC is a refusal both programs give for the same cause, so a twin start would add a start and no discriminating cell
-# MUTANT-MATRIX m-rsany decides=PRIORD,QAD twins=- why=per push it runs only the PRIORD start; its green twins PRIORM and QAM name one value, where the dropped refusal never fires, so a twin start would only repeat the unmutated run
-# MUTANT-MATRIX m-nofence decides=FENCE,FENCEC twins=- why=per push it runs only the FENCE start; every other prior carries no fence, so no twin start can move
-# MUTANT-MATRIX m-raw decides=QAM,PRIORX twins=- why=per push it runs only the QAM start; every other pass-2 prior is plain, so raw and normalised values agree on each and no twin start can move
-# MUTANT-MATRIX m-nohex decides=PRIORX twins=- why=per push it runs only the PRIORX start; every other prior names hex values, where the dropped refusal never fires, so a twin start would only repeat the unmutated run
-# MUTANT-MATRIX m-ra-nog1 decides=RA1,RA0,RAN,RAX,RAM twins=- why=per push it runs only the RA1 start; its one green cell RAA refuses before the candidate is read, so a twin start would only repeat the unmutated refusal
-# MUTANT-MATRIX m-ra-noverdict decides=RAN twins=- why=per push it runs only the RAN start; every other RA world reads an APPROVED latest file, where counting any verdict changes nothing, so a twin start would only repeat the unmutated run
-# MUTANT-MATRIX m-ra-lexsort decides=RAN twins=- why=per push it runs only the RAN start; every other RA world has passes below 10, where lexical and numeric order agree, so a twin start would only repeat the unmutated run
-# MUTANT-MATRIX m-ra-noanc decides=RAX twins=- why=per push it runs only the RAX start; every other RA world is ancestor-related, where the dropped check never fires, so a twin start would only repeat the unmutated run
-# MUTANT-MATRIX m-ra-noambig decides=RAA twins=- why=per push it runs only the RAA start; every other RA world carries one index form, where the dropped refusal never fires, so a twin start would only repeat the unmutated run
-# MUTANT-MATRIX m-ra-dashnext decides=RA0,RAN twins=- why=per push it runs only the RA0 start; every other RA world writes no next: line, so a twin start would only repeat the unmutated run
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/gate-transition/run.sh --matrix
-#
-# Usage: run.sh [--matrix]
+# Usage: run.sh
 # Exit:  0 = every arm passed, 1 = an arm failed, 2 = fixture broken.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset GT_FX_REFUSE GT_FX_RC22 GT_FX_MSG22
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
 
 # The engine is found by walking up for the directory that carries it, in either layout:
 # <root>/core/scripts (the distribution) or <root>/scripts/ai-dlc (an installed consumer).
@@ -155,8 +126,6 @@ T="$(cd "$T" && pwd -P)" || { echo "FIXTURE BROKEN: the scratch dir has no physi
 WORK="$T/work"; DIR="$HERE"; mkdir -p "$WORK"
 # shellcheck source=/dev/null
 . "$WSH" || { echo "FIXTURE BROKEN: sourcing $WSH failed" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: lib/mutant.sh not found" >&2; exit 2; }
-. "$HERE/../lib/matrix.sh" || { echo "FIXTURE BROKEN: lib/matrix.sh not found" >&2; exit 2; }
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
 # --- trees of the subject ---------------------------------------------------------------------
@@ -172,25 +141,6 @@ mk_tree() {
     [ -f "$d/stub/core/scripts/$s" ] || return 1
     printf '#!/usr/bin/env bash\n# gate-transition fixture stub for %s: PASS unless GT_FX_REFUSE names it.\n[ %s != validate-spawn-ledger.sh ] || [ -z "${GT_FX_RC22:-}" ] || { [ "$GT_FX_RC22" != 3 ] || { if [ "${GT_FX_MSG22:-}" = norole ]; then echo "NO ROLE-BOUND ROWS: EXAMINED NOTHING -- 2 S1 row(s) exist and NONE of them was judged"; else echo "PRE-LEDGER: 4 row(s) in ledger.jsonl, NONE of them S1."; fi; echo "COUNTS: examined 0 S1 spawn row(s) of 4 in ledger.jsonl;"; }; exit "$GT_FX_RC22"; }\n[ "${GT_FX_REFUSE:-}" != %s ] || { echo "stub %s: REFUSED by the fixture" >&2; exit 1; }\n[ %s != validate-h2-attestation.sh ] || echo "H2_ATTESTED v1 sprint=1 stub"\n[ %s != validate-steering-budget.sh ] || echo "steering-count 0"\nexit 0\n' \
       "$s" "$s" "$s" "$s" "$s" "$s" > "$d/stub/core/scripts/$s" || return 1
-  done
-}
-# mut_tree <name> <awk program> <expected count of changed lines> : a mutant tree under $T/m/<name>,
-# both copies of gate-transition.sh rewritten by the awk program (which prints every line). Sets d to
-# the tree; returns 1, loudly, when the mutation did not apply or changed the wrong number of lines.
-# Called directly, never inside `$( )`: there its `bad` would land in the capture and its count in a
-# subshell, and a mutant that never applied would print nothing at all.
-mut_tree() {
-  local n="$1" prog="$2" want="$3" f got dd
-  d="$T/m/$1"
-  mk_tree "$d" || { bad "mutant $n: DID NOT APPLY -- the tree copy failed"; return 1; }
-  for f in "$d/core/scripts/gate-transition.sh" "$d/stub/core/scripts/gate-transition.sh"; do
-    awk "$prog" "$GT" > "$f.new" || { bad "mutant $n: DID NOT APPLY -- its awk program died"; return 1; }
-    if cmp -s "$f.new" "$GT"; then bad "mutant $n: DID NOT APPLY -- the edit matched nothing"; return 1; fi
-    # diff exits 1 on a difference, so under pipefail it is captured first and counted from a here-string.
-    dd="$(diff "$GT" "$f.new")"
-    got="$(grep -c '^[<>]' <<< "$dd")" || got=0
-    [ "$got" = "$want" ] || { bad "mutant $n: DID NOT APPLY as built -- $got changed line(s), $want expected"; return 1; }
-    mv "$f.new" "$f" || { bad "mutant $n: DID NOT APPLY -- the copy could not be replaced"; return 1; }
   done
 }
 
@@ -575,93 +525,6 @@ printf 'HERMETIC-CONSUMED %s\n' "$GT"
 printf 'HERMETIC-CONSUMED %s\n' "$HOOK"
 printf '  subject %s\n' "$GT"
 
-# --- the matrix: each mutant through every step on a fresh world -------------------------------
-P_EARLY='{ print } $0 == "rm -f \"$PLAN\"" { print "echo \"story: $IDX\" > \"$PLAN\"" }'
-P_OPEN12='{ print } $0 == "1)" || $0 == "2)" { print "  bash \"$SELF/gate-checkpoint.sh\" --nonce implementation-20990101T000000Z open > /dev/null 2>&1" }'
-P_NOXCAP='{ i = index($0, "\"$SHA\" $(xcap) \"$@\" --shard-dir"); if (i) $0 = substr($0, 1, i + 5) substr($0, i + 14) } { print }'
-P_NORM='$0 != "rm -f \"$PLAN\"" { print }'
-# m-pre3: Check 22 exit 3 refuses like any other non-zero exit.
-P_PRE3='index($0, "3) input gate-log \"Check 22 exit 3:") { $0 = "    3) refuse check-22 \"mutant: exit 3 refuses\" \"none\" ;;" } { print }'
-P_CLOSE26='{ i = index($0, "$2 == \"PASS\""); if (i) $0 = substr($0, 1, i - 1) "($2 == \"PASS\" || $2 == \"FAIL\")" substr($0, i + 13) } { print }'
-# m-pdir: the program's plan directory spelled with a `/./` hop. The physical directory is unchanged, so every
-# other arm still finds its plan; only the printed path changes, and the guard refuses a dotted plan path.
-P_PDIR='$0 == "PDIR=\"${ROOT}/_bmad-output/implementation-artifacts/s${SPRINT}/gate-transition\"" { $0 = "PDIR=\"${ROOT}/_bmad-output/implementation-artifacts/s${SPRINT}/./gate-transition\"" } { print }'
-# m-fixed3: Check 22 exit 3 records one fixed PRE-LEDGER line whatever the script said, as the program once did.
-P_FIXED3='index($0, "3) input gate-log \"Check 22 exit 3:") { $0 = "    3) input gate-log \"Check 22 exit 3: PRE-LEDGER: 4 row(s) in ledger.jsonl, NONE of them S1.\"; [ -z \"$CL\" ] || input gate-log \"Check 22 $CL\" ;;" } { print }'
-# m-nosprint: the sprint-scoped close fallback dropped; its series-id match never holds.
-P_NOSPRINT='index($0, "\"implementation-s${SPRINT}-[0-9]{8}T[0-9]{6}Z") { $0 = "      continue" } { print }'
-# m-slugok: the fallback's series-id match admits any text before the sprint field, so a slugged id qualifies.
-P_SLUGOK='{ i = index($0, "implementation-s${SPRINT}-[0-9]{8}"); if (i) $0 = substr($0, 1, i + 14) "[^\\\"]*" substr($0, i + 15) } { print }'
-# m-skipolder: the fallback skips a verdict whose ledger lacks 26 PASS and moves on, so an OLDER passing gate 3 is taken
-# where newest-wins refuses on the newest one.
-P_SKIPOLDER='{ print } index($0, "implementation-s${SPRINT}-[0-9]{8}T[0-9]{6}Z\\\"\" \"$v\" || continue") { print "      n=\"${v##*/}\"; grep -qE \"^26[[:space:]]+PASS\" <<< \"$(bash \"$SELF/gate-checkpoint.sh\" --nonce \"${n%.verdict.json}\" list 2> /dev/null)\" || continue" }'
-# m-rs1: reviewed_sha counts LINES, so a prior must carry exactly one, as the program did before BL-926.
-P_RS1='index($0, "if (!(v in S)) {") { $0 = "      n++; s = v }" } { print }'
-# m-rsany: the distinct-value refusal dropped; any number of lines answers, whatever they name.
-P_RSANY='{ i = index($0, "if (n > 1)"); if (i) $0 = substr($0, 1, i - 1) "if (n < 0)" substr($0, i + 10) } { print }'
-# m-nofence: a reviewed-sha line inside a fence is read like any other.
-P_NOFENCE='$0 != "    f { next }" { print }'
-# m-raw: the value is the raw second field, with no label, backtick, CR or blank normalisation.
-# m-nohex: the hex check made unable to fire; any single value answers.
-P_NOHEX='{ i = index($0, "if (s !~ /^[0-9a-f]+$/)"); if (i) $0 = substr($0, 1, i - 1) "if (s !~ /^/)" substr($0, i + 24) } { print }'
-P_RAW='index($0, "gsub(/[") { $0 = "      v = $2" } { print }'
-# BL-931, Rule A's gate-1 candidate. m-ra-nog1: the candidate dropped, the base always the QA sha.
-P_RA_NOG1='$0 == "    g1_scan" { $0 = "    g1_scan; G1P=0" } { print }'
-# m-ra-noverdict: any verdict of the latest gate-1 review counts.
-P_RA_NOVERDICT='$0 == "      if [ \"$G1V\" != APPROVED ]; then" { $0 = "      if false; then" } { print }'
-# m-ra-noanc: the re-review's sha taken whenever it is not older than the QA sha, with no further ancestry check.
-P_RA_NOANC='$0 == "        elif [ \"$A_GOG1\" = yes ] && [ \"$A_G1SHA\" = yes ]; then" { $0 = "        elif true; then" } { print }'
-# m-ra-dashnext: the next: line names the gate-2 index, as before BL-931.
-P_RA_DASHNEXT='{ i = index($0, "\"gate-transition.sh $G1IDX 1 --pass $NEXTP"); if (i) $0 = substr($0, 1, i + 19) "$IDX" substr($0, i + 26) } { print }'
-# m-ra-noambig: the first index form carrying files wins; files under two forms never refuse.
-P_RA_NOAMBIG='index($0, "    [ \"$G1NF\" -le 1 ] || {") == 1 { $0 = "    :" } { print }'
-# m-ra-lexsort: the latest pass chosen by LEXICAL order of the pass number, so p9 outranks p10.
-P_RA_LEXSORT='$0 == "        if [ \"$n_\" -gt \"$fp_\" ]; then fp_=\"$n_\"; frel_=\"docs/reviews/s${SPRINT}/$b\"; fi" { $0 = "        if [[ \"$n_\" > \"$fp_\" ]]; then fp_=\"$n_\"; frel_=\"docs/reviews/s${SPRINT}/$b\"; fi" } { print }'
-MUTS="m-early:P_EARLY:1 m-open12:P_OPEN12:2 m-noxcap:P_NOXCAP:2 m-norm:P_NORM:1 m-close26:P_CLOSE26:2 m-pdir:P_PDIR:2 m-pre3:P_PRE3:2 m-fixed3:P_FIXED3:2 m-nosprint:P_NOSPRINT:2 m-slugok:P_SLUGOK:2 m-skipolder:P_SKIPOLDER:1 m-rs1:P_RS1:2 m-rsany:P_RSANY:2 m-nofence:P_NOFENCE:1 m-raw:P_RAW:2 m-nohex:P_NOHEX:2 m-ra-nog1:P_RA_NOG1:2 m-ra-noverdict:P_RA_NOVERDICT:2 m-ra-noanc:P_RA_NOANC:2 m-ra-dashnext:P_RA_DASHNEXT:2 m-ra-noambig:P_RA_NOAMBIG:2 m-ra-lexsort:P_RA_LEXSORT:2"
-ARMS="MAP JOIN MAPX DAR RECP OPEN12 RERUN PRIORM PRIORD PRIORX FENCE FENCEC QAM QAD RA1 RA0 RAN RAX RAA RAM G3X G3Q G3 CLOSEX CLOSE G3P G3N CLOSEMX CLOSEM CLOSEP"
-
-if [ "$MATRIX" = 1 ]; then
-  rows=0
-  for m in $MUTS; do
-    n="${m%%:*}"; r="${m#*:}"; pv="${r%%:*}"; want="${r#*:}"
-    eval "prog=\"\$$pv\""
-    mut_tree "$n" "$prog" "$want" || continue
-    new_world "$T/mx-$n" || { echo "FIXTURE BROKEN: the matrix world for $n did not build" >&2; exit 2; }
-    o=1
-    st_g1 x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0
-    st_join x
-    st_g1x x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0
-    st_g2s x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0
-    st_g2 x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0
-    st_g2r x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0
-    st_g2k x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0
-    seed_priors || { echo "FIXTURE BROKEN: the matrix priors for $n did not build" >&2; exit 2; }
-    for s in st_pm st_pd st_px st_fe st_fc st_qm st_qd; do "$s" x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0; done
-    seed_ra || { echo "FIXTURE BROKEN: the matrix Rule A world for $n did not build" >&2; exit 2; }
-    for s in st_ra1 st_ra0 st_ran st_rax st_raa st_ram; do "$s" x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0; done
-    st_g3x x "$d/stub/core/scripts/gate-transition.sh"
-    st_g3q x "$d/stub/core/scripts/gate-transition.sh"
-    st_g3 x "$d/stub/core/scripts/gate-transition.sh"
-    st_cx x "$d/core/scripts/gate-transition.sh"
-    st_c x "$d/core/scripts/gate-transition.sh"
-    st_g3p x "$d/stub/core/scripts/gate-transition.sh"
-    st_g3n x "$d/stub/core/scripts/gate-transition.sh"
-    st_cmx x "$d/core/scripts/gate-transition.sh"
-    st_cm x "$d/core/scripts/gate-transition.sh"
-    st_cp x "$d/core/scripts/gate-transition.sh"
-    V_OPEN12=$o
-    for a in $ARMS; do
-      eval "v=\$V_$a"
-      if [ "$v" = 1 ]; then matrix_row "$n" "$a" 0 GREEN no; else matrix_row "$n" "$a" 1 TRIPPED yes; fi
-      rows=$((rows + 1))
-    done
-  done
-  _nm="$(printf '%s\n' $MUTS | grep -c .)" || _nm=0
-  _na="$(printf '%s\n' $ARMS | grep -c .)" || _na=0
-  [ "$rows" -eq $((_nm * _na)) ] && ok "MX matrix run measured $rows mutant x arm cells" || bad "MX matrix run measured $rows cells, $((_nm * _na)) expected"
-  [ "$fails" -eq 0 ] && { echo "gate-transition: MATRIX DONE"; exit 0; }
-  exit 1
-fi
 
 # --- the plain run ----------------------------------------------------------------------------
 new_world "$T/w" || { echo "FIXTURE BROKEN: the story world did not build (build_world, the worktree, the live OPEN or a standalone --map)" >&2; exit 2; }
@@ -680,61 +543,30 @@ GH="$T/real/core/hooks/ai-dlc-dispatch-guard.sh"
 cmp -s "$GH" "$HOOK" || { echo "FIXTURE BROKEN: the guard copy $GH is not byte-identical to $HOOK" >&2; exit 2; }
 [ -s "$WD/sa2" ] && grep -q '^SERIAL: ' "$WD/sa8" && [ -n "$(shards "$WD/sa8n")" ] \
   || { echo "FIXTURE BROKEN: the standalone maps do not separate the threshold world (sa2, sa8 SERIAL, sa8n partitioned)" >&2; exit 2; }
-O12=1; KILLS=0
+O12=1
 
 st_g1 g1 "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
-B_MAP="$([ "$V_MAP" = 1 ] && echo 1)"; B_O1="$([ "$V_OPEN" = 1 ] && echo 1)"
 [ "$V_MAP" = 1 ] && ok "MAP gate-1 plan carries $(grep -c . "$WD/g1.shards") shard line(s), cmp-equal to a standalone --map with --exclude-captures" \
   || bad "MAP gate-1 rc=$RC: plan shard lines differ from the standalone --map, or are absent ($(head -3 "$WD/g1.err" | tr '\n' ' '))"
 sed '1s/^./X/' "$WD/sa2" > "$WD/sa2.alt"
 cmp -s "$WD/g1.shards" "$WD/sa2.alt" && bad "MAP control: a one-byte-altered map is still cmp-equal" || ok "MAP control: a one-byte-altered standalone map is NOT cmp-equal to the plan"
 st_join join
-B_JOIN="$([ "$V_JOIN" = 1 ] && echo 1)"
 [ "$J_OK" = 1 ] && ok "JOIN the real guard ALLOWS a sharded code-reviewer brief citing the plan gate-transition.sh printed ($(head -1 "$WD/g1.out" | sed "s#^$L/##"))" \
   || bad "JOIN the program's own plan read $J_ODEC from the guard (rc $J_OGRC): $(printf '%s' "$J_OWHY" | cut -c1-240)"
 [ "$J_SHA" = 1 ] && ok "JOIN control: the byte-identical brief citing the plan's wrong-sha twin is DENIED (partition manifest)" \
   || bad "JOIN control: the wrong-sha twin was not denied on the partition manifest"
 [ "$J_NO" = 1 ] && ok "JOIN control: the same brief with no gate-plan line is DENIED" || bad "JOIN control: the no-plan brief was not denied for its missing gate-plan line"
 [ "$J_DIFF" = 1 ] && ok "JOIN control: the allow and wrong-sha briefs differ only in their gate-plan line" || bad "JOIN control: the allow and wrong-sha briefs differ outside the gate-plan line"
-if mut_tree m-pdir "$P_PDIR" 2; then
-  st_g1 m-pdir "$d/core/scripts/gate-transition.sh"
-  st_join m-pdir
-  case "$V_JOIN:$V_MAP:$J_ODEC:$J_OWHY" in
-    0:1:deny:*"names no readable plan"*)
-      mutant_killed "$([ "$B_JOIN" = 1 ] && [ "$B_MAP" = 1 ] && echo 1)" m-pdir "mutant m-pdir (plan dir spelled s<N>/./gate-transition): the guard denies the program's own plan, killed by JOIN; twin MAP stays green" && KILLS=$((KILLS + 1)) ;;
-    *) bad "mutant m-pdir SURVIVED or for another reason: JOIN=$V_JOIN MAP=$V_MAP guard=$J_ODEC" ;;
-  esac
-fi
-if mut_tree m-open12 "$P_OPEN12" 2; then
-  st_g1 m-open12 "$d/core/scripts/gate-transition.sh"
-  if [ "$V_OPEN" = 0 ] && [ "$V_MAP" = 1 ]; then
-    mutant_killed "$([ "$B_O1" = 1 ] && [ "$B_MAP" = 1 ] && echo 1)" m-open12 "mutant m-open12 (open at gates 1 and 2): OPEN moved across gate 1, killed by OPEN12; twin MAP stays green" && KILLS=$((KILLS + 1))
-  else bad "mutant m-open12 SURVIVED or moved MAP: OPEN same=$V_OPEN MAP=$V_MAP"; fi
-fi
 
 st_g1x g1x "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
-B_MAPX="$([ "$V_MAPX" = 1 ] && echo 1)"; B_O2="$([ "$V_OPEN" = 1 ] && echo 1)"
 [ "$V_MAPX" = 1 ] && ok "MAPX at min-files 8 the plan reads manifest: none, no shard line, route: serial $(cut -c1-48 "$WD/sa8")..." \
   || bad "MAPX rc=$RC: plan is not the standalone SERIAL answer ($(grep -E '^(manifest|route):' "$P/1-8-g1-p1.plan" 2> /dev/null | tr '\n' ' '))"
 [ "$(nshards "$WD/sa8n")" -gt 0 ] && ok "MAPX control: the same tree WITHOUT --exclude-captures partitions ($(nshards "$WD/sa8n") shard lines)" \
   || bad "MAPX control: without --exclude-captures the tree does not partition, so MAPX cannot discriminate"
-if mut_tree m-noxcap "$P_NOXCAP" 2; then
-  st_g1x m-noxcap "$d/core/scripts/gate-transition.sh"
-  if [ "$V_MAPX" = 0 ] && [ "$V_OPEN" = 1 ]; then
-    mutant_killed "$([ "$B_MAPX" = 1 ] && [ "$B_O2" = 1 ] && echo 1)" m-noxcap "mutant m-noxcap (--map without --exclude-captures): the plan partitions at the threshold, killed by MAPX; twin OPEN12 stays green" && KILLS=$((KILLS + 1))
-  else bad "mutant m-noxcap SURVIVED or moved OPEN12: MAPX=$V_MAPX OPEN same=$V_OPEN"; fi
-fi
 
 st_g2s g2s "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
-B_DAR="$([ "$V_DAR" = 1 ] && echo 1)"; B_O3="$([ "$V_OPEN" = 1 ] && echo 1)"
 [ "$V_DAR" = 1 ] && ok "DAR stale Dev Agent Record: exit 1, REFUSED dar-fold, and the pre-seeded plan is gone (no plan on disk)" \
   || bad "DAR rc=$RC: $(grep -c 'REFUSED dar-fold' "$WD/g2s.err") dar-fold line(s), plan on disk: $([ -e "$P/1-1-g2-p1.plan" ] && echo yes || echo no)"
-if mut_tree m-norm "$P_NORM" 1; then
-  st_g2s m-norm "$d/core/scripts/gate-transition.sh"
-  if [ "$V_DAR" = 0 ] && [ "$RC" = 1 ] && [ -e "$P/1-1-g2-p1.plan" ] && [ "$V_OPEN" = 1 ]; then
-    mutant_killed "$([ "$B_DAR" = 1 ] && [ "$B_O3" = 1 ] && echo 1)" m-norm "mutant m-norm (stale-plan removal dropped): the pre-seeded plan survives a refusal, killed by DAR; twin OPEN12 stays green" && KILLS=$((KILLS + 1))
-  else bad "mutant m-norm SURVIVED or for another reason: DAR=$V_DAR rc=$RC OPEN same=$V_OPEN"; fi
-fi
 
 st_g2 g2 "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
 [ "$V_DARC" = 1 ] && ok "DAR control: once the record is folded the same gate exits 0 and writes its plan" || bad "DAR control: folded gate 2 rc=$RC, $(head -3 "$WD/g2.err" | tr '\n' ' ')"
@@ -762,30 +594,24 @@ seed_priors || { echo "FIXTURE BROKEN: the pass-1 priors did not build (the real
   && [ "$(nrs "$L/docs/reviews/s1/4-1-qa-validation.md")" = 1 ] \
   || { echo "FIXTURE BROKEN: the seeded priors do not separate one distinct value from two, or raw from normalised" >&2; exit 2; }
 st_pm pm "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
-B_PRIORM="$([ "$V_PRIORM" = 1 ] && echo 1)"
 [ "$V_PRIORM" = 1 ] && ok "PRIORM gate 1 pass 2 over a real merged prior ($(grep -c '^reviewed-sha:' "$L/docs/reviews/s1/1-1-code-review.md") reviewed-sha lines, one sha): plan written, its prior line names the file, the manifest base is the prior's sha" \
   || bad "PRIORM rc=$RC: $(head -2 "$WD/pm.err" | tr '\n' ' ') base=$(mbase "$P/1-1-g1-p2.plan")"
 st_pd pd "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
-B_PRIORD="$([ "$V_PRIORD" = 1 ] && echo 1)"
 [ "$V_PRIORD" = 1 ] && ok "PRIORD control: the same prior with its middle line naming the base exits 1, REFUSED prior-review naming 2 distinct values, no plan" \
   || bad "PRIORD rc=$RC: $(head -2 "$WD/pd.err" | tr '\n' ' ')"
 st_px px "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
-B_PRIORX="$([ "$V_PRIORX" = 1 ] && echo 1)"
 [ "$V_PRIORX" = 1 ] && ok "PRIORX gate 1 pass 2 over a prior whose lines read 'reviewed-sha: <sha> (base <sha>)': exit 1, REFUSED prior-review naming a value that is not a hex object name, no plan" \
   || bad "PRIORX rc=$RC: $(head -2 "$WD/px.err" | tr '\n' ' ')"
 st_fe fe "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
-B_FENCE="$([ "$V_FENCE" = 1 ] && echo 1)"
 [ "$V_FENCE" = 1 ] && ok "FENCE a fenced reviewed-sha naming the base is not read: gate 1 pass 2 proceeds with manifest base $(printf '%s' "$MID" | cut -c1-12)" \
   || bad "FENCE rc=$RC: $(head -2 "$WD/fe.err" | tr '\n' ' ')"
 st_fc fc "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
 [ "$V_FENCEC" = 1 ] && ok "FENCE control: a prior whose only reviewed-sha line is fenced exits 1, REFUSED prior-review naming no line outside a fence" \
   || bad "FENCE control rc=$RC: $(head -2 "$WD/fc.err" | tr '\n' ' ')"
 st_qm qm "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
-B_QAM="$([ "$V_QAM" = 1 ] && echo 1)"
 [ "$V_QAM" = 1 ] && ok "QAM gate 2 pass 2 over a merged QA prior, three lines naming the frozen sha (one backticked): gate: 2 with $(nshards "$P/4-1-g2-p2.plan") shard lines" \
   || bad "QAM rc=$RC: $(head -2 "$WD/qm.err" | tr '\n' ' ')"
 st_qd qd "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
-B_QAD="$([ "$V_QAD" = 1 ] && echo 1)"
 [ "$V_QAD" = 1 ] && ok "QAD control: a merged QA prior naming WK, B, WK exits 1, REFUSED prior-validation naming 2 distinct values, no plan" \
   || bad "QAD rc=$RC: $(head -2 "$WD/qd.err" | tr '\n' ' ')"
 # BL-926's receipt reads the outputs the PRIORM, PRIORD, QAM and QAD starts above left on disk; it starts no subject.
@@ -795,36 +621,6 @@ case "$r926" in
   9) echo "FIXTURE BROKEN: receipt-bl926.sh refused to measure: $(head -1 "$WD/r926.out")" >&2; exit 2 ;;
   *) bad "BL-926 receipt exited $r926: $(tr '\n' ' ' < "$WD/r926.out" | cut -c1-300)" ;;
 esac
-if mut_tree m-rs1 "$P_RS1" 2; then
-  st_pm m-rs1 "$d/core/scripts/gate-transition.sh"
-  if [ "$V_PRIORM" = 0 ] && [ "$RC" = 1 ] && grep -q 'REFUSED prior-review' "$WD/pm.err"; then
-    mutant_killed "$([ "$B_PRIORM" = 1 ] && echo 1)" m-rs1 "mutant m-rs1 (exactly one reviewed-sha line, as before BL-926): the real merged prior is refused, killed by PRIORM" && KILLS=$((KILLS + 1))
-  else bad "mutant m-rs1 SURVIVED or for another reason: PRIORM=$V_PRIORM rc=$RC"; fi
-fi
-if mut_tree m-rsany "$P_RSANY" 2; then
-  st_pd m-rsany "$d/core/scripts/gate-transition.sh"
-  if [ "$V_PRIORD" = 0 ] && [ "$RC" = 0 ]; then
-    mutant_killed "$([ "$B_PRIORD" = 1 ] && echo 1)" m-rsany "mutant m-rsany (any number of lines, no distinct check): the A A B A A prior proceeds, killed by PRIORD" && KILLS=$((KILLS + 1))
-  else bad "mutant m-rsany SURVIVED or for another reason: PRIORD=$V_PRIORD rc=$RC"; fi
-fi
-if mut_tree m-nofence "$P_NOFENCE" 1; then
-  st_fe m-nofence "$d/core/scripts/gate-transition.sh"
-  if [ "$V_FENCE" = 0 ] && [ "$RC" = 1 ] && grep -q 'carries 2 distinct' "$WD/fe.err"; then
-    mutant_killed "$([ "$B_FENCE" = 1 ] && echo 1)" m-nofence "mutant m-nofence (fenced lines read): the fenced base sha is a second value, killed by FENCE" && KILLS=$((KILLS + 1))
-  else bad "mutant m-nofence SURVIVED or for another reason: FENCE=$V_FENCE rc=$RC"; fi
-fi
-if mut_tree m-nohex "$P_NOHEX" 2; then
-  st_px m-nohex "$d/core/scripts/gate-transition.sh"
-  if [ "$V_PRIORX" = 0 ] && [ "$RC" = 0 ] && [ -e "$P/1-5-g1-p2.plan" ]; then
-    mutant_killed "$([ "$B_PRIORX" = 1 ] && echo 1)" m-nohex "mutant m-nohex (hex check unable to fire): a 'sha (base sha)' prior proceeds, killed by PRIORX" && KILLS=$((KILLS + 1))
-  else bad "mutant m-nohex SURVIVED or for another reason: PRIORX=$V_PRIORX rc=$RC"; fi
-fi
-if mut_tree m-raw "$P_RAW" 2; then
-  st_qm m-raw "$d/core/scripts/gate-transition.sh"
-  if [ "$V_QAM" = 0 ] && [ "$RC" = 1 ] && grep -q 'REFUSED prior-validation' "$WD/qm.err"; then
-    mutant_killed "$([ "$B_QAM" = 1 ] && echo 1)" m-raw "mutant m-raw (raw field 2, no normalisation): the backticked line reads as a second value, killed by QAM" && KILLS=$((KILLS + 1))
-  else bad "mutant m-raw SURVIVED or for another reason: QAM=$V_QAM rc=$RC"; fi
-fi
 # --- Rule A's gate-1 candidate (BL-931): six starts of the real subject, then BL-931's receipt over their outputs ----
 seed_ra || { echo "FIXTURE BROKEN: the Rule A rework world did not build (the worktree off WK, its two commits, or the lifted role files)" >&2; exit 2; }
 for s in ra1:RA1 ra0:RA0 ran:RAN rax:RAX raa:RAA ram:RAM; do
@@ -832,8 +628,6 @@ for s in ra1:RA1 ra0:RA0 ran:RAN rax:RAX raa:RAA ram:RAM; do
   "st_$t" "$t" "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
   eval "v=\$V_$a"
   if [ "$v" = 1 ]; then
-    # Each arm's base flag, set only in the passing branch of its unmutated start.
-    case "$a" in RA1) B_RA1=1 ;; RA0) B_RA0=1 ;; RAN) B_RAN=1 ;; RAX) B_RAX=1 ;; RAA) B_RAA=1 ;; esac
     ok "$a gate 2 pass 2 over the Rule A world: $(grep -E '^(gate|rule-a-base):' "$WD/$t.plan" 2> /dev/null | tr '\n' ' ')$(grep -m1 'REFUSED' "$WD/$t.err" | cut -c1-120)"
   else bad "$a rc=$RC: $(grep -E '^(gate|rule-a-base|next):' "$WD/$t.plan" 2> /dev/null | tr '\n' ' ') $(head -3 "$WD/$t.err" | tr '\n' ' ' | cut -c1-400)"; fi
 done
@@ -843,51 +637,11 @@ case "$r931" in
   9) echo "FIXTURE BROKEN: receipt-bl931.sh refused to measure: $(head -1 "$WD/r931.out")" >&2; exit 2 ;;
   *) bad "BL-931 receipt exited $r931: $(tr '\n' ' ' < "$WD/r931.out" | cut -c1-300)" ;;
 esac
-# ra_mut <mutant> <prog var> <start> <arm> <expect> <label>: one BL-931 mutant in its deciding start. <expect> is the
-# answer the mutant gives there: rerun (a gate: rerun plan), plan (any plan at exit 0), dashnext (a next: naming 5-1),
-# skip (a gate: 2 plan).
-ra_mut() {
-  local n="$1" pv="$2" t="$3" a="$4" e="$5" prog hit=0
-  eval "prog=\"\$$pv\""
-  mut_tree "$n" "$prog" 2 || return 0
-  [ "$t" != ra0 ] || rm -f "$RV/5.1-code-review-p2.md"
-  "st_$t" "$n" "$d/core/scripts/gate-transition.sh"
-  case "$e" in
-    rerun) [ "$(cat "$WD/$t.rc")" = 0 ] && grep -qx 'gate: rerun' "$WD/$t.plan" 2> /dev/null && hit=1 ;;
-    skip) [ "$(cat "$WD/$t.rc")" = 0 ] && grep -qx 'gate: 2' "$WD/$t.plan" 2> /dev/null && hit=1 ;;
-    plan) [ "$(cat "$WD/$t.rc")" = 0 ] && [ -f "$WD/$t.plan" ] && hit=1 ;;
-    dashnext) grep -q '^next: gate-transition.sh 5-1 1 --pass 2 ' "$WD/$t.plan" 2> /dev/null && hit=1 ;;
-  esac
-  eval "v=\$V_$a"
-  [ "$v" = 0 ] && [ "$hit" = 1 ] && return 0
-  bad "mutant $n SURVIVED or for another reason: $a=$v rc=$(cat "$WD/$t.rc") $(grep -E '^(gate|rule-a-base|next):' "$WD/$t.plan" 2> /dev/null | tr '\n' ' ')"
-  return 1
-}
-# ra_mut returns 0 only for a kill; each kill is scored at its own literal call, against its arm's own base flag.
-ra_mut m-ra-nog1 P_RA_NOG1 ra1 RA1 rerun \
-  && mutant_killed "${B_RA1:-0}" m-ra-nog1 "mutant m-ra-nog1 (the gate-1 candidate dropped, the base always the QA sha): killed by RA1" && KILLS=$((KILLS + 1))
-ra_mut m-ra-noverdict P_RA_NOVERDICT ran RAN skip \
-  && mutant_killed "${B_RAN:-0}" m-ra-noverdict "mutant m-ra-noverdict (any verdict of the latest gate-1 review counts): killed by RAN" && KILLS=$((KILLS + 1))
-ra_mut m-ra-lexsort P_RA_LEXSORT ran RAN skip \
-  && mutant_killed "${B_RAN:-0}" m-ra-lexsort "mutant m-ra-lexsort (the latest pass chosen lexically, so p9 outranks p10): killed by RAN" && KILLS=$((KILLS + 1))
-ra_mut m-ra-noanc P_RA_NOANC rax RAX plan \
-  && mutant_killed "${B_RAX:-0}" m-ra-noanc "mutant m-ra-noanc (the re-review sha taken with no ancestry check): killed by RAX" && KILLS=$((KILLS + 1))
-ra_mut m-ra-noambig P_RA_NOAMBIG raa RAA plan \
-  && mutant_killed "${B_RAA:-0}" m-ra-noambig "mutant m-ra-noambig (the first index form wins, files under two forms never refuse): killed by RAA" && KILLS=$((KILLS + 1))
-ra_mut m-ra-dashnext P_RA_DASHNEXT ra0 RA0 dashnext \
-  && mutant_killed "${B_RA0:-0}" m-ra-dashnext "mutant m-ra-dashnext (the next: line names the gate-2 index): killed by RA0" && KILLS=$((KILLS + 1))
 [ "$O12" = 1 ] && ok "OPEN12 the live OPEN is byte-identical across every gate-1 and gate-2 run" || bad "OPEN12 a gate-1 or gate-2 run moved the live OPEN"
 
 st_g3x g3x "$GT3"
-B_G3X="$([ "$V_G3X" = 1 ] && echo 1)"
 [ "$V_G3X" = 1 ] && ok "G3X gate 3 with the H2 arm refusing: exit 1, no g3 plan, OPEN byte-identical" \
   || bad "G3X rc=$RC: plan $([ -e "$P/1-1-g3-p1.plan" ] && echo present || echo absent), OPEN same=$OPEN_SAME"
-if mut_tree m-early "$P_EARLY" 1; then
-  st_g3x m-early "$d/stub/core/scripts/gate-transition.sh"
-  if [ "$V_G3X" = 0 ] && [ "$RC" = 1 ] && [ -e "$P/1-1-g3-p1.plan" ]; then
-    mutant_killed "$([ "$B_G3X" = 1 ] && echo 1)" m-early "mutant m-early (plan written before the checks): a refused gate 3 leaves a plan, killed by G3X" && KILLS=$((KILLS + 1))
-  else bad "mutant m-early SURVIVED or for another reason: G3X=$V_G3X rc=$RC"; fi
-fi
 
 st_g3q g3q "$GT3"
 [ "$V_G3Q" = 1 ] && ok "G3Q gate 3 with the Check 22 arm exiting 1: exit 1, REFUSED check-22, OPEN byte-identical" \
@@ -899,76 +653,26 @@ st_g3 g3 "$GT3"
 [ "$V_OPENC" = 1 ] && ok "OPEN12 control: the gate-3 open moves OPEN" || bad "OPEN12 control: gate 3 left OPEN unchanged, so OPEN12 cannot discriminate"
 
 st_cx cx "$GTR"
-B_CLOSEX="$([ "$V_CLOSEX" = 1 ] && echo 1)"
 [ "$V_CLOSEX" = 1 ] && ok "CLOSEX close over a 26 FAIL ledger: exit 1, no '26 PASS' row refused, no close plan" \
   || bad "CLOSEX rc=$RC: $(head -2 "$WD/cx.err" | tr '\n' ' ')"
-if mut_tree m-close26 "$P_CLOSE26" 2; then
-  st_cx m-close26 "$d/core/scripts/gate-transition.sh"
-  if [ "$V_CLOSEX" = 0 ] && [ "$RC" = 0 ]; then
-    mutant_killed "$([ "$B_CLOSEX" = 1 ] && echo 1)" m-close26 "mutant m-close26 (close accepting 26 FAIL): close passes over a FAIL ledger, killed by CLOSEX" && KILLS=$((KILLS + 1))
-  else bad "mutant m-close26 SURVIVED or for another reason: CLOSEX=$V_CLOSEX rc=$RC"; fi
-fi
 
 st_c c "$GTR"
 [ "$V_CLOSE" = 1 ] && ok "CLOSE close with 26 PASS: exit 0, gate: close, nonce: $X" || bad "CLOSE rc=$RC: $(head -2 "$WD/c.err" | tr '\n' ' ')"
-if [ -d "$T/m/m-close26/core/scripts" ]; then
-  st_c m-close26-t "$T/m/m-close26/core/scripts/gate-transition.sh"
-  [ "$V_CLOSE" = 1 ] && ok "T-m-close26 twin CLOSE stays GREEN under mutant m-close26" || bad "T-m-close26 twin CLOSE tripped under m-close26 (rc=$RC)"
-fi
 st_g3p g3p "$GT3"
-B_G3P="$([ "$V_G3P" = 1 ] && echo 1)"
 [ "$V_G3P" = 1 ] && ok "G3P gate 3 with the Check 22 arm exiting 3 (PRE-LEDGER): exit 0, g3 plan written, it carries the PRE-LEDGER gate-log line" \
   || bad "G3P rc=$RC: $(head -3 "$WD/g3p.err" | tr '\n' ' ')"
 st_g3n g3n "$GT3"
-B_G3N="$([ "$V_G3N" = 1 ] && echo 1)"
 [ "$V_G3N" = 1 ] && ok "G3N gate 3 with the Check 22 arm exiting 3 (NO ROLE-BOUND ROWS): exit 0, the plan carries that message and no PRE-LEDGER" \
   || bad "G3N rc=$RC: $(head -3 "$WD/g3n.err" | tr '\n' ' ')"
-if mut_tree m-pre3 "$P_PRE3" 2; then
-  st_g3p m-pre3 "$d/stub/core/scripts/gate-transition.sh"
-  if [ "$V_G3P" = 0 ] && [ "$RC" = 1 ] && grep -q 'REFUSED check-22' "$WD/g3p.err"; then
-    mutant_killed "$([ "$B_G3P" = 1 ] && echo 1)" m-pre3 "mutant m-pre3 (Check 22 exit 3 refuses): a PRE-LEDGER sprint is refused, killed by G3P; twin G3Q stays green" && KILLS=$((KILLS + 1))
-  else bad "mutant m-pre3 SURVIVED or for another reason: G3P=$V_G3P rc=$RC"; fi
-fi
-if mut_tree m-fixed3 "$P_FIXED3" 2; then
-  st_g3n m-fixed3 "$d/stub/core/scripts/gate-transition.sh"
-  if [ "$V_G3N" = 0 ] && [ "$RC" = 0 ]; then
-    mutant_killed "$([ "$B_G3N" = 1 ] && echo 1)" m-fixed3 "mutant m-fixed3 (Check 22 exit 3 records a fixed PRE-LEDGER line): the NO ROLE-BOUND ROWS branch is mislabelled, killed by G3N; twin G3P stays green" && KILLS=$((KILLS + 1))
-  else bad "mutant m-fixed3 SURVIVED or for another reason: G3N=$V_G3N rc=$RC"; fi
-fi
 st_cmx cmx "$GTR"
 [ "$V_CLOSEMX" = 1 ] && ok "CLOSEMX close over a storyless s1 verdict whose ledger lacks 26 PASS: exit 1, REFUSED close, no close plan (a newer s12 verdict with 26 PASS is not taken)" \
   || bad "CLOSEMX rc=$RC: $(head -2 "$WD/cmx.err" | tr '\n' ' ')"
-B_CLOSEMX="$([ "$V_CLOSEMX" = 1 ] && echo 1)"
-# Before CLOSEM seeds a newer storyless verdict, which would hide the slugged decoy from the mutant.
-if mut_tree m-slugok "$P_SLUGOK" 2; then
-  st_cmx m-slugok "$d/core/scripts/gate-transition.sh"
-  if [ "$V_CLOSEMX" = 0 ] && [ "$RC" = 0 ] && grep -qxF "nonce: $NM4" "$P/2-1-gclose-p1.plan"; then
-    mutant_killed "$([ "$B_CLOSEMX" = 1 ] && echo 1)" m-slugok "mutant m-slugok (fallback admits a slugged series id): story 2-1 closes on story 4-1's gate, killed by CLOSEMX" && KILLS=$((KILLS + 1))
-  else bad "mutant m-slugok SURVIVED or for another reason: CLOSEMX=$V_CLOSEMX rc=$RC"; fi
-fi
-# Also before CLOSEM: its newer 26-PASS storyless verdict would be taken by the mutant and the original alike.
-if mut_tree m-skipolder "$P_SKIPOLDER" 1; then
-  st_cmx m-skipolder "$d/core/scripts/gate-transition.sh"
-  if [ "$V_CLOSEMX" = 0 ] && [ "$RC" = 0 ] && grep -qxF "nonce: $NM0" "$P/2-1-gclose-p1.plan"; then
-    mutant_killed "$([ "$B_CLOSEMX" = 1 ] && echo 1)" m-skipolder "mutant m-skipolder (fallback skips a verdict lacking 26 PASS): story 2-1 closes on an older sprint gate, killed by CLOSEMX" && KILLS=$((KILLS + 1))
-  else bad "mutant m-skipolder SURVIVED or for another reason: CLOSEMX=$V_CLOSEMX rc=$RC"; fi
-fi
 st_cm cm "$GTR"
-B_CLOSEM="$([ "$V_CLOSEM" = 1 ] && echo 1)"
 [ "$V_CLOSEM" = 1 ] && ok "CLOSEM close with no g3 plan over the newest storyless implementation-s1 verdict with 26 PASS: exit 0, gate: close, nonce: $NM2, a gate3-scope line" \
   || bad "CLOSEM rc=$RC: $(head -2 "$WD/cm.err" | tr '\n' ' ')"
 st_cp cp "$GTR"
-B_CLOSEP="$([ "$V_CLOSEP" = 1 ] && echo 1)"
 [ "$V_CLOSEP" = 1 ] && ok "CLOSEP a story-slug verdict ($NM3) wins over a newer storyless one ($NM2): no gate3-scope line" \
   || bad "CLOSEP rc=$RC: $(grep -E '^(nonce|gate3-scope):' "$P/3-1-gclose-p1.plan" 2> /dev/null | tr '\n' ' ') $(head -2 "$WD/cp.err" | tr '\n' ' ')"
-if mut_tree m-nosprint "$P_NOSPRINT" 2; then
-  st_cm m-nosprint "$d/core/scripts/gate-transition.sh"
-  if [ "$V_CLOSEM" = 0 ] && [ "$RC" = 1 ] && grep -q 'no gate-3 plan and no gate-adjudication verdict' "$WD/cm.err"; then
-    mutant_killed "$([ "$B_CLOSEM" = 1 ] && echo 1)" m-nosprint "mutant m-nosprint (sprint-scoped close fallback dropped): a storyless gate 3 names no nonce, killed by CLOSEM" && KILLS=$((KILLS + 1))
-  else bad "mutant m-nosprint SURVIVED or for another reason: CLOSEM=$V_CLOSEM rc=$RC"; fi
-fi
-# Every mutant was built, applied and killed: KILLS counts mutant_killed calls that returned 0.
-[ "$KILLS" = 22 ] && ok "MK all 22 mutants applied and scored" || bad "MK $KILLS of 22 mutants scored"
 
 echo
 report_end gate-transition

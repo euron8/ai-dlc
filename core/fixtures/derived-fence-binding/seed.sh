@@ -10,10 +10,10 @@
 # script, and the two install layouts make that walk resolve differently in a consumer than it
 # does here — green upstream, red installed.
 #
-# `.githooks/` and `templates/` are staged for the reasons the siblings state: I30 compares the
-# two pre-push syntax globs and I22 joins the role files against templates/settings.json.template,
-# and either one missing makes the PRISTINE seed fail, which takes every assertion built on it
-# down as a false pass.
+# `templates/` is staged for the reason the siblings state: I22 joins the role files against
+# templates/settings.json.template, and its absence makes the PRISTINE seed fail. `.githooks/` is
+# neither declared nor staged: every run here, --matrix included, selects arms (I75 I108 I121
+# I122 I123) that never open it.
 #
 # Prints the temp root on stdout. Caller owns cleanup.
 set -euo pipefail
@@ -40,7 +40,6 @@ ROOT="$(mktemp -d "${TMPDIR:-/tmp}/derived-fence-binding.XXXXXX")"
 mkdir -p "$ROOT"
 cp -R "$D_ROOT/core"      "$ROOT/core"
 cp -R "$D_ROOT/scripts"   "$ROOT/scripts"
-cp -R "$D_ROOT/.githooks" "$ROOT/.githooks"
 cp -R "$D_ROOT/templates" "$ROOT/templates"
 cp -R "$D_ROOT/patterns"  "$ROOT/patterns"
 mkdir -p "$ROOT/.claude"

@@ -28,21 +28,7 @@
 #   S8  --split / --assemble round-trip: section copies only for the sectioned stem, a whole-file
 #       SPEC part has no copy, an edited copy assembles into prd.md.
 #   R   receipt.sh exits 0 on this tree (BL-458's receipt, run against the shipping code).
-# THE MUTANTS AT THE END are copies of the script with partition-document.sh beside it. Each runs
-# only its DECIDING arm (must fail) and one named TWIN (must stay green), per the matrix below.
-# The mutant x predicate matrix below was measured once with every predicate on every
-# mutant (the kill sets were compared for EQUALITY); the twin is a predicate outside that set.
-# MUTANT-MATRIX SX1 decides=s3 twins=s1
-# MUTANT-MATRIX SX2 decides=s1 twins=s3
-# MUTANT-MATRIX SX3 decides=s2 twins=s1
-# MUTANT-MATRIX SX4 decides=s5 twins=s1
-# MUTANT-MATRIX SX5 decides=x1 twins=s1
-# MUTANT-MATRIX SX6 decides=x7 twins=s1
-# MUTANT-MATRIX-DYNAMIC score why=the name is "${label%% *}", the first word of the literal label each mutant call passes, so each SX name above is one literal call site
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/subject-partition/run.sh --matrix
 set -uo pipefail
-MATRIX=0; MATRIX_CELLS=0
-case "${1:-}" in --matrix) MATRIX=1 ;; "") ;; *) echo "FIXTURE ERROR: unknown argument ${1}" >&2; exit 2 ;; esac
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
 
@@ -68,10 +54,6 @@ _tmp="${TMPDIR:-/tmp}"; _tmp="${_tmp%/}"
 WORK="$(mktemp -d "$_tmp/subject-partition.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=f -c user.email=f@example.invalid -c core.hooksPath=/dev/null "${@:2}"; }
 lorem() { local i; for i in $(seq 1 "$2"); do printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
@@ -272,11 +254,7 @@ p_x9() { # the `@` separator: an all-`@` list splits, and a list mixing `@` and 
   run "$1" "$w" --split 9 "$d" --expect-sha "$(shas_of "$w" | sed 's/=/@/')"
   [ "$RC" -eq 0 ] && [ -f "$d/.subject" ]
 }
-live_fails0=0
-P_ALL="s1 s2 s3 s4 s5 s6 s7 s8 x1 x2 x3 x4 x5 x6 x7 x8 x9"
 
-echo "subject-partition: mode $([ "$MATRIX" -eq 1 ] && echo FULL || echo PUSH)"
-live_fails0=$fails
 p_s1 "$PS" && ok "S1: brief, SPEC, architecture-impact each one part; >= 3 PRD parts, one holding the line edited in an EARLIER section; manifest written" \
   || bad "S1: the subject map is incomplete: $(head -12 "$OUT")"
 p_s2 "$PS" && ok "S2: an unchanged brief has no part, and the other three files still do" || bad "S2: $(head -12 "$OUT")"
@@ -299,69 +277,6 @@ p_x8 "$PS" && ok "X8: nested AI_DLC_STATE_DIR=out/bmad -> map and split --expect
 p_x9 "$PS" && ok "X9: --expect-sha in the <stem>@<sha> form, and mixed with <stem>=<sha> -> SPLIT" || bad "X9: $(head -3 "$OUT")"
 if bash "$HERE/receipt.sh" "$TREE" > "$OUT" 2>&1; then ok "R: receipt.sh exits 0 on $TREE"
 else bad "R: receipt.sh did not pass on $TREE: $(cat "$OUT")"; fi
-B_live=0   # set 1 only when every live predicate above held in THIS run: the flag every kill routes through
-if [ "$fails" -eq "$live_fails0" ]; then ok "LIVE: every live predicate above held in this run, so each kill below reads an unmutated arm that passed"; B_live=1; fi
-
-# ------------------------------------------------------------------------------ the mutants
-mutdir() { local d; d="$(mktemp -d "$WORK/mut-$1.XXXXXX")" || return 1; cp "$PS" "$SRCDIR/partition-document.sh" "$d/"; printf '%s' "$d"; }
-apply() { # <file> <old> <new>
-  M_OLD="$2" M_NEW="$3" python3 - "$1" <<'PY'
-import os, sys
-p = sys.argv[1]; old, new = os.environ["M_OLD"], os.environ["M_NEW"]
-t = open(p, encoding="utf-8").read()
-n = t.count(old)
-if n != 1:
-    sys.stderr.write("ANCHOR MATCHED %d TIMES, EXPECTED 1\n" % n); sys.exit(3)
-open(p, "w", encoding="utf-8").write(t.replace(old, new))
-PY
-}
-score() { # <label> <script> <deciding arm> <twin arm>
-  local label="$1" s="$2" decide="$3" twin="$4" dead="" p
-  if [ "$MATRIX" -eq 1 ]; then # --matrix: every predicate on every mutant, nothing asserted
-    for p in $P_ALL; do MATRIX_CELLS=$((MATRIX_CELLS + 1)); "p_$p" "$s" || dead="$dead $p"; done
-    echo "  matrix ${label%% *}: dead [${dead# }]"; return
-  fi
-  if ! "p_$decide" "$s"; then
-    if "p_$twin" "$s"; then mutant_killed "$B_live" "${label%% *}" "$label: KILLED by [$decide], twin [$twin] stays green"
-    else bad "$label: twin [$twin] also failed -- the kill is not the mutation's alone"; fi
-  else bad "$label SURVIVED: deciding arm [$decide] held"; fi
-}
-mutant() { # <label> <decides> <twin> <old> <new>
-  local d; d="$(mutdir "${1%% *}")"
-  if ! apply "$d/partition-subject.sh" "$4" "$5"; then bad "$1: FIXTURE STALE -- anchor not in the script exactly once"; return; fi
-  cmp -s "$PS" "$d/partition-subject.sh" && { bad "$1: FIXTURE STALE -- the mutated copy is byte-identical"; return; }
-  score "$1" "$d/partition-subject.sh" "$2" "$3"
-}
-# SX0 control folded: the unmutated copy would rerun the same predicates as the live arms above, so
-# only what it guarded is asserted -- the sandbox copy is the subject byte for byte and carries its sibling.
-C0="$(mutdir sx0)"
-if [ -f "$C0/partition-document.sh" ] && cmp -s "$PS" "$C0/partition-subject.sh"; then ok "SX0 control: the sandbox copy is byte-identical to the subject and carries partition-document.sh (the live arms above are its run)"
-else bad "SX-pre: FIXTURE BROKEN -- the sandbox lacks partition-document.sh"; fi
-mutant "SX1 the first SPEC match taken" "s3" "s1" \
-  '[ "$nspec" -eq 1 ] || refuse' \
-  'sed -i.b 1q "$T/specs"; [ "$nspec" -ge 1 ] || refuse'
-mutant "SX2 architecture-impact omitted from the subject" "s1" "s3" \
-  "    printf 'architecture-impact %s\\n' \"\$PA/s\$SPRINT/architecture-impact.md\"; } > \"\$T/files\"" \
-  '    :; } > "$T/files"'
-mutant "SX3 unchanged files emitted" "s2" "s1" \
-  '    cmp -s "$T/base.blob" "$f" && continue' \
-  '    :'
-mutant "SX4 the base re-derived on every map" "s5" "s1" \
-  '  if [ -f "$MANIFEST" ]; then' \
-  '  if false; then'
-mutant "SX5 --expect-sha a no-op (the list is never compared)" "x1" "s1" \
-  'if [ -n "$EXPECT" ]; then' \
-  'if false; then'
-mutant "SX6 the undo of a failed split a no-op (sections left behind)" "x7" "s1" \
-  '  for s in $SPLIT_DONE; do
-    rm -f' \
-  '  for s in; do
-    rm -f'
-
-# A plain run executes no matrix-only cell: the matrix branch of score() is the only place that counts one.
-if [ "$MATRIX" -eq 0 ]; then
-  if [ "$MATRIX_CELLS" -eq 0 ]; then ok "MODE: a plain run (PUSH) executed 0 matrix-only cells"; else bad "MODE: a plain run executed $MATRIX_CELLS matrix-only cell(s)"; fi
-fi
 
 echo
 report_end subject-partition

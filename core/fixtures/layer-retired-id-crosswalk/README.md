@@ -48,21 +48,8 @@ did not judge, and counts them, in three cases: no git work tree, a **shallow** 
 history is truncated at the graft boundary), and a tracked entry whose diff history yields
 none of the ids it currently defines.
 
-Part 3 drives a real `--depth 1` clone. Part 4's M3 forces the shallow probe to `ok` and
-requires the truncated tree to then report **clean** — which is the state the guard exists
-to make impossible.
-
-## Mutants
-
-Four, each scored on the **complete expected vector** rather than per row, because three of
-the four cells are occupied by more than one arm and per-row scoring would report
-entanglement on every mutant. An unmutated control copy runs first: every assertion is
-"this cell moved", and a copy that dies on startup moves every cell at once.
-
-One mutant is recorded here because it was wrong first: M3 originally knocked out the
-**per-file** guard and the shallow tree still refused, because two different branches
-produce a refusal and only one is reachable on a shallow clone. A mutant that fails to move
-its cell is telling you the arm it named is not the arm under test.
+Part 3 drives a real `--depth 1` clone and requires the arm to refuse and to name the shallow
+condition.
 
 ## Run
 

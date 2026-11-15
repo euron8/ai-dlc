@@ -7,7 +7,7 @@
 # purpose (the only true finding), one inside a generated region, and one informational block that
 # must never be confused for either.
 #
-# Copies of the shipping schema and the shipping script go in, and the mutants below are made from
+# Copies of the shipping schema and the shipping script go in, and the schema variants below are made from
 # those copies — never from the originals in the tree. Idempotent.
 set -uo pipefail
 
@@ -110,7 +110,7 @@ block "$N/lib/y.py"    "$PARTY" "# nested lib"
 # that separates a prefix match from a substring match no matter how the caller spelled the path
 # or how thoroughly it was normalised first. The nested checkout's absolute path does that job
 # only until the paths are resolved; this file does it afterwards too, which is the difference
-# between a mutant that guards the fix and one that only guards the bug.
+# between a subject that guards the fix and one that only guards the bug.
 block "$N/vendor/docs/retro/inner.md" "$PARTY" "# vendored, and not a home"
 
 # Two symlinks NAMED ON THE COMMAND LINE, both pointing at a genuine stray inside the same
@@ -126,44 +126,14 @@ printf '{ "party_mode_homes": ["server/**"] }\n'   > "$WORK/ext-adds-server.json
 printf '{ "party_mode_homes": "server/**" }\n'     > "$WORK/ext-malformed-type.json"
 printf '{ "party_mode_homes": ["ser*ver/x"] }\n'   > "$WORK/ext-bad-glob.json"
 
-# --- mutants: COPIES, each one edit, each guarded by cmp -s -------------------
+# --- control copies and schema variants ---------------------------------------
 V="$P/scripts/ai-dlc/validate-provenance-block.sh"
 S="$P/.claude/schemas/provenance-block.json"
 
-# The unmutated control. A lone copy of a script that dies on its own preamble emits nothing, and
-# "no output" scores as a kill for every mutant at once — v0.196.0's fixture learned that the
-# hard way. This copy is run first and must behave exactly like the tree's.
-cp "$V" "$WORK/validator-control.sh"
+# The control copy of the schema: every arm restores the schema to it.
 cp "$S" "$WORK/schema-control.json"
 
-mutate_py() { # <src> <dst> <old-literal> <new-literal> <label>
-  python3 - "$1" "$2" "$3" "$4" <<'PY'
-import sys
-src, dst, old, new = sys.argv[1:5]
-text = open(src, encoding="utf-8").read()
-if text.count(old) != 1:
-    sys.stderr.write(f"FIXTURE ERROR: mutation anchor appears {text.count(old)} times, want 1\n")
-    sys.exit(2)
-open(dst, "w", encoding="utf-8").write(text.replace(old, new))
-PY
-  [ $? -eq 0 ] || { echo "FIXTURE ERROR: mutation $5 failed" >&2; exit 2; }
-  cmp -s "$1" "$2" && { echo "FIXTURE ERROR: mutation $5 changed nothing" >&2; exit 2; }
-}
-
-# MUT-C: the generated-region marker drifts to a second spelling — the exact failure the schema's
-# region_slug key exists to make impossible. The carve-out stops matching; the taught example
-# reads as a forgery.
-mutate_py "$V" "$WORK/mut-region.sh" \
-  'GEN_OPEN = "BEGIN GENERATED: " + S["region_slug"] + "/"' \
-  'GEN_OPEN = "BEGIN GENERATEDX: " + S["region_slug"] + "/"' "region"
-
-# MUT-D: the trailing-comment rule is dropped, so a block copied from a taught example — comments
-# and all — stops being recognised as party-mode at all.
-mutate_py "$V" "$WORK/mut-comment.sh" \
-  'value = re.sub(r"\s+#.*$", "", stripped.split(":", 1)[1]).strip()' \
-  'value = stripped.split(":", 1)[1].strip()' "comment"
-
-# MUT-A: a declared home is removed from the schema. The retro document becomes a finding.
+# A declared home is removed from the schema. The retro document becomes a finding.
 python3 - "$S" "$WORK/schema-no-retro.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -174,9 +144,8 @@ if len(d["stray_scan"]["homes"]) == len(before):
 json.dump(d, open(sys.argv[2], "w", encoding="utf-8"), indent=2)
 PY
 [ $? -eq 0 ] || exit 2
-cmp -s "$S" "$WORK/schema-no-retro.json" && { echo "FIXTURE ERROR: home mutation changed nothing" >&2; exit 2; }
 
-# MUT-B: the subject vocabulary is emptied. A scan with nothing to look for reports PASS on every
+# The subject vocabulary is emptied. A scan with nothing to look for reports PASS on every
 # tree there is, which is this repo's named defect class in its purest form.
 python3 - "$S" "$WORK/schema-no-skills.json" <<'PY'
 import json, sys
@@ -187,58 +156,19 @@ d["stray_scan"]["party_mode_skills"] = []
 json.dump(d, open(sys.argv[2], "w", encoding="utf-8"), indent=2)
 PY
 [ $? -eq 0 ] || exit 2
-cmp -s "$S" "$WORK/schema-no-skills.json" && { echo "FIXTURE ERROR: skills mutation changed nothing" >&2; exit 2; }
-
-# MUT-E: the home match widens from a PREFIX to a SUBSTRING. This is the shape of the tempting
-# wrong fix for the absolute-path defect — "the absolute path contains the home, so accept it" —
-# and it turns every file of a project checked out at docs/retro/<name>/ into a declared home.
-# A widened guard usually produces the SAME output as the original, which is how it scores an
-# unearned kill; the arm that reads this mutant asks about the nested checkout, where the two
-# spellings disagree, and pairs it with a stray the widening cannot reach.
-mutate_py "$V" "$WORK/mut-substr.sh" \
-  'return rel.startswith(prefix)' \
-  'return prefix in rel' "substr"
-
-# MUT-F: the on-disk respelling is reverted to bare realpath, on BOTH sides at once -- the anchor
-# is inside the one helper the root and every candidate go through, so no layer survives it.
-# A case-variant spelling of a declared home is a false stray again on a case-folding filesystem.
-mutate_py "$V" "$WORK/mut-ondisk-revert.sh" \
-  '    real = os.path.realpath(path)' \
-  '    return os.path.realpath(path)' "ondisk-revert"
-
-# MUT-G: the FORBIDDEN remedy -- fold case in the home comparison instead of respelling the path.
-# It closes the false stray on a folding filesystem exactly as the shipped fix does, so nothing
-# on such a host can tell them apart. On a case-sensitive filesystem it accepts a genuinely
-# distinct DOCS/retro/ as the home: a false PASS. Only the case-sensitive arm can kill it.
-mutate_py "$V" "$WORK/mut-casefold.sh" \
-  'return rel.startswith(prefix)' \
-  'return rel.casefold().startswith(prefix.casefold())' "casefold"
-
-# MUT-H: the respelling picks by casefold alone, dropping the samestat check. Where the filesystem
-# folds more narrowly than casefold, two listed entries match and the first listed wins.
-mutate_py "$V" "$WORK/mut-no-samestat.sh" \
-  'if n.casefold() == fold and os.path.samestat(st, os.lstat(os.path.join(out, n))):' \
-  'if n.casefold() == fold:' "no-samestat"
 
 cat > "$WORK/env.sh" <<ENV
 WORK="$WORK"
 PROJ="$P"
 VALIDATOR="$V"
 SCHEMA="$S"
-CONTROL_VALIDATOR="$WORK/validator-control.sh"
 CONTROL_SCHEMA="$WORK/schema-control.json"
-MUT_REGION="$WORK/mut-region.sh"
-MUT_COMMENT="$WORK/mut-comment.sh"
 SCHEMA_NO_RETRO="$WORK/schema-no-retro.json"
 SCHEMA_NO_SKILLS="$WORK/schema-no-skills.json"
 EXT_ADDS_SERVER="$WORK/ext-adds-server.json"
 EXT_MALFORMED_TYPE="$WORK/ext-malformed-type.json"
 EXT_BAD_GLOB="$WORK/ext-bad-glob.json"
 NESTED="$N"
-MUT_SUBSTR="$WORK/mut-substr.sh"
-MUT_ONDISK_REVERT="$WORK/mut-ondisk-revert.sh"
-MUT_CASEFOLD="$WORK/mut-casefold.sh"
-MUT_NO_SAMESTAT="$WORK/mut-no-samestat.sh"
 LAYOUT="$LAYOUT"
 ENV
 

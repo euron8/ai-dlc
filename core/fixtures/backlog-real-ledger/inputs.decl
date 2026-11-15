@@ -11,8 +11,6 @@ core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
 core/fixtures/backlog-real-ledger/ledger.snapshot
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 scripts/backlog-receipt-lib.sh
-core/fixtures/lib/mutant.sh
-core/fixtures/lib/matrix.sh
 # p3 (BL-880): both pre-push hooks and every script either one names on a non-comment line. The fixture
 # DERIVES that set from the hooks at run time and refuses (FIXTURE BROKEN) when a member is absent from
 # the sandbox, so a script a hook starts running is a red run until it is added here. The two validators
@@ -36,7 +34,6 @@ scripts/validate-fixture-git-env.sh
 scripts/validate-fixture-hygiene.sh
 scripts/validate-fixture-inprocess.sh
 scripts/validate-fixture-invocations.sh
-scripts/validate-mutant-kills.sh
 scripts/validate-no-dead-doc-refs.sh
 scripts/validate-plan-shape.sh
 scripts/validate-release-version.sh

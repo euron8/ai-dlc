@@ -5,9 +5,9 @@
 # direct plus 4 locked-anchor --emit-blocks starts nested under the other two; two counted runs, identical counts.
 # Re-measured when arm (o) (BL-936) added two end-to-end starts of the capture hook, writing the history the §3
 # derivation reads; two counted runs, identical counts.
-53 *
+21 *
 0 core/scripts/validate-draft-stamps.sh
-10 core/scripts/validate-adversarial-convergence.sh
+2 core/scripts/validate-adversarial-convergence.sh
 2 core/scripts/validate-request-coverage.sh
 2 core/scripts/validate-spec-join.sh
 6 core/scripts/validate-locked-anchor.sh

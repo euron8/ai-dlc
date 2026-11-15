@@ -26,45 +26,17 @@
 # Every assertion is
 # PRESENCE-shaped, so none of them can be satisfied by a validator that emits nothing: measured
 # with `validate-enforcement-map.sh` replaced by `exit 0`, ten of the eleven fail and only the
-# unmutated control passes.
-#
-# THE MUTANT MATRIX. Every mutant is named, and its row below names the cell that KILLS it
-# (decides: the mutant's own expected FAIL line) and the cell it could plausibly co-trip but must
-# leave GREEN (twins: another mutant's expected FAIL line, which must be ABSENT from this
-# mutant's output). A plain run scores each mutant on its deciding cell and checks its twin
-# against the SAME `--arms I39` output, so a twin costs no validator run. Each twin pair sits on
-# the same extraction or the same step, which is where one mutation could trip its neighbour.
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
-# state") requires. Run the REMEASURE command below, from the repo root. It scores every mutant
-# against every cell, and against
-# every validator arm outside I39 by one full validator run of the same mutated tree, whose
-# sorted FAIL: set must equal the `--arms I39` run's.
-# MUTANT-MATRIX emit-undocumented decides=emit-undocumented twins=documented-unemitted
-# MUTANT-MATRIX documented-unemitted decides=documented-unemitted twins=emit-undocumented
-# MUTANT-MATRIX emitter-zero decides=emitter-zero twins=emit-undocumented
-# MUTANT-MATRIX skill-zero decides=skill-zero twins=documented-unemitted
-# MUTANT-MATRIX heading-phantom decides=heading-phantom twins=heading-zero
-# MUTANT-MATRIX step8-undisposed decides=step8-undisposed twins=near-miss
-# MUTANT-MATRIX near-miss decides=near-miss twins=step8-undisposed
-# MUTANT-MATRIX heading-zero decides=heading-zero twins=heading-phantom
-# MUTANT-MATRIX step8-zero decides=step8-zero twins=step8-undisposed
-# MUTANT-MATRIX half-rename decides=half-rename twins=documented-unemitted
-# MUTANT-MATRIX-CONTROL control why=an unmutated copy must pass every arm so a mutant fire is attributable; nothing is mutated and there is no deciding cell
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/ledger-status-vocabulary/run.sh --matrix
+# clean-copy twin passes.
 set -u
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset CLAUDE_PROJECT_DIR
 DIR="$(cd "$(dirname "$0")" && pwd)"
-SELF_FILE="$DIR/$(basename "$0")"
 
-# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed by
-# the suite. Anything else as an argument is a usage error, never a silent plain run.
-MODE=plain
+# Any argument is a usage error, never a silent run.
 case "${1:-}" in
   "") ;;
-  --matrix) MODE=matrix ;;
-  *) echo "ledger-status-vocabulary: usage: run.sh [--matrix]" >&2; exit 2 ;;
+  *) echo "ledger-status-vocabulary: usage: run.sh" >&2; exit 2 ;;
 esac
 
 # I10 — a fixture must not inherit an ambient tunable that changes what it measures.
@@ -140,36 +112,26 @@ echo
 # and is a different number from anything measured here.
 #
 # Three phases. The call sites in the middle are UNCHANGED from the serial version —
-# `mutant_fires` now REGISTERS a run instead of performing it, and a third phase evaluates the
+# `seed_fires` now REGISTERS a run instead of performing it, and a third phase evaluates the
 # registry in DECLARATION order, which is what keeps this fixture's stdout byte-comparable
 # against the version it replaces.
 RUNS="$TMP/runs"; : > "$RUNS"
 MUTD="$TMP/seds"; mkdir -p "$MUTD"
 OUTD="$TMP/out";  mkdir -p "$OUTD"
 
-# THE UNMUTATED CONTROL, FIRST. Each mutant is a fresh copy of this tree; if the copy itself
-# cannot come out clean then every "the mutant fired" result below is a kill it did not earn.
-# This is the control that caught a copy missing its manifest on the first draft.
-# It is registered like any other run and REPORTED first; an empty sed program is the whole of
-# its mutation, so the worker runs the validator over an untouched copy.
-ASSERTIONS=$((ASSERTIONS + 1))
-: > "$MUTD/control.sed"
-printf 'control\t%s\t\t\t\n' "control" >> "$RUNS"
-
 # THE PASSING CLI TWIN: a clean copy judged by I39 alone, answered in-process and by the program
-# (cells.decl cli-pass). It is not a mutant, so it has no matrix row; the refusing twin rides on
-# emit-undocumented's own run.
+# (cells.decl cli-pass); the refusing twin rides on emit-undocumented's own run.
 ASSERTIONS=$((ASSERTIONS + 1))
 : > "$MUTD/cli-pass.sed"
 printf 'twinpass\t%s\t\t\t\n' "cli-pass" >> "$RUNS"
 
-# $1 label  $2 file-to-mutate  $3 sed-expr  $4 substring that MUST appear  $5 expected FAIL count  $6 why
+# $1 label  $2 file-to-seed  $3 sed-expr  $4 substring that MUST appear  $5 expected FAIL count  $6 why
 #
 # The sed program goes to a FILE rather than into the registry: these programs carry
 # backslashes and both quote characters, and one that arrived at the worker subtly re-quoted
 # would still apply, still satisfy `cmp -s`, and prove something other than what its call site
 # says.
-mutant_fires() {
+seed_fires() {
   local label="$1" file="$2" expr="$3" want="$4" want_n="$5" why="$6"
   ASSERTIONS=$((ASSERTIONS + 1))
   printf '%s' "$expr" > "$MUTD/$label.sed"
@@ -179,13 +141,13 @@ mutant_fires() {
 # --- Forward: the emitter produces a status step 3f does not document -----------------
 # The silent half. The operator is handed a verdict the step governing the ledger does not
 # explain, and the pull looks complete.
-mutant_fires "emit-undocumented" "$LR" \
+seed_fires "emit-undocumented" "$LR" \
   's/^\(  na=""; nam=""\)$/  emit NAMED-PHANTOM "x" "y"\n\1/' \
   "emits 'NAMED-PHANTOM' but SKILL.md step 3f never documents it" 1 \
   "a status with no entry in step 3f reaches the operator with no stated handling"
 
 # --- Reverse: step 3f documents a status nothing emits --------------------------------
-mutant_fires "documented-unemitted" "$SK" \
+seed_fires "documented-unemitted" "$SK" \
   's/^   - `HAND-REVIEW` → /   - `PHANTOM-STATUS` → nothing emits this.\n   - `HAND-REVIEW` → /' \
   "documents 'PHANTOM-STATUS' but ledger-reverify.sh never emits it" 1 \
   "the step describes a row no run can produce, which an operator reads as nothing to do"
@@ -194,12 +156,12 @@ mutant_fires "documented-unemitted" "$SK" \
 # Two empty sets are equal, so without these the check reports agreement the moment either
 # extraction stops matching — the exact shape of a check that cannot fire. The emitter mutation
 # widens `emit ` to `emit  `, which bash runs identically and the extraction cannot see.
-mutant_fires "emitter-zero" "$LR" \
+seed_fires "emitter-zero" "$LR" \
   's/^\([[:space:]]*\)emit \([A-Z]\)/\1emit  \2/' \
   "I39 found NO statuses in ledger-reverify.sh" 1 \
   "an extraction that stopped matching must fail loudly, not report two empty sets in agreement"
 
-mutant_fires "skill-zero" "$SK" \
+seed_fires "skill-zero" "$SK" \
   's/^3f\. \*\*/3z. **/' \
   "I39 found NO documented statuses in ai-dlc-update/SKILL.md step 3f" 1 \
   "renumbering the step must fail loudly rather than silently retiring the reverse direction"
@@ -220,7 +182,7 @@ mutant_fires "skill-zero" "$SK" \
 # SO THE `want_n 1` BELOW IS LOAD-BEARING AND IS NOT A TOLERANCE. Re-widening that loop makes
 # this mutant report 2 and fails here. Do not "fix" that by raising the number — the second
 # finding is the vacuous one, which is the whole of `fixture-mutants.md`'s two-failures rule.
-mutant_fires "heading-phantom" "$ER" \
+seed_fires "heading-phantom" "$ER" \
   's/Push-candidate ledger — CLOSE-CANDIDATE/Push-candidate ledger — GONE-CANDIDATE/' \
   "heading names 'GONE-CANDIDATE', which ledger-reverify.sh does not emit" 1 \
   "the report promises a section that can never have rows in it"
@@ -230,7 +192,7 @@ mutant_fires "heading-phantom" "$ER" \
 # with no actor, and it fails in the CLOSING direction: the reader executing step 8 literally
 # leaves the row unannotated and it re-reports forever. Removing one status from step 8's
 # disposition list is the whole defect, in one line.
-mutant_fires "step8-undisposed" "$SK" \
+seed_fires "step8-undisposed" "$SK" \
   's/, `INPUT-UNRESOLVED`//' \
   "heading puts 'INPUT-UNRESOLVED' in front of the operator, but SKILL.md step 8" 1 \
   "a status the report announces and step 8 never names is a duty with no actor"
@@ -263,12 +225,12 @@ printf 'near-miss\t%s\t%s\t\t\n' "near-miss" "$SK" >> "$RUNS"
 # Neither may be allowed to read as agreement: an empty heading set makes the two arms above
 # vacuous, and an empty step-8 region retires the acting-reader check while everything else
 # still passes.
-mutant_fires "heading-zero" "$ER" \
+seed_fires "heading-zero" "$ER" \
   's/Push-candidate ledger/Push-candidate LEDGER/' \
   "push-candidate heading yielded NO statuses" 1 \
   "an empty heading set makes both heading arms vacuous, which reads exactly like agreement"
 
-mutant_fires "step8-zero" "$SK" \
+seed_fires "step8-zero" "$SK" \
   's/^8\. \*\*Deliver/8z. **Deliver/' \
   "I39 could not locate SKILL.md's step 8 acting region" 1 \
   "renumbering step 8 must fail loudly rather than silently retiring the acting-reader check"
@@ -300,26 +262,17 @@ fi
 # that matched nothing from scoring as a kill, and moving it to the parent would put it on the
 # wrong side of the thing it checks.
 #
-# THE CONTROL IS THE ONE FULL RUN; EVERY MUTANT RUNS `--arms I39`. The control is the licence that
-# the clean tree passes every arm, so it keeps the whole validator. Each mutation touches only
-# I39's inputs and every message asserted below is emitted inside I39, so a mutant needs I39's
-# unit alone. want_n counts `^FAIL:` lines, and under `--arms` that counts only I39's lines where
+# EVERY RUN IS `--arms I39`. Each seeded input touches only I39's inputs and every message
+# asserted below is emitted inside I39, so a run needs I39's unit alone. want_n counts `^FAIL:` lines, and under `--arms` that counts only I39's lines where
 # a full run counts every arm; the entanglement want_n guards lives inside I39. Measured by a
 # one-off probe over all ten mutations, each on a copy, full run against `--arms I39`, the
 # sorted `^FAIL:` sets diffed: in every one the sets were identical (1 line each, 18 for
 # half-rename), with no line present in the full run and absent from the selected one.
-#
-# MATRIX-ONLY: under `--matrix` the worker also runs ONE full validator over the same mutated
-# tree (after the `--arms I39` run, before the copy is removed) so phase 3 can diff the two
-# sorted `^FAIL:` sets; equal sets mean every arm outside I39 stayed green. That full run is the
-# only matrix-only cell the worker owns, and it records itself in the ledger first (rule 9).
 LSV_JOBS=8
-MXL="$TMP/mx.ledger"; : > "$MXL"
-LSV_MODE="$MODE" LSV_LEDGER="$MXL" \
 LSV_BASE="$BASE" LSV_MUTD="$MUTD" LSV_OUT="$OUTD" LSV_WORK="$TMP" LSV_RUNS="$RUNS" \
   xargs -P "$LSV_JOBS" -I{} bash -c '
     l="$1"
-    if [ "$l" = control ]; then sel=""; else sel="--arms I39"; fi
+    sel="--arms I39"
     f="$(awk -F"\t" -v k="$l" "\$2==k{print \$3}" "$LSV_RUNS")"
     work="$LSV_WORK/w-$l"
     rm -rf "$work"
@@ -358,95 +311,11 @@ LSV_BASE="$BASE" LSV_MUTD="$MUTD" LSV_OUT="$OUTD" LSV_WORK="$TMP" LSV_RUNS="$RUN
         printf "DIFF rc=%s/%s" "$(cat "$LSV_OUT/$l.rc")" "$crc" > "$LSV_OUT/$l.twin"
       fi
     fi
-    if [ "$LSV_MODE" = matrix ] && [ "$l" != control ] && [ "$l" != cli-pass ]; then
-      printf "mx-full %s\n" "$l" >> "$LSV_LEDGER"
-      fx_inproc "$work/scripts/validate-enforcement-map.sh"
-      ( vem_entry ) > "$LSV_OUT/$l.full.out" 2>&1
-      printf %s $? > "$LSV_OUT/$l.full.rc"
-    fi
     printf done  > "$LSV_OUT/$l.done"
     rm -rf "$work"
   ' _ {} < <(cut -f2 "$RUNS")
 
 # ================= PHASE 3: evaluate, serially, in DECLARATION order =================
-
-# --- THE MATRIX CELLS, single-sourced. A cell is one mutant's expected FAIL line(s); it is RED on
-# an output when that line is present. Both the per-push twin check and the --matrix score read
-# the predicate here, and the registry ($RUNS) is where each `fires` cell's wanted text lives.
-# Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
-NM_WANT="heading puts 'NAMED-UPSTREAM' in front of the operator, but SKILL.md step 8"
-HR_FWD="emits 'NAMED-UPSTREAM' but SKILL.md step 3f never documents it"
-HR_REV="documents 'NAMED-ABSORBED' but ledger-reverify.sh never emits it"
-cell_red() {
-  local c="$1" o="$2" w
-  case "$c" in
-    near-miss)   grep -qF -- "$NM_WANT" <<<"$o" ;;
-    half-rename) grep -qF -- "$HR_FWD" <<<"$o" && grep -qF -- "$HR_REV" <<<"$o" ;;
-    *)
-      w="$(awk -F'\t' -v k="$c" '$1=="fires" && $2==k {print $4}' "$RUNS")"
-      [ -n "$w" ] || return 2
-      grep -qF -- "$w" <<<"$o" ;;
-  esac
-}
-CELLS="$(awk -F'\t' '$1!="control" && $1!="twinpass"{print $2}' "$RUNS")"
-
-# The header IS the twin list: nothing else in this file restates it.
-mx_row() {
-  awk -v n="$1" -v f="$2" '
-    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
-      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
-    }
-    END { if (c == 1) print v }' "$SELF_FILE"
-}
-
-# mx_twins <mutant> <output> <full-out-file> -- run after the mutant's own kill. Plain mode: every
-# twin must be GREEN on the SAME `--arms I39` output, which costs no validator run. Matrix mode:
-# the full score against every cell, plus the outside-I39 diff against the full run.
-mx_twins() {
-  local m="$1" o="$2" fo="$3" tw t r g=0 tot=0 tws="" uex="" dec c extra outside frc
-  tw="$(mx_row "$m" twins)"
-  if [ -z "$tw" ]; then
-    BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m"; return
-  fi
-  if [ "$MODE" != matrix ]; then
-    printf 'plain-twins %s\n' "$m" >> "$MXL"
-    for t in $(printf '%s' "$tw" | tr ',' ' '); do
-      cell_red "$t" "$o"; r=$?
-      if [ "$r" -eq 2 ]; then
-        BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t"
-      elif [ "$r" -eq 0 ]; then
-        FAILURES=$((FAILURES + 1))
-        printf '  FAIL  %-20s its twin %s also fired on this mutant'"'"'s output — the kill is not confined to its own cell\n' "$m" "$t"
-      fi
-    done
-    return
-  fi
-  printf 'mx-score %s\n' "$m" >> "$MXL"
-  frc="$(cat "$OUTD/$m.full.rc" 2>/dev/null)"
-  if grep -qE 'unbound variable|command not found|syntax error' <<<"$o" \
-     || grep -qE 'unbound variable|command not found|syntax error' "$fo" 2>/dev/null \
-     || { [ "$frc" != 0 ] && [ "$frc" != 1 ]; }; then
-    BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN %s\n' "$m"; return
-  fi
-  if cell_red "$m" "$o"; then dec="$m:RED"; else dec="$m:GREEN"; uex="$uex $m:GREEN"; fi
-  for t in $(printf '%s' "$tw" | tr ',' ' '); do
-    if cell_red "$t" "$o"; then tws="$tws,$t:RED"; uex="$uex $t:RED"; else tws="$tws,$t:GREEN"; fi
-  done
-  tws="${tws#,}"
-  for c in $CELLS; do
-    [ "$c" = "$m" ] && continue
-    case ",$tw," in *",$c,"*) continue ;; esac
-    tot=$((tot + 1)); cell_red "$c" "$o" || g=$((g + 1))
-  done
-  extra="$(LC_ALL=C comm -13 <(grep '^FAIL:' <<<"$o" | LC_ALL=C sort -u) <(grep '^FAIL:' "$fo" | LC_ALL=C sort -u) | grep -c .)" || extra=0
-  if [ "$extra" -eq 0 ]; then outside=EQUAL; else outside="+$extra"; uex="$uex outside:RED"; fi
-  if [ -n "$uex" ]; then
-    printf 'MATRIX %s decides=%s twins=%s others=%d/%d outside=%s UNEXPECTED=%s\n' "$m" "$dec" "$tws" "$g" "$tot" "$outside" "$(printf '%s' "${uex# }" | tr ' ' ',')"
-    FAILURES=$((FAILURES + 1))
-  else
-    printf 'MATRIX %s decides=%s twins=%s others=%d/%d outside=%s\n' "$m" "$dec" "$tws" "$g" "$tot" "$outside"
-  fi
-}
 
 while IFS=$'\t' read -r kind label file want want_n why; do
   [ -n "$label" ] || continue
@@ -482,15 +351,6 @@ while IFS=$'\t' read -r kind label file want want_n why; do
   n="$(printf '%s\n' "$out" | grep -c '^FAIL:' || true)"
 
   case "$kind" in
-    control)
-      if [ "$rc" = "0" ] && [ "$n" -eq 0 ]; then
-        printf '  ok    %-20s clean copy  (a mutant fire below is attributable to the mutation)\n' "$label"
-      else
-        FAILURES=$((FAILURES + 1))
-        printf '  FAIL  %-20s the UNMUTATED copy already fails (rc=%s) — every mutant below is unattributable\n' "$label" "$rc"
-        printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -5
-      fi ;;
-
     twinpass)
       if [ "$rc" = "0" ] && [ "$n" -eq 0 ] && [ "$(cat "$OUTD/$label.twin" 2>/dev/null)" = same ] && grep -q '^OK: ' "$OUTD/$label.cso"; then
         printf '  ok    %-20s the program answers a clean copy exactly as the in-process entry does  (stdout, stderr, exit)\n' "$label"
@@ -561,37 +421,7 @@ while IFS=$'\t' read -r kind label file want want_n why; do
         printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -4
       fi ;;
   esac
-
-  [ "$kind" = control ] || [ "$kind" = twinpass ] || mx_twins "$label" "$out" "$OUTD/$label.full.out"
 done < "$RUNS"
-
-# RULE 9: A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL. The worker's full validator run and the
-# score of every cell append to the ledger before doing anything else. The CONTROL is the
-# plain-twins lines the per-push twin check writes to the SAME ledger: they must be present, so
-# an empty matrix count cannot come from a ledger nothing writes.
-mx_only="$(grep -cE '^(mx-full|mx-score) ' "$MXL")" || mx_only=0
-mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
-if [ "$MODE" = plain ]; then
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if [ "$mx_ctl" -eq 0 ]; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-20s the matrix ledger control is EMPTY: no per-push twin check wrote to it, so a zero count of matrix-only cells would mean nothing\n' "rule-9"
-  elif [ "$mx_only" -ne 0 ]; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-20s a plain run executed %d matrix-only cell(s) (%s) — the --matrix measurement leaked into the per-push run\n' "rule-9" "$mx_only" "$(grep -E '^(mx-full|mx-score) ' "$MXL" | head -3 | tr '\n' ' ')"
-  else
-    printf '  ok    %-20s a plain run executed no matrix-only cell, while its %s per-push twin check(s) wrote to the same ledger\n' "rule-9" "$mx_ctl"
-  fi
-else
-  # The header is bound to the measured set both ways: one MATRIX line per row, one row per line.
-  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort)"
-  mx_cells="$(printf '%s\n' "$CELLS" | LC_ALL=C sort)"
-  if [ "$mx_hdr" != "$mx_cells" ]; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  the MUTANT-MATRIX header and the registered mutants disagree\n'
-  fi
-  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $(printf '%s\n' "$mx_hdr" | grep -c .) header row(s)"
-fi
 
 echo
 if [ "$BROKEN" -gt 0 ]; then

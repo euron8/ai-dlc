@@ -9,5 +9,5 @@
 # BL-868 (* 294->568), attributed by counter rows: +272 the Dc-reader-dies awk shim, now `#!/bin/bash` so the
 # counter sees each start it serves; +2 the settled-tree net's end-to-end stubs (st-stop.sh, st-exit.sh). The
 # net's own poll forks no bash.
-568 *
-65 core/scripts/validate-spawn-ledger.sh
+554 *
+64 core/scripts/validate-spawn-ledger.sh

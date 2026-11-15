@@ -8,22 +8,16 @@
 # transcript-SHA match — is invisible to all of them, precisely because the file it moved to is
 # never in anyone's scope. `--strays` is the floor under that carve-out.
 #
-# WHAT THE MUTANTS DEFEND. Three of this check's four ways to go quiet are silent: the
-# generated-region carve-out can stop matching (and then core's own taught example reports as a
-# forgery, which trains the operator to switch the scan off), the trailing-comment rule can be
-# dropped (and then every block copied from the taught example stops being recognised at all), and
-# the subject vocabulary can go empty (and then the scan reports PASS on every tree there is).
-# None of the three changes the exit code on a clean tree.
+# WHAT IT ASSERTS. The generated-region carve-out exempts core's own taught example, the homes are
+# read from the schema, and an empty subject vocabulary refuses to run rather than reporting PASS on
+# every tree there is.
 #
-# The fourth way is not about what a block SAYS but about where the caller says the file IS. The
+# The other half is not about what a block SAYS but about where the caller says the file IS. The
 # homes are matched against the candidate path as a string, so the answer depends on how the path
 # was spelled — and that goes wrong in both directions, silently in one of them. The S-arms below
 # are that half; their section header states the two shapes and which branch of the validator each
-# one reaches. MUT-E defends the arm that is green today: the home match must stay a PREFIX, because
-# a substring match turns every file of a project checked out at docs/retro/<name>/ into a home.
-# MUT-E's subject was chosen the hard way -- an earlier version of it went vacuous against a
-# candidate fix and reported MUTANT SURVIVED. The paragraph beside it says why, and says not to
-# re-aim it; read that before simplifying it.
+# one reaches. The home match must stay a PREFIX, because a substring match turns every file of a
+# project checked out at docs/retro/<name>/ into a home (S7, S7b).
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -45,9 +39,9 @@ trap 'exit 130' INT TERM
 
 # image_unavailable <arm> <what failed> -- hdiutil is PRESENT and could not build the world.
 # In the distribution that is a broken fixture, not a skip: this host is known to build both
-# images, and a SKIP here would leave MUT-G/MUT-H unguarded while the suite reads green. On a
+# images, and a SKIP here would leave S10-C/S10-H unchecked while the suite reads green. On a
 # consumer the host is not ours to assume (a sandboxed CI may refuse disk images), so it SKIPs,
-# naming the mutant it leaves unguarded and hdiutil's own words.
+# naming the arm it leaves unchecked and hdiutil's own words.
 image_unavailable() {
   local why; why="$(tail -1 "$WORK/hdiutil.err" 2>/dev/null)"
   [ "$LAYOUT" = dist ] && broken "$1: $2 (hdiutil: ${why:-no stderr})"
@@ -90,12 +84,10 @@ ERR="$WORK/err.txt"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo; echo "stray-party-mode-provenance: FIXTURE BROKEN" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
-B_homes=0; B_region=0; B_s10c1=0; B_s10f1=0; B_s10h=0; B_s7b=0
 
 # scan <validator> <schema> <ext-or-empty> [<explicit path>...]
 # The schema is swapped into the seeded project because the resolver has no schema override, and
-# restored to the control copy afterwards so no assertion can inherit the previous one's mutation.
+# restored to the control copy afterwards so no assertion can inherit the previous one's schema.
 scan() {
   local v="$1" s="$2" e="$3"; shift 3
   cp "$s" "$SCHEMA" || broken "could not stage schema $s"
@@ -126,8 +118,8 @@ scan_at() {
   cp "$CONTROL_SCHEMA" "$sch" || broken "could not restore the control schema in $r"
 }
 
-# Reported/not-reported are asked about ONE path, never about the finding count, so a mutant that
-# changes an unrelated file's verdict cannot satisfy another mutant's assertion.
+# Reported/not-reported are asked about ONE path, never about the finding count, so an unrelated
+# file's verdict cannot satisfy another arm's assertion.
 reported()     { grep -qF "STRAY PARTY-MODE PROVENANCE: $1 [skill:" "$ERR"; }
 # reported_any asks whether the finding NAMES this file, whatever spelling the scanner echoed
 # back. `reported` anchors on the message prefix and so answers NO for a correctly-reported
@@ -144,16 +136,15 @@ findings()     { grep -cF "STRAY PARTY-MODE PROVENANCE: " "$ERR" 2>/dev/null || 
 echo "stray-party-mode-provenance:"
 echo "HERMETIC-CONSUMED core/scripts/validate-provenance-block.sh"
 
-# --- Assertion 0: the UNMUTATED CONTROL COPY behaves like the in-tree script ---
-# A lone copy that dies sourcing its own preamble emits nothing, and "no output" scores as a kill
-# for every mutant at once. This runs the control first and refuses to believe any mutant until it
-# has produced the exact baseline.
-scan "$CONTROL_VALIDATOR" "$CONTROL_SCHEMA" ""
-[ "$RC" -eq 1 ] || broken "the unmutated control copy exited $RC on the seeded tree, want 1 — the mutants below would score its silence as a kill"
-reported "server/handler.py"   || broken "the control copy did not report server/handler.py; every negative assertion below would pass vacuously"
-reported "server/commented.py" || broken "the control copy did not report server/commented.py"
-[ "$(findings)" -eq 2 ] || broken "the control copy reported $(findings) finding(s), want exactly 2"
-ok "the unmutated control copy reports exactly the two service-file strays (exit 1)"
+# --- Assertion 0: the baseline ---
+# The shipped script on the seeded tree reports exactly the two service-file strays; every negative
+# assertion below is unreadable until it has.
+scan "$VALIDATOR" "$CONTROL_SCHEMA" ""
+[ "$RC" -eq 1 ] || broken "the validator exited $RC on the seeded tree, want 1"
+reported "server/handler.py"   || broken "the validator did not report server/handler.py; every negative assertion below would pass vacuously"
+reported "server/commented.py" || broken "the validator did not report server/commented.py"
+[ "$(findings)" -eq 2 ] || broken "the validator reported $(findings) finding(s), want exactly 2"
+ok "the validator reports exactly the two service-file strays (exit 1)"
 
 # --- Assertion 1: a party-mode block in each declared home is NOT a finding ----
 scan "$VALIDATOR" "$CONTROL_SCHEMA" ""
@@ -161,7 +152,7 @@ h_bad=""
 for h in docs/retro/sprint-1.md _bmad-output/party-mode-transcripts/s1-retro.md docs/reviews/adversarial-1.md; do
   reported "$h" && h_bad="$h_bad $h"
 done
-[ -z "$h_bad" ] && { ok "a party-mode block in a declared home (retro, party-mode-transcripts, reviews) is not a finding"; B_homes=1; } \
+[ -z "$h_bad" ] && ok "a party-mode block in a declared home (retro, party-mode-transcripts, reviews) is not a finding" \
   || bad "declared homes reported as strays:$h_bad"
 
 # --- Assertion 2: an INFORMATIONAL block outside every home is NOT a finding ---
@@ -172,7 +163,7 @@ reported "server/informational.py" \
 # --- Assertion 3: a party-mode block inside a GENERATED REGION is not a finding -
 reported "docs/taught.md" \
   && bad "the rendered taught example was reported as a stray" \
-  || { ok "a party-mode block inside a generated region is not a finding (the region IS the schema)"; B_region=1; }
+  || ok "a party-mode block inside a generated region is not a finding (the region IS the schema)"
 
 # --- Assertion 4: a fixture home is a home under a default whole-tree scan -----
 reported "tests/fixtures/forgery-corpus/forged.md" \
@@ -202,33 +193,17 @@ scan "$VALIDATOR" "$CONTROL_SCHEMA" "$EXT_BAD_GLOB"
   && ok "a home pattern that is neither '<dir>/**' nor an exact path is an error, not a silent non-match" \
   || bad "an unsupported home pattern did not fail closed (rc=$RC)"
 
-# --- MUTATION 1: the generated-region marker drifts ---------------------------
-# Asserts on the TAUGHT FILE alone. The two service strays are reported either way, so this cannot
-# be satisfied by a mutant that merely breaks the scan.
-scan "$MUT_REGION" "$CONTROL_SCHEMA" ""
-reported "docs/taught.md" \
-  && mutant_killed "$B_region" region-marker "MUTANT (region marker drifts to a second spelling): the rendered taught example is reported as a forgery — the carve-out is what stops that" \
-  || bad "MUTANT SURVIVED: the region marker drifted and the taught example was still exempt; the carve-out is not doing the work"
-
-# --- MUTATION 2: the trailing-comment rule is dropped -------------------------
-# Asserts the comment-carrying stray goes UNSEEN while the bare one is still seen. The second half
-# is what separates this mutant from one that simply kills the scan.
-scan "$MUT_COMMENT" "$CONTROL_SCHEMA" ""
-{ ! reported "server/commented.py" && reported "server/handler.py"; } \
-  && ok "MUTANT (trailing-comment rule dropped): a block copied from the taught example goes unseen while a bare one is still caught — the strip is what reaches the copied form" \
-  || bad "MUTANT SURVIVED: dropping the trailing-comment rule changed nothing about the comment-carrying stray"
-
-# --- MUTATION 3: a declared home is removed from the schema ------------------
+# --- a declared home is removed from the schema ------------------------------
 scan "$VALIDATOR" "$SCHEMA_NO_RETRO" ""
 reported "docs/retro/sprint-1.md" \
-  && mutant_killed "$B_homes" retro-home-removed "MUTANT (docs/retro/** removed from homes): the retro document is reported — the homes list is read from the schema, not assumed" \
-  || bad "MUTANT SURVIVED: removing docs/retro/** from homes did not make the retro document a finding"
+  && ok "docs/retro/** removed from homes: the retro document is reported — the homes list is read from the schema, not assumed" \
+  || bad "removing docs/retro/** from homes did not make the retro document a finding"
 
-# --- MUTATION 4: the subject vocabulary is emptied ---------------------------
+# --- the subject vocabulary is emptied ---------------------------------------
 scan "$VALIDATOR" "$SCHEMA_NO_SKILLS" ""
 { [ "$RC" -eq 2 ] && grep -qF "vacuous" "$ERR"; } \
-  && ok "MUTANT (party_mode_skills emptied): the scan refuses to run rather than reporting PASS on a tree it cannot judge" \
-  || bad "MUTANT SURVIVED: an empty subject vocabulary produced rc=$RC instead of a loud refusal"
+  && ok "party_mode_skills emptied: the scan refuses to run rather than reporting PASS on a tree it cannot judge" \
+  || bad "an empty subject vocabulary produced rc=$RC instead of a loud refusal"
 
 # =============================================================================
 # PATH-SPELLING. The homes are judged against the candidate path as a STRING, and the only
@@ -261,10 +236,10 @@ scan "$VALIDATOR" "$SCHEMA_NO_SKILLS" ""
 # is silent. Both directions, because a helper that reports everything and a helper that
 # discriminates read identically from one call.
 [ -d "$NESTED" ] || broken "the nested checkout was not seeded; every substring arm below would be vacuous"
-scan_at "$NESTED" "$NESTED" "$CONTROL_VALIDATOR" "$CONTROL_SCHEMA" "" server/x.py
+scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" server/x.py
 { [ "$RC" -eq 1 ] && reported_any "server/x.py"; } \
-  || broken "SELF-PROBE (positive): the control copy did not report the nested stray it was pointed at (rc=$RC); the path-spelling arms cannot fire"
-scan_at "$PROJ" "$PROJ" "$CONTROL_VALIDATOR" "$CONTROL_SCHEMA" "" docs/retro/sprint-1.md
+  || broken "SELF-PROBE (positive): the validator did not report the nested stray it was pointed at (rc=$RC); the path-spelling arms cannot fire"
+scan_at "$PROJ" "$PROJ" "$VALIDATOR" "$CONTROL_SCHEMA" "" docs/retro/sprint-1.md
 { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } \
   || broken "SELF-PROBE (negative): a relatively-spelled home did not come back PASS-over-1-file (rc=$RC, count='$(scanned_count)'); the quiet direction is unreadable"
 ok "SELF-PROBE: the arm can produce a finding, and can count a file it scanned and cleared"
@@ -356,7 +331,7 @@ scan_at "$PROJ" "$PROJ" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$PROJ/server/handler.
 # `$WORK/docs/retro/nested-checkout` is its own project root. Nothing in it is a home: its
 # repo-relative layout is server/ and lib/. Its ABSOLUTE path contains `docs/retro/` before the
 # root even starts, so a home match that looks for the pattern anywhere accepts the whole
-# checkout. Green today; MUT-E below is what proves it can fire.
+# checkout. Green today.
 scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$NESTED/server/x.py"
 { [ "$RC" -eq 1 ] && reported_any "server/x.py"; } \
   && ok "S7 a stray in a checkout that LIVES at docs/retro/<name>/ is reported (the home is a location, not a substring)" \
@@ -366,10 +341,10 @@ scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$NESTED/server/x.
 # `vendor/docs/retro/inner.md` contains the home pattern and does not begin with it. Unlike S7
 # this survives normalisation — after the caller's paths are resolved to repo-relative form the
 # nested checkout's stray no longer carries a home substring, and this one still does. It is the
-# subject MUT-E needs in order to keep guarding a FIXED validator rather than a broken one.
+# subject that keeps separating prefix from substring on a FIXED validator.
 scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$NESTED/vendor/docs/retro/inner.md"
 { [ "$RC" -eq 1 ] && reported_any "vendor/docs/retro/inner.md"; } \
-  && { ok "S7b a stray under vendor/docs/retro/ is reported; a home is a place the path STARTS, not one it contains"; B_s7b=1; } \
+  && { ok "S7b a stray under vendor/docs/retro/ is reported; a home is a place the path STARTS, not one it contains"; } \
   || bad "S7b FALSE PASS: vendor/docs/retro/inner.md was accepted as a home (rc=$RC) — the home pattern was found mid-path"
 
 # --- S10: case-variant spellings, on BOTH kinds of filesystem (BL-082) -------
@@ -382,7 +357,7 @@ scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$NESTED/vendor/do
 # match closes the false stray exactly as the respelling does, so NO arm on a folding filesystem
 # can tell the two apart (S10-F5 records that). On a case-sensitive filesystem `DOCS/retro/` can
 # be a genuinely distinct directory, and folding accepts it as the home: a false PASS on the
-# platform a consumer's CI runs. S10-C is that world, and MUT-G, the folding remedy, dies there.
+# platform a consumer's CI runs. S10-C is that world, and the folding remedy is rejected there.
 #
 # Two worlds, each built fresh here rather than in seed.sh so no whole-tree count above moves.
 # Files are copied from seeded ones, so this file spells no complete block either.
@@ -402,7 +377,7 @@ if [ ! -e "$WORK/case-fold/PROJ/DOCS/retro/sprint-1.md" ]; then
 else
   scan_at "$CI" "$CI" "$VALIDATOR" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
   { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } \
-    && { ok "S10-F1 a declared home spelled DOCS/retro/ on a case-folding filesystem is not a stray (and was scanned)"; B_s10f1=1; } \
+    && { ok "S10-F1 a declared home spelled DOCS/retro/ on a case-folding filesystem is not a stray (and was scanned)"; } \
     || bad "S10-F1 DOCS/retro/sprint-1.md -- the same file as the home here -- was reported as a stray (rc=$RC, scanned='$(scanned_count)')"
   # The near-miss: a stray whose name is one letter from the home, case-varied. Respelling must
   # land on ITS OWN entry and report it under its on-disk name, never collapse onto the home.
@@ -414,20 +389,6 @@ else
   { [ "$RC" -eq 1 ] && reported "server/handler.py"; } \
     && ok "S10-F3 a service stray spelled SERVER/ is still reported (a case variant is not a pass)" \
     || bad "S10-F3 SERVER/handler.py was not reported as server/handler.py (rc=$RC)"
-  # MUT-F, the revert to bare realpath: the false stray comes back. Paired with a live control
-  # from the same mutant, because the kill below is presence-shaped only on the rc=1 side.
-  scan_at "$CI" "$CI" "$MUT_ONDISK_REVERT" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
-  mut_f_stray=0; { [ "$RC" -eq 1 ] && reported "DOCS/retro/sprint-1.md"; } && mut_f_stray=1
-  scan_at "$CI" "$CI" "$MUT_ONDISK_REVERT" "$CONTROL_SCHEMA" "" "docs/retro/sprint-1.md"
-  mut_f_alive=0; { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } && mut_f_alive=1
-  { [ "$mut_f_stray" -eq 1 ] && [ "$mut_f_alive" -eq 1 ]; } \
-    && mutant_killed "$B_s10f1" ondisk-revert "MUTANT (on-disk respelling reverted to bare realpath): DOCS/retro/ is a false stray again while docs/retro/ still passes -- S10-F1 is what stops that" \
-    || bad "MUTANT SURVIVED: reverting the respelling did not bring back the false stray (stray=$mut_f_stray, alive=$mut_f_alive)"
-  # S10-F5 is a RECORD, not a kill: here the forbidden fold is indistinguishable from the fix.
-  scan_at "$CI" "$CI" "$MUT_CASEFOLD" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
-  [ "$RC" -eq 0 ] \
-    && ok "S10-F5 the forbidden case-fold remedy ALSO passes here (rc=0) -- no folding-filesystem arm can reject it; S10-C must" \
-    || bad "S10-F5 the case-fold mutant gave rc=$RC on the folding filesystem; S10-C's premise that only a case-sensitive world separates the two has moved"
 fi
 
 # S10-C: the CASE-SENSITIVE world. Native where $WORK already is one (a Linux consumer's CI);
@@ -441,13 +402,13 @@ elif command -v hdiutil >/dev/null 2>&1; then
     CS_MNT="$WORK/cs-mnt"; CS_BASE="$CS_MNT"; CS_WHY="case-sensitive APFS disk image"
   else
     CS_WHY="-"
-    image_unavailable "S10-C" "hdiutil could not create or attach a case-sensitive APFS image -- MUT-G (the forbidden case-fold remedy) is UNGUARDED"
+    image_unavailable "S10-C" "hdiutil could not create or attach a case-sensitive APFS image -- S10-C is UNCHECKED"
   fi
 else
   CS_WHY="the filesystem folds case and hdiutil is not available to build one that does not"
 fi
 if [ -z "$CS_BASE" ]; then
-  [ "$CS_WHY" = "-" ] || ok "S10-C SKIP: $CS_WHY -- MUT-G (the forbidden case-fold remedy) is UNGUARDED on this run"
+  [ "$CS_WHY" = "-" ] || ok "S10-C SKIP: $CS_WHY -- S10-C is UNCHECKED on this run"
 else
   CS="$CS_BASE/proj"
   case_proj "$CS"
@@ -456,7 +417,7 @@ else
   [ "$(ls "$CS" | grep -c -x -e docs -e DOCS)" = "2" ] || broken "S10-C premise ($CS_WHY): docs/ and DOCS/ are not two entries"
   scan_at "$CS" "$CS" "$VALIDATOR" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
   { [ "$RC" -eq 1 ] && reported "DOCS/retro/sprint-1.md"; } \
-    && { ok "S10-C1 ($CS_WHY) a DISTINCT DOCS/retro/ is a stray, not the declared home"; B_s10c1=1; } \
+    && { ok "S10-C1 ($CS_WHY) a DISTINCT DOCS/retro/ is a stray, not the declared home"; } \
     || bad "S10-C1 FALSE PASS ($CS_WHY): DOCS/retro/sprint-1.md is a different file from the home and came back rc=$RC"
   scan_at "$CS" "$CS" "$VALIDATOR" "$CONTROL_SCHEMA" "" "docs/retro/sprint-1.md"
   { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } \
@@ -466,20 +427,6 @@ else
   { [ "$RC" -eq 1 ] && reported "DOCS/retro/sprint-1.md" && ! reported "docs/retro/sprint-1.md"; } \
     && ok "S10-C3 ($CS_WHY) the whole-tree scan reports DOCS/retro/ and not docs/retro/" \
     || bad "S10-C3 ($CS_WHY) the whole-tree scan did not separate DOCS/retro/ from docs/retro/ (rc=$RC)"
-  # MUT-G, the forbidden remedy: the distinct DOCS/retro/ is accepted as the home. Paired with a
-  # stray no fold can excuse, from the same mutant, so a dead copy cannot score the kill.
-  scan_at "$CS" "$CS" "$MUT_CASEFOLD" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
-  mut_g_pass=0; { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } && mut_g_pass=1
-  scan_at "$CS" "$CS" "$MUT_CASEFOLD" "$CONTROL_SCHEMA" "" "server/handler.py"
-  mut_g_alive=0; { [ "$RC" -eq 1 ] && reported "server/handler.py"; } && mut_g_alive=1
-  { [ "$mut_g_pass" -eq 1 ] && [ "$mut_g_alive" -eq 1 ]; } \
-    && mutant_killed "$B_s10c1" casefold-home "MUTANT (home match folds case -- the forbidden remedy): a distinct DOCS/retro/ is excused while server/ is still caught -- S10-C1 is what stops that" \
-    || bad "MUTANT SURVIVED: folding the home match did not excuse the distinct DOCS/retro/ (false-pass=$mut_g_pass, alive=$mut_g_alive)"
-  # And the fix is inert here: reverting it changes no verdict in the world with no subject.
-  scan_at "$CS" "$CS" "$MUT_ONDISK_REVERT" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
-  { [ "$RC" -eq 1 ] && reported "DOCS/retro/sprint-1.md"; } \
-    && ok "S10-C4 ($CS_WHY) the respelling is inert where case is significant (reverting it keeps DOCS/retro/ a stray)" \
-    || bad "S10-C4 ($CS_WHY) the reverted mutant answered rc=$RC on the distinct DOCS/retro/"
 fi
 
 # S10-H: the world where the SAMESTAT check decides. HFS+ folds case more narrowly than python's
@@ -490,9 +437,9 @@ fi
 # APFS folds the long s, and a case-sensitive filesystem never reaches the respelling at all.
 LS="$(printf 'doc\305\277')"
 if ! command -v hdiutil >/dev/null 2>&1; then
-  ok "S10-H SKIP: hdiutil is not available to build an HFS+ volume -- MUT-H (casefold without samestat) is UNGUARDED on this run"
+  ok "S10-H SKIP: hdiutil is not available to build an HFS+ volume -- S10-H is UNCHECKED on this run"
 elif ! img_build "$WORK/hfs.dmg" "$WORK/hfs-mnt" hfs; then
-  image_unavailable "S10-H" "hdiutil could not create or attach an HFS+ image -- MUT-H (casefold without samestat) is UNGUARDED"
+  image_unavailable "S10-H" "hdiutil could not create or attach an HFS+ image -- S10-H is UNCHECKED"
 else
   HFS_MNT="$WORK/hfs-mnt"
   HP="$HFS_MNT/proj"
@@ -506,21 +453,8 @@ else
   scan_at "$HP" "$HP" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$H_UP/retro/sprint-1.md"
   h_stray=0; { [ "$RC" -eq 1 ] && reported "$LS/retro/sprint-1.md"; } && h_stray=1
   { [ "$h_home" -eq 1 ] && [ "$h_stray" -eq 1 ]; } \
-    && { ok "S10-H (HFS+ image) DOCS/ respells to the home and DOC<long-s>/ to its own distinct directory, which is reported"; B_s10h=1; } \
+    && { ok "S10-H (HFS+ image) DOCS/ respells to the home and DOC<long-s>/ to its own distinct directory, which is reported"; } \
     || bad "S10-H (HFS+ image) two casefold-equal entries were not told apart (home-passes=$h_home, long-s-reported=$h_stray)"
-  # The kill is PRESENCE-shaped: a mutant that crashed (rc=2) satisfies neither cell. Whichever
-  # entry the volume lists first, one spelling lands on the OTHER directory, and that shows as a
-  # positive wrong answer -- the long-s stray excused as the home (PASS over 1 file), or the home
-  # reported as a stray under the long-s name.
-  scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "$H_UP/retro/sprint-1.md"
-  m_stray_excused=0; { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } && m_stray_excused=1
-  scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
-  m_home_misnamed=0; { [ "$RC" -eq 1 ] && reported "$LS/retro/sprint-1.md"; } && m_home_misnamed=1
-  scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "server/handler.py"
-  m_alive=0; { [ "$RC" -eq 1 ] && reported "server/handler.py"; } && m_alive=1
-  { [ "$m_alive" -eq 1 ] && [ $((m_stray_excused + m_home_misnamed)) -eq 1 ]; } \
-    && mutant_killed "$B_s10h" no-samestat "MUTANT (respelling by casefold without samestat): one spelling lands on the other directory (long-s-excused=$m_stray_excused, home-misnamed=$m_home_misnamed) -- S10-H is what stops that" \
-    || bad "MUTANT SURVIVED: dropping the samestat check produced no wrong-directory answer (long-s-excused=$m_stray_excused, home-misnamed=$m_home_misnamed, alive=$m_alive)"
 fi
 
 # --- S9: a SYMLINK named on the command line -----------------------------------
@@ -546,42 +480,6 @@ scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" "link-to-serverdir
   && ok "S9b a directory named through a symlink does not come back PASS" \
   || bad "S9b FALSE PASS: link-to-serverdir is the server/ directory and came back rc=$RC over $(scanned_count) file(s); naming server/ directly reports its stray"
 
-# --- MUTATION 5: the home match widens from a prefix to a substring ----------
-# The tempting wrong fix for S1: "the absolute path contains the home, so it is a home." Two
-# runs, because the kill is absence-shaped and an absence is also what a dead copy produces.
-# The first asks that the widening swallowed S7b's subject; the second asks, from the SAME
-# mutant, that a stray no home substring can reach is still reported — which a copy that died
-# on its own preamble cannot satisfy.
-#
-# DO NOT RE-AIM THIS MUTANT AT S7. It was written against S7 first and that version SURVIVED,
-# measured against a candidate fix before the shipped one landed, and the three parts of that
-# are worth more than the arm itself:
-#
-#   WHAT IT WAS.  The mutation was the same one it is now -- `rel.startswith(prefix)` widened to
-#     `prefix in rel` -- but the subject was the nested checkout's `server/x.py`, named by its
-#     ABSOLUTE path. That path contains `docs/retro/` because of where the checkout SITS, so
-#     under the widening it was accepted and the kill scored.
-#   WHY THE FIX MADE IT VACUOUS.  The fix resolves every candidate to a root-relative path before
-#     the home match sees it, and that is exactly the step that removes `docs/retro/` from the
-#     nested checkout's spelling. Post-fix the mutation flips no verdict on that subject, so the
-#     arm reports MUTANT SURVIVED -- and had the arm been written the other way round it would
-#     have reported a clean kill it did not earn. A guard turned into a tautology by the very
-#     change it exists to guard, going green while claiming to defend it.
-#   WHAT THE RETARGET IS KEYED ON.  `vendor/docs/retro/inner.md` is a path whose root-relative
-#     form CONTAINS a home pattern and does not BEGIN with one. Canonicalisation cannot remove
-#     that -- it is where the file actually is -- so prefix and substring disagree about it
-#     before and after any normalisation anyone adds later.
-#
-# The rule that generalises: a mutant keyed on a SPELLING is only as durable as the spelling, and
-# a fix that normalises spellings will disarm it silently. Key it on a LOCATION instead.
-scan_at "$NESTED" "$NESTED" "$MUT_SUBSTR" "$CONTROL_SCHEMA" "" "$NESTED/vendor/docs/retro/inner.md"
-mut_e_accepted=1; { [ "$RC" -eq 0 ] && ! reported_any "vendor/docs/retro/inner.md"; } || mut_e_accepted=0
-scan_at "$PROJ" "$PROJ" "$MUT_SUBSTR" "$CONTROL_SCHEMA" "" "server/handler.py"
-mut_e_alive=0; { [ "$RC" -eq 1 ] && reported_any "server/handler.py"; } && mut_e_alive=1
-{ [ "$mut_e_accepted" -eq 1 ] && [ "$mut_e_alive" -eq 1 ]; } \
-  && mutant_killed "$B_s7b" substring-home "MUTANT (home match widened to a substring): vendor/docs/retro/inner.md is swallowed while a stray carrying no home substring is still caught — S7b is what stops that fix" \
-  || bad "MUTANT SURVIVED: widening the home match to a substring did not change the nested checkout's verdict (accepted=$mut_e_accepted, still-alive=$mut_e_alive)"
-
 # --- S8: the arms that must not depend on a cwd, do not ----------------------
 # A fixture green only from one directory may be asserting nothing there. The whole-tree scan
 # takes no path, so its answer is a property of the root alone; run it from two unrelated
@@ -595,14 +493,14 @@ scan_at "$PROJ/server" "$PROJ" "$VALIDATOR" "$CONTROL_SCHEMA" ""
 
 # --- Assertion 9: the tree the fixture ran against is unchanged --------------
 # The schema is swapped in and out around every scan; a restore that silently failed would leave
-# later assertions running against a mutant's schema, which is the entanglement that makes one
+# later assertions running against a swapped schema, which is the entanglement that makes one
 # assertion vacuous.
 cmp -s "$CONTROL_SCHEMA" "$SCHEMA" \
   && ok "the seeded project's schema is byte-identical to the control after every swap" \
-  || bad "the seeded schema was left mutated; assertions after the first mutation were not testing what they claim"
+  || bad "the seeded schema was left swapped; assertions after the first swap were not testing what they claim"
 cmp -s "$CONTROL_SCHEMA" "$NESTED/.claude/schemas/provenance-block.json" \
   && ok "the nested checkout's schema is byte-identical to the control after every swap" \
-  || bad "the nested checkout's schema was left mutated; S7 and MUT-E were not testing what they claim"
+  || bad "the nested checkout's schema was left swapped; S7 and S7b were not testing what they claim"
 
 echo
 report_end stray-party-mode-provenance

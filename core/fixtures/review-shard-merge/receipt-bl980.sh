@@ -21,20 +21,16 @@
 # receipt that sets nothing and is unprotected when run alone. Each receipt carries its own flag on its own wrapper.
 #
 # Guards, each a FIXTURE BROKEN (exit 2): at least one receipt is driven, and receipt-bl904.sh (which cp -R's the
-# repository its commits just wrote) is among them; the must-fire, receipt-bl904.sh copied with every
-# ` -c maintenance.auto=false` stripped and driven the same way, must spawn at least 1, else this receipt cannot fail.
-# The stripped copy must carry 0 flags; there is no cmp, and a strip that changed nothing is caught because the
-# must-fire must spawn at least 1.
+# repository its commits just wrote) is among them.
 # Prints ONE verdict line and exits with it:
-#   BL980 OK receipts=<n> files=<receipt,...> commits=<receipt:n,...> mustfire=<n>     exit 0
+#   BL980 OK receipts=<n> files=<receipt,...> commits=<receipt:n,...> selfprobe=<...>  exit 0
 #   BL980 FAIL <receipt spawned 'c'; ...>                                              exit 1
 #   BL980 FIXTURE BROKEN: <why>                                                         exit 2
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 r_broken() { echo "BL980 FIXTURE BROKEN: $1"; exit 2; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || r_broken "cannot resolve the receipt's own directory"
-SPONLY=0; [ "${1:-}" = --self-probe-only ] && { SPONLY=1; shift; }
-[ "$#" -eq 2 ] || [ "$#" -eq 3 ] || r_broken "usage: bash receipt-bl980.sh [--self-probe-only] <script dir> <project root> [<scan root>]"
+[ "$#" -eq 2 ] || [ "$#" -eq 3 ] || r_broken "usage: bash receipt-bl980.sh <script dir> <project root> [<scan root>]"
 SDIR="$(cd "$1" 2>/dev/null && pwd)" || r_broken "the script dir '$1' is not a directory"
 PRJ="$(cd "$2" 2>/dev/null && pwd)" || r_broken "the project root '$2' is not a directory"
 SELF="${BASH_SOURCE[0]##*/}"
@@ -79,7 +75,7 @@ r_gwords() { local n; n="$(grep -v '^[[:space:]]*#' "$1" | grep -cE '(^|[^A-Za-z
 # AND its non-comment text names no `git` word. The text conjunct is what stops a receipt that DOES run git from
 # reading nogit because its git never reached the trace (under `env -i`, or with GIT_TRACE2_EVENT redirected); the
 # trace conjunct is what stops a receipt with no `git` word that runs git through a helper. Each is held by the
-# self-probe below and by a mutant of this line. RESIDUAL: git reached only through a helper that also hides its trace.
+# self-probe below. RESIDUAL: git reached only through a helper that also hides its trace.
 r_nogit() { [ "$1" = 0 ] && [ "$2" = 0 ] && [ "$3" = 0 ]; } # <commits> <git commands> <git words>
 # r_class <receipt> <basename> <tag> -> NOGIT | COMMIT <spawns> <commits> | NOCOMMIT
 r_class() {
@@ -113,21 +109,6 @@ for _sp in 1 2 3; do
 done
 [ "$SP_GOT" = " sp1=NOCOMMIT sp2=NOCOMMIT sp3=NOGIT" ] \
   || r_broken "SELF-PROBE: the nogit rule read [${SP_GOT# }], want [sp1=NOCOMMIT sp2=NOCOMMIT sp3=NOGIT]: a git-running receipt read as nogit, or a git-free one did not"
-[ "$SPONLY" = 0 ] || { echo "BL980 SELF-PROBE OK${SP_GOT}"; exit 0; }
-# ---- the two conjunct mutants, built from this file and run --self-probe-only: each must be REFUSED by the self-probe.
-for _m in text trace; do
-  if [ "$_m" = text ]; then _o=' && [ "$3" = 0 ]; }'; else _o=' && [ "$2" = 0 ]'; fi
-  # The copy sits at $W/mut-<m>/, so its line-2 seam resolves $W/lib/preamble.sh: the seam is copied there first.
-  mkdir -p "$W/mut-$_m" "$W/lib" && cp "$HERE/../lib/preamble.sh" "$W/lib/preamble.sh" || r_broken "could not make the $_m mutant's directory and its seam"
-  _src="${BASH_SOURCE[0]}"
-  OLD="$_o" awk 'BEGIN { o = ENVIRON["OLD"] } /^r_nogit\(\) / { i = index($0, o); if (i) { $0 = substr($0, 1, i - 1) (o ~ /; }$/ ? "; }" : "") substr($0, i + length(o)); n++ } } { print } END { exit n != 1 }' "$_src" > "$W/mut-$_m/$SELF" \
-    || r_broken "the $_m conjunct mutant did not apply (its conjunct is not on the r_nogit line once)"
-  ! cmp -s "$_src" "$W/mut-$_m/$SELF" || r_broken "the $_m conjunct mutant changed nothing"
-  _mo="$(bash "$W/mut-$_m/$SELF" --self-probe-only "$SDIR" "$PRJ" 2>&1)"; _mrc=$?
-  case "$_mrc:$_mo" in 2:*"FIXTURE BROKEN: SELF-PROBE: the nogit rule read"*) MUTS="${MUTS:-}${MUTS:+,}$_m" ;;
-    *) r_broken "the $_m conjunct mutant passed the self-probe (rc $_mrc: ${_mo##*$'\n'}): that conjunct is not held" ;; esac
-done
-
 ROOT="${3:-$HERE}"
 ROOT="$(cd "$ROOT" 2>/dev/null && pwd)" || r_broken "the scan root '${3:-}' is not a directory"
 [ -f "$ROOT/lib.sh" ] || r_broken "found no lib.sh in $ROOT, so no receipt has a call site to derive its arguments from"
@@ -145,14 +126,7 @@ done
 [ "$NF" -ge 1 ] || r_broken "the glob holds no receipt but this one"
 [ "$H904" = 1 ] || r_broken "receipt-bl904.sh, the must-hit (it copies the repository its commits wrote), is absent from $ROOT"
 
-# ---- the must-fire: receipt-bl904.sh less its flag, driven the same way
-# The copy sits at $W/seed/, so the ../lib/mutant.sh it sources (for fx_inproc) resolves $W/lib/mutant.sh: copied first.
-mkdir -p "$W/seed" "$W/lib" && cp "$HERE/../lib/mutant.sh" "$W/lib/mutant.sh" || r_broken "could not make $W/seed and the lib/mutant.sh its copy sources"
-sed 's/ -c maintenance\.auto=false//g' "$ROOT/receipt-bl904.sh" > "$W/seed/receipt-bl904.sh" || r_broken "could not build the must-fire"
-n1="$(grep -c ' -c maintenance\.auto=false' "$W/seed/receipt-bl904.sh")" || n1=0
-[ "$n1" = 0 ] || r_broken "the must-fire still carries the flag $n1 time(s)"
-
-# ---- drives: every receipt, then the must-fire
+# ---- drives: every receipt
 fail=""; LIST=""; COMMITS=""; k=0
 for f in $FILES; do
   k=$((k + 1)); b="${f##*/}"
@@ -166,9 +140,6 @@ for f in $FILES; do
   [ "$n" = 0 ] || fail="$fail${fail:+; }$b spawned '$n'"
   LIST="$LIST${LIST:+,}$b"; COMMITS="$COMMITS${COMMITS:+,}$b:$c"
 done
-r="$(r_drive "$W/seed/receipt-bl904.sh" receipt-bl904.sh mf)" || r_broken "could not drive the must-fire: $r"
-set -- $r; mf="$1"; mfc="$2"
-[ "$mfc" -ge 1 ] && [ "$mf" -ge 1 ] || r_broken "the must-fire (receipt-bl904.sh less the flag) spawned '$mf' with $mfc commit(s), want at least 1 of each: this receipt cannot fail"
 [ -z "$fail" ] || { echo "BL980 FAIL a receipt's commits spawned git maintenance run, want 0 each: $fail"; exit 1; }
-echo "BL980 OK receipts=$NF files=$LIST commits=$COMMITS mustfire=$mf selfprobe=${SP_GOT# } conjunct-mutants-refused=$MUTS"
+echo "BL980 OK receipts=$NF files=$LIST commits=$COMMITS selfprobe=${SP_GOT# }"
 exit 0

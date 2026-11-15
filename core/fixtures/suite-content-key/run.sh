@@ -27,47 +27,12 @@
 # compare empty-to-empty, so the first assertion is a sanity arm that must produce
 # a well-formed key before any comparison below is believed.
 #
-# THE MUTANT MATRIX. A CELL is one arm's predicate. PER PUSH a mutant is scored on its DECIDING cell, which
-# must fail on it, and its named TWIN, a different cell it could plausibly co-trip but must leave GREEN.
-# `run.sh --matrix` scores each mutant against every cell that READS the mutated file and prints one MATRIX
-# line per mutant: M-plus mutates the READSET_KEYROWS span, so its cells are the four arms driving that span
-# (k1, k2, k5, k6.hook); M-docs mutates the outer key script, so its cells are the arms driving it after the
-# `+` fixture is built (k3.plans, k3.backlog, k4, k6.key, k7, and a well-formed-key sanity cell). Arms 0-9
-# run against the unmutated key script and the unmutated span, so neither mutant reaches them. The matrix is
-# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the
-# REMEASURE command below, from the repo root.
-# MUTANT-MATRIX M-plus decides=k1 twins=k2
-# MUTANT-MATRIX M-docs decides=k3.plans twins=k3.backlog
-# BL-998: bl998-rd-hit drops the renderer on the whole-suite HIT (cells w2p, w2); bl998-ip-tail reads step 3b's record
-# rows by `tail -n +4` (cells ip.pend, ip.legacy, ip.nostore); bl998-snap-fnr narrows the green write's snapshot awk
-# to `FNR <= 3`, so it never reads a record's line-4 `#pending` (cells w1p, w1).
-# MUTANT-MATRIX bl998-rd-hit decides=w2p twins=w2
-# MUTANT-MATRIX bl998-snap-fnr decides=w1p twins=w1
-# MUTANT-MATRIX bl998-ip-tail decides=ip.pend twins=ip.legacy
-# The mutants reach mutant_killed through one helper, as a variable:
-# MUTANT-MATRIX-DYNAMIC mx_score why=passes each mutant name of the M- and bl998- batteries as a variable and each name keeps its own row
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/suite-content-key/run.sh --matrix
-#
-# Usage: run.sh [--matrix]
 set -uo pipefail
-
-MODE=plain
-case "${1:-}" in
-  "") ;;
-  --matrix) MODE=matrix ;;
-  *) echo "suite-content-key: usage: run.sh [--matrix]" >&2; exit 2 ;;
-esac
-
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DIST="$(cd "$HERE/../../.." && pwd)"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "suite-content-key: FIXTURE BROKEN" >&2; exit 2; }
-
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || broken "lib/mutant.sh not found beside $HERE"
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "suite-content-key:"
 
@@ -147,8 +112,7 @@ cp "$WORK/alpha.orig" "$T/core/fixtures/alpha/run.sh"
 # its own component, so an empty directory there would be caught twice and this
 # assertion could not attribute the catch to the listing. Under scripts/ the
 # listing is the ONLY component that can see it: git cannot track an empty
-# directory and a contents hash has nothing to hash. Verified by mutation --
-# dropping directories from the listing turns exactly this assertion red.
+# directory and a contents hash has nothing to hash.
 mkdir "$T/scripts/probe-empty" || broken "could not create the empty-directory probe"
 [ -d "$T/scripts/probe-empty" ] || broken "the empty-directory probe was not created"
 moved "a NEW EMPTY DIRECTORY outside core/fixtures/ moves the key (only the listing component can see one)"
@@ -224,9 +188,6 @@ fi
 #   k5  `+` on a directory is refused by the parse
 #   k6  `+` and `!` on one line is refused, by the parse and by the outer key
 #   k7  no inputs.decl at all: the unmatched glob still yields a well-formed key
-# Two mutants, each a copy, each cmp-guarded, each killed by its own arm only:
-#   M-plus  the parse strips `+` and emits no key row -- silent, it reads exactly like k2. k1 kills it.
-#   M-docs  the outer key hashes all of docs/ (docs dropped from EXCLUDE). k3's plans control kills it.
 span() { # span <hook> <out> -- the READSET_KEYROWS span, or broken
   sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$1" > "$2"
   grep -q '^readset_decl_parse() ' "$2" || broken "no READSET_KEYROWS span with readset_decl_parse in $1"
@@ -243,7 +204,7 @@ BSHA="$(shasum -a 256 "$T/docs/backlog.md" | cut -d' ' -f1)"
 [ "${#BSHA}" -eq 64 ] || broken "could not hash the seeded docs/backlog.md"
 
 k1="$(krows "$WORK/span.sh" '+docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md" { print $3 }')"
-if [ "$k1" = "$BSHA" ]; then ok "k1 a +docs/backlog.md declaration yields a docs/backlog.md key row carrying its sha256"; B_k1=1
+if [ "$k1" = "$BSHA" ]; then ok "k1 a +docs/backlog.md declaration yields a docs/backlog.md key row carrying its sha256"
 else bad "k1 a +docs/backlog.md declaration yielded the row value '$k1', want '$BSHA' -- the file under an excluded top is still unkeyed"; fi
 
 k2="$(krows "$WORK/span.sh" 'docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md"' | grep -c .)" || k2=0
@@ -265,7 +226,7 @@ edit_key() { # edit_key <file> -> the key after appending one line, then the fil
 k3b="$(edit_key docs/backlog.md)"; k3p="$(edit_key docs/plans/p.md)"
 if [ -n "$k3b" ] && [ "$k3b" != "$KP" ]; then ok "k3 an EDIT of the +declared docs/backlog.md moves the outer key"
 else bad "k3 an edit of the +declared docs/backlog.md did NOT move the outer key ('$k3b') -- a backlog-only push still skips the suite"; fi
-if [ "$k3p" = "$KP" ]; then ok "k3 an EDIT of docs/plans/p.md does NOT move it (only the declared file is keyed, not its top)"; B_k3plans=1
+if [ "$k3p" = "$KP" ]; then ok "k3 an EDIT of docs/plans/p.md does NOT move it (only the declared file is keyed, not its top)"
 else bad "k3 an edit of docs/plans/p.md moved the outer key -- the + opt-in widened to the whole excluded top"; fi
 
 printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n+docs/absent.md\n' > "$T/core/fixtures/gamma/inputs.decl"
@@ -291,112 +252,6 @@ mv "$WORK/gamma.decl" "$T/core/fixtures/gamma/inputs.decl"
 printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n' > "$T/core/fixtures/gamma/inputs.decl"
 [ "$(key)" = "$KP" ] || broken "the gamma declaration was not restored"
 
-# M-plus: the parse line that records a `+` path is deleted, so the marker is stripped and no P row
-# is emitted. Anchored on that line alone, which the span carries exactly once.
-mp_n="$(grep -cF 'if (x && $0 != "") print $0 > pl' "$WORK/span.sh")" || mp_n=0
-[ "$mp_n" -eq 1 ] || broken "M-plus anchor found $mp_n time(s) in the span, want 1"
-grep -vF 'if (x && $0 != "") print $0 > pl' "$WORK/span.sh" > "$WORK/span.mplus.sh"
-cmp -s "$WORK/span.sh" "$WORK/span.mplus.sh" && broken "M-plus DID NOT APPLY"
-
-# ---- matrix plumbing. The header rows are the only source of a mutant's deciding cell and twin. ----
-# MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
-MXL="$WORK/mx.ledger"; : > "$MXL"
-mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
-  awk -v n="$1" -v f="$2" '
-    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
-      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
-    }
-    END { if (c == 1) print v }' "$HERE/run.sh"
-}
-mx_count() { local n; n="$(grep -c "^$1 " "$MXL")" || n=0; printf '%s' "$n"; }
-mx_cell() { # <mutant> <cell> <role dec|mx> -> RED|GREEN, ledgered; a predicate that crashes is BROKEN, never GREEN
-  local m="$1" c="$2" r="$3" e="$WORK/cell.err" rc
-  printf '%s %s %s\n' "$r" "$m" "$c" >> "$MXL"
-  "cell_$m" "$c" 2>"$e"; rc=$?
-  case "$(cat "$e")" in
-    *"unbound variable"*|*"command not found"*|*"syntax error"*)
-      if [ "$MODE" = matrix ]; then echo "MATRIX BROKEN $m"; exit 2; fi
-      broken "cell $c of $m crashed, which reads as GREEN" ;;
-  esac
-  case "$rc" in 0) MX_COLOR=RED ;; 1) MX_COLOR=GREEN ;; *) broken "cell $c of $m is not a cell of that mutant" ;; esac
-}
-# mx_score <mutant> <base-pass flag> <message> -- the deciding cell and the twin per push, every cell under --matrix.
-mx_score() {
-  local m="$1" fl="$2" msg="$3" dec tw d t a g=0 tot=0 u="" rd=""
-  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
-  [ -n "$dec" ] && [ -n "$tw" ] || broken "MUTANT $m has no single MUTANT-MATRIX row naming its deciding cell and twin"
-  mx_cell "$m" "$dec" dec; d="$MX_COLOR"
-  if [ "$d" = RED ]; then mutant_killed "$fl" "$m" "$msg"; else bad "MUTANT $m SURVIVED: its deciding cell $dec held on the mutated copy"; fi
-  mx_cell "$m" "$tw" dec; t="$MX_COLOR"
-  if [ "$t" = RED ]; then bad "MUTANT $m is entangled: its twin $tw also failed"; fi
-  if [ "$MODE" = matrix ]; then # mx-all-cells
-    for a in $(cells_of "$m"); do
-      if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
-      tot=$((tot + 1)); mx_cell "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); else rd="$rd,$a"; fi
-    done
-    if [ "$d" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
-    if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
-  fi
-}
-cells_of() { case "$1" in M-plus) echo "k1 k2 k5 k6.hook" ;; M-docs) echo "k3.plans k3.backlog k4 k6.key k7 sane" ;; bl998-rd-hit) echo "w2p w2" ;; bl998-snap-fnr) echo "w1p w1" ;; bl998-ip-tail) echo "ip.pend ip.legacy ip.nostore" ;; esac; }
-
-# M-plus cells, each read off the mutated span: RED when that arm's own predicate would FAIL (rc 0), GREEN when it holds (rc 1).
-cell_M-plus() {
-  local v n
-  case "$1" in
-    k1) v="$(krows "$WORK/span.mplus.sh" '+docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md" { print $3 }')"
-        MP_CTL="$(awk -F'\t' '$2 == "F" && $3 == "docs/backlog.md"' "$WORK/k.parse" | grep -c .)" || MP_CTL=0
-        [ "$v" != "$BSHA" ] ;;
-    k2) n="$(krows "$WORK/span.mplus.sh" 'docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md"' | grep -c .)" || n=0
-        [ "$n" -ne 0 ] ;;
-    k5) krows "$WORK/span.mplus.sh" '+docs/' > /dev/null
-        n="$(awk -F'\t' '$2 == "X" && $3 == "plusdir"' "$WORK/k.parse" | grep -c .)" || n=0
-        [ "$n" -ne 1 ] ;;
-    k6.hook) krows "$WORK/span.mplus.sh" '!+docs/backlog.md' > /dev/null
-        n="$(awk -F'\t' '$2 == "X" && $3 == "plusbang"' "$WORK/k.parse" | grep -c .)" || n=0
-        [ "$n" -ne 1 ] ;;
-    *) return 2 ;;
-  esac
-}
-MP_CTL=0
-mx_score M-plus "${B_k1:-0}" "M-plus scored by k1: a parse that drops + silently keys nothing, with the F row still parsed (it ran)"
-# k1 ran first in mx_score, so MP_CTL is the F-row count of the mutated parse. A copy that never ran has no F row.
-[ "$MP_CTL" -eq 1 ] || bad "M-plus control: the mutated parse produced $MP_CTL F row(s) for docs/backlog.md, want 1 -- the copy may not have run"
-
-# M-docs: docs removed from EXCLUDE in a copy of the key script, driven through k3's two edits only.
-sed '/^# EXCLUDE_BEGIN$/,/^# EXCLUDE_END$/{/^docs$/d;}' "$KEY" > "$WORK/key.mdocs.sh"
-cmp -s "$KEY" "$WORK/key.mdocs.sh" && broken "M-docs DID NOT APPLY"
-cp "$WORK/key.mdocs.sh" "$T/scripts/.key-mdocs.sh"
-mkey() { bash "$T/scripts/.key-mdocs.sh" 2>/dev/null; }
-mkedit() { # <file> -> the mutant key after appending one line, then the file restored
-  cp "$T/$1" "$WORK/e.orig"; printf 'edited\n' >> "$T/$1"
-  mkey; cp "$WORK/e.orig" "$T/$1"
-}
-MK="$(mkey)"
-[ -n "$MK" ] || bad "M-docs control: the mutated key script produced no key on the pristine tree, so it may not have run"
-GAMMA="$T/core/fixtures/gamma/inputs.decl"
-cell_M-docs() { # RED = that arm's predicate would FAIL on the mutated key script
-  local k
-  case "$1" in
-    k3.plans)   k="$(mkedit docs/plans/p.md)"; [ -n "$MK" ] && [ "$k" != "$MK" ] ;;
-    k3.backlog) k="$(mkedit docs/backlog.md)"; [ -z "$k" ] || [ "$k" = "$MK" ] ;;
-    k4)  printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n+docs/absent.md\n' > "$GAMMA"
-         if mkey > /dev/null; then k=0; else k=1; fi
-         printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n' > "$GAMMA"; [ "$k" -eq 0 ] ;;
-    k6.key) printf '!scripts/suite-content-key.sh\n+!docs/backlog.md\n' > "$GAMMA"
-         if mkey > /dev/null; then k=0; else k=1; fi
-         printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n' > "$GAMMA"; [ "$k" -eq 0 ] ;;
-    k7)  mv "$GAMMA" "$WORK/gamma.mdecl"; k="$(mkey)"; mv "$WORK/gamma.mdecl" "$GAMMA"
-         case "$k" in ????????????????????????????????????????????????????????????????) return 1 ;; *) return 0 ;; esac ;;
-    sane) case "$MK" in ????????????????????????????????????????????????????????????????) return 1 ;; *) return 0 ;; esac ;;
-    *) return 2 ;;
-  esac
-}
-mx_score M-docs "${B_k3plans:-0}" "M-docs scored by k3: a key hashing all of docs/ moves on the plans edit k3 requires to be still"
-rm -f "$T/scripts/.key-mdocs.sh"
-[ "$(key)" = "$KP" ] || broken "the tree did not return to its baseline key after the M-docs cells"
-
 # --- BL-954. THE FINAL BANNER NAMES THE ARM THAT DECIDED THE SKIP ---------------------------------
 # Two arms skip the suite and each is its own decision with its own log line: the whole-suite content key
 # (HIT) and the read-set skip inside run_fixtures (the key MISSED, then no fixture's inputs moved). The
@@ -404,16 +259,11 @@ rm -f "$T/scripts/.key-mdocs.sh"
 # the FIXTURE_POOL block is cut from the hook (run_fixtures and apply_readset_skip set READSET_NO_CHANGE
 # themselves; nothing here sets it), then SUITE_STEP (fixture_suite_step and its cause assignments) and
 # SUITE_BANNER (the final banner) are cut by the markers the hook carries, and all three are sourced in a
-# world. A mutant is a copy of the hook, so it reaches the receipt.
+# world.
 #   W1 the key MISSED (no record) and every read-set is unchanged  -> banner names the read-set arm, never
 #      "unchanged content key", and the step and log say MISS / "content key changed"
 #   W2 the key matches its record                                  -> banner names the content-key arm, log HIT
 #   the two banners DIFFER, and each matches its own log line.
-# MUTANT-MATRIX bl954-m1 decides=w1 twins=w2
-# MUTANT-MATRIX bl954-m2 decides=w1 twins=w2
-# MUTANT-MATRIX bl954-m3 decides=w1 twins=- why=a swap moves both worlds, so there is no world it must leave green
-# MUTANT-MATRIX bl954-m4 decides=w2 twins=w1
-# MUTANT-MATRIX-DYNAMIC bl954_mut why=one helper scoring the four banner mutants bl954-m1 to bl954-m4 on their own worlds
 BW="$WORK/bl954"; mkdir -p "$BW/tpl/core/fixtures/alpha" "$BW/tpl/core/fixtures/beta" "$BW/tpl/src"
 for _f in alpha beta; do printf 'exit 0\n' > "$BW/tpl/core/fixtures/$_f/run.sh"; done
 printf 'alpha\tsrc/a.sh\nbeta\tsrc/b.sh\n' > "$BW/tpl/.ai-dlc-fixture-readsets.tsv"
@@ -486,34 +336,12 @@ grep -q '^# SUITE_BANNER_BEGIN$' "$BHOOK" || broken "BL-954: the hook carries no
 BR1="$(bl954_run "$BHOOK" w1 base)"; BR2="$(bl954_run "$BHOOK" w2 base)"
 grep -q 'STEP-RC 0' <<< "$BR1" || broken "BL-954 W1 driver: the step did not return 0: $(printf '%s' "$BR1" | tail -5 | tr '\n' '|')"
 grep -q 'STEP-RC 0' <<< "$BR2" || broken "BL-954 W2 driver: the step did not return 0: [$BR2] key.sh: $(cd "$BW/w.base.w2" 2>&1 && bash scripts/suite-content-key.sh 2>&1 | head -3)"
-B_W1=0; B_W2=0
-if bl954_okw1 "$BR1"; then B_W1=1; ok "W1 key MISSED, every read-set unchanged: the banner names the read-set arm, not 'unchanged content key', and the log says MISS ($(bl954_banner "$BR1" | cut -c1-150))"
+if bl954_okw1 "$BR1"; then ok "W1 key MISSED, every read-set unchanged: the banner names the read-set arm, not 'unchanged content key', and the log says MISS ($(bl954_banner "$BR1" | cut -c1-150))"
 else bad "W1 the read-set world's banner/log is wrong: $(printf '%s' "$BR1" | tail -6 | tr '\n' '|')"; fi
-if bl954_okw2 "$BR2"; then B_W2=1; ok "W2 key matched its record: the banner names the content-key arm and the log says HIT ($(bl954_banner "$BR2" | cut -c1-150))"
+if bl954_okw2 "$BR2"; then ok "W2 key matched its record: the banner names the content-key arm and the log says HIT ($(bl954_banner "$BR2" | cut -c1-150))"
 else bad "W2 the content-key world's banner/log is wrong: $(printf '%s' "$BR2" | tail -6 | tr '\n' '|')"; fi
 if [ -n "$(bl954_banner "$BR1")" ] && [ "$(bl954_banner "$BR1")" != "$(bl954_banner "$BR2")" ]; then ok "W1 and W2 banners differ, each matching its own log line (MISS and HIT)"
 else bad "W1 and W2 banners are identical or empty: a banner that cannot tell the arms apart"; fi
-bl954_mut() { # <name> <flag> <sed expr> <worlds> : mutate a COPY of the hook, score the named worlds
-  local n="$1" fl="$2" sedx="$3" worlds="$4" w r hk="$BW/hook.$1"
-  sed "$sedx" "$BHOOK" > "$hk"
-  cmp -s "$BHOOK" "$hk" && broken "BL-954 MUTANT $n DID NOT APPLY"
-  for w in $worlds; do
-    r="$(bl954_run "$hk" "$w" "$n")"
-    grep -q 'STEP-RC 0' <<< "$r" || broken "BL-954 MUTANT $n: the mutated hook did not run in $w: $(printf '%s' "$r" | tail -3 | tr '\n' '|')"
-    if [ "$w" = w1 ]; then
-      if bl954_okw1 "$r"; then bad "MUTANT $n SURVIVED in w1"; else mutant_killed "$fl" "$n" "MUTANT $n killed by w1: $(bl954_banner "$r" | cut -c1-120)"; fi
-    else
-      if bl954_okw2 "$r"; then bad "MUTANT $n SURVIVED in w2"; else mutant_killed "$fl" "$n" "MUTANT $n killed by w2: $(bl954_banner "$r" | cut -c1-120)"; fi
-    fi
-  done
-}
-# m1 the old hard-coded banner restored; m2 the read-set cause assignment removed; m3 the two causes swapped
-# (both worlds); m4 the content-key cause assignment removed.
-bl954_mut bl954-m1 "$B_W1" "s|FIXTURE SUITE SKIPPED -- %s%s\.|FIXTURE SUITE SKIPPED on an unchanged content key%s.|; s|\"\$skip_why\" \"\$pending_note\"|\"\$pending_note\"|" w1
-bl954_mut bl954-m2 "$B_W1" 's|then SUITE_SKIP_CAUSE=read-set; fi|then :; fi|' w1
-bl954_mut bl954-m3 "$B_W1" 's|SUITE_SKIP_CAUSE=content-key|SUITE_SKIP_CAUSE=SWAPTMP|; s|SUITE_SKIP_CAUSE=read-set|SUITE_SKIP_CAUSE=content-key|; s|SUITE_SKIP_CAUSE=SWAPTMP|SUITE_SKIP_CAUSE=read-set|' "w1 w2"
-bl954_mut bl954-m4 "$B_W2" 's|^      SUITE_SKIP_CAUSE=content-key$|      :|' w2
-
 # --- BL-998. A WHOLE-SUITE HIT NAMES THE PENDING FIXTURES IT SKIPPED, FROM THE RECORD'S OWN SNAPSHOT --------
 # Every fixture is skipped on a HIT, so its PENDING counts come from line 2 of the key record, written at the green
 # write beside the key. W2P's snapshot names alpha=3 and not beta while the per-fixture key records say alpha 0 and
@@ -523,8 +351,7 @@ bl954_mut bl954-m4 "$B_W2" 's|^      SUITE_SKIP_CAUSE=content-key$|      :|' w2
 BL998_W2P='   PENDING: 1 skipped on a recorded pass that printed a PENDING row: alpha(recorded)=3'
 BRP="$(bl954_run "$BHOOK" w2p base)"
 grep -q 'STEP-RC 0' <<< "$BRP" || broken "BL-998 W2P driver: the step did not return 0: $(printf '%s' "$BRP" | tail -5 | tr '\n' '|')"
-B_W2P=0
-if bl954_okw2 "$BRP" && grep -qxF "$BL998_W2P" <<< "$BRP"; then B_W2P=1; ok "W2P a HIT prints the PENDING clause from the record's snapshot (alpha=3, beta unnamed), not from the key records (alpha 0, beta 5)"
+if bl954_okw2 "$BRP" && grep -qxF "$BL998_W2P" <<< "$BRP"; then ok "W2P a HIT prints the PENDING clause from the record's snapshot (alpha=3, beta unnamed), not from the key records (alpha 0, beta 5)"
 else bad "W2P the HIT's PENDING line is wrong: $(grep 'PENDING' <<< "$BRP" | tr '\n' '|')"; fi
 if ! grep -q '^   PENDING:' <<< "$BR2"; then ok "W2 a one-line record (no snapshot) prints no PENDING line on its HIT"
 else bad "W2 a record without a snapshot printed a PENDING line: $(grep 'PENDING:' <<< "$BR2" | tr '\n' '|')"; fi
@@ -539,44 +366,9 @@ export W1P_KEYS="$BW/w.base.w1/.git/ai-dlc-fixture-keys"
 bl998_w1p_rec() { sed -n '/^---REC---$/,/^---BANNER---$/p' <<< "$1" | sed -n 3p; } # line 2 of the record
 BR1P="$(bl954_run "$BHOOK" w1p base)"
 grep -q 'STEP-RC 0' <<< "$BR1P" || broken "BL-998 W1P driver: the step did not return 0: $(printf '%s' "$BR1P" | tail -5 | tr '\n' '|')"
-B_W1P=0
 if grep -qF 'read-set keys: 0 of 2 fixture(s) run' <<< "$BR1P" && [ "$(bl998_w1p_rec "$BR1P")" = '#pending alpha=3' ]; then
-  B_W1P=1; ok "W1P the green write snapshots line 4 of the key records: line 2 reads '#pending alpha=3' (beta's 0 omitted, both records skipped)"
+  ok "W1P the green write snapshots line 4 of the key records: line 2 reads '#pending alpha=3' (beta's 0 omitted, both records skipped)"
 else bad "W1P the green write's snapshot is wrong: $(sed -n '/^---REC---$/,/^---BANNER---$/p' <<< "$BR1P" | tr '\n' '|') $(grep 'read-set keys:' <<< "$BR1P")"; fi
-smut() { # smut <src> <dst> <old> <new>: the ONE line holding <old> gets <new>; refuses a lost or no-op anchor
-  local n
-  n="$(O="$3" awk 'index($0, ENVIRON["O"]) { c++ } END { print c + 0 }' "$1")"
-  [ "$n" = 1 ] || broken "BL-998 mutant anchor matched $n line(s) of ${1##*/}, want 1: $3"
-  O="$3" N="$4" awk '{ i = index($0, ENVIRON["O"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["N"] substr($0, i + length(ENVIRON["O"])); print }' "$1" > "$2"
-  cmp -s "$1" "$2" && broken "BL-998 mutant DID NOT APPLY: $3"
-  return 0
-}
-smut "$BHOOK" "$BW/hook.bl998-rd-hit" '        | readset_pending_line 0 "" -' '        | cat > /dev/null'
-cell_bl998-rd-hit() { # RED = that world's predicate fails under the hook with the HIT's renderer dropped
-  local r
-  case "$1" in
-    w2p) r="$(bl954_run "$BW/hook.bl998-rd-hit" w2p rdhit)"; grep -q 'STEP-RC 0' <<< "$r" || return 2
-         ! { bl954_okw2 "$r" && grep -qxF "$BL998_W2P" <<< "$r"; } ;;
-    w2)  r="$(bl954_run "$BW/hook.bl998-rd-hit" w2 rdhit)"; grep -q 'STEP-RC 0' <<< "$r" || return 2
-         ! { bl954_okw2 "$r" && ! grep -q '^   PENDING:' <<< "$r"; } ;;
-    *) return 2 ;;
-  esac
-}
-mx_score bl998-rd-hit "$B_W2P" "bl998-rd-hit scored by W2P: with the HIT's renderer dropped the snapshot's PENDING fixtures go unnamed"
-# bl998-snap-fnr: the green write's snapshot awk reads only lines 1-3 of each key record, so it never sees line 4.
-smut "$BHOOK" "$BW/hook.bl998-snap-fnr" 'FNR <= 4 && /^#pending' 'FNR <= 3 && /^#pending'
-cell_bl998-snap-fnr() { # RED = that world's snapshot-line predicate fails under the hook reading only lines 1-3
-  local r
-  case "$1" in
-    w1p) r="$(bl954_run "$BW/hook.bl998-snap-fnr" w1p snapfnr)"; grep -q 'STEP-RC 0' <<< "$r" || return 2
-         [ "$(bl998_w1p_rec "$r")" != '#pending alpha=3' ] ;;
-    w1)  r="$(bl954_run "$BW/hook.bl998-snap-fnr" w1 snapfnr)"; grep -q 'STEP-RC 0' <<< "$r" || return 2
-         [ "$(bl998_w1p_rec "$r")" != '#pending alpha=- beta=-' ] ;;
-    *) return 2 ;;
-  esac
-}
-mx_score bl998-snap-fnr "$B_W1P" "bl998-snap-fnr scored by W1P: a snapshot reading lines 1-3 of each record misses line 4's '#pending 3' and writes alpha=- (count unrecorded)"
-
 # --- BL-998. STEP 3b: A STORE-SKIPPED COUNTED FIXTURE IS NOT PENDING ----------------------------------------------
 # inproc_pending_step (distribution hook only, outside FIXTURE_POOL) vouches for a fixture this push did not run counted
 # when its key record's rows digest to an entry of the counted store. A record now carries `#pending <n>` as line 4, so
@@ -585,7 +377,7 @@ mx_score bl998-snap-fnr "$B_W1P" "bl998-snap-fnr scored by W1P: a snapshot readi
 # (the producer's own k2 entry, with its 2 PENDING rows), its key record composed from the runner's --key-only rows.
 # The step is cut from the hook and run in-process against three records:
 #   pend     the record with `#pending 2`   -> skipped on a counted pass, 0 PENDING
-#   legacy   the record with no `#pending`  -> the same (the twin: `tail -n +4` reads this one correctly)
+#   legacy   the record with no `#pending`  -> the same
 #   nostore  the record against an empty counted store -> 1 PENDING, named (the step CAN report PENDING)
 HRS="$DIST/core/scripts/hermetic-run.sh"
 [ -f "$HRS" ] || broken "no core/scripts/hermetic-run.sh at $DIST"
@@ -627,32 +419,10 @@ ip_ok() { # ip_ok <output> <variant>: the variant's own predicate
     nostore) grep -qxF "$IP_PN" <<< "$1" && grep -qxF '   PENDING (no counted run under this judge): dc' <<< "$1" ;;
   esac
 }
-B_IP=0
 for _v in pend legacy nostore; do
   _o="$(ip_run "$BHOOK" "$_v" base)"
-  if ip_ok "$_o" "$_v"; then ok "step 3b $_v: $(grep -E '^   1 declared|^   PENDING \(' <<< "$_o" | tr '\n' ' ')"; [ "$_v" = pend ] && B_IP=1
+  if ip_ok "$_o" "$_v"; then ok "step 3b $_v: $(grep -E '^   1 declared|^   PENDING \(' <<< "$_o" | tr '\n' ' ')"
   else bad "step 3b $_v is wrong: $(printf '%s' "$_o" | tail -4 | tr '\n' '|')"; fi
 done
-smut "$BHOOK" "$BW/hook.bl998-ip-tail" 'readset_key_rows "$rec" > "$w/rows"' 'tail -n +4 "$rec" > "$w/rows"'
-cell_bl998-ip-tail() { # RED = that variant's predicate fails under the hook reading the record's rows by `tail -n +4`
-  local r rc
-  case "$1" in ip.pend|ip.legacy|ip.nostore) ;; *) return 2 ;; esac
-  r="$(ip_run "$BW/hook.bl998-ip-tail" "${1#ip.}" iptail)"
-  ip_ok "$r" "${1#ip.}"; rc=$?
-  case "$rc" in 0) return 1 ;; 1) return 0 ;; *) return 2 ;; esac
-}
-mx_score bl998-ip-tail "$B_IP" "bl998-ip-tail scored by ip.pend: reading the rows by tail -n +4 takes '#pending 2' as a row and reports a counted pass PENDING"
-
-# RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
-# empty matrix count cannot come from a ledger nothing writes.
-mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
-if [ "$MODE" = plain ]; then
-  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
-  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
-  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
-else
-  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
-fi
-
 echo
 report_end suite-content-key

@@ -14,7 +14,7 @@
 # `named-distonly` and `touched-deleted` are here for the OVER-completeness arm and they model
 # the filed episode literally: on the reference consumer the surplus directory was WRITTEN into
 # `tests/fixtures/` by the slice, so the run was green and the orphan survived. A consumer tree
-# that lacked them would make every over-completeness mutant die of MISSING instead of running
+# that lacked them would make the over-completeness arm read MISSING instead of running
 # to the green suite the arm has to be able to see.
 #
 # Prints the consumer root on stdout; the caller owns removing it.

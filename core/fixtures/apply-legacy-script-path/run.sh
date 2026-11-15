@@ -38,23 +38,7 @@
 # The driver REPORTS and never deletes. A difference is the very thing the new
 # boundary exists to prevent, and it belongs upstream as a push candidate.
 
-# MUTANT MATRIX. Case 12's x_vec scores four cells (i, ii, iii, r) in ONE run, so every mutant is
-# measured against every cell on every push: the exact vector asserted per mutant IS the recorded
-# matrix (deciding cell red, twins green). The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
-# per distinct state") requires. Case 10 has the single arm "legacy rows"; its twin is the no-DECISION-row arm, green under
-# the mutant.
-# MUTANT-MATRIX-CONTROL legacy-loop why=neutering the loop's file test must emit no legacy-script row at all, so absence of those rows is the pass
-# MUTANT-MATRIX XE-M1 decides=ii twins=i,iii,r
-# MUTANT-MATRIX XE-M2 decides=i twins=iii,r
-# MUTANT-MATRIX XE-M3 decides=i twins=ii,iii,r
-# MUTANT-MATRIX XE-M4 decides=iii twins=i,ii,r
-# MUTANT-MATRIX XE-M5 decides=r twins=i,ii,iii
-# MUTANT-MATRIX-DYNAMIC x_mut-name why=x_mut() passes its first argument "$1" to mutant_killed; each x_mut call (XE-M1, XE-M2, ...) names a literal mutant that carries its own row in this block
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/apply-legacy-script-path/run.sh --matrix
 set -uo pipefail
-MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
-MX_RAN=0
-mx() { MX_RAN=$((MX_RAN + 1)); echo "$@"; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
@@ -122,7 +106,6 @@ printf '#!/usr/bin/env bash\necho mine\n' > "$CONSUMER/scripts/audit-dormant-gat
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$CONSUMER/.claude/.ai-dlc-version"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 echo "apply-legacy-script-path:"
 
@@ -344,29 +327,6 @@ else
   ok "  and says nothing about relocation"
 fi
 
-# --- 10. THE MUTATION TEST — prove the rows come from the new block ------------
-# Neuter the legacy loop's file test on a COPY. Both rows must disappear; if either
-# survives, something else was emitting it and assertions 1-2 prove nothing.
-MUTANT="$WORK/mutant.sh"
-sed 's@^  \[ -f "\$old" \] || continue@  continue@' "$APPLY" > "$MUTANT" || exit 2
-if cmp -s "$APPLY" "$MUTANT"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- the legacy loop was rewritten" >&2
-  exit 2
-fi
-rm -rf "$CONSUMER/scripts/ai-dlc"
-cp "$DIST/core/scripts/validate-edited.sh" "$CONSUMER/scripts/validate-edited.sh"
-printf '# LOCAL EDIT\n' >> "$CONSUMER/scripts/validate-edited.sh"
-MOUT="$(bash "$MUTANT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
-# The control's name, used verbatim by its helper call and by its ok line.
-LL_NAME=legacy-loop
-LL_N="$(grep -c 'legacy-script' <<<"$MOUT" || true)"
-LL_D="$(grep -c 'DECISION.*legacy-script' <<<"$MOUT" || true)"
-if [ "$LL_N" -eq 0 ] && [ "$LL_D" -eq 0 ]; then
-  ok "CONTROL $LL_NAME: with the loop's file test neutered, no legacy-script row of any kind is emitted (0 legacy-script rows, 0 DECISION legacy-script rows) -- the rows exist only when that loop runs, so their absence is the pass"
-else
-  bad "CONTROL $LL_NAME: legacy rows still emitted without the loop ($LL_N legacy-script, $LL_D DECISION) -- assertions 1-2 prove nothing"
-fi
-
 # --- 11. THE SHIPPED GLOB FORM IS ITERATED AS ITS MEMBERS -----------------------
 # v0.160.0 replaced the manifest's 27 filenames with `core/scripts/ai-dlc/*`. Every
 # case above writes a hand-ENUMERATED stand-in manifest, so all of them stay green
@@ -436,7 +396,7 @@ fi
 #   (iii) validate-x.sh 100755, consumer -x     -> still named under `not-executable`
 # And (r): every exec-bit row's remedy is the union gate's own procedure, interpolated with this
 # run's arguments -- never a bare "re-run", which that gate refuses once this run has written.
-# OWN DIST, so cases 1-11 keep theirs. Mutants: XE-M1..M5 below.
+# OWN DIST, so cases 1-11 keep theirs.
 X_ISDIST=0; [ -f "$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh" ] && X_ISDIST=1
 X_RUN=1
 if ! grep -qF 'say DECISION extra-executable' "$APPLY"; then
@@ -487,11 +447,7 @@ if [ "$X_RUN" = 1 ]; then
     printf '%s %s' "$v" "$d"
   }
   X_WANT="1 1 1 1"
-  # ONE unmutated run serves as both the live cells and the control. $APPLY is already a byte copy
-  # of the reconcile directory ($RECON), and every mutant below is a copy of that same directory in
-  # a fresh sibling, so the control copy XC is the exact shape the mutants run in. Scoring the cells
-  # off XC means a copy that cannot run reads "BROKEN"/0 in cells (i)-(r) as well as in the control
-  # line, and the run that used to repeat it is not paid twice.
+  # ONE run of a copy of the reconcile directory scores the cells and the control.
   XC="$WORK/x-ctl"; mkdir -p "$XC" && cp "$RECON"/* "$XC"/ 2>/dev/null
   XV="$(x_vec "$XC/apply.sh")"
   set -- $XV
@@ -504,41 +460,11 @@ if [ "$X_RUN" = 1 ]; then
   [ "${4:-0}" = 1 ] && ok "case 12 (r): every exec-bit row names re-render/re-approve/apply with this run's arguments, and none ends in a bare re-run" \
                     || bad "case 12 (r): an exec-bit row still prescribes a bare re-run, which the union gate refuses after this run has written ($XV)"
   set --
-  # CONTROL: the unmutated copy of the reconcile dir scored the vector above.
+  # CONTROL: the copy of the reconcile dir scored the vector above.
   XCV="$XV"
-  [ "$XCV" = "$X_WANT" ] && ok "case 12 CONTROL: an unmutated copy scores $XCV" \
-                         || bad "case 12 CONTROL: the unmutated copy scored '$XCV', want '$X_WANT' -- every mutant below is unreadable"
-  # x_mut <label> <anchor> <replacement> <want> <what> -- a copy of the whole reconcile dir.
-  # trip_names / held_names turn the "i ii iii r" 1=HELD / 0=TRIPPED vector into explicit cell names.
-  trip_names() { local k=0 o="" c; set -- $1; for c in i ii iii r; do k=$((k + 1)); eval "val=\${$k}"; [ "$val" = 0 ] && o="$o${o:+,}$c"; done; printf '%s' "$o"; }
-  held_names() { local k=0 o="" c; set -- $1; for c in i ii iii r; do k=$((k + 1)); eval "val=\${$k}"; [ "$val" = 1 ] && o="$o${o:+,}$c"; done; printf '%s' "$o"; }
-  x_mut() {
-    local d="$WORK/x-$1" n
-    n="$(grep -cF -- "$2" "$APPLY")" || n=0
-    if [ "$n" != 1 ]; then bad "$1 DID NOT APPLY -- \`$2\` is not in apply.sh exactly once"; return; fi
-    mkdir -p "$d" && cp "$RECON"/* "$d"/ 2>/dev/null
-    X_A="$2" X_R="$3" awk '{ i = index($0, ENVIRON["X_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["X_R"] substr($0, i + length(ENVIRON["X_A"])); print }' "$APPLY" > "$d/apply.sh"
-    if cmp -s "$APPLY" "$d/apply.sh" || ! bash -n "$d/apply.sh"; then bad "$1 DID NOT APPLY or does not parse"; return; fi
-    local v; v="$(x_vec "$d/apply.sh")"
-    local tv; tv="$(trip_names "$v")"
-    if [ "$MATRIX" = 1 ]; then mx "  MATRIX $1: tripped=[$tv] held=[$(held_names "$v")]"; fi
-    if [ "$v" = "$4" ]; then mutant_killed "$([ "$XV" = "$X_WANT" ] && echo 1 || echo 0)" "$1" "$1 ($5): tripped=[$tv] -- killed exactly its arms"
-    elif [ "$v" = "$X_WANT" ]; then bad "$1 SURVIVED ($5)"
-    else bad "$1 ($5) scored $v, want $4"; fi
-  }
-  # M1 is b177's wrong fix 1: every non-executable file named, whatever its mode.
-  x_mut XE-M1 'if [ "$mode" = 100755 ] && [ ! -x "$cons" ]; then' 'if [ ! -x "$cons" ]; then' "1 0 1 1" "the 100755 conjunct dropped (names every non-exec file)"
-  # M2 is wrong fix 2: the mirror's exec test inverted.
-  x_mut XE-M2 'elif [ "$mode" = 100644 ] && [ -x "$cons" ]; then' 'elif [ "$mode" = 100644 ] && [ ! -x "$cons" ]; then' "0 0 1 1" "the mirror test inverted"
-  x_mut XE-M3 'elif [ "$mode" = 100644 ] && [ -x "$cons" ]; then' 'elif false; then' "0 1 1 1" "the mirror arm removed"
-  x_mut XE-M4 'if [ "$mode" = 100755 ] && [ ! -x "$cons" ]; then' 'if false; then' "1 1 0 1" "the original direction removed"
-  x_mut XE-M5 'installed and inert. \`chmod +x\` it, then ${reapply_remedy}"' 'installed and inert. \`chmod +x\` and re-run."' "1 1 1 0" "declared-not-executable's bare re-run restored"
+  [ "$XCV" = "$X_WANT" ] && ok "case 12 CONTROL: a copy of the reconcile dir scores $XCV" \
+                         || bad "case 12 CONTROL: the copy scored '$XCV', want '$X_WANT'"
 fi
 
-if [ "$MATRIX" = 1 ]; then
-  if [ "$MX_RAN" -gt 0 ]; then ok "matrix mode: $MX_RAN matrix-only row(s) were measured"; else bad "matrix mode measured no matrix row"; fi
-else
-  if [ "$MX_RAN" -eq 0 ]; then ok "a plain run executed no matrix-only cell"; else bad "a plain run executed $MX_RAN matrix-only cell(s)"; fi
-fi
 echo ""
 report_end apply-legacy-script-path

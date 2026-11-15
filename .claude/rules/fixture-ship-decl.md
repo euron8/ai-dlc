@@ -12,14 +12,13 @@ A fixture ships to consumers unless its own directory carries a `.dist-only` fil
 set there any more.
 
 **The criterion: a fixture is `.dist-only` when its SUBJECT is not present on a
-consumer.** Three measured shapes, and every marker on disk is one of them:
+consumer.** Two measured shapes, and every marker on disk is one of them:
 
 - the subject is a distribution-only program (`scripts/validate-enforcement-map.sh`,
   `validate-plan-shape.sh`, `suite-content-key.sh`, the distribution `.githooks/pre-push`);
 - the subject is a corpus only this repo holds, so the same run on a consumer scans a
   smaller set and prints the same clean line — a narrower check reading identically to a
-  full one;
-- it is a MUTATION BATTERY behind a shipped fixture, editing copies of core's own sources.
+  full one.
 
 **Write the reason in the marker.** It is required to be non-empty, because a marker with
 no reason is a decision nobody can audit — and most of the markers on disk when this rule

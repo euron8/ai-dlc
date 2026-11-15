@@ -33,61 +33,16 @@
 # repository's history — a bare command in a step's own command list, and a `Required:` clause
 # in a role file — and an agent following either runs nothing.
 #
-# ITS FOUR SILENT CASES ARE FOUR DIFFERENT REASONS, which is why there is one mutant each:
+# ITS FOUR SILENT CASES ARE FOUR DIFFERENT REASONS, which is why there is one cell each:
 #
 #   scripts/present.sh          the file resolves          -> the arm has something to be quiet about
 #   scripts/fenced-missing.sh   inside a fenced block      -> I68's defect, and the skip's stated cost
 #   core/scripts/…              not root-relative          -> resolved against the wrong root otherwise
 #   extensions/README.md        not a layer entry          -> layer_files() drops it by name
 #
-# Usage: run.sh [--matrix] [path-to-validate-layer-entries.sh]
+# Usage: run.sh [path-to-validate-layer-entries.sh]
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = fixture broken.
-#
-# MUTANT BATTERY, NARROWED TO ONE DECIDER AND ONE TWIN PER MUTANT. The live pass over the
-# shipped linter keeps every world and every cell (Parts 1-4). Each mutant used to be scored on
-# the full 35-cell vector, which forks the linter twice per mutant. Per push a mutant now runs
-# only its DECIDING cell and its TWIN: the decider must move to the mutant's measured value and
-# the twin must hold at the pristine value. "Each mutant moves only its own cells" is a
-# test-quality property established by `--matrix`, which scores every mutant on the full vector
-# and prints one `MATRIX<TAB><mutant><TAB><cell><TAB><FAIL|ok>` line per cell. The matrix is
-# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
-# The rows below are read back by
-# this script at run time (mk_mutant), so a mutant without a row, or a row without a mutant,
-# is a FIXTURE ERROR rather than a drift.
-#
-# MUTANT-MATRIX hardcoded-dot decides=apform twins=dotform
-# MUTANT-MATRIX no-crosswalk-bare decides=c34 twins=c12
-# MUTANT-MATRIX no-crosswalk-namespaced decides=c12 twins=c34
-# MUTANT-MATRIX alphabetic-grammar decides=alpha twins=c7
-# MUTANT-MATRIX no-anchor-resolve decides=c7 twins=alpha
-# MUTANT-MATRIX no-hook-resolve decides=hk61 twins=hk62
-# MUTANT-MATRIX hook-resolve-any decides=hk62 twins=hk61
-# MUTANT-MATRIX hook-resolve-mention decides=hk64 twins=hk65
-# MUTANT-MATRIX w9-no-fence-skip decides=w9fence twins=w9ok
-# MUTANT-MATRIX w9-no-dotslash decides=w9dot twins=w9miss
-# MUTANT-MATRIX w9-no-root-anchor decides=w9dist twins=w9rdme
-# MUTANT-MATRIX w9-extensions-only decides=w9ovr twins=w9miss
-# MUTANT-MATRIX w12-title-off decides=w12t26 twins=w12g24
-# MUTANT-MATRIX w12-tag-off decides=w12g24 twins=w12t26
-# MUTANT-MATRIX w12-token-loose decides=w12p20 twins=w12q17
-# MUTANT-MATRIX w12-stem-quiet decides=w12stem twins=w12x26amb
-# MUTANT-MATRIX w12-core-gate-off decides=w12w19b twins=w12n8
-# MUTANT-MATRIX w12-crosswalk-off decides=w12amb twins=w12stem
-# MUTANT-MATRIX w12-crosswalk-unconditional decides=w12t26 twins=w12g24
-# MUTANT-MATRIX w12-note-uncaveated decides=w12note twins=w12self
-# MUTANT-MATRIX w12-shadow-off decides=w12shadow5 twins=w12wrap21
-# MUTANT-MATRIX w12-self-off decides=w12self twins=w12note
-# MUTANT-MATRIX w12-window-one-line decides=w12wrap21 twins=w12shadow5
-# MUTANT-MATRIX w12-section-rebuttal-off decides=w12sect23 twins=w12wrap21
-# MUTANT-MATRIX pool-width-2 decides=pool-width twins=pool-self-probe
-# MUTANT-MATRIX-DYNAMIC collector-loop why=Part 5b hands each worker verdict to mutant_killed by label, one row above per label
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-reference-resolution/run.sh --matrix
 set -uo pipefail
-
-# --matrix is parsed and shifted before any other positional argument. It scores every mutant on
-# the full vector and prints the matrix; a plain run never executes that path.
-MATRIX=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
 
 # SCRUB AMBIENT AI_DLC_* BEFORE ANYTHING READS IT. This fixture seeds files under
 # `.claude/hooks/` for W7's hook namespace, so an operator's own `AI_DLC_*` tunables would be
@@ -121,22 +76,14 @@ CROSSWALK="$CONS/.claude/skills/ai-dlc/extensions/README.md"
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-B_pristine=0
 
-# EXPECTED_ASSERTIONS is not bookkeeping. A sibling fixture lost a whole mutant to a missing
-# space in a helper call: `set -u` killed the `$( )` subshell, `if m="$( … )"` read that as a
-# false branch, and the arm silently did not run — green lines and a PASS. Counting what ran is
-# what closes it, and the count is a literal here or it disappears with the assertions.
-# 3 premises + 3 W9 premises + 1 pristine vector + 2 applicability + 1 code-attribution
-# + 1 crosswalk-is-load-bearing + 1 exit condition + 9 mutants + 1 unmutated control.
-# + 1 W12 premise + 12 W12 mutants + 3 HOOK-namespace mutants + 1 pool-accounting arm + 3 collector self-probes
-# + 1 matrix-mode arm (matrix run: MATRIX lines emitted; plain run: no matrix-only cell executed).
-# + 1 pool self-probe + 1 pool-width-2 mutant (the pool-width arm replaced the old in-flight floor one for one).
-EXPECTED_ASSERTIONS=45
+# EXPECTED_ASSERTIONS is not bookkeeping. `set -u` killing a `$( )` subshell inside
+# `if m="$( … )"` reads as a false branch, and the arm silently does not run — green lines and a
+# PASS. Counting what ran is what closes it, and the count is a literal here or it disappears
+# with the assertions.
+# 3 premises + 3 W9 premises + 1 W12 premise + 1 pristine vector + 2 applicability
+# + 1 code-attribution + 1 crosswalk-is-load-bearing + 1 exit condition.
+EXPECTED_ASSERTIONS=13
 
 echo "layer-reference-resolution:"
 
@@ -171,15 +118,13 @@ grep -q '^## Check 19b$' "$DOMAIN" \
   || bad "premise BROKEN: scripts/missing-tool.sh EXISTS — W9 reporting it would be the false positive"
 
 # The fenced case must actually be fenced. A seed that put the path outside a fence would make
-# the fence-skip mutant unkillable while every line still read green.
+# the fenced cell silent for the wrong reason while every line still read green.
 awk '/^[[:space:]]*```/ { f = 1 - f; next } f && /scripts\/fenced-missing\.sh/ { hit = 1 } END { exit hit ? 0 : 1 }' "$DOMAIN" \
   && ok "premise: scripts/fenced-missing.sh sits INSIDE a fenced block in the seed" \
-  || bad "premise BROKEN: scripts/fenced-missing.sh is not inside a fence — the fence mutant cannot fire"
+  || bad "premise BROKEN: scripts/fenced-missing.sh is not inside a fence — its silent cell proves nothing"
 
-# THE SCORING FUNCTION IS SOURCED, NOT DEFINED HERE. The mutants run under an inner pool
-# (Part 5), so the worker is a separate process that cannot inherit a function from this file.
-# One definition in `vector.sh`, sourced by both readers — restating it in the worker would be
-# two copies of one grammar free to drift. It reads $DOMAIN, set above.
+# THE SCORING FUNCTION IS SOURCED, NOT DEFINED HERE: one definition in `vector.sh`. It reads
+# $DOMAIN, set above.
 . "$HERE/vector.sh"
 
 
@@ -190,7 +135,7 @@ WANT="d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W 
 # --- Part 1: the pristine vector ---------------------------------------------------------
 got="$(vector "$LINTER" "$CONS")"
 [ "$got" = "$WANT" ] \
-  && { ok "pristine vector: $WANT"; B_pristine=1; } \
+  && ok "pristine vector: $WANT" \
   || bad "pristine vector: got [$got] want [$WANT]"
 
 # --- Part 2: applicability, stated as its own arm and in both directions ------------------
@@ -244,497 +189,12 @@ got="$(vector "$LINTER" "$CONS")"
 git -C "$CONS" checkout -q -- . 2>/dev/null
 rm -f "$DOMAIN.bak" "$CONS/.claude/skills/ai-dlc/extensions/roles/dev.md.bak"
 
-# --- Part 5: mutants ----------------------------------------------------------------------
-# Each is a COPY of the linter, never an in-place edit, guarded by `cmp -s` so a sed that
-# matched nothing cannot pass as a mutation. Each asserts a complete vector distinct from every
-# other mutant's, so a mutant that fails two cells is reporting entanglement rather than a kill.
-#
-# THE MUTANTS RUN UNDER AN INNER POOL, AND THAT IS A COST FIX, NOT A BEHAVIOUR CHANGE. This
-# fixture was the suite's POLE — the single longest directory, which is what the pool's wall
-# clock tracks. Measured: it is fork/exec-bound (~5200 spawns per linter run, 85% system time)
-# and was consuming 1.22 cores while the box had 18, so it was serial for no reason. Under the
-# outer pool (`.githooks/pre-push`, `AI_DLC_FIXTURE_JOBS` default 12) an inner pool at P=6
-# measured 4.4-4.8x on the mutant phase, interleaved, with P=8 run FIRST so the ordering
-# confound ran against the change. Re-derive the loaded cost from `.git/ai-dlc-fixture-durations`
-# after any edit here; a solo timing of this directory answers a different question and the two
-# must never be compared.
-#
-# WHY P=6 AND NOT THE 8 THAT MEASURED FASTEST. An inner width multiplies against the outer
-# one, and both existing inner pools in this suite fix theirs as a narrow constant for exactly
-# that reason (`enforcement-map-sites/run.sh`, `validator-arm-selection/run.sh`). The
-# measurement justifies a pool; it does not justify 8.
-#
-# THE POOL IS WHY THE COLLECTOR EXISTS. `made=$((made+1))` inside a pooled child is lost to
-# the subshell, so a child cannot assert. Each worker writes a verdict FILE and the collector
-# below walks the DISPATCHED LIST to read them — see its own header for why the list and not
-# the directory listing.
-MUT_DIR="$ROOT/mutants"
-mkdir -p "$MUT_DIR"
-MUT_JOBS="6"
-printf '%s' "$WANT" > "$MUT_DIR/pristine"
-# THE RUN-SCOPED NONCE THAT MAKES AN IN-FLIGHT MARKER PROVABLE. Every worker writes it into
-# its own marker and counts only markers carrying it, so the concurrency arm below counts
-# peers of THIS dispatch rather than any live process that happens to have a file named for
-# its pid. `worker.sh`'s header records the two wrong versions this replaces.
-MUT_NONCE="$$-$(date +%s)-$RANDOM"
-export MUT_NONCE
-: > "$ROOT/mutant-list"
-
-mk_mutant() { # mk_mutant <label> <sed-expr> <expected-vector>
-  local label="$1" expr="$2" want="$3"
-  # printf '%s' and not echo: these expressions carry backslashes and `-e`-shaped leading
-  # text, both of which echo is free to interpret. The worker reads the file verbatim.
-  printf '%s' "$expr" > "$MUT_DIR/$label.expr"
-  printf '%s' "$want" > "$MUT_DIR/$label.want"
-  printf '%s\n' "$label" >> "$ROOT/mutant-list"
-  # The deciding cell and its twin come from this file's own MUTANT-MATRIX header row, so the
-  # recorded matrix and the cells actually driven cannot drift apart.
-  local row dec twin
-  row="$(grep -E "^# MUTANT-MATRIX $label decides=" "$HERE/run.sh")"
-  dec="$(sed -n 's/.* decides=\([A-Za-z0-9_.-]*\) .*/\1/p' <<<"$row")"
-  twin="$(sed -n 's/.* twins=\([A-Za-z0-9_.-]*\).*/\1/p' <<<"$row")"
-  if [ -z "$dec" ] || [ -z "$twin" ]; then echo "FIXTURE ERROR: no MUTANT-MATRIX row for $label" >&2; exit 2; fi
-  if [ "$MATRIX" = 1 ]; then printf 'ALL' > "$MUT_DIR/$label.cells"; else printf '%s %s' "$dec" "$twin" > "$MUT_DIR/$label.cells"; fi
-}
-
-# M1 — put the hardcoded dot back. Only the em-dash subject's applicability moves.
-mk_mutant hardcoded-dot \
-  "s/a_form=\"\\\$\(anchor_form \"\\\$f\" \"\\\$a\"\)\"/a_form=\"\\\${a}.\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=BAD dotform=OK $W9WANT $W12WANT"
-
-# M2 — drop the BARE half of the crosswalk join. Only the bare-row citation moves.
-# The first cut of this fixture had one mutant for the whole join and seeded only a bare row,
-# so deleting the namespaced branch changed a line and changed no verdict: it passed `cmp -s`
-# and proved nothing. Two rows, two mutants, one cell each.
-mk_mutant no-crosswalk-bare \
-  "/grep -Fxq -- \"\\\$ref\" <<<\"\\\$CROSSWALK_IDS\" && continue/d" \
-  "d19b=W r19b=W r11b=W c34=W c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT $W12WANT"
-
-# M2b — drop the NAMESPACED half. Only the namespaced-row citation moves.
-mk_mutant no-crosswalk-namespaced \
-  "/grep -Fxq -- \"Check \\\$ref\" <<<\"\\\$CROSSWALK_IDS\" && continue/d" \
-  "d19b=W r19b=W r11b=W c34=- c12=W c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT $W12WANT"
-
-# M3 — widen the grammar to alphabetic ids. Only the placeholders move.
-mk_mutant alphabetic-grammar \
-  "s/grep -Eoh 'Check\[ -\]\[0-9\]\+\[a-z-\]\*'/grep -Eoh 'Check[ -][0-9A-Z]+[a-z-]*'/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=W hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT $W12WANT"
-
-# M4 — drop the rulebook resolve. Only core's own check moves.
-mk_mutant no-anchor-resolve \
-  "/grep -Fxq -- \"\\\$ref\" <<<\"\\\$GLOBAL_CHECK_ANCHORS\" && continue/d" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=W alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT $W12WANT"
-
-# --- The HOOK namespace's mutants. Two, because the resolver makes two decisions and one
-# mutant over both would go red for either and identify neither.
-#
-# M5 — drop the hook resolve entirely. This is the DEFECT AS FILED: a correct citation of a
-# hook-implemented check reports as dangling. Only hk61 moves, because it is the only cell
-# whose silence the hook branch owns — hk62/hk64/hk65 report either way, which is what makes
-# them controls for this mutant rather than passengers.
-mk_mutant no-hook-resolve \
-  "/hook_resolves_ref \"\\\$f\" \"\\\$ref\" && continue/d" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=W hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT $W12WANT"
-
-# M6 — RESOLVE ON ANY HOOK RATHER THAN THE ONE THE LINE NAMES. The plausible wrong fix, and
-# the one the candidate's own suggested shape describes: grep the registered hooks for the id.
-# It silences the true subject exactly as the correct fix does, so every cell except hk62
-# agrees with the pristine vector — hk62 is the ONLY input that separates the two
-# implementations, which is why the seed puts it in its own file.
-mk_mutant hook-resolve-any \
-  "s@ids=\"\\\$\(hook_declared_ids \"\\\$HOOKS_DIR/\\\$hook_base\"\)\"@ids=\"\$(for _h in \"\$HOOKS_DIR\"/ai-dlc-*.sh; do hook_declared_ids \"\$_h\"; done)\"@" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=- hk64=W hk65=W apform=OK dotform=OK $W9WANT $W12WANT"
-
-# M7 — RESOLVE ON A MENTION RATHER THAN A DECLARATION. The other plausible wrong fix, and the
-# one with a LATENT acquittal: core hooks mention 15 check ids and declare 8, and all 7 in the
-# difference resolve in the rulebook today — so on the real tree this mutant changes nothing
-# and would ship invisibly. Only hk64 separates them, and it exists for that reason alone.
-mk_mutant hook-resolve-mention \
-  "s@grep -hoE '\\^# Check \[0-9\]\+\[a-z-\]\*:'@grep -hoE 'Check [0-9]+[a-z-]*'@; s@sed -E 's/\\^# Check //; s/:\\\$//'@sed -E 's/^Check //'@" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=- hk65=W apform=OK dotform=OK $W9WANT $W12WANT"
-
-# --- W9's mutants. One per narrowing, and each narrowing exists for a measured reason. ----
-# The arm is four decisions, not one: skip fences, normalise `./`, require the path to be
-# root-relative, and read overrides as well as extensions. A single mutant over the whole arm
-# would go red for any of them and identify none.
-
-# M5 — stop skipping fenced blocks. Only the fenced path moves. This is I68's defect exactly:
-# a reader that does not skip fences turns a worked example into a finding.
-mk_mutant w9-no-fence-skip \
-  "/^[[:space:]]+fence \{ next \}$/d" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=W w9dist=- w9rdme=- $W12WANT"
-
-# M6 — stop normalising the leading `./`. Only the dot-slash path moves, and it goes SILENT:
-# the reference consumer's live subject is written in exactly this form, in a step's own
-# command list, so without this line the arm misses the case that motivated it.
-mk_mutant w9-no-dotslash \
-  "/, \"\", t\)/d" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK w9miss=W w9dot=- w9ovr=W w9ok=- w9fence=- w9dist=- w9rdme=- $W12WANT"
-
-# M7 — stop requiring the token to be root-relative. Only the distribution-form path moves.
-# Unanchored, the arm resolves a path written against the distribution's layout against the
-# CONSUMER's root, where it correctly does not exist — a finding manufactured by the grammar.
-mk_mutant w9-no-root-anchor \
-  "s/if \(t ~ [^)]*\) print t/print t/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=- w9dist=W w9rdme=- $W12WANT"
-
-# M8 — narrow the subject set to extensions/. Only the override's citation moves, and it goes
-# silent: an arm that walked one of the two layer directories would print the same clean line
-# on a tree whose overrides tell an agent to run a file that is not there.
-mk_mutant w9-extensions-only \
-  "s/vle_layer_list w9-layers \"\\\$EXT_DIR\" \"\\\$OVR_DIR\"/vle_layer_list w9-layers \"\\\$EXT_DIR\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK w9miss=W w9dot=W w9ovr=- w9ok=- w9fence=- w9dist=- w9rdme=- $W12WANT"
-
 # --- W12 (LC-R5) ------------------------------------------------------------------------
 # THE PREMISE, read out of the seed rather than through the arm. The false-positive pin only
 # pins something if the same lowercase-with-digit token really is on both sides.
 grep -q 'gate-1 only' "$DOMAIN" && grep -q 'gate-1 is active (Check 20)' "$CONS/.claude/skills/ai-dlc/extensions/roles/dev.md" \
   && ok "premise: 'gate-1' appears in the 920 heading AND on the Check 20 citation line" \
   || bad "premise BROKEN: the gate-1 false-positive pin has no subject on one side or the other"
-
-# M10 — the title-join off. Only the titled citation moves; the tag-join one is untouched,
-# which is what makes these two signals rather than one written twice.
-mk_mutant w12-title-off \
-  "s/verdict=\"title\"/verdict=\"ambiguous\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=- w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=-"
-
-# M11 — the tag-join off. The mirror of M10, and the count moves because a demoted FINDING
-# lands in AMBIGUOUS rather than vanishing: this arm never drops a subject, it re-tiers it.
-mk_mutant w12-tag-off \
-  "s/verdict=\"tag\"/verdict=\"ambiguous\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=- w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=-"
-
-# M12 — drop the UPPERCASE half of the provenance-token filter. `gate-1` becomes a token, the
-# 920 heading and the Check 20 citation line share it, and the arm reports a mislabel on a
-# citation nothing is wrong with. This is the measured false positive, armed as a mutant so
-# the filter cannot be simplified back out.
-mk_mutant w12-token-loose \
-  's/_t="\$\(tok_chain "\$1" -E .\[A-Z\].\)" \|\| return/_t="$1"/' \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=W w12amb=2 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=-"
-
-# M13 — accept a bare `gate-validation` stem as a core qualifier, which is the signal the
-# reference consumer originally proposed. The bare-stem row leaves AMBIGUOUS and goes silent —
-# and that consumer adjudicated that exact row as a real mislabel. A false QUIET, on demand.
-mk_mutant w12-stem-quiet \
-  "s/gate-validation\\\\\\.md\\)\\[/gate-validation)[/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=- w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=-"
-
-# M14 — drop the stand-down for a citation core does not define. The vector is derived, not
-# observed: the three baseline AMBIGUOUS rows stay, `Check 19b` on the dev.md gate-1 line joins
-# them (its `gate-1` token carries no uppercase, so nothing reaches it), and the `## Check 19b`
-# group heading joins them too because at that point the enclosing section is still 917. The
-# fourth 19b citation sits INSIDE `### 919b.` and reports as a self-reference, which is why
-# `w12w19b` moves to W rather than staying quiet. `Check 34` stays stood down by its
-# non-corroborating crosswalk row. Three plus two ambiguous, one finding. W7 already reports those as
-# dangling; without this gate both arms fire on one subject and one of them is vacuous.
-mk_mutant w12-core-gate-off \
-  "s/\\[ -n \"\\\$ctitle\" \\] \\|\\| continue/: ; #/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=W w12x34=- w12n8=- w12p20=- w12amb=5 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=-"
-
-# M15 — drop the crosswalk stand-down. `Check 34` is resolved by the row that exists for
-# exactly that purpose, so reporting it is the arm firing on its own contract remedy. This is
-# the load-bearing silent case W7 already has, in the second namespace.
-# M15 — delete the crosswalk gate entirely. `Check 22` carries a row whose title is nothing
-# like this project's 922, so the row genuinely does license the citation and the clause must
-# stay silent; without the gate it lands in AMBIGUOUS. That subject exists only because the
-# corroboration split created a second branch — before it, "a non-corroborating row exempts"
-# had nothing in the seed that could exercise it, which is a clause nobody could have caught
-# breaking.
-#
-# ANCHORED ON THIS ARM'S OWN INDENT. W7 carries a byte-identical crosswalk line four spaces
-# in; a mutation keyed on the text alone edits both and flips a W7 cell, which is a kill
-# scored by the wrong arm. Measured here, on the first run of this mutant.
-mk_mutant w12-crosswalk-off \
-  "s/^      if grep -Fxq -- \"\\\$ref\" <<<\"\\\$CROSSWALK_IDS\"/      if false/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=-"
-
-# M16 — restore the UNCONDITIONAL crosswalk stand-down that shipped in v0.390.0, by making
-# the corroboration test never fire. The seed's `26` row is a `(label adoption)` row whose own
-# title IS this project's 926 title, so under the old rule one row silences a title-join
-# FINDING and an AMBIGUOUS row together, before any signal is evaluated. That is the defect
-# the reference consumer found by running the shipped arm against its own tree — not by
-# review here, and not by this fixture, which did not have a corroborating row until now.
-mk_mutant w12-crosswalk-unconditional \
-  "s/\\[ -n \"\\\$_x\" \\] \\|\\| return 1/return 1/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=- w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=A w12x26amb=- w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=-"
-
-# M17 — drop the caveat from the count line, keeping the count. The number survives and the
-# sentence that stops it being misread does not. This is the only arm that would catch a
-# future author trimming that line for length, and the line is long on purpose: the reference
-# consumer has read five of its ambiguous rows closely and all five were findings.
-mk_mutant w12-note-uncaveated \
-  "s/UNADJUDICATED is not UNDECIDABLE[^\\\\]*//" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A w12x26amb=A w12note=- w12self=W w12shadow5=- w12wrap21=- w12sect23=-"
-
-# M18 — disable the `shadows:` branch. The override declares `#5. Story status consistency?`
-# and cites `Check 5` in its body; without the branch that citation is a subject with no
-# evidence and falls to AMBIGUOUS. The cell moves `-` -> A rather than vanishing, which is why
-# it is three-state: a two-state cell cannot tell quiet-by-declaration from never-reached.
-mk_mutant w12-shadow-off \
-  "s/\\[ -n \"\\\$shadow_anc\" \\] && \\[ \"\\\$\\{shadow_anc#\\\"\\\$ref\\\"\\}\" != \"\\\$shadow_anc\" \\]/false/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=A w12wrap21=- w12sect23=-"
-
-# M19 — disable the self-reference branch, and ONLY it. The section-rebuttal branch opens with
-# the byte-identical condition, so a mutation keyed on that text alone kills both and the
-# rebuttal's own subject moves too — two cells for one mutant, which means one of the two arms
-# is proving nothing. Measured here on the first run. The `; then` is what separates them: the
-# rebuttal continues onto the next line, the self branch does not.
-# M19 — disable the self-reference branch. The `Check-28` citation inside the `### 928.`
-# section carries no title and no provenance token, so nothing else can reach it and it falls
-# to AMBIGUOUS. Two of the reference consumer's seven real mislabels are exactly this shape.
-mk_mutant w12-self-off \
-  "s/\\[ -n \"\\\$sec\" \\] && \\[ \"\\\$sec\" = \"\\\$band\" \\]; then/false; then/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=- w12shadow5=- w12wrap21=- w12sect23=-"
-
-# M20 — put the qualifier back on a one-line window. Its subject sits OUTSIDE any band
-# section, deliberately: inside one, the section rebuttal joins the whole body and reaches the
-# same wrapped qualifier, so the two guards mask each other and NEITHER mutant can be killed
-# on its own. That is how this arm was first written and both mutants survived — the seed had
-# one subject that both guards covered, which reads exactly like two guards that do not work.
-#
-# The shape is the reference consumer's: prose wrapping at ~76 columns puts `core` at the end
-# of one line and the citation at the start of the next. Line-scoped, no quiet signal fires;
-# on their tree the position signal then convicted a citation whose own sentence said it meant
-# core's, and its remedy would have INVERTED the clause it edits.
-mk_mutant w12-window-one-line \
-  "s/printf '%s %s' \"\\\$prevline\" \"\\\$text\"/printf '%s' \"\\\$text\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=A w12sect23=-"
-
-# M21 — disable the section rebuttal. Its subject needs THREE lines of separation between the
-# qualified mention and the bare citation, for the mirror of M20's reason: at one line the
-# window reaches the qualifier and the rebuttal is never the thing deciding. Separated, only
-# the section-level read can see it, and without the rebuttal position convicts.
-mk_mutant w12-section-rebuttal-off \
-  "s/inb { printf \"%s \", \\\$0 }/inb { }/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=W"
-
-# --- Part 5b: DISPATCH the mutants through the inner pool, then COLLECT by name ------------
-# THE DISPATCH LIST IS THE POPULATION, AND THE COLLECTOR WALKS IT RATHER THAN THE DIRECTORY.
-# A worker that died — killed, aborted under `set -u`, a `sed` that segfaulted — writes no
-# file. Reading the directory listing would then simply not see it, and a lost mutant would
-# score as a shorter green run, which is this repo's named recurring defect. Walking the list
-# makes the absence a FINDING with the label attached.
-#
-# TWO LOSSES, TWO ARMS, AND EACH MUST BE ABLE TO FIRE WITHOUT THE OTHER. The precedent in
-# `.githooks/pre-push` has a count assertion that cannot fire unless its per-file branch
-# already has — the count increments only on the path the branch skips — so the count arm
-# there is unreachable-by-construction. Here they are independent: the per-label arm below
-# reports a MISSING verdict and does not touch `dispatched`, and the count arm compares the
-# dispatched total against the number of labels the pool was GIVEN, so a list that lost an
-# entry between writing and dispatch fails the count while every file that does exist reads
-# fine.
-#
-# THE SELF-PROBE RUNS BEFORE THE CORPUS, AND IT IS COMMITTED RATHER THAN HAND-RUN. Measured
-# while building this: a receipt asserting only that the pool-accounting arm reports OK was
-# closed by a collector reading the DIRECTORY instead of the list — the precise defect this
-# section exists to prevent — and by a pool at P=1. Both non-fixes produce an identical green
-# line, because a collector that never loses anything cannot tell the two apart. So the arm's
-# ability to FIRE is asserted here, on a seeded absence, before any real verdict is read.
-# THE PROBE DRIVES THE SHIPPING COLLECTOR, NOT A COPY OF IT. A probe that re-implements the
-# walk is a second implementation agreeing with itself: measured here, the first cut asserted
-# its OWN loop and the directory-reading non-fix still closed the receipt, because the probe
-# never touched the collector that non-fix had changed. `collect_into` is the one walk, called
-# once by the probe against a seeded 1-absent/1-present list and once against the real one.
-# Change it to read the directory and the probe's `missing` falls to 0 in the same run.
-collect_into() { # collect_into <listfile> <verdict-dir> -> sets c_seen, c_missing, c_labels
-  c_seen=0; c_missing=0; c_labels=''
-  local _l
-  while IFS= read -r _l; do
-    [ -n "$_l" ] || continue
-    if [ ! -f "$2/$_l" ]; then c_missing=$((c_missing+1)); c_labels="$c_labels $_l"; continue; fi
-    c_seen=$((c_seen+1))
-  done < "$1"
-}
-
-probe_dir="$ROOT/collector-probe"
-mkdir -p "$probe_dir"
-printf 'present\nabsent\n' > "$probe_dir/list"
-printf 'KILL probe\n' > "$probe_dir/present"      # one verdict exists, one deliberately does not
-# THE PROBE'S SEED IS ITSELF ASSERTED. A seed that quietly gains a second verdict file leaves
-# the probe reporting on a world with nothing missing — it still passes, and it discriminates
-# against nothing. Measured: seeding both files closed this receipt. The seed's discriminating
-# property is that `absent` is ABSENT, so that is stated before the walk reads it.
-{ [ -f "$probe_dir/present" ] && [ ! -e "$probe_dir/absent" ]; } \
-  && ok "self-probe seed: 'present' has a verdict file and 'absent' has none, so the walk below has something to discriminate" \
-  || bad "self-probe seed BROKEN: the 1-absent/1-present world is not what is on disk, so the walk below discriminates against nothing"
-collect_into "$probe_dir/list" "$probe_dir"
-[ "$c_missing" -eq 1 ] && [ "$c_seen" -eq 1 ] \
-  && ok "self-probe: the list-walk reports a seeded missing verdict (1 absent, 1 present) — a directory listing would report 1 and 0 findings" \
-  || bad "self-probe BROKEN: the list-walk scored $c_seen present / $c_missing missing on a 1-and-1 seed — the collector below cannot be trusted"
-
-# --- THE POOL'S WIDTH, READ AT A SETTLED STATE (BL-868: no verdict here depends on load) ------
-# Each worker writes a nonce marker and parks itself (SIGSTOP, worker.sh) before any work. The pool
-# runs as its own process group (`set -m`), and pool_run waits until that group is SETTLED: every
-# live member blocked with no signal pending. xargs then sits in wait(2) holding exactly as many
-# parked workers as its width allows -- it cannot hold fewer, because it only blocks once it is at
-# its limit or out of input -- so the live markers counted there ARE the width, at any load and in
-# any start order. The settle is read twice with the same parked set before it is believed, so a
-# non-atomic `ps` sweep cannot be the only reading. Then the driver writes `.released` and CONTs the group, and keeps CONTing until xargs exits, so a worker
-# that checked the flag just before it appeared is freed too. Every wait here is a condition wait
-# with no bound; no elapsed time and no iteration count decides anything. This replaces a count
-# each worker took of its peers at its own start, whose floor of 4 out of 6 was set "for a box
-# that never schedules the full 6" -- a bound widened for load.
-pool_blocked() { # <pid>: alive, state S/I/T, no signal pending (readset-skip's aw_blocked, without its stall log)
-  local _st _pd
-  kill -0 "$1" 2>/dev/null || return 1
-  _st="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"; _pd="$(ps -o pending= -p "$1" 2>/dev/null | tr -d ' ')"
-  if [ -z "$_st" ]; then kill -0 "$1" 2>/dev/null || return 1; POOL_PS_BROKEN=1; return 0; fi
-  case "$_st" in S*|I*|T*) ;; *) return 1 ;; esac
-  case "$_pd" in ''|*[!0]*) return 1 ;; esac
-  return 0
-}
-pool_settled() { # <xargs pid = pgid>: 0 when xargs is pool_blocked and EVERY other live member is STOPPED
-  # Stricter than "every member blocked": a worker that has not parked yet can sit in S while it waits
-  # on a `mkdir` child, so S alone would let a half-started worker read as settled. Only a worker that
-  # wrote its marker and ran `kill -STOP $$` is T, so "every non-xargs member is T" is "every worker
-  # xargs holds has parked", and a worker's own child (any non-T member) defers the reading.
-  local _p _n=0 _st
-  pool_blocked "$1" || return 1
-  for _p in $(pgrep -g "$1" 2>/dev/null); do
-    [ "$_p" = "$1" ] && continue
-    kill -0 "$_p" 2>/dev/null || continue
-    _st="$(ps -o stat= -p "$_p" 2>/dev/null | tr -d ' ')"
-    if [ -z "$_st" ]; then kill -0 "$_p" 2>/dev/null || continue; POOL_PS_BROKEN=1; return 0; fi
-    case "$_st" in T*) _n=$((_n + 1)) ;; *) return 1 ;; esac
-  done
-  [ "$_n" -gt 0 ]
-}
-pool_parked() { # <outdir> -> "<n> <pid> <pid>..." of live markers carrying this run's nonce
-  local _p _n=0 _l=''
-  for _p in "$1/.inflight"/*; do
-    [ -f "$_p" ] || continue
-    case "${_p##*/}" in ''|*[!0-9]*) continue ;; esac
-    kill -0 "${_p##*/}" 2>/dev/null || continue
-    grep -qxF "$MUT_NONCE" "$_p" 2>/dev/null || continue
-    _n=$((_n + 1)); _l="$_l ${_p##*/}"
-  done
-  printf '%s%s\n' "$_n" "$_l"
-}
-pool_run() { # <width> <list> <outdir> -> runs the pool to completion; sets POOL_N, the parked count at the settle
-  local _w="$1" _list="$2" _od="$3" _xg _p _prev='' _cur
-  POOL_N=''; POOL_PS_BROKEN=0
-  mkdir -p "$_od/.inflight"
-  # I54: no `printf | xargs`. The list is a file; feed the pool from the file.
-  set -m
-  xargs -P "$_w" -I{} bash "$HERE/worker.sh" \
-      {} "$_od/{}.expr" "$_od/{}.want" "$LINTER" "$CONS" "$DOMAIN" "$_od" "$_od/{}.cells" < "$_list" &
-  _xg=$!
-  set +m
-  while kill -0 "$_xg" 2>/dev/null; do
-    if [ -z "$POOL_N" ] && pool_settled "$_xg"; then
-      _cur="$(pool_parked "$_od")"
-      if [ "$_cur" = "$_prev" ]; then POOL_N="${_cur%% *}"; : > "$_od/.inflight/.released"; else _prev="$_cur"; fi
-    fi
-    if [ -n "$POOL_N" ]; then
-      for _p in $(pgrep -g "$_xg" 2>/dev/null); do kill -CONT "$_p" 2>/dev/null; done
-    fi
-    sleep 0.05
-  done
-  wait "$_xg"
-}
-pool_width_ok() { # <parked> <width> <dispatched>: 0 when the parked count is exactly min(width, dispatched)
-  local _want="$2"; [ "$3" -lt "$_want" ] && _want="$3"
-  [ -n "$1" ] && [ "$POOL_PS_BROKEN" = 0 ] && [ "$1" -eq "$_want" ]
-}
-
-# THE ARM'S OWN DISCRIMINATION, ON A CHEAP POOL BEFORE THE REAL ONE. Four workers whose expression
-# matches nothing, so each parks, is released and reports BROKEN at once. At width 6 the settle
-# must read 4 (all of them); dispatched at width 2 -- the feared `xargs -P 2` beside an untouched
-# MUT_JOBS -- it must read 2, and the arm must refuse it. The width-2 pool also proves the barrier
-# ENDS when the pool is narrower than the expected count: it settles at 2 and finishes.
-PP="$ROOT/pool-probe"; mkdir -p "$PP"; : > "$PP/list"
-for _i in 1 2 3 4; do
-  printf 's/ZZ_POOL_PROBE_NO_SUCH_TOKEN_q9//' > "$PP/pp$_i.expr"; : > "$PP/pp$_i.want"; printf 'c7 alpha' > "$PP/pp$_i.cells"
-  printf 'pp%s\n' "$_i" >> "$PP/list"
-done
-B_pool=0
-pool_run "$MUT_JOBS" "$PP/list" "$PP"
-collect_into "$PP/list" "$PP"
-if pool_width_ok "$POOL_N" "$MUT_JOBS" 4 && [ "$c_seen" = 4 ]; then
-  ok "pool self-probe: a 4-worker pool at width $MUT_JOBS settles with exactly 4 parked, and all 4 reported"; B_pool=1
-else
-  bad "pool self-probe: a 4-worker pool at width $MUT_JOBS settled with '${POOL_N:-none}' parked (want 4, ps broken=$POOL_PS_BROKEN), $c_seen of 4 reported (missing:$c_labels) -- the width arm below cannot be trusted"
-fi
-PM="$ROOT/pool-probe-w2"; mkdir -p "$PM"; cp "$PP"/pp?.expr "$PP"/pp?.want "$PP"/pp?.cells "$PP/list" "$PM/"
-if need_base "$B_pool" pool-width-2; then
-  pool_run 2 "$PM/list" "$PM"
-  if pool_width_ok "$POOL_N" "$MUT_JOBS" 4; then
-    bad "mutant pool-width-2 SURVIVED: a pool dispatched at width 2 settled with ${POOL_N} parked and the width arm accepted it"
-  else
-    mutant_killed "$B_pool" pool-width-2 "mutant pool-width-2 killed: dispatched at width 2 the pool settles with ${POOL_N:-none} parked, the width arm refuses it, and the pool still ran to its end"
-  fi
-fi
-
-dispatched="$(wc -l < "$ROOT/mutant-list" | tr -d ' ')"
-if [ "$dispatched" -eq 0 ]; then
-  bad "fixture BROKEN: no mutants were dispatched — the list is empty, so every kill below is vacuous"
-else
-  pool_run "$MUT_JOBS" "$ROOT/mutant-list" "$MUT_DIR"
-  POOL_REAL="${POOL_N:-}"
-
-  # THE SAME WALK THE PROBE JUST EXERCISED. `collect_into` decides what is present and what
-  # is missing; this loop only reads the verdicts it found. Point the walk at the directory
-  # instead of the list and the probe above goes red in the same run.
-  collect_into "$ROOT/mutant-list" "$MUT_DIR"
-  collected="$c_seen"
-  for label in $c_labels; do
-    bad "mutant $label: NO VERDICT — the worker produced no file, so this mutant was never scored"
-  done
-  while IFS= read -r label; do
-    [ -n "$label" ] || continue
-    [ -f "$MUT_DIR/$label" ] || continue
-    # HEAD -1, not `cat`: the worker appends a `stamp <start> <end>` line the overlap arm
-    # below reads, and `cat` would fold it into the reported vector.
-    verdict="$(head -1 "$MUT_DIR/$label")"
-    case "$verdict" in
-      KILL*)     mutant_killed "$B_pristine" "$label" "$label: killed — cells [${verdict#KILL }]" ;;
-      SURVIVED*) bad "mutant $label SURVIVED or misfired — ${verdict#SURVIVED }" ;;
-      *)         bad "mutant $label: ${verdict}" ;;
-    esac
-  done < "$ROOT/mutant-list"
-
-  # THE POOL ACTUALLY RAN AT ITS WIDTH, READ FROM THE DISPATCH ITSELF. A probe that reads the
-  # WIDTH VARIABLE is not this arm and cannot replace it: measured by an adversary, `xargs -P 1`
-  # beside an untouched `MUT_JOBS="6"` ran 132.3s at 125% CPU and printed an identical green
-  # "width 6" line, closing the receipt. Nothing joined the assertion to the dispatch. This is the
-  # number of workers parked at once when the pool group settled (pool_run, above), and it must be
-  # EXACTLY min(MUT_JOBS, dispatched): `xargs -P 2` or `-P 5` reads 2 or 5 and fails, at any load.
-  pool_width_ok "$POOL_REAL" "$MUT_JOBS" "$dispatched" \
-    && ok "pool width: $POOL_REAL worker(s) parked at once when the pool settled — exactly min(MUT_JOBS=$MUT_JOBS, $dispatched dispatched), read from the dispatch and not from MUT_JOBS" \
-    || bad "pool width: ${POOL_REAL:-no} worker(s) parked when the pool settled (ps broken=$POOL_PS_BROKEN), want min(MUT_JOBS=$MUT_JOBS, $dispatched) — the mutants did not run at the pool's width and this fixture is the suite pole again"
-
-  # The count arm, independent of the per-label arm above: it compares what the pool was
-  # given against what the walk actually read a file for.
-  if [ "$collected" -ne "$dispatched" ]; then
-    bad "pool accounting: $dispatched mutant(s) dispatched, $collected verdict(s) collected"
-  else
-    ok "pool accounting: all $dispatched dispatched mutants produced a verdict"
-  fi
-fi
-
-# THE MATRIX. Matrix mode prints one line per (mutant, cell); a plain run must have executed no
-# matrix-only cell, which is read from the worker verdict files rather than from the flag.
-if [ "$MATRIX" = 1 ]; then
-  while IFS= read -r label; do
-    [ -n "$label" ] || continue
-    awk -v m="$label" '$1 == "cell" && ($3 == "FAIL" || $3 == "ok") { printf "MATRIX\t%s\t%s\t%s\n", m, $2, $3 }' "$MUT_DIR/$label"
-  done < "$ROOT/mutant-list"
-  ok "matrix mode: MATRIX cells emitted for every mutant"
-else
-  ncell="$(cat "$MUT_DIR"/*.cells | grep -c ALL)" || ncell=0
-  nrows="$(grep -l '^cell ' "$MUT_DIR"/* 2>/dev/null | wc -l | tr -d ' ')"
-  [ "$ncell" -eq 0 ] && [ "$nrows" -eq 0 ] \
-    && ok "plain run: no matrix-only cell was executed (no ALL cells file, no cell verdict rows)" \
-    || bad "plain run executed matrix-only cells ($ncell ALL, $nrows cell-row files)"
-fi
-
-# THE UNMUTATED CONTROL, from the same directory and run last. A lone copy that dies for a
-# reason unrelated to any mutation emits nothing, and "no output" otherwise scores as a kill.
-cp "$LINTER" "$ROOT/mutant-control.sh"
-got="$(vector "$ROOT/mutant-control.sh" "$CONS")"
-[ "$got" = "$WANT" ] \
-  && ok "unmutated control: an unedited copy still reports the pristine vector" \
-  || bad "unmutated control: an UNEDITED copy reports [$got] — every kill above is suspect"
 
 # --- the assertion floor ------------------------------------------------------------------
 report_end layer-reference-resolution "$EXPECTED_ASSERTIONS"

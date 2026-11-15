@@ -28,26 +28,7 @@
 # so a copy of `reconcile/` with a STUB layer-drift makes the worklist a pure function of a TSV
 # this file writes. Nothing is stubbed inside apply.sh itself: the rendering under test is the
 # shipped code, byte for byte.
-# MUTANT MATRIX. Measured once over every mutant x every arm (arm labels: A1..A10 are the numbered
-# assertions above, S9..S13 the subsumption arms). The deciding arm FAILS and each twin stays GREEN
-# under the mutant, asserted every run; the other arms are not run per push, so the exact-vector
-# assertion this file used to make per mutant is replaced by the recorded matrix plus the twin.
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
-# state") requires.
-# MUTANT-MATRIX M1 decides=A2 twins=A1
-# MUTANT-MATRIX M2 decides=A1 twins=A2
-# MUTANT-MATRIX M3 decides=A3 twins=A1,A2
-# MUTANT-MATRIX M4 decides=A4 twins=A3
-# MUTANT-MATRIX M5 decides=A5 twins=A6
-# MUTANT-MATRIX M6 decides=A6 twins=A5
-# MUTANT-MATRIX M7 decides=A8 twins=A5
-# MUTANT-MATRIX M8 decides=S13 twins=S9
-# MUTANT-MATRIX M9 decides=S10 twins=S9
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/apply-worklist-rows/run.sh --matrix
 set -uo pipefail
-MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
-MX_RAN=0
-mx() { MX_RAN=$((MX_RAN + 1)); echo "$@"; }
 
 # TWO LAYOUTS, and this fixture ships to consumers, so it must resolve in both. install.sh
 # splits what shares a parent here: `core/skills/ai-dlc-update/reconcile/` in the distribution
@@ -345,8 +326,7 @@ STUB
 # ONE apply.sh run per reconcile directory. Every question asked of a directory (rows, notes,
 # subsumed notes for any entry) reads the same stdout of the same world, so the run is captured once
 # beside the directory and each entry is a filter over it. The cache lives INSIDE the directory it
-# describes, and every mutant is its own freshly built directory, so a mutant is still read from
-# its own run and never from the shipped one's.
+# describes, so the run is read from its own directory.
 run_rec() { # run_rec <rec-dir> -> that directory's apply.sh stdout
   [ -f "$1/.run.out" ] || bash "$1/apply.sh" "$W/dist" HEAD "$W/cons" HEAD 2>/dev/null > "$1/.run.out"
   cat "$1/.run.out"
@@ -441,178 +421,11 @@ case "$(last_detail "$A_ROWS")" in
   *)                               bad "  the env-less multi-anchor row does not narrow the shadow: $(last_detail "$A_ROWS" | cut -c1-80)" ;;
 esac
 
-# --- ARM PREDICATES AND THE BASE-PASS FLAG -------------------------------------------------------
-# Every arm above, restated as a SILENT predicate over a reconcile directory, so a mutant can be
-# scored against ANY arm. The shipped arms above stay the emitters; these are evaluated against the
-# unmutated tree in the same run (BASE_PASS), and a kill is emitted only through mutant_killed behind
-# the flag of its deciding arm -- an arm that did not pass on the unmutated tree makes the "kill"
-# the seed failing, and the run reports FIXTURE BROKEN instead.
+
 subsumed_for() { # subsumed_for <rec-dir> <entry>
   run_rec "$1" \
     | awk -F'\t' -v o="$2" '$1=="NOTE" && $2=="override-readopt-subsumed" && $3==o' | grep -c . || true
 }
-seq_ok() { # seq_ok <rec> <subject> <expected-last-action-substring>
-  local rows first last
-  rows="$(rows_for "$1" "$2")"
-  [ "$(printf '%s\n' "$rows" | grep -c . || true)" -eq 2 ] || return 1
-  first="$(printf '%s\n' "$rows" | awk -F'\t' 'NF>=4 {print $4; exit}')"; last="$(last_detail "$rows")"
-  case "$first" in "1/2 ATOMIC"*"AI_DLC_ONE_KEY"*) ;; *) return 1 ;; esac
-  case "$last" in "2/2 ATOMIC"*"$3"*) ;; *) return 1 ;; esac
-  case "$first" in *"--stamp retire"*|*"remove the anchor"*) return 1 ;; esac
-  return 0
-}
-has_in_last() { case "$(last_detail "$(rows_for "$1" "$2")")" in *"$3"*) return 0 ;; *) return 1 ;; esac; }
-arm_ok() { # arm_ok <arm> <rec-dir> -> 0 when the arm holds over that directory's run
-  local r="$2"
-  case "$1" in
-    A1)  [ "$(rows_for "$r" "$OVR" | grep -c . || true)" -eq 2 ] ;;
-    A2)  has_in_last "$r" "$OVR" ATOMIC ;;
-    A3)  case "$(last_detail "$(rows_for "$r" "$OVR_M")")" in *"remove the anchor"*"$ANCHOR"*) return 0 ;; *) return 1 ;; esac ;;
-    A4)  [ "$(rows_for "$r" "$OVR_A" | grep -c ATOMIC || true)" -eq 0 ] ;;
-    A5)  [ "$(rows_for "$r" "$OVR_J" | grep -c . || true)" -eq 0 ] && [ "$(notes_for "$r" "$OVR_J")" -ge 1 ] ;;
-    A6)  seq_ok "$r" "$OVR_KR" "--stamp retire" && seq_ok "$r" "$OVR_KC" "--stamp retire" && seq_ok "$r" "$OVR_JR" "remove the anchor \`$ANCHOR\`" ;;
-    A7)  has_in_last "$r" "$OVR_KC" "$V_ACT2" ;;
-    A8)  [ "$(rows_for "$r" "$OVR_AR" | grep -c ATOMIC || true)" -eq 0 ] && has_in_last "$r" "$OVR_AR" "remove the anchor" ;;
-    A9)  [ "$(rows_for "$r" "$OVR_J" | grep -c . || true)" -eq 0 ] && [ "$(rows_for "$r" "$OVR_JR" | grep -c . || true)" -eq 2 ] ;;
-    A10) [ $(( $(notes_for "$r" "$OVR") + $(notes_for "$r" "$OVR_M") + $(notes_for "$r" "$OVR_A") )) -eq 0 ] ;;
-    S9)  [ "$(subsumed_for "$r" "$OVR_H")" -ge 1 ] ;;
-    S10) [ "$(rows_for "$r" "$OVR_H" | grep -c . || true)" -ge 1 ] ;;
-    S11) has_in_last "$r" "$OVR_H" "Same commit" ;;
-    S12) ! has_in_last "$r" "$OVR_H" "row(s) above" ;;
-    S13) [ "$(subsumed_for "$r" "$OVR_HA")" -eq 0 ] ;;
-    *)   return 2 ;;
-  esac
-}
-ARMS="A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 S9 S10 S11 S12 S13"
-BASE_PASS=""
-for _a in $ARMS; do arm_ok "$_a" "$W/rec" && BASE_PASS="$BASE_PASS $_a"; done
-bflag() { case " $BASE_PASS " in *" $1 "*) echo 1 ;; *) echo 0 ;; esac; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-BF_A1="$(bflag A1)"
-BF_A2="$(bflag A2)"
-BF_A3="$(bflag A3)"
-BF_A4="$(bflag A4)"
-BF_A5="$(bflag A5)"
-BF_A6="$(bflag A6)"
-BF_A8="$(bflag A8)"
-BF_S10="$(bflag S10)"
-BF_S13="$(bflag S13)"
-# twin_green <mutant> <rec> <arm>... -- each named twin is an arm the measured matrix shows GREEN
-# under the mutant, so a change in co-tripping is a failure here.
-twin_green() {
-  local m="$1" r="$2" a; shift 2
-  for a in "$@"; do
-    if arm_ok "$a" "$r"; then ok "  $m twin $a stays green: the failure is confined to the deciding arm"
-    else bad "  $m moved its twin arm $a: the matrix recorded it green"; fi
-  done
-}
-# --matrix prints the full mutant x arm verdict table (the re-measure mode).
-matrix_row() { # matrix_row <mutant> <rec>
-  local m="$1" r="$2" a v=""
-  for a in $ARMS; do if arm_ok "$a" "$r"; then v="$v $a=PASS"; else v="$v $a=FAIL"; fi; done
-  mx "  MATRIX $m:$v"
-}
-
-# --- MUTANTS -------------------------------------------------------------------------------
-# Each is a COPY of the whole reconcile directory (apply.sh loads map_consumer() from its
-# sibling preclassify.sh, so a lone script copy dies before printing anything), guarded by
-# `cmp -s` so a sed that matched nothing cannot pass as a mutation, and aimed at ONE assertion.
-#
-# THE UNMUTATED CONTROL IS NOT OPTIONAL HERE. Both mutants below are copies into fresh
-# directories, and a copy that cannot run emits nothing — which is indistinguishable from the
-# the mutant working. The control proves the copying itself is sound.
-build_rec "$W/mut-ctl" && cp "$REC/apply.sh" "$W/mut-ctl/apply.sh"
-CTL_ROWS="$(retire_rows "$W/mut-ctl")"
-if assert_count "$CTL_ROWS" && case "$(last_detail "$CTL_ROWS")" in *ATOMIC*) true ;; *) false ;; esac; then
-  ok "CONTROL: an unmutated copy in a fresh directory reproduces both outcomes (so a mutant's silence is the mutation, not the copy)"
-else
-  bad "CONTROL: the unmutated copy did not reproduce the shipped behaviour — every mutant verdict below is unreadable"
-fi
-
-# MUTANT 1 — say() back to three fields. Assertion 2 must go red; assertion 1 must NOT, because
-# the row COUNT does not depend on the field count.
-build_rec "$W/mut1"
-sed "s@^  if \[ -n \"\${4:-}\" \]; then printf '%s\\\\t%s\\\\t%s\\\\t%s\\\\n' \"\$1\" \"\$2\" \"\${3:-}\" \"\$4\"@  if false; then printf '%s\\\\t%s\\\\t%s\\\\n' \"\$1\" \"\$2\" \"\${3:-}\"@" \
-  "$REC/apply.sh" > "$W/mut1/apply.sh"
-if cmp -s "$REC/apply.sh" "$W/mut1/apply.sh"; then
-  bad "MUTANT 1 did not apply — the say() spelling it targets has changed, so this mutant proves nothing"
-else
-  M1="$(retire_rows "$W/mut1")"
-  m1_detail="$(last_detail "$M1")"
-  if [ -z "$m1_detail" ]; then
-    mutant_killed "$([ "$BF_A2" = 1 ] && echo 1 || echo 0)" M1 "MUTANT 1 (say drops the 4th field): the detail assertion goes red — it is what holds the instruction in the row"
-  else
-    bad "MUTANT 1 SURVIVED: the detail is still present with say() printing three fields, so assertion 2 is not testing the field"
-  fi
-  if assert_count "$M1"; then
-    ok "  and the COUNT assertion stays green under it — the two arms are not entangled"
-  else
-    bad "  MUTANT 1 also failed the count assertion: the two arms are entangled and one of them proves nothing on its own"
-  fi
-fi
-
-# MUTANT 2 — the key loop fed an UNTERMINATED stream, as `printf | while read` did, which drops
-# its last element. Assertion 1 must go red; assertion 2 must NOT, because the surviving row is the
-# one whose detail is read. Anchored on the staged-file read (BL-360 replaced the here-string).
-build_rec "$W/mut2"
-sed "s@^    done < \"\$AP_TMP/env-keys\"\$@    done < <(printf '%s' \"\$env_key\" | tr ',' '\\\\n')@" \
-  "$REC/apply.sh" > "$W/mut2/apply.sh"
-if cmp -s "$REC/apply.sh" "$W/mut2/apply.sh"; then
-  bad "MUTANT 2 did not apply — the staged key-loop read it targets has changed, so this mutant proves nothing"
-else
-  M2="$(retire_rows "$W/mut2")"
-  if assert_count "$M2"; then
-    bad "MUTANT 2 SURVIVED: the sequence still emits both steps without the trailing newline, so assertion 1 is not testing the drop"
-  else
-    mutant_killed "$([ "$BF_A1" = 1 ] && echo 1 || echo 0)" M2 "MUTANT 2 (unterminated key stream): the count assertion goes red — the write-the-key step is the one that disappears"
-  fi
-  case "$(last_detail "$M2")" in
-    *ATOMIC*) ok "  and the DETAIL assertion stays green under it — the two arms are not entangled" ;;
-    *)        bad "  MUTANT 2 also failed the detail assertion: the two arms are entangled and one of them proves nothing on its own" ;;
-  esac
-fi
-
-# MUTANT 3 — drop the `retire_anchor=` branch, so the last step is a retire stamp again.
-# Assertion 3 must go red; assertions 1 and 2 must NOT, because the one-key entry carries no
-# token and its two rows are untouched.
-build_rec "$W/mut3"
-sed 's@^    retire_anchor=\*) drop_anchor="\${det_rest#retire_anchor=}"; drop_anchor="\${drop_anchor%% ::\*}" ;;@    retire_anchor=*) : ;;@' \
-  "$REC/apply.sh" > "$W/mut3/apply.sh"
-if cmp -s "$REC/apply.sh" "$W/mut3/apply.sh"; then
-  bad "MUTANT 3 did not apply — the retire_anchor= parse it targets has been respelled, so this mutant proves nothing"
-else
-  case "$(last_detail "$(rows_for "$W/mut3" "$OVR_M")")" in
-    *"--stamp retire"*) mutant_killed "$([ "$BF_A3" = 1 ] && echo 1 || echo 0)" M3 "MUTANT 3 (retire_anchor= unparsed): the multi-anchor row reverts to a retire stamp — the token is what redirects the action" ;;
-    *)                  bad "MUTANT 3 SURVIVED: the row still narrows the shadow without parsing the token, so assertion 3 is not testing the parse" ;;
-  esac
-  M3_ONE="$(rows_for "$W/mut3" "$OVR")"
-  if assert_count "$M3_ONE" && case "$(last_detail "$M3_ONE")" in *ATOMIC*) true ;; *) false ;; esac; then
-    ok "  and the one-key entry's count and detail are untouched by it — the arms are not entangled"
-  else
-    bad "  MUTANT 3 also moved the one-key entry's rows: assertions 1 and 2 are entangled with the token parse"
-  fi
-fi
-
-# MUTANT 4 — the token parse back to the un-anchored `${detail#...}` + equality guard. Assertion 4
-# must go red; assertion 3 must NOT, because the multi-KEY detail does lead with `replaces_with=`
-# and still parses correctly under the old form.
-build_rec "$W/mut4"
-sed 's@^  case "\$detail" in$@  env_key="${detail#replaces_with=}"; env_key="${env_key%% ::*}"; [ "$env_key" = "$detail" ] \&\& env_key=""; case "" in@' \
-  "$REC/apply.sh" > "$W/mut4/apply.sh"
-if cmp -s "$REC/apply.sh" "$W/mut4/apply.sh"; then
-  bad "MUTANT 4 did not apply — the env_key prefix case it targets has been respelled, so this mutant proves nothing"
-else
-  if [ "$(rows_for "$W/mut4" "$OVR_A" | grep -c 'ATOMIC' || true)" -ge 1 ]; then
-    mutant_killed "$([ "$BF_A4" = 1 ] && echo 1 || echo 0)" M4 "MUTANT 4 (env_key read without its prefix): the env-less row renders an ATOMIC sequence naming a key that does not exist"
-  else
-    bad "MUTANT 4 SURVIVED: the env-less detail stayed key-less without the prefix guard, so assertion 4 is not testing it"
-  fi
-  case "$(last_detail "$(rows_for "$W/mut4" "$OVR_M")")" in
-    *"remove the anchor"*) ok "  and the multi-KEY row still narrows the shadow under it — the arms are not entangled" ;;
-    *)                     bad "  MUTANT 4 also broke the multi-key row: assertions 3 and 4 are entangled" ;;
-  esac
-fi
-
 # --- ASSERTION 5: a row carrying a RECORDED VERDICT emits no retire steps -------------------
 # PC-S327: apply.sh built this worklist from layer-drift's rows and never asked whether the
 # project had already decided. layer-drift.sh now writes `adjudicated=<verdict>` into the row
@@ -643,7 +456,7 @@ fi
 #
 # KEYED ON THE ROWS, NEVER ON A SPELLING. Which name the branch tests, and whether it tests a
 # literal or a resolved declaration, is not this fixture's business: a grep for a verdict name in
-# apply.sh passes against a mutant that mentions it in a comment and branches wrongly. What is
+# apply.sh passes against an apply.sh that mentions it in a comment and branches wrongly. What is
 # asserted here is which rows reach the operator for which verdict.
 assert_seq() { # assert_seq <subject> <expected-last-action-substring> <label>
   local rows n first last
@@ -726,74 +539,6 @@ else
   bad "$BASE_NOTES token-less subject(s) were reported as adjudicated: apply.sh is claiming a recorded verdict for a subject with none"
 fi
 
-# --- MUTANT 5 — the keep branch stops suppressing. Assertion 5 must go red; the act-direction
-# arms must NOT, because they never took that path.
-build_rec "$W/mut5"
-sed 's@^      if \[ "\$adj_v" = "\$ADJ_KEEP_VERDICT" \]; then$@      if false; then@' \
-  "$REC/apply.sh" > "$W/mut5/apply.sh"
-if cmp -s "$REC/apply.sh" "$W/mut5/apply.sh"; then
-  bad "MUTANT 5 did not apply — the keep-verdict branch it targets is spelled differently or is not there, so this mutant proves nothing"
-else
-  if [ "$(printf '%s\n' "$(rows_for "$W/mut5" "$OVR_J")" | grep -c . || true)" -ge 1 ]; then
-    mutant_killed "$([ "$BF_A5" = 1 ] && echo 1 || echo 0)" M5 "MUTANT 5 (the keep branch never taken): the KEEP verdict is handed retire steps — assertion 5 is testing the suppression, not the presence of a NOTE"
-  else
-    bad "MUTANT 5 SURVIVED: the keep verdict emitted no steps with its branch disabled, so assertion 5 would pass against an implementation that suppresses unconditionally"
-  fi
-  if [ "$(printf '%s\n' "$(rows_for "$W/mut5" "$OVR_KR")" | grep -c . || true)" -eq 2 ]; then
-    ok "  and the act-direction rows are untouched by it — the two directions are not entangled"
-  else
-    bad "  MUTANT 5 also moved the act-direction rows: assertions 5 and 6 are entangled and one of them proves nothing on its own"
-  fi
-fi
-
-# --- MUTANT 6 — the PC-S307 defect restored, with the verdict names spelled into the message.
-# This is the NEAR-MISS: apply.sh then CONTAINS every verdict literal an arm might grep for while
-# branching on none of them. The act-direction arms must still report it broken.
-build_rec "$W/mut6"
-sed -e 's@^      if \[ "\$adj_v" = "\$ADJ_KEEP_VERDICT" \]; then$@      if [ -n "$adj_v" ]; then@' \
-    -e "s@a verdict of '\\\${adj_v}'@a verdict of '\${adj_v}' (one of ${V_ACT1}, ${V_ACT2}, ${ADJ_KEEP})@" \
-  "$REC/apply.sh" > "$W/mut6/apply.sh"
-if cmp -s "$REC/apply.sh" "$W/mut6/apply.sh"; then
-  bad "MUTANT 6 did not apply — the keep-verdict branch it targets is spelled differently or is not there, so this mutant proves nothing"
-elif ! grep -q 'if \[ -n "\$adj_v" \]; then' "$W/mut6/apply.sh"; then
-  # BOTH HALVES OR NEITHER. The near-miss half edits the NOTE's text and applies to a presence-keyed
-  # apply.sh as readily as to a branched one, so `cmp -s` alone reports a mutation that left the
-  # branch intact — and against a presence-keyed subject the act rows are already absent, which
-  # scores as a kill this mutant did not make.
-  bad "MUTANT 6 applied only its near-miss half — the branch-disabling half did not land, so its kill below would be the subject's own behaviour rather than the mutation"
-elif ! grep -qF -- "$V_ACT2" "$W/mut6/apply.sh"; then
-  bad "MUTANT 6 applied but its near-miss half did not: the verdict literals are absent from the mutant, so it is not testing a spelling-keyed arm"
-else
-  if [ "$(printf '%s\n' "$(rows_for "$W/mut6" "$OVR_KR")" | grep -c . || true)" -eq 0 ]; then
-    mutant_killed "$([ "$BF_A6" = 1 ] && echo 1 || echo 0)" M6 "MUTANT 6 (suppress on the token's PRESENCE, verdict names spelled in the text): the act-direction arms go red although apply.sh now names every verdict — they are keyed on the rows"
-  else
-    bad "MUTANT 6 SURVIVED: an act verdict still produced its sequence under a presence-keyed suppression, so assertion 6 is not testing the branch"
-  fi
-  if [ "$(printf '%s\n' "$(rows_for "$W/mut6" "$OVR_J")" | grep -c . || true)" -eq 0 ] && [ "$(notes_for "$W/mut6" "$OVR_J")" -ge 1 ]; then
-    ok "  and the KEEP direction stays green under it — assertion 5 is not entangled with the act direction"
-  else
-    bad "  MUTANT 6 also moved the keep direction: assertions 5 and 6 are entangled"
-  fi
-fi
-
-# --- MUTANT 7 — the adjudication prefix left attached on the act path. Assertion 8 must go red;
-# assertion 5 must NOT, because the keep path never reaches the strip.
-build_rec "$W/mut7"
-sed 's@^      detail="\${detail#\*" :: "}"$@      :@' "$REC/apply.sh" > "$W/mut7/apply.sh"
-if cmp -s "$REC/apply.sh" "$W/mut7/apply.sh"; then
-  bad "MUTANT 7 did not apply — the prefix strip it targets is spelled differently or is not there, so this mutant proves nothing"
-else
-  case "$(last_detail "$(rows_for "$W/mut7" "$OVR_AR")")" in
-    *"remove the anchor"*) bad "MUTANT 7 SURVIVED: the env-less multi-anchor row still narrowed the shadow with the prefix attached, so assertion 8 is not testing the strip" ;;
-    *)                     mutant_killed "$([ "$BF_A8" = 1 ] && echo 1 || echo 0)" M7 "MUTANT 7 (adjudication prefix not stripped): the env-less multi-anchor row loses its narrowing — the strip is what keeps the positional parse reachable" ;;
-  esac
-  if [ "$(printf '%s\n' "$(rows_for "$W/mut7" "$OVR_J")" | grep -c . || true)" -eq 0 ] && [ "$(notes_for "$W/mut7" "$OVR_J")" -ge 1 ]; then
-    ok "  and the keep direction is untouched by it — assertions 5 and 8 are not entangled"
-  else
-    bad "  MUTANT 7 also moved the keep direction: assertions 5 and 8 are entangled"
-  fi
-fi
-
 # --- AN OVERRIDE THAT IS BOTH DRIFT-HARD AND SUPERSEDED (PC-S331) -------------------------------
 # Two remedies were built for this and BOTH were regressions, which is why the arms below assert
 # what SURVIVES and not merely that something changed:
@@ -837,68 +582,5 @@ else
   bad "13 $OVR_HA was marked subsumed, but retire_anchor= drops ONE anchor and leaves the file: the readopt is how its remaining shadowed sections get the moved text"
 fi
 
-# --- MUTANT 8 — the subsumption guard widened to every supersession. Arm 13 must go red while
-# arm 9 stays green: a mutant that moves both is not testing the exemption.
-build_rec "$W/mut8"
-sed 's@^  if \[ -z "\$drop_anchor" \]; then$@  if true; then@' "$REC/apply.sh" > "$W/mut8/apply.sh"
-if cmp -s "$REC/apply.sh" "$W/mut8/apply.sh"; then
-  bad "MUTANT 8 did not apply — the drop_anchor guard it targets is spelled differently or is not there, so arm 13 proves nothing"
-else
-  if [ "$(subsumed_for "$W/mut8" "$OVR_HA")" -ge 1 ]; then
-    mutant_killed "$([ "$BF_S13" = 1 ] && echo 1 || echo 0)" M8 "MUTANT 8 (subsumption guard widened to every supersession): the anchor-only entry is wrongly marked subsumed — arm 13 is what catches a guard that would strand live work"
-  else
-    bad "MUTANT 8 SURVIVED: widening the guard changed nothing, so arm 13 is not testing the drop_anchor exemption"
-  fi
-  if [ "$(subsumed_for "$W/mut8" "$OVR_H")" -ge 1 ]; then
-    ok "  and the full-retire subject stays marked under it — arms 9 and 13 are not entangled"
-  else
-    bad "  MUTANT 8 also moved the full-retire subject: arms 9 and 13 are entangled"
-  fi
-fi
-
-# --- MUTANT 9 — the marked readopt turned into a SUPPRESSED retire. This is the first remedy that
-# was built for PC-S331 and rejected: it deletes the sequence that resolves the supersession and
-# keeps the readopt that cannot. Arm 10 must go red; arm 9 must NOT, because the NOTE is still
-# emitted — a mutant that moves both would mean the two arms are one.
-# `continue` is INSERTED rather than an existing line edited, because the shipped code never
-# suppresses and arm 10 would otherwise be a guard with no subject.
-build_rec "$W/mut9"
-awk '{ print } /say NOTE override-readopt-subsumed/ { print "        continue" }' \
-  "$REC/apply.sh" > "$W/mut9/apply.sh"
-if cmp -s "$REC/apply.sh" "$W/mut9/apply.sh"; then
-  bad "MUTANT 9 did not apply — the subsumption NOTE it keys on is spelled differently or is not there, so arm 10 proves nothing"
-else
-  if [ "$(printf '%s\n' "$(rows_for "$W/mut9" "$OVR_H")" | grep -c . || true)" -eq 0 ]; then
-    mutant_killed "$([ "$BF_S10" = 1 ] && echo 1 || echo 0)" M9 "MUTANT 9 (retire suppressed for a marked readopt): the retire sequence disappears — arm 10 is what catches a remedy that deletes the work instead of marking the readopt"
-  else
-    bad "MUTANT 9 SURVIVED: the retire sequence was still emitted with the loop short-circuited, so arm 10 is not testing that the work survives"
-  fi
-  if [ "$(subsumed_for "$W/mut9" "$OVR_H")" -ge 1 ]; then
-    ok "  and the NOTE is still emitted under it — arms 9 and 10 are not entangled"
-  else
-    bad "  MUTANT 9 also removed the NOTE: arms 9 and 10 are entangled and one of them is vacuous"
-  fi
-fi
-
-# --- twins, asserted green under each mutant (MEASURED matrix), and the matrix mode -------------
-twin_green M1 "$W/mut1" A1
-twin_green M2 "$W/mut2" A2
-twin_green M3 "$W/mut3" A1 A2
-twin_green M4 "$W/mut4" A3
-twin_green M5 "$W/mut5" A6
-twin_green M6 "$W/mut6" A5
-twin_green M7 "$W/mut7" A5
-twin_green M8 "$W/mut8" S9
-twin_green M9 "$W/mut9" S9
-if [ "$MATRIX" = 1 ]; then
-  for _m in 1 2 3 4 5 6 7 8 9; do matrix_row "M$_m" "$W/mut$_m"; done
-  matrix_row CONTROL "$W/rec"
-fi
-
-if [ "$MATRIX" = 1 ]; then
-  if [ "$MX_RAN" -gt 0 ]; then ok "matrix mode: $MX_RAN matrix-only row(s) were measured"; else bad "matrix mode measured no matrix row"; fi
-else
-  if [ "$MX_RAN" -eq 0 ]; then ok "a plain run executed no matrix-only cell"; else bad "a plain run executed $MX_RAN matrix-only cell(s)"; fi
-fi
 echo ""
 report_end apply-worklist-rows

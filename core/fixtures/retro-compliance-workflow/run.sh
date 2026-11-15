@@ -39,21 +39,13 @@
 # guard whose removal changes no outcome a loaded gun. If the header is stale after the fix
 # that is a review finding, not a gate finding, and this file says so rather than pretending.
 #
-# WHAT THE FOUR REMEDY STATES DO TO THE ARMS (this is the fixture's whole claim):
+# WHAT THE REMEDY STATES DO TO THE ARMS (this is the fixture's whole claim):
 #
-#   (a) unfixed                A1 A2 A3 A4 A5 all FAIL
+#   (a) unfixed                A1 A2 A3 A4 all FAIL
 #   (b) flag added only        A1 A2 A4 FAIL   (A3 passes: the flag reaches the no-block
 #                                               rung at the legacy path, and only that one)
-#   (c) all five paths, no flag           A5 FAILS
+#   (c) all five paths, no flag   all pass
 #   (d) paths + flag           all pass
-#
-# A5 IS THE ONLY ARM THAT SEPARATES (c) FROM (d), AND IT NEEDS A MUTANT TO DO IT. On the real
-# validator every rung the flag reaches is ALSO reached by is_retro once the argument path is
-# migrated, so no seeded document can tell a path-only fix from the full fix. The flag's whole
-# value is that the CALLER declares its own requirement instead of depending on a regex in
-# another file — so the arm that tests it must remove that regex. A5 disarms is_retro in a
-# COPY of the validator and requires the workflow to still reject a blockless retro.
-# Without A5 this fixture would certify a path-only fix as complete.
 #
 # TWO SEEDED REPOS, AND THEY MUST STAY TWO.
 #   repo_extract  holds the retro at the MIGRATED path ONLY. If it also held the legacy copy,
@@ -141,7 +133,7 @@ if [ -z "$WF" ] || [ -z "$VP" ] || [ -z "$SCHEMA" ]; then
     [ -z "$SCHEMA" ] && miss="$miss provenance-block.json"
     for a in "A1 trigger paths" "A2 changed-set filter + sprint extraction" \
              "A3 blockless retro rejected" "A4 transcript_path required" \
-             "A5 caller declares its own requirement" "A6 compliant retro accepted" \
+             "A6 compliant retro accepted" \
              "A7 empty extraction hard-fails"; do
         skip "$a — subject absent in both layouts:$miss"
     done
@@ -154,7 +146,7 @@ trap 'rm -rf "$WORK"' EXIT
 SEED="$WORK/seed"
 mkdir -p "$SEED"
 if ! bash "$HERE/seed.sh" "$SEED" >/dev/null 2>"$WORK/seed.err"; then
-    for a in "A1" "A2" "A3" "A4" "A5" "A6" "A7"; do
+    for a in "A1" "A2" "A3" "A4" "A6" "A7"; do
         skip "$a — seed unavailable: $(tr -d '\n' < "$WORK/seed.err")"
     done
     exit 0
@@ -288,7 +280,7 @@ prov_out() { cat "$WORK/prov.out" 2>/dev/null; }
 # Prints one token per arm: "<id>:pass" or "<id>:fail:<detail>".
 # ---------------------------------------------------------------------------
 arms() {
-    local wf="$1" tag="$2" VPUSE="${3:-$VP}" r v
+    local wf="$1" tag="$2" r v
 
     # --- A1 trigger paths -----------------------------------------------------
     local plist hit p
@@ -308,7 +300,7 @@ arms() {
     # repo_extract holds the retro at the MIGRATED path ONLY.
     local re="$WORK/${tag}.extract" s
     rm -rf "$re"
-    if ! build_repo "$re" "$SEED/docs/blockless.md" migrated-only "$VPUSE" >/dev/null; then
+    if ! build_repo "$re" "$SEED/docs/blockless.md" migrated-only "$VP" >/dev/null; then
         echo "A2:fail:could not build the extraction repo (fixture broken, not a finding)"
     else
         s="$(drive_sprint "$wf" "$re")"
@@ -322,7 +314,7 @@ arms() {
     # --- A3/A4/A6 the invocation argument -------------------------------------
     # repo_invoke holds byte-identical copies at BOTH paths, so the ONLY variable is which
     # one the step names. sprint is injected as 302 rather than taken from A2: entangling
-    # them would make one mutant fail two arms and hide which is vacuous.
+    # them would make one fault fail two arms and hide which is vacuous.
     local ri
     local doc rest id want
     for v in blockless:A3:1 notranscript:A4:1 compliant:A6:0; do
@@ -333,7 +325,7 @@ arms() {
         doc="${v%%:*}"; rest="${v#*:}"; id="${rest%%:*}"; want="${rest##*:}"
         ri="$WORK/${tag}.${doc}"
         rm -rf "$ri"
-        if ! build_repo "$ri" "$SEED/docs/${doc}.md" both "$VPUSE" >/dev/null; then
+        if ! build_repo "$ri" "$SEED/docs/${doc}.md" both "$VP" >/dev/null; then
             echo "$id:fail:could not build the invocation repo (fixture broken, not a finding)"
             continue
         fi
@@ -384,7 +376,7 @@ arms() {
     # the near-miss and it must stay quiet.
     local rr rq rc7 sp7
     rr="$WORK/${tag}.nested"; rm -rf "$rr"
-    if ! build_repo "$rr" "$SEED/docs/blockless.md" nested-only "$VPUSE" >/dev/null; then
+    if ! build_repo "$rr" "$SEED/docs/blockless.md" nested-only "$VP" >/dev/null; then
         echo "A7:fail:could not build the nested repo (fixture broken, not a finding)"
     else
         r="$(drive_sprint_rc "$wf" "$rr")"
@@ -395,86 +387,12 @@ arms() {
             echo "A7:fail:a changed retro that yields NO sprint exited 0 (wrote sprint='$sp7') — every later step is disabled by its own if: and the job reports green having validated nothing"
         else
             rq="$WORK/${tag}.noretro"; rm -rf "$rq"
-            if ! build_repo "$rq" "$SEED/docs/blockless.md" no-retro "$VPUSE" >/dev/null; then
+            if ! build_repo "$rq" "$SEED/docs/blockless.md" no-retro "$VP" >/dev/null; then
                 echo "A7:fail:could not build the no-retro repo (fixture broken, not a finding)"
             else
                 r="$(drive_sprint_rc "$wf" "$rq")"
                 if [ "${r%%|*}" = 0 ]; then echo "A7:pass"
                 else echo "A7:fail:NEAR-MISS — a PR touching no retro at all exited ${r%%|*}; the hard-fail is keyed on the empty sprint rather than on retro files having changed, so it fires on every unrelated PR"; fi
-            fi
-        fi
-    fi
-
-    # --- A5 the caller declares its own requirement ----------------------------
-    # MUTANT: every rung the VALIDATOR would use to reject a blockless retro on its own is
-    # removed in a COPY, so the only thing left that can reject is an explicit
-    # --require-skill from the caller. Two rungs, and BOTH must go — a partial revert
-    # produces a mutant that proves the layer left in place, and it comes out green:
-    #
-    #   is_retro                  the path-classifier rung. Anchored on the ASSIGNMENT, not
-    #                             on its right-hand side. An anchor quoting the
-    #                             RETRO_PATH_RE call is defeated by any change to how the
-    #                             path is normalised — measured: the first draft of this arm
-    #                             quoted `RETRO_PATH_RE.search(artifact_path)` and the real
-    #                             line wraps it in os.path.normpath(), so the disarm matched
-    #                             nothing and the arm was vacuous. RETRO_PATH_RE itself must
-    #                             NOT be disarmed: the validator self-tests the pattern and
-    #                             exits 2 if it stops matching, which is not a rejection.
-    #   the flagless-absent rung  added when absence became a denial by default. Anchored on
-    #                             the message that rung EMITS — its own predicate — rather
-    #                             than on a line number.
-    #
-    # WHY BOTH: with only is_retro disarmed the flagless-absent rung catches the blockless
-    # retro at every path, so the mutant rejects whether or not the caller declared anything
-    # and A5 passes on the legacy workflow — measured, and it took A5 out of P1's offender
-    # set. A5's claim is that the CALLER declares its requirement instead of depending on
-    # rungs in another file, so the mutant must remove the rungs in that other file. Both.
-    local mut="$WORK/${tag}.mutant.sh"
-    local n_disarm
-    n_disarm="$(python3 - "$VPUSE" "$mut" <<'PY'
-import re, sys
-src, dst = sys.argv[1], sys.argv[2]
-s = open(src, encoding="utf-8").read()
-s, n1 = re.subn(r'(?m)^is_retro = .*$', 'is_retro = False', s)
-s, n2 = re.subn(r'\n    print\(\n        f"FAIL: \{artifact_path\} carries no ',
-                '\n    sys.exit(0)\n    print(\n        f"FAIL: {artifact_path} carries no ',
-                s, count=1)
-open(dst, "w", encoding="utf-8").write(s)
-print(f"{1 if n1 else 0}{1 if n2 else 0}")
-PY
-)"
-    if cmp -s "$VPUSE" "$mut"; then
-        echo "A5:fail:the disarm matched nothing — validate-provenance-block.sh no longer computes is_retro that way and no longer emits the flagless-absent message, so this arm is vacuous and must be re-anchored"
-    elif [ "$n_disarm" != 11 ]; then
-        # A PARTIAL DISARM IS THE DANGEROUS STATE, and `cmp -s` cannot see it: one of the two
-        # edits applied, the copy differs, and the surviving rung rejects the blockless retro
-        # for a reason the caller had nothing to do with. Refused by name.
-        echo "A5:fail:the disarm applied only PARTIALLY (is_retro+absent-rung = '$n_disarm', expected '11') — the surviving rung would reject the blockless retro on its own and A5 would pass without the caller declaring anything"
-    else
-        local rd="$WORK/${tag}.disarm"
-        rm -rf "$rd"
-        if ! build_repo "$rd" "$SEED/docs/blockless.md" both "$mut" >/dev/null; then
-            echo "A5:fail:could not build the disarm repo (fixture broken, not a finding)"
-        else
-            # REACHABILITY CONTROL: the disarmed validator, called DIRECTLY with no flag,
-            # must ACCEPT the blockless retro. If it still rejects, the disarm did not take
-            # and A5 would pass for a reason that has nothing to do with the caller.
-            #
-            # THE CONTROL STAYS FLAGLESS BECAUSE THE DISARM NEUTERS THE NEW RUNG. The other
-            # available shape — leaving the disarm at is_retro alone and passing
-            # `--allow-missing` here — makes the control read 0 while the mutant still
-            # rejects everything the workflow hands it flagless, so A5 passes on the legacy
-            # workflow and stops being an offender in P1. Measured both ways. This control
-            # asks the question A5 needs answered: with every validator-side rung gone, does
-            # anything still reject? A flagless call is the only call that asks it, so the
-            # rung has to be gone rather than waived.
-            ( cd "$rd" && bash scripts/ai-dlc/validate-provenance-block.sh docs/retro/s302/retro.md ) >/dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                echo "A5:fail:CONTROL — the disarmed validator still rejects a blockless retro, so the mutant is not reached and this arm proves nothing"
-            else
-                r="$(drive_provenance "$wf" "$rd" 302)"
-                if [ "$r" = 1 ]; then echo "A5:pass"
-                else echo "A5:fail:with is_retro disarmed the workflow ACCEPTED a blockless retro (rc=$r) — the step depends entirely on RETRO_PATH_RE in another file and declares no requirement of its own"; fi
             fi
         fi
     fi
@@ -491,27 +409,27 @@ probe_fixed="$(arms "$SEED/probe-fixed.yml"  pfixed)"
 n_leg_fail="$(grep -c ':fail:' <<<"$probe_legacy")"
 n_fix_fail="$(grep -c ':fail:' <<<"$probe_fixed")"
 
-# Offender direction: the synthetic legacy workflow must trip A1 A2 A3 A4 A5 — each named,
+# Offender direction: the synthetic legacy workflow must trip A1 A2 A3 A4 A7 — each named,
 # because "five findings" would also be satisfied by five copies of one finding.
 p_missing=""
-for id in A1 A2 A3 A4 A5 A7; do
+for id in A1 A2 A3 A4 A7; do
     grep -q "^${id}:fail:" <<<"$probe_legacy" || p_missing="$p_missing $id"
 done
 if [ -z "$p_missing" ]; then
-    ok "P1 self-probe: the synthetic LEGACY workflow trips A1 A2 A3 A4 A5 A7 by name"
+    ok "P1 self-probe: the synthetic LEGACY workflow trips A1 A2 A3 A4 A7 by name"
 else
     bad "P1 self-probe: the synthetic LEGACY workflow did NOT trip$p_missing — those arms cannot fire, and a clean corpus run would mean nothing"
     sed 's/^/        /' <<<"$probe_legacy" >&2
 fi
 # Near-miss direction. THE POSITIVE CONJUNCT IS NOT DECORATION: "zero findings" is exactly
-# what a run that emitted nothing looks like, so the arm also requires all six verdict
-# tokens to be PRESENT. Measured twice elsewhere in this repo, a control asserting only
+# what a run that emitted nothing looks like, so the arm also requires every verdict
+# token to be PRESENT. Measured twice elsewhere in this repo, a control asserting only
 # rc=0-and-no-findings passes against a subject replaced by `exit 0`.
 n_fix_tok="$(grep -c '^A[1-7]:' <<<"$probe_fixed")"
-if [ "$n_fix_fail" = 0 ] && [ "$n_fix_tok" = 7 ]; then
-    ok "P2 self-probe: the synthetic FIXED workflow trips nothing, and all 7 arms reported"
-elif [ "$n_fix_tok" != 7 ]; then
-    bad "P2 self-probe: only $n_fix_tok of 7 arms produced a verdict — arms went silent, which is not the same as passing"
+if [ "$n_fix_fail" = 0 ] && [ "$n_fix_tok" = 6 ]; then
+    ok "P2 self-probe: the synthetic FIXED workflow trips nothing, and all 6 arms reported"
+elif [ "$n_fix_tok" != 6 ]; then
+    bad "P2 self-probe: only $n_fix_tok of 6 arms produced a verdict — arms went silent, which is not the same as passing"
 else
     bad "P2 self-probe: the synthetic FIXED workflow tripped $n_fix_fail arm(s); the arms are over-broad"
     grep ':fail:' <<<"$probe_fixed" | sed 's/^/        /' >&2
@@ -521,49 +439,6 @@ if [ "$n_leg_fail" -gt "$n_fix_fail" ]; then
     ok "P3 self-probe: the two probe sides DIFFER ($n_leg_fail findings vs $n_fix_fail)"
 else
     bad "P3 self-probe: the two probe sides did not differ ($n_leg_fail vs $n_fix_fail) — both runs read the same tree"
-fi
-
-# ---------------------------------------------------------------------------
-# MUTANTS — the question a both-directions probe cannot answer.
-#
-# P1/P2 establish that the arms discriminate between two workflows. They do NOT establish
-# what happens when a SUBJECT EMITS NOTHING, and that is the state an absence-shaped arm
-# passes silently. Both subjects get one: the workflow and the validator it calls.
-# ---------------------------------------------------------------------------
-: > "$WORK/empty.yml"
-m1="$(arms "$WORK/empty.yml" m1)"
-m1_missing=""
-for id in A1 A2 A3 A4 A5 A6 A7; do
-    grep -q "^${id}:fail:" <<<"$m1" || m1_missing="$m1_missing $id"
-done
-if [ -z "$m1_missing" ]; then
-    ok "M1 mutant: an EMPTY workflow file trips all seven arms — no arm treats a subject that says nothing as a subject that is clean"
-else
-    bad "M1 mutant: an EMPTY workflow file left$m1_missing quiet — those arms would report ok for a workflow that does not exist"
-fi
-
-# M2 — the validator replaced by `exit 0`. The three REJECT arms must all still fire; if any
-# passes, it is asserting "the pipeline ran", not "the document was rejected".
-printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK/vp-yes.sh"; chmod +x "$WORK/vp-yes.sh"
-m2="$(arms "$WF" m2 "$WORK/vp-yes.sh")"
-m2_missing=""
-for id in A3 A4 A5; do
-    grep -q "^${id}:fail:" <<<"$m2" || m2_missing="$m2_missing $id"
-done
-if [ -z "$m2_missing" ]; then
-    ok "M2 mutant: a validator replaced by \`exit 0\` trips A3 A4 A5"
-else
-    bad "M2 mutant: a validator that accepts everything left$m2_missing quiet"
-fi
-
-# M3 — the validator replaced by `exit 1`. A6 owns this case and must be the one that fires;
-# a fixture whose every arm is a reject arm certifies a validator that rejects everything.
-printf '#!/usr/bin/env bash\nexit 1\n' > "$WORK/vp-no.sh"; chmod +x "$WORK/vp-no.sh"
-m3="$(arms "$WF" m3 "$WORK/vp-no.sh")"
-if grep -q '^A6:fail:' <<<"$m3"; then
-    ok "M3 mutant: a validator replaced by \`exit 1\` trips A6 — the accept direction is load-bearing"
-else
-    bad "M3 mutant: a validator that rejects everything did NOT trip A6"
 fi
 
 # ---------------------------------------------------------------------------
@@ -597,12 +472,11 @@ name_of() {
         A2) echo "A2 the changed-set filter and the sprint extraction resolve a sprint number" ;;
         A3) echo "A3 a blockless retro is REJECTED" ;;
         A4) echo "A4 a party-mode block with no transcript_path is REJECTED" ;;
-        A5) echo "A5 the step declares its own requirement (is_retro disarmed)" ;;
         A6) echo "A6 a compliant retro is ACCEPTED" ;;
         A7) echo "A7 a changed retro that yields no sprint HARD-FAILS, and an unrelated PR does not" ;;
     esac
 }
-for id in A1 A2 A3 A4 A5 A6 A7; do
+for id in A1 A2 A3 A4 A6 A7; do
     line="$(grep "^${id}:" <<<"$real" | head -n 1)"
     if [ -z "$line" ]; then
         bad "$(name_of "$id") — the arm produced no verdict at all"

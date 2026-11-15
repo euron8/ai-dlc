@@ -16,8 +16,6 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
-B_3b=0; B_3c=0; B_degctl=0
 
 # Two stderr sinks for the check-mode arms, inside the seed's own WORK so the EXIT trap
 # reaps them. Named rather than inlined because a `2>` target computed at the call site is
@@ -64,7 +62,7 @@ grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$out" \
 out_adv="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
 grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$out_adv" \
   && bad "CONTROL: the qualifier was printed on a range whose two refs DIFFER — it fires unconditionally and says nothing" \
-  || { ok "CONTROL: a real base..theirs range carries no degenerate qualifier"; B_degctl=1; }
+  || ok "CONTROL: a real base..theirs range carries no degenerate qualifier"
 
 # --- Assertion 2c: --post-apply moves ONLY the unregistered-drift base ----------
 # Post-apply, core on disk is at THEIRS. Asking unregistered-drift.sh against the PULL's base
@@ -180,7 +178,7 @@ else
 fi
 a3b_out="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
 if grep -q '^CORE-AT-THEIRS' <<<"$a3b_out"; then
-  ok "a stale base is qualified in the rendered list: the CORE-AT-THEIRS row reaches the region the operator approves apply from"; B_3b=1
+  ok "a stale base is qualified in the rendered list: the CORE-AT-THEIRS row reaches the region the operator approves apply from"
 else
   bad "print mode rendered no CORE-AT-THEIRS row on a run whose scan emitted $a3b_at of them — the one finding is 'the list you are reading was computed against the wrong base', and it was filtered out"
 fi
@@ -216,7 +214,7 @@ git -C "$DIST" show "$THEIRS_ADV:core/$MOVED_REL" > "$CONSUMER/.claude/$MOVED_RE
 a3c_err="$MW_ERR_A"
 bash "$HB" --check "$REPORT_BAD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" >/dev/null 2>"$a3c_err"; a3c_rc=$?
 if grep -q 'CORE-AT-THEIRS' "$a3c_err"; then
-  ok "--check WARNS on a stale base — it no longer certifies a report complete against a comparison the detector says was computed wrong"; B_3c=1
+  ok "--check WARNS on a stale base — it no longer certifies a report complete against a comparison the detector says was computed wrong"
 else
   bad "--check said NOTHING about a stale base (rc=$a3c_rc) — it certifies the report complete against a HARD set the detector itself reports as computed against the wrong base"
 fi
@@ -236,137 +234,11 @@ else
   ok "CONTROL: --check on a tree with no at-theirs file emits no stale-base warning, at the same exit ($a3c_rc2)"
 fi
 
-# --- MUTANT: the degenerate detection made unconditional -----------------------
-# Assertion 2b's CONTROL is an ABSENCE — "a real base..theirs range carries no qualifier" —
-# and an absence passes against a script that emits nothing at all. This is what makes that
-# control mean "the detection discriminates" rather than "something did not happen".
-#
-# THE MUTANT IS A COPY OF THE WHOLE `reconcile/` DIRECTORY, not of the one script.
-# `hard-blockers.sh` resolves its two detectors as siblings of its own path, so a lone copy
-# in a temp dir finds neither, `[ -f "$UD" ]` is false, and it emits an empty list — which
-# would score as a kill for every mutant in this file while proving nothing. The unmutated
-# control below is what states that the copied harness still works.
-MUTDIR="$(dirname "$HB")"
-MW="$(mktemp -d "${TMPDIR:-/tmp}/rbl-mut.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
-cp -R "$MUTDIR/." "$MW/" 2>/dev/null
-
-ctl_out="$(bash "$MW/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$ctl_out" \
-  && ok "MUTANT CONTROL: the unmutated copy still resolves its detectors and qualifies the degenerate run" \
-  || bad "MUTANT CONTROL is dead — a copy of the reconcile dir emits nothing, so any kill below is unearned"
-
-sed 's|\$1=="DRIFT-RANGE-DEGENERATE"{print \$1; exit}|{print "X"; exit}|' \
-  "$MW/hard-blockers.sh" > "$MW/hb-mut.sh"
-if cmp -s "$MW/hard-blockers.sh" "$MW/hb-mut.sh"; then
-  bad "MUTANT matched nothing (cmp -s guard) — assertion 2b's control proves nothing"
-else
-  mut_out="$(bash "$MW/hb-mut.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
-  grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$mut_out" \
-    && mutant_killed "$B_degctl" degenerate-unconditional "MUTANT: with the row test removed the qualifier appears on a NON-degenerate range — so the control is what proves it discriminates" \
-    || bad "MUTANT: the qualifier stayed absent even with the row test removed — assertion 2b's control is vacuous"
-fi
-
-# --- MUTANTS: the stale-base read-out, one per RENDER SITE ---------------------------------
-# ASSERTION 3b's CONTROL AND 3c's CONTROL ARE BOTH ABSENCES, and an absence passes against a
-# script that emits nothing at all. Three mutants, each keyed on a LOCATION and scored on an
-# OBSERVABLE, never on the status spelling — a mutant anchored on the word `CORE-AT-THEIRS`
-# dies to a rename and proves nothing about the behaviour.
-#
-# THE WORLD IS REBUILT HERE because the control arms above left the tree with no at-theirs
-# file. Every mutant below is scored against the SAME world, and the unmutated control at the
-# top of this block is what says that world still produces the row through a fresh copy.
-git -C "$DIST" show "$THEIRS_ADV:core/$MOVED_REL" > "$CONSUMER/.claude/$MOVED_REL"
-
-atctl_out="$(bash "$MW/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
-if grep -q '^CORE-AT-THEIRS' <<<"$atctl_out" && grep -q '0 HARD blockers' <<<"$atctl_out"; then
-  ok "MUTANT CONTROL: the unmutated copy renders the stale-base row AND the affirmative line on the rebuilt world — a copy that never ran cannot print either"
-else
-  bad "MUTANT CONTROL is dead — the unmutated copy did not reproduce both baseline lines, so every stale-base kill below is unearned"
-fi
-
-# MUTANT A — the PRINT-MODE render site deleted. `emit-report.sh` invokes print mode with
-# `2>/dev/null`, so this is the only site whose output can reach the artifact the operator
-# approves `apply` from; deleting it puts the finding somewhere no reader looks. Keyed on the
-# emitting line's LOCATION (the guarded printf in the region), and the affirmative line is the
-# positive conjunct so a copy that died cannot score this as a kill.
-sed '/^  \[ -n "\$AT_THEIRS" \] && printf /d' "$MW/hard-blockers.sh" > "$MW/hb-at-print.sh"
-if cmp -s "$MW/hard-blockers.sh" "$MW/hb-at-print.sh"; then
-  bad "MUTANT print-site: the mutation matched nothing (cmp -s guard) — assertion 3b is unproven, and the render site has been respelled"
-else
-  mo="$(bash "$MW/hb-at-print.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
-  if ! grep -q '^CORE-AT-THEIRS' <<<"$mo" && grep -q '0 HARD blockers' <<<"$mo"; then
-    mutant_killed "$B_3b" print-site "MUTANT print-site: without it the stale-base row vanishes from the region while the affirmative line still renders — 3b is reading that site and the copy is alive"
-  else
-    bad "MUTANT print-site: row=$(grep -c '^CORE-AT-THEIRS' <<<"$mo") (want 0) clean-line=$(grep -c '0 HARD blockers' <<<"$mo") (want 1) — either 3b does not read the print site, or the mutant broke the whole script and silence scored as a kill"
-  fi
-fi
-
-# MUTANT B — the CHECK-MODE warn site deleted, which is the site the fix hand ADDED and the one
-# with no prior counterpart. It changes no exit code by construction, so only assertion 3c's
-# message conjunct can see it: a guard whose removal moves nothing observable is the vacuous
-# shape, and this is what establishes it is not. The print site is left intact deliberately —
-# the two sites must be separable, or one arm is covering the other.
-sed '/^\[ -n "\$AT_THEIRS" \] && echo "hard-blockers: /d' "$MW/hard-blockers.sh" > "$MW/hb-at-check.sh"
-if cmp -s "$MW/hard-blockers.sh" "$MW/hb-at-check.sh"; then
-  bad "MUTANT check-site: the mutation matched nothing (cmp -s guard) — assertion 3c is unproven, and the warn site has been respelled"
-else
-  bash "$MW/hb-at-check.sh" --check "$REPORT_BAD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" >/dev/null 2>"$MW/at-check-mut.err"; mrc=$?
-  mprint="$(bash "$MW/hb-at-check.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
-  mwarn="$(grep -c 'CORE-AT-THEIRS' "$MW/at-check-mut.err")" || mwarn=0
-  if [ "$mwarn" -eq 0 ] && [ "$mrc" -eq 0 ] && grep -q '^CORE-AT-THEIRS' <<<"$mprint"; then
-    mutant_killed "$(( $B_3b && $B_3c ))" check-site "MUTANT check-site: without it --check goes silent on a stale base at the SAME exit 0 — the warning is the only observable, so a vacuous-guard reading of it is refuted; and the print site still fires, so the two are separable"
-  else
-    bad "MUTANT check-site: warn=$mwarn (want 0) rc=$mrc (want 0) print-row=$(grep -c '^CORE-AT-THEIRS' <<<"$mprint") (want 1) — either 3c is not reading this site, or deleting it took the print site with it and the two arms are entangled"
-  fi
-fi
-
-# MUTANT C — the ROWS-SUPPLIED GATE widened, which is the conjunct that keeps the row out of the
-# `emit-report.sh` path. That renderer supplies `--ud-rows` and renders its own unregistered-drift
-# section through a filter excluding only `CORE-OK`, so the row is ALREADY there; emitting it here
-# too puts two rows in one region for one finding, and `--verify`'s `unseen_rows()` COUNTS what is
-# in the region. Scored on the rows-supplied invocation going from silent to loud — a behaviour,
-# not a spelling.
-printf 'CORE-AT-THEIRS\t%s\tbyte-identical to theirs\n' "$MOVED_REL" > "$MW/rows.at"
-sed 's|^if \[ -z "\$UD_ROWS_FILE" \]; then$|if true; then|' "$MW/hard-blockers.sh" > "$MW/hb-at-gate.sh"
-if cmp -s "$MW/hard-blockers.sh" "$MW/hb-at-gate.sh"; then
-  bad "MUTANT rows-gate: the mutation matched nothing (cmp -s guard) — the gate that keeps this row out of the emit-report path is unproven"
-else
-  # CAPTURED FIRST, COUNTED SECOND, AND THAT IS NOT A STYLE CHOICE. `grep -c` prints its zero AND
-  # EXITS 1, so a `$( … | grep -c … )` under this file's `pipefail` "fails" on exactly the count
-  # this arm most needs to read — and the `|| n=0` beside it would then overwrite a correct
-  # non-zero count from a subject that happened to exit non-zero with a silent 0. Feed the reader
-  # a here-string from a captured variable, where the two failures cannot be confused.
-  g_ship_out="$(bash "$MW/hard-blockers.sh" --ud-rows "$MW/rows.at" --ud-rc 0 "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
-  g_mut_out="$(bash "$MW/hb-at-gate.sh"     --ud-rows "$MW/rows.at" --ud-rc 0 "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
-  # AND THE STANDALONE SIDE IS THE POSITIVE CONJUNCT: the mutant must still render it there, or
-  # the two counts above are a statement about a script that stopped rendering the row at all.
-  g_alone_out="$(bash "$MW/hb-at-gate.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
-  g_ship="$(grep -c '^CORE-AT-THEIRS' <<<"$g_ship_out")" || g_ship=0
-  g_mut="$(grep -c '^CORE-AT-THEIRS' <<<"$g_mut_out")" || g_mut=0
-  g_mut_alone="$(grep -c '^CORE-AT-THEIRS' <<<"$g_alone_out")" || g_mut_alone=0
-  if [ "$g_ship" -eq 0 ] && [ "$g_mut" -eq 1 ] && [ "$g_mut_alone" -eq 1 ]; then
-    ok "MUTANT rows-gate: the shipped wrapper renders NOTHING when the caller supplied the rows and the mutant renders the row — so emit-report's region carries one row for one finding, and --verify's unseen count is not doubled"
-  else
-    bad "MUTANT rows-gate: shipped rows-supplied=$g_ship (want 0) mutant rows-supplied=$g_mut (want 1) mutant standalone=$g_mut_alone (want 1) — either the gate is not load-bearing, or the mutant stopped rendering the row entirely and the 0 above is silence"
-  fi
-fi
-
-# THE STALE-BASE WORLD IS TORN DOWN, AND THAT IS AN ASSERTION RATHER THAN A CLEANUP LINE.
-# MEASURED while building the block above: leaving `$MOVED_REL` at THEIRS_ADV's bytes broke
-# assertion 4's positive control at `:192` — at the degenerate pair THEIRS==BASE that file is not
-# at-theirs at all, it is a plain in-place edit, so the tree carried a HARD blocker, the unstubbed
-# copy rendered no `0 HARD blockers.` and BOTH refusal controls failed. Two red cells, in an arm
-# neither of my mutants touches, reading exactly like a regression in the change under test.
-#
-# A world every later arm depends on being ABSENT is restored by name and then VERIFIED, because
-# the restore failing silently and the restore never happening produce the identical tree.
-git -C "$DIST" show "$BASE:core/$MOVED_REL" > "$CONSUMER/.claude/$MOVED_REL"
-teardown_out="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-if grep -q '0 HARD blockers' <<<"$teardown_out" && ! grep -q '^CORE-AT-THEIRS' <<<"$teardown_out"; then
-  ok "the stale-base world is torn down: the clean tree renders '0 HARD blockers.' with no qualifier, which is the precondition assertion 4's controls below are asserted against"
-else
-  bad "the stale-base world SURVIVED into assertion 4's precondition — the clean tree renders clean-line=$(grep -c '0 HARD blockers' <<<"$teardown_out") (want 1) qualifier=$(grep -c '^CORE-AT-THEIRS' <<<"$teardown_out") (want 0), and :192's positive control will fail for a reason no arm below owns"
-fi
+# The detector directory is copied per arm below: `hard-blockers.sh` resolves its two detectors
+# as siblings of its own path, so a lone script copy finds neither and emits an empty list.
+DETDIR="$(dirname "$HB")"
+MW="$(mktemp -d "${TMPDIR:-/tmp}/rbl-copy.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+cp -R "$DETDIR/." "$MW/" 2>/dev/null
 
 # --- Assertion 4: A REFUSING DETECTOR IS NOT A CLEAN SHEET --------------------------------
 # THE DEFECT THIS CLOSES, MEASURED BEFORE THE FIX: stub either detector to `exit 2` and this
@@ -381,7 +253,7 @@ fi
 # which would score every arm here as a kill it did not earn.
 for a4_det in layer-drift unregistered-drift; do
   a4_w="$MW/refuse-$a4_det"
-  rm -rf "$a4_w"; cp -R "$MUTDIR/." "$a4_w/" 2>/dev/null
+  rm -rf "$a4_w"; cp -R "$DETDIR/." "$a4_w/" 2>/dev/null
 
   # POSITIVE CONTROL FIRST, in the same copy: unstubbed, this world renders the clean line.
   # Without it a copy that simply died would satisfy the absence half below.
@@ -419,7 +291,7 @@ done
 #
 # What is asserted here is the REFUSALS, because each one makes an ambiguous state
 # unconstructible rather than merely detectable.
-a5_w="$MW/flags"; rm -rf "$a5_w"; cp -R "$MUTDIR/." "$a5_w/" 2>/dev/null
+a5_w="$MW/flags"; rm -rf "$a5_w"; cp -R "$DETDIR/." "$a5_w/" 2>/dev/null
 : > "$a5_w/rows.empty"
 a5_bad=0
 bash "$a5_w/hard-blockers.sh" --ld-rows "$a5_w/rows.empty" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
@@ -445,7 +317,7 @@ bash "$a5_w/hard-blockers.sh" --post-apply "$DIST" "$BASE" "$CONSUMER" "$THEIRS"
 # finding — and it is not cosmetic: `--verify`'s `refused_new` COUNTS these rows to decide
 # whether a mismatch can be BLOCKERS-RESOLVED, and two arms of reconcile-emit-report assert that
 # count is exactly 1. So the row is emitted by whichever program RAN the detector.
-a6_w="$MW/owns"; rm -rf "$a6_w"; cp -R "$MUTDIR/." "$a6_w/" 2>/dev/null
+a6_w="$MW/owns"; rm -rf "$a6_w"; cp -R "$DETDIR/." "$a6_w/" 2>/dev/null
 : > "$a6_w/rows.empty"
 a6_supplied="$(bash "$a6_w/hard-blockers.sh" --ud-rows "$a6_w/rows.empty" --ud-rc 2 \
   "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | grep -c '^DETECTOR-REFUSED')" || a6_supplied=0

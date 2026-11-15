@@ -18,9 +18,6 @@ run, the reconcile report must say so with a column-0 `DETECTOR-REFUSED` line. I
 - With an ai-dlc hook unregistered, two renders are byte-identical and `--verify` passes: the
   hook validator's FIX line names the consumer's installed path, never the render's temp copy.
 
-Every arm has a mutant of the shipped source, built in a copy of the whole `reconcile/`
-directory, and each mutant must fail exactly its own arms.
-
 ## Run
 
     bash run.sh

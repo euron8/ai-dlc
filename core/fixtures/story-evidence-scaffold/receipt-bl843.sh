@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # BL-843 receipt: the capture-heads block (--render-dar, --check, and its fold into handoff mode). Usage:
 #   bash receipt-bl843.sh <path to validate-handoff-evidence.sh> [<cells>]
-# With <cells> (space-separated cell names), only those cells and the `ctl` control run: a mutant run
-# names the one cell that decides it. Without it every cell runs.
+# With <cells> (space-separated cell names), only those cells and the `ctl` control run: a narrowed run
+# names the one cell it needs. Without it every cell runs.
 # Drives the validator over two scratch repositories. W carries an ENGINE file at
 # core/scripts/validate-handoff-evidence.sh whose history gives the legacy epoch (VADD): c0 adds a
 # stub without the flag and the legacy story, c1 adds the flag (VADD, and <base>), X adds every other

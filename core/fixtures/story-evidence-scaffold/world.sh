@@ -1,11 +1,9 @@
-# Shared worlds for story-evidence-scaffold (and, formerly, its mutation battery). SOURCED, never run: it defines functions and tables and prints nothing.
+# Shared worlds for story-evidence-scaffold. SOURCED, never run: it defines functions and tables and prints nothing.
 #
-# WHY THIS FILE EXISTS. The shipped fixture asserts the validator against a control vector and in place;
-# the battery (dist-only) asserts that each mutated COPY of the validator moves exactly its own cases.
-# Both drive the same seeded git worlds through the same verdict function, so a second copy of the
-# world builder would be two opinions about one input. Single-sourcing it here means a change to a world
-# moves both sides together. It ships with the shipped fixture (install.sh copies the whole directory),
-# and the battery reads it as a sibling inside core/fixtures/, never by walking up into a core subtree.
+# WHY THIS FILE EXISTS. The shipped fixture and its dist-only shards drive the same seeded git worlds through
+# the same verdict function, so a second copy of the world builder would be two opinions about one input.
+# It ships with the shipped fixture (install.sh copies the whole directory), and the sibling fixtures read it
+# as a sibling inside core/fixtures/, never by walking up into a core subtree.
 #
 # The sourcing script defines WORK (a scratch dir), ok, bad and DIR before calling anything here, and
 # must not already own any of these names.
@@ -26,7 +24,7 @@ for cand in "$SE_WDIR/../../scripts/validate-handoff-evidence.sh" "$SE_WDIR/../.
   [ -f "$cand" ] && { HE="$cand"; break; }
 done
 # The bookkeeping arms call sprint-status.sh beside the validator, which loads its schema. Both
-# are subjects: a mutant tree without them reads every status arm as a SKIP.
+# are subjects: a tree without them reads every status arm as a SKIP.
 SCHEMA="$(locate schemas/sprint-status.json)" || SCHEMA=""
 SSH=""
 [ -n "$HE" ] && [ -f "$(dirname "$HE")/sprint-status.sh" ] && SSH="$(dirname "$HE")/sprint-status.sh"
@@ -227,7 +225,7 @@ build_world() { # <dir> <variant>
   printf '1 passed\n' > "$w/test-results/full-suite.txt"
   printf 'sha=%s cmd=pytest -q -n auto cwd=/w\n1 passed\n' "$b" > "$w/test-results/p4.txt"
   # The bookkeeping half: the story at `review` in its frontmatter, and its row agreeing in BOTH
-  # canonical views, so that a mutant reading the planning view moves only `planlag`.
+  # canonical views, so that a reader of the planning view moves only `planlag`.
   if [ "$v" != noyaml ]; then
     mkdir -p "$w/$IMPLY_DIR" "$w/$PLANY_DIR" || return 2
     ymlw "$w/$IMPLY_DIR/sprint-status.yaml" review; ymlw "$w/$PLANY_DIR/sprint-status.yaml" review
@@ -605,8 +603,7 @@ verdict() {
   VERDICT_OUT="$o"; VERDICT_RC="$rc"
   printf '%s:%s%s' "$rc" "$k" "$VERDICT_FLAGS"
 }
-# Cases 10-13 are appended so the 1-9 indices every mutant below names stay put, and 14-23 after
-# them for the same reason.
+# Cases 10-13 are appended so the 1-9 indices stay put, and 14-23 after them for the same reason.
 # headeq: the captures' head: is the commit that frozen only adds them to, with FOUR captures
 # cited, so the head-tree arm must be quiet and stderr empty. second: the first `.py::` token
 # of a cell resolves and the second does not. short: a three-cell row under a header that has
@@ -631,8 +628,7 @@ verdict() {
 # untracked: the story is not tracked at <frozen> and sits on disk (story-untracked).
 # mixfence (32): `~~~`, a "```" inside it, `~~~` closing it, then `### Smoke Test Updates`
 # OUTSIDE every fence. A toggle on any marker reads the closing `~~~` as an opening and hides it.
-# Mode `k` is handoff mode over the bookkeeping worlds. It is its own mode for cost only: an
-# evidence-arm mutant runs the evidence worlds, and the bookkeeping worlds report their WANT.
+# Mode `k` is handoff mode over the bookkeeping worlds.
 # latin1strat (33): strategy mode over a row carrying one non-UTF-8 byte ABOVE an empty cell, driven
 # under a UTF-8 locale (the world's `.LC`), so BSD awk without LC_ALL=C aborts at that row and the
 # empty cell below it is never read.
@@ -653,7 +649,7 @@ CASES='clean:h clean:s nocmd:h redun:h glob:h empty:s rename:s rebind:s movefile
 WANT='0::W 0: 1:no-command,:W 1:red-untracked,:W 1:glob-cited,:W 1:empty-cell, 1:node-missing, 0: 1:node-missing, 0: 1:node-missing, 1:short-row, 0: 0::W:S 0::W 1:status-not-review,:W 1:status-yaml-mismatch,:W 0::W 1:heading-demoted,:W 1:heading-demoted,:W 0::W 0::W 1:empty-cell, 1:empty-cell, 1:heading-demoted,:W 1:status-not-review,:W 0::W 1:status-not-review,:W 1:heading-demoted,:W 1:status-missing,:W 1:story-untracked,:W 1:heading-demoted,:W 1:empty-cell, 1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W 1:replay-preamble,:W 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W'
 # The UTF-8 locale latin1strat is driven under: the first one in which THIS awk aborts on a
 # non-UTF-8 byte. Empty where none does (gawk, mawk, or no UTF-8 locale installed): the abort the
-# world is about cannot happen on this host, and its mutant below says so instead of scoring.
+# world is about cannot happen on this host.
 UTF8_LOCALE=""
 LATIN1_PROBE="$(printf 'caf\351')"
 for l in en_US.UTF-8 C.UTF-8; do
@@ -661,7 +657,7 @@ for l in en_US.UTF-8 C.UTF-8; do
   if ! LC_ALL="$l" awk '{gsub(/a/, "")} END{print 1}' <<<"$LATIN1_PROBE" >/dev/null 2>&1; then UTF8_LOCALE="$l"; break; fi
 done
 
-# A mutant TREE: the whole scripts directory and the schema, laid out so sprint-status.sh finds
+# A control TREE: the whole scripts directory and the schema, laid out so sprint-status.sh finds
 # its schema script-relative and its root by its own walk. A lone validator copy finds no
 # sibling and turns every status arm into a SKIP, which reads as a kill or a survival for the
 # wrong reason. mk_tree <name> -> path of the validator in that tree, sibling asserted present.
@@ -674,11 +670,7 @@ mk_tree() {
 }
 vector() { # <script> [modes] -> space-separated verdicts in CASES order
   # With modes (letters from h, k, s), only the cases of those modes run and every other case is
-  # reported as its WANT value, so it can never move: a mutant inside one mode's code path cannot
-  # reach another mode's worlds. Measured solo on the unsharded fixture: a bookkeeping-mode verdict
-  # costs about 0.4s, so a mutant run over the 17 bookkeeping worlds is about 6-7s, a handoff-mode
-  # mutant about 3s and a strategy-mode mutant under a second; the 16 bookkeeping mutants were about
-  # 112s of a 168s run, which is why the battery is dealt by mode.
+  # reported as its WANT value.
   # Serial on purpose: running the cases concurrently lost reads from the sandbox read-set
   # tracer's stream (73 paths) and the map then OMITTED the fixture.
   local s="$1" only="${2:-}" c out="" i=0
@@ -705,22 +697,15 @@ se_build_worlds() {
   done
   return "$okw"
 }
-  # mkmut <name> <he|ss> <from-literal> <to-literal> -> path of the validator to drive, or
-  # nothing when the mutation matched nothing. A validator mutant is written INTO the control
-  # tree's scripts dir under its own name, so it finds the real sprint-status.sh beside it; a
-  # sprint-status.sh mutant gets a tree of its own (mk_tree asserts the sibling is there).
-mkmut() {
-  local name="$1" tgt="$2" src m t
-  if [ "$tgt" = ss ]; then
-    t="$(mk_tree "$name")" || return 1
-    src="$SSH"; m="$(dirname "$t")/sprint-status.sh"
-  else
-    src="$HE"; m="$(dirname "$HECTL")/he-mut-$name.sh"; t="$m"
-  fi
-  FROM="$3" TO="$4" awk 'BEGIN{f=ENVIRON["FROM"]; t=ENVIRON["TO"]} !done && (p=index($0,f)) {$0=substr($0,1,p-1) t substr($0,p+length(f)); done=1} {print}' "$src" > "$m.tmp"
-  if cmp -s "$src" "$m.tmp"; then rm -f "$m.tmp"; return 1; fi
-  mv "$m.tmp" "$m"
-  printf '%s\n' "$t"
+# se_need <world names...>: seeds each named CASES world not yet seeded under $WORK/world-<name>. A block asks for the
+# worlds it reads and a group drives only its own blocks, so no group builds a world it does not read. A world that
+# cannot be seeded is a finding, never a skip.
+se_need() {
+  local v
+  for v in "$@"; do
+    [ -f "$WORK/world-$v/.T" ] && continue
+    build_world "$WORK/world-$v" "$v" || bad "FIXTURE BROKEN: could not seed git world '$v'"
+  done
 }
 
 # --- BL-833 RED LINE (rv_*) -----------------------------------------------------------------------
@@ -729,10 +714,7 @@ mkmut() {
 # <its token>:` line names it. BL-834: the block was 7 worlds x 4 programs = 28 validator calls; it is 4.
 # Cells, in order: rvid quiet; rvred, rvproven, rvmut refused red-untracked; rvmix refused; rvnone quiet;
 # rvcap refused (world.sh's RVCELLS comment says why each). Each quiet cell is the near-miss of the refused
-# cell beside it, one property apart. Mutants: rv-m1 the pre-fix grammar on the unblanked line (rvid
-# refuses), rv-m2 a `-`-bounded grammar on the unblanked line (rvmut and rvcap go quiet), rv-m3 the
-# blanking applied to `line` itself (rvcap, whose capture basename is an identifier, is destroyed and goes
-# quiet). The sourcing script defines WORK, HECTL, ok and bad; BL-834's receipt drives this function alone.
+# cell beside it, one property apart. The sourcing script defines WORK, HECTL, ok and bad; BL-834's receipt drives this function alone.
 rv_vec() { # <script> -> "<cell>=<rc>:<kinds><flags> ..." in RVCELLS order, plus a STRAY/RC/NOWARN token
   # on any program-level violation, which no want string carries, so the comparison fails and names it.
   # Runs inside `$( )`: a `bad` here would be lost, so every finding travels in the string.
@@ -754,7 +736,7 @@ rv_vec() { # <script> -> "<cell>=<rc>:<kinds><flags> ..." in RVCELLS order, plus
     if grep -qxF "red-untracked $t" <<<"$refd"; then any=1; k="red-untracked,"; crc=1
     else k=""; crc=0
       # The two cells quiet by design (rvid, rvnone) must show their line was PARSED: their own
-      # capture-unresolved WARN. Not asked of a cell a mutant silences: rv-m3 destroys rvcap's token.
+      # capture-unresolved WARN.
       case "${c%%:*}" in rvid|rvnone) grep -qF "WARN capture-unresolved $t: " <<<"$o" || out="$out NOWARN[${c%%:*}]" ;; esac
     fi
     case "$prc" in 0|1) ;; *) crc="$prc" ;; esac
@@ -763,17 +745,6 @@ rv_vec() { # <script> -> "<cell>=<rc>:<kinds><flags> ..." in RVCELLS order, plus
   # rc is 1 exactly when some cell refused.
   case "$prc:$any" in 0:0|1:1) ;; *) out="$out RC[$prc:$any]" ;; esac
   printf '%s' "${out# }"
-}
-rv_mutant() { # <name> <from> <to> <want> <label>
-  local m got nf nt
-  if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: red-line mutation '$1' matched nothing"; return; fi
-  # Applied: the mutant carries the replacement and no longer the original line.
-  nf="$(grep -cF -- "$2" "$m")" || nf=0; nt="$(grep -cF -- "$3" "$m")" || nt=0
-  if [ "$nf" != 0 ] || [ "$nt" != 1 ]; then bad "FIXTURE ERROR: red-line mutation '$1' did not apply (from x$nf, to x$nt)"; return; fi
-  got="$(rv_vec "$m")"
-  if [ "$got" = "$4" ]; then mutant_killed "${B_rv:-0}" "$1" "MUTATION '$1' killed, moving its own cell only: $5"
-  elif [ "$got" = "$RVWANT" ]; then bad "MUTATION '$1' SURVIVED -- $5"
-  else bad "MUTATION '$1' moved [$got], want [$4] -- the cells are entangled"; fi
 }
 rv_block() {
   local rv_ok=1 c t n got T
@@ -797,22 +768,12 @@ rv_block() {
   : > "$WORK/.vcalls"
   RVWANT='rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=1:red-untracked,:W'
   got="$(rv_vec "$HECTL")"
-  if [ "$got" = "$RVWANT" ]; then ok "RED LINE: a RED inside an all-caps hyphenated identifier does not mark its line RED; a standalone RED, PROVEN and Mutation-RED each refuse an outside-spelled capture red-untracked, an identifier beside a standalone RED still refuses, a line with no verdict word is quiet; rvid and rvnone each WARN capture-unresolved on their own token"; B_rv=1
+  if [ "$got" = "$RVWANT" ]; then ok "RED LINE: a RED inside an all-caps hyphenated identifier does not mark its line RED; a standalone RED, PROVEN and Mutation-RED each refuse an outside-spelled capture red-untracked, an identifier beside a standalone RED still refuses, a line with no verdict word is quiet; rvid and rvnone each WARN capture-unresolved on their own token"
   else bad "RED LINE: want [$RVWANT] got [$got]"; fi
-  RVFIX='red = (l2 ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0'
-  rv_mutant rv-m1-old-grammar "$RVFIX" 'red = (line ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0' \
-    'rvid=1:red-untracked,:W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=1:red-untracked,:W' \
-    "the pre-fix grammar on the unblanked line: a hyphen-joined -RED- identifier refuses its capture"
-  rv_mutant rv-m2-hyphen-bound "$RVFIX" 'red = (line ~ /(^|[^A-Za-z-])(RED|PROVEN)([^A-Za-z-]|$)/) ? 1 : 0' \
-    'rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=0::W rvmix=1:red-untracked,:W rvnone=0::W rvcap=0::W' \
-    "a hyphen-bounded grammar on the unblanked line: Mutation-RED no longer marks its capture RED (rvmut, and rvcap whose line is the same wording)"
-  rv_mutant rv-m3-blank-line 'line=$0; l2=line; gsub(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)*/, " ", l2)' 'line=$0; gsub(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)*/, " ", line); l2=line' \
-    'rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=0::W' \
-    "the blanking applied to the line itself instead of a copy: a capture whose basename is an all-caps hyphenated identifier is destroyed"
-  # One validator call per program: the fix and three mutants. rv_vec runs inside `$( )`, so the count
+  # One validator call per program. rv_vec runs inside `$( )`, so the count
   # travels through the file verdict appends to, never a shell variable.
   n="$(grep -c . "$WORK/.vcalls")" || n=0
-  if [ "$n" = 4 ]; then ok "RED LINE: 4 validator invocations, one per program (the fix and three mutants)"
-  else bad "RED LINE: $n validator invocations in the block, want 4 (one per program)"; fi
+  if [ "$n" = 1 ]; then ok "RED LINE: 1 validator invocation, one per program"
+  else bad "RED LINE: $n validator invocations in the block, want 1 (one per program)"; fi
 }
 # --- end BL-833 RED LINE --------------------------------------------------------------------------

@@ -6,7 +6,7 @@
 # usage:  bash receipt-bl977.sh [--root R] [--hook H]
 #   --root R  the tree whose audit and hook are judged. Default: walk up from this file to the first
 #             directory holding the audit in either layout (core/scripts/ or scripts/ai-dlc/).
-#   --hook H  drive H instead of the resolved hook (run.sh passes a mutant copy this way).
+#   --hook H  drive H instead of the resolved hook (run.sh passes the resolved hook this way).
 # exit 0 PASS, 1 FAIL, 2 the receipt could not run (no audit, no hook, no git).
 #
 # THE WHOLE HOOK IS DRIVEN, in a scratch consumer git repo holding the audit and its ownership resolver

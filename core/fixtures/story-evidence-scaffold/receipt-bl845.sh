@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # BL-845 receipt (the mechanical half of Check 11: smoke_arms, run by --smoke and by handoff mode). Usage:
 #   bash receipt-bl845.sh <path to validate-handoff-evidence.sh> [<worlds dir> [<cells>]]
-# With <cells> (space-separated cell names), only those cells and the `clean` control run: a mutant run
-# names the one cell that decides it. Without it every cell runs.
+# With <cells> (space-separated cell names), only those cells and the `clean` control run: a narrowed run
+# names the one cell it needs. Without it every cell runs.
 # With <worlds dir>, the worlds are seeded into it ONCE (it then carries `.seeded`) and every later call
-# reuses them: a mutant changes the validator, never a world, and the validator only reads them through
+# reuses them: no call changes a world, and the validator only reads them through
 # git. run.sh holds that to byte-identity with a snapshot. Without it, a scratch dir is seeded and removed.
 # One repository per cell, each a <base> commit and a <frozen> commit, driven with
 # `--smoke stories/s.md <base> <frozen>` unless the cell says handoff. A cell reads
@@ -35,7 +35,7 @@
 #   none     surface `# comment` + `none`; UI diff; empty body                         -> 0::N
 #   cnone    surface `None` (capitalised); UI diff; empty body: none is case-folded     -> 0::N
 #            (uncased, `None` is no lone none: it matches nothing at base or frozen and refuses
-#            smoke-surface-unevaluable, which is the sm-none-case mutant's kill)
+#            smoke-surface-unevaluable)
 #   magic    surface `:(bogus)x` + `web/src/**`; UI diff; empty body: git exits 128 on the
 #            surface pathspecs, which REFUSES (exit 1), never an empty "no change"     -> 1:smoke-surface-unevaluable:R
 #   magicm1  the magic surface plus the m1 absent token: both refusals, exit 1        -> 1:smoke-listed-absent,smoke-surface-unevaluable:R

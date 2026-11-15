@@ -1,6 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's J3 output, armed as .githooks/pre-push fxcount_arm arms it) after the BL-918 score-and-cut, then verified by a second armed run.
-451 *
-0 core/scripts/check-owed-derivations.sh
-0 core/scripts/sprint-status.sh
+# Re-measured for BL-1099 (units bl, hr and hu moved from shard c to the new dist-only shard d): one counted run (scripts/seed-verdict-store.sh).
+71 *
 0 core/scripts/sync-transient-ignore.sh
-18 core/skills/ai-dlc-update/reconcile/apply.sh
+13 core/skills/ai-dlc-update/reconcile/apply.sh

@@ -2,63 +2,30 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # apply-drift-refile/run.sh — prove apply.sh AUTOMATES the known_skills drift migration: refile the
 # in-place addition to extensions/known-skills.json and revert the core schema, with no manual step.
-#
-# MUTANT-MATRIX mapper decides=base7 twins=h
-# MUTANT-MATRIX h-M1 decides=h twins=f
-# MUTANT-MATRIX r-M1 decides=r twins=qH
-# MUTANT-MATRIX r-M2 decides=r twins=qH
-# MUTANT-MATRIX q-M1 decides=qW twins=qH
-# MUTANT-MATRIX q-M2 decides=qX twins=qH
-# MUTANT-MATRIX q-M3 decides=qW twins=qH
-# MUTANT-MATRIX t-M1 decides=tAn twins=tBk
-# MUTANT-MATRIX t-M2 decides=tBk twins=tAn
-# MUTANT-MATRIX v-M1 decides=vU twins=vM
-# MUTANT-MATRIX v-M2 decides=vR twins=vU
-# MUTANT-MATRIX v-M3 decides=vU twins=vM
-# MUTANT-MATRIX y-M1 decides=yM twins=yL
-# MUTANT-MATRIX y-M2 decides=yP twins=yM
-# MUTANT-MATRIX y-M3 decides=yD twins=yP
-# MUTANT-MATRIX y-M4 decides=yX twins=yM
-# MUTANT-MATRIX y-M5 decides=yN twins=yM
-# MUTANT-MATRIX y-M6 decides=yF twins=yN
-# MUTANT-MATRIX u-M1 decides=u14 twins=uCtl
-# MUTANT-MATRIX w-M-ud decides=w14 twins=wCtl
-# MUTANT-MATRIX w-M-rt decides=w14 twins=wCtl
-# MUTANT-MATRIX x-exec-audit decides=xA twins=xB
-# MUTANT-MATRIX x-manifest decides=xB twins=xC
-# MUTANT-MATRIX x-vd-moved decides=xC twins=xB
-# MUTANT-MATRIX s-M1 decides=s twins=h
-# MUTANT-MATRIX-DYNAMIC w-hand-down-loop why=the arm w loop over the hand-down sites names w-M-ud and w-M-rt; each keeps its own row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/apply-drift-refile/run.sh --matrix
-#
-# The matrix is MEASURED by that command (every world of each mutant's unit, plus the named cross-unit twin,
-# one MATRIX row per arm). The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
-# per distinct state") requires. A plain run scores only the
-# deciding arm and its twin and asserts deciding FAILS and twin stays green; the recorded matrix plus the twin
-# replaces the exact-vector assertion. Arms are the worlds of a unit (qW qH qX; tAn tAp tBk tBn; vU vM vR vO;
-# yM yP yS yD yX yL yN yF; xA xB xC; uCtl u14 u20; wCtl w14 w20), plus r, s, h, f and base7 (assertion 7).
 set -uo pipefail
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # ---------------------------------------------------------------------------- shards ----
-# THIS FILE IS ONE SHARD. Every arm below is a UNIT guarded by `if sg <unit>; then ... fi`. The fixture used to be
-# dealt across three shard directories (apply-drift-refile-b and -c, one-line drivers); a plain run now scores
-# only each mutant's deciding arm and one twin, so the pole no longer needs the split, and the drivers are gone.
-# `--group a` is still accepted. The seed and the sanity arms are not units: they always run.
+# THIS FILE IS THREE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
+# BOUNDARY. Every arm below is a UNIT guarded by `if sg <unit>; then ... fi`. `--group <x>` runs the units dealt to
+# shard <x>; `apply-drift-refile-{b,c}/run.sh` are one-line drivers that `exec bash` this file with their group,
+# so the pre-push pool starts each on its own. No `--group` runs shard 'a'. The seed and the sanity arms are not
+# units: every shard builds the seed and runs them, and every helper a unit uses is hoisted above the units.
 #
 # THE COVERAGE JOIN runs in EVERY shard before anything else: the declared units are DERIVED from this
 # file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal the
 # declared set exactly, and every declared shard must have a driver directory. The join proves it can
 # fire first, on a seeded duplicate and a seeded omission.
-#   a  base fh r s x      Assertions 1-9b and the stamp-withhold mutant; BL-230 arms f/h; BL-336 r; BL-360 s; BL-364 x
-#   b  y t                 BL-413 arm y (the CLASSIFY record, six mutants); arm t
-#   c  q v u w            BL-402 arm q; BL-413 arm v; arm u; BL-414 w
-SHARDS="a"
-UNITS_a="base fh r s x y t q v u w"
+#   a  base fh r w         Assertions 1-9b; BL-230 arms f/h; BL-336 r; BL-414 w
+#   b  y t                 BL-413 arm y (the CLASSIFY record); arm t
+#   c  q v u x s          BL-402 arm q; BL-413 arm v; arm u; BL-364 x; BL-360 s
+SHARDS="a b c"
+UNITS_a="base fh r w"
+UNITS_b="y t"
+UNITS_c="q v u x s"
 GROUP=a
-MATRIX=0
-for _arg in "$@"; do [ "$_arg" = --matrix ] && MATRIX=1; done
 if [ "${1:-}" = "--group" ]; then
   GROUP="${2:-}"
   [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
@@ -99,11 +66,18 @@ fi
 if ! _why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
   rm -rf "$JW"; shard_broken "the shard partition does not cover the guarded units exactly -- $_why"
 fi
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  _drv="$HERE/../apply-drift-refile-$_s/run.sh"
+  if [ ! -f "$_drv" ] || ! grep -qF -- "--group $_s" "$_drv"; then
+    rm -rf "$JW"; shard_broken "shard '$_s' is declared but $_drv does not drive it"
+  fi
+done
 rm -rf "$JW"
 echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
-# EVERY WORLD IS BUILT ONCE AND COPIED (fixture-mutants.md clause 4). seed.sh runs here and nowhere else:
+# EVERY WORLD IS BUILT ONCE AND COPIED seed.sh runs here and nowhere else:
 # its output is kept untouched in $SEED_TPL before any arm writes to $WORK, and seed_copy hands each later
 # cell a `cp -Rp` of it with env.sh's paths rewritten (seed.sh's inputs never vary, so every copy is the
 # world a fresh seed.sh would build). world_once does the same for the in-file builders (h_world, t_aworld,
@@ -138,10 +112,6 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
 fails=0; asserts=0
 ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # Helpers hoisted above the units: units use each other's worlds, so a helper inside a unit another shard owns would be undefined there.
 # THE FORCING MECHANISM (arms q, r, t). The `did not run` row (apply.sh, the ap_ks_diff failure branch) needs
@@ -203,52 +173,6 @@ q_world() { # q_world <W|H|X> -> sets Q_* from a clone of the q_base world (env.
   if [ "$1" = X ]; then chmod +x "$Q_CONSUMER/scripts/ai-dlc/validate-synthetic.sh" || return 1; fi
   return 0
 }
-# ------------------------------------------------------------------ the matrix machinery ----
-# Mutant matrix mode. `run.sh --matrix` scores EVERY world of each mutant's unit (and each named cross-unit twin)
-# and prints one `MATRIX <mutant> | <arm> | PASS|FAIL | <cell>` row per arm: PASS is green (equal to the unmutated
-# arm's cell), FAIL is tripped. A plain run scores only the DECIDING arm and its measured-green TWIN, and asserts
-# deciding FAILS and twin stays PASS. mx_row is called only under --matrix; the closing arm asserts that.
-. "$HERE/matrix.sh" || { echo "FIXTURE ERROR: matrix.sh not found beside $HERE/run.sh" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/apply-drift-refile/matrix.sh"
-mx_idx() { # mx_idx <table "w:i,j w2:k"> <world>... -> the cell indexes of those worlds, comma-joined
-  local t="$1" w o="" r; shift
-  for w in "$@"; do
-    r="$(printf '%s\n' $t | awk -F: -v w="$w" '$1==w {print $2; exit}')"
-    [ -n "$r" ] || { printf 'MX-UNKNOWN-WORLD-%s' "$w"; return 1; }
-    o="$o,$r"
-  done
-  printf '%s' "${o#,}"
-}
-mx_st() { if [ "$1" = "$2" ]; then printf PASS; else printf FAIL; fi; }
-mx_names() { printf '%s\n' $1 | awk -F: '{printf "%s ", $1}'; }
-mx_slice() { # mx_slice <vec> <i,j,..> -> those fields, |-joined
-  printf '%s\n' "$1" | awk -F'|' -v ix="$2" '{ n = split(ix, a, ","); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? "|" : "") $(a[i]); print o }'
-}
-vset() { printf '%s\n' "$1" | awk -F'|' -v OFS='|' -v i="$2" -v v="$3" '{ $i = v; print }'; }
-# mut_assert <mutant> <table> <base-vec> <want-vec> <decide-world> <twin-world> <scorefn> <rec-dir> <base-flag> <label>
-mut_assert() {
-  local m="$1" tab="$2" basev="$3" wantv="$4" dec="$5" twin="$6" fn="$7" rec="$8" flag="$9" lbl="${10}"
-  local worlds di ti got gd wd bd gt bt w wi st
-  di="$(mx_idx "$tab" $dec)" && ti="$(mx_idx "$tab" $twin)" || { bad "FIXTURE BROKEN [$m]: unknown world in $dec / $twin"; return; }
-  if [ "$MATRIX" = 1 ]; then worlds="$(mx_names "$tab")"; else worlds="$dec $twin"; fi
-  got="$("$fn" "$rec" "$worlds")"
-  case "$got" in BROKEN|NOROW*) bad "FIXTURE BROKEN [$m]: the scorer returned $got"; return ;; esac
-  if [ "$MATRIX" = 1 ]; then
-    for w in $worlds; do
-      wi="$(mx_idx "$tab" "$w")"
-      st=FAIL; [ "$(mx_slice "$got" "$wi")" = "$(mx_slice "$basev" "$wi")" ] && st=PASS
-      mx_row "$m" "$w" "$st" "$(mx_slice "$got" "$wi")"
-    done
-  fi
-  gd="$(mx_slice "$got" "$di")"; wd="$(mx_slice "$wantv" "$di")"; bd="$(mx_slice "$basev" "$di")"
-  gt="$(mx_slice "$got" "$ti")"; bt="$(mx_slice "$basev" "$ti")"
-  if [ "$gd" = "$wd" ] && [ "$gd" != "$bd" ] && [ "$gt" = "$bt" ]; then
-    mutant_killed "$flag" "$m" "$lbl killed (decides=$dec reads $gd; twin $twin stays $gt)"
-  else
-    bad "$m SURVIVED or misfired: $dec reads '$gd' (want '$wd', unmutated '$bd'); twin $twin reads '$gt' (must stay '$bt')"
-  fi
-}
-Q_TAB="qW:1,2,3 qH:4 qX:5,6"
 Q_WANT='-|-|OWED|STAMPED|-|EXEC'
 q_score() { # q_score <hooked-reconcile-dir> [worlds] -> the six cells (`.` for a world not asked for), or NOROW / BROKEN
   local rec="$1" ws=" ${2:-qW qH qX} " c1=. c2=. c3=. c4=. c5=. c6=. fo
@@ -274,7 +198,7 @@ q_score() { # q_score <hooked-reconcile-dir> [worlds] -> the six cells (`.` for 
   esac
   printf '%s|%s|%s|%s|%s|%s' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6"
 }
-# h_world / h_score are hoisted: they are the cross-unit TWIN of the arm s and mapper mutants.
+# h_world / h_score are hoisted: used by arm h.
 # h_world -> a fresh zero-work world under $WORK, refs recorded IN it as .B/.T
 h_world() { world_once zr h_world_build; }
 h_world_build() {
@@ -335,21 +259,6 @@ t_aworld_build() {
   fi
   printf 'version: 0.0.1\ncommit: %s\n' "$(cat "$_w/.B")" > "$_c/.claude/.ai-dlc-version"
   printf '%s' "$_w"
-}
-# A mutant copy: each <anchor> -> <replacement> pair is applied once; refuses unless every anchor is
-# in apply.sh exactly once, the copy differs and parses, and preclassify.sh is beside it.
-mut_copy() { # mut_copy <dir> <anchor> <replacement> [<anchor> <replacement>]
-  local d="$1" n src; shift
-  cp -R "$(dirname "$APPLY")" "$d" || return 1
-  src="$APPLY"
-  while [ "$#" -ge 2 ]; do
-    n="$(grep -cF -- "$1" "$APPLY")" || n=0
-    [ "$n" = 1 ] || return 1
-    M_A="$1" M_R="$2" awk '{ i = index($0, ENVIRON["M_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["M_R"] substr($0, i + length(ENVIRON["M_A"])); print }' \
-      "$src" > "$d/apply.sh.next" || return 1
-    mv "$d/apply.sh.next" "$d/apply.sh"; src="$d/apply.sh"; shift 2
-  done
-  ! cmp -s "$APPLY" "$d/apply.sh" && bash -n "$d/apply.sh" && [ -f "$d/preclassify.sh" ]
 }
 u_world() { world_once u u_world_build; }
 u_world_build() {
@@ -419,7 +328,7 @@ fi
 # so an over-anchored pattern is caught HERE as a red rather than silently making assertion
 # 8's third conjunct permanently true. Keep the two spellings byte-identical.
 if grep -qE '^version: 9\.9\.9$' "$STAMP"; then
-  ok "stamp re-stamped to theirs (version 9.9.9)"; B_stamp=1
+  ok "stamp re-stamped to theirs (version 9.9.9)"
 else
   bad "stamp not updated"
 fi
@@ -431,7 +340,7 @@ fi
 # have. It escaped notice because the only upstream delta the driver had ever carried was a
 # mode bit (100644 -> 100755) that install.sh had already set, so nothing observable broke.
 if grep -q 'driver v2 UPSTREAM' "$DRIVER"; then
-  ok "core/session-driver/ applied — apply.sh maps every core/ subtree, not a hand-listed set"; B_driver=1
+  ok "core/session-driver/ applied — apply.sh maps every core/ subtree, not a hand-listed set"
 else
   bad "core/session-driver/ did NOT apply (still: $(head -2 "$DRIVER" | tail -1)) — apply.sh's mapper omits a subtree the pull classified and the installer ships"
 fi
@@ -442,50 +351,6 @@ if grep -q "unmapped-path" <<<"$MANIFEST"; then
 else
   ok "no DECISION unmapped-path — the mapper is total, so nothing silently falls through"
 fi
-
-# --- Assertion 7: MUTANT — a mechanical failure must WITHHOLD the stamp -------
-# The stamp asserts "this tree is at THEIRS". If a file that should have applied did not,
-# that assertion is false, and a stamp that lies is exactly how the v0.70.1 exec-bit defect
-# stayed invisible. Break the mapper on purpose and the stamp must NOT advance.
-#
-# The mutant needs its SIBLINGS: apply.sh resolves preclassify.sh via $SELF, so a lone copy
-# in a temp dir exercises the load guard (assertion 8) rather than the mapper. Copy the
-# whole reconcile/ dir and mutate that.
-# A FRESH seed is load-bearing. The run above already applied the driver and refiled the
-# drift, so a mutant pointed at that tree finds every bucket ALREADY-AT-THEIRS, fails at
-# nothing, and re-stamps — scoring a false FAIL here for a reason that has nothing to do
-# with the guard. The mutant needs work left to fail at.
-MUTDIR="$WORK/reconcile-mutant"
-mkdir -p "$MUTDIR"
-# The `.md` siblings travel too: preclassify reads `setup-sites.md` beside itself, and a missing
-# manifest is a refusal (a broken install), not an empty set -- a copy without it refuses before the
-# mapper is ever reached.
-cp "$(dirname "$APPLY")"/*.sh "$(dirname "$APPLY")"/*.md "$MUTDIR/" 2>/dev/null
-sed 's|^\( *\)local m; m=.*|\1local m; m=""|' "$APPLY" > "$MUTDIR/apply.sh"
-W2="$(seed_copy "${TMPDIR:-/tmp}")" || { echo "FIXTURE ERROR: second seed failed" >&2; exit 2; }
-eval "$(sed 's/^/M_/' "$W2/env.sh")"
-if ! grep -q 'local m; m=""' "$MUTDIR/apply.sh" || [ ! -f "$MUTDIR/preclassify.sh" ]; then
-  bad "FIXTURE STALE: could not build the mapper mutant — consumer_path() no longer resolves via 'local m; m=...', or reconcile/ has no preclassify.sh sibling"
-else
-  MUT_OUT="$(bash "$MUTDIR/apply.sh" "$M_DIST" "$M_BASE" "$M_CONSUMER" "$M_THEIRS" 2>/dev/null)"
-  M_TW="$(h_score "$MUTDIR")"
-  if [ "$MATRIX" = 1 ]; then
-    mx_row mapper base7 "$(grep -qE '^version: 9\.9\.9$' "$M_STAMP" && echo PASS || echo FAIL)" "stamp withheld=$(grep -qE '^version: 9\.9\.9$' "$M_STAMP" && echo no || echo yes)"
-    mx_row mapper h "$([ -z "$M_TW" ] && echo PASS || echo FAIL)" "${M_TW:-green}"
-  fi
-  if [ -n "$M_TW" ]; then
-    bad "mutant mapper also moved arm h ($M_TW) -- the kill is not confined to assertion 7"
-  elif grep -qE '^version: 9\.9\.9$' "$M_STAMP"; then
-    bad "mutant mapper SURVIVED: with the mapper broken, the stamp STILL advanced to 9.9.9 — the tree now claims a version it does not have"
-  elif ! grep -q "restamp-withheld" <<<"$MUT_OUT"; then
-    bad "mutant: stamp correctly withheld but apply.sh said nothing — a silent withhold is its own trap"
-  elif grep -q 'driver v2' "$M_DRIVER"; then
-    bad "FIXTURE BROKEN — the mutant applied the driver anyway, so the withhold above was not caused by a mapping failure"
-  else
-    mutant_killed "$(( ${B_stamp:-0} && ${B_driver:-0} ))" mapper "mutant: a mapping failure withholds the stamp and says so (the record cannot claim an apply that did not happen)"
-  fi
-fi
-rm -rf "$W2"
 
 # --- Assertion 8: severed from its mapper, apply.sh must REFUSE, not guess ----
 # The delegation is only safe if a failure to load map_consumer() is loud. A silent fallback
@@ -614,7 +479,6 @@ if [ "$F_RUN" = 1 ]; then
     if [ "$F_RC" -eq 1 ] && grep -qF "$F_WANT" <<<"$F_OUT" && grep -qF 'NOTHING HAS BEEN WRITTEN' <<<"$F_OUT" \
        && [ "$F_STAMP_AFTER" = "$F_STAMP_BEFORE" ] && grep -q 'driver v1' <<<"$F_DRV" && [ "$F_SCHEMA_EDITED" = 1 ]; then
       ok "BL-230 arm f ($F_CASE): apply exits 1 naming the cause, writes nothing (driver still v1, drift unrefiled) and leaves the stamp"
-      case "$F_CASE" in rc2) B_f_rc2=1 ;; esac
     else
       bad "BL-230 arm f ($F_CASE): apply did not stop before writing on a preclassify that did not classify (rc=$F_RC, stamp moved: $([ "$F_STAMP_AFTER" = "$F_STAMP_BEFORE" ] && echo no || echo yes), driver: $(grep -o 'driver v[12]' <<<"$F_DRV"), drift still in place: $F_SCHEMA_EDITED)"
       printf '%s\n' "$F_OUT" | head -20 | sed "s/^/  DIAG  f-$F_CASE | /"
@@ -652,9 +516,7 @@ fi
 # the render are relocation-preclassify arm G.
 #
 # PRESENCE-SHAPED: rc 0 and an untouched file are also what a subject replaced by `exit 0` gives,
-# so apply must also have printed its manifest (at least one RESOLVED/DECISION/NOTE row). The
-# MUTANT restores the silent skip in a copy and must fail h while f's forced cases, which the row
-# cannot reach, stay green on the same copy.
+# so apply must also have printed its manifest (at least one RESOLVED/DECISION/NOTE row).
 case "$APPLY" in */core/skills/ai-dlc-update/reconcile/apply.sh) H_ISDIST=1 ;; *) H_ISDIST=0 ;; esac
 H_RUN=1
 if ! grep -qF 'PRE-RELOCATION-NOOP' "$(dirname "$APPLY")/preclassify.sh"; then
@@ -668,36 +530,9 @@ fi
 if [ "$H_RUN" = 1 ]; then
   h="$(h_score "$(dirname "$APPLY")")"
   if [ -z "$h" ]; then
-    ok "BL-230 arm h: apply runs a zero-work pre-relocation pull through (rc 0), leaves scripts/x.sh, and files no unhandled-bucket row"; B_armh=1
+    ok "BL-230 arm h: apply runs a zero-work pre-relocation pull through (rc 0), leaves scripts/x.sh, and files no unhandled-bucket row"
   else
     bad "BL-230 arm h: the zero-work pre-relocation pull was not applied as zero work: $h"
-  fi
-  if [ "$F_RUN" = 1 ]; then
-    HM="$WORK/bl230-h-mutant"
-    cp -R "$FH" "$HM" || { echo "FIXTURE ERROR: could not copy the hooked reconcile dir" >&2; exit 2; }
-    _ha="$(printf '        printf %s %s %s %s %s\n' "'%s\\t%s\\t%s\\t%s\\n'" '"$status"' '"$path"' '"$cons"' '"PRE-RELOCATION-NOOP"')"
-    _hh="$(grep -cxF "$_ha" "$FH/preclassify.sh")" || _hh=0
-    H_A="$_ha" awk '$0 == ENVIRON["H_A"] { next } { print }' "$FH/preclassify.sh" > "$HM/preclassify.sh"
-    if [ "$_hh" -ne 1 ] || cmp -s "$FH/preclassify.sh" "$HM/preclassify.sh" || ! bash -n "$HM/preclassify.sh"; then
-      bad "FIXTURE STALE [BL-230 h mutant]: the row-emitter anchor matches $_hh lines of preclassify.sh (want 1), or the mutant does not parse"
-    else
-      hm="$(h_score "$HM")"
-      # f's forced rc2 case on the SAME mutant copy: the row cannot reach it, so it must still stop.
-      _hf_w="$(seed_copy)" || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
-      eval "$(sed 's/^/HF_/' "$_hf_w/env.sh")"
-      FX_B230_PC=rc2 bash "$HM/apply.sh" "$HF_DIST" "$HF_BASE" "$HF_CONSUMER" "$HF_THEIRS" >/dev/null 2>&1; _hf_rc=$?
-      if [ "$MATRIX" = 1 ]; then
-        mx_row h-M1 h "$([ -z "$hm" ] && echo PASS || echo FAIL)" "${hm:-green}"
-        mx_row h-M1 f "$([ "$_hf_rc" -eq 1 ] && echo PASS || echo FAIL)" "rc=$_hf_rc"
-      fi
-      if [ -z "$hm" ]; then
-        bad "MUTANT SURVIVED [BL-230 h]: with the PRE-RELOCATION-NOOP row removed, arm h still passed"
-      elif [ "$_hf_rc" -ne 1 ]; then
-        bad "MUTANT [BL-230 h] also moved arm f's forced stop (rc=$_hf_rc) -- entangled, or the copy did not run"
-      else
-        mutant_killed "$(( ${B_armh:-0} && ${B_f_rc2:-0} ))" h-M1 "MUTANT (PRE-RELOCATION-NOOP row removed) fails h ($hm) while arm f's forced stop on the same copy is unchanged"
-      fi
-    fi
   fi
 fi
 
@@ -759,61 +594,9 @@ if [ "$R_RUN" = 1 ]; then
   case "$R_GOT" in
     NOROW) bad "FIXTURE BROKEN [BL-336 arm r]: the did-not-run row never appeared; refused at: $(cat "$WORK/norow.why")" ;;
     BROKEN) bad "FIXTURE BROKEN [BL-336 arm r]: the world could not be seeded" ;;
-    "ROW|0|EXT|SCHEMA|STAMPED|rerender") ok "BL-336 arm r: the did-not-run row prescribes re-render/re-approve/apply, and following it refiles my-persona-skill, reverts the schema to theirs and advances the stamp"; B_armr=1 ;;
+    "ROW|0|EXT|SCHEMA|STAMPED|rerender") ok "BL-336 arm r: the did-not-run row prescribes re-render/re-approve/apply, and following it refiles my-persona-skill, reverts the schema to theirs and advances the stamp" ;;
     *) bad "BL-336 arm r: following the did-not-run row's remedy did not finish the refile ($R_GOT; want ROW|0|EXT|SCHEMA|STAMPED|rerender)" ;;
   esac
-  # MUTANTS, each a copy of the whole reconcile dir. r-M1 restores the old bare re-run text (the
-  # union gate refuses it); r-M2 points the row at --finish, which since BL-402 re-checks the
-  # refile and WITHHOLDS (stamp cell `-`) rather than stamping with nothing refiled. Both must
-  # leave the work undone, read off the tree.
-  r_mut() { # <label> <replacement for ${reapply_remedy} in the did-not-run row> <want-prefix> <base-pass flag>
-    local d="$WORK/r-$1" a='the consumer copy unreadable, or no staging directory), then ${reapply_remedy}"' n
-    n="$(grep -cF -- "$a" "$APPLY")" || n=0
-    if [ "$n" != 1 ]; then bad "BL-336 $1 DID NOT APPLY -- the did-not-run row's remedy anchor is not in apply.sh exactly once"; return; fi
-    cp -R "$(dirname "$APPLY")" "$d" || { bad "BL-336 $1 could not copy the reconcile dir"; return; }
-    R_A="$a" R_R="the consumer copy unreadable, or no staging directory), then $2\"" \
-      awk '{ i = index($0, ENVIRON["R_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["R_R"] substr($0, i + length(ENVIRON["R_A"])); print }' \
-      "$APPLY" > "$d/apply.sh"
-    if cmp -s "$APPLY" "$d/apply.sh" || ! bash -n "$d/apply.sh" || ! ks_hook "$d"; then bad "BL-336 $1 DID NOT APPLY or does not parse"; return; fi
-    local g tw qi qw; g="$(r_follow "$d")"
-    qi="$(mx_idx "$Q_TAB" qH)"
-    case "$g" in
-      NOROW) bad "FIXTURE BROKEN [BL-336 $1]: the did-not-run row never appeared; refused at: $(cat "$WORK/norow.why")"; return ;;
-    esac
-    if [ "$MATRIX" = 1 ]; then
-      tw="$(q_score "$d")"
-      case "$g" in "$3"*) mx_row "$1" r FAIL "$g" ;; *) mx_row "$1" r PASS "$g" ;; esac
-      for qw in qW qH qX; do
-        if [ "$(mx_slice "$tw" "$(mx_idx "$Q_TAB" $qw)")" = "$(mx_slice "$Q_WANT" "$(mx_idx "$Q_TAB" $qw)")" ]; then mx_row "$1" $qw PASS "$(mx_slice "$tw" "$(mx_idx "$Q_TAB" $qw)")"; else mx_row "$1" $qw FAIL "$(mx_slice "$tw" "$(mx_idx "$Q_TAB" $qw)")"; fi
-      done
-    else
-      tw="$(q_score "$d" qH)"
-    fi
-    case "$g" in
-      "$3"*) if [ "$(mx_slice "$tw" "$qi")" = "$(mx_slice "$Q_WANT" "$qi")" ]; then
-               mutant_killed "$4" "$1" "BL-336 $1 killed: following its remedy leaves the work undone ($g); twin qH stays $(mx_slice "$tw" "$qi")"
-             else
-               bad "BL-336 $1 also moved arm q world H ($tw) -- the kill is not confined to arm r"
-             fi ;;
-      *)     bad "BL-336 $1 SURVIVED or misfired: $g (want $3...)" ;;
-    esac
-  }
-  [ "$R_GOT" = NOROW ] || {
-    r_mut r-M1 're-run apply' 'ROW|1|-|-|-|bare' "${B_armr:-0}"
-    # r-M2's pin is BL-402's behaviour: an installed apply.sh that predates the finisher re-check
-    # still stamps here, so on a consumer it SKIPs until the pull that carries the subject. In the
-    # distribution it always runs and must go red against an engine without the re-check.
-    if grep -qF 'finish_reapply_owed' "$APPLY"; then
-      r_mut r-M2 'advance the stamp with apply.sh --finish' 'ROW|0|-|-|-|finish' "${B_armr:-0}"
-    else
-      case "$APPLY" in
-        */core/skills/ai-dlc-update/reconcile/apply.sh)
-          printf '  --    (BL-402: this apply.sh carries no finish_reapply_owed; in the distribution r-M2 runs anyway and must go red)\n'
-          r_mut r-M2 'advance the stamp with apply.sh --finish' 'ROW|0|-|-|-|finish' "${B_armr:-0}" ;;
-        *) printf '  SKIP  BL-336 r-M2 -- the installed apply.sh predates the BL-402 finisher re-check; it lands with the pull that carries this fixture\n' ;;
-      esac
-    fi
-  }
 fi
 
 fi
@@ -844,27 +627,9 @@ if [ "$Q_RUN" = 1 ]; then
   case "$Q_GOT" in
     NOROW)   bad "FIXTURE BROKEN [BL-402 arm q]: the did-not-run row never appeared; refused at: $(cat "$WORK/norow.why")" ;;
     BROKEN)  bad "FIXTURE BROKEN [BL-402 arm q]: a world could not be seeded" ;;
-    "$Q_WANT") ok "BL-402 arm q: the withheld row does not offer --finish while the refile is owed; --finish withholds over an unrefiled tree (finish-refile-owed) and over a 100644 file left +x outside the range (finish-exec-owed), and STAMPS the hand-refiled tree"; B_armq=1 ;;
+    "$Q_WANT") ok "BL-402 arm q: the withheld row does not offer --finish while the refile is owed; --finish withholds over an unrefiled tree (finish-refile-owed) and over a 100644 file left +x outside the range (finish-exec-owed), and STAMPS the hand-refiled tree" ;;
     *)       bad "BL-402 arm q: $Q_GOT (want $Q_WANT; cells: W-row-names-finish|W-finish-stamp|W-refile-owed|H-stamp|X-stamp|X-exec-row)" ;;
   esac
-  # MUTANTS, each a whole-dir copy, each reverting ONE layer and expected to move ONLY its own cells.
-  q_mut() { # <label> <anchor> <replacement> <want> <decide-world> <twin-world>
-    local d="$WORK/q-$1" n
-    n="$(grep -cF -- "$2" "$APPLY")" || n=0
-    if [ "$n" != 1 ]; then bad "BL-402 $1 DID NOT APPLY -- its anchor is in apply.sh $n times (want 1)"; return; fi
-    cp -R "$(dirname "$APPLY")" "$d" || { bad "BL-402 $1 could not copy the reconcile dir"; return; }
-    Q_A="$2" Q_R="$3" \
-      awk '{ i = index($0, ENVIRON["Q_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["Q_R"] substr($0, i + length(ENVIRON["Q_A"])); print }' \
-      "$APPLY" > "$d/apply.sh"
-    if cmp -s "$APPLY" "$d/apply.sh" || ! bash -n "$d/apply.sh" || ! ks_hook "$d"; then bad "BL-402 $1 DID NOT APPLY or does not parse"; return; fi
-    [ -f "$d/preclassify.sh" ] || { bad "BL-402 $1: the copy has no preclassify.sh beside apply.sh"; return; }
-    mut_assert "$1" "$Q_TAB" "$Q_WANT" "$4" "$5" "$6" q_score "$d" "${B_armq:-0}" "BL-402 $1: arm q"
-  }
-  [ "$Q_GOT" = NOROW ] || {
-    q_mut q-M1 'elif [ "$ap_drc" -eq 1 ]; then' 'elif false; then' '-|STAMPED|-|STAMPED|-|EXEC' qW qH
-    q_mut q-M2 '  exec_audit' '  :' '-|-|OWED|STAMPED|STAMPED|-' qX qH
-    q_mut q-M3 'if [ "$reapply_owed" -gt 0 ]; then' 'if false; then' 'F|-|OWED|STAMPED|-|EXEC' qW qH
-  }
 fi
 
 fi
@@ -912,7 +677,6 @@ t_score() { # t_score <hooked-reconcile-dir> [worlds] -> the cell above (`.` for
   esac
   printf '%s|%s|%s|%s|%s' "$c1" "$c2" "$c3" "$c4" "$c5"
 }
-T_TAB="tAn:1 tAp:2 tBk:3,4 tBn:5"
 T_WANT='-|-|-|STAMPED|OWED'
 T_RUN=1
 if ! grep -qF 'ud_capture' "$APPLY"; then
@@ -930,23 +694,9 @@ if [ "$T_RUN" = 1 ]; then
   case "$T_GOT" in
     NOROW)    bad "FIXTURE BROKEN [arm t]: the did-not-run row never appeared, so worlds Bk/Bn could not be built; refused at: $(cat "$WORK/norow.why")" ;;
     BROKEN)   bad "FIXTURE BROKEN [arm t]: a world could not be seeded" ;;
-    "$T_WANT") ok "arm t: --finish owes no refile for an untouched schema whose range retires a skill, nor for a kept schema whose skills are in the extension (and stamps it), nor for a both-changed schema the ordinary run hands back as a semantic merge; it still owes an unrefiled in-place addition"; B_armt=1 ;;
+    "$T_WANT") ok "arm t: --finish owes no refile for an untouched schema whose range retires a skill, nor for a kept schema whose skills are in the extension (and stamps it), nor for a both-changed schema the ordinary run hands back as a semantic merge; it still owes an unrefiled in-place addition" ;;
     *)        bad "arm t: $T_GOT (want $T_WANT; cells: An-owes-retired|Ap-owed|Bk-owed-row|Bk-stamp|Bn-owed)" ;;
   esac
-  [ "$T_GOT" = NOROW ] || {
-    # t-M1 drops the gate (any diff counts); t-M2 drops the trailing-comma cancel. Each is scored on its
-    # deciding world plus one measured-green twin world (see the MUTANT-MATRIX header).
-    t_mut() { # <label> <want> <decide> <twin> <message> <anchor> <replacement>
-      local l="$1" w="$2" dec="$3" twin="$4" msg="$5"; shift 5
-      if mut_copy "$WORK/$l" "$@" && ks_hook "$WORK/$l"; then
-        mut_assert "$l" "$T_TAB" "$T_WANT" "$w" "$dec" "$twin" t_score "$WORK/$l" "${B_armt:-0}" "arm t $l ($msg)"
-      else
-        bad "arm t $l DID NOT APPLY -- its anchor is not in apply.sh exactly once, or the copy does not parse"
-      fi
-    }
-    t_mut t-M1 'RETIRED|OWED|-|STAMPED|OWED' tAn tBk 'in-place-edit gate removed: An owes the retired skill' '          *) ap_drc=0 ;;' '          *) : ;;'
-    t_mut t-M2 '-|-|BMAD|-|OWED' tBk tAn 'trailing-comma cancel removed: Bk owes bmad-party-mode and withholds' 'if (old[new_n[i]] > 0) { old[new_n[i]]--; continue }' 'if (0) { continue }'
-  }
 fi
 
 fi
@@ -991,7 +741,6 @@ v_score() { # v_score <reconcile-dir> [worlds] -> the cell above (`.` for a worl
   case "$ws" in *" vO "*) x="$(v_drive "$rec" o)"; [ "$x" = BROKEN ] && { printf 'BROKEN'; return; }; c5="${x%%|*}"; c6="${x##*|}" ;; esac
   printf '%s|%s|%s|%s|%s|%s' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6"
 }
-V_TAB="vU:1,2 vM:3 vR:4 vO:5,6"
 V_WANT='WITHHELD|UNMERGED|STAMPED|STAMPED|STAMPED|NOTE'
 V_RUN=1
 if ! grep -qF 'finish_classify_unmerged' "$APPLY"; then
@@ -1004,31 +753,9 @@ if [ "$V_RUN" = 1 ]; then
   V_GOT="$(v_score "$(dirname "$APPLY")")"
   case "$V_GOT" in
     BROKEN)   bad "FIXTURE BROKEN [BL-413 arm v]: a world could not be seeded, or its ordinary run moved the schema or drew no semantic-merge row" ;;
-    "$V_WANT") ok "BL-413 arm v: --finish withholds over an untouched handed-back merge (finish-classify-unmerged), stamps a hand-merged one, stamps it after a second ordinary run (first write wins), and stamps with a NOTE over a previous-engine marker"; B_armv=1 ;;
+    "$V_WANT") ok "BL-413 arm v: --finish withholds over an untouched handed-back merge (finish-classify-unmerged), stamps a hand-merged one, stamps it after a second ordinary run (first write wins), and stamps with a NOTE over a previous-engine marker" ;;
     *)        bad "BL-413 arm v: $V_GOT (want $V_WANT; cells: Vu-stamp|Vu-row|Vm-stamp|Vr-stamp|Vo-stamp|Vo-note)" ;;
   esac
-  [ "$V_GOT" = BROKEN ] || {
-    # v-M1 drops the withhold row (base behaviour); v-M2 lets a later run replace the record (first
-    # write lost); v-M3 compares against theirs' blob instead of the record (the refuted alternative).
-    v_mut() { # <label> <want> <decide> <twin> <message> <anchor> <replacement>
-      local l="$1" w="$2" dec="$3" twin="$4" msg="$5"; shift 5
-      if mut_copy "$WORK/$l" "$@"; then
-        mut_assert "$l" "$V_TAB" "$V_WANT" "$w" "$dec" "$twin" v_score "$WORK/$l" "${B_armv:-0}" "BL-413 $l ($msg)"
-      else
-        bad "BL-413 $l DID NOT APPLY -- its anchor is not in apply.sh exactly once, or the copy does not parse"
-      fi
-    }
-    # ANCHORED INSIDE finish_classify_unmerged ONLY. Its `elif [ "$_now" = "$_h" ] && …` line is
-    # byte-identical to finish_template_unmerged's, so that line is no longer unique and cannot carry
-    # a mutation; v-M1 drops the row itself, v-M3 and y-M1 rewrite the record line the classify loop
-    # alone parses (`classify: ` prefix strip), which reaches the same comparison.
-    v_mut v-M1 'STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE' vU vM 'withhold row removed: Vu stamps over the unmerged schema' \
-      '      say WORKLIST finish-classify-unmerged "$_c"' '      : WORKLIST finish-classify-unmerged "$_c"'
-    v_mut v-M2 'WITHHELD|UNMERGED|STAMPED|WITHHELD|STAMPED|NOTE' vR vU 'first write lost: the re-run records the merged copy and Vr withholds forever' \
-      ' _keep="$(printf' ' : "$(printf'
-    v_mut v-M3 'STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE' vU vM 'compared to theirs, not the record: an untouched CLASSIFY file never equals theirs, so Vu stamps' \
-      '    _l="${_l#classify: }"' '    _l="${_l#classify: }"; _l="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/${_l#*"$_tab"}" 2>/dev/null)${_tab}${_l#*"$_tab"}"'
-  }
 fi
 
 fi
@@ -1170,7 +897,6 @@ y_score() { # y_score <reconcile-dir> [<case>...] -> "|"-joined cells, or BROKEN
   done
   printf '%s' "$out"
 }
-Y_TAB="yM:1 yP:2 yS:3 yD:4 yX:5 yL:6 yN:7 yF:8"
 Y_WANT='STAMPED|STAMPED|STAMPED|STAMPED/NOTE|STAMPED/0|WITHHELD:scripts/ai-dlc/n.sh,:kept>STAMPED:gone|REFUSED/empty|WITHHELD/ROW'
 Y_RUN=1
 if ! grep -qF '_unrec' "$APPLY"; then
@@ -1183,49 +909,9 @@ if [ "$Y_RUN" = 1 ]; then
   Y_GOT="$(y_score "$(dirname "$APPLY")")"
   case "$Y_GOT" in
     BROKEN)   bad "FIXTURE BROKEN [BL-413 arm y]: a world could not be seeded, or its ordinary run drew no semantic-merge row for its subject" ;;
-    "$Y_WANT") ok "BL-413 arm y: a chmod-only merge stamps; a re-pointed pull, a second same-base pull and the delivering pull keep the record and stamp after the merge; kept UPSTREAM-DELETED/ORPHANED copies do not withhold; the per-line exit withholds only the other file and keeps the marker; a directory at the marker's path is refused by the ordinary run and withholds --finish"; B_army=1 ;;
+    "$Y_WANT") ok "BL-413 arm y: a chmod-only merge stamps; a re-pointed pull, a second same-base pull and the delivering pull keep the record and stamp after the merge; kept UPSTREAM-DELETED/ORPHANED copies do not withhold; the per-line exit withholds only the other file and keeps the marker; a directory at the marker's path is refused by the ordinary run and withholds --finish" ;;
     *)        bad "BL-413 arm y: $Y_GOT (want $Y_WANT; cells: Ym|Yp|Ys|Yd|Yx|Yl|Yn|Yf)" ;;
   esac
-  [ "$Y_GOT" = BROKEN ] || {
-    # Each mutant reverts ONE engine change and is scored on its deciding world plus one measured-green
-    # twin world (y_vec pads every other world with `.`). y-M2 restores base's reset exactly -- keyed on
-    # base AND theirs, and a marker with no `classify-hashes:` started fresh; y-M3 drops only the
-    # unrecorded-stays-unrecorded half.
-    y_vec() { # y_vec <reconcile-dir> [worlds] -> the eight cells of Y_WANT, `.` for a world not asked for
-      local ws=" ${2:-yM yP yS yD yX yL yN yF} " pr k t g out=""
-      for pr in m:yM p:yP s:yS d:yD x:yX l:yL n:yN f:yF; do
-        k="${pr%%:*}"; t="${pr##*:}"
-        case "$ws" in
-          *" $t "*) g="$(y_drive "$1" "$k")"; [ "$g" = BROKEN ] && { printf 'BROKEN'; return; } ;;
-          *) g=. ;;
-        esac
-        out="${out:+$out|}$g"
-      done
-      printf '%s' "$out"
-    }
-    y_mut() { # <label> <want> <decide> <twin> <message> <anchor> <replacement> [<anchor> <replacement>]
-      local l="$1" w="$2" dec="$3" twin="$4" msg="$5"; shift 5
-      if mut_copy "$WORK/$l" "$@"; then
-        mut_assert "$l" "$Y_TAB" "$Y_WANT" "$w" "$dec" "$twin" y_vec "$WORK/$l" "${B_army:-0}" "BL-413 $l ($msg)"
-      else
-        bad "BL-413 $l DID NOT APPLY -- its anchor is not in apply.sh exactly once, or the copy does not parse"
-      fi
-    }
-    y_mut y-M1 "$(vset "$Y_WANT" 1 WITHHELD)" yM yL 'mode ignored: the chmod-only merge withholds forever' \
-      '    _l="${_l#classify: }"' '    _l="${_l#classify: }"; _l="${_l%% *}${_tab}${_l#*"$_tab"}"'
-    y_mut y-M2 "$(vset "$Y_WANT" 2 WITHHELD)" yP yM 'record reset on base AND theirs, as base shipped: the re-pointed pull adopts a merged copy and withholds' \
-      '       && [ "$(git -C "$DIST" rev-parse -q --verify "${_ob}:core" 2>/dev/null)" = "$_bt" ]; then' \
-      '       && [ "$(git -C "$DIST" rev-parse -q --verify "${_ob}:core" 2>/dev/null)" = "$_bt" ] && grep -qx "theirs: ${THEIRS}" "$APPLYING"; then' \
-      '        *) _unrec=1 ;;' '        *) : ;;'
-    y_mut y-M3 "$(vset "$Y_WANT" 4 'WITHHELD/-')" yD yP 'a previous-engine marker re-recorded: the delivering pull records the merged copy and withholds' \
-      '        *) _unrec=1 ;;' '        *) : ;;'
-    y_mut y-M4 "$(vset "$Y_WANT" 5 'WITHHELD/2')" yX yM 'keep-consumer buckets recorded: both kept copies withhold' \
-      '    case "$_b" in UPSTREAM-DELETED*|ORPHANED-UNKNOWN*) continue ;; esac' '    :'
-    y_mut y-M5 "$(vset "$Y_WANT" 7 '-/FILLED')" yN yM 'marker-directory refusal removed: mv -f files the marker INSIDE the directory and no row says so' \
-      '  if [ -d "$APPLYING" ]; then' '  if false; then'
-    y_mut y-M6 "$(vset "$Y_WANT" 8 'STAMPED/-')" yF yN 'finisher directory refusal removed: --finish stamps unchecked over the unmerged tree' \
-      '  [ -d "$APPLYING" ] && { say WORKLIST finish-marker-directory' '  false && { say WORKLIST finish-marker-directory'
-  }
 fi
 
 fi
@@ -1268,36 +954,15 @@ if [ "$U_RUN" = 1 ]; then
     if [ "$U_CTL" != '100|-|0.0.1' ]; then
       bad "arm u control: with no limit --finish read $U_CTL (want 100|-|0.0.1) -- the world does not hold 100 files at base, so the limited runs prove nothing"
     else
-      ok "arm u control: with no limit --finish names all 100 files still at base and leaves the stamp at 0.0.1"; B_armu_ctl=1
+      ok "arm u control: with no limit --finish names all 100 files still at base and leaves the stamp at 0.0.1"
       for U_L in 10 14 20; do
         u="$(u_cell "$UW" "$APPLY" "$U_L")"
         case "$u" in
           *'|REFUSED|0.0.1') ok "arm u (ulimit -f $U_L): the finish check could not stage its rows, says so, and withholds the stamp ($u)"
-            case "$U_L" in 14) B_armu_14=1 ;; 20) B_armu_20=1 ;; esac ;;
+            ;;
           *) bad "arm u (ulimit -f $U_L): $u (want <n>|REFUSED|0.0.1) -- a finish check that could not read its rows let the stamp advance or said nothing" ;;
         esac
       done
-      # u-M1 restores the heredoc and drops the stage: both layers of the fix.
-      if mut_copy "$WORK/u-M1" '  _fv_rc=0; ap_stage fv-rows "$_fv_rows" || _fv_rc=$?' '  _fv_rc=0' \
-                               '  done < "$AP_TMP/fv-rows"' "$(printf '  done <<EOF\n$_fv_rows\nEOF')"; then
-        um_ctl="$(u_cell "$UW" "$WORK/u-M1/apply.sh" none)"
-        um14="$(u_cell "$UW" "$WORK/u-M1/apply.sh" 14)"
-        if [ "$MATRIX" = 1 ]; then
-          um20="$(u_cell "$UW" "$WORK/u-M1/apply.sh" 20)"
-          mx_row u-M1 uCtl "$(mx_st "$um_ctl" '100|-|0.0.1')" "$um_ctl"
-          mx_row u-M1 u14 "$(mx_st "${um14#*|}" 'REFUSED|0.0.1')" "$um14"
-          mx_row u-M1 u20 "$(mx_st "${um20#*|}" 'REFUSED|0.0.1')" "$um20"
-        fi
-        if [ "$um_ctl" != '100|-|0.0.1' ]; then
-          bad "arm u u-M1: the mutant copy with no limit read $um_ctl (want 100|-|0.0.1) -- it did not run as a finisher (twin uCtl must stay green)"
-        elif [ "$um14" = '0|-|9.9.9' ]; then
-          mutant_killed "$(( ${B_armu_ctl:-0} && ${B_armu_14:-0} ))" u-M1 "arm u u-M1 killed (heredoc restored): under the 14 KB limit (decides=u14) the loop reads nothing and the stamp advances over 100 files at base ($um14); twin uCtl stays $um_ctl"
-        else
-          bad "arm u u-M1 SURVIVED or misfired: 14=$um14 (want 0|-|9.9.9)"
-        fi
-      else
-        bad "arm u u-M1 DID NOT APPLY -- the fv-rows staging anchors are not each in apply.sh exactly once, or the copy does not parse"
-      fi
     fi
   fi
 fi
@@ -1344,34 +1009,14 @@ if [ "$W_RUN" = 1 ]; then
     if [ "$W_CTL" != '0|0|9.9.9' ]; then
       bad "BL-414 arm w control: with no limit the ordinary apply read $W_CTL (want 0|0|9.9.9) -- the world does not apply cleanly, so the limited runs prove nothing"
     else
-      ok "BL-414 arm w control: with no limit the ordinary apply prints no malformed line, refuses nothing and stamps 9.9.9"; B_armw_ctl=1
+      ok "BL-414 arm w control: with no limit the ordinary apply prints no malformed line, refuses nothing and stamps 9.9.9"
       for W_L in 14 20; do
         w="$(w_cell "$WW" "$APPLY" "$W_L")"
         case "$w" in
           0\|2\|0.0.1) ok "BL-414 arm w (ulimit -f $W_L): no partial row leaks; both hand-downs refuse by name and the stamp is withheld ($w)"
-            case "$W_L" in 14) B_armw_14=1 ;; 20) B_armw_20=1 ;; esac ;;
+            ;;
           *) bad "BL-414 arm w (ulimit -f $W_L): $w (want 0|2|0.0.1) -- a hand-down that could not be written leaked a row into the manifest, or refused silently" ;;
         esac
-      done
-      # One mutant per site: each restores that site's builtin redirect, the shape base shipped. Each
-      # must print a malformed line at BOTH limits -- the cells above are only evidence if base fails them.
-      for W_M in ud rt; do
-        if mut_copy "$WORK/w-M-$W_M" "${W_M}_pc_rc=0; ap_stage ${W_M}-bucket-rows \"\$PC\" || ${W_M}_pc_rc=\$?" \
-                                     "${W_M}_pc_rc=0; printf '%s\\n' \"\$PC\" > \"\$AP_TMP/${W_M}-bucket-rows\" || ${W_M}_pc_rc=\$?"; then
-          wm14="$(w_cell "$WW" "$WORK/w-M-$W_M/apply.sh" 14)"; wmc="$(w_cell "$WW" "$WORK/w-M-$W_M/apply.sh" none)"
-          if [ "$MATRIX" = 1 ]; then
-            wm20="$(w_cell "$WW" "$WORK/w-M-$W_M/apply.sh" 20)"
-            mx_row "w-M-$W_M" wCtl "$([ "$wmc" = '0|0|9.9.9' ] && echo PASS || echo FAIL)" "$wmc"
-            mx_row "w-M-$W_M" w14 "$([ "$wm14" = '0|2|0.0.1' ] && echo PASS || echo FAIL)" "$wm14"
-            mx_row "w-M-$W_M" w20 "$([ "$wm20" = '0|2|0.0.1' ] && echo PASS || echo FAIL)" "$wm20"
-          fi
-          case "$wm14/$wmc" in
-            [1-9]*\|*\|0.0.1/0\|0\|9.9.9) mutant_killed "$(( ${B_armw_ctl:-0} && ${B_armw_14:-0} ))" "w-M-$W_M" "BL-414 w-M-$W_M killed (builtin redirect restored at the $W_M hand-down): a partial row leaks under the 14 KB limit (decides=w14, $wm14); twin wCtl stays $wmc" ;;
-            *) bad "BL-414 w-M-$W_M SURVIVED or misfired: 14=$wm14 ctl=$wmc (want a non-zero malformed count at 14 with stamp 0.0.1, and the no-limit control unmoved at 0|0|9.9.9)" ;;
-          esac
-        else
-          bad "BL-414 w-M-$W_M DID NOT APPLY -- the $W_M hand-down stage is not in apply.sh exactly once, or the copy does not parse"
-        fi
       done
     fi
   fi
@@ -1474,7 +1119,6 @@ x_score() { # x_score <reconcile-dir> [worlds] -> the cell above (`.` for a worl
   esac
   printf '%s|%s|%s|%s|%s|%s|%s|%s' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6" "$c7" "$c8"
 }
-X_TAB="xA:1,2,3 xB:4,5 xC:6,7,8"
 X_WANT='N|D|2|PLACED|PLACED|2|X|T'
 X_RUN=1
 # The real scope classifier, resolved from this fixture's own repo root in either layout; world C
@@ -1511,24 +1155,9 @@ if [ "$X_RUN" = 1 ]; then
   X_GOT="$(x_score "$(dirname "$APPLY")")"
   case "$X_GOT" in
     BROKEN)   bad "FIXTURE BROKEN [BL-364 arm x]: a world could not be seeded" ;;
-    "$X_WANT") ok "BL-364 arm x: café.sh is audited for its exec bit, declared, relocated and matched as a derivation needle under its raw name beside plain.sh; the mode lookups and the tracked count hold for it too"; B_armx=1 ;;
+    "$X_WANT") ok "BL-364 arm x: café.sh is audited for its exec bit, declared, relocated and matched as a derivation needle under its raw name beside plain.sh; the mode lookups and the tracked count hold for it too" ;;
     *)        bad "BL-364 arm x: $X_GOT (want $X_WANT; cells: XA-café-N|XA-café-D|XA-plain-N+D|XB-café|XB-plain|XC-hits|XC-café+x|XC-tracked)" ;;
   esac
-  # One mutant per reader quoting can move, each restoring the default at that site alone. The guard
-  # cells (XC-café+x, XC-tracked) carry no mutant: their readers take the mode column or a line count,
-  # which a C-quoted name does not change, so a mutant there survives by construction.
-  [ "$X_GOT" = BROKEN ] || {
-    x_mut() { # <label> <anchor> <want> <decide> <twin>
-      if mut_copy "$WORK/x-$1" "$2" "${2/ -c core.quotePath=false/}"; then
-        mut_assert "x-$1" "$X_TAB" "$X_WANT" "$3" "$4" "$5" x_score "$WORK/x-$1" "${B_armx:-0}" "BL-364 x-$1 (default quotePath at that site)"
-      else
-        bad "BL-364 x-$1 DID NOT APPLY -- its listing line is not in apply.sh exactly once, or the copy does not parse"
-      fi
-    }
-    x_mut exec-audit '_ne="$(git -C "$DIST" -c core.quotePath=false ls-tree -r "$THEIRS" -- core/' '-|D|2|PLACED|PLACED|2|X|T' xA xB
-    x_mut manifest   'git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$THEIRS" -- core/scripts/' 'N|-|2|-|PLACED|2|X|T' xB xC
-    x_mut vd-moved   'VD_MOVED="$(git -C "$1" -c core.quotePath=false diff --name-only' 'N|D|2|PLACED|PLACED|1|X|T' xC xB
-  }
 fi
 
 fi
@@ -1537,7 +1166,6 @@ if sg s; then
 # apply.sh read relabel-extension-checks.sh through `2>/dev/null || true`, so its refusal (exit 2,
 # no count printed) read exactly like a catalog with no collisions. The copy's relabel tool is
 # replaced by one that refuses; the arm reads the `relabel-refused` DECISION and the withheld stamp.
-# Its mutant restores the `|| true` capture, and must lose the row.
 s_score() { # s_score <reconcile-dir> -> "<relabel-refused row?>|<stamp>"
   local w o
   w="$(seed_copy)" || { printf 'BROKEN'; return; }
@@ -1562,7 +1190,7 @@ if [ "$S_RUN" = 1 ]; then
   if s_copy "$WORK/s-ctl"; then
     S_GOT="$(s_score "$WORK/s-ctl")"
     if [ "$S_GOT" = 'REFUSED|-' ]; then
-      ok "BL-360 arm s: a relabel tool that exits 2 draws DECISION relabel-refused and the stamp is withheld"; B_arms=1
+      ok "BL-360 arm s: a relabel tool that exits 2 draws DECISION relabel-refused and the stamp is withheld"
     else
       bad "BL-360 arm s: $S_GOT (want REFUSED|-)"
     fi
@@ -1570,44 +1198,10 @@ if [ "$S_RUN" = 1 ]; then
     S_CTL="$(s_score "$(dirname "$APPLY")")"
     [ "$S_CTL" = '-|STAMPED' ] && ok "BL-360 arm s control: the shipped relabel tool draws no refusal and the stamp advances" \
       || bad "BL-360 arm s control: $S_CTL (want -|STAMPED)"
-    s_anchor='detector_run relabel relabel-extension-checks.sh "$CONSUMER" --apply --dist "$DIST" --theirs "$THEIRS"'
-    if [ "$(grep -cF -- "$s_anchor" "$APPLY")" = 1 ] && s_copy "$WORK/s-M1"; then
-      S_A="$s_anchor" S_R='bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --apply --dist "$DIST" --theirs "$THEIRS" >/dev/null 2>&1 || true' \
-        awk '{ i = index($0, ENVIRON["S_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["S_R"] substr($0, i + length(ENVIRON["S_A"])); print }' \
-        "$APPLY" > "$WORK/s-M1/apply.sh"
-      if cmp -s "$APPLY" "$WORK/s-M1/apply.sh" || ! bash -n "$WORK/s-M1/apply.sh"; then
-        bad "BL-360 s-M1 DID NOT APPLY or does not parse"
-      else
-        S_M="$(s_score "$WORK/s-M1")"
-        S_T="$(h_score "$WORK/s-M1")"
-        if [ "$MATRIX" = 1 ]; then
-          mx_row s-M1 s "$([ "$S_M" = 'REFUSED|-' ] && echo PASS || echo FAIL)" "$S_M"
-          mx_row s-M1 h "$([ -z "$S_T" ] && echo PASS || echo FAIL)" "${S_T:-green}"
-        fi
-        if [ "$S_M" = '-|STAMPED' ] && [ -z "$S_T" ]; then
-          mutant_killed "${B_arms:-0}" s-M1 "BL-360 s-M1 killed (decides=s): with the status folded into success the refusal vanishes and the stamp advances ($S_M); twin h stays green"
-        else
-          bad "BL-360 s-M1 SURVIVED or misfired: $S_M (want -|STAMPED)"
-        fi
-      fi
-    else
-      bad "BL-360 s-M1 DID NOT APPLY -- the relabel detector_run line is not in apply.sh exactly once"
-    fi
   else
     bad "FIXTURE BROKEN [BL-360 arm s]: could not copy the reconcile dir"
   fi
 fi
-fi
-
-# --- matrix-only cells: a plain run executes none, --matrix executes them and says so
-if ( MX_ROWS=0; mx_row probe probe PASS probe >/dev/null; [ "$MX_ROWS" = 1 ] ); then
-  if [ "$MATRIX" = 0 ]; then
-    [ "$MX_ROWS" -eq 0 ] && ok "plain run: no matrix-only cell ran (0 MATRIX rows)" || bad "plain run executed $MX_ROWS matrix-only cell(s) -- --matrix is the only mode that may"
-  else
-    [ "$MX_ROWS" -gt 0 ] && ok "matrix run: $MX_ROWS MATRIX rows recorded" || bad "FIXTURE BROKEN: --matrix printed no MATRIX rows, so it measured nothing"
-  fi
-else
-  bad "FIXTURE BROKEN: the MATRIX row counter does not count, so the plain-run arm above could not fail"
 fi
 
 echo

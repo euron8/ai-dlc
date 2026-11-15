@@ -78,7 +78,7 @@ CORE
 # THE RETIRED LOCATION, SEEDED AS CORE SHIPS IT — a documented table with NO data row, and
 # the worked example fenced. This is the state a consumer that has never written a row is in,
 # and it is what makes "a row found here is consumer-authored" true by construction rather
-# than by subtraction. The fixture mutates this file to prove both halves of that claim.
+# than by subtraction. The S0 and S2 arms read this file to prove both halves of that claim.
 cat > "$SKILL/extensions/README.md" <<'RM'
 # extensions/ — synthetic entry contract for the layer-crosswalk-home fixture
 

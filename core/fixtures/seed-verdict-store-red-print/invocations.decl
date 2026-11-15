@@ -1,5 +1,9 @@
+# BL-1092: 29 -> 124 from one counted run through scripts/seed-verdict-store.sh: the census over its world copies (b cells),
+# the gate_wait and marker drives, the seed variants and predict.
+# 124 -> 154 from one counted run through scripts/seed-verdict-store.sh, the judge's J3 output: the c_skip, b_hpred and
+# b_moved census drives and the m-c-silent, m-cl-keyblind and m-s-dirtyleak mutant drives.
 # Measured by a counted run through scripts/seed-verdict-store.sh (stdin /dev/null), the judge's own J3 output: 13 -> 17 for arm a4's mutant drive.
 # 17 -> 29, BL-1069: each of the four subject drives starts one `bash unit.sh` per fixture (three), the unit the
 # subject hands xargs. From one counted run through scripts/seed-verdict-store.sh.
-29 *
+56 *
 0 scripts/seed-verdict-store.sh

@@ -1,5 +1,5 @@
-# adversarial-shard-merge drives the merge and the siblings it resolves beside itself by name (lib.sh:33-38, :324-347,
-# run.sh:177), the provenance schema, and sources the shared preamble. Nothing enumerates core/scripts/, so the
+# adversarial-shard-merge drives the merge and the siblings it resolves beside itself by name (lib.sh:33-38, :324-347),
+# the provenance schema, and sources the shared preamble. Nothing enumerates core/scripts/, so the
 # scripts are declared one by one, against a fresh sandbox read-set trace. validate-provenance-block.sh's optional
 # probes -- lib/meta-gate.sh and core/skills/ai-dlc/extensions/known-skills.json -- do not exist at tip and are not declared.
 !core/scripts/merge-adversarial-shards.sh
@@ -16,12 +16,14 @@ core/scripts/validate-artifact-budget.sh
 # The real producer of a sealed `sha=` marker: the CS1 arm seals the reference sibling with its --mark (BL-974).
 core/scripts/wait-for-deliverable.sh
 core/schemas/provenance-block.json
-# The shared fixture libs this fixture sources (run.sh:2 preamble.sh, run.sh:118-121 matrix.sh and mutant.sh; lib.sh
-# sources none), file by file: the whole directory keyed every push that touched an unrelated lib file.
+# The shared fixture lib this fixture sources (run.sh:2 preamble.sh; lib.sh sources none), file by file: the whole
+# directory keyed every push that touched an unrelated lib file.
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/matrix.sh
-core/fixtures/lib/mutant.sh
 # The merge derives each shard dispatch id from the write ledger this hook appends; every shard the fixture writes drives it.
 core/hooks/ai-dlc-gate-remediation-guard.sh
 # The installed rulebook every derived-set world commits: the merge narrows only where it carries the validator's ERA_TOKEN (BL-911).
-!core/skills/ai-dlc/steps/_gate-procedures.md
+core/skills/ai-dlc/steps/_gate-procedures.md
+# The shard drivers: the parent's coverage join reads every one (BL-1095). A fixture's OWN run.sh is copied by the runner itself.
+core/fixtures/adversarial-shard-merge-c/run.sh
+core/fixtures/adversarial-shard-merge-d/run.sh
+# The dist-only shards (b) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.

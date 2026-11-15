@@ -37,8 +37,8 @@
 # all six real PASS spellings and both real FAIL spellings against the shipping validator, so a
 # narrowing of the grammar cannot pass this file.
 #
-# WHY ARM (f) IS THE ONE THAT MATTERS FOR `widened`. Whole-file matching is the obvious wrong
-# implementation, and the seed that kills it must sit where the real ones do: 31 revisions carry
+# WHY ARM (f) MATTERS. Whole-file matching is the obvious wrong implementation, and the seed
+# that catches it must sit where the real ones do: 31 revisions carry
 # `current_step_file: deploy-validate.md` with `retro.md` named in the Pipeline Position
 # section's OWN prose a few lines below. Arm (f) is that shape. A seed that put `retro.md` in
 # Recent Activity would be killed by the section anchor alone and would say nothing about a
@@ -59,8 +59,7 @@
 # than replacing it.
 #
 # CHECKS 1, 2 AND 4 ARE DRIVEN THROUGH STUBBED SIBLINGS, as in the sibling fixtures: this
-# fixture's subject is Check 8, and the contract those three publish is an exit code. The
-# unmutated CONTROL battery proves the stubs are live, and every arm is PRESENCE-shaped — each
+# fixture's subject is Check 8, and the contract those three publish is an exit code. Every arm is PRESENCE-shaped — each
 # demands a `  CHECK 8: ` verdict word parsed out of the output — so a subject that emits
 # nothing scores NONE and fails every arm rather than passing any.
 set -uo pipefail
@@ -102,8 +101,6 @@ trap 'rm -rf "$WORK"' EXIT
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_mrpBattery=0
 
 echo "mandatory-rules-snapshot-position:"
 
@@ -259,7 +256,7 @@ battery() {
   snap_at 'retro.md — Steps 1/2/3 COMPLETE, retro doc written, PR open'; run; t="$t e:$(tok)"
   # f — the defect WITH `retro.md` named INSIDE the same Pipeline Position section, which is the
   #     shape 31 real revisions carry. A section-wide or file-wide grammar acquits this and only
-  #     this; it is the arm the `widened` mutant dies on.
+  #     this.
   snap_at 'deploy-validate.md' '- routing to retro.md (Step 7) next.'
   run; t="$t f:$(tok)"
   # g/h — TWO LIVE BULLETS naming DIFFERENT step files, the same pair in BOTH orders. A
@@ -290,7 +287,7 @@ echo "HERMETIC-CONSUMED $VMR"
 toolchain "$WORK/bin" "$VMR"
 GOT="$(battery "$WORK/bin")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all ten arms: a position at retro.md PASSes (bare and with trailing prose), a position at deploy-validate.md FAILs at rc=1 naming the value it found, a missing field and a missing snapshot each SKIP and are counted in the summary, \`retro.md\` sitting in another section does not acquit the defect, two live bullets naming DIFFERENT step files SKIP in BOTH orders, and the SAME basename twice is still decided — PASS at retro.md and FAIL at deploy-validate.md"; B_mrpBattery=1
+  ok "all ten arms: a position at retro.md PASSes (bare and with trailing prose), a position at deploy-validate.md FAILs at rc=1 naming the value it found, a missing field and a missing snapshot each SKIP and are counted in the summary, \`retro.md\` sitting in another section does not acquit the defect, two live bullets naming DIFFERENT step files SKIP in BOTH orders, and the SAME basename twice is still decided — PASS at retro.md and FAIL at deploy-validate.md"
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -383,127 +380,6 @@ else
   bad "the real-spelling battery did not answer [PASS x6, FAIL x2]:$t5"
 fi
 
-# ============================================================================
-# MUTANTS. Each is a COPY of the validator in its OWN toolchain directory, guarded by `cmp -s`
-# so a `sed` that matched nothing cannot pass as a mutation, and scored beside an UNMUTATED
-# CONTROL built the same way — a copy that cannot resolve ../schemas emits nothing, and "no
-# output" would otherwise score as a kill for every mutant at once.
-#
-# Each mutant declares the EXACT battery it produces. No two share a moved-set.
-# ============================================================================
-toolchain "$WORK/mut-control" "$VMR"
-CTL="$(battery "$WORK/mut-control")"
-if [ "$CTL" = "$EXPECTED" ]; then
-  ok "CONTROL: an unmutated copy in its own toolchain dir reproduces all ten baseline rows (so a mutant's silence below is the mutation, not the copy)"
-else
-  echo "FIXTURE ERROR: the unmutated control does not reproduce the battery — expected [$EXPECTED], got [$CTL]." >&2
-  echo "  Every mutant verdict below would be meaningless." >&2
-  exit 2
-fi
-
-mutate() {  # <tag> <sed-program> <expected-battery> <what-it-proves>
-  local tag="$1" prog="$2" want="$3" claim="$4"
-  local D="$WORK/mut-$tag" M="$WORK/staged-$tag.sh" got
-  if ! sed "$prog" "$VMR" > "$M"; then
-    bad "MUTANT $tag DID NOT APPLY: sed failed, so no mutant existed and its arms scored nothing"
-    return
-  fi
-  if cmp -s "$VMR" "$M"; then
-    echo "FIXTURE ERROR: mutant '$tag' matched nothing — the line it targets was renamed, so it proves nothing." >&2
-    exit 2
-  fi
-  toolchain "$D" "$M"
-  got="$(battery "$D")"
-  if [ "$got" = "$want" ]; then
-    mutant_killed "$B_mrpBattery" "$tag" "MUTANT $tag: $claim"
-  elif [ "$got" = "$EXPECTED" ]; then
-    bad "MUTANT $tag SURVIVED: $claim — every arm unchanged, so nothing here can catch it"
-  else
-    bad "MUTANT $tag ($claim): expected battery [$want], got [$got]"
-  fi
-}
-
-# disabled — the check disabled outright: the snapshot is never opened, so every arm takes the
-# missing-snapshot road. The defect arms (b, f) fall from FAIL to a counted SKIP, which is the
-# whole finding: a tree that ships a stale position reports PASS WITH SKIPS.
-mutate disabled \
-  's@^SNAPSHOT_MD="_bmad-output/pipeline-snapshot.md"$@SNAPSHOT_MD="_bmad-output/no-such-snapshot.md"@' \
-  'a:SKIP/-/skip8/0 b:SKIP/-/skip8/0 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:SKIP/-/skip8/0 f:SKIP/-/skip8/0 g:SKIP/-/skip8/0 h:SKIP/-/skip8/0 i:SKIP/-/skip8/0 j:SKIP/-/skip8/0' \
-  "pointing the check at a path nothing writes makes every arm take the absent-snapshot SKIP — the defect arms report PASS WITH SKIPS over a stale position, which is the pre-fix state wearing a floor"
-
-# widened — THE CONTAINMENT TEST. The extraction is left alone and the VERDICT is widened: the
-# equality against the resolved position becomes "does the snapshot contain `retro.md` anywhere".
-# That is the wrong implementation this check is most likely to be rewritten into, and arm f is
-# the ONLY cell that moves — position at deploy-validate.md with `retro.md` named in the section
-# a few lines below, the shape 31 real revisions carry. Arm b is the same defect WITHOUT that
-# mention and stays FAIL, which is what makes f's flip attributable to the widening rather than
-# to the defect going undetected generally.
-#
-# ANCHORED ON THE EQUALITY, NOT ON THE MULTI-LINE EXTRACTION. The first spelling of this mutant
-# keyed on `C8_POS="$(awk ...` and replaced only that line of a five-line continuation, leaving
-# a dangling `| grep ...` — the copy died at parse time and every arm scored NONE/rc=2, which is
-# a mutant that never existed reading as a kill of all six cells at once. `cmp -s` cannot see
-# that: the mutation applied cleanly, to a program that no longer runs. The battery's NONE token
-# is what caught it.
-mutate widened \
-  's@^      if \[ "\$C8_POS" = "retro.md" \]; then$@      if grep -qi "retro[.]md" "$SNAPSHOT_MD"; then@' \
-  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:PASS/-/all8/0 g:SKIP/d/skip8/0 h:SKIP/d/skip8/0 i:PASS/-/all8/0 j:FAIL/d/nosumm/1' \
-  "widening the verdict from 'the resolved position IS retro.md' to 'the file mentions retro.md' ACQUITS a snapshot whose position is deploy-validate.md and whose own section says 'routing to retro.md next' — the exact shape 31 of the consumer's revisions carry"
-
-# skipispass — the SKIP branch for a field-less snapshot turned into a PASS. Only arm c moves: it is the
-# only world with the section and no field. The finding is that "cannot check" is reported as
-# "checked and correct", which is this repo's recurring class stated in one cell.
-# BOTH LINES OF THE BRANCH, because reverting one layer of a two-line change produces a mutant
-# that proves the layer left in place. Replacing only the `echo` left the counter behind, so the
-# run printed PASS and still reported a floor — a self-contradicting output no implementation
-# would ever produce, and an expected battery written against it would have been asserting about
-# a world that cannot exist.
-mutate skipispass \
-  "/^      echo \"  CHECK 8: SKIP (\${SNAPSHOT_MD} carries no /{ s@.*@      echo \"  CHECK 8: PASS\"@; n; /SKIPPED_CHECKS 8/d; }" \
-  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:PASS/-/all8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1 g:SKIP/d/skip8/0 h:SKIP/d/skip8/0 i:PASS/-/all8/0 j:FAIL/d/nosumm/1' \
-  "turning the field-less SKIP into a PASS reports an unreadable position as a verified one and drops it from the skip accounting — a check that cannot fire reading exactly like one that passed"
-
-# nocount — the counter. The branch still SKIPs and still says so on its own line, but the summary
-# stops knowing: arms c and d fall back to `all 8 checks passed` while two checks did not run.
-# This is the sibling fixture's subject asserted for the new check, and it is the only mutant
-# that moves the SUMMARY without moving a CHECK 8 verdict.
-# KEYED ON THE SUBJECT'S OWN PREDICATE, NOT ON ONE INDENT. Check 8 has THREE skip branches and
-# they are not indented alike — the absent-snapshot one sits two spaces in, the other two six.
-# A mutation anchored on the six-space spelling stripped two of three, arm d kept its counter,
-# and the surviving cell read as a wrong prediction rather than as an insufficient mutation. A
-# hand-written site list goes vacuous the release somebody adds a site; this matches every
-# assignment of that counter whatever its indent.
-mutate nocount \
-  '/^[[:blank:]]*SKIPPED_CHECKS="\$SKIPPED_CHECKS 8"$/d' \
-  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/all8/0 d:SKIP/-/all8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1 g:SKIP/d/all8/0 h:SKIP/d/all8/0 i:PASS/-/all8/0 j:FAIL/d/nosumm/1' \
-  "not counting Check 8's skip returns both skipping arms to the unqualified 'all 8 checks passed' while the CHECK 8 line still says SKIP — the two roads to exit 0 sharing one sentence again"
-
-# firstwins — THE PRE-FIX GATE. The ambiguity branch is made unreachable, so a two-valued
-# section falls back to whichever bullet the file lists first. Arms g and h are the whole
-# finding and they move in OPPOSITE directions from ONE tree with the same two values in it:
-# g goes SKIP->PASS and h goes SKIP->FAIL. That is the defect stated as a pair, and it is why
-# one order alone could not have caught it — a fixture seeding only g would have read a PASS
-# and called the reader correct.
-# ANCHORED ON THE DISTINCT-COUNT BRANCH, not on the `C8_COUNT` one beside it: the two open with
-# similar text and a loose anchor would edit both, collapsing the count as well as the refusal
-# and moving cells this mutant does not own.
-mutate firstwins \
-  's@^  if \[ "\$C8_DISTINCT" -ge 2 \]; then$@  if false; then@' \
-  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1 g:PASS/-/all8/0 h:FAIL/d/nosumm/1 i:PASS/-/all8/0 j:FAIL/d/nosumm/1' \
-  "with the refusal gone the same two values PASS in one order and FAIL in the other — one tree, two verdicts, decided by which duplicate the file happened to list first, and neither of them a measurement of where the pipeline is"
-
-# agreementrefuses — THE OPPOSITE ERROR, and the reason (i) and (j) exist. The basename
-# de-duplication is made unreachable so two bullets naming ONE file count as two distinct
-# values and SKIP. Only i and j move: the gate stops deciding the common stale-plus-live state,
-# which is the state it was written for, and reports a floor where it owes a failure.
-# The replacement pattern can never match a basename, so the `case` arm is dead rather than
-# widened — a widened guard often produces the original's output and scores a kill it did not
-# earn.
-mutate agreementrefuses \
-  's@^        \*" \$_c8_b "\*) ;;$@        *"ZZ-unreachable-ZZ"*) ;;@' \
-  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1 g:SKIP/d/skip8/0 h:SKIP/d/skip8/0 i:SKIP/-/skip8/0 j:SKIP/d/skip8/0' \
-  "treating agreement as a duplicate makes the stale-plus-live state that names ONE file skip — including the deploy-validate.md pair, which is the defect Check 8 exists to fail, reported as a verified floor instead"
-
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-report_end mandatory-rules-snapshot-position 12
+report_end mandatory-rules-snapshot-position 5

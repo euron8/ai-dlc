@@ -3251,3 +3251,31 @@ Provenance: batch 257, ruled by lead ai-dlc-a9 on the operator's approval; id al
 
 verify: manual
 
+
+## BL-1101 — no step asks whether an expensive mechanism should exist before it is optimized
+
+**DEFECT.** OPEN. Filed 2026-11-14. Owner: CLAUDE.md "## Build process" (lead steps) and a premise-reviewer subagent definition.
+
+The lead and its advisor review HOW a change is built, never WHETHER its subject should exist. Batch 257's PW release spent a builder splitting the 1001 s `backlog-receipt-binding` battery into six shards before the operator asked, in one sentence, whether it should exist; every mutation battery was then deleted. The advisor saw the same evidence and did not ask either: a reviewer sharing the lead's rulebook and the code's own justification headers shares its frame.
+
+Fix: (1) a premise reviewer, `.claude/agents/premise-reviewer.md` with `omitClaudeMd: true` and read-only tools, given ONLY a data directory built outside the repo (the durations record, the gate's step timings, the fixture and validator list with one-line subjects and ship status; no code, no fixture headers, since path-scoped rules load again on a matching read), the operator ruling "a step with no measured value goes", and one question: what would you delete, and what evidence would keep each item. (2) A lead step in CLAUDE.md's "## Build process", before dispatching a build: the brief states what the mechanism costs, what it buys and who would notice it gone. (3) A periodic subtraction pass over `.claude/rules/` and the validators, judged on the cost each adds. Before relying on (1), confirm the subagent cannot quote `operator-rulings.md`, since the docs imply but do not state that unconditional rule files are omitted.
+
+Receipt: the first premise-review run over the post-PW gate, its deletion list, and the operator's ruling on it.
+
+Provenance: batch 257, operator request to file it and not take it on now; id allocated by lead ai-dlc-35.
+
+verify: manual
+
+## BL-1102 — validators re-prove on every push that their arms can fire
+
+**DEFECT.** OPEN. Filed 2026-11-14. Owner: every `scripts/validate-*.sh` and `core/scripts/validate-*.sh` that runs a self-probe on each invocation.
+
+Many validators seed an offender and a near-miss under `mktemp` and print "probe fired both ways" on every push before reading the corpus (`.claude/rules/verification-discipline.md` "Every arm carries a self-probe"). That an arm can fire is a fact established once at authoring, the same reasoning that deleted every fixture mutation battery in batch 257's PW release. Their per-push cost is unmeasured.
+
+Fix: measure the self-probe share of each pre-push validator step from one gate log, then move each self-probe to a by-hand authoring step (or a mode the gate does not run), and amend the verification-discipline rule to match.
+
+Receipt: a gate log with no "probe fired" line from a per-push step, and the step timings before and after.
+
+Provenance: batch 257, lead ai-dlc-35, filed with BL-1101 at the operator's request to move on; id allocated by lead ai-dlc-35.
+
+verify: manual

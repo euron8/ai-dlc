@@ -10,6 +10,9 @@ core/scripts/partition-document.sh
 # which sources its lib.sh and seeds the same worlds; the parent's whole directory, because a fixture's OWN directory
 # is copied by the runner and this shard's own is only the driver.
 core/fixtures/review-shard-merge/
+core/fixtures/review-shard-merge-b/run.sh
+core/fixtures/review-shard-merge-c/run.sh
+core/fixtures/review-shard-merge-d/run.sh
 core/scripts/merge-adversarial-shards.sh
 core/scripts/validate-adversarial-convergence.sh
 core/scripts/wfd-start-of.sh
@@ -21,3 +24,4 @@ core/team-roles/qa.md
 core/schemas/sprint-status.json
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
+# The dist-only shards (e, f, g) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.

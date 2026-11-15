@@ -16,85 +16,38 @@
 # arm below runs in a tree built by running `scripts/install.sh` into an empty directory.
 #
 # THE FIX appends the install root's copy, walked up from the script's own directory, as the
-# LAST candidate. Each property of that sentence is an arm, and each arm has a mutant:
+# LAST candidate. Each property of that sentence is an arm:
 #   A  NO-SCHEMA ROOT   a foreign root holding only `.claude/` gives the SAME exit and output as
-#                       the no-override control. Killed by deleting the install fallback (DEL).
+#                       the no-override control.
 #   B  ROOT WINS        a foreign root carrying an UNPARSEABLE schema makes the run non-zero, and
 #                       its ALLOW twin — the same root carrying a VALID copy — exits 0, so the
-#                       non-zero is the schema's doing. Killed by putting the install FIRST (IF).
+#                       non-zero is the schema's doing.
 #   C  LEGACY LAYOUT    a copy at `scripts/X` (the pre-relocation path) answers exactly as the
-#                       `scripts/ai-dlc/X` copy under the same foreign root. Killed by a fallback
-#                       that counts hops (`$SCRIPT_DIR/../..`) instead of walking up (HOP): right
-#                       from `scripts/ai-dlc/`, one level too high from `scripts/`.
+#                       `scripts/ai-dlc/X` copy under the same foreign root.
 #   D  R1, write-format-steering only: under the foreign root it judges the SAME number of
 #                       declaration rows as the control, not zero. The schema came from the install,
-#                       so its `declared_in` paths are resolved against the install. Killed by
-#                       handing the reader the override root instead (R1).
+#                       so its `declared_in` paths are resolved against the install.
 #   E  R2, sync-taught-schema only: WRITE mode under a foreign root that carries a stale generated
 #                       region modifies neither that root's file nor the install's docs. The
 #                       schemas install as a set, so the fallback branch renders the INSTALL's docs.
-#                       Killed by leaving ROOT at the override (R2), which rewrites the foreign file.
 #   M  R3, gate-adjudication only: a foreign root carrying its own enforcement-map.yaml is the map
-#                       the escalated set is derived from. Killed by putting the install map first.
+#                       the escalated set is derived from.
 #   N  BL-326, gate-adjudication only: adjudicate mode reads `docs/escalations/pending.md` from the
 #                       tree its enforcement map came from. Under a foreign root with no map (F) that
 #                       is the INSTALL's docs, and — the near-miss — under a root carrying its own map
-#                       (GE) it is GE's. Killed by reading the escalations from the override root
-#                       again (ESC) and by always reading the install's (ESCI). IFMAP also fails N,
-#                       legitimately: a root whose map is not chosen does not own the escalations.
+#                       (GE) it is GE's.
 #   P  BL-330, write-format-steering only: a foreign root carrying the steering schema but NOT the
 #                       population schema (FP) owns the PAIR, so its missing half is the honest
 #                       `SKIP — EXAMINED NOTHING` (rc 0), never the install's population joined to the
 #                       root's steering and judged under the root (rc 1). B's Ggood, the root carrying
-#                       the whole set, is the near-miss. Killed by falling back per FILE again
-#                       (PERFILE). IF also fails P, legitimately: install-first never lets a root own it.
+#                       the whole set, is the near-miss.
 #   Q  BL-331, write-format-steering only, a standalone arm after E2: under the install fallback a
 #                       root carrying its OWN declared file without the anchor exits 1 naming the
 #                       root's copy, and the same root with the anchor passes at the control's row
-#                       count. Killed by dropping the root resolution (NOROOT) and by failing any root
-#                       that carries the file (ANCHORLESS); each leaves A-P at its base value.
+#                       count.
 #
-# MUTANT-MATRIX sprint-status:DEL decides=A twins=B
-# MUTANT-MATRIX sprint-status:IF decides=B twins=A
-# MUTANT-MATRIX sprint-status:HOP decides=C twins=B
-# MUTANT-MATRIX validate-audit-anchors:DEL decides=A twins=B
-# MUTANT-MATRIX validate-audit-anchors:IF decides=B twins=A
-# MUTANT-MATRIX validate-audit-anchors:HOP decides=C twins=B
-# MUTANT-MATRIX validate-write-format-steering:DEL decides=A,D twins=B
-# MUTANT-MATRIX validate-write-format-steering:IF decides=B,P twins=A
-# MUTANT-MATRIX validate-write-format-steering:HOP decides=C twins=B
-# MUTANT-MATRIX validate-write-format-steering:R1 decides=D twins=C
-# MUTANT-MATRIX validate-write-format-steering:PERFILE decides=P twins=B
-# MUTANT-MATRIX sync-taught-schema:DEL decides=A twins=B
-# MUTANT-MATRIX sync-taught-schema:IF decides=B twins=A
-# MUTANT-MATRIX sync-taught-schema:HOP decides=C twins=B
-# MUTANT-MATRIX sync-taught-schema:R2 decides=E,A twins=B
-# MUTANT-MATRIX validate-gate-adjudication:DEL decides=A,N twins=B
-# MUTANT-MATRIX validate-gate-adjudication:IF decides=B twins=A
-# MUTANT-MATRIX validate-gate-adjudication:HOP decides=C twins=B
-# MUTANT-MATRIX validate-gate-adjudication:IFMAP decides=M,N twins=B
-# MUTANT-MATRIX validate-gate-adjudication:ESC decides=N twins=M
-# MUTANT-MATRIX validate-gate-adjudication:ESCI decides=N twins=M
-# MUTANT-MATRIX sync-taught-schema:SKIP decides=E2 twins=E
-# MUTANT-MATRIX sync-taught-schema:R2W decides=E2 twins=E
-# MUTANT-MATRIX validate-write-format-steering:NOROOT decides=Q twins=A
-# MUTANT-MATRIX validate-write-format-steering:ANCHORLESS decides=Q twins=A
-# MUTANT-MATRIX-DYNAMIC mm-spec-loop why=the name is "$s:$mode" split from each entry of the MUTANTS list, and every entry of that list has its own row above
-# MUTANT-MATRIX-DYNAMIC e2-skip-r2w-loop why=the name is "sync-taught-schema:$m" over the literal list SKIP R2W, and both resulting names have their own row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/schema-install-fallback/run.sh --matrix
-# decides= lists more than one arm where one fault is seen through several arms (the five mutants whose
-# declared vector trips two cells: write-format-steering DEL and IF, sync-taught-schema R2,
-# gate-adjudication DEL and IFMAP). A twin is an arm that stays GREEN under the mutant. The full A B C D E
-# M N P vector of every mutant is the MUTANTS table below, measured at authoring and asserted whole when
-# the --matrix argument (the remeasure command above); a plain run (the per-push one) scores each mutant on its
-# deciding arm(s) plus its named twin. The matrix is re-measured as .claude/rules/fixture-mutants.md
-# clause 2 ("One run per distinct state") requires.
-#
-# THE KILL IS THE WHOLE VECTOR. A mutant is killed only when every arm of the script it edits
-# answers exactly as declared — its own arm(s) fail and the rest hold — so no kill is borrowed
-# from an entangled arm. Two mutants legitimately fail two arms, and the vector says so: DEL on
-# write-format-steering also leaves D with no count to compare, and R2 also moves A, because an
-# override root whose docs are rendered answers --check about the wrong tree.
+# The full A B C D E M N P vector of each script is asserted whole: its own arm(s) hold and the rest
+# are not that script's.
 #
 # FOLDED ARMS, at the end of the run: two SHIPPING fixtures' distribution-only checks, which
 # their own sandboxes could never reach because a shipping fixture cannot declare a path a
@@ -137,29 +90,6 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# The one-line switch is the ARGUMENT, never the environment: `--matrix` makes every mutant drive all
-# eight arms and reproduce its WHOLE declared vector (the matrix measurement); a plain run drives only
-# each mutant's deciding arm(s) and named twin, read from the header MUTANT-MATRIX lines.
-MATRIX=0
-[ "${1-}" != "--matrix" ] || MATRIX=1
-ARMLET="ABCDEMNP"
-# arms_of <script:MODE> -> "<decides,..> <twin,..>" read from this file's own header, never restated
-arms_of() { sed -n "s/^# MUTANT-MATRIX $1 decides=\([^ ]*\) twins=\(.*\)\$/\1 \2/p" "$HERE/run.sh" | sed -n 1p; }
-# sel_match <got> <want> <arms...> -> 0 when the whole vector agrees (switch 1) or the named cells do
-sel_match() {
-  local got="$1" want="$2" a pre
-  shift 2
-  [ "$MATRIX" != 0 ] && { [ "$got" = "$want" ]; return; }
-  for a in "$@"; do
-    case "$ARMLET" in *"$a"*) ;; *) continue ;; esac
-    pre="${ARMLET%%"$a"*}"
-    [ "${got:${#pre}:1}" = "${want:${#pre}:1}" ] || return 1
-  done
-}
 
 SCRIPTS="sprint-status sync-taught-schema validate-audit-anchors validate-write-format-steering validate-gate-adjudication"
 schema_of() {
@@ -191,7 +121,7 @@ token_of() {
     validate-gate-adjudication)     printf '%s' '^[0-9]+[a-z]?$' ;;
   esac
 }
-# The unmutated answer per script, over arms A B C D E M N P ('-' = the arm is not this script's).
+# The expected answer per script, over arms A B C D E M N P ('-' = the arm is not this script's).
 want_base() {
   case "$1" in
     validate-write-format-steering) printf '%s' '0000---0' ;;
@@ -337,209 +267,68 @@ adjudicate() {
   printf '%s\n' "$out" | sed -e "s@$w@WORLD@g" | grep -oE '\((no-escalations-file|ok):[^)]*' | sed -n 's/^([a-z-]*://p' | sed -n 1p
 }
 
-# arm_on <letter> -> 0 when this vector() call drives that arm; $sel (the caller's) empty = all eight
-arm_on() { [ -z "$sel" ] && return 0; case " $sel " in *" $1 "*) return 0 ;; esac; return 1; }
-# sel_for <script:MODE> -> the arms to drive for a mutant: empty (all eight) under --matrix,
-# else its decides= and twins= arms from the header. The unmutated base and copy worlds always drive all.
-sel_for() { [ "$MATRIX" != 0 ] || arms_of "$1" | tr ',' ' '; }
-
-# vector <world> <script> [arms] -> eight characters over A B C D E M N P: 0 held, 1 failed, - not this
-# script's or not driven; or "BROKEN: <why>" when the unmutated control itself did not run.
+# vector <world> <script> -> eight characters over A B C D E M N P: 0 held, 1 failed, - not this
+# script's; or "BROKEN: <why>" when the control itself did not run.
 vector() {
-  local w="$1" s="$2" sel="${3-}" ctl fo="" lg gb gg="" a="-" b="-" c="-" d="-" e="-" m="-" n="-" p="-" nc nf d0 i0 d1 i1 gm fp
+  local w="$1" s="$2" ctl fo lg gb gg a="-" b="-" c="-" d="-" e="-" m="-" n="-" p="-" nc nf d0 i0 d1 i1 gm fp
   ctl="$(drive "$w" ai "$s" "")"
   if [ "$(first_line "$ctl")" != rc=0 ] || ! grep -Eq "$(token_of "$s")" <<<"$ctl"; then
     echo "BROKEN: the no-override control of $s did not exit 0 with its baseline line: $(printf '%s' "$ctl" | tr '\n' '|' | cut -c1-160)"; return
   fi
-  if arm_on A || arm_on C || arm_on D; then fo="$(drive "$w" ai "$s" "$w/F")"; fi
-  if arm_on A; then
-    if [ "$s" = validate-write-format-steering ]; then
-      # D owns the counts, so A compares the exit exactly and the text with digits masked.
-      a=1; [ "$(first_line "$fo")" = "$(first_line "$ctl")" ] && [ "$(tr 0-9 N <<<"$fo")" = "$(tr 0-9 N <<<"$ctl")" ] && a=0
-    else
-      a=1; [ "$fo" = "$ctl" ] && a=0
-    fi
-  fi
-  if arm_on B || { [ "$s" = validate-write-format-steering ] && arm_on P; }; then gg="$(drive "$w" ai "$s" "$w/Ggood-$s")"; fi
-  if arm_on B; then
-    gb="$(drive "$w" ai "$s" "$w/Gbad-$s")"
-    b=1; [ "$(first_line "$gb")" != rc=0 ] && [ "$(first_line "$gg")" = rc=0 ] && b=0
-  fi
-  if arm_on C; then
-    lg="$(drive "$w" legacy "$s" "$w/F")"
-    c=1; [ "$lg" = "$fo" ] && c=0
-  fi
+  fo="$(drive "$w" ai "$s" "$w/F")"
   if [ "$s" = validate-write-format-steering ]; then
-    if arm_on D; then
-      nc="$(decl_rows "$ctl")"; nf="$(decl_rows "$fo")"
-      case "$nc" in ''|0) echo "BROKEN: the control of $s judged no declaration rows"; return ;; esac
-      d=1; [ "$nf" = "$nc" ] && d=0
-    fi
-    if arm_on P; then
-      fp="$(drive "$w" ai "$s" "$w/FP")"
-      p=1
-      if [ "$(first_line "$fp")" = rc=0 ] && grep -q 'SKIP — EXAMINED NOTHING' <<<"$fp" \
-         && [ "$(first_line "$gg")" = rc=0 ] && ! grep -q 'SKIP — EXAMINED NOTHING' <<<"$gg"; then p=0; fi
-    fi
+    # D owns the counts, so A compares the exit exactly and the text with digits masked.
+    a=1; [ "$(first_line "$fo")" = "$(first_line "$ctl")" ] && [ "$(tr 0-9 N <<<"$fo")" = "$(tr 0-9 N <<<"$ctl")" ] && a=0
+  else
+    a=1; [ "$fo" = "$ctl" ] && a=0
   fi
-  if [ "$s" = sync-taught-schema ] && arm_on E; then
+  gg="$(drive "$w" ai "$s" "$w/Ggood-$s")"
+  gb="$(drive "$w" ai "$s" "$w/Gbad-$s")"
+  b=1; [ "$(first_line "$gb")" != rc=0 ] && [ "$(first_line "$gg")" = rc=0 ] && b=0
+  lg="$(drive "$w" legacy "$s" "$w/F")"
+  c=1; [ "$lg" = "$fo" ] && c=0
+  if [ "$s" = validate-write-format-steering ]; then
+    nc="$(decl_rows "$ctl")"; nf="$(decl_rows "$fo")"
+    case "$nc" in ''|0) echo "BROKEN: the control of $s judged no declaration rows"; return ;; esac
+    d=1; [ "$nf" = "$nc" ] && d=0
+    fp="$(drive "$w" ai "$s" "$w/FP")"
+    p=1
+    if [ "$(first_line "$fp")" = rc=0 ] && grep -q 'SKIP — EXAMINED NOTHING' <<<"$fp" \
+       && [ "$(first_line "$gg")" = rc=0 ] && ! grep -q 'SKIP — EXAMINED NOTHING' <<<"$gg"; then p=0; fi
+  fi
+  if [ "$s" = sync-taught-schema ]; then
     d0="$(cksum < "$w/FE/.claude/skills/ai-dlc/decoy.md")"; i0="$(sum_docs "$w")"
     ( cd "$w/t" && AI_DLC_PROJECT_ROOT="$w/FE" bash "$w/t/scripts/ai-dlc/sync-taught-schema.sh" >/dev/null 2>&1 )
     d1="$(cksum < "$w/FE/.claude/skills/ai-dlc/decoy.md")"; i1="$(sum_docs "$w")"
     e=1; [ "$d0" = "$d1" ] && [ "$i0" = "$i1" ] && e=0
   fi
   if [ "$s" = validate-gate-adjudication ]; then
-    if arm_on M; then
-      gm="$(drive "$w" ai "$s" "$w/GM")"
-      m=1
-      if [ "$(first_line "$gm")" = rc=0 ] && grep -qx SIFPROBE <<<"$gm" && ! grep -qx SIFPROBE <<<"$ctl"; then m=0; fi
-    fi
-    if arm_on N; then
-      n=1
-      if [ "$(adjudicate "$w" "$w/F")" = "WORLD/t/docs/escalations/pending.md" ] \
-         && [ "$(adjudicate "$w" "$w/GE")" = "WORLD/GE/docs/escalations/pending.md" ]; then n=0; fi
-    fi
+    gm="$(drive "$w" ai "$s" "$w/GM")"
+    m=1
+    if [ "$(first_line "$gm")" = rc=0 ] && grep -qx SIFPROBE <<<"$gm" && ! grep -qx SIFPROBE <<<"$ctl"; then m=0; fi
+    n=1
+    if [ "$(adjudicate "$w" "$w/F")" = "WORLD/t/docs/escalations/pending.md" ] \
+       && [ "$(adjudicate "$w" "$w/GE")" = "WORLD/GE/docs/escalations/pending.md" ]; then n=0; fi
   fi
   printf '%s%s%s%s%s%s%s%s\n' "$a" "$b" "$c" "$d" "$e" "$m" "$n" "$p"
 }
 
-# --- the mutants ------------------------------------------------------------------------------
-# Each edits a COPY of an installed script inside a copy of the WHOLE install tree, anchored on
-# the fix's own lines, refused unless every anchor matched exactly once, and cmp-guarded.
-MUTPY="$WORK/mut.py"
-cat > "$MUTPY" <<'PY'
-import re, sys
-mode, src_path, dst_path = sys.argv[1], sys.argv[2], sys.argv[3]
-src = open(src_path).read()
-def die(msg):
-    sys.stderr.write("anchor: " + msg + "\n"); sys.exit(3)
-def once(pat, flags=re.M):
-    m = list(re.finditer(pat, src, flags))
-    if len(m) != 1:
-        die("%s matched %d times" % (pat[:60], len(m)))
-    return m[0]
-def lit(old, new, text):
-    if text.count(old) != 1:
-        die("literal %r found %d times" % (old[:60], text.count(old)))
-    return text.replace(old, new)
-if mode in ("DEL", "HOP"):
-    # The install-root walk the candidate is built from. DEL empties it, so no candidate is added.
-    # HOP replaces the walk with a fixed two-hop climb from the script's own directory.
-    m = once(r'^(\w*INSTALL_ROOT)="\$\(ai_dlc_resolve_root "\$(\w+)" \|\| true\)"$')
-    rep = m.group(1) + '=""' if mode == "DEL" else m.group(1) + '="$(cd "$' + m.group(2) + '/../.." && pwd)"'
-    out = src[:m.start()] + rep + src[m.end():]
-elif mode == "IF":
-    if 'SCHEMA_DIR=""' in src:
-        # write-format-steering resolves its schema pair by DIRECTORY; the install's goes first.
-        out = lit(' \\\n          "${AI_DLC_INSTALL_ROOT:+$AI_DLC_INSTALL_ROOT/.claude/schemas}"; do', '; do', src)
-        out = lit('for _d in "$AI_DLC_SELF_DIR/../schemas"',
-                  'for _d in "${AI_DLC_INSTALL_ROOT:+$AI_DLC_INSTALL_ROOT/.claude/schemas}" "$AI_DLC_SELF_DIR/../schemas"', out)
-    elif "GA_INSTALL_SCHEMA" in src:
-        out = lit('schemas/gate-adjudication-verdict.json" \\\n        "$GA_INSTALL_SCHEMA"; do',
-                  'schemas/gate-adjudication-verdict.json"; do', src)
-        out = lit('        "$GA_ROOT/core/schemas/gate-adjudication-verdict.json" \\\n',
-                  '        "$GA_INSTALL_SCHEMA" \\\n        "$GA_ROOT/core/schemas/gate-adjudication-verdict.json" \\\n', out)
-    else:
-        blk = once(r'^elif \[ -n "\$AI_DLC_INSTALL_ROOT" \] .*?(?=^(?:elif|else))', re.M | re.S)
-        rest = src[:blk.start()] + src[blk.end():]
-        first = list(re.finditer(r'^(if|elif) (\[ -f "\$SCRIPT_DIR/\.\./schemas/)', rest, re.M))
-        if len(first) != 1:
-            die("script-relative head matched %d times" % len(first))
-        f = first[0]; b = blk.group(0)
-        ins = ("if" + b[len("elif"):] if f.group(1) == "if" else b) + "elif " + f.group(2)
-        out = rest[:f.start()] + ins + rest[f.end():]
-elif mode == "IFMAP":
-    out = lit('skills/ai-dlc/enforcement-map.yaml" \\\n        "$GA_INSTALL_MAP"; do', 'skills/ai-dlc/enforcement-map.yaml"; do', src)
-    out = lit('        "$GA_ROOT/core/skills/ai-dlc/enforcement-map.yaml" \\\n',
-              '        "$GA_INSTALL_MAP" \\\n        "$GA_ROOT/core/skills/ai-dlc/enforcement-map.yaml" \\\n', out)
-elif mode == "R1":
-    out = lit('  READER_ROOT="$AI_DLC_INSTALL_ROOT"\n', '  READER_ROOT="$AI_DLC_ROOT"\n', src)
-elif mode == "R2":
-    out = lit('    ROOT="$AI_DLC_INSTALL_ROOT"\n', '    ROOT="$AI_DLC_ROOT"\n', src)
-elif mode == "ESC":
-    # BL-326 reverted: the escalations are read from the override root whatever tree the map is from.
-    out = lit('ESC="${AI_DLC_ESCALATIONS:-$GA_MAP_ROOT/', 'ESC="${AI_DLC_ESCALATIONS:-$GA_ROOT/', src)
-elif mode == "PERFILE":
-    # BL-330 reverted: the population schema falls back on its own, through every candidate
-    # directory, whatever directory the steering schema came from.
-    out = lit('[ -f "$SCHEMA_DIR/$POP_NAME" ] && POP="$SCHEMA_DIR/$POP_NAME"\n',
-              'for _pd in "$AI_DLC_SELF_DIR/../schemas" "$AI_DLC_ROOT/core/schemas" "$AI_DLC_ROOT/.claude/schemas" '
-              '"${AI_DLC_INSTALL_ROOT:+$AI_DLC_INSTALL_ROOT/.claude/schemas}"; do '
-              '[ -n "$_pd" ] && [ -f "$_pd/$POP_NAME" ] && { POP="$_pd/$POP_NAME"; break; }; done\n', src)
-elif mode == "ESCI":
-    # Over-reach: the escalations always come from the install, even when the root's own map won.
-    out = lit('GA_MAP_ROOT="$GA_ROOT"\n', 'GA_MAP_ROOT="$GA_INSTALL_ROOT"\n', src)
-else:
-    die("unknown mode " + mode)
-open(dst_path, "w").write(out)
-PY
-
-# script:MODE:want — want over A B C D E M N P, exactly. DEL on gate-adjudication also fails N: with
-# no install fallback the no-map root F finds no map at all, so there is no escalations path to read.
-MUTANTS="
-sprint-status:DEL:100----- sprint-status:IF:010----- sprint-status:HOP:001-----
-validate-audit-anchors:DEL:100----- validate-audit-anchors:IF:010----- validate-audit-anchors:HOP:001-----
-validate-write-format-steering:DEL:1001---0 validate-write-format-steering:IF:0100---1
-validate-write-format-steering:HOP:0010---0 validate-write-format-steering:R1:0001---0
-validate-write-format-steering:PERFILE:0000---1
-sync-taught-schema:DEL:100-0--- sync-taught-schema:IF:010-0--- sync-taught-schema:HOP:001-0---
-sync-taught-schema:R2:100-1---
-validate-gate-adjudication:DEL:100--01- validate-gate-adjudication:IF:010--00-
-validate-gate-adjudication:HOP:001--00- validate-gate-adjudication:IFMAP:000--11-
-validate-gate-adjudication:ESC:000--01- validate-gate-adjudication:ESCI:000--01-
-"
-
-# world <name> <script or ""> <mode or COPY> [real] -> writes the world; its .status says APPLIED or why not
-#
-# mk_world_t <dst> <real|overlay>: a mutant differs from the install by ONE script, so a world is not a
-# 24MB copy of the install. `overlay` copies only scripts/ (the mutated script and its siblings, which
-# the resolver walks up from) and symlinks every other top entry of the install, .claude/ and .git
-# included, to the shared BASE. That is sound only for a world whose drives WRITE nothing under the
-# install; the drives that write the install's docs (sync-taught-schema write mode: arm E, E2, and
-# R2 which rewrites docs by design) get `real`, a copy-on-write clone (cp -Rc) of the whole install.
-mk_world_t() {
-  local dst="$1" kind="$2" e b
-  if [ "$kind" = real ]; then cp -Rc "$BASE/t" "$dst" || cp -R "$BASE/t" "$dst"; return; fi
-  mkdir -p "$dst" || return 1
-  cp -R "$BASE/t/scripts" "$dst/scripts" || return 1
-  for e in "$BASE/t"/* "$BASE/t"/.[!.]*; do
-    [ -e "$e" ] || [ -L "$e" ] || continue
-    b="$(basename "$e")"; [ "$b" != scripts ] || continue
-    ln -s "$e" "$dst/$b" || return 1
-  done
-}
+# build_world <name> -> a whole copy of the install (a copy-on-write clone where the filesystem has one)
+# with the foreign roots built beside it; its .status says APPLIED or why not. Write-mode drives (arm E,
+# E2) modify the install's docs, so the copy is whole.
 build_world() {
-  local w="$WORK/$1" s="$2" mode="$3" kind="${4:-overlay}" src dst
-  mkdir -p "$w" && mk_world_t "$w/t" "$kind" 2>"$w/.err" || { echo "DID NOT APPLY: copy of the install failed: $(sed -n 1p "$w/.err")" > "$w/.status"; return 1; }
-  if [ "$mode" != COPY ]; then
-    src="$BASE/t/scripts/ai-dlc/$s.sh"; dst="$w/t/scripts/ai-dlc/$s.sh"
-    if ! python3 "$MUTPY" "$mode" "$src" "$dst" 2>"$w/.err"; then
-      echo "DID NOT APPLY: $(sed -n 1p "$w/.err")" > "$w/.status"; return 1
-    fi
-    if cmp -s "$src" "$dst"; then echo "DID NOT APPLY: identical to the installed $s.sh" > "$w/.status"; return 1; fi
-    # The legacy copy is the same program, so it carries the same mutation.
-    cp "$dst" "$w/t/scripts/$s.sh" || { echo "DID NOT APPLY: legacy copy failed" > "$w/.status"; return 1; }
-  fi
+  local w="$WORK/$1"
+  mkdir -p "$w" && { cp -Rc "$BASE/t" "$w/t" 2>"$w/.err" || cp -R "$BASE/t" "$w/t" 2>"$w/.err"; } \
+    || { echo "DID NOT APPLY: copy of the install failed: $(sed -n 1p "$w/.err")" > "$w/.status"; return 1; }
   mk_roots "$w" || { echo "DID NOT APPLY: foreign roots not built" > "$w/.status"; return 1; }
   echo APPLIED > "$w/.status"
 }
 
 echo "schema-install-fallback"
-echo "  mode: $([ "$MATRIX" != 0 ] && echo "--matrix (FULL: every mutant drives all eight arms)" || echo "plain (PER-PUSH: every mutant drives its deciding arm(s) and twin only)")"
 echo "  install: $BASE/t (scripts/ai-dlc/ + $n_legacy legacy copies in scripts/)"
 echo ""
 
-# --- anchor control: every mutation refuses a file that carries none of the fix -------------
-printf '#!/usr/bin/env bash\necho no fix here\n' > "$WORK/decoy.sh"
-n_decoy=0; n_modes=0
-for mode in DEL HOP IF IFMAP R1 R2 ESC ESCI PERFILE; do
-  n_modes=$((n_modes + 1))
-  python3 "$MUTPY" "$mode" "$WORK/decoy.sh" "$WORK/decoy.out" 2>/dev/null && n_decoy=$((n_decoy + 1))
-done
-[ "$n_decoy" -eq 0 ] && ok "mutants: all $n_modes mutation programs refuse a decoy carrying no anchor" \
-                     || bad "mutants: $n_decoy mutation program(s) applied to a decoy — an anchor matches text that is not the fix"
-
-# --- the unmutated install ------------------------------------------------------------------
+# --- the install ------------------------------------------------------------------
 mk_roots "$BASE" || { echo "FIXTURE ERROR: foreign roots not built" >&2; exit 2; }
 
 # E's discrimination, proven first: the decoy IS a live stale region that write mode rewrites
@@ -564,88 +353,18 @@ extra_arms() {
     validate-gate-adjudication)     printf '%s' ', M root map wins, N escalations follow the map' ;;
   esac
 }
-base_ok=1
 for s in $SCRIPTS; do
   got="$(vector "$BASE" "$s")"; want="$(want_base "$s")"
   if [ "$got" = "$want" ]; then
     ok "$s: A no-schema root = control, B root schema wins, C legacy layout agrees$(extra_arms "$s") ($got)"
   else
-    bad "$s: vector $got, want $want (A B C D E M N P)"; base_ok=0
+    bad "$s: vector $got, want $want (A B C D E M N P)"
   fi
 done
 
-# --- mutants, in whole-tree copies, six at a time -------------------------------------------
+# --- the whole-tree copy that E2 and Q write into -------------------------------------------
 echo ""
-i=0; running=0
-for spec in COPY $MUTANTS; do
-  i=$((i + 1))
-  (
-    w="$WORK/m$i"
-    if [ "$spec" = COPY ]; then
-      build_world "m$i" "" COPY real || exit 0
-      for s in $SCRIPTS; do printf '%s %s\n' "$s" "$(vector "$w" "$s")"; done > "$w/.vec"
-    else
-      s="${spec%%:*}"; rest="${spec#*:}"; mode="${rest%%:*}"
-      kind=overlay; [ "$s" != sync-taught-schema ] || kind=real  # its write-mode drives (E) may write docs
-      build_world "m$i" "$s" "$mode" "$kind" || exit 0
-      vector "$w" "$s" "$(sel_for "$s:$mode")" > "$w/.vec"
-    fi
-  ) &
-  running=$((running + 1))
-  if [ "$running" -ge 6 ]; then wait; running=0; fi
-done
-wait
-
-# The unmutated COPY: the copy harness reproduces the base vectors, so a mutant verdict below is
-# evidence about a subject that ran, not about a copy that broke.
-if [ "$(cat "$WORK/m1/.status" 2>/dev/null)" != APPLIED ]; then
-  bad "CONTROL: the unmutated whole-tree copy was not built — $(cat "$WORK/m1/.status" 2>/dev/null)"
-else
-  copy_bad=0
-  for s in $SCRIPTS; do
-    got="$(sed -n "s/^$s //p" "$WORK/m1/.vec")"
-    [ "$got" = "$(want_base "$s")" ] || { copy_bad=1; bad "CONTROL: unmutated copy, $s vector ${got:-<none>}, want $(want_base "$s")"; }
-  done
-  if [ "$copy_bad" -eq 0 ] && [ "$base_ok" -eq 1 ]; then
-    ok "CONTROL: an unmutated whole-tree copy reproduces every base vector"
-    B_base=1
-  fi
-fi
-
-i=1; n_scored=0; n_leak=0; n_checked=0
-for spec in $MUTANTS; do
-  i=$((i + 1))
-  s="${spec%%:*}"; rest="${spec#*:}"; mode="${rest%%:*}"; want="${rest#*:}"
-  st="$(cat "$WORK/m$i/.status" 2>/dev/null)"
-  label="MUTANT $mode on $s"
-  mid="$s:$mode"
-  arms="$(arms_of "$mid")"
-  [ -n "$arms" ] || { bad "$label: no MUTANT-MATRIX line for $mid in the header"; continue; }
-  if [ "$st" != APPLIED ]; then bad "$label: ${st:-no status written}"; continue; fi
-  if [ "$base_ok" -ne 1 ]; then bad "$label: FIXTURE BROKEN — the unmutated vectors are wrong, so no kill is readable"; continue; fi
-  got="$(cat "$WORK/m$i/.vec" 2>/dev/null)"
-  if [ "$MATRIX" = 0 ]; then
-    # a plain run must leave every cell outside decides+twin undriven ('-'), and drive every selected one
-    n_checked=$((n_checked + 1))
-    sel_cells="$(tr -d ', ' <<<"$arms")"
-    for _k in 0 1 2 3 4 5 6 7; do
-      _a="${ARMLET:_k:1}"; _c="${got:_k:1}"
-      case "$sel_cells" in *"$_a"*) [ "$_c" != "-" ] || [ "${want:_k:1}" = "-" ] || n_leak=$((n_leak + 1)) ;;
-                           *) [ "$_c" = "-" ] || n_leak=$((n_leak + 1)) ;; esac
-    done
-  fi
-  if sel_match "$got" "$want" $(tr , ' ' <<<"$arms"); then
-    mutant_killed "${B_base:-0}" "$mid" "$label killed by its own arm(s) ($got)" && n_scored=$((n_scored + 1))
-  else bad "$label SURVIVED: vector ${got:-<none>}, want $want (A B C D E M N P)"; fi
-done
-[ "$n_scored" -gt 0 ] || bad "no mutant was scored — the arms were never shown to fire"
-if [ "$MATRIX" = 0 ]; then
-  if [ "$n_checked" -gt 0 ] && [ "$n_leak" -eq 0 ]; then
-    ok "PLAIN RUN: $n_checked mutant(s) drove only their deciding arm(s) and twin; no matrix-only cell was executed"
-  else
-    bad "PLAIN RUN: $n_leak cell(s) of $n_checked mutant(s) were driven outside (or missed inside) the deciding+twin selection"
-  fi
-fi
+build_world m1 || { echo "FIXTURE ERROR: whole-tree copy not built: $(cat "$WORK/m1/.status" 2>/dev/null)" >&2; exit 2; }
 
 # --- E2 (BL-332): write mode under a foreign root REWRITES a stale region in the INSTALL ------
 # Arm E seeds its stale region in the FOREIGN root only, and the install's docs are already in
@@ -655,33 +374,9 @@ fi
 # override does: exit 0, rewrite the install's retro.md, leave the foreign decoy alone.
 #   1. The seed is live: --check under the foreign root exits 1 naming steps/retro.md.
 #   2. EXPECTED is DERIVED, not the shipped bytes: a no-override write of the same seed (that run
-#      resolves the install's .claude/schemas/ branch, never the fallback, so no mutant here can
-#      move it), asserted to differ from the seed so the comparison is not two no-ops.
+#      resolves the install's .claude/schemas/ branch, never the fallback), asserted to differ from the seed so the comparison is not two no-ops.
 #   3. Re-seeded, the foreign-root write exits 0, reports 1 file updated, produces EXPECTED byte
 #      for byte, leaves the decoy's cksum alone, and --check then passes.
-# Two mutants, both gated on write mode inside the fallback branch so A (check mode) cannot move:
-#   SKIP  the install's doc dirs are dropped — exit 0, nothing written. An rc-only arm passes it.
-#   R2W   the 0.645.0 answer — exit 1, nothing written.
-# Each is shown to leave the whole A-E vector at its base value (E green) and to fail E2 alone.
-bl332_mut() { # $1 SKIP|R2W|DECOY-CHECK  $2 src  $3 dst
-  python3 - "$1" "$2" "$3" <<'PY'
-import sys
-mode, src_path, dst_path = sys.argv[1], sys.argv[2], sys.argv[3]
-src = open(src_path).read()
-# Anchored on the fallback branch's own ROOT line, which the branch above it does not carry;
-# its DOC_DIRS line is byte-identical to that branch's, so it is never the anchor on its own.
-old = '    ROOT="$AI_DLC_INSTALL_ROOT"\n    DOC_DIRS=("$ROOT/.claude/skills" "$ROOT/.claude/team-roles")\n'
-if src.count(old) != 1:
-    sys.stderr.write("anchor: fallback ROOT/DOC_DIRS pair found %d times\n" % src.count(old)); sys.exit(3)
-if mode == "SKIP":
-    new = old + '    [ "$MODE" = sync ] && DOC_DIRS=("$ROOT/.sif-bl332-no-such-dir")\n'
-elif mode == "R2W":
-    new = old + '    [ "$MODE" = sync ] && { echo "sync-taught-schema: FAIL — BL-332 mutant" >&2; exit 1; }\n'
-else:
-    sys.stderr.write("anchor: unknown mode %s\n" % mode); sys.exit(3)
-open(dst_path, "w").write(src.replace(old, new))
-PY
-}
 
 # e2 <world> -> "0" held, or "1 <why>"
 bl332_e2() {
@@ -716,60 +411,13 @@ PY
 }
 
 bl332_stale_install_arm() {
-  local m w st v e n_dec=0
-  printf '#!/usr/bin/env bash\necho no fix here\n' > "$WORK/bl332-decoy.sh"
-  for m in SKIP R2W; do bl332_mut "$m" "$WORK/bl332-decoy.sh" "$WORK/bl332-decoy.out" 2>/dev/null && n_dec=$((n_dec + 1)); done
-  [ "$n_dec" -eq 0 ] && ok "E2 mutants: both BL-332 mutation programs refuse a decoy carrying no anchor" \
-                     || bad "E2 mutants: $n_dec BL-332 mutation program(s) applied to a decoy"
-  # NONE is the unmutated COPY world m1 (already built, its vector already read): re-driving a second
-  # identical world would repeat it. Its retro.md is seeded here, after m1's last read, so m1 is spent.
-  for m in SKIP R2W; do
-    (
-      w="$WORK/e2-$m"
-      mkdir -p "$w" && cp -Rc "$BASE/t" "$w/t" || { echo "DID NOT APPLY: copy of the install failed" > "$w/.status"; exit 0; }
-      if [ "$m" != NONE ]; then
-        bl332_mut "$m" "$BASE/t/scripts/ai-dlc/sync-taught-schema.sh" "$w/t/scripts/ai-dlc/sync-taught-schema.sh" 2>"$w/.err" \
-          || { echo "DID NOT APPLY: $(sed -n 1p "$w/.err")" > "$w/.status"; exit 0; }
-        cmp -s "$BASE/t/scripts/ai-dlc/sync-taught-schema.sh" "$w/t/scripts/ai-dlc/sync-taught-schema.sh" \
-          && { echo "DID NOT APPLY: identical to the installed sync-taught-schema.sh" > "$w/.status"; exit 0; }
-        cp "$w/t/scripts/ai-dlc/sync-taught-schema.sh" "$w/t/scripts/sync-taught-schema.sh" \
-          || { echo "DID NOT APPLY: legacy copy failed" > "$w/.status"; exit 0; }
-      fi
-      mk_roots "$w" || { echo "DID NOT APPLY: foreign roots not built" > "$w/.status"; exit 0; }
-      echo APPLIED > "$w/.status"
-      # The vector first: once the install region is seeded, E's install checksum moves under a
-      # CORRECT write too, so the order is part of the arm.
-      vector "$w" sync-taught-schema "$(sel_for "sync-taught-schema:$m")" > "$w/.vec"
-      bl332_e2 "$w" > "$w/.e2"
-    ) &
-  done
-  mkdir -p "$WORK/e2-NONE"; cp "$WORK/m1/.status" "$WORK/e2-NONE/.status"
-  sed -n 's/^sync-taught-schema //p' "$WORK/m1/.vec" > "$WORK/e2-NONE/.vec"
-  bl332_e2 "$WORK/m1" > "$WORK/e2-NONE/.e2"
-  wait
-  for m in NONE SKIP R2W; do
-    w="$WORK/e2-$m"; st="$(cat "$w/.status" 2>/dev/null)"
-    if [ "$st" != APPLIED ]; then bad "E2 $m: ${st:-no status written}"; continue; fi
-    v="$(cat "$w/.vec" 2>/dev/null)"; e="$(cat "$w/.e2" 2>/dev/null)"
-    case "$e" in "1 BROKEN"*) bad "E2 $m: FIXTURE BROKEN — ${e#1 }"; continue ;; esac
-    if ! sel_match "$v" "$(want_base sync-taught-schema)" E; then
-      bad "E2 $m: vector $v, want $(want_base sync-taught-schema) — a mutant moving A-E is entangled, not an E2 kill"; continue
-    fi
-    if [ "$m" = NONE ]; then
-      if [ "$e" = 0 ]; then
-        ok "E2 write mode under a foreign root rewrites a stale INSTALL retro.md region to the no-override render, decoy untouched"
-        B_e2=1
-      else
-        bad "E2 write mode under a foreign root over a stale install region: ${e#1 }"
-      fi
-    else
-      if [ "${e%% *}" = 1 ]; then
-        mutant_killed "${B_e2:-0}" "sync-taught-schema:$m" "MUTANT $m on sync-taught-schema leaves A-E at $v and is killed by E2 alone (${e#1 })"
-      else
-        bad "MUTANT $m on sync-taught-schema SURVIVED: E2 held — the arm cannot see a skipped install region"
-      fi
-    fi
-  done
+  local e
+  e="$(bl332_e2 "$WORK/m1")"
+  case "$e" in
+    0) ok "E2 write mode under a foreign root rewrites a stale INSTALL retro.md region to the no-override render, decoy untouched" ;;
+    "1 BROKEN"*) bad "E2: FIXTURE BROKEN — ${e#1 }" ;;
+    *) bad "E2 write mode under a foreign root over a stale install region: ${e#1 }" ;;
+  esac
 }
 bl332_stale_install_arm
 
@@ -780,27 +428,9 @@ bl332_stale_install_arm
 # byte-for-byte the no-override answer, where the distribution layout exits 1 on the same root).
 # The root holds no .claude/schemas, so the fallback branch is the one taken, in the consumer layout.
 #   STALE root  its reconcile/lib.sh lacks `function ledger_entry_shape(` -> rc 1 and a STALE finding
-#               naming the ROOT's lib.sh. Killed by dropping the root resolution (NOROOT).
+#               naming the ROOT's lib.sh.
 #   INTACT root the same file WITH its anchor -> rc 0, `PASS —`, and the control's declaration-row
-#               count, so the root side adds findings only, never a row. Killed by failing any root
-#               that merely CARRIES the file (ANCHORLESS). F, the bare root, is arm A and holds.
-# Each mutant must leave the A-P vector at its base value, so the kill is Q's alone.
-bl331_mut() { # $1 NOROOT|ANCHORLESS  $2 src  $3 dst
-  python3 - "$1" "$2" "$3" <<'PY'
-import sys
-mode, src_path, dst_path = sys.argv[1], sys.argv[2], sys.argv[3]
-src = open(src_path).read()
-if mode == "NOROOT":
-    old, new = 'ALSO_ROOT="$AI_DLC_ROOT"', 'ALSO_ROOT=""'
-elif mode == "ANCHORLESS":
-    old, new = 'if anchor not in rbody:', 'if True:'
-else:
-    sys.stderr.write("anchor: unknown mode %s\n" % mode); sys.exit(3)
-if src.count(old) != 1:
-    sys.stderr.write("anchor: %r found %d times\n" % (old, src.count(old))); sys.exit(3)
-open(dst_path, "w").write(src.replace(old, new))
-PY
-}
+#               count, so the root side adds findings only, never a row. F, the bare root, is arm A and holds.
 
 # q <world> -> two characters, stale-arm then intact-arm, 0 held 1 failed; or "BROKEN: <why>"
 bl331_q() {
@@ -825,50 +455,13 @@ bl331_q() {
 }
 
 bl331_arm() {
-  local m w st v q n_dec=0
-  printf '#!/usr/bin/env bash\necho no fix here\n' > "$WORK/bl331-decoy.sh"
-  for m in NOROOT ANCHORLESS; do bl331_mut "$m" "$WORK/bl331-decoy.sh" "$WORK/bl331-decoy.out" 2>/dev/null && n_dec=$((n_dec + 1)); done
-  [ "$n_dec" -eq 0 ] && ok "Q mutants: both BL-331 mutation programs refuse a decoy carrying no anchor" \
-                     || bad "Q mutants: $n_dec BL-331 mutation program(s) applied to a decoy"
-  # NONE is the unmutated COPY world m1 again; its Q roots are built inside it, read-only.
-  for m in NOROOT ANCHORLESS; do
-    (
-      w="$WORK/q-$m"
-      mk_world_t "$w/t" overlay || { echo "DID NOT APPLY: copy of the install failed" > "$w/.status"; exit 0; }
-      if [ "$m" != NONE ]; then
-        bl331_mut "$m" "$BASE/t/scripts/ai-dlc/validate-write-format-steering.sh" "$w/t/scripts/ai-dlc/validate-write-format-steering.sh" 2>"$w/.err" \
-          || { echo "DID NOT APPLY: $(sed -n 1p "$w/.err")" > "$w/.status"; exit 0; }
-        cmp -s "$BASE/t/scripts/ai-dlc/validate-write-format-steering.sh" "$w/t/scripts/ai-dlc/validate-write-format-steering.sh" \
-          && { echo "DID NOT APPLY: identical to the installed validate-write-format-steering.sh" > "$w/.status"; exit 0; }
-        cp "$w/t/scripts/ai-dlc/validate-write-format-steering.sh" "$w/t/scripts/validate-write-format-steering.sh" \
-          || { echo "DID NOT APPLY: legacy copy failed" > "$w/.status"; exit 0; }
-      fi
-      mk_roots "$w" || { echo "DID NOT APPLY: foreign roots not built" > "$w/.status"; exit 0; }
-      echo APPLIED > "$w/.status"
-      vector "$w" validate-write-format-steering "$(sel_for "validate-write-format-steering:$m")" > "$w/.vec"
-      bl331_q "$w" > "$w/.q"
-    ) &
-  done
-  mkdir -p "$WORK/q-NONE"; cp "$WORK/m1/.status" "$WORK/q-NONE/.status"
-  sed -n 's/^validate-write-format-steering //p' "$WORK/m1/.vec" > "$WORK/q-NONE/.vec"
-  bl331_q "$WORK/m1" > "$WORK/q-NONE/.q"
-  wait
-  for m in NONE NOROOT ANCHORLESS; do
-    w="$WORK/q-$m"; st="$(cat "$w/.status" 2>/dev/null)"
-    if [ "$st" != APPLIED ]; then bad "Q $m: ${st:-no status written}"; continue; fi
-    v="$(cat "$w/.vec" 2>/dev/null)"; q="$(cat "$w/.q" 2>/dev/null)"
-    case "$q" in BROKEN*) bad "Q $m: FIXTURE BROKEN — ${q#BROKEN: }"; continue ;; esac
-    if ! sel_match "$v" "$(want_base validate-write-format-steering)" A; then
-      bad "Q $m: vector $v, want $(want_base validate-write-format-steering) — a mutant moving A-P is entangled, not a Q kill"; continue
-    fi
-    case "$m:$q" in
-      NONE:00)       ok "Q a stale root lib.sh under the install fallback exits 1 naming the root's copy; the intact root passes with the control's row count"; B_q=1 ;;
-      NONE:*)        bad "Q stale/intact root under the install fallback: $q, want 00 (a stale root is acquitted, or an intact one fails)" ;;
-      NOROOT:10)     mutant_killed "${B_q:-0}" "validate-write-format-steering:NOROOT" "MUTANT NOROOT on validate-write-format-steering leaves A-P at $v and is killed by Q's stale arm alone" ;;
-      ANCHORLESS:01) mutant_killed "${B_q:-0}" "validate-write-format-steering:ANCHORLESS" "MUTANT ANCHORLESS on validate-write-format-steering leaves A-P at $v and is killed by Q's intact arm alone" ;;
-      *)             bad "MUTANT $m on validate-write-format-steering SURVIVED: Q $q, want $( [ "$m" = NOROOT ] && echo 10 || echo 01)" ;;
-    esac
-  done
+  local q
+  q="$(bl331_q "$WORK/m1")"
+  case "$q" in
+    BROKEN*) bad "Q: FIXTURE BROKEN — ${q#BROKEN: }" ;;
+    00)      ok "Q a stale root lib.sh under the install fallback exits 1 naming the root's copy; the intact root passes with the control's row count" ;;
+    *)       bad "Q stale/intact root under the install fallback: $q, want 00 (a stale root is acquitted, or an intact one fails)" ;;
+  esac
 }
 bl331_arm
 
@@ -880,7 +473,7 @@ bl331_arm
 # FAILS when its input is missing; a stand-down here would recreate the gap. They run after every
 # background worker above has been reaped. Between the install at the top and this point nothing
 # writes $BASE/t's crosswalk path: the legacy copies go to scripts/, the foreign roots sit beside
-# $BASE/t, and every mutant works on a copy.
+# $BASE/t, and every other world works on a copy.
 echo ""
 
 # CW1/CW2, from layer-crosswalk-home (LC-N7 / W8): the installer scaffolds the consumer's

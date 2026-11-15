@@ -17,30 +17,7 @@
 # two pairs of ONE block and require opposite verdicts; a mask that works at block grain
 # passes every other arm here and fails those two.
 #
-# THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). M1-M6 mutate the BL-727 fix, each a copy built
-# by sup_mk; the arms are the cells their kills read (sup_arm: r1..r5, jg, join, pre2, preM). PER PUSH a mutant runs
-# its DECIDING arm (the kill's own check, unchanged) and its TWIN, an arm the measured matrix shows GREEN for it, which
-# must stay green (sup_twin), so the kill is confined. `--matrix` runs ctl and every mutant on every arm, each cell in
-# a fresh project, and prints one `MATRIX <mutant> <arm> GREEN|TRIPPED` row per cell. Measured: ctl GREEN on all nine;
-# M1 and M2 trip r1-r4 (M2 is scored on r1 alone); M3 trips join; M4 and M5 trip jg; M6 trips pre2 and preM; every
-# other cell GREEN. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
-# per distinct state") requires. Run it from the repo root:
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/derivation-capture/run.sh --matrix
-# MUTANT-MATRIX M1 decides=r1,r2,r3,r4 twins=r5
-# MUTANT-MATRIX M2 decides=r1 twins=r5
-# MUTANT-MATRIX M3 decides=join twins=pre2
-# MUTANT-MATRIX M4 decides=jg twins=r1
-# MUTANT-MATRIX M5 decides=jg twins=r1
-# MUTANT-MATRIX M6 decides=pre2,preM twins=join
-# MUTANT-MATRIX-CONTROL ctl why=the unmutated hook and validator in a project of their own; every arm holds there, and B_SUPCTL gates every kill on it
 set -uo pipefail
-# Usage: run.sh [--matrix]   (--matrix also prints one MATRIX row per mutant-or-ctl and arm; see the M1-M6 block)
-MATRIX=0
-case "${1:-}" in
-  "") ;;
-  --matrix) MATRIX=1 ;;
-  *) echo "FIXTURE ERROR: unknown argument '$1' (usage: run.sh [--matrix])" >&2; exit 2 ;;
-esac
 
 # The pre-push gate exports every AI_DLC_* tunable a consumer set in settings.json into
 # this process. Scrub them so the hook and the validator are tested against their own
@@ -447,7 +424,7 @@ fi
 # the command line ALONE on purpose: a mask shedding all leading blanks reads the eight-space
 # `$ x` as a second command and therefore a second, UNTOUCHED pair, blanks it, and submits the
 # real command with no recorded output -- STALE, and a reproducing block is refused. With the
-# whole pair in the payload both masks keep both lines and the mutation is invisible.
+# whole pair in the payload both masks keep both lines and the difference is invisible.
 IND_PAIR_DEEP="$(printf '  $ printf '"'"'      $ x\\n'"'"'')"
 fire "$(edit_json "$IND_ART" "$IND_PAIR_DEEP")"
 if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$IND_ART" "$IND_PAIR_DEEP"; then
@@ -470,7 +447,7 @@ fi
 # --- A20: an edit to PROSE in a file whose real block sits below a prose line that begins
 # with the fence token → SILENT. The near-miss beside A21: same file, one property apart. It
 # holds under a mask that misreads the prose line too, and moves only when every pair is
-# submitted regardless of the payload (the file-grain mutant).
+# submitted regardless of the payload (file grain).
 fire "$(edit_json "$OPN_ART" "A sentence that wraps so its continuation begins with the fence token, and the block")"
 if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && grep -qxF "A sentence that wraps so its continuation begins with the fence token, and the block" "$OPN_ART"; then
   ok "prose-opener file, edit touching only prose → exit 0 (payload seeded in the artifact)"
@@ -609,8 +586,7 @@ else
   bad "a ./-prefixed document path in a repair part exited $RC — the leading ./ is not normalised"
 fi
 # A37b: the ./ token after a redirect, `<./<path>`. The canonical spelling (A44-A49) also resolves a
-# bare `./<path>` to the document, so A37 alone is covered by two guards and a mutant of either
-# survives. Here the whitespace field is `<./...`, whose directory does not exist, so only the ./
+# bare `./<path>` to the document, so A37 alone is covered by two guards. Here the whitespace field is `<./...`, whose directory does not exist, so only the ./
 # normalisation in the token match can exempt it. Written into part 1.md, which no other arm touches.
 PAIR_DOTREDIR="$(printf '```derived\n$ grep -c scope <./%s\n96\n```' "$SELF_REL")"
 sec_write "$REPDIR/1.md" "$PAIR_DOTREDIR"
@@ -1016,7 +992,7 @@ fi
 # SUPERSEDE_FROM names the ONE real file a single masked argument stands for, so two arguments, or a
 # real file that is not there, is refused BEFORE any walk, with its own text. Without the pre-check
 # the join guard refuses these too, but under the "does not carry the commands" text and after a
-# walk -- so the arms key on the pre-check's own sentence, and M6 scores that difference.
+# walk -- so the arms key on the pre-check's own sentence.
 SUP_PRE='^REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=.* needs exactly one file argument and a readable file to read supersession from; no verdict\.$'
 # A65: env set + two file arguments -> rc 2, the pre-check text, no verdict.
 ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" AI_DLC_DERIV_SUPERSEDE_FROM="$CONSUMER/$(sup_path 1)" \
@@ -1076,202 +1052,6 @@ if [ "$JR_RC" = 2 ] && sup_jg_ok && ! grep -q 'did not run to' "$ERR"; then
   ok "A64: a join-guard REFUSED from the validator -> exit 0, stderr empty, PostToolUse additionalContext on stdout naming the refusal and the gate"
 else
   bad "A64: a replayed join REFUSED (capture rc $JR_RC) gave hook rc $RC with stdout: $(head -c 300 "$OUT") stderr: $(head -2 "$ERR") -- expected exit 0, empty stderr and the 'could not run' additionalContext"
-fi
-
-# --- M1-M6: MUTANTS OF THE BL-727 FIX, each a COPY in its own project, guarded by cmp -s ----------
-# Each project carries the seeded hook and validator, one of them mutated. The unmutated project is
-# the control: rows 1 and 5 hold there, and the join line appears, so a project whose hook or
-# validator cannot run fails the control rather than scoring every mutant as a kill.
-sup_world() { # <name> <hook> <validator> -> SUPW, a project carrying exactly those two
-  SUPW="$WORK/sup-world-$1"
-  mkdir -p "$SUPW/.claude/hooks" "$SUPW/scripts/ai-dlc" "$SUPW/$SUP_PA/s1" \
-    && printf '0.0.0\n' > "$SUPW/VERSION" \
-    && cp "$2" "$SUPW/.claude/hooks/ai-dlc-derivation-capture.sh" \
-    && cp "$3" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
-}
-sup_mut() { # <src> <dst> <old> <new> -> 0 when <old> is on exactly one line of <src> and the copy differs
-  local n
-  n="$(grep -cF -- "$3" "$1")" || n=0
-  [ "$n" = 1 ] || { printf '  DID NOT APPLY: %s lines of %s carry the anchor\n' "$n" "$1"; return 1; }
-  O="$3" N="$4" awk 'BEGIN { o = ENVIRON["O"]; n = ENVIRON["N"] }
-    { i = index($0, o); if (i) $0 = substr($0, 1, i - 1) n substr($0, i + length(o)); print }' "$1" > "$2" || return 1
-  ! cmp -s "$1" "$2"
-}
-MH="$WORK/sup-mut-hook.sh"; MV="$WORK/sup-mut-validator.sh"
-# sup_mk <M1..M6|ctl> -> SB_H, SB_V: the hook and validator that mutant's project carries, one of them a mutated copy
-# (ctl: neither). THE ONE HOME of the six mutations: the per-push block below and the --matrix loop both build here.
-sup_mk() {
-  SB_H="$HOOK"; SB_V="$VALIDATOR"
-  case "$1" in
-    ctl) return 0 ;;
-    M1) SB_H="$MH"; sup_mut "$HOOK" "$MH" 'AI_DLC_DERIV_SUPERSEDE_FROM="$FILE" bash "$VALIDATOR"' 'bash "$VALIDATOR"' ;;
-    M2) SB_V="$MV"; sup_mut "$VALIDATOR" "$MV.1" 'd="${sf%/*}"; [ "$d" = "$sf" ] && d="."' 'd="${f%/*}"; [ "$d" = "$f" ] && d="."' \
-          && sup_mut "$MV.1" "$MV" '-v bn="${sf##*/}"' '-v bn="${f##*/}"' ;;
-    M3) SB_V="$MV"; sup_mut "$VALIDATOR" "$MV" 'substr($0, 1, 2) == "C " && !($0 in have)' 'substr($0, 1, 2) == "C " && 0' ;;
-    M4) SB_H="$MH"; sup_mut "$HOOK" "$MH" "if _jg=\"\$(grep -m1 '^REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=' <<<\"\$OUT\")\"; then" 'if false; then' ;;
-    M5) SB_H="$MH"; sup_mut "$HOOK" "$MH" 'jq -n --arg context' ': --arg context' ;;
-    M6) SB_V="$MV"; sup_mut "$VALIDATOR" "$MV" 'if [ "$#" -ne 1 ] || [ ! -f "$1" ] || [ ! -r "$SUP_FROM" ] || [ ! -f "$SUP_FROM" ]; then' 'if false; then' ;;
-    *) echo "FIXTURE ERROR: no mutation registered for '$1'" >&2; exit 2 ;;
-  esac
-}
-# sup_arm <arm> -> 0 GREEN (the arm holds), 1 TRIPPED, run with SB_H/SB_V in a FRESH project of its own. The arms are
-# the cells the six kills read: r1..r5 one row's Edit fired through the hook (sup_ok, as A54-A58 read it); jg the
-# replayed join REFUSED fired through the hook (sup_jg_ok, A64); join the validator on a non-joining SUPERSEDE_FROM
-# (rc 2 and a REFUSED line, A62); pre2 and preM the pre-check's two refusals (A65 two arguments, A66 a missing file:
-# its own text). On the unmutated pair every arm is GREEN, which the matrix's ctl row shows.
-SUP_AN=0
-sup_arm() {
-  SUP_AN=$((SUP_AN + 1))
-  sup_world "arm$SUP_AN" "$SB_H" "$SB_V" || { echo "FIXTURE ERROR: the project for arm $1 could not be built" >&2; exit 2; }
-  case "$1" in
-    r1|r2|r3|r4|r5) sup_fire "$SUPW" "${1#r}"; sup_ok "${1#r}" ;;
-    jg) sup_body 1 > "$SUPW/$(sup_path 1)"
-        sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
-        sup_fire "$SUPW" 1; sup_jg_ok ;;
-    join) sup_body 1 > "$SUPW/$(sup_path 1)"; sup_body 5 > "$SUPW/$(sup_path 5)"
-        ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$(sup_path 5)" \
-            bash "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh" "$SUPW/$(sup_path 1)" ) > "$WORK/sup-arm.txt" 2>&1
-        [ "$?" = 2 ] && grep -q '^REFUSED' "$WORK/sup-arm.txt" ;;
-    pre2) sup_body 1 > "$SUPW/$(sup_path 1)"; sup_body 5 > "$SUPW/$(sup_path 5)"
-        ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$(sup_path 1)" \
-            bash "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh" "$SUPW/$(sup_path 1)" "$SUPW/$(sup_path 5)" ) > "$WORK/sup-arm.txt" 2>&1
-        grep -q "$SUP_PRE" "$WORK/sup-arm.txt" ;;
-    preM) sup_body 1 > "$SUPW/$(sup_path 1)"
-        ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$SUP_PA/s1/sup-absent.md" \
-            bash "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh" "$SUPW/$(sup_path 1)" ) > "$WORK/sup-arm.txt" 2>&1
-        grep -q "$SUP_PRE" "$WORK/sup-arm.txt" ;;
-    *) echo "FIXTURE ERROR: no arm '$1'" >&2; exit 2 ;;
-  esac
-}
-SUP_ARMS="r1 r2 r3 r4 r5 jg join pre2 preM"
-# sup_twin <M> <arm> -> 0 when the mutant's TWIN arm (its MUTANT-MATRIX row) still holds under that mutant's pair, so
-# the kill is confined to the deciding arm; otherwise one FAIL naming it. Run after the deciding check has been read.
-sup_twin() {
-  sup_mk "$1" > /dev/null && sup_arm "$2" && return 0
-  bad "$1: twin $2 tripped beside its deciding arm -- the kill is not confined to it; re-measure the matrix (--matrix)"
-  return 1
-}
-
-# CONTROL: the unmutated pair in a project of its own.
-if sup_world ctl "$HOOK" "$VALIDATOR" && cmp -s "$HOOK" "$SUPW/.claude/hooks/ai-dlc-derivation-capture.sh"; then
-  sup_fire "$SUPW" 1; _c1=$RC; sup_ok 1; _o1=$?
-  sup_fire "$SUPW" 5; _c5=$RC; sup_ok 5; _o5=$?
-  sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
-  sup_fire "$SUPW" 1; sup_jg_ok; _oj=$?
-  if [ "$_o1" = 0 ] && [ "$_o5" = 0 ] && [ "$_oj" = 0 ]; then
-    ok "mutant control: the unmutated copies give row 1 exit 0, row 5 FAIL (STALE) at :4, and the join line"
-    B_SUPCTL=1
-  else
-    bad "FIXTURE BROKEN: the unmutated copies gave row 1 rc $_c1, row 5 rc $_c5, join line $_oj -- every mutant verdict below is void"
-  fi
-else
-  bad "FIXTURE BROKEN: the mutant control project could not be built"
-fi
-
-# M1: the hook drops AI_DLC_DERIV_SUPERSEDE_FROM -- the defect as filed. Rows 1-4 go red, each on
-# the EARLIER pair the mask can no longer see superseded. Row 4 is scored too: A57 is silent-shaped
-# and would pass against a hook that emits nothing, so it needs a mutant that reddens it.
-if sup_mk M1 && sup_world m1 "$SB_H" "$SB_V"; then
-  _k=""
-  for _r in 1 2 3 4; do sup_fire "$SUPW" "$_r"; sup_ok "$_r" || { sup_stale_at4 "$_r" && _k="$_k$_r"; }; done
-  if [ "$_k" != 1234 ]; then bad "M1 survived: with the env dropped only rows '$_k' of 1-4 went red at :4 -- A54-A57 do not need the real file"
-  elif sup_twin M1 r5; then mutant_killed "${B_SUPCTL:-0}" M1 "M1 killed: the hook without SUPERSEDE_FROM refuses rows 1, 2, 3 and 4 at :4" \
-    || bad "M1 survived: with the env dropped only rows '$_k' of 1-4 went red at :4 -- A54-A57 do not need the real file"
-  fi
-else
-  bad "M1 DID NOT APPLY: the hook's validator call no longer carries AI_DLC_DERIV_SUPERSEDE_FROM=\"\$FILE\""
-fi
-
-# M2: the validator keeps the ARGUMENT's parent and basename for is_record (the mask's mktemp dir),
-# while the later copies still come from the real file. Row 1 goes red: no record, no supersession.
-if sup_mk M2 && sup_world m2 "$SB_H" "$SB_V"; then
-  sup_fire "$SUPW" 1
-  if ! sup_ok 1 && sup_stale_at4 1; then sup_twin M2 r5 && mutant_killed "${B_SUPCTL:-0}" M2 "M2 killed: is_record read off the mask's path refuses row 1 at :4"
-  else bad "M2 survived: is_record keyed on the argument's path gave row 1 rc $RC -- A54 does not need the real file's identity"; fi
-else
-  bad "M2 DID NOT APPLY: the supersession pre-pass no longer takes par/bn from \$sf"
-fi
-
-# M3: the validator's join guard matches nothing. A62's call then reads the other file's one command,
-# skips the pre-pass and answers FAIL (STALE) at rc 1 -- a verdict built on a file it never joined.
-if sup_mk M3 && sup_world m3 "$SB_H" "$SB_V"; then
-  sup_body 1 > "$SUPW/$(sup_path 1)"; sup_body 5 > "$SUPW/$(sup_path 5)"
-  ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$(sup_path 5)" \
-      bash "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh" "$SUPW/$(sup_path 1)" ) > "$WORK/sup-m3.txt" 2>&1
-  _m3=$?
-  if [ "$_m3" = 1 ] && ! grep -q '^REFUSED' "$WORK/sup-m3.txt" && grep -q 'FAIL (STALE): .*:4 records an output' "$WORK/sup-m3.txt"; then
-    sup_twin M3 pre2 && mutant_killed "${B_SUPCTL:-0}" M3 "M3 killed: without the join guard a non-joining SUPERSEDE_FROM gives a verdict (rc 1, FAIL (STALE)), not REFUSED"
-  else
-    bad "M3 survived: without the join guard the non-joining call gave rc $_m3: $(head -2 "$WORK/sup-m3.txt")"
-  fi
-else
-  bad "M3 DID NOT APPLY: the join guard's awk test is not on one line of the validator"
-fi
-
-# M4: the hook's join-guard arm matches nothing. The REFUSED line then falls to the generic arm and
-# the write is refused under the "did not run to completion" headline -- an author blocked by drift.
-if sup_mk M4 && sup_world m4 "$SB_H" "$SB_V"; then
-  sup_body 1 > "$SUPW/$(sup_path 1)"
-  sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
-  sup_fire "$SUPW" 1
-  if ! sup_jg_ok && [ "$RC" = 2 ] && grep -q 'did not run to' "$ERR"; then
-    sup_twin M4 r1 && mutant_killed "${B_SUPCTL:-0}" M4 "M4 killed: without the join-guard arm the drift refuses the write under the 'did not run to completion' headline"
-  else
-    bad "M4 survived: without the join-guard arm the hook gave rc $RC: $(head -2 "$ERR")"
-  fi
-else
-  bad "M4 DID NOT APPLY: the hook's join-guard test is not on one line"
-fi
-
-# M5: the join-guard arm still exits 0 but emits nothing -- the silent fail-open A64 exists to refuse.
-# `:` swallows the jq call's arguments, so the arm emits neither the JSON nor anything on stderr.
-if sup_mk M5 && sup_world m5 "$SB_H" "$SB_V"; then
-  sup_body 1 > "$SUPW/$(sup_path 1)"
-  sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
-  sup_fire "$SUPW" 1
-  if ! sup_jg_ok && [ "$RC" = 0 ] && [ ! -s "$OUT" ] && [ ! -s "$ERR" ]; then
-    sup_twin M5 r1 && mutant_killed "${B_SUPCTL:-0}" M5 "M5 killed: a join-guard arm that exits 0 silently (no stdout, no stderr) fails A64"
-  else
-    bad "M5 survived: the silenced join-guard arm gave rc $RC with $(wc -c < "$OUT") stdout and $(wc -c < "$ERR") stderr bytes"
-  fi
-else
-  bad "M5 DID NOT APPLY: the hook's additionalContext jq call is not on one line"
-fi
-
-# M6: the validator's SUPERSEDE_FROM pre-check matches nothing. A65's and A66's inputs then reach
-# the walk, and the join guard refuses them under ITS text -- a refusal for the wrong reason, after
-# reading a file the pre-check exists to keep it from reading. Scored as the presence of that text.
-if sup_mk M6 && sup_world m6 "$SB_H" "$SB_V"; then
-  sup_body 1 > "$SUPW/$(sup_path 1)"; sup_body 5 > "$SUPW/$(sup_path 5)"
-  _MV6="$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
-  ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$(sup_path 1)" \
-      bash "$_MV6" "$SUPW/$(sup_path 1)" "$SUPW/$(sup_path 5)" ) > "$WORK/sup-m6-two.txt" 2>&1
-  _m6a=$?
-  ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$SUP_PA/s1/sup-absent.md" \
-      bash "$_MV6" "$SUPW/$(sup_path 1)" ) > "$WORK/sup-m6-missing.txt" 2>&1
-  _m6b=$?
-  _k6=""
-  ! grep -q "$SUP_PRE" "$WORK/sup-m6-two.txt" && grep -q 'does not carry the commands of' "$WORK/sup-m6-two.txt" && _k6="${_k6}a"
-  ! grep -q "$SUP_PRE" "$WORK/sup-m6-missing.txt" && grep -q 'does not carry the commands of' "$WORK/sup-m6-missing.txt" && _k6="${_k6}b"
-  if [ "$_k6" = ab ]; then
-    sup_twin M6 join && mutant_killed "${B_SUPCTL:-0}" M6 "M6 killed: without the pre-check both A65's and A66's inputs reach the walk and are refused by the join guard instead (rc $_m6a, $_m6b)"
-  else
-    bad "M6 survived: without the pre-check only inputs '$_k6' of ab lost the pre-check text for the join guard's (rc $_m6a, $_m6b): $(head -2 "$WORK/sup-m6-two.txt")"
-  fi
-else
-  bad "M6 DID NOT APPLY: the validator's SUPERSEDE_FROM pre-check test is not on one line"
-fi
-
-# THE MATRIX, printed only under --matrix: every mutant (and the unmutated pair, ctl) against every arm, each cell in
-# a fresh project, so a row is that arm's own verdict under that pair. The MUTANT-MATRIX rows in this file's header are
-# read off this output.
-if [ "$MATRIX" = 1 ]; then
-  for _m in ctl M1 M2 M3 M4 M5 M6; do
-    sup_mk "$_m" > /dev/null || { bad "MATRIX: mutant $_m did not apply"; continue; }
-    for _a in $SUP_ARMS; do
-      if sup_arm "$_a"; then printf '  MATRIX %s %s GREEN\n' "$_m" "$_a"; else printf '  MATRIX %s %s TRIPPED\n' "$_m" "$_a"; fi
-    done
-  done
 fi
 
 # --- A14: the artifact is not modified by the hook ----------------------------

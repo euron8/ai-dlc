@@ -1,8 +1,6 @@
-# Tools run.sh invokes: env+sed (option scrub), dirname, mktemp, cat, grep, wc, awk, cmp, rm.
-awk
+# Tools run.sh invokes: env+sed (option scrub), dirname, mktemp, cat, grep, wc, rm.
 bash
 cat
-cmp
 dirname
 env
 grep

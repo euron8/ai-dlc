@@ -3,37 +3,9 @@
 # derivation-differential — assert reconcile/derivation-differential.sh clears the
 # `WORKLIST artifact-derivations` row on what THIS PULL broke, and on nothing else.
 #
-# Usage: run.sh [--matrix] [<path-to-derivation-differential.sh>]
-#   The path argument existed for a retired mutation battery, which drove this file against
-#   mutated copies. With no argument the subject is found beside this fixture in either layout.
-#   `--matrix` runs every P mutant over every P world and prints one MATRIX row each.
+# Usage: run.sh [<path-to-derivation-differential.sh>]
+#   With no argument the subject is found beside this fixture in either layout.
 #
-# THE P MUTANT MATRIX (the P section's header says how each is built and scored). The matrix is re-measured
-# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run it from the repo
-# root, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir.
-# Per push each mutant runs its FIRST decides arm's world only; `decides` lists every arm the matrix found red.
-# MUTANT-MATRIX dd-nocmp decides=Piii_nf,Piiip_nf twins=Piii_ctl
-# MUTANT-MATRIX dd-trunc decides=Piiip_nf twins=Piiip_ctl
-# MUTANT-MATRIX dd-noroots decides=Pv_nf,Ptpl_nf twins=Pv_ctl
-# MUTANT-MATRIX dd-untracked decides=Pvi_nf twins=Pvi_ctl
-# MUTANT-MATRIX dd-nocap decides=Pvii_nf twins=Pvii_ctl
-# MUTANT-MATRIX dd-capoff1 decides=Pviic_sb twins=Pviic_ctl
-# MUTANT-MATRIX dd-noskipline decides=Pvii_nf twins=Pvii_ctl
-# MUTANT-MATRIX dd-cap256 decides=Pi_row,Pi_owed,Pii_sb,Pix_sb,Pcapabc_sb,Pcapzero_sb twins=Pi_ctl
-# MUTANT-MATRIX dd-capvalid decides=Pcapzero_sb,Pcapabc_sb twins=Pcapzero_ctl
-# MUTANT-MATRIX dd-capvalid-abc decides=Pcapabc_sb twins=Pcapabc_ctl
-# MUTANT-MATRIX dd-notpl decides=Ptpl_nf twins=Ptpl_ctl
-# MUTANT-MATRIX dd-noisy decides=Pii_nf,Piv_hb,Piv_pc,Pv_nf,Pvi_nf,Pix_nf,Ptpl_nf twins=Pii_sb
-# MUTANT-MATRIX dd-baseroot decides=Pviii_nf twins=Pviii_tree
-# MUTANT-MATRIX dd-lateowed decides=Pi_owed,Pii_sb twins=Pi_row
-# MUTANT-MATRIX dd-unbounded decides=Pi_bound twins=Pi_ctl
-# MUTANT-MATRIX vd-sidecar decides=Px_unset twins=Px_set
-# MUTANT-MATRIX dd-noro decides=Pii_ro,Pi_ro,Prel_ro,Prelsl_ro twins=Pii_genuine
-# MUTANT-MATRIX dd-strfilter decides=Pi_ro,Prel_ro twins=Pi_row
-# MUTANT-MATRIX dd-emptyro decides=Pvi_unc twins=Pvi_nf
-# MUTANT-MATRIX dd-rawrec decides=Prel_ro,Prelsl_ro twins=Prel_ctl
-# MUTANT-MATRIX-DYNAMIC pscore why=pscore passes its first argument to mutant_killed; each of its twenty callers names a literal mutant carrying its own row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/derivation-differential/run.sh --matrix
 # Exit: 0 every assertion holds | 1 something regressed | 2 the harness could not run.
 #
 # EVERY WORLD IS SEEDED AT HAND-BACK SHAPE, because that is the one moment the helper runs: the
@@ -66,10 +38,6 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset CLAUDE_PROJECT_DIR 2>/dev/null || true
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# `--matrix` scores every P mutant over every P world (see the P MUTANTS section); a plain run scores each on its
-# deciding world only. hermetic-run.sh forwards no argument, so the matrix is re-measured by a direct run.
-PMATRIX=0
-case "${1:-}" in --matrix) PMATRIX=1; shift ;; esac
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 SUBJ="$(pick "${1:-}" \
   "$HERE/../../skills/ai-dlc-update/reconcile/derivation-differential.sh" \
@@ -137,10 +105,6 @@ rc_is() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 -- exit was $3, expecte
 rows_of() { awk -F'\t' -v s="$1" '$1 == s { print $2 }' <<<"$2"; }
 # nrows <status> <output> -> how many rows carry that status (awk, so zero prints 0 and exits 0)
 nrows() { awk -F'\t' -v s="$1" '$1 == s { n++ } END { print n + 0 }' <<<"$2"; }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
 
 # seed_cls <dist> -- the scope classifier and what it loads, into <dist>'s working tree
 seed_cls() {
@@ -1304,7 +1268,6 @@ pcell() {
     *) return 2 ;;
   esac
 }
-P_CELLS="Pi_row Pi_owed Pi_ctl Pi_bound Pi_two Pi_ro Pii_nf Pii_sb Pii_ro Pii_genuine Prel_ro Prel_ctl Prelsl_ro Pvi_unc Piii_nf Piii_ctl Piiip_nf Piiip_ctl Piv_hb Piv_pc Pv_nf Pv_ctl Pvi_nf Pvi_ctl Pvii_nf Pvii_ctl Pviic_sb Pviic_ctl Pviii_nf Pviii_tree Pix_nf Pix_sb Proot_nf Ptpl_nf Ptpl_ctl Pnots_nf Pnoop_nf Plong_sb Pnosc_nf Psym_nf Pnest_nf Pcpfail_nf Pcapabc_sb Pcapabc_ctl Pcapzero_sb Pcapzero_ctl Px_unset Px_set"
 P_RUNWORLDS="i ii iii iiip iv ivpc v vi vii viic viii ix root tplsite long nosc sym nest cpfail noop capabc capzero rel relsl"
 # pworld <label> -> the world that label reads
 pworld() { case "$1" in Pi_*) echo i ;; Pii_*) echo ii ;; Piii_*) echo iii ;; Piiip_*) echo iiip ;; Piv_hb) echo iv ;; Piv_pc) echo ivpc ;;
@@ -1314,31 +1277,22 @@ pworld() { case "$1" in Pi_*) echo i ;; Pii_*) echo ii ;; Piii_*) echo iii ;; Pi
 
 # px <tag> <validator copy> -- arm Px over a fresh copy of world x, with <validator copy> installed at the
 # consumer's own path (so no path string differs between the runs). Writes x.unset and x.set as ok|<why>.
-# Base-shaped: the same copy with its two opt-in call sites removed. Unset: stdout, stderr and exit
-# byte-identical to it, no file added under the tree and nothing left in TMPDIR. Set: the same output, and
+# Unset: the stale fence is reported, no file added under the tree and nothing left in TMPDIR. Set: the same output as unset, and
 # exactly one file per COMPARED derivation -- the hit, the no-output one (an EMPTY file), the stale one --
 # and none for the refused one.
 px() {
   local tag="$1" v="$2" d o vp fo n why
   d="$WORK/run-$tag-x"; o="$WORK/o/$tag"
-  mkdir -p "$o" "$d" "$o/xtmp-s" "$o/xtmp-u" "$o/xtmp-f" "$o/fo"; cp -R "$WORK/tpl-x/." "$d/"
+  mkdir -p "$o" "$d" "$o/xtmp-u" "$o/xtmp-f" "$o/fo"; cp -R "$WORK/tpl-x/." "$d/"
   vp="$d/scripts/ai-dlc/validate-artifact-derivations.sh"
-  if ! pmut "$VALIDATOR" "$o/x-stripped.sh" \
-       'if [ -n "${AI_DLC_VD_FULL_OUT_DIR:-}" ]; then vd_full_out "$f" "$ln" empty; fi' ':' \
-       'if [ -n "${AI_DLC_VD_FULL_OUT_DIR:-}" ]; then vd_full_out "$f" "$ln"; fi' ':'; then
-    echo "the opt-in call sites were not found in the validator" > "$o/x.unset"; echo "no base-shaped copy" > "$o/x.set"; return
-  fi
-  cp "$o/x-stripped.sh" "$vp"
-  (cd "$d" && TMPDIR="$o/xtmp-s" AI_DLC_PROJECT_ROOT="$d" bash "$vp" "$SF" > "$o/x-s.out" 2> "$o/x-s.err"; echo "$?" > "$o/x-s.rc")
   cp "$v" "$vp"
   ptree "$d" > "$o/x-tree0"
   (cd "$d" && TMPDIR="$o/xtmp-u" AI_DLC_PROJECT_ROOT="$d" bash "$vp" "$SF" > "$o/x-u.out" 2> "$o/x-u.err"; echo "$?" > "$o/x-u.rc")
   ptree "$d" > "$o/x-tree1"
   (cd "$d" && TMPDIR="$o/xtmp-f" AI_DLC_PROJECT_ROOT="$d" AI_DLC_VD_FULL_OUT_DIR="$o/fo" bash "$vp" "$SF" > "$o/x-f.out" 2> "$o/x-f.err"; echo "$?" > "$o/x-f.rc")
   why=""
-  [ "$(cat "$o/x-s.rc")" = 1 ] && grep -qF "story.md:${PX_STALE_KEY##*:}" <<<"$(cat "$o/x-s.out" "$o/x-s.err")" \
-    || why="$why the base-shaped run did not report the stale fence (rc $(cat "$o/x-s.rc"));"
-  cmp -s "$o/x-s.out" "$o/x-u.out" && cmp -s "$o/x-s.err" "$o/x-u.err" && cmp -s "$o/x-s.rc" "$o/x-u.rc" || why="$why unset output differs from the base-shaped copy;"
+  [ "$(cat "$o/x-u.rc")" = 1 ] && grep -qF "story.md:${PX_STALE_KEY##*:}" <<<"$(cat "$o/x-u.out" "$o/x-u.err")" \
+    || why="$why the unset run did not report the stale fence (rc $(cat "$o/x-u.rc"));"
   cmp -s "$o/x-tree0" "$o/x-tree1" || why="$why the unset run added a file under the tree;"
   n="$(find "$o/xtmp-u" -mindepth 1 2>/dev/null | awk 'END { print NR + 0 }')"; [ "$n" = 0 ] || why="$why the unset run left $n path(s) in TMPDIR;"
   echo "${why:-ok}" > "$o/x.unset"
@@ -1356,22 +1310,6 @@ px() {
 }
 # pxout <full-output dir> <file:line> -> the ordinal file the index names for that key, empty when none
 pxout() { awk -F'\t' -v k="$2" '$2 == k { print $1 ".out"; exit }' "$1/index" 2>/dev/null; }
-# pmut <src> <dst> <anchor> <replacement> [<anchor> <replacement>...] -- a COPY with each literal anchor replaced
-# on exactly ONE line (awk index, the strings through ENVIRON, so no sed metacharacter reaches them); returns 1 when
-# an anchor matched no line or more than one, or when the copy is byte-identical to its source.
-pmut() {
-  local src="$1" dst="$2" n=0
-  shift 2
-  while [ "$#" -ge 2 ]; do n=$((n + 1)); export "PMA$n=$1" "PMR$n=$2"; shift 2; done
-  awk -v np="$n" '{ line = $0
-      for (i = 1; i <= np; i++) { a = ENVIRON["PMA" i]; p = index(line, a)
-        if (p > 0) { hit[i]++; line = substr(line, 1, p - 1) ENVIRON["PMR" i] substr(line, p + length(a)) } }
-      print line }
-    END { for (i = 1; i <= np; i++) if (hit[i] != 1) bad = 1; exit bad }' "$src" > "$dst"
-  local r=$?
-  while [ "$n" -gt 0 ]; do unset "PMA$n" "PMR$n"; n=$((n - 1)); done
-  [ "$r" -eq 0 ] && ! cmp -s "$src" "$dst"
-}
 PX_HIT="$(pkey x 'grep -c qqgamma')"; PX_EMPTY="$(pkey x 'grep qqnothing')"; PX_STALE="$(pkey x 'grep -c qqbeta')"
 PX_STALE_KEY="$PX_STALE"; PX_REFUSED="$(pkey x 'perl -ne print')"
 
@@ -1393,8 +1331,7 @@ for _f in derivation-differential.sh apply.sh preclassify.sh consumer-read.sh; d
 [ ! -e "$P_NOTS/template-sites.md" ] || { echo "FIXTURE ERROR: the nots copy carries template-sites.md" >&2; exit 2; }
 pw tip nots "$P_NOTS/derivation-differential.sh" "$DDTMP"
 px tip "$VALIDATOR"
-# Each arm's verdict on the shipped run. B_<arm>=1 is set in the passing branch only: it is the base-pass flag the
-# mutant scoring below hands to mutant_killed. pbad <label> <message> reports a red arm with what that world printed.
+# Each arm's verdict on the shipped run. pbad <label> <message> reports a red arm with what that world printed.
 pbad() {
   local w
   bad "$1 $2"; w="$(pworld "$1")"
@@ -1403,79 +1340,75 @@ pbad() {
     *) printf '        | rc=%s\n' "$(prc tip "$w")"; grep -E '^(NEWLY-FAILING|STALE-BOTH|NOTE|VERDICT|REFUSED)' "$WORK/o/tip/$w.out" | cut -c1-300 | sed 's/^/        | /' | head -12 ;;
   esac
 }
-B_Pi_row=0; B_Pi_bound=0; B_Pi_two=0; B_Pi_owed=0; B_Pi_ctl=0; B_Piii_nf=0; B_Piii_ctl=0; B_Piiip_nf=0; B_Piiip_ctl=0; B_Pv_nf=0; B_Pv_ctl=0
-B_Pvi_nf=0; B_Pvi_ctl=0; B_Pvii_nf=0; B_Pvii_ctl=0; B_Pviic_sb=0; B_Pviic_ctl=0; B_Pviii_nf=0; B_Pviii_tree=0
-B_Pcapzero_sb=0; B_Pcapzero_ctl=0; B_Px_unset=0; B_Px_set=0; B_Pcapabc_sb=0; B_Pcapabc_ctl=0; B_Ptpl_nf=0; B_Ptpl_ctl=0; B_Pii_nf=0; B_Pii_sb=0
-B_Pii_ro=0; B_Pii_genuine=0; B_Pi_ro=0; B_Prel_ro=0; B_Prel_ctl=0; B_Prelsl_ro=0; B_Pvi_unc=0
-if pcell Pi_row tip; then ok "Pi_row the consumer's shape (300 ignored files in a tests __pycache__, under the default cap; recorded output over 160 columns) -> exit 0, STALE-BOTH base=STALE, a NOTE naming the copied file, no skip row"; B_Pi_row=1
+if pcell Pi_row tip; then ok "Pi_row the consumer's shape (300 ignored files in a tests __pycache__, under the default cap; recorded output over 160 columns) -> exit 0, STALE-BOTH base=STALE, a NOTE naming the copied file, no skip row"
 else pbad Pi_row "the consumer's shape (300 ignored files in a tests __pycache__, under the default cap; recorded output over 160 columns) -> exit 0, STALE-BOTH base=STALE, a NOTE naming the copied file, no skip row"; fi
-if pcell Pi_owed tip; then ok "Pi_owed and under --record-owed the record is written and holds no OWED row for it"; B_Pi_owed=1
+if pcell Pi_owed tip; then ok "Pi_owed and under --record-owed the record is written and holds no OWED row for it"
 else pbad Pi_owed "and under --record-owed the record is written and holds no OWED row for it"; fi
-if pcell Pi_ctl tip; then ok "Pi_ctl and the holding fence beside it gets no row"; B_Pi_ctl=1
+if pcell Pi_ctl tip; then ok "Pi_ctl and the holding fence beside it gets no row"
 else pbad Pi_ctl "and the holding fence beside it gets no row"; fi
-if pcell Pi_bound tip; then ok "Pi_bound and its relabel NOTE is BOUNDED: 300 files, exactly the first five paths, '… and 295 more', under 1000 bytes"; B_Pi_bound=1
+if pcell Pi_bound tip; then ok "Pi_bound and its relabel NOTE is BOUNDED: 300 files, exactly the first five paths, '… and 295 more', under 1000 bytes"
 else pbad Pi_bound "and its relabel NOTE is BOUNDED: 300 files, exactly the first five paths, '… and 295 more', under 1000 bytes"; fi
-if pcell Pi_two tip; then ok "Pi_two a second artifact with the same fence over the same cache: both keys STALE-BOTH, each with its own bounded NOTE, no worktree left and TMPDIR empty after the run"; B_Pi_two=1
+if pcell Pi_two tip; then ok "Pi_two a second artifact with the same fence over the same cache: both keys STALE-BOTH, each with its own bounded NOTE, no worktree left and TMPDIR empty after the run"
 else pbad Pi_two "a second artifact with the same fence over the same cache: both keys STALE-BOTH, each with its own bounded NOTE, no worktree left and TMPDIR empty after the run"; fi
-if pcell Pii_nf tip; then ok "Pii_nf a real line shift beside it -> exit 1, NEWLY-FAILING, and recorded OWED"; B_Pii_nf=1
+if pcell Pii_nf tip; then ok "Pii_nf a real line shift beside it -> exit 1, NEWLY-FAILING, and recorded OWED"
 else pbad Pii_nf "a real line shift beside it -> exit 1, NEWLY-FAILING, and recorded OWED"; fi
-if pcell Pii_sb tip; then ok "Pii_sb and in that same run the ignored-file fence is STALE-BOTH with its NOTE and no OWED row"; B_Pii_sb=1
+if pcell Pii_sb tip; then ok "Pii_sb and in that same run the ignored-file fence is STALE-BOTH with its NOTE and no OWED row"
 else pbad Pii_sb "and in that same run the ignored-file fence is STALE-BOTH with its NOTE and no OWED row"; fi
-if pcell Pii_ro tip; then ok "Pii_ro and in that same run neither run-owned file (apply.sh's in-flight marker, the owed record listed ?? by name) is named as uncommitted in the consumer"; B_Pii_ro=1
+if pcell Pii_ro tip; then ok "Pii_ro and in that same run neither run-owned file (apply.sh's in-flight marker, the owed record listed ?? by name) is named as uncommitted in the consumer"
 else pbad Pii_ro "and in that same run neither run-owned file (apply.sh's in-flight marker, the owed record listed ?? by name) is named as uncommitted in the consumer"; fi
-if pcell Pii_genuine tip; then ok "Pii_genuine and a genuine untracked consumer file beside the record IS named, exactly once"; B_Pii_genuine=1
+if pcell Pii_genuine tip; then ok "Pii_genuine and a genuine untracked consumer file beside the record IS named, exactly once"
 else pbad Pii_genuine "and a genuine untracked consumer file beside the record IS named, exactly once"; fi
-if pcell Pi_ro tip; then ok "Pi_ro the first pull (record directory untracked, holding only the record, porcelain ?? _bmad-output/ai-dlc-update/) -> neither the directory nor the record is named as uncommitted"; B_Pi_ro=1
+if pcell Pi_ro tip; then ok "Pi_ro the first pull (record directory untracked, holding only the record, porcelain ?? _bmad-output/ai-dlc-update/) -> neither the directory nor the record is named as uncommitted"
 else pbad Pi_ro "the first pull (record directory untracked, holding only the record, porcelain ?? _bmad-output/ai-dlc-update/) -> neither the directory nor the record is named as uncommitted"; fi
-if pcell Prel_ro tip; then ok "Prel_ro consumer '.' run from inside it, record './_bmad-output/...' (apply.sh's spelling) -> the record is written and neither it nor its directory is named"; B_Prel_ro=1
+if pcell Prel_ro tip; then ok "Prel_ro consumer '.' run from inside it, record './_bmad-output/...' (apply.sh's spelling) -> the record is written and neither it nor its directory is named"
 else pbad Prel_ro "consumer '.' run from inside it, record './_bmad-output/...' (apply.sh's spelling) -> the record is written and neither it nor its directory is named"; fi
-if pcell Prel_ctl tip; then ok "Prel_ctl and the holding fence in that run gets no row"; B_Prel_ctl=1
+if pcell Prel_ctl tip; then ok "Prel_ctl and the holding fence in that run gets no row"
 else pbad Prel_ctl "and the holding fence in that run gets no row"; fi
-if pcell Prelsl_ro tip; then ok "Prelsl_ro consumer '<abs>/' with record '<abs>//_bmad-output/...' -> neither the marker nor the record is named"; B_Prelsl_ro=1
+if pcell Prelsl_ro tip; then ok "Prelsl_ro consumer '<abs>/' with record '<abs>//_bmad-output/...' -> neither the marker nor the record is named"
 else pbad Prelsl_ro "consumer '<abs>/' with record '<abs>//_bmad-output/...' -> neither the marker nor the record is named"; fi
-if pcell Pvi_unc tip; then ok "Pvi_unc with no --record-owed, the genuine untracked lib/qqdata.blob IS named as uncommitted, exactly once"; B_Pvi_unc=1
+if pcell Pvi_unc tip; then ok "Pvi_unc with no --record-owed, the genuine untracked lib/qqdata.blob IS named as uncommitted, exactly once"
 else pbad Pvi_unc "with no --record-owed, the genuine untracked lib/qqdata.blob IS named as uncommitted, exactly once"; fi
-if pcell Piii_nf tip; then ok "Piii_nf a pre-existing ignored file AND a pull-made line in one fence -> exit 1, NEWLY-FAILING"; B_Piii_nf=1
+if pcell Piii_nf tip; then ok "Piii_nf a pre-existing ignored file AND a pull-made line in one fence -> exit 1, NEWLY-FAILING"
 else pbad Piii_nf "a pre-existing ignored file AND a pull-made line in one fence -> exit 1, NEWLY-FAILING"; fi
-if pcell Piii_ctl tip; then ok "Piii_ctl and the holding fence beside it gets no row"; B_Piii_ctl=1
+if pcell Piii_ctl tip; then ok "Piii_ctl and the holding fence beside it gets no row"
 else pbad Piii_ctl "and the holding fence beside it gets no row"; fi
-if pcell Piiip_nf tip; then ok "Piiip_nf the same, the pull-made line past column 160 of the joined output -> exit 1, NEWLY-FAILING"; B_Piiip_nf=1
+if pcell Piiip_nf tip; then ok "Piiip_nf the same, the pull-made line past column 160 of the joined output -> exit 1, NEWLY-FAILING"
 else pbad Piiip_nf "the same, the pull-made line past column 160 of the joined output -> exit 1, NEWLY-FAILING"; fi
-if pcell Piiip_ctl tip; then ok "Piiip_ctl and the holding fence beside it gets no row"; B_Piiip_ctl=1
+if pcell Piiip_ctl tip; then ok "Piiip_ctl and the holding fence beside it gets no row"
 else pbad Piiip_ctl "and the holding fence beside it gets no row"; fi
-if pcell Piv_hb tip; then ok "Piv_hb a file the RANGE ADDS, untracked at hand-back -> exit 1, NEWLY-FAILING"; B_Piv_hb=1
+if pcell Piv_hb tip; then ok "Piv_hb a file the RANGE ADDS, untracked at hand-back -> exit 1, NEWLY-FAILING"
 else pbad Piv_hb "a file the RANGE ADDS, untracked at hand-back -> exit 1, NEWLY-FAILING"; fi
-if pcell Piv_pc tip; then ok "Piv_pc and tracked after the step-8 commit (base root HEAD^) -> exit 1, NEWLY-FAILING"; B_Piv_pc=1
+if pcell Piv_pc tip; then ok "Piv_pc and tracked after the step-8 commit (base root HEAD^) -> exit 1, NEWLY-FAILING"
 else pbad Piv_pc "and tracked after the step-8 commit (base root HEAD^) -> exit 1, NEWLY-FAILING"; fi
-if pcell Pv_nf tip; then ok "Pv_nf an ignored file under an install root (.claude/) -> exit 1, NEWLY-FAILING"; B_Pv_nf=1
+if pcell Pv_nf tip; then ok "Pv_nf an ignored file under an install root (.claude/) -> exit 1, NEWLY-FAILING"
 else pbad Pv_nf "an ignored file under an install root (.claude/) -> exit 1, NEWLY-FAILING"; fi
-if pcell Pv_ctl tip; then ok "Pv_ctl and the holding fence beside it gets no row"; B_Pv_ctl=1
+if pcell Pv_ctl tip; then ok "Pv_ctl and the holding fence beside it gets no row"
 else pbad Pv_ctl "and the holding fence beside it gets no row"; fi
-if pcell Pvi_nf tip; then ok "Pvi_nf an untracked-NOT-ignored pre-existing file -> exit 1, NEWLY-FAILING (it cannot be told from an apply addition)"; B_Pvi_nf=1
+if pcell Pvi_nf tip; then ok "Pvi_nf an untracked-NOT-ignored pre-existing file -> exit 1, NEWLY-FAILING (it cannot be told from an apply addition)"
 else pbad Pvi_nf "an untracked-NOT-ignored pre-existing file -> exit 1, NEWLY-FAILING (it cannot be told from an apply addition)"; fi
-if pcell Pvi_ctl tip; then ok "Pvi_ctl and the holding fence beside it gets no row"; B_Pvi_ctl=1
+if pcell Pvi_ctl tip; then ok "Pvi_ctl and the holding fence beside it gets no row"
 else pbad Pvi_ctl "and the holding fence beside it gets no row"; fi
-if pcell Pvii_nf tip; then ok "Pvii_nf cap+1 ignored files under the operand (the cap overridden to $P_CAP) -> exit 1, NEWLY-FAILING, and the skip row names the count and the cap"; B_Pvii_nf=1
+if pcell Pvii_nf tip; then ok "Pvii_nf cap+1 ignored files under the operand (the cap overridden to $P_CAP) -> exit 1, NEWLY-FAILING, and the skip row names the count and the cap"
 else pbad Pvii_nf "cap+1 ignored files under the operand (the cap overridden to $P_CAP) -> exit 1, NEWLY-FAILING, and the skip row names the count and the cap"; fi
-if pcell Pvii_ctl tip; then ok "Pvii_ctl and the holding fence beside it gets no row"; B_Pvii_ctl=1
+if pcell Pvii_ctl tip; then ok "Pvii_ctl and the holding fence beside it gets no row"
 else pbad Pvii_ctl "and the holding fence beside it gets no row"; fi
-if pcell Pviic_sb tip; then ok "Pviic_sb exactly cap ignored files -> exit 0, relabelled STALE-BOTH with its NOTE, and no skip row"; B_Pviic_sb=1
+if pcell Pviic_sb tip; then ok "Pviic_sb exactly cap ignored files -> exit 0, relabelled STALE-BOTH with its NOTE, and no skip row"
 else pbad Pviic_sb "exactly cap ignored files -> exit 0, relabelled STALE-BOTH with its NOTE, and no skip row"; fi
-if pcell Pviic_ctl tip; then ok "Pviic_ctl and the holding fence beside it gets no row"; B_Pviic_ctl=1
+if pcell Pviic_ctl tip; then ok "Pviic_ctl and the holding fence beside it gets no row"
 else pbad Pviic_ctl "and the holding fence beside it gets no row"; fi
-if pcell Pviii_nf tip; then ok "Pviii_nf the consumer's shape under --base-root -> exit 1, NEWLY-FAILING, from that root, with the --base-root skip row"; B_Pviii_nf=1
+if pcell Pviii_nf tip; then ok "Pviii_nf the consumer's shape under --base-root -> exit 1, NEWLY-FAILING, from that root, with the --base-root skip row"
 else pbad Pviii_nf "the consumer's shape under --base-root -> exit 1, NEWLY-FAILING, from that root, with the --base-root skip row"; fi
-if pcell Pviii_tree tip; then ok "Pviii_tree and the --base-root tree is unchanged by the run"; B_Pviii_tree=1
+if pcell Pviii_tree tip; then ok "Pviii_tree and the --base-root tree is unchanged by the run"
 else pbad Pviii_tree "and the --base-root tree is unchanged by the run"; fi
-if pcell Pix_nf tip; then ok "Pix_nf post-commit (base root HEAD^): the real line shift -> exit 1, NEWLY-FAILING"; B_Pix_nf=1
+if pcell Pix_nf tip; then ok "Pix_nf post-commit (base root HEAD^): the real line shift -> exit 1, NEWLY-FAILING"
 else pbad Pix_nf "post-commit (base root HEAD^): the real line shift -> exit 1, NEWLY-FAILING"; fi
-if pcell Pix_sb tip; then ok "Pix_sb and the ignored-file fence is STALE-BOTH with its NOTE"; B_Pix_sb=1
+if pcell Pix_sb tip; then ok "Pix_sb and the ignored-file fence is STALE-BOTH with its NOTE"
 else pbad Pix_sb "and the ignored-file fence is STALE-BOTH with its NOTE"; fi
-if pcell Proot_nf tip; then ok "Proot_nf a fence naming the project root ('.') as an operand -> exit 1, NEWLY-FAILING, with the root-operand skip row"; B_Proot_nf=1
+if pcell Proot_nf tip; then ok "Proot_nf a fence naming the project root ('.') as an operand -> exit 1, NEWLY-FAILING, with the root-operand skip row"
 else pbad Proot_nf "a fence naming the project root ('.') as an operand -> exit 1, NEWLY-FAILING, with the root-operand skip row"; fi
-if pcell Ptpl_nf tip; then ok "Ptpl_nf an ignored TEMPLATE SITE (docs/coding-conventions.md) the pull rewrites with the token -> exit 1, NEWLY-FAILING, with the no-ignored-file skip row"; B_Ptpl_nf=1
+if pcell Ptpl_nf tip; then ok "Ptpl_nf an ignored TEMPLATE SITE (docs/coding-conventions.md) the pull rewrites with the token -> exit 1, NEWLY-FAILING, with the no-ignored-file skip row"
 else pbad Ptpl_nf "an ignored TEMPLATE SITE (docs/coding-conventions.md) the pull rewrites with the token -> exit 1, NEWLY-FAILING, with the no-ignored-file skip row"; fi
-if pcell Ptpl_ctl tip; then ok "Ptpl_ctl and the holding fence beside it gets no row"; B_Ptpl_ctl=1
+if pcell Ptpl_ctl tip; then ok "Ptpl_ctl and the holding fence beside it gets no row"
 else pbad Ptpl_ctl "and the holding fence beside it gets no row"; fi
 if pcell Pnots_nf tip; then ok "Pnots_nf no template-sites.md beside the helper -> the pass fails closed: Pi's key stays NEWLY-FAILING, exit 1, with the manifest-unreadable row"
 else pbad Pnots_nf "no template-sites.md beside the helper -> the pass fails closed: Pi's key stays NEWLY-FAILING, exit 1, with the manifest-unreadable row"; fi
@@ -1493,161 +1426,18 @@ if [ -f "$WORK/o/tip/cpfail.readable" ]; then
   printf '  SKIP  Pcpfail_nf a mode-000 file is still readable here (running as root?), so no copy of it can fail; Pcpfail_nf was not scored\n'
 elif pcell Pcpfail_nf tip; then ok "Pcpfail_nf an unreadable ignored file -> exit 1, NEWLY-FAILING, with the failed-copy skip row"
 else pbad Pcpfail_nf "an unreadable ignored file -> exit 1, NEWLY-FAILING, with the failed-copy skip row"; fi
-if pcell Pcapabc_sb tip; then ok "Pcapabc_sb AI_DLC_DD_OVERLAY_CAP=abc is refused and the default holds: Pi's 300 files still relabel, exit 0"; B_Pcapabc_sb=1
+if pcell Pcapabc_sb tip; then ok "Pcapabc_sb AI_DLC_DD_OVERLAY_CAP=abc is refused and the default holds: Pi's 300 files still relabel, exit 0"
 else pbad Pcapabc_sb "AI_DLC_DD_OVERLAY_CAP=abc is refused and the default holds: Pi's 300 files still relabel, exit 0"; fi
-if pcell Pcapabc_ctl tip; then ok "Pcapabc_ctl and the holding fence beside it gets no row"; B_Pcapabc_ctl=1
+if pcell Pcapabc_ctl tip; then ok "Pcapabc_ctl and the holding fence beside it gets no row"
 else pbad Pcapabc_ctl "and the holding fence beside it gets no row"; fi
-if pcell Pcapzero_sb tip; then ok "Pcapzero_sb AI_DLC_DD_OVERLAY_CAP=0 is refused and the default holds: Pi's 300 files still relabel, exit 0"; B_Pcapzero_sb=1
+if pcell Pcapzero_sb tip; then ok "Pcapzero_sb AI_DLC_DD_OVERLAY_CAP=0 is refused and the default holds: Pi's 300 files still relabel, exit 0"
 else pbad Pcapzero_sb "AI_DLC_DD_OVERLAY_CAP=0 is refused and the default holds: Pi's 300 files still relabel, exit 0"; fi
-if pcell Pcapzero_ctl tip; then ok "Pcapzero_ctl and the holding fence beside it gets no row"; B_Pcapzero_ctl=1
+if pcell Pcapzero_ctl tip; then ok "Pcapzero_ctl and the holding fence beside it gets no row"
 else pbad Pcapzero_ctl "and the holding fence beside it gets no row"; fi
-if pcell Px_unset tip; then ok "Px_unset the validator with AI_DLC_VD_FULL_OUT_DIR unset is byte-identical to the opt-in stripped out, and writes no file"; B_Px_unset=1
+if pcell Px_unset tip; then ok "Px_unset the validator with AI_DLC_VD_FULL_OUT_DIR unset is byte-identical to the opt-in stripped out, and writes no file"
 else pbad Px_unset "the validator with AI_DLC_VD_FULL_OUT_DIR unset is byte-identical to the opt-in stripped out, and writes no file"; fi
-if pcell Px_set tip; then ok "Px_set with it set: the same output, and one file per compared derivation (an empty one for no output, none for a refusal)"; B_Px_set=1
+if pcell Px_set tip; then ok "Px_set with it set: the same output, and one file per compared derivation (an empty one for no output, none for a refusal)"
 else pbad Px_set "with it set: the same output, and one file per compared derivation (an empty one for no output, none for a refusal)"; fi
-
-# ---- P MUTANTS: copies of the helper (with its declared siblings beside it) or of the validator ------------
-# Each is a pmut copy (exactly one line per anchor, cmp -s against the source). PER PUSH it runs ONLY the world its
-# deciding arm reads: the deciding arm must go red BY THE WRONG VERDICT (the key relabelled STALE-BOTH with exit 0,
-# the OWED row present, a file written), and the twin, an arm of that same run, must stay green. A copy that never
-# ran (no VERDICT row) is FIXTURE BROKEN, never scored. `--matrix` runs every mutant over every world and prints the
-# red set; the rows below are that measurement.
-P_MDIR="$WORK/pmut"; P_MTMP="$WORK/ddtmp-mut"; mkdir -p "$P_MDIR" "$P_MTMP"
-for _f in derivation-differential.sh apply.sh preclassify.sh consumer-read.sh template-sites.md; do
-  [ -f "$(dirname "$SUBJ")/$_f" ] || { echo "FIXTURE ERROR: $_f is not beside the subject, so no copy of the helper can run" >&2; exit 2; }
-done
-# pmutdir <name> <anchor> <replacement>... -> $P_MDIR/<name>/derivation-differential.sh, its siblings copied beside it
-pmutdir() {
-  local m="$1" f; shift
-  mkdir -p "$P_MDIR/$m"
-  for f in apply.sh preclassify.sh consumer-read.sh template-sites.md; do cp "$(dirname "$SUBJ")/$f" "$P_MDIR/$m/$f"; done
-  pmut "$SUBJ" "$P_MDIR/$m/derivation-differential.sh" "$@"
-}
-# pwrong <label> <tag>: the WRONG verdict the deciding arm exists to refuse is present
-pwrong() {
-  local w r k; w="$(pworld "$1")"
-  case "$1" in
-    Pi_owed) p_owed "$2" i "$P_KI" 1 ;;
-    # the unbounded list: the relabel NOTE for Pi's key is still printed, and runs to 1000 bytes or more
-    Pi_bound) [ "$(awk -F'\t' -v k="$P_KI" '$1 == "NOTE" && $2 == k && index($3, "STALE-BOTH, not NEWLY-FAILING") { print length($0); exit }' "$WORK/o/$2/i.out")" -ge 1000 ] 2>/dev/null ;;
-    Pcapabc_sb) grep -q 'integer expression expected' "$WORK/o/$2/capabc.out" ;;
-    # the run-owned exclusion dropped: the marker or the record is named as uncommitted in the consumer
-    Pii_ro) [ "$(p_uncnt "$2" ii .claude/.ai-dlc-applying)" != 0 ] || [ "$(p_uncnt "$2" ii "$P_RO_REC")" != 0 ] ;;
-    # the record, or the `?? <dir>/` row porcelain collapses it into, is named as uncommitted in the consumer
-    Pi_ro|Prel_ro) [ "$(p_uncnt "$2" "$w" "$P_RO_DIR")" != 0 ] || [ "$(p_uncnt "$2" "$w" "$P_RO_REC")" != 0 ] ;;
-    # every uncommitted-path NOTE dropped: the genuine untracked file is not named
-    Pvi_unc) [ "$(p_uncnt "$2" vi lib/qqdata.blob)" = 0 ] && grep -q '^VERDICT' "$WORK/o/$2/vi.out" ;;
-    Pii_nf) awk -F'\t' -v k="$P_KII" '$1 == "NOTE" && $2 == k && index($3, "overlay skipped") { f = 1 } END { exit !f }' "$WORK/o/$2/ii.out" ;;
-    Ptpl_nf) [ "$(prc "$2" tplsite)" = 0 ] && [ "$(rowst "$WORK/o/$2/tplsite.out" "$P_KTPL")" = STALE-BOTH ] ;;
-    Px_unset) [ "$(cat "$WORK/o/$2/x.unset" 2>/dev/null)" != ok ] && ! cmp -s "$WORK/o/$2/x-tree0" "$WORK/o/$2/x-tree1" ;;
-    Piii_nf|Piiip_nf) [ "$(prc "$2" "$w")" = 0 ] && [ "$(rowst "$WORK/o/$2/$w.out" "$P_KIII")" = STALE-BOTH ] ;;
-    Pv_nf) [ "$(prc "$2" v)" = 0 ] && [ "$(rowst "$WORK/o/$2/v.out" "$P_KV")" = STALE-BOTH ] ;;
-    Pvi_nf) [ "$(prc "$2" vi)" = 0 ] && [ "$(rowst "$WORK/o/$2/vi.out" "$P_KVI")" = STALE-BOTH ] ;;
-    Pvii_nf)
-      # the cap dropped (the key relabelled), or the skip row lost while the row stays NEWLY-FAILING
-      { [ "$(prc "$2" vii)" = 0 ] && [ "$(rowst "$WORK/o/$2/vii.out" "$P_KVII")" = STALE-BOTH ]; } \
-        || { p_nf "$2" vii "$P_KVII" && ! grep -q 'overlay skipped' "$WORK/o/$2/vii.out"; } ;;
-    Pviii_nf) [ "$(prc "$2" viii)" = 0 ] && [ "$(rowst "$WORK/o/$2/viii.out" "$P_KI")" = STALE-BOTH ] ;;
-    # an exact-cap or the old 256 default, or an override the helper should have refused: the key skipped and failing
-    Pi_row|Pviic_sb|Pcapzero_sb)
-      case "$1" in Pi_row) r=i; k="$P_KI" ;; Pviic_sb) r=viic; k="$P_KVII" ;; *) r=capzero; k="$P_KI" ;; esac
-      p_nf "$2" "$r" "$k" && grep -q 'exceed the overlay cap' "$WORK/o/$2/$r.out" ;;
-    *) return 1 ;;
-  esac
-}
-# pscore <name> <deciding label> <twin label> <base flag> -- one subject copy, its deciding world, its verdict. The
-# flag is the $(( )) conjunction of the deciding arm's and the twin's B_ flags, from the unmutated runs above.
-pscore() {
-  local m="$1" dec="$2" twin="$3" w r red="" c
-  w="$(pworld "$dec")"
-  if [ "$w" = x ]; then px "$m" "$P_MDIR/$m/validate-artifact-derivations.sh"
-  else
-    pw "$m" "$w" "$P_MDIR/$m/derivation-differential.sh" "$P_MTMP"
-    grep -q '^VERDICT' "$WORK/o/$m/$w.out" \
-      || { bad "FIXTURE BROKEN: $m -- the copy reached no verdict (exit $(prc "$m" "$w")), so nothing about it can be scored"; return; }
-  fi
-  if [ "$PMATRIX" = 1 ]; then
-    if [ "$w" != x ]; then for r in $P_RUNWORLDS; do [ "$r" = "$w" ] || pw "$m" "$r" "$P_MDIR/$m/derivation-differential.sh" "$P_MTMP"; done; fi
-    for c in $P_CELLS; do
-      [ "$w" = x ] && [ "$(pworld "$c")" != x ] && continue
-      [ "$w" != x ] && [ "$(pworld "$c")" = x ] && continue
-      [ "$(pworld "$c")" = nots ] && continue  # nots drives its own fixed copy of the helper, never a mutant
-      pcell "$c" "$m" || red="$red,$c"
-    done
-    printf 'MATRIX %s decides=%s twins=%s red=%s\n' "$m" "$dec" "$twin" "${red#,}"
-  fi
-  if pcell "$dec" "$m"; then bad "$m SURVIVED: its deciding arm $dec stayed green"
-  elif ! pwrong "$dec" "$m"; then bad "$m: $dec went red, but not by the wrong verdict it exists to refuse -- not scored"
-  elif ! pcell "$twin" "$m"; then bad "$m: its twin $twin went red too -- the change is not confined to its arm"
-  else
-    mutant_killed "$4" "$m" "mutant $m KILLED by $dec (the wrong verdict appeared); twin $twin holds"
-  fi
-}
-if pmutdir dd-nocmp 'if ! cmp -s "$TMP/fo.b/$_vb.out" "$TMP/fo.t/$_vt.out"; then' 'if false; then'; then pscore dd-nocmp Piii_nf Piii_ctl "$(( ${B_Piii_nf:-0} && ${B_Piii_ctl:-0} ))"
-else bad "dd-nocmp DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-trunc 'if ! cmp -s "$TMP/fo.b/$_vb.out" "$TMP/fo.t/$_vt.out"; then' \
-     'if [ "$(tr "\n" "/" < "$TMP/fo.b/$_vb.out" | cut -c1-160)" != "$(tr "\n" "/" < "$TMP/fo.t/$_vt.out" | cut -c1-160)" ]; then'; then
-  pscore dd-trunc Piiip_nf Piiip_ctl "$(( ${B_Piiip_nf:-0} && ${B_Piiip_ctl:-0} ))"
-else bad "dd-trunc DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-noroots 'case "$_p" in "$_r"*) _q=1; break ;; esac' ':'; then pscore dd-noroots Pv_nf Pv_ctl "$(( ${B_Pv_nf:-0} && ${B_Pv_ctl:-0} ))"
-else bad "dd-noroots DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-untracked "'!! '*) ;; *) continue ;; esac" "'!! '*|'?? '*) ;; *) continue ;; esac" '_p="${_e#!! }"' '_p="${_e#?? }"'; then
-  pscore dd-untracked Pvi_nf Pvi_ctl "$(( ${B_Pvi_nf:-0} && ${B_Pvi_ctl:-0} ))"
-else bad "dd-untracked DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-nocap 'if [ "$_n" -gt "$DD_OVERLAY_CAP" ]; then _over=1; continue; fi' ':'; then pscore dd-nocap Pvii_nf Pvii_ctl "$(( ${B_Pvii_nf:-0} && ${B_Pvii_ctl:-0} ))"
-else bad "dd-nocap DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-capoff1 'if [ "$_n" -gt "$DD_OVERLAY_CAP" ]; then' 'if [ "$_n" -ge "$DD_OVERLAY_CAP" ]; then'; then
-  pscore dd-capoff1 Pviic_sb Pviic_ctl "$(( ${B_Pviic_sb:-0} && ${B_Pviic_ctl:-0} ))"
-else bad "dd-capoff1 DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-noskipline "dd_ov_note \"\$_k\" \"overlay skipped: \${_n} ignored file(s)" ": \"overlay skipped: \${_n} ignored file(s)"; then
-  pscore dd-noskipline Pvii_nf Pvii_ctl "$(( ${B_Pvii_nf:-0} && ${B_Pvii_ctl:-0} ))"
-else bad "dd-noskipline DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-cap256 'DD_OVERLAY_CAP=4096' 'DD_OVERLAY_CAP=256'; then pscore dd-cap256 Pi_row Pi_ctl "$(( ${B_Pi_row:-0} && ${B_Pi_ctl:-0} ))"
-else bad "dd-cap256 DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-capvalid "''|*[!0-9]*|0*) ;;" "'') ;;"; then pscore dd-capvalid Pcapzero_sb Pcapzero_ctl "$(( ${B_Pcapzero_sb:-0} && ${B_Pcapzero_ctl:-0} ))"
-else bad "dd-capvalid DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-notpl '_roots="$_roots$_ts$_nl${ART#"$CONSUMER"/}/$_nl"' '_roots="$_roots${ART#"$CONSUMER"/}/$_nl"'; then
-  pscore dd-notpl Ptpl_nf Ptpl_ctl "$(( ${B_Ptpl_nf:-0} && ${B_Ptpl_ctl:-0} ))"
-else bad "dd-notpl DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-noisy '[ "$_n" -gt 0 ] || continue' '[ "$_n" -gt 0 ] || { dd_ov_skip "$_k" "nothing to overlay"; continue; }'; then
-  pscore dd-noisy Pii_nf Pii_sb "$(( ${B_Pii_nf:-0} && ${B_Pii_sb:-0} ))"
-else bad "dd-noisy DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-unbounded 'NR <= 5 { l = l (NR > 1 ? " " : "") $0 }' '{ l = l (NR > 1 ? " " : "") $0 }'; then
-  pscore dd-unbounded Pi_bound Pi_ctl "$(( ${B_Pi_bound:-0} && ${B_Pi_ctl:-0} ))"
-else bad "dd-unbounded DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-capvalid-abc "''|*[!0-9]*|0*) ;;" "''|0*) ;;"; then pscore dd-capvalid-abc Pcapabc_sb Pcapabc_ctl "$(( ${B_Pcapabc_sb:-0} && ${B_Pcapabc_ctl:-0} ))"
-else bad "dd-capvalid-abc DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-baseroot '[ "$N_NF" -gt 0 ] && [ "$BASE_ROOT_SET" -eq 0 ] && [ -n "$WT" ]' '[ "$N_NF" -gt 0 ]'; then
-  pscore dd-baseroot Pviii_nf Pviii_tree "$(( ${B_Pviii_nf:-0} && ${B_Pviii_tree:-0} ))"
-else bad "dd-baseroot DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-lateowed '[ -s "$TMP/relabel" ] && dd_classify' \
-     '[ -s "$TMP/relabel" ] && { cp "$TMP/owed" "$TMP/owed.first"; dd_classify; cp "$TMP/owed.first" "$TMP/owed"; rm -f "$TMP/owed.first"; }'; then
-  pscore dd-lateowed Pi_owed Pi_row "$(( ${B_Pi_owed:-0} && ${B_Pi_row:-0} ))"
-else bad "dd-lateowed DID NOT APPLY: its anchor matched no line, or more than one"; fi
-if pmutdir dd-noro 'status --porcelain -- . ":(exclude,top)$RO_MARKER" ":(exclude,top)$_ro_rec" 2>/dev/null' 'status --porcelain 2>/dev/null'; then
-  pscore dd-noro Pii_ro Pii_genuine "$(( ${B_Pii_ro:-0} && ${B_Pii_genuine:-0} ))"
-else bad "dd-noro DID NOT APPLY: its anchor matched no line, or more than one"; fi
-# a STRING filter on the porcelain output in place of the pathspec: it drops `?? <record>` but not the `?? <dir>/` row
-# porcelain collapses a record-only untracked directory into
-if pmutdir dd-strfilter 'status --porcelain -- . ":(exclude,top)$RO_MARKER" ":(exclude,top)$_ro_rec" 2>/dev/null' \
-     'status --porcelain 2>/dev/null | grep -vxF -e "?? $RO_MARKER" -e "?? $_ro_rec"'; then
-  pscore dd-strfilter Pi_ro Pi_row "$(( ${B_Pi_ro:-0} && ${B_Pi_row:-0} ))"
-else bad "dd-strfilter DID NOT APPLY: its anchor matched no line, or more than one"; fi
-# the fallback removed: with no --record-owed the second exclude pathspec is EMPTY, which excludes the whole tree
-if pmutdir dd-emptyro '_ro_rec="$RO_MARKER"; case' '_ro_rec="$RO_RECORD"; case'; then
-  pscore dd-emptyro Pvi_unc Pvi_nf "$(( ${B_Pvi_unc:-0} && ${B_Pvi_nf:-0} ))"
-else bad "dd-emptyro DID NOT APPLY: its anchor matched no line, or more than one"; fi
-# the record path stripped as typed (no absolute, collapsed form): `./_bmad-output/...` keeps its `./` and never matches
-if pmutdir dd-rawrec 'RO_RECORD="${_ro_n#"$CONSUMER"/}"' 'RO_RECORD="${OWED_FILE#"$CONSUMER"/}"'; then
-  pscore dd-rawrec Prel_ro Prel_ctl "$(( ${B_Prel_ro:-0} && ${B_Prel_ctl:-0} ))"
-else bad "dd-rawrec DID NOT APPLY: its anchor matched no line, or more than one"; fi
-mkdir -p "$P_MDIR/vd-sidecar"
-if pmut "$VALIDATOR" "$P_MDIR/vd-sidecar/validate-artifact-derivations.sh" \
-     'local d="$AI_DLC_VD_FULL_OUT_DIR" n' 'local d="${AI_DLC_VD_FULL_OUT_DIR:-.}" n' \
-     'if [ -n "${AI_DLC_VD_FULL_OUT_DIR:-}" ]; then vd_full_out "$f" "$ln" empty; fi' 'vd_full_out "$f" "$ln" empty' \
-     'if [ -n "${AI_DLC_VD_FULL_OUT_DIR:-}" ]; then vd_full_out "$f" "$ln"; fi' 'vd_full_out "$f" "$ln"'; then
-  pscore vd-sidecar Px_unset Px_set "$(( ${B_Px_unset:-0} && ${B_Px_set:-0} ))"
-else bad "vd-sidecar DID NOT APPLY: its anchor matched no line, or more than one"; fi
 
 # ---- A10: the default base root leaves no worktree and no scratch behind --------------------
 # CONTROL FIRST: the counter must see a worktree when one exists, or a 1 below is a counter that

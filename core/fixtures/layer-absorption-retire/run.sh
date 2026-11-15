@@ -41,15 +41,6 @@ trap 'rm -rf "$ROOT"' EXIT
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# B_P2=1 only beside the part 2 control's own ok: a part 2 mutant is scored only if the unmutated copy scored all-ok.
-B_P2=0
-# LA_CTL=1 only beside the MUTANT 1/2 control's own ok: both kills are a row DISAPPEARING, which a
-# copy that cannot run also produces.
-LA_CTL=0
-
 echo "layer-absorption-retire:"
 
 mkdir -p "$DIST/core/skills/ai-dlc/steps" "$DIST/core/schemas" "$CONS/.claude/skills/ai-dlc/extensions"
@@ -182,66 +173,6 @@ if grep -qx EXTENSION-RETIRE-CANDIDATE <<<"$(st 'RENUMBERED\.md$')"; then
   ok "  and an absorption landed under a DIFFERENT number fires it too (the second emit site)"
 else
   bad "  an absorption renumbered by core went unreported — a number-keyed join is exactly how a duplicate hid across ~35 minor versions, which is why this arm exists"
-fi
-
-# --- MUTANTS ---------------------------------------------------------------------------------
-# COPIES of the whole reconcile directory (layer-drift sources lib.sh from beside it, and a lone
-# script copy dies before printing anything), `cmp -s`-guarded so a sed that matched nothing
-# cannot pass as a mutation, each aimed at ONE assertion.
-MUT="$ROOT/mut"; rm -rf "$MUT"; mkdir -p "$MUT"
-cp "$(dirname "$DRIFT")"/*.sh "$MUT/" 2>/dev/null || true
-
-# THE UNMUTATED CONTROL. Both mutants below assert that a row DISAPPEARS, and a copy that cannot
-# run emits nothing — which reads exactly like a kill.
-cp "$DRIFT" "$MUT/layer-drift.sh"
-CTL="$(run_drift "$MUT/layer-drift.sh")"
-ctl_n="$(printf '%s\n' "$CTL" | awk -F'\t' '$1=="EXTENSION-RETIRE-CANDIDATE"' | grep -c . || true)"
-if [ "$ctl_n" -eq 2 ]; then
-  ok "CONTROL: an unmutated copy in a fresh directory reproduces both LC-E6 rows"; LA_CTL=1
-else
-  bad "CONTROL: the unmutated copy produced $ctl_n LC-E6 row(s), not 2 — the mutant verdicts below are unreadable"
-fi
-
-# MUTANT 1 — force the tag to PRE-EXISTING, i.e. stop consulting the base. Assertion 1 must go
-# red; assertion 2's LC-E5 control must NOT, because that entry was already tagged PRE-EXISTING.
-sed 's@then tag=PRE-EXISTING; else tag=NEW-THIS-PULL; fi@then tag=PRE-EXISTING; else tag=PRE-EXISTING; fi@' \
-  "$DRIFT" > "$MUT/layer-drift.sh"
-if cmp -s "$DRIFT" "$MUT/layer-drift.sh"; then
-  bad "MUTANT 1 did not apply — the tag assignment it targets has been respelled, so it proves nothing"
-else
-  M1="$(run_drift "$MUT/layer-drift.sh")"
-  m1_st() { printf '%s\n' "$M1" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
-  if grep -qx EXTENSION-RETIRE-CANDIDATE <<<"$(m1_st 'ABSORBED\.md$')"; then
-    bad "MUTANT 1 SURVIVED: LC-E6 still fires with the tag forced PRE-EXISTING, so assertion 1 is not testing the base comparison"
-  else
-    mutant_killed "${LA_CTL:-0}" mutant-1 "MUTANT 1 (tag forced PRE-EXISTING): LC-E6 goes silent — the base comparison is what makes it an absorption rather than a duplicate"
-  fi
-  if grep -qx EXTENSION-RESTATES-CORE <<<"$(m1_st 'PREEXISTING\.md$')"; then
-    ok "  and the LC-E5 control is unmoved by it — the two arms are not entangled"
-  else
-    bad "  MUTANT 1 also moved the LC-E5 control: the two arms are entangled and one of them proves nothing alone"
-  fi
-fi
-
-# MUTANT 2 — break the renumbered search's title predicate so only the same-number arm can fire.
-# Assertion 3 must go red; assertion 1 must NOT, because ABSORBED matches core at the SAME number.
-sed 's@^        same_section "\$t_ext" "\$t_up" || continue@        false \&\& same_section "$t_ext" "$t_up" || continue@' \
-  "$DRIFT" > "$MUT/layer-drift.sh"
-if cmp -s "$DRIFT" "$MUT/layer-drift.sh"; then
-  bad "MUTANT 2 did not apply — the renumbered title search it targets has been respelled, so it proves nothing"
-else
-  M2="$(run_drift "$MUT/layer-drift.sh")"
-  m2_st() { printf '%s\n' "$M2" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
-  if grep -qx EXTENSION-RETIRE-CANDIDATE <<<"$(m2_st 'RENUMBERED\.md$')"; then
-    bad "MUTANT 2 SURVIVED: the renumbered entry still fires with the title search disabled, so assertion 3 is not testing that emit site"
-  else
-    mutant_killed "${LA_CTL:-0}" mutant-2 "MUTANT 2 (renumbered title search disabled): only the renumbered row disappears"
-  fi
-  if grep -qx EXTENSION-RETIRE-CANDIDATE <<<"$(m2_st 'ABSORBED\.md$')"; then
-    ok "  and the same-number row survives it — the two emit sites are asserted separately"
-  else
-    bad "  MUTANT 2 also removed the same-number row: assertions 1 and 3 are entangled"
-  fi
 fi
 
 # --- PART 2: AN UNREADABLE BASE OBJECT REFUSES; A PATH ABSENT AT BASE DOES NOT (BL-376) ----------
@@ -420,80 +351,6 @@ if [ "$b376_run" = 1 ]; then
         *)      bad "part 2 ${b376_a%%=*}: arm failed on the engine under test ($b376_v)" ;;
       esac
     done
-
-    # MUTANTS -- one gate removed, one gate turned into the skip-on-absent wrong fix, and the gate
-    # moved inside sup_measure's `$( )`. Built in a copy of the whole reconcile directory, each anchor
-    # counted (0 = STALE, >1 = AMBIGUOUS), `cmp -s`-guarded, scored by EXACT arm vector. The three
-    # `$BASE` gate lines are byte-identical, so each anchor is the gate PLUS the read under it.
-    BM="$BW/mut"; mkdir -p "$BM"
-    cp "$(dirname "$DRIFT")"/*.sh "$BM/" 2>/dev/null || true
-    b376_mut() { # <id> -> writes $BM/layer-drift-<id>.sh; prints OK, STALE or AMBIGUOUS
-      python3 - "$DRIFT" "$BM/layer-drift-$1.sh" "$1" <<'B376PY'
-import sys
-src, dst, mid = sys.argv[1], sys.argv[2], sys.argv[3]
-s = open(src).read()
-G = {
-  "n": ('    have "$BASE" "$cp" || :\n', '    base_anchors="$(git_show "$BASE" "$cp"'),
-  "t": ('    have "$BASE" "$cp" || :\n', '    base_titles="$(git_show "$BASE" "$cp"'),
-  "x": ('      have "$BASE" "$cp" || :\n', '      ext_old="$(git_show "$BASE" "$cp"'),
-  "o": ('    have "$base_sha" "$a_cp" || :\n', '    s_base="$(git_show "$base_sha" "$a_cp"'),
-  "s": ('      have "$base_sha" "$(dist_path "${sup_raw%%#*}")" || :\n', '      sup_surplus="$(sup_measure "$sup_raw")"'),
-}
-kind, site = mid[0], mid[1]
-gate, nxt = G[site]
-anchor = gate + nxt
-n = s.count(anchor)
-if n == 0: print("STALE"); sys.exit(0)
-if n > 1: print("AMBIGUOUS"); sys.exit(0)
-if kind == "g":
-    s = s.replace(anchor, nxt, 1)
-elif kind == "c":
-    s = s.replace(anchor, gate.replace("|| :", "|| continue") + nxt, 1)
-elif kind == "w":
-    inner = '        cs="$(git_show "$base_sha" "$(dist_path "$fpart")"'
-    if s.count(inner) != 1: print("STALE" if s.count(inner) == 0 else "AMBIGUOUS"); sys.exit(0)
-    s = s.replace(anchor, nxt, 1)
-    s = s.replace(inner, '        have "$base_sha" "$(dist_path "$fpart")" || :\n' + inner, 1)
-open(dst, "w").write(s)
-print("OK")
-B376PY
-    }
-    cp "$DRIFT" "$BM/layer-drift-unmutated.sh"
-    b376_score "$BM/layer-drift-unmutated.sh"
-    if [ "$b376_v" != "$B376_ALLOK" ]; then
-      bad "FIXTURE ERROR: the UNMUTATED copy in $BM scores '$b376_v', not all-ok, so no mutant verdict below is attributable"
-    else
-      ok "part 2 CONTROL: an unmutated copy in the mutant directory scores every arm ok, NM's rows present"; B_P2=1
-      for b376_m in \
-        "gn:N=no T=ok X=ok O=ok S=ok NN=ok NT=ok NX=ok NO=ok NSS=ok:the numbered-catalog base gate removed" \
-        "gt:N=ok T=no X=ok O=ok S=ok NN=ok NT=ok NX=ok NO=ok NSS=ok:the title-arm base gate removed" \
-        "gx:N=ok T=ok X=no O=ok S=ok NN=ok NT=ok NX=ok NO=ok NSS=ok:the extends: span base gate removed" \
-        "go:N=ok T=ok X=ok O=no S=ok NN=ok NT=ok NX=ok NO=ok NSS=ok:the override section base_sha gate removed" \
-        "gs:N=ok T=ok X=ok O=ok S=no NN=ok NT=ok NX=ok NO=ok NSS=ok:the surplus-measure base_sha gate removed" \
-        "cn:N=ok T=ok X=ok O=ok S=ok NN=no NT=ok NX=ok NO=ok NSS=ok:the numbered-catalog gate skipping an absent path" \
-        "ct:N=ok T=ok X=ok O=ok S=ok NN=ok NT=no NX=ok NO=ok NSS=ok:the title-arm gate skipping an absent path" \
-        "cx:N=ok T=ok X=ok O=ok S=ok NN=ok NT=ok NX=no NO=ok NSS=ok:the extends: span gate skipping an absent path" \
-        "co:N=ok T=ok X=ok O=ok S=ok NN=ok NT=ok NX=ok NO=no NSS=ok:the override section gate skipping an absent path" \
-        "cs:N=ok T=ok X=ok O=ok S=ok NN=ok NT=ok NX=ok NO=ok NSS=no:the surplus gate skipping an absent path" \
-        "ws:N=ok T=ok X=ok O=ok S=no NN=ok NT=ok NX=ok NO=ok NSS=ok:the surplus gate moved inside sup_measure's subshell (refuses under the staging message)"; do
-        b376_id="${b376_m%%:*}"; b376_rest="${b376_m#*:}"; b376_want="${b376_rest%%:*}"; b376_what="${b376_rest#*:}"
-        b376_ap="$(b376_mut "$b376_id")"; b376_f="$BM/layer-drift-$b376_id.sh"
-        if [ "$b376_ap" = STALE ]; then
-          bad "FIXTURE STALE: part 2 mutant $b376_id ($b376_what) found no anchor -- the gate moved; re-anchor it, never drop it"
-        elif [ "$b376_ap" != OK ] || [ ! -s "$b376_f" ] || cmp -s "$DRIFT" "$b376_f"; then
-          bad "FIXTURE ERROR: part 2 mutant $b376_id ($b376_what) did not apply (python said '$b376_ap')"
-        elif ! bash -n "$b376_f" 2>/dev/null; then
-          bad "FIXTURE ERROR: part 2 mutant $b376_id ($b376_what) does not parse"
-        else
-          b376_score "$b376_f"
-          if [ "$b376_v" = "$b376_want" ]; then
-            mutant_killed "$B_P2" "part2-$b376_id" "part 2 MUTANT $b376_id -- $b376_what: KILLED by exactly $(printf '%s' "$b376_v" | tr ' ' '\n' | grep '=no' | cut -d= -f1 | tr '\n' ' ' | sed 's/ $//')"
-          else
-            bad "part 2 MUTANT $b376_id -- $b376_what: scored '$b376_v', want '$b376_want'"
-          fi
-        fi
-      done
-    fi
   fi
 fi
 

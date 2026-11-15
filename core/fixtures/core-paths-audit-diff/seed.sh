@@ -9,8 +9,8 @@
 #
 # THE WORKING TREE STAYS AT `base` FOR EVERY RUN. Ranges are named by ref, never checked
 # out, so the working-tree manifest equals the base-ref manifest on every branch except by
-# deliberate construction. That is what lets the base-ref-resolution mutant fail exactly one
-# assertion instead of shifting the classification under all of them.
+# deliberate construction. That keeps the base-ref-resolution assertion the only one that reads
+# the manifest source, instead of shifting the classification under all of them.
 set -uo pipefail
 
 WORK="$(mktemp -d)" || exit 2
@@ -322,7 +322,7 @@ nt="$(GIT_INDEX_FILE="$WORK/nfd.idx" g write-tree)" || exit 2
 NFDADD="$(g commit-tree "$nt" -p "$BASE" -m "feat: add an nfd-named core script")" || exit 2
 g update-ref refs/heads/nfd-add "$NFDADD" || exit 2
 # PRECOMPOSE=1 when this git rewrites an NFD command-line pathspec under precomposeunicode=true
-# (macOS); elsewhere the setting is inert and mutation 24 has no observable to kill.
+# (macOS); elsewhere the setting is inert and the precomposition pin has nothing to observe.
 n_on="$(g -c core.precomposeunicode=true ls-tree -r --full-tree "$NFDADD" -- "$NFD_P" | wc -l | tr -d ' ')"
 n_off="$(g -c core.precomposeunicode=false ls-tree -r --full-tree "$NFDADD" -- "$NFD_P" | wc -l | tr -d ' ')"
 [ "$n_off" -eq 1 ] || { echo "seed: the NFD path does not list under precomposeunicode=false ($n_off)" >&2; exit 2; }
@@ -384,19 +384,10 @@ g cat-file blob "$(blob "$XREC" "$V")" > "$WORK/x.b" 2>/dev/null || seedfail "X 
 for c in "$SQUASH" "$BYTE" "$CHMOD" "$OLDBLOB" "$INRANGE"; do
   g merge-base --is-ancestor "$XREC" "$c" && seedfail "X is an ancestor of $c, so deleting its ref cannot empty R"
 done
-# Mutation 3 must stay killable: no reconcile outside BASE..RECONCILE carries RECONCILE's stamp.
-n="$(g log --branches --format='%H %s' | awk -v k="$RECONCILE" '$1 != k && index($0, "chore(ai-dlc-update):") { print $1 }' \
-  | while IFS= read -r r; do [ "$(blob "$r" "$S")" = "$(blob "$RECONCILE" "$S")" ] && echo "$r"; done)"
-[ -z "$n" ] || seedfail "another reconcile carries RECONCILE's stamp: $n"
-# Positive control for the loop above, same pipeline minus the exclusion: it must find exactly
-# RECONCILE, so its zero above is a search that could fire.
-pc="$(g log --branches --format='%H %s' | awk 'index($0, "chore(ai-dlc-update):") { print $1 }' \
-  | while IFS= read -r r; do [ "$(blob "$r" "$S")" = "$(blob "$RECONCILE" "$S")" ] && echo "$r"; done)"
-[ "$pc" = "$RECONCILE" ] || seedfail "the stamp-uniqueness search did not find RECONCILE itself ($pc)"
 
 g checkout -q "$BASE" >/dev/null 2>&1 || exit 2
 
-# --- the script under test, plus an unmutated control copy -------------------
+# --- the script under test, plus a control copy -------------------
 # Resolve upstream by walking UP for either layout, never by walking up from a sibling
 # core file (I33).
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -412,8 +403,8 @@ cp "$RESOLVER" "$WORK/control-core-paths.sh" || exit 2
 
 # The citation arm DELEGATES to a sibling — it asks validate-escalation-resolution.sh whether
 # the file carries an operator citation rather than restating that script's grammar. The
-# control copy and every mutant copy live in $WORK, so the sibling has to be there too or all
-# of them take the "delegate missing" exit-2 branch and every mutant scores as a kill at once.
+# control copy lives in $WORK, so the sibling has to be there too or it takes the
+# "delegate missing" exit-2 branch on every run.
 # Take it from the SAME directory the resolver was found in — walking up a second time could
 # resolve a different tree, and resolving it relative to $RESOLVER is the sibling-in-one-dir
 # case install.sh preserves in both layouts, not the walk-up I33 forbids.

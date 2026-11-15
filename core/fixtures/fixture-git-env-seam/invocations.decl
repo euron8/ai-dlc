@@ -6,5 +6,7 @@
 # BL-988 (* 296->298, two agreeing counted runs): +1 the bash start of W12's no-second-hop mutant copy of
 # validate-fixture-git-env.sh and +1 that of W13's sourced-only-hop copy, each refused at its own self-probe. The
 # validator's self-probe judges its seeds in process and starts no bash, and W10/W11 ride the one shipped run.
-298 *
+# PW3 (* 98->61, one counted run on the squash): the driven fixtures lost their batteries, trunk-push-bound 17->9
+# starts per run (driven 3 times: the H2 canary, cells A and U) and setup-config-drift 43->30 (driven once, cell B).
+61 *
 3 scripts/validate-fixture-git-env.sh

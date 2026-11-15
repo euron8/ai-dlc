@@ -35,7 +35,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
   || { echo "REFUSED: usage: bash receipt-bl815.sh <path to validate-handoff-evidence.sh> [<cells>]" >&2; exit 9; }
 HE="$1"; CELLS="${2:-}"
 # With <cells> (space-separated cell names) only the validator calls those cells read run, plus story-1's, which
-# carries the ctl cell: a mutant run names the one cell that decides it. Without it every cell runs.
+# carries the ctl cell: a narrowed run names the one cell it needs. Without it every cell runs.
 want() { [ -z "$CELLS" ] && return 0; case " $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
 # ran <cell>: printed inside each want-gated block, once per cell whose assertion that block evaluates.
 ran() { echo "RAN $1"; }

@@ -43,50 +43,8 @@
 # CLOCK AND BACKGROUND, per arm. No arm runs a background process. No arm reads the clock for its
 # verdict: the stamp compared is the seeded ledger ts, and AI_DLC_SNAPSHOT_NOW_EPOCH pins the stamp
 # check's "now" to 2030-01-01. The waiter beat delivers on its FIRST check (the file's mtime is past
-# the 2026-11-01 join epoch and no --complete is armed), so it never sleeps on a poll. Only the
-# m-datestamp mutant reads the clock, and any real clock reading differs from the 2026-11-01 ts.
-#
-# MUTANTS (each a copy at .../core/hooks/ai-dlc-inflight-row.sh or .../core/scripts/
-# wait-for-deliverable.sh, so a counted run sees every start; each must turn its deciding cell red
-# and leave its twin green):
-#   m-datestamp   dispatched-at from `date` -> DISPATCH red, and the hook's stderr carries the LATE
-#                 line of validate-artifact-budget.sh: the stamp check refused the clock reading
-#   m-noera       the era gate dropped -> ERAOLD writes a row
-#   m-nonested    the agent_id check dropped -> NESTED writes a row
-#   m-noupdater   the updater-session gate dropped -> UPDATER writes a row
-#   m-noledger    the single-ledger-row check dropped -> NOLEDGER exits 2
-#   m-lastmd      the LAST `.md` token of the Deliverable line taken -> DLPARSE gives x/draft.md
-#   m-rowadd      the --row-replace remedy branch of say_unwritten dropped -> ROWDIFF's stderr names only --row-add
-#   m-substop2    SubagentStop exits 2 on a missing deliverable -> SUBSTOPABS exit 2
-#   m-wstatus     the waiter writes the row on `--status` -> WSTATUS changes the file
-#   m-wnoera      the waiter's era gate dropped -> WBEATOLD rewrites the lead's hand-written row
-# A control drives UNMUTATED copies through the same harness first (DISPATCH on the hook copy,
-# WSTATUS on the waiter copy) and requires both to pass, so a copy that cannot run is not read as
-# a scored mutant.
-#
-# MUTANT-MATRIX m-datestamp decides=DISPATCH twins=NESTED
-# MUTANT-MATRIX m-noera decides=ERAOLD twins=DISPATCH
-# MUTANT-MATRIX m-nonested decides=NESTED twins=DISPATCH
-# MUTANT-MATRIX m-noupdater decides=UPDATER twins=LEADTR
-# MUTANT-MATRIX m-noledger decides=NOLEDGER twins=DISPATCH
-# MUTANT-MATRIX m-lastmd decides=DLPARSE twins=DLFALL
-# MUTANT-MATRIX m-rowadd decides=ROWDIFF twins=NODL
-# MUTANT-MATRIX m-substop2 decides=SUBSTOPABS twins=SUBSTOP
-# MUTANT-MATRIX m-wstatus decides=WSTATUS twins=WBEAT
-# MUTANT-MATRIX m-wnoera decides=WBEATOLD twins=WBEAT
-# MUTANT-MATRIX-CONTROL control why=the unmutated hook and waiter copies must pass DISPATCH and WSTATUS through the mutant harness so a mutant verdict is attributable to the mutation
-# MUTANT-MATRIX-DYNAMIC mutants why=one scoring function takes every mutant name as an argument and every name keeps its own row
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/inflight-row-hook/run.sh --matrix
-# also trips: m-datestamp -> DLPARSE,DLFALL (every hook write is stamp-checked, so a clock stamp refuses each one)
-# also trips: m-noera, m-nonested, m-rowadd, m-noupdater, m-noledger, m-lastmd, m-substop2, m-wstatus, m-wnoera -> none
+# the 2026-11-01 join epoch and no --complete is armed), so it never sleeps on a poll.
 set -uo pipefail
-
-MODE=plain
-case "${1:-}" in
-  "") ;;
-  --matrix) MODE=matrix ;;
-  *) echo "inflight-row-hook: usage: run.sh [--matrix]" >&2; exit 2 ;;
-esac
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
@@ -112,10 +70,6 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/inflight-row-hook.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 export AI_DLC_SNAPSHOT_NOW_EPOCH=1893456000      # 2030-01-01T00:00:00Z: the stamp check's "now", pinned
 LEDGER_TS="2026-11-01T10:00:00Z"
@@ -275,10 +229,9 @@ cell() {
       waiter "$wp" "$w" "$t.wbeatold" --dispatch toolu_01abc x/y.md
       grep -q '^DELIVERED x/y.md' <<<"$OUT" && [ "$(cksum < "$(snap "$w")")" = "$cs" ] && return 0
       CELL_MSG="rc=$RC changed=$([ "$(cksum < "$(snap "$w")")" = "$cs" ] && echo no || echo yes) out=$(printf '%s' "$OUT" | head -3 | tr '\n' ' ')"; return 1 ;;
-    *) echo "MATRIX BROKEN unknown cell $c" >&2; exit 2 ;;
+    *) echo "FIXTURE BROKEN unknown cell $c" >&2; exit 2 ;;
   esac
 }
-CELLS="DISPATCH ERAOLD NESTED UPDATER LEADTR NOLEDGER DLPARSE DLFALL NODL ROWDIFF SUBSTOP SUBSTOPABS WSTATUS WDTS WBEAT WBEATOLD"
 
 echo "inflight-row-hook:"
 
@@ -303,82 +256,5 @@ say_cell WDTS "the waiter's --dispatch-ts prints the ledger ts and leaves the fi
 say_cell WBEAT "a --dispatch-armed beat that says DELIVERED sets the row delivered-reachable"
 say_cell WBEATOLD "in the old era the same armed beat says DELIVERED and leaves the lead's bare-agentId row byte-identical"
 
-# --- mutants ---------------------------------------------------------------------------------
-# mkmut <src> <dst> <old> <new> [<old> <new> ...]: <dst> is <src> with each literal replaced once, in
-# order; an <old> beginning `=` matches a WHOLE line. Each replacement must change the file (cmp -s).
-mkmut() {
-  local src="$1" dst="$2" cur="$WORK/mk.cur" nxt="$WORK/mk.nxt"; shift 2
-  cp "$src" "$cur" || return 1
-  while [ $# -ge 2 ]; do
-    MM_OLD="$1" MM_NEW="$2" awk 'BEGIN { o = ENVIRON["MM_OLD"]; n = ENVIRON["MM_NEW"]; whole = (substr(o, 1, 1) == "="); if (whole) o = substr(o, 2) }
-      { if (!done && whole && $0 == o) { $0 = n; done = 1 }
-        else if (!done && !whole && index($0, o)) { i = index($0, o); $0 = substr($0, 1, i - 1) n substr($0, i + length(o)); done = 1 }
-        print }' "$cur" > "$nxt" || return 1
-    cmp -s "$cur" "$nxt" && { echo "DID NOT APPLY: $1" >&2; return 1; }
-    mv "$nxt" "$cur"; shift 2
-  done
-  mkdir -p "$(dirname "$dst")" && mv "$cur" "$dst"
-}
-# The waiter resolves its siblings beside itself, so its copies are whole directories.
-wfd_dir() { mkdir -p "$1"; local f; for f in $SIBS; do cp "$SDIR/$f" "$1/$f" || return 1; done; }
-
-CH="$WORK/mut-control/core/hooks/ai-dlc-inflight-row.sh"; mkdir -p "$(dirname "$CH")"; cp "$HOOK" "$CH"
-CW="$WORK/mut-control/core/scripts"; wfd_dir "$CW"
-if cell DISPATCH "$CH" "$WFD" control && cell WSTATUS "$HOOK" "$CW/wait-for-deliverable.sh" control; then
-  ok "control: the unmutated hook copy writes DISPATCH's row and the unmutated waiter copy passes WSTATUS"; B_ctl=1
-else bad "control: an unmutated copy fails ($CELL_MSG) -- no mutant verdict below can be read"; fi
-
-mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
-  local n="$1" f="$2" l w c=0 v=""
-  while IFS= read -r l; do
-    case "$l" in "# MUTANT-MATRIX $n "*) c=$((c + 1)); for w in ${l#"# MUTANT-MATRIX $n "}; do case "$w" in "$f="*) v="${w#"$f="}" ;; esac; done ;; esac
-  done < "$HERE/run.sh"
-  [ "$c" -eq 1 ] && printf '%s' "$v"
-}
-# score <mutant> <hook|waiter> <old> <new> [...]: build the mutant, run its deciding cell and its twin.
-score() {
-  local name="$1" kind="$2" hp="$HOOK" wp="$WFD" dec tw d t dmsg a g tot rd u; shift 2
-  if [ "$kind" = hook ]; then
-    hp="$WORK/mut-$name/core/hooks/ai-dlc-inflight-row.sh"
-    mkmut "$HOOK" "$hp" "$@" || { bad "$name: mutation did not apply"; return; }
-  else
-    wfd_dir "$WORK/mut-$name/core/scripts" || { bad "$name: cannot copy the waiter's directory"; return; }
-    wp="$WORK/mut-$name/core/scripts/wait-for-deliverable.sh"
-    mkmut "$WFD" "$wp" "$@" || { bad "$name: mutation did not apply"; return; }
-  fi
-  dec="$(mx_row "$name" decides)"; tw="$(mx_row "$name" twins)"
-  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "$name: no single MUTANT-MATRIX row names its deciding cell and twin"; return; fi
-  if cell "$dec" "$hp" "$wp" "$name"; then d=GREEN; dmsg=""; else d=RED; dmsg="$CELL_MSG"; fi
-  # m-datestamp is killed only when the STAMP CHECK refused the clock reading: its LATE line is in the hook's stderr.
-  if [ "$name" = m-datestamp ] && [ "$d" = RED ] && ! grep -q 'LATE  ' <<<"$ERR"; then
-    bad "$name: DISPATCH went red, but not by the LATE arm (stderr: $(printf '%s' "$ERR" | head -2 | tr '\n' ' '))"; d=GREEN
-  fi
-  if cell "$tw" "$hp" "$wp" "$name"; then t=GREEN; else t=RED; fi
-  if [ "$d" = RED ]; then
-    mutant_killed "${B_ctl:-0}" "$name" "$name: scored by $dec ($dec failed on the mutant: $dmsg) with twin $tw GREEN"
-  else bad "$name: SURVIVED -- $dec still holds on the mutant"; fi
-  [ "$t" = GREEN ] || bad "$name: its twin $tw also failed -- the mutant is not confined to its own cell"
-  if [ "$MODE" = matrix ]; then
-    g=0; tot=0; rd=""
-    for a in $CELLS; do
-      { [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; } && continue
-      tot=$((tot + 1)); if cell "$a" "$hp" "$wp" "$name-mx"; then g=$((g + 1)); else rd="$rd,$a"; fi
-    done
-    u=""; [ "$d" = GREEN ] && u=" UNEXPECTED=$dec:GREEN"; [ "$t" = RED ] && u="$u UNEXPECTED=$tw:RED"
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$name" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
-  fi
-}
-
-score m-datestamp hook 'TS="$(bash "$WFD" --dispatch-ts "$TUI" 2> /dev/null)"' 'TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"'
-score m-noera hook 'era_held || exit 0' 'era_held || :'
-score m-nonested hook '[ -z "$(jq -r '"'"'.agent_id // empty'"'"' <<< "$INPUT" 2> /dev/null)" ] || exit 0' ':'
-score m-noupdater hook '*'"'"'"skill":"ai-dlc-update"'"'"') exit 0 ;;' '*'"'"'"skill":"zz-never"'"'"') exit 0 ;;'
-score m-noledger hook '[ "$(printf '"'"'%s'"'"' "$LROW" | grep -c .)" = 1 ] || exit 0' ':'
-score m-lastmd hook 'if (t ~ /\// || t ~ /\.[A-Za-z0-9]+$/) { print t; exit }' 'if (t ~ /\.md$/) last = t' \
-  '=      exit' '      if (last != "") print last; exit'
-score m-rowadd hook '*--row-replace*) printf' '*zz-never*) printf'
-score m-substop2 hook '[ -n "$DL" ] && present "$DL" || exit 0' '[ -n "$DL" ] && present "$DL" || exit 2'
-score m-wstatus waiter '  S_DONE=0; S_OUT=0' '  S_DONE=0; S_OUT=0; for _t in $TARGETS; do row_on_delivery "$_t"; done'
-score m-wnoera waiter 'rd_era_held || return 0' ':'
 
 report_end inflight-row-hook

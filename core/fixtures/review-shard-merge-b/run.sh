@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # review-shard-merge-b -- shard 'b' of the review-shard-merge fixture (BL-906).
 #
-# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. Every world, arm, mutant and control lives in the
+# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. Every world, arm and control lives in the
 # sibling's run.sh and lib.sh; what this directory buys is a unit the pre-push pool can start on its own, because
 # the suite is POLE-BOUND and the unsharded fixture was its longest directory. The shard split, the units each shard
 # runs and the coverage join over them (J0) are declared in the sibling, and both shards run that join and the seed,
@@ -9,7 +9,7 @@
 #
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree.
 #
-# Usage: run.sh [--matrix | --merge-slices <slice output>...]  (passed to the sibling after --group b)
+# Usage: run.sh  (passed to the sibling after --group b)
 # Exit:  0 = every unit dealt to this shard passes, 1 = one does not, 2 = fixture broken.
 set -uo pipefail
 

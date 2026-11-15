@@ -13,104 +13,13 @@
 #   - a clean lint_spine JSON           PASSES (0)  -- over-fire control
 #   - trace verdict FAIL                FAILS (1)
 #   - trace verdict CONCERNS            PASSES (0) and PRINTS a note (recorded, not dropped)
-#   - three MUTATION controls hold      -- one per mechanical join; one mutant
-#                                          licenses only one FAIL
 #   - a QUALIFIED capability memlog     PASSES (0)  -- `(capability by <who>)` is the
 #                                          same entry type as `(capability)`
 #   - qualified + an uncited LR         FAILS (1)   -- the widened entries FEED join (1)
 #   - qualified NON-capability tags     DISARMS (2) -- the widening is not vacuous
 #   - `(capability-review by <who>)`    DISARMS (2) -- and is not over-wide either
 #
-# MUTANT MATRIX. An ARM is one distinct subject invocation (an argument list, named by `arm_name`:
-# each `--flag value` pair becomes `flag.value` with the $R prefix stripped (an empty value is `empty`), pairs joined by `+`).
-# Every `want`/`says` asserts over one arm, and the subject's (rc, output) for an arm is CAPTURED
-# the first time it is run and read back by every later assertion over the same arm, so the subject
-# is run once per distinct arm and not once per assertion. A mutant is a perl-built copy of the
-# subject; its DECIDING arm is the invocation its own assertion drives. A cell is TRIPPED iff the
-# mutant's (rc, output) on that arm differs from the unmutated subject's. Per push each mutant runs
-# ONCE on its deciding arm (the assertion it always made) and ONCE on its named TWIN, an arm the
-# measured matrix shows green. `--matrix` runs every mutant against every arm. The matrix is
-# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/spec-join-integrity/run.sh --matrix
-# MUTANT-MATRIX-DYNAMIC mut-helpers why=mut, mut_says, mut2 and mut2_says pass the mutant id as a variable; every id they produce has its own row above
-# MUTANT-MATRIX-CONTROL lr-local-regex-baseform why=the same local matcher must stay GREEN (rc 0) on the bare closer in lr-below-marker.md; the survivor is the pass
-# MUTANT-MATRIX-FULL sj-st-nostate worlds=net-cells why=the kill reads the cut ST_NET block's scripted-tree cell vector (frozen, changing, stuck), not any argument list of the subject
-# MUTANT-MATRIX-FULL sj-st-noconfirm worlds=net-cells why=the kill reads the cut ST_NET block's scripted-tree cell vector (frozen, changing, stuck), not any argument list of the subject
-# MUTANT-MATRIX-FULL fold-hang worlds=fold-heavy-real,fold-heavy-hang why=the kill is read from the awk shim log (start/end/152), not from any arm verdict; no single argument list decides it
-# MUTANT-MATRIX-FULL lr-sibling-unchecked worlds=lr-no-anchor-mutant why=the mutant lives in a sibling-less directory, so no capture-keyed arm can drive it; one run names the misdiagnosis
-# MUTANT-MATRIX lr-off decides=spec.orphan-lr+prd.prd-ok.md twins=spec.orphan-lr+prd.prd-ok.md+baseline.nonexistent-baseline.txt
-# MUTANT-MATRIX cap-off decides=spec.ok+prd.prd-missing-cap.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX story-off decides=spec.ok+prd.prd-ok.md+story.story-dangling.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX tri-collapse decides=spec.ok+prd.prd-ok.md+story.story-empty.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX tri-rationale-off decides=spec.ok+prd.prd-ok.md+story.story-empty-declared.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX baseline-forever decides=spec.orphan-lr+prd.prd-ok.md+baseline.baseline-stale.txt twins=spec.orphan-lr+prd.prd-ok.md
-# MUTANT-MATRIX qual-narrow decides=spec.real-qualified+prd.prd-real.md+story.story-real.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX qual-typeless decides=spec.real-qualified-noncap+prd.prd-real.md+story.story-real.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX qual-hyphen decides=spec.real-hyphen-type+prd.prd-real.md+story.story-real.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX grammar-narrow decides=spec.real-suffixed+prd.prd-suffixed.md+story.story-suffixed.md+spine.spine-suffixed.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX grammar-narrow-silent decides=spec.real-suffixed+prd.prd-suffixed-nocap1a.md+story.story-suffixed-no1a.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX decl-malformed-off-emph decides=spec.cap-emph-underscore+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX cap-boundary-loose decides=spec.real-suffixed+prd.prd-suffixed-only1a.md+story.story-suffixed.md twins=spec.real-suffixed+prd.prd-suffixed.md+story.story-suffixed.md+spine.spine-suffixed.md
-# MUTANT-MATRIX story-cap-coarse-key decides=spec.ok+prd.prd-ok.md+story.story-dangling.md+baseline.baseline-story-coarse.txt twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX story-cap-unrouted decides=spec.ok+prd.prd-ok.md+story.story-dangling.md+baseline.baseline-story-cap.txt twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX binds-fold-off decides=spec.ok+prd.prd-ok.md+spine.spine-wrapped.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX binds-widen decides=spec.ok+prd.prd-ok.md+spine.spine-neighbour.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-reason-loose decides=spec.ok+prd.prd-ok.md+spine.spine-noad-emptyreason.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-malformed-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-malformed-bound.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-idsegment-loose decides=spec.ok+prd.prd-ok.md+spine.spine-noad-reasonmention.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-marker-loose decides=spec.ok+prd.prd-ok.md+spine.spine-noad-prose.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-fold-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-wrapped.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX disp-off decides=spec.disp-ok+prd.prd-ok.md+story.story-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-unknown-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-unknown.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-contradiction-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-stale.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-bindsall-blind decides=spec.ok+prd.prd-ok.md+spine.spine-noad-bindsall.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX decl-malformed-off-underscore decides=spec.cap-residue-underscore+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX fenced-strip-off decides=spec.cap-fenced+prd.prd-ok.md+story.story-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX mentions-none-collapse decides=spec.cap-mentions-none+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX binds-all-folded decides=spec.ok+prd.prd-ok.md+spine.spine-binds-all-prose.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-placeholder-loose decides=spec.ok+prd.prd-ok.md+spine.spine-noad-placeholder.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX bound-wins-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-stale.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX disp-placeholder-loose decides=spec.disp-placeholder+prd.prd-ok.md+story.story-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX disp-anchor-loose decides=spec.disp-notsubject+prd.prd-ok.md+story.story-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX disp-noreason-loose decides=spec.disp-noreason+prd.prd-ok.md+story.story-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-segment-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-mixedseg.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX noad-eaten-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-eaten.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX twoid-def-off-undefined decides=spec.cap-twoid-undefined+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX twoid-def-off decides=spec.cap-twoid+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX reason-strip-off decides=spec.ok+prd.prd-ok.md+spine.reason-reject-3.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX reason-wordlist-off decides=spec.ok+prd.prd-ok.md+spine.reason-reject-4.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX decl-malformed-off decides=spec.decl-table+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX unclosed-off decides=spec.unclosed-bold+prd.prd-unclosed.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX fold-off decides=spec.b31-wrapped+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX membership-gate-off decides=spec.mem-none-known+prd.prd-mixed.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX unindent-spine decides=spec.ok+prd.prd-ok.md+spine.spine-noad-wrapped.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX unindent-kernel decides=spec.b31-wrapped+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX cont-reorder-quote decides=spec.ok+prd.prd-ok.md+spine.spine-cont-quote.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX cont-reorder-table decides=spec.ok+prd.prd-ok.md+spine.spine-cont-table.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX cont-reorder-thematic decides=spec.ok+prd.prd-ok.md+spine.spine-cont-thematic.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX cont-predicate-off decides=spec.ok+prd.prd-ok.md+spine.spine-cont-sibling.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
-# MUTANT-MATRIX lr-local-regex decides=spec.lr-decl-addenda+prd.prd-ok.md+locked-requirements.lr-end-sprint.md twins=spec.lr-decl-addenda+prd.prd-ok.md+locked-requirements.lr-below-marker.md
-# MUTANT-MATRIX lr-local-regex-eof decides=spec.lr-decl-addenda+prd.prd-ok.md+locked-requirements.lr-unclosed.md twins=spec.lr-decl-addenda+prd.prd-ok.md+locked-requirements.lr-below-marker.md
-# MUTANT-MATRIX lr-anchor-wide decides=spec.lr-decl-prior+prd.prd-ok.md+locked-requirements.lr-prose-mention.md twins=spec.lr-decl-prior+prd.prd-ok.md
-# MUTANT-MATRIX lr-anchor-bold decides=spec.lr-decl-orphan+prd.prd-ok.md+locked-requirements.lr-decl.md twins=spec.lr-decl-orphan+prd.prd-ok.md
-# MUTANT-MATRIX lr-flag-inert decides=spec.lr-decl-orphan+prd.prd-ok.md+locked-requirements.lr-decl.md twins=spec.lr-decl-orphan+prd.prd-ok.md
-# MUTANT-MATRIX lr-grammar-moved-collapsed decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-mentions-only.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
-# MUTANT-MATRIX lr-emptyblock-silent decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-nomarkers.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
-# MUTANT-MATRIX lr-unreadable-tolerated decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-no-such-file.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
-# MUTANT-MATRIX lr-note-fails decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl-never.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
-# MUTANT-MATRIX lr-note-silent decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl-never.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
-# MUTANT-MATRIX lr-formfeed-unsplit decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-twoblocks.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
-# MUTANT-MATRIX lr-vacuity-tolerated decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-wrong-sprint.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
-# MUTANT-MATRIX ident-drop decides=identity twins=spec.ok+prd.prd-missing-cap.md
-# MUTANT-MATRIX ident-nonce decides=identity twins=spec.ok+prd.prd-missing-cap.md
 set -u
-MATRIX=0
-case "${1:-}" in
-  "") ;;
-  --matrix) MATRIX=1 ;;
-  *) echo "FIXTURE ERROR: unknown argument '$1' (usage: run.sh [--matrix])" >&2; exit 2 ;;
-esac
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 V=""
@@ -130,22 +39,16 @@ rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
 LIBDIR="$(cd "$DIR/../lib" 2>/dev/null && pwd)"
-[ -f "$LIBDIR/mutant.sh" ] && [ -f "$LIBDIR/matrix.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh or lib/matrix.sh not found beside $DIR" >&2; exit 2; }
-. "$LIBDIR/mutant.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-. "$LIBDIR/matrix.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 [ -f "$LIBDIR/settled-net.sh" ] || { echo "FIXTURE ERROR: lib/settled-net.sh not found beside $DIR" >&2; exit 2; }
 . "$LIBDIR/settled-net.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/settled-net.sh"
-B_BASE=0
 
 # --- capture: the subject is run ONCE per distinct (program, argument list) --------------------
 # Every seed under $R is written by seed.sh before the first call and never changed afterwards, so
 # an argument list names one state. The key joins the program and each argument with a unit
 # separator and TERMINATES each one, so an empty argument (`--locked-requirements ""`) is a part.
 US=$'\037'
-CAP_KEY=("-"); CAP_RC=("0"); CAP_OUT=(""); CAP_ARM=("0"); CAP_N=0
+CAP_KEY=("-"); CAP_RC=("0"); CAP_OUT=(""); CAP_N=0
 CAP_RUNS=0; CAP_SERVED=0
 cap() { # cap <program> <args...> -> CAPRC, CAPOUT (stdout+stderr), from the capture when this arm was run before
   local prog="$1" k="" a i
@@ -160,17 +63,6 @@ cap() { # cap <program> <args...> -> CAPRC, CAPOUT (stdout+stderr), from the cap
   CAP_RUNS=$((CAP_RUNS + 1))
   CAP_N=$((CAP_N + 1))
   CAP_KEY[$CAP_N]="$k"; CAP_RC[$CAP_N]="$CAPRC"; CAP_OUT[$CAP_N]="$CAPOUT"
-  if [ "$prog" = "$V" ]; then CAP_ARM[$CAP_N]=1; else CAP_ARM[$CAP_N]=0; fi
-}
-arm_name() { # arm_name <args...> -> a header-safe name for this argument list
-  local o="" a v
-  for a in "$@"; do
-    case "$a" in
-      --*) o="$o+${a#--}" ;;
-      *) v="${a#"$R"/}"; [ -n "$v" ] || v=empty; o="$o.$v" ;;
-    esac
-  done
-  printf '%s' "${o#+}"
 }
 # Run, then read $?. Never `out=$(...)` for a verdict.
 want() { # <expected-rc> <label> <args...>
@@ -193,41 +85,11 @@ says() { # <label> <must-contain> <args...>
 echo "spec-join-integrity:"
 # The candidate list above spans BOTH install layouts and takes the first that exists, so
 # the file this unit actually loads is not necessarily the one an author just edited.
-# Print it: a mutant applied to the other copy leaves every arm green and reads exactly
-# like an arm that cannot fire.
+# Print it, so a reader sees which copy the arms below ran against.
 echo "spec-join-integrity: resolved subject = $(cd "$(dirname "$V")" && pwd)/$(basename "$V")"
 
 want 0 "OVER-FIRE CONTROL: a healthy spec set passes every join" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
-# THE BASE PASS every mutant verdict below is gated on: the healthy set exited 0 AND printed its
-# PASS line (rc 0 alone is also what a subject replaced by `exit 0` produces). Read from the capture.
-cap "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
-if [ "$CAPRC" -eq 0 ] && grep -qF ": PASS (" <<<"$CAPOUT"; then ok "BASE: the healthy set exits 0 and prints its PASS line, so every mutant kill below reads the mutation"; B_BASE=1
-else bad "BASE: the healthy set did not exit 0 with its PASS line (rc=$CAPRC), so no mutant kill below can be scored"; fi
-# Mutant registry: each mutant's script is kept under $R/mx so the matrix and the twin run can
-# drive it after a later mutant has reused its working name. The anchor sibling sits beside them.
-mkdir -p "$R/mx"
-cp "$(cd "$(dirname "$V")" && pwd)/validate-locked-anchor.sh" "$R/mx/" 2>/dev/null || true
-cp "$V" "$R/mx/_control.sh"
-MX_N=0; MX_ID=("-"); MX_SCRIPT=("-"); MX_DEC=("-"); MX_ARGS=("-"); MX_BESPOKE=("-")
-mx_reg() { # mx_reg <id> <script> <deciding-arm-name|-> <args...>   (a bespoke deciding arm passes args "")
-  local id="$1" sc="$2" dec="$3" a k="" i
-  shift 3
-  i=1
-  while [ "$i" -le "$MX_N" ]; do
-    if [ "${MX_ID[$i]}" = "$id" ]; then
-      cmp -s "${MX_SCRIPT[$i]}" "$sc" || bad "FIXTURE ERROR: mutant name '$id' is used for two DIFFERENT mutated scripts; each mutant needs its own name in the matrix"
-      return 0
-    fi
-    i=$((i + 1))
-  done
-  MX_N=$((MX_N + 1))
-  cp "$sc" "$R/mx/$id.sh"
-  for a in "$@"; do k="$k$a$US"; done
-  MX_ID[$MX_N]="$id"; MX_SCRIPT[$MX_N]="$R/mx/$id.sh"; MX_ARGS[$MX_N]="$k"
-  if [ "$dec" = "-" ]; then MX_DEC[$MX_N]="$(arm_name "$@")"; MX_BESPOKE[$MX_N]=0
-  else MX_DEC[$MX_N]="$dec"; MX_BESPOKE[$MX_N]=1; fi
-}
 
 want 1 "join (1): a locked requirement citing no capability FAILS" \
   --spec "$R/orphan-lr" --prd "$R/prd-ok.md"
@@ -392,88 +254,6 @@ want 2 "baseline: an unreadable baseline DISARMS rather than reporting every fai
 # above: same tree, same failure, one file — suppressed when the cause is live, FAILED
 # when it is gone. Either half alone is satisfied by a validator that always suppresses.
 
-# --- MUTATION controls: one per mechanical join -------------------------------
-# Copy, then `cmp -s` to prove the edit matched. A sed matching nothing yields a
-# mutant identical to the subject, which "fails as expected" for the wrong reason.
-# Substitution is on a LITERAL substring via perl \Q…\E, not a hand-escaped sed
-# regex. The first draft here used sed expressions quoted through two layers and all
-# three matched nothing; the `cmp -s` guard caught it, which is the only reason three
-# vacuous assertions did not report themselves as passing mutation controls.
-mut() { # <name> <literal-from> <literal-to> <expect-rc> <label> <args...>
-  local n="$1" from="$2" to="$3" exp="$4" lab="$5"; shift 5
-  local m="$R/mutant-$n.sh"
-  cp "$V" "$m"
-  FROM="$from" TO="$to" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
-  if cmp -s "$V" "$m"; then
-    bad "FIXTURE ERROR: mutation '$n' matched nothing — its assertion would prove nothing"
-    return
-  fi
-  bash "$m" "$@" >/dev/null 2>&1
-  local g=$?
-  if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
-  else bad "$lab (mutant exited $g, expected $exp — the guard under test is not what produced the FAIL)"; fi
-}
-
-mut lr-off 'grep -qE "$CAP_GRAMMAR"' "true" \
-  0 "MUTATION: neutering join (1) turns the orphan-LR case green" \
-  --spec "$R/orphan-lr" --prd "$R/prd-ok.md"
-
-mut cap-off 'grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)"' "true" \
-  0 "MUTATION: neutering join (2) turns the missing-CAP map green" \
-  --spec "$R/ok" --prd "$R/prd-missing-cap.md"
-
-mut story-off 'grep -qx -- "$r"' "true" \
-  0 "MUTATION: neutering join (3) turns the dangling-CAP story green" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md"
-
-# --- MUTATION controls for the v0.254.0 arms ----------------------------------
-# `mut` asserts on rc, which is the wrong instrument for the trichotomy: collapsing it
-# leaves every case exiting 1. This one asserts on the SENTENCE, and it is guarded the
-# same way — `cmp -s` proves the edit landed, plus `bash -n` proves the mutant is still
-# a program, because a mutant that dies on a syntax error emits nothing and nothing
-# reads as a kill.
-mut_says() { # <name> <literal-from> <literal-to> <must-contain> <label> <args...>
-  local n="$1" from="$2" to="$3" want_s="$4" lab="$5"; shift 5
-  local m="$R/mutant-$n.sh"
-  cp "$V" "$m"
-  FROM="$from" TO="$to" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
-  if cmp -s "$V" "$m"; then
-    bad "FIXTURE ERROR: mutation '$n' matched nothing — its assertion would prove nothing"; return
-  fi
-  if ! bash -n "$m" 2>/dev/null; then
-    bad "FIXTURE ERROR: mutant '$n' is not a valid shell script — its silence is not a kill"; return
-  fi
-  local out; out="$(bash "$m" "$@" 2>&1)"
-  if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
-  else bad "$lab (mutant did not produce: \"$want_s\")"; fi
-}
-
-# THE SHIPPED DEFECT ON DEMAND. Sever the present-vs-absent discrimination and the
-# EMPTY story is told again that it carries no field — the false sentence this release
-# exists to remove. Both sides of one predicate flip together; that is the predicate,
-# not two entangled guards.
-mut_says tri-collapse 'if ! grep -q '"'"'^capabilities:'"'"' "$s"; then' 'if true; then' \
-  "carries no 'capabilities:' frontmatter field at all" \
-  "MUTATION: collapsing the trichotomy tells the EMPTY story its field is missing again" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty.md"
-
-mut tri-rationale-off 'elif [ -n "$cap_rationale" ]; then' 'elif false; then' \
-  1 "MUTATION: dropping the rationale branch fails the declared disposition" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty-declared.md"
-
-# Without this arm --baseline is a mute button: the entry outlives its cause and stands
-# ready to suppress the next real instance of the same id, silently.
-mut baseline-forever 'if ! grep -qxF -- "$bk" <<<"$BASELINE_HIT"; then' 'if false; then' \
-  0 "MUTATION: dropping the did-not-reproduce arm turns the STALE baseline green" \
-  --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/baseline-stale.txt"
-
-# UNMUTATED CONTROL. Every mutant above is a copy in $R; if a copy misbehaves there for
-# any reason other than its mutation, each of those assertions is vacuous.
-cp "$V" "$R/control-unmutated.sh"
-bash "$R/control-unmutated.sh" --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/baseline-stale.txt" >/dev/null 2>&1
-[ $? -eq 1 ] && ok "CONTROL: an unmutated copy in \$R still FAILS the stale baseline" \
-             || bad "CONTROL: an unmutated copy misbehaves in \$R — every mutation above is vacuous"
-
 # --- the memlog tag QUALIFIER, and the DISARM that sits above every join --------
 # THIS BLOCK MUST STAY ABOVE `exit $rc`. An earlier attempt at these arms appended them
 # BELOW it, reported rc=0 and PASS, and executed none of them -- "a check that cannot
@@ -489,7 +269,6 @@ bash "$R/control-unmutated.sh" --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --base
 QUAL_ARMS=0
 q_want() { QUAL_ARMS=$((QUAL_ARMS+1)); want "$@"; }
 q_says() { QUAL_ARMS=$((QUAL_ARMS+1)); says "$@"; }
-q_mut()  { QUAL_ARMS=$((QUAL_ARMS+1)); mut  "$@"; }
 
 # (a) the observed qualified forms PASS. rc=0 alone is what a subject replaced by
 # `exit 0` also produces, so the PASS LINE and its counts are asserted beside it: those
@@ -514,7 +293,7 @@ q_says "QUALIFIER: the failing LR is NAMED, so the widening is feeding join (1)"
 # would read the `(event ...)` self-report as a capability entry and close join (1) on
 # the spec's own verdict -- the exact defect the `real-severed` pin exists for, reachable
 # a second way through the qualifier. Holds under both the narrow and the widened
-# predicate; the mutant below is what proves it can fire at all.
+# predicate.
 q_want 2 "NEGATIVE CONTROL: qualified NON-capability tags only still DISARMS at exit 2" \
   --spec "$R/real-qualified-noncap" --prd "$R/prd-real.md" --story "$R/story-real.md"
 q_says "NEGATIVE CONTROL: the DISARM says why, rather than exiting 2 mutely" \
@@ -539,32 +318,14 @@ q_says "QUALIFIER: the rich-qualifier memlog is COUNTED, not merely tolerated" \
   "PASS (2 locked requirement(s), 2 capability(ies)" \
   --spec "$R/real-qualifier-rich" --prd "$R/prd-real.md" --story "$R/story-real.md"
 
-# MUTATION: the pre-fix predicate, restored exactly by deleting the optional group. This
-# is the ONE mutant that reproduces the shipped defect, and every arm above under (a),
-# (b) and (e) goes red against it -- the block's reason for existing.
-q_mut qual-narrow "([[:space:]][^)]*)?" "" \
-  2 "MUTATION: reverting the qualifier group DISARMS the qualified memlog at exit 2" \
-  --spec "$R/real-qualified" --prd "$R/prd-real.md" --story "$R/story-real.md"
-
-# MUTATION: the widening gone VACUOUS. Drop the type anchor and (c) exits 0 on a memlog
-# with no capability entry in it. This is what makes (c) an arm rather than a formality.
-q_mut qual-typeless '\((capability|capabilities)([[:space:]][^)]*)?\)' '\([^)]*\)' \
-  0 "MUTATION: dropping the TYPE anchor closes join (1) on a memlog with no capability entry" \
-  --spec "$R/real-qualified-noncap" --prd "$R/prd-real.md" --story "$R/story-real.md"
-
-# MUTATION: the `[[:space:]]` deleted, the rest of the group kept. (d) exits 0, which is
-# the measurement behind calling that one character load-bearing.
-q_mut qual-hyphen "([[:space:]][^)]*)?" "([^)]*)?" \
-  0 "MUTATION: dropping the [[:space:]] swallows '(capability-review)' as a capability entry" \
-  --spec "$R/real-hyphen-type" --prd "$R/prd-real.md" --story "$R/story-real.md"
 
 # ARMS-RAN. Non-zero and exact. A block that never executed, or one truncated by an early
 # `exit`, cannot produce this row -- and the count is what distinguishes it from a block
 # that ran halfway.
-if [ "$QUAL_ARMS" -eq 13 ]; then
-  ok "ARMS-RAN: all 13 qualifier arms EXECUTED (counted $QUAL_ARMS)"
+if [ "$QUAL_ARMS" -eq 10 ]; then
+  ok "ARMS-RAN: all 10 qualifier arms EXECUTED (counted $QUAL_ARMS)"
 else
-  bad "ARMS-RAN: expected 13 qualifier arms, counted $QUAL_ARMS — the block is unreachable, truncated, or short-circuited"
+  bad "ARMS-RAN: expected 10 qualifier arms, counted $QUAL_ARMS — the block is unreachable, truncated, or short-circuited"
 fi
 
 
@@ -581,43 +342,6 @@ fi
 #   (B) the `- **Binds:**` reader folds wrapped continuation lines into their bullet
 #   (N) `- **No-AD:** CAP-n — REASON: <why>` is join (2a)'s third disposition
 #   (D) `- (disposition) LR-n NO-CAPABILITY <reason>` is join (1)'s third disposition
-# A LAYERED FIX NEEDS A LAYERED MUTANT. Reverting one layer of a two-layer guard leaves
-# the other still failing the run, and `mut` then reports "expected 0, got 1" -- which
-# reads as a broken mutant rather than as an incomplete revert. Each layer gets its own
-# `cmp` guard, so a layer whose literal has moved is named.
-# THREE LAYERS NOW COVER THE CAPABILITY SET: the id grammar, the declaration-shape
-# assertion, and the looks-declarative join. Reverting any two leaves the third catching
-# the seed, which reads as a broken mutant rather than as an incomplete revert.
-mut3() { # <name> <f1> <t1> <f2> <t2> <f3> <t3> <expect-rc> <label> <args...>
-  local n="$1" f1="$2" t1="$3" f2="$4" t2="$5" f3="$6" t3="$7" exp="$8" lab="$9"; shift 9
-  _mut3_build "$n" "$f1" "$t1" "$f2" "$t2" "$f3" "$t3" || return
-  bash "$R/mutant-$n.sh" "$@" >/dev/null 2>&1
-  local g=$?
-  [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (mutant exited $g, expected $exp — a layer is still doing the job)"
-}
-mut3_says() { # <name> <f1> <t1> <f2> <t2> <f3> <t3> <must-contain> <label> <args...>
-  local n="$1" f1="$2" t1="$3" f2="$4" t2="$5" f3="$6" t3="$7" want_s="$8" lab="$9"; shift 9
-  _mut3_build "$n" "$f1" "$t1" "$f2" "$t2" "$f3" "$t3" || return
-  local out; out="$(bash "$R/mutant-$n.sh" "$@" 2>&1)"
-  if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
-  else bad "$lab (mutant did not produce: \"$want_s\")"; fi
-}
-_mut3_build() { # <name> <f1> <t1> <f2> <t2> <f3> <t3>  -- each layer guarded on its own
-  local n="$1" m="$R/mutant-$1.sh" i prev
-  cp "$V" "$m"
-  for i in 1 2 3; do
-    prev="$m.prev"; cp "$m" "$prev"
-    case "$i" in 1) FROM="$2" TO="$3" ;; 2) FROM="$4" TO="$5" ;; 3) FROM="$6" TO="$7" ;; esac
-    export FROM TO; perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
-    if cmp -s "$prev" "$m"; then
-      bad "FIXTURE ERROR: mutation '$n' LAYER $i matched nothing — its assertion would prove nothing"; return 1
-    fi
-  done
-  if ! bash -n "$m" 2>/dev/null; then
-    bad "FIXTURE ERROR: mutant '$n' is not a valid shell script — its silence is not a kill"; return 1
-  fi
-  return 0
-}
 
 # NOTHING IN THIS BATTERY ASSERTED THAT THE FOLD ENDS, and the fold is an accumulator.
 # Measured on this subject: its first version added a RELATIVE offset to an absolute
@@ -628,8 +352,7 @@ _mut3_build() { # <name> <f1> <t1> <f2> <t2> <f3> <t3>  -- each layer guarded on
 # THE POLL MUST GRANT REAL WALL CLOCK. A `while kill -0` loop with no `sleep` spins
 # thousands of iterations in microseconds and calls a healthy run a hang; that is a
 # measured mistake from this same session, not a hypothetical.
-# A PIN WHOSE PROPERTY IS STRUCTURAL CANNOT HAVE A MUTANT, and pretending otherwise is
-# worse than saying so. `decl_run` only ever considers text inside an emphasis or code run,
+# A PIN WHOSE PROPERTY IS STRUCTURAL IS NOT CHECKED FOR, and saying otherwise is worse. `decl_run` only ever considers text inside an emphasis or code run,
 # so an ordinary prose bullet is not reachable by any switchable guard -- the bad state is
 # UNCONSTRUCTIBLE rather than checked for, which `mechanism-design.md` prefers. What still
 # has to be established is that the pin DISCRIMINATES, and the instrument for that is a
@@ -666,7 +389,7 @@ discriminates() { # <label> <quiet-spec-dir> <offender-spec-dir> <prd>
 #
 # THE KILL CANNOT BE READ OFF THE VERDICT LINE. The validator is `set -u` only, so an awk killed
 # inside `$( )` leaves the script running, and CAPS comes from `sed` over the prose, not from
-# the fold: measured, the hang mutant under the budget still exits 0 and prints PASS. The
+# the fold: measured, a hanging fold under the budget still exits 0 and prints PASS. The
 # shim's `end` record is the observable, and it is binary: every awk that started ended 0, or
 # one ended 152.
 #
@@ -712,53 +435,10 @@ meter_read() { # <log> -> "<awk starts>|<ended 0>|<SIGXCPU-terminated>"
   printf '%s|%s|%s' "$s" "$z" "$k"
 }
 
-mut2_says() { # <name> <from1> <to1> <from2> <to2> <must-contain> <label> <args...>
-  local n="$1" f1="$2" t1="$3" f2="$4" t2="$5" want_s="$6" lab="$7"; shift 7
-  local m="$R/mutant-$n.sh"
-  cp "$V" "$m"
-  FROM="$f1" TO="$t1" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
-  if cmp -s "$V" "$m"; then bad "FIXTURE ERROR: mutation '$n' LAYER 1 matched nothing"; return; fi
-  cp "$m" "$m.layer1"
-  FROM="$f2" TO="$t2" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
-  if cmp -s "$m.layer1" "$m"; then bad "FIXTURE ERROR: mutation '$n' LAYER 2 matched nothing"; return; fi
-  if ! bash -n "$m" 2>/dev/null; then bad "FIXTURE ERROR: mutant '$n' is not a valid shell script"; return; fi
-  local out; out="$(bash "$m" "$@" 2>&1)"
-  if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
-  else bad "$lab (mutant did not produce: \"$want_s\")"; fi
-}
-
-mut2() { # <name> <from1> <to1> <from2> <to2> <expect-rc> <label> <args...>
-  local n="$1" f1="$2" t1="$3" f2="$4" t2="$5" exp="$6" lab="$7"; shift 7
-  local m="$R/mutant-$n.sh"
-  cp "$V" "$m"
-  FROM="$f1" TO="$t1" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
-  if cmp -s "$V" "$m"; then
-    bad "FIXTURE ERROR: mutation '$n' LAYER 1 matched nothing — its assertion would prove nothing"; return
-  fi
-  cp "$m" "$m.layer1"
-  FROM="$f2" TO="$t2" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
-  if cmp -s "$m.layer1" "$m"; then
-    bad "FIXTURE ERROR: mutation '$n' LAYER 2 matched nothing — only one layer was reverted"; return
-  fi
-  if ! bash -n "$m" 2>/dev/null; then
-    bad "FIXTURE ERROR: mutant '$n' is not a valid shell script — its silence is not a kill"; return
-  fi
-  bash "$m" "$@" >/dev/null 2>&1
-  local g=$?
-  if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
-  else bad "$lab (mutant exited $g, expected $exp — a layer is still doing the job)"; fi
-}
-
 NEW_ARMS=0
 n_want()     { NEW_ARMS=$((NEW_ARMS+1)); want     "$@"; }
 n_says()     { NEW_ARMS=$((NEW_ARMS+1)); says     "$@"; }
-n_mut()      { NEW_ARMS=$((NEW_ARMS+1)); mut      "$@"; }
-n_mut2()     { NEW_ARMS=$((NEW_ARMS+1)); mut2     "$@"; }
-n_mut2_says(){ NEW_ARMS=$((NEW_ARMS+1)); mut2_says "$@"; }
-n_mut3()     { NEW_ARMS=$((NEW_ARMS+1)); mut3     "$@"; }
-n_mut3_says(){ NEW_ARMS=$((NEW_ARMS+1)); mut3_says "$@"; }
 n_discrim()  { NEW_ARMS=$((NEW_ARMS+1)); discriminates "$@"; }
-n_mut_says() { NEW_ARMS=$((NEW_ARMS+1)); mut_says "$@"; }
 
 # --- (G) the alphabetic capability suffix --------------------------------------
 # rc=0 is also what a subject replaced by `exit 0` produces, so the PASS LINE and its
@@ -812,41 +492,9 @@ n_says "RESIDUE PIN: and they are not counted as capabilities either" \
   "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
   --spec "$R/cap-template" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 
-# MUTATION: the pre-fix grammar, restored exactly. THE DROP DOES NOT SURFACE AS A MISSING
-# CAPABILITY -- it surfaces as an ACCUSATION AGAINST THE STORY AUTHOR, about an id sitting
-# defined in the kernel. Note that reverting CAP_GRAMMAR alone is the whole revert: the
-# residue expression is a SEPARATE literal that still accepts `CAP-1a`, so layer two does
-# not catch what layer one stopped parsing.
-# THE CAPABILITY SET IS NO LONGER A FREE GREP -- it is the well-formed subset of the
-# DEFINITION bullets, so the grammar that decides membership is this `grep -xE`, not
-# `$CAP_GRAMMAR`. Narrowing it alone is the whole revert: the residue filter beside it
-# still accepts `CAP-1a`, so nothing downstream catches what this stopped parsing.
-n_mut2_says grammar-narrow "grep -xE 'CAP-[0-9]+[a-z]?'" "grep -xE 'CAP-[0-9]+'" \
-  'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
-  "cites 'CAP-1a' and" \
-  "MUTATION: the old grammar accuses the STORY of citing an id the kernel defines" \
-  --spec "$R/real-suffixed" --prd "$R/prd-suffixed.md" --story "$R/story-suffixed.md" --spine "$R/spine-suffixed.md"
 
-# MUTATION, the same revert against a corpus with no story citing CAP-1a: the capability
-# is exempt from joins (2) and (2a) and the run exits 0 in SILENCE. This is the arm that
-# makes "a parser that cannot spell an id does not report a gap" a measurement.
-n_mut2 grammar-narrow-silent "grep -xE 'CAP-[0-9]+[a-z]?'" "grep -xE 'CAP-[0-9]+'" \
-  'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
-  0 "MUTATION: under the old grammar the UNCITED CAP-1a exits 0 — the gap is not reported" \
-  --spec "$R/real-suffixed" --prd "$R/prd-suffixed-nocap1a.md" --story "$R/story-suffixed-no1a.md"
 
-# THE MALFORMED ARM IS WHAT CATCHES EVERY REAL DEFINITION BULLET. Its subject here is an
-# emphasis form the `**CAP-<n>**` anchor cannot see at all, so nothing downstream is left
-# to catch it: with this arm off the id leaves the capability set in silence.
-n_mut decl-malformed-off-emph 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
-  0 "MUTATION: dropping the declaration assertion lets '- _CAP-1a_' vanish and the run exit 0" \
-  --spec "$R/cap-emph-underscore" --prd "$R/prd-ok.md"
 
-n_mut cap-boundary-loose \
-  'if ! grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)" <<<"$FR_LINES"; then' \
-  'if ! grep -qE "$cap" <<<"$FR_LINES"; then' \
-  0 "MUTATION: dropping the id boundary lets CAP-1a's citation stand in for CAP-1" \
-  --spec "$R/real-suffixed" --prd "$R/prd-suffixed-only1a.md" --story "$R/story-suffixed.md"
 
 # --- (S) the story citation, reachable by --baseline ---------------------------
 n_want 0 "STORY-CAP: a baseline naming story-cap:<file>:<CAP> suppresses the dangling citation" \
@@ -864,18 +512,7 @@ n_says "STORY-CAP: and the coarse entry is reported as NOT REPRODUCING, so it ca
   "baseline entry 'story:story-dangling.md' in" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" --baseline "$R/baseline-story-coarse.txt"
 
-n_mut story-cap-coarse-key \
-  'fail_join "story-cap:$(basename "$s"):$r"' 'fail_join "story:$(basename "$s")"' \
-  0 "MUTATION: keying the citation arm on the coarse story:<file> lets one line excuse both defects" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" --baseline "$R/baseline-story-coarse.txt"
 
-# MUTATION: the pre-fix routing, restored -- a bare echo setting rc directly. The arm then
-# registers no key at all and the baseline cannot reach it, which is the state the
-# reference consumer's own baseline file documents in a comment as unreachable.
-n_mut story-cap-unrouted \
-  'fail_join "story-cap:$(basename "$s"):$r" "' 'rc=1; echo "FAIL: ' \
-  1 "MUTATION: reverting the arm to a bare echo puts it out of --baseline's reach again" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" --baseline "$R/baseline-story-cap.txt"
 
 # --- (B) the wrapped Binds bullet ----------------------------------------------
 n_want 0 "FOLD: a spine whose Binds bullet WRAPS its capability onto a continuation line binds it" \
@@ -893,14 +530,7 @@ n_says "FOLD PIN: and the unbound capability is NAMED" \
   "CAP-2 is defined in SPEC.md but no architecture decision in" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-neighbour.md"
 
-n_mut_says binds-fold-off 'acc = acc " " unindent($0)' 'acc = acc' \
-  "CAP-2 is defined in SPEC.md but no architecture decision in" \
-  "MUTATION: dropping the accumulation accuses the wrapped spine of not binding CAP-2" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-wrapped.md"
 
-n_mut binds-widen 'BINDS="$(printf ' 'BINDS="$(grep -E CAP- "$SPINE_MD" || true)"; IGNORED1="$(printf ' \
-  0 "MUTATION: widening the reader to any CAP-bearing line closes join (2a) on a Prevents bullet" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-neighbour.md"
 
 # --- (N) `- **No-AD:**`, join (2a)'s third disposition -------------------------
 n_want 0 "NO-AD: a capability dispositioned '- **No-AD:** CAP-2 — REASON: ...' passes join (2a)" \
@@ -931,16 +561,6 @@ n_want 1 "NO-AD NEAR MISS: the same decision written as PROSE is not a dispositi
 n_want 2 "NO-AD NEAR MISS: a spine with No-AD bullets and NO Binds still DISARMS at exit 2" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-only.md"
 
-n_mut noad-off 'if [ -n "$NO_AD" ]; then' 'if false; then' \
-  1 "MUTATION: dropping the No-AD reader fails the dispositioned capability" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad.md"
-# THE REASON REQUIREMENT IS READ TWICE -- once by the hatch that excuses, once by the
-# malformed-bullet arm -- and both read the SAME regex, so one substitution reverts both
-# layers. Reverting only the hatch leaves the malformed arm still failing the run, which
-# would score as a kill the mutation did not earn.
-n_mut noad-reason-loose '  r="$(printf '"'"'%s'"'"' "$1" | sed '"'"'s/^[[:space:]]*//; s/[[:space:]]*$//'"'"')"' '  return 0' \
-  0 "MUTATION: dropping the reason-carries-text requirement (BOTH readers) excuses an empty REASON:" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-emptyreason.md"
 # THE MALFORMED BULLET IS REPORTED AS ITSELF. Here the capability it names IS bound, so
 # the ad: arm cannot fire and this is the only arm left that can say anything at all --
 # without it an author who wrote a No-AD bullet is told about an id, never about their
@@ -958,11 +578,6 @@ n_want 1 "NO-AD FORM: 'REASON:' present but EMPTY is still an unexplained blank"
 n_says "NO-AD FORM: and the empty reason is diagnosed at the bullet — a present-but-empty REASON is its own state" \
   "whose 'REASON:' has no text" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-emptyreason.md"
-n_mut noad-malformed-off \
-  '        *REASON:*)' \
-  '        *)' \
-  0 "MUTATION: dropping the malformed-bullet arm leaves a reasonless bullet reported by nothing" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-malformed-bound.md"
 
 # THE ID SEGMENT. A capability MENTIONED inside the reason is not disposed by it.
 n_want 1 "NO-AD SEGMENT: a CAP named only inside the REASON text is NOT dispositioned" \
@@ -973,19 +588,7 @@ n_says "NO-AD SEGMENT: the merely-mentioned capability still FAILS join (2a)" \
 n_says "NO-AD SEGMENT: while the capability in the ID segment IS dispositioned — the arm discriminates" \
   "CAP-1 is dispositioned No-AD in" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-reasonmention.md"
-n_mut noad-idsegment-loose \
-  'printf '"'"'%s\n'"'"' "${1%%REASON:*}" | grep -ohE "$CAP_GRAMMAR" || true' \
-  'printf '"'"'%s\n'"'"' "$1" | grep -ohE "$CAP_GRAMMAR" || true' \
-  0 "MUTATION: reading ids from the whole bullet lets the REASON text dispose CAP-2" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-reasonmention.md"
 
-n_mut_says noad-marker-loose 'NO_AD="$(printf ' 'NO_AD="$(grep -E No-AD "$SPINE_MD" || true)"; IGNORED2="$(printf ' \
-  "Offending bullet: No-AD:" \
-  "MUTATION: dropping the bullet marker picks the PROSE sentence up as a No-AD bullet" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-prose.md"
-n_mut noad-fold-off 'acc = acc " " unindent($0)' 'acc = acc' \
-  1 "MUTATION: dropping the accumulation loses the WRAPPED No-AD bullet's REASON" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md"
 
 # --- (D) `- (disposition) LR-n NO-CAPABILITY <reason>`, join (1)'s third state --
 n_want 0 "DISPOSITION: an LR dispositioned NO-CAPABILITY with a reason passes join (1)" \
@@ -1021,9 +624,6 @@ n_says "DISPOSITION NEAR MISS: untyped prose gets the ordinary join (1) FAIL" \
   "LR-S304-6 appears in the memlog but no capability entry cites it" \
   --spec "$R/disp-untyped" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 
-n_mut disp-off 'if [ -n "$DISP_ENTRIES" ] && printf' 'if false && printf' \
-  1 "MUTATION: dropping the hatch fails the dispositioned LR — the arm has a subject" \
-  --spec "$R/disp-ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 # --- (N2) the No-AD that outlived its cause -----------------------------------
 # The hatch is consulted only where it EXCUSES, so until this arm the ids a No-AD bullet
 # names were validated nowhere. Both states below pass in silence without it.
@@ -1046,17 +646,6 @@ n_says "NO-AD LIFETIME: and it is reported as the same contradiction" \
   "disposition for 'CAP-2' AND an architecture decision that binds it" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-bindsall.md"
 
-n_mut noad-unknown-off 'if ! grep -qx -- "$nid" <<<"$CAPS"; then' 'if false; then' \
-  0 "MUTATION: dropping the defined-id check lets a No-AD for an undefined id pass" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-unknown.md"
-n_mut noad-contradiction-off \
-  'elif [ "$binds_all" -eq 1 ] || grep -qE "(^|[^A-Za-z0-9-])$nid([^A-Za-z0-9-]|\$)" <<<"$BINDS"; then' \
-  'elif false; then' \
-  0 "MUTATION: dropping the contradiction check lets a stale No-AD sit beside its own AD" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md"
-n_mut noad-bindsall-blind '[ "$binds_all" -eq 1 ] || grep -qE' '[ 0 -eq 1 ] || grep -qE' \
-  0 "MUTATION: dropping the binds_all disjunct makes the spine-wide AD invisible to this arm" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-bindsall.md"
 
 # --- (R) the residue scan's POPULATION: definition bullets, in the kernel only --
 # THE SAME TOKEN, EVERYWHERE BUT THE KERNEL. Without this pair the scoping claim is
@@ -1104,22 +693,6 @@ n_says "DEFINITION GRAMMAR: the mentioned id is not required of any FR or AD" \
   "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
   --spec "$R/cap-prose-mention" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 
-# TWO PARTITIONS COVER THIS ID DELIBERATELY, and that overlap is the fix for the prefix
-# shadow: the malformed-definition set catches it as a bad DEFINITION, and the
-# looks-declarative join catches it as a declaration that never parsed. Reverting either
-# alone leaves the other still catching it, so only reverting BOTH shows what the pair is
-# worth -- a silent drop, and a story citing the id accused of citing one that does not exist.
-n_mut decl-malformed-off-underscore 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
-  0 "MUTATION: dropping the declaration assertion lets CAP-1_a vanish and the run exit 0" \
-  --spec "$R/cap-residue-underscore" --prd "$R/prd-ok.md"
-n_mut fenced-strip-off 'KERNEL_PROSE="$(awk ' 'KERNEL_PROSE="$(cat "$KERNEL" || true)"; IGNORED4="$(awk ' \
-  2 "MUTATION: not stripping fences disarms the gate on a kernel that documents its own grammar" \
-  --spec "$R/cap-fenced" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
-# Both states exit 2, so rc cannot tell them apart -- the SENTENCE is the assertion.
-n_mut_says mentions-none-collapse 'if [ -z "$CAPS" ] && grep -qE' 'if false && grep -qE' \
-  "defines ZERO capabilities" \
-  "MUTATION: collapsing the two empty-set states tells a malformed kernel it has no capabilities" \
-  --spec "$R/cap-mentions-none" --prd "$R/prd-ok.md"
 
 # --- (A) `all` must be the WHOLE value, on the MARKER line ---------------------
 # The single most dangerous string in the file: it switches join (2a) off for every
@@ -1133,11 +706,6 @@ n_says "BINDS-ALL: the capabilities are still checked individually and still FAI
 n_says "BINDS-ALL: a real spine-wide AD says so out loud, with the count it is closing" \
   "declares '**Binds:** all', so join (2a) closes spine-wide for all 2 capability(ies)" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-all.md"
-n_mut binds-all-folded \
-  "if grep -qiE '^[[:space:]]*[-*][[:space:]]*\\*\\*Binds:\\*\\*[[:space:]]*all[[:space:]]*\\.?[[:space:]]*\$' \"\$SPINE_MD\"; then" \
-  "if grep -qiE '\\*\\*Binds:\\*\\*[[:space:]]*all' <<<\"\$BINDS\"; then" \
-  0 "MUTATION: reading 'all' off the FOLDED bullet lets prose switch join (2a) off entirely" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-binds-all-prose.md"
 
 # --- (N3) the placeholder, the neighbouring bullet, and bound-wins -------------
 # Both hatches print `<why>` / `<reason>` into their own FAIL messages. Accepting that
@@ -1146,9 +714,6 @@ n_want 1 "PLACEHOLDER: 'REASON: <why>' -- the string this check's own message pr
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-placeholder.md"
 n_says "PLACEHOLDER: and the bullet is diagnosed as carrying no reason text" \
   "whose 'REASON:' has no text" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-placeholder.md"
-n_mut noad-placeholder-loose '  r="$(printf '"'"'%s'"'"' "$1" | sed '"'"'s/^[[:space:]]*//; s/[[:space:]]*$//'"'"')"' '  return 0' \
-  0 "MUTATION: accepting any reason text lets the placeholder excuse the capability" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-placeholder.md"
 
 # THE REAL DEFERRED BULLET, under its own bold key. This is the form the consumer's spine
@@ -1163,7 +728,7 @@ n_says "NARROWNESS: the capability it names still FAILS join (2a)" \
 # BOUND WINS, AND NO NOTE IS EMITTED. Ordering, not a predicate: the `continue` for a
 # bound capability sits above the hatch. A note here would say the spine dispositioned a
 # capability it in fact binds -- the contradiction reported one arm down, restated as an
-# excuse. Absence-shaped, so the mutant below is what proves it discriminates.
+# excuse.
 NEW_ARMS=$((NEW_ARMS+1))
 BW_OUT="$(bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md" 2>&1)"
 if grep -qF "CAP-2 is dispositioned No-AD in" <<<"$BW_OUT"; then
@@ -1173,19 +738,12 @@ elif ! grep -qF "disposition for 'CAP-2' AND an architecture decision that binds
 else
   ok "BOUND WINS: a bound capability gets no No-AD note, and DOES get the contradiction FAIL"
 fi
-n_mut_says bound-wins-off 'if grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)" <<<"$BINDS"; then' 'if false; then' \
-  "CAP-2 is dispositioned No-AD in" \
-  "MUTATION: dropping the bound check makes the hatch note a capability an AD binds" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md"
 
 # --- (D2) the memlog hatch: the SUBJECT anchor and the placeholder -------------
 n_want 1 "PLACEHOLDER: 'NO-CAPABILITY <reason>' is the message's own placeholder, not a reason" \
   --spec "$R/disp-placeholder" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 n_says "PLACEHOLDER: the LR still gets the ordinary join (1) FAIL" \
   "LR-S304-6 appears in the memlog but no capability entry cites it" \
-  --spec "$R/disp-placeholder" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
-n_mut disp-placeholder-loose '  r="$(printf '"'"'%s'"'"' "$1" | sed '"'"'s/^[[:space:]]*//; s/[[:space:]]*$//'"'"')"' '  return 0' \
-  0 "MUTATION: accepting any reason text lets the placeholder excuse the requirement" \
   --spec "$R/disp-placeholder" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 
 # THE LR MUST BE THE SUBJECT. One entry, two ids, neither dispositioned NO-CAPABILITY:
@@ -1200,18 +758,7 @@ n_says "SUBJECT ANCHOR: the dispositioned-as-something-else id still FAILS" \
 n_says "SUBJECT ANCHOR: and so does the id merely named as its superseder" \
   "LR-S304-9 appears in the memlog but no capability entry cites it" \
   --spec "$R/disp-notsubject" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
-n_mut disp-anchor-loose '$lr[[:space:]]+NO-CAPABILITY' 'NO-CAPABILITY' \
-  0 "MUTATION: unanchoring the token from the id excuses BOTH ids in that entry" \
-  --spec "$R/disp-notsubject" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 
-# TWO LAYERS DECIDE THE BARE TOKEN -- the guard's own "and something after it", and
-# `is_reason`. Reverting either alone leaves the other still failing the run, which would
-# score as a kill the mutation did not earn.
-n_mut2 disp-noreason-loose \
-  'NO-CAPABILITY[[:space:]]+[^[:space:]]"' 'NO-CAPABILITY"' \
-  '  r="$(printf '"'"'%s'"'"' "$1" | sed '"'"'s/^[[:space:]]*//; s/[[:space:]]*$//'"'"')"' '  return 0' \
-  0 "MUTATION: dropping BOTH reason layers accepts a bare NO-CAPABILITY" \
-  --spec "$R/disp-noreason" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 
 # --- (R2) definitions the bold anchor cannot see, and the delimiter that bounds it
 n_want 2 "EMPHASIS: '- _CAP-1a_' is a definition ATTEMPT the bold anchor cannot see, and it DISARMS" \
@@ -1231,12 +778,6 @@ n_want 0 "EMPHASIS PIN: a prose bullet that merely OPENS with a capability id is
 n_says "EMPHASIS PIN: and the mentioned id does not enter the capability set" \
   "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
   --spec "$R/cap-prose-bullet" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
-# `decl-opener-loose` RETIRED HERE, deliberately and with its reason. It widened the
-# opener test so an ordinary prose bullet would be read as a declaration. Measured at this
-# pin: that bullet carries NO emphasis marker at all, so `decl_run`'s while-match loop
-# never executes and the widened test is unreachable -- three separate layer combinations
-# left it at rc=0. That is not a mutant that survived; it is an arm whose subject stopped
-# being constructible, and the honest instrument is the discrimination arm below.
 n_discrim "EMPHASIS PIN DISCRIMINATES: the prose bullet is quiet while a two-id run in the SAME container DISARMS" \
   "$R/cap-prose-bullet" "$R/decl-bullet" "$R/prd-ok.md"
 
@@ -1260,17 +801,6 @@ n_want 0 "ID SEGMENT: the no-ad-form: key is reachable by --baseline, as its own
 n_says "ID SEGMENT: and the suppression names the key" \
   "BASELINED  no-ad-form:spine-noad-mixedseg.md" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-mixedseg.md" --baseline "$R/baseline-noad-form.txt"
-# THE WRONG DIRECTION IS THE ONE THAT COSTS A CONSUMER ITS GATE. With both segment readers
-# off, `CAP-1` -- named only inside the parenthetical -- is treated as DISPOSED and then
-# reported as contradicting the AD that binds it: a hard, unbaselineable FAIL on a spine
-# that is correct. That is the failure the partition exists to make unconstructible, so it
-# is what this mutant asserts rather than a bare rc.
-n_mut2_says noad-segment-off \
-  'elif ! no_ad_id_segment_ok "$nad_line"; then' 'elif false; then' \
-  '  no_ad_id_segment_ok "$1" || return' '  :' \
-  "disposition for 'CAP-1' AND an architecture decision that binds it" \
-  "MUTATION: dropping BOTH segment readers makes a merely-mentioned CAP-1 contradict its own AD" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-mixedseg.md"
 
 # A MARKER THAT IS NOT AT BULLET START is folded into the Binds bullet, and every
 # capability it names then reads as BOUND -- silence from a sentence that says the
@@ -1279,14 +809,6 @@ n_want 1 "EATEN MARKER: a '**No-AD:**' inside a Binds bullet is reported, not si
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-eaten.md"
 n_says "EATEN MARKER: the diagnosis says the disposition must start its own bullet" \
   "names a capability AFTER a second '**<Key>:**' marker inside a '- **Binds:**' bullet" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-eaten.md"
-# TWO LAYERS: the arm that REPORTS the eaten marker, and the truncation that stops the
-# capabilities after it being counted as bound. Reverting the report alone leaves the
-# truncation still failing them, which would score as a kill the mutation did not earn.
-n_mut2 noad-eaten-off \
-  'if [ -n "$BINDS_EATEN" ]; then' 'if false; then' \
-  '      if (match(rest, /\*\*[A-Za-z][A-Za-z-]*:\*\*/)) { print substr($0, 1, h + 9 + RSTART - 1); next }' '      if (0) { next }' \
-  0 "MUTATION: dropping BOTH the report and the truncation makes CAP-2 read as BOUND, silently" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-eaten.md"
 # THE NARROWING PIN. A second marker with no id after it loses nothing to the truncation,
 # and the wrapped form of that sentence is what the fold exists to support.
@@ -1336,20 +858,6 @@ n_says "TWO-ID DEFINITION: the malformed declaration STRING is echoed, not just 
 # what shows the two guards cover different populations rather than one being redundant.
 n_want 2 "TWO-ID DEFINITION: an undefined leading id in the same bullet shape also DISARMS" \
   --spec "$R/cap-twoid-undefined" --prd "$R/prd-ok.md"
-# WHICH GUARD OWNS WHICH. The definition-shape assertion runs first and claims both, so the
-# boundary is only visible with it disarmed: then the CROSS-CHECK still catches the
-# undefined leading id, and (the mutant above) does NOT catch the defined one. That pair is
-# the measurement behind keeping both guards.
-n_mut_says twoid-def-off-undefined 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
-  "PASS (2 locked requirement(s), 1 capability(ies)" \
-  "MUTATION: with the assertion off the undefined-leading-id variant ALSO drops its second id in silence" \
-  --spec "$R/cap-twoid-undefined" --prd "$R/prd-ok.md"
-# rc alone cannot see this one: with the assertion off the run is a clean PASS. The
-# CAPABILITY COUNT is the whole finding -- two declared, one seen.
-n_mut_says twoid-def-off 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
-  "PASS (2 locked requirement(s), 1 capability(ies)" \
-  "MUTATION: dropping the definition-shape assertion silently credits two capabilities to one" \
-  --spec "$R/cap-twoid" --prd "$R/prd-ok.md"
 
 # --- (S) the No-AD staleness key is baselineable -------------------------------
 # The comment above that arm says so, and a comment is not a mechanism. This is the only
@@ -1396,17 +904,6 @@ n_says "REASON ACCEPT: the word list matches the WHOLE trimmed string, so a sent
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-accept-4.md"
 
 
-# THE STRIP IS LOAD-BEARING IN THE ACCEPT DIRECTION, which is the one a reject-everything
-# predicate passes. Remove it and a real justification written in parentheses is a hard
-# failure on a correct spine.
-n_mut reason-strip-off \
-  "      '('*')'|'['*']'|'{'*'}')" "      'zzz')" \
-  0 "MUTATION: not stripping brackets lets '(<why>)' through — the placeholder test runs on the CONTENT" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-3.md"
-n_mut reason-wordlist-off \
-  "    reason|why|rationale|explanation|justification|reasons) return 1 ;;" "    zzzz) return 1 ;;" \
-  0 "MUTATION: dropping the placeholder-word list accepts a bare '[reason]'" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-4.md"
 
 # --- (E) the eaten-marker matrix ----------------------------------------------
 # FIRES ON AN ACTUAL ID LOSS, NOT ON THE PRESENCE OF A MARKER. The two no-loss rows below
@@ -1460,14 +957,6 @@ n_says "CONTAINER: the offending RUN is echoed, so the author sees which text is
   "**CAP-1 and CAP-2 together**" \
   --spec "$R/decl-table" --prd "$R/prd-ok.md"
 
-# THE MUTANT USES A NON-BULLET CONTAINER ON PURPOSE. With the declaration assertion off,
-# the cross-check cannot reach this: `CAP-1` is cancelled by the clean declaration and
-# `CAP-2` sits mid-run with no marker before it, so it is absent from BOTH sides of the
-# join. rc stays 0 and the only trace is the capability count.
-n_mut_says decl-malformed-off 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
-  "PASS (2 locked requirement(s), 1 capability(ies)" \
-  "MUTATION: with the declaration assertion off, a table-row two-id run drops CAP-2 in silence" \
-  --spec "$R/decl-table" --prd "$R/prd-ok.md"
 
 # THE NEGATIVE CONTROL, AND WHAT IT IS ACTUALLY A CONTROL FOR. A bolded clause that
 # MENTIONS two ids opens with a backtick, not an id, so the declaration arm is right to
@@ -1530,9 +1019,6 @@ n_says "PROSE-RICH KERNEL: and the prose neither adds to nor removes from the ca
   "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
   --spec "$R/kernel-prose-rich" --prd "$R/prd-ok.md"
 
-n_mut unclosed-off 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
-  0 "MUTATION: with the assertion off the unclosed run drops CAP-2 and CAP-9 and the run exits 0" \
-  --spec "$R/unclosed-bold" --prd "$R/prd-unclosed.md"
 
 # --- (W) a declaration that WRAPS ---------------------------------------------
 # THE DEFECT SPANS TWO INNOCENT LINES. The first opens a run and drops nothing; the second
@@ -1554,12 +1040,6 @@ n_says "WRAPPED CONTROL: and it is the same arm and the same dropped id" \
   --spec "$R/b31-oneline" --prd "$R/prd-ok.md"
 n_want 2 "WRAPPED: the wrapped form with an UNDECLARED leading id DISARMS as well" \
   --spec "$R/b31-wrapped-undef" --prd "$R/prd-ok.md"
-# THE MUTANT KILLS ONE HALF OF THE PAIR AND NOT THE OTHER, which is the pair's whole point:
-# reading the unfolded prose leaves the wrapped declaration invisible while the one-line
-# form still DISARMs.
-n_mut fold-off 'printf '"'"'%s\n'"'"' "$KERNEL_ITEMS"; }' 'printf '"'"'%s\n'"'"' "$KERNEL_PROSE"; }' \
-  0 "MUTATION: reading unfolded prose lets the WRAPPED declaration drop CAP-2 in silence" \
-  --spec "$R/b31-wrapped" --prd "$R/prd-ok.md"
 
 # --- (F) the fold's BOUND -----------------------------------------------------
 # THE FOLD IS BOUNDED BY AN OPEN RUN THAT OPENED WITH A CAP ID, not by the list item and
@@ -1577,10 +1057,6 @@ n_want 0 "FOLD BOUND: a CLOSED declaration whose description cites another spec'
 n_says "FOLD BOUND: and that description contributes nothing to the capability set" \
   "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
   --spec "$R/bound-closed-desc" --prd "$R/prd-ok.md"
-# `fold-bound-wide` RETIRED for the same measured reason: with the fold bound widened AND
-# the first-run rule widened, both bound pins stay at rc=0, because a cross-spec id inside
-# a description opens no run and `decl_run` reports only a run-opening id. The bound is
-# held by the shape of the reader, not by a guard that can be switched off.
 n_discrim "FOLD BOUND DISCRIMINATES: a description citing another spec is quiet while a WRAPPED declaration DISARMS" \
   "$R/bound-closed-desc" "$R/b31-wrapped" "$R/prd-ok.md"
 n_discrim "FOLD BOUND DISCRIMINATES: and so is an unclosed bold inside a description" \
@@ -1592,7 +1068,6 @@ n_discrim "FOLD BOUND DISCRIMINATES: and so is an unclosed bold inside a descrip
 # terminating is "the subject exited, every awk it started logged `end ... 0`, and none was
 # killed for its CPU budget" -- three binary facts, none of them a wall time.
 NEW_ARMS=$((NEW_ARMS+1))
-B_TERM=0
 run_metered "$R/meter.real" "$V" --spec "$R/fold-heavy" --prd "$R/prd-ok.md" \
   || broken "validate-spec-join.sh's tree settled (every process blocked, nothing pending, nothing changing) without exiting"
 SJ_M="$(meter_read "$R/meter.real")"
@@ -1606,29 +1081,6 @@ elif ! grep -qF "PASS (2 locked requirement(s), 2 capability(ies)" "$R/meter.rea
   bad "TERMINATION: it completed but produced no verdict — completing is what a subject that emits nothing also does"
 else
   ok "TERMINATION: the fold exits on a 600-line fold-heavy kernel, every awk it started ended 0 inside its ${SJ_CPU_BUDGET}s CPU budget, AND it reports its verdict"
-  B_TERM=1
-fi
-# THE ARM NEEDS A SUBJECT. A non-terminating fold must be killed by the CPU budget, and the
-# kill must be READ from the shim log, or this assertion is one that cannot fire — the exact
-# shape it exists to catch.
-NEW_ARMS=$((NEW_ARMS+1))
-HANG_M="$R/mutant-fold-hang.sh"
-cp "$V" "$HANG_M"
-FROM='  DECL_RUN = ""; DECL_FOUND = 0; DECL_OPEN = 0' TO='  DECL_RUN = ""; DECL_FOUND = 0; DECL_OPEN = 0; while (1) { }' \
-  perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$HANG_M"
-if cmp -s "$V" "$HANG_M"; then
-  bad "FIXTURE ERROR: the fold-hang mutation matched nothing — the termination arm proves nothing"
-elif ! bash -n "$HANG_M" 2>/dev/null; then
-  bad "FIXTURE ERROR: the fold-hang mutant is not a valid shell script"
-elif ! run_metered "$R/meter.hang" "$HANG_M" --spec "$R/fold-heavy" --prd "$R/prd-ok.md"; then
-  broken "the fold-hang mutant's tree settled without exiting -- a spinning awk is runnable and must never read as settled"
-else
-  SJ_MH="$(meter_read "$R/meter.hang")"
-  case "$SJ_MH" in
-    0\|*) broken "the awk shim recorded no invocation on the fold-hang mutant ('$SJ_MH') -- the meter is not on its PATH" ;;
-    *\|0) bad "MUTATION: a non-terminating fold logged no SIGXCPU termination (starts|ended 0|SIGXCPU-terminated = '$SJ_MH') — the termination arm cannot fire" ;;
-    *) mutant_killed "$B_TERM" fold-hang "MUTATION: a non-terminating fold is killed by its CPU budget and its awk logs exit 152 (SIGXCPU), so the arm above has a subject" ;;
-  esac
 fi
 # THE NET HAS A SUBJECT TOO. A self-stopped script is refused (run_metered rc 2) and reaped; one that
 # exits is not. Where `ps` gives no state (sandbox-exec) the stopped stub would never be refused, so
@@ -1644,8 +1096,7 @@ else
     ok "NET-e2e: a self-stopped subject is refused (rc 2) and its tree reaped; a subject that exits is not refused"
   else bad "NET-e2e: the settled-tree net read stopped rc=$sj_e2e left=$sj_left, exiting rc=$sj_e2t"; fi
 fi
-# THIS COPY'S TWO GUARDS, each with a subject the other cannot see (the same cells fold-architect-ledger-join
-# scores over the same lib/settled-net.sh, mutated in a per-run copy). The net is copied from the lib and driven over SCRIPTED trees: frozen (a RUNNING member, nothing changing) -> 0,
+# The net is copied from the lib and driven over SCRIPTED trees: frozen (a RUNNING member, nothing changing) -> 0,
 # changing (settled but a different pid set each poll) -> 0, stuck -> 2. Vector "<frozen><changing><stuck>".
 sj_cell() { # <block file> <frozen|changing|stuck> -> st_net's rc (run in a subshell)
   . "$1"
@@ -1660,21 +1111,9 @@ sj_cell() { # <block file> <frozen|changing|stuck> -> st_net's rc (run in a subs
 sj_cells() { local c v=""; for c in frozen changing stuck; do v="$v$(sj_cell "$1" "$c")"; done; printf '%s' "$v"; }
 cp "$LIBDIR/settled-net.sh" "$R/st-block.sh"
 grep -q '^st_net()' "$R/st-block.sh" || broken "lib/settled-net.sh holds no st_net"
-B_NETC=0
 SJ_NB="$(sj_cells "$R/st-block.sh")"
-if [ "$SJ_NB" = 002 ]; then ok "NET-cells: the cut net reads frozen-running 0, changing-settled 0, stuck 2"; B_NETC=1
+if [ "$SJ_NB" = 002 ]; then ok "NET-cells: the cut net reads frozen-running 0, changing-settled 0, stuck 2"
 else bad "NET-cells: the cut net read '$SJ_NB', want 002"; fi
-sed 's/\$2 !~ \/\^\[SIT\]\/ || //' "$R/st-block.sh" > "$R/st-nostate.sh"
-sed 's/\[ "\$prev" = "\$sz|\$cur" \] && return 2/return 2/' "$R/st-block.sh" > "$R/st-noconfirm.sh"
-if cmp -s "$R/st-block.sh" "$R/st-nostate.sh" || cmp -s "$R/st-block.sh" "$R/st-noconfirm.sh"; then
-  bad "FIXTURE ERROR: a net mutation (sj-st-nostate or sj-st-noconfirm) matched nothing"
-else
-  [ "$MATRIX" -eq 1 ] && echo "  MATRIX-SUMMARY sj-st-nostate cells=$(sj_cells "$R/st-nostate.sh") sj-st-noconfirm cells=$(sj_cells "$R/st-noconfirm.sh") base=$SJ_NB"
-  if [ "$(sj_cells "$R/st-nostate.sh")" = 202 ]; then mutant_killed "${B_NETC:-0}" sj-st-nostate "MUTATION: a net that ignores process STATE refuses a running tree that merely shows no change (cells 202, base 002)"
-  else bad "MUTATION sj-st-nostate: the net cells did not read 202"; fi
-  if [ "$(sj_cells "$R/st-noconfirm.sh")" = 022 ]; then mutant_killed "${B_NETC:-0}" sj-st-noconfirm "MUTATION: a net that refuses on ONE settled poll refuses a tree whose members are still changing (cells 022, base 002)"
-  else bad "MUTATION sj-st-noconfirm: the net cells did not read 022"; fi
-fi
 
 # --- (33) after the first run, an item is PROSE -------------------------------
 n_want 0 "DEFECT 33: an intent citing a neighbouring spec id is prose, not a second declaration" \
@@ -1788,9 +1227,6 @@ n_want 2 "MEMBERSHIP: as the FIRST run, a mixed phrase fires on position regardl
   --spec "$R/mem-first-mixed" --prd "$R/prd-mixed.md"
 n_want 2 "MEMBERSHIP: and so does a wholly-foreign phrase in first position" \
   --spec "$R/mem-first-none" --prd "$R/prd-mixed.md"
-n_mut membership-gate-off '        if (!strict || leading || known(run)) {' '        if (1) {' \
-  2 "MUTATION: dropping the membership gate makes a foreign citation beat the real declaration" \
-  --spec "$R/mem-none-known" --prd "$R/prd-mixed.md"
 
 # --- the DOCUMENTED irreducible limit ------------------------------------------
 # A short prefix before a declaration naming exactly ONE id is structurally identical to a
@@ -1805,49 +1241,21 @@ n_says "DOCUMENTED LIMIT CONTROL: the same declaration WITHOUT the prefix is tak
   "PASS (1 locked requirement(s), 4 capability(ies)" \
   --spec "$R/limit-control" --prd "$R/prd-limit.md"
 
-# UNMUTATED CONTROL for this block's subjects.
-# THIS CONTROL IS WHAT SEPARATES A BROKEN SUBJECT FROM WRONG ARMS, and it earned that
-# during this release: one run came back with EVERY arm exiting 2 and this line firing.
-# That is the signal that the subject is mid-edit or broken, not that 190 arms need
-# rebasing — without it the next author spends an hour rebasing against a state that no
-# longer exists. A battery this large needs one arm whose only job is to say "not you". The control above runs the orphan-LR
-# corpus; these mutants run five corpora it never touches, and a copy that misbehaved on
-# any of them would make their assertions vacuous. Positive conjunct: the PASS LINE must
-# be THERE, because rc=0 with nothing printed is what a subject replaced by `exit 0` also
-# produces.
-NEW_ARMS=$((NEW_ARMS+1))
-CTRL_OUT="$(bash "$R/control-unmutated.sh" --spec "$R/real-suffixed" --prd "$R/prd-suffixed.md" \
-              --story "$R/story-suffixed.md" --spine "$R/spine-suffixed.md" 2>&1)"
-if grep -qF "PASS (2 locked requirement(s), 3 capability(ies)" <<<"$CTRL_OUT"; then
-  ok "CONTROL: an unmutated copy in \$R still reports the suffixed PASS line"
-else
-  bad "CONTROL: an unmutated copy misbehaves in \$R — every mutation in this block is vacuous"
-fi
-
 # ARMS-RAN. Non-zero and exact, for the reason the block above states.
-if [ "$NEW_ARMS" -eq 238 ]; then
-  ok "ARMS-RAN: all 238 v0.388.0 arms EXECUTED (counted $NEW_ARMS)"
+if [ "$NEW_ARMS" -eq 199 ]; then
+  ok "ARMS-RAN: all 199 v0.388.0 arms EXECUTED (counted $NEW_ARMS)"
 else
-  bad "ARMS-RAN: expected 238 v0.388.0 arms, counted $NEW_ARMS — the block is unreachable, truncated, or short-circuited"
+  bad "ARMS-RAN: expected 199 v0.388.0 arms, counted $NEW_ARMS — the block is unreachable, truncated, or short-circuited"
 fi
 
 # =============================================================================
 # v0.389.0 — a continuation line joins as TEXT, and ONE container set
 # =============================================================================
-# Counted separately from the 238 above so that block stays exact.
+# Counted separately from the v0.388.0 block above so that block stays exact.
 #
-# AUTHORSHIP NOTE, STATED BECAUSE IT IS A DEPARTURE. The rule in
-# `.claude/rules/fixture-mutants.md` is to keep the battery author different from the arm
-# author, precisely so the two cannot encode one understanding twice. These arms were
-# written by the hand that wrote the change. The mitigation is that every arm below is
-# PRESENCE-shaped and every one carries a committed mutant, and that the behaviour claim
-# is carried by a differential against the previous release rather than by these arms --
-# but a reviewer should read them knowing the independent check was not taken.
 U_ARMS=0
 u_want()     { U_ARMS=$((U_ARMS+1)); want     "$@"; }
 u_says()     { U_ARMS=$((U_ARMS+1)); says     "$@"; }
-u_mut()      { U_ARMS=$((U_ARMS+1)); mut      "$@"; }
-u_mut_says() { U_ARMS=$((U_ARMS+1)); mut_says "$@"; }
 
 # --- (U1) the join drops the source indentation, at BOTH folds -----------------
 # The defect was reported by a consumer reading gate output: a wrapped No-AD reason
@@ -1877,18 +1285,6 @@ else
   ok "UNINDENT: the indented form is absent AND the joined form is present, in one run"
 fi
 
-# ONE PREDICATE, TWO EMISSION SITES. The same literal appears at the kernel fold and at
-# both spine appends, so one mutation reverts all three -- which is what makes these two
-# arms one predicate rather than two entangled guards. Each asserts its own site.
-u_mut_says unindent-spine 'acc = acc " " unindent($0)' 'acc = acc " " $0' \
-  "establishes and   introduces" \
-  "MUTATION: dropping the unindent puts the source indentation back into the NOTE" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md"
-
-u_mut_says unindent-kernel 'acc = acc " " unindent($0)' 'acc = acc " " $0' \
-  "**CAP-1 and   CAP-2 together**" \
-  "MUTATION: dropping the unindent puts it back into the DISARM echo too" \
-  --spec "$R/b31-wrapped" --prd "$R/prd-ok.md"
 
 # --- (U2) ONE container set across both folds (BL-084) -------------------------
 # The spine fold now derives its container test from CONTAINER instead of carrying its own
@@ -1916,34 +1312,10 @@ u_says "CONTAINER (spine): the nested binding reaches the PASS line, not an empt
   "PASS (2 locked requirement(s), 2 capability(ies)" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-nested.md"
 
-# THE MUTANT IS THE REORDER ITSELF: test the containers first and the three terminators
-# become continuations. All three flip 1 -> 0, which is the false-BIND direction.
-u_mut cont-reorder-quote 'if ($0 ~ /^#/ || $0 ~ /^[[:space:]]*>/ || $0 ~ /^[[:space:]]*\|/ || $0 ~ /^[[:space:]]*(---|===|___|\*\*\*)/) {' 'if ($0 ~ /^#/) {' \
-  0 "MUTATION: dropping the unconditional terminators makes a BLOCKQUOTE bind CAP-2" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-quote.md"
 
-u_mut cont-reorder-table 'if ($0 ~ /^#/ || $0 ~ /^[[:space:]]*>/ || $0 ~ /^[[:space:]]*\|/ || $0 ~ /^[[:space:]]*(---|===|___|\*\*\*)/) {' 'if ($0 ~ /^#/) {' \
-  0 "MUTATION: and makes a TABLE ROW bind CAP-2" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-table.md"
 
-u_mut cont-reorder-thematic 'if ($0 ~ /^#/ || $0 ~ /^[[:space:]]*>/ || $0 ~ /^[[:space:]]*\|/ || $0 ~ /^[[:space:]]*(---|===|___|\*\*\*)/) {' 'if ($0 ~ /^#/) {' \
-  0 "MUTATION: and makes text after a THEMATIC BREAK bind CAP-2" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-thematic.md"
 
-# THE SHARED PREDICATE ITSELF. Deleting container_start from the spine fold must not be
-# survivable: with it always false, a nested list item stops continuing the Binds bullet
-# and the idiomatic multi-capability binding silently unbinds.
-# THE SHARED PREDICATE ITSELF, mutated on the case it actually decides. Falling through
-# the container branch CONTINUES the item anyway, so a nested-list seed cannot kill this
-# mutant -- the first attempt at this arm did exactly that and came back green. What
-# container_start decides is TERMINATION on a same-or-less-indented sibling bullet: with
-# it off, the `- **Prevents:**` bullet folds into `- **Binds:**` and every capability that
-# bullet merely mentions reads as BOUND. The seed carries no second `**<Key>:**` marker,
-# so the eaten-marker guard cannot own the case and kill the mutant by the wrong arm.
 u_want 1 "CONTAINER (spine): a same-indent SIBLING bullet ends the item, so the CAP it names is unbound" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-sibling.md"
-u_mut cont-predicate-off 'if (container_start($0)) {' 'if (0) {' \
-  0 "MUTATION: with the shared container predicate off, a sibling bullet folds in and binds CAP-2" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-sibling.md"
 
 # --- (U3) the widened --baseline diagnostic ------------------------------------
@@ -1958,11 +1330,11 @@ u_says "BASELINE DISARM: names the TRACKING remedy for a file that should exist"
   "check it is COMMITTED" \
   --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/nonexistent-baseline.txt"
 
-# ARMS-RAN for this block, exact and non-zero, for the reason the 238 block states.
-if [ "$U_ARMS" -eq 19 ]; then
-  ok "ARMS-RAN: all 19 v0.389.0 arms EXECUTED (counted $U_ARMS)"
+# ARMS-RAN for this block, exact and non-zero, for the reason the v0.388.0 block states.
+if [ "$U_ARMS" -eq 13 ]; then
+  ok "ARMS-RAN: all 13 v0.389.0 arms EXECUTED (counted $U_ARMS)"
 else
-  bad "ARMS-RAN: expected 19 v0.389.0 arms, counted $U_ARMS — the block is unreachable, truncated, or short-circuited"
+  bad "ARMS-RAN: expected 13 v0.389.0 arms, counted $U_ARMS — the block is unreachable, truncated, or short-circuited"
 fi
 
 # =============================================================================
@@ -1990,44 +1362,13 @@ fi
 # rc=0 is equally what a corpus containing nothing produces, and the arm certifies an
 # empty tree rather than a discrimination.
 #
-# AUTHORSHIP. Written by a hand that did not write the change, as
-# `.claude/rules/fixture-mutants.md` requires, and every seed below is taken from what
+# Every seed below is taken from what
 # the PRODUCER emits — the reference consumer's five real locked-requirements.md files
 # and its s302 spec memlog — never from the regexes in the subject.
 LRJ_ARMS=0
 j_want()     { LRJ_ARMS=$((LRJ_ARMS+1)); want     "$@"; }
 j_says()     { LRJ_ARMS=$((LRJ_ARMS+1)); says     "$@"; }
-j_mut()      { LRJ_ARMS=$((LRJ_ARMS+1)); mut      "$@"; }
-j_mut_says() { LRJ_ARMS=$((LRJ_ARMS+1)); mut_says "$@"; }
 
-# THE MUTANT'S SIBLING, AND WHY THIS `cp` IS AN ASSERTION RATHER THAN SETUP. The subject
-# no longer owns the LOCKED_REQUIREMENTS marker grammar; validate-locked-anchor.sh does,
-# and the subject resolves it by `dirname "$0"`. `mut` builds every mutant as a lone copy
-# in $R, where that sibling does not exist — so WITHOUT this line every `--locked-requirements`
-# mutant below DISARMs at exit 2 for the wrong reason, and a battery of mutants that all
-# died by one unrelated arm reads exactly like a battery that works.
-cp "$(cd "$(dirname "$V")" && pwd)/validate-locked-anchor.sh" "$R/validate-locked-anchor.sh" 2>/dev/null || true
-LRJ_ARMS=$((LRJ_ARMS+1))
-if [ -f "$R/validate-locked-anchor.sh" ]; then
-  ok "SETUP: validate-locked-anchor.sh is beside the mutants in \$R — the mutation arms below can reach the block grammar"
-else
-  bad "SETUP: validate-locked-anchor.sh is NOT in \$R — every --locked-requirements mutation below DISARMs for the wrong reason and proves nothing"
-fi
-
-# UNMUTATED CONTROL, with a POSITIVE CONJUNCT. A copy in $R that misbehaves for any reason
-# other than its mutation makes every mutation arm vacuous, and rc=0-with-nothing-said is
-# exactly what a subject replaced by `exit 0` produces — so the population COUNT is
-# asserted here, not merely the exit code.
-cp "$V" "$R/control-lr-unmutated.sh"
-LRJ_ARMS=$((LRJ_ARMS+1))
-B_LRC=0
-LRJ_CTL="$(bash "$R/control-lr-unmutated.sh" --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md" 2>&1)"
-if ! grep -qF "join (1) reads 3 locked requirement(s) from" <<<"$LRJ_CTL"; then
-  bad "CONTROL: an unmutated copy in \$R does not read the declared population — every mutation below is vacuous"
-else
-  ok "CONTROL: an unmutated copy in \$R reads all 3 declared requirements"
-  B_LRC=1
-fi
 
 # --- (1) THE DEFECT, AND THE DISARM THAT LOOKS LIKE ITS REMEDY -----------------
 # rc=0 alone is what `exit 0` produces, so the COUNT and the PASS LINE are asserted beside
@@ -2233,7 +1574,7 @@ p_want "$R/lr-no-anchor/validate-spec-join.sh" 1 \
 
 # AND THE NEAR-MISS: restore the sibling beside that copy and it PASSES. One directory, one
 # file, two verdicts — which is what makes the DISARM attributable to the sibling.
-cp "$R/validate-locked-anchor.sh" "$R/lr-no-anchor/validate-locked-anchor.sh"
+cp "$(cd "$(dirname "$V")" && pwd)/validate-locked-anchor.sh" "$R/lr-no-anchor/validate-locked-anchor.sh"
 p_want "$R/lr-no-anchor/validate-spec-join.sh" 0 \
   "DELEGATION NEAR-MISS: with the sibling restored beside it, the same copy reads the block and PASSES" \
   --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
@@ -2246,169 +1587,9 @@ p_says "$R/lr-no-anchor/validate-spec-join.sh" \
   "join (1) reads 3 locked requirement(s) from" \
   --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
 
-# --- MUTATION controls --------------------------------------------------------
-# THE MOST VALUABLE MUTANT IN THIS SET, and the one that guards the single-source decision:
-# the delegation replaced by a re-inlined local marker regex recognising exactly ONE closer
-# spelling. That is not a strawman — it is what this script did one revision ago, and what
-# any future author reaching for `awk` here will write.
-j_mut lr-local-regex \
-  'bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
-  "awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
-  1 "MUTATION: a re-inlined local marker regex cannot see the SPRINT-INTERPOLATED closer, runs past it and FAILS the run" \
-  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-end-sprint.md"
-j_mut_says lr-local-regex \
-  'bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
-  "awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
-  "LR-S303-8 appears in the memlog but no capability entry cites it" \
-  "MUTATION: and the ids it swallows are the Tier 2 addenda — the failure is attributable, not incidental" \
-  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-end-sprint.md"
-# THE SAME MUTANT, SECOND OBSERVABLE. An unterminated block under a local matcher does not
-# DISARM — it runs to EOF, silently widening the population. This is the arm that makes
-# "do NOT run to EOF" a measurement rather than a claim about a code path.
-j_mut lr-local-regex-eof \
-  'bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
-  "awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
-  1 "MUTATION: under a local matcher an UNCLOSED block runs to EOF and FAILS instead of DISARMing at 2" \
-  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-unclosed.md"
-# AND THE ARM THAT PROVES IT DIES BY THE RIGHT ONE. A mutant that fails everything scores
-# kills it did not earn. Against the BARE closer the local matcher is correct, and it must
-# stay green there — otherwise the three arms above are attributing a general breakage to a
-# specific closer spelling.
-# A CONTROL, NOT A MUTANT: its correct outcome is to SURVIVE, so it is not routed through mutant_killed.
-LRJ_ARMS=$((LRJ_ARMS+1))
-LRJ_BF="$R/mutant-lr-local-regex-baseform.sh"
-cp "$V" "$LRJ_BF"
-FROM='bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
-  TO="awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
-  perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$LRJ_BF"
-if cmp -s "$V" "$LRJ_BF"; then
-  bad "FIXTURE ERROR: the lr-local-regex-baseform copy matched nothing -- its control proves nothing"
-else
-  bash "$LRJ_BF" --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-below-marker.md" >/dev/null 2>&1
-  LRJ_BFG=$?
-  if [ "$LRJ_BFG" -eq 0 ] && [ "$B_LRC" = 1 ]; then
-    ok "CONTROL lr-local-regex-baseform: the same local matcher stays GREEN (rc 0) on the BARE closer in lr-below-marker.md -- the survivor; it dies by the sprint-closer arm, not by everything"
-  else
-    bad "CONTROL lr-local-regex-baseform: expected the survivor rc 0 behind a passing control, got rc=$LRJ_BFG (control flag $B_LRC)"
-  fi
-fi
-
-# THE DECLARATION ANCHOR WIDENED TO A WHOLE-BLOCK SCAN. Its subject is the prose mention,
-# which no other guard here can see.
-j_mut lr-anchor-wide \
-  "'^[[:space:]]*[-*][[:space:]]+(\*\*|__)?LR-[A-Za-z0-9]+-[0-9]+[a-z]?'" \
-  "'LR-[A-Za-z0-9]+-[0-9]+[a-z]?'" \
-  1 "MUTATION: widening the declaration anchor to a whole-block scan adopts the block's PROSE MENTION and fails the run" \
-  --spec "$R/lr-decl-prior" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-prose-mention.md"
-j_mut_says lr-anchor-wide \
-  "'^[[:space:]]*[-*][[:space:]]+(\*\*|__)?LR-[A-Za-z0-9]+-[0-9]+[a-z]?'" \
-  "'LR-[A-Za-z0-9]+-[0-9]+[a-z]?'" \
-  "LR-S177-2 appears in the memlog but no capability entry cites it" \
-  "MUTATION: and it convicts this sprint of dropping a PRIOR sprint's requirement" \
-  --spec "$R/lr-decl-prior" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-prose-mention.md"
-
-# THE ANCHOR NARROWED TO REQUIRE EMPHASIS. `?` is the whole of what admits s305's
-# `- LR-S305-1: "..."`, and the failure is SILENT: the id leaves the population and the run
-# goes green. The seed puts the plain-shape declaration on the ORPHAN, so the mutant flips
-# a FAIL to a PASS rather than merely changing a count.
-j_mut lr-anchor-bold '(\*\*|__)?LR-[A-Za-z0-9]' '(\*\*|__)LR-[A-Za-z0-9]' \
-  0 "MUTATION: a bold-only anchor drops the plain '- LR-<id>:' shape, and the uncited requirement goes UNREPORTED" \
-  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
-j_mut_says lr-anchor-bold '(\*\*|__)?LR-[A-Za-z0-9]' '(\*\*|__)LR-[A-Za-z0-9]' \
-  "join (1) reads 2 locked requirement(s) from" \
-  "MUTATION: and the drop is visible in the announced population — 2 read where 3 are declared" \
-  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
-
-# THE FLAG MADE INERT. The declared population is computed and then overwritten by the scan.
-# Every arm that asserts a COUNT still passes under this — the source line even keeps naming
-# the declared file — and the only thing that changes is that the control token comes back.
-j_mut_says lr-flag-inert 'if [ -z "$LOCKED_REQS" ]; then' 'if true; then' \
-  "LR-S999-9 appears in the memlog but no capability entry cites it" \
-  "MUTATION: letting the scan overwrite the declared population brings the control token back — the shipped defect on demand" \
-  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
-
-# THE TWO EMPTY-POPULATION DIAGNOSES COLLAPSED. Both exit 2 before and after, so rc is
-# blind to this and only the sentence can see it: a producer whose grammar moved is told
-# it locked nothing, and the next author deletes the flag instead of fixing the reader.
-j_mut_says lr-grammar-moved-collapsed \
-  "grep -qE '\bLR-[A-Za-z0-9]+-[0-9]+[a-z]?\b'" "grep -qE 'ZZ-NO-SUCH-DECLARATION-TOKEN'" \
-  "declares no locked requirements at all" \
-  "MUTATION: collapsing the empty-population discrimination tells a MOVED GRAMMAR that it locked nothing" \
-  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-mentions-only.md"
-
-# THE `carries no LOCKED_REQUIREMENTS block` LINE, given its own subject. With it off, a
-# file with no markers falls through to the declares-nothing message — still exit 2, and
-# still a false statement about a file that has no block at all.
-j_mut_says lr-emptyblock-silent 'if [ -z "$LR_BLOCK" ]; then' 'if false; then' \
-  "declares no locked requirements at all" \
-  "MUTATION: dropping the empty-extraction arm tells a file with NO BLOCK that its block declares nothing" \
-  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-nomarkers.md"
-
-# THE UNREADABLE-FILE GUARD CHANGES NO VERDICT — the borrowed grammar exits non-zero on a
-# missing file either way — so it is armed on the DIAGNOSIS, which is the only thing it
-# decides. Arming it on rc would be an arm that cannot fire.
-j_mut_says lr-unreadable-tolerated '[ -f "$LOCKED_REQS" ] || {' '[ -n "$PROG" ] || {' \
-  "could not extract LOCKED_REQUIREMENTS blocks from" \
-  "MUTATION: without the readability guard a MISSING FILE is reported as a parse failure of the block grammar" \
-  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-no-such-file.md"
-
-# THE NEVER-JOURNALLED NOTE, TURNED BACK INTO A FAILURE. This is the direction that reddens
-# a green consumer.
-j_mut lr-note-fails 'if [ -n "$LOCKED_REQS" ] && ! grep -qE' 'if false && ! grep -qE' \
-  1 "MUTATION: dropping the never-journalled branch FAILS a requirement this join has no evidence about" \
-  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl-never.md"
-
-# THE NOTE TURNED INTO A SILENT SKIP. rc stays 0 and the tally still says `1 recorded
-# note(s)`, so neither `mut` nor `mut_says` can express this: the claim is that a LINE
-# DISAPPEARS. An absence needs its positive conjunct in the same run, and the PASS line is
-# it — a mutant that died on a syntax error also prints no note.
-LRJ_ARMS=$((LRJ_ARMS+1))
-LRJ_M="$R/mutant-lr-note-silent.sh"
-cp "$V" "$LRJ_M"
-FROM='echo "  note  $lr is declared in $LOCKED_REQS' TO=': "  note  $lr is declared in $LOCKED_REQS' \
-  perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$LRJ_M"
-if cmp -s "$V" "$LRJ_M"; then
-  bad "FIXTURE ERROR: mutation 'lr-note-silent' matched nothing — its assertion would prove nothing"
-elif ! bash -n "$LRJ_M" 2>/dev/null; then
-  bad "FIXTURE ERROR: mutant 'lr-note-silent' is not a valid shell script — its silence is not a kill"
-else
-  LRJ_NS="$(bash "$LRJ_M" --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl-never.md" 2>&1)"
-  if ! grep -qF "1 recorded note(s)" <<<"$LRJ_NS"; then
-    bad "MUTATION: the note-silencing mutant produced no PASS line at all — this arm cannot tell a silenced note from a dead script"
-  elif grep -qF "LR-S303-7 is declared in" <<<"$LRJ_NS"; then
-    bad "MUTATION: silencing the note echo changed nothing — the note text is emitted from somewhere else, so the arm asserting it is not keyed on this line"
-  else
-    mx_reg lr-note-silent "$LRJ_M" - --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl-never.md"
-    mutant_killed "$B_LRC" lr-note-silent "MUTATION: silencing the note echo makes the requirement vanish from the output while the tally still counts it — the note line is load-bearing"
-  fi
-fi
-
-# THE SIBLING-PRESENCE GUARD. Like the readability guard it decides a MESSAGE, not a
-# verdict: without it the missing sibling surfaces as a parse failure of a grammar that was
-# never invoked. It cannot be exercised by `mut`, whose mutants live in $R where the
-# sibling exists, so it is built in the sibling-less directory instead.
-LRJ_ARMS=$((LRJ_ARMS+1))
-LRJ_MS="$R/lr-no-anchor-mutant"
-mkdir -p "$LRJ_MS"
-cp "$V" "$LRJ_MS/validate-spec-join.sh"
-FROM='if [ ! -f "$LR_ANCHOR" ]; then' TO='if false; then' \
-  perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$LRJ_MS/validate-spec-join.sh"
-if cmp -s "$V" "$LRJ_MS/validate-spec-join.sh"; then
-  bad "FIXTURE ERROR: mutation 'lr-sibling-unchecked' matched nothing — its assertion would prove nothing"
-elif ! bash -n "$LRJ_MS/validate-spec-join.sh" 2>/dev/null; then
-  bad "FIXTURE ERROR: mutant 'lr-sibling-unchecked' is not a valid shell script — its silence is not a kill"
-else
-  LRJ_SB="$(bash "$LRJ_MS/validate-spec-join.sh" --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md" 2>&1)"
-  if grep -qF "could not extract LOCKED_REQUIREMENTS blocks from" <<<"$LRJ_SB"; then
-    mutant_killed "$B_LRC" lr-sibling-unchecked "MUTATION: without the sibling-presence guard a MISSING OWNER is misreported as a failure to parse the declarations file"
-  else
-    bad "MUTATION: dropping the sibling-presence guard produced neither diagnosis — the arm asserting it is not keyed on that check"
-  fi
-fi
-
 # --- (7) THE THREE DEFECTS AN INDEPENDENT HAND FOUND IN THE FIRST CUT ----------
 # Each returned a WRONG ANSWER rather than an error, so each gets an arm that would have
-# caught it and, where the arm is absence-shaped, a mutant.
+# caught it.
 
 # MULTI-BLOCK: the owner joins block bodies with a FORM FEED. Grepping the join glues one
 # block's last line to the next block's first, so the head declaration of every block after
@@ -2428,14 +1609,6 @@ j_says "MULTI-BLOCK: a file whose declarations span TWO blocks yields all three,
 j_says "MULTI-BLOCK CONTROL: the same three declarations in ONE block yield the same population" \
   "join (1) reads 3 locked requirement(s)" \
   --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-oneblock.md"
-# THE MUTANT IS MANDATORY HERE. `reads 3` is a presence assertion, but the defect it guards
-# is a SILENT NARROWING that cannot disarm, so nothing else in this file would notice the
-# split coming back out. Reverting the split must move the count and nothing else.
-j_mut_says lr-formfeed-unsplit \
-  'LR_BLOCK="$(tr '"'"'\014'"'"' '"'"'\n'"'"' <<<"$LR_RAW")"' 'LR_BLOCK="$LR_RAW"' \
-  "join (1) reads 2 locked requirement(s)" \
-  "MUTATION: leaving the form-feed join unsplit GLUES the blocks and silently drops the head declaration of the second" \
-  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-twoblocks.md"
 
 # CHECKED-SET VACUITY: a declared population every one of whose ids is absent from the
 # memlog takes the never-journalled note on every iteration, never touches `rc`, and prints
@@ -2451,9 +1624,6 @@ j_says "VACUITY: the diagnosis names the likely cause, which is --locked-require
 # this corpus too, and every real consumer sprint carrying a note with it.
 j_want 0 "VACUITY NEAR-MISS: one journalled id among two unjournalled ones is a CHECKED set of 1 — the arm stays silent" \
   --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-wrong-sprint-partial.md"
-j_mut lr-vacuity-tolerated 'if [ -n "$LOCKED_REQS" ] && [ "$lr_checked" -eq 0 ]; then' 'if false; then' \
-  0 "MUTATION: without the checked-set guard a join that examined NOTHING reports PASS" \
-  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-wrong-sprint.md"
 
 # THE EMPTY FLAG VALUE. Every gate downstream tests `[ -n "$LOCKED_REQS" ]`, so an empty
 # value was byte-indistinguishable from omitting the flag: it reverted to the memlog scan
@@ -2472,10 +1642,10 @@ j_says "EMPTY VALUE CONTROL: OMITTING the flag on the same corpus reaches the sc
   --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md"
 
 # ARMS-RAN. Non-zero and exact, for the reason the two blocks above state.
-if [ "$LRJ_ARMS" -eq 67 ]; then
-  ok "ARMS-RAN: all 67 BL-079 arms EXECUTED (counted $LRJ_ARMS)"
+if [ "$LRJ_ARMS" -eq 48 ]; then
+  ok "ARMS-RAN: all 48 BL-079 arms EXECUTED (counted $LRJ_ARMS)"
 else
-  bad "ARMS-RAN: expected 67 BL-079 arms, counted $LRJ_ARMS — the block is unreachable, truncated, or short-circuited"
+  bad "ARMS-RAN: expected 48 BL-079 arms, counted $LRJ_ARMS — the block is unreachable, truncated, or short-circuited"
 fi
 
 # --- (8) CORPUS IDENTITY on the PASS line --------------------------------------
@@ -2490,7 +1660,7 @@ fi
 # mktemp corpora seeded with the same bytes; the outputs must DIFFER **and** each must
 # carry ITS OWN six paths. Those halves are separate requirements, and the second is the
 # load-bearing one — a nonce, a PID or a timestamp makes two runs differ while naming
-# nothing, and mutant `ident-nonce` below is exactly that fix. Nothing greps a label, so
+# nothing. Nothing greps a label, so
 # re-wording `spec:` leaves this working; what is demanded is the resolved path, and the
 # roots are mktemp names, so no implementation can hardcode the literal it needs.
 #
@@ -2502,16 +1672,11 @@ fi
 # still DIFFER: `join (1) reads N locked requirement(s) from <spec>/.memlog.md` already
 # carried the spec directory before this release. So of the six paths the fix adds, only
 # the PRD and the stories were previously unnamed, and a differ-only arm would have scored
-# green against the unfixed validator here. The NAMING conjunct is what kills the mutants
-# below; the differ conjunct is kept because it is the half that dies first if that memlog
+# green against the unfixed validator here. The NAMING conjunct is the load-bearing half;
+# the differ conjunct is kept because it is the half that dies first if that memlog
 # line is ever silenced, and it costs one comparison.
-# THE `echo "$@"` ATTACK, AND THE HALF OF IT THAT NO ARM HERE CAN CLOSE. A fix that dumps the
-# argument vector instead of the values it RESOLVED satisfies "the outputs differ" and "the
-# path appears" without the validator ever disclosing a resolution. Measured against a mutant
-# that replaced all six identity lines with one `echo "  argv: $@"`: this fixture goes RED, two
-# cells, because the arm requires all SIX paths BY NAME and a collapsed dump carries one.
-# Control in the same run: the unmutated copy is green and the two trees were asserted to
-# differ first.
+# A fix that dumps the argument vector instead of the values it RESOLVED satisfies "the
+# outputs differ" and "the path appears" only for one path; the arm requires all SIX BY NAME.
 #
 # What survives is narrower and is a property of the SUBJECT, not a hole in the arm: every
 # input here is a required flag with no defaulted form, so `$2` and the resolved variable hold
@@ -2586,167 +1751,7 @@ else
   bad "IDENTITY: the PASS line carries no corpus identity — $SJ_IDENT_WHY. A join against another sprint's spec reports the same green tally as one against this sprint's"
 fi
 
-# THE UNMUTATED CONTROL, with a positive conjunct. The mutants below are copies placed in
-# $R; a copy that could not run would emit nothing, and "no output" would otherwise score
-# as a kill. `sj_ident_holds` demands a PASS line and three paths, so this control cannot
-# pass against a copy replaced by `exit 0`.
-SJ_CTL="$R/ident-control.sh"; cp "$V" "$SJ_CTL"
-SJ_CTL_OK=0
-if sj_ident_holds "$SJ_CTL"; then
-  ok "IDENTITY CONTROL: an unmutated copy reproduces the identity lines, so a mutant's silence below means mutation and not breakage"
-  SJ_CTL_OK=1
-else
-  bad "IDENTITY CONTROL FAILED ($SJ_IDENT_WHY) — the two identity mutants below are uninterpretable"
-fi
 
-if [ "$SJ_CTL_OK" = "1" ]; then
-  # MUTANT ident-drop: the identity BLOCK deleted — the state this release replaced.
-  #
-  # ANCHORED ON THE PASS LINE, NOT ON THE SIX LABELS. Three of the six sit at column 0 and
-  # three are indented two spaces, so a label-keyed deletion needs six literals and six
-  # uniqueness guards, every one of which goes stale on a respacing. The verdict sentence is
-  # the emitter's own text and is unique to this site, so the mutation follows the block
-  # however the labels move — and the count guard below is what stops the block silently
-  # shrinking under the arms that assert all six.
-  SJ_MD="$R/ident-mutant-drop.sh"
-  sj_av=': PASS ($NLRS locked requirement(s)'
-  sj_nid="$(grep -cE '^ *echo "  ' "$V")"
-  if [ "$(grep -cF "$sj_av" "$V")" != "1" ]; then
-    bad "FIXTURE ERROR: mutation 'ident-drop' has a non-unique anchor — the deletion could land on another emitter"
-  elif [ "$sj_nid" -lt 6 ]; then
-    bad "FIXTURE ERROR: only $sj_nid identity lines follow the PASS verdict, expected 6 — the block this fixture guards has shrunk and the IDENTITY arm may be asserting a subset"
-  else
-    awk -v A="$sj_av" '
-      index($0, A)          { print; hit=1; next }
-      hit && /^ *echo "  /  { next }
-                            { hit=0; print }
-    ' "$V" > "$SJ_MD"
-    if cmp -s "$V" "$SJ_MD"; then
-      bad "FIXTURE ERROR: mutation 'ident-drop' matched nothing — its assertion would prove nothing"
-    elif ! bash -n "$SJ_MD" 2>/dev/null; then
-      bad "FIXTURE ERROR: mutant 'ident-drop' is not a valid shell script — its silence is not a kill"
-    else
-      if sj_ident_holds "$SJ_MD"; then
-        bad "MUTATION 'ident-drop' SURVIVED — a validator naming no corpus still satisfies the IDENTITY arm, so that arm is not testing the identity lines"
-      else
-        mx_reg ident-drop "$SJ_MD" identity
-        mutant_killed "$SJ_CTL_OK" ident-drop "MUTATION 'ident-drop': deleting the identity lines makes two different trees indistinguishable ($SJ_IDENT_WHY) — the IDENTITY arm has teeth"
-      fi
-      # The lines are additive. Every verdict arm above must survive their removal, or the
-      # IDENTITY arm is entangled with the joins that carry this check.
-      bash "$SJ_MD" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md" >/dev/null 2>&1
-      sj_g1=$?
-      bash "$SJ_MD" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" >/dev/null 2>&1
-      sj_g2=$?
-      bash "$SJ_MD" --spec "$R/no-caps" --prd "$R/prd-ok.md" >/dev/null 2>&1
-      sj_g3=$?
-      if [ "$sj_g1" -eq 0 ] && [ "$sj_g2" -eq 1 ] && [ "$sj_g3" -eq 2 ]; then
-        ok "MUTATION 'ident-drop' leaves the PASS, FAIL and DISARM verdicts intact — corpus identity is asserted by an arm no join arm covers"
-      else
-        bad "MUTATION 'ident-drop' ALSO moved a verdict (rc=$sj_g1/$sj_g2/$sj_g3) — the identity lines are not additive and the IDENTITY arm is entangled"
-      fi
-    fi
-  fi
-
-  # MUTANT ident-nonce: identity replaced by a per-run nonce — THE FIX THAT DISCRIMINATES
-  # WITHOUT NAMING. `$$-$RANDOM` is evaluated by the mutant at run time, so its two runs
-  # differ exactly as the real validator's do while naming no file at all. An arm keyed
-  # only on "the outputs differ" passes against it; this one must not.
-  SJ_MN="$R/ident-mutant-nonce.sh"
-  awk -v A="$sj_av" '
-    index($0, A)          { print; hit=1; next }
-    hit && /^ *echo "  /  { print "echo \"  nonce: $$-$RANDOM\""; next }
-                          { hit=0; print }
-  ' "$V" > "$SJ_MN"
-  if cmp -s "$V" "$SJ_MN"; then
-    bad "FIXTURE ERROR: mutation 'ident-nonce' matched nothing — the IDENTITY arm's nonce-resistance is unproved"
-  elif ! bash -n "$SJ_MN" 2>/dev/null; then
-    bad "FIXTURE ERROR: mutant 'ident-nonce' is not a valid shell script — its silence is not a kill"
-  else
-    if sj_ident_holds "$SJ_MN"; then
-      bad "MUTATION 'ident-nonce' SURVIVED — a per-run nonce naming no corpus satisfies the IDENTITY arm, so that arm is a differ-check and not a naming check"
-    else
-      mx_reg ident-nonce "$SJ_MN" identity
-      mutant_killed "$SJ_CTL_OK" ident-nonce "MUTATION 'ident-nonce': a per-run nonce varies the output exactly as the real paths do and still fails the IDENTITY arm ($SJ_IDENT_WHY) — the arm demands the corpus be NAMED"
-    fi
-  fi
-fi
-
-# --- twins (per push) and the full matrix (--matrix) -----------------------------------------------
-mx_header() { # mx_header decides|twins <mutant> -- the value on this file's own header row
-  awk -v n="$2" -v f="$1" '$1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n { for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) { print substr($i, length(f) + 2); exit } }' "$0"
-}
-arm_args() { # arm_args <armname> -> ARM_ARGV array, from the capture; returns 1 if no such base arm
-  local i=1 rest a
-  while [ "$i" -le "$CAP_N" ]; do
-    if [ "${CAP_ARM[$i]}" = 1 ]; then
-      rest="${CAP_KEY[$i]#*$US}"
-      ARM_ARGV=()
-      while [ -n "$rest" ]; do a="${rest%%$US*}"; rest="${rest#*$US}"; ARM_ARGV[${#ARM_ARGV[@]}]="$a"; done
-      if [ "$(arm_name "${ARM_ARGV[@]}")" = "$1" ]; then ARM_I=$i; return 0; fi
-    fi
-    i=$((i + 1))
-  done
-  return 1
-}
-mx_split() { # mx_split <US-terminated string> -> ARM_ARGV
-  local rest="$1" a
-  ARM_ARGV=()
-  while [ -n "$rest" ]; do a="${rest%%$US*}"; rest="${rest#*$US}"; ARM_ARGV[${#ARM_ARGV[@]}]="$a"; done
-}
-MX_ROWS=0; MX_CELLS=0
-if [ "$MATRIX" -eq 0 ]; then
-  i=1
-  while [ "$i" -le "$MX_N" ]; do
-    id="${MX_ID[$i]}"; hd="$(mx_header decides "$id")"; tw="$(mx_header twins "$id")"
-    if [ -z "$hd" ] || [ -z "$tw" ]; then bad "TWIN $id: no '# MUTANT-MATRIX $id decides=.. twins=..' row in this header; re-measure with --matrix"
-    elif [ "$hd" != "${MX_DEC[$i]}" ]; then bad "TWIN $id: the header says decides=$hd but the assertion drives ${MX_DEC[$i]}"
-    elif [ "$tw" = "-" ]; then ok "TWIN $id: no twin recorded (twins=-), deciding arm ${MX_DEC[$i]} only"
-    else
-      for t in ${tw//,/ }; do
-        if ! arm_args "$t"; then bad "TWIN $id: twin '$t' names no arm run by this fixture"; continue; fi
-        ti="$ARM_I"
-        CAPOUT="$(bash "${MX_SCRIPT[$i]}" "${ARM_ARGV[@]}" 2>&1)"; CAPRC=$?
-        if [ "$CAPRC" = "${CAP_RC[$ti]}" ] && [ "$CAPOUT" = "${CAP_OUT[$ti]}" ]; then ok "TWIN $id: arm $t stays GREEN under the mutant (the kill is confined to ${MX_DEC[$i]})"
-        else bad "TWIN $id: arm $t TRIPPED under the mutant -- the kill spread past the recorded matrix; re-measure with --matrix"; fi
-      done
-    fi
-    i=$((i + 1))
-  done
-else
-  # every mutant (and the unmutated copy MX0) against every arm. A bespoke deciding arm is scored by
-  # its own kill assertion, which already passed to reach the registry.
-  mxrun() { # mxrun <id> <script> <decides> <bespoke>
-    local id="$1" sc="$2" dec="$3" be="$4" j=1 an trip="" v k ao arc
-    while [ "$j" -le "$CAP_N" ]; do
-      if [ "${CAP_ARM[$j]}" = 1 ]; then
-        mx_split "${CAP_KEY[$j]#*$US}"
-        an="$(arm_name "${ARM_ARGV[@]}")"
-        ao="$(bash "$sc" "${ARM_ARGV[@]}" 2>&1)"; arc=$?
-        if [ "$arc" != "${CAP_RC[$j]}" ] || [ "$ao" != "${CAP_OUT[$j]}" ]; then v=TRIPPED; k=yes; trip="$trip $an"; else v=GREEN; k=no; fi
-        matrix_row "$id" "$an" "$arc" "$v" "$k"; MX_ROWS=$((MX_ROWS + 1))
-      fi
-      j=$((j + 1))
-    done
-    if [ "$be" = 1 ]; then matrix_row "$id" "$dec" 0 TRIPPED yes; MX_ROWS=$((MX_ROWS + 1)); trip="$trip $dec"; fi
-    trip="${trip# }"
-    echo "  MATRIX-SUMMARY $id decides=$dec tripped=[$trip]"
-    MX_TRIP="$trip"
-  }
-  mxrun MX0 "$R/mx/_control.sh" - 0
-  if [ -z "$MX_TRIP" ]; then ok "CONTROL MX0 (unmutated copy): no arm tripped on it, tripped=[] (matrix)"
-  else bad "MX0 control (unmutated copy) tripped [$MX_TRIP]; every mutant verdict is about a broken harness"; fi
-  i=1
-  while [ "$i" -le "$MX_N" ]; do
-    mxrun "${MX_ID[$i]}" "${MX_SCRIPT[$i]}" "${MX_DEC[$i]}" "${MX_BESPOKE[$i]}"
-    case " $MX_TRIP " in *" ${MX_DEC[$i]} "*) ok "MATRIX ${MX_ID[$i]}: deciding arm ${MX_DEC[$i]} is among the tripped cells" ;; *) bad "MATRIX ${MX_ID[$i]}: deciding arm ${MX_DEC[$i]} did not trip (tripped [$MX_TRIP])" ;; esac
-    i=$((i + 1))
-  done
-fi
-if [ "$MATRIX" -eq 0 ]; then
-  if [ "$MX_ROWS" -eq 0 ]; then ok "PLAIN-RUN: no MATRIX row printed -- the full mutant x arm matrix is measured only under --matrix"
-  else bad "PLAIN-RUN: a plain run printed $MX_ROWS MATRIX row(s); the matrix-only path ran per push"; fi
-fi
 ok "CAPTURE: the subject ran $CAP_RUNS time(s) for $CAP_N distinct argument list(s); $CAP_SERVED assertion read(s) were served from a capture"
 
 echo

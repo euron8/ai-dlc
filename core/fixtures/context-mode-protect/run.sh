@@ -34,11 +34,6 @@ trap 'rm -rf "$WORK"' EXIT
 [ -r "$(dirname "$HOOK")/ai-dlc-context-provenance.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-context-provenance.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# B_<arm>=1 only beside the unmutated arm's own ok: a mutant is scored only if its base arm passed.
-B_CTX=0; B_H2=0; B_LBL=0; B_COST=0
 
 # raw <project_dir> <json> -> hook stdout (JSON on deny, empty on allow)
 raw() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null; }
@@ -160,33 +155,8 @@ ctxarm() {
   ! grep -qF 'NOT protected' <<<"$o" || return 1
   grep -qF 'Use the native Read tool' <<<"$o" || return 1
 }
-if ctxarm "$HOOK"; then ok "layered deny CONTEXT: deny, no 'NOT protected', names the native Read tool"; B_CTX=1
+if ctxarm "$HOOK"; then ok "layered deny CONTEXT: deny, no 'NOT protected', names the native Read tool"
 else bad "layered deny CONTEXT: deny + no 'NOT protected' + 'Use the native Read tool' did not all hold"; fi
-
-# Mutant CONTEXT-RESTORED: the whole hooks directory is copied (the hook sources a sibling),
-# with the 0.927.0 sentence restored. It must differ from the fix, pass the unmutated control,
-# and fail this arm alone.
-_MUT="$WORK/mut-ctx"; mkdir -p "$_MUT"
-cp -R "$(dirname "$HOOK")/." "$_MUT/" 2>/dev/null
-_OLD='story files."'
-_NEW='story files. Archives and the planning corpus (prd/architecture/product-brief/carry-over) are NOT protected — consolidate those freely."'
-_SRC="$(cat "$HOOK"; printf x)"; _SRC="${_SRC%x}"
-printf '%s' "${_SRC/"$_OLD"/$_NEW}" > "$_MUT/ai-dlc-protect.sh"
-if cmp -s "$HOOK" "$_MUT/ai-dlc-protect.sh"; then
-  bad "mutant CONTEXT-RESTORED did not differ from the fix (DID NOT APPLY)"
-elif ! bash -n "$_MUT/ai-dlc-protect.sh" 2>/dev/null; then
-  bad "mutant CONTEXT-RESTORED does not parse (a crashing hook fails at the deny conjunct, not the NOT protected one)"
-elif _MO="$(printf '%s' "$(jb 'cat docs/architecture.md')" | CLAUDE_PROJECT_DIR="$LAYERED" bash "$_MUT/ai-dlc-protect.sh" 2>/dev/null)"; \
-     ! { grep -q '"permissionDecision": *"deny"' <<<"$_MO" && grep -qF 'NOT protected' <<<"$_MO"; }; then
-  bad "mutant CONTEXT-RESTORED output lacks deny + 'NOT protected': its kill would not come from the NOT protected conjunct"
-elif ! { cp "$HOOK" "$_MUT/ctl.sh" && ctxarm "$_MUT/ctl.sh"; }; then
-  bad "mutant CONTEXT-RESTORED harness broken: an unmutated copy in the same directory fails the 9c arm"
-elif ! ctxarm "$_MUT/ai-dlc-protect.sh" \
-     && [ "$(CLAUDE_PROJECT_DIR="$PLAIN" bash "$_MUT/ai-dlc-protect.sh" <<<"$(jf docs/architecture.md)" 2>/dev/null | grep -c permissionDecision)" = 0 ]; then
-  mutant_killed "$B_CTX" "CONTEXT-RESTORED" "mutant CONTEXT-RESTORED killed by the 9c arm, and its PLAIN allow of docs/architecture.md still holds"
-else
-  bad "mutant CONTEXT-RESTORED SURVIVED the 9c arm (or disturbed the PLAIN allow)"
-fi
 
 # --- Assertion 9d: a batch deny NAMES its offending commands ----------------
 # The deny used to name the paths but not which commands carried them, so the
@@ -201,10 +171,6 @@ J_LABEL="$(jbm a 'npm test' '.claude/skills/ai-dlc/SKILL.md' 'ls docs' c 'pwd')"
 J_STR='{"tool_name":"mcp__plugin_context-mode_context-mode__ctx_batch_execute","tool_input":{"commands":["cat .claude/skills/ai-dlc/SKILL.md"]}}'
 reason() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$PLAIN" bash "$1" 2>/dev/null | jq -r '.hookSpecificOutput.permissionDecisionReason // empty' 2>/dev/null; }
 offending() { reason "$1" "$2" | grep -oE 'Offending: [^.]*' ; }
-# decision_with <hooks_dir> <json> -> "deny" | "allow" for the hook in that directory.
-decision_with() {
-  if grep -q '"permissionDecision": *"deny"' <<<"$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$PLAIN" bash "$1/ai-dlc-protect.sh" 2>/dev/null)"; then echo deny; else echo allow; fi
-}
 # hit2arm <hook> -> 0 when the command-2 deny names command 2 of 3, its label, and nothing else.
 hit2arm() {
   local r; r="$(reason "$1" "$J_HIT2")"
@@ -217,14 +183,14 @@ hit2arm() {
 labelarm() { grep -q '"permissionDecision": *"deny"' <<<"$(printf '%s' "$J_LABEL" | CLAUDE_PROJECT_DIR="$PLAIN" bash "$1" 2>/dev/null)"; }
 
 expect deny "$PLAIN" "$J_HIT2" "3-command batch, protected path in command 2 → deny"
-if hit2arm "$HOOK"; then ok "batch deny REASON names exactly 'command 2 of 3 (label \"rd\")', the 2 clean commands, and native Read"; B_H2=1
+if hit2arm "$HOOK"; then ok "batch deny REASON names exactly 'command 2 of 3 (label \"rd\")', the 2 clean commands, and native Read"
 else bad "batch deny REASON does not name exactly command 2 of 3 — got '$(offending "$HOOK" "$J_HIT2")'"; fi
 [ "$(offending "$HOOK" "$J_HIT3")" = 'Offending: command 3 of 3 (label "rd")' ] \
   && ok "batch deny with the hit in command 3 names 'command 3 of 3'" \
   || bad "batch deny with the hit in command 3 — got '$(offending "$HOOK" "$J_HIT3")'"
 expect allow "$PLAIN" "$J_NONE" "3-command batch with no protected path → allow"
 expect deny "$PLAIN" "$J_LABEL" "protected path carried ONLY by a label → deny (decision reads the whole element)"
-if labelarm "$HOOK"; then ok "label-only batch: the label arm denies the unmutated hook"; B_LBL=1
+if labelarm "$HOOK"; then ok "label-only batch: the label arm denies the hook"
 else bad "labelarm helper disagrees with expect on the label-only batch"; fi
 expect deny "$PLAIN" "$J_STR" "string-element batch naming a protected path → deny"
 [ "$(offending "$HOOK" "$J_STR")" = 'Offending: command 1 of 1' ] \
@@ -233,84 +199,6 @@ expect deny "$PLAIN" "$J_STR" "string-element batch naming a protected path → 
 grep -qF -- '- Offending commands: command 2 of 3 (label "rd")' "$PLAIN/_bmad-output/context-mode-protection-log.md" \
   && ok "protection log carries the '- Offending commands:' line" \
   || bad "protection log lacks '- Offending commands: command 2 of 3 (label \"rd\")'"
-
-# mkmut9d <name> <old> <new> [<old2> <new2>] -> path of a mutated copy of the hooks dir, or empty
-# when a substitution matched nothing. The whole directory is copied (the hook sources a sibling).
-mkmut9d() {
-  local d="$WORK/mut-$1" src
-  mkdir -p "$d"; cp -R "$(dirname "$HOOK")/." "$d/" 2>/dev/null
-  src="$(cat "$HOOK"; printf x)"; src="${src%x}"
-  case "$src" in *"$2"*) ;; *) return 0 ;; esac
-  src="${src/"$2"/$3}"
-  if [ "$#" -ge 5 ]; then
-    case "$src" in *"$4"*) ;; *) return 0 ;; esac
-    src="${src/"$4"/$5}"
-  fi
-  printf '%s' "$src" > "$d/ai-dlc-protect.sh"
-  cmp -s "$HOOK" "$d/ai-dlc-protect.sh" || printf '%s' "$d"
-}
-# Unmutated control in a copied directory: the harness itself must pass every arm the mutants are scored on.
-_CTL9="$WORK/ctl-9d"; mkdir -p "$_CTL9"; cp -R "$(dirname "$HOOK")/." "$_CTL9/" 2>/dev/null
-if hit2arm "$_CTL9/ai-dlc-protect.sh" && labelarm "$_CTL9/ai-dlc-protect.sh"; then
-  ok "9d mutant control: an unmutated copy passes the command-2 and label-only arms"
-else
-  bad "9d mutant harness broken: an unmutated copy fails the command-2 or label-only arm"
-fi
-
-# Mutant REASON-BASE: the naming branch never taken, so REASON is base's text. Killed by the
-# command-2 arm; its decisions (command-2 deny, label-only deny, clean allow) must still hold.
-_M1="$(mkmut9d reason-base 'elif [ -n "$OFF_DESC" ]; then' 'elif false; then')"
-if [ -z "$_M1" ]; then
-  bad "mutant REASON-BASE did not differ from the fix (DID NOT APPLY)"
-elif ! bash -n "$_M1/ai-dlc-protect.sh" 2>/dev/null; then
-  bad "mutant REASON-BASE does not parse"
-elif hit2arm "$_M1/ai-dlc-protect.sh"; then
-  bad "mutant REASON-BASE SURVIVED the command-2 arm"
-elif [ "$(decision_with "$_M1" "$J_HIT2")$(decision_with "$_M1" "$J_LABEL")$(decision_with "$_M1" "$J_NONE")" = denydenyallow ]; then
-  mutant_killed "$B_H2" "REASON-BASE" "mutant REASON-BASE killed by the command-2 arm, its decisions unchanged (deny, deny, allow)"
-else
-  bad "mutant REASON-BASE moved a decision — its kill is not the REASON's"
-fi
-
-# Mutant PER-ELEMENT-DECIDES: the naming step searches only each element's command (labels
-# dropped) and a batch it names nothing in is allowed. Killed by the label-only arm; the
-# command-2 arm must still pass on it, so the kill is the label's.
-_M2="$(mkmut9d per-element '\(.value | tojson)"' '\(if (.value | type) == "object" then (.value.command // "" | tostring) else (.value | tostring) end)"' \
-  "$(printf '\nOFF_DESC=""\n')" "$(printf '\nif [ "$OFF_TOTAL" -gt 0 ]; then [ "$OFF_N" -gt 0 ] || PROTECTED_HITS=(); fi\nOFF_DESC=""\n')")"
-if [ -z "$_M2" ]; then
-  bad "mutant PER-ELEMENT-DECIDES did not differ from the fix (DID NOT APPLY)"
-elif ! bash -n "$_M2/ai-dlc-protect.sh" 2>/dev/null; then
-  bad "mutant PER-ELEMENT-DECIDES does not parse"
-elif labelarm "$_M2/ai-dlc-protect.sh"; then
-  bad "mutant PER-ELEMENT-DECIDES SURVIVED the label-only arm"
-elif hit2arm "$_M2/ai-dlc-protect.sh"; then
-  mutant_killed "$(( ${B_LBL:-0} && ${B_H2:-0} ))" "PER-ELEMENT-DECIDES" "mutant PER-ELEMENT-DECIDES killed by the label-only arm, and the command-2 arm still passes on it"
-else
-  bad "mutant PER-ELEMENT-DECIDES also fails the command-2 arm — its kill is not the label's"
-fi
-
-# Fallback arm: when the naming step names no offender while the decision denies, REASON is
-# base's text. The naming step's jq is pointed at a key the batch does not carry (a copy of the
-# hooks dir), so it yields no rows while the decision source, a separate extraction, still denies.
-# fallbackarm <hook> -> 0 when deny AND base REASON text AND no 'Offending:'.
-fallbackarm() {
-  local r; r="$(reason "$1" "$J_HIT2")"
-  [ "$(decision_with "$(dirname "$1")" "$J_HIT2")" = deny ] || return 1
-  grep -qF 'Use native Read for verbatim content.' <<<"$r" || return 1
-  ! grep -qF 'Offending:' <<<"$r" || return 1
-}
-_M3="$(mkmut9d naming-empty '(.tool_input.commands // [])' '(.tool_input.nocommands // [])')"
-if [ -z "$_M3" ]; then
-  bad "fallback arm: naming-step mutant did not differ from the fix (DID NOT APPLY)"
-elif ! bash -n "$_M3/ai-dlc-protect.sh" 2>/dev/null; then
-  bad "fallback arm: naming-step mutant does not parse"
-elif fallbackarm "$HOOK"; then
-  bad "fallback arm: the unmutated hook satisfies the fallback arm (it names the offender, so the arm cannot discriminate)"
-elif fallbackarm "$_M3/ai-dlc-protect.sh"; then
-  ok "REASON falls back to base text (deny, 'Use native Read for verbatim content.', no 'Offending:') when naming finds no offender"
-else
-  bad "fallback arm: with the naming step empty the hook did not deny with base REASON text and no 'Offending:'"
-fi
 
 # Allowed-batch cost arm, structural rather than timed: the naming step's output is read only in
 # the deny branch, so an ALLOWED batch must not run it. Its observable is its one jq fork. A jq shim
@@ -335,23 +223,10 @@ J_ALLOWF="$(jf _bmad-output/planning-artifacts/prd.md)"
 costarm() { [ "$(jqcount "$1" "$J_NONE")" = "$(jqcount "$1" "$J_ALLOWF")" ]; }
 _cn="$(jqcount "$HOOK" "$J_NONE")"; _cd="$(jqcount "$HOOK" "$J_HIT2")"
 if [ "${_cn:-0}" -gt 0 ] && [ "${_cd:-0}" -gt "${_cn:-0}" ] && costarm "$HOOK"; then
-  ok "allowed batch does not run the naming step (jq forks: allowed batch $_cn = allowed file call, deny $_cd)"; B_COST=1
+  ok "allowed batch does not run the naming step (jq forks: allowed batch $_cn = allowed file call, deny $_cd)"
 else
   bad "allowed batch ran the naming step, or the jq counter is blind (allowed batch ${_cn:-?}, deny ${_cd:-?}, file call $(jqcount "$HOOK" "$J_ALLOWF"))"
 fi
-_M4="$(mkmut9d naming-unguarded ' && [ ${#PROTECTED_HITS[@]} -gt 0 ]; then' '; then')"
-if [ -z "$_M4" ]; then
-  bad "mutant NAMING-UNGUARDED did not differ from the fix (DID NOT APPLY)"
-elif ! bash -n "$_M4/ai-dlc-protect.sh" 2>/dev/null; then
-  bad "mutant NAMING-UNGUARDED does not parse"
-elif costarm "$_M4/ai-dlc-protect.sh"; then
-  bad "mutant NAMING-UNGUARDED SURVIVED the cost arm"
-elif hit2arm "$_M4/ai-dlc-protect.sh" && [ "$(decision_with "$_M4" "$J_NONE")" = allow ]; then
-  mutant_killed "$(( ${B_COST:-0} && ${B_H2:-0} ))" "NAMING-UNGUARDED" "mutant NAMING-UNGUARDED killed by the cost arm, its command-2 REASON and clean allow unchanged"
-else
-  bad "mutant NAMING-UNGUARDED moved a decision or the REASON — its kill is not the cost arm's"
-fi
-
 # --- Assertion 10: a MALFORMED layer file fails CLOSED ----------------------
 expect deny "$BROKEN" "$(jf _bmad-output/planning-artifacts/prd.md)" \
   "malformed layer file → deny even an unprotected path (fail closed)"

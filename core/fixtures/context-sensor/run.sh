@@ -129,8 +129,6 @@ raw()    { printf '{"transcript_path":"%s","session_id":"t"}' "$1" | CLAUDE_PROJ
 
 ok()   { PASS=$((PASS+1)); printf '  PASS  %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  FAIL  %s -- %s\n' "$1" "$2"; }
-. "$FIXTURES/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_carve=0
 check(){ [ "$2" = "$3" ] && ok "$1" || bad "$1" "expected '$3', got '$2'"; }
 
 echo "context-sensor fixtures"
@@ -179,36 +177,9 @@ check "  a one-iteration turn reads exactly its top level (279085)" "$(field las
 reset1m
 raw "$(at 150000)" >/dev/null
 check "  a line with no iterations keeps the top-level reading (150000)" "$(field last_measured)" "150000"
-# MUTANT: the top-level sum restored. The advisor arms must read the sums; the one-iteration and
-# no-iterations arms still pass, which is the point of their being near-misses.
-#
-# RE-ANCHORED INTO THE SHARED LIBRARY. The iteration rule moved out of the sensor into the jq def
-# in ai-dlc-usage-tokens.sh, which the sensor and the subagent probe both source, so the two
-# deleted lines now live there and the mutation is on a LIBRARY copy beside an UNMUTATED sensor
-# copy and an unmutated window library. Same two lines, same observable. The library's def opens
-# with a bare `.` so the program left after the deletion is still well-formed: it is exactly the
-# old top-level sum. The sensor exits 0 without writing state when the usage library is absent,
-# so a copy that lost it would score every arm below as a kill it did not earn -- the copy is
-# asserted present first.
 SENSOR_PATH="${HOOK#bash }"
 USAGELIB="$(dirname "$SENSOR_PATH")/ai-dlc-usage-tokens.sh"
 for _l in usage-tokens window context-provenance; do [ -r "$(dirname "$SENSOR_PATH")/ai-dlc-$_l.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-$_l.sh"; done
-MUTI="$WORK/mutant-iter-sum"; mkdir -p "$MUTI"
-cp "$(dirname "$SENSOR_PATH")/ai-dlc-window.sh" "$MUTI/ai-dlc-window.sh"
-cp "$SENSOR_PATH" "$MUTI/ai-dlc-context-sensor.sh"
-sed -e '/^  | (\[ \.iterations\[\]? | select(\.type == "message") \] | last) as \$lastmsg$/d' \
-    -e '/^  | (\$lastmsg \/\/ \.)$/d' "$USAGELIB" > "$MUTI/ai-dlc-usage-tokens.sh"
-if [ ! -s "$MUTI/ai-dlc-usage-tokens.sh" ] || cmp -s "$USAGELIB" "$MUTI/ai-dlc-usage-tokens.sh" \
-   || [ "$(grep -c 'lastmsg' "$MUTI/ai-dlc-usage-tokens.sh")" -ne 0 ]; then
-  bad "iteration-sum mutant applied" "sed did not remove both lines from the usage library (lastmsg left: $(grep -c 'lastmsg' "$MUTI/ai-dlc-usage-tokens.sh" 2>/dev/null))"
-else
-  for m in "$ADV:554953" "$ADV2:220000" "$ONE:279085"; do
-    reset1m
-    printf '{"transcript_path":"%s","session_id":"t"}' "${m%:*}" \
-      | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTI/ai-dlc-context-sensor.sh" >/dev/null 2>&1
-    check "MUTANT: with the top-level sum restored $(basename "${m%:*}") reads ${m##*:}" "$(field last_measured)" "${m##*:}"
-  done
-fi
 
 reset
 check "subagent (agent_id) is silent" "$(fire at-red.jsonl ',"agent_id":"a1"' | ctx)" ""
@@ -344,25 +315,7 @@ printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
 check "an unparseable declaration falls to the floor" "$(field effective_window)" "200000"
 check "  and is recorded as undeclared" "$(field window_declared)" "0"
 
-# MUTANT CONTROL for the floor arm: the defaults live in the LIBRARY now, so the mutation
-# is on a library copy beside an unmutated hook copy. The seed's id is the FULL id
-# `claude-haiku-4-5`, which takes the not-a-bare-alias default; that default moved to 1M
-# and the floor arm must fail. cmp -s so a sed that matched nothing cannot pass as a
-# mutation.
 HOOK_PATH="${HOOK#bash }"
-WINLIB="$(dirname "$HOOK_PATH")/ai-dlc-window.sh"
-MUTD="$WORK/mutant"; mkdir -p "$MUTD"
-cp "$HOOK_PATH" "$MUTD/ai-dlc-context-sensor.sh"
-cp "$USAGELIB" "$MUTD/ai-dlc-usage-tokens.sh"
-sed 's/^    \*)                 printf .200000|not a bare alias/    *)                 printf '"'"'1000000|not a bare alias/' "$WINLIB" > "$MUTD/ai-dlc-window.sh"
-if cmp -s "$WINLIB" "$MUTD/ai-dlc-window.sh"; then
-  bad "floor mutant applied" "sed matched nothing; the copy is byte-identical"
-else
-  reset
-  printf '{"transcript_path":"%s","session_id":"t"}' "$FIXTURES/at-250000.jsonl" \
-    | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTD/ai-dlc-context-sensor.sh" >/dev/null 2>&1
-  check "MUTANT: with the non-alias default at 1M the floor arm fails (effective 300000)" "$(field effective_window)" "300000"
-fi
 
 # --- the shared window policy (ai-dlc-window.sh) -----------------------------
 # A BARE alias is its 1M variant in Claude Code, so an undeclared `opus`/`sonnet`/`fable`
@@ -384,22 +337,6 @@ for spec in "sonnet:SONNET:1000000" "opus:OPUS:1000000" "fable:FABLE:1000000" \
   check "  and is recorded as undeclared" "$(field window_declared)" "0"
   check "  and classifies as $f" "$(field model_family)" "$f"
 done
-# MUTANT: substring defaulting restored -- the 1M default keyed on the FAMILY, not on the
-# exact alias. The full-id arms above (claude-sonnet-4-5 and the Bedrock id) must read 1M.
-MUTSUB="$WORK/mutant-subdefault"; mkdir -p "$MUTSUB"
-cp "$HOOK_PATH" "$MUTSUB/ai-dlc-context-sensor.sh"
-cp "$USAGELIB" "$MUTSUB/ai-dlc-usage-tokens.sh"
-sed 's/^    fable|opus|sonnet) printf/    *fable*|*opus*|*sonnet*) printf/' "$WINLIB" > "$MUTSUB/ai-dlc-window.sh"
-if cmp -s "$WINLIB" "$MUTSUB/ai-dlc-window.sh"; then
-  bad "substring-default mutant applied" "sed matched nothing; the copy is byte-identical"
-else
-  for m in claude-sonnet-4-5 global.anthropic.claude-sonnet-4-6; do
-    reset
-    printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000 "$m")" \
-      | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTSUB/ai-dlc-context-sensor.sh" >/dev/null 2>&1
-    check "MUTANT: substring defaulting reads $m at 1000000 (the arm above catches it)" "$(field effective_window)" "1000000"
-  done
-fi
 # DECLARATION RANGE: a declared window outside 50000..2000000 is rejected and falls through
 # to the next layer. `99` would be a 99-token window; a 20-digit value overflows awk.
 for v in 99 99999999999999999999 5m; do
@@ -420,19 +357,6 @@ printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
   | AI_DLC_MODEL_HAIKU_WINDOW=99 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
 check "  a rejected process env falls through to the settings .env (300000)" "$(field effective_window)" "300000"
 rm -f "$WORK/.claude/settings.json"
-# MUTANT: the range check removed (any positive parse accepted). 99 must then be taken.
-MUTR="$WORK/mutant-range"; mkdir -p "$MUTR"
-cp "$HOOK_PATH" "$MUTR/ai-dlc-context-sensor.sh"
-cp "$USAGELIB" "$MUTR/ai-dlc-usage-tokens.sh"
-sed 's/^  \[ "\$1" -ge "\$AI_DLC_WINDOW_MIN" \] 2>\/dev\/null && \[ "\$1" -le "\$AI_DLC_WINDOW_MAX" \] 2>\/dev\/null$/  [ "$1" -gt 0 ]/' "$WINLIB" > "$MUTR/ai-dlc-window.sh"
-if cmp -s "$WINLIB" "$MUTR/ai-dlc-window.sh"; then
-  bad "range mutant applied" "sed matched nothing; the copy is byte-identical"
-else
-  reset
-  printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
-    | AI_DLC_MODEL_HAIKU_WINDOW=99 CLAUDE_PROJECT_DIR="$WORK" bash "$MUTR/ai-dlc-context-sensor.sh" >/dev/null 2>&1
-  check "MUTANT: with the range check gone a declared 99 is taken" "$(field effective_window)" "99"
-fi
 # A [1m] id is a declaration (the suffix names the variant).
 reset
 raw "$(at 100000 'claude-sonnet-5[1m]')" >/dev/null
@@ -456,45 +380,16 @@ reset
 printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
   | AI_DLC_MODEL_HAIKU_WINDOW=260000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
 check "  process env AI_DLC_MODEL_HAIKU_WINDOW outranks the settings .env" "$(field effective_window)" "260000"
-# MUTANT: the settings .env layer ignored (its jq read returns nothing). Library copy
-# beside an unmutated hook copy; the .env arm must fall back to the HAIKU default.
-MUTE="$WORK/mutant-env"; mkdir -p "$MUTE"
-cp "$HOOK_PATH" "$MUTE/ai-dlc-context-sensor.sh"
-cp "$USAGELIB" "$MUTE/ai-dlc-usage-tokens.sh"
-sed 's/^\( *\)val="\$(jq -r --arg k "\$var" .*/\1val=""/' "$WINLIB" > "$MUTE/ai-dlc-window.sh"
-if cmp -s "$WINLIB" "$MUTE/ai-dlc-window.sh"; then
-  bad "settings-env mutant applied" "sed matched nothing; the copy is byte-identical"
-else
-  reset
-  printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
-    | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTE/ai-dlc-context-sensor.sh" >/dev/null 2>&1
-  check "MUTANT: with the settings .env ignored the .env arm reads the HAIKU default" "$(field effective_window)" "200000"
-fi
-# MUTANT: a `[1m]`-substring-only resolver (the bare-alias 1M default gone) -- the
-# pre-change validator's policy. Undeclared bare `sonnet` must then read 200000.
-MUTS="$WORK/mutant-substr"; mkdir -p "$MUTS"
-cp "$HOOK_PATH" "$MUTS/ai-dlc-context-sensor.sh"
-cp "$USAGELIB" "$MUTS/ai-dlc-usage-tokens.sh"
-sed 's/^    fable|opus|sonnet) printf .1000000|/    NONE) printf '"'"'200000|/' "$WINLIB" > "$MUTS/ai-dlc-window.sh"
-if cmp -s "$WINLIB" "$MUTS/ai-dlc-window.sh"; then
-  bad "substring mutant applied" "sed matched nothing; the copy is byte-identical"
-else
-  echo '{}' > "$WORK/.claude/settings.json"
-  reset
-  printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000 sonnet)" \
-    | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTS/ai-dlc-context-sensor.sh" >/dev/null 2>&1
-  check "MUTANT: a [1m]-only resolver reads undeclared bare sonnet at 200000" "$(field effective_window)" "200000"
-fi
 # LIBRARY ABSENT: a hook copy without the WINDOW library falls to OTHER at UNDECLARED_MODEL_MAX,
 # never dies. The usage-token library goes beside it: this arm removes the window library, not
 # that one, and without it the sensor would exit before writing any state at all.
-MUTL="$WORK/nolib"; mkdir -p "$MUTL"
-cp "$HOOK_PATH" "$MUTL/ai-dlc-context-sensor.sh"
-cp "$USAGELIB" "$MUTL/ai-dlc-usage-tokens.sh"
+NOLIB="$WORK/nolib"; mkdir -p "$NOLIB"
+cp "$HOOK_PATH" "$NOLIB/ai-dlc-context-sensor.sh"
+cp "$USAGELIB" "$NOLIB/ai-dlc-usage-tokens.sh"
 echo '{}' > "$WORK/.claude/settings.json"
 reset
 printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000 sonnet)" \
-  | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTL/ai-dlc-context-sensor.sh" >/dev/null 2>&1
+  | CLAUDE_PROJECT_DIR="$WORK" bash "$NOLIB/ai-dlc-context-sensor.sh" >/dev/null 2>&1
 check "library absent: the sensor falls to 200000 and still writes state" "$(field effective_window)" "200000"
 check "  classified OTHER" "$(field model_family)" "OTHER"
 mv "$WORK/.claude/settings.json.bak" "$WORK/.claude/settings.json"
@@ -547,30 +442,11 @@ case "$OUT" in *"SURFACE that trade-off"*|*"let THEM call it"*)
 # lead answered "refreshing the snapshot now" and the finding never reached the operator.
 # The advice binds BOTH halves in ONE response -- record it under Open Items AND put it to
 # the operator -- because "report first" would lose the refresh to the compaction.
-case "$OUT" in *"not held back by this refresh"*) ok "imminent does not let the refresh hold back an operator finding"; B_carve=1 ;;
+case "$OUT" in *"not held back by this refresh"*) ok "imminent does not let the refresh hold back an operator finding" ;;
   *) bad "imminent does not let the refresh hold back an operator finding" "got: ${OUT:-<silent>}" ;; esac
 case "$OUT" in *"under Open Items AND put it to the operator in the SAME response"*)
     ok "  and binds the snapshot record and the operator report into one response" ;;
   *) bad "  and binds the snapshot record and the operator report into one response" "got: ${OUT:-<silent>}" ;; esac
-
-# MUTANT (BL-297): the pre-fix advice, with the carve-out sentence deleted. Both arms above
-# are PRESENCE-shaped, so this copy must fail them; a sed that matched nothing is refused.
-MUTF="$WORK/mutant-finding"; mkdir -p "$MUTF"
-cp "$(dirname "$HOOK_PATH")"/ai-dlc-*.sh "$MUTF/" 2>/dev/null || true
-sed 's/ A finding the operator has not yet been told -- .* this reminder is warning about\.//' \
-  "$HOOK_PATH" > "$MUTF/ai-dlc-context-sensor.sh"
-if cmp -s "$HOOK_PATH" "$MUTF/ai-dlc-context-sensor.sh"; then
-  bad "finding mutant applied" "sed matched nothing; the copy is byte-identical"
-else
-  reset1m
-  MOUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 249001)" \
-          | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTF/ai-dlc-context-sensor.sh" 2>/dev/null | ctx)"
-  case "$MOUT" in *"Auto-compact will fire"*) ok "  finding mutant still fires imminent (the copy ran)" ;;
-    *) bad "  finding mutant still fires imminent (the copy ran)" "got: ${MOUT:-<silent>}" ;; esac
-  case "$MOUT" in *"not held back by this refresh"*)
-      bad "MUTANT: without the carve-out the finding arm fails" "carve-out still present" ;;
-    *) mutant_killed "$B_carve" finding-carveout "MUTANT: without the carve-out the finding arm fails" ;; esac
-fi
 
 # The band must still be reachable at the values real compactions were observed at.
 reset1m
@@ -715,29 +591,6 @@ printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatc
   | AI_DLC_MODEL_HAIKU_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
 check "relax control: cached at IMMINENT has no unfired threshold above it, so the same sub-throttle PostToolBatch is SKIPPED (cost guard intact)" \
   "$(evfield last_measured)" "150000"
-
-# MUTANT: force RELAX=0 so the throttle is the pre-fix flat byte gate. Built as a copy with
-# its sibling library, cmp -s proves the sed matched, bash -n that it parses. The kill is
-# the read-through arm alone: the control arm must STAY green under the mutant, because a
-# flat gate skips both cases and a mutant that flipped the control would mean the two arms
-# cannot tell "reads near thresholds" from "reads always".
-MRD="$WORK/mutant-relax"; mkdir -p "$MRD"
-cp "$(dirname "$HOOK_PATH")/ai-dlc-window.sh" "$MRD/" 2>/dev/null || true
-cp "$USAGELIB" "$MRD/ai-dlc-usage-tokens.sh" 2>/dev/null || true
-sed 's/\[ "$_TOK_DISTANCE" -le "$RELAX_TOKENS" \] && RELAX=1/RELAX=0/' "$HOOK_PATH" > "$MRD/ai-dlc-context-sensor.sh"
-if cmp -s "$HOOK_PATH" "$MRD/ai-dlc-context-sensor.sh"; then
-  bad "relax mutant applied" "sed matched nothing; the copy is byte-identical"
-elif ! bash -n "$MRD/ai-dlc-context-sensor.sh" 2>/dev/null; then
-  bad "relax mutant applied" "the mutant does not parse"
-else
-  reset
-  printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"Stop"}' "$FIXTURES/below-yellow.jsonl" \
-    | CLAUDE_PROJECT_DIR="$WORK" bash "$MRD/ai-dlc-context-sensor.sh" >/dev/null 2>&1
-  printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatch"}' "$(at 85000)" \
-    | CLAUDE_PROJECT_DIR="$WORK" bash "$MRD/ai-dlc-context-sensor.sh" >/dev/null 2>&1
-  check "MUTANT: with RELAX forced to 0 the near-threshold PostToolBatch is skipped again (reads 50000, not 85000)" \
-    "$(evfield last_measured)" "50000"
-fi
 
 # First PostToolBatch of a session (no sidecar) is never throttled.
 reset

@@ -181,9 +181,8 @@ chk "duration_s is null when the transcript carries no timestamps (not 0, not \"
 chk "  role is null when no binding was dispatched (not empty-string)" "$(raw .role)" "null"
 
 # --- 4c. THE FIELDS THE SEEDS ABOVE CANNOT REACH -----------------------------
-# Each of these four was a mutation that changed a recorded number and left this file
-# green, because every seed above happens to agree under both the right behaviour and
-# the wrong one. A seed set that cannot separate two semantics asserts neither.
+# Seeds that give the right and the wrong behaviour different numbers: a seed set that
+# cannot separate two semantics asserts neither.
 
 # peak is a SUM of three usage components and only two of them were ever non-zero.
 reset
@@ -240,43 +239,6 @@ fire "$PROJ" advisor-nomsg.jsonl >/dev/null
 chk "P3 an advisor turn with no message-type iteration falls back to its top level (90000)" \
   "$(last .peak_tokens)" "90000"
 
-# MUTANTS of the shared def. P1 is presence-shaped, but a library copy that the hook could not
-# source writes no row and would fail P1 for the WRONG reason, so each mutant carries a positive
-# ran-control: P2 must still pass on it. Built in a copy of the hook's WHOLE directory (the hook
-# resolves the library as its own sibling), the library asserted present in the copy, and `cmp
-# -s` refuses a sed that matched nothing.
-#   M1  the two iteration lines deleted -> the old top-level sum. P1 reads 240000.
-#   M2  `last` replaced by `first`      -> the advisor turn reads 100000 and the 120000 turn wins.
-HOOKDIR="$(dirname "$HOOK")"
-USAGELIB="$HOOKDIR/ai-dlc-usage-tokens.sh"
-mkmut() { # <name> <sed args...> -> prints the mutant hook path, or nothing
-  _mm_d="$WORKDIR/mut-$1"; shift
-  mkdir -p "$_mm_d"
-  cp "$HOOKDIR"/*.sh "$_mm_d/" 2>/dev/null
-  [ -f "$_mm_d/ai-dlc-usage-tokens.sh" ] && [ -f "$_mm_d/$(basename "$HOOK")" ] || return 1
-  sed "$@" "$USAGELIB" > "$_mm_d/ai-dlc-usage-tokens.sh" || return 1
-  cmp -s "$USAGELIB" "$_mm_d/ai-dlc-usage-tokens.sh" && return 1
-  printf '%s' "$_mm_d/$(basename "$HOOK")"
-}
-mutfire() { # <mutant hook> <seed> -> that run's peak_tokens
-  _mf_h="$HOOK"; HOOK="$1"; reset; fire "$PROJ" "$2" >/dev/null 2>&1; HOOK="$_mf_h"; last .peak_tokens
-}
-M1="$(mkmut m1 -e '/^  | (\[ \.iterations\[\]? | select(\.type == "message") \] | last) as \$lastmsg$/d' \
-               -e '/^  | (\$lastmsg \/\/ \.)$/d')"
-if [ -z "$M1" ] || [ "$(grep -c lastmsg "$(dirname "$M1")/ai-dlc-usage-tokens.sh")" != 0 ]; then
-  bad "M1 top-level-sum mutant applied (the sed did not remove both iteration lines)"
-else
-  chk "M1 ran-control: with the top-level sum restored P2 still reads 60000" "$(mutfire "$M1" calm.jsonl)" "60000"
-  chk "M1 with the top-level sum restored P1 reads the advisor turn at 240000" "$(mutfire "$M1" advisor.jsonl)" "240000"
-fi
-M2="$(mkmut m2 -e 's/| last) as \$lastmsg$/| first) as $lastmsg/')"
-if [ -z "$M2" ]; then
-  bad "M2 first-iteration mutant applied (the sed matched nothing)"
-else
-  chk "M2 ran-control: with first in place of last P2 still reads 60000" "$(mutfire "$M2" calm.jsonl)" "60000"
-  chk "M2 with first in place of last the 120000 non-advisor turn wins P1" "$(mutfire "$M2" advisor.jsonl)" "120000"
-fi
-
 # --- 5. silence cases --------------------------------------------------------
 reset
 fire "$PROJ" nousage.jsonl >/dev/null
@@ -305,11 +267,8 @@ reset
 fire "$PROJ" does-not-exist.jsonl absent-probe-s291 >/dev/null
 if [ -f "$OUT" ]; then _absent="$(jq -r '.model' "$OUT" 2>/dev/null | tr '\n' ',')"; else _absent="no-row"; fi
 fire "$PROJ" calm.jsonl absent-probe-s291 >/dev/null
-# The positive half reads peak_tokens rather than model DELIBERATELY. A paired arm needs
-# a positive conjunct or silence satisfies it, but whichever field it reads it entangles
-# with -- and read on `model` this arm also failed under a mutant that only blanked the
-# model, which is a case the model arm above already owns. peak_tokens on the calm seed
-# is touched by fewer mutants, so the overlap is smallest here.
+# The positive half reads peak_tokens rather than model DELIBERATELY: a paired arm needs
+# a positive conjunct or silence satisfies it, and the model arm above already owns `model`.
 chk "5b absent teammate file records NOTHING, and the same fire WITH the file present records a row" \
   "absent=${_absent} present=$(last .peak_tokens)" \
   "absent=no-row present=60000"
@@ -378,8 +337,7 @@ chk "8b ledger present: the role the guard BOUND wins over the transcript" \
 
 # 8c needs TWO rows whose names BOTH match the same agent_id, or the sort never
 # arbitrates and the assertion is decoration: `adev-escalated-s298-3-xyz` contains
-# `dev` AND `dev-escalated`. A mutation run proved the earlier single-match version
-# passed with the sort removed entirely.
+# `dev` AND `dev-escalated`.
 reset
 { jq -nc '{v:1,name:"dev",role:"dev",model_bound:"sonnet"}'
   jq -nc '{v:1,name:"dev-escalated",role:"dev-escalated",model_bound:"opus"}'; } > "$LEDGER"

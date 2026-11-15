@@ -1,13 +1,5 @@
 e2e core/scripts/validate-adversarial-convergence.sh ts-shipped-met why=arm (m) ts-bind: Check 24's prefix over the terminal MET pass, the one end-to-end run per distinct outcome (exit 0)
 e2e core/scripts/validate-adversarial-convergence.sh ts-shipped-unk why=arm (m) ts-bind: Check 24's prefix over the verdict-less pass (exit 1, rung A)
-e2e core/scripts/validate-adversarial-convergence.sh ts-CONTROL_ts_unmutated-met why=arm (m) the unmutated control row, MET pass
-e2e core/scripts/validate-adversarial-convergence.sh ts-CONTROL_ts_unmutated-unk why=arm (m) the unmutated control row, verdict-less pass
-e2e core/scripts/validate-adversarial-convergence.sh ts-MUTATION_ts-bmad-restored-met why=mutant ts-bmad-restored: its bind twin cell, MET pass
-e2e core/scripts/validate-adversarial-convergence.sh ts-MUTATION_ts-bmad-restored-unk why=mutant ts-bmad-restored: its bind twin cell, verdict-less pass
-e2e core/scripts/validate-adversarial-convergence.sh ts-MUTATION_ts-bmad-restored-new-met why=mutant ts-bmad-restored-new: its bind twin cell, MET pass
-e2e core/scripts/validate-adversarial-convergence.sh ts-MUTATION_ts-bmad-restored-new-unk why=mutant ts-bmad-restored-new: its bind twin cell, verdict-less pass
-e2e core/scripts/validate-adversarial-convergence.sh ts-MUTATION_ts-precondition-deleted-met why=mutant ts-precondition-deleted: its bind twin cell, MET pass
-e2e core/scripts/validate-adversarial-convergence.sh ts-MUTATION_ts-precondition-deleted-unk why=mutant ts-precondition-deleted: its bind twin cell, verdict-less pass
 # Arm (n) (BL-936) drives the three shipped LR parsers end to end, one start per parser per outcome: the near-miss
 # (label after the id) and the offender (label before it, or stripped). The parsers' own --emit-blocks calls into
 # validate-locked-anchor.sh are nested starts of each parent.

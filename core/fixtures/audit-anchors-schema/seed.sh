@@ -39,12 +39,6 @@ WORK="$(cd "$WORK" && pwd)"
 # A malformed schema JSON — used to prove the reader fails CLOSED, never degrades to no-schema.
 printf '{ "fields": { "sprint": }, BROKEN\n' > "$WORK/bad-schema.json"
 
-# `mut/` holds mutant COPIES of the validator; `schemas/` sits beside it because the validator
-# resolves its schema at $SCRIPT_DIR/../schemas first, which is the shape both shipped layouts
-# have. A mutant that cannot find its schema exits 1 on every arm and scores a kill it did not earn.
-mkdir -p "$WORK/mut" "$WORK/schemas" || exit 2
-cp "$SCHEMA" "$WORK/schemas/audit-anchors.json" || exit 2
-
 # --- the fixture's OWN git repository ----------------------------------------
 # `--close-record` RESOLVES its <sha> argument with `git rev-parse` in the process CWD before it
 # will write anything. Borrowing whichever tree the suite was launched from would make every
