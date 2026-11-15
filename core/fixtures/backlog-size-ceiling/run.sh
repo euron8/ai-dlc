@@ -80,10 +80,9 @@ done
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-rc=0
 note() { printf '%s\n' "$*"; }
-ok()  { note "ok    $1"; }
-bad() { note "FAIL  $1"; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 KC_OK=0; CC_OK=0
 
 # BL_K IS 7 AND ARBITRARY. What matters is that the seed writes exactly BL_K entries and the
@@ -139,19 +138,19 @@ count_check() { # count_check <name> <dir> <env> <want> [<extra-args>...]
   CC_OK=0
   out="$(run_v "$e" "$d" "$@")"; rc_v=$?
   if [ "$rc_v" -ne 0 ]; then
-    note "FAIL  $n -- validator exited $rc_v on a tree that must pass"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return 1
+    bad "$n -- validator exited $rc_v on a tree that must pass"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4; return 1
   fi
   got="$(bl_reported "$out")"
   if [ -z "$got" ]; then
-    note "FAIL  $n -- the arm printed no ok line, so it observed nothing and the quiet is not a reading"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return 1
+    bad "$n -- the arm printed no ok line, so it observed nothing and the quiet is not a reading"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4; return 1
   fi
   if [ "$got" -ne "$want" ]; then
-    note "FAIL  $n -- the arm reports $got live entries; the seed wrote $want. Quiet at a slack ceiling is not evidence the predicate read the right file."
-    rc=1; return 1
+    bad "$n -- the arm reports $got live entries; the seed wrote $want. Quiet at a slack ceiling is not evidence the predicate read the right file."
+    return 1
   fi
-  note "ok    $n -- quiet, and the arm counted exactly the $want entries the seed wrote"; CC_OK=1
+  ok "$n -- quiet, and the arm counted exactly the $want entries the seed wrote"; CC_OK=1
 }
 
 fail_check() { # fail_check <name> <dir> <env> <nfail> <substr>
@@ -159,20 +158,20 @@ fail_check() { # fail_check <name> <dir> <env> <nfail> <substr>
   KC_OK=0
   out="$(run_v "$e" "$d")"; rc_v=$?
   nfail="$(printf '%s\n' "$out" | grep -c '^FAIL:')"
-  if [ "$rc_v" -eq 0 ]; then note "FAIL  $n -- probe SURVIVED (validator exited 0)"; rc=1; return 1; fi
+  if [ "$rc_v" -eq 0 ]; then bad "$n -- probe SURVIVED (validator exited 0)"; return 1; fi
   if [ "$rc_v" -eq 2 ]; then
-    note "FAIL  $n -- validator exited 2 (environment), which is not this probe's assertion"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -3; rc=1; return 1
+    bad "$n -- validator exited 2 (environment), which is not this probe's assertion"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -3; return 1
   fi
   if ! grep -qF "$pat" <<<"$out"; then
-    note "FAIL  $n -- validator failed, but not on this probe's assertion (wanted: $pat)"
-    printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/      /' | head -3; rc=1; return 1
+    bad "$n -- validator failed, but not on this probe's assertion (wanted: $pat)"
+    printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/      /' | head -3; return 1
   fi
   if [ "$nfail" -ne "$want" ]; then
-    note "FAIL  $n -- $nfail FAIL lines, expected $want"
-    printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/      /' | head -4; rc=1; return 1
+    bad "$n -- $nfail FAIL lines, expected $want"
+    printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/      /' | head -4; return 1
   fi
-  note "ok    $n -- fails on its own assertion, and by exactly that many"; KC_OK=1
+  ok "$n -- fails on its own assertion, and by exactly that many"; KC_OK=1
 }
 
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/${VALIDATOR##*/}"
@@ -223,14 +222,14 @@ seed "$TMP/b04"; rm -f "$TMP/b04/docs/backlog.md"
 # yield an EMPTY string rather than 0, and `[ "${n:-0}" -gt 100 ]` is then FALSE.
 b04_out="$(run_v "" "$TMP/b04")"; b04_rc=$?
 if [ "$b04_rc" -eq 0 ]; then
-  note "FAIL  b04 absent corpus -- the arm exited 0 having observed nothing"; rc=1
+  bad "b04 absent corpus -- the arm exited 0 having observed nothing"
 elif ! grep -qF "is not a file" <<<"$b04_out"; then
-  note "FAIL  b04 absent corpus -- exited $b04_rc but not on the absent-corpus assertion"
-  printf '%s\n' "$b04_out" | sed 's/^/      /' | head -3; rc=1
+  bad "b04 absent corpus -- exited $b04_rc but not on the absent-corpus assertion"
+  printf '%s\n' "$b04_out" | sed 's/^/      /' | head -3
 elif grep -qF "OK: validate-backlog-size" <<<"$b04_out"; then
-  note "FAIL  b04 absent corpus -- the arm reported a count anyway"; rc=1
+  bad "b04 absent corpus -- the arm reported a count anyway"
 else
-  note "ok    b04 absent corpus is a finding (exit $b04_rc), not a pass"
+  ok "b04 absent corpus is a finding (exit $b04_rc), not a pass"
 fi
 
 # b05 -- the file exists and is empty.
@@ -328,17 +327,16 @@ if [ -n "$REVERIFY" ]; then
   b15_rev="$( cd "$TMP/b15" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null \
     | cut -f2 | sort -u | grep -c . )"
   if [ -z "$b15_arm" ] || [ -z "$b15_rev" ]; then
-    note "FAIL  b15 -- a side produced no value (arm='$b15_arm' reverify='$b15_rev')"; rc=1
+    bad "b15 -- a side produced no value (arm='$b15_arm' reverify='$b15_rev')"
   elif [ "$b15_arm" -eq 0 ] || [ "$b15_rev" -eq 0 ]; then
-    note "FAIL  b15 -- a side counted ZERO (arm=$b15_arm reverify=$b15_rev); two predicates that both find nothing agree perfectly and prove nothing"; rc=1
+    bad "b15 -- a side counted ZERO (arm=$b15_arm reverify=$b15_rev); two predicates that both find nothing agree perfectly and prove nothing"
   elif [ "$b15_arm" -ne "$b15_rev" ]; then
-    note "FAIL  b15 -- the ceiling counts $b15_arm entries and backlog-reverify.sh classifies $b15_rev. The ceiling and the classifier disagree about the population."; rc=1
+    bad "b15 -- the ceiling counts $b15_arm entries and backlog-reverify.sh classifies $b15_rev. The ceiling and the classifier disagree about the population."
   else
-    note "ok    b15 -- ceiling count agrees with backlog-reverify.sh's population at $b15_arm entries"
+    ok "b15 -- ceiling count agrees with backlog-reverify.sh's population at $b15_arm entries"
   fi
 else
-  note "FAIL  b15 -- backlog-reverify.sh not resolvable, so the classifier join could not be evaluated. A skip here reads exactly like agreement."
-  rc=1
+  bad "b15 -- backlog-reverify.sh not resolvable, so the classifier join could not be evaluated. A skip here reads exactly like agreement."
 fi
 
 # b16 -- the same join against the REAL ledger -- is core/fixtures/backlog-real-ledger/ now, over a
@@ -360,7 +358,7 @@ fi
 EMPTY_MARKER=""
 [ -n "$REVERIFY" ] && EMPTY_MARKER="$(bash "$REVERIFY" --print-marker 2>/dev/null)"
 if [ -z "$EMPTY_MARKER" ]; then
-  note "FAIL  d00 -- backlog-reverify.sh --print-marker returned nothing, so no declared-empty arm below can be built"; rc=1
+  bad "d00 -- backlog-reverify.sh --print-marker returned nothing, so no declared-empty arm below can be built"
 fi
 de_ledger() { # de_ledger <file> <body-before-marker> [<after-marker>]
   { printf '# Carry-over backlog\n\nLegend: each entry ends in a receipt line, verify: sh or verify: manual.\n\n'
@@ -373,10 +371,10 @@ de_ledger() { # de_ledger <file> <body-before-marker> [<after-marker>]
 seed "$TMP/d01"; de_ledger "$TMP/d01/docs/backlog.md" "Prose with no entry in it.\n\n"
 d01_out="$(run_v "" "$TMP/d01")"; d01_rc=$?
 if [ "$d01_rc" -eq 0 ] && [ "$(bl_reported "$d01_out")" = 0 ] && grep -qF ', declared empty (' <<<"$d01_out"; then
-  note "ok    d01 -- a ledger declared empty passes B1 with the 'entries in' OK line reading 0, declared empty"
+  ok "d01 -- a ledger declared empty passes B1 with the 'entries in' OK line reading 0, declared empty"
 else
-  note "FAIL  d01 -- a declared-empty ledger exited $d01_rc or did not say 'declared empty'"
-  printf '%s\n' "$d01_out" | sed 's/^/      /' | head -3; rc=1
+  bad "d01 -- a declared-empty ledger exited $d01_rc or did not say 'declared empty'"
+  printf '%s\n' "$d01_out" | sed 's/^/      /' | head -3
 fi
 
 # d02 / d03 -- B1b: the marker last while a real entry is present, in each entry shape.
@@ -407,12 +405,9 @@ ph_seed() { # ph_seed <dir> -- BL_K entries; the phantom bullet sits inside BL-0
   # `cp`, never `mv`: tools.decl does not declare `mv`, and the hermetic sandbox has none.
   awk -v ph="$PH_BODY" '{ print } /^Body of entry 1\.$/ { print ""; print ph }' "$1/docs/backlog.md" > "$1/docs/backlog.md.new" \
     && cp "$1/docs/backlog.md.new" "$1/docs/backlog.md"; rm -f "$1/docs/backlog.md.new"
-  grep -qxF -- "$PH_BODY" "$1/docs/backlog.md" || { note "FAIL  p01 -- the phantom bullet was not seeded into $1"; rc=1; return 1; }
+  grep -qxF -- "$PH_BODY" "$1/docs/backlog.md" || { bad "p01 -- the phantom bullet was not seeded into $1"; return 1; }
 }
 ph_seed "$TMP/p01" && count_check "p01 a '- **BL-632 is LANDED**' lead-in inside an entry is not counted" "$TMP/p01" "" "$BL_K"
 
 
-if [ "$rc" -eq 0 ]; then
-  note "PASS  backlog-size-ceiling -- control green, every probe holds"
-fi
-exit "$rc"
+report_end backlog-size-ceiling

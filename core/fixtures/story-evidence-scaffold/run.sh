@@ -197,9 +197,8 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/story-evidence.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 # he-inproc.sh appends every subject call it could NOT answer in process here; the INPROC arm reads it.
 export UT_FALLBACK_LOG="$WORK/.fallback"; : > "$UT_FALLBACK_LOG"
-rc=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # THE GROUP JOIN, in every dist-only group (b-g, and `all`), whose inputs.decl declares the sibling drivers. Group a
 # ships, and a consumer carries no sibling directory, so a declares none and does not run it.
@@ -419,7 +418,7 @@ else
   while IFS= read -r l; do bad "$l"; done <<<"$out"
 fi
 
-[ "${1:-}" = "--probe-only" ] && exit "$rc"
+[ "${1:-}" = "--probe-only" ] && { [ "$fails" -eq 0 ] && exit 0; exit 1; }
 if ( cd / && bash "$DIR/run.sh" --probe-only ) >/dev/null 2>&1; then
   ok "CWD: the fixture resolves its subjects from / as well as from the repo root"
 else
@@ -1094,9 +1093,4 @@ else
 fi
 
 echo
-if [ "$rc" -eq 0 ]; then
-  echo "story-evidence-scaffold: PASS"
-else
-  echo "story-evidence-scaffold: FAILED" >&2
-fi
-exit $rc
+report_end story-evidence-scaffold

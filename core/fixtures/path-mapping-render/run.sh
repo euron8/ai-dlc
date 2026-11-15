@@ -84,11 +84,9 @@ fi
 echo "HERMETIC-CONSUMED scripts/render-path-mapping.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-rc=0
 note() { printf '%s\n' "$*"; }
-# `bad` sets the variable this file exits on (rc).
-ok()  { note "ok    ${1-}"; }
-bad() { note "FAIL  ${1-}"; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
 if [ ! -f "$DIR/../lib/mutant.sh" ]; then echo "run.sh: no lib/mutant.sh beside $DIR" >&2; exit 2; fi
 # shellcheck source=/dev/null
@@ -223,11 +221,11 @@ fail_check() { # fail_check <name> <dir> <expected-cell>
   use "$d/scripts/render-path-mapping.sh"
   out="$(check_in "$d")"; rc_v=$?
   if [ "$rc_v" -eq 0 ]; then
-    note "FAIL  $n -- --check exited 0 on a broken input"; rc=1; return
+    bad "$n -- --check exited 0 on a broken input"; return
   fi
   if ! cell_red "$cell" "$out"; then
-    note "FAIL  $n -- --check failed, but not on its own assertion (wanted the $cell message)"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -5; rc=1; return
+    bad "$n -- --check failed, but not on its own assertion (wanted the $cell message)"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -5; return
   fi
   ok "$n -- fails on its own message"
 }
@@ -237,13 +235,13 @@ quiet_check() { # quiet_check <name> <dir>
   use "$d/scripts/render-path-mapping.sh"
   out="$(check_in "$d")"; rc_v=$?
   if [ "$rc_v" -ne 0 ] || ! grep -qF "$OK_TAIL" <<<"$out"; then
-    note "FAIL  $n -- a change that does not touch map_consumer() disturbed --check"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -6; rc=1; return
+    bad "$n -- a change that does not touch map_consumer() disturbed --check"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -6; return
   fi
-  note "ok    $n -- quiet, as a change outside map_consumer() must be"
+  ok "$n -- quiet, as a change outside map_consumer() must be"
 }
 
-seed_not_built() { note "FAIL  $1 -- the seed edit matched nothing; no broken-input world was built"; rc=1; }
+seed_not_built() { bad "$1 -- the seed edit matched nothing; no broken-input world was built"; }
 
 # --- controlA: the real repo ------------------------------------------------
 # The real renderer is sourced once, here; controlA, controlE and the cli-ok and cli-usage cells drive it before any
@@ -255,7 +253,7 @@ if outA="$( cd "$REPO" && rpm_main --check 2>&1 )" \
   # self-update -- the hook written to `.claude/git-hooks/pre-push`, an inert orphan, while
   # every gate went green because the live hook was never touched.
   if grep -qF '| `core/git-hooks/<x>` | `.githooks/<x>` |' "$SRC_SKILL"; then
-    note "ok    controlA   the committed region matches map_consumer(), git-hooks row present"
+    ok "controlA   the committed region matches map_consumer(), git-hooks row present"
   else
     note "FIXTURE BROKEN: --check passes on the real repo but the git-hooks row is not in SKILL.md."
     exit 1
@@ -273,11 +271,10 @@ e_root="$( ( cd "$REPO" && rpm_main --check ) 2>&1; echo "rc=$?" )"
 e_slash="$( ( cd / && rpm_main --check ) 2>&1; echo "rc=$?" )"
 e_tmp="$( ( cd "$TMP" && rpm_main --check ) 2>&1; echo "rc=$?" )"
 if [ "$e_root" = "$e_slash" ] && [ "$e_root" = "$e_tmp" ] && grep -qF "$OK_TAIL" <<<"$e_root"; then
-  note "ok    controlE   --check answers identically from the repo root, / and a temp dir"
+  ok "controlE   --check answers identically from the repo root, / and a temp dir"
 else
-  note "FAIL  controlE   --check is cwd-dependent, or did not pass from all three"
+  bad "controlE   --check is cwd-dependent, or did not pass from all three"
   printf 'root : %s\n/    : %s\ntmp  : %s\n' "$e_root" "$e_slash" "$e_tmp" | sed 's/^/      /' | head -9
-  rc=1
 fi
 
 # --- the cli cells (cells.decl): the renderer run as a PROGRAM once per distinct CLI outcome ---------------------
@@ -360,7 +357,7 @@ if [ -n "$c_bad" ]; then
   note "FIXTURE BROKEN: --write is not a region rewrite.$c_bad"
   exit 1
 fi
-note "ok    controlC   --write is idempotent and leaves everything outside the region alone"
+ok "controlC   --write is idempotent and leaves everything outside the region alone"
 
 # --- controlD: the sandbox's OWN map_consumer() is what gets rendered --------
 # The inserted arm exists in no real source in this repository, so its row can only come from
@@ -386,15 +383,15 @@ if seed_edit_awk "$(preclass_of "$TMP/controlD")" '
   d_probe="$(grep -nF '| `core/probe-marker/<x>` | `probe-dest/<x>` |' "$D_SKILL" | head -1 | cut -d: -f1)"
   d_catch="$(grep -nF '| `core/<x>` | `.claude/<x>` |' "$D_SKILL" | head -1 | cut -d: -f1)"
   if [ -z "$d_probe" ]; then
-    note "FAIL  controlD   the sandbox's own new arm did not render; the renderer read some other tree"
-    grep -n '^| ' "$D_SKILL" | sed 's/^/      /'; rc=1
+    bad "controlD   the sandbox's own new arm did not render; the renderer read some other tree"
+    grep -n '^| ' "$D_SKILL" | sed 's/^/      /'
   elif [ -z "$d_catch" ] || [ "$d_probe" -ge "$d_catch" ]; then
     # First match wins in a `case`, so a specific subtree rendered BELOW the catch-all is a
     # table that lies about precedence.
-    note "FAIL  controlD   the new arm rendered at or below the core/ catch-all; precedence is not source order"
-    grep -n '^| ' "$D_SKILL" | sed 's/^/      /'; rc=1
+    bad "controlD   the new arm rendered at or below the core/ catch-all; precedence is not source order"
+    grep -n '^| ' "$D_SKILL" | sed 's/^/      /'
   else
-    note "ok    controlD   a new arm renders from the sandbox's own source, above the catch-all"
+    ok "controlD   a new arm renders from the sandbox's own source, above the catch-all"
   fi
 else
   seed_not_built "controlD"
@@ -501,7 +498,4 @@ else
   quiet_check "n1 near-miss   a change to preclassify.sh outside map_consumer()" "$TMP/n1"
 fi
 
-if [ "$rc" -eq 0 ]; then
-  note "PASS  path-mapping-render -- 5 controls green, 6/6 broken-input worlds fail on their own message, near-miss quiet"
-fi
-exit "$rc"
+report_end path-mapping-render

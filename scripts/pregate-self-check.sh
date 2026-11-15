@@ -287,6 +287,47 @@ else
   note_fail "d:fork-budget"
 fi
 
+# THE PREDICTION, run at most once and read by sections e and f: $ROOT's scripts/predict-push-set.sh, the hook's own
+# composer, into $W/e/pred. P_OK=1 when it printed its `RUN <n>` line; $W/e/predrun then holds the units it would run.
+E_PRED="$ROOT/scripts/predict-push-set.sh"
+P_DONE=0; P_OK=0
+pred_once() {
+  [ "$P_DONE" = 1 ] && return 0
+  P_DONE=1
+  mkdir -p "$W/e" || exit 2
+  if [ -f "$E_PRED" ] && bash "$E_PRED" "$ROOT" "$W/e/pred" > "$W/e/pred.out" 2> "$W/e/pred.err" < /dev/null \
+     && grep -q '^RUN [0-9][0-9]*$' "$W/e/pred.out"; then
+    sed -n 's/^run //p' "$W/e/pred.out" | sort -u > "$W/e/predrun"; P_OK=1
+  fi
+}
+# THE SEED of one section's units, $1/torun, through this tree's seed-verdict-store.sh into the counted store a push
+# reads: one rc line per unit (a unit with none is a refusal), and any red is a finding under $4.
+seed_set() { # <section dir> <jobs> <unit count> <finding name>
+  local d="$1" j="$2" k="$3" s_rc s_red="" s_rec=0 n r
+  arm_start
+  if [ "$k" -gt 0 ]; then
+    bash "$SEED" --keep "$d/keep" --jobs "$j" ${d_dok:+"$d_dok"} $(cat "$d/torun") > "$d/seed" 2>&1
+    s_rc=$?
+  else
+    : > "$d/seed"; s_rc=0
+  fi
+  arm_took
+  while IFS= read -r n; do
+    r="$(sed -n "s/^${n} rc=\([0-9][0-9]*\)\$/\1/p" "$d/seed")"
+    [ -n "$r" ] || { printf '   cannot run: seed-verdict-store.sh (exit %s) gave %s no rc:\n' "$s_rc" "$n" >&2; tail -5 "$d/seed" | sed 's/^/     /' >&2; exit 2; }
+    printf '     %s rc=%s\n' "$n" "$r"
+    [ "$r" = 0 ] || s_red="$s_red $n"
+    grep -q "^hermetic-run: ${n}: verdict recorded in " "$d/keep/$n.out" 2>/dev/null && s_rec=$((s_rec + 1))
+  done < "$d/torun"
+  if [ -n "$s_red" ]; then
+    printf '   FAIL: red:%s\n' "$s_red"
+    grep -vE '^[A-Za-z0-9._-]+ rc=[0-9]+$|^counted store: ' "$d/seed" | tail -20 | sed 's/^/     /'
+    note_fail "$4"
+  else
+    printf '   ok: %s fixture(s) run green; %s pass(es) recorded in the counted store (%s)\n' "$k" "$s_rec" "$(sed -n 's/^counted store: //p' "$d/seed")"
+  fi
+}
+
 # --- (e) the hook-driving fixtures, when the diff touches a hook or a script a hook names (BL-1069) -------------
 # A change to either pre-push hook, or to a script either hook names, can break a fixture world that drives the
 # hook, and the gate finds that only in the bundle. So when the diff from the merge-base with <base> to the work
@@ -370,10 +411,8 @@ else
   # ONLY WHAT THE PUSH WOULD RUN: $ROOT's scripts/predict-push-set.sh decides with the hook's own composer which of
   # the set lack a counted pass on their current key rows; the rest reuse theirs, as the push does. With no
   # prediction the whole set runs, and the line says so.
-  E_PRED="$ROOT/scripts/predict-push-set.sh"
-  if [ -f "$E_PRED" ] && bash "$E_PRED" "$ROOT" "$W/e/pred" > "$W/e/pred.out" 2> "$W/e/pred.err" < /dev/null \
-     && grep -q '^RUN [0-9][0-9]*$' "$W/e/pred.out"; then
-    sed -n 's/^run //p' "$W/e/pred.out" | sort -u > "$W/e/predrun"
+  pred_once
+  if [ "$P_OK" = 1 ]; then
     awk 'NR == FNR { R[$0] = 1; next } ($0 in R)' "$W/e/predrun" "$W/e/set" > "$W/e/torun"
     e_k="$(awk 'END { print NR }' "$W/e/torun")"
     printf '   predict-push-set.sh: %s of %s hold a counted pass on their current key rows (reused); %s to run\n' \
@@ -384,29 +423,90 @@ else
     printf '   PREDICTION UNAVAILABLE (%s): running all %s\n' \
       "$( [ -f "$E_PRED" ] && { head -1 "$W/e/pred.err" 2>/dev/null; true; } || echo "no $E_PRED")" "$e_n"
   fi
-  arm_start
-  if [ "$e_k" -gt 0 ]; then
-    bash "$SEED" --keep "$W/e/keep" --jobs "$E_JOBS" ${d_dok:+"$d_dok"} $(cat "$W/e/torun") > "$W/e/seed" 2>&1
-    e_rc=$?
-  else
-    : > "$W/e/seed"; e_rc=0
+  seed_set "$W/e" "$E_JOBS" "$e_k" e:hook-fixtures
+fi
+
+# --- (f) every fixture the push would run that reaches a changed script (BL-1122, BL-1129) ----------------------
+# A change to a script's child starts moves the `<n> *` J3 row of EVERY fixture that runs the script, whether its
+# invocations.decl rows the child or not, and whether it names the script or sweeps its whole directory. So when the
+# diff from the merge-base with <base> to the work tree touches a `core/scripts/*.sh` or `scripts/*.sh` path (added,
+# modified or deleted), every fixture of predict-push-set's RUN set that reaches one runs here, through this tree's
+# seed-verdict-store.sh at AI_DLC_FIXTURE_JOBS, and any red is a finding. Every pass lands in the counted store, so the
+# push reuses it. The member set (a `<fx>@consumer` unit by its fixture's routes) is the RUN fixtures with any route:
+#   DIR       a D row of the composer's own parse (predict-push-set's out/.dparse, readset_decl_parse) is a directory
+#             holding a changed path;
+#   DECLFILE  an F row of that parse is a changed path;
+#   NAME      a shell file under core/fixtures/<fx>/ names a changed script's basename, bounded as section e bounds a
+#             name (a `/` before it is a directory prefix).
+# Units section e already ran are not run again. Its self-probe runs first, both directions. With no prediction, or a
+# non-empty RUN set and no parse, the section cannot know what the push measures: a refusal.
+printf '== f. fixtures that reach a changed script (when the diff touches core/scripts/*.sh or scripts/*.sh)\n'
+F_AWK='FILENAME == ARGV[1] { C[++nc] = $0; B[nc] = $0; sub(/.*\//, "", B[nc]); next }
+FILENAME == ARGV[2] { u = $0; b = u; sub(/@consumer$/, "", b); if (!(u in U)) { U[u] = 1; O[++no] = u; OB[no] = b; R[b] = 1 }; next }
+FILENAME == ARGV[3] { n = split($0, f, "\t"); if (n < 3 || !(f[1] in R)) next
+  for (i = 1; i <= nc; i++) {
+    if (f[2] == "D" && index(C[i], f[3] "/") == 1 && !((f[1], "D", f[3]) in G)) { G[f[1], "D", f[3]] = 1; why[f[1]] = why[f[1]] " DIR:" f[3] }
+    if (f[2] == "F" && C[i] == f[3] && !((f[1], "F", f[3]) in G)) { G[f[1], "F", f[3]] = 1; why[f[1]] = why[f[1]] " DECLFILE:" f[3] }
+  }
+  next }
+{ split(FILENAME, q, "/"); x = q[3]; if (q[1] != "core" || q[2] != "fixtures" || !(x in R)) next
+  for (i = 1; i <= nc; i++) if (!((x, "N", B[i]) in G) && named($0, B[i])) { G[x, "N", B[i]] = 1; why[x] = why[x] " NAME:" B[i] } }
+function named(t, p,   s, k, b, a) {
+  s = t
+  while ((k = index(s, p)) > 0) {
+    b = (k > 1) ? substr(s, k - 1, 1) : ""; a = substr(s, k + length(p), 1)
+    if (b !~ /[A-Za-z0-9_.-]/ && a !~ /[A-Za-z0-9_.-]/) return 1
+    s = substr(s, k + 1)
+  }
+  return 0
+}
+END { for (k = 1; k <= no; k++) if (OB[k] in why) print O[k] "\t" substr(why[OB[k]], 2) }'
+mkdir -p "$W/f/keep" "$W/f/probe/core/fixtures/fname" "$W/f/probe/core/fixtures/fnear" "$W/f/probe/core/fixtures/fout" || exit 2
+# The probe: fnear sorts LAST in the RUN set and carries every near-miss (a longer directory, a longer file name, a
+# longer basename on both sides); fout reaches x.sh by all three routes but is not in the RUN set.
+printf '%s\n' core/scripts/x.sh > "$W/f/probe.changed"
+printf '%s\n' fdir ffile fname fname@consumer fnear > "$W/f/probe.run"
+printf 'fdir\tN\nfdir\tD\tcore/scripts\t1\tcore/scripts\nffile\tF\tcore/scripts/x.sh\t0\tcore/scripts/x.sh\nfnear\tD\tcore/scriptsx\t1\tcore/scriptsx\nfnear\tF\tcore/scripts/x.shx\t1\tcore/scripts/x.shx\nfout\tD\tcore/scripts\t1\tcore/scripts\nfout\tF\tcore/scripts/x.sh\t1\tcore/scripts/x.sh\n' > "$W/f/probe.dparse"
+printf '%s\n' 'bash "$ROOT/core/scripts/x.sh" --check' > "$W/f/probe/core/fixtures/fname/run.sh"
+printf '%s\n' 'bash core/scripts/wx.sh' 'cat core/scripts/x.shy' > "$W/f/probe/core/fixtures/fnear/run.sh"
+printf '%s\n' 'bash core/scripts/x.sh' > "$W/f/probe/core/fixtures/fout/run.sh"
+f_probe="$( cd "$W/f/probe" && awk "$F_AWK" "$W/f/probe.changed" "$W/f/probe.run" "$W/f/probe.dparse" core/fixtures/fname/run.sh core/fixtures/fnear/run.sh core/fixtures/fout/run.sh | cut -f1 | tr '\n' ' ')"
+if [ "$f_probe" != "fdir ffile fname fname@consumer " ]; then
+  printf '   cannot run: the route matcher read "%s" on its seeded probe, expected "fdir ffile fname fname@consumer " -- it cannot be trusted on the RUN set\n' "$f_probe" >&2
+  exit 2
+fi
+git diff --name-only --no-renames "$E_MB" -- 'core/scripts/*.sh' 'scripts/*.sh' > "$W/f/changed" 2> "$W/f/err" \
+  || { printf 'pregate-self-check: git diff against %s failed: %s\n' "$E_MB" "$(head -1 "$W/f/err")" >&2; exit 2; }
+f_nc="$(awk 'END { print NR }' "$W/f/changed")"
+if [ "$f_nc" -eq 0 ]; then
+  printf '   SKIPPED: the diff from %s touches no core/scripts/*.sh or scripts/*.sh path\n' "$(git rev-parse --short "$E_MB")"
+else
+  printf '   %s changed script(s): %s\n' "$f_nc" "$(tr '\n' ' ' < "$W/f/changed")"
+  pred_once
+  [ "$P_OK" = 1 ] || { printf '   cannot run: no prediction of the RUN set (%s), so the fixtures a push measures are unknown\n' \
+    "$( [ -f "$E_PRED" ] && { head -1 "$W/e/pred.err" 2>/dev/null; true; } || echo "no $E_PRED")" >&2; exit 2; }
+  f_run="$(awk 'END { print NR }' "$W/e/predrun")"
+  if [ "$f_run" -gt 0 ] && [ ! -f "$W/e/pred/out/.dparse" ]; then
+    printf '   cannot run: predict-push-set.sh named %s RUN unit(s) but wrote no parse (%s), so no DIR or DECLFILE route can be read\n' "$f_run" "$W/e/pred/out/.dparse" >&2
+    exit 2
   fi
-  arm_took
-  e_red=""; e_rec=0
-  while IFS= read -r n; do
-    r="$(sed -n "s/^${n} rc=\([0-9][0-9]*\)\$/\1/p" "$W/e/seed")"
-    [ -n "$r" ] || { printf '   cannot run: seed-verdict-store.sh (exit %s) gave %s no rc:\n' "$e_rc" "$n" >&2; tail -5 "$W/e/seed" | sed 's/^/     /' >&2; exit 2; }
-    printf '     %s rc=%s\n' "$n" "$r"
-    [ "$r" = 0 ] || e_red="$e_red $n"
-    grep -q "^hermetic-run: ${n}: verdict recorded in " "$W/e/keep/$n.out" 2>/dev/null && e_rec=$((e_rec + 1))
-  done < "$W/e/torun"
-  if [ -n "$e_red" ]; then
-    printf '   FAIL: red:%s\n' "$e_red"
-    grep -vE '^[A-Za-z0-9._-]+ rc=[0-9]+$|^counted store: ' "$W/e/seed" | tail -20 | sed 's/^/     /'
-    note_fail "e:hook-fixtures"
-  else
-    printf '   ok: %s fixture(s) run green; %s pass(es) recorded in the counted store (%s)\n' "$e_k" "$e_rec" "$(sed -n 's/^counted store: //p' "$W/e/seed")"
-  fi
+  if [ -f "$W/e/pred/out/.dparse" ]; then cp "$W/e/pred/out/.dparse" "$W/f/dparse" || exit 2; else : > "$W/f/dparse"; fi
+  sed 's/@consumer$//' "$W/e/predrun" | sort -u | sed 's|.*|core/fixtures/&/*.sh|' > "$W/f/globs"
+  set -f
+  if [ -s "$W/f/globs" ]; then git ls-files -- $(cat "$W/f/globs") > "$W/f/sh" || { set +f; exit 2; }; else : > "$W/f/sh"; fi
+  awk "$F_AWK" "$W/f/changed" "$W/e/predrun" "$W/f/dparse" $(cat "$W/f/sh") > "$W/f/sel" || { set +f; exit 2; }
+  set +f
+  f_sel="$(awk 'END { print NR }' "$W/f/sel")"
+  : > "$W/f/done"; [ -f "$W/e/torun" ] && cp "$W/e/torun" "$W/f/done"
+  # Keyed on FILENAME, never NR == FNR: an empty done file (section e ran nothing) would read the selection as itself.
+  cut -f1 "$W/f/sel" | awk 'FILENAME == ARGV[1] { D[$0] = 1; next } !($0 in D)' "$W/f/done" - > "$W/f/torun"
+  f_k="$(awk 'END { print NR }' "$W/f/torun")"
+  F_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
+  printf '   predict-push-set.sh: %s of %s RUN unit(s) reach a changed script (DIR %s, DECLFILE %s, NAME %s); %s already run in section e; %s to run, %s-way\n' \
+    "$f_sel" "$f_run" "$(grep -c 'DIR:' "$W/f/sel")" "$(grep -c 'DECLFILE:' "$W/f/sel")" "$(grep -c 'NAME:' "$W/f/sel")" \
+    "$((f_sel - f_k))" "$f_k" "$F_JOBS"
+  awk -F'\t' '{ printf "     %s  %s\n", $1, $2 }' "$W/f/sel"
+  seed_set "$W/f" "$F_JOBS" "$f_k" f:reached-fixtures
 fi
 
 printf '\n'

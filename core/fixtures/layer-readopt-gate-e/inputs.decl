@@ -15,3 +15,4 @@ core/fixtures/layer-readopt-gate-d/run.sh
 # The coverage join reads each DIST_SHARDS shard's .dist-only marker (present, non-empty) in the distribution.
 core/fixtures/layer-readopt-gate-b/.dist-only
 core/fixtures/layer-readopt-gate-d/.dist-only
+core/fixtures/lib/report.sh

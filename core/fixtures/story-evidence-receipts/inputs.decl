@@ -13,3 +13,4 @@ core/scripts/
 !core/fixtures/story-evidence-scaffold/receipt-bl843.sh
 !core/fixtures/story-evidence-scaffold/receipt-bl845.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh

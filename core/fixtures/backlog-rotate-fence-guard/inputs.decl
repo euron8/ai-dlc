@@ -8,3 +8,4 @@ VERSION
 scripts/backlog-reverify.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
 scripts/backlog-receipt-lib.sh
+core/fixtures/lib/report.sh

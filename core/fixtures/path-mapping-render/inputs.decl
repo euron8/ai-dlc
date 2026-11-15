@@ -6,3 +6,4 @@ VERSION
 core/skills/ai-dlc-update/SKILL.md
 core/skills/ai-dlc-update/reconcile/preclassify.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/report.sh

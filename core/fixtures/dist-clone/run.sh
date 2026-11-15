@@ -56,9 +56,8 @@ fi
 W="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 W="$(cd "$W" && pwd -P)"
 trap 'chmod -R u+w "$W" 2>/dev/null; rm -rf "$W"' EXIT
-FAILS=0
-ok()  { echo "ok   $1"; }
-bad() { echo "FAIL $1"; FAILS=$((FAILS+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 G() { git -c user.name=fx -c user.email=fx@fx -c commit.gpgsign=false "$@"; }
@@ -246,8 +245,8 @@ grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJ"; _gx=$?
 [ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
 [ "$_gx" -ne 0 ] || w_guard=1
 if [ "$w_def$w_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
-if [ "$w_def" = 0 ]; then bad "$SUBJ carries the column-0 source guard but no \`dcl_main() {\` line -- a respelled subject this fixture cannot drive"; echo "FAILED dist-clone: $FAILS"; exit 1; fi
-if [ "$w_guard" = 0 ]; then bad "$SUBJ defines \`dcl_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run dcl_main in this shell"; echo "FAILED dist-clone: $FAILS"; exit 1; fi
+if [ "$w_def" = 0 ]; then bad "$SUBJ carries the column-0 source guard but no \`dcl_main() {\` line -- a respelled subject this fixture cannot drive"; report_end dist-clone; fi
+if [ "$w_guard" = 0 ]; then bad "$SUBJ defines \`dcl_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run dcl_main in this shell"; report_end dist-clone; fi
 suite "$SUBJ" "$W/real"
 while read -r st id msg; do
   if [ "$st" = ok ]; then ok "$id $msg"; else bad "$id $msg"; fi
@@ -303,5 +302,4 @@ n="$(grep -cF -- 'ZZ-NEVER-IN-SKILL-ZZ' "$SKILL")" || n=0
 [ "$n" -eq 0 ] && ok "DCP control: an impossible phrase is absent from SKILL.md" || bad "DCP control matched $n"
 
 
-if [ "$FAILS" -eq 0 ]; then echo "PASS dist-clone"; exit 0; fi
-echo "FAILED dist-clone: $FAILS"; exit 1
+report_end dist-clone

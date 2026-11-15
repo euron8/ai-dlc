@@ -30,13 +30,14 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/report.sh"
+. "$HERE/../lib/pool-span.sh" || { echo "FIXTURE BROKEN: cannot source lib/pool-span.sh" >&2; exit 2; }
 HOOK=".githooks/pre-push"
 [ -f "$HOOK" ] || { echo "FIXTURE BROKEN: $HOOK not found (run from the repo root)" >&2; exit 2; }
 echo "HERMETIC-CONSUMED .githooks/pre-push"
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "presuite-units: FIXTURE BROKEN" >&2; exit 2; }
 WORK="$(mktemp -d)" || broken "mktemp failed"
 trap 'rm -rf "$WORK"' EXIT
-sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$HOOK" > "$WORK/pool.sh"
+pool_span "$HOOK" "$WORK/pool.sh" FIXTURE_POOL || broken "pool_span could not extract the FIXTURE_POOL span from $HOOK"
 sed -n '/^# PRESUITE_UNITS_BEGIN$/,/^# PRESUITE_UNITS_END$/p' "$HOOK" > "$WORK/psu.sh"
 for _s in pool psu; do [ "$(grep -c . "$WORK/$_s.sh")" -gt 20 ] || broken "the $_s span did not extract from $HOOK"; done
 grep -q '^ps_flush() {$' "$WORK/psu.sh" && grep -q '^readset_keys() {' "$WORK/pool.sh" || broken "the spans do not hold ps_flush and readset_keys"

@@ -120,10 +120,8 @@ for f in "$VALIDATOR" "$SYNC" "$SCHEMA" "$ROLE"; do
     [ -e "$f" ] || { echo "FIXTURE BROKEN: the sandbox copy is missing $f" >&2; exit 2; }
 done
 
-PASS=0
-FAIL=0
-ok()   { PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; }
-bad()  { FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "$1" >&2; }
+# shellcheck source=/dev/null
+. "$FIXTURE_DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # ---------------------------------------------------------------------------------------
 # V1. THE ROUND TRIP. Lift the example adversary.md TEACHES, feed it to the parser the gate
@@ -351,6 +349,4 @@ if ! bash "$SYNC" --check >/dev/null 2>&1; then
 fi
 
 echo ""
-echo "taught-schema: ${PASS} passed, ${FAIL} failed."
-[ "$FAIL" -eq 0 ] || exit 1
-exit 0
+report_end taught-schema

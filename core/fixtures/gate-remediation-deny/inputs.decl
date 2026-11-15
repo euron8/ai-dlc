@@ -20,3 +20,4 @@ core/team-roles/remediator.md
 core/scripts/validate-adversarial-convergence.sh
 # lib/ carries preamble.sh, sourced by run.sh.
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh

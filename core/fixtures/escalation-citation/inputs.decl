@@ -3,3 +3,4 @@
 core/scripts/validate-steering-budget.sh
 core/scripts/validate-suppression-lifetime.sh
 !core/scripts/validate-escalation-resolution.sh
+core/fixtures/lib/report.sh

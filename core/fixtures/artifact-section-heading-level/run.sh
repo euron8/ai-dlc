@@ -83,11 +83,11 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/retro.md"
 STEP_HEADING='4a. Close-Out Sweep'
 ARTIFACT_RE='^#{3,6}[[:space:]]+`## Machine Audits`'
 
-FAILURES=0
-ASSERTIONS=0
-
-ok()   { ASSERTIONS=$((ASSERTIONS + 1)); printf '  ok    %-34s %s\n' "$1" "${2-}"; }
-bad()  { ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %-34s %s\n' "$1" "${2-}"; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# okm/badm: the two-column assertion line (name, detail) through report.sh's ok/bad.
+okm()  { local m; printf -v m '%-34s %s' "$1" "${2-}"; ok "$m"; }
+badm() { local m; printf -v m '%-34s %s' "$1" "${2-}"; bad "$m"; }
 
 # heading_line <file> -> 1-indexed line number of the artifact heading, empty if absent
 heading_line() { grep -nE "$ARTIFACT_RE" "$1" | head -1 | cut -d: -f1; }
@@ -110,24 +110,24 @@ echo "── subject: $STEPS  (source: $SUBJ_SRC)"
 # step is gone, arm 2 cannot fire and its silence would read exactly like a pass.
 hl="$(heading_line "$STEPS")"
 if [ -n "$hl" ]; then
-  ok "artifact-heading-present" "\`## Machine Audits\` heading at line $hl"
+  okm "artifact-heading-present" "\`## Machine Audits\` heading at line $hl"
 else
-  bad "artifact-heading-present" "no heading matching $ARTIFACT_RE — arm 2 below cannot fire, so its silence proves nothing"
+  badm "artifact-heading-present" "no heading matching $ARTIFACT_RE — arm 2 below cannot fire, so its silence proves nothing"
 fi
 set -- $(span_of "$STEP_HEADING" < "$STEPS")
 S="${1:-}"; E="${2:-}"
 if [ -n "$S" ] && [ -n "$E" ]; then
-  ok "step-span-resolves" "span_of '$STEP_HEADING' = $S $E"
+  okm "step-span-resolves" "span_of '$STEP_HEADING' = $S $E"
 else
-  bad "step-span-resolves" "span_of returned nothing for '$STEP_HEADING' — the oracle is dead, not the property satisfied"
+  badm "step-span-resolves" "span_of returned nothing for '$STEP_HEADING' — the oracle is dead, not the property satisfied"
 fi
 
 # --- ARM 2: the property itself, ABSENCE-shaped ---
 verdict="$(swallowed "$STEPS")"
 case "$verdict" in
-  no)  ok  "artifact-not-swallowed" "the heading sits OUTSIDE $S..$E, so a shadow of '$STEP_HEADING' does not displace it" ;;
-  yes) bad "artifact-not-swallowed" "the heading is INSIDE $S..$E — every consumer override shadowing '$STEP_HEADING' silently displaces the artifact's definition. Promote it to a sibling heading one level shallower." ;;
-  *)   bad "artifact-not-swallowed" "could not decide (heading or span unresolvable) — a check that cannot fire reads exactly like one that passed" ;;
+  no)  okm "artifact-not-swallowed" "the heading sits OUTSIDE $S..$E, so a shadow of '$STEP_HEADING' does not displace it" ;;
+  yes) badm "artifact-not-swallowed" "the heading is INSIDE $S..$E — every consumer override shadowing '$STEP_HEADING' silently displaces the artifact's definition. Promote it to a sibling heading one level shallower." ;;
+  *)   badm "artifact-not-swallowed" "could not decide (heading or span unresolvable) — a check that cannot fire reads exactly like one that passed" ;;
 esac
 
 # --- THE SPRINT-SHIP SLICER. Each is a pure helper of its arguments and of $STEPS-shaped files; arms 5-9 below call them.
@@ -182,9 +182,9 @@ ss_txt="$(ss_norm "$ss_raw")"
 
 # --- ARM 5: the span resolves and is IN BAND -------------------------------------------
 if [ "$ss_lines" -gt 0 ] && [ "$ss_lines" -le "$SS_BAND_MAX" ]; then
-  ok "ss-span-band" "'$SS_START' span is $ss_lines lines (band 1..$SS_BAND_MAX)"
+  okm "ss-span-band" "'$SS_START' span is $ss_lines lines (band 1..$SS_BAND_MAX)"
 else
-  bad "ss-span-band" "span is $ss_lines lines, outside 1..$SS_BAND_MAX — the range ran past its terminator, and every content assertion below it is satisfied by the rest of the file rather than by this section"
+  badm "ss-span-band" "span is $ss_lines lines, outside 1..$SS_BAND_MAX — the range ran past its terminator, and every content assertion below it is satisfied by the rest of the file rather than by this section"
 fi
 
 # --- ARM 6: the CONTROL, run against the same extraction in the same invocation ---------
@@ -194,25 +194,25 @@ fi
 ss_ctl="$(ss_cF 'consecutive-no-regression' "$ss_txt")"
 ss_ctl2="$(ss_cF 'dual-counter: consecutive-deploy-clean:' "$ss_txt")"
 if [ "$ss_ctl" -gt 0 ] && [ "$ss_ctl2" -gt 0 ]; then
-  ok "ss-control" "the span still names both counters and the template line ($ss_ctl/$ss_ctl2) — the extraction ran"
+  okm "ss-control" "the span still names both counters and the template line ($ss_ctl/$ss_ctl2) — the extraction ran"
 else
-  bad "ss-control" "the span names consecutive-no-regression $ss_ctl time(s) and the dual-counter template $ss_ctl2 time(s); at zero the section has been restructured and the arms below assert nothing about it"
+  badm "ss-control" "the span names consecutive-no-regression $ss_ctl time(s) and the dual-counter template $ss_ctl2 time(s); at zero the section has been restructured and the arms below assert nothing about it"
 fi
 
 # --- ARM 7: the DEFECT is gone, read through any wrap ----------------------------------
 ss_def="$(ss_cF 'EITHER counter reaches 5/5' "$ss_txt")"
 if [ "$ss_def" -eq 0 ]; then
-  ok "ss-disjunction-gone" "the bare 'EITHER counter reaches 5/5' does not appear in the normalised span"
+  okm "ss-disjunction-gone" "the bare 'EITHER counter reaches 5/5' does not appear in the normalised span"
 else
-  bad "ss-disjunction-gone" "the span still declares a sprint ship-quality when EITHER counter reaches 5/5 — a smoke FAIL carried across a sprint boundary pins consecutive-deploy-clean at 0 forever while the loose counter climbs, and the sprint is declared ship-quality with the FAIL live"
+  badm "ss-disjunction-gone" "the span still declares a sprint ship-quality when EITHER counter reaches 5/5 — a smoke FAIL carried across a sprint boundary pins consecutive-deploy-clean at 0 forever while the loose counter climbs, and the sprint is declared ship-quality with the FAIL live"
 fi
 
 # --- ARM 8: the CONJUNCTION REGRESSION is convicted by name ----------------------------
 ss_conj="$(ss_cE '(BOTH counters reach|both counters reach|only when BOTH)' "$ss_txt")"
 if [ "$ss_conj" -eq 0 ]; then
-  ok "ss-not-a-conjunction" "the span does not require BOTH counters at 5/5"
+  okm "ss-not-a-conjunction" "the span does not require BOTH counters at 5/5"
 else
-  bad "ss-not-a-conjunction" "the span requires BOTH counters to reach 5/5. That is not a stricter spelling of the fix, it is a wedge: the reference consumer ran an essentially unbroken sequence of sprints at consecutive-deploy-clean 0/5 on a pre-existing FAIL it could not fix, and a conjunction blocks every one of their ship-quality declarations. The required shape is a QUALIFIED disjunction."
+  badm "ss-not-a-conjunction" "the span requires BOTH counters to reach 5/5. That is not a stricter spelling of the fix, it is a wedge: the reference consumer ran an essentially unbroken sequence of sprints at consecutive-deploy-clean 0/5 on a pre-existing FAIL it could not fix, and a conjunction blocks every one of their ship-quality declarations. The required shape is a QUALIFIED disjunction."
 fi
 
 # --- ARM 9: the QUALIFICATION is present, as three separate properties -----------------
@@ -224,15 +224,10 @@ ss_strict="$(ss_cE 'consecutive-deploy-clean`?[^.]*(on its own|alone)' "$ss_txt"
 ss_loose="$(ss_cE 'consecutive-no-regression`?[^.]*(only where|only when|sufficient only)' "$ss_txt")"
 ss_carry="$(ss_cE 'carry-over|carried over' "$ss_txt")"
 if [ "$ss_strict" -gt 0 ] && [ "$ss_loose" -gt 0 ] && [ "$ss_carry" -gt 0 ]; then
-  ok "ss-qualified" "the strict counter declares ship-quality alone, the loose one only conditionally, and the condition is a recorded carry-over"
+  okm "ss-qualified" "the strict counter declares ship-quality alone, the loose one only conditionally, and the condition is a recorded carry-over"
 else
-  bad "ss-qualified" "the span does not carry the qualified disjunction (strict-alone=$ss_strict loose-conditional=$ss_loose carry-over-record=$ss_carry, each wanted >0) — without all three the two counters carry equal authority again"
+  badm "ss-qualified" "the span does not carry the qualified disjunction (strict-alone=$ss_strict loose-conditional=$ss_loose carry-over-record=$ss_carry, each wanted >0) — without all three the two counters carry equal authority again"
 fi
 
 echo
-if [ "$FAILURES" -gt 0 ]; then
-  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
-  exit 1
-fi
-echo "PASS: all $ASSERTIONS assertions correct."
-exit 0
+report_end artifact-section-heading-level

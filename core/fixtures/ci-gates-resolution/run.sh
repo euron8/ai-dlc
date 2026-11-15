@@ -52,9 +52,8 @@ run_ci() { # run_ci <validator> <surface> [alias-table]
   echo "$?"
 }
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 echo "ci-gates-resolution:"
 
 # ==================== A. EXAMINED NOTHING = exit 78 ==========================
@@ -305,6 +304,4 @@ fi
 
 
 echo
-[ "$fails" -eq 0 ] && { echo "ci-gates-resolution: PASS"; exit 0; }
-echo "ci-gates-resolution: $fails assertion(s) violated." >&2
-exit 1
+report_end ci-gates-resolution

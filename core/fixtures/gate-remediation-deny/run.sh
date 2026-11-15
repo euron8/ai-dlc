@@ -52,9 +52,8 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq absent; every arm wou
 echo "gate-remediation-deny: resolved subject = $(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-gate-remediation-guard.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\\n' "$1"; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 
 # Drive the PreToolUse hook. `agent` empty => the LEAD (the harness omits agent_id
@@ -1900,6 +1899,4 @@ rm -rf "$RR" "$RR_BASE"
 
 
 echo
-if [ "$fails" -eq 0 ]; then echo "gate-remediation-deny: PASS"; exit 0; fi
-echo "gate-remediation-deny: $fails assertion(s) FAILED" >&2
-exit 1
+report_end gate-remediation-deny

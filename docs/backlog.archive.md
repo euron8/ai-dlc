@@ -44878,3 +44878,48 @@ Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b; id allocated 
 
 verify: manual
 
+## BL-1122 — a fixture that reaches a changed validator through a directory sweep is missing from a builder's per-file set of rows to re-measure
+
+**DEFECT.** Filed 2026-11-15. Owner: `scripts/pregate-self-check.sh`, `scripts/predict-push-set.sh`.
+
+**LANDED (v0.1138.0).** `scripts/pregate-self-check.sh` section f runs, through `scripts/seed-verdict-store.sh` at `AI_DLC_FIXTURE_JOBS`, every unit of predict-push-set's RUN set that reaches a `core/scripts/*.sh` or `scripts/*.sh` path which the diff from the merge-base adds, modifies or deletes. A unit reaches a path by a D row (DIR) or an F row (DECLFILE) of the composer's own parse, which predict-push-set already leaves in its out dir as `out/.dparse` (`readset_decl_parse`), so no second inputs.decl derivation is built; or by a bounded basename in its shell files (NAME, BL-1129). A red is the finding `f:reached-fixtures`. `scripts/predict-push-set.sh` needed no change. The prediction now runs once and is shared by sections e and f. The section's self-probe runs first, in both directions. Shipping code on B11's red tree d594c01f2 against 39184970b (`AI_DLC_PREGATE_ROOT`, `--member`, a stub seeder): 10 changed scripts, and 28 of 40 RUN units selected (DIR 7, DECLFILE 20, NAME 21), procsub-staged-refusal (DIR + NAME) and validator-path-resolution (DIR + NAME) among them. The base-vs-base control (base d594c01f2) read SKIPPED, 0 selected. Fixture: receipt world Fs (one unit per route, a near-miss of each, and a non-RUN unit that reaches all three), plus Tn (a changed script that no RUN unit reaches).
+
+A builder that changes a validator re-measures the J3 rows of the fixtures that name the validator. A fixture that sweeps the directory never names it. validator-path-resolution runs every `core/scripts/*.sh` bare, through `for f in "$SRC"/*.sh` (`run.sh:113`, `:398`), and declares `!core/scripts/` whole.
+
+Evidence:
+- At 39184970b, `validate-artifact-budget` occurs 0 times in its run.sh. The control: budget-summary-verdict names it in 3 files.
+- B10's first push went red on this fixture alone, after a 19m19s gate: J3 `row "343 *"` measured 328, with all 125 assertions passing. B10 edited 15 fixtures' invocations.decl, and this one was not among them. The re-cut moved the row to 328, because the deleted self-probe of `validate-artifact-budget.sh` had started `wait-for-deliverable.sh` 3 times per bare run.
+- The hook's composer would run the fixture: a whole-directory `!` row matches. The gap is only in what the builder re-measures before handing over.
+- At 39184970b, 26 fixtures declare a whole `core/scripts/` or `scripts/` directory in inputs.decl, against 160 that declare a file under `core/scripts/`.
+
+Related, not a duplicate: BL-1085 (WITHDRAWN) covered READY acceptance of the pregate record and the predicted set. It did not cover which rows a validator change moves.
+
+Fix: build no second inputs.decl derivation. `scripts/predict-push-set.sh` already prints the hook composer's `RUN` set, and that set includes validator-path-resolution through its `!core/scripts/` row. Have `scripts/pregate-self-check.sh` re-measure the J3 rows of the RUN-set fixtures that reach a changed `core/scripts/` or `scripts/` validator only through a whole-directory row; a builder's name grep misses exactly these. It should refuse a tree on which one of them reads a row other than its committed one. Measure the false-positive set on B10's tree before shipping.
+
+Provenance: batch 257, wave 4, filed by ai-dlc-a8 on lead ai-dlc-35's B10 red (rulings log 08:44); id allocated by the lead.
+
+verify: manual
+
+## BL-1129 — a change to a script's child-start count moves the `*` row of every fixture that runs the script, and no pre-push step re-measures a fixture with no row for the child
+
+**DEFECT.** Filed 2026-11-15. Owner: `scripts/pregate-self-check.sh`.
+
+**LANDED (v0.1138.0).** Shipped as BL-1122's section f, whose NAME route is this entry's fix: a RUN unit whose shell files name a changed script's basename runs counted before the push, whether or not its invocations.decl rows the child. On B11's red tree (d594c01f2 against 39184970b, shipping code) consumer-machinery-inventory is selected (DECLFILE + NAME), and so is backlog-receipt-traced-removal (DECLFILE + NAME); all three B11 `*` reds and the fourth red fire. Cost: the counted runs move from the push to pregate; they are not added to it. B11's diff reached 109 of 295 fixtures before the RUN intersection (a pre-build probe). Against the store as it stands, the shipping run selects 28 of the 40 RUN units. Pregate now also runs predict-push-set on every diff that touches a script; before, it ran only when section e triggered. Section f runs the push's own counted run, so a red at f is a red at the push, and no false positive refuses a tree. The over-selection is cost: on B11, 28 units selected against the 4 the push redded. B10's tree, which BL-1122 names for the false-positive measurement, was available and was not measured. The trigger excludes non-`.sh` files under `core/scripts/` and `scripts/`, and every path outside them, `core/fixtures/lib/` included.
+
+The `<n> *` J3 row counts every bash start in a fixture. A change that stops a script starting a child, or starts a new one, moves the `*` row of every fixture that runs the script. This includes fixtures with no `invocations.decl` row for the child. A builder re-measures the fixtures whose `invocations.decl` names the changed script, and that grep misses these. Pregate's only counted runs are step d (validator-fork-budget, `scripts/pregate-self-check.sh:266`) and step e (the hook-driving fixtures that are also in predict-push-set's RUN set, `:389`). So nothing before the push measures them.
+
+Evidence, B11 (0.1135.0). 61's BL-878 change made `core/scripts/validate-layer-entries.sh` source `core/scripts/artifact-path-config.sh` (`lc_apc`/`apc_main`) instead of starting `bash` on it 3 times per run. The first B11 push went red on 4 fixtures, all J3 count drift (rulings log `b257-rulings.md:1222`). All 4 were in the squash's predict-push-set RUN list (RUN 107, CONSUMER 76). None names a pre-push hook in its shell files, so step e did not run them; 32 fixtures' run.sh do name one. Three of the reds are this shape:
+- procsub-staged-refusal `147 *` measured 132. This one is measured: counted runs through the hook's `fxcount_arm` read 132 at the tip and 147 on a scratch copy of the tip with the two scripts reverted to base (ai-dlc-e9, `b257-rulings.md:1224`). Its `invocations.decl` has no row for either script, and its `inputs.decl` declares `core/scripts/` whole.
+- consumer-machinery-inventory `53 *` measured 14. This one is attributed to the same change by routing, not separately measured (`:1222`, `:1224`). Its `inputs.decl` names both scripts as files (`!core/scripts/validate-layer-entries.sh`, `core/scripts/artifact-path-config.sh`), with no whole-directory row. Its `invocations.decl` rows `validate-layer-entries.sh` (1 row) but not `artifact-path-config.sh` (0 rows).
+- validator-path-resolution `328 *` measured 322. This is a net of two B11 changes: it runs every `core/scripts/*.sh` bare, and B11 also added `core/scripts/resolve-cited-paths.sh`.
+
+Why this is not BL-1122. BL-1122's fix re-measures the RUN-set fixtures that reach a changed validator only through a whole-directory `inputs.decl` row. That covers procsub-staged-refusal and validator-path-resolution. It does not cover consumer-machinery-inventory, which declares both scripts by file, so BL-1122's population excludes it. Its shape is the fan-out change itself: a child-start count moved in a script it names, and it has no row for the child.
+
+Measured population at d619fe62a. 16 fixtures' run.sh name `validate-layer-entries.sh`. 9 row `artifact-path-config.sh` in `invocations.decl`, and all 9 were edited by B11's members. Of the 7 that do not, 2 had their `*` row moved (consumer-machinery-inventory, procsub-staged-refusal). The other 5 kept theirs (extract-push-flag-decision, hermetic-consumption, layer-crosswalk-home, self-update-join-gate, shell-portability). So a run.sh name grep over-selects by 5 of 7 on this change.
+
+Fix: in pregate, take predict-push-set's RUN set (step e already reads it) and seed every member whose shell files name a script the diff changed, through `scripts/seed-verdict-store.sh` (the counted store a push reads). Any red is a finding. Measure the false-positive set on B11's tree before shipping. This builds no second inputs.decl derivation. It should share BL-1122's selection, which covers the whole-directory half.
+
+Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b from the B11 red; id allocated by the lead.
+
+verify: manual
+

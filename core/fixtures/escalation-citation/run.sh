@@ -38,36 +38,30 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALI
 
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 trap 'rm -rf "$ROOT"' EXIT
-FAIL=0; N=0
-
-# ok/bad in this fixture's own line format, the first word of the message being the label column.
-ok()  { printf '  ok   %-30s %s\n' "${1%% *}" "${1#* }"; }
-bad() {
-  FAIL=$((FAIL + 1))
-  case "$1" in
-    "FIXTURE BROKEN"*) printf '  FAIL %s\n' "$1" ;;
-    *) printf '  FAIL %-30s %s\n' "${1%% *}" "${1#* }" ;;
-  esac
-}
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# okf/badf <format> [<arg>...]: one ok/bad line whose message is printf-formatted (the label columns).
+okf()  { local _m; printf -v _m "$@"; ok "$_m"; }
+badf() { local _m; printf -v _m "$@"; bad "$_m"; }
 
 # $1 pending-file  $2 sprint  $3 transcript-basename (or "")  $4 want-exit  $5 why  $6 optional validator
 # Returns 0 when the arm held, 1 when it did not.
 g() {
-  local f="$1" sp="$2" t="$3" want="$4" why="$5" v="${6:-$VALIDATOR}"; N=$((N + 1))
+  local f="$1" sp="$2" t="$3" want="$4" why="$5" v="${6:-$VALIDATOR}"
   local args=(--escalations "$ROOT/$f" --sprint "$sp")
   [ -n "$t" ] && args+=(--transcript "$ROOT/$t")
   local out got
   out="$(bash "$v" "${args[@]}" 2>&1)"; got=$?
-  if [ "$got" -eq "$want" ]; then printf '  ok   %-22s exit=%s  (%s)\n' "$f/${t:-none}" "$got" "$why"; return 0
-  else FAIL=$((FAIL + 1)); printf '  FAIL %-22s exit=%s want=%s  (%s)\n' "$f/${t:-none}" "$got" "$want" "$why"; printf '%s\n' "$out" | sed 's/^/       | /'; return 1; fi
+  if [ "$got" -eq "$want" ]; then okf '%-22s exit=%s  (%s)' "$f/${t:-none}" "$got" "$why"; return 0
+  else badf '%-22s exit=%s want=%s  (%s)' "$f/${t:-none}" "$got" "$want" "$why"; printf '%s\n' "$out" | sed 's/^/       | /'; return 1; fi
 }
 says() {
-  local f="$1" sp="$2" t="$3"; shift 3; N=$((N + 1))
+  local f="$1" sp="$2" t="$3"; shift 3
   local out miss=""
   out="$(bash "$VALIDATOR" --escalations "$ROOT/$f" --sprint "$sp" --transcript "$ROOT/$t" 2>&1)"
   local w; for w in "$@"; do grep -qF -- "$w" <<<"$out" || miss="$miss [$w]"; done
-  if [ -z "$miss" ]; then printf '  ok   %-22s message names the cause\n' "$f(msg)"; return 0
-  else FAIL=$((FAIL + 1)); printf '  FAIL %-22s missing:%s\n' "$f(msg)" "$miss"; return 1; fi
+  if [ -z "$miss" ]; then okf '%-22s message names the cause' "$f(msg)"; return 0
+  else badf '%-22s missing:%s' "$f(msg)" "$miss"; return 1; fi
 }
 
 echo "escalation-citation proof (Check 2)"
@@ -89,14 +83,14 @@ g pending-real.md        50 ""             1 "gate fail-closed: real citation bu
 # $1 pending  $2 sprint  $3 dir-or-""  $4 single-transcript-or-""  $5 want-exit  $6 why
 # $7 optional validator override, so the control copy below reuses exactly these assertions.
 gx() {
-  local f="$1" sp="$2" d="$3" t="$4" want="$5" why="$6" v="${7:-$VALIDATOR}"; N=$((N + 1))
+  local f="$1" sp="$2" d="$3" t="$4" want="$5" why="$6" v="${7:-$VALIDATOR}"
   local args=(--escalations "$ROOT/$f" --sprint "$sp")
   [ -n "$t" ] && args+=(--transcript "$ROOT/$t")
   [ -n "$d" ] && args+=(--transcript-dir "$ROOT/$d")
   local out got
   out="$(bash "$v" "${args[@]}" 2>&1)"; got=$?
-  if [ "$got" -eq "$want" ]; then printf '  ok   %-26s exit=%s  (%s)\n' "$f" "$got" "$why"; return 0
-  else FAIL=$((FAIL + 1)); printf '  FAIL %-26s exit=%s want=%s  (%s)\n' "$f" "$got" "$want" "$why"; printf '%s\n' "$out" | sed 's/^/       | /'; return 1; fi
+  if [ "$got" -eq "$want" ]; then okf '%-26s exit=%s  (%s)' "$f" "$got" "$why"; return 0
+  else badf '%-26s exit=%s want=%s  (%s)' "$f" "$got" "$want" "$why"; printf '%s\n' "$out" | sed 's/^/       | /'; return 1; fi
 }
 
 echo
@@ -115,7 +109,7 @@ gx pending-crosssession.md 50 corpus  corpus/gate.jsonl 0 "(k) corpus wins over 
 # $1 pending  $2 dir-or-""  $3 transcript-or-""  $4 want-exit  $5 must-appear  $6 must-NOT-appear
 # $7 why  $8 optional validator override.
 gsx() {
-  local f="$1" d="$2" t="$3" want="$4" yes="$5" no="$6" why2="$7" v="${8:-$VALIDATOR}"; N=$((N + 1))
+  local f="$1" d="$2" t="$3" want="$4" yes="$5" no="$6" why2="$7" v="${8:-$VALIDATOR}"
   local args=(--escalations "$ROOT/$f" --sprint 50)
   [ -n "$t" ] && args+=(--transcript "$ROOT/$t")
   [ -n "$d" ] && args+=(--transcript-dir "$ROOT/$d")
@@ -124,8 +118,8 @@ gsx() {
   [ "$got" -eq "$want" ] || why="$why [exit=$got want=$want]"
   grep -qF -- "$yes" <<<"$out" || why="$why [missing: $yes]"
   grep -qF -- "$no"  <<<"$out" && why="$why [PRESENT but must not be: $no]"
-  if [ -z "$why" ]; then printf '  ok   %-30s exit=%s  (%s)\n' "$f/${d:-nodir}/${t:-nofile}" "$got" "$why2"; return 0
-  else FAIL=$((FAIL + 1)); printf '  FAIL %-30s%s  (%s)\n' "$f/${d:-nodir}/${t:-nofile}" "$why" "$why2"; return 1; fi
+  if [ -z "$why" ]; then okf '%-30s exit=%s  (%s)' "$f/${d:-nodir}/${t:-nofile}" "$got" "$why2"; return 0
+  else badf '%-30s%s  (%s)' "$f/${d:-nodir}/${t:-nofile}" "$why" "$why2"; return 1; fi
 }
 
 echo
@@ -184,12 +178,12 @@ says pending-before.md 50 real.jsonl "appears in NO genuine" "within the toleran
 # that -- but the PASS now SAYS SO, and the canonical twin says zero in the same run.
 g pending-space.md 50 real.jsonl 0 "(v) a space instead of T verifies unbounded -> PASS"
 saysout() {  # $1 pending  $2 transcript  $3.. must-appear
-  local f="$1" t="$2"; shift 2; N=$((N + 1))
+  local f="$1" t="$2"; shift 2
   local out miss=""
   out="$(bash "$VALIDATOR" --escalations "$ROOT/$f" --sprint 50 --transcript "$ROOT/$t" 2>/dev/null)"
   local w; for w in "$@"; do grep -qF -- "$w" <<<"$out" || miss="$miss [$w]"; done
-  if [ -z "$miss" ]; then printf '  ok   %-26s PASS line carries the count\n' "$f"; return 0
-  else FAIL=$((FAIL + 1)); printf '  FAIL %-26s missing:%s\n       | %s\n' "$f" "$miss" "$out"; return 1; fi
+  if [ -z "$miss" ]; then okf '%-26s PASS line carries the count' "$f"; return 0
+  else badf '%-26s missing:%s\n       | %s' "$f" "$miss" "$out"; return 1; fi
 }
 saysout pending-space.md real.jsonl "unbounded-citation: 1"; RC_V=$?
 # ...and the CANONICAL twin, one property apart, must say zero. Without it the count arm passes
@@ -236,12 +230,11 @@ pass_corpus_pair() {  # $1 validator  -> 0 if the PASS output moves with the cor
   [ "$a" != "$b" ] || PCP_WHY="$PCP_WHY [both PASSes are byte-identical over two different corpora]"
   [ -z "$PCP_WHY" ]
 }
-N=$((N + 1))
 pass_corpus_pair "$VALIDATOR"; RC_X=$?
 if [ "$RC_X" -eq 0 ]; then
-  printf '  ok   %-30s (x) a PASS states the corpus state it was taken over\n' "corpus-live"
+  okf '%-30s (x) a PASS states the corpus state it was taken over' "corpus-live"
 else
-  FAIL=$((FAIL + 1)); printf '  FAIL %-30s%s  (x) the PASS path does not name its corpus\n' "corpus-live" "$PCP_WHY"
+  badf '%-30s%s  (x) the PASS path does not name its corpus' "corpus-live" "$PCP_WHY"
 fi
 
 # (y) THE ACCUSATION BRANCH DID NOT CHANGE SHAPE. The over-broad version of this fix -- render
@@ -253,11 +246,10 @@ cite_lines() {  # $1 validator  -> how many corpus-report lines the FAIL output 
   n="$(grep -cF -- "cite: scanned" <<<"$out")" || n=0
   printf '%s' "$n"
 }
-N=$((N + 1))
 CL="$(cite_lines "$VALIDATOR")"
 [ "$CL" -eq 1 ]; RC_Y=$?
-if [ "$RC_Y" -eq 0 ]; then printf '  ok   %-30s (y) the FAIL branch reports its corpus exactly once\n' "pending-crossfake.md"
-else FAIL=$((FAIL + 1)); printf '  FAIL %-30s (y) the FAIL branch carries %s corpus-report line(s), not 1\n' "pending-crossfake.md" "$CL"; fi
+if [ "$RC_Y" -eq 0 ]; then okf '%-30s (y) the FAIL branch reports its corpus exactly once' "pending-crossfake.md"
+else badf '%-30s (y) the FAIL branch carries %s corpus-report line(s), not 1' "pending-crossfake.md" "$CL"; fi
 
 # (z) A VERDICT THAT VERIFIED NOTHING NAMES NO CORPUS. The vacuous path exits before any
 # citation is checked, so a corpus line there would attest a scan that never ran -- which is the
@@ -268,11 +260,10 @@ vac_lines() {  # $1 validator  -> stdout line count of the nothing-in-scope PASS
   out="$(bash "$v" --escalations "$ROOT/pending-clean.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>/dev/null)"
   printf '%s' "$(printf '%s\n' "$out" | grep -c .)"
 }
-N=$((N + 1))
 VL="$(vac_lines "$VALIDATOR")"
 [ "$VL" -eq 1 ]; RC_Z=$?
-if [ "$RC_Z" -eq 0 ]; then printf '  ok   %-30s (z) a PASS that examined nothing names no corpus\n' "pending-clean.md"
-else FAIL=$((FAIL + 1)); printf '  FAIL %-30s (z) the vacuous PASS printed %s line(s), not 1\n' "pending-clean.md" "$VL"; fi
+if [ "$RC_Z" -eq 0 ]; then okf '%-30s (z) a PASS that examined nothing names no corpus' "pending-clean.md"
+else badf '%-30s (z) the vacuous PASS printed %s line(s), not 1' "pending-clean.md" "$VL"; fi
 
 # --- scratch space for the sections below ------------------------------------------------------
 echo
@@ -329,9 +320,9 @@ en_names="A:empty B:whitespace C:absent D:populated-zero-record E:finding F:any-
 en_report() {  # $1 cells -> one ok/FAIL line per cell
   local i=0 nm
   for nm in $en_names; do
-    i=$((i + 1)); N=$((N + 1))
-    if [ "$(printf '%s' "$1" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s empty-file cell %s holds\n' "${nm#*:}" "${nm%%:*}"
-    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s empty-file cell %s does not hold\n' "${nm#*:}" "${nm%%:*}"; fi
+    i=$((i + 1))
+    if [ "$(printf '%s' "$1" | cut -c"$i")" = "1" ]; then okf '%-30s empty-file cell %s holds' "${nm#*:}" "${nm%%:*}"
+    else badf '%-30s empty-file cell %s does not hold' "${nm#*:}" "${nm%%:*}"; fi
   done
 }
 en_cells "$VALIDATOR"
@@ -370,9 +361,8 @@ ER_SKIP_A=""
 if [ "$(id -u)" -eq 0 ]; then ER_SKIP_A="running as root, which reads a mode-000 file"
 elif cat "$ER_LOCKED" >/dev/null 2>&1; then ER_SKIP_A="this host reads a mode-000 file, so the seed cannot express unreadable"; fi
 [ -n "$ER_SKIP_A" ] && printf '  SKIP %-30s refusal cell A -- %s\n' "pending-locked.md" "$ER_SKIP_A"
-N=$((N + 1))
-if [ -L "$ER_LINK" ] && [ ! -e "$ER_LINK" ]; then printf '  ok   %-30s the dangling-symlink seed is a link to a missing target\n' "pending-dangling.md"
-else FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: the dangling-symlink seed is not dangling\n' "pending-dangling.md"; fi
+if [ -L "$ER_LINK" ] && [ ! -e "$ER_LINK" ]; then okf '%-30s the dangling-symlink seed is a link to a missing target' "pending-dangling.md"
+else badf '%-30s FIXTURE BROKEN: the dangling-symlink seed is not dangling' "pending-dangling.md"; fi
 ER_STUB="$ER/stub"; mkdir -p "$ER_STUB"
 ER_REALGREP="$(command -v grep)" || { echo "FIXTURE ERROR: grep is not on PATH" >&2; exit 2; }
 {
@@ -417,9 +407,9 @@ else
   for nm in $er_names; do
     i=$((i + 1))
     case "$(printf '%s' "$ER_CELLS" | cut -c"$i")" in
-      1) N=$((N + 1)); printf '  ok   %-30s refusal cell %s holds\n' "${nm#*:}" "${nm%%:*}" ;;
+      1) okf '%-30s refusal cell %s holds' "${nm#*:}" "${nm%%:*}" ;;
       S) ;;
-      *) N=$((N + 1)); FAIL=$((FAIL + 1)); printf '  FAIL %-30s refusal cell %s does not hold (cells=%s)\n' "${nm#*:}" "${nm%%:*}" "$ER_CELLS" ;;
+      *) badf '%-30s refusal cell %s does not hold (cells=%s)' "${nm#*:}" "${nm%%:*}" "$ER_CELLS" ;;
     esac
   done
 fi
@@ -453,12 +443,11 @@ echo "  escalation-citation: resolved predicate = $FL_SRC_DIR/validate-steering-
 # THE INCIDENT FILE IS NOT THE MEMBER THE READER OPENS FIRST. Asked of the reader's own call,
 # because shell glob order and `readdirSync` order are two different claims about one directory.
 FL_FIRST="$(node -e 'const fs=require("fs");console.log(fs.readdirSync(process.argv[1]).filter(f=>f.endsWith(".jsonl"))[0]||"")' "$ROOT/corpus-short" 2>/dev/null)"
-N=$((N + 1))
 if [ -n "$FL_FIRST" ] && [ "$FL_FIRST" != "b-incident.jsonl" ] \
    && [ "$(ls "$ROOT/corpus-short" | grep -c '\.jsonl$')" -ge 2 ]; then
-  printf '  ok   %-30s the reader opens %s first; the incident turn is in the second member\n' "corpus-short" "$FL_FIRST"
+  okf '%-30s the reader opens %s first; the incident turn is in the second member' "corpus-short" "$FL_FIRST"
 else
-  FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: first member read is "%s" -- the incident must not be first in a >=2-file corpus\n' "corpus-short" "$FL_FIRST"
+  badf '%-30s FIXTURE BROKEN: first member read is "%s" -- the incident must not be first in a >=2-file corpus' "corpus-short" "$FL_FIRST"
 fi
 FL_CELLS=""
 fl_cells() {  # $1 directory holding the validator and its steering sibling -> FL_CELLS
@@ -523,9 +512,9 @@ if [ "$FL_CELLS" = "001001000100000001" ] && [ "$EN_IS_DIST" -ne 1 ]; then
 else
   i=0
   for nm in $fl_names; do
-    i=$((i + 1)); N=$((N + 1))
-    if [ "$(printf '%s' "$FL_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s floor cell %s holds\n' "${nm#*:}" "${nm%%:*}"
-    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s floor cell %s does not hold (cells=%s)\n' "${nm#*:}" "${nm%%:*}" "$FL_CELLS"; fi
+    i=$((i + 1))
+    if [ "$(printf '%s' "$FL_CELLS" | cut -c"$i")" = "1" ]; then okf '%-30s floor cell %s holds' "${nm#*:}" "${nm%%:*}"
+    else badf '%-30s floor cell %s does not hold (cells=%s)' "${nm#*:}" "${nm%%:*}" "$FL_CELLS"; fi
   done
 fi
 
@@ -587,9 +576,9 @@ if [ "$LR_CELLS" = "0111100101111111" ] && [ "$EN_IS_DIST" -ne 1 ]; then
 else
   i=0
   for c in $LR_NAMES; do
-    i=$((i + 1)); N=$((N + 1))
-    if [ "$(printf '%s' "$LR_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s lead-interpretation cell holds\n' "lr/$c"
-    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s lead-interpretation cell does not hold (cells=%s)\n' "lr/$c" "$LR_CELLS"; fi
+    i=$((i + 1))
+    if [ "$(printf '%s' "$LR_CELLS" | cut -c"$i")" = "1" ]; then okf '%-30s lead-interpretation cell holds' "lr/$c"
+    else badf '%-30s lead-interpretation cell does not hold (cells=%s)' "lr/$c" "$LR_CELLS"; fi
   done
 
 fi
@@ -656,9 +645,9 @@ if [ "$SV_CELLS" = "001100001000" ] && [ "$EN_IS_DIST" -ne 1 ]; then
 else
   i=0
   for c in $SV_NAMES; do
-    i=$((i + 1)); N=$((N + 1))
-    if [ "$(printf '%s' "$SV_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s SUPPRESSED-citation cell holds\n' "sup/$c"
-    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s SUPPRESSED-citation cell does not hold (cells=%s)\n' "sup/$c" "$SV_CELLS"; fi
+    i=$((i + 1))
+    if [ "$(printf '%s' "$SV_CELLS" | cut -c"$i")" = "1" ]; then okf '%-30s SUPPRESSED-citation cell holds' "sup/$c"
+    else badf '%-30s SUPPRESSED-citation cell does not hold (cells=%s)' "sup/$c" "$SV_CELLS"; fi
   done
 fi
 
@@ -710,13 +699,11 @@ if [ "$IF_CELLS" = "00001000" ] && [ "$EN_IS_DIST" -ne 1 ]; then
 else
   i=0
   for c in $IF_NAMES; do
-    i=$((i + 1)); N=$((N + 1))
-    if [ "$(printf '%s' "$IF_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s in-force SUPPRESSED cell holds\n' "inf/$c"
-    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s in-force SUPPRESSED cell does not hold (cells=%s)\n' "inf/$c" "$IF_CELLS"; fi
+    i=$((i + 1))
+    if [ "$(printf '%s' "$IF_CELLS" | cut -c"$i")" = "1" ]; then okf '%-30s in-force SUPPRESSED cell holds' "inf/$c"
+    else badf '%-30s in-force SUPPRESSED cell does not hold (cells=%s)' "inf/$c" "$IF_CELLS"; fi
   done
 fi
 
 echo
-if [ "$FAIL" -gt 0 ]; then echo "FAIL: $FAIL of $N assertions wrong."; exit 1; fi
-echo "PASS: all $N assertions correct."
-exit 0
+report_end escalation-citation

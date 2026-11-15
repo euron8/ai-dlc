@@ -11,3 +11,4 @@ core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
 core/fixtures/backlog-real-ledger/ledger.snapshot
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 scripts/backlog-receipt-lib.sh
+core/fixtures/lib/report.sh

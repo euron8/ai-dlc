@@ -80,10 +80,9 @@ done
 echo "HERMETIC-CONSUMED scripts/validate-shell-portability.sh"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-rc=0
 note() { printf '%s\n' "$*"; }
-ok()  { note "ok    $1"; }
-bad() { note "FAIL  $1"; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 PRE_DIR="$TMP/pre"; mkdir -p "$PRE_DIR"
 
 
@@ -178,15 +177,15 @@ fi
 arm_check() { # arm_check <name> <dir> <arm-id>
   local n="$1" d="$2" arm="$3" out nfail
   out="$(pre_out "$d")"
-  if [ -z "$out" ]; then note "FAIL  $n -- validator produced NO output; the harness died"; rc=1; return; fi
+  if [ -z "$out" ]; then bad "$n -- validator produced NO output; the harness died"; return; fi
   nfail="$(grep -c '^FAIL:' <<<"$out")"
   if ! grep -q "^FAIL: ${arm}:" <<<"$out"; then
-    note "FAIL  $n -- ${arm} did not fire on its own violation"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return
+    bad "$n -- ${arm} did not fire on its own violation"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4; return
   fi
   if [ "$nfail" -ne 1 ]; then
-    note "FAIL  $n -- $nfail FAIL lines; a seed must fail ONLY its own arm, so the arms are entangled"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return
+    bad "$n -- $nfail FAIL lines; a seed must fail ONLY its own arm, so the arms are entangled"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4; return
   fi
   ok "$n -- fired on its own arm, and only its own"
 }
@@ -199,21 +198,21 @@ arm_check() { # arm_check <name> <dir> <arm-id>
 count_check() { # count_check <name> <dir> <arm-id> <expected-hit-lines>
   local n="$1" d="$2" arm="$3" want="$4" out nfail nhits
   out="$(pre_out "$d")"
-  if [ -z "$out" ]; then note "FAIL  $n -- validator produced NO output; the harness died"; rc=1; return; fi
+  if [ -z "$out" ]; then bad "$n -- validator produced NO output; the harness died"; return; fi
   nfail="$(grep -c '^FAIL:' <<<"$out")" || nfail=0
   nhits="$(grep -c '^    ' <<<"$out")" || nhits=0
   if ! grep -q "^FAIL: ${arm}:" <<<"$out"; then
-    note "FAIL  $n -- ${arm} did not fire on its own violation"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -6; rc=1; return
+    bad "$n -- ${arm} did not fire on its own violation"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -6; return
   fi
   if [ "$nfail" -ne 1 ]; then
-    note "FAIL  $n -- $nfail FAIL lines; a seed must fail ONLY its own arm, so the arms are entangled"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -6; rc=1; return
+    bad "$n -- $nfail FAIL lines; a seed must fail ONLY its own arm, so the arms are entangled"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -6; return
   fi
   if [ "$nhits" -ne "$want" ]; then
-    note "FAIL  $n -- ${arm} reported $nhits offending line(s), not the $want seeded. A pattern that"
+    bad "$n -- ${arm} reported $nhits offending line(s), not the $want seeded. A pattern that"
     note "               spells only some of its subject's grammars scores the rest as non-instances."
-    printf '%s\n' "$out" | sed 's/^/      /' | head -10; rc=1; return
+    printf '%s\n' "$out" | sed 's/^/      /' | head -10; return
   fi
   ok "$n -- fired on its own arm, and only its own, on all $want seeded line(s)"
 }
@@ -279,12 +278,12 @@ empty_check() { # empty_check <name> <dir> <what-was-emptied> <corpus-name-in-th
   local n="$1" d="$2" what="$3" which="$4" out
   out="$(pre_out "$d")"
   if ! refused "$out"; then
-    note "FAIL  $n -- $what emptied: did not fail closed"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
+    bad "$n -- $what emptied: did not fail closed"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4
   elif ! refused_for "$out" "$which"; then
-    note "FAIL  $n -- $what emptied: it refused, but not for the $which corpus. Some OTHER condition"
+    bad "$n -- $what emptied: it refused, but not for the $which corpus. Some OTHER condition"
     note "               fired, so this seed proves nothing about the one it names."
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4
   else
     ok "$n -- $what emptied: fails closed naming the $which corpus, rather than reporting a clean scan"
   fi
@@ -371,8 +370,8 @@ silent_check() { # silent_check <label> <dir>
   if grep -q "^validate-shell-portability: PASS" <<<"$out"; then
     ok "$n"
   else
-    note "FAIL  $n -- the shipped validator reported this near-miss"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -6; rc=1
+    bad "$n -- the shipped validator reported this near-miss"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -6
   fi
 }
 
@@ -408,7 +407,7 @@ for _l in en_US.UTF-8 C.UTF-8 en_GB.UTF-8; do
   if grep -qxF "$_l" <<<"$_locales"; then UTF8_LOCALE="$_l"; break; fi
 done
 if [ -z "$UTF8_LOCALE" ]; then
-  note "FAIL  x7 S10 under UTF-8 -- no UTF-8 locale on this machine, so the arm cannot be driven"; rc=1
+  bad "x7 S10 under UTF-8 -- no UTF-8 locale on this machine, so the arm cannot be driven"
 else
   seed_shell "$TMP/x7" <<'X7EOF'
 awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
@@ -418,8 +417,8 @@ X7EOF
   if grep -q "^FAIL: S10:" <<<"$x7_out"; then
     ok "x7 S10 multibyte class is reported as a corpus finding under $UTF8_LOCALE"
   else
-    note "FAIL  x7 S10 under $UTF8_LOCALE -- not reported as a corpus finding"
-    printf '%s\n' "$x7_out" | sed 's/^/      /' | head -6; rc=1
+    bad "x7 S10 under $UTF8_LOCALE -- not reported as a corpus finding"
+    printf '%s\n' "$x7_out" | sed 's/^/      /' | head -6
   fi
 fi
 
@@ -518,8 +517,8 @@ x29_pre="$(pre_out "$TMP/x29")"
 if grep -q "^FAIL: S15:" <<<"$x29_pre" && grep -q 'scripts/s15-step:' <<<"$x29_pre" && [ "$(grep -c '^FAIL:' <<<"$x29_pre")" -eq 1 ]; then
   ok "x29 S15 duplicated listed site is reported as NEW (S15 alone)"
 else
-  note "FAIL  x29 S15 -- the duplicated listed site was not reported as NEW (S15 alone)"
-  printf '%s\n' "$x29_pre" | sed 's/^/      /' | head -6; rc=1
+  bad "x29 S15 -- the duplicated listed site was not reported as NEW (S15 alone)"
+  printf '%s\n' "$x29_pre" | sed 's/^/      /' | head -6
 fi
 
 # --- negative arms: the measured false positives must stay silent -----------
@@ -527,16 +526,16 @@ seed "$TMP/n1" "sed -i '' 's/x/y/' f" "sed -i.bak 's/x/y/' f && rm -f f.bak"
 if out="$(run_v "$TMP/n1")" && grep -q "PASS" <<<"$out"; then
   ok "CONTROL n1 -- the portable sed -i pair is NOT reported"
 else
-  note "FAIL  n1 -- the correct sed -i form was flagged; the arm fires on its own fix"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
+  bad "n1 -- the correct sed -i form was flagged; the arm fires on its own fix"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -4
 fi
 
 seed "$TMP/n2" 'python3 -c "import re; print(re.sub(r\"^(a)$\", r\"\1b\", x))"'
 if out="$(run_v "$TMP/n2")" && grep -q "PASS" <<<"$out"; then
   ok "CONTROL n2 -- a python re.sub backreference is NOT reported as an awk one"
 else
-  note "FAIL  n2 -- python's re.sub was flagged; the language subtraction is broken"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
+  bad "n2 -- python's re.sub was flagged; the language subtraction is broken"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -4
 fi
 
 seed "$TMP/n3"
@@ -556,8 +555,8 @@ seed_core "$TMP/n3" skills/correct.md \
 if out="$(run_v "$TMP/n3")" && grep -q "PASS" <<<"$out"; then
   ok "CONTROL n3 -- braced, HEAD-literal and \"\$SHA: rev-paths are NOT reported"
 else
-  note "FAIL  n3 -- S8 flagged a correct rev-path rendering; the arm fires on its own fix"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
+  bad "n3 -- S8 flagged a correct rev-path rendering; the arm fires on its own fix"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -4
 fi
 
 # m9b -- S8's OTHER offender form, and the one this arm shipped as its own prescribed FIX for
@@ -659,8 +658,8 @@ N4EOF
 if out="$(run_v "$TMP/n4")" && grep -q "PASS" <<<"$out"; then
   ok "CONTROL n4 -- alternations, python, message prose, a bracketed aside and a comment are NOT reported"
 else
-  note "FAIL  n4 -- S10 flagged a correct form; the arm fires on its own fix or on prose"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
+  bad "n4 -- S10 flagged a correct form; the arm fires on its own fix or on prose"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -8
 fi
 
 # n5 -- S11's negatives, one line per acquitting mechanism. Every line is either the FIX S11
@@ -699,8 +698,8 @@ N5EOF
 if out="$(run_v "$TMP/n5")" && grep -q "PASS" <<<"$out"; then
   ok "CONTROL n5 -- guarded cd, subshell-and, a substitution target, SELF_DIR, a continuation and a comment are NOT reported"
 else
-  note "FAIL  n5 -- S11 flagged a correct form; the arm fires on its own fix or on prose"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
+  bad "n5 -- S11 flagged a correct form; the arm fires on its own fix or on prose"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -8
 fi
 
 # m13 -- S12. SIX SEEDS, COUNTED, because S12 is a JOIN and each seed is a different way the two
@@ -767,8 +766,8 @@ s13_seed() { # s13_seed <name> <BREAK|ok>   (body on stdin)
   if { [ "$want" = BREAK ] && [ "$o" = BREAK ] && [ "$s" = FLAG ]; } || { [ "$want" = ok ] && [ "$o" = ok ] && [ "$s" = ok ]; }; then
     S13_AGREE=$((S13_AGREE + 1))
   else
-    S13_BAD=$((S13_BAD + 1)); rc=1
-    note "FAIL  m14 $n -- declared $want, bash 3.2 says $o, S13 says $s. The grammar and the shell disagree."
+    S13_BAD=$((S13_BAD + 1))
+    bad "m14 $n -- declared $want, bash 3.2 says $o, S13 says $s. The grammar and the shell disagree."
   fi
 }
 
@@ -778,8 +777,7 @@ printf '%s\n' '  x="$(' "    # a balanced ( pair ) here" '    echo "1 0"' '  )"'
 if [ "$(s13_oracle "$S13DIR/ctl-break.body")" = BREAK ] && [ "$(s13_oracle "$S13DIR/ctl-ok.body")" = ok ]; then
   ok "CONTROL m14 oracle control -- /bin/bash 3.2 parses (bash -n 0) and then breaks the lone-paren seed, and runs the balanced one, so it can disagree"
 else
-  note "FIXTURE BROKEN: the /bin/bash 3.2 oracle did not break its control seed. Every m14 verdict below is meaningless."
-  rc=1
+  bad "FIXTURE BROKEN: the /bin/bash 3.2 oracle did not break its control seed. Every m14 verdict below is meaningless."
 fi
 
 # form (a): comment text inside a DOUBLE-QUOTED substitution
@@ -960,7 +958,7 @@ _s13_brk=$(grep -c '^s13_seed [^ ]* BREAK <<' "$0")
 if [ "$S13_BAD" -eq 0 ] && [ "$_s13_decl" -ge 2 ] && [ "$S13_N" -eq "$_s13_decl" ] && [ "$S13_AGREE" -eq "$_s13_decl" ]; then
   ok "CONTROL m14 S13 -- bash 3.2 and the validator AGREE on all $S13_AGREE/$S13_N seeds ($_s13_brk break, $((_s13_decl - _s13_brk)) parse), each equal to its declared verdict and every one accepted by bash -n"
 else
-  note "FAIL  m14 S13 -- $S13_AGREE of $S13_N seeds agreed (expected $_s13_decl of $_s13_decl declared)"; rc=1
+  bad "m14 S13 -- $S13_AGREE of $S13_N seeds agreed (expected $_s13_decl of $_s13_decl declared)"
 fi
 
 # r1 -- an awk arm that cannot OPEN a listed file refuses (exit 2), never PASS. BSD awk abandons
@@ -983,8 +981,8 @@ for r1_a in S12 S13 S14; do
   grep -q "^REFUSED: ${r1_a}: .*unopenable: scripts/a0.sh" <<<"$r1_out" || r1_ok=0
 done
 if [ "$r1_ok" -ne 1 ]; then
-  note "FAIL  r1 unopenable listed file -- control PASS rc 0 and refusal rc 2 naming S12, S13 and S14 and scripts/a0.sh were not both seen"
-  printf '%s\n' "$r1_ctl" "$r1_out" | sed 's/^/      /' | head -8; rc=1
+  bad "r1 unopenable listed file -- control PASS rc 0 and refusal rc 2 naming S12, S13 and S14 and scripts/a0.sh were not both seen"
+  printf '%s\n' "$r1_ctl" "$r1_out" | sed 's/^/      /' | head -8
 else
   ok "r1 unopenable listed file -- refused rc 2 naming S12, S13 and S14 (control PASS rc 0)"
 fi
@@ -1016,8 +1014,8 @@ N6EOF
 if out="$(run_v "$TMP/n6")" && grep -q "PASS" <<<"$out"; then
   ok "CONTROL n6 -- a quoted literal, clean variables, grep-only escapes, prose and an even backslash run are NOT reported"
 else
-  note "FAIL  n6 -- S12 flagged a correct form; the arm fires on a grep consumer, on prose or on its own fix"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
+  bad "n6 -- S12 flagged a correct form; the arm fires on a grep consumer, on prose or on its own fix"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -8
 fi
 
 # n7 -- S8b's negatives in a `.md`, one per acquitting property: the BRACED form (the remedy), a
@@ -1034,8 +1032,8 @@ seed_core "$TMP/n7" skills/correct-vars.md \
 if out="$(run_v "$TMP/n7")" && grep -q "PASS" <<<"$out"; then
   ok "CONTROL n7 -- braced, \$-after-colon, non-modifier-letter and literal-ref rev-paths in a .md are NOT reported"
 else
-  note "FAIL  n7 -- S8b flagged a correct rev-path; the arm fires on its own fix or on a safe letter"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
+  bad "n7 -- S8b flagged a correct rev-path; the arm fires on its own fix or on a safe letter"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -8
 fi
 
 # m7b / n8 -- S7 is scoped to the REPLACEMENT string (BL-681). The old pattern read a
@@ -1060,8 +1058,8 @@ N8EOF
 if out="$(run_v "$TMP/n8")" && grep -q "^validate-shell-portability: PASS" <<<"$out"; then
   ok "CONTROL n8 -- an octal escape past the gsub replacement's closing quote is NOT a backreference"
 else
-  note "FAIL  n8 -- S7 flagged a backslash-digit outside the replacement string"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -6; rc=1
+  bad "n8 -- S7 flagged a backslash-digit outside the replacement string"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -6
 fi
 # m15 -- S14's subject, seeded where the gate's own `bash -n` never looks: a FIXTURE script. A
 # heredoc body carrying one apostrophe inside `"$( )"`, which `/bin/bash` 3.2 cannot parse.
@@ -1098,8 +1096,8 @@ N9EOF
 if out="$(run_v "$TMP/n9")" && grep -q "PASS" <<<"$out"; then
   ok "CONTROL n9 -- a balanced pair, a backtick substitution and a function-held heredoc are NOT reported"
 else
-  note "FAIL  n9 -- S14 flagged a form /bin/bash 3.2 parses; the arm fires on its own remedy"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
+  bad "n9 -- S14 flagged a form /bin/bash 3.2 parses; the arm fires on its own remedy"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -8
 fi
 
 # m16: S15 over a seeded pre-suite closure. The offender is appended to the script the seed's hook
@@ -1108,7 +1106,4 @@ seed "$TMP/m16"
 printf '%s\n' '[ -x docs/x.sh ] || exit 1' >> "$TMP/m16/scripts/s15-step"
 ( cd "$TMP/m16" && git add -A >/dev/null 2>&1 )
 arm_check "m16 S15 unlisted metadata test in a pre-suite script" "$TMP/m16" S15
-if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, every seeded offender reported by its own arm, every negative silent"
-fi
-exit "$rc"
+report_end shell-portability

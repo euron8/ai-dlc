@@ -39,9 +39,8 @@ STEP="$(locate skills/ai-dlc/steps/sprint-review.md .claude/skills/ai-dlc/steps/
   exit 2
 }
 
-rc=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 ROLE="$(locate team-roles/dev.md .claude/team-roles/dev.md)" || {
   echo "review-carry-over-clauses: FIXTURE BROKEN -- could not locate team-roles/dev.md in either layout. An absent subject is not a passing one." >&2
@@ -123,7 +122,7 @@ else
 fi
 
 # --- cwd invariance: the resolver keys on \$DIR, never on the process cwd ------
-[ "${1:-}" = "--probe-only" ] && exit "$rc"
+[ "${1:-}" = "--probe-only" ] && report_end review-carry-over-clauses
 if ( cd / && bash "$DIR/run.sh" --probe-only ) >/dev/null 2>&1; then
   ok "CWD: the fixture resolves its subjects from / as well as from the repo root"
 else
@@ -131,9 +130,4 @@ else
 fi
 
 echo
-if [ "$rc" -eq 0 ]; then
-  echo "review-carry-over-clauses: PASS"
-else
-  echo "review-carry-over-clauses: FAILED" >&2
-fi
-exit $rc
+report_end review-carry-over-clauses

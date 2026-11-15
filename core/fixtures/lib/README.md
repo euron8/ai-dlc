@@ -3,7 +3,10 @@
 Not a fixture. This directory holds `preamble.sh`, the seam every fixture `run.sh`
 that builds a scratch repository sources before its first git call, and `mutant.sh`,
 which now holds only `fx_inproc`, the in-process pass counter. No fixture carries a
-mutation battery; `scripts/validate-fixture-hygiene.sh` fails the push on one. The rest
+mutation battery; `scripts/validate-fixture-hygiene.sh` fails the push on one.
+`pool-span.sh` holds `pool_span`, the one way a fixture extracts a record-binding hook
+span (`FIXTURE_POOL`, `RECORD_HOME`); its first line defaults the store to the sourcing
+world's, and `scripts/validate-fixture-hygiene.sh` H13 fails a hand extraction. The rest
 of this file is about `preamble.sh`.
 
 **No `run.sh`, deliberately.** There is no condition here to drive. The file is a

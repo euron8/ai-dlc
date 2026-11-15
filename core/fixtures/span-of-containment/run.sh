@@ -39,17 +39,18 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/lib.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-FAILURES=0
-ASSERTIONS=0
-ok()  { ASSERTIONS=$((ASSERTIONS + 1)); printf '  ok    %-30s %s\n' "$1" "${2-}"; }
-bad() { ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %-30s %s\n' "$1" "${2-}"; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# ok2/bad2 <name> <detail>: one ok/bad line with the name in a 30-column field.
+ok2()  { local m; printf -v m '%-30s %s' "$1" "${2-}"; ok "$m"; }
+bad2() { local m; printf -v m '%-30s %s' "$1" "${2-}"; bad "$m"; }
 
 # want <name> <heading> <file> <expected-span> <why>
 want() {
   local n="$1" h="$2" f="$3" e="$4" why="$5" got
   got="$(span_of "$h" < "$f")"
-  if [ "$got" = "$e" ]; then ok "$n" "'$h' -> [$got]  ($why)"
-  else bad "$n" "'$h' -> [${got:-<empty>}], want [$e]  ($why)"; fi
+  if [ "$got" = "$e" ]; then ok2 "$n" "'$h' -> [$got]  ($why)"
+  else bad2 "$n" "'$h' -> [${got:-<empty>}], want [$e]  ($why)"; fi
 }
 
 # --- the corpus -------------------------------------------------------------------------
@@ -82,8 +83,8 @@ EOF
 # --- ARM 1: a DEEPER heading does not end a span ----------------------------------------
 # This is the rule the v0.431.0 promotion turned on, and the one no other unit states.
 got="$(span_of 'Step One' < "$TMP/nest.md")"
-if [ "$got" = '3 6' ]; then ok nesting-deeper-does-not-end "'Step One' -> [$got]  (the #### child at 5 is inside; the sibling ### at 7 ends it)"
-else bad nesting-deeper-does-not-end "'Step One' -> [${got:-<empty>}], want [3 6]  (the #### child at 5 is inside; the sibling ### at 7 ends it)"; fi
+if [ "$got" = '3 6' ]; then ok2 nesting-deeper-does-not-end "'Step One' -> [$got]  (the #### child at 5 is inside; the sibling ### at 7 ends it)"
+else bad2 nesting-deeper-does-not-end "'Step One' -> [${got:-<empty>}], want [3 6]  (the #### child at 5 is inside; the sibling ### at 7 ends it)"; fi
 
 # --- ARM 2: an EQUAL-level heading DOES end a span --------------------------------------
 want nesting-equal-ends 'Step Two' "$TMP/nest.md" '7 8' \
@@ -113,14 +114,9 @@ want reverse-containment 'Plain and then some' "$TMP/norm.md" '3 3' \
 
 # --- ARM 7: no match is EMPTY, not a span -----------------------------------------------
 got="$(span_of 'No Such Heading Anywhere' < "$TMP/nest.md")"
-if [ -z "$got" ]; then ok "no-match-is-empty" "an absent heading yields no span, so a caller can tell 'missing' from 'line 1'"
-else bad "no-match-is-empty" "absent heading yielded [$got] — a caller cannot distinguish missing from found"; fi
+if [ -z "$got" ]; then ok2 "no-match-is-empty" "an absent heading yields no span, so a caller can tell 'missing' from 'line 1'"
+else bad2 "no-match-is-empty" "absent heading yielded [$got] — a caller cannot distinguish missing from found"; fi
 
 
 echo
-if [ "$FAILURES" -gt 0 ]; then
-  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
-  exit 1
-fi
-echo "PASS: all $ASSERTIONS assertions correct."
-exit 0
+report_end span-of-containment

@@ -74,10 +74,9 @@ echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-rc=0
 note() { printf '%s\n' "$*"; }
-ok()  { note "ok    $1"; }
-bad() { note "FAIL  $1"; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 MUT_LIB="$DIR/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
 . "$DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
@@ -266,7 +265,7 @@ if [ "$P_POS" != "50" ] || [ "$P_NEG" != "0" ] || [ "$P_ASG" != "3" ]; then
   note "FIXTURE BROKEN: self-probe returned PROBEPOS=$P_POS PROBENEG=$P_NEG PROBEASG=$P_ASG; must be 50, 0 and 3."
   exit 1
 fi
-note "ok    A0 self-probe   -- a known-50 script counts 50, a fork-free one counts 0, the assignment probe counts only its 3 near-misses"
+ok "A0 self-probe   -- a known-50 script counts 50, a fork-free one counts 0, the assignment probe counts only its 3 near-misses"
 
 # ==========================================================================================
 # THE FLOOR -- what a BROKEN subject reads under THIS profiler, measured before the corpus.
@@ -329,20 +328,19 @@ if [ "$A2V" != "OK" ]; then
   note "FIXTURE BROKEN: ${A2V#BROKEN }"
   exit 1
 fi
-note "ok    A2 wholeness    -- the classifier read all $N_MARK trace record(s) of one reading, $N_DISP displaced"
+ok "A2 wholeness    -- the classifier read all $N_MARK trace record(s) of one reading, $N_DISP displaced"
 
 VERDICT="$(judge "$T1" "$EX" "$MX" "$LA" "$BUDGET")"
 case "$VERDICT" in
   PASS)
-    note "ok    A1 floor       -- $T1 forks is above the broken-subject floor of $FLOOR (the most a broken subject read this run)"
-    note "ok    A3 ceiling     -- $T1 <= FORK_BUDGET=$BUDGET ($((BUDGET - T1)) of headroom, $NFX fixture dirs)"
-    note "ok    A3b spare      -- $((BUDGET - T1)) fork(s) to spare, at least the allowance of $HEADROOM_MARGIN"
-    note "ok    A4 stale-high  -- $T1 is at least 70% of $BUDGET, so the ceiling is still reachable"
-    note "ok    A5 wholeness   -- traced run exited $EX and reached line $MX, past the last arm header at $LA"
+    ok "A1 floor       -- $T1 forks is above the broken-subject floor of $FLOOR (the most a broken subject read this run)"
+    ok "A3 ceiling     -- $T1 <= FORK_BUDGET=$BUDGET ($((BUDGET - T1)) of headroom, $NFX fixture dirs)"
+    ok "A3b spare      -- $((BUDGET - T1)) fork(s) to spare, at least the allowance of $HEADROOM_MARGIN"
+    ok "A4 stale-high  -- $T1 is at least 70% of $BUDGET, so the ceiling is still reachable"
+    ok "A5 wholeness   -- traced run exited $EX and reached line $MX, past the last arm header at $LA"
     ;;
   *)
-    note "FAIL  validator-fork-budget -- ${VERDICT}"
-    rc=1
+    bad "validator-fork-budget -- ${VERDICT}"
     ;;
 esac
 
@@ -388,7 +386,7 @@ RCPT="$DIR/receipt-bl898.sh"
 # world runs in process (vem_entry); only the two cli cells start the validator as a program.
 bash "$RCPT" "$VAL" > "$TMP/rcpt.out" 2>"$TMP/rcpt.err"; rcpt_rc=$?
 if [ "$rcpt_rc" = 0 ] && [ "$(grep -c '^CELL [a-z]* PASS' "$TMP/rcpt.out")" = 5 ]; then
-  note "ok    A6 BL-898      -- $(grep '^CELL count ' "$TMP/rcpt.out" | cut -d' ' -f4-); the unread and self-reader cells pass"
+  ok "A6 BL-898      -- $(grep '^CELL count ' "$TMP/rcpt.out" | cut -d' ' -f4-); the unread and self-reader cells pass"
 elif [ "$rcpt_rc" = 9 ]; then
   bad "FIXTURE BROKEN: receipt-bl898.sh refused to measure: $(head -1 "$TMP/rcpt.err")"
 else
@@ -426,7 +424,7 @@ a7_verdict() {
 r981_v="$(a7_verdict "$r981_rc" "$TMP/r981.out")"
 case "$r981_v" in
   BROKEN) bad "FIXTURE BROKEN: receipt-bl981.sh refused to measure: $(head -1 "$TMP/r981.err")" ;;
-  OK) note "ok    A7 BL-981      -- receipt exit 0: $(grep '^CELL ' "$TMP/r981.out" | cut -d' ' -f2-3 | tr '\n' ' ')" ;;
+  OK) ok "A7 BL-981      -- receipt exit 0: $(grep '^CELL ' "$TMP/r981.out" | cut -d' ' -f2-3 | tr '\n' ' ')" ;;
   *) bad "A7 BL-981 -- receipt-bl981.sh ${r981_v#RED } (exit 0 and one PASS of each owed): $(grep '^CELL ' "$TMP/r981.out" | tr '\n' ' ')$(head -c 400 "$TMP/r981.err" | tr '\n' ' ')" ;;
 esac
 # THE TWO BL-981 CLI CELLS' EQUIVALENCE (cells.decl bl981-em, bl981-emp): the receipt's live run re-runs each `--arms I14`
@@ -437,7 +435,5 @@ else
   bad "A7 equivalence -- the in-process and command-line I14 runs differ or did not run: $(grep '^EQUIV ' "$TMP/r981.out" | tr '\n' ' ')"
 fi
 
-if [ "$rc" -eq 0 ]; then
-  note "PASS  validator-fork-budget -- $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs; 9 arms green"
-fi
-exit "$rc"
+note "validator-fork-budget: $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs"
+report_end validator-fork-budget

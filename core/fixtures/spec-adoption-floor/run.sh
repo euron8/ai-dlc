@@ -36,9 +36,8 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/docs/retro"
 DECL="$WORK/_bmad-output/planning-artifacts/spec-adoption.md"
 
-rc=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # fx_inproc lives in lib/mutant.sh, which needs ok() and bad() defined first. A literal-tail path, never `. "$VAR"`:
 # in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
 [ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
@@ -191,5 +190,4 @@ g=$(rcof --verdict 300 "$WORK")
                || bad "an unversioned declaration exited $g, expected 1"
 
 echo
-if [ "$rc" -eq 0 ]; then echo "spec-adoption-floor: PASS"; else echo "spec-adoption-floor: FAILED" >&2; fi
-exit $rc
+report_end spec-adoption-floor

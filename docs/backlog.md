@@ -2722,6 +2722,21 @@ verify: manual
 
 ## BL-1056 — fixtures have no written contract, so each is built bespoke and every builder rediscovers how the fixture system works
 
+**PARTIAL (v0.1138.0; batch 257, W6-09).** 49 more fixtures now report through `core/fixtures/lib/report.sh`, and their 49 `:report` rows are dropped from `fixture-contract-allowlist.txt`. The file is rebuilt as its header plus `validate-fixture-hygiene.sh --derive-h10` on the edited tree, so it adds no row. The 49: apply-drift-refile, artifact-section-heading-level, backlog-ledger, backlog-real-ledger, backlog-rotate-fence-guard, backlog-size-ceiling, bmad-invocation-resolve, budget-summary-verdict, check-31-ac-falsifiability, ci-gates-resolution, claude-rules-joins, context-sensor, deploy-validate-smoke-classification, dist-clone, escalation-citation, extension-check-adoption, file-mtime, gate-remediation-deny, gate-series-rung, hook-registration-join, invariant-index, layer-conforms-to, layer-contract-conformance, layer-entry-unreadable, layer-readopt-gate, party-wave-barrier, path-mapping-render, predicate-reclassification, prepush-pool-depth, provenance-flagless-default, push-drain-refusals, retro-compliance-workflow, review-carry-over-clauses, seed-verdict-store-red-print, self-update-reinvoke-liveness, shadowed-local-validators, shell-portability, smoke-surface-ignored, snapshot-supersession-marker, span-of-containment, spec-adoption-floor, spec-join-integrity, story-evidence-receipts, story-evidence-scaffold, story-provenance, taught-schema, trunk-push-bound, validator-fork-budget, vocabulary-index.
+- Each one sources the library through its own fixture-directory variable; `prepush-pool-depth`, which has none, uses `$(cd "$(dirname "$0")/../lib" && pwd)`. Its own counters (`rc`, `FAILS`, `ASSERTIONS`/`FAILURES`, `asserts`, `made`) map onto `oks`/`fails`. Its verdict tail is `report_end`, which keeps the expected count where the fixture checked one: layer-conforms-to 20, layer-entry-unreadable 23, layer-contract-conformance 5 or 1 per shard, and invariant-index 2.
+- Fixtures that asserted through raw `printf` or `note` lines now assert through `ok`/`bad`, so those lines count. Fixtures whose `ok`/`bad` took two arguments keep their column layout through wrappers that call `ok`/`bad`.
+- `core/fixtures/lib/report.sh` is a declared input of every migrated fixture that has an `inputs.decl`, and of the shards that run a migrated parent (apply-drift-refile-b/c, layer-readopt-gate-b..e, story-evidence-scaffold-b/c/d/g).
+- `prepush-pool-depth/receipt-bl924.sh` prints `$((oks + fails))` where it printed the removed `$asserts`.
+
+Remainder (11 rows still listed):
+- Owned by other units: apply-restamp-worklist (W6-08), backlog-receipt-traced-removal (W6-11), readset-skip and suite-pole-info (B12). W6-04 migrated hermetic-consumption and release-version-triple in v0.1137.0.
+- Rewrites, not counter swaps: hermetic-runner, ledger-status-vocabulary, plan-rotate, reconcile-emit-report, self-update-gate.
+- ledger-reverify: about 75 direct `printf '  ok …'` sites and 150 `FAILURES` sites, and `ASSERTIONS` is control logic (the shared-control check, the per-unit floor, the `row_is` probes).
+- procsub-staged-refusal: its `ok`/`bad` call `stub_clear` after every assertion, and the arm helpers that call arms outside `run_arm` rely on that clear.
+- hook-registration-join and retro-compliance-workflow carry no `inputs.decl`. Their new read of `lib/report.sh` is owed a sandbox read-set trace.
+- World adoption is still not bound by an arm.
+- NOTE: six archived receipts in `docs/backlog.archive.md` grep output text the migration changed, so they no longer match: 26795, 27158 and 27168 (predicate-reclassification `ok   13a`), 40163 (gate-series-rung `ok: …`), 40288 (deploy-validate-smoke-classification `: PASS`) and 40431 (bmad-invocation-resolve `: PASS`). The gate runs no archived receipt (`.githooks/pre-push:596`), so none of them reads red.
+
 **PARTIAL (v0.1124.0; batch 257, F24).** The contract is written and bound; the migration of existing fixtures onto it is owed. `.claude/rules/fixture-contract.md` (scoped to `core/fixtures/**`) states the run.sh skeleton, the library entry points, every declaration grammar, the keys, the verdict store and the runner span in 24 clauses, each ending with its enforcer. `scripts/validate-claude-rules.sh` arm A7 resolves every cite (an arm header, a span marker, a function, or a cell or mutant word in a fixture) and fails the push on a clause with no enforcer, on a cite that names nothing, and on a declaration kind or `core/fixtures/lib/*.sh` the contract never names. New library entry points: `core/fixtures/lib/report.sh` (`ok`, `bad`, `report_end <name> [<expected>]`), `world.sh` (`world_git`, `world_repo`, `world_commit`, `world_install`) and `hook-drive.sh` (`hook_drive`: stdin `/dev/null`, `GIT_*` unset, `AI_DLC_READSET_LIVE_TRACE=0`, store `<tree>.verdicts`). `scripts/validate-fixture-hygiene.sh` arms H10 (a run.sh defining its own `ok`/`bad`) and H11 (a run.sh running a pre-push hook by hand) are down-only over `fixture-contract-allowlist.txt` (arm H10-M4). `core/fixtures/suite-dispatch-order` is migrated onto all three new files and is the contract's reference fixture. CLAUDE.md's verified-record and suite-key lines now say what F16 made true (both follow a green suite under a red step) and point at the contract.
 
 Owed (the migration, not done in this release by the lead's brief):
@@ -2992,26 +3007,6 @@ Provenance: batch 257, wave 4, filed by ai-dlc-a8 from ai-dlc-f1's rows (relayed
 
 verify: manual
 
-## BL-1122 — a fixture that reaches a changed validator through a directory sweep is missing from a builder's per-file set of rows to re-measure
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `scripts/pregate-self-check.sh`, `scripts/predict-push-set.sh`.
-
-A builder that changes a validator re-measures the J3 rows of the fixtures that name the validator. A fixture that sweeps the directory never names it. validator-path-resolution runs every `core/scripts/*.sh` bare, through `for f in "$SRC"/*.sh` (`run.sh:113`, `:398`), and declares `!core/scripts/` whole.
-
-Evidence:
-- At 39184970b, `validate-artifact-budget` occurs 0 times in its run.sh. The control: budget-summary-verdict names it in 3 files.
-- B10's first push went red on this fixture alone, after a 19m19s gate: J3 `row "343 *"` measured 328, with all 125 assertions passing. B10 edited 15 fixtures' invocations.decl, and this one was not among them. The re-cut moved the row to 328, because the deleted self-probe of `validate-artifact-budget.sh` had started `wait-for-deliverable.sh` 3 times per bare run.
-- The hook's composer would run the fixture: a whole-directory `!` row matches. The gap is only in what the builder re-measures before handing over.
-- At 39184970b, 26 fixtures declare a whole `core/scripts/` or `scripts/` directory in inputs.decl, against 160 that declare a file under `core/scripts/`.
-
-Related, not a duplicate: BL-1085 (WITHDRAWN) covered READY acceptance of the pregate record and the predicted set. It did not cover which rows a validator change moves.
-
-Fix: build no second inputs.decl derivation. `scripts/predict-push-set.sh` already prints the hook composer's `RUN` set, and that set includes validator-path-resolution through its `!core/scripts/` row. Have `scripts/pregate-self-check.sh` re-measure the J3 rows of the RUN-set fixtures that reach a changed `core/scripts/` or `scripts/` validator only through a whole-directory row; a builder's name grep misses exactly these. It should refuse a tree on which one of them reads a row other than its committed one. Measure the false-positive set on B10's tree before shipping.
-
-Provenance: batch 257, wave 4, filed by ai-dlc-a8 on lead ai-dlc-35's B10 red (rulings log 08:44); id allocated by the lead.
-
-verify: manual
-
 ## BL-1125 — 15 rows of `scripts/fixture-inprocess-allowlist.txt` carry a reason `--derive` no longer writes, 8 of them naming `artifact-path-config.sh`
 
 **NOTE.** OPEN. Filed 2026-11-15. Owner: `scripts/fixture-inprocess-allowlist.txt` (written only by `bash scripts/validate-fixture-inprocess.sh --derive`).
@@ -3040,27 +3035,6 @@ Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b; id allocated 
 
 verify: manual
 
-## BL-1129 — a change to a script's child-start count moves the `*` row of every fixture that runs the script, and no pre-push step re-measures a fixture with no row for the child
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `scripts/pregate-self-check.sh`.
-
-The `<n> *` J3 row counts every bash start in a fixture. A change that stops a script starting a child, or starts a new one, moves the `*` row of every fixture that runs the script. This includes fixtures with no `invocations.decl` row for the child. A builder re-measures the fixtures whose `invocations.decl` names the changed script, and that grep misses these. Pregate's only counted runs are step d (validator-fork-budget, `scripts/pregate-self-check.sh:266`) and step e (the hook-driving fixtures that are also in predict-push-set's RUN set, `:389`). So nothing before the push measures them.
-
-Evidence, B11 (0.1135.0). 61's BL-878 change made `core/scripts/validate-layer-entries.sh` source `core/scripts/artifact-path-config.sh` (`lc_apc`/`apc_main`) instead of starting `bash` on it 3 times per run. The first B11 push went red on 4 fixtures, all J3 count drift (rulings log `b257-rulings.md:1222`). All 4 were in the squash's predict-push-set RUN list (RUN 107, CONSUMER 76). None names a pre-push hook in its shell files, so step e did not run them; 32 fixtures' run.sh do name one. Three of the reds are this shape:
-- procsub-staged-refusal `147 *` measured 132. This one is measured: counted runs through the hook's `fxcount_arm` read 132 at the tip and 147 on a scratch copy of the tip with the two scripts reverted to base (ai-dlc-e9, `b257-rulings.md:1224`). Its `invocations.decl` has no row for either script, and its `inputs.decl` declares `core/scripts/` whole.
-- consumer-machinery-inventory `53 *` measured 14. This one is attributed to the same change by routing, not separately measured (`:1222`, `:1224`). Its `inputs.decl` names both scripts as files (`!core/scripts/validate-layer-entries.sh`, `core/scripts/artifact-path-config.sh`), with no whole-directory row. Its `invocations.decl` rows `validate-layer-entries.sh` (1 row) but not `artifact-path-config.sh` (0 rows).
-- validator-path-resolution `328 *` measured 322. This is a net of two B11 changes: it runs every `core/scripts/*.sh` bare, and B11 also added `core/scripts/resolve-cited-paths.sh`.
-
-Why this is not BL-1122. BL-1122's fix re-measures the RUN-set fixtures that reach a changed validator only through a whole-directory `inputs.decl` row. That covers procsub-staged-refusal and validator-path-resolution. It does not cover consumer-machinery-inventory, which declares both scripts by file, so BL-1122's population excludes it. Its shape is the fan-out change itself: a child-start count moved in a script it names, and it has no row for the child.
-
-Measured population at d619fe62a. 16 fixtures' run.sh name `validate-layer-entries.sh`. 9 row `artifact-path-config.sh` in `invocations.decl`, and all 9 were edited by B11's members. Of the 7 that do not, 2 had their `*` row moved (consumer-machinery-inventory, procsub-staged-refusal). The other 5 kept theirs (extract-push-flag-decision, hermetic-consumption, layer-crosswalk-home, self-update-join-gate, shell-portability). So a run.sh name grep over-selects by 5 of 7 on this change.
-
-Fix: in pregate, take predict-push-set's RUN set (step e already reads it) and seed every member whose shell files name a script the diff changed, through `scripts/seed-verdict-store.sh` (the counted store a push reads). Any red is a finding. Measure the false-positive set on B11's tree before shipping. This builds no second inputs.decl derivation. It should share BL-1122's selection, which covers the whole-directory half.
-
-Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b from the B11 red; id allocated by the lead.
-
-verify: manual
-
 ## BL-1130 — a fixture world that drives or sources the pre-push pool without its own `AI_DLC_VERDICT_STORE` writes records into the real verdict store
 
 **DEFECT.** OPEN. Filed 2026-11-15. Owner: one of `scripts/validate-fixture-hygiene.sh` (a static arm), `core/scripts/hermetic-run.sh` (per-run stores) or `.githooks/pre-push` (a post-suite root check). Choose by the false-positive set each one measures.
@@ -3080,7 +3054,24 @@ Reported by ai-dlc-67's BL-1115 report, not verified here: one prepush-pool-dept
 
 Owed: one mechanism, with its false-positive set measured on the B12 tree before it ships. Candidates are a fixture-hygiene arm (a world that drives the hook sets its own store), per-run stores in hermetic-run, or a post-suite check that every root under the real store is ai-dlc's or a declared consumer's. Removing the stray `0196bbccd` root is part of the fix.
 
-Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b from ai-dlc-67's BL-1115 report; id allocated by the lead.
+**PARTIAL (v0.1138.0).** The mechanism ships; the remainder is named under "Remaining" below.
+
+The pool path cannot reach the real store: `core/scripts/hermetic-run.sh:617` runs every declared fixture under `env -i ... HOME="$HR_WORK/home"`. The stray records come from plain `bash core/fixtures/<fx>/run.sh` runs, which CLAUDE.md sanctions, and the defect stands on that path.
+
+What landed:
+- `core/fixtures/lib/pool-span.sh`, `pool_span <hook> <out> <SPAN>...`: writes the named hook spans under a first line `export AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$PWD.verdicts}"`, so a world that sources `<out>` after a `cd` into itself files every record (the RECORD_HOME span at source, later `rec_home` calls, and every child) under `<world>.verdicts` unless the caller set a store.
+- `scripts/validate-fixture-hygiene.sh` H13, keyed on the emission site: a command-position `sed` or `awk` whose quoted argument carries `FIXTURE_POOL_BEGIN` or `RECORD_HOME_BEGIN` FAILs, heredoc-written drivers included. Its down-only allowlist is `scripts/pool-span-allowlist.txt` (H13STALE, H13DUP, H13NOREASON, H13-M4). Fixture contract clause C25.
+- consumer-suite-pool and presuite-units extract through `pool_span`.
+
+Stray records removed by exact listing (contents in the sha message): `consumer-placement-keys/0196bbccda293ee7aa4ccf0f282cafd2a291787f/`, which held `stub-shipping.key` AND `stub-shipping.key.prev` (the entry above names only the first), and a second stray, the top-level `40b46e0f45ea8896d46fdf5f1144ae8ffbb1555c/` holding one story-evidence-scaffold consumer-layout record. Its writer is not determined.
+
+Remaining:
+- the 8 rows of `scripts/pool-span-allowlist.txt` (fixture-invocation-budget, hermetic-runner, pregate-self-check, prepush-pool-depth, readset-skip, seed-verdict-store-red-print, self-update-gate, suite-content-key), each migrated to `pool_span` by the owner of its fixture-contract or fixture-inprocess allowlist row, dropping its row;
+- path (b): an undeclared `@consumer` fixture runs plain as `bash tests/fixtures/<f>/run.sh` with `AI_DLC_VERDICT_STORE` set to the real store base (`.githooks/pre-push:3441`-`:3446`); a world it builds without a store of its own writes there;
+- scripts that load a record-binding span themselves rather than through a fixture (`scripts/pregate-self-check.sh:432` writes pregate-green through `rec_home`); H13 reads only fixture files;
+- the `REC_ROOT` inheritance effect stated above was never reproduced; no stray under `89857cfe9` was observed.
+
+Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b from ai-dlc-67's BL-1115 report; id allocated by the lead. W6-14 by ai-dlc-b7.
 
 verify: manual
 

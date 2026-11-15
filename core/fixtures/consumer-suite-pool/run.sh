@@ -52,6 +52,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../lib/hook-drive.sh" || { echo "FIXTURE BROKEN: cannot source lib/hook-drive.sh" >&2; exit 2; }
+. "$HERE/../lib/pool-span.sh" || { echo "FIXTURE BROKEN: cannot source lib/pool-span.sh" >&2; exit 2; }
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "consumer-suite-pool: FIXTURE BROKEN" >&2; exit 2; }
@@ -1086,10 +1087,10 @@ cl_seed() {                    # cl_seed <prefix> <post-P1 tree> [<hook>]: the c
   # distribution's census script does not ship; this is its core, driven through the hook copy's own FIXTURE_POOL span:
   # cl_select in census mode, each selected unit run from the tree and its pass published by cl_publish, cl_write.
   # The span is SOURCED here, an in-process pass of the hook: fx_inproc records it, and invocations.decl declares it.
-  ( cd "$t" && sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' .githooks/pre-push > "$t.pool" || exit 1
+  ( cd "$t" && pool_span .githooks/pre-push "$t.pool" FIXTURE_POOL || exit 1
     fx_inproc "$HOOK"
-    . "$t.pool" >/dev/null 2>&1 || exit 1
-    POOL_DEPTH_IN=0 && cl_tree="$t.ct0" && AI_DLC_VERDICT_STORE="$t.vs" && o="$t.census" && mkdir -p "$o" && cl_select "$o" census >"$p.cl0.out" 2>&1 \
+    AI_DLC_VERDICT_STORE="$t.vs" && . "$t.pool" >/dev/null 2>&1 || exit 1
+    POOL_DEPTH_IN=0 && cl_tree="$t.ct0" && o="$t.census" && mkdir -p "$o" && cl_select "$o" census >"$p.cl0.out" 2>&1 \
       && while IFS= read -r i; do ( cd "$cl_tree" && bash "tests/fixtures/$i/run.sh" ) </dev/null >/dev/null 2>&1 && printf ok > "$o/$i@consumer" && cl_publish "$o" "$i"; done < "$o/.cl.sel" \
       && cl_write "$o" ) || broken "BL-998 seed cl: the census over tree 0 failed: $(tr '\n' '|' < "$p.cl0.out" | tail -c 300)"
   grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.cl0.out" \

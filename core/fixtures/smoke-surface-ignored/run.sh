@@ -64,9 +64,8 @@ done
 for p in scripts/validate-handoff-evidence.sh scripts/record-only-diff.sh scripts/sprint-status.sh; do echo "HERMETIC-CONSUMED core/$p"; done
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/smoke-surface-ignored.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
-rc=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # The control tree: the whole scripts directory and the schema, laid out as the shipped one is.
 T="$WORK/tree/core"
 mkdir -p "$T/scripts" "$T/schemas" && cp -R "$(dirname "$HE")/." "$T/scripts/" && cp "$SCHEMA" "$T/schemas/sprint-status.json" \
@@ -230,5 +229,4 @@ for a in $ARMS; do
   if [ -z "$f" ]; then ok "$a: the unmutated validator answers every row of $(armworlds "$a" | tr ' ' '+')"
   else bad "$a: the unmutated validator: $(tr '\n' ' ' <<<"$f")"; fi
 done
-if [ "$rc" = 0 ]; then echo "PASS smoke-surface-ignored"; else echo "FAIL smoke-surface-ignored"; fi
-exit "$rc"
+report_end smoke-surface-ignored

@@ -200,15 +200,30 @@ gitin "$W/rootMr" config core.hooksPath "$W/ext-tree" || exit 9
 # Section e (BL-1069). Er: Mt, whose runner fails hookfx while the tree hook carries Mt's edit, so the hook edit breaks
 # a hook-driving world. Ts: A on tag base0 plus a commit editing a script the hook names. Tn: the same with a script the
 # hook does not name. A (no diff against HEAD) is the skip.
-cp -R "$W/rootMt" "$W/rootEr" || exit 9
+# Er's runner is committed BELOW base0, so its diff is the hook edit alone and section f skips it (no script changed).
+cp -R "$W/rootA" "$W/rootEr" || exit 9
 printf '%s\n' '#!/usr/bin/env bash' \
   'case "$1" in hookfx) grep -qxF "# tree hook moved" .githooks/pre-push && { echo "hookfx: FAIL: the hook edit broke this world"; exit 1; } ;; esac' \
   'echo "validator-fork-budget: invocation budget ok: 1 start(s)"; exit 0' > "$W/rootEr/core/scripts/hermetic-run.sh" || exit 9
-gitin "$W/rootEr" -c user.email=x@x -c user.name=x commit -q -am "a runner that a hook edit breaks" || exit 9
+gitin "$W/rootEr" -c user.email=x@x -c user.name=x commit -q -am "a runner that a hook edit breaks" && gitin "$W/rootEr" tag base0 || exit 9
+printf '# tree hook moved\n' >> "$W/rootEr/.githooks/pre-push" || exit 9
+gitin "$W/rootEr" -c user.email=x@x -c user.name=x commit -q -am "branch edits the hook" || exit 9
+gitin "$W/rootEr" config core.hooksPath "$W/ext-tree" || exit 9
+# A stub predictor for sections e and f: RUN is the root's pred.run, and the composer's parse (out/.dparse) its
+# pred.dparse, so a world declares which units the push would run and which D/F routes their declarations carry.
+PREDSTUB='#!/usr/bin/env bash
+mkdir -p "$2/out" && cp "$1/pred.dparse" "$2/out/.dparse" || exit 2
+echo "RUN $(grep -c . "$1/pred.run")"; sed "s/^/run /" "$1/pred.run"'
+pred_stub() { # <root> <pred.dparse body> <unit>... -> the stub predictor and its two files, committed
+  local t="$1" b="$2"; shift 2
+  printf '%s\n' "$PREDSTUB" > "$t/scripts/predict-push-set.sh" && printf '%s' "$b" > "$t/pred.dparse" \
+    && printf '%s\n' "$@" | sort > "$t/pred.run" || return 1
+  gitin "$t" add scripts/predict-push-set.sh pred.dparse pred.run && gitin "$t" -c user.email=x@x -c user.name=x commit -q -m "a stub predictor"
+}
 # Ep: Mt plus a stub scripts/predict-push-set.sh that predicts hookfx alone, so section e runs that one and reuses the
 # other three (Mt itself has no predictor and runs all four).
 cp -R "$W/rootMt" "$W/rootEp" || exit 9
-printf '%s\n' '#!/usr/bin/env bash' 'echo "RUN 1"' 'echo "run hookfx"' > "$W/rootEp/scripts/predict-push-set.sh" || exit 9
+printf '%s\n' '#!/usr/bin/env bash' 'mkdir -p "$2/out" && printf "hookfx\tN\n" > "$2/out/.dparse" || exit 2' 'echo "RUN 1"' 'echo "run hookfx"' > "$W/rootEp/scripts/predict-push-set.sh" || exit 9
 gitin "$W/rootEp" add scripts/predict-push-set.sh && gitin "$W/rootEp" -c user.email=x@x -c user.name=x commit -q -m "a predictor naming hookfx" || exit 9
 # Mt and Mr (hook-editing member worlds the other sections read) get a predictor naming nothing, so their section e
 # reuses all four and starts no seed; Er, with no predictor, is the world that says so and runs the whole set.
@@ -216,11 +231,37 @@ for t in Mt Mr; do
   printf '%s\n' '#!/usr/bin/env bash' 'echo "RUN 0"' > "$W/root$t/scripts/predict-push-set.sh" || exit 9
   gitin "$W/root$t" add scripts/predict-push-set.sh && gitin "$W/root$t" -c user.email=x@x -c user.name=x commit -q -m "a predictor naming nothing" || exit 9
 done
-for t in Ts Tn; do cp -R "$W/rootA" "$W/root$t" && gitin "$W/root$t" tag base0 || exit 9; done
+# Ts and Tn carry a predictor below base0 naming all five fixtures, each declared with no D/F row, so section f reads a
+# changed script that no RUN unit reaches.
+for t in Ts Tn; do
+  cp -R "$W/rootA" "$W/root$t" || exit 9
+  pred_stub "$W/root$t" "$(printf '%s\tN\n' backlog-real-ledger hermetic-runner hookfx hookfx-w validator-fork-budget)
+" backlog-real-ledger hermetic-runner hookfx hookfx-w validator-fork-budget && gitin "$W/root$t" tag base0 || exit 9
+done
 printf '# edited\n' >> "$W/rootTs/scripts/validate-shell-portability.sh" || exit 9
 gitin "$W/rootTs" -c user.email=x@x -c user.name=x commit -q -am "edit a script the hook names" || exit 9
 printf '#!/usr/bin/env bash\nexit 0\n' > "$W/rootTn/scripts/unnamed.sh" || exit 9
 gitin "$W/rootTn" add scripts/unnamed.sh && gitin "$W/rootTn" -c user.email=x@x -c user.name=x commit -q -m "add a script no hook names" || exit 9
+# Section f (BL-1122, BL-1129). Fs: A plus five fixtures and core/scripts/fx-sub.sh below base0, then an edit of
+# fx-sub.sh. The RUN set is fdir (a D row core/scripts), ffile (an F row fx-sub.sh), fname (its run.sh names fx-sub.sh)
+# and fnear (a D row core/scriptsx, an F row fx-sub.shx, run.sh naming xfx-sub.sh), sorted so fnear is last; fout
+# reaches fx-sub.sh by all three routes but is not in RUN. The runner reds fname, so the section's own finding shows.
+cp -R "$W/rootA" "$W/rootFs" || exit 9
+for n in fdir ffile fname fnear fout; do mkdir -p "$W/rootFs/core/fixtures/$n" || exit 9; done
+printf '#!/usr/bin/env bash\nexit 0\n' > "$W/rootFs/core/fixtures/fdir/run.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$W/rootFs/core/fixtures/ffile/run.sh"
+printf '#!/usr/bin/env bash\nbash core/scripts/fx-sub.sh\n' > "$W/rootFs/core/fixtures/fname/run.sh"
+printf '#!/usr/bin/env bash\nbash core/scripts/xfx-sub.sh\n' > "$W/rootFs/core/fixtures/fnear/run.sh"
+printf '#!/usr/bin/env bash\nbash core/scripts/fx-sub.sh\n' > "$W/rootFs/core/fixtures/fout/run.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$W/rootFs/core/scripts/fx-sub.sh" || exit 9
+printf '%s\n' '#!/usr/bin/env bash' \
+  'case "$1" in fname) echo "fname: FAIL (J3): row \"3 *\": measured 2, declared 3"; exit 1 ;; esac' \
+  'echo "validator-fork-budget: invocation budget ok: 1 start(s)"; exit 0' > "$W/rootFs/core/scripts/hermetic-run.sh" || exit 9
+gitin "$W/rootFs" add -A && gitin "$W/rootFs" -c user.email=x@x -c user.name=x commit -q -m "five fixtures and fx-sub.sh" || exit 9
+pred_stub "$W/rootFs" "$(printf 'fdir\tN\nfdir\tD\tcore/scripts\t1\tcore/scripts\nffile\tN\nffile\tF\tcore/scripts/fx-sub.sh\t0\tcore/scripts/fx-sub.sh\nfname\tN\nfnear\tN\nfnear\tD\tcore/scriptsx\t1\tcore/scriptsx\nfnear\tF\tcore/scripts/fx-sub.shx\t0\tcore/scripts/fx-sub.shx\nfout\tN\nfout\tD\tcore/scripts\t1\tcore/scripts\nfout\tF\tcore/scripts/fx-sub.sh\t1\tcore/scripts/fx-sub.sh')
+" fdir ffile fname fnear && gitin "$W/rootFs" tag base0 || exit 9
+printf '# edited\n' >> "$W/rootFs/core/scripts/fx-sub.sh" || exit 9
+gitin "$W/rootFs" -c user.email=x@x -c user.name=x commit -q -am "edit fx-sub.sh" || exit 9
 drive_away() { # <root> <out-file> -> the self-check's exit, run from a cwd other than the root
   ( cd "$W" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
 }
@@ -275,7 +316,9 @@ mrn=no; grep -qF 'FAIL: seeded post-presuite step' "$W/Mr.out" && grep -qF 'FIND
 htreem=no; grep -qF 'before READY run this script with --member' "$W/Htree.out" && htreem=yes
 # Section e (BL-1069): A skips; Mt runs the derived 4 green; Er's hook edit reds hookfx -> 1 under e:hook-fixtures;
 # Ts triggers on the named script and runs green; Tn's unnamed script skips.
-eskip=no; grep -qF '   SKIPPED: the diff from ' "$W/A.out" && eskip=yes
+eskip=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches neither pre-push hook' "$W/A.out" && eskip=yes
+# Section f (BL-1122, BL-1129): A's diff touches no script, so f skips.
+fskip=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches no core/scripts/\*\.sh or scripts/\*\.sh path$' "$W/A.out" && fskip=yes
 mte=no; grep -qF '   triggered by: .githooks/pre-push ' "$W/Mt.out" && grep -qF '   4 fixture(s): 3 naming a hook or named by the ruling, 1 wrapper(s) in 2 round(s); ' "$W/Mt.out" \
   && grep -qF '   predict-push-set.sh: 4 of 4 hold a counted pass on their current key rows (reused); 0 to run' "$W/Mt.out" \
   && grep -qF '   ok: 0 fixture(s) run green' "$W/Mt.out" && mte=yes
@@ -291,7 +334,18 @@ ern=no; grep -qF '   PREDICTION UNAVAILABLE (no ' "$W/Er.out" && grep -qxF '    
 drive_base "$W/rootTs" "$W/Ts.out" base0; ts=$?
 tsn=no; grep -qxF '   triggered by: scripts/validate-shell-portability.sh ' "$W/Ts.out" && grep -qF '   ok: 4 fixture(s) run green' "$W/Ts.out" && tsn=yes
 drive_base "$W/rootTn" "$W/Tn.out" base0; tn=$?
-tnn=no; grep -qF '   SKIPPED: the diff from ' "$W/Tn.out" && tnn=yes
+tnn=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches neither pre-push hook' "$W/Tn.out" && tnn=yes
+# Tn: f reads the added script and no RUN unit reaches it (the near-miss of Fs).
+tnf=no; grep -qxF '   1 changed script(s): scripts/unnamed.sh ' "$W/Tn.out" \
+  && grep -qF '   predict-push-set.sh: 0 of 5 RUN unit(s) reach a changed script (DIR 0, DECLFILE 0, NAME 0); 0 already run in section e; 0 to run' "$W/Tn.out" \
+  && grep -qF '   ok: 0 fixture(s) run green' "$W/Tn.out" && tnf=yes
+# Fs: f runs exactly the three RUN units that reach fx-sub.sh, one route each, and fname's red is its finding.
+drive_base "$W/rootFs" "$W/Fs.out" base0; fs=$?
+fsn=no; grep -qF '   predict-push-set.sh: 3 of 4 RUN unit(s) reach a changed script (DIR 1, DECLFILE 1, NAME 1); 0 already run in section e; 3 to run' "$W/Fs.out" \
+  && grep -qxF '     fdir  DIR:core/scripts' "$W/Fs.out" && grep -qxF '     ffile  DECLFILE:core/scripts/fx-sub.sh' "$W/Fs.out" \
+  && grep -qxF '     fname  NAME:fx-sub.sh' "$W/Fs.out" && grep -qxF '     fdir rc=0' "$W/Fs.out" && grep -qxF '     ffile rc=0' "$W/Fs.out" \
+  && grep -qxF '     fname rc=1' "$W/Fs.out" && grep -qxF '   FAIL: red: fname' "$W/Fs.out" && grep -qF 'FINDINGS in f:reached-fixtures' "$W/Fs.out" && fsn=yes
+fsnear=no; grep -qE '^     (fnear|fout)( |$)' "$W/Fs.out" && fsnear=yes
 seed_refusal() { # <name> <hook body above the marker> -> sets RC
   local T="$W/ref-$1"; mkdir -p "$T/.githooks" "$T/core/fixtures/validator-fork-budget" || exit 9
   echo 0.0.1 > "$T/VERSION"
@@ -319,7 +373,7 @@ nv=$RC
 # World A's own output, printed ABOVE the summary only when A is not clean, so a caller can read why; the
 # summary stays the last line.
 [ "$a" = 0 ] || sed 's/^/A| /' "$W/A.out"
-echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn Arec=$arec Brec=$brec Wd=$wd Wdrec=$wdrec Wdn=$wdn Aseed=$aseed Wdseed=$wdseed Mt=$mt Mtn=$mtn Mtrec=$mtrec Mr=$mr Mrn=$mrn Htreem=$htreem Eskip=$eskip Mte=$mte Er=$er Ern=$ern Ts=$ts Tsn=$tsn Tn=$tn Tnn=$tnn Ep=$ep Epn=$epn Epall=$epall Epnone=$epnone"
+echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn Arec=$arec Brec=$brec Wd=$wd Wdrec=$wdrec Wdn=$wdn Aseed=$aseed Wdseed=$wdseed Mt=$mt Mtn=$mtn Mtrec=$mtrec Mr=$mr Mrn=$mrn Htreem=$htreem Eskip=$eskip Mte=$mte Er=$er Ern=$ern Ts=$ts Tsn=$tsn Tn=$tn Tnn=$tnn Ep=$ep Epn=$epn Epall=$epall Epnone=$epnone Fskip=$fskip Tnf=$tnf Fs=$fs Fsn=$fsn Fsnear=$fsnear"
 shared_ok=0; base_ok=0; e_ok=0
 [ "$a" = 0 ] && [ "$aseed" = yes ] && [ "$arec" = yes ] && [ "$mt" = 0 ] && [ "$mtn" = yes ] && [ "$mtrec" = no ] \
   && [ "$eskip" = yes ] && [ "$mte" = yes ] && shared_ok=1
@@ -329,6 +383,7 @@ shared_ok=0; base_ok=0; e_ok=0
   && [ "$d" = 2 ] && [ "$dran" = no ] && [ "$dnamed" = yes ] \
   && [ "$u" = 2 ] && [ "$unamed" = yes ] && [ "$j" = 1 ] && [ "$jnamed" = yes ] && base_ok=1
 [ "$ep" = 0 ] && [ "$epn" = yes ] && [ "$epall" = no ] && [ "$epnone" = no ] \
-  && [ "$er" = 1 ] && [ "$ern" = yes ] && [ "$ts" = 0 ] && [ "$tsn" = yes ] && [ "$tn" = 0 ] && [ "$tnn" = yes ] && e_ok=1
+  && [ "$er" = 1 ] && [ "$ern" = yes ] && [ "$ts" = 0 ] && [ "$tsn" = yes ] && [ "$tn" = 0 ] && [ "$tnn" = yes ] \
+  && [ "$fskip" = yes ] && [ "$tnf" = yes ] && [ "$fs" = 1 ] && [ "$fsn" = yes ] && [ "$fsnear" = no ] && e_ok=1
 [ "$shared_ok$base_ok$e_ok" = 111 ] && exit 0
 exit 1

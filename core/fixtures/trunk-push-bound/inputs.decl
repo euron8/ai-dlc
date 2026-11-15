@@ -1,3 +1,4 @@
 !core/scripts/validate-audit-anchors.sh
 core/schemas/audit-anchors.json
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh

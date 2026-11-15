@@ -59,29 +59,26 @@ SCHEMA_ONLY="$(git -C "$DIST" rev-parse HEAD~1)"
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
 [ -n "$BASE" ] && [ -n "$MID" ] && [ -n "$SCHEMA_ONLY" ] && [ -n "$THEIRS" ] || { echo "FIXTURE ERROR: seeded refs unresolvable" >&2; exit 2; }
 
-fails=0
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # HERE-STRINGS, NEVER `printf | grep -q`. Under pipefail the pipeline reports the WRITER's
 # status, so once the value exceeds the pipe buffer the test answers "not found" on input that
 # contains the pattern -- permanently, and with no symptom. I54/I54b fail the push on the pipe
 # form and caught all three of these on this file's first push.
 ck() { # $1 label, $2 expected-substring, $3 actual
   if grep -qF "$2" <<<"$3"; then
-    printf 'ok   %s\n' "$1"
+    ok "$1"
   else
-    printf 'FAIL %s\n  expected to find: %s\n  in: %s\n' "$1" "$2" "$3"; fails=$((fails + 1))
+    bad "$1"; printf '  expected to find: %s\n  in: %s\n' "$2" "$3"
   fi
 }
 nk() { # negative: $2 must NOT appear
   if grep -qF "$2" <<<"$3"; then
-    printf 'FAIL %s\n  must NOT contain: %s\n  in: %s\n' "$1" "$2" "$3"; fails=$((fails + 1))
+    bad "$1"; printf '  must NOT contain: %s\n  in: %s\n' "$2" "$3"
   else
-    printf 'ok   %s\n' "$1"
+    ok "$1"
   fi
 }
-
-# ok/bad print one verdict line each; `bad` increments the counter this file exits on.
-ok()  { printf 'ok   %s\n' "${1-}"; }
-bad() { printf 'FAIL %s\n' "${1-}"; fails=$((fails + 1)); }
 
 # The detector reads its manifest from beside itself, so each case gets its own copy of the
 # script with its own manifest. It has no other sibling dependency.
@@ -114,14 +111,14 @@ verdict: s/^FAIL \(([A-Z]+) --.*/\1/p'
 R="$(mkrecon "$GOOD")"
 out="$(bash "$R/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then
-  printf 'ok   1a exit is 0 (a classifier, never a gate)\n'
+  ok "1a exit is 0 (a classifier, never a gate)"
 else
-  printf 'FAIL 1a exit was %s, expected 0\n' "$rc"; fails=$((fails + 1))
+  bad "1a exit was $rc, expected 0"
 fi
 if [ -n "$out" ]; then
-  printf 'ok   1b the run produced rows (an empty run asserts nothing)\n'
+  ok "1b the run produced rows (an empty run asserts nothing)"
 else
-  printf 'FAIL 1b the run produced NO output at all\n'; fails=$((fails + 1))
+  bad "1b the run produced NO output at all"
 fi
 
 # ---- PART 2: THE LOAD-BEARING ARM — it fires, and on the RIGHT series ------------------------
@@ -188,9 +185,9 @@ nk "8c not reported as a reclassification"      "PREDICATE-RECLASSIFIES" "$out8"
 
 # ---- PART 9: the detector never blocks -------------------------------------------------------
 for o in "$out" "$out4" "$out5" "$out6" "$out7" "$out8"; do
-  grep -qF "HARD-" <<<"$o" && { echo "FAIL 9 a run emitted a blocking HARD- status"; fails=$((fails + 1)); }
+  grep -qF "HARD-" <<<"$o" && { bad "9 a run emitted a blocking HARD- status"; p9_hard=1; }
 done
-printf 'ok   9 no run emits a blocking status\n'
+[ -n "${p9_hard:-}" ] || ok "9 no run emits a blocking status"
 
 # ---- PART 10: A SCHEMA-ONLY CHANGE IS A PREDICATE CHANGE ------------------------------------
 # THE ARM THAT SEPARATES A READ-SET DIFFERENTIAL FROM A SCRIPT DIFFERENTIAL. Across
@@ -205,9 +202,9 @@ out10="$(bash "$R10/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$
 sb="$(git -C "$DIST" show "${BASE}:core/scripts/toy-schema-predicate.sh" | md5 -q)"
 st="$(git -C "$DIST" show "${SCHEMA_ONLY}:core/scripts/toy-schema-predicate.sh" | md5 -q)"
 if [ "$sb" = "$st" ]; then
-  printf 'ok   10a control -- the entry script IS byte-identical across the schema-only commit\n'
+  ok "10a control -- the entry script IS byte-identical across the schema-only commit"
 else
-  printf 'FAIL 10a the seed did not hold the script identical; part 10 asserts nothing\n'; fails=$((fails + 1))
+  bad "10a the seed did not hold the script identical; part 10 asserts nothing"
 fi
 ck "10b a SCHEMA-only change is reported as a reclassification" "PREDICATE-RECLASSIFIES" "$out10"
 nk "10c and NOT as byte-identical/stable"                       "PREDICATE-STABLE" "$out10"
@@ -231,9 +228,10 @@ R11="$(mkrecon "$ROOT_SITE")"
 out11="$(pd "$R11/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS")"
 grep -qF "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" <<<"$out11"; RC_11a=$?
 if [ "$RC_11a" -eq 0 ]; then
-  printf 'ok   %s\n' "11a a schema-only change to a ROOT-resolving predicate is a reclassification"
+  ok "11a a schema-only change to a ROOT-resolving predicate is a reclassification"
 else
-  printf 'FAIL %s\n  expected to find: %s\n  in: %s\n' "11a a schema-only change to a ROOT-resolving predicate is a reclassification" "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" "$out11"; fails=$((fails + 1))
+  bad "11a a schema-only change to a ROOT-resolving predicate is a reclassification"
+  printf '  expected to find: %s\n  in: %s\n' "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" "$out11"
 fi
 ck "11b and the crossing series moves [] -> [B]" "verdict tokens [] -> [B,] under toy-root-predicate.sh" "$(row_of crossing-adversarial-pass "$out11")"
 # THE EXTENSION CELL. The series names a skill only the CONSUMER's known-skills file lists. A side
@@ -242,9 +240,10 @@ ck "11b and the crossing series moves [] -> [B]" "verdict tokens [] -> [B,] unde
 # keeps it [] -> [B]. A walk-up marker alone cannot pass this cell.
 grep -qF "verdict tokens [] -> [B,] under toy-root-predicate.sh" <<<"$(row_of ext-adversarial-pass "$out11")"; RC_11c=$?
 if [ "$RC_11c" -eq 0 ]; then
-  printf 'ok   %s\n' "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)"
+  ok "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)"
 else
-  printf 'FAIL %s\n  expected to find: %s\n  in: %s\n' "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)" "verdict tokens [] -> [B,] under toy-root-predicate.sh" "$(row_of ext-adversarial-pass "$out11")"; fails=$((fails + 1))
+  bad "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)"
+  printf '  expected to find: %s\n  in: %s\n' "verdict tokens [] -> [B,] under toy-root-predicate.sh" "$(row_of ext-adversarial-pass "$out11")"
 fi
 # AN INHERITED ROOT MUST NOT WIN. The pull may run with AI_DLC_PROJECT_ROOT naming the consumer;
 # a root found by a walk-up marker loses to that variable, so only a per-side pin survives it.
@@ -253,8 +252,8 @@ ck "11d an inherited AI_DLC_PROJECT_ROOT naming the consumer does not pin both s
 # Control: the root toy really is byte-identical across the schema-only commit.
 rb="$(git -C "$DIST" show "${BASE}:core/scripts/toy-root-predicate.sh" | md5 -q)"
 rt="$(git -C "$DIST" show "${SCHEMA_ONLY}:core/scripts/toy-root-predicate.sh" | md5 -q)"
-[ "$rb" = "$rt" ] && printf 'ok   11e control -- toy-root-predicate.sh IS byte-identical across the schema-only commit\n' \
-  || { printf 'FAIL 11e the root toy moved across the schema-only commit; part 11 asserts nothing\n'; fails=$((fails + 1)); }
+[ "$rb" = "$rt" ] && ok "11e control -- toy-root-predicate.sh IS byte-identical across the schema-only commit" \
+  || bad "11e the root toy moved across the schema-only commit; part 11 asserts nothing"
 
 # Cells over the part-16 drive (cell16) and the gate-adjudication drives (cellga): 0 RED, 1 GREEN, 2 unknown.
 srow() { awk -F'\t' -v n="$1" '$2 == n { print; exit }' <<<"$2"; } # a site's SUMMARY row
@@ -337,8 +336,8 @@ CAFE_SITE="$(sed 's|^reads: .*|reads: core/scripts/toy-predicate.sh core/schemas
 R14="$(mkrecon "$CAFE_SITE")"
 out14="$(pd "$R14/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS")"
 [ -n "$(git -C "$DIST" -c core.quotePath=false ls-files -- 'core/schemas/caf*' | grep -F 'café')" ] \
-  && printf 'ok   14a control -- the seed tracks core/schemas/café.yaml under its raw name\n' \
-  || { printf 'FAIL 14a the seed does not track café.yaml; part 14 asserts nothing\n'; fails=$((fails + 1)); }
+  && ok "14a control -- the seed tracks core/schemas/café.yaml under its raw name" \
+  || bad "14a the seed does not track café.yaml; part 14 asserts nothing"
 nk "14b a non-ASCII member does not make the side unmaterializable" "could not materialize" "$out14"
 ck "14c the site is compared"                                       "PREDICATE-RECLASSIFIES	toy-predicate.sh" "$out14"
 
@@ -398,8 +397,8 @@ R16="$(mkrecon "$M16")"
 out16="$(pd "$R16/predicate-differential.sh" "$D16" "$B16" "$T16" "$C16")"
 # Controls: the dist is non-bare and its index holds the member BASE's tree lacks.
 [ -d "$D16/.git" ] && [ -n "$(git -C "$D16" ls-files -- core/scripts/helper.py)" ] && [ -z "$(git -C "$D16" ls-tree --name-only "$B16" -- core/scripts/helper.py)" ] \
-  && printf 'ok   16a control -- dist16 is non-bare, its index holds helper.py and BASE does not\n' \
-  || { printf 'FAIL 16a the seed does not hold helper.py in the index only; NONBARE asserts nothing\n'; fails=$((fails + 1)); }
+  && ok "16a control -- dist16 is non-bare, its index holds helper.py and BASE does not" \
+  || bad "16a the seed does not hold helper.py in the index only; NONBARE asserts nothing"
 if cell16 UNDEC "$out16"; then bad "16-UNDEC a side silent on every series is not UNDECIDABLE: $out16"; else ok "16-UNDEC"; fi
 if cell16 RECL "$out16"; then bad "16-RECL a real reclassification was not reported: $out16"; else ok "16-RECL"; fi
 if cell16 PASSONLY "$out16"; then bad "16-PASSONLY a side printing only pass lines was read as silent: $out16"; else ok "16-PASSONLY"; fi
@@ -429,12 +428,12 @@ outga="$(pd "$RG/predicate-differential.sh" "$DG" "$BG" "$MG" "$CG")"
 outgu="$(pd "$RG/predicate-differential.sh" "$DG" "$BG" "$TG" "$CG")"
 # Control: the entry is byte-identical across BASE..MID, so only the module can move the verdict.
 [ "$(git -C "$DG" rev-parse "${BG}:core/scripts/validate-gate-adjudication.sh")" = "$(git -C "$DG" rev-parse "${MG}:core/scripts/validate-gate-adjudication.sh")" ] \
-  && printf 'ok   17a control -- the entry is byte-identical across BASE..MID\n' \
-  || { printf 'FAIL 17a the seed moved the entry; GA asserts nothing\n'; fails=$((fails + 1)); }
-if cellga GA "$outga"; then printf 'FAIL 17-GA the module moving PASS -> FAIL is not compared\n  in: %s\n' "$(srow validate-gate-adjudication.sh "$outga")"; fails=$((fails + 1))
+  && ok "17a control -- the entry is byte-identical across BASE..MID" \
+  || bad "17a the seed moved the entry; GA asserts nothing"
+if cellga GA "$outga"; then bad "17-GA the module moving PASS -> FAIL is not compared"; printf '  in: %s\n' "$(srow validate-gate-adjudication.sh "$outga")"
 else ok "17-GA a gate_adjudication.py-only change is compared, not STABLE"; fi
-if cellga GAU "$outgu"; then printf 'FAIL 17-GAU a module that no longer imports is not UNDECIDABLE\n  in: %s\n' "$(srow validate-gate-adjudication.sh "$outgu")"; fails=$((fails + 1))
-else printf 'ok   17-GAU a module that no longer imports is UNDECIDABLE naming the incoming side\n'; fi
+if cellga GAU "$outgu"; then bad "17-GAU a module that no longer imports is not UNDECIDABLE"; printf '  in: %s\n' "$(srow validate-gate-adjudication.sh "$outgu")"
+else ok "17-GAU a module that no longer imports is UNDECIDABLE naming the incoming side"; fi
 
 # ---- PART 18: A CHANGE TO HOW WAIVERS ARE READ IS OBSERVED (BL-896) ---------------------------
 # The shipped manifest over seed.sh's distw: a FAIL_WAIVED verdict whose waiver resolves only through
@@ -451,16 +450,13 @@ outwc="$(pd "$RG/predicate-differential.sh" "$DW" "$BW" "$MW" "$CW")"
 # Controls: the consumer file exists, the verdict carries the token, and the control ref MOVED the entry.
 [ -f "$CW/docs/escalations/pending.md" ] && grep -q '"FAIL_WAIVED"' "$CW/_bmad-output/gate-adjudication/s1/p1.verdict.json" \
   && [ "$(git -C "$DW" rev-parse "${BW}:core/scripts/validate-gate-adjudication.sh")" != "$(git -C "$DW" rev-parse "${MW}:core/scripts/validate-gate-adjudication.sh")" ] \
-  && printf 'ok   18a control -- consw holds the waiving row and a FAIL_WAIVED verdict; the control ref moves the entry\n' \
-  || { printf 'FAIL 18a the FAIL_WAIVED world is not seeded as declared; WV and WVC assert nothing\n'; fails=$((fails + 1)); }
-if cellga WV "$outwv"; then printf 'FAIL 18-WV a change to how waivers are read is not a reclassification\n  in: %s\n' "$(srow validate-gate-adjudication.sh "$outwv")"; fails=$((fails + 1))
+  && ok "18a control -- consw holds the waiving row and a FAIL_WAIVED verdict; the control ref moves the entry" \
+  || bad "18a the FAIL_WAIVED world is not seeded as declared; WV and WVC assert nothing"
+if cellga WV "$outwv"; then bad "18-WV a change to how waivers are read is not a reclassification"; printf '  in: %s\n' "$(srow validate-gate-adjudication.sh "$outwv")"
 else ok "18-WV a change to how waivers are read reclassifies the FAIL_WAIVED series"; fi
-if cellga WVC "$outwc"; then printf 'FAIL 18-WVC an unrelated change to the entry is not STABLE having compared\n  in: %s\n' "$(srow validate-gate-adjudication.sh "$outwc")"; fails=$((fails + 1))
+if cellga WVC "$outwc"; then bad "18-WVC an unrelated change to the entry is not STABLE having compared"; printf '  in: %s\n' "$(srow validate-gate-adjudication.sh "$outwc")"
 else ok "18-WVC an unrelated change to the entry is STABLE, compared"; fi
 
 
-if [ "$fails" -ne 0 ]; then
-  printf '\n%s assertion(s) FAILED\n' "$fails"; exit 1
-fi
-printf '\nall assertions hold\n'
-exit 0
+echo
+report_end predicate-reclassification

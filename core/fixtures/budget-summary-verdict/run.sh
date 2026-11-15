@@ -57,9 +57,8 @@ VW="$(dirname "$V")/verdict.sh"
 echo "HERMETIC-CONSUMED core/scripts/verdict.sh"
 
 
-rc=0
-ok()  { echo "ok: $1"; }
-bad() { echo "FAIL: $1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 VD="$(dirname "$V")"
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "run.sh: mktemp failed" >&2; exit 2; }
@@ -879,6 +878,4 @@ if arm_f_history "$VD" "$VW"; then ok "F-history a future stamp in the history f
 else bad "F-history the shipped arm refused a snapshot whose history file carries a future stamp"; fi
 
 echo ""
-[ "$rc" -eq 0 ] && echo "budget-summary-verdict fixture: PASS"
-[ "$rc" -eq 0 ] || echo "budget-summary-verdict fixture: FAIL" >&2
-exit "$rc"
+report_end budget-summary-verdict

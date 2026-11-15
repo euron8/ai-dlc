@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1138.0] - 2026-11-15
+
+### BL-1122 and BL-1129 CLOSED: pregate re-measures every unit that reaches a changed script
+
+`scripts/pregate-self-check.sh` section f takes `predict-push-set.sh`'s RUN set and the composer's own parse, and runs counted, through `scripts/seed-verdict-store.sh`, every unit that reaches a `core/scripts/*.sh` or `scripts/*.sh` path the diff adds, modifies or deletes: by a directory row, a declared file, or a bounded basename in its shell files. The prediction runs once and is shared with section e. This moves cost from the push to pregate: a plain pregate now runs the prediction on every script-touching diff, plus section f's seeds.
+
+### BL-1130 PARTIAL: `pool_span` and fixture-hygiene H13
+
+`core/fixtures/lib/pool-span.sh` adds `pool_span <hook> <out> <SPAN>...`, which extracts a record-binding pre-push span (FIXTURE_POOL, RECORD_HOME) under an exported store default of `<world>.verdicts`, so a plain fixture run no longer files a world's records in the real verdict store. `scripts/validate-fixture-hygiene.sh` gains H13, keyed on the extraction line, with the down-only allowlist `scripts/pool-span-allowlist.txt` (8 rows, the remainder). consumer-suite-pool and presuite-units extract through `pool_span`.
+
+### BL-1056 PARTIAL: 49 more fixtures report through `lib/report.sh`
+
+49 fixtures drop their own ok/bad definitions and verdict tails and end with `report_end` from `core/fixtures/lib/report.sh`. Their 49 `:report` rows leave `fixture-contract-allowlist.txt` (11 rows remain), and the read-set map gains the two `lib/report.sh` rows the migration adds.
+
 ## [0.1137.0] - 2026-11-15
 
 ### BL-1030 PARTIAL: gate 1 stays closed after a gate-3 rework that changed nothing it reviewed

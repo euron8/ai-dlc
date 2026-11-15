@@ -28,9 +28,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-fails=0
-ok()  { printf '   ok    %s\n' "$1"; }
-bad() { printf '   FAIL  %s\n' "$1" >&2; fails=$((fails + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # Resolve the script and schema in BOTH layouts: core/scripts + core/schemas in the
 # distribution, scripts/ai-dlc + .claude/schemas in a consumer. Never by hop count.
@@ -163,6 +162,4 @@ else
   bad "AI_DLC_TRUNK was ignored and 'main' was judged regardless (rc=$RC)"
 fi
 
-if [ "$fails" -eq 0 ]; then echo "trunk-push-bound: PASS"; exit 0; fi
-echo "trunk-push-bound: $fails assertion(s) FAILED" >&2
-exit 1
+report_end trunk-push-bound

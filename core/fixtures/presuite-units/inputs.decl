@@ -1,5 +1,6 @@
 # presuite-units extracts the PRESUITE_UNITS and FIXTURE_POOL spans out of the distribution hook (spans.decl) and sources
 # them in a mktemp git repo; run.sh prints HERMETIC-CONSUMED for the hook where it resolves it.
-# run.sh sources ../lib/report.sh.
+# run.sh sources ../lib/report.sh and ../lib/pool-span.sh, which extracts the FIXTURE_POOL span.
+core/fixtures/lib/pool-span.sh
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh

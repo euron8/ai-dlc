@@ -122,9 +122,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # ---------------------------------------------------------------------------
 # SEEDS
@@ -469,9 +468,5 @@ else
   ok "g  an artifact with NO .md extension and no block is DENIED flagless (rc=1), naming --allow-missing — the rung is keyed on the declaration, not on the filename"; B_g=1
 fi
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "provenance-flagless-default: PASS (layout: $LAYOUT, subject: ${VALIDATOR#$ROOT/})"
-  exit 0
-fi
-echo "provenance-flagless-default: FAIL ($fails assertion(s))" >&2
-exit 1
+echo "provenance-flagless-default: layout $LAYOUT, subject ${VALIDATOR#$ROOT/}"
+report_end provenance-flagless-default

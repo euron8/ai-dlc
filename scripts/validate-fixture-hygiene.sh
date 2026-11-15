@@ -352,6 +352,28 @@
 #     rewritten copy (the fixture's own predicate, or the product subject), not its shape.
 #     One row per offending FILE, `H12 <file>: <reason>[, <reason>]`, each reason the first line of its kind; no
 #     allowlist. A fixture proves a product feature with its own arms; none scores a battery of mutants per push.
+# H13 a hand extraction of a hook span that binds the record homes (BL-1130). Population: every tracked
+#     core/fixtures/<f>/**/*.sh (core/fixtures/lib excluded). The EMISSION site is a line whose command-position `sed`
+#     or `awk` carries, inside a quoted word after it, `FIXTURE_POOL_BEGIN` or `RECORD_HOME_BEGIN` (FIXTURE_POOL holds
+#     the RECORD_HOME span). A code line is read on its mask, where a string keeps its quotes and a comment is X to its
+#     end; a heredoc body line (all X in the mask) is read raw, a `#` line excepted, so a driver script a fixture
+#     writes is read too. A fixture with such a line that is not a row of scripts/pool-span-allowlist.txt -> FAIL,
+#     naming its first line; the list's own findings are H13STALE (a listed fixture with no such line, or no tracked
+#     run.sh), H13DUP and H13NOREASON, and a row not on the list at origin/main FAILs H13-M4 (the shared m4). The
+#     remedy is pool_span (core/fixtures/lib/pool-span.sh), whose first line defaults the store to the sourcing
+#     world's: a span sourced with no store of its own resolves its record homes in the real verdict store, so a
+#     plain `bash core/fixtures/<f>/run.sh` files the world's records there under the world's root commit. A pool run
+#     of a declared fixture never does: hermetic-run.sh runs it under `env -i ... HOME="$HR_WORK/home"`.
+#     WHY THE EXTRACTION AND NOT THE SOURCE: a source reaches the extracted file through a reassigned variable, a
+#     function parameter or a written driver, which no line grammar resolves. At 27fded102 a join of each `.`/`eval`
+#     to a word the same file extracted into resolved 9 sources and none of the 8 prepush-pool-depth sites that gained
+#     a store at that commit; the extraction is literal at every one of them.
+#     FP SET, how it reached its value: at 27fded102 a raw grep of the two BEGIN markers over the population reads 24
+#     lines; the one dropped is seed-verdict-store-red-print run.sh:332, `# FIXTURE_POOL_BEGIN` as a line of a stub
+#     hook that a heredoc writes (a `#` line, and no sed or awk). The 23 left (20 code, 3 heredoc: fixture-invocation-
+#     budget run.sh:204, suite-content-key run.sh:325 and :445) sit in 11 files of 10 fixtures, every one read by hand
+#     and a real extraction. FALSE POSITIVES: 0. Proved by hand at authoring: a marker in a `#` comment, in an echo
+#     string and in a trailing comment after a real sed stays quiet.
 #
 # ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
 # rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
@@ -359,7 +381,8 @@
 #
 # COST: a constant number of forks -- one git ls-files, one resolver call, one awk scan (two passes over the corpus),
 # one judge awk, sorts. E1 adds one e1_run pass over the tree: a git ls-files, the inert() awk and the judge awk.
-# H9 adds one H9_AWK pass over the corpus, its join awk and sorts, and reuses run_all's list.
+# H9 adds one H9_AWK pass over the corpus, its join awk and sorts, and reuses run_all's list. H13 reads inside the
+# scan awk's existing pass and adds its judge awk, one sort and one grep; its H13-M4 is the shared m4.
 set -uo pipefail
 
 MODE=check
@@ -382,6 +405,7 @@ E1_ALLOW_REL="scripts/inert-receipt-allowlist.txt"
 H8_ALLOW_REL="scripts/env-scrub-allowlist.txt"
 H10_ALLOW_REL="fixture-contract-allowlist.txt"
 H9_ALLOW_REL="scripts/bl868-wait-allowlist.txt"
+H13_ALLOW_REL="scripts/pool-span-allowlist.txt"
 
 WORK="$(mktemp -d)" || { echo "validate-fixture-hygiene: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -788,6 +812,23 @@ function h12(i,   s, k, n, off, q, e, w, nm, W) {
     else if (match(w, /^"?\$\{?[A-Za-z_][A-Za-z0-9_]*/)) { nm = substr(w, RSTART, RLENGTH); sub(/^"?\$\{?/, "", nm); if (nm in MV12) r12("lib/matrix.sh", i) }
   }
 }
+# --- H13: a hand extraction of a hook span that binds the record homes --------------------------------------------
+# ps13 <line>: `PS <fx> <rel>:<line>` when the line EMITS such a span: a command-position `sed` or `awk` and, after
+# it, `FIXTURE_POOL_BEGIN` or `RECORD_HOME_BEGIN` inside a quoted word (on a code line the X run under the marker opens
+# on a quote character; a comment opens on the blank before its `#`). A heredoc body line is read raw.
+function ps13(i,   o, s, st, p, k, t) {
+  o = O[i]
+  if (!index(o, "FIXTURE_POOL_BEGIN") && !index(o, "RECORD_HOME_BEGIN")) return
+  if (HDL[i]) { if (o ~ /^[[:space:]]*#/) return; s = o } else s = M[i]
+  if (!match(s, /(^|[;&|({!`]|(^|[[:space:]])(then|do|else))[[:space:]]*(sed|awk)[[:space:]]/)) return
+  st = RSTART + RLENGTH
+  p = index(substr(o, st), "FIXTURE_POOL_BEGIN"); k = index(substr(o, st), "RECORD_HOME_BEGIN")
+  if (!p || (k && k < p)) p = k
+  if (!p) return
+  p += st - 1
+  if (!HDL[i]) { t = p; while (t > 1 && substr(M[i], t - 1, 1) == "X") t--; if (t <= 1 || substr(M[i], t - 1, 1) !~ /["\047]/) return }
+  print "PS\t" FX "\t" REL ":" i
+}
 function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h, k, re, w2, pe) {
   if (FX != "" && FX != "lib") prep6()
   R12 = ""; split("", S12); split("", MV12)
@@ -850,6 +891,7 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
       else if (!ISRUN) t8 = ""
       if (t8 ~ /hooks\/ai-dlc|\$HOOK/) { HK8[FX] = 1; print "HK8\t" FX "\t" REL ":" i }
     }
+    if (ISF12) ps13(i)
     if (!HDL[i]) { h6(i); if (ISRUN || ISL12 || ISF12) h12(i) }
     # H10/H11 facts (the fixture contract's skeleton): a run.sh code line DEFINING ok or bad, and a run.sh code line
     # whose command-position `bash` runs a pre-push hook. Both read the masked line, so a comment, a string (a
@@ -964,6 +1006,30 @@ END {
 }
 AWK
 
+# --- the H13 judge: hand extractions per fixture, against scripts/pool-span-allowlist.txt -------------------------
+# ARGV[1] the allowlist, rows `<fixture>\t<reason>`; ARGV[2] the scan. Rows: H13 <fx> <where> (an unlisted fixture's
+# FIRST extraction line); H13LISTED <fx>; H13STALE <fx> <why>; H13DUP <fx>; H13NOREASON <fx>; N13 <extraction lines>.
+read -r -d '' H13_JUDGE_AWK <<'AWK'
+FILENAME == ARGV[1] {
+  if ($0 ~ /^[[:space:]]*(#|$)/) next
+  x = $1; gsub(/[[:space:]]/, "", x); r = (NF >= 2) ? $2 : ""; gsub(/[[:space:]]/, "", r)
+  if (x in LISTED) print "H13DUP\t" x
+  LISTED[x] = 1
+  if (r == "") print "H13NOREASON\t" x
+  next
+}
+$1 == "F" { n = split($2, a, "/"); if (n == 4 && a[4] == "run.sh" && a[3] != "lib") FXS[a[3]] = 1; next }
+$1 == "PS" { N13++; if (!(($2) in HIT)) HIT[$2] = $3; next }
+END {
+  for (f in HIT) print ((f in LISTED) ? "H13LISTED\t" f : "H13\t" f "\t" HIT[f])
+  for (x in LISTED) {
+    if (!(x in FXS)) { print "H13STALE\t" x "\tno core/fixtures/" x "/run.sh is tracked"; continue }
+    if (!(x in HIT)) print "H13STALE\t" x "\tthe fixture no longer extracts a span by hand; drop the row"
+  }
+  print "N13\t" (N13 + 0)
+}
+AWK
+
 # run_all <root> <out-prefix>: list, resolve, scan, judge. Writes <out>.scan and <out>.verdict; returns 2 on a broken
 # corpus with the reason on stdout.
 run_all() {
@@ -996,6 +1062,10 @@ run_all() {
   [ -f "$r/$H10_ALLOW_REL" ] && cp "$r/$H10_ALLOW_REL" "$o.h10allow" || : > "$o.h10allow"
   awk -F'\t' "$H10_JUDGE_AWK" "$o.h10allow" "$o.scan" | LC_ALL=C sort -u > "$o.h10" \
     || { echo "BROKEN: the H10/H11 judge awk failed, so its verdict is empty rather than clean"; return 2; }
+  [ -f "$r/$H13_ALLOW_REL" ] && cp "$r/$H13_ALLOW_REL" "$o.h13allow" || : > "$o.h13allow"
+  awk -F'\t' "$H13_JUDGE_AWK" "$o.h13allow" "$o.scan" | LC_ALL=C sort -u > "$o.h13" \
+    || { echo "BROKEN: the H13 judge awk failed, so its verdict is empty rather than clean"; return 2; }
+  grep -q '^N13	' "$o.h13" || { echo "BROKEN: the H13 judge printed no extraction count"; return 2; }
   return 0
 }
 
@@ -1414,6 +1484,16 @@ h10m4_out="$(m4 "$ROOT" "$ROOT/$H10_ALLOW_REL" "$WORK/h10m4-root-base.txt" "$H10
   "do not list the fixture; move it onto core/fixtures/lib/report.sh or hook_drive, and drop the row." \
   "<fixture>:<clause> key")" || rc=1
 echo "$h10m4_out"
+n13="$(awk -F'\t' '$1 == "N13" { print $2 }' "$WORK/c.h13")"; n13l="$(grep -c '^H13LISTED	' "$WORK/c.h13")" || n13l=0
+echo "validate-fixture-hygiene: H13 ${n13:-0} hand extraction line(s) of a record-binding hook span; $n13l allowlisted fixture(s) carry them"
+if grep -qE '^(H13|H13STALE|H13DUP|H13NOREASON)	' "$WORK/c.h13"; then
+  rc=1; echo "FAIL H13:"
+  awk -F'\t' '$1 ~ /^H13(STALE|DUP|NOREASON)?$/ { print "    " $1 " " $2 (NF >= 3 ? ": " $3 : "") }' "$WORK/c.h13"
+  echo "  H13 (BL-1130): extract a FIXTURE_POOL or RECORD_HOME span through pool_span (core/fixtures/lib/pool-span.sh), never by a sed or awk of its BEGIN marker. A span sourced with no store of its own resolves its record homes in the real verdict store, so a plain \`bash core/fixtures/<f>/run.sh\` files the world's records there; pool_span's first line defaults the store to the sourcing world's. H13STALE/H13DUP/H13NOREASON: fix $H13_ALLOW_REL."
+fi
+h13m4_out="$(m4 "$ROOT" "$ROOT/$H13_ALLOW_REL" "$WORK/h13m4-root-base.txt" "$H13_ALLOW_REL" H13-M4 \
+  "do not list the fixture; extract the span through pool_span (core/fixtures/lib/pool-span.sh), and drop the row.")" || rc=1
+echo "$h13m4_out"
 e1_out="$(e1_run "$ROOT" "$WORK/e1c")"; e1rc=$?
 if [ "$e1rc" -ne 0 ]; then echo "validate-fixture-hygiene: REFUSED -- E1: $e1_out" >&2; exit 2; fi
 ne1="$(awk 'END { print NR }' "$WORK/e1c.e1list")"; ni1="$(awk 'END { print NR }' "$WORK/e1c.inert")"
@@ -1445,6 +1525,6 @@ if [ "$nh9k" -gt 0 ] || [ "$nh9s" -gt 0 ]; then
 fi
 nlist="$(awk 'END { print NR }' "$WORK/c.list")"
 if [ "$rc" = 0 ]; then
-  echo "OK: validate-fixture-hygiene -- $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H12 no mutation battery in a run.sh or lib.sh; E1 $ne1 receipt(s), $ni1 inert and allowlisted; H9 $nh9r bounded-wait row(s), every one allowlisted."
+  echo "OK: validate-fixture-hygiene -- $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H12 no mutation battery in a run.sh or lib.sh; E1 $ne1 receipt(s), $ni1 inert and allowlisted; H9 $nh9r bounded-wait row(s), every one allowlisted; H13 ${n13:-0} hand span extraction(s), every one allowlisted."
 fi
 exit "$rc"

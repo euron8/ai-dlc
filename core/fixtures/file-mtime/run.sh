@@ -31,9 +31,8 @@ echo "HERMETIC-CONSUMED $SUBJ"
 
 WORK="$(mktemp -d)" || exit 2
 trap 'rm -rf "$WORK"' EXIT
-fails=0
-ok()  { printf '   ok    %s\n' "$1"; }
-bad() { printf '   FAIL  %s\n' "$1" >&2; fails=$((fails + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
@@ -149,6 +148,4 @@ if ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-missing.cl.out" && ! cmp -s "$EQ/cli-
   ok "cli cells discriminate: the passing and the refusing input give different stdout and exit"
 else bad "cli cells do not discriminate: cli-pass and cli-missing gave the same stdout or exit"; fi
 
-if [ "$fails" -gt 0 ]; then echo "file-mtime: $fails FAILED" >&2; exit 1; fi
-echo "file-mtime: all arms ok"
-exit 0
+report_end file-mtime

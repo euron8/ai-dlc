@@ -78,9 +78,8 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required" >&2; exi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/pwb-fx.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-FAILS=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 eq()  { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (got '$2', want '$3')"; fi; }
 has() { if grep -qF -- "$3" <<<"$2"; then ok "$1"; else bad "$1 (absent: $3)"; fi; }
 hasnt() { if grep -qF -- "$3" <<<"$2"; then bad "$1 (present: $3)"; else ok "$1"; fi; }
@@ -487,5 +486,4 @@ else
 fi
 
 echo
-if [ "$FAILS" -eq 0 ]; then echo "party-wave-barrier: PASS"; exit 0; fi
-echo "party-wave-barrier: $FAILS assertion(s) FAILED"; exit 1
+report_end party-wave-barrier

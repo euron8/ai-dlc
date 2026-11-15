@@ -157,9 +157,8 @@ OVR="$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md"
 BASE="$(git -C "$DIST" rev-parse --short HEAD~1)"
 THEIRS="$(git -C "$DIST" rev-parse --short HEAD)"
 
-fails=0
-ok()   { printf '  ok    %s\n' "$1"; }
-bad()  { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 if sg main; then
 echo "== A. the stale-core-text gate fires on the real shape =="
@@ -2178,5 +2177,4 @@ rm -f "$JOK" "$JBAD" "$JNEG" "$JNEGOK"
 fi
 rm -rf "$ROOT"
 echo ""
-if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
-echo "$NAME: FAIL ($fails)"; exit 1
+report_end "$NAME"

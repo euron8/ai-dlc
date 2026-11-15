@@ -35,7 +35,8 @@ change. Building good arms is `fixture-mutants.md`'s; shipping is `fixture-ship-
   <args>]`, which prints the hook's status and runs it with `GIT_*` unset, stdin `/dev/null`,
   `AI_DLC_READSET_LIVE_TRACE=0` and the store `<tree>.verdicts`; it sets no `AI_DLC_FIXTURE_JOBS` (a nested pool is
   capped at two workers). `inproc.sh`: `inproc_load`, `inproc_run`. `mutant.sh`: `fx_inproc`. `settled-net.sh`:
-  `st_net`, `st_reap`. Enforcer: `core/fixtures/suite-dispatch-order/run.sh` hook_drive, world_git, report_end;
+  `st_net`, `st_reap`. `pool-span.sh`: `pool_span <hook> <out> <SPAN>...`, which writes the named hook spans under an
+  exported store default of `<world>.verdicts` for the shell that sources `<out>` inside its world. Enforcer: `core/fixtures/suite-dispatch-order/run.sh` hook_drive, world_git, report_end;
   `scripts/validate-fixture-hygiene.sh` H10, H11.
 - **C9** No fixture carries a mutation battery: no `run.sh` or `lib.sh` calls or defines `mutant_killed`, `need_base`,
   `matrix_row`, `mkmut`, `mut_copy` or `mutate_file`, carries a `# MUTANT-MATRIX` line or sources `lib/matrix.sh`.
@@ -88,3 +89,6 @@ change. Building good arms is `fixture-mutants.md`'s; shipping is `fixture-ship-
   cannot read fails the push. Enforcer: `.githooks/pre-push` readset_invalidation_guard; `scripts/invalidation-guard.sh`.
 - **C24** A counted run outside the pool gives the fixture stdin `/dev/null`, as the pool does; seed a push with
   `scripts/seed-verdict-store.sh`. Enforcer: `core/fixtures/seed-verdict-store-red-print/run.sh` a4.
+- **C25** A hook span that binds the record homes (`FIXTURE_POOL`, `RECORD_HOME`) is extracted only through
+  `pool_span`, never by a `sed` or `awk` of its BEGIN marker, so a plain run never files a world's records in the real
+  verdict store. Enforcer: `scripts/validate-fixture-hygiene.sh` H13.

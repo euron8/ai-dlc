@@ -13,3 +13,4 @@ core/fixtures/apply-drift-refile/run.sh
 core/fixtures/apply-drift-refile/seed.sh
 core/fixtures/apply-drift-refile-b/run.sh
 core/fixtures/apply-drift-refile-c/run.sh
+core/fixtures/lib/report.sh

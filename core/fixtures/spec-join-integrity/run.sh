@@ -35,9 +35,8 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$V")" && pwd)/$(basename "$V")"
 R="$(bash "$DIR/seed.sh")"
 trap 'rm -rf "$R"' EXIT
 
-rc=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 LIBDIR="$(cd "$DIR/../lib" 2>/dev/null && pwd)"
 [ -f "$LIBDIR/settled-net.sh" ] || { echo "FIXTURE ERROR: lib/settled-net.sh not found beside $DIR" >&2; exit 2; }
 . "$LIBDIR/settled-net.sh"
@@ -1755,5 +1754,4 @@ fi
 ok "CAPTURE: the subject ran $CAP_RUNS time(s) for $CAP_N distinct argument list(s); $CAP_SERVED assertion read(s) were served from a capture"
 
 echo
-if [ "$rc" -eq 0 ]; then echo "spec-join-integrity: PASS"; else echo "spec-join-integrity: FAILED" >&2; fi
-exit $rc
+report_end spec-join-integrity

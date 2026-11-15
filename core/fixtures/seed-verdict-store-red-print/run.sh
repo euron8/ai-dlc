@@ -50,9 +50,8 @@ done
 SUBJ="$ROOT/scripts/seed-verdict-store.sh"
 echo "HERMETIC-CONSUMED scripts/seed-verdict-store.sh"
 
-rc=0
-ok()  { printf 'ok    %s\n' "$*"; }
-bad() { printf 'FAIL  %s\n' "$*"; rc=1; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found beside $HERE" >&2; exit 2; }
 
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/w/.githooks" "$T/w/core/scripts" "$T/tmp" "$T/v"
@@ -389,5 +388,5 @@ if cell_of s_skip "$(subj_of s_skip)"; then ok "n-s_skip holds on the unmutated 
 if cell_of p_dist "$(subj_of p_dist)"; then ok "n-p_dist holds on the unmutated subject"; else bad "n-p_dist does not hold on the unmutated subject"; fi
 if cell_of p_cons "$(subj_of p_cons)"; then ok "n-p_cons holds on the unmutated subject"; else bad "n-p_cons does not hold on the unmutated subject"; fi
 
-[ "$rc" -eq 0 ] && echo "PASS  seed-verdict-store-red-print -- 4 arms; BL-1092: $(printf "%s" "$G_CELLS" | wc -w | tr -d " ") cells"
-exit "$rc"
+echo "seed-verdict-store-red-print: 4 arms; BL-1092: $(printf "%s" "$G_CELLS" | wc -w | tr -d " ") cells"
+report_end seed-verdict-store-red-print

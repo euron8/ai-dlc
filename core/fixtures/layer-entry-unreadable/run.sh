@@ -107,10 +107,8 @@ cat "$CONS/.claude/skills/ai-dlc/extensions/current-a.md" >/dev/null 2>&1 || {
   echo "FIXTURE BROKEN: a deliberately READABLE seeded entry could not be read either, so the" >&2
   echo "  unreadability check above proves nothing about permissions." >&2; exit 2; }
 
-ASSERTIONS=0
-fails=0
-ok()  { ASSERTIONS=$((ASSERTIONS+1)); printf '  ok   %s\n' "$1"; }
-bad() { ASSERTIONS=$((ASSERTIONS+1)); fails=$((fails+1)); printf '  FAIL %s\n' "$1"; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 say() { if [ "$1" = 1 ]; then ok "$2"; else bad "$2"; fi; }
 
 # NO run() HELPER, deliberately. `OUT="$(run ...)"` evaluates the helper in a SUBSHELL, so an
@@ -397,13 +395,4 @@ fi
 # --------------------------------------------------------------------------------------
 EXPECTED_ASSERTIONS=23
 echo
-if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
-  printf 'layer-entry-unreadable: FAIL — %d assertions ran, %d expected. An arm did not execute.\n' \
-    "$ASSERTIONS" "$EXPECTED_ASSERTIONS"
-  exit 1
-fi
-if [ "$fails" -gt 0 ]; then
-  printf 'layer-entry-unreadable: FAIL (%d of %d assertions)\n' "$fails" "$ASSERTIONS"
-  exit 1
-fi
-printf 'layer-entry-unreadable: PASS (%d assertions)\n' "$ASSERTIONS"
+report_end layer-entry-unreadable "$EXPECTED_ASSERTIONS"

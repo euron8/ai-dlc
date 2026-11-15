@@ -60,13 +60,15 @@ echo "HERMETIC-CONSUMED scripts/backlog-rotate.sh"
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-FAIL=0
 echo "backlog-rotate-fence-guard fixture"
 echo "  subject: $RT"
 echo
 
-ok()  { printf '  ok    %-21s %s\n' "$1" "${2-}"; }
-bad() { printf '  FAIL  %-21s %s\n' "$1" "${2-}"; FAIL=1; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# okm/badm: the two-column assertion line (arm, detail) through report.sh's ok/bad.
+okm()  { local m; printf -v m '%-21s %s' "$1" "${2-}"; ok "$m"; }
+badm() { local m; printf -v m '%-21s %s' "$1" "${2-}"; bad "$m"; }
 
 # ---------------------------------------------------------------------------------------
 # Case construction. Every case gets a PRE-EXISTING archive carrying a sentinel, so the
@@ -528,14 +530,14 @@ expect_refusal() { # expect_refusal <arm> <dir> [args to rotate]
   local arm="$1" dd="$2"; shift 2
   run_rt "$RT" "$dd" "$@"
   if [ "$LAST_RC" -eq 0 ]; then
-    bad "$arm" "exited 0 on a ledger measured to corrupt: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
+    badm "$arm" "exited 0 on a ledger measured to corrupt: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
     return 1
   fi
   if ! has "REFUSING" "$LAST_OUT"; then
-    bad "$arm" "exit $LAST_RC but the operator was told nothing: $LAST_OUT"
+    badm "$arm" "exit $LAST_RC but the operator was told nothing: $LAST_OUT"
     return 1
   fi
-  ok "$arm" "refused with exit $LAST_RC"
+  okm "$arm" "refused with exit $LAST_RC"
   return 0
 }
 
@@ -548,15 +550,15 @@ if [ -z "$LAST_OUT" ]; then
   echo "assertion below reads that output, so this is a dead harness, not a regression." >&2
   exit 2
 fi
-ok "harness" "the rotator emitted output on the offender seed (exit $LAST_RC)"
+okm "harness" "the rotator emitted output on the offender seed (exit $LAST_RC)"
 
 A_OUT="$LAST_OUT"; A_RC="$LAST_RC"
 if [ "$A_RC" -eq 0 ]; then
-  bad "fires-heading" "exited 0 on the measured-corrupting seed: $(printf '%s' "$A_OUT" | head -2 | tr '\n' '|')"
+  badm "fires-heading" "exited 0 on the measured-corrupting seed: $(printf '%s' "$A_OUT" | head -2 | tr '\n' '|')"
 elif ! has "REFUSING" "$A_OUT"; then
-  bad "fires-heading" "exit $A_RC but no refusal reached the operator: $A_OUT"
+  badm "fires-heading" "exit $A_RC but no refusal reached the operator: $A_OUT"
 else
-  ok "fires-heading" "refused with exit $A_RC"
+  okm "fires-heading" "refused with exit $A_RC"
 fi
 
 # NAMES THEM ALL, AND NAMES THE RIGHT ONES. Both fenced lines must be reported, and the real
@@ -580,28 +582,28 @@ fi
 # fence: the closer then reads as an opener and every line after it, `## BL-403` included, reads
 # as fenced. Naming an extra line is the failure, so the assertion has to be able to see one.
 if [ "$GOT" = "$EXP_H $EXP_B " ]; then
-  ok "names-all" "exactly the two fenced offenders are named ($EXP_H, $EXP_B); neither the entry heading at $GOOD nor the entry after the fence at $AFTER_A is"
+  okm "names-all" "exactly the two fenced offenders are named ($EXP_H, $EXP_B); neither the entry heading at $GOOD nor the entry after the fence at $AFTER_A is"
 elif has " $AFTER_A " " $GOT "; then
-  bad "names-all" "the real entry AFTER the fence, at line $AFTER_A, is named as fenced — the fence state carried past its own closer; got: [$GOT]"
+  badm "names-all" "the real entry AFTER the fence, at line $AFTER_A, is named as fenced — the fence state carried past its own closer; got: [$GOT]"
 elif has " $GOOD " " $GOT "; then
-  bad "names-all" "the real entry heading at line $GOOD is named as an offender; got: [$GOT]"
+  badm "names-all" "the real entry heading at line $GOOD is named as an offender; got: [$GOT]"
 elif ! has " $EXP_H " " $GOT "; then
-  bad "names-all" "the fenced heading at line $EXP_H is not named as an offender; got: [$GOT]"
+  badm "names-all" "the fenced heading at line $EXP_H is not named as an offender; got: [$GOT]"
 elif ! has " $EXP_B " " $GOT "; then
-  bad "names-all" "the SECOND fenced heading at line $EXP_B is not named; only the first is reported, so a fence holding several offenders sends the operator back for a second run — got: [$GOT]"
+  badm "names-all" "the SECOND fenced heading at line $EXP_B is not named; only the first is reported, so a fence holding several offenders sends the operator back for a second run — got: [$GOT]"
 else
-  bad "names-all" "expected exactly [$EXP_H $EXP_B]; got: [$GOT]"
+  badm "names-all" "expected exactly [$EXP_H $EXP_B]; got: [$GOT]"
 fi
 
 # WROTE NOTHING, BYTE-COMPARED. Not eyeballed, and against an archive that ALREADY had content:
 # an archive the refusal merely failed to create is a weaker claim than one it failed to append
 # to, and appending is what --apply does.
 if ! cmp -s "$A/backlog.md" "$A/pristine.ledger"; then
-  bad "no-write" "the refused --apply modified the ledger"
+  badm "no-write" "the refused --apply modified the ledger"
 elif ! cmp -s "$A/backlog.archive.md" "$A/pristine.archive"; then
-  bad "no-write" "the refused --apply modified the pre-existing archive"
+  badm "no-write" "the refused --apply modified the pre-existing archive"
 else
-  ok "no-write" "ledger and pre-existing archive byte-identical after the refused --apply"
+  okm "no-write" "ledger and pre-existing archive byte-identical after the refused --apply"
 fi
 
 expect_refusal "fires-bullet" "$B" --apply
@@ -624,16 +626,16 @@ expect_refusal "quotes-two" "$Q" --apply
 Q_OUT="$LAST_OUT"
 Q_GOT="$(offender_lines "$Q_OUT")"
 if [ "$Q_GOT" = "$EXP_Q1 $EXP_Q2 " ]; then
-  ok "quotes-two-names" "exactly the two quoted headings ($EXP_Q1, $EXP_Q2) are named; the real entry at $REAL_Q is not"
+  okm "quotes-two-names" "exactly the two quoted headings ($EXP_Q1, $EXP_Q2) are named; the real entry at $REAL_Q is not"
 elif has " $REAL_Q " " $Q_GOT "; then
-  bad "quotes-two-names" "the REAL entry at line $REAL_Q is named as fenced, so the remedy tells the author to strip a live entry's marker; got [$Q_GOT], expected [$EXP_Q1 $EXP_Q2]"
+  badm "quotes-two-names" "the REAL entry at line $REAL_Q is named as fenced, so the remedy tells the author to strip a live entry's marker; got [$Q_GOT], expected [$EXP_Q1 $EXP_Q2]"
 else
-  bad "quotes-two-names" "expected exactly the two quoted headings [$EXP_Q1 $EXP_Q2]; got [$Q_GOT]"
+  badm "quotes-two-names" "expected exactly the two quoted headings [$EXP_Q1 $EXP_Q2]; got [$Q_GOT]"
 fi
 if unterm_finding "$Q_OUT"; then
-  bad "quotes-two-unterm" "an unterminated fence was reported on a ledger whose every fence closes — the delimiter between the two quotations was read as a closer"
+  badm "quotes-two-unterm" "an unterminated fence was reported on a ledger whose every fence closes — the delimiter between the two quotations was read as a closer"
 else
-  ok "quotes-two-unterm" "no unterminated-fence finding: the info-string delimiter inside the fence is content, not a closer"
+  okm "quotes-two-unterm" "no unterminated-fence finding: the info-string delimiter inside the fence is content, not a closer"
 fi
 
 # AN UNTERMINATED FENCE IS REPORTED ONCE, AND NAMES NO LINE. Whole-file pairing makes every line
@@ -643,11 +645,11 @@ expect_refusal "unterm-quotes" "$UQ" --apply
 UQ_OUT="$LAST_OUT"
 UQ_GOT="$(offender_lines "$UQ_OUT")"
 if ! unterm_finding "$UQ_OUT"; then
-  bad "unterm-quotes-once" "a fence that never closes was not reported as unterminated: $UQ_OUT"
+  badm "unterm-quotes-once" "a fence that never closes was not reported as unterminated: $UQ_OUT"
 elif [ -n "$UQ_GOT" ]; then
-  bad "unterm-quotes-once" "a fence that never closes produced per-line findings [$UQ_GOT]; the entry after it is a real entry and the remedy names it"
+  badm "unterm-quotes-once" "a fence that never closes produced per-line findings [$UQ_GOT]; the entry after it is a real entry and the remedy names it"
 else
-  ok "unterm-quotes-once" "the unterminated fence is reported once, and no line it swallows is named"
+  okm "unterm-quotes-once" "the unterminated fence is reported once, and no line it swallows is named"
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -667,15 +669,15 @@ expect_delim_refusal() { # <arm> <dir> <regex matching the seed's own delimiter 
   run_rt "$RT" "$dd" --apply
   got="$(offender_lines "$LAST_OUT")"
   if [ "$LAST_RC" -eq 0 ]; then
-    bad "$arm" "exited 0 on a ledger whose delimiter positions the two readers disagree about"; return 1
+    badm "$arm" "exited 0 on a ledger whose delimiter positions the two readers disagree about"; return 1
   elif ! has "$DELIM_SAYS" "$LAST_OUT"; then
-    bad "$arm" "refused, but not by the position finding — the operator is handed the wrong remedy: $LAST_OUT"; return 1
+    badm "$arm" "refused, but not by the position finding — the operator is handed the wrong remedy: $LAST_OUT"; return 1
   elif [ "$got" != "$exp" ]; then
-    bad "$arm" "expected exactly the seeded delimiter lines [$exp]; got [$got]"; return 1
+    badm "$arm" "expected exactly the seeded delimiter lines [$exp]; got [$got]"; return 1
   elif ! cmp -s "$dd/backlog.md" "$dd/pristine.ledger" || ! cmp -s "$dd/backlog.archive.md" "$dd/pristine.archive"; then
-    bad "$arm" "the refused --apply wrote to disk"; return 1
+    badm "$arm" "the refused --apply wrote to disk"; return 1
   else
-    ok "$arm" "refused by position, naming exactly [$got], and wrote nothing"; return 0
+    okm "$arm" "refused by position, naming exactly [$got], and wrote nothing"; return 0
   fi
 }
 expect_delim_refusal "delim-indent"     "$DI" '^        ```'
@@ -694,13 +696,13 @@ expect_refusal "fires-report" "$A"
 # ---------------------------------------------------------------------------------------
 run_rt "$RT" "$NM" --apply
 if [ "$LAST_RC" -ne 0 ] || has "REFUSING" "$LAST_OUT"; then
-  bad "near-miss" "refused a ledger whose fence holds only near-misses: $LAST_OUT"
+  badm "near-miss" "refused a ledger whose fence holds only near-misses: $LAST_OUT"
 elif ! has "SENTINEL-ARCHIVE-LINE" "$(cat "$NM/backlog.archive.md")"; then
-  bad "near-miss" "the pre-existing archive content was lost"
+  badm "near-miss" "the pre-existing archive content was lost"
 elif ! has "NEAR-MISS-TAIL" "$(cat "$NM/backlog.archive.md")"; then
-  bad "near-miss" "rotation succeeded but the entry's tail did not reach the archive"
+  badm "near-miss" "rotation succeeded but the entry's tail did not reach the archive"
 else
-  ok "near-miss" "eight near-miss shapes in a fence do not block a normal rotation"
+  okm "near-miss" "eight near-miss shapes in a fence do not block a normal rotation"
 fi
 
 # THE ALLOW TWIN OF THE TWO-QUOTATION SEED, ONE PROPERTY APART: the fenced heading carries no id.
@@ -711,15 +713,15 @@ run_rt "$RT" "$PF" --apply
 PF_ARCH="$(cat "$PF/backlog.archive.md")"
 PF_LIVE="$(cat "$PF/backlog.md")"
 if ! has "PROSE-FENCE-TAIL" "$PF_ARCH"; then
-  bad "prose-fence" "the closed entry whose fence quotes an id-less heading did not reach the archive (exit $LAST_RC): $LAST_OUT"
+  badm "prose-fence" "the closed entry whose fence quotes an id-less heading did not reach the archive (exit $LAST_RC): $LAST_OUT"
 elif has "BL-402" "$PF_LIVE"; then
-  bad "prose-fence" "the closed entry is still in the live ledger"
+  badm "prose-fence" "the closed entry is still in the live ledger"
 elif ! has "BL-403" "$PF_LIVE"; then
-  bad "prose-fence" "the real entry AFTER the fence did not stay live"
+  badm "prose-fence" "the real entry AFTER the fence did not stay live"
 elif has "BL-403" "$PF_ARCH"; then
-  bad "prose-fence" "the real entry AFTER the fence was swept into the archive with the closed one — the fence swallowed the boundary between them"
+  badm "prose-fence" "the real entry AFTER the fence was swept into the archive with the closed one — the fence swallowed the boundary between them"
 else
-  ok "prose-fence" "a fence quoting an id-less heading rotates, tail included, and the entry after it stays live"
+  okm "prose-fence" "a fence quoting an id-less heading rotates, tail included, and the entry after it stays live"
 fi
 
 # THE NEAR-MISS OF THE POSITION FINDING, ONE COLUMN SHORT. CommonMark honours a delimiter up to
@@ -728,20 +730,20 @@ fi
 run_rt "$RT" "$D3" --apply
 D3_ARCH="$(cat "$D3/backlog.archive.md")"
 if ! has "DELIM-3SP-TAIL" "$D3_ARCH"; then
-  bad "delim-three-space" "a fence indented three columns, which CommonMark honours, did not rotate (exit $LAST_RC): $LAST_OUT"
+  badm "delim-three-space" "a fence indented three columns, which CommonMark honours, did not rotate (exit $LAST_RC): $LAST_OUT"
 elif has "BL-402" "$(cat "$D3/backlog.md")"; then
-  bad "delim-three-space" "the closed entry is still in the live ledger"
+  badm "delim-three-space" "the closed entry is still in the live ledger"
 else
-  ok "delim-three-space" "a delimiter at three columns is honoured, not refused — the finding starts at four"
+  okm "delim-three-space" "a delimiter at three columns is honoured, not refused — the finding starts at four"
 fi
 
 run_rt "$RT" "$N" --apply
 if [ "$LAST_RC" -ne 0 ] || has "REFUSING" "$LAST_OUT"; then
-  bad "nested-fence" "refused a legal four-backtick fence displaying a three-backtick one: $LAST_OUT"
+  badm "nested-fence" "refused a legal four-backtick fence displaying a three-backtick one: $LAST_OUT"
 elif ! has "NESTED-TAIL" "$(cat "$N/backlog.archive.md")"; then
-  bad "nested-fence" "rotation succeeded but the entry's tail did not reach the archive"
+  badm "nested-fence" "rotation succeeded but the entry's tail did not reach the archive"
 else
-  ok "nested-fence" "a nested fence pairs evenly and does not block rotation"
+  okm "nested-fence" "a nested fence pairs evenly and does not block rotation"
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -751,15 +753,15 @@ run_rt "$RT" "$H" --apply
 H_ARCH="$(cat "$H/backlog.archive.md")"
 H_LIVE="$(cat "$H/backlog.md")"
 if [ "$LAST_RC" -ne 0 ]; then
-  bad "healthy" "a balanced fence with nothing entry-shaped inside was refused: $LAST_OUT"
+  badm "healthy" "a balanced fence with nothing entry-shaped inside was refused: $LAST_OUT"
 elif ! has "HEALTHY-TAIL" "$H_ARCH"; then
-  bad "healthy" "the line AFTER the fence was stranded — this is the defect's signature"
+  badm "healthy" "the line AFTER the fence was stranded — this is the defect's signature"
 elif has "BL-402" "$H_LIVE"; then
-  bad "healthy" "the closed entry is still in the live ledger"
+  badm "healthy" "the closed entry is still in the live ledger"
 elif ! has "BL-401" "$H_LIVE" || ! has "must never move" "$H_LIVE"; then
-  bad "healthy" "an open entry or the preamble was swept"
+  badm "healthy" "an open entry or the preamble was swept"
 else
-  ok "healthy" "the closed entry moved in full, tail included"
+  okm "healthy" "the closed entry moved in full, tail included"
 fi
 
 # FENCE BALANCE — the property the defect actually violates, measured. Under the guard-off
@@ -769,18 +771,18 @@ HF_IN="$(fences "$H/pristine.ledger")"
 HF_LIVE="$(fences "$H/backlog.md")"
 HF_ARCH="$(fences "$H/backlog.archive.md")"
 if [ $((HF_LIVE % 2)) -ne 0 ] || [ $((HF_ARCH % 2)) -ne 0 ]; then
-  bad "fence-balance" "an output file carries an unterminated fence: live=$HF_LIVE archive=$HF_ARCH"
+  badm "fence-balance" "an output file carries an unterminated fence: live=$HF_LIVE archive=$HF_ARCH"
 elif [ "$((HF_LIVE + HF_ARCH))" -ne "$HF_IN" ]; then
-  bad "fence-balance" "fence delimiters were gained or lost: $HF_IN in, $HF_LIVE + $HF_ARCH out"
+  badm "fence-balance" "fence delimiters were gained or lost: $HF_IN in, $HF_LIVE + $HF_ARCH out"
 else
-  ok "fence-balance" "both outputs carry an even fence count summing to the input's $HF_IN"
+  okm "fence-balance" "both outputs carry an even fence count summing to the input's $HF_IN"
 fi
 
 # CONSERVATION. A multiset, not a count — a count is satisfied by two lines swapping files.
 if conserved "$H"; then
-  ok "conservation" "every input line is in exactly one output file"
+  okm "conservation" "every input line is in exactly one output file"
 else
-  bad "conservation" "$(diff "$H/exp.sorted" "$H/got.sorted" | head -6 | tr '\n' '|')"
+  badm "conservation" "$(diff "$H/exp.sorted" "$H/got.sorted" | head -6 | tr '\n' '|')"
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -835,9 +837,9 @@ ph_split_ok() { # the phantom moved with its host, the open list entry stayed li
 }
 reseed "$PH"; run_rt "$RT" "$PH" --apply
 if [ "$LAST_RC" -eq 0 ] && ph_split_ok && conserved "$PH"; then
-  ok "phantom-bullet" "a closed entry carrying a '- **BL-632 is LANDED**' lead-in moves whole, and the open list entry BL-404 stays live"
+  okm "phantom-bullet" "a closed entry carrying a '- **BL-632 is LANDED**' lead-in moves whole, and the open list entry BL-404 stays live"
 else
-  bad "phantom-bullet" "exit $LAST_RC; the host, its lead-in and the open list entry did not split as one closed entry and one live: $(printf '%s' "$LAST_OUT" | grep -E 'REFUSING|BL-' | head -3 | tr '\n' '|')"
+  badm "phantom-bullet" "exit $LAST_RC; the host, its lead-in and the open list entry did not split as one closed entry and one live: $(printf '%s' "$LAST_OUT" | grep -E 'REFUSING|BL-' | head -3 | tr '\n' '|')"
 fi
 
 # SECTION SPAN (BL-824). A `##` heading carrying no BL- label is a ledger SECTION at the entries'
@@ -941,27 +943,27 @@ sub_in_ok() {
 }
 reseed "$SM"; run_rt "$RT" "$SM" --apply
 if [ "$LAST_RC" -eq 0 ] && sec_mid_ok && conserved "$SM"; then
-  ok "section-mid" "a section between a closed and a live entry stays live; the closed entry alone is archived"
+  okm "section-mid" "a section between a closed and a live entry stays live; the closed entry alone is archived"
 else
-  bad "section-mid" "exit $LAST_RC; the section between BL-501 and BL-502 did not stay live: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
+  badm "section-mid" "exit $LAST_RC; the section between BL-501 and BL-502 did not stay live: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
 fi
 reseed "$SE"; run_rt "$RT" "$SE" --apply
 if [ "$LAST_RC" -eq 0 ] && sec_eof_ok && conserved "$SE"; then
-  ok "section-eof" "a section after the last closed entry, at EOF, stays live"
+  okm "section-eof" "a section after the last closed entry, at EOF, stays live"
 else
-  bad "section-eof" "exit $LAST_RC; the trailing section was archived with BL-504: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
+  badm "section-eof" "exit $LAST_RC; the trailing section was archived with BL-504: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
 fi
 reseed "$SR"; run_rt "$RT" "$SR" --apply
 if [ "$LAST_RC" -eq 0 ] && sec_reopened_ok && conserved "$SR"; then
-  ok "section-reopened" "a section whose heading names a BL- id after its first token stays live"
+  okm "section-reopened" "a section whose heading names a BL- id after its first token stays live"
 else
-  bad "section-reopened" "exit $LAST_RC; the Reopened-by-BL-817 section did not stay live: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
+  badm "section-reopened" "exit $LAST_RC; the Reopened-by-BL-817 section did not stay live: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
 fi
 reseed "$SI"; run_rt "$RT" "$SI" --apply
 if [ "$LAST_RC" -eq 0 ] && sub_in_ok && conserved "$SI"; then
-  ok "subhead-in-entry" "a ### subheading inside a closed entry moves with it"
+  okm "subhead-in-entry" "a ### subheading inside a closed entry moves with it"
 else
-  bad "subhead-in-entry" "exit $LAST_RC; the ### subheading did not move with BL-505"
+  badm "subhead-in-entry" "exit $LAST_RC; the ### subheading did not move with BL-505"
 fi
 
 # OUTCOME GUARD (BL-817). A closed entry tagged `**DEFECT (efficiency).**` with no line opening
@@ -1005,15 +1007,15 @@ EOM
 reseed "$EO"; run_rt "$RT" "$EO" --apply
 if [ "$LAST_RC" -eq 2 ] && has "$OUTCOME_SAYS" "$LAST_OUT" && has "BL-601" "$LAST_OUT" \
    && cmp -s "$EO/backlog.md" "$EO/pristine.ledger" && cmp -s "$EO/backlog.archive.md" "$EO/pristine.archive"; then
-  ok "outcome-refused" "a tagged efficiency close with no Outcome measured: line is refused by name and nothing is written"
+  okm "outcome-refused" "a tagged efficiency close with no Outcome measured: line is refused by name and nothing is written"
 else
-  bad "outcome-refused" "exit $LAST_RC; the tagged close without an outcome line was not refused by the outcome arm"
+  badm "outcome-refused" "exit $LAST_RC; the tagged close without an outcome line was not refused by the outcome arm"
 fi
 reseed "$EY"; run_rt "$RT" "$EY" --apply
 if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-601 ' "$EY/backlog.archive.md" && ! has "$OUTCOME_SAYS" "$LAST_OUT"; then
-  ok "outcome-carried" "the same close carrying its Outcome measured: line rotates"
+  okm "outcome-carried" "the same close carrying its Outcome measured: line rotates"
 else
-  bad "outcome-carried" "exit $LAST_RC; a tagged close WITH its outcome line did not rotate"
+  badm "outcome-carried" "exit $LAST_RC; a tagged close WITH its outcome line did not rotate"
 fi
 
 # OUTCOME GUARD, EVERY TAG SPELLING (BL-835). The guard keyed on `**DEFECT (efficiency).**` alone
@@ -1044,9 +1046,9 @@ for EFW in "$EF1" "$EF2" "$EF3"; do
   reseed "$EFW"; run_rt "$RT" "$EFW" --apply
   if [ "$LAST_RC" -eq 2 ] && has "$OUTCOME_SAYS" "$LAST_OUT" && has "BL-603" "$LAST_OUT" \
      && cmp -s "$EFW/backlog.md" "$EFW/pristine.ledger" && cmp -s "$EFW/backlog.archive.md" "$EFW/pristine.archive"; then
-    ok "outcome-${EFW##*/}" "that tag spelling, closed with no outcome line, is refused and nothing is written"
+    okm "outcome-${EFW##*/}" "that tag spelling, closed with no outcome line, is refused and nothing is written"
   else
-    bad "outcome-${EFW##*/}" "exit $LAST_RC; a close in that tag spelling with no outcome line was not refused"
+    badm "outcome-${EFW##*/}" "exit $LAST_RC; a close in that tag spelling with no outcome line was not refused"
   fi
 done
 EFN="$WORK/eff-form-nearmiss"
@@ -1076,15 +1078,10 @@ EOM
 reseed "$EFN"; run_rt "$RT" "$EFN" --apply
 if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-605 ' "$EFN/backlog.archive.md" && grep -q '^## BL-606 ' "$EFN/backlog.archive.md" \
    && ! has "$OUTCOME_SAYS" "$LAST_OUT"; then
-  ok "outcome-nearmiss" "untagged closes whose bold spans carry the word efficiency rotate without an outcome line"
+  okm "outcome-nearmiss" "untagged closes whose bold spans carry the word efficiency rotate without an outcome line"
 else
-  bad "outcome-nearmiss" "exit $LAST_RC; an untagged close carrying the word efficiency in bold was refused or not archived"
+  badm "outcome-nearmiss" "exit $LAST_RC; an untagged close carrying the word efficiency in bold was refused or not archived"
 fi
 
 echo
-if [ "$FAIL" -eq 0 ]; then
-  echo "PASS: every assertion holds."
-  exit 0
-fi
-echo "FAIL: an assertion regressed." >&2
-exit 1
+report_end backlog-rotate-fence-guard
