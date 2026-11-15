@@ -273,7 +273,7 @@ fi
 RC_HR="$HERE/../../scripts/hermetic-run.sh"
 RC_CP="$HERE/../../scripts/core-paths.sh"
 rcpt_drive() { # <tag> <hook-source> <pristine>
-  local w="$WORK/$1/w" h
+  local w="$WORK/$1/w" h rt
   mkdir -p "$w/.githooks" "$w/core/scripts" "$w/core/fixtures/aaa-rec" "$w/lib" "$w/scripts" || return 1
   h="$w/.githooks/pre-push"
   case "$3" in
@@ -288,8 +288,9 @@ rcpt_drive() { # <tag> <hook-source> <pristine>
   ( cd "$w" && git init -q . && git add -A && git -c user.email=f@x -c user.name=f -c commit.gpgsign=false commit -qm seed ) \
     > /dev/null 2>&1 || return 1
   rcpt_push "$1" 1
-  find "$w.vs" -type f 2>/dev/null | grep -c . > "$WORK/$1/n1"
-  rm -f "$w/.git/ai-dlc-fixture-keys/aaa-rec.key"
+  rt="$(git -C "$w" rev-list --max-parents=0 HEAD)" || return 1
+  find "$w.vs/$rt" -type f 2>/dev/null | grep -c . > "$WORK/$1/n1"
+  rm -f "$w.vs/fixture-keys/$rt/aaa-rec.key"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$w/scripts/validate-fixture-inprocess.sh"
   ( cd "$w" && git -c user.email=f@x -c user.name=f -c commit.gpgsign=false commit -qam fix ) > /dev/null 2>&1 || return 1
   rcpt_push "$1" 2

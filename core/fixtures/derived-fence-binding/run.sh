@@ -2,8 +2,8 @@
 # derived-fence-binding — assert invariant I108 both fires and discriminates.
 # Also hosts I75's seeded-drift oracle (A16-A19, and A51-A53 on real-sized spans), which had no fixture anywhere, and I121's
 # battery (A20-A29, A31a-A33a): the verify-shape paragraph every role contract carries.
-# And I122's battery (A34-A41, A43a-A45a, A46-A47): the advisor paragraph directly below it in every role
-# contract, and a cross-probe that neither arm is satisfied by the other's text.
+# And I122's battery (A34-A41, A43a-A45a): the advisor paragraph directly below it in every role
+# contract.
 # And A48-A50: the three-way drop matrix over I121, I122 and I123's chunked-write paragraph below
 # them, where the advisor drop must leave I123 reporting MISPLACED rather than green.
 #
@@ -641,10 +641,8 @@ fi
 
 # --- I122: the advisor paragraph in every role contract ------------------------
 # I122 is built as I121 is, over the same population, for a second paragraph that sits directly
-# below I121's in every role file. The battery mirrors A20-A33, and adds what only a SECOND
-# paragraph in the same files needs: A46/A47 drop each paragraph in turn and require the OTHER
-# arm to stay green while this one names the files, so neither arm can be satisfied by the
-# neighbour's text.
+# below I121's in every role file. The battery mirrors A20-A33; A48-A50 hold the cross-probe
+# that neither arm is satisfied by the other's text.
 #
 # The opener sentence is held in a SINGLE-QUOTED variable: it carries backticks, and inside
 # double quotes they would run `advisor` as a command and plant the text either side of a hole.
@@ -768,36 +766,6 @@ t="$(fresh)"
 if edit "$t" "core/team-roles/qa.md" "$MUT_I122_INLINE"; then
   says I122 "A45a an offender: the arm reports the inline opener" "$t" "$I122_INLINE: core/team-roles/qa.md"
 fi
-
-# --- A46/A47: I121 AND I122 DO NOT SATISFY EACH OTHER ---------------------------
-# Each paragraph dropped from EVERY role file in turn. The arm that owns it must name a file
-# (adversary.md, first in the glob) and the arm that owns the OTHER paragraph must reach a clean
-# verdict on the same tree. An arm keyed on its neighbour's opener or closer fails one half.
-xprobe() { # xprobe <label> <drop-mutation> <owner-arm> <owner-missing-msg> <other-arm>
-  local label="$1" mut="$2" own="$3" msg="$4" oth="$5" f brk=0 o1 o2 r1 r2
-  t="$(fresh)"
-  for f in "$t"/core/team-roles/*.md; do
-    edit "$t" "core/team-roles/${f##*/}" "$mut" || { brk=1; break; }
-  done
-  [ "$brk" -eq 0 ] || return 0
-  o1="$(run_arm "$t" "$own")"; r1=$?
-  o2="$(run_arm "$t" "$oth")"; r2=$?
-  guard_sel "$r1" "$o1" || return 0
-  guard_sel "$r2" "$o2" || return 0
-  case "$o1" in
-    *"$msg: core/team-roles/adversary.md"*) ;;
-    *) bad "$label — $own did not name the files its paragraph was dropped from (rc=$r1)"; return 0 ;;
-  esac
-  case "$r2:$o2" in
-    *"FAIL: $oth"*) bad "$label — $oth reported on a tree where only $own's paragraph was dropped, so the two arms are entangled (rc=$r2)" ;;
-    0:*"$OKLINE"*)  ok "$label" ;;
-    *)              bad "$label — $oth reached no verdict (rc=$r2), so its silence is a run that died" ;;
-  esac
-}
-xprobe "A46 the verify-shape paragraph dropped everywhere: I121 names the files and I122 stays green" \
-       "$MUT_I121_DROP" I121 "$I121_MISSING" I122
-xprobe "A47 the advisor paragraph dropped everywhere: I122 names the files and I121 stays green" \
-       "$MUT_I122_DROP" I122 "$I122_MISSING" I121
 
 # --- A48-A50: THE THREE-WAY DROP MATRIX OVER I121, I122 AND I123 -------------------
 # I123 binds the chunked-write paragraph directly below I122's in every role file. Each of the
@@ -970,7 +938,7 @@ fi
 # THE COUNT IS ASSERTED. A driver whose `for` loop or `if` guard stopped reaching an assertion
 # prints fewer lines and no failure, and an unrun assertion is indistinguishable from one that
 # passed.
-EXPECTED=55
+EXPECTED=53
 tree_clean() { fresh >/dev/null; diff -rq "$PRISTINE" "$TREE" >"$WORK/tree.diff" 2>&1; }
 # PROBE of the guard, both directions: a write that was never recorded must be seen, and once it is
 # gone the same guard must be quiet. A guard that cannot fail reads exactly like one that passed.

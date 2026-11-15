@@ -474,6 +474,18 @@
 #       run-filter` start with <conventions> (its `$ `, `command:`, `cmd=` or `sha=... cmd=` prefix dropped) and
 #       refused, or refused as unevaluable, as above (ev_capfilter_fc). A counted capture rendering `command (none)`
 #       has no command to read. A no-run claim keeps its route above, unfiltered.
+#       RECORDED WORKING DIRECTORY. A value RUN-GATE accepts as an unfiltered run (exit 0) whose first `working
+#       directory` or `cwd` annotation names a RELATIVE directory, backticked or a bare word carrying a `/`, is held to
+#       RUN-FILTER's WORKING DIRECTORY rule as a `cd` is: one `record-only-diff.sh run-span <value>` start reads the
+#       invocation and one `run-filter` start with <conventions> reads `cd "<dir>" && <invocation>`, so the run is
+#       accepted from the repository root (`.`, `./`) or from a conventions-declared canonical path, and is otherwise
+#       refused `full-collection-filtered` (unevaluable: refused as above) (ev_cwdfilter_fc). Not judged, the
+#       RECORDED-DIRECTORY RESIDUAL: an absolute, `~`, `<placeholder>` or `$VAR` directory (the gate cannot know the
+#       dev's worktree path), prose such as `from the worktree root` or `in <dir>`, a bare word with no `/`, a
+#       `--cwd` option (THE RELOCATION RESIDUAL), an invocation carrying its own `cd`/`pushd` (RUN-FILTER reads that one),
+#       a declared wrapper's span, which run-span reads with no conventions file, and a value the (o) capture-heads
+#       count route accepts (RUN-GATE 4), whose run claim is the capture's command line (ev_capfilter_fc reads a `cd`
+#       there) and whose recorded directory is not read.
 #       <conventions> is `$TOP/docs/coding-conventions.md` when readable, the file RUN-SHAPE receives, read from
 #       DISK at the toplevel and not as committed at <frozen>, as merge-review-shards.sh reads it for QA's run: a
 #       conventions edit left uncommitted in the worktree decides the verdict (a known gap, shared with QA's run).
@@ -1249,6 +1261,46 @@ ev_capfilter_fc() {
     esac
   done <<<"$DAR_CCMDS"
 }
+# ev_cwdfilter_fc <value>: a value RUN-GATE accepts as an unfiltered run (exit 0) whose `working directory` or `cwd`
+# annotation names a RELATIVE directory (header: (k), RECORDED WORKING DIRECTORY) is read by record-only-diff.sh
+# run-filter, with ev_conv, as `cd "<dir>" && <the run-span invocation>`: 0 accepts, 1 refuses with its reason, any
+# other refuses as unevaluable. Not judged: no annotation, an absolute, `~`, `<placeholder>` or `$VAR` directory, `.`
+# or `./`, a bare (unbackticked) word with no `/`, a `--cwd` option, and an invocation carrying its own `cd`/`pushd`.
+ev_cwdfilter_fc() {
+  local cw cw_bt cw_d cw_sp cw_o cw_rc EV_TAB=$'\t'
+  # No start for a value naming neither label (the awk below matches only these, in any case).
+  case "$1" in
+    *[Cc][Ww][Dd]*|*[Ww][Oo][Rr][Kk][Ii][Nn][Gg]' '[Dd][Ii][Rr][Ee][Cc][Tt][Oo][Rr][Yy]*) ;;
+    *) return 0 ;;
+  esac
+  cw="$(awk '{
+    s = $0; l = tolower($0)
+    while (match(l, /(working directory|cwd)[ :=]*/)) {
+      p = (RSTART > 1) ? substr(l, RSTART - 1, 1) : ""
+      r = substr(s, RSTART + RLENGTH); s = r; l = substr(l, RSTART + RLENGTH)
+      if (p ~ /[-a-z0-9_]/) continue
+      if (substr(r, 1, 1) == "`") { e = index(substr(r, 2), "`"); if (e > 0) print "1\t" substr(r, 2, e - 1); exit }
+      if (match(r, /^[^ ,;()`]+/)) print "0\t" substr(r, 1, RLENGTH)
+      exit
+    }
+  }' <<<"$1")"
+  [ -n "$cw" ] || return 0
+  cw_bt="${cw%%"$EV_TAB"*}"; cw_d="${cw#*"$EV_TAB"}"
+  case "$cw_d" in ''|/*|'~'*|'<'*|'$'*|.|./) return 0 ;; esac
+  [ "$cw_bt" = 1 ] || case "$cw_d" in */*) ;; *) return 0 ;; esac
+  cw_sp="$(bash "$RO" run-span "$1")"; cw_rc=$?
+  if [ "$cw_rc" -ne 0 ] || [ -z "$cw_sp" ]; then
+    ev_filter_fc "$1" 2 "records working directory \`$cw_d\`, and record-only-diff.sh run-span read no invocation to hold to it (exit $cw_rc)"
+    return 0
+  fi
+  ! grep -qE '(^|[;&|(][[:space:]]*)(cd|pushd)[[:space:]]' <<<"$cw_sp" || return 0
+  cw_o="$(bash "$RO" run-filter "\`cd \"$cw_d\" && $cw_sp\`" ${ev_conv:+"$ev_conv"})"; cw_rc=$?
+  case "$cw_rc" in
+    0) ;;
+    1) ev_filter_fc "$1" 1 "records working directory \`$cw_d\`, and run there (\`cd \"$cw_d\" && $cw_sp\`) it $cw_o" ;;
+    *) ev_filter_fc "$1" 2 "records working directory \`$cw_d\`: run-filter exit $cw_rc on \`cd \"$cw_d\" && $cw_sp\`, $cw_o" ;;
+  esac
+}
 # ------------------------------------------------------------------------- bookkeeping
 # Every bookkeeping arm reads <frozen> through git, never the working tree and never the disk
 # fallback the evidence arms use: the reviewer reads the commit, so an uncommitted fix to the
@@ -1754,7 +1806,7 @@ else
     # RUN-FILTER, each with ev_conv. 0/3/2: a run, its filter passing, refusing, or unevaluable.
     fc_gv="$(bash "$RO" run-gate "$fc" ${ev_conv:+"$ev_conv"})"; EV_FC_GATE=$?
     case "$EV_FC_GATE" in
-      0) ;;
+      0) ev_cwdfilter_fc "$fc" ;;
       3) ev_filter_fc "$fc" 1 "$fc_gv" ;;
       1|4|5|6)
         # Not a run. A value citing the full-collection capture plus `counts: capture-heads block` is a run when

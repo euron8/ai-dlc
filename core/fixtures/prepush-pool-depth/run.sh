@@ -252,7 +252,7 @@ drive() {
   rc="$( cd "$t" && {
     [ "$depth" = - ] || export PREPUSH_POOL_DEPTH="$depth"
     [ "$jobs" = - ] || export AI_DLC_FIXTURE_JOBS="$jobs"
-    export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 PD_LOG="$WORK/log" PD_FLIGHT="$WORK/flight"
+    export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_VERDICT_STORE="$PWD.vs" PD_LOG="$WORK/log" PD_FLIGHT="$WORK/flight"
     . "$blk" > "$WORK/load.out" 2>&1
     bp=""
     if [ -n "${PD_BARRIER:-}" ]; then
@@ -307,7 +307,7 @@ nest_stub() { # nest_stub <lvl> <next-lvl or empty>
   printf 'for _v in $(env | sed -n "s/^\\(AI_DLC_[A-Za-z0-9_]*\\)=.*/\\1/p"); do unset "$_v"; done\n'
   printf 'printf "%%s depth=%%s\\n" "stub-%s" "${PREPUSH_POOL_DEPTH-unset}" >> "$NEST_LOG"\n' "$1"
   if [ -n "$2" ]; then
-    printf '( cd "$NEST_ROOT/%s" && export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 && . "$NEST_BLK" >/dev/null 2>&1 && run_fixtures >> "$NEST_LOG.out" 2>&1 )\n' "$2"
+    printf '( cd "$NEST_ROOT/%s" && export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_VERDICT_STORE="$PWD.vs" && . "$NEST_BLK" >/dev/null 2>&1 && run_fixtures >> "$NEST_LOG.out" 2>&1 )\n' "$2"
   fi
   printf 'exit 0\n'
 }
@@ -429,7 +429,7 @@ grp_REF5() { local r; r="$(drive "$1" "$W" 5 12)"; printf 'refuse_d5_rc=%s\n' "$
 grp_NEST() {
   local b="$1" st
   : > "$WORK/nest.log"; : > "$WORK/nest.log.out"
-  ( cd "$NW/a" && export NEST_BLK="$b" NEST_ROOT="$NW" NEST_LOG="$WORK/nest.log" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1; unset PREPUSH_POOL_DEPTH
+  ( cd "$NW/a" && export NEST_BLK="$b" NEST_ROOT="$NW" NEST_LOG="$WORK/nest.log" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_VERDICT_STORE="$PWD.vs"; unset PREPUSH_POOL_DEPTH
     . "$b" >/dev/null 2>&1; run_fixtures >> "$WORK/nest.log.out" 2>&1 )
   st="$(sed 's/ depth=.*//' "$WORK/nest.log" | tr '\n' ' ' | sed 's/ *$//')"
   printf 'nest_started=%s\n' "$st"
@@ -560,7 +560,7 @@ exec > /dev/null 2>&1
 g=""
 case "$PN_MODE" in
   grow|silent)
-    ( cd "$PN_DIR/b" && export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 && . "$PN_BLK" && run_fixtures ) &
+    ( cd "$PN_DIR/b" && export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_VERDICT_STORE="$PWD.vs" && . "$PN_BLK" && run_fixtures ) &
     wait
     exit 0 ;;
   hlink)
@@ -638,7 +638,7 @@ pn_drive() { # pn_drive <block> <mode> <tag>: backgrounded; writes ok, REFUSED o
   # THE DRIVE'S EVENT: the OUTER subshell emits `done pn.<tag>` once the inner one has exited by any means, a SIGKILL
   # included (the hook installs and clears its own EXIT trap, so a trap in the drive would not fire). The inner one
   # holds the step gate's two FIFOs open read-write (fds 5 and 6) for the drive's life.
-  ( ( cd "$d/a" && export AI_DLC_POOL_STALL="$PN_STALL" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 PN_BLK="$blk" PN_MODE="$mode" PN_DIR="$d" PN_STEPS="$PN_STEPS" PN_GATE="$d/gate" \
+  ( ( cd "$d/a" && export AI_DLC_POOL_STALL="$PN_STALL" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_VERDICT_STORE="$PWD.vs" PN_BLK="$blk" PN_MODE="$mode" PN_DIR="$d" PN_STEPS="$PN_STEPS" PN_GATE="$d/gate" \
         PN_REC="$WORK/pn.$tag.rec" PN_EV="$WORK/pn.ev" PN_TAG="pn.$tag"
       exec 5<> "$d/gate/stub-a/w" 6<> "$d/gate/stub-a/p"
       pd_gate_sleep
@@ -667,7 +667,7 @@ ord_drive() { # ord_drive <block> <tag>
   m="$(cd "$d/u/.t.abcde" && pwd -P)"
   i=0; while [ "$i" -lt 17 ]; do mkdir -p "$d/old/$i"; printf '%s\n' "$d/old/$i" >> "$d/seed"; i=$((i + 1)); done
   cp "$d/seed" "$m/.pool-nested"
-  ( ( cd "$d/w" && export TMPDIR="$m" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1
+  ( ( cd "$d/w" && export TMPDIR="$m" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_VERDICT_STORE="$PWD.vs"
       . "$blk" >/dev/null 2>&1; run_fixtures >/dev/null 2>&1
       awk 'NR == FNR { s[$0] = 1; next } !($0 in s) { n++; at = FNR } END { print (n == 1 ? at : "none") }' "$d/seed" "$m/.pool-nested" > "$WORK/ord.$tag.v" )
     printf 'done %s\n' "ord.$tag" 1<> "$WORK/pn.ev" ) > /dev/null 2>&1 &
@@ -1031,7 +1031,7 @@ td_drive() {
   local blk="$1" set="$2" mode="$3" d="$WORK/td.$2.$3" p n st root ks k wp t dp dn xp
   mkdir -p "$d/s" && cp -R "$TDT" "$d/w" || { bad "teardown drive $set/$mode: could not copy the template"; return 1; }
   set -m
-  ( cd "$d/w" && unset PREPUSH_POOL_DEPTH && export AI_DLC_FIXTURE_JOBS=2 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 TD_DIR="$d/s" \
+  ( cd "$d/w" && unset PREPUSH_POOL_DEPTH && export AI_DLC_FIXTURE_JOBS=2 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_VERDICT_STORE="$PWD.vs" TD_DIR="$d/s" \
     && exec bash -c '. "$1" > /dev/null 2>&1; run_fixtures > "$2" 2>&1' _ "$blk" "$d/out" ) > /dev/null 2>&1 &
   p=$!
   set +m
@@ -1130,7 +1130,7 @@ ts_hold() {
 # so nothing under the subject can hold the lifeline lock after the drive has gone.
 ts_launch() {
   set -m
-  ( cd "$1/w" && unset PREPUSH_POOL_DEPTH && export PATH="$1/shim:$PATH" TD_SLP="$slp" AI_DLC_FIXTURE_JOBS=2 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 TD_DIR="$1/s" \
+  ( cd "$1/w" && unset PREPUSH_POOL_DEPTH && export PATH="$1/shim:$PATH" TD_SLP="$slp" AI_DLC_FIXTURE_JOBS=2 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_VERDICT_STORE="$PWD.vs" TD_DIR="$1/s" \
     && exec sandbox-exec -p '(version 1)(allow default)' /bin/bash -c '. "$1" > /dev/null 2>&1; run_fixtures > "$2" 2>&1; r=$?; [ -p "$TD_DIR/evlog" ] && printf "subject-exit %s\n" "$r" 1<> "$TD_DIR/evlog"; exit "$r"' _ "$2" "$1/out" ) > /dev/null 2>&1 9>&- &
   p=$!
   set +m
@@ -1464,7 +1464,7 @@ cl_census() {
 cl_recs() { ls "$1" 2>/dev/null | sed -n 's/\.key$//p' | sort | tr '\n' ' ' | sed 's/ *$//'; }
 # cl_kdir <world>: the world's consumer-layout records dir, where cl_select puts it: the world's store base
 # (<world>.vs, every drive's AI_DLC_VERDICT_STORE), consumer-placement-keys, the world's root commit
-cl_kdir() { printf '%s.vs/consumer-placement-keys/%s' "$1" "$(git -C "$1" rev-list --max-parents=0 HEAD 2>/dev/null | LC_ALL=C sort | sed -n 1p)"; }
+cl_kdir() { printf '%s.vs/%s/%s' "$1" "${2:-consumer-placement-keys}" "$(git -C "$1" rev-list --max-parents=0 HEAD 2>/dev/null | LC_ALL=C sort | sed -n 1p)"; }
 # the C template: a copy of the template carrying the base span's census records, and a committed stub-installed tree
 # that moved since that census (one extra file), so a drive over a copy of it selects all three shipping fixtures
 CLTC="$CLW/tpl.c"
@@ -1595,7 +1595,7 @@ cl_B() {
       "$(cl_crows "$o")" "$([ -e "$(cl_kdir "$W")" ] && echo cl-keys || echo nocl)" ;;
   esac
   case " $4 " in *" 3 "*)
-    a="$(cat "$W.main/.git/ai-dlc-fixture-verified.format" 2>/dev/null)|$([ -e "$(cl_kdir "$W")" ] && echo cl-keys || echo nocl)"
+    a="$(cat "$(cl_kdir "$W" fixture-verified).format" 2>/dev/null)|$([ -e "$(cl_kdir "$W")" ] && echo cl-keys || echo nocl)"
     r="$(cl_census "$P" "$W" "$g.B2")"
     printf 'cl_fb5_sel=%s|%s\n' "$a" "$(sed -n 's/^   \.\.    consumer layout: \([0-9]* of [0-9]*\) shipping.*/\1/p' "$CLW/census.$g.B2")"
     printf 'cl_fb5_state=%s\n' "$(sed -n 2p "$(cl_kdir "$W")/cl-ok.key" 2>/dev/null)" ;;

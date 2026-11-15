@@ -107,6 +107,12 @@ further when any of these is absent:
   not declare canonical, is a partial run and not the full collection. It is
   the rule your own `Canonical run:` is held to, and
   `validate-handoff-evidence.sh` refuses it as `full-collection-filtered`.
+- a recorded working directory for that run that is the repository root or a
+  path `docs/coding-conventions.md` declares canonical. A run made from a
+  narrower relative directory (`` `pytest -q`, working directory `server/` ``)
+  collects only that subtree and is a partial run: it is read as
+  `record-only-diff.sh run-filter` reads `cd <dir> && <invocation>`, and
+  `validate-handoff-evidence.sh` refuses it as `full-collection-filtered`.
 
 Do not compare Dev Agent Record prose to capture headers — the capture-heads
 block is rendered and validator-checked; a capture header that is wrong about

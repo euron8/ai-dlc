@@ -494,22 +494,10 @@ DURATIONS_RECORD="$GITDIR/ai-dlc-fixture-durations"
 # early, and treating those as a measurement reads a short run as a fast one.
 LASTRUN_RECORD="$GITDIR/ai-dlc-fixture-durations.last"
 READSET_MAP=".ai-dlc-fixture-readsets.tsv"
-# THE VERIFIED-STATE RECORD LIVES UNDER .git FOR I55 ARM 4'S REASON EXACTLY: the content key
-# hashes the working tree, so a cross-run record inside it would change the key that decides
-# whether this suite runs at all.
-VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"
-# THE RECORD'S FORMAT STAMP IS A SIDECAR, NOT A HEADER LINE, so the record stays pure
-# `path<TAB>sha` rows and every reader of it -- `comm`, `cut`, and the fixtures that seed one
-# by copying a manifest -- is unchanged. Written only beside a record THIS hook wrote, which is
-# already filtered of ignored paths at the manifest; see the reader in apply_readset_skip.
-VERIFIED_FORMAT="$GITDIR/ai-dlc-fixture-verified.format"
-# ONE KEY RECORD PER FIXTURE, `<fixture>.key`; see the header of apply_readset_skip.
-KEYS_DIR="$GITDIR/ai-dlc-fixture-keys"
-# THE CONSUMER-LAYOUT KEY RECORDS (BL-1027; installed-path rows since BL-1043), `<fixture>.key` plus `.prev`: a separate directory,
-# written only by cl_publish and cl_write and read only by cl_select, in the shared verdict store base where the store
-# is on (cl_select resolves it); this per-clone path is the store-OFF fallback. The distribution hook alone sets the
-# switch that uses it; in this hook it stays empty and the directory is never made.
-CL_KEYS_DIR="$GITDIR/ai-dlc-consumer-placement-keys"
+# THE VERIFIED-STATE RECORD (VERIFIED_RECORD, its format sidecar VERIFIED_FORMAT), THE PER-FIXTURE KEY RECORDS
+# (KEYS_DIR) AND THE CONSUMER-LAYOUT KEY RECORDS (CL_KEYS_DIR, used only by the distribution hook's switch) live in the
+# shared verdict store base, outside the working tree the content key hashes; the RECORD_HOME span (after READSET_VS)
+# resolves them.
 # WHEN A FIXTURE GOES RED, THIS IS THE FILE TO READ. The pool runs each unit in its own worker
 # and keeps only a verdict, so without this record a failing fixture left you one line --
 # `FAIL <name>` -- and no way to see what it actually printed. Re-running the fixture by hand
@@ -538,7 +526,7 @@ FAILLOG_KEEP=20
 # reader sees the old file or the new one whole, never a torn one. rec_put stages the copy beside
 # the record under this process's pid, then renames it over the record.
 rec_put() { # <src> <record>
-  cp "$1" "$2.tmp.$$" 2>/dev/null && mv -f "$2.tmp.$$" "$2" 2>/dev/null && return 0
+  { [ -d "${2%/*}" ] || mkdir -p "${2%/*}" 2>/dev/null; } && cp "$1" "$2.tmp.$$" 2>/dev/null && mv -f "$2.tmp.$$" "$2" 2>/dev/null && return 0
   rm -f "$2.tmp.$$" 2>/dev/null
   return 1
 }
@@ -1553,6 +1541,40 @@ readset_key_rows() { # <record>
   grep -vE '^#(format|state|tools|pending) ' "$1"
 }
 # READSET_VS_END
+# RECORD_HOME_BEGIN
+# EVERY PASS AND KEY RECORD LIVES IN THE SHARED VERDICT STORE BASE, NEVER UNDER A CLONE'S GIT DIR, so every clone and
+# worktree of one repository reads the records any of them wrote. `rec_home <var> <kind>` sets <var> to
+# `<base>/<kind>/<repository root commit>`: <base> is AI_DLC_VERDICT_STORE (default ~/.cache/ai-dlc/verdicts) with a
+# counted-<vk> suffix stripped, the root commit is readset_vs_store's, resolved once per process (REC_ROOT).
+# STORE OFF (no base, a shallow clone, no root commit) sets REC_OFF, a path under /dev/null: nothing under it can be
+# read or created, so every record reads absent, every write fails, and every fixture runs with nothing recorded.
+# `rec_import <legacy> <record>` is the one-time carry-forward of a record an older hook kept under the git dir: it
+# copies <legacy> (a file or a directory) to <record> only when <record> is absent and <legacy> present, through a
+# temp beside <record> and a rename, never removes <legacy>, and returns 0 only when it copied.
+# The verified record's format stamp is a sidecar, never a header line, so the record stays pure `path<TAB>sha` rows.
+REC_OFF=/dev/null/ai-dlc-verdict-store-off
+rec_home() { # <var> <kind>; <var> must not be rh_b or rh_p
+  local rh_b="${AI_DLC_VERDICT_STORE:-}" rh_p
+  [ -n "$rh_b" ] || [ -z "${HOME:-}" ] || rh_b="$HOME/.cache/ai-dlc/verdicts"
+  case "${rh_b##*/}" in counted-????????????) rh_b="${rh_b%/*}" ;; esac
+  case "$rh_b" in ''|/*) ;; *) rh_b="$PWD/$rh_b" ;; esac
+  if [ -z "${REC_ROOT:-}" ] && [ -n "$rh_b" ]; then rh_p="$(readset_vs_store "$PWD")"; REC_ROOT="${rh_p##*/}"; fi
+  if [ -n "$rh_b" ] && [ -n "${REC_ROOT:-}" ]; then printf -v "$1" '%s/%s/%s' "$rh_b" "$2" "$REC_ROOT"
+  else printf -v "$1" '%s' "$REC_OFF"; fi
+}
+rec_import() { # <legacy> <record>
+  [ -e "$1" ] && [ ! -e "$2" ] || return 1
+  mkdir -p "${2%/*}" 2>/dev/null || return 1
+  rm -rf "$2.imp.$$" 2>/dev/null
+  if cp -Rp "$1" "$2.imp.$$" 2>/dev/null && [ ! -e "$2" ] && mv "$2.imp.$$" "$2" 2>/dev/null; then return 0; fi
+  rm -rf "$2.imp.$$" 2>/dev/null
+  return 1
+}
+rec_home VERIFIED_RECORD fixture-verified
+VERIFIED_FORMAT="$VERIFIED_RECORD.format"
+rec_home KEYS_DIR fixture-keys
+CL_KEYS_DIR="$REC_OFF"
+# RECORD_HOME_END
 # A DECLARED FIXTURE'S KEY ROWS, ONE COMPOSER. This hook and hermetic-run.sh both source this span -- the runner at
 # top level, the way it sources READSET_TOOLS -- so the declaration is parsed, and the key rows composed, by ONE
 # implementation: there is no second composer to hold equal by a census. A code change here bumps READSET_VS_FORMAT
@@ -2331,9 +2353,7 @@ cl_select() {
   base="${AI_DLC_VERDICT_STORE:-${HOME:-}/.cache/ai-dlc/verdicts}"
   case "${base##*/}" in counted-????????????) base="${base%/*}" ;; esac
   case "$base" in /*) ;; *) base="$PWD/$base" ;; esac
-  p="$(AI_DLC_VERDICT_STORE="$base" readset_vs_store "$PWD")"
-  if [ -n "$p" ]; then kd="$base/consumer-placement-keys/${p##*/}"
-  else kd="$CL_KEYS_DIR"; case "$kd" in /*) ;; *) kd="$PWD/$kd" ;; esac; fi
+  rec_home kd consumer-placement-keys
   CL_KEYS_DIR="$kd"
   printf '%s\n' "$kd" > "$out/.cl.keys"; printf '%s\n' "$base" > "$out/.cl.store"; declare -f cl_publish > "$out/.cl.pub"
   mkdir -p "$out/.cl/.k" && c="$(cd "$out/.cl" && pwd -P)" || { printf 'no consumer-layout decision dir under %s\n' "$out" > "$out/.cl.refused"; return 0; }
@@ -2508,6 +2528,11 @@ apply_readset_skip() {
   local list="$1" out="$2" n_all n_sel readset_at readset_age n_unmapped unmapped_names readset_deriver dv dsha="" b
 
   n_all="$(grep -c . "$list" 2>/dev/null)"; case "$n_all" in ''|*[!0-9]*) n_all=0 ;; esac
+  # THE ONE-TIME CARRY-FORWARD (RECORD_HOME): the key records before the verified record, whose sidecar is copied only
+  # with it, so a copied record never pairs with a stamp it did not come with.
+  rec_import "$GITDIR/ai-dlc-fixture-keys" "$KEYS_DIR"
+  rec_import "$GITDIR/ai-dlc-fixture-verified" "$VERIFIED_RECORD" && rec_import "$GITDIR/ai-dlc-fixture-verified.format" "$VERIFIED_FORMAT"
+  [ "$KEYS_DIR" != "$REC_OFF" ] || printf '   ..    verdict store OFF (no store base, a shallow clone or no root commit): no key record is read or written\n'
 
   # THE MANIFEST IS BUILT FIRST, BEFORE ANY EARLY RETURN: it is the pre-run state every record
   # this run publishes is keyed on.

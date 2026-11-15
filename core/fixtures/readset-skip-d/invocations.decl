@@ -1,4 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-147 *
+# BL-583: ckw (j) retired (the man arms n7 and n8, and ckw qpath, drive the same quoted-name branch): 147 to 135, one counted run.
+135 *
 0 core/git-hooks/pre-push
 0 core/scripts/derive-fixture-readsets.sh

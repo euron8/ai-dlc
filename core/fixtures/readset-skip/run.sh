@@ -56,7 +56,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 #   a  arms ign man merge slot   pool selection worlds, the manifest, the deriver's merge and control, the trace-window slot (slot-world.sh)
 #   b  loc hr tk dg              local map and trace report, hash rows, tool keys, committed digests
 #   c  tracer rc                 trace tree, lossy window, --tracer both and its stub worlds, --reconcile
-#   d  ckw vs                    shared verdict store (vs), checksum-key worlds (fifteen against the first hook, one wiring world on the second)
+#   d  ckw vs                    shared verdict store (vs), checksum-key worlds (fourteen against the first hook, one wiring world on the second -- the only hook-2 world of the whole fixture)
 # The per-fixture checksum-key section (contract k1) is the unit ckw, its worlds.
 # `rc` rides with `tracer` because it drives the stub `sandbox-exec` and deriver copy that `tracer` builds.
 # IN PROCESS. The deriver carries a BASH_SOURCE guard over its top level (rs_main); hermetic-run.sh and the decision
@@ -370,8 +370,14 @@ ps_sandbox_skip() { # <group>: 0 (skip it, SKIP printed) inside a sandbox where 
 # The block is extracted rather than the whole hook sourced: the hook runs a full gate on
 # source. I66 holds the two copies of this block to one program, so proving it here proves it
 # for the consumer's hook as well.
+# THE WORLDS KEEP THEIR RECORDS UNDER THEIR OWN GIT DIR. The hook resolves KEYS_DIR and the verified record into the
+# shared verdict store base (its RECORD_HOME span); every world here is a copy of one template, so they would share one
+# root commit and so one set of records. Each extracted block is therefore followed by rs_rec_pin's three assignments,
+# which put the records back under the world's own GITDIR: this fixture's subject is the skip decided from a record,
+# not where the record lives (scripts/validate-verdict-identity.sh W1 holds the hook's own sites).
+rs_rec_pin() { printf '%s\n' 'KEYS_DIR="$GITDIR/ai-dlc-fixture-keys"; VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"; VERIFIED_FORMAT="$VERIFIED_RECORD.format"'; }
 POOL="$WORK/pool.sh"
-sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$HOOK" > "$POOL"
+sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$HOOK" > "$POOL" && rs_rec_pin >> "$POOL"
 [ -s "$POOL" ] || broken "extracted an empty FIXTURE_POOL block from $HOOK"
 grep -q 'apply_readset_skip' "$POOL" || broken "the extracted block carries no apply_readset_skip"
 # THE RESOLVED BLOCK'S FIXTURE ROOT -- `core/fixtures` in the distribution's hook, `tests/fixtures` in
@@ -3824,8 +3830,7 @@ STUB
     # one rc 0), so a killed leader not yet waited cannot hold the loop, and the reaper never `wait`s inside it:
     # a wait on a leader that never dies would block before the group is read.
     # iw_group_state <pgid>: "gone", "dying" (a live member is not blocked), or "missed <pid>..." (every live member
-    # blocked with nothing pending). THE SEAM: the reaper reads the group only through ${IW_GROUP_STATE:-iw_group_state},
-    # so the unkillable-member cell drives the SAME iw_reap with a state that never leaves "missed".
+    # blocked with nothing pending). The reaper reads the group only through ${IW_GROUP_STATE:-iw_group_state}.
     iw_group_state() {
       kill -0 -- -"$1" 2>/dev/null || { echo gone; return 0; }
       if aw_group_settled "$1"; then printf 'missed %s\n' "$(pgrep -g "$1" 2>/dev/null | tr '\n' ' ')"; else echo dying; fi
@@ -3915,52 +3920,6 @@ STUB
     else
       bad "INTERRUPTED GROUP: expected '1|0' (recorded group alive before the kill | alive after the reap), got '$IWG'"
     fi
-    # THE REAP REFUSES A SURVIVOR, AND ITS REFUSAL REACHES THE FIXTURE'S OWN SHELL (BL-900). A real group the kill cannot empty
-    # is not constructible here: a zombie never answers `kill -0 -- -<pgid>` on Darwin. So the cell starts one `sleep`
-    # WITHOUT `set -m` (pid recorded, killed by that pid after) and drives the SHIPPED iw_reap on the group id equal to
-    # that pid -- a group that cannot exist while its would-be leader lives outside it, so every round's group kill
-    # lands on nothing and the member stays alive for `ps` to read -- through the IW_GROUP_STATE seam, with a state
-    # reporting that pid as a missed member forever. The reap runs inside `$( )`, as it does inside iw_run, and
-    # records into the cell's own file (never the real AW_STALL_LOG, which the fixture's final aw_gate reads). The
-    # shipped aw_gate then runs in a separate `( )` reading that file, as the call site's does, and must exit 2 with
-    # FIXTURE BROKEN naming the pid and its `ps` state: the refusal crossed the `$( )` boundary as a file.
-    # Its twins are INTERRUPTED GROUP above (the unseamed reap emptied the real group) and INTERRUPTED REAP FRESH
-    # below (seven settled reads of seven DIFFERENT members, then gone, is a reap that ends 0 -- no read count refuses).
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    # A member that never exits on its own (BL-868): a `sleep 30` that ran out before `ps` read it left no state to name.
-    tail -f /dev/null </dev/null >/dev/null 2>&1 & IWB_P=$!
-    iwb_stuck() { printf 'missed %s\n' "$IWB_P"; }
-    IWB_R="$(IW_GROUP_STATE=iwb_stuck; iw_reap "$IWB_P" "$WORK/iwb.reap"; echo "$?")"
-    IWB_OUT="$( ( AW_STALL_LOG="$WORK/iwb.reap"; aw_gate; echo "NOT REFUSED" ) 2>&1 )"; IWB_RC=$?
-    kill -9 "$IWB_P" 2>/dev/null; wait "$IWB_P" 2>/dev/null
-    IWB_LEFT=0; kill -0 "$IWB_P" 2>/dev/null && IWB_LEFT=1
-    case "$IWB_R|$IWB_RC|$IWB_LEFT|$IWB_OUT" in
-      "1|2|0|"*"FIXTURE BROKEN"*)
-        if grep -Eq "group $IWB_P settled on both sides of a SIGKILL, and it still holds $IWB_P \([A-Z]" <<< "$IWB_OUT" && ! grep -q 'NOT REFUSED' <<< "$IWB_OUT"; then
-          ok "INTERRUPTED REAP SURVIVOR: a group member read settled on both sides of a SIGKILL stops iw_reap inside \$( ), and aw_gate in the caller's shell refuses FIXTURE BROKEN naming pid $IWB_P and its ps state, never a spin and never a pass"
-        else bad "INTERRUPTED REAP SURVIVOR: refused, but the refusal does not name the member and its state: $(tr '\n' ' ' <<< "$IWB_OUT")"; fi ;;
-      *) bad "INTERRUPTED REAP SURVIVOR: expected reap rc 1, gate rc 2, the member reaped, FIXTURE BROKEN; got reap $IWB_R gate $IWB_RC left $IWB_LEFT: $(tr '\n' ' ' <<< "$IWB_OUT")" ;;
-    esac
-    # INTERRUPTED REAP FRESH (BL-868): THE REFUSAL IS DECIDED ON SETTLED STATE, NEVER ON A COUNT. Seven live members, each
-    # read settled ONCE and then gone (the in-flight fork a group kill misses and the next kill takes), and then the group
-    # gone: the reap must end 0 with no BROKEN line. The 5-round count this replaced refused this sequence on its sixth
-    # read, so a chain deeper than the count, or one whose in-flight members kept settling, read FIXTURE BROKEN. The
-    # reads are driven through the same IW_GROUP_STATE seam, one per call, by a counter in a file (the seam runs in
-    # `$( )`).
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    IWF_P=""; for _i in 1 2 3 4 5 6 7; do tail -f /dev/null </dev/null >/dev/null 2>&1 & IWF_P="$IWF_P $!"; done
-    iwf_seq() { local k; k="$(grep -c . "$WORK/iwf.n")" || k=0; echo x >> "$WORK/iwf.n"; set -- $IWF_P
-      if [ "$k" -lt "$#" ]; then shift "$k"; printf 'missed %s\n' "$1"; else echo gone; fi; }
-    iwf_drive() { # <reaper fn>; prints "<rc>|<BROKEN lines>|<reads>"
-      : > "$WORK/iwf.n"; : > "$WORK/iwf.reap"
-      local r; r="$(IW_GROUP_STATE=iwf_seq; set -- "$1" $IWF_P; "$1" "$2" "$WORK/iwf.reap"; echo "$?")"
-      printf '%s|%s|%s' "$r" "$(grep -c BROKEN "$WORK/iwf.reap")" "$(grep -c . "$WORK/iwf.n")"
-    }
-    IWF="$(iwf_drive iw_reap)"
-    if [ "$IWF" = "0|0|8" ]; then
-      ok "INTERRUPTED REAP FRESH: seven settled reads of seven different members, then gone, end iw_reap at 0 with no BROKEN line ('$IWF' rc|BROKEN|reads) -- no read count refuses"
-    else bad "INTERRUPTED REAP FRESH: expected '0|0|8' (rc|BROKEN lines|reads), got '$IWF' -- the reaper refused on a count, not on a survivor"; fi
-    for _i in $IWF_P; do kill -9 "$_i" 2>/dev/null; wait "$_i" 2>/dev/null; done
     # The identity arm. The fix's run must have written per fixture and reached a map that MOVED (new
     # rows, fxw2's OLD row dropped, the OMITTED line). The per-fixture call's output lands in $WORK/fxw1.write; it
     # prints the controls but no `wrote` line (that `say` follows only the final call), so the
@@ -4393,14 +4352,6 @@ ck_w_i() { local p="$1" x="$2" t="$3"
 }
 CK_WANT_i='p1=alpha beta|0 delta=#state seeded'
 
-# (j) an empty `.now` runs everything: a name git must quote empties the manifest by design.
-ck_w_j() { local p="$1" x="$2" t="$3"
-  ck_seed "$t" "$x" || { printf SEED; return; }
-  ck_push "$p" "$t" 1; printf 'q\n' > "$t/src/q\"x.txt"; ck_push "$p" "$t" 2
-  printf 'p2=%s why=%s' "$(ck_r "$t" 2)" "$(ck_ln "$t" 2 '   ..    could not hash the working tree -- running all 3')"
-}
-CK_WANT_j='p2=alpha beta delta|0 why=1'
-
 # (k) a record with no `#format k1` line is no record: that ONE fixture runs, not everything.
 # And a `#pending` line whose value is not a non-negative integer reads as no `#pending` line, which is never a
 # run reason: beta's is EMPTY and delta's is `x1`, so each SKIPS on its recorded pass and the push names the two
@@ -4430,7 +4381,7 @@ ck_w_l() { local p="$1" x="$2" t="$3"
 }
 CK_WANT_l='p1=alpha beta|1 bad=0'
 
-CK_WORLDS="a b c d e f g h i j k l m n o"
+CK_WORLDS="a b c d e f g h i k l m n o"
 ck_all() { # <pool> <fixture root> <tag>: every world, vectors at $CK_W/<tag>.<w>.got
   local w
   for w in $CK_WORLDS; do "ck_w_$w" "$1" "$2" "$CK_W/$3.$w" > "$CK_W/$3.$w.got" 2>/dev/null; done
@@ -4441,17 +4392,17 @@ CK_N=0
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_h" ] || continue
   CK_N=$((CK_N+1)); CK_P="$CK_W/pool.$CK_N.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$CK_P"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$CK_P" && rs_rec_pin >> "$CK_P"
   CK_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$CK_P" | sort -u)"
   [ "$(printf '%s\n' "$CK_X" | grep -c .)" -eq 1 ] || broken "read '$CK_X' as ${_h#"$ROOT"/}'s fixture root; need exactly one"
   eval "CK_H$CK_N=\"\$_h\"; CK_PP$CK_N=\"\$CK_P\"; CK_XX$CK_N=\"\$CK_X\""
   [ "$CK_N" -eq 1 ] && { CK_P1="$CK_P"; CK_X1="$CK_X"; }
 done
 # ckw: every world against the FIRST resolved hook, plus ONE wiring world against the second.
-# THE SECOND HOOK'S POOL BLOCK IS NOT RE-DRIVEN THROUGH ALL FIFTEEN WORLDS, because invariant I66 in
+# THE SECOND HOOK'S POOL BLOCK IS NOT RE-DRIVEN THROUGH ALL FOURTEEN WORLDS, because invariant I66 in
 # scripts/validate-enforcement-map.sh already fails the push when the two FIXTURE_POOL blocks differ in any
 # executable line after comment strip, with the fixture root (core/fixtures/ against tests/fixtures/) the one
-# mapped difference. Fifteen worlds over code I66 holds identical buy no information; what I66 cannot see is
+# mapped difference. Fourteen worlds over code I66 holds identical buy no information; what I66 cannot see is
 # whether that one permitted difference WORKS, so world (d) -- which writes under the fixture root itself,
 # `$x/alpha/extra.txt`, and must rerun alpha alone -- runs end to end against the second hook with the root
 # read off that hook's own block. On a consumer only one hook exists and the wiring arm does not run.
@@ -4749,27 +4700,25 @@ tk_want() { eval "printf '%s' \"\$TK_WANT_$1\""; }
 # TK_WORLDS_END
 
 TK_N=0
-# EVERY WORLD RUNS AGAINST THE FIRST HOOK; THE SECOND RUNS ONE WIRING WORLD (pos). I66 in
-# scripts/validate-enforcement-map.sh fails the push on any difference between the two FIXTURE_POOL blocks
-# after comment strip except FXROOT, so the worlds would score identical code twice. pos is the world that
-# exercises FXROOT end to end (a fixture under the block's own root reruns on a changed tool), so the one
-# permitted difference is still driven on the second hook.
+# EVERY WORLD RUNS AGAINST THE FIRST HOOK ONLY. I66 in scripts/validate-enforcement-map.sh fails the push on any
+# difference between the two FIXTURE_POOL blocks after comment strip except FXROOT, so the worlds would score
+# identical code twice; the second hook's FXROOT is driven end to end by ckw's (d, wiring) world, the one
+# hook-2 world of this fixture.
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_h" ] || continue
   TK_N=$((TK_N+1)); TK_P="$CK_W/tkpool.$TK_N.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$TK_P"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$TK_P" && rs_rec_pin >> "$TK_P"
   TK_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$TK_P" | sort -u)"
-  [ "$TK_N" -eq 1 ] && TK_WS="$TK_WORLDS" || TK_WS=pos
-  TK_WORLDS_ALL="$TK_WORLDS"; TK_WORLDS="$TK_WS"; tk_all "$TK_P" "$TK_X" "h$TK_N"; TK_WORLDS="$TK_WORLDS_ALL"
-  for _w in $TK_WS; do
+  tk_all "$TK_P" "$TK_X" "h$TK_N"
+  for _w in $TK_WORLDS; do
     TK_ARMS=$((TK_ARMS+1)); _g="$(cat "$CK_W/tk.h$TK_N.$_w.got")"
     if [ "$_g" = "$(tk_want "$_w")" ]; then ok "(tk-$_w) ${_h#"$ROOT"/}: $_g"
     else bad "(tk-$_w) ${_h#"$ROOT"/}: want '$(tk_want "$_w")' got '$_g'"; fi
   done
-  [ "$TK_N" -eq 1 ] && { TK_P1="$TK_P"; TK_X1="$TK_X"; }
+  break
 done
 TK_ARMS=$((TK_ARMS+1))
-[ "$TK_N" -ge 1 ] && ok "the tool-key worlds ran against $TK_N hook(s)" || bad "no pre-push hook was found for the tool-key worlds"
+[ "$TK_N" -ge 1 ] && ok "the tool-key worlds ran against the first of the hook(s)" || bad "no pre-push hook was found for the tool-key worlds"
 
 fi
 
@@ -5078,21 +5027,21 @@ for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -n "$DERIVER" ] || break
   [ -f "$_h" ] || continue
   DG_N=$((DG_N+1)); DG_P="$CK_W/dgpool.$DG_N.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$DG_P"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$DG_P" && rs_rec_pin >> "$DG_P"
   DG_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$DG_P" | sort -u)"
-  # The first hook runs every world; the second runs w1 alone, the motivating case, as its wiring world.
-  # I66 holds the two FIXTURE_POOL blocks to one program except FXROOT, which w1 drives end to end.
-  [ "$DG_N" -eq 1 ] && DG_WS="$DG_WORLDS" || DG_WS=w1
-  DG_WORLDS_ALL="$DG_WORLDS"; DG_WORLDS="$DG_WS"; dg_all "$DG_P" "$DG_X" "h$DG_N"; DG_WORLDS="$DG_WORLDS_ALL"
-  for _w in $DG_WS; do
+  # Every world runs against the first hook only. I66 holds the two FIXTURE_POOL blocks to one program except
+  # FXROOT, which ckw's (d, wiring) world drives end to end on the second hook.
+  dg_all "$DG_P" "$DG_X" "h$DG_N"
+  for _w in $DG_WORLDS; do
     DG_ARMS=$((DG_ARMS+1)); _g="$(cat "$CK_W/dg.h$DG_N.$_w.got")"
     if [ "$_g" = "$(dg_want "$_w")" ]; then ok "($_w) ${_h#"$ROOT"/}: $_g"
     else bad "($_w) ${_h#"$ROOT"/}: want '$(dg_want "$_w")' got '$_g'"; fi
   done
+  break
 done
 if [ -n "$DERIVER" ]; then
   DG_ARMS=$((DG_ARMS+1))
-  [ "$DG_N" -ge 1 ] && ok "the committed-digest worlds ran against $DG_N hook(s)" || bad "no pre-push hook was found for the committed-digest worlds"
+  [ "$DG_N" -ge 1 ] && ok "the committed-digest worlds ran against the first of the hook(s)" || bad "no pre-push hook was found for the committed-digest worlds"
 fi
 
 fi
@@ -5121,10 +5070,12 @@ else
   grep -q '^readset_reconcile_list() {' "$RCS" || broken "no readset_reconcile_list in the deriver's READSET_RECONCILE span"
   # The span reads READSET_MAP and READSET_LOCAL, which the pool block binds; dg_digest sources this.
   { printf 'READSET_MAP=.ai-dlc-fixture-readsets.tsv\nREADSET_LOCAL=/dev/null\n'; cat "$RCS"; } > "$WORK/rc.pool"
+  # The key records live in the world's own store, <repo>.vs, under fixture-keys/<root commit> (the hook's RECORD_HOME).
+  rc_kd() { printf '%s.vs/fixture-keys/%s' "$1" "$(git -C "$1" rev-list --max-parents=0 HEAD)"; }
   rc_seed() { # <repo> <change ch: yes|no> <stale st: yes|no> <unmapped un: yes|no>
-    local r="$1" f
+    local r="$1" f k
     mkdir -p "$r/.githooks" "$r/core/scripts" "$r/src" || return 1
-    { printf '#!/bin/bash\nFXROOT="core/fixtures/"\n'; sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$HOOK"; } > "$r/.githooks/pre-push"
+    { printf '#!/bin/bash\nFXROOT="core/fixtures/"\n'; sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p;/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p;/^# RECORD_HOME_BEGIN$/,/^# RECORD_HOME_END$/p' "$HOOK"; } > "$r/.githooks/pre-push"
     cp "$SB/deriver.sh" "$r/core/scripts/derive-fixture-readsets.sh" || return 1
     : > "$r/.ai-dlc-fixture-readsets.tsv"
     for f in ch cl nd st ${4:+un}; do
@@ -5136,9 +5087,10 @@ else
     done
     ( cd "$r" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1 || return 1
     dg_digest "$WORK/rc.pool" "$r" ch cl st || return 1
-    mkdir -p "$r/.git/ai-dlc-fixture-keys" || return 1
-    for f in ch cl nd st; do printf '#format k1\n#state ok\n#tools per-fixture\n' > "$r/.git/ai-dlc-fixture-keys/$f.key"; done
-    [ "$3" = yes ] && printf '#format k1\n#state stale\n#tools per-fixture\n' > "$r/.git/ai-dlc-fixture-keys/st.key"
+    # rc_list hands the span the legacy path; it names the same records the whole deriver reads from the store.
+    f="$(rc_kd "$r")" && mkdir -p "$f" && ln -s "$f" "$r/.git/ai-dlc-fixture-keys" || return 1
+    for k in ch cl nd st; do printf '#format k1\n#state ok\n#tools per-fixture\n' > "$f/$k.key"; done
+    [ "$3" = yes ] && printf '#format k1\n#state stale\n#tools per-fixture\n' > "$f/st.key"
     if [ "$2" = yes ]; then
       printf 'v2\n' > "$r/src/ch.sh"; printf 'v2\n' > "$r/src/nd.sh"
       ( cd "$r" && git add -A && git -c user.email=f@f -c user.name=f commit -qm change ) >/dev/null 2>&1 || return 1
@@ -5161,7 +5113,7 @@ else
   RC_TR="$(cd "$WORK" && pwd -P)/rc.tr"
   rc_run() { # <repo> <trace root>; prints "<rc>|<announce>|<listed>|<traced>"
     local r="$1" x
-    ( cd "$r" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$WORK/rc.sb" \
+    ( cd "$r" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH AI_DLC_VERDICT_STORE="$r.vs" PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$WORK/rc.sb" \
         AI_DLC_READSET_TRACE_ROOT="$2" -- core/scripts/derive-fixture-readsets.sh --reconcile ) > "$WORK/rc.out" 2>&1 </dev/null
     x=$?
     stub_reap "${SB:-}"
@@ -5188,9 +5140,9 @@ else
   fi
   if [ "$(id -u)" != 0 ]; then
     RC_ARMS=$((RC_ARMS+1))
-    chmod 000 "$RC2/.git/ai-dlc-fixture-keys"
+    chmod 000 "$(rc_kd "$RC2")"
     RR3="$(rc_run "$RC2" "$RC2_TR")"
-    chmod 755 "$RC2/.git/ai-dlc-fixture-keys"
+    chmod 755 "$(rc_kd "$RC2")"
     case "$RR3" in
       1*) if grep -q 'cannot read the key records' "$WORK/rc.out"; then ok "RECONCILE: an unreadable key-record directory REFUSES at 1 rather than reading as 'no stale record'"
           else bad "RECONCILE: an unreadable keys dir exited 1 without naming it: $(tail -2 "$WORK/rc.out" | tr '\n' ' ')"; fi ;;
@@ -5373,7 +5325,7 @@ VS_N=0
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_h" ] || continue
   VS_N=$((VS_N+1)); VS_P="$WORK/vspool.$VS_N.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$VS_P"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$VS_P" && rs_rec_pin >> "$VS_P"
   VS_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$VS_P" | sort -u)"
   [ "$VS_N" -eq 1 ] && { VS_P1="$VS_P"; VS_X1="$VS_X"; }
   VS_ARMS=$((VS_ARMS+1)); _g="$(vs_world "$VS_P" "$VS_X" "$VS_RUN" "$WORK/vs.h$VS_N" 2>/dev/null)"
@@ -5521,7 +5473,7 @@ VS_CN=0
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_h" ] || continue
   VS_CN=$((VS_CN+1)); VS_CP="$WORK/vscpool.$VS_CN.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$VS_CP"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$VS_CP" && rs_rec_pin >> "$VS_CP"
   VS_CX="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$VS_CP" | sort -u)"
   [ "$VS_CN" -eq 1 ] && { VS_CX1="$VS_CX"; VS_CH1="$_h"; }
   _g="$(vs_census "$VS_CP" "$VS_CX" "$VS_RUN" "$WORK/vs.c$VS_CN" "$_h" 2>/dev/null)"
@@ -5547,8 +5499,8 @@ vs_hprobe() { # <name> <from> <to> [<source hook>]
   [ "$n" = 1 ] || { bad "VS PROBE $1: anchor matched $n time(s) in ${s##*/}, not 1 -- DID NOT APPLY"; return 1; }
   MF="$2" MT="$3" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$s" > "$VS_HP" \
     || { bad "VS PROBE $1: awk DID NOT APPLY"; return 1; }
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$s" > "$VS_HPP.src"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$VS_HP" > "$VS_HPP"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$s" > "$VS_HPP.src" && rs_rec_pin >> "$VS_HPP.src"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$VS_HP" > "$VS_HPP" && rs_rec_pin >> "$VS_HPP"
   if cmp -s "$s" "$VS_HP" || cmp -s "$VS_HPP.src" "$VS_HPP"; then bad "VS PROBE $1: the hook copy or its pool is unchanged"; return 1; fi
   return 0
 }

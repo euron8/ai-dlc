@@ -321,7 +321,7 @@ hook="$1"; w="$2"; t="$3"
 cp -Rp "$4" "$t" || exit 3
 cd "$t" || exit 3
 sp="$t.spans"; mkdir -p "$sp"
-export AI_DLC_READSET_LIVE_TRACE=0
+export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$t.vs"
 sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$hook" > "$sp/pool"
 sed -n '/^# SUITE_STEP_BEGIN$/,/^# SUITE_STEP_END$/p' "$hook" > "$sp/step"
 sed -n '/^# SUITE_BANNER_BEGIN$/,/^# SUITE_BANNER_END$/p' "$hook" > "$sp/banner"
@@ -333,7 +333,7 @@ if [ "$w" = w1 ] || [ "$w" = w1p ]; then
   # no key record; the verified record is the tree's own manifest, so every read-set is unchanged
   mkdir -p "$sp/m"; for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$sp/m/list"
   readset_manifest "$sp/m"
-  cp "$sp/m/.now" "$GITDIR/ai-dlc-fixture-verified"; printf 'v2\n' > "$GITDIR/ai-dlc-fixture-verified.format"
+  mkdir -p "${VERIFIED_RECORD%/*}" "${KEYS_DIR%/*}" && cp "$sp/m/.now" "$VERIFIED_RECORD" && printf 'v2\n' > "$VERIFIED_FORMAT" || exit 3
   if [ "$w" = w1p ]; then
     # BL-998: the per-fixture records W1's seed published ($W1P_KEYS), each given line 4 `#pending <n>` where the
     # producer writes it -- alpha 3, beta 0 -- so the green write's snapshot has a count to name and one to omit
@@ -344,11 +344,13 @@ if [ "$w" = w1 ] || [ "$w" = w1p ]; then
   fi
 elif [ "$w" = w2p ]; then
   # BL-998: the record's line 2 snapshots alpha=3 (beta absent) while the key records say alpha 0 and beta 5
+  mkdir -p "${KEY_RECORD%/*}" || exit 3
   printf '%s %s %s\n#pending alpha=3\n' "$(bash scripts/suite-content-key.sh)" 2 2026-01-01T00:00:00Z > "$KEY_RECORD"
   mkdir -p "$KEYS_DIR"
   printf '#format k1\n#state ok\n#tools canonical\n#pending 0\n' > "$KEYS_DIR/alpha.key"
   printf '#format k1\n#state ok\n#tools canonical\n#pending 5\n' > "$KEYS_DIR/beta.key"
 else
+  mkdir -p "${KEY_RECORD%/*}" || exit 3
   printf '%s %s %s\n' "$(bash scripts/suite-content-key.sh)" 2 2026-01-01T00:00:00Z > "$KEY_RECORD"
 fi
 fixture_suite_step; echo "STEP-RC $?"
@@ -404,7 +406,7 @@ else bad "W1 the green write's snapshot line is wrong: $(sed -n '/^---REC---$/,/
 # W1P: W1's world again, its KEYS_DIR holding the records W1's seed just published, each given line 4 `#pending <n>`
 # where readset_keys_write puts it (alpha 3, beta 0). Both still skip, and the green write's line 2 must read exactly
 # `#pending alpha=3`: a count on line 4 is read, a zero is omitted. W1 above is the twin, its records carrying no count.
-export W1P_KEYS="$BW/w.base.w1/.git/ai-dlc-fixture-keys"
+export W1P_KEYS="$BW/w.base.w1.vs/fixture-keys/$(git -C "$BW/w.base.w1" rev-list --max-parents=0 HEAD 2>/dev/null)"
 [ -f "$W1P_KEYS/alpha.key" ] && [ -f "$W1P_KEYS/beta.key" ] || broken "BL-998 W1P: W1's seed published no alpha/beta record at $W1P_KEYS"
 bl998_w1p_rec() { sed -n '/^---REC---$/,/^---BANNER---$/p' <<< "$1" | sed -n 3p; } # line 2 of the record
 BR1P="$(bl954_run "$BHOOK" w1p base)"
@@ -448,7 +450,7 @@ fail=0; PENDING_N=0
 . "$sp/ip"
 AI_DLC_VERDICT_STORE="$t.vs/counted-x"; [ "$v" = nostore ] && AI_DLC_VERDICT_STORE="$t.vs0/counted-x"
 export AI_DLC_VERDICT_STORE
-FXCOUNT_DIR="$sp/fxc"; mkdir -p "$FXCOUNT_DIR" "$KEYS_DIR"
+FXCOUNT_DIR="$sp/fxc"; KEYS_DIR="$sp/keys"; mkdir -p "$FXCOUNT_DIR" "$KEYS_DIR"
 { printf '#format k1\n#state ok\n#tools canonical\n'; [ "$v" = legacy ] || printf '#pending 2\n'; cat "$t.rows"; } > "$KEYS_DIR/dc.key"
 inproc_pending_step; echo "STEP-RC $?"
 DRV

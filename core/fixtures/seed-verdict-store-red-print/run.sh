@@ -331,6 +331,7 @@ mkdir -p "$T/pw/.githooks" "$T/pw/core/fixtures/fxa" "$T/pw/scripts" || exit 2
 cat > "$T/pw/.githooks/pre-push" <<PWH
 # FIXTURE_POOL_BEGIN
 FXROOT=core/fixtures/
+KEYS_DIR=/dev/null/k; VERIFIED_RECORD=/dev/null/v; VERIFIED_FORMAT=/dev/null/v.format
 apply_readset_skip() { printf 'fxa\trun\tr\tk\n' > "\$2/.kdec"; echo "   ..    read-set keys: 1 of 1 fixture(s) run"; }
 # FIXTURE_POOL_END
 fxcount_arm() {

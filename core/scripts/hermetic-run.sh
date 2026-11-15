@@ -35,7 +35,7 @@
 # satisfy it is to reach that point.
 #
 # THE KEY. `--key-only` prints the hermetic key rows for this fixture, in the SAME grammar the
-# pre-push hook writes to `$GITDIR/ai-dlc-fixture-keys/<fixture>.key`: `<path>\t<sha256>` for a
+# pre-push hook writes to `<verdict store base>/fixture-keys/<repository root commit>/<fixture>.key`: `<path>\t<sha256>` for a
 # declared file, `<dir>/\t#listing:<sha256>` for a declared directory's entry list (so a file added
 # to a copied directory reruns the fixture, because it would be copied in), every file under the
 # fixture's own directory, and `<tool path>\t<sha256>` for each declared tool. The POPULATION is

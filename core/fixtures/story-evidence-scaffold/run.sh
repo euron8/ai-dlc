@@ -795,7 +795,8 @@ if gsel run-filter; then
   # `pytest -q` span, on the capture route with a fresh block: refused full-collection-none) and rf1016-s9-nm (the
   # same wrapper run with `-- -q`: accepted). A chained or quoted `cd` in these worlds is `cd .`, so each refused cell
   # and its near-miss stay one property apart: a `cd` into a subdirectory narrows on its own (RUN-FILTER, WORKING
-  # DIRECTORY; receipt-bl1036.sh).
+  # DIRECTORY; receipt-bl1036.sh). For the same reason rf1016-d1 and rf1016-d1-nm record the working directory `./`:
+  # a recorded relative subdirectory narrows on its own (validate-handoff-evidence.sh, RECORDED WORKING DIRECTORY).
   RF_WORLDS='rfs1 rfs2 rfs2n rfs3 rfs4 rfs5 rfs6 rfs7 rfs8 rfph rfphnm rfch rfchnm rfchnm2 rfs2nw rfd1 rfd1nm rfrd rfa1 rfa2 rfa2n rfa3 rfa3n rfsp rfspnm rfbl rfblnm rfao rfaonm rfqk rfto rftonm rfnpm rfch2 rfch2nm rfbe rfsu rfsunm rfto2 rfto2nm rfjx rfss rfssnm rfde rfdenm rfdc rfdcnm rfdx rfdxnm rfgr rfbt rfbtnm rfs9 rfs9nm'
   rf_ok=1
   for v in $RF_WORLDS; do build_world "$WORK/world-$v" "$v" || { rf_ok=0; bad "FIXTURE BROKEN: could not seed git world '$v'"; }; done

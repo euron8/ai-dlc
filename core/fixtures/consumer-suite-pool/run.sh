@@ -260,14 +260,19 @@ csp_load() { C_T="$1"; C_RC="$2"; C_O="$3"; }
 #   inplace    the descriptor reads what the path now holds (the hook wrote into the reader's file)
 #   unwritten  the path still holds the seed
 at_rec() { case "$1" in dur) echo ai-dlc-fixture-durations ;; last) echo ai-dlc-fixture-durations.last ;;
-  ver) echo ai-dlc-fixture-verified ;; stall) echo ai-dlc-pool-stall.last ;; fail) echo ai-dlc-fixture-failures ;; esac; }
+  stall) echo ai-dlc-pool-stall.last ;; fail) echo ai-dlc-fixture-failures ;; esac; }
+# at_path <tree> <key>: the record's path. The verified record lives in the tree's store (hook_drive's <tree>.verdicts),
+# under fixture-verified/<root commit>; the others under the git dir.
+at_path() { case "$2" in ver) printf '%s.verdicts/fixture-verified/%s' "$1" "$(git -C "$1" rev-list --max-parents=0 HEAD | LC_ALL=C sort | sed -n 1p)" ;;
+  *) printf '%s/.git/%s' "$1" "$(at_rec "$2")" ;; esac; }
 at_fd() { case "$1" in dur) echo 3 ;; last) echo 4 ;; ver) echo 5 ;; stall) echo 6 ;; fail) echo 7 ;; esac; }
 AT_OPEN=""
 at_seed() {                    # at_seed <tree> <key...>: seed each record with AT-OLD-<key> and hold it open
-  local t="$1" k; shift; AT_OPEN=""
+  local t="$1" k p; shift; AT_OPEN=""
   for k in "$@"; do
-    printf 'AT-OLD-%s\n' "$k" > "$t/.git/$(at_rec "$k")" || broken "could not seed $(at_rec "$k")"
-    eval "exec $(at_fd "$k")<\"\$t/.git/\$(at_rec \"\$k\")\"" || broken "could not hold $(at_rec "$k") open"
+    p="$(at_path "$t" "$k")"; mkdir -p "${p%/*}" || broken "could not make the directory of $p"
+    printf 'AT-OLD-%s\n' "$k" > "$p" || broken "could not seed $p"
+    eval "exec $(at_fd "$k")<\"\$p\"" || broken "could not hold $p open"
     AT_OPEN="$AT_OPEN $k"
   done
 }
@@ -277,7 +282,7 @@ at_snap() {                    # at_snap <tree>: read each held descriptor once,
   for k in $AT_OPEN; do
     fd="$(at_fd "$k")"
     old="$(cat <&"$fd")"; eval "exec $fd<&-"
-    cur="$(cat "$1/.git/$(at_rec "$k")" 2>/dev/null)" || cur=""
+    cur="$(cat "$(at_path "$1" "$k")" 2>/dev/null)" || cur=""
     if [ "$old" = "AT-OLD-$k" ] && [ -n "$cur" ] && [ "$cur" != "AT-OLD-$k" ]; then old=atomic
     elif [ "$cur" = "AT-OLD-$k" ]; then old=unwritten
     elif [ "$old" = "$cur" ]; then old=inplace
@@ -325,6 +330,8 @@ until [ -s "$AI_DLC_FX_OUT/bravo" ] && [ -s "$AI_DLC_FX_OUT/charlie" ]; do sleep
 exit 0
 FX
   mkfx_noisy "$1" bravo 0 GREENTOKEN; mkfx "$1" charlie 0
+  # The verified record is keyed on the root commit: a world with no commit has no record home.
+  ( cd "$1" && git add -A && git commit -qm green ) >/dev/null 2>&1 || broken "could not commit the green world"
   at_seed "$1" dur last ver stall
 }
 cw_retain() {                  # the arm-2c world: twenty seeds, three decoys, one noisy red
@@ -1029,6 +1036,7 @@ bl_mk() {                      # bl_mk <tree> <hook> <runner>: the declared, com
 bl_drv() {                     # bl_drv <tree> <outfile> -> rc; the store is <tree>.vs, the counter never armed inside
   ( unset FXCOUNT_DIR FXCOUNT_RC FXCOUNT_JUDGE; hook_drive "$1" "$2" AI_DLC_VERDICT_STORE="$1.vs" )
 }
+bl_k() { printf '%s.vs/fixture-keys/%s' "$1" "$(git -C "$1" rev-list --max-parents=0 HEAD | LC_ALL=C sort | sed -n 1p)"; } # bl_k <tree>: its key records
 bl_entry() { grep -lx '#fixture pend' "$1.vs"/*/* 2>/dev/null; }   # bl_entry <tree>: pend's store entry
 bl_p1() {                      # bl_p1 <prefix> <hook> <runner>: builds and drives P1 at <prefix>.p1
   mkdir -p "$1.p1.vs" && bl_mk "$1.p1" "$2" "$3" || broken "BL-998 world seed failed"
@@ -1041,7 +1049,7 @@ bl_seed() {                    # bl_seed <seed> <prefix> <post-P1 tree> [<hook>]
   if [ "$s" = cl ]; then cl_seed "$p" "$b" "${4:-}"; return; fi
   cp -Rp "$b" "$t" && cp -Rp "$b.vs" "$t.vs" || broken "BL-998 seed $s: copying the post-P1 world failed"
   [ -z "${4:-}" ] || cp "$4" "$t/.githooks/pre-push" || broken "BL-998 seed $s: installing the hook copy failed"
-  k="$t/.git/ai-dlc-fixture-keys"
+  k="$(bl_k "$t")"
   [ -f "$k/pend.key" ] || broken "BL-998 seed $s: the post-P1 world holds no pend.key"
   case "$s" in
     s1) ;;
@@ -1102,7 +1110,7 @@ bl_cell() {                    # bl_cell <seed>.<observable>, read off the loade
     pran) yn grep -qxF "$BL_PRAN" "$o" ;;
     vs)   yn grep -qxF "$BL_VS" "$o" ;;
     unrec) yn grep -qxF "$BL_UNREC" "$o" ;;
-    kp2)  yn [ "$(sed -n 4p "$t/.git/ai-dlc-fixture-keys/pend.key" 2>/dev/null)" = '#pending 2' ] ;;
+    kp2)  yn [ "$(sed -n 4p "$(bl_k "$t")/pend.key" 2>/dev/null)" = '#pending 2' ] ;;
     skip) if [ "$(cat "$C_T.clb.rc" 2>/dev/null)" = 0 ] && grep -qF '   ..    consumer layout: 0 of 2 shipping fixture(s) run as <fx>@consumer in ' "$o" \
              && ! grep -qF '<fx>@consumer unit(s) skipped on a consumer-layout pass whose PENDING count is unrecorded' "$o"; then echo yes; else echo no; fi ;;
     crec) yn grep -qxF '   PENDING: 2 skipped on a recorded pass that printed a PENDING row: pend(recorded)=2 pend@consumer(recorded)=2' "$o" ;;
@@ -1126,7 +1134,7 @@ bl_drive_cells() {             # bl_drive_cells <prefix> <post-P1 tree> <hook|->
 BLF="$WORK/bl.fixed"
 bl_p1 "$BLF" "$HOOK" "$HR_SRC"
 BLP="$BLF.p1"
-_pk="$BLP/.git/ai-dlc-fixture-keys"
+_pk="$(bl_k "$BLP")"
 _e="$(bl_entry "$BLP")"
 _hn="$(sed -n 's/^   ok    pend  (\([0-9]*\) PENDING row(s).*/\1/p' "$BLF.p1.out")"
 _rn="$(tail -n 1 "$_e" 2>/dev/null | sed -n 's/^#pending \([0-9]*\)$/\1/p')"
@@ -1149,7 +1157,7 @@ else bad "7b s1 the unchanged-push return lost the count (rc=$(cat "$BLF.s1.rc")
 if [ "$(cat "$BLF.s2.rc")" = 0 ] && _bl_eq s2.vs yes && _bl_eq s2.rec2 yes && _bl_eq s2.kp2 yes \
    && [ -n "$_hn" ] && [ "$_hn" = "$_rn" ] && grep -qxF "   PENDING: 1 skipped on a recorded pass that printed a PENDING row: pend(recorded)=$_rn" "$BLF.s2.out"; then
   ok "7b s2 pend skipped on its store entry: the hook's count ($_hn) equals the runner's entry count ($_rn), it is printed, and the republished record carries it"
-else bad "7b s2 the store skip (hook n '$_hn', runner n '$_rn'): $(grep -E 'PENDING|verdict store' "$BLF.s2.out" | tr '\n' '|' | tail -c 400) pend.key line 4 '$(sed -n 4p "$BLF.s2/.git/ai-dlc-fixture-keys/pend.key" 2>/dev/null)'"; fi
+else bad "7b s2 the store skip (hook n '$_hn', runner n '$_rn'): $(grep -E 'PENDING|verdict store' "$BLF.s2.out" | tr '\n' '|' | tail -c 400) pend.key line 4 '$(sed -n 4p "$(bl_k "$BLF.s2")/pend.key" 2>/dev/null)'"; fi
 if [ "$(cat "$BLF.s4.rc")" = 0 ] && _bl_eq s4.rec2 yes && ! grep -qxF "$BL_VS" "$BLF.s4.out"; then
   ok "7b s4 the record a store skip republished is read-set skipped on the next push and still names pend with 2 (store -> record -> read-set)"
 else bad "7b s4 the carry chain broke: $(grep -E 'PENDING|verdict store' "$BLF.s4.out" | tr '\n' '|' | tail -c 400)"; fi
@@ -1161,9 +1169,9 @@ if [ "$(cat "$BLF.su.rc")" = 0 ] && _bl_eq su.pran no && _bl_eq su.kp2 no && _bl
   ok "7b su a record with no #pending line is no run reason: pend skips on it and the push names its count unrecorded (not a zero); s5 the next push does the same"
 else bad "7b su/s5 the record without a count: $(grep -E 'PENDING|   ok |read-set|unrecorded' "$BLF.su.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 400) s5: $(grep -E 'PENDING|   ok ' "$BLF.s5.out" | tr '\n' '|')"; fi
 if [ "$(cat "$BLF.sv.rc")" = 0 ] && _bl_eq sv.rec2 yes && _bl_eq sv.kp2 yes \
-   && [ "$(sed -n 2p "$BLF.sv/.git/ai-dlc-fixture-keys/pend.key")" = '#state ok' ]; then
+   && [ "$(sed -n 2p "$(bl_k "$BLF.sv")/pend.key")" = '#state ok' ]; then
   ok "7b sv a stale record republished without a run (state back to ok) keeps '#pending 2' and is named recorded with 2"
-else bad "7b sv the stale republish: $(grep -E 'PENDING' "$BLF.sv.out" | tr '\n' '|') record '$(sed -n 1,4p "$BLF.sv/.git/ai-dlc-fixture-keys/pend.key" 2>/dev/null | tr '\n' ,)'"; fi
+else bad "7b sv the stale republish: $(grep -E 'PENDING' "$BLF.sv.out" | tr '\n' '|') record '$(sed -n 1,4p "$(bl_k "$BLF.sv")/pend.key" 2>/dev/null | tr '\n' ,)'"; fi
 if [ "$(cat "$BLF.sk.rc")" = 0 ] && _bl_eq sk.pran no && _bl_eq sk.vs yes && _bl_eq sk.unrec yes; then
   ok "7b sk a store entry written before the count (no '#pending' line) under the current digest is reused: pend skips on it and is named count unrecorded"
 else bad "7b sk the count-less entry (pran=$(mx_get "$BASE_bl" sk.pran) vs=$(mx_get "$BASE_bl" sk.vs) unrec=$(mx_get "$BASE_bl" sk.unrec)): $(grep -E 'PENDING|verdict store|   ok ' "$BLF.sk.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 400)"; fi

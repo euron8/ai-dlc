@@ -6,9 +6,10 @@
 # <tree> is the root of a worktree at the sha to be pushed (clean, detached at it, as the push requires). The run
 # sources <tree>/.githooks/pre-push's FIXTURE_POOL span and its fxcount_arm function -- the hook's own bytes, never a
 # second implementation -- and runs apply_readset_skip over every fixture directory, against COPIES of the shared key
-# records (.git/ai-dlc-fixture-keys) and the v2 verified record placed in <out dir>. The counted verdict store is the
-# one fxcount_arm names, read and never written; fxcount_arm's scratch directory lands under <out dir>. Nothing under
-# the git directory and nothing in the store is written.
+# records and the v2 verified record (the hook's RECORD_HOME span resolves both) placed in <out dir>; where a shared
+# record is absent, apply_readset_skip's own one-time import copies the git dir's legacy record into <out dir> instead.
+# The counted verdict store is the one fxcount_arm names, read and never written; fxcount_arm's scratch directory
+# lands under <out dir>. Nothing under the git directory and nothing in the store is written.
 #
 # Output: the counted store, the number of fixture directories listed, the hook's read-set and verdict-store lines,
 # `RUN <n>`, then one `run <fixture>` line per fixture the push would run. <out dir>/run holds the `.kdec` rows.
@@ -26,13 +27,7 @@ T="$1"; O="$2"
 mkdir -p "$O" || exit 2
 [ -z "$(ls -A "$O")" ] || { echo "predict-push-set: $O is not empty" >&2; exit 2; }
 O="$(cd "$O" && pwd -P)" || exit 2
-G="$(git -C "$T" rev-parse --git-common-dir)" || exit 2
-case "$G" in /*) ;; *) G="$T/$G" ;; esac
-mkdir -p "$O/keys" "$O/out" "$O/tmp" || exit 2
-if [ -d "$G/ai-dlc-fixture-keys" ]; then cp -R "$G/ai-dlc-fixture-keys/." "$O/keys/" || exit 2; fi
-if [ -f "$G/ai-dlc-fixture-verified" ] && [ -f "$G/ai-dlc-fixture-verified.format" ]; then
-  cp "$G/ai-dlc-fixture-verified" "$O/verified" && cp "$G/ai-dlc-fixture-verified.format" "$O/verified.format" || exit 2
-fi
+mkdir -p "$O/out" "$O/tmp" || exit 2
 cd "$T" || exit 2
 sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' .githooks/pre-push > "$O/pool.sh"
 awk '/^fxcount_arm\(\) \{/ { on = 1 } on { print } on && /^}/ { exit }' .githooks/pre-push >> "$O/pool.sh"
@@ -43,6 +38,10 @@ grep -q '^apply_readset_skip() {' "$O/pool.sh" && grep -q '^fxcount_arm() {' "$O
 POOL_DEPTH_IN=0
 TMPDIR="$O/tmp" fxcount_arm > "$O/arm.out" 2>&1 || { cat "$O/arm.out" >&2; echo "predict-push-set: arming failed" >&2; exit 2; }
 echo "store: ${AI_DLC_VERDICT_STORE#"$HOME"/}"
+if [ -d "$KEYS_DIR" ]; then mkdir -p "$O/keys" && cp -R "$KEYS_DIR/." "$O/keys/" || exit 2; fi
+if [ -f "$VERIFIED_RECORD" ] && [ -f "$VERIFIED_FORMAT" ]; then
+  cp "$VERIFIED_RECORD" "$O/verified" && cp "$VERIFIED_FORMAT" "$O/verified.format" || exit 2
+fi
 KEYS_DIR="$O/keys"; VERIFIED_RECORD="$O/verified"; VERIFIED_FORMAT="$O/verified.format"
 for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf '%s\n' "$d"; done > "$O/list"
 n="$(grep -c . "$O/list")" || n=0
