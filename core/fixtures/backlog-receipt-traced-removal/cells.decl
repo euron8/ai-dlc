@@ -2,9 +2,8 @@
 # is ONE start of a copy of scripts/validate-backlog-receipts.sh, tagged at its start through env FXCELL=<cell> by
 # run.sh's cli(); run.sh asserts that the tagged starts are exactly the cli cells below, each once. The validator's own
 # worker re-starts under a tagged start are covered by the ONE nested row at the end. The in-process passes that remain
-# (fx_inproc: the probe-world build, r13_untraced, vbr_sec_setup alone) reach no worker start.
+# (fx_inproc: r13_untraced, vbr_sec_setup alone) reach no worker start.
 # controls
-cli scripts/validate-backlog-receipts.sh m1
 cli scripts/validate-backlog-receipts.sh c-write
 cli scripts/validate-backlog-receipts.sh c-replay
 cli scripts/validate-backlog-receipts.sh c-moved-judge
@@ -25,5 +24,4 @@ cli scripts/validate-backlog-receipts.sh cli-wire
 cli scripts/validate-backlog-receipts.sh c-m1-e2e
 cli scripts/validate-backlog-receipts.sh c-empty-stale
 cli scripts/validate-backlog-receipts.sh c-nothing-judged
-cli scripts/validate-backlog-receipts.sh c-restricted-seeds
 nested scripts/validate-backlog-receipts.sh scripts/validate-backlog-receipts.sh why=worker re-starts of --score-one, --closed-one and --r13-one

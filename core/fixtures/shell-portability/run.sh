@@ -102,7 +102,7 @@ seed() { # seed <dir> [extra-line...]
   # And a clean FIXTURE shell file, because S11's corpus is counted separately from the other
   # two and a seed with an empty `core/fixtures/*/*.sh` listing trips the fail-closed guard
   # before any arm runs. Its `cd` is GUARDED, so every run of this fixture exercises S11's
-  # acquittal over the sandbox corpus rather than only over the validator's own probe.
+  # acquittal over the sandbox corpus.
   mkdir -p "$d/core/fixtures/probe-unit"
   printf '%s\n' '#!/usr/bin/env bash' 'cd "$WORK" || exit 2' 'echo clean' \
     > "$d/core/fixtures/probe-unit/seed.sh"
@@ -415,8 +415,8 @@ awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
   cid="$(printf '%s' "$h" | sed -E 's/[[:space:]]*[.—]$//')"
 X7EOF
   x7_out="$( cd "$TMP/x7" && LC_ALL="$UTF8_LOCALE" LANG="$UTF8_LOCALE" bash scripts/validate-shell-portability.sh 2>&1 </dev/null )"
-  if grep -q "^FAIL: S10:" <<<"$x7_out" && ! grep -q "own probe did not fire" <<<"$x7_out"; then
-    ok "x7 S10 multibyte class is reported as a corpus finding under $UTF8_LOCALE, probe intact"
+  if grep -q "^FAIL: S10:" <<<"$x7_out"; then
+    ok "x7 S10 multibyte class is reported as a corpus finding under $UTF8_LOCALE"
   else
     note "FAIL  x7 S10 under $UTF8_LOCALE -- not reported as a corpus finding"
     printf '%s\n' "$x7_out" | sed 's/^/      /' | head -6; rc=1

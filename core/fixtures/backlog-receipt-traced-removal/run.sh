@@ -1,24 +1,22 @@
 #!/usr/bin/env bash
 # backlog-receipt-traced-removal -- BL-899 in scripts/validate-backlog-receipts.sh: M1 (driver-absent in R7's
 # cannot-measure set, lead ruling L3 (a)-(d)), R13 (traced removal over the NAMED closure, read set by atime after a
-# forced epoch, the in-arm instrument probe, the must-miss and must-hit controls, the 32-removal ceiling) and M3 (the
+# forced epoch, the in-arm instrument check, the must-miss and must-hit controls, the 32-removal ceiling) and M3 (the
 # per-receipt green record). Distribution-only: its .dist-only says why.
 #
 # HOW IT DRIVES THE VALIDATOR (lead ruling (a), batch 256). Each distinct state is ONE FXCELL-tagged `cli` start of a
-# copy of the validator, run from the copy's tree in its cheap mode `--r13-drive <m1|probe|corpus|score>` (the
+# copy of the validator, run from the copy's tree in its cheap mode `--r13-drive <corpus|score>` (the
 # validator's header beside DEFAULT_MAX_R13), and every worker that start launches (--score-one, --closed-one,
 # --r13-one) is covered by the ONE self-nested row of cells.decl. The in-process passes that remain (fx_inproc) are
-# the probe-world build (r13_world), r13_untraced called as a function, and vbr_sec_setup alone for the --base
-# states; none of them reaches score_ledger, score_closed or r13_removals, so none starts a worker. ONE end-to-end
+# r13_untraced called as a function, and vbr_sec_setup alone for the --base states; none of them reaches score_ledger, score_closed or r13_removals, so none starts a worker. ONE end-to-end
 # CLI run (cell cli-wire) proves the corpus wiring and the --traced-removal flag.
-# THE WORLDS ARE BUILT ONCE: the R13 probe world by r13_world into $PW (every probe start passes --probe-world), the
-# one-receipt worlds g/u/o/x/e as templates copied per drive (a drive that commits or writes a record gets its own
+# THE WORLDS ARE BUILT ONCE: the one-receipt worlds g/u/o/x/e as templates copied per drive (a drive that commits or writes a record gets its own
 # copy and its own record store, so no drive replays a green another drive wrote).
 #
 # A SANDBOX THAT DENIES `touch -a`, OR A FILESYSTEM WHERE ATIME DOES NOT MOVE, is FIXTURE BROKEN (exit 2), never a
 # skip: the control captures carry `R13-INSTRUMENT-REFUSED` and every control below reads that first.
 #
-# CONTROLS: the M1 drive, the corpus write on world g (it fires vbr_probe_r13 over all 14 seeds), replay, moved named file, moved judge byte, red, overflow, not-run, untraced
+# CONTROLS: the corpus write on world g, replay, moved named file, moved judge byte, red, overflow, not-run, untraced
 # (function-level), the two-sided ceiling (c-stale-high, c-committed), the within-ceiling record and its replay
 # (c-within-write, c-within), a DRIVEN instrument refusal (c-instr-refused, through the validator's documented test
 # seam BR_R13_PROBE_DIR with a pre-placed unreadable `read`; no command is shadowed), the three states of a given
@@ -58,7 +56,7 @@ bad() { echo "FAIL  $*"; FAILS=$(( FAILS + 1 )); }
 TMP="$(mktemp -d)" || broken "mktemp -d"
 trap 'rm -rf "$TMP"' EXIT
 export GIT_AUTHOR_NAME=fx GIT_AUTHOR_EMAIL=fx@local GIT_COMMITTER_NAME=fx GIT_COMMITTER_EMAIL=fx@local
-unset BR_PROBE_RECORD BR_RECEIPTS_RUNNING BR_R13_RECORD_DIR BR_R13_PROBE_DIR
+unset BR_RECEIPTS_RUNNING BR_R13_RECORD_DIR BR_R13_PROBE_DIR
 
 # --- the trees -----------------------------------------------------------------------------
 # mkdist <dir> <validator> -- the files the validator resolves beside itself.
@@ -115,15 +113,6 @@ store() { local d; d="$(mktemp -d "$TMP/s.XXXXXX")" || broken "a record store di
 # tree; every world a command later commits in, or runs the CLI in, is checked first.
 wcheck() { case "$1" in "$TMP"/*) [ -d "$1/.git" ] || broken "the world $1 has no .git" ;; *) broken "a world did not copy" ;; esac; }
 
-# THE R13 PROBE WORLD, BUILT ONCE (in process: r13_world writes and commits files; it starts no worker).
-PW="$TMP/pw/world"; mkdir -p "$TMP/pw" || broken "the probe-world dir did not create"
-( cd "$TMP/dist" || exit 2
-  fx_inproc scripts/validate-backlog-receipts.sh
-  # shellcheck source=/dev/null
-  . scripts/validate-backlog-receipts.sh || exit 2
-  r13_world "$PW" ) > /dev/null 2>&1 || broken "the R13 probe world did not build"
-[ -f "$PW.base" ] && [ -f "$PW.ledger" ] && [ -d "$PW/.git" ] || broken "the R13 probe world is incomplete"
-WL="$(world g)"; wcheck "$WL"; LEDGER0="$WL/docs/backlog.md"   # the ledger a probe-mode start is given (setup needs one)
 
 # cli <cell> <copy> <out> <store> <env words or -> <args...> -- ONE FXCELL-tagged start of a validator copy, from its
 # tree, `--max-unguarded 0` first (a seeded world's own count is 0 unless the cell's flag after it says otherwise).
@@ -138,7 +127,7 @@ cli() {
   echo "$raw" > "$o.raw"
   # EVERY start here is RESTRICTED (--r13-drive), so it must exit 3 with its verdict on `RESTRICTED: verdict-rc=`, or
   # refuse with 2; <out>.rc is the VERDICT the cells read. Any other exit is a failure of the restricted contract.
-  v="$(sed -n 's/^RESTRICTED: verdict-rc=\([0-9][0-9]*\) -- this run narrowed the self-probes and is never a gate pass$/\1/p' "$o" | tail -1)"
+  v="$(sed -n 's/^RESTRICTED: verdict-rc=\([0-9][0-9]*\) -- this run was restricted and is never a gate pass$/\1/p' "$o" | tail -1)"
   case "$raw" in
     3) echo "${v:-none}" > "$o.rc" ;;
     2) echo 2 > "$o.rc" ;;
@@ -152,25 +141,25 @@ klist() { sed -n 's/^R13-RECORD: WRITTEN BL-1401 (K=\([0-9a-f]*\))$/\1/p' "$1"; 
 instr_refused() { has "$1" "R13-INSTRUMENT-REFUSED" && broken "atime is not a working read instrument here: $(grep -F R13-INSTRUMENT-REFUSED "$1" | head -1)"; return 0; }
 
 # --- the cells: each reads one capture and returns 0 when GREEN ----------------------------
-cell_c_write() { has "$1" "R13-POPULATION: 1 open sh receipt(s), 1 traced, 2 named removals (0 replayed), 0 named-unread (0 replayed), " && has "$1" "removals: 1 exit 9, 2 in the cannot-measure set, 0 UNGUARDED-READ" && [ -n "$(klist "$1")" ] && has "$1" "R13-RC 0 R13 fired both directions"; }
+cell_c_write() { has "$1" "R13-POPULATION: 1 open sh receipt(s), 1 traced, 2 named removals (0 replayed), 0 named-unread (0 replayed), " && has "$1" "removals: 1 exit 9, 2 in the cannot-measure set, 0 UNGUARDED-READ" && [ -n "$(klist "$1")" ] && has "$1" "R13-RC 0"; }
 cell_c_enumline() { has "$1" ", 0 enumerated excluded (0 replayed), "; }
 cell_c_instr() { has "$1" "R13-INSTRUMENT: atime moved on a read and on a second read after a second reset"; }
-cell_c_replay() { has "$1" ", 1 replayed, " && [ -z "$(klist "$1")" ] && has "$1" "R13-RC 0 R13 self-probe not fired"; }
+cell_c_replay() { has "$1" ", 1 replayed, " && [ -z "$(klist "$1")" ] && has "$1" "R13-RC 0"; }
 cell_c_moved() { [ -n "$(klist "$1")" ] && [ "$(klist "$1")" != "$2" ]; }
-cell_red_fail() { has "$1" "FAIL: R13" && has "$1" "R13-RC 1 " && has "$1" "1 UNGUARDED-READ"; }
+cell_red_fail() { has "$1" "FAIL: R13" && has "$1" "R13-RC 1" && has "$1" "1 UNGUARDED-READ"; }
 cell_red_norecord() { [ -z "$(ls -A "$2")" ] && [ -z "$(klist "$1")" ]; }
 cell_c_overflow() { [ "$(rcof "$1")" = 2 ] && has "$1" "R13-NAMED-OVERFLOW BL-1401 34"; }
 cell_c_notrun() { has "$1" "R13-POPULATION: NOT RUN"; }
 cell_c_untraced() { [ "$(cat "$1" 2>/dev/null)" = "1 0 0" ]; }
-cell_c_stale_high() { has "$1" "R13-RC 1 " && has "$1" "BELOW the ceiling of 2" && has "$1" "lower DEFAULT_MAX_R13 in scripts/validate-backlog-receipts.sh to 1"; }
+cell_c_stale_high() { has "$1" "R13-RC 1" && has "$1" "BELOW the ceiling of 2" && has "$1" "lower DEFAULT_MAX_R13 in scripts/validate-backlog-receipts.sh to 1"; }
 UROW="$(printf 'UNGUARDED-READ\tBL-1401\tw/data.txt\texit=1')"
-cell_c_within_write() { [ -n "$(klist "$1")" ] && has "$1" "$UROW" && has "$1" "R13-RC 0 "; }
-cell_c_within_replay() { has "$2" ", 1 replayed, " && has "$2" "$UROW" && has "$2" "R13-RC 0 " \
-  && has "$3" ", 1 replayed, " && has "$3" "$UROW" && has "$3" "FAIL: R13" && has "$3" "R13-RC 1 "; }
+cell_c_within_write() { [ -n "$(klist "$1")" ] && has "$1" "$UROW" && has "$1" "R13-RC 0"; }
+cell_c_within_replay() { has "$2" ", 1 replayed, " && has "$2" "$UROW" && has "$2" "R13-RC 0" \
+  && has "$3" ", 1 replayed, " && has "$3" "$UROW" && has "$3" "FAIL: R13" && has "$3" "R13-RC 1"; }
 # BR_R13_PROBE_DIR makes the run RESTRICTED too; an instrument refusal is a refusal, so it leaves through the
 # restricted trap as 2 (never 0 or 3) with `RESTRICTED: verdict-rc=2`.
 cell_c_instr_refused() { [ "$(cat "$1.raw" 2>/dev/null)" = 2 ] && has "$1" "R13-INSTRUMENT-REFUSED read-not-moved" \
-  && has "$1" "RESTRICTED: verdict-rc=2 -- this run narrowed the self-probes and is never a gate pass"; }
+  && has "$1" "RESTRICTED: verdict-rc=2 -- this run was restricted and is never a gate pass"; }
 cell_m1_base3() { [ "$(rcof "$1")" = 0 ] && has "$1" "SETUP-OK" && ! has "$1" "M1-BASE-UNRESOLVED" \
   && [ "$(rcof "$2")" = 2 ] && has "$2" "M1-BASE-UNRESOLVED:" && ! has "$2" "SETUP-OK" \
   && [ "$(rcof "$3")" = 0 ] && has "$3" "base-exit=127-cannot-measure=driver-absent/DRIVER-REMOVED"; }
@@ -204,15 +193,7 @@ base_setup() {
 
 # --- controls ------------------------------------------------------------------------------
 C="$TMP/cap"; mkdir -p "$C"
-cli m1 "$D" "$C/m1" "$(store)" - --r13-drive m1 "$LEDGER0"
-if [ "$(rcof "$C/m1")" = 0 ] && has "$C/m1" "M1-OK M1 fired both directions"; then ok "m1 -- M1 fired both directions over its seeds and L3 (d)"
-else bad "m1 -- vbr_probe_m1 did not pass (rc $(rcof "$C/m1")): $(grep -F 'SELF-PROBE FAILED' "$C/m1" | head -1)"; fi
-# c-restricted: a restricted start whose verdict is GREEN exits 3, never 0, and says its verdict.
-cell_c_restricted() { [ "$(cat "$1.raw" 2>/dev/null)" = 3 ] && has "$1" "RESTRICTED: verdict-rc=0 -- this run narrowed the self-probes and is never a gate pass"; }
-if cell_c_restricted "$C/m1"; then ok "c-restricted -- a restricted start with a green verdict exited 3, not 0, and printed verdict-rc=0"
-else bad "c-restricted -- raw exit $(cat "$C/m1.raw" 2>/dev/null): $(grep -F 'RESTRICTED:' "$C/m1" | tr '\n' ' ')"; fi
-
-# c-m1-e2e: M1 THROUGH REAL WORKERS (lead condition; vbr_probe_m1 is start-free and cannot see a caller defect). World
+# c-m1-e2e: M1 THROUGH REAL WORKERS. World
 # m, one tagged start: BL-1401 `bash w/never.sh` (absent at HEAD and at --base) reads EXCLUDED-DRIVER-ABSENT-AT-BASE;
 # BL-1402's guarded driver and BL-1403's driver, removed, read driver-absent (R13-PASS) and BL-1402's guarded file
 # exits 9; BL-1403's unguarded file is UNGUARDED-READ (within a ceiling of 1). A --score-one worker classifies the
@@ -222,7 +203,7 @@ cell_c_m1_e2e() { has "$1" "R13-POPULATION: 3 open sh receipt(s), 3 traced, " &&
   && has "$1" "$(printf 'UNGUARDED-READ\tBL-1403\tw/ud.txt\texit=1')" && [ "$(rcof "$1")" = 0 ]; }
 m1e2e_run() { # m1e2e_run <copy> <out> <cell>
   local w; w="$(world m)"; wcheck "$w"
-  cli "$3" "$1" "$2" "$(store)" - --r13-drive corpus --traced-removal --probe-seeds - --max-unguarded 1 \
+  cli "$3" "$1" "$2" "$(store)" - --r13-drive corpus --traced-removal --max-unguarded 1 \
     --base "$(git -C "$w" rev-parse HEAD)" "$w/docs/backlog.md"
 }
 m1e2e_run "$D" "$C/m1e2e" c-m1-e2e
@@ -230,44 +211,48 @@ if cell_c_m1_e2e "$C/m1e2e"; then ok "c-m1-e2e -- real workers read an EXCLUDED 
 else bad "c-m1-e2e -- rc $(rcof "$C/m1e2e"): $(grep -E 'R13-POPULATION|UNGUARDED|FAIL' "$C/m1e2e" | tr '\n' ' ')"; fi
 
 WG="$(world g)"; wcheck "$WG"; S1="$(store)"
-cli c-write "$D" "$C/write" "$S1" - --r13-drive corpus --traced-removal --probe-world "$PW" "$WG/docs/backlog.md"
+cli c-write "$D" "$C/write" "$S1" - --r13-drive corpus --traced-removal "$WG/docs/backlog.md"
 instr_refused "$C/write"
 if cell_c_instr "$C/write"; then ok "c-instr -- the in-arm instrument probe ran and atime moved"; else bad "c-instr -- no R13-INSTRUMENT line"; fi
-if cell_c_write "$C/write"; then ok "c-write -- R13 traced, removed 2 named reads (both guarded), wrote one record, and its self-probe fired over every seed"
-else bad "c-write -- $(grep -E 'R13-POPULATION|SELF-PROBE FAILED|R13-RC' "$C/write" | tr '\n' ' ')"; fi
+if cell_c_write "$C/write"; then ok "c-write -- R13 traced, removed 2 named reads (both guarded), and wrote one record"
+else bad "c-write -- $(grep -E 'R13-POPULATION|R13-RC' "$C/write" | tr '\n' ' ')"; fi
 if cell_c_enumline "$C/write"; then ok "c-enumline -- the population line prints the enumerated-excluded count"; else bad "c-enumline -- no enumerated count"; fi
 K1="$(klist "$C/write")"
 [ "$(ls -A "$S1" | grep -c '\.green$')" = 1 ] || bad "c-write -- the store holds $(ls -A "$S1" | grep -c '\.green$') records, want 1"
 
-cli c-replay "$D" "$C/replay" "$S1" - --r13-drive corpus --traced-removal --probe-seeds - "$WG/docs/backlog.md"
-if cell_c_replay "$C/replay"; then ok "c-replay -- an unmoved key replayed: no removal, no self-probe, no new record"
+cli c-replay "$D" "$C/replay" "$S1" - --r13-drive corpus --traced-removal "$WG/docs/backlog.md"
+if cell_c_replay "$C/replay"; then ok "c-replay -- an unmoved key replayed: no removal, no new record"
 else bad "c-replay -- $(grep -E 'R13-POPULATION|R13-RC|R13-RECORD' "$C/replay" | tr '\n' ' ')"; fi
 
 WGJ="$(world g)"; wcheck "$WGJ"; SJ="$(store)"; cp "$S1"/*.green "$SJ/" 2>/dev/null
 mkdist "$TMP/distj" "$D" || broken "the moved-judge copy did not build"
 printf '# a moved judge byte\n' >> "$TMP/distj/scripts/validate-backlog-receipts.sh"
-cli c-moved-judge "$TMP/distj/scripts/validate-backlog-receipts.sh" "$C/judge" "$SJ" - --r13-drive corpus --traced-removal --probe-seeds - "$WGJ/docs/backlog.md"
+cli c-moved-judge "$TMP/distj/scripts/validate-backlog-receipts.sh" "$C/judge" "$SJ" - --r13-drive corpus --traced-removal "$WGJ/docs/backlog.md"
 if cell_c_moved "$C/judge" "$K1"; then ok "c-moved-judge -- one changed byte of the judge moved the key and R13 re-ran"
 else bad "c-moved-judge -- K '$(klist "$C/judge")' against '$K1'"; fi
 
 printf 'moved\n' >> "$WG/w/data.txt"
 git -C "$WG" -c commit.gpgsign=false commit -q -am moved >/dev/null 2>&1 || broken "the moved-named commit did not build"
-cli c-moved-named "$D" "$C/moved" "$S1" - --r13-drive corpus --traced-removal --probe-seeds - "$WG/docs/backlog.md"
+cli c-moved-named "$D" "$C/moved" "$S1" - --r13-drive corpus --traced-removal "$WG/docs/backlog.md"
 if cell_c_moved "$C/moved" "$K1"; then ok "c-moved-named -- a changed NAMED file moved the key and R13 re-ran"
 else bad "c-moved-named -- K '$(klist "$C/moved")' against '$K1'"; fi
 
 SU="$(store)"
-cli red "$D" "$C/red" "$SU" - --r13-drive corpus --traced-removal --probe-seeds - "$(world u)/docs/backlog.md"
+cli red "$D" "$C/red" "$SU" - --r13-drive corpus --traced-removal "$(world u)/docs/backlog.md"
 if cell_red_fail "$C/red"; then ok "red-fail -- an unguarded named read is UNGUARDED-READ over a ceiling of 0"
 else bad "red-fail -- $(grep -E 'R13-POPULATION|R13-RC|FAIL' "$C/red" | tr '\n' ' ')"; fi
 if cell_red_norecord "$C/red" "$SU"; then ok "red-norecord -- a red R13 wrote no record (store empty before and after)"; else bad "red-norecord -- the store holds: $(ls -A "$SU" | tr '\n' ' ')"; fi
 
-cli overflow "$D" "$C/over" "$(store)" - --r13-drive corpus --traced-removal --probe-seeds - "$(world o)/docs/backlog.md"
+cli overflow "$D" "$C/over" "$(store)" - --r13-drive corpus --traced-removal "$(world o)/docs/backlog.md"
 if cell_c_overflow "$C/over"; then ok "c-overflow -- 34 named reads printed R13-NAMED-OVERFLOW and refused"
 else bad "c-overflow -- rc $(rcof "$C/over"): $(grep -E 'R13-' "$C/over" | tr '\n' ' ')"; fi
 
 cli notrun "$D" "$C/notrun" "$(store)" - --r13-drive corpus "$(world g)/docs/backlog.md"
 if cell_c_notrun "$C/notrun"; then ok "c-notrun -- without --traced-removal R13 says NOT RUN"; else bad "c-notrun -- no NOT RUN line"; fi
+# c-restricted: a restricted start whose verdict is GREEN exits 3, never 0, and says its verdict.
+cell_c_restricted() { [ "$(cat "$1.raw" 2>/dev/null)" = 3 ] && has "$1" "RESTRICTED: verdict-rc=0 -- this run was restricted and is never a gate pass"; }
+if cell_c_restricted "$C/notrun"; then ok "c-restricted -- a restricted start with a green verdict exited 3, not 0, and printed verdict-rc=0"
+else bad "c-restricted -- raw exit $(cat "$C/notrun.raw" 2>/dev/null): $(grep -F 'RESTRICTED:' "$C/notrun" | tr '\n' ' ')"; fi
 
 untraced_fn "$D" "$C/untraced"
 if cell_c_untraced "$C/untraced"; then ok "c-untraced -- r13_untraced reads 1 untraced, then 0 when traced, then 0 when R2 refused it before a checkout"
@@ -275,7 +260,7 @@ else bad "c-untraced -- read '$(cat "$C/untraced")', want '1 0 0'"; fi
 
 # THE TWO-SIDED CEILING. c-stale-high: world u (1 unguarded row) under a ceiling of 2 FAILS with the lower-it message;
 # the equal case is c-within-write below, and the above case is red-fail above.
-cli c-stale-high "$D" "$C/stale" "$(store)" - --r13-drive corpus --traced-removal --probe-seeds - --max-unguarded 2 "$(world u)/docs/backlog.md"
+cli c-stale-high "$D" "$C/stale" "$(store)" - --r13-drive corpus --traced-removal --max-unguarded 2 "$(world u)/docs/backlog.md"
 if cell_c_stale_high "$C/stale"; then ok "c-stale-high -- a live count below the ceiling failed and named the count to lower it to"
 else bad "c-stale-high -- $(grep -E 'R13-RC|FAIL: R13' "$C/stale" | tr '\n' ' ')"; fi
 # c-committed: the window is reachable AT THE COMMITTED VALUE. N is read from the subject's own DEFAULT_MAX_R13 line;
@@ -293,8 +278,8 @@ printf 'exit 0\n' >> "$WF/w/drv.sh"
 printf '# Probe backlog\n\n## BL-1401 — world f\n\nverify: sh bash w/drv.sh\n' > "$WF/docs/backlog.md"
 ( cd "$WF" && git init -q . && git add -A && git -c commit.gpgsign=false commit -q -m seed ) >/dev/null 2>&1
 wcheck "$WF"
-cli c-committed "$D" "$C/committed" "$(store)" - --r13-drive corpus --traced-removal --probe-seeds - --max-unguarded "$N_COMMITTED" "$WF/docs/backlog.md"
-if has "$C/committed" "R13-RC 0 " && has "$C/committed" "$N_COMMITTED UNGUARDED-READ (ceiling $N_COMMITTED)"; then
+cli c-committed "$D" "$C/committed" "$(store)" - --r13-drive corpus --traced-removal --max-unguarded "$N_COMMITTED" "$WF/docs/backlog.md"
+if has "$C/committed" "R13-RC 0" && has "$C/committed" "$N_COMMITTED UNGUARDED-READ (ceiling $N_COMMITTED)"; then
   ok "c-committed -- a world with exactly the committed $N_COMMITTED unguarded reads passes at that ceiling"
 else bad "c-committed -- $(grep -E 'R13-POPULATION|R13-RC|FAIL: R13' "$C/committed" | tr '\n' ' ')"; fi
 
@@ -304,10 +289,10 @@ else bad "c-committed -- $(grep -E 'R13-POPULATION|R13-RC|FAIL: R13' "$C/committ
 # NOTHING WAS JUDGED, never "BELOW the ceiling".
 cell_c_empty_stale() { [ "$(rcof "$1")" = 1 ] && has "$1" "R13-POPULATION: EMPTY" && has "$1" "the open sh population is EMPTY, so the live UNGUARDED-READ count is 0, BELOW the ceiling of 1" && has "$1" "to 0"; }
 cell_c_nothing_judged() { [ "$(rcof "$1")" = 1 ] && has "$1" "FAIL: R13: NOTHING WAS JUDGED -- 0 of 1 traced" && ! has "$1" "BELOW the ceiling"; }
-empty_run() { cli "$1" "$2" "$3" "$(store)" - --r13-drive corpus --traced-removal --probe-seeds - --max-unguarded 1 "$(world n)/docs/backlog.md"; }
+empty_run() { cli "$1" "$2" "$3" "$(store)" - --r13-drive corpus --traced-removal --max-unguarded 1 "$(world n)/docs/backlog.md"; }
 judged_run() { # judged_run <cell> <copy> <out>
   local w; w="$(world x)"; wcheck "$w"
-  cli "$1" "$2" "$3" "$(store)" - --r13-drive corpus --traced-removal --probe-seeds - --max-unguarded 1 --base "$(cat "$w/.git/fx-base")" "$w/docs/backlog.md"
+  cli "$1" "$2" "$3" "$(store)" - --r13-drive corpus --traced-removal --max-unguarded 1 --base "$(cat "$w/.git/fx-base")" "$w/docs/backlog.md"
 }
 empty_run c-empty-stale "$D" "$C/empty"
 if cell_c_empty_stale "$C/empty"; then ok "c-empty-stale -- an EMPTY population under a ceiling of 1 failed and named 0"
@@ -320,8 +305,8 @@ else bad "c-nothing-judged -- verdict $(rcof "$C/judged"): $(grep -E 'R13-POPULA
 # write, then its replay. c-replay-pop: the replay prints the live run's figures, labelled replayed.
 pop_run() {
   local s w; s="$(store)"; w="$(world e)"; wcheck "$w"
-  cli "$3-1" "$1" "$2.1" "$s" - --r13-drive corpus --traced-removal --probe-seeds - "$w/docs/backlog.md"
-  cli "$3-2" "$1" "$2.2" "$s" - --r13-drive corpus --traced-removal --probe-seeds - "$w/docs/backlog.md"
+  cli "$3-1" "$1" "$2.1" "$s" - --r13-drive corpus --traced-removal "$w/docs/backlog.md"
+  cli "$3-2" "$1" "$2.2" "$s" - --r13-drive corpus --traced-removal "$w/docs/backlog.md"
 }
 pop_run "$D" "$C/pop" pop
 if cell_c_pop_live "$C/pop.1"; then ok "c-pop-live -- the live run printed 2 named removals, 1 named-unread and 1 enumerated excluded"
@@ -332,9 +317,9 @@ else bad "c-replay-pop -- $(grep -E 'R13-POPULATION' "$C/pop.2" | tr '\n' ' ')";
 # within_run <copy> <prefix> <id-prefix> -- world u, one store, three starts: write at ceiling 1, replay at 1, replay at 0.
 within_run() {
   local s w; s="$(store)"; w="$(world u)"; wcheck "$w"
-  cli "$3-1" "$1" "$2.1" "$s" - --r13-drive corpus --traced-removal --probe-seeds - --max-unguarded 1 "$w/docs/backlog.md"
-  cli "$3-2" "$1" "$2.2" "$s" - --r13-drive corpus --traced-removal --probe-seeds - --max-unguarded 1 "$w/docs/backlog.md"
-  cli "$3-3" "$1" "$2.3" "$s" - --r13-drive corpus --traced-removal --probe-seeds - --max-unguarded 0 "$w/docs/backlog.md"
+  cli "$3-1" "$1" "$2.1" "$s" - --r13-drive corpus --traced-removal --max-unguarded 1 "$w/docs/backlog.md"
+  cli "$3-2" "$1" "$2.2" "$s" - --r13-drive corpus --traced-removal --max-unguarded 1 "$w/docs/backlog.md"
+  cli "$3-3" "$1" "$2.3" "$s" - --r13-drive corpus --traced-removal --max-unguarded 0 "$w/docs/backlog.md"
 }
 within_run "$D" "$C/within" within
 if cell_c_within_write "$C/within.1"; then ok "c-within-write -- an UNGUARDED-READ within the ceiling wrote the record"
@@ -345,7 +330,7 @@ else bad "c-within -- replay at 1: $(grep -E 'R13-RC' "$C/within.2" | tr '\n' ' 
 # c-instr-refused, through the documented seam BR_R13_PROBE_DIR: its `read` is pre-placed at mode 0200, so the probe's
 # cat cannot open it and its atime stays at the epoch. No command is shadowed.
 AG="$TMP/aged-probe"; mkdir -p "$AG" && printf 'r\n' > "$AG/read" && chmod 0200 "$AG/read" || broken "the aged probe dir did not build"
-cli c-instr-refused "$D" "$C/irefused" "$(store)" "BR_R13_PROBE_DIR=$AG" --r13-drive corpus --traced-removal --probe-seeds - "$(world g)/docs/backlog.md"
+cli c-instr-refused "$D" "$C/irefused" "$(store)" "BR_R13_PROBE_DIR=$AG" --r13-drive corpus --traced-removal "$(world g)/docs/backlog.md"
 if cell_c_instr_refused "$C/irefused"; then ok "c-instr-refused -- an atime that did not move on a read refused R13 (exit 2)"
 else bad "c-instr-refused -- rc $(rcof "$C/irefused"): $(grep -E 'R13-INSTRUMENT' "$C/irefused" | tr '\n' ' ')"; fi
 
@@ -374,14 +359,9 @@ SC="$(store)"
 echo "$?" > "$C/cli.rc"; printf 'cli-wire\n' >> "$CELLS_USED"
 instr_refused "$C/cli"
 if [ "$(rcof "$C/cli")" = 0 ] && has "$C/cli" "R13-POPULATION: 1 open sh receipt(s), 1 traced, 2 named removals" \
-   && has "$C/cli" "R13-RECORD: WRITTEN BL-1401" && has "$C/cli" "R13 fired both directions"; then
+   && has "$C/cli" "R13-RECORD: WRITTEN BL-1401"; then
   ok "cli-wire -- the CLI with --traced-removal ran R13 end to end and wrote its record"
 else bad "cli-wire -- rc $(rcof "$C/cli"): $(grep -E 'R13-|FAIL' "$C/cli" | head -5 | tr '\n' ' ')"; fi
-# c-restricted-seeds: a start given ONLY `--probe-seeds -` (no --r13-drive) is restricted too. The cheapest green verdict
-# with no drive is `--efficiency-only` in the CLI world (no receipt, no worker): it must exit 3 with verdict-rc=0.
-cli c-restricted-seeds "$WC/scripts/validate-backlog-receipts.sh" "$C/rseeds" "$(store)" - --efficiency-only --probe-seeds - "$WC/docs/backlog.md"
-if cell_c_restricted "$C/rseeds"; then ok "c-restricted-seeds -- a start given only --probe-seeds exited 3 with verdict-rc=0"
-else bad "c-restricted-seeds -- raw exit $(cat "$C/rseeds.raw" 2>/dev/null): $(grep -E 'RESTRICTED:|FAIL' "$C/rseeds" | head -3 | tr '\n' ' ')"; fi
 
 
 # THE CELLS THIS RUN TAGGED ARE THE ONES cells.decl DECLARES, EACH ONCE (the judge's C3, predicted here). One cmp of

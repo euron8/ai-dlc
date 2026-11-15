@@ -1971,33 +1971,6 @@ awk_prog_refusal() { # $1 an awk program -> AWK_WHY (empty = admitted)
   elif [[ "$1" =~ $AWK_DIR_RE ]]; then AWK_WHY="awk @include/@load/@namespace directive"
   fi
 }
-# THE SELF-PROBE: the program check above is driven at startup over literal text, through the
-# helper seg_check calls, so a regex that stops matching stops every run (exit 2) instead of
-# admitting silently. It matches strings; nothing is loaded or run. Each row is
-# `<expected refusal or ->|<program>`; `-` is a near-miss that must be admitted.
-vad_awk_probe() {
-awk_probe_bad=""
-while IFS='|' read -r ap_want ap_prog; do
-  [ -n "$ap_want" ] || continue
-  awk_prog_refusal "$ap_prog"
-  [ "${AWK_WHY:--}" = "$ap_want" ] || awk_probe_bad="$awk_probe_bad [$ap_prog] read '${AWK_WHY:--}', want '$ap_want';"
-done <<'AWK_PROBE_END'
-awk @include/@load/@namespace directive|@include "f"
-awk @include/@load/@namespace directive|@load "f"
-awk @include/@load/@namespace directive|@namespace "n"
-awk @include/@load/@namespace directive|@include"f"
-awk @include/@load/@namespace directive|BEGIN{x=1} @load
-awk @name() indirect call|BEGIN{@f(1)}
-awk system()|BEGIN{system ("x")}
--|{print "user@host"}
--|@includes "f"
--|{print $1}
-AWK_PROBE_END
-if [ -n "$awk_probe_bad" ]; then
-  printf 'REFUSED: the awk program check failed its own self-probe (%s ), so it would admit a program it exists to refuse; no verdict.\n' "$awk_probe_bad" >&2
-  exit 2
-fi
-}
 
 seg_check() { # $1 one pipeline segment -> 0 allowed | 1 refused (SEG_KIND, SEG_WHY)
   local seg="$1" w n=0 i=1 first="" sub="" gdir groot gres gcom_root gcom_dir pend="" endop=0 nops=0
@@ -2904,8 +2877,8 @@ exit 0
 # nothing else (no option set, no trap, no temp file), and has three entries:
 #   vad_cli <args>     the whole program, as above. Run it in a subshell: it ends in `exit`.
 #   vad_load           the half that does not depend on the arguments or the environment: the
-#                      option tables, the NEVER intersection and the startup self-probes. Once
-#                      per shell. It sets no shell option; a self-probe refusal exits 2 exactly
+#                      option tables, the NEVER intersection and the CD_LIST check. Once
+#                      per shell. It sets no shell option; a table refusal exits 2 exactly
 #                      as the program does, so load a file you have not vetted in a subshell.
 #                      Its last act records the file it was defined from in VAD_LOADED.
 #   vad_invoke <args>  the other half, after vad_load ran in the same shell: the shell state a
@@ -2928,7 +2901,6 @@ vad_cli() {
   vad_explain_cdp
   vad_explain_id
   vad_awk_re
-  vad_awk_probe
   vad_sed_awk
   vad_tmp
   vad_rec_awk
@@ -2942,7 +2914,6 @@ vad_load() {
   vad_explain_cdp
   vad_explain_id
   vad_awk_re
-  vad_awk_probe
   vad_sed_awk
   vad_rec_awk
   VAD_LOADED="${BASH_SOURCE[0]}"

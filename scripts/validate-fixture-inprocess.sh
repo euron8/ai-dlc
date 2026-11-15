@@ -6,7 +6,7 @@
 # fxc_judge, which core/scripts/hermetic-run.sh calls once per counted run; the hook's post-suite summary names every
 # declared fixture with no counted pass under the current judge as PENDING.
 #
-# usage:  validate-fixture-inprocess.sh [--root R]             the gate (exit 0 clean, 1 FAIL, 2 refused or self-probe red)
+# usage:  validate-fixture-inprocess.sh [--root R]             the gate (exit 0 clean, 1 FAIL, 2 refused)
 #         validate-fixture-inprocess.sh --complete [--root R]  the gate, AND non-zero while any allowlist row remains or
 #                                                              when zero fixtures were scanned (BL-878's receipt)
 #         validate-fixture-inprocess.sh --derive [--root R]    write the allowlist from the tree (header + rows)
@@ -47,8 +47,7 @@
 #       origin/main list, (2) core/fixtures/<family>-<letter>/run.sh is a shard driver of that family -- exactly the eight
 #       non-comment lines sf_driver names, ending in `exec bash "$IMPL" --group <letter>`, no other command -- and (3) the
 #       family's own row is still on the current list. A shard split of a listed subject is a scheduling boundary and
-#       starts it no more often than the family did; any other new row is still refused. Each condition has a mutant in
-#       the self-probe (sf_famlisted, sf_driver, sf_famrow each forced true must flip the case that needs it, read off m4's own list of refused names).
+#       starts it no more often than the family did; any other new row is still refused.
 #       HOW ITS FALSE-POSITIVE SET REACHED ZERO: the first shape accepted any run.sh whose last line was an exec of the
 #       sibling; a body of real commands before that exec passed it. The shape is now the whole file, line by line, and the
 #       message line may carry no quote, `$`, backtick or backslash, so no second command rides in the echo.
@@ -102,10 +101,6 @@ M4_REMEDY="do not list the fixture; build it in-process and declare its remainin
 for f in "$JUDGE" "$HYG"; do [ -f "$f" ] || { echo "validate-fixture-inprocess: REFUSED -- $f is absent" >&2; exit 2; }; done
 WORK="$(mktemp -d)" || { echo "validate-fixture-inprocess: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
-# The judge's self-probe runs once per run of this script, not once per --b2-census call: the judge memoises a green
-# probe in this run's own private directory, keyed by the judge's content (fxc_sp_memo).
-mkdir "$WORK/spmemo" || exit 2
-export FXC_SP_MEMO="$WORK/spmemo"
 
 # THE ONE SHARED m4, extracted by its own boundaries; exactly one definition between the markers, else REFUSED.
 awk '/^# M4_BEGIN$/ { on = 1; next } /^# M4_END$/ { on = 0 } on' "$HYG" > "$WORK/m4.sh"
@@ -135,8 +130,7 @@ judge_tree() {
 # PRIVATE index (read-tree --index-output, then ls-files | checkout-index --prefix under GIT_INDEX_FILE): git only, so
 # no tool a fixture sandbox may lack (tar), and the repository's own index is never touched. The join scans <dir> with
 # the tip's own scan (--p2-base). Returns 1 when there is no base.
-p2_ix() { if [ "$P2_RG" = pgit ]; then env -u GIT_DIR -u GIT_WORK_TREE -u GIT_OBJECT_DIRECTORY GIT_INDEX_FILE="$P2_IDX" git -C "$P2_R" "$@"
-          else GIT_INDEX_FILE="$P2_IDX" git -C "$P2_R" "$@"; fi; }
+p2_ix() { GIT_INDEX_FILE="$P2_IDX" git -C "$P2_R" "$@"; }
 p2_base() {
   local r="$1" b="$2" rg="$3" mb
   mb="$("$rg" -C "$r" merge-base HEAD origin/main 2>/dev/null)" && [ -n "$mb" ] || return 1
@@ -255,153 +249,6 @@ derive_rows() { # <out prefix>: the allowlist rows, sorted; a fixture refused fo
     END { for (f in X) { r = X[f]; gsub(/ declares [0-9]+ start\(s\) against [0-9]+ cell\(s\)/, " runs outside a declared cell", r); print f "\t" r }; for (f in G) if (!(f in X)) print f "\tB2 gap(s):" G[f] }' "$1.join" <(tr ' ' '\t' < "$1.census") | LC_ALL=C sort
 }
 
-# --- the self-probe, before the corpus, in mktemp, both directions ------------------------------------------------
-SP_RED=0
-spl() { printf '  %-5s self-probe %s\n' "$1" "$2"; [ "$1" = ok ] || SP_RED=1; }
-P="$WORK/probe"
-mkf() { # <fixture> <invocations.decl rows |-joined> <cells.decl rows |-joined, or ->
-  mkdir -p "$P/core/fixtures/$1"; printf ':\n' > "$P/core/fixtures/$1/run.sh"
-  printf '!core/scripts/g.sh\n!core/scripts/u.sh\n!core/scripts/d.sh\n' > "$P/core/fixtures/$1/inputs.decl"
-  printf '%s\n' "$2" | tr '|' '\n' > "$P/core/fixtures/$1/invocations.decl"
-  rm -f "$P/core/fixtures/$1/cells.decl"; [ "$3" = - ] || printf '%s\n' "$3" | tr '|' '\n' > "$P/core/fixtures/$1/cells.decl"
-}
-mkdir -p "$P/core/scripts" "$P/core/fixtures/und"
-printf '#!/usr/bin/env bash\n[ "${BASH_SOURCE[0]}" = "$0" ] || return 0\n:\n' > "$P/core/scripts/g.sh"
-printf '#!/usr/bin/env bash\n:\n' > "$P/core/scripts/u.sh"
-printf '#!/usr/bin/env bash\necho "[ \\"${BASH_SOURCE[0]}\\" = \\"$0\\" ] || return 0"\n' > "$P/core/scripts/d.sh"
-printf ':\n' > "$P/core/fixtures/und/run.sh"; printf 'probe: subject absent on a consumer\n' > "$P/core/fixtures/und/.undeclarable"
-Z='0 core/scripts/g.sh|0 core/scripts/u.sh|0 core/scripts/d.sh'
-mkf aok    "2 *|1 core/scripts/g.sh|0 core/scripts/u.sh|0 core/scripts/d.sh" 'cli core/scripts/g.sh a'
-mkf azero  "1 *|$Z" -
-mkf anew   "2 *|1 core/scripts/g.sh|0 core/scripts/u.sh|0 core/scripts/d.sh" -
-mkf aextra "3 *|2 core/scripts/g.sh|0 core/scripts/u.sh|0 core/scripts/d.sh" 'cli core/scripts/g.sh a'
-mkf ae2e   "3 *|2 core/scripts/g.sh|0 core/scripts/u.sh|0 core/scripts/d.sh" 'cli core/scripts/g.sh a|e2e core/scripts/g.sh b why=the wiring'
-mkf awhy   "3 *|2 core/scripts/g.sh|0 core/scripts/u.sh|0 core/scripts/d.sh" 'cli core/scripts/g.sh a|e2e core/scripts/g.sh b why= '
-mkf aunq   "2 *|0 core/scripts/g.sh|1 core/scripts/u.sh|0 core/scripts/d.sh" 'cli core/scripts/u.sh a'
-mkf adata  "2 *|0 core/scripts/g.sh|0 core/scripts/u.sh|1 core/scripts/d.sh" 'cli core/scripts/d.sh a'
-mkf aunqe  "2 *|0 core/scripts/g.sh|1 core/scripts/u.sh|0 core/scripts/d.sh" 'e2e core/scripts/u.sh a why=no guard needed end to end'
-mkf adup   "3 *|2 core/scripts/g.sh|0 core/scripts/u.sh|0 core/scripts/d.sh" 'cli core/scripts/g.sh a|cli core/scripts/g.sh a'
-mkf aheld  "3 *|2 core/scripts/g.sh|0 core/scripts/u.sh|0 core/scripts/d.sh" 'cli core/scripts/g.sh a'
-mkf anp    "3 *|1 core/scripts/g.sh|0 core/scripts/u.sh|0 core/scripts/d.sh|1 core/fixtures/anp/drv.sh" 'e2e core/fixtures/anp/drv.sh d why=the driver|nested core/fixtures/anp/drv.sh core/scripts/g.sh why=the driver loops'
-mkf anpq   "3 *|1 core/scripts/g.sh|1 core/scripts/u.sh|0 core/scripts/d.sh" 'cli core/scripts/g.sh a|nested core/scripts/g.sh core/scripts/u.sh why=g runs u'
-# P2 (D5, D6): the receipt seed, an unrouted source of the unguarded u.sh in a fixture NOT opted in (apin), FAILs with a
-# P2 row and its R row; the same seed in an ALLOWLISTED fixture (apheld) still prints its P2 row; the paired twin apinq
-# stays quiet.
-mkf apin   "1 *|$Z" -; printf '. "$d/core/scripts/u.sh"\n' > "$P/core/fixtures/apin/run.sh"
-mkf apheld "1 *|$Z" -; printf '. "$d/core/scripts/u.sh"\n' > "$P/core/fixtures/apheld/run.sh"
-mkf apinq  "1 *|$Z" -; printf 'fx_inproc u\n. "$d/core/scripts/u.sh"\n' > "$P/core/fixtures/apinq/run.sh"
-printf '# probe\naheld\tseeded\napheld\tseeded\n' > "$WORK/p-allow.txt"
-# THE P2 RATCHET's worlds, inside this same probe tree so they cost no extra join: P becomes a git repo. Commit A is the
-# base; commit M (origin/main) then adds an fx_inproc in rt8 and HEAD is reset to A, so the branch is BEHIND main and
-# its merge-base is A. The tip working tree then edits A. A whole-repo git call drops GIT_DIR and its siblings (pgit):
-# a pushing linked worktree exports GIT_DIR, and `git -C <probe repo>` would otherwise read the real repository.
-#   rt  a, b, c unpaired; the tip deletes c, moves and re-indents a, edits b into b2, adds n: NEW n and b2, OWED a.
-#   rt2 a paired drive whose fx_inproc the tip deletes: NEW.   rt3 the same, with `# fx_inproc u` left as a comment: NEW.
-#   rt4 `echo hi` inserted between the fx_inproc and its drive: NEW.   rt5 a new drive inserted between them takes
-#   the pairing and leaves the old one unpaired: NEW (the old one).   rt6 a paired drive deleted WITH its fx_inproc in a
-#   file holding an owed drive: the owed one stays OWED (no wedge).   rt7 a line becomes a drive with no text change
-#   because inputs.decl newly declares its subject (v.sh) `!`: NEW.   rt8 the branch is behind a main that paired its
-#   drive: OWED (the base is the merge-base A, not origin/main).
-pgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
-  git -c user.name=probe -c user.email=probe@invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null -c init.defaultBranch=main \
-  -c maintenance.auto=false "$@"; }
-printf '#!/usr/bin/env bash\n:\n' > "$P/core/scripts/v.sh"
-U1='. "$d/core/scripts/u.sh"'
-mkf rt "1 *|$Z" -; printf '%s\n' "$U1 a" "$U1 b" "$U1 c" > "$P/core/fixtures/rt/run.sh"
-for x in rt2 rt3 rt4 rt5; do mkf "$x" "1 *|$Z" -; printf '%s\n' 'fx_inproc u' "$U1 p" > "$P/core/fixtures/$x/run.sh"; done
-mkf rt6 "1 *|$Z" -; printf '%s\n' 'fx_inproc u' "$U1 p" "$U1 q" > "$P/core/fixtures/rt6/run.sh"
-mkf rt7 "1 *|$Z" -; printf '%s\n' '. "$d/core/scripts/v.sh" z' > "$P/core/fixtures/rt7/run.sh"
-mkf rt8 "1 *|$Z" -; printf '%s\n' "$U1 r" > "$P/core/fixtures/rt8/run.sh"
-# The SHARD worlds: families sh and shx each carry an owed drive at the base; the tip adds a NEW unpaired drive to sh, a
-# shard driver sh-b (M4's exact shape) and a near-miss shx-b, the same shape with one real command before the exec.
-mkf sh "1 *|$Z" -; printf '%s\n' "$U1 s" > "$P/core/fixtures/sh/run.sh"
-mkf shx "1 *|$Z" -; printf '%s\n' "$U1 s" > "$P/core/fixtures/shx/run.sh"
-p2_drv() { # <name> <family> <letter> [extra line]: an M4-shape shard driver in the probe tree
-  mkf "$1" "1 *|$Z" -
-  { printf '#!/usr/bin/env bash\nset -uo pipefail\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../%s/run.sh"\n' "$2"
-    printf '[ -f "$IMPL" ] || {\n  echo "FIXTURE ERROR: sibling not found" >&2\n  exit 2\n}\n'
-    [ -z "${4:-}" ] || printf '%s\n' "$4"
-    printf 'exec bash "$IMPL" --group %s\n' "$3"; } > "$P/core/fixtures/$1/run.sh"
-}
-rtok=0
-{ pgit -C "$P" init -q && pgit -C "$P" add -A && pgit -C "$P" commit -qm A \
-  && printf '%s\n' 'fx_inproc u' "$U1 r" > "$P/core/fixtures/rt8/run.sh" && pgit -C "$P" commit -qam M \
-  && pgit -C "$P" update-ref refs/remotes/origin/main HEAD && pgit -C "$P" reset -q --hard HEAD~1; } >/dev/null 2>&1 || rtok=1
-printf '%s\n' ':' ':' "  $U1   a" "$U1 n" "$U1 b2" > "$P/core/fixtures/rt/run.sh"
-printf '%s\n' ':' "$U1 p" > "$P/core/fixtures/rt2/run.sh"
-printf '%s\n' '# fx_inproc u' "$U1 p" > "$P/core/fixtures/rt3/run.sh"
-printf '%s\n' 'fx_inproc u' 'echo hi' "$U1 p" > "$P/core/fixtures/rt4/run.sh"
-printf '%s\n' 'fx_inproc u' "$U1 n" "$U1 p" > "$P/core/fixtures/rt5/run.sh"
-printf '%s\n' "$U1 q" > "$P/core/fixtures/rt6/run.sh"
-printf '!core/scripts/v.sh\n' >> "$P/core/fixtures/rt7/inputs.decl"; printf '0 core/scripts/v.sh\n' >> "$P/core/fixtures/rt7/invocations.decl"
-printf '%s\n' "$U1 s" "$U1 t" > "$P/core/fixtures/sh/run.sh"; p2_drv sh-b sh b; p2_drv shx-b shx b 'echo hi'
-pbok=0; p2_base "$P" "$WORK/pbase" pgit || pbok=1
-PBD=""; [ "$pbok" = 0 ] && PBD="$WORK/pbase"
-if judge_tree "$P" "$WORK/p" "$PBD"; then
-  p2_ratchet "$P" "$WORK/p" -
-  verdict "$P" "$WORK/p" "$WORK/p-allow.txt" > "$WORK/p.v"; pv=$?
-  P2W='the source of unguarded bash subject core/scripts/u.sh ($d/core/scripts/u.sh) -- an unrouted in-process pass: call fx_inproc <subject> on the line before it and declare the pass as an inproc: row'
-  want="$(printf '%s\n' \
-    'C2 adup:2: cell id a is declared twice (first at line 1)' \
-    'C4 awhy:2: an empty why= on an e2e row' \
-    'C5 adata:1: cli subject core/scripts/d.sh carries no column-0 BASH_SOURCE source guard statement' \
-    'C5 aunq:1: cli subject core/scripts/u.sh carries no column-0 BASH_SOURCE source guard statement' \
-    'NP anp:2: the nested row'"'"'s parent core/fixtures/anp/drv.sh lies under core/fixtures/ -- a fixture-local driver would cover any number of starts of core/scripts/g.sh; a nested parent must be shipped code' \
-    "P2 apheld:apheld/run.sh:1: $P2W" \
-    "P2 apin:apin/run.sh:1: $P2W" \
-    "P2 rt2:rt2/run.sh:2: $P2W" \
-    "P2 rt3:rt3/run.sh:2: $P2W" \
-    "P2 rt4:rt4/run.sh:3: $P2W" \
-    "P2 rt5:rt5/run.sh:3: $P2W" \
-    "P2 rt6:rt6/run.sh:1: $P2W" \
-    "P2 rt7:rt7/run.sh:1: ${P2W//u.sh/v.sh}" \
-    "P2 rt8:rt8/run.sh:1: $P2W" \
-    "P2 rt:rt/run.sh:3: $P2W" \
-    "P2 rt:rt/run.sh:4: $P2W" \
-    "P2 rt:rt/run.sh:5: $P2W" \
-    "P2 sh-b:sh/run.sh:1: $P2W" \
-    "P2 sh-b:sh/run.sh:2: $P2W" \
-    "P2 sh:sh/run.sh:1: $P2W" \
-    "P2 sh:sh/run.sh:2: $P2W" \
-    "P2 shx-b:shx/run.sh:1: $P2W" \
-    "P2 shx:shx/run.sh:1: $P2W" \
-    'R adata: static finding(s) above' \
-    'R adup: core/scripts/g.sh declares 2 start(s) against 1 cell(s)' \
-    'R aextra: core/scripts/g.sh declares 2 start(s) against 1 cell(s)' \
-    'R anew: core/scripts/g.sh declares 1 start(s) against 0 cell(s)' \
-    'R aunq: static finding(s) above' \
-    'R awhy: core/scripts/g.sh declares 2 start(s) against 1 cell(s)')"
-  if [ "$pv" = 1 ] && [ "$(cat "$WORK/p.v")" = "$want" ]; then
-    spl ok "FIRES: a subject start with no cells.decl (anew), an extra start (aextra), a duplicate id (adup), an empty why= (awhy), an unguarded cli subject (aunq), a guard token inside a data string (adata), a nested row whose parent is a fixture-local driver (anp, NP), an unrouted in-process drive in a fixture not opted in (apin, P2) and the same drive in an allowlisted fixture (apheld, P2 printed allowlisted or not); QUIET: the fixed twins aok, azero, ae2e, aunqe (an e2e row needs no guard), a nested row whose parent is shipped core/scripts/g.sh (anpq), the paired drive apinq and the allowlisted aheld"
-  else spl FAIL "the probe verdict (rc $pv) was: $(tr '\n' '|' < "$WORK/p.v"), want: $(printf '%s' "$want" | tr '\n' '|')"; fi
-  grep -qxF 'EXEMPT (undeclarable) und' "$WORK/p.census" && grep -qxF 'O	und	undeclarable' "$WORK/p.join" \
-    && spl ok "EXEMPT (undeclarable) printed from the B2 census, and the join holds it out of population" || spl FAIL "the undeclarable probe fixture's EXEMPT line"
-  derive_rows "$WORK/p" > "$WORK/p.d1"; derive_rows "$WORK/p" > "$WORK/p.d2"
-  if cmp -s "$WORK/p.d1" "$WORK/p.d2" && [ "$(cut -f1 "$WORK/p.d1" | tr '\n' ' ')" = "adata adup aextra aheld anew aunq awhy " ] \
-      && [ "$(awk -F'\t' '$1 == "anew" { print $2 }' "$WORK/p.d1")" = "core/scripts/g.sh runs outside a declared cell" ]; then
-    spl ok "--derive lists exactly the refused set (aheld included, its row derived rather than typed), twice byte-identical"
-  else spl FAIL "--derive listed [$(cut -f1 "$WORK/p.d1" | tr '\n' ' ')]"; fi
-  printf '# probe\naheld\tseeded\naheld\tagain\nazap\tgone\naok\t \n' > "$WORK/p-allow2.txt"
-  verdict "$P" "$WORK/p" "$WORK/p-allow2.txt" > "$WORK/p.v2"
-  grep -qxF 'A DUP aheld' "$WORK/p.v2" && grep -qxF 'A NOFIXTURE azap' "$WORK/p.v2" && grep -qxF 'A NOREASON aok' "$WORK/p.v2" && ! grep -q 'A .* aheld$' <(grep -v DUP "$WORK/p.v2") \
-    && spl ok "the allowlist: a duplicate row, a row naming no fixture and a row with a blank reason FIRE; the well-formed aheld row does not" || spl FAIL "allowlist shape: $(tr '\n' '|' < "$WORK/p.v2")"
-else
-  spl FAIL "the probe tree could not be joined (rc $?): $(head -c 300 "$WORK/p.join.err" 2>/dev/null)"
-fi
-# scanned == listed: a join that skipped a fixture is REFUSED, never clean.
-printf '1\n' > "$WORK/n.listed"; printf 'F\taok\nF\tazero\n' > "$WORK/n.join"; : > "$WORK/n.census"
-verdict "$P" "$WORK/n" /dev/null > "$WORK/n.v"; nv=$?
-[ "$nv" = 2 ] && grep -qF 'REFUSED N: listed 1 run.sh, the join scanned 2' "$WORK/n.v" && spl ok "N: a scanned count unequal to the listed count is REFUSED" || spl FAIL "N: rc $nv"
-mkdir -p "$WORK/empty/core/fixtures/x"
-judge_tree "$WORK/empty" "$WORK/e"; [ $? = 3 ] && spl ok "N: zero run.sh listed is REFUSED before any join" || spl FAIL "N: an empty corpus was not refused"
-# COST, with GIT_DIR unset (`--complete`, same-tree swap at 3f3b99ae1, two agreeing runs per side): bash starts 5 -> 5,
-# git processes 35 -> 14 (under the M4 probe repos 30 -> 11, two auto-maintenance children 2 -> 0); output byte-identical.
-# M4's six cases on THIS list, through the shared m4 with this file's rel, arm and remedy. The scratch repos come from
-# the shared m4_probe_repo (one fast-import each). A case with a repo runs the whole of m4 with the corpus call's own
-# arguments (once per origin/main state: added, nofile, noorigin); a case with - runs m4cmp alone over the base the
-# `added` case wrote. The remedy check reads the `added` case's own whole-m4 output, so m4's hand-off of this file's
-# remedy to m4cmp is what it reads. A whole-m4 case drops GIT_DIR and its siblings, as validate-fixture-hygiene.sh's
-# M4 cases do: a pushing linked worktree exports GIT_DIR, and `git -C <probe repo>` then reads the real repository.
 # THE SHARD NARROWING of M4 (header above). m4sf <git repo> <fixture root> <current list> <out list> writes the current
 # list minus every row that qualifies, and m4 then judges the OUT list. It filters only; a row that does not qualify
 # stays in the list and m4 refuses it as before.
@@ -445,98 +292,6 @@ m4sf() {
   rm -f "$base" "$names"
   return 0
 }
-R="$WORK/m4-base"; RN="$WORK/m4-nofile"; RX="$WORK/m4-noorigin"
-{ m4_probe_repo "$R" "$ALLOW_REL" $'# base\na\tr1\nb\tr2\n' && m4_probe_repo "$RN" other $'x\n' && m4_probe_repo "$RX"; } >/dev/null 2>&1 \
-  || { echo "validate-fixture-inprocess: REFUSED -- could not build the M4 probe repos" >&2; exit 2; }
-M4GOT=""
-m4c() { # <label> <repo | -> <want rc> <want first line> <rows...>
-  local lab="$1" repo="$2" wrc="$3" want="$4" got rc; shift 4
-  printf '# probe list\n' > "$WORK/m4-cur.txt"; printf '%s\n' "$@" >> "$WORK/m4-cur.txt"
-  if [ "$repo" = - ]; then got="$(m4cmp "$WORK/m4-cur.txt" "$WORK/m4-b.added.txt" "$ALLOW_REL" M4 "$M4_REMEDY" fixture)"; rc=$?
-  else got="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
-              m4 "$repo" "$WORK/m4-cur.txt" "$WORK/m4-b.$lab.txt" "$ALLOW_REL" M4 "$M4_REMEDY")"; rc=$?; fi
-  M4GOT="$got"
-  [ "$rc" = "$wrc" ] && [ "$(printf '%s\n' "$got" | head -1)" = "$want" ] && return 0
-  spl FAIL "M4 case $lab: rc $rc, want $wrc: $(printf '%s' "$got" | head -2 | tr '\n' ' ')"; return 1
-}
-M4F="FAIL M4: allowlist row(s) whose fixture is not on $ALLOW_REL at origin/main -- the list is DOWN-ONLY:"
-M4O="OK M4: no allowlist row added against origin/main"
-m4ok=0
-m4c added "$R" 1 "$M4F" "$(printf 'a\tr1')" "$(printf 'b\tr2')" "$(printf 'c\tr3')" || m4ok=1
-grep -qxF "  Remedy: $M4_REMEDY" <<<"$M4GOT" || { spl FAIL "M4 the added-row failure does not carry this list's remedy"; m4ok=1; }
-m4c swap - 1 "$M4F" "$(printf 'a\tr1')" "$(printf 'c\tr3')" || m4ok=1
-m4c shrink - 0 "$M4O" "$(printf 'a\tr1')" || m4ok=1
-m4c reworded - 0 "$M4O" "$(printf 'a\tother words')" "$(printf 'b\tr2')" || m4ok=1
-m4c nofile "$RN" 0 "SKIP M4: origin/main carries no $ALLOW_REL -- this is the release that first ships it" "$(printf 'c\tr')" || m4ok=1
-m4c noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there is no base allowlist to compare against" "$(printf 'c\tr')" || m4ok=1
-[ "$m4ok" = 0 ] && spl ok "M4 on $ALLOW_REL: added and swapped rows refused with this list's remedy; shrink and a reworded reason pass; both no-base states SKIP"
-# M4's SHARD NARROWING, in both directions and one mutant per condition, in mktemp. The base list holds the family `fam`
-# and `other`; the fixture root holds drivers built from the shipped shape. A case runs m4sf then the whole m4.
-SFX="$WORK/sf-fx"; SFR="$WORK/sf-base-repo"
-sf_drv() { # <name> <family> <letter> [extra line]: writes core/fixtures/<name>/run.sh
-  mkdir -p "$SFX/core/fixtures/$1"
-  { printf '#!/usr/bin/env bash\n# shard driver\nset -uo pipefail\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../%s/run.sh"\n' "$2"
-    printf '[ -f "$IMPL" ] || {\n  echo "FIXTURE ERROR: sibling not found -- shard has nothing to run" >&2\n  exit 2\n}\n'
-    [ -z "${4:-}" ] || printf '%s\n' "$4"
-    printf 'exec bash "$IMPL" --group %s\n' "$3"; } > "$SFX/core/fixtures/$1/run.sh"
-}
-sf_drv fam-b fam b; sf_drv fam-c fam c "rm -rf /"; sf_drv nofam-b nofam b; sf_drv fam-d fam c; sf_drv gone-b gone b
-m4_probe_repo "$SFR" "$ALLOW_REL" $'# base\nfam\tr1\nother\tr2\ngone\tr3\n' >/dev/null 2>&1 || { echo "validate-fixture-inprocess: REFUSED -- could not build the shard-narrowing probe repo" >&2; exit 2; }
-sf_case() { # <cur rows...> -> prints m4's rc and its refused names over the narrowed list, as `rc:a,b`
-  local o rc
-  printf '# probe list\n' > "$WORK/sf-cur.txt"; printf '%s\n' "$@" >> "$WORK/sf-cur.txt"
-  o="$( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
-        m4sf "$SFR" "$SFX" "$WORK/sf-cur.txt" "$WORK/sf-out.txt" || exit 2
-        m4 "$SFR" "$WORK/sf-out.txt" "$WORK/sf-b.txt" "$ALLOW_REL" M4 "$M4_REMEDY"; echo "rc=$?" )"
-  rc="${o##*rc=}"
-  printf '%s:%s\n' "$rc" "$(printf '%s\n' "$o" | sed -n 's/^    //p' | tr '\n' ',' | sed 's/,$//')"
-}
-sf_matrix() { # the five cases in order: pass, real body, unlisted family, family row dropped, wrong letter
-  local a=$'\t'
-  printf '%s ' "$(sf_case "fam${a}r1" "other${a}r2" "fam-b${a}x")" "$(sf_case "fam${a}r1" "other${a}r2" "fam-c${a}x")" \
-    "$(sf_case "fam${a}r1" "other${a}r2" "nofam${a}r" "nofam-b${a}x")" "$(sf_case "other${a}r2" "gone-b${a}x")" "$(sf_case "fam${a}r1" "other${a}r2" "fam-d${a}x")"
-  echo
-}
-sfok=0
-SFW="0: 1:fam-c 1:nofam,nofam-b 1:gone-b 1:fam-d "
-[ "$(sf_matrix)" = "$SFW" ] || { spl FAIL "M4 shard narrowing: want [$SFW], got [$(sf_matrix)]"; sfok=1; }
-[ "$( sf_famlisted() { return 0; }; sf_matrix)" = "0: 1:fam-c 1:nofam 1:gone-b 1:fam-d " ] || { spl FAIL "M4 shard narrowing: the unlisted-family mutant (condition 1) was not killed"; sfok=1; }
-[ "$( sf_driver() { return 0; }; sf_matrix)" = "0: 0: 1:nofam,nofam-b 1:gone-b 0: " ] || { spl FAIL "M4 shard narrowing: the real-body mutant (condition 2) was not killed"; sfok=1; }
-[ "$( sf_famrow() { return 0; }; sf_matrix)" = "0: 1:fam-c 1:nofam,nofam-b 0: 1:fam-d " ] || { spl FAIL "M4 shard narrowing: the family-row-dropped mutant (condition 3) was not killed: [$( sf_famrow() { return 0; }; sf_matrix)]"; sfok=1; }
-# A tree with NO current allowlist (a fixture world) reads as an empty list: m4sf returns 0 and writes an empty out list.
-rm -f "$WORK/sf-none.txt" "$WORK/sf-none.out"
-( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY; m4sf "$SFR" "$SFX" "$WORK/sf-none.txt" "$WORK/sf-none.out" ) 2> "$WORK/sf-none.err"; sfn=$?
-[ "$sfn" = 0 ] && [ -f "$WORK/sf-none.out" ] && [ ! -s "$WORK/sf-none.out" ] && [ ! -s "$WORK/sf-none.err" ] \
-  || { spl FAIL "M4 shard narrowing: an absent current allowlist gave rc $sfn: $(head -c 200 "$WORK/sf-none.err")"; sfok=1; }
-[ "$sfok" = 0 ] && spl ok "M4 shard narrowing: an absent current list reads as empty; a shard driver of a listed family passes; a real body, an unlisted family, a dropped family row and a wrong letter are refused; each condition forced true flips exactly its own cases"
-# THE P2 RATCHET in ONE run, over the probe tree's own join and its scanned merge-base (the rt worlds above). Then the
-# same rows with no push base are REFUSED (rc 2), never acquitted, and p2_base reports no base once origin/main is gone.
-if [ "$rtok" = 0 ] && [ "$pbok" = 0 ] && [ -f "$WORK/p.join" ]; then
-  p2_ratchet "$P" "$WORK/p" base > "$WORK/rt.msg" 2>&1; rr=$?
-  got="$(awk -F'\t' '$2 ~ /^rt[0-9]?$/' "$WORK/p.p2cls" | LC_ALL=C sort | tr '\t\n' ' |')"
-  wnt="NEW rt rt/run.sh:4|NEW rt rt/run.sh:5|NEW rt2 rt2/run.sh:2|NEW rt3 rt3/run.sh:2|NEW rt4 rt4/run.sh:3|NEW rt5 rt5/run.sh:3|NEW rt7 rt7/run.sh:1|OWED rt rt/run.sh:3|OWED rt6 rt6/run.sh:1|OWED rt8 rt8/run.sh:1|"
-  [ "$rr" = 0 ] && [ "$got" = "$wnt" ] \
-    && spl ok "P2 RATCHET: NEW an added drive, an edited owed one, a deleted fx_inproc, one left as a comment, an echo between, a new drive taking the pairing, a subject newly declared; OWED a moved re-indented one, an owed drive beside a paired drive deleted with its fx_inproc, and one a later main paired (base = merge-base); a pure deletion prints nothing" \
-    || spl FAIL "P2 RATCHET: rc $rr, classified [$got], want [$wnt]"
-  # THE SHARD RULE: sh-b (an M4 shard driver) is judged under its family sh, whose owed drive stays OWED and whose new
-  # drive stays NEW in both; the near-miss shx-b is not a driver, so its scan of shx's owed drive reads NEW. Mutants:
-  # sf_driver forced false turns sh-b's owed row NEW; forced true acquits shx-b.
-  sh_cls() { p2_ratchet "$P" "$WORK/p" base > /dev/null 2>&1; awk -F'\t' '$2 ~ /^shx?(-b)?$/' "$WORK/p.p2cls" | LC_ALL=C sort | tr '\t\n' ' |'; }
-  shw="NEW sh sh/run.sh:2|NEW sh-b sh/run.sh:2|NEW shx-b shx/run.sh:1|OWED sh sh/run.sh:1|OWED sh-b sh/run.sh:1|OWED shx shx/run.sh:1|"
-  shg="$(sh_cls)"; shf="$( sf_driver() { return 1; }; sh_cls)"; sht="$( sf_driver() { return 0; }; sh_cls)"
-  [ "$shg" = "$shw" ] && [ "$shf" != "$shw" ] && case "$shf" in *"NEW sh-b sh/run.sh:1"*) true ;; *) false ;; esac \
-    && [ "$sht" != "$shw" ] && case "$sht" in *"OWED shx-b shx/run.sh:1"*) true ;; *) false ;; esac \
-    && spl ok "P2 RATCHET shard rule: a shard driver reads its family's OWED baseline and a drive new in the family reads NEW in both; a near-miss non-driver shard reads NEW; sf_driver forced false and forced true are each killed" \
-    || spl FAIL "P2 RATCHET shard rule: got [$shg] want [$shw]; sf_driver false [$shf]; sf_driver true [$sht]"
-  p2_ratchet "$P" "$WORK/p" base > /dev/null 2>&1
-  awk -F'\t' '$1 != "BASEROOT" && $1 != "B"' "$WORK/p.join" > "$WORK/nb.join"
-  p2_ratchet "$P" "$WORK/nb" base > "$WORK/rt.msg" 2>&1; rr=$?
-  pgit -C "$P" update-ref -d refs/remotes/origin/main >/dev/null 2>&1
-  p2_base "$P" "$WORK/pbase2" pgit; pb2=$?
-  [ "$rr" = 2 ] && grep -qF 'REFUSED P2 ratchet' "$WORK/rt.msg" && [ "$pb2" = 1 ] \
-    && spl ok "P2 RATCHET: with no push base the same rows are REFUSED (rc 2), never acquitted, and p2_base reports none once origin/main is gone" || spl FAIL "P2 RATCHET: no base gave rc $rr, p2_base rc $pb2"
-else spl FAIL "P2 RATCHET: the probe tree could not be committed or its base materialised (rc $rtok, base $pbok)"; fi
-if [ "$SP_RED" != 0 ]; then echo "validate-fixture-inprocess: REFUSED -- the self-probe is red, so a verdict over the tree is unattributable" >&2; exit 2; fi
 
 # --- the corpus -----------------------------------------------------------------------------------------------------
 CBASE=""; p2_base "$ROOT" "$WORK/cbase" git && CBASE="$WORK/cbase"
@@ -589,5 +344,5 @@ if [ "$MODE" = complete ]; then
   if [ "$nsc" -eq 0 ]; then echo "  INCOMPLETE  zero fixtures scanned"; rc=1
   elif [ "$nal" -gt 0 ]; then echo "  INCOMPLETE  $nal allowlist row(s) remain in $ALLOW_REL"; rc=1; fi
 fi
-[ "$rc" = 0 ] && echo "OK: validate-fixture-inprocess -- self-probe fired both ways; $nsc fixture(s) scanned; no static finding; no unlisted refusal; the allowlist is down-only"
+[ "$rc" = 0 ] && echo "OK: validate-fixture-inprocess -- $nsc fixture(s) scanned; no static finding; no unlisted refusal; the allowlist is down-only"
 exit "$rc"

@@ -517,7 +517,24 @@
 #       aab2ddf4a and s317 2.7 at 96345d422 (each DAR sits in the dev report, not the story; 2.7
 #       was re-ruled a true positive by the lead because its dev report carries a dev-written
 #       `## 8. Dev Agent Record`). FALSE-POSITIVE SET: 0 of 141.
-#   Not checked, deliberately: an empty evidence heading (operator ruling, batch 230).
+#   (r) SECTION-EMPTY (WARN, never a refusal, exit unchanged). The operator lifted the batch-230
+#       "empty evidence headings: no arm" ruling for a warning arm only; a refusal is not authorized.
+#       Run in the same heading-demoted pass as (p), on the story at <frozen>: `WARN section-empty
+#       <story>: the '## <h>' section has no content` for `## Production Integrity Tests` and `## Smoke
+#       Test Updates` when the section sits at level 2 and, read to the next level-1 or level-2
+#       heading outside a fence, holds no content line. EMPTY is (p)'s content grammar (the lines
+#       listed above are not content; a line inside a code fence is) plus one placeholder rule for
+#       these two sections only: a line whose text, list marker and `*_()` stripped, opens `to be
+#       populated` or `to be filled` (graph s322 story 4's `(to be filled by the dev: ...)`, which
+#       (p)'s grammar reads as content because of its trailing text). An absent section is not this
+#       arm's subject. `none: <reason>` is content.
+#       MEASURED, read-only clone, every s317-s322 code-review and QA pass whose reviewed-sha
+#       resolves and names a story: 375 states (42 excluded, unmeasured: 15 record no sha, 27 name
+#       no story file, fix-forward or sprint-review keys). 18 fires over 16 story states; the DAR and
+#       heading verdicts are byte-identical to the previous script on all 375. 10 fires are gate-1
+#       code-review passes; 8 are QA passes: 6 QA-rejected on this ground (s317 1-4, 4-2a; s320 1-3,
+#       2-1, 3-5; s322 4), 2 QA-accepted (s317 1-6 evidence-only, s317 2-7 docs-only). Those 2 are the false-positive set
+#       against QA's own verdict; the narrowing that keeps them from blocking is the WARN tier.
 #
 # MEASURED, bookkeeping arms. Reference consumer, read-only clone, at every gate-1 code-review
 # pass's `reviewed-sha:` over s317/s318 (56 passes) plus, for the 7 passes that record none, the
@@ -1828,7 +1845,7 @@ if tracked "$FROZEN" "$STORY"; then
       if ($0 ~ /^[ \t]*```/) m = "```"
       else if ($0 ~ /^[ \t]*~~~/) m = "~~~"
       if (fence == "" && m != "") { fence = m; next }
-      if (fence != "") { if (m == fence) { fence = ""; darn += fb; fb = 0; next } fl = 1 }
+      if (fence != "") { if (m == fence) { fence = ""; n[ind] += fb; fb = 0; next } fl = 1 }
     }
     !fl {
       for (i = 1; i <= 4; i++) {
@@ -1843,7 +1860,7 @@ if tracked "$FROZEN" "$STORY"; then
     # line left after HTML comments are cut, except a table separator, a table header (the row a
     # separator follows), a table row whose every cell after the first is blank, and a dar_ph line.
     # A line inside a code fence in the section is content unless dar_ph; comments are not cut there.
-    # Fenced lines are BUFFERED in fb and added to darn only when the fence closes; a fence still open
+    # Fenced lines are BUFFERED in fb and added to the section count n[ind] only when the fence closes; a fence still open
     # at EOF drops its buffer, so an unclosed fence no longer turns the rest of the file into content.
     # Heading detection is unchanged: a heading inside any fence, closed or not, is never a section
     # heading (graph fences hold `#` lines, 21 at HEAD, so "a heading ends the fence" was rejected).
@@ -1863,23 +1880,25 @@ if tracked "$FROZEN" "$STORY"; then
     {
       t = $0; sub(/\r$/, "", t)
       if (fl) { if (ind && !dar_ph(t)) fb++; next }
-      if (ev_level(t, "Dev Agent Record") == 2) { dar = 1; ind = 1; com = 0; lastrow = 0; next }
-      if (ind && t ~ /^##?[ \t]/) ind = 0
-      if (!ind) next
+      if (ev_level(t, "Dev Agent Record") == 2) { dar = 1; ind = "D"; com = 0; lastrow = 0; next }
+      if (ev_level(t, H[1]) == 2 || ev_level(t, H[2]) == 2) { ind = (ev_level(t, H[1]) == 2) ? 1 : 2; sec[ind] = 1; com = 0; lastrow = 0; next }
+      if (ind != "" && t ~ /^##?[ \t]/) ind = ""
+      if (ind == "") next
       if (com) { if (!index(t, "-->")) next; com = 0; sub(/^.*-->/, "", t) }
       gsub(/<!--.*-->/, "", t)
       if (index(t, "<!--")) { com = 1; sub(/<!--.*/, "", t) }
       gsub(/^[ \t]+|[ \t]+$/, "", t)
       if (t == "") next
-      if (t ~ /^\|?[ \t:|-]+\|?$/ && t ~ /-/) { if (lastrow) darn--; lastrow = 0; next }
+      if (t ~ /^\|?[ \t:|-]+\|?$/ && t ~ /-/) { if (lastrow) n[ind]--; lastrow = 0; next }
       if (t ~ /^\|/) {
         r = t; sub(/^\|/, "", r); sub(/\|$/, "", r); k = split(r, c, "|"); full = (k < 2)
         for (i = 2; i <= k; i++) { x = c[i]; gsub(/[ \t*_`]/, "", x); if (x != "") full = 1 }
-        lastrow = full; darn += full; next
+        lastrow = full; n[ind] += full; next
       }
       lastrow = 0
       if (dar_ph(t)) next
-      darn++
+      if (ind != "D") { p = tolower(t); gsub(/[*_()]/, "", p); sub(/^[ \t]*([-+*]|[0-9]+\.)?[ \t]*/, "", p); if (p ~ /^to be (populated|filled)/) next }
+      n[ind]++
     }
     BEGIN { H[1] = "Production Integrity Tests"; H[2] = "Smoke Test Updates"; H[3] = "Rename Verification"; H[4] = "Strategy Test IDs" }
     END {
@@ -1887,7 +1906,8 @@ if tracked "$FROZEN" "$STORY"; then
         if (!two[i] && deep[i]) print "deeper\t" H[i]
         if (!two[i] && one[i]) print "level1\t" H[i]
       }
-      if (!dar) print "dar\tabsent"; else if (darn <= 0) print "dar\tempty"
+      if (!dar) print "dar\tabsent"; else if (n["D"] <= 0) print "dar\tempty"
+      for (i = 1; i <= 2; i++) if (sec[i] && n[i] <= 0) print "empty\t" H[i]
     }')"
   if [ -n "$demoted" ]; then
     while IFS="$(printf '\t')" read -r how h; do
@@ -1896,6 +1916,8 @@ if tracked "$FROZEN" "$STORY"; then
         level1) refuse "heading-demoted $STORY: '## $h' appears only at level 1 ('# $h') at ${FROZEN:0:12}; write it as '## $h'" ;;
         # (p) DAR-MISSING: a refusal (header: HANDOFF MODE (p)).
         dar) refuse "dar-missing $STORY: the '## Dev Agent Record' section is $h at ${FROZEN:0:12} (comments, blank table rows, subheadings, labels with no value and template placeholders are not content; a filled line inside a code fence is); the dev populates it in the story file before the handoff (dev.md step 8); for a lead-executed story the lead writes a one-line DAR carrying 'lead (self-executed', which validate-mandatory-rules.sh Check 6 then fails unless docs/escalations/pending.md has a DECIDED_AUTONOMOUSLY or HARD_BLOCK entry naming the story" ;;
+        # (r) SECTION-EMPTY: a WARN, never a refusal; the exit is unchanged (header: HANDOFF MODE (r)).
+        empty) warn "section-empty $STORY: the '## $h' section has no content at ${FROZEN:0:12} (the Dev Agent Record content grammar: comments, blank table rows, bare subheadings, labels with no value and template placeholders such as 'To be filled by the dev' are not content); fill it before the handoff, or write 'none: <reason>' (dev.md, QA Handoff Evidence: an empty heading at handoff is an unfinished story)" ;;
       esac
     done <<<"$demoted"
   fi

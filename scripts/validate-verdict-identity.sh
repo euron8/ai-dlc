@@ -7,13 +7,9 @@
 # dropped) has exactly one pin row, `# VS-IDENTITY <format> <sha> <reason>`. A hook passes when the row of its
 # current sha names its one READSET_VS_FORMAT line and carries a reason, and no sha has two rows.
 #
-# SELF-PROBE FIRST, on two copies of .githooks/pre-push: a code line added inside READSET_KEYROWS must fail the
-# identity, a comment line must not.
-#
 # Arm W1 (below the identity check) holds every verdict-store and pass-record writer site to a reviewed row.
 #
-# Exit: 0 every pre-push hook passes and W1 holds; 1 a hook fails, W1 fails, or the self-probe shows the check cannot
-# fire; 2 no hook.
+# Exit: 0 every pre-push hook passes and W1 holds; 1 a hook fails or W1 fails; 2 no hook.
 # `--sha <hook>` prints that hook's semantic sha and exits 0.
 set -u
 
@@ -36,13 +32,6 @@ if [ "${1:-}" = --sha ]; then [ -f "${2:-}" ] || exit 2; vi_sha "$2"; exit 0; fi
 
 [ -f .githooks/pre-push ] || { printf '   no .githooks/pre-push under %s\n' "$PWD"; exit 2; }
 rc=0
-t="$(mktemp -d "${TMPDIR:-/tmp}/vi.XXXXXX")" || exit 2
-trap 'rm -rf "$t"' EXIT
-awk '{ print } $0 == "# READSET_KEYROWS_BEGIN" { print ":" }' .githooks/pre-push > "$t/code"
-awk '{ print } $0 == "# READSET_KEYROWS_BEGIN" { print "# a comment" }' .githooks/pre-push > "$t/comment"
-if cmp -s .githooks/pre-push "$t/code"; then printf '   self-probe: the code edit did not apply (no READSET_KEYROWS_BEGIN line)\n'; rc=1
-elif vi_ok "$t/code"; then printf '   self-probe: a code line inside READSET_KEYROWS kept the identity, so this check cannot fire\n'; rc=1; fi
-if vi_ok .githooks/pre-push && ! vi_ok "$t/comment"; then printf '   self-probe: a comment line inside READSET_KEYROWS failed the identity\n'; rc=1; fi
 for h in .githooks/pre-push core/git-hooks/pre-push; do
   [ -f "$h" ] || continue
   vi_ok "$h" && continue
@@ -59,6 +48,8 @@ done
 # Row: `# VS-WRITER <class> <path> <normalized text>`. Classes: `shared` (resolves to the shared base or its counted-<vk>),
 # `probe` (a self-probe world's synthetic verdicts), `not-a-pass` (a per-clone record that holds no pass), or the open
 # BL-<n> that owes the site's move into the shared content-keyed base.
+t="$(mktemp -d "${TMPDIR:-/tmp}/vi.XXXXXX")" || exit 2
+trap 'rm -rf "$t"' EXIT
 vw_t="$t/vw"; mkdir -p "$vw_t" || exit 2
 git ls-files -z -- '.githooks/*' 'core/git-hooks/*' 'core/*.sh' 'scripts/*.sh' ':(exclude)core/fixtures/*' > "$vw_t/files" || exit 2
 vw_nf="$(tr '\0' '\n' < "$vw_t/files" | grep -c .)" || vw_nf=0

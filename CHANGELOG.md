@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1134.0] - 2026-11-15
+
+### BL-1102 PARTIAL: validators no longer re-prove on every run that their arms can fire
+
+The per-invocation seeded self-probe is deleted from 19 validators: 18 ran it on every default invocation, and `scripts/validate-fixture-invocations.sh` ran it from its `--b2-census` path. The seams that existed only to skip a probe go with it (`--probe-from-caller`, `BR_PROBE_RECORD`, `--probe-seeds`, `--probe-world`, `validate-write-format-steering --self-probe`). Probes that check data read at run time stay. Nineteen stale S15 rows leave `scripts/presuite-metadata-allowlist.txt`, three `backlog-real-ledger` rows leave `docs/inputs-decl-whole-rows.tsv`, and `.claude/rules/verification-discipline.md` states that an arm is proved to fire once, by hand, at authoring. Eight shipped `core/scripts` validators and a comment in `core/hooks/ai-dlc-foreground-budget.sh` change. The enforcement-map, fixture-hygiene and pre-push probes remain owed.
+
+### BL-397 PARTIAL, BL-809, BL-846 and BL-847 progress: `validate-handoff-evidence.sh` warns on an empty evidence section
+
+Handoff mode gains arm (r) SECTION-EMPTY, a WARN that never changes the exit: `WARN section-empty <story>` when `## Production Integrity Tests` or `## Smoke Test Updates` sits at level 2 with no content line before the next level-1 or level-2 heading. The `story-evidence-receipts` fixture gains five offender and five near-miss cells. BL-397 stays PARTIAL; BL-809, BL-846 and BL-847 record that their remainder is consumer-side or the operator's.
+
+### BL-584 progress: no sandbox drop across B9's push
+
+The capture across the 0.1133.0 push read 6,480 sandbox log lines and 0 drop notices, with `#discards` unchanged. Owed (3) still needs a capture at the load the loss was recorded at. The entry stays PARTIAL.
+
 ## [0.1133.0] - 2026-11-15
 
 ### BL-1044 CLOSED and BL-1105 CLOSED: wait-stale-deliverable's waits end when their root vanishes; four stale tools.decl rows dropped

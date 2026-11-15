@@ -1,3 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 # Re-measured after BL-913 added core/scripts/gate-transition.sh: +5, all of them that script (the two layouts, the wrong-root mutant, and the WRONG REPO clean and poisoned runs).
-343 *
+# BL-1102: 343 -> 328. validate-artifact-budget.sh's late-dispatch self-probe, gone, started its sibling
+# wait-for-deliverable.sh 3 times per bare run; the script runs 5 times here (two layouts, the wrong root, and
+# the clean and poisoned wrong-repo runs). Measured by the push gate's counted run.
+328 *

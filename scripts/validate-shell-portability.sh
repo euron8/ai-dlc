@@ -37,7 +37,7 @@
 # here than in an interactive shell, and must be probed under this file's locale, not yours.
 #
 # Because the finding set is empty, `core/fixtures/shell-portability/` is the ONLY evidence
-# any of these arms works. Every arm self-probes before it touches the corpus.
+# any of these arms works.
 #
 # Usage: validate-shell-portability.sh [--quiet]
 # Exit:  0 = clean, 1 = at least one finding, 2 = usage/environment.
@@ -236,8 +236,8 @@ S8_WHY="a git rev-path in shipped instruction text whose ref placeholder is not 
 # bash script where the form works -- fixture seeds and `reconcile/emit-report.sh:726` -- and
 # 0 lines in the non-`.sh` files. A `.sh` subject is run by bash; a `.md` subject is retyped by a
 # model or an operator into whatever shell they hold, and on this machine that is zsh. The
-# subtraction is a CORPUS rather than a SKIP because the self-probe below is `bad.sh`/`good.sh`:
-# a skip keyed on `\.sh:` would subtract the probe's own offender and the arm could never fire.
+# subtraction is a CORPUS rather than a SKIP: a skip keyed on `\.sh:` would subtract every shell
+# offender and the arm could never fire.
 #
 # FALSE-POSITIVE SET: EMPTY over the `doc` corpus, after two narrowings measured on it:
 #   1. THE CHARACTER AFTER THE COLON MUST BE A MODIFIER LETTER. A loose `\$NAME:` form finds 2
@@ -878,10 +878,7 @@ FNR == 1 { reset() }
 # file once, at the first heredoc opener whose lexer state is inside a `$(`), then one `-n` per
 # selected file. The selector is S13's lexer and not a regex because a regex keyed on the opener's
 # LINE misses the multi-line spelling (`"$(` on one line, `cat <<X` on the next), and a looser
-# "opener and `$(` anywhere in the file" regex selects 292 of 604 files. The selector self-probes
-# below in both directions on its own seed set (`$(cat<<X`, `$( cat <<-'X'`, a nested
-# `$(echo "$(cat <<X`, the opener on the line after a multi-line `"$(`; quiet on a heredoc outside
-# any `$(`, a function-held one and a backtick one). The selector has TWO keys, and the second
+# "opener and `$(` anywhere in the file" regex selects 292 of 604 files. The selector has TWO keys, and the second
 # exists because the first alone failed its false-negative measurement: against the 16 files the
 # BL-689 census found by the line regex `$(` ... `<<`, the lexer key selected 7. The other 9 carry
 # that text in a `<<<` here-string, a comment or a quoted string -- not a heredoc in a `$(` -- but
@@ -932,8 +929,8 @@ ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14"
 # A function no pre-suite step names is ignored, which is why `scripts/suite-content-key.sh` (called
 # only from the post-suite `fixture_suite_step`) is OUT; `agent_definitions_dist` is a wrapper, which
 # is why `core/scripts/render-agent-definitions.sh` is IN; `syntax_all` contributes only `bash -n`,
-# which reads every file and runs none. All three are asserted in the self-probe on every run and
-# against the real hook wherever it carries their subject. THE FLOOR IS DERIVED, NOT A LITERAL: the
+# which reads every file and runs none. All three are asserted against the
+# real hook wherever it carries their subject. THE FLOOR IS DERIVED, NOT A LITERAL: the
 # parsed step count must EQUAL a second reader's count of `step "` lines (any indent) before the cut,
 # every step must resolve to a tracked script unless its function body runs only `bash -n`, and at
 # least one seed must exist. A hook rewrite this parser cannot read therefore fails the push rather
@@ -978,10 +975,8 @@ ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14"
 # 28, mode-keyed-by-present-key 20, size-read-by-step 6, pipe 3, text-only 3, python-api 2, system-path 1,
 # verdict-independent 1) and ONE site unlisted -- I119's `[ -s "$i119_f" ] || continue` in
 # validate-enforcement-map.sh, which fired here and was fixed at its site. The allowlist as committed with
-# this arm adds this file's own sites (the self-probe's seed text, which the closure reaches because S15
-# runs on itself) and moves two mode rows reachable only under a mode the pre-suite call never selects:
-# 78 rows, scratch 28, mode-keyed-by-present-key 16, text-only 17, size-read-by-step 6, pipe 3,
-# verdict-independent 5, python-api 2, system-path 1, git-index 0, live-pending-lead 0. No mtime test is
+# this arm adds this file's own sites (the closure reaches them because S15 runs on itself) and moves
+# two mode rows reachable only under a mode the pre-suite call never selects. No mtime test is
 # in the closure. `undecidable-variable` is not a class: every row was resolved by reading its dataflow.
 # The two reconcile/lib.sh `-r` rows (`_lca_src`, `_elc_src`) are verdict-independent: no closure file calls
 # ledger_close_awk, ledger_archive_awk or ledger_entry_line_close_awk, only fixtures and scripts outside the
@@ -1190,8 +1185,7 @@ S9_COMMENTS=skip; S10_COMMENTS=skip; S11_COMMENTS=skip; S12_COMMENTS=skip; S13_C
 # KIND. `line` is one `grep -E` per line through `scan`; `join` is S12's two-pass program over
 # whole files through `scan_join`, which the PATTERN still drives. `awk13` is S13's program, which
 # takes NO pattern: S13_PAT is empty and inert, the one PAT cell here that no scan reads.
-# `parse` is S14's: the PAT cell is the shell binary `scan_parse` runs `-n` under, and its probe
-# pair is its own, because the shared `good.sh` carries awk and python lines no shell parses.
+# `parse` is S14's: the PAT cell is the shell binary `scan_parse` runs `-n` under.
 S1_KIND=line; S2_KIND=line; S3_KIND=line; S4_KIND=line; S5_KIND=line; S6_KIND=line
 S7_KIND=line; S8_KIND=line; S8b_KIND=line; S9_KIND=line; S10_KIND=line; S11_KIND=line; S12_KIND=join; S13_KIND=awk13
 S14_KIND=parse
@@ -1229,9 +1223,8 @@ corpus() { # corpus shell|instr|doc|fixture
 # explaining why it avoids mapfile, which is the single measured false positive across all
 # seven arms and the reason this filter exists rather than an exemption list.
 # `grep -H` is load-bearing, not decoration: without it grep omits the filename when handed a
-# SINGLE file, the comment filter's `file:line:` anchor stops matching, and three arms report
-# their own probe's comment line as a violation. The probes caught that; a corpus-only test
-# would not have, because the corpus is always more than one file.
+# SINGLE file, the comment filter's `file:line:` anchor stops matching and a comment line is
+# reported as a violation.
 scan() { # scan <pattern> <skip-pattern-or-empty> <skip|keep comments> <file...>
   local pat="$1" skip="$2" comments="$3"; shift 3
   local out
@@ -1251,22 +1244,22 @@ scan() { # scan <pattern> <skip-pattern-or-empty> <skip|keep comments> <file...>
 # against the list. A prepended rule counts the files whose first record the program saw; a file
 # that exists and is EMPTY has no first record and is subtracted from the expected count, so an
 # empty file is not a refusal. A non-zero awk status or a count that differs is recorded in
-# `$probe/refused` (a command substitution cannot set `fail`) and the run exits 2 before PASS.
-# `ARM_NOW` names the arm in the message; the probe and corpus loops set it.
+# `$scratch/refused` (a command substitution cannot set `fail`) and the run exits 2 before PASS.
+# `ARM_NOW` names the arm in the message; the corpus loop sets it.
 awk_counted() { # awk_counted <awk-program> <file...>   (stdout is the program's; the environment passes through)
   local prog="$1" want=0 got rc f bad="" opened; shift
   for f in "$@"; do { [ -f "$f" ] && [ ! -s "$f" ]; } || want=$((want + 1)); done
-  : > "$probe/awkn"
-  AWKN_OUT="$probe/awkn" awk 'FNR == 1 { AWKN_SEEN++ } END { print AWKN_SEEN + 0 > ENVIRON["AWKN_OUT"] }'"$prog" "$@" 2>"$probe/awke"
-  rc=$?; got="$(cat "$probe/awkn")"
+  : > "$scratch/awkn"
+  AWKN_OUT="$scratch/awkn" awk 'FNR == 1 { AWKN_SEEN++ } END { print AWKN_SEEN + 0 > ENVIRON["AWKN_OUT"] }'"$prog" "$@" 2>"$scratch/awke"
+  rc=$?; got="$(cat "$scratch/awkn")"
   if [ "$rc" -ne 0 ] || [ "${got:-none}" != "$want" ]; then
     for f in "$@"; do { [ -f "$f" ] && [ -r "$f" ]; } || { bad="$f"; break; }; done
     # An awk that aborted before its END block leaves no count: say so, never a zero it did not measure.
     if [ "$rc" -ne 0 ] || [ -z "$got" ]; then opened=", open count unknown (awk aborted), $want listed file(s)"
     else opened=", having opened $got of $want listed file(s)"; fi
     printf 'REFUSED: %s: awk exited %s%s; unopenable: %s (%s). An arm that could not read its whole corpus has not scanned it.\n' \
-      "${ARM_NOW:-?}" "$rc" "$opened" "${bad:-unknown}" "$(head -1 "$probe/awke")" >&2
-    printf '%s\n' "${ARM_NOW:-?}" >> "$probe/refused"
+      "${ARM_NOW:-?}" "$rc" "$opened" "${bad:-unknown}" "$(head -1 "$scratch/awke")" >&2
+    printf '%s\n' "${ARM_NOW:-?}" >> "$scratch/refused"
     return 2
   fi
 }
@@ -1321,185 +1314,8 @@ run_arm() { # run_arm <kind> <pattern> <skip> <comments> <file...>
   else scan "$@"; fi
 }
 
-# --- self-probes, before the corpus --------------------------------------------------------
-probe="$(mktemp -d)"; trap 'rm -rf "$probe"' EXIT
-
-# One offender per arm, and one CORRECT form per arm that must NOT be reported. An arm proven
-# only to fire has been proven to be a scanner that flags everything.
-cat > "$probe/bad.sh" <<'BADEOF'
-sed -i 's/a/b/' f
-mapfile -t arr < f
-declare -A map
-setsid sleep 1
-grep -E 'a\sb' f
-sed -E 's/a\sb/c/' f
-awk '{ gsub(/(a)b/, "\1x") }' f
-git -C <dist> show <theirs>:templates/settings.json.template > "$t"
-git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"
-git grep -nE '\bMODEL_MAX\b' -- core/
-git -C "$DIST" show "$THEIRS:core/scripts/validate-thing.sh" > "$t"
-awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
-  /^#{2,4}[ \t]+[0-9]+[ \t]*[.—]/ { print }
-  cd "$REPO"
-if [[ $x =~ $early ]]; then :; fi
-re="\b(foo)\b"
-if [[ $x =~ $re ]]; then :; fi
-if [[ $x =~ \bfoo\b ]]; then :; fi
-  [[ "$line" =~ ${wre} ]] && echo y
-  local wre=^\\<local
-early='\<stub\>'
-BADEOF
-cat > "$probe/good.sh" <<'GOODEOF'
-sed -i.bak 's/a/b/' f && rm -f f.bak
-sed -i '' 's/a/b/' f
-while IFS= read -r l; do :; done < f
-grep -E 'a[[:space:]]b' f
-sed -E 's/a[[:blank:]]b/c/' f
-awk '{ if (match($0, /(a)b/)) print substr($0, RSTART, RLENGTH) }' f
-git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"
-git show "${SHA}:templates/settings.json.template" > "$t"
-git show HEAD:templates/settings.json.template > "$t"
-git -C "$DIST" show "${THEIRS}:core/scripts/validate-thing.sh" > "$t"
-git -C "$DIST" show "$THEIRS:$CORE_PATH" > "$t"
-git -C "$DIST" show "$THEIRS:docs/x.md" > "$t"
-git grep -nE '[[:space:]]MODEL_MAX' -- core/
-grep -oE '\bLR-[0-9]+\b' f
-awk '{ sub(/[[:space:]]*(—|–|-)[[:space:]].*$/, "", s) }' f
-HEAD_RE='^#{2,4}[[:space:]]+[0-9]+[[:space:]]*(\.|—)'
-  /^#{2,4}[ \t]+[0-9]+[ \t]*(\.|—)/ { print }
-/usr/bin/grep -E '[[:space:]]' f
-cd "$REPO" || exit 2
-cd "$REPO" && git init -q .
-( cd "$REPO" && git init -q . )
-cd "$(dirname "$0")" || exit 2
-SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
-( cd "$PROJ" \
-  && git init -q . )
-ok "prose naming a class in a message ([…]) is a string, not a class"
-    r"^#{2,4}[ \t]+(?:Check[ \t]+)?([0-9]+)[ \t]*[.—]")
-SECTION_RE = re.compile(r'^## Sprint (\d+) [—\-]+ (.+)')
-# mapfile and declare -A and setsid named in a comment are prose, not code
-#   cd "$REPO" named in a comment is prose, not an unguarded chdir
-if [[ $x =~ ^a ]]; then :; fi
-[[ "$x" =~ "a.b" ]] && echo lit
-pat='^[0-9]+$'
-[[ $n =~ $pat ]] || n=0
-n=$(printf %s a | grep -cE "\bfoo\b")
-[[ $n =~ ^[0-9]+$ ]] || n=0
-id=$(grep -m1 -oE '\bID-[0-9]+\b' f)
-[[ $line =~ $id ]] && echo seen
-g='\bfoo\b'
-grep -E "$g" f
-# [[ $x =~ $g ]] named in a comment is prose
-echo "[[ \$x =~ \$g ]] in a string is prose"
-lb='a\\bc'
-[[ $x =~ $lb ]] && echo literal-backslash
-GOODEOF
-# S14's pair, one property apart: the offender's heredoc body inside `"$( )"` carries ONE
-# apostrophe, the near-miss's carries a balanced pair in the identical structure -- so an arm
-# that flagged every heredoc in a substitution, or every apostrophe in one, misfires here.
-cat > "$probe/bad-parse.sh" <<'BADPEOF'
-v="$(cat <<'X'
-it's here
-X
-)"
-echo "$v"
-BADPEOF
-cat > "$probe/good-parse.sh" <<'GOODPEOF'
-v="$(cat <<'X'
-it's x's here
-X
-)"
-echo "$v"
-GOODPEOF
-
-# S13 reads MULTI-LINE state, so its probe is its own pair of files: appended to the shared pair
-# its state would be carried through every other arm's seeded lines. Bad: each failing form, with
-# the entry's exact lines. Good: each paired passing form, one character or one context away.
-cat > "$probe/s13bad.sh" <<'S13BADEOF'
-x="$(
-  # the scorer's own subshell (bash -c's PPID) is excluded
-  echo ok
-)"
-y="$(
-  case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac
-  echo "$k"
-)"
-if true; then
-  amutant_arm a "$(amut n 'x "$(p"){y} 1')" z
-fi
-v="$(cat <<'X'
-a ) here
-X
-)"
-S13BADEOF
-cat > "$probe/s13good.sh" <<'S13GOODEOF'
-x="$(
-  # the scorer own subshell, 'quoted pair' ok
-  echo ok
-)"
-u=$(
-  # it's an unquoted substitution
-  echo ok
-)
-y="$(
-  case "$h" in (''|*[!0-9]*) k=x ;; (*) k=1 ;; esac
-  echo "$k"
-)"
-if true; then
-  amutant_arm a "$(amut n 'x $(p){y} 1')" z
-  amutant_arm a "$(amut n 'a "$(printf" b')" z
-  v="$(amut n 'x "$(p"){y} 1')"
-  amutant_arm a "$(amut n 'x "$(p") 1')" z
-fi
-v="$(cat <<'X'
-a ( b ) here, it's ) ok's, a \) b
-X
-)"
-f() { cat <<'X'
-a ) here
-X
-}
-S13GOODEOF
-
-# S14's SELECTOR, probed in both directions BEFORE the corpus: every spelling of a heredoc opened
-# inside a `$(` must be SELECTED (a miss there is a file S14 never parses), and a heredoc outside
-# any `$(` must not be, or the narrowing is not a narrowing.
-mkdir -p "$probe/sel"
-printf '%s\n' 'v="$(cat<<X' 'a' 'X' ')"' > "$probe/sel/y1.sh"
-printf '%s\n' "v=\"\$( cat <<-'X'" '	a' '	X' ')"' > "$probe/sel/y2.sh"
-printf '%s\n' 'v="$(echo "$(cat <<X' 'a' 'X' ')")"' > "$probe/sel/y3.sh"
-printf '%s\n' 'v="$(' "  cat <<'X'" 'a' 'X' ')"' > "$probe/sel/y4.sh"
-printf '%s\n' 'v=$(f <<"X"' 'a' 'X' ')' > "$probe/sel/y5.sh"
-printf '%s\n' 'cat <<X' 'a $(b) c' 'X' > "$probe/sel/n1.sh"
-printf '%s\n' 'f() { cat <<X' 'a' 'X' '}' 'v="$(f)"' > "$probe/sel/n2.sh"
-printf '%s\n' 'v="`cat <<X' 'a' 'X' '`"' > "$probe/sel/n3.sh"
-printf '%s\n' 'v="$(cat <<<"a")"' 'n=$((1 << 2))' > "$probe/sel/n4.sh"
-sel_got="$(S13_SELECT=1 awk "$S13_JOIN" "$probe"/sel/y*.sh "$probe"/sel/n*.sh 2>/dev/null)"
-for y in "$probe"/sel/y*.sh; do
-  grep -qxF "$y" <<<"$sel_got" || err "S14's selector did not select $(basename "$y"), a heredoc opened inside a \`\$(\`. S14 would never parse such a file, and its clean run would read exactly like a parse that passed."
-done
-for nn in "$probe"/sel/n*.sh; do
-  grep -qxF "$nn" <<<"$sel_got" && err "S14's selector selected $(basename "$nn"), a heredoc outside any \`\$(\`: the prefilter has stopped narrowing."
-done
-
-for a in $ARMS; do
-  ARM_NOW="$a"
-  eval "p=\$${a}_PAT"
-  eval "sk=\$${a}_SKIP"
-  eval "cm=\$${a}_COMMENTS"
-  eval "kd=\$${a}_KIND"
-  pb="$probe/bad.sh"; pg="$probe/good.sh"
-  if [ "$a" = S13 ]; then pb="$probe/s13bad.sh"; pg="$probe/s13good.sh"; fi
-  if [ "$kd" = "parse" ]; then pb="$probe/bad-parse.sh"; pg="$probe/good-parse.sh"; fi
-  hit_bad="$(run_arm "$kd" "$p" "$sk" "$cm" "$pb")"
-  hit_good="$(run_arm "$kd" "$p" "$sk" "$cm" "$pg")"
-  if [ -z "$hit_bad" ]; then
-    err "$a's own probe did not fire: the seeded offender was not reported. Its zero over the corpus below would be a scan that cannot find anything, which reads exactly like a clean tree."
-  elif [ -n "$hit_good" ]; then
-    err "$a's own probe misfired: it reported the CORRECT form as a violation. An arm that flags the fix is worse than no arm. Got: $(printf '%s' "$hit_good" | head -1)"
-  fi
-done
+# --- the scratch dir: refusal records and the awk open counts --------------------------------
+scratch="$(mktemp -d)"; trap 'rm -rf "$scratch"' EXIT
 
 # S15's runner: one awk over the hook, the derived closure and the allowlist, under <root> (empty
 # means the cwd). A `U` row is a file the program could not open: a refusal, never a clean scan.
@@ -1509,126 +1325,13 @@ s15_join() { awk -v s="$1" 'NF { printf "%s%s", (k++ ? s : ""), $0 } END { print
 s15_run() { # s15_run <root> <tracked-list> -> the program's rows on stdout; returns 2 on a refusal
   local out
   out="$(S15_ROOT="$1" S15_TRACKED="$2" S15_HOOK="$S15_HOOK" S15_ALLOW="$S15_ALLOW" S15_CLASSES="$S15_CLASSES" \
-    awk "$S15_PROG" </dev/null 2>"$probe/s15e")" || { printf 'REFUSED: S15: awk exited non-zero: %s\n' "$(head -1 "$probe/s15e")" >&2; printf 'S15\n' >> "$probe/refused"; return 2; }
+    awk "$S15_PROG" </dev/null 2>"$scratch/s15e")" || { printf 'REFUSED: S15: awk exited non-zero: %s\n' "$(head -1 "$scratch/s15e")" >&2; printf 'S15\n' >> "$scratch/refused"; return 2; }
   if grep -q "^U${TAB}" <<<"$out"; then
     printf 'REFUSED: S15: could not open %s. An arm that could not read its hook, its closure or its allowlist has not scanned them.\n' "$(s15_col U 2 "$out" | s15_join ' ')" >&2
-    printf 'S15\n' >> "$probe/refused"; return 2
+    printf 'S15\n' >> "$scratch/refused"; return 2
   fi
   printf '%s\n' "$out"
 }
-# S15's self-probe, BEFORE the corpus, in its own tree under the probe dir. FLAG: the gating shape, a
-# tree-path `-x`, `-nt`, `find -newer`, `stat -f`, (through a wrapper and a nested invoke) `date -r`
-# and `touch -r`, and one site reached through each invoker the closure claims (`.` of a variable
-# assigned a literal path, `awk -f`, `"$BASH" x`, `env ... bash`, `xargs bash`, a path in a subdir).
-# QUIET: a listed site, a comment, an unstepped function's script, a post-suite step's script, a script
-# named only inside `err "..."` text, and a same-basename decoy in another directory. One row matches nothing (STALE) and one names
-# no class (BADROW). The NEW set is compared EXACTLY, so a scan that flags everything misfires here.
-s15p="$probe/s15"; mkdir -p "$s15p/.githooks" "$s15p/scripts"
-cat > "$s15p/.githooks/pre-push" <<'S15HOOK'
-w() {
-  bash scripts/w.sh
-}
-agent_definitions_dist() {
-  out="$(bash core/scripts/render-agent-definitions.sh --check --root . 2>&1)"
-}
-u() { bash scripts/u.sh; }
-syntax_all() {
-  for f in scripts/*.sh; do bash -n "$f" 2>/dev/null || rc=1; done
-}
-step "a" \
-  bash scripts/a.sh
-step "w" w
-step "agent definitions" \
-  agent_definitions_dist
-step "shell syntax" syntax_all
-PRESUITE_DONE=1
-step "post" bash scripts/post.sh
-fixture_suite_step() { key="$(bash scripts/late-key.sh 2>/dev/null)"; }
-step "suite" fixture_suite_step
-S15HOOK
-mkdir -p "$s15p/core/scripts"
-printf '%s\n' 'echo rendered' > "$s15p/core/scripts/render-agent-definitions.sh"
-printf '%s\n' '[ -x docs/k ] || exit 1' > "$s15p/scripts/late-key.sh"
-cat > "$s15p/scripts/a.sh" <<'S15A'
-bash scripts/b.sh
-err "run bash scripts/t.sh by hand"
-for f in g/*; do [ -s "$f" ] || continue; grep x "$f"; done
-[ -x docs/x.sh ] || exit 1
-[ docs/a -nt docs/b ] && echo y
-find docs -newer docs/a -print
-stat -f %z docs/a
-[ -s "$WORK/listed" ] || exit 2
-# [ -x docs/c.sh ] in a comment
-S15A
-# b.sh carries one line per invoker the closure claims; each target holds ONE flagged line, and a
-# same-basename decoy in another directory holds one that must NOT be reached (resolve by path).
-cat > "$s15p/scripts/b.sh" <<'S15B'
-touch -r docs/a docs/b
-LIB="$ROOT/scripts/lib/l.sh"
-. "$LIB"
-awk -f scripts/k.awk f
-"$BASH" scripts/e.sh
-env FOO=1 bash scripts/v.sh
-printf x | xargs bash scripts/x.sh
-bash scripts/real/n.sh
-S15B
-mkdir -p "$s15p/scripts/lib" "$s15p/scripts/real" "$s15p/scripts/decoy"
-for s15f in scripts/lib/l.sh scripts/k.awk scripts/e.sh scripts/v.sh scripts/x.sh scripts/real/n.sh scripts/decoy/n.sh; do
-  printf '%s\n' '[ -x docs/q ] || exit 1' > "$s15p/$s15f"
-done
-printf '%s\n' 'date -r docs/a' > "$s15p/scripts/w.sh"
-printf '%s\n' '[ -x docs/u ] || exit 1' > "$s15p/scripts/u.sh"
-printf '%s\n' '[ -x docs/p ] || exit 1' > "$s15p/scripts/post.sh"
-printf '%s\n' '[ -x docs/t ] || exit 1' > "$s15p/scripts/t.sh"
-# G1/D1 probe lines are composed with printf so that THIS file's text carries no metadata test for them
-# (a literal line would be a site of this file's own and need a row). 10-12: a compound `[[ ]]` test, an
-# `-a` and an `-o` operand, each ending in a metadata test (flag). 13-15: string or existence tests only,
-# including a binary `-a`/`-o` (quiet). 16: a second copy of the LISTED line 8 (flag, the surplus site).
-s15m=s; s15t=x; s15u=w
-{
-  printf '%s\n' "[[ -f a && -$s15m a ]]" "[ -f a -a -$s15t b ]" "test -d d -o -$s15u f"
-  printf '%s\n' '[[ -n "$x" && -z "$y" ]]' '[ -f a -a -d b ]' 'test -f a -o -d b'
-  printf '[ -%s "$WORK/listed" ] || exit 2\n' "$s15m"
-} >> "$s15p/scripts/a.sh"
-printf 'scripts/a.sh\t[ -s "$WORK/listed" ] || exit 2\tscratch: the probe mktemp dir\nscripts/a.sh\t[ -s gone ]\tscratch: matches no site\nscripts/a.sh\t[ -x docs/x.sh ] || exit 1\tnot-a-class: x\n' > "$s15p/$S15_ALLOW"
-printf '%s\n' .githooks/pre-push scripts/a.sh scripts/b.sh scripts/w.sh scripts/u.sh scripts/post.sh scripts/t.sh \
-  core/scripts/render-agent-definitions.sh scripts/late-key.sh \
-  scripts/lib/l.sh scripts/k.awk scripts/e.sh scripts/v.sh scripts/x.sh scripts/real/n.sh scripts/decoy/n.sh > "$s15p/tracked"
-s15_want='scripts/a.sh:3
-scripts/a.sh:4
-scripts/a.sh:5
-scripts/a.sh:6
-scripts/a.sh:7
-scripts/a.sh:10
-scripts/a.sh:11
-scripts/a.sh:12
-scripts/a.sh:16
-scripts/b.sh:1
-scripts/w.sh:1
-scripts/lib/l.sh:1
-scripts/k.awk:1
-scripts/e.sh:1
-scripts/v.sh:1
-scripts/x.sh:1
-scripts/real/n.sh:1'
-ARM_NOW=S15
-if s15p_out="$(s15_run "$s15p" tracked)"; then
-  # EXACT set equality without sort: the same count, and every wanted site present.
-  s15p_new="$(s15_col NEW 2 "$s15p_out")"
-  s15p_ok=1
-  [ "$(grep -c . <<<"$s15p_new")" = "$(grep -c . <<<"$s15_want")" ] || s15p_ok=0
-  while IFS= read -r s15w; do grep -qxF "$s15w" <<<"$s15p_new" || s15p_ok=0; done <<<"$s15_want"
-  if [ "$s15p_ok" -ne 1 ]; then
-    err "S15's own probe did not report exactly the seeded offenders. Want: $(s15_join ' ' <<<"$s15_want"). Got: $(s15_join ' ' <<<"$s15p_new"). A scan that misses one is blind to that grammar; one that reports a listed, commented, unstepped or text-only site flags everything."
-  fi
-  s15p_seeds="$(s15_col SEED 2 "$s15p_out")"
-  grep -qxF core/scripts/render-agent-definitions.sh <<<"$s15p_seeds" || err "S15 control: core/scripts/render-agent-definitions.sh is not a seed of the probe hook. It is reached through the agent_definitions_dist wrapper, as in the real hook, so wrapper-function resolution is broken."
-  grep -qxF scripts/late-key.sh <<<"$s15p_seeds" && err "S15 control: scripts/late-key.sh is a seed of the probe hook, but only a post-suite step calls it. The PRESUITE_DONE cut is broken."
-  grep -q "^FN${TAB}syntax_all${TAB}0${TAB}1\$" <<<"$s15p_out" || err "S15 control: syntax_all is not read as a step that runs only \`bash -n\` with no script seed."
-  [ "$(grep -c '^SEED' <<<"$s15p_out")" = 3 ] || err "S15's probe hook derived $(grep -c '^SEED' <<<"$s15p_out") seed(s), not the 3 its pre-suite steps name (a.sh, w.sh, render-agent-definitions.sh; b.sh is closure, not seed): $(s15_join ' ' <<<"$s15p_seeds")"
-  [ "$(grep -c '^STALE' <<<"$s15p_out")" = 1 ] || err "S15's own probe did not report its one STALE row: a row matching no site would pass."
-  [ "$(grep -c '^BADROW' <<<"$s15p_out")" = 1 ] || err "S15's own probe did not report its one BADROW (a reason outside the closed class set)."
-fi
 
 # --- the corpus ----------------------------------------------------------------------------
 FILES_shell="$(corpus shell)"
@@ -1662,8 +1365,8 @@ n_files="$n_shell"
 # observable WHICH CORPUS IS NAMED rather than merely whether a refusal happened, and that is
 # the only shape the battery can score. `fail=1` either way; the message is the discriminator.
 #
-# `dead_corpus` IS ITS OWN FLAG AND NOT `fail`. `fail` is already 1 when a SELF-PROBE failed,
-# and gating the corpus scan on it would silently stop scanning on a probe failure -- a
+# `dead_corpus` IS ITS OWN FLAG AND NOT `fail`. `fail` may already be 1 from an earlier finding,
+# and gating the corpus scan on it would silently stop scanning on that finding -- a
 # behaviour change that removes findings and reports the same exit.
 dead_corpus=0
 if [ "${n_shell:-0}" -lt 1 ]; then
@@ -1700,8 +1403,8 @@ else
   done
   # S15 over the real hook. Its controls are the hook shapes the seed derivation must get right.
   ARM_NOW=S15
-  git ls-files > "$probe/s15tracked"
-  if s15_out="$(s15_run "" "$probe/s15tracked")"; then
+  git ls-files > "$scratch/s15tracked"
+  if s15_out="$(s15_run "" "$scratch/s15tracked")"; then
     s15_seeds="$(s15_col SEED 2 "$s15_out")"
     s15_nseed="$(grep -c . <<<"$s15_seeds")" || s15_nseed=0
     grep -q '^NODONE' <<<"$s15_out" && err "S15 found no \`PRESUITE_DONE=1\` line in $S15_HOOK, so it cannot tell a pre-suite step from a post-suite one. Failing closed."
@@ -1713,7 +1416,7 @@ else
     [ "${s15_nstep:-0}" = "$s15_nstep_want" ] && [ "$s15_nstep_want" -ge 1 ] || err "S15 parsed ${s15_nstep:-0} pre-suite step(s) from $S15_HOOK where a plain count of \`step \"\` lines before PRESUITE_DONE=1 reads $s15_nstep_want. The step parser has lost the hook's grammar."
     [ "$s15_nseed" -ge "$S15_MIN_SEEDS" ] || err "S15 derived $s15_nseed seed script(s) from $S15_HOOK, under the floor of $S15_MIN_SEEDS. The step parser has lost the hook's grammar."
     # The three named controls bind the DISTRIBUTION's hook, so each is asserted where its subject is
-    # present in that hook; the self-probe above holds all three mechanisms on every run regardless.
+    # present in that hook.
     if grep -q '^agent_definitions_dist()' "$S15_HOOK"; then
       grep -qxF core/scripts/render-agent-definitions.sh <<<"$s15_seeds" || err "S15 control: core/scripts/render-agent-definitions.sh is not a seed. It is reached through the agent_definitions_dist wrapper, so the wrapper-function resolution is broken."
     fi
@@ -1744,11 +1447,11 @@ fi
 # produce, and a wrong gloss is visible where a wrong count is not.
 n_arms=0
 for a in $ARMS; do n_arms=$((n_arms + 1)); done
-if [ -s "$probe/refused" ]; then
-  printf 'validate-shell-portability: REFUSED -- %s could not open every listed file (see REFUSED above). Exit 2: not a PASS and not a finding.\n' "$(sort -u "$probe/refused" | paste -sd ' ' -)" >&2
+if [ -s "$scratch/refused" ]; then
+  printf 'validate-shell-portability: REFUSED -- %s could not open every listed file (see REFUSED above). Exit 2: not a PASS and not a finding.\n' "$(sort -u "$scratch/refused" | paste -sd ' ' -)" >&2
   exit 2
 fi
 if [ "$fail" -eq 0 ]; then
-  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) ($n_doc non-shell) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S8b unbraced \$VAR: rev-path in non-shell text, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script, S12 GNU escape reaching [[ =~ ]], S13 command substitution bash 3.2 closes early or misreads, S14 a heredoc-in-\$( ) file /bin/bash 3.2 cannot parse), plus S15 (an unlisted metadata-only test in the pre-suite closure: $s15_nseed seeds, $(s15_col COUNTS 4 "$s15_out") closure files, $(s15_col COUNTS 5 "$s15_out") sites, $s15_rows allowlist rows), every arm probed in both directions."
+  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) ($n_doc non-shell) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S8b unbraced \$VAR: rev-path in non-shell text, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script, S12 GNU escape reaching [[ =~ ]], S13 command substitution bash 3.2 closes early or misreads, S14 a heredoc-in-\$( ) file /bin/bash 3.2 cannot parse), plus S15 (an unlisted metadata-only test in the pre-suite closure: $s15_nseed seeds, $(s15_col COUNTS 4 "$s15_out") closure files, $(s15_col COUNTS 5 "$s15_out") sites, $s15_rows allowlist rows)."
 fi
 exit "$fail"

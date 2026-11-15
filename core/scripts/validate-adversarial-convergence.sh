@@ -415,7 +415,7 @@ MAJOR_EXIT_CEILING=3
 # machine (`toolUseId` across ~/.claude/projects/*/*/subagents/): `toolu_` and 24 base62 characters
 # (4534), `toolu_`, 13 digits, `_` and a counter (587), and `call_` and 32 hex characters under a
 # local-model lead (1). A fabricated `toolu_cross1_g1_dispatch` matches none of the three. Every ERE
-# alternative opens with a declared prefix; arm K's self-probe holds the two lines together.
+# alternative opens with a declared prefix.
 DISPATCH_ID_PREFIXES="toolu_ call_"
 DISPATCH_ID_ERE='^(toolu_[0-9A-Za-z]{24}|toolu_[0-9]{13}_[0-9]+|call_[0-9a-f]{32})$'
 
@@ -1861,19 +1861,12 @@ done
 #   The record kinds are VALID_RESOLUTIONS, unchanged: "repair it once more" is CHANGE_APPROACH, which
 #   arm I's RESOLUTION_CEILING counts; CUT_SCOPE and REVERT_REPAIR are byte-anchored.
 #   LEGACY     a series the era leaves unbound: nothing binds; the gate prints one PENDING line.
-# Fork-free unless a capped pass exists; the self-probe runs before the series is judged.
+# Fork-free unless a capped pass exists.
 CAP_LIVE=0
 CAP_UNRESOLVED=0
 cap_any=0
 for ((i = 0; i < N; i++)); do cap_capped "${P_NUM[$i]}" "${P_VERDICT[$i]}" && { cap_any=1; break; }; done
 if [ "$cap_any" -eq 1 ]; then
-  if ! cap_capped 3 EXIT_CONDITION_NOT_MET || cap_capped 3 EXIT_CONDITION_MET || cap_capped 2 EXIT_CONDITION_NOT_MET \
-     || ! cap_capped 6 DIVERGENT_HARD_BLOCK || cap_capped "" EXIT_CONDITION_NOT_MET \
-     || ! era_cmp 2026-01-02T00:00:00Z 2026-01-02T00:00:00Z || ! era_cmp 2026-01-02T00:00:00.5Z 2026-01-01T23:59:59Z \
-     || era_cmp 2026-01-01T23:59:59Z 2026-01-02T00:00:00Z || era_cmp 2026-01-02 2026-01-01T00:00:00Z; then
-    echo "validate-adversarial-convergence.sh: arm M self-probe failed (cap_capped or era_cmp); no verdict" >&2
-    exit 2
-  fi
   era_resolve "${P_FILE[0]}" "${P_AT[0]:-}"
   if [ "$ERA_STATE" = bound ]; then
     for ((i = 0; i + 1 < N; i++)); do
@@ -2040,38 +2033,6 @@ k_stamp_parse() {  # git log -p text on stdin -> earliest UTC ISO commit stampin
     END { if (best != "") print best }'
 }
 
-# THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, fork-free for the three predicates.
-# The stamp parser is probed immediately before it reads the real history, below.
-if ac_on K && [ "$N" -gt 0 ]; then
-  : > "$AC_T/k-one.md" || { echo "validate-adversarial-convergence.sh: arm K self-probe could not stage; no verdict" >&2; exit 2; }
-  k_count_md "$AC_T"; kp1="$K_COUNT"
-  : > "$AC_T/k-two.md" || { echo "validate-adversarial-convergence.sh: arm K self-probe could not stage; no verdict" >&2; exit 2; }
-  k_count_md "$AC_T"; kp2="$K_COUNT"
-  # Walk-up resolve: from a pass two levels below the probe dir's PARENT, `<probe-dir name>/`
-  # must resolve to the probe dir; a FILE of that name must not resolve as a directory.
-  k_resolve "$AC_T/deep/p.md" "${AC_T##*/}/"; kp3="$K_DIR"
-  k_resolve "$AC_T/p.md" "k-one.md"; kp4="$K_DIR"
-  if [ "$kp1" != 1 ] || [ "$kp2" != 2 ] || [ "$kp3" != "${AC_T%/*}/${AC_T##*/}" ] || [ -n "$kp4" ] \
-     || ! k_has_ids " 01=toolu_a cross=toolu_b" || k_has_ids "" || k_has_ids " 01= cross=toolu_" \
-     || ! k_has_ids " 01=call_a cross=call_b" || k_has_ids " 01=xyz_a cross=xyz_b"; then
-    echo "validate-adversarial-convergence.sh: arm K self-probe failed (count 1->$kp1, 2->$kp2, resolve '$kp3', file-as-dir '$kp4'); no verdict" >&2
-    exit 2
-  fi
-  # THE GRAMMAR'S TWO LINES AGREE: each real shape matches the ERE and opens with a declared prefix,
-  # and the fabricated id matches neither shape. Fork-free: bash's own =~ and a prefix loop.
-  for kg in toolu_01AbCdEfGhIjKlMnOpQrStUv toolu_1789696640267_0 call_45aba045bf78553ca703fc8694de7577; do
-    kgp=0; for kp in $DISPATCH_ID_PREFIXES; do case "$kg" in "$kp"?*) kgp=1 ;; esac; done
-    if ! [[ $kg =~ $DISPATCH_ID_ERE ]] || [ "$kgp" -ne 1 ]; then
-      echo "validate-adversarial-convergence.sh: arm K grammar self-probe failed: '$kg' is not both a DISPATCH_ID_ERE match and a DISPATCH_ID_PREFIXES member; no verdict" >&2
-      exit 2
-    fi
-  done
-  if [[ toolu_cross1_g1_dispatch =~ $DISPATCH_ID_ERE ]]; then
-    echo "validate-adversarial-convergence.sh: arm K grammar self-probe failed: the fabricated toolu_cross1_g1_dispatch matches DISPATCH_ID_ERE; no verdict" >&2
-    exit 2
-  fi
-fi
-
 K_CAND=""
 if ac_on K && [ "$N" -gt 0 ]; then
   # ONE awk over the TERMINAL pass file: `<file>\t<artifact>\t<shard_tool_use_ids>`. Not every
@@ -2110,13 +2071,6 @@ if [ -n "$K_CAND" ]; then
     if [ -f "$k_walk/.claude/.ai-dlc-version" ]; then k_root="$k_walk"; break; fi
     k_walk="${k_walk%/*}"
   done
-  k_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' '+version: 0.663.0' 'C 2026-01-01T00:00:00Z' '+version: 0.662.0' \
-             'C 2026-01-03T00:00:00Z' '+version: 0.700.0' | k_stamp_parse)"
-  k_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' '+version: 0.66.0' | k_stamp_parse)"
-  if [ "$k_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$k_probe_none" ]; then
-    echo "validate-adversarial-convergence.sh: arm K stamp-parser self-probe failed (got '$k_probe', near-miss '$k_probe_none'); no verdict" >&2
-    exit 2
-  fi
   k_stamp=""
   if [ -n "$k_root" ] && command -v git >/dev/null 2>&1; then
     # A git hook exports GIT_DIR/GIT_WORK_TREE, which would redirect `git -C` to the hook's own
@@ -2211,8 +2165,7 @@ fi
 # arm abstains rather than guess what the reviewer saw); and the STAMP keyed on the series'
 # FIRST pass, as arm K does -- no commit there stamps K2_RELEASE, so every surviving candidate
 # is PENDING and none fails. `K_RELEASE` is rebound for the one `k_stamp_parse` call rather
-# than the parser being copied; the probe below includes K_RELEASE's own successor as a
-# near-miss, so a rebinding that silently did not take reads as a probe failure, not a pass.
+# than the parser being copied.
 #
 # THE MAP IS ASKED OF THE PARTITIONER IN FORCE AT THE PASS, NOT OF TODAY'S. A consumer's
 # self-update replaces `partition-document.sh`, and a document the installed copy called SERIAL
@@ -2357,20 +2310,6 @@ k2_sha() {  # $1 file -> sha256 hex on stdout; the merge's own spelling
   else sha256sum "$1" | cut -d' ' -f1; fi
 }
 
-# THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, fork-free: a FILE resolves by
-# walking up, a DIRECTORY of the same shape does not, and a trailing `/` never names a file.
-if ac_on K2 && [ "$N" -gt 0 ]; then
-  mkdir -p "$AC_T/k2-dir" && : > "$AC_T/k2-doc.md" || {
-    echo "validate-adversarial-convergence.sh: arm K2 self-probe could not stage; no verdict" >&2; exit 2; }
-  k2_resolve_file "$AC_T/deep/er/p.md" "k2-doc.md"; k2p1="$K2_FILE"
-  k2_resolve_file "$AC_T/deep/p.md" "k2-dir"; k2p2="$K2_FILE"
-  k2_resolve_file "$AC_T/p.md" "k2-doc.md/"; k2p3="$K2_FILE"
-  if [ "$k2p1" != "$AC_T/k2-doc.md" ] || [ -n "$k2p2" ] || [ -n "$k2p3" ]; then
-    echo "validate-adversarial-convergence.sh: arm K2 self-probe failed (file '$k2p1', dir-as-file '$k2p2', slash '$k2p3'); no verdict" >&2
-    exit 2
-  fi
-fi
-
 K2_CAND=""
 if ac_on K2 && [ "$N" -gt 0 ]; then
   # ONE awk over the TERMINAL pass: `<artifact>\t<artifact_sha>\t<shard_tool_use_ids>`. The sha is
@@ -2462,15 +2401,6 @@ if [ -n "$K2_CAND" ]; then
   k2_first="$(basename "${P_FILE[0]}")"
   k2_at="${P_AT[0]:-}"
   # k2_root was walked above, before the partitioner in force was resolved.
-  # The rebinding is probed with K_RELEASE's successor as the near-miss: under a rebinding that
-  # did not take, 0.664.0 would satisfy K_RELEASE and this probe would report it.
-  k2_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' '+version: 0.665.0' 'C 2026-01-01T00:00:00Z' '+version: 0.664.0' \
-              'C 2026-01-03T00:00:00Z' '+version: 0.700.0' | K_RELEASE="$K2_RELEASE" k_stamp_parse)"
-  k2_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' '+version: 0.664.0' | K_RELEASE="$K2_RELEASE" k_stamp_parse)"
-  if [ "$k2_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$k2_probe_none" ]; then
-    echo "validate-adversarial-convergence.sh: arm K2 stamp-parser self-probe failed (got '$k2_probe', near-miss '$k2_probe_none'); no verdict" >&2
-    exit 2
-  fi
   k2_stamp=""
   if [ -n "$k2_root" ]; then
     stamp_log "$k2_root"
@@ -2515,7 +2445,7 @@ fi
 #
 #   subject    the TERMINAL pass, `$LAST_FILE`, for arm K's reason (the remedy is a NEXT pass).
 #   candidate  its basename is `requirements-adversarial-p<M>.md` in an `s<N>/` directory. That
-#              string test is the whole cost for every other series: the self-probe, the manifest
+#              string test is the whole cost for every other series: the manifest
 #              read, the git reads and the map all sit BEHIND it (as J2's sit behind its drift).
 #              WIDENED at K3B_RELEASE: ANY `<stem>-adversarial-p<M>.md` in an `s<N>/` directory
 #              that holds `requirements-subject.md`, whose terminal `artifact:` resolves to that
@@ -2580,7 +2510,7 @@ fi
 # plus one `cross` is therefore ACQUITTED when its series opened at or after K3D_RELEASE's stamp
 # (k3_opened_after); before that stamp it keeps the K3C_RELEASE verdict unchanged. The grouped set
 # stays accepted at every date. K3D_RELEASE is written as a placeholder on the branch and stamped
-# with the release version at cut; k3_stamp_probe refuses the placeholder, exit 2.
+# with the release version at cut; k3_release_guard refuses the placeholder, exit 2.
 K3_RELEASE="0.735.0"
 K3B_RELEASE="0.738.0"
 K3C_RELEASE="0.744.0"
@@ -2635,49 +2565,13 @@ if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ] && [ "$k3_wide" -eq 1 ]; then
   k3_wart="$(block_field "$LAST_FILE" 'artifact')"; k3_wart="${k3_wart%%[[:space:]]*}"
   k2_resolve_file "$LAST_FILE" "$k3_wart"; k3_wf="$K2_FILE"
   [ -z "$k3_wf" ] || k3_wf="$(cd "$(dirname "$k3_wf")" 2>/dev/null && pwd -P)/${k3_wf##*/}"
-  # THE SELF-PROBE, both directions, before the corpus: a file the manifest names is named, its
-  # sibling under the same root is not, and the manifest itself is.
-  mkdir -p "$AC_T/k3b/pa/s1" && : > "$AC_T/k3b/pa/a.md" && : > "$AC_T/k3b/pa/b.md" \
-    && printf 'file: a pa/a.md\n' > "$AC_T/k3b/pa/s1/requirements-subject.md" || {
-    echo "validate-adversarial-convergence.sh: arm K3 widened-candidate self-probe could not stage; no verdict" >&2; exit 2; }
-  k3b_pd="$(cd "$AC_T/k3b/pa/s1" && pwd -P)"
-  k3_names "$k3b_pd" "$(dirname "$k3b_pd")/a.md"; k3bp1=$?
-  k3_names "$k3b_pd" "$(dirname "$k3b_pd")/b.md"; k3bp2=$?
-  k3_names "$k3b_pd" "$k3b_pd/requirements-subject.md"; k3bp3=$?
-  if [ "$k3bp1" -ne 0 ] || [ "$k3bp2" -eq 0 ] || [ "$k3bp3" -ne 0 ]; then
-    echo "validate-adversarial-convergence.sh: arm K3 widened-candidate self-probe failed (named $k3bp1, sibling $k3bp2, manifest $k3bp3); no verdict" >&2
-    exit 2
-  fi
   k3_names "$k3_dir" "$k3_wf" || k3_go=0
 fi
 if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ]; then
-  # THE SELF-PROBE, both directions, before the corpus: the key set is an IDENTITY (same count,
-  # other set -> differs), padding-blind, and blind to a key with no toolu_ id.
-  printf '01\ta\n02\tb\n03\tc\n' > "$AC_T/k3-map" \
-    && printf '1\t1,2\n2\t1,3\n3\t2,3\n' > "$AC_T/k3-g3" && printf '1\t1,2\n' > "$AC_T/k3-g1" \
-    || { echo "validate-adversarial-convergence.sh: arm K3 self-probe could not stage; no verdict" >&2; exit 2; }
-  k3p_w="$(k3_want "$AC_T/k3-map" cross | tr '\n' ' ')"
-  k3p_1="$(k3_keys " 1=toolu_a 02=toolu_b 3=toolu_c cross=toolu_d" | tr '\n' ' ')"
-  k3p_2="$(k3_keys " 1=toolu_a 2=toolu_b 4=toolu_c cross=toolu_d" | tr '\n' ' ')"
-  k3p_3="$(k3_keys " 1=toolu_a 2=toolu_b 3= cross=toolu_d" | tr '\n' ' ')"
-  # The cross keys: three groups name cross-1..3, one group names `cross`; a group set read as
-  # {cross} would make the three-group want-set equal the one-cross key set.
-  k3p_x3="$(k3_xkeys "$AC_T/k3-g3")"; k3p_x1="$(k3_xkeys "$AC_T/k3-g1")"
-  k3p_wg="$(k3_want "$AC_T/k3-map" "$k3p_x3" | tr '\n' ' ')"
-  k3p_4="$(k3_keys " 1=toolu_a 2=toolu_b 3=toolu_c cross-1=toolu_d cross-2=toolu_e cross-3=toolu_f" | tr '\n' ' ')"
-  k3p_5="$(k3_keys " 1=call_a 02=call_b 3=call_c cross=call_d" | tr '\n' ' ')"
-  k3p_6="$(k3_keys " 1=xyz_a 02=xyz_b 3=xyz_c cross=xyz_d" | tr '\n' ' ')"
-  if [ "$k3p_w" != "$k3p_1" ] || [ "$k3p_w" = "$k3p_2" ] || [ "$k3p_w" = "$k3p_3" ] \
-     || [ "$k3p_w" != "$k3p_5" ] || [ -n "$k3p_6" ] \
-     || [ "$k3p_x3" != "cross-1 cross-2 cross-3" ] || [ "$k3p_x1" != "cross" ] \
-     || [ "$k3p_wg" != "$k3p_4" ] || [ "$k3p_wg" = "$k3p_1" ]; then
-    echo "validate-adversarial-convergence.sh: arm K3 self-probe failed (want '$k3p_w', same set '$k3p_1', other set '$k3p_2', empty id '$k3p_3', groups '$k3p_x3'/'$k3p_x1', grouped want '$k3p_wg' vs '$k3p_4'); no verdict" >&2
-    exit 2
-  fi
   # The stamp this candidate is dated against: K3_RELEASE for a `requirements-` series, K3B_RELEASE
   # for a widened one, K3C_RELEASE for a pass in the pre-groups cross shape (rebound below, and
-  # probed again there). The probe exercises the release actually bound, predecessor as near-miss.
-  k3_stamp_probe() {
+  # checked again there).
+  k3_release_guard() {
     # The bound release must be a release: a placeholder such as `0.0.0-CUT` reads as 0.0.0 to the
     # stamp parser, so every stamped series would be dated against it and convicted. Refused here,
     # where the value is bound, so only a pass that actually reaches it loses its verdict.
@@ -2685,19 +2579,8 @@ if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ]; then
       echo "validate-adversarial-convergence.sh: arm K3 is bound to release '${k3_rel}', which is not <major>.<minor>.<patch>; this validator shipped unstamped. No verdict." >&2
       exit 2
     fi
-    IFS=. read -r k3_maj k3_min k3_pat <<EOF
-$k3_rel
-EOF
-    k3_pred="${k3_maj}.$((k3_min - 1)).${k3_pat}"
-    k3_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $k3_rel" 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" \
-                'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$k3_rel" k_stamp_parse)"
-    k3_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" | K_RELEASE="$k3_rel" k_stamp_parse)"
-    if [ "$k3_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$k3_probe_none" ]; then
-      echo "validate-adversarial-convergence.sh: arm K3 stamp-parser self-probe failed for ${k3_rel} (got '$k3_probe', near-miss '$k3_probe_none'); no verdict" >&2
-      exit 2
-    fi
   }
-  k3_stamp_probe
+  k3_release_guard
   # k3_opened_after -> 0 when the series' first pass is an ISO 8601 UTC invoked_at at or after the
   # stamp of the release bound in k3_rel, in the consumer root above that pass; 1 otherwise (no root,
   # no stamp, no ISO date, or earlier). The same reads the finding's dating below makes.
@@ -2814,12 +2697,12 @@ EOF
               # series opened at or after K3D_RELEASE's stamp, and acquitted there. Before it, that
               # shape keeps its old verdict, dated against K3C_RELEASE below.
               k3_dok=0
-              if [ "$k3_lone" -eq 1 ]; then k3_rel="$K3D_RELEASE"; k3_stamp_probe; k3_opened_after && k3_dok=1; fi
+              if [ "$k3_lone" -eq 1 ]; then k3_rel="$K3D_RELEASE"; k3_release_guard; k3_opened_after && k3_dok=1; fi
               if [ "$k3_dok" -eq 0 ]; then
                 k3_why="its shard_tool_use_ids key set {${k3_have% }} is not the subject map's ordinals plus cross groups {${k3_want_s% }} (asked of ${k3_ps_from}, base read from ${k3_mf})"
                 k3_rel="$K3_RELEASE"; [ "$k3_wide" -eq 1 ] && k3_rel="$K3B_RELEASE"
                 # The pre-groups shape (ordinals plus one `cross`) is dated against K3C_RELEASE.
-                if [ "$k3_lone" -eq 1 ]; then k3_rel="$K3C_RELEASE"; k3_stamp_probe; fi
+                if [ "$k3_lone" -eq 1 ]; then k3_rel="$K3C_RELEASE"; k3_release_guard; fi
               fi
             fi
           fi
@@ -2890,8 +2773,6 @@ fi
 #              false-MET direction) leaves a changed or still-open part unreviewed.
 #   PENDING    printed, never counted: the derivation refused, or the series is LEGACY (era_resolve).
 #   NOTOKEN    the installed rulebook carries no ERA_TOKEN: the arm is silent and forks nothing.
-# The self-probe stages a three-story series and fires the derivation both ways before the corpus, then
-# a three-part DOCUMENT series that must come back narrowed (no FULL line) under NARROW_ERA_TOKEN.
 n_cand=""
 for ((i = 1; i < N; i++)); do
   k_has_ids "$(block_field "${P_FILE[$i]}" 'shard_tool_use_ids')" && n_cand="$n_cand $i"
@@ -2904,51 +2785,6 @@ if [ -n "$n_cand" ]; then
   elif [ "$ERA_STATE" = bound ]; then
     N_MERGE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-adversarial-shards.sh"
     [ -f "$N_MERGE" ] || { echo "validate-adversarial-convergence.sh: arm N cannot re-derive: $N_MERGE is absent; no verdict" >&2; exit 2; }
-    # THE SELF-PROBE. p1 notarizes c at other bytes and cites 02 in a MAJOR; p2 owes {2, 3}, never 1.
-    np="$AC_T/n/s1"
-    mkdir -p "$np/stories" && printf 'a\n' > "$np/stories/a.md" && printf 'b\n' > "$np/stories/b.md" && printf 'c\n' > "$np/stories/c.md" \
-      || { echo "validate-adversarial-convergence.sh: arm N self-probe could not stage; no verdict" >&2; exit 2; }
-    n_sa="$(k2_sha "$np/stories/a.md")"; n_sb="$(k2_sha "$np/stories/b.md")"; n_sc="$(k2_sha "$np/stories/c.md")"
-    n_pass() {  # $1 file, $2 c's sha, $3 findings body, $4 major count
-      printf '# p\n\n## Shard ordinal map\n\n```text\n1\ta.md\n2\tb.md\n3\tc.md\n```\n\n## Shard: story 02\n\n## Findings\n\n%s\n<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact_sha: a@%s b@%s c@%s\nfindings_critical: 0\nfindings_major: %s\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' \
-        "$3" "$n_sa" "$n_sb" "$2" "$4" > "$1"
-    }
-    n_pass "$np/stories-adversarial-p1.md" "$(printf '%064d' 0)" "$(printf '### F-1 — MAJOR — x\nstories: 02\n')" 1 \
-      && n_pass "$np/stories-adversarial-p2.md" "$n_sc" "" 0 \
-      || { echo "validate-adversarial-convergence.sh: arm N self-probe could not stage; no verdict" >&2; exit 2; }
-    n_p1="$(bash "$N_MERGE" --derived-set "$np/stories-adversarial-p2.md" 2>/dev/null | awk -F'\t' 'NF == 1' | tr '\n' ' ')"
-    n_p2="$(bash "$N_MERGE" --derived-set "$np/stories-adversarial-p1.md" >/dev/null 2>&1; echo $?)"
-    if [ "$n_p1" != "2 3 " ] || [ "$n_p2" != 3 ] || [ "$(n_keys " 01=toolu_a 3=toolu_b cross=toolu_c")" != "1 3 " ] \
-       || [ -n "$(n_keys " 1=xyz_a cross=toolu_c")" ]; then
-      echo "validate-adversarial-convergence.sh: arm N self-probe failed (derived '$n_p1' want '2 3 ', first-pass rc '$n_p2' want 3); no verdict" >&2
-      exit 2
-    fi
-    # THE DOCUMENT SELF-PROBE. A three-part document series under its own installed rulebook carrying
-    # NARROW_ERA_TOKEN (no git above a mktemp tree: the era binds): p1 cites part 03 in a MAJOR, p2's
-    # `part_sha:` moves only part 2, so p2 owes {2, 3} with NO `FULL` line. Fails when document narrowing
-    # never fires (a FULL line, or the full map, comes back). A dispatch of every part is then refused by
-    # the loop's own equality test below, the one the files series exercises; it is not restated here.
-    nd="$AC_T/nd/s1"
-    mkdir -p "$nd" "$AC_T/nd/.claude/skills/ai-dlc/steps" \
-      && printf '%s\n' "$NARROW_ERA_TOKEN" > "$AC_T/nd/.claude/skills/ai-dlc/steps/_gate-procedures.md" \
-      || { echo "validate-adversarial-convergence.sh: arm N document self-probe could not stage; no verdict" >&2; exit 2; }
-    n_dpass() {  # $1 file, $2 part 2's digest digit, $3 findings body, $4 major count
-      printf '# p\n\n## Shard ordinal map\n\n```text\n1\t1\t3\t## A\n2\t4\t6\t## B\n3\t7\t9\t## C\n```\n\n## Findings\n\n%s\n<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: 2026-01-01T00:00:00Z\nartifact_sha: %064d\npart_sha: 1=%064d 2=%064d 3=%064d\npart_run: -\nfindings_critical: 0\nfindings_major: %s\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' \
-        "$3" 9 1 "$2" 3 "$4" > "$1"
-    }
-    n_dpass "$nd/doc-adversarial-p1.md" 2 "$(printf '### F-1 — MAJOR — x\nsections: 03\n')" 1 \
-      && n_dpass "$nd/doc-adversarial-p2.md" 22 "" 0 \
-      || { echo "validate-adversarial-convergence.sh: arm N document self-probe could not stage; no verdict" >&2; exit 2; }
-    # GIT_CEILING_DIRECTORIES: a TMPDIR inside some git work tree must not turn the probe's era LEGACY.
-    # The ceiling is $AC_T, the PARENT of the rulebook root: era_resolve runs `git -C $AC_T/nd`, and git
-    # never excludes its working directory from discovery, only the ascent past a listed directory, so
-    # listing $AC_T/nd itself would still let git climb from it to an outer repository.
-    n_d="$(GIT_CEILING_DIRECTORIES="$AC_T" bash "$N_MERGE" --derived-set "$nd/doc-adversarial-p2.md" 2>&1)"
-    n_dset="$(printf '%s\n' "$n_d" | awk -F'\t' 'NF == 1 && /^[0-9]+$/' | tr '\n' ' ')"
-    if [ "$n_dset" != "2 3 " ] || [ -n "$(printf '%s\n' "$n_d" | awk -F'\t' '$1 == "FULL"')" ]; then
-      echo "validate-adversarial-convergence.sh: arm N document self-probe failed (derived '$n_dset' want '2 3 ' and no FULL line: $(printf '%s\n' "$n_d" | awk -F'\t' '$1 == "FULL" { print $2; exit }')); no verdict" >&2
-      exit 2
-    fi
     for i in $n_cand; do
       n_f="${P_FILE[$i]}"; n_b="$(basename "$n_f")"; n_pred="$(basename "${P_FILE[$((i - 1))]}")"
       n_from="$(block_field "$n_f" 'shard_set_derived_from')"; n_from="${n_from%%[[:space:]]*}"
@@ -3067,7 +2903,7 @@ fi
 # s315 (a, the `-p1` record), s316 (a), s317 PASS (its lone `cross.md` is the whole cross part), s318
 # (a); s311 carry-over-single, s312 lightweight and s313 standard NOT-OWED; s319 no stories series.
 # Under each record's ERA: s310 and s314-s318 PENDING, s311-s313 NOT-OWED, FAIL set EMPTY.
-# THE FAIL PATH IS PROVEN ONLY BY THE SEEDED SELF-PROBE BELOW: no sprint on that corpus was elicited
+# THE FAIL PATH WAS PROVEN ONLY BY A SEEDED PROBE AT AUTHORING: no sprint on that corpus was elicited
 # after the consumer installed 0.782.0, so no real input reaches it. The real-corpus receipt is
 # OWED, not covered -- the reference consumer's NEXT stories elicitation, run through the
 # era-correct path, is the first input that can fire or pass this arm on its merits.
@@ -3320,7 +3156,7 @@ l_delta_judge() {
 
 # $1 intensity  $2 K  $3 want set (space-separated, ordinals de-padded)  $4 record present 0/1
 # $5 shard dir present 0/1  $6 shard dir entries, one basename per line -> L_V (PASS | FAIL |
-# NOT-OWED | UNJUDGED) and L_WHY. Fork-free: the self-probe calls it on staged inputs, not a corpus.
+# NOT-OWED | UNJUDGED) and L_WHY. Fork-free.
 l_judge() {
   L_V=""; L_WHY=""
   case "$1" in
@@ -3403,160 +3239,8 @@ K_COUNT=0
 [ -z "$l_sd" ] || k_count_md "$l_sd/stories"
 if [ -n "$l_sd" ] && [ "$K_COUNT" -ge 1 ]; then
   l_k="$K_COUNT"
-  # THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, fork-free for the judge and the record
-  # glob. Each row is `<want verdict> <cause letter or -> | intensity | K | want | rec | dir | entries`.
-  mkdir -p "$AC_T/l-probe/a" "$AC_T/l-probe/b" \
-    && : > "$AC_T/l-probe/a/stories-elicitation-p1.md" && : > "$AC_T/l-probe/a/stories-elicitation-repair-p1.md" \
-    && : > "$AC_T/l-probe/b/stories-elicitation-repair-p1.md" || {
-    echo "validate-adversarial-convergence.sh: arm L self-probe could not stage; no verdict" >&2; exit 2; }
-  l_records "$AC_T/l-probe/a"; lp_ra="$L_RECS"
-  l_records "$AC_T/l-probe/b"; lp_rb="$L_RECS"
-  l_W3="1 2 3 cross-1 cross-2 cross-3"
-  l_W7="1 2 3 4 5 6 7 cross-1 cross-2 cross-3 cross-4 cross-5 cross-6"
   l_NL='
 '
-  lp_bad=""
-  while IFS='|' read -r lp_want lp_int lp_k lp_set lp_rec lp_dir lp_ent; do
-    [ -n "$lp_want" ] || continue
-    l_judge "$lp_int" "$lp_k" "$lp_set" "$lp_rec" "$lp_dir" "${lp_ent//,/$l_NL}"
-    lp_v="${lp_want% *}"; lp_c="${lp_want#* }"
-    if [ "$L_V" != "$lp_v" ]; then lp_bad="$lp_bad [$lp_want got $L_V]"; continue; fi
-    case "$lp_c" in -) ;; *) case "$L_WHY" in *"($lp_c)"*) ;; *) lp_bad="$lp_bad [$lp_want: '$L_WHY']" ;; esac ;; esac
-  done <<EOF
-FAIL a|full|3|$l_W3|1|0|
-PASS -|full|3|$l_W3|0|1|01.md,02.md,03.md,cross-1.md,cross-2.md,cross-3.md
-PASS -|full|3|$l_W3|1|1|01.md,02.md,03.md,cross-1.md,cross-2.md,cross-3.md
-FAIL b|full|3|$l_W3|0|1|01.md,02.md,04.md,cross-1.md,cross-2.md,cross-3.md
-FAIL d|full|3|$l_W3|0|1|01.md,02.md,04.md,cross-1.md,cross-2.md,cross-3.md
-PASS -|full|3|$l_W3|0|1|01.md,02.md,03.md,cross.md
-FAIL c|full|3|$l_W3|1|1|01.md,02.md,03.md,cross-1.md,cross-2.md
-PASS -|full|7|$l_W7|0|1|01.md,02.md,03.md,04.md,05.md,06.md,07.md,cross.md
-PASS -|full|7|$l_W7|0|1|01.md,02.md,03.md,04.md,05.md,06.md,07.md,cross-1.md,cross-2.md,cross-3.md,cross-4.md,cross-5.md,cross-6.md
-FAIL c|full|7|$l_W7|0|1|01.md,02.md,03.md,04.md,05.md,06.md,07.md,cross-1.md,cross-2.md,cross-3.md
-FAIL c|full|3|$l_W3|0|1|01.md,02.md,03.md,cross.md,cross-1.md
-FAIL d|full|3|$l_W3|0|1|01.md,02.md,03.md,cross.md,cross-1.md,cross-2.md,cross-3.md
-FAIL d|full|1|1|0|1|01.md,cross.md
-FAIL e|full|3|$l_W3|0|0|
-NOT-OWED -|standard|3|$l_W3|0|0|
-NOT-OWED -|carry-over-single|3|$l_W3|1|0|
-UNJUDGED -|ful|3|$l_W3|0|0|
-PASS -|full|1|1|0|1|01.md
-NOT-OWED -|full|1|1|1|0|
-FAIL b|full|1|1|0|1|02.md
-FAIL d|full|3|$l_W3|0|1|01.md,1.md,02.md,03.md,cross-1.md,cross-2.md,cross-3.md
-EOF
-  # A lone `cross.md` at K=3 is the whole cross part. A PARTIAL cross-<g> set (cross-1..3 of G=6 at
-  # K=7) must be (c), naming both accepted forms and never (d); `cross.md` beside one `cross-<g>` is
-  # neither form, so (c) names it as found instead.
-  l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}cross.md"
-  [ "$L_V $L_WHY" = "PASS shards/stories-elicitation/ holds exactly the owed set" ] || lp_bad="$lp_bad [lone cross.md: $L_V '$L_WHY']"
-  l_judge full 7 "$l_W7" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}04.md${l_NL}05.md${l_NL}06.md${l_NL}07.md${l_NL}cross-1.md${l_NL}cross-2.md${l_NL}cross-3.md"
-  case "$L_WHY" in
-    *"(d)"*) lp_bad="$lp_bad [partial cross set read as (d): '$L_WHY']" ;;
-    "(c) cross shards short: 3 cross shard(s) where G=6 are owed (owed: cross.md, or all of cross-1.md cross-2.md cross-3.md cross-4.md cross-5.md cross-6.md)") ;;
-    *) lp_bad="$lp_bad [partial cross set: '$L_WHY']" ;;
-  esac
-  l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}cross.md${l_NL}cross-1.md"
-  case "$L_WHY" in *"found instead: cross.md"*) ;; *) lp_bad="$lp_bad [cross.md beside cross-1: '$L_WHY']" ;; esac
-  # A correct COUNT with wrong names must name both the missing ordinal and the stray: a judge
-  # that compared counts passes it. Ordinals print at the merge's width (K=3: `3.md`).
-  l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}04.md${l_NL}cross-1.md${l_NL}cross-2.md${l_NL}cross-3.md"
-  case "$L_WHY" in *"(b) ordinals missing: 3.md"*"(d) wrong names present: 04.md"*) ;; *) lp_bad="$lp_bad [count-not-names: '$L_WHY']" ;; esac
-  # THE RECORDED K, both directions. c: 01.md bare (as the reference consumer's is), the K on a later
-  # file and on a cross shard after a body line -> 5. d: two files disagree -> (f), no K. e: a
-  # `shard: none` line and an INDENTED one -> no K and no (f). f: the K-matches near-miss -> 3.
-  # g: a fenced quote of the grammar (K=9) before the real line (K=4) -> 4. h: K=1000 -> (f).
-  # Then the two judgments against K_rec = 5 that separate a moved stories/ from under-sharding:
-  # complete for 5 PASSes; 01-03 plus three cross shards FAILs naming 4.md and 5.md, which only a
-  # judgment against K_rec can owe. Then the DIRECTION: l_kuse honours only a LARGER recorded K --
-  # 5 over 3 yes; 3 over 3 (equality), 1 over 3 (`shard: 1/1`, one voice) and 2 over 3 no -- and the
-  # equality and grow dirs are judged against today's K=3, failing (b) and (c).
-  # n: a ```` fence holding a ``` block, a quoted shard line (K=9) after the inner closer, then the real
-  # line (K=4) after the ```` closer -> 4; a closer without the length rule reads the quote, so 9.
-  mkdir -p "$AC_T/l-probe/c" "$AC_T/l-probe/d" "$AC_T/l-probe/e" "$AC_T/l-probe/f" "$AC_T/l-probe/g" "$AC_T/l-probe/h" "$AC_T/l-probe/n" \
-    && printf '```\nshard: 01/9 quoted\n```\nshard: 02/4 real\n' > "$AC_T/l-probe/g/02.md" \
-    && printf '````md\n```text\nx\n```\nshard: 01/9 quoted\n````\nshard: 02/4 real\n' > "$AC_T/l-probe/n/02.md" \
-    && printf 'shard: 01/1000 x\n' > "$AC_T/l-probe/h/01.md" \
-    && : > "$AC_T/l-probe/c/01.md" && printf '# x\n\nshard: 02/5 story-2\n' > "$AC_T/l-probe/c/02.md" \
-    && printf 'body\nshard: cross/5 cross-1\n' > "$AC_T/l-probe/c/cross-1.md" \
-    && printf 'shard: 02/5 a\n' > "$AC_T/l-probe/d/02.md" && printf 'shard: 03/3 b\n' > "$AC_T/l-probe/d/03.md" \
-    && printf 'shard: none (serial-document)\n  shard: 01/4 indented\n' > "$AC_T/l-probe/e/01.md" \
-    && printf 'shard: 01/3 a\n' > "$AC_T/l-probe/f/01.md" || {
-    echo "validate-adversarial-convergence.sh: arm L self-probe could not stage; no verdict" >&2; exit 2; }
-  l_kparse "$AC_T/l-probe/c"; [ "$L_KREC/$L_KBAD" = "5/" ] || lp_bad="$lp_bad [recorded K, bare 01.md: '$L_KREC/$L_KBAD' want '5/']"
-  l_kparse "$AC_T/l-probe/d"
-  case "$L_KREC/$L_KBAD" in "/(f) the shard: lines do not record one K in 1..999: 02.md=5 03.md=3") ;; *) lp_bad="$lp_bad [recorded K disagreeing: '$L_KREC/$L_KBAD']" ;; esac
-  l_kparse "$AC_T/l-probe/g"; [ "$L_KREC/$L_KBAD" = "4/" ] || lp_bad="$lp_bad [recorded K, fenced quote: '$L_KREC/$L_KBAD' want '4/']"
-  l_kparse "$AC_T/l-probe/n"; [ "$L_KREC/$L_KBAD" = "4/" ] || lp_bad="$lp_bad [recorded K, quote in a nested fence: '$L_KREC/$L_KBAD' want '4/']"
-  l_kparse "$AC_T/l-probe/h"
-  case "$L_KREC/$L_KBAD" in "/(f) the shard: lines do not record one K in 1..999: 01.md=1000") ;; *) lp_bad="$lp_bad [recorded K over the cap: '$L_KREC/$L_KBAD']" ;; esac
-  lp_ku="$(l_kuse 5 3 && printf y)$(l_kuse 3 3 && printf y)$(l_kuse 1 3 && printf y)$(l_kuse 2 3 && printf y)$(l_kuse '' 3 && printf y)"
-  [ "$lp_ku" = "y" ] || lp_bad="$lp_bad [l_kuse 5/3 3/3 1/3 2/3 none/3: '$lp_ku' want 'y' (larger only)]"
-  l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}cross-1.md"
-  case "$L_V $L_WHY" in "FAIL (b) ordinals missing: 3.md; (c) cross shards short: 1 cross shard(s) where G=3 are owed (owed: cross.md, or all of cross-1.md cross-2.md cross-3.md)") ;; *) lp_bad="$lp_bad [equality under-sharded: $L_V '$L_WHY']" ;; esac
-  l_judge full 3 "$l_W3" 0 1 "01.md"
-  case "$L_V $L_WHY" in "FAIL (b) ordinals missing: 2.md 3.md; (c) cross shards short: 0 cross shard(s) where G=3 are owed"*) ;; *) lp_bad="$lp_bad [grow, one voice at shard: 1/1: $L_V '$L_WHY']" ;; esac
-  # THE SUBJECT COVER, in the forms a real elicitation writes (s317's 03.md, 04.md and cross.md): i,
-  # one ordinal naming its story by ABSOLUTE path and one by RELATIVE path -> covered; j, one cross
-  # shard naming the stories dir RELATIVELY with `<name>=<sha>` pairs -> covered; k, j's shard over a
-  # stories/ where one name differs by one character -> that name; n, a shard naming no subject -> no
-  # names. i is also the near-miss of o: the SAME basename under s9 covers. o: i's relative ordinal
-  # beside an s8 ordinal (one sprint off) of that basename -> uncovered. p: an s19 cross dir naming
-  # both, beside i's relative ordinal -> uncovered (`s19/stories/` ends in `s9/stories/` without the `/`
-  # boundary). q: an s19 ORDINAL `s19/stories/story-1-3-x.md` (relative, no leading dir) -> uncovered.
-  l_pz="$(printf '%064d' 0)"
-  mkdir -p "$AC_T/l-probe/i/sh" "$AC_T/l-probe/i/st" "$AC_T/l-probe/j/sh" "$AC_T/l-probe/j/st" \
-           "$AC_T/l-probe/k/st" "$AC_T/l-probe/n/sh" "$AC_T/l-probe/n/st" "$AC_T/l-probe/o/sh" "$AC_T/l-probe/p/sh" \
-           "$AC_T/l-probe/q/sh" \
-    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: /abs/s9/stories/story-1-3-x.md\nartifact_sha: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" > "$AC_T/l-probe/i/sh/01.md" \
-    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: out/area/s9/stories/story-2-1-x.md \nSKILL_INVOCATION_PROVENANCE_END -->\n' > "$AC_T/l-probe/i/sh/02.md" \
-    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: /abs/s8/stories/story-1-3-x.md\nartifact_sha: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" > "$AC_T/l-probe/o/sh/01.md" \
-    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: s19/stories/story-1-3-x.md\nartifact_sha: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" > "$AC_T/l-probe/q/sh/01.md" \
-    && cp "$AC_T/l-probe/i/sh/02.md" "$AC_T/l-probe/o/sh/02.md" && cp "$AC_T/l-probe/i/sh/02.md" "$AC_T/l-probe/p/sh/02.md" \
-    && cp "$AC_T/l-probe/i/sh/02.md" "$AC_T/l-probe/q/sh/02.md" \
-    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: out/area/s19/stories/\nartifact_sha: story-1-3-x=%s story-2-1-x=%s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" "$l_pz" > "$AC_T/l-probe/p/sh/cross.md" \
-    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: s9/stories/\nartifact_sha: story-1-3-x=%s story-2-1-x=%s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" "$l_pz" > "$AC_T/l-probe/j/sh/cross.md" \
-    && mkdir -p "$AC_T/l-probe/ja/sh" \
-    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: s9/stories/\nartifact_sha: story-1-3-x@%s story-2-1-x@%s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" "$l_pz" > "$AC_T/l-probe/ja/sh/cross.md" \
-    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: s9/stories/\nartifact_sha: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" > "$AC_T/l-probe/n/sh/01.md" \
-    && : > "$AC_T/l-probe/i/st/story-1-3-x.md" && : > "$AC_T/l-probe/i/st/story-2-1-x.md" \
-    && : > "$AC_T/l-probe/j/st/story-1-3-x.md" && : > "$AC_T/l-probe/j/st/story-2-1-x.md" \
-    && : > "$AC_T/l-probe/k/st/story-1-3-y.md" && : > "$AC_T/l-probe/k/st/story-2-1-x.md" \
-    && : > "$AC_T/l-probe/n/st/story-1-3-x.md" || {
-    echo "validate-adversarial-convergence.sh: arm L self-probe could not stage; no verdict" >&2; exit 2; }
-  l_cover "$AC_T/l-probe/i/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/" ] || lp_bad="$lp_bad [cover, ordinal forms: '$L_NONAMES/$L_UNCOV' want '/']"
-  l_cover "$AC_T/l-probe/j/sh" "$AC_T/l-probe/j/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/" ] || lp_bad="$lp_bad [cover, cross form: '$L_NONAMES/$L_UNCOV' want '/']"
-  l_cover "$AC_T/l-probe/ja/sh" "$AC_T/l-probe/j/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/" ] || lp_bad="$lp_bad [cover, cross form with @ pairs: '$L_NONAMES/$L_UNCOV' want '/']"
-  l_cover "$AC_T/l-probe/j/sh" "$AC_T/l-probe/k/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-y" ] || lp_bad="$lp_bad [cover, one-char rename: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-y']"
-  l_cover "$AC_T/l-probe/n/sh" "$AC_T/l-probe/n/st" 9; [ "$L_NONAMES/$L_UNCOV" = "1/" ] || lp_bad="$lp_bad [cover, no names: '$L_NONAMES/$L_UNCOV' want '1/']"
-  l_cover "$AC_T/l-probe/o/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-x" ] || lp_bad="$lp_bad [cover, foreign-sprint ordinal: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-x']"
-  l_cover "$AC_T/l-probe/p/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-x" ] || lp_bad="$lp_bad [cover, foreign-sprint cross: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-x']"
-  l_cover "$AC_T/l-probe/q/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-x" ] || lp_bad="$lp_bad [cover, s19 ordinal suffix: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-x']"
-  # THE DELTA'S ORDINAL NAMES (BL-733): i's two ordinals name both stories; j's cross shard names
-  # both by `<name>=` and must name NONE, or a cross voice acquits an ordinal.
-  l_onames "$AC_T/l-probe/i/sh" 9; [ "$L_ONAMES" = " story-1-3-x story-2-1-x " ] || lp_bad="$lp_bad [delta ordinal names: '$L_ONAMES']"
-  l_onames "$AC_T/l-probe/j/sh" 9; [ "$L_ONAMES" = " " ] || lp_bad="$lp_bad [delta ordinal names read a cross shard: '$L_ONAMES']"
-  if ! l_insprint "a/s9/stories/x.md" "s9/stories/x.md" || ! l_insprint "s9/stories/x.md" "s9/stories/x.md" \
-     || l_insprint "a/s19/stories/x.md" "s9/stories/x.md" || l_insprint "s19/stories/x.md" "s9/stories/x.md" \
-     || l_insprint "a/s8/stories/x.md" "s9/stories/x.md"; then lp_bad="$lp_bad [l_insprint boundary: /s9/ and leading s9/ only]"; fi
-  l_kparse "$AC_T/l-probe/e"; [ "$L_KREC/$L_KBAD" = "/" ] || lp_bad="$lp_bad [recorded K, none/indented: '$L_KREC/$L_KBAD' want '/']"
-  l_kparse "$AC_T/l-probe/f"; [ "$L_KREC/$L_KBAD" = "3/" ] || lp_bad="$lp_bad [recorded K, near-miss: '$L_KREC/$L_KBAD' want '3/']"
-  l_W5="1 2 3 4 5 cross-1 cross-2 cross-3 cross-4 cross-5 cross-6"
-  l_judge full 5 "$l_W5" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}04.md${l_NL}05.md${l_NL}cross-1.md${l_NL}cross-2.md${l_NL}cross-3.md${l_NL}cross-4.md${l_NL}cross-5.md${l_NL}cross-6.md"
-  [ "$L_V" = PASS ] || lp_bad="$lp_bad [complete for recorded K=5: $L_V '$L_WHY']"
-  l_judge full 5 "$l_W5" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}cross-1.md${l_NL}cross-2.md${l_NL}cross-3.md"
-  case "$L_V $L_WHY" in "FAIL (b) ordinals missing: 4.md 5.md; (c) cross shards short: 3 cross shard(s) where G=6 are owed"*) ;; *) lp_bad="$lp_bad [under-sharded for recorded K=5: $L_V '$L_WHY']" ;; esac
-  if [ "$lp_ra" != "stories-elicitation-p1.md" ] || [ -n "$lp_rb" ] || [ -n "$lp_bad" ]; then
-    echo "validate-adversarial-convergence.sh: arm L self-probe failed (records '$lp_ra' / '$lp_rb' want 'stories-elicitation-p1.md' / '';$lp_bad); no verdict" >&2
-    exit 2
-  fi
-  l_sp="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $L_RELEASE" 'C 2026-01-01T00:00:00Z' '+version: 0.781.0' \
-           'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$L_RELEASE" k_stamp_parse)"
-  l_sp_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' '+version: 0.781.0' | K_RELEASE="$L_RELEASE" k_stamp_parse)"
-  if [ "$l_sp" != "2026-01-02T00:00:00Z" ] || [ -n "$l_sp_none" ]; then
-    echo "validate-adversarial-convergence.sh: arm L stamp-parser self-probe failed (got '$l_sp', near-miss '$l_sp_none'); no verdict" >&2
-    exit 2
-  fi
 
   l_term="${LAST_FILE##*/}"
   l_int=""; l_int_src=""
@@ -3886,43 +3570,15 @@ h_stem() {  # $1 pass file -> H_STEM (empty when the name carries no pass number
   H_STEM="${b%-adversarial}"
 }
 H_STEM_RE='^(.*)(pass|p)[0-9]+'
-# THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, fork-free: the last numbered token
-# wins over an earlier one, `pass<N>` is not read as `s<N>`, a suffix after the token is
-# dropped, `-adversarial` is dropped once and only at the end, and a name with no number has
-# no stem.
-if ac_on H && [ "$N" -gt 1 ]; then
-  h_stem "d/prd-adversarial-p13.md"; hp1="$H_STEM"
-  h_stem "s289-rr-adversarial-pass4-verification.md"; hp2="$H_STEM"
-  h_stem "x-p1-adversarial-pass2.md"; hp3="$H_STEM"
-  h_stem "adversarial-notes-p1.md"; hp4="$H_STEM"
-  h_stem "brief-adversarial.md"; hp5="$H_STEM"
-  if [ "$hp1" != prd ] || [ "$hp2" != s289-rr ] || [ "$hp3" != x-p1 ] \
-     || [ "$hp4" != adversarial-notes ] || [ -n "$hp5" ]; then
-    echo "validate-adversarial-convergence.sh: arm H stem self-probe failed (p13 '$hp1', pass4-suffix '$hp2', last-token '$hp3', inner-word '$hp4', no-number '$hp5'); no verdict" >&2
-    exit 2
-  fi
-fi
 H_GATE=""   # unset until the first FOREIGN case asks: owed | pending-<reason>
 h_gate() {  # -> H_GATE, H_GATE_MSG; the stamp is read once per run
   [ -n "$H_GATE" ] && return 0
-  local h_root="" h_walk h_at="${P_AT[0]:-}" h_maj h_min h_pat h_pred h_probe h_probe_none h_stamp=""
+  local h_root="" h_walk h_at="${P_AT[0]:-}" h_stamp=""
   h_walk="$(cd "$(dirname "${P_FILE[0]}")" 2>/dev/null && pwd)"
   while [ -n "$h_walk" ]; do
     if [ -f "$h_walk/.claude/.ai-dlc-version" ]; then h_root="$h_walk"; break; fi
     h_walk="${h_walk%/*}"
   done
-  # The rebinding is probed with H_RELEASE's predecessor as the near-miss, as J2's is.
-  IFS=. read -r h_maj h_min h_pat <<EOF
-$H_RELEASE
-EOF
-  h_pred="${h_maj}.$((h_min - 1)).${h_pat}"
-  h_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $H_RELEASE" 'C 2026-01-01T00:00:00Z' "+version: $h_pred" \
-             'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$H_RELEASE" k_stamp_parse)"
-  h_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $h_pred" | K_RELEASE="$H_RELEASE" k_stamp_parse)"
-  if [ "$h_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$h_probe_none" ]; then
-    echo "validate-adversarial-convergence.sh: arm H stamp-parser self-probe failed (got '$h_probe', near-miss '$h_probe_none'); no verdict" >&2
-    exit 2
-  fi
   if [ -n "$h_root" ]; then
     stamp_log "$h_root"
     h_stamp="$(K_RELEASE="$H_RELEASE" k_stamp_parse < "$STAMP_LOG")"
@@ -4259,22 +3915,6 @@ if ac_on J2 && [ "$N" -gt 0 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; the
   if [ -n "$j2_file" ] && j2_is_sha "$j2_sha" && j2_in_subject "$j2_file"; then
     j2_disk="$(k2_sha "$j2_file")"
     if [ -n "$j2_disk" ] && [ "$j2_disk" != "$j2_sha" ]; then
-      # THE SELF-PROBE, both directions, before the corpus -- and only here, where the drift
-      # makes the walk and the reader load-bearing. The pole invokes this validator hundreds of
-      # times per run; a probe on every invocation would pay for a question nobody asked.
-      printf 'a\tb\tr1\nb\tc\tr2\n' > "$AC_T/j2-chain" && printf 'a\tb\tr1\na\tc\tr2\n' > "$AC_T/j2-fork" \
-        && printf -- '- **artifact:** `x/y.md`\n- artifact_sha_before: abc\n' > "$AC_T/j2-rec.md" || {
-        echo "validate-adversarial-convergence.sh: arm J2 self-probe could not stage; no verdict" >&2; exit 2; }
-      j2_walk a c "$AC_T/j2-chain"; j2p1="$J2_END"
-      j2_walk a d "$AC_T/j2-chain"; j2p2="$J2_END"
-      j2_walk a c "$AC_T/j2-fork";  j2p3="$J2_END"
-      j2p4="$(repair_value artifact "$AC_T/j2-rec.md")"
-      j2p5="$(repair_value artifact_sha "$AC_T/j2-rec.md")"
-      if [ "$j2p1" != complete ] || [ "$j2p2" != incomplete ] || [ "$j2p3" != fork ] \
-         || [ "$j2p4" != "x/y.md" ] || [ -n "$j2p5" ]; then
-        echo "validate-adversarial-convergence.sh: arm J2 self-probe failed (chain '$j2p1', miss '$j2p2', fork '$j2p3', value '$j2p4', near-miss label '$j2p5'); no verdict" >&2
-        exit 2
-      fi
       : > "$AC_T/j2-links"
       for j2_rec in "$(dirname "$LAST_FILE")"/*-repair-p*.md; do
         [ -f "$j2_rec" ] || continue
@@ -4291,15 +3931,8 @@ if ac_on J2 && [ "$N" -gt 0 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; the
       done
       j2_walk "$j2_sha" "$j2_disk" "$AC_T/j2-links"
       if [ "$J2_END" = complete ] && [ "${j2_file##*/}" = "test-strategy.md" ]; then
-        # THE STORY-ID SET (BL-736, header at J2T_RELEASE). Self-probe first, both directions: the
-        # row id keeps `2.3` while the story column says `2.3a`, so only the column reader gets `2.3a`.
-        printf '| ST9-2.3-01 | 2.3a | AC1 | unit |\n| ST9-2.3-02 | 2.3b | AC2 | unit |\nStory 2.3 prose\n| id | story |\n' > "$AC_T/j2t-probe.md" || {
-          echo "validate-adversarial-convergence.sh: arm J2 story-id self-probe could not stage; no verdict" >&2; exit 2; }
-        j2tp="$(j2t_ids "$AC_T/j2t-probe.md" | tr '\n' ' ')"
-        if [ "$j2tp" != "2.3a 2.3b " ]; then
-          echo "validate-adversarial-convergence.sh: arm J2 story-id self-probe failed (got '$j2tp', want '2.3a 2.3b '); no verdict" >&2
-          exit 2
-        fi
+        # THE STORY-ID SET (BL-736, header at J2T_RELEASE): the row id keeps `2.3` while the story column
+        # says `2.3a`, so only the column reader gets `2.3a`.
         j2t_term="${LAST_FILE##*/}"
         j2t_recover "$j2_file" "$j2_sha"
         j2t_why=""; j2t_diff=""
@@ -4356,18 +3989,6 @@ if ac_on J2 && [ "$N" -gt 0 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; the
           if [ -f "$j2_walkup/.claude/.ai-dlc-version" ]; then j2_root="$j2_walkup"; break; fi
           j2_walkup="${j2_walkup%/*}"
         done
-        # The rebinding is probed with J2_RELEASE's predecessor as the near-miss, as K2's is.
-        IFS=. read -r j2_maj j2_min j2_pat <<EOF
-$J2_RELEASE
-EOF
-        j2_pred="${j2_maj}.$((j2_min - 1)).${j2_pat}"
-        j2_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $J2_RELEASE" 'C 2026-01-01T00:00:00Z' "+version: $j2_pred" \
-                    'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$J2_RELEASE" k_stamp_parse)"
-        j2_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $j2_pred" | K_RELEASE="$J2_RELEASE" k_stamp_parse)"
-        if [ "$j2_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$j2_probe_none" ]; then
-          echo "validate-adversarial-convergence.sh: arm J2 stamp-parser self-probe failed (got '$j2_probe', near-miss '$j2_probe_none'); no verdict" >&2
-          exit 2
-        fi
         j2_stamp=""
         if [ -n "$j2_root" ]; then
           stamp_log "$j2_root"
@@ -4437,23 +4058,6 @@ EOF
         done < "$j2s_mf"
       fi
       if [ -n "$j2s_moved" ]; then
-        # THE SELF-PROBE, both directions, before the corpus -- here, where a moved stem makes the
-        # entry reader, the token lookup and the link filter load-bearing.
-        printf -- '- artifact: p/prd.md\n- artifact_sha_before: AA\n- artifact_sha_after: BB\n- **artifact:** `s/SPEC.md`\n- artifact_sha_before: CC\n- artifact_sha_after: DD\nthe artifact: s/x.md moved\n- artifact: m.md\n- artifact_sha_before: SPEC=EE prd=FF\n' \
-          > "$AC_T/j2s-rec.md" && printf 'SPEC\tx\tx\tr0\nSPEC\tx\ty\tr1\nSPEC\tx\ty\tr2\nprd\tx\tz\tr3\n' > "$AC_T/j2s-rows" || {
-          echo "validate-adversarial-convergence.sh: arm J2 subject self-probe could not stage; no verdict" >&2; exit 2; }
-        j2sp1="$(repair_entries "$AC_T/j2s-rec.md" | awk -F'\t' 'NR == 2 || NR == 3 { print $1 "|" $2 "|" $3 } END { print NR }' | tr '\n' ' ')"
-        j2sp2="$(j2s_tok SPEC "SPE=aa SPEC=bb") $(j2s_tok SPE "SPEC=bb") $(j2s_tok SPEC "SPE@aa SPEC@cc") $(j2s_tok SPE "SPEC@cc")"
-        j2sp3="$(j2s_links SPEC "$AC_T/j2s-rows" | tr '\t\n' ': ')"
-        # The `@` separator, read alongside `=`: the value is lowercased, the stem is not.
-        printf -- '- artifact: m.md\n- artifact_sha_before: SPEC@EE prd=FF\n' > "$AC_T/j2s-rec-at.md" || {
-          echo "validate-adversarial-convergence.sh: arm J2 subject self-probe could not stage; no verdict" >&2; exit 2; }
-        j2sp4="$(repair_entries "$AC_T/j2s-rec-at.md" | awk -F'\t' '{ print $2 }')"
-        if [ "$j2sp1" != "s/SPEC.md|cc|dd m.md|SPEC=ee prd=ff| 3 " ] || [ "$j2sp2" != "bb  cc " ] || [ "$j2sp3" != "x:y:r1 " ] \
-           || [ "$j2sp4" != "SPEC@ee prd=ff" ]; then
-          echo "validate-adversarial-convergence.sh: arm J2 subject self-probe failed (entries '$j2sp1', token '$j2sp2', links '$j2sp3', @ entries '$j2sp4'); no verdict" >&2
-          exit 2
-        fi
         # THE LINK ROWS: every repair record in the pass directory -- `*repair*.md`, so the
         # reference consumer's `requirements-repair-adv-p<M>.md` and `requirements-repair-el.md`
         # count beside `*-repair-p<M>.md` -- structured for arm H; each of its entries naming the
@@ -4507,17 +4111,6 @@ J2SEOF
             if [ -f "$j2_walkup/.claude/.ai-dlc-version" ]; then j2_root="$j2_walkup"; break; fi
             j2_walkup="${j2_walkup%/*}"
           done
-          IFS=. read -r j2_maj j2_min j2_pat <<EOF
-$J2S_RELEASE
-EOF
-          j2_pred="${j2_maj}.$((j2_min - 1)).${j2_pat}"
-          j2_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $J2S_RELEASE" 'C 2026-01-01T00:00:00Z' "+version: $j2_pred" \
-                      'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$J2S_RELEASE" k_stamp_parse)"
-          j2_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $j2_pred" | K_RELEASE="$J2S_RELEASE" k_stamp_parse)"
-          if [ "$j2_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$j2_probe_none" ]; then
-            echo "validate-adversarial-convergence.sh: arm J2 subject stamp-parser self-probe failed (got '$j2_probe', near-miss '$j2_probe_none'); no verdict" >&2
-            exit 2
-          fi
           j2_stamp=""
           if [ -n "$j2_root" ]; then
             stamp_log "$j2_root"
@@ -4782,41 +4375,6 @@ J3_INBOUND=0
 if [ "$N" -gt 0 ] && [ "$J3_ARM" -eq 1 ]; then
   for j3_r in "$j3_dir"/*-deferral-p*.md; do [ -f "$j3_r" ] && { J3_INBOUND=1; break; }; done
 fi
-if [ "$J3_OPEN" -eq 1 ] || [ "$J3_INBOUND" -eq 1 ]; then
-  # THE SELF-PROBE, both directions, before the corpus -- and only here, where a MAJOR at MET or a
-  # deferral record makes the readers load-bearing. The pole invokes this validator hundreds of times.
-  printf '%s\n' '# probe' '## Shard: section 1' '## Findings' '### F-1 — MAJOR — kept' '```text' \
-    '### F-9 — MAJOR — fenced' '```' '### F-2 — MINOR — not major' '## Probes' '### F-3 — MAJOR — outside Findings' \
-    '## Findings (pass 2)' '### F-4 — MAJOR — sharded, not a findings section' \
-    '## Shard: cross-section group 2 (1,2)' '## Findings' '### F-1 — MAJOR — cross' > "$AC_T/j3p-adversarial-p1.md" \
-    && printf '%s\n' '## Findings introduced by the repair' '### M1 — MAJOR — unsharded' > "$AC_T/j3u-adversarial-p1.md" \
-    && printf '%s\n' '### F-0 — MAJOR' '- source: 0.md#F-0' '- disposition: repaired' '- artifact: a.md' \
-    '- **artifact_sha_before:** AA' '- artifact_sha_after: bb' '### F-1 — MAJOR' '- **source:** `1.md#F-1` cross-2.md#F-1' '- **disposition:** repaired' \
-    '### F-2 — MAJOR' '- source: 2.md#F-2' '- disposition: escalated' '- edit: x' > "$AC_T/j3p-rec.md" \
-    && printf '%s\n' '- **source:** p/1.md#F-1' '- **deferred-to:** `requirements`' '- source: 2.md#F-2' \
-    '- deferred-to: architecture (next)' '- deferred-to: orphan' > "$AC_T/j3p-def.md" || {
-    echo "validate-adversarial-convergence.sh: arm J3 self-probe could not stage; no verdict" >&2; exit 2; }
-  j3p1="$(j3_keys "$AC_T/j3p-adversarial-p1.md" | tr '\n' ' ')"
-  j3p2="$(j3_keys "$AC_T/j3u-adversarial-p1.md" | tr '\n' ' ')"
-  j3p3="$(j3_sources "$AC_T/j3p-rec.md" | tr '\t\n' ': ')"
-  j3p4="$(j3_deferrals "$AC_T/j3p-def.md" | tr '\t\n' ': ')"
-  j3_succ coe; j3p5="$J3_SUCC:$J3_CTX"; j3_succ stories; j3p6="$J3_SUCC:$J3_CTX"
-  IFS=. read -r j3_maj j3_min j3_pat <<EOF
-$J3_RELEASE
-EOF
-  j3_pred="${j3_maj}.$((j3_min - 1)).${j3_pat}"
-  j3p7="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $J3_RELEASE" 'C 2026-01-01T00:00:00Z' "+version: $j3_pred" \
-          'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$J3_RELEASE" k_stamp_parse)"
-  j3p8="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $j3_pred" | K_RELEASE="$J3_RELEASE" k_stamp_parse)"
-  if [ "$j3p1" != "1.md#F-1 cross-2.md#F-1 " ] || [ "$j3p2" != "j3u-adversarial-p1.md#M1 " ] \
-     || [ "$j3p3" != "S:0:0.md#F-0 S:1:1.md#F-1 S:1:cross-2.md#F-1 T:1:aa:bb " ] || [ "$j3p4" != "p/1.md#F-1:requirements 2.md#F-2:architecture " ] \
-     || [ "$j3p5" != "requirements:requirements-context.md" ] || [ "$j3p6" != ":" ] \
-     || [ "$j3p7" != "2026-01-02T00:00:00Z" ] || [ -n "$j3p8" ]; then
-    echo "validate-adversarial-convergence.sh: arm J3 self-probe failed (keys '$j3p1', unsharded '$j3p2', sources '$j3p3', deferrals '$j3p4', map '$j3p5' / '$j3p6', stamp '$j3p7', near-miss '$j3p8'); no verdict" >&2
-    exit 2
-  fi
-fi
-
 if [ "$J3_OPEN" -eq 1 ]; then
   j3_pd="${j3_stem}-p${j3_m}"
   j3_keys "$LAST_FILE" > "$AC_T/j3-keys"

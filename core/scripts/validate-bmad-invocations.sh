@@ -40,8 +40,7 @@
 #   1  -- a dangling name, a shim whose load target is absent, or a capability probe miss
 #         (bmad-sprint-planning without references/readiness-gate.md; bmad-review without a
 #         `code = "adversarial"` lens in customize.toml). Every FAIL names the BMAD floor, 6.11.0.
-#   2  -- DISARMED or usage error: no skills root, ZERO call sites enumerated, or the
-#         capability self-probe did not hold.
+#   2  -- DISARMED or usage error: no skills root, or ZERO call sites enumerated.
 #         A scan that found no call sites prints the same clean line as a scan that
 #         found them all healthy, so it must not be able to exit 0.
 
@@ -227,35 +226,6 @@ cap_probe() {  # <skill dir> <name> -> 0 capable (or not probed); 1 with a FAIL 
   esac
   return 0
 }
-
-# SELF-PROBE, BEFORE THE REAL INPUT, IN BOTH DIRECTIONS. Each probe has an offender that must
-# fire and a near-miss that must stay quiet; the near-misses carry the property a widened match
-# would key on (a commented adversarial line, a longer lens code, a references/ directory holding
-# other gate files). A probe that cannot fire would let every install pass.
-cap_self_probe() {
-  local pd bad=0
-  pd="$(mktemp -d 2>/dev/null)" || return 1
-  [ -n "$pd" ] && [ -d "$pd" ] || return 1
-  mkdir -p "$pd/sp-ok/references" "$pd/sp-off/references" "$pd/rv-ok" "$pd/rv-commented" "$pd/rv-longer" "$pd/rv-notoml" || return 1
-  : > "$pd/sp-ok/references/readiness-gate.md"
-  : > "$pd/sp-off/references/generate-tracking.md"
-  printf '%s\n' '#   code = "accessibility"' '[[lens]]' 'code = "adversarial"' > "$pd/rv-ok/customize.toml"
-  printf '%s\n' '#   code = "adversarial"' 'code = "structure"' > "$pd/rv-commented/customize.toml"
-  printf '%s\n' 'code = "adversarial-x"' > "$pd/rv-longer/customize.toml"
-  cap_probe "$pd/sp-ok" bmad-sprint-planning 2>/dev/null || { echo "$PROG: SELF-PROBE FAIL: a sprint-planning skill carrying references/readiness-gate.md was refused." >&2; bad=1; }
-  cap_probe "$pd/sp-off" bmad-sprint-planning 2>/dev/null && { echo "$PROG: SELF-PROBE FAIL: a sprint-planning skill with no readiness-gate.md was accepted." >&2; bad=1; }
-  cap_probe "$pd/rv-ok" bmad-review 2>/dev/null || { echo "$PROG: SELF-PROBE FAIL: a bmad-review customize.toml carrying code = \"adversarial\" was refused." >&2; bad=1; }
-  cap_probe "$pd/rv-commented" bmad-review 2>/dev/null && { echo "$PROG: SELF-PROBE FAIL: a COMMENTED code = \"adversarial\" line was accepted as the lens." >&2; bad=1; }
-  cap_probe "$pd/rv-longer" bmad-review 2>/dev/null && { echo "$PROG: SELF-PROBE FAIL: code = \"adversarial-x\" was accepted as the adversarial lens." >&2; bad=1; }
-  cap_probe "$pd/rv-notoml" bmad-review 2>/dev/null && { echo "$PROG: SELF-PROBE FAIL: a bmad-review with no customize.toml was accepted." >&2; bad=1; }
-  cap_probe "$pd/rv-notoml" bmad-party-mode 2>/dev/null || { echo "$PROG: SELF-PROBE FAIL: a skill with no capability probe was refused." >&2; bad=1; }
-  rm -f "$pd/sp-ok/references/readiness-gate.md" "$pd/sp-off/references/generate-tracking.md" \
-    "$pd/rv-ok/customize.toml" "$pd/rv-commented/customize.toml" "$pd/rv-longer/customize.toml" 2>/dev/null
-  rmdir "$pd/sp-ok/references" "$pd/sp-off/references" "$pd/sp-ok" "$pd/sp-off" "$pd/rv-ok" \
-    "$pd/rv-commented" "$pd/rv-longer" "$pd/rv-notoml" "$pd" 2>/dev/null
-  return "$bad"
-}
-cap_self_probe || { echo "$PROG: DISARMED — the capability self-probe did not hold, so a verdict on the real skills tree would establish only that the scan ran." >&2; exit 2; }
 
 COUNT="$(printf '%s\n' "$NAMES" | grep -c . )"
 if [ "$COUNT" -eq 0 ]; then

@@ -28,8 +28,6 @@ scripts/validate-backlog-receipts.sh	[ -s "$WORK/r10.awk" ] || r10_awk_prog > "$
 scripts/validate-backlog-receipts.sh	[ -s "$WORK/r10.tracked" ] || return 2	scratch: $WORK is the step's own mktemp directory
 scripts/validate-backlog-receipts.sh	[ -s "$WORK/unrec" ] && R2_UNREC_IDS="; entries whose verify: value matched no receipt form: $(cut -f1 "$WORK/unrec" | tr '\n' ' ')"	scratch: $WORK is the step's own mktemp directory
 scripts/validate-backlog-receipts.sh	[ -s "$WORK/unrec" ] && awk -F'\t' '{ printf "FAIL: UNRECOGNISED\t%s\tverify: %s\n", $1, $2 }' "$WORK/unrec" >&2	scratch: $WORK is the step's own mktemp directory
-scripts/validate-backlog-receipts.sh	if ! [ -d "$BR_PROBE_RECORD" ] || ! [ -w "$BR_PROBE_RECORD" ]; then	verdict-independent: BR_PROBE_RECORD is unset by .githooks/pre-push before any step, so the gate never reaches this test
-scripts/validate-backlog-receipts.sh	if [ -n "$_pk_pb" ] && ! [ "$_pk_pb" -ef "$BASH" ]; then	system-path: both operands are the bash binary (command -v bash and $BASH), outside the work tree
 scripts/validate-backlog-receipts.sh	if [ -s "$WORK/unrec" ]; then	scratch: $WORK is the step's own mktemp directory
 scripts/validate-claude-rules.sh	b="$(wc -c < "$f" | tr -d ' ')"	size-read-by-step: the size of CLAUDE.md and each rule file, all of which the same step reads (pointers, fm_keys)
 scripts/validate-enforcement-map.sh	[ -r "$i120_tmp/counts" ] && read -r i120_memn i120_nearn i120_lenn < "$i120_tmp/counts"	scratch: $i120_tmp is the arm's own mktemp directory
@@ -65,26 +63,10 @@ scripts/validate-fixture-invocations.sh	{ trap '{ trap - DEBUG; trap "" XFSZ; __
 scripts/validate-fixture-invocations.sh	if [ -s "$w/ipt" ] || [ -s "$log.inproc" ]; then	scratch: $w is the judge's own mktemp directory and $log the judge's run-log prefix under TMPDIR; the pre-suite call is --impl-of, which never judges
 scripts/validate-fixture-invocations.sh	if [ ! -s "$w/ipt" ]; then	scratch: $w is the judge's own mktemp directory
 scripts/validate-fixture-invocations.sh	elif [ -s "$w/ipu" ]; then	scratch: $w is the judge's own mktemp directory
-scripts/validate-plan-shape.sh	p8_at="$(wc -c < "$p8probe/at.md" | tr -d ' ')"	scratch: $p8probe is the step's own mktemp directory
 scripts/validate-plan-shape.sh	p8_bytes="$(wc -c < "$f" | tr -d ' ')"	size-read-by-step: the size of each docs/plans/*.md, every one of which the same step reads
-scripts/validate-plan-shape.sh	p8_over="$(wc -c < "$p8probe/over.md" | tr -d ' ')"	scratch: $p8probe is the step's own mktemp directory
-scripts/validate-shell-portability.sh	[ -s "$WORK/listed" ] || exit 2	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	[ -x docs/x.sh ] || exit 1	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	[ docs/a -nt docs/b ] && echo y	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	find docs -newer docs/a -print	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
 scripts/validate-shell-portability.sh	for f in "$@"; do { [ -f "$f" ] && [ ! -s "$f" ]; } || want=$((want + 1)); done	size-read-by-step: the size of each corpus file, every one of which the same awk is handed as an operand, an empty one included
 scripts/validate-shell-portability.sh	for f in "$@"; do { [ -f "$f" ] && [ -r "$f" ]; } || { bad="$f"; break; }; done	mode-keyed-by-present-key: a -f/-r mode test on each corpus file after awk refused, which awk was handed to read
-scripts/validate-shell-portability.sh	for f in g/*; do [ -s "$f" ] || continue; grep x "$f"; done	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	if [ -s "$probe/refused" ]; then	scratch: $probe is the step's own mktemp directory
-scripts/validate-shell-portability.sh	printf '%s\n' '[ -x docs/k ] || exit 1' > "$s15p/scripts/late-key.sh"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	printf '%s\n' '[ -x docs/p ] || exit 1' > "$s15p/scripts/post.sh"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	printf '%s\n' '[ -x docs/q ] || exit 1' > "$s15p/$s15f"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	printf '%s\n' '[ -x docs/t ] || exit 1' > "$s15p/scripts/t.sh"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	printf '%s\n' '[ -x docs/u ] || exit 1' > "$s15p/scripts/u.sh"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	printf '%s\n' 'date -r docs/a' > "$s15p/scripts/w.sh"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	printf 'scripts/a.sh\t[ -s "$WORK/listed" ] || exit 2\tscratch: the probe mktemp dir\nscripts/a.sh\t[ -s gone ]\tscratch: matches no site\nscripts/a.sh\t[ -x docs/x.sh ] || exit 1\tnot-a-class: x\n' > "$s15p/$S15_ALLOW"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	stat -f %z docs/a	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
-scripts/validate-shell-portability.sh	touch -r docs/a docs/b	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	if [ -s "$scratch/refused" ]; then	scratch: $scratch is the step's own mktemp directory
 scripts/validate-backlog-receipts.sh	if [ -s "$2" ]; then	scratch: $2 is the named list the worker wrote under its own BR_R13_DIR, inside the step's mktemp $WORK
 scripts/validate-backlog-receipts.sh	find "$_t" -path "$_t/.git" -prune -o -type f -neweram "$_d/$n.mark" -print 2>/dev/null \	scratch: every operand is a mark, control or probe file the step itself writes under its own mktemp $WORK
 scripts/validate-backlog-receipts.sh	if [ -n "$(find "$_d/$n.ctl/unread" -neweram "$_d/$n.mark" 2>/dev/null)" ]; then	scratch: every operand is a mark, control or probe file the step itself writes under its own mktemp $WORK
@@ -97,7 +79,6 @@ scripts/validate-backlog-receipts.sh	{ [ -n "$BR_R13_STORE" ] && mkdir -p "$BR_R
 scripts/validate-backlog-receipts.sh	if [ -s "$_sd/$_n.named" ] && [ "$_nr" -eq 0 ]; then	scratch: $_sd is R13's state directory under the step's own mktemp $WORK, and the named list is a file the step wrote
 scripts/validate-fixture-inprocess.sh	[ -s "$o.ex" ] || [ -s "$o.rx" ] && rc=1	scratch: a size test on a scratch file this step wrote itself in its own work directory; the step is an always-run pool unit, never keyed
 scripts/validate-fixture-inprocess.sh	if [ -s "$WORK/c.ow" ]; then	scratch: a size test on a scratch file this step wrote itself in its own work directory; the step is an always-run pool unit, never keyed
-scripts/validate-fixture-inprocess.sh	[ "$sfn" = 0 ] && [ -f "$WORK/sf-none.out" ] && [ ! -s "$WORK/sf-none.out" ] && [ ! -s "$WORK/sf-none.err" ] \	scratch: an existence and size test on scratch files this step wrote itself in its own work directory (the M4 absent-list self-probe); the step is an always-run pool unit, never keyed
 scripts/invalidation-guard.sh	[ -s "$w/programs" ] || { printf ' FAIL invalidation guard: %s declares no #program row\n' "$list"; return 1; }	scratch: a size test on a scratch file this step wrote itself in its own work directory; the step is an always-run pool unit, never keyed
 scripts/invalidation-guard.sh	if [ -s "$w/moved.err" ] || grep -q 'list-unreadable$' "$w/moved"; then	scratch: a size test on a scratch file this step wrote itself in its own work directory; the step is an always-run pool unit, never keyed
 scripts/invalidation-guard.sh	[ -s "$G_W/ratchet.out" ] || return 0	scratch: a size test on a scratch file this step wrote itself in its own work directory; the step is an always-run pool unit, never keyed

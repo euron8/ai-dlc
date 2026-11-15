@@ -47,13 +47,9 @@
 #
 # exit: 0 clean; 1 any finding; 2 unevaluable -- no snapshot, no `## Open Items` section, the sibling
 #   absent or exiting non-zero or printing a line that is not three tab-separated fields, a bad
-#   AI_DLC_NOW / AI_DLC_HOLD_MAX_HOURS, or the self-probe failing. Never a silent pass on an absent
+#   AI_DLC_NOW / AI_DLC_HOLD_MAX_HOURS. Never a silent pass on an absent
 #   input. An EMPTY list-stories answer (exit 0) is a sprint with no stories, accounted trivially.
 #
-# SELF-PROBE. Before the real read the evaluator runs over a mktemp world of two ready-for-dev
-# stories, one held by its yaml key: the unheld one must be reported UNACCOUNTED and the held one
-# must not be. Either direction failing is exit 2, so an evaluator that cannot fire, or fires on
-# everything, never reads as clean.
 set -u
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -183,18 +179,7 @@ evaluate() {
 }
 
 TSV="$(mktemp "${TMPDIR:-/tmp}/held-stories-tsv.XXXXXX")" || unevaluable "no temp file"
-PS="$(mktemp "${TMPDIR:-/tmp}/held-stories-probe-snap.XXXXXX")" || { rm -f "$TSV"; unevaluable "no temp file"; }
-PT="$(mktemp "${TMPDIR:-/tmp}/held-stories-probe-tsv.XXXXXX")" || { rm -f "$TSV" "$PS"; unevaluable "no temp file"; }
-trap 'rm -f "$TSV" "$PS" "$PT"' EXIT
-
-# --- self-probe: both directions, before the real read ----------------------
-printf 'story-9-1\tready-for-dev\tx/story-9-1-held.md\nstory-9-2\tready-for-dev\tx/story-9-2-unheld.md\n' > "$PT"
-printf '# probe\n\n## Open Items\n- held: story-9-1 until the probe ends since %s\n\n## In-Flight Teammates\nagent | role | deliverable | dispatched-at | status\n--- | --- | --- | --- | ---\n' "$NOW" > "$PS"
-probe="$(evaluate "$PT" "$PS")"; prc=$?
-case "$prc:$probe" in
-  "1:UNACCOUNTED story-9-2 (9.2)") ;;
-  *) unevaluable "self-probe failed (rc $prc, output '$probe'): the evaluator must report the unheld probe story and only it" ;;
-esac
+trap 'rm -f "$TSV"' EXIT
 
 # --- the real read ----------------------------------------------------------
 [ -f "$SNAP" ] || unevaluable "no snapshot at $SNAP"

@@ -652,44 +652,12 @@ with open(artifact_path, "r", encoding="utf-8") as fh:
     content = fh.read()
 
 blocks = BLOCK_RE.findall(content)
-# THE RETRO CLASSIFIER, AND IT IS THE KIND OF LINE THAT GOES QUIET WITHOUT A SOUND.
-# Three requirements below fire only when it is true (party-mode block required, a
-# `transcript_path` field required, at least one party-mode block present), so a regex
-# that stops matching does not FAIL anything -- it silently exempts every retro. The
-# same-run probes underneath assert the pattern still recognises a retro path and still
-# refuses a non-retro one; without them this line's silence is indistinguishable from a
-# tree that happens to contain no retros.
+# THE RETRO CLASSIFIER. Three requirements below fire only when it is true (party-mode block
+# required, a `transcript_path` field required, at least one party-mode block present), so a
+# regex that stops matching exempts every retro without failing anything. The regex is anchored at
+# its END only and `search` reads the RAW argument, so classify the NORMALISED path: a spelling
+# such as `docs/retro/s301/./retro.md` denotes a retro without being spelled canonically.
 RETRO_PATH_RE = re.compile(r"docs/retro/s\d+/retro\.md$")
-if not RETRO_PATH_RE.search("docs/retro/s301/retro.md"):
-    sys.stderr.write(
-        "validate-provenance-block: FAIL — the retro-path classifier does not recognise "
-        "docs/retro/s301/retro.md. Every retro-only requirement below would be skipped "
-        "and this run would exit 0 having checked none of them.\n")
-    sys.exit(2)
-if RETRO_PATH_RE.search("docs/retro/s301/retro-draft.md"):
-    sys.stderr.write(
-        "validate-provenance-block: FAIL — the retro-path classifier matched "
-        "docs/retro/s301/retro-draft.md, which is not the retro document. A classifier "
-        "that cannot tell them apart imposes the retro contract on drafts.\n")
-    sys.exit(2)
-# NORMALISE BEFORE CLASSIFYING. The regex is anchored at its END only, and `search` reads the
-# RAW argument, so a spelling that denotes a retro without being spelled canonically -- measured
-# on `docs/retro/s301/./retro.md` -- classifies as NOT a retro, and a real retro doc carrying no
-# provenance block used to exit 0 "no provenance block required or present". That fall-through is
-# now closed: a blockless artifact with no flag FAILS whether or not this classifier recognises
-# it, so a misclassified retro costs the retro-specific message rather than the denial. Same
-# fail-open as the
-# caller-side path defect this file's retro rungs already had, reached by a different route. The
-# probes above test two canonical spellings and structurally cannot see it, so one more probe
-# below drives the non-canonical form.
-_retro_probe = os.path.normpath("docs/retro/s301/./retro.md")
-if not RETRO_PATH_RE.search(_retro_probe):
-    sys.stderr.write(
-        "validate-provenance-block: FAIL — the retro-path classifier does not recognise "
-        "docs/retro/s301/./retro.md once normalised. A non-canonical spelling of a retro "
-        "path would exempt every retro-only requirement and this run would exit 0 having "
-        "checked none of them.\n")
-    sys.exit(2)
 is_retro = bool(RETRO_PATH_RE.search(os.path.normpath(artifact_path)))
 
 # MALFORMED != ABSENT, and they must never share an exit code.
@@ -958,17 +926,16 @@ def lens_unmet(req, blocks_fields):
     )
 
 
-# LENS SELF-PROBE, IN-PROCESS, BEFORE THE REAL INPUT, BOTH DIRECTIONS. Offenders: a lens-less
-# current-name block, a wrong-case lens. Near-misses: the current name with the lens, the old name
-# with no lens. Skipped only when the schema declares no lens pin, which is itself refused HERE
-# for the one pin that needs it: a schema that lost `lens_pins` would otherwise switch the lens
-# rule off for the one-shot evaluation and every lens-less bmad-review block would pass.
+# A schema that lost `lens_pins` would switch the lens rule off for the one-shot evaluation and
+# every lens-less bmad-review block would pass, so that case is refused here.
 if require_skill in ("bmad-review", "bmad-review-adversarial-general") and _LENS.get("bmad-review") != "adversarial":
     sys.stderr.write(
         f"validate-provenance-block: FAIL — --require-skill {require_skill} needs the schema's "
         f"lens_pins to map bmad-review to adversarial, and {schema_path} does not "
         f"(lens_pins: {_LENS}). Without it the lens rule cannot fire; refusing to give a verdict.\n")
     sys.exit(2)
+# THE LENS RULE AGAINST THE SCHEMA THIS RUN READ, IN BOTH DIRECTIONS. The pins and superseded names
+# are data loaded at run time, so a schema edit can switch the rule off without any code changing.
 if _LENS:
     _lp_cur = sorted(_LENS)[0]
     _lp_want = _LENS[_lp_cur]
@@ -986,7 +953,7 @@ if _LENS:
         if lens_unmet(_o, [{"skill": _lp_cur}]) is None:
             _lp_fail.append(f"a pin on {_o} accepted a lens-less {_lp_cur} block")
     if _lp_fail:
-        sys.stderr.write("validate-provenance-block: FAIL — the lens self-probe did not hold: "
+        sys.stderr.write("validate-provenance-block: FAIL — the lens rule does not hold on this schema: "
                          + "; ".join(_lp_fail) + ". A verdict on the real artifact would establish only that the rule ran.\n")
         sys.exit(2)
 

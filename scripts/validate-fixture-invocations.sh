@@ -194,6 +194,7 @@
 # FXC-IDENTITY 1 cc011bb8430f348d037ed2a565be3f493f1074da7f072c919c65ef67776784ad the per-fixture judge row (BL-1057)
 # FXC-IDENTITY 1 f4035938f576baa486a7c6acd4b69d429eb974eecac63c27277279fb6af02691 cost only: per-row forks cut, C5's guard table built once, the --b2-census self-probe memoised (BL-1065); every output byte-identical
 # FXC-IDENTITY 1 773c3d37115fb87226d647e883483c839cffc54dddd02a8750483c73805dcb8a the J5 arm and the matrix allowlist removed with every mutation battery; every judged fixture's row format unchanged
+# FXC-IDENTITY 1 4ab7b9213aef40bc9e9cfa591abbab63a184703d40186176cd88c5dad937be0e cost only: the --b2-census self-probe and its memo removed (BL-1102); no fixture's judgement moves
 set -u
 FXC_FORMAT=1
 
@@ -1804,22 +1805,6 @@ fxc_self_probe() {
   return 2
 }
 
-# fxc_sp_memo: fxc_self_probe, run at most once per FXC_SP_MEMO directory for one content key. FXC_SP_MEMO is a
-# directory the CALLER created for its own run (validate-fixture-inprocess.sh exports its private mktemp dir); unset,
-# empty or not a directory, the probe runs every time. The key is the sha256 of this file's bytes, of
-# core/fixtures/lib/mutant.sh beside it (the probe's E2E loop sources it) and of the bash running it. Only a GREEN
-# probe writes `sp-<key>`; a red one writes nothing, so a red probe is never skipped, and a token under any other key
-# (another judge, another mutant.sh, another bash) is never read.
-fxc_sp_memo() {
-  local k
-  [ -n "${FXC_SP_MEMO:-}" ] && [ -d "$FXC_SP_MEMO" ] || { fxc_self_probe; return $?; }
-  k="$({ cat "$FXC_SELF" "${FXC_SELF%/scripts/*}/core/fixtures/lib/mutant.sh" 2>/dev/null; printf '\n%s\n%s\n' "$BASH" "$BASH_VERSION"; } | shasum -a 256 | cut -c1-64)"
-  [ -n "$k" ] && [ -f "$FXC_SP_MEMO/sp-$k" ] && return 0
-  fxc_self_probe || return $?
-  [ -n "$k" ] && : > "$FXC_SP_MEMO/sp-$k"
-  return 0
-}
-
 # ---------------------------------------------------------------------------------------------------------------
 FXC_FX=""; FXC_DECL=""; FXC_LOG=""; FXC_ROOT=""
 case "${1:-}" in
@@ -1846,7 +1831,6 @@ case "${1:-}" in
     FXC_ROOT="${FXC_SELF%/scripts/*}"
     [ "${2:-}" = --root ] && { [ -n "${3:-}" ] || { echo "usage: $0 --b2-census [--root R]" >&2; exit 2; }; FXC_ROOT="$3"; }
     [ -d "$FXC_ROOT/core/fixtures" ] || { echo "b2-census: REFUSED: no core/fixtures under $FXC_ROOT" >&2; exit 2; }
-    fxc_sp_memo || { printf 'b2-census: REFUSED: the self-probe is red\n%s' "$SP_OUT"; exit 2; }
     fxc_census "$FXC_ROOT"; exit $? ;;
 esac
 while [ $# -gt 0 ]; do

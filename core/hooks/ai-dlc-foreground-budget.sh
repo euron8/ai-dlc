@@ -159,8 +159,8 @@
 # `python3 - <<EOF` that only reads); a deny that refuses a read wedges every resume, so the
 # write-shape list ships. Over every line under core/ and templates/ (core/fixtures excluded)
 # naming either subject -- 222 files, 148 lines naming the waiter, 146 naming the snapshot, 517
-# payloads (each line and each backtick span on it) -- the hook denies one: the self-probe
-# redirect `} > "$LPROBE_D/state/pipeline-snapshot.md"` inside validate-artifact-budget.sh, which
+# payloads (each line and each backtick span on it) -- the hook denied one: the self-probe
+# redirect that validate-artifact-budget.sh no longer carries, which
 # is script body, never a Bash call an agent issues.
 # Known over-refusals, both refused and neither instructed by core: `git restore --staged <snapshot>`
 # (index-only, the file is untouched) and `tee -a log < <snapshot>` (reads the snapshot). A grep of

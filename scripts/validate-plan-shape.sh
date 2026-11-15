@@ -211,14 +211,6 @@ plan_action_windows() {
 # one total, where this is a PER-FILE cap over a glob, and the two comparisons cannot be added.
 # `validate-backlog-size.sh` bounds a different file in a different unit and its own header
 # records why a byte clause was withdrawn there.
-#
-# THE SELF-PROBE RUNS BEFORE THE CORPUS AND FIRES IN BOTH DIRECTIONS. An arm reporting "every
-# plan is under the ceiling" without first proving it can produce a breach has established that
-# it ran, not that the corpus is short. The probe tree is under `mktemp` and is never the real
-# corpus. THE SECOND ASSERTION IS THE ONE THAT MATTERS: `[ over -gt N ] && [ at -le N ]` is
-# `validate-backlog-size.sh:149`'s shape, and that one line is what caught a broken counter
-# there -- a probe that only checks the two sizes were WRITTEN says nothing about whether the
-# comparison discriminates at the boundary.
 # ===================================================================================
 PLAN_MAX="${AI_DLC_PLAN_BYTES:-150000}"
 case "$PLAN_MAX" in
@@ -226,20 +218,6 @@ case "$PLAN_MAX" in
     echo "validate-plan-shape: AI_DLC_PLAN_BYTES is '$PLAN_MAX', which is not a byte count. Refusing rather than defaulting -- a ceiling nobody can read is a check that cannot fire." >&2
     exit 2 ;;
 esac
-p8probe="$(mktemp -d)" || { echo "validate-plan-shape: FAIL -- mktemp -d" >&2; exit 2; }
-trap 'rm -rf "$p8probe"' EXIT
-printf '%*s' "$((PLAN_MAX + 1))" '' > "$p8probe/over.md"
-printf '%*s' "$PLAN_MAX"         '' > "$p8probe/at.md"
-p8_over="$(wc -c < "$p8probe/over.md" | tr -d ' ')"
-p8_at="$(wc -c   < "$p8probe/at.md"   | tr -d ' ')"
-if [ "$p8_over" != "$((PLAN_MAX + 1))" ] || [ "$p8_at" != "$PLAN_MAX" ]; then
-  echo "validate-plan-shape: P8 SELF-PROBE FAILED -- the byte counter read ${p8_over}/$((PLAN_MAX + 1)) and ${p8_at}/${PLAN_MAX} on seeded files, so it cannot be trusted on a real plan and no size verdict below is a reading." >&2
-  exit 2
-fi
-if ! { [ "$p8_over" -gt "$PLAN_MAX" ] && [ "$p8_at" -le "$PLAN_MAX" ]; }; then
-  echo "validate-plan-shape: P8 SELF-PROBE FAILED -- the comparison does not discriminate $((PLAN_MAX + 1)) from ${PLAN_MAX} at a ceiling of ${PLAN_MAX}. A ceiling that admits its own breach reads exactly like a corpus that is clean." >&2
-  exit 2
-fi
 
 for f in "${FILES[@]}"; do
   [ -f "$f" ] || { err "$f" "not a readable file"; continue; }

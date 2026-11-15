@@ -134,8 +134,7 @@ esac
 # The awk program is built OUTSIDE a command substitution, deliberately: bash 3.2's `$( )` parser
 # counts parentheses across a heredoc body and does not exempt it. See backlog-reverify.sh:87.
 AWKF="$(mktemp)" || { echo "validate-backlog-size: FAIL -- mktemp" >&2; exit 2; }
-probe="$(mktemp -d)" || { echo "validate-backlog-size: FAIL -- mktemp -d" >&2; exit 2; }
-trap 'rm -rf "$probe" "$AWKF"' EXIT
+trap 'rm -f "$AWKF"' EXIT
 
 { ledger_entry_awk; backlog_entry_label_awk; cat <<'AWK'
 { if (backlog_entry_label($0) != "") n++ }
@@ -144,28 +143,6 @@ AWK
 } > "$AWKF"
 
 count_entries() { awk -f "$AWKF" "$1"; }
-
-# ---------------------------------------------------------------------------
-# THE SELF-PROBE RUNS BEFORE THE CORPUS, IN BOTH DIRECTIONS. An arm reporting "under the ceiling"
-# without first proving it can produce a breach has established that it ran, not that the ledger
-# is short. The probe tree is under mktemp and is never the real corpus.
-# ---------------------------------------------------------------------------
-# THE LAST SEEDED ENTRY IS A `- **BL-` BULLET, NOT A HEADING. Clause (c) of the declared-empty
-# predicate catches an entry the parser stopped seeing only if something proves the parser still
-# sees both shapes; with headings alone a bullet-shape regression passes this probe, under-counts
-# the real ledger, and at zero could read as declared empty.
-seed() { i=1; : > "$2"; while [ "$i" -lt "$1" ]; do printf '## BL-%03d — seeded\n\nverify: manual\n\n' "$i" >> "$2"; i=$((i+1)); done
-  printf -- '- **BL-%03d** — seeded as a list entry\n\nverify: manual\n\n' "$i" >> "$2"; }
-seed 3 "$probe/over.md"; seed 2 "$probe/at.md"
-p_over="$(count_entries "$probe/over.md")"; p_at="$(count_entries "$probe/at.md")"
-if [ "$p_over" != "3" ] || [ "$p_at" != "2" ]; then
-  echo "validate-backlog-size: SELF-PROBE FAILED -- the entry counter read ${p_over}/3 and ${p_at}/2 on seeded ledgers, so it cannot be trusted on the real one and nothing below is a reading." >&2
-  exit 2
-fi
-if ! { [ "$p_over" -gt 2 ] && [ "$p_at" -le 2 ]; }; then
-  echo "validate-backlog-size: SELF-PROBE FAILED -- the comparison does not discriminate 3 from 2 at a ceiling of 2." >&2
-  exit 2
-fi
 
 # ---------------------------------------------------------------------------
 # B1 -- docs/backlog.md carries at most AI_DLC_BACKLOG_MAX_ENTRIES entries.
@@ -204,9 +181,9 @@ if [ "$N" -gt "$MAX" ]; then
 fi
 if [ "$QUIET" != "1" ]; then
   if [ "$DEFAULTED" = "1" ]; then
-    echo "OK: validate-backlog-size -- B1 ${N}/${MAX} entries in docs/backlog.md (probe fired both directions; docs/backlog.archive.md deliberately NOT read -- it is an append-only log and unbounded by design)."
+    echo "OK: validate-backlog-size -- B1 ${N}/${MAX} entries in docs/backlog.md (docs/backlog.archive.md deliberately NOT read -- it is an append-only log and unbounded by design)."
   else
-    echo "OK: validate-backlog-size -- B1 ${N}/${MAX} entries in ${LEDGER} (probe fired both directions)."
+    echo "OK: validate-backlog-size -- B1 ${N}/${MAX} entries in ${LEDGER}."
   fi
 fi
 exit 0

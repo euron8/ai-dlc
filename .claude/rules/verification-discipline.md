@@ -5,7 +5,7 @@
 How to establish that a thing is true here. `CLAUDE.md` carries two rules: a zero needs a control, and a check
 that cannot fire reads like one that passed. These are the rest.
 
-## Every arm carries a self-probe, and the probe runs BEFORE the corpus
+## Prove each arm fires once, by hand, at authoring; never per run
 
 Build probe trees under `mktemp`, never the real corpus, and fire the probe in **both** directions: the arm
 reports a seeded offender and stays quiet on a seeded near-miss.

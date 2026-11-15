@@ -2,6 +2,6 @@
 # itself and the three cli cells of cells.decl; every other run of a validator copy is in process. inproc rows
 # (fx_inproc, one per source): the shipped validator (arm c) and each world's copy, one per world driven (w1-w12
 # but w6), every copy at <world>/scripts/validate-hermetic-consumption.sh.
-35 *
+19 *
 3 scripts/validate-hermetic-consumption.sh
 12 inproc:scripts/validate-hermetic-consumption.sh

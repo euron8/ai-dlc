@@ -5,8 +5,7 @@
 #
 # Behavioural arms over throwaway repos under a temp dir: the control tree passes, the cli cells
 # (pass, finding, usage) agree byte for byte with the in-process call, the no-VERSION refusal names
-# the running copy, and the probe builds and reads its own repository under an inherited git
-# environment (m12, m12b, m13).
+# the running copy, and the corpus read holds under an inherited git environment (m13).
 set -u
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -24,8 +23,8 @@ unset CLAUDE_PROJECT_DIR
 # The sibling prepush-worktree-env-scrub/run.sh scrubs at its top for this same stated
 # reason. It was the only fixture of the 27 building scratch repos that did.
 #
-# m12 below is unaffected: it sets GIT_DIR explicitly at its own call, which is the state it
-# exists to measure, and that assignment is scoped to the command rather than exported here.
+# m13 below sets GIT_DIR explicitly at its own call, which is the state it exists to measure, and that
+# assignment is scoped to the command rather than exported here.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -265,138 +264,14 @@ else
   ok "m11 A6 over ceiling -- rejected by its own arm, and only its own"
 fi
 
-# m12 -- THE PROBE MUST BUILD ITS OWN REPOSITORY, NOT WRITE THE CALLER'S.
+# m13 -- THE CORPUS READ IS REDIRECTED BY AN INHERITED GIT ENVIRONMENT, AND IT IS THE SILENT FAILURE.
 #
-# A1's probe builds a scratch repo under `mktemp` and relies on git's upward DISCOVERY to
-# find it. Discovery is the branch git takes only when the repository environment is unset,
-# and git exports GIT_DIR -- ABSOLUTE -- into any hook running from a linked worktree. So a
-# validator invoked with that environment inherited writes the CALLER's index instead of the
-# probe's. Measured on a clone of this repo pushed from a linked worktree before the fix:
-# the index collapsed 757 entries to 3.
+# `a1_offenders()` and `glob_matches()` enumerate the corpus with bare `git ls-files`; redirected by an
+# inherited environment they answer about the caller's repo, and A1 then reports `ok` over a corpus it
+# never opened.
 #
-# THIS ARM IS BEHAVIOURAL AND NOT A TEXT ANCHOR, for the reason the sibling
-# prepush-worktree-env-scrub fixture states about its own subject: a `grep` for the `unset`
-# establishes that a line EXISTS, never that it executes, executes in the right shell, or
-# executes BEFORE the `git add`. What is asserted here is the OUTCOME -- a victim repository
-# whose index is untouched across the run -- so any fix that achieves it passes and any that
-# does not fails, whatever it looks like.
-#
-# WHY THE VICTIM IS SEEDED WITH A DISTINCTIVE COUNT rather than checked for equality alone:
-# the probe writes exactly its own two paths, so a victim that happened to hold two entries
-# would compare equal to a clobbered one. Nine entries cannot be confused with the probe's two.
-#
-# THE ENV IS SET AT THE CALL, not exported here, so this arm cannot leak into the arms below.
-seed "$TMP/m12"
-victim="$TMP/m12victim"
-mkdir -p "$victim"
-( cd "$victim" && git init -q . \
-  && for i in 1 2 3 4 5 6 7 8 9; do printf 'x\n' > "f$i.txt"; done \
-  && git add -A >/dev/null 2>&1 )
-v_before="$( ( cd "$victim" && git ls-files | wc -l ) | tr -d ' ' )"
-# THE VICTIM MUST BE A REPOSITORY OF ITS OWN, AND THE COUNT GUARD BELOW CANNOT ESTABLISH THAT.
-# MEASURED, on the first version of this arm: seeded while the environment already carried an
-# exported GIT_DIR, `git init -q .` silently succeeded WITHOUT creating a `.git` here, so both
-# readings described the OUTER repository -- which this seed had just overwritten to exactly 9
-# entries. `v_after -eq v_before` then held BY CONSTRUCTION: the 9 in "caller's index intact at
-# 9" was the count this arm wrote, read back, while 17 entries of the real caller's index were
-# destroyed. The fixture printed PASS. The `-ne 9` guard cannot catch it -- it reads 9 either way,
-# and both readings are byte-identical to correct ones.
-#
-# This is the arm's own subject turned on the arm: a script that clobbers, carrying a check
-# pointed at exactly that, returning a green verdict COMPUTED FROM THE DAMAGE. Anyone adding an
-# index-integrity assertion to another fixture reproduces it unless the victim is seeded under a
-# scrub and its repository-ness asserted rather than assumed.
-if [ ! -d "$victim/.git" ]; then
-  note 'FIXTURE BROKEN: m12 victim has no .git -- the seeding git init was redirected, so v_before/v_after describe another repository and any "intact" verdict is computed from the damage.'
-  rc=1
-elif [ "$v_before" -ne 9 ]; then
-  note "FIXTURE BROKEN: m12's victim repo seeded $v_before entries, expected 9. The arm below cannot discriminate."
-  rc=1
-else
-  # The ARMING control: with the environment inherited, this is the exact shape git hands a
-  # hook pushed from a linked worktree. If the seed cannot express that, the arm is vacuous.
-  src_vcr "$TMP/m12"
-  out="$(run_v_env "GIT_DIR=$victim/.git" "$TMP/m12")"
-  v_after="$( ( cd "$victim" && git ls-files | wc -l ) | tr -d ' ' )"
-  if [ "$v_after" -ne "$v_before" ]; then
-    note "FAIL  m12 probe wrote the caller's index -- victim went $v_before -> $v_after entries."
-    note "      A1's probe must build its own repository; inherited GIT_DIR redirected its \`git add\`."
-    rc=1
-  elif [ -z "$out" ]; then
-    note "FAIL  m12 -- validator produced no output under an inherited GIT_DIR; cannot tell a pass from a dead run."
-    rc=1
-  elif ! grep -qF "A1  ok" <<<"$out"; then
-    note "FAIL  m12 -- victim index survived, but A1 did not report ok; the probe is not firing."
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4
-    rc=1
-  else
-    note "ok    m12 -- probe built its own repo under an inherited GIT_DIR; caller's index intact at $v_after, A1 still fired"
-  fi
-
-  # m12b -- THE INPUT THAT SEPARATES THE FIX FROM THE ONE-VARIABLE NEAR-MISS.
-  #
-  # A `GIT_DIR`-only scrub PASSES both drives above: `GIT_DIR` is the single variable they
-  # set, so unsetting it is sufficient for them and the near-miss scores as fixed. It is not
-  # fixed — git resolves a repository from `GIT_INDEX_FILE` and `GIT_WORK_TREE` as well, and
-  # exports `GIT_INDEX_FILE` to a pre-commit hook even from a PRIMARY checkout, so that world
-  # is one a real caller arrives in.
-  #
-  # THIS ARM EXISTS BECAUSE THE SEPARATING INPUT WAS IDENTIFIED, WRITTEN INTO THE ENTRY, AND
-  # THEN NOT DRIVEN. An adversarial pass caught that: the arms above assert the right
-  # OUTCOME against an input that cannot distinguish the two builds, which is a seed defect
-  # and not an assertion defect. A near-miss one property short of the offender discriminates
-  # against nothing that requires that property.
-  #
-  # `GIT_DIR` is deliberately ABSENT here. Setting it would let a `GIT_DIR`-only scrub pass
-  # by handling the one variable it knows, which is exactly the build being hunted.
-  m12b_victim="$TMP/m12bvictim"
-  mkdir -p "$m12b_victim"
-  ( cd "$m12b_victim" && git init -q . \
-    && for i in 1 2 3 4 5 6 7; do printf 'x\n' > "h$i.txt"; done \
-    && git add -A >/dev/null 2>&1 )
-  b_before="$( ( cd "$m12b_victim" && git ls-files | wc -l ) | tr -d ' ' )"
-  # ASSERT THE VICTIM IS A REAL REPOSITORY, NOT A DIRECTORY WHOSE READINGS DESCRIBE SOMEWHERE ELSE.
-  # `git init` under an exported GIT_DIR silently succeeds WITHOUT creating a `.git` here --
-  # measured: no `.git` in the directory, and the seed's seven files land in the OUTER repo's
-  # index instead. Every reading below would then describe that outer repo, and the arm would
-  # report a victim count it wrote itself. The fixture's own top-of-file scrub is what prevents
-  # this today, but an arm must not depend on a line ten lines away that a later edit can move.
-  if [ ! -d "$m12b_victim/.git" ]; then
-    note 'FIXTURE BROKEN: m12b victim has no .git -- the seeding git init was redirected, so its counts describe another repository.'
-    rc=1
-  elif [ "$b_before" -ne 7 ]; then
-    note "FIXTURE BROKEN: m12b's victim seeded $b_before entries, expected 7; the arm cannot discriminate."
-    rc=1
-  else
-    src_vcr "$TMP/m12"
-    out_b="$( vcr_ready "$TMP/m12" && cd "$TMP/m12" && export "GIT_INDEX_FILE=$m12b_victim/.git/index" "GIT_WORK_TREE=$m12b_victim" \
-      && vcr_main 2>&1 )"
-    b_after="$( ( cd "$m12b_victim" && git ls-files | wc -l ) | tr -d ' ' )"
-    if [ "$b_after" -ne "$b_before" ]; then
-      note "FAIL  m12b probe wrote the caller's index through GIT_INDEX_FILE -- victim went $b_before -> $b_after."
-      note "      A GIT_DIR-only scrub passes m12 and m13 and fails here; the scrub must cover all five variables."
-      rc=1
-    elif ! grep -qF "A1  ok" <<<"$out_b"; then
-      note "FAIL  m12b -- victim intact but A1 did not fire under GIT_INDEX_FILE/GIT_WORK_TREE; the probe is redirected."
-      printf '%s\n' "$out_b" | sed 's/^/      /' | head -4
-      rc=1
-    else
-      note "ok    m12b -- GIT_INDEX_FILE/GIT_WORK_TREE without GIT_DIR: victim intact at $b_after, A1 still fired"
-    fi
-  fi
-fi
-
-# m13 -- THE CORPUS READ IS THE OTHER HALF, AND IT IS THE SILENT ONE.
-#
-# m12 above asserts the probe does not WRITE the caller's repository. This asserts the arms do
-# not READ it. `a1_offenders()` and `glob_matches()` enumerate the corpus with bare `git
-# ls-files`; redirected by an inherited environment they answer about the caller's repo, and A1
-# then reports `ok` over a corpus it never opened.
-#
-# WHY BOTH ARMS ARE NEEDED, and why m12 alone was not enough: a fix that scrubs only the probe
-# subshell PASSES m12 -- the index is intact and A1 fires -- while the corpus read stays
-# redirected. That build converts a loud clobber into a silent false green, which is strictly
-# worse than the defect, and m12 scores it as fixed. The two arms are one property apart.
+# WHY A REAL OFFENDER: an inherited environment that leaves the corpus read redirected prints a
+# silent false green on a clean-looking victim, so the arm needs a real offender and a clean victim.
 #
 # THE SEED IS A REAL OFFENDER, not a near-miss: a tracked `.claude/settings.json` in the corpus,
 # against a victim repo that is CLEAN under `.claude/`. So the arm reads a CONVICTION and not an
@@ -417,8 +292,7 @@ if [ "$m13_vclaude" -ne 0 ] || [ "$m13_corpus" -ne 1 ]; then
   rc=1
 else
   # BOTH DIRECTIONS, in the same run. Scrubbed: A1 must convict. Inherited: A1 must convict
-  # the SAME offender. A build that reads the victim prints `A1  ok` on the second only, so
-  # the pair separates a working scrub from one that covers the write alone.
+  # the SAME offender. A build that reads the victim prints `A1  ok` on the second only.
   src_vcr "$TMP/m13"
   m13_clean="$(run_v_env "AI_DLC_UNUSED=1" "$TMP/m13")"
   m13_armed="$(run_v_env "GIT_DIR=$m13victim/.git" "$TMP/m13")"
@@ -427,7 +301,7 @@ else
     rc=1
   elif grep -qF "A1  ok" <<<"$m13_armed"; then
     note "FAIL  m13 corpus read redirected -- A1 reported ok under an inherited GIT_DIR while the corpus tracks a real offender."
-    note "      The scrub covers the probe's WRITE and not the arms' READ; the arm's own subject is acquitted with nothing to give it away."
+      The scrub does not cover the arms' READ; the arm's own subject is acquitted with nothing to give it away.
     rc=1
   elif ! grep -qF "A1: tracked path(s) under .claude/" <<<"$m13_armed"; then
     note "FAIL  m13 -- A1 neither convicted nor acquitted under an inherited GIT_DIR; the run is unreadable."

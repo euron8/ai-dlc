@@ -6,5 +6,5 @@ e2e scripts/validate-fixture-inprocess.sh clean why=the clean world's gate run: 
 e2e scripts/validate-fixture-inprocess.sh k why=--complete on a non-empty allowlist
 e2e scripts/validate-fixture-inprocess.sh derive.first why=--derive, first of the two runs the byte comparison needs
 e2e scripts/validate-fixture-inprocess.sh derive why=--derive, second run, compared byte for byte with the first
-# The validator starts the judge for --static-join and --b2-census, twice per run that passes its self-probe.
+# The validator starts the judge for --static-join and --b2-census, once each per run.
 nested scripts/validate-fixture-inprocess.sh scripts/validate-fixture-invocations.sh why=the validator reads every fixture through the judge's own parses

@@ -10,32 +10,23 @@ set -uo pipefail
 # Git exports GIT_DIR, ABSOLUTE, into any hook running from a linked worktree, and this
 # program is BOTH a hook-dispatched validator and a thing operators and agents run directly.
 # Every git call below then answers about whichever repository the environment names rather
-# than the one this program was pointed at, and the two failures pull in opposite directions:
+# than the one this program was pointed at:
 #
-#   THE WRITE. A1's probe builds a scratch repo under `mktemp` and relies on git's upward
-#   DISCOVERY to find it -- the branch git takes only when this environment is unset. With
-#   it inherited the probe's `git add -A -f` writes the CALLER's index. MEASURED on a clone
-#   of this repo pushed from a linked worktree: 757 tracked paths to 3.
+#   THE READ, which is silent. `a1_offenders()` and `glob_matches()` enumerate the CORPUS. Redirected,
+#   they answer about the caller's repo, and A1 then reports `ok` over a corpus it never opened. MEASURED
+#   against a tree carrying a real tracked `.claude/settings.json` and a victim repo clean under `.claude/`:
+#   clean environment FAILS A1 correctly; inherited environment prints `A1 ok`. The arm's entire subject is
+#   acquitted, with no clobber to give it away.
 #
-#   THE READ, which is the direction that is silent and therefore worse. `a1_offenders()`
-#   and `glob_matches()` enumerate the CORPUS. Redirected, they answer about the caller's
-#   repo, and A1 then reports `ok` over a corpus it never opened. MEASURED against a tree
-#   carrying a real tracked `.claude/settings.json` and a victim repo clean under `.claude/`:
-#   clean environment FAILS A1 correctly; inherited environment prints `A1 ok`. The arm's
-#   entire subject is acquitted, with no clobber to give it away.
-#
-# Scrubbing only the probe subshell fixes the write and LEAVES the read redirected, which
-# converts a loud wrong answer into a silent false green -- strictly worse than the defect.
-# So the scrub is here, at the top, covering both.
+# So the scrub is here, at the top, covering every git call.
 #
 # WHY NOT AT THE HOOK'S TOP INSTEAD. `.githooks/pre-push` carries the same unset above its
 # fixture dispatch. That protects one caller. MEASURED with it in place and this program
 # invoked directly: 757 to 3, unchanged. A duty that must hold across several delivery paths
 # is sited in the program that needs it, not on one of its callers.
 #
-# ALL FIVE VARIABLES, not GIT_DIR alone: with only GIT_DIR unset, a caller carrying
-# GIT_INDEX_FILE and GIT_WORK_TREE still redirects the probe, which then fails its own fire
-# check. Git exports GIT_INDEX_FILE to a pre-commit hook even from a PRIMARY checkout.
+# ALL FIVE VARIABLES, not GIT_DIR alone: a caller carrying GIT_INDEX_FILE and GIT_WORK_TREE still
+# redirects every git call below. Git exports GIT_INDEX_FILE to a pre-commit hook even from a PRIMARY checkout.
 #
 # NOTHING ABOVE THIS LINE MAY CALL GIT.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
@@ -65,10 +56,9 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 #       marker. audit-rule-files.sh's pointer scan cannot see either: it excludes
 #       CLAUDE.md from its targets and restricts its sources to the skill tree.
 #
-# EVERY ARM CARRIES A SELF-PROBE, and the probe runs BEFORE the corpus. An arm that
-# reports "0 findings" without first proving it can produce 1 has established that it
-# ran, not that the corpus is clean -- which is the defect this repo names most often.
-# The probe trees are built under mktemp and are never the real corpus.
+# EVERY ARM IS PROVED ABLE TO FIRE ONCE, BY HAND, AT AUTHORING: a seeded offender is reported and a
+# near-miss is not. A run does not re-prove it. A zero over the real corpus is paired with a
+# control that must come back non-zero (CLAUDE.md, "A zero is not a finding").
 #
 # usage:  validate-claude-rules.sh [--quiet]
 # exit 0 = all arms pass;  1 = at least one finding;  2 = usage/environment error
@@ -133,30 +123,12 @@ fm_keys() {
 # ---------------------------------------------------------------------------
 a1_offenders() { git ls-files -- '.claude' | grep -vE '^\.claude/rules/.*\.md$' || true; }
 
-probe="$(mktemp -d)"; trap 'rm -rf "$probe"' EXIT
-# This subshell builds no repository: it seeds a private index file and reads it back, so
-# only the index it names can be written. The environment that would redirect the git calls
-# (GIT_DIR and the rest) is scrubbed at the top of this file, covering this write and the
-# corpus READS below together; a second unset here would be a guard whose removal changes
-# nothing, and the top-of-file comment is where the measurement lives.
-(
-  # One update-index into a private index file seeds the offender and the near-miss; no
-  # scratch repository is needed because ls-files reads only the index. e69de29 is the empty
-  # blob, and --info-only means the object need not exist.
-  export GIT_INDEX_FILE="$probe/idx"
-  git update-index --add --info-only --cacheinfo 100644,e69de29bb2d1d6434b8b29ae775ad8c2e48c5391,.claude/rules/ok.md --cacheinfo 100644,e69de29bb2d1d6434b8b29ae775ad8c2e48c5391,.claude/settings.json
-  git ls-files -- '.claude' | grep -vE '^\.claude/rules/.*\.md$'
-) > "$probe/out" 2>/dev/null
-if ! grep -q 'settings.json' "$probe/out"; then
-  err "A1's own probe did not fire: a tracked \`.claude/settings.json\` was NOT reported. The extraction is broken, so the corpus result below would be an empty set produced by a scan that cannot find an offender -- indistinguishable from a clean tree."
+off="$(a1_offenders)"
+if [ -n "$off" ]; then
+  err "A1: tracked path(s) under .claude/ that are not \`.claude/rules/**/*.md\`. The .gitignore narrowing exists ONLY to admit rule files; anything else here is a hook artifact that .gitignore:19-24 was written to keep out:"
+  printf '  %s\n' $off >&2
 else
-  off="$(a1_offenders)"
-  if [ -n "$off" ]; then
-    err "A1: tracked path(s) under .claude/ that are not \`.claude/rules/**/*.md\`. The .gitignore narrowing exists ONLY to admit rule files; anything else here is a hook artifact that .gitignore:19-24 was written to keep out:"
-    printf '  %s\n' $off >&2
-  else
-    say "  A1  ok  -- tracked .claude/ paths are rule files only (probe fired)"
-  fi
+  say "  A1  ok  -- tracked .claude/ paths are rule files only"
 fi
 
 # ---------------------------------------------------------------------------
@@ -166,67 +138,44 @@ fi
 # ---------------------------------------------------------------------------
 glob_matches() { git ls-files -- ":(glob)$1" ${2:+":(glob)$2"} 2>/dev/null; }
 
-# ONE call, TWO globs, through the arm's own function. The real glob must return a path under
-# core/fixtures/, and ANY returned path outside it is the typo glob matching -- judged by what
-# is NOT the real prefix, so a glob_matches that ignores its pattern (returns every tracked
-# path) is caught as well as one that matches the typo's own prefix.
-a2p="$(glob_matches 'core/fixtures/**' 'core/fixture/**')"
-a2_hit="$(grep -m1 '^core/fixtures/' <<<"$a2p")"; a2_typo="$(grep -v -m1 '^core/fixtures/' <<<"$a2p")"
-if [ -n "$a2_hit" ] && [ -z "$a2_typo" ]; then
-  : # probe fired: a real glob matches, a typo'd one does not
-else
-  err "A2's own probe did not fire: \`core/fixtures/**\` must match and \`core/fixture/**\` (typo) must not. Got match=[$a2_hit] typo=[$a2_typo]. Every orphan-glob verdict below is then unreadable."
-fi
 while IFS=$'\t' read -r f g; do
   [ -z "${f:-}" ] && continue
   if [ -z "$(glob_matches "$g")" ]; then
     err "A2: $f declares \`paths:\` glob '$g' which matches NO tracked path. That rule can never load, and a rule that never loads reads exactly like one that is being obeyed."
   fi
 done < <(rule_globs)
-[ "$fail" = "0" ] && say "  A2  ok  -- every paths: glob matches at least one tracked path (probe fired)"
+[ "$fail" = "0" ] && say "  A2  ok  -- every paths: glob matches at least one tracked path"
 
 # ---------------------------------------------------------------------------
 # A3 -- frontmatter uses `paths:`, never a Cursor-schema key.
 # ---------------------------------------------------------------------------
 BAD_KEYS='^(globs|description|alwaysApply|apply|rule-type)$'
-printf -- '---\nglobs:\n  - "x/**"\n---\nbody\n' > "$probe/a3bad.md"
-printf -- '---\npaths:\n  - "x/**"\n---\nbody\n'  > "$probe/a3good.md"
-if ! grep -qE "$BAD_KEYS" <<<"$(fm_keys "$probe/a3bad.md")"; then
-  err "A3's own probe did not fire: a frontmatter \`globs:\` key was not extracted. The key scan is broken and the corpus verdict below is vacuous."
-elif grep -qE "$BAD_KEYS" <<<"$(fm_keys "$probe/a3good.md")"; then
-  err "A3's own probe misfired: a correct \`paths:\` frontmatter was reported as a Cursor key. The scan discriminates nothing."
-else
-  for f in $(rule_files); do
-    bad="$(fm_keys "$f" | grep -E "$BAD_KEYS" || true)"
-    if [ -n "$bad" ]; then
-      err "A3: $f frontmatter carries $(echo $bad | tr '\n' ' ')-- Claude Code consults ONLY \`paths:\`. This file is silently UNCONDITIONAL: resident in every session, while reading like a scoped rule. (That is Cursor's .mdc schema, not this one.)"
-    fi
-  done
-  say "  A3  ok  -- no Cursor-schema frontmatter keys (probe fired both ways)"
-fi
+for f in $(rule_files); do
+  bad="$(fm_keys "$f" | grep -E "$BAD_KEYS" || true)"
+  if [ -n "$bad" ]; then
+    err "A3: $f frontmatter carries $(echo $bad | tr '\n' ' ')-- Claude Code consults ONLY \`paths:\`. This file is silently UNCONDITIONAL: resident in every session, while reading like a scoped rule. (That is Cursor's .mdc schema, not this one.)"
+  fi
+done
+say "  A3  ok  -- no Cursor-schema frontmatter keys"
 
 # ---------------------------------------------------------------------------
 # A4 -- pointers resolve, and every rule is reachable (pointer OR no-stub marker).
 # ---------------------------------------------------------------------------
 pointers() { grep -oE '\.claude/rules/[A-Za-z0-9._/-]+\.md' CLAUDE.md 2>/dev/null | LC_ALL=C sort -u; }
 
-if ! grep -qE '\.claude/rules/[A-Za-z0-9._/-]+\.md' <<<'see .claude/rules/zzz-probe.md here'; then
-  err "A4's own probe did not fire: the pointer pattern did not match a literal \`.claude/rules/zzz-probe.md\`. Both directions below are unreadable."
-else
-  for p in $(pointers); do
-    [ -f "$p" ] || err "A4: CLAUDE.md points at \`$p\`, which does not exist. A dangling pointer here is caught by nothing else -- audit-rule-files.sh excludes CLAUDE.md from its pointer targets and restricts its sources to the skill tree."
-  done
-  for f in $(rule_files); do
-    if ! grep -qxF "$f" <<<"$(pointers)"; then
-      if ! grep -q '<!-- *no-stub:' "$f"; then
-        err "A4: $f has no CLAUDE.md pointer and no \`<!-- no-stub: <reason> -->\` marker. Its trigger may never fire and nothing names it -- invisible in both channels. Add the pointer, or declare in the marker why the read trigger suffices."
-      elif ! grep -qE '<!-- *no-stub:[[:space:]]*[^[:space:]>-]' "$f"; then
-        err "A4: $f carries an EMPTY \`no-stub:\` marker. A marker with no reason is a decision nobody can audit -- the same rule .dist-only markers are held to."
-      fi
+for p in $(pointers); do
+  [ -f "$p" ] || err "A4: CLAUDE.md points at \`$p\`, which does not exist. A dangling pointer here is caught by nothing else -- audit-rule-files.sh excludes CLAUDE.md from its pointer targets and restricts its sources to the skill tree."
+done
+for f in $(rule_files); do
+  if ! grep -qxF "$f" <<<"$(pointers)"; then
+    if ! grep -q '<!-- *no-stub:' "$f"; then
+      err "A4: $f has no CLAUDE.md pointer and no \`<!-- no-stub: <reason> -->\` marker. Its trigger may never fire and nothing names it -- invisible in both channels. Add the pointer, or declare in the marker why the read trigger suffices."
+    elif ! grep -qE '<!-- *no-stub:[[:space:]]*[^[:space:]>-]' "$f"; then
+      err "A4: $f carries an EMPTY \`no-stub:\` marker. A marker with no reason is a decision nobody can audit -- the same rule .dist-only markers are held to."
     fi
-  done
-  say "  A4  ok  -- pointers resolve; every rule has a pointer or a reasoned no-stub (probe fired)"
-fi
+  fi
+done
+say "  A4  ok  -- pointers resolve; every rule has a pointer or a reasoned no-stub"
 
 # ---------------------------------------------------------------------------
 # A3b -- a rule file declares its scope EXACTLY ONCE: either a `paths:` block, or a
@@ -265,51 +214,34 @@ has_uncond()    { grep -q '<!-- *unconditional:' "$1"; }
 # `|| echo 0` form emits two zeros and the arithmetic below then aborts with no verdict.
 paths_key_count() { _pkc="$(grep -cx 'paths' <<<"$(fm_keys "$1")")" || _pkc=0; printf '%s' "$_pkc"; }
 
-printf -- '---\npaths:\n  - "x/**"\n---\nbody\n'            > "$probe/a3b_scoped.md"
-printf -- '<!-- unconditional: because reasons -->\nbody\n'  > "$probe/a3b_uncond.md"
-printf -- 'body only, no declaration\n'                      > "$probe/a3b_neither.md"
-# The DUPLICATE probe, and its near-miss. The offender carries two `paths:` keys with
-# DIFFERENT values at DIFFERENT positions -- nothing about the seed's value, line number or
-# filename may be what the arm reads. The near-miss carries a second `paths:` in the BODY,
-# below the closing `---`, which is prose and not a declaration: `fm_keys` must not count it.
-printf -- '---\npaths:\n  - "a/**"\nfoo: bar\npaths:\n  - "b/**"\n---\nbody\n' > "$probe/a3b_dup.md"
-printf -- '---\npaths:\n  - "a/**"\n---\nbody mentions paths: in prose\n'      > "$probe/a3b_dupmiss.md"
-if has_paths_key "$probe/a3b_scoped.md" && ! has_uncond "$probe/a3b_scoped.md" \
-   && has_uncond "$probe/a3b_uncond.md" && ! has_paths_key "$probe/a3b_uncond.md" \
-   && ! has_paths_key "$probe/a3b_neither.md" && ! has_uncond "$probe/a3b_neither.md" \
-   && [ "$(paths_key_count "$probe/a3b_dup.md")" -gt 1 ] \
-   && [ "$(paths_key_count "$probe/a3b_dupmiss.md")" -eq 1 ]; then
-  for f in $(rule_files); do
-    # A3 OWNS THE CURSOR-KEY CASE, and this arm stands down for it. A file carrying
-    # `globs:` has MISdeclared its scope, not failed to declare one, and both arms firing
-    # on one mutation makes neither attributable -- the entanglement the mutation battery
-    # exists to catch. A3's message is the one that names the actual repair.
-    if grep -qE "$BAD_KEYS" <<<"$(fm_keys "$f")"; then continue; fi
-    p=0; u=0
-    has_paths_key "$f" && p=1
-    has_uncond "$f" && u=1
-    if [ "$p" = "0" ] && [ "$u" = "0" ]; then
-      err "A3b: $f declares no scope. It has no \`paths:\` block, so the loader treats it as UNCONDITIONAL and re-injects it on every compaction of every session -- but nothing here says that was intended. Add \`paths:\`, or declare \`<!-- unconditional: <reason> -->\`."
-    elif [ "$p" = "1" ] && [ "$u" = "1" ]; then
-      err "A3b: $f carries BOTH a \`paths:\` block and an \`<!-- unconditional: -->\` marker. The loader obeys \`paths:\` and the marker is then a false claim about when this file loads."
-    elif [ "$u" = "1" ] && ! grep -qE '<!-- *unconditional:[[:space:]]*[^[:space:]>-]' "$f"; then
-      err "A3b: $f carries an EMPTY \`unconditional:\` marker. Resident-in-every-session is the most expensive declaration in this repo and it is the one nobody can audit without a reason."
-    fi
-    # THIS BRANCH IS SEPARATE FROM THE if/elif CHAIN ABOVE, DELIBERATELY. A file can carry
-    # two `paths:` keys AND a marker, and the chain's `p=1 u=1` branch would consume it and
-    # never report the duplicate. It also sits INSIDE this loop, not beside `rule_globs()`:
-    # measured, an arm placed there printed its FAIL and the validator still exited 0,
-    # because `err` sets `fail=1` and that assignment is lost to a command-substitution
-    # subshell. The exit is the verdict, so the arm has to run where `fail` survives.
-    n_paths="$(paths_key_count "$f")"
-    if [ "$n_paths" -gt 1 ]; then
-      err "A3b: $f declares \`paths:\` $n_paths times in its frontmatter. YAML keeps the LAST one, so every earlier block is dead text that reads to a human as this rule's scope while the loader obeys a different glob -- and A2 then validates a glob that decides nothing. Declare the scope once, in one \`paths:\` block."
-    fi
-  done
-  say "  A3b ok  -- every rule declares its scope exactly once (probe fired all five ways)"
-else
-  err "A3b's own probe did not fire: scoped/unconditional/neither/duplicate/prose-near-miss were not told apart. The scope verdicts below are vacuous."
-fi
+for f in $(rule_files); do
+  # A3 OWNS THE CURSOR-KEY CASE, and this arm stands down for it. A file carrying
+  # `globs:` has MISdeclared its scope, not failed to declare one, and both arms firing
+  # on one mutation makes neither attributable -- the entanglement the mutation battery
+  # exists to catch. A3's message is the one that names the actual repair.
+  if grep -qE "$BAD_KEYS" <<<"$(fm_keys "$f")"; then continue; fi
+  p=0; u=0
+  has_paths_key "$f" && p=1
+  has_uncond "$f" && u=1
+  if [ "$p" = "0" ] && [ "$u" = "0" ]; then
+    err "A3b: $f declares no scope. It has no \`paths:\` block, so the loader treats it as UNCONDITIONAL and re-injects it on every compaction of every session -- but nothing here says that was intended. Add \`paths:\`, or declare \`<!-- unconditional: <reason> -->\`."
+  elif [ "$p" = "1" ] && [ "$u" = "1" ]; then
+    err "A3b: $f carries BOTH a \`paths:\` block and an \`<!-- unconditional: -->\` marker. The loader obeys \`paths:\` and the marker is then a false claim about when this file loads."
+  elif [ "$u" = "1" ] && ! grep -qE '<!-- *unconditional:[[:space:]]*[^[:space:]>-]' "$f"; then
+    err "A3b: $f carries an EMPTY \`unconditional:\` marker. Resident-in-every-session is the most expensive declaration in this repo and it is the one nobody can audit without a reason."
+  fi
+  # THIS BRANCH IS SEPARATE FROM THE if/elif CHAIN ABOVE, DELIBERATELY. A file can carry
+  # two `paths:` keys AND a marker, and the chain's `p=1 u=1` branch would consume it and
+  # never report the duplicate. It also sits INSIDE this loop, not beside `rule_globs()`:
+  # measured, an arm placed there printed its FAIL and the validator still exited 0,
+  # because `err` sets `fail=1` and that assignment is lost to a command-substitution
+  # subshell. The exit is the verdict, so the arm has to run where `fail` survives.
+  n_paths="$(paths_key_count "$f")"
+  if [ "$n_paths" -gt 1 ]; then
+    err "A3b: $f declares \`paths:\` $n_paths times in its frontmatter. YAML keeps the LAST one, so every earlier block is dead text that reads to a human as this rule's scope while the loader obeys a different glob -- and A2 then validates a glob that decides nothing. Declare the scope once, in one \`paths:\` block."
+  fi
+done
+say "  A3b ok  -- every rule declares its scope exactly once"
 
 # ---------------------------------------------------------------------------
 # A5 -- every invariant cited as a MECHANISM names one that exists.
@@ -341,19 +273,13 @@ if [ ! -f "$INDEX" ]; then
 elif [ -z "$LIVE" ]; then
   err "A5: parsed ZERO invariant IDs out of $INDEX. The row grammar changed. An empty live set makes every citation look dead OR every citation look fine depending on the comparison direction, so this fails closed."
 else
-  printf 'cites **I99999** and **%s**\n' "$(printf '%s\n' "$LIVE" | head -1)" > "$probe/a5.md"
-  probe_bad="$(bold_ids "$probe/a5.md" | grep -vxF -f <(printf '%s\n' "$LIVE") || true)"
-  if [ "$probe_bad" != "I99999" ]; then
-    err "A5's own probe did not fire: a bold **I99999** beside a live ID should report exactly I99999, got [$probe_bad]. Every citation verdict below is unreadable."
-  else
-    for f in CLAUDE.md $(rule_files); do
-      dead="$(bold_ids "$f" | grep -vxF -f <(printf '%s\n' "$LIVE") || true)"
-      if [ -n "$dead" ]; then
-        err "A5: $f cites $(printf '%s' "$dead" | tr '\n' ' ')as a live mechanism, and no arm declares it. Cite the invariant that exists, or if you are writing ABOUT a retired id use backticks, which is what the surrounding prose already does."
-      fi
-    done
-    say "  A5  ok  -- every bold invariant citation resolves against $INDEX ($(printf '%s\n' "$LIVE" | grep -c .) live) (probe fired)"
-  fi
+  for f in CLAUDE.md $(rule_files); do
+    dead="$(bold_ids "$f" | grep -vxF -f <(printf '%s\n' "$LIVE") || true)"
+    if [ -n "$dead" ]; then
+      err "A5: $f cites $(printf '%s' "$dead" | tr '\n' ' ')as a live mechanism, and no arm declares it. Cite the invariant that exists, or if you are writing ABOUT a retired id use backticks, which is what the surrounding prose already does."
+    fi
+  done
+  say "  A5  ok  -- every bold invariant citation resolves against $INDEX ($(printf '%s\n' "$LIVE" | grep -c .) live)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -967,8 +893,6 @@ fi
 #     core/fixtures/lib/<x>.sh that the contract never names in backticks.
 # A tree with no contract file is not judged: the CLAUDE.md pointer to it is A4's subject, so deleting the contract
 # fails A4 in this repository, and a seeded probe tree with neither is quiet.
-# One awk reads the contract, the cited files and the tracked list; the probe below runs that awk on a seeded tree
-# in both directions before the corpus.
 # ---------------------------------------------------------------------------
 A7_CONTRACT=".claude/rules/fixture-contract.md"
 # a7_judge <root> <contract> <tracked-list file> -> one `A7<TAB><finding>` row per finding, nothing when clean
@@ -1049,40 +973,15 @@ a7_judge() {
       }
     }' "$2" "$3"
 }
-a7p="$probe/a7"; mkdir -p "$a7p/scripts" "$a7p/core/fixtures/zf"
-printf '#!/usr/bin/env bash\n# Z1  the arm\n# ZS_BEGIN\nzfn() { :; }\n# ZS_END\n' > "$a7p/scripts/z.sh"
-printf 'echo zcell\n' > "$a7p/core/fixtures/zf/run.sh"
-printf '%s\n' '- **C1** fine. Enforcer: `scripts/z.sh` Z1, ZS, zfn; `core/fixtures/zf/run.sh` zcell; **I1**.' \
-  '- **C2** names `x.decl` and `run.sh`, no enforcer.' \
-  '- **C3** Enforcer: `scripts/gone.sh`.' \
-  '- **C4** Enforcer: `scripts/z.sh` Z2,' '  zfx; plain words.' \
-  '- **C4** Enforcer: `scripts/z.sh`. Enforcer: `scripts/z.sh`.' \
-  '- **C5** comment-only id. Enforcer: `scripts/z.sh` the; `core/fixtures/zf/run.sh` zce.' > "$a7p/contract.md"
-printf '%s\n' core/fixtures/zf/x.decl core/fixtures/zf/y.decl core/fixtures/lib/run.sh core/fixtures/zf/.dist-only > "$a7p/ls"
-a7_judge "$a7p" "$a7p/contract.md" "$a7p/ls" | LC_ALL=C sort > "$a7p/got"
-printf 'A7\t%s\n' 'clause C2 names no Enforcer:' \
-  'clause C3 cites `scripts/gone.sh`, which is not a readable non-empty file' \
-  'clause C4 cites Z2 in `scripts/z.sh`, which declares no such arm, span, function' \
-  'clause C4 cites zfx in `scripts/z.sh`, which declares no such arm, span, function' \
-  'clause C4 enforcer item is neither a backticked path nor a bold invariant: plain words' \
-  'clause C4 is numbered twice' 'clause C4 carries Enforcer: more than once' \
-  'clause C5 cites the in `scripts/z.sh`, which declares no such arm, span, function' \
-  'clause C5 cites zce in `core/fixtures/zf/run.sh`, which declares no such arm, span, function or word' \
-  'the contract never names `.dist-only`, which the fixture tree carries' \
-  'the contract never names `y.decl`, which the fixture tree carries' | LC_ALL=C sort > "$a7p/want"
-if ! cmp -s "$a7p/got" "$a7p/want"; then
-  err "A7's own probe did not fire as seeded (a clean clause citing an arm header, a span, a function, a fixture word and an invariant; seven seeded findings and two coverage gaps). The contract verdict below is unreadable. Differences:"
-  diff "$a7p/want" "$a7p/got" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
-elif [ ! -f "$A7_CONTRACT" ]; then
-  say "  A7  ok  -- no $A7_CONTRACT in this tree, so nothing to join (probe fired)"
+if [ ! -f "$A7_CONTRACT" ]; then
+  say "  A7  ok  -- no $A7_CONTRACT in this tree, so nothing to join"
 else
-  git ls-files -- 'core/fixtures/*' > "$probe/a7.ls" 2>/dev/null || : > "$probe/a7.ls"
-  a7_out="$(a7_judge "$ROOT" "$A7_CONTRACT" "$probe/a7.ls")"
+  a7_out="$(a7_judge "$ROOT" "$A7_CONTRACT" <(git ls-files -- 'core/fixtures/*' 2>/dev/null))"
   if [ -n "$a7_out" ]; then
     err "A7: $A7_CONTRACT does not join to the tree. Fix the clause or its cite; an enforcer named here must exist:"
     printf '%s\n' "$a7_out" | cut -f2- | sed 's/^/  /' >&2
   else
-    say "  A7  ok  -- every fixture-contract clause names an enforcer that exists; every declaration kind and library file is named (probe fired)"
+    say "  A7  ok  -- every fixture-contract clause names an enforcer that exists; every declaration kind and library file is named"
   fi
 fi
 

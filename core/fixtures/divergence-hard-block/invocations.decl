@@ -6,4 +6,5 @@
 # era-between (bound by the mutant) and era-bound under era-date-gate-dropped; era-bound under legacy-on-field-absence;
 # era-between (bound by the mutant) and era-bound under era-on-engine-commit; era-merge-before (bound by the mutant) and
 # era-merge-after under era-not-first-parent.
-215 *
+# BL-1102 (215 -> 209): arm N's self-probes, which started merge-adversarial-shards.sh in the gate runs that reach a bound arm N, are removed; the row is set from a counted run.
+209 *
