@@ -16,8 +16,9 @@ docs/analysis/step-value-stories-elicitation-s321.md:
              already in the text the pass read.
   deletion   (sensitivity only) the `grep -rn -F` sibling tokens of the joined blocks: present in the read text, absent at
              the gate.
-  span arm   every backtick or double-quoted span of 12+ characters in the finding body that occurs in the read text, and
-             the earliest text state that carries each; origin = the repair that wrote every such span.
+  span arm   every backtick or double-quoted span of 12+ characters in the finding body, as party_ts_yield.claim_spans
+             pairs them, that occurs in the read text, and the earliest text state that carries each; origin = the repair
+             that wrote every such span.
 REFOUND and the attribution reading are manual and live in the document, not here.
 
 Controls printed in the same run (each must read MATCH or the run says DIFFERS):
@@ -236,10 +237,21 @@ def token_arm(tree, blocks, key, read_ref, story, head=""):
     dels_gone = sum(1 for t, p in dels if not present(tree, SHIP, t, p, story))
     return len(jb), len(use), shipped, already, len(dels), dels_gone
 
-SPAN = re.compile(r"`([^`\n]{12,})`|\"([^\"\n]{12,})\"")
+_PTS = []
+
+def claim_spans(text):
+    """party_ts_yield.claim_spans at 12+ for both span kinds. Loaded on first use: party_ts_yield loads this file at
+    its own import, so a load at the top of this file would recurse."""
+    if not _PTS:
+        import importlib.util
+        sys.dont_write_bytecode = True
+        spec = importlib.util.spec_from_file_location("party_ts_yield", os.path.join(os.path.dirname(os.path.abspath(__file__)), "party_ts_yield.py"))
+        m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+        _PTS.append(m.claim_spans)
+    return _PTS[0](text, 12, 12)
 
 def span_arm(tree, body, story, read_ref, prior_states):
-    spans = [m.group(1) or m.group(2) for m in SPAN.finditer(body)]
+    spans = claim_spans(body)
     rd = tree.stories(read_ref).get(story, "")
     inread = [s for s in spans if s in rd]
     first = []
@@ -389,8 +401,8 @@ def main():
         inread, first = span_arm(tree, body, story, READ["stories-p%d" % p], prior + [(READ["stories-p%d" % p], "read text")])
         print("p%d %-8s %-6s blocks %d | tokens %d/%d shipped, %d in read | del %d/%d gone | spans %d first: %s | %s" % (
             p, f, key[2], nb, shipped, n, already, dg, nd, len(inread), ",".join(str(x) for x in first), head[4:110]))
-    s1 = 9; a1 = cst.get((1, "adversary"), [0, 0])[1]
-    print("p1 $ per survivor by survivor count: %s" % ", ".join("%d: $%.2f" % (k, a1 / k) for k in (8, 9, 10, 11)))
+    a1 = cst.get((1, "adversary"), [0, 0])[1]
+    print("p1 $ per survivor by survivor count: %s" % ", ".join("%d: $%.2f" % (k, a1 / k) for k in (7, 8, 9, 10)))
     print("control join: %d of %d findings join at least one repair block (must be all)" % (joined, total))
 
     # ---- arm control on the elicitation population
@@ -409,17 +421,18 @@ def main():
             cls, ev = m.group(1), m.group(2)
             mt = re.search(r": (\d+)/(\d+) tokens in `stories/` at 41484a513(?:, (\d+) at e6f964de8)?", ev)
             ms = re.search(r"span arm: (\d+)/(\d+) quoted spans", ev)
+            if not (mt or ms): continue
+            n += 1; ok = True   # a cell carrying both arms is checked on both
             if mt:
                 _, nn, sh_, al, _, _ = token_arm(tree, eblocks, ("stories-elicitation", re.sub(r"^0+", "", f[:-3]), i), "e6f964de8", story, head)
-                n += 1; ok = (sh_, nn) == (int(mt.group(1)), int(mt.group(2))) and (mt.group(3) is None or al == int(mt.group(3)))
-                agree += ok
-                if not ok: diff.append((f, i, "tokens", (sh_, nn, al), mt.groups()))
-            elif ms:
+                if not ((sh_, nn) == (int(mt.group(1)), int(mt.group(2))) and (mt.group(3) is None or al == int(mt.group(3)))):
+                    ok = False; diff.append((f, i, "tokens", (sh_, nn, al), mt.groups()))
+            if ms:
                 inread, first = span_arm(tree, body, story, "e6f964de8", [("01f3925ec", "authored")])
                 absent = sum(1 for x in first if x is None)
-                n += 1; ok = (absent, len(inread)) == (int(ms.group(1)), int(ms.group(2)))
-                agree += ok
-                if not ok: diff.append((f, i, "spans", (absent, len(inread)), ms.groups()))
+                if (absent, len(inread)) != (int(ms.group(1)), int(ms.group(2))):
+                    ok = False; diff.append((f, i, "spans", (absent, len(inread)), ms.groups()))
+            agree += ok
     print("elicitation rows with a token or span evidence cell: %d; reproduced exactly: %d %s" % (n, agree, "MATCH" if n and agree == n else "DIFFERS"))
     for x in diff: print("   differs:", x)
     # the elicitation document's `later:` REFOUND rows against p1 C/M headings (the document's claim: 4 findings naming 5 p1 findings)

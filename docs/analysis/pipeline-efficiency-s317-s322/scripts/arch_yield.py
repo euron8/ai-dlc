@@ -16,9 +16,9 @@ uses CM, blocks(), git() and claim_spans().
    committed review shards; its stand-in is the C/M blocks of its repair record). Read sha per round. A span-overlap proxy for
    "refound by an earlier round" (>=2 shared backtick spans of 12+ chars; NOT a judgment). s321 p1 and p2 read one sha.
 3. Survival (a FLOOR, counted in BLOCKS of a repair record, not findings). Per C/M repair block with disposition `repaired`:
-   the backtick (8+) and double-quoted (12+) spans of its `- claim now asserted:` line, paired over ALL spans left to right
-   (party_ts_yield.claim_spans; PRE_FIX_SPAN, the single regex it replaced, mispairs a short span with the next one's
-   backtick and is kept only as the seeded control's other side). NEW = absent from the text the
+   the backtick (8+) and double-quoted (12+) spans of its `- claim now asserted:` line, as party_ts_yield.claim_spans pairs
+   them (PRE_FIX_SPAN, the single regex it replaced, mispairs a short span with the next one's backtick and is kept only as
+   the seeded control's other side). NEW = absent from the text the
    round READ (BEFORE: the committed docs/architecture.md state or sections/.before file whose sha8 equals the round's read sha,
    plus the spine). Classes: NEW-SHIPPED (a NEW span is in docs/architecture.md or the spine at the sprint merge);
    NEW-SUPERSEDED (at the round's own output state, absent at ship: later rounds rewrote it); NEW-NOT-SEEN-AFTER (absent at
@@ -153,7 +153,7 @@ def findings(text):
 
 
 def spans(body):
-    return set(m.group(1) for m in re.finditer(r"`([^`\n]+)`", body) if len(m.group(1)) >= 12)
+    return set(claim_spans(body, 12, len(body) + 1))   # code spans only: no double-quoted span is that long
 
 
 class Corpus:
@@ -482,6 +482,11 @@ def main():
     seed_claim = "`ENV` residual and `config.py:346` stated, plus `longer-span-xyz`"
     sib = [m.group(1) or m.group(2) for m in PRE_FIX_SPAN.finditer(seed_claim)]
     ctl.append(("seeded claim: this script's pairing reads %s; the pre-fix grammar reads %s (must differ, proving the mispairing is real)" % (claim_spans(seed_claim), sib), claim_spans(seed_claim) != sib and "config.py:346" in claim_spans(seed_claim)))
+    seed_q = 'AC6 reads "the record prints `db=unknown` and never the raw value" and `grep -F "inside-a-code-span" f`'
+    want_q = ["db=unknown", 'grep -F "inside-a-code-span" f', "the record prints `db=unknown` and never the raw value"]
+    ctl.append(("seeded claim: a quoted sentence keeps its code span, a quote inside a code span is no delimiter: %s" % claim_spans(seed_q, 8, 12), claim_spans(seed_q, 8, 12) == want_q))
+    seed_d = "the awk prints (`` `_execute_swap_same_pool` `` with padding) and `ENV`"
+    ctl.append(("seeded claim: a double-backtick span is one span: %s" % claim_spans(seed_d), claim_spans(seed_d) == ["`_execute_swap_same_pool`"]))
     tot = dif = 0
     for sp in (321, 319):
         for r in sv[sp][0]:

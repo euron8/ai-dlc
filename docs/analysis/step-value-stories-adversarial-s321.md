@@ -26,8 +26,8 @@ findings are not classified. Each finding takes the first class that applies.
 2. **REPAIR-INTRODUCED.** The finding sits in text that an earlier repair, fold or amendment wrote.
    Either the finding body attributes the text to one (read, not regex-matched), or the span arm holds.
    The span arm holds when the finding body quotes at least one span the pass read (a backtick or
-   double-quoted span of 12 or more characters) and every such span is absent from the authored text
-   at 01f3925ec. The origin is the repair that wrote the text. The script records, for each span, the
+   double-quoted span of 12 or more characters, paired as `party_ts_yield.claim_spans()` pairs them,
+   BL-1132) and every such span is absent from the authored text at 01f3925ec. The origin is the repair that wrote the text. The script records, for each span, the
    earliest text state that carries it (authored, readiness fold, party repair, elicitation repair, or
    p1+p2 repair).
 3. **UNIQUE-SURVIVED.** Every `grep -c -F` token that the finding's repair blocks run against a story
@@ -74,7 +74,7 @@ are manual.
 | elicitation adversary dollars | per-story $111.55, cross $11.33 | the elicitation document's cells | MATCH, MATCH |
 | `elicitation_yield.py`'s four s319 cells on the same file | 54/$40.89, 14/$32.19, 22/$34.58, 4/$18.94 | the s319-s320 study | MATCH ×4 |
 | C/M per pass against the lead's `rounds/stories-repair-pN.return` | 26 (3 CRITICAL, 23 MAJOR), 4, 2 | 3 + 23, 4, 2 | MATCH ×3 |
-| token and span arms re-run on the ELICITATION population, compared with the evidence column of `step-value-stories-elicitation-s321.md` | 59 of 59 rows reproduced | all | MATCH. This control is known to discriminate: before span multiplicity and the no-id join were fixed, it read 54 of 59 and printed DIFFERS |
+| token and span arms re-run on the ELICITATION population, compared with the evidence column of `step-value-stories-elicitation-s321.md` (a cell carrying both arms is checked on both) | 61 of 61 rows reproduced | all | MATCH. This control is known to discriminate: before span multiplicity and the no-id join were fixed, it read 54 of 59 and printed DIFFERS; with the pre-BL-1132 span grammar it reads 45 of 61 |
 | join: findings with at least one repair block | 32 of 32 | all (the stories series has no deferral route) | MATCH |
 | step total, s319 stories-test-strategy (the like-for-like comparison below) | 311 spawns, $441.19 | the figure read when the comparison was written: 311, $441.19 | MATCH (the script prints it) |
 | partition of the step by description | sums to 428 / $589.64; its adversarial part is 116 / $104.17, equal to the per-pass sum | the step total | MATCH ×2 |
@@ -102,15 +102,23 @@ between its spawns; the other 4.5 min of the 98 is lead time around them, after 
 
 | Pass | C/M | CRITICAL | REFOUND | REPAIR-INTRODUCED | UNIQUE-SURVIVED | UNIQUE-unverified |
 |---|---|---|---|---|---|---|
-| p1 | 26 | 3 | 2 | 11 | **9** | 4 |
+| p1 | 26 | 3 | 2 | 10 | **8** | 6 |
 | p2 | 4 | 0 | 0 | 4 | **0** | 0 |
 | p3 | 2 | 0 | 0 | 2 | **0** | 0 |
-| **all** | 32 | 3 | 2 | 17 | **9** | 4 |
+| **all** | 32 | 3 | 2 | 16 | **8** | 6 |
 
 p1's two REFOUND findings are one defect, raised twice in the same pass: 01 F-1 and cross F-1, Story
 1.1's SWEEP claim against Story 5.6. The defect is EARLIER-RAISED (elicitation 01#F-5), and its
 fixes reached the gate (1/1 and 2/2 tokens). p1's MISSED-BY-PRIOR set, the unique findings whose every
-span was already in the text elicitation read, is 5: 02 F-1, 10 F-2, 12 F-1, 20 F-1 and 20 F-2.
+span was already in the text elicitation read, is 6: 02 F-1, 10 F-2, 12 F-1, 13 F-1, 20 F-1 and 20 F-2.
+
+BL-1132 re-derivation. The span arm's grammar changed, and three p1 classes moved:
+- 11 F-2 gains the arm, and leaves UNIQUE-SURVIVED for REPAIR-INTRODUCED (party repair). Its 2 read-text
+  spans are both first at e6f964de8, one of them the story sentence "a helper that skips every
+  `unknown` answer of an absent instance fails".
+- 13 F-2 and 19 F-2 lose the arm. Each now has 1 and 2 read-text spans in authored text. Read for
+  attribution, neither body attributes its text to a repair, so both are UNIQUE-unverified (no token).
+- 13 F-1's spans are now all authored or party-repair text, which adds it to MISSED-BY-PRIOR.
 
 ## Summary: cost per unique survivor
 
@@ -119,14 +127,14 @@ The column with the repair added is shown beside it.
 
 | Pass | Shards | Spawns (adversary) | C/M | Unique survived | Adversary $ | $ per survivor | Pass + repair $ per survivor |
 |---|---|---|---|---|---|---|---|
-| p1 | 26 | 27 | 26 | 9 | $51.70 | $5.74 | $7.39 |
+| p1 | 26 | 27 | 26 | 8 | $51.70 | $6.46 | $8.31 |
 | p2 | 26 | 26 | 4 | 0 | $16.79 | none survived (by construction: every finding sits in p1-repair text) | none |
 | p3 | 26 | 26 | 2 | 0 | $12.80 | none survived (every finding sits in p2-repair text) | none |
-| elicitation, s321 (for reference) | 26 | 38 | 87 | 36 | $122.88 | $3.41 | |
+| elicitation, s321 (for reference) | 26 | 38 | 87 | 39 | $122.88 | $3.15 | |
 
-p1 also caught 11 defects in the text that the party and elicitation repairs wrote. No later round
-raised any of them, and the fixes for 8 reached the gate by token: 01 F-2, 09 F-1, 09 F-2, 10 F-1,
-11 F-1, 21 F-1, 21 F-2 and 23 F-1. Two of the 8 are CRITICAL. The elicitation and party readings do not
+p1 also caught 10 defects in the text that the party and elicitation repairs wrote. No later round
+raised any of them, and the fixes for 9 reached the gate by token: 01 F-2, 09 F-1, 09 F-2, 10 F-1,
+11 F-1, 11 F-2, 21 F-1, 21 F-2 and 23 F-1. Two of the 9 are CRITICAL. The elicitation and party readings do not
 count these, because the method excludes REPAIR-INTRODUCED findings from the round whose repair wrote
 the text. Counting them, with the REFOUND pair as one defect, p1 has 18 distinct catches whose fix
 reached the gate: $51.70 / 18 = $2.87 each.
@@ -135,8 +143,8 @@ reached the gate: $51.70 / 18 = $2.87 each.
 
 | Text written by | Cost of that repair | MAJOR+ found in it by p1-p3 | CRITICAL | Fix at the gate |
 |---|---|---|---|---|
-| party repair (e6f964de8) | (party round, not this reading) | 4 in p1 (10 F-1, 11 F-1, 21 F-1, 21 F-2), plus 19 F-2 whose spans the party and elicitation repairs both wrote | 1 (11 F-1) | 4 by token; 19 F-2 has no token |
-| elicitation repair (6509c26b2) | $26.19 (the elicitation document) | 6 in p1 (01 F-2, 09 F-1, 09 F-2, 13 F-2, 23 F-1, 23 F-2), plus the REFOUND pair 01 F-1 / cross F-1 (a half-applied elicitation repair, by its body) | 1 (09 F-1) | 4 by token, the pair by token; 13 F-2 and 23 F-2 have no token |
+| party repair (e6f964de8) | (party round, not this reading) | 5 in p1 (10 F-1, 11 F-1, 11 F-2, 21 F-1, 21 F-2) | 1 (11 F-1) | 5 by token |
+| elicitation repair (6509c26b2) | $26.19 (the elicitation document) | 5 in p1 (01 F-2, 09 F-1, 09 F-2, 23 F-1, 23 F-2), plus the REFOUND pair 01 F-1 / cross F-1 (a half-applied elicitation repair, by its body) | 1 (09 F-1) | 4 by token, the pair by token; 23 F-2 has no token |
 | p1 repair | $14.78, 23 spawns | **all 4 of p2's** (03 F-1, 09 F-1, 09 F-2, 13 F-1) | 0 | 3: 03 F-1 and 09 F-1 by token, and 13 F-1 by deletion (the struck clause "and by the deploy-validate smoke" reads 0 in story 3.3 at 41484a513, against a control clause from the same sentence that reads 1). 09 F-2's p2 fix was rewritten by the p3 repair after p3 09 F-1 found it could not red (0/1) |
 | p2 repair | $6.26, 11 spawns | **both of p3's** (09 F-1, 10 F-1) | 0 | 2: p3 09 F-1 by token, and p3 10 F-1 by deletion (its one token was already in the text p3 read, so the token does not discriminate; the deleted text reads 1/1 gone at the gate) |
 | p3 repair | $1.84, 3 spawns | nothing measured; no adversarial pass follows it. The gate pre-check repair (Check 902s) edited story 5.6, which the p3 repair did not touch | | |
@@ -183,7 +191,7 @@ The ruling is "A step with no measured value goes" (`.claude/rules/operator-ruli
 
 | Element | s321 measured value | Verdict |
 |---|---|---|
-| Adversarial p1, with its repair | 9 unique survivors at $5.74 each, including the one unique CRITICAL (19 F-1). It also has 11 catches in party- and elicitation-repair text that no later round raised; 8 of those fixes reached the gate, 2 of them CRITICAL. That is 18 distinct gate-surviving catches at $2.87 | **Keep.** It is the convergence exit, and it carries unique and high-consequence value |
+| Adversarial p1, with its repair | 8 unique survivors at $6.46 each, including the one unique CRITICAL (19 F-1). It also has 10 catches in party- and elicitation-repair text that no later round raised; 9 of those fixes reached the gate, 2 of them CRITICAL. That is 18 distinct gate-surviving catches at $2.87 | **Keep.** It is the convergence exit, and it carries unique and high-consequence value |
 | Adversarial p2 and p3, with their repairs | 0 unique survivors, by construction. All 6 MAJORs sit in the previous pass's repair text, 4 of them in the native-spend-bound chain, and 5 of the 6 fixes are at the gate. Cost $37.70 for both (pass + repair) | **Keep while repairs write defects**, as `step-value-s317-s319.md` ruled for requirements p2 and p3. They are the only check on a repair's own text, and on s321 that text held capital-path defects in three successive rounds |
 | p2/p3 shards on unchanged story bytes | 19 reads, $7.57, 0.48 spawn-hours, 0 C/M | **Narrow candidate, recorded only.** The measured upper bound on the saving is $7.57 and 0.48 spawn-hours on s321 ($0.30 per story). One sprint cannot bound a rare catch, and no narrowing is contracted here |
 | The repairs | p1's repair wrote all 4 p2 MAJORs, and p2's repair wrote both p3 MAJORs | The removable cost is the repair defect rate, not a pass (BL-508's finding) |
@@ -208,29 +216,29 @@ counts, for each span from the read text, the earliest state that carries it.
 |---|---|---|---|---|---|---|---|
 | p1 | 1.1 | `01.md` | F-1 | AC2 records SWEEP as observed by AC5; AC5 and 5.6 say it never is | REFOUND | same pass: `shards/stories-p1/cross.md` F-1; EARLIER-RAISED (elicitation 01#F-5); body attributes the stale sentence to elicitation repair F-5, half-applied | tokens 1/1 at gate, 0 in read |
 | p1 | 1.1 | `01.md` | F-2 | the golden tuple omits `deployed_ranges`, the burn source | REPAIR-INTRODUCED | elicitation repair: its F-3 wrote the five-field tuple (`proposed_ranges` reads 0 in story 1.1 at e6f964de8 and 3 at 6509c26b2); EARLIER-RAISED (elicitation 01#F-3 listed the field) | spans: read text 2, authored 1; tokens 1/1 |
-| p1 | 1.2 | `02.md` | F-1 | existing base-chain tests fail under the new predicate and are not owned paths | UNIQUE-unverified | MISSED-BY-PRIOR (all 7 spans authored) | repair carries no `grep -c -F` token |
+| p1 | 1.2 | `02.md` | F-1 | existing base-chain tests fail under the new predicate and are not owned paths | UNIQUE-unverified | MISSED-BY-PRIOR (all 9 spans authored) | repair carries no `grep -c -F` token |
 | p1 | 1.3 | `03.md` | F-1 | AC1's zero-`sign_transaction` legs run dry-run and cannot fail | UNIQUE-SURVIVED | EARLIER-RAISED (elicitation 03#F-4) | 5 repair blocks; tokens 3/3 at gate, 1 in read |
 | p1 | 1.3 | `03.md` | F-2 | "`RPC_URL` read only in `_main`" is false, underived | UNIQUE-SURVIVED | | tokens 1/1, 0 in read |
 | p1 | 2.3 | `09.md` | F-1 | **CRITICAL**: AC3's completeness check cannot pass against a correct build | REPAIR-INTRODUCED | elicitation repair, by body ("Introduced by the stories-elicitation repair", part 9/25) | tokens 1/1 |
 | p1 | 2.3 | `09.md` | F-2 | AC2's second bound location is a branch Story 2.1's rule makes unreachable | REPAIR-INTRODUCED | elicitation repair, by body ("re-opens the F-1 repair of the elicitation record", part 9/25); EARLIER-RAISED (elicitation 09#F-1) | tokens 1/1 |
 | p1 | 2.4 | `10.md` | F-1 | the AC1 exposure case has no disposition when it reds | REPAIR-INTRODUCED | party repair: the "Exposure record" sentence reads 0 in story 2.4 at 01f3925ec and c3c00660f and 1 at e6f964de8; the body cites its party adjudication | spans: party repair 9, authored 3; tokens 1/1 |
 | p1 | 2.4 | `10.md` | F-2 | positional, universal and negative claims underived | UNIQUE-unverified | MISSED-BY-PRIOR | no token |
-| p1 | 3.1 | `11.md` | F-1 | **CRITICAL**: AC5's allow-list is taken against the merge-base with `main` | REPAIR-INTRODUCED | party repair: span arm 5/5 absent from authored, all first at e6f964de8; body names the party repair's FI-RANGE-SC | tokens 1/1 |
-| p1 | 3.1 | `11.md` | F-2 | case 7 does not pin the fake's response body | UNIQUE-SURVIVED | | no span; tokens 1/1, 0 in read |
+| p1 | 3.1 | `11.md` | F-1 | **CRITICAL**: AC5's allow-list is taken against the merge-base with `main` | REPAIR-INTRODUCED | party repair: span arm 6/6 absent from authored, all first at e6f964de8; body names the party repair's FI-RANGE-SC | tokens 1/1 |
+| p1 | 3.1 | `11.md` | F-2 | case 7 does not pin the fake's response body | REPAIR-INTRODUCED | party repair: span arm 2/2 absent from authored, both first at e6f964de8 (the pre-BL-1132 grammar read no span) | tokens 1/1, 0 in read |
 | p1 | 3.2 | `12.md` | F-1 | two caller and live-service claims underived | UNIQUE-unverified | MISSED-BY-PRIOR | no token |
-| p1 | 3.3 | `13.md` | F-1 | item 2's resolver and restore have no assertion route | UNIQUE-SURVIVED | | 5 blocks (part, lane-11, fan-in sweep); tokens 1/1, 0 in read |
-| p1 | 3.3 | `13.md` | F-2 | the new shared reader's "unreadable record" is not bound to 3.1 | REPAIR-INTRODUCED | elicitation repair: span arm 1/1, first at 6509c26b2 | no token |
+| p1 | 3.3 | `13.md` | F-1 | item 2's resolver and restore have no assertion route | UNIQUE-SURVIVED | MISSED-BY-PRIOR (spans authored 7, party repair 1) | 5 blocks (part, lane-11, fan-in sweep); tokens 1/1, 0 in read |
+| p1 | 3.3 | `13.md` | F-2 | the new shared reader's "unreadable record" is not bound to 3.1 | UNIQUE-unverified | span arm does not hold: 7 read-text spans, 1 authored (read text 5, party repair 1); the body attributes no text to a repair | no token |
 | p1 | 3.3 | `13.md` | F-3 | the deployed-ranges loop varies only `REBALANCER_URL` | UNIQUE-unverified | | tokens 1/2 at gate |
 | p1 | 3.4 | `14.md` | F-1 | no AC3 case exercises the unreadable-record arm | UNIQUE-SURVIVED | EARLIER-RAISED (elicitation 14#F-5) | tokens 2/2, 0 in read |
-| p1 | 4.2 | `16.md` | F-1 | the AC4 import control cannot succeed: `python3 -I` ignores the cwd | UNIQUE-SURVIVED | 3 of 6 spans were first written by the elicitation repair; the body does not attribute, and 1 span is authored, so by this method it is not REPAIR-INTRODUCED | tokens 1/1, 0 in read |
+| p1 | 4.2 | `16.md` | F-1 | the AC4 import control cannot succeed: `python3 -I` ignores the cwd | UNIQUE-SURVIVED | 6 of 10 spans were first written by the elicitation repair; the body does not attribute, and 2 spans are authored, so by this method it is not REPAIR-INTRODUCED | tokens 1/1, 0 in read |
 | p1 | 5.2 | `19.md` | F-1 | **CRITICAL**: the swapped-wiring guard reads property values from a `cdk diff` | UNIQUE-SURVIVED | EARLIER-RAISED (elicitation 19#F-1) | 3 blocks; tokens 2/2, 0 in read |
-| p1 | 5.2 | `19.md` | F-2 | `MonitoringStack` universal and negative underived | REPAIR-INTRODUCED | party and elicitation repairs: span arm 4/4 absent from authored (party repair 2, elicitation repair 2) | no token |
-| p1 | 5.3 | `20.md` | F-1 | AC7's mutation control does not exercise the sentinel-sha assertion | UNIQUE-SURVIVED | MISSED-BY-PRIOR (spans party repair 3, authored 1) | tokens 1/1, 0 in read |
+| p1 | 5.2 | `19.md` | F-2 | `MonitoringStack` universal and negative underived | UNIQUE-unverified | span arm does not hold: 11 read-text spans, 2 authored (`MonitoringStack`; party repair 7, read text 2); the body attributes no text to a repair | no token |
+| p1 | 5.3 | `20.md` | F-1 | AC7's mutation control does not exercise the sentinel-sha assertion | UNIQUE-SURVIVED | MISSED-BY-PRIOR (spans party repair 4, authored 3) | tokens 1/1, 0 in read |
 | p1 | 5.3 | `20.md` | F-2 | AC5's `contract_allowlist` mutation need not red the log-line assertion | UNIQUE-SURVIVED | MISSED-BY-PRIOR | tokens 1/1, 0 in read |
-| p1 | 5.4 | `21.md` | F-1 | "Every service runs the image tagged `latest`" is false | REPAIR-INTRODUCED | party repair: span arm 2/2 absent from authored, first at e6f964de8. The body's own authorship check (`grep` over three repair RECORDS) reads "original story text". The commits say otherwise, and the commit-based arm is the measurement | tokens 1/1 |
-| p1 | 5.4 | `21.md` | F-2 | AC4's revert predicate keys on `[-/+]`, a token `cdk diff` does not emit | REPAIR-INTRODUCED | party round, by body ("entered with the party round's Matic-unchanged fix"); the span arm also holds, 3/3 | tokens 1/1 |
+| p1 | 5.4 | `21.md` | F-1 | "Every service runs the image tagged `latest`" is false | REPAIR-INTRODUCED | party repair: span arm 3/3 absent from authored, first at e6f964de8. The body's own authorship check (`grep` over three repair RECORDS) reads "original story text". The commits say otherwise, and the commit-based arm is the measurement | tokens 1/1 |
+| p1 | 5.4 | `21.md` | F-2 | AC4's revert predicate keys on `[-/+]`, a token `cdk diff` does not emit | REPAIR-INTRODUCED | party round, by body ("entered with the party round's Matic-unchanged fix"); the span arm also holds, 7/7 | tokens 1/1 |
 | p1 | 5.6 | `23.md` | F-1 | AC2's digest requirement is absent from the discharge predicate | REPAIR-INTRODUCED | elicitation repair, by body (its E-4 added the digest text); the span arm also holds, 3/3 | tokens 1/1 |
-| p1 | 5.6 | `23.md` | F-2 | SWEEP-writer and digest-source universals underived | REPAIR-INTRODUCED | elicitation repair: span arm 2/2, first at 6509c26b2; the body names the elicitation repair records | no token |
+| p1 | 5.6 | `23.md` | F-2 | SWEEP-writer and digest-source universals underived | REPAIR-INTRODUCED | elicitation repair: span arm 7/7, first at 6509c26b2; the body names the elicitation repair records | no token |
 | p1 | 1.1, 5.6 | `cross.md` | F-1 | FR-S321-4 "every action type" has three unobserved types; 1.1 contradicts 5.6 on SWEEP | REFOUND | same pass: `shards/stories-p1/01.md` F-1; EARLIER-RAISED (elicitation 01#F-5) | tokens 2/2 |
 | p2 | 1.3 | `03.md` | F-1 | the F-3 repair names `importlib.reload`, which 1.2 AC1 rules out | REPAIR-INTRODUCED | p1 repair, by body (part 3/25, entry F-3, a MINOR's repair) | tokens 1/1 at gate |
 | p2 | 2.3 | `09.md` | F-1 | "the one bound at the top covers them" is false for the offramp senders | REPAIR-INTRODUCED | p1 repair, by body (part 9, entries F-1 and F-2) | tokens 2/2 |
@@ -244,17 +252,23 @@ Sensitivity:
 - **10 F-1.** It is REPAIR-INTRODUCED by body attribution alone: the body cites its party
   adjudication, and 3 of its 12 read-text spans are authored text, so the span arm does not hold.
   Were the body attribution not accepted, 10 F-1 would be UNIQUE-SURVIVED (tokens 1/1, 0 in read,
-  deletion 1/1 gone), giving p1 10 survivors at $5.17 each and 10 REPAIR-INTRODUCED.
-- **Range.** Taken one at a time, 16 F-1 gives 8 survivors, 10 F-1 gives 10 and the 13 F-3 deletion
-  arm gives 10, against 9 as classified: p1's survivors read as 8 to 10, $6.46 to $5.17 each, around
-  $5.74. The two upward readings together would give 11 ($4.70). The script prints the dollar column.
+  deletion 1/1 gone), giving p1 9 survivors at $5.74 each and 9 REPAIR-INTRODUCED.
+- **11 F-2.** It is REPAIR-INTRODUCED by the span arm alone, whose two spans are a story sentence and
+  `execution/active`, an endpoint name the body cites from the code. Were the arm not accepted, 11 F-2
+  would be UNIQUE-SURVIVED again (tokens 1/1, 0 in read), giving p1 9 survivors at $5.74 each.
+- **Range.** Taken one at a time, 16 F-1 gives 7 survivors, and 10 F-1, 11 F-2 and the 13 F-3 deletion
+  arm each give 9, against 8 as classified. p1's survivors read as 7 to 9, $7.39 to $5.74 each, around
+  $6.46. 10 F-1 and 13 F-3 together would give 10 ($5.17). The script prints the dollar column.
 - **16 F-1.** If its read-text spans written by the elicitation repair were taken as attribution,
-  p1's unique survivors would be 8 ($6.46 each) and its REPAIR-INTRODUCED count 12.
+  p1's unique survivors would be 7 ($7.39 each) and its REPAIR-INTRODUCED count 11.
+- **13 F-2 and 19 F-2.** Under the pre-BL-1132 grammar both held the span arm, at 1/1 and 4/4. Neither
+  has a token, so restoring that reading moves REPAIR-INTRODUCED to 12 and UNIQUE-unverified to 4, and
+  leaves the survivor count unchanged.
 - **Deletion arm.** It counts `grep -rn -F` sibling tokens that are present in the read text and gone
   at the gate. Every p1 finding with a deletion token has every deletion token gone at the gate. Of
-  the four UNIQUE-unverified findings, only 13 F-3 has deletion tokens, and all 3 are gone at the
-  gate. Counting a completed deletion as survival would make 13 F-3 a survivor, giving p1 10
-  survivors at $5.17 each.
+  the six UNIQUE-unverified findings, only 13 F-3 has deletion tokens, and all 3 are gone at the
+  gate. Counting a completed deletion as survival would make 13 F-3 a survivor, giving p1 9
+  survivors at $5.74 each.
 
 ## Commands
 

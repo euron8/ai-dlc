@@ -3080,6 +3080,9 @@ readset_invalidation_guard() { # <out>
 
 run_fixtures() {
   local rc=0 rf_hard=0 d b out out_q n_expected n_actual n_ordered verdict fx_root fx_s fx_err fx_m fx_p fx_t fx_e pool_xp=""
+  # THE WORK OUTSIDE THE POOL IS TIMED (BL-1124): `ph` collects `<phase> <n>s` from the shell's own SECONDS, no
+  # fork, and the distribution hook's real entry (depth 0, PREPUSH_CL_ENTRY) prints it as one `suite phases:` line.
+  local ph="" ph_t="$SECONDS"
   # THE CONSUMER-LAYOUT SWITCH (cl_select) is read at depth 0 only and then UNSET, so no unit and no nested
   # hook ever inherits it: builtins only, and with the switch unset nothing below changes.
   local cl_tree="" cl_q=""
@@ -3174,9 +3177,13 @@ run_fixtures() {
   # the verdict-completeness assertion below both speak about the set actually dispatched. A
   # skip applied after the count would make every skipped fixture read as a dropped worker.
   READSET_NO_CHANGE=0
+  ph="$ph setup $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   apply_readset_skip "$out/list" "$out"
+  ph="$ph select $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   readset_trace_report "$out"
+  ph="$ph trace-report $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   readset_invalidation_guard "$out" || { rm -rf "$out"; trap - EXIT INT TERM HUP; return 1; }
+  ph="$ph guard $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   # A REFUSED CONSUMER-LAYOUT SELECTION FAILS THE STEP before any dispatch or skip return (cl_select says why).
   if [ -s "$out/.cl.refused" ]; then
     sed 's/^/   FAIL  consumer layout: /' "$out/.cl.refused"
@@ -3329,6 +3336,7 @@ run_fixtures() {
   # REFUSED IS WRITTEN BEFORE THE TRACE'S ROW DISCARD, so a refused unit keeps no trace rows; it writes no
   # `.dur` line, so it records no cost; readset_keys_write and readset_live_trace take only `ok`.
   readset_pool_trace_prep "$out"
+  ph="$ph order $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   set -m
   { PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))" AI_DLC_FX_OUT="$out" AI_DLC_FX_TRACE="$PT_ROOT" AI_DLC_FX_TRACE_LIST="$PT_LIST" AI_DLC_FX_DV="$PT_DV" \
   POOL_STALL="$POOL_STALL" POOL_WALK="$POOL_WALK" AI_DLC_FX_TOTAL="$n_expected" \
@@ -3486,6 +3494,7 @@ run_fixtures() {
   set +m
   wait "$pool_xp"
   pool_xp=""
+  ph="$ph pool $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   readset_pool_trace_merge "$out"
 
   # A GREEN FIXTURE THAT CHECKED NOTHING SAYS SO (BL-998). A shipped fixture whose subject is absent prints a
@@ -3587,6 +3596,7 @@ run_fixtures() {
   # ceiling and the pole line key on the bare unit name, which an `@red` row never matches. A clean
   # `<unit> <secs>` row is written only by a green run. The prune tests the unit with `@red` stripped, so a red row lives exactly as long as its
   # fixture directory. `.last` below is this run's own measurement, unsuffixed, whatever `rc` is.
+  ph="$ph verdicts $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
   dur_sfx=""; [ "$rc" -eq 0 ] || dur_sfx=@red
   # The merge reads the record and writes it back, so it runs under the record's lock: two pushes
@@ -3619,6 +3629,7 @@ run_fixtures() {
   readset_keys_write "$out"
   cl_write "$out"
   cl_confirm "$out"
+  ph="$ph records $((SECONDS - ph_t))s"; ph_t="$SECONDS"
 
   # PUBLISH THIS RUN'S UNMERGED COSTS WHATEVER `rc` IS, and copy the PRE-MERGE file:
   # "$out/.durations" is exactly the units this pool timed, while "$out/.merged" one block up
@@ -3706,6 +3717,7 @@ run_fixtures() {
   POOL_REFUSED_ONLY=0
   if [ -f "$out/.refused" ] && [ "$rf_hard" = 0 ]; then POOL_REFUSED_ONLY=1; fi
   rm -rf "$out"; trap - EXIT INT TERM HUP
+  if [ "$POOL_DEPTH_IN" -eq 0 ] && [ "${PREPUSH_CL_ENTRY:-}" = 1 ]; then printf '   ..    suite phases:%s after %ss\n' "$ph" "$((SECONDS - ph_t))"; fi
   return $rc
 }
 # FIXTURE_POOL_END
@@ -3750,7 +3762,7 @@ KEY_LOG="$GITDIR/ai-dlc-suite-key.log"
 key_log() { printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:-none}" >> "$KEY_LOG" 2>/dev/null || true; }
 
 fixture_suite_step() {
-  local key cached_key cached_n cached_when n_now record
+  local key cached_key cached_n cached_when n_now record sp="" sp_t="$SECONDS" cl_kd="" kf
 
   # A RED STEP ABOVE DOES NOT STOP THE SUITE. Every pass the pool makes is recorded for reuse by
   # content key; the push stays BLOCKED because step() keeps $fail. The red steps are named first.
@@ -3804,6 +3816,7 @@ fixture_suite_step() {
     fi
     key_log MISS "$key"
   fi
+  sp=" content-key $((SECONDS - sp_t))s"; sp_t="$SECONDS"
 
   # THE CONSUMER-LAYOUT TREE (BL-1027): scripts/install.sh into a fresh scratch tree, so run_fixtures runs every
   # selected SHIPPING fixture there too, as `<fx>@consumer` (cl_select, inside FIXTURE_POOL). Built at depth 0
@@ -3858,9 +3871,11 @@ fixture_suite_step() {
   # this snapshot for that. Sited here, outside the I66 block, because a consumer hook prints no pole.
   # Held in this process, never in a shared file a concurrent push could replace before the pole line.
   POLE_PREV="$(cat "$DURATIONS_RECORD" 2>/dev/null)" || POLE_PREV=""
+  sp="$sp consumer-layout $((SECONDS - sp_t))s"; sp_t="$SECONDS"
   run_fixtures || cl_rc=1
   if [ -n "$cl_top" ]; then eval "rm -rf -- $cl_q"; trap - EXIT INT TERM HUP; fi
-  [ "$cl_rc" -eq 0 ] || return 1
+  sp="$sp run_fixtures $((SECONDS - sp_t))s"; sp_t="$SECONDS"
+  [ "$cl_rc" -eq 0 ] || { [ "$POOL_DEPTH_IN" -ne 0 ] || [ "${PREPUSH_CL_ENTRY:-}" != 1 ] || printf '   ..    suite step:%s\n' "$sp"; return 1; }
   # THE OTHER SKIP ARM: run_fixtures returned 0 having run nothing because the read-set skip found no
   # fixture whose inputs changed (it sets READSET_NO_CHANGE and SUITE_SKIPPED inside the I66 block, which
   # may not be edited here). The cause is recorded at this site, beside the content-key setter above.
@@ -3897,15 +3912,25 @@ fixture_suite_step() {
     else
       # LINE 2 SNAPSHOTS THE PENDING COUNTS a HIT reprints: `#pending` then `<fx>=<n>` for every fixture whose key
       # record carries n > 0, and `<fx>=-` for one with no `#pending` line (count unrecorded). One awk over the records. Written to a temp file and renamed (BL-1046).
+      # A HIT SKIPS THE `<fx>@consumer` UNITS TOO (BL-1116): when this run built the consumer layout, the records in
+      # its keys dir (rec_home consumer-placement-keys, the dir cl_select names) are read by the same awk as
+      # `<fx>@consumer=<n>`, so readset_pending_line names them in their own clause; one whose fixture now carries
+      # `.dist-only` is not a unit of this tree and is dropped. Only existing files are passed.
+      set -- "$KEYS_DIR"/*.key
+      [ -z "$cl_top" ] || rec_home cl_kd consumer-placement-keys
+      if [ -n "$cl_kd" ] && [ -d "$cl_kd" ]; then for kf in "$cl_kd"/*.key; do [ ! -f "$kf" ] || set -- "$@" "$kf"; done; fi
       { { [ -d "${KEY_RECORD%/*}" ] || mkdir -p "${KEY_RECORD%/*}"; } && { printf '%s %s %s\n' "$key" "$n_now" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          awk -v fr="$FXROOT" '
+          awk -v fr="$FXROOT" -v ckd="${cl_kd:+$cl_kd/}" '
             function flush() { if (f != "" && x && n != "0") s = s " " f "=" n }
-            FNR == 1 { flush(); f = FILENAME; sub(/.*\//, "", f); sub(/\.key$/, "", f); n = "-"; r = fr f "/run.sh"; x = ((getline l < r) >= 0); if (x) close(r) }
+            FNR == 1 { flush(); f = FILENAME; c = (ckd != "" && index(f, ckd) == 1); sub(/.*\//, "", f); sub(/\.key$/, "", f); n = "-"; r = fr f "/run.sh"; x = ((getline l < r) >= 0); if (x) close(r)
+              if (c) { f = f "@consumer"; r = fr substr(f, 1, length(f) - 9) "/.dist-only"; if ((getline l < r) >= 0) { close(r); x = 0 } } }
             FNR <= 4 && /^#pending (0|[1-9][0-9]*)$/ { n = substr($0, 10) }
-            END { flush(); print "#pending" s }' "$KEYS_DIR"/*.key 2>/dev/null || :; } > "$KEY_RECORD.tmp.$$" \
+            END { flush(); print "#pending" s }' "$@" 2>/dev/null || :; } > "$KEY_RECORD.tmp.$$" \
           && mv -f "$KEY_RECORD.tmp.$$" "$KEY_RECORD"; } 2>/dev/null || rm -f "$KEY_RECORD.tmp.$$" 2>/dev/null || true
     fi
+    sp="$sp content-key-after $((SECONDS - sp_t))s"
   fi
+  [ "$POOL_DEPTH_IN" -ne 0 ] || [ "${PREPUSH_CL_ENTRY:-}" != 1 ] || printf '   ..    suite step:%s\n' "$sp"
   return 0
 }
 # SUITE_STEP_END

@@ -19,6 +19,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1140.0] - 2026-11-15
+
+### BL-1114 CLOSED: the census records into no per-pair store
+
+`scripts/census-hermetic-coverage.sh` runs its hermetic leg with `AI_DLC_VERDICT_STORE` and the three `FXCOUNT_*` variables unset, so the leg names no store and the per-pair `$T/vs` is gone. A distribution pass prints the runner's store-OFF line; a consumer root's pass records into the real store under that root's commit. `scripts/validate-verdict-identity.sh` drops W1's BL-1114 row, and the census fixture's store arm asserts the store-OFF line on every hermetic pass.
+
+### BL-1116 CLOSED: a content-key HIT names the consumer-layout PENDING counts
+
+The suite-key line-2 writer in `.githooks/pre-push` reads the consumer-placement records as `<fx>@consumer=<n>` when the run built the consumer layout.
+
+### BL-1124 PARTIAL: the push records where its suite time goes
+
+`run_fixtures` in both pre-push hooks records phase marks and `fixture_suite_step` records step marks, from `$SECONDS` with no fork; the distribution hook's real entry prints them as `suite phases:` and `suite step:`. `core/git-hooks/pre-push`'s dispatch header names both lower bounds. BL-1133 is filed for the `@consumer` twin selection.
+
+### BL-1132 CLOSED: the s321 span arm pairs code spans as CommonMark does
+
+`party_ts_yield.py`'s `claim_spans()` takes backtick runs as CommonMark does and pairs double quotes over the text with code spans masked; `adversarial_yield.py` and `arch_yield.py` use it. The s321 stories elicitation and adversarial documents, `arch_yield.txt`, BL-812's figures and four archived citations in BL-811 and BL-695 are re-derived; no verdict changes.
+
 ## [0.1139.0] - 2026-11-15
 
 ### BL-1131 CLOSED: the implementation step names gate 1's `gate: skip` plan after a gate-3 rework

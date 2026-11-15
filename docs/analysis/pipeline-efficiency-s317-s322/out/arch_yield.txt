@@ -91,8 +91,8 @@ graph <graph clone> ref fb6f198e7 spawns <OUT>
          22 C/M repair blocks (0 CRITICAL): NEW-SHIPPED 5  NEW-NOT-SEEN-AFTER 1  OLD-ONLY 5  NO-SPAN 9  NOT-REPAIRED 2
          floor: 5 NEW-SHIPPED; sub-part $46.39 / 5 = $9.28 per surviving block; repair spawns alone $7.04
    p4    BEFORE: commit 443c4e352
-         18 C/M repair blocks (2 CRITICAL): NEW-SHIPPED 7  NEW-NOT-SEEN-AFTER 2  OLD-ONLY 4  NO-SPAN 1  NOT-REPAIRED 4
-         floor: 7 NEW-SHIPPED; sub-part $22.44 / 7 = $3.21 per surviving block; repair spawns alone $6.22
+         18 C/M repair blocks (2 CRITICAL): NEW-SHIPPED 8  OLD-ONLY 5  NO-SPAN 1  NOT-REPAIRED 4
+         floor: 8 NEW-SHIPPED; sub-part $22.44 / 8 = $2.80 per surviving block; repair spawns alone $6.22
    p5    BEFORE: commit 9d5b7c938
           1 C/M repair blocks (0 CRITICAL): NEW-SHIPPED 1
          floor: 1 NEW-SHIPPED; sub-part $6.71 / 1 = $6.71 per surviving block; repair spawns alone $0.83
@@ -108,8 +108,8 @@ graph <graph clone> ref fb6f198e7 spawns <OUT>
           8 C/M repair blocks (1 CRITICAL): NEW-SHIPPED 4  NEW-SUPERSEDED 2  OLD-ONLY 2
          floor: 4 NEW-SHIPPED; sub-part $27.80 / 4 = $6.95 per surviving block; repair spawns alone $4.71
    p3    BEFORE: commit 1812ccbb4
-          9 C/M repair blocks (0 CRITICAL): NEW-SHIPPED 2  NEW-NOT-SEEN-AFTER 2  OLD-ONLY 1  NO-SPAN 2  NO-TARGET 1  NOT-REPAIRED 1
-         floor: 2 NEW-SHIPPED; sub-part $21.22 / 2 = $10.61 per surviving block; repair spawns alone $4.02
+          9 C/M repair blocks (0 CRITICAL): NEW-SHIPPED 3  NEW-NOT-SEEN-AFTER 1  OLD-ONLY 1  NO-SPAN 2  NO-TARGET 1  NOT-REPAIRED 1
+         floor: 3 NEW-SHIPPED; sub-part $21.22 / 3 = $7.07 per surviving block; repair spawns alone $4.02
 
 == 3b. CRITICAL findings (rare high-consequence): shard finding joined to its repair blocks by `- source: N.md#F-k`
   s321 elic 3.md#F-1     The staged Base file deterministically fails the Base startup self-tes -> elic/elicitation-repair-p1:BASE-NEW-SHIPPED, elic/elicitation-repair-p1:NOT-REPAIRED, elic/elicitation-serial-repair-p1:NO-SPAN
@@ -176,4 +176,6 @@ graph <graph clone> ref fb6f198e7 spawns <OUT>
   MATCH   impossible finding token QZXV-ARCH-FINDING-NEVER-8842 found in 0 of 123 loaded texts; positive token 'MAJOR' in 103
   MATCH   classify seeds: NEW-SHIPPED=NEW-SHIPPED NEW-GONE=NEW-GONE OLD-ONLY=OLD-ONLY impossible-span=NEW-GONE
   MATCH   seeded claim: this script's pairing reads ['config.py:346', 'longer-span-xyz']; the pre-fix grammar reads [' residual and ', ' stated, plus '] (must differ, proving the mispairing is real)
-controls: 41, DIFFERS: 0
+  MATCH   seeded claim: a quoted sentence keeps its code span, a quote inside a code span is no delimiter: ['db=unknown', 'grep -F "inside-a-code-span" f', 'the record prints `db=unknown` and never the raw value']
+  MATCH   seeded claim: a double-backtick span is one span: ['`_execute_swap_same_pool`']
+controls: 43, DIFFERS: 0

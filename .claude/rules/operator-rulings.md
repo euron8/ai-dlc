@@ -81,7 +81,7 @@ widened bound, a retry or fewer jobs.
 
 ## Valid measurements are never thrown away
 
-Record every fixture, census or gate verdict in the shared, content-keyed verdict store (`AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`), keyed on what the run read, in the store a later matching run reads: a push reads only `counted-<vk>`, which `scripts/seed-verdict-store.sh` writes. A stopped or red run keeps every pass it recorded. Never record a verdict in a per-clone, per-worktree or mktemp location, or in a store no run reads, and never build a measurement whose results are discarded. Enforcer: `scripts/validate-verdict-identity.sh` arm W1; owed: BL-1114.
+Record every fixture, census or gate verdict in the shared, content-keyed verdict store (`AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`), keyed on what the run read, in the store a later matching run reads: a push reads only `counted-<vk>`, which `scripts/seed-verdict-store.sh` writes. A stopped or red run keeps every pass it recorded. Never record a verdict in a per-clone, per-worktree or mktemp location, or in a store no run reads, and never build a measurement whose results are discarded. Enforcer: `scripts/validate-verdict-identity.sh` arm W1.
 
 ## A release never waits for another release's landing
 

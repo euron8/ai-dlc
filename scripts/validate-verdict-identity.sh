@@ -101,7 +101,6 @@ fi
 # VS-WRITER not-a-pass core/git-hooks/pre-push fl_copy="$GITDIR/ai-dlc-fixture-failures.$fl_stamp.$$"
 # VS-WRITER not-a-pass core/git-hooks/pre-push [ -s "$out/.stall" ] && rec_put "$out/.stall" "$GITDIR/ai-dlc-pool-stall.last"
 # VS-WRITER shared scripts/census-consumer-layout.sh AI_DLC_VERDICT_STORE="$cs" "$@" ) < /dev/null > "$out/.log/$cf@consumer" 2>&1; then v=ok; else v=FAIL; fi
-# VS-WRITER BL-1114 scripts/census-hermetic-coverage.sh ( cd "$CENSUS_ROOT" && AI_DLC_HERMETIC_KEEP=1 TMPDIR="$T/htmp" AI_DLC_VERDICT_STORE="$T/vs" \
 # VS-WRITER probe scripts/invalidation-guard.sh export AI_DLC_VERDICT_STORE="$G_W/e2e-store"
 # VS-WRITER import .githooks/pre-push rec_import "$(git rev-parse --git-common-dir)/ai-dlc-pregate-green" "$rec" || :
 # VS-WRITER import .githooks/pre-push rec_import "$GITDIR/ai-dlc-fixture-keys" "$KEYS_DIR"

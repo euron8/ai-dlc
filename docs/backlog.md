@@ -641,7 +641,7 @@ Party round with its repair.
 - Cost: s321 $187.19 and 151 spawns, per story $7.49, 6.04 spawns, 0.58 agent-h and 11.42M tokens. s319: $132.11 and 124 spawns, per story $6.61, 6.20 spawns, 0.81 agent-h and 13.01M tokens. Dollars per story rose $0.88; spawns, agent-hours and tokens per story fell.
 - Yield: s321's seats raised 326 C/M findings (s319 200), consolidated into 254 C/M repair blocks (s319 138). NEW-SHIPPED: s321 88 at the stories gate and 87 at the merge, $2.13 each; s319 37, $3.57 each. Not read by the arm: 46 NO-SPAN and 22 NO-TARGET of 254 blocks (s319 50 and 4 of 138). Not repaired: 65 blocks (s319 28).
 - Every CRITICAL block was read by the `grep -c -F` token arm instead: s321 R-1 (story 1.1, raised by four seats) and E-2 (story 3.3, five seat findings), and s319 F-1 (story 4.1). In each, the token is absent before the round and present at ship, so all three shipped.
-- Against it: the s321 party repair's own text carried 4 defects that p1 later caught, 1 of them CRITICAL (`docs/analysis/step-value-stories-adversarial-s321.md:138`).
+- Against it: the s321 party repair's own text carried 5 defects that p1 later caught, 1 of them CRITICAL (`docs/analysis/step-value-stories-adversarial-s321.md:146`).
 - Party is the first review of the stories in both sprints, so its uniqueness is not measurable (`docs/analysis/step-value-s317-s319.md:31-33`).
 - Reading: KEEP, as `docs/analysis/step-value-s317-s319.md:136` ruled on s317 and s318.
 
@@ -695,11 +695,11 @@ Items 2 and 3 stay as ruled above: item 2 is OPEN while BL-810 is PARTIAL, and i
 
 **Progress (batch b257, W6-07).** Item 1's step-value clause on s321 for the four labels the paragraph above left owed: architecture, `gate-validation[implementation]`, `gate-validation[architecture]` and `gate-validation[requirements]`. Population: one extractor run at `EXTRACT_WIN_END=2026-11-12T14:41:00Z` (`extract.py`, `spawns.py`, `analyze.py`, `roll.py`, `roll.py --seats`, `roll.py --classes`), graph records read from a `file://` scratch clone at 6c30b864f (ship ref fb6f198e7, the s321 sprint merge). The spawn ledger `spawns.py` reads from graph's working tree is 9637 lines, byte-equal to the clone's committed copy. Controls, same run: `bl812_rederive.py row <OUT> 321 319` re-derives every s321 and s319 figure the b255 and b257 paragraphs record, among them architecture $10.41 and $9.48, `gate-validation[implementation]` $6.43 and $4.61, `gate-validation[architecture]` $0.10 and $0.05 and `gate-validation[requirements]` $0.13 and $0.09 per story; `bl812_rederive.py rose <OUT> 321 319` names the same seven risen labels; per-step machine hours sum to `roll.txt` TOTAL (MATCH ×2); token control units==segs 24709666393 on both sides; an impossible step reads 0.
 
-architecture. Command: `python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/arch_yield.py <OUT> <graph clone>`; output `docs/analysis/pipeline-efficiency-s317-s322/out/arch_yield.txt`, 41 controls MATCH, 0 DIFFERS (partition sums, step totals, the p1 and adversarial-p1 shard files byte-identical and counted once, read sha per round, repair-record C/M counts against a second count, seeded span cases in both directions, an impossible description token and an impossible finding token at 0 beside a present one).
+architecture. Command: `python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/arch_yield.py <OUT> <graph clone>`; output `docs/analysis/pipeline-efficiency-s317-s322/out/arch_yield.txt`, 43 controls MATCH, 0 DIFFERS (partition sums, step totals, the p1 and adversarial-p1 shard files byte-identical and counted once, read sha per round, repair-record C/M counts against a second count, seeded span cases in both directions, an impossible description token and an impossible finding token at 0 beside a present one).
 - Cost: s321 118 spawns, $260.19, 1830.5 agent-minutes; s319 135 spawns, $189.54, 1137.8. The +$0.93 per story sits in p3 (+$0.79), elicitation (+$0.45), p1 (+$0.33) and p5 (+$0.27, a pass s319 did not run), offset by the party round (−$0.83, $2.55 to $1.72) and the rest (−$0.08).
 - C/M findings by round, s321 (s319): elicitation 38 with 1 CRITICAL (26), p1 10 with 2 CRITICAL (8 with 1), p2 10 (7 with 2), p3 10 (8), p4 4 with 1 CRITICAL (4), p5 1 (none run).
-- Survival arm (repair blocks whose new claim text reaches the shipped `docs/architecture.md` or spine; a FLOOR): s321 p2 1, p3 5, p4 7, p5 1. The party and elicitation rounds' read texts have no committed state, so their blocks are read against the pre-sprint document (BASE-NEW-SHIPPED 20 and 26), which counts authoring too and is not a floor. s321 p1 wrote no repair record; its two CRITICALs were repaired inside p2's serial repair, where the arm reads OLD-ONLY.
-- Readings. Elicitation: KEEP (the largest yield, 38 C/M and 1 CRITICAL; survival not measurable on s321, s319 floor 6). Party: its cost fell, so the clause does not bind. p1 and p2: both reviewed one sha (bed2fca2), $65.59 and 11.0 agent-hours of review between them (p1 $43.06, 494.7 min; p2 review $22.53, 167.1 min); 6 of p2's 10 C/M share fewer than 2 spans with any p1 finding (a span-overlap proxy, not a judgment), so p2 is not a re-read that found nothing. The second review of an unchanged sha is a narrowing candidate, recorded only: one sprint does not support removing a pass. p3: 7 review spawns at $39.35 against s319's 11 at $17.19; 10 C/M, 6 overlapping an earlier round; floor 5, $9.28 per surviving block; its per-shard cost is a narrowing candidate, recorded only. p4: KEEP (1 CRITICAL, floor 7, $3.21 per surviving block). p5: KEEP on its one catch, a repair-introduced contradiction (graph `changelog-architecture.md`), $6.71.
+- Survival arm (repair blocks whose new claim text reaches the shipped `docs/architecture.md` or spine; a FLOOR): s321 p2 1, p3 5, p4 8, p5 1. The party and elicitation rounds' read texts have no committed state, so their blocks are read against the pre-sprint document (BASE-NEW-SHIPPED 20 and 26), which counts authoring too and is not a floor. s321 p1 wrote no repair record; its two CRITICALs were repaired inside p2's serial repair, where the arm reads OLD-ONLY.
+- Readings. Elicitation: KEEP (the largest yield, 38 C/M and 1 CRITICAL; survival not measurable on s321, s319 floor 6). Party: its cost fell, so the clause does not bind. p1 and p2: both reviewed one sha (bed2fca2), $65.59 and 11.0 agent-hours of review between them (p1 $43.06, 494.7 min; p2 review $22.53, 167.1 min); 6 of p2's 10 C/M share fewer than 2 spans with any p1 finding (a span-overlap proxy, not a judgment), so p2 is not a re-read that found nothing. The second review of an unchanged sha is a narrowing candidate, recorded only: one sprint does not support removing a pass. p3: 7 review spawns at $39.35 against s319's 11 at $17.19; 10 C/M, 6 overlapping an earlier round; floor 5, $9.28 per surviving block; its per-shard cost is a narrowing candidate, recorded only. p4: KEEP (1 CRITICAL, floor 8, $2.80 per surviving block). p5: KEEP on its one catch, a repair-introduced contradiction (graph `changelog-architecture.md`), $6.71.
 
 `gate-validation[implementation]`. Command: `python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/gate_label_yield.py <OUT> <graph clone>`; output `out/gate_label_yield.txt`, 11 MATCH, 0 DIFFERS, impossible token absent from the tree beside present positives.
 - Like for like, implementation plus its gate fell: subagent $30.68 to $17.89 per story, 107.2 to 52.1 agent-hours, raw tokens 82.2M to 40.6M per story. So the step-value clause does not bind the pair.
@@ -711,9 +711,21 @@ architecture. Command: `python3 -I docs/analysis/pipeline-efficiency-s317-s322/s
 
 So every label that rose on s321 now carries a reading: architecture KEEP part by part, with two narrowing candidates recorded; the implementation pair fell; `gate-validation[architecture]` KEEP; `gate-validation[requirements]` KEEP except the pm-escalated review. Not read: whether the adjudicator's 5 FAILs were catches, architecture elicitation survival on s321 (its read text has no committed state), and the 105 party seat findings behind the 38 party repair blocks (the seats' own files are not in the clone).
 
-Correction (span grammar). `party_ts_yield.py`'s `SPAN` regex required 8+ characters inside a backtick pair, so a short span (`ENV`) paired its closing backtick with the next span's opening one, inventing a span and dropping the real one; 55 of 266 architecture claim lines read a different span set under it (`out/arch_yield.txt`). `party_ts_yield.claim_spans()` now pairs every backtick span first, and `arch_yield.py` imports it. Old against new, same run and ref (f7e60625b), the old script reproducing every recorded b257 figure: party NEW-SHIPPED s321 88 to 91 at the stories gate and 87 to 90 at the merge ($2.13 to $2.06 each), s319 37 to 40 ($3.57 to $3.30, its CRITICAL F-1 now NEW-SHIPPED); test strategy s321 21 to 20 ($5.99 to $6.29; p1 10 to 8, p3 4 to 5, p2 5 and p6 2 unchanged, so p1, p2 and p6 hold 15 of the 20), s319 5 unchanged; p3 NEW-GONE 13 to 12, 7 of them still rows the p4 cut names. No reading changes. `adversarial_yield.py:239` carries the same pairing at 12+: with the fix its elicitation evidence control reproduces 46 of 59 rows (13 differ) against `step-value-stories-elicitation-s321.md`, and 3 p1 findings change their span-arm verdict (11 F-2, 13 F-2, 19 F-2), so p1's 9 UNIQUE-SURVIVED may read 8, inside the 8 to 10 that document states. That re-classification is owed and not done here (BL-1132).
+Correction (span grammar). `party_ts_yield.py`'s `SPAN` regex required 8+ characters inside a backtick pair, so a short span (`ENV`) paired its closing backtick with the next span's opening one, inventing a span and dropping the real one; 55 of 266 architecture claim lines read a different span set under it (`out/arch_yield.txt`). `party_ts_yield.claim_spans()` now pairs every backtick span first, and `arch_yield.py` imports it. Old against new, same run and ref (f7e60625b), the old script reproducing every recorded b257 figure: party NEW-SHIPPED s321 88 to 91 at the stories gate and 87 to 90 at the merge ($2.13 to $2.06 each), s319 37 to 40 ($3.57 to $3.30, its CRITICAL F-1 now NEW-SHIPPED); test strategy s321 21 to 20 ($5.99 to $6.29; p1 10 to 8, p3 4 to 5, p2 5 and p6 2 unchanged, so p1, p2 and p6 hold 15 of the 20), s319 5 unchanged; p3 NEW-GONE 13 to 12, 7 of them still rows the p4 cut names. No reading changes. `adversarial_yield.py:239` carries the same pairing at 12+: with the fix its elicitation evidence control reproduces 46 of 59 rows (13 differ) against `step-value-stories-elicitation-s321.md`, and 3 p1 findings change their span-arm verdict (11 F-2, 13 F-2, 19 F-2), so p1's 9 UNIQUE-SURVIVED may read 8, inside the 8 to 10 that document states. That re-classification was owed here and is done in the BL-1132 correction below.
 
-Still owed under item 1: step-value readings for the steps that rose on s322 (named in the b257 paragraph above; the data is available and was not read here), and the `adversarial_yield.py` span re-derivation above, filed as BL-1132. Items 2 and 3 stay as ruled. The entry stays PARTIAL, `verify: manual` stays, and no `Outcome measured:` line is written.
+Correction (span grammar, BL-1132). `claim_spans()` had two pairing defects of its own. It blanked code spans before pairing double quotes, so a quoted story sentence that carried a code span could not match. And it paired a double-backtick span (`` `x` ``) as fragments. It now pairs code spans the way CommonMark does and double quotes over a position-preserving mask, and takes `bt_min`/`dq_min`. `adversarial_yield.py` calls it at 12+, and `arch_yield.py`'s overlap proxy calls it too, with byte-identical output.
+
+Same extraction (`EXTRACT_WIN_END=2026-11-12T14:41:00Z`, spawns.jsonl md5 04a16a54e3a43dc33255f404b75e8cba) and clone, old against new:
+- Party: unchanged. s321 91 at the stories gate and 90 at the merge, s319 40.
+- Test strategy: s321 20 to 22 at the merge ($6.29 to $5.72), with p1 8 to 10 and NEW-GONE 17 to 16 (p1 2 to 1). p1, p2 and p6 now hold 17 of the 22. s319 5 is unchanged.
+- Architecture survival floor: s321 p4 7 to 8 ($3.21 to $2.80), and s319 p3 2 to 3 ($10.61 to $7.07; NEW-NOT-SEEN-AFTER 2 to 1). `arch_yield.py` has 43 controls, adding two seeded `claim_spans` cases. The 55 of 266 grammar figure is unchanged.
+- Stories adversarial (`step-value-stories-adversarial-s321.md`): p1 has 8 UNIQUE-SURVIVED, $6.46 each (was 9, $5.74). 11 F-2 is now REPAIR-INTRODUCED (party repair); 13 F-2 and 19 F-2 are UNIQUE-unverified after an attribution reading. p1's 18 gate-surviving catches at $2.87 are unchanged, and the sensitivity range is 7 to 9.
+- Stories elicitation (`step-value-stories-elicitation-s321.md`): s321 per-story is REPAIR-INTRODUCED 28 to 24, UNIQUE-SURVIVED 36 to 39 and UNIQUE-unverified 11 to 12. Each survivor costs $3.10 to $2.86, and both shard types $3.41 to $3.15. The s319 r1 second control predicts 16, not 15, with agreement on 42 of 44 (11#F-2 added).
+- `adversarial_yield.py`'s evidence-column control reads 61 of 61, against 45 of 61 under the pre-BL-1132 grammar. 61 rows rather than 59, because two rows gained a span cell.
+
+No verdict changes: elicitation KEEP, adversarial p1 KEEP, party KEEP, architecture p4 KEEP.
+
+Still owed under item 1: step-value readings for the steps that rose on s322 (named in the b257 paragraph above; the data is available and was not read here). Items 2 and 3 stay as ruled. The entry stays PARTIAL, `verify: manual` stays, and no `Outcome measured:` line is written.
 
 Step: pipeline
 
@@ -2894,36 +2906,6 @@ Owed: the false-positive set, measured; a cost-bounded farm; and a delivery path
 
 verify: manual
 
-## BL-1114 — an unarmed distribution run records its pass in a store no push reads
-
-**PARTIAL (v0.1135.0) — the runner refuses; the census row is the remainder.** `hr_store_put` in `core/scripts/hermetic-run.sh` (the HR_STORE span, outside HR_SANDBOX, so no `#runner` digest moves) now records nothing for a run in the distribution layout with the counter unarmed and `AI_DLC_VERDICT_STORE` unset, and prints `verdict store OFF: an unarmed distribution run; a push reads only counted-<vk>, so seed it with scripts/seed-verdict-store.sh`. Two cases still record: a caller that names `AI_DLC_VERDICT_STORE` (the probe worlds that read their own store), and a consumer layout, whose push reads `<base>/<root commit>`. `core/fixtures/census-hermetic-coverage/run.sh`'s store control now names the HOME store explicitly. Remainder: `scripts/census-hermetic-coverage.sh:353` still names its per-pair `$T/vs`, so that store is still unread and its W1 `BL-1114` row stays.
-
-**DEFECT.** Filed 2026-11-15. Owner: `core/scripts/hermetic-run.sh` (`hr_store_put`).
-
-A plain `hermetic-run.sh` pass in the distribution is recorded under `<base>/<root commit>` (`hr_store_put`, through `readset_vs_store`). A distribution push always arms the invocation judge at depth 0 (`.githooks/pre-push` `fxcount_arm`, where an arming failure is a FAIL) and reads only `<base>/counted-<vk>`, so the hand run's valid pass is never reused. `scripts/census-hermetic-coverage.sh` records its hermetic passes in a per-pair scratch store, and moving that store to the shared base would land them in the same unread store; arm W1 of `scripts/validate-verdict-identity.sh` carries that site as a `BL-1114` row. Owed: an unarmed distribution run either refuses or records into a store that a later matching run reads, and the census row then moves to `shared` or goes.
-
-Provenance: batch 257, filed by ai-dlc-ba under BL-1045 on lead ai-dlc-35's ruling.
-
-verify: manual
-
-## BL-1116 — a `<fx>@consumer` unit skipped on a consumer-layout record carries no PENDING count and is not named unrecorded
-
-**NOTE.** OPEN. Filed 2026-11-15. Owner: `.githooks/pre-push`, the `cl_select` / `cl_write` skips, which sit outside `readset_pending_recorded`.
-
-The distribution hook's consumer-layout records never carry `#pending`, by construction. The header above `readset_keys_write` says so: no `.pend` is written under the `.cl` out dir. Their skips are rows of `.cl/.kdec`, and `readset_pending_recorded` reads only `.kdec`, so a skipped `<fx>@consumer` unit is counted neither by its count nor as `count unrecorded`. This cannot fire today. All 3 emitters (`pause-hook-origin`, `push-drain-refusals`, `retro-branch-behind-main`) print a `PENDING  ` row only in a mid-pull state, and an install from one sha cannot be in one. Owed if a `@consumer` emitter ever prints outside a pull: carry `.pend` into the `.cl` records and add `.cl/.kdec`'s skips to the recorded file `readset_pending_line` reads.
-
-**PARTIAL (v0.1135.0).** Built while the trigger is still unreachable. Across 39 push logs, the 3 emitters ran green as `@consumer` 10 times and printed 0 PENDING rows. A seeded control row matched in the same grep.
-
-What landed, in both hooks (identical span, I66):
-- `cl_publish` writes line 4 `#pending <n>` from the unit's log `<out>/.log/<fx>@consumer`. `cl_select` appends the `READSET_VS_PENDING` definition to `.cl.pub`.
-- `readset_pending_recorded` reads `.cl/.kdec`'s skip rows as `<fx>@consumer`. Each count comes from `.cl/.kpn` or else from the record in the keys dir `.cl.keys` names; a clean record skip writes nothing to `.kpn`.
-- `readset_pending_line` names a `@consumer` row with no count in its own clause, so records published before this release do not swell the distribution's count-unrecorded clause.
-- `consumer-suite-pool` 7b `cl` now asserts both records carry `#pending` and that push b names `pend@consumer(recorded)=2`.
-
-Remainder: the whole-suite content-key HIT reprints `#pending` from `.git/ai-dlc-suite-key` line 2, which is built from `$KEYS_DIR/*.key` alone. A `<fx>@consumer` unit skipped by a HIT is still neither counted nor named unrecorded.
-
-verify: manual
-
 ## BL-1117 — fixture-git-env-seam reads every file's data twice, so its sandbox trace drops reports and its `core/fixtures/` line cannot be narrowed
 
 **DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/fixture-git-env-seam/run.sh` `:191` (the whole-tree copy, `tar cf - --exclude=… . | tar xf -`) and `:214` (the population count, `tar cf - … . | tar tf -`).
@@ -2977,6 +2959,21 @@ Each lettered item expires separately.
 Provenance: batch 257, wave 4 (ai-dlc-33), from the B9 and B10 gate logs and the durations record; id allocated by the lead.
 
 **PARTIAL (v0.1136.0) — (a) and (b) shipped; (c), (d) and (e) stay owed.** `pole_info_step` (`.githooks/pre-push`) now prints a second line under the pole: `throughput <sum>s summed over <n> unit(s) / <w> worker(s) = <t>s`, followed by `THROUGHPUT-BOUND` when that figure exceeds the pole and `POLE-BOUND` otherwise. It reads `LASTRUN_OWN` in the same awk, so it adds no fork. The width is `FIXTURE_JOBS`, cut to the number of units timed. A tie names the pole, and a width that is not a count names no bound. `core/fixtures/suite-pole-info` arms 10 to 12 cover these cases, and arms 1 and 9 cover the width cut. The consumer hook has no pole step, so it is unchanged. The step label now names both bounds. For (b), the two `.githooks/pre-push` headers are rewritten. The pole step's header (`3a.`) now names both lower bounds and says that a push dispatching most of the suite is width-bound, with B9's and B10's figures. The dispatch-order header in the pool block now says that the order moves the makespan only while the pole is the larger bound, and that it wins nothing measurable here because the push is width-bound. Both edits are comment-only, so the I66 comparison, which strips comments, does not see them.
+
+**PARTIAL (v0.1140.0) — (c)'s instrument shipped; the cut, (d) and (e) stay owed.**
+
+Width 12, re-derived on r1135 (0.1135.0's first push, 12-way, 156 units, every unit's cost from its `@red` row). The summed loaded cost is 8355 s, and 8355 ÷ 12 = 696 s. The pole is 219 s (`adversarial-shard-merge-d@consumer`), the fixture step 779 s, and the residual 83 s. So the suite is throughput-bound at width 12 as well. On r1135b (green, 5 units summing 36 s, pole 15 s), the step was 82 s, so at least 67 s ran outside the pool.
+
+(c): `run_fixtures` (both hooks, identical lines) now prints `..    suite phases: setup <n>s select <n>s trace-report <n>s guard <n>s order <n>s pool <n>s verdicts <n>s records <n>s after <n>s`. It prints only on the distribution hook's real entry (depth 0 and `PREPUSH_CL_ENTRY`), so no consumer push, nested hook or fixture-sourced span prints a clock. `fixture_suite_step` (`.githooks/pre-push`) prints `..    suite step: content-key <n>s consumer-layout <n>s run_fixtures <n>s content-key-after <n>s`, on a red run as well. Both read the shell's `$SECONDS` and add no fork. The push that delivers this release is the measurement; the cut is owed against it.
+
+(d): `--list "<8>" --tracer sandbox` ran in the main checkout at 27fded102 (rc 0). It traced vocabulary-index (268 paths), hermetic-consumption (1025), finding-grammar-binding (114), procsub-staged-refusal (173), validator-path-resolution (92) and bmad-invocation-resolve (68). install-scaffold-ignored and schema-install-fallback were OMITTED on 24 and 23 stream drops. The deriver drops a declared fixture's rows from the map, so no read set was kept. Still owed: a trace that keeps each declared fixture's paths, the two OMITTED fixtures, and the `inputs.decl` narrowing, which belongs to each fixture's owner.
+
+(e): the source is 35 retained push logs (`/private/tmp/claude-501/-Users-n8-git-ai-dlc/*/scratchpad/*push*.log`).
+- `@consumer`: 823 unit runs, and one catch event, pw2 (`ai-dlc-fixture-failures.20261115T000445Z.28480`). 20 `@consumer` units went red on `declared file absent: tests/fixtures/<sibling>/.dist-only` and its `run.sh`: a shipping shard driver declared a dist-only sibling's files, which an installed tree lacks. 13 of the 20 had their distribution twin green in the same push, so no distribution unit saw that defect class.
+- Distribution shard-merge units: 79 runs and 1 FAIL (review-shard-merge-b, f2gate).
+- On r1135 the twins cost 3620 s summed (43%), about 302 s of wall clock per push at width 12. Shard-merge cost 2427 s (29%), about 202 s.
+- No dollar figure: the box's compute has no recorded rate.
+- The twins are not a step with no measured value. A static join would make pw2's catch without running them: a shipping fixture's declarations name no `.dist-only` fixture's files. Owed: that join, then the twin set weighed again against what remains.
 
 verify: manual
 
@@ -3075,21 +3072,14 @@ Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b from ai-dlc-67
 
 verify: manual
 
-## BL-1132 — `adversarial_yield.py`'s span regex mispairs a short backtick span, so its span arm reads spans the findings never quoted
+## BL-1133 — the push runs every selected `<fx>@consumer` twin, though a static join would make the one catch the twins have on record
 
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `docs/analysis/pipeline-efficiency-s317-s322/scripts/adversarial_yield.py` (`SPAN`, `:239`, read by `span_arm()`, `:242`).
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `.githooks/pre-push` consumer-layout selection (`fixture_suite_step`, `run_fixtures`), with `scripts/predict-push-set.sh` mirroring it.
 
-`SPAN` requires 12 or more characters inside a backtick pair. A shorter span (`ENV`) is not consumed, so its closing backtick pairs with the next span's opening one. The regex then returns the prose between the two spans as a span and drops the real one. `party_ts_yield.py` carried the same shape at 8+ characters and was fixed in BL-812's batch b257 W6-07 progress (`claim_spans()`).
+BL-1124 (e) measured the `@consumer` twin set: 823 unit runs and one catch event (pw2), about 302 s of wall clock per push at width 12 on r1135 (BL-1124's PARTIAL text). pw2's catch was a shipping shard driver declaring a `.dist-only` fixture's files, which a static join over the declarations finds without running the twins.
 
-Evidence, from one run of `python3 -I adversarial_yield.py <OUT> <graph clone> --ref f7e60625b --elicitation-doc docs/analysis/step-value-stories-elicitation-s321.md` on the extractor output at `EXTRACT_WIN_END=2026-11-12T14:41:00Z`. One side is the script as committed; the other is a scratch copy whose `span_arm()` pairs every backtick span first and then double-quoted spans over the remaining text, both kept at 12+:
-- As committed, the elicitation evidence control reproduces 59 of 59 rows (MATCH). With the fix it reproduces 46 of 59, and 13 differ from `step-value-stories-elicitation-s321.md`'s evidence column.
-- 23 of the 32 p1 to p3 findings read a different span count. 3 p1 findings change their span-arm verdict (every in-read span absent from the authored text): 11 F-2 gains one, and 13 F-2 and 19 F-2 lose it.
-- 13 F-2 and 19 F-2 are REPAIR-INTRODUCED by attribution in `step-value-stories-adversarial-s321.md` (`:138`-`:139`), so their class may hold. 11 F-2 has no span on the committed grammar and gains a party-repair one, so p1's 9 UNIQUE-SURVIVED may read 8, inside the 8 to 10 that document states.
+Fix: add that join (a shipping fixture's declarations name no `.dist-only` fixture's files) at the selection step, then skip a `<fx>@consumer` unit whose distribution twin passed on the same key and whose read set holds no layout-sensitive input; mirror the selection in `predict-push-set.sh`. Weigh the remaining twin set again against what it catches.
 
-Fix: replace `SPAN` with a call to `party_ts_yield.claim_spans()` at 12+ characters (give it a minimum-length parameter, do not restate it). Re-derive the elicitation evidence column of `step-value-stories-elicitation-s321.md` and the per-finding classes of `step-value-stories-adversarial-s321.md` on the fixed arm. Restate any class that moves, and BL-812's figures that cite them.
-
-There is no graph pipeline step behind this entry: it is a grammar defect in a read-only analysis script, and the `docs/analysis/` files above are its subject, not a reading of a consumer sprint; the cost lives in docs/analysis/pipeline-efficiency-s317-s322/scripts/adversarial_yield.py.
-
-Provenance: batch 257, wave 6, found by W6-07 (ai-dlc-eb) while building BL-812's architecture reading; id allocated by lead ai-dlc-7b.
+Provenance: batch 257, wave 6, the BL-1124 (e) remainder named by ai-dlc-48 (W6-13); id allocated by the lead.
 
 verify: manual

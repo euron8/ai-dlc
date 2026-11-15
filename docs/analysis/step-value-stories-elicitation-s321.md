@@ -22,6 +22,9 @@ first class that applies, in this order.
    Either the finding body attributes that text to one (read, not regex-matched), or the span arm
    holds: every backtick or double-quoted span of 12 or more characters in the finding body that
    occurs in the text the round read is absent from the authored text, and there is at least one.
+   Spans are paired as `party_ts_yield.claim_spans()` pairs them (BL-1132): code spans as CommonMark
+   pairs them, so a short span such as `ENV` never shifts the pairing, then double quotes with code
+   spans masked in place, so a quoted story sentence keeps its code span.
 3. **UNIQUE-SURVIVED.** Every `grep -c -F` token that the finding's repair blocks run against a story
    file is in that story at the stories gate, and not every one was already in the text the round
    read. Where a repair runs no story-targeted `grep -c -F`, its other `grep -c -F` tokens are
@@ -70,14 +73,21 @@ The four disagreements:
 
 | Finding | Study | This method | Why |
 |---|---|---|---|
-| r1 12#E-3 | other | UNIQUE-SURVIVED | its token survives at ccf7db999, no attribution, span arm 2 of 4; p1 12#F-1 flaws the repair's own text, so it is not a re-raise |
+| r1 12#E-3 | other | UNIQUE-SURVIVED | its token survives at ccf7db999, no attribution, span arm 3 of 5; p1 12#F-1 flaws the repair's own text, so it is not a re-raise |
 | r1 cross-2#F-2 | other | UNIQUE-SURVIVED | repaired by one block whose `- source:` names cross-2#F-2 and cross-4#F-2; its story token survives |
 | r1 cross-4#F-2 | other | UNIQUE-SURVIVED | the same shared block; its own block carries only a `grep -n -o` line |
 | r1 cross-4#F-3 | REFOUND | UNIQUE-SURVIVED | r1 is the TYPE of `pairs[].chain_id` against 4.4; r2 cross-4#F-1 is 3.1 adopting 4.3's key without its unresolved-chain guard, a different failure mode |
 
 A second control over the whole s319 r1 per-story set: of the 44 findings not on the study's
 REFOUND list, the mechanical arms (tokens survive, span arm does not hold, no attribution phrase)
-predict 15 survivors against the study's 14, and agree on 43 of 44. The one difference is 12#E-3.
+predict 16 survivors against the study's 14, and agree on 42 of 44. The two differences are 12#E-3
+and 11#F-2: 11#F-2's span arm read 2 of 2 under the pre-BL-1132 grammar and reads 3 of 4 under
+`claim_spans()`, its body attributes no text, and its one repair token is in the shipped story
+(1/1, 0 in the read text). The same grammar change moves three more s319 r1 span-arm verdicts
+(07#F-1, 13#E-2, 17#F-1); 13#E-2 and 17#F-1 are on the study's REFOUND list and 07#F-1's token
+did not ship (0/1), so none of them moves the prediction. The cross sample was not re-derived
+mechanically: on a union-of-stories reading no cross-2 or cross-4 span-arm verdict changes, but
+the original cross reading is not committed.
 
 Every disagreement makes this method count MORE survivors than the study. s321 has 3 multi-source
 `- source:` lines; the only finding they name as a non-first source, 02#F-3, is UNIQUE-unverified
@@ -91,7 +101,7 @@ here, so the shared-block reading moves s321 by at most one survivor.
 | s319 r1 (study) | cross group | 14 | 7 | 2 | 2 | 3 |
 | s319 r2 (study) | per-story | 22 | 3 | 3 | 12 | 4 |
 | s319 r2 (study) | cross group | 4 | 3 | 1 | 0 | 0 |
-| s321 | per-story | 84 | 9 | 28 | **36** | 11 |
+| s321 | per-story | 84 | 9 | 24 | **39** | 12 |
 | s321 | one cross shard (`cross.md`) | 3 | 2 | 1 | **0** | 0 |
 
 ## Summary: cost per unique survivor
@@ -108,16 +118,30 @@ r1 cross 14 and $32.19, r2 per-story 22 and $34.58, r2 cross 4 and $18.94).
 | s319 r2 (study) | cross group | 6 | 6 | 4 | 0 | $18.94 | none survived | study |
 | s320 (study, provisional) | per-story | 13 | 13 | 25 | 6 | $22.57 | $3.76 | study |
 | s320 (study, provisional) | cross group | 6 | 6 | 11 | 1 | $24.32 | $24.32 | study |
-| s321 | per-story | 25 | 36 | 84 | 36 | $111.55 | $3.10 | s321 per-story shards: 36 unique survivors at $3.10 each |
+| s321 | per-story | 25 | 36 | 84 | 39 | $111.55 | $2.86 | s321 per-story shards: 39 unique survivors at $2.86 each |
 | s321 | one cross shard | 1 | 2 | 3 | 0 | $11.33 | none survived | s321 cross shard: no unique survivor |
-| s321 | both | 26 | 38 | 87 | 36 | $122.88 | $3.41 | s321 elicitation shards: $3.41 per unique survivor |
+| s321 | both | 26 | 38 | 87 | 39 | $122.88 | $3.15 | s321 elicitation shards: $3.15 per unique survivor |
 
-Like for like: this method counts 15 survivors on s319 r1's per-story shards where the study counts
-14 (the second control above), which is $40.89 / 15 = $2.73 per survivor against s321's $3.10.
+Like for like: this method counts 16 survivors on s319 r1's per-story shards where the study counts
+14 (the second control above), which is $40.89 / 16 = $2.56 per survivor against s321's $2.86.
 
 The 36 per-story spawns over 25 shards include the re-dispatches after the handoff stop (graph
-179705412, "elicitation round 14 of 26 delivered, 12 stopped at handoff"), so $3.10 carries the cost
+179705412, "elicitation round 14 of 26 delivered, 12 stopped at handoff"), so $2.86 carries the cost
 of one interrupted round. The figure is not adjusted for it.
+
+BL-1132 re-derivation. The span arm's grammar changed under BL-1132, and 13 s321 per-story rows moved
+class:
+- Nine lost the span arm. 07#F-6, 14#F-1, 14#F-3, 17#F-5 and 22#F-3 are now UNIQUE-SURVIVED (1/1
+  tokens each, 0 in the read text).
+- 07#F-3, 17#F-9 and 18#F-2 are now UNIQUE-unverified.
+- 18#F-1 stays REPAIR-INTRODUCED by its body, which places AC9's isolation pin in the lead's party
+  adjudication. Its token arm is 0/0, so it is not a survivor under either reading.
+- Four gained the span arm: 09#F-3, 11#F-2, 23#E-3 and 25 (no id) AC1. 23#E-3 and 25 (no id) AC1
+  leave UNIQUE-SURVIVED.
+- Each of the nine was read for attribution, and only 18#F-1 carries one.
+- The evidence cells of the rows that lost the arm keep their span figure, so the script's
+  evidence-column control still re-derives them: 61 of 61 rows, where the pre-BL-1132 grammar reads
+  45 of 61.
 
 The CRITICAL findings: six were raised, all by per-story shards. 17#F-1 (AC1's DOM-node identity
 assertion cannot pass) is a unique survivor. 16#F-1 was raised by the cross shard as well (REFOUND),
@@ -125,8 +149,8 @@ and 03#F-1, 03#F-2, 22#F-1 and 23#E-1 sit in text the party repair wrote.
 
 Sensitivity. Taking the attribution arm mechanically, as the s319 second control does, instead of by
 reading, adds three REPAIR-INTRODUCED findings (02#F-5, 06#F-1 and 13#F-4b, whose bodies name a
-repair record or an amendment rule without attributing the defect's text to it) and gives 33
-survivors, $3.38 each. Measuring survival at graph HEAD instead of the stories gate gives 35 (06#F-2's
+repair record or an amendment rule without attributing the defect's text to it) and gives 36
+survivors, $3.10 each. Measuring survival at graph HEAD instead of the stories gate gives 38 (06#F-2's
 token is gone at HEAD).
 
 ## Elicitation's own cost, and the step's
@@ -151,7 +175,7 @@ repairs are both inside that, and this reading does not split it between them.
 
 | Element | s321 unique survived | $ per survivor | Verdict |
 |---|---|---|---|
-| Per-story elicitation shards | 36, including the one surviving CRITICAL | $3.10 (s319 $2.92 and $2.88) | **Keep**: the yield per dollar is the s319 yield the study kept |
+| Per-story elicitation shards | 39, including the one surviving CRITICAL | $2.86 (s319 $2.92 and $2.88) | **Keep**: the yield per dollar is the s319 yield the study kept |
 | The one cross-story shard | 0: 2 of 3 REFOUND by per-story shards, 1 REPAIR-INTRODUCED | $11.33, none survived | NOTE: no unique survivor on s321 |
 
 ## Per-finding classification
@@ -161,7 +185,7 @@ stories gate, "at e6f964de8" the text the round read.
 
 | Story | Shard | Finding | Heading | Class | Evidence |
 |---|---|---|---|---|---|
-| 1.1 | `01.md` | F-1 | F-1 — MAJOR — The capture prerequisite names no read path, output path or tick-sequence, and AC2's per-type floor can only be met by dev-composed inputs | REPAIR-INTRODUCED | span arm: 2/2 quoted spans of the read text absent from `stories/story-1-1-feasibility-gate-and-matic-replay-fixture.md` at 01f3925ec |
+| 1.1 | `01.md` | F-1 | F-1 — MAJOR — The capture prerequisite names no read path, output path or tick-sequence, and AC2's per-type floor can only be met by dev-composed inputs | REPAIR-INTRODUCED | span arm: 5/5 quoted spans of the read text absent from `stories/story-1-1-feasibility-gate-and-matic-replay-fixture.md` at 01f3925ec |
 | 1.1 | `01.md` | F-2 | F-2 — MAJOR — The replay's engine construction and per-tick state seeding are unspecified, and the golden depends on both | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/1.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 1.1 | `01.md` | F-3 | F-3 — MAJOR — "action type and range" is not a defined oracle: `ProposedAction` carries a list of ranges plus layers, trigger, priority and deployed ranges | REPAIR-INTRODUCED | span arm: 2/2 quoted spans of the read text absent from `stories/story-1-1-feasibility-gate-and-matic-replay-fixture.md` at 01f3925ec |
 | 1.1 | `01.md` | F-4 | F-4 — MAJOR — The provenance-sha assertion cannot reject a golden regenerated from modified code, yet AC2 and the LR to AC map claim it does | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/1.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
@@ -187,15 +211,15 @@ stories gate, "at e6f964de8" the text the round read.
 | 1.6 | `06.md` | F-2 | F-2 — MAJOR — AC5 asserts "`config/rebalancer-base.yaml` is not tracked at this commit" with no derivation | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/6.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 2.1 | `07.md` | F-1 | F-1 — MAJOR — AC3 leaves the `bounded` disposition of the burn and collect `_build_tx_payload` sites undefined, and its literal wording yields false "no read exists" results | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/7.md`: no `grep -c -F` token |
 | 2.1 | `07.md` | F-2 | F-2 — MAJOR — The seven FR-S321-13 (5) sender rows and the dust-sweep row have no criterion for `bounded=yes` | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/7.md`: no `grep -c -F` token |
-| 2.1 | `07.md` | F-6 | F-6 — MAJOR — AC1 anchors FR-S321-13 input (4), the offramp raw `balanceOf` sizing, at a read that is not the Step 1 sizing and is two-hop only | REPAIR-INTRODUCED | span arm: 1/1 quoted spans of the read text absent from `stories/story-2-1-reserve-audit-report-and-pinned-span-findings.md` at 01f3925ec |
-| 2.1 | `07.md` | F-3 | F-3 — MAJOR — The AC1 row-count predicate counts every backticked first cell, but AC1 and AC3 invite further tables | REPAIR-INTRODUCED | span arm: 1/1 quoted spans of the read text absent from `stories/story-2-1-reserve-audit-report-and-pinned-span-findings.md` at 01f3925ec |
+| 2.1 | `07.md` | F-6 | F-6 — MAJOR — AC1 anchors FR-S321-13 input (4), the offramp raw `balanceOf` sizing, at a read that is not the Step 1 sizing and is two-hop only | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/7.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8; span arm: 3/4 quoted spans of the read text absent from `stories/story-2-1-reserve-audit-report-and-pinned-span-findings.md` at 01f3925ec, so it does not hold |
+| 2.1 | `07.md` | F-3 | F-3 — MAJOR — The AC1 row-count predicate counts every backticked first cell, but AC1 and AC3 invite further tables | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/7.md`: no `grep -c -F` token; span arm: 4/8 quoted spans of the read text absent from `stories/story-2-1-reserve-audit-report-and-pinned-span-findings.md` at 01f3925ec, so it does not hold |
 | 2.2 | `08.md` | F-1 | F-1 — MAJOR — AC6 control spy cannot be built as written, and its refusal assertion can pass for the wrong reason | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/8.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 2.3 | `09.md` | F-1 | F-1 — MAJOR — AC2/AC3 leave the bound site and the test entry point open (same-pool vs top of `_execute_swap`), so the one-time bound can be built twice or the swap rows can be driven at the wrong entry | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/9.md`: 0/2 tokens in `stories/` at 41484a513 |
 | 2.3 | `09.md` | F-2 | F-2 — MAJOR — The AC3 completeness check (test row list equals the audit's bounded:no list) names no command and no audit path | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/9.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
-| 2.3 | `09.md` | F-3 | F-3 — MAJOR — AC5 asserts "the only `value` source in `_build_tx_payload` is `_native_value`, a mint-step input" with no derivation | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/9.md`: no `grep -c -F` token |
+| 2.3 | `09.md` | F-3 | F-3 — MAJOR — AC5 asserts "the only `value` source in `_build_tx_payload` is `_native_value`, a mint-step input" with no derivation | REPAIR-INTRODUCED | span arm: 1/1 quoted spans of the read text absent from `stories/story-2-3-unpinned-native-spends-capped-at-balance-less-reserve.md` at 01f3925ec |
 | 2.4 | `10.md` | F-1 | F-1 — MAJOR — No AC asserts that Step 1 delegates to the helper, so an inlined read that maps an empty balance to 0 passes every AC | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/10.md`: no `grep -c -F` token |
 | 2.4 | `10.md` | F-2 | F-2 — MAJOR — AC4's live-mode "sizes exactly X" and "exactly 1" cases name no observable and no chain context that can read one | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/10.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
-| 3.1 | `11.md` | F-2 | F-2 — MAJOR — "a reachable answer that is not `data: null` counts busy" is ambiguous for a 200 body with no `data` key or with `ok: false`; the kept helper `rb_idle_from_json` reads those idle, and `ecs-deploy.sh` today reads a missing `.data` as abort | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/11.md`: no `grep -c -F` token |
+| 3.1 | `11.md` | F-2 | F-2 — MAJOR — "a reachable answer that is not `data: null` counts busy" is ambiguous for a 200 body with no `data` key or with `ok: false`; the kept helper `rb_idle_from_json` reads those idle, and `ecs-deploy.sh` today reads a missing `.data` as abort | REPAIR-INTRODUCED | span arm: 4/4 quoted spans of the read text absent from `stories/story-3-1-absence-record-and-both-idle-helper.md` at 01f3925ec |
 | 3.1 | `11.md` | F-3 | F-3 — MAJOR — the default record path "beside the repo root" has no resolution rule, and no AC case runs the default path | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/11.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 3.1 | `11.md` | F-4 | F-4 — MAJOR — AC2(g) "adds no probe timeout" drops the `--max-time 10` bound that `ecs-deploy.sh` has today, and the story neither prices that change nor assigns it to Story 3.3 | REPAIR-INTRODUCED | span arm: 1/1 quoted spans of the read text absent from `stories/story-3-1-absence-record-and-both-idle-helper.md` at 01f3925ec |
 | 3.3 | `13.md` | F-1 | F-1 — MAJOR — Items 1-5 and 7-8 all need to enumerate the record (id, ecs_fragment, absent, url_env), but no story owns a reader and 3.1's fixed interface offers none | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/13.md`: no `grep -c -F` token |
@@ -203,9 +227,9 @@ stories gate, "at e6f964de8" the text the round read.
 | 3.3 | `13.md` | F-3 | F-3 — MAJOR — Retention script: the Cloud Map host is to be "parsed from the instance's `url_env`", but `url_env` names an environment variable that is unset on the operator host where this script runs, and the test host assertions have no source | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/13.md`: 2/2 tokens in `stories/` at 41484a513, 1 at e6f964de8 |
 | 3.3 | `13.md` | F-4 | F-4 — MAJOR — The `rc 0` controls for `ecs-switch-preset.sh` (AC2 control, item 6 control) cannot be observed offline: the script has no DRY_RUN/seam, the idle gate sits at the top of a 997-line, 53-`aws`-call, multi-`sleep` script that ends in a real smoke run | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/13.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 3.3 | `13.md` | F-4b | F-4b — MAJOR — Where `rb_all_idle` runs in `ecs-deploy.sh` is contradictory: AC1 item 1 puts the `update-service` calls "immediately after `rb_all_idle` passes", while the AC1 and AC3 sentinel cases need the check before the `DRY_RUN` exit at line 181 | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/13.md`, `stories-elicitation-serial-repair-p1.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
-| 3.4 | `14.md` | F-1 | F-1 — MAJOR — AC1 leaves a probe thread that dies on an exception outside its three "unreachable" classes unclassified | REPAIR-INTRODUCED | span arm: 1/1 quoted spans of the read text absent from `stories/story-3-4-execution-state-gate-lambda-probes-both-instances.md` at 01f3925ec |
+| 3.4 | `14.md` | F-1 | F-1 — MAJOR — AC1 leaves a probe thread that dies on an exception outside its three "unreachable" classes unclassified | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/14.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8; span arm: 1/4 quoted spans of the read text absent from `stories/story-3-4-execution-state-gate-lambda-probes-both-instances.md` at 01f3925ec, so it does not hold |
 | 3.4 | `14.md` | F-2 | F-2 — MAJOR — `PROBE_DEADLINE_SECS` has no production value and "joins each thread against" it is not pinned to a shared deadline | REPAIR-INTRODUCED | span arm: 3/3 quoted spans of the read text absent from `stories/story-3-4-execution-state-gate-lambda-probes-both-instances.md` at 01f3925ec |
-| 3.4 | `14.md` | F-3 | F-3 — MAJOR — the AC1 barrier stub and the AC2 never-set Event stub hang the pytest process, so the "red" states and the green state are not the stated ones | REPAIR-INTRODUCED | span arm: 1/1 quoted spans of the read text absent from `stories/story-3-4-execution-state-gate-lambda-probes-both-instances.md` at 01f3925ec |
+| 3.4 | `14.md` | F-3 | F-3 — MAJOR — the AC1 barrier stub and the AC2 never-set Event stub hang the pytest process, so the "red" states and the green state are not the stated ones | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/14.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8; span arm: 2/3 quoted spans of the read text absent from `stories/story-3-4-execution-state-gate-lambda-probes-both-instances.md` at 01f3925ec, so it does not hold |
 | 3.4 | `14.md` | F-5 | F-5 — MAJOR — the production default record path is never exercised, and an unreadable record is silent by design | REFOUND | later: `shards/stories-p1/14.md` F-1, the unreadable-record arm |
 | 3.4 | `14.md` | F-6 | F-6 — MAJOR (underived) — AC4 says "the existing file sets no environment, derived below" and no derivation follows | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/14.md`: no `grep -c -F` token |
 | 4.1 | `15.md` | F-1 | F-1 — MAJOR — AC8's verification command is anchored on the shared sprint branch's merge-base, so it fails once any earlier story lands | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/15.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
@@ -214,12 +238,12 @@ stories gate, "at e6f964de8" the text the round read.
 | 4.2 | `16.md` | F-3 | F-3 — MAJOR — The Base grace window is unspecified and no fixture discriminates it | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/16.md`: no `grep -c -F` token |
 | 4.3 | `17.md` | F-1 | F-1 — CRITICAL — AC1's DOM-node-identity assertion cannot pass: `RebalancerPage` returns null while inactive, so the Backtest tab node is destroyed and re-created on every round trip | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/17.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 4.3 | `17.md` | F-2 | F-2 — MAJOR — Existing tests outside the story's owned paths and outside AC8's lists break on the nav change, so AC8's "the full vitest run passes" is unsatisfiable under the Routing paths | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/17.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
-| 4.3 | `17.md` | F-5 | F-5 — MAJOR — "5 in the other four modules" is contradicted by the story's own fence: the derived output sums to 6 | REPAIR-INTRODUCED | span arm: 5/5 quoted spans of the read text absent from `stories/story-4-3-rebalancer-matic-and-base-pages.md` at 01f3925ec |
-| 4.3 | `17.md` | F-9 | F-9 — MAJOR — The Mechanism paragraph leaves the delivery of `apiSegment` to the ~35 non-hook request sites unspecified, though it exists "so the dev does not choose" | REPAIR-INTRODUCED | span arm: 2/2 quoted spans of the read text absent from `stories/story-4-3-rebalancer-matic-and-base-pages.md` at 01f3925ec |
-| 5.1 | `18.md` | F-1 | MAJOR — F-1 — AC9 can be built two ways, contradicts AC1's "identical" clause, and its control cannot go RED | REPAIR-INTRODUCED | span arm: 13/13 quoted spans of the read text absent from `stories/story-5-1-base-ecs-service-in-cdk.md` at 01f3925ec |
-| 5.1 | `18.md` | F-2 | MAJOR — F-2 — AC4's default record read (the production path) is never exercised, and fails closed to a green result | REPAIR-INTRODUCED | span arm: 5/5 quoted spans of the read text absent from `stories/story-5-1-base-ecs-service-in-cdk.md` at 01f3925ec |
+| 4.3 | `17.md` | F-5 | F-5 — MAJOR — "5 in the other four modules" is contradicted by the story's own fence: the derived output sums to 6 | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/17.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8; span arm: 5/6 quoted spans of the read text absent from `stories/story-4-3-rebalancer-matic-and-base-pages.md` at 01f3925ec, so it does not hold |
+| 4.3 | `17.md` | F-9 | F-9 — MAJOR — The Mechanism paragraph leaves the delivery of `apiSegment` to the ~35 non-hook request sites unspecified, though it exists "so the dev does not choose" | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/17.md`: no `grep -c -F` token; span arm: 4/5 quoted spans of the read text absent from `stories/story-4-3-rebalancer-matic-and-base-pages.md` at 01f3925ec, so it does not hold |
+| 5.1 | `18.md` | F-1 | MAJOR — F-1 — AC9 can be built two ways, contradicts AC1's "identical" clause, and its control cannot go RED | REPAIR-INTRODUCED | finding body: AC9's isolation pin is the lead's party adjudication (FI-ESC-OUT, item 2); span arm: 14/15 quoted spans of the read text absent from `stories/story-5-1-base-ecs-service-in-cdk.md` at 01f3925ec, so it does not hold |
+| 5.1 | `18.md` | F-2 | MAJOR — F-2 — AC4's default record read (the production path) is never exercised, and fails closed to a green result | UNIQUE-unverified | no repair block's `- source:` names it; span arm: 6/7 quoted spans of the read text absent from `stories/story-5-1-base-ecs-service-in-cdk.md` at 01f3925ec, so it does not hold |
 | 5.2 | `19.md` | F-1 | F-1 — MAJOR — AC1's wiring evidence names "the real Base service name" in the `cdk diff`, but that value is a CloudFormation import token and nothing in jest exercises `infra/bin/graph.ts`, so a swapped wiring passes every named check | REFOUND | later: `shards/stories-p1/19.md` F-1, AC1's wiring guard read from a `cdk diff` that cannot show it |
-| 5.2 | `19.md` | F-2 | F-2 — MAJOR — AC1 asserts "All 6 rebalancer-log-group `AWS::Logs::MetricFilter` resources" and a log-group count of 6 with the enumeration given but no derivation of the 6 | REPAIR-INTRODUCED | span arm: 6/6 quoted spans of the read text absent from `stories/story-5-2-base-service-alarm-and-monitoring-pins.md` at 01f3925ec |
+| 5.2 | `19.md` | F-2 | F-2 — MAJOR — AC1 asserts "All 6 rebalancer-log-group `AWS::Logs::MetricFilter` resources" and a log-group count of 6 with the enumeration given but no derivation of the 6 | REPAIR-INTRODUCED | span arm: 12/12 quoted spans of the read text absent from `stories/story-5-2-base-service-alarm-and-monitoring-pins.md` at 01f3925ec |
 | 5.3 | `20.md` | F-1 | F-1 — MAJOR — AC4 requires stdout to carry the bytes read back, but the AC3 seam names no stub that can deliver them | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/20.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 5.3 | `20.md` | F-2 | F-2 — MAJOR — AC5 imports a "boot helper" from Story 1.3 that Story 1.3 never names, signs for, or makes parameterizable by config path | REFOUND | same round: `shards/stories-elicitation/03.md` F-6 and `shards/stories-elicitation/cross.md` F-3 |
 | 5.4 | `21.md` | F-1 | F-1 — MAJOR — Default `cdk diff` includes dependency stacks, so AC4's "none of the eight in the CicdStack and MonitoringStack captures" cannot hold, and the deploy command and stack list are unspecified | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/21.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
@@ -229,13 +253,13 @@ stories gate, "at e6f964de8" the text the round read.
 | 5.4 | `21.md` | F-5 | F-5 — MAJOR — AC6's content clause has no check and collides with R3-RUNNING | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/21.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 5.5 | `22.md` | F-1 | F-1 — CRITICAL — AC4 requires "zero skipped" for a test file that skips 4 tests on every run | REPAIR-INTRODUCED | finding body: git log -S prints only e6f964de8, the party repair commit |
 | 5.5 | `22.md` | F-2 | F-2 — MAJOR — AC1 and AC2 key on fixed line numbers (77, 10) while AC7 adds an entry the story lets land two ways | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/22.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
-| 5.5 | `22.md` | F-3 | F-3 — MAJOR — AC6's closed path list excludes the status file the dev contract requires the dev to update | REPAIR-INTRODUCED | span arm: 1/1 quoted spans of the read text absent from `stories/story-5-5-restage-base-entry-router-carry-over.md` at 01f3925ec |
+| 5.5 | `22.md` | F-3 | F-3 — MAJOR — AC6's closed path list excludes the status file the dev contract requires the dev to update | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/22.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8; span arm: 1/3 quoted spans of the read text absent from `stories/story-5-5-restage-base-entry-router-carry-over.md` at 01f3925ec, so it does not hold |
 | 5.5 | `22.md` | F-4 | F-4 — MAJOR — The AD-4 / "operator answer D-1" attribution carries neither the operator's words nor a locator | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/22.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 5.5 | `22.md` | F-5 | F-5 — MAJOR — "none contains the old value literal" is asserted for three files and derived for one | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/22.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 5.6 | `23.md` | E-1 | E-1 — CRITICAL — AC2's SWEEP leg can never discharge: no component writes an organic SWEEP row | REPAIR-INTRODUCED | finding body: organic filter rests on party serial repair R-10 |
 | 5.6 | `23.md` | E-2 | E-2 — MAJOR — Per-AC state vocabulary has no failure state, so a real RED cannot be recorded | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/23.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
-| 5.6 | `23.md` | E-3 | E-3 — MAJOR — The "deploy timestamp" is used with two meanings, and AC2 mislabels `createdAt` as a completion time | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/23.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
-| 5.6 | `23.md` | E-4 | E-4 — MAJOR — AC2's "digest that `scripts/ecs-deploy.sh rebalancer` pushed" has no recorded source | REPAIR-INTRODUCED | span arm: 2/2 quoted spans of the read text absent from `stories/story-5-6-observe-base-running-matic-succeeding.md` at 01f3925ec |
+| 5.6 | `23.md` | E-3 | E-3 — MAJOR — The "deploy timestamp" is used with two meanings, and AC2 mislabels `createdAt` as a completion time | REPAIR-INTRODUCED | span arm: 3/3 quoted spans of the read text absent from `stories/story-5-6-observe-base-running-matic-succeeding.md` at 01f3925ec |
+| 5.6 | `23.md` | E-4 | E-4 — MAJOR — AC2's "digest that `scripts/ecs-deploy.sh rebalancer` pushed" has no recorded source | REPAIR-INTRODUCED | span arm: 3/3 quoted spans of the read text absent from `stories/story-5-6-observe-base-running-matic-succeeding.md` at 01f3925ec |
 | 5.6 | `23.md` | E-5 | E-5 — MAJOR — AC3's "matched whole" boot-line check is unimplementable against JSON log events | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/23.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 5.6 | `23.md` | E-6 | E-6 — MAJOR — Story 1.4 hands the deployed S9 observation to this story; no AC here reads it, and the Story 5.2 alarm is a Dependency that nothing observes | REFOUND | same round: `shards/stories-elicitation/04.md` F-2 |
 | 5.6 | `23.md` | E-7 | E-7 — MAJOR — Story 1.1 AC5 assigns this story the AC2 observation window and a sha-pinned fence; this story supplies neither | UNIQUE-unverified | `shards/stories-elicitation-repair-p1/23.md`, `stories-elicitation-serial-repair-p1.md`: 1/3 tokens in `stories/` at 41484a513 |
@@ -244,7 +268,7 @@ stories gate, "at e6f964de8" the text the round read.
 | 6.1 | `24.md` | F-3 | F-3 MAJOR: AC1's three states overlap, so "exactly one state" is undecidable for the five named capabilities, and "missing" does not fit the router row | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/24.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 6.1 | `24.md` | F-4 | F-4 MAJOR: AC1's universe omits four OPEN Base-specific CO-S317 carry-over items that the backlog lists beside the CO-S316 set | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/24.md`, `stories-elicitation-serial-repair-p1.md`: 1/1 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
 | 6.2 | `25.md` | (no id) AC3's token check has | MAJOR — AC3's token check has three readings; two break and the planted-token control cannot fail | REPAIR-INTRODUCED | span arm: 3/3 quoted spans of the read text absent from `stories/story-6-2-claude-md-covers-both-instances.md` at 01f3925ec |
-| 6.2 | `25.md` | (no id) AC1 does not say how t | MAJOR — AC1 does not say how the added lines are split by place, so its negative fixture can pass when it must fail | UNIQUE-SURVIVED | `shards/stories-elicitation-repair-p1/25.md`: 3/3 tokens in `stories/` at 41484a513, 0 at e6f964de8 |
+| 6.2 | `25.md` | (no id) AC1 does not say how t | MAJOR — AC1 does not say how the added lines are split by place, so its negative fixture can pass when it must fail | REPAIR-INTRODUCED | span arm: 3/3 quoted spans of the read text absent from `stories/story-6-2-claude-md-covers-both-instances.md` at 01f3925ec |
 | 4.2 | `cross.md` | F-1 | F-1 — MAJOR — Story 4.2's byte-identical Lambda mirror imports a helper that the Lambda bundle does not contain | REFOUND | same round: `shards/stories-elicitation/16.md` F-1 |
 | 5.1, 1.5 | `cross.md` | F-2 | F-2 — MAJOR — Story 5.1 AC9 pins an FR-S321-5 clause but 5.1's trace never carries FR-S321-5 or LR-S321-4, and Story 1.5 still says the clause is routed to the lead | REPAIR-INTRODUCED | finding body: party adjudication added 5.1 AC9 without its trace |
 | 5.3, 1.3 | `cross.md` | F-3 | F-3 — MAJOR — Story 5.3 AC5 imports "Story 1.3's boot helper", a symbol Story 1.3 never names or promises | REFOUND | same round: `shards/stories-elicitation/03.md` F-6 and `shards/stories-elicitation/20.md` F-2 |
