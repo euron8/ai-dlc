@@ -19,6 +19,38 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1131.0] - 2026-11-14
+
+### BL-1058 CLOSED: a pre-suite step's pass survives another tree's record at other content
+
+The pre-suite units keep one record `<slug>.key` per step under `<verdict store base>/presuite-keys/<root commit>/`, shared by every tree of the repo, so a tree's pass was overwritten by another tree's pass at other content. Inside `.githooks/pre-push`'s PRESUITE_UNITS span, `ps_keep` also keeps each passing step's record as `<slug>.<first 16 hex of sha256 of its rows>.key`, the 16 newest per step, and `ps_select` skips a step decided `run` as unrecorded, `changed <path>` or `tools changed` when a kept record carries its current rows' name. `<slug>.key` is read and written as before, so every existing record carries forward. `presuite-units` gains arm `content`, red on the 0.1130.0 hook.
+
+### BL-1087 filed and CLOSED: readset-stage1-verdict's [term] cell no longer breaks under load
+
+The cell's "will never exit" test skipped dead pids, so during `finish()`'s grace poll it read the wrapper as blocked and KILLed it while it was about to exit: FIXTURE BROKEN in 2 of 3 loaded runs, green in every solo run. `st_unreached` holds only when the wrapper and every recorded stub pid are alive and blocked with no signal pending. The subject never dropped the TERM.
+
+### BL-993 CLOSED: deploy-validate records the sprint-PR merge, and retro Step 1 reads it first
+
+deploy-validate Step 2 gains a core block that, after the sprint PR merges, commits `<pr> <head> <squash>` to `${AI_DLC_STATE_DIR:-_bmad-output}/implementation-artifacts/s<N>/sprint-pr-merge.txt`. retro Step 1 reads that record at the sprint tip before its tree match and the gh fallback; a record that is present but refused is a named HARD_BLOCK, and a sprint with no record keeps the old derivations unchanged. `retro-branch-behind-main` gains receipt `receipt-bl993.sh`.
+
+Consumer side: graph's deploy-validate-domain Step 2a must call the new `# deploy-validate Step 2: record the sprint-PR merge` block after `gh pr merge --squash`; until it does, behaviour is unchanged.
+
+### BL-1031 and BL-1041 CLOSED: validate-backlog-receipts judges `fell` claims and ignores the verify: line
+
+A live `fell` verdict must show its figures falling: one that rose reads FELL-ROSE, and a figureless `fell` owes a value citation or reads NO-VALUE-CITATION (BL-1031). The entry scan skips an entry's `verify:` line before classing it (BL-1041).
+
+### BL-1035 CLOSED: a gate's span ends at a sliced step read once record 26 PASS is written
+
+`extract.py` arms the remembered gate on `gate-checkpoint.sh ... record 26 PASS`, and once armed a SLICED read of another step file leaves the gate, as a whole read already did. A record 26 FAIL keeps the gate label. On s322, 32 spawns move from gate-validation[carry-over-evaluation] to requirements, and BL-1003's subject 2 is discharged. BL-812's Projection (c) is re-derived.
+
+### BL-1079 CLOSED: no hand-written matrix header list is left to derive
+
+0.1130.0 deleted every fixture's mutation battery, so the twelve fixtures BL-1079 named carry no `# MUTANT-MATRIX` list. The entry is closed with no code change.
+
+### BL-982 PARTIAL: item (5)'s cost re-measured
+
+Item (5) stays owed. On 0.1130.0 a validator-header comment edit alone predicts RUN 20; the `lib/mutant.sh` comment predicts RUN 90 (60 plus 30 `@consumer`). A comment edit to the validator keeps every counted pass.
+
 ## [0.1130.0] - 2026-11-14
 
 ### No fixture carries a mutation battery that runs on every push

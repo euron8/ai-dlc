@@ -533,15 +533,17 @@ st_blocked() {
 st_settled() { local p n=0; while IFS= read -r p; do case "$p" in ''|*[!0-9]*) continue ;; esac; kill -0 "$p" 2>/dev/null || continue; st_blocked "$p" || return 1; n=$((n + 1)); done < "$1"; [ "$n" -gt 0 ]; }
 # st_group_settled <pgid>: the same over a process group's live members.
 st_group_settled() { local p n=0; for p in $(pgrep -g "$1" 2>/dev/null); do kill -0 "$p" 2>/dev/null || continue; st_blocked "$p" || return 1; n=$((n + 1)); done; [ "$n" -gt 0 ]; }
-# st_tree_settled <pid file> <leader pid>: st_settled over the file's pids PLUS every live descendant of the
-# leader. The TERMed wrapper's finish() also waits on its load sampler (stop_sampler: kill, then wait) and
-# the sampler's own sleep, and neither is a pid the stub recorded: with the stub's tree already gone the
-# wrapper alone sits blocked in that wait with nothing pending while the sampler dies, which reads settled
-# although the wrapper is about to exit. Only a settled tree, sampler included, is a wrapper nothing will end.
-st_tree_settled() {
-  local t="$1.tree" p c g
-  { cat "$1"; for p in $(pgrep -P "$2" 2>/dev/null); do echo "$p"; for c in $(pgrep -P "$p" 2>/dev/null); do echo "$c"; for g in $(pgrep -P "$c" 2>/dev/null); do echo "$g"; done; done; done; } > "$t"
-  st_settled "$t"
+# st_unreached <stub pid file> <wrapper pid>: 0 when the wrapper is st_blocked AND every pid the stub recorded
+# is ALIVE and st_blocked -- the group kill never reached them, so nothing will end the wrapper. A dead recorded
+# pid means the kill landed: the wrapper's remaining path is finite (the grace, its KILL, the sampler's KILL)
+# and is waited out by pid. Skipping dead pids instead reads finish()'s grace poll -- the wrapper and its
+# `sleep 0.1`, the sampler and its `sleep 15`, all blocked on timers with nothing pending -- as settled
+# (BL-1087). The wrapper is read FIRST: between taking the TERM and its group kill finish() runs builtins only,
+# so a blocked reading of the wrapper precedes the kill, and the stub's pids are read after it.
+st_unreached() {
+  local p
+  st_blocked "$2" || return 1
+  while IFS= read -r p; do case "$p" in ''|*[!0-9]*) continue ;; esac; st_blocked "$p" || return 1; done < "$1"
 }
 AWAIT_WHY=""
 # await <scope-dir> <watch-pid | -> <what> <test...> [-- <final test...>]: 0 once <test> holds; 1 with AWAIT_WHY
@@ -589,12 +591,10 @@ wrap_term() {
     || { kill "$wp" 2>/dev/null; broken "[$t] the stub's children are not blocked on the hang fifo: $AWAIT_WHY"; }
   [ "$(grep -c . "$R/kids")" = 2 ] || broken "[$t] the stub recorded $(grep -c . "$R/kids") children before its own pid, not 2"
   kill -TERM "$wp"
-  # The wrapper's finish() TERMs the stub's group and then WAITS on the stub, so the wrapper alone is briefly
-  # blocked with nothing pending while its child is still dying: read alone that is a false settle at any
-  # load. The settle set is the wrapper plus every pid the stub recorded, which are not all blocked until
-  # the group kill has truly not reached them.
-  { printf '%s\n' "$wp"; cat "$R/pids"; } > "$R/wp.pid"
-  await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" -- st_tree_settled "$R/wp.pid" "$wp" \
+  # The wrapper's finish() TERMs the stub's group, then polls and WAITS on it and on its sampler, so the wrapper
+  # is blocked with nothing pending for most of its exit at any load. Only the stub's pids, all alive and
+  # blocked, say the group kill never came (st_unreached).
+  await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" -- st_unreached "$R/pids" "$wp" \
     || { kill -KILL "$wp" 2>/dev/null; broken "[$t] the TERMed wrapper did not exit: $AWAIT_WHY"; }
   wait "$wp"; rc=$?
   # The wrapper's finish() TERMs the stub's whole process group but waits only on the stub itself, so its two

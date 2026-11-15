@@ -64,6 +64,37 @@ If your project requires pre-deployment configuration checks (e.g.,
 environment selection, resource scaling, migration status), run those
 before deploying.
 
+**The `{deploy_command}` that merges the sprint PR writes the sprint-merge record.**
+Right after the merge, on the sprint branch and before any other deploy-validate
+commit, it runs this block with `<N>` the sprint number, `<pr-number>` the sprint
+PR, `<pr-head>` the PR's head commit as merged and `<squash>` the squash commit on
+the trunk, each sha in full:
+
+```bash
+# deploy-validate Step 2: record the sprint-PR merge
+REC="${AI_DLC_STATE_DIR:-_bmad-output}/implementation-artifacts/s<N>/sprint-pr-merge.txt"
+ROW='<pr-number> <pr-head> <squash>'
+cd "$(git rev-parse --show-toplevel)" && git fetch -q origin main
+read -r R_N R_H R_M <<<"$ROW"
+if ! grep -qxE '[0-9]+ [0-9a-f]{40} [0-9a-f]{40}' <<<"$ROW"; then
+  echo "RECORD: HARD_BLOCK malformed — want one line: PR number, 40-hex PR head, 40-hex squash commit"
+elif ! git merge-base --is-ancestor "$R_M" origin/main 2>/dev/null; then
+  echo "RECORD: HARD_BLOCK squash — $R_M is not on origin/main"
+elif ! git cat-file -e "${R_H}^{commit}" 2>/dev/null; then
+  echo "RECORD: HARD_BLOCK head — PR head $R_H is not a local commit"
+elif [ "$(git show "HEAD:$REC" 2>/dev/null)" = "$ROW" ]; then
+  echo "RECORD: PR #$R_N head $R_H squash $R_M already committed at $REC"
+elif mkdir -p "$(dirname "$REC")" && printf '%s\n' "$ROW" > "$REC" && git add -- "$REC" \
+    && git commit -q -m "deploy-validate: sprint-merge record, PR #$R_N squash $R_M" -- "$REC"; then
+  echo "RECORD: PR #$R_N head $R_H squash $R_M committed at $REC"
+else
+  echo "RECORD: HARD_BLOCK write — $REC was not committed"
+fi
+```
+
+A `RECORD: HARD_BLOCK` line STOPs deploy-validate: correct the values and re-run the
+block. Retro Step 1 reads this record to carry the post-squash commits.
+
 ### 2a. Destructive one-time operation (Hard Gate — only when the sprint fires one)
 
 **Placement: BEFORE the operation is fired.** Skip when the sprint fires

@@ -15,7 +15,9 @@ Two attribution rules beyond the step-file reads:
     gate-validation reads keep that label and a read of another step moves main but not step, with one exception:
     a WHOLE read (no offset, no limit) of a step file S that is not gate-validation, not _gate-procedures or
     _dispatch-protocol (any name starting with an underscore), and S != M LEAVES the gate. That read ends the span:
-    step = main = S. The gate stays remembered, so a later gate-validation read (sliced or whole) before any new
+    step = main = S. Once the gate's terminal verdict is recorded (gate-checkpoint.sh ... record 26 PASS; a FAIL
+    re-dispatches the gate and does not count), a SLICED read of such a step file S leaves it as well; until then a
+    slice of S moves main only. The gate stays remembered, so a later gate-validation read (sliced or whole) before any new
     open/close RETURNS to it under the same label, not one recomputed from the new main. A new open replaces the
     remembered gate; gate-checkpoint.sh ... close clears it and sets step = main (also when no gate was open).
     gate-checkpoint.sh ... done is a post-compaction read-back inside a live gate and does not end the span, and a
@@ -76,10 +78,11 @@ def strip_heredocs(cmd):
     return "\n".join(out)
 
 def gate_event(cmd):
-    """'open' / 'close' / 'verb' / None for the INVOCATIONS of the gate scripts in a Bash command (heredoc bodies
-    stripped, script name in command position of a pipeline / ; / && segment, after optional bash/sh/env and VAR=x
-    words). 'verb' is a gate-checkpoint.sh record, done or list with no open or close in the command."""
-    ev = None; verb = False
+    """'open' / 'close' / 'terminal' / 'verb' / None for the INVOCATIONS of the gate scripts in a Bash command
+    (heredoc bodies stripped, script name in command position of a pipeline / ; / && segment, after optional
+    bash/sh/env and VAR=x words). 'verb' is a gate-checkpoint.sh record, done or list with no open or close in the
+    command; 'terminal' is such a verb that records the terminal verdict, `record 26 PASS`."""
+    ev = None; verb = False; terminal = False
     for seg_ in re.split(r"\|\||&&|[|;&\n]", strip_heredocs(cmd)):
         w = [x.strip("\"'") for x in seg_.split()]
         while w and (w[0] in ("bash", "sh", "env") or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w[0])): w = w[1:]
@@ -88,7 +91,11 @@ def gate_event(cmd):
         if base == "gate-checkpoint.sh":
             if "close" in args: ev = "close"
             elif "open" in args: ev = "open"
-            elif any(a in args for a in ("record", "done", "list")): verb = True
+            elif any(a in args for a in ("record", "done", "list")):
+                verb = True
+                # the terminal verdict: record 26 PASS (FAIL_WAIVED is checkpointed PASS; a FAIL re-dispatches the gate)
+                i = args.index("record") if "record" in args else -1
+                if i >= 0 and args[i + 1:i + 3] == ["26", "PASS"]: terminal = True
         elif base == "gate-transition.sh":
             # usage: gate-transition.sh <story-index> 1|2|3|close ; the gate is the SECOND positional argument
             pos, skip = [], False
@@ -99,7 +106,7 @@ def gate_event(cmd):
                     continue
                 pos.append(a)
             if len(pos) > 1 and pos[1] == "3": ev = "open"
-    return ev or ("verb" if verb else None)
+    return ev or ("terminal" if terminal else "verb" if verb else None)
 
 def human_prompt(r):
     if r.get("type") != "user" or r.get("toolUseResult") is not None or r.get("isMeta"):
@@ -320,6 +327,7 @@ def scan(path, kind, meta):
     glabel = None        # label of the last opened, never closed gate; stays set after the lead leaves it
     gmain = None         # main at the open of glabel
     gopen = None         # timestamp of that open
+    garmed = False       # glabel's terminal verdict is recorded (record 26 PASS): a SLICED read of another step leaves too
     whole = set()        # step files this transcript has read without offset/limit
     segs = {}            # step -> dict
     pend = {}            # tool_use_id -> (name, ts, step)
@@ -375,13 +383,15 @@ def scan(path, kind, meta):
                     ev = gate_event(str((c.get("input") or {}).get("command") or ""))
                     if ev == "open":
                         if glabel is not None: GATE_EV.append((sprint_of(gopen), "unclosed"))
-                        glabel = "gate-validation[" + main + "]"; gate = glabel; gmain = main; gopen = t
+                        glabel = "gate-validation[" + main + "]"; gate = glabel; gmain = main; gopen = t; garmed = False
                         GATE_EV.append((sprint_of(t), "open")); step = gate
                     elif ev == "close":
                         if glabel is not None: GATE_EV.append((sprint_of(gopen), "closed"))
-                        gate = None; glabel = None; step = main
-                    elif ev == "verb" and glabel is not None and gate is None:
-                        gate = glabel; step = gate   # a record, done or list after leaving: back in the gate
+                        gate = None; glabel = None; garmed = False; step = main
+                    elif ev in ("verb", "terminal") and glabel is not None:
+                        if ev == "terminal": garmed = True
+                        if gate is None:
+                            gate = glabel; step = gate   # a record, done or list after leaving: back in the gate
                 mm = STEP_RE.search(inp)
                 if mm and c.get("name") == "Read":
                     name = mm.group(1)
@@ -397,7 +407,7 @@ def scan(path, kind, meta):
                             if glabel is not None: gate = glabel   # back in the gate it left; keep its label
                             step = gate or "gate-validation[" + main + "]"
                         else:
-                            leave = gate is not None and not isslice and name != gmain and gmain != "pre-step"
+                            leave = gate is not None and (garmed or not isslice) and name != gmain and gmain != "pre-step"
                             main = name
                             if leave:
                                 gate = None   # LEFT: a whole read of another step ends the span

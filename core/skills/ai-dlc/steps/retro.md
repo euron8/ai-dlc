@@ -45,13 +45,32 @@ elif git merge-base --is-ancestor "$SPRINT_TIP" origin/main; then
 else
   FORK="$(git rev-list --first-parent "$SPRINT_TIP" \
     | while read -r c; do git merge-base --is-ancestor "$c" origin/main && { echo "$c"; break; }; done)"
-  PR_HEAD=""
-  if [ -n "$FORK" ]; then
+  PR_HEAD=""; REC_SRC=""; REC_WHY=""
+  REC="$(git show "${SPRINT_TIP}:${AI_DLC_STATE_DIR:-_bmad-output}/implementation-artifacts/s<N>/sprint-pr-merge.txt" 2>/dev/null)"
+  if [ -n "$REC" ]; then
+    if [ "$(grep -c '' <<<"$REC")" != 1 ] || grep -vqxE '[0-9]+ [0-9a-f]{40} [0-9a-f]{40}' <<<"$REC"; then
+      REC_WHY="the record is not one line: PR number, head sha, squash sha"
+    else
+      read -r R_N R_H R_M <<<"$REC"
+      if ! git merge-base --is-ancestor "$R_M" origin/main 2>/dev/null; then
+        REC_WHY="squash $R_M of #$R_N is not on origin/main"
+      elif ! git cat-file -e "${R_H}^{commit}" 2>/dev/null \
+          && ! { git fetch -q origin "pull/$R_N/head" 2>/dev/null && git cat-file -e "${R_H}^{commit}" 2>/dev/null; }; then
+        REC_WHY="PR head $R_H of #$R_N not local and not fetchable"
+      elif git merge-base --is-ancestor "$R_H" "$SPRINT_TIP" 2>/dev/null || [ "$R_M" = "$FORK" ]; then
+        PR_HEAD="$R_H"; REC_SRC=" (merged PR #$R_N, from the sprint-merge record)"
+      else
+        REC_WHY="PR head $R_H of #$R_N is not an ancestor of the sprint tip and squash $R_M is not its fork point"
+      fi
+    fi
+  fi
+  if [ -z "$REC" ] && [ -n "$FORK" ]; then
     TRUNK_TREES="$(git log --format=%T origin/main --not "$FORK")"
     PR_HEAD="$(git log --first-parent --format='%T %H' "$SPRINT_TIP" --not "$FORK" \
       | while read -r t h; do grep -qxF "$t" <<<"$TRUNK_TREES" && { echo "$h"; break; }; done)"
   fi
-  PR_SRC=""; GH_WHY=""
+  PR_SRC="$REC_SRC"; GH_WHY=""
+  [ -n "$REC" ] && FORK=""
   if [ -z "$PR_HEAD" ] && [ -n "$FORK" ]; then
     if ! command -v gh >/dev/null 2>&1; then
       GH_WHY="gh unavailable"
@@ -84,7 +103,8 @@ else
     fi
   fi
   if [ -z "$PR_HEAD" ]; then
-    echo "CARRY: HARD_BLOCK underivable — no sprint commit's tree equals a trunk commit's tree, so the squash's PR head is unknown${GH_WHY:+; gh fallback: $GH_WHY}"
+    [ -n "$REC_WHY" ] && echo "CARRY: HARD_BLOCK underivable — the sprint-merge record at the sprint tip is refused: $REC_WHY"
+    [ -z "$REC_WHY" ] && echo "CARRY: HARD_BLOCK underivable — no sprint commit's tree equals a trunk commit's tree, so the squash's PR head is unknown${GH_WHY:+; gh fallback: $GH_WHY}"
   else
     CARRY_N="$(git rev-list --count --no-merges "$SPRINT_TIP" --not "$PR_HEAD" origin/main)"
     if [ "$CARRY_N" = 0 ]; then
@@ -116,8 +136,19 @@ that lacks the deploy-validate block. Carrying the commits onto a trunk-cut
 branch keeps the squash as an ancestor (the property required below) and
 delivers those commits to `main` through the retro PR.
 
-**The PR head is derived, not looked up, and the derivation is the control.** No
-step records the sprint PR's number. A squash commit's tree equals its PR head's
+**The sprint-merge record comes first.** Deploy-validate Step 2 commits
+`${AI_DLC_STATE_DIR:-_bmad-output}/implementation-artifacts/s<N>/sprint-pr-merge.txt`
+to the sprint branch: one line, `<PR number> <PR head sha> <squash sha>`. The block reads it at
+the sprint tip and accepts it when the squash is on `origin/main`, the PR head is
+local or fetchable as `pull/<number>/head`, and the PR head is an ancestor of the
+sprint tip or the squash is the fork point. An accepted record becomes `PR_HEAD`
+and the count line names the PR and `from the sprint-merge record`. A record that
+fails any of these prints `HARD_BLOCK underivable` naming the refusal, and neither
+the tree match nor `gh` runs. Only a sprint with no record reaches the two
+derivations below.
+
+**Without a record, the PR head is derived, and the derivation is the control.**
+A squash commit's tree equals its PR head's
 tree whenever the trunk did not move between the PR's last sync and the merge,
 so the block walks the sprint branch's first-parent chain back to the first
 commit already on `origin/main`, and takes the newest commit on that chain whose
@@ -180,8 +211,9 @@ the sprint's diff a second time and cannot merge; and a retro branch that lacks
 every sprint commit made after the sprint PR squash-merged, so the retro reads
 incomplete files and Step 7a-post rotates a gate log missing its deploy-validate
 block. False-positive cost: one `git fetch` per retro, the count 0 in the steady
-state, one tree comparison over the sprint-only commits, and one `gh pr list`
-call made only when that comparison finds no PR head. Removal condition:
+state, one `git show` of the sprint-merge record, and, only with no record, one
+tree comparison over the sprint-only commits and one `gh pr list` call made only
+when that comparison finds no PR head. Removal condition:
 the `checkout -b` above now names `origin/main` as its base, so a session
 running that line alone cuts from the trunk rather than from wherever it is —
 but `origin/main` is a local ref and the `fetch` is what makes it current, so
@@ -190,9 +222,8 @@ base ref is guaranteed fresh without a fetch. Retire the carry only when
 deploy-validate can no longer commit to the sprint branch after the sprint PR
 merges. Do not retire it by cutting the retro branch from the sprint tip
 instead: that branch lacks the squash commit as an ancestor, which is the
-defect the paragraph above describes. Retire the `gh` fallback only when a step
-records the sprint PR's number or its squash commit, so the re-pointed state no
-longer needs a lookup.
+defect the paragraph above describes. Retire the tree match and the `gh`
+fallback when no sprint the retro still runs on lacks the sprint-merge record.
 
 The branch name MUST contain `sprint-<N>` (literal word "sprint"
 followed by the sprint number). Abbreviated forms (`s<N>`,

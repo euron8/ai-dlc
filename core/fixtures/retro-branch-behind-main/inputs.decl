@@ -1,6 +1,8 @@
-# The two subjects: Check 7 of the validator (worlds A-H) and retro.md Step 1 (part 2, extracted and driven).
+# The subjects: Check 7 of the validator (worlds A-H), retro.md Step 1 (part 2, extracted and driven),
+# and deploy-validate.md Step 2's record block (receipt-bl993.sh).
 !core/scripts/validate-mandatory-rules.sh
 !core/skills/ai-dlc/steps/retro.md
+!core/skills/ai-dlc/steps/deploy-validate.md
 # Sibling validators copied into each synthetic toolchain dir, and the sprint-status roller.
 core/scripts/validate-audit-anchors.sh
 core/scripts/sprint-status.sh
