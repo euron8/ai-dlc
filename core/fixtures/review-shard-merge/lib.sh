@@ -264,21 +264,52 @@ gm_vacuous() {
   fi
   GM_GITV="$v"
 }
+# bl980_ctl: the control, once per shard. One commit through raw git (no maintenance.auto=false) must spawn exactly 1
+# `git maintenance run` child, or this git cannot show the defect and every 0 read beside it is vacuous: FIXTURE BROKEN.
+# A git before 2.29 has no maintenance (gm_vacuous, which exits 2 on any later git); its 0 is then not a reading.
+BL980_CTL=""
+bl980_ctl() {
+  [ -z "$BL980_CTL" ] || return 0
+  if ! gm_has_maint; then gm_vacuous; BL980_CTL=vacuous; return 0; fi
+  G init -q "$WORK/gm-repo-ctl" || { echo "FIXTURE BROKEN: the BL-980 control repository was not built" >&2; exit 2; }
+  BL980_CTL="$(gm_children gm_raw "$WORK/gm-repo-ctl" 2)" || BL980_CTL=""
+  [ "$BL980_CTL" = 1 ] || { echo "FIXTURE BROKEN: the BL-980 control, one commit through raw $(command -v git), spawned '${BL980_CTL}' maintenance children (want 1): this git cannot show the defect, so a 0 read beside it would pass whatever G or a receipt sets" >&2; exit 2; }
+}
+# BL-980 AT THE CALL SITE. A receipt whose arm runs in a SHIPPED shard is metered where it runs, never re-driven:
+# `bl980_meter <receipt>` empties its trace (trace2 APPENDS) and names it in BL980_T; the call site runs the receipt
+# with GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TRACE2_EVENT="$BL980_T" (an inherited maintenance.auto=false
+# cannot zero the count); `bl980_judge <receipt>` then ADDS to the arm's WHY, never replacing its own reasons, unless
+# that run made at least one commit and spawned 0 `git maintenance run` children. receipt-bl980.sh drives only the
+# receipts whose arm runs in a dist-only shard, and holds metered and driven as a partition.
+bl980_meter() { BL980_T="$WORK/bl980.$1.json"; : > "$BL980_T" || { echo "FIXTURE BROKEN: could not empty $BL980_T" >&2; exit 2; }; }
+bl980_judge() {
+  local t="$WORK/bl980.$1.json" n c
+  bl980_ctl
+  [ "$BL980_CTL" != vacuous ] || return 0 # a git before 2.29 spawns no maintenance child; GM1 stands down on it too
+  [ -s "$t" ] || { WHY="$WHY bl980{$1 wrote no trace2 event, so its maintenance children were never read}"; return 0; }
+  n="$(grep -c '"event":"child_start".*"argv":\["git","maintenance","run"' "$t")" || n=0
+  c="$(grep -c '"event":"cmd_name".*"name":"commit"' "$t")" || c=0
+  [ "$c" -ge 1 ] || WHY="$WHY bl980{$1 made no commit, so its 0 maintenance children prove nothing}"
+  [ "$n" = 0 ] || WHY="$WHY bl980{$1 spawned $n git maintenance run child(ren), want 0}"
+  return 0
+}
 p_gmaint() { # GM1: a G commit spawns 0 maintenance children; raw git spawns 1 (control)
-  local r="$WORK/gm-repo" fx ctl last
+  local r="$WORK/gm-repo" fx last
   WHY=""
   # Each drive commits into a FRESH repository of its own, so the control's detached maintenance child cannot race G's
   # counted commit.
-  G init -q "$r" && G init -q "$WORK/gm-repo-ctl" || { WHY=" the probe repositories were not built"; return 1; }
+  G init -q "$r" || { WHY=" the probe repository was not built"; return 1; }
   fx="$(gm_children G "$r" 1)" || fx=""
-  ctl="$(gm_children gm_raw "$WORK/gm-repo-ctl" 2)" || ctl=""
-  [ "$ctl" = 1 ] || { echo "FIXTURE BROKEN: GM1's control, one commit through raw $(command -v git), spawned '${ctl}' maintenance children (want 1): this git cannot show the defect, so GM1 would pass whatever G sets" >&2; exit 2; }
+  bl980_ctl
   [ "$fx" = 0 ] || { WHY=" a commit through G spawned '${fx}' git maintenance run child(ren), want 0"; return 1; }
-  # BL-980: every receipt-*.sh in this directory (receipt-bl904.sh copies the repository its commits just wrote) is
-  # DRIVEN by receipt-bl980.sh, run with the arguments its call site below gives it and judged by the maintenance
-  # children its whole run spawns. Its LAST stdout line is the verdict (stderr kept
-  # apart, so a git warning cannot turn a pass into BROKEN). A BROKEN receipt is a broken fixture, never a FAIL.
-  GM_RO="$(bash "$LIB_DIR/receipt-bl980.sh" "$1" "$PROJ" 2> "$WORK/gm-receipt.err")"; GM_RRC=$?
+  # BL-980: receipt-bl980.sh DRIVES every receipt-*.sh in this directory whose arm runs in a dist-only shard (so a
+  # consumer, which runs only the shipped shards, still counts its spawns), with the arguments its call site gives it,
+  # and refuses unless every other receipt is metered at its shipped-shard call site (receipt-bl904.sh, which copies
+  # the repository its commits just wrote, among them). It joins call site to shard through RSM_ARMTAB, run.sh's J0
+  # arms derivation. Its LAST stdout line is the verdict (stderr kept apart, so a git warning cannot turn a pass into
+  # BROKEN). A BROKEN receipt is a broken fixture, never a FAIL.
+  printf '%s\n' "$RSM_ARMTAB" > "$WORK/bl980-arms" || { WHY=" the arm table was not written"; return 1; }
+  GM_RO="$(bash "$LIB_DIR/receipt-bl980.sh" --arm-table "$WORK/bl980-arms" "$1" "$PROJ" 2> "$WORK/gm-receipt.err")"; GM_RRC=$?
   last="${GM_RO##*$'\n'}"
   case "$GM_RRC:$last" in
     "0:BL980 OK receipts="*) ;;
@@ -3644,10 +3675,12 @@ p_story_path() { # <script-dir>
   local sd="$1" o rc n
   WHY=""
   if cell story-path; then
-    o="$(bash "$LIB_DIR/receipt-bl885.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
+    bl980_meter receipt-bl885.sh
+    o="$(GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TRACE2_EVENT="$BL980_T" bash "$LIB_DIR/receipt-bl885.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
     n="$(grep -c '^ok ' <<<"$o")" || n=0
     [ "$rc" = 0 ] && [ "$n" = "$SP_CELLS" ] \
       || WHY="$WHY story-path{rc=$rc ok=$n/$SP_CELLS $(grep -v '^ok ' <<<"$o" | tr '\n' ' ')}"
+    bl980_judge receipt-bl885.sh
   fi
   [ -z "$WHY" ]
 }
@@ -3658,10 +3691,12 @@ p_story_frozen() { # <script-dir>
   local sd="$1" o rc n
   WHY=""
   if cell story-frozen; then
-    o="$(bash "$LIB_DIR/receipt-bl885-frozen.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
+    bl980_meter receipt-bl885-frozen.sh
+    o="$(GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TRACE2_EVENT="$BL980_T" bash "$LIB_DIR/receipt-bl885-frozen.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
     n="$(grep -c '^ok ' <<<"$o")" || n=0
     [ "$rc" = 0 ] && [ "$n" = "$SF_CELLS" ] \
       || WHY="$WHY story-frozen{rc=$rc ok=$n/$SF_CELLS $(grep -v '^ok ' <<<"$o" | tr '\n' ' ')}"
+    bl980_judge receipt-bl885-frozen.sh
   fi
   [ -z "$WHY" ]
 }
@@ -3674,10 +3709,12 @@ p_story_hist() { # <script-dir>
   local sd="$1" o rc n
   WHY=""
   if cell story-hist; then
-    o="$(bash "$LIB_DIR/receipt-bl904.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
+    bl980_meter receipt-bl904.sh
+    o="$(GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TRACE2_EVENT="$BL980_T" bash "$LIB_DIR/receipt-bl904.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
     n="$(grep -c '^ok ' <<<"$o")" || n=0
     [ "$rc" = 0 ] && [ "$n" = "$SH_CELLS" ] \
       || WHY="$WHY story-hist{rc=$rc ok=$n/$SH_CELLS $(grep -v '^ok ' <<<"$o" | tr '\n' ' ')}"
+    bl980_judge receipt-bl904.sh
   fi
   [ -z "$WHY" ]
 }
@@ -5144,7 +5181,8 @@ p_wrap() {
   printf '%s\n' "$WR_CONV" > "$cv" && printf -- '- canonical: `pytest suite/tests` and `<venv>/bin/python -m pytest -m unit`\n' > "$nd" \
     && printf '%s\n' "$WR_C1" > "$c1" || { WHY="$WHY FIXTURE ERROR: the BL-988 conventions files were not written"; return 1; }
   # wr-receipt: BL-988's receipt (receipt-bl988.sh, its header), run beside this fixture over the script directory's
-  # record-only-diff.sh (receipt-bl980.sh drives every receipt in exactly the "$sd/<file>" form its call site names).
+  # record-only-diff.sh (receipt-bl980.sh drives a dist-only-shard receipt in exactly the "$sd/<file>" form its call
+  # site names).
   if cell wr-receipt; then
     o="$(bash "$LIB_DIR/receipt-bl988.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
     [ "$rc" = 0 ] && [ "$(grep -c '^  ok    receipt-bl988 R[0-4] ' <<<"$o")" = 5 ] \

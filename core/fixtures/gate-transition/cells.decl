@@ -30,3 +30,5 @@ e2e core/scripts/gate-transition.sh ran why=gate 2 pass 2 over p9 APPROVED and p
 e2e core/scripts/gate-transition.sh rax why=gate 2 pass 2 over a re-review not ancestor-related to the QA sha, the RAX start
 e2e core/scripts/gate-transition.sh raa why=gate 2 pass 2 over gate-1 files under two index forms, the RAA start
 e2e core/scripts/gate-transition.sh ram why=gate 2 pass 2 over a merged gate-1 re-review, the RAM start
+e2e core/scripts/gate-transition.sh g3k why=gate 1 pass 2 after a gate-3 rework over a records-only delta, the G3K arm
+e2e core/scripts/gate-transition.sh g3c why=gate 1 pass 2 at the sha gate 3 judged, the remedy, G3K's control

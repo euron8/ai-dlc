@@ -74,8 +74,6 @@
 #   validate-write-format-steering.sh                    # report + verdict
 #   validate-write-format-steering.sh --report           # ...with the per-artifact table
 #   validate-write-format-steering.sh --max-undeclared N # also fail if undeclared > N
-#   validate-write-format-steering.sh --render           # print the derived header table
-#   validate-write-format-steering.sh --check FILE       # byte-compare FILE's region
 #
 # Exit codes:
 #   0  every declaration resolves (undeclared artifacts reported, not fatal)
@@ -121,14 +119,12 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 }
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
-MODE="validate"; REPORT=0; MAX_UNDECLARED=""; CHECK_FILE=""
+REPORT=0; MAX_UNDECLARED=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --report)         REPORT=1; shift ;;
-    --render)         MODE="render"; shift ;;
-    --check)          MODE="check"; CHECK_FILE="${2:-}"; shift 2 ;;
     --max-undeclared) MAX_UNDECLARED="${2:-}"; shift 2 ;;
-    -h|--help)        sed -n '1,80p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)        sed -n '1,78p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "validate-write-format-steering: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -139,11 +135,6 @@ if [ -n "$MAX_UNDECLARED" ]; then
       echo "validate-write-format-steering: --max-undeclared needs a non-negative integer (got '${MAX_UNDECLARED}')" >&2
       exit 2 ;;
   esac
-fi
-
-if [ "$MODE" = "check" ] && [ -z "$CHECK_FILE" ]; then
-  echo "validate-write-format-steering: --check needs a file" >&2
-  exit 2
 fi
 
 command -v python3 >/dev/null 2>&1 || {

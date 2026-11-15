@@ -74,17 +74,18 @@ UNITS_d="bl885"
 UNITS_e="canon"
 UNITS_f="run_rec bl808"
 UNITS_g="canon_merge wv955 bind956"
-GROUP=a; RSM_DEAL=0; _grp=0
+GROUP=a; RSM_DEAL=0; RSM_TAB=0; _grp=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --group) _grp=1; GROUP="${2:-}"
       [ -n "$GROUP" ] || { echo "usage: run.sh [--group <shard> | --deal]: --group needs a shard name" >&2; exit 2; }
       shift; shift ;;
     --deal) RSM_DEAL=1; shift ;;
-    *) echo "usage: run.sh [--group <shard>] | --deal" >&2; exit 2 ;;
+    --arm-table) RSM_TAB=1; shift ;;
+    *) echo "usage: run.sh [--group <shard>] | --deal | --arm-table" >&2; exit 2 ;;
   esac
 done
-[ $((_grp + RSM_DEAL)) -le 1 ] || { echo "usage: run.sh [--group <shard>] | --deal: --deal takes no --group" >&2; exit 2; }
+[ $((_grp + RSM_DEAL + RSM_TAB)) -le 1 ] || { echo "usage: run.sh [--group <shard>] | --deal | --arm-table: each takes no other" >&2; exit 2; }
 case " $SHARDS " in *" $GROUP "*) ;; *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;; esac
 eval "MINE=\"\${UNITS_$GROUP:-}\""
 # MINE is the units whose ARMS run: the shard's deal, or every unit under --deal.
@@ -136,6 +137,17 @@ awk '/^if sg [a-z0-9_]+; then$/ { u = $3; sub(/;$/, "", u) } /^fi # sg [a-z0-9_]
 _nout="$(grep -c ' -$' "$RSM_JW/arms")" || _nout=0
 _narm="$(grep -c . "$RSM_JW/arms")" || _narm=0
 [ "$_narm" -gt 0 ] && [ "$_nout" = 0 ] || { rm -rf "$RSM_JW"; rsm_broken "$_nout of $_narm arm line(s) sit outside every unit guard"; }
+# THE ARM TABLE receipt-bl980.sh joins each receipt's call site to: `<arm> <unit> <shard> ship|dist`, one row per arm
+# line above, kept past the join directory's removal.
+: > "$RSM_JW/ushard"
+for _s in $SHARDS; do
+  case " $DIST_SHARDS " in *" $_s "*) _k=dist ;; *) _k=ship ;; esac
+  eval "_us=\"\${UNITS_$_s}\""
+  for _u in $_us; do printf '%s %s %s\n' "$_u" "$_s" "$_k" >> "$RSM_JW/ushard"; done
+done
+RSM_ARMTAB="$(awk 'NR == FNR { s[$1] = $2 " " $3; next } { print $1, $2, (($2 in s) ? s[$2] : "- -") }' "$RSM_JW/ushard" "$RSM_JW/arms")"
+# --arm-table prints that table and exits: receipt-bl980.sh run on its own (its verify form) reads it from here.
+[ "$RSM_TAB" = 0 ] || { rm -rf "$RSM_JW"; printf '%s\n' "$RSM_ARMTAB"; exit 0; }
 if [ "$RSM_DEAL" = 1 ]; then
   # The static unit-cell count: an arm's `cell` declarations in its lib.sh body (at least 1).
   awk 'match($0, /^p_[a-z0-9_]+\(\) *\{/) { p = substr($0, 3, RLENGTH - 2); sub(/\(.*/, "", p); n[p] += 0 }
@@ -563,7 +575,7 @@ if ! gm_has_maint; then
 gm_vacuous
 ok "GM1 VACUOUS on git $GM_GITV: this git predates git maintenance (2.29), so no commit can spawn the child GM1 counts; no spawn was read and the arm asserts nothing here"
 else
-arm2 gmaint "GM1 (BL-868, BL-980): a commit through lib.sh's G spawns 0 'git maintenance run' children (trace2 child_start), so no detached repack races a later cp -R of the repository; the same commit through raw git spawns 1 (the control), and receipt-bl980.sh answers BL980 OK: every receipt-*.sh in this directory (the line above names them), run as lib.sh runs it, commits and spawns 0 across its whole run" \
+arm2 gmaint "GM1 (BL-868, BL-980): a commit through lib.sh's G spawns 0 'git maintenance run' children (trace2 child_start), so no detached repack races a later cp -R of the repository; the same commit through raw git spawns 1 (the control), and receipt-bl980.sh answers BL980 OK: every receipt-*.sh in this directory whose arm runs only in a dist-only shard (the line above names them), run as lib.sh runs it, commits and spawns 0 across its whole run, and every other one is metered at its shipped-shard call site (metered=), whose arm fails on a spawn" \
             "GM1: a commit through G or a receipt spawns auto-maintenance, or the arm cannot tell"
 fi
 fi # sg gmaint

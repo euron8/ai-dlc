@@ -22,7 +22,9 @@
 # WHAT IT RUNS, PER GATE, IN THE STEP FILES' ORDER (steps/implementation.md, gate-validation.md):
 #   gate 1   commit presence (base..sha has a non-merge commit); validate-handoff-evidence.sh
 #            handoff mode, then --strategy; --list-captures (exit 2: partition without
-#            --exclude-captures, the line recorded); pass M >= 2: --route, then --narrow and the
+#            --exclude-captures, the line recorded); pass M >= 2: after a gate-3 rework, Rule A from the
+#            pass M-1 reviewed-sha (g1_after_g3: GATE1-SKIP writes a `gate: skip` plan with no shard
+#            lines, which authorizes no seat); then --route, then --narrow and the
 #            narrowed map with its two fallbacks; partition-review-diff.sh --map;
 #            pass M >= 2: validate-carried-findings.sh --list.
 #   gate 2   --list-captures at the go-signal sha; pass M >= 2: --gate1-rerun from Rule A's base (GATE1-RERUN or any
@@ -57,7 +59,7 @@
 # directory only, never in the basename (artifact-path-grammar.md, held by I82 and I82b). Any plan already at that path is removed BEFORE the first
 # check, and the new one is written only after every check has passed, through a temporary file
 # and mv. So a plan on disk is a completion record. Lines, in order:
-#   story: <idx> / gate: <1|2|3|rerun|close> / pass: <M> / sha: <frozen sha> / worktree: <abs> /
+#   story: <idx> / gate: <1|2|3|rerun|skip|close> / pass: <M> / sha: <frozen sha> / worktree: <abs> /
 #   manifest: <shard-dir>/.manifest, or none / route: <kind> <answer line> / nonce: <gate_nonce>
 #   (gate 3 and close only) / the --map stdout lines, byte-equal / the brief inputs, each
 #   `<key>: <value>`.
@@ -295,6 +297,51 @@ write_plan() {
   exit 0
 }
 
+# g1_after_g3 (header, gate 1 pass M >= 2): RULE A AT GATE 1, after a gate-3 rework. It applies when the story's
+# newest g3 plan (the highest p<K> in $PDIR) names a sha that the pass M-1 review's PSHA is an ancestor of or equal
+# to, so gate 3 judged on or after gate 1's last review. A gate-1 pass at the very sha gate 3 judged (no new commit)
+# is the re-review gate 3 asked for against the gate-1 record, and always runs. A pass M-1 whose verdict is not
+# APPROVED is a same-gate re-review, and always runs. Otherwise it asks --gate1-rerun from PSHA: GATE1-SKIP writes a
+# `gate: skip` plan with no shard lines, which authorizes no seat, and the lead runs its `next:` gate-2 command;
+# GATE1-RERUN or any refusal is recorded and the pass goes on as a re-review below. Returns 0 unless it wrote a plan.
+g1_after_g3() {
+  local p k g3k=0 g3sha="" l v
+  for p in "$PDIR/${IDX}-g3-p"*.plan; do
+    [ -f "$p" ] || continue
+    k="${p##*-g3-p}"; k="${k%.plan}"
+    case "$k" in '' | *[!0-9]* | 0*) continue ;; esac
+    [ "$k" -gt "$g3k" ] || continue
+    v=""; while IFS= read -r l; do case "$l" in 'sha: '*) v="${l#sha: }"; break ;; esac; done < "$p"
+    g3k="$k"; g3sha="$v"
+  done
+  [ "$g3k" -gt 0 ] || return 0
+  is_anc "$PSHA" "$g3sha"
+  [ "$ANC" = yes ] || { input gate-log "Rule A at gate 1: the g3 plan p$g3k names $g3sha, which does not descend from the pass $((PASS - 1)) reviewed-sha $PSHA (ancestry $ANC); not a gate-3 rework, so the pass is a re-review"; return 0; }
+  if [ "$g3sha" = "$SHA" ]; then
+    input gate-log "Rule A at gate 1: the frozen sha $SHA12 is the sha the g3 plan p$g3k judged, no new commit: a re-review gate 3 asked for, so it runs"; return 0
+  fi
+  ( cd "$ROOT" && bash "$SELF/merge-review-shards.sh" --read-verdict "$PRIOR" --gate code-review ) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
+  l="$(first_line "$W.out")"; [ -n "$l" ] || l="$(first_line "$W.err")"
+  case "$RC:$l" in
+    "0:VERDICT: "*" verdict=APPROVED") ;;
+    *) input gate-log "Rule A at gate 1: the pass $((PASS - 1)) review $PRIOR is not read as APPROVED (merge-review-shards.sh --read-verdict exited $RC: $l), so the pass is a re-review"; return 0 ;;
+  esac
+  set -f
+  # shellcheck disable=SC2046
+  bash "$SELF/partition-review-diff.sh" --gate1-rerun "$WT" "$PSHA" "$SHA" $(xcap) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
+  set +f
+  l="$(first_line "$W.out")"; [ -n "$l" ] || l="$(first_line "$W.err")"
+  case "$RC:$l" in
+    0:GATE1-SKIP*)
+      MANIFEST=none; ROUTE="skip $l"
+      input rule-a-base "gate1 $PSHA $PRIOR"
+      input next "gate-transition.sh $IDX 2 --pass <next QA pass> -C $WT --base $BASE --sprint $SPRINT --story-file $STORY"
+      printf 'gate-transition: Rule A at gate 1 answered %s; after the gate-3 rework gate 1 dispatches no seat. This plan authorizes no seat; the lead runs the next: gate-2 command.\n' "$l" >&2
+      write_plan skip ;;
+    *) input gate-log "Rule A at gate 1: $l" ;;
+  esac
+}
+
 case "$GATE" in
 1)
   n="$(git -C "$WT" rev-list --no-merges --count "${BASE}..${SHA}" 2> /dev/null)" || n=""
@@ -312,6 +359,7 @@ case "$GATE" in
     PRIOR="$(prior_file code-review)" || { refuse prior-review "no pass $((PASS - 1)) review file docs/reviews/s${SPRINT}/${IDX}-code-review${PSFX}.md in $WT or $ROOT" "merge pass $((PASS - 1)) before re-reviewing"; stop_if_refused; }
     PSHA="$(reviewed_sha "$PRIOR")" || { refuse prior-review "$PRIOR carries $PSHA" "every column-0 reviewed-sha line of the pass $((PASS - 1)) review (one per shard in a merged review) must name the one full sha it reviewed"; stop_if_refused; }
     input prior "$PRIOR"
+    g1_after_g3
     set -f
     # shellcheck disable=SC2046
     bash "$SELF/partition-review-diff.sh" --route "$WT" "$PRIOR" "$SHA" $(xcap) > "$W.out" 2> "$W.err" < /dev/null; RC=$?

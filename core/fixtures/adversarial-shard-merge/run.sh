@@ -1024,6 +1024,9 @@ else
       || bad "K1-$L: $L layout with current readers gave '$a' (want @)"
     # K2: ONE old reader, derived from the current file (K0) -> `=`, each world first proven to differ from the current one.
     # Only the vac world is asserted here; the ps and sch old readers are scored end to end by KE below.
+    # Only in the inst layout: pair_sep reads VAC beside the merge in both layouts and answers '=' before
+    # the layout-dependent schema chain, and K1-core holds the core layout's VAC lookup.
+    [ "$L" = inst ] || continue
     for S in vac; do
       w="$(kl_world "$L" "$S" "$MERGE")" || { bad "K2$S-$L: FIXTURE BROKEN -- world did not build"; continue; }
       if ! k_differs "$w" "$L" "$S"; then bad "K2$S-$L: FIXTURE BROKEN -- the old-$S world is byte-identical to the current one"; continue; fi

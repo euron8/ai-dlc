@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # receipt-bl988.sh [<fixture-dir> | <record-only-diff.sh>] -- BL-988's receipt, run by lib.sh's p_wrap (cell wr-receipt)
-# beside it on every push, as `"$sd/record-only-diff.sh"` (the form receipt-bl980.sh drives every receipt in).
+# beside it on every push, as `"$sd/record-only-diff.sh"` (the form receipt-bl980.sh drives a dist-only-shard receipt in).
 # A consumer's operator-mandated wrapper (`python3 -u scripts/<wrapper>.py --cwd <root> ... -- <pytest args>`) was
 # recorded by --record-run and refused by the check half: RUN-SHAPE read it as no run and RUN-FILTER read every token
 # after its bare `--` as a path handed to the runner. record-only-diff.sh now reads a wrapper the conventions DECLARE.

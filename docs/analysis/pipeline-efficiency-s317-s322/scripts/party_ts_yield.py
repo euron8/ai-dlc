@@ -11,7 +11,8 @@ over 25 stories). s319 is partitioned by the description patterns PARTS_319 belo
 parts are printed with the s319 step total, which must equal adversarial_yield.py's S319_STEP (311 spawns, $441.19).
 
 Survival arm, per repair block (a `### ` section of a repair record whose heading carries CRITICAL or MAJOR):
-  evidence  the backtick spans (8+ characters) and double-quoted spans (12+) on the block's `- claim now asserted:` line;
+  evidence  the backtick spans (8+ characters) and double-quoted spans (12+) on the block's `- claim now asserted:` line,
+            paired by claim_spans() (every backtick span paired left to right, so a short span never shifts the pairing);
   target    party: the story file the block's `- edit:` line names (else the shard's `- artifact:`);
             test strategy: the sprint's test-strategy.md;
   NEW       an evidence span absent from the target at BEFORE (the text the round read);
@@ -64,7 +65,17 @@ SPRINTS = {
               ts_before="e3fb1b442", ts_ship=[("sprint merge", "1da426ef9")], ts_passes=3),
 }
 CM = re.compile(r"^### .*\b(CRITICAL|MAJOR)\b")
-SPAN = re.compile(r"`([^`\n]{8,})`|\"([^\"\n]{12,})\"")
+BT = re.compile(r"`([^`\n]+)`")
+DQ = re.compile(r"\"([^\"\n]+)\"")
+
+
+def claim_spans(claim):
+    """The evidence spans of a claim line: every backtick span is paired left to right (a short one such as `ENV` is
+    consumed, never paired with the next span's opening backtick) and kept at 8+ characters; then double-quoted spans
+    are paired the same way over the text left after the backtick spans are removed, and kept at 12+."""
+    out = [s for s in BT.findall(claim) if len(s) >= 8]
+    out += [s for s in DQ.findall(BT.sub(" ", claim)) if len(s) >= 12]
+    return out
 
 
 def git(g, *a, ok=False):
@@ -115,7 +126,7 @@ def classify(body, target_texts):
     if not disp or disp.group(1) != "repaired":
         return {s: "NOT-REPAIRED" for s in ships}
     claim = "\n".join(re.findall(r"^- claim now asserted:.*$", body, re.M))
-    spans = [m.group(1) or m.group(2) for m in SPAN.finditer(claim)]
+    spans = claim_spans(claim)
     if not spans:
         return {s: "NO-SPAN" for s in ships}
     new = [s for s in spans if s not in before]

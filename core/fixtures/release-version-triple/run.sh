@@ -44,10 +44,7 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0
-made=0
-ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
 
@@ -57,7 +54,7 @@ printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
 # PASS. Every assertion below reaches the validator through `$( )`, so the same
 # shape is available here. A failed assertion is loud; one that never executed is
 # not, and this is what tells them apart.
-EXPECTED_ASSERTIONS=33
+EXPECTED_ASSERTIONS=35
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -86,7 +83,7 @@ commit() {
 # drive_src <validator-file> <outfile> [args...] -> the validator's own exit status, output in <outfile>.
 # SOURCES the file in a subshell and calls the SAME functions its main body calls, in its order,
 # minus arm_e, arm_f and arm_g: no drive through here asks about them, and the full-program drives
-# (assertions 1 and 25-26) execute all three. An `exit` in an
+# (assertions 1 and 25-26, and assertion 28's in-process rv_main) execute all three. An `exit` in an
 # arm ends this subshell with the arm's status, exactly as it ends the script. A sourced copy that
 # defines no arm_ab (an older validator) is refused rather than scored as a pass.
 drive_src() {
@@ -703,14 +700,51 @@ else
 fi
 cd "$WORK" || exit 2
 
+# --- 27-28. ARM E: A COMMITTED CONFLICT IS REFUSED, AND EACH NEAR-MISS ONE PROPERTY AWAY IS NOT ----------------
+# The offender's bytes come from the real producer: a `git merge` that conflicts, conflict style pinned. Each
+# near-miss is one property from it. nospace.md is the offender with the open marker's trailing space and label
+# removed, so its REAL close marker is all that remains. openonly.md is the offender cut before `=======`: a
+# real open marker with its trailing space and no close, the truncated-conflict limit, quiet by construction.
+# setext.md is an H1 underline, the `^=======$` widening the grammar rejects. Assertion 1 is the ALLOW twin;
+# this world's triple agrees, so arm E is the only arm that can fail it. One whole-program run, rv_main.
+E_SRC="$WORK/e-src"; E_DIR="$WORK/e"
+mkdir -p "$E_SRC" "$E_DIR" || exit 2
+( cd "$E_SRC" && git init -q . && git config user.email f@example.com && git config user.name Fixture \
+  && git config commit.gpgsign false && printf 'base\n' > offender.md && git add -A && git commit -q -m base \
+  && git branch other-branch && printf 'ours\n' > offender.md && git commit -q -am ours \
+  && git checkout -q other-branch && printf 'theirs\n' > offender.md && git commit -q -am theirs \
+  && git checkout -q - && { git -c merge.conflictStyle=merge merge -q other-branch; :; } ) >/dev/null 2>&1
+grep -q '^<<<<<<< ' "$E_SRC/offender.md" && grep -q '^>>>>>>> ' "$E_SRC/offender.md" \
+  || { echo "FIXTURE BROKEN: git merge wrote no conflict markers into $E_SRC/offender.md" >&2; exit 2; }
+cd "$E_DIR" || exit 2
+git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
+git config user.email f@example.com
+git config user.name Fixture
+git config commit.gpgsign false
+cp "$E_SRC/offender.md" offender.md || exit 2
+sed 's/^<<<<<<< .*$/<<<<<<</' offender.md > nospace.md
+awk '$0 == "=======" { exit } { print }' offender.md > openonly.md
+printf 'A Heading\n=======\n\nbody text\n' > setext.md
+cmp -s offender.md nospace.md || cmp -s offender.md openonly.md \
+  && { echo "FIXTURE BROKEN: a near-miss edit did not change the offender" >&2; exit 2; }
+commit 0.1.0 0.1.0 'feat(v0.1.0): the first one'
+e_names="$(git ls-tree -r --name-only HEAD 2>/dev/null | tr '\n' ' ')"
+if [ "$e_names" = "CHANGELOG.md VERSION nospace.md offender.md openonly.md setext.md " ]; then
+  ok "arm E's world holds the offender and all three near-misses at HEAD: $e_names"
+else
+  bad "arm E's world lists [$e_names], want CHANGELOG.md, VERSION, the offender and the three near-misses"
+fi
+# The whole program in process: rv_main is the body the executed script runs, so arm E's verdict reaches
+# rv_report and the exit exactly as it does at a push; no new uncelled start of the subject.
+( . "$VALIDATOR" || exit 97; fx_inproc scripts/validate-release-version.sh; rv_main --commit HEAD ) >"$WORK/out.txt" 2>&1; status=$?
+e_fails="$(grep -c '^FAIL' "$WORK/out.txt")" || e_fails=0
+if [ "$status" = 1 ] && [ "$e_fails" = 1 ] \
+   && grep -qxF 'FAIL  tracked file(s) carry committed merge-conflict markers: offender.md ' "$WORK/out.txt"; then
+  ok "arm E: a committed conflict fails the program, naming offender.md and none of the three near-misses"
+else
+  bad "arm E: want exit 1 and one FAIL line naming exactly offender.md; got exit $status, $e_fails FAIL line(s)"; sed 's/^/        /' "$WORK/out.txt"
+fi
+cd "$WORK" || exit 2
+
 echo ""
-if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "release-version-triple: FAIL — $made assertions ran, $EXPECTED_ASSERTIONS were written. An arm did not execute at all, which is not the same as an arm that passed. Find the one that vanished before reading anything above as green."
-  exit 1
-fi
-if [ "$fails" -eq 0 ]; then
-  echo "release-version-triple: PASS ($made assertions)"
-  exit 0
-fi
-echo "release-version-triple: FAIL ($fails of $made assertion(s))"
-exit 1
+report_end release-version-triple "$EXPECTED_ASSERTIONS"

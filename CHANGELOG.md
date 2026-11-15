@@ -19,6 +19,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1137.0] - 2026-11-15
+
+### BL-1030 PARTIAL: gate 1 stays closed after a gate-3 rework that changed nothing it reviewed
+
+`core/scripts/gate-transition.sh` gate 1, pass M >= 2, runs `g1_after_g3` before `--route`. After a gate-3 rework whose frozen sha is not the gate-3 sha, with an APPROVED pass M-1 review, it asks `partition-review-diff.sh --gate1-rerun`; on `GATE1-SKIP` it writes a `gate: skip` plan that authorizes no seat and names the next gate-2 command. The gate-2 record-only route, the step prose (BL-1131) and the Outcome measured: line stay owed.
+
+### BL-1059 CLOSED: the review-shard-merge, adversarial-shard-merge and apply-restamp-worklist remainders
+
+review-shard-merge's GM1 meters each receipt whose arm runs in a shipped shard at its own call site and judges it inside that arm, and `receipt-bl980.sh` drives only the receipts that run in a dist-only shard, refusing a receipt that is neither metered nor driven, both, or half-metered. adversarial-shard-merge drops its K2vac-core cell, and apply-restamp-worklist folds U3 into its seed runs. Invocation rows are set from counted runs.
+
+### BL-1120 CLOSED: the unseeded hermetic-consumption worlds and release-version arm E
+
+hermetic-consumption gains worlds w13-w16 (`e-non-bang`, `m-grepq`, `o-varlater`, `p-heredoc`), and `scripts/validate-hermetic-consumption.sh`'s header names the world that holds each narrowing. release-version-triple gains an arm-E world built from a real conflicting merge, with three near-misses.
+
+### BL-1121 CLOSED: `--render` and `--check` leave the write-format steering validator
+
+`core/scripts/validate-write-format-steering.sh` no longer accepts `--render` or `--check FILE`, which did nothing; both now exit 2 as unknown arguments. A plain run, `--report` and `--max-undeclared 15` print the same bytes as before.
+
+### BL-1123 CLOSED: adversarial repair is dispatched from the plan file
+
+`_gate-procedures.md`'s "Adversarial repair dispatch" gains a paragraph: the lane, fan-in and adjudicator briefs read their lines from the file `PLAN-FILE:` names, never from a cut of stdout, and a refused re-join is dispatched from that file.
+
+### BL-1119 PARTIAL: the divergence-hard-block world no longer loses objects mid-copy
+
+`core/fixtures/divergence-hard-block/seed.sh`'s git helpers set `maintenance.auto=false`, so no detached `git maintenance run` repacks the cached world while it is copied. Subject 1, counted starts that move with pool width, stays owed.
+
+### BL-550 PARTIAL: the missing-path counter is committed
+
+`docs/analysis/bl550-missing-path-counter/count.py` counts "No such file or directory" lines in party, elicitation and adversary seat results, classifying each seat from its `meta.json` and dispatch prompt, with the s319 and s322 baselines re-derived. The close reading stays owed. BL-1127 corrects the entry's citation of the gate-procedures lines that shipped.
+
+### Backlog
+
+BL-812 and BL-819 record value evidence read on s321 (the analysis scripts under `docs/analysis/pipeline-efficiency-s317-s322/` change with it); both stay PARTIAL. BL-1128 corrects a BL-1059 bullet. BL-1131 and BL-1132 are filed.
+
 ## [0.1136.0] - 2026-11-15
 
 ### BL-1115 CLOSED: pass and key records leave the per-clone git dir

@@ -54,6 +54,11 @@
 #   RAM     the re-review a MERGED file (the real merge's output, every reviewed-sha naming G1): RA1's answer.
 #   receipt-bl931.sh reads the six outputs and prints `receipt-bl931: PASS` (BL-931), after asserting RA1 and RA0
 #   differ by exactly the p2 file, --gate1-rerun from WK answers RERUN and from G1 answers SKIP.
+#   G3K     RULE A AT GATE 1: gate 1 pass 2 over the rework worktree (frozen RSHA) after a gate-3 rework, the pass-1
+#           gate-1 review APPROVED at G1 and the g3 p1 plan naming G1, so the delta G1..RSHA is a docs .md only: exit 0,
+#           `gate: skip`, `manifest: none`, `route: skip GATE1-SKIP`, no shard line, `rule-a-base: gate1 <G1> ...`, a
+#           next: gate-2 line. control: G3C, the same world with the g3 plan naming RSHA (the remedy gate 3 asked for
+#           at the sha it judged): `gate: 1` and the remedy gate-log line.
 #   G3X     gate 3 with one refusing arm exits 1, writes no g3 plan and leaves OPEN byte-identical.
 #           control: G3.
 #   G3      gate 3 with every arm passing exits 0, its plan carries `nonce: <N>`, and OPEN now reads <N>.
@@ -442,6 +447,30 @@ st_ram() { # the re-review a MERGED review (the real merge's output over the sha
     && grep -q '^gate-log: GATE1-SKIP' "$WD/ram.plan" && V_RAM=1
   V_OPEN=$OPEN_SAME
 }
+# g3run <cell> <gt> <tag> <idx> <g3 sha> : gate 1 pass 2 over the rework worktree (frozen RSHA), after a gate-3 rework:
+# the pass-1 gate-1 review APPROVED at G1 (so G1..RSHA, docs .md only, is the delta) and a g3 p1 plan naming <g3 sha>.
+g3run() {
+  local wt0="$WT"
+  g1f "$RV/$4-code-review.md" APPROVED "$G1"
+  printf 'story: %s\ngate: 3\npass: 1\nsha: %s\n' "$4" "$5" > "$P/$4-g3-p1.plan"
+  WT="$WRA"; gtrun "$1" "$2" "$3" 2 - "$4" 1 --pass 2; WT="$wt0"
+  rm -f "$WD/$3.plan"; [ ! -f "$P/$4-g1-p2.plan" ] || cp "$P/$4-g1-p2.plan" "$WD/$3.plan"
+}
+st_g3k() { # gate 3 judged G1, the rework after it is records only: G3K
+  g3run "$1" "$2" g3k 10-1 "$G1"
+  V_G3K=0
+  [ "$RC" = 0 ] && grep -qx 'gate: skip' "$WD/g3k.plan" && grep -qx 'manifest: none' "$WD/g3k.plan" \
+    && grep -q '^route: skip GATE1-SKIP: ' "$WD/g3k.plan" && [ "$(nshards "$WD/g3k.plan")" = 0 ] \
+    && grep -qxF "rule-a-base: gate1 $G1 $RV/10-1-code-review.md" "$WD/g3k.plan" && grep -q '^next: gate-transition.sh 10-1 2 ' "$WD/g3k.plan" && V_G3K=1
+  V_OPEN=$OPEN_SAME
+}
+st_g3c() { # gate 3 judged RSHA itself, so gate 1 at RSHA is the remedy gate 3 asked for: G3K's control
+  g3run "$1" "$2" g3c 11-1 "$RSHA"
+  V_G3C=0
+  [ "$RC" = 0 ] && grep -qx 'gate: 1' "$WD/g3c.plan" && ! grep -q '^route: skip' "$WD/g3c.plan" \
+    && grep -q '^gate-log: Rule A at gate 1: .* a re-review gate 3 asked for, so it runs$' "$WD/g3c.plan" && V_G3C=1
+  V_OPEN=$OPEN_SAME
+}
 st_g3x() { # gate 3, the H2 arm refusing: G3X
   gtrun "$1" "$2" g3x 2 validate-h2-attestation.sh 1-1 3 --transcript-dir "$WD/td"
   V_G3X=0
@@ -637,6 +666,12 @@ case "$r931" in
   9) echo "FIXTURE BROKEN: receipt-bl931.sh refused to measure: $(head -1 "$WD/r931.out")" >&2; exit 2 ;;
   *) bad "BL-931 receipt exited $r931: $(tr '\n' ' ' < "$WD/r931.out" | cut -c1-300)" ;;
 esac
+st_g3k g3k "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+[ "$V_G3K" = 1 ] && ok "G3K gate 1 pass 2 after a gate-3 rework over a records-only delta: gate: skip, route: skip GATE1-SKIP, no shard line" \
+  || bad "G3K rc=$RC: $(grep -E '^(gate|route|rule-a-base|next|gate-log):' "$WD/g3k.plan" 2> /dev/null | tr '\n' ' ' | cut -c1-400) $(head -3 "$WD/g3k.err" | tr '\n' ' ' | cut -c1-300)"
+st_g3c g3c "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+[ "$V_G3C" = 1 ] && ok "G3K control: the same pass at the sha gate 3 judged is the remedy gate 3 asked for: gate: 1, a seat" \
+  || bad "G3K control rc=$RC: $(grep -E '^(gate|route|gate-log):' "$WD/g3c.plan" 2> /dev/null | tr '\n' ' ' | cut -c1-400) $(head -3 "$WD/g3c.err" | tr '\n' ' ' | cut -c1-300)"
 [ "$O12" = 1 ] && ok "OPEN12 the live OPEN is byte-identical across every gate-1 and gate-2 run" || bad "OPEN12 a gate-1 or gate-2 run moved the live OPEN"
 
 st_g3x g3x "$GT3"

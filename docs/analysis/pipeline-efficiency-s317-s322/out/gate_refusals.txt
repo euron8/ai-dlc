@@ -1,0 +1,160 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z; graph lead transcripts read only; gate-transition.sh from graph f7e60625b in a file:// scratch clone. Command: EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/gate_refusals.py
+window 2026-10-05T14:00:00Z .. 2026-11-12T14:41:00Z  root /Users/n8/.claude/projects/-Users-n8-git-graph  gate-transition.sh f7e60625b:scripts/ai-dlc/gate-transition.sh  (step state from 2026-09-26T00:35:00Z)
+scan parity: Bash calls 35624, idx mismatches against scan_all 0; bare-index alias conflicts 0
+CONTROLS (same run):
+  s321 gate-transition.sh calls: evidence 160, here 160 (expected 160); refused: evidence 34, here b2 34, here parsed groups 34 (expected 34)  OK
+      could-not-run: evidence 1 (die line or exit 2 of the command), here calls with a die() line 0; passed: evidence 115
+  s322 gate-transition.sh calls: evidence 82, here 82 (expected 82); refused: evidence 19, here b2 19, here parsed groups 19 (expected 19)  OK
+      could-not-run: evidence 0 (die line or exit 2 of the command), here calls with a die() line 0; passed: evidence 45
+  negative control: impossible token raw-text count 0 (must be 0), invoked 0 (must be 0); positive control gate-transition.sh invoked 242 (must be > 0)  OK
+
+== Q1  what gate-transition.sh refused
+s321: gate-transition.sh calls 160 (resolved 150, UNRESOLVED bg 10, persisted 0, no-result 0); refused calls (evidence b2) 34; calls with a parsed REFUSED line 34; calls with a die() line 0
+s322: gate-transition.sh calls 82 (resolved 64, UNRESOLVED bg 18, persisted 0, no-result 0); refused calls (evidence b2) 19; calls with a parsed REFUSED line 19; calls with a die() line 0
+s321: refusal reasons parsed 36 (unkeyed, closing line cut off: 0)
+  VALIDATOR-FINDING  occurrences  15  distinct (story,gate,reason)  14  distinct incl. pass  14  retries (occurrences - distinct) 1
+      handoff-evidence:dar-heads-stale               occurrences   5  distinct (story,gate)   4
+      handoff-evidence:smoke-listed-absent           occurrences   3  distinct (story,gate)   3
+      check-16:element1-item-ref                     occurrences   2  distinct (story,gate)   2
+      handoff-strategy:empty-cell                    occurrences   2  distinct (story,gate)   2
+      handoff-strategy:node-missing                  occurrences   1  distinct (story,gate)   1
+      handoff-evidence:full-collection-missing       occurrences   1  distinct (story,gate)   1
+      handoff-evidence:dar-heads-missing             occurrences   1  distinct (story,gate)   1
+  PROCEDURAL         occurrences  21  distinct (story,gate,reason)  20  distinct incl. pass  20  retries (occurrences - distinct) 1
+      dar-fold                                       occurrences   9  distinct (story,gate)   9
+      prior-validation                               occurrences   6  distinct (story,gate)   5
+      prior-review                                   occurrences   4  distinct (story,gate)   4
+      record-partition                               occurrences   2  distinct (story,gate)   2
+s322: refusal reasons parsed 20 (unkeyed, closing line cut off: 0)
+  VALIDATOR-FINDING  occurrences  13  distinct (story,gate,reason)  11  distinct incl. pass  11  retries (occurrences - distinct) 2
+      check-5                                        occurrences   3  distinct (story,gate)   2
+      handoff-evidence:full-collection-none          occurrences   2  distinct (story,gate)   2
+      handoff-evidence:full-collection-missing       occurrences   2  distinct (story,gate)   2
+      check-2                                        occurrences   2  distinct (story,gate)   1
+      check-16:element1-item-ref                     occurrences   1  distinct (story,gate)   1
+      handoff-strategy:empty-cell                    occurrences   1  distinct (story,gate)   1
+      handoff-evidence:no-command                    occurrences   1  distinct (story,gate)   1
+      handoff-evidence:dar-heads-stale               occurrences   1  distinct (story,gate)   1
+  PROCEDURAL         occurrences   7  distinct (story,gate,reason)   5  distinct incl. pass   6  retries (occurrences - distinct) 2
+      dar-fold                                       occurrences   4  distinct (story,gate)   3
+      prior-validation                               occurrences   2  distinct (story,gate)   1
+      close                                          occurrences   1  distinct (story,gate)   1
+COULD-NOT-RUN (die(), exit 2; a wrong argument, missing path; no REFUSED line, so not in the refused counts):
+  none
+invocation outcome (markers, per call output; never the command's final status):
+  s321: literal-key invocations 161; closed refusal groups 34; pass markers 117; resolved calls with neither marker 1
+  s322: literal-key invocations 82; closed refusal groups 19; pass markers 40; resolved calls with neither marker 5
+value reading, one row per distinct VALIDATOR-FINDING (story,gate,reason) at its first occurrence [later PASS = same story+gate; same pass preferred; between = tool_use kinds after the refusal up to that pass]:
+  s321 story 3.1 g1 handoff-evidence:dar-heads-stale         PASS          same-pass   1.2 min  named-story edit 0, commit/cp/mv 0, dispatch 1 | all lead events edit 0, commit/cp/mv 2, dispatch 4
+        reason text: dar-heads-stale _bmad-output/planning-artifacts/s321/stories/story-3-1-absence-record-and-both-idle-helper.md: the capture-heads block diffe
+  s321 story 3.1 g1 handoff-evidence:smoke-listed-absent     PASS          same-pass   0.4 min  no event naming the story | all lead events edit 0, commit/cp/mv 0, dispatch 1
+        reason text: smoke-listed-absent _bmad-output/planning-artifacts/s321/stories/story-3-1-absence-record-and-both-idle-helper.md: `docs/smoke-surface.txt` 
+  s321 story 3.2 g1 handoff-evidence:dar-heads-stale         PASS          same-pass   1.8 min  named-story edit 0, commit/cp/mv 4, dispatch 1 | all lead events edit 0, commit/cp/mv 4, dispatch 2
+        reason text: dar-heads-stale _bmad-output/planning-artifacts/s321/stories/story-3-2-tunnel-library-refuses-ambiguous-service-label.md: the capture-heads 
+  s321 story 3.1 g3 check-16:element1-item-ref               NO LATER PASS later invocations 3   0.0 min  
+        reason text: FINDING scripts/tests/test-rebalancer-idle.sh:180 element1-item-ref — the comment block cites no 'Item N' carry-over reference
+  s321 story 2.1 g1 handoff-evidence:smoke-listed-absent     PASS          same-pass   4.7 min  named-story edit 0, commit/cp/mv 0, dispatch 2 | all lead events edit 0, commit/cp/mv 3, dispatch 5
+        reason text: smoke-listed-absent _bmad-output/planning-artifacts/s321/stories/story-2-1-reserve-audit-report-and-pinned-span-findings.md: `docs/smoke-sur
+  s321 story 1.2 g1 handoff-evidence:dar-heads-stale         PASS          same-pass   0.8 min  named-story edit 0, commit/cp/mv 0, dispatch 1 | all lead events edit 0, commit/cp/mv 1, dispatch 1
+        reason text: dar-heads-stale _bmad-output/planning-artifacts/s321/stories/story-1-2-instance-chain-selector-and-predicate.md: the capture-heads block dif
+  s321 story 5.1 g1 handoff-evidence:smoke-listed-absent     PASS          same-pass   0.6 min  named-story edit 0, commit/cp/mv 0, dispatch 2 | all lead events edit 0, commit/cp/mv 1, dispatch 2
+        reason text: smoke-listed-absent _bmad-output/planning-artifacts/s321/stories/story-5-1-base-ecs-service-in-cdk.md: `docs/smoke-surface.txt` in ## Smoke 
+  s321 story 4.3 g1 handoff-evidence:dar-heads-missing       PASS          same-pass   5.1 min  named-story edit 0, commit/cp/mv 1, dispatch 2 | all lead events edit 0, commit/cp/mv 2, dispatch 2
+        reason text: dar-heads-missing _bmad-output/planning-artifacts/s321/stories/story-4-3-rebalancer-matic-and-base-pages.md: the story cites a capture and c
+  s321 story 5.2 g3 check-16:element1-item-ref               PASS          same-pass   2.6 min  named-story edit 0, commit/cp/mv 2, dispatch 1 | all lead events edit 0, commit/cp/mv 4, dispatch 2
+        reason text: FINDING infra/test/ingress-cicd-monitoring-stacks.test.ts:37 element1-item-ref — the comment block cites no 'Item N' carry-over reference
+  s321 story 5.4 g1 handoff-evidence:dar-heads-stale         NO LATER PASS later invocations 3   0.0 min  
+        reason text: dar-heads-stale <S54>: the capture-heads block differs from the render at 9aebd5860a9a, line 2 of the block: story [- `_bmad-output/implemen
+  s321 story 5.4 g1 handoff-strategy:empty-cell              NO LATER PASS later invocations 3   0.0 min  
+        reason text: empty-cell <S54>: ST321-138 case - has an empty Kind cell
+  s321 story 2.4 g1 handoff-strategy:node-missing            PASS          same-pass   0.9 min  named-story edit 0, commit/cp/mv 0, dispatch 1 | all lead events edit 0, commit/cp/mv 1, dispatch 1
+        reason text: node-missing _bmad-output/planning-artifacts/s321/stories/story-2-4-offramp-sweep-sizes-from-balance-less-reserve.md: ST321-63 case - names 
+  s321 story 6.2 g1 handoff-evidence:full-collection-missing PASS          same-pass   5.1 min  named-story edit 0, commit/cp/mv 2, dispatch 4 | all lead events edit 0, commit/cp/mv 4, dispatch 4
+        reason text: full-collection-missing _bmad-output/planning-artifacts/s321/stories/story-6-2-claude-md-covers-both-instances.md: no 'Full-collection run:'
+  s321 story 6.2 g1 handoff-strategy:empty-cell              PASS          same-pass   5.1 min  named-story edit 0, commit/cp/mv 2, dispatch 4 | all lead events edit 0, commit/cp/mv 4, dispatch 4
+        reason text: empty-cell _bmad-output/planning-artifacts/s321/stories/story-6-2-claude-md-covers-both-instances.md: ST321-163 case - has an empty Kind cel
+  s322 story 1.6 g1 handoff-evidence:full-collection-missing PASS          same-pass   2.3 min  named-story edit 0, commit/cp/mv 0, dispatch 2 | all lead events edit 0, commit/cp/mv 0, dispatch 3
+        reason text: full-collection-missing _bmad-output/planning-artifacts/s322/stories/story-1-6-test-harness-repair-measure-and-cap.md: no 'Full-collection r
+  s322 story 1.6 g1 handoff-strategy:empty-cell              PASS          same-pass   2.3 min  named-story edit 0, commit/cp/mv 0, dispatch 2 | all lead events edit 0, commit/cp/mv 0, dispatch 3
+        reason text: empty-cell _bmad-output/planning-artifacts/s322/stories/story-1-6-test-harness-repair-measure-and-cap.md: S322-1.6-AC1 case - has an empty K
+  s322 story 1.6 g1 handoff-evidence:full-collection-none    PASS          same-pass   0.5 min  named-story edit 0, commit/cp/mv 0, dispatch 1 | all lead events edit 0, commit/cp/mv 0, dispatch 1
+        reason text: full-collection-none _bmad-output/planning-artifacts/s322/stories/story-1-6-test-harness-repair-measure-and-cap.md: 'Full-collection run: (c
+  s322 story 1.6 g3 check-5                                  PASS          same-pass   0.8 min  named-story edit 1, commit/cp/mv 0, dispatch 0 | all lead events edit 1, commit/cp/mv 0, dispatch 0
+        reason text: sprint-status check-stories: sprint 322
+  s322 story 1.7 g1 handoff-evidence:no-command              PASS          same-pass   0.9 min  named-story edit 0, commit/cp/mv 0, dispatch 1 | all lead events edit 0, commit/cp/mv 0, dispatch 1
+        reason text: no-command test-results/s322-1-7-canonical-n8.txt: none of its first 25 lines is a command line ('$ <command>', 'command: <command>', 'cmd=<
+  s322 story 1.7 g3 check-5                                  PASS          same-pass  20.2 min  no event naming the story | all lead events edit 0, commit/cp/mv 3, dispatch 0
+        reason text: sprint-status derive-stories: sprint 322, fields status, priority, model, gate_1_model, effort, capital_path, acceptance_criteria (--check: 
+  s322 story 1.7 g3 check-2                                  PASS          same-pass  19.6 min  no event naming the story | all lead events edit 0, commit/cp/mv 3, dispatch 0
+        reason text: FAIL validate-suppression-lifetime.sh (rc=1)
+  s322 story 1.3 g1 handoff-evidence:dar-heads-stale         PASS          same-pass   1.1 min  named-story edit 0, commit/cp/mv 1, dispatch 1 | all lead events edit 0, commit/cp/mv 2, dispatch 1
+        reason text: dar-heads-stale _bmad-output/planning-artifacts/s322/stories/story-1-3-smoke-nav-button-count-derived.md: the capture-heads block differs fr
+  s322 story 1.4 g1 handoff-evidence:full-collection-missing PASS          same-pass   0.5 min  named-story edit 0, commit/cp/mv 0, dispatch 1 | all lead events edit 1, commit/cp/mv 0, dispatch 2
+        reason text: full-collection-missing _bmad-output/planning-artifacts/s322/stories/story-1-4-check-926-path-keyed-clean-line.md: no 'Full-collection run:'
+  s322 story 1.4 g3 check-16:element1-item-ref               PASS          same-pass   5.8 min  named-story edit 1, commit/cp/mv 1, dispatch 1 | all lead events edit 1, commit/cp/mv 2, dispatch 1
+        reason text: FINDING scripts/ai-dlc-local/lib/meta-gate.sh:2 element1-item-ref — the comment block cites no 'Item N' carry-over reference
+  s322 story 1.8 g1 handoff-evidence:full-collection-none    NO LATER PASS later invocations 6   0.0 min  
+        reason text: full-collection-none _bmad-output/planning-artifacts/s322/stories/story-1-8-xdist-crash-admission-controls.md: 'Full-collection run: not run
+  distinct validator-finding units 25; later PASS 21 (an event naming that story between 18, none naming it 3); no later PASS 4
+  distinct PROCEDURAL units 25; later PASS on the same story+gate 16
+
+== Q2  hand-run repeat share with a derived story key
+tuple scope (story-scoped = gate-transition.sh passes it $STORY/$WT/$SHA/$IDX/$BASE/$1):
+   sprint sprint-status.sh                   check-stories              gates 3
+   sprint sprint-status.sh                   derive-stories --check     gates 3
+   story  validate-carried-findings.sh       --list                     gates 1,2
+   sprint validate-escalation-resolution.sh  (default)                  gates 3
+   sprint validate-h2-attestation.sh         --verify                   gates 3
+   story  validate-handoff-evidence.sh       (default)                  gates 1
+   story  validate-handoff-evidence.sh       --gate2                    gates 2
+   story  validate-handoff-evidence.sh       --list-captures            gates 1,2
+   story  validate-handoff-evidence.sh       --smoke                    gates 2
+   story  validate-handoff-evidence.sh       --strategy                 gates 1
+   story  validate-provenance-block.sh       --require-skill            gates 3
+   sprint validate-spawn-ledger.sh           (default)                  gates 3
+   sprint validate-spawn-ledger.sh           --fold-architect           gates 3
+   story  validate-stub-audit.sh             --changed-from             gates 3
+   sprint verdict.sh                         validate-escalation-status-vocabulary gates 3
+   sprint verdict.sh                         validate-suppression-lifetime gates 3
+control s321: in-step rows 236 vs gate_run_evidence.compute hr_in 236  OK
+control s322: in-step rows 16 vs gate_run_evidence.compute hr_in 16  OK
+story-key coverage (in-step rows):
+  321   : rows 236; sprint-wide (no story to key, joined on gate) 205; story-scoped 31: T1 12, T2 13, T3 1 (strict key 26 = 83.9%), T4 recency 4, no key 1
+          verdict resolved: found 3 clean 56 recorded 1; unresolved 176
+  322   : rows 16; sprint-wide (no story to key, joined on gate) 10; story-scoped 6: T1 3, T2 3, T3 0 (strict key 6 = 100.0%), T4 recency 0, no key 0
+          verdict resolved: found 1 clean 7 recorded 0; unresolved 8
+  pooled: rows 252; sprint-wide (no story to key, joined on gate) 215; story-scoped 37: T1 15, T2 16, T3 1 (strict key 32 = 86.5%), T4 recency 4, no key 1
+          verdict resolved: found 4 clean 63 recorded 1; unresolved 184
+  structurally excluded: a sprint-wide tuple has no story; a story named only in a file the validator READS (not in its arguments, command or result) is invisible; a bare s322 worktree index with no gate-transition call carrying both forms is unmapped (bare map {'s322:1': '1.1', 's322:2': '1.2', 's322:3': '1.3', 's322:4': '1.4', 's322:5': '1.5', 's322:6': '1.6', 's322:7': '1.7', 's322:8': '1.8'}); T4 inherits recency and can be wrong when the lead switches story.
+threshold 50% same-verdict repeats of in-step rows; LOWER = T1-T3 keys, MID = + T4, CEILING = story ignored (gate kept)
+  s321 N= 5: rows 236; repeats (any verdict) LOWER 12 (5.1%) MID 12 (5.1%) CEILING 13 (5.5%) [control: gate_run_evidence story-ignored count 13 OK]; same-verdict LOWER 4 (1.7%) MID 4 (1.7%); of the LOWER repeats 9 are sprint-wide rows
+  s321 N=20: rows 236; repeats (any verdict) LOWER 43 (18.2%) MID 43 (18.2%) CEILING 48 (20.3%) [control: gate_run_evidence story-ignored count 48 OK]; same-verdict LOWER 14 (5.9%) MID 14 (5.9%); of the LOWER repeats 39 are sprint-wide rows
+  s322 N= 5: rows 16; repeats (any verdict) LOWER 3 (18.8%) MID 3 (18.8%) CEILING 3 (18.8%) [control: gate_run_evidence story-ignored count 3 OK]; same-verdict LOWER 0 (0.0%) MID 0 (0.0%); of the LOWER repeats 3 are sprint-wide rows
+  s322 N=20: rows 16; repeats (any verdict) LOWER 7 (43.8%) MID 7 (43.8%) CEILING 7 (43.8%) [control: gate_run_evidence story-ignored count 7 OK]; same-verdict LOWER 1 (6.2%) MID 1 (6.2%); of the LOWER repeats 4 are sprint-wide rows
+per tuple at N=20 (rows, strict repeats, same-verdict repeats):
+  s321 sprint-status.sh                   check-stories              rows  49  repeats  17  same-verdict   4
+  s321 sprint-status.sh                   derive-stories --check     rows  53  repeats  15  same-verdict   4
+  s321 validate-carried-findings.sh       --list                     rows   9  repeats   2  same-verdict   2
+  s321 validate-escalation-resolution.sh  (default)                  rows  24  repeats   2  same-verdict   1
+  s321 validate-h2-attestation.sh         --verify                   rows  25  repeats   3  same-verdict   1
+  s321 validate-handoff-evidence.sh       (default)                  rows   1  repeats   0  same-verdict   0
+  s321 validate-handoff-evidence.sh       --strategy                 rows   1  repeats   1  same-verdict   0
+  s321 validate-provenance-block.sh       --require-skill            rows   1  repeats   0  same-verdict   0
+  s321 validate-spawn-ledger.sh           (default)                  rows  23  repeats   2  same-verdict   2
+  s321 validate-stub-audit.sh             --changed-from             rows  19  repeats   1  same-verdict   0
+  s321 verdict.sh                         validate-escalation-status-vocabulary rows  21  repeats   0  same-verdict   0
+  s321 verdict.sh                         validate-suppression-lifetime rows  10  repeats   0  same-verdict   0
+  s322 sprint-status.sh                   check-stories              rows   1  repeats   0  same-verdict   0
+  s322 sprint-status.sh                   derive-stories --check     rows   1  repeats   0  same-verdict   0
+  s322 validate-handoff-evidence.sh       (default)                  rows   3  repeats   3  same-verdict   0
+  s322 validate-provenance-block.sh       --require-skill            rows   3  repeats   0  same-verdict   0
+  s322 validate-spawn-ledger.sh           (default)                  rows   1  repeats   1  same-verdict   1
+  s322 validate-spawn-ledger.sh           --fold-architect           rows   4  repeats   0  same-verdict   0
+  s322 verdict.sh                         validate-escalation-status-vocabulary rows   1  repeats   1  same-verdict   0
+  s322 verdict.sh                         validate-suppression-lifetime rows   2  repeats   2  same-verdict   0
+verdict (threshold 50% same-verdict repeats; CEILING bounds every reading above it):
+  s321 N= 5: KEEP               (rows 236, 50% = 118.0; CEILING 13, MID repeats 12, same-verdict LOWER 4)
+  s321 N=20: KEEP               (rows 236, 50% = 118.0; CEILING 48, MID repeats 43, same-verdict LOWER 14)
+  s322 N= 5: KEEP               (rows 16, 50% = 8.0; CEILING 3, MID repeats 3, same-verdict LOWER 0)
+  s322 N=20: KEEP               (rows 16, 50% = 8.0; CEILING 7, MID repeats 7, same-verdict LOWER 1)
+CONTROL STATUS: OK

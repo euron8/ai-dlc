@@ -1173,6 +1173,8 @@ taken from the FIRST adjudicator dispatch, so its window arms see an adjudicator
 read-only arm also refuses, over the whole write ledger, an adjudicator whose batch file is on disk
 and that wrote anything else. `ADJUDICATOR-COUNT: 0` is the round as before.
 
+**Dispatch from the plan file.** A parts-mode join's last line is `PLAN-FILE: <shard dir>/.join-plan`, a byte copy of every line it printed from `JOINED:` on. Read the `ESCALATED:`, `LANE-ARTIFACT:`, `LANE-ARTIFACT-PATH:`, `LANE:`, `LANE-ITEM:`, `FANIN:` and `ADJUDICATE:` lines the lane, fan-in and adjudicator briefs above carry from that file, never from a cut of the join's stdout (`| tail`, `| head`, `| grep`). A join run again over its record refuses and names that file: dispatch from the file, never re-run the join.
+
 After a join refusal naming a file `which no dispatched agent wrote`, or a file `written by more
 than one agent in the window`, or a part whose entry `sets part of the fix aside` and names no
 hand-off:

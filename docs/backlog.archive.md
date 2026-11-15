@@ -44735,3 +44735,146 @@ Provenance: batch 257, filed by ai-dlc-ba under BL-1045 on lead ai-dlc-35's ruli
 
 verify: manual
 
+## BL-1059 — the heaviest fixtures pay for arms and worlds a narrower drive would answer, and one mutant battery re-runs a whole key per mutant
+
+**LANDED (v0.1137.0).** The arm-and-world-cost subject's remainder (the three "Owed" items below) is closed; the mutant-battery subject expired with 0.1130.0. Counted starts are old against new, each from one counted run through `scripts/seed-verdict-store.sh` at `AI_DLC_FIXTURE_JOBS=12` (the old figure is the committed row):
+- review-shard-merge GM1: a receipt whose arm runs in a shipped shard is metered at its own call site and no longer re-driven. `bl980_meter` and the call site's `GIT_TRACE2_EVENT="$BL980_T"` trace that run; `bl980_judge` adds a reason to the arm's WHY unless it made a commit and spawned 0 `git maintenance run` children; `bl980_ctl` runs the raw-git control once per shard. `receipt-bl980.sh` drives only the receipts whose arm runs only in a dist-only shard (bl956, bl988), joining call site to `p_<arm>`, unit, shard and `DIST_SHARDS` through `RSM_ARMTAB`, which is J0's arms derivation in `run.sh` (`p_gmaint` passes it by `--arm-table`; run alone, as `receipt-bl980.sh core/scripts .`, the receipt reads it from `run.sh --arm-table`). On the dist suite bl956 and bl988 still run twice (GM1's drive and their own arms in shards g and f): a cost left for a later efficiency unit, not an Owed item. Archived BL-980's verify line expects `BL980 OK receipts=4`; it read 5 at base and reads 2 after this change; it is not run at the gate. Metered and driven are a partition: neither, both, half-metered, or a call site outside every arm is FIXTURE BROKEN, and receipt-bl904.sh must be metered. Shard a 66 to 63 starts (`inproc:core/scripts/record-only-diff.sh` 47 to 17); shards b-g unchanged (215, 90, 76, 3, 42, 41). Hand probes, once: neither, both and half-metered each exit 2 naming the receipt, and the real tree reads `BL980 OK receipts=2` with bl885, bl885-frozen and bl904 metered; with receipt-bl904.sh's `maintenance.auto=false` removed, story_hist fails on `bl980{receipt-bl904.sh spawned 8 git maintenance run child(ren), want 0}` while its 8 cells still pass.
+- adversarial-shard-merge K2vac: K2vac-core is cut and K2vac-inst kept. pair_sep reads VAC beside the merge in both layouts and answers `=` before the layout-dependent schema chain, and K1-core holds the core layout's VAC lookup. -d stays at 607 starts: the cell was one world copy and one drive through `ASM_RUN=mx` (`adversarial-shard-merge/run.sh`; `mx` in its `lib.sh` runs the merge in a subshell, no bash exec), so it had no counted start.
+- apply-restamp-worklist U3: U3's state (a green consumer, no report) is the seed run's, so U3 reads `OUT_GREEN` and the rc and stamp captured at the seed (`RC_GREEN`, `GREEN_VER0`, before any cf arm touches C_GREEN), and `SEED_RUNS` includes unit u. Shard a 490 to 483 starts (`core/skills/ai-dlc-update/reconcile/apply.sh` 19 to 18).
+
+**PARTIAL (v0.1133.0).** The entry has two subjects. The mutant-battery subject EXPIRED with 0.1130.0 (the "Subjects after 0.1130.0" paragraph below). The arm-and-world-cost subject SURVIVES: this change cuts part of it, and the remainder is named per fixture under "Owed" below. Every cut below keeps every assertion and is judged by counted starts, old against new, each from one counted run through `core/scripts/hermetic-run.sh` (the old figure is the committed row):
+- adversarial-shard-merge-b 629 to 438: `p_xgroups` (X1-X3) builds each mode's K=8 groups world and lone-cross world once (`xg_world`, `wc_get xg-<mode>-<shape>`) and copies it per cell (clause 4). adversarial-shard-merge 486 to 480: `hdr_world` copies one cached B3 world with shard 2 rewritten (`wc_get hdr0`). -c and -d are unchanged (557, 635), and so is content-seal, which sources the same lib.sh (595).
+- owed-derivations 552 to 452: the per-path `--scope` arms on `$RH` and `$RN` (Hs, Hl1-Hl7, Sl, Sl1-4, Hl3, Hn, Ha1-9, Hc1-2) read one `--scope-batch` per root (`smap_load`/`scope_of`; `--scope` is `scope_batch tokens` over one line). The Sc arms stay per-path CLI drives, and Bt1 still byte-compares a batch against per-path `--scope` (clauses 5, 6).
+- apply-drift-refile-c 122 to 98: arm v's four worlds copy one world after its ordinary run (`v_base`). apply-drift-refile-b 142 to 124: arm y's worlds d, l and f copy one `y_two` world after its ordinary run at T (`y_post`) (clause 1). An ordinary apply writes no absolute path of its world into the world (a hand probe, with a `base:` control), so a copy is that state.
+- apply-restamp-worklist-c 71 to 56 (apply.sh 13 to 11): the worklist and decision seed applies, and S1, run only where unit cf reads them. apply-restamp-worklist-b 773 to 759: `ar_flowI`'s second `--verify` is gone; nothing read its output, and a verify with a record present writes none.
+
+**PARTIAL (v0.1135.0).** The arm-and-world-cost subject advances again; the remainder is named under "Owed" below. Counted starts are old against new, each from one counted run through `core/scripts/hermetic-run.sh` with the judge armed (the old figure is the committed row). Every fold was first proved byte-identical by hand in a scratch copy, and every cut was broken once by hand with the arm that caught it named:
+- apply-restamp-worklist-b 759 to 577 (24 assertions, 0 failed): the plain green render at THEIRS is built once in its template (`ar_wr`) for I0, K, KA, M (both) and d1, and flows I, J, N and n3 copy the twin's state after its first plain `--verify` (`ar_wv`, `AR_V1`, rc in `.vrc`) instead of rendering and verifying it again. Two worlds rendered at different paths give byte-identical reports and records, a plain render writes only the report, and apply on a copied verified world gives the in-place tree, output and n3 refusal cause. AR-n4 re-proves it every run (the twin is an `ar_wr` copy; N4S compares it with a fresh render at the copy's path). A template rendered at OTHER turned 11 arms red (AR-h0, I0, i1, j, d1, k x3, n, n4, n3). Shards a, c and d unchanged (490, 56, 121).
+- adversarial-shard-merge 480 to 463, -b 438 to 424, -d 635 to 607 (adversarial-shard-merge's `core/scripts/content-seal.sh` row 130 to 124; -c unchanged at 487): T1's SELF_ID worlds are copies of the cached B3 world with one `tool_use_id:` line rewritten (`self_world`); S1/S4's refused worlds carry no shard writes (`stem_world <name> bare`, the refusal reads the directory name only); WC0 reads the cache template's own build and A1 reads WC0's merge of the same copy; p_t1, p_elic, p_t1_chk and p_t1_dry copy one `kw` world (`t1_world`).
+- review-shard-merge (all seven shards, `*` rows unchanged): the top-level `lib.sh` seed (CR, PROJ_CRS, AD, CRL/CRU/CRB/CLB/CRH, CM, LR, QL/QS, E/F) is built only in the shards whose units read it, from a call-graph closure over every unit's arms; sourcing `lib.sh` ran 748 git commands, 154 of them commits, in every shard. With every unit on, the variable names and per-repo tree sets equal the base's byte for byte (48 rows). Dropping one reader from a gate fails loudly (`CR_B6: unbound variable`, exit 1).
+- owed-derivations 452 to 394: Gd, Ge, Gf and Gg read B1a's, B1e's and B7a's saved reader output (byte-identical, the b1/b7 control differs), and Bt1 reuses Sc1-Sc9's per-path tokens for the 8 paths it shares with `$R` outside `gate-adjudication/` (a live-stem sidecar there reads HISTORY on R, CURRENT on RH).
+- apply-drift-refile 130 to 116, -c 98 to 96: arms w and u lose `ulimit -f 20` (no stage lies between 14336 and 20480 bytes; a builtin-redirect revert reads identically at 14 and 20); u keeps 10 KB (a heredoc revert is green at 10 and red at 14, and an exec-audit stage of 10841 bytes fails only at 10). The `f_case ""` and `ks_ctl_ready` controls read one unforced run of one two-hook copy (rc, stdout, stderr and the consumer tree identical for each pair of copies).
+
+Refuted:
+- apply-restamp-worklist RA-X's exit-0 half is not AR-h0's input: `mk_consumer` runs no `git init`, so C_X0 has no git-dir and takes the no-record path, while AR-h0's world is its own git toplevel; the two are also in different shards.
+- adversarial-shard-merge RS2/RS3: their worlds carry `mk_markers` and a re-edited `findings=1` marker that FI1/FI2's do not, and RS2's plain `### F-1 (MAJOR)` form and RS3's colon-form MAJOR appear in neither FI body. K1-inst/core take different candidates in `validate-provenance-block.sh`'s schema chain.
+- review-shard-merge `receipt-bl988.sh` R1, R3, R4: the receipt drives a two-line conventions file and `p_wrap` a four-line one (`--artifact`, a `--quiet` wrapper, the not-wrappers line), and R3/R4 also assert the run-shape exit.
+- owed-derivations: merging the single-row records or the Rp and B5 rewrites loses each arm's record-level exit and OPEN/INFO count (Sp1 with Sp2 reads rc 1; Sp1 with Sp7 reads 2 INFO). Bt1's other 24 paths have no per-path run anywhere to reuse.
+- apply-restamp-worklist CWD: nothing folds. `mk_consumer` is mkdir and printf only and starts no process, and the arm's one start is its `run_apply` from `/`, the distinct state it asserts.
+
+Owed (the remainder, closed by the LANDED paragraph above):
+- review-shard-merge GM1 (`p_gmaint`): a consumer runs shards a-d only, and `receipt-bl956` and `receipt-bl988` are called only from units in the dist-only shards f and g, so GM1's `receipt-bl980.sh` drive is the only consumer-side run of those two receipts. Removing it needs a static join from each receipt's call site to a unit in a shipped shard plus a shipped-shard drive for those two: a mechanism change.
+- adversarial-shard-merge K2vac-inst/core: `pair_sep` exits before any layout-dependent step, so both cells take one branch; not cut because it would remove an ok line and the cell's start count is unmeasured.
+- apply-restamp-worklist: the CWD arm and U3 repeat seed states, but C_WORK is mutated by later cf arms, so neither folds cleanly.
+
+**DEFECT.** OPEN. Filed 2026-11-13. Owner: the matrix fixtures under `core/fixtures/` named below.
+
+procsub-staged-refusal-boot's plain run scores every mutant against every arm of its key, not its deciding arm and one twin. adversarial-shard-merge, backlog-receipt-binding, owed-derivations, apply-drift-refile, apply-restamp-worklist and review-shard-merge already score decides plus one twin on a plain run; their cost is in arms and worlds (fixture-mutants clauses 1, 4 and 5).
+
+**Progress (batch 257; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** Two whole-key batteries are narrowed, each kill set identical old against new by name:
+
+- procsub-staged-refusal-boot (+b, +c): its 43 mutants score their deciding arm and one twin; counted starts 3041 to 2191 (1197/763/1081 to 734/673/784).
+- story-evidence-scaffold: the five DAR-N mutants each re-scored all 28 `DARN_WORLDS`. Each now runs the worlds its own want moves plus the first world it holds (`darn_sel`), and a kill must also differ from the control there; the 28-world vector is the `DAR_FULL=1` authoring check. 140 world runs per push become 28. Counted starts are unchanged (42; the subjects run in process, so the saving is seconds, not starts): the DAR-N mutant segment of a timestamped plain run read 177 s of 691 s.
+
+The premise that every heavy fixture re-runs whole worlds per mutant did not hold: no push path passes `--matrix` (0 hits in `.githooks/pre-push`, `core/scripts/hermetic-run.sh` and `scripts/validate-fixture-invocations.sh`), and each fixture below scores decides plus one twin on a plain run. What remains is arm and world cost, owed under clauses 1, 4 and 5. Plain wall seconds on 4c3a82362, five runs in parallel at load average 36-43, so loaded and not comparable to a pool figure; counted starts from each `invocations.decl`:
+
+- adversarial-shard-merge: 2437 s, 3125 starts (its worlds already build once through `wc_get`). A timestamped plain run at load 7-23 read 1143 s: 364 s on mutant lines (deciding arm and twin already), 779 s over 208 arm lines, about 4 s each, the largest 30 s.
+- backlog-receipt-binding: 2210 s, 2851 starts; 2110 are `scripts/validate-backlog-receipts.sh`, whose `--score-one` workers start one bash per receipt per in-process drive (119 drives). A timed copy (each in-process drive stamped) read 100 drives in 1866 s loaded, about 20-35 s each, and self-probe-killed mutants cost the same as corpus ones (m1 24 s, m19 14 s, r1g-a 17 s, r1g-b 63 s): the bulk of a drive is the self-probes firing again under each mutant copy's own probe-record key. Driving the 5 self-probe-killed mutants (m1, m19, m-loose, r1g-a, r1g-b) probe-only would save about 60-100 s, so it was stopped; the other 43 decide on corpus rows and need the full run. The lever is subject-side: the per-copy probe-record keying.
+- owed-derivations: 909 s, 1961 starts; 267 s in the timestamped run, released to G3.
+- apply-drift-refile: 913 s, 877 starts; 283 s in the timestamped run, released to H5.
+- apply-restamp-worklist (+b, +c): 157 / 288 / 149 s, pool figures from `.git/ai-dlc-fixture-durations.last` (the 23:06 run). review-shard-merge (+b): 752 / 651 s, only in the older, heavier-load durations record.
+
+**Subjects after 0.1130.0 (the entry stays OPEN).** The first subject, the mutant batteries (procsub-staged-refusal-boot's whole-key battery and story-evidence-scaffold's DAR-N mutants), EXPIRED when 0.1130.0 (56877eb4d) deleted every mutation battery: `grep -ci mutant` reads 0 in each of `core/fixtures/procsub-staged-refusal-boot{,-b,-c}/run.sh` (119 in `procsub-staged-refusal-boot/run.sh` at `56877eb4d^`) and 0 across `core/fixtures/story-evidence-scaffold*/run.sh`. `backlog-receipt-binding` was deleted in the same release, so its row above is gone. The second subject SURVIVES: the arm and world cost of adversarial-shard-merge, owed-derivations, apply-drift-refile, apply-restamp-worklist and review-shard-merge, all present at 9ee073be0, owed under fixture-mutants clauses 1, 4 and 5.
+
+Receipt: `verify: manual`. The evidence is each fixture's counted run, old against new, by name.
+
+verify: manual
+
+## BL-1120 — hermetic-consumption seeds e, m, o and p and release-version arm E are unseeded since the self-probe deletions
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/hermetic-consumption/run.sh`, `core/fixtures/release-version-triple/run.sh`, `scripts/validate-hermetic-consumption.sh:74`-`:75`.
+
+0.1134.0 (BL-1102) deleted both validators' per-run self-probes. Neither fixture gained the seeds that only those probes carried.
+
+hermetic-consumption's worlds (header `:18`-`:30`; world ids w1-w5 and w7-w12) seed the shapes of the old probe's a, b, c, d, f, h (w7, the `.dist-only` marker), j, k, l and n. Four have no seed:
+- `e-non-bang`: a fixed `!` input beside an unmarked input echoed in its core branch only. It is the only shape that separates `!`-keyed from every-line keying.
+- `m-grepq`: a branch that names the consumer path in a `grep -qF`.
+- `o-varlater`: a layout chain whose sentinel is emitted later through a variable.
+- `p-heredoc`: a column-0 sentinel inside a heredoc body, after the chain.
+
+In the fixture, `grep -qF`, `LAY=` and `<<EOF` each count 0. The control, `vhc_main`, counts 8. The old probe's g (override branch) is not counted: its world w6 was deleted with the override it tested.
+
+The validator's header (`:74`-`:75`) now says the m and o narrowings got seeds of their own "in the fixture". No such world exists, so that sentence is false.
+
+release-version arm E (committed conflict markers, `arm_e`, `scripts/validate-release-version.sh:574`) lost `rv_probe_e_tree`. It held a seeded offender and three near-misses: `setext.md`, `nospace.md`, and `openonly.md`, the truncated-conflict limit. release-version-triple referenced `rv_probe_e_tree` twice at 0.1133.0 and does not at 0.1134.0. Its only arm-E drive (`:118`-`:124`) is a passing input, and it contains no `<<<<<<<`. So nothing shows that arm E can fire.
+
+Fix: add the four shapes as hermetic-consumption worlds, each edited from the real producer as the others are, or record a drop for each; then make `:74`-`:75` true. Give release-version-triple one arm-E world with the offender and the near-misses. Prove both can fail by hand, once.
+
+**LANDED (v0.1137.0).** hermetic-consumption gains four worlds, each edited from `consumer-machinery-inventory/run.sh` as the others are: w13 `e-non-bang`, the producer's second chain echoing an unmarked `core/skills/ai-dlc/`, appended to the subject's inputs.decl, in its core branch only; w14 `m-grepq`; w15 `o-varlater`; w16 `p-heredoc`. `edit()` now passes its text through `ENVIRON`, so a multi-line insert keeps its newlines. The validator's header names the world that holds each narrowing (w13-w16, and w4 for the whole-token compare). release-version-triple gains an arm-E world. Its offender's bytes come from a real conflicting `git merge` (`merge.conflictStyle=merge`). Its near-misses are `nospace.md` and `openonly.md`, each edited from the offender, and `setext.md`. The world runs once through the whole program (`rv_main`, in process) and asserts exit 1 and one FAIL line naming exactly `offender.md`, with `ls-tree` listing all four. Assertion 1 is the ALLOW twin. Hand-run mutants, once, each killed by its own world: every-non-comment-line keying by w13 (also w8 and arm c); the file-test-operand `continue` deleted by w14 (also arm c); `if (!local_) continue` deleted by w15 (also arm c); the heredoc skip disabled by w16 alone; the prefix compare by w4 and w10. Arm E: an empty open-marker side, the open marker without its space, no intersection, and the `^=======$` widening, each killed by the exact-list assertion. Both fixtures move onto `lib/report.sh`, and their `:report` rows leave `fixture-contract-allowlist.txt`.
+
+Provenance: batch 257, wave 4, filed by ai-dlc-a8 from ai-dlc-f1's B10 note (relayed by lead ai-dlc-35); the relay listed h, and w7 seeds it; id allocated by the lead.
+
+verify: manual
+
+## BL-1121 — validate-write-format-steering accepts `--render` and `--check FILE` and does nothing with either
+
+**NOTE.** Filed 2026-11-15. Owner: `core/scripts/validate-write-format-steering.sh:77`-`:78` (usage), `:124`-`:146` (parser).
+
+**LANDED (v0.1137.0).** Both flags are deleted from the usage block and the parser, with the `--check` empty-argument guard and the `MODE`/`CHECK_FILE` initialisers; `--render` and `--check` now exit 2 as unknown arguments. Re-derived at d619fe62a, base and tip: a plain run, `--report` and `--max-undeclared 15` are md5-identical (plain `93e7d5c3e9ae9042f20150a5d3762de3`); `--render`, `--check /dev/null` and `--check docs/no-such-file.md` go from rc 0 to rc 2. No generated region exists for either mode, so the build alternative had no subject.
+
+The usage block advertises `--render` ("print the derived header table") and `--check FILE` ("byte-compare FILE's region"). The parser sets `MODE` and `CHECK_FILE`. The only reader of `MODE` is the empty-argument guard at `:144`, so both modes fall through to the default validation.
+
+Measured at 39184970b. A plain run, `--render`, `--check /dev/null` and `--check docs/no-such-file.md` all exit 0 with byte-identical output (md5 `a2ed2b569bbd77d3cf16ebdeb4353058`, 8 lines). The control: `--no-such-arg` exits 2. At 0.1133.0 the only other reader was the `self-probe` branch, so the two modes were inert before BL-1102 too. No script, hook or fixture passes either flag. Outside the backlog, `git grep` finds only the validator's own 3 lines: the two usage lines and the `:145` message. The control: 23 files name the validator.
+
+Fix: delete both flags from the usage and the parser, so that each is refused as an unknown argument. Alternatively, build `--render` and `--check` against a real generated region, if one exists.
+
+Provenance: batch 257, wave 4, filed by ai-dlc-a8 from ai-dlc-f1's B10 note (relayed by lead ai-dlc-35); id allocated by the lead.
+
+verify: manual
+
+## BL-1123 — the gate procedures never tell the lead to dispatch from the join's `PLAN-FILE`
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/skills/ai-dlc/steps/_gate-procedures.md` (the join and lane-dispatch prose, `:1084`-`:1130`; pinned by `core/fixtures/process-rule-pins`).
+
+BL-716's 0.1133.0 PARTIAL made `core/scripts/join-remediator-shards.sh` write every line from `JOINED:` on to `<shard dir>/.join-plan` (`:3421`). Its last line is `PLAN-FILE: <shard dir>/.join-plan` (`:3537`). That PARTIAL was caused by graph s323's lead, which ran the join through `| tail -30`, lost the LANE and batch lines, and dispatched 0 of 8 adjudicators. The procedure that consumes the plan still teaches only stdout lines (`LANE:`, `LANE-ITEM:`, `FANIN:`, `ADJUDICATE:`), and nothing tells the lead that the plan file exists or that dispatch reads from it.
+
+At 39184970b, `join-plan` and `PLAN-FILE` occur 0 times across `core/skills/` and `core/team-roles/`. The control: 4 files under `core/skills/ai-dlc/steps/` name `join-remediator-shards.sh`, and `_gate-procedures.md` names it on 12 lines.
+
+The engine half partly covers this: a tail keeps the last line, and a refused re-join names the file. The procedure is still the carrier a lead follows.
+
+Fix: in the prose that dispatches lanes, the fan-in and the adjudicators, say that the dispatch reads `PLAN-FILE`'s file, never a cut of stdout. Put it on its own line outside every pinned paragraph. Owner of the dispatch prose: the `_gate-procedures` holder of the batch.
+
+Provenance: batch 257, wave 4, filed by ai-dlc-a8 from ai-dlc-35 [4bb187]'s finding (commit 681e93823) as summarized by lead ai-dlc-35; id allocated by the lead.
+
+**LANDED (v0.1137.0).** `_gate-procedures.md` "Adversarial repair dispatch" gains its own paragraph, **Dispatch from the plan file.**, between the adjudicators paragraph and "After a join refusal": the lane, fan-in and adjudicator briefs read `ESCALATED:`, `LANE-ARTIFACT:`, `LANE-ARTIFACT-PATH:`, `LANE:`, `LANE-ITEM:`, `FANIN:` and `ADJUDICATE:` lines from the file `PLAN-FILE:` names, never from a cut of stdout, and a refused re-join is dispatched from that file. No pinned paragraph changed. Batch 257 wave 6, ai-dlc-f0 [e049a5].
+
+verify: manual
+
+## BL-1127 — BL-550's PARTIAL line cites a session's unit where it should cite the gate-procedures lines that shipped
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `docs/backlog.md`, BL-550 (its `**PARTIAL (v0.1135.0)` paragraph).
+
+The line says the `_gate-procedures.md` clauses that put the `cited-paths:` block into party, elicitation and adversary briefs "ship in ai-dlc-74's unit of the same bundle". A session name is not a reference a later reader can resolve. At d619fe62a the clauses are `core/skills/ai-dlc/steps/_gate-procedures.md:374` (seat briefs), `:557` (elicitation shard briefs) and `:728` (adversary briefs). That file names `cited-paths` on 3 lines, against 0 at 39184970b. The control: `core/team-roles/adversary.md` names it once.
+
+Fix: replace "ship in ai-dlc-74's unit of the same bundle" with "are `_gate-procedures.md:374`, `:557` and `:728`".
+
+Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b; id allocated by the lead.
+
+**LANDED (v0.1137.0).** BL-550's `**PARTIAL (v0.1135.0)` paragraph now cites the clauses as `_gate-procedures.md:374`, `:557` and `:728`, re-derived on 27fded102 by `grep -n cited-paths core/skills/ai-dlc/steps/_gate-procedures.md` (3 lines, the same three as at d619fe62a; control: `core/team-roles/adversary.md` names it once).
+
+verify: manual
+
+## BL-1128 — BL-1059's "content-seal's row 130 to 124" does not say which fixture's row moved
+
+**LANDED (v0.1137.0).** BL-1059's 0.1135.0 adversarial-shard-merge bullet now reads "(adversarial-shard-merge's `core/scripts/content-seal.sh` row 130 to 124; -c unchanged at 487)". Re-derived from each `invocations.decl`: that row is 130 at 39184970b and 124 at d619fe62a in adversarial-shard-merge, and unchanged in -b (120), -c (82), -d (166) and the content-seal fixture (210).
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `docs/backlog.md`, BL-1059 (the adversarial-shard-merge bullet of its `**PARTIAL (v0.1135.0)` paragraph).
+
+The bullet reads "adversarial-shard-merge 480 to 463, -b 438 to 424, -d 635 to 607 (content-seal's row 130 to 124; -c unchanged at 487)". The parenthetical follows -d, and content-seal is also a fixture name, so the row could be read as -d's or as the content-seal fixture's. At d619fe62a it is the `core/scripts/content-seal.sh` row of `core/fixtures/adversarial-shard-merge/invocations.decl`: 130 at 39184970b, 124 at d619fe62a. The same row is unchanged in -b (120), -c (82) and -d (166), and the content-seal fixture's `core/scripts/content-seal.sh` row is unchanged at 210.
+
+Fix: write "(adversarial-shard-merge's `core/scripts/content-seal.sh` row 130 to 124; -c unchanged at 487)".
+
+Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b; id allocated by the lead.
+
+verify: manual
+

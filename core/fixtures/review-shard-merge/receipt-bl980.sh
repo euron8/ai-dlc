@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # BL-980 receipt (no receipt in this fixture directory lets a commit spawn auto-maintenance). Usage:
-#   bash receipt-bl980.sh <script dir> <project root> [<scan root>]
+#   bash receipt-bl980.sh [--arm-table <file>] <script dir> <project root> [<scan root>]
 # <script dir> and <project root> are what lib.sh's receipt call sites name $sd and $PROJ (from the distribution's
-# root: `core/scripts .`). The scan root defaults to this file's own directory; a probe tree is fed through it.
+# root: `core/scripts .`). The arm table is run.sh's RSM_ARMTAB (J0's arms derivation): `<arm> <unit> <shard>
+# ship|dist`, one row per arm line; p_gmaint passes it, and without the flag `<scan root>/run.sh --arm-table` prints
+# it. The scan root defaults to this file's own directory; a probe tree is fed through it.
 # Invoked by lib.sh's p_gmaint (arm GM1), which drives lib.sh's own G and the raw-git control itself.
 #
-# THE POPULATION IS PER FILE, judged by BEHAVIOUR, never by spelling: every <scan root>/receipt-*.sh but this one (the
-# driver; it would run itself) is RUN the way lib.sh runs it, its arguments derived from its call site in
+# THE PARTITION, before any drive. Every <scan root>/receipt-*.sh but this one has ONE non-comment call site in
+# <scan root>/lib.sh, directly inside a p_<arm> function whose <arm> is a row of the arm table. A receipt whose arm runs
+# in a SHIPPED shard must be METERED there: the call-site line carries GIT_TRACE2_EVENT="$BL980_T", and the same
+# function calls `bl980_meter <receipt>` and `bl980_judge <receipt>` (lib.sh, which judges that run's spawns inside the
+# arm). A receipt whose arm runs only in a DIST-ONLY shard is DRIVEN here, so a consumer, which runs only the shipped
+# shards, still counts it. Metered and driven never both, never neither: a shipped-shard call site with no meter, a
+# dist-only one carrying it, a half-metered function, or a call site outside every arm is FIXTURE BROKEN.
+#
+# THE DRIVEN POPULATION IS PER FILE, judged by BEHAVIOUR, never by spelling: every driven receipt is
+# RUN the way lib.sh runs it, its arguments derived from its call site in
 # <scan root>/lib.sh (a non-comment line `bash "$LIB_DIR/<receipt>" ...`, each argument "$sd/<file>" or "$PROJ"), with
 # GIT_TRACE2_EVENT set and no system or global gitconfig, and the `git maintenance run` child_start events across its
 # WHOLE run are counted: they must be 0. However a receipt spells or reaches git, a commit that spawns auto-maintenance
@@ -21,16 +31,18 @@
 # receipt that sets nothing and is unprotected when run alone. Each receipt carries its own flag on its own wrapper.
 #
 # Guards, each a FIXTURE BROKEN (exit 2): at least one receipt is driven, and receipt-bl904.sh (which cp -R's the
-# repository its commits just wrote) is among them.
+# repository its commits just wrote) is metered.
 # Prints ONE verdict line and exits with it:
-#   BL980 OK receipts=<n> files=<receipt,...> commits=<receipt:n,...> selfprobe=<...>  exit 0
+#   BL980 OK receipts=<n> files=<receipt,...> commits=<receipt:n,...> metered=<receipt,...> selfprobe=<...>  exit 0
 #   BL980 FAIL <receipt spawned 'c'; ...>                                              exit 1
 #   BL980 FIXTURE BROKEN: <why>                                                         exit 2
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 r_broken() { echo "BL980 FIXTURE BROKEN: $1"; exit 2; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || r_broken "cannot resolve the receipt's own directory"
-[ "$#" -eq 2 ] || [ "$#" -eq 3 ] || r_broken "usage: bash receipt-bl980.sh <script dir> <project root> [<scan root>]"
+ARMTAB=""
+if [ "${1:-}" = --arm-table ]; then ARMTAB="${2:-}"; shift 2 || r_broken "usage: --arm-table needs a file"; fi
+[ "$#" -eq 2 ] || [ "$#" -eq 3 ] || r_broken "usage: bash receipt-bl980.sh [--arm-table <file>] <script dir> <project root> [<scan root>]"
 SDIR="$(cd "$1" 2>/dev/null && pwd)" || r_broken "the script dir '$1' is not a directory"
 PRJ="$(cd "$2" 2>/dev/null && pwd)" || r_broken "the project root '$2' is not a directory"
 SELF="${BASH_SOURCE[0]##*/}"
@@ -113,18 +125,47 @@ ROOT="${3:-$HERE}"
 ROOT="$(cd "$ROOT" 2>/dev/null && pwd)" || r_broken "the scan root '${3:-}' is not a directory"
 [ -f "$ROOT/lib.sh" ] || r_broken "found no lib.sh in $ROOT, so no receipt has a call site to derive its arguments from"
 ARGROOT="$ROOT"
+# No --arm-table (the receipt run on its own): the scan root's run.sh prints its J0 table.
+if [ -z "$ARMTAB" ]; then
+  ARMTAB="$W/arm-table"
+  bash "$ROOT/run.sh" --arm-table > "$ARMTAB" 2> "$W/arm-table.err" < /dev/null \
+    || r_broken "$ROOT/run.sh --arm-table exited non-zero: $(head -c 300 "$W/arm-table.err" | tr '\n' ' ')"
+fi
+[ -s "$ARMTAB" ] || r_broken "the arm table '$ARMTAB' is absent or empty"
 
 # ---- the population, by glob
 set -- "$ROOT"/receipt-*.sh
 [ -f "$1" ] || r_broken "found no receipt-*.sh in $ROOT"
-FILES=""; NF=0; H904=0
+# r_site <receipt basename> -> `<call sites> <enclosing function or -> <line meter 0|1> <bl980_meter 0|1> <bl980_judge 0|1>`
+# over the non-comment text of $ARGROOT/lib.sh; the meter and judge count only inside the call site's own function.
+r_site() {
+  awk -v b="$1" '
+    /^[[:space:]]*#/ { next }
+    match($0, /^[A-Za-z_][A-Za-z0-9_]*\(\) *\{/) { fn = substr($0, 1, RLENGTH); sub(/\(.*/, "", fn) }
+    index($0, "bash \"$LIB_DIR/" b "\"") { n++; sf = (fn == "" ? "-" : fn); lm = index($0, "GIT_TRACE2_EVENT=\"$BL980_T\"") ? 1 : 0 }
+    { s = $0; if (index(s " ", "bl980_meter " b " ")) mf[fn] = 1; if (index(s " ", "bl980_judge " b " ")) jf[fn] = 1 }
+    /^}/ { fn = "" }
+    END { if (sf == "") sf = "-"; printf "%d %s %d %d %d\n", n, sf, lm + 0, (sf in mf) ? 1 : 0, (sf in jf) ? 1 : 0 }' "$ARGROOT/lib.sh"
+}
+FILES=""; NF=0; H904=0; METERED=""; PART=""
 for f in "$@"; do
   b="${f##*/}"
   [ "$b" = "$SELF" ] && continue
-  FILES="$FILES $f"; NF=$((NF + 1)); [ "$b" = receipt-bl904.sh ] && H904=1
+  set -- $(r_site "$b"); sn="$1"; sf="$2"; m="$3$4$5"
+  [ "$sn" = 1 ] || r_broken "$b has $sn call site(s) in lib.sh, want 1"
+  case "$sf" in p_?*) ;; *) r_broken "$b's call site sits in '$sf', not in a p_<arm> function, so no shard can be joined to it" ;; esac
+  k="$(awk -v a="${sf#p_}" '$1 == a { print $4; n++ } END { if (n != 1) print "rows=" n + 0 }' "$ARMTAB")"
+  case "$k:$m" in
+    ship:111) METERED="$METERED${METERED:+,}$b"; PART="$PART $b=metered"; [ "$b" = receipt-bl904.sh ] && H904=1 ;;
+    dist:000) FILES="$FILES $f"; NF=$((NF + 1)); PART="$PART $b=driven" ;;
+    ship:000) r_broken "$b runs in a shipped shard (${sf}) but its call site is not metered: neither metered nor driven" ;;
+    dist:111) r_broken "$b runs only in a dist-only shard (${sf}) and is metered there too: both metered and driven" ;;
+    ship:*|dist:*) r_broken "$b is half-metered in ${sf} (call-site meter, bl980_meter, bl980_judge read $3/$4/$5; want all three or none)" ;;
+    *) r_broken "$b's arm ${sf#p_} is not one row of the arm table ($k)" ;;
+  esac
 done
-[ "$NF" -ge 1 ] || r_broken "the glob holds no receipt but this one"
-[ "$H904" = 1 ] || r_broken "receipt-bl904.sh, the must-hit (it copies the repository its commits wrote), is absent from $ROOT"
+[ "$NF" -ge 1 ] || r_broken "the glob holds no driven receipt (every receipt but this one is metered, or there is none)"
+[ "$H904" = 1 ] || r_broken "receipt-bl904.sh, the must-hit (it copies the repository its commits wrote), is not metered at a shipped-shard call site in $ROOT"
 
 # ---- drives: every receipt
 fail=""; LIST=""; COMMITS=""; k=0
@@ -141,5 +182,5 @@ for f in $FILES; do
   LIST="$LIST${LIST:+,}$b"; COMMITS="$COMMITS${COMMITS:+,}$b:$c"
 done
 [ -z "$fail" ] || { echo "BL980 FAIL a receipt's commits spawned git maintenance run, want 0 each: $fail"; exit 1; }
-echo "BL980 OK receipts=$NF files=$LIST commits=$COMMITS selfprobe=${SP_GOT# }"
+echo "BL980 OK receipts=$NF files=$LIST commits=$COMMITS metered=$METERED selfprobe=${SP_GOT# }"
 exit 0

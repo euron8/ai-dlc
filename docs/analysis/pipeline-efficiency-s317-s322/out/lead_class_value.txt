@@ -1,0 +1,204 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z. Command: EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/spawns.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/analyze.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py $OUT --classes > $OUT/classes.txt && EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/lead_class_value.py $OUT 321 319
+control: (sprint, step, class) cells, computed against classes.txt: 771 MATCH, 0 DIFFERS
+== fell rule, s321 against s319, per story: active h / calls / lead token-eq $ (lead seat, pipeline bucket)
+  architecture             dispatch             s319 0.007 /   0.6 / $0.08   s321 0.007 /   0.8 / $0.10   DID-NOT-FALL
+  architecture             merge                s319 0.014 /   6.0 / $0.38   s321 0.026 /   8.0 / $0.57   DID-NOT-FALL
+  architecture             repair               s319 0.002 /   0.3 / $0.03   s321 0.004 /   0.5 / $0.05   DID-NOT-FALL
+  architecture             gate-run             s319 0.008 /   1.2 / $0.08   s321 0.002 /   0.7 / $0.05   FELL
+  architecture             step-reread          s319 0.001 /   0.5 / $0.07   s321 0.001 /   0.4 / $0.02   DID-NOT-FALL
+  architecture             compaction-recovery  s319 0.000 /   0.1 / $0.05   s321 0.000 /   0.2 / $0.05   DID-NOT-FALL
+  architecture             snapshot             s319 0.019 /   2.5 / $0.22   s321 0.022 /   2.9 / $0.24   DID-NOT-FALL
+  architecture             other                s319 0.017 /   9.9 / $0.58   s321 0.009 /   7.1 / $0.44   FELL
+  architecture             idle-wait            s319 0.119 /   0.0 / $0.00   s321 0.081 /   0.0 / $0.00   FELL
+  deploy-validate          dispatch             s319 0.001 /   0.2 / $0.02   s321 0.007 /   1.8 / $0.14   DID-NOT-FALL
+  deploy-validate          merge                s319 0.024 /   5.8 / $0.46   s321 0.077 /  17.5 / $1.26   DID-NOT-FALL
+  deploy-validate          repair               s319 0.001 /   0.1 / $0.01   s321 0.001 /   0.2 / $0.01   DID-NOT-FALL
+  deploy-validate          step-reread          s319 0.001 /   0.5 / $0.03   s321 0.002 /   0.2 / $0.02   DID-NOT-FALL
+  deploy-validate          compaction-recovery  s319 0.000 /   0.1 / $0.03   s321 0.001 /   0.3 / $0.09   DID-NOT-FALL
+  deploy-validate          snapshot             s319 0.012 /   2.5 / $0.19   s321 0.038 /   8.8 / $0.78   DID-NOT-FALL
+  deploy-validate          other                s319 0.029 /   5.6 / $0.37   s321 0.064 /  12.1 / $0.76   DID-NOT-FALL
+  deploy-validate          idle-wait            s319 0.034 /   0.0 / $0.00   s321 0.138 /   0.0 / $0.00   DID-NOT-FALL
+  gate[architecture]       dispatch             s319 0.001 /   0.1 / $0.00   s321 0.000 /   0.0 / $0.00   FELL
+  gate[architecture]       merge                s319 0.000 /   0.1 / $0.00   s321 0.002 /   0.4 / $0.04   DID-NOT-FALL
+  gate[architecture]       repair               s319 0.000 /   0.0 / $0.00   s321 0.000 /   0.1 / $0.01   DID-NOT-FALL
+  gate[architecture]       gate-run             s319 0.005 /   0.3 / $0.02   s321 0.002 /   0.5 / $0.04   DID-NOT-FALL
+  gate[architecture]       step-reread          s319 0.001 /   0.1 / $0.01   s321 0.000 /   0.1 / $0.00   DID-NOT-FALL
+  gate[architecture]       compaction-recovery  s319 0.000 /   0.0 / $0.00   s321 0.000 /   0.0 / $0.01   DID-NOT-FALL
+  gate[architecture]       snapshot             s319 0.003 /   0.2 / $0.02   s321 0.004 /   0.5 / $0.06   DID-NOT-FALL
+  gate[architecture]       other                s319 0.002 /   0.3 / $0.02   s321 0.000 /   0.2 / $0.02   FELL
+  gate[architecture]       idle-wait            s319 0.005 /   0.0 / $0.00   s321 0.004 /   0.0 / $0.00   FELL
+  gate[implementation]     dispatch             s319 0.018 /   2.5 / $0.25   s321 0.023 /   2.1 / $0.27   DID-NOT-FALL
+  gate[implementation]     merge                s319 0.043 /   9.7 / $0.74   s321 0.041 /   8.7 / $0.70   FELL
+  gate[implementation]     repair               s319 0.003 /   0.5 / $0.04   s321 0.001 /   0.1 / $0.02   FELL
+  gate[implementation]     gate-run             s319 0.069 /   7.5 / $0.65   s321 0.065 /   8.3 / $0.70   DID-NOT-FALL
+  gate[implementation]     step-reread          s319 0.010 /   1.6 / $0.12   s321 0.009 /   1.7 / $0.13   DID-NOT-FALL
+  gate[implementation]     compaction-recovery  s319 0.001 /   0.2 / $0.06   s321 0.001 /   0.3 / $0.10   DID-NOT-FALL
+  gate[implementation]     snapshot             s319 0.049 /   9.2 / $0.82   s321 0.054 /   9.2 / $0.83   DID-NOT-FALL
+  gate[implementation]     other                s319 0.041 /  10.5 / $0.67   s321 0.027 /   7.5 / $0.57   FELL
+  gate[implementation]     idle-wait            s319 0.121 /   0.0 / $0.00   s321 0.043 /   0.0 / $0.00   FELL
+  gate[requirements]       dispatch             s319 0.000 /   0.0 / $0.00   s321 0.000 /   0.1 / $0.01   DID-NOT-FALL
+  gate[requirements]       merge                s319 0.001 /   0.1 / $0.01   s321 0.001 /   0.5 / $0.04   DID-NOT-FALL
+  gate[requirements]       repair               s319 0.000 /   0.0 / $0.00   s321 0.000 /   0.0 / $0.00   DID-NOT-FALL
+  gate[requirements]       gate-run             s319 0.001 /   0.4 / $0.03   s321 0.005 /   1.0 / $0.09   DID-NOT-FALL
+  gate[requirements]       step-reread          s319 0.000 /   0.2 / $0.02   s321 0.000 /   0.2 / $0.01   DID-NOT-FALL
+  gate[requirements]       compaction-recovery  s319 0.000 /   0.0 / $0.00   s321 0.000 /   0.0 / $0.00   DID-NOT-FALL
+  gate[requirements]       snapshot             s319 0.002 /   0.3 / $0.03   s321 0.009 /   1.2 / $0.11   DID-NOT-FALL
+  gate[requirements]       other                s319 0.002 /   0.4 / $0.04   s321 0.005 /   1.2 / $0.12   DID-NOT-FALL
+  gate[requirements]       idle-wait            s319 0.006 /   0.0 / $0.00   s321 0.005 /   0.0 / $0.00   FELL
+  gate[sprint-review]      dispatch             s319 0.004 /   0.2 / $0.04   s321 0.000 /   0.0 / $0.00   FELL
+  gate[sprint-review]      merge                s319 0.004 /   0.3 / $0.03   s321 0.003 /   0.8 / $0.05   DID-NOT-FALL
+  gate[sprint-review]      gate-run             s319 0.002 /   0.5 / $0.03   s321 0.002 /   0.7 / $0.05   DID-NOT-FALL
+  gate[sprint-review]      step-reread          s319 0.000 /   0.2 / $0.02   s321 0.000 /   0.0 / $0.00   DID-NOT-FALL
+  gate[sprint-review]      compaction-recovery  s319 0.000 /   0.0 / $0.00   s321 0.000 /   0.0 / $0.01   DID-NOT-FALL
+  gate[sprint-review]      snapshot             s319 0.005 /   0.8 / $0.08   s321 0.003 /   0.8 / $0.06   DID-NOT-FALL
+  gate[sprint-review]      other                s319 0.002 /   0.8 / $0.05   s321 0.007 /   0.2 / $0.02   DID-NOT-FALL
+  gate[stories-test-strategy] dispatch             s319 0.003 /   0.3 / $0.04   s321 0.001 /   0.1 / $0.01   FELL
+  gate[stories-test-strategy] merge                s319 0.005 /   1.6 / $0.11   s321 0.001 /   0.5 / $0.03   FELL
+  gate[stories-test-strategy] gate-run             s319 0.007 /   1.0 / $0.11   s321 0.002 /   0.4 / $0.03   FELL
+  gate[stories-test-strategy] step-reread          s319 0.001 /   0.3 / $0.03   s321 0.000 /   0.1 / $0.01   FELL
+  gate[stories-test-strategy] snapshot             s319 0.005 /   1.1 / $0.10   s321 0.001 /   0.4 / $0.03   FELL
+  gate[stories-test-strategy] other                s319 0.003 /   3.3 / $0.21   s321 0.002 /   0.4 / $0.04   FELL
+  gate[stories-test-strategy] idle-wait            s319 0.020 /   0.0 / $0.00   s321 0.003 /   0.0 / $0.00   FELL
+  handoff                  merge                s319 0.005 /   1.5 / $0.08   s321 0.004 /   0.8 / $0.05   FELL
+  handoff                  gate-run             s319 0.000 /   0.1 / $0.00   s321 0.002 /   0.1 / $0.01   DID-NOT-FALL
+  handoff                  step-reread          s319 0.000 /   0.0 / $0.00   s321 0.000 /   0.0 / $0.00   DID-NOT-FALL
+  handoff                  compaction-recovery  s319 0.001 /   0.3 / $0.03   s321 0.001 /   0.1 / $0.02   DID-NOT-FALL
+  handoff                  snapshot             s319 0.016 /   2.0 / $0.17   s321 0.011 /   2.4 / $0.18   DID-NOT-FALL
+  handoff                  other                s319 0.040 /   8.9 / $0.54   s321 0.018 /   4.9 / $0.25   FELL
+  handoff                  idle-wait            s319 0.045 /   0.0 / $0.00   s321 0.020 /   0.0 / $0.00   FELL
+  implementation           dispatch             s319 0.062 /   7.2 / $0.77   s321 0.030 /   4.6 / $0.38   FELL
+  implementation           merge                s319 0.090 /  28.3 / $1.93   s321 0.073 /  19.6 / $1.34   FELL
+  implementation           repair               s319 0.004 /   0.3 / $0.04   s321 0.000 /   0.1 / $0.01   FELL
+  implementation           gate-run             s319 0.023 /   5.2 / $0.40   s321 0.027 /   6.1 / $0.40   DID-NOT-FALL
+  implementation           step-reread          s319 0.001 /   0.5 / $0.03   s321 0.001 /   0.5 / $0.04   DID-NOT-FALL
+  implementation           compaction-recovery  s319 0.004 /   0.9 / $0.28   s321 0.002 /   0.6 / $0.19   FELL
+  implementation           snapshot             s319 0.075 /  15.4 / $1.18   s321 0.052 /  14.0 / $0.93   FELL
+  implementation           other                s319 0.187 /  45.7 / $2.62   s321 0.106 /  17.0 / $1.00   FELL
+  implementation           idle-wait            s319 0.345 /   0.0 / $0.00   s321 0.158 /   0.0 / $0.00   FELL
+  pre-step                 compaction-recovery  s319 0.000 /   0.0 / $0.00   s321 0.000 /   0.0 / $0.00   DID-NOT-FALL
+  pre-step                 other                s319 0.004 /   1.1 / $0.33   s321 0.003 /   1.3 / $0.18   DID-NOT-FALL
+  requirements             dispatch             s319 0.007 /   1.1 / $0.16   s321 0.007 /   1.0 / $0.11   DID-NOT-FALL
+  requirements             merge                s319 0.026 /   8.8 / $0.56   s321 0.029 /   8.2 / $0.51   DID-NOT-FALL
+  requirements             repair               s319 0.003 /   0.2 / $0.03   s321 0.003 /   0.4 / $0.04   DID-NOT-FALL
+  requirements             gate-run             s319 0.012 /   1.2 / $0.08   s321 0.006 /   1.3 / $0.06   DID-NOT-FALL
+  requirements             step-reread          s319 0.002 /   0.5 / $0.03   s321 0.001 /   0.5 / $0.02   DID-NOT-FALL
+  requirements             compaction-recovery  s319 0.000 /   0.1 / $0.03   s321 0.000 /   0.1 / $0.02   DID-NOT-FALL
+  requirements             snapshot             s319 0.014 /   2.5 / $0.19   s321 0.016 /   3.4 / $0.26   DID-NOT-FALL
+  requirements             other                s319 0.066 /  21.1 / $1.33   s321 0.030 /  13.4 / $0.74   FELL
+  requirements             idle-wait            s319 0.135 /   0.0 / $0.00   s321 0.128 /   0.0 / $0.00   FELL
+  retro                    dispatch             s319 0.004 /   0.3 / $0.03   s321 0.002 /   0.2 / $0.02   FELL
+  retro                    merge                s319 0.025 /   2.6 / $0.23   s321 0.016 /   2.6 / $0.20   DID-NOT-FALL
+  retro                    gate-run             s319 0.003 /   0.5 / $0.03   s321 0.001 /   0.4 / $0.03   FELL
+  retro                    step-reread          s319 0.000 /   0.2 / $0.04   s321 0.000 /   0.0 / $0.00   DID-NOT-FALL
+  retro                    compaction-recovery  s319 0.000 /   0.1 / $0.02   s321 0.000 /   0.0 / $0.01   DID-NOT-FALL
+  retro                    snapshot             s319 0.010 /   1.4 / $0.12   s321 0.007 /   0.9 / $0.08   FELL
+  retro                    other                s319 0.024 /   4.4 / $0.38   s321 0.009 /   2.6 / $0.18   FELL
+  retro                    idle-wait            s319 0.014 /   0.0 / $0.00   s321 0.005 /   0.0 / $0.00   FELL
+  route                    gate-run             s319 0.000 /   0.2 / $0.01   s321 0.000 /   0.0 / $0.00   DID-NOT-FALL
+  route                    snapshot             s319 0.002 /   1.3 / $0.09   s321 0.004 /   1.1 / $0.08   DID-NOT-FALL
+  route                    other                s319 0.006 /   1.2 / $0.09   s321 0.005 /   1.1 / $0.05   FELL
+  sprint-review            dispatch             s319 0.002 /   0.5 / $0.03   s321 0.004 /   0.4 / $0.04   DID-NOT-FALL
+  sprint-review            merge                s319 0.003 /   1.1 / $0.06   s321 0.024 /   5.4 / $0.34   DID-NOT-FALL
+  sprint-review            repair               s319 0.001 /   0.3 / $0.03   s321 0.001 /   0.1 / $0.01   DID-NOT-FALL
+  sprint-review            gate-run             s319 0.000 /   0.1 / $0.00   s321 0.001 /   0.2 / $0.01   DID-NOT-FALL
+  sprint-review            step-reread          s319 0.000 /   0.1 / $0.01   s321 0.000 /   0.2 / $0.01   DID-NOT-FALL
+  sprint-review            compaction-recovery  s319 0.000 /   0.1 / $0.04   s321 0.000 /   0.1 / $0.03   DID-NOT-FALL
+  sprint-review            snapshot             s319 0.010 /   1.7 / $0.14   s321 0.014 /   3.6 / $0.27   DID-NOT-FALL
+  sprint-review            other                s319 0.010 /   5.2 / $0.34   s321 0.031 /   3.2 / $0.16   DID-NOT-FALL
+  sprint-review            idle-wait            s319 0.017 /   0.0 / $0.00   s321 0.026 /   0.0 / $0.00   DID-NOT-FALL
+  stories-test-strategy    dispatch             s319 0.020 /   0.8 / $0.18   s321 0.011 /   1.7 / $0.14   DID-NOT-FALL
+  stories-test-strategy    merge                s319 0.026 /   8.8 / $0.64   s321 0.045 /  12.8 / $0.82   DID-NOT-FALL
+  stories-test-strategy    repair               s319 0.003 /   0.6 / $0.08   s321 0.006 /   0.7 / $0.06   DID-NOT-FALL
+  stories-test-strategy    gate-run             s319 0.004 /   1.4 / $0.10   s321 0.010 /   2.0 / $0.14   DID-NOT-FALL
+  stories-test-strategy    step-reread          s319 0.004 /   1.1 / $0.08   s321 0.004 /   1.0 / $0.06   DID-NOT-FALL
+  stories-test-strategy    compaction-recovery  s319 0.001 /   0.1 / $0.05   s321 0.004 /   0.5 / $0.07   DID-NOT-FALL
+  stories-test-strategy    snapshot             s319 0.030 /   5.0 / $0.58   s321 0.022 /   6.5 / $0.46   DID-NOT-FALL
+  stories-test-strategy    other                s319 0.046 /  20.4 / $1.21   s321 0.081 /  27.2 / $1.54   DID-NOT-FALL
+  stories-test-strategy    idle-wait            s319 0.172 /   0.0 / $0.00   s321 0.176 /   0.0 / $0.00   DID-NOT-FALL
+  ui-direction             merge                s319 0.000 /   0.1 / $0.00   s321 0.000 /   0.1 / $0.01   DID-NOT-FALL
+  ui-direction             snapshot             s319 0.000 /   0.1 / $0.00   s321 0.000 /   0.1 / $0.01   DID-NOT-FALL
+  ui-direction             other                s319 0.000 /   0.1 / $0.00   s321 0.000 /   0.0 / $0.00   DID-NOT-FALL
+  ui-direction             idle-wait            s319 0.003 /   0.0 / $0.00   s321 0.002 /   0.0 / $0.00   FELL
+cells: 38 FELL ($180.24 s321 lead token-eq, whole sprint), 80 DID-NOT-FALL ($329.86) (rule applied at the printed precision)
+  s321 all steps dispatch             active 2.33 h  calls 322  lead token-eq $30.60
+  s321 all steps merge                active 8.60 h  calls 2147  lead token-eq $149.10
+  s321 all steps repair               active 0.39 h  calls 55  lead token-eq $5.35
+  s321 all steps gate-run             active 3.14 h  calls 541  lead token-eq $40.39
+  s321 all steps step-reread          active 0.49 h  calls 123  lead token-eq $8.07
+  s321 all steps compaction-recovery  active 0.27 h  calls 55  lead token-eq $15.49
+  s321 all steps snapshot             active 6.41 h  calls 1397  lead token-eq $109.77
+  s321 all steps other                active 9.92 h  calls 2487  lead token-eq $151.34
+  s321 all steps idle-wait            active 19.72 h  calls 0  lead token-eq $0.00
+== step-reread s319: 305 re-read Reads in 185 messages; 128 messages neither in a recovery window nor carrying a higher-precedence block, against classes.jsonl step-reread calls (lead, all buckets) 129: DIFFERS by -1
+  NEW-RANGE           78 Reads in   42 messages
+  AFTER-COMPACTION   193 Reads in  118 messages
+  CHANGED              6 Reads in    6 messages
+  OVERLAP             13 Reads in   13 messages
+  COVERED             15 Reads in   15 messages
+  REPEAT               0 Reads in    0 messages
+  class-charged messages: NEW-RANGE 38, AFTER-COMPACTION 60, CHANGED 6, OVERLAP 9, COVERED 15, REPEAT 0
+    gate-validation              AFTER-COMPACTION  101
+    gate-validation              NEW-RANGE          46
+    _gate-procedures             AFTER-COMPACTION   42
+    _gate-procedures             NEW-RANGE          32
+    implementation               AFTER-COMPACTION   22
+    _gate-procedures             OVERLAP            11
+    deploy-validate              COVERED             7
+    _dispatch-protocol           AFTER-COMPACTION    6
+    stories-test-strategy        AFTER-COMPACTION    6
+    architecture                 AFTER-COMPACTION    3
+    implementation               CHANGED             3
+    carry-over-evaluation        AFTER-COMPACTION    2
+    carry-over-evaluation        CHANGED             2
+    carry-over-evaluation        COVERED             2
+    deploy-validate              AFTER-COMPACTION    2
+    gate-validation              OVERLAP             2
+    handoff                      AFTER-COMPACTION    2
+    implementation               COVERED             2
+    requirements                 AFTER-COMPACTION    2
+    retro                        AFTER-COMPACTION    2
+    retro                        COVERED             2
+    sprint-review                AFTER-COMPACTION    2
+    deploy-validate              CHANGED             1
+    requirements                 COVERED             1
+    route                        AFTER-COMPACTION    1
+    stories-test-strategy        COVERED             1
+== step-reread s321: 382 re-read Reads in 208 messages; 123 messages neither in a recovery window nor carrying a higher-precedence block, against classes.jsonl step-reread calls (lead, all buckets) 123: MATCH
+  NEW-RANGE           84 Reads in   38 messages
+  AFTER-COMPACTION   270 Reads in  150 messages
+  CHANGED              0 Reads in    0 messages
+  OVERLAP              8 Reads in    8 messages
+  COVERED             14 Reads in   13 messages
+  REPEAT               6 Reads in    6 messages
+  class-charged messages: NEW-RANGE 29, AFTER-COMPACTION 74, CHANGED 0, OVERLAP 4, COVERED 11, REPEAT 5
+  s321 step-reread class, all steps: 0.49 h, 123 calls, lead token-eq $8.07; REPEAT or COVERED (nothing unread this epoch) 16 of its 123 charged messages, so at most 0.06 h and $1.05 by call share (an apportionment, not a per-message measurement)
+    gate-validation              AFTER-COMPACTION  166
+    gate-validation              NEW-RANGE          54
+    _gate-procedures             AFTER-COMPACTION   38
+    _gate-procedures             NEW-RANGE          30
+    implementation               AFTER-COMPACTION   24
+    _dispatch-protocol           AFTER-COMPACTION   11
+    stories-test-strategy        AFTER-COMPACTION   11
+    deploy-validate              AFTER-COMPACTION    7
+    deploy-validate              COVERED             7
+    _gate-procedures             OVERLAP             5
+    architecture                 AFTER-COMPACTION    4
+    gate-validation              OVERLAP             3
+    implementation               COVERED             3
+    implementation               REPEAT              3
+    requirements                 AFTER-COMPACTION    3
+    sprint-review                AFTER-COMPACTION    3
+    handoff                      AFTER-COMPACTION    2
+    requirements                 COVERED             2
+    stories-test-strategy        REPEAT              2
+    architecture                 COVERED             1
+    requirements                 REPEAT              1
+    retro                        AFTER-COMPACTION    1
+    retro                        COVERED             1
+    REPEAT message 2026-11-03T03:42:25.545Z unit 38d6a63b requirements: 1 Reads
+    REPEAT message 2026-11-04T06:54:50.777Z unit 189712ad stories-test-strategy: 1 Reads
+    REPEAT message 2026-11-04T10:47:04.382Z unit df04e9cd stories-test-strategy: 1 Reads
+    REPEAT message 2026-11-06T07:45:04.312Z unit 0ec8b044 implementation: 1 Reads
+    REPEAT message 2026-11-06T08:51:38.395Z unit 0ec8b044 implementation: 1 Reads
+    REPEAT message 2026-11-07T00:57:05.371Z unit f369e605 implementation: 1 Reads
+control: impossible step file qzxv-never-step-6630 re-reads 0; known step implementation re-reads 57
