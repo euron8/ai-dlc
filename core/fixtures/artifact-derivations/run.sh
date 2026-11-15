@@ -616,7 +616,7 @@ mkdir -p "$WORK/k"
 VBASE="$(basename "$VALIDATOR")"
 
 # --- THE ARM HARNESS --------------------------------------------------------------------------
-# Every battery below (K through T, and the awk self-probe) is an ARM FUNCTION
+# Every battery below (K through T) is an ARM FUNCTION
 # `<x>_arms <validator> <quiet>`. Run on the shipped validator with quiet 0 it prints each arm's ok
 # line once; ARMS_RAN and ARMS_FAILED record which arms ran and which failed. WANT (space-separated
 # arm ids; empty = every arm) names the only arms to run.
@@ -1425,7 +1425,7 @@ a_arms() { # <validator> <quiet> -> ARMS_FAILED
   want a-ctl && {
     r_run "$1" a-ctl 'grep -c a d.txt' 1
     [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out"
-    arm a-ctl $? "exit=0  the unmutated validator passes its self-probe and runs a benign derivation"; }
+    arm a-ctl $? "exit=0  the unmutated validator runs a benign derivation"; }
   arm_end
 }
 a_arms "$VALIDATOR" 0

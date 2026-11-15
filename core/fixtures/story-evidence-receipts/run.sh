@@ -16,6 +16,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 #                     exits 0 on the shipped validator: every cell it carries holds.
 #   RAN SET bl815 / bl809 / bl845 / bl843  BL-979 C3: the full call's `RAN <cell>` set EQUALS the set the receipt's own
 #                     CODE gates (want_cells), so a dead or partly dead want() gate fails here, not silently.
+#   SECTION-EMPTY     handoff arm (r) on ten seeded worlds: five offenders WARN with exit 0, five near-misses are quiet.
 #   INPROC            every subject call above was answered in process (UT_FALLBACK_LOG empty, and present).
 #
 # THE MUTATION BATTERY IS NOT HERE. Its mutants edit copies of core's own validator and of the receipts, so it is
@@ -150,6 +151,56 @@ else bad "CAPTURE-HEADS: receipt-bl843.sh exited $b43_rc on the shipped validato
 B43_GATED="$(want_cells "$R843")"
 if c3_msg="$(c3_check "$R843" "$b43_out")"; then ok "RAN SET bl843: the full control call ran exactly the $(grep -c . <<<"$B43_GATED") cells the receipt's code gates"
 else bad "$c3_msg"; fi
+
+# SECTION-EMPTY (handoff arm (r), BL-397): the clean world built once, copied per cell, its Production Integrity Tests
+# body (Smoke Test Updates for se_smk) replaced, committed, and read once. Offenders, WARN section-empty naming the
+# section with exit 0 and the OK line (the arm never moves the exit): an empty body, graph s322 story 4's `(to be filled by the dev: ...)` placeholder, a comment, a bare
+# subheading, an empty Smoke Test Updates. Near-misses, exit 0 with the OK line: a filled table, content only inside a
+# fence, a subheading with a line under it, `none: <reason>`, a placeholder beside one real line.
+# A cell reads <rc>:<PIT|SMK|ok>; PIT and SMK need the OK line too, so a refusing arm reads 1:PIT or 0:?.
+SECELLS='se_bare se_ph se_com se_sub se_smk se_tbl se_fence se_subc se_none se_phreal'
+SEWANT='0:PIT 0:PIT 0:PIT 0:PIT 0:SMK 0:ok 0:ok 0:ok 0:ok 0:ok'
+se_body() { # <cell> -> the replacement body
+  case "$1" in
+    se_bare|se_smk) printf '' ;;
+    se_ph) printf '(to be filled by the dev: the fixture runs are the integrity evidence.)' ;;
+    se_com) printf '<!-- the dev fills this -->' ;;
+    se_sub) printf '### Integrity runs' ;;
+    se_tbl) printf '| Test | Result |\n|---|---|\n| tests/test_x.py | 1 passed |' ;;
+    se_fence) printf '```\npytest -q tests/test_x.py: 1 passed\n```' ;;
+    se_subc) printf '### Integrity runs\n- tests/test_x.py, 1 passed' ;;
+    se_none) printf 'none: no production path changed' ;;
+    se_phreal) printf '(to be filled by the dev: x)\nThe fixture run is the integrity evidence: 1 passed.' ;;
+  esac
+}
+se_vec() { # <validator> -> "<rc>:<PIT|SMK|ok|?> ..." in SECELLS order
+  local c o="" k
+  for c in $SECELLS; do
+    verdict "$1" "$WORK/se-$c" h > /dev/null
+    k="$(awk '/^WARN section-empty / { if (index($0, "## Production Integrity Tests")) print "PIT"; else if (index($0, "## Smoke Test Updates")) print "SMK"; else print "?" }' <<<"$VERDICT_OUT" | tr '\n' ',')"
+    k="${k%,}"
+    if grep -q '^validate-handoff-evidence: OK' <<<"$VERDICT_OUT"; then k="${k:-ok}"; else k=""; fi
+    o="$o $VERDICT_RC:${k:-?}"
+  done
+  printf '%s' "${o# }"
+}
+se_seed() {
+  local c w tgt
+  build_world "$WORK/se-clean" clean || return 1
+  for c in $SECELLS; do
+    w="$WORK/se-$c"; cp -R "$WORK/se-clean" "$w" || return 1
+    tgt='None: no production path changed.'; [ "$c" = se_smk ] && tgt='None.'
+    SEBODY="$(se_body "$c")" SETGT="$tgt" story_awk "$w" '$0 == ENVIRON["SETGT"] && !done { print ENVIRON["SEBODY"]; done = 1; next } { print }' || return 1
+    gitw "$w" add -A && gitw "$w" commit -qm "se $c" && gitw "$w" rev-parse HEAD > "$w/.T" || return 1
+  done
+}
+if se_seed; then
+  se_got="$(se_vec "$HECTL")"
+  if [ "$se_got" = "$SEWANT" ]; then ok "SECTION-EMPTY: an empty, placeholder-only ('(to be filled by the dev: ...)'), comment-only or bare-subheading Production Integrity Tests and an empty Smoke Test Updates WARN section-empty naming the section with exit 0 and the OK line; a filled table, content only inside a fence, a subheading with a line under it, 'none: <reason>' and a placeholder beside one real line pass with exit 0 and the OK line"
+  else bad "SECTION-EMPTY: want [$SEWANT] got [$se_got] for [$SECELLS]"; fi
+else
+  bad "FIXTURE BROKEN: could not seed the section-empty worlds"
+fi
 
 # INPROC: every subject call the receipts made through he-inproc.sh was answered in process. Positive conjunct: the
 # log exists, so an unset variable cannot pass.

@@ -1133,8 +1133,8 @@ expect_says k2-serial prd-adversarial-p "K2-fallback-marked-silent" \
   "FALLBACK (K2 partitioner): prd-adversarial-p1.md is judged by the CURRENT" "the distribution layout"
 #
 # The HISTORY worlds hold the validator INSIDE a stamped git root, beside a partitioner the root
-# TRACKS, and commit two copies of it: the shipped one and a stub that maps a two-section probe
-# (so it passes K2's map probe) and calls anything larger SERIAL. The stub is self-contained on
+# TRACKS, and commit two copies of it: the shipped one and a stub that maps a two-section document
+# and calls anything larger SERIAL. The stub is self-contained on
 # purpose -- a copy derived by editing the shipped partitioner breaks whenever those lines move.
 # The document has four sections: the shipped copy maps it (FAIL), the stub calls it SERIAL.
 #
@@ -2174,8 +2174,7 @@ fi
 if sg elic; then
 echo
 # --- ARM L: the stories elicitation, driven END TO END ------------------------------------------
-# The validator's self-probe covers l_judge, l_records, l_kparse and the stamp parser on staged
-# inputs; nothing there runs the LIVE path -- the staged `merge-adversarial-shards.sh --map` call
+# The LIVE path of this arm is the staged `merge-adversarial-shards.sh --map` call
 # (a shards/stories-p1/ beside a symlink to the real stories/), the `$1 + 0` de-padding, the
 # intensity lookup, the era branches and the err text. Every world below is a sprint s9 with a MET,
 # shard-merged `stories-adversarial-p1.md` (K is silent on it), run through the real validator.

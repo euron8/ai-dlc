@@ -24,9 +24,6 @@ apply-restamp-worklist	!core/git-hooks/pre-push	whole
 apply-self-overwrite	!core/skills/ai-dlc-update/reconcile/	legacy
 apply-setup-sited-merge	!core/skills/ai-dlc-update/reconcile/	legacy
 apply-worklist-rows	core/skills/ai-dlc-update/reconcile/	whole
-backlog-real-ledger	.githooks/pre-push	whole
-backlog-real-ledger	core/git-hooks/pre-push	whole
-backlog-real-ledger	core/scripts/	legacy
 bmad-invocation-resolve	!core/skills/ai-dlc/	legacy
 census-hermetic-coverage	.githooks/pre-push	whole
 census-hermetic-coverage	core/scripts/hermetic-run.sh	whole

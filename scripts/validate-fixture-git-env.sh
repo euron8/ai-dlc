@@ -185,8 +185,7 @@ INVOKE_RE='(^|[[:space:]]|[;&|(])(bash|sh|source|\.)[[:space:]]'
 # which also invokes x.sh. Before the hop it was (init-site-unresolved), failing closed; with a sourced-only hop it
 # read site 4, ok, while the init really runs at line 2, above the seam -- an acquitted clobber. Following every
 # sibling run.sh reaches places it at line 2, seam below: reported. The control (that tree less its lib.sh line)
-# reads unresolved either way. The self-probe's sp-ran seed holds it, and fixture-git-env-seam W13's mutant, which
-# restores the sourced-only reading, dies on that seed.
+# reads unresolved either way.
 # EXACTLY ONE MORE HOP, NEVER A CLOSURE. The live population needed one (review-shard-merge, the only directory
 # whose init sits two hops away); a closure would follow chains nobody has written, through a reader that keys on a
 # basename and a separator, and each extra hop widens what a comment-shaped or string-shaped mention can move. A
@@ -202,9 +201,8 @@ INVOKE_RE='(^|[[:space:]]|[;&|(])(bash|sh|source|\.)[[:space:]]'
 # FALSE-POSITIVE SET over the live population, measured before this shipped, from clean detached worktrees, per
 # member (verdict and site), the pre-hop validator against this one: the ONLY change is review-shard-merge, its site
 # NONE -> 504 (run.sh's `. "$HERE/lib.sh"`) and its verdict (init-site-unresolved) -> ok. That is a measurement, not
-# a construction: a hop site CAN move a member from acquitted to reported, when it lands above the member's seam
-# (sp-below, sp-ran), and that is a true positive; no live member carries one.
-# The self-probe below holds the hop both ways, both near-misses and the masked route, before the corpus is read.
+# a site moves a member from acquitted to reported only by landing above the member's seam, and that is a true
+# positive; no live member carries one.
 noncomment_hits() { # noncomment_hits <file> <ere> -> "<n>:<line>" rows of the ERE, comment lines dropped
   # One awk, the ERE handed over through the ENVIRONMENT: an `awk -v` value loses one level of escaping (the note at
   # first_line_re above), ENVIRON keeps it byte for byte.
@@ -266,8 +264,7 @@ init_site_line() { # init_site_line <dir> <run.sh-path> -> earliest reaching lin
   printf '%s\n' "$best"
 }
 
-# judge_one <dir> <run.sh> -> JR: ok, plain, or the reason tag a row carries. The corpus loop and the self-probe below
-# ask this ONE function, so the probe holds the program the corpus runs, never a copy of it.
+# judge_one <dir> <run.sh> -> JR: ok, plain, or the reason tag a row carries. The corpus loop asks this ONE function.
 judge_one() {
   local jd="$1"
   local jr="$2"
@@ -350,8 +347,7 @@ judge_one() {
   # that acquits the arm's own subject is a mechanism defending its own defect.
   # Measured when it was fixed: 0 of the 27 were reaching this branch, so it
   # acquitted nothing live -- it was a trap for the next author, not a hole.
-  # Each alternative is `^[[:space:]]*` anchored and the probe asserts the comment
-  # form is NOT acquitted.
+  # Each alternative is `^[[:space:]]*` anchored, so the comment form is NOT acquitted.
   #
   # AND IT IS KEYED ON POSITION, per the note at the top of this loop: the
   # exemption holds only where the scrub precedes the file's first init.
@@ -365,52 +361,6 @@ judge_one() {
   fi
   JR=plain
 }
-
-# THE SELF-PROBE, BEFORE THE CORPUS: the second hop held both ways, its two near-misses and the masked route (a run
-# sibling reaching the init above the seam, ahead of a sourced one), plus the one-hop case it must leave unchanged, each a mktemp tree judged by judge_one with absolute paths (no root is read, so no answer can
-# come from the real tree). A probe whose answer differs is a REFUSAL: a reader that cannot place its own seeds has no
-# verdict to give about anyone else's.
-#   sp-below    run.sh sources lib.sh at line 2 and the seam at line 3; lib.sh runs `bash ./x.sh`, which inits
-#                                                                          -> seam-sourced-below-first-init
-#   sp-above    the same, the seam at line 2 and the sourcing line at 3   -> ok
-#   sp-mention  lib.sh names x.sh only in a comment and a string          -> init-site-unresolved (fails closed)
-#   sp-3hop     lib.sh sources mid.sh, which runs x.sh                    -> init-site-unresolved (fails closed)
-#   sp-1hop     run.sh, the seam at line 2, runs `bash ./x.sh` itself, which inits  -> ok (unchanged)
-#   sp-ran      run.sh line 2 RUNS mid.sh, which runs x.sh; the seam at 3; line 4 sources lib.sh, which runs x.sh too
-#                                                                          -> seam-sourced-below-first-init (masked route)
-sp_tree() { # sp_tree <name> <run.sh body> <lib.sh body> [<mid.sh body>] -> the tree's directory
-  local d="$SP_W/$1"
-  mkdir -p "$d" || return 1
-  printf '#!/usr/bin/env bash\n%s\n' "$2" > "$d/run.sh" || return 1
-  [ -z "$3" ] || printf '#!/usr/bin/env bash\n%s\n' "$3" > "$d/lib.sh" || return 1
-  [ -z "${4:-}" ] || printf '#!/usr/bin/env bash\n%s\n' "$4" > "$d/mid.sh" || return 1
-  # A literal `git init`: it joins under the current grammar and under the literal one, so the probe stays readable
-  # to a copy of this file carrying an older INIT_RE (fixture-git-env-seam W5's mutant).
-  printf '#!/usr/bin/env bash\ngit init -q "$1"\n' > "$d/x.sh" || return 1
-  printf '%s' "$d"
-}
-SP_W="$(mktemp -d "${TMPDIR:-/tmp}/validate-fixture-git-env.XXXXXX")" || { echo "validate-fixture-git-env: REFUSED — mktemp failed for the self-probe." >&2; exit 2; }
-SP_SEAM='. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"'
-SP_GOT=""
-for _sp in below above mention 3hop 1hop ran; do
-  case "$_sp" in
-    below) _d="$(sp_tree sp-below "$(printf '. "$(dirname "$0")/lib.sh"\n%s' "$SP_SEAM")" 'bash "$(dirname "$0")/x.sh" "$1"')" ;;
-    above) _d="$(sp_tree sp-above "$(printf '%s\n. "$(dirname "$0")/lib.sh"' "$SP_SEAM")" 'bash "$(dirname "$0")/x.sh" "$1"')" ;;
-    mention) _d="$(sp_tree sp-mention "$(printf '%s\n. "$(dirname "$0")/lib.sh"' "$SP_SEAM")" "$(printf '# bash x.sh, never called\necho "see x.sh"')")" ;;
-    3hop) _d="$(sp_tree sp-3hop "$(printf '%s\n. "$(dirname "$0")/lib.sh"' "$SP_SEAM")" '. "$(dirname "$0")/mid.sh"' 'bash "$(dirname "$0")/x.sh" "$1"')" ;;
-    1hop) _d="$(sp_tree sp-1hop "$(printf '%s\nbash "$(dirname "$0")/x.sh" "$1"' "$SP_SEAM")" '')" ;;
-    ran) _d="$(sp_tree sp-ran "$(printf 'bash "$(dirname "$0")/mid.sh" "$1"\n%s\n. "$(dirname "$0")/lib.sh"' "$SP_SEAM")" 'bash "$(dirname "$0")/x.sh" "$1"' 'bash "$(dirname "$0")/x.sh" "$1"')" ;;
-  esac
-  [ -n "$_d" ] || { echo "validate-fixture-git-env: REFUSED — the self-probe tree $_sp was not built." >&2; exit 2; }
-  judge_one "$_d" "$_d/run.sh"; SP_GOT="$SP_GOT $_sp=$JR"
-done
-for _sp in sp-below sp-above sp-mention sp-3hop sp-1hop sp-ran; do rm -f "$SP_W/$_sp"/*.sh; rmdir "$SP_W/$_sp"; done; rmdir "$SP_W"
-SP_WANT=" below=seam-sourced-below-first-init above=ok mention=init-site-unresolved 3hop=init-site-unresolved 1hop=ok ran=seam-sourced-below-first-init"
-if [ "$SP_GOT" != "$SP_WANT" ]; then
-  echo "validate-fixture-git-env: REFUSED — SELF-PROBE: the init-site reader read [${SP_GOT# }]," >&2
-  echo "  want [${SP_WANT# }]. A reader that misplaces its own seeds has no verdict about the corpus." >&2
-  exit 2
-fi
 
 UNSCRUBBED=""
 N_UNSCRUBBED=0

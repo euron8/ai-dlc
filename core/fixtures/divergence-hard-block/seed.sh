@@ -108,8 +108,8 @@ record() {
 # token world is a git repository whose commits carry FIXED literal dates (BL-868: no `date`, no clock):
 #   rulebook notoken   the real file with the token sentence's opening reworded (count 0, asserted)
 #   rulebook token     the real file (count 1, asserted)
-# The engine's merge and its siblings are copied beside the validator: arm N's self-probe re-derives through
-# the merge, and a gate run without it refuses with "no verdict".
+# The engine's merge and its siblings are copied beside the validator: arm N re-derives through the merge,
+# and a gate run without it refuses with "no verdict".
 RULEBOOK="$(pick_one "$HERE/../../skills/ai-dlc/steps/_gate-procedures.md" \
                      "$HERE/../../../.claude/skills/ai-dlc/steps/_gate-procedures.md" \
                      "$HERE/../../core/skills/ai-dlc/steps/_gate-procedures.md")"

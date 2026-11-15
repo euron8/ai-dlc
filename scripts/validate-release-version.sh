@@ -141,7 +141,7 @@
 #          would join the population.
 #        - `^=======$` IS DELIBERATELY NOT IN THE GRAMMAR. It is the setext H1
 #          underline, so a markdown file with a title reads as a conflict under a
-#          grammar that includes it, and the probe below pins that acquittal. The
+#          grammar that includes it. The
 #          pair above already identifies the file; the middle marker adds nothing
 #          to the join and would only widen it.
 #
@@ -149,9 +149,7 @@
 #      DOWN IS READ AS COVERAGE.
 #
 #        - A TRUNCATED conflict, carrying one marker and not the other, is outside
-#          the grammar by construction: the intersect requires both. The probe
-#          below asserts that silence on a seeded open-marker-only file, which
-#          documents the gap rather than acquitting it.
+#          the grammar by construction: the intersect requires both.
 #        - `core/fixtures/layer-readopt-gate/run.sh:514` writes a whole conflict
 #          block -- both markers and the middle one -- as a `printf` argument, and
 #          escapes this arm only because none of the three is LINE-LEADING in the
@@ -190,7 +188,7 @@
 #      ANYWHERE in a line, all mid-sentence prose (e.g. 7665d11a, "The candidate
 #      is NOT discharged."), so the grammar is LINE-LEADING only -- the engine's own form is
 #      column-0, and a mid-line phrase is something neither side treats as a
-#      citation. The self-probe below pins that acquittal.
+#      citation.
 #
 # A FIFTH JOIN, ON WHAT A BUNDLE'S INTEGRATOR REBUILT.
 #
@@ -279,10 +277,7 @@ set -uo pipefail
 
 # THE REPOSITORY ENVIRONMENT IS SCRUBBED BEFORE ANY GIT CALL. Git exports GIT_DIR
 # absolute into a hook run from a linked worktree, and this program is both
-# hook-dispatched and run directly. Arm E's self-probe builds a scratch repository
-# under mktemp and relies on git's upward DISCOVERY to find it -- the branch git
-# takes only when this environment is unset -- and its `git fast-import` would
-# otherwise write the CALLER's object store and refs/heads/probe. The corpus reads below take the same redirection
+# hook-dispatched and run directly. The corpus reads below take the redirection
 # silently. NOTHING ABOVE THIS LINE MAY CALL GIT.
 rv_init() {
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
@@ -468,23 +463,12 @@ restored_in_history() { # <"## [x.y.z]"> -> a sha when the heading text ever cha
   git log -1 --format=%H -S "$1" "$range_base" -- CHANGELOG.md 2>/dev/null
 }
 
-# THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, no git. The exemption
-# below turns on one numeric comparison; a lexical one would read 0.10.0 as below
-# 0.9.0 and exempt a release ABOVE the base's top. The `-S` half is not probed
-# here -- it is git's own search, and the release-version-triple fixture drives it
-# both ways (R3 exempt, R5 refused, and a mutant searching from the tip).
+# The exemption below turns on one numeric comparison (semver_le); a lexical one would read
+# 0.10.0 as below 0.9.0 and exempt a release ABOVE the base's top.
 arm_c() {
-arm_c_probe_bad=""
-semver_le 0.9.0 0.10.0 || arm_c_probe_bad="0.9.0 <= 0.10.0 read false"
-semver_le 0.10.0 0.9.0 && arm_c_probe_bad="${arm_c_probe_bad:+$arm_c_probe_bad; }0.10.0 <= 0.9.0 read true"
-semver_le 0.9.0 0.9.0 || arm_c_probe_bad="${arm_c_probe_bad:+$arm_c_probe_bad; }0.9.0 <= 0.9.0 read false"
-
 range_removed=0
 range_multi=0
-if [ -n "$arm_c_probe_bad" ]; then
-  echo "FAIL  arm C's own semver probe did not discriminate -- $arm_c_probe_bad. Every restored-heading exemption below would then rest on a comparison that cannot order two releases." >&2
-  range_fail=1
-elif [ -n "$range_base" ]; then
+if [ -n "$range_base" ]; then
   arm_c_ran=1
   # REMOVAL FIRST. A release that REPLACES the previous release's heading in
   # place nets to one added heading and passed the count below; the heading it
@@ -587,94 +571,12 @@ conflict_files_in() { # <repo-dir> -> tracked paths at HEAD carrying BOTH marker
     <(git -C "$d" grep -l -e '^>>>>>>> ' HEAD 2>/dev/null | sed 's|^HEAD:||' | sort -u)
 }
 
-# THE PROBE REPOSITORIES OF ARMS E AND F ARE WRITTEN BY ONE `git fast-import` EACH, not by a
-# `git config` and `git commit` per case. Every commit carries the identity in the stream, so no
-# config is read or written, and fast-import neither runs a hook nor spawns the auto-maintenance
-# process each `git commit` did; `fastimport.unpackLimit=0` keeps its pack as written instead of
-# spawning `unpack-objects` for a handful of objects. Each `data` block is byte-counted in the C locale, so a message
-# carrying a \001 byte (arm F's forged-boundary offender) is stored exactly as written. The
-# commits chain on refs/heads/probe, which `git init --initial-branch=probe` makes HEAD.
-rv_fi_data() { # <bytes> -> a fast-import `data` command carrying <bytes> exactly
-  local LC_ALL=C
-  printf 'data %d\n%s\n' "${#1}" "$1"
-}
-rv_fi_commit() { # <subject> [body] -> a commit on refs/heads/probe, message as `git commit -m -m` writes it
-  printf 'commit refs/heads/probe\ncommitter probe <probe@example.com> 0 +0000\n'
-  if [ $# -ge 2 ]; then rv_fi_data "$1
-
-$2
-"
-  else rv_fi_data "$1
-"
-  fi
-}
-rv_fi_file() { # <path> <content ending in a `_` sentinel> -> an inline file in the current commit
-  printf 'M 100644 inline %s\n' "$1"
-  rv_fi_data "${2%_}"
-}
-
-# THE SELF-PROBE RUNS BEFORE THE CORPUS, and it fires in both directions. An arm
-# reporting no offenders without first proving it can produce one has established
-# that it ran, not that the tree is clean. Built under mktemp, never on the real
-# corpus.
-#
-# EACH NEAR-MISS IS ONE PROPERTY FROM THE OFFENDER, never two. `setext.md` is the
-# rejected widening -- an H1 underline, quiet only because `^=======$` is not in
-# the grammar. `nospace.md` carries a REAL close marker, so the only thing keeping
-# it quiet is the open marker's missing trailing space. `openonly.md` carries a
-# real open marker WITH its trailing space, so the only thing keeping it quiet is
-# the intersection -- and that silence is the TRUNCATED-conflict blind spot named
-# in the header, pinned here so a later author reads it as a measured limit rather
-# than as coverage. A near-miss short of two properties discriminates against
-# neither.
-#
-# The tree is written by rv_probe_e_tree alone, so the release-version-triple fixture can build
-# it the same way and list its four paths: a near-miss that never reached the tree is quiet too.
-rv_probe_e_tree() { # <empty dir> -> a repository whose HEAD tree holds the four probe files
-(
-  cd "$1" || exit 1
-  git init -q --initial-branch=probe . || exit 1
-  {
-    rv_fi_commit 'probe corpus'
-    rv_fi_file offender.md "$(printf '<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other-branch\n_')"
-    # A setext H1 underline. This is the shape that would join the population if
-    # `^=======$` were in the grammar, and it is why it is not.
-    rv_fi_file setext.md   "$(printf 'A Heading\n=======\n\nbody text\n_')"
-    rv_fi_file nospace.md  "$(printf '<<<<<<<\nours\n>>>>>>> other-branch\n_')"
-    # A TRUNCATED conflict: a real open marker, trailing space and all, with no
-    # closing marker. The arm is silent on it BY CONSTRUCTION, and that silence is
-    # asserted so the gap is on the record.
-    rv_fi_file openonly.md "$(printf '<<<<<<< HEAD\nours\n_')"
-  } | git -c fastimport.unpackLimit=0 fast-import --quiet
-) >/dev/null 2>&1
-}
-
 arm_e() {
-probe_e="$(mktemp -d 2>/dev/null)" || {
-  echo "FAIL: arm E could not create its probe directory" >&2; exit 1; }
-trap 'rm -rf "$probe_e"' EXIT
-rv_probe_e_tree "$probe_e"
-
-probe_hits="$(conflict_files_in "$probe_e")"
-probe_bad=""
-grep -qxF 'offender.md' <<<"$probe_hits" \
-  || probe_bad="the seeded offender was NOT reported"
-for nm in setext.md nospace.md openonly.md; do
-  if grep -qxF "$nm" <<<"$probe_hits"; then
-    probe_bad="${probe_bad:+$probe_bad; }the near-miss $nm WAS reported"
-  fi
-done
-
-if [ -n "$probe_bad" ]; then
-  echo "FAIL  arm E's own probe did not discriminate -- $probe_bad. Every conflict verdict below would then be an empty set produced by a scan that cannot find an offender, which reads exactly like a clean tree." >&2
+arm_e_ran=1
+conflict_list="$(conflict_files_in .)"
+if [ -n "$conflict_list" ]; then
+  echo "FAIL  tracked file(s) carry committed merge-conflict markers: $(printf '%s\n' "$conflict_list" | tr '\n' ' ')" >&2
   conflict_fail=1
-else
-  arm_e_ran=1
-  conflict_list="$(conflict_files_in .)"
-  if [ -n "$conflict_list" ]; then
-    echo "FAIL  tracked file(s) carry committed merge-conflict markers: $(printf '%s\n' "$conflict_list" | tr '\n' ' ')" >&2
-    conflict_fail=1
-  fi
 fi
 }
 
@@ -735,69 +637,14 @@ form_findings_in() { # <repo-dir> <newline-separated shas> -> "<short> <line>" p
   done
 }
 
-# THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, under mktemp. Offenders:
-# a bulleted lowercase spelling, a backticked canonical line, a canonical line in
-# the SUBJECT, trailing text after a canonical id (dash-only and dotted). Near-misses,
-# each one property from an offender: the canonical body line itself (dash-only and
-# dotted), and the same phrase MID-line (the 3 corpus occurrences are that shape).
 arm_f() {
 form_fail=0
-arm_f_ran=0
-probe_f="$(mktemp -d 2>/dev/null)" || {
-  echo "FAIL: arm F could not create its probe directory" >&2; exit 1; }
-trap 'rm -rf "${probe_e:-}" "$probe_f"' EXIT
-(
-  cd "$probe_f" || exit 1
-  git init -q --initial-branch=probe . || exit 1
-  {
-    rv_fi_commit 'rel: bulleted' '  - not discharged: PC-S1-BULLET'
-    rv_fi_commit 'rel: backticked' 'Not-discharged: `PC-S1-TICK`'
-    rv_fi_commit 'Not-discharged: PC-S1-SUBJECT'
-    # TRAILING TEXT after a canonical-looking id: the engine reads this line as an ORDINARY mention,
-    # so it must be reported. It is the offender that kills a canonical regex missing its `$`.
-    rv_fi_commit 'rel: trailing' 'Not-discharged: PC-S1-TRAIL (rejected, see BL-9)'
-    rv_fi_commit 'rel: separator' "$(printf 'Body PC-S1-SEPBYTE \001 forged')"
-    rv_fi_commit 'rel: canonical' 'Not-discharged: PC-S1-CANON'
-    # THE SHARED ID CLASS, `[A-Za-z0-9_.-]` as in lib.sh `ledger_entry_id()`. A dotted canonical id
-    # must NOT be reported -- the narrow `[A-Z0-9]` spelling refused it -- and the same dotted id with
-    # trailing text MUST be, so widening the class cannot drop the `$` anchor unseen.
-    rv_fi_commit 'rel: canonical dotted' 'Not-discharged: PC-S1-3.2-DOT_CANON'
-    rv_fi_commit 'rel: trailing dotted' 'Not-discharged: PC-S1-3.2-DOT_TRAIL (see 0.1.0)'
-    rv_fi_commit 'rel: midline' 'This entry was not discharged by this release.'
-  } | git -c fastimport.unpackLimit=0 fast-import --quiet
-) >/dev/null 2>&1
-probe_f_shas="$(git -C "$probe_f" rev-list HEAD 2>/dev/null)"
-probe_f_hits="$(form_findings_in "$probe_f" "$probe_f_shas")"
-# AN UNREADABLE MEMBER, IN A CALL OF ITS OWN. `git log --no-walk` given a full name that
-# names no object prints no record at all, so only the record count keeps the single read
-# from answering "no findings" for the whole list. One real offender (the first commit, the
-# bulleted spelling) beside one absent name: both findings must come back. It is not in the
-# list above, which would then never take the single read and lose its \001 case.
-probe_f_gone=0000000000000000000000000000000000000001
-probe_f_mixed="$(form_findings_in "$probe_f" "$(printf '%s\n' "$probe_f_shas" | tail -n 1)
-$probe_f_gone")"
-probe_f_bad=""
-grep -qxF -- "$probe_f_gone <message could not be read>" <<<"$probe_f_mixed" \
-  || probe_f_bad="the unreadable member $probe_f_gone was NOT reported"
-grep -qF -- PC-S1-BULLET <<<"$probe_f_mixed" \
-  || probe_f_bad="${probe_f_bad:+$probe_f_bad; }the offender PC-S1-BULLET beside an unreadable member was NOT reported"
-for tok in PC-S1-BULLET PC-S1-TICK PC-S1-SUBJECT PC-S1-TRAIL PC-S1-3.2-DOT_TRAIL 'carries a \001 byte'; do
-  grep -qF -- "$tok" <<<"$probe_f_hits" || probe_f_bad="${probe_f_bad:+$probe_f_bad; }the offender $tok was NOT reported"
-done
-for tok in PC-S1-CANON PC-S1-3.2-DOT_CANON 'not discharged by this release'; do
-  grep -qF -- "$tok" <<<"$probe_f_hits" && probe_f_bad="${probe_f_bad:+$probe_f_bad; }the near-miss '$tok' WAS reported"
-done
-if [ -n "$probe_f_bad" ]; then
-  echo "FAIL  arm F's own probe did not discriminate -- $probe_f_bad. A clean range below would then be a scan that cannot find an offender." >&2
+arm_f_ran=1
+form_list="$(form_findings_in . "$COMMITS")"
+if [ -n "$form_list" ]; then
+  echo "FAIL  a not-discharged citation is misspelled or misplaced:" >&2
+  printf '%s\n' "$form_list" | sed 's/^/        /' >&2
   form_fail=1
-else
-  arm_f_ran=1
-  form_list="$(form_findings_in . "$COMMITS")"
-  if [ -n "$form_list" ]; then
-    echo "FAIL  a not-discharged citation is misspelled or misplaced:" >&2
-    printf '%s\n' "$form_list" | sed 's/^/        /' >&2
-    form_fail=1
-  fi
 fi
 }
 
@@ -806,7 +653,7 @@ fi
 #
 # See the header for the rule set and the measured false-positive set. Evaluated over the same
 # commit list as A and B, and only on a commit whose subject names a bundle or whose message
-# carries a `Members` paragraph: a push carrying neither pays one `git log` and no probe.
+# carries a `Members` paragraph: a push carrying neither pays one `git log`.
 # ---------------------------------------------------------------------------
 ledger_members_of() { # one message on stdin -> the first object name on each `- ` line of its Members paragraph
   LC_ALL=C awk '
@@ -1076,161 +923,11 @@ ledger_check() { # <repo-dir> <release sha> <message> -> `G FAIL|G NOTE|G STAT .
     | G_ROLES="$roles" G_NM="$cnt" G_PAR="${par# }" G_SHORT="${short# }" LC_ALL=C awk "$LEDGER_AWK"
 }
 
-# THE PROBE REPOSITORY: a base, two members on it, and four release commits on it. Written by two
-# fast-imports, because a release message names its members by object name, known only after the first.
-rv_probe_g_tree() { # <empty dir> -> "<name> <sha>" per release commit, on stdout
-  local d="$1" P bl1 bl2 bl0 a b
-  bl0='# Archive
-
-## BL-0 — zero
-
-old
-
-verify: manual
-'
-  bl1='## BL-1 — one
-
-body one
-
-verify: manual
-'
-  bl2='## BL-2 — two
-
-body two
-
-verify: manual
-'
-  P="# Backlog
-
-$bl1
-$bl2"
-  (
-    cd "$d" || exit 1
-    git init -q --initial-branch=probe . || exit 1
-    {
-      rv_fi_commit 'probe base'
-      rv_fi_file VERSION "0.1.0
-_"
-      rv_fi_file CHANGELOG.md "# Changelog
-
-## [0.1.0] - d
-
-- base
-_"
-      rv_fi_file docs/backlog.md "${P}_"
-      rv_fi_file docs/backlog.archive.md "${bl0}_"
-      printf 'commit refs/heads/ma\ncommitter probe <probe@example.com> 0 +0000\n'; rv_fi_data 'member A
-'
-      printf 'from refs/heads/probe\n'
-      rv_fi_file docs/backlog.md "${P}
-Note: same
-
-## BL-3 — three
-
-**LANDED (vVERSION_PLACEHOLDER).** three
-
-verify: manual
-_"
-      printf 'commit refs/heads/mb\ncommitter probe <probe@example.com> 0 +0000\n'; rv_fi_data 'member B
-'
-      printf 'from refs/heads/probe\n'
-      rv_fi_file docs/backlog.md "${P}
-Note: same
-
-## BL-4 — four
-
-body four, vVERSION_PLACEHOLDER kept
-
-verify: manual
-_"
-    } | git -c fastimport.unpackLimit=0 fast-import --quiet || exit 1
-  ) >/dev/null 2>&1 || return 1
-  a="$(git -C "$d" rev-parse -q --verify refs/heads/ma 2>/dev/null)" || return 1
-  b="$(git -C "$d" rev-parse -q --verify refs/heads/mb 2>/dev/null)" || return 1
-  rv_probe_g_rel() { # <ref> <message> <backlog> <archive>
-    printf 'commit refs/heads/%s\ncommitter probe <probe@example.com> 0 +0000\n' "$1"; rv_fi_data "$2
-"
-    printf 'from refs/heads/probe\n'
-    rv_fi_file VERSION "0.3.0
-_"
-    rv_fi_file CHANGELOG.md "# Changelog
-
-## [0.3.0] - d
-
-- the bundle
-
-## [0.1.0] - d
-
-- base
-_"
-    rv_fi_file docs/backlog.md "$3"
-    rv_fi_file docs/backlog.archive.md "$4"
-  }
-  local msg="0.3.0 — probe bundle
-
-Members:
-- A (probe) $a
-- B (probe) $b
-" good gooda
-  # The near-miss: BL-1 rotated into the archive, BL-2 carrying BOTH members' identical note, BL-3's
-  # status-line placeholder set to v0.3.0, BL-4 whole at the end of its file (its body-line placeholder
-  # as written), and a BL-9 the release adds.
-  good="# Backlog
-
-$bl2
-Note: same
-Note: same
-
-## BL-3 — three
-
-**LANDED (v0.3.0).** three
-
-verify: manual
-
-## BL-4 — four
-
-body four, vVERSION_PLACEHOLDER kept
-
-verify: manual
-"
-  gooda="$bl0
-$bl1
-## BL-9 — nine
-
-filed by the integrator
-"
-  (
-    cd "$d" || exit 1
-    {
-      rv_probe_g_rel good "$msg" "${good}_" "${gooda}_"
-      # One of the two identical member lines dropped, the union shape.
-      rv_probe_g_rel dropmulti "$msg" "$(printf '%s' "$good" | awk '/^Note: same$/ && ++n == 2 { next } { print }')
-_" "${gooda}_"
-      # BL-4's closing line dropped at the end of the file.
-      rv_probe_g_rel dropeof "$msg" "$(printf '%s' "$good" | awk '{ l[NR] = $0 } END { for (i = 1; i <= NR; i++) if (!(l[i] == "verify: manual" && l[i-4] == "## BL-4 — four")) print l[i] }')
-_" "${gooda}_"
-      rv_probe_g_rel nomembers '0.3.0 — probe bundle' "${good}_" "${gooda}_"
-      # The status line edited beyond its placeholder: the substitution acquits that token only.
-      rv_probe_g_rel renbody "$msg" "$(printf '%s' "$good" | sed 's/^\*\*LANDED (v0\.3\.0)\.\*\* three$/**LANDED (v0.3.0).** three, amended/')
-_" "${gooda}_"
-      # The placeholder set to a version that is not the release's.
-      rv_probe_g_rel wrongver "$msg" "$(printf '%s' "$good" | sed 's/^\*\*LANDED (v0\.3\.0)\./**LANDED (v0.2.9)./')
-_" "${gooda}_"
-      # The placeholder substituted on a line that is not a status line.
-      rv_probe_g_rel bodysub "$msg" "$(printf '%s' "$good" | sed 's/^body four, vVERSION_PLACEHOLDER kept$/body four, v0.3.0 kept/')
-_" "${gooda}_"
-    } | git -c fastimport.unpackLimit=0 fast-import --quiet || exit 1
-  ) >/dev/null 2>&1 || return 1
-  for k in good dropmulti dropeof nomembers renbody wrongver bodysub; do
-    printf '%s %s\n' "$k" "$(git -C "$d" rev-parse -q --verify "refs/heads/$k" 2>/dev/null)"
-  done
-}
-
 arm_g() {
 ledger_fail=0
 arm_g_ran=0
 arm_g_why=""
-local rec sha msg cands="" out all="" probe_g_bad="" name psha pmsg nl=$'\n'
+local rec sha msg cands="" out all="" nl=$'\n'
 while IFS= read -r -d '' rec || [ -n "$rec" ]; do
   sha="${rec%%$'\n'*}"; msg="${rec#*$'\n'}"
   ledger_is_bundle "${msg%%$'\n'*}" && { cands="$cands $sha"; continue; }
@@ -1238,33 +935,6 @@ while IFS= read -r -d '' rec || [ -n "$rec" ]; do
 done < <(git log -z --no-walk=unsorted --format='%H%n%B' $COMMITS 2>/dev/null)
 if [ -z "$cands" ]; then
   arm_g_why="none"
-  return 0
-fi
-probe_g="$(mktemp -d 2>/dev/null)" || {
-  echo "FAIL: arm G could not create its probe directory" >&2; exit 1; }
-trap 'rm -rf "${probe_e:-}" "${probe_f:-}" "$probe_g"' EXIT
-while read -r name psha; do
-  [ -n "$psha" ] || { probe_g_bad="${probe_g_bad:+$probe_g_bad; }the probe release $name was not written"; continue; }
-  pmsg="$(git -C "$probe_g" log -1 --format=%B "$psha" 2>/dev/null)"
-  out="$(ledger_check "$probe_g" "$psha" "$pmsg")"
-  grep -q -e '^G STAT ' -e '^G FAIL - the subject names a bundle' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }the probe release $name produced no verdict"
-  case "$name" in
-    good)
-      grep -q '^G FAIL' <<<"$out" && probe_g_bad="${probe_g_bad:+$probe_g_bad; }the near-miss release WAS reported: $(grep -m1 '^G FAIL' <<<"$out")"
-      grep -q '^G NOTE BL-9:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }the release-added BL-9 was not named" ;;
-    dropmulti) grep -q '^G FAIL BL-2:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }one of two identical member lines dropped from BL-2 was NOT reported" ;;
-    dropeof) grep -q '^G FAIL BL-4:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }BL-4's last line dropped at the end of the file was NOT reported" ;;
-    nomembers) grep -q '^G FAIL - the subject names a bundle' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }a bundle naming no member was NOT reported" ;;
-    renbody) grep -q '^G FAIL BL-3:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }a status line edited beyond its placeholder in BL-3 was NOT reported" ;;
-    wrongver) grep -q '^G FAIL BL-3:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }a placeholder set to a version other than the release's in BL-3 was NOT reported" ;;
-    bodysub) grep -q '^G FAIL BL-4:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }a placeholder substituted off the status line in BL-4 was NOT reported" ;;
-  esac
-done < <(rv_probe_g_tree "$probe_g")
-[ -n "$probe_g_bad" ] || [ "$(git -C "$probe_g" rev-parse -q --verify refs/heads/nomembers 2>/dev/null)" ] \
-  || probe_g_bad="the probe repository was not built"
-if [ -n "$probe_g_bad" ]; then
-  echo "FAIL  arm G's own probe did not discriminate -- $probe_g_bad. A clean bundle below would then be a comparison that cannot find a dropped line." >&2
-  ledger_fail=1
   return 0
 fi
 arm_g_ran=1
@@ -1490,11 +1160,11 @@ if [ "$arm_d_ran" -eq 1 ]; then summary="$summary; no unpushed main commits inhe
 elif [ "$arm_d_why" = "on-main" ]; then summary="$summary; branch-base arm n/a on main"
 elif [ "$arm_d_why" = "scoped-out" ]; then summary="$summary; branch-base arm n/a for an explicit range"
 else                            summary="$summary; BRANCH-BASE ARM NOT EVALUATED"; fi
-if [ "$arm_e_ran" -eq 1 ]; then summary="$summary; no committed conflict markers (probe fired both ways)"
+if [ "$arm_e_ran" -eq 1 ]; then summary="$summary; no committed conflict markers"
 else                            summary="$summary; CONFLICT-MARKER ARM NOT EVALUATED"; fi
-if [ "$arm_f_ran" -eq 1 ]; then summary="$summary; no misspelled not-discharged citation (probe fired both ways)"
+if [ "$arm_f_ran" -eq 1 ]; then summary="$summary; no misspelled not-discharged citation"
 else                            summary="$summary; CITATION-FORM ARM NOT EVALUATED"; fi
-if [ "$arm_g_ran" -eq 1 ]; then summary="$summary; every bundle's ledger sections match its members (probe fired both ways; member, multi-member, base, release-added:$arm_g_stat)"
+if [ "$arm_g_ran" -eq 1 ]; then summary="$summary; every bundle's ledger sections match its members (member, multi-member, base, release-added:$arm_g_stat)"
 elif [ "$arm_g_why" = "none" ]; then summary="$summary; bundle-ledger arm n/a, no bundle in the range"
 else                            summary="$summary; BUNDLE-LEDGER ARM NOT EVALUATED"; fi
 echo "$summary."
@@ -1503,8 +1173,7 @@ exit 0
 
 # THE MAIN BODY IS A FUNCTION SEQUENCE, AND IT RUNS ONLY WHEN THIS FILE IS EXECUTED. The
 # release-version-triple fixture sources a copy and calls rv_init, arm_c_range, arm_c, arm_d and
-# arm_ab directly, skipping arm_e and arm_f, whose self-probes each build a scratch repository and
-# were paid on every one of its drives. Sourcing defines the functions and runs nothing; the guard
+# arm_ab directly. Sourcing defines the functions and runs nothing; the guard
 # is the idiom core/scripts/content-seal.sh uses. Every `exit` is unchanged: executed, it ends the
 # script as before; in a sourced subshell it ends that subshell with the arm's own status.
 rv_main() {

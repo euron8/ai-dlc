@@ -970,21 +970,7 @@ fi
 # THE COUNT IS ASSERTED. A driver whose `for` loop or `if` guard stopped reaching an assertion
 # prints fewer lines and no failure, and an unrun assertion is indistinguishable from one that
 # passed.
-EXPECTED=56
-# --- no shipped caller passes validate-spawn-ledger.sh's --probe-from-caller seam ----------------
-# Hosted HERE because this fixture is .dist-only and seeds core/ and scripts/ whole, so the scan
-# reads a real tree; the shipping fold-architect-ledger-join cannot declare them. Non-comment lines
-# outside core/fixtures and outside the subject. The CONTROL is a token every caller line carries,
-# which must count at least 1 in the same tree.
-scan_nc() {
-  grep -rnF --exclude-dir=fixtures --exclude=validate-spawn-ledger.sh -- "$1" "$PRISTINE/core" "$PRISTINE/scripts" 2>/dev/null \
-    | grep -v ':[0-9][0-9]*:[[:space:]]*#' | grep -c .
-}
-n_flag="$(scan_nc 'probe-from-caller')" || n_flag=0
-n_ctl="$(scan_nc 'validate-spawn-ledger.sh')" || n_ctl=0
-if [ "$n_flag" -eq 0 ] && [ "$n_ctl" -ge 1 ]; then
-  ok "A-callers no shipped caller passes --probe-from-caller (flag lines=$n_flag; control, lines naming the script=$n_ctl)"
-else bad "A-callers no shipped caller passes --probe-from-caller -- flag lines=$n_flag control=$n_ctl"; fi
+EXPECTED=55
 tree_clean() { fresh >/dev/null; diff -rq "$PRISTINE" "$TREE" >"$WORK/tree.diff" 2>&1; }
 # PROBE of the guard, both directions: a write that was never recorded must be seen, and once it is
 # gone the same guard must be quiet. A guard that cannot fail reads exactly like one that passed.

@@ -28,7 +28,6 @@
 #       gives a listed fixture's digest input `#inproc listed <its cells.decl sha256>` and an unlisted one's
 #       `#inproc unlisted none` (dg.sh, no bash start beyond its own)
 #   DS  the same span extracts with readset_vs_store, readset_vs_input and readset_vs_inproc defined
-# The dirty world's anp-shaped NP finding is held by the validator's own self-probe (anp FIRES, anpq QUIET).
 #
 # THE IN-PROCESS CELLS of this fixture are its own cells.decl: every validator start is one e2e cell, tagged at its
 # start, and the judge starts the validator makes are covered by one nested row.
@@ -45,7 +44,7 @@ while [ -n "$d" ] && [ "$d" != / ]; do
 done
 [ -n "$ROOT" ] || { echo "FIXTURE ERROR: no scripts/validate-fixture-inprocess.sh walking up from $HERE" >&2; exit 2; }
 VREL=scripts/validate-fixture-inprocess.sh; JREL=scripts/validate-fixture-invocations.sh; HREL=scripts/validate-fixture-hygiene.sh
-for p in "$VREL" "$JREL" "$HREL" core/fixtures/lib/mutant.sh; do [ -f "$ROOT/$p" ] || { echo "FIXTURE BROKEN: $p is absent under $ROOT" >&2; exit 2; }; done
+for p in "$VREL" "$JREL" "$HREL"; do [ -f "$ROOT/$p" ] || { echo "FIXTURE BROKEN: $p is absent under $ROOT" >&2; exit 2; }; done
 
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"
@@ -63,9 +62,7 @@ mkf() { # <world> <fixture> <invocations rows |-joined> <cells rows |-joined, or
 }
 mk_world() { # <dir> <dirty|clean|listed>
   local w="$1"
-  # The judge's --b2-census runs its self-probe, which drives the real core/fixtures/lib/mutant.sh beside it.
-  mkdir -p "$w/scripts" "$w/core/scripts" "$w/core/fixtures/lib" && : > "$w/VERSION" && cp -p "$ROOT/$VREL" "$ROOT/$JREL" "$ROOT/$HREL" "$w/scripts/" \
-    && cp -p "$ROOT/core/fixtures/lib/mutant.sh" "$w/core/fixtures/lib/" || return 1
+  mkdir -p "$w/scripts" "$w/core/scripts" && : > "$w/VERSION" && cp -p "$ROOT/$VREL" "$ROOT/$JREL" "$ROOT/$HREL" "$w/scripts/" || return 1
   cmp -s "$ROOT/$VREL" "$w/$VREL" && cmp -s "$ROOT/$JREL" "$w/$JREL" || return 1
   printf '#!/usr/bin/env bash\n[ "${BASH_SOURCE[0]}" = "$0" ] || return 0\n:\n' > "$w/core/scripts/g.sh"
   if [ "$2" = dirty ]; then printf '#!/usr/bin/env bash\necho "[ \\"${BASH_SOURCE[0]}\\" = \\"$0\\" ] || return 0"\n' > "$w/core/scripts/d.sh"
@@ -133,7 +130,7 @@ verdict() { # <arm> <tag> [<world dir> for DV]
     D4) rcis "$t" 1 && has "$t" '  FAIL  C4 fwhy:1: an empty why= on an e2e row' ;;
     D5) rcis "$t" 1 && has "$t" '  FAIL  C5 fguard:1: cli subject core/scripts/d.sh carries no column-0 BASH_SOURCE source guard statement' ;;
     DQ) rcis "$t" 1 && has "$t" '5 fixture(s) scanned' && ! grep -qE 'FAIL  [A-Z0-9]+ (fok|fzero)[:]' "$WORK/c.$t.out" ;;
-    C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-inprocess -- self-probe fired both ways; 5 fixture(s) scanned' ;;
+    C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-inprocess -- 5 fixture(s) scanned' ;;
     N)  rcis "$t" 0 && has "$t" 'judges GRAMMAR only' && has "$t" '; 5 fixture(s) scanned; 5 predicted to pass, 0 refused' ;;
     DV) rcis "$t" 0 && has "$t" '--derive wrote 3 row(s)' && [ "$(rows "$3/scripts/fixture-inprocess-allowlist.txt")" = "fguard fnew fwhy " ] \
           && cmp -s "$3/scripts/fixture-inprocess-allowlist.txt" "$3.first" \

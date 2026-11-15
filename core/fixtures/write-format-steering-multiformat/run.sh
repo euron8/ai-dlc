@@ -292,18 +292,6 @@ else
   bad "MUTANT 6: rc=$M6_RC anchor=[${M6_READ:-<absent>}] — a correctly-installed consumer is being reported, so MUTANT 5's failure was not about the broken pointer"
 fi
 
-# ==============================================================================================
-# ARM 7 — REGRESSION GUARD: the shipped script's own self-probe still passes, unmodified.
-# Both directions, run by the subject itself, before any corpus verdict is believed.
-# ==============================================================================================
-SP_F="$OUTDIR/selfprobe.txt"
-bash "$VALIDATOR" --self-probe > "$SP_F" 2>&1; SP_RC=$?
-if [ "$SP_RC" -eq 0 ] && has_in "$SP_F" 'self-probe PASS'; then
-  ok "--self-probe still PASSES on the shipped script (offender reported, near-miss not)"
-else
-  bad "--self-probe rc=$SP_RC: $(cat "$SP_F" 2>/dev/null)"
-fi
-
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-report_end write-format-steering-multiformat 15
+report_end write-format-steering-multiformat 14

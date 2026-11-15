@@ -1,7 +1,7 @@
 # artifact-derivations/unit.sh -- the in-process way to ask validate-artifact-derivations.sh a question.
 # Sourced by run.sh. The validator is a loadable file (vad_load, vad_invoke; see the header of the
 # validator): vad_call sources the COPY it is given in a subshell, loads its tables and startup
-# self-probes, and runs one vad_invoke, so the file answers what `bash <copy> <args>` answers and the
+# checks, and runs one vad_invoke, so the file answers what `bash <copy> <args>` answers and the
 # copy is sourced, never re-implemented. The subshell is what keeps the validator's `fails`,
 # `rc`, `out`, `exit` and trap away from this fixture's own names.
 #   vad_call <copy> [NAME=value ...] -- <args>...

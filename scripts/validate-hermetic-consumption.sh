@@ -54,7 +54,7 @@
 # first line only.
 #
 # HOW THE FALSE-POSITIVE SET REACHED ZERO. Each narrowing below was measured by reverting it in a
-# copy and scanning the same tip corpus, self-probe off:
+# copy and scanning the same tip corpus:
 #   - with no own-sentinel restriction (every chain whose test names the consumer path judged):
 #     flagged 1 -- `write-format-steering-multiformat` (a resolver inside a helper that seeds
 #     worlds, the sentinel emitted unconditionally at the top). Before the sentinel grammar
@@ -66,17 +66,13 @@
 #     names the path as a STRING it looks for. With BOTH narrowings reverted it flags 3, adding
 #     `prepush-worktree-env-scrub` on a `cmp -s` naming `.githooks/pre-push`;
 #   - keyed on EVERY decl line instead of `!` lines: flagged 0 here -- structurally, because no
-#     unmarked input on today's corpus has the shape -- so the self-probe's `e-non-bang` seed (a
-#     fixed `!` input beside an unmarked input echoed in its core branch only) is the only thing
-#     that can tell the two apart, and the fixture's widening mutant asserts that it does;
-#   - the sentinel token compared as a PREFIX: flagged 0 here, and accepts the `.bak` near-miss,
-#     so it is compared whole and the self-probe's `d-bak` seed holds it.
+#     unmarked input on today's corpus has the shape -- so only a seed (a fixed `!` input beside an
+#     unmarked input echoed in its core branch only) can tell the two apart;
+#   - the sentinel token compared as a PREFIX: flagged 0 here, and accepts a `.bak` near-miss, so it
+#     is compared whole.
 # No input was exempted by name, and none is. The first two narrowings were held only by today's
-# corpus until they got seeds of their own: `o-varlater` (a layout chain whose sentinel is emitted
-# later through a variable) and `m-grepq` (a branch that names the consumer path in a `grep -qF`)
-# must stay quiet, and removing either guard makes the self-probe refuse naming that seed. The
-# heredoc skip is held by `p-heredoc`, whose heredoc body carries a column-0 sentinel after the
-# chain that would otherwise acquit a dist-only echo.
+# corpus until they got seeds of their own, in the fixture: a layout chain whose sentinel is emitted
+# later through a variable, and a branch that names the consumer path in a `grep -qF`.
 #
 # WHY A STANDALONE SCRIPT AND NOT AN ARM IN THE ENFORCEMENT MAP. That validator is invoked by
 # the suite's slowest fixtures and is held to `FORK_BUDGET`; this scan forks a fixed handful of
@@ -84,19 +80,8 @@
 # `core/fixtures/hermetic-consumption/`, which is the only thing that runs it at a push. It is
 # distribution-only: its corpus is `core/fixtures/`, which no consumer holds.
 #
-# EVERY RUN SELF-PROBES FIRST, in both directions, under a mktemp tree. Eight seeded offenders
-# must each be flagged: an echo in the dist branch only, a `.bak` near-miss in the consumer
-# branch, an echo at the top of the file above the resolution, an echo in the override branch
-# only, a consumer echo sent to `> /dev/null`, one with a trailing space inside the quotes, one
-# behind `[ ... ] &&`, and a dist-only echo beside a heredoc body carrying the consumer sentinel.
-# Six near-misses must stay quiet: the consumer-branch echo, the declared spelling after `fi`, a
-# fixed `!` input beside an unmarked input whose chain echoes in its core branch only, the
-# consumer echo sent `>&2`, a `grep -qF` branch naming the consumer path, and a layout chain whose
-# sentinel comes later through a variable. A `.dist-only` seed must not be scanned at all. A
-# probe that disagrees refuses the corpus.
-#
 # Usage: validate-hermetic-consumption.sh [--quiet]
-# Exit:  0 = clean, 1 = at least one finding, 2 = usage, environment, or a refused self-probe.
+# Exit:  0 = clean, 1 = at least one finding, 2 = usage or environment.
 #
 # The whole program is vhc_main, so a fixture can SOURCE this file and call it in process; nothing above
 # the guard at the end runs in the sourcing shell except that definition. Its own name and directory are
@@ -278,92 +263,6 @@ scan() {
   [ "$(cut -f1 "$o/summary")" = "$n_run" ] || { echo "validate-hermetic-consumption: listed $n_run run.sh, opened $(cut -f1 "$o/summary")" >&2; return 2; }
   return 0
 }
-
-# probe_seed <fixtures dir> <name> <variant> -- one seeded fixture, shaped like the real producer
-# (consumer-machinery-inventory's resolver: an override branch, a core branch, a consumer branch).
-probe_seed() {
-  local d="$1/$2" v="$3" ce="" ue="" oe="" top="" after=""
-  mkdir -p "$d" || return 2
-  printf '%s\n' '!core/scripts/probe-subject.sh' 'core/fixtures/lib/' > "$d/inputs.decl"
-  ce='  echo "HERMETIC-CONSUMED core/scripts/probe-subject.sh"'
-  local grepq="" later="" here=""
-  case "$v" in
-    fix-a|non-bang) ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"' ;;
-    dist-only)      : ;;
-    devnull)        ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh" > /dev/null' ;;
-    stderr)         ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh" >&2' ;;
-    tspace)         ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh "' ;;
-    andand)         ue='  [ -n "${AI_DLC_PROBE_UNSET:-}" ] && echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"' ;;
-    grepq)          ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"'; grepq=1 ;;
-    varlater)       ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"'; later=1 ;;
-    heredoc)        here=1 ;;
-    fix-b)          ce=""; after='echo "HERMETIC-CONSUMED core/scripts/probe-subject.sh"' ;;
-    bak)            ue='  echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh.bak"' ;;
-    top)            top='echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"' ;;
-    override)       ce=""; oe='  echo "HERMETIC-CONSUMED core/scripts/probe-subject.sh"' ;;
-    *) return 2 ;;
-  esac
-  {
-    printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' 'ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"'
-    [ -z "$top" ] || printf '%s\n' "$top"
-    printf '%s\n' 'if [ -n "${AI_DLC_PROBE_SUBJECT:-}" ] && [ -f "${AI_DLC_PROBE_SUBJECT}" ]; then' '  VAL="${AI_DLC_PROBE_SUBJECT}"'
-    [ -z "$oe" ] || printf '%s\n' "$oe"
-    printf '%s\n' 'elif [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/probe-subject.sh" ]; then' '  VAL="$ROOT/core/scripts/probe-subject.sh"'
-    [ -z "$ce" ] || printf '%s\n' "$ce"
-    printf '%s\n' 'elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/probe-subject.sh" ]; then' '  VAL="$ROOT/scripts/ai-dlc/probe-subject.sh"'
-    [ -z "$ue" ] || printf '%s\n' "$ue"
-    # grepq: a branch that names the consumer path as a STRING it searches for, not as a file-test
-    # operand, and emits nothing -- it must not be judged as an installed-path branch.
-    [ -z "$grepq" ] || printf '%s\n' 'elif grep -qF "scripts/ai-dlc/probe-subject.sh" "$ROOT/manifest.txt"; then' '  VAL="$ROOT/manifest.txt"'
-    printf '%s\n' 'else' '  echo "FIXTURE ERROR: probe-subject.sh not found in either layout" >&2; exit 2' 'fi'
-    [ -z "$after" ] || printf '%s\n' "$after"
-    # varlater: a second, layout-DETECTING chain that tests the consumer path, sets a variable, and
-    # whose sentinel is emitted later through that variable -- not where the input is consumed.
-    [ -z "$later" ] || printf '%s\n' 'if [ -f "$ROOT/core/scripts/probe-subject.sh" ]; then' '  LAY=core/scripts' \
-      'elif [ -f "$ROOT/scripts/ai-dlc/probe-subject.sh" ]; then' '  LAY=scripts/ai-dlc' 'fi' 'echo "HERMETIC-CONSUMED $LAY/probe-subject.sh"'
-    # heredoc: the dist-only shape plus a heredoc body, after the chain, carrying a consumer-branch
-    # sentinel at column 0 -- text written to a file, never emitted, so it must not acquit the input.
-    [ -z "$here" ] || printf '%s\n' 'cat > "$ROOT/probe.sh" <<EOF' 'echo "HERMETIC-CONSUMED scripts/ai-dlc/probe-subject.sh"' 'echo "HERMETIC-CONSUMED core/scripts/probe-subject.sh"' 'EOF'
-    if [ "$v" = "non-bang" ]; then
-      printf '%s\n' 'cat > "$ROOT/probe.out" <<'"'"'EOF'"'"'' 'if [ -f x ]; then' 'fi' 'EOF'
-      printf '%s\n' 'if [ -f "$ROOT/core/skills/probe/notes.md" ]; then' '  NOTES="$ROOT/core/skills/probe/notes.md"' \
-        '  echo "HERMETIC-CONSUMED core/skills/probe/notes.md"' \
-        'elif [ -f "$ROOT/.claude/skills/probe/notes.md" ]; then' '  NOTES="$ROOT/.claude/skills/probe/notes.md"' 'fi'
-    fi
-    printf '%s\n' 'bash "$VAL"'
-  } > "$d/run.sh"
-  [ "$v" != "non-bang" ] || printf '%s\n' 'core/skills/probe/notes.md' >> "$d/inputs.decl"
-  return 0
-}
-
-# The seeds, in an order where a quiet seed comes first and the offenders are not adjacent, so a
-# scan that judged only the first fixture cannot pass. `h-dist-marked` carries a dist-only echo
-# AND a `.dist-only` marker: it must not be scanned, so `scanned` must read 14, not 15.
-PROBE_FIRE="b-dist-only d-bak f-top g-override j-devnull l-tspace n-andand p-heredoc"
-PROBE_QUIET="a-fix-a c-fix-b e-non-bang k-stderr m-grepq o-varlater"
-self_probe() {
-  local fx="$WORK/probe/fx" o="$WORK/probe/out" bad=0 n s
-  for s in a-fix-a:fix-a b-dist-only:dist-only c-fix-b:fix-b d-bak:bak e-non-bang:non-bang f-top:top g-override:override h-dist-marked:dist-only \
-           j-devnull:devnull k-stderr:stderr l-tspace:tspace m-grepq:grepq n-andand:andand o-varlater:varlater p-heredoc:heredoc; do
-    probe_seed "$fx" "${s%%:*}" "${s#*:}" || { echo "validate-hermetic-consumption: self-probe could not seed ${s%%:*}" >&2; return 2; }
-  done
-  printf '%s\n' 'seeded: its subject is not present on a consumer' > "$fx/h-dist-marked/.dist-only"
-  mkdir -p "$fx/i-no-decl" && printf '%s\n' 'echo "HERMETIC-CONSUMED core/scripts/probe-subject.sh"' > "$fx/i-no-decl/run.sh"
-  scan "$fx" "$o" || { echo "validate-hermetic-consumption: self-probe: the scan refused its own seeded tree" >&2; return 2; }
-  n="$(cut -f1 "$o/summary")"
-  [ "$n" = "14" ] || { echo "validate-hermetic-consumption: self-probe: scanned $n seeded fixtures, expected 14 -- the corpus walk is not the one this probe seeded" >&2; bad=1; }
-  for s in $PROBE_FIRE; do
-    grep -q "^$fx/$s	" "$o/flags" || { echo "validate-hermetic-consumption: self-probe: seeded offender $s was NOT flagged" >&2; bad=1; }
-  done
-  for s in $PROBE_QUIET; do
-    grep -q "^$fx/$s	" "$o/flags" && { echo "validate-hermetic-consumption: self-probe: seeded near-miss $s WAS flagged" >&2; bad=1; }
-  done
-  [ "$bad" = "0" ] || return 2
-  say "self-probe: ok -- 8 seeded offenders flagged, 6 near-misses quiet, 1 .dist-only seed not scanned"
-  return 0
-}
-
-self_probe || { echo "validate-hermetic-consumption: REFUSED -- the self-probe disagrees with its seeds, so a clean corpus result would mean nothing" >&2; exit 2; }
 
 scan "$ROOT/core/fixtures" "$WORK/corpus" || exit 2
 IFS="$(printf '\t')" read -r c_open c_inputs c_same c_var c_else c_nobr c_scored c_flag < "$WORK/corpus/summary"

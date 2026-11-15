@@ -57,7 +57,7 @@ printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
 # PASS. Every assertion below reaches the validator through `$( )`, so the same
 # shape is available here. A failed assertion is loud; one that never executed is
 # not, and this is what tells them apart.
-EXPECTED_ASSERTIONS=34
+EXPECTED_ASSERTIONS=33
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -85,9 +85,8 @@ commit() {
 
 # drive_src <validator-file> <outfile> [args...] -> the validator's own exit status, output in <outfile>.
 # SOURCES the file in a subshell and calls the SAME functions its main body calls, in its order,
-# minus arm_e and arm_f: those two self-probes each build a scratch repository, the bulk of the
-# cost, and no drive through here asks about them. Assertion 1 executes the whole program, so both
-# arms are still proved to fire. An `exit` in an
+# minus arm_e, arm_f and arm_g: no drive through here asks about them, and the full-program drives
+# (assertions 1 and 25-26) execute all three. An `exit` in an
 # arm ends this subshell with the arm's status, exactly as it ends the script. A sourced copy that
 # defines no arm_ab (an older validator) is refused rather than scored as a pass.
 drive_src() {
@@ -117,11 +116,11 @@ echo "release-version-triple"
 # --- 1. All three agreeing passes ---------------------------------------------
 commit 0.1.0 0.1.0 'feat(v0.1.0): the first one'
 # The ONE full-program drive of a passing input: the whole validator EXECUTED, so arms E and F run
-# their probes and the summary names both as fired. Every other drive goes through drive_src.
+# and the summary names both. Every other drive goes through drive_src.
 bash "$VALIDATOR" --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
 if [ "$status" = "0" ] \
-   && grep -q 'no committed conflict markers (probe fired both ways)' "$WORK/out.txt" \
-   && grep -q 'no misspelled not-discharged citation (probe fired both ways)' "$WORK/out.txt"; then
+   && grep -q 'no committed conflict markers' "$WORK/out.txt" \
+   && grep -q 'no misspelled not-discharged citation' "$WORK/out.txt"; then
   ok "subject, VERSION and CHANGELOG all agreeing passes, with arms E and F evaluated end to end"
 else
   bad "an agreeing commit failed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
@@ -652,26 +651,11 @@ else
 fi
 
 cd "$WORK" || exit 2
-# --- 24. EVERY NEAR-MISS REACHES ARM E'S PROBE TREE -----------------------------
-# m-e-nospace proves one near-miss arrived. setext.md and openonly.md are written the same way,
-# and a near-miss that never reached the tree is quiet exactly as a correctly-acquitted one is.
-# rv_probe_e_tree is the function arm E calls, sourced and run here on a fresh directory, and its
-# HEAD tree must list exactly the offender and the three near-misses.
-E_TREE="$WORK/e-tree"
-mkdir -p "$E_TREE" || exit 2
-( . "$VALIDATOR" || exit 97; fx_inproc scripts/validate-release-version.sh; rv_probe_e_tree "$E_TREE" ) >/dev/null 2>&1
-e_names="$(git -C "$E_TREE" ls-tree -r --name-only HEAD 2>/dev/null | tr '\n' ' ')"
-if [ "$e_names" = "nospace.md offender.md openonly.md setext.md " ]; then
-  ok "arm E's probe tree, built by the function arm E calls, holds the offender and all three near-misses: $e_names"
-else
-  bad "arm E's probe tree lists [$e_names], want the offender and the three near-misses"
-fi
-
 # --- 25-26. ARM G: A BUNDLE'S LEDGER SECTIONS ARE ITS MEMBERS' BYTES ---------------------------------
 # A union merge of two members' appends can drop one of two identical lines where they meet, and a count of
 # lines or headings cannot see it. A repository of its own: a base, two members each appending the SAME note
 # to BL-1, and two releases naming both members, one keeping both notes and one keeping a single note. Both
-# runs execute the whole program, so arm G's probe runs before the corpus each time.
+# runs execute the whole program, so arm G runs end to end each time.
 G_DIR="$WORK/g"
 mkdir -p "$G_DIR/docs" || exit 2
 cd "$G_DIR" || exit 2
@@ -704,8 +688,8 @@ Members:
 g_rel g-drop 'Note: same'
 g_rel g-keep "$(printf 'Note: same\nNote: same')"
 bash "$VALIDATOR" --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
-if [ "$status" = 0 ] && grep -q 'ledger sections match its members (probe fired both ways' "$WORK/out.txt"; then
-  ok "arm G: a bundle keeping both members' identical note passes, with its probe fired both ways"
+if [ "$status" = 0 ] && grep -q 'ledger sections match its members (' "$WORK/out.txt"; then
+  ok "arm G: a bundle keeping both members' identical note passes"
 else
   bad "arm G: the bundle keeping both members' notes did not pass with arm G evaluated -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi

@@ -3,8 +3,7 @@
 !scripts/validate-fixture-inprocess.sh
 !scripts/validate-fixture-invocations.sh
 !scripts/validate-fixture-hygiene.sh
-# preamble.sh is sourced here; mutant.sh is copied into each probe world (the judge's self-probe drives it).
-core/fixtures/lib/mutant.sh
+# preamble.sh is sourced here.
 core/fixtures/lib/preamble.sh
 # Both pre-push hooks, READ for arm DG: the READSET_VS span is extracted and sourced, never run as a program.
 !.githooks/pre-push

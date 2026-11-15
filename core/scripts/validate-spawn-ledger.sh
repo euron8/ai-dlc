@@ -147,9 +147,6 @@
 #                            [--snapshot <pipeline-snapshot.md>] [--route <route.md>]
 #                            [--sprint-status <sprint-status.yaml>]
 #                            [--variant <pipeline_variant>]   (explicit override, for tests)
-#                            [--probe-from-caller]   (the caller vouches for the self-probe, which is
-#                                                     skipped; stdout line 1 is then a banner and the
-#                                                     output is not a gate verdict. For fixtures only.)
 #   Decides whether an ARCHITECT dispositioned a folded bug-fix story, from a record the lead
 #   does not write: the residue's `tool_use_id` must resolve to a spawn-ledger row with role
 #   `architect`, the one-shot's sprint, a `ts` at or after the `ts` of the one-shot's OWN
@@ -175,7 +172,7 @@
 #          id missing from a FULLY adopted sprint or resolving to a non-adversary row, an
 #          unstamped or re-pointed story, and a residue failing its shape check
 #        2 usage, a flag with no value, an unreadable input, an unparseable ledger, an UNKNOWN
-#          variant, a snapshot/sprint-status variant disagreement, or a failed self-probe
+#          variant, a snapshot/sprint-status variant disagreement
 #   The ledger defaults to `_bmad-output/spawn-ledger.jsonl`. An ABSENT ledger is exit 2, not
 #   SKIP: a mistyped path must not read as a sprint that predates the ledger.
 set -u
@@ -196,7 +193,6 @@ FA_VARIANT=""
 FA_ROUTE=""
 FA_SNAPSHOT=""
 FA_SSTATUS=""
-FA_SKIP_PROBE=0
 while [ $# -gt 0 ]; do
   # No MODE_DISPATCH markers here on purpose. I49 and I53 bind the MODES of core-paths.sh
   # and validate-escalation-resolution.sh -- verbs another file names in prose and calls by
@@ -207,10 +203,6 @@ while [ $# -gt 0 ]; do
     --fold-architect)
       [ $# -ge 3 ] || { echo "FAIL: --fold-architect takes two paths: <fold-architecture residue> <bug-fix one-shot>" >&2; exit 2; }
       MODE="fold"; FA_RES="$2"; FA_ONE="$3"; shift 3 ;;
-    # --fold-architect only: the CALLER vouches for the self-probe, which is then skipped, and
-    # stdout line 1 says so. An argv flag, never an environment variable; no shipped caller passes it.
-    --probe-from-caller)
-      FA_SKIP_PROBE=1; shift ;;
     --variant)
       [ $# -ge 2 ] || { echo "FAIL: --variant takes a pipeline_variant name" >&2; exit 2; }
       FA_VARIANT="$2"; shift 2 ;;
@@ -250,7 +242,6 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-[ "$FA_SKIP_PROBE" = 0 ] || [ "$MODE" = fold ] || { echo "FAIL: --probe-from-caller applies to --fold-architect only" >&2; exit 2; }
 
 # =================================================================================
 # --fold-architect: CHECK 17'S FOLD ARCHITECTURE GATE, LEDGER HALF.
@@ -497,9 +488,7 @@ fa_judge() {  # <residue> <one-shot> <ledger> -> 0 PASS, 1 finding, 2 refusal, 3
   # HERE-STRINGS, NEVER `printf | awk '... exit'`. Each awk leaves at its first match while
   # printf is still writing; once the rest of $q exceeds the pipe buffer printf takes EPIPE,
   # `printf: write error: Broken pipe` lands on stderr, and the caller's first stderr line is
-  # that instead of its verdict. Measured under the pre-push pool at load ~60: the self-probe's
-  # no-tool_use_id world read rc=99 and fold-architect-ledger-join went red on D1-1 and D4-arch
-  # while the same tree passed solo. A here-string has no writer to interrupt.
+  # that instead of its verdict. A here-string has no writer to interrupt.
   nid="$(awk -F'\t' '$1 == "NID" { print $2; exit }' <<<"$q")"
   nidless="$(awk -F'\t' '$1 == "NIDLESS" { print $2; exit }' <<<"$q")"
   one_e="$(awk -F'\t' '$1 == "ONE" { print $2; exit }' <<<"$q")"
@@ -625,19 +614,13 @@ EOF
   [ -r "$story" ] || { echo "FAIL: cannot read the story ${story}" >&2; return 2; }
   # FAST PATH FIRST: a stamp citing the one-shot's OWN name needs no alias table, and the name
   # itself is always in the accepted set, so the exact join is exact and costs no reader start.
-  # Only when it finds nothing is the alias set consulted -- FA_ACC_MEMO (filled ONCE at fold-mode
-  # entry when the self-probe runs, which calls this inside command substitutions where a memo set
-  # here would be lost), else the sibling reader, live.
+  # Only when it finds nothing is the alias set consulted, from the sibling reader, live.
   sblocks="$(fa_story_blocks "$story")"
   stids="$(awk -F'\t' -v k="$oskill" '$1 == k { print $2 }' <<<"$sblocks")"
   # A story carrying NO block has no alias to resolve: it is unstamped whatever the one-shot's name.
   if [ -z "$stids" ] && [ -n "$sblocks" ]; then
-    case " ${FA_ACC_MEMO:-} " in
-      *" $oskill "*) oacc="$FA_ACC_MEMO" ;;
-      *)
-        [ -r "$FA_VPB" ] || { echo "FAIL: the sibling validate-provenance-block.sh is not at ${FA_VPB}, so the one-shot's skill aliases cannot be resolved." >&2; return 2; }
-        oacc="$(bash "$FA_VPB" --accepted-skills "$oskill" 2>/dev/null)" || { echo "FAIL: validate-provenance-block.sh --accepted-skills ${oskill} did not answer; the stamp join cannot be keyed." >&2; return 2; } ;;
-    esac
+    [ -r "$FA_VPB" ] || { echo "FAIL: the sibling validate-provenance-block.sh is not at ${FA_VPB}, so the one-shot's skill aliases cannot be resolved." >&2; return 2; }
+    oacc="$(bash "$FA_VPB" --accepted-skills "$oskill" 2>/dev/null)" || { echo "FAIL: validate-provenance-block.sh --accepted-skills ${oskill} did not answer; the stamp join cannot be keyed." >&2; return 2; }
     [ -n "$oacc" ] || { echo "FAIL: validate-provenance-block.sh --accepted-skills ${oskill} answered nothing; the stamp join cannot be keyed." >&2; return 2; }
     oacc="$(printf '%s\n' "$oacc" | tr '\n' ' ')"
     stids="$(awk -F'\t' -v ks="$oacc" 'BEGIN { n = split(ks, a, " "); for (i = 1; i <= n; i++) if (a[i] != "") acc[a[i]] = 1 } ($1 in acc) { print $2 }' <<<"$sblocks")"
@@ -669,270 +652,8 @@ EOF
   return 0
 }
 
-# --- SELF-PROBE, BEFORE THE REAL INPUT, IN BOTH DIRECTIONS ------------------------------
-# The same fa_judge the real run uses, on a mktemp world. Each clause has an offender and a
-# near-miss: ordering (architect before / after the one-shot's LEDGER row, and a backdated
-# invoked_at that must neither SKIP nor rescue the early architect), adoption (no ids SKIP; a
-# one-shot id missing from a PARTIALLY adopted sprint SKIPs; from a FULLY adopted one FAILs), the
-# legacy name (owed -> FAIL; pre-adoption -> SKIP first), the artifact path (same basename in
-# another directory FAILs; a leading `./` does not), role, uniqueness, and the two readers of
-# the variant. Every SKIP asserts its FIRST LINE and that no line starts `PASS`, because SKIP
-# and PASS share exit 0 at the caller. Round v3.3 adds: the one-shot's id resolving to an
-# ARCHITECT row (FAIL naming the role, in a fully AND a partially adopted sprint -- never SKIP),
-# the story stamp (absent -> FAIL; carrying another id -> FAIL; equal -> the passing world),
-# the residue's shape through the sibling reader (wrong skill -> FAIL), the fence- and
-# comment-blind snapshot reader, the sprint-status reader, and the variant cross-check.
-fa_probe_block() {  # <file> <invoked_at> <tool_use_id> <artifact> [skill]
-  # A current-name (bmad-review) block carries `lens: adversarial`, as the one-shot writes it.
-  if [ "${5:-bmad-review-adversarial-general}" = bmad-review ]; then
-    printf '%s\n' '<!-- SKILL_INVOCATION_PROVENANCE v1' 'skill: bmad-review' 'lens: adversarial' \
-      "invoked_at: $2" "tool_use_id: $3" 'mode: subagent' \
-      "artifact: $4" 'SKILL_INVOCATION_PROVENANCE_END -->' > "$1"
-    return
-  fi
-  printf '%s\n' '<!-- SKILL_INVOCATION_PROVENANCE v1' "skill: ${5:-bmad-review-adversarial-general}" \
-    "invoked_at: $2" "tool_use_id: $3" 'mode: subagent' \
-    "artifact: $4" 'SKILL_INVOCATION_PROVENANCE_END -->' > "$1"
-}
-fa_probe_res() {  # <file> <tool_use_id> <artifact> [skill] [lens line] -- every field the reader requires
-  printf '%s\n' '# Fold architecture disposition' '' '- **No-AD:** CAP-1 -- REASON: probe.' '' \
-    '<!-- SKILL_INVOCATION_PROVENANCE v1' "skill: ${4:-bmad-review-adversarial-general}" \
-    "${5:-# no lens}" \
-    'invoked_at: 2000-01-02T11:00:05Z' "tool_use_id: $2" 'mode: subagent' \
-    'lead_role: bug-investigation.md' "artifact: $3" \
-    'findings_critical: 0' 'findings_major: 0' 'findings_minor: 0' \
-    'SKILL_INVOCATION_PROVENANCE_END -->' > "$1"
-}
-fa_probe_rc() {  # <expected rc> <message substring or ""> <label> <residue> <one-shot> <ledger>
-  local out rc
-  out="$(fa_judge "$4" "$5" "$6" 2>&1)"; rc=$?
-  if [ "$rc" -ne "$1" ]; then
-    echo "FAIL: fold-architect self-probe: $3 (rc=$rc, expected $1)." >&2; return 1
-  fi
-  if [ -n "$2" ] && ! grep -qF -- "$2" <<<"$out"; then
-    echo "FAIL: fold-architect self-probe: $3 -- rc=$rc as expected, but not for the reason '$2'." >&2; return 1
-  fi
-  return 0
-}
-fa_probe_skip() {  # <label> <residue> <one-shot> <ledger> -> 0 when rc 3, first line SKIP, no PASS
-  local out rc first
-  out="$(fa_judge "$2" "$3" "$4" 2>&1)"; rc=$?
-  first="$(sed -n 1p <<<"$out")"
-  case "$first" in SKIP-PRE-ADOPTION:*) : ;; *) rc=99 ;; esac
-  grep -q '^PASS' <<<"$out" && rc=98
-  [ "$rc" -eq 3 ] || { echo "FAIL: fold-architect self-probe: $1 did not SKIP cleanly (rc=$rc, first='$first'); an unanswerable ledger must never read as a pass." >&2; return 1; }
-  return 0
-}
-fa_self_probe() {
-  local pd rc bad=0 side sides d S
-  pd="$(mktemp -d 2>/dev/null)" || return 1
-  [ -n "$pd" ] && [ -d "$pd" ] || return 1
-  sides="pos neg role dup pre back backok part full leg legpre art artdot oid oidpart unst repoint shape newone newstamp"
-  for side in $sides; do mkdir -p "$pd/$side/s900" "$pd/$side/s901" "$pd/$side/s902" || return 1; done
-  mkdir -p "$pd/stories" || return 1
-  cat > "$pd/ledger.jsonl" <<'JSONL'
-{"v":1,"ts":"2000-01-01T00:00:00Z","sprint":900,"name":"dev","role":"dev","tool_use_id":"toolu_probeepoch0"}
-{"v":1,"ts":"2000-01-02T09:00:00Z","sprint":900,"name":"architect","role":"architect","tool_use_id":"toolu_probeearly0"}
-{"v":1,"ts":"2000-01-02T10:00:00Z","sprint":900,"name":"adversary","role":"adversary","tool_use_id":"toolu_probeoneshot"}
-{"v":1,"ts":"2000-01-02T10:30:00Z","sprint":900,"name":"adversary","role":"adversary","tool_use_id":"toolu_probeadvmid"}
-{"v":1,"ts":"2000-01-02T11:00:00Z","sprint":900,"name":"architect","role":"architect","tool_use_id":"toolu_probelate0"}
-{"v":1,"ts":"2000-01-02T11:30:00Z","sprint":900,"name":"adversary","role":"adversary","tool_use_id":"toolu_probeadvlate"}
-{"v":1,"ts":"2000-01-02T11:00:00Z","sprint":901,"name":"architect","role":"architect"}
-{"v":1,"ts":"2000-01-03T08:00:00Z","sprint":902,"name":"adversary","role":"adversary"}
-{"v":1,"ts":"2000-01-03T11:00:00Z","sprint":902,"name":"architect","role":"architect","tool_use_id":"toolu_probe902arch"}
-JSONL
-  # The story is named by an ABSOLUTE path so the probe reads it from any cwd; the stamp carries
-  # the one-shot's id, as stamp-story-provenance.sh writes it. `unst` names a story with no block.
-  S="$pd/stories/probe.md"; SU="$pd/stories/unstamped.md"
-  printf '%s\n' '# Story probe' '' 'Status: ready-for-dev' '' '<!-- SKILL_INVOCATION_PROVENANCE v1' \
-    'skill: bmad-review-adversarial-general' 'invoked_at: 2000-01-02T10:00:05Z' \
-    'tool_use_id: toolu_probeoneshot' 'mode: subagent' "artifact: $S" \
-    'SKILL_INVOCATION_PROVENANCE_END -->' > "$S"
-  printf '%s\n' '# Story unstamped' '' 'Status: ready-for-dev' > "$SU"
-  # SN carries the stamp as the current writer emits it: the current name plus the lens.
-  SN="$pd/stories/probe-new.md"
-  printf '%s\n' '# Story probe new' '' 'Status: ready-for-dev' '' '<!-- SKILL_INVOCATION_PROVENANCE v1' \
-    'skill: bmad-review' 'lens: adversarial' 'invoked_at: 2000-01-02T10:00:05Z' \
-    'tool_use_id: toolu_probeoneshot' 'mode: subagent' "artifact: $SN" \
-    'SKILL_INVOCATION_PROVENANCE_END -->' > "$SN"
-  # newone: a NEW-name one-shot over an OLD-name story stamp, new-name residue with the lens -> PASS.
-  # newstamp: an OLD-name one-shot over a NEW-name story stamp (the writer normalises) -> PASS.
-  # No lens-less world here: the lens rule is the sibling reader's, self-probed in-process there in
-  # both directions, and the `shape` world already proves this caller passes the residue to it.
-  fa_probe_block "$pd/newone/s900/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$S" bmad-review
-  fa_probe_block "$pd/newstamp/s900/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$SN"
-  fa_probe_res "$pd/newone/s900/fold-architecture-p.md" toolu_probelate0 "$S" bmad-review 'lens: adversarial'
-  fa_probe_res "$pd/newstamp/s900/fold-architecture-p.md" toolu_probelate0 "$SN"
-  # The one-shot's invoked_at is written 5s AFTER its ledger row everywhere but `back`/`backok`,
-  # where it is backdated a year -- before every row of the sprint, which is what the old
-  # invoked_at ordering read as SKIP.
-  for side in pos neg role dup shape; do fa_probe_block "$pd/$side/s900/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$S"; done
-  fa_probe_block "$pd/oid/s900/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probeearly0 "$S"
-  fa_probe_block "$pd/oidpart/s902/bug-fix-oneshot-p.md" 2000-01-03T08:00:05Z toolu_probe902arch "$S"
-  fa_probe_block "$pd/unst/s900/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$SU"
-  fa_probe_block "$pd/repoint/s900/bug-fix-oneshot-p.md" 2000-01-02T10:30:05Z toolu_probeadvmid "$S"
-  fa_probe_block "$pd/pre/s901/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$S"
-  fa_probe_block "$pd/back/s900/bug-fix-oneshot-p.md" 1999-01-01T00:00:00Z toolu_probeoneshot "$S"
-  fa_probe_block "$pd/backok/s900/bug-fix-oneshot-p.md" 1999-01-01T00:00:00Z toolu_probeoneshot "$S"
-  fa_probe_block "$pd/part/s902/bug-fix-oneshot-p.md" 2000-01-03T08:00:05Z toolu_probe902absent "$S"
-  fa_probe_block "$pd/full/s900/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probe900absent "$S"
-  fa_probe_block "$pd/leg/s900/bug-fix-oneshot.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$S"
-  fa_probe_block "$pd/legpre/s901/bug-fix-oneshot.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$S"
-  fa_probe_block "$pd/art/s900/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$S"
-  fa_probe_block "$pd/artdot/s900/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$S"
-  fa_probe_res "$pd/pos/s900/fold-architecture-p.md" toolu_probelate0 "$S"
-  fa_probe_res "$pd/neg/s900/fold-architecture-p.md" toolu_probeearly0 "$S"
-  fa_probe_res "$pd/pre/s901/fold-architecture-p.md" toolu_probelate0 "$S"
-  fa_probe_res "$pd/role/s900/fold-architecture-p.md" toolu_probeadvlate "$S"
-  fa_probe_res "$pd/dup/s900/fold-architecture-p.md" toolu_probelate0 "$S"
-  fa_probe_res "$pd/dup/s900/fold-architecture-q.md" toolu_probelate0 "$S"
-  fa_probe_res "$pd/back/s900/fold-architecture-p.md" toolu_probeearly0 "$S"
-  fa_probe_res "$pd/backok/s900/fold-architecture-p.md" toolu_probelate0 "$S"
-  fa_probe_res "$pd/part/s902/fold-architecture-p.md" toolu_probe902arch "$S"
-  fa_probe_res "$pd/full/s900/fold-architecture-p.md" toolu_probelate0 "$S"
-  fa_probe_res "$pd/art/s900/fold-architecture-p.md" toolu_probelate0 "other-dir/probe.md"
-  fa_probe_res "$pd/artdot/s900/fold-architecture-p.md" toolu_probelate0 "./$S"
-  fa_probe_res "$pd/oid/s900/fold-architecture-p.md" toolu_probelate0 "$S"
-  fa_probe_res "$pd/oidpart/s902/fold-architecture-p.md" toolu_probe902arch "$S"
-  fa_probe_res "$pd/unst/s900/fold-architecture-p.md" toolu_probelate0 "$SU"
-  fa_probe_res "$pd/repoint/s900/fold-architecture-p.md" toolu_probelate0 "$S"
-  fa_probe_res "$pd/shape/s900/fold-architecture-p.md" toolu_probelate0 "$S" ai-dlc-adversary-review
-  printf '%s\n' '| Variant | Pipeline Sequence | First Step |' '|---|---|---|' \
-    '| arch-v | requirements → architecture → stories-test-strategy | `r.md` |' \
-    '| plain-v | bug-investigation → implementation | `b.md` |' '' > "$pd/route.md"
-  printf '%s\n' '# Pipeline Snapshot' '' '## Pipeline Position' '- pipeline_variant: carry-over' \
-    '- current_step_file: retro.md -- mentions pipeline_variant: feature later' > "$pd/snap-plain.md"
-  printf '%s\n' '# Pipeline Snapshot' '- **`pipeline_variant`:** `feature`' > "$pd/snap-bold.md"
-  printf '%s\n' '# Pipeline Snapshot' '- current_step_file: retro.md' > "$pd/snap-none.md"
-  printf '%s\n' '# Pipeline Snapshot' '' '## Pipeline Position' '- **Variant:** bug' > "$pd/snap-legacy.md"
-  # Decoys ABOVE the real line: a fenced one, a one-line comment, a multi-line comment, and a
-  # comment closed mid-line with the real key after it (read, because it is outside the comment).
-  printf '%s\n' '# Pipeline Snapshot' '```yaml' '- pipeline_variant: bug' '```' \
-    '<!-- - pipeline_variant: bug -->' '<!-- example:' '- pipeline_variant: bug' '-->' \
-    '- pipeline_variant: carry-over' > "$pd/snap-decoy.md"
-  printf '%s\n' '# Pipeline Snapshot' '~~~' 'pipeline_variant: bug' '~~~' \
-    '<!-- note --> - pipeline_variant: feature' > "$pd/snap-tail.md"
-  printf '%s\n' 'sprint: 900' 'stories:' '  s1:' '    variant: bug' 'variant: carry-over  # routed' \
-    'status: in_progress' > "$pd/ss-plain.yaml"
-  printf '%s\n' 'sprint: 900' "variant: 'bug'" > "$pd/ss-quoted.yaml"
-  printf '%s\n' 'sprint: 900' 'stories:' '  s1:' '    variant: bug' > "$pd/ss-none.yaml"
-
-  fa_judge "$pd/pos/s900/fold-architecture-p.md" "$pd/pos/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" >/dev/null 2>&1; rc=$?
-  [ "$rc" -eq 0 ] || { echo "FAIL: fold-architect self-probe: an architect row AFTER the one-shot's ledger row was not accepted (rc=$rc)." >&2; bad=1; }
-  fa_judge "$pd/neg/s900/fold-architecture-p.md" "$pd/neg/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" >/dev/null 2>&1; rc=$?
-  [ "$rc" -eq 1 ] || { echo "FAIL: fold-architect self-probe: an architect row BEFORE the one-shot was not reported (rc=$rc), so the ordering clause cannot fire." >&2; bad=1; }
-  fa_judge "$pd/back/s900/fold-architecture-p.md" "$pd/back/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" >/dev/null 2>&1; rc=$?
-  [ "$rc" -eq 1 ] || { echo "FAIL: fold-architect self-probe: a BACKDATED invoked_at citing the stale architect did not FAIL (rc=$rc); invoked_at is deciding the ordering." >&2; bad=1; }
-  fa_judge "$pd/backok/s900/fold-architecture-p.md" "$pd/backok/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" >/dev/null 2>&1; rc=$?
-  [ "$rc" -eq 0 ] || { echo "FAIL: fold-architect self-probe: a backdated invoked_at with a later architect did not PASS (rc=$rc); invoked_at must decide nothing, SKIP included." >&2; bad=1; }
-  fa_judge "$pd/role/s900/fold-architecture-p.md" "$pd/role/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" >/dev/null 2>&1; rc=$?
-  [ "$rc" -eq 1 ] || { echo "FAIL: fold-architect self-probe: a residue citing an ADVERSARY dispatch was not reported (rc=$rc), so the role clause cannot fire." >&2; bad=1; }
-  fa_judge "$pd/dup/s900/fold-architecture-p.md" "$pd/dup/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" >/dev/null 2>&1; rc=$?
-  [ "$rc" -eq 1 ] || { echo "FAIL: fold-architect self-probe: two residues citing one architect dispatch were not reported (rc=$rc), so the uniqueness clause cannot fire." >&2; bad=1; }
-  # The SKIP assertion must itself be able to fire: on the PASSING world it must refuse.
-  if fa_probe_skip "the passing world" "$pd/pos/s900/fold-architecture-p.md" "$pd/pos/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" 2>/dev/null; then
-    echo "FAIL: fold-architect self-probe: the SKIP assertion accepted a PASS, so it cannot tell SKIP from PASS." >&2; bad=1
-  fi
-  fa_probe_skip "a sprint with no tool_use_id" "$pd/pre/s901/fold-architecture-p.md" "$pd/pre/s901/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
-  fa_probe_skip "a one-shot id absent from a PARTIALLY adopted sprint" "$pd/part/s902/fold-architecture-p.md" "$pd/part/s902/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
-  fa_judge "$pd/full/s900/fold-architecture-p.md" "$pd/full/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" >/dev/null 2>&1; rc=$?
-  [ "$rc" -eq 1 ] || { echo "FAIL: fold-architect self-probe: a one-shot id absent from a FULLY adopted sprint did not FAIL (rc=$rc)." >&2; bad=1; }
-  fa_judge "$pd/leg/s900/fold-architecture-p.md" "$pd/leg/s900/bug-fix-oneshot.md" "$pd/ledger.jsonl" >/dev/null 2>&1; rc=$?
-  [ "$rc" -eq 1 ] || { echo "FAIL: fold-architect self-probe: a legacy one-shot name where the fold is owed did not FAIL (rc=$rc); the legacy name is an opt-out." >&2; bad=1; }
-  fa_probe_skip "a legacy one-shot name in a sprint with no tool_use_id" "$pd/legpre/s901/fold-architecture-p.md" "$pd/legpre/s901/bug-fix-oneshot.md" "$pd/ledger.jsonl" || bad=1
-  fa_judge "$pd/art/s900/fold-architecture-p.md" "$pd/art/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" >/dev/null 2>&1; rc=$?
-  [ "$rc" -eq 1 ] || { echo "FAIL: fold-architect self-probe: a residue over other-dir/<same basename> was not reported (rc=$rc); the artifact is compared by basename." >&2; bad=1; }
-  fa_judge "$pd/artdot/s900/fold-architecture-p.md" "$pd/artdot/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" >/dev/null 2>&1; rc=$?
-  [ "$rc" -eq 0 ] || { echo "FAIL: fold-architect self-probe: a residue artifact differing only by a leading ./ was not accepted (rc=$rc)." >&2; bad=1; }
-  [ "$(fa_variant_arch "$pd/route.md" arch-v)" = yes ] || { echo "FAIL: fold-architect self-probe: a variant running architecture read as not running it." >&2; bad=1; }
-  [ "$(fa_variant_arch "$pd/route.md" plain-v)" = no ] || { echo "FAIL: fold-architect self-probe: a variant with no architecture step read as running one." >&2; bad=1; }
-  [ "$(fa_variant_arch "$pd/route.md" nope-v)" = unknown ] || { echo "FAIL: fold-architect self-probe: a variant absent from the table did not read as unknown." >&2; bad=1; }
-  [ "$(fa_snapshot_variant "$pd/snap-plain.md")" = carry-over ] || { echo "FAIL: fold-architect self-probe: the snapshot reader missed '- pipeline_variant: carry-over'." >&2; bad=1; }
-  [ "$(fa_snapshot_variant "$pd/snap-bold.md")" = feature ] || { echo "FAIL: fold-architect self-probe: the snapshot reader missed the emphasised, backticked form." >&2; bad=1; }
-  [ -z "$(fa_snapshot_variant "$pd/snap-none.md")" ] || { echo "FAIL: fold-architect self-probe: the snapshot reader invented a variant from a snapshot naming none." >&2; bad=1; }
-  [ "$(fa_snapshot_variant "$pd/snap-decoy.md")" = carry-over ] || { echo "FAIL: fold-architect self-probe: a pipeline_variant quoted in a fence or an HTML comment above the real line won." >&2; bad=1; }
-  [ "$(fa_snapshot_variant "$pd/snap-tail.md")" = feature ] || { echo "FAIL: fold-architect self-probe: the snapshot reader lost the text after a comment closed mid-line, or read a ~~~ fence." >&2; bad=1; }
-  [ "$(fa_sstatus_variant "$pd/ss-plain.yaml")" = carry-over ] || { echo "FAIL: fold-architect self-probe: the sprint-status reader missed a top-level variant (or read a nested one)." >&2; bad=1; }
-  [ "$(fa_sstatus_variant "$pd/ss-quoted.yaml")" = bug ] || { echo "FAIL: fold-architect self-probe: the sprint-status reader kept the quotes of a quoted variant." >&2; bad=1; }
-  [ -z "$(fa_sstatus_variant "$pd/ss-none.yaml")" ] || { echo "FAIL: fold-architect self-probe: the sprint-status reader took a NESTED variant for the sprint's." >&2; bad=1; }
-  fa_xcheck carry-over probe "$pd/ss-plain.yaml" 2>/dev/null || { echo "FAIL: fold-architect self-probe: agreeing snapshot and sprint-status variants were refused." >&2; bad=1; }
-  fa_xcheck feature probe "$pd/ss-plain.yaml" 2>/dev/null; rc=$?
-  [ "$rc" -eq 2 ] || { echo "FAIL: fold-architect self-probe: a snapshot/sprint-status variant disagreement was not refused (rc=$rc)." >&2; bad=1; }
-  fa_xcheck feature probe "$pd/ss-none.yaml" 2>/dev/null || { echo "FAIL: fold-architect self-probe: a sprint-status with no top-level variant was cross-checked." >&2; bad=1; }
-  fa_xcheck feature probe "$pd/ss-absent.yaml" 2>/dev/null || { echo "FAIL: fold-architect self-probe: an absent sprint-status was cross-checked." >&2; bad=1; }
-  # The resolution order. A snapshot that exists but carries only the legacy `- **Variant:** bug`
-  # spelling falls through to sprint-status (offender side: the old exit 2); with no sprint-status
-  # it resolves to nothing, which the caller holds OWED (near-miss: never NOT-OWED by default).
-  fa_resolve_variant "" "$pd/snap-legacy.md" "$pd/ss-quoted.yaml" 2>/dev/null; rc=$?
-  [ "$rc" -eq 0 ] && [ "$FA_RV" = bug ] && [ "$FA_RVSRC" = "$pd/ss-quoted.yaml" ] \
-    || { echo "FAIL: fold-architect self-probe: a snapshot with no pipeline_variant line did not fall through to sprint-status (rc=$rc, variant='$FA_RV')." >&2; bad=1; }
-  fa_resolve_variant "" "$pd/snap-legacy.md" "$pd/ss-none.yaml" 2>/dev/null; rc=$?
-  [ "$rc" -eq 0 ] && [ -z "$FA_RV" ] \
-    || { echo "FAIL: fold-architect self-probe: no variant in any record resolved to '$FA_RV' (rc=$rc); it must resolve to none, the fold OWED." >&2; bad=1; }
-  # A reader that FAILS is refused, never read as "no variant". Offender: an unreadable snapshot
-  # (mode 000) beside a sprint-status saying bug, which a discarded status resolved to bug from
-  # sprint-status alone. Near-miss: the same snapshot readable resolves to carry-over. Skipped
-  # under root, where mode 000 is readable.
-  if [ "$(id -u)" -ne 0 ]; then
-    cp "$pd/snap-plain.md" "$pd/snap-unreadable.md" && chmod 000 "$pd/snap-unreadable.md"
-    fa_resolve_variant "" "$pd/snap-unreadable.md" "$pd/ss-quoted.yaml" 2>/dev/null; rc=$?
-    [ "$rc" -eq 2 ] || { echo "FAIL: fold-architect self-probe: a snapshot the reader could not open resolved to '$FA_RV' (rc=$rc) instead of being refused." >&2; bad=1; }
-    chmod 644 "$pd/snap-unreadable.md"
-    fa_resolve_variant "" "$pd/snap-unreadable.md" "$pd/ss-quoted.yaml" 2>/dev/null; rc=$?
-    [ "$rc" -eq 2 ] && [ -z "$FA_RV" ] \
-      || { echo "FAIL: fold-architect self-probe: the readable twin of the unreadable snapshot did not reach the disagreement check (rc=$rc, variant='$FA_RV')." >&2; bad=1; }
-  fi
-  fa_resolve_variant "" "$pd/snap-plain.md" "$pd/ss-plain.yaml" 2>/dev/null; rc=$?
-  [ "$rc" -eq 0 ] && [ "$FA_RV" = carry-over ] && [ "$FA_RVSRC" = "$pd/snap-plain.md" ] \
-    || { echo "FAIL: fold-architect self-probe: an agreeing snapshot did not win over sprint-status (rc=$rc, source='$FA_RVSRC')." >&2; bad=1; }
-  fa_resolve_variant "" "$pd/snap-plain.md" "$pd/ss-quoted.yaml" 2>/dev/null; rc=$?
-  [ "$rc" -eq 2 ] || { echo "FAIL: fold-architect self-probe: a snapshot/sprint-status disagreement was resolved rather than refused (rc=$rc)." >&2; bad=1; }
-  # The one-shot's id on an ARCHITECT row: a finding naming the role, fully AND partially adopted.
-  fa_probe_rc 1 "as role architect" "a one-shot id resolving to an architect row in a FULLY adopted sprint did not FAIL naming the role" \
-    "$pd/oid/s900/fold-architecture-p.md" "$pd/oid/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
-  fa_probe_rc 1 "as role architect" "a one-shot id resolving to an architect row in a PARTIALLY adopted sprint did not FAIL naming the role (it must never SKIP)" \
-    "$pd/oidpart/s902/fold-architecture-p.md" "$pd/oidpart/s902/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
-  # The story stamp: absent -> FAIL; re-pointed one-shot -> FAIL; the passing world is the near-miss.
-  fa_probe_rc 1 "story not stamped" "a story carrying no stamp was not reported" \
-    "$pd/unst/s900/fold-architecture-p.md" "$pd/unst/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
-  fa_probe_rc 1 "one-shot re-pointed after the story was stamped" "a one-shot whose id differs from the stamp was not reported" \
-    "$pd/repoint/s900/fold-architecture-p.md" "$pd/repoint/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
-  # The residue's shape, through the sibling reader: the passing world differs by the skill only.
-  fa_probe_rc 1 "fails its shape check" "a residue citing the wrong skill passed the shape check" \
-    "$pd/shape/s900/fold-architecture-p.md" "$pd/shape/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
-  fa_probe_rc 0 "whose stamp carries the one-shot's id" "the passing world did not PASS through the stamp and shape clauses" \
-    "$pd/pos/s900/fold-architecture-p.md" "$pd/pos/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
-  # The alias join, both directions, and the lens through the sibling reader.
-  fa_probe_rc 0 "whose stamp carries the one-shot's id" "a bmad-review one-shot over a story stamped under bmad-review-adversarial-general did not join" \
-    "$pd/newone/s900/fold-architecture-p.md" "$pd/newone/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
-  fa_probe_rc 0 "whose stamp carries the one-shot's id" "a bmad-review-adversarial-general one-shot over a story stamped under bmad-review did not join" \
-    "$pd/newstamp/s900/fold-architecture-p.md" "$pd/newstamp/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
-
-  for side in $sides; do
-    for d in s900 s901 s902; do rm -f "$pd/$side/$d"/*.md 2>/dev/null; rmdir "$pd/$side/$d" 2>/dev/null; done
-    rmdir "$pd/$side" 2>/dev/null
-  done
-  rm -f "$pd/ledger.jsonl" "$pd/route.md" "$pd/snap-plain.md" "$pd/snap-bold.md" "$pd/snap-none.md" "$pd/snap-legacy.md" \
-    "$pd/snap-decoy.md" "$pd/snap-tail.md" "$pd/ss-plain.yaml" "$pd/ss-quoted.yaml" "$pd/ss-none.yaml" \
-    "$pd/stories/probe.md" "$pd/stories/unstamped.md" "$pd/stories/probe-new.md" 2>/dev/null
-  rmdir "$pd/stories" 2>/dev/null
-  rmdir "$pd" 2>/dev/null
-  return "$bad"
-}
-
 if [ "$MODE" = "fold" ]; then
   command -v jq >/dev/null 2>&1 || { echo "FAIL: jq is not on PATH; the ledger cannot be joined. Exit 2, not a pass." >&2; exit 2; }
-  # The one-shot's accepted skill names. Resolved ONCE, here, only for the self-probe, whose many
-  # fa_judge calls reach the stamp join inside command substitutions where a memo set in fa_judge is
-  # lost. A run that skips the probe leaves it empty, and fa_judge asks the sibling reader live only
-  # if it REACHES the join -- so a run that exits before the join pays no reader start for it.
-  FA_ACC_MEMO=""
-  if [ "${FA_SKIP_PROBE:-0}" = 1 ]; then
-    echo "PROBE-SKIPPED-BY-CALLER: the fold-architect self-probe did not run (--probe-from-caller); this is not a gate verdict."
-  else
-    [ -r "$FA_VPB" ] && FA_ACC_MEMO="$(bash "$FA_VPB" --accepted-skills bmad-review 2>/dev/null | tr '\n' ' ')"
-    fa_self_probe || { echo "FAIL: the fold-architect self-probe did not hold, so a verdict on the real input would establish only that the join ran." >&2; exit 2; }
-  fi
   [ -n "$LEDGER" ] || LEDGER="_bmad-output/spawn-ledger.jsonl"
   # THE VARIANT IS READ, NOT TYPED. `--variant` is an explicit override for tests; the gate
   # passes none. fa_resolve_variant owns the order: --variant, then the snapshot's
@@ -1331,96 +1052,6 @@ function cover_missing(cv_v,    cv_k, cv_l, cv_n, cv_i, cv_t, cv_s, cv_p, cv_ok,
         close(f)
       }
     }'
-}
-
-# THE SELF-PROBE RUNS BEFORE THE CORPUS, in both directions: a seeded offender of each kind
-# must be reported, and a seeded near-miss of each kind must not. Built under mktemp, never
-# the real ledger. A failure here is exit 2 -- a WARN arm that cannot fire reads exactly like
-# one that found nothing.
-shard_self_probe() {
-  sp_d="$(mktemp -d "${TMPDIR:-/tmp}/validate-spawn-ledger-shard.XXXXXX")" || return 1
-  mkdir -p "$sp_d/pl" || { rm -rf "$sp_d"; return 1; }
-  printf '%s\n' \
-    '{"v":1,"sprint":7,"name":"adv-a","role":"adversary","tool_use_id":"toolu_A","shard":null}' \
-    '{"v":1,"sprint":7,"name":"adv-b","role":"adversary","tool_use_id":"toolu_B","shard":"1/2 01"}' \
-    '{"v":1,"sprint":7,"name":"adv-inv","role":"adversary","tool_use_id":"toolu_I","shard":"invalid-exception","shard_raw":"none (made up)"}' \
-    '{"v":1,"sprint":7,"name":"adv-ok3","role":"adversary","tool_use_id":"toolu_K","shard":"none (3)"}' \
-    '{"v":1,"sprint":7,"name":"cov-miss","role":"adversary","tool_use_id":"toolu_CM","shard":"cross/4 g1/1 1,2,3"}' \
-    '{"v":1,"sprint":7,"name":"cov-ok","role":"adversary","tool_use_id":"toolu_CO","shard":"cross/4 g1/1 1,2,3,4"}' \
-    '{"v":1,"sprint":7,"name":"cov-legacy","role":"adversary","tool_use_id":"toolu_CL","shard":"cross/6 g2/6 1,2,5"}' \
-    '{"v":1,"sprint":7,"name":"adv-c","role":"adversary","tool_use_id":"toolu_C"}' \
-    '{"v":1,"sprint":7,"name":"seat","role":"tea","tool_use_id":"toolu_D","shard":null}' \
-    '{"v":1,"sprint":7,"name":"dev-a","role":"dev","tool_use_id":"toolu_E","shard":null}' \
-    '{"sprint":7,"name":"hand","role":"adversary","tool_use_id":"toolu_F","shard":null}' \
-    '{"v":1,"sprint":null,"name":"adv-x","role":"adversary","tool_use_id":"toolu_X","shard":"2/2 02"}' \
-    '{"v":1,"sprint":7,"name":"Explore","role":"","tool_use_id":"toolu_L","parent_agent_id":"a0123456789abcdef","shard":null}' \
-    '{"v":1,"sprint":7,"name":"adv-fix","role":"adversary","tool_use_id":"toolu_R","shard":"1/1 k","remediates":"toolu_I"}' \
-    '{"v":1,"sprint":7,"name":"adv-pend","role":"adversary","tool_use_id":"toolu_RP","shard":"cross/4 g1/1 1,2,3,4","remediates":"toolu_CM"}' \
-    '{"v":1,"sprint":7,"name":"adv-dirty","role":"adversary","tool_use_id":"toolu_RD","shard":"cross/4 g1/1 1,2","remediates":"toolu_CM"}' \
-    > "$sp_d/l.jsonl" || { rm -rf "$sp_d"; return 1; }
-  printf '%s\n' '{"tool_use_id":"toolu_R"}' '{"tool_use_id":"toolu_RD"}' > "$sp_d/ctx.jsonl" || { rm -rf "$sp_d"; return 1; }
-  printf '%s\n' '<!-- SKILL_INVOCATION_PROVENANCE v1' \
-    'shard_tool_use_ids: 01=toolu_B 02=toolu_X 03=toolu_F cross=toolu_GONE' \
-    'SKILL_INVOCATION_PROVENANCE_END -->' 'shard_tool_use_ids: 09=toolu_OUTSIDE' \
-    > "$sp_d/pl/stories-adversarial-p1.md" || { rm -rf "$sp_d"; return 1; }
-  # THE SEAT IN THE PROBE IS DERIVED, NOT TYPED. Three role files: one whose line opens with
-  # the persona sentence (tea), one carrying the phrase only mid-line (the rule-body shape),
-  # and one carrying nothing (dev). The derivation must return exactly `tea`, and that
-  # result -- not a literal -- is what the scan below is handed, so a derivation that lost
-  # its seat makes the `seat` cell fail rather than the probe passing over a typed list.
-  mkdir -p "$sp_d/tr" || { rm -rf "$sp_d"; return 1; }
-  printf '%s\n' '# Role: tea' '' 'The lead spawns you as a party-mode persona; your model is optional.' \
-    > "$sp_d/tr/tea.md" || { rm -rf "$sp_d"; return 1; }
-  printf '%s\n' '# Rule' 'A file-write deliverable: every party-mode persona delivers its verdict.' \
-    'Prose that says The lead spawns you as a party-mode persona in passing.' \
-    > "$sp_d/tr/midline.md" || { rm -rf "$sp_d"; return 1; }
-  printf '%s\n' '# Role: dev' '' 'You implement stories.' > "$sp_d/tr/dev.md" || { rm -rf "$sp_d"; return 1; }
-  sp_seats="$(party_seats "$sp_d/tr")"
-  sp_absent="$(party_seats "$sp_d/no-such-dir")"
-  sp_out="$(shard_scan "$sp_d/l.jsonl" 7 " adversary ${sp_seats} " "$sp_d/pl" "$sp_d/ctx.jsonl")" || { rm -rf "$sp_d"; return 1; }
-  rm -rf "$sp_d"
-  sp_bad=0
-  [ "$sp_seats" = "tea" ] || { echo "FAIL: shard self-probe: party_seats derived '${sp_seats}', expected exactly 'tea' (a line-opening persona sentence, not a mid-line mention)." >&2; sp_bad=1; }
-  [ -z "$sp_absent" ] || { echo "FAIL: shard self-probe: party_seats derived '${sp_absent}' from a directory that does not exist." >&2; sp_bad=1; }
-  sp_want() { case "${NL}${sp_out}${NL}" in *"${NL}$1${NL}"*) ;; *) echo "FAIL: shard self-probe: expected '$2'." >&2; sp_bad=1 ;; esac; }
-  sp_not()  { case "${NL}${sp_out}${NL}" in *"$1"*) echo "FAIL: shard self-probe: '$2'." >&2; sp_bad=1 ;; esac; }
-  TAB="$(printf '\t')"
-  sp_want "U${TAB}adv-a${TAB}adversary" "a shardable row with shard:null to WARN"
-  sp_want "U${TAB}seat${TAB}tea" "a party seat with shard:null to WARN"
-  sp_want "P${TAB}adv-c" "a row with no shard KEY to read as PENDING"
-  sp_want "S${TAB}adv-b${TAB}1/2 01" "a recorded shard line to be read"
-  sp_want "X${TAB}adv-inv${TAB}adversary${TAB}none (made up)${TAB}toolu_I${TAB}2" "an invalid-exception row to FAIL under S3 with its raw text, tool_use_id and ledger index"
-  sp_want "Q${TAB}shard${TAB}2${TAB}toolu_I${TAB}toolu_R${TAB}adversary" "a later, run, clean same-role row naming the S3 row to REMEDIATE it"
-  sp_want "Y${TAB}toolu_CM${TAB}toolu_RP${TAB}adv-pend" "a clean remedy with no subagent-context row to be PENDING"
-  sp_want "W${TAB}15${TAB}dirty${TAB}adv-dirty${TAB}toolu_RD${TAB}toolu_CM" "a remedy itself dirty on S4 to WARN and remediate nothing"
-  sp_not "Q${TAB}cover" "an S4 row was remediated by a pending or dirty remedy"
-  sp_want "S${TAB}adv-ok3${TAB}none (3)" "a valid serial exception to read as a carried shard line"
-  sp_want "C${TAB}cov-miss${TAB}adversary${TAB}cross/4 g1/1 1,2,3${TAB}toolu_CM${TAB}4" "a one-cross dispatch whose brief omits section 4 to be REFUSED under S4"
-  sp_want "S${TAB}cov-ok${TAB}cross/4 g1/1 1,2,3,4" "a one-cross dispatch naming every section to read as a carried shard line"
-  sp_want "S${TAB}cov-legacy${TAB}cross/6 g2/6 1,2,5" "a legacy per-group cross (G>1, a subset by design) to read as a carried shard line"
-  sp_not "C${TAB}cov-ok" "a one-cross dispatch naming every section was refused"
-  sp_not "C${TAB}cov-legacy" "a legacy per-group cross covering a subset was refused"
-  sp_not "S${TAB}adv-inv" "an invalid-exception row was counted as a carried shard line"
-  sp_not "X${TAB}adv-ok3" "a valid serial exception was FAILED under S3"
-  sp_not "X${TAB}adv-c" "a row with no shard KEY was FAILED under S3"
-  sp_want "N${TAB}${sp_d}/pl/stories-adversarial-p1.md${TAB}toolu_GONE" "a merged id with no ledger row to WARN"
-  sp_want "N${TAB}${sp_d}/pl/stories-adversarial-p1.md${TAB}toolu_F" "a merged id carried only by a row the guard did not write to WARN"
-  sp_want "J${TAB}toolu_B" "a merged id with a ledger row to join"
-  sp_want "J${TAB}toolu_X" "a merged id whose row has a null sprint to join (the id set is the whole ledger)"
-  sp_not "adv-c${TAB}adversary" "a pre-field row was WARNED -- the PENDING key is not being read"
-  sp_want "L${TAB}Explore${TAB}a0123456789abcdef" "a role-less row to be named with its issuer, never judged shardable"
-  sp_not "U${TAB}Explore" "a role-less row was WARNED as shardable -- the empty role matched a double blank in the set"
-  sp_not "dev-a" "a non-shardable role was judged"
-  sp_not "hand" "a row the guard did not write was judged"
-  sp_not "toolu_OUTSIDE" "an id outside the provenance block was joined"
-  sp_not "Z${TAB}" "a class in REMEDIABLE_CLASSES has no cleanliness test"
-  [ "$sp_bad" -eq 0 ]
-}
-
-shard_self_probe || {
-  echo "FAIL: the shard arm's self-probe did not hold, so its silence on the real ledger would" >&2
-  echo "      establish only that it ran. Exit 2, no verdict." >&2
-  exit 2
 }
 
 # --remediated-keys: the remediation predicate alone, for the dispatch guard's ARM 2. stdout carries

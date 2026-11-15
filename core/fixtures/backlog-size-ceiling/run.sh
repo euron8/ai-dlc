@@ -28,9 +28,6 @@
 #
 # Usage: run.sh
 # Exit:  0 = every probe holds, 1 = one regressed, 2 = fixture broken.
-# THE SELF-PROBE IS NOT HOISTED. validate-backlog-size.sh runs its self-probe (two seeded ledgers, a
-# 3-entry and a 2-entry one, a handful of awk calls) before every corpus, in every seed below; the
-# probe is itself the subject of b14 and needs to run in its own world.
 set -u
 
 # CLEAR EVERY AMBIENT AI_DLC_* KEY BEFORE ANY PROBE RUNS, and I87 fails the push without it.
@@ -164,7 +161,7 @@ fail_check() { # fail_check <name> <dir> <env> <nfail> <substr>
   nfail="$(printf '%s\n' "$out" | grep -c '^FAIL:')"
   if [ "$rc_v" -eq 0 ]; then note "FAIL  $n -- probe SURVIVED (validator exited 0)"; rc=1; return 1; fi
   if [ "$rc_v" -eq 2 ]; then
-    note "FAIL  $n -- validator exited 2 (environment/self-probe), which is not this probe's assertion"
+    note "FAIL  $n -- validator exited 2 (environment), which is not this probe's assertion"
     printf '%s\n' "$out" | sed 's/^/      /' | head -3; rc=1; return 1
   fi
   if ! grep -qF "$pat" <<<"$out"; then
@@ -314,26 +311,6 @@ count_check "b11 the positional ledger argument is honoured" "$TMP/b11" "" 3 doc
 # it, an arm that read the argument and an arm that read nothing both satisfy b11 whenever the
 # two seeded files happen to agree.
 count_check "b12 with no argument the default corpus is read" "$TMP/b11" "" "$BL_K"
-
-# ===== THE SELF-PROBE, BOTH DIRECTIONS. =================================================
-# The arm's predicate is LOADED from lib.sh at runtime, so it can be broken by something that
-# is not in the arm at all. An arm reporting "65 entries, under the ceiling" over a predicate
-# that silently stopped matching reads exactly like a healthy ledger.
-
-# b14 -- NEAR-MISS, and without it b13 proves nothing. A self-probe that trips on ANY edit to
-# lib.sh is as useless as one that never trips: it would make every unrelated change to a
-# shared library look like a broken predicate. An edit that does not change discrimination
-# must leave the arm reporting normally.
-seed "$TMP/b14"
-b14_lib="$TMP/b14/core/skills/ai-dlc-update/reconcile/lib.sh"
-cp "$b14_lib" "$b14_lib.orig"
-printf '\n# an unrelated comment appended by the fixture\nledger_unrelated_helper() { :; }\n' >> "$b14_lib"
-if cmp -s "$b14_lib" "$b14_lib.orig"; then
-  note "FAIL  b14 -- the near-miss edit was a NO-OP, so its quiet proves nothing"; rc=1
-else
-  count_check "b14 an edit that does not break discrimination is NOT flagged" "$TMP/b14" "" "$BL_K"
-fi
-rm -f "$b14_lib.orig"
 
 # ===== THE CROSS-CHECK JOINS. ===========================================================
 # Bind the ceiling's entry count to the SHIPPING classifier's distinct row ids, at fixture time

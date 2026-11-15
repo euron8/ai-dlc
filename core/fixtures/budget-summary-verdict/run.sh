@@ -567,8 +567,7 @@ echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
 echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"
 # THE FORK COUNTER. A `bash` shim first on PATH logs every `bash .../wait-for-deliverable.sh
 # --dispatch-ts <tok>` as `<AI_DLC_STATE_DIR>\t<tok>` and execs the real bash, so a change in the
-# arm's cost is an assertion, not a guess. The self-probe's calls carry its own state dir
-# (`.../probe-late/state`), which is how they are told apart from a world's.
+# arm's cost is an assertion, not a guess.
 REALBASH="$(command -v bash)" || { echo "FIXTURE ERROR: no bash on PATH" >&2; exit 2; }
 SHIM="$WORK/shim"; FORKLOG="$WORK/forks.log"; mkdir -p "$SHIM" || exit 2
 { printf '#!%s\n' "$REALBASH"
@@ -582,7 +581,6 @@ SHIMEOF
 forks_world() { # forks_world <arm name> -> resolver calls made for that world's state dir
   awk -F'\t' -v s="/$1/_bmad-output" 'substr($1, length($1) - length(s) + 1) == s { n++ } END { print n + 0 }' "$FORKLOG" 2>/dev/null || echo 0
 }
-forks_probe() { awk -F'\t' '$1 ~ /\/probe-late\/state$/ { n++ } END { print n + 0 }' "$FORKLOG" 2>/dev/null || echo 0; }
 
 LH='agent | role | deliverable | dispatched-at | status
 --- | --- | --- | --- | ---'
@@ -851,30 +849,29 @@ fi
 
 # --- LC. COST, asserted. One --dispatch-ts fork per distinct candidate token of a judged row: the
 # motivating cell is 6 (remediator, serial, pass, 1, cross-part, a7ffc8dcd555207b8), a no-id cell
-# 4, a bare id 1. The gate path runs the self-probe (its forks are the control); --stamps-only runs
-# none, so a snapshot Edit pays only for the rows its payload carries.
-lcost() { # lcost <label> <row> -> LC_W (world forks), LC_P (probe forks) for one gate run
+# 4, a bare id 1. --stamps-only pays only for the rows its payload carries.
+lcost() { # lcost <label> <row> -> LC_W (world forks) for one gate run
   : > "$FORKLOG"; late_world "$1" "$2"; ldrive "$1" "$V" "$LW"
-  LC_W="$(forks_world "$1")"; LC_P="$(forks_probe)"
+  LC_W="$(forks_world "$1")"
 }
-lcost cost-deco "$DECO | remediator | r1 | 2026-10-14T10:00:03Z | in-flight"; c_deco="$LC_W"; c_probe="$LC_P"
+lcost cost-deco "$DECO | remediator | r1 | 2026-10-14T10:00:03Z | in-flight"; c_deco="$LC_W"
 lcost cost-noid "remediator (serial, pass 1) | remediator | r1 | 2026-10-14T10:00:03Z | in-flight"; c_noid="$LC_W"
 lcost cost-bare "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:00:03Z | in-flight"; c_bare="$LC_W"
-if [ "$c_deco" = 6 ] && [ "$c_noid" = 4 ] && [ "$c_bare" = 1 ] && [ "$c_probe" -ge 1 ]; then
-  ok "LC resolver forks per row: decorated 6, no-id 4, bare 1 (gate self-probe $c_probe, the control)"
+if [ "$c_deco" = 6 ] && [ "$c_noid" = 4 ] && [ "$c_bare" = 1 ]; then
+  ok "LC resolver forks per row: decorated 6, no-id 4, bare 1"
 else
-  bad "LC resolver forks: decorated $c_deco (want 6), no-id $c_noid (want 4), bare $c_bare (want 1), probe $c_probe (want >= 1)"
+  bad "LC resolver forks: decorated $c_deco (want 6), no-id $c_noid (want 4), bare $c_bare (want 1)"
 fi
 : > "$FORKLOG"
 SPAY="$WORK/runs/stamps.payload"
 printf '%s\n' 'a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:00:03Z | in-flight' > "$SPAY"
 AI_DLC_TEAMMATE_DIR="$LW/sub" PATH="$SHIM:$PATH" drive_now cost-stamps "$V" "$LW" \
   --stamps-only "$LW/_bmad-output/pipeline-snapshot.md" --payload "$SPAY"
-s_w="$(forks_world cost-bare)"; s_p="$(forks_probe)"
-if [ "$(status_of cost-stamps)" = 0 ] && [ "$s_w" = 1 ] && [ "$s_p" = 0 ]; then
-  ok "LC --stamps-only makes 0 self-probe forks and 1 for the written bare-id row (rc 0)"
+s_w="$(forks_world cost-bare)"
+if [ "$(status_of cost-stamps)" = 0 ] && [ "$s_w" = 1 ]; then
+  ok "LC --stamps-only makes 1 resolver fork for the written bare-id row (rc 0)"
 else
-  bad "LC --stamps-only: exit $(status_of cost-stamps) (want 0), row forks $s_w (want 1), self-probe forks $s_p (want 0)"
+  bad "LC --stamps-only: exit $(status_of cost-stamps) (want 0), row forks $s_w (want 1)"
 fi
 
 # F-history: a future stamp in the history file is not read by the shipped arm

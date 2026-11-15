@@ -15,7 +15,7 @@
 # TWO fixtures, a quiet one first (`extract-push-flag-decision`, copied unchanged) and the
 # subject second, so a scan that judged only the first member cannot pass a firing world.
 #
-#   c   the real corpus: exit 0, `self-probe: ok`, `scanned=` equal to this fixture's own
+#   c   the real corpus: exit 0, `scanned=` equal to this fixture's own
 #       count of shipped dirs whose inputs.decl has a `!` line, `flagged=0`
 #   w1  fix A (the consumer branch echoes its consumer path)             -> exit 0, flagged=0
 #   w2  fix B (the declared spelling after the chain's fi)              -> exit 0, flagged=0
@@ -160,10 +160,10 @@ want="$(cd "$ROOT/core/fixtures" && n=0 && for d in */; do d="${d%/}"; [ -f "$d/
 src_vhc "$VALIDATOR"
 OUT="$(vhc_main 2>&1)"; RC=$?
 case "$want" in ''|0|*[!0-9]*) bad "c: this fixture derived '$want' shipped \`!\` fixtures -- the derivation is broken, so nothing below means anything" ;; esac
-if [ "$RC" = 0 ] && grep -q '^self-probe: ok' <<< "$OUT" && summary_has "scanned=$want " && summary_has 'flagged=0$'; then
-  ok "c: the real corpus is clean, the self-probe ran, and scanned=$want matches this fixture's own count"
+if [ "$RC" = 0 ] && summary_has "scanned=$want " && summary_has 'flagged=0$'; then
+  ok "c: the real corpus is clean, and scanned=$want matches this fixture's own count"
 else
-  bad "c: want exit 0, a self-probe line, scanned=$want and flagged=0; got exit $RC: $(printf '%s\n' "$OUT" | tail -3 | tr '\n' '|')"
+  bad "c: want exit 0, scanned=$want and flagged=0; got exit $RC: $(printf '%s\n' "$OUT" | tail -3 | tr '\n' '|')"
 fi
 if eqv cli-usage "$VALIDATOR" --no-such-arg && [ "$(eq_rc cli-usage)" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
    && [ "$(cat "$EQ/cli-usage.cl.err")" = "usage: validate-hermetic-consumption.sh [--quiet]" ]; then

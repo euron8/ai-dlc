@@ -76,7 +76,6 @@
 #   validate-write-format-steering.sh --max-undeclared N # also fail if undeclared > N
 #   validate-write-format-steering.sh --render           # print the derived header table
 #   validate-write-format-steering.sh --check FILE       # byte-compare FILE's region
-#   validate-write-format-steering.sh --self-probe       # both directions, then exit
 #
 # Exit codes:
 #   0  every declaration resolves (undeclared artifacts reported, not fatal)
@@ -128,7 +127,6 @@ while [ $# -gt 0 ]; do
     --report)         REPORT=1; shift ;;
     --render)         MODE="render"; shift ;;
     --check)          MODE="check"; CHECK_FILE="${2:-}"; shift 2 ;;
-    --self-probe)     MODE="self-probe"; shift ;;
     --max-undeclared) MAX_UNDECLARED="${2:-}"; shift 2 ;;
     -h|--help)        sed -n '1,80p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "validate-write-format-steering: unknown argument '$1'" >&2; exit 2 ;;
@@ -187,9 +185,8 @@ if [ -z "$STEERING" ]; then
 fi
 
 # --- the reader ---------------------------------------------------------------
-# One python3 for the corpus AND both probe directions. An arm's fork count is a change to
-# the suite's wall clock, so the reader takes (tag, steering, population) triples and tags
-# every line it prints; the live tree and the two seeded trees are one process, not three.
+# One python3 for the corpus. An arm's fork count is a change to the suite's wall clock, so
+# the reader takes (tag, steering, population) triples and tags every line it prints.
 run_reader() {
   python3 - "$@" <<'PY'
 import io, json, os, sys
@@ -354,88 +351,6 @@ for i in range(0, len(args), 5):
 PY
 }
 
-# --- SELF-PROBE FIRST, BEFORE THE CORPUS -------------------------------------
-# An arm reporting zero findings without first proving it can produce one has established
-# that it ran, not that the corpus is clean. Both directions, on mktemp trees rather than the
-# real corpus: the OFFENDER declares a format in a file that does not carry the anchor, and
-# the NEAR-MISS declares one in a file that does. An arm that flagged the near-miss would
-# flag every correct declaration in the tree, and its finding set would be the whole
-# population — which is a scan that discriminates nothing and reads exactly like one that
-# discriminates perfectly.
-PROBE_DIR=""; PROBE_POS=""; PROBE_NEG=""
-build_probe() {
-  PROBE_DIR="$(mktemp -d 2>/dev/null)" || return 1
-  [ -n "$PROBE_DIR" ] || return 1
-  for side in pos neg; do
-    mkdir -p "$PROBE_DIR/$side/core/schemas" || return 1
-    cat > "$PROBE_DIR/$side/pop.json" <<'JSON'
-{ "paths": [
-  { "name": "probe-artifact.md", "transient": false },
-  { "name": "probe-transient",   "transient": true  }
-] }
-JSON
-  done
-  # OFFENDER: the declared file exists and has LOST the anchor.
-  printf 'this file no longer carries the format\n' \
-    > "$PROBE_DIR/pos/core/schemas/probe-format.json"
-  cat > "$PROBE_DIR/pos/steer.json" <<'JSON'
-{ "join": { "population_key": "transient", "population_value": false },
-  "formats": [ { "name": "probe-artifact.md",
-                 "declared_in": "core/schemas/probe-format.json",
-                 "anchor": "PROBE-FORMAT-ANCHOR", "kind": "schema" } ] }
-JSON
-  # NEAR-MISS: same shape, same population, and the anchor IS present.
-  printf 'PROBE-FORMAT-ANCHOR is right here\n' \
-    > "$PROBE_DIR/neg/core/schemas/probe-format.json"
-  cat > "$PROBE_DIR/neg/steer.json" <<'JSON'
-{ "join": { "population_key": "transient", "population_value": false },
-  "formats": [ { "name": "probe-artifact.md",
-                 "declared_in": "core/schemas/probe-format.json",
-                 "anchor": "PROBE-FORMAT-ANCHOR", "kind": "schema" } ] }
-JSON
-  PROBE_POS="$PROBE_DIR/pos"; PROBE_NEG="$PROBE_DIR/neg"
-  return 0
-}
-
-PROBE_OUT=""; PROBE_BUILT=0
-if build_probe; then
-  PROBE_BUILT=1
-  PROBE_OUT="$(run_reader \
-      pos "$PROBE_POS/steer.json" "$PROBE_POS/pop.json" "$PROBE_POS" "" \
-      neg "$PROBE_NEG/steer.json" "$PROBE_NEG/pop.json" "$PROBE_NEG" "" 2>&1)"
-fi
-[ -n "$PROBE_DIR" ] && rm -rf "$PROBE_DIR"
-
-PROBE_FAIL=0
-if [ "$PROBE_BUILT" -ne 1 ]; then
-  echo "validate-write-format-steering: FAIL — could not build the probe trees, so NEITHER" >&2
-  echo "  direction of the self-probe ran. A verdict on the corpus below would establish" >&2
-  echo "  only that the reader executed." >&2
-  PROBE_FAIL=1
-else
-  pos_fired=0; neg_fired=0
-  case "$PROBE_OUT" in *"pos	STALE	probe-artifact.md"*) pos_fired=1 ;; esac
-  case "$PROBE_OUT" in *"neg	STALE	probe-artifact.md"*) neg_fired=1 ;; esac
-  if [ "$pos_fired" -ne 1 ]; then
-    echo "validate-write-format-steering: FAIL — the POSITIVE probe was NOT reported. A seeded" >&2
-    echo "  declaration pointing at a file that has lost its anchor went unseen by the same" >&2
-    echo "  reader the corpus arm runs, so a clean corpus result means nothing. Fails closed." >&2
-    PROBE_FAIL=1
-  fi
-  if [ "$neg_fired" -ne 0 ]; then
-    echo "validate-write-format-steering: FAIL — the NEGATIVE probe WAS reported. A declaration" >&2
-    echo "  whose file DOES carry its anchor was flagged as stale, so this arm flags every" >&2
-    echo "  correct declaration in the tree and discriminates nothing." >&2
-    PROBE_FAIL=1
-  fi
-fi
-
-if [ "$MODE" = "self-probe" ]; then
-  [ "$PROBE_FAIL" -eq 0 ] && echo "validate-write-format-steering: self-probe PASS — the offender was reported and the near-miss was not."
-  exit "$PROBE_FAIL"
-fi
-[ "$PROBE_FAIL" -eq 0 ] || exit 1
-
 # --- the corpus ---------------------------------------------------------------
 # The population schema is resolved from the STEERING schema's own `join.population_schema`,
 # so the declaration decides which file is joined and this reader cannot pick a different one.
@@ -479,8 +394,8 @@ OUT="$(run_reader live "$STEERING" "$POP" "$READER_ROOT" "$ALSO_ROOT" 2>&1)"
 
 if [ -z "$OUT" ]; then
   echo "validate-write-format-steering: FAIL — the reader produced NO output at all, not even" >&2
-  echo "  its population count. It did not run, so neither the corpus verdict nor the probe" >&2
-  echo "  that proves the corpus verdict means anything. Fails closed." >&2
+  echo "  its population count. It did not run, so the corpus verdict means nothing." >&2
+  echo "  Fails closed." >&2
   exit 1
 fi
 

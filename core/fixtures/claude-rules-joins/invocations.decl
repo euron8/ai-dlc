@@ -1,7 +1,7 @@
 # Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
 # are run.sh itself and the three cli cells of cells.decl; every other run of a tree's copy is in process. inproc rows
-# (fx_inproc, one per source): each seeded tree's copy once (the control, m1-m13, mA1-mA2b and the no-VERSION tree), every copy at
+# (fx_inproc, one per source): each seeded tree's copy once (the control, m1-m11, m13, mA1-mA2b and the no-VERSION tree), every copy at
 # <tree>/scripts/validate-claude-rules.sh.
 4 *
 3 scripts/validate-claude-rules.sh
-15 inproc:scripts/validate-claude-rules.sh
+14 inproc:scripts/validate-claude-rules.sh

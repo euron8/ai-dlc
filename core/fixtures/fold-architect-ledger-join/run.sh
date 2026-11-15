@@ -191,23 +191,9 @@ rel() { printf '%s\n' "${1#"$W"/}"; }  # <absolute path inside the current world
 # EVERY DRIVE RUNS FROM THE WORLD ROOT. The subject reads `_bmad-output/pipeline-snapshot.md`
 # relative to the cwd, so a drive from the caller's cwd would read a consumer's OWN snapshot when
 # this fixture runs there, and every no-snapshot arm would then assert about that sprint.
-# THE SELF-PROBE IS PAID ONCE PER DISTINCT OUTCOME, NOT ONCE PER DRIVE. Every --fold-architect run
-# first runs a self-probe that builds its own world and judges ~30 cases, and it answers the same
-# question each time. A drive therefore passes --probe-from-caller (the subject's explicit flag,
-# which makes stdout line 1 a fixed banner and runs the SAME fa_judge afterwards) unless E2E=1.
-# The banner is REQUIRED on a seam drive and stripped before the arm reads the output; a subject
-# that ignored the flag fails every seam arm with rc 99. E2E=1 drives (one per outcome: FAIL, PASS,
-# NOT-OWED, SKIP, refusal) run the unmodified gate, probe included.
-SEAM_BANNER="PROBE-SKIPPED-BY-CALLER: the fold-architect self-probe did not run (--probe-from-caller); this is not a gate verdict."
-drive() {  # args to the subject; sets RC, FIRST, NPASS, OUTF. E2E=1 -> no seam; DRIVE_PATH -> PATH override
+drive() {  # args to the subject; sets RC, FIRST, NPASS, OUTF. DRIVE_PATH -> PATH override
   OUTF="$WORK/out.$WN.$RANDOM"
-  if [ "${E2E:-0}" = 1 ]; then
-    ( cd "$W" && PATH="${DRIVE_PATH:-$PATH}" bash "$VSL" "$@" ) > "$OUTF" 2>&1; RC=$?
-  else
-    ( cd "$W" && PATH="${DRIVE_PATH:-$PATH}" bash "$VSL" --probe-from-caller "$@" ) > "$OUTF.raw" 2>&1; RC=$?
-    if [ "$(sed -n 1p "$OUTF.raw")" = "$SEAM_BANNER" ]; then sed 1d "$OUTF.raw" > "$OUTF"
-    else cp "$OUTF.raw" "$OUTF"; RC=99; fi
-  fi
+  ( cd "$W" && PATH="${DRIVE_PATH:-$PATH}" bash "$VSL" "$@" ) > "$OUTF" 2>&1; RC=$?
   FIRST="$(sed -n 1p "$OUTF")"
   NPASS="$(grep -c '^PASS:' "$OUTF")" || NPASS=0
 }
@@ -309,7 +295,7 @@ esac
 # --- the eight contract seeds, plus the arms that pin each clause's neighbour ------------------
 # (i) folded story, architecture variant, no residue
 mkworld 313; oneshot "$SLOT/$ONE"
-E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
+drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
 expect A-i 1 "FAIL: no residue" "" 1 "(i) architecture variant, no residue -> FAIL"
 
 # The no-flags DEFAULT: without --variant/--route every fold is OWED. Pinned, not accidental.
@@ -318,7 +304,7 @@ expect A-default 1 "FAIL: no residue" "" 1 "no --variant/--route: the fold is ow
 
 # (ii) residue citing a real architect row after the one-shot
 mkworld 313; oneshot "$SLOT/$ONE"; residue "$SLOT/$RES" "$ARCH_AFTER" "$STORY"; stamp "$STORY" "$(rel "$SLOT/$ONE")"
-E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
+drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
 expect A-ii 0 "PASS: $ONE -> $RES" "architect dispatch $ARCH_AFTER in S313" 0 "(ii) architect row after the one-shot -> PASS"
 # The residue shape section 4 prescribes is the one the gate's OTHER half accepts.
 bash "$VPB" "$SLOT/$RES" --require-skill bmad-review >/dev/null 2>&1; pbrc=$?
@@ -341,7 +327,7 @@ expect A-iii 1 "FAIL: residue artifact:" "" 1 "(iii) residue artifact: names a d
 
 # (iv) bug variant, no residue: not owed — and the variant set is read off the REAL route.md
 mkworld 313; oneshot "$SLOT/$ONE"
-E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --variant bug --route "$ROUTE"
+drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --variant bug --route "$ROUTE"
 expect A-iv 0 "NOT-OWED: variant 'bug' runs no architecture step" "" 1 "(iv) bug variant, no residue -> NOT-OWED, never PASS"
 # The legacy one-shot name in an ARCHITECTURE variant is a finding, never an opt-out (contract
 # v3.2 D4). The reference consumer's own S313 file is this shape, byte for byte.
@@ -381,7 +367,7 @@ expect A-vii-near 0 "PASS: $ONE -> $RES" "" 0 "two residues citing two different
 
 # (viii) a sprint whose ledger rows carry no tool_use_id at all (real S310 rows)
 mkworld 310; oneshot "$SLOT/$ONE" "2026-09-10T02:00:00Z" "_bmad-output/planning-artifacts/s310/stories/story-1-1-fix.md"
-E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
+drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
 expect A-viii 0 "SKIP-PRE-ADOPTION: the ledger carries no tool_use_id on any S310 row" "" 1 "(viii) no tool_use_id for the sprint -> SKIP-PRE-ADOPTION, never PASS"
 # The mid-sprint adoption: real S311 carries ids on some rows and not others. A one-shot whose own
 # tool_use_id joins no S311 adversary row may have been one of the id-less dispatches: SKIP...
@@ -400,7 +386,7 @@ expect A-viii-near 0 "PASS: $ONE -> $RES" "in S311" 0 "one-shot id joins an S311
 mkworld 313; oneshot "$SLOT/$ONE"; residue "$SLOT/$RES" "$ARCH_AFTER" "$STORY"; : > "$W/_bmad-output/spawn-ledger.jsonl"
 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
 expect A-empty 0 "SKIP-PRE-ADOPTION: the ledger carries no tool_use_id on any S313 row" "" 1 "empty ledger -> SKIP-PRE-ADOPTION, never PASS"
-E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/no-such-ledger.jsonl" $VARF
+drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/no-such-ledger.jsonl" $VARF
 expect A-absent 2 "FAIL: no spawn ledger at" "" 1 "absent ledger -> exit 2 refusal, never SKIP"
 
 # --- D1: ordering is anchored on the one-shot's OWN ledger row, never on invoked_at -------------
@@ -897,33 +883,7 @@ expect Dc-reader-dies 2 "FAIL: could not read the pipeline snapshot" "reader rc=
 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --route "$ROUTE"
 expect Dc-reader-lives 2 "FAIL: variant disagreement: snapshot says carry-over, sprint-status says bug" "" 1 "the same world with the real awk reaches the disagreement check"
 
-# --- the --probe-from-caller seam: it is announced, it is not shipped, and it cannot be unconditional --
-# S1: on a seam run line 1 is the banner (drive requires it, rc 99 otherwise) and an end-to-end run
-# of the unmodified gate does NOT carry it. Both sides in one world, one property apart.
-mkworld 313; oneshot "$SLOT/$ONE"
-( cd "$W" && bash "$VSL" --probe-from-caller --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s1.seam" 2>&1
-( cd "$W" && bash "$VSL" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s1.e2e" 2>&1
-if [ "$(sed -n 1p "$WORK/s1.seam")" = "$SEAM_BANNER" ] && [ "$(sed -n 2p "$WORK/s1.seam")" = "$(sed -n 1p "$WORK/s1.e2e")" ] \
-   && ! grep -qF 'PROBE-SKIPPED-BY-CALLER' "$WORK/s1.e2e"; then
-  ok "[SEAM-banner] --probe-from-caller prints the banner as line 1 and then the gate's own verdict; the end-to-end run carries no banner"
-else bad "[SEAM-banner] --probe-from-caller banner on the seam run and none end to end -- seam1='$(sed -n 1p "$WORK/s1.seam")' e2e1='$(sed -n 1p "$WORK/s1.e2e")'"; fi
-
-# S2 (no shipped caller passes --probe-from-caller) lives in derived-fence-binding, which is
-# .dist-only and seeds core/ and scripts/ whole; this fixture ships and cannot declare them.
-
-FOLDARGS=(--fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl")
-# ENV: an inherited FA_SKIP_PROBE must not skip the probe. The end-to-end run under it equals the plain one.
-( cd "$W" && env FA_SKIP_PROBE=1 bash "$VSL" "${FOLDARGS[@]}" $VARF ) > "$WORK/s5.env" 2>&1
-c_env=0; [ "$(sed -n 1p "$WORK/s5.env")" != "$SEAM_BANNER" ] && cmp -s "$WORK/s5.env" "$WORK/s1.e2e" && c_env=1
-# NONFOLD: the flag outside fold mode is a usage fault.
-( cd "$W" && bash "$VSL" --probe-from-caller --ledger "$W/_bmad-output/spawn-ledger.jsonl" --sprint 313 --settings "$W/none.json" ) > "$WORK/s6.nf" 2>&1; nfrc=$?
-c_nf=0; [ "$nfrc" = 2 ] && grep -qF -- '--probe-from-caller applies to --fold-architect only' "$WORK/s6.nf" && c_nf=1
-if [ "$c_env" = 1 ]; then ok "[SEAM-env] an inherited FA_SKIP_PROBE=1 with no flag does NOT skip the probe: no banner, output identical to the plain end-to-end run"
-else bad "[SEAM-env] FA_SKIP_PROBE=1 in the environment changed the end-to-end run -- line 1='$(sed -n 1p "$WORK/s5.env")'"; fi
-if [ "$c_nf" = 1 ]; then ok "[SEAM-nonfold] --probe-from-caller outside --fold-architect exits 2 with a usage message"
-else bad "[SEAM-nonfold] --probe-from-caller outside fold mode -- rc=$nfrc"; fi
-
 # --- verdict ---------------------------------------------------------------------------------
-EXPECTED_ARMS=79
+EXPECTED_ARMS=76
 echo "fold-architect-ledger-join: $stood stood down"
 report_end fold-architect-ledger-join "$((EXPECTED_ARMS - stood))"
