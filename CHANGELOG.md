@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1139.0] - 2026-11-15
+
+### BL-1131 CLOSED: the implementation step names gate 1's `gate: skip` plan after a gate-3 rework
+
+`core/skills/ai-dlc/steps/implementation.md` gains the paragraph **Gate 1 after a gate-3 rework (Rule A).** It states what `core/scripts/gate-transition.sh` already does at gate 1, pass M >= 2: when the conditions hold it asks `--gate1-rerun`, and on `GATE1-SKIP` it writes a `gate: skip` plan that authorizes no seat. The lead records the plan's `route:` line and runs its `next:` gate-2 command. A pass that is not asked, and a `GATE1-RERUN` or refusal, is a gate-log line and a re-review.
+
+### Backlog
+
+BL-1056's W6-09 remainder no longer calls the `lib/report.sh` read of hook-registration-join and retro-compliance-workflow owed: both rows are in `.ai-dlc-fixture-readsets.tsv` as of 0.1138.0.
+
 ## [0.1138.0] - 2026-11-15
 
 ### BL-1122 and BL-1129 CLOSED: pregate re-measures every unit that reaches a changed script

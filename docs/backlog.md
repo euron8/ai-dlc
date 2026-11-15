@@ -2733,7 +2733,7 @@ Remainder (11 rows still listed):
 - Rewrites, not counter swaps: hermetic-runner, ledger-status-vocabulary, plan-rotate, reconcile-emit-report, self-update-gate.
 - ledger-reverify: about 75 direct `printf '  ok …'` sites and 150 `FAILURES` sites, and `ASSERTIONS` is control logic (the shared-control check, the per-unit floor, the `row_is` probes).
 - procsub-staged-refusal: its `ok`/`bad` call `stub_clear` after every assertion, and the arm helpers that call arms outside `run_arm` rely on that clear.
-- hook-registration-join and retro-compliance-workflow carry no `inputs.decl`. Their new read of `lib/report.sh` is owed a sandbox read-set trace.
+- hook-registration-join and retro-compliance-workflow carry no `inputs.decl`. Their new read of `lib/report.sh` is traced: as of v0.1138.0, the `core/fixtures/lib/report.sh` row for each is in `.ai-dlc-fixture-readsets.tsv`, from `derive-fixture-readsets.sh --tracer sandbox`.
 - World adoption is still not bound by an arm.
 - NOTE: six archived receipts in `docs/backlog.archive.md` grep output text the migration changed, so they no longer match: 26795, 27158 and 27168 (predicate-reclassification `ok   13a`), 40163 (gate-series-rung `ok: …`), 40288 (deploy-validate-smoke-classification `: PASS`) and 40431 (bmad-invocation-resolve `: PASS`). The gate runs no archived receipt (`.githooks/pre-push:596`), so none of them reads red.
 
@@ -3072,20 +3072,6 @@ Remaining:
 - the `REC_ROOT` inheritance effect stated above was never reproduced; no stray under `89857cfe9` was observed.
 
 Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b from ai-dlc-67's BL-1115 report; id allocated by the lead. W6-14 by ai-dlc-b7.
-
-verify: manual
-
-## BL-1131 — implementation.md names no `gate: skip` plan, so a lead holding one has only the program's stderr line to go on
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/skills/ai-dlc/steps/implementation.md` (pinned by `core/fixtures/process-rule-pins`: its own paragraph, beside the Rule A paragraph at `:520`-`:528`, never inside a pinned one).
-
-BL-1030's PARTIAL made `core/scripts/gate-transition.sh` gate 1, pass M >= 2, run `g1_after_g3` (`:307`, called at `:362`) before `--route`. After a gate-3 rework (the story's newest `<idx>-g3-p<K>.plan` names a sha the pass M-1 reviewed-sha is an ancestor of or equal to), when the frozen sha is not that g3 sha and the pass M-1 review reads APPROVED, it asks `partition-review-diff.sh --gate1-rerun` from that reviewed-sha. On `GATE1-SKIP` it writes a plan reading `gate: skip`, `manifest: none`, `route: skip GATE1-SKIP: ...`, no shard line, a `rule-a-base: gate1 <sha> <file>` line and a `next: gate-transition.sh <idx> 2 --pass <next QA pass> ...` line (`:340`), and prints on stderr that the plan authorizes no seat. The dispatch guard's ROLE TO GATE default arm denies every seat that cites it. The step file is the carrier a lead follows, and it does not say what a `skip` plan means or that the next transition is gate 2.
-
-At d619fe62a, which BL-1030's change leaves byte-identical under both directories, `gate: skip` occurs 0 times under `core/skills/` and `core/team-roles/`. The control: the `gate:` line reading `rerun` is named in 1 file under `core/skills/`.
-
-Fix: add one paragraph after the Rule A paragraph: after a gate-3 rework, `gate-transition.sh <story> 1 --pass M` may answer with a `gate: skip` plan; it authorizes no seat, the lead records its `route:` line in the gate log and runs the plan's `next:` gate-2 command with the next QA pass; a gate-1 pass at the sha gate 3 judged (the remedy gate 3 asked for) and a pass after a non-APPROVED review always dispatch. Run `core/fixtures/process-rule-pins` on the final tree.
-
-Provenance: batch 257, wave 6, filed by ai-dlc-15 as BL-1030's remainder (2), on lead ai-dlc-7b's amend; id allocated by the lead.
 
 verify: manual
 
