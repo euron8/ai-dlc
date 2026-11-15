@@ -50,6 +50,8 @@ PN_STALL=3; PN_STEPS=$((3 * PN_STALL))
 
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")/../lib" && pwd)/pool-span.sh" || { echo "FIXTURE BROKEN: cannot source lib/pool-span.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "prepush-pool-depth: FIXTURE BROKEN" >&2; exit 2; }
 # SIGINT IGNORED ON ENTRY IS A REFUSAL, NOT A RED. A plain `&` from a non-interactive shell starts this
 # fixture with SIGINT ignored, every drive inherits that, and bash cannot re-enable a signal ignored at
@@ -286,8 +288,7 @@ raws() { sed -n 's/^raw=\([^ ]*\) .*/\1/p' "$WORK/log" | sort -u | tr '\n' ' ' |
 HN=0; FXRS=""
 for HOOK in $HOOKS; do
   HN=$((HN+1))
-  sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$HOOK" > "$WORK/block$HN.sh"
-  [ -s "$WORK/block$HN.sh" ] || broken "extracted an empty FIXTURE_POOL block from $HOOK"
+  pool_span "$HOOK" "$WORK/block$HN.sh" FIXTURE_POOL || broken "pool_span could not extract the FIXTURE_POOL span from $HOOK"
   FXR="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$WORK/block$HN.sh" | sort -u)"
   [ "$(printf '%s\n' "$FXR" | grep -c .)" -eq 1 ] || broken "read '$FXR' as the block's fixture root; need exactly one"
   printf '%s\n' "$FXR" > "$WORK/block$HN.fxr"
@@ -1408,7 +1409,7 @@ CLC="$ROOT/scripts/census-consumer-layout.sh"
 [ -f "$CLH" ] || broken "the consumer-layout section needs the distribution hook .githooks/pre-push"
 [ -f "$CLC" ] || broken "the consumer-layout section needs the census scripts/census-consumer-layout.sh"
 CLW="$WORK/cl"; mkdir -p "$CLW" || broken "mkdir $CLW"
-sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$CLH" > "$CLW/pool.sh"
+pool_span "$CLH" "$CLW/pool.sh" FIXTURE_POOL || broken "pool_span could not extract the FIXTURE_POOL span from $CLH"
 sed -n '/^# SUITE_STEP_BEGIN$/,/^# SUITE_STEP_END$/p' "$CLH" > "$CLW/step.sh"
 grep -q '^cl_select() ' "$CLW/pool.sh" && grep -q '^fixture_suite_step() ' "$CLW/step.sh" && grep -q 'PREPUSH_CL_ENTRY' "$CLW/step.sh" \
   || broken "the extracted FIXTURE_POOL / SUITE_STEP spans of $CLH carry no consumer-layout seam"

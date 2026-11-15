@@ -7,3 +7,4 @@ core/fixtures/prepush-pool-depth/receipt-bl924.sh
 scripts/install.sh
 scripts/census-consumer-layout.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/pool-span.sh

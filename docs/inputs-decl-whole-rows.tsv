@@ -24,7 +24,7 @@ apply-restamp-worklist	!core/git-hooks/pre-push	whole
 apply-self-overwrite	!core/skills/ai-dlc-update/reconcile/	legacy
 apply-setup-sited-merge	!core/skills/ai-dlc-update/reconcile/	legacy
 apply-worklist-rows	core/skills/ai-dlc-update/reconcile/	whole
-bmad-invocation-resolve	!core/skills/ai-dlc/	legacy
+bmad-invocation-resolve	!core/skills/ai-dlc/	whole
 census-hermetic-coverage	.githooks/pre-push	whole
 census-hermetic-coverage	core/scripts/hermetic-run.sh	whole
 changelog-sprint-slot	core/skills/ai-dlc/steps/	whole
@@ -64,8 +64,8 @@ enforcement-map-sites	scripts/	whole
 enforcement-map-sites	.githooks/	whole
 enforcement-map-sites	templates/	whole
 enforcement-map-sites	core/	whole
-finding-grammar-binding	!core/scripts/	legacy
-finding-grammar-binding	!core/hooks/	legacy
+finding-grammar-binding	!core/scripts/	whole
+finding-grammar-binding	!core/hooks/	whole
 fixture-git-env-seam	core/fixtures/	legacy
 fixture-inprocess	!.githooks/pre-push	whole
 fixture-inprocess	!core/git-hooks/pre-push	whole
@@ -80,7 +80,6 @@ h2-attest-scripts-dir	core/fixtures/check-manifest-bypass/	whole
 handoff-completion-assertion	core/hooks/	whole
 handoff-record-carries-return	!core/skills/ai-dlc/	legacy
 handoff-record-carries-return	core/team-roles/	whole
-hermetic-consumption	core/fixtures/	legacy
 hermetic-runner	core/scripts/hermetic-run.sh	whole
 hermetic-runner	core/git-hooks/pre-push	whole
 hermetic-runner	.githooks/pre-push	whole
@@ -135,9 +134,9 @@ procsub-staged-refusal-boot-c	core/fixtures/procsub-staged-refusal-boot/	legacy
 procsub-staged-refusal-boot	core/skills/ai-dlc-update/reconcile/	whole
 procsub-staged-refusal-c	core/scripts/	whole
 procsub-staged-refusal-c	core/skills/	legacy
-procsub-staged-refusal	core/hooks/	legacy
-procsub-staged-refusal	core/scripts/	legacy
-procsub-staged-refusal	core/session-driver/	legacy
+procsub-staged-refusal	core/hooks/	whole
+procsub-staged-refusal	core/scripts/	whole
+procsub-staged-refusal	core/session-driver/	whole
 procsub-staged-refusal	core/skills/	legacy
 readset-skip-b	!core/git-hooks/pre-push	whole
 readset-skip-b	.githooks/pre-push	whole
@@ -166,7 +165,7 @@ retro-audit-scans	!core/git-hooks/pre-push	whole
 review-shard-merge-b	core/fixtures/review-shard-merge/	legacy
 route-defect-classification	core/fixtures/route-defect-classification/	legacy
 schema-install-fallback	core/	legacy
-schema-install-fallback	patterns/	legacy
+schema-install-fallback	patterns/	whole
 schema-install-fallback	templates/	legacy
 self-update-gate-b	!core/skills/ai-dlc-update/reconcile/	legacy
 self-update-gate-b	!core/git-hooks/pre-push	whole
@@ -217,10 +216,10 @@ validator-fork-budget	templates/	legacy
 validator-fork-budget	core/	legacy
 validator-fork-budget	patterns/	legacy
 validator-fork-budget	.claude/rules/	legacy
-validator-path-resolution	!core/scripts/	legacy
+validator-path-resolution	!core/scripts/	whole
 validator-path-resolution	core/schemas/	whole
-vocabulary-index	scripts/	legacy
-vocabulary-index	.githooks/	legacy
-vocabulary-index	templates/	legacy
+vocabulary-index	scripts/	whole
+vocabulary-index	.githooks/	whole
+vocabulary-index	templates/	whole
 vocabulary-index	core/	legacy
 write-format-steering-multiformat	core/schemas/	whole
