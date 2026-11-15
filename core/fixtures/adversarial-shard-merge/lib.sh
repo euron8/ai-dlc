@@ -518,10 +518,10 @@ refused_clean() { # <shard-dir> <token> -- exit 2, the token, nothing written, n
 
 # ------------------------------------------------------------------------------- predicates
 # Each takes the merge script to drive, so the mutant battery scores the arm's OWN body.
-p_b3() { # the recomputed verdict, and the convergence validator accepts the merged file
-  local m="$1" d o c
-  d="$(b3_world)"; o="$(out_of "$d")"; c="$(dirname "$m")/validate-adversarial-convergence.sh"
-  run_merge "$m" "$d"
+p_b3() { # <merge> <merged B3 world> <the merge's output on it> <its rc>: the recomputed verdict, and the convergence validator accepts the merged file
+  local m="$1" d="$2" o c
+  o="$(out_of "$d")"; c="$(dirname "$m")/validate-adversarial-convergence.sh"
+  cp "$3" "$MO" || return 1; RC="$4"
   [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_NOT_MET shards=6" && has "$MO" "blocking=6" \
     && [ -f "$o" ] && has "$o" "verdict: EXIT_CONDITION_NOT_MET" || return 1
   bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
@@ -890,12 +890,13 @@ p_b4doc_other() {
 # `coe-adversarial-adversarial-p1.md`. Every world here is a sprint s9 holding the 3-part document
 # seed, with the shard set written into s9/shards/<base>/ -- the one property the cells vary.
 STEM_TOKEN="_bmad-output/planning-artifacts/s9/test-strategy.md"
-stem_world() { # <shard-dir basename> -> prints the shard dir of a fresh s9 document world, shards written
+stem_world() { # <shard-dir basename> [bare] -> prints the shard dir of a fresh s9 document world, shards written (bare: none)
   local w pa d x
   w="$(mktemp -d "$WORK/sw.XXXXXX")" || return 1
   pa="$w/_bmad-output/planning-artifacts"; d="$pa/s9/shards/$1"
   mkdir -p "$d" || return 1
   cp "$SEED_DIR/seed.doc-test-strategy.md" "$pa/s9/test-strategy.md" || return 1
+  [ "${2:-}" = bare ] && { printf '%s' "$d"; return 0; }
   dshard "$d" 1 0 EXIT_CONDITION_MET 1 "" "$STEM_TOKEN"
   dshard "$d" 2 0 EXIT_CONDITION_MET 2 "" "$STEM_TOKEN"
   dshard "$d" 3 0 EXIT_CONDITION_MET 3 "" "$STEM_TOKEN"
@@ -908,7 +909,7 @@ stem_none() { # <s9 dir> -> 0 when no *adversarial* file and no merge temp sits 
   [ -z "$(find "$1" -maxdepth 1 -type f \( -name '*adversarial*' -o -name '*.merge-tmp.*' \) 2>/dev/null)" ]
 }
 p_stem_series() { # document mode, shards/doc-adversarial-p1/ -> REFUSED naming the series, nothing written
-  local d; d="$(stem_world doc-adversarial-p1)" || return 1
+  local d; d="$(stem_world doc-adversarial-p1 bare)" || return 1
   stem_merge "$1" "$d"
   [ "$RC" -eq 2 ] && has "$MO" "REFUSED: shard directory doc-adversarial-p1 names the series, not the artifact" \
     && has "$MO" "would write doc-adversarial-adversarial-p1.md" && stem_none "$(stem_s9 "$d")"
@@ -927,7 +928,7 @@ p_stem_near() { # a stem CONTAINING the word, not ending in it, is legal: advers
   [ "$RC" -eq 0 ] && has "$MO" "MERGED: " && [ -f "$(stem_s9 "$d")/adversarial-notes-adversarial-p1.md" ]
 }
 p_stem_files() { # files mode and --map, shards/stories-adversarial-p1/ -> both REFUSED naming the series
-  local d s9; d="$(stem_world stories-adversarial-p1)" || return 1; s9="$(stem_s9 "$d")"
+  local d s9; d="$(stem_world stories-adversarial-p1 bare)" || return 1; s9="$(stem_s9 "$d")"
   # The artifact dir the wrong name derives EXISTS with two stories, so without the refusal --map
   # prints its ordinal map (exit 0) and files mode reads on: only the refusal stops either.
   mkdir -p "$s9/stories-adversarial" && printf 'a\n' > "$s9/stories-adversarial/a.md" \
@@ -954,10 +955,24 @@ tw_build() { # -> a B3 shard dir with every shard but 2 written and recorded
 s2() { shard "$1" 2 2 EXIT_CONDITION_MET 2 "" "${2:-}"; } # <shard dir> [invoked_at] -- shard 2, under whatever knobs prefix the call
 REAL_OTHER=toolu_01ZZZZZZZZZZZZZZZZZZZZZZ   # real-shaped (toolu_ + 24 base62) and no fixture's derived id
 FORGED=toolu_cross1_g1_dispatch             # a fabricated id the reference consumer merged; NOT real-shaped
+# self_world <self id> -> a B3 shard dir whose shards self-report <self id> (ABSENT: no tool_use_id line). SELF_ID reaches
+# a world through self_line alone: harness_record's hook payload and every ledger row are a function of the shard dir and
+# file name (hr_ids), so a copy of the cached B3 world with its one self line rewritten is the world `SELF_ID=<id> b3_world`
+# builds, minus its hook starts.
+self_world() {
+  local d f
+  d="$(b3_world)" || return 1
+  [ "$1" = NOT_ACCESSIBLE ] || for f in "$d"/*.md; do
+    if [ "$1" = ABSENT ]; then sed '/^tool_use_id: NOT_ACCESSIBLE$/d' "$f" > "$f.tmp" || return 1
+    else sed "s/^tool_use_id: NOT_ACCESSIBLE\$/tool_use_id: $1/" "$f" > "$f.tmp" || return 1; fi
+    mv "$f.tmp" "$f" || return 1
+  done
+  printf '%s' "$d"
+}
 p_tuid_main() { # self ids NOT_ACCESSIBLE / unavailable / absent / forged all merge, ids = the derived ones
   local m="$1" d o k want have sid
   for sid in NOT_ACCESSIBLE unavailable ABSENT "$FORGED"; do
-    d="$(SELF_ID="$sid" b3_world)"; o="$(out_of "$d")"
+    d="$(self_world "$sid")" || return 1; o="$(out_of "$d")"
     run_merge "$m" "$d"
     [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] || return 1
     want=""; for k in 1 2 3 cross-1 cross-2 cross-3; do want="$want $k=$(did_of "$d" "$k")"; done
@@ -1745,10 +1760,12 @@ KF_J3='closes a MAJOR only by a `source: <shard>#<id>` token keyed on that id'
 KF_DUP='2.md:9 repeats finding id F-1 of the heading at line 5'
 KF_FENCE='2.md:9 opens a fence that is still open at end of file'
 T1_BODY='## Findings\n\n### MAJOR — wiring check\n\nstories: 2\n'
+# t1_world -> a B3 shard dir of the T1 state (shard 2 = T1_BODY, 1 MAJOR declared), built once (wc_get t1kw), a copy per call.
+t1_world() { wc_get t1kw kw "$T1_BODY" 1; }
 # T1: a keyless MAJOR and a keyless CRITICAL heading are each REFUSED, naming file:line, the keyed form and J3's token.
 p_t1() {
   local d
-  d="$(kw "$T1_BODY" 1)" || return 1; run_merge "$1" "$d"
+  d="$(t1_world)" || return 1; run_merge "$1" "$d"
   refused_clean "2.md:5 is a MAJOR finding heading from which no finding id is derived" "$d" && has "$MO" "$KF_MAJ" && has "$MO" "$KF_J3" || return 1
   d="$(kw '## Findings\n\n### CRITICAL: x\n\nstories: 2\n' 0 1)" || return 1; run_merge "$1" "$d"
   refused_clean "2.md:5 is a CRITICAL finding heading from which no finding id is derived" "$d" \
@@ -1790,7 +1807,7 @@ p_d1() {
 # --check-header --axis elicitation (rc 0, nothing printed).
 p_elic() {
   local d c
-  d="$(kw "$T1_BODY" 1)" || return 1; c="$(mktemp -d "$WORK/elic.XXXXXX")" || return 1
+  d="$(t1_world)" || return 1; c="$(mktemp -d "$WORK/elic.XXXXXX")" || return 1
   sed -e '/^verdict:/d' -e 's/^skill: .*/skill: bmad-advanced-elicitation/' "$d/2.md" > "$c/2.md" || return 1
   has "$c/2.md" "### MAJOR — wiring check" && has "$c/2.md" "skill: bmad-advanced-elicitation" || return 1
   chm "$1" "$c/2.md" elicitation
@@ -1798,12 +1815,12 @@ p_elic() {
 }
 # CHK / DRY: --check-header (convergence) and --dry-run each refuse T1's shard with the same refusal.
 p_t1_chk() {
-  local d; d="$(kw "$T1_BODY" 1)" || return 1
+  local d; d="$(t1_world)" || return 1
   chm "$1" "$d/2.md" convergence
   [ "$RC" -eq 1 ] && has "$MO" "REFUSED: " && has "$MO" "2.md:5 is a MAJOR finding heading from which no finding id is derived" && has "$MO" "$KF_MAJ"
 }
 p_t1_dry() {
-  local d; d="$(kw "$T1_BODY" 1)" || return 1
+  local d; d="$(t1_world)" || return 1
   $ASM_RUN "$1" --dry-run "$d" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 2 ] && has "$MO" "REFUSED: " && has "$MO" "2.md:5 is a MAJOR finding heading from which no finding id is derived" && [ ! -e "$(out_of "$d")" ]
 }

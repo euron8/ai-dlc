@@ -1,0 +1,17 @@
+sprint pass | majors repair-introduced | recorded (BL-508 filing)
+  s317 stories-adversarial-p1.md          |   9   0 | 0/11
+  s317 stories-adversarial-p2.md          |   7   2 | 2/9
+  s317 stories-adversarial-p3.md          |   4   2 | 2/4
+  s318 stories-adversarial-p1.md          |  29  17 | 16/30
+  s318 stories-adversarial-p2.md          |  19  11 | 8/19
+  s318 stories-adversarial-p3.md          |   2   2 | 1/2
+  s322 stories-adversarial-p1.md          |  11   1 | -
+      line 421: F-1 — MAJOR — Story 1.5 AC5's capture-location rationale is false for its own `.txt` captures, and story 1.1 handles the same ignore rule correctly
+  s322 stories-adversarial-p2.md          |   3   1 | -
+      line 115: F-1 — MAJOR — The fan-in repair wrote story 1.5's two edit-site lines (24357, 24861) and "the highest is 23581" into the story with the derivation lef
+  s322 test-strategy-adversarial-p1.md    |  18   0 | -
+  s322 test-strategy-adversarial-p2.md    |   1   1 | -
+      line 73: MAJOR — S322-1.1-AC1 wiring check does not discriminate wiring of the pytest target, and asserts a grep hit at a site that names no file (pass-1 repai
+  s322 test-strategy-adversarial-p3.md    |   0   0 | -
+CONTROL impossible token zqxv-repair-introduced-9931: 0 (must be 0); present token 'repair-introduced': 43 (must be > 0)
+SELF-PROBE OK

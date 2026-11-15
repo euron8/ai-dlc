@@ -279,6 +279,7 @@ ck "B0c the s<N> record with a later copy prints SUPERSEDED on the verdict strea
 # ---- B1: two rows, both still failing -> exactly those two keys OPEN ------------------------------
 { row "$K_PRD" "$CMD"; row "$K_STORY" "$CMD"; } > "$WORK/b1.tsv"
 rd "$R" "$WORK/b1.tsv"
+B1A_RC="$RC"   # the gate arm Gd reads this run: the reader exit, not a second run
 rc_is "B1a two failing rows -> exit 1" 1 "$RC"
 rc_is "B1b and the OPEN keys are exactly those two" 0 "$([ "$(open_keys)" = "$K_PRD,$K_STORY" ] && echo 0 || echo 1)"
 # B1 near-miss: a second root where one is re-pointed so it reproduces
@@ -290,6 +291,7 @@ rc_is "B1c one re-pointed (now reproduces) -> exit 1 with ONE open row" 1 "$RC"
 rc_is "B1d the open key is the one still failing, not the re-pointed one" 0 "$([ "$(open_keys)" = "$K_STORY" ] && echo 0 || echo 1)"
 row "$K_PRD" "$CMD" > "$WORK/b1e.tsv"
 rd "$R2" "$WORK/b1e.tsv"
+B1E_RC="$RC"; B1E_OUT="$OUT"   # Ge and Gg read this run
 rc_is "B1e every row re-pointed -> exit 0" 0 "$RC"
 rc_is "B1f and nothing is printed on stdout" 0 "$(printf '%s' "$OUT" | wc -c | tr -d ' ')"
 
@@ -409,6 +411,7 @@ ck "B6c control: the same file's SUPERSEDED line names this key, so the closure 
 # ---- B7: STAYS-OPEN seeds that do not depend on supersession ---------------------------------------
 { row "$K_REC1" "$CMD"; row "$K_STORY" "$CMD"; row "$K_PRD" "$CMD"; } > "$WORK/b7.tsv"
 rd "$R" "$WORK/b7.tsv"
+B7A_OUT="$OUT"   # Gf reads this run
 rc_is "B7a a record with NO later identical copy, a live s<N> doc and a file outside s<N>/ are all OPEN" 0 "$([ "$(open_keys)" = "$K_REC1,$K_STORY,$K_PRD" ] && echo 0 || echo 1)"
 
 # ---- B8: validator exit 2 over a row's file -> unassessed, never closed ---------------------------
@@ -436,6 +439,8 @@ K_PAST="$PASTDOC:$(line_of "$R/$PASTDOC" '$ grep')"
 K_S19="$S19DOC:$(line_of "$R/$S19DOC" '$ grep')"
 sc_is() { # <arm> <expected> <path>
   scope_in "$R" "$3"
+  # Bt1 reuses this per-path run: `--scope` reads only the path, the sprint id and (under _bmad-output/gate-adjudication/) the live stem.
+  [ "$RC" = 0 ] && printf '%s\t%s\t%s\n' "$SC" "$3" "$(cat "$R/.sprint-id")" >> "$WORK/scR.tsv"
   rc_is "$1 --scope $3 (current sprint 1) -> $2" 0 "$([ "$RC" = 0 ] && [ "$SC" = "$2" ] && echo 0 || echo 1)"
 }
 sc_is Sc1 PAST    "_bmad-output/planning-artifacts/s19/x.md"
@@ -586,7 +591,14 @@ batch_in() { # <root> <stdin text> -> BOUT, BRC, BERR
 }
 batch_in "$RH" "$BPATHS
 "
-PER=""; while IFS= read -r bp; do scope_in "$RH" "$bp"; PER="$PER$SC	$bp
+# A path an Sc arm already drove per-path on $R is not driven again on $RH when the sprint id read is the same and the path is
+# outside _bmad-output/gate-adjudication/ (the only place the live stem, the one other root state --scope reads, decides).
+RH_SPR="$(cat "$RH/.sprint-id")"
+PER=""; while IFS= read -r bp; do
+  SC=""
+  case "$bp" in _bmad-output/gate-adjudication/*) ;; *) SC="$(P="$bp" S="$RH_SPR" awk -F'\t' '$2 == ENVIRON["P"] && $3 == ENVIRON["S"] { print $1; exit }' "$WORK/scR.tsv")" ;; esac
+  [ -n "$SC" ] || scope_in "$RH" "$bp"
+  PER="$PER$SC	$bp
 "; done <<<"$BPATHS"
 if [ "$BRC" = 0 ] && [ "$BOUT
 " = "$PER" ]; then ok "Bt1 batch output over every --scope world's path equals the per-path --scope tokens (byte compare, input order)"; else bad "Bt1 batch output differs from per-path --scope"; printf '%s\n' "$BOUT" | head -5; fi
@@ -691,14 +703,16 @@ rc_is "Rp5 a malformed REPOINTED row refuses the record -> exit 2" 2 "$RC"
 # The prose-presence arms for the three callers lived in a retired dist-only mutation battery: on a
 # consumer at update step 2 the rulebook is still the old one, so a shipping arm grepping it would go red.
 # GATE ARM, executed: the gate site passes iff the reader exits 0. Open row -> refuse; control -> pass.
-gate_site() { rd "$1" "$2"; [ "$RC" = 0 ] && echo PASS || echo REFUSE; }
-rc_is "Gd gate arm: an open row REFUSES the gate" REFUSE "$(gate_site "$R" "$WORK/b1.tsv")"
-rc_is "Ge gate arm control: no open row PASSES the gate" PASS "$(gate_site "$R2" "$WORK/b1e.tsv")"
+# Each gate and sprint-close arm below reads the reader run B1a, B1e or B7a already made on the same record: a hand diff
+# of the reader's rc, stdout and stderr at those runs and at the end of this unit read byte-identical, so R's later
+# CURRENT and PAST files leave the sweep unchanged.
+gate_of() { [ "$1" = 0 ] && echo PASS || echo REFUSE; }
+rc_is "Gd gate arm: an open row REFUSES the gate" REFUSE "$(gate_of "$B1A_RC")"
+rc_is "Ge gate arm control: no open row PASSES the gate" PASS "$(gate_of "$B1E_RC")"
 # SPRINT-CLOSE ARM, executed: every OPEN line becomes a carry-over item; the count must equal the open rows.
-co="$(gate_site "$R" "$WORK/b7.tsv" >/dev/null; rd "$R" "$WORK/b7.tsv"; awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$OUT")"
+co="$(awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$B7A_OUT")"
 rc_is "Gf sprint-close: three open rows are three carried-forward items, none dropped" 3 "$co"
-rd "$R2" "$WORK/b1e.tsv"
-rc_is "Gg sprint-close control: with the record's rows all closed nothing is carried" 0 "$(awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$OUT")"
+rc_is "Gg sprint-close control: with the record's rows all closed nothing is carried" 0 "$(awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$B1E_OUT")"
 fi  # ---- end of unit rec
 
 if sg lw; then

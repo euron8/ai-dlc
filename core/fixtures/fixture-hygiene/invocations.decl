@@ -1,6 +1,8 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output).
 # 2 validator runs (dirty, clean) plus 2 from the receipt arms D8 (receipt-bl929.sh) and D9 (receipt-bl930.sh), each
 # validator run calling the resolver twice (probe, corpus), plus the 2 receipt starts and the fixture's own start.
-15 *
+# 15 -> 11 and 8 -> 4, BL-1102: with the self-probe gone each validator run calls the resolver once (corpus only);
+# one counted hermetic-run.sh run at AI_DLC_FIXTURE_JOBS=12 measured both (J3).
+11 *
 4 scripts/validate-fixture-hygiene.sh
-8 scripts/validate-fixture-invocations.sh
+4 scripts/validate-fixture-invocations.sh

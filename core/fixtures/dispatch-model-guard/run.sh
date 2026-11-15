@@ -26,9 +26,7 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # raw <project_dir> <json> -> hook stdout (decision JSON on a set, empty on a plain allow).
 raw() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null; }
 
@@ -2246,6 +2244,4 @@ SD_OPEN="$(sd_cell "$(mk_hooks_copy sd-open)" sdbad)"
 [ "$SD_OPEN" = "allow:1:-" ] && ok "SHARD-DIR sdopen: no merge reachable -> '$SD_OPEN' (fail open; sdbad denies with one)" \
   || bad "SHARD-DIR sdopen: no merge reachable -> '$SD_OPEN', expected 'allow:1:-'"
 echo
-if [ "$fails" -eq 0 ]; then echo "dispatch-model-guard: PASS"; exit 0; fi
-echo "dispatch-model-guard: $fails assertion(s) FAILED" >&2
-exit 1
+report_end dispatch-model-guard

@@ -294,6 +294,7 @@ core_manifest:
   - fixtures/transient-ignore-block/**
   - fixtures/trunk-push-bound/**
   - fixtures/file-mtime/**
+  - fixtures/resolve-cited-paths/**
   - fixtures/pause-hook-origin/**
   - fixtures/pause-question-in-prose/**
   - fixtures/postcompact-rulebook-recovery/**

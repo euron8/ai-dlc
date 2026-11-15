@@ -772,20 +772,20 @@ if gsel run-filter; then
   # `tests/test_x.py`: refused); rf1016-a3 (`uv pip install pytest pytest-xdist && pytest -n 8`, a pytest word inside
   # a non-pytest chain command: accepted) and rf1016-a3-nm (`uv pip install pytest && pytest -k foo`: refused);
   # rf1016-sp (`cd /repo` then `pytest -k foo`, a pytest span AFTER a non-pytest span: refused) and rf1016-sp-nm (the
-  # same with `pytest -q`: accepted); rf1016-bl (`bash -lc "cd backend && pytest -k x"`: refused) and rf1016-bl-nm
+  # same with `pytest -q`: accepted); rf1016-bl (`bash -lc "cd . && pytest -k x"`: refused) and rf1016-bl-nm
   # (`... pytest -q"`: accepted); rf1016-ao (`pytest -o "addopts=-k foo"`: refused) and rf1016-ao-nm
   # (`-o "addopts=-q; x"`: accepted); rf1016-qk (`pytest -q -v' -k foo`, an unbalanced quote: refused); rf1016-to
   # (`timeout 600 pytest -k foo`, then `pytest -q`: refused) and rf1016-to-nm (`timeout 600 pytest -q`: accepted);
-  # rf1016-npm (`npm test -- -n 8 -q`: accepted); rf1016-ch2 (`pytest -q && cd sub && pytest -k foo`, a narrowing
+  # rf1016-npm (`npm test -- -n 8 -q`: accepted); rf1016-ch2 (`pytest -q && cd . && pytest -k foo`, a narrowing
   # command after a non-pytest one: refused) and rf1016-ch2-nm (the same ending `pytest -q`: accepted); rf1016-be
-  # (`bash -lc "cd backend && pytest -k \"not slow\" -q"`, an escaped quote inside the quoted command: refused; its
+  # (`bash -lc "cd . && pytest -k \"not slow\" -q"`, an escaped quote inside the quoted command: refused; its
   # pair is rf1016-bl-nm); rf1016-su (`sudo -u app pytest -k foo` then `pytest -q`, a prefix carrying its own option:
   # refused) and rf1016-su-nm (`sudo -u app pytest -q`: accepted); rf1016-to2 (`timeout -s KILL 600 pytest -k foo`
   # then `pytest -q`, a prefix's own option skipped: refused) and rf1016-to2-nm (`timeout -s KILL 600 pytest -q`:
   # accepted); rf1016-jx (`bash -lc "... pytest -q --junitxml \"a b.xml\""`, an escaped quote kept inside one argument:
   # accepted); rf1016-ss (the capture route citing `bash -c "ssh h 'pytest -k x'"`, a quoted command nested in a quoted
   # command, over a fresh block: refused) and rf1016-ss-nm (citing `bash -c "pytest -q"`: accepted); rf1016-de
-  # (`ssh host "cd app && direnv exec . pytest -k x"`, an unrecognised program before pytest inside a quoted command:
+  # (`ssh host "cd . && direnv exec . pytest -k x"`, an unrecognised program before pytest inside a quoted command:
   # refused) and rf1016-de-nm (the same with `pytest -q`: accepted); rf1016-dc (`pytest -q && direnv exec . pytest
   # -k x`, the same in a chain step: refused) and rf1016-dc-nm (`... direnv exec . pytest -q`: accepted); rf1016-dx
   # (`direnv exec . pytest -k x` then `pytest -q`, the same as an earlier span: refused) and rf1016-dx-nm (accepted);
@@ -793,7 +793,9 @@ if gsel run-filter; then
   # (`pytest -q --basetemp <tmp> tests/test_x.py`, a placeholder option value before a file: refused) and rf1016-bt-nm
   # (`pytest -q --basetemp <tmp>`: accepted); rf1016-s9 (rf1016-s8's collect-only wrapper run followed by a
   # `pytest -q` span, on the capture route with a fresh block: refused full-collection-none) and rf1016-s9-nm (the
-  # same wrapper run with `-- -q`: accepted).
+  # same wrapper run with `-- -q`: accepted). A chained or quoted `cd` in these worlds is `cd .`, so each refused cell
+  # and its near-miss stay one property apart: a `cd` into a subdirectory narrows on its own (RUN-FILTER, WORKING
+  # DIRECTORY; receipt-bl1036.sh).
   RF_WORLDS='rfs1 rfs2 rfs2n rfs3 rfs4 rfs5 rfs6 rfs7 rfs8 rfph rfphnm rfch rfchnm rfchnm2 rfs2nw rfd1 rfd1nm rfrd rfa1 rfa2 rfa2n rfa3 rfa3n rfsp rfspnm rfbl rfblnm rfao rfaonm rfqk rfto rftonm rfnpm rfch2 rfch2nm rfbe rfsu rfsunm rfto2 rfto2nm rfjx rfss rfssnm rfde rfdenm rfdc rfdcnm rfdx rfdxnm rfgr rfbt rfbtnm rfs9 rfs9nm'
   rf_ok=1
   for v in $RF_WORLDS; do build_world "$WORK/world-$v" "$v" || { rf_ok=0; bad "FIXTURE BROKEN: could not seed git world '$v'"; }; done

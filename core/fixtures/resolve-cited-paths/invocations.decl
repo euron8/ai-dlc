@@ -1,0 +1,7 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output); the push's counted run is
+# the second. The starts are run.sh itself (1) and the two cli cells of cells.decl (2). Every other drive is in process.
+# inproc rows (fx_inproc, one per pass): the source once, the three in-process states, and the in-process side of the
+# two cli cells (rcp_ip).
+3 *
+2 core/scripts/resolve-cited-paths.sh
+6 inproc:core/scripts/resolve-cited-paths.sh

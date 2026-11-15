@@ -2251,8 +2251,8 @@ readset_keys() { # <list> <out>
 # LINE 4 IS `#pending <n>`: for a fixture this push RAN green, the PENDING rows of its log (`<out>/.pend`); for one
 # republished without a run, the count carried in `<out>/.kpn` (its prior record's, or the store entry's on a store
 # skip). Neither known: no line, and the count stays unrecorded (never a run reason). ONE awk writes every temp record.
-# cl_write's consumer-layout records (<keys dir> = CL_KEYS_DIR) never carry `#pending`, BY CONSTRUCTION: no `.pend`
-# is written under its <out>, and its `.kpn` carries only a count read from a record of that dir, which has none.
+# cl_write's consumer-layout records (<keys dir> = CL_KEYS_DIR) take line 4 from `.cl/.kpn` alone (no `.pend` is
+# written under its <out>): a store skip's entry count, or the prior record's, which cl_publish wrote from the unit's log.
 readset_keys_write() { # <out> [<keys dir>, default $KEYS_DIR]
   local out="$1" kd="${2:-$KEYS_DIR}" f b r
   [ -d "$out/.k" ] || return 0
@@ -2340,6 +2340,7 @@ cl_select() {
   while IFS= read -r b; do printf 'tests/fixtures/%s/\n' "$b"; done < "$out/.cl.all" > "$c/.list"
   while IFS= read -r b; do [ ! -f "$cl_tree/tests/fixtures/$b/inputs.decl" ] || printf '%s\n' "$b"; done < "$out/.cl.all" > "$c/.mapped.all"
   : > "$c/.kdec"
+  printf 'READSET_VS_PENDING=%q\n' "${READSET_VS_PENDING:-}" >> "$out/.cl.pub"
   ( cd "$cl_tree" || exit 1
     KEYS_DIR="$kd"; FXROOT="tests/fixtures/"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; AI_DLC_VERDICT_STORE="$base"
     readset_manifest "$c"
@@ -2407,12 +2408,17 @@ cl_any_record() {
 # later keeps every pass it made. cl_select writes this definition to <out>/.cl.pub, which the pool worker and the
 # census unit source: ONE implementation. hermetic-run.sh writes a declared unit's store entry at the same moment.
 # The record lands UNCONFIRMED (`<keys dir>/.unconfirmed/<fx>`, written first) until cl_confirm clears the mark.
+# LINE 4 IS `#pending <n>`, the READSET_VS_PENDING rows of the unit's log `<out>/.log/<fx>@consumer` (the definition
+# .cl.pub carries); no log or no regex, no line, and a later skip on the record names its count unrecorded.
 cl_publish() {
-  local kd=""
+  local kd="" n=""
   read -r kd 2>/dev/null < "$1/.cl.keys" || return 0
   [ -n "$kd" ] && [ -s "$1/.cl/.k/$2" ] || return 0
+  [ -n "${READSET_VS_PENDING:-}" ] && [ -f "$1/.log/$2@consumer" ] && n="$(grep -cE "$READSET_VS_PENDING" "$1/.log/$2@consumer")" || :
+  case "$n" in ''|*[!0-9]*) n="" ;; esac
   mkdir -p "$kd/.unconfirmed" 2>/dev/null && : > "$kd/.unconfirmed/$2" 2>/dev/null \
-    && cp "$1/.cl/.k/$2" "$kd/$2.key.tmp.$$" 2>/dev/null && mv "$kd/$2.key.tmp.$$" "$kd/$2.key" 2>/dev/null
+    && awk -v n="$n" '{ print } NR == 3 && n != "" { print "#pending " n }' "$1/.cl/.k/$2" > "$kd/$2.key.tmp.$$" 2>/dev/null \
+    && mv "$kd/$2.key.tmp.$$" "$kd/$2.key" 2>/dev/null
   return 0
 }
 # cl_write <out>: publishes the remaining consumer-layout records through
@@ -2455,34 +2461,46 @@ cl_confirm() {
 # A FIXTURE SKIPPED ON A RECORDED PASS KEEPS ITS PENDING COUNT IN SIGHT. Writes `<out>/.precorded`, C-sorted, one
 # `<fx>\t<n>` line per `skip` row of `.kdec` this push did not dispatch (no verdict file): n from `.kpn` (a
 # republished or store-skipped record), else from line `#pending` of `$KEYS_DIR/<fx>.key`, else `-` (a record or
-# entry written before the count was recorded, or a seeded one: unrecorded, never a run reason). Called on the
-# unchanged-push return and on the pool path, after the dispatch.
+# entry written before the count was recorded, or a seeded one: unrecorded, never a run reason). A `skip` row of
+# `.cl/.kdec` is the line `<fx>@consumer\t<n>`, read the same way from `.cl/.kpn` and the consumer-layout keys dir
+# `.cl.keys` names. Called on the unchanged-push return and on the pool path, after the dispatch.
 readset_pending_recorded() { # <out>
-  : > "$1/.precorded"
-  [ -s "$1/.kdec" ] || return 0
-  awk -F'\t' -v out="$1" -v kd="$KEYS_DIR" '
-    BEGIN { c = out "/.kpn"; while ((getline l < c) > 0) { i = index(l, "\t"); if (i > 1) C[substr(l, 1, i - 1)] = substr(l, i + 1) } }
+  local o="$1" ckd=""
+  : > "$o/.precorded"
+  read -r ckd 2>/dev/null < "$o/.cl.keys" || :
+  if [ -s "$o/.kdec" ]; then set -- "$o/.kdec"; [ ! -s "$o/.cl/.kdec" ] || set -- "$o/.kdec" "$o/.cl/.kdec"
+  elif [ -s "$o/.cl/.kdec" ]; then set -- "$o/.cl/.kdec"
+  else return 0; fi
+  awk -F'\t' -v out="$o" -v kd="$KEYS_DIR" -v ckd="$ckd" -v cl="$o/.cl/.kdec" '
+    function kpn(c, A,   l, i) { while ((getline l < c) > 0) { i = index(l, "\t"); if (i > 1) A[substr(l, 1, i - 1)] = substr(l, i + 1) } }
+    BEGIN { kpn(out "/.kpn", C); kpn(out "/.cl/.kpn", CC) }
     $2 != "skip" { next }
-    { v = out "/" $1; if ((getline l < v) >= 0) { close(v); next }
+    { b = $1; d = kd; if (FILENAME == cl) { b = b "@consumer"; d = ckd }
+      v = out "/" b; if ((getline l < v) >= 0) { close(v); next }
       n = "-"
-      if ($1 in C) n = C[$1]
-      else { r = kd "/" $1 ".key"; i = 0
+      if (FILENAME == cl && ($1 in CC)) n = CC[$1]
+      else if (FILENAME != cl && ($1 in C)) n = C[$1]
+      else if (d != "") { r = d "/" $1 ".key"; i = 0
              while (i < 4 && (getline l < r) > 0) { i++; if (l ~ /^#pending /) n = substr(l, 10) }
              close(r) }
       if (n !~ /^(0|[1-9][0-9]*)$/) n = "-"
-      print $1 "\t" n }' "$1/.kdec" | LC_ALL=C sort > "$1/.precorded.t" && mv "$1/.precorded.t" "$1/.precorded"
+      print b "\t" n }' "$@" | LC_ALL=C sort > "$o/.precorded.t" && mv "$o/.precorded.t" "$o/.precorded"
 }
 # THE PENDING SUMMARY LINE, ONE RENDERER: <green count> fixtures this push ran printed PENDING rows (<green names>,
 # space-led), and <recorded file> holds `<fx>\t<n>` for every fixture skipped on a recorded pass (`-` names stdin);
-# only n > 0 is named, and an n of `-` is counted as "count unrecorded", never read as a zero. Prints nothing when no clause has a member.
+# only n > 0 is named, and an n of `-` is counted as "count unrecorded", never read as a zero; a `<fx>@consumer` one
+# in its own clause, so consumer-layout records published before they carried a count do not swamp the distribution's.
+# Prints nothing when no clause has a member.
 readset_pending_line() { # <green count> <green names> <recorded file>
   awk -F'\t' -v g="$1" -v gn="$2" '
     $2 ~ /^[1-9][0-9]*$/ { k++; kn = kn " " $1 "(recorded)=" $2 }
+    $2 == "-" && $1 ~ /@consumer$/ { cu++; next }
     $2 == "-" { u++ }
     END { s = ""
       if (g > 0) s = g " green fixture(s) printed a PENDING row, so part of each checked nothing:" gn
       if (k) s = s (s == "" ? "" : "; ") k " skipped on a recorded pass that printed a PENDING row:" kn
       if (u) s = s (s == "" ? "" : "; ") u " skipped on a recorded pass whose PENDING count is unrecorded (count unrecorded: recorded before counts were kept, or seeded)"
+      if (cu) s = s (s == "" ? "" : "; ") cu " <fx>@consumer unit(s) skipped on a consumer-layout pass whose PENDING count is unrecorded (recorded before those records kept counts)"
       if (s != "") print "   PENDING: " s }' "$3"
 }
 

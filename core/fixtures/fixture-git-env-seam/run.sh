@@ -182,15 +182,70 @@ victim_intact() { # victim_intact <n> <repo> <bare> <name>
 # is the ONLY reason the breakage below was ever observed rather than shipping silently.
 # The exclusion is narrow ON PURPOSE: `.claude/rules/**` is un-ignored by negation and is
 # tracked, so excluding all of `.claude` would drop files this tree legitimately carries.
+#
+# THE COPY READS NO FILE'S DATA, AND THE COUNT IS THE COPY'S OWN LIST (BL-1117). A byte copy
+# plus a second whole-tree `tar` just to count read every file's data twice, a burst the
+# sandbox read-set tracer drops reports under. `mktree_clone` walks the tree ONCE with
+# `scandir` (no stat per entry), clones each file with APFS clonefile(2), and prints the number
+# of entries it walked; that number is the source count. Where clonefile is unavailable
+# (another volume, a non-APFS filesystem, a refused clone) its first clone fails and it exits 3, the partial destination
+# is removed, the tar copy runs instead, and the source count is a metadata-only `find` over
+# the same three prunes. The path taken is printed, so a trace of the fallback says so.
+mktree_clone() { # mktree_clone <src> <dest> -- prints the entries cloned; rc 3 = no clonefile
+  python3 -I -c '
+import ctypes, os, sys
+src, dst = sys.argv[1], sys.argv[2]
+try:
+    libc = ctypes.CDLL("libc.dylib", use_errno=True)
+    libc.clonefile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
+except (OSError, AttributeError):
+    sys.exit(3)
+prune = {".git", "node_modules", os.path.join(".claude", "worktrees")}
+n = cloned = 0
+def walk(rel):
+    global n, cloned
+    with os.scandir(os.path.join(src, rel)) as it:
+        for e in it:
+            r = os.path.join(rel, e.name) if rel else e.name
+            if r in prune:
+                continue
+            t = os.path.join(dst, r)
+            if e.is_symlink():
+                os.symlink(os.readlink(e.path), t)
+            elif e.is_dir(follow_symlinks=False):
+                os.mkdir(t)
+                walk(r)
+            elif libc.clonefile(e.path.encode(), t.encode(), 1) != 0:
+                err = ctypes.get_errno()
+                if cloned == 0:  # the first clone failed: no clone here at all
+                    sys.exit(3)
+                raise OSError(err, "clonefile failed: " + r)
+            else:
+                cloned += 1
+            n += 1
+walk("")
+print(n)
+' "$1" "$2"
+}
 mktree() { # mktree <dest>
-  local dest="$1" src_n dst_n
+  local dest="$1" src_n dst_n rc
   rm -rf "$dest"
   # `git archive HEAD` would miss the uncommitted seam on the branch that adds it.
   # Copy the working tree, excluding .git so the copy is not itself a repository.
   mkdir -p "$dest" || return 1
-  ( cd "$ROOT" && tar cf - --exclude='./.git' --exclude='./node_modules' --exclude='./.claude/worktrees' . ) \
-    | ( cd "$dest" && tar xf - ) || return 1
-  # THE `||` ABOVE READS THE *READER* TAR'S STATUS AND NOTHING ELSE. There is no `pipefail`
+  src_n="$(mktree_clone "$ROOT" "$dest")"; rc=$?
+  if [ "$rc" -eq 3 ]; then
+    echo "  copy: tar (clonefile unavailable)"
+    rm -rf "$dest" && mkdir -p "$dest" || return 1
+    ( cd "$ROOT" && tar cf - --exclude='./.git' --exclude='./node_modules' --exclude='./.claude/worktrees' . ) \
+      | ( cd "$dest" && tar xf - ) || return 1
+    src_n="$( ( cd "$ROOT" && find . -mindepth 1 \( -path ./.git -o -path ./node_modules -o -path ./.claude/worktrees \) -prune -o -print 2>/dev/null ) | grep -c .)" || src_n=0
+  elif [ "$rc" -ne 0 ]; then
+    return 1
+  else
+    echo "  copy: clonefile"
+  fi
+  # THE TAR PIPE'S `||` READS THE *READER* TAR'S STATUS AND NOTHING ELSE. There is no `pipefail`
   # in this fixture or in `core/fixtures/lib/preamble.sh` (`set -u` at the top of this file is
   # the only `set` line), so a WRITER that fails mid-walk -- a vanishing directory, an
   # unreadable file -- exits non-zero into a reader that exits 0, and the pipeline reports 0.
@@ -201,17 +256,9 @@ mktree() { # mktree <dest>
   # THAT IS THE EXACT STATE THE HEADER ABOVE SAYS IS UNDETECTABLE: a partial tree makes the
   # driven subject bail at its own startup check, every mutant "survives" against an untouched
   # victim, and the unmutated arm passes too because two inert runs compare equal. So the copy
-  # asserts its own COMPLETENESS rather than the presence of two names. Counting entries both
-  # sides is cheap here -- the excluded copy is ~1000 entries, milliseconds -- and it fails
-  # CLOSED: any shortfall returns 1, which `broken` turns into FIXTURE BROKEN.
-  # COUNT THE SAME POPULATION ON BOTH SIDES. `tar tf -` emits a bare `./` for the root that
-  # `find -mindepth 1` does not, so a raw comparison is short by exactly one and the arm fires
-  # on a CORRECT copy -- measured, 1048 against 1049, on a complete tree. The root entry is
-  # dropped here rather than subtracting a constant: `-1` is an unexplained magic number that
-  # goes wrong the moment the stream's shape changes, and this repo's rule is to derive both
-  # sides rather than patch one. `grep -vx './'` also drops tar's trailing-slash directory
-  # spelling only for the ROOT, which is the single entry whose two spellings differ.
-  src_n="$( ( cd "$ROOT" && tar cf - --exclude='./.git' --exclude='./node_modules' --exclude='./.claude/worktrees' . 2>/dev/null ) | tar tf - 2>/dev/null | grep -vx '\./' | grep -c .)" || src_n=0
+  # asserts its own COMPLETENESS rather than the presence of two names, on either path, and it
+  # fails CLOSED: any shortfall returns 1, which `broken` turns into FIXTURE BROKEN. Both counts
+  # exclude the root entry (`-mindepth 1`; the clone walk never yields its own root).
   dst_n="$( ( cd "$dest" && find . -mindepth 1 2>/dev/null ) | grep -c .)" || dst_n=0
   # A zero on either side is a broken measurement, never a clean one: it would make the
   # comparison below pass by comparing two nothings, which is this fixture's own defect class.

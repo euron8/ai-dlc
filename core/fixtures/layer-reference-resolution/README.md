@@ -43,9 +43,13 @@ reads right.
 - `seed.sh` — a consumer **mid-migration**: some ids renamed into the band, some not,
   with a crosswalk carrying its two rows in both accepted forms. It is a git repo,
   because a consumer is one and a seed that is not makes `E16` refuse.
-- `run.sh` — 13 assertions: the premises read without the code under test, the pristine
+- `run.sh` — 20 assertions: the premises read without the code under test, the pristine
   vector, 2 applicability arms, the code-attribution arm, the crosswalk row proven
-  load-bearing by removing it, the migration **exit condition**.
+  load-bearing by removing it, the migration **exit condition**, and the in-process
+  equivalence cells. It sources the validator once and calls `vle_main` in process; the
+  validator starts only in the four `cli` cells of `cells.decl`, each compared byte for
+  byte with the in-process answer, and one cell holds the validator beside a resolver
+  from before its wrap to the same answer. A subject from before the wrap reads SKIP.
 - `vector.sh` — the scoring function: one `cell=value` token per cell, sourced by `run.sh`.
 
 The seed carries the crosswalk's two rows, bare and namespaced, one cell each.

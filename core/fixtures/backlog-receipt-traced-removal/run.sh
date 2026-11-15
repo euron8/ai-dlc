@@ -69,20 +69,23 @@ mkdist() {
     && cp "$R/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$1/core/skills/ai-dlc-update/reconcile/"
 }
 # mkworld <dir> g|u|o|x|e -- a one-receipt repository: g reads a guarded file, u an unguarded one, o 33 named files,
-# x has its driver deleted on HEAD (the seed commit recorded in .git/fx-base), e reads one enumerated and names one
-# unread file.
+# x has its driver deleted on HEAD (the seed commit recorded in .git/fx-base), e reads one enumerated file it guards
+# and names one unread file, v reads two enumerated files by a glob it does not guard.
 mkworld() {
   local d="$1" l i
   mkdir -p "$d/docs" "$d/w" || return 1
   case "$2" in
     g) printf 'grep -q GUARDTOKEN w/data.txt || exit 9\n' > "$d/w/drv.sh"; printf 'GUARDTOKEN\n' > "$d/w/data.txt" ;;
     u) printf 'grep -q x w/data.txt || exit 1\n' > "$d/w/drv.sh"; printf 'x\n' > "$d/w/data.txt" ;;
-    e) printf '%s\n' 'F=w' 'cat "$F/hidden.txt" > /dev/null' 'if false; then cat w/nev.txt; fi' \
+    e) printf '%s\n' 'F=w' 'cat "$F/hidden.txt" > /dev/null || exit 9' 'if false; then cat w/nev.txt; fi' \
          'grep -q GUARDTOKEN w/data.txt || exit 9' > "$d/w/drv.sh"
        printf 'GUARDTOKEN\n' > "$d/w/data.txt"; printf 'h\n' > "$d/w/hidden.txt"; printf 'n\n' > "$d/w/nev.txt" ;;
     o) l="cat"; i=1
        while [ "$i" -le 33 ]; do printf 'f\n' > "$d/w/f$i.txt"; l="$l w/f$i.txt"; i=$(( i + 1 )); done
        printf '%s > /dev/null\n' "$l" > "$d/w/drv.sh" ;;
+    v) mkdir -p "$d/w/d" || return 1
+       printf '%s\n' 'cat w/d/*.txt > /dev/null 2>&1' 'grep -q GUARDTOKEN w/data.txt || exit 9' > "$d/w/drv.sh"
+       printf 'GUARDTOKEN\n' > "$d/w/data.txt"; printf 'a\n' > "$d/w/d/a.txt"; printf 'b\n' > "$d/w/d/b.txt" ;;
     x) printf 'exit 0\n' > "$d/w/drv.sh" ;;
     m) printf 'grep -q GUARDTOKEN w/gd.txt || exit 9\n' > "$d/w/g.sh"; printf 'GUARDTOKEN\n' > "$d/w/gd.txt"
        printf 'grep -q x w/ud.txt || exit 1\n' > "$d/w/u.sh"; printf 'x\n' > "$d/w/ud.txt" ;;
@@ -105,7 +108,7 @@ mkworld() {
 }
 mkdist "$TMP/dist" "$R/scripts/validate-backlog-receipts.sh" || broken "the validator copy did not build"
 D="$TMP/dist/scripts/validate-backlog-receipts.sh"
-for _k in g u o x e m n; do mkworld "$TMP/tpl-$_k" "$_k" || broken "world $_k did not build"; done
+for _k in g u o x e m n v; do mkworld "$TMP/tpl-$_k" "$_k" || broken "world $_k did not build"; done
 # world / store are called inside $( ), so a counter would be lost to the subshell: each takes a fresh mktemp dir.
 world() { local d; d="$(mktemp -d "$TMP/w.XXXXXX")" && cp -R "$TMP/tpl-$1/." "$d/" || broken "world $1 did not copy"; printf '%s' "$d"; }
 store() { local d; d="$(mktemp -d "$TMP/s.XXXXXX")" || broken "a record store did not create"; printf '%s' "$d"; }
@@ -142,7 +145,7 @@ instr_refused() { has "$1" "R13-INSTRUMENT-REFUSED" && broken "atime is not a wo
 
 # --- the cells: each reads one capture and returns 0 when GREEN ----------------------------
 cell_c_write() { has "$1" "R13-POPULATION: 1 open sh receipt(s), 1 traced, 2 named removals (0 replayed), 0 named-unread (0 replayed), " && has "$1" "removals: 1 exit 9, 2 in the cannot-measure set, 0 UNGUARDED-READ" && [ -n "$(klist "$1")" ] && has "$1" "R13-RC 0"; }
-cell_c_enumline() { has "$1" ", 0 enumerated excluded (0 replayed), "; }
+cell_c_enumline() { has "$1" ", 0 enumerated, removed together (0 replayed), "; }
 cell_c_instr() { has "$1" "R13-INSTRUMENT: atime moved on a read and on a second read after a second reset"; }
 cell_c_replay() { has "$1" ", 1 replayed, " && [ -z "$(klist "$1")" ] && has "$1" "R13-RC 0"; }
 cell_c_moved() { [ -n "$(klist "$1")" ] && [ "$(klist "$1")" != "$2" ]; }
@@ -163,8 +166,15 @@ cell_c_instr_refused() { [ "$(cat "$1.raw" 2>/dev/null)" = 2 ] && has "$1" "R13-
 cell_m1_base3() { [ "$(rcof "$1")" = 0 ] && has "$1" "SETUP-OK" && ! has "$1" "M1-BASE-UNRESOLVED" \
   && [ "$(rcof "$2")" = 2 ] && has "$2" "M1-BASE-UNRESOLVED:" && ! has "$2" "SETUP-OK" \
   && [ "$(rcof "$3")" = 0 ] && has "$3" "base-exit=127-cannot-measure=driver-absent/DRIVER-REMOVED"; }
-cell_c_pop_live() { has "$1" ", 2 named removals (0 replayed), 1 named-unread (0 replayed), 1 enumerated excluded (0 replayed), " && [ -n "$(klist "$1")" ]; }
-cell_c_replay_pop() { has "$2" ", 1 replayed, " && has "$2" ", 2 named removals (2 replayed), 1 named-unread (1 replayed), 1 enumerated excluded (1 replayed), "; }
+# c-pop-live: 3 removals, the third the enumeration removal of w/hidden.txt, which the driver guards (exit 9).
+cell_c_pop_live() { has "$1" ", 2 named removals (0 replayed), 1 named-unread (0 replayed), 1 enumerated, removed together (0 replayed), " \
+  && has "$1" "removals: 2 exit 9, 3 in the cannot-measure set, 0 UNGUARDED-READ" && [ -n "$(klist "$1")" ]; }
+cell_c_replay_pop() { has "$2" ", 1 replayed, " && has "$2" ", 2 named removals (2 replayed), 1 named-unread (1 replayed), 1 enumerated, removed together (1 replayed), "; }
+# c-enum-unguarded: world v's glob over w/d/ answers 0 with both of its files gone, so the enumeration removal is ONE
+# UNGUARDED-READ row naming both files' count; its two named removals stay guarded.
+VROW="$(printf 'UNGUARDED-READ\tBL-1401\tENUMERATED(2)\texit=0')"
+cell_c_enum_unguarded() { has "$1" "$VROW" && has "$1" ", 2 enumerated, removed together (0 replayed), " \
+  && has "$1" "removals: 1 exit 9, 2 in the cannot-measure set, 1 UNGUARDED-READ (ceiling 1)" && has "$1" "R13-RC 0"; }
 
 # The in-process function and setup passes (no worker can start from them; see the header).
 # untraced_fn <copy> <out> -- r13_untraced over: 0 traced of 1 scored (1 untraced), 1 of 1 (0), and 0 traced of 1
@@ -309,10 +319,15 @@ pop_run() {
   cli "$3-2" "$1" "$2.2" "$s" - --r13-drive corpus --traced-removal "$w/docs/backlog.md"
 }
 pop_run "$D" "$C/pop" pop
-if cell_c_pop_live "$C/pop.1"; then ok "c-pop-live -- the live run printed 2 named removals, 1 named-unread and 1 enumerated excluded"
+if cell_c_pop_live "$C/pop.1"; then ok "c-pop-live -- the live run printed 2 named removals, 1 named-unread and 1 enumerated, and the guarded enumeration removal passed"
 else bad "c-pop-live -- $(grep -E 'R13-POPULATION|R13-RC' "$C/pop.1" | tr '\n' ' ')"; fi
 if cell_c_replay_pop "$C/pop.1" "$C/pop.2"; then ok "c-replay-pop -- the replay re-printed the live run's population figures, labelled replayed"
 else bad "c-replay-pop -- $(grep -E 'R13-POPULATION' "$C/pop.2" | tr '\n' ' ')"; fi
+
+WV="$(world v)"; wcheck "$WV"
+cli c-enum-unguarded "$D" "$C/enumu" "$(store)" - --r13-drive corpus --traced-removal --max-unguarded 1 "$WV/docs/backlog.md"
+if cell_c_enum_unguarded "$C/enumu"; then ok "c-enum-unguarded -- a glob that answers 0 with every enumerated file gone is one UNGUARDED-READ ENUMERATED(2) row"
+else bad "c-enum-unguarded -- $(grep -E 'R13-POPULATION|R13-RC|UNGUARDED|BROKEN' "$C/enumu" | tr '\n' ' ')"; fi
 
 # within_run <copy> <prefix> <id-prefix> -- world u, one store, three starts: write at ceiling 1, replay at 1, replay at 0.
 within_run() {

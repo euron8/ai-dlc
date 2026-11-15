@@ -5,7 +5,9 @@
 # moves with files added to core/**/*.sh, scripts/** or .githooks/**. Measured by one counted hermetic-run.sh run on this
 # tree (509); on the 0.1094.0-based build the same fix read 484, 484 with one more scripts/*.txt, and 488 with one more
 # small-world file (+4, one file in four worlds).
-172 *
+# 172 -> 102, BL-1102: the arm self-probes deleted from scripts/validate-enforcement-map.sh started bash in the
+# traced runs; one counted hermetic-run.sh run at AI_DLC_FIXTURE_JOBS=12 measured 102 (J3), the other rows as declared.
+102 *
 5 scripts/validate-enforcement-map.sh
 7 inproc:scripts/validate-enforcement-map.sh
 3 scripts/fork-profile.sh

@@ -19,6 +19,88 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1135.0] - 2026-11-15
+
+### BL-1113 CLOSED: per-push can-fail proofs of fixture-internal predicates dropped
+
+gate-resume drops g3-regex-control-third and g3-regex-control-differ, which seeded hook directories and ran them through the fixture's own `g3_rx_join`; g3-regex stays on the real hook directory. retro-branch-behind-main drops pending-gate and pending-layout, which judged fixture-written or sed-cut `retro.md` copies through the fixture's own checks. self-update-gate's hook-copy rewrites are reworked. 25 lines added, 94 removed across 3 fixtures.
+
+### BL-1114 PARTIAL and BL-1118 progress: an unarmed distribution run on the default store records nothing
+
+`hr_store_put` in `core/scripts/hermetic-run.sh` (the HR_STORE span, outside HR_SANDBOX) refuses to record a pass from a distribution-layout run with the invocation counter unarmed and `AI_DLC_VERDICT_STORE` unset, and prints the OFF line naming `scripts/seed-verdict-store.sh`. An explicit store and a consumer layout still record. A census fixture is added and `tool-hazards.md` loses 58 bytes. BL-1114's census row is the remainder; BL-1118 gains a progress note and stays OPEN.
+
+### BL-1084 CLOSED: dispatch-model-guard reports through lib/report.sh
+
+`dispatch-model-guard` sources `lib/report.sh` (guarded), its hand-written `ok`/`bad` and fails counter are deleted, it ends with `report_end dispatch-model-guard`, and its `inputs.decl` declares `core/fixtures/lib/report.sh`. The `dispatch-model-guard:report` row leaves `fixture-contract-allowlist.txt`. The entry's counter half is withdrawn.
+
+### BL-1116 PARTIAL: a <fx>@consumer unit skipped on a consumer-layout record keeps its PENDING count in sight
+
+Both pre-push hooks carry one byte-identical span (I66): `cl_publish` writes line 4 `#pending <n>` from the unit's log, and `cl_select` appends the READSET_VS_PENDING definition to `.cl.pub`. The consumer-suite-pool fixture changes with it. The trigger is still unreachable on the logs read, so the entry stays PARTIAL.
+
+### BL-1102 CLOSED: the per-push self-probes of validate-enforcement-map.sh, validate-fixture-hygiene.sh and the hook are deleted
+
+The remainder of BL-1102: no validator and no hook step runs a seeded self-probe on the default path. The change is in `scripts/validate-enforcement-map.sh`, `scripts/validate-fixture-hygiene.sh` and `.githooks/pre-push`; `scripts/presuite-metadata-allowlist.txt` and three invocations.decl rows follow. 321 lines added, 3352 removed across 10 files.
+
+### BL-1117 PARTIAL: fixture-git-env-seam clones the tree copy and counts from its own walk
+
+`mktree` read every file's data twice (a tar byte copy and a second whole-tree tar only to count entries). It now walks the tree once with `scandir` and clones each file with APFS `clonefile(2)`; the source count is that walk's own entry count. Where the first clone fails it falls back to tar and prints `copy: tar`. `.ai-dlc-fixture-readsets.tsv` is updated. The trace still omits the fixture, and the narrowing is OPEN.
+
+### BL-552 PARTIAL: the round-dispatcher brief answers a covered member notification
+
+`steps/_dispatch-protocol.md` gains a paragraph in the round-dispatcher brief's stable block: a member's task-notification, before or after the return file is written, gets no status line and no re-check; a failed member, the first exit since a held rejection and an exit while members remain undispatched are acted on. Two process-rule-pins rows, dp-rd-tpl-notification and dp-rd-tpl-notification-carve, pin it.
+
+### BL-508 and BL-512 progress: premise check on graph s322; BL-550 cited-paths clauses carried
+
+BL-508's repair-introduced MAJOR count, re-taken by a committed counter (`docs/analysis/step-value-b257/bl508/`), fell from 31/70 MAJORs over 34 stories to 2/14 over 8 stories. BL-512's lead-paperwork discards read 0 on s321 and s322 at every gate. Both entries stay PARTIAL. `_gate-procedures.md` carries the BL-550 cited-paths clauses.
+
+### BL-550 PARTIAL: resolve-cited-paths.sh and the seat half
+
+`core/scripts/resolve-cited-paths.sh` resolves every backticked path a subject cites against `git ls-files` (and the disk, for an ignored tree) and prints a `cited-paths:` count line plus one SUFFIX, AMBIGUOUS or ABSENT line per path that does not resolve as written. A new shipping fixture, resolve-cited-paths, runs in process with two cli cells; `uninstall.sh` and both manifests list it. The party-seat sections of the role files carry the call. The close reading is OPEN.
+
+### BL-878 PARTIAL: layer-reference-resolution is converted in process
+
+`core/scripts/validate-layer-entries.sh` is wrapped as `vle_main` behind the column-0 source guard (a pure move) and `core/scripts/artifact-path-config.sh` as `apc_main`, with its `--help` self-read moved to `${BASH_SOURCE[0]}`. The validator sources the resolver in a subshell instead of starting it 3 times per run. The layer fixtures change and the allowlist row is deleted. BL-878's line reads `**Progress (batch 257; the entry stays PARTIAL).**`.
+
+### BL-899 PARTIAL and BL-909 WITHDRAWN: R13 removes a receipt's enumerated reads together
+
+`scripts/validate-backlog-receipts.sh` R13 adds one removal per judged receipt that removes every ENUMERATED read together, judged as a named removal. On the live ledger BL-878's receipt answers exit=1 with all 1264 enumerated inputs gone; DEFAULT_MAX_R13 moves 5 to 6. Fixture backlog-receipt-traced-removal gains world v. BL-909's subject is gone with 0.1130.0.
+
+### BL-1036, BL-1037 and BL-1040 CLOSED: RUN-FILTER reads the working directory, PYTEST_ADDOPTS, groups and the cited capture's command
+
+`core/scripts/record-only-diff.sh` RUN-FILTER reads `cd <dir>` and `pushd <dir>` in a chain, so `cd server && pytest -q` is refused (BL-1036). `core/scripts/validate-handoff-evidence.sh` records the command line of each counted capture and holds it to the filter rule on the capture-cite route (BL-1037). BL-1040 closes with the RUN-FILTER shapes the same commit reads (PYTEST_ADDOPTS, groups). The story-evidence-scaffold fixture is updated.
+
+### BL-984 PARTIAL: tools.decl completeness
+
+prepush-worktree-env-scrub declares `ls`, `mkfifo` and `rmdir`, so its hook runs take the pooled branch a real push takes; apply-restamp-worklist-d declares `rmdir`.
+
+### BL-1059 PARTIAL: arm and world cost cut in five heavy fixtures
+
+Counted starts, old to new: apply-restamp-worklist-b 759 to 577; adversarial-shard-merge 480 to 463, -b 438 to 424, -d 635 to 607; owed-derivations 452 to 394; apply-drift-refile 130 to 116, -c 98 to 96; review-shard-merge gates its seed per reader shard. The remainder is named in the entry.
+
+### BL-1124 filed: the push suite is throughput-bound, not pole-bound
+
+B9's and B10's pools ran 6-way and their makespans equal the summed loaded cost divided by 6, so no hook scheduling change is warranted. `CLAUDE.md` corrects "POLE-BOUND" to width-bound (net 1 byte shorter).
+
+### BL-1119 to BL-1123 filed
+
+BL-1119: counted starts move with pool width, and divergence-hard-block's cached world loses objects mid-copy. BL-1120: hermetic-consumption seeds and release-version arm E are unseeded since the self-probe deletions. BL-1121: validate-write-format-steering accepts `--render` and `--check FILE` and does nothing with either. BL-1122: a fixture reaching a changed validator through a directory sweep is missing from a builder's rows to re-measure. BL-1123: the gate procedures never tell the lead to dispatch from the join's `PLAN-FILE`.
+
+### BL-911 and BL-1005 progress: s322 and s323 readings
+
+Backlog only. BL-1005's s322 reading finds 0 of 5 stories-p2 shards with an artifact_sha unchanged since p1; the zero does not discriminate, because the p1 repair touched all 5 stories, and the same comparison reproduces s321's 5/14. BL-911 is blocked, with no bound sprint yet. Both entries keep their status.
+
+### BL-397 and BL-398 progress: BL-397's filter half is met by BL-1016
+
+Backlog only. BL-397's working-directory half stays owed and BL-398's remainder is a consumer-sprint measurement. Both stay PARTIAL.
+
+### BL-541 and BL-543 progress: wave-5 readings
+
+Backlog only. BL-541: the serial join woke the s323 lead with 2 cap returns in 22 minutes and none on an append. BL-543: 4 of 72 swept phrases match the 181-line worklist, all before the worklist ran. Both stay PARTIAL.
+
+### BL-910 and BL-1008 progress: wave-5 readings
+
+Backlog only. A forced per-line-write shim under ignored SIGPIPE shows the `--arms I81` path loses no writes (57 pipe branches, 0 EPIPE). Both stay PARTIAL.
+
 ## [0.1134.0] - 2026-11-15
 
 ### BL-1102 PARTIAL: validators no longer re-prove on every run that their arms can fire

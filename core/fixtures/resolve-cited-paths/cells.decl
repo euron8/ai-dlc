@@ -1,0 +1,6 @@
+# resolve-cited-paths's starts of core/scripts/resolve-cited-paths.sh (BL-879 grammar). Every other drive is in
+# process: run.sh sources the subject once and calls rcp_main in a subshell. One cli cell per distinct CLI outcome
+# (exit 0 resolved, exit 2 usage), each started as FXCELL=<id> bash "$SUBJ" in eqv() and compared byte for byte with
+# the in-process call on the same input.
+cli core/scripts/resolve-cited-paths.sh cli-pass
+cli core/scripts/resolve-cited-paths.sh cli-usage

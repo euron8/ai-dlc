@@ -11,13 +11,13 @@
 #   rd  no scrub, a row of scripts/env-scrub-allowlist.txt. Want: quiet (one allowlisted unscrubbed).
 #   rz  scrubbed, carrying one clean H1, H2 and H6 candidate and one receipt its run.sh runs: the populations the
 #       validator requires before it trusts a corpus.
-# One validator run reads all five: rc 1, `FAIL H8:` the only FAIL section, its one row rc's, the self-probe's H8 line
-# ok, and the corpus count the probe's own (6 fixture .sh scanned, so the root walk did not reach the repo).
+# One validator run reads all five: rc 1, `FAIL H8:` the only FAIL section, its one row rc's,
+# and the corpus count the probe's own (6 fixture .sh scanned, so the root walk did not reach the repo).
 #
 # usage:  receipt-bl929.sh [--validator <path>]
 #   With no argument the subject is the repository's validator, and the copy is held byte-identical (cmp -s).
 #   --validator names another copy (one of fixture-hygiene's H8 mutants); its stderr is passed through so the caller
-#   can read the self-probe refusal, and PASS is printed only for the unmutated subject.
+#   can read a refusal, and PASS is printed only for the unmutated subject.
 # Exit: 0 PASS, 1 FAIL, 2 the validator refused (its exit 2, passed through), 9 the receipt could not run.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -77,7 +77,6 @@ cat "$WORK/err" >&2
 f=0
 no() { echo "receipt-bl929: FAIL -- $1"; f=1; }
 [ "$vrc" = 1 ] || no "the validator exited $vrc over a world with one unscrubbed unlisted fixture, want 1"
-grep -qF 'self-probe H8: ok' "$WORK/err" || no "no 'self-probe H8: ok' line"
 grep -qF 'validate-fixture-hygiene: 6 fixture .sh scanned;' "$WORK/out" \
   || no "the corpus count is not the probe's 6 files, so the root walk did not resolve to the probe"
 for x in ra rb rz; do grep -qxF "H8 SCRUBBED $x" "$WORK/out" || no "no 'H8 SCRUBBED $x' row"; done

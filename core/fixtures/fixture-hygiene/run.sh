@@ -145,8 +145,8 @@ verdict() { # <arm> <tag>
     W-ALLOW-STALE core/fixtures/fa/run.sh fa-wait: line 11 carries $H9MK and no allowlist row names that id" ] ;;
     D8) rcis "$t" 0 && has "$t" 'receipt-bl929: PASS' ;;
     D9) rcis "$t" 0 && has "$t" 'receipt-bl930: PASS' ;;
-    C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-hygiene -- self-probe fired both ways' && has "$t" 'E1 1 receipt(s), 0 inert' ;;
-    R)  rcis "$t" 0 && has "$t" '; 3 fixture .sh scanned;' ;;
+    C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-hygiene -- ' && has "$t" 'E1 1 receipt(s), 0 inert' ;;
+    R)  rcis "$t" 0 && has "$t" '-- 3 fixture .sh scanned;' ;;
     *) return 1 ;;
   esac
 }

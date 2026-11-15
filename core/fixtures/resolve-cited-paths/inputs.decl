@@ -1,0 +1,6 @@
+!core/scripts/resolve-cited-paths.sh
+# The libraries run.sh sources: plain reads, not `!` rows (P1 would read a `!` .sh as an unpaired in-process pass).
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh
+core/fixtures/lib/world.sh
+core/fixtures/lib/mutant.sh

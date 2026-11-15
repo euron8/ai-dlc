@@ -9,7 +9,6 @@
 # text-only (text the step writes or prints, never runs), verdict-independent (the result cannot reach the verdict),
 # mode-keyed-by-present-key (a mode test on a tree file, keyed for chmod because the present key carries the permission bits; an ACL or file flag is not keyed), and
 # live-pending-lead (a LIVE site the lead has been sent and has not yet ruled on).
-core/fixtures/lib/settled-net.sh	cur="$(st_members "$1")"; sz="$(wc -c < "$2" 2>/dev/null | tr -d ' ')"	text-only: the closure reaches this file only through heredoc seed text in validate-fixture-hygiene.sh, which no pre-suite step sources, and its operand is a caller's progress log
 core/scripts/validate-audit-anchors.sh	if [ ! -r "$FILE" ] || [ ! -w "$FILE" ]; then	verdict-independent: reachable only under --close-record, a mode the pre-suite call never selects
 core/scripts/validate-audit-anchors.sh	if [ ! -r "$FILE" ]; then	mode-keyed-by-present-key: a -r mode test on templates/audit-anchors.md.template, which the same run then reads
 core/scripts/validate-provenance-block.sh	[ -r "${PB_SCRIPT_DIR}/lib/meta-gate.sh" ] && . "${PB_SCRIPT_DIR}/lib/meta-gate.sh"	mode-keyed-by-present-key: a -r mode test on core/scripts/lib/meta-gate.sh, whose presence the present key carries
@@ -33,12 +32,8 @@ scripts/validate-claude-rules.sh	b="$(wc -c < "$f" | tr -d ' ')"	size-read-by-st
 scripts/validate-enforcement-map.sh	[ -r "$i120_tmp/counts" ] && read -r i120_memn i120_nearn i120_lenn < "$i120_tmp/counts"	scratch: $i120_tmp is the arm's own mktemp directory
 scripts/validate-enforcement-map.sh	[ -s "$TMPDIR_I62/scope" ] || continue	scratch: $TMPDIR_I62 is the arm's own mktemp directory
 scripts/validate-enforcement-map.sh	[ -s "$TMPDIR_I65/drv" ] || return 0	scratch: $TMPDIR_I65 is the arm's own mktemp directory
-scripts/validate-enforcement-map.sh	_cn_a="$(printf "%s" "$1" | LC_ALL=C tr -cd "\360" | wc -c)"	pipe: wc -c counts a printf pipe, not a file
-scripts/validate-enforcement-map.sh	_cn_c="$(printf "%s" "$1" | LC_ALL=C tr -d "\200-\277" | wc -c)"	pipe: wc -c counts a printf pipe, not a file
-scripts/validate-enforcement-map.sh	elif [ ! -r "$I84_SCHEMA" ]; then	mode-keyed-by-present-key: a -r mode test on core/schemas/sprint-status.json, which the same arm then reads with sed
+scripts/validate-enforcement-map.sh	if [ ! -r "$I84_SCHEMA" ]; then	mode-keyed-by-present-key: a -r mode test on core/schemas/sprint-status.json, which the same arm then reads with sed
 scripts/validate-enforcement-map.sh	elif [ ! -s "$i118_map" ]; then	size-read-by-step: the size of .ai-dlc-fixture-readsets.tsv, which the same arm then reads with awk
-scripts/validate-enforcement-map.sh	elif [ -r "$i83_probe_dir/unread.sh" ]; then	scratch: $i83_probe_dir is the arm's own mktemp directory
-scripts/validate-enforcement-map.sh	elif [ -r "$i84_probe_dir/unread.sh" ]; then	scratch: $i84_probe_dir is the arm's own mktemp directory
 scripts/validate-enforcement-map.sh	for p in "$2" "$3" "$4" "$5" "$6"; do [ -r "$p" ] || { printf '\001U\t%s\t%s\n' "$1" "$p"; ok=0; break; }; done	mode-keyed-by-present-key: a -r mode test on each I129 input, all of which the same arm then reads with awk
 scripts/validate-enforcement-map.sh	if [ ! -f "$arms_renderer" ] || [ ! -r "$VEM_SELF" ]; then	verdict-independent: reachable only under --arms, which the pre-suite call never passes
 scripts/validate-enforcement-map.sh	if [ ! -r "$1" ] || [ ! -r "$2" ]; then printf 'UNREAD %s %s\n' "$1" "$2"; return; fi	mode-keyed-by-present-key: a -r mode test on each I125 input, which the same function then reads with grep
@@ -54,7 +49,6 @@ scripts/validate-enforcement-map.sh	if [ ! -s "$_fd.dist-only" ]; then	size-read
 scripts/validate-enforcement-map.sh	if [ ! -s "$lc_i65_pairs" ]; then	scratch: $lc_i65_pairs lives under the arm's own mktemp directory
 scripts/validate-enforcement-map.sh	if [ ! -s "$lc_pairs_all" ]; then	scratch: $lc_pairs_all lives under the arm's own mktemp directory
 scripts/validate-enforcement-map.sh	if [ -r "$TEMPLATE" ]; then	mode-keyed-by-present-key: a -r mode test on templates/settings.json.template, which I14 then reads
-scripts/validate-enforcement-map.sh	printf '%s\n' 'SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1)"'	text-only: the ls -t is text printf writes into a probe file, never executed by the step
 scripts/validate-fixture-hygiene.sh	[ -s "$o.e1list" ] || { echo "BROKEN: E1 listed 0 tracked receipt*.sh under $repo; an empty population has no inert receipt by construction"; return 2; }	scratch: $o is an output prefix under the step's own mktemp directory
 scripts/validate-fixture-hygiene.sh	if [ -s "$WORK/e1c.verdict" ]; then	scratch: $WORK is the step's own mktemp directory
 scripts/validate-fixture-invocations.sh	if [ ! -s "$w/log" ]; then	scratch: $w is the judge's own mktemp directory

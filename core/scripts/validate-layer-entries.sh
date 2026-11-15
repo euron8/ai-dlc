@@ -191,6 +191,7 @@
 # deliberate restriction. Remove when: core ships as an immutable package with
 # machine-checked layer bindings resolved at load time.
 
+vle_main() {
 set -uo pipefail
 
 # `--check-refs` lists W12's AMBIGUOUS rows instead of only counting them. It is a flag
@@ -1987,9 +1988,14 @@ done
 if [ -z "$LC_APC" ]; then
   warn W11 "no artifact-path-config.sh beside this script, so the artifact-path grammar could not be resolved and NO entry was checked against it. It is the single home of the scan roots and of the sprint-token expression; without it this arm would have to guess both, and a guessed empty root set reports every entry conforming without reading one."
 else
-  LC_ROOTS="$(bash "$LC_APC" --scan-roots --root "$PROJECT_ROOT" 2>/dev/null)"
-  LC_TOKRE="$(bash "$LC_APC" --token-re-prescribed 2>/dev/null)"
-  LC_SLOTRE="$(bash "$LC_APC" --slot-re-prescribed 2>/dev/null)"
+  # SOURCED IN A SUBSHELL, NOT STARTED, and the answer is the one `bash <file> <args>` prints. A
+  # wrapped resolver returns at its source guard and `apc_main` answers; an installed one from
+  # before the wrap runs its body on the positional arguments `.` hands it and exits the `$( )`
+  # before `apc_main` is reached. Either way the resolver's `exit` ends only the subshell.
+  lc_apc() { { . "$LC_APC" "$@"; apc_main "$@"; } 2>/dev/null; }
+  LC_ROOTS="$(lc_apc --scan-roots --root "$PROJECT_ROOT")"
+  LC_TOKRE="$(lc_apc --token-re-prescribed)"
+  LC_SLOTRE="$(lc_apc --slot-re-prescribed)"
   LC_NROOT="$(printf '%s\n' "$LC_ROOTS" | grep -c .)"
 
   # The story corpus location, read from its declared home and SUBSTITUTED. I84's second arm is
@@ -2801,3 +2807,7 @@ printf 'LAYER_MEASURED v1 enforcer=validate-layer-entries.sh contract_version=%s
 unreadable_report
 [ "$UNREADABLE_N" -eq 0 ] || exit 2
 [ "$ERRORS" -eq 0 ]
+}
+# Executed, it runs; sourced, it has defined vle_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vle_main "$@"

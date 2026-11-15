@@ -371,6 +371,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    marked one but does not check the count, so on that axis the marker's count has no
    mechanical reader. `--complete` and `--progress-path` never go on the same beat.
 
+   **Every seat brief carries the subject's cited paths, resolved.** Before the round's first wave the lead runs `scripts/ai-dlc/resolve-cited-paths.sh <every subject file>` ONCE, from the project root, and pastes its whole output, which opens with its `cited-paths:` line, into every seat brief of the round, part and cross alike, and into an unsharded round's `/bmad-party-mode` call. It is never retyped and never run once per seat. A path the subject cites that has no line in that block resolves as cited. A `SUFFIX <cited> <path>` line names the path to read in its place. An `AMBIGUOUS` path is listed with `git ls-files` before it is read. An `ABSENT` path does not exist in the tree and is not read.
+
    **One repair writer applies them.** After the round's join the lead dispatches the seats'
    findings to remediators, never back to a seat, and every entry of the party repair record
    — a joined part, the serial remediator's appended entries, or a single writer's record —
@@ -552,6 +554,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    the sha every elicitation shard notarized, and joined with
    `join-remediator-shards.sh --document <doc> <that dir>`.
 
+   **Every elicitation shard brief, part and cross, carries the `cited-paths:` block** of item 1, from one `scripts/ai-dlc/resolve-cited-paths.sh` run over the elicitation subject's files.
+
    **The delta clause — a story split or added after a correctly sharded stories elicitation.**
    When `shards/stories-elicitation/` is complete for the K it was elicited at, and `stories/`
    has since gained a story no ORDINAL shard in it names (a split, or an addition), elicit ONLY
@@ -720,6 +724,8 @@ exactly one, or whose `findings=<n>` differs from the findings it parses there. 
 unchecked, exactly as before. That is a directory written before this instruction, and also a
 round where no shard has finished — which the join's `--complete` beat, not the merge, keeps
 from reaching the merge. The merged record's `tool_use_id` is the derived id of `cross` (of `cross-1` in a per-group set).
+
+**Every adversary brief carries the `cited-paths:` block** of "Validation cycle" item 1, from one `scripts/ai-dlc/resolve-cited-paths.sh` run per pass over the artifact's files.
 
 It writes findings to `_bmad-output/planning-artifacts/s<N>/<artifact>-adversarial-p<M>.md`
 carrying a `SKILL_INVOCATION_PROVENANCE v1` block. Every adversary brief, sharded or not, carries

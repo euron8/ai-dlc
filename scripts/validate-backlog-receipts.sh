@@ -2727,9 +2727,11 @@ END { r12_flush(); printf "R12-COUNTS %d %d %d\n", ne, np, nx }' "$_l")" || retu
 #   shell-shebang file the closure EXECUTES (the expansion rule below) read the same way. Basename
 #   matching is forbidden. A path built from
 #   any other variable is not named: NAMED IS A FLOOR, and every traced read outside it is
-#   ENUMERATED -- counted on the population line every run, never removed. That exclusion is the
-#   owed half of BL-899, which stays PARTIAL. The removal set is NAMED ∩ READ; a named file the
-#   baseline did not read is counted named-unread.
+#   ENUMERATED -- counted on the population line every run and removed TOGETHER in one extra
+#   removal per judged receipt (row path `ENUMERATED(<n>)`), judged as a named removal is: a receipt
+#   that still answers 0 or 1 with every enumerated input gone is measuring an empty population. A
+#   single enumerated file is never removed alone (BL-899 stays PARTIAL on that). The removal set is
+#   NAMED ∩ READ; a named file the baseline did not read is counted named-unread.
 #   HOW THE NAMED SET REACHED ITS SHAPE (the narrowing, measured by the owner's reference closure script over base
 #   0bb1ee28d, batch 256): with comment lines included the closure SATURATED at 340 files for every seed, through the
 #   hub scripts/validate-enforcement-map.sh, whose comments alone add 128-139 paths; executable lines
@@ -2775,19 +2777,17 @@ END { r12_flush(); printf "R12-COUNTS %d %d %d\n", ne, np, nx }' "$_l")" || retu
 # TWO-SIDED RATCHET: the run FAILS when the live UNGUARDED-READ count is ABOVE it, and ALSO when it is BELOW it (a
 # stale-high ceiling hides a regrowth, as in the fork-budget gate), with a message naming the live count to lower it
 # to. `--max-unguarded` / AI_DLC_BACKLOG_MAX_UNGUARDED keep the same two-sided meaning.
-# THE FIVE ROWS, measured on the live ledger in the batch 256 window, all against BL-878's receipt (`bash
-# scripts/validate-fixture-inprocess.sh --complete`, base exit 1), less scripts/fixture-matrix-allowlist.txt, deleted
-# with every mutation battery. They are findings against THAT RECEIPT, not R13's own failures, in two classes by
-# consequence:
-#   (a) THE REAL DEFECT, two rows: scripts/fixture-inprocess-allowlist.txt and
-#       scripts/validate-enforcement-map.sh. Removed, the driver exits 1 -- the receipt's own STILL-LIVE code -- on a
-#       DELETED input, which reads as "rows remain". R7 reads exit 1 as a measurement, so a rename of any of them would
-#       leave BL-878 with no instrument.
+# THE SIX ROWS, measured on the live ledger at 39184970b (batch 257), all against BL-878's receipt (`bash
+# scripts/validate-fixture-inprocess.sh --complete`, base exit 1). They are findings against THAT RECEIPT, not R13's
+# own failures, in two classes by consequence:
+#   (a) THE REAL DEFECT, four rows: scripts/fixture-inprocess-allowlist.txt, scripts/validate-enforcement-map.sh,
+#       core/fixtures/lib/mutant.sh, and ENUMERATED(1264) (every enumerated input removed together). Removed, the
+#       driver exits 1 -- the receipt's own STILL-LIVE code -- on a DELETED input, which reads as "rows remain". R7
+#       reads exit 1 as a measurement, so a rename of any of them would leave BL-878 with no instrument.
 #       THE scripts/validate-enforcement-map.sh ROW was introduced by 0.1098.0: BL-982's P2 self-probe in
 #       scripts/validate-fixture-invocations.sh names scripts/validate-enforcement-map.sh on an executable line, and
-#       BL-878's run reads it; removed, the driver exits 1 (cause not determined). The ceiling drops to 4 when it
-#       is guarded.
-#   (b) THE CONTRACT MISMATCH, three rows: core/fixtures/lib/mutant.sh, scripts/validate-fixture-hygiene.sh and
+#       BL-878's run reads it; removed, the driver exits 1 (cause not determined).
+#   (b) THE CONTRACT MISMATCH, two rows: scripts/validate-fixture-hygiene.sh and
 #       scripts/validate-fixture-invocations.sh. Removed, the driver gives its DOCUMENTED refusal, exit 2 (its header
 #       :9 documents 0 clean, 1 FAIL, 2 refused; for the two scripts the line is `validate-fixture-inprocess:
 #       REFUSED -- <path> is absent` at :90). R13 scores them unguarded only because R7's could-not-measure contract
@@ -2796,7 +2796,7 @@ END { r12_flush(); printf "R12-COUNTS %d %d %d\n", ne, np, nx }' "$_l")" || retu
 # Any release that moves BL-878's unguarded count (rotating BL-878, or changing its driver or the files it reads) must
 # edit DEFAULT_MAX_R13 in scripts/validate-backlog-receipts.sh in the same commit; the two-sided ceiling fails the
 # 'backlog receipts' step otherwise.
-DEFAULT_MAX_R13=5
+DEFAULT_MAX_R13=6
 R13_MAX_REMOVALS=32
 
 # THE FIXTURE'S CHEAP MODE (fixture-mutants.md clause 5), never passed by the hook. core/fixtures/
@@ -3212,7 +3212,8 @@ r13_plan() {
     awk 'NR == FNR { R[$0] = 1; next } ($0 in R)' "$_sd/$_n.reads" "$_sd/$_n.named" > "$_sd/$_n.remove"
     _nr="$(grep -c . "$_sd/$_n.remove")" || _nr=0
     _nu=$(( $(grep -c . "$_sd/$_n.named" || true) - _nr ))
-    _ne="$(awk 'NR == FNR { N[$0] = 1; next } !($0 in N)' "$_sd/$_n.named" "$_sd/$_n.reads" | grep -c .)" || _ne=0
+    awk 'NR == FNR { N[$0] = 1; next } !($0 in N)' "$_sd/$_n.named" "$_sd/$_n.reads" > "$_sd/$_n.enum"
+    _ne="$(grep -c . "$_sd/$_n.enum")" || _ne=0
     _en=$(( _en + _ne )); _un=$(( _un + _nu ))
     # NO NAMED READ (tip adversary D4): for EVERY receipt that names a file, a baseline read set holding none of
     # them is a refusal -- a `cd x && bash P`, a `bash ./P` or a grep-only receipt has no driver for must-hit.
@@ -3229,6 +3230,11 @@ r13_plan() {
       _k=$(( _k + 1 ))
       { sed -n '1,2p' "$_sd/$_n.rec"; printf '%s\n' "$_p"; } > "$_sd/rm/$_n.r$(printf '%02d' "$_k")"
     done < "$_sd/$_n.remove"
+    # THE ENUMERATION REMOVAL: every ENUMERATED read of the receipt removed together, in ONE run (job `<n>.rE`,
+    # line 3 the marker, lines 4+ the paths), judged as a named removal is.
+    if [ "$_ne" -gt 0 ]; then
+      { sed -n '1,2p' "$_sd/$_n.rec"; printf '@enumerated\n'; cat "$_sd/$_n.enum"; } > "$_sd/rm/$_n.rE"
+    fi
     printf '%s\t%s\tjudge\t%s\n' "$_n" "$_lbl" "$_nr" >> "$_sd/plan"
   done
   printf '%s %s %s %s %s %s %s %s %s %s %s %s\n' "$_t" "$_rm" "$_un" "$_en" "$_xc" "$_cc" "$_pc" "$_oc" "$_rc" "$_rmr" "$_unr" "$_enr" > "$_sd/pcounts"
@@ -3266,26 +3272,38 @@ r13_removals() {
   return 0
 }
 
-# r13_removed_ok <tree> <path> -- the removal is APPLIED: gone from disk, gone from ls-files, the tree clean.
-r13_removed_ok() { [ ! -e "$1/$2" ] && [ -z "$(git -C "$1" ls-files -- "$2" 2>/dev/null)" ] && [ -z "$(git -C "$1" status --porcelain 2>/dev/null)" ]; }
+# r13_removed_ok <tree> <path-list file> -- the removal is APPLIED: every listed path gone from disk and from
+# ls-files, the tree clean.
+r13_removed_ok() {
+  local _q _ls _st
+  while IFS= read -r _q; do [ ! -e "$1/$_q" ] || return 1; done < "$2"
+  _ls="$(git -C "$1" ls-files 2>/dev/null)" || return 1
+  _st="$(git -C "$1" status --porcelain 2>/dev/null)" || return 1
+  [ -n "$_ls" ] && [ -z "$(printf '%s\n' "$_ls" | awk 'NR == FNR { P[$0] = 1; next } ($0 in P)' "$2" -)" ] && [ -z "$_st" ]
+}
 
 # r13_judge_rc <rc> <cm member> -> PASS when the removal made the receipt say it cannot measure.
 r13_judge_rc() { [ -n "$2" ]; }
 
-# r13_remove_one -- the --r13-one worker body: record lines 1-2 are the receipt, line 3 the path to remove.
+# r13_remove_one -- the --r13-one worker body: record lines 1-2 are the receipt, line 3 the path to remove; or line 3
+# `@enumerated` and lines 4+ every enumerated path, removed together, the row's path field `ENUMERATED(<n>)`.
 r13_remove_one() {
-  local _p _rc _cm _out
+  local _p _rc _cm _out _ps _q
   _p="$(sed -n '3p' "$REC")"
   _out="$BR_R13_RMOUT/$n"
+  _ps="$W/t/$n.paths"
+  if [ "$_p" = "@enumerated" ]; then
+    sed '1,3d' "$REC" > "$_ps"; _p="ENUMERATED($(grep -c . "$_ps" || true))"
+  else printf '%s\n' "$_p" > "$_ps"; fi
   rw() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$LABEL" "$_p" "$2" "$3" > "$_out"; }
-  [ -n "$_p" ] || { rw BROKEN exit=none no-path; return 0; }
+  [ -n "$_p" ] && grep -q . "$_ps" || { rw BROKEN exit=none no-path; return 0; }
   TA="$(mktree a)"
   [ -n "$TA" ] || { rw BROKEN exit=none no-removal-worktree; return 0; }
-  git -C "$TA" rm -q -- "$_p" >/dev/null 2>&1 \
+  git --literal-pathspecs -C "$TA" rm -q --pathspec-from-file="$_ps" >/dev/null 2>&1 \
     && git -C "$TA" -c user.email=r13@local -c user.name=r13 -c commit.gpgsign=false -c core.hooksPath=/dev/null \
          -c maintenance.auto=false commit -q --no-verify -m "r13 removal" >/dev/null 2>&1 \
     || { rw BROKEN exit=none removal-did-not-commit; return 0; }
-  r13_removed_ok "$TA" "$_p" || { rw BROKEN exit=none removal-not-applied; return 0; }
+  r13_removed_ok "$TA" "$_ps" || { rw BROKEN exit=none removal-not-applied; return 0; }
   ( cd "$TA" && r13_eval_env && eval "$REST" ) >/dev/null 2>"$W/t/$n.err"
   _rc=$?
   _cm="$(cm_reason "$_rc" "$W/t/$n.err")"
@@ -3349,7 +3367,7 @@ r13_corpus() {
   _n9="$(awk -F'\t' '$4 == "exit=9"' "$_sd/rows" | grep -c .)" || _n9=0
   _ncm="$(awk -F'\t' '$1 == "R13-PASS"' "$_sd/rows" | grep -c .)" || _ncm=0
   [ "$QUIET" = 1 ] || awk -F'\t' '$1 != "R13-PASS" { printf "%s\t%s\t%s\t%s\n", $1, $2, $3, $4 }' "$_sd/rows"
-  echo "R13-POPULATION: $SH_RECEIPTS open sh receipt(s), $_t traced, $(( _rm + _rmr )) named removals ($_rmr replayed), $(( _un + _unr )) named-unread ($_unr replayed), $(( _en + _enr )) enumerated excluded ($_enr replayed), $_xc EXCLUDED-DRIVER-ABSENT-AT-BASE, $_cc baseline-cm, $_pc replayed, $_oc overflow, $_rc refused; removals: $_n9 exit 9, $_ncm in the cannot-measure set, $_ng UNGUARDED-READ (ceiling $MAX_R13)."
+  echo "R13-POPULATION: $SH_RECEIPTS open sh receipt(s), $_t traced, $(( _rm + _rmr )) named removals ($_rmr replayed), $(( _un + _unr )) named-unread ($_unr replayed), $(( _en + _enr )) enumerated, removed together ($_enr replayed), $_xc EXCLUDED-DRIVER-ABSENT-AT-BASE, $_cc baseline-cm, $_pc replayed, $_oc overflow, $_rc refused; removals: $_n9 exit 9, $_ncm in the cannot-measure set, $_ng UNGUARDED-READ (ceiling $MAX_R13)."
   if [ -n "$(awk -F'\t' '$1 == "BROKEN"' "$_sd/rows")" ]; then
     awk -F'\t' '$1 == "BROKEN" { printf "FAIL: R13 BROKEN\t%s\t%s\t%s\n", $2, $3, $5 }' "$_sd/rows" >&2
     echo "$(me): FAIL -- R13: a removal could not be built or applied (named above). This is a refusal, not a reading." >&2

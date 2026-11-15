@@ -16,3 +16,4 @@ core/scripts/validate-adversarial-convergence.sh
 core/schemas/gate-adjudication-verdict.json
 core/skills/ai-dlc/enforcement-map.yaml
 core/skills/ai-dlc/steps/_gate-procedures.md
+core/fixtures/lib/report.sh

@@ -44,7 +44,7 @@
 #   end walk s-marker plants one mid-run; the census exits 2 naming it.
 #   incomplete s-selfkill leaves its root; the summary names it by path and counts it, and it is on disk.
 # STORE: the census leaves $HOME/.cache/ai-dlc/verdicts empty while its per-pair stores hold entries;
-#   control: hermetic-run run directly with no AI_DLC_VERDICT_STORE writes under that HOME.
+#   control: hermetic-run run directly with AI_DLC_VERDICT_STORE naming that HOME's store writes there.
 # Exit: 0 = every assertion holds, 1 = an assertion failed, 2 = the fixture could not run.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 set -uo pipefail
@@ -285,9 +285,9 @@ eq "store: the census wrote nothing under its HOME" "$n" 0
 n="$(find "$SCR/keep" -path '*/vs/*' -type f | wc -l | tr -d ' ')"
 if [ "$n" -gt 0 ]; then ok "store: the per-pair stores hold the hermetic passes ($n entries)"; else bad "store: no per-pair store entry, so the empty HOME proves nothing"; fi
 mkdir -p "$WORK/home-direct"
-( cd "$WA" && env -u AI_DLC_VERDICT_STORE HOME="$WORK/home-direct" bash "$WA/core/scripts/hermetic-run.sh" --root "$WA" s-low ) >/dev/null 2>&1
+( cd "$WA" && HOME="$WORK/home-direct" AI_DLC_VERDICT_STORE="$WORK/home-direct/.cache/ai-dlc/verdicts" bash "$WA/core/scripts/hermetic-run.sh" --root "$WA" s-low ) >/dev/null 2>&1
 n="$(find "$WORK/home-direct/.cache/ai-dlc/verdicts" -type f 2>/dev/null | wc -l | tr -d ' ')"
-if [ "$n" -gt 0 ]; then ok "store control: a direct hermetic-run with no store override writes under HOME"; else bad "store control: a direct hermetic-run wrote nothing under HOME, so the store arm cannot fire"; fi
+if [ "$n" -gt 0 ]; then ok "store control: a direct hermetic-run naming the HOME store writes under HOME"; else bad "store control: a direct hermetic-run naming the HOME store wrote nothing under HOME, so the store arm cannot fire"; fi
 
 # --- world B: a plain run that changes the root's git state stops the census ----------------------
 census "$CENSUS" "$WB" "s-dirty s-after" 1

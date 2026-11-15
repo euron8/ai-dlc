@@ -1005,12 +1005,13 @@ unset CSP_PIDS CSP_FIFO CSP_STALL CSP_GATE CSP_GLIB
 #       cl_write), then two pushes each naming a FRESH committed tree in AI_DLC_FX_CL_TREE (the switch the
 #       distribution hook sets; read at depth 0 only, so the drive pins PREPUSH_POOL_DEPTH=0) whose pend/run.sh moved
 #       after the census: both units are undeclared, so each is keyed on the whole installed tree, and push a runs
-#       both and writes their records to <store>/consumer-placement-keys/<root commit>/; push b must select 0 of the 2. Those records
-#       never carry `#pending`, and a missing count is no run reason anywhere.
+#       both and writes their records to <store>/consumer-placement-keys/<root commit>/; push b must select 0 of the 2. cl_publish
+#       writes each record's `#pending` from its unit's log (pend 2, near 0), so push b names pend@consumer recorded with 2.
 # Cells are <seed>.<observable>: rec2 = the recorded clause names pend with 2, pran = pend ran with its 2 rows,
 # vs = the store-skip announce, kp2 = pend.key line 4 is `#pending 2`, unrec = the summary names pend's count unrecorded; cl.skip = push b selects 0 of 2 consumer-layout
-# units and names none `pending count unrecorded`, cl.disp = push a's dispatched pend@consumer keeps its 2 rows on its
-# ok row AND in the pool PENDING summary, cl.nopend = `<records>:<records carrying #pending>` in the consumer-layout dir.
+# units and names none in the consumer count-unrecorded clause, cl.crec = push b's recorded clause names pend and pend@consumer with 2,
+# cl.disp = push a's dispatched pend@consumer keeps its 2 rows on its ok row AND in the pool PENDING summary,
+# cl.kpend = `<records>:<records carrying #pending>` in the consumer-layout dir.
 BL_REC2='   PENDING: 1 skipped on a recorded pass that printed a PENDING row: pend(recorded)=2'
 BL_PRAN='   ok    pend  (2 PENDING row(s): its subject is absent, so those parts checked nothing)'
 BL_VS='   ..    verdict store: 1 fixture(s) skipped on a pass recorded elsewhere: pend'
@@ -1103,12 +1104,13 @@ bl_cell() {                    # bl_cell <seed>.<observable>, read off the loade
     unrec) yn grep -qxF "$BL_UNREC" "$o" ;;
     kp2)  yn [ "$(sed -n 4p "$t/.git/ai-dlc-fixture-keys/pend.key" 2>/dev/null)" = '#pending 2' ] ;;
     skip) if [ "$(cat "$C_T.clb.rc" 2>/dev/null)" = 0 ] && grep -qF '   ..    consumer layout: 0 of 2 shipping fixture(s) run as <fx>@consumer in ' "$o" \
-             && ! grep -qF '@consumer: pending count unrecorded' "$o"; then echo yes; else echo no; fi ;;
+             && ! grep -qF '<fx>@consumer unit(s) skipped on a consumer-layout pass whose PENDING count is unrecorded' "$o"; then echo yes; else echo no; fi ;;
+    crec) yn grep -qxF '   PENDING: 2 skipped on a recorded pass that printed a PENDING row: pend(recorded)=2 pend@consumer(recorded)=2' "$o" ;;
     disp) if [ "$(cat "$C_T.cla.rc" 2>/dev/null)" = 0 ] \
              && grep -qxF '   ok    pend@consumer  (2 PENDING row(s): its subject is absent, so those parts checked nothing)' "$C_T.cla.out" \
              && grep -qF ' green fixture(s) printed a PENDING row, so part of each checked nothing: pend@consumer' <<< "$(grep -E '^   PENDING: ' "$C_T.cla.out")"; then
             echo yes; else echo no; fi ;;
-    nopend) n=0; m=0
+    kpend) n=0; m=0
             for f in "$t.vs/consumer-placement-keys/$(git -C "$t" rev-list --max-parents=0 HEAD | LC_ALL=C sort | sed -n 1p)"/*.key; do
               [ -f "$f" ] || continue; n=$((n + 1)); grep -q '^#pending' "$f" && m=$((m + 1))
             done
@@ -1116,7 +1118,7 @@ bl_cell() {                    # bl_cell <seed>.<observable>, read off the loade
     *) echo "<unknown cell $1>" ;;
   esac
 }
-BL_CELLS="s1.rec2,s2.rec2,s2.vs,s2.kp2,s4.rec2,s3.rec2,su.pran,su.kp2,su.unrec,s5.unrec,sv.rec2,sv.kp2,sk.pran,sk.vs,sk.unrec,cl.skip,cl.rec2,cl.disp,cl.nopend"
+BL_CELLS="s1.rec2,s2.rec2,s2.vs,s2.kp2,s4.rec2,s3.rec2,su.pran,su.kp2,su.unrec,s5.unrec,sv.rec2,sv.kp2,sk.pran,sk.vs,sk.unrec,cl.skip,cl.crec,cl.disp,cl.kpend"
 bl_drive_cells() {             # bl_drive_cells <prefix> <post-P1 tree> <hook|-> <cells>: drives only the seeds the cells read
   local c s h="$3"; [ "$h" = - ] && h=""
   for c in $4; do s="${c%%.*}"; [ -f "$1.$s.out" ] || bl_seed "$s" "$1" "$2" "$h"; done
@@ -1165,9 +1167,9 @@ else bad "7b sv the stale republish: $(grep -E 'PENDING' "$BLF.sv.out" | tr '\n'
 if [ "$(cat "$BLF.sk.rc")" = 0 ] && _bl_eq sk.pran no && _bl_eq sk.vs yes && _bl_eq sk.unrec yes; then
   ok "7b sk a store entry written before the count (no '#pending' line) under the current digest is reused: pend skips on it and is named count unrecorded"
 else bad "7b sk the count-less entry (pran=$(mx_get "$BASE_bl" sk.pran) vs=$(mx_get "$BASE_bl" sk.vs) unrec=$(mx_get "$BASE_bl" sk.unrec)): $(grep -E 'PENDING|verdict store|   ok ' "$BLF.sk.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 400)"; fi
-if _bl_eq cl.skip yes && _bl_eq cl.rec2 yes && _bl_eq cl.disp yes && _bl_eq cl.nopend 2:0; then
-  ok "7b cl the consumer layout: push a runs pend@consumer and names it in the pool PENDING summary; its 2 records carry no #pending; push b selects 0 of 2 and names none 'pending count unrecorded', while pend(recorded)=2 still prints"
-else bad "7b cl the consumer layout (skip=$(mx_get "$BASE_bl" cl.skip) rec2=$(mx_get "$BASE_bl" cl.rec2) disp=$(mx_get "$BASE_bl" cl.disp) records:#pending=$(mx_get "$BASE_bl" cl.nopend)): a: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cla.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300) b: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cl.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300)"; fi
+if _bl_eq cl.skip yes && _bl_eq cl.crec yes && _bl_eq cl.disp yes && _bl_eq cl.kpend 2:2; then
+  ok "7b cl the consumer layout: push a runs pend@consumer and names it in the pool PENDING summary; both records carry #pending; push b selects 0 of 2 and names pend(recorded)=2 pend@consumer(recorded)=2, none count-unrecorded"
+else bad "7b cl the consumer layout (skip=$(mx_get "$BASE_bl" cl.skip) crec=$(mx_get "$BASE_bl" cl.crec) disp=$(mx_get "$BASE_bl" cl.disp) records:#pending=$(mx_get "$BASE_bl" cl.kpend)): a: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cla.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300) b: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cl.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300)"; fi
 
 # F10, VERSION SKEW: a runner sourcing a hook whose READSET_VS span predates the `#pending` entry line (no readset_vs_entry, no
 # READSET_VS_PENDING) turns the store OFF, says so, and writes nothing; the same run under the current span wrote

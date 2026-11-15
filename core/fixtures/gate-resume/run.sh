@@ -658,25 +658,10 @@ if [ -z "$_G3_SKIP" ]; then
     printf '%s' "$v"
   }
   _rx_real="$(g3_rx_join "$_HOOKDIR")"
-  _rx_c3="$WORK/g3-rx-third"; _rx_cd="$WORK/g3-rx-differ"; mkdir -p "$_rx_c3" "$_rx_cd"
-  cp "$HED" "$HOOK" "$_rx_c3/"; cp "$HED" "$HOOK" "$_rx_cd/"
-  grep -o 'capture("skills/ai-dlc[^"]*")' "$HED" > "$_rx_c3/ai-dlc-third.sh"
-  sed 's/A-Za-z0-9_\.-\]+)\\\\\.md\$")/A-Za-z0-9_-]+)\\\\.md$")/' "$HOOK" > "$_rx_cd/ai-dlc-recover.sh"
-  _rx_v3="$(g3_rx_join "$_rx_c3")"; _rx_vd="$(g3_rx_join "$_rx_cd")"
   if [ "$_rx_real" = ok ]; then
     ok "g3-regex: the step regex in ai-dlc-handoff-entry.sh and ai-dlc-recover.sh is byte-identical, and no third hook carries one"
   else
     bad "g3-regex: the step regex join over $_HOOKDIR read [$_rx_real], expected [ok]"
-  fi
-  if [ "$_rx_v3" = "copies 3" ]; then
-    ok "g3-regex-control-third: a seeded third copy is refused [$_rx_v3]"
-  else
-    bad "g3-regex-control-third: a seeded third copy read [$_rx_v3], expected [copies 3] -- the join cannot fire"
-  fi
-  if [ "$_rx_vd" = differ ] && ! cmp -s "$HOOK" "$_rx_cd/ai-dlc-recover.sh"; then
-    ok "g3-regex-control-differ: a recover hook whose copy drops the dot from the class is refused [$_rx_vd]"
-  else
-    bad "g3-regex-control-differ: a differing copy read [$_rx_vd], expected [differ] (or the seed did not change the hook)"
   fi
 
   # --- the worlds -------------------------------------------------------------------------------

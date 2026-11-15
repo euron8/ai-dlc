@@ -271,6 +271,16 @@ first; only the tail varies per round.
     rejected or undispatched set and no member of yours is live. Run
     no merge, judge nothing, edit no artifact, and send nothing with
     `SendMessage`.
+
+    A member's task-notification is not a turn's work, before or after
+    the return file is written: the beat reports its path. Post no
+    status line, restate none of its findings or counts, and re-check
+    or read nothing; your next act is the beat, or ending the turn
+    once the return file is written. Three are acted on: one whose
+    status is failed, the first exit since a spawn was rejected while
+    you hold that rejected set, and an exit while members remain
+    undispatched.
+
     ---
     Round: <round>. Epoch: <epoch>. Axis: <axis>. Return file:
     _bmad-output/planning-artifacts/s<N>/rounds/<round>.return

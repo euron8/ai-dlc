@@ -44,6 +44,8 @@
 # rewriting shard 2 per call. From one counted run through core/scripts/hermetic-run.sh.
 # BL-1102: arm N's document self-probe and the NDP and NDC arms that drove it are removed from the validator and from this fixture;
 # every NDP, NDC and document-self-probe figure in the history above describes the tree before that, and only the rows below are current.
-480 *
+# 480 to 463, BL-1059: T1's four SELF_ID worlds are copies of the cached B3 world with the self line rewritten (self_world; SELF_ID enters a world only through self_line,
+# never the hook payload), WC0 compares its copy against EQ1's fresh CLI pass instead of building and merging a second fresh world, and A1 reads WC0's copy merge.
+463 *
 11 core/scripts/merge-adversarial-shards.sh
-130 core/scripts/content-seal.sh
+124 core/scripts/content-seal.sh

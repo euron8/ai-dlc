@@ -3,10 +3,14 @@
 # c-restricted-seeds starts are gone, and the probe-world build is gone from the in-process passes. Measured by one counted
 # run through core/scripts/hermetic-run.sh (the judge's own J3 output) at this change's tip; the push's counted run is the
 # second.
-# Every distinct state is ONE FXCELL-tagged cli start of a validator copy (20 cells, cells.decl), its workers covered by
+# BL-899 enumeration removal: 99 -> 111 *, 66 -> 73 validator. The new cell c-enum-unguarded is one start, one --score-one
+# and three --r13-one workers (two named removals and the enumeration removal); pop-1 gains one --r13-one (world e's
+# enumeration removal); c-committed's world follows DEFAULT_MAX_R13 (5 -> 6), so it gains one --r13-one and that removal's
+# seeded receipt run. The rest of * is the seeded receipts those removals run. Measured the same way.
+# Every distinct state is ONE FXCELL-tagged cli start of a validator copy (21 cells, cells.decl), its workers covered by
 # the one self-nested row. c-m1-e2e and cli-wire drive real --score-one and --r13-one workers.
 # inproc 9: untraced_fn 3 (one per r13_untraced call) and base_setup 3 per pass (vbr_sec_env, vbr_sec_args,
 # vbr_sec_setup) x 2 passes = 6; every in-process call is paired with its own fx_inproc (arm P2).
-99 *
-66 scripts/validate-backlog-receipts.sh
+111 *
+73 scripts/validate-backlog-receipts.sh
 9 inproc:scripts/validate-backlog-receipts.sh

@@ -1606,17 +1606,20 @@ ss_assert "rec-skill-commit-absent" \
   "no-stamp|-" \
   "a consumer with no stamp records '-', so the field is always present and always comparable"
 
-  VR_CTL_C="$(vr_cons skcctl)"
-  mkdir -p "$VR_CTL_C/.claude"
-  printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' \
-    "$THEIRS" "$BASE" > "$VR_CTL_C/.claude/.ai-dlc-version"
-  bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_CTL_C" > "$VR/skcctl.out" 2> "$VR/skcctl.err"
-  vr_ctl_rec="$(vr_newest "$VR_CTL_C")"
-  VR_CTL_SKC="$(sed -n 's/^# skill-commit: *//p' "${vr_ctl_rec:-/dev/null}" | head -1)"
-  ss_assert "rec-skc-mutant-control" \
-    "$VR_CTL_SKC" \
-    "$(git -C "$DIST" rev-parse "${BASE}^{commit}")" \
-    "the SHIPPED gate on that same split-stamp world records skill_commit, so the kill above is the mutation and not the world"
+# A SPLIT STAMP, `commit:` at THEIRS and `skill_commit:` at BASE. In `$VR_SK_C1` both fields name
+# BASE, so a gate reading `commit:` in place of `skill_commit:` records the same value there; here
+# it would record THEIRS, and only this world tells the two fields apart.
+VR_CTL_C="$(vr_cons skcctl)"
+mkdir -p "$VR_CTL_C/.claude"
+printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' \
+  "$THEIRS" "$BASE" > "$VR_CTL_C/.claude/.ai-dlc-version"
+bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_CTL_C" > "$VR/skcctl.out" 2> "$VR/skcctl.err"
+vr_ctl_rec="$(vr_newest "$VR_CTL_C")"
+VR_CTL_SKC="$(sed -n 's/^# skill-commit: *//p' "${vr_ctl_rec:-/dev/null}" | head -1)"
+ss_assert "rec-skc-split-stamp" \
+  "$VR_CTL_SKC" \
+  "$(git -C "$DIST" rev-parse "${BASE}^{commit}")" \
+  "on a split stamp (commit THEIRS, skill_commit BASE) the header carries skill_commit, not commit"
 
 # THE PATH REACHES THE CALLER ON STDERR, because stdout is the TSV contract and every caller of
 # this gate parses it by field. A record nobody can name is a record nobody commits.

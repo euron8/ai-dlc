@@ -33,3 +33,4 @@ tail
 xargs
 ln
 cksum
+rmdir
