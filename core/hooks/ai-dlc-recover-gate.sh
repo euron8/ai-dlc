@@ -166,7 +166,7 @@
 set -uo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
-STATE_DIR="${PROJECT_DIR}/_bmad-output"
+STATE_DIR="${PROJECT_DIR}/${AI_DLC_STATE_DIR:-_bmad-output}"
 MARKER="${STATE_DIR}/.recover-fired"
 PROGRESS="${STATE_DIR}/.recover-gate-progress"
 OWED="${STATE_DIR}/.recover-advisor-owed"

@@ -1319,13 +1319,29 @@ RS_POOL_DEPTH=$((10#$RS_POOL_DEPTH + 1))
 # nests the hook at the refused depth 2 only when traced, and its verdict would differ for that reason alone.
 [ -z "$IN_POOL" ] || RS_POOL_DEPTH=$((RS_POOL_DEPTH - 1))
 }
+# THE PLAIN EMITTER'S TRACED RUN IS CLAMPED TO BACKGROUND QoS (rs_qos): `--list`/`--all`/`--reconcile` only. A
+# sweep at full priority out-competes logd for CPU and its own reports are dropped upstream of every stream
+# client; clamped, logd outranks the sweep and keeps up. Like the width knobs it changes the schedule, not the
+# work, and every child inherits it. `--local-map` and `--in-pool` stay unclamped: a clamped run on a loaded box
+# stretches its window many times over, which holds the per-uid window slot that long and exposes the window to
+# other processes' report bursts. `both` stays unclamped. Without /usr/sbin/taskpolicy the run is unclamped, and
+# the drop guard and loss canary still omit a lossy window. core/fixtures/readset-sandbox-root-clause cells nq
+# and nl bind it.
+RS_QOS=""; RS_TASKPOLICY=/usr/sbin/taskpolicy
+rs_qos_decide() {
+  RS_QOS=""
+  if [ "$TRACER" = sandbox ] && [ -z "$LOCAL_MAP" ] && [ -x "$RS_TASKPOLICY" ]; then RS_QOS=1; fi
+}
+rs_qos() {
+  if [ -n "$RS_QOS" ]; then "$RS_TASKPOLICY" -c background "$@"; else "$@"; fi
+}
 sandboxed() {
   if [ "$TRACER" = both ]; then
     sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"
   elif [ -n "$LOCAL_MAP" ]; then
-    sandbox-exec -D FXTAG="$CUR_FX" -f "$PROFILE" "$@"
+    rs_qos sandbox-exec -D FXTAG="$CUR_FX" -f "$PROFILE" "$@"
   elif [ -n "${RS_NEST_PATH:-}" ] && [ "$1" = env ]; then
-    sandbox-exec -f "$PROFILE" env PATH="$RS_NEST_PATH" READSET_POOL_WIDTH=1 "${@:2}"
+    rs_qos sandbox-exec -f "$PROFILE" env PATH="$RS_NEST_PATH" READSET_POOL_WIDTH=1 "${@:2}"
   else
     sandbox-exec -f "$PROFILE" "$@"
   fi
@@ -1418,6 +1434,7 @@ if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
     RS_ESC=1; readset_write_nest_shim "$TRACE_ROOT/s" "$rs_ins" || die "cannot write the nest shim under $TRACE_ROOT/s"
     [ "$TRACER" = both ] || RS_NEST_PATH="$TRACE_ROOT/s:$PATH"
   fi
+  rs_qos_decide
   sandboxed true 2>"$WORK/sandbox-probe.err" </dev/null \
     || die "sandbox-exec refused the profile: $(head -1 "$WORK/sandbox-probe.err")"
 fi

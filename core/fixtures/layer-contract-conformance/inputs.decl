@@ -11,3 +11,4 @@ patterns/
 .claude/rules/
 +CLAUDE.md
 core/fixtures/lib/mutant.sh
+core/fixtures/*/inputs.decl

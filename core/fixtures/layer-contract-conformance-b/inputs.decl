@@ -4,11 +4,10 @@
 # selected, and a FIFO probe (CLAUDE.md replaced by a FIFO) found a selected run on the unmutated contract never opens
 # it, while the full run on the same tree did.
 # The validator walks the whole distribution tree and renders its arm map via render-invariant-index.sh --arm-lines <src>, which needs no root marker.
+# A complete sandbox trace of this shard opens no path under templates/, patterns/ or .claude/rules/.
 !scripts/validate-enforcement-map.sh
 scripts/
 # reason: core/ is walked by content -- the validator the parent run.sh runs (layer-contract-conformance/run.sh, in process) finds every core/*.sh and derives core/*/, scripts/validate-enforcement-map.sh:2476 and :3327.
 core/
-templates/
-patterns/
-.claude/rules/
 core/fixtures/lib/mutant.sh
+core/fixtures/*/inputs.decl

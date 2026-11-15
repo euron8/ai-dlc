@@ -24,3 +24,4 @@ core/git-hooks/
 core/ci-templates/
 templates/
 patterns/
+core/fixtures/*/inputs.decl

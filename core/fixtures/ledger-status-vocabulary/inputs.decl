@@ -11,3 +11,4 @@ patterns/
 .claude/rules/
 .ai-dlc-fixture-readsets.tsv
 core/fixtures/lib/mutant.sh
+core/fixtures/*/inputs.decl

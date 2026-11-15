@@ -620,11 +620,10 @@ fi
 #   backstop-left    T0 driven by the recover hook alone over a transcript showing the leave (G2's shape):
 #                    its backstop closes N and writes LEFT `noted`; a second recovery emits no note;
 #                    `record c1 PASS` at N re-opens N
-#   forced-statedir  AI_DLC_STATE_DIR=state for every hook and the checkpoint, the real chain: the
-#                    recover hook writes `.recover-fired` under the state dir, recover-gate reads it under
-#                    _bmad-output and never arms, so no breadcrumb exists; M1 stands down whenever the state
-#                    dir is not _bmad-output, so neither the whole Read of dev-story nor a later one of
-#                    code-review closes N or writes STEP (STEP was seeded by T0 before the variable was set)
+#   forced-statedir  as forced, with AI_DLC_STATE_DIR=state for every hook and the checkpoint and the
+#                    snapshot and .gate-checkpoint/ moved there: recover-gate reads `.recover-fired` under
+#                    the state dir, arms, and writes the breadcrumb there (and none under _bmad-output);
+#                    the compelled Read keeps N and consumes it; a whole Read of code-review closes N
 #   sub-forced       as forced, a teammate's PostToolUse on the forced Read lands before the lead's
 #   new-session      session T whole-reads dev-story -> kept (STEP is bound to S)
 #   rebind           T whole-reads create-story (rebinds), then dev-story -> closed
@@ -823,9 +822,9 @@ if [ -z "$_G3_SKIP" ]; then
           t="$(g3_fire "$d")"
           g3_pre "$d" "$d/state/pipeline-snapshot.md"
           g3_pre "$d" "$d/.claude/skills/ai-dlc/steps/dev-story.md"
-          t="$t/B$(g3_bc "$d")"
-          t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story S)")"
-          t="$t/$(g3_st "$d" "$(g3_rd "$d" code-review S)")" ;;
+          t="$t/B$([ -f "$d/state/.recover-satisfied" ] && echo y || echo n)$([ -f "$d/_bmad-output/.recover-satisfied" ] && echo y || echo n)"
+          t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story S)")/b$(g3_bc "$d")"
+          t="$t/$(g3_st "$d" "$(g3_rd "$d" code-review S)" code-review)" ;;
         new-session) t="$(g3_st "$d" "$(g3_rd "$d" dev-story T)")" ;;
         rebind)
           t="$(g3_st "$d" "$(g3_rd "$d" create-story T)")"
@@ -867,7 +866,7 @@ if [ -z "$_G3_SKIP" ]; then
       forced|forced-offset1) echo "NnRy/By/OyLnJ0Screate-story.S/bn/OnLyJ1Sdev-story.S|the real recover-gate wrote the breadcrumb on the compelled Read, the entry hook kept N and consumed it, and the next whole Read of dev-story closed N" ;;
       forced-noopen) echo "NnRn/By/OnLnJ0Sdev-story.S/bn/OyLnJ0Sdev-story.S/OnLyJ1Scode-review.S|with no gate open the compelled Read of dev-story records STEP there, so after N opens a whole re-read of dev-story keeps it, and a whole Read of code-review closes it" ;;
       backstop-left) echo "NyRn/Lcreate-storynoted/NnRn/OyLn|the recover hook's transcript backstop closed a gate the lead left, wrote LEFT already noted, a second recovery emits no note, and a record at N re-opens N" ;;
-      forced-statedir) echo "NnRy/Bn/OyLnJ0Screate-story.S/OyLnJ0Screate-story.S|under AI_DLC_STATE_DIR recover-gate never arms (it reads .recover-fired under _bmad-output), and M1 stands down there: neither the step Read the recovery names nor a later whole Read of another step closes N or writes STEP" ;;
+      forced-statedir) echo "NnRy/Byn/OyLnJ0Screate-story.S/bn/OnLyJ1Scode-review.S|under AI_DLC_STATE_DIR recover-gate arms on the marker under the state dir and writes the breadcrumb there, the entry hook keeps N on the compelled Read and consumes it, and a whole Read of code-review closes N" ;;
       sub-forced) echo "NnRy/By/OyLnJ0Screate-story.S/by/OyLnJ0Screate-story.S/bn|a teammate's Read leaves the breadcrumb and N in place for the lead's compelled Read, which then consumes it" ;;
       new-session) echo "OyLnJ0Screate-story.S|another session's whole Read of another step keeps N open" ;;
       rebind) echo "OyLnJ0Screate-story.T/OnLyJ1Sdev-story.T|session T's whole Read of the gate's step rebinds STEP to T, and T's whole Read of dev-story then closes N" ;;

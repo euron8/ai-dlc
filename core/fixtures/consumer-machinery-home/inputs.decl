@@ -8,3 +8,4 @@ scripts/
 templates/
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh
+core/fixtures/*/inputs.decl

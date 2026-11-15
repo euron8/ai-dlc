@@ -11,3 +11,4 @@ core/
 patterns/
 templates/
 core/fixtures/lib/report.sh
+core/fixtures/*/inputs.decl

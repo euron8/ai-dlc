@@ -1,5 +1,6 @@
 # Set from one counted run (scripts/seed-verdict-store.sh) after the batteries were removed; every row is exact.
-308 *
+# Re-measured for BL-1032 from one counted seed-verdict-store.sh run, 308 -> 309 (+1): world forced-statedir runs the real chain under AI_DLC_STATE_DIR and gains one more start.
+309 *
 0 core/hooks/ai-dlc-recover.sh
 0 core/hooks/ai-dlc-handoff-entry.sh
 0 core/hooks/ai-dlc-recover-gate.sh

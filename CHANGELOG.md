@@ -19,6 +19,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1132.0] - 2026-11-15
+
+### BL-1032 CLOSED: recover-gate honours AI_DLC_STATE_DIR; handoff-entry's M1 state-dir guard is lifted
+
+`core/hooks/ai-dlc-recover-gate.sh` resolves its state dir as `${PROJECT_DIR}/${AI_DLC_STATE_DIR:-_bmad-output}`, the form `ai-dlc-recover.sh` and `ai-dlc-handoff-entry.sh` use, so the gate's marker, progress, owed and `.recover-satisfied` files live where the other hooks read them. `ai-dlc-handoff-entry.sh` drops the guard that switched M1 off whenever the state dir was not `_bmad-output`, and M1's breadcrumb read drops the literal `_bmad-output/.recover-satisfied` half. `gate-resume` arm G3 world `forced-statedir` runs the real chain under `AI_DLC_STATE_DIR=state`. BL-1009 stays PARTIAL.
+
+### BL-1015 CLOSED: snapshot-update.sh --activity runs validate-held-stories.sh
+
+A call carrying `--activity` runs the sibling `validate-held-stories.sh --root <root> --snapshot <the snapshot it wrote>` after the write, with the lock released first, and prints its output under the success line. An absent validator or an exit 2 prints `held-stories NOT EVALUATED` with the reason. The exit stays 0 because the write has landed. `held-stories` gains arms `s3` and `s3n`.
+
+### BL-1038 CLOSED: validate-artifact-paths judges real path names under core.quotePath
+
+Each scan root is enumerated with `git ls-files -z` and split on NUL, so a non-ASCII or backslash path is judged by its bytes under both `core.quotePath` settings; a conforming `docs/retro/s322/café.md` is no longer BLOCKED in the consumer pre-push hook. A path holding a tab or newline is listed `%q`-quoted under REPORTED as UNSAFE-NAME and never BLOCKING.
+
+### BL-1001 CLOSED: audit-rule-files.sh decides an indefinite-subject `used to` by its head noun
+
+After `a/an` within four words, the head noun right before `used to` decides: only a head in the closed INSTRUMENT set reads as purpose. An unlisted purpose noun flags as a tier-2 NARRATIVE_DRIFT row. The tier-1 ORIGIN_PARENTHETICAL class clears a parenthetical whose only origin token is a purpose `used to`. CLAUSE_OPENER, FINITE_AFTER, SENT_END, CLAUSE_INIT, after_clause, article_opens_clause and the next-line plumbing are deleted. The NARRATIVE_DRIFT false-positive set is identical on the distribution and reference-consumer corpora.
+
+### BL-1088 filed and CLOSED: a fixture that reads its own comment lines is keyed on its whole run.sh
+
+`story-evidence-scaffold` reads its own `# CAPGUARD-BEGIN`, `# CAPGUARD-END` and `# CAPCALL-END` lines, which BL-1062's comment-stripped key dropped, so a push skipped it on a stale pass. Its `inputs.decl` now declares its own `run.sh`, so the composer keys it whole. The 20 fixtures that read the `inputs.decl` glob re-run once on this edit.
+
+### BL-1071 PARTIAL: another fixture's inputs.decl is keyed only by a fixture that names it
+
+`readset_decl_keys`' `dk` test, which kept a directory line from keying another fixture's `invocations.decl`, covers `inputs.decl` too, in both pre-push hooks. A fixture that reads every fixture's declaration declares it with a `core/fixtures/*/inputs.decl` line, which `readset_decl_parse` expands into one F row per matching file (`fixture-contract.md` C12). 19 declarers carry the line. `suite-content-key` gains arms `k8` and `k9`. Owed: complete traces for `fixture-git-env-seam` and `layer-contract-conformance`.
+
+### BL-1070 CLOSED: arm G compares a bundle's ledger sections with its members
+
+`scripts/validate-release-version.sh` gains arm G. A release whose subject opens with its version and names a bundle, or whose message has a `Members` paragraph, has its `docs/backlog.md`, `docs/backlog.archive.md` and `CHANGELOG.md` compared section by section against its parent and each member, with the member's version placeholder set to `v<VERSION>` on a `**LANDED`/`**PARTIAL` line the one acquitted substitution. A dropped member line, an edited status line, a wrong placeholder version and a memberless bundle fail. `release-version-triple` arms 25-26 run the whole program on a seeded two-member bundle.
+
+### BL-1068 and BL-584 PARTIAL: the plain read-set emitter's traced run is clamped to background QoS
+
+`core/scripts/derive-fixture-readsets.sh` launches each traced fixture of `--list`, `--all` and `--reconcile` under `taskpolicy -c background`, so a full-priority sweep no longer out-competes logd and loses its own reports; `--local-map` and `--in-pool` stay unclamped. `readset-sandbox-root-clause` gains cells `nq` and `nl`. `layer-contract-conformance-b/inputs.decl` drops `templates/`, `patterns/` and `.claude/rules/` on its accepted trace. Owed: complete traces for `layer-contract-conformance-b` and `layer-contract-conformance` at load, and BL-584's unnamed burst sender.
+
 ## [0.1131.0] - 2026-11-14
 
 ### BL-1058 CLOSED: a pre-suite step's pass survives another tree's record at other content

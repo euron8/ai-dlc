@@ -1476,6 +1476,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 3fc1c587525156eff1e5435a3cdcbe69102eb22d6c2df8f01d396caa35454186 bundle B1: the BL-1052 span rows and the BL-1057 counted #judge row together; neither changes an existing entry
 # VS-IDENTITY 1 28342ca57c853d53b8dfea1c1b7ed7e05593aba85c12e9aafe8c31e5d35ae89c a fixture's own run.sh keyed on its comment-stripped text where the executor parses both alike, a stored raw row of today's bytes reading as it (BL-1062); a + file narrowed by section.decl keyed on that section (BL-1061)
 # VS-IDENTITY 1 b2ec0b25c1096bc624ac08968284825ee5ec5aecd6f3f5540127caa1e7701f0c an entry may end in `#pending <n>` (BL-998); an entry without it is reused with its count unrecorded, so no existing entry changes meaning
+# VS-IDENTITY 1 786022459096dffaab204f2ccb876acf8a4f6d6f38fa1e237af948531f071c77 another fixture's inputs.decl is no longer keyed through a covering directory and a `<dir>/*/<name>` line expands to F rows (BL-1071); every row an existing entry carries keeps its value
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -1619,7 +1620,7 @@ readset_tail_sha() { # <file>: the top-level lines after its last line that is e
   awk '{ a[NR] = $0 } $0 == "}" { e = NR } END { for (i = e + 1; i <= NR; i++) print a[i] }' "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
 }
 readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix>
-  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" t k p rq dp name found seen="|"
+  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" t k p rq dp name found seen="|" ga gb gn gf ge
   printf '%s\tN\n' "$fx"
   awk -v fx="$fx" -v pl="$w.p" 'BEGIN { printf "" > pl } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
       r = 0; x = 0; while ((c = substr($0, 1, 1)) == "!" || c == "+") { if (c == "!") r = 1; else x = 1; $0 = substr($0, 2) }
@@ -1639,6 +1640,20 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
     awk -F'\t' 'NR == FNR { m[FNR] = $0; next } { p = m[FNR]; sub(/\/+$/, "", p); print $1 "\t" $2 "\t" p "\t" $4 "\t" $3 }' "$w.m" "$w.n" > "$w.r"
   else
     awk -F'\t' '{ print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $3 }' "$w.n" > "$w.r"
+  fi
+  # A `<dir>/*/<name>` LINE expands here, after mapping, into one F row per file on disk matching it, each carrying the
+  # line as its declared spelling. A fixture that reads every fixture's inputs.decl declares `core/fixtures/*/inputs.decl`.
+  # Any other `*` spelling, or one matching nothing, stays one row and is refused absf below.
+  if awk -F'\t' '$2 == "F" && index($3, "/*/") { f = 1 } END { exit f ? 0 : 1 }' "$w.r"; then
+    while IFS="$(printf '\t')" read -r t k p rq dp; do
+      ga="${p%%/\**}"; gb="${p##*/}"; gn=0
+      if [ "$k" = F ] && [ -n "$ga" ] && [ "$p" = "$ga/*/$gb" ]; then case "$ga$gb" in *\**) ;; *)
+        case $- in *f*) gf=1; set +f ;; *) gf=0 ;; esac
+        for ge in "$ga"/*/"$gb"; do [ -f "$ge" ] || continue; printf '%s\tF\t%s\t%s\t%s\n' "$t" "$ge" "$rq" "$dp"; gn=$((gn + 1)); done
+        [ "$gf" = 0 ] || set -f ;; esac; fi
+      [ "$gn" -gt 0 ] || printf '%s\t%s\t%s\t%s\t%s\n' "$t" "$k" "$p" "$rq" "$dp"
+    done < "$w.r" > "$w.g"
+    mv -f "$w.g" "$w.r"
   fi
   cat "$w.r"
   # Absent ON DISK under the root (the cwd): -f for a file, -d for a directory. A path on disk but outside the
@@ -1819,7 +1834,7 @@ readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture ro
       if (p in FF) { n = split(FF[p], a, "\n"); for (j = 2; j <= n; j++) out(a[j], p, v) }
       dk = ""
       if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1 && (substr(r, 1, i - 1) in FX)) out(substr(r, 1, i - 1), p, (p in SK) ? SK[p] : v)
-        if (r ~ /^[^\/]+\/invocations\.decl$/) dk = substr(r, 1, i - 1) }
+        if (r ~ /^[^\/]+\/(invocations|inputs)\.decl$/) dk = substr(r, 1, i - 1) }
       q = p
       while ((i = match(q, /\/[^\/]*$/)) > 0) { q = substr(q, 1, i - 1)
         if (!(q in DD)) continue

@@ -47,7 +47,9 @@ change. Building good arms is `fixture-mutants.md`'s; shipping is `fixture-ship-
 
 - **C12** `inputs.decl`: one root-relative path per line; a trailing `/` declares a directory (keyed on its listing
   and every file under it); a leading `!` is REQUIRED (C7); a leading `+` keys a file outside the universe; `#` and
-  blank lines are ignored. An absolute path, a `..`, `!+` together or `+` on a directory is refused. Enforcer:
+  blank lines are ignored. An absolute path, a `..`, `!+` together or `+` on a directory is refused. A directory
+  line never keys another fixture's `inputs.decl` or `invocations.decl`; a fixture that reads every fixture's
+  declaration declares `core/fixtures/*/inputs.decl`, which expands to one file row per match. Enforcer:
   `.githooks/pre-push` readset_decl_parse.
 - **C13** Declare the narrowest file or span the fixture reads, derived from
   `bash core/scripts/derive-fixture-readsets.sh --list "<f>" --tracer sandbox`, never hand-listed. A whole shared

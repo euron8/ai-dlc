@@ -24,6 +24,10 @@
 #   h8   a wave-2 story 2.2 held `until 1.3 passes gate 3` -> exit 0, 4 stories
 #   h9   `held: 2.1 ...` matches yaml key story-320-4 whose file is story-2-1-*.md -> exit 0
 #   h0   a `stories:` key with no entries (list-stories exit 0, empty output) -> exit 0, 0 stories
+#   s3   BL-1015, the sub-step site: the sibling snapshot-update.sh writes one --activity line into the
+#        h2 world -> the line is written, exit 0, and its output carries UNACCOUNTED story-320-4 (2.1)
+#        and the WAS-written line
+#   s3n  the same write into the h1 world -> exit 0 and the OK line, no UNACCOUNTED
 #   S1   implementation.md section 7 carries the validator's invocation line
 #   S2   ai-dlc-recover.sh's verification turn names every `held:` Open Item
 set -uo pipefail
@@ -32,17 +36,18 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
-VAL=""; SS=""; SCHEMA=""
+VAL=""; SS=""; SCHEMA=""; SU=""; VAB=""
 for d in "$ROOT/core/scripts" "$ROOT/scripts/ai-dlc"; do
-  if [ -f "$d/validate-held-stories.sh" ] && [ -f "$d/sprint-status.sh" ]; then
-    VAL="$d/validate-held-stories.sh"; SS="$d/sprint-status.sh"; break
+  if [ -f "$d/validate-held-stories.sh" ] && [ -f "$d/sprint-status.sh" ] && [ -f "$d/snapshot-update.sh" ] && [ -f "$d/validate-artifact-budget.sh" ]; then
+    VAL="$d/validate-held-stories.sh"; SS="$d/sprint-status.sh"; SU="$d/snapshot-update.sh"; VAB="$d/validate-artifact-budget.sh"; break
   fi
 done
 for s in "$ROOT/core/schemas/sprint-status.json" "$ROOT/.claude/schemas/sprint-status.json"; do
   [ -f "$s" ] && { SCHEMA="$s"; break; }
 done
-[ -n "$VAL" ] && [ -n "$SCHEMA" ] || { echo "FIXTURE ERROR: validate-held-stories.sh, sprint-status.sh and sprint-status.json not found together in either layout" >&2; exit 2; }
+[ -n "$VAL" ] && [ -n "$SCHEMA" ] || { echo "FIXTURE ERROR: validate-held-stories.sh, sprint-status.sh, snapshot-update.sh, validate-artifact-budget.sh and sprint-status.json not found together in either layout" >&2; exit 2; }
 printf 'HERMETIC-CONSUMED %s\nHERMETIC-CONSUMED %s\nHERMETIC-CONSUMED %s\n' "$VAL" "$SS" "$SCHEMA"
+printf 'HERMETIC-CONSUMED %s\nHERMETIC-CONSUMED %s\n' "$SU" "$VAB"
 # The sibling resolves its schema script-relative first; a mutant copy carries schemas/ beside it,
 # and the override makes both layouts read the one schema this fixture resolved.
 export AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA"
@@ -72,6 +77,7 @@ world() {
 snap() {
   {
     printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step_file: implementation.md\n\n'
+    printf '## Recent Activity\n\n'
     printf '## Open Items\n- fan-out round story-320-3 since 2026-10-27T21:14Z\n'
     [ -n "$2" ] && printf '%s\n' "$2"
     printf '\n## In-Flight Teammates\nteammate | role | deliverable | dispatched-at | status\n--- | --- | --- | --- | ---\n'
@@ -87,6 +93,13 @@ HOLD_KEY="- held: story-320-4 until the 2.1 tolerance amendment lands since $((N
 RC=""; OUT=""
 drive() { OUT="$(AI_DLC_PROJECT_ROOT="$2" bash "$1" --root "$2" 2>&1)"; RC=$?; }
 has() { grep -qxF -- "$1" <<<"$OUT"; }
+# su_drive <validator path> <world>: the snapshot-update.sh beside that validator writes one
+# --activity line into the world's snapshot (the sub-step site's story-transition write)
+ACT_LINE='2026-10-27T21:20Z story 2.1 transition observed'
+su_drive() {
+  OUT="$(AI_DLC_PROJECT_ROOT="$2" bash "$(dirname "$1")/snapshot-update.sh" --snapshot "$2/_bmad-output/pipeline-snapshot.md" --activity "$ACT_LINE" 2>&1)"; RC=$?
+  grep -qxF -- "- $ACT_LINE" "$2/_bmad-output/pipeline-snapshot.md"
+}
 
 # arm <program> <name> -> builds the arm's world, drives it, sets A_<name>=1 on the expected outcome
 arm() {
@@ -121,6 +134,11 @@ arm() {
          [ "$RC" = 0 ] && grep -q '^held-stories: OK -- 0 stories' <<<"$OUT" ;;
     h9)  world "$w" ready-for-dev; snap "$w" "- held: 2.1 until the 2.1 tolerance amendment lands since $((NOW - 600))" "$ROW_DELIV"; drive "$pr" "$w"
          [ "$RC" = 0 ] && grep -q '^held-stories: OK -- 3 stories' <<<"$OUT" ;;
+    s3)  world "$w" ready-for-dev; snap "$w" "" "$ROW_DELIV"; su_drive "$pr" "$w" \
+           && [ "$RC" = 0 ] && has 'UNACCOUNTED story-320-4 (2.1)' \
+           && grep -q '^snapshot-update: the snapshot WAS written; do not re-run this call' <<<"$OUT" ;;
+    s3n) world "$w" ready-for-dev; snap "$w" "$HOLD_KEY" "$ROW_DELIV"; su_drive "$pr" "$w" \
+           && [ "$RC" = 0 ] && grep -q '^held-stories: OK -- 3 stories' <<<"$OUT" && ! grep -q 'UNACCOUNTED' <<<"$OUT" ;;
     *)   return 1 ;;
   esac
 }
@@ -140,7 +158,9 @@ for spec in \
   "h7n|a 1h-old hold is quiet" \
   "h8|a wave-2 story held until 1.3 passes gate 3 is accounted" \
   "h9|held: 2.1 matches yaml key story-320-4 through its file stem" \
-  "h0|a sprint with no story entries (list-stories exit 0, empty) is clean with 0 stories"; do
+  "h0|a sprint with no story entries (list-stories exit 0, empty) is clean with 0 stories" \
+  "s3|snapshot-update.sh --activity on the h2 world writes the line, exits 0 and prints UNACCOUNTED story-320-4 (2.1)" \
+  "s3n|snapshot-update.sh --activity on the h1 world writes the line and prints the OK line, no UNACCOUNTED"; do
   n="${spec%%|*}"; msg="${spec#*|}"
   if arm "$VAL" "$n" ship; then ok "$n: $msg"; eval "A_$n=1"
   else bad "$n: $msg (rc=$RC: $(tr '\n' ' ' <<<"$OUT"))"; eval "A_$n=0"; fi
