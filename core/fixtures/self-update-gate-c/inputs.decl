@@ -18,3 +18,5 @@ core/fixtures/self-update-gate-d/run.sh
 core/fixtures/self-update-gate/run.sh
 core/fixtures/self-update-gate/seed.sh
 core/fixtures/lib/hook-drive.sh
+core/fixtures/lib/report.sh
+core/fixtures/lib/pool-span.sh

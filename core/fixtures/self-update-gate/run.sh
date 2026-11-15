@@ -18,6 +18,7 @@ set -u
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$DIR/../lib/hook-drive.sh" || { echo "FIXTURE BROKEN: cannot source lib/hook-drive.sh" >&2; exit 2; }
+. "$DIR/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 GATE=""; LOOKED=""
 for cand in \
@@ -134,12 +135,8 @@ case "$DIST" in
   *) echo "FIXTURE BROKEN: seed's DIST is not under ${TMPDIR:-/tmp}/self-update-gate-fx-*: $DIST" >&2; exit 2 ;;
 esac
 trap 'rm -rf "$(dirname "$DIST")"' EXIT
-FAILURES=0
-ASSERTIONS=0
-# ok() and bad() print only: every assertion site keeps its own ASSERTIONS/FAILURES accounting, so the
-# closing count is the number of assertion sites and a routed kill is counted exactly where it was.
-ok() { printf '  ok    %s\n' "$1"; }
-bad() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
+# Every assertion site reports through lib/report.sh's ok or bad, exactly once, so oks + fails is the number of
+# assertion sites that ran; a column-aligned label is formatted with printf -v first.
 echo "self-update-gate fixture"
 echo "MODE: PUSH"
 echo
@@ -156,19 +153,15 @@ if [ "$GROUP" = a ] && [ -z "${SG_SEED:-}" ]; then
   _smo="$(SG_SEED="$_sm/fail.sh" bash "$DIR/run.sh" --group a 2>&1)"; _smr=$?
   _sco="$(SG_SEED="$_sm/junk.sh" bash "$DIR/run.sh" --group a 2>&1)"; _scr=$?
   rm -rf "$_sm"
-  ASSERTIONS=$((ASSERTIONS + 1))
   if [ "$_smr" = 2 ] && grep -qF 'FIXTURE BROKEN: seed exited' <<< "$_smo"; then
-    printf '  ok    %-22s a seed that exits 1 reads FIXTURE BROKEN: seed exited, exit 2\n' "seed-fails"
+    printf -v _m '%-22s a seed that exits 1 reads FIXTURE BROKEN: seed exited, exit 2' "seed-fails"; ok "$_m"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s rc=%s want 2 and the text FIXTURE BROKEN: seed exited\n' "seed-fails" "$_smr"
+    printf -v _m '%-22s rc=%s want 2 and the text FIXTURE BROKEN: seed exited' "seed-fails" "$_smr"; bad "$_m"
   fi
-  ASSERTIONS=$((ASSERTIONS + 1))
   if [ "$_scr" = 2 ] && grep -qF 'FIXTURE BROKEN' <<< "$_sco" && ! grep -qF 'seed exited' <<< "$_sco"; then
-    printf '  ok    %-22s a seed that exits 0 with junk reads BROKEN without seed exited (the harness discriminates)\n' "seed-fails-ctl"
+    printf -v _m '%-22s a seed that exits 0 with junk reads BROKEN without seed exited (the harness discriminates)' "seed-fails-ctl"; ok "$_m"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s rc=%s want 2, FIXTURE BROKEN and no seed exited\n' "seed-fails-ctl" "$_scr"
+    printf -v _m '%-22s rc=%s want 2, FIXTURE BROKEN and no seed exited' "seed-fails-ctl" "$_scr"; bad "$_m"
   fi
 fi
 
@@ -238,9 +231,9 @@ git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c
 SS_R4="$(git -C "$SS/dist" rev-parse HEAD)"
 
 ss_assert() { # ss_assert <label> <got> <want> <why>
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if [ "$2" = "$3" ]; then printf '  ok    %-16s %s\n' "$1" "$4"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s got=[%s] want=[%s]  %s\n' "$1" "$2" "$3" "$4"; fi
+  local _m
+  if [ "$2" = "$3" ]; then printf -v _m '%-16s %s' "$1" "$4"; ok "$_m"
+  else printf -v _m '%-16s got=[%s] want=[%s]  %s' "$1" "$2" "$3" "$4"; bad "$_m"; fi
 }
 ss_stamp() { # ss_stamp <skill_commit|-> ; `-` removes the stamp
   if [ "$1" = "-" ]; then rm -f "$SS/cons/.claude/.ai-dlc-version"
@@ -414,21 +407,18 @@ OUT="$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
 RC=$?
 # $1 script  $2 expected STATUS (or ABSENT)  $3 why
 row() {
-  local s="$1" want="$2" why="$3" got
-  ASSERTIONS=$((ASSERTIONS + 1))
+  local s="$1" want="$2" why="$3" got _m
   got="$(printf '%s\n' "$OUT" | awk -F'\t' -v s="$s" '$2 == s {print $1; exit}')"
   if [ "$want" = ABSENT ]; then
     if [ -z "$got" ]; then
-      printf '  ok    %-16s no row  (%s)\n' "$s" "$why"
+      printf -v _m '%-16s no row  (%s)' "$s" "$why"; ok "$_m"
     else
-      FAILURES=$((FAILURES + 1))
-      printf '  FAIL  %-16s got=%s want=no-row  (%s)\n' "$s" "$got" "$why"
+      printf -v _m '%-16s got=%s want=no-row  (%s)' "$s" "$got" "$why"; bad "$_m"
     fi
   elif [ "$got" = "$want" ]; then
-    printf '  ok    %-16s %s  (%s)\n' "$s" "$got" "$why"
+    printf -v _m '%-16s %s  (%s)' "$s" "$got" "$why"; ok "$_m"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s got=%s want=%s  (%s)\n' "$s" "${got:-<none>}" "$want" "$why"
+    printf -v _m '%-16s got=%s want=%s  (%s)' "$s" "${got:-<none>}" "$want" "$why"; bad "$_m"
     printf '%s\n' "$OUT" | sed 's/^/          | /'
   fi
 }
@@ -451,22 +441,18 @@ row unchanged.sh   ABSENT "invoked but unchanged base->theirs, so the self-updat
 
 # UNDECIDED must be treated as a defer, or the caller proceeds autonomously on a failure nobody
 # could attribute — the one thing this gate exists to prevent.
-ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$OUT" | awk -F'\t' '$1 == "SELF-UPDATE-DEFER" && $2 == "-" {f=1} END{exit !f}'; then
-  printf '  ok    %-16s a summary DEFER row is emitted, so the caller cannot read past a per-script verdict\n' "summary-defer"
+  printf -v _m '%-16s a summary DEFER row is emitted, so the caller cannot read past a per-script verdict' "summary-defer"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-16s no summary DEFER row — a caller scanning only the last line would proceed\n' "summary-defer"
+  printf -v _m '%-16s no summary DEFER row — a caller scanning only the last line would proceed' "summary-defer"; bad "$_m"
 fi
 
 # Classifier, not a gate: the CALLER decides. (layer-drift.sh shares the classifier posture but
 # exits 2 when a row could not be written; this script has no such exit.)
-ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$RC" -eq 0 ]; then
-  printf '  ok    %-16s exit 0  (classifier never blocks; the caller decides)\n' "exit-code"
+  printf -v _m '%-16s exit 0  (classifier never blocks; the caller decides)' "exit-code"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-16s exit=%s want=0\n' "exit-code" "$RC"
+  printf -v _m '%-16s exit=%s want=0' "exit-code" "$RC"; bad "$_m"
 fi
 
 
@@ -2615,7 +2601,10 @@ if [ -z "$PU_TK_HOOK" ] || ! grep -q '^readset_tools() ' "$PU_TK_HOOK"; then
   printf '  SKIP  pu-readset-*   no pre-push hook with readset_tools in either layout yet\n'
 else
   PU_TK_P="$PU_D/tk.pool.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$PU_TK_HOOK" > "$PU_TK_P"
+  # pool_span's first line defaults the store to <world>.verdicts, so the world's pool run and its hook file no
+  # record in the real verdict store.
+  . "$DIR/../lib/pool-span.sh" || broken "cannot source lib/pool-span.sh"
+  pool_span "$PU_TK_HOOK" "$PU_TK_P" FIXTURE_POOL || broken "pool_span could not extract the FIXTURE_POOL span from $PU_TK_HOOK"
   PU_TK_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$PU_TK_P" | sort -u)"
   PU_TK_PLAIN="/usr/bin:/bin:/usr/sbin:/sbin"
   # pu_tk_world <name> <pool>: a pu world whose su commit adds fixture fa reading src/t.sh, a script
@@ -2692,9 +2681,9 @@ rm -rf "$SG"
 fi
 # --- SHARD d HELPER (qw mp av hk): sd_assert returns the verdict, 0 when got == want.
 sd_assert() { # sd_assert <label> <got> <want> <why> -> 0 when got == want
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if [ "$2" = "$3" ]; then printf '  ok    %-16s %s\n' "$1" "$4"; return 0; fi
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s got=[%s] want=[%s]  %s\n' "$1" "$2" "$3" "$4"; return 1
+  local _m
+  if [ "$2" = "$3" ]; then printf -v _m '%-16s %s' "$1" "$4"; ok "$_m"; return 0; fi
+  printf -v _m '%-16s got=[%s] want=[%s]  %s' "$1" "$2" "$3" "$4"; bad "$_m"; return 1
 }
 if sg qw; then
 # --- A NON-ASCII PATH IS LISTED RAW AND READ BY ITS RAW NAME (BL-364) ---------------------------
@@ -3403,9 +3392,9 @@ fi
 if sg hu2; then
 # The signature, scored in THIS shard.
 if [ "$(hu_sig "$GATE")" = "$HU_SIG_FIX" ]; then
-  ASSERTIONS=$((ASSERTIONS + 1)); ok "hu2-signature    an unchanged script the new hook asks is judged by the copy the push runs, on every world the hu2 mutants are scored on"
+  ok "hu2-signature    an unchanged script the new hook asks is judged by the copy the push runs, on every world the hu2 mutants are scored on"
 else
-  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s hu_sig drifted from HU_SIG_FIX\n' "hu2-signature"
+  printf -v _m '%-16s hu_sig drifted from HU_SIG_FIX' "hu2-signature"; bad "$_m"
 fi
 # THE STACK BALANCES ON THE SHIPPED HOOK: scanning it ends at if-frame depth 0.
 HU_REAL=""
@@ -3526,11 +3515,6 @@ ss_assert "sh-step" "$(av_st "$SH_S" sa-step.sh) $(av_st "$SH_S" sa-steptrue.sh)
 fi
 rm -rf "$AV"
 
-echo "$NAME: shard $GROUP ran $ASSERTIONS assertions"
+echo "$NAME: shard $GROUP ran $((oks + fails)) assertions"
 echo
-if [ "$FAILURES" -gt 0 ]; then
-  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
-  exit 1
-fi
-echo "PASS: all $ASSERTIONS assertions correct."
-exit 0
+report_end "$NAME"

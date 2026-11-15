@@ -50,13 +50,13 @@ if [ ! -f "$VAL" ]; then
   exit 0
 fi
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
-# fx_inproc (one row per in-process vem_entry pass, BL-982) comes from lib/mutant.sh, which refuses to load
-# without ok() and bad(); this file defines neither, so it is sourced behind stubs that are then removed. It is
-# exported because every pass runs in an xargs bash -c worker below.
+# ok, bad and report_end come from lib/report.sh, sourced before lib/mutant.sh. fx_inproc (one row per in-process
+# vem_entry pass, BL-982) comes from lib/mutant.sh; it is exported because every pass runs in an xargs bash -c worker
+# below.
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "ledger-status-vocabulary: FIXTURE ERROR -- lib/report.sh not found beside $DIR" >&2; exit 2; }
 [ -f "$DIR/../lib/mutant.sh" ] || { echo "ledger-status-vocabulary: FIXTURE ERROR -- lib/mutant.sh not found beside $DIR" >&2; exit 2; }
-ok() { :; }; bad() { :; }
 . "$DIR/../lib/mutant.sh"
-unset -f ok bad
 export -f fx_inproc
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
@@ -91,7 +91,6 @@ LR="core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
 SK="core/skills/ai-dlc-update/SKILL.md"
 ER="core/skills/ai-dlc-update/reconcile/emit-report.sh"
 
-FAILURES=0
 BROKEN=0
 ASSERTIONS=0
 
@@ -324,8 +323,7 @@ while IFS=$'\t' read -r kind label file want want_n why; do
   # absence means the pool dropped the job — which otherwise contributes exactly what a
   # passing assertion contributes: nothing.
   if [ ! -f "$OUTD/$label.done" ]; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-20s produced no verdict — the pool dropped work, and a short green run reads exactly like a passing one\n' "$label"
+    bad "$(printf '%-20s produced no verdict — the pool dropped work, and a short green run reads exactly like a passing one' "$label")"
     continue
   fi
 
@@ -338,10 +336,9 @@ while IFS=$'\t' read -r kind label file want want_n why; do
   fi
 
   if [ -f "$OUTD/$label.state" ]; then
-    FAILURES=$((FAILURES + 1))
     case "$kind" in
-      half-rename) printf '  FAIL  %-20s the rename revert matched nothing — SKILL.md no longer carries the status this asserts on\n' "$label" ;;
-      *)           printf '  FAIL  %-20s the mutation matched nothing, so this assertion is unproven\n' "$label" ;;
+      half-rename) bad "$(printf '%-20s the rename revert matched nothing — SKILL.md no longer carries the status this asserts on' "$label")" ;;
+      *)           bad "$(printf '%-20s the mutation matched nothing, so this assertion is unproven' "$label")" ;;
     esac
     continue
   fi
@@ -353,31 +350,27 @@ while IFS=$'\t' read -r kind label file want want_n why; do
   case "$kind" in
     twinpass)
       if [ "$rc" = "0" ] && [ "$n" -eq 0 ] && [ "$(cat "$OUTD/$label.twin" 2>/dev/null)" = same ] && grep -q '^OK: ' "$OUTD/$label.cso"; then
-        printf '  ok    %-20s the program answers a clean copy exactly as the in-process entry does  (stdout, stderr, exit)\n' "$label"
+        ok "$(printf '%-20s the program answers a clean copy exactly as the in-process entry does  (stdout, stderr, exit)' "$label")"
       else
-        FAILURES=$((FAILURES + 1))
-        printf '  FAIL  %-20s the passing CLI twin differs from the in-process answer (%s) or is not a pass\n' "$label" "$(cat "$OUTD/$label.twin" 2>/dev/null)"
+        bad "$(printf '%-20s the passing CLI twin differs from the in-process answer (%s) or is not a pass' "$label" "$(cat "$OUTD/$label.twin" 2>/dev/null)")"
       fi ;;
     fires)
       if [ "$label" = emit-undocumented ]; then
         ASSERTIONS=$((ASSERTIONS + 1))
         if [ "$(cat "$OUTD/$label.twin" 2>/dev/null)" = same ] && [ "$rc" = 1 ] && grep -qF "$want" <<<"$(cat "$OUTD/$label.cso" "$OUTD/$label.cse")"; then
-          printf '  ok    %-20s twin: the program refuses a mutant exactly as the in-process entry does  (stdout, stderr, exit 1)\n' "cli-refuse"
+          ok "$(printf '%-20s twin: the program refuses a mutant exactly as the in-process entry does  (stdout, stderr, exit 1)' "cli-refuse")"
         else
-          FAILURES=$((FAILURES + 1))
-          printf '  FAIL  %-20s the refusing CLI twin differs from the in-process answer (%s)\n' "cli-refuse" "$(cat "$OUTD/$label.twin" 2>/dev/null)"
+          bad "$(printf '%-20s the refusing CLI twin differs from the in-process answer (%s)' "cli-refuse" "$(cat "$OUTD/$label.twin" 2>/dev/null)")"
         fi
       fi
       if ! grep -qF "$want" <<<"$out"; then
-        FAILURES=$((FAILURES + 1))
-        printf '  FAIL  %-20s I39 did NOT fire  (%s)\n' "$label" "$why"
+        bad "$(printf '%-20s I39 did NOT fire  (%s)' "$label" "$why")"
         printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -3
       elif [ -n "$want_n" ] && [ "$n" -ne "$want_n" ]; then
-        FAILURES=$((FAILURES + 1))
-        printf '  FAIL  %-20s fired, but the run produced %s failures (want %s) — the assertions are entangled and one of them is vacuous\n' "$label" "$n" "$want_n"
+        bad "$(printf '%-20s fired, but the run produced %s failures (want %s) — the assertions are entangled and one of them is vacuous' "$label" "$n" "$want_n")"
         printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -4
       else
-        printf '  ok    %-20s fires  (%s)\n' "$label" "$why"
+        ok "$(printf '%-20s fires  (%s)' "$label" "$why")"
       fi ;;
 
     near-miss)
@@ -395,18 +388,15 @@ while IFS=$'\t' read -r kind label file want want_n why; do
       # "puts 'NAMED-UPSTREAM' in front" cannot be satisfied by a message about
       # 'NAMED-UPSTREAM-AMBIGUOUS', because the closing quote follows the token immediately.
       if [ "$bare" -ne 1 ] || [ "$delim" -ne 0 ]; then
-        FAILURES=$((FAILURES + 1))
-        printf '  FAIL  %-20s this is no longer a NEAR-MISS (bare substring present=%s, backticked present=%s) — it now proves only what step8-undisposed proves, and the delimiters are unguarded\n' "$label" "$bare" "$delim"
+        bad "$(printf '%-20s this is no longer a NEAR-MISS (bare substring present=%s, backticked present=%s) — it now proves only what step8-undisposed proves, and the delimiters are unguarded' "$label" "$bare" "$delim")"
       elif ! grep -qF "heading puts 'NAMED-UPSTREAM' in front of the operator, but SKILL.md step 8" <<<"$out"; then
-        FAILURES=$((FAILURES + 1))
-        printf '  FAIL  %-20s I39 did NOT report NAMED-UPSTREAM undispositioned while step 8 disposes only NAMED-UPSTREAM-AMBIGUOUS. If the other arms above fired, the step-8 predicate has lost its backtick delimiters and is now closing on a disposition written for a different row; if they went quiet too, read the control first\n' "$label"
+        bad "$(printf '%-20s I39 did NOT report NAMED-UPSTREAM undispositioned while step 8 disposes only NAMED-UPSTREAM-AMBIGUOUS. If the other arms above fired, the step-8 predicate has lost its backtick delimiters and is now closing on a disposition written for a different row; if they went quiet too, read the control first' "$label")"
         printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -3
       elif [ "$n" -ne 1 ]; then
-        FAILURES=$((FAILURES + 1))
-        printf '  FAIL  %-20s fired, but the run produced %s failures (want 1) — the assertions are entangled and one of them is vacuous\n' "$label" "$n"
+        bad "$(printf '%-20s fired, but the run produced %s failures (want 1) — the assertions are entangled and one of them is vacuous' "$label" "$n")"
         printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -4
       else
-        printf '  ok    %-20s fires  (a step 8 disposing only NAMED-UPSTREAM-AMBIGUOUS still owes NAMED-UPSTREAM, which a bare-substring predicate cannot say)\n' "$label"
+        ok "$(printf '%-20s fires  (a step 8 disposing only NAMED-UPSTREAM-AMBIGUOUS still owes NAMED-UPSTREAM, which a bare-substring predicate cannot say)' "$label")"
       fi ;;
 
     half-rename)
@@ -414,10 +404,9 @@ while IFS=$'\t' read -r kind label file want want_n why; do
       grep -qF "emits 'NAMED-UPSTREAM' but SKILL.md step 3f never documents it" <<<"$out" && fwd=1
       grep -qF "documents 'NAMED-ABSORBED' but ledger-reverify.sh never emits it" <<<"$out" && rev=1
       if [ "$fwd" -eq 1 ] && [ "$rev" -eq 1 ]; then
-        printf '  ok    %-20s both directions fire and name both tokens  (the half-done rename is rejected)\n' "$label"
+        ok "$(printf '%-20s both directions fire and name both tokens  (the half-done rename is rejected)' "$label")"
       else
-        FAILURES=$((FAILURES + 1))
-        printf '  FAIL  %-20s half-done rename not fully caught (forward=%s reverse=%s)\n' "$label" "$fwd" "$rev"
+        bad "$(printf '%-20s half-done rename not fully caught (forward=%s reverse=%s)' "$label" "$fwd" "$rev")"
         printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -4
       fi ;;
   esac
@@ -428,9 +417,4 @@ if [ "$BROKEN" -gt 0 ]; then
   echo "FIXTURE BROKEN: $BROKEN run(s) could not be built, so those assertions tested nothing." >&2
   exit 2
 fi
-if [ "$FAILURES" -gt 0 ]; then
-  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
-  exit 1
-fi
-echo "PASS: all $ASSERTIONS assertions correct."
-exit 0
+report_end ledger-status-vocabulary 12

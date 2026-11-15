@@ -3,8 +3,9 @@
 # directory holding one is declared whole: an undeclared script would read as a deletion in that diff.
 # lib rows derived from procsub-staged-refusal/run.sh:2 (preamble.sh).
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh
 core/hooks/
-# reason: core/scripts/ is enumerated -- the spelling arm diffs every core/*.sh outside core/fixtures/ in the seeded repo, and core/fixtures/procsub-staged-refusal/run.sh:2023.
+# reason: core/scripts/ is enumerated -- the spelling arm diffs every core/*.sh outside core/fixtures/ in the seeded repo, and core/fixtures/procsub-staged-refusal/run.sh:2022.
 core/scripts/
 core/session-driver/
 core/skills/

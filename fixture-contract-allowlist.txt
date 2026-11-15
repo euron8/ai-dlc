@@ -5,12 +5,7 @@
 # its row in the same change; a row the origin/main copy lacks fails the push.
 apply-restamp-worklist:report	defines its own ok/bad; predates lib/report.sh
 backlog-receipt-traced-removal:report	defines its own ok/bad; predates lib/report.sh
-hermetic-runner:report	defines its own ok/bad; predates lib/report.sh
 ledger-reverify:report	defines its own ok/bad; predates lib/report.sh
-ledger-status-vocabulary:report	defines its own ok/bad; predates lib/report.sh
 plan-rotate:report	defines its own ok/bad; predates lib/report.sh
-procsub-staged-refusal:report	defines its own ok/bad; predates lib/report.sh
 readset-skip:report	defines its own ok/bad; predates lib/report.sh
 reconcile-emit-report:report	defines its own ok/bad; predates lib/report.sh
-self-update-gate:report	defines its own ok/bad; predates lib/report.sh
-suite-pole-info:report	defines its own ok/bad; predates lib/report.sh

@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1141.0] - 2026-11-15
+
+### BL-1130 PARTIAL: three more fixtures extract the pre-push pool through `pool_span`
+
+hermetic-runner, seed-verdict-store-red-print and self-update-gate extract FIXTURE_POOL through `core/fixtures/lib/pool-span.sh`, and their 3 rows are dropped from `scripts/pool-span-allowlist.txt`.
+
+### BL-1056 PARTIAL: five more fixtures report through `lib/report.sh`
+
+hermetic-runner, self-update-gate, ledger-status-vocabulary, procsub-staged-refusal and suite-pole-info report through `core/fixtures/lib/report.sh`. `fixture-contract-allowlist.txt` is its header plus `validate-fixture-hygiene.sh --derive-h10`: 6 rows. Each fixture's verdict and assertion count are unchanged from base to tip.
+
+### BL-1132 archive pointer
+
+BL-1132's archived body names 13 F-2 and 19 F-2 as UNIQUE-unverified at `step-value-stories-adversarial-s321.md` `:230` and `:235`.
+
 ## [0.1140.0] - 2026-11-15
 
 ### BL-1114 CLOSED: the census records into no per-pair store

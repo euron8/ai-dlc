@@ -157,10 +157,10 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/procsub-staged-refusal.XXXXXX")" || { echo "FIXT
 W="$(cd "$W" && pwd)"
 trap 'chmod -R u+rwX "$W" 2>/dev/null; rm -rf "$W"' EXIT
 
-fails=0
-# ok and bad also drop any stub function the arm just driven left defined (stub_clear is defined with mkstub; before it exists the guard is a no-op).
-ok()   { printf '  ok    %s\n' "$1"; declare -F stub_clear >/dev/null 2>&1 && stub_clear; return 0; }
-bad()  { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); declare -F stub_clear >/dev/null 2>&1 && stub_clear; return 0; }
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A stub function an arm leaves defined is dropped by run_arm's stub_clear after the arm, and by mkstub before it
+# builds the next stub.
 skip() { printf '  SKIP  %s\n' "$1"; }
 
 gitq() { git -c user.email=f@x -c user.name=fixture -c commit.gpgsign=false "$@"; }
@@ -1978,8 +1978,7 @@ fi
 if [ "$SELF_TREE" -ne 1 ]; then
   skip "spelling arm -- it runs only against this fixture's own tree, not $TREE"
   echo
-  if [ "$fails" -eq 0 ]; then echo "procsub-staged-refusal: PASS"; exit 0; fi
-  echo "procsub-staged-refusal: $fails assertion(s) FAILED" >&2; exit 1
+  report_end procsub-staged-refusal
 fi
 
 if sg spell; then
@@ -2289,6 +2288,4 @@ fi
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
-echo "$NAME: $fails assertion(s) FAILED" >&2
-exit 1
+report_end "$NAME"

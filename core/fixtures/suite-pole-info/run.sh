@@ -46,9 +46,8 @@ if [ ! -s "$T/fn.sh" ] || ! grep -q '^pole_info_step() {' "$T/fn.sh"; then
   echo "FIXTURE BROKEN: pole_info_step could not be extracted from $HOOK"; exit 2
 fi
 
-rc=0
-ok()  { printf 'ok    %s\n' "$*"; }
-bad() { printf 'FAIL  %s\n' "$*"; rc=1; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # run_case <fn-file> -> the line the function prints, in a subshell so its globals cannot leak.
 run_case() { ( . "$1"; pole_info_step ); }
 
@@ -150,5 +149,4 @@ expect "10 summed cost / width exceeds the pole: THROUGHPUT-BOUND" 10
 expect "11 summed cost / width equals the pole: POLE-BOUND" 11
 expect "12 a width that is not a count names no bound" 12
 
-[ "$rc" -eq 0 ] && echo "PASS  suite-pole-info -- 11 arms"
-exit "$rc"
+report_end suite-pole-info 11
