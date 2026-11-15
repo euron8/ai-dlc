@@ -379,8 +379,13 @@ readset_reconcile_list() {
 rs_top_reconcile() {
 if [ "$RECONCILE" = 1 ]; then
   [ "$HAVE_UNIVERSE" = 1 ] || die "--reconcile needs the READSET_UNIVERSE span of $RUNNER to judge a changed read set, and it has none -- update the hook first"
+  grep -qx '# RECORD_HOME_BEGIN' "$RUNNER" || die "--reconcile needs the RECORD_HOME span of $RUNNER to find the key records, and it has none -- update the hook first"
   RC_S="$(mktemp -d "${TMPDIR:-/tmp}/readset-reconcile.XXXXXX")" || die "mktemp failed"
-  ( cd "$REPO_ROOT" && readset_reconcile_list "$FIXTURE_ROOT" "${GITCOMMON:-.git}/ai-dlc-fixture-keys" "$RC_S/l" ) > "$RC_S/list" \
+  # THE KEY RECORDS' HOME IS THE RUNNER'S RECORD_HOME span, sourced with READSET_VS by their sentinels. A store that
+  # is OFF names an absent directory, which reads as "no record yet".
+  ( cd "$REPO_ROOT" && eval "$(sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p;/^# RECORD_HOME_BEGIN$/,/^# RECORD_HOME_END$/p' "$RUNNER")" \
+      && rec_home RC_KD fixture-keys \
+      && readset_reconcile_list "$FIXTURE_ROOT" "$RC_KD" "$RC_S/l" ) > "$RC_S/list" \
     || die "--reconcile could not derive its list (see above); nothing traced"
   if [ ! -s "$RC_S/list" ]; then
     echo "nothing to reconcile"

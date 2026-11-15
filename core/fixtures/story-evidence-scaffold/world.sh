@@ -114,8 +114,8 @@ EOV
     rfch) printf '%s\n' '`pytest -q > out.txt; pytest -k foo` 3 passed' ;;
     rfchnm) printf '%s\n' '`pytest -q > out.txt` 3 passed' ;;
     rfchnm2) printf '%s\n' '`pytest -q; pytest -q` 3 passed' ;;
-    rfd1) printf '%s\n' 'pytest -q -k foo, working directory `backend/`, 12 passed' ;;
-    rfd1nm) printf '%s\n' 'pytest -q, working directory `backend/`' ;;
+    rfd1) printf '%s\n' 'pytest -q -k foo, working directory `./`, 12 passed' ;;
+    rfd1nm) printf '%s\n' 'pytest -q, working directory `./`' ;;
     rfrd) printf '%s\n' '`pytest -q 1>out.txt -k foo` 3 passed' ;;
     rfa1) printf '%s\n' '`pytest -q --junitxml "a; b.xml"` 3 passed' ;;
     rfa2) printf '%s\n' '`pytest -q --reruns 1` 3 passed' ;;
@@ -422,6 +422,8 @@ EOS
     # wv957rundir: a bare real run with a backticked directory and NO count, a run by the opening-command arm
     # alone -- accepted. wv957cocomma / wv957cosemi: the token followed by `,` and by `;` (the boundary is any
     # character outside [A-Za-z0-9_-]) -- refused. wv957covcomma: `--cov,` the same way, a run -- accepted.
+    # The two accepted runs record the directory `./`: a recorded relative subdirectory would be refused by its
+    # own rule (validate-handoff-evidence.sh, RECORDED WORKING DIRECTORY), which is not these worlds' subject.
     # wv957coalias: `--collectonly`, pytest's third spelling of the one option, with its count -- refused.
     wv957coalias) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest --collectonly -q` 12 tests collected"); print }' || return 2 ;;
     # wv957coopenrun: a bare collect-only invocation opening the value, then a backticked real run that rf_span reads
@@ -431,12 +433,12 @@ EOS
     wv957codollarrun) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `backend/` $ pytest --co -q; then `pytest -q` 3 passed"); print }' || return 2 ;;
     wv957cocomma) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --collect-only, working directory `backend/`"); print }' || return 2 ;;
     wv957cosemi) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --co; in `backend/`"); print }' || return 2 ;;
-    wv957covcomma) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --cov, working directory `backend/`"); print }' || return 2 ;;
+    wv957covcomma) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --cov, working directory `./`"); print }' || return 2 ;;
     wv957codir) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --collect-only -q, working directory `backend/`"); print }' || return 2 ;;
     wv957codollardir) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: $ pytest --co -q (in `backend/`)"); print }' || return 2 ;;
     wv957codollarmid) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: in `backend/`: $ pytest --co -q"); print }' || return 2 ;;
     wv957cospan) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: in `backend/`: `pytest --co -q`"); print }' || return 2 ;;
-    wv957rundir) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest -q, working directory `backend/`"); print }' || return 2 ;;
+    wv957rundir) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest -q, working directory `./`"); print }' || return 2 ;;
     wv957cobt) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest --collect-only -q` from the root, 12 tests collected"); print }' || return 2 ;;
     wv957cobare) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --collect-only -q from the worktree root, 12 tests collected"); print }' || return 2 ;;
     wv957codollar) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: $ pytest --co -q"); print }' || return 2 ;;

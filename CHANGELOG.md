@@ -19,6 +19,32 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1136.0] - 2026-11-15
+
+### BL-1115 CLOSED: pass and key records leave the per-clone git dir
+
+Each pass and key record now lives at `<verdict store base>/<kind>/<repository root commit>`, so every clone and worktree of one repository reads and writes the same records. Both pre-push hooks (one byte-identical span, I66), `scripts/pregate-self-check.sh`, `scripts/predict-push-set.sh` and `core/scripts/derive-fixture-readsets.sh` resolve the new path, and the hook imports a legacy per-clone record into the shared base (`rec_import`). `scripts/validate-verdict-identity.sh` admits that import as its own writer class, and `core/scripts/hermetic-run.sh`'s header names the new path. The fixtures that drive them change with it. `CLAUDE.md` names the new location, and `operator-rulings.md` no longer lists BL-1115 as owed.
+
+### BL-1124 PARTIAL: the push says whether its suite is throughput-bound or pole-bound
+
+`pole_info_step` in `.githooks/pre-push` prints a THROUGHPUT-BOUND or POLE-BOUND line from summed unit cost over width against the longest unit, with no added fork. The two dist-hook dispatch headers are reworded to match. Parts (c), (d) and (e) stay owed.
+
+### BL-583 PARTIAL: duplicate checks retired from the pole fixtures
+
+readset-skip, derived-fence-binding and check-24-adversarial-convergence (shards a, d, e and f) drop checks another arm already holds, with their invocation rows set from counted runs. BL-982 is checked and carried; BL-1014 is withdrawn, its subject having been deleted in 0.1130.0.
+
+### BL-397 PARTIAL: a full-collection run recorded in a subdirectory is refused
+
+`core/scripts/validate-handoff-evidence.sh` reads a relative `working directory` or `cwd` annotation on an accepted run as `cd "<dir>" &&` before the run-span invocation and judges it with `record-only-diff.sh run-filter` and the conventions, so a run recorded only from a subdirectory reads as full-collection-filtered. `core/team-roles/qa.md` gains the matching REJECT bullet. The unjudged shapes are named in the validator header and the entry.
+
+### BL-994 CLOSED: the harness's non-blocking ask is measured
+
+The entry records the measurement on Claude Code 2.1.325.
+
+### Backlog
+
+BL-878 attributes the three fixture-row moves 0.1135.0 made; BL-584 and BL-1068 record a push-load trace measurement, and BL-584 the readset `--list` guard it needs. All three stay PARTIAL. BL-1125, BL-1126, BL-1127, BL-1128, BL-1129 and BL-1130 are filed.
+
 ## [0.1135.0] - 2026-11-15
 
 ### BL-1113 CLOSED: per-push can-fail proofs of fixture-internal predicates dropped

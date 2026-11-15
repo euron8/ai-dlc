@@ -287,6 +287,7 @@ hook_dump() {
   local blk="$3.blk"
   sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$2" > "$blk"
   ( cd "$1" && export AI_DLC_READSET_LIVE_TRACE=0 && . "$blk" && o="$3" && mkdir -p "$o" \
+    && KEYS_DIR="$1/.git/ai-dlc-fixture-keys" && VERIFIED_RECORD="$1/.git/ai-dlc-fixture-verified" \
     && printf '%s\n' "$FXR/probe/" > "$o/list" && readset_manifest "$o" && readset_local_validate "$o/list" "$o" \
     && readset_keys "$o/list" "$o" ) >/dev/null 2>&1
 }

@@ -2,6 +2,8 @@
 # Exact (BL-868): the fx_drive and fw_drive stop-at-first-leak drives now run a fixed number of launches.
 # +18 for the forced-day psfailpad world (BL-868): 8 pj_evals x (judge + ps stub), and 2 ps-stub writer runs.
 # BL-1081: (t4w) and its sleeptrap mutant probe the extracted watchdog (one stub sleep start each) instead of 10 forced-window traces each (one deriver stub start per trace): 502 to 484 and 82 to 62, one counted run.
-291 *
+# BL-1115: +2, the tk.xp world's git shim (7 to 9): RECORD_HOME resolves the root commit once per pool load, one counted run against origin/main's 291.
+# BL-583: tk and dg run no worlds on the second hook (its FXROOT is ckw (d, wiring)'s): 291 to 275, one counted run.
+277 *
 0 core/git-hooks/pre-push
 45 core/scripts/derive-fixture-readsets.sh

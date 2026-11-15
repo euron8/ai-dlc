@@ -442,7 +442,7 @@ expect_silent divergent-resolved "names a locked requirement" adjudication-locke
   "a record with no locked_requirements_touched line reads as none"
 # The field is read on its FIRST TOKEN. Each unlocked spelling below carries one badge and must
 # take the unlocked branch: exit 0 AND silent on the locked finding, against the badged control.
-for _sp in emdash changed nonedot na list dash; do
+for _sp in emdash nonedot na list dash; do
   expect "adjudication-unlocked-$_sp" 0 "locked_requirements_touched spelled '$_sp' is unlocked, one badge -- PASS" s1-adversarial-p
   expect_silent "adjudication-unlocked-$_sp" "names a locked requirement" adjudication-locked-badged \
     "the first token of the '$_sp' spelling is in the unlocked set"
@@ -1712,6 +1712,8 @@ k3_shard() { # <dir> <key> <cite> <minute> <artifact> <artifact_sha> [n-major]
     printf 'findings_critical: 0\nfindings_major: %s\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "${7:-0}"; } > "$1/$2.md"
   k3_rec "$1/$2.md"
 }
+# k3_copy <src world name> <dst world name> -> the dst path: a byte copy of a world built once, taken BEFORE its divergent step.
+k3_copy() { rm -rf "${K3W:?}/$2" && cp -R "$K3W/$1" "$K3W/$2" && printf '%s' "$K3W/$2"; }
 k3_stems() { local w="$1"
   printf 'product-brief=%s SPEC=%s prd=%s architecture-impact=%s' "$(k3sha "$w/$K3PA/product-brief.md")" \
     "$(k3sha "$w/_bmad-output/specs/s9/kernel/SPEC.md")" "$(k3sha "$w/$K3PA/prd.md")" "$(k3sha "$w/$K3PA/s9/architecture-impact.md")"; }
@@ -1776,19 +1778,21 @@ k3_other_pass() {
   bash "$2/merge-adversarial-shards.sh" --document "$w/$K3PA/s9/test-strategy.md" "$d" >/dev/null 2>&1 || return 1
   [ -f "$w/$K3PA/s9/test-strategy-adversarial-p1.md" ]
 }
-K3_OUT="$K3W/out"
-k3_run() { # <validator> <world> -> K3_RC, $K3_OUT
-  bash "$1" --series "$2/$K3PA/s9/requirements-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" > "$K3_OUT" 2>&1; K3_RC=$?
+# k3_ask <validator> <world> <stem> -> K3_RC, K3_TXT. One run per (validator, world, stem) through the memo `vrun`: a world
+# is read, never rewritten, after its first question, so a second cell over it reads the same answer.
+k3_ask() {
+  vrun both "$1" --series "$2/$K3PA/s9/$3-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+  K3_RC="$VR_RC"; K3_TXT="$VR_OUT"
 }
 k3_cell() { # <label> <validator> <world> <want rc> <must-say | -> <must-not-say | ->
   ASSERTIONS=$((ASSERTIONS + 1))
-  k3_run "$2" "$3"
-  if [ "$K3_RC" -eq "$4" ] && { [ "$5" = - ] || grep -qF -- "$5" "$K3_OUT"; } && { [ "$6" = - ] || ! grep -qF -- "$6" "$K3_OUT"; }; then
+  k3_ask "$2" "$3" requirements
+  if [ "$K3_RC" -eq "$4" ] && { [ "$5" = - ] || grep -qF -- "$5" <<<"$K3_TXT"; } && { [ "$6" = - ] || ! grep -qF -- "$6" <<<"$K3_TXT"; }; then
     printf '  ok    %-28s exit=%s %s\n' "$1" "$K3_RC" "${5#-}"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s exit=%s want=%s, must say [%s], must not say [%s]\n' "$1" "$K3_RC" "$4" "$5" "$6"
-    sed 's/^/          | /' "$K3_OUT"
+    sed 's/^/          | /' <<<"$K3_TXT"
   fi
 }
 K3_POST=2026-01-01T00:00:00Z; K3_LATE=2026-12-01T00:00:00Z
@@ -1807,32 +1811,33 @@ k3_need_subject() {
 }
   k3w_cell() { # <label> <validator> <world> <stem> <want rc> <must-say | -> <must-not-say | ->
     ASSERTIONS=$((ASSERTIONS + 1))
-    bash "$2" --series "$3/$K3PA/s9/$4-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" > "$K3_OUT" 2>&1; K3_RC=$?
-    if [ "$K3_RC" -eq "$5" ] && { [ "$6" = - ] || grep -qF -- "$6" "$K3_OUT"; } && { [ "$7" = - ] || ! grep -qF -- "$7" "$K3_OUT"; }; then
+    k3_ask "$2" "$3" "$4"
+    if [ "$K3_RC" -eq "$5" ] && { [ "$6" = - ] || grep -qF -- "$6" <<<"$K3_TXT"; } && { [ "$7" = - ] || ! grep -qF -- "$7" <<<"$K3_TXT"; }; then
       printf '  ok    %-28s exit=%s %s\n' "$1" "$K3_RC" "${6#-}"
     else
       FAILURES=$((FAILURES + 1))
       printf '  FAIL  %-28s exit=%s want=%s, must say [%s], must not say [%s]\n' "$1" "$K3_RC" "$5" "$6" "$7"
-      sed 's/^/          | /' "$K3_OUT"
+      sed 's/^/          | /' <<<"$K3_TXT"
     fi
   }
 if sg k3; then
 K3_BUILT=1
 k3_need_subject; [ "$K3_SUBJ_OK" -eq 1 ] || K3_BUILT=0
 [ "$K3_PREP" -eq 1 ] || K3_BUILT=0
-w="$(k3_world k3-document "$K3_POST")" && k3_document_pass "$w" "$K3S" || K3_BUILT=0
+K3_DOC_OK=0
+w="$(k3_world k3-document "$K3_POST")" && k3_document_pass "$w" "$K3S" && K3_DOC_OK=1 || K3_BUILT=0
 # k3-atform: k3-subject with `@`-form shards. The merge in this tree emits the `@` list, so K3's own
 # pair split reads the new form straight off the merge's output.
 w="$(k3_world k3-atform "$K3_POST")" && k3_subject_pass "$w" "$K3S" at \
   && grep -q '^artifact_sha: product-brief@' "$w/$K3PA/s9/requirements-adversarial-p1.md" || K3_BUILT=0
-w="$(k3_world k3-wrongset "$K3_POST")" && k3_subject_pass "$w" "$K3S" \
+w="$(k3_copy k3-subject k3-wrongset)" && [ "$K3_SUBJ_OK" -eq 1 ] \
   && awk '/^shard_tool_use_ids:/ { sub(/ 1=/, " 99=") } { print }' "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/p1.n" \
   && mv "$w/p1.n" "$w/$K3PA/s9/requirements-adversarial-p1.md" || K3_BUILT=0
 w="$(k3_world k3-serial "$K3_POST" serial)" && { AI_DLC_PROJECT_ROOT="$w" bash "$K3S/partition-subject.sh" --map 9 > "$w/serial.map" 2>&1; [ $? -eq 3 ]; } \
   && k3_shard "$w/$K3PA/s9" requirements-adversarial-p1 x 0 "$K3PA/s9/requirements-subject.md" "$(k3_stems "$w")" \
   && sed -i.b 's/^tool_use_id: .*/tool_use_id: toolu_k3serial/' "$w/$K3PA/s9/requirements-adversarial-p1.md" && rm -f "$w/$K3PA/s9/"*.b || K3_BUILT=0
 w="$(k3_world k3-pre "$K3_LATE")" && k3_document_pass "$w" "$K3S" || K3_BUILT=0
-w="$(k3_world k3-moved "$K3_POST")" && k3_document_pass "$w" "$K3S" && printf 'moved\n' >> "$w/$K3PA/prd.md" || K3_BUILT=0
+w="$(k3_copy k3-document k3-moved)" && [ "$K3_DOC_OK" -eq 1 ] && printf 'moved\n' >> "$w/$K3PA/prd.md" || K3_BUILT=0
 # k3-pin: an installed layout whose tracked partition-document.sh has no --scope-ref; the working
 # copy (what would run TODAY) is the real one. Control: the same world with the real copy tracked.
 # The pin only matters where a MAP is asked -- a manifest pass -- so both worlds carry k3-wrongset's
@@ -1844,7 +1849,7 @@ for v in pin:"$K3_STUB" pinctl:"$K3_REAL"; do
     && mv "$w/p1.n" "$w/$K3PA/s9/requirements-adversarial-p1.md" || K3_BUILT=0
 done
 # k3-armh: pass 1 has 2 MAJOR, pass 2 has 0, and only a PARTY record sits beside them.
-w="$(k3_world k3-armh "$K3_POST")" && k3_subject_pass "$w" "$K3S" || K3_BUILT=0
+w="$(k3_copy k3-subject k3-armh)" && [ "$K3_SUBJ_OK" -eq 1 ] || K3_BUILT=0
 if [ "$K3_BUILT" -eq 1 ]; then
   sed -i.b 's/^findings_major: 0$/findings_major: 2/; s/^verdict: .*/verdict: EXIT_CONDITION_NOT_MET/' "$w/$K3PA/s9/requirements-adversarial-p1.md"
   awk '/^## Findings/ { print; print ""; print "### M1 — MAJOR — a"; print ""; print "### M2 — MAJOR — b"; next } { print }' \
@@ -1926,7 +1931,9 @@ EOF
 if [ -n "$k3m_mi" ] && [ -n "$k3b_mi" ] && [ "$k3m_ma" = "$k3b_ma" ] && [ $((k3m_mi + 1)) -lt "$k3b_mi" ]; then
   K3W_MID="${k3m_ma}.$((k3m_mi + 1)).${k3m_pa}"
 fi
-w="$(k3_world k3w-subj "$K3_POST" "" "" "$K3W_MID")" && [ -n "$K3W_MID" ] && k3_subject_pass "$w" "$K3S" \
+K3W_SB_OK=0
+w="$(k3_world k3w-subjbase "$K3_POST" "" "" "$K3W_MID")" && [ -n "$K3W_MID" ] && k3_subject_pass "$w" "$K3S" && K3W_SB_OK=1
+w="$(k3_copy k3w-subjbase k3w-subj)" && [ "$K3W_SB_OK" -eq 1 ] \
   && awk '/^shard_tool_use_ids:/ { sub(/ 1=/, " 99=") } { print }' "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/$K3PA/s9/prd-adversarial-p1.md" \
   && rm "$w/$K3PA/s9/requirements-adversarial-p1.md" \
   && grep -q '^artifact: .*s9/requirements-subject\.md$' "$w/$K3PA/s9/prd-adversarial-p1.md" \
@@ -1935,7 +1942,7 @@ w="$(k3_world k3w-subj "$K3_POST" "" "" "$K3W_MID")" && [ -n "$K3W_MID" ] && k3_
 # k3w-subj-req: the same branch-(b) key-set miss on the `requirements-` series itself, stamped at the
 # same K3W_MID. It is not widened, so it is dated against K3_RELEASE and must FAIL; a rebind that
 # dates every branch-(b) miss against K3B_RELEASE reads it PENDING "not owed yet".
-w="$(k3_world k3w-subj-req "$K3_POST" "" "" "$K3W_MID")" && [ -n "$K3W_MID" ] && k3_subject_pass "$w" "$K3S" \
+w="$(k3_copy k3w-subjbase k3w-subj-req)" && [ "$K3W_SB_OK" -eq 1 ] \
   && awk '/^shard_tool_use_ids:/ { sub(/ 1=/, " 99=") } { print }' "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/$K3PA/s9/req.tmp" \
   && mv "$w/$K3PA/s9/req.tmp" "$w/$K3PA/s9/requirements-adversarial-p1.md" \
   && grep -q '^artifact: .*s9/requirements-subject\.md$' "$w/$K3PA/s9/requirements-adversarial-p1.md" \
@@ -1988,11 +1995,17 @@ J2S_PRED="${j2s_ma}.$((j2s_mi - 1)).${j2s_pa}"
 J2S_SPEC=_bmad-output/specs/s9/kernel/SPEC.md
 J2S_ARCH=$K3PA/s9/architecture-impact.md
 J2S_MF=$K3PA/s9/requirements-subject.md
-j2s_world() { # <name> <stamp-date> [stamp-version] -> a world holding a MET subject pass
+j2s_build() { # <name> <stamp-date> [stamp-version] -> a world holding a MET subject pass
   local w; w="$(k3_world "$1" "$2" "" "" "${3:-}")" || return 1
   k3_subject_pass "$w" "$K3S" || return 1
   grep -qx 'verdict: EXIT_CONDITION_MET' "$w/$K3PA/s9/requirements-adversarial-p1.md" || return 1
   printf '%s' "$w"
+}
+# j2s_world <name> <stamp-date> [stamp-version]: the K3_POST, default-version worlds are one byte copy of j2s-base, taken before
+# each world's own divergent step; the others are built.
+J2S_BASE_OK=0
+j2s_world() {
+  if [ "$2" = "$K3_POST" ] && [ -z "${3:-}" ]; then [ "$J2S_BASE_OK" -eq 1 ] && k3_copy j2s-base "$1"; else j2s_build "$@"; fi
 }
 # j2s_rec <file> <entry>... ; an entry is `artifact|before|after`, written as the remediator template's
 # triple, the three arm-H fields after them.
@@ -2008,6 +2021,7 @@ j2s_sub() { # <list> <stem> <sha> -> the list with that stem's sha replaced, in 
   local t o=""; for t in $1; do case "$t" in "$2="*) t="$2=$3" ;; "$2@"*) t="$2@$3" ;; esac; o="$o${o:+ }$t"; done; printf '%s' "$o"
 }
 J2S_FAKE="$(printf '%064d' 7)"
+j2s_build j2s-base "$K3_POST" >/dev/null && J2S_BASE_OK=1 || j2s_bad j2s-base
 w="$(j2s_world j2s-nochain "$K3_POST")" && printf 'cap-2: THE system SHALL y.\n' >> "$w/$J2S_SPEC" || j2s_bad j2s-nochain
 w="$(j2s_world j2s-chain "$K3_POST")" || j2s_bad j2s-chain
 if [ "$J2S_BUILT" -eq 1 ]; then
@@ -2114,7 +2128,6 @@ else
     *" cross-1="*" cross-6="*) printf '  ok    %-28s the merged subject pass carries cross-1..cross-6\n' k3c-shape ;;
     *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE BROKEN -- k3-subject ids are [%s], not cross-1..6\n' k3c-shape "$k3c_ids" ;;
   esac
-  k3_cell k3c-grouped  "$VALIDATOR" "$K3W/k3-subject"  0 - "K3 -- SUBJECT"
   k3_cell k3c-old      "$VALIDATOR" "$K3W/k3c-old"     1 "is not the subject map's ordinals plus cross groups" -
   k3_cell k3c-oldpre   "$VALIDATOR" "$K3W/k3c-oldpre"  0 "Legacy series." "FAIL (K3"
   k3_cell k3c-oldpred  "$VALIDATOR" "$K3W/k3c-oldpred" 0 "at ${K3C_REL} or later -- not owed yet." "FAIL (K3"

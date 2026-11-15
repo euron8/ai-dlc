@@ -71,13 +71,13 @@ fi
 # A PUSH IS REFUSED UNTIL scripts/pregate-self-check.sh HAS PASSED ON THE EXACT TREE IT DELIVERS (BL-1055). That
 # script runs this hook's pre-suite prefix, the procsub spelling arm and the counted validator-fork-budget run in
 # minutes; the suite below finds the same reds only after the whole pool. On exit 0 over a clean work tree it writes
-# `<git common dir>/ai-dlc-pregate-green/<HEAD tree>`; this gate reads that record and nothing else. It exits before
+# `<verdict store base>/pregate-green/<root commit>/<HEAD tree>` (RECORD_HOME); this gate reads that record and nothing else. It exits before
 # any step, so a refusal costs seconds. It applies to every push that delivers a tree (a ref line with a non-zero
 # local sha): the work tree must be clean, every delivered commit's tree must equal HEAD's (the hook judges the work
 # tree, not the pushed sha), and the record must exist. An empty stdin (a hand run, the self-check's own prefix run,
 # a fixture driving this hook with </dev/null) delivers nothing and is not gated. A delete-only push exited above.
 pregate_gate() { # <ref lines>: 0 = the push may proceed; 1 = refused, the reason printed
-  local lr ls rr rs n=0 tree st gcd rec
+  local lr ls rr rs n=0 tree st rec
   tree="$(git rev-parse --verify --quiet 'HEAD^{tree}')" || tree=""
   while read -r lr ls rr rs; do
     [ -n "$lr" ] || continue
@@ -96,9 +96,15 @@ PG_EOF
     printf 'pre-push: REFUSED. The work tree is not clean, so no pregate record can name it:\n%s\n   Push from a clean worktree detached at the sha, after running bash scripts/pregate-self-check.sh there.\n' "$(printf '%s\n' "$st" | head -5 | sed 's/^/     /')"
     return 1
   fi
-  gcd="$(git rev-parse --git-common-dir 2>/dev/null)" || gcd=""
-  rec="$gcd/ai-dlc-pregate-green/$tree"
-  if [ -z "$gcd" ] || [ ! -f "$rec" ] || [ "$(sed -n 1p "$rec" 2>/dev/null)" != '#format pg1' ]; then
+  # THE RECORD IS RESOLVED BY THE RECORD_HOME SPAN, read out of this file before the pool defines it.
+  eval "$(sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p;/^# RECORD_HOME_BEGIN$/,/^# RECORD_HOME_END$/p' "${BASH_SOURCE[0]:-$0}" 2>/dev/null)"
+  if ! rec_home rec pregate-green 2>/dev/null || [ "$rec" = "$REC_OFF" ]; then
+    printf 'pre-push: REFUSED. The verdict store is OFF (no AI_DLC_VERDICT_STORE or HOME, a shallow clone, or no root commit), so no pregate record can be read; pregate-self-check cannot record one either.\n'
+    return 1
+  fi
+  rec_import "$(git rev-parse --git-common-dir)/ai-dlc-pregate-green" "$rec" || :
+  rec="$rec/$tree"
+  if [ ! -f "$rec" ] || [ "$(sed -n 1p "$rec" 2>/dev/null)" != '#format pg1' ]; then
     printf 'pre-push: REFUSED. No green scripts/pregate-self-check.sh run is recorded for this tree (%s).\n   Run `bash scripts/pregate-self-check.sh` in this worktree (minutes), fix what it names, and push again.\n' "$tree"
     return 1
   fi
@@ -252,7 +258,7 @@ ps_run() { # <n>: one queued step in a forked subshell (a fork, never a new bash
   echo $((SECONDS - s)) > "$PS_W/$n.sec"
 }
 ps_select() { # decides every keyed step in the runlist from the fixture mechanism's own key pass; a skip leaves `<n>.keyskip`
-  local c="$PS_W/k" n slug base pr kd h keyed=0
+  local c="$PS_W/k" n slug kd h keyed=0
   PS_KD=""
   mkdir -p "$c" || return 0
   : > "$c/.list"; : > "$c/.mapped.all"; : > "$c/.kdec"
@@ -262,11 +268,7 @@ ps_select() { # decides every keyed step in the runlist from the fixture mechani
     printf 'scripts/presuite/%s/\n' "$slug" >> "$c/.list"; printf '%s\n' "$slug" >> "$c/.mapped.all"; keyed=1
   done
   [ "$keyed" = 1 ] || return 0
-  base="${AI_DLC_VERDICT_STORE:-${HOME:-}/.cache/ai-dlc/verdicts}"
-  case "${base##*/}" in counted-????????????) base="${base%/*}" ;; esac
-  case "$base" in /*) ;; *) base="$PWD/$base" ;; esac
-  pr="$(AI_DLC_VERDICT_STORE="$base" readset_vs_store "$PWD")"
-  if [ -n "$pr" ]; then kd="$base/presuite-keys/${pr##*/}"; else kd="$GITDIR/ai-dlc-presuite-unit-keys"; case "$kd" in /*) ;; *) kd="$PWD/$kd" ;; esac; fi
+  rec_home kd presuite-keys
   PS_KD="$kd"
   # THE MARK precedes the key pass, so a declared input changed after it is either in the keys or newer than the mark.
   : > "$c/.mark" 2>/dev/null
@@ -898,22 +900,9 @@ DURATIONS_RECORD="$GITDIR/ai-dlc-fixture-durations"
 # SUITE_SKIPPED rather than trusting the file's age.
 LASTRUN_RECORD="$GITDIR/ai-dlc-fixture-durations.last"
 READSET_MAP=".ai-dlc-fixture-readsets.tsv"
-# THE VERIFIED-STATE RECORD LIVES UNDER .git FOR I55 ARM 4'S REASON EXACTLY: the content key
-# hashes the working tree, so a cross-run record inside it would change the key that decides
-# whether this suite runs at all.
-VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"
-# THE RECORD'S FORMAT STAMP IS A SIDECAR, NOT A HEADER LINE, so the record stays pure
-# `path<TAB>sha` rows and every reader of it -- `comm`, `cut`, and the fixtures that seed one
-# by copying a manifest -- is unchanged. Written only beside a record THIS hook wrote, which is
-# already filtered of ignored paths at the manifest; see the reader in apply_readset_skip.
-VERIFIED_FORMAT="$GITDIR/ai-dlc-fixture-verified.format"
-# ONE KEY RECORD PER FIXTURE, `<fixture>.key`; see the header of apply_readset_skip.
-KEYS_DIR="$GITDIR/ai-dlc-fixture-keys"
-# THE CONSUMER-LAYOUT KEY RECORDS (BL-1027; installed-path rows since BL-1043), `<fixture>.key` plus `.prev`: a separate directory,
-# written only by cl_publish and cl_write and read only by cl_select. It lives in the SHARED verdict store base, as
-# `<base>/consumer-placement-keys/<repository root commit>` (cl_select resolves it), so every clone and worktree reads
-# the passes any of them recorded; this per-clone path is used only where the store is OFF (no base, or no root commit).
-CL_KEYS_DIR="$GITDIR/ai-dlc-consumer-placement-keys"
+# THE VERIFIED-STATE RECORD (VERIFIED_RECORD, its format sidecar VERIFIED_FORMAT), THE PER-FIXTURE KEY RECORDS
+# (KEYS_DIR) AND THE CONSUMER-LAYOUT KEY RECORDS (CL_KEYS_DIR) live in the shared verdict store base, outside the
+# working tree the content key hashes; the RECORD_HOME span (after READSET_VS) resolves them.
 # A RED UNIT'S OUTPUT HAS TO OUTLIVE THE RUN THAT PRODUCED IT. Until this record existed the
 # worker below sent every fixture's stdout and stderr to /dev/null, so an intermittent red left
 # ONE line of evidence -- `FAIL <name>` in a terminal -- and the honest local remedy was "push
@@ -945,7 +934,7 @@ FAILLOG_KEEP=20
 # reader sees the old file or the new one whole, never a torn one. rec_put stages the copy beside
 # the record under this process's pid, then renames it over the record.
 rec_put() { # <src> <record>
-  cp "$1" "$2.tmp.$$" 2>/dev/null && mv -f "$2.tmp.$$" "$2" 2>/dev/null && return 0
+  { [ -d "${2%/*}" ] || mkdir -p "${2%/*}" 2>/dev/null; } && cp "$1" "$2.tmp.$$" 2>/dev/null && mv -f "$2.tmp.$$" "$2" 2>/dev/null && return 0
   rm -f "$2.tmp.$$" 2>/dev/null
   return 1
 }
@@ -1943,6 +1932,42 @@ readset_key_rows() { # <record>
   grep -vE '^#(format|state|tools|pending) ' "$1"
 }
 # READSET_VS_END
+# RECORD_HOME_BEGIN
+# EVERY PASS AND KEY RECORD LIVES IN THE SHARED VERDICT STORE BASE, NEVER UNDER A CLONE'S GIT DIR, so every clone and
+# worktree of one repository reads the records any of them wrote. `rec_home <var> <kind>` sets <var> to
+# `<base>/<kind>/<repository root commit>`: <base> is AI_DLC_VERDICT_STORE (default ~/.cache/ai-dlc/verdicts) with a
+# counted-<vk> suffix stripped, the root commit is readset_vs_store's, resolved once per process (REC_ROOT).
+# STORE OFF (no base, a shallow clone, no root commit) sets REC_OFF, a path under /dev/null: nothing under it can be
+# read or created, so every record reads absent, every write fails, and every unit runs with nothing recorded.
+# `rec_import <legacy> <record>` is the one-time carry-forward of a record an older hook kept under the git dir: it
+# copies <legacy> (a file or a directory) to <record> only when <record> is absent and <legacy> present, through a
+# temp beside <record> and a rename, never removes <legacy>, and returns 0 only when it copied.
+# The pre-push gate, scripts/pregate-self-check.sh, scripts/predict-push-set.sh and
+# core/scripts/derive-fixture-readsets.sh source this span and READSET_VS by their sentinel lines.
+# The verified record's format stamp is a sidecar, never a header line, so the record stays pure `path<TAB>sha` rows.
+REC_OFF=/dev/null/ai-dlc-verdict-store-off
+rec_home() { # <var> <kind>; <var> must not be rh_b or rh_p
+  local rh_b="${AI_DLC_VERDICT_STORE:-}" rh_p
+  [ -n "$rh_b" ] || [ -z "${HOME:-}" ] || rh_b="$HOME/.cache/ai-dlc/verdicts"
+  case "${rh_b##*/}" in counted-????????????) rh_b="${rh_b%/*}" ;; esac
+  case "$rh_b" in ''|/*) ;; *) rh_b="$PWD/$rh_b" ;; esac
+  if [ -z "${REC_ROOT:-}" ] && [ -n "$rh_b" ]; then rh_p="$(readset_vs_store "$PWD")"; REC_ROOT="${rh_p##*/}"; fi
+  if [ -n "$rh_b" ] && [ -n "${REC_ROOT:-}" ]; then printf -v "$1" '%s/%s/%s' "$rh_b" "$2" "$REC_ROOT"
+  else printf -v "$1" '%s' "$REC_OFF"; fi
+}
+rec_import() { # <legacy> <record>
+  [ -e "$1" ] && [ ! -e "$2" ] || return 1
+  mkdir -p "${2%/*}" 2>/dev/null || return 1
+  rm -rf "$2.imp.$$" 2>/dev/null
+  if cp -Rp "$1" "$2.imp.$$" 2>/dev/null && [ ! -e "$2" ] && mv "$2.imp.$$" "$2" 2>/dev/null; then return 0; fi
+  rm -rf "$2.imp.$$" 2>/dev/null
+  return 1
+}
+rec_home VERIFIED_RECORD fixture-verified
+VERIFIED_FORMAT="$VERIFIED_RECORD.format"
+rec_home KEYS_DIR fixture-keys
+CL_KEYS_DIR="$REC_OFF"
+# RECORD_HOME_END
 # A DECLARED FIXTURE'S KEY ROWS, ONE COMPOSER. This hook and hermetic-run.sh both source this span -- the runner at
 # top level, the way it sources READSET_TOOLS -- so the declaration is parsed, and the key rows composed, by ONE
 # implementation: there is no second composer to hold equal by a census. A code change here bumps READSET_VS_FORMAT
@@ -2725,9 +2750,7 @@ cl_select() {
   base="${AI_DLC_VERDICT_STORE:-${HOME:-}/.cache/ai-dlc/verdicts}"
   case "${base##*/}" in counted-????????????) base="${base%/*}" ;; esac
   case "$base" in /*) ;; *) base="$PWD/$base" ;; esac
-  p="$(AI_DLC_VERDICT_STORE="$base" readset_vs_store "$PWD")"
-  if [ -n "$p" ]; then kd="$base/consumer-placement-keys/${p##*/}"
-  else kd="$CL_KEYS_DIR"; case "$kd" in /*) ;; *) kd="$PWD/$kd" ;; esac; fi
+  rec_home kd consumer-placement-keys
   CL_KEYS_DIR="$kd"
   printf '%s\n' "$kd" > "$out/.cl.keys"; printf '%s\n' "$base" > "$out/.cl.store"; declare -f cl_publish > "$out/.cl.pub"
   mkdir -p "$out/.cl/.k" && c="$(cd "$out/.cl" && pwd -P)" || { printf 'no consumer-layout decision dir under %s\n' "$out" > "$out/.cl.refused"; return 0; }
@@ -2902,6 +2925,11 @@ apply_readset_skip() {
   local list="$1" out="$2" n_all n_sel readset_at readset_age n_unmapped unmapped_names readset_deriver dv dsha="" b
 
   n_all="$(grep -c . "$list" 2>/dev/null)"; case "$n_all" in ''|*[!0-9]*) n_all=0 ;; esac
+  # THE ONE-TIME CARRY-FORWARD (RECORD_HOME): the key records before the verified record, whose sidecar is copied only
+  # with it, so a copied record never pairs with a stamp it did not come with.
+  rec_import "$GITDIR/ai-dlc-fixture-keys" "$KEYS_DIR"
+  rec_import "$GITDIR/ai-dlc-fixture-verified" "$VERIFIED_RECORD" && rec_import "$GITDIR/ai-dlc-fixture-verified.format" "$VERIFIED_FORMAT"
+  [ "$KEYS_DIR" != "$REC_OFF" ] || printf '   ..    verdict store OFF (no store base, a shallow clone or no root commit): no key record is read or written\n'
 
   # THE MANIFEST IS BUILT FIRST, BEFORE ANY EARLY RETURN: it is the pre-run state every record
   # this run publishes is keyed on.
@@ -3185,7 +3213,9 @@ run_fixtures() {
 
   # DISPATCH LONGEST-FIRST, FROM WHAT THE LAST RUN ACTUALLY COST.
   #
-  # A pool's makespan is decided by when its longest unit STARTS. Dispatched in glob
+  # A pool's makespan has two lower bounds: its longest unit, and the summed cost of its units
+  # over the width. Dispatch order can move it only while the first is the larger, where the
+  # makespan is decided by when the longest unit STARTS. Dispatched in glob
   # order the poles are picked up wherever the alphabet puts them, and the tail is one
   # long unit finishing alone: measured on the reference consumer at width 16, its two
   # heaviest units sat at positions 62 and 63 of 109 and the pole began 5.5s in.
@@ -3195,9 +3225,11 @@ run_fixtures() {
   # AND IT IS NOT FREE, WHICH IS WHY THE ORDER IS NOT ALSO A CLAIM ABOUT SPEED. Running
   # the heavy units together makes each of them slower: the same measurement puts the
   # consumer's pole at 25.30s dispatched late against 28.46s dispatched first, so a 5.5s
-  # head start bought 2.4s. On THIS repository's own suite that trade comes out level --
-  # `enforcement-map-sites` alone is 144s of a 148s wall, so no dispatch order can win
-  # more than 2.5% here and this one wins nothing measurable. The reorder ships for the
+  # head start bought 2.4s. On THIS repository's own suite a push that dispatches most units
+  # is WIDTH-BOUND: the summed cost over the width is several times the pole (the pole step
+  # prints both and names the larger), and a list schedule over BL-1124's recorded costs
+  # gives the same makespan in the logged order and longest-first, so no dispatch order
+  # wins anything measurable here. The reorder ships for the
   # consumer's schedule shape, and the distribution carries it because I66 makes the two
   # runners one program. A `hoist the K longest, leave the rest alphabetical` variant was
   # measured too and lost to plain longest-first, so nothing here carries a tuning
@@ -3702,11 +3734,11 @@ run_fixtures() {
 #   4. AI_DLC_FIXTURE_NO_SKIP=1 forces the run, on the record, for an operator who
 #      wants the suite regardless.
 #
-# The record lives in .git/, NOT in the working tree, and that is load-bearing: a
-# record inside the tree would be hashed by the key it stores, so writing it would
-# invalidate it and no push could ever hit.
+# The record lives in the shared verdict store base (RECORD_HOME), NOT in the working
+# tree, and that is load-bearing: a record inside the tree would be hashed by the key it
+# stores, so writing it would invalidate it and no push could ever hit.
 # SUITE_STEP_BEGIN
-KEY_RECORD="$GITDIR/ai-dlc-suite-key"
+rec_home KEY_RECORD suite-key
 
 # THE HIT RATE IS THE ONE NUMBER THIS CHANGE COULD NOT MEASURE BEFORE SHIPPING.
 # main is squash-merged, so its history records releases and not the pushes inside
@@ -3732,6 +3764,7 @@ fixture_suite_step() {
   # and an announce saying "87 of 87" beside a suite that prints 84 verdicts is a
   # discrepancy an operator has to go and resolve before they can trust the skip.
   n_now="$(for d in core/fixtures/*/; do [ -f "$d/run.sh" ] && printf 'x\n'; done | wc -l | tr -d ' ')"
+  rec_import "$GITDIR/ai-dlc-suite-key" "$KEY_RECORD"
 
   if [ -n "${AI_DLC_FIXTURE_NO_SKIP:-}" ]; then
     printf '   (content-key skip disabled by AI_DLC_FIXTURE_NO_SKIP)\n'
@@ -3742,7 +3775,7 @@ fixture_suite_step() {
     key=""
     key_log UNAVAILABLE
   elif [ ! -r "$KEY_RECORD" ]; then
-    printf '   (no prior green run recorded for this clone -- running the suite)\n'
+    printf '   (no prior green run recorded for this repository -- running the suite)\n'
     key_log MISS "$key"
   else
     record="$(cat "$KEY_RECORD" 2>/dev/null)"
@@ -3864,7 +3897,7 @@ fixture_suite_step() {
     else
       # LINE 2 SNAPSHOTS THE PENDING COUNTS a HIT reprints: `#pending` then `<fx>=<n>` for every fixture whose key
       # record carries n > 0, and `<fx>=-` for one with no `#pending` line (count unrecorded). One awk over the records. Written to a temp file and renamed (BL-1046).
-      { { printf '%s %s %s\n' "$key" "$n_now" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      { { [ -d "${KEY_RECORD%/*}" ] || mkdir -p "${KEY_RECORD%/*}"; } && { printf '%s %s %s\n' "$key" "$n_now" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           awk -v fr="$FXROOT" '
             function flush() { if (f != "" && x && n != "0") s = s " " f "=" n }
             FNR == 1 { flush(); f = FILENAME; sub(/.*\//, "", f); sub(/\.key$/, "", f); n = "-"; r = fr f "/run.sh"; x = ((getline l < r) >= 0); if (x) close(r) }
@@ -4060,11 +4093,14 @@ inproc_pending_step() {
 }
 step "in-process cells, dynamic half: every declared fixture judged under this judge, or PENDING (information, not a verdict)" inproc_pending_step
 
-# 3a. THE SUITE'S WALL CLOCK IS ONE NUMBER, AND IT IS PRINTED, NEVER JUDGED. This suite is
-#     POLE-BOUND: the time you wait tracks the single longest fixture DIRECTORY, not the sum over
-#     the pool. That figure once grew 493 -> 573 across two releases with nothing able to see it,
-#     so every push names the pole unit, its loaded wall clock, and its change against the same
-#     unit's figure before this run.
+# 3a. THE SUITE'S WALL CLOCK IS PRINTED, NEVER JUDGED, AS ITS TWO LOWER BOUNDS. One is the pole,
+#     the single longest fixture DIRECTORY; the other is the summed loaded cost of every unit this
+#     run timed over the pool width. A push that dispatches most of the suite is WIDTH-BOUND: the
+#     second is the larger (B9 and B10 at width 6: 882s and 999s against poles of 145s and 147s),
+#     and only a small selection waits on its pole. The pole once grew 493 -> 573 across two
+#     releases with nothing able to see it, so every push names the pole unit, its loaded wall
+#     clock and its change against the same unit's figure before this run, then the summed cost
+#     over the width and which bound is the larger.
 #
 #     IT IS INFORMATION, NOT A VERDICT, AND THAT IS A RULING. It was a ratchet with a band, and
 #     a loaded wall clock moves several-fold with the box's load (one unit's recorded cost at pool
@@ -4078,17 +4114,27 @@ pole_info_step() {
     printf '   (no suite run, no pole)\n'
     return 0
   fi
-  printf '%s\n' "$LASTRUN_OWN" | PP="${POLE_PREV:-}" awk '
+  # THE POLE IS ONE BOUND ON THE POOL'S MAKESPAN; THE SUMMED COST OVER THE WIDTH IS THE OTHER. The second
+  # line divides this run's summed loaded cost by the width the pool ran (FIXTURE_JOBS, never more than
+  # the units timed) and names whichever bound is larger. Same awk, no new fork.
+  printf '%s\n' "$LASTRUN_OWN" | PP="${POLE_PREV:-}" PW="${FIXTURE_JOBS:-}" awk '
        BEGIN { n = split(ENVIRON["PP"], L, "\n"); for (i = 1; i <= n; i++) if (split(L[i], f, " ") == 2) prev[f[1]] = f[2] }
+       NF == 2 && $2 ~ /^[0-9]+$/ { sum += $2; units++ }
        NF == 2 && $2 ~ /^[0-9]+$/ && ($2 + 0 > max + 0 || u == "") { u = $1; max = $2 }
        END {
          if (u == "") { print "   (no suite run, no pole)"; exit }
          if (u in prev) printf "   pole %s %ss loaded (was %ss before this run, %+ds)\n", u, max, prev[u], max - prev[u]
          else           printf "   pole %s %ss loaded (no prior figure for it)\n", u, max
+         w = ENVIRON["PW"]
+         if (w !~ /^[1-9][0-9]*$/) { printf "   throughput %ss summed over %d unit(s); pool width \"%s\" is not a count, no bound named\n", sum, units, w; exit }
+         w += 0; if (w > units) w = units
+         tp = int(sum / w + 0.5)
+         if (tp > max + 0) printf "   throughput %ss summed over %d unit(s) / %d worker(s) = %ds: THROUGHPUT-BOUND (%ds > pole %ss)\n", sum, units, w, tp, tp, max
+         else              printf "   throughput %ss summed over %d unit(s) / %d worker(s) = %ds: POLE-BOUND (pole %ss >= %ds)\n", sum, units, w, tp, max, tp
        }'
   return 0
 }
-step "suite pole (this run's longest fixture; information, not a verdict)" pole_info_step
+step "suite pole and throughput bound (this run's longest fixture, summed cost / width; information, not a verdict)" pole_info_step
 
 # A POOL WHOSE ONLY RED IS A REFUSAL EXITS 2, NOT 1 (BL-606). Written identically in both hooks, outside
 # the I66 block: POOL_REFUSED_ONLY is set inside it, FAIL_BEFORE_SUITE on the line before the suite step.

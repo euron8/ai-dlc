@@ -101,7 +101,7 @@ W="$(mktemp -d)" || exit 2
 # THE PREGATE RECORD (BL-1055). .githooks/pre-push refuses a push that delivers a tree with no record written here.
 # One is written only on exit 0, and only when $ROOT's work tree is clean (no tracked change, no untracked
 # non-ignored path) at the start AND at the end of this run with the same HEAD tree, so the record names exactly the
-# tree every section judged. Path: <git common dir>/ai-dlc-pregate-green/<HEAD tree>; body `#format pg1`, then the
+# tree every section judged. Path: <verdict store base>/pregate-green/<root commit>/<HEAD tree>; body `#format pg1`, then the
 # tree, the base commit and the UTC time.
 pg_state() { local t s; t="$(git rev-parse --verify --quiet 'HEAD^{tree}')" || return 1
   s="$(GIT_OPTIONAL_LOCKS=0 git status --porcelain --untracked-files=normal)" || return 1; printf '%s\n%s' "$t" "$s"; }
@@ -425,11 +425,15 @@ PG_END="$(pg_state)" || PG_END=""
 pg_tree="${PG_START%%
 *}"
 if [ -n "$PG_START" ] && [ "$PG_START" = "$pg_tree" ] && [ "$PG_END" = "$PG_START" ]; then
-  pg_dir="$(git rev-parse --git-common-dir)/ai-dlc-pregate-green" && mkdir -p "$pg_dir" \
+  # THE RECORD'S HOME IS THE HOOK'S OWN RECORD_HOME span (the hook a push runs equals $ROOT's here), so the gate and
+  # this writer resolve one path. A record that cannot be written is a refusal (exit 2), never a clean exit.
+  pg_dir=""
+  eval "$(sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p;/^# RECORD_HOME_BEGIN$/,/^# RECORD_HOME_END$/p' "$ROOT/.githooks/pre-push")"
+  { rec_home pg_dir pregate-green && [ "$pg_dir" != "$REC_OFF" ]; } 2>/dev/null && mkdir -p "$pg_dir" \
     && printf '#format pg1\ntree %s\nbase %s\nwhen %s\n' "$pg_tree" "$(git rev-parse "${BASE}^{commit}")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$pg_dir/$pg_tree.tmp" \
     && mv -f "$pg_dir/$pg_tree.tmp" "$pg_dir/$pg_tree" \
-    && printf 'pregate-self-check: recorded green for tree %s; a push delivering it may proceed\n' "$pg_tree" \
-    || printf 'pregate-self-check: could not write the pregate record for tree %s; a push of it will be refused\n' "$pg_tree" >&2
+    && printf 'pregate-self-check: recorded green for tree %s in %s; a push delivering it may proceed\n' "$pg_tree" "$pg_dir" \
+    || { printf 'pregate-self-check: could not write the pregate record for tree %s under %s (the verdict store is OFF when that reads %s); a push of it will be refused\n' "$pg_tree" "${pg_dir:-<unresolved>}" "${REC_OFF:-<no RECORD_HOME span>}" >&2; exit 2; }
 else
   printf 'pregate-self-check: NO RECORD written: the work tree was not clean, or moved, during this run; a push of it will be refused\n' >&2
 fi

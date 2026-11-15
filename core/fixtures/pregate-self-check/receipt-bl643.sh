@@ -38,10 +38,14 @@ if [ "${1:-}" = --gate ]; then
   G="$W/g"; mkdir -p "$G" || exit 9
   nb="$(grep -cxF '# PREGATE_GATE_BEGIN' "$HK")" || nb=0; ne="$(grep -cxF '# PREGATE_GATE_END' "$HK")" || ne=0
   [ "$nb" = 1 ] && [ "$ne" = 1 ] || { echo "gate receipt: PREGATE_GATE_BEGIN/END occur $nb/$ne times in $HK, expected 1/1" >&2; exit 9; }
+  # The gate resolves its record through the RECORD_HOME and READSET_VS spans it reads out of its own file, so the cut
+  # carries both after its last line; G's records live in G's own store, $G.vs.
   { printf '%s\n' '#!/usr/bin/env bash' 'PUSH_LINES="$(cat)"'
     sed -n '/^# PREGATE_GATE_BEGIN$/,/^# PREGATE_GATE_END$/p' "$HK"
-    printf '%s\n' 'echo PAST-THE-GATE'; } > "$W/gate.sh" || exit 9
+    printf '%s\n' 'echo PAST-THE-GATE' 'exit 0'
+    sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p;/^# RECORD_HOME_BEGIN$/,/^# RECORD_HOME_END$/p' "$HK"; } > "$W/gate.sh" || exit 9
   bash -n "$W/gate.sh" || exit 9
+  export AI_DLC_VERDICT_STORE="$G.vs"
   ( cd "$G" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git init -q . && echo one > f && git add -A \
     && git -c user.email=x@x -c user.name=x commit -q -m one && echo two > f \
     && git -c user.email=x@x -c user.name=x commit -q -am two ) || exit 9
@@ -61,7 +65,8 @@ if [ "${1:-}" = --gate ]; then
   gdrive "refs/heads/x $H1 refs/heads/x $Z40" "$W/deny.out"; gdeny=$?
   gdenyn=no; grep -qF "No green scripts/pregate-self-check.sh run is recorded for this tree ($TR)" "$W/deny.out" && gdenyn=yes
   gdrive - "$W/empty.out"; gempty="$(past "$W/empty.out")"
-  mkdir -p "$G/.git/ai-dlc-pregate-green" && printf '#format pg1\ntree %s\n' "$TR" > "$G/.git/ai-dlc-pregate-green/$TR" || exit 9
+  PG="$G.vs/pregate-green/$(gx rev-list --max-parents=0 HEAD)"
+  mkdir -p "$PG" && printf '#format pg1\ntree %s\n' "$TR" > "$PG/$TR" || exit 9
   gdrive "refs/heads/x $H1 refs/heads/x $Z40" "$W/allow.out"; gallow="$(past "$W/allow.out")"
   gdrive "refs/heads/x $H0 refs/heads/x $Z40" "$W/tree.out"; gtree=$?
   gtreen=no; grep -qF "delivers a tree that is not this work tree's HEAD tree" "$W/tree.out" && gtreen=yes
@@ -93,6 +98,11 @@ ARMFN='fxcount_arm() {
   local vk=000000000000
   FXCOUNT_RC=stub FXCOUNT_DIR=stub FXCOUNT_JUDGE=stub AI_DLC_VERDICT_STORE="$PWD/.stub-store/counted-$vk"; export FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE AI_DLC_VERDICT_STORE
 }'
+# The pregate record's home is the hook's RECORD_HOME span (with READSET_VS, which it calls), read by the self-check out
+# of the root's hook; each stub hook carries both spans, cut from the real hook, below its exit. Each root's records live
+# in that root's own store, <root>.vs (drive and its siblings export it).
+RHSPANS="$(sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p;/^# RECORD_HOME_BEGIN$/,/^# RECORD_HOME_END$/p' .githooks/pre-push)"
+[ "$(grep -c '^rec_home() {' <<< "$RHSPANS")" = 1 ] || exit 9
 seedgit() { # <root> -> commit everything in it; the root pushes through .githooks, as the distribution does (BL-1020)
   ( cd "$1" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git init -q . && git config core.hooksPath .githooks && git add -A \
     && git -c user.email=x@x -c user.name=x commit -q -m seed )
@@ -139,6 +149,7 @@ for v in A B C D U J; do
     [ "$v" = D ] && printf 'step "below the pool" touch BELOW-RAN\n'
     printf 'exit $fail\n'
     printf '%s\n' "$ARMFN"
+    printf '%s\n' "$RHSPANS"
   } > "$T/.githooks/pre-push"
   # No bash ever parses D's NUL-bearing text: bash versions differ on NUL in input, and this box has only 3.2 to probe.
   tr -d '\000' < "$T/.githooks/pre-push" > "$W/seed-$v.sh" || exit 9
@@ -146,7 +157,7 @@ for v in A B C D U J; do
   seedgit "$T" || exit 9
 done
 drive() { # <root> <out-file> -> the self-check's exit
-  ( cd "$1" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
+  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
 }
 # BL-1020 worlds: copies of root A (committed hook = A's), each with a different hook-path state.
 #   World A itself is driven from a cwd that is not the root (drive_away; it does NOT test the defensive relative-path join: the self-check cds to its root first). Hres: core.hooksPath -> an absolute dir whose hook differs from the
@@ -211,11 +222,11 @@ gitin "$W/rootTs" -c user.email=x@x -c user.name=x commit -q -am "edit a script 
 printf '#!/usr/bin/env bash\nexit 0\n' > "$W/rootTn/scripts/unnamed.sh" || exit 9
 gitin "$W/rootTn" add scripts/unnamed.sh && gitin "$W/rootTn" -c user.email=x@x -c user.name=x commit -q -m "add a script no hook names" || exit 9
 drive_away() { # <root> <out-file> -> the self-check's exit, run from a cwd other than the root
-  ( cd "$W" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
+  ( cd "$W" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
 }
 drive "$W/rootHres" "$W/Hres.out"; hres=$?
 drive_base() { # <root> <out-file> <base> -> the self-check's exit, with an explicit base ref
-  ( cd "$1" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" "$3" </dev/null >"$2" 2>&1 )
+  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" "$3" </dev/null >"$2" 2>&1 )
 }
 drive_base "$W/rootHtree" "$W/Htree.out" base0; htree=$?
 drive_base "$W/rootHbehind" "$W/Hbehind.out" newbase; hbehind=$?
@@ -241,7 +252,7 @@ jnamed=no; grep -qF 'FAIL (J3): row "1 *"' "$W/J.out" && grep -qF 'FINDINGS in d
 # and Wd names why.
 rec_of() { # <root> -> yes when a pg1 record names the root's HEAD tree
   local t; t="$(gitin "$1" rev-parse 'HEAD^{tree}')" || { echo err; return; }
-  [ "$(sed -n 1p "$1/.git/ai-dlc-pregate-green/$t" 2>/dev/null)" = '#format pg1' ] && echo yes || echo no
+  [ "$(sed -n 1p "$1.vs/pregate-green/$(gitin "$1" rev-list --max-parents=0 HEAD)/$t" 2>/dev/null)" = '#format pg1' ] && echo yes || echo no
 }
 arec="$(rec_of "$W/rootA")"; brec="$(rec_of "$W/rootB")"
 drive "$W/rootWd" "$W/Wd.out"; wd=$?
@@ -252,12 +263,12 @@ wdn=no; grep -qF 'NO RECORD written: the work tree was not clean' "$W/Wd.out" &&
 aseed=no; grep -qF "counted store $W/rootA/.stub-store/counted-000000000000 (clean tree" "$W/A.out" && aseed=yes
 wdseed=no; grep -qF "counted store $W/rootWd/.stub-store/counted-000000000000 (dirty tree" "$W/Wd.out" && wdseed=yes
 drive_member() { # <root> <out-file> <base> -> the self-check's exit under --member
-  ( cd "$1" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" --member "$3" </dev/null >"$2" 2>&1 )
+  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" --member "$3" </dev/null >"$2" 2>&1 )
 }
 drive_member "$W/rootMt" "$W/Mt.out" base0; mt=$?
 mtn=no; grep -qF "member mode: running the tree's own hook $W/rootMt/.githooks/pre-push (" "$W/Mt.out" \
   && grep -qF 'member mode wrote no pregate record' "$W/Mt.out" && mtn=yes
-mtrec=no; [ -e "$W/rootMt/.git/ai-dlc-pregate-green" ] && mtrec=yes
+mtrec=no; [ -e "$W/rootMt.vs/pregate-green" ] && mtrec=yes
 drive_member "$W/rootMr" "$W/Mr.out" base0; mr=$?
 mrn=no; grep -qF 'FAIL: seeded post-presuite step' "$W/Mr.out" && grep -qF 'FINDINGS in a:hook-steps' "$W/Mr.out" && mrn=yes
 # The edited-hook refusal is the member mode's carrier: Htree's refusal names --member.

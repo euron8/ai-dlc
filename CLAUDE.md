@@ -37,8 +37,8 @@ consolidate them here.
   fixture gave a verdict. Invariant **I66** binds that runner to be one program across both pre-push hooks.
   Never loop over fixtures by hand; run one as `bash core/fixtures/<fx>/run.sh` from the repo root.
 - A unit's push is its gate: a green push delivers that exact sha, merged as pushed, and fills the verdict
-  store (`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`) and the key records
-  (`.git/ai-dlc-fixture-keys/<fx>.key`). Never push to a throwaway ref.
+  store `<vs>` (`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`) and its key records
+  (`<vs>/fixture-keys/<root>/<fx>.key`). Never push to a throwaway ref.
 - Pushes and pre-push suites may run concurrently. `scripts/predict-push-set.sh <tree> <empty dir>` prints,
   read-only, the set a push runs.
 - After a red push the failing set is in `.git/ai-dlc-fixture-failures`; a re-push re-runs those and any
@@ -46,11 +46,11 @@ consolidate them here.
 - Clear the shared verdict store by EXACT LISTING before a gate, never by glob or `rm -rf`.
 - Pool width is `AI_DLC_FIXTURE_JOBS` (default 12; not `FIXTURE_JOBS`), read at the top of the hook's pool
   block. A nested pool (depth 1 or more) is capped at two workers. Re-measure on a smaller box.
-- `.git/ai-dlc-fixture-verified` (with its `.format` sidecar, which must read `v2`) is the per-file
+- `<vs>/fixture-verified/<root>` (with its `.format` sidecar, which must read `v2`) is the
   verified-state record: written after a green fixture suite, even under a red step, as a copy of that run's
   file-content manifest; the read-set skip reads it to decide which fixtures' inputs moved. A red suite never
   writes it; an unstamped record means "run everything"; deleting it forces a full run.
-- `.git/ai-dlc-suite-key` is the whole-suite content key: when key and fixture count match the last green suite,
+- `<vs>/suite-key/<root>` is the whole-suite content key: when key and fixture count match the last green suite,
   the push prints `SKIPPED -- this exact tree already passed the whole suite` and runs no fixtures. Each
   decision appends `<utc stamp> HIT|MISS|FORCED|UNAVAILABLE <key>` to `.git/ai-dlc-suite-key.log`; count with
   `awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c`.
