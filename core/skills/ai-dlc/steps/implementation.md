@@ -527,6 +527,18 @@ re-validation directly, after the handoff preflight below; `GATE1-RERUN:`, or an
 makes the transition a gate-1 re-review: the plan's `gate:` line reads `rerun`, and the lead
 runs gate 1 as a re-review pass first.
 
+**Gate 1 after a gate-3 rework (Rule A).** At gate 1, pass M >= 2, when the story's newest g3
+plan names a sha the pass M-1 reviewed-sha is an ancestor of or equal to, the frozen sha is not
+that g3 sha, and the pass M-1 review reads APPROVED, `gate-transition.sh <story> 1 --pass M <flags>`
+asks `partition-review-diff.sh --gate1-rerun` from that reviewed-sha before `--route`.
+`GATE1-SKIP:` writes a `gate: skip` plan, `manifest: none` and no shard line: it authorizes no
+seat, and the dispatch guard denies every code-reviewer, QA or adjudicator brief that cites it. The
+lead records the plan's `route:` line in the story's gate log and runs the plan's `next:` gate-2
+command with the next QA pass. A gate-1 pass at the very sha gate 3 judged (the re-review gate 3
+asked for), or after a pass M-1 review that does not read APPROVED, is not asked and runs as a
+re-review. That answer, `GATE1-RERUN:` and any refusal are each a `gate-log:` line in the plan,
+which the lead records, and the pass goes on as a re-review.
+
 **Handoff preflight before every gate-2 dispatch.** Before every gate-2
 dispatch, including one that follows `GATE1-SKIP:`, the program runs the `--gate2` arm of the
 handoff-evidence validator in the frozen dev worktree.
