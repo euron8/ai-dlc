@@ -241,7 +241,7 @@ judges nothing, edits no artifact and sends nothing with `SendMessage`.
 It holds one slot for the whole round, so a round of M members needs M+1
 slots, beside every other live subagent, to go out in one wave. The lead
 joins with one background `wait-for-deliverable.sh --since <epoch>
-<return path>` and then runs the round's join program unchanged: MISSING
+--dispatch <dispatcher agentId> <return path>` and then runs the round's join program unchanged: MISSING
 and FAILED are Rule 20 non-delivery, which the lead re-dispatches itself;
 REJECTED and UNLAUNCHED are a held rejected set, which the lead
 dispatches without spending the Rule 20 budget; a return with no launched
@@ -270,8 +270,9 @@ Every beat that passes `--since` also passes `--dispatch <agentId>` for
 each agent it joins, the `agentId` (or a named teammate's `agent_id`) its
 Agent result returned: the beat reads that dispatch's time from the spawn
 ledger and refuses a `--since` later than it.
-The lead's beat over a round-return file is exempt on every arm, a re-arm
-after a compaction included: it passes `--since <epoch>` alone, and the
+The lead's beat over a round-return file passes `--since <epoch> --dispatch <dispatcher agentId>`, a re-arm
+after a compaction included; the beat reads the role-less dispatcher's time from this session's Agent line.
+Only a re-arm in a LATER session passes `--since <epoch>` alone, and the
 dispatcher's own member beats keep `--dispatch` per member.
 The `<epoch>` is the one recorded before wave 1, never one minted at the
 beat. A beat outside a fan-out round, on an agent this session

@@ -61,7 +61,29 @@ KILLTOK="$(awk 'match($0, /; RC="[a-z]+";/) { print substr($0, RSTART + 6, RLENG
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-stage1-fx.XXXXXX")" || { echo "FIXTURE BROKEN: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"
 ORPHANS="$WORK/orphans"; : > "$ORPHANS"
-reap() { local p; [ -f "$ORPHANS" ] || return 0; while IFS= read -r p; do case "$p" in ''|*[!0-9]*) ;; *) kill "$p" 2>/dev/null ;; esac; done < "$ORPHANS"; }
+# PGIDS holds process groups this file KILLs whole at reap: each wrapper's load sampler, and the ic cells' groups. The
+# sampler loops on `sleep 15` in its own group and only the wrapper's finish() stops it, so a wrapper that ends without
+# finish() (KILLed on a broken path, or left blocked when this file is TERMed) leaves it running unless this file kills it.
+PGIDS="$WORK/pgids"; : > "$PGIDS"
+# RUNDIRS holds each wrapper's RUN_DIR, written before the wrapper starts; reap reads each one's sampler.pid, so a reap on
+# any exit path the fixture sees finds the sampler, wherever the cell was. stop_sampler removes sampler.pid, so one still
+# present at reap is a sampler its wrapper never stopped.
+RUNDIRS="$WORK/rundirs"; : > "$RUNDIRS"
+reap() {
+  local p
+  [ -f "$RUNDIRS" ] && { while IFS= read -r p; do [ -n "$p" ] && rec_sampler "$p"; done < "$RUNDIRS"; : > "$RUNDIRS"; }
+  # Emptied once killed, so a group recorded here is KILLed once and a later reap cannot reach a reused pgid.
+  [ -f "$PGIDS" ] && { while IFS= read -r p; do case "$p" in ''|*[!0-9]*) ;; *) kill -KILL -- "-$p" 2>/dev/null ;; esac; done < "$PGIDS"; : > "$PGIDS"; }
+  [ -f "$ORPHANS" ] || return 0; while IFS= read -r p; do case "$p" in ''|*[!0-9]*) ;; *) kill "$p" 2>/dev/null ;; esac; done < "$ORPHANS"
+}
+# rec_sampler <run dir>: record the wrapper's sampler pgid, if it wrote one, for reap's group KILL and the final orphan
+# check. Builtins only: a cell's start count does not move.
+rec_sampler() {
+  local p=""
+  [ -f "$1/sampler.pid" ] && read -r p < "$1/sampler.pid"
+  case "$p" in ''|*[!0-9]*) return 0 ;; esac
+  echo "$p" >> "$PGIDS"; echo "$p" >> "$ORPHANS"
+}
 # THE HANG TARGET IS A FIFO READ, NEVER A LONG SLEEP (BL-868). Every process this file needs to "never exit on its
 # own" is a `cat` blocked opening this fifo, which no writer opens until hang_release, ONCE, at teardown -- after the
 # last orphan check. A `sleep 300` target exits by itself once 300s pass, so on a slow enough box a group kill that
@@ -477,6 +499,7 @@ wrap_ok() {
   local src="$1" t="$2" R="$WORK/wr/$2" rd L f
   mkrepo "$R/repo" "$src" || broken "mkrepo $t"
   rd="$R/run"; L="$R/ledger"; f=0
+  echo "$rd" >> "$RUNDIRS"
   ( cd "$DECOY" && PATH="$SBIN:$PATH" AI_DLC_READSET_SANDBOX_PROFILE="$WORK/narrow.sb" AI_DLC_READSET_STAGE1_LEDGER="$L" \
       FXCELL=wrap-ok bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" ) > "$R/out" 2>&1; rc=$?
   # THE ENVIRONMENT ARM, with its control: the stub's env dump must exist and carry the ledger
@@ -577,7 +600,7 @@ wrap_term() {
   local src="$1" t="$2" R="$WORK/wr/$2" rd L f p n alive
   mkrepo "$R/repo" "$src" || broken "mkrepo $t"
   rd="$R/run"; L="$R/ledger"; f=0
-  : > "$R/pids"
+  : > "$R/pids"; echo "$rd" >> "$RUNDIRS"
   FXCELL=wrap-term AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
     bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" > "$R/out" 2>&1 &
   wp=$!
@@ -621,6 +644,7 @@ echo " the wrapper, against a stub deriver:"
 if wrap_ok "$WRAPPER" ok; then ok "exit 0 run (driven from a dirty decoy repo, stub sysctl first on PATH, a replacement profile in the env): map restored, started + terminal ledger lines, load.tsv is the 1-min figure, profile not passed on, files beside root/ and not under it, override delivered"; else bad "the exit 0 run"; fi
 
 R="$WORK/wr/fail"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo fail"
+echo "$R/run" >> "$RUNDIRS"
 FXCELL=wrap-fail AI_DLC_READSET_STAGE1_LEDGER="$R/ledger" STUB_MODE=fail bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run" > "$R/out" 2>&1; rc=$?
 if [ "$rc" = 1 ] && cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && grep -qx 'stub-wrote' "$R/run/root/w/map.written" \
    && awk -F'\t' '(NR == 1 && NF == 4 && $2 == "started") || (NR == 2 && NF == 5 && $2 == "1") { n++ } END { exit !(n == 2 && NR == 2) }' "$R/ledger" \
@@ -647,13 +671,13 @@ wrap_kill9() {
   local src="$1" t="$2" R="$WORK/wr/$2" rd L f p n out rc2 pg sp
   mkrepo "$R/repo" "$src" || broken "mkrepo $t"
   rd="$R/run"; L="$R/ledger"; f=0
-  : > "$R/pids"
+  : > "$R/pids"; echo "$rd" >> "$RUNDIRS"
   FXCELL=wrap-late AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang-late STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
     bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" > "$R/out" 2>&1 &
   wp=$!
   await "$R" "$wp" "the stub's ready file and the wrapper's pgid file" ready_and_pgid "$R/ready" "$rd/pgid" \
     || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready, or the wrapper wrote no pgid: $AWAIT_WHY"; }
-  cat "$R/pids" >> "$ORPHANS"; cat "$rd/sampler.pid" >> "$ORPHANS" 2>/dev/null
+  cat "$R/pids" >> "$ORPHANS"
   # CONTROL: RUN_DIR/pgid is the stub's own pid, which leads its process group (third STUB_PIDS line).
   pg="$(cat "$rd/pgid")"; sp="$(sed -n 3p "$R/pids")"
   [ -n "$pg" ] && [ "$pg" = "$sp" ] || { echo "    [$t] RUN_DIR/pgid reads '$pg', not the stub's pid '$sp'"; f=1; }
@@ -683,6 +707,7 @@ wrap_kill9() {
   [ ! -e "$R/run3" ] || { echo "    [$t] (b) the refused run on the dirty map created its RUN_DIR"; f=1; }
   # (c) the ALLOW twin.
   git -C "$R/repo" checkout -q -- .ai-dlc-fixture-readsets.tsv || broken "[$t] cannot check the map out clean"
+  echo "$R/run4" >> "$RUNDIRS"
   out="$(FXCELL=wrap-run4 AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run4" 2>&1)"; rc2=$?
   [ "$rc2" = 0 ] || { echo "    [$t] (c) with the orphan gone and the map clean the next run did not proceed: rc=$rc2 $out"; f=1; }
   return "$f"
@@ -834,7 +859,7 @@ ic_samplerstop() { # stop_sampler ends the sampler's sleep although the sleep ne
     [ "$1" = "$WRAPPER" ] && fx_inproc "$1"; stage1_state
     # The stub sleep is first on PATH for this one call only: the cell's own waits sleep through PATH too.
     [ "$1" = "$WRAPPER" ] && fx_inproc "$1"; PATH="$2/sl:$PATH" stage1_sampler; trap - EXIT INT TERM
-    sp="$(cat "$SPID_FILE")"; echo "$sp" >> "$ORPHANS"
+    rec_sampler "$RUN_DIR"; sp="$(cat "$SPID_FILE")"
     await "$2" "$sp" "the sampler's sleep blocked on the hang fifo" st_settled "$2/sl.pids" \
       || { echo "control: the sampler's sleep never blocked: $AWAIT_WHY"; exit 1; }
     s="$(head -1 "$2/sl.pids")"; cat "$2/sl.pids" >> "$ORPHANS"
@@ -897,7 +922,7 @@ ic_hold() {
   rn=$!
   printf '%s\n' "$rn" > "$2/self.tmp" && mv "$2/self.tmp" "$2/self"
   wait "$rn"; r=$?
-  j="$(cat "$2/job" 2>/dev/null)"; echo "$j" >> "$ORPHANS"
+  j="$(cat "$2/job" 2>/dev/null)"; echo "$j" >> "$ORPHANS"; echo "$j" >> "$PGIDS"
   [ -n "$j" ] || { echo "control: the injected line never ran (no job pid recorded; rc $r)"; return 1; }
   [ "$r" = 143 ] || { echo "the TERMed $3 cell exited $r, not 143: $(head -1 "$2/out")"; return 1; }
   await "$2" - "the $3 job's group ending" group_gone "$j" -- st_group_settled "$j" \

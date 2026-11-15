@@ -18,8 +18,9 @@
 #   GAINED       a row the key gained (in the present rows, absent from the record). Neutral.
 #
 # The whole-rows list, docs/inputs-decl-whole-rows.tsv, is the one data source for the shared-program set and the
-# `whole` / `legacy` class of every whole-program and whole-directory inputs.decl line; arm I130 of
-# scripts/validate-enforcement-map.sh holds it to the corpus and to its base copy (shrink-only).
+# `whole` / `legacy` class of every whole-program and whole-directory inputs.decl line; this script's
+# --ratchet mode (arms r1-r5, run by .githooks/pre-push's inputs_decl_ratchet step) holds it to the corpus and
+# to its base copy (shrink-only).
 #
 # Usage:
 #   invalidation-guard.sh --out <pool out dir> --keys <key record dir>   the gate: reads .kdec .dfx .dkeys

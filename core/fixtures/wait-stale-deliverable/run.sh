@@ -177,6 +177,9 @@ STUB_PATH=""; STUB_LOG=""
 # `clk-advance.sh` (sourced by the sleep shim) takes a `clock.lock` symlink mutex (its target is the holder's pid, recorded in the same atomic step that takes it), reads, adds, writes `clock.tmp.$$` and
 # renames it onto `clock` with the REAL mv, baked in by absolute path so the W5 mv shim never logs a clock write. A lock
 # whose holder pid is dead is renamed away, so a beat reaped with SIGKILL mid-advance cannot wedge the clock.
+# EVERY WAIT ENDS WHEN ITS ROOT VANISHES (BL-1044). A shim whose stub or clock dir is gone runs the real sleep or date,
+# so a beat orphaned by a deleted work dir runs out its own real-time quantum and exits; every poll loop here also
+# tests that its directory still exists.
 CLK_DIR=""
 clock_now() { # [clock dir] -> the virtual now of the last stub (or of the named clock dir)
   local b o; read -r b < "${1:-$CLK_DIR}/clock.base"; read -r o < "${1:-$CLK_DIR}/clock"
@@ -187,6 +190,7 @@ clk_advance_lib() {
   local body
   body='d_="@D@"
 until ln -s "$$" "$d_/clock.lock" 2>/dev/null; do
+  [ -d "$d_" ] || return 0
   h_="$(readlink "$d_/clock.lock" 2>/dev/null)"
   if [ -n "$h_" ] && ! kill -0 "$h_" 2>/dev/null; then
     "@M@" -f "$d_/clock.lock" "$d_/clock.dead.$$" 2>/dev/null && { g_="$(readlink "$d_/clock.dead.$$")"; [ "$g_" = "$h_" ] || ln -s "$g_" "$d_/clock.lock" 2>/dev/null; rm -f "$d_/clock.dead.$$"; }
@@ -210,13 +214,13 @@ sleep_stub() { # <dir> <fast|gate> [clock dir]
   STUB_LOG="$1/sleep.log"; : > "$STUB_LOG"
   case "$mode" in
     fast) body="$(printf 'exec "%s" 0.05' "$real_sleep")" ;;
-    gate) body="$(printf 'while [ ! -e "%s/release" ]; do "%s" 0.02; done' "$1" "$real_sleep")" ;;
+    gate) body="$(printf 'while [ ! -e "%s/release" ] && [ -d "%s" ]; do "%s" 0.02; done' "$1" "$1" "$real_sleep")" ;;
     *) echo "FIXTURE ERROR: unknown sleep stub mode '$mode'" >&2; exit 2 ;;
   esac
   clk_advance_lib "$cdir" "$real_mv" "$cdir/clk-advance.sh"
   adv="$(printf 'if [ "$#" -eq 1 ]; then case "$1" in ""|*[!0-9]*) ;; *) . "%s/clk-advance.sh" "$1" ;; esac; fi' "$cdir")"
-  printf '#!%s\n%s\nprintf "%%s\\n" "$*" >> "%s"\n%s\n' "$real_bash" "$adv" "$STUB_LOG" "$body" > "$1/bin/sleep"
-  printf '#!%s\nif [ "$#" -eq 1 ] && [ "$1" = "+%%s" ]; then read -r b_ < "%s/clock.base"; read -r o_ < "%s/clock"; printf "%%s\\n" "$(( b_ + o_ ))"; exit 0; fi\nexec "%s" "$@"\n' "$real_bash" "$cdir" "$cdir" "$real_date" > "$1/bin/date"
+  printf '#!%s\n[ -d "%s" ] || exec "%s" "$@"\n%s\nprintf "%%s\\n" "$*" >> "%s"\n%s\n' "$real_bash" "$1" "$real_sleep" "$adv" "$STUB_LOG" "$body" > "$1/bin/sleep"
+  printf '#!%s\nif [ "$#" -eq 1 ] && [ "$1" = "+%%s" ] && [ -f "%s/clock.base" ] && [ -f "%s/clock" ]; then read -r b_ < "%s/clock.base"; read -r o_ < "%s/clock"; printf "%%s\\n" "$(( b_ + o_ ))"; exit 0; fi\nexec "%s" "$@"\n' "$real_bash" "$cdir" "$cdir" "$cdir" "$cdir" "$real_date" > "$1/bin/date"
   chmod +x "$1/bin/sleep" || { echo "FIXTURE ERROR: cannot make the sleep stub executable" >&2; exit 2; }
   chmod +x "$1/bin/date" || { echo "FIXTURE ERROR: cannot make the sleep stub executable" >&2; exit 2; }
   STUB_PATH="$1/bin:$PATH"
@@ -259,8 +263,9 @@ stub_works() { # -> 0 when one `sleep 0` through STUB_PATH adds exactly one reco
 # the writer looping. Sets DW to the writer's pid.
 DW=""
 deliver_on_sleep() { # <file> <stop>
-  ( while [ ! -s "$STUB_LOG" ] && [ ! -e "$2" ]; do sleep 0.02; done
-    [ -s "$STUB_LOG" ] && { printf 'the actual answer for this sprint\n' > "$1"; : > "$(dirname "$STUB_LOG")/release"; } ) &
+  local sd; sd="$(dirname "$STUB_LOG")"
+  ( while [ ! -s "$STUB_LOG" ] && [ ! -e "$2" ] && [ -d "$sd" ]; do sleep 0.02; done
+    [ -s "$STUB_LOG" ] && { printf 'the actual answer for this sprint\n' > "$1"; : > "$sd/release"; } ) &
   DW=$!
 }
 end_writer() { # <stop>
@@ -373,7 +378,7 @@ fx_inproc "$SUBJ"
 seen=0
 # The beat is parked when the stub has RECORDED its first poll sleep, which is after every pre-loop lease write, so the
 # marker is read at a fixed point of the beat (and the beat's clock reads before the release do not move with load).
-until [ -s "$STUB_LOG" ] || ! kill -0 "$PID" 2>/dev/null; do sleep 0.02; done
+until [ -s "$STUB_LOG" ] || ! kill -0 "$PID" 2>/dev/null || [ ! -d "$W" ]; do sleep 0.02; done
 [ -f "$W/_bmad-output/.beat-inflight" ] && seen=1
 printf 'the actual answer for this sprint\n' > "$W/deliv.md"
 : > "$W/.stub/release"
@@ -565,7 +570,7 @@ run_stale() { # <subject> -> MS_LEASE MS_KILL_T MS_DISCRIM ; leaves W
   fx_inproc "$1"
   ( wsd_enter fresh "$W" PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS="$MS_Q" AI_DLC_WAIT_POLL_SECS="$MS_POLL" AI_DLC_WAIT_MARGIN_SECS="$MS_MARGIN" AI_DLC_MAX_WAIT_BEATS=6 && . "$1" || exit 97
     wfd_mark_main deliv.md; wfd_beat_main deliv.md ) >/dev/null 2>&1 & pid=$!
-  until [ -s "$STUB_LOG" ] || ! kill -0 "$pid" 2>/dev/null; do sleep 0.02; done
+  until [ -s "$STUB_LOG" ] || ! kill -0 "$pid" 2>/dev/null || [ ! -d "$W" ]; do sleep 0.02; done
   reap_tree "$pid"
   MS_KILL_T="$(clock_now)"
   MS_LEASE="$(marker_of "$W")"
@@ -856,12 +861,12 @@ run_early() { # <subject> -> EA_* ; leaves W
   [ -n "$real_ck" ] && [ -n "$real_sl" ] && [ -n "$real_bash" ] || { echo "FIXTURE ERROR: cannot resolve cksum/sleep/bash for the cksum hold" >&2; exit 2; }
   mkdir -p "$W/.ckbin" || { echo "FIXTURE ERROR: cannot create the cksum hold dir" >&2; exit 2; }
   d="$W/_bmad-output/.wait-beats"
-  printf '#!%s\nfor f_ in "%s"/*.since; do\n  [ -e "$f_" ] || break\n  [ -e "%s/.held" ] || : > "%s/.held"\n  while [ ! -e "%s/.go" ]; do "%s" 0.02; done\n  break\ndone\nexec "%s" "$@"\n' \
-    "$real_bash" "$d" "$W" "$W" "$W" "$real_sl" "$real_ck" > "$W/.ckbin/cksum"
+  printf '#!%s\nfor f_ in "%s"/*.since; do\n  [ -e "$f_" ] || break\n  [ -e "%s/.held" ] || : > "%s/.held"\n  while [ ! -e "%s/.go" ] && [ -d "%s" ]; do "%s" 0.02; done\n  break\ndone\nexec "%s" "$@"\n' \
+    "$real_bash" "$d" "$W" "$W" "$W" "$W" "$real_sl" "$real_ck" > "$W/.ckbin/cksum"
   chmod +x "$W/.ckbin/cksum" || { echo "FIXTURE ERROR: cannot make the cksum hold executable" >&2; exit 2; }
   BG_PATH="$W/.ckbin:$PATH"; bg_beat "$1" "$W" "$W/e.out" 30 1 $args; p=$BG; BG_PATH=""
   EA_SEEN=0; EA_MARK=0; EA_CNT=0
-  until_event eval '[ -e "$W/.held" ] || ! kill -0 "$p" 2>/dev/null'
+  until_event eval '[ -e "$W/.held" ] || ! kill -0 "$p" 2>/dev/null || [ ! -d "$W" ]'
   EA_CNT="$(count_glob "$d"/*.since)"
   if [ -e "$W/.held" ] && [ "$EA_CNT" -gt 0 ]; then
     EA_SEEN=1; [ -e "$W/_bmad-output/.beat-inflight" ] && EA_MARK=1

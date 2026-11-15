@@ -149,7 +149,7 @@ drive() { # <root> <out-file> -> the self-check's exit
   ( cd "$1" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
 }
 # BL-1020 worlds: copies of root A (committed hook = A's), each with a different hook-path state.
-#   Hcwd: A driven from a cwd that is not the root (it does NOT test the defensive relative-path join: the self-check cds to its root first). Hres: core.hooksPath -> an absolute dir whose hook differs from the
+#   World A itself is driven from a cwd that is not the root (drive_away; it does NOT test the defensive relative-path join: the self-check cds to its root first). Hres: core.hooksPath -> an absolute dir whose hook differs from the
 #   committed one (the resolved hook moved). Htree: hooksPath -> an absolute dir holding the committed bytes, the tree's
 #   own hook then edited (the tree hook moved). Habs: no core.hooksPath (a push runs no hook).
 gitin() { ( cd "$1" && shift && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git "$@" ); }
@@ -213,7 +213,6 @@ gitin "$W/rootTn" add scripts/unnamed.sh && gitin "$W/rootTn" -c user.email=x@x 
 drive_away() { # <root> <out-file> -> the self-check's exit, run from a cwd other than the root
   ( cd "$W" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
 }
-drive_away "$W/rootA" "$W/Hcwd.out"; hcwd=$?
 drive "$W/rootHres" "$W/Hres.out"; hres=$?
 drive_base() { # <root> <out-file> <base> -> the self-check's exit, with an explicit base ref
   ( cd "$1" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" "$3" </dev/null >"$2" 2>&1 )
@@ -225,7 +224,7 @@ hresn=no; grep -qF "$W/ext-res/pre-push" "$W/Hres.out" && grep -qF "$W/rootHres/
 htreen=no; grep -qF "$W/ext-tree/pre-push" "$W/Htree.out" && grep -qF "$W/rootHtree/.githooks/pre-push" "$W/Htree.out" && grep -qF 'the tree hook moved relative to base0:.githooks/pre-push; the branch edited the hook, but the push will run '"$W/ext-tree/pre-push"', not the edit' "$W/Htree.out" && ! grep -qF 'rebase onto' "$W/Htree.out" && htreen=yes
 hbehindn=no; grep -qF "$W/ext-behind/pre-push" "$W/Hbehind.out" && grep -qF 'the tree hook moved relative to newbase:.githooks/pre-push; the branch is behind: rebase onto newbase' "$W/Hbehind.out" && hbehindn=yes
 habsn=no; grep -qF 'would run no pre-push hook' "$W/Habs.out" && habsn=yes
-drive "$W/rootA" "$W/A.out"; a=$?
+drive_away "$W/rootA" "$W/A.out"; a=$?
 drive "$W/rootB" "$W/B.out"; b=$?
 drive "$W/rootC" "$W/C.out"; c=$?
 drive "$W/rootD" "$W/D.out"; d=$?
@@ -309,12 +308,12 @@ nv=$RC
 # World A's own output, printed ABOVE the summary only when A is not clean, so a caller can read why; the
 # summary stays the last line.
 [ "$a" = 0 ] || sed 's/^/A| /' "$W/A.out"
-echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hcwd=$hcwd Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn Arec=$arec Brec=$brec Wd=$wd Wdrec=$wdrec Wdn=$wdn Aseed=$aseed Wdseed=$wdseed Mt=$mt Mtn=$mtn Mtrec=$mtrec Mr=$mr Mrn=$mrn Htreem=$htreem Eskip=$eskip Mte=$mte Er=$er Ern=$ern Ts=$ts Tsn=$tsn Tn=$tn Tnn=$tnn Ep=$ep Epn=$epn Epall=$epall Epnone=$epnone"
+echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn Arec=$arec Brec=$brec Wd=$wd Wdrec=$wdrec Wdn=$wdn Aseed=$aseed Wdseed=$wdseed Mt=$mt Mtn=$mtn Mtrec=$mtrec Mr=$mr Mrn=$mrn Htreem=$htreem Eskip=$eskip Mte=$mte Er=$er Ern=$ern Ts=$ts Tsn=$tsn Tn=$tn Tnn=$tnn Ep=$ep Epn=$epn Epall=$epall Epnone=$epnone"
 shared_ok=0; base_ok=0; e_ok=0
 [ "$a" = 0 ] && [ "$aseed" = yes ] && [ "$arec" = yes ] && [ "$mt" = 0 ] && [ "$mtn" = yes ] && [ "$mtrec" = no ] \
   && [ "$eskip" = yes ] && [ "$mte" = yes ] && shared_ok=1
 [ "$htreem" = yes ] && [ "$mr" = 1 ] && [ "$mrn" = yes ] \
-  && [ "$wdseed" = yes ] && [ "$brec" = no ] && [ "$wd" = 0 ] && [ "$wdrec" = no ] && [ "$wdn" = yes ] && [ "$hcwd" = 0 ] && [ "$hres" = 2 ] && [ "$hresn" = yes ] && [ "$htree" = 2 ] && [ "$htreen" = yes ] && [ "$habs" = 2 ] && [ "$habsn" = yes ] && [ "$hbehind" = 2 ] && [ "$hbehindn" = yes ] && [ "$b" = 1 ] && grep -qF 'seeded red step' "$W/B.out" && [ "$c" = 2 ] \
+  && [ "$wdseed" = yes ] && [ "$brec" = no ] && [ "$wd" = 0 ] && [ "$wdrec" = no ] && [ "$wdn" = yes ] && [ "$hres" = 2 ] && [ "$hresn" = yes ] && [ "$htree" = 2 ] && [ "$htreen" = yes ] && [ "$habs" = 2 ] && [ "$habsn" = yes ] && [ "$hbehind" = 2 ] && [ "$hbehindn" = yes ] && [ "$b" = 1 ] && grep -qF 'seeded red step' "$W/B.out" && [ "$c" = 2 ] \
   && [ "$np" = 2 ] && [ "$ns" = 2 ] && [ "$nv" = 2 ] \
   && [ "$d" = 2 ] && [ "$dran" = no ] && [ "$dnamed" = yes ] \
   && [ "$u" = 2 ] && [ "$unamed" = yes ] && [ "$j" = 1 ] && [ "$jnamed" = yes ] && base_ok=1

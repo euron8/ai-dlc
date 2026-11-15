@@ -2308,6 +2308,8 @@ p_adjfour() { # files mode, 3 lanes, FOUR file-less escalations -> the fan-in de
   local w; w="$(new_world)"; three_writers "$w"
   sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"; escpart "$w/$SLOT/shards/stories-repair-p1/01.md" 1
   run_join "$1" "$w"
+  # LN17 reads this run (one subject run per distinct state): the world and a copy of its output.
+  ADJ4_W="$w"; rm -f "$WORK/adjfour.out"; [ "$RC" -eq 0 ] && cp "$JO" "$WORK/adjfour.out"
   [ "$RC" -eq 0 ] && has "$JO" "FANIN-COUNT: 5" && adj_ok "$JO" fanin 2 && has "$JO" "ADJUDICATOR-COUNT: 2" \
     && ! grep -q '^ADJUDICATE: fanin .*sweep' "$JO"
 }
@@ -2322,6 +2324,27 @@ p_adjcap() { # ELEVEN fan-in items -> k=min(4, floor(11/2)) = 4 batches, none ov
   sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"; escpart "$w/$SLOT/shards/stories-repair-p1/02.md" 8
   run_join "$1" "$w"
   [ "$RC" -eq 0 ] && has "$JO" "FANIN-COUNT: 12" && adj_ok "$JO" fanin 4 && has "$JO" "ADJUDICATOR-COUNT: 4"
+}
+# p_planfile (BL-716, graph s323: the lead's `| tail -30` lost the ADJUDICATE lines and the re-join refused, so no adjudicator
+# was dispatched). It reads p_adjfour's run (LN10), never a second join of that state: the join's LAST line is `PLAN-FILE:`
+# naming <shard dir>/.join-plan, which holds every line from JOINED: on, byte for byte, its fan-in dealt into the 2 batches;
+# then two states of its own: a second join refuses naming that file, and with the file gone the same refusal says no plan
+# file is there. RPLAN names the failing case.
+p_planfile() {
+  local w d p last body o="$WORK/adjfour.out"
+  RPLAN=world; w="${ADJ4_W:-}"; [ -n "$w" ] && [ -f "$o" ] || return 1
+  d="$w/$SLOT/shards/stories-repair-p1"; p="$d/.join-plan"
+  RPLAN=join; [ -f "$p" ] || return 1
+  RPLAN=last; last="$(tail -n 1 "$o")"
+  case "$last" in "PLAN-FILE: "*/shards/stories-repair-p1/.join-plan) ;; *) return 1 ;; esac
+  [ "${last#PLAN-FILE: }" -ef "$p" ] || return 1
+  RPLAN=bytes; body="$(sed -n '/^JOINED: /,$p' "$o" | sed '$d')"
+  [ -n "$body" ] && [ "$body" = "$(cat "$p")" ] && has "$p" "ADJUDICATOR-COUNT: 2" && adj_ok "$p" fanin 2 || return 1
+  RPLAN=rejoin; run_join "$1" "$w"
+  [ "$RC" -eq 2 ] && has "$JO" "already exists; a join never overwrites a repair record. Its serial plan" \
+    && has "$JO" "/shards/stories-repair-p1/.join-plan: read the plan there" && ! has "$JO" "PLAN-FILE:" || return 1
+  RPLAN=noplan; rm -f "$p"; run_join "$1" "$w"
+  [ "$RC" -eq 2 ] && has "$JO" "No plan file is at" && ! has "$JO" "Its serial plan" && [ ! -e "$p" ]
 }
 p_escown() { # an escalation naming a story NO part edited, on disk in the slot -> a lane of its own, the escalation its item
   local w; w="$(new_world)"; drive "$w" Edit "$w/$REL/$S21" "$AG1"; drive "$w" Edit "$REL/$S22" "$AG2"

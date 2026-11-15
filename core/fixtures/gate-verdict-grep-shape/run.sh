@@ -172,7 +172,7 @@ fi
 # entry's `grep -q 'gate-log\.md'` over the awk-extracted Check 5 span returned 0 — a
 # CLOSE — for an inserted `<!-- see also gate-log.md -->`, for a bare prose sentence
 # naming the file, AND for a deleted `CHECK_LOADED: 6` anchor, which runs the awk range to
-# end-of-file and lets Check 12's own write site satisfy the grep from 1800 lines away.
+# end-of-file and lets Check 12's own write site, later in the file, satisfy the grep.
 # Three ways to close a receipt while shipping nothing, so the pin has to be here.
 #
 # WHAT THE ARMS KEY ON, AND WHY IT IS NOT A SPELLING. `story_status` appears in none of
@@ -184,9 +184,9 @@ fi
 # keeps the join intact stays green.
 #
 # THE BOUNDS RUN BEFORE THE JOIN AND REFUSE IT. A span whose closing anchor is gone runs
-# to EOF, and every join question then has the whole file to answer from. Measured at this
-# tip: Check 5 is 100 lines and Check 12 is 136; with their closers deleted they are 2438
-# and 2214. The ceilings sit at roughly twice the live lengths, so ordinary growth does not
+# to EOF, and every join question then has the whole file to answer from. The ceilings
+# (CEIL below) sit well above the live span lengths, which the GREEN verdict prints as
+# `s5=` and `s12=`, and far below a span run to end of file, so ordinary growth does not
 # trip them, and a blown bound reports MEASURED NOTHING — a third verdict that is neither
 # the pass nor the finding, because a span that was never delimited has not been read.
 GV_WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }

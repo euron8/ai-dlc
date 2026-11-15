@@ -271,6 +271,8 @@ ps_select() { # decides every keyed step in the runlist from the fixture mechani
   pr="$(AI_DLC_VERDICT_STORE="$base" readset_vs_store "$PWD")"
   if [ -n "$pr" ]; then kd="$base/presuite-keys/${pr##*/}"; else kd="$GITDIR/ai-dlc-presuite-unit-keys"; case "$kd" in /*) ;; *) kd="$PWD/$kd" ;; esac; fi
   PS_KD="$kd"
+  # THE MARK precedes the key pass, so a declared input changed after it is either in the keys or newer than the mark.
+  : > "$c/.mark" 2>/dev/null
   ( KEYS_DIR="$kd"; FXROOT="scripts/presuite/"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; VERIFIED_RECORD=/dev/null
     readset_drop_excluded() { cat; }
     readset_manifest "$c"
@@ -306,6 +308,32 @@ ps_keep() {
   ls -t "$3/$2".*.key 2>/dev/null | sed 1,16d | while IFS= read -r f; do rm -f "$f"; done
   return 0
 }
+# ps_moved <key record> <mark>: prints the first row path of the record whose inode changed after the mark was written,
+# and returns 0. A row path now absent is judged on its nearest existing parent. A missing mark, an unreadable record or
+# a find that fails counts as moved. Content keys taken BEFORE the steps cannot see a declared input that a writer
+# changed and restored while they ran (a rewrite put back, a file created and removed, an mtime reset); its inode change
+# time can, because nothing in this hook resets an atime or a ctime.
+ps_moved() {
+  local rec="$1" mark="$2" l q tab out
+  [ -f "$mark" ] && [ -r "$rec" ] || { printf '%s' "${rec##*/} (no mark or record)"; return 0; }
+  tab="$(printf '\t')"
+  set --
+  while IFS= read -r l; do
+    case "$l" in '#'*|'') continue ;; esac
+    q="${l%%"$tab"*}"; q="${q%/}"
+    while [ -n "$q" ] && [ "$q" != . ] && [ ! -e "$q" ] && [ ! -L "$q" ]; do
+      case "$q" in */*) q="${q%/*}" ;; *) q=. ;; esac
+    done
+    [ -n "$q" ] || q=.
+    case "$q" in .) set -- "$@" . ;; *) set -- "$@" "./$q" ;; esac
+  done < "$rec"
+  [ "$#" -gt 0 ] || return 1
+  out="$(find "$@" -prune -cnewer "$mark" -print 2>/dev/null)" || { printf '%s' "${rec##*/} (find failed)"; return 0; }
+  [ -n "$out" ] || return 1
+  out="${out%%
+*}"
+  printf '%s' "${out#./}"
+}
 ps_stop() { # <exit status>: an interrupted flush stops the step forks it started, by their recorded pids
   local p
   trap '' INT TERM HUP
@@ -315,7 +343,7 @@ ps_stop() { # <exit status>: an interrupted flush stops the step forks it starte
   exit "$1"
 }
 ps_flush() {
-  local n slug title jobs why rc ps_nskip=0 p
+  local n slug title jobs why rc ps_nskip=0 p mv_p
   [ "$PS_N" -gt 0 ] || return 0
   : > "$PS_W/runlist"
   n=0
@@ -361,7 +389,12 @@ ps_flush() {
     else cat "$PS_W/$n.out"; rc="$(cat "$PS_W/$n.rc")"; if [ "$rc" = 0 ]; then printf '   PASS\n'; else printf '   FAIL\n'; fi; fi
     [ "$rc" = 0 ] || { fail=1; RED_STEPS="$RED_STEPS
      $title"; }
-    [ "$rc" != 0 ] || printf '%s\n' "$(cat "$PS_W/$n.slug" 2>/dev/null)" >> "$PS_W/k/.passed"
+    slug="$(cat "$PS_W/$n.slug" 2>/dev/null)"
+    # A PASS IS RECORDED ONLY ON THE TREE IT WAS KEYED ON: a step whose key rows moved after the mark passes this push and
+    # leaves no record, so the next push runs it.
+    if [ "$rc" = 0 ] && [ -n "$PS_KD" ] && [ -n "$slug" ] && [ -f "$PS_W/k/.k/$slug" ] && mv_p="$(ps_moved "$PS_W/k/.k/$slug" "$PS_W/k/.mark")"; then
+      printf '   ..    not recorded: %s changed while the pre-suite steps ran\n' "$mv_p"
+    elif [ "$rc" = 0 ]; then printf '%s\n' "$slug" >> "$PS_W/k/.passed"; fi
     printf '   ..    step elapsed %ss\n' "$(cat "$PS_W/$n.sec" 2>/dev/null || echo 0)"
   done
   # A PASS IS PUBLISHED THROUGH THE FIXTURE MECHANISM'S OWN WRITER: a verdict file named for the step, then readset_keys_write.
@@ -848,7 +881,7 @@ GITDIR="$(git rev-parse --git-common-dir 2>/dev/null)" || GITDIR=".git"
 [ -n "$GITDIR" ] || GITDIR=".git"
 DURATIONS_RECORD="$GITDIR/ai-dlc-fixture-durations"
 # THIS RUN'S COSTS, UNMERGED, AND THAT IS THE WHOLE DIFFERENCE FROM THE RECORD ABOVE.
-# DURATIONS_RECORD merges each GREEN run over the last one so a SKIPPED unit keeps the cost it had --
+# DURATIONS_RECORD merges each run over the last one (a red run under `<unit>@red` keys) so a SKIPPED unit keeps the cost it had --
 # correct for scheduling, useless for measurement. Its rows are of mixed vintage and nothing in
 # it says which run wrote which, so reading a pole figure off it compares two different days.
 # This file holds only what THIS pool actually timed.
@@ -3155,7 +3188,11 @@ run_fixtures() {
   # measured too and lost to plain longest-first, so nothing here carries a tuning
   # constant that §7's gate item 3 would have to expire.
   #
-  # THE RECORD IS WRITTEN BY THE LAST GREEN RUN AND LIVES UNDER .git, for I55 arm 4's
+  # A CLEAN ROW WINS; `<unit>@red` IS THE FALLBACK, then the 999999 unknown slot. A red pool writes
+  # only `@red` rows (the merge below), so a unit that has only ever run red is ordered by its red cost
+  # rather than as unknown. A `<fx>@consumer@red` row strips to `<fx>@consumer`, which `b` never is --
+  # the same as a clean `<fx>@consumer` row: a consumer-layout unit is ordered by its distribution rows.
+  # THE RECORD IS WRITTEN BY EVERY POOL AND LIVES UNDER .git, for I55 arm 4's
   # reason exactly: the content key hashes the working tree, so a cost record inside it
   # would change the key that decides whether this suite runs at all.
   #
@@ -3168,9 +3205,9 @@ run_fixtures() {
   # the reader, still finds no verdict, and still fails the push.
   cp "$out/list" "$out/.order"
   if [ -s "$DURATIONS_RECORD" ]; then
-    awk 'NR==FNR { if (NF == 2) prev[$1] = $2; next }
+    awk 'NR==FNR { if (NF == 2) { k = $1; if (sub(/@red$/, "", k)) red[k] = $2; else prev[k] = $2 }; next }
          { b = $0; sub(/\/$/, "", b); sub(/.*\//, "", b); sub(/@consumer$/, "", b)
-           print ((b in prev) ? prev[b] : 999999) " " $0 }' \
+           print ((b in prev) ? prev[b] : ((b in red) ? red[b] : 999999)) " " $0 }' \
         "$DURATIONS_RECORD" "$out/list" 2>/dev/null \
       | sort -k1,1nr | cut -d' ' -f2- > "$out/.order.lpt" 2>/dev/null
     n_ordered="$(grep -c . "$out/.order.lpt" 2>/dev/null)"
@@ -3392,7 +3429,9 @@ run_fixtures() {
     fi
     [ -f "$pr.refused" ] || printf "%s %s\n" "$b" "$SECONDS" > "$AI_DLC_FX_OUT/.dur/$b"
     printf "%s\n" "$b" >> "$AI_DLC_FX_OUT/.done"
-    printf "   done %s/%s  %s %s\n" "$(grep -c . "$AI_DLC_FX_OUT/.done" 2>/dev/null)" "$AI_DLC_FX_TOTAL" "$(cat "$AI_DLC_FX_OUT/$b" 2>/dev/null)" "$b"
+    dn=0; while IFS= read -r dl; do [ -z "$dl" ] || dn=$((dn + 1)); done 2>/dev/null < "$AI_DLC_FX_OUT/.done"
+    dv=""; read -r dv 2>/dev/null < "$AI_DLC_FX_OUT/$b"
+    printf "   done %s/%s  %s %s\n" "$dn" "$AI_DLC_FX_TOTAL" "$dv" "$b"
     : > "$pr.k"
   ' _ {} < "$out/.order"
   } &
@@ -3493,22 +3532,23 @@ run_fixtures() {
   # FXROOT and not a literal path: this block is I66-joined with the consumer hook, where
   # the fixtures live under tests/fixtures/, and a literal core/fixtures there prunes
   # every row the consumer has.
-  # A RED POOL MERGES NOTHING, and the gate is on the RUN, not on each unit. A unit that came back
-  # ok inside a red run was still timed under that run's load, and those are exactly the rows that
-  # poisoned this record: readset-skip-d at 928s against 330-502s in every clean gate, and three
-  # mutation-battery shards at ~650s against ~200s, all ok units of runs red elsewhere
-  # (BL-591). A per-unit gate would have kept every one of them. The price is that a unit timed
-  # only inside red runs keeps its older row, or none, until a green run times it; a misplaced
-  # dispatch costs a little schedule, while an inflated pole misdirects the runner and every
-  # ranking read off this file. `.last` below is NOT gated this way: it is this run's own measurement.
+  # A RED POOL MERGES UNDER ITS OWN KEY, `<unit>@red <secs>`, and never touches a clean row. Every unit
+  # that gave a verdict (ok or FAIL) has a `.dur/` file; a REFUSED unit and a unit with no verdict have
+  # none, because the `.dur/` write follows the verdict write and skips a refusal. Its ok units were timed
+  # under that run's load and its FAIL units may have stopped early, so a red figure never displaces a
+  # clean one: the dispatch order reads `<unit>@red` only for a unit with no clean row, and the trace
+  # ceiling and the pole line key on the bare unit name, which an `@red` row never matches. A clean
+  # `<unit> <secs>` row is written only by a green run. The prune tests the unit with `@red` stripped, so a red row lives exactly as long as its
+  # fixture directory. `.last` below is this run's own measurement, unsuffixed, whatever `rc` is.
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
+  dur_sfx=""; [ "$rc" -eq 0 ] || dur_sfx=@red
   # The merge reads the record and writes it back, so it runs under the record's lock: two pushes
   # merging at once would otherwise each drop the rows the other timed.
-  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then
+  if [ -s "$out/.durations" ]; then
     if rec_lock "$DURATIONS_RECORD.lock"; then
-      { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
+      { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; awk -v s="$dur_sfx" 'NF == 2 { print $1 s, $2 }' "$out/.durations"; } 2>/dev/null \
         | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
-        | while read -r k v; do [ -f "${FXROOT}${k%@consumer}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
+        | while read -r k v; do kb="${k%@red}"; [ -f "${FXROOT}${kb%@consumer}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
         | sort > "$out/.merged"
       [ -s "$out/.merged" ] && rec_put "$out/.merged" "$DURATIONS_RECORD"
       rec_unlock "$DURATIONS_RECORD.lock"
@@ -3538,7 +3578,7 @@ run_fixtures() {
   # has already been folded over the prior record and carries rows nothing here measured.
   # `.last` is this run's own measurement and is read only by the pole line, so it is true on a
   # red run too; gating it on `rc` made a red run print "no suite run, no pole". The merged
-  # record above steers dispatch and stays green-only.
+  # record above steers dispatch; a red run's rows there carry `@red`.
   # LASTRUN_OWN is the same figures held in this process: the shared file can be another push's by the
   # time a reader opens it, so this run's pole line reads the variable, never the file.
   if [ -s "$out/.durations" ]; then rec_put "$out/.durations" "$LASTRUN_RECORD"; LASTRUN_OWN="$(cat "$out/.durations")"; fi

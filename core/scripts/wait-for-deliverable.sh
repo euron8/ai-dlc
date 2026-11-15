@@ -1765,6 +1765,36 @@ dispatch_refuse() {  # $1 = what failed, $2 = the remedy; uses $dp_id_
 ledger_rows() {  # $1 = field, $2 = value -> the matching ledger lines (compact JSON, one per line)
   grep -F "\"$1\":\"$2\"" "$SPAWN_LEDGER" 2>/dev/null
 }
+# THE ROLE-LESS SPAWN HAS NO LEDGER ROW, BY DESIGN (BL-975). The dispatch guard writes a row only
+# for a role-bound spawn, and a round-dispatcher is spawned with no `subagent_type` and no
+# `team-roles/` path (`_dispatch-protocol.md` "Round-dispatcher brief"), so a lead beat carrying
+# `--dispatch <dispatcher>` refused and was re-armed without it, leaving the round's dispatcher with
+# no DISPATCH FAILED arm. With 0 ledger rows the dispatch time is read from the record the HARNESS
+# wrote for the spawn: the lead transcript's own `Agent`/`Task` tool_use line for that id, its
+# `timestamp` cut to the second (no later than the guard's row would have been). It applies only to
+# a spawn that LAUNCHED (this session's `agent-*.meta.json` carries the toolUseId; a guard-denied
+# dispatch never launches and has none), whose id is on exactly ONE line of the lead transcript, and
+# that is ROLE-LESS (no `subagent_type`, no `team-roles/` path on that line). Anything else returns 1
+# and the refusal stands.
+dispatch_roleless_ts() {  # uses dp_tui_ -> sets dp_rl_ts_; 1 when the fallback does not apply
+  dp_rl_ts_=""
+  [ -n "$TEAMMATE_DIR" ] && [ -d "$TEAMMATE_DIR" ] || return 1
+  dp_rl_hit_=0
+  for dp_rl_f_ in "$TEAMMATE_DIR"/agent-*.meta.json; do
+    [ -f "$dp_rl_f_" ] || continue
+    grep -qF "\"toolUseId\":\"$dp_tui_\"" "$dp_rl_f_" 2>/dev/null && { dp_rl_hit_=1; break; }
+  done
+  [ "$dp_rl_hit_" = 1 ] || return 1
+  dp_rl_lead_="${TEAMMATE_DIR%/subagents}.jsonl"
+  [ -f "$dp_rl_lead_" ] || return 1
+  dp_rl_rec_="$(grep -F "\"id\":\"$dp_tui_\"" "$dp_rl_lead_" 2>/dev/null)" || return 1
+  dp_rl_n_="$(printf '%s\n' "$dp_rl_rec_" | grep -c .)" || dp_rl_n_=0
+  [ "$dp_rl_n_" -eq 1 ] || return 1
+  case "$dp_rl_rec_" in *'"subagent_type"'*|*team-roles/*) return 1 ;; esac
+  dp_rl_ts_="$(printf '%s' "$dp_rl_rec_" | sed -n 's/.*"timestamp":"\([0-9T:-]*\)[.0-9]*Z".*/\1Z/p')"
+  [ -n "$dp_rl_ts_" ] || return 1
+  return 0
+}
 dispatch_epoch_of() {  # $1 = agentId, <name>@<team> or toolu_ id -> sets dp_ts_, dp_tui_, dp_e_; refuses
   dp_id_="$1"
   [ -r "$SPAWN_LEDGER" ] || dispatch_refuse "no spawn ledger at $SPAWN_LEDGER" \
@@ -1796,9 +1826,13 @@ dispatch_epoch_of() {  # $1 = agentId, <name>@<team> or toolu_ id -> sets dp_ts_
   esac
   dp_rows_="$(ledger_rows tool_use_id "$dp_tui_")"
   dp_c_="$(printf '%s' "$dp_rows_" | grep -c .)" || dp_c_=0
-  [ "$dp_c_" -eq 1 ] || dispatch_refuse "the ledger holds $dp_c_ row(s) for tool_use_id $dp_tui_, not one" \
-    "The dispatch guard writes one row per dispatch; a re-sent spawn is a new agentId."
-  dp_ts_="$(printf '%s' "$dp_rows_" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')"
+  if [ "$dp_c_" -eq 0 ] && dispatch_roleless_ts; then
+    dp_ts_="$dp_rl_ts_"
+  else
+    [ "$dp_c_" -eq 1 ] || dispatch_refuse "the ledger holds $dp_c_ row(s) for tool_use_id $dp_tui_, not one" \
+      "The dispatch guard writes one row per dispatch; a re-sent spawn is a new agentId."
+    dp_ts_="$(printf '%s' "$dp_rows_" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')"
+  fi
   dp_e_="$(to_epoch "$dp_ts_")" || dp_e_=""
   [ -n "$dp_e_" ] || dispatch_refuse "its ledger row has no readable ts ('$dp_ts_')" \
     "Arm without --since."

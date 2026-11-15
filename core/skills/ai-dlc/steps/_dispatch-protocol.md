@@ -277,6 +277,8 @@ first; only the tail varies per round.
     Members (<count>), one `<role> <brief path> <deliverable path>` per line:
     <role> <brief path> <deliverable path>
 
+The lead's beat over the return file carries `--dispatch <dispatcher agentId>` (Rule 28, "The round's epoch is written down before wave 1.").
+
 **Dev-brief bug-class checklist.** When the dev-brief includes a
 bug-class finding from the code-reviewer (see `code-reviewer.md`
 bug-class audit mandate), the dev MUST grep for same-shape call-sites

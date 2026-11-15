@@ -44,7 +44,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hcwd=0 Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=yes Epall=no Epnone=no'
+WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unamed=yes J=1 Jnamed=yes Hres=2 Hresn=yes Htree=2 Htreen=yes Habs=2 Habsn=yes Hbehind=2 Hbehindn=yes Arec=yes Brec=no Wd=0 Wdrec=no Wdn=yes Aseed=yes Wdseed=yes Mt=0 Mtn=yes Mtrec=no Mr=1 Mrn=yes Htreem=yes Eskip=yes Mte=yes Er=1 Ern=yes Ts=0 Tsn=yes Tn=0 Tnn=yes Ep=0 Epn=yes Epall=no Epnone=no'
 
 cd "$REPO" || exit 2
 

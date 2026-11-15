@@ -19,6 +19,60 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1133.0] - 2026-11-15
+
+### BL-1044 CLOSED and BL-1105 CLOSED: wait-stale-deliverable's waits end when their root vanishes; four stale tools.decl rows dropped
+
+Every poll loop in `core/fixtures/wait-stale-deliverable/run.sh` (the gate stub's release wait, the clock-lock wait in `clk-advance.sh`, the delivery writer, the cksum hold and the parent-side waits in C02, run_stale and run_early) also exits once its directory is gone, with no time or iteration bound added. A `sleep` or `date` shim whose root is gone runs the real tool. The four stale `tools.decl` rows of `owed-derivations` and `layer-reference-resolution` are dropped.
+
+### BL-919 CLOSED, BL-868 CLOSED and BL-984 advances (stays PARTIAL): a pre-suite pass whose inputs moved mid-run is not recorded; BL-1118 filed
+
+`ps_select` writes a mark before the key pass, and `ps_flush` records a passed keyed step only when `ps_moved` finds no key-row path whose inode changed after the mark. `presuite-units` gains arms `trewrite`, `tcreate` and `tunrel`. `env` is declared in `apply-drift-refile` and `pregate-self-check`. BL-868 closes by the lead's ruling C: items 10 and 12 superseded, item 14 withdrawn. BL-1118 (a PATH-trap arm for undeclared tools) is filed.
+
+### BL-1103 CLOSED: a red pool keeps its timings under `<unit>@red`
+
+Both pre-push hooks merge a red pool's timings for every unit that gave a verdict, ok or FAIL, into `.git/ai-dlc-fixture-durations` under `<unit>@red` (`<fx>@consumer@red` for a consumer-layout unit). The dispatch reader takes the clean row first, falls back to the `@red` row only when the unit has no clean row, and otherwise uses 999999. `suite-dispatch-order` gains cell `red`.
+
+### BL-1107 CLOSED: the pool worker's done line is fork-free
+
+In both pre-push hooks the worker's done line counts `.done` with a `while read` loop and reads the verdict with `read -r`, so a failed fork can no longer print into the step output with every row reading ok. `prepush-pool-depth`'s `cl_vi_out` diff note goes to a file.
+
+### BL-1045 PARTIAL: arm W1 holds every verdict-store and pass-record writer to a reviewed row
+
+`scripts/validate-verdict-identity.sh` gains arm W1, which keys each site that assigns `AI_DLC_VERDICT_STORE` or names a per-clone `ai-dlc-*` record under a git dir on its path and normalized text, and joins the sites to the `# VS-WRITER` rows as a multiset. `.claude/rules/operator-rulings.md` names W1 as the enforcer. The sites it names as owed move under BL-1114 and BL-1115, both filed.
+
+### BL-1104 CLOSED: readset-stage1-verdict reaps the wrapper's load sampler by recorded pgid on every exit path
+
+Each wrapper run's RUN_DIR is recorded before the wrapper starts, and the reap kills each recorded sampler group.
+
+### BL-1039 CLOSED and BL-1059 PARTIAL: heavy fixtures drive each state once
+
+`pregate-self-check` drives world A once, from a cwd that is not its root. `adversarial-shard-merge-b`, `adversarial-shard-merge` and `owed-derivations` and others build their worlds once and read one batch per root, with every assertion kept and their `invocations.decl` rows re-set from counted runs. The arm-and-world-cost subject of BL-1059 survives.
+
+### BL-1109 CLOSED, BL-1008 and BL-910 advance (stay PARTIAL): enforcement-map-sites has an exact assertion floor
+
+`core/fixtures/enforcement-map-sites/run.sh` enumerates against `EXPECTED_ASSERTIONS=9` with `-ne`, not a floor of 5. The `--arms I12` equivalence pair runs in shard a only.
+
+### BL-1106, BL-1108, BL-1110, BL-1111 and BL-1112 CLOSED; BL-1113 filed: fixture hygiene and the ratchet citation
+
+`retro-branch-behind-main` restores arm `pending-gate` and `retro-compliance-workflow` restores A5 as plain arms. `emit-report-refusal` A7 runs a process-substitution reference in the same start. `gate-verdict-grep-shape`'s stale span figures are dropped. BL-1111 is a recorded drop (no H12 clause). Both headers that cited I130 now cite `scripts/invalidation-guard.sh --ratchet`. BL-1113 files the two fixtures that rewrite a hook copy on every push.
+
+### BL-716 PARTIAL, BL-543 and BL-804 advance (stay PARTIAL): the join keeps its serial plan in `<shard dir>/.join-plan`
+
+`core/scripts/join-remediator-shards.sh` writes every line from `JOINED:` on, byte for byte, to `<shard dir>/.join-plan` and ends with `PLAN-FILE: <shard dir>/.join-plan`. A join over an existing record refuses naming that file, or says no plan file is there. `remediator-shard-join` gains LN17.
+
+### BL-975 PARTIAL, BL-974 and BL-976 advance (stay PARTIAL): a round-dispatcher is covered by DISPATCH FAILED
+
+`wait-for-deliverable.sh` reads a role-less spawn's dispatch time from the lead transcript's own Agent/Task `tool_use` line when the spawn ledger holds 0 rows, and rule 28 no longer sends the lead to `--since <epoch>` alone. `wait-beat-liveness` and `process-rule-pins` cover the change.
+
+### BL-1071 CLOSED, BL-998 CLOSED; BL-1116 filed: fixture-git-env-seam drops its inputs.decl glob line
+
+A FIFO open probe over all 291 other declarations logged 0 opens for the line, so `fixture-git-env-seam`'s key carries 1 decl row, not 292. BL-998 closes with no build: the owed count already runs on every path in both hooks. BL-1116 files the `<fx>@consumer` skips that carry no PENDING count.
+
+### BL-1009 CLOSED; BL-841, BL-972, BL-1068, BL-584 and BL-912 advance (stay PARTIAL); BL-1117 filed: records
+
+BL-1009 closes by the lead's ruling on window (A). BL-841 and BL-972 record the 0.1092.0 landing and the post-pull asks. BL-1068 and BL-584 record a `--list --tracer sandbox` trace, and BL-1117 files `fixture-git-env-seam`'s doubled data reads. BL-912 records the row-hook gap closed by the deliverable-line deny, with `docs/analysis/step-value-b257/bl912/`.
+
 ## [0.1132.0] - 2026-11-15
 
 ### BL-1032 CLOSED: recover-gate honours AI_DLC_STATE_DIR; handoff-entry's M1 state-dir guard is lifted

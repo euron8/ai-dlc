@@ -15,4 +15,3 @@ core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 # copy-only: scripts/validate-fixture-git-env.sh:41 the validator walks up for the marker; nothing reads its content
 VERSION
 core/fixtures/lib/report.sh
-core/fixtures/*/inputs.decl

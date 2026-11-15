@@ -347,7 +347,10 @@
 #     (d) widens the population to every tracked core/fixtures/<f>/**.sh (core/fixtures/lib excluded): a code line
 #     DEFINING a function whose name contains `mut` in any case (`name()` or `function name`), the builder every old
 #     battery named (mut_new, mutate, *_mut, *_mutant, mk_mutant). No exemption: a seeded-input helper carries no `mut`
-#     in its name. A battery with no named builder (an inline copy and sed) is outside every clause.
+#     in its name. A battery with no named builder (an inline copy and sed) is outside every clause, and no clause
+#     can take it: copying a shipped program and rewriting the copy is also how a fixture seeds an older engine, a
+#     drifted copy the product must refuse, a removed seam or a stub. What separates a battery is what READS the
+#     rewritten copy (the fixture's own predicate, or the product subject), not its shape.
 #     One row per offending FILE, `H12 <file>: <reason>[, <reason>]`, each reason the first line of its kind; no
 #     allowlist. A fixture proves a product feature with its own arms; none scores a battery of mutants per push.
 #

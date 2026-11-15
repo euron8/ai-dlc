@@ -621,21 +621,23 @@ else
 fi
 
 # --- the three runs ---------------------------------------------------------------------------
-# ONLY units cf and vf READ OUT_*/C_* (and S1/S2 below), so only the shards that run one of them build
-# and run the three consumers. Every other shard skips three full applies it never reads.
+# ONLY units cf and vf READ OUT_GREEN/C_GREEN (and S2 below), and only unit cf reads the worklist and decision
+# seeds (and S1), so a shard builds and runs only the consumers its units read.
 SEED_RUNS=0; if sg cf || sg vf; then SEED_RUNS=1; fi
+SEED_CF=0; if sg cf; then SEED_CF=1; fi
 if [ "$SEED_RUNS" = 1 ]; then
 C_GREEN="$WORK/cons-green"; C_WORK="$WORK/cons-worklist"; C_DEC="$WORK/cons-decision"
 mk_consumer "$C_GREEN" green    || { echo "FIXTURE BROKEN — could not build the green consumer" >&2; exit 2; }
+OUT_GREEN="$(run_apply "$APPLY" "$C_GREEN")"
+fi
+if [ "$SEED_CF" = 1 ]; then
 mk_consumer "$C_WORK"  worklist || { echo "FIXTURE BROKEN — could not build the worklist consumer" >&2; exit 2; }
 mk_consumer "$C_DEC"   decision || { echo "FIXTURE BROKEN — could not build the decision consumer" >&2; exit 2; }
-
-OUT_GREEN="$(run_apply "$APPLY" "$C_GREEN")"
 OUT_WORK="$(run_apply "$APPLY" "$C_WORK")"
 OUT_DEC="$(run_apply "$APPLY" "$C_DEC")"
 fi
 
-if [ "$SEED_RUNS" = 1 ]; then
+if [ "$SEED_CF" = 1 ]; then
 # --- S1 SANITY: the three inputs really are three different shapes ----------------------------
 # Three arms below read three trees, and if the seeds collapsed into one shape they would agree
 # for that reason rather than because the guard discriminates. Assert the discriminating property
@@ -650,7 +652,9 @@ else
   pre_guard "$OUT_WORK" | sed 's/^/        /' | head -6
   echo; echo "apply-restamp-worklist: FIXTURE BROKEN" >&2; exit 2
 fi
+fi
 
+if [ "$SEED_RUNS" = 1 ]; then
 # --- S2 SANITY: the normal run DOES overwrite C5's subject ------------------------------------
 # C5 asserts `--finish` leaves the session driver at v1. That is only a claim about `--finish` if
 # a full run would have moved it, so establish the other side here rather than assuming it.
@@ -2857,7 +2861,6 @@ ar_flowI() {
   ar_ver "$r" "$w"
   u5_seed_unseen "$w/c" || { av BROKEN; return; }
   ar_render "$w"; cp "$w/c/$AR_RPT" "$w/r2.md"; dg2="$(ar_dg "$w")"
-  ar_ver "$r" "$w"
   if [ -z "$dg1" ] || [ -z "$dg2" ] || [ "$dg1" = "$dg2" ] || cmp -s "$w/r1.md" "$w/r2.md"; then av BROKEN; return; fi
   ra_answer "$w/c" "$(ar_q "$dg2")" "$(ar_lbl "$dg2")" || { av BROKEN; return; }
   rm -f "$w/c/ra-payload.json"

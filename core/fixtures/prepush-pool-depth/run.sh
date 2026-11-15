@@ -1587,7 +1587,7 @@ cl_B() {
   # named `<tag>.wb` under $CLW/, so the path is matched by that shape rather than by one literal spelling.
   grep -v '^   done ' "$o" | sed -E "s|[^ (]*/cl/[A-Za-z0-9._-]+\.wb(\.main)?|WORLD|g" > "$o.f"
   if [ -s "$o.f" ] && cmp -s "$o.f" "$CLW/noseam.f"; then printf 'cl_vi_out=same\n'
-  else printf 'cl_vi_out=differs\n'; { echo "  note  cl_vi_out: diff of the no-seam reference (<) against this drive (>):"; diff "$CLW/noseam.f" "$o.f" | head -n 20; } >&2; fi
+  else printf 'cl_vi_out=differs\n'; { echo "  note  cl_vi_out: diff of the no-seam reference (<) against this drive (>):"; diff "$CLW/noseam.f" "$o.f" | head -n 20; } > "$CLW/$g.vi.note"; fi
   printf 'cl_vi_list=%s|%s\n' "$(cl_cnt '@consumer' "$o")" "$([ -e "$(cl_kdir "$W")" ] && echo cl-keys || echo none)"
   case " $4 " in *" 2 "*|*" 3 "*)
     r="$(cl_drive "$P" "$S" "$W" "$g.B1" step)"; o="$CLW/out.$g.B1"
@@ -1733,6 +1733,8 @@ clcheck "BL-1043: a push moving only a rendered template selects the reader of t
 clcheck "BL-1043: a consumer-layout pass in the shared store at a unit's placement key skips <fx>@consumer and republishes its record" cl_cstore
 clcheck "the tree is built only on the hook's real entry: no PREPUSH_CL_ENTRY, no tree, no install, no @consumer row, every distribution fixture ran" cl_entry cl_entry_ran
 clcheck "(vi) switch unset: the output is the no-seam block's, with no @consumer row and no consumer-layout record" cl_vi_out cl_vi_list
+# cl_B's stdout is the cell stream cl_score filters, so the cl_vi_out diff is printed here, on this fixture's stdout
+[ ! -s "$CLW/base.vi.note" ] || cat "$CLW/base.vi.note"
 clcheck "BL-1043: a push with no consumer-layout record FAILs the step naming the census, runs no unit and writes no record" cl_ref
 clcheck "F-B5: the census over a v2 verified record and no consumer keys dir selects every candidate, and the record written is ok, not seeded" cl_fb5_sel cl_fb5_state
 clcheck "F-B2: a switch inherited at depth 1 is not honoured; exported at depth 0 it is, and no unit inherits it" cl_fb2 cl_fb2_ran cl_fb2_d0

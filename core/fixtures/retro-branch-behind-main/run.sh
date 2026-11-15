@@ -549,8 +549,9 @@ extract_block() { # <retro.md> -> the Step 1 carry block, fences excluded
 #   LAND block   the `# retro 7a-post step 1:` comment AND every `LAND: ` token in retro.md
 #   MERGE block  the `# retro 7a:` comment AND every `MERGE: ` token in retro.md
 # Any marker present means PRESENT, and a present subject is held to every arm: a kept comment
-# over a gutted body, or one surviving fallback line, is RED. Arm `pending-gate` proves it on three
-# seeds with the anchor kept and the block broken. The skipped arms are counted, and the liveness
+# over a gutted body, or one surviving fallback line, is RED. Arm `pending-gate` (before the liveness
+# check) proves a kept LAND or 7a anchor over a gutted block RED and a kept fallback line PRESENT;
+# what then reds a gutted fallback is part 2's worlds. The skipped arms are counted, and the liveness
 # check requires asserted + skipped == the full count, so a skip cannot hide a lost arm.
 #
 # PENDING IS A CONSUMER-LAYOUT VERDICT ONLY. In the DISTRIBUTION (the root walk matched
@@ -1018,6 +1019,11 @@ echo "retro-branch-behind-main: part 3 — retro.md 7a-post step 1 land (subject
 extract_land() { # <retro.md> -> the 7a-post step 1 block, fences excluded
   awk '/^# retro 7a-post step 1: land on the merged trunk$/{on=1} on && /^```$/{exit} on{print}' "$1"
 }
+land_shape_ok() { # <retro.md>: exactly one comment-anchored LAND block printing both outcomes
+  local n; n="$(grep -c '^# retro 7a-post step 1: land on the merged trunk$' "$1")" || n=0
+  case "$n:$(extract_land "$1")" in 1:*'LAND: main at origin/main'*'LAND: HARD_BLOCK'*) return 0 ;; esac
+  return 1
+}
 # An ABSENT LAND block (subject_state: no comment and no LAND: token) is PENDING. A PRESENT one that
 # is not exactly one comment-anchored block printing both outcomes is BROKEN, and FAILs, exit 1.
 LBLOCK="$(extract_land "$RETRO")"
@@ -1026,13 +1032,11 @@ if [ "$ST_LAND" = absent ]; then
     "the worlds land-ok land-wt land-diverged land-tag are not asserted" 1
 else
 _ln="$(grep -c '^# retro 7a-post step 1: land on the merged trunk$' "$RETRO")" || _ln=0
-case "$_ln:$LBLOCK" in
-  1:*'LAND: main at origin/main'*'LAND: HARD_BLOCK'*) : ;;
-  *)
+if ! land_shape_ok "$RETRO"; then
     echo "  FAIL  retro.md carries a LAND marker but ${_ln} '# retro 7a-post step 1: land on the merged trunk' block(s), not exactly one printing both LAND outcomes — a present subject that is broken is a finding, not PENDING" >&2
     echo "retro-branch-behind-main: FAIL (part 3 subject broken)" >&2
-    exit 1 ;;
-esac
+    exit 1
+fi
 
 P3="$WORK/p3"; mkdir -p "$P3"
 RB=ai-dlc/retro/sprint-900
@@ -1172,6 +1176,11 @@ echo "retro-branch-behind-main: part 4 — retro.md 7a merge (subject $RETRO)"
 extract_merge() { # <retro.md> -> the 7a block, fences excluded
   awk '/^# retro 7a: merge the retro PR, then read its state from GitHub$/{on=1} on && /^```$/{exit} on{print}' "$1"
 }
+merge_shape_ok() { # <retro.md>: exactly one comment-anchored 7a block naming <pr-number>, printing both outcomes
+  local n; n="$(grep -c '^# retro 7a: merge the retro PR, then read its state from GitHub$' "$1")" || n=0
+  case "$n:$(extract_merge "$1")" in 1:*'<pr-number>'*'MERGE: merged'*'MERGE: HARD_BLOCK'*) return 0 ;; esac
+  return 1
+}
 # ABSENT (no comment and no MERGE: token) is PENDING; PRESENT but not exactly one comment-anchored
 # block naming <pr-number> and printing both outcomes is BROKEN, and FAILs, exit 1.
 MBLOCK="$(extract_merge "$RETRO")"
@@ -1180,13 +1189,11 @@ if [ "$ST_MERGE" = absent ]; then
     "the worlds merge-ok merge-exit0-open merge-cleanup-failed merge-open merge-view-fails merge-view-lowercase are not asserted" 1
 else
 _mn="$(grep -c '^# retro 7a: merge the retro PR, then read its state from GitHub$' "$RETRO")" || _mn=0
-case "$_mn:$MBLOCK" in
-  1:*'<pr-number>'*'MERGE: merged'*'MERGE: HARD_BLOCK'*) : ;;
-  *)
+if ! merge_shape_ok "$RETRO"; then
     echo "  FAIL  retro.md carries a MERGE marker but ${_mn} '# retro 7a: merge the retro PR, then read its state from GitHub' block(s), not exactly one naming <pr-number> and printing both MERGE outcomes — a present subject that is broken is a finding, not PENDING" >&2
     echo "retro-branch-behind-main: FAIL (part 4 subject broken)" >&2
-    exit 1 ;;
-esac
+    exit 1
+fi
 P4="$WORK/p4"; mkdir -p "$P4"
 WORLDS4="merge-ok merge-exit0-open merge-cleanup-failed merge-open merge-view-fails merge-view-lowercase"
 NW4="$(wc -w <<<"$WORLDS4")"
@@ -1333,6 +1340,37 @@ fi
 
 
 
+# ARM pending-gate: PENDING NEVER HIDES A BROKEN SUBJECT. Fixture-written retro.md fragments, judged in
+# the CONSUMER layout (where PENDING exists) by the same subject_state, gate_verdict and shape checks the
+# parts above apply to $RETRO: a kept anchor over a gutted LAND or 7a block is PRESENT and RED, its whole
+# twin asserts, and a kept Step 1 fallback line is PRESENT (asserted, never PENDING). Seeded, not cut from
+# $RETRO, so it runs whether or not the subjects have arrived.
+PGD="$WORK/pg"; mkdir -p "$PGD"
+printf '%s\n' '# retro 7a-post step 1: land on the merged trunk' 'git checkout main' '```' > "$PGD/land-kept.md"
+printf '%s\n' '# retro 7a-post step 1: land on the merged trunk' 'echo "LAND: main at origin/main"' \
+  'echo "LAND: HARD_BLOCK diverged"' '```' > "$PGD/land-whole.md"
+printf '%s\n' '# retro 7a: merge the retro PR, then read its state from GitHub' 'gh pr merge <pr-number>' '```' > "$PGD/merge-kept.md"
+printf '%s\n' '# retro 7a: merge the retro PR, then read its state from GitHub' 'gh pr merge <pr-number>' \
+  'echo "MERGE: merged"' 'echo "MERGE: HARD_BLOCK open"' '```' > "$PGD/merge-whole.md"
+printf '%s\n' '### 1. Context Loading' '```bash' '# retro Step 1: carry the sprint branch' 'PR_SRC=""; GH_WHY=""' '```' \
+  '### 2. Next' > "$PGD/fallback-kept.md"
+pg_verdict() { # <subject> <file> -> assert | PENDING | RED, consumer layout
+  local v; v="$(gate_verdict consumer "$(subject_state "$1" "$2")")"
+  if [ "$v" = assert ]; then
+    case "$1" in land) land_shape_ok "$2" || v=RED ;; merge) merge_shape_ok "$2" || v=RED ;; esac
+  fi
+  printf '%s' "$v"
+}
+PG_WANT="land-kept:RED land-whole:assert merge-kept:RED merge-whole:assert fallback-kept:assert"
+PG_GOT=""
+for _c in $PG_WANT; do _c="${_c%%:*}"; PG_GOT="$PG_GOT $_c:$(pg_verdict "${_c%%-*}" "$PGD/$_c.md")"; done
+PG_GOT="${PG_GOT# }"
+if [ "$PG_GOT" = "$PG_WANT" ]; then
+  ok "pending-gate: a kept anchor over a gutted block is PRESENT and RED in a consumer, never PENDING, and its whole twin asserts [$PG_GOT]"
+else
+  bad "pending-gate: expected [$PG_WANT], got [$PG_GOT]"
+fi
+
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
 # A PENDING skip is counted, so asserted + skipped must still be the full count.
@@ -1340,4 +1378,4 @@ echo
 if [ "$PENDN" -gt 0 ]; then
   echo "retro-branch-behind-main: $PENDN PENDING row(s) skipping $SKIPPED -- their subjects have not arrived in this retro.md"
 fi
-report_end retro-branch-behind-main "$((13 - SKIPPED + PENDBAD))"
+report_end retro-branch-behind-main "$((14 - SKIPPED + PENDBAD))"

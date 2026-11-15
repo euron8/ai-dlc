@@ -1,0 +1,13 @@
+lead transcripts 162 | latest record 2026-11-14T16:51:21.143Z | control toolu_QZX9impossible 0
+pre-cut 2026-11-09T00:00:00Z..2026-11-12T07:39:59Z: lead Agent calls 528, hook refusals (distinct dispatch) 263, guard deliverable denies 13, snapshot-update calls 1005, --row-add 164, --row-add right after an Agent call 104
+post-cut 2026-11-12T07:40:00Z..9999: lead Agent calls 80, hook refusals (distinct dispatch) 0, guard deliverable denies 24, snapshot-update calls 108, --row-add 3, --row-add right after an Agent call 1
+s322 snapshot-update calls 1084, directly after another snapshot-update call 362, --help 96 {'no earlier call': 7, 'after rc 0': 82, 'after rc!=0': 7}
+s322 hook refusals 263 | with a lead truth row 197
+  11 (a) agree
+  1 (a) resolved, no lead row
+  24 (b) DISAGREE
+  20 (b) agree
+  14 (b) resolved, no lead row
+  116 unresolved: .brief has no deliverable line
+  77 unresolved: no .brief reference
+(b) fan groups 8, groups whose brief deliverable set differs from the lead's set 0, (b) disagreements inside fan groups 24
