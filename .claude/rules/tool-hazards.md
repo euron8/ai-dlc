@@ -32,9 +32,8 @@ mutations. Where a Bash result has to be exact, DERIVE it: `md5`, `wc -c`, `cmp 
 ## Delegation hazards
 
 - **Never kill by pattern.** Stop only a process you started, by a recorded pid or group. A plain
-  `hermetic-run.sh` run records its pass in the parent store (`<store>/<root-sha>`), which a push does not read;
-  `scripts/seed-verdict-store.sh` records into `counted-<vk>`, which a push does read. Never point
-  `AI_DLC_VERDICT_STORE` at a mktemp dir: those passes are lost.
+  `hermetic-run.sh` run in the distribution records nothing; `scripts/seed-verdict-store.sh` records into
+  `counted-<vk>`, which a push reads. Never point `AI_DLC_VERDICT_STORE` at a mktemp dir: those passes are lost.
 - **A backgrounded `sleep` returns immediately.** Block on the condition instead.
 - **A claim about a call's output must not share a parallel block with the call**, and cleanup that
   presupposes an action's success (a branch delete beside its merge) must not either.

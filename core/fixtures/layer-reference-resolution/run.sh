@@ -66,7 +66,35 @@ LINTER="$(pick "${1:-}" "$HERE/../../scripts/validate-layer-entries.sh" \
 [ -n "$LINTER" ] || { echo "FIXTURE ERROR: cannot locate validate-layer-entries.sh from $HERE" >&2; exit 2; }
 
 echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
-[ -f "$(dirname "$LINTER")/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED core/scripts/artifact-path-config.sh"
+APC="$(dirname "$LINTER")/artifact-path-config.sh"
+[ -f "$APC" ] || { echo "SKIP: no artifact-path-config.sh beside $LINTER, so the resolver cells have no subject"; exit 0; }
+echo "HERMETIC-CONSUMED core/scripts/artifact-path-config.sh"
+
+# IN PROCESS (BL-878). The validator is SOURCED ONCE into this shell (its guard returns after defining vle_main), and
+# every drive calls vle_main inside the `$( )` that captures its output, so its `exit`, `set -u`, EXIT trap and
+# function definitions stay in that subshell. The validator in turn sources the resolver in a subshell, so neither
+# subject starts a bash except in the cli cells below. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with
+# neither its `<p>_main() {` line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an
+# ok); exactly one half is a respelled subject and FAILs; a subject grep cannot READ (exit 2) is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$LINTER" vle_main; g_vle=$?
+wrap_gate "$APC" apc_main; g_apc=$?
+if [ "$g_vle" = 2 ] || [ "$g_apc" = 2 ]; then exit 2; fi
+if [ "$g_vle" = 1 ] || [ "$g_apc" = 1 ]; then echo "layer-reference-resolution: 1 FAILED"; exit 1; fi
+if [ "$g_vle" = 3 ] || [ "$g_apc" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
 
 ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$ROOT"' EXIT
@@ -76,14 +104,21 @@ CROSSWALK="$CONS/.claude/skills/ai-dlc/extensions/README.md"
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+fx_inproc "$LINTER"
+. "$LINTER" || { echo "FIXTURE ERROR: sourcing $LINTER failed" >&2; exit 2; }
+declare -F vle_main > /dev/null || { echo "FIXTURE ERROR: sourcing $LINTER defined no vle_main" >&2; exit 2; }
 
 # EXPECTED_ASSERTIONS is not bookkeeping. `set -u` killing a `$( )` subshell inside
 # `if m="$( … )"` reads as a false branch, and the arm silently does not run — green lines and a
 # PASS. Counting what ran is what closes it, and the count is a literal here or it disappears
 # with the assertions.
 # 3 premises + 3 W9 premises + 1 W12 premise + 1 pristine vector + 2 applicability
-# + 1 code-attribution + 1 crosswalk-is-load-bearing + 1 exit condition.
-EXPECTED_ASSERTIONS=13
+# + 1 code-attribution + 1 crosswalk-is-load-bearing + 1 exit condition
+# + 4 validator cli cells + 1 cli discrimination + 1 pre-wrap resolver premise + 1 pre-wrap resolver equivalence.
+EXPECTED_ASSERTIONS=20
 
 echo "layer-reference-resolution:"
 
@@ -142,7 +177,7 @@ got="$(vector "$LINTER" "$CONS")"
 # The differential the release rests on: the emitted form is present in the file, and the form
 # that USED to be emitted for this subject is not. Without the second half "it matches" could
 # be true of a change that did nothing.
-out="$(bash "$LINTER" "$CONS" 2>&1)"
+out="$(fx_inproc "$LINTER"; vle_main "$CONS" 2>&1)"
 apf="$(grep -oE "SECTION ID OUT OF BAND(, ALREADY COLLIDED)? — '[^']*' allocates" <<<"$out" | grep -oE "'[^']*'" | tr -d "'" | grep -E '^AP' | head -1)"
 if [ -n "$apf" ] && grep -qF -- "$apf" "$DOMAIN"; then
   ok "the em-dash subject's emitted form [$apf] occurs in the file it is reported about"
@@ -159,6 +194,59 @@ grep -qF -- 'AP.' "$DOMAIN" \
 grep -qE '^WARN[[:space:]]+W9[[:space:]]' <<<"$out" \
   && ok "the script-citation findings are emitted under the code W9, so a run can attribute them" \
   || bad "no emitted line carries the code W9 — the subjects report but name no clause"
+
+# --- the cli cells (cells.decl): each subject run as a PROGRAM once per distinct CLI outcome -------
+# Each is compared with the in-process answer on the same input: stdout, stderr and exit separately,
+# byte for byte, and each asserts its own outcome, so two runs that both printed nothing cannot read
+# as equivalent. Taken on the pristine consumer, before Part 3 edits it.
+EQ="$ROOT/eq"; mkdir -p "$EQ" "$ROOT/clean/.claude/skills/ai-dlc" "$ROOT/notcons" || exit 2
+cp "$CONS/.claude/skills/ai-dlc/layer-contract.yaml" "$ROOT/clean/.claude/skills/ai-dlc/" || exit 2
+eqv() { # eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two answers are identical
+  local id="$1"; shift
+  ( fx_inproc "$LINTER"; vle_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$LINTER" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(tail -2 "$EQ/$1.ip.out")" "$(head -2 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(tail -2 "$EQ/$1.cl.out")" "$(head -2 "$EQ/$1.cl.err")"; }
+if eqv cli-pass "$ROOT/clean" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] \
+   && grep -q '^LAYER_CONFORMANCE v1 .* errors=0 ' "$EQ/cli-pass.cl.out" && [ ! -s "$EQ/cli-pass.cl.err" ]; then
+  ok "cli-pass: the program passes a contract-only consumer exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with errors=0 ($(eq_twin cli-pass))"; fi
+# The W11 line names a NON-EMPTY token expression only when the validator's sourced resolver answered
+# (`a ${LC_TOKRE:+non-}empty`); this seed declares no scan roots, so that clause is the one it reads.
+if eqv cli-fail "$CONS" && [ "$(cat "$EQ/cli-fail.cl.rc")" = 1 ] && grep -q '^ERROR  E15 ' "$EQ/cli-fail.cl.out" \
+   && grep -q '^WARN   W11  artifact-path-config.sh resolved 0 scan root(s) and a non-empty sprint-token expression' "$EQ/cli-fail.cl.out"; then
+  ok "cli-fail: the program refuses the seeded consumer exactly as the in-process call does (stdout, stderr, exit 1), its resolver answering"
+else bad "cli-fail: the program and the in-process call differ, or the outcome is not exit 1 with an E15 and a resolved token expression ($(eq_twin cli-fail))"; fi
+if eqv cli-refs "$CONS" --check-refs && [ "$(cat "$EQ/cli-refs.cl.rc")" = 1 ] \
+   && [ "$(grep -c '^  ambiguous ' "$EQ/cli-refs.cl.out")" -eq 3 ]; then
+  ok "cli-refs: the program lists the three AMBIGUOUS rows under --check-refs exactly as the in-process call does"
+else bad "cli-refs: the program and the in-process call differ, or --check-refs did not list 3 ambiguous rows ($(eq_twin cli-refs))"; fi
+if eqv cli-refuse "$ROOT/notcons" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] \
+   && grep -q 'Not an ai-dlc consumer' "$EQ/cli-refuse.cl.out" "$EQ/cli-refuse.cl.err"; then
+  ok "cli-refuse: the program refuses a tree that is no consumer exactly as the in-process call does (exit 2)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 2 naming no consumer ($(eq_twin cli-refuse))"; fi
+if ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-fail.cl.out" && ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-fail.cl.rc"; then
+  ok "cli cells discriminate: the passing and the refusing input give different stdout and exit"
+else bad "cli cells do not discriminate: cli-pass and cli-fail gave the same stdout or exit"; fi
+
+# THE RESOLVER INSTALLED BEFORE ITS WRAP. The validator sources the resolver beside it as
+# `. <file> <args>; apc_main <args>`; a pre-wrap resolver runs its body on the arguments `.` hands it
+# and exits before apc_main is reached. The validator is copied beside a pre-wrap resolver (the real
+# one with its five wrap lines cut), called in process, and held to cli-fail's PROGRAM answer.
+UNW="$ROOT/unwrapped/core/scripts/artifact-path-config.sh"
+UVLE="$ROOT/unwrapped/core/scripts/validate-layer-entries.sh"
+mkdir -p "$(dirname "$UNW")" && cp "$LINTER" "$UVLE" || exit 2
+sed -e '/^apc_main() {$/d' -e '/^# Executed, it runs; sourced, it has defined apc_main and returns\.$/,$d' "$APC" | sed '$d' > "$UNW"
+if [ "$(wc -l < "$UNW")" -eq $(( $(wc -l < "$APC") - 5 )) ] && [ "$(tail -1 "$UNW")" = 'exit 0' ] \
+   && ! grep -q '^apc_main() {$' "$UNW" && ! grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$UNW"; then
+  ok "premise: the pre-wrap resolver copy carries neither wrap half and ends on the body's own exit 0"
+else bad "premise BROKEN: the pre-wrap resolver copy is not the body with five wrap lines cut ($(wc -l < "$UNW") of $(wc -l < "$APC") lines)"; fi
+( fx_inproc "$UVLE"; . "$UVLE"; vle_main "$CONS" ) > "$EQ/uw.out" 2> "$EQ/uw.err"; echo "$?" > "$EQ/uw.rc"
+if cmp -s "$EQ/uw.out" "$EQ/cli-fail.cl.out" && cmp -s "$EQ/uw.err" "$EQ/cli-fail.cl.err" && cmp -s "$EQ/uw.rc" "$EQ/cli-fail.cl.rc"; then
+  ok "a pre-wrap resolver beside the validator gives the program's answer byte for byte (stdout, stderr, exit)"
+else bad "a pre-wrap resolver beside the validator changes its answer: rc=$(cat "$EQ/uw.rc") vs $(cat "$EQ/cli-fail.cl.rc"); $(grep 'W11' "$EQ/uw.out" | head -1)"; fi
 
 # --- Part 3: the crosswalk join is load-bearing, proven by removing the row ---------------
 # Not a mutation of the code: a mutation of the CONSUMER, which is the operator action the

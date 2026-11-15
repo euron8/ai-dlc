@@ -370,6 +370,8 @@ D_BASE="$P_ROOT"; D_SHA="$(G -C "$REPO_P" rev-parse HEAD)"
 D_SHA12="$(printf '%s' "$D_SHA" | cut -c1-12)"
 # E / F: eight and two top directories of identical weight, merged with --max-parts 8 and 2, so
 # the map has K=8 (six cross groups, the largest G) and K=2 (one cross group, `cross.md`).
+# SEED GATE: REPO_E/F are read by unit arms only (a reader in another unit fails under set -u).
+if sg arms; then
 REPO_E="$WORK/repo-e"; REPO_F="$WORK/repo-f"
 new_repo "$REPO_E" old && new_repo "$REPO_F" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
 for _i in 1 2 3 4 5 6 7 8; do lines "$REPO_E/e$_i/a.txt" 5 "e$_i-a"; lines "$REPO_E/e$_i/b.txt" 5 "e$_i-b"; done
@@ -382,6 +384,7 @@ for r in "$REPO_E" "$REPO_F"; do
 done
 E_BASE="$(G -C "$REPO_E" rev-parse HEAD~1)"; E_SHA="$(G -C "$REPO_E" rev-parse HEAD)"
 F_BASE="$(G -C "$REPO_F" rev-parse HEAD~1)"; F_SHA="$(G -C "$REPO_F" rev-parse HEAD)"
+fi # seed gate arms
 # S / N: B's six files, so the map is B's (K=3), over a base whose engine is the key= engine itself
 # (S, the sentinel present, distribution layout) or absent in both layouts (N).
 REPO_S="$WORK/repo-s"; REPO_N="$WORK/repo-n"
@@ -1176,6 +1179,8 @@ printf '\n## Finding Class\n\n%s\n' "$_q_c" >> "$PROJ_QCLS/core/team-roles/qa.md
 # consumer path .claude/team-roles/qa.md -- QL the container-less one (PROJ_QLEG's, graph's installed
 # shape), QS the subject's own. The installed copy sits in the BASE commit, so the map is B's (K=3).
 # REPO_B itself installs no qa.md: the unreadable side.
+# SEED GATE: REPO_QL/QS are read by unit bl737 only.
+if sg bl737; then
 REPO_QL="$WORK/repo-ql"; REPO_QS="$WORK/repo-qs"
 for _r in "$REPO_QL" "$REPO_QS"; do
   new_repo "$_r" old || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
@@ -1193,6 +1198,7 @@ _qs="$(G -C "$REPO_QS" show "${QS_SHA}:.claude/team-roles/qa.md" | grep -c '^## 
 _qb=0; G -C "$REPO_B" cat-file -e "${B_SHA}:.claude/team-roles/qa.md" 2>/dev/null && _qb=1
 [ "$_ql" = 0 ] && [ "$_qs" = 1 ] && [ "$_qb" = 0 ] \
   || { echo "FIXTURE STALE: the frozen trees cannot express the severity boundary (QL template $_ql, QS template $_qs, B carries qa.md $_qb)" >&2; exit 2; }
+fi # seed gate bl737
 p_q_vset() {
   local sd="$1" d o
   d="$(qworld "$sd" PASS PASS PASS PASS)" || return 1
@@ -2768,6 +2774,12 @@ CR_BNOSPR="its path carries no sprint"
 # story_key_stem) drops BOTH `1` components of `story-1-1`, so a key-only row binds no file.
 CR_REPO="$WORK/repo-cr"; CR_SDIR=_bmad-output/planning-artifacts/s1/stories; CR_STORY="$CR_SDIR/story-1-1-x.md"
 CR_VIEW=_bmad-output/implementation-artifacts/sprint-status.yaml
+# CR_SCHQ is read by canon and canon_merge, so it is built in every shard, outside the CR gate.
+CR_SCHQ="$WORK/schema-q.json"
+sed 's#planning-artifacts/s{sprint}/stories#planning-artifacts/q{sprint}/stories#' "$SS_SCHEMA" > "$CR_SCHQ" && grep -qF 'q{sprint}' "$CR_SCHQ" \
+  || { echo "FIXTURE STALE: the schema override (stories_dir q{sprint}) was not built from the subject's schema" >&2; exit 2; }
+# SEED GATE: CR_REPO and its branches are read by units bl885, canon and bind956 only.
+if sg bl885 || sg canon || sg bind956; then
 cr_view() { # <story-1-1 status> [<story-1-2 status>] -> the implementation view; story-1-2's row only when given
   { printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    status: %s\n    file: stories/story-1-1-x.md\n' "$1"
     [ -z "${2:-}" ] || printf '  story-1-2:\n    status: %s\n    file: stories/story-1-2-y.md\n' "$2"; } > "$CR_REPO/$CR_VIEW"
@@ -3060,9 +3072,8 @@ _hcv="$(G -C "$CR_REPO" show "${CR_HC}:$CR_VIEW")" || _hcv=""; _hcr="$(grep -c $
 #               a GIT_WORK_TREE leak from the seat's environment while the review file sits in CR_REPO.
 CR_SPQ="$CR_SDIR/story-1-3-q.md"; CR_S2PAD="${CR_S2Z%/*}/story-9-pad.md"; CR_QZ="${CR_SDIR%/s1/stories}/q1/stories/story-1-1-z.md"
 CR_S6N="${CR_SDIR%/s1/stories}/s6/stories/story-1-1-n6.md"; CR_S4="${CR_SDIR%/s1/stories}/s4/stories"; CR_S5="${CR_SDIR%/s1/stories}/s5/stories"
-CR_S4Z="$CR_S4/story-1-1-z4.md"; CR_SCHQ="$WORK/schema-q.json"; CR_GWO="$WORK/repo-cr-gwt"
+CR_S4Z="$CR_S4/story-1-1-z4.md"; CR_GWO="$WORK/repo-cr-gwt"
 mkdir -p "$CR_REPO/docs/reviews/s2" "$CR_REPO/docs/reviews/s4" "$CR_REPO/docs/reviews/s6" \
-  && sed 's#planning-artifacts/s{sprint}/stories#planning-artifacts/q{sprint}/stories#' "$SS_SCHEMA" > "$CR_SCHQ" \
   && cr_s2z() { mkdir -p "$CR_REPO/${CR_S2Z%/*}" && printf -- '---\nstatus: review\n---\n# Story Z\n' > "$CR_REPO/$CR_S2Z"; } \
   && cr_vs() { local s="$1"; shift; { printf 'sprint: %s\nstatus: in_progress\nstories:\n' "$s"; while [ "$#" -gt 1 ]; do printf '  %s:\n    status: review\n    file: %s\n' "$1" "$2"; shift 2; done; } > "$CR_REPO/$CR_VIEW"; } \
   && G -C "$CR_REPO" checkout -q -b fr1 "$CR_REC" && cr_vs 2 story-7 ../planning-artifacts/s1/stories/story-7-q.md && CR_FR1="$(cr_lc fr1)" \
@@ -3112,14 +3123,18 @@ G -C "$CR_REPO" cat-file -e "${CR_FR3}:$CR_S2PAD" 2> /dev/null && ! G -C "$CR_RE
   && G -C "$CR_REPO" cat-file -e "${CR_RMD}^:$CR_S5/story-1-1-m.md" && [ "$(G -C "$CR_REPO" diff --name-only "$CR_RMD" "$CR_RMF" | tr '\n' ' ')" = "$CR_VIEW $CR_S4Z " ] \
   && [ "$(G -C "$CR_GWO" diff --name-only "$CR_GWB" "$CR_GWF" | tr '\n' ' ')" = "$CR_VIEW $CR_STORYZ " ] && ! G -C "$CR_REPO" cat-file -e "${CR_GWF}^{commit}" 2> /dev/null \
   || { echo "FIXTURE STALE: a review-sprint, schema, roll, intermediate-sprint or GIT_WORK_TREE world does not have the shape its cell names" >&2; exit 2; }
+fi # seed gate CR
 # PROJ_CRS: a serial root whose qa.md predates the label (the LEGACY branch of --check-serial), and a git repository of
 # its own, so a review written inside it is checked against that same qa.md (cr-serial-legacy, the legitimate LEGACY).
+# SEED GATE: PROJ_CRS is read by units bl885 and canon only.
+if sg bl885 || sg canon; then
 PROJ_CRS="$WORK/proj-crs"
 mkdir -p "$PROJ_CRS/core/skills/ai-dlc/steps" "$PROJ_CRS/core/team-roles" "$PROJ_CRS/docs/reviews/s1" && G init -q "$PROJ_CRS" \
   && cp "$PROJ/core/skills/ai-dlc/steps/gate-validation.md" "$PROJ_CRS/core/skills/ai-dlc/steps/" \
   && grep -vF 'column-0 `Canonical run:`' "$QA_MD" > "$PROJ_CRS/core/team-roles/qa.md" || { echo "FIXTURE ERROR: the legacy serial root was not seeded" >&2; exit 2; }
 _crs0="$(grep -cF 'column-0 `Canonical run:`' "$PROJ_CRS/core/team-roles/qa.md")" || _crs0=0
 [ "$_crs0" = 0 ] || { echo "FIXTURE STALE: the legacy serial root still carries the label" >&2; exit 2; }
+fi # seed gate CRS
 # ---- AD (BL-790): THE ADVISOR LINE's era. The sentinel is read from the subject's own files; each
 # legacy role file is the subject's with every line carrying it removed, the sentinel-less world the
 # reference consumer runs from pull step 3 until the reconcile merge.
@@ -3167,6 +3182,8 @@ ad_repo() { # <dir> <committed: new|old|none> <on disk after freeze: new|old|sam
     old) mkdir -p "$r/.claude/team-roles" && cp "$AD_LEGQ" "$r/.claude/team-roles/qa.md" && cp "$AD_LEGC" "$r/.claude/team-roles/code-reviewer.md" ;;
   esac
 }
+# SEED GATE: the REPO_AD* repositories are read by unit bl885 only (ad_world names them through eval).
+if sg bl885; then
 REPO_ADP="$WORK/repo-adp"; REPO_ADL="$WORK/repo-adl"; REPO_ADA="$WORK/repo-ada"; REPO_ADB="$WORK/repo-adb"
 REPO_ADU="$WORK/repo-adu"; REPO_ADUL="$WORK/repo-adul"
 ad_repo "$REPO_ADP" new same && ad_repo "$REPO_ADL" old same && ad_repo "$REPO_ADA" old new \
@@ -3187,6 +3204,7 @@ for _p in "ADP:1 1" "ADL:0 0" "ADA:0 1" "ADB:1 0" "ADU:u 1" "ADUL:u 0"; do
     [ "$_g" = "${_p#*:}" ] || { echo "FIXTURE STALE: advisor world ${_p%%:*} $_f reads '$_g', want '${_p#*:}' (frozen sha, on disk)" >&2; exit 2; }
   done
 done
+fi # seed gate AD
 AD_ABS="carries no column-0 'advisor:' line"
 AD_TWO="carries 2 'advisor:' lines outside a fence"
 AD_VAL="'advisor: maybe' is not called or unavailable"
@@ -3852,6 +3870,9 @@ py_jack() {
 }
 CR_B2S="path names two sprints: the logical directory"
 # REPO_CRL: B's six files over a base installing a qa.md WITHOUT the canonical-run label (consumer layout).
+CRB_STORY="$CR_SDIR/story-1-x.md"
+# SEED GATE: REPO_CRL/CRU/CRB/CLB/CRH are read by units bl885, canon_merge and run_rec only.
+if sg bl885 || sg canon_merge || sg run_rec; then
 REPO_CRL="$WORK/repo-crl"
 new_repo "$REPO_CRL" old && mkdir -p "$REPO_CRL/.claude/team-roles" \
   && grep -vF 'column-0 `Canonical run:`' "$QA_MD" > "$REPO_CRL/.claude/team-roles/qa.md" \
@@ -3877,7 +3898,7 @@ G -C "$REPO_CRU" cat-file -e "${CRU_SHA}:.claude/team-roles/qa.md" 2>/dev/null \
 # record-only-diff.sh (no *.py/*.sh/*.toml/*.cfg), reviewable to the partition. The base installs the subject's qa.md (the
 # rule held), story-1-x.md at `review` and the implementation view listing it with its file:. The merged index is 1, so
 # the story is story-1-x.md: story-1-1-x.md's slug opens with a digit and carries index 1-1, not 1.
-REPO_CRB="$WORK/repo-crb"; CRB_STORY="$CR_SDIR/story-1-x.md"
+REPO_CRB="$WORK/repo-crb"
 new_repo "$REPO_CRB" old && mkdir -p "$REPO_CRB/.claude/team-roles" "$REPO_CRB/$CR_SDIR" "$REPO_CRB/${CR_VIEW%/*}" \
   && cp "$QA_MD" "$REPO_CRB/.claude/team-roles/qa.md" && printf -- '---\nstatus: review\n---\n# Story 1\n' > "$REPO_CRB/$CRB_STORY" \
   && printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    status: review\n    file: stories/story-1-x.md\n' > "$REPO_CRB/$CR_VIEW" \
@@ -3924,6 +3945,9 @@ _crhr="$(G -C "$REPO_CRH" show "${CRH_BASE}~1:$CR_VIEW")" || _crhr=""
 #   REPO_CMS      over c2, the frozen commit moves the view to sprint 2 and adds s2's stories/story-1-x.md, created in the range;
 #   REPO_CMSH (B2) REPO_CRH copied, its .git/shallow naming CRH_BASE; REPO_CMRP (B3) REPO_CRH copied, a replace ref pointing
 #                 its root's view blob (which names story-1-y.md) at its base's.
+cm_six() { local f; for f in alpha/a1.txt alpha/a2.txt beta/b1.txt beta/b2.txt gamma/g1.txt gamma/g2.txt; do lines "$1/test-results/$f" 5 "$f"; done; }
+# SEED GATE: REPO_CM* are read by unit canon_merge only (cm_six, above, is read by bl885, run_rec and wv955).
+if sg canon_merge; then
 cm_seed() { # <repo> -> c1 and c2 committed over new_repo's base
   new_repo "$1" old && mkdir -p "$1/.claude/team-roles" "$1/$CR_SDIR" "$1/${CR_VIEW%/*}" && cp "$QA_MD" "$1/.claude/team-roles/qa.md" \
     && printf -- '---\nstatus: review\n---\n# Story Y\n' > "$1/$CR_SDIR/story-1-y.md" \
@@ -3932,7 +3956,6 @@ cm_seed() { # <repo> -> c1 and c2 committed over new_repo's base
     && printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-2:\n    status: review\n    file: stories/story-1-2-w.md\n' > "$1/$CR_VIEW" \
     && G -C "$1" add -A && G -C "$1" commit -q -m c2
 }
-cm_six() { local f; for f in alpha/a1.txt alpha/a2.txt beta/b1.txt beta/b2.txt gamma/g1.txt gamma/g2.txt; do lines "$1/test-results/$f" 5 "$f"; done; }
 CM_ZZ=zz/story-1-x.md; CM_S2="${CR_SDIR%/s1/stories}/s2/stories/story-1-x.md"
 REPO_CMH="$WORK/repo-cmh"; REPO_CMZ="$WORK/repo-cmz"; REPO_CMS="$WORK/repo-cms"; REPO_CMSH="$WORK/repo-cmsh"; REPO_CMRP="$WORK/repo-cmrp"
 cm_seed "$REPO_CMH" && cm_h="$(G -C "$REPO_CMH" symbolic-ref -q --short HEAD)" && G -C "$REPO_CMH" checkout -q -b side \
@@ -4000,6 +4023,8 @@ _cmhs="$(G -C "$REPO_CMH" rev-parse "${CMH_BASE}^2")" || _cmhs=""
   && [ "$(G -C "$REPO_CMSH" rev-parse --is-shallow-repository)" = true ] && ! grep -qF story-1-y.md <<<"$_cmrv" \
   && grep -qF story-1-y.md <<<"$_cmrn" \
   || { echo "FIXTURE STALE: a merge history-trust repo (CMH, CMZ, CMS, the shallow or replaced copy of REPO_CRH) does not have the shape its cell names" >&2; exit 2; }
+fi # seed gate CM
+fi # seed gate CRX
 # Role text (BL-742): each serial seat is told to run --check-serial before returning. Keyed on the
 # command spelling in each role file's serial passage.
 SR_ROLE_CMD='merge-review-shards.sh --check-serial'
@@ -4195,6 +4220,8 @@ lr_st() { printf -- '---\nstatus: %s\n---\n# Story 1\n' "$1" > "$REPO_LR/$LR_STO
 lr_view() { printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    status: %s\n    file: stories/story-1-1-x.md\n  story-1-2:\n    status: ready-for-dev\n    file: stories/story-1-2-zz.md\n' "$1" > "$REPO_LR/$CR_VIEW"
   printf -- '---\nstatus: ready-for-dev\n---\n# Story 1.2\n' > "$REPO_LR/$CR_SDIR/story-1-2-zz.md"; }
 lr_review() { lr_st review && lr_view review; }
+# SEED GATE: REPO_LR is read by units bl885 and wv955 only.
+if sg bl885 || sg wv955; then
 mkdir -p "$REPO_LR/.claude/team-roles" "$REPO_LR/$CR_SDIR" "$REPO_LR/${CR_VIEW%/*}" "$REPO_LR/docs/reviews/s1" && G init -q "$REPO_LR" \
   && grep -vF -e "$LR_RSENT" -e 'column-0 `Canonical run:`' "$QA_MD" > "$REPO_LR/.claude/team-roles/qa.md" && lr_st ready-for-dev && lr_view ready-for-dev \
   && LR_OLD="$(lr_c old)" && cp "$QA_MD" "$REPO_LR/.claude/team-roles/qa.md" && LR_D="$(lr_c dispatch)" \
@@ -4215,6 +4242,7 @@ LR_REF="does not descend from the dispatch sha"; LR_RSHA="reviewed-sha:"; LR_UNR
 # removed by lr_unrec for the LEGACY-UNRECORDED cells; LR_RECF is its path, derived from git, never hand-spelled twice.
 LR_RECF="$(cd "$REPO_LR" && git rev-parse --git-common-dir)" && LR_RECF="$(cd "$REPO_LR" && cd "$LR_RECF" && pwd -P)/ai-dlc/stories/s1-1-1" \
   || { echo "FIXTURE ERROR: REPO_LR's git common dir did not resolve" >&2; exit 2; }
+fi # seed gate LR
 # ONE RECORD OF LR_D, SHARED (BL-906). Thirteen SRCDIR lead cells each began by having the subject write the same
 # record of LR_D. The first two SRCDIR writes of LR_D still go through the subject, and the second must be byte-identical
 # to the first (LR_REC_PROOF=1); every later one rewrites those captured bytes and output with builtins (LR_REC_HITS).

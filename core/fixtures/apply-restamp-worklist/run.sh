@@ -2731,13 +2731,28 @@ ar_w() {
   mkdir -p "$w" && cp -Rp "$t/." "$w/" || return 1
   printf '%s\n' "$w"
 }
-ar_w_build() { # ar_w_build <dir> <green|worklist> <theirs> [nogit] -- the world ar_w copies
+ar_w_build() { # ar_w_build <dir> <green|worklist> <theirs> [nogit|rendered] -- the world ar_w copies
   local w="$1"
   mkdir -p "$w" || return 1
   printf '%s\n' "$BASE" > "$w/.B"; printf '%s\n' "$3" > "$w/.T"
   mk_consumer "$w/c" "$2" || return 1
   mkdir -p "$w/c/_bmad-output/ai-dlc-update" || return 1
   if [ "${4:-}" != nogit ]; then git -C "$w/c" init -q 2>/dev/null || return 1; fi
+  if [ "${4:-}" = rendered ]; then ar_render "$w" || return 1; fi
+}
+# ar_wr <tag> -> a green git world at THEIRS holding the shipped renderer's report, rendered ONCE in its template
+# (clause 4). A plain render writes only the report, and neither the report nor a plain --verify record carries the
+# world's path (two worlds at different paths read byte-identical), so a copy is the rendered state. AR-n4 re-proves
+# it every run: the twin is an ar_wr copy, and N4S compares its report with a fresh render at the copy's own path.
+ar_wr() { ar_w "$1" green "$THEIRS" rendered; }
+# ar_wv <tag> -> a copy of AR_V1, the twin's world taken after its first plain --verify (rendered, record written),
+# with that verify's rc in <world>/.vrc. Flows I, J, N and n3 start from that state; they do not re-render or
+# re-verify it. No snapshot is BROKEN, never a fresh build.
+ar_wv() {
+  local w="$WORK/ar-$1-$$-$RANDOM"
+  [ -n "${AR_V1:-}" ] && [ -s "$AR_V1/.vrc" ] || return 1
+  mkdir -p "$w" && cp -Rp "$AR_V1/." "$w/" || return 1
+  printf '%s\n' "$w"
 }
 ar_rec() { printf '%s\n' "$1/c/.git/ai-dlc-approved-region"; }
 # ar_render <world> [theirs] -- the SHIPPED renderer, as the session runs it
@@ -2855,10 +2870,9 @@ ar_flowA_f() {
 ar_flowI() {
   local r="$1" w rc dg1 dg2 f n=0 bad=0
   AR_V=""; AR_W=""
-  w="$(ar_w I green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  w="$(ar_wv I)"; [ -d "$w" ] || { AR_V=BROKEN; return; }
   AR_W="$w"
-  ar_render "$w"; cp "$w/c/$AR_RPT" "$w/r1.md"; dg1="$(ar_dg "$w")"
-  ar_ver "$r" "$w"
+  cp "$w/c/$AR_RPT" "$w/r1.md"; dg1="$(ar_dg "$w")"
   u5_seed_unseen "$w/c" || { av BROKEN; return; }
   ar_render "$w"; cp "$w/c/$AR_RPT" "$w/r2.md"; dg2="$(ar_dg "$w")"
   if [ -z "$dg1" ] || [ -z "$dg2" ] || [ "$dg1" = "$dg2" ] || cmp -s "$w/r1.md" "$w/r2.md"; then av BROKEN; return; fi
@@ -2891,10 +2905,13 @@ ar_flowI() {
 # and AR_I0_RC (apply's rc) for unit ar's h0 and I0 arms.
 ar_twin() {
   [ -d "${AR_I0:-}/c" ] && return 0
-  AR_I0="$(ar_w I0 green "$THEIRS")"; [ -d "$AR_I0" ] || { AR_I0=""; return 1; }
+  AR_I0="$(ar_wr I0)"; [ -d "$AR_I0" ] || { AR_I0=""; return 1; }
   local a b r=no
-  ar_render "$AR_I0"
-  ar_ver "$REC" "$AR_I0"; a=$?; cp "$AR_I0/v.out" "$AR_I0/v0a.out"; cp "$AR_I0/v.err" "$AR_I0/v0a.err"
+  ar_ver "$REC" "$AR_I0"; a=$?
+  # AR_V1: this state (rendered, first plain --verify run, record written), copied before anything else lands in it.
+  AR_V1="$WORK/.ar-v1"; rm -rf "$AR_V1"
+  if mkdir -p "$AR_V1" && cp -Rp "$AR_I0/." "$AR_V1/" && printf '%s\n' "$a" > "$AR_V1/.vrc"; then :; else rm -rf "$AR_V1"; AR_V1=""; fi
+  cp "$AR_I0/v.out" "$AR_I0/v0a.out"; cp "$AR_I0/v.err" "$AR_I0/v0a.err"
   [ -s "$(ar_rec "$AR_I0")" ] && r=yes
   ar_ver "$REC" "$AR_I0"; b=$?
   AR_I0_H0="$a $b $r"
@@ -2918,11 +2935,10 @@ ar_flowNT_twin() {
 ar_flowJ() {
   local r="$1" w rc rec dgt2 fa
   AR_V=""; AR_W=""
-  w="$(ar_w J green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  w="$(ar_wv J)"; [ -d "$w" ] || { AR_V=BROKEN; return; }
   AR_W="$w"; rec="$(ar_rec "$w")"
   printf '%s\n' "$OTHER" > "$w/.T2"
-  ar_render "$w"
-  ar_ver "$r" "$w"; rc=$?
+  rc="$(cat "$w/.vrc")"
   [ "$rc" -eq 0 ] && [ "$(sed -n 2p "$rec" 2>/dev/null)" = "key $BASE $THEIRS" ] && av J0 || av J0!
   ar_render "$w" "$(sed -n 1p "$w/.T2")"; dgt2="$(ar_dg "$w" "$(sed -n 1p "$w/.T2")")"
   ar_ver "$r" "$w" "$(sed -n 1p "$w/.T2")"; rc=$?
@@ -2940,9 +2956,8 @@ ar_flowK() {
   local r="$1" w rc s="$WORK/ar-kstub-$$-$RANDOM" fa
   AR_V=""; AR_W=""
   mkdir -p "$s" && printf '#!/bin/bash\nexit 1\n' > "$s/shasum" && chmod +x "$s/shasum" || { AR_V=BROKEN; return; }
-  w="$(ar_w K green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  w="$(ar_wr K)"; [ -d "$w" ] || { AR_V=BROKEN; return; }
   AR_W="$w"
-  ar_render "$w"
   PATH="$s:$PATH" ar_ver "$r" "$w"; rc=$?
   [ "$rc" -eq 0 ] && grep -qF 'present, current, and complete.' "$w/v.out" && [ ! -e "$(ar_rec "$w")" ] && av KV || av KV!
   ar_ver "$r" "$w"; rc=$?
@@ -2957,8 +2972,7 @@ ar_flowK() {
   # first=UNAVAILABLE, and a matching report writes.
   s="$WORK/ar-knone-$$-$RANDOM"
   ar_notool "$s" || { av BROKEN; return; }
-  w="$(ar_w KA green "$THEIRS")"; [ -d "$w" ] || { av BROKEN; return; }
-  ar_render "$w"
+  w="$(ar_wr KA)"; [ -d "$w" ] || { av BROKEN; return; }
   PATH="$s" ar_ver "$r" "$w"; rc=$?
   [ "$rc" -eq 0 ] && [ -s "$(ar_rec "$w")" ] && av KA1 || av KA1!
   fa="$(PATH="$s" ar_fa "$r" "$w")"
@@ -2991,10 +3005,9 @@ ar_region_of() {
 ar_flowN() {
   local r="$1" w rc
   AR_V=""; AR_W=""
-  w="$(ar_w N green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  w="$(ar_wv N)"; [ -d "$w" ] || { AR_V=BROKEN; return; }
   AR_W="$w"
-  ar_render "$w"
-  ar_ver "$r" "$w"; rc=$?
+  rc="$(cat "$w/.vrc")"
   [ "$rc" -eq 0 ] && [ -s "$(ar_rec "$w")" ] && av N0 || av N0!
   if [ "$2" = edit ]; then
     ar_hand_edit "$w" || { av BROKEN; return; }
@@ -3015,10 +3028,9 @@ ar_flowN() {
 ar_flowN2() {
   local r="$1" w rc
   AR_V=""; AR_W=""
-  w="$(ar_w "$2" green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  w="$(ar_wv "$2")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
   AR_W="$w"
-  ar_render "$w"
-  ar_ver "$r" "$w"; rc=$?
+  rc="$(cat "$w/.vrc")"
   [ "$rc" -eq 0 ] && [ -s "$(ar_rec "$w")" ] && av N0 || av N0!
   u5_seed_unseen "$w/c" || { av BROKEN; return; }
   # Not emit-report.sh's file: the fresh region is spliced in by awk over a report holding R1.
@@ -3065,9 +3077,8 @@ ar_flowM() {
      || cmp -s "$REC/emit-report.sh" "$h/emit-report.sh"; then
     AR_V="MH!"; return
   fi
-  w="$(ar_w M green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  w="$(ar_wr M)"; [ -d "$w" ] || { AR_V=BROKEN; return; }
   AR_W="$w"
-  ar_render "$w"
   ar_app "$h" "$w"; rc=$?
   local found='(found 1)'; [ "$2" = absent ] && found='(found 0)'
   if [ "$rc" -ne 0 ] && ! ar_wrote "$w" && grep -qF 'did not print exactly one well-formed' "$w/a.err" \
@@ -3198,10 +3209,13 @@ else
   if ar_seg D; then
   # (d) no record at all: d1 a git toplevel never verified, d2 not a git toplevel.
   for kind in d1 d2; do
-    ng=""; [ "$kind" = d2 ] && ng=nogit
-    wd="$(ar_w "$kind" green "$THEIRS" $ng)"
+    if [ "$kind" = d1 ]; then
+      wd="$(ar_wr d1)"
+    else
+      wd="$(ar_w d2 green "$THEIRS" nogit)"; [ -d "$wd" ] && ar_render "$wd"
+    fi
     if [ -d "$wd" ]; then
-      ar_render "$wd"; ar_app "$REC" "$wd"; rc=$?
+      ar_app "$REC" "$wd"; rc=$?
       if ar_went "$wd" "$rc" report-verified 'the re-render binding was not evaluated' \
          && { [ "$kind" = d2 ] || [ ! -e "$(ar_rec "$wd")" ]; } && { [ "$kind" = d1 ] || [ ! -d "$wd/c/.git" ]; }; then
         ok "AR-$kind no approved-region record ($([ "$kind" = d1 ] && echo 'a clean git-dir; apply mode wrote none either' || echo 'not a git toplevel')) WRITES, with the NOTE saying the re-render binding was not evaluated"

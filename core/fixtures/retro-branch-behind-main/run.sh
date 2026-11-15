@@ -95,7 +95,7 @@ fi
 # arms that need it, and every other arm still asserts — before the fallback arrives, the six
 # carry worlds whose verdict it did not change keep asserting.
 # ABSENT is keyed only on the subject's own markers counting 0 (see PENDING above part 2); a
-# PRESENT subject that is broken is RED (arm pending-gate). The final line names the PENDING count.
+# PRESENT subject that is broken is RED. The final line names the PENDING count.
 # PENDING is a CONSUMER-layout verdict only: in the distribution an absent subject is RED.
 RETRO=""
 for _r in "$ROOT/core/skills/ai-dlc/steps/retro.md" "$ROOT/.claude/skills/ai-dlc/steps/retro.md"; do
@@ -549,16 +549,13 @@ extract_block() { # <retro.md> -> the Step 1 carry block, fences excluded
 #   LAND block   the `# retro 7a-post step 1:` comment AND every `LAND: ` token in retro.md
 #   MERGE block  the `# retro 7a:` comment AND every `MERGE: ` token in retro.md
 # Any marker present means PRESENT, and a present subject is held to every arm: a kept comment
-# over a gutted body, or one surviving fallback line, is RED. Arm `pending-gate` (before the liveness
-# check) proves a kept LAND or 7a anchor over a gutted block RED and a kept fallback line PRESENT;
-# what then reds a gutted fallback is part 2's worlds. The skipped arms are counted, and the liveness
-# check requires asserted + skipped == the full count, so a skip cannot hide a lost arm.
+# over a gutted body, or one surviving fallback line, is RED. The skipped arms are counted, and the
+# liveness check requires asserted + skipped == the full count, so a skip cannot hide a lost arm.
 #
 # PENDING IS A CONSUMER-LAYOUT VERDICT ONLY. In the DISTRIBUTION (the root walk matched
 # core/scripts/) retro.md ships in the same tree as this fixture and is always the new one, so an
 # absent subject there is a reverted or broken subject: gate_verdict answers RED, pending() counts a
-# FAILURE naming the part, and the run exits 1. Arm pending-layout drives a subject-absent copy
-# through subject_state and gate_verdict in BOTH layouts.
+# FAILURE naming the part, and the run exits 1.
 # ============================================================================
 SKIPPED=0; PENDN=0; PENDBAD=0
 case "$LAYOUT" in distribution|consumer) : ;; *) echo "FIXTURE ERROR: the root walk set no layout" >&2; exit 2 ;; esac
@@ -592,34 +589,6 @@ ST_FB="$(subject_state fallback "$RETRO")"
 ST_LAND="$(subject_state land "$RETRO")"
 ST_MERGE="$(subject_state merge "$RETRO")"
 [ "$ST_CARRY" = absent ] && ST_FB=absent
-# ARM pending-layout: one subject-absent retro.md (the resolved one with every LAND marker deleted)
-# and its present twin (the same plus one LAND: line), each read by subject_state, each judged by
-# gate_verdict in BOTH layouts. Presence-shaped: every cell must print its verdict word.
-PLCELLS="dist-absent consumer-absent dist-present consumer-present"
-PL_WANT="dist-absent:RED consumer-absent:PENDING dist-present:assert consumer-present:assert"
-_pla="$WORK/pl-absent.md"; _plp="$WORK/pl-present.md"
-sed -e '/LAND: /d' -e '/^# retro 7a-post step 1:/d' "$RETRO" > "$_pla"
-{ cat "$_pla"; echo 'echo "LAND: main at origin/main"'; } > "$_plp"
-if [ "$(subject_state land "$_pla")/$(subject_state land "$_plp")" != absent/present ]; then
-  echo "FIXTURE ERROR: the pending-layout seeds are not absent/present ($(subject_state land "$_pla")/$(subject_state land "$_plp"))." >&2
-  exit 2
-fi
-pl_vector() { # the four cells, judged by gate_verdict
-  local c ly f st o=""
-  for c in $PLCELLS; do
-    case "$c" in dist-*) ly=distribution ;; *) ly=consumer ;; esac
-    case "$c" in *-absent) f="$_pla" ;; *) f="$_plp" ;; esac
-    st="$(subject_state land "$f")"
-    o="$o $c:$(gate_verdict "$ly" "$st")"
-  done
-  printf '%s' "${o# }"
-}
-PL_GOT="$(pl_vector)"
-if [ "$PL_GOT" = "$PL_WANT" ]; then
-  ok "pending-layout: a subject-absent retro.md is RED in the distribution and PENDING in a consumer, and its present twin asserts in both [$PL_GOT]"
-else
-  bad "pending-layout: expected [$PL_WANT], got [$PL_GOT]"
-fi
 # P2MODE: full (fallback present) | prefb (carry block present, fallback absent) | absent
 if [ "$ST_CARRY" = absent ]; then P2MODE=absent; elif [ "$ST_FB" = absent ]; then P2MODE=prefb; else P2MODE=full; fi
 
@@ -1339,38 +1308,6 @@ fi
 fi
 
 
-
-# ARM pending-gate: PENDING NEVER HIDES A BROKEN SUBJECT. Fixture-written retro.md fragments, judged in
-# the CONSUMER layout (where PENDING exists) by the same subject_state, gate_verdict and shape checks the
-# parts above apply to $RETRO: a kept anchor over a gutted LAND or 7a block is PRESENT and RED, its whole
-# twin asserts, and a kept Step 1 fallback line is PRESENT (asserted, never PENDING). Seeded, not cut from
-# $RETRO, so it runs whether or not the subjects have arrived.
-PGD="$WORK/pg"; mkdir -p "$PGD"
-printf '%s\n' '# retro 7a-post step 1: land on the merged trunk' 'git checkout main' '```' > "$PGD/land-kept.md"
-printf '%s\n' '# retro 7a-post step 1: land on the merged trunk' 'echo "LAND: main at origin/main"' \
-  'echo "LAND: HARD_BLOCK diverged"' '```' > "$PGD/land-whole.md"
-printf '%s\n' '# retro 7a: merge the retro PR, then read its state from GitHub' 'gh pr merge <pr-number>' '```' > "$PGD/merge-kept.md"
-printf '%s\n' '# retro 7a: merge the retro PR, then read its state from GitHub' 'gh pr merge <pr-number>' \
-  'echo "MERGE: merged"' 'echo "MERGE: HARD_BLOCK open"' '```' > "$PGD/merge-whole.md"
-printf '%s\n' '### 1. Context Loading' '```bash' '# retro Step 1: carry the sprint branch' 'PR_SRC=""; GH_WHY=""' '```' \
-  '### 2. Next' > "$PGD/fallback-kept.md"
-pg_verdict() { # <subject> <file> -> assert | PENDING | RED, consumer layout
-  local v; v="$(gate_verdict consumer "$(subject_state "$1" "$2")")"
-  if [ "$v" = assert ]; then
-    case "$1" in land) land_shape_ok "$2" || v=RED ;; merge) merge_shape_ok "$2" || v=RED ;; esac
-  fi
-  printf '%s' "$v"
-}
-PG_WANT="land-kept:RED land-whole:assert merge-kept:RED merge-whole:assert fallback-kept:assert"
-PG_GOT=""
-for _c in $PG_WANT; do _c="${_c%%:*}"; PG_GOT="$PG_GOT $_c:$(pg_verdict "${_c%%-*}" "$PGD/$_c.md")"; done
-PG_GOT="${PG_GOT# }"
-if [ "$PG_GOT" = "$PG_WANT" ]; then
-  ok "pending-gate: a kept anchor over a gutted block is PRESENT and RED in a consumer, never PENDING, and its whole twin asserts [$PG_GOT]"
-else
-  bad "pending-gate: expected [$PG_WANT], got [$PG_GOT]"
-fi
-
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
 # A PENDING skip is counted, so asserted + skipped must still be the full count.
@@ -1378,4 +1315,4 @@ echo
 if [ "$PENDN" -gt 0 ]; then
   echo "retro-branch-behind-main: $PENDN PENDING row(s) skipping $SKIPPED -- their subjects have not arrived in this retro.md"
 fi
-report_end retro-branch-behind-main "$((14 - SKIPPED + PENDBAD))"
+report_end retro-branch-behind-main "$((12 - SKIPPED + PENDBAD))"

@@ -8,10 +8,12 @@
 
 VECTOR_CELLS="d19b r19b r11b c34 c12 c7 alpha hk61 hk62 hk64 hk65 apform dotform w9miss w9dot w9ovr w9ok w9fence w9dist w9rdme w12t26 w12g24 w12q17 w12w19b w12x34 w12n8 w12p20 w12amb w12stem w12x26amb w12note w12self w12shadow5 w12wrap21 w12sect23"
 
-_vc_fetch_out() { [ -n "${_vc_out+x}" ] || _vc_out="$(bash "$_vc_l" "$_vc_r" 2>&1)"; }
+# IN PROCESS: run.sh has sourced the validator at $_vc_l, so each run is one vle_main call in the
+# capturing `$( )`, one fx_inproc pass apiece.
+_vc_fetch_out() { [ -n "${_vc_out+x}" ] || _vc_out="$(fx_inproc "$_vc_l"; vle_main "$_vc_r" 2>&1)"; }
 # I54: the listing is captured once and both readers get a here-string; `grep -q` never
 # reads from a pipe, because it leaves at its first match and the writer takes the EPIPE.
-_vc_fetch_refs() { [ -n "${_vc_refs+x}" ] || _vc_refs="$(bash "$_vc_l" "$_vc_r" --check-refs 2>&1)"; }
+_vc_fetch_refs() { [ -n "${_vc_refs+x}" ] || _vc_refs="$(fx_inproc "$_vc_l"; vle_main "$_vc_r" --check-refs 2>&1)"; }
 
 # three-state cell: W when the default output cites the check, else A when the --check-refs
 # listing carries it as ambiguous, else -. `-` is also what a subject nothing reached looks like.

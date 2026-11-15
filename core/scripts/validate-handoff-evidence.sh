@@ -469,7 +469,11 @@
 #       refused `full-collection-filtered` with run-filter's reason and the remedy (the invocation in backticks; a path,
 #       marker or wrapper run made canonical by naming it in `docs/coding-conventions.md`); an unevaluable filter, or
 #       any run-gate exit outside its table, is refused `full-collection-filtered` as unevaluable, never acquitted. A
-#       no-run claim keeps its route above, unfiltered.
+#       value the capture-heads count route accepts names no invocation of its own, so the command line the block
+#       renders for each counted capture is the run claim: each is read by one further `record-only-diff.sh
+#       run-filter` start with <conventions> (its `$ `, `command:`, `cmd=` or `sha=... cmd=` prefix dropped) and
+#       refused, or refused as unevaluable, as above (ev_capfilter_fc). A counted capture rendering `command (none)`
+#       has no command to read. A no-run claim keeps its route above, unfiltered.
 #       <conventions> is `$TOP/docs/coding-conventions.md` when readable, the file RUN-SHAPE receives, read from
 #       DISK at the toplevel and not as committed at <frozen>, as merge-review-shards.sh reads it for QA's run: a
 #       conventions edit left uncommitted in the worktree decides the verdict (a known gap, shared with QA's run).
@@ -813,7 +817,7 @@ render_dar() {
   fcv="$(bash "$HE_SELF/record-only-diff.sh" label 'Full-collection run:' <<<"$TEXT" 2>/dev/null)" || fcv=""
   fcp=""
   [ -z "$fcv" ] || fcp="$(cap_tokens 0 <<<"$fcv" | cap_resolve | awk -F'\t' '$3 != "" {print $3}')"
-  DAR_RENDER="$DAR_OPEN"; DAR_NCOUNT=0
+  DAR_RENDER="$DAR_OPEN"; DAR_NCOUNT=0; DAR_CCMDS=""
   if [ -n "$caps" ]; then
     while IFS= read -r p; do
       # LC_ALL=C on every tr/grep here: BSD tr in a UTF-8 locale aborts on one non-UTF-8 byte.
@@ -832,7 +836,7 @@ render_dar() {
         cnt="$(G show "$FROZEN:$p" 2>/dev/null | LC_ALL=C tr -d '\r' | LC_ALL=C grep -E '[0-9]+[[:space:]]+(passed|failed)([^A-Za-z]|$)' | tail -n 1)"
         cnt="${cnt#"${cnt%%[![:space:]]*}"}"; cnt="${cnt%"${cnt##*[![:space:]]}"}"
         [ -z "$rl" ] || cnt=""
-        if [ -n "$cnt" ]; then ln="$ln — $(dar_span "$cnt")"; DAR_NCOUNT=$((DAR_NCOUNT + 1)); fi
+        if [ -n "$cnt" ]; then ln="$ln — $(dar_span "$cnt")"; DAR_NCOUNT=$((DAR_NCOUNT + 1)); [ -z "$cmd" ] || DAR_CCMDS="$DAR_CCMDS$cmd"$'\n'; fi
       fi
       DAR_RENDER="$DAR_RENDER"$'\n'"$ln"
     done <<<"$caps"
@@ -1222,6 +1226,28 @@ ev_filter_fc() {
     1) refuse "full-collection-filtered $STORY: 'Full-collection run: $1' ${3} (record-only-diff.sh run-gate, RUN-FILTER, conventions: ${ef_cv})${ef_fix}" ;;
     *) refuse "full-collection-filtered $STORY: 'Full-collection run: $1' cannot be evaluated by record-only-diff.sh run-gate (${3}; conventions: ${ef_cv}), and an unevaluable filter never acquits${ef_fix}" ;;
   esac
+}
+# ev_capfilter_fc <value>: on the capture-cite route (dar_counts_ok), the command line the block renders for each
+# counted capture is a run claim of its own (header: (k)), read by record-only-diff.sh run-filter with ev_conv as the
+# value is: 0 accepts, 1 refuses with its reason, any other refuses as unevaluable. A counted capture whose command
+# renders `command (none)` carries no command to read.
+ev_capfilter_fc() {
+  local cf_c cf_o cf_rc
+  while IFS= read -r cf_c; do
+    [ -n "$cf_c" ] || continue
+    case "$cf_c" in
+      '$ '*) cf_c="${cf_c#\$ }" ;;
+      'sha='*) cf_c="${cf_c#*cmd=}" ;;
+      'cmd='*) cf_c="${cf_c#cmd=}" ;;
+      *) cf_c="${cf_c#\# }"; cf_c="${cf_c#command:}"; cf_c="${cf_c#"${cf_c%%[![:space:]]*}"}" ;;
+    esac
+    cf_o="$(bash "$RO" run-filter "\$ $cf_c" ${ev_conv:+"$ev_conv"})"; cf_rc=$?
+    case "$cf_rc" in
+      0) ;;
+      1) ev_filter_fc "$1" 1 "cites a capture whose command \`$cf_c\` $cf_o" ;;
+      *) ev_filter_fc "$1" 2 "the cited capture's command \`$cf_c\`: run-filter exit $cf_rc, $cf_o" ;;
+    esac
+  done <<<"$DAR_CCMDS"
 }
 # ------------------------------------------------------------------------- bookkeeping
 # Every bookkeeping arm reads <frozen> through git, never the working tree and never the disk
@@ -1738,7 +1764,8 @@ else
         # held to RUN-FILTER's verdict (RUN-GATE 4/5/6) as a run-shape value is; a no-run claim (ev_none_fc) is not.
         EV_FC_NONE=0
         dar_counts_ok "$fc" || ev_none_fc "$fc"
-        [ "$EV_FC_NONE" = 1 ] || ev_filter_fc "$fc" "$((EV_FC_GATE - 4))" "$fc_gv" ;;
+        [ "$EV_FC_NONE" = 1 ] || ev_filter_fc "$fc" "$((EV_FC_GATE - 4))" "$fc_gv"
+        [ "$EV_FC_NONE" = 1 ] || [ "$EV_FC_GATE" != 4 ] || ev_capfilter_fc "$fc" ;;
       *) ev_filter_fc "$fc" 2 "$fc_gv" ;;
     esac
   fi

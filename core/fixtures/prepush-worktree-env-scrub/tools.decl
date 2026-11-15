@@ -16,11 +16,14 @@ git
 grep
 head
 kill
+ls
 mkdir
+mkfifo
 mktemp
 mv
 ps
 rm
+rmdir
 sed
 shasum
 sleep

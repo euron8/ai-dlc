@@ -15,6 +15,7 @@
 # it recomputes the same value over the tree it is pushing.
 #
 # fixtures mapped: 2    entries: 56
+# OMITTED by the last run (always run): fixture-git-env-seam
 hook-registration-join	core
 hook-registration-join	core/.claude
 hook-registration-join	core/.git

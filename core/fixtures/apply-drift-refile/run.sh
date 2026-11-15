@@ -130,17 +130,34 @@ ks_hook() { # ks_hook <reconcile-copy-dir> -> 0 when the hook was added exactly 
   mv "$d/apply.sh.hk" "$d/apply.sh"
   grep -qF 'FX_KSDIFF_FAIL' "$d/apply.sh" && bash -n "$d/apply.sh"
 }
-HK="$WORK/ks-ctl"; KS_READY=""
-ks_ctl_ready() { # builds the hooked shipped copy once and runs it UNFORCED once as the near-miss; sets KS_READY=ok|<why>
-  [ -n "$KS_READY" ] && return 0
-  local w nm
-  if ! { cp -R "$(dirname "$APPLY")" "$HK" && ks_hook "$HK"; }; then
-    KS_READY="the ap_ks_diff anchor is not in apply.sh exactly once, so the diff-failure hook cannot be added"; bad "FIXTURE BROKEN [forcing hook]: $KS_READY"; return 0
-  fi
-  w="$(seed_copy)" || { KS_READY="seed failed"; bad "FIXTURE BROKEN [forcing near-miss]: $KS_READY"; return 0; }
+HK="$WORK/ks-ctl"; KS_READY=""; KS_BUILD=""; HK_COPIED=0; CTL_DONE=0
+# THE ONE HOOKED COPY. $HK is a copy of the reconcile dir that carries ks_hook's apply.sh hook and, when unit fh runs,
+# arm f's preclassify.sh hook: both are inert unless their variable (FX_KSDIFF_FAIL, FX_B230_PC) is set. ONE unforced
+# run of it on a fresh seed (ctl_run) is both arm f's control and the forcing near-miss, because both read that one state.
+hk_copy() { # copies the reconcile dir to $HK once
+  [ "$HK_COPIED" = 1 ] && return 0
+  cp -R "$(dirname "$APPLY")" "$HK" && HK_COPIED=1
+}
+ks_build() { # idempotent: copy + ks_hook; sets KS_BUILD=ok|<why>
+  [ -n "$KS_BUILD" ] && return 0
+  if ! { hk_copy && ks_hook "$HK"; }; then KS_BUILD="the ap_ks_diff anchor is not in apply.sh exactly once, so the diff-failure hook cannot be added"; else KS_BUILD=ok; fi
+}
+ctl_run() { # ONE unforced run of $HK on a fresh seed; sets CTL_RC CTL_OUT (stdout) CTL_ERR CTL_STAMP CTL_DRV
+  [ "$CTL_DONE" = 1 ] && return 0
+  local w; w="$(seed_copy)" || return 1
   eval "$(sed 's/^/KN_/' "$w/env.sh")"
-  nm="$(bash "$HK/apply.sh" "$KN_DIST" "$KN_BASE" "$KN_CONSUMER" "$KN_THEIRS" 2>/dev/null)"
-  if ! grep -q 'did not run' <<<"$nm" && grep -q 'drift-refile' <<<"$nm"; then
+  CTL_OUT="$(bash "$HK/apply.sh" "$KN_DIST" "$KN_BASE" "$KN_CONSUMER" "$KN_THEIRS" 2>"$w/ctl.err")"; CTL_RC=$?
+  CTL_ERR="$(cat "$w/ctl.err")"; CTL_STAMP="$(cat "$KN_STAMP")"; CTL_DRV="$(cat "$KN_DRIVER")"
+  CTL_DONE=1
+}
+ks_ctl_ready() { # builds the hooked shipped copy once and reads its UNFORCED run as the near-miss; sets KS_READY=ok|<why>
+  [ -n "$KS_READY" ] && return 0
+  ks_build
+  if [ "$KS_BUILD" != ok ]; then
+    KS_READY="$KS_BUILD"; bad "FIXTURE BROKEN [forcing hook]: $KS_READY"; return 0
+  fi
+  ctl_run || { KS_READY="seed failed"; bad "FIXTURE BROKEN [forcing near-miss]: $KS_READY"; return 0; }
+  if ! grep -q 'did not run' <<<"$CTL_OUT" && grep -q 'drift-refile' <<<"$CTL_OUT"; then
     KS_READY=ok
     ok "forcing near-miss: the hooked copy, UNFORCED, refiles the drift and draws no did-not-run row (the row in arms q, r, t appears only because the diff is starved)"
   else
@@ -428,8 +445,10 @@ if ! grep -qF 'without classifying, so which files this pull writes' "$APPLY"; t
   fi
 fi
 if [ "$F_RUN" = 1 ]; then
-  FH="$WORK/bl230-recon"
-  cp -R "$(dirname "$APPLY")" "$FH" || { echo "FIXTURE ERROR: could not copy the reconcile dir" >&2; exit 2; }
+  FH="$HK"
+  ks_build
+  hk_copy || { echo "FIXTURE ERROR: could not copy the reconcile dir" >&2; exit 2; }
+  [ "$CTL_DONE" = 0 ] || { echo "FIXTURE ERROR: the shared unforced control ran before arm f's preclassify hook was added" >&2; exit 2; }
   F_HOOK="$(printf '%s\n' 'MODE="${5:-}"' \
     'case "${FX_B230_PC:-}:$MODE" in' \
     '  rc2:) printf '"'"'M\tcore/session-driver/ai-dlc-session-driver.sh\t.claude/session-driver/ai-dlc-session-driver.sh\tUPSTREAM-ONLY\n'"'"'' \
@@ -462,12 +481,13 @@ if [ "$F_RUN" = 1 ]; then
     printf '%s' "$2" > "$F_MARK"
     F_OUT="$(FX_B230_PC="$1" bash "$FH/apply.sh" "$F_DIST" "$F_BASE" "$F_CONSUMER" "$F_THEIRS" 2>&1)"; F_RC=$?
   }
-  f_case ""
-  if [ "$F_RC" -eq 0 ] && grep -qE '^version: 9\.9\.9$' <<<"$F_STAMP_AFTER" && grep -q 'driver v2' <<<"$F_DRV"; then
+  # THE CONTROL IS THE SHARED UNFORCED RUN (ctl_run): the copy carries both hooks, and neither is set.
+  ctl_run || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
+  if [ "$CTL_RC" -eq 0 ] && grep -qE '^version: 9\.9\.9$' <<<"$CTL_STAMP" && grep -q 'driver v2' <<<"$CTL_DRV"; then
     ok "BL-230 control: the hooked copy, unforced, applies the pull and re-stamps"
   else
-    echo "FIXTURE ERROR: BL-230 control -- the hooked copy UNFORCED did not apply (rc=$F_RC); the stops below would measure a copy that cannot write" >&2
-    printf '%s\n' "$F_OUT" | head -20 | sed 's/^/  DIAG  f-control | /' >&2
+    echo "FIXTURE ERROR: BL-230 control -- the hooked copy UNFORCED did not apply (rc=$CTL_RC); the stops below would measure a copy that cannot write" >&2
+    printf '%s\n%s\n' "$CTL_OUT" "$CTL_ERR" | head -20 | sed 's/^/  DIAG  f-control | /' >&2
     exit 2
   fi
   for F_CASE in rc2 empty; do
@@ -934,7 +954,9 @@ if sg u; then
 # write the heredoc's temp file and runs the loop on EMPTY stdin: no finish-unapplied row, and the
 # stamp advanced to theirs over a tree with every file still at base. The world: 100 files at base
 # under one long directory, so the rows (~22 KB) exceed a 14 and a 20 KB limit while everything else
-# the finish path writes fits under 14. Limits are in 1024-byte units, SIGXFSZ ignored.
+# the finish path writes fits under 14. Limits are in 1024-byte units, SIGXFSZ ignored. Limits 10 and 14 only: no
+# write of this world lies in 14336..20480 bytes (its stage sizes are 10841 and 22099), so 20 reads 14's cell; 10 stays
+# because the 10841-byte exec-audit stage fails at 10 and fits 14.
 # Cell per limit: "<finish-unapplied rows>|<fv staging-refused or finish-unverified-tree row?>|<stamp>"
 u_cell() { # u_cell <world> <apply.sh> <limit|none>
   local w="$1" b t o
@@ -968,7 +990,7 @@ if [ "$U_RUN" = 1 ]; then
       bad "arm u control: with no limit --finish read $U_CTL (want 100|-|0.0.1) -- the world does not hold 100 files at base, so the limited runs prove nothing"
     else
       ok "arm u control: with no limit --finish names all 100 files still at base and leaves the stamp at 0.0.1"
-      for U_L in 10 14 20; do
+      for U_L in 10 14; do
         u="$(u_cell "$UW" "$APPLY" "$U_L")"
         case "$u" in
           *'|REFUSED|0.0.1') ok "arm u (ulimit -f $U_L): the finish check could not stage its rows, says so, and withholds the stamp ($u)"
@@ -986,7 +1008,8 @@ if sg w; then
 # apply.sh wrote preclassify's rows to the unregistered-drift and retired-tokens hand-down files with
 # a builtin `printf … > file`. Under a file-size limit the write fails, its unflushed tail stays in
 # the shell's stdout buffer, and the next manifest row carries it: one line such as
-# `ddd…/f064<TAB>UPSTREAM-ONLY`. arm u's 100-file world makes the rows (~22 KB) exceed 14 and 20 KB.
+# `ddd…/f064<TAB>UPSTREAM-ONLY`. arm u's 100-file world makes the rows (~22 KB) exceed 14 KB; a 20 KB limit reads the
+# same cell (no write of the world lies in 14336..20480 bytes), so only 14 runs.
 # A line is MALFORMED when it is non-empty and its first field is none of the four row kinds.
 # Cell per limit: "<malformed lines>|<hand-down staging-refused rows>|<stamp>"
 w_cell() { # w_cell <world> <apply.sh> <limit|none>
@@ -1023,7 +1046,7 @@ if [ "$W_RUN" = 1 ]; then
       bad "BL-414 arm w control: with no limit the ordinary apply read $W_CTL (want 0|0|9.9.9) -- the world does not apply cleanly, so the limited runs prove nothing"
     else
       ok "BL-414 arm w control: with no limit the ordinary apply prints no malformed line, refuses nothing and stamps 9.9.9"
-      for W_L in 14 20; do
+      for W_L in 14; do
         w="$(w_cell "$WW" "$APPLY" "$W_L")"
         case "$w" in
           0\|2\|0.0.1) ok "BL-414 arm w (ulimit -f $W_L): no partial row leaks; both hand-downs refuse by name and the stamp is withheld ($w)"

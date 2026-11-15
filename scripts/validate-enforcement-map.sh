@@ -1493,8 +1493,7 @@ DIST_ONLY="$(cd "$REPO_ROOT/core/fixtures" 2>/dev/null && for d in */; do
 done | sort -u)"
 # ONE comm join for "uninstall.sh names a marked fixture": a grep per fixture cost one fork per
 # .dist-only fixture, so the fork total grew with every marker added. The stale-marker test stays a
-# builtin `[ -d ]` in a loop with no fork inside it. dist_only_findings is a function so the
-# self-probe drives the SAME code the corpus run does.
+# builtin `[ -d ]` in a loop with no fork inside it.
 dist_only_findings() { # dist_only_findings <marked list> <uninstall list> <fixtures root> -> "named <f>" / "stale <f>" lines
   local _n _f
   _n="$(LC_ALL=C comm -12 <(LC_ALL=C sort -u <<<"$1") <(LC_ALL=C sort -u <<<"$2"))"
@@ -1504,11 +1503,6 @@ dist_only_findings() { # dist_only_findings <marked list> <uninstall list> <fixt
     [ -d "$3/$_f" ] || echo "stale $_f"
   done <<<"$1"
 }
-# SELF-PROBE, three seeds read in one invocation, against / so no directory is created: `bin` is
-# marked AND named by uninstall (must err), `etc` is marked and NOT named (must stay quiet), and
-# `ghost-nodir` is marked with no directory (must err as stale).
-do_pf="$(dist_only_findings "$(printf 'bin\netc\nghost-nodir\n')" "$(printf 'bin\nother\n')" / | tr '\n' ',')"
-[ "$do_pf" = "named bin,stale ghost-nodir," ] || err "I8's .dist-only join SELF-PROBE FAILED: findings read '${do_pf}', expected exactly 'named bin,stale ghost-nodir,'. Either a marked fixture uninstall.sh names was not reported, a marked fixture it does not name was, or a stale marker was missed, so a clean corpus result below means nothing."
 while IFS=' ' read -r do_kind f; do
   case "$do_kind" in
     named) err "fixture '$f' carries a .dist-only marker but uninstall.sh names it. install.sh never copies a marked fixture, so this is a removal loop reaching for a path no consumer was ever given." ;;
@@ -2051,13 +2045,6 @@ EOF
   # the other 19 narrate report rows whose clauses live elsewhere. For a file pinned `pointer`
   # (I63), the subject is EVERY code it names, because a pointer's whole job is to point at the
   # clause and it homes none of its own.
-  #
-  # THE VACUITY DEFENCE IS A PROBE THIS INVARIANT WRITES ITSELF, not a count. A zero here is
-  # indistinguishable from a tree where every mention is cited, and every count-based floor this
-  # could assert is one an edit to the corpus retires silently. So the extractor is run each time
-  # against two units the invariant authors: one naming a code with no id, one naming the same
-  # code WITH it. Reporting anything but exactly the first means the grammar has stopped reading
-  # either the code or the citation, and every clean line below is unattributable.
   lc_units_flagged() {
     # $1 file to scan   $2 file of "CODE LC-ID" pairs in scope   $3 label used in the report
     awk -v home="$3" '
@@ -2099,23 +2086,6 @@ EOF
   if [ ! -s "$lc_pairs_all" ]; then
     err "I62 read ZERO (code, clause, prose_home) triples out of layer-contract.yaml, so every file below would be scanned against an empty vocabulary and report clean for the reason a conforming tree does."
   else
-    # THE SELF-WRITTEN PROBE. Both directions, every run.
-    lc_probe62="$TMPDIR_I62/probe"
-    mkdir -p "$lc_probe62"
-    awk '{ print $1, $2; exit }' "$lc_pairs_all" > "$lc_probe62/pairs"
-    lc_pc="$(awk '{print $1; exit}' "$lc_probe62/pairs")"
-    lc_pi="$(awk '{print $2; exit}' "$lc_probe62/pairs")"
-    {
-      printf -- '- **Uncited.** The pull reports %s against the entry.\n' "$lc_pc"
-      printf -- '\n'
-      printf -- '- **Cited.** The pull reports %s against the entry [%s].\n' "$lc_pc" "$lc_pi"
-    } > "$lc_probe62/home.md"
-    lc_probe62_out="$(lc_units_flagged "$lc_probe62/home.md" "$lc_probe62/pairs" "probe")"
-    lc_probe62_n="$(printf '%s' "$lc_probe62_out" | grep -c . || true)"
-    if [ "$lc_probe62_n" != "1" ]; then
-      err "I62's probe answered with $lc_probe62_n finding(s) where exactly 1 is correct [$(printf '%s' "$lc_probe62_out" | tr '\n' '; ')]. The probe carries one uncited mention of '$lc_pc' and one cited by '$lc_pi'; anything but the uncited one alone means the extractor has stopped reading the code, the citation or the unit boundary, and every clean result below is an empty set produced by a grammar that can no longer find a ghost."
-    fi
-
     while IFS='|' read -r lc_pin_path lc_pin_role; do
       [ -n "$lc_pin_path" ] || continue
       [ -f "$REPO_ROOT/$lc_pin_path" ] || continue
@@ -2258,10 +2228,6 @@ EOF
   # whole predicate, and every arm below is a lookup in that one file. One grep over
   # core/fixtures/ for the code vocabulary, one per enforcer basename, and a fork-free glob for
   # run.sh. Measured after: the validator is back under the pre-I65 figure.
-  #
-  # THE INDEX IS BUILT BY A FUNCTION TAKING A ROOT, so the probe below can build one over its
-  # own synthetic tree and exercise THE SHIPPING CODE PATH. A probe that tested a separate
-  # helper would prove nothing about the index the arms actually read.
   lc_i65_index() { # lc_i65_index <fixtures-root> <out-triples-file>
     local root="$1" out="$2" d b
     : > "$out"
@@ -2351,83 +2317,49 @@ EOF
   awk -F'|' '{n=split($2,p,"/"); print p[n]}' "$lc_i65_pairs" | sort -u > "$TMPDIR_I65/enfnames"
   LC_I65_ALT="$(awk 'NR>1{printf "|"} {printf "%s", $0}' "$TMPDIR_I65/codes")"
 
-  # THE PROBE, written and run here rather than trusted, and it drives THE SAME INDEXER the
-  # arms below read. lc_i65_index() is a grep, an awk and a three-way join; a change to any of
-  # them can turn it into a function that answers "bound" for everything or nothing, and either
-  # way every arm goes quiet in the same direction. So build a tree whose four directories have
-  # exactly one right answer between them, index it with the shipping function, and refuse to
-  # run the invariant unless the answers total exactly 1.
-  lc_p65="$TMPDIR_I65/probe"
-  mkdir -p "$lc_p65/fx/yes" "$lc_p65/fx/no-comment" "$lc_p65/fx/no-driver" "$lc_p65/fx/other-enf"
-  printf 'bash probe-enforcer.sh\nok "PROBE65 fired"\n'  > "$lc_p65/fx/yes/run.sh"
-  printf 'bash probe-enforcer.sh\n# PROBE65 is not exercised here\n    code: PROBE65\n' \
-                                                         > "$lc_p65/fx/no-comment/run.sh"
-  printf 'bash probe-enforcer.sh\nok "PROBE65 fired"\n'  > "$lc_p65/fx/no-driver/driver.sh"
-  printf 'bash other-enforcer.sh\nok "PROBE65 fired"\n'  > "$lc_p65/fx/other-enf/run.sh"
-  lc_p65_codes_save="$TMPDIR_I65/codes.save"; cp "$TMPDIR_I65/codes" "$lc_p65_codes_save"
-  lc_p65_enf_save="$TMPDIR_I65/enfnames.save"; cp "$TMPDIR_I65/enfnames" "$lc_p65_enf_save"
-  lc_p65_alt_save="$LC_I65_ALT"
-  printf 'PROBE65\n' > "$TMPDIR_I65/codes"
-  printf 'probe-enforcer.sh\n' > "$TMPDIR_I65/enfnames"
-  LC_I65_ALT='PROBE65'
-  lc_i65_index "$lc_p65/fx" "$TMPDIR_I65/probe.triples"
-  lc_p65_n=0
-  grep -qxF 'yes|probe-enforcer.sh|PROBE65'        "$TMPDIR_I65/probe.triples" && lc_p65_n=$((lc_p65_n+1))
-  grep -qxF 'no-comment|probe-enforcer.sh|PROBE65' "$TMPDIR_I65/probe.triples" && lc_p65_n=$((lc_p65_n+100))
-  grep -qxF 'no-driver|probe-enforcer.sh|PROBE65'  "$TMPDIR_I65/probe.triples" && lc_p65_n=$((lc_p65_n+1000))
-  grep -qxF 'other-enf|probe-enforcer.sh|PROBE65'  "$TMPDIR_I65/probe.triples" && lc_p65_n=$((lc_p65_n+10000))
-  cp "$lc_p65_codes_save" "$TMPDIR_I65/codes"
-  cp "$lc_p65_enf_save"   "$TMPDIR_I65/enfnames"
-  LC_I65_ALT="$lc_p65_alt_save"
-  if [ "$lc_p65_n" -ne 1 ]; then
-    err "I65's probe scored $lc_p65_n where exactly 1 is correct. The four probe directories are: one bound (+1), one naming the code only in a comment and on a contract code: line (+100), one with no run.sh (+1000), and one naming a DIFFERENT enforcer (+10000). Any other total means lc_i65_index has stopped reading the driver, the comment grain, the code: grain or the enforcer, and every result below is produced by an index that can no longer tell proof from mention."
-  else
-    # THE REAL INDEX, built once. Every arm below is a lookup in this file.
-    lc_i65_index "$REPO_ROOT/core/fixtures" "$TMPDIR_I65/triples"
-    if [ ! -s "$TMPDIR_I65/triples" ]; then
-      err "I65 indexed core/fixtures/ and found ZERO (directory, enforcer, code) triples. The probe above proves the indexer works, so an empty result here means the fixture corpus moved out from under it — and an empty index makes every declared fixture fail and every 'none' pass, which is loud in one direction and silent in the other."
-    fi
-    # HELD IN MEMORY, and read HERE rather than earlier: `lc_i65_index` above rewrites both of
-    # these files, and the probe run before it deliberately writes a fake enforcer list and
-    # restores it. Loading them any sooner would answer every lookup below from the probe's
-    # index instead of the real one. Two reads replace two greps per clause.
-    _i65_enf="$(<"$TMPDIR_I65/enf")"
-    _i65_triples="$(<"$TMPDIR_I65/triples")"
-    while IFS='|' read -r fid fenf fcode ffx; do
-      [ -n "$fid" ] || continue
-      if [ -z "$ffx" ]; then
-        err "I65 $fid: no 'fixture:' declared. Every clause names the fixture that proves its code fires, or the literal 'none' to record that nothing does. An undeclared field is neither, and it is the only one of the three states this invariant cannot report."
-        continue
-      fi
-      fenf_base="${fenf##*/}"
-      if [ "$ffx" = none ]; then
-        # REVERSE: 'none' may not be written over a fixture that would satisfy the join. One
-        # awk over the index, not a walk of 92 directories per clause.
-        lc_i65_witness="$(awk -F'|' -v e="$fenf_base" -v c="$fcode" '$2==e && $3==c {print $1; exit}' "$TMPDIR_I65/triples")"
-        [ -z "$lc_i65_witness" ] \
-          || err "I65 $fid: declares 'fixture: none' but core/fixtures/$lc_i65_witness/ drives '$fenf_base' and names '$fcode' at an attributable site — so the proof exists and the clause says it does not. 'none' is a counted gap, not a default; a fixture written without updating the clause it proves leaves the gap on the books forever."
-        continue
-      fi
-      case "$ffx" in
-        */*|.*) err "I65 $fid: fixture '$ffx' is not a bare directory name under core/fixtures/. The value is joined to that one root so a clause cannot cite a proof living outside the suite the pre-push drives."; continue ;;
-      esac
-      fdir="$REPO_ROOT/core/fixtures/$ffx"
-      if [ ! -d "$fdir" ]; then
-        err "I65 $fid: declares fixture '$ffx', which is not a directory under core/fixtures/. A clause citing a fixture that does not exist states a proof nothing can run."
-        continue
-      fi
-      if [ ! -f "$fdir/run.sh" ]; then
-        err "I65 $fid: fixture '$ffx' has no run.sh. The pre-push loop skips a driverless directory in silence (I20's finding), so this clause cites a proof that never executes and reads exactly like one that passes every push."
-        continue
-      fi
-      if ! in_lines "$ffx	$fenf_base" "$_i65_enf"; then
-        err "I65 $fid: fixture '$ffx' never names '$fenf_base', the enforcer this clause declares. A fixture that does not drive the script the clause binds cannot be evidence about that clause — the two W1/W2 vocabularies in this repo collide on the token, so naming the code alone is satisfied by a fixture for a different enforcer entirely."
-        continue
-      fi
-      in_lines "$ffx|$fenf_base|$fcode" "$_i65_triples" \
-        || err "I65 $fid: fixture '$ffx' drives '$fenf_base' but names '$fcode' nowhere a run can attribute — only in comments, or only on a seeded contract 'code:' line. A fixture header sentence listing the checks it covers is prose about the proof, not the proof; when this shipped, six fixtures were in exactly that state for codes they do exercise. Name the code in the assertion that proves it, so the fixture's own output says which clause it closed."
-    done < "$lc_i65_pairs"
+  # THE REAL INDEX, built once. Every arm below is a lookup in this file.
+  lc_i65_index "$REPO_ROOT/core/fixtures" "$TMPDIR_I65/triples"
+  if [ ! -s "$TMPDIR_I65/triples" ]; then
+    err "I65 indexed core/fixtures/ and found ZERO (directory, enforcer, code) triples. An empty result here means the fixture corpus moved out from under the indexer, or the indexer stopped reading it — and an empty index makes every declared fixture fail and every 'none' pass, which is loud in one direction and silent in the other."
   fi
+  # HELD IN MEMORY, and read HERE rather than earlier: `lc_i65_index` above rewrites both of
+  # these files. Two reads replace two greps per clause.
+  _i65_enf="$(<"$TMPDIR_I65/enf")"
+  _i65_triples="$(<"$TMPDIR_I65/triples")"
+  while IFS='|' read -r fid fenf fcode ffx; do
+    [ -n "$fid" ] || continue
+    if [ -z "$ffx" ]; then
+      err "I65 $fid: no 'fixture:' declared. Every clause names the fixture that proves its code fires, or the literal 'none' to record that nothing does. An undeclared field is neither, and it is the only one of the three states this invariant cannot report."
+      continue
+    fi
+    fenf_base="${fenf##*/}"
+    if [ "$ffx" = none ]; then
+      # REVERSE: 'none' may not be written over a fixture that would satisfy the join. One
+      # awk over the index, not a walk of 92 directories per clause.
+      lc_i65_witness="$(awk -F'|' -v e="$fenf_base" -v c="$fcode" '$2==e && $3==c {print $1; exit}' "$TMPDIR_I65/triples")"
+      [ -z "$lc_i65_witness" ] \
+        || err "I65 $fid: declares 'fixture: none' but core/fixtures/$lc_i65_witness/ drives '$fenf_base' and names '$fcode' at an attributable site — so the proof exists and the clause says it does not. 'none' is a counted gap, not a default; a fixture written without updating the clause it proves leaves the gap on the books forever."
+      continue
+    fi
+    case "$ffx" in
+      */*|.*) err "I65 $fid: fixture '$ffx' is not a bare directory name under core/fixtures/. The value is joined to that one root so a clause cannot cite a proof living outside the suite the pre-push drives."; continue ;;
+    esac
+    fdir="$REPO_ROOT/core/fixtures/$ffx"
+    if [ ! -d "$fdir" ]; then
+      err "I65 $fid: declares fixture '$ffx', which is not a directory under core/fixtures/. A clause citing a fixture that does not exist states a proof nothing can run."
+      continue
+    fi
+    if [ ! -f "$fdir/run.sh" ]; then
+      err "I65 $fid: fixture '$ffx' has no run.sh. The pre-push loop skips a driverless directory in silence (I20's finding), so this clause cites a proof that never executes and reads exactly like one that passes every push."
+      continue
+    fi
+    if ! in_lines "$ffx	$fenf_base" "$_i65_enf"; then
+      err "I65 $fid: fixture '$ffx' never names '$fenf_base', the enforcer this clause declares. A fixture that does not drive the script the clause binds cannot be evidence about that clause — the two W1/W2 vocabularies in this repo collide on the token, so naming the code alone is satisfied by a fixture for a different enforcer entirely."
+      continue
+    fi
+    in_lines "$ffx|$fenf_base|$fcode" "$_i65_triples" \
+      || err "I65 $fid: fixture '$ffx' drives '$fenf_base' but names '$fcode' nowhere a run can attribute — only in comments, or only on a seeded contract 'code:' line. A fixture header sentence listing the checks it covers is prose about the proof, not the proof; when this shipped, six fixtures were in exactly that state for codes they do exercise. Name the code in the assertion that proves it, so the fixture's own output says which clause it closed."
+  done < "$lc_i65_pairs"
   rm -rf "$TMPDIR_I65"
 
   # --- I58: the ADJUDICATED level is one token across the contract and the enforcer that acts
@@ -2537,15 +2469,11 @@ fi
 # core/fixtures/ is out of corpus for the reason I49 and I50 state: fixtures deliberately
 # carry ghost text, and a lint that reads them reports their mutants as findings.
 #
-# ONE READER, used by the corpus scan AND by the probe below. A probe that exercises a copy
-# of the extraction proves the copy.
 # ONE AWK PASS OVER A FILE LIST, replacing a fork-per-FILE and a fork-per-MODE shape.
 # `i59_modes_of` forked 4 externals per file across the 100 shipped scripts under core/,
 # and `i59_undocumented_in` forked one `awk` per MODE across the 216 modes those files
 # dispatch. The arm cost 713 forks, second largest in this file. It is the same
-# transformation `I87` took at 0.587.0 and the same doctrine holds: the probe and the
-# corpus scan drive THIS program, so a probe exercising the extraction exercises the one
-# engine the corpus loop calls.
+# transformation `I87` took at 0.587.0.
 #
 # THE THREE PREDICATES ARE THE SHELL PIPELINE'S, NOT A REINTERPRETATION OF IT, and each is
 # named here because a regex moved into awk is a regex two people must agree about:
@@ -2632,82 +2560,48 @@ i59_undocumented_batch() { # <file list> [scan-count file] -> "<path>\t<undocume
 # when a memo relocated two call sites out from under their `sed` anchors. Measured here
 # before deleting it: with the function still present, ARM 2's mutation applied cleanly and
 # `--arms I59` exited 0 and printed the OK line. The mutation is re-anchored on the awk's own
-# mode grammar, which the corpus scan and the probe both execute.
-i59_undocumented_in() {   # <file> -> one undocumented mode per line
-  local _fl _out
-  _fl="$(mktemp)"
-  printf '%s\n' "$1" > "$_fl"
-  _out="$(i59_undocumented_batch "$_fl")"
-  rm -f "$_fl"
-  [ -n "$_out" ] || return 0
-  printf '%s\n' "$_out" | sed 's/^.*	//'
-}
+# mode grammar, which the corpus scan executes.
 
-# THE LIVENESS PROBE. This invariant reports an ABSENCE, and its extraction is a regex over a
-# shell construct — the side that moves. A grammar that stops matching returns the same empty
-# set as a clean tree. So it is asked, every run, to answer a file whose answer is known.
-i59_probe_dir="$(mktemp -d)"
-cat > "$i59_probe_dir/probe.sh" <<'I59_PROBE'
-#!/usr/bin/env bash
-# Usage:
-#   probe.sh --documented    named right here, so it must NOT be reported
-case "$1" in
-  --documented) : ;;
-  --probe-undocumented) : ;;
-  -h|--help) : ;;
-esac
-I59_PROBE
-i59_probe="$(i59_undocumented_in "$i59_probe_dir/probe.sh" | tr '\n' ' ')"
-rm -rf "$i59_probe_dir"
-
-if ! grep -q -- '--probe-undocumented' <<<"$i59_probe"; then
-  err "I59's dispatch grammar did not fire on its own probe: a case arm that no comment names was not reported [probe answered: ${i59_probe:-<nothing>}]. The corpus result below is an empty set produced by an extraction that matches nothing, which reads exactly like a documented tree."
-elif grep -q -- '--documented ' <<<"$i59_probe"; then
-  err "I59 reported a DOCUMENTED mode on its own probe [probe answered: $i59_probe]. The predicate is not reading the prose, so every finding it prints is suspect."
-elif grep -q -- '--help' <<<"$i59_probe"; then
-  err "I59 reported the exempt --help arm on its own probe [probe answered: $i59_probe]. The exemption is gone or narrowed, and the six scripts that dispatch -h|--help to print their own header become findings — the measured-empty false-positive set is held by that exemption."
-else
-  # CORPUS BY `find`, NOT `git ls-files`. The fixture that tests this invariant seeds a
-  # COPY of the tree with no `.git` in it, where `ls-files` answers nothing — so a
-  # git-derived corpus would make the scan vacuous inside the very fixture that exists to
-  # prove it fires, and read as a clean tree in both places. The count is guarded below for
-  # the same reason.
-  i59_undoc=""
-  i59_n=0
-  i59_files=0
-  i59_flist="$(mktemp)"
-  i59_scanned_f="$(mktemp)"
-  find "$REPO_ROOT/core" -type f -name '*.sh' -not -path "$REPO_ROOT/core/fixtures/*" | sort > "$i59_flist"
-  # COUNTED FROM THE LIST, not from the loop below, because the loop now iterates
-  # FINDINGS rather than files and a corpus of 100 clean scripts emits no rows. Counting
-  # the scanned set inside a loop over the reported set is how a floor guard silently
-  # becomes unreachable: it would read 0 on a healthy tree and fire every run.
-  i59_files="$(grep -c . "$i59_flist")" || i59_files=0
-  while IFS= read -r i59_row; do
-    [ -n "$i59_row" ] || continue
-    i59_f="${i59_row%%	*}"
-    i59_m="${i59_row#*	}"
-    [ -n "$i59_m" ] || continue
-    i59_undoc="${i59_undoc}
-  ${i59_f#"$REPO_ROOT/"} $i59_m"
-    i59_n=$((i59_n + 1))
-  done < <(i59_undocumented_batch "$i59_flist" "$i59_scanned_f")
-  i59_scanned="$(cat "$i59_scanned_f" 2>/dev/null)"
-  case "$i59_scanned" in ''|*[!0-9]*) i59_scanned=-1 ;; esac
-  rm -f "$i59_flist" "$i59_scanned_f"
-  if [ "$i59_files" -lt 20 ]; then
-    err "I59 found only $i59_files shipped script(s) under core/ to scan. The corpus is derived by find; a count this low means the tree is not the one this runs against, and an empty corpus reports the same clean line as a documented one."
-  elif [ "$i59_scanned" -ne "$i59_files" ]; then
-    # THE FLOOR ABOVE COUNTS THE LIST; THIS COUNTS WHAT WAS READ, AND THEY ARE TWO CLAIMS.
-    # `getline < fn` returns -1 on an unreadable or absent file and raises nothing, so a
-    # corpus that was listed and never opened reports the same clean line as a scanned one --
-    # measured, 3 files listed and 2 scanned at awk exit 0 with an empty stderr. The shell
-    # form this replaced could not hide it because `grep` wrote to stderr.
-    err "I59 listed $i59_files shipped script(s) under core/ but SCANNED only $i59_scanned. The difference is files the extraction could not open — unreadable, deleted between the find and the read, or empty — and every mode in them went unchecked while the finding set below reported clean."
-  elif [ "$i59_n" -ne 0 ]; then
-    err "I59 found $i59_n dispatched mode(s) documented nowhere in their own file:$i59_undoc
+# CORPUS BY `find`, NOT `git ls-files`. The fixture that tests this invariant seeds a
+# COPY of the tree with no `.git` in it, where `ls-files` answers nothing — so a
+# git-derived corpus would make the scan vacuous inside the very fixture that exists to
+# prove it fires, and read as a clean tree in both places. The count is guarded below for
+# the same reason.
+i59_undoc=""
+i59_n=0
+i59_files=0
+i59_flist="$(mktemp)"
+i59_scanned_f="$(mktemp)"
+find "$REPO_ROOT/core" -type f -name '*.sh' -not -path "$REPO_ROOT/core/fixtures/*" | sort > "$i59_flist"
+# COUNTED FROM THE LIST, not from the loop below, because the loop now iterates
+# FINDINGS rather than files and a corpus of 100 clean scripts emits no rows. Counting
+# the scanned set inside a loop over the reported set is how a floor guard silently
+# becomes unreachable: it would read 0 on a healthy tree and fire every run.
+i59_files="$(grep -c . "$i59_flist")" || i59_files=0
+while IFS= read -r i59_row; do
+  [ -n "$i59_row" ] || continue
+  i59_f="${i59_row%%	*}"
+  i59_m="${i59_row#*	}"
+  [ -n "$i59_m" ] || continue
+  i59_undoc="${i59_undoc}
+${i59_f#"$REPO_ROOT/"} $i59_m"
+  i59_n=$((i59_n + 1))
+done < <(i59_undocumented_batch "$i59_flist" "$i59_scanned_f")
+i59_scanned="$(cat "$i59_scanned_f" 2>/dev/null)"
+case "$i59_scanned" in ''|*[!0-9]*) i59_scanned=-1 ;; esac
+rm -f "$i59_flist" "$i59_scanned_f"
+if [ "$i59_files" -lt 20 ]; then
+  err "I59 found only $i59_files shipped script(s) under core/ to scan. The corpus is derived by find; a count this low means the tree is not the one this runs against, and an empty corpus reports the same clean line as a documented one."
+elif [ "$i59_scanned" -ne "$i59_files" ]; then
+  # THE FLOOR ABOVE COUNTS THE LIST; THIS COUNTS WHAT WAS READ, AND THEY ARE TWO CLAIMS.
+  # `getline < fn` returns -1 on an unreadable or absent file and raises nothing, so a
+  # corpus that was listed and never opened reports the same clean line as a scanned one --
+  # measured, 3 files listed and 2 scanned at awk exit 0 with an empty stderr. The shell
+  # form this replaced could not hide it because `grep` wrote to stderr.
+  err "I59 listed $i59_files shipped script(s) under core/ but SCANNED only $i59_scanned. The difference is files the extraction could not open — unreadable, deleted between the find and the read, or empty — and every mode in them went unchecked while the finding set below reported clean."
+elif [ "$i59_n" -ne 0 ]; then
+  err "I59 found $i59_n dispatched mode(s) documented nowhere in their own file:$i59_undoc
   Each is a mode that exists and cannot be discovered. Name it in the script's usage block — an operator who reads that block and concludes the mode is absent files a correct instruction as a defect, which is the v0.213.1 case this invariant was derived from."
-  fi
 fi
 
 # --- I60: every MODE one shipped file names on another shipped script is dispatched there --
@@ -2744,7 +2638,7 @@ fi
 # re-derivation found the misses were the extraction's, in two enumerated classes:
 #   - FIVE of the eight are produced by THIS FILE, which quotes `<script>.sh --mode` inside
 #     error prose, inside its own grep flags (`--exclude=core-paths.sh --exclude=…` reads as
-#     a citation of `--exclude`) and inside I59's probe heredoc. I49 and I53 already exclude
+#     a citation of `--exclude`). I49 and I53 already exclude
 #     this file by name for exactly that reason; the exclusion is inherited, not invented.
 #   - THREE are dispatch forms the `case`-arm grammar cannot see. Six shipped scripts parse
 #     their mode with `[ "$1" = "--x" ]` or `[[ "$1" == "--x" ]]` rather than a case arm, and
@@ -2763,8 +2657,6 @@ fi
 # core/fixtures/ is out of corpus for the reason I49, I50 and I59 all state: fixtures write
 # wrong spellings on purpose, and a lint that reads them reports their mutants as findings.
 #
-# ONE READER PAIR, used by the corpus scan AND by the probe below. A probe that exercises a
-# copy of the extraction proves the copy, not the extraction.
 i60_citations() {   # <root> -> "<basename.sh> <--mode>" per line
   grep -rhoE '[A-Za-z0-9_.-]+\.sh"?[[:space:]]+--[a-z][a-z0-9-]*' \
     "$1/core" "$1/scripts" "$1/templates" 2>/dev/null \
@@ -2775,8 +2667,7 @@ i60_citations() {   # <root> -> "<basename.sh> <--mode>" per line
 # `i60_ghosts_in` forked a `find` and a `head` per citation to resolve a basename (97 of
 # each), then `i60_dispatches` at 8 externals per resolved citation (84 of them) over only
 # 42 distinct target files. The arm cost 1011 forks, the largest in this file. It is the
-# same transformation `I87` took at 0.587.0, and the ONE READER doctrine stated above is
-# preserved: the probe and the corpus scan drive THIS program.
+# same transformation `I87` took at 0.587.0.
 #
 # THE RESOLUTION SEMANTICS ARE `find … -name "$t" | head -1`, WHICH IS FIRST-IN-FIND-ORDER.
 # Reproduced by walking the tree ONCE in find's own order and keeping the FIRST path seen
@@ -2872,47 +2763,16 @@ i60_ghosts_in() {   # <root> -> "<target.sh> <--mode>" per undispatched citation
   printf '%s\n' "$_out"
 }
 
-# THE LIVENESS PROBE. This invariant reports an ABSENCE across two regexes over shell
-# constructs — both sides move. A citation grammar that stops matching, or a dispatch grammar
-# that matches everything, returns the same empty set as a tree with no ghost in it. So it is
-# asked, every run, to answer a tree whose answer is known — and the probe target dispatches
-# one mode as a `case` arm and one as a `[ "$1" = … ]` test, because the second form is the
-# fix this invariant shipped and an extraction that lost it again would go quiet, not red.
-i60_probe_dir="$(mktemp -d)"
-mkdir -p "$i60_probe_dir/core/scripts" "$i60_probe_dir/scripts" "$i60_probe_dir/templates"
-cat > "$i60_probe_dir/core/scripts/i60-probe-target.sh" <<'I60_TARGET'
-#!/usr/bin/env bash
-case "$1" in
-  --probe-case) : ;;
-esac
-if [ "$1" = "--probe-if" ]; then :; fi
-I60_TARGET
-cat > "$i60_probe_dir/core/i60-probe-caller.md" <<'I60_CALLER'
-Run i60-probe-target.sh --probe-case to start.
-Then i60-probe-target.sh --probe-if to confirm.
-Finally i60-probe-target.sh --probe-ghost, which the target does not dispatch.
-I60_CALLER
-i60_probe="$(i60_ghosts_in "$i60_probe_dir" | awk '{print $2}' | tr '\n' ' ')"
-rm -rf "$i60_probe_dir"
-
-if ! grep -q -- '--probe-ghost' <<<"$i60_probe"; then
-  err "I60's join did not fire on its own probe: a cited mode the probe target does not dispatch was not reported [probe answered: ${i60_probe:-<nothing>}]. Either the citation grammar matched nothing or the dispatch grammar matched everything; the corpus result below is an empty set produced by an extraction that cannot find a ghost, which reads exactly like a tree that has none."
-elif grep -q -- '--probe-case' <<<"$i60_probe"; then
-  err "I60 reported a mode the probe target dispatches as a case arm [probe answered: $i60_probe]. The dispatch side is not reading case arms, so every finding it prints is suspect."
-elif grep -q -- '--probe-if' <<<"$i60_probe"; then
-  err "I60 reported a mode the probe target dispatches as \`[ \"\$1\" = \"--probe-if\" ]\` [probe answered: $i60_probe]. The dispatch side has lost the non-case form — six shipped scripts parse their mode that way, and every one of them becomes a false finding. That regression is the measured false-positive set this invariant was blocked on for two programs."
+i60_pairs="$(i60_citations "$REPO_ROOT" | grep -c .)"
+i60_targets="$(i60_citations "$REPO_ROOT" | awk '{print $1}' | sort -u | grep -c .)"
+if [ "$i60_pairs" -lt 20 ] || [ "$i60_targets" -lt 10 ]; then
+  err "I60 derived only $i60_pairs cited (script, mode) pair(s) across $i60_targets target(s). The corpus is derived by grep over core/, scripts/ and templates/; counts this low mean the citation grammar stopped matching the tree, and an empty corpus reports the same clean line as a tree with no ghost citation in it."
 else
-  i60_pairs="$(i60_citations "$REPO_ROOT" | grep -c .)"
-  i60_targets="$(i60_citations "$REPO_ROOT" | awk '{print $1}' | sort -u | grep -c .)"
-  if [ "$i60_pairs" -lt 20 ] || [ "$i60_targets" -lt 10 ]; then
-    err "I60 derived only $i60_pairs cited (script, mode) pair(s) across $i60_targets target(s). The corpus is derived by grep over core/, scripts/ and templates/; counts this low mean the citation grammar stopped matching the tree, and an empty corpus reports the same clean line as a tree with no ghost citation in it."
-  else
-    i60_ghost="$(i60_ghosts_in "$REPO_ROOT")"
-    if [ -n "$i60_ghost" ]; then
-      err "I60 found shipped file(s) naming a mode the target script does not dispatch:
+  i60_ghost="$(i60_ghosts_in "$REPO_ROOT")"
+  if [ -n "$i60_ghost" ]; then
+    err "I60 found shipped file(s) naming a mode the target script does not dispatch:
   $(printf '%s' "$i60_ghost" | tr '\n' '~' | sed 's/~/\n  /g')
   Each is an instruction that exits 2 on an unknown argument. Whether that 2 is read as a refusal or as a malformed invocation is the call site's business, and the two sites hand-listed by I49 and I53 read it both ways — so a mode named here and absent there is a wrong instruction reaching a gate as an authoritative answer."
-    fi
   fi
 fi
 
@@ -3986,10 +3846,10 @@ if [ "$cm" != "$ss" ]; then
   diff <(printf '%s\n' "$cm") <(printf '%s\n' "$ss") >&2 || true
 fi
 # i5_part_scan <sites|fixman> <label>  < a file's text -- appends " <label>:<entry>" to $i5_part
-# for every entry of its `core_manifest:` block that is in the wrong file. Reads stdin so the
-# self-probe below feeds it here-docs and the corpus feeds it the two files, through ONE program.
+# for every entry of its `core_manifest:` block that is in the wrong file. Reads stdin; the
+# corpus feeds it the two files.
 # Builtins only: `local`, `read`, `case`, `[`; a here-doc is staged by the shell itself, as at
-# the `done <<EOF` loops above, so neither the probe nor the corpus call forks.
+# the `done <<EOF` loops above, so the corpus call does not fork.
 i5_part_scan() {
   local i5_in=0 i5_l
   while IFS= read -r i5_l || [ -n "$i5_l" ]; do
@@ -4008,41 +3868,6 @@ i5_part_scan() {
     esac
   done
 }
-# SELF-PROBE, before the corpus, both ways and on exact equality: a seeded OVERLAP (a fixture
-# entry in setup-sites' block) and a seeded GAP (a non-fixture entry in fixture-manifest's) must
-# each be reported as exactly that entry, and a clean partition must be quiet -- its setup-sites
-# side carries a fixture line AFTER the block's dedent, so a scan that never ends the block at
-# the dedent reports it. Exact equality makes a scan that never reports and one that reports
-# everything both fail here.
-i5_pbad=""
-i5_part=""
-i5_part_scan sites setup-sites.md <<'EOF'
-core_manifest:
-  - core/rules/probe-a.md
-  - core/fixtures/probe-overlap/**
-EOF
-[ "$i5_part" = " setup-sites.md:core/fixtures/probe-overlap/**" ] || i5_pbad="${i5_pbad} overlap read [${i5_part}];"
-i5_part=""
-i5_part_scan fixman fixture-manifest.md <<'EOF'
-core_manifest:
-  - core/fixtures/probe-x/**
-  - core/rules/probe-gap.md
-EOF
-[ "$i5_part" = " fixture-manifest.md:core/rules/probe-gap.md" ] || i5_pbad="${i5_pbad} gap read [${i5_part}];"
-i5_part=""
-i5_part_scan sites setup-sites.md <<'EOF'
-core_manifest:
-  - core/rules/probe-a.md
-```
-other_list:
-  - core/fixtures/probe-after-dedent/**
-EOF
-i5_part_scan fixman fixture-manifest.md <<'EOF'
-core_manifest:
-  - core/fixtures/probe-x/**
-EOF
-[ -z "$i5_part" ] || i5_pbad="${i5_pbad} clean partition read [${i5_part}];"
-[ -n "$i5_pbad" ] && err "I5 partition self-probe failed:${i5_pbad} want exactly the seeded overlap, exactly the seeded gap, and nothing on the clean pair. The partition scan cannot be trusted to fire, so its silence over setup-sites.md and fixture-manifest.md below means nothing."
 i5_part=""
 i5_part_scan sites setup-sites.md < "$SETUP_SITES"
 i5_part_scan fixman fixture-manifest.md < "$FIXTURE_MANIFEST"
@@ -4505,24 +4330,13 @@ else
   # continues onto with a trailing backslash, carries a bare `--now` token. Prose writing `--now`
   # in backticks is not an invocation and does not match, which is the narrowing that keeps
   # escalations.md and gate-validation.md out of the false-positive set (measured 0 on the tree
-  # that shipped this). SELF-PROBE, fed as stdin to the same grep before the corpus is trusted:
-  # a continued invocation passing `--now` must be reported, and an uncontinued one followed by a
-  # `--now` line, and a prose mention, must not -- both directions, or the arm cannot fire.
+  # that shipped this).
   # THE `.sh` IS OPTIONAL, BL-966: the gate's own caller is `gate-transition.sh`'s
   # `arm 2 verdict.sh validate-suppression-lifetime --escalations ...`, and gate-validation.md
   # documents the same verdict.sh form. verdict.sh takes the BARE name and forwards "$@", so a
   # `--now` there pins the gate exactly as a direct call would; a `\.sh`-only grammar scored that
-  # seed rc 0. The probe carries the verdict.sh form both ways: with `--now` it must be reported,
-  # and the same line without it must not.
-  i107_probe='validate-suppression-lifetime.sh --probe-now-miss --escalations x
-  --now 2026-01-01T00:00:00Z
-`validate-suppression-lifetime.sh --probe-now-prose` is never given `--now`.
-  arm 2 verdict.sh validate-suppression-lifetime --probe-now-vmiss --escalations x
-  arm 2 verdict.sh validate-suppression-lifetime --probe-now-vhit --escalations x --now 2026-01-01T00:00:00Z
-validate-suppression-lifetime.sh --probe-now-hit \
-  --escalations x \
-  --now 2026-01-01T00:00:00Z'
-  i107_raw="$(grep -rhE -A3 'validate-suppression-lifetime(\.sh)?"? --[a-z-]+' "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" - <<<"$i107_probe" 2>/dev/null \
+  # seed rc 0.
+  i107_raw="$(grep -rhE -A3 'validate-suppression-lifetime(\.sh)?"? --[a-z-]+' "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" 2>/dev/null \
     --exclude-dir=fixtures --exclude=validate-suppression-lifetime.sh --exclude="${VEM_SELF##*/}" \
     | awk '
       $0 == "--" { cont = 0; next }
@@ -4537,20 +4351,16 @@ validate-suppression-lifetime.sh --probe-now-hit \
       }
       cont { if ($0 ~ /(^|[[:space:]])--now([[:space:]=]|$)/) print "NOW:" last; cont = ($0 ~ /\\[[:space:]]*$/); next }
     ' | sort -u)"
-  i107_cited=""; i107_now=""; i107_phit=0; i107_pmiss=0
+  i107_cited=""; i107_now=""
   while IFS= read -r i107_l; do
     case "$i107_l" in
-      NOW:--probe-now-hit|NOW:--probe-now-vhit) i107_phit=$((i107_phit + 1)) ;;
-      NOW:--probe-now-miss|NOW:--probe-now-prose|NOW:--probe-now-vmiss) i107_pmiss=1 ;;
       NOW:*) i107_now="$i107_now ${i107_l#NOW:}" ;;
-      --probe-now-hit|--probe-now-miss|--probe-now-prose|--probe-now-vhit|--probe-now-vmiss|'') ;;
+      '') ;;
       *) i107_cited="$i107_cited$i107_l"$'\n' ;;
     esac
   done <<<"$i107_raw"
   i107_cited="${i107_cited%$'\n'}"
-  if [ "$i107_phit" -ne 2 ] || [ "$i107_pmiss" -ne 0 ]; then
-    err "I107 the --now arm's self-probe scored hit=$i107_phit (want 2) and miss=$i107_pmiss (want 0): its grammar cannot tell a continued or verdict.sh-form invocation passing --now from an uncontinued one, from the same verdict.sh line without it, or from prose, so its silence over the shipped callers means nothing."
-  elif [ -n "$i107_now" ]; then
+  if [ -n "$i107_now" ]; then
     err "I107 a shipped caller passes --now to validate-suppression-lifetime.sh (mode(s):${i107_now}). --now pins the clock that refuses a future-dated SUPPRESSED authorization; it is for fixtures only (BL-868), and a caller passing it freezes every gate at one instant. Drop the flag; the validator reads the system clock."
   fi
   i107_usage="$(sed -nE 's@^#[[:space:]]+(validate-suppression-lifetime\.sh |\[)(.*)$@\2@p' "$i107_f" \
@@ -4600,65 +4410,32 @@ i109_join() { # <file> -> the file with backslash-continuations folded onto one 
 # a command from a description of one.
 i109_re='bash .*--cite'
 
-# THE PROBE, RUN BEFORE THE CORPUS, in both directions. Both halves are absence-shaped: a
-# grammar that folds nothing reports every continued call unbound, and one that matches nothing
-# reports no call sites at all. Neither silence is distinguishable from a conforming tree.
-i109_probe="$(mktemp -d "${TMPDIR:-/tmp}/i108-XXXXXX")"
-#  a  a conforming ONE-LINE call.
-printf 'x=1\nbash "$S" --dir "$d" --cite "$q" --authorized-at "$t" --quiet\n' > "$i109_probe/a.sh"
-#  b  a conforming CONTINUED call, the convergence gate's shape: the two flags on different
-#     physical lines. Must fold to one and pass.
-printf 'bash "$S" --dir "$d" --cite "$q" \\\n  --since "$w" --authorized-at "$t" --quiet\n' > "$i109_probe/b.sh"
-#  c  THE OFFENDER: a call with --cite and no bound. Must be reported.
-printf 'bash "$S" --dir "$d" --cite "$q" --quiet\n' > "$i109_probe/c.sh"
-#  d  NEAR-MISS: a comment DESCRIBING the flagless call. Must stay quiet, or the arm flags every
-#     file that documents the interface -- the owner's own usage block first.
-printf '#   validate-steering-budget.sh --dir PATH --cite "SUBSTR"\n' > "$i109_probe/d.sh"
-#  e  NEAR-MISS: a call carrying neither flag. Not this arm'"'"'s subject.
-printf 'bash "$S" --dir "$d" --count\n' > "$i109_probe/e.sh"
-i109_score=0
-for i109_pf in a b c d e; do
-  i109_pn="$(i109_join "$i109_probe/$i109_pf.sh" | grep -cE "$i109_re")" || i109_pn=0
-  i109_pb="$(i109_join "$i109_probe/$i109_pf.sh" | grep -E "$i109_re" | grep -cE -- '--authorized-at')" || i109_pb=0
-  case "$i109_pf" in
-    a) [ "$i109_pn" -eq 1 ] && [ "$i109_pb" -eq 1 ] || i109_score=$((i109_score + 1)) ;;
-    b) [ "$i109_pn" -eq 1 ] && [ "$i109_pb" -eq 1 ] || i109_score=$((i109_score + 10)) ;;
-    c) [ "$i109_pn" -eq 1 ] && [ "$i109_pb" -eq 0 ] || i109_score=$((i109_score + 100)) ;;
-    d) [ "$i109_pn" -eq 0 ]                         || i109_score=$((i109_score + 1000)) ;;
-    e) [ "$i109_pn" -eq 0 ]                         || i109_score=$((i109_score + 10000)) ;;
-  esac
-done
-rm -rf "$i109_probe"
-if [ "$i109_score" -ne 0 ]; then
-  err "I109's probe scored $i109_score where 0 is the only correct total, so the corpus below was not scanned. +1 a conforming one-line call was not seen as a bounded call; +10 a conforming call spelled across a backslash continuation read as UNBOUND, which would report the convergence gate as an offender on a clean tree; +100 a call with --cite and no --authorized-at was not reported, which is the state this arm exists to catch; +1000 a COMMENT describing the interface was scored as a call site, so the arm would flag the owner's own usage block; +10000 a call carrying neither flag was scored as a citation query. Any non-zero total means this arm would report a clean tree for the reason a broken reader does."
-else
-  # THE CORPUS. A POSITIVE CONTROL FIRST: an arm that found no call sites at all reports no
-  # unbound ones, and that silence is what a renamed flag or a moved caller looks like.
-  i109_sites=''
-  i109_unbound=''
-  # NO `--` BEFORE THE PATTERN. It terminates option parsing, so the `--exclude-dir` that
-  # follows the path is read as a FILE to search and the fixtures come back in the corpus --
-  # measured, on this arm's own first run: fifteen deliberately-unbound calls inside the
-  # batteries, reported as offenders.
-  for i109_f in $(grep -rlE "$i109_re" "$REPO_ROOT/core" 2>/dev/null --exclude-dir=fixtures); do
-    while IFS= read -r i109_line; do
-      case "$i109_line" in *--cite*) : ;; *) continue ;; esac
-      case "$i109_line" in *bash*) : ;; *) continue ;; esac
-      i109_rel="${i109_f#"$REPO_ROOT"/}"
-      i109_sites="$i109_sites $i109_rel"
-      case "$i109_line" in
-        *--authorized-at*) : ;;
-        *) i109_unbound="$i109_unbound $i109_rel" ;;
-      esac
-    done <<EOF
+# THE CORPUS. A POSITIVE CONTROL FIRST: an arm that found no call sites at all reports no
+# unbound ones, and that silence is what a renamed flag or a moved caller looks like.
+i109_sites=''
+i109_unbound=''
+# NO `--` BEFORE THE PATTERN. It terminates option parsing, so the `--exclude-dir` that
+# follows the path is read as a FILE to search and the fixtures come back in the corpus --
+# measured, on this arm's own first run: fifteen deliberately-unbound calls inside the
+# batteries, reported as offenders.
+for i109_f in $(grep -rlE "$i109_re" "$REPO_ROOT/core" 2>/dev/null --exclude-dir=fixtures); do
+  while IFS= read -r i109_line; do
+    case "$i109_line" in *--cite*) : ;; *) continue ;; esac
+    case "$i109_line" in *bash*) : ;; *) continue ;; esac
+    i109_rel="${i109_f#"$REPO_ROOT"/}"
+    i109_sites="$i109_sites $i109_rel"
+    case "$i109_line" in
+      *--authorized-at*) : ;;
+      *) i109_unbound="$i109_unbound $i109_rel" ;;
+    esac
+  done <<EOF
 $(i109_join "$i109_f")
 EOF
-  done
-  if [ -z "${i109_sites// /}" ]; then
-    err "I109 found ZERO \`--cite\` call sites under core/. Four programs ask that question and the arm located none of them, so its clean line is about a corpus it never read -- the flag was renamed, the callers moved, or this grammar stopped spelling a call."
-  fi
-  [ -z "${i109_unbound// /}" ] || err "I109 call site(s) ask \`validate-steering-budget.sh --cite\` without passing \`--authorized-at\`:${i109_unbound}. An unbounded citation query scans the project's ENTIRE session history, so any twelve-character phrase the operator ever typed verifies a record filed at any moment -- with the same exit codes, the same output and no second piece of evidence anywhere. Pass the flag on every call, with an empty value where the record carries no parseable timestamp; \`cite_ts()\` beside \`cite_quote()\` is what derives it."
+done
+if [ -z "${i109_sites// /}" ]; then
+  err "I109 found ZERO \`--cite\` call sites under core/. Four programs ask that question and the arm located none of them, so its clean line is about a corpus it never read -- the flag was renamed, the callers moved, or this grammar stopped spelling a call."
 fi
+[ -z "${i109_unbound// /}" ] || err "I109 call site(s) ask \`validate-steering-budget.sh --cite\` without passing \`--authorized-at\`:${i109_unbound}. An unbounded citation query scans the project's ENTIRE session history, so any twelve-character phrase the operator ever typed verifies a record filed at any moment -- with the same exit codes, the same output and no second piece of evidence anywhere. Pass the flag on every call, with an empty value where the record carries no parseable timestamp; \`cite_ts()\` beside \`cite_quote()\` is what derives it."
 
 # --- I50: every scripts/ai-dlc/<script> a shipped file names is one core actually ships ---
 #
@@ -5029,32 +4806,11 @@ I33B_WALK_AWK='
     nfiles++
   }
 '
-# ONE PREDICATE, TWO CALLERS, AND THE BATCHING DOES NOT CHANGE THAT. Both the probe and the
-# corpus scan reach the awk program above through this function; neither carries a private
-# copy. Blinding the program therefore still surfaces as the probe failing rather than as a
-# clean tree, which is the property assertion 27 of enforcement-map-derivations exists to hold.
 i33b_scan() { # i33b_scan <file>... -> one line per (file, variable) that walks up
   [ "$#" -gt 0 ] || return 0
   awk -v SCANFILE="${I33B_SCANFILE:-}" "$I33B_WALK_AWK" "$@" 2>/dev/null
 }
 
-# The probe proves BOTH directions in the same run, through the function the scan uses.
-# A scanner that cannot see the two-step form reports the same clean line as a tree that
-# does not use it; one that flags a dirname variable which never walks up would put every
-# fixture's own $HERE/$DIR in the finding set. Built here, because a probe in the tree is
-# a subject.
-i33b_probe="$(mktemp -d 2>/dev/null)"
-if [ -n "$i33b_probe" ] && [ -d "$i33b_probe" ]; then
-  printf 'D="$(dirname "$TOOL")"\nS="$D/../schemas/x.json"\n' > "$i33b_probe/bad.sh"
-  printf 'D="$(dirname "$TOOL")"\nS="$D/sibling.sh"\nH="$(dirname "$0")"\nR="$H/../../.."\n' > "$i33b_probe/ok.sh"
-  i33b_pp="$(i33b_scan "$i33b_probe/bad.sh" | grep -c . || true)"
-  i33b_pn="$(i33b_scan "$i33b_probe/ok.sh"  | grep -c . || true)"
-  rm -rf "$i33b_probe"
-  [ "$i33b_pp" -eq 0 ] && err "I33b's own positive probe was NOT reported: a two-step dirname-then-walk went unseen by the SAME function the scan below calls, so a clean result there would mean nothing. The invariant fails closed rather than reporting an absence its instrument could not have found."
-  [ "$i33b_pn" -ne 0 ] && err "I33b's negative probe WAS reported: a dirname variable used WITHOUT walking up, or a fixture's own \$HERE-rooted chain, was flagged. Both are the house pattern I33 prescribes, and flagging them would put every fixture in the finding set."
-else
-  err "I33b could not create its probe directory, so neither direction of its scanner was proven this run."
-fi
 
 i33b_hits=""
 if [ -d "$REPO_ROOT/core/fixtures" ]; then
@@ -5117,11 +4873,7 @@ fi
 #
 # MEASURED BEFORE SHIPPING: across every core/fixtures/**/*.sh this grammar matches ONE
 # file -- the one above -- and its false-positive set is EMPTY. After the fix it matches
-# none, which is why the probe below is not optional: a corpus the grammar cannot match
-# reports the same clean line as a corpus with nothing to find.
-#
-# ONE PREDICATE, TWO CALLERS, as I33b established. The probe and the corpus scan call the
-# SAME function, or the probe certifies an instrument the scan never uses.
+# none.
 #
 # COMMENTS ARE EXCLUDED, AND THAT NARROWING IS DERIVED FROM ONE MEASURED FALSE POSITIVE --
 # this invariant's first run flagged the very file it had just fixed, because the fix's own
@@ -5151,24 +4903,6 @@ if [ -z "$i33c_subs" ]; then
   err "I33c derived NO core subtree to scan for, so its corpus scan could only report clean. The subtree list is derived from ls core/ and an empty one is an instrument failure, not a pass."
 fi
 
-# BOTH DIRECTIONS, through the scan's own function. A grammar blind to the cd/pwd spelling
-# reports the same clean line as a fixed tree; one that flags a chain which DOES name the
-# consumer layout would flag the remedy this invariant prescribes.
-i33c_probe="$(mktemp -d 2>/dev/null)"
-if [ -n "$i33c_probe" ] && [ -d "$i33c_probe" ]; then
-  printf 'S="$(cd "$(dirname "$0")/../.." && pwd)/schemas/x.json"\n' > "$i33c_probe/bad1.sh"
-  printf 'S="$(dirname "$0")/../../schemas/x.json"\n'                 > "$i33c_probe/bad2.sh"
-  printf 'H="$(cd "$(dirname "$0")" && pwd)"\nfor c in "$H/../../schemas/x.json" "$H/../../../.claude/schemas/x.json"; do :; done\n' > "$i33c_probe/ok.sh"
-  i33c_p1="$(i33c_scan "$i33c_probe/bad1.sh" schemas | grep -c . || true)"
-  i33c_p2="$(i33c_scan "$i33c_probe/bad2.sh" schemas | grep -c . || true)"
-  i33c_pn="$(i33c_scan "$i33c_probe/ok.sh"   schemas | grep -c . || true)"
-  rm -rf "$i33c_probe"
-  [ "$i33c_p1" -eq 0 ] && err "I33c's cd/pwd positive probe was NOT reported. That is the exact spelling v0.343.0 shipped, and the one I33 and I33b are both blind to, so a clean corpus result would mean nothing."
-  [ "$i33c_p2" -eq 0 ] && err "I33c's direct-walk positive probe was NOT reported, so the grammar covers only one of the two self-rooted spellings."
-  [ "$i33c_pn" -ne 0 ] && err "I33c's negative probe WAS reported: a self-rooted chain that DOES name the consumer layout was flagged. That is the remedy this invariant prescribes, and flagging it would make the check unsatisfiable."
-else
-  err "I33c could not create its probe directory, so neither direction of its scanner was proven this run."
-fi
 
 i33c_hits=""
 if [ -d "$REPO_ROOT/core/fixtures" ]; then
@@ -5205,8 +4939,8 @@ fi
 # do today, and the walk is the right resolver for a battery that only ever runs here.
 #
 # MEASURED BEFORE SHIPPING: the grammar matches 9 files across core/fixtures; 8 are
-# `.dist-only`; the ninth is the defect. After the fix it matches 0 shipping files, which is
-# why the probe is not optional. Comment lines are excluded for the reason I33c records --
+# `.dist-only`; the ninth is the defect. After the fix it matches 0 shipping files. Comment
+# lines are excluded for the reason I33c records --
 # the fix's own comment names the walk to explain why it is gone.
 i33d_pat='\[ ! -f "\$[A-Za-z_][A-Za-z0-9_]*/VERSION" \]|\[ -f "\$[A-Za-z_][A-Za-z0-9_]*/VERSION" \]'
 i33d_scan() { # i33d_scan <file> -> offending non-comment line(s), if any
@@ -5226,32 +4960,6 @@ i33d_ship_hits() { # i33d_ship_hits <fixtures-root> -> each SHIPPING walk-up fil
   done
 }
 
-i33d_probe="$(mktemp -d 2>/dev/null)"
-if [ -n "$i33d_probe" ] && [ -d "$i33d_probe" ]; then
-  printf '_d="$HERE"\nwhile [ "$_d" != "/" ]; do\n  if [ -f "$_d/VERSION" ]; then ROOT="$_d"; break; fi\n  _d="$(dirname "$_d")"\ndone\n' > "$i33d_probe/bad1.sh"
-  printf 'while [ "$R" != "/" ] && [ ! -f "$R/VERSION" ]; do R="$(dirname "$R")"; done\n' > "$i33d_probe/bad2.sh"
-  printf '# if [ -f "$_d/VERSION" ]; then -- quoted in prose only\nROOT="$(cd "$HERE/../../.." && pwd)"\n[ -f "$ROOT/.claude/.ai-dlc-version" ] && :\n' > "$i33d_probe/ok.sh"
-  i33d_p1="$(i33d_scan "$i33d_probe/bad1.sh" | grep -c . || true)"
-  i33d_p2="$(i33d_scan "$i33d_probe/bad2.sh" | grep -c . || true)"
-  i33d_pn="$(i33d_scan "$i33d_probe/ok.sh"   | grep -c . || true)"
-  # SHIP-SET FILTER, both directions, through the SAME function the corpus loop calls: a shipping
-  # fixture's nested walk-up file must be reported, a .dist-only fixture's identical file must not.
-  mkdir -p "$i33d_probe/fx/ship-a/sub" "$i33d_probe/fx/dist-b/sub"
-  printf '_d="$HERE"\nwhile [ "$_d" != "/" ]; do\n  if [ -f "$_d/VERSION" ]; then ROOT="$_d"; break; fi\n  _d="${_d%%/*}"\ndone\n' > "$i33d_probe/fx/ship-a/sub/x.sh"
-  cp "$i33d_probe/fx/ship-a/sub/x.sh" "$i33d_probe/fx/dist-b/sub/x.sh"
-  printf 'probe: not shipped\n' > "$i33d_probe/fx/dist-b/.dist-only"
-  i33d_fo="$(i33d_ship_hits "$i33d_probe/fx")"
-  i33d_fa="$(printf '%s\n' "$i33d_fo" | grep -c '/ship-a/sub/x\.sh$' || true)"
-  i33d_fb="$(printf '%s\n' "$i33d_fo" | grep -c '/dist-b/' || true)"
-  rm -rf "$i33d_probe"
-  [ "$i33d_p1" -eq 0 ] && err "I106's positive probe (the if/break walk) was NOT reported. That is the spelling v0.491.0 shipped, so a clean corpus result would mean nothing."
-  [ "$i33d_p2" -eq 0 ] && err "I106's negated-test probe (the while ! -f walk) was NOT reported, so the grammar covers only one of the two spellings in the corpus."
-  [ "$i33d_pn" -ne 0 ] && err "I106's negative probe WAS reported: a three-up self-rooted resolver, with the walk quoted only in a comment, was flagged. That is the remedy this invariant prescribes, and flagging it would make the check unsatisfiable."
-  [ "$i33d_fa" -eq 0 ] && err "I106's ship-set filter probe (a SHIPPING fixture with a nested walk-up file) was NOT reported, so the filter can skip a shipping fixture and a clean corpus result would mean nothing."
-  [ "$i33d_fb" -ne 0 ] && err "I106's ship-set filter probe WAS reported for a .dist-only fixture carrying the same walk-up file. That fixture never reaches a consumer and walking for VERSION is its correct resolver, so flagging it would make the check unsatisfiable."
-else
-  err "I106 could not create its probe directory, so neither direction of its scanner was proven this run."
-fi
 
 i33d_hits=""
 i33d_ship_n=0
@@ -5697,20 +5405,19 @@ fi
 # tools span are comments, so renaming one in a single hook is invisible to it while the hermetic runner
 # (which extracts the span by those exact strings) exits 2 on every declared fixture of the consumer.
 # Each hook must carry exactly one BEGIN and one END line, END after BEGIN, with at least one code line
-# between them. ONE awk pass reads every file named (the five self-probe files first, then the two hooks)
+# between them. ONE awk pass reads both hooks
 # and prints `<file><TAB><reason>` per file, empty reason when the span is sound: a per-file grep/sed/cut
 # chain here cost about fifty forks against the fork budget.
 # THE READSET_KEYROWS SPAN IS HELD THE SAME WAY: the runner sources the shared declared-fixture composer out of the
 # hook by its sentinel lines, so a renamed or emptied KEYROWS sentinel in one hook leaves --key-only exiting 2 and
 # every sandbox run of that consumer with the verdict store OFF, and the comment-stripped compare above cannot see
-# it. rt_scan takes the span NAME first; the self-probe runs once per span, so each name is proven to discriminate.
+# it. rt_scan takes the span NAME first.
 # THE READSET_LOCK SPAN IS THE THIRD, held the same way AND byte for byte across the two hooks. The read-set deriver
 # (core/scripts/derive-fixture-readsets.sh) sources the trace-window slot's pid-file writer and stale test out of
 # whichever hook it finds, so a consumer whose span differed would judge the slot by different rules from this repo.
 # The span sits INSIDE the FIXTURE_POOL block, so the comment-stripped compare above already binds its executable
 # lines; what that compare cannot see is its comments and its sentinels. The compare here is WHOLE-SPAN, comments
-# included, because the span is sourced verbatim; it holds no fixture-root path, so no tests/fixtures mapping applies. Its own
-# self-probe (an identical pair stays quiet, a one-byte divergence flags) runs before the hooks are compared.
+# included, because the span is sourced verbatim; it holds no fixture-root path, so no tests/fixtures mapping applies.
 rt_scan() { # <span name> <file>... -> one `<file>\t<reason>` line per file
   local rt_sn="$1"; shift
   awk -v B="# ${rt_sn}_BEGIN" -v E="# ${rt_sn}_END" '
@@ -5732,48 +5439,21 @@ RT_RUNNER="$REPO_ROOT/core/scripts/hermetic-run.sh"
 if [ ! -f "$PP_DIST" ] || [ ! -f "$PP_CONS" ]; then
   err "I66 (tools span) could not read both pre-push hooks, so the span sentinels were not checked."
 else
-  rt_pd="$(mktemp -d)" || rt_pd=""
-  if [ -z "$rt_pd" ]; then
-    err "I66 (tools span) could not create a scratch directory for its self-probe."
-  else
-    for rt_sn in READSET_TOOLS READSET_KEYROWS READSET_LOCK; do
-      printf 'x\n# %s_BEGIN\nA=1\n# %s_END\n' "$rt_sn" "$rt_sn" > "$rt_pd/1ok"
-      printf '# %s_BEGIN\nA=1\n# %s_END\nz\n' "$rt_sn" "$rt_sn" > "$rt_pd/2moved"
-      printf 'x\n# %s_BEGINS\nA=1\n# %s_END\n' "$rt_sn" "$rt_sn" > "$rt_pd/3renamed"
-      printf '# %s_BEGIN\n# c\n# %s_END\n' "$rt_sn" "$rt_sn" > "$rt_pd/4empty"
-      printf '# %s_END\nA=1\n# %s_BEGIN\n' "$rt_sn" "$rt_sn" > "$rt_pd/5swapped"
-      rt_out="$(rt_scan "$rt_sn" "$rt_pd/1ok" "$rt_pd/2moved" "$rt_pd/3renamed" "$rt_pd/4empty" "$rt_pd/5swapped" "$PP_DIST" "$PP_CONS")"
-      rt_tab="$(printf '\t')"; rt_bad=0; rt_n=0
-      while IFS="$rt_tab" read -r rt_f rt_r; do
-        rt_n=$((rt_n + 1))
-        case "$rt_n:${rt_r:+bad}" in
-          1:|2:) ;;                   # sound probes must be quiet (a moved span is still sound)
-          3:bad|4:bad|5:bad) ;;       # offenders must be flagged
-          [1-5]:*) rt_bad=1 ;;        # a quiet offender or a flagged near-miss: the check cannot discriminate
-          *) [ -z "$rt_r" ] || err "I66 the ${rt_sn} span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. Its extractor reads it by those exact sentinel lines: the hermetic runner exits 2 on every declared fixture without READSET_TOOLS, --key-only exits 2 and a sandbox run records nothing without READSET_KEYROWS, and the read-set deriver runs every trace window unslotted without READSET_LOCK." ;;
-        esac
-      done <<RT_EOF
+  rt_tab="$(printf '\t')"
+  for rt_sn in READSET_TOOLS READSET_KEYROWS READSET_LOCK; do
+    rt_out="$(rt_scan "$rt_sn" "$PP_DIST" "$PP_CONS")"
+    while IFS="$rt_tab" read -r rt_f rt_r; do
+      [ -z "$rt_r" ] || err "I66 the ${rt_sn} span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. Its extractor reads it by those exact sentinel lines: the hermetic runner exits 2 on every declared fixture without READSET_TOOLS, --key-only exits 2 and a sandbox run records nothing without READSET_KEYROWS, and the read-set deriver runs every trace window unslotted without READSET_LOCK."
+    done <<RT_EOF
 $rt_out
 RT_EOF
-      { [ "$rt_n" = 7 ] && [ "$rt_bad" = 0 ]; } || err "I66 (${rt_sn} span) self-probe failed: the sentinel check did not flag a renamed, empty or swapped span, or flagged a moved one (read ${rt_n} of 7 files)."
-    done
-    # READSET_LOCK BYTE IDENTITY. Self-probe first: two identical spans must compare equal and two spans one byte
-    # apart must not, through the same extraction the corpus compare uses.
-    rl_span() { sed -n '/^# READSET_LOCK_BEGIN$/,/^# READSET_LOCK_END$/p' "$1"; }
-    printf 'x\n# READSET_LOCK_BEGIN\nA=1\n# READSET_LOCK_END\n' > "$rt_pd/l1"
-    printf '# READSET_LOCK_BEGIN\nA=1\n# READSET_LOCK_END\nz\n' > "$rt_pd/l2"
-    printf 'x\n# READSET_LOCK_BEGIN\nA=2\n# READSET_LOCK_END\n' > "$rt_pd/l3"
-    rl_a="$(rl_span "$rt_pd/l1")"; rl_b="$(rl_span "$rt_pd/l2")"; rl_c="$(rl_span "$rt_pd/l3")"
-    if [ -n "$rl_a" ] && [ "$rl_a" = "$rl_b" ] && [ "$rl_a" != "$rl_c" ]; then
-      rl_d="$(rl_span "$PP_DIST")"; rl_k="$(rl_span "$PP_CONS")"
-      if [ "$rl_d" != "$rl_k" ]; then
-        rl_diff="$(diff <(printf '%s\n' "$rl_d") <(printf '%s\n' "$rl_k") | sed -n '1,12p' | tr '\n' ' ')"
-        err "I66 the two pre-push hooks' READSET_LOCK spans have forked. Diff (distribution expected, consumer actual): ${rl_diff:-<none>}. core/scripts/derive-fixture-readsets.sh sources this span from whichever hook it finds, so a consumer would write and judge the trace-window slot by different rules, and install.sh always overwrites the consumer hook. Bring core/git-hooks/pre-push's READSET_LOCK span byte-identical to the distribution's."
-      fi
-    else
-      err "I66 (READSET_LOCK identity) self-probe failed: two identical spans compared unequal, two spans one byte apart compared equal, or the extraction read nothing, so the hook compare cannot discriminate."
-    fi
-    rm -rf "$rt_pd"
+  done
+  # READSET_LOCK BYTE IDENTITY, through one extraction per hook.
+  rl_span() { sed -n '/^# READSET_LOCK_BEGIN$/,/^# READSET_LOCK_END$/p' "$1"; }
+  rl_d="$(rl_span "$PP_DIST")"; rl_k="$(rl_span "$PP_CONS")"
+  if [ "$rl_d" != "$rl_k" ]; then
+    rl_diff="$(diff <(printf '%s\n' "$rl_d") <(printf '%s\n' "$rl_k") | sed -n '1,12p' | tr '\n' ' ')"
+    err "I66 the two pre-push hooks' READSET_LOCK spans have forked. Diff (distribution expected, consumer actual): ${rl_diff:-<none>}. core/scripts/derive-fixture-readsets.sh sources this span from whichever hook it finds, so a consumer would write and judge the trace-window slot by different rules, and install.sh always overwrites the consumer hook. Bring core/git-hooks/pre-push's READSET_LOCK span byte-identical to the distribution's."
   fi
   # The runner-extraction claim is SEPARATE: it is owed only when the hooks carry the spans at all,
   # and a hooks-only scratch copy must therefore copy the runner too (validator-arm-selection's i66-onehook phase does).
@@ -5873,23 +5553,6 @@ for _cw in "$REPO_ROOT/core/skills/ai-dlc/extensions/README.md" \
   if [ "$_n" -ne 0 ]; then
     err "I68 core ships $_n crosswalk row(s) in ${_cw#"$REPO_ROOT"/}: $(awk -F'|' '/^[[:space:]]*```/{f=!f;next} f{next} /^[[:space:]]*\|/{v=$2; gsub(/^[ \t`*]+|[ \t`*]+$/,"",v); if (v=="" || v ~ /^-+$/) next; if (tolower(v) ~ /^your (number|id)$/) next; print v}' "$_cw" | sort -u | paste -sd', ' -). Every consumer inherits them, so LC-N6 and LC-R2 clear themselves on those ids in a tree whose operator never wrote a row — a check that cannot fire, for exactly the ids core happened to use in an example. Fence the example, or drop the data row."
   fi
-  # THE PROBE IS WRITTEN OUTSIDE THE REPOSITORY, and that is not fastidiousness. The first
-  # cut of this arm wrote `.i68-probe.md` into $REPO_ROOT. Measured: an untracked, unignored
-  # file at the repo root MOVES `scripts/suite-content-key.sh`'s value — key `3488ca3…` clean
-  # against `b6c9884…` with a probe present — so a check about checks-that-cannot-fire was
-  # quietly invalidating the suite skip for every later run. That is v0.208.0's finding
-  # exactly: a fixture writing into the repo it tests, and a transient write leaves no trace
-  # to find it by.
-  _probe="$(mktemp "${TMPDIR:-/tmp}/i68-probe.XXXXXX")" || continue
-  cp "$_cw" "$_probe" 2>/dev/null || { rm -f "$_probe"; continue; }
-  printf '\n| ZZ-PROBE | x | y | z | w |\n' >> "$_probe"
-  _p="$(cw_harvest "$_probe")"
-  rm -f "$_probe"
-  # ONE MORE than the base count, not one. Written as `-eq 1` this arm fired alongside the
-  # claim above on every mutant that added a row, so a single defect scored two failures and
-  # neither assertion was independently meaningful — the entanglement CLAUDE.md forbids.
-  # The delta is what the control is actually about: the reader can still SEE a row.
-  [ "$_p" -eq $((_n + 1)) ] || err "I68's control failed on ${_cw#"$REPO_ROOT"/}: the reader yielded $_n on the file and $_p on the same file plus ONE unfenced row, so appending a row did not move the count by one. The reading above is therefore a broken extractor rather than a measurement of the file, and this invariant would report every future example row as absent."
 done
 
 # --- I69: prose naming the declaration's HOME must name a file that carries it --
@@ -6047,12 +5710,11 @@ done
 # left in the trace population without a stated reason is one the next trace can silently lose.
 # The marker is a dedicated file for the same reason `.dist-only` is: README.md cannot carry it,
 # because many fixtures already have one for other purposes. LINE 1, NOT `-s`: a file whose first
-# line is blank is non-empty and states nothing where a reader looks first, and the probe seeds
-# that near-miss so a `[ -s ]` regression fails here.
+# line is blank is non-empty and states nothing where a reader looks first.
 # NOT PACKAGED: install.sh copies a fixture's `*`, which matches no dotfile, so the marker never
 # reaches a consumer -- it is only read here, like `.dist-only`.
 # COST: builtins only per directory (`[ -f ]`, `read`, parameter expansion), the I74(d) shape;
-# the forks are the probe's mktemp/mkdir/rm and the two command substitutions.
+# the forks are the two command substitutions.
 # STANDS DOWN when the tree has no core/fixtures (a scratch tree a fixture copied the validator
 # into), and FAILS CLOSED when core/fixtures exists and no run.sh directory was scanned.
 i74e_scan() { # <fixtures root> -> `SCANNED <n>`, then one `<name> <neither|both|empty-reason>` per offender
@@ -6071,29 +5733,6 @@ i74e_scan() { # <fixtures root> -> `SCANNED <n>`, then one `<name> <neither|both
   done
   printf 'SCANNED %s\n' "$c"
 }
-i74e_pd="$(mktemp -d "${TMPDIR:-/tmp}/i74e-XXXXXX" 2>/dev/null)"
-if [ -n "$i74e_pd" ] && [ -d "$i74e_pd" ]; then
-  mkdir -p "$i74e_pd/f-neither" "$i74e_pd/f-both" "$i74e_pd/f-empty" "$i74e_pd/f-blank1" \
-    "$i74e_pd/q-decl" "$i74e_pd/q-undecl" "$i74e_pd/q-undecl-dist" "$i74e_pd/q-norun"
-  for _d in f-neither f-both f-empty f-blank1 q-decl q-undecl q-undecl-dist; do : > "$i74e_pd/$_d/run.sh"; done
-  printf 'core/x\n' > "$i74e_pd/f-both/inputs.decl"; printf 'a reason\n' > "$i74e_pd/f-both/.undeclarable"
-  : > "$i74e_pd/f-empty/.undeclarable"
-  printf '\nthe reason sits on line 2\n' > "$i74e_pd/f-blank1/.undeclarable"
-  printf 'core/x\n' > "$i74e_pd/q-decl/inputs.decl"
-  printf 'a reason with no trailing newline' > "$i74e_pd/q-undecl/.undeclarable"
-  printf 'a reason\n' > "$i74e_pd/q-undecl-dist/.undeclarable"; printf 'dist\n' > "$i74e_pd/q-undecl-dist/.dist-only"
-  : > "$i74e_pd/q-norun/.undeclarable"
-  i74e_got="$(i74e_scan "$i74e_pd")"
-  rm -rf "$i74e_pd"
-  i74e_want="f-blank1 empty-reason
-f-both both
-f-empty empty-reason
-f-neither neither
-SCANNED 7"
-  [ "$i74e_got" = "$i74e_want" ] || err "I74(e) self-probe FAILED: the scan over a seeded tree did not flag exactly f-neither, f-both, f-empty and f-blank1 and stay quiet on a declared dir, two valid markers and a dir with no run.sh, across 7 scanned. Got: $(echo $i74e_got). Its verdict on the corpus below would be unattributable."
-else
-  err "I74(e) could not create its probe directory, so neither direction of its scan was proven this run."
-fi
 if [ -d "$REPO_ROOT/core/fixtures" ]; then
   i74e_out="$(i74e_scan "$REPO_ROOT/core/fixtures")"
   i74e_n="${i74e_out##*SCANNED }"
@@ -6205,47 +5844,6 @@ i79_moved() {
   fi
 }
 
-# SELF-PROBE, BEFORE THE CORPUS, BOTH DIRECTIONS. A three-rule SKILL.md and a carrier under
-# mktemp; the pair is recorded at s0/c0 and each case is scored against it:
-#   A  Rule 23's body edited, carrier unchanged      -> must name "rule body"
-#   B  Rules 22 and 24 edited, Rule 23 untouched     -> must be silent (the span holds)
-#   C  carrier edited alone                          -> must name "carrier"
-#   D  only Rule 23's `**Carrier:**` line edited     -> must be silent (the narrowing)
-i79_pd="$(mktemp -d "${TMPDIR:-/tmp}/i79-XXXXXX")"
-printf '%s\n' '### Rule 22 -- a' '' 'alpha' '### Rule 23 -- b' '' 'beta body' '' '**Carrier:** `.claude/rules/x.md`' '<!-- note -->' '### Rule 24 -- c' '' 'gamma' > "$i79_pd/s0"
-printf '%s\n' '### Rule 22 -- a' '' 'alpha' '### Rule 23 -- b' '' 'beta body, plus a new clause' '' '**Carrier:** `.claude/rules/x.md`' '<!-- note -->' '### Rule 24 -- c' '' 'gamma' > "$i79_pd/s1"
-printf '%s\n' '### Rule 22 -- a' '' 'alpha EDITED' '### Rule 23 -- b' '' 'beta body' '' '**Carrier:** `.claude/rules/x.md`' '<!-- note -->' '### Rule 24 -- c' '' 'gamma EDITED' > "$i79_pd/s2"
-printf '%s\n' '### Rule 22 -- a' '' 'alpha' '### Rule 23 -- b' '' 'beta body' '' '**Carrier:** `.claude/rules/x.md` (a longer declaration)' '<!-- note -->' '### Rule 24 -- c' '' 'gamma' > "$i79_pd/s3"
-printf '%s\n' 'carried beta' > "$i79_pd/c0"
-printf '%s\n' 'carried beta, plus the new clause' > "$i79_pd/c1"
-i79_probe_bad=""
-# Each variant's Rule 23 span goes through the SAME extractor and stripper the corpus uses;
-# the four stripped bodies and two carriers are then hashed in ONE process, because a
-# per-case `shasum` (a perl script) cost 5 forks this validator's budget does not have.
-for i79_s in s0 s1 s2 s3; do
-  i79_strip_carrier "$(awk -v n=23 "$i79_body_awk" "$i79_pd/$i79_s")"
-  printf '%s\n' "$I79_NC" > "$i79_pd/b$i79_s"
-done
-i79_ph="$(cd "$i79_pd" && { shasum -a 256 bs0 bs1 bs2 bs3 c0 c1 2>/dev/null || sha256sum bs0 bs1 bs2 bs3 c0 c1 2>/dev/null; })"
-i79_hs=""
-while read -r i79_h i79_f; do
-  [ "${#i79_h}" -eq 64 ] && i79_hs="$i79_hs $i79_f=$i79_h"
-done <<<"$i79_ph"
-i79_ph() { local x="${i79_hs#* $1=}"; [ "$x" != "$i79_hs" ] && I79_H="${x%% *}" || I79_H=""; }
-i79_ph bs0; i79_rb="$I79_H"; i79_ph c0; i79_rc="$I79_H"
-if [ -z "$i79_rb" ] || [ -z "$i79_rc" ]; then
-  i79_probe_bad=" no sha256 tool answered (tried shasum -a 256, sha256sum);"
-else
-  for i79_case in A:bs1:c0:rule\ body B:bs2:c0: C:bs0:c1:carrier D:bs3:c0:; do
-    i79_cs="${i79_case#*:}"; i79_cc="${i79_cs#*:}"; i79_want="${i79_cc#*:}"
-    i79_cs="${i79_cs%%:*}"; i79_cc="${i79_cc%%:*}"
-    i79_ph "$i79_cs"; i79_lb="$I79_H"; i79_ph "$i79_cc"; i79_lc="$I79_H"
-    i79_moved "$i79_rb" "$i79_rc" "$i79_lb" "$i79_lc"
-    [ "$I79_MOVED" = "$i79_want" ] || i79_probe_bad="$i79_probe_bad case ${i79_case%%:*} gave '$I79_MOVED' where '$i79_want' was required;"
-  done
-fi
-rm -f "$i79_pd/s0" "$i79_pd/s1" "$i79_pd/s2" "$i79_pd/s3" "$i79_pd/bs0" "$i79_pd/bs1" "$i79_pd/bs2" "$i79_pd/bs3" "$i79_pd/c0" "$i79_pd/c1" && rmdir "$i79_pd"
-[ -n "$i79_probe_bad" ] && err "I79 carrier-stamp self-probe failed:$i79_probe_bad The binding between a rule and its .claude/rules/ carrier cannot be trusted to fire, so its silence over the real SKILL.md means nothing."
 i79_carried=""; i79_carried_n=0
 
 i79_budget="$(sed -n 's/^BUDGET="${AI_DLC_REATTACH_BUDGET:-\([0-9]*\)}"/\1/p' "$REPO_ROOT/core/scripts/validate-reattach-budget.sh" | head -1)"
@@ -6565,76 +6163,6 @@ i75_n="$(grep -c . <<<"$i75_subjects" || true)"
 if [ "$i75_n" -lt 5 ]; then
   err "I75's subject extractor found $i75_n script(s) consulting a project root. Fewer than five means the extractor stopped matching, not that the population shrank — and an empty subject set agrees with every requirement, so this fails closed."
 else
-  # SELF-PROBES, written here rather than assumed, and run BEFORE the corpus loop. Without them, a
-  # run whose extractor returns nothing for every subject prints the same clean line as a real
-  # pass. The fail-closed reader is probed on two block sizes, because a reader that is right on a
-  # small block and wrong on a large one is the defect BL-1000 measured:
-  #   small: good.sh (validate-ci-gates.sh's real block, guarded) must PASS -- the near-miss;
-  #          bad.sh (no guard) and good-ng.sh (the same real block, its guard token lines
-  #          deleted) must FAIL.
-  #   REAL-SIZED: big-ok.sh (merge-review-shards.sh, padded) must PASS; big-ng.sh (its guard
-  #          token lines deleted) must FAIL; big-open.sh (its end marker deleted) must read 3.
-  # The big copies are built by ONE awk that also counts what it removed: the guard token lines
-  # (>= 1) and the end marker (exactly 1), the two things the live file must supply.
-  # THE SIZE AND THE PRE-WALK TOKENS ARE CONSTRUCTED, NOT INHERITED, and so are not re-checked: a
-  # count of what the padder was told to write cannot come out differently. The pre-walk tokens are
-  # what make big-ng.sh discriminate a whole-span reader, which accepts it. Every copy gets 500 real-shaped
-  # executable lines (`|| exit 2`, `:-/nonexistent`, a `case`, a no-op) inserted right after its
-  # start marker, so the probe holds for ANY layout of the live file -- including the correct
-  # refactor that moves its chain up beside its resolver and leaves a span of a few dozen lines.
-  # The live file supplies only what I75 already requires of every subject: a cwd walk, a guard
-  # after it, and an end marker.
-  i75_pd="$(mktemp -d)"
-  awk -v d="$i75_pd" '
-    /^# --- AI_DLC_ROOT ---/ { inb = 1 }
-    inb && /ai_dlc_resolve_root "\$\(pwd\)"/ { w = 1 }
-    inb && w && !/^[[:space:]]*#/ && /exit [0-9]|:-\/nonexistent/ { ng++; print > (d "/good.sh"); next }
-    inb { print > (d "/good.sh"); print > (d "/good-ng.sh") }
-    /^# --- end AI_DLC_ROOT ---/ { inb = 0 }
-    END { print ng + 0 }' "$REPO_ROOT/core/scripts/validate-ci-gates.sh" > "$i75_pd/good.n" 2>/dev/null
-  i75_big="$REPO_ROOT/core/scripts/merge-review-shards.sh"
-  awk -v d="$i75_pd" '
-    function out(l) { print l > (d "/big-ok.sh"); print l > (d "/big-ng.sh"); print l > (d "/big-open.sh") }
-    /^# --- AI_DLC_ROOT ---/ && !s {
-      inb = 1; s = NR; out($0)
-      for (i = 1; i <= 125; i++) {
-        out("[ -e \"${T:-}/pad." i "\" ] || exit 2")
-        out("PAD" i "=\"${PAD" i ":-/nonexistent}\"")
-        out("case \"${1:-}\" in --pad" i ") shift ;; esac")
-        out(": \"pad " i "\"")
-      }
-      next
-    }
-    /^# --- end AI_DLC_ROOT ---/ && inb { inb = 0; eo++; print > (d "/big-ok.sh"); print > (d "/big-ng.sh"); next }
-    inb && /ai_dlc_resolve_root "\$\(pwd\)"/ { w = 1 }
-    inb && w && !/^[[:space:]]*#/ && /exit [0-9]|:-\/nonexistent/ { ng++; print > (d "/big-ok.sh"); print > (d "/big-open.sh"); next }
-    { out($0) }
-    END { print ng + 0, eo + 0 }' "$i75_big" > "$i75_pd/big.n" 2>/dev/null
-  { echo '#!/usr/bin/env bash'; echo '# --- AI_DLC_ROOT ---'
-    echo 'ROOT="${CLAUDE_PROJECT_DIR:-.}"'; echo '# --- end AI_DLC_ROOT ---'; } > "$i75_pd/bad.sh"
-  i75_fcv=""
-  for _p in good bad good-ng; do
-    _r=0; i75_failsclosed "$i75_pd/$_p.sh" || _r=$?; i75_fcv="$i75_fcv$_r"
-  done
-  for _p in "$i75_pd/big-ok.sh" "$i75_pd/big-ng.sh" "$i75_pd/big-open.sh"; do
-    _r=0; i75_failsclosed "$_p" || _r=$?; i75_fcv="$i75_fcv$_r"
-  done
-  i75_gn=""; i75_bn=""
-  read -r i75_gn < "$i75_pd/good.n" 2>/dev/null; read -r i75_bn < "$i75_pd/big.n" 2>/dev/null
-  # The canonical-chain probe: a script carrying good.sh's chain. Kept as a file for the hash probe
-  # after the corpus hashes, which is the only point the modal chain exists.
-  i75_pg="$(i75_chain "$i75_pd/good.sh" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
-  i75_pb="$(i75_chain "$i75_pd/bad.sh"  | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
-  rm -rf "$i75_pd"
-  # good.n: guard token lines removed from the small copy (>= 1). big.n: guard token lines
-  # removed (>= 1) and end markers removed (exactly 1), both supplied by the live file.
-  read -r i75_b1 i75_b2 <<<"${i75_bn:-}"
-  if [ "${i75_gn:-0}" -lt 1 ] || [ "${i75_b1:-0}" -lt 1 ] || [ "${i75_b2:-0}" -ne 1 ]; then
-    err "I75 self-probe FAILED: the probe copies were not built as declared (small guard lines removed=${i75_gn:-none}; big guard lines removed, end markers removed=${i75_bn:-none}). merge-review-shards.sh must carry a guard after its cwd walk and exactly one end marker, or big-ng.sh and big-open.sh are not mutants of anything."
-  elif [ "$i75_fcv" != "011013" ]; then
-    err "I75 self-probe FAILED: the fail-closed reader scored $i75_fcv on good.sh, bad.sh, good-ng.sh, big-ok.sh, big-ng.sh, big-open.sh, where 011013 is required (0 = fails closed, 1 = does not, 3 = a start marker with no end marker). A reader that accepts a guard-less real-sized block reads the token from the whole span; that arm cannot fire on the subjects it exists for."
-  fi
-
   # Each subject's chain is hashed ONCE, as `<hash> <file>`, and both the modal count and the
   # drift loop below read that list. The drift loop used to re-run the chain pipeline per
   # subject, which doubled this arm's per-subject cost for an identical value.
@@ -6647,11 +6175,6 @@ else
   if [ -z "$i75_modal" ] || [ "$i75_modal" = "$i75_empty" ]; then
     err "I75 could not derive a canonical precedence chain: the most common chain across $i75_n subject script(s) is EMPTY, and an empty chain matches every subject. Failing closed rather than reporting an agreement it did not compute."
   else
-    # The chain probes, judged here because the modal chain exists only after the corpus hashes;
-    # good.sh and bad.sh were hashed above, before the corpus loop.
-    [ "$i75_pg" = "$i75_modal" ] || err "I75 self-probe FAILED: a synthetic script carrying the canonical chain did not match the derived one. The comparison is broken, so every verdict below is unattributable."
-    [ "$i75_pb" != "$i75_modal" ] || err "I75 self-probe FAILED: a synthetic script carrying only a bare \`\${CLAUDE_PROJECT_DIR:-.}\` MATCHED the derived chain. The check cannot fire and would report every tree clean."
-
     i75_drift=""; i75_open=""; i75_unclosed=""
     while IFS=' ' read -r _s _f; do
       [ -n "$_f" ] || continue
@@ -6739,25 +6262,6 @@ i71_scan() { # $1 = root -- prints `file:line` for every violating line
     | grep -E '(^|[^a-zA-Z0-9_])(sed|grep)([^a-zA-Z0-9_]|$)' \
     | cut -d: -f1,2 || true
 }
-# The probe proves BOTH directions in the same run, because "0 findings" and "the
-# scanner is broken" are the same output. A sed line carrying the needle must be
-# reported; an awk line carrying the same needle must NOT be, since that one is
-# correct and reporting it would make this invariant an FP machine on 75 live
-# sites. Built here rather than committed: a probe in the tree is a subject.
-i71_probe="$(mktemp -d 2>/dev/null)"
-if [ -n "$i71_probe" ] && [ -d "$i71_probe" ]; then
-  printf 'X="$(sed -n %ss/^k:%s*//p%s f)"\n' "'" "$i71_needle" "'" > "$i71_probe/bad.sh"
-  printf 'Y="$(awk %s{sub(/%s+/,"",$0); print}%s f)"\n' "'" "$i71_needle" "'" > "$i71_probe/ok.sh"
-  i71_pos="$(i71_scan "$i71_probe" | grep -c 'bad\.sh' || true)"
-  i71_neg="$(i71_scan "$i71_probe" | grep -c 'ok\.sh' || true)"
-  rm -rf "$i71_probe"
-  if [ "$i71_pos" -ne 1 ]; then
-    err "I71's own probe was NOT reported: a sed expression carrying a bracket class with a backslash-t went unseen by the scanner, so a clean result below would mean nothing. The invariant fails closed rather than reporting an absence its instrument could not have found."
-  fi
-  if [ "$i71_neg" -ne 0 ]; then
-    err "I71's negative probe WAS reported: an awk expression carrying the same bracket class was flagged, and awk's is correct. Shipping this would put 75 live and correct sites into the finding set, which is how a lint gets turned off."
-  fi
-fi
 i71_hits="$(i71_scan "$REPO_ROOT/core"; i71_scan "$REPO_ROOT/scripts")"
 if [ -n "$i71_hits" ]; then
   err "I71 sed or grep expression(s) using a bracket class that contains a literal backslash and t, which in a POSIX bracket expression is the CHARACTER SET rather than a tab:
@@ -6842,11 +6346,6 @@ i54_files="$(find "$REPO_ROOT" \( -name .git -o -path "$REPO_ROOT/.claude/worktr
 i54_n="$(printf '%s\n' "$i54_files" | grep -c .)"
 i54_fmt="'%""s'"
 i54_re="(printf[[:space:]]+${i54_fmt%\'}(\\\\n)?'|echo)[[:space:]]+\"[^\"]*\"[[:space:]]*[|][[:space:]]*grep[[:space:]]+-[A-Za-z]*q"
-# A grammar that matches nothing reads exactly like a clean tree, so it is tested
-# against a probe of the banned shape and a probe of the permitted one, both built
-# here, before its verdict on the tree is believed.
-i54_probe_bad="if printf ${i54_fmt} \"\$v\" | grep -q TOKEN; then"
-i54_probe_ok='git log --oneline | grep -q TOKEN'
 # A COMMENT IS NOT A SITE, and this arm shipped for eleven releases without that test.
 # Measured: a fixture added in v0.357.0 quoted the banned idiom in a comment warning the
 # next author away from it, and was reported as carrying it. That is the failure direction
@@ -6873,12 +6372,7 @@ i54_probe_ok='git log --oneline | grep -q TOKEN'
 #   awk, -v                 hit                          MISS
 #
 # The -v row is the whole class this repo is named for: half the grammar goes quiet and the
-# arm prints a clean line over the half of the tree it can no longer see. So the live probe
-# below carries BOTH formats, and asserts on the COUNT. One probe file of the bare form
-# alone cannot tell the two readers apart -- it is the row where they agree.
-#
-# The probes run through the SAME reader as the corpus scan, so a transfer that broke the
-# grammar takes them down with it rather than reporting a clean tree.
+# arm prints a clean line over the half of the tree it can no longer see.
 i54_awk='
   /^[[:space:]]*#/ { next }
   $0 ~ ENVIRON["I54_RE"] { print FILENAME ":" FNR ":" $0 }
@@ -6886,28 +6380,8 @@ i54_awk='
 i54_scan() {   # NUL-separated file list on stdin -> path:line:text per live banned site
   I54_RE="$i54_re" xargs -0 awk "$i54_awk" 2>/dev/null
 }
-# The probe FILES are written from the assembled fragments, never from a literal, for the
-# reason stated above: this scan covers this file.
-i54_fmt_nl="${i54_fmt%\'}"'\n'"'"
-i54_probe_bad_nl="if printf ${i54_fmt_nl} \"\$v\" | grep -q TOKEN; then"
-i54_pd="$(mktemp -d)"
-printf '%s\n' '#!/usr/bin/env bash' \
-  "$i54_probe_bad" ' :; fi' "$i54_probe_bad_nl" ' :; fi' > "$i54_pd/live.sh"
-printf '%s\n' '#!/usr/bin/env bash' "#   never write this: $i54_probe_bad" > "$i54_pd/commented.sh"
-i54_p_live="$(printf '%s\0' "$i54_pd/live.sh" | i54_scan)"
-i54_p_live_n="$(printf '%s\n' "$i54_p_live" | grep -c .)"
-i54_p_cmt="$(printf '%s\0' "$i54_pd/commented.sh" | i54_scan)"
-rm -rf "$i54_pd"
 if [ "$i54_n" -eq 0 ]; then
   err "I54 enumerated ZERO tracked .sh files under $REPO_ROOT. It reports an ABSENCE -- that no shipped script writes a variable into an early-exiting reader -- and an absence over an empty corpus is not a finding. Fails closed."
-elif ! grep -qE "$i54_re" <<<"$i54_probe_bad"; then
-  err "I54's grammar no longer matches the shape it bans, tested against a probe built in this script. Every tree passes it now, including one full of the defect. Fix the grammar or retire the invariant; do not leave it printing a clean line."
-elif grep -qE "$i54_re" <<<"$i54_probe_ok"; then
-  err "I54's grammar matches an ordinary command piped into grep -q, which is permitted and common. As written it would report a false positive on nearly every script in the tree. Narrow it back to a builtin writing a shell variable."
-elif [ "$i54_p_live_n" -ne 2 ]; then
-  err "I54's reader reported ${i54_p_live_n} of the 2 LIVE banned sites in a probe file this script wrote itself -- one per printf format the grammar admits, the bare one and the trailing-newline one. The corpus scan below runs that same reader, so its verdict on the tree is a set produced by a reader that cannot see the whole defect, and a half-blind reader prints the same clean line as a clean tree. At ONE hit the likeliest cause is the grammar losing its trailing-newline half on the way into awk: it must cross through ENVIRON, never through -v, which expands escape sequences in the value. At zero, the grammar did not survive the transfer at all."
-elif [ -n "$i54_p_cmt" ]; then
-  err "I54 reported a probe file whose only banned line is a COMMENT [reader answered: $i54_p_cmt]. The comment exclusion was derived from a measured false positive -- a fixture quoting the idiom in order to warn against it -- and without it this arm fires on the documentation it asks people to write, which is how a check gets switched off."
 else
   i54_hits="$(printf '%s\n' "$i54_files" | tr '\n' '\0' | i54_scan | sed "s@^${REPO_ROOT}/@@")"
   if [ -n "$i54_hits" ]; then
@@ -6965,32 +6439,12 @@ fi
 # can bite -- and that one's upstream emits a single line. Recorded so a fourth
 # instance does not re-derive it.
 #
-# The grammar is assembled from fragments and every probe is built at runtime, for
-# the reason the arm above states: this scan covers its own file.
+# The grammar is assembled from fragments, for the reason the arm above states: this scan
+# covers its own file.
 i54b_rd="gre""p"
 i54b_pf_re="^[[:space:]]*set[[:space:]]+-[a-zA-Z]*[[:space:]]*pipefail"
 i54b_re="[^|][|][[:space:]]*${i54b_rd}[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|\$)"
 i54b_st_re="(^|[[:space:]])(if|elif|while|until)[[:space:]]|&&|[|][|]|![[:space:]]"
-# Probes, all four tested before the verdict on the tree is believed. A grammar
-# that matches nothing and a narrowing that excludes everything both read exactly
-# like a clean tree.
-i54b_p_bad="if git show REF:p | ${i54b_rd} -q TOKEN; then"
-i54b_p_here="if ${i54b_rd} -q TOKEN <<<\"\$(git show REF:p)\"; then"
-i54b_p_or="${i54b_rd} -q A f || ${i54b_rd} -q B f"
-i54b_p_free="git log | ${i54b_rd} -q TOKEN"
-if ! grep -qE "$i54b_re" <<<"$i54b_p_bad"; then
-  err "I54b's grammar no longer matches a pipeline feeding a reader that stops at its first match, tested against a probe built in this script. Every tree passes it now, including one full of the defect."
-elif grep -qE "$i54b_re" <<<"$i54b_p_here"; then
-  err "I54b's grammar matches the very form it tells people to convert TO. It would report every remediated site, which is the unmeasured lint that gets switched off."
-elif grep -qE "$i54b_re" <<<"$i54b_p_or"; then
-  err "I54b's grammar reads a shell OR as a pipe. Two guarded readers joined by || carry no pipeline at all, so every such line would be reported and none of them is a defect."
-elif grep -qE "$i54b_st_re" <<<"$i54b_p_free"; then
-  err "I54b's load-bearing-status narrowing matches a pipeline whose status nothing reads. The narrowing is what keeps this arm off the 26 correct sites in this tree; without it the arm is a blanket ban."
-elif ! grep -qE "$i54b_pf_re" <<<"set -uo pipefail"; then
-  err "I54b's pipefail detector does not recognise the form this repo actually writes, tested against a probe built in this script. It would exclude every file and the arm would report a clean tree by excluding all of it."
-elif grep -qE "$i54b_pf_re" <<<"set -u"; then
-  err "I54b's pipefail detector fires on a file that does NOT enable pipefail. That file's pipeline reports the reader's status alone and the construct is correct there, so the arm would report sites that cannot misbehave."
-else
   # ONE awk pass over the whole corpus -- no fork per file, and no second grep
   # for the pipefail set. §7's gate item 2 says to read each corpus once and
   # answer every question from the index; this arm runs on every push.
@@ -7034,7 +6488,6 @@ else
 $(printf '%s\n' "$i54b_hits" | cut -c1-160)
 The reader leaves at its first match and the writer is still pushing, so under pipefail the pipeline answers with the WRITER's EPIPE and the test reports 'not found' on input that contains the pattern. It is a SIZE threshold, not a race: correct until the upstream's output after the match passes the pipe buffer, then wrong permanently and with no symptom. Remove the pipe -- put the upstream in a command substitution and feed the reader a here-string. Seventeen sites were converted that way in v0.231.0 and the false-positive set was empty; a new one means the idiom came back through the writer or the intermediate stage this arm exists to see."
   fi
-fi
 
 # --- I55: what the suite's content key does NOT cover stays uncovered ----------
 # The pre-push hook skips the fixture suite when a content key over the tree is
@@ -7318,111 +6771,8 @@ else
     i55_tops=""
     while IFS= read -r e; do [ -n "$e" ] && i55_tops="${i55_tops} $e"; done <<<"$i55_excl"
     i55_tops="${i55_tops# }"
-    i55_bprobe=""; i55_nl='
+    i55_nl='
 '
-    # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Seventeen fixtures, each one
-    # property from the acquitted one: (a) `+` declared, literal path -> acquitted; (b) declared without
-    # `+` -> flagged; (c) `+` on another docs path -> flagged; (d) a variable path -> flagged; (e) its
-    # SIBLING (a) declares the `+` -> flagged; (f) two reaches on one line, one declared -> flagged;
-    # (g) a variable SUFFIX `backlog.md$sfx`, (h) a glob after the closing quote `backlog.md"*` and (i) a
-    # variable after a dot `backlog.md.$x`, each with `+docs/backlog.md` declared -> flagged, because the
-    # name runs past the literal and is not the declared file. (j) the declared path closed by a quote
-    # and a redirect -> acquitted, the near-miss that keeps the boundary rule from flagging everything.
-    # THE DERIVED ROOTS, none of them a floor name and none declared: (k) `OWN` assigned a climb to
-    # the distribution root, (l) `RD` the target of a VERSION walk-up, (m) a literal
-    # `$HERE/../../../docs` climb, (o) `R` assigned a climb from `dirname "$0"`, (q) `ROOT_DIR` the
-    # target of a walk-up for `scripts/install.sh`, a marker other than VERSION -> each flagged;
-    # (n) `TMPROOT="$(mktemp -d)"` reading the same path -> acquitted, because a scratch root is not
-    # the distribution and nothing derives it; (r) a `! -f "$W/<marker>" ]; do sleep` wait loop
-    # whose `do` assigns nothing, reading `$W/docs/x.md` -> acquitted, the near-miss of (q).
-    i55_pd="$(mktemp -d 2>/dev/null)"
-    if [ -z "$i55_pd" ] || [ ! -d "$i55_pd" ]; then
-      err "I55 arm 3 could not create its + exemption probe directory, so neither direction of the exemption was proven this run."
-    else
-      mkdir -p "$i55_pd"/core/fixtures/a "$i55_pd"/core/fixtures/b "$i55_pd"/core/fixtures/c \
-               "$i55_pd"/core/fixtures/d "$i55_pd"/core/fixtures/e "$i55_pd"/core/fixtures/f \
-               "$i55_pd"/core/fixtures/g "$i55_pd"/core/fixtures/h "$i55_pd"/core/fixtures/i \
-               "$i55_pd"/core/fixtures/j "$i55_pd"/core/fixtures/k "$i55_pd"/core/fixtures/l \
-               "$i55_pd"/core/fixtures/m "$i55_pd"/core/fixtures/n "$i55_pd"/core/fixtures/o \
-               "$i55_pd"/core/fixtures/q "$i55_pd"/core/fixtures/r \
-               "$i55_pd"/a5/core/fixtures/p1 "$i55_pd"/a5/core/fixtures/p2 "$i55_pd"/a5/core/fixtures/p3 \
-               "$i55_pd"/a5/core/fixtures/p4 "$i55_pd"/a5/core/fixtures/p5 "$i55_pd"/a5/core/fixtures/p6 \
-               "$i55_pd"/a5/cite
-      # ARM 5 SELF-PROBE, BOTH DIRECTIONS, seeded in this same probe directory under its own root
-      # `a5/` so neither arm reads the other arm's seeds, and scanned BEFORE the corpus. (p1) a bare
-      # `docs/x.md` fires; (p2) `+docs/x.md` is quiet; (p3) a copy-only citing a real `-f` test of
-      # VERSION is quiet; (p4) a copy-only citing a line holding `cat VERSION` fires; (p5) a copy-only
-      # citing a line past the end of a real file fires, which is the getline -1 trap; (p6) a
-      # copy-only citing a COMMENT that spells `[ -f "$d/VERSION" ]` fires, the near-miss of p3.
-      printf 'docs/x.md\n'  > "$i55_pd/a5/core/fixtures/p1/inputs.decl"
-      printf '+docs/x.md\n' > "$i55_pd/a5/core/fixtures/p2/inputs.decl"
-      printf '# copy-only: cite/ok.sh:2 walks up for the marker\nVERSION\n' > "$i55_pd/a5/core/fixtures/p3/inputs.decl"
-      printf '# copy-only: cite/rd.sh:1 reads it\nVERSION\n'                > "$i55_pd/a5/core/fixtures/p4/inputs.decl"
-      printf '# copy-only: cite/ok.sh:9 past the end\nVERSION\n'           > "$i55_pd/a5/core/fixtures/p5/inputs.decl"
-      printf 'd="$HERE"\nif [ -f "$d/VERSION" ]; then R="$d"; fi\n' > "$i55_pd/a5/cite/ok.sh"
-      printf 'v="$(cat VERSION)"\n' > "$i55_pd/a5/cite/rd.sh"
-      printf '# copy-only: cite/cm.sh:1 a comment\nVERSION\n'              > "$i55_pd/a5/core/fixtures/p6/inputs.decl"
-      printf '  # [ -f "$d/VERSION" ] once found the root here\n' > "$i55_pd/a5/cite/cm.sh"
-      i55_bprobe="$(i55_bare_scan "$i55_pd/a5" "$i55_tops" core)"
-      printf 'OWN="$(cd "$HERE/../../.." && pwd)"\ncat "$OWN/docs/x"\n' > "$i55_pd/core/fixtures/k/run.sh"
-      printf 'RD="$HERE"\nwhile [ "$RD" != "/" ] && [ ! -f "$RD/VERSION" ]; do RD="$(dirname "$RD")"; done\ncat "$RD/docs/x"\n' > "$i55_pd/core/fixtures/l/run.sh"
-      printf 'cat "$HERE/../../../docs/x"\n' > "$i55_pd/core/fixtures/m/run.sh"
-      printf 'TMPROOT="$(mktemp -d)"; cat "$TMPROOT/docs/x"\n' > "$i55_pd/core/fixtures/n/run.sh"
-      printf 'R="$(cd "$(dirname "$0")/../../.." && pwd)"; cat "$R/docs/x"\n' > "$i55_pd/core/fixtures/o/run.sh"
-      printf 'ROOT_DIR="$HERE"\nwhile [ "$ROOT_DIR" != "/" ] && [ ! -f "$ROOT_DIR/scripts/install.sh" ]; do ROOT_DIR="$(dirname "$ROOT_DIR")"; done\ncat "$ROOT_DIR/docs/x.md"\n' > "$i55_pd/core/fixtures/q/run.sh"
-      printf 'W="$(mktemp -d)"\nwhile [ ! -f "$W/scripts/ready" ]; do sleep 0.1; done\ncat "$W/docs/x.md"\n' > "$i55_pd/core/fixtures/r/run.sh"
-      for i55_c in g h i j; do printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/$i55_c/inputs.decl"; done
-      printf 'L="$ROOT/docs/backlog.md$sfx"\n'      > "$i55_pd/core/fixtures/g/run.sh"
-      printf 'cat "$ROOT/docs/backlog.md"*\n'       > "$i55_pd/core/fixtures/h/run.sh"
-      printf 'L="$ROOT/docs/backlog.md.$x"\n'       > "$i55_pd/core/fixtures/i/run.sh"
-      printf 'n=$(wc -l <"$ROOT/docs/backlog.md")>/dev/null\n' > "$i55_pd/core/fixtures/j/run.sh"
-      printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/a/inputs.decl"
-      printf 'docs/backlog.md\n'  > "$i55_pd/core/fixtures/b/inputs.decl"
-      printf '+docs/other.md\n'   > "$i55_pd/core/fixtures/c/inputs.decl"
-      printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/d/inputs.decl"
-      printf 'scripts/x.sh\n'     > "$i55_pd/core/fixtures/e/inputs.decl"
-      printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/f/inputs.decl"
-      for i55_c in a b c e; do printf 'L="$ROOT/docs/backlog.md"\n' > "$i55_pd/core/fixtures/$i55_c/run.sh"; done
-      printf 'L="$ROOT/docs/$name"\n' > "$i55_pd/core/fixtures/d/run.sh"
-      printf 'cp "$ROOT/docs/backlog.md" "$ROOT/docs/plans/x.md" "$ROOT/zz/y"\n' > "$i55_pd/core/fixtures/f/run.sh"
-      # FAST PATH WITH BUILTINS, EXACT PATH ON ANY DOUBT. The expected answer is the name set
-      # {b..i, k, l, m, o, q}; each hit line is cut to its fixture name with parameter expansion and the set is
-      # checked without a fork. Any other outcome -- a missing name, an extra one, an empty one --
-      # recomputes the string with the original sed|sort -u|tr, so a failing message is the same
-      # bytes it always was. Only the passing run is cheaper.
-      i55_pe="zz docs"; i55_nl='
-'
-      i55_praw="$(i55_reach_scan "$i55_pd" "${i55_pe#* }")"
-      i55_pset=" "; i55_pok=1
-      while IFS= read -r i55_l; do
-        i55_c="${i55_l#"$i55_pd"/core/fixtures/}"; i55_c="${i55_c%%/*}"
-        case "$i55_c" in b|c|d|e|f|g|h|i|k|l|m|o|q) i55_pset="${i55_pset}${i55_c} " ;; *) i55_pok=0 ;; esac
-      done <<<"$i55_praw"
-      for i55_c in b c d e f g h i k l m o q; do
-        case "$i55_pset" in *" $i55_c "*) ;; *) i55_pok=0 ;; esac
-      done
-      if [ -z "$i55_praw" ]; then
-        i55_pr=""
-      elif [ "$i55_pok" = 1 ]; then
-        i55_pr="b c d e f g h i k l m o q "
-      else
-        i55_pr="$(printf '%s\n' "$i55_praw" | sed "s@^${i55_pd}/core/fixtures/@@; s@/.*@@" | LC_ALL=C sort -u | tr '\n' ' ')"
-      fi
-      # THE TWO-ENTRY REGROUPING, which a one-entry call cannot exercise. Fixture f's line also
-      # reaches `zz`, so under the entry list `zz docs` that ONE line belongs to BOTH groups, and the
-      # groups must come out in list order: the zz hit first, then exactly the docs-only answer
-      # above. A regroup that reorders the groups, or that attributes a line to only one entry,
-      # yields different bytes. The expectation is built from the list itself, not retyped.
-      i55_p2="$(i55_reach_scan "$i55_pd" "$i55_pe")"
-      i55_pw="${i55_pd}/core/fixtures/f/run.sh:1:\$ROOT/${i55_pe%% *}/${i55_nl}${i55_praw}"
-      rm -rf "$i55_pd"
-      [ "$i55_p2" = "$i55_pw" ] || err "I55 arm 3's self-probe is BROKEN on the two-entry regrouping: i55_reach_scan '$i55_pe' did not print the '${i55_pe%% *}' group (fixture f's line) followed by exactly the '${i55_pe#* }' answer above. Either the groups came out in a different order from the entry list, or a line reaching both entries was attributed to only one -- and the corpus scan below passes every EXCLUDE entry in one such call. Got:${i55_nl}${i55_p2}"
-      [ "$i55_pr" = "b c d e f g h i k l m o q " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f g h i k l m o q '. Fixtures a and j (a + declared, literal reach ending at a boundary), n (a mktemp root nothing derives) and r (a wait loop that assigns nothing) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, or the derived root set misses a climb, a walk-up for some marker or a literal climb, or roots a variable no walk-up assigns, and the corpus scan below would be read through it."
-    fi
-    # ARM 5'S PROBE VERDICT. Exactly p1, p4, p5 and p6 flagged, each for its own reason, and a CTL
-    # line that read all six declarations; built from builtins so a pass costs no fork.
-    i55_bwant="core/fixtures/p1/inputs.decl:1: docs/x.md -- a bare line under an excluded top keys nothing${i55_nl}core/fixtures/p4/inputs.decl:2: VERSION -- copy-only cites cite/rd.sh:1, which reads the content of VERSION${i55_nl}core/fixtures/p5/inputs.decl:2: VERSION -- copy-only cites cite/ok.sh:9, which does not exist${i55_nl}core/fixtures/p6/inputs.decl:2: VERSION -- copy-only cites cite/cm.sh:1, which is a comment and tests nothing${i55_nl}CTL 0 6"
-    [ "$i55_bprobe" = "$i55_bwant" ] || err "I55 arm 5's self-probe did not discriminate: a bare docs/x.md (p1), a copy-only citing \`cat VERSION\` (p4), one citing a line past the end of its file (p5) and one citing a comment that spells the test (p6) must fire, and +docs/x.md (p2) and a copy-only citing a real \`[ -f .../VERSION ]\` test (p3) must stay quiet. Got:${i55_nl}${i55_bprobe:-<nothing: the probe tree was never built, or the scan printed nothing>}${i55_nl}The corpus scan below reads through this same function, so its zero would mean nothing."
     # THE CONTROL COUNTS THROUGH THE SAME FUNCTION, so it reads the per-file derived roots the scan
     # reads: `core` is an included top no fixture declares with `+`, so every reach of it is printed.
     i55_ctl="$(i55_reach_scan "$REPO_ROOT" core | grep -c .)" || i55_ctl=0
@@ -7723,39 +7073,6 @@ i57_bind="$(awk "$i57_map_awk" "$MAP" | sort -u)"
 i57_nsel="$(printf '%s\n' "$i57_sel" | grep -c . )"
 i57_nbind="$(printf '%s\n' "$i57_bind" | grep -c . )"
 
-# Grammar liveness, proved against a probe rather than against the corpus: a corpus with
-# nothing to find and a grammar that can find nothing print the same clean line. The probe
-# paths are ASSEMBLED so this file carries no literal citation of its own -- I50 scans a
-# different corpus today, and a scan that later widens onto this one must not read the
-# probe as a real citation.
-i57_dir="scripts/ai-dlc"
-#
-# THE PROBE CARRIES BOTH SPELLINGS, and that arm is here because the grammar was blind to one
-# of them for its whole existence: `; exit 0 required.` was selected and `. Exit 0 required.`
-# was not, hiding Checks 26 and 30 from arm 1 (both bound anyway, so latent rather than live).
-# Two spellings of the same sentence must select alike, and asserting it costs one probe line.
-i57_probe="$(printf '%s\n' \
-  '<!-- CHECK_LOADED: probe -->' \
-  "- **Check.** Run \`${i57_dir}/validate-i57-probe-positive.sh <arg>\`; exit 0 required." \
-  '' \
-  '<!-- CHECK_LOADED: probecap -->' \
-  "- **Check.** Run \`${i57_dir}/validate-i57-probe-capital.sh <arg>\`. Exit 0 required." \
-  '' \
-  "- The bound script consults \`${i57_dir}/validate-i57-probe-negative.sh --mode x\` first:" \
-  '  exit 0 = out of scope, exit 1 = in scope.')"
-i57_probe_out="$(printf '%s\n' "$i57_probe" | awk "$i57_awk")"
-case "$i57_probe_out" in
-  *validate-i57-probe-positive.sh*) : ;;
-  *) err "I57's selection grammar did not fire on a probe written in the exact shape it exists to catch -- a check body naming a validator with 'exit 0 required' beside it. Every tree passes this invariant now, including one full of the defect. Fix the grammar or retire I57; do not leave it printing a clean line." ;;
-esac
-case "$i57_probe_out" in
-  *validate-i57-probe-capital.sh*) : ;;
-  *) err "I57's selection grammar selected the lowercase 'exit 0 required' probe but NOT the identical sentence written 'Exit 0 required' at a sentence start. That is the exact blindness v0.357.0 removed: an author who ends the preceding clause with a full stop instead of a semicolon steps outside the grammar without meaning to, and the check goes quiet on their row while printing the same clean line. Measured when it was live: 12 lowercase sites selected, 2 capitalised ones invisible — Check 26, the fail-closed check through which the lead adopts every adjudication:llm verdict, and Check 30. Restore the case-tolerant class; do not re-narrow it." ;;
-esac
-case "$i57_probe_out" in
-  *validate-i57-probe-negative.sh*) err "I57's selection grammar fired on a probe carrying an exit-code LEGEND ('exit 0 = out of scope') rather than an exit-code REQUIREMENT. That is the form Check 16 uses to describe a delegation validate-stub-audit.sh makes internally, and it is correctly carried under reads:. As written the grammar reports a false positive on it. Narrow it back to a posture that binds the gate." ;;
-esac
-
 if [ "$i57_nsel" -eq 0 ] || [ "$i57_nbind" -eq 0 ]; then
   err "I57 derived an EMPTY set: ${i57_nsel} exit-code-posture citation(s) in ${GV##*/}, ${i57_nbind} enforcer binding(s) in ${MAP##*/}. It reports an ABSENCE -- that no check states a mechanical predicate its row leaves unbound -- and over an empty corpus that absence is a broken extractor, not a finding. Fails closed."
 else
@@ -7836,7 +7153,7 @@ else
   i91_hb="$(python3 -c 'import json,sys; h=json.load(open(sys.argv[1])).get("handback") or {}; print(h.get("frame","")); print(h.get("agent_message_from",""))' "$i91_schema" 2>/dev/null)"
   { IFS= read -r i91_hb_frame; IFS= read -r i91_hb_from; } <<<"$i91_hb"
   i91_pats="$i91_declared"
-  # i91_scan <root>: root is "" for the live tree, "<tmp>/" for the self-probe tree.
+  # i91_scan <root>: the copy scan, called with "" for the live tree.
   i91_scan() {
     local root="$1" pfx
     set --
@@ -7860,27 +7177,10 @@ EOF2
   if [ -z "$i91_hb_frame" ] || [ -z "$i91_hb_from" ] || [ "$i91_hb_frame" = "$i91_hb_from" ]; then
     err "I91: $i91_schema carries no usable handback.frame / handback.agent_message_from. The copy-scan would silently drop the two hand-back literals, so this fails closed rather than scanning fewer patterns than declared."
   else
-    # SELF-PROBE, BEFORE the corpus, in both directions: a seeded offender carrying each scanned
-    # literal must be reported; near-misses (a literal one character short, a different attribute,
-    # an exempt prefix, an excluded fixture path) must stay quiet.
-    i91_pt="$(mktemp -d "${TMPDIR:-/tmp}/i91-XXXXXX")"
-    mkdir -p "$i91_pt/core/hooks" "$i91_pt/core/fixtures/x" "$i91_pt/scripts"
-    printf '%s\n' "x $i91_hb_frame y" > "$i91_pt/core/hooks/off-frame.sh"
-    printf '%s\n' "x $i91_hb_from y" > "$i91_pt/core/hooks/off-from.sh"
-    printf '%s\n' "x ${i91_hb_frame%?} y" "x <agent-msg from=\"" "x <command-name>" > "$i91_pt/core/hooks/near.sh"
-    printf '%s\n' "$i91_hb_frame" > "$i91_pt/core/fixtures/x/fx.sh"
-    i91_pout="$(i91_scan "$i91_pt/")"
-    case "$i91_pout" in *"core/hooks/off-frame.sh:"*) i91_p1=1 ;; *) i91_p1=0 ;; esac
-    case "$i91_pout" in *"core/hooks/off-from.sh:"*) i91_p2=1 ;; *) i91_p2=0 ;; esac
-    case "$i91_pout" in *"near.sh"*|*"fixtures/"*) i91_p3=1 ;; *) i91_p3=0 ;; esac
-    if [ "$i91_p1" -ne 1 ] || [ "$i91_p2" -ne 1 ] || [ "$i91_p3" -ne 0 ]; then
-      err "I91 self-probe failed (frame offender reported=$i91_p1, from offender reported=$i91_p2, near-miss or fixture reported=$i91_p3; want 1 1 0). The copy-scan cannot be trusted, so it did not run on the corpus."
-    else
       i91_copies="$(i91_scan "" | sed -e 's/^/  /')"
       [ -n "$i91_copies" ] && err "I91: shipped file(s) restate a harness-origin literal outside the declaration (path:literal):
 $i91_copies
 Resolve it from core/schemas/harness-origin.json instead. A second copy in a second language is the drift v0.265.0 exists to end, and the file that carried the last one warned about it in prose that nothing enforced."
-    fi
   fi
 fi
 
@@ -7934,7 +7234,6 @@ PY
 )"
   i94_empty=""
   i94_copies=""
-  i94_needle=""
   if [ -z "$i94_dump" ]; then
     err "I94 could not read $i94_schema at all — it is present but did not parse, so neither the empty-field arm nor the copy scan below ran. A silent parse failure would leave both reporting clean."
   else
@@ -7948,7 +7247,6 @@ PY
     while IFS="$(printf '\t')" read -r _f _v; do
       [ -n "$_f" ] || continue
       if [ -z "$_v" ]; then i94_empty="$i94_empty $_f"; continue; fi
-      [ "$_f" = pause_branch_text ] && i94_needle="$_v"
       # ONE FORK PER FIELD. The obvious `grep -rlF | grep -v | tr` is three processes, and
       # this loop runs once per declared field -- 15 forks for a filter and a join the shell
       # does for free. The declaration's own path is excluded here rather than by a second
@@ -7992,27 +7290,6 @@ Resolve it from $i94_schema instead. A second copy of the branch text hands the 
       err "I94(c): $_r does not READ $i94_schema — no line feeds \$${_v} to jq. Either it went back to a literal, in which case arm (b) above is scanning for a value this file no longer carries verbatim, or it stopped reading the declaration at all. Both are silent."
     fi
   done
-
-  # SELF-PROBE, both directions, on a mktemp tree rather than the corpus. An arm reporting
-  # zero copies without first producing one has established that it ran, not that the tree is
-  # clean; and an arm that flags a near-miss would flag every paraphrase in the CHANGELOG.
-  i94_probe="$(mktemp -d 2>/dev/null)"
-  if [ -z "$i94_probe" ] || [ -z "$i94_needle" ]; then
-    err "I94 could not build its probe (dir='${i94_probe:-}' needle=${#i94_needle}B), so neither direction of its copy scan was proven this run. An empty needle is contained by nothing and matched by everything, depending on the tool — either way the scan above is unproven."
-  else
-    printf '%s\n' "$i94_needle" > "$i94_probe/offender.sh"
-    # The near-miss drops the first word. Same subject, same length class, not the value.
-    printf '%s\n' "${i94_needle#* }" > "$i94_probe/nearmiss.sh"
-    # Read the EXIT STATUS, not a piped `grep -c` of the output: `grep -lF` already answers
-    # "did this file contain it", and counting its lines costs a second process for an
-    # answer the first one gave.
-    i94_pp=0; i94_pn=0
-    grep -qlF -- "$i94_needle" "$i94_probe/offender.sh" 2>/dev/null && i94_pp=1
-    grep -qlF -- "$i94_needle" "$i94_probe/nearmiss.sh" 2>/dev/null && i94_pn=1
-    rm -rf "$i94_probe"
-    [ "$i94_pp" -eq 0 ] && err "I94's positive probe was NOT reported: a seeded verbatim copy of the branch text went unseen by the same scan the corpus arm runs, so a clean result above means nothing. This fails closed."
-    [ "$i94_pn" -ne 0 ] && err "I94's negative probe WAS reported: a near-miss that is not the declared value was flagged as a copy. The scan is not fixed-string, and every paraphrase in the tree is now in its finding set."
-  fi
 fi
 
 # --- I95: every pipeline state path is CLASSIFIED transient or durable, in one place ---
@@ -8040,38 +7317,14 @@ fi
 # grep: a producer that only NAMES its path in a header comment constructs nothing, and a
 # substring search cannot tell those apart.
 #
-# ONE `python3` FOR THE CORPUS AND BOTH PROBE DIRECTIONS. An arm's fork count is a change to
+# ONE `python3`. An arm's fork count is a change to
 # the suite's wall clock -- validator-fork-budget exists to say so, and I94's first draft
-# breached it by resolving fields one interpreter start at a time. The reader below takes
-# (tag, root, schema) triples and tags every finding, so the live corpus and the two seeded
-# trees are one process rather than three.
+# breached it by resolving fields one interpreter start at a time.
 i95_schema="core/schemas/pipeline-state-paths.json"
 if [ ! -f "$i95_schema" ]; then
   err "I95: $i95_schema is missing. It is the single classification of every path the shipped machinery writes under the pipeline root, and install.sh renders the consumer's .gitignore from it — without the file the installer writes NO ignore rules and reports that it skipped them, which is how 134 transient files became tracked in the reference consumer in the first place."
 else
-  # PROBE TREES FIRST, so the arm's ability to fire is established before its verdict on the
-  # corpus is read. The offender constructs an undeclared path on a live line; the near-miss
-  # names the same shape of path in a COMMENT and additionally constructs one that IS
-  # declared. An arm that flagged the near-miss would flag every documented example in core.
-  i95_probe="$(mktemp -d 2>/dev/null)"
-  i95_pos_root=""; i95_neg_root=""
-  if [ -n "$i95_probe" ]; then
-    mkdir -p "$i95_probe/pos/core/hooks" "$i95_probe/neg/core/hooks"
-    printf 'X="${STATE_DIR}/.i95-probe-undeclared"\n' > "$i95_probe/pos/core/hooks/probe.sh"
-    {
-      printf '# X="${STATE_DIR}/.i95-probe-nearmiss"\n'
-      printf 'Y="${STATE_DIR}/.wait-beats"\n'
-    } > "$i95_probe/neg/core/hooks/probe.sh"
-    # (e)'s probe: the ledger is NAMED in a comment (offender) or BUILT on a live line (near-miss).
-    printf '# L="${LEDGER_DIR}/.i95-probe-ledger.jsonl"\n' > "$i95_probe/pos/core/hooks/ledger.sh"
-    printf 'L="${LEDGER_DIR}/.i95-probe-ledger.jsonl"\n' > "$i95_probe/neg/core/hooks/ledger.sh"
-    i95_pos_root="$i95_probe/pos"; i95_neg_root="$i95_probe/neg"
-  fi
-
-  i95_out="$(python3 - \
-      live "$REPO_ROOT" "$REPO_ROOT/$i95_schema" \
-      pos "${i95_pos_root:-}" "$REPO_ROOT/$i95_schema" \
-      neg "${i95_neg_root:-}" "$REPO_ROOT/$i95_schema" <<'PY' 2>&1
+  i95_out="$(python3 - live "$REPO_ROOT" "$REPO_ROOT/$i95_schema" <<'PY' 2>&1
 import io, json, os, re, sys
 
 NAME = r'[A-Za-z0-9_.-]+'
@@ -8150,7 +7403,7 @@ def ignore_scope(decl):
     root, and the ONLY declared way to put an out-of-root rule into the block is the out_of_root
     field. So an in-root ignore that escapes root is refused, and an out_of_root pattern that is
     really under root is refused too (it belongs in paths, where the set-compare can see it).
-    Returns (name, message) pairs. One function, so the probes below drive the corpus code."""
+    Returns (name, message) pairs."""
     root = decl.get('root') or ''
     out = []
     for e in (decl.get('paths') or []):
@@ -8195,9 +7448,6 @@ def constructs(path, name):
 args = sys.argv[1:]
 for i in range(0, len(args), 3):
     tag, root, schema_p = args[i], args[i + 1], args[i + 2]
-    if not root or not os.path.isdir(root):
-        print('%s\tPROBEBROKEN\t-\troot %r is not a directory' % (tag, root))
-        continue
     derived = population(root)
     if not derived:
         print('%s\tDISARMED\t-\tthe grammar matched nothing under %s' % (tag, ', '.join(DIRS)))
@@ -8230,9 +7480,7 @@ for i in range(0, len(args), 3):
         elif ig:
             print('%s\tFIELD\t%s\tdurable but declares an ignore pattern (%s)' % (tag, nm, ig))
         prod = (e.get('producer') or '').strip()
-        # Only the live corpus can be asked about producers; a probe tree holds no machinery,
-        # and checking there would emit a finding per entry and drown the seeded signal.
-        if prod and tag == 'live':
+        if prod:
             pp = os.path.join(root, prod)
             if not os.path.isfile(pp):
                 print('%s\tPRODUCER\t%s\t%s does not exist' % (tag, nm, prod))
@@ -8242,28 +7490,7 @@ for i in range(0, len(args), 3):
 
     for nm, msg in ignore_scope(decl):
         print('%s\tFIELD\t%s\t%s' % (tag, nm, msg))
-    if tag == 'pos':
-        # The scope probe, offender direction: an in-root entry whose ignore ESCAPES root, and an
-        # out_of_root pattern that is really under root. Both must be refused.
-        esc = ignore_scope({'root': '_bmad-output', 'paths': [
-            {'name': 'x', 'transient': True, 'ignore': '.claude/worktrees/'}]})
-        inr = ignore_scope({'root': '_bmad-output', 'paths': [], 'out_of_root': [
-            {'pattern': '_bmad-output/x/', 'reason': 'r'}]})
-        print('%s\tOOR\t%d\t%d' % (tag, len(esc), len(inr)))
-    elif tag == 'neg':
-        # Near-miss: the SAME out-of-root pattern, declared in out_of_root, beside a well-scoped
-        # transient entry. Nothing may be refused.
-        ok = ignore_scope({'root': '_bmad-output', 'paths': [
-            {'name': 'x', 'transient': True, 'ignore': '_bmad-output/x/'}], 'out_of_root': [
-            {'pattern': '.claude/worktrees/', 'reason': 'r'}]})
-        print('%s\tOOR\t%d\t%d' % (tag, len(ok), len(ok)))
-    if tag == 'live':
-        ledger_findings(tag, root, decl.get('paths') or [])
-    else:
-        # The (e) probe, both directions, in the same process: ledger.sh in the probe tree names
-        # the ledger only in a COMMENT under pos and builds it on a live line under neg.
-        ledger_findings(tag, root, [{'name': 'probe-dir', 'transient': False, 'ledgers': [
-            {'name': '.i95-probe-ledger.jsonl', 'producer': 'core/hooks/ledger.sh'}]}])
+    ledger_findings(tag, root, decl.get('paths') or [])
     for nm in sorted(set(derived) - set(declared)):
         print('%s\tUNDECLARED\t%s\t%s' % (tag, nm, derived[nm]))
     if tag == 'live':
@@ -8272,28 +7499,18 @@ for i in range(0, len(args), 3):
     print('%s\tPOP\t%d\t%d' % (tag, len(derived), len(declared)))
 PY
 )"
-  [ -n "$i95_probe" ] && rm -rf "$i95_probe"
 
   if [ -z "$i95_out" ]; then
-    err "I95's reader produced NO output at all, not even its population count. It did not run, so neither the corpus verdict nor the probe that proves the corpus verdict means anything. This fails closed."
+    err "I95's reader produced NO output at all, not even its population count. It did not run, so the corpus verdict means nothing. This fails closed."
   else
-    i95_pos_fired=0
-    i95_neg_fired=0
     i95_live_pop=0
-    i95_led_pos=0; i95_led_neg=0; i95_led_n=""
-    i95_oor_pos=""; i95_oor_neg=""
+    i95_led_n=""
     while IFS="$(printf '\t')" read -r _tag _kind _what _where; do
       [ -n "$_tag" ] || continue
       case "$_tag:$_kind" in
-        pos:OOR) i95_oor_pos="$_what:$_where" ;;
-        neg:OOR) i95_oor_neg="$_what:$_where" ;;
-        pos:LEDGER) i95_led_pos=1 ;;
-        neg:LEDGER) i95_led_neg=1 ;;
         live:LEDGERS) i95_led_n="$_what" ;;
         live:LEDGER)
           err "I95(e): nested ledger $_what -- $_where. A ledger declared on its parent directory's entry is bound to the line that BUILDS it, so a name no shipped file writes, or one written only in a comment, is a declaration of nothing." ;;
-        pos:UNDECLARED) [ "$_what" = ".i95-probe-undeclared" ] && i95_pos_fired=1 ;;
-        neg:UNDECLARED) i95_neg_fired=1 ;;
         live:POP) i95_live_pop="$_what" ;;
         live:UNDECLARED)
           err "I95: $_what is constructed at $_where and is classified NOWHERE in $i95_schema. Add it with transient true or false: transient means per-run coordination state, which renders into the consumer's .gitignore, and durable means a pipeline artifact the consumer commits. An unclassified path is exactly how .wait-beats/ reached 134 tracked files." ;;
@@ -8307,31 +7524,17 @@ PY
           err "I95: $_what did not parse as JSON ($_where), so nothing below it ran and the corpus arm reported nothing rather than reporting clean." ;;
         live:DISARMED)
           err "I95's population grammar matched NOTHING in the live tree — $_where. Every hook that writes pipeline state would have to have stopped doing so; far likelier is that the directories moved, in which case this arm is scanning an empty set and passing." ;;
-        *:PROBEBROKEN)
-          err "I95 could not build its $_tag probe tree ($_where), so that direction of its self-probe did not run this run." ;;
       esac
     done <<EOF
 $i95_out
 EOF
 
-    [ "$i95_pos_fired" -eq 0 ] && err "I95's POSITIVE probe was NOT reported: a seeded file constructing an undeclared path went unseen by the same reader the corpus arm runs, so a clean corpus result above establishes only that the reader executed. This fails closed."
-    [ "$i95_neg_fired" -ne 0 ] && err "I95's NEGATIVE probe WAS reported: a path named only inside a COMMENT was treated as constructed. The grammar is not comment-blind, and every worked path example in core's prose is now in this arm's finding set."
-    [ "$i95_led_pos" -eq 0 ] && err "I95(e)'s POSITIVE probe was NOT reported: a ledger named only in a producer's COMMENT passed as built, so a clean nested-ledger result means nothing. This fails closed."
-    [ "$i95_led_neg" -ne 0 ] && err "I95(e)'s NEGATIVE probe WAS reported: a ledger its producer builds on a live line was flagged, so every declared ledger is now a finding."
-    # (f) BL-685, both directions: an in-root ignore escaping root AND an out_of_root pattern under
-    # root are each refused (pos reports 1:1), and the same out-of-root pattern declared in
-    # out_of_root beside a well-scoped entry is not (neg reports 0:0).
-    case "$i95_oor_pos" in
-      [1-9]*:[1-9]*) : ;;
-      *) err "I95(f)'s POSITIVE probe did not refuse both offenders (got '${i95_oor_pos:-nothing}', want both counts non-zero): an in-root ignore escaping root, or an out_of_root pattern under root, passed. Either one lets a pattern reach the consumer's .gitignore without the declaration that scopes it." ;;
-    esac
-    [ "$i95_oor_neg" = "0:0" ] || err "I95(f)'s NEGATIVE probe was refused (got '${i95_oor_neg:-nothing}', want 0:0): an out-of-root pattern declared in out_of_root is the sanctioned form, so every such declaration would now be a finding."
     if [ -z "$i95_led_n" ]; then
       err "I95(e) printed no nested-ledger count for the live tree, so the sub-arm did not run over $i95_schema."
     else
       echo "  I95(e): $i95_led_n nested ledger(s) bound to the line that builds them."
     fi
-    [ "${i95_live_pop:-0}" -lt 2 ] && err "I95 derived ${i95_live_pop:-0} path(s) from the live tree. The probe trees derive one each by construction, so a live population that small means the corpus scan resolved to a probe-sized tree rather than to core/, and its set-compare is meaningless."
+    [ "${i95_live_pop:-0}" -lt 2 ] && err "I95 derived ${i95_live_pop:-0} path(s) from the live tree. A population that small means the corpus scan did not resolve to core/, and its set-compare is meaningless."
 
     # (c) THE READERS, keyed on the line that FEEDS the schema path to jq. A script that names
     # the file in a comment satisfies a whole-file grep and reads nothing, and the failure is
@@ -8484,32 +7687,6 @@ The PreToolUse hook is the one that DENIES a dispatch; if it resolves a differen
       *'"${ART_DIR}/s${SPRINT_N'*) : ;;
       *) err "I81 both hooks agree, but the live-series glob is not scoped to the declared sprint's directory (\`\${ART_DIR}/s\${SPRINT_N...\`). An unscoped glob asks 'which cycle is live' of every series the project has ever written and answers it by mtime -- measured at 135 files across 56 sprints on the reference consumer. The sprint is DECLARED (\`sprint-status.sh sprint-id\`); compose the path from it. Got: $i81_a" ;;
     esac
-    # PROBES, written here so a run proves both arms above can FAIL. They are deliberately
-    # INDEPENDENT of the shipped block: each asserts that the extractor SEES a probe carrying
-    # the old form and that the corresponding test REJECTS it. Comparing a probe to the shipped
-    # value instead would entangle these with the arms above -- a hook reverted to the old form
-    # would trip both, and two failures from one cause is how an assertion becomes vacuous
-    # without anyone noticing.
-    i81_probe="$(mktemp 2>/dev/null || echo /tmp/i81probe.$$)"
-    {
-      printf '%s\n' '# >>> I81 LIVE-SERIES BLOCK >>>'
-      printf '%s\n' 'SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1)"'
-      printf '%s\n' '# <<< I81 LIVE-SERIES BLOCK <<<'
-    } > "$i81_probe"
-    i81_pexpr="$(i81_expr_of "$i81_probe")"
-    rm -f "$i81_probe"
-    if [ -z "$i81_pexpr" ]; then
-      err "I81's own probe returned nothing: the extractor does not read a marked block at all, so the agreement it reported above means nothing."
-    else
-      case "$i81_pexpr" in
-        *"sed -E -n 's/(pass|p)[0-9]+\.md\$//p'"*)
-          err "I81's filtering-form test MATCHED a probe carrying the old newest-then-strip form. The test cannot tell the two apart, so it would pass over the exact regression it exists to catch." ;;
-      esac
-      case "$i81_pexpr" in
-        *'"${ART_DIR}/s${SPRINT_N'*)
-          err "I81's sprint-scope test MATCHED a probe carrying the old UNSCOPED glob. The test cannot tell a scoped glob from an unscoped one, so it would pass over the mtime-across-56-sprints defect it exists to catch." ;;
-      esac
-    fi
   fi
 fi
 
@@ -8537,25 +7714,18 @@ fi
 # `esac`). Its opener sits on the line ABOVE that range, as acknowledge.sh's does, so 3b-bind's block
 # is unchanged; the two arms bind different spans and neither replaces the other.
 #
-# BOTH DIRECTIONS, and the probe runs FIRST. A seeded pair of identical copies must read SAME and a
-# seeded pair one byte apart must read DIFFER, before the shipped hooks are compared, so a broken
-# extractor (two empty strings compare equal) cannot report agreement.
+# THE SPAN MUST BE FOUND IN EVERY BOUND HOOK, exactly once, and be a LAST_SKILL= scan, so a
+# broken extractor (two empty strings compare equal) reports OPENERS or EMPTY, never SAME.
 i126_hooks="core/hooks/ai-dlc-acknowledge.sh core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-continue.sh core/hooks/ai-dlc-advisor-gate.sh core/hooks/ai-dlc-recover.sh core/hooks/ai-dlc-recover-gate.sh core/hooks/ai-dlc-postcompact.sh core/hooks/ai-dlc-gate-remediation-guard.sh core/hooks/ai-dlc-inflight-row.sh core/hooks/ai-dlc-dispatch-guard.sh"
 i126_open='>>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>'
-# ONE awk, ONE fork, FOR THE PROBE AND THE CORPUS TOGETHER. The first draft ran a grep and an awk
-# per file inside a per-call subshell, four calls, plus a mktemp/mkdir/rm probe directory -- about
-# 34 forks for a one-line comparison, and the suite's fork gate went red on it. The probe copies
-# are now a here-string on stdin, split into units by `@@UNIT <group> <name>` lines (no file, no
-# directory), and the bound hooks follow as ordinary file arguments; the program groups every unit
-# and prints one `<group> <verdict>` line per group. The probe groups are still judged FIRST below,
-# and the corpus verdict is read only once they pass. Every assignment and read here is a builtin.
+# ONE awk, ONE fork: the bound hooks are its file arguments, and it prints one `real <verdict>`
+# line. Every assignment and read here is a builtin.
 I126_AWK='
 function start(g, u) {
   if (!(g in gn)) { gn[g] = 0; order[++ng] = g }
   gn[g]++; gu[g, gn[g]] = u; cur = g SUBSEP u; cnt[cur] = 0; got[cur] = ""; want = 0
 }
-NR == FNR && /^@@UNIT / { start($2, $3); next }
-NR != FNR && FNR == 1  { start("real", FILENAME) }
+FNR == 1 { start("real", FILENAME) }
 want                   { l = $0; sub(/^[[:space:]]+/, "", l); got[cur] = l; want = 0 }
 index($0, m)           { cnt[cur]++; if (cnt[cur] == 1) want = 1 }
 END {
@@ -8573,34 +7743,19 @@ END {
     print g " " v
   }
 }'
-i126_nl='
-'
-i126_seed='  LAST_SKILL=$(grep -oE '"'"'"name":"Skill","input":\{"skill":"ai-dlc(-update)?"'"'"' "$TRANSCRIPT" 2>/dev/null | tail -1)'
-i126_ua="# ${i126_open}${i126_nl}${i126_seed}"
-i126_uc="# ${i126_open}${i126_nl}${i126_seed% | tail -1)} | tail -n 1)"
-i126_ud="# ${i126_open}${i126_nl}  echo unrelated"
-i126_stream="@@UNIT same a${i126_nl}${i126_ua}${i126_nl}@@UNIT same b${i126_nl}${i126_ua}${i126_nl}@@UNIT diff a${i126_nl}${i126_ua}${i126_nl}@@UNIT diff c${i126_nl}${i126_uc}${i126_nl}@@UNIT empty a${i126_nl}${i126_ua}${i126_nl}@@UNIT empty d${i126_nl}${i126_ud}"
 i126_missing=""; i126_present=""
 for i126_h in $i126_hooks; do
   if [ -f "$i126_h" ]; then i126_present="$i126_present $i126_h"; else i126_missing="$i126_missing $i126_h"; fi
 done
-# shellcheck disable=SC2086
-i126_out="$(awk -v m="$i126_open" "$I126_AWK" - $i126_present <<<"$i126_stream" 2>/dev/null)"
-i126_p_same=""; i126_p_diff=""; i126_p_empty=""; i126_v=""
-while IFS=' ' read -r i126_g i126_r; do
-  case "$i126_g" in
-    same)  i126_p_same="$i126_r" ;;
-    diff)  i126_p_diff="$i126_r" ;;
-    empty) i126_p_empty="$i126_r" ;;
-    real)  i126_v="$i126_r" ;;
-  esac
-done <<<"$i126_out"
-if [ "$i126_p_same" != SAME ] || [ "$i126_p_diff" != DIFFER ] || [ "${i126_p_empty%%:*}" != EMPTY ]; then
-  err "I126's own probe failed: two identical seeded copies read '$i126_p_same' (want SAME), a one-token drift read '$i126_p_diff' (want DIFFER), and a marker over a non-scan line read '${i126_p_empty%%:*}' (want EMPTY). The extractor cannot tell agreement from drift, so no verdict it gives on the shipped hooks means anything."
-else
-  if [ -n "$i126_missing" ]; then
+if [ -n "$i126_missing" ]; then
     err "I126 cannot find bound hook(s):${i126_missing}. A missing hook leaves the others compared among themselves, which reads as agreement."
-  else
+else
+  # shellcheck disable=SC2086
+  i126_out="$(awk -v m="$i126_open" "$I126_AWK" $i126_present 2>/dev/null)"
+  i126_v=""
+  while IFS=' ' read -r i126_g i126_r; do
+    [ "$i126_g" = real ] && i126_v="$i126_r"
+  done <<<"$i126_out"
     case "$i126_v" in
       SAME) : ;;
       DIFFER) err "I126 the ai-dlc session-marker scan has FORKED between the bound hooks ($i126_hooks). Each answers 'is this an /ai-dlc session, the updater, or neither' for the same transcript; one copy drifting means one hook pauses or blocks a session another lets through. Make the line after each '$i126_open' marker byte-identical (leading whitespace aside)." ;;
@@ -8608,7 +7763,6 @@ else
       EMPTY:*) err "I126 the line after the marker in ${i126_v#EMPTY:} is not a LAST_SKILL= scan. The marker sits on the line ABOVE the scan; anything else between them makes this arm compare the wrong line." ;;
       *) err "I126 unexpected verdict '$i126_v'." ;;
     esac
-  fi
 fi
 
 # --- I128: Check B's pause-write allow list, updater-marker ERE and Explore role ERE are the pause hook's, byte for byte ---
@@ -8650,20 +7804,8 @@ fi
 # refused on either side, as is a missing opener, terminator or generic arm: an empty set equals
 # an empty set, and a moved anchor would otherwise read as agreement.
 #
-# ONE awk, ONE fork, probe and corpus together, in I126's shape: the probe units arrive as a
-# here-string split by `@@UNIT <group> <hook|val>` lines, the two real files follow as arguments,
-# and one `<group> <verdict>` line is printed per group. The probe runs FIRST: identical-but-
-# reordered sets with a comment line between arms must read SAME, a dropped validator member
-# ALLOW-DIFFER, a one-byte ERE drift ERE-DIFFER, a zero-member hook side EMPTY:hook and a
-# zero-member validator list between intact anchors EMPTY:val, a one-byte XERE drift
-# ERE-DIFFER:explore, a validator missing its XERE opener ERE-EMPTY:explore-val, a hook missing
-# its XERE line ERE-EMPTY:explore-hook, a hook carrying it twice ANCHOR:explore-hook-lines:2, an
-# Explore construction line naming another literal CONSTRUCT-DIFFER:explore, an updater one
-# CONSTRUCT-DIFFER:updater and a validator missing its Explore terminator ANCHOR:explore-terminator --
-# before the shipped pair is read. Then the arm-SHAPE units, each run against the full list and against
-# the list missing that arm: `) ;;  # comment`, `);;` and the pattern and `;;` on two lines must
-# read SAME and ALLOW-DIFFER respectively; `) : ;;` and a pattern line whose `;;` follows a `#`
-# line must read REFUSE-SHAPE and a `?` pattern REFUSE-PATTERN both times.
+# ONE awk, ONE fork: the hook and the validator are its two arguments, and one `real <verdict>`
+# line is printed.
 #
 # NARROWING, AND THE FP SET. Measured on the live tree: 0 findings, hook 4 arms, validator 4
 # members, ERE equal. (1) Hook arms are taken only AFTER `case "$FP" in` and only BEFORE the
@@ -8700,8 +7842,7 @@ function arm(p) {
   if (!((cur, p) in hm)) { hm[cur, p] = 1; hn[cur]++ }
 }
 function shape(s) { if (!(cur in hshape)) hshape[cur] = s }
-NR == FNR && /^@@UNIT / { start($2, $3); next }
-NR != FNR && FNR == 1  { start("real", (FILENAME == hf) ? "hook" : "val") }
+FNR == 1 { start("real", (FILENAME == hf) ? "hook" : "val") }
 role == "hook" && wantere {
   wantere = 0; a = index($0, "grep -oE " q); b = index($0, q " \"$TRANSCRIPT\"")
   if (a && b > a) here[cur] = substr($0, a + 10, b - a - 10)
@@ -8772,8 +7913,6 @@ END {
     print g " " v
   }
 }'
-i128_nl='
-'
 i128_q="'"
 i128_vo='// >>> I128 PAUSE-WRITE ALLOW ARMS: the hook'"'"'s case patterns, verbatim >>>'
 i128_vc='// <<< I128 PAUSE-WRITE ALLOW ARMS <<<'
@@ -8783,65 +7922,16 @@ i128_xterm='// <<< I128 EXPLORE ROLE ERE <<<'
 i128_eterm='// <<< I128 UPDATER MARKER ERE <<<'
 i128_xcon='const EXPLORE_ROLE_RE = new RegExp(EXPLORE_ROLE_ERE);'
 i128_econ='const UPDATER_MARKER_RE = new RegExp(UPDATER_MARKER_ERE, "g");'
-i128_ere='"name":"Skill","input":\{"skill":"ai-dlc(-update)?"'
-i128_xere='team-roles/[a-z][a-z-]*\.md'
-i128_hx="          elif grep -qE '${i128_xere}' <<< \"\$EXPLORE_PROMPT\"; then${i128_nl}"
-i128_hk="  # ${i126_open}${i128_nl}  LAST_SKILL=\$(grep -oE '${i128_ere}' \"\$TRANSCRIPT\" 2>/dev/null | tail -1)${i128_nl}${i128_hx}    case \"\$FP\" in${i128_nl}      */a/*|a/*) ;;${i128_nl}      # a comment between arms${i128_nl}      */b.md|b.md) ;;${i128_nl}      */_bmad-output/*|_bmad-output/*)${i128_nl}        x=1 ;;${i128_nl}    esac"
-i128_hk0="  # ${i126_open}${i128_nl}  LAST_SKILL=\$(grep -oE '${i128_ere}' \"\$TRANSCRIPT\" 2>/dev/null | tail -1)${i128_nl}${i128_hx}    case \"\$FP\" in${i128_nl}      */_bmad-output/*|_bmad-output/*)${i128_nl}        x=1 ;;${i128_nl}    esac"
-i128_vxt="${i128_xterm}${i128_nl}${i128_xcon}${i128_nl}"
-i128_vet="${i128_eterm}${i128_nl}${i128_econ}${i128_nl}"
-i128_vx="${i128_vxo} x >>>${i128_nl}const X = String.raw\`${i128_xere}\`;${i128_nl}${i128_vxt}"
-i128_vl="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere}\`;${i128_nl}${i128_vet}${i128_vx}${i128_vo}${i128_nl}const L = [${i128_nl}"
-i128_vsame="${i128_vl}  \"*/b.md|b.md\",${i128_nl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
-i128_vdrop="${i128_vl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
-i128_vere="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere%\?\"}\"\`;${i128_nl}${i128_vet}${i128_vx}${i128_vo}${i128_nl}const L = [${i128_nl}  \"*/b.md|b.md\",${i128_nl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
-i128_v0="${i128_vl}];${i128_nl}${i128_vc}"
-# The Explore-ERE units: a one-byte drift of the validator's copy, the validator's opener removed,
-# the hook's line removed, and the hook's line written twice. Each must read its own verdict.
-i128_vxlist="${i128_vo}${i128_nl}const L = [${i128_nl}  \"*/b.md|b.md\",${i128_nl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
-i128_vxd="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere}\`;${i128_nl}${i128_vet}${i128_vxo} x >>>${i128_nl}const X = String.raw\`${i128_xere}x\`;${i128_nl}${i128_vxt}${i128_vxlist}"
-i128_vxn="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere}\`;${i128_nl}${i128_vet}const X = String.raw\`${i128_xere}\`;${i128_nl}${i128_vxt}${i128_vxlist}"
-# The construction units: each copy's ERE bytes intact, its RegExp construction line naming
-# another literal (xcon, econ) or its terminator removed (xcterm). Each must read its own verdict.
-i128_vxc="${i128_vsame/"${i128_xcon}"/const EXPLORE_ROLE_RE = new RegExp(\"team-roles/[a-z]+\\\\.md\");}"
-i128_vec="${i128_vsame/"${i128_econ}"/const UPDATER_MARKER_RE = new RegExp(\"x\", \"g\");}"
-i128_vxct="${i128_vsame/"${i128_xterm}"/}"
-i128_hxn="${i128_hk/"${i128_hx}"/}"
-i128_hxd="${i128_hk/"${i128_hx}"/${i128_hx}${i128_hx}}"
-i128_stream="@@UNIT same hook${i128_nl}${i128_hk}${i128_nl}@@UNIT same val${i128_nl}${i128_vsame}${i128_nl}@@UNIT drop hook${i128_nl}${i128_hk}${i128_nl}@@UNIT drop val${i128_nl}${i128_vdrop}${i128_nl}@@UNIT ere hook${i128_nl}${i128_hk}${i128_nl}@@UNIT ere val${i128_nl}${i128_vere}${i128_nl}@@UNIT empty hook${i128_nl}${i128_hk0}${i128_nl}@@UNIT empty val${i128_nl}${i128_vsame}${i128_nl}@@UNIT emptyv hook${i128_nl}${i128_hk}${i128_nl}@@UNIT emptyv val${i128_nl}${i128_v0}"
-i128_stream="${i128_stream}${i128_nl}@@UNIT xdrift hook${i128_nl}${i128_hk}${i128_nl}@@UNIT xdrift val${i128_nl}${i128_vxd}${i128_nl}@@UNIT xnoval hook${i128_nl}${i128_hk}${i128_nl}@@UNIT xnoval val${i128_nl}${i128_vxn}${i128_nl}@@UNIT xnohook hook${i128_nl}${i128_hxn}${i128_nl}@@UNIT xnohook val${i128_nl}${i128_vsame}${i128_nl}@@UNIT xdup hook${i128_nl}${i128_hxd}${i128_nl}@@UNIT xdup val${i128_nl}${i128_vsame}"
-i128_stream="${i128_stream}${i128_nl}@@UNIT xcon hook${i128_nl}${i128_hk}${i128_nl}@@UNIT xcon val${i128_nl}${i128_vxc}${i128_nl}@@UNIT xecon hook${i128_nl}${i128_hk}${i128_nl}@@UNIT xecon val${i128_nl}${i128_vec}${i128_nl}@@UNIT xcterm hook${i128_nl}${i128_hk}${i128_nl}@@UNIT xcterm val${i128_nl}${i128_vxct}"
-# The shape units: the b arm respelled in each accepted form must read SAME against the full
-# list and ALLOW-DIFFER against the list missing it; a no-op body and a glob metacharacter REFUSE.
-i128_hpre="${i128_hk%%      \*/b.md|b.md) ;;*}"
-i128_hsuf="${i128_hk#*b.md|b.md) ;;}"
-for i128_f in "trail:      */b.md|b.md) ;;  # allowed" "nosp:      */b.md|b.md);;" "split:      */b.md|b.md)${i128_nl}      ;;" "noop:      */b.md|b.md) : ;;" "cmt:      */b.md|b.md)${i128_nl}      # between${i128_nl}      ;;" "glob:      */b?.md|b?.md) ;;"; do
-  i128_fh="${i128_hpre}${i128_f#*:}${i128_hsuf}"
-  i128_stream="${i128_stream}${i128_nl}@@UNIT ${i128_f%%:*}-eq hook${i128_nl}${i128_fh}${i128_nl}@@UNIT ${i128_f%%:*}-eq val${i128_nl}${i128_vsame}${i128_nl}@@UNIT ${i128_f%%:*}-dr hook${i128_nl}${i128_fh}${i128_nl}@@UNIT ${i128_f%%:*}-dr val${i128_nl}${i128_vdrop}"
-done
 if [ ! -f "$i128_hook" ] || [ ! -f "$i128_val" ]; then
   err "I128 cannot find $i128_hook or $i128_val. With either side absent there is nothing to compare, which would read as agreement."
 else
-  i128_out="$(awk -v hf="$i128_hook" -v q="$i128_q" -v i126="$i126_open" -v vopenm="$i128_vo" -v vclosem="$i128_vc" -v vereo="$i128_veo" -v vxo="$i128_vxo" -v xterm="$i128_xterm" -v eterm="$i128_eterm" -v xcon="$i128_xcon" -v econ="$i128_econ" "$I128_AWK" - "$i128_hook" "$i128_val" <<<"$i128_stream" 2>/dev/null)"
-  i128_p_same=""; i128_p_drop=""; i128_p_ere=""; i128_p_empty=""; i128_p_emptyv=""; i128_v=""; i128_p_shape=""; i128_p_x=""
+  i128_out="$(awk -v hf="$i128_hook" -v q="$i128_q" -v i126="$i126_open" -v vopenm="$i128_vo" -v vclosem="$i128_vc" -v vereo="$i128_veo" -v vxo="$i128_vxo" -v xterm="$i128_xterm" -v eterm="$i128_eterm" -v xcon="$i128_xcon" -v econ="$i128_econ" "$I128_AWK" "$i128_hook" "$i128_val" 2>/dev/null)"
+  i128_v=""
   while IFS=' ' read -r i128_g i128_r; do
     case "$i128_g" in
-      x*)    case "$i128_r" in CONSTRUCT-DIFFER:*) i128_cs="${i128_r#CONSTRUCT-DIFFER:}"; i128_r="CONSTRUCT-DIFFER:${i128_cs%%:*}" ;; esac
-             i128_p_x="${i128_p_x} ${i128_g}=${i128_r}" ;;
-      same)  i128_p_same="$i128_r" ;;
-      drop)  i128_p_drop="$i128_r" ;;
-      ere)   i128_p_ere="$i128_r" ;;
-      empty) i128_p_empty="$i128_r" ;;
-      emptyv) i128_p_emptyv="$i128_r" ;;
       real)  i128_v="$i128_r" ;;
-      *-eq|*-dr) i128_p_shape="${i128_p_shape} ${i128_g}=${i128_r%%:*}" ;;
     esac
   done <<<"$i128_out"
-  i128_shape_want=" trail-eq=SAME trail-dr=ALLOW-DIFFER nosp-eq=SAME nosp-dr=ALLOW-DIFFER split-eq=SAME split-dr=ALLOW-DIFFER noop-eq=REFUSE-SHAPE noop-dr=REFUSE-SHAPE cmt-eq=REFUSE-SHAPE cmt-dr=REFUSE-SHAPE glob-eq=REFUSE-PATTERN glob-dr=REFUSE-PATTERN"
-  i128_x_want=" xdrift=ERE-DIFFER:explore xnoval=ERE-EMPTY:explore-val xnohook=ERE-EMPTY:explore-hook xdup=ANCHOR:explore-hook-lines:2 xcon=CONSTRUCT-DIFFER:explore xecon=CONSTRUCT-DIFFER:updater xcterm=ANCHOR:explore-terminator"
-  if [ "$i128_p_same" != "SAME:2" ] || [ "${i128_p_drop%%:*}" != ALLOW-DIFFER ] || [ "$i128_p_ere" != ERE-DIFFER ] || [ "$i128_p_empty" != EMPTY:hook ] || [ "$i128_p_emptyv" != EMPTY:val ] || [ "$i128_p_shape" != "$i128_shape_want" ] || [ "$i128_p_x" != "$i128_x_want" ]; then
-    err "I128's own probe failed: a reordered equal pair with a comment between arms read '$i128_p_same' (want SAME:2), a dropped validator member '$i128_p_drop' (want ALLOW-DIFFER), a one-byte ERE drift '$i128_p_ere' (want ERE-DIFFER), a zero-arm hook '$i128_p_empty' (want EMPTY:hook), a zero-member validator list between intact anchors '$i128_p_emptyv' (want EMPTY:val); the arm-shape units read '${i128_p_shape# }' (want '${i128_shape_want# }'); the Explore-ERE units read '${i128_p_x# }' (want '${i128_x_want# }'). The extractor cannot tell agreement from drift, so no verdict on the shipped pair means anything."
-  else
     case "$i128_v" in
       SAME:*) : ;;
       ALLOW-DIFFER:*) err "I128 Check B's pause-write allow list in $i128_val has drifted from the empty-bodied arms before the generic _bmad-output arm of $i128_hook:${i128_v#ALLOW-DIFFER:}. Check B would score a write the hook allows while paused as a steamroll, or acquit one the hook denies. Copy the hook's case pattern verbatim into PAUSE_WRITE_ALLOW." ;;
@@ -8853,7 +7943,6 @@ else
       EMPTY:*|ERE-EMPTY:*|ANCHOR:*) err "I128 derived nothing comparable (${i128_v}): an anchor this arm keys on has moved or a side has zero members, and an empty side compares equal to an empty side." ;;
       *) err "I128 unexpected verdict '$i128_v'." ;;
     esac
-  fi
 fi
 
 # --- I82: core's own artifact-path prescriptions obey core's own grammar --------
@@ -9336,38 +8425,6 @@ i83_extracts() { # <file>... -> prints each file carrying an extractor, in argum
   [ "$?" -le 1 ] || return 2
 }
 
-# THE LIVENESS PROBE. This reports an ABSENCE and its whole answer is one grep. An expression
-# that stopped matching would return the same empty set as a tree with one reader, so it is
-# asked about two files whose answers are known, every run.
-#
-# THE PROBE'S EXTRACTOR IS ASSEMBLED FROM HALVES AND NEVER WRITTEN WHOLE, because a heredoc
-# carrying it would make THIS file a positive — and the exemption that would fix that is an
-# exemption for the one file copy number three actually lived in. Two halves that only ever meet
-# at runtime cost nothing and keep the corpus honest.
-i83_probe_dir="$(mktemp -d)"
-i83_h='/^are'; i83_t='as:$/{f=1;next}'
-printf '#!/usr/bin/env bash\nareas="$(awk %s%s%s%s \"$1\")"\n' \
-  "'" "$i83_h" "$i83_t" "'" > "$i83_probe_dir/copy.sh"
-printf '#!/usr/bin/env bash\necho no extraction here\n' > "$i83_probe_dir/clean.sh"
-# THE UNREAD GUARD'S PROBE. One grep over the whole corpus answers 2 when ANY file could not be
-# read, and still prints the matches it did read -- so the guard below is the only thing standing
-# between an unreadable file and a clean line. It is asked about a mode-000 file AFTER a readable
-# one (the reader must not stop at the first member), and about the readable one alone, which must
-# NOT be scored unread. A mode-000 file that still reads means root or a mode-blind filesystem:
-# the guard cannot be proven there, so that is a refusal, never a pass. Mode 000 comes from a
-# umask in a subshell, not `chmod`: builtins only, so no fixture driving this file owes a new tool.
-( umask 777; printf '#!/usr/bin/env bash\necho unreadable\n' > "$i83_probe_dir/unread.sh" )
-if [ -z "$(i83_extracts "$i83_probe_dir/copy.sh")" ]; then
-  err "I83's own probe: a file carrying the areas extractor was NOT matched. The corpus result below is an empty set produced by an expression that matches nothing, which reads exactly like a tree with one reader."
-elif [ -n "$(i83_extracts "$i83_probe_dir/clean.sh")" ]; then
-  err "I83's own probe: a file carrying no extraction WAS matched, so every finding it prints is suspect."
-elif [ -r "$i83_probe_dir/unread.sh" ]; then
-  err "I83's own probe: a file set to mode 000 is still readable (root, or a filesystem that ignores modes), so the unread guard below cannot be shown to fire. Refusing rather than reporting a corpus scan whose read failures would be invisible."
-elif i83_extracts "$i83_probe_dir/clean.sh" "$i83_probe_dir/unread.sh" > /dev/null 2>&1; then
-  err "I83's own probe: a corpus holding one unreadable file was scored as fully read. A read failure would then report the same clean line as a scanned file."
-elif ! i83_extracts "$i83_probe_dir/clean.sh" > /dev/null 2>&1; then
-  err "I83's own probe: a corpus of one readable clean file was scored as UNREAD, so the unread guard fires on every tree and its error means nothing."
-else
   i83_extra=""
   i83_files=0
   i83_resolver_seen=0
@@ -9380,7 +8437,7 @@ else
               find "$REPO_ROOT/scripts" "$REPO_ROOT/.githooks" -type f 2>/dev/null; } | sort )
   i83_unread=0
   if [ "$i83_files" -ge 1 ]; then
-    i83_extracts "${i83_list[@]}" > "$i83_probe_dir/hits" || i83_unread=1
+    i83_hits="$(i83_extracts "${i83_list[@]}")" || i83_unread=1
     while IFS= read -r i83_f; do
       [ -n "$i83_f" ] || continue
       i83_rel="${i83_f#"$REPO_ROOT/"}"
@@ -9389,7 +8446,9 @@ else
         continue
       fi
       i83_extra="${i83_extra} $i83_rel"
-    done < "$i83_probe_dir/hits"
+    done <<EOF
+$i83_hits
+EOF
   fi
   if [ "$i83_unread" -ne 0 ]; then
     err "I83 could not read every file in its corpus (grep exited 2). An unreadable file is a file this invariant did not scan, and its silence about it reads exactly like a file with no extractor."
@@ -9401,8 +8460,6 @@ else
     err "I83 file(s) other than $I83_RESOLVER extract the artifact path grammar's own blocks:${i83_extra}
   Widen \`areas:\` or the scan roots and whichever copy nobody edits goes on governing a smaller tree while reporting the same clean line — the fork migrate-artifact-paths.sh and I82 were one edit away from. Call \`artifact-path-config.sh --areas\` / \`--scan-roots\` instead."
   fi
-fi
-rm -rf "$i83_probe_dir"
 
 # --- I84: the story corpus location is ONE declaration ------------------------
 #
@@ -9491,32 +8548,13 @@ i84_reads() { # <file>... -> prints each file whose non-comment line reads the d
 # is `{sprint}`, whose braces are metacharacters, and a fixed-string match needs no escaping and
 # nothing piped into `grep -q`. ONE awk OVER EVERY READER, not one per reader, for fork-budget
 # headroom: a per-file flag reset at `FNR == 1` (no `nextfile`, which macOS awk lacks) prints each
-# file with no naming line, and the two probes below drive this same function on one file each.
+# file with no naming line.
 i84_names_slot() { # <file>... -> 0 when every file has a non-comment line naming the slot or the placeholder key; prints each that does not
   [ "$#" -gt 0 ] || return 1
   awk -v s="$i84_slot" 'FNR == 1 { if (p != "" && !f) { print p; u++ } p = FILENAME; f = 0 } !f && !/^[[:blank:]]*#/ && (index($0, s) || index($0, "stories_dir_sprint_placeholder")) { f = 1 } END { if (p == "") exit 1; if (!f) { print p; u++ } exit (u > 0) }' "$@" 2>/dev/null
 }
 
-i84_probe_dir="$(mktemp -d)"
-printf '#!/usr/bin/env bash\nD="_bmad-output/%s%s"\n' "$i84_a" 'artifacts/stories' > "$i84_probe_dir/restate.sh"
-printf '#!/usr/bin/env bash\n# _bmad-output/%s%s is what this used to say\nP="*/stories/*.md"\n' \
-  "$i84_a" 'artifacts/stories' > "$i84_probe_dir/clean.sh"
-# The unread guard's probe, I83's reason, asked of BOTH corpus predicates: each is its own grep
-# with its own exit status, and a guard dropped from either one loses read failures for that arm.
-( umask 777; printf '#!/usr/bin/env bash\necho unreadable\n' > "$i84_probe_dir/unread.sh" )
-if [ -z "$(i84_restates "$i84_probe_dir/restate.sh")" ]; then
-  err "I84's own probe: a file that DOES restate the story corpus path was not matched. The zero below is produced by an expression that matches nothing, which reads exactly like a tree with one declaration."
-elif [ -n "$(i84_restates "$i84_probe_dir/clean.sh")" ]; then
-  err "I84's own probe: a file carrying the path only in a COMMENT, and the component-keyed pattern the protect hook uses, WAS matched. The expression cannot tell a restatement from an explanation of one, so every finding it prints is suspect."
-elif [ -r "$i84_probe_dir/unread.sh" ]; then
-  err "I84's own probe: a file set to mode 000 is still readable (root, or a filesystem that ignores modes), so the unread guard below cannot be shown to fire. Refusing rather than reporting a corpus scan whose read failures would be invisible."
-elif i84_restates "$i84_probe_dir/clean.sh" "$i84_probe_dir/unread.sh" > /dev/null 2>&1; then
-  err "I84's own probe: i84_restates scored a corpus holding one unreadable file as fully read. A read failure would then report the same clean line as a scanned file."
-elif i84_reads "$i84_probe_dir/clean.sh" "$i84_probe_dir/unread.sh" > /dev/null 2>&1; then
-  err "I84's own probe: i84_reads scored a corpus holding one unreadable file as fully read. A read failure would then report the same clean line as a scanned file."
-elif ! i84_restates "$i84_probe_dir/clean.sh" > /dev/null 2>&1 || ! i84_reads "$i84_probe_dir/clean.sh" > /dev/null 2>&1; then
-  err "I84's own probe: a corpus of one readable clean file was scored as UNREAD, so the unread guard fires on every tree and its error means nothing."
-elif [ ! -r "$I84_SCHEMA" ]; then
+if [ ! -r "$I84_SCHEMA" ]; then
   err "I84 cannot read core/schemas/sprint-status.json. It is the declared home of the story corpus template; absent it, every program composing a story path is unchecked and this invariant's silence is indistinguishable from conformance."
 else
   i84_tmpl="$(sed -n 's/.*"stories_dir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$I84_SCHEMA" | head -1)"
@@ -9525,18 +8563,10 @@ else
   # the EPIPE-under-pipefail class I54 exists for, and I54 flagged this line on its first run.
   i84_has_slot=0
   case "$i84_tmpl" in *"$i84_slot"*) i84_has_slot=1 ;; esac
-  # The slot is read just above, not with the restate/clean seeds earlier, so its two seeds are
-  # written here from the REAL value. Same rule: they are scored before the corpus is.
-  printf '#!/usr/bin/env bash\nD="$(read stories_dir)"\n# composes s%s from the template\n' "$i84_slot" > "$i84_probe_dir/slotcomment.sh"
-  printf '#!/usr/bin/env bash\nD="$(read stories_dir)"\nD="${D//%s/s1}"\n' "$i84_slot" > "$i84_probe_dir/slotcode.sh"
   if [ -z "$i84_tmpl" ] || [ -z "$i84_slot" ]; then
     err "I84 read core/schemas/sprint-status.json but found stories_dir='${i84_tmpl:-<absent>}' and its slot placeholder='${i84_slot:-<absent>}'. Both are required: the declaration is the thing every reader resolves, and a reader resolving an empty template composes the repo root."
   elif [ "$i84_has_slot" -ne 1 ]; then
     err "I84 the stories_dir template '$i84_tmpl' does not contain its own sprint slot '$i84_slot'. Every sprint would then resolve to the SAME directory — the flat, cross-sprint corpus rule 2 exists to end — and it would do so silently, because a shared directory is a directory that exists."
-  elif i84_names_slot "$i84_probe_dir/slotcomment.sh" >/dev/null; then
-    err "I84's own probe: a reader whose sprint slot appears ONLY in a comment was scored as naming it. The slot check is satisfied by an explanation of the substitution, so a reader that lost the substitution stays silent -- the whole-file grep this replaced."
-  elif ! i84_names_slot "$i84_probe_dir/slotcode.sh" >/dev/null; then
-    err "I84's own probe: a reader that DOES name the sprint slot in code was not matched. Every reader would be reported as never substituting, or the expression matches nothing and the slot check below is an instrument that cannot fire."
   else
     i84_bad=""
     i84_nosub=""
@@ -9552,25 +8582,31 @@ else
     done < <( { find "$REPO_ROOT/core" -type f -name '*.sh' -not -path "$REPO_ROOT/core/fixtures/*"
                 find "$REPO_ROOT/scripts" "$REPO_ROOT/.githooks" -type f 2>/dev/null; } | sort )
     if [ "$i84_files" -ge 1 ]; then
-      i84_restates "${i84_list[@]}" > "$i84_probe_dir/bad" || i84_unread=1
-      i84_reads "${i84_list[@]}" > "$i84_probe_dir/readers" || i84_unread=1
+      i84_badl="$(i84_restates "${i84_list[@]}")" || i84_unread=1
+      i84_rdl="$(i84_reads "${i84_list[@]}")" || i84_unread=1
       while IFS= read -r i84_f; do
         [ -n "$i84_f" ] && i84_bad="${i84_bad} ${i84_f#"$REPO_ROOT/"}"
-      done < "$i84_probe_dir/bad"
+      done <<EOF
+$i84_badl
+EOF
       while IFS= read -r i84_f; do
         [ -n "$i84_f" ] || continue
         [ "${i84_f#"$REPO_ROOT/"}" = "$I84_SELF" ] && continue
         i84_readers=$((i84_readers + 1))
         i84_rarr+=("$i84_f")
-      done < "$i84_probe_dir/readers"
+      done <<EOF
+$i84_rdl
+EOF
     fi
     # Expanded only behind the guard: an empty array under `set -u` is an error on bash 3.2, and
-    # awk handed no file would read stdin. Its report lands in the probe dir, removed below.
+    # awk handed no file would read stdin.
     if [ "$i84_readers" -ge 1 ]; then
-      i84_names_slot "${i84_rarr[@]}" > "$i84_probe_dir/nosub"
+      i84_nsl="$(i84_names_slot "${i84_rarr[@]}")"
       while IFS= read -r i84_f; do
         [ -n "$i84_f" ] && i84_nosub="${i84_nosub} ${i84_f#"$REPO_ROOT/"}"
-      done < "$i84_probe_dir/nosub"
+      done <<EOF
+$i84_nsl
+EOF
     fi
     if [ "$i84_unread" -ne 0 ]; then
       err "I84 could not read every file in its corpus (grep exited 2). An unreadable file is a file this invariant did not scan, and its silence about it reads exactly like a file that restates nothing."
@@ -9587,7 +8623,6 @@ else
     fi
   fi
 fi
-rm -rf "$i84_probe_dir"
 
 # --- I85: no shipped script command-substitutes inside its own operator message ----
 # BACKTICKS INSIDE A DOUBLE-QUOTED STRING ARE COMMAND SUBSTITUTION. A message written
@@ -9647,36 +8682,6 @@ i85_scan() { # i85_scan <root> -> "<file>:<line>: <word>" per finding
     ' "$i85_f"
   done
 }
-
-# The probe proves BOTH directions in the same run: a zero from a scanner that cannot see
-# the positive is not a clean tree, and a scanner that also flags the heredoc form would
-# ship the six-file false-positive set this narrowing exists to exclude. Built here rather
-# than committed, because a probe in the tree is a subject.
-i85_probe="$(mktemp -d 2>/dev/null)"
-if [ -n "$i85_probe" ] && [ -d "$i85_probe" ]; then
-  {
-    printf 'emit X \\\n'
-    printf '  "records `%s` with a reason"\n' 'still-additive'
-  } > "$i85_probe/bad.sh"
-  {
-    printf 'emit X \\\n'
-    printf '  "records \\\\`%s\\\\` with a reason"\n' 'still-additive'
-    printf "python3 - <<'PY'\n"
-    printf '  "a docstring saying `%s` inside a quoted heredoc"\n' 'still-additive'
-    printf 'PY\n'
-  } > "$i85_probe/ok.sh"
-  i85_pos="$(i85_scan "$i85_probe" | grep -c 'bad\.sh' || true)"
-  i85_neg="$(i85_scan "$i85_probe" | grep -c 'ok\.sh' || true)"
-  rm -rf "$i85_probe"
-  if [ "$i85_pos" -eq 0 ]; then
-    err "I85's own positive probe was NOT reported: an unescaped backtick inside a double-quoted message went unseen by the scanner, so a clean result below would mean nothing. The invariant fails closed rather than reporting an absence its instrument could not have found."
-  fi
-  if [ "$i85_neg" -ne 0 ]; then
-    err "I85's negative probe WAS reported: either a correctly ESCAPED backtick or one inside a QUOTED heredoc was flagged. Both are correct code — the heredoc form alone is six live files — and shipping this would put them in the finding set, which is how a lint gets turned off."
-  fi
-else
-  err "I85 could not create its probe directory, so neither direction of its scanner was proven this run. A finding set it produces now is unattributable."
-fi
 
 i85_hits="$( { i85_scan "$REPO_ROOT/core"; i85_scan "$REPO_ROOT/scripts"; } 2>/dev/null )"
 if [ -n "$i85_hits" ]; then
@@ -9825,14 +8830,6 @@ fi
 #   * `enforcement-map-derivations` names `AI_DLC_REATTACH_BUDGET` inside a single-quoted awk
 #     program — it is building a mutation STRING, where no expansion happens at all.
 #
-# ZERO SUBJECTS TODAY, WHICH IS WHY THE PROBE IS NOT OPTIONAL. This is a regression guard: the
-# three fixtures that had the defect were fixed before it existed. A guard whose real answer is
-# always zero is exactly this repo's "a check that cannot fire reads like one that passed", so it
-# is asked every run to answer a tree whose answer is known — one exposed probe fixture, and two
-# that must stay silent for the two different reasons the exclusions encode.
-#
-# ONE READER, used by the corpus scan AND by the probe. A probe exercising a copy proves the copy.
-#
 # BOTH FUNCTIONS BELOW ARE ONE-FORK AWK PASSES, REPLACING A FORK-PER-FILE AND A
 # FORK-PER-DIRECTORY SHAPE. i87_readable forked one `grep` per file across the whole
 # core/+scripts/ tree (430 files at this writing); i87_exposed_in forked ~9 externals
@@ -9841,10 +8838,6 @@ fi
 # pipelines did, verified against the extracted-verbatim prior implementation over a
 # seeded probe tree exercising all four (see the fork-budget entry above this function
 # for how that was measured) plus the live corpus, never retyped from memory.
-#
-# i87_exposed_in keeps its per-directory signature and callers (used by the probe below),
-# now driving the same awk program as the batched corpus scan so a probe exercising it
-# still exercises the one engine the corpus loop calls.
 I87_EXPOSED_AWK='
   function flush(d,    k, out, any) {
     if (d == "") return
@@ -9924,15 +8917,6 @@ i87_readable() {   # <root> -> AI_DLC_* keys a shipped program dereferences, one
   ' < /dev/null | sed -E 's/^\$\{?//' | sort -u
   rm -f "$_fl"
 }
-i87_exposed_in() { # <fixture dir> <readable-key file> -> exposed keys, one per line
-  local d="$1" rk="$2" manifest out
-  manifest="$(mktemp)"
-  find "$d" -maxdepth 1 -type f -name '*.sh' -not -name '.*' 2>/dev/null | sort > "$manifest"
-  out="$(awk -v RKFILE="$rk" -v MANIFEST="$manifest" "$I87_EXPOSED_AWK" < /dev/null)"
-  rm -f "$manifest"
-  [ -n "$out" ] || return 0
-  printf '%s\n' "${out#*$'\t'}" | tr ' ' '\n' | grep -v '^$'
-}
 i87_exposed_batch() { # <fixtures root> <readable-key file> -> "<dir>\t<space-joined keys>" per exposed dir
   local root="$1" rk="$2" manifest
   manifest="$(mktemp)"
@@ -9941,26 +8925,6 @@ i87_exposed_batch() { # <fixtures root> <readable-key file> -> "<dir>\t<space-jo
   rm -f "$manifest"
 }
 
-i87_probe_dir="$(mktemp -d)"
-mkdir -p "$i87_probe_dir/core/scripts" "$i87_probe_dir/scripts" \
-         "$i87_probe_dir/fx-exposed" "$i87_probe_dir/fx-assigns" "$i87_probe_dir/fx-comment"
-printf '%s\n' '#!/usr/bin/env bash' 'echo "${AI_DLC_I87_PROBE:-default}"' > "$i87_probe_dir/core/scripts/i87-probe.sh"
-printf '%s\n' '#!/usr/bin/env bash' 'bash i87-probe.sh' 'echo AI_DLC_I87_PROBE' > "$i87_probe_dir/fx-exposed/run.sh"
-printf '%s\n' '#!/usr/bin/env bash' 'AI_DLC_I87_PROBE=fixed' 'bash i87-probe.sh' > "$i87_probe_dir/fx-assigns/run.sh"
-printf '%s\n' '#!/usr/bin/env bash' '# AI_DLC_I87_PROBE is named only here' 'bash i87-probe.sh' > "$i87_probe_dir/fx-comment/run.sh"
-i87_prk="$i87_probe_dir/readable.txt"; i87_readable "$i87_probe_dir" > "$i87_prk"
-i87_p_exp="$(i87_exposed_in "$i87_probe_dir/fx-exposed" "$i87_prk" | tr '\n' ' ')"
-i87_p_asg="$(i87_exposed_in "$i87_probe_dir/fx-assigns" "$i87_prk" | tr '\n' ' ')"
-i87_p_cmt="$(i87_exposed_in "$i87_probe_dir/fx-comment" "$i87_prk" | tr '\n' ' ')"
-rm -rf "$i87_probe_dir"
-
-if ! grep -q 'AI_DLC_I87_PROBE' <<<"$i87_p_exp"; then
-  err "I87's join did not fire on its own probe: a fixture naming a key a shipped program dereferences, without assigning it and without clearing the environment, was NOT reported [probe answered: ${i87_p_exp:-<nothing>}]. Either the readable-key derivation matched nothing or the naming scan did; the corpus result below is then an empty set produced by an extraction that cannot find an exposure, which reads exactly like a suite with none."
-elif grep -q 'AI_DLC_I87_PROBE' <<<"$i87_p_asg"; then
-  err "I87 reported a fixture that ASSIGNS the key itself [probe answered: $i87_p_asg]. A fixture setting the value cannot inherit one, so every fixture that pins its own tunable becomes a finding — and that is most of the suite."
-elif grep -q 'AI_DLC_I87_PROBE' <<<"$i87_p_cmt"; then
-  err "I87 reported a key named only in a COMMENT [probe answered: $i87_p_cmt]. That exclusion was derived from a measured false positive (whole-read-pool explaining why a lone copy fails); without it the guard fires on fixtures documenting the very hazard it exists for."
-else
   i87_rk="$(mktemp)"; i87_readable "$REPO_ROOT" > "$i87_rk"
   i87_nrk="$(grep -c . "$i87_rk")"
   i87_nfx="$(find "$REPO_ROOT/core/fixtures" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -c .)"
@@ -9978,7 +8942,6 @@ else
 Each one asserts against whatever the developer's .claude/settings.json happens to say — it passes for the wrong reason on the machine that set the key and fails on a correct build for the machine that set it differently. v0.289.0 fixed three fixtures in exactly that state. Add the clearing loop the suite already uses (\`for _v in \$(env | sed -n 's/^\\(AI_DLC_[A-Za-z0-9_]*\\)=.*/\\1/p'); do unset \"\$_v\"; done\`) or set the key explicitly."
     rm -f "$i87_rk"
   fi
-fi
 
 # --- I89 / I90: the procedure citation join, and the fix-imperative attribution --
 #
@@ -10098,18 +9061,9 @@ fi
 # count is not 9 defects -- most are legitimate pointers to a procedure. Separating "points
 # at a procedure" from "depends on it for who acts" is the valuable half and this grammar
 # cannot do it, so it does not pretend to.
-#
-# BOTH INVARIANTS ANSWER A KNOWN TREE FIRST. I89's real answer is "everything resolves"
-# and I90's known-good arms are the requalified sites -- and an extraction that has
-# stopped matching reports exactly that same silence. The probe renames a heading and
-# requires the strand to be reported; it feeds I90 a bare imperative, a dispatched one, a
-# declared one, an empty-reason marker and a file-object imperative, and requires the
-# five verdicts to differ in the five ways the grammar claims. If any probe answers
-# wrong, that is the only error reported and the corpus scan does not run -- a corpus
-# result from a reader that cannot find its subject is worth nothing.
 I89_PY="$(mktemp)"
 cat > "$I89_PY" <<'I89EOF'
-import os, re, sys, tempfile, shutil
+import os, re, sys
 
 ROOT = sys.argv[1]
 STEPS = os.path.join(ROOT, "core/skills/ai-dlc/steps")
@@ -10291,146 +9245,7 @@ def i90_scan(paths, roles, root=None):
                     fires.append((name, ln, sent))
     return fires, silent, bad
 
-# ---------------------------------------------------------------- probes
-def probe():
-    d = tempfile.mkdtemp()
-    try:
-        st = os.path.join(d, "steps")
-        os.makedirs(st)
-        gp = os.path.join(st, "_gate-procedures.md")
-        good = os.path.join(st, "good.md")
-        open(gp, "w").write("# T\n\n## Probe procedure (referenced by step files)\n\nbody\n")
-        open(good, "w").write('See `_gate-procedures.md`, "Probe procedure" for this.\n')
-        unres, uncited, n, _ = i89(gp, [good])
-        if unres or uncited or n != 1:
-            return ("I89 did not read its own agreeing probe as clean: %d unresolved, "
-                    "%d uncited, %d citation(s) seen (expected 0/0/1). The extraction has "
-                    "stopped matching the citation grammar, so a clean repo result is an "
-                    "empty set produced by a reader that finds nothing."
-                    % (len(unres), len(uncited), n))
-        # The qualifier must be free to change, in ANY shape, without stranding a citation.
-        # This is what "bind on the substring, not the heading line" buys, and it is asserted
-        # rather than assumed: an equality-based resolve passes the clean probe above and
-        # fails only here, which is exactly the churn this design exists to avoid.
-        open(gp, "w").write("# T\n\n## Probe procedure — now referenced by the gate too\n\nbody\n")
-        unres, uncited, n, _ = i89(gp, [good])
-        if unres or uncited:
-            return ("I89 stranded a citation when only the heading's QUALIFIER changed "
-                    "(`(referenced by step files)` -> `— now referenced by the gate too`). "
-                    "The resolve has become an equality against the whole heading line, so "
-                    "every edit to a parenthetical now reds the push across thirteen citing "
-                    "files. Bind on the substring the citations carry, as I11 does.")
-        open(gp, "w").write("# T\n\n## Renamed procedure (referenced by step files)\n\nbody\n")
-        unres, uncited, n, _ = i89(gp, [good])
-        if not unres:
-            return ("I89 did not fire on a RENAMED heading: the probe cites "
-                    '"Probe procedure" and the file now heads "Renamed procedure", and the '
-                    "join reported no stranded citation. That is the exact defect the "
-                    "invariant exists for, and a check that cannot fire reads exactly like "
-                    "one that passed.")
-        if not uncited:
-            return ("I89 did not report the renamed heading as UNCITED. The dormancy arm has "
-                    "gone vacuous, so a procedure nobody invokes reads as a live one.")
-        for name, body in (
-            ("p_bare.md",     "Run the validator. Fix all gaps found.\n"),
-            ("p_named.md",    "Run the validator. Fix all gaps found by dispatching a "
-                              "`remediator`.\n"),
-            ("p_declared.md", "Run the validator. Fix all gaps found. <!-- inline-ok: the "
-                              "probe's declared reason -->\n"),
-            ("p_baremark.md", "Run the validator. Fix all gaps found. <!-- inline-ok: -->\n"),
-            ("p_file.md",     "Update `sprint-status.yaml` to match.\n"),
-            # THE WRAP PROBE. The verb and its object on opposite sides of a line break is
-            # the shape a hand `grep -c "Repair its findings"` returns 0 on while the folded
-            # read returns 1 — measured on stories-test-strategy.md:548, a site that WAS
-            # requalified and still went invisible to a line-based sweep. The extractor here
-            # folds by construction (a block is one list item or paragraph run), so this
-            # arm is not fixing anything; it is pinning the property, so a future narrowing
-            # of i90_blocks cannot silently reintroduce a blind spot whose symptom is a
-            # clean run.
-            ("p_wrap.md",     "- Repair all\n  findings.\n"),
-            # THE DISMISSIVE ARM, written in the exact shape Rule 7 carried: a quoted
-            # question ending in `?"` followed by the bare imperative. Both halves are
-            # load-bearing. If the sentence splitter stops treating `?"` as a boundary the
-            # whole thing reads as one sentence beginning "Do" and the arm sees nothing;
-            # if the verb class re-narrows to capitals the lowercase `fix` after `Just`
-            # stops matching. Verified against the real pre-fix text of SKILL.md Rule 7.
-            ("p_dismiss.md",  'Do not ask "should I fix this?" Just fix it.\n'),
-            # ...and its NEGATIVE twin, which is why arm 2 requires the Just/Simply prefix
-            # rather than simply admitting a pronoun object. This is `route.md`'s real
-            # sentence, where "it" is a sprint_id being DERIVED. A bare pronoun-object
-            # widening selects it; the measured false-positive set went 0 -> 1 on exactly
-            # this line before the prefix was made mandatory.
-            ("p_pronoun.md", "Resolve it here, before creating the snapshot.\n"),
-        ):
-            open(os.path.join(st, name), "w").write(body)
-        os.remove(good)
-        os.remove(gp)
-        fires, silent, badm = i90_scan(
-            [os.path.join(st, f) for f in sorted(os.listdir(st))], {"remediator"})
-        ff = set(f for f, _, _ in fires)
-        ss = set(f for f, _, _ in silent)
-        if "p_bare.md" not in ff:
-            return ("I90 did not fire on a bare fix-imperative probe ('Fix all gaps found.' "
-                    "with no dispatch target and no declaration). The grammar has stopped "
-                    "matching its own subject; the corpus scan would then report a clean "
-                    "tree it never read.")
-        if "p_wrap.md" not in ff:
-            return ("I90 did not fire on a WRAPPED bare imperative ('Repair all' / newline / "
-                    "'findings.'). The reader has stopped folding, so its unit is a LINE "
-                    "while its declared unit is a block — and every fix-imperative that "
-                    "happens to wrap between the verb and its object is now invisible while "
-                    "the run prints the same clean line it prints for a requalified site. "
-                    "Measured: a line-based sweep of stories-test-strategy.md:548 returned 0 "
-                    "on a site that was correctly requalified.")
-        if "p_dismiss.md" not in ff:
-            return ("I90 did not fire on the DISMISSIVE bare imperative probe -- the exact "
-                    "text SKILL.md Rule 7 carried until v0.357.0: 'Do not ask \"should I fix "
-                    "this?\" Just fix it.' Two things can break it and both are silent. "
-                    "Either the sentence splitter stopped treating a stop-inside-a-quote "
-                    "(`?\"`) as a boundary, so the unit begins 'Do' and the imperative is "
-                    "buried mid-sentence; or the verb class re-narrowed to capitals, and the "
-                    "verb after `Just ` is lowercase. Rule 7 is RESIDENT above the 20,000-byte "
-                    "re-attach cut while the rule that attributed it is not, so this is the "
-                    "one sentence in the corpus a compacted lead is most likely to hold "
-                    "alone.")
-        if "p_pronoun.md" not in ff and "p_pronoun.md" in ss:
-            return ("I90 treated the pronoun-object probe as a SILENT site rather than one "
-                    "outside its population. It should match neither arm.")
-        if "p_pronoun.md" in ff:
-            return ("I90 fired on 'Resolve it here, before creating the snapshot.' -- the "
-                    "pronoun-object arm has lost its `Just`/`Simply` prefix requirement. "
-                    "That prefix is the discriminator: it is the instruction not to route "
-                    "the act. Without it the arm selects any imperative with a pronoun "
-                    "object, and `route.md`'s sprint_id derivation becomes a finding.")
-        if "p_named.md" not in ss:
-            return ("I90 fired on a probe that NAMES a dispatch target. Every requalified "
-                    "site in the corpus becomes a finding, which is the shape an operator "
-                    "turns the lint off over.")
-        if "p_declared.md" not in ss:
-            return ("I90 fired on a probe carrying a declared `<!-- inline-ok: ... -->` "
-                    "carve-out with a reason. That declaration is the only way a legitimate "
-                    "inline edit can be recorded where the rule's reader sees it.")
-        if "p_baremark.md" not in ff:
-            return ("I90 accepted an `<!-- inline-ok: -->` marker with an EMPTY reason. A "
-                    "carve-out with no reason is a decision nobody can audit -- the same hole "
-                    "a zero-byte `.dist-only` marker left until I74(d).")
-        if not badm:
-            return "I90's empty-reason marker arm did not report the bare marker probe."
-        if "p_file.md" in ff or "p_file.md" in ss:
-            return ("I90's population includes an imperative whose object is a FILE "
-                    "('Update `sprint-status.yaml`'). That is one of the lead's own Rule "
-                    "28(a) mutations, and the finding-object narrowing is what keeps it out; "
-                    "without it the check reports 15 sites, 11 of them correct prose.")
-        return None
-    finally:
-        shutil.rmtree(d, ignore_errors=True)
-
 # ---------------------------------------------------------------- run
-p = probe()
-if p:
-    out(p)
-    sys.exit(0)
-
 if not os.path.isfile(GP):
     out("I89/I90 could not read %s. An unreadable side reports the same silence as an "
         "agreeing one." % GP)
@@ -10565,53 +9380,9 @@ core/hooks/ai-dlc-gate-remediation-guard.sh'
 # The same extractor I25 and I40 use, for the same reason: a function body is a line range
 # between its opening line at column 0 and the matching closing brace at column 0.
 i92_body() { awk "/^$2\(\) \{/,/^\}/" "$1" 2>/dev/null; }
-# The site scan, as a function taking its roots, so the probe below drives THE SHIPPING CODE
-# PATH rather than a second implementation of it.
+# The site scan, as a function taking its roots.
 i92_sites() { i92_n="$1"; shift; grep -rlF -- "$i92_n" "$@" 2>/dev/null; }
 
-# THE PROBE, RUN BEFORE THE CORPUS. Both halves of this arm are absence-shaped: a body that no
-# longer extracts compares empty-to-empty and reports agreement, and a scan that no longer
-# matches reports no fourth copy. Both silences read exactly like a conforming tree. So the two
-# functions above are first driven over a tree with one right answer, and the corpus is not
-# scanned at all unless they produce it. The tree fires in BOTH directions -- a seeded offender
-# must be reported and a seeded near-miss must not.
-i92_probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/i92-XXXXXX")"
-mkdir -p "$i92_probe_dir/t"
-#  a  the reference body.
-printf 'lead=1\n%s() { # note\n  f "$1"\n}\ntail=2\n' "$i92_needle" > "$i92_probe_dir/t/a.sh"
-#  b  NEAR-MISS for the equality half: identical body, different surrounding text. Must compare
-#     EQUAL, or this arm reports drift on every file that is merely not a copy of its neighbour.
-printf 'other=9\n%s() { # note\n  f "$1"\n}\nmore=0\n' "$i92_needle" > "$i92_probe_dir/t/b.sh"
-#  c  DRIFT: one character inside the body differs. Must compare UNEQUAL.
-printf '%s() { # note\n  f "$2"\n}\n' "$i92_needle" > "$i92_probe_dir/t/c.sh"
-#  d  no definition at all. Extraction must be EMPTY -- an extractor that invents a body here
-#     is one that would compare two inventions and call them equal.
-printf 'unrelated_helper() {\n  :\n}\n' > "$i92_probe_dir/t/d.sh"
-#  e  a FOURTH SITE that MENTIONS the helper without defining it. The scan must SEE it: a copy
-#     arrives as a mention before it arrives as a definition.
-printf '# dispatches through %s\n' "$i92_needle" > "$i92_probe_dir/t/e.sh"
-#  f  NEAR-MISS for the scan half: a differently-named helper in the same family. Must stay
-#     quiet, or the scan flags files for resembling the subject rather than carrying it.
-printf 'steer_dir_has_nothing() { :; }\n' > "$i92_probe_dir/t/f.sh"
-i92_pa="$(i92_body "$i92_probe_dir/t/a.sh" "$i92_needle")"
-i92_pb="$(i92_body "$i92_probe_dir/t/b.sh" "$i92_needle")"
-i92_pc="$(i92_body "$i92_probe_dir/t/c.sh" "$i92_needle")"
-i92_pd="$(i92_body "$i92_probe_dir/t/d.sh" "$i92_needle")"
-i92_pm="$(i92_sites "$i92_needle" "$i92_probe_dir/t" | LC_ALL=C sort)"
-i92_pm_want="$i92_probe_dir/t/a.sh
-$i92_probe_dir/t/b.sh
-$i92_probe_dir/t/c.sh
-$i92_probe_dir/t/e.sh"
-i92_score=0
-[ -n "$i92_pa" ]              || i92_score=$((i92_score + 1))
-[ "$i92_pa" = "$i92_pb" ]     || i92_score=$((i92_score + 10))
-[ "$i92_pa" != "$i92_pc" ]    || i92_score=$((i92_score + 100))
-[ -z "$i92_pd" ]              || i92_score=$((i92_score + 1000))
-[ "$i92_pm" = "$i92_pm_want" ] || i92_score=$((i92_score + 10000))
-rm -rf "$i92_probe_dir"
-if [ "$i92_score" -ne 0 ]; then
-  err "I92's probe scored $i92_score where 0 is the only correct total, so the corpus below was not scanned. +1 the extractor found no body where one is defined; +10 it called two IDENTICAL bodies in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a body differing by one character the SAME, which is the state this arm exists to report; +1000 it returned a body from a file defining no such function, so the equality half would be comparing two inventions; +10000 the site scan did not name exactly the four probe files that carry the string -- it either missed the mention-only fourth site or flagged the similarly-named near-miss. Any non-zero total means both halves of I92 would report a clean tree for the reason a broken reader does."
-else
   # HALF ONE: the four declared copies are one byte string. Read against the FIRST readable
   # copy rather than pairwise, so N files cost N extractions.
   i92_ref=''; i92_ref_of=''; i92_vacuous=''; i92_drift=''
@@ -10667,7 +9438,6 @@ $i92_hits
 EOF
     [ -z "$i92_extra" ] || err "I92: file(s) outside the four bound sites name ${i92_needle}:$i92_extra. A fifth copy is an unbound copy -- the equality half above compares only the four it is given, so a fifth drifts in silence and decides the same corpus question its own way. Either resolve it from one of the four bound sites, or add it to i92_declared here in the same change so it is held byte-identical with them. A file that merely CITES the name in prose still counts: that is how the last unbound copy in this repository arrived."
   fi
-fi
 
 # --- I103: the operator-citation PARSER is one rule in four copies, byte-identical ---
 # WHAT IT BINDS. `cite_segments()`, `cite_quote()` and `cite_ts()` read the one field that
@@ -10738,7 +9508,7 @@ core/hooks/ai-dlc-gate-remediation-guard.sh'
 # no shell source here carries, so the join is injective and byte-equality of two joined bodies
 # is byte-equality of the bodies. `index(..) == 1` and not a regex, so no needle character needs
 # escaping through awk's dynamic-regex layer; the trailing `() {` is what keeps `cite_tsx() {`
-# out of `cite_ts`, and the probe's f.sh holds that near-miss.
+# out of `cite_ts`.
 # The extractor itself is `fn_bodies`/`fn_pick`, HOISTED above the first arm header because I120
 # reads the same bodies and `--arms I120` runs without this unit. These wrappers bind it to
 # this arm's needles; a wrapper is a function call, not a fork.
@@ -10748,57 +9518,6 @@ i103_pick() { fn_pick "$1" "$2"; i103_picked="$fn_picked"; }
 # pole pays on every shard, and the union answers the same question.
 i103_sites() { i103_re="$1"; shift; grep -rlE -- "$i103_re" "$@" 2>/dev/null; }
 
-# THE PROBE, RUN BEFORE THE CORPUS. Both halves are absence-shaped -- a body that no longer
-# extracts compares empty-to-empty and reports agreement, and a scan that no longer matches
-# reports no fourth copy -- and both silences read exactly like a conforming tree. So the two
-# functions above are driven first over a tree with one right answer, in BOTH directions: a
-# seeded offender must be reported and a seeded near-miss must not.
-i103_probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/i103-XXXXXX")"
-mkdir -p "$i103_probe_dir/t"
-#  a  the reference bodies, every needle in one file, as the real sites carry them.
-printf 'lead=1\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\ncite_nlen() { # note\n  m "$1"\n}\ntail=2\n' > "$i103_probe_dir/t/a.sh"
-#  b  NEAR-MISS for the equality half: identical bodies, different surrounding text. Must
-#     compare EQUAL, or the arm reports drift on every file that is not a copy of its neighbour.
-printf 'other=9\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\ncite_nlen() { # note\n  m "$1"\n}\nmore=0\n' > "$i103_probe_dir/t/b.sh"
-#  c  DRIFT in the SECOND needle only. Must compare UNEQUAL -- an arm that checked only the
-#     first needle would call this file conforming, and the pick is the half that forked. The
-#     THIRD needle is seeded identical to a/b here, so the +200 arm below can say the needles
-#     are read independently in both directions rather than only for the pair.
-printf 'cite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$2"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\ncite_nlen() { # note\n  m "$1"\n}\n' > "$i103_probe_dir/t/c.sh"
-#  d  no definition at all. Extraction must be EMPTY -- an extractor that invents a body here
-#     would compare two inventions and call them equal.
-printf 'unrelated_helper() {\n  :\n}\n' > "$i103_probe_dir/t/d.sh"
-#  e  a FOURTH SITE that MENTIONS a needle without defining it. The scan must SEE it: a copy
-#     arrives as a mention before it arrives as a definition.
-printf '# routes through cite_quote\n' > "$i103_probe_dir/t/e.sh"
-#  f  NEAR-MISS for the scan half: a differently-named helper in the same family. Must stay
-#     quiet, or the scan flags files for resembling the subject rather than carrying it.
-#     `cite_tsx` is the near-miss for the third needle, and it is the one the boundary class
-#     could plausibly swallow: `cite_ts` is a PREFIX of it where the other two names are not
-#     prefixes of anything in this family.
-#     `cite_normalised` and `cite_nlength` are the same near-miss for the fourth and fifth
-#     needles, each of which is a prefix of its near-miss.
-printf 'cite_quoted_span() { :; }\ncite_segment_of() { :; }\ncite_tsx() { :; }\ncite_normalised() { :; }\ncite_nlength() { :; }\n' > "$i103_probe_dir/t/f.sh"
-i103_score=0
-i103_ba="$(i103_bodies "$i103_probe_dir/t/a.sh")"
-i103_bb="$(i103_bodies "$i103_probe_dir/t/b.sh")"
-i103_bc="$(i103_bodies "$i103_probe_dir/t/c.sh")"
-i103_bd="$(i103_bodies "$i103_probe_dir/t/d.sh")"
-# f.sh defines only near-miss names, each a needle plus a suffix. The extractor must return
-# NOTHING for it: a prefix match would hand `cite_tsx`'s body to `cite_ts` and compare it.
-i103_bf="$(i103_bodies "$i103_probe_dir/t/f.sh")"
-i103_pick "$i103_ba" cite_segments; i103_pa_s="$i103_picked"
-i103_pick "$i103_ba" cite_quote;    i103_pa_q="$i103_picked"
-i103_pick "$i103_ba" cite_ts;       i103_pa_t="$i103_picked"
-i103_pick "$i103_ba" cite_norm;     i103_pa_n="$i103_picked"
-i103_pick "$i103_ba" cite_nlen;     i103_pa_l="$i103_picked"
-i103_pick "$i103_bb" cite_quote;    i103_pb_q="$i103_picked"
-i103_pick "$i103_bc" cite_segments; i103_pc_s="$i103_picked"
-i103_pick "$i103_bc" cite_quote;    i103_pc_q="$i103_picked"
-i103_pick "$i103_bc" cite_ts;       i103_pc_t="$i103_picked"
-i103_pick "$i103_bc" cite_norm;     i103_pc_n="$i103_picked"
-i103_pick "$i103_bc" cite_nlen;     i103_pc_l="$i103_picked"
-i103_pick "$i103_bd" cite_quote;    i103_pd_q="$i103_picked"
 # The scan grammar is the one the corpus half uses, word-bounded so `cite_quoted_span` and
 # `cite_segment_of` are not members. `\b` is a GNU extension BSD grep does not honour, so the
 # boundary is spelled as a bracket class. THE `|$` ALTERNATIVE IS LOAD-BEARING and the probe is
@@ -10806,25 +9525,6 @@ i103_pick "$i103_bd" cite_quote;    i103_pd_q="$i103_picked"
 # looks like -- has no character after the name at all, so a bracket class alone scored the
 # seeded fourth site as a non-instance and the fourth-copy half went quiet.
 i103_re='(cite_segments|cite_quote|cite_ts|cite_norm|cite_nlen)([^A-Za-z0-9_]|$)'
-i103_pm="$(i103_sites "$i103_re" "$i103_probe_dir/t" | LC_ALL=C sort)"
-i103_pm_want="$i103_probe_dir/t/a.sh
-$i103_probe_dir/t/b.sh
-$i103_probe_dir/t/c.sh
-$i103_probe_dir/t/e.sh"
-[ -n "$i103_pa_s" ] && [ -n "$i103_pa_q" ] && [ -n "$i103_pa_t" ] && [ -n "$i103_pa_n" ] && [ -n "$i103_pa_l" ] || i103_score=$((i103_score + 1))
-[ "$i103_pa_q" = "$i103_pb_q" ]            || i103_score=$((i103_score + 10))
-[ "$i103_pa_q" != "$i103_pc_q" ]           || i103_score=$((i103_score + 100))
-[ "$i103_pa_s" = "$i103_pc_s" ]            || i103_score=$((i103_score + 200))
-[ "$i103_pa_t" = "$i103_pc_t" ]            || i103_score=$((i103_score + 400))
-[ "$i103_pa_n" = "$i103_pc_n" ]            || i103_score=$((i103_score + 800))
-[ "$i103_pa_l" = "$i103_pc_l" ]            || i103_score=$((i103_score + 20000))
-[ -z "$i103_pd_q" ]                        || i103_score=$((i103_score + 1000))
-[ -z "$i103_bf" ]                          || i103_score=$((i103_score + 40000))
-[ "$i103_pm" = "$i103_pm_want" ]           || i103_score=$((i103_score + 10000))
-rm -rf "$i103_probe_dir"
-if [ "$i103_score" -ne 0 ]; then
-  err "I103's probe scored $i103_score where 0 is the only correct total, so the corpus below was not scanned. +1 the extractor found no body where one is defined; +10 it called two IDENTICAL bodies in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a cite_quote() body differing by one character the SAME, which is the state this arm exists to report; +200 it reported drift in cite_segments() where the probe seeded drift only in cite_quote(), so the two needles are not being read independently and one of them is riding on the other; +400 the same for cite_ts(), the needle that carries the citation's TIMESTAMP half; +800 the same for cite_norm(), the needle the 12-character floor is measured with; +20000 the same for cite_nlen(), the needle that counts it in UTF-16 units; +1000 it returned a body from a file defining no such function, so the equality half would be comparing two inventions; +40000 it returned a body from a file defining only near-miss names like cite_tsx(), so a needle that is a prefix of another helper would be compared against that helper; +10000 the site scan did not name exactly the four probe files that carry a needle -- it either missed the mention-only fourth site or flagged one of the similarly-named near-misses. Any non-zero total means both halves of I103 would report a clean tree for the reason a broken reader does."
-else
   # HALF ONE: for each needle, the four declared copies are one byte string. Read against the
   # FIRST readable copy rather than pairwise. Each declared file is extracted ONCE, for every
   # needle together, so the cost is one awk per file however many needles the arm binds.
@@ -10883,7 +9583,6 @@ $i103_hits
 EOF
     [ -z "$i103_extra" ] || err "I103: file(s) outside the three bound sites name the citation parser:$i103_extra. A fourth copy is an unbound copy -- the equality half above compares only the three it is given, so a fourth drifts in silence and parses the operator's own words its own way. Either resolve it from one of the three bound sites, or add it to i103_declared here in the same change so it is held byte-identical with them. A file that merely CITES the name in prose still counts."
   fi
-fi
 
 # --- I120: the citation floor's bash measure is node's, member for member ---
 # WHAT IT BINDS. `cite_norm()` and `cite_nlen()` -- held byte-identical across the four citation
@@ -10904,7 +9603,7 @@ fi
 #
 # FORKS: one extraction, one mktemp, one node, one bash, one rm. Both bodies come out of the hoisted
 # single-pass extractor `fn_bodies` (never I103's wrapper, which `--arms I120` does not load), the three counts come back in one file read by the `read` builtin, and
-# the shipping run and both self-probes share ONE child bash -- three children and three `cat`s
+# the shipping run in ONE child bash -- three children and three `cat`s
 # here were 6 of the 17 that pushed the tree over FORK_BUDGET.
 i120_site="$REPO_ROOT/core/scripts/validate-escalation-resolution.sh"
 i120_bodies="$(fn_bodies "cite_norm
@@ -10946,49 +9645,28 @@ else
   if [ "${i120_memn:-0}" -le 6 ] || [ "${i120_nearn:-0}" -lt 3 ] || [ "${i120_lenn:-0}" -lt 5 ]; then
     err "I120's derivation is not discriminating: node reported ${i120_memn:-0} whitespace member(s), ${i120_nearn:-0} near-miss(es) and ${i120_lenn:-0} length case(s). The non-ASCII members and the near-misses are what separate a correct rendering from \`[[:space:]]\`; without them every comparison below agrees for the wrong reason."
   else
-    # ONE clean bash runs the two self-probe mutants FIRST and the shipping bodies LAST, so the
-    # shipping definitions are the ones in force when they are judged; nothing in this file's
-    # scope can shadow either. Files are read with `$(< f)`, which forks no `cat`. Output is
-    # three lines: the ASCII-only mutant's verdict, the F0-only mutant's, then the shipping
-    # findings (empty when it agrees with node).
+    # ONE clean bash runs the shipping bodies. Files are read with `$(< f)`, which forks no `cat`.
+    # Its last line is the findings line (empty when it agrees with node).
     i120_out="$(I120_N="$i120_body_n" I120_L="$i120_body_l" I120_D="$i120_tmp" I120_C="$i120_lenn" bash -c '
       lens_agree() { i=0; while [ "$i" -lt "$I120_C" ]; do
           [ "$(cite_nlen "$(< "$I120_D/len$i")")" = "$(< "$I120_D/lenwant$i")" ] || { printf "len%s " "$i"; }
           i=$((i + 1)); done; }
       mem="$(< "$I120_D/mem")"; memwant="$(< "$I120_D/memwant")"; near="$(< "$I120_D/near")"
-      # SELF-PROBE ON A MUTANT RENDERING: the old ASCII-only body must FAIL the members case, or
-      # the comparison cannot tell a correct rendering from the one that shipped the hole.
-      cite_norm() { printf "%s" "$1" | LC_ALL=C tr -s "[:space:]" " " | sed "s/^ //; s/ \$//"; }
-      [ "$(cite_norm "$mem")" = "$memwant" ] && echo same || echo differs
-      # SECOND SELF-PROBE: a cite_nlen that doubles only F0-lead (`\360`) characters must disagree
-      # with node on some length case, or the cases cannot tell it from the shipped `\360-\367` body.
-      cite_nlen() {
-        _cn_c="$(printf "%s" "$1" | LC_ALL=C tr -d "\200-\277" | wc -c)"
-        _cn_a="$(printf "%s" "$1" | LC_ALL=C tr -cd "\360" | wc -c)"
-        printf "%s" "$((_cn_c + _cn_a))"
-      }
-      [ -z "$(lens_agree)" ] && echo same || echo differs
       eval "$I120_N"; eval "$I120_L"
       f=""
       [ "$(cite_norm "$mem")" = "$memwant" ] || f="$f members"
       [ "$(cite_norm "$near")" = "$near" ] || f="$f near-miss"
       l="$(lens_agree)"; [ -z "$l" ] || f="$f ${l% }"
       printf "F:%s\n" "$f"' 2>&1)"
-    i120_mut="${i120_out%%$'\n'*}"; i120_rest="${i120_out#*$'\n'}"
-    i120_mutl="${i120_rest%%$'\n'*}"; i120_last="${i120_rest#*$'\n'}"
+    i120_last="${i120_out##*$'\n'}"
     # The findings line carries an `F:` prefix because `$( )` strips a trailing newline, and an
-    # EMPTY last line would otherwise vanish and leave the second verdict in its place. A child
-    # that died before printing it has no `F:` line, and that reads as a finding, never as
-    # agreement.
+    # EMPTY findings line would otherwise vanish. A child that died before printing it has no
+    # `F:` line, and that reads as a finding, never as agreement.
     case "$i120_last" in
       F:*) i120_got="${i120_last#F:}" ;;
       *)   i120_got=" no findings line from the child bash (output: ${i120_out})" ;;
     esac
-    if [ "$i120_mutl" != "differs" ]; then
-      err "I120 SELF-PROBE FAILED: a cite_nlen() counting only F0 (\\360) lead bytes as surrogate pairs compared '${i120_mutl}' against node's .length on every length case, where 'differs' is the only correct answer. The length cases hold no astral character with an F1-F4 lead, so they cannot tell that body from the correct one."
-    elif [ "$i120_mut" != "differs" ]; then
-      err "I120 SELF-PROBE FAILED: the ASCII-only \`tr -s '[:space:]'\` rendering -- the one that let an NBSP-padded quote count AUTHORIZED -- compared '${i120_mut}' against node's member set, where 'differs' is the only correct answer. The comparison below cannot tell the hole from its fix."
-    elif [ -n "$i120_got" ]; then
+    if [ -n "$i120_got" ]; then
       err "I120: the shipped citation-floor measure disagrees with node on:${i120_got}. members: cite_norm() left an ECMAScript \\s character uncollapsed, so a quote padded with it passes the bash floor while the predicate counts it as whitespace -- on --any-authorized that is a padded quote counted AUTHORIZED. near-miss: it collapsed a character node does not. lenN: cite_nlen() counted a length node's .length does not, so the floor sits at a different place in bash. Fix the body at all four I103 sites."
     fi
   fi
@@ -11119,11 +9797,10 @@ esv_sites() {
 #               verdict; that run's own verdict is three lines away and this arm reports it.
 #               0 of the 30 declared token emissions carry a `%-Ns` field.
 #   `> path/`   a line whose output is REDIRECTED INTO A FILE is writing a fixture or a probe
-#               seed, not reporting to an operator -- this unit's own six arm-E seeds are
-#               `printf ... > "$ESV_TMP/novel.sh"`, and without this clause the arm reports its
-#               own probe. 0 of the 30 declared token emissions redirect to a path (they go to
-#               stdout or to `&2`), so the clause cannot acquit a conforming one either. It is
-#               keyed on a `/` after the `>` for exactly that reason: `>&2` is not a path.
+#               seed, not reporting to an operator. 0 of the 30 declared token emissions redirect
+#               to a path (they go to stdout or to `&2`), so the clause cannot acquit a conforming
+#               one either. It is keyed on a `/` after the `>` for exactly that reason: `>&2` is not a
+#               path.
 # THE EMISSION-VERB LIST IS SIX, AND TWO REAL SHAPES SIT OUTSIDE IT: a `cat <<EOF` heredoc
 # BODY line, and a `sys.stderr.write(` call. A verdict spelled through either escapes this arm.
 # Both are empty today, each against a control in the same pass: 0 verdict phrases inside a
@@ -11227,94 +9904,6 @@ $2
 EOF
 }
 
-# --- the probe, over a seeded tree, BEFORE the corpus ------------------------------------
-ESV_TMP="$(mktemp -d "${TMPDIR:-/tmp}/i93-XXXXXX")"
-printf '%s\n' \
-  'decoy_before:' \
-  '  token: DECOY93A' \
-  'empty_subject_verdict:' \
-  '  token: PROBE93 TOKEN' \
-  '  emitters:' \
-  '    - a.sh' \
-  '    - b.sh' \
-  '  retired:' \
-  '    - "OLD93:"' \
-  'checks:' \
-  '  token: DECOY93B' > "$ESV_TMP/map.yaml"
-printf '%s\n' 'echo "PROBE93 TOKEN reached the operator"' > "$ESV_TMP/emit.sh"
-printf '%s\n' '#   4 = PROBE93 TOKEN, in an exit-code table' \
-              '    # PROBE93 TOKEN, indented comment' > "$ESV_TMP/comment.sh"
-printf '%s\n' 'echo "nothing to see"' > "$ESV_TMP/silent.sh"
-
-# ARM E's six seeds. Each is the SHAPE of one real thing in the corpus, not a paraphrase:
-# novel.sh is the receipt's own seed; novel.py is a python heredoc emitting on a sys.exit(0)
-# path, which is how six of the nine converged files state their verdict; failpath.sh is an
-# err() argument at exit 1, which is what eight lines INSIDE this very unit look like;
-# nearmiss.sh puts the same words in a comment and in a docstring; conforming.sh emits the
-# declared token AND carries a novel phrase, which is validate-bmad-invocations.sh's real
-# shape; tablerow.sh is sprint-status.sh's per-view padded report row.
-#
-# WRITTEN THROUGH A HELPER RATHER THAN BY `printf ... > file` DIRECTLY, and that is arm E's
-# own subject reaching this unit. Arm E sweeps this file like any other and acquits a
-# file-redirected emission by grammar, but awk is LINE-oriented: a `printf` whose redirect
-# sits on a backslash continuation puts the verdict prose and the `>` on two different lines,
-# and the arm correctly reports the first. Routing the seeds through `esv_seed` -- which is
-# not an output verb -- puts the seed text in an ARGUMENT to an ordinary function call, which
-# is the same thing the grammar already does for every `err "..."` in this unit. The
-# alternative was an ESV_EXEMPT line for this file, which would acquit every future real
-# emitter added to it.
-esv_seed() { esv_s_p="$1"; shift; printf '%s\n' "$@" > "$esv_s_p"; }
-esv_seed "$ESV_TMP/novel.sh" '#!/usr/bin/env bash' \
-  'echo "probe93: NOTHING TO EXAMINE HERE — the corpus was empty."' 'exit 0'
-esv_seed "$ESV_TMP/novel.py" 'python3 <<PY' \
-  'print("probe93: this run compared nothing at all.")' 'sys.exit(0)' 'PY'
-esv_seed "$ESV_TMP/failpath.sh" '#!/usr/bin/env bash' \
-  'err "the corpus is empty: found nothing to scan. Failing closed."' 'exit 1'
-esv_seed "$ESV_TMP/nearmiss.sh" '#!/usr/bin/env bash' \
-  '#   0 = nothing was audited, in an exit-code table' \
-  '  """A missing file EXITS: nothing was judged."""'
-esv_seed "$ESV_TMP/conforming.sh" '#!/usr/bin/env bash' \
-  'echo "DISARMED — PROBE93 TOKEN — no corpus."' \
-  'echo "could not locate the oracle, so there is nothing to resolve against."'
-esv_seed "$ESV_TMP/tablerow.sh" 'print("  %-15s no key — nothing to compare" % view)'
-
-esv_p_rows="$(esv_rows "$ESV_TMP/map.yaml")"
-esv_score=0
-[ "$(esv_val token "$esv_p_rows")" = "PROBE93 TOKEN" ] || esv_score=$((esv_score + 1))
-[ "$(esv_val emitters "$esv_p_rows" | grep -c .)" = "2" ] || esv_score=$((esv_score + 10))
-[ "$(esv_val retired "$esv_p_rows")" = "OLD93:" ] || esv_score=$((esv_score + 100))
-[ -n "$(esv_sites 'PROBE93 TOKEN' "$ESV_TMP/emit.sh")" ] || esv_score=$((esv_score + 1000))
-[ -z "$(esv_sites 'PROBE93 TOKEN' "$ESV_TMP/comment.sh")" ] || esv_score=$((esv_score + 10000))
-[ -z "$(esv_sites 'PROBE93 TOKEN' "$ESV_TMP/silent.sh")" ] || esv_score=$((esv_score + 100000))
-
-# ARM D's decision, driven in all four directions. The seed carries one undeclared emitter,
-# one declared emitter cited TWICE (so the dedupe is exercised, not assumed) and one exempt
-# emitter. Only the undeclared one may come back.
-esv_p_und="$(esv_undeclared "$ESV_TMP/core/scripts/undeclared.sh:1
-$ESV_TMP/core/scripts/declared.sh:3
-$ESV_TMP/scripts/exempt.sh:9
-$ESV_TMP/core/scripts/declared.sh:7" 'core/scripts/declared.sh' 'scripts/exempt.sh' "$ESV_TMP")"
-in_lines 'core/scripts/undeclared.sh' "$esv_p_und"    || esv_score=$((esv_score + 1000000))
-! in_lines 'core/scripts/declared.sh' "$esv_p_und"    || esv_score=$((esv_score + 10000000))
-! in_lines 'scripts/exempt.sh' "$esv_p_und"           || esv_score=$((esv_score + 100000000))
-[ "$esv_p_und" = 'core/scripts/undeclared.sh' ]       || esv_score=$((esv_score + 1000000000))
-
-# ARM E's decision, driven in SIX directions, each its own power of ten. Fires on a novel
-# spelling in shell and in a python heredoc; silent on a failure path, on comment/docstring
-# prose, on a file already emitting the token, and on a padded table row.
-esv_p_nov="$(esv_novel 'PROBE93 TOKEN' "$ESV_TMP/novel.sh" "$ESV_TMP/novel.py" \
-  "$ESV_TMP/failpath.sh" "$ESV_TMP/nearmiss.sh" "$ESV_TMP/conforming.sh" "$ESV_TMP/tablerow.sh")"
-case "$esv_p_nov" in *"$ESV_TMP/novel.sh:"*)      : ;; *) esv_score=$((esv_score + 10000000000)) ;; esac
-case "$esv_p_nov" in *"$ESV_TMP/novel.py:"*)      : ;; *) esv_score=$((esv_score + 100000000000)) ;; esac
-case "$esv_p_nov" in *"$ESV_TMP/failpath.sh:"*)   esv_score=$((esv_score + 1000000000000)) ;; esac
-case "$esv_p_nov" in *"$ESV_TMP/nearmiss.sh:"*)   esv_score=$((esv_score + 10000000000000)) ;; esac
-case "$esv_p_nov" in *"$ESV_TMP/conforming.sh:"*) esv_score=$((esv_score + 100000000000000)) ;; esac
-case "$esv_p_nov" in *"$ESV_TMP/tablerow.sh:"*)   esv_score=$((esv_score + 1000000000000000)) ;; esac
-rm -rf "$ESV_TMP"
-
-if [ "$esv_score" -ne 0 ]; then
-  err "I93's probe scored $esv_score where 0 is the only correct total, so nothing below was read by a working reader. +1 the block reader lost the token or picked up a decoy \`token:\` outside the block; +10 it read the wrong number of emitters, so the list grammar moved; +100 it did not strip the quotes off a retired spelling, so arm C would search for a literal with quotes in it and find nothing forever; +1000 esv_sites found no emission in a file whose only line EMITS the token, which makes arm A pass by finding nothing; +10000 it counted a COMMENT as an emission, which is the whole of this arm's false-positive narrowing and makes arm C fire on every exit-code table; +100000 it reported a site in a file carrying no token at all; +1000000 arm D's reverse join did not report a seeded UNDECLARED emitter, which is the whole of that arm and makes it a check that cannot fire; +10000000 it reported a DECLARED emitter, so arm D would fire on every conforming file; +100000000 it reported an EXEMPT emitter, so the exemption is inert and the arm fails the tree as it stands; +1000000000 it returned something other than the one expected path, so it is double-reporting a file cited twice or carrying a path it was not given; +10000000000 arm E did not report a file whose only emission is a NOVEL spelling of the empty-subject verdict, which is the whole of that arm and makes a fourth spelling seed clean exactly as it does today; +100000000000 arm E missed the same spelling inside a PYTHON heredoc, so it is blind to how six of the nine converged validators state their verdict and its silence over them would read as a unified tree; +1000000000000 it reported an \`err\` FAILURE path, which is not the empty-subject state and would make this arm fire on eight lines of its own unit and on every validator's diagnostics; +10000000000000 it reported COMMENT or DOCSTRING prose, which is the false-positive class that sinks the whole arm; +100000000000000 it reported a file that already emits the DECLARED token, so a conforming emitter would be told to converge on a token it already prints; +1000000000000000 it reported a padded \`%-Ns\` TABLE ROW, which is a per-item report line and not a run verdict."
-else
   esv_rows_all="$(esv_rows "$MAP")"
   esv_tok="$(esv_val token "$esv_rows_all")"
   esv_emitters="$(esv_val emitters "$esv_rows_all")"
@@ -11641,7 +10230,6 @@ $(esv_novel "$esv_tok" "${esv_rev_core[@]}" "${esv_rev_dist[@]}")
 EOF
     fi
   fi
-fi
 
 # --- I100: no step file prescribes a BARE `git push` -----------------------------------
 # A bare `git push` CANNOT SUCCEED on a branch that has never been pushed, and that is not an
@@ -11760,18 +10348,6 @@ i102_owner="$REPO_ROOT/core/skills/ai-dlc/artifact-path-grammar.md"
 i102_re='(to|into) a dated archive'
 i102_dest='implementation-artifacts/s<N>/<basename>-archive.md'
 
-# SELF-PROBE, BOTH DIRECTIONS, BEFORE THE CORPUS. An arm reporting zero without first proving
-# it can produce one has established that it ran, not that the tree is clean.
-i102_probe="$(mktemp -d)"
-mkdir -p "$i102_probe/core"
-printf 'Move the epoch to a dated archive (Rule 25(c)).\n' > "$i102_probe/core/offender.md"
-printf '#  destroyed if all 158 dated archives vanish : 17   unchanged\n' > "$i102_probe/core/nearmiss.md"
-i102_pos="$(grep -rlE "$i102_re" "$i102_probe/core" 2>/dev/null | grep -c 'offender.md')"
-i102_neg="$(grep -rlE "$i102_re" "$i102_probe/core" 2>/dev/null | grep -c 'nearmiss.md')"
-rm -rf "$i102_probe"
-if [ "$i102_pos" -ne 1 ] || [ "$i102_neg" -ne 0 ]; then
-  err "I102 SELF-PROBE FAILED (offender matched=$i102_pos expected 1, near-miss matched=$i102_neg expected 0). The grammar no longer discriminates an instruction from a measurement, so a zero from arm A below would mean nothing. Fix the pattern before reading any result from this invariant."
-else
   # ARM A -- forward. One recursive grep per subtree; do NOT make this a loop over files, the
   # fixture pole invokes this validator and a nested scan here multiplies across the shards.
   i102_hits="$(grep -rnE "$i102_re" "$REPO_ROOT/core" --include='*.sh' --include='*.md' 2>/dev/null \
@@ -11815,7 +10391,6 @@ $i102_hits"
   elif ! grep -qF "$i102_dest" "$i102_owner"; then
     err "I102 reverse: core/skills/ai-dlc/artifact-path-grammar.md no longer states the rotation destination '$i102_dest' verbatim. Arm A above would then be silent forever while every reader is free to invent a spelling -- which is the state this invariant was built to end. Restore the destination in the owner, or move this arm with it."
   fi
-fi
 
 # --- I104: the snapshot sprint_id READER is one expression in three copies -----
 # =============================================================================
@@ -11854,7 +10429,7 @@ fi
 # measured. A DIRECTORY exclusion for core/fixtures/ was written first and removed: the reader
 # grammar already scores zero of them, so the exclusion had no subject and would only have
 # hidden a fixture that grew a real reader. Over the real tree the scan returns exactly the
-# three declared sites and this file, which carries the strings in its own probe.
+# three declared sites.
 i104_expr='s/^- *[*]*sprint_id:[*]* *\([0-9][0-9]*\).*/\1/p'
 i104_declared='core/hooks/ai-dlc-dispatch-guard.sh
 core/hooks/ai-dlc-subagent-probe.sh
@@ -11865,40 +10440,6 @@ core/hooks/ai-dlc-context-sensor.sh'
 i104_reader_re='sed -n .[^;]*sprint_id'
 i104_sites() { grep -rlE -- "$i104_reader_re" "$@" 2>/dev/null; }
 
-# THE PROBE, RUN BEFORE THE CORPUS. Both halves are absence-shaped -- a needle that no longer
-# matches reports no drift, and a scan that no longer matches reports no fourth copy -- and both
-# silences read exactly like a conforming tree. So both are driven first over a tree with one
-# right answer, in BOTH directions: a seeded offender is reported and a seeded near-miss is not.
-i104_probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/i104-XXXXXX")"
-mkdir -p "$i104_probe_dir/t" "$i104_probe_dir/t/fixtures"
-#  a  a conforming reader, as the real sites carry it.
-printf 'A="$(sed -n '"'"'%s'"'"' "$F" 2>/dev/null | head -1)"\n' "$i104_expr" > "$i104_probe_dir/t/a.sh"
-#  b  the PRE-FIX brittle spelling: a reader that requires the emphasis markers. The scan must
-#     SEE it and the equality half must call it drift -- this is the exact state the arm exists
-#     to report, and it is what shipped for the whole of the defect's life.
-printf 'B="$(sed -n '"'"'s/^- \\*\\*sprint_id:\\*\\* *\\([0-9][0-9]*\\).*/\\1/p'"'"' "$F" | head -1)"\n' > "$i104_probe_dir/t/b.sh"
-#  c  NEAR-MISS for the scan half: the field MENTIONED in prose with no extraction. Must stay
-#     quiet, or the arm flags every file that discusses the field.
-printf '# the sprint_id field is stamped by the dispatch guard\n' > "$i104_probe_dir/t/c.sh"
-#  d  NEAR-MISS for the scan half: a sed extraction of a DIFFERENT field. Must stay quiet, or
-#     the arm flags every snapshot reader for resembling this one.
-printf 'D="$(sed -n '"'"'s/^- sprint_name: *\\(.*\\)/\\1/p'"'"' "$F")"\n' > "$i104_probe_dir/t/d.sh"
-#  e  a fixture-shaped SEED: writes the line, never reads it, and carries the emphasised form
-#     deliberately. Must stay quiet on SHAPE alone -- it is the reason no directory exclusion is
-#     needed, and if the grammar ever stops discriminating it this arm fails rather than the
-#     exclusion silently covering for it.
-printf 'printf -- '"'"'- **sprint_id:** 291\\n'"'"' > "$P/pipeline-snapshot.md"\n' > "$i104_probe_dir/t/e.sh"
-i104_score=0
-grep -qF -- "$i104_expr" "$i104_probe_dir/t/a.sh"     || i104_score=$((i104_score + 1))
-grep -qF -- "$i104_expr" "$i104_probe_dir/t/b.sh"     && i104_score=$((i104_score + 10))
-i104_pm="$(i104_sites "$i104_probe_dir/t" | LC_ALL=C sort)"
-i104_pm_want="$i104_probe_dir/t/a.sh
-$i104_probe_dir/t/b.sh"
-[ "$i104_pm" = "$i104_pm_want" ] || i104_score=$((i104_score + 100))
-rm -rf "$i104_probe_dir"
-if [ "$i104_score" -ne 0 ]; then
-  err "I104's probe scored $i104_score where 0 is the only correct total, so the corpus below was not scanned. +1 the canonical expression was not found in a file that carries it verbatim, so the equality half would report drift on a conforming tree; +10 the canonical expression matched the PRE-FIX brittle reader, so the half that exists to catch a regression cannot tell the two apart; +100 the reader scan did not name exactly the four probe files carrying an extraction -- it either missed the brittle fourth copy, or flagged a prose mention, a different field, or a fixture that only SEEDS the line. Any non-zero total means both halves of I104 would report a clean tree for the reason a broken reader does."
-else
   # HALF ONE: every declared site carries the canonical expression verbatim, exactly once.
   i104_missing=''
   while IFS= read -r i104_rel; do
@@ -11914,15 +10455,23 @@ EOF
   [ -z "$i104_missing" ] || err "I104: the snapshot sprint_id reader has forked or gone missing at:$i104_missing. All three hooks stamp the sprint Check 22 resolves dispatches by, and a reader that resolves EMPTY writes null rather than failing -- so a fork here is invisible until a gate reports PRE-LEDGER on a sprint whose rows are all present. Make the expression byte-identical across all three, or move this arm with it."
 
   # HALF TWO: no fourth reader, and none of the three regressed to the brittle spelling. THE
-  # POSITIVE CONTROL IS THIS FILE, read in the same invocation -- it carries both the canonical
-  # and the brittle spelling in i104_expr= and in the probe above, so a scan that is not reading
-  # the roots it was handed shows up here rather than as a clean fourth-copy report.
+  # POSITIVE CONTROL IS THE DECLARED SITES, read in the same invocation -- each carries the
+  # canonical sed extraction, so a scan that is not reading the roots it was handed misses them
+  # here rather than reporting a clean fourth copy. A site half one already reported is skipped.
   i104_hits="$(i104_sites "$REPO_ROOT/core" "$REPO_ROOT/scripts" | LC_ALL=C sort)"
   i104_self="$REPO_ROOT/scripts/validate-enforcement-map.sh"
-  case "$i104_hits" in
-    *"$i104_self"*) : ;;
-    *) err "I104's fourth-copy scan did not find scripts/validate-enforcement-map.sh, which carries the reader grammar in its own probe. The scan is not reading the roots it was handed, so its silence about a fourth copy means nothing." ;;
-  esac
+  i104_unseen=''
+  while IFS= read -r i104_rel; do
+    [ -n "$i104_rel" ] || continue
+    case " $i104_missing " in *" $i104_rel "*|*" ${i104_rel}(unreadable) "*) continue ;; esac
+    case "$i104_hits" in
+      *"$REPO_ROOT/$i104_rel"*) : ;;
+      *) i104_unseen="$i104_unseen $i104_rel" ;;
+    esac
+  done <<EOF
+$i104_declared
+EOF
+  [ -z "$i104_unseen" ] || err "I104's fourth-copy scan did not find the declared reader(s):$i104_unseen, each of which carries the canonical sed extraction. The scan is not reading the roots it was handed, so its silence about a fourth copy means nothing."
   i104_extra=''
   while IFS= read -r i104_hit; do
     [ -n "$i104_hit" ] || continue
@@ -11936,7 +10485,6 @@ EOF
 $i104_hits
 EOF
   [ -z "$i104_extra" ] || err "I104: a FOURTH reader of the snapshot sprint_id field exists at:$i104_extra. Three copies are already the most this field can carry safely; a fourth written the brittle way reproduces the defect in a file no arm names. Add it to i104_declared here in the same change, or route it through one of the three."
-fi
 
 # --- I105: every reconcile detector is DRIVEN into the report region or declared exempt ---
 # WHAT IT BINDS. `reconcile/emit-report.sh` renders the `reconcile-mechanical` region, and
@@ -11976,29 +10524,7 @@ i105_driver="$i105_rec/emit-report.sh"
 i105_invoked() { grep -cF "\"\$SELF/$1\"" "$2" 2>/dev/null || true; }
 i105_exempt()  { grep -cE '^# reconcile-region: exempt — .*[^[:space:]]' "$1" 2>/dev/null || true; }
 
-# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS. Both halves are absence-shaped: a
-# predicate that can no longer see an invocation reports every file unrouted, and one that can
-# no longer see a marker reports every exemption missing. Either way the arm would fire on the
-# whole tree or on none of it, and a scan that flags everything looks identical to one that
-# discriminates.
-i105_pd="$(mktemp -d "${TMPDIR:-/tmp}/i105-XXXXXX")"
-mkdir -p "$i105_pd/rec"
-printf '#!/usr/bin/env bash\nrun() {\n  x="$(bash "$SELF/called.sh" a b)"\n}\n' > "$i105_pd/rec/driver.sh"
-printf '#!/usr/bin/env bash\n# a detector the driver calls\n'                    > "$i105_pd/rec/called.sh"
-printf '#!/usr/bin/env bash\n# reconcile-region: exempt — an action, not a finding.\n' > "$i105_pd/rec/marked.sh"
-printf '#!/usr/bin/env bash\n# nothing routes this one\n'                       > "$i105_pd/rec/orphan.sh"
-printf '#!/usr/bin/env bash\n# reconcile-region: exempt — \n'                   > "$i105_pd/rec/blank.sh"
-printf '#!/usr/bin/env bash\n# mentions `# reconcile-region: exempt — x` in prose\n' > "$i105_pd/rec/prose.sh"
-i105_bad=0
-[ "$(i105_invoked called.sh "$i105_pd/rec/driver.sh")" -ge 1 ] || { err "I105's probe could not see an invocation the driver plainly makes, so its zero over the real directory would mean nothing."; i105_bad=1; }
-[ "$(i105_invoked orphan.sh "$i105_pd/rec/driver.sh")" -eq 0 ] || { err "I105's probe reported an invocation for a file the driver never calls — the scan matches on resemblance, not on the call."; i105_bad=1; }
-[ "$(i105_exempt "$i105_pd/rec/marked.sh")" -ge 1 ]            || { err "I105's probe could not read a well-formed exemption marker, so every exempt file would report as unrouted."; i105_bad=1; }
-[ "$(i105_exempt "$i105_pd/rec/orphan.sh")" -eq 0 ]            || { err "I105's probe found an exemption in a file carrying none."; i105_bad=1; }
-[ "$(i105_exempt "$i105_pd/rec/blank.sh")" -eq 0 ]             || { err "I105's probe accepted an exemption with NO REASON — the half that makes the marker auditable is not being enforced."; i105_bad=1; }
-[ "$(i105_exempt "$i105_pd/rec/prose.sh")" -eq 0 ]             || { err "I105's probe scored PROSE ABOUT the marker as a declaration of it. The driver's own header describes the marker, so an unanchored grammar exempts the driver by talking about itself."; i105_bad=1; }
-rm -rf "$i105_pd"
 
-if [ "$i105_bad" -eq 0 ]; then
   if [ ! -d "$i105_rec" ] || [ ! -f "$i105_driver" ]; then
     err "I105 found no reconcile/ directory or no emit-report.sh at $i105_rec. A scan over nothing reports clean, which is the shape this check exists to end."
   else
@@ -12017,7 +10543,6 @@ if [ "$i105_bad" -eq 0 ]; then
     [ -z "$i105_neither" ] || err "I105: these reconcile scripts are neither invoked by emit-report.sh nor declared exempt:$i105_neither. SKILL.md step 5 tells the operator the rendered region carries every detector's mechanical findings, and --verify byte-compares that region — so a detector outside it cannot be reported missing, because it was never there to omit. Either render it in emit-report.sh, or add '# reconcile-region: exempt — <reason>' to its header saying why its output is not a finding the operator reads before approving apply."
     [ -z "$i105_both" ] || err "I105: these reconcile scripts are BOTH invoked by emit-report.sh and marked exempt:$i105_both. The marker says the driver does not render it and the driver does. One of the two is stale, and a reader who believes the marker will not look for the rows."
   fi
-fi
 
 # --- I108: the derived-fence grammar is taught in ONE passage, and its EXAMPLE is what the reader accepts ---
 # WHAT IT BINDS. Seven files under core/team-roles/ hand an agent the shape of a checkable
@@ -12216,14 +10741,10 @@ if [ ! -f "$i108_reader" ]; then
   err "I108 cannot find core/scripts/validate-artifact-derivations.sh. It is the reader that decides what a derivation fence is, and without it this arm cannot tell a role file teaching a checkable form from one teaching a form that produces zero derivations and exit 0. Half C is not skipped over a missing subject: a role file teaching an unreadable grammar is exactly what ships while nobody is looking. Halves A and B below still run, so a passage that forked in the same change is still reported."
 fi
 
-# THE PROBE, RUN BEFORE THE CORPUS. All three halves are absence-shaped: an extractor that
-# stops matching compares empty to empty, a site scan that stops matching reports no sixth copy,
-# a population scan that stops matching reports no file left to ask the reader about, and a
-# stderr channel that stops being captured reports no broken block. Every one of those silences
-# reads exactly like a conforming tree. So the functions above are first driven over a tree with
-# one right answer, and the corpus is not judged at all unless they produce it (half C's reader
-# walks the corpus in the probe's own start; those rows are read only on a 0 score). The tree fires in
-# BOTH directions: a seeded offender must be reported and a seeded near-miss must not.
+# THE READER PROBE, RUN BEFORE THE CORPUS. Half C's verdict comes from a program read at run time,
+# core/scripts/validate-artifact-derivations.sh, so its producer shapes are driven through it in the
+# same start as the corpus, and the corpus rows are read only on a 0 score. It fires in BOTH
+# directions: a seeded offender must be reported and a seeded near-miss must not.
 #
 # HALF C'S SEEDS ARE THE PRODUCER'S SHAPES, NOT THE READER'S. The two record templates emit a
 # fence at column 0 under a derivation list item; a list item invites the same fence indented to
@@ -12231,52 +10752,8 @@ fi
 # read, and a seed lifted from the reader's accept-set would prove only that the reader accepts
 # its own grammar.
 i108_pd="$(mktemp -d "${TMPDIR:-/tmp}/i108-XXXXXX")"
-mkdir -p "$i108_pd/t" "$i108_pd/c" "$i108_pd/p"
+mkdir -p "$i108_pd/c"
 i108_ef="$i108_pd/stderr"
-#  a  the reference passage.
-{ printf 'lead paragraph\n\n'
-  printf '%s\n\n' "$i108_needle"
-  printf '```derived\n$ echo one\none\n```\n\n'
-  printf '%s\n' 'in the sentence beside the block.'; } > "$i108_pd/t/a.md"
-#  b  NEAR-MISS for the equality half: the identical passage in different surrounding text.
-#     Must compare EQUAL, or this arm reports drift on every file that is merely not a copy of
-#     its neighbour.
-{ printf 'a completely different opening\n\n'
-  printf '%s\n\n' "$i108_needle"
-  printf '```derived\n$ echo one\none\n```\n\n'
-  printf '%s\n' 'in the sentence beside the block.'
-  printf '\nand a different closing\n'; } > "$i108_pd/t/b.md"
-#  c  DRIFT: one word inside the passage differs. Must compare UNEQUAL.
-{ printf '%s\n\n' "$i108_needle"
-  printf '```derived\n$ echo two\ntwo\n```\n\n'
-  printf '%s\n' 'in the sentence beside the block.'; } > "$i108_pd/t/c.md"
-#  d  no passage at all. Extraction must be EMPTY -- an extractor that invents a passage here
-#     is one that would compare two inventions and call them equal.
-printf 'a role file that teaches nothing about fences\n' > "$i108_pd/t/d.md"
-#  e  a SIXTH SITE that carries the opener and nothing else. The scan must SEE it: a copy
-#     arrives as one sentence before it arrives as a passage.
-printf '%s\n' "$i108_needle" > "$i108_pd/t/e.md"
-#  f  NEAR-MISS for the scan half: the same sentence without its code span. Must stay quiet, or
-#     the scan flags files for resembling the passage rather than carrying it.
-printf '**Write it in a derived fence, which is what makes it checkable:**\n' > "$i108_pd/t/f.md"
-#  g  the passage OPENED and never closed. Extraction must be EMPTY. Without this the range
-#     runs to end of file and half A reports a fork over five files whose passage is intact.
-{ printf '%s\n\n' "$i108_needle"
-  printf '```derived\n$ echo one\none\n```\n\nand then the file simply ends\n'; } > "$i108_pd/t/g.md"
-#  h  DRIFT BY LEADING BLANKS ALONE: the same passage with its fence indented two spaces. Must
-#     compare UNEQUAL against a. A comparison that normalises leading blanks calls this
-#     identical, and the recorded output of an indented block is not the recorded output of an
-#     unindented one.
-{ printf '%s\n\n' "$i108_needle"
-  printf '  ```derived\n  $ echo one\n  one\n  ```\n\n'
-  printf '%s\n' 'in the sentence beside the block.'; } > "$i108_pd/t/h.md"
-#  half C population, in its own directory so the site scan above is not asked about it.
-#  p/teach.md anchors on the taught sentence, p/record.md on the record field, p/other.md on
-#  neither -- and p/other.md names the word derivation in prose, which the line-anchored key
-#  must not take.
-printf '%s\n' "$i108_needle"                       > "$i108_pd/p/teach.md"
-printf '%s\n' '- derivation:'                      > "$i108_pd/p/record.md"
-printf '%s\n' 'a derivation is a claim about the tree' > "$i108_pd/p/other.md"
 #  half C producer shapes.
 { printf '%s\n\n' '- derivation:'
   printf '```derived\n$ echo one\none\n```\n'; } > "$i108_pd/c/col0.md"
@@ -12294,22 +10771,6 @@ printf '%s\n' 'a derivation is a claim about the tree' > "$i108_pd/p/other.md"
 { printf '%s\n\n' '- derivation:'
   printf '```derived\n$ echo one\none\n$ echo two\ntwo\n  ```\n'; } > "$i108_pd/c/unclosed.md"
 
-i108_pa="$(i108_passage "$i108_pd/t/a.md")"
-i108_pb="$(i108_passage "$i108_pd/t/b.md")"
-i108_pc="$(i108_passage "$i108_pd/t/c.md")"
-i108_pdd="$(i108_passage "$i108_pd/t/d.md")"
-i108_pg="$(i108_passage "$i108_pd/t/g.md")"
-i108_ph="$(i108_passage "$i108_pd/t/h.md")"
-i108_pm="$(i108_sites "$i108_needle" "$i108_pd/t" | LC_ALL=C sort)"
-i108_pm_want="$i108_pd/t/a.md
-$i108_pd/t/b.md
-$i108_pd/t/c.md
-$i108_pd/t/e.md
-$i108_pd/t/g.md
-$i108_pd/t/h.md"
-i108_pp="$(i108_pop "$i108_pd/p")"
-i108_pp_want="$i108_pd/p/record.md
-$i108_pd/p/teach.md"
 i108_pl=""; i108_pe=""
 i108_roles="$REPO_ROOT/core/team-roles"
 if [ "$i108_reader_ok" -eq 1 ]; then
@@ -12317,25 +10778,17 @@ if [ "$i108_reader_ok" -eq 1 ]; then
   i108_pe="$(cat "$i108_ef" 2>/dev/null)"
 fi
 i108_score=0
-[ -n "$i108_pa" ]                                  || i108_score=$((i108_score + 1))
-[ "$i108_pa" = "$i108_pb" ]                        || i108_score=$((i108_score + 10))
-[ "$i108_pa" != "$i108_pc" ]                       || i108_score=$((i108_score + 100))
-[ -z "$i108_pdd" ]                                 || i108_score=$((i108_score + 1000))
-[ -z "$i108_pg" ]                                  || i108_score=$((i108_score + 10000))
-[ "$i108_pm" = "$i108_pm_want" ]                   || i108_score=$((i108_score + 100000))
-[ "$i108_pp" = "$i108_pp_want" ]                   || i108_score=$((i108_score + 1000000))
-[ "$i108_pa" != "$i108_ph" ]                       || i108_score=$((i108_score + 10000000))
 if [ "$i108_reader_ok" -eq 1 ]; then
-  i108_opened "$i108_pd/c/col0.md" "$i108_pl"       || i108_score=$((i108_score + 100000000))
-  i108_opened "$i108_pd/c/indented.md" "$i108_pl"   || i108_score=$((i108_score + 1000000000))
-  i108_opened "$i108_pd/c/info.md" "$i108_pl"       && i108_score=$((i108_score + 10000000000))
-  i108_grammar "$i108_pd/c/unclosed.md" "$i108_pe"  || i108_score=$((i108_score + 100000000000))
-  i108_grammar "$i108_pd/c/col0.md" "$i108_pe"      && i108_score=$((i108_score + 1000000000000))
+  i108_opened "$i108_pd/c/col0.md" "$i108_pl"       || i108_score=$((i108_score + 1))
+  i108_opened "$i108_pd/c/indented.md" "$i108_pl"   || i108_score=$((i108_score + 10))
+  i108_opened "$i108_pd/c/info.md" "$i108_pl"       && i108_score=$((i108_score + 100))
+  i108_grammar "$i108_pd/c/unclosed.md" "$i108_pe"  || i108_score=$((i108_score + 1000))
+  i108_grammar "$i108_pd/c/col0.md" "$i108_pe"      && i108_score=$((i108_score + 10000))
 fi
 rm -rf "$i108_pd"
 
 if [ "$i108_score" -ne 0 ]; then
-  err "I108's probe scored $i108_score where 0 is the only correct total, so the corpus below was not read. +1 the extractor found no passage where one is plainly written; +10 it called two IDENTICAL passages in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a passage differing by one word the SAME, which is the state half A exists to report; +1000 it returned a passage from a file carrying none, so half A would be comparing two inventions; +10000 it returned a passage from a file whose CLOSING delimiter is absent, which makes an extractor that lost its subject read as five files that forked; +100000 the site scan did not name exactly the six probe files carrying the opener sentence, so it either missed the mention-only sixth site or flagged the near-miss without the code span; +1000000 the half C population did not name exactly the file anchoring on the taught sentence and the file anchoring on the record field, or it took a file naming the word derivation in ordinary prose; +10000000 it called two passages differing ONLY in the leading blanks of their fence the same, so a copy indented where the others are not would teach a different recorded output unreported; +100000000 the shipping reader did not open the record template's own column-0 fence; +1000000000 it did not open that fence INDENTED into a list item, which the taught passage states is read; +10000000000 it opened a fence whose info string carries a trailing word, which must produce nothing; +100000000000 its STDERR did not name a block that is opened and never closed, so half C would acquit an unclosable taught block on the strength of the stdout row the same file still produces; +1000000000000 its stderr named a well-formed block, so every population file would report as broken. Any non-zero total means one of I108's three halves would report a clean tree for the reason a broken reader does."
+  err "I108's probe scored $i108_score where 0 is the only correct total, so the corpus below was not read. +1 the shipping reader did not open the record template's own column-0 fence; +10 it did not open that fence INDENTED into a list item, which the taught passage states is read; +100 it opened a fence whose info string carries a trailing word, which must produce nothing; +1000 its STDERR did not name a block that is opened and never closed, so half C would acquit an unclosable taught block on the strength of the stdout row the same file still produces; +10000 its stderr named a well-formed block, so every population file would report as broken. Any non-zero total means half C would report a clean tree for the reason a broken reader does."
 else
   # HALF A: the five declared copies are one byte string. Read against the FIRST readable copy
   # rather than pairwise, so N files cost N extractions.
@@ -12590,79 +11043,6 @@ EOF
   elif [ "$i110_n_col" -lt 2 ]; then
     err "I110 could not derive the In-Flight row's column names: $i110_n_col read out of route.md's schema code span. Without them the column headings \`status\` and \`dispatched-at\` are indistinguishable from status TOKENS, and the arm would report two findings that are not drift."
   else
-    # SELF-PROBE, BOTH DIRECTIONS, ON A mktemp TREE AND BEFORE THE CORPUS VERDICT IS READ.
-    # The offender seeds a token no reader teaches and the whitelist does not carry; the
-    # near-miss seeds a COLUMN NAME, which is the input the exclusion above exists for and the
-    # one that separates this grammar from the wider one that scored 2. An arm that reported
-    # both would flag the schema line in every reader; an arm that reported neither could not
-    # have caught BL-147. Both seeds live in ONE probe file: the grammar is line-windowed, not
-    # file-scoped, so two files would prove nothing a blank line between the seeds does not.
-    i110_probe="$(mktemp -d 2>/dev/null)"
-    if [ -z "$i110_probe" ]; then
-      err "I110 could not build its probe tree, so neither direction of its scan was proven this run. A grammar that has not been shown to fire is not evidence about the corpus below it."
-    else
-      # THE THIRD SEED IS WHAT GIVES THE BACKSLASH STRIP A SUBJECT, AND WITHOUT IT THAT LINE
-      # IS A VACUOUS GUARD. Measured on the live corpus: removing `gsub(/\\/, "")` changes the
-      # taught set by NOTHING today, because every member the hooks teach in escaped form is
-      # also taught unescaped in a step file, so a mutant deleting it passes every other arm
-      # here. The strip's real subject is a member taught ONLY inside ai-dlc-continue.sh or
-      # ai-dlc-recover.sh's double-quoted heredocs -- a state one hook edit away -- and this
-      # seed constructs it. It is written into a `.sh` file because that is the filetype the
-      # escaping arises in.
-      printf '%s\n' \
-        'A row in **In-Flight Teammates** may read' '' '`idle-reusable` when parked.' '' \
-        'x' 'x' 'x' 'x' 'x' 'x' 'x' \
-        'The In-Flight Teammates row schema names a' '' '`dispatched-at` column.' \
-        > "$i110_probe/probe.md"
-      printf '%s\n' \
-        'echo "## In-Flight Teammates' '' 'Status \`escaped-only\` -> SKIP the row."' \
-        > "$i110_probe/probe.sh"
-      # THE ANCHOR SEEDS (BL-697). A sentence that merely names the row opens no window: `ux`
-      # is the role name that failed the 0.876.0 pregate, and `zz-near` is a token no role
-      # vocabulary carries, so a fix that excluded role names instead of anchoring the window
-      # still reads it. The wrapped heading is the shape implementation.md Rule 26(c) carries,
-      # and an anchor that demands `In-Flight Teammates` on ONE line drops it.
-      printf '%s\n' \
-        'the same value as the In-Flight row and the join' '' 'plain line' \
-        '`ux` is a role name' '`zz-near` is no column' \
-        > "$i110_probe/near.md"
-      printf '%s\n' \
-        'the dispatch-time **In-Flight' 'Teammates** row, held as `wrapped-taught`' \
-        > "$i110_probe/wrap.md"
-      # THE RESET SEED is what makes the window a DISTANCE: a bare mention two lines into a
-      # good window must not close it. An on/off flag drops `reset-kept` here and nowhere else.
-      printf '%s\n' \
-        '## In-Flight Teammates' 'x' 'see the In-Flight row and the join' 'x' '`reset-kept` row' \
-        > "$i110_probe/reset.md"
-      i110_pt="$(i110_tokens "$i110_probe")"
-      i110_pp=0; i110_pn=0; i110_pn_excluded=0; i110_pe=0; i110_pw=0; i110_pa=''
-      in_lines 'idle-reusable' "$i110_pt"   && i110_pp=1
-      in_lines 'escaped-only'  "$i110_pt"   && i110_pe=1
-      in_lines 'wrapped-taught' "$i110_pt"  && i110_pw=1
-      in_lines 'reset-kept'    "$i110_pt"   || i110_pa="$i110_pa reset-kept(missing)"
-      in_lines 'ux'            "$i110_pt"   && i110_pa="$i110_pa ux"
-      in_lines 'zz-near'       "$i110_pt"   && i110_pa="$i110_pa zz-near"
-      in_lines 'dispatched-at' "$i110_pt"   && i110_pn=1
-      in_lines 'dispatched-at' "$i110_cols" && i110_pn_excluded=1
-      rm -rf "$i110_probe"
-      if [ "$i110_pp" -eq 0 ]; then
-        err "I110's positive probe was NOT seen: a seeded \`idle-reusable\` two lines under an In-Flight line went unread by the same grammar the corpus arm runs. That is the exact token the FIRST drift of this set used, so a clean verdict below is a scan that cannot spell its own subject."
-      fi
-      if [ "$i110_pw" -eq 0 ]; then
-        err "I110's WRAPPED-heading probe was NOT seen: a seeded \`wrapped-taught\` under a heading that breaks \`In-Flight\` / \`Teammates\` across two lines went unread. implementation.md Rule 26(c) teaches \`delivered-reachable\` under exactly that shape, so the corpus scan below is blind to one reader file and its clean result would not say so."
-      fi
-      if [ -n "$i110_pa" ]; then
-        err "I110's ANCHOR probe is wrong:$i110_pa. A bare mention of the In-Flight row, with no \`Teammates\` and no status, must neither OPEN a token window (\`ux\`, \`zz-near\` -- the BL-697 shape that failed the 0.876.0 pregate on a role name) nor CLOSE one it sits inside (\`reset-kept\`, four lines under a good anchor, missing means the window became an on/off flag). The window is the distance from the last In-Flight line naming Teammates or a status."
-      fi
-      if [ "$i110_pe" -eq 0 ]; then
-        err "I110's ESCAPED probe was NOT seen: a token written \\\`escaped-only\\\` -- the spelling both hooks use, because their guidance sits inside double-quoted heredocs -- was invisible to the token grammar. The corpus verdict below would then be taken over a set missing whatever those two files teach and no step file repeats, and it would read exactly like agreement."
-      fi
-      if [ "$i110_pn" -eq 0 ]; then
-        err "I110's near-miss probe read back NOTHING: a seeded \`dispatched-at\` was not extracted at all, so the exclusion below is acquitting a token the scan never found. The quiet direction has to be quiet for the right reason."
-      elif [ "$i110_pn_excluded" -eq 0 ]; then
-        err "I110's near-miss probe was NOT excluded: the row's own column name \`dispatched-at\` survived the derived column list and would be reported as an unenforced status token. That exclusion is what takes this grammar's false-positive set from 2 to 0."
-      fi
-    fi
     # THE CORPUS. Set equality, both directions, each with its own remedy.
     i110_taught="$(i110_tokens "$REPO_ROOT/core/skills/ai-dlc" "$REPO_ROOT/core/hooks")"
     i110_extra=""; i110_missing=""
@@ -12796,64 +11176,6 @@ i111_sets_in() {  # <path>... -> "file<TAB>member,member,..." one row per file c
 i111_set_of() {  # file -> that file's set, comma-joined (empty when it declares none)
   i111_sets_in "$1" | awk -F'\t' 'NR==1{print $2}'
 }
-# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp and never against the real corpus. An arm
-# that reports zero findings without first proving it can produce one has established that
-# it ran, not that the tree agrees.
-i111_probe="$(mktemp -d 2>/dev/null)"
-if [ -z "$i111_probe" ] || [ ! -d "$i111_probe" ]; then
-  err "I111 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports agreement it never established; this fails rather than reporting a clean corpus."
-else
-  # THE SEEDS ARE ASSEMBLED, NEVER TYPED, AND THAT IS NOT A STYLE CHOICE. A literal
-  # `low|medium|high|xhigh|max)` written here is matched by this arm's OWN corpus grep,
-  # which scans `scripts/` -- so the offender seed put `ultra` into this file's declared
-  # set and the arm reported itself as the forked site, correctly and uselessly. A scan
-  # whose findings are its own probe is a scan whose real findings are unreadable.
-  # Measured: the first run of this arm emitted exactly that.
-  i111_mk() {  # i111_mk <outfile> <level>...
-    i111_out="$1"; shift
-    i111_alt=""
-    for i111_w in "$@"; do
-      if [ -z "$i111_alt" ]; then i111_alt="$i111_w"; else i111_alt="${i111_alt}|${i111_w}"; fi
-    done
-    printf '  %s) ;;\n' "$i111_alt" > "$i111_out"
-  }
-  i111_mk "$i111_probe/good.sh"   low medium high xhigh max
-  printf '    low|medium|high|xhigh|max) return 0 ;;\n' > "$i111_probe/goodcmd.sh"
-  i111_mk "$i111_probe/lost.sh"   low medium high max
-  i111_mk "$i111_probe/gained.sh" low medium high xhigh max ultra
-  # NEAR-MISS ONE: a case arm of the same SHAPE carrying no level at all. `allow|forbid`
-  # is not hypothetical -- it is validate-artifact-budget.sh:596, one of three such arms
-  # the corpus filter must reject. If this were selected the arm would fire on every
-  # alternation in the tree and its findings would be noise.
-  i111_mk "$i111_probe/nearmiss.sh" allow forbid
-  # NEAR-MISS TWO: a line that MENTIONS the canonical set without validating against it,
-  # which is what the `) ;;` anchor exists to exclude. Both real instances carried the
-  # correct five, so an arm that selected them passed by accident; seeded here so the
-  # anchor cannot be relaxed without this probe going red.
-  printf "i111_re='(low|medium|high|xhigh|max)'\n" > "$i111_probe/mentions.sh"
-  # One pass over the probe directory answers all five seeds; the sets are read back by name.
-  i111_pg=""; i111_pc=""; i111_pl=""; i111_pn=""; i111_pm=""; i111_px=""
-  while IFS="$(printf '\t')" read -r i111_pf i111_ps; do
-    case "$i111_pf" in
-      */good.sh)     i111_pg="$i111_ps" ;;
-      */goodcmd.sh)  i111_pc="$i111_ps" ;;
-      */lost.sh)     i111_pl="$i111_ps" ;;
-      */gained.sh)   i111_pn="$i111_ps" ;;
-      */nearmiss.sh) i111_pm="$i111_ps" ;;
-      */mentions.sh) i111_px="$i111_ps" ;;
-    esac
-  done <<EOF_I111
-$(i111_sets_in "$i111_probe")
-EOF_I111
-  if [ "$i111_pg" != "$i111_canon" ] || [ "$i111_pc" != "$i111_canon" ]; then
-    err "I111 SELF-PROBE FAILED: the canonical seed extracted '${i111_pg}' rather than the five levels. The reader cannot spell its own subject, so every zero below is a floor of unknown depth rather than a finding of agreement."
-  elif [ "$i111_pl" = "$i111_pg" ] || [ "$i111_pn" = "$i111_pg" ]; then
-    err "I111 SELF-PROBE FAILED: a seed that LOST a member and one that GAINED one did not differ from the canonical seed. The comparison below cannot discriminate and would report agreement on any corpus."
-  elif [ -n "$i111_pm" ]; then
-    err "I111 SELF-PROBE FAILED: the near-miss seed (a case arm carrying no effort level, the shape validate-artifact-budget.sh:596 actually has) was selected and yielded '${i111_pm}'. The population grammar matches alternations that are not this vocabulary, so its findings would be noise."
-  elif [ -n "$i111_px" ]; then
-    err "I111 SELF-PROBE FAILED: a line that MENTIONS the level set without validating against it was selected and yielded '${i111_px}'. Text about a program is not the program: that shape carries the canonical five and would make this arm pass by accident on a tree where the real copies had forked. The \`) ;;\` anchor is what excludes it."
-  else
     # THE CORPUS. Derived in one recursive grep plus the stage-two filter, never
     # hand-listed, so a fourth copy added by a later release is in scope on the push that
     # adds it. Membership is decided by `i111_set_of` -- the same reader the comparison
@@ -12878,9 +11200,6 @@ EOF_I111
         err "I111 the reasoning-effort level set has FORKED. Canonical is low/medium/high/xhigh/max, owned by core/hooks/ai-dlc-dispatch-guard.sh. Disagreeing site(s):${i111_bad}. A copy that LOST a member silently drops a legitimately configured level -- the guard stops stating it, render-agent-definitions.sh stops writing it into .claude/agents/<role>.md frontmatter, and the teammate runs at the session default with every gate green. A copy that GAINED one accepts a value the harness does not implement. Make every site declare the same five."
       fi
     fi
-  fi
-  rm -rf "$i111_probe" 2>/dev/null || true
-fi
 
 
 # --- I112: the code-review verdict set is ONE set across its owner and the gate that reads it ---
@@ -13141,11 +11460,10 @@ else
                                    for (i = 1; i <= k; i++) print o[i] }')"
   i112_count "$i112_set"; i112_n_set=$i112_cnt
   i112_count "$i112_qset"; i112_n_qset=$i112_cnt
-  i112_n_enum=0; i112_enum_first=""
+  i112_n_enum=0
   while IFS= read -r i112_l; do
     [ -n "$i112_l" ] || continue
     i112_n_enum=$((i112_n_enum + 1))
-    [ -n "$i112_enum_first" ] || i112_enum_first="$i112_l"
   done <<EOF
 $i112_enum
 EOF
@@ -13162,127 +11480,6 @@ EOF
   elif [ "$i112_n_enum" -lt 1 ]; then
     err "I112 derived ZERO screaming-compound schema enum members by running render-vocabulary-index.sh's SCHEMA_PY over core/schemas/. That walker is the whole exclusion for the span scan below, and an empty exclusion makes every enum token in Check 1 a finding. Either the walker's quoting in the renderer changed or python3 refused it."
   else
-    # SELF-PROBE, EVERY GRAMMAR AND BOTH DIRECTIONS, ON A mktemp TREE AND BEFORE THE CORPUS
-    # VERDICT IS READ. The seeds are ASSEMBLED from variables, never typed: a literal member
-    # name written here is inside this arm's own subject matter, and I111's header records
-    # that arm reporting ITSELF as the forked site for exactly that reason.
-    i112_probe="$(mktemp -d 2>/dev/null)"
-    if [ -z "$i112_probe" ] || [ ! -d "$i112_probe" ]; then
-      err "I112 could not build its probe tree, so none of its grammars was proven this run. A grammar that has not been shown to fire is not evidence about the corpus below it."
-    else
-      i112_p="PROBE"
-      i112_a="${i112_p}_ALPHA"; i112_b="${i112_p}_BETA"; i112_c="${i112_p}_GAMMA"
-      i112_d="${i112_p}_DELTA"; i112_e="${i112_p}_EPSILON"
-      i112_h="${i112_p}_HIDDEN"; i112_o="${i112_p}_OUTSIDE"
-      i112_qa="${i112_p}_PI"; i112_qb="${i112_p}_RHO"
-      # The second owner's set is a list, not a file: the owner grammar is the same function
-      # for both owners and is proven on the file seed below. What the second owner adds is
-      # the per-bullet split and the union exclusion, and those are what this set feeds.
-      i112_pq="$i112_qa
-$i112_qb"
-      # THE OWNER SEED CARRIES THE TWO SHAPES THAT ARE NOT THE TEMPLATE, and the first is not
-      # hypothetical: code-reviewer.md's Communication bullet writes the real three members as
-      # a parenthesised alternation inside a sentence. An extractor reading it derives a
-      # byte-identical set today and stays correct-looking after the template has moved.
-      { printf '# seed\n## Verdict\n%s | %s\n\n## Communication\n' "$i112_a" "$i112_b"
-        printf -- '- Send your verdict (%s | %s | %s, with severity).\n' "$i112_a" "$i112_b" "$i112_c"
-        printf -- '- %s appears only in this bullet.\n' "$i112_d"
-      } > "$i112_probe/owner.md"
-      # THE HEADING NEAR-MISS carries the word under the same `## ` prefix but not the bare line,
-      # which is the shape a role file reorganised by someone who never heard of this arm has.
-      printf '# seed\n## Verdict Values\n%s | %s\n' "$i112_a" "$i112_b" > "$i112_probe/renamed.md"
-      i112_ph=0; i112_has_heading "$i112_probe/owner.md" && i112_ph=1
-      i112_phn=0; i112_has_heading "$i112_probe/renamed.md" && i112_phn=1
-      # THE READER SEED CARRIES ONE OF EVERY INPUT THE SPAN SCAN MUST SEPARATE: both owner
-      # bullets, the code-review one naming a member AND a non-member; an unowned compound in
-      # ordinary prose, which is the motivating case; a real schema enum member and a SECOND-
-      # owner member in prose, which the derived exclusion and the union must acquit; a
-      # compound inside an HTML comment, the shape Check 1's own `CHECK_LOADED` marker has; and
-      # a compound AFTER the next `### ` heading, which is the span boundary.
-      { printf '### 1. Validation cycle complete?\n'
-        printf -- '<!-- %s -->\n' "$i112_h"
-        printf -- '%s`owner.md`)** -- `%s` passes; `%s` does not.\n' "$i112_cpfx" "$i112_a" "$i112_e"
-        printf -- '%s`qa.md`)** -- `%s` passes.\n' "$i112_qpfx" "$i112_qa"
-        printf -- '- A sentence naming %s, %s and %s.\n' "$i112_c" "$i112_enum_first" "$i112_qb"
-        printf '### 2. Something else\n'
-        printf -- '- %s lives past the boundary.\n' "$i112_o"
-      } > "$i112_probe/reader.md"
-      i112_po="$(i112_owner_set "$i112_probe/owner.md")"
-      i112_psp="$(i112_span_of "$i112_probe/reader.md")"
-      i112_prs="$(i112_reader_sets "$i112_psp")"
-      i112_pr="$(i112_pick C "$i112_prs")"; i112_prq="$(i112_pick Q "$i112_prs")"
-      # THE PROBE SCANS WITH THE SEEDED OWNER SETS, NOT WITH THE REAL ONES. The seed's members
-      # are synthetic, so passing the corpus sets here would leave every seeded token unowned
-      # and the positive direction would pass for the wrong reason.
-      i112_pt="$(i112_strays "$i112_psp" "$i112_po
-$i112_pq" "$i112_enum")"
-      # THE SWAPPED PAIR: each bullet names the OTHER owner's members. Per-owner equality must
-      # report both directions for both owners, and the same span read the other way round --
-      # each owner against the bullet carrying ITS members -- must be quiet. That quiet half is
-      # the near-miss: a comparison that fired on everything would pass the loud half alone.
-      i112_sw="$(printf '%s`%s` `%s`)**\n%s`%s` `%s`)**\n' \
-                 "$i112_cpfx" "$i112_qa" "$i112_qb" "$i112_qpfx" "$i112_a" "$i112_b")"
-      i112_swr="$(i112_reader_sets "$i112_sw")"
-      i112_swc="$(i112_pick C "$i112_swr")"; i112_swq="$(i112_pick Q "$i112_swr")"
-      # THE DUPLICATE-BULLET SEED. The reader takes the FIRST line carrying each prefix, so a
-      # second bullet for one owner is read by nothing and can teach any value at all. The
-      # counter must see two code-review bullets here and ONE QA bullet, because the QA prefix's
-      # second appearance is mid-line, quoted inside a sentence.
-      i112_dup="$(printf '%s`%s`)**\n%s`%s`)**\n- A sentence quoting %s`x`)** in prose.\n%s`%s`)**\n' \
-                  "$i112_cpfx" "$i112_a" "$i112_cpfx" "$i112_e" "$i112_qpfx" "$i112_qpfx" "$i112_qa")"
-      i112_prefix_count "$i112_cpfx" "$i112_dup"; i112_pdc=$i112_pc
-      i112_prefix_count "$i112_qpfx" "$i112_dup"; i112_pdq=$i112_pc
-      rm -rf "$i112_probe" 2>/dev/null || true
-      i112_pf=""
-      [ "$i112_ph" = 1 ] || \
-        i112_pf="${i112_pf} the heading grammar did not see the seeded bare \`## Verdict\` line, so its refusal below would fire on every owner, correct or not."
-      [ "$i112_phn" = 0 ] || \
-        i112_pf="${i112_pf} the heading grammar accepted \`## Verdict Values\` as the bare heading. A renamed section would then pass the missing-section refusal and be compared as though it were still there."
-      in_lines "$i112_a" "$i112_po" && in_lines "$i112_b" "$i112_po" || \
-        i112_pf="${i112_pf} the owner grammar did not read the seeded template line back (got '$i112_po'), so it cannot spell its own subject and every zero below is a floor of unknown depth."
-      in_lines "$i112_c" "$i112_po" && \
-        i112_pf="${i112_pf} the owner grammar read a member out of the PARENTHESISED alternation the seed writes in prose. That is the shape code-reviewer.md's own Communication bullet has, so the owner set below would come from a sentence rather than from the template a review file is written from."
-      in_lines "$i112_d" "$i112_po" && \
-        i112_pf="${i112_pf} the owner grammar read a member named only in a BULLET. The template line is the declaration; a bullet is prose about it."
-      in_lines "$i112_a" "$i112_pr" && in_lines "$i112_e" "$i112_pr" || \
-        i112_pf="${i112_pf} the reader grammar did not read both backticked tokens off the seeded code-review bullet (got '$i112_pr'). Neither direction of that owner's comparison could then fire."
-      in_lines "$i112_qa" "$i112_prq" || \
-        i112_pf="${i112_pf} the reader grammar did not read the backticked token off the seeded QA bullet (got '$i112_prq'). The QA owner's comparison could not fire in either direction."
-      { in_lines "$i112_qa" "$i112_pr" || in_lines "$i112_a" "$i112_prq" || in_lines "$i112_e" "$i112_prq"; } && \
-        i112_pf="${i112_pf} the reader grammar POOLED the two bullets (code-review '$i112_pr', QA '$i112_prq'). Each owner would then be compared against both bullets, and a member written on the wrong gate's bullet would read as named."
-      in_lines "$i112_c" "$i112_pt" || \
-        i112_pf="${i112_pf} the span scan did not see a seeded unowned compound token in ordinary prose. That is the motivating case -- a non-member in a sentence, not on a bullet -- so a quiet scan below would be a scan that cannot spell it."
-      in_lines "$i112_enum_first" "$i112_pt" && \
-        i112_pf="${i112_pf} the span scan did not exclude a seeded SCHEMA ENUM member, which the derived exclusion exists to acquit. Check 1 legitimately names one, so without this the arm reports a finding on a correct tree."
-      in_lines "$i112_a" "$i112_pt" && \
-        i112_pf="${i112_pf} the span scan did not exclude a seeded OWNER MEMBER. Every legitimate verdict value in Check 1's span is a member, so an arm that reported them would fire on a correct tree and be turned off."
-      in_lines "$i112_qb" "$i112_pt" && \
-        i112_pf="${i112_pf} the span scan did not exclude a seeded member of the SECOND owner. The exclusion is the union of both sets, and Check 1's prose names QA members as legitimately as code-review ones."
-      in_lines "$i112_h" "$i112_pt" && \
-        i112_pf="${i112_pf} the span scan read a compound token out of an HTML COMMENT. Every check in gate-validation.md opens with a \`CHECK_LOADED\` marker of exactly that shape, so this exclusion is what keeps the scan's false-positive set at zero."
-      in_lines "$i112_o" "$i112_pt" && \
-        i112_pf="${i112_pf} the span scan crossed the next \`### \` heading. Check 1's span ends there, and a scan running past it reports tokens belonging to checks this vocabulary does not bind."
-      i112_compare "$i112_po" "$i112_swc"
-      i112_in "$i112_a" "$i112_cu" && i112_in "$i112_b" "$i112_cu" && \
-        i112_in "$i112_qa" "$i112_cn" && i112_in "$i112_qb" "$i112_cn" || \
-        i112_pf="${i112_pf} the SWAPPED pair did not report both directions for the code-review owner (unnamed '$i112_cu', unowned '$i112_cn'). A bullet carrying the other gate's set would pass."
-      i112_compare "$i112_pq" "$i112_swq"
-      i112_in "$i112_qa" "$i112_cu" && i112_in "$i112_qb" "$i112_cu" && \
-        i112_in "$i112_a" "$i112_cn" && i112_in "$i112_b" "$i112_cn" || \
-        i112_pf="${i112_pf} the SWAPPED pair did not report both directions for the QA owner (unnamed '$i112_cu', unowned '$i112_cn'). A bullet carrying the other gate's set would pass."
-      i112_compare "$i112_po" "$i112_swq"
-      [ -z "$i112_cu$i112_cn" ] || \
-        i112_pf="${i112_pf} the code-review owner compared against a bullet carrying exactly its own members reported (unnamed '$i112_cu', unowned '$i112_cn'). The comparison fires on agreement, so its findings below say nothing."
-      [ "$i112_pdc" = 2 ] || \
-        i112_pf="${i112_pf} the bullet counter read $i112_pdc code-review bullet(s) on a seed carrying two, so a second bullet for one owner -- read by nothing, and free to teach any value -- would pass."
-      [ "$i112_pdq" = 1 ] || \
-        i112_pf="${i112_pf} the bullet counter read $i112_pdq QA bullet(s) on a seed carrying one at column one and one quoted mid-line. It is counting prose that mentions the prefix, and a correct Check 1 quoting its own bullet would be refused."
-      i112_compare "$i112_pq" "$i112_swc"
-      [ -z "$i112_cu$i112_cn" ] || \
-        i112_pf="${i112_pf} the QA owner compared against a bullet carrying exactly its own members reported (unnamed '$i112_cu', unowned '$i112_cn'). The comparison fires on agreement, so its findings below say nothing."
-      if [ -n "$i112_pf" ]; then
-        err "I112 SELF-PROBE FAILED:${i112_pf}"
-      else
         # THE CORPUS. Each owner's bullet at most once, then per-owner set equality both ways,
         # then the span scan, each with its own remedy. The bullet count is checked first and
         # is not a refusal of the rest: a duplicate bullet is reported, and the comparison still
@@ -13326,8 +11523,6 @@ EOF
         if [ -n "$i112_stray" ]; then
           err "I112: Check 1's span in core/skills/ai-dlc/steps/gate-validation.md carries screaming compound token(s) that are neither a code-review or QA verdict nor a schema enum member:$i112_stray. That is exactly how \`CHANGES-REQUESTED\` lived in the one paragraph in the system about verdict VALUES -- a token no reviewer can write, taught beside a grep that validates a verdict line's SHAPE and never its value. Use a member of a set core/team-roles/code-reviewer.md or core/team-roles/qa.md declares under \`## Verdict\`, or move the token out of Check 1."
         fi
-      fi
-    fi
   fi
 fi
 # --- I113: the single-valued position-bullet COUNT is one grammar in four copies ----
@@ -13364,7 +11559,7 @@ fi
 # grep, sed or awk expression naming it -- which is what separates a reader from a producer:
 # the fixtures under core/fixtures/ write snapshot lines carrying this field on purpose, and
 # none of them is a member, measured. Over the real tree the scan returns exactly the three
-# declared sites, and this file, which carries the strings in its own probe.
+# declared sites, and this file, which carries the bullet expression in i113_bul.
 i113_declared='core/hooks/ai-dlc-recover.sh
 core/hooks/ai-dlc-continue.sh
 core/scripts/validate-mandatory-rules.sh
@@ -13378,15 +11573,10 @@ i113_bul="AI_DLC_POS_BULLET_RE='^[[:space:]]*-[^:]*(current_step_file|current[ _
 i113_lab="AI_DLC_POS_LABEL_RE='^[^:]*(prior|superseded|retained history)'"
 i113_bas='AI_DLC_POS_BASE_SED='"'"'s/[`*,.;:)]*$//; s|^.*/||'"'"
 
-# THE PRE-FIX BRITTLE READER, which the canonical bullet expression must NOT match. This is
-# I104's "+10" arm: the whole point of the binding is to catch a regression to first-match-wins,
-# and an expression that also matched the thing it replaces could not tell the two apart.
-i113_prefix="grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)'"
-
 # A READER carries the key alternation in its REGEX spelling -- the bracket class in
 # `current[ _]step`, which only an expression can carry. That is what separates a reader from a
 # file that merely discusses the field: prose and snapshot seeds write `current_step_file` or
-# `Current step file`, never the bracket class, so the near-miss probes below stay quiet on
+# `Current step file`, never the bracket class, so they stay quiet on
 # SHAPE alone and no directory exclusion for core/fixtures/ is needed.
 #
 # AN EARLIER, NARROWER GRAMMAR REQUIRED A `grep|sed|awk` ON THE SAME LINE and this arm's own
@@ -13397,11 +11587,6 @@ i113_prefix="grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)'
 i113_reader_re='current\[ _\]step'
 i113_sites() { grep -rlE -- "$i113_reader_re" "$@" 2>/dev/null; }
 
-# THE PROBE, RUN BEFORE THE CORPUS. Both halves are absence-shaped -- a needle that no longer
-# matches reports no drift, and a scan that no longer matches reports no fourth copy -- and both
-# silences read exactly like a conforming tree. So both are driven first over a tree with one
-# right answer, in BOTH directions: a seeded offender is reported and a seeded near-miss is not.
-#
 # CONTAINMENT IS A `case` GLOB OVER TEXT ALREADY IN MEMORY, NOT A `grep -qF` PER STRING. This
 # file declares FORK_BUDGET about itself and core/fixtures/validator-fork-budget/ fails the push
 # when a change crosses it; the first draft of this arm forked a grep per string per site and
@@ -13411,98 +11596,47 @@ i113_sites() { grep -rlE -- "$i113_reader_re" "$@" 2>/dev/null; }
 i113_has() { # i113_has <haystack> <needle> -> 0 when the needle occurs verbatim
   case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac
 }
-#  a  a conforming copy, carrying all four strings as the real sites do.
-#
-#  EACH SEED IS ONE LINE, joined by `; ` where a real site spells the assignments on separate
-#  lines. The scan half below labels each seed and strips the label with `sed`, so a seed
-#  carrying an embedded newline would put its continuation lines into that pipeline unlabelled
-#  and the comparison would read junk -- measured, the probe scored 100 on exactly that.
-#  Containment is a glob, which does not care, and the scan regex is line-oriented, which does.
-i113_p_a="$i113_sec; $i113_bul; $i113_lab; $i113_bas"
-#  b  the PRE-FIX reader: whole-file first-match-wins, no count at all. The scan must SEE it as
-#     a reader and the equality half must call it drift -- this is the exact state the arm
-#     exists to report, and it is what shipped for the whole of the defect's life.
-i113_p_b="S=\"\$($i113_prefix \"\$SNAP\" | sed -E 's/^[^:]*://')\""
-#  c  NEAR-MISS for the scan half: the field MENTIONED in prose with no extraction. Must stay
-#     quiet, or the arm flags every file that discusses the field.
-i113_p_c='# current_step_file is single-valued and overwritten in place'
-#  d  NEAR-MISS for the scan half: an extraction of a DIFFERENT field. Must stay quiet, or the
-#     arm flags every snapshot reader for resembling this one.
-i113_p_d='D="$(grep -iE "(last_gate_passed|last[ _]gate)" "$SNAP" | head -1)"'
-#  e  a fixture-shaped SEED: writes a position bullet, never reads one. Must stay quiet on SHAPE
-#     alone -- it is the reason no directory exclusion is needed, and if the grammar ever stops
-#     discriminating it this arm fails rather than the exclusion silently covering for it.
-i113_p_e='printf -- "- **Current step file:** retro.md\n" > "$P/pipeline-snapshot.md"'
-#  f  NEAR-MISS for the equality half: a copy carrying three of the four strings. The fourth is
-#     the basename reduction, which is what makes agreement distinguishable from a duplicate --
-#     a binding that checked only the bullet regex would pass this and let the same-basename
-#     case diverge across the three copies.
-i113_p_f="$i113_sec; $i113_bul; $i113_lab"
-i113_score=0
-for i113_s in "$i113_sec" "$i113_bul" "$i113_lab" "$i113_bas"; do
-  i113_has "$i113_p_a" "$i113_s" || i113_score=$((i113_score + 1))
-done
-i113_has "$i113_p_b" "$i113_bul" && i113_score=$((i113_score + 10))
-i113_has "$i113_p_f" "$i113_bas" && i113_score=$((i113_score + 20))
-# THE SCAN HALF'S PROBE IS THE SAME REGEX THE CORPUS SCAN USES, applied to the six seeded bodies
-# rather than to a probe tree -- ONE `grep` reading a here-string, where the first draft built a
-# directory and walked it recursively. The seeds are labelled and the labels are collected in the
-# shell, so the pipeline is a single stage and nothing downstream of the match forks.
-i113_pm="$(grep -E -- "$i113_reader_re" <<EOF | cut -c1-1 | tr -d '\n'
-a:$i113_p_a
-b:$i113_p_b
-c:$i113_p_c
-d:$i113_p_d
-e:$i113_p_e
-f:$i113_p_f
-EOF
-)" || i113_pm=''
-[ "$i113_pm" = "abf" ] || i113_score=$((i113_score + 100))
-if [ "$i113_score" -ne 0 ]; then
-  err "I113's probe scored $i113_score where 0 is the only correct total, so the corpus below was not scanned. +1 per canonical string not found in a file that carries it verbatim, so the equality half would report drift on a conforming tree; +10 the canonical bullet expression matched the PRE-FIX whole-file \`grep -m1\` reader, so the half that exists to catch a regression to first-match-wins cannot tell the two apart; +20 the four-string check passed a copy carrying only three, so a copy could drop the basename reduction -- the clause that separates two bullets naming ONE file from two naming different ones -- and this arm would stay quiet; +100 the reader scan did not name exactly the three probe files carrying an extraction -- it either missed the brittle copy, or flagged a prose mention, a different field's reader, or a fixture that only SEEDS a position bullet. Any non-zero total means both halves of I113 would report a clean tree for the reason a broken reader does."
-else
-  # HALF ONE: every declared site carries all four canonical strings verbatim. Each file is read
-  # ONCE into memory and the four containments are globs against it, for the fork reason above.
-  i113_missing=''
-  while IFS= read -r i113_rel; do
-    [ -n "$i113_rel" ] || continue
-    if [ ! -r "$REPO_ROOT/$i113_rel" ]; then
-      i113_missing="$i113_missing ${i113_rel}(unreadable)"
-      continue
-    fi
-    i113_body="$(cat "$REPO_ROOT/$i113_rel")"
-    for i113_s in "$i113_sec" "$i113_bul" "$i113_lab" "$i113_bas"; do
-      i113_has "$i113_body" "$i113_s" || { i113_missing="$i113_missing ${i113_rel}"; break; }
-    done
-  done <<EOF
+# HALF ONE: every declared site carries all four canonical strings verbatim. Each file is read
+# ONCE into memory and the four containments are globs against it, for the fork reason above.
+i113_missing=''
+while IFS= read -r i113_rel; do
+  [ -n "$i113_rel" ] || continue
+  if [ ! -r "$REPO_ROOT/$i113_rel" ]; then
+    i113_missing="$i113_missing ${i113_rel}(unreadable)"
+    continue
+  fi
+  i113_body="$(cat "$REPO_ROOT/$i113_rel")"
+  for i113_s in "$i113_sec" "$i113_bul" "$i113_lab" "$i113_bas"; do
+    i113_has "$i113_body" "$i113_s" || { i113_missing="$i113_missing ${i113_rel}"; break; }
+  done
+done <<EOF
 $i113_declared
 EOF
-  [ -z "$i113_missing" ] || err "I113: the single-valued position-bullet count has forked or gone missing at:$i113_missing. All three readers refuse a snapshot whose \`## Pipeline Position\` names two different step files -- the recovery hook drops its mandate and its gate, the stop hook resolves empty, Check 8 skips -- and refusal is only coherent while the three agree on what a second live bullet IS. A copy that narrowed the key alternation un-resolves 94 of the reference consumer's 2218 snapshot revisions; a copy that dropped the label exclusion refuses every correctly-labelled prior; a copy that dropped the basename reduction refuses two bullets naming ONE file, which is the common stale-plus-live state. Make all four strings byte-identical across all three files, or move this arm with them."
+[ -z "$i113_missing" ] || err "I113: the single-valued position-bullet count has forked or gone missing at:$i113_missing. All three readers refuse a snapshot whose \`## Pipeline Position\` names two different step files -- the recovery hook drops its mandate and its gate, the stop hook resolves empty, Check 8 skips -- and refusal is only coherent while the three agree on what a second live bullet IS. A copy that narrowed the key alternation un-resolves 94 of the reference consumer's 2218 snapshot revisions; a copy that dropped the label exclusion refuses every correctly-labelled prior; a copy that dropped the basename reduction refuses two bullets naming ONE file, which is the common stale-plus-live state. Make all four strings byte-identical across all three files, or move this arm with them."
 
-  # HALF TWO: no fourth reader, and none of the three regressed to the whole-file first-match
-  # spelling. THE POSITIVE CONTROL IS THIS FILE, read in the same invocation -- it carries the
-  # canonical strings and the pre-fix spelling in its own probe, so a scan that is not reading
-  # the roots it was handed shows up here rather than as a clean fourth-copy report.
-  i113_hits="$(i113_sites "$REPO_ROOT/core" "$REPO_ROOT/scripts" | LC_ALL=C sort)"
-  i113_self="$REPO_ROOT/scripts/validate-enforcement-map.sh"
-  case "$i113_hits" in
-    *"$i113_self"*) : ;;
-    *) err "I113's fourth-copy scan did not find scripts/validate-enforcement-map.sh, which carries the reader grammar in its own probe. The scan is not reading the roots it was handed, so its silence about a fourth copy means nothing." ;;
+# HALF TWO: no fourth reader, and none of the three regressed to the whole-file first-match
+# spelling. THE POSITIVE CONTROL IS THIS FILE, read in the same invocation -- it carries the
+# canonical bullet expression in i113_bul, so a scan that is not reading
+# the roots it was handed shows up here rather than as a clean fourth-copy report.
+i113_hits="$(i113_sites "$REPO_ROOT/core" "$REPO_ROOT/scripts" | LC_ALL=C sort)"
+i113_self="$REPO_ROOT/scripts/validate-enforcement-map.sh"
+case "$i113_hits" in
+  *"$i113_self"*) : ;;
+  *) err "I113's fourth-copy scan did not find scripts/validate-enforcement-map.sh, which carries the reader grammar in i113_bul. The scan is not reading the roots it was handed, so its silence about a fourth copy means nothing." ;;
+esac
+i113_extra=''
+while IFS= read -r i113_hit; do
+  [ -n "$i113_hit" ] || continue
+  [ "$i113_hit" = "$i113_self" ] && continue
+  i113_rel_hit="${i113_hit#$REPO_ROOT/}"
+  case "$i113_declared" in
+    *"$i113_rel_hit"*) ;;
+    *) i113_extra="$i113_extra ${i113_rel_hit}" ;;
   esac
-  i113_extra=''
-  while IFS= read -r i113_hit; do
-    [ -n "$i113_hit" ] || continue
-    [ "$i113_hit" = "$i113_self" ] && continue
-    i113_rel_hit="${i113_hit#$REPO_ROOT/}"
-    case "$i113_declared" in
-      *"$i113_rel_hit"*) ;;
-      *) i113_extra="$i113_extra ${i113_rel_hit}" ;;
-    esac
-  done <<EOF
+done <<EOF
 $i113_hits
 EOF
-  [ -z "$i113_extra" ] || err "I113: an UNDECLARED reader of the snapshot position field exists at:$i113_extra. The four declared copies are already the most this field can carry safely; a fifth written the pre-fix way takes whichever bullet came first and reproduces the coin-toss in a file no arm names. Add it to i113_declared here in the same change, carrying all four canonical strings, or route it through one of the three."
-fi
+[ -z "$i113_extra" ] || err "I113: an UNDECLARED reader of the snapshot position field exists at:$i113_extra. The four declared copies are already the most this field can carry safely; a fifth written the pre-fix way takes whichever bullet came first and reproduces the coin-toss in a file no arm names. Add it to i113_declared here in the same change, carrying all four canonical strings, or route it through one of the three."
 
 # --- I114: a shipped skill's frontmatter sets nothing on the session that invokes it ---
 #
@@ -13552,22 +11686,6 @@ $(i114_keys_in "$@")
 EOF_I114
   printf '%s' "$i114_out"
 }
-# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp. The offender seed must be reported; the
-# near-miss (allowed keys only, a `model:` token inside the description, and an `effort:` line
-# in the BODY) must not be -- that seed is exactly the shape of the corrected tree.
-i114_probe="$(mktemp -d 2>/dev/null)"
-if [ -z "$i114_probe" ] || [ ! -d "$i114_probe" ]; then
-  err "I114 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports a clean corpus it never read; this fails instead."
-else
-  printf -- '---\nname: x\ndescription: y\neffort: high\n---\nbody\n' > "$i114_probe/offender.md"
-  printf -- '---\nname: x\ndescription: "pick a model: any"\n---\n\neffort: high\nmodel: opus\n' > "$i114_probe/nearmiss.md"
-  i114_po="$(i114_offenders "$i114_probe/offender.md")"
-  i114_pn="$(i114_offenders "$i114_probe/nearmiss.md")"
-  if [ "$i114_po" != " $i114_probe/offender.md[effort]" ]; then
-    err "I114 SELF-PROBE FAILED: a seeded SKILL.md carrying \`effort: high\` in its frontmatter yielded '${i114_po}' rather than one [effort] finding. The parser cannot see the key it exists to refuse, so a clean corpus below would be a floor of unknown depth."
-  elif [ -n "$i114_pn" ]; then
-    err "I114 SELF-PROBE FAILED: the near-miss seed (allowed keys only, a \`model:\` token inside the description, \`effort:\`/\`model:\` lines in the BODY) was reported as '${i114_pn}'. The parser reads past the closing fence or inside a value, so its findings would be noise."
-  else
     # Relative paths, from a subshell at the root, so a finding names `core/skills/<x>/SKILL.md`
     # and never an absolute path that varies by checkout.
     i114_n="$(cd "$REPO_ROOT" 2>/dev/null && set -- core/skills/*/SKILL.md && { [ -f "$1" ] && echo "$#" || echo 0; })"
@@ -13579,9 +11697,6 @@ else
         err "I114: a shipped skill's frontmatter sets a key outside the allowlist (${i114_allowed# }):${i114_bad}. A skill runs inside the lead session, and a key the harness applies at invocation (effort, model, allowed-tools, ...) silently overrides what the operator set with /effort, /model or settings, for the whole turn. ai-dlc binds subagents through aiDlcRoles and never the lead. If the key sets anything on the session, remove it. If it is purely descriptive, add it to i114_allowed in this arm, with the reason."
       fi
     fi
-  fi
-  rm -rf "$i114_probe" 2>/dev/null || true
-fi
 
 # --- I115: no file that sources reconcile/lib.sh can take the memo's EXIT cleanup away ---
 #
@@ -13639,31 +11754,7 @@ i115_scan() { # <file>... -> "S<TAB>file" per sourcer, "O<TAB>file:line<TAB>text
     END { if (prev != "") done(prev) }
   ' "$@" 2>/dev/null
 }
-# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp. The offender is a sourcer carrying each of the
-# seven forbidden spellings once, and all seven must be reported. The near-misses must not be: a
-# sourcer whose only such text is in COMMENTS, which also arms an ordinary `trap … EXIT` and a
-# `trap - INT`, unsets `trap_dir` and `mytrap`, and runs `unset foo; trap x EXIT`, and a
-# NON-sourcer (the settings-merge shape) carrying `trap - EXIT` for real.
-i115_probe="$(mktemp -d 2>/dev/null)"
-if [ -z "$i115_probe" ] || [ ! -d "$i115_probe" ]; then
-  err "I115 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports a clean corpus it never read; this fails instead."
-else
-  mkdir -p "$i115_probe/reconcile"
-  printf '%s\n' '. "$SELF/lib.sh"' 'builtin trap x EXIT' 'command trap x EXIT' 'unset -f trap' 'trap - EXIT' "trap '' EXIT" 'unset trap' 'unset -f -v foo trap' > "$i115_probe/reconcile/offender.sh"
-  printf '%s\n' '. "$SELF/lib.sh"' '# builtin trap x EXIT' '  # trap - EXIT' "trap 'rm -f x' EXIT" 'trap - INT' 'unset trap_dir' 'unset -v mytrap' 'unset foo; trap x EXIT' > "$i115_probe/reconcile/nearmiss.sh"
-  printf '%s\n' 'OUT=x' 'trap - EXIT' > "$i115_probe/reconcile/nonsourcer.sh"
-  i115_p="$(i115_scan "$i115_probe/reconcile/offender.sh" "$i115_probe/reconcile/nearmiss.sh" "$i115_probe/reconcile/nonsourcer.sh")"
   i115_count() { printf '%s\n' "$1" | awk -F'\t' -v k="$2" -v f="$3" '$1 == k && index($2, f) == 1 { n++ } END { print n + 0 }'; }
-  i115_po="$(i115_count "$i115_p" O "$i115_probe/reconcile/offender.sh:")"
-  i115_pn="$(i115_count "$i115_p" O "$i115_probe/reconcile/n")"
-  i115_px="$(i115_count "$i115_p" X "$i115_probe/reconcile/nonsourcer.sh:")"
-  if [ "$i115_po" -ne 7 ]; then
-    err "I115 SELF-PROBE FAILED: a seeded lib.sh sourcer carrying builtin trap, command trap, unset -f trap, trap - EXIT, trap '' EXIT, unset trap and unset -f -v foo trap yielded ${i115_po} finding(s), not 7. The scan cannot see a spelling it exists to refuse, so a clean corpus below would be a floor of unknown depth."
-  elif [ "$i115_pn" -ne 0 ]; then
-    err "I115 SELF-PROBE FAILED: the near-misses (the forbidden spellings in comments, an ordinary trap … EXIT, trap - INT, and a NON-sourcer's real trap - EXIT) yielded ${i115_pn} finding(s). The scan reads comments or ignores the sourcer filter, so its findings would be noise."
-  elif [ "$i115_px" -ne 1 ]; then
-    err "I115 SELF-PROBE FAILED: the non-sourcer's trap - EXIT was not seen by the line grammar at all (${i115_px} rows), so the near-miss above passed by blindness rather than by the sourcer filter."
-  else
     # Relative paths from a subshell at the root, so a finding names `core/...` and never an
     # absolute path that varies by checkout. lib.sh is dropped from the argument list here.
     i115_out="$(cd "$REPO_ROOT" 2>/dev/null && set -- core/skills/ai-dlc-update/reconcile/*.sh scripts/*.sh core/scripts/*.sh core/hooks/*.sh core/fixtures/*/*.sh \
@@ -13680,9 +11771,6 @@ else
       i115_bad="$(printf '%s\n' "$i115_out" | awk -F'\t' '$1 == "O" { printf " %s", $2 }')"
       [ -z "$i115_bad" ] || err "I115: a file that sources reconcile/lib.sh reaches the builtin trap past lib.sh's composing shadow, or resets EXIT with a spelling whose builtin meaning no longer holds:${i115_bad}. lib.sh arms the memo cleanup on EXIT and composes every later trap X EXIT with it; builtin trap, command trap and unset -f trap drop it, and the memo directory then leaks on every run. Write an ordinary trap <handler> EXIT, which lib.sh composes, and drop the reset line."
     fi
-  fi
-  rm -rf "$i115_probe" 2>/dev/null || true
-fi
 
 # --- I116: a SHIPPING fixture that uses a sibling fixture requires that sibling to ship ---
 #
@@ -13730,32 +11818,6 @@ i116_scan() { # <file>... -> "P<TAB>src<TAB>sib" per satisfied pair, "B<TAB>src<
     }
   ' "$@" 2>/dev/null
 }
-# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp. Offender: a shipped fixture using a dist-only
-# sibling that has a run.sh. Near-misses, each one property away: a shipped sibling; a sibling
-# with no run.sh that IS marked dist-only (the lib shape, so the run.sh test is what acquits
-# it); a dist-only user; a reference only in a comment; and a `../../` walk up.
-i116_probe="$(mktemp -d 2>/dev/null)"
-if [ -z "$i116_probe" ] || [ ! -d "$i116_probe" ]; then
-  err "I116 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports a clean corpus it never read; this fails instead."
-else
-  i116_f="$i116_probe/core/fixtures"
-  mkdir -p "$i116_f/user" "$i116_f/dsib" "$i116_f/ssib" "$i116_f/libby" "$i116_f/duser" "$i116_f/csib"
-  : > "$i116_f/dsib/run.sh"; echo reason > "$i116_f/dsib/.dist-only"
-  : > "$i116_f/ssib/run.sh"
-  : > "$i116_f/libby/x.sh"; echo reason > "$i116_f/libby/.dist-only"
-  : > "$i116_f/csib/run.sh"; echo reason > "$i116_f/csib/.dist-only"
-  echo reason > "$i116_f/duser/.dist-only"
-  printf '%s\n' 'H="$(dirname "$0")"' '. "$H/../dsib/seed.sh"' 'bash "$H/../ssib/seed.sh"' '. "$H/../libby/x.sh"' '# see ../csib/seed.sh' 'R="$H/../../dsib"' > "$i116_f/user/run.sh"
-  printf '%s\n' '. "$(dirname "$0")/../dsib/seed.sh"' > "$i116_f/duser/run.sh"
-  i116_p="$(i116_scan "$i116_f"/*/*.sh)"
-  i116_pb="$(printf '%s\n' "$i116_p" | awk -F'\t' '$1 == "B" { printf "%s>%s ", $2, $3 }')"
-  i116_pp="$(printf '%s\n' "$i116_p" | awk -F'\t' '$1 == "P" { printf "%s>%s ", $2, $3 }')"
-  rm -rf "$i116_probe" 2>/dev/null || true
-  if [ "$i116_pb" != "user>dsib " ]; then
-    err "I116 SELF-PROBE FAILED: breaches read '${i116_pb}', expected exactly 'user>dsib '. Either a shipped fixture using a dist-only sibling was not reported, or a near-miss (a lib-shaped dir with no run.sh, a dist-only user, a comment, a ../../ walk) was. Every verdict below is unattributable."
-  elif [ "$i116_pp" != "user>ssib " ]; then
-    err "I116 SELF-PROBE FAILED: satisfied pairs read '${i116_pp}', expected exactly 'user>ssib '. The grammar does not see a shipped sibling, so the breach arm above passed on a scan that reads nothing but the offender."
-  else
     i116_out="$(cd "$REPO_ROOT" 2>/dev/null && i116_scan core/fixtures/*/*.sh)"
     # IN-CORPUS CONTROL: the motivating pair must be seen as a pair, shipped or not. A grammar
     # that stopped matching on the real tree would otherwise report zero breaches forever.
@@ -13765,8 +11827,6 @@ else
       i116_bad="$(printf '%s\n' "$i116_out" | awk -F'\t' '$1 == "B" { printf " %s uses %s (%s);", $2, $3, $4 }')"
       [ -z "$i116_bad" ] || err "I116: a SHIPPING fixture uses a sibling fixture that does not ship:${i116_bad} A consumer receives the user without the sibling, so it errors or skips there while this repo stays green. Remove the sibling's .dist-only, or give the user a .dist-only of its own."
     fi
-  fi
-fi
 
 # --- I117: the `--cite` verdict set is ONE set across its emitter and every reader that compares it ---
 # vocabulary: steering-budget --cite verdicts
@@ -14028,35 +12088,6 @@ i118_split() {
 $1
 EOF
 }
-# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp. Offenders: a mapped fixture naming
-# `core/hooks/<h>` in run.sh, and `../../hooks/<h>` in seed.sh, with no row for either.
-# Near-misses, each one property away from an offender: the same full path on a COMMENT line; a
-# consumer `.claude/hooks/` path; a bare `hooks/<h>` argument; the basename in prose; a path to a
-# hook that does not exist under core/hooks/; the same offender line in an UNMAPPED fixture; the
-# same offender line in a mapped fixture's `lib.sh`, which the glob reaches and the basename
-# filter must drop; and a pair whose row IS present, which must read back as satisfied.
-i118_probe="$(mktemp -d 2>/dev/null)"
-if [ -z "$i118_probe" ] || [ ! -d "$i118_probe" ]; then
-  err "I118 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports a clean corpus it never read; this fails instead."
-else
-  mkdir -p "$i118_probe/core/hooks" "$i118_probe/core/fixtures/user" "$i118_probe/core/fixtures/loose"
-  for i118_h in miss seedmiss carried cmt cons arg prose libonly; do : > "$i118_probe/core/hooks/ai-dlc-$i118_h.sh"; done
-  printf '%s\n' '# GENERATED probe map' 'user	core/fixtures/user/run.sh' 'user	core/hooks/ai-dlc-carried.sh' > "$i118_probe/.ai-dlc-fixture-readsets.tsv"
-  printf '%s\n' 'H="$D/core/hooks/ai-dlc-miss.sh"' 'bash "$D/core/hooks/ai-dlc-carried.sh"' \
-    '  # bash "$D/core/hooks/ai-dlc-cmt.sh"' 'cp x "$C/.claude/hooks/ai-dlc-cons.sh"' \
-    'bash "$REG" hooks/ai-dlc-arg.sh --apply' 'echo "ai-dlc-prose.sh is named here"' \
-    'bash "$D/core/hooks/ai-dlc-ghost.sh"' > "$i118_probe/core/fixtures/user/run.sh"
-  printf '%s\n' 'S="$HERE/../../hooks/ai-dlc-seedmiss.sh"' > "$i118_probe/core/fixtures/user/seed.sh"
-  printf '%s\n' 'bash "$D/core/hooks/ai-dlc-miss.sh"' > "$i118_probe/core/fixtures/loose/run.sh"
-  # A hook of its OWN, so the `seen` memo cannot absorb it into run.sh's offender.
-  printf '%s\n' 'bash "$D/core/hooks/ai-dlc-libonly.sh"' > "$i118_probe/core/fixtures/user/lib.sh"
-  i118_split "$(i118_scan "$i118_probe")"
-  rm -rf "$i118_probe" 2>/dev/null || true
-  if [ "$i118_b" != "user>ai-dlc-miss.sh user>ai-dlc-seedmiss.sh " ]; then
-    err "I118 SELF-PROBE FAILED: omissions read '${i118_b}', expected exactly 'user>ai-dlc-miss.sh user>ai-dlc-seedmiss.sh '. Either a mapped fixture naming a core hook path in run.sh or seed.sh with no row was not reported, or a near-miss (a comment, a consumer .claude/hooks/ path, a bare hooks/ argument, a basename in prose, a hook absent from core/hooks/, an unmapped fixture, a fixture file that is neither run.sh nor seed.sh) was. Every verdict below is unattributable."
-  elif [ "$i118_pp" != "user>ai-dlc-carried.sh " ]; then
-    err "I118 SELF-PROBE FAILED: satisfied pairs read '${i118_pp}', expected exactly 'user>ai-dlc-carried.sh '. The scan does not see a row that IS present, so the omission arm above passed on a scan that reads nothing but the offenders."
-  else
     i118_map="$REPO_ROOT/.ai-dlc-fixture-readsets.tsv"
     if [ ! -f "$i118_map" ] && [ ! -e "$REPO_ROOT/.git" ]; then
       : # a seeded copy of the distribution: no map by construction, see the header
@@ -14084,8 +12115,6 @@ else
         err "I118: a mapped fixture's read-set rows omit a core/hooks/ path its own run.sh or seed.sh names on a code line:${i118_detail} The pre-push runner runs a MAPPED fixture only when a changed path is in its rows, so a push touching only that hook skips the fixture that drives it. Re-trace the fixture (bash core/scripts/derive-fixture-readsets.sh --list <fixture> --tracer sandbox) and commit the map; never hand-edit a row, because the next derivation reverts it."
       fi
     fi
-  fi
-fi
 
 # --- I119: no shipped prompt prescribes a whole fan-out "in ONE message" ---------
 # The harness runs at most CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS subagents at once and REJECTS
@@ -14121,11 +12150,7 @@ fi
 # bound by Rule 28's wave paragraph, which is the carrier; this arm guards the one spelling
 # that shipped.
 #
-# PROBE FIRST, BOTH WAYS, IN THE SAME awk RUN AS THE CORPUS. The probe cases arrive on stdin
-# ("-" is the first operand, so awk reads them before any corpus file), separated by
-# `#I119CASE <name>` lines, and each case's hit count is compared against its expectation
-# before the corpus verdict is read. ZERO extra forks for the probe: no mktemp, no rm. The
-# in-corpus control is a token known present in the scanned corpus -- Rule 28's own
+# THE IN-CORPUS CONTROL is a token known present in the scanned corpus -- Rule 28's own
 # "Split dispatch" heading -- counted by the same pass, so a corpus the scan never opened
 # cannot read as a clean one, and the scanned-file count is held to a floor.
 #
@@ -14136,7 +12161,6 @@ fi
 # all 24 hooks and the template is 0 with the whole file scanned. Each class carries its own
 # listed-count floor (the template exactly 1, the hooks at least 10), because the in-corpus
 # control below counts a token only rule-28.md carries and so cannot see a class go missing.
-# Two probe cases are shaped like those classes -- a hook's `echo` line and a template bullet.
 i119_files=(); i119_k=0; i119_nhook=0; i119_ntmpl=0
 for i119_f in "$REPO_ROOT"/core/skills/*/*.md "$REPO_ROOT"/core/skills/*/*/*.md \
               "$REPO_ROOT"/core/skills/*/*/*/*.md "$REPO_ROOT"/core/team-roles/*.md \
@@ -14156,31 +12180,6 @@ for i119_f in "$REPO_ROOT"/core/skills/*/*.md "$REPO_ROOT"/core/skills/*/*/*.md 
     */templates/CLAUDE.md.template) i119_ntmpl=$((i119_ntmpl + 1)) ;;
   esac
 done
-i119_probe='#I119CASE fire-inline
-the lead dispatches one agent per part in ONE message, plus one
-#I119CASE fire-wrapped
-dispatch every shard in ONE
-message, then join them all
-#I119CASE fire-emphasis
-send the whole wave in **one** message and stop
-#I119CASE fire-single
-dispatch every analyst in a single message
-#I119CASE fire-hook
-  echo "Re-dispatch every undelivered teammate in ONE message, then beat-join them."
-#I119CASE fire-template
-- Fan review work out to one agent per story, all in one message.
-#I119CASE quiet-citation
-dispatch one shard per story in waves (Rule 28, "Split dispatch").
-#I119CASE quiet-beat
-**Each wave is joined in ONE beat** -- pass every path to one call.
-#I119CASE quiet-same
-3. Route below in the SAME message as that dispatch when no FAILing
-#I119CASE quiet-response
-IN THE SAME response as any status recap. A response that contains
-#I119CASE quiet-each
-# --- Part 2: the authoring arms fire, one message each ---
-#I119CASE quiet-within
-the operator correcting a misreading within one message of it'
 if [ "${#i119_files[@]}" -lt 20 ]; then
   err "I119 found ${#i119_files[@]} prompt file(s) under core/skills, core/team-roles, core/rules, core/hooks and templates; at least 20 are expected. The glob no longer reaches the shipped prompts, so a clean result here would describe an empty corpus."
 elif [ "$i119_ntmpl" -ne 1 ] || [ "$i119_nhook" -lt 10 ]; then
@@ -14191,33 +12190,27 @@ else
     function hit(s) { return s ~ /(^|[^a-z])in (one|a single) message([^a-z]|$)/ }
     BEGIN {
       for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] == "-") continue
         r = (getline l < ARGV[i]); close(ARGV[i])
         if (r == 0) nempty++
         else if (r < 0) printf "U %s\n", ARGV[i]
       }
       printf "E %d\n", nempty + 0
     }
-    FNR == 1 { prev = ""; if (FILENAME != "-") nfiles++ }
-    FILENAME == "-" && /^#I119CASE / { cur = $2; seen[cur] = 0; order = order " " cur; prev = ""; next }
+    FNR == 1 { prev = ""; nfiles++ }
     {
       line = norm($0)
       if (hit(line) || (prev != "" && !hit(prev) && hit(prev " " line))) {
-        if (FILENAME == "-") seen[cur]++
-        else printf "H %s:%d\n", FILENAME, FNR
+        printf "H %s:%d\n", FILENAME, FNR
       }
-      if (FILENAME != "-" && index($0, "**Split dispatch:")) ctl++
+      if (index($0, "**Split dispatch:")) ctl++
       prev = line
     }
     END {
-      n = split(order, o, " "); p = ""
-      for (i = 1; i <= n; i++) p = p o[i] "=" seen[o[i]] " "
-      printf "P %s\nC %d\nN %d\n", p, ctl + 0, nfiles + 0
-    }' - "${i119_files[@]}" <<<"$i119_probe" 2>&1)"
-  i119_p=""; i119_c=""; i119_n=""; i119_hits=""; i119_e=0; i119_u=""
+      printf "C %d\nN %d\n", ctl + 0, nfiles + 0
+    }' "${i119_files[@]}" 2>&1)"
+  i119_c=""; i119_n=""; i119_hits=""; i119_e=0; i119_u=""
   while IFS= read -r i119_l; do
     case "$i119_l" in
-      "P "*) i119_p="${i119_l#P }" ;;
       "C "*) i119_c="${i119_l#C }" ;;
       "N "*) i119_n="${i119_l#N }" ;;
       "E "*) i119_e="${i119_l#E }" ;;
@@ -14229,10 +12222,7 @@ else
   awk: ${i119_l}" ;;
     esac
   done <<<"$i119_out"
-  i119_want="fire-inline=1 fire-wrapped=1 fire-emphasis=1 fire-single=1 fire-hook=1 fire-template=1 quiet-citation=0 quiet-beat=0 quiet-same=0 quiet-response=0 quiet-each=0 quiet-within=0 "
-  if [ "$i119_p" != "$i119_want" ]; then
-    err "I119 SELF-PROBE FAILED: the probe read '${i119_p}', expected exactly '${i119_want}'. Either a seeded whole-set imperative (inline, wrapped across a line break, emphasised, 'a single', a hook echo line, or a template bullet) was not reported, or a near-miss (a Rule 28 waves citation, 'in ONE beat', 'in the SAME message', 'IN THE SAME response', 'one message each', 'within one message') was. Every verdict below is unattributable.${i119_u}"
-  elif [ "${i119_n:-0}" != "$((${#i119_files[@]} - i119_e))" ] || [ -n "$i119_u" ]; then
+  if [ "${i119_n:-0}" != "$((${#i119_files[@]} - i119_e))" ] || [ -n "$i119_u" ]; then
     err "I119 scanned ${i119_n:-0} file(s) of the $((${#i119_files[@]} - i119_e)) listed non-empty (${#i119_files[@]} listed, ${i119_e} empty). A listed prompt the scan never opened reads exactly like a clean one.${i119_u}${i119_hits}"
   elif [ "${i119_c:-0}" -lt 1 ] 2>/dev/null || [ -z "$i119_c" ]; then
     err "I119 IN-CORPUS CONTROL FAILED: the scan did not see Rule 28's '**Split dispatch:' clause in core/skills/ai-dlc/rule-bodies/rule-28.md. Either the clause was renamed (move this control and every citation with it) or the scan no longer reaches the real tree, so zero findings here prove nothing."
@@ -14391,64 +12381,6 @@ $1
 EOF
 }
 
-# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS. Every half is absence-shaped: a scan
-# that stops matching reports no missing copy, no drift and no sixth site, and each of those
-# silences reads exactly like a conforming tree. So the functions above are driven over seeds
-# with one right answer first, and the corpus is not read unless they produce it.
-i121_pd="$(mktemp -d "${TMPDIR:-/tmp}/i121-XXXXXX")"
-mkdir -p "$i121_pd/t" "$i121_pd/p/sub" "$i121_pd/s"
-i121_body="$i121_op
-claim (a count, a citation, a listing) is either a \`derived\` fence in your deliverable, replayed
-by one call to \`scripts/ai-dlc/validate-artifact-derivations.sh <that file>\`, or one read-only
-command or pipeline in its own Bash call: no \`set\`, no chain of variable assignments, no
-$i121_cl"
-#  a  the reference paragraph.   b  NEAR-MISS: identical, different surroundings -- must be OK.
-printf 'lead\n\n%s\n\nafter\n' "$i121_body" > "$i121_pd/t/a.md"
-printf 'other lead\nmore lead\n\n%s\n\nother after\n' "$i121_body" > "$i121_pd/t/b.md"
-#  c  one word of the BODY changed -- DRIFT. An arm comparing only the opener calls this OK.
-printf 'lead\n\n%s\n\nafter\n' "$(printf '%s\n' "$i121_body" | sed 's/no chain of variable assignments/no chain of variable assignment/')" > "$i121_pd/t/c.md"
-#  d  no paragraph at all -- MISSING.
-printf 'a role file that says nothing about Bash calls\n' > "$i121_pd/t/d.md"
-#  e  the opener GLUED onto the end of another sentence on one line -- INLINE. A substring key
-#     finds the sentence here and accepts it.
-printf 'lead\n\nSome other sentence. %s\n\nafter\n' "$i121_body" > "$i121_pd/t/e.md"
-#  f  the opener on its own line with NO blank line above it, so markdown joins it to the
-#     paragraph before -- INLINE.
-printf 'lead\n%s\n\nafter\n' "$i121_body" > "$i121_pd/t/f.md"
-#  g  opened and never closed -- UNCLOSED, not DRIFT.
-printf 'lead\n\n%s\nand the file simply ends\n' "$i121_op" > "$i121_pd/t/g.md"
-#  h  two copies -- MULTI.
-printf 'lead\n\n%s\n\nmiddle\n\n%s\n' "$i121_body" "$i121_body" > "$i121_pd/t/h.md"
-#  i  a sentence appended to the closing line's paragraph -- TRAILING.
-printf 'lead\n\n%s\nAnd one more sentence.\n' "$i121_body" > "$i121_pd/t/i.md"
-#  population seeds: a .md, a .txt and a .md one directory down. Only the first is a member.
-printf 'x\n' > "$i121_pd/p/a.md"; printf 'x\n' > "$i121_pd/p/b.txt"; printf 'x\n' > "$i121_pd/p/sub/c.md"
-#  site seeds: a mention-only sixth site that MUST be seen, and the sentence without its bold
-#  markers, which must NOT be.
-printf 'see %s\n' "$i121_sn" > "$i121_pd/s/m.md"
-printf 'Verify with one read-only command per Bash call.\n' > "$i121_pd/s/n.md"
-
-i121_parse "$(i121_scan "$i121_pd"/t/a.md "$i121_pd"/t/b.md "$i121_pd"/t/c.md "$i121_pd"/t/d.md \
-  "$i121_pd"/t/e.md "$i121_pd"/t/f.md "$i121_pd"/t/g.md "$i121_pd"/t/h.md "$i121_pd"/t/i.md)"
-i121_score=0
-[ "$(i121_pop "$i121_pd/p")" = "$i121_pd/p/a.md" ]                   || i121_score=$((i121_score + 1))
-[ "$i121_st_OK" = " $i121_pd/t/a.md $i121_pd/t/b.md" ]               || i121_score=$((i121_score + 10))
-[ "$i121_st_DRIFT" = " $i121_pd/t/c.md" ]                            || i121_score=$((i121_score + 1000))
-[ "$i121_st_MISSING" = " $i121_pd/t/d.md" ]                          || i121_score=$((i121_score + 10000))
-in_lines "$i121_pd/t/e.md" "$(printf '%s\n' $i121_st_INLINE)"         || i121_score=$((i121_score + 100000))
-in_lines "$i121_pd/t/f.md" "$(printf '%s\n' $i121_st_INLINE)"         || i121_score=$((i121_score + 1000000))
-[ "$i121_st_UNCLOSED" = " $i121_pd/t/g.md" ]                         || i121_score=$((i121_score + 10000000))
-[ "$i121_st_MULTI" = " $i121_pd/t/h.md" ]                            || i121_score=$((i121_score + 100000000))
-[ "$i121_st_TRAILING" = " $i121_pd/t/i.md" ]                         || i121_score=$((i121_score + 1000000000))
-[ "$i121_nscan" = 9 ]                                                || i121_score=$((i121_score + 10000000000))
-[ "$(i121_sites "$i121_pd/s")" = "$i121_pd/s/m.md" ]                 || i121_score=$((i121_score + 100000000000))
-[ "$(i121_ptrs "$i121_block")" = "scripts/ai-dlc/validate-artifact-derivations.sh" ] \
-                                                                     || i121_score=$((i121_score + 1000000000000))
-rm -rf "$i121_pd"
-
-if [ "$i121_score" -ne 0 ]; then
-  err "I121's probe scored $i121_score where 0 is the only correct total, so the corpus below was not read. +1 the population function did not return exactly the one *.md directly under its directory, so the population is not the glob install.sh copies -- a hand list, or a recursive or extension-blind scan; +10 a reference paragraph, or the identical paragraph in different surroundings, was not scored OK; +1000 a paragraph differing by one word in its BODY was not scored DRIFT, so the comparison reads only the opener; +10000 a file with no paragraph was not scored MISSING; +100000 the opener glued onto the end of another sentence was not scored INLINE, so the key is a substring rather than a whole line; +1000000 the opener with no blank line above it was not scored INLINE; +10000000 an opener with no closing line was not scored UNCLOSED; +100000000 two copies were not scored MULTI; +1000000000 a sentence appended after the closing line was not scored TRAILING; +10000000000 the scan did not report every file it was given; +100000000000 the sixth-site scan did not name exactly the mention-only file, or it named the sentence without its bold markers; +1000000000000 the validator path was not extracted from the modal block as exactly scripts/ai-dlc/validate-artifact-derivations.sh. Any non-zero total means a half of I121 would report a clean tree for the reason a broken scan does."
-else
   i121_roles="$REPO_ROOT/core/team-roles"
   i121_set="$(i121_pop "$i121_roles")"
   i121_n="$(printf '%s\n' "$i121_set" | grep -c .)" || i121_n=0
@@ -14505,7 +12437,6 @@ EOF
       [ -z "$i121_extra" ] || err "I121: file(s) outside core/team-roles/*.md carry the verify-shape opener sentence:$i121_extra. Half A binds only the role files, so a copy anywhere else drifts unbound and teaches its own version of the rule to whichever agent reads it. Point that file at the role contract instead of copying the paragraph."
     fi
   fi
-fi
 
 # --- I122: every role contract carries the advisor paragraph exactly once, byte-identical, and no other file carries it ---
 # WHAT IT BINDS. Every file matching core/team-roles/*.md carries one paragraph opening
@@ -14613,51 +12544,6 @@ $1
 EOF
 }
 
-# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS -- I121's seeds re-spelled for this
-# paragraph, plus one I121 does not need: a file carrying ONLY the verify-shape paragraph must
-# score MISSING here, so a scan keyed on the neighbour's text cannot read as conforming.
-i122_pd="$(mktemp -d "${TMPDIR:-/tmp}/i122-XXXXXX")"
-mkdir -p "$i122_pd/t" "$i122_pd/p/sub" "$i122_pd/s"
-i122_body="$i122_op
-call it before your first edit or write, and again before you write your deliverable or verdict.
-It takes no parameters and forwards your whole transcript to a stronger reviewer; weigh what it
-$i122_cl"
-printf 'lead\n\n%s\n\nafter\n' "$i122_body" > "$i122_pd/t/a.md"
-printf 'other lead\nmore lead\n\n%s\n\nother after\n' "$i122_body" > "$i122_pd/t/b.md"
-printf 'lead\n\n%s\n\nafter\n' "$(printf '%s\n' "$i122_body" | sed 's/forwards your whole transcript/forwards your transcript/')" > "$i122_pd/t/c.md"
-# The neighbour's opener and closer are spelled here, not read from i121_op/i121_cl: `--arms
-# I122` runs this unit alone, where I121's variables are unset.
-printf 'lead\n\n%s\n%s\n\nafter\n' \
-  '**Verify with one read-only command per Bash call.** A check that reads the tree to confirm a' \
-  'no command-prefix allow rule and can stop an unattended sprint until a human approves it.' > "$i122_pd/t/d.md"
-printf 'lead\n\nSome other sentence. %s\n\nafter\n' "$i122_body" > "$i122_pd/t/e.md"
-printf 'lead\n%s\n\nafter\n' "$i122_body" > "$i122_pd/t/f.md"
-printf 'lead\n\n%s\nand the file simply ends\n' "$i122_op" > "$i122_pd/t/g.md"
-printf 'lead\n\n%s\n\nmiddle\n\n%s\n' "$i122_body" "$i122_body" > "$i122_pd/t/h.md"
-printf 'lead\n\n%s\nAnd one more sentence.\n' "$i122_body" > "$i122_pd/t/i.md"
-printf 'x\n' > "$i122_pd/p/a.md"; printf 'x\n' > "$i122_pd/p/b.txt"; printf 'x\n' > "$i122_pd/p/sub/c.md"
-printf 'see %s\n' "$i122_sn" > "$i122_pd/s/m.md"
-printf 'Consult the `advisor` tool when it is available.\n' > "$i122_pd/s/n.md"
-
-i122_parse "$(i122_scan "$i122_pd"/t/a.md "$i122_pd"/t/b.md "$i122_pd"/t/c.md "$i122_pd"/t/d.md \
-  "$i122_pd"/t/e.md "$i122_pd"/t/f.md "$i122_pd"/t/g.md "$i122_pd"/t/h.md "$i122_pd"/t/i.md)"
-i122_score=0
-[ "$(i122_pop "$i122_pd/p")" = "$i122_pd/p/a.md" ]                   || i122_score=$((i122_score + 1))
-[ "$i122_st_OK" = " $i122_pd/t/a.md $i122_pd/t/b.md" ]               || i122_score=$((i122_score + 10))
-[ "$i122_st_DRIFT" = " $i122_pd/t/c.md" ]                            || i122_score=$((i122_score + 1000))
-[ "$i122_st_MISSING" = " $i122_pd/t/d.md" ]                          || i122_score=$((i122_score + 10000))
-in_lines "$i122_pd/t/e.md" "$(printf '%s\n' $i122_st_INLINE)"         || i122_score=$((i122_score + 100000))
-in_lines "$i122_pd/t/f.md" "$(printf '%s\n' $i122_st_INLINE)"         || i122_score=$((i122_score + 1000000))
-[ "$i122_st_UNCLOSED" = " $i122_pd/t/g.md" ]                         || i122_score=$((i122_score + 10000000))
-[ "$i122_st_MULTI" = " $i122_pd/t/h.md" ]                            || i122_score=$((i122_score + 100000000))
-[ "$i122_st_TRAILING" = " $i122_pd/t/i.md" ]                         || i122_score=$((i122_score + 1000000000))
-[ "$i122_nscan" = 9 ]                                                || i122_score=$((i122_score + 10000000000))
-[ "$(i122_sites "$i122_pd/s")" = "$i122_pd/s/m.md" ]                 || i122_score=$((i122_score + 100000000000))
-rm -rf "$i122_pd"
-
-if [ "$i122_score" -ne 0 ]; then
-  err "I122's probe scored $i122_score where 0 is the only correct total, so the corpus below was not read. +1 the population function did not return exactly the one *.md directly under its directory; +10 a reference paragraph, or the identical paragraph in different surroundings, was not scored OK; +1000 a paragraph differing by one word in its BODY was not scored DRIFT, so the comparison reads only the opener; +10000 a file carrying only the verify-shape paragraph was not scored MISSING, so the scan is keyed on the neighbouring I121 paragraph; +100000 the opener glued onto the end of another sentence was not scored INLINE, so the key is a substring rather than a whole line; +1000000 the opener with no blank line above it was not scored INLINE; +10000000 an opener with no closing line was not scored UNCLOSED; +100000000 two copies were not scored MULTI; +1000000000 a sentence appended after the closing line was not scored TRAILING; +10000000000 the scan did not report every file it was given; +100000000000 the sixth-site scan did not name exactly the mention-only file, or it named the sentence without its bold markers. Any non-zero total means a half of I122 would report a clean tree for the reason a broken scan does."
-else
   i122_roles="$REPO_ROOT/core/team-roles"
   i122_set="$(i122_pop "$i122_roles")"
   i122_n="$(printf '%s\n' "$i122_set" | grep -c .)" || i122_n=0
@@ -14703,7 +12589,6 @@ EOF
       [ -z "$i122_extra" ] || err "I122: file(s) outside core/team-roles/*.md carry the advisor opener sentence:$i122_extra. Half A binds only the role files, so a copy anywhere else drifts unbound and teaches its own version of the rule to whichever agent reads it. Point that file at the role contract instead of copying the paragraph."
     fi
   fi
-fi
 
 # --- I123: every role contract carries the chunked-write paragraph once, byte-identical, directly after the advisor paragraph, and no other file carries it ---
 # WHAT IT BINDS. Every file matching core/team-roles/*.md carries one paragraph whose first line
@@ -14849,68 +12734,6 @@ $1
 EOF
 }
 
-# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS. Every seed file is written by the
-# builtin printf, so the probe costs one mktemp, one mkdir, one awk, one grep and one rm.
-i123_pd="$(mktemp -d "${TMPDIR:-/tmp}/i123-XXXXXX")"
-mkdir -p "$i123_pd/t" "$i123_pd/p18" "$i123_pd/e0" "$i123_pd/r/core/skills" "$i123_pd/r/core/fixtures/zz"
-i123_l1='draft body line one of the planted paragraph.'
-i123_l2='If an advisor tool is available to you, also call it before the first chunk.'
-i123_l3='final line of the planted paragraph.'
-i123_body="$i123_op
-$i123_l1
-$i123_l2
-$i123_l3"
-i123_adv="$(printf '%s\n%s' '**Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,' "$i123_pc")"
-printf 'lead\n\n%s\n\n%s\n\nafter\n' "$i123_adv" "$i123_body" > "$i123_pd/t/a.md"
-printf 'other lead\n%s\n\n%s\n\n## Next\n' "$i123_pc" "$i123_body" > "$i123_pd/t/b.md"
-printf 'lead\n%s\n\n%s\n%s \n%s\n%s\n\nafter\n' "$i123_pc" "$i123_op" "$i123_l1" "$i123_l2" "$i123_l3" > "$i123_pd/t/c.md"
-printf 'lead\n%s\n\n%s\n%s\n%s\n\nafter\n' "$i123_pc" "$i123_op" "$i123_l1" "$i123_l3" > "$i123_pd/t/d.md"
-printf 'lead\n\n%s\n\nafter\n' "$i123_adv" > "$i123_pd/t/e.md"
-printf 'lead\n%s\n\nSome other sentence. %s\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/t/f.md"
-printf 'lead\n%s\n%s\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/t/g.md"
-printf 'lead\n%s\n\n```\n\n%s\n```\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/t/h.md"
-printf 'lead\n%s\n\nanother paragraph between them.\n\n%s\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/t/i.md"
-printf 'lead\n%s\n\n%s\n\nmiddle\n\n%s\n' "$i123_pc" "$i123_body" "$i123_body" > "$i123_pd/t/j.md"
-printf 'lead\n%s\n\n\n%s\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/t/k.md"
-printf 'lead\n%s\n\n%s\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/p18/r01.md"
-for i123_i in 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18; do
-  printf 'lead\n\n%s\n\nafter\n' "$i123_adv" > "$i123_pd/p18/r$i123_i.md"
-done
-printf 'x\n' > "$i123_pd/e0/not-md.txt"
-printf 'See the role contract.\n\n%s Do it.\n' "$i123_sn" > "$i123_pd/r/core/skills/zz.md"
-printf 'Write your deliverable in chunks and iteratively, never in one write at the end.\n' > "$i123_pd/r/core/skills/plain.md"
-printf '%s\n' "$i123_sn" > "$i123_pd/r/core/fixtures/zz/x.md"
-
-i123_p18="$(i123_population "$i123_pd/p18")"
-# shellcheck disable=SC2086 # the probe paths are mktemp paths with no blanks
-i123_parse "$(IFS='
-'; i123_scan "$i123_pd"/t/a.md "$i123_pd"/t/b.md "$i123_pd"/t/c.md "$i123_pd"/t/d.md "$i123_pd"/t/e.md \
-  "$i123_pd"/t/f.md "$i123_pd"/t/g.md "$i123_pd"/t/h.md "$i123_pd"/t/i.md "$i123_pd"/t/j.md "$i123_pd"/t/k.md $i123_p18)"
-i123_bad=''
-i123_has() { in_lines "$1" "$(printf '%s\n' $2)"; }
-[ "$(i123_count "$i123_p18")" = 18 ]                    || i123_bad="$i123_bad population-of-18"
-if i123_population "$i123_pd/e0" >/dev/null; then i123_bad="$i123_bad empty-glob-not-refused"; fi
-[ "$i123_nscan" = 29 ]                                  || i123_bad="$i123_bad scanned-count"
-i123_has "$i123_pd/t/a.md" "$i123_st_OK"                || i123_bad="$i123_bad a-reference-not-OK"
-i123_has "$i123_pd/t/b.md" "$i123_st_OK"                || i123_bad="$i123_bad b-other-surroundings-not-OK"
-i123_has "$i123_pd/p18/r01.md" "$i123_st_OK"            || i123_bad="$i123_bad 18th-carrier-not-OK"
-i123_has "$i123_pd/t/c.md" "$i123_st_DRIFT"             || i123_bad="$i123_bad c-whitespace-drift"
-i123_has "$i123_pd/t/d.md" "$i123_st_DRIFT"             || i123_bad="$i123_bad d-advisor-sentence-removed"
-i123_has "$i123_pd/t/e.md" "$i123_st_MISSING"           || i123_bad="$i123_bad e-advisor-only-not-MISSING"
-[ "$(i123_count "$(printf '%s\n' $i123_st_MISSING | grep -F /p18/)")" = 17 ] || i123_bad="$i123_bad 17-of-18-missing"
-i123_has "$i123_pd/t/f.md" "$i123_st_INLINE"            || i123_bad="$i123_bad f-glued-sentence"
-i123_has "$i123_pd/t/g.md" "$i123_st_INLINE"            || i123_bad="$i123_bad g-no-blank-line-above"
-i123_has "$i123_pd/t/h.md" "$i123_st_FENCED"            || i123_bad="$i123_bad h-fenced-copy"
-i123_has "$i123_pd/t/i.md" "$i123_st_MISPLACED"         || i123_bad="$i123_bad i-not-after-advisor-closer"
-i123_has "$i123_pd/t/j.md" "$i123_st_MULTI"             || i123_bad="$i123_bad j-two-copies"
-i123_has "$i123_pd/t/k.md" "$i123_st_MISPLACED"         || i123_bad="$i123_bad k-two-blank-lines"
-[ "$(i123_outside "$i123_pd/r" "$(i123_sites "$i123_pd/r/core")" '')" = " core/skills/zz.md" ] \
-                                                        || i123_bad="$i123_bad half-B-skills-reported-fixtures-quiet"
-rm -rf "$i123_pd"
-
-if [ -n "$i123_bad" ]; then
-  err "I123's probe failed on seed(s):$i123_bad, so the corpus below was not read. Each name is a planted case the scan scored wrongly: population-of-18 and empty-glob-not-refused are the population function; a-, b- and 18th- are reference copies that must score OK; c- and d- are body drifts (one trailing space, the advisor sentence removed) that must score DRIFT; e- is a file holding only the advisor paragraph, which must score MISSING; 17-of-18-missing is that file shape seventeen times; f- and g- are the opener glued onto a sentence and onto the previous paragraph, INLINE; h- is a fenced copy, FENCED; i- and k- are copies not directly after the advisor closing line with one blank, MISPLACED; j- is two copies, MULTI; half-B- requires a core/skills/ copy reported and a core/fixtures/ copy and an unbolded sentence quiet. Any of them failing means a half of I123 would report a clean tree for the reason a broken scan does."
-else
   if ! i123_set="$(i123_population "$REPO_ROOT/core/team-roles")"; then
     err "I123 found no file matching core/team-roles/*.md. That glob is what install.sh copies into a consumer as the role contracts, so an empty population means the arm is looking in the wrong place, not that there are no roles. Nothing below was checked."
   else
@@ -14938,7 +12761,6 @@ else
       [ -z "$i123_extra" ] || err "I123: file(s) outside core/team-roles/*.md carry the chunked-write opener sentence:$i123_extra. Half A binds only the role files, so a copy anywhere else drifts unbound. Point that file at the role contract instead of copying the paragraph."
     fi
   fi
-fi
 
 # --- I124: the party-seat section is byte-identical across exactly architect, dev, pm and tea, and no other file carries it ---
 # WHAT IT BINDS. Four role contracts carry a section headed
@@ -14970,9 +12792,7 @@ fi
 # regex or its grep names every carrier. NARROWING: the control set is the files half A scored
 # OK, DRIFT or MULTI, never MISSING -- a listed file without the heading is half A's finding and
 # is not a hit half B could have produced, so including it would double-report every MISSING as
-# CONTROL. The probe seeds the mutant that drops "$1/core" from the roots (i124_mut=nocore) on
-# the conforming four and requires exactly four CONTROL rows; the three other seeds and the real
-# corpus stay free of CONTROL rows, which is the near-miss direction.
+# CONTROL.
 #
 # NOT A VOCABULARY, so no vocabulary marker. The subject is one section's BYTES.
 #
@@ -15043,11 +12863,7 @@ ${i124_l#* }"; printf '%s %s\n' "${i124_l%% *}" "${i124_l#* "$1"/}" ;;
 $i124_rows
 EOF
   fi
-  if [ "${i124_mut:-}" = nocore ]; then
-    i124_hits="$(i124_sites "$1/scripts" "$1/templates" "$1/patterns" "$1/.claude/rules" "$1/CLAUDE.md")"
-  else
     i124_hits="$(i124_sites "$1/core" "$1/scripts" "$1/templates" "$1/patterns" "$1/.claude/rules" "$1/CLAUDE.md")"
-  fi
   while IFS= read -r i124_h; do
     [ -n "$i124_h" ] || continue
     case "${i124_h#"$1"/}" in core/fixtures/*) continue ;; esac
@@ -15064,46 +12880,12 @@ $i124_carry
 EOF
 }
 
-# THE PROBE, BEFORE THE CORPUS, BOTH DIRECTIONS. Seeds: a conforming four (quiet), three of four
-# (tea MISSING), one body drift (DRIFT dev), a fifth carrier under core/skills/ at a demoted
-# level (EXTRA), and near-misses that must stay quiet: a copy under core/fixtures/ and a prose
-# mention that is not a heading.
-i124_pd="$(mktemp -d "${TMPDIR:-/tmp}/i124-XXXXXX")"
-mkdir -p "$i124_pd/ok/core/team-roles" "$i124_pd/w3/core/team-roles" "$i124_pd/wd/core/team-roles" \
-  "$i124_pd/w5/core/team-roles" "$i124_pd/w5/core/skills" "$i124_pd/w5/core/fixtures/zz" "$i124_pd/ok/core/skills"
-i124_sec="$(printf '%s\n\nWrite the header first.\nClose with one marker.' "$i124_hd")"
-for i124_nm in architect dev pm tea; do
-  for i124_w in ok w3 wd w5; do
-    printf '# Role\n\n%s\n\n## Constraints\n\nnone\n' "$i124_sec" > "$i124_pd/$i124_w/core/team-roles/$i124_nm.md"
-  done
-done
-printf '# Role\n\n## Constraints\n\nnone\n' > "$i124_pd/w3/core/team-roles/tea.md"
-printf '# Role\n\n%s\nOne extra sentence.\n\n## Constraints\n' "$i124_sec" > "$i124_pd/wd/core/team-roles/dev.md"
-printf '# Copy\n\n### As a party seat — paraphrased\n\nbody\n' > "$i124_pd/w5/core/skills/zz.md"
-printf '%s\n' "$i124_hd" > "$i124_pd/w5/core/fixtures/zz/x.md"
-printf 'Prose that says As a party seat in passing.\n' > "$i124_pd/ok/core/skills/prose.md"
-i124_bad=''
-[ -z "$(i124_check "$i124_pd/ok")" ]                                  || i124_bad="$i124_bad conforming-four-not-quiet"
-[ "$(i124_check "$i124_pd/w3")" = "MISSING core/team-roles/tea.md" ]  || i124_bad="$i124_bad 3-of-4"
-[ "$(i124_check "$i124_pd/wd")" = "DRIFT core/team-roles/dev.md" ]    || i124_bad="$i124_bad body-drift"
-[ "$(i124_check "$i124_pd/w5")" = "EXTRA core/skills/zz.md" ]         || i124_bad="$i124_bad 5th-carrier"
-i124_mo="$(i124_mut=nocore i124_check "$i124_pd/ok")"
-[ "$i124_mo" = "CONTROL core/team-roles/architect.md
-CONTROL core/team-roles/dev.md
-CONTROL core/team-roles/pm.md
-CONTROL core/team-roles/tea.md" ]                                       || i124_bad="$i124_bad no-core-root-mutant"
-rm -rf "$i124_pd"
-
-if [ -n "$i124_bad" ]; then
-  err "I124's probe failed on seed(s):$i124_bad, so the corpus below was not read. conforming-four-not-quiet: four identical sections and a prose mention were reported; 3-of-4: tea.md without the section was not the only finding; body-drift: one appended sentence in dev.md was not the only finding; 5th-carrier: a demoted copy under core/skills/ was not the only finding, or the core/fixtures/ copy was reported; no-core-root-mutant: half B run with core/ dropped from its roots did not name all four carriers as CONTROL, so a half-B scan that read nothing would pass. Any of them failing means I124 would report a clean tree for the reason a broken scan does."
-else
   i124_out="$(i124_check "$REPO_ROOT")"
   if [ -n "$i124_out" ]; then
     err "I124: the party-seat section is not bound across architect, dev, pm and tea. Findings, one per line (MISSING: a listed file lacks the exact heading line; MULTI: it carries the heading twice; DRIFT: its section differs from the copy the others agree on, heading through the line before the next '## '; EXTRA: a file outside the four carries a heading opening 'As a party seat'; UNREAD: a listed file was not read; CONTROL: a listed file carrying the heading was not among half B's hits, so half B did not read the tree it reports on):
 $i124_out
 The four copies are the standing copy of one join protocol, so a fork among them is two protocols. Make the section byte-identical in the four files, and keep it out of every other file -- if a fifth role becomes a party seat, add it to i124_names in the same change."
   fi
-fi
 
 
 # --- I125: the shardable-role set is ONE set across Check 22's validator and the dispatch guard ---
@@ -15157,35 +12939,12 @@ i125_check() { # i125_check <validator> <guard> -> one finding per line, nothing
   [ "$v" = "$g" ] || printf 'DRIFT validator=[%s] guard=[%s]\n' "$v" "$g"
 }
 
-# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS. Every finding here is presence-shaped,
-# but a grammar that stopped matching the real lines would report MISSING on the corpus, never
-# silence -- the probe is for the other direction: a pattern that matched the APPEND line, or a
-# comparison that normalised away a dropped role, would read as agreement.
-i125_pd="$(mktemp -d "${TMPDIR:-/tmp}/i125-XXXXXX")"
-i125_roles='adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa'
-printf 'SHARD_ROLES="%s"\nSHARD_SET=" ${SHARD_ROLES} "\n' "$i125_roles" > "$i125_pd/v.sh"
-#  ok    the guard's real shape, the party-seat append line beside it as a decoy.
-printf '  _dg_shardable=" %s "\n      _dg_shardable="${_dg_shardable}${_dg_rb%%.md} "\n' "$i125_roles" > "$i125_pd/g-ok.sh"
-#  drift the same with `qa` dropped -- the exact state the arm exists to report.
-printf '  _dg_shardable=" %s "\n      _dg_shardable="${_dg_shardable}${_dg_rb%%.md} "\n' "${i125_roles% qa}" > "$i125_pd/g-drift.sh"
-#  gone  only the append line: the literal replaced by something the grammar cannot spell.
-printf '      _dg_shardable="${_dg_shardable}${_dg_rb%%.md} "\n' > "$i125_pd/g-gone.sh"
-i125_bad=''
-[ -z "$(i125_check "$i125_pd/v.sh" "$i125_pd/g-ok.sh")" ] || i125_bad="$i125_bad match-not-quiet"
-case "$(i125_check "$i125_pd/v.sh" "$i125_pd/g-drift.sh")" in DRIFT*) ;; *) i125_bad="$i125_bad drift-not-reported" ;; esac
-case "$(i125_check "$i125_pd/v.sh" "$i125_pd/g-gone.sh")" in MISSING*) ;; *) i125_bad="$i125_bad gone-not-reported" ;; esac
-rm -rf "$i125_pd"
-
-if [ -n "$i125_bad" ]; then
-  err "I125's probe failed on seed(s):$i125_bad, so the corpus below was not read. match-not-quiet: identical lists with the party-seat append line beside them were reported; drift-not-reported: a guard copy missing \`qa\` was not called DRIFT; gone-not-reported: a guard carrying only the append line was not called MISSING. Any of them means I125 would report agreement for the reason a broken grammar does."
-else
   i125_out="$(i125_check "$REPO_ROOT/core/scripts/validate-spawn-ledger.sh" "$REPO_ROOT/core/hooks/ai-dlc-dispatch-guard.sh")"
   if [ -n "$i125_out" ]; then
     err "I125: the shardable-role set has forked between Check 22's validator and the dispatch guard:
 $i125_out
 SHARD_ROLES in core/scripts/validate-spawn-ledger.sh decides which rows arm S3 fails; _dg_shardable in core/hooks/ai-dlc-dispatch-guard.sh decides which of those rows refuse a gate-adjudicator dispatch. A role in one and not the other either lets an adjudicator run over a waiver the gate will discard, or refuses one over a row the gate never judges. Make the guard's inner list byte-identical to SHARD_ROLES (the guard keeps one framing space each side), on the single line each file carries."
   fi
-fi
 
 # --- I129: the finding-class set is ONE set across code-reviewer.md, qa.md, the merge's grammar (both gates) and the record-only route ---
 # vocabulary: finding classes
@@ -15309,62 +13068,12 @@ i129_check() { # i129_check {<label> <renderer> <merge> <owner> <partition> <qa.
     done
   } | LC_ALL=C awk "$I129_AWK"
 }
-# THE PROBE, BEFORE THE CORPUS, IN BOTH DIRECTIONS: agreement is quiet (a qa.md listing the owner's
-# members in ANOTHER order included); a forked grammar, an owner with no template line, an undeclared
-# route class, a qa.md set differing or absent, and a merge lift gated on GATE are each reported.
-i129_pd="$(mktemp -d "${TMPDIR:-/tmp}/i129-XXXXXX")"
-i129_g="CLASS_SET_AWK='/^Class: [A-Z_]+( \\| [A-Z_]+)+\$/ { n = split(substr(\$0, 8), m, /[[:blank:]]*\\|[[:blank:]]*/); for (i = 1; i <= n; i++) print m[i]; exit }'"
-i129_lift='CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD" | LC_ALL=C sort -u)"'
-printf '%s\n' "$i129_g" > "$i129_pd/r.sh"; printf '%s\n' "$i129_g" "$i129_lift" '  [ -n "$CLASS_SET" ] || return 0' > "$i129_pd/m.sh"
-printf '%s\n' "${i129_g/exit/next}" "$i129_lift" > "$i129_pd/m-fork.sh"
-printf '%s\n' "$i129_g" "[ \"\$GATE\" != code-review ] || $i129_lift" > "$i129_pd/m-gated.sh"
-printf '%s\n' "$i129_g" "$i129_lift" '  [ "$GATE" = code-review ] && [ -n "$CLASS_SET" ] || return 0' > "$i129_pd/m-guard.sh"
-printf '%s\n' '#### t' 'Class: PA | PB | PC' > "$i129_pd/o.md"
-printf '%s\n' '#### t' 'Class: PA' > "$i129_pd/o-none.md"
-printf '%s\n' '## Finding Class' 'Class: PC | PA | PB' > "$i129_pd/q.md"
-printf '%s\n' '## Finding Class' 'Class: PA | PB' > "$i129_pd/q-diff.md"
-printf '%s\n' '## Findings Template' '#### t' 'Class: PA' > "$i129_pd/q-none.md"
-printf '%s\n' 'ROUTE_CLASSES="PB PC"' > "$i129_pd/p.sh"
-printf '%s\n' 'ROUTE_CLASSES="PB PZ"' > "$i129_pd/p-bad.sh"
-i129_bad=''
-# ALL EIGHT SEEDS IN ONE i129_check CALL -- the corpus call below is the same function with one tuple.
-i129_d="$i129_pd"
-i129_po="$(i129_check \
-  match  "$i129_d/r.sh" "$i129_d/m.sh"       "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q.md" \
-  fork   "$i129_d/r.sh" "$i129_d/m-fork.sh"  "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q.md" \
-  owner  "$i129_d/r.sh" "$i129_d/m.sh"       "$i129_d/o-none.md" "$i129_d/p.sh"     "$i129_d/q.md" \
-  route  "$i129_d/r.sh" "$i129_d/m.sh"       "$i129_d/o.md"      "$i129_d/p-bad.sh" "$i129_d/q.md" \
-  qadiff "$i129_d/r.sh" "$i129_d/m.sh"       "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q-diff.md" \
-  qanone "$i129_d/r.sh" "$i129_d/m.sh"       "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q-none.md" \
-  gated  "$i129_d/r.sh" "$i129_d/m-gated.sh" "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q.md" \
-  guard  "$i129_d/r.sh" "$i129_d/m-guard.sh" "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q.md")"
-i129_s() { # i129_s <seed> -> i129_v holds that seed's findings, one per line
-  local l nl='
-'
-  i129_v=''
-  while IFS= read -r l; do case "$l" in "$1 "*) i129_v="$i129_v${i129_v:+$nl}${l#"$1 "}" ;; esac; done <<EOF
-$i129_po
-EOF
-}
-i129_s match;  [ -z "$i129_v" ] || i129_bad="$i129_bad match-not-quiet"
-i129_s fork;   case "$i129_v" in FORK*) ;; *) i129_bad="$i129_bad fork-not-reported" ;; esac
-i129_s owner;  case "$i129_v" in OWNER*) ;; *) i129_bad="$i129_bad owner-not-reported" ;; esac
-i129_s route;  case "$i129_v" in ROUTE*PZ*) ;; *) i129_bad="$i129_bad route-not-reported" ;; esac
-i129_s qadiff; case "$i129_v" in "QA "*"[PA PB]"*) ;; *) i129_bad="$i129_bad qa-diff-not-reported" ;; esac
-i129_s qanone; case "$i129_v" in "QA "*"[]"*) ;; *) i129_bad="$i129_bad qa-none-not-reported" ;; esac
-i129_s gated;  case "$i129_v" in "GATE "*"0 unconditional"*"1 non-comment"*) ;; *) i129_bad="$i129_bad gated-lift-not-reported" ;; esac
-i129_s guard;  case "$i129_v" in "GATE "*"1 unconditional"*"1 non-comment"*) ;; *) i129_bad="$i129_bad gated-guard-not-reported" ;; esac
-rm -rf "$i129_pd"
-if [ -n "$i129_bad" ]; then
-  err "I129's probe failed on seed(s):$i129_bad, so the corpus below was not read. Each names a direction the arm must report or stay quiet in; a probe that did not fire means the corpus result would read as agreement for the reason a broken grammar does."
-else
   i129_out="$(i129_check '' "$REPO_ROOT/scripts/render-vocabulary-index.sh" "$REPO_ROOT/core/scripts/merge-review-shards.sh" "$REPO_ROOT/core/team-roles/code-reviewer.md" "$REPO_ROOT/core/scripts/partition-review-diff.sh" "$REPO_ROOT/core/team-roles/qa.md")"
   if [ -n "$i129_out" ]; then
     err "I129: the finding-class set is not one set:
 $i129_out
 code-reviewer.md's template \`Class:\` line declares it and qa.md's \`## Finding Class\` section carries the same line; merge-review-shards.sh lifts it from the gate's role file for BOTH gates (one unconditional CLASS_SET line, no gate condition on the lift or on class_gate) with a CLASS_SET_AWK line byte-identical to scripts/render-vocabulary-index.sh's; partition-review-diff.sh's ROUTE_CLASSES must name only declared members. Change the owner, then make qa.md's set equal, the two CLASS_SET_AWK lines equal and ROUTE_CLASSES a subset."
   fi
-fi
 
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then

@@ -74,8 +74,8 @@ consolidate them here.
   `--work DIR`, `--scratch BASE`, `--keep`. Exit 0 = every row EQUAL, EQUIVALENT or LOW-RES; 1 = a MISMATCH,
   BOTH-FAIL, FLAKY, UNCOUNTABLE or REFUSED row; 2 = could not run. It needs a clean root and never writes the
   real verdict store or the durations record.
-- Derive the fixture count, never quote one: `ls core/fixtures/*/run.sh | wc -l`. The suite is POLE-BOUND —
-  wall clock tracks the single longest DIRECTORY; watch the top of `.git/ai-dlc-fixture-durations`. A cost
+- Derive the fixture count, never quote one: `ls core/fixtures/*/run.sh | wc -l`. The suite is WIDTH-BOUND:
+  wall clock is summed unit cost / width, at least the longest; see `.git/ai-dlc-fixture-durations`. A cost
   recorded there is a LOADED cost; never compare it with a solo run.
 - A change to a validator the pole invokes is a change to the suite's wall clock. Count the validator's execs
   and invocations before and after, from inside the repo (a copy run from `/tmp` resolves its root elsewhere);

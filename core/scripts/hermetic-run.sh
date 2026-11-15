@@ -671,6 +671,12 @@ hr_store_put() {
   local store ident dig pn
   [ "$hr_vs_skew" = 0 ] || { printf 'hermetic-run: %s: verdict store OFF: the hook READSET_VS span lacks readset_vs_entry or READSET_VS_PENDING (version skew), so no entry is written\n' "$HR_FX"; return 0; }
   [ -s "$HR_WORK/vs.sh" ] || return 0
+  # AN UNARMED DISTRIBUTION RUN ON THE DEFAULT STORE RECORDS NOTHING. A distribution push arms the counter at depth 0
+  # and reads only <base>/counted-<vk>, so this pass would land in <base>/<root commit>, which no push reads. A caller
+  # that names AI_DLC_VERDICT_STORE names the store it reads, and is recorded there.
+  if [ "$HR_LAYOUT" = distribution ] && [ "$hr_fxc" = 0 ] && [ -z "${AI_DLC_VERDICT_STORE:-}" ]; then
+    printf 'hermetic-run: %s: verdict store OFF: an unarmed distribution run; a push reads only counted-<vk>, so seed it with scripts/seed-verdict-store.sh\n' "$HR_FX"; return 0
+  fi
   store="$(readset_vs_store "$HR_ROOT")"
   [ -n "$store" ] || { printf 'hermetic-run: %s: verdict store OFF: no store base, or the project root commit cannot be resolved\n' "$HR_FX"; return 0; }
   mkdir -p "$store" 2>/dev/null || return 0

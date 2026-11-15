@@ -1,4 +1,7 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-30 *
-21 core/scripts/artifact-path-config.sh
-7 core/scripts/validate-layer-entries.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output).
+# The validator is sourced once and called in process (inproc row); it starts only in its four cli cells
+# (cells.decl), and it sources the resolver in a subshell, so the resolver starts nowhere.
+6 *
+0 core/scripts/artifact-path-config.sh
+4 core/scripts/validate-layer-entries.sh
+13 inproc:core/scripts/validate-layer-entries.sh

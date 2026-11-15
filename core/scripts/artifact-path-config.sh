@@ -63,6 +63,7 @@
 #   2  -- usage error, no readable grammar, or an extraction that came back EMPTY. An empty
 #         area set makes every area inferred and an empty scan-root set makes every tree
 #         conforming, so both are refusals rather than empty output.
+apc_main() {
 set -uo pipefail
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -189,7 +190,7 @@ while [ $# -gt 0 ]; do
       MODE="$1"; shift ;;
     --root) ROOT="${2:-}"; [ -n "$ROOT" ] || { echo "$PROG: --root needs a directory" >&2; exit 2; }; shift 2 ;;
     --grammar) GRAMMAR_ARG="${2:-}"; [ -n "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar needs a file" >&2; exit 2; }; shift 2 ;;
-    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "$PROG: unknown option '$1'" >&2
        echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--conceal-id-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
        exit 2 ;;
@@ -327,3 +328,7 @@ fi
 
 printf '%s\n%s\n' "$CORE_AREAS" "$CONSUMER_AREAS" | grep -E '.' | sort -u
 exit 0
+}
+# Executed, it runs; sourced, it has defined apc_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+apc_main "$@"

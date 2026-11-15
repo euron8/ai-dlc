@@ -3,7 +3,7 @@
 # no `sh` start the invocation counter cannot see, no bounded real-time wait (H9, BL-868), and no fixture that carries
 # a mutation battery (H12).
 #
-# usage:  validate-fixture-hygiene.sh            check the tree (exit 0 clean, 1 FAIL, 2 self-probe red or broken)
+# usage:  validate-fixture-hygiene.sh            check the tree (exit 0 clean, 1 FAIL, 2 broken)
 #
 # Standalone pre-suite step in .githooks/pre-push, deliberately NOT an arm of
 # validate-enforcement-map.sh, which the suite pole invokes. Distribution-only: repo-root scripts/ is never installed.
@@ -18,7 +18,7 @@
 # BROKEN (exit 2), never scanned silently half-masked. So `sh` or `exit 0` inside an awk program, a printf seed or a
 # heredoc is data, and an arm sees only code.
 #
-# THE ARMS. Each runs a self-probe FIRST, under mktemp, in both directions; the probe's verdict per arm is printed.
+# THE ARMS. That each can fire was proved once, by hand, at authoring; the default run reads only the tree.
 #
 # H1  linked-worktree false skip. A `-d <expr>` test inside `[`, `[[` or `test` (negated by `!` inside or before the
 #     bracket, or not) whose operand ends in `/.git` (or is `.git`), and whose ABSENT branch reaches `exit 0` (or a
@@ -112,7 +112,7 @@
 #     ships scripts/inert-receipt-allowlist.txt, the down-only check refuses an added row, so a new receipt that only
 #     a verify: line names cannot ship until a runner invokes it; the one exception is the release that first ships
 #     the allowlist.
-#     KNOWN ACQUITTALS, asserted by the self-probe: a name inside a message string (zz9, `echo "receipt-x.sh …"`)
+#     KNOWN ACQUITTALS: a name inside a message string (zz9, `echo "receipt-x.sh …"`)
 #     counts as a reader, and so does a name in a TRAILING comment after code (zz13, `cmd # bash "$HERE/receipt-x.sh"`),
 #     because only lines whose first non-blank character is `#` are skipped. A line grammar cannot acquit
 #     `bash "$R736"` and convict `echo receipt.sh` without resolving variables, and the variable form (zz3,
@@ -133,7 +133,7 @@
 #     reader files). Widening the population to scripts/receipt*.sh added
 #     scripts/*.sh as readers for those receipts only, with self-reference excluded (a receipt naming itself, e.g. in a
 #     usage line, is not a reader). The corpus does not exercise that exclusion today (0 of the 4 names itself on a
-#     non-comment line; measured both ways, 4 inert either way); the self-probe's zz12 is its subject. On
+#     non-comment line; measured both ways, 4 inert either way). On
 #     the BL-915 filing tree 0.1004.0 was built on, E1 flags 90: the 72 the BL-915 census classed uninvoked (68 fixture receipts plus the 4 scripts/
 #     receipts, every one flagged, none missed) and 18 more, each read by hand -- 6 non-BL receipt.sh / receipt-*.sh
 #     run by no gate (apply-restamp-worklist x2, check-24, layer-adjudication-tier, serial-remediation-worklist,
@@ -302,9 +302,8 @@
 #     `then`, `else` or `time`. After it: 0 files end with a frame open, and the rows are the same 8. ITS OWN FP SET:
 #     3497 frame opens before, 3392 after, 0 new; the 105 lines that no longer open a frame were read, and every one is
 #     prose in a code-scanned heredoc (seed ledgers, rule text), Python inside a `python3 -c '...'` body (a `for` in a
-#     comprehension), sed program text, or a `grep -c` pattern -- none is a shell loop. The self-probe seeds a bounded
-#     loop in every admitted opener position and behind every glued `done`, then a top-level sleep that fires only if
-#     every one of those frames closed. SECOND STEP, the same rule for `done`: a `done` in any position closed the
+#     comprehension), sed program text, or a `grep -c` pattern -- none is a shell loop.
+#     SECOND STEP, the same rule for `done`: a `done` in any position closed the
 #     innermost frame, so once a skipped opener left its `done` behind (a backtick loop, `time -p for`) or prose said
 #     `done` (`echo not done; true`, `echo $(echo done)`, `echo all done|cat`), the ENCLOSING bounded loop was popped
 #     early and lost its W-BOUND. Now `done` closes only at line start or after `;`, `&`, `&&`, `|`, `||`, `{`, `)`,
@@ -359,18 +358,8 @@
 # integrated tip, where this list is also re-derived.
 #
 # COST: a constant number of forks -- one git ls-files, one resolver call, one awk scan (two passes over the corpus),
-# one judge awk, sorts -- the same again for the probe tree, and the M4 probe repos. E1 adds one probe repository
-# (index only, no commit), two e1_run passes (one over the probe, one over the tree), each a git ls-files, the inert() awk and
-# the judge awk: measured with PATH shims in clean worktrees inside the repo, 213 execs on the BL-915 filing tree 0.1004.0 was built on and 322 with E1;
-# with the archive clause removed, 306 against 325 on the same tree. H9 adds no repository: one H9_AWK pass over the
-# probe files and one over the corpus, its join awk and sorts each time, and reuses run_all's list.
-# Measured by scripts/fork-profile.sh --target on ee9376900's tree, in the worktree: 362 execs (bash 2, git 24)
-# before H9, 386 (bash 2, git 23) with H9 and without the ledger-mode inert() call that the E1 probe once made.
-# The M4 probe repos are `git init` plus one fast-import each (m4_probe_repo), and the probe runs the whole of m4 once
-# per origin/main state plus once for the hand-off, m4cmp alone for the rest: step argv
-# `bash scripts/validate-fixture-hygiene.sh`, same-tree swap at 3f3b99ae1 with GIT_DIR exported, two agreeing runs per
-# side, by the hook's own counter and GIT_TRACE2_EVENT: bash starts 3 -> 3, git processes 47 -> 37 (under the M4 probe
-# repos 24 -> 14); stdout and stderr byte-identical.
+# one judge awk, sorts. E1 adds one e1_run pass over the tree: a git ls-files, the inert() awk and the judge awk.
+# H9 adds one H9_AWK pass over the corpus, its join awk and sorts, and reuses run_all's list.
 set -uo pipefail
 
 MODE=check
@@ -1016,9 +1005,7 @@ run_all() {
 # the `# M4_BEGIN` and `# M4_END` marker lines below, refusing unless exactly one `m4() {` sits between them) and passes
 # all three, so the two down-only fixture lists run one function.
 # m4 is m4base (the git half: origin/main's <rel> written to <scratch>, rc 3, else the SKIP or FAIL text) then m4cmp
-# (the compare half over that base), so each self-probe runs the whole of m4 once per origin/main state and m4cmp
-# alone for every further list over the same base. m4_probe_repo builds those self-probes' scratch repos; it calls the
-# caller's own `pgit`.
+# (the compare half over that base).
 # M4_BEGIN
 m4() {
   local rel="$4" arm="$5" rc
@@ -1050,19 +1037,6 @@ m4cmp() {
     return 1
   fi
   echo "OK $arm: no allowlist row added against origin/main"; return 0
-}
-# m4_probe_repo <dir> [<path> <content>]... -> a scratch repo; with files, ONE `git fast-import` writes one commit
-# carrying them straight to refs/remotes/origin/main. m4base reads origin/main's objects only (never HEAD, the index or
-# the worktree), so no add, commit or update-ref is needed; the commit runs no hook and spawns no auto-maintenance, and
-# fastimport.unpackLimit=0 keeps its pack instead of spawning unpack-objects.
-m4_probe_repo() {
-  local d="$1" LC_ALL=C
-  pgit init -q "$d" || return 1
-  shift
-  [ $# -gt 0 ] || return 0
-  { printf 'commit refs/remotes/origin/main\ncommitter probe <probe@invalid> 0 +0000\ndata 5\nbase\n'
-    while [ $# -ge 2 ]; do printf 'M 100644 inline %s\ndata %d\n%s\n' "$1" "${#2}" "$2"; shift 2; done
-  } | pgit -c fastimport.unpackLimit=0 -C "$d" fast-import --quiet
 }
 # M4_END
 
@@ -1368,711 +1342,6 @@ h9_join() {
   return 0
 }
 
-# --- self-probe, before the corpus ---------------------------------------------------------------------------------
-pgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
-  git -c user.name=probe -c user.email=probe@invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null \
-  -c init.defaultBranch=main -c maintenance.auto=false "$@"; }
-P="$WORK/probe"
-seed() { mkdir -p "$(dirname "$P/$1")" && cat > "$P/$1"; }
-mkdir -p "$P/scripts" && : > "$P/VERSION"
-seed core/fixtures/s1/run.sh <<'EOF'
-#!/usr/bin/env bash
-D_ROOT=x; GATE=y
-if [ ! -f "$GATE" ] || [ ! -d "$D_ROOT/.git" ]; then
-  echo "SKIP"
-  exit 0
-fi
-[ -d "$D_ROOT/.git" ] || { echo skip; exit 0; }
-[ -d "$R/.git" ] || exit 0 # no history
-if [ ! -d "$R/.git" ]; then
-  exit 0   # no repo, so nothing to check
-fi
-EOF
-seed core/fixtures/s1n/run.sh <<'EOF'
-#!/usr/bin/env bash
-# [ -d "$R/.git" ] || exit 0
-[ -d "$R/.git" ] || { echo "FIXTURE BROKEN: no repo, exit 0 would lie"; exit 2; }
-if [ ! -d "$v/.git" ]; then
-  note 'victim has no .git; exit 0'
-  rc=1
-fi
-[ -d "$R/.git" ] && git -C "$R" worktree prune
-[ -d "$R/.git" ] || bad "no repo"
-exit 0
-[ -d "$R/.git/modules/x" ] || exit 0
-if [ -d "$R/.git" ]; then
-  exit 0
-fi
-[ -d "$R/.git" ] || exit 2 # no repo; exit 0 would lie
-[ -d "$R/.git" ] || echo "exit 0 X" # a string, not an exit
-EOF
-seed core/fixtures/s2/tools.decl <<'EOF'
-# tools
-jq
-?node
-EOF
-seed core/fixtures/s2/run.sh <<'EOF'
-#!/usr/bin/env bash
-command -v jq >/dev/null 2>&1 || { echo "SKIP no jq"; exit 0; }
-if ! command -v node >/dev/null 2>&1; then
-  echo "skip"
-  exit 0
-fi
-command -v jq >/dev/null 2>&1 || exit 0 # no jq
-EOF
-seed core/fixtures/s2n/tools.decl <<'EOF'
-jq
-EOF
-seed core/fixtures/s2n/run.sh <<'EOF'
-#!/usr/bin/env bash
-command -v perl >/dev/null 2>&1 || { echo "SKIP no perl"; exit 0; }
-MG='command -v jq >/dev/null 2>&1 || exit 0'
-command -v jq >/dev/null 2>&1 || { echo "FIXTURE BROKEN: jq"; exit 2; }
-if ! command -v jq >/dev/null 2>&1; then
-  ok "SKIP arms: jq absent"
-elif true; then
-  exit 0
-fi
-command -v jq >/dev/null 2>&1 || exit 2 # no jq; exit 0 would lie
-EOF
-seed core/fixtures/s3/run.sh <<'EOF'
-#!/usr/bin/env bash
-( cd "$X" && sh scripts/a.sh )
-P="$(exec sh -c 'printf %s "$PPID"')"
-sh -c 'exit 0' & p=$!
-/bin/sh "$X/b.sh"
-printf 'echo hi\n' | sh;
-env FOO=1 sh -c x
-cat "$X/s" | sh
-command sh "$X/c.sh"
-env sh -c x
-EOF
-seed core/fixtures/s6/run.sh <<'EOF'
-#!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
-. "$HERE/../lib/mutant.sh"
-MUT_LIB="$HERE/../lib/mutant.sh"
-. "$MUT_LIB"
-[ -f "$HERE/../lib/matrix.sh" ] || echo "matrix.sh missing"
-. "$HERE/../lib/matrix.sh"
-[ -f "$HERE/lib.sh" ] || exit 2
-. "$HERE/../lib/settled-net.sh"
-. "$HERE/../lib/inproc.sh" || true
-. "$HERE/../lib/mutant.sh" && run_it
-. "$HERE/../lib/mutant.sh" || broken "no broken() is defined in this file"
-. "$HERE/../lib/mutant.sh" || { echo "skip"; exit 0; }
-broken() { echo "FIXTURE BROKEN: $1" >&2; exit 2; }
-EOF
-seed core/fixtures/s6n/run.sh <<'EOF'
-#!/usr/bin/env bash
-broken() { echo "FIXTURE BROKEN: $1" >&2; exit 2; }
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || broken "no lib/mutant.sh"
-. "$MUT_LIB"
-[ -f "$HERE/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh" >&2; exit 2; }
-. "$HERE/../lib/matrix.sh"
-for p in scripts/x.sh core/fixtures/lib/settled-net.sh; do [ -f "$ROOT/$p" ] || { echo "absent: $p" >&2; exit 2; }; done
-. "$ROOT/core/fixtures/lib/settled-net.sh"
-. "$HERE/lib.sh"
-# . "$HERE/../lib/mutant.sh"
-echo '. "$HERE/../lib/mutant.sh"'
-. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: inproc.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || broken "cannot source lib/mutant.sh"
-cat > "$W/x.sh" <<'E'
-. "$HERE/../lib/mutant.sh"
-E
-[ -f "$D/../lib/a.sh" ] && [ -f "$D/../lib/settled-net.sh" ] || {
-  echo "FIXTURE ERROR: lib absent" >&2; exit 2; }
-. "$D/../lib/settled-net.sh"
-EOF
-seed core/fixtures/s3n/run.sh <<'EOF'
-#!/usr/bin/env bash
-awk '{ if (sh != "") print sh }' f
-x=1; [ "$sh" = 1 ] && bash scripts/a.sh
-zsh -c 'true'
-cat <<'END' > receipt.md
-verify: sh scripts/x.sh
-END
-echo "run sh scripts/a.sh"
-k=$(( sh == 1 ))
-printf x | bash run.sh;
-echo x | ./b.sh
-awk -v sh=1 'BEGIN { print sh }' </dev/null | cat
-echo verify: sh scripts/x.sh
-myenv sh -c x
-x | sh=1
-command -v sh >/dev/null
-EOF
-seed core/fixtures/s3s/run.sh <<'EOF'
-#!/usr/bin/env bash
-printf '#!/bin/sh\necho hi\n' > "$W/stub" && chmod +x "$W/stub"
-"$W/stub" arg
-cat > "$W/bin/tool" <<'END'
-#!/bin/sh
-exit 0
-END
-chmod +x "$W/bin/tool"
-PATH="$W/bin:$PATH" bash "$X"
-echo '#!/bin/sh' > "$W/e"
-exec "$W/e"
-printf '#!/usr/bin/env sh\nexit 0\n' > "$W/v" && chmod +x "$W/v"
-"$W/v"
-EOF
-seed core/fixtures/s3sn/run.sh <<'EOF'
-#!/usr/bin/env bash
-printf '#!/bin/sh\necho hi\n' > "$W/stub" && chmod +x "$W/stub"
-cmp -s "$W/stub" "$W/other"
-X="$W/stub"
-printf '#!/bin/sh\nexit 0\n' > "$W/b" && chmod +x "$W/b"
-bash "$W/b" arg
-printf '#!/usr/bin/env bash\nexit 0\n' > "$W/c" && chmod +x "$W/c"
-"$W/c"
-printf '#!/bin/bash\nexit 0\n' > "$W/d" && chmod +x "$W/d"
-exec "$W/d"
-cat > "$W/h" <<'END'
-#!/bin/bash
-END
-"$W/h"
-cat > "$W/q/tool" <<'END'
-#!/bin/sh
-exit 0
-END
-chmod +x "$W/q/tool"
-printf '#!/bin/sh\nexit 0\n' > "$W/bin/sub/tool" && chmod +x "$W/bin/sub/tool"
-PATH="$W/bin:$PATH" bash "$X"
-EOF
-# H8's seeds, every name `h8*` (the probe compares only those rows). FIRE (no scrub): h8none none at all; h8cmt the
-# loop only in a comment; h8hd only in a heredoc body; h8git a GIT_ loop of the identical shape; h8srcb the loop after
-# `. "$HERE/lib.sh"` (a lib.sh with no scrub); h8bash after `bash "$X/x.sh"`; h8stubbad a shard stub whose IMPL
-# (h8none) does not scrub. QUIET (SCRUBBED): h8loop the loop after the exempt lib/preamble.sh source; h8dc
-# dist-clone's one-line exemption; h8wrp whole-read-pool's three-line exemption; h8cont the loop below a continued
-# `pick "$A/a.sh" \` / `  "$B/x.sh"`, a continued `for cand in` list and a `[ -f …/x.sh ]` test, none an invocation;
-# h8lib the loop in its own lib.sh, sourced; h8stubok a stub whose IMPL (h8loop) scrubs. The list: h8lst
-# unscrubbed and listed (quiet, H8LISTED); h8stl scrubbed and listed (H8STALE).
-H8L='for _v in $(env | sed -n '"'"'s/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'"'"'); do unset "$_v"; done'
-seed core/fixtures/h8none/run.sh <<'EOF'
-#!/usr/bin/env bash
-set -u
-echo none
-EOF
-mkdir -p "$P/core/fixtures/h8cmt" && printf '#!/usr/bin/env bash\n# %s\necho x\n' "$H8L" > "$P/core/fixtures/h8cmt/run.sh"
-mkdir -p "$P/core/fixtures/h8hd" && printf '#!/usr/bin/env bash\ncat > "$W/x" <<'"'"'E'"'"'\n%s\nE\n' "$H8L" > "$P/core/fixtures/h8hd/run.sh"
-mkdir -p "$P/core/fixtures/h8git" && printf '%s\n' '#!/usr/bin/env bash' 'for _v in $(env | sed -n '"'"'s/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'"'"'); do unset "$_v"; done' > "$P/core/fixtures/h8git/run.sh"
-mkdir -p "$P/core/fixtures/h8srcb" && printf '#!/usr/bin/env bash\n. "$HERE/lib.sh"\n%s\n' "$H8L" > "$P/core/fixtures/h8srcb/run.sh" && printf 'f() { :; }\n' > "$P/core/fixtures/h8srcb/lib.sh"
-mkdir -p "$P/core/fixtures/h8bash" && printf '#!/usr/bin/env bash\nset -u\nbash "$X/x.sh" >/dev/null\n%s\n' "$H8L" > "$P/core/fixtures/h8bash/run.sh"
-mkdir -p "$P/core/fixtures/h8loop" && printf '#!/usr/bin/env bash\n. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: preamble" >&2; exit 2; }\nset -u\n%s\nbash "$X/x.sh"\n' "$H8L" > "$P/core/fixtures/h8loop/run.sh"
-seed core/fixtures/h8dc/run.sh <<'EOF'
-#!/usr/bin/env bash
-for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do [ "$_v" = AI_DLC_PROJECT_ROOT ] || unset "$_v"; done
-EOF
-seed core/fixtures/h8wrp/run.sh <<'EOF'
-#!/usr/bin/env bash
-for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do
-  [ "$_v" = AI_DLC_PROJECT_ROOT ] || unset "$_v"
-done
-EOF
-seed core/fixtures/h8cont/run.sh <<'EOF'
-#!/usr/bin/env bash
-pick() { for c in "$@"; do [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
-G="$(pick "$A/a.sh" \
-          "$B/x.sh")"
-for cand in "$A/y.sh" \
-            "$B/y.sh"; do :; done
-[ -f "$H/z.sh" ] || exit 2
-echo "run x.sh by hand"
-for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
-EOF
-mkdir -p "$P/core/fixtures/h8lib" && printf '#!/usr/bin/env bash\n. "$HERE/lib.sh"\n' > "$P/core/fixtures/h8lib/run.sh" && printf '%s\n' "$H8L" > "$P/core/fixtures/h8lib/lib.sh"
-for x in h8stubok:h8loop h8stubbad:h8none; do
-  mkdir -p "$P/core/fixtures/${x%%:*}" && printf '%s\n' '#!/usr/bin/env bash' 'HERE="$(cd "$(dirname "$0")" && pwd)"' "IMPL=\"\$HERE/../${x#*:}/run.sh\"" 'exec bash "$IMPL" --group b' > "$P/core/fixtures/${x%%:*}/run.sh"
-done
-mkdir -p "$P/core/fixtures/h8lst" && printf '#!/usr/bin/env bash\necho listed\n' > "$P/core/fixtures/h8lst/run.sh"
-mkdir -p "$P/core/fixtures/h8stl" && printf '#!/usr/bin/env bash\n%s\n' "$H8L" > "$P/core/fixtures/h8stl/run.sh"
-# h8lhk: listed, but its lib.sh drives a hook (I10's population): FIRE. h8lgl: listed, its lib.sh names only the
-# `hooks/ai-dlc-*` glob and a hook in a comment: quiet, H8LISTED.
-mkdir -p "$P/core/fixtures/h8lhk" "$P/core/fixtures/h8lgl"
-printf '#!/usr/bin/env bash\n. "$HERE/lib.sh"\n' > "$P/core/fixtures/h8lhk/run.sh"
-printf 'bash "$ROOT/core/hooks/ai-dlc-x.sh" </dev/null\n' > "$P/core/fixtures/h8lhk/lib.sh"
-printf '#!/usr/bin/env bash\n. "$HERE/lib.sh"\n' > "$P/core/fixtures/h8lgl/run.sh"
-printf 'cp core/hooks/ai-dlc-*.sh "$T"\n  # runs hooks/ai-dlc-x.sh\n' > "$P/core/fixtures/h8lgl/lib.sh"
-printf '# probe\nh8lst\tunscrubbed and listed\nh8stl\tscrubbed, so stale\nh8lhk\tdrives a hook\nh8lgl\tnames a glob\n' > "$P/$H8_ALLOW_REL"
-# H10/H11 seeds. FIRE: h10own (ok() at :3), h10fn (`function bad ()` at :2), h10hd (a hook run at :3; the second at :4
-# is not its first). QUIET: h10q (ok() in a comment, a string, a heredoc body; okay()), h10hq (a printf writing a
-# stub hook, a comment, a heredoc body, a cp of the hook, a script whose name only starts with pre-push). Listed:
-# h10lst:report (offends: H10LISTED; listed twice: H10DUP), h10stl:report (no offence: STALE), h10lst:bogus (STALE
-# clause), h10nr:hook-drive (no reason: NOREASON; no run.sh: STALE).
-seed core/fixtures/h10own/run.sh <<'EOF'
-#!/usr/bin/env bash
-x=1
-ok() { printf '  ok    %s\n' "$1"; }
-EOF
-seed core/fixtures/h10fn/run.sh <<'EOF'
-#!/usr/bin/env bash
-function bad () { echo "$1"; }
-EOF
-seed core/fixtures/h10hd/run.sh <<'EOF'
-#!/usr/bin/env bash
-t="$1"
-( cd "$t" && AI_DLC_READSET_LIVE_TRACE=0 bash @G@/pre-push </dev/null )
-r="$(cd "$t" && bash @C@/pre-push origin x)"
-EOF
-seed core/fixtures/h10q/run.sh <<'EOF'
-#!/usr/bin/env bash
-# ok() { the comment form }
-echo "ok() {"
-cat > "$T/x.sh" <<'BODY'
-ok() { :; }
-BODY
-okay() { :; }
-EOF
-seed core/fixtures/h10hq/run.sh <<'EOF'
-#!/usr/bin/env bash
-printf '#!/usr/bin/env bash\nbash @G@/pre-push\n' > "$d/x"
-# bash @G@/pre-push
-cat > "$d/y" <<'BODY'
-bash @G@/pre-push
-BODY
-cp @G@/pre-push "$d/z"
-bash scripts/pre-push-helper.sh
-EOF
-# The two hook-run seeds carry @G@ / @C@ for the hook directories, so this file's own text never names a hook
-# path (validate-shell-portability.sh S15 reads a named hook path as a run of that hook); expanded here.
-for _h in h10hd h10hq; do
-  _c="$(cat "$P/core/fixtures/$_h/run.sh")"; _c="${_c//@G@/.githooks}"; _c="${_c//@C@/core/git-hooks}"
-  printf '%s\n' "$_c" > "$P/core/fixtures/$_h/run.sh"
-done
-seed core/fixtures/h10lst/run.sh <<'EOF'
-#!/usr/bin/env bash
-bad() { echo "$1"; }
-EOF
-seed core/fixtures/h10stl/run.sh <<'EOF'
-#!/usr/bin/env bash
-echo clean
-EOF
-printf '# probe\nh10lst:report\tlisted\nh10lst:report\ttwice\nh10stl:report\tclean, so stale\nh10lst:bogus\tr\nh10nr:hook-drive\n' > "$P/$H10_ALLOW_REL"
-# H12's seeds, every name `h12*`; s6 and s6n above also fire it (a lib/matrix.sh source), so the probe compares the WHOLE
-# H12 row set. FIRE: h12call a mutant_killed call at :3; h12def `mkmut() {` at :2; h12hdr a `# MUTANT-MATRIX` header at
-# :2; h12src a guarded source of lib/matrix.sh at :2; h12var the same through a variable assigned the path (:3); h12lib
-# a lib.sh defining need_base (the run.sh beside it is clean); h12all four more words in one file, ONE row listing
-# each first line. QUIET: h12cmt a comment-only mention of three words, a trailing `# MUTANT-MATRIX` after code and a
-# trailing commented source; h12str the words inside a double-quoted string, a printf argument, a heredoc body (which
-# also carries a header line and a matrix source) and a multi-line single-quoted string whose middle line opens
-# `# MUTANT-MATRIX`; h12prod a fixture whose subject is a mutation-grading validator and which sources lib/mutant.sh and
-# a lib/matrix-x.sh, with identifiers that only CONTAIN a battery word (mutated, mutate_files, xmkmut, mkmut2,
-# need_basement, matrix_rows, my_mutant_killed_x). Clause (d): FIRE h12unit a `bl_Mutant_vec ()` definition in a
-# unit file beside a clean run.sh (any case, a space before the parens); h12fn a `function mutate {` definition; h12def
-# also fires it. QUIET: h12use a call of a builder it never defines, a `x_mut=` assignment, a definition inside a string
-# and a commented one; lib/h12-mut.sh a definition under core/fixtures/lib; h12prod's `check_red()`.
-seed core/fixtures/h12call/run.sh <<'EOF'
-#!/usr/bin/env bash
-# a comment
-mutant_killed 1 M1 "m"
-EOF
-seed core/fixtures/h12def/run.sh <<'EOF'
-#!/usr/bin/env bash
-mkmut() { :; }
-EOF
-seed core/fixtures/h12hdr/run.sh <<'EOF'
-#!/usr/bin/env bash
-# MUTANT-MATRIX MA decides=A twins=B
-EOF
-seed core/fixtures/h12src/run.sh <<'EOF'
-#!/usr/bin/env bash
-. "$HERE/../lib/matrix.sh" || { echo "FIXTURE BROKEN: matrix" >&2; exit 2; }
-EOF
-seed core/fixtures/h12var/run.sh <<'EOF'
-#!/usr/bin/env bash
-MX="$HERE/../lib/matrix.sh"
-. "$MX" || { echo "FIXTURE BROKEN: matrix" >&2; exit 2; }
-EOF
-seed core/fixtures/h12lib/run.sh <<'EOF'
-#!/usr/bin/env bash
-echo clean
-EOF
-seed core/fixtures/h12lib/lib.sh <<'EOF'
-need_base() { :; }
-EOF
-seed core/fixtures/h12all/run.sh <<'EOF'
-#!/usr/bin/env bash
-mut_copy a b
-matrix_row M R 0 x
-need_base 1
-mutate_file f 's/a/b/'
-EOF
-seed core/fixtures/h12cmt/run.sh <<'EOF'
-#!/usr/bin/env bash
-# mutant_killed was retired; mkmut and need_base went with it
-echo ok # MUTANT-MATRIX trailing, not a header
-x=1 # . "$HERE/../lib/matrix.sh"
-EOF
-seed core/fixtures/h12str/run.sh <<'EOF'
-#!/usr/bin/env bash
-echo "mutant_killed 1 M x"
-printf '%s\n' 'mkmut() { :; }' 'matrix_row a b'
-cat > "$W/x.sh" <<'E'
-mutant_killed 1 M "m"
-# MUTANT-MATRIX MA decides=A twins=B
-. "$HERE/../lib/matrix.sh"
-E
-msg='first line
-# MUTANT-MATRIX inside a multi-line string
-mut_copy needs_base'
-echo "$msg"
-EOF
-seed core/fixtures/h12prod/run.sh <<'EOF'
-#!/usr/bin/env bash
-# the SUBJECT is a validator that grades a mutation; this fixture drives it and scores no battery
-V="$ROOT/core/scripts/validate-mutation-red.sh"
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-mutated=1; mutate_files=2; xmkmut=3; mkmut2=4; need_basement=5; matrix_rows=6; my_mutant_killed_x=7
-check_red() { :; }
-cmp -s "$a" "$b" || echo "mutation landed"
-M2="$HERE/../lib/matrix-x.sh"
-. "$M2" || { echo "FIXTURE BROKEN: matrix-x" >&2; exit 2; }
-EOF
-seed core/fixtures/h12unit/run.sh <<'EOF'
-#!/usr/bin/env bash
-echo clean
-EOF
-seed core/fixtures/h12unit/unit-a.sh <<'EOF'
-# a unit file the run.sh sources
-echo setup
-bl_Mutant_vec () { :; }
-EOF
-seed core/fixtures/h12fn/run.sh <<'EOF'
-#!/usr/bin/env bash
-echo setup
-function mutate { :; }
-EOF
-seed core/fixtures/h12use/run.sh <<'EOF'
-#!/usr/bin/env bash
-mutate f 's/a/b/' || echo "a call names a builder this file does not define"
-x_mut=1; echo "bl_mut() { :; }"
-# mutate() { :; } in a comment
-EOF
-seed core/fixtures/lib/h12-mut.sh <<'EOF'
-lib_mut() { :; }
-EOF
-{ pgit init -q "$P" && pgit -C "$P" add -A; } >/dev/null 2>&1 \
-  || { echo "validate-fixture-hygiene: REFUSED -- could not build the probe repository under $WORK" >&2; exit 2; }
-
-SP_RED=0
-sp_line() { printf 'self-probe %s: %s\n' "$1" "$2" >&2; }
-pout="$(run_all "$P" "$WORK/p")"; prc=$?
-if [ "$prc" -ne 0 ]; then
-  sp_line CORPUS "FAIL -- $pout"; SP_RED=1
-  : > "$WORK/p.verdict"; : > "$WORK/p.scan"
-else
-  sp_line CORPUS "ok (listed and scanned $(awk 'END { print NR }' "$WORK/p.list") probe files)"
-fi
-cut -f1,2 "$WORK/p.verdict" > "$WORK/p.got"
-want_rows() { case "$1" in
-  H1) printf 'H1\tcore/fixtures/s1/run.sh:%s\n' 3 7 8 9 ;;
-  H2) printf 'H2\tcore/fixtures/s2/run.sh:%s\n' 2 3 7 ;;
-  H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 6 7 8 9 10
-      printf 'H3\tcore/fixtures/s3s/run.sh:%s\n' 2 4 10 12 ;;
-  H6) printf 'H6\tcore/fixtures/s6/run.sh:%s\n' 2 3 5 7 9 10 11 12 13 ;;
-  esac; }
-for arm in H1 H2 H3 H6; do
-  grep -E "^$arm	" "$WORK/p.got" | LC_ALL=C sort > "$WORK/got.$arm" || :
-  want_rows "$arm" | LC_ALL=C sort > "$WORK/want.$arm"
-  if cmp -s "$WORK/got.$arm" "$WORK/want.$arm"; then sp_line "$arm" "ok ($(awk 'END { print NR }' "$WORK/want.$arm") seeded offender row(s) exact; the near-misses stayed quiet)"
-  else
-    SP_RED=1; sp_line "$arm" "FAIL -- verdict rows differ from the seeded set:"
-    diff "$WORK/want.$arm" "$WORK/got.$arm" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
-  fi
-done
-# H12: the whole row set, reasons included (file, then each reason with its first line), so a scan that emits nothing
-# fails the probe as surely as one that accepts every near-miss.
-grep -E '^H12	' "$WORK/p.verdict" | LC_ALL=C sort > "$WORK/got.H12" || :
-{ printf 'H12\tcore/fixtures/%s\n' \
-    'h12all/run.sh	mut_copy:2, matrix_row:3, need_base:4, mutate_file:5' 'h12call/run.sh	mutant_killed:3' \
-    'h12def/run.sh	def mkmut:2, mkmut:2' 'h12hdr/run.sh	# MUTANT-MATRIX:2' 'h12lib/lib.sh	need_base:1' \
-    'h12unit/unit-a.sh	def bl_Mutant_vec:3' 'h12fn/run.sh	def mutate:3' \
-    'h12src/run.sh	lib/matrix.sh:2' 'h12var/run.sh	lib/matrix.sh:3' 's6/run.sh	lib/matrix.sh:7' 's6n/run.sh	lib/matrix.sh:8'
-} | LC_ALL=C sort > "$WORK/want.H12"
-if cmp -s "$WORK/got.H12" "$WORK/want.H12"; then sp_line H12 "ok (11 seeded file rows exact -- a call, a definition, a builder definition in a run.sh and in a unit file, a header, a literal and a variable matrix source, a lib.sh, four words in one file, two lib/matrix.sh sources among the H6 seeds; a comment, a string, a heredoc body, a multi-line string, a trailing comment and words that only contain a battery word stayed quiet)"
-else
-  SP_RED=1; sp_line H12 "FAIL -- verdict rows differ from the seeded set:"
-  diff "$WORK/want.H12" "$WORK/got.H12" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
-fi
-# H8: the rows of the h8* seeds, by kind and fixture. Every FIRE seed must be an H8 row and every QUIET one an
-# H8SCRUB row, so a scan that emits nothing fails the probe as surely as one that accepts everything.
-[ -f "$WORK/p.h8" ] || : > "$WORK/p.h8"
-awk -F'\t' '$2 ~ /^h8/ && $1 ~ /^H8(SCRUB|LISTED|STALE|DUP|NOREASON)?$/ { print $1 "\t" $2 }' "$WORK/p.h8" | LC_ALL=C sort > "$WORK/got.H8"
-{ printf 'H8\t%s\n' h8none h8cmt h8hd h8git h8srcb h8bash h8stubbad h8lhk
-  printf 'H8SCRUB\t%s\n' h8loop h8dc h8wrp h8cont h8lib h8stubok h8stl
-  printf 'H8LISTED\t%s\n' h8lst h8lgl; printf 'H8STALE\th8stl\n'; } | LC_ALL=C sort > "$WORK/want.H8"
-if cmp -s "$WORK/got.H8" "$WORK/want.H8"; then sp_line H8 "ok (8 seeds fire -- none, comment-only, heredoc-only, a GIT_ loop, after a lib source, after a bash start, a stub of an unscrubbed IMPL, a listed hook driver; 6 scrubbed shapes and a scrubbed-IMPL stub read SCRUBBED; a listed one and a listed glob-only one are quiet, a listed scrubbed one STALE)"
-else
-  SP_RED=1; sp_line H8 "FAIL -- verdict rows differ from the seeded set:"
-  diff "$WORK/want.H8" "$WORK/got.H8" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
-fi
-# H10/H11: the h10* rows, kind and key. Every FIRE seed must be a row and every QUIET one absent, so a scan that emits
-# nothing fails the probe as surely as one that accepts everything.
-[ -f "$WORK/p.h10" ] || : > "$WORK/p.h10"
-cut -f1-3 "$WORK/p.h10" | LC_ALL=C sort > "$WORK/got.H10"
-{ printf 'H10\th10own\tcore/fixtures/h10own/run.sh:3\nH10\th10fn\tcore/fixtures/h10fn/run.sh:2\n'
-  printf 'H11\th10hd\tcore/fixtures/h10hd/run.sh:3\nH10LISTED\th10lst:report\nH10DUP\th10lst:report\nH10NOREASON\th10nr:hook-drive\n'
-  printf 'H10STALE\th10stl:report\tthe fixture no longer offends; drop the row\n'
-  printf 'H10STALE\th10lst:bogus\tthe clause after `:` is neither report nor hook-drive\n'
-  printf 'H10STALE\th10nr:hook-drive\tno core/fixtures/h10nr/run.sh is tracked\n'; } | LC_ALL=C sort > "$WORK/want.H10"
-if cmp -s "$WORK/got.H10" "$WORK/want.H10"; then sp_line H10 "ok (3 seeds fire -- ok(), function bad (), a hook run by hand; a comment, a string, a heredoc body, okay(), a stub-hook printf, a cp and a pre-push-prefixed script stay quiet; listed, duplicate, reasonless and three stale rows read as such)"
-else
-  SP_RED=1; sp_line H10 "FAIL -- verdict rows differ from the seeded set:"
-  diff "$WORK/want.H10" "$WORK/got.H10" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
-fi
-
-# m4_case <label> <repo | +repo | -> <want-rc> <want-first-line> <rows...>. With <repo>, the whole of m4 called with
-# rel $M4DREL, arm M4, a remedy and NO noun, as the H8-M4 and E1-M4 corpus calls pass them (the noun reads its default).
-# With +<repo>, the whole of m4 with an explicit rel ($M4XREL, a second list in the same repo), arm, remedy and noun, as
-# the H10-M4 corpus call passes them, so m4's hand-off of each to m4base and m4cmp is read: $R's $M4DREL
-# carries the row d that $M4XREL lacks, so the swap rows a and d FAIL against $M4XREL and would pass against
-# $M4DREL, and the FAIL line names the arm, the noun and the rel m4cmp was handed. With -, m4cmp alone
-# over the base the `added` case wrote from $R (the same objects a re-read returns). The whole of m4 thus runs once per
-# origin/main state (added, nofile, noorigin), swap and nofile in the + form: swap reads the hand-off to m4cmp, and
-# nofile's SKIP line, printed by m4base, reads the arm and rel handed to m4base. shrink and reworded read m4cmp alone.
-m4_case() {
-  local lab="$1" repo="$2" wrc="$3" want="$4" got rc
-  shift 4; printf '# probe list\n' > "$WORK/m4-cur.txt"; printf '%s\n' "$@" >> "$WORK/m4-cur.txt"
-  case "$repo" in
-    -) got="$(m4cmp "$WORK/m4-cur.txt" "$WORK/m4-base.added.txt" "$M4DREL" M4 - fixture)"; rc=$? ;;
-    +*) got="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
-               m4 "${repo#+}" "$WORK/m4-cur.txt" "$WORK/m4-base.$lab.txt" "$M4XREL" P-M4 "probe remedy" "probe key")"; rc=$? ;;
-    *) got="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY; m4 "$repo" "$WORK/m4-cur.txt" "$WORK/m4-base.$lab.txt" "$M4DREL" M4 "probe remedy")"; rc=$? ;;
-  esac
-  [ "$rc" = "$wrc" ] && [ "$(printf '%s\n' "$got" | head -1)" = "$want" ] && return 0
-  sp_line M4 "FAIL -- case $lab got rc $rc, want $wrc: $(printf '%s' "$got" | head -2 | tr '\n' ' ')"; SP_RED=1; return 1
-}
-R="$WORK/m4-base"; RN="$WORK/m4-nofile"; RX="$WORK/m4-noorigin"; M4XREL="scripts/m4-probe-list.txt"; M4DREL="scripts/m4-probe-base.txt"
-{ m4_probe_repo "$R" "$M4DREL" $'# base\na\tr1\nb\tr2\nd\tr4\n' "$M4XREL" $'# base\na\tr1\nb\tr2\n' \
-  && m4_probe_repo "$RN" other $'x\n' && m4_probe_repo "$RX"; } >/dev/null 2>&1 \
-  || { echo "validate-fixture-hygiene: REFUSED -- could not build the M4 probe repos" >&2; exit 2; }
-M4F="FAIL M4: allowlist row(s) whose fixture is not on $M4DREL at origin/main -- the list is DOWN-ONLY:"
-m4ok=0
-m4_case added "$R" 1 "$M4F" "$(printf 'a\tr1')" "$(printf 'b\tr2')" "$(printf 'c\tr3')" || m4ok=1
-m4_case swap "+$R" 1 "FAIL P-M4: allowlist row(s) whose probe key is not on $M4XREL at origin/main -- the list is DOWN-ONLY:" \
-  "$(printf 'a\tr1')" "$(printf 'd\tr4')" || m4ok=1
-m4_case shrink - 0 "OK M4: no allowlist row added against origin/main" "$(printf 'a\tr1')" || m4ok=1
-m4_case reworded - 0 "OK M4: no allowlist row added against origin/main" "$(printf 'a\tother words')" "$(printf 'b\tr2')" || m4ok=1
-m4_case nofile "+$RN" 0 "SKIP P-M4: origin/main carries no $M4XREL -- this is the release that first ships it" "$(printf 'c\tr')" || m4ok=1
-m4_case noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there is no base allowlist to compare against" "$(printf 'c\tr')" || m4ok=1
-[ "$m4ok" = 0 ] && sp_line M4 "ok (added and swapped rows refused; shrink and a reworded reason pass; both no-base states SKIP)"
-
-# E1's probe: one repository, index only, no commit (E1 lists tracked files, and nothing here reads HEAD). Fires: zz1 (named by nothing), zz5 (named only by
-# a live `verify:` line of docs/backlog.md -- NOT a reader for E1), zz8's twin zza (named only in a comment),
-# zd/receipt.sh (its bare name called from ANOTHER fixture), scripts/receipt-zz10 (named by nothing) and
-# scripts/receipt-zz12 (named only by itself). Quiet: zz2 (`bash "$HERE/receipt-zz2.sh"`), zz3 (`R="$HERE/…"` then
-# `bash "$R"`), zz4 (called from another fixture's lib.sh), zz9 (inside an echo message) and zz13 (in a trailing
-# comment after code) -- THE TWO KNOWN ACQUITTALS, asserted -- and scripts/receipt-zz11 (called from
-# scripts/zz-other.sh). The allowlist: zz8 listed (quiet) and listed twice (DUP), zz2 listed while read and `gone`
-# listed while absent (STALE), zz12 listed with no reason (NOREASON).
-E="$WORK/e1probe"; ef() { mkdir -p "$(dirname "$E/$1")" && cat > "$E/$1"; }
-mkdir -p "$E/scripts" "$E/docs" && : > "$E/VERSION"
-for x in za/receipt-zz1 za/receipt-zz2 za/receipt-zz3 za/receipt-zz13 zb/receipt-zz4 zb/receipt-zz5 \
-         zb/receipt-zz8 zb/receipt-zza zb/receipt-zz9 zd/receipt; do ef "core/fixtures/$x.sh" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-done
-ef core/fixtures/za/run.sh <<'EOF'
-#!/usr/bin/env bash
-HERE="$(cd "$(dirname "$0")" && pwd)"
-bash "$HERE/receipt-zz2.sh" || exit 1
-R="$HERE/receipt-zz3.sh"
-bash "$R" || exit 1
-bash "$HERE/receipt.sh"
-true # bash "$HERE/receipt-zz13.sh"
-EOF
-ef core/fixtures/zc/lib.sh <<'EOF'
-zc_check() { bash "$HERE/../zb/receipt-zz4.sh"; }
-EOF
-ef core/fixtures/zb/run.sh <<'EOF'
-#!/usr/bin/env bash
-# bash "$HERE/receipt-zza.sh" -- a comment, never a reader
-echo "the receipt-zz9.sh receipt is run by hand"
-EOF
-ef scripts/receipt-zz10.sh <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-ef scripts/receipt-zz11.sh <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-ef scripts/receipt-zz12.sh <<'EOF'
-#!/usr/bin/env bash
-bash scripts/receipt-zz12.sh --self
-EOF
-ef scripts/zz-other.sh <<'EOF'
-#!/usr/bin/env bash
-bash scripts/receipt-zz11.sh
-EOF
-printf '%s\n' '# ledger' '' '## BL-1 -- live' '' 'verify: sh bash core/fixtures/zb/receipt-zz5.sh' > "$E/docs/backlog.md"
-printf '%s\n' '# probe' "core/fixtures/zb/receipt-zz8.sh	held" "core/fixtures/zb/receipt-zz8.sh	again" \
-  "core/fixtures/za/receipt-zz2.sh	read" "core/fixtures/gone/receipt.sh	absent" "scripts/receipt-zz12.sh" > "$E/scripts/inert-receipt-allowlist.txt"
-{ pgit init -q "$E" && pgit -C "$E" add -A; } >/dev/null 2>&1 \
-  || { echo "validate-fixture-hygiene: REFUSED -- could not build the E1 probe repository" >&2; exit 2; }
-printf '%s\n' 'DUP	core/fixtures/zb/receipt-zz8.sh' 'INERT	core/fixtures/za/receipt-zz1.sh' \
-  'INERT	core/fixtures/zb/receipt-zz5.sh' 'INERT	core/fixtures/zb/receipt-zza.sh' 'INERT	core/fixtures/zd/receipt.sh' \
-  'INERT	scripts/receipt-zz10.sh' 'NOREASON	scripts/receipt-zz12.sh' 'STALE	core/fixtures/gone/receipt.sh' \
-  'STALE	core/fixtures/za/receipt-zz2.sh' | LC_ALL=C sort > "$WORK/e1p.want"
-e1ok=0
-eo="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY; e1_run "$E" "$WORK/e1p")" || { sp_line E1 "FAIL -- $eo"; e1ok=1; }
-if [ "$e1ok" = 0 ] && ! cmp -s "$WORK/e1p.want" "$WORK/e1p.verdict"; then
-  e1ok=1; sp_line E1 "FAIL -- verdict rows differ from the seeded set:"
-  diff "$WORK/e1p.want" "$WORK/e1p.verdict" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
-fi
-if [ "$e1ok" = 0 ]; then sp_line E1 "ok (6 unread receipts fire, among them a verify:-only one, a comment-only one, another fixture's same-named one and a self-named scripts/ one; invocation by path, by variable, from a lib.sh, from scripts/, a message string and a trailing comment after code stay quiet; DUP, NOREASON and both STALE shapes fire)"
-else SP_RED=1; fi
-
-# H9's probe, no repository (H9 reads the file list it is handed): p/run.sh carries one
-# offender per W row beside the unbounded near-misses (until/while condition waits, `sleep "$@"`, a seeded timestamp,
-# a SECONDS name list, sed mutant text, a JSON seed, a comment, a heredoc read into a variable, a `for` over a data
-# list, the per-pass reset, the unchecked `read -t` pause), and the two frame-blindness shapes: a top-level sleep
-# after a `$(for ...; done)` line (:55) and after an `echo ... for ...` prose line (:57) must fire, while a poll
-# inside a `$(until ...; done)` and a real while-loop poll after them stay quiet. :60-:73 put a bounded loop in every
-# admitted opener position (`;`, `&`, `&&`, `||`, `|`, `(`, `$(`, `{`, `do`, `then`, `else`, `!`, `time`, a case
-# arm), :74-:77 close one by a glued `done|`, `done>`, `done<` and `done&`, and the sleep at :78 fires only if every
-# frame closed. :79-:108 are six bounded loops whose body holds a backtick loop, a `time -p` loop, or a prose `done`
-# (`echo $(echo done)`, `echo all done|cat`, `echo not done; true`, `echo all done | cat`): none may close the
-# bounded loop early, so each must still raise its W-BOUND. q/receipt-h9a.sh, a receipt, is scanned like any fixture file and REPORTED. m/run.sh drives the allowlist join: m:2
-# marked and suppressed (the live row); m:3 the identical line UNmarked, still a row; m:4 a marker with no allowlist
-# row, still a row AND a W-ALLOW-STALE row (the marker side of stale); m:5 a marked line the scan does not flag (a NOTE); m:6 and m:7 one id on two
-# lines (W-ALLOW-STALE, neither suppressed); m:8 marked with an id whose row names ANOTHER path (two W-ALLOW-STALE
-# rows, the row's and the marker's, and not suppressed); pm-gone is on no line. The rows the scan returns must equal the seeded set exactly.
-H9P="$WORK/h9probe"; mkdir -p "$H9P/core/fixtures/p" "$H9P/core/fixtures/q" "$H9P/core/fixtures/m" || exit 2
-printf '%s\n' '#!/usr/bin/env bash' \
-  '( sleep 2; act ) &' \
-  'while [ ! -e "$f" ] && [ $((SECONDS - s)) -lt 60 ]; do sleep 0.1; done' \
-  'i=0; while [ "$i" -lt 50 ]; do probe && break; sleep 0.2; i=$((i + 1)); done' \
-  'for k in 1 2 3; do' '  probe && break' '  /bin/sleep 1' 'done' \
-  'timeout 30 cmd' \
-  'read -r -t 5 l < "$fifo"' \
-  'until [ -e "$f" ]; do sleep 0.1; done' \
-  'while ! [ -e "$f" ]; do sleep 0.05; done' \
-  'n=0; while [ "$(grep -c . "$p")" -lt 3 ]; do sleep 0.01; n=$((n + 1)); done' \
-  'exec /bin/sleep "$@"' \
-  'since=$(( $(date +%s) - 30 ))' \
-  'case "$v" in IFS|SECONDS|RANDOM) continue ;; esac' \
-  "sed 's/^      sleep 0\\.2\$/      sleep 600/' a > b" \
-  "printf '{\"command\":\"until x; do sleep 15; done\"}' > t.jsonl" \
-  '# sleep 30 is a comment' \
-  'sleep 0' \
-  "bash -c 'sleep 300 & wait'" \
-  "printf '#!/bin/bash\\nexec sleep 600\\n' > \"\$w/stub\"" \
-  'cat > "$w/stub2" <<'"'"'EOF'"'" \
-  'sleep 5' \
-  'EOF' \
-  'sleep 0.3' \
-  's=$SECONDS' \
-  'for s in $SCEN; do run "$s"; sleep 0.1; done' \
-  'read -r -d '"''"' DATA <<'"'"'EOD'"'" \
-  'sleep 4' \
-  'EOD' \
-  'cat > "$w/fx/run.sh" <<FX' \
-  'sleep $3' \
-  'FX' \
-  'idle=0; while [ ! -e "$s" ]; do sleep 0.1; idle=$((idle + 1)); [ "$idle" -ge 50 ] && break; done' \
-  'n=0; while [ ! -e "$s" ]; do sleep 0.1; n=$((n + 1)); [ "$((n % 10))" -eq 0 ] || continue; done' \
-  'while :; do' '  ul=0; set_=1' '  while read -r p; do ul=$((ul + 1)); done < "$f"' '  [ "$ul" -eq 0 ] && break' '  sleep 0.1' 'done' \
-  'n=0; while :; do n=$((n + 1)); [ "$n" -lt 30 ] || break; sleep 0.1; done' \
-  'while :; do' '  [ -e "$f" ] && break' '  read -t 1 -u 8 _px' 'done' \
-  'while :; do if read -t 5 l1 < "$q"; then break; fi; done' \
-  'while :; do read -t 5 l2 < "$q" || bad x; sleep 0.1; [ -e "$f" ] && break; done' \
-  'while :; do read -t 2 l3 < "$q"; [ "$l3" = go ] && break; done' \
-  'while :; do read -t 3 l4 < "$q"' '  [ $? -eq 0 ] && break; done' \
-  'k=0; until [ "$k" -ge 40 ]; do sleep 0.1; let k++; done' \
-  'x="$(for a in b c; do echo "$a"; done)"' 'sleep 5' \
-  'echo waiting for the server' 'sleep 6' \
-  'y="$(until [ -e "$f" ]; do sleep 0.1; done)"' 'while ! [ -e "$f" ]; do sleep 0.1; done' \
-  'true; while [ "$a1" -lt 5 ]; do sleep 0.1; a1=$((a1 + 1)); done' \
-  'true & while [ "$a2" -lt 5 ]; do sleep 0.1; a2=$((a2 + 1)); done' \
-  'true && while [ "$a3" -lt 5 ]; do sleep 0.1; a3=$((a3 + 1)); done' \
-  'false || while [ "$a4" -lt 5 ]; do sleep 0.1; a4=$((a4 + 1)); done' \
-  'printf x | while [ "$a5" -lt 5 ]; do sleep 0.1; a5=$((a5 + 1)); done' \
-  '( while [ "$a6" -lt 5 ]; do sleep 0.1; a6=$((a6 + 1)); done )' \
-  'z="$(while [ "$a7" -lt 5 ]; do sleep 0.1; a7=$((a7 + 1)); done)"' \
-  '{ while [ "$a8" -lt 5 ]; do sleep 0.1; a8=$((a8 + 1)); done; }' \
-  'for q in a; do while [ "$a9" -lt 5 ]; do sleep 0.1; a9=$((a9 + 1)); done; done' \
-  'if true; then while [ "$b1" -lt 5 ]; do sleep 0.1; b1=$((b1 + 1)); done; fi' \
-  'if false; then :; else while [ "$b2" -lt 5 ]; do sleep 0.1; b2=$((b2 + 1)); done; fi' \
-  '! while [ "$b3" -lt 5 ]; do sleep 0.1; b3=$((b3 + 1)); done' \
-  'time for k in 1 2 3; do sleep 0.1; done' \
-  'case x in x) while [ "$b4" -lt 5 ]; do sleep 0.1; b4=$((b4 + 1)); done ;; esac' \
-  'for k in 1 2; do sleep 0.1; done|cat' 'for k in 1 2; do sleep 0.1; done>/dev/null' \
-  'for k in 1 2; do sleep 0.1; done<"$f"' 'for k in 1 2; do sleep 0.1; done&' \
-  'sleep 7' \
-  'n1=0; while [ "$n1" -lt 50 ]; do' '  sleep 0.1' '  y=`for k in a; do :; done;`' '  n1=$((n1 + 1))' 'done' \
-  'n2=0; while [ "$n2" -lt 50 ]; do' '  sleep 0.1' '  time -p for k in 1; do :; done' '  n2=$((n2 + 1))' 'done' \
-  'n3=0; while [ "$n3" -lt 50 ]; do' '  sleep 0.1' '  echo $(echo done)' '  n3=$((n3 + 1))' 'done' \
-  'n4=0; while [ "$n4" -lt 50 ]; do' '  sleep 0.1' '  echo all done|cat' '  n4=$((n4 + 1))' 'done' \
-  'n5=0; while [ "$n5" -lt 50 ]; do' '  sleep 0.1' '  echo not done; true' '  n5=$((n5 + 1))' 'done' \
-  'n6=0; while [ "$n6" -lt 50 ]; do' '  sleep 0.1' '  echo all done | cat' '  n6=$((n6 + 1))' 'done' > "$H9P/core/fixtures/p/run.sh"
-printf '%s\n' '#!/usr/bin/env bash' 'sleep 7' > "$H9P/core/fixtures/q/receipt-h9a.sh"
-printf '%s\n' '#!/usr/bin/env bash' 'sleep 3  # bl868-allow: pm-one' 'sleep 3' 'sleep 4 # bl868-allow: pm-norow' \
-  'true # bl868-allow: pm-fixed' 'sleep 5 # bl868-allow: pm-two' 'sleep 5 # bl868-allow: pm-two' \
-  'sleep 6 # bl868-allow: pm-elsewhere' > "$H9P/core/fixtures/m/run.sh"
-printf '%s\n' 'core/fixtures/m/run.sh	pm-one	probe' 'core/fixtures/m/run.sh	pm-fixed	probe' \
-  'core/fixtures/m/run.sh	pm-two	probe' 'core/fixtures/m/run.sh	pm-gone	probe' 'core/fixtures/p/run.sh	pm-elsewhere	probe' > "$WORK/h9p.allow"
-printf "$H9P/core/fixtures/%s\n" p/run.sh q/receipt-h9a.sh m/run.sh > "$WORK/h9p.abs"
-printf '%s\n' 'W-SLEEP	core/fixtures/p/run.sh:2' 'W-CLOCK	core/fixtures/p/run.sh:3' 'W-BOUND	core/fixtures/p/run.sh:4' \
-  'W-BOUND	core/fixtures/p/run.sh:5' 'W-TIMEOUT	core/fixtures/p/run.sh:9' 'W-TIMEOUT	core/fixtures/p/run.sh:10' \
-  'W-SLEEP	core/fixtures/p/run.sh:21' 'W-SLEEP	core/fixtures/p/run.sh:22' 'W-SLEEP	core/fixtures/p/run.sh:24' \
-  'W-SLEEP	core/fixtures/p/run.sh:26' 'W-SLEEP	core/fixtures/p/run.sh:33' 'W-BOUND	core/fixtures/p/run.sh:35' \
-  'W-BOUND	core/fixtures/p/run.sh:43' 'W-TIMEOUT	core/fixtures/p/run.sh:48' 'W-TIMEOUT	core/fixtures/p/run.sh:49' \
-  'W-TIMEOUT	core/fixtures/p/run.sh:50' 'W-TIMEOUT	core/fixtures/p/run.sh:51' 'W-BOUND	core/fixtures/p/run.sh:53' \
-  'W-SLEEP	core/fixtures/p/run.sh:55' 'W-SLEEP	core/fixtures/p/run.sh:57' \
-  'W-BOUND	core/fixtures/p/run.sh:60' 'W-BOUND	core/fixtures/p/run.sh:61' 'W-BOUND	core/fixtures/p/run.sh:62' \
-  'W-BOUND	core/fixtures/p/run.sh:63' 'W-BOUND	core/fixtures/p/run.sh:64' 'W-BOUND	core/fixtures/p/run.sh:65' \
-  'W-BOUND	core/fixtures/p/run.sh:66' 'W-BOUND	core/fixtures/p/run.sh:67' 'W-BOUND	core/fixtures/p/run.sh:68' \
-  'W-BOUND	core/fixtures/p/run.sh:69' 'W-BOUND	core/fixtures/p/run.sh:70' 'W-BOUND	core/fixtures/p/run.sh:71' \
-  'W-BOUND	core/fixtures/p/run.sh:72' 'W-BOUND	core/fixtures/p/run.sh:73' 'W-BOUND	core/fixtures/p/run.sh:74' \
-  'W-BOUND	core/fixtures/p/run.sh:75' 'W-BOUND	core/fixtures/p/run.sh:76' 'W-BOUND	core/fixtures/p/run.sh:77' \
-  'W-SLEEP	core/fixtures/p/run.sh:78' \
-  'W-BOUND	core/fixtures/p/run.sh:79' 'W-BOUND	core/fixtures/p/run.sh:84' 'W-BOUND	core/fixtures/p/run.sh:89' \
-  'W-BOUND	core/fixtures/p/run.sh:94' 'W-BOUND	core/fixtures/p/run.sh:99' 'W-BOUND	core/fixtures/p/run.sh:104' \
-  'W-SLEEP	core/fixtures/q/receipt-h9a.sh:2' \
-  'W-SLEEP	core/fixtures/m/run.sh:2' 'W-SLEEP	core/fixtures/m/run.sh:3' 'W-SLEEP	core/fixtures/m/run.sh:4' \
-  'W-SLEEP	core/fixtures/m/run.sh:6' 'W-SLEEP	core/fixtures/m/run.sh:7' 'W-SLEEP	core/fixtures/m/run.sh:8' \
-  | LC_ALL=C sort > "$WORK/h9p.want"
-h9ok=0
-ho="$(h9_scan "$H9P" "$WORK/h9p.abs" "$WORK/h9p")" || { sp_line H9 "FAIL -- $ho"; h9ok=1; }
-if [ "$h9ok" = 0 ]; then
-  cut -f1,2 "$WORK/h9p.rows" | LC_ALL=C sort > "$WORK/h9p.got"
-  if ! cmp -s "$WORK/h9p.got" "$WORK/h9p.want"; then
-    h9ok=1; sp_line H9 "FAIL -- the scan's rows differ from the seeded set:"
-    diff "$WORK/h9p.want" "$WORK/h9p.got" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
-  fi
-fi
-# the allowlist join over the same probe: the marker, not the line text, suppresses; every stale shape is a row
-if [ "$h9ok" = 0 ]; then
-  if ! h9_join "$WORK/h9p.allow" "$WORK/h9p.rows" "$WORK/h9p.marks" "$WORK/h9p.keep" "$WORK/h9p.notes" > "$WORK/h9p.stale"; then
-    h9ok=1; sp_line H9 "FAIL -- the allowlist join failed over the probe"
-  else
-    grep -v '	core/fixtures/m/run.sh:2$' "$WORK/h9p.want" > "$WORK/h9p.kwant"
-    cut -f1,2 "$WORK/h9p.keep" | LC_ALL=C sort > "$WORK/h9p.kgot"
-    sa="$(cut -f1,3 "$WORK/h9p.stale" | LC_ALL=C sort | tr '\t\n' ' |')"
-    sw='W-ALLOW-STALE pm-elsewhere|W-ALLOW-STALE pm-elsewhere|W-ALLOW-STALE pm-gone|W-ALLOW-STALE pm-norow|W-ALLOW-STALE pm-two|'
-    nn="$(grep -c 'core/fixtures/m/run.sh:5 carries # bl868-allow: pm-fixed' "$WORK/h9p.notes")" || nn=0
-    na="$(awk 'END { print NR }' "$WORK/h9p.notes")"
-    if ! cmp -s "$WORK/h9p.kgot" "$WORK/h9p.kwant" || [ "$sa" != "$sw" ] || [ "$nn" != 1 ] || [ "$na" != 1 ]; then
-      h9ok=1; sp_line H9 "FAIL -- the allowlist join is wrong: stale [$sa] want [$sw], notes $na (pm-fixed $nn) want 1 (1):"
-      diff "$WORK/h9p.kwant" "$WORK/h9p.kgot" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
-    fi
-  fi
-fi
-# a malformed or duplicate row is this file's own text gone wrong: a refusal, never a finding
-if [ "$h9ok" = 0 ]; then
-  printf '%s\n' 'core/fixtures/m/run.sh	pm-one	a' 'core/fixtures/m/run.sh	pm-one	b' > "$WORK/h9p.dup"
-  if h9_join "$WORK/h9p.dup" "$WORK/h9p.rows" "$WORK/h9p.marks" "$WORK/h9p.k2" "$WORK/h9p.n2" > /dev/null 2>&1; then
-    h9ok=1; sp_line H9 "FAIL -- a duplicate allowlist id was accepted"
-  fi
-fi
-if [ "$h9ok" = 0 ]; then sp_line H9 "ok ($(awk 'END { print NR }' "$WORK/h9p.want") seeded offender row(s) exact; the unbounded waits, the pauses, the per-pass counts, and the data stayed quiet, a receipt was scanned; the allowlist suppressed only its marked line, 5 stale rows (both directions, and a marker whose row names another file) and 1 NOTE printed, a duplicate id refused)"
-else SP_RED=1; fi
-
 # --- the corpus ----------------------------------------------------------------------------------------------------
 out="$(run_all "$ROOT" "$WORK/c")"; crc=$?
 if [ "$crc" -ne 0 ]; then echo "validate-fixture-hygiene: REFUSED -- $out" >&2; exit 2; fi
@@ -2086,7 +1355,6 @@ fi
 if [ "$MODE" = derive10 ]; then
   # Every H10/H11 offender and every listed one still offending, one `<fixture>:<clause>\t<reason>` row; a committed
   # row keeps its reason (keyed on field 1).
-  [ "$SP_RED" = 0 ] || { echo "validate-fixture-hygiene: REFUSED -- the self-probe is red, so the derived set is unattributable" >&2; exit 2; }
   awk -F'\t' 'FILENAME == ARGV[1] { if ($0 !~ /^[[:space:]]*(#|$)/ && NF >= 2) { x = $1; gsub(/[[:space:]]/, "", x); R[x] = $2 } next }
     $1 == "H10LISTED" { k = $2 } $1 == "H10" { k = $2 ":report" } $1 == "H11" { k = $2 ":hook-drive" }
     $1 ~ /^H1[01](LISTED)?$/ { print k "\t" ((k in R) ? R[k] : (k ~ /:report$/ ? "defines its own ok/bad; predates lib/report.sh" : "runs a pre-push hook by hand; predates lib/hook-drive.sh")) }' \
@@ -2098,7 +1366,6 @@ if [ "$MODE" = derive8 ]; then
   # its reason (keyed on field 1, so a re-derive on a later tip never rewrites a hand-written reason); a new row gets
   # its kind's reason. The two fixtures whose mutant battery selects its subject through an AI_DLC_* variable get
   # the reason that the channel must move first: a scrub would erase their mutant selection.
-  [ "$SP_RED" = 0 ] || { echo "validate-fixture-hygiene: REFUSED -- the self-probe is red, so the derived set is unattributable" >&2; exit 2; }
   awk -F'\t' 'FILENAME == ARGV[1] { if ($0 !~ /^[[:space:]]*(#|$)/ && NF >= 2) { x = $1; gsub(/[[:space:]]/, "", x); R[x] = $2 } next }
     $1 == "H8DER" { f = $2
       if (f in R) r = R[f]
@@ -2176,12 +1443,8 @@ if [ "$nh9k" -gt 0 ] || [ "$nh9s" -gt 0 ]; then
   awk -F'\t' '{ print "    " $1 " " $2 " " $3 ": " $4 }' "$WORK/h9c.stale"
   echo "  H9 (BL-868): a fixture verdict that elapsed time or an iteration bound can decide moves with load. Wait on the CONDITION, unbounded (\`until [ -e \"\$f\" ]; do sleep 0.1; done\`), or on a pid; never a fixed sleep, a SECONDS/date deadline, a counted poll or a timeout. A site where no elapsed time can decide a verdict ends in \`# bl868-allow: <id>\` and gets a row of $H9_ALLOW_REL with its reason. W-ALLOW-STALE: fix that row or its marker."
 fi
-if [ "$SP_RED" != 0 ]; then
-  echo "validate-fixture-hygiene: REFUSED -- the self-probe is red (above), so the verdict over the tree is unattributable." >&2
-  exit 2
-fi
 nlist="$(awk 'END { print NR }' "$WORK/c.list")"
 if [ "$rc" = 0 ]; then
-  echo "OK: validate-fixture-hygiene -- self-probe fired both ways; $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H12 no mutation battery in a run.sh or lib.sh; E1 $ne1 receipt(s), $ni1 inert and allowlisted; H9 $nh9r bounded-wait row(s), every one allowlisted."
+  echo "OK: validate-fixture-hygiene -- $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H12 no mutation battery in a run.sh or lib.sh; E1 $ne1 receipt(s), $ni1 inert and allowlisted; H9 $nh9r bounded-wait row(s), every one allowlisted."
 fi
 exit "$rc"

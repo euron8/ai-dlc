@@ -44587,3 +44587,111 @@ Both headers cite I130 as an arm of `scripts/validate-enforcement-map.sh`. I130 
 
 verify: manual
 
+## BL-1084 — `lib/report.sh` keeps no per-category fail count, so a fixture that must count its mutant FAILs apart cannot migrate onto it
+
+**DEFECT.** Filed 2026-11-14. Owner: `core/fixtures/lib/report.sh` and `core/fixtures/dispatch-model-guard/`.
+
+**LANDED (v0.1135.0).** `dispatch-model-guard` sources `lib/report.sh`, ends with `report_end`, declares `core/fixtures/lib/report.sh`, and its `dispatch-model-guard:report` row is dropped. The Fix's counter half is withdrawn: `git log -S mfails -- core/fixtures/dispatch-model-guard/run.sh` names 56877eb4d (0.1130.0) as the removal of `mfails`/`bfl` (3 `-` lines, 0 `+`), C9/H12 forbid `mutant_killed`, so no caller for a per-category counter exists and `lib/report.sh` is unchanged.
+
+Measured instance: `core/fixtures/dispatch-model-guard/run.sh:161` redefines `bad()` to also count, in `mfails`, every FAIL whose message names a MUTANT (not a MUTANT CONTROL), and `bfl()` (`run.sh:164`) hands `mutant_killed` the base-pass flag `fails - mfails`. `core/fixtures/lib/mutant.sh:29` calls `bad "FIXTURE BROKEN: MUTANT ..."` itself, so a wrapper inside the fixture cannot see every mutant FAIL. The fixture therefore keeps its `dispatch-model-guard:report` row in `fixture-contract-allowlist.txt` (reason: `counts mutant FAILs apart for bfl; report.sh has no hook (BL-1084)`), the one H10 row left for this cause after G3 batch 3.
+
+Fix: `lib/report.sh` gains the counter `bad()` keeps for a category the caller names; migrate `dispatch-model-guard` onto it and drop its row. Measured at 9cad095fe by the lead: `lib/report.sh` has 89 `inputs.decl` declarers and `lib/mutant.sh` 234 (control 0), so the fix rides a release that already re-runs `lib/report.sh`'s declarers, or is scheduled with its own predicted set.
+
+Provenance: batch 257, G3 batch 3; ruling (A) and id allocated by the lead.
+
+verify: sh f=fixture-contract-allowlist.txt; grep -q 'derive-h10' "$f" || exit 9; ! grep -q '^dispatch-model-guard:report' "$f" && bash scripts/validate-fixture-hygiene.sh </dev/null >/dev/null 2>&1
+
+## BL-1036 — `cd <subdir> && pytest` is accepted as a full-collection run, though a narrowed working directory narrows the collection
+
+**DEFECT.** OPEN. Filed 2026-11-13. A dev's `Full-collection run:` value that changes into a subdirectory before it runs pytest (`cd server && pytest -q`) is read by `record-only-diff.sh run-gate` as a plain `pytest -q`, because RUN-FILTER reads the arguments of the pytest command and not the working directory the command runs in. The tip adversary of BL-1016 measured `run-gate` exit 0 on `cd server && pytest -q` (scratch `tipadv.61TRUv/`, read only), so the handoff validator accepts it as a full collection although pytest collects only `server/`. BL-1016 reads every command of a `;`, `&&` or `||` chain, which is why the `pytest` of that chain is read at all; it does not read a leading `cd`.
+
+This is a NEW RULE, not a reader fix: the project's conventions would have to say which working directory the canonical run is made from, and RUN-FILTER would have to refuse a run whose directory differs from it. That rule is not in BL-1016.
+
+**LANDED (v0.1135.0).** The rule built is RUN-FILTER's WORKING DIRECTORY (`core/scripts/record-only-diff.sh` header). A `cd <dir>` or `pushd <dir>` command of the chain moves every later pytest command. That command's path arguments are read under the directory, and when it names no path, the directory itself is its path. Either way the result is held to the existing path rule: a conventions-declared path or a containing one is accepted, and `.` is accepted. So `cd server && pytest -q` is refused as the path `server`, and the consumer's `cd <worktree>/server && pytest tests/` now reads `<worktree>/server/tests`, matching its declared `server/tests`. Residuals, not read: a declared wrapper's `--cwd` (THE RELOCATION RESIDUAL); an outer `cd` before a QUOTED COMMAND; `cd` inside a group over-refuses the commands after it. One false-positive class is refused deliberately: `cd <absolute worktree root> && pytest -n 8` reads the absolute root as its path, which no declaration matches, as `pytest /abs/wt` already reads (0 of the consumer's 199 values); the remedy is to drop the `cd` or write it relative to the repository root. Measured on a scratch clone of the consumer: all 199 distinct `Full-collection run:`/`Canonical run:` single-line values in its history, against base 39184970b, with and without its conventions. 0 values moved from accepted to refused. 2 moved from refused to accepted (the `cd .../server && ... tests/` pair above). 7 kept their verdict with a new reason text. `run-span` gave 0 differences.
+
+Provenance: batch 257, cluster F2, from the F2 tip adversary; id allocated by lead ai-dlc-15.
+
+verify: sh bash core/fixtures/story-evidence-scaffold/receipt-bl1036.sh core/scripts/validate-handoff-evidence.sh
+
+## BL-1037 — the capture-cite route filters only the value's text, never the capture-heads block's rendered command line
+
+**DEFECT.** OPEN. Filed 2026-11-13. On the capture-cite route (`` `test-results/full.txt`, counts: capture-heads block ``) the validator reads the `Full-collection run:` value through RUN-FILTER, and the capture-heads block's own rendered command line (the `$ <the exact command>` first line of the capture) is not filtered. A plain cite of a capture that actually ran `pytest -k foo` is therefore accepted. F2's seed S7 asserts that a plain capture cite is accepted, so the fixture holds the gap as the intended behaviour today.
+
+This is a NEW RULE, not a reader fix: it needs a decision that the rendered command line of a cited capture is itself a run claim and is read through RUN-FILTER with the project's conventions.
+
+**LANDED (v0.1135.0).** `core/scripts/validate-handoff-evidence.sh`: `render_dar` records the command line of each counted capture (DAR_CCMDS). On the capture-cite route (run-gate 4, accepted by `dar_counts_ok`), `ev_capfilter_fc` reads each of those lines through one `record-only-diff.sh run-filter` start with the conventions, after dropping its `$ `/`command:`/`cmd=` prefix. A refusing line is refused `full-collection-filtered`, and an unevaluable one is refused as unevaluable (header (k)). The fixtures ask the subjects in process, so no `invocations.decl` row moves. A counted capture rendering `command (none)` has nothing to read; the consumer's history carries 1 such line. Measured on a scratch clone of the consumer: 23 `Full-collection run:` values cite `counts: capture-heads block`, all 23 run-gate 0, 3 or 5 there, and none takes the route, so the new start fired on none of them.
+
+Provenance: batch 257, cluster F2, from the F2 tip adversary; id allocated by lead ai-dlc-15.
+
+verify: sh bash core/fixtures/story-evidence-scaffold/receipt-bl1037.sh core/scripts/validate-handoff-evidence.sh
+
+## BL-1040 — RUN-FILTER accepts four narrowed spellings of a pytest invocation
+
+**DEFECT.** OPEN. Filed 2026-11-13. `record-only-diff.sh` RUN-FILTER reads each of these as a full collection, all pre-existing on base and measured at exit 0 by F2's delta adversary (scratch `dadv.3EG76h`, read only):
+- `pytest --cov -kfoo`: `--cov` is read as always taking a value, so it swallows `-kfoo`.
+- `PYTEST_ADDOPTS="-k foo" pytest -q`: the environment assignment is skipped.
+- `pytest -o python_functions=test_foo`: narrows collection silently on real pytest.
+- `pytest -q && (pytest -k foo)`: a subshell group is not read.
+
+Four more shapes, found by F2's final delta pass and shipped as they are, measured at exit 0 by the delta adversary (scratch `dadv3.ldyCbv`, read only):
+- Nesting four levels deep or more, such as `ssh a "ssh b 'ssh c \"ssh d \\\"pytest -k x\\\"\"'"`, is read as not a run.
+- Malformed mixed nesting, such as `a "b 'c \"d \\'e pytest -k x\\' \"'"`, is accepted.
+- `pytest -q; echo env pytest -k x`, an `echo` holding the words, is accepted.
+- With no conventions file, `-m "not slow"` inside a quoted command is accepted, as the existing no-conventions `-m` rule does at the top level.
+
+**LANDED (v0.1135.0).** `core/scripts/record-only-diff.sh` RUN-FILTER (header), shape by shape, every result run through `run-filter` on 39184970b and on the tip:
+- `--cov -kfoo`: refused. `--cov` and `--cov-report` take an OPTIONAL value, so an option token after them is not their value. `--cov src -q` and `--cov` alone are still accepted.
+- `PYTEST_ADDOPTS="-k foo" pytest -q`: refused. A `PYTEST_ADDOPTS=` assignment before the pytest word, or an earlier `export PYTEST_ADDOPTS=` command of the chain, is read as arguments. `PYTEST_ADDOPTS="-q"` is still accepted.
+- `-o python_functions=test_foo`: refused. An `-o` override of a collection key (`python_files`, `python_classes`, `python_functions`, `testpaths`, `norecursedirs`) is refused. `-o cache_dir=x` is still accepted.
+- `pytest -q && (pytest -k foo)`: refused. A group's commands are chain commands; a `{ ...; }` group is read too. `(pytest -q)` is still accepted.
+- Four levels or more of nesting: the QUOTED COMMAND depth cap of three is lifted, since each level drops one quote pair. The entry's four-level `-k x` is refused, and the same value with `-q` is accepted.
+- Malformed mixed nesting: NOT REPRODUCED. The entry's spelling, through `run-filter`, exits 1 (refused, `-k`) on 39184970b already.
+- `pytest -q; echo env pytest -k x`: REFUTED. The echo runs nothing, so accepting the value is correct. Control: `pytest -q; env pytest -k x` is refused.
+- With no conventions, a quoted `-m "not slow"`: REFUTED. It is the documented no-conventions `-m` rule, the same as at the top level.
+
+The Owed lines (A) and (B), the PREFIX case of `rf_cmdpy` and its state 8, are deleted by subtraction. Every caller asks `rf_cmdpy || rf_cmdbare`, and `rf_cmdbare` reads a pytest word behind any prefix program. This was measured by running it, not by reading it. The final tree was compared with a copy that restores (A) and (B), over 238 values: 39 seeds, among them the three prefixed full runs this entry asked about (`timeout 600 pytest -q`, `sudo -u app pytest -q`, `kubectl exec pod -- pytest -q`), plus the consumer's 199. Each value went through `run-filter`, `run-shape`, `no-test-run` and `run-gate` (each with and without the consumer's conventions) and through `run-span`, and the comparison found 0 differences. Control: the same comparison, base against tip, found 9.
+
+Owed (closed above): two lines of `core/scripts/record-only-diff.sh` may be vacuous since the bare-pytest fallback landed. f2-fixture's mutants of each change none of story-evidence-scaffold's 54 RUN-FILTER cells: (A) the prefix-word case `env|exec|time|timeout|…|docker|kubectl) st=8; continue ;;`, and (B) `case "$b" in pytest|py.test) return 0 ;; esac ;;`. Not yet measured: whether a stand-alone prefixed full run (`` `timeout 600 pytest -q` ``, `` `sudo -u app pytest -q` ``, `` `kubectl exec pod -- pytest -q` ``) separates them. If such a run does, it is the killer seed and the lines stay. If none does, delete both (fix by subtraction).
+
+Provenance: batch 257, cluster F2, from the F2 delta adversary; id allocated by lead ai-dlc-15.
+
+verify: sh bash core/fixtures/story-evidence-scaffold/receipt-bl1040.sh core/scripts/validate-handoff-evidence.sh
+
+## BL-1102 — validators re-prove on every push that their arms can fire
+
+**LANDED (v0.1135.0).** The remainder: no validator and no hook step runs a seeded self-probe on the default path. `scripts/validate-enforcement-map.sh` drops the seeded probe of every arm that tested its own code: I5, I8, I33b, I33c, I54, I54b, I55, I57, I59, I60, I62, I65, I66, I68, I71, I74(e), I75, I79, I81, I83, I84, I85, I87, I89/I90, I91, I92, I93, I94, I95, I102, I103, I104, I105, I106, I107, I108 halves A and B, I109, I110, I111, I112, I113, I114, I115, I116, I118, I119, I120 (its two mutant renderings), I121, I122, I123, I124, I125, I126, I128 and I129. Kept, the class 0.1134.0 kept: I17 and I76 drive the shipping `apply.sh` and `install.sh`; I58 asks `layer-drift.sh` about a mutated contract; I82, I82b and I99 score EREs resolved from `artifact-path-config.sh`; I108 half C drives `validate-artifact-derivations.sh`; I117 runs the awk lifted from `render-vocabulary-index.sh`; I77 and the I120 node-set guard read the live tree. I104's positive control, which read this file's own probe, now requires the scan to find its three declared readers. `scripts/validate-fixture-hygiene.sh` prints no `self-probe` line (11 at 39184970b, 0 at the tip; OK line in both). `.githooks/pre-push` `fxcount_arm` no longer starts `validate-fixture-invocations.sh --self-probe`, which stays a by-hand mode, and `unset BR_PROBE_RECORD` is gone. Start counts moved in 3 `invocations.decl` files, each from one counted `hermetic-run.sh` run at AI_DLC_FIXTURE_JOBS=12: `validator-fork-budget` `*` 172 to 102; `fixture-hygiene` `*` 15 to 11 and its judge row 8 to 4; `fixture-invocation-budget` `*` 56 to 55 and its judge row 30 to 29. Every fixture a push of the final tree runs was counted-run green at AI_DLC_FIXTURE_JOBS=12 with every row as declared: `scripts/predict-push-set.sh` named 37 on the first commit of this change, and 17 on the final content (the others hold a counted pass on their current key rows). No fixture keys `docs/backlog.md`. `validator-fork-budget` reads 2233 forks against FORK_BUDGET=2675, above the 70% stale-high line, so the budget stands.
+
+**PARTIAL (v0.1134.0) — the per-run self-probe is deleted from 19 validators; the hook's own call and two validators remain.** Counted from inside the repo at 30a78d884: 18 validators ran a seeded self-probe on every default invocation, and `scripts/validate-fixture-invocations.sh` ran one from its `--b2-census` path. Every one is deleted, with any seam that existed only to skip it (`--probe-from-caller`, `BR_PROBE_RECORD`, `--probe-seeds`, `--probe-world`, `--self-probe` of `validate-write-format-steering.sh`). Kept: live-corpus guards, and the checks on files read at run time (`validate-artifact-paths.sh` classifier, `validate-hook-registration.sh` pattern, `r13_instrument_probe`, `validate-provenance-block.sh` lens rule on the schema's `lens_pins`, `validate-adversarial-convergence.sh` K2 map on the partitioner in force). `.claude/rules/verification-discipline.md` now says the arm is proved once, by hand, at authoring. Start counts moved in 13 `invocations.decl` files. The largest moves are `fold-architect-ledger-join` `*` 554 to 114, `budget-summary-verdict` `*` 441 to 222, `backlog-receipt-traced-removal` `*` 286 to 99 and `backlog-real-ledger` `*` 68 to 18. Owed:
+
+- `scripts/validate-enforcement-map.sh`: its 34 arm probes. This is the pole's validator.
+- `scripts/validate-fixture-hygiene.sh`: its 11 `self-probe` lines.
+- `.githooks/pre-push`: the per-push `validate-fixture-invocations.sh --self-probe` in `fxcount_arm`, and the now-vestigial `unset BR_PROBE_RECORD` at `:32`-`:34`.
+
+**DEFECT.** OPEN. Filed 2026-11-14. Owner: every `scripts/validate-*.sh` and `core/scripts/validate-*.sh` that runs a self-probe on each invocation.
+
+Many validators seed an offender and a near-miss under `mktemp` and print "probe fired both ways" on every push before reading the corpus (`.claude/rules/verification-discipline.md` "Every arm carries a self-probe"). That an arm can fire is a fact established once at authoring, the same reasoning that deleted every fixture mutation battery in batch 257's PW release. Their per-push cost is unmeasured.
+
+Fix: measure the self-probe share of each pre-push validator step from one gate log, then move each self-probe to a by-hand authoring step (or a mode the gate does not run), and amend the verification-discipline rule to match.
+
+Receipt: a gate log with no "probe fired" line from a per-push step, and the step timings before and after.
+
+Provenance: batch 257, lead ai-dlc-35, filed with BL-1101 at the operator's request to move on; id allocated by lead ai-dlc-35.
+
+verify: manual
+
+## BL-1113 — two fixtures prove their own predicate can fail by rewriting a hook copy on every push
+
+**LANDED (v0.1135.0).** The test applied to every control: can any edit to the shipped subject change its verdict? Each control dropped here fails that test, because every predicate it runs is defined in the fixture's own `run.sh`, so each one is a recorded drop. Each kept arm passes the test.
+- gate-resume: `g3-regex-control-third` and `g3-regex-control-differ` are dropped, together with their seeded hook dirs. `g3-regex` stays on the real hook dir. It is presence-shaped: a dir with no copy reads `copies 0`. By hand, once, the dropped `sed` was applied to `core/hooks/ai-dlc-recover.sh` in a scratch worktree, and `g3-regex` read `differ` and failed.
+- backlog-real-ledger: already discharged by 0.1134.0 (BL-1102), which deleted the whole p3 block. That includes the seeded hook copy, the three unset copies, `probe.sh`/`forms.sh` and their controls. `p3_unset` appears 8 times in `run.sh` at a03785229 and 0 at 39184970b.
+- retro-branch-behind-main: `pending-gate` and `pending-layout` are dropped, and `report_end` goes from 14 to 12. Both judged fixture-written fragments, or a `sed`-cut copy, by the fixture's own `subject_state`, `gate_verdict`, `land_shape_ok` and `merge_shape_ok`. No `retro.md` byte reaches either verdict. This reverses BL-1106's restoration of `pending-gate` (0.1133.0). The property it held, that PENDING never hides a broken subject, is now a property of fixture code, proved once by hand when it was written. `land_shape_ok` and `merge_shape_ok` stay, because they judge `$RETRO` in parts 3 and 4.
+- self-update-gate: `rec-skc-mutant-control` is renamed `rec-skc-split-stamp`, and its stale "the kill above" prose and indent are fixed. Its run stays because it is a distinct state. The stamp reads commit THEIRS and skill_commit BASE, while `rec-skill-commit`'s world reads BASE/BASE. It is the only arm that tells a gate reading `skill_commit:` from one reading `commit:`.
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/gate-resume/run.sh:664`-`:680`, `core/fixtures/backlog-real-ledger/run.sh:146`-`:160`.
+
+gate-resume's `g3-regex-control-differ` feeds a recover-hook copy rewritten by `sed` (the dot dropped from the step regex's class) to the fixture's own join `g3_rx_join`, and requires it to read `differ`. backlog-real-ledger's p3 feeds three rewritten `.githooks/pre-push` copies (`pre-push.nounset`, `.late`, `.infn`) to the fixture's own predicate `p3_unset`, and requires each to fail. Each is a can-fail proof of a fixture-internal predicate that runs on every push, which is what the "no battery runs on every push" rule (`.claude/rules/fixture-mutants.md`) retires. Found while measuring BL-1111's false-positive set.
+
+Owed: decide each, either a plain arm on the real subject or a recorded drop.
+
+verify: manual
+

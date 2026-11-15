@@ -218,13 +218,16 @@ eqw="$(HR_BOUND=0 b3_world)"; HR_BOUND=0 shard "$eqw" 1 2 EXIT_CONDITION_MET 1 "
 eq_arm EQ9 0 "LEGACY" "a LEGACY WARN on stderr beside a MERGED line" "$eqw" @D
 eq_arm EQ10 2 "usage: " "a usage refusal" - --document
 eq_arm EQ11 0 "USAGE" "--help" - --help
-# WC0: a COPIED world is the world a fresh build makes. eqd above was the first b3 build (the template); a copy
-# and a fresh build each merge, and the two pass files and MERGED lines (the root aside) must be byte-identical,
-# and the copy's ledger must name no other world's root.
-wcc="$(b3_world)"; wcf="$(b3_world_build)"
-mx "$MERGE" "$wcc" > "$WORK/wc.c" 2>&1; wcrc=$?; mx "$MERGE" "$wcf" > "$WORK/wc.f" 2>&1; wfrc=$?
+# WC0: a COPIED world is the world a fresh build makes. eqd above is the FIRST b3 build (the cache template's own dir,
+# asserted below), and EQ1's CLI run merged it first, so $WORK/eq.EQ1.c.pass is the pass file a fresh build merges to.
+# A copy merges in process, and its pass file and the fresh one must be byte-identical, and the copy's ledger must
+# name no other world's root. A1 below reads this same copy's merge (wcc, wc.c), so B3 is merged in process once more, not twice.
+wcc="$(b3_world)"
+[ "$wcc" != "$eqd" ] && [ "${ASM_WCACHE:-0}" = 1 ] && [ "$eqd" = "$WORK/$(cat "$WC_ROOT/wcache/b3.old" 2>/dev/null)/$(cat "$WC_ROOT/wcache/b3.rel" 2>/dev/null)" ] \
+  || bad "WC0: FIXTURE BROKEN -- eqd is not the cache template's own fresh build, so the EQ1 pass file is not a fresh build's"
+mx "$MERGE" "$wcc" > "$WORK/wc.c" 2>&1; wcrc=$?; wfrc="$(cat "$WORK/eq.EQ1.c.rc")"
 wcr="$(dirname "$(hr_state "$wcc/1.md")")"; wce="$(dirname "$(hr_state "$eqd/1.md")")"
-if [ "$wcc" != "$eqd" ] && [ "$wcrc" = 0 ] && [ "$wfrc" = 0 ] && cmp -s "$(out_of "$wcc")" "$(out_of "$wcf")" \
+if [ "$wcc" != "$eqd" ] && [ "$wcrc" = 0 ] && [ "$wfrc" = 0 ] && cmp -s "$(out_of "$wcc")" "$WORK/eq.EQ1.c.pass" \
    && ! grep -qF "/${wce##*/}" "$wcr/_bmad-output/planning-artifacts/.artifact-writes.jsonl" \
    && grep -qF "/${wcr##*/}\"" "$wcr/_bmad-output/planning-artifacts/.artifact-writes.jsonl"; then
   ok "WC0: a copied B3 world merges to the pass file a fresh build merges to, byte for byte, and its ledger names its own root only"
@@ -245,7 +248,7 @@ n_met="$(grep -l '^verdict: EXIT_CONDITION_MET$' "$d1"/1.md "$d1"/2.md "$d1"/3.m
 [ "$n_met" -eq 3 ] && ok "W1: every B3 shard stamps EXIT_CONDITION_MET (a worst-shard merge would say MET)" \
   || bad "W1: FIXTURE BROKEN -- only $n_met of 3 B3 shards stamp MET, so B3 no longer discriminates"
 
-p_b3 "$MERGE" && ok "A1: B3 (3 shards x 2 blocking MAJOR, each stamped MET) merges NOT_MET with blocking=6, shards=4 beside a repair dir, and --cycle-state reads CONTINUE" \
+p_b3 "$MERGE" "$wcc" "$WORK/wc.c" "$wcrc" && ok "A1: B3 (3 shards x 2 blocking MAJOR, each stamped MET) merges NOT_MET with blocking=6, shards=4 beside a repair dir, and --cycle-state reads CONTINUE" \
   || bad "A1: the B3 input did not merge to a recomputed NOT_MET accepted by the convergence validator (rc=$RC): $(cat "$MO") $(cat "$CO" 2>/dev/null)"
 p_clean "$MERGE" && ok "A2: every shard stamped NOT_MET, summed blocking 3 = the ceiling -> merged MET and CONVERGED (the mirror of A1)" \
   || bad "A2: the clean set did not merge to MET/CONVERGED (rc=$RC): $(cat "$MO")"

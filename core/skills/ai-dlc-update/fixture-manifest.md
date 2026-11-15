@@ -168,6 +168,7 @@ core_manifest:
   - core/fixtures/transient-ignore-block/**
   - core/fixtures/trunk-push-bound/**
   - core/fixtures/file-mtime/**
+  - core/fixtures/resolve-cited-paths/**
   - core/fixtures/pause-hook-origin/**
   - core/fixtures/pause-question-in-prose/**
   - core/fixtures/postcompact-rulebook-recovery/**

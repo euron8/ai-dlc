@@ -18,7 +18,6 @@ ci-gates-resolution:report	defines its own ok/bad; predates lib/report.sh
 claude-rules-joins:report	defines its own ok/bad; predates lib/report.sh
 context-sensor:report	defines its own ok/bad; predates lib/report.sh
 deploy-validate-smoke-classification:report	defines its own ok/bad; predates lib/report.sh
-dispatch-model-guard:report	counts mutant FAILs apart for bfl; report.sh has no hook (BL-1084)
 dist-clone:report	defines its own ok/bad; predates lib/report.sh
 escalation-citation:report	defines its own ok/bad; predates lib/report.sh
 extension-check-adoption:report	defines its own ok/bad; predates lib/report.sh

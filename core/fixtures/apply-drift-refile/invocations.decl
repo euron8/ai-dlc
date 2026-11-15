@@ -1,2 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-130 *
+# 130 to 116, BL-1059: the BL-230 control and the forcing near-miss are one unforced run of one two-hook copy (ctl_run);
+# arm w no longer runs ulimit -f 20 and arm u no longer runs ulimit -f 20. From one counted run through core/scripts/hermetic-run.sh.
+116 *

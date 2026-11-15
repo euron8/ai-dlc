@@ -25,10 +25,10 @@
 # RUN-FILTER. Exit 0 when the invocation in <value> is the unfiltered canonical collection, 1 with
 # the reason on stdout when it narrows it. TOKENS are blank-separated words, a quoted stretch (`"a; b.xml"`,
 # `-o "addopts=-q; x"`) one token (rf_toks). A span RUNS PYTEST when a command of its CHAIN (below) has pytest as its
-# COMMAND WORD: the first word after env assignments and `env`/`exec`/`time`, through an interpreter (`python* -m
-# pytest`) or a launcher's `run`/`exec` (`uv run pytest`) (rf_cmdpy). BARE PYTEST: a command that is none of those
-# but carries a bare `pytest`/`py.test` word behind a program the reader does not know (`direnv exec . pytest`, `nix
-# develop -c pytest`, `./run pytest`) also runs pytest, read from that word (rf_cmdbare), unless the pipeline segment
+# COMMAND WORD: the first word after env assignments, through an interpreter (`python* -m pytest`) or a launcher's
+# `run`/`exec` (`uv run pytest`) (rf_cmdpy). BARE PYTEST: a command that is none of those but carries a bare
+# `pytest`/`py.test` word behind another program (`timeout 600 pytest`, `sudo -u app pytest`, `direnv exec . pytest`,
+# `nix develop -c pytest`, `./run pytest`) also runs pytest, read from that word (rf_cmdbare), unless the pipeline segment
 # holding the word opens with a NOT-A-RUN program: `pip`, `pip3`, `pipx`, `uv pip`, `grep`, `egrep`, `fgrep`, `echo`,
 # `printf`, or the text `version ok:` (`uv pip install pytest`, `grep pytest out.txt`, `version ok: pytest 9.1.1`). The invocation is the first backticked span
 # that runs pytest; else, with a readable <conventions file>, a DECLARED WRAPPER run (below) in a span BEFORE that
@@ -41,7 +41,16 @@
 # `failed`, `error(s)`, `skipped`, `deselected`, `xfailed`, `xpassed`, `warning(s)`, `collected` or `selected`
 # (`$ pytest -q 1 passed, 0 failed` reads `-q`). The invocation is a CHAIN of commands cut at every `;`, `&&` and `||`
 # token (and after a token ending in `;`); every command running `pytest` or a declared wrapper is read on its own
-# and the value is refused when ANY of them narrows; a chain with neither is read whole, as one command. A command
+# and the value is refused when ANY of them narrows; a chain with neither is read whole, as one command. A GROUP's
+# commands are commands of the chain: an unquoted token's leading `(` and trailing `)`, and a bare `{` or `}`, are
+# dropped (`pytest -q && (pytest -k foo)` reads `-k`). WORKING DIRECTORY: a `cd <dir>` or `pushd <dir>` command of
+# the chain moves the directory later pytest commands run in (`popd` drops it, `cd` with no directory reads `~`);
+# their path arguments are read under it and, naming none, the directory itself is their path, held to the path
+# rule below (`cd server && pytest -q` reads the path `server`; `cd server && pytest tests` reads `server/tests`).
+# A declared wrapper's run is not moved (its `--cwd` is THE RELOCATION RESIDUAL), and a `cd` inside a group still
+# moves the commands after the group (an over-refusal). PYTEST_ADDOPTS: the value of a `PYTEST_ADDOPTS=` assignment
+# before the pytest word, or of an earlier `export PYTEST_ADDOPTS=` command of the chain, is read before its
+# arguments, as arguments (`PYTEST_ADDOPTS="-k foo" pytest -q` reads `-k`). A command
 # is read up to the first pipe or chain operator after the runner; a REDIRECTION there (`>`, `2>`, `>>`, `<`, `&>`
 # with the next token as target, or one token carrying its target, `1>out.txt`, `2>&1`, `><capture>`) is skipped
 # and the read goes on (`pytest -q 1>out.txt -k foo` reads `-k`). A token opening with a
@@ -55,13 +64,15 @@
 # (`-n`, `--dist`, `--maxprocesses`, `--tx`), pytest-cov, pytest-timeout, pytest-rerunfailures (`--reruns`),
 # pytest-randomly (`--randomly-seed`), pytest-asyncio and pytest-django, listed in rf_scan. An option outside that
 # list takes no value: the token after it is read as an argument (`--foo bar` names the path `bar`), and
-# `--opt=value` is always one token. ADDOPTS: the value of `-o`/`--override-ini` (`-o "addopts=-k foo"`,
-# `-oaddopts=...`, `--override-ini=addopts=...`) is read, to its first `;` or ` #`, as arguments. A quote still open at
+# `--opt=value` is always one token. `--cov` and `--cov-report` take an OPTIONAL value: an option token after them is
+# no value (`pytest --cov -kfoo` reads `-kfoo`). ADDOPTS: the value of `-o`/`--override-ini` (`-o "addopts=-k foo"`,
+# `-oaddopts=...`, `--override-ini=addopts=...`) is read, to its first `;` or ` #`, as arguments; an override of a
+# COLLECTION key (`python_files`, `python_classes`, `python_functions`, `testpaths`, `norecursedirs`) is refused. A quote still open at
 # the end of the text joins nothing (`-v' -k foo` reads `-k`). QUOTED COMMAND: when no command of the CHAIN runs pytest,
 # a quoted token whose text does (`bash -lc "cd backend && pytest -k x"`, `ssh host "..."`, `sh -c '...'`) is read as
 # its own span through the same chain reading; an escaped quote (`\"`, `\'`) is text when quotes are counted, the inner
-# text is unescaped before it is read, and a quoted token inside it is scanned again (`bash -c "ssh h 'pytest -k x'"`,
-# three levels). UNDECLARED WRAPPER: a command running no pytest and no declared
+# text is unescaped before it is read, and a quoted token inside it is scanned again (`bash -c "ssh h 'pytest -k x'"`),
+# at any depth. UNDECLARED WRAPPER: a command running no pytest and no declared
 # wrapper whose PROGRAM (its first word after env assignments, interpreter words and options) names `pytest` and
 # which hands arguments after a bare `--` (`python3 scripts/pytest-footprint-watchdog.py ... -- -n 8`) is refused by
 # name: it runs a wrapper the conventions do not declare. A runner whose program names no pytest (`npm test -- -n 8`)
@@ -348,13 +359,20 @@ rf_toks() {
   fi
 }
 # rf_cmdv <span> -> RF_C, one command per line: the span's tokens cut at every unquoted `;`, `&&` and `||` token, and
-# after an unquoted token ending in `;` (`out.txt; pytest -k x`), a CHAIN. rf_cmds prints it.
+# after an unquoted token ending in `;` (`out.txt; pytest -k x`), a CHAIN. rf_cmds prints it. A GROUP is read as its
+# commands: an unquoted token's leading `(` and trailing `)` are dropped, and a bare `{` or `}` token, so
+# `pytest -q && (pytest -k foo)` and `{ pytest -k foo; }` read the narrowed command.
 rf_cmdv() {
   local w c=""
   RF_C=""
   rf_toks "$1"
   while IFS= read -r w; do
     [ -n "$w" ] || continue
+    case "$w" in \'*|\"*) ;; '{'|'}') continue ;; *)
+      while [ "${w#(}" != "$w" ]; do w="${w#(}"; done
+      while [ "${w%)}" != "$w" ]; do w="${w%)}"; done
+      [ -n "$w" ] || continue ;;
+    esac
     case "$w" in
       ';'|'&&'|'||') RF_C="$RF_C$c"$'\n'; c=""; continue ;;
       \'*|\"*) ;;
@@ -366,12 +384,11 @@ rf_cmdv() {
 }
 rf_cmds() { rf_cmdv "$1"; printf '%s' "$RF_C"; }
 # rf_cmdpy <command> -> 0 when pytest is the command's COMMAND WORD (header: RUN-FILTER): its first word after env
-# assignments (`VAR=x`) and numeric arguments, after a PREFIX command (`env`, `exec`, `time`, `timeout`, `nice`,
-# `nohup`, `sudo`, `xvfb-run`, `npx`, `uvx`, `stdbuf`, `command`, `docker`, `kubectl`) the first later pytest word
-# before an operator, whatever options and values the prefix takes (`timeout -s KILL 600 pytest`, `docker compose run
-# --rm -e X=1 app pytest`, `kubectl exec pod -- pytest`), an interpreter (`python* [-opts] -m pytest`, `-X`/`-W` taking a value) or a launcher's `run`/`exec`
-# subcommand (`uv run pytest`, `poetry run python -m pytest`, `pipx run pytest`). A pytest word anywhere else (`uv pip
-# install pytest`, `grep pytest out.txt`, `version ok: pytest 9.1.1`) is not the invocation.
+# assignments (`VAR=x`) and numeric arguments, an interpreter (`python* [-opts] -m pytest`, `-X`/`-W` taking a value)
+# or a launcher's `run`/`exec` subcommand (`uv run pytest`, `poetry run python -m pytest`, `pipx run pytest`). Every
+# caller asks rf_cmdbare beside it, which reads a pytest word behind a prefix program (`timeout -s KILL 600 pytest`,
+# `kubectl exec pod -- pytest`). A pytest word behind a NOT-A-RUN program (`uv pip install pytest`, `grep pytest
+# out.txt`, `version ok: pytest 9.1.1`) is not the invocation.
 rf_cmdpy() {
   local w b st=0
   rf_toks "$1"
@@ -380,11 +397,8 @@ rf_cmdpy() {
     b="${w##*/}"
     case "$st" in
       0) case "$w" in [A-Za-z_]*=*|-*|[0-9]|[0-9]*[0-9smhd]) continue ;; esac
-         case "$b" in env|exec|time|timeout|nice|nohup|sudo|xvfb-run|npx|uvx|stdbuf|command|docker|kubectl) st=8; continue ;; pytest|py.test) return 0 ;; python*) st=2; continue ;; esac
+         case "$b" in pytest|py.test) return 0 ;; python*) st=2; continue ;; esac
          st=1 ;;
-      # After a PREFIX word, whatever options and values it takes: the first later pytest word before an operator.
-      8) case "$w" in \'*|\"*) continue ;; '|'|'<'|*'>'*) return 1 ;; esac
-         case "$b" in pytest|py.test) return 0 ;; esac ;;
       1) case "$w" in run|exec) st=3; continue ;; esac; return 1 ;;
       2) case "$w" in -m) st=4; continue ;; -X|-W) st=7; continue ;; -*) continue ;; esac; return 1 ;;
       7) st=2 ;;
@@ -546,8 +560,10 @@ ro_no_test() {
 }
 ro_run_filter() {
     [ $# -eq 2 ] || [ $# -eq 3 ] || { echo "usage: $ME run-filter <value> [<conventions file>]" >&2; exit 64; }
-    rf_args() { # <span> -> one argument per line: the tokens after the pytest token, to the first operator
-      local w seen=0 all="" aft="" dd=0 sk=0
+    rf_args() { # <span> [<PYTEST_ADDOPTS value>] -> one argument per line: the tokens after the pytest token, to the
+      # first operator. PYTEST_ADDOPTS (header: RUN-FILTER): the value of a `PYTEST_ADDOPTS=` assignment before the
+      # pytest token, or the one passed (an earlier `export` of the chain), is read first, as arguments.
+      local w seen=0 all="" aft="" dd=0 sk=0 ev="${2:-}"
       rf_toks "$1"
       while IFS= read -r w; do
         [ -n "$w" ] || continue
@@ -557,7 +573,7 @@ ro_run_filter() {
         # A quoted token (rr_quote writes `'--junitxml=x>y'`) is an argument, never a shell operator; so is a placeholder.
         case "$w" in \'*|\"*) ;; '|'|'||'|'&&'|';'|'>'|'>>'|'2>&1'|'<'|*'>'*) rf_ph "$w" || { [ "$seen" = 1 ] && { rf_redir "$w" || break; continue; }; aft=""; all=""; dd=0; continue; } ;; esac
         if [ "$seen" = 0 ]; then
-          case "$w" in pytest|*/pytest|py.test|*/py.test) seen=1; aft=""; continue ;; esac
+          case "$w" in pytest|*/pytest|py.test|*/py.test) seen=1; aft=""; continue ;; PYTEST_ADDOPTS=*) ev="${w#PYTEST_ADDOPTS=}"; ev="${ev#[\"\']}"; ev="${ev%[\"\']}"; continue ;; esac
           # After a bare `--` (`npm test -- <args>`) every non-flag token is an argument handed to the runner.
           if [ "$dd" = 1 ]; then case "$w" in -*) ;; *) w="--passed-path=$w" ;; esac; fi
           [ "$w" = -- ] && dd=1
@@ -567,16 +583,25 @@ ro_run_filter() {
       # No pytest token (`go test ./...`, `npx graph test -r`): only the flag tokens and the
       # test-file arguments are read, so a runner's own package path is never taken for a narrowing
       # argument while a test file named to any runner is.
-      if [ "$seen" = 1 ]; then printf '%s' "$aft"
+      if [ "$seen" = 1 ]; then
+        [ -z "$ev" ] || { rf_toks "$ev"; printf '%s' "$RF_T"; }
+        printf '%s' "$aft"
       else printf '%s' "$all" | awk '/^-/ && $0 != "-m" && $0 != "-c" { print; next } { n = $0; sub(/.*\//, "", n) } n ~ /\.(test|spec)\.[A-Za-z0-9]+$|_test\.go$|^test_.*\.py$|_test\.py$/ { print }'; fi
     }
     rf_norm() { local p="${1#./}"; p="${p%/}"; printf '%s' "${p:-.}"; }
     # rf_addopts <-o value> (header: RUN-FILTER, ADDOPTS): `addopts=<args>`, unquoted and read to its first `;` or ` #`
-    # (an ini comment), is scanned as arguments; any other ini override is a value and nothing more.
+    # (an ini comment), is scanned as arguments. An override of a COLLECTION key (`python_files`, `python_classes`,
+    # `python_functions`, `testpaths`, `norecursedirs`) changes what is collected and is refused; any other ini
+    # override is a value and nothing more.
     rf_addopts() {
       local v="$1"
       v="${v#\"}"; v="${v%\"}"; v="${v#\'}"; v="${v%\'}"
-      case "$v" in addopts=*) ;; *) return 0 ;; esac
+      case "$v" in
+        python_files=*|python_classes=*|python_functions=*|testpaths=*|norecursedirs=*)
+          printf 'x\t%s\n' "overrides the collection setting ${v%%=*} (-o $v)"; return 0 ;;
+        addopts=*) ;;
+        *) return 0 ;;
+      esac
       v="${v#addopts=}"; v="${v%%;*}"; v="${v%%[[:space:]]#*}"
       rf_toks "$v"; rf_scan "$RF_T"
     }
@@ -586,6 +611,8 @@ ro_run_filter() {
       while IFS= read -r a; do
         [ -n "$a" ] || continue
         if [ -n "$mq" ]; then mv="$mv $a"; case "$a" in *"$mq") mq=""; mv="${mv#\"}"; mv="${mv#\'}"; mv="${mv%\"}"; mv="${mv%\'}"; printf 'm\t%s\n' "$mv" ;; esac; continue; fi
+        # An OPTIONAL value (`--cov`, `--cov-report`, pytest-cov's nargs='?'): an option token after it is no value.
+        if [ "$pend" = ov ]; then pend=""; case "$a" in -?*) ;; *) continue ;; esac; fi
         if [ -n "$pend" ]; then
           if [ "$pend" = m ]; then
             case "$a" in \"*\"|\'*\') mv="${a:1:${#a}-2}"; printf 'm\t%s\n' "$mv" ;;
@@ -611,7 +638,8 @@ ro_run_filter() {
           -m*) mv="${a#-m}"; mv="${mv#\"}"; mv="${mv#\'}"; mv="${mv%\"}"; mv="${mv%\'}"; printf 'm\t%s\n' "$mv" ;;
           -o|--override-ini) pend=o ;;
           -o*|--override-ini=*) rf_addopts "${a#-o}"; rf_addopts "${a#--override-ini=}" ;;
-          -p|-n|-c|-W|-r|--rootdir|--tb|--maxfail|--basetemp|--timeout|--junitxml|--durations|--log-level|--cov|--cov-report|--dist|--numprocesses|--confcutdir) pend=v ;;
+          --cov|--cov-report) pend=ov ;;
+          -p|-n|-c|-W|-r|--rootdir|--tb|--maxfail|--basetemp|--timeout|--junitxml|--durations|--log-level|--dist|--numprocesses|--confcutdir) pend=v ;;
           # VALUE OPTIONS (header: RUN-FILTER), continued: the rest of pytest's own and its common plugins'.
           --config-file|--override-ini|--pythonwarnings|--durations-min|--junit-xml|--junit-prefix|--log-format|--log-date-format|--log-cli-level|--log-cli-format|--log-cli-date-format|--log-file|--log-file-level|--log-file-format|--log-file-date-format|--log-auto-indent|--capture|--import-mode|--doctest-glob|--doctest-report|--show-capture|--color|--code-highlight|--assert|--verbosity|--last-failed-no-failures|--lfnf|--pdbcls|--maxprocesses|--tx|--rsyncdir|--cov-config|--cov-fail-under|--cov-context|--timeout-method|--timeout_method|--reruns|--reruns-delay|--only-rerun|--randomly-seed|--asyncio-mode|--ds|--dc) pend=v ;;
           -*) ;;
@@ -644,13 +672,40 @@ ro_run_filter() {
       return 1
     }
     # rf_loop <span>: every command of its CHAIN that runs pytest or a declared wrapper, scanned into RF_RUN.
+    # WORKING DIRECTORY (header: RUN-FILTER): a `cd <dir>` or `pushd <dir>` command of the chain moves the directory
+    # every later pytest command runs in (`popd` drops it); such a command's path arguments are read relative to it,
+    # and a command naming no path reads that directory as its path. `cd server && pytest -q` reads the path
+    # `server`, held to the path rule. j(<dir>, <path>) is the joined path, `.` and `x/..` components folded.
+    RF_PJ='function j(d, p,   s, n, a, o, k, i, r, ab) { s = (p ~ /^\//) ? p : (p == "." ? d : d "/" p); ab = (s ~ /^\//)
+      n = split(s, a, "/"); k = 0
+      for (i = 1; i <= n; i++) { if (a[i] == "" || a[i] == ".") continue; if (a[i] == ".." && k > 0 && o[k] != "..") { k--; continue } o[++k] = a[i] }
+      r = ""; for (i = 1; i <= k; i++) r = r (i > 1 ? "/" : "") o[i]
+      if (ab) r = "/" r; return (r == "" ? "." : r) }'
+    rf_cwdp() { awk -v d="$1" -v p="$2" "$RF_PJ"' BEGIN { print j(d, p) }'; }
     rf_loop() {
-      local rf_c rf_rd rf_a rf_w rf_cl
+      local rf_c rf_rd rf_a rf_w rf_cl rf_cwd="" rf_env="" rf_t rf_s
       # Staged, never fed from $( ) straight into the loop: a chain that cannot be split is UNEVALUABLE (exit 2,
       # which run-gate reports as an unevaluable filter), never an empty chain that reads as no narrowing.
       rf_cl="$(rf_cmds "$1")" || { echo "$ME: UNEVALUABLE — the invocation's chain could not be split: $1" >&2; exit 2; }
       while IFS= read -r rf_c; do
         [ -n "$rf_c" ] || continue
+        case "$rf_c" in
+          cd|pushd|'cd '*|'pushd '*)
+            rf_toks "$rf_c"; rf_t="$(awk 'NR > 1 && ($0 !~ /^-./) { print; exit }' <<<"$RF_T")"
+            rf_t="${rf_t#[\"\']}"; rf_t="${rf_t%[\"\']}"; rf_t="${rf_t:-~}"
+            if [ -z "$rf_cwd" ]; then rf_cwd="$(rf_cwdp . "$rf_t")"; else rf_cwd="$(rf_cwdp "$rf_cwd" "$rf_t")"; fi
+            continue ;;
+          popd|'popd '*) rf_cwd=""; continue ;;
+        esac
+        # An `export PYTEST_ADDOPTS=...` (or a bare assignment) command running nothing: later pytest commands read it.
+        case "$rf_c" in
+          'export PYTEST_ADDOPTS='*|'PYTEST_ADDOPTS='*)
+            if ! rf_cmdpy "$rf_c" && ! rf_cmdbare "$rf_c"; then
+              rf_toks "$rf_c"; rf_t="$(grep -m1 '^PYTEST_ADDOPTS=' <<<"$RF_T")"
+              rf_env="${rf_t#PYTEST_ADDOPTS=}"; rf_env="${rf_env#[\"\']}"; rf_env="${rf_env%[\"\']}"
+              continue
+            fi ;;
+        esac
         rf_rd=0
         if [ -n "$rf_conv" ]; then
           # DECLARED WRAPPER (header): a declared wrapper's payload is read as the arguments after a `pytest` token.
@@ -662,33 +717,41 @@ ro_run_filter() {
             *) rf_rd=0 ;;
           esac
         fi
-        if [ "$rf_rd" = 0 ] && rf_cmdpy "$rf_c"; then rf_a="$(rf_args "$rf_c")"; rf_rd=1; fi
-        if [ "$rf_rd" = 0 ] && rf_cmdbare "$rf_c"; then rf_a="$(rf_args "$rf_c")"; rf_rd=1; fi
+        rf_s=0
+        if [ "$rf_rd" = 0 ] && { rf_cmdpy "$rf_c" || rf_cmdbare "$rf_c"; }; then rf_a="$(rf_args "$rf_c" "$rf_env")"; rf_rd=1; rf_s=1; fi
         if [ "$rf_rd" = 0 ] && rf_w="$(rf_wrapper "$rf_c")"; then
           printf 'runs %s, a wrapper the conventions do not declare, handing pytest the arguments after its --; declare it in docs/coding-conventions.md as `<program> <options> -- <pytest args>`\n' "$rf_w"; exit 1
         fi
         [ "$rf_rd" = 1 ] || continue
         rf_n=$((rf_n + 1))
-        RF_RUN="$RF_RUN$(rf_scan "$rf_a")"$'\n''n'$'\n'
+        rf_t="$(rf_scan "$rf_a")"
+        # WORKING DIRECTORY: a pytest command after a `cd` reads its paths under that directory, and the directory
+        # itself when it names none.
+        if [ "$rf_s" = 1 ] && [ -n "$rf_cwd" ]; then
+          rf_t="$(awk -F'\t' -v d="$rf_cwd" "$RF_PJ"'
+            $1 != "p" { print; next } { hp = 1; print "p\t" j(d, $2) } END { if (!hp) print "p\t" d }' <<<"$rf_t")"
+        fi
+        RF_RUN="$RF_RUN$rf_t"$'\n''n'$'\n'
       done <<<"$rf_cl"
     }
     rf_loop "$rf_sp"
     # QUOTED COMMAND (header: RUN-FILTER): no command runs pytest, and a quoted token whose unquoted text does
     # (`bash -lc "cd backend && pytest -k x"`, `ssh host "..."`) is read as its own span, through the same loop.
     # The inner text is unescaped (`\"` -> `"`) before it is read, and a quoted token inside it that runs no pytest
-    # itself is scanned again (`bash -c "ssh h 'pytest -k x'"`), to a depth of three.
-    rf_qscan() { # <span> <depth>
+    # itself is scanned again (`bash -c "ssh h 'pytest -k x'"`), at any depth: each level drops one quote pair, so the
+    # scan ends.
+    rf_qscan() { # <span>
       local rf_q rf_t
       rf_toks "$1"; rf_q="$RF_T"
       while IFS= read -r rf_t; do
         case "$rf_t" in
           \"*\"|\'*\')
             rf_t="${rf_t:1:${#rf_t}-2}"; rf_t="${rf_t//\\\"/\"}"; rf_t="${rf_t//\\\'/\'}"
-            if rf_spanpy "$rf_t"; then rf_loop "$rf_t"; elif [ "$2" -lt 3 ]; then rf_qscan "$rf_t" $(($2 + 1)); fi ;;
+            if rf_spanpy "$rf_t"; then rf_loop "$rf_t"; else rf_qscan "$rf_t"; fi ;;
         esac
       done <<<"$rf_q"
     }
-    [ "$rf_n" != 0 ] || rf_qscan "$rf_sp" 1
+    [ "$rf_n" != 0 ] || rf_qscan "$rf_sp"
     [ "$rf_n" -gt 0 ] || RF_RUN="$(rf_scan "$(rf_args "$rf_sp")")"$'\n''n'$'\n'
     # `--ff` alone runs every test (failures first); with `-x` it stops at the first failure. Decided per command.
     RF_RUN="$(printf '%s\n' "$RF_RUN" | awk -F'\t' '$1 == "f" { g[$2] = 1; next } $1 == "n" { if (g["x"] && g["ff"]) print "x\tstops at the first of the previous failures (-x with --ff)"; split("", g); next } { print }')"
