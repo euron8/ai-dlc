@@ -2870,11 +2870,15 @@ The premise that every heavy fixture re-runs whole worlds per mutant did not hol
 - apply-drift-refile: 913 s, 877 starts; 283 s in the timestamped run, released to H5.
 - apply-restamp-worklist (+b, +c): 157 / 288 / 149 s, pool figures from `.git/ai-dlc-fixture-durations.last` (the 23:06 run). review-shard-merge (+b): 752 / 651 s, only in the older, heavier-load durations record.
 
+**Subjects after 0.1130.0 (the entry stays OPEN).** The first subject, the mutant batteries (procsub-staged-refusal-boot's whole-key battery and story-evidence-scaffold's DAR-N mutants), EXPIRED when 0.1130.0 (56877eb4d) deleted every mutation battery: `grep -ci mutant` reads 0 in each of `core/fixtures/procsub-staged-refusal-boot{,-b,-c}/run.sh` (119 in `procsub-staged-refusal-boot/run.sh` at `56877eb4d^`) and 0 across `core/fixtures/story-evidence-scaffold*/run.sh`. `backlog-receipt-binding` was deleted in the same release, so its row above is gone. The second subject SURVIVES: the arm and world cost of adversarial-shard-merge, owed-derivations, apply-drift-refile, apply-restamp-worklist and review-shard-merge, all present at 9ee073be0, owed under fixture-mutants clauses 1, 4 and 5.
+
 Receipt: `verify: manual`. The evidence is each fixture's counted run, old against new, by name.
 
 verify: manual
 
 ## BL-1074 — `backlog-receipt-binding` reads red under concurrency: its re-entry control and one mutant flip when five other fixtures run beside it
+
+**WITHDRAWN (56877eb4d).** Its subject is gone: `core/fixtures/backlog-receipt-binding` was deleted in 0.1130.0 (56877eb4d). `git ls-tree -d 9ee073be0 core/fixtures/` lists it 0 times and the sibling `owed-derivations` once; at `56877eb4d^` it lists it once.
 
 **DEFECT.** OPEN. Filed 2026-11-14. Owner: `core/fixtures/backlog-receipt-binding/` (G1, ai-dlc-98, holds its rework).
 
@@ -2921,7 +2925,8 @@ verify: manual
 **PARTIAL (v0.1132.0) — at moderate load the two owed fixtures trace completely; at the load a push runs at, layer-contract-conformance-b and layer-contract-conformance still omit, so this entry carries no `**LANDED` line.** Cause: a full-priority sweep out-competes logd for CPU, so its own reports are lost upstream of the stream. Fix: the plain emitter's fixture launch (`--list`, `--all`, `--reconcile`) runs under `taskpolicy -c background` (`rs_qos_decide`/`rs_qos` in `core/scripts/derive-fixture-readsets.sh`); every child inherits the clamp. `--local-map`, `--in-pool` and `both` stay unclamped, because a clamped run on a loaded box stretches its window, which holds the per-uid slot that long. `core/fixtures/readset-sandbox-root-clause` binds both cells: nq (the plain launch goes through `taskpolicy -c background sandbox-exec`) and nl (a `--local-map` launch reaches sandbox-exec unclamped). Each is driven from the deriver's own functions, with recorder stubs. Proved once by hand at authoring: without `rs_qos` on the nest launch, nq FAILs and nl holds; without the `-z "$LOCAL_MAP"` test, nl FAILs and nq holds.
 - Measured with `--list --tracer sandbox` in standalone clones (drop notices / canary paths, unclamped then clamped). layer-contract-conformance-b: 175/0 then 0/0 at load ~15 (1849 paths, 160 s), and 249/0 then 6/0 at load 50, with the clamped run spanning load 54-135. ledger-status-vocabulary: 129/798 at load 50, then 0/0 twice (2299 and 2302 paths) across load 54-135. On a 3x-oversubscribed box the clamp does not suffice: layer-contract-conformance-b at load 64-106 ran over 25 min and dropped 74 (omitted), and hermetic-runner (a peak of 116 own reports/s) dropped 67 over a 41-min window, against 0 unclamped in 84 s at load 50. Those drops are other senders' volume, not the window's own; a 10 s box-wide `sender == "Sandbox"` sample at load 61 read 4 messages, so the burst source was not caught. Every such window is omitted (fail-closed). Trace at moderate load.
 - Narrowed: 1 fixture, layer-contract-conformance-b. Its accepted trace (c75a7c323 plus this deriver, load ~15) opens nothing under `templates/`, `patterns/` or `.claude/rules/`, and those 3 lines are removed (`.githooks/` was already dropped by BL-1098); 5 directory lines become 2. `scripts/` stays, because the trace stats the directory (stat-only rows stay wide, by ruling), and `core/` stays, because the trace lists `core/fixtures`. In `docs/inputs-decl-whole-rows.tsv`, 3 rows are deleted and `core/` is reclassed `whole`. Two-tree mutation at the tip (9ee073be0 plus this unit): a copy with all 21 tracked files under the 3 removed paths overwritten, plus 1 new file in each (24 paths differ), gave byte-identical output to the unmutated copy (rc 0 both). A third copy with the still-declared `scripts/render-invariant-index.sh` broken gave rc 1 (vem-cli-twin FAIL), so the fixture does see a declared input move. ledger-status-vocabulary stays wide (it archives every tracked file; ruling).
-- Owed: a complete trace of layer-contract-conformance-b and layer-contract-conformance at the load a push runs at (both omitted at load 40-106), and the committed `.ai-dlc-fixture-readsets.tsv` rows for the fixtures accepted here, traced in the main checkout at the landed commit.
+- Traced in the main checkout at 13bb5e8c8 (`--list --tracer sandbox`, load ~9): layer-contract-conformance 3175 paths, consumer-machinery-home 2236, crosswalk-home-declaration 2228 and hermetic-consumption 1021 accepted. layer-contract-conformance-b (38 drop notices), ledger-status-vocabulary (111, a 200-path canary) and fixture-git-env-seam (100, a 3-path canary) were omitted. `.ai-dlc-fixture-readsets.tsv` maps only fixtures with no `inputs.decl` (2 before and after), so a declared fixture's trace adds no map row; there is no map commit to make. The accepted layer-contract-conformance trace reads every tracked file under `templates/` (5 of 5), `patterns/` (5 of 5), `.claude/rules/` (11 of 11) and `.githooks/` (1 of 1), so its directory lines stay.
+- Owed: a complete trace of layer-contract-conformance-b at the load a push runs at (omitted at load 40-106 and again at load ~9).
 
 **DEFECT.** OPEN. Filed 2026-11-14. Owner: `core/scripts/derive-fixture-readsets.sh`, the `--tracer sandbox` profile emitter and `sandboxed()`.
 
@@ -3067,6 +3072,124 @@ Fix: measure the self-probe share of each pre-push validator step from one gate 
 Receipt: a gate log with no "probe fired" line from a per-push step, and the step timings before and after.
 
 Provenance: batch 257, lead ai-dlc-35, filed with BL-1101 at the operator's request to move on; id allocated by lead ai-dlc-35.
+
+verify: manual
+
+## BL-1103 — a red pre-push suite keeps none of its timings in any record that survives the next pool
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `.githooks/pre-push` (the durations merge, `:3482`-`:3504`), with `core/fixtures/suite-dispatch-order` (cell `red`, `w_red` at `run.sh:279`-`:291`), which asserts the current gate.
+
+The merge into `.git/ai-dlc-fixture-durations` is gated on the run: `.githooks/pre-push:3493` merges `$out/.durations` only when `[ "$rc" -eq 0 ]`. The pool already has a row for every unit that gave a verdict, red or green. `:3379` writes `$out/.dur/<unit>` for every unit except a REFUSED one, and `:3409`-`:3410` fails any dispatched unit with no verdict file. `.last` is written on a red run too (`:3530`), but the next pool entry truncates it (`:3069`). So a red run's costs live only until the next push enters its pool. The green-only gate discards them, against the operator ruling "Valid measurements are never thrown away". Instance: PW3's first push (red, `b257-rulings.md:868`) timed review-shard-merge-b at 282 s, and the record still reads `review-shard-merge-b 232` (`.git/ai-dlc-fixture-durations:256`).
+
+Owed: on a red pool, merge into `.git/ai-dlc-fixture-durations` the duration of every fixture that gave a verdict, the same record a green run feeds. The fix must answer BL-591's constraint (LANDED v0.811.0; the comment at `:3482`-`:3489`):
+
+- Units that came back ok inside a red run were timed under that run's load: readset-skip-d at 928 s against 330-502 s in every clean gate, and mutation-battery shards at about 650 s against about 200 s.
+- A per-unit gate would have kept those rows.
+- An inflated pole misdirects the runner's longest-first dispatch and every ranking read off the record.
+
+suite-dispatch-order's `red` cell asserts that a red pool leaves the record byte-identical, so it changes with the fix. Self-probes:
+
+- A red pool's verdict-giving units appear in the record afterwards.
+- A dispatched unit with no verdict, and a REFUSED one, do not.
+- One probe holds the BL-591 constraint as the fix answers it.
+
+Receipt: `verify: manual`. The closing evidence is a red push's verdict-giving units read back from `.git/ai-dlc-fixture-durations` after it, with the BL-591 probe green.
+
+Provenance: batch 257, lead ai-dlc-35's post-PW notes; id allocated by the lead.
+
+verify: manual
+
+## BL-1104 — `readset-stage1-verdict` leaves the wrapper's load sampler running when a cell ends on a broken path
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/readset-stage1-verdict/run.sh` (its sampler reaping).
+
+The subject wrapper starts its load sampler as its own process group, a `while :; do sleep 15; sample; done` loop under `set -m` (`scripts/readset-stage1-run.sh:197`-`:210`), and writes its pid to `RUN_DIR/sampler.pid`. Only the wrapper's `finish()` stops it (`stop_sampler`, `:123`-`:133`). The fixture's EXIT trap `reap` (`run.sh:64`, `:77`) TERMs only the pids listed in `$ORPHANS`, and `sampler.pid` reaches that list at one site, `wrap_kill9`'s `:656`, after the ready wait has passed. Paths where the wrapper ends without its `finish()` and the sampler goes unrecorded:
+
+- `wrap_term`'s broken path at `:597`-`:598` SIGKILLs the TERMed wrapper and exits 2. No line in `wrap_term` (`:576`-`:618`) records `sampler.pid` (0 hits; control: 2 in `wrap_kill9`).
+- `wrap_kill9`'s broken path at `:654`-`:655` exits before `:656` records `sampler.pid`.
+- A SIGKILL of the fixture itself, which runs no trap.
+
+Instance: three `sleep 15` sampler groups survived about 15 hours after a `[term]` FIXTURE BROKEN run. That run's settle-test cause is BL-1087 (LANDED v0.1131.0); this entry is the cleanup on every exit path, a distinct subject.
+
+Owed: every cell records `sampler.pid` as soon as the wrapper writes it, and `reap` KILLs each recorded sampler by group (`kill -KILL -- -<pgid>`), so the sampler is reaped on every exit path the fixture can see.
+
+Receipt: `verify: manual`. The closing evidence is a forced broken `wrap_term` exit with no sampler group alive afterwards, read by recorded pgid.
+
+Provenance: batch 257, lead ai-dlc-35's post-PW notes; id allocated by the lead.
+
+verify: manual
+
+## BL-1105 — stale `tools.decl` rows in owed-derivations and layer-reference-resolution
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/owed-derivations/tools.decl`, `core/fixtures/layer-reference-resolution/tools.decl`.
+
+`owed-derivations/tools.decl:29` declares `python3`, and `layer-reference-resolution/tools.decl:19`, `:20` and `:28` declare `pgrep`, `ps` and `xargs`. Neither fixture's directory, the libraries it sources, nor its subjects use them. `core/scripts/hermetic-run.sh:225`-`:249` places each declared tool in the sandbox's tool farm. Owed: drop the four rows.
+
+verify: manual
+
+## BL-1106 — three properties lost their only arm when the mutation batteries were deleted
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/retro-branch-behind-main`, `core/fixtures/retro-compliance-workflow`, `core/fixtures/self-update-gate`.
+
+- retro-branch-behind-main: no arm seeds an anchored but broken block and requires RED, not PENDING. The deleted `pending-gate` arm did this. At 9ee073be0, `ok .*pending-gate` matches 0 lines and `ok .*pending-layout` matches 1. `gate_verdict()` at `run.sh:564`-`:567` covers layout only.
+- retro-compliance-workflow: no arm separates remedy state (c), paths without the flag, from state (d), paths with the flag. The deleted A5 did. `A5` matches 0 lines in `run.sh` and `A4` matches 12.
+- self-update-gate: `rec-mut-control` (an unmutated copy beside its siblings reads `n=1 rows=identical v=DEFER`) has 0 hits across `core/fixtures/self-update-gate*`.
+
+Owed: decide each property on its own, a plain arm on the real subject or a recorded drop.
+
+verify: manual
+
+## BL-1107 — prepush-pool-depth's `cl_vi_out` cell went red once in 66 runs and green with no fix
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/prepush-pool-depth/run.sh` (cell `cl_vi_out`).
+
+`cl_vi_out` (`run.sh:1589`-`:1590`, checked at `:1735`) byte-compares the no-entry push output through the real pool block against a copy with the consumer seam removed. It went red 1 time in 66 runs, then green with no change to any path it reads (`b257-rulings.md:811`). A verdict that moves with no input change breaks the operator ruling "Zero tests depend on load (BL-868)". The cause is unmeasured: `cl_drive` (`:1486`-`:1503`) has no sleep or timeout, and whether the pool's output order differs between the two compared runs is unchecked. No entry names `cl_vi_out` (0 hits in `docs/backlog.md` and `docs/backlog.archive.md`; control: `prepush-pool-depth` 20 and 40).
+
+Owed: find what in the two compared outputs can differ between runs, and fix it in the test. No retry, widened comparison or fewer jobs.
+
+Receipt: `verify: manual`. The closing evidence is the named source of the difference, removed in the test.
+
+Provenance: batch 257, PW chunk 5 builder's post-PW note; id allocated by the lead.
+
+verify: manual
+
+## BL-1108 — emit-report-refusal A7 lost its race calibration
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/emit-report-refusal/run.sh` (arm A7, `:461`-`:520`).
+
+The deleted reference pair established that the forcing could reproduce the bash 3.2 race. A process-substitution `diff` had to refuse 5 of 5, a temp-file `diff` 0 of 5, and the arm otherwise printed INCONCLUSIVE. The surviving arm asserts only that the shadowed `diff` ran 5 times (`:513`), then passes on 0 refusals (`:515`-`:516`). On a bash that keeps the fd open, a regressed process-substitution engine reads `ok`. Owed: restore a one-line reference that reports INCONCLUSIVE when the forcing cannot reproduce the race.
+
+verify: manual
+
+## BL-1109 — enforcement-map-sites' assertion floor sits below its live count
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/enforcement-map-sites/run.sh:602`.
+
+0.1130.0 lowered the floor from `-lt 10` to `-lt 5`, and the file defines 9 `A<nn>_` assertion functions. Four can vanish with the enumerator still above the floor. The two other counts cut in that release are exact and equal their live counts: derived-fence-binding `EXPECTED=56` (`run.sh:973`, was 89) and crosswalk-home-declaration `EXPECTED_ASSERTIONS=2` (`run.sh:52`, was 9). Owed: set the floor to the live count, or bind it to an exact count.
+
+verify: manual
+
+## BL-1110 — gate-verdict-grep-shape's span comment quotes stale line counts
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/gate-verdict-grep-shape/run.sh:170`-`:191`.
+
+`:188` says Check 5 is 100 lines and Check 12 is 136, or 2438 and 2214 with their closers deleted. `core/skills/ai-dlc/steps/gate-validation.md` now gives 105 and 170 (2.3x and 1.9x under `CEIL = {5: 240, 12: 320}`), and 3069 and 2748 to end of file. `:175`'s "1800 lines away" describes a former layout. Owed: re-derive the figures or drop them.
+
+verify: manual
+
+## BL-1111 — hygiene H12 cannot see a mutant built by an inline copy and sed
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `scripts/validate-fixture-hygiene.sh` (arm H12, `h12()` `:775`-`:798`).
+
+H12 fires on six named builder words, a `# MUTANT-MATRIX` header, a source of `lib/matrix.sh`, or a function whose name contains `mut`. A battery written as `cp run.sh x; sed -i '' … x` with none of those passes, and the arm's own header says so (`:350`). Owed: a clause for a fixture that copies a subject and rewrites the copy, with its false-positive set measured first.
+
+verify: manual
+
+## BL-1112 — I130 is cited as an enforcement-map arm and no such arm exists
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `docs/inputs-decl-whole-rows.tsv:5`, `scripts/invalidation-guard.sh:21`.
+
+Both headers cite I130 as an arm of `scripts/validate-enforcement-map.sh`. I130 has 0 hits in that script and 0 in `docs/invariant-index.md` (control: I66 has 19 and 1). The whole-rows refusal lives in `scripts/invalidation-guard.sh`. Owed: re-point both citations at the program that enforces the rule.
 
 verify: manual
 
