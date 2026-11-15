@@ -43,7 +43,7 @@
 #   preflight a `.claude` above the base refuses the census before any fixture runs.
 #   end walk s-marker plants one mid-run; the census exits 2 naming it.
 #   incomplete s-selfkill leaves its root; the summary names it by path and counts it, and it is on disk.
-# STORE: the census leaves $HOME/.cache/ai-dlc/verdicts empty while its per-pair stores hold entries;
+# STORE: the census leaves $HOME/.cache/ai-dlc/verdicts empty and every hermetic pass prints the runner's store-OFF line;
 #   control: hermetic-run run directly with AI_DLC_VERDICT_STORE naming that HOME's store writes there.
 # Exit: 0 = every assertion holds, 1 = an assertion failed, 2 = the fixture could not run.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
@@ -282,8 +282,9 @@ has "scratch: --keep prints the physical root" "$C_ERR" "kept scratch root: $SCR
 # --- store: the census never writes the default verdict store -------------------------------------
 n="$(find "$WORK/home$C_N" -type f | wc -l | tr -d ' ')"
 eq "store: the census wrote nothing under its HOME" "$n" 0
-n="$(find "$SCR/keep" -path '*/vs/*' -type f | wc -l | tr -d ' ')"
-if [ "$n" -gt 0 ]; then ok "store: the per-pair stores hold the hermetic passes ($n entries)"; else bad "store: no per-pair store entry, so the empty HOME proves nothing"; fi
+np="$(find "$SCR/keep" -name h.raw -type f -exec grep -lE ': rc=0 sandbox_files=[0-9]+ required_missing=0$' {} + 2>/dev/null | wc -l | tr -d ' ')"
+no="$(find "$SCR/keep" -name h.raw -type f -exec grep -lF 'verdict store OFF: an unarmed distribution run' {} + 2>/dev/null | wc -l | tr -d ' ')"
+if [ "$np" -gt 0 ] && [ "$no" = "$np" ]; then ok "store: every hermetic pass ($np) printed the runner's unarmed-distribution store-OFF line"; else bad "store: $no of $np hermetic passes printed the store-OFF line, so the empty HOME proves nothing"; fi
 mkdir -p "$WORK/home-direct"
 ( cd "$WA" && HOME="$WORK/home-direct" AI_DLC_VERDICT_STORE="$WORK/home-direct/.cache/ai-dlc/verdicts" bash "$WA/core/scripts/hermetic-run.sh" --root "$WA" s-low ) >/dev/null 2>&1
 n="$(find "$WORK/home-direct/.cache/ai-dlc/verdicts" -type f 2>/dev/null | wc -l | tr -d ' ')"

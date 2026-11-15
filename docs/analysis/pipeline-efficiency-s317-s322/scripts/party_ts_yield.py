@@ -12,7 +12,8 @@ parts are printed with the s319 step total, which must equal adversarial_yield.p
 
 Survival arm, per repair block (a `### ` section of a repair record whose heading carries CRITICAL or MAJOR):
   evidence  the backtick spans (8+ characters) and double-quoted spans (12+) on the block's `- claim now asserted:` line,
-            paired by claim_spans() (every backtick span paired left to right, so a short span never shifts the pairing);
+            paired by claim_spans() (code spans paired as CommonMark pairs them, so a short span never shifts the
+            pairing; double quotes paired with code spans masked in place, so a quoted sentence keeps its code span);
   target    party: the story file the block's `- edit:` line names (else the shard's `- artifact:`);
             test strategy: the sprint's test-strategy.md;
   NEW       an evidence span absent from the target at BEFORE (the text the round read);
@@ -65,16 +66,27 @@ SPRINTS = {
               ts_before="e3fb1b442", ts_ship=[("sprint merge", "1da426ef9")], ts_passes=3),
 }
 CM = re.compile(r"^### .*\b(CRITICAL|MAJOR)\b")
-BT = re.compile(r"`([^`\n]+)`")
+BT = re.compile(r"(?<!`)(`+)(?!`)([^\n]+?)(?<!`)\1(?!`)")
 DQ = re.compile(r"\"([^\"\n]+)\"")
 
 
-def claim_spans(claim):
-    """The evidence spans of a claim line: every backtick span is paired left to right (a short one such as `ENV` is
-    consumed, never paired with the next span's opening backtick) and kept at 8+ characters; then double-quoted spans
-    are paired the same way over the text left after the backtick spans are removed, and kept at 12+."""
-    out = [s for s in BT.findall(claim) if len(s) >= 8]
-    out += [s for s in DQ.findall(BT.sub(" ", claim)) if len(s) >= 12]
+def claim_spans(claim, bt_min=8, dq_min=12):
+    """The evidence spans of a text: every code span is paired left to right as CommonMark pairs it (a run of N
+    backticks closes only on a run of exactly N, so a short span such as `ENV` is consumed and never paired with the
+    next span's opening backtick, and `` `x` `` is one span reading `x` with its backticks), one leading and one
+    trailing space stripped when both are present, kept at bt_min+ characters; then double-quoted spans are paired
+    left to right over the text with every code span masked in place (a quote inside a code span is not a delimiter)
+    and taken from the original text (a quoted sentence that contains a code span keeps it), kept at dq_min+."""
+    out = []; mask = list(claim)
+    for m in BT.finditer(claim):
+        c = m.group(2)
+        if len(c) >= 2 and c[0] == " " and c[-1] == " " and c.strip():
+            c = c[1:-1]
+        if len(c) >= bt_min:
+            out.append(c)
+        mask[m.start():m.end()] = " " * (m.end() - m.start())
+    mask = "".join(mask)
+    out += [claim[m.start(1):m.end(1)] for m in DQ.finditer(mask) if m.end(1) - m.start(1) >= dq_min]
     return out
 
 

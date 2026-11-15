@@ -2683,6 +2683,9 @@ readset_invalidation_guard() { # <out>
 
 run_fixtures() {
   local rc=0 rf_hard=0 d b out out_q n_expected n_actual n_ordered verdict fx_root fx_s fx_err fx_m fx_p fx_t fx_e pool_xp=""
+  # THE WORK OUTSIDE THE POOL IS TIMED (BL-1124): `ph` collects `<phase> <n>s` from the shell's own SECONDS, no
+  # fork, and the distribution hook's real entry (depth 0, PREPUSH_CL_ENTRY) prints it as one `suite phases:` line.
+  local ph="" ph_t="$SECONDS"
   # THE CONSUMER-LAYOUT SWITCH (cl_select) is read at depth 0 only and then UNSET, so no unit and no nested
   # hook ever inherits it: builtins only, and with the switch unset nothing below changes.
   local cl_tree="" cl_q=""
@@ -2773,9 +2776,13 @@ run_fixtures() {
   # the mechanism was not, and a fixture driving the real hook is what found it.
   # Normalise to a bare integer instead of rescuing a failed exit status.
   READSET_NO_CHANGE=0
+  ph="$ph setup $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   apply_readset_skip "$out/list" "$out"
+  ph="$ph select $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   readset_trace_report "$out"
+  ph="$ph trace-report $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   readset_invalidation_guard "$out" || { rm -rf "$out"; trap - EXIT INT TERM HUP; return 1; }
+  ph="$ph guard $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   # A REFUSED CONSUMER-LAYOUT SELECTION FAILS THE STEP before any dispatch or skip return (cl_select says why).
   if [ -s "$out/.cl.refused" ]; then
     sed 's/^/   FAIL  consumer layout: /' "$out/.cl.refused"
@@ -2812,8 +2819,10 @@ run_fixtures() {
 
   # DISPATCH LONGEST-FIRST, FROM WHAT YOUR OWN LAST RUN COST.
   #
-  # A pool finishes when its longest unit finishes, so what matters is when that unit
-  # STARTS. In glob order it starts wherever the alphabet puts it. Measured on the
+  # A pool's makespan has two lower bounds: its longest unit, and the summed cost of its
+  # units over the width. Dispatch order can move it only while the first is the larger,
+  # where what matters is when the longest unit STARTS. In glob order it starts wherever
+  # the alphabet puts it. Measured on the
   # reference consumer's own 109-fixture suite at width 16: the two heaviest units sat
   # at positions 62 and 63, the pole began 5.5s into the run, and the suite ended with
   # it running alone. Dispatched longest-first the pole starts at 0.0s and the suite's
@@ -2825,8 +2834,10 @@ run_fixtures() {
   # box or a fixture set that makes a different unit the pole gets a different order for
   # free. What you should NOT expect is a fixed percentage: running the heavy units
   # together makes each of them slower, and where one unit dominates the wall clock that
-  # trade comes out level. On the distribution's own suite it does exactly that and wins
-  # nothing measurable; it is shipped for the schedule shape a consumer suite has.
+  # trade comes out level. A suite whose summed cost over the width exceeds its longest
+  # unit is WIDTH-BOUND, and no order changes its makespan: the distribution's own pushes
+  # are, so it wins nothing measurable there; it is shipped for the schedule shape a
+  # consumer suite has.
   #
   # THE RECORD LIVES UNDER .git ON PURPOSE. It is written once per green run and it is not
   # part of your project's tree, so it never shows up in a diff, a status, or a commit.
@@ -2915,6 +2926,7 @@ run_fixtures() {
   # REFUSED IS WRITTEN BEFORE THE TRACE'S ROW DISCARD, so a refused unit keeps no trace rows; it writes no
   # `.dur` line, so it records no cost; readset_keys_write and readset_live_trace take only `ok`.
   readset_pool_trace_prep "$out"
+  ph="$ph order $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   set -m
   { PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))" AI_DLC_FX_OUT="$out" AI_DLC_FX_TRACE="$PT_ROOT" AI_DLC_FX_TRACE_LIST="$PT_LIST" AI_DLC_FX_DV="$PT_DV" \
   POOL_STALL="$POOL_STALL" POOL_WALK="$POOL_WALK" AI_DLC_FX_TOTAL="$n_expected" \
@@ -3072,6 +3084,7 @@ run_fixtures() {
   set +m
   wait "$pool_xp"
   pool_xp=""
+  ph="$ph pool $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   readset_pool_trace_merge "$out"
 
   # A GREEN FIXTURE THAT CHECKED NOTHING SAYS SO. A shipped fixture whose subject is absent on this tree (a core
@@ -3155,6 +3168,7 @@ run_fixtures() {
   # stopped early, so a red figure is kept but never displaces a green one: the ordering step reads
   # `<fixture>@red` only for a fixture with no clean row. A fixture that was refused, or gave no
   # verdict, records nothing. The prune tests the name with `@red` stripped.
+  ph="$ph verdicts $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
   dur_sfx=""; [ "$rc" -eq 0 ] || dur_sfx=@red
   # The merge reads the record and writes it back, so it runs under the record's lock: two pushes
@@ -3182,6 +3196,7 @@ run_fixtures() {
   readset_keys_write "$out"
   cl_write "$out"
   cl_confirm "$out"
+  ph="$ph records $((SECONDS - ph_t))s"; ph_t="$SECONDS"
 
   # PUBLISH THIS RUN'S UNMERGED COSTS WHATEVER `rc` IS, and copy the PRE-MERGE file:
   # "$out/.durations" is exactly the units this pool timed, whereas "$out/.merged" above has
@@ -3265,6 +3280,7 @@ run_fixtures() {
   POOL_REFUSED_ONLY=0
   if [ -f "$out/.refused" ] && [ "$rf_hard" = 0 ]; then POOL_REFUSED_ONLY=1; fi
   rm -rf "$out"; trap - EXIT INT TERM HUP
+  if [ "$POOL_DEPTH_IN" -eq 0 ] && [ "${PREPUSH_CL_ENTRY:-}" = 1 ]; then printf '   ..    suite phases:%s after %ss\n' "$ph" "$((SECONDS - ph_t))"; fi
   return $rc
 }
 # FIXTURE_POOL_END

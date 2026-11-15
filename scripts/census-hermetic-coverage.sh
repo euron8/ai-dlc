@@ -33,7 +33,9 @@
 #
 # THE TWO RUNS, hermetic first and then plain, never concurrently for one fixture:
 #   hermetic  `hermetic-run.sh --root R <fx>` with AI_DLC_HERMETIC_KEEP=1, a per-fixture TMPDIR, and
-#             AI_DLC_VERDICT_STORE a fresh directory, so the real store is never written.
+#             AI_DLC_VERDICT_STORE and FXCOUNT_* unset, so it names no store of its own. On a distribution root
+#             the runner records nothing (`verdict store OFF: an unarmed distribution run`); on a consumer root
+#             it records a pass in the real store, which that consumer's push reads.
 #   plain     from the root (never a cd into the fixture dir, which CLAUDE.md measures as five fabricated
 #             failures): `env -i PATH=<READSET_TOOL_DIRS>:<kept sandbox>/bin HOME=<pair>/ptmp/<run>/home
 #             TMPDIR=<pair>/ptmp/<run>/tmp AI_DLC_PROJECT_ROOT=<root> PREPUSH_POOL_DEPTH=<same> bash
@@ -90,8 +92,8 @@
 # real tree by an absolute path still reads it inside the sandbox, and both runs then agree. A jail was
 # drafted and dropped; this census measures (a) only.
 #
-# It writes nothing to `.git/ai-dlc-fixture-durations` or to the real verdict store, and nothing under the
-# root: every scratch path is under the work dir.
+# It writes nothing to `.git/ai-dlc-fixture-durations`, nothing to the real verdict store except a consumer
+# root's hermetic passes, and nothing under the root: every scratch path is under the work dir.
 set -u
 # An inherited GIT_DIR (a hook run from a linked worktree exports it) would redirect every git call below,
 # including the git-state snapshot, onto the caller's repository.
@@ -349,9 +351,10 @@ census_pair_once() {
     ln -s "$T" "$2" || return 2
   fi
   T="$(cd "$2" && pwd -P)" || return 2
-  mkdir -p "$T/htmp" "$T/vs" "$T/ptmp" || return 2
-  ( cd "$CENSUS_ROOT" && AI_DLC_HERMETIC_KEEP=1 TMPDIR="$T/htmp" AI_DLC_VERDICT_STORE="$T/vs" \
-      PREPUSH_POOL_DEPTH="$CENSUS_PD" bash "$CENSUS_RUNNER" --root "$CENSUS_ROOT" "$fx" ) > "$T/h.raw" 2>&1 < /dev/null; hx=$?
+  mkdir -p "$T/htmp" "$T/ptmp" || return 2
+  ( cd "$CENSUS_ROOT" && exec env -u AI_DLC_VERDICT_STORE -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE \
+      AI_DLC_HERMETIC_KEEP=1 TMPDIR="$T/htmp" PREPUSH_POOL_DEPTH="$CENSUS_PD" bash "$CENSUS_RUNNER" --root "$CENSUS_ROOT" "$fx" ) \
+      > "$T/h.raw" 2>&1 < /dev/null; hx=$?
   hrc="$(CN_FX="$fx" awk 'BEGIN { p = "hermetic-run: " ENVIRON["CN_FX"] ": rc=" }
     index($0, p) == 1 { s = substr($0, length(p) + 1); sub(/[^0-9].*$/, "", s); if (s != "") r = s }
     END { print (r == "") ? "-" : r }' "$T/h.raw")"

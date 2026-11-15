@@ -68,12 +68,9 @@ consolidate them here.
   `.git/ai-dlc-fixture-readsets.local` (the `--local-map` the hook passes); the committed map is
   `.ai-dlc-fixture-readsets.tsv`, which the hook never writes. `AI_DLC_READSET_LIVE_TRACE=0` disables the
   detached trace the hook starts after a green suite.
-- `scripts/census-hermetic-coverage.sh` is a one-time census, not a gate: it runs each declared fixture inside
-  `hermetic-run.sh`'s sandbox and plainly against the real tree and reports every fixture whose sandboxed run
-  asserted something different. Options: `--root R`, `--list "<names>"`, `--jobs N` (default 4), `--out PATH`,
-  `--work DIR`, `--scratch BASE`, `--keep`. Exit 0 = every row EQUAL, EQUIVALENT or LOW-RES; 1 = a MISMATCH,
-  BOTH-FAIL, FLAKY, UNCOUNTABLE or REFUSED row; 2 = could not run. It needs a clean root and never writes the
-  real verdict store or the durations record.
+- `scripts/census-hermetic-coverage.sh` is a one-time census, not a gate: it compares each fixture's sandboxed
+  run with a plain one. Its header states options and exit codes. It needs a clean root, never writes the
+  durations record, and writes the real verdict store only on a consumer root.
 - Derive the fixture count, never quote one: `ls core/fixtures/*/run.sh | wc -l`. The suite is WIDTH-BOUND:
   wall clock is summed unit cost / width, at least the longest; see `.git/ai-dlc-fixture-durations`. A cost
   recorded there is a LOADED cost; never compare it with a solo run.
