@@ -52,6 +52,8 @@ echo "HERMETIC-CONSUMED scripts/seed-verdict-store.sh"
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found beside $HERE" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/pool-span.sh" || { echo "FIXTURE ERROR: lib/pool-span.sh not found beside $HERE" >&2; exit 2; }
 
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/w/.githooks" "$T/w/core/scripts" "$T/tmp" "$T/v"
@@ -146,8 +148,8 @@ mkdir -p "$T/v2" "$T/cw0" || exit 2
 
 # ---- the census world: the hook's FIXTURE_POOL span only, a stub install.sh, two shipping fixtures, committed.
 CW="$T/cw0"; mkdir -p "$CW/.githooks" "$CW/scripts/ai-dlc" "$CW/core/fixtures/cl-a" "$CW/core/fixtures/cl-b" "$CW/lib"
-sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$HOOKSRC" > "$CW/.githooks/pre-push"
-grep -q '^cl_select() ' "$CW/.githooks/pre-push" || { echo "FIXTURE ERROR: no FIXTURE_POOL span with cl_select in $HOOKSRC" >&2; exit 2; }
+pool_span "$HOOKSRC" "$CW/.githooks/pre-push" FIXTURE_POOL && grep -q '^cl_select() ' "$CW/.githooks/pre-push" \
+  || { echo "FIXTURE ERROR: no FIXTURE_POOL span with cl_select in $HOOKSRC" >&2; exit 2; }
 for _f in cl-a cl-b; do printf '#!/usr/bin/env bash\nexit 0\n' > "$CW/core/fixtures/$_f/run.sh"; done
 printf 'input\n' > "$CW/lib/input.txt"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$CW/scripts/ai-dlc/hermetic-run.sh"

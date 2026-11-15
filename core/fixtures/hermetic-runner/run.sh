@@ -106,12 +106,12 @@ trap 'rm -rf "$WORK"' EXIT
 AI_DLC_VERDICT_STORE="$WORK/verdict-store"; export AI_DLC_VERDICT_STORE
 
 T="$(printf '\t')"
-VERBOSE=1
 CUR="?"
 FAILED=""
-ok()  { [ "$VERBOSE" = 1 ] && printf '  ok    %s\n' "$1"; return 0; }
-bad() { [ "$VERBOSE" = 1 ] && printf '  FAIL  %s\n' "$1"; FAILED="$FAILED $CUR"; return 0; }
-eq()  { if [ "$2" = "$3" ]; then ok "$CUR: $1"; else bad "$CUR: $1 (got '$2', want '$3')"; fi; }
+# ok, bad and report_end are lib/report.sh's; the failing-arm list is built from each arm's own fails count.
+. "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "hermetic-runner: FIXTURE BROKEN: core/fixtures/lib/report.sh is absent" >&2; exit 2; }
+. "$(cd "$(dirname "$0")/../lib" && pwd)/pool-span.sh" || { echo "hermetic-runner: FIXTURE BROKEN: core/fixtures/lib/pool-span.sh is absent" >&2; exit 2; }
+eq() { if [ "$2" = "$3" ]; then ok "$CUR: $1"; else bad "$CUR: $1 (got '$2', want '$3')"; fi; }
 yes() { if grep -qF -- "$3" <<<"$2"; then ok "$CUR: $1"; else bad "$CUR: $1 (line absent: $3)"; fi; }
 # no <desc> <haystack> <needle> <control needle>: the control must be PRESENT in the same haystack,
 # or the absence proves nothing.
@@ -285,8 +285,8 @@ edit_hook() { sed "$2" "$1/.githooks/pre-push" > "$1/.githooks/pre-push.new" && 
 # its work files (.k/probe, .dunres, .dtools) in <out dir>. $FXR must be the hook's own fixture root.
 hook_dump() {
   local blk="$3.blk"
-  sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$2" > "$blk"
-  ( cd "$1" && export AI_DLC_READSET_LIVE_TRACE=0 && . "$blk" && o="$3" && mkdir -p "$o" \
+  pool_span "$2" "$blk" FIXTURE_POOL || return 1
+  ( cd "$1"&& export AI_DLC_READSET_LIVE_TRACE=0 && . "$blk" && o="$3" && mkdir -p "$o" \
     && KEYS_DIR="$1/.git/ai-dlc-fixture-keys" && VERIFIED_RECORD="$1/.git/ai-dlc-fixture-verified" \
     && printf '%s\n' "$FXR/probe/" > "$o/list" && readset_manifest "$o" && readset_local_validate "$o/list" "$o" \
     && readset_keys "$o/list" "$o" ) >/dev/null 2>&1
@@ -538,8 +538,7 @@ arm_J() {
   mk_probe "$P" stub_named $'data/a.txt\nlib/\n!data/a.txt' 'awk'
   mkdir -p "$P/lib/sub" && printf 's\n' > "$P/lib/sub/s.txt"
   ( cd "$P" && git add -A && git -c user.name=t -c user.email=t@t commit -qm sub ) >/dev/null 2>&1
-  sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$P/.githooks/pre-push" > "$blk"
-  [ -s "$blk" ] && ok "$CUR: pool block extracted" || bad "$CUR: pool block empty"
+  pool_span "$P/.githooks/pre-push" "$blk" FIXTURE_POOL && ok "$CUR: pool block extracted" || bad "$CUR: pool block empty"
   hook_rows() { # <probe>: the hook's row set for the probe fixture, the three # header lines dropped
     ( cd "$1" && export AI_DLC_READSET_LIVE_TRACE=0 && . "$blk" && o="$(mktemp -d)" \
       && printf '%s\n' "$FXR/probe/" > "$o/list" && readset_manifest "$o" && readset_local_validate "$o/list" "$o" \
@@ -1284,7 +1283,7 @@ arm_Z1() {
   yes "a .claude/ in the TMPDIR itself: the refusal names that dir" "$OUT" "sandbox escape: $px/q carries a project marker"
   yes "a .claude/ in the TMPDIR itself: the remedy points TMPDIR elsewhere" "$OUT" "Point TMPDIR at a directory with no marker above it."
   if [ -n "$STRAY" ]; then
-    [ "$VERBOSE" = 1 ] && echo "  SKIP  $CUR: ALLOW cell (marker beside TMPDIR): a stray marker refuses every run here"
+    echo "  SKIP  $CUR: ALLOW cell (marker beside TMPDIR): a stray marker refuses every run here"
   else
     hr_tmp "$P" "$x/nm/tmp"
     eq "a .claude/ BESIDE the TMPDIR, not above it: exit 0" "$RC" 0
@@ -1312,7 +1311,7 @@ arm_Z2() {
   # work-dir guard be deleted (M23) and stay green.
   yes "a worktree .git FILE above TMPDIR: the remedy points TMPDIR elsewhere" "$OUT" "Point TMPDIR at a directory with no marker above it."
   if [ -n "$STRAY" ]; then
-    [ "$VERBOSE" = 1 ] && echo "  SKIP  $CUR: ALLOW cell (seeded fixture, clean TMPDIR): a stray marker refuses every run here"
+    echo "  SKIP  $CUR: ALLOW cell (seeded fixture, clean TMPDIR): a stray marker refuses every run here"
   else
     mk_git_probe "$WK/Z2s" 'seed'
     hr_tmp "$WK/Z2s" "$x/clean"
@@ -1359,7 +1358,7 @@ run_arms() { arm_A; arm_B; arm_C; arm_D; arm_E; arm_F; arm_H; arm_I; arm_K; arm_
 # --- main run -----------------------------------------------------------------------------------
 WK="$WORK/main"; mkdir -p "$WK"
 if [ -z "$HOOK_SRC" ]; then echo "FIXTURE ERROR: no pre-push hook with a READSET_UNIVERSE span in this tree" >&2; exit 2; fi
-# The main pass runs its arms in parallel subshells, each with its own output and FAILED file, then
+# The main pass runs its arms in parallel subshells, each with its own output and oks/fails count file, then
 # replays the output in arm order so the transcript reads as before.
 mkdir -p "$WORK/par"
 stray_check
@@ -1371,13 +1370,14 @@ if [ -n "$STRAY" ]; then
   ARMS="Z1 Z2 Z3 Z4"
 fi
 for _a in $ARMS; do
-  ( "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s' "$FAILED" > "$WORK/par/$_a.failed" ) &
+  ( oks=0; fails=0; "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s %s\n' "$oks" "$fails" > "$WORK/par/$_a.n" ) &
 done
 wait
 for _a in $ARMS; do
   cat "$WORK/par/$_a.out"
-  [ -f "$WORK/par/$_a.failed" ] || { echo "FIXTURE ERROR: arm $_a produced no verdict" >&2; exit 2; }
-  FAILED="$FAILED$(cat "$WORK/par/$_a.failed")"
+  read -r _o _f < "$WORK/par/$_a.n" 2>/dev/null || { echo "FIXTURE ERROR: arm $_a produced no verdict" >&2; exit 2; }
+  oks=$((oks + _o)); fails=$((fails + _f))
+  [ "$_f" -eq 0 ] || FAILED="$FAILED $_a"
 done
 
 failed_set() { tr ' ' '\n' <<<"$1" | grep -v '^$' | LC_ALL=C sort -u | tr '\n' ' '; }
@@ -1386,7 +1386,7 @@ if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
   ( cd "$(dirname "$RUN_TREE")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
-  CUR=cwd
+  CUR=cwd; _f0=$fails
   eq "from the root: exit 0" "$(cat "$WORK/cwd1.rc" 2>/dev/null)" 0
   eq "from the runner's dir: exit 0" "$(cat "$WORK/cwd2.rc" 2>/dev/null)" 0
   a="$(grep '^  ok' "$WORK/cwd1.out" | sed 's/ [0-9]*$//' | shasum | awk '{ print $1 }')"
@@ -1394,11 +1394,11 @@ if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
   na="$(grep -c '^  ok' "$WORK/cwd1.out")" || na=0
   [ "$na" -gt 0 ] && ok "cwd: the nested run produced $na ok lines (control)" || bad "cwd: nested run produced no ok lines"
   eq "same ok lines from both working directories" "$a" "$b"
+  [ "$fails" -eq "$_f0" ] || FAILED="$FAILED cwd"
 fi
 
 if [ -n "$(failed_set "$FAILED")" ]; then
   echo "hermetic-runner: FAIL arms:$(failed_set "$FAILED")"
-  exit 1
-fi
-if [ -n "$STRAY" ]; then echo "hermetic-runner: every arm that could run holds (Z1 and Z2 DENY cells, Z3, Z4); the rest SKIPPED for the stray marker named above"; else echo "hermetic-runner: every arm holds"; fi
-exit 0
+elif [ -n "$STRAY" ]; then echo "hermetic-runner: every arm that could run holds (Z1 and Z2 DENY cells, Z3, Z4); the rest SKIPPED for the stray marker named above"
+else echo "hermetic-runner: every arm holds"; fi
+report_end hermetic-runner

@@ -7,3 +7,4 @@ scripts/census-consumer-layout.sh
 scripts/gate-wait.sh
 scripts/predict-push-set.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/pool-span.sh
