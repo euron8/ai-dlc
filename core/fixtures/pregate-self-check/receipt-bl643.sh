@@ -25,12 +25,12 @@
 #   one line that fills PUSH_LINES from stdin, followed by `echo PAST-THE-GATE`) and drives it from a two-commit repo G:
 #   deny (an update line for HEAD, clean, no record) -> 1 naming the missing record; empty (no stdin, no record) -> past;
 #   allow (record for HEAD's tree) -> past; tree (the line names HEAD~1, whose tree differs) -> 1 naming the tree;
-#   dirty (record present, an untracked file) -> 1 naming the dirty tree. Then, unless --cut-only, the WHOLE <pre-push>
+#   dirty (record present, an untracked file) -> 1 naming the dirty tree. Then the WHOLE <pre-push>
 #   on the deny shape from a clean copy of G (E2E), which must stop at the gate. Prints one summary line; exit 0 when it
 #   is the expected line, 1 when it differs, 9 when the world cannot be built.
 set -uo pipefail
 if [ "${1:-}" = --gate ]; then
-  HK="${2:-}"; E2E_ON=1; [ "${3:-}" = --cut-only ] && E2E_ON=0
+  HK="${2:-}"
   [ -s "$HK" ] || exit 9
   case "$HK" in /*) : ;; *) HK="$PWD/$HK" ;; esac
   W="$(mktemp -d)" || exit 9
@@ -53,14 +53,11 @@ if [ "${1:-}" = --gate ]; then
     else printf '%s\n' "$1" | ( cd "$G" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && bash "$W/gate.sh" >"$2" 2>&1 ); fi
   }
   past() { grep -qxF PAST-THE-GATE "$1" && echo 0 || echo 1; }
-  E2E=skip; E2En=skip
-  if [ "$E2E_ON" = 1 ]; then
-    cp -R "$G" "$W/e" || exit 9
+  cp -R "$G" "$W/e" || exit 9
     printf 'refs/heads/x %s refs/heads/x %s\n' "$H1" "$Z40" | ( cd "$W/e" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE \
       && AI_DLC_READSET_LIVE_TRACE=0 bash "$HK" origin file:///nowhere/x.git >"$W/e.out" 2>&1 ); E2E=$?
-    E2En=no; grep -qF 'No green scripts/pregate-self-check.sh run is recorded for this tree' "$W/e.out" \
-      && ! grep -q '^── ' "$W/e.out" && E2En=yes
-  fi
+  E2En=no; grep -qF 'No green scripts/pregate-self-check.sh run is recorded for this tree' "$W/e.out" \
+    && ! grep -q '^── ' "$W/e.out" && E2En=yes
   gdrive "refs/heads/x $H1 refs/heads/x $Z40" "$W/deny.out"; gdeny=$?
   gdenyn=no; grep -qF "No green scripts/pregate-self-check.sh run is recorded for this tree ($TR)" "$W/deny.out" && gdenyn=yes
   gdrive - "$W/empty.out"; gempty="$(past "$W/empty.out")"
@@ -73,8 +70,7 @@ if [ "${1:-}" = --gate ]; then
   gdirtyn=no; grep -qF 'The work tree is not clean' "$W/dirty.out" && grep -qF 'untracked.txt' "$W/dirty.out" && gdirtyn=yes
   line="Gdeny=$gdeny Gdenyn=$gdenyn Gempty=$gempty Gallow=$gallow Gtree=$gtree Gtreen=$gtreen Gdirty=$gdirty Gdirtyn=$gdirtyn E2E=$E2E E2En=$E2En"
   echo "$line"
-  want="Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes"
-  if [ "$E2E_ON" = 1 ]; then want="$want E2E=1 E2En=yes"; else want="$want E2E=skip E2En=skip"; fi
+  want="Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes E2E=1 E2En=yes"
   [ "$line" = "$want" ] && exit 0
   exit 1
 fi
@@ -217,38 +213,29 @@ gitin "$W/rootTn" add scripts/unnamed.sh && gitin "$W/rootTn" -c user.email=x@x 
 drive_away() { # <root> <out-file> -> the self-check's exit, run from a cwd other than the root
   ( cd "$W" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
 }
-# RECEIPT_WORLDS picks the worlds driven: all (default), base (every world but section e's Er, Ep, Ts, Tn) or e (A, Mt
-# and section e's four). A world not driven prints 99 and the flags its empty output gives; the exit is decided over
-# the group driven, so a mutant runs only the worlds its own cells read.
-RW="${RECEIPT_WORLDS:-all}"
-case "$RW" in all|base|e) ;; *) exit 9 ;; esac
-in_group() { # <group> <drive fn> <root> <out-file> [<base>]: drives when the group is selected, else an empty out, 99
-  local g="$1"; shift
-  case "$RW" in all|"$g") "$@" ;; *) : > "$3"; return 99 ;; esac
-}
-in_group base drive_away "$W/rootA" "$W/Hcwd.out"; hcwd=$?
-in_group base drive "$W/rootHres" "$W/Hres.out"; hres=$?
+drive_away "$W/rootA" "$W/Hcwd.out"; hcwd=$?
+drive "$W/rootHres" "$W/Hres.out"; hres=$?
 drive_base() { # <root> <out-file> <base> -> the self-check's exit, with an explicit base ref
   ( cd "$1" && AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" "$3" </dev/null >"$2" 2>&1 )
 }
-in_group base drive_base "$W/rootHtree" "$W/Htree.out" base0; htree=$?
-in_group base drive_base "$W/rootHbehind" "$W/Hbehind.out" newbase; hbehind=$?
-in_group base drive "$W/rootHabs" "$W/Habs.out"; habs=$?
+drive_base "$W/rootHtree" "$W/Htree.out" base0; htree=$?
+drive_base "$W/rootHbehind" "$W/Hbehind.out" newbase; hbehind=$?
+drive "$W/rootHabs" "$W/Habs.out"; habs=$?
 hresn=no; grep -qF "$W/ext-res/pre-push" "$W/Hres.out" && grep -qF "$W/rootHres/.githooks/pre-push" "$W/Hres.out" && grep -qF 'the resolved hook moved relative to HEAD:.githooks/pre-push' "$W/Hres.out" && hresn=yes
 htreen=no; grep -qF "$W/ext-tree/pre-push" "$W/Htree.out" && grep -qF "$W/rootHtree/.githooks/pre-push" "$W/Htree.out" && grep -qF 'the tree hook moved relative to base0:.githooks/pre-push; the branch edited the hook, but the push will run '"$W/ext-tree/pre-push"', not the edit' "$W/Htree.out" && ! grep -qF 'rebase onto' "$W/Htree.out" && htreen=yes
 hbehindn=no; grep -qF "$W/ext-behind/pre-push" "$W/Hbehind.out" && grep -qF 'the tree hook moved relative to newbase:.githooks/pre-push; the branch is behind: rebase onto newbase' "$W/Hbehind.out" && hbehindn=yes
 habsn=no; grep -qF 'would run no pre-push hook' "$W/Habs.out" && habsn=yes
 drive "$W/rootA" "$W/A.out"; a=$?
-in_group base drive "$W/rootB" "$W/B.out"; b=$?
-in_group base drive "$W/rootC" "$W/C.out"; c=$?
-in_group base drive "$W/rootD" "$W/D.out"; d=$?
+drive "$W/rootB" "$W/B.out"; b=$?
+drive "$W/rootC" "$W/C.out"; c=$?
+drive "$W/rootD" "$W/D.out"; d=$?
 # D: refused (2), nothing below the marker ran, and the cause is named (the NUL byte).
 dran=no; [ -e "$W/rootD/BELOW-RAN" ] && dran=yes
 dnamed=no; grep -qF 'NUL byte' "$W/D.out" && dnamed=yes
 # U: section d's counted run exits 0 with no judge pass line -> refused (2), the missing judgment named.
 # J: section d's counted run reads a J3 FAIL -> a finding (1) under d:fork-budget, the J3 line shown.
-in_group base drive "$W/rootU" "$W/U.out"; u=$?
-in_group base drive "$W/rootJ" "$W/J.out"; j=$?
+drive "$W/rootU" "$W/U.out"; u=$?
+drive "$W/rootJ" "$W/J.out"; j=$?
 unamed=no; grep -qF 'the judge printed no pass line for validator-fork-budget' "$W/U.out" && unamed=yes
 jnamed=no; grep -qF 'FAIL (J3): row "1 *"' "$W/J.out" && grep -qF 'FINDINGS in d:fork-budget' "$W/J.out" && jnamed=yes
 # The pregate record (BL-1055): A (green, clean) writes one for its HEAD tree; B (a finding) and Wd (green, dirty) do not,
@@ -258,7 +245,7 @@ rec_of() { # <root> -> yes when a pg1 record names the root's HEAD tree
   [ "$(sed -n 1p "$1/.git/ai-dlc-pregate-green/$t" 2>/dev/null)" = '#format pg1' ] && echo yes || echo no
 }
 arec="$(rec_of "$W/rootA")"; brec="$(rec_of "$W/rootB")"
-in_group base drive "$W/rootWd" "$W/Wd.out"; wd=$?
+drive "$W/rootWd" "$W/Wd.out"; wd=$?
 wdrec="$(rec_of "$W/rootWd")"
 wdn=no; grep -qF 'NO RECORD written: the work tree was not clean' "$W/Wd.out" && wdn=yes
 # BL-1064: A (clean) runs section d through seed-verdict-store.sh into the counted store its hook's fxcount_arm names;
@@ -272,7 +259,7 @@ drive_member "$W/rootMt" "$W/Mt.out" base0; mt=$?
 mtn=no; grep -qF "member mode: running the tree's own hook $W/rootMt/.githooks/pre-push (" "$W/Mt.out" \
   && grep -qF 'member mode wrote no pregate record' "$W/Mt.out" && mtn=yes
 mtrec=no; [ -e "$W/rootMt/.git/ai-dlc-pregate-green" ] && mtrec=yes
-in_group base drive_member "$W/rootMr" "$W/Mr.out" base0; mr=$?
+drive_member "$W/rootMr" "$W/Mr.out" base0; mr=$?
 mrn=no; grep -qF 'FAIL: seeded post-presuite step' "$W/Mr.out" && grep -qF 'FINDINGS in a:hook-steps' "$W/Mr.out" && mrn=yes
 # The edited-hook refusal is the member mode's carrier: Htree's refusal names --member.
 htreem=no; grep -qF 'before READY run this script with --member' "$W/Htree.out" && htreem=yes
@@ -283,23 +270,23 @@ mte=no; grep -qF '   triggered by: .githooks/pre-push ' "$W/Mt.out" && grep -qF 
   && grep -qF '   predict-push-set.sh: 4 of 4 hold a counted pass on their current key rows (reused); 0 to run' "$W/Mt.out" \
   && grep -qF '   ok: 0 fixture(s) run green' "$W/Mt.out" && mte=yes
 # Ep: the predictor's subset runs (hookfx alone); Epall would read yes if the whole set ran, Epnone if none did.
-in_group e drive_member "$W/rootEp" "$W/Ep.out" base0; ep=$?
+drive_member "$W/rootEp" "$W/Ep.out" base0; ep=$?
 epn=no; grep -qF '   predict-push-set.sh: 3 of 4 hold a counted pass on their current key rows (reused); 1 to run' "$W/Ep.out" \
   && grep -qxF '     hookfx rc=0' "$W/Ep.out" && grep -qF '   ok: 1 fixture(s) run green' "$W/Ep.out" && epn=yes
 epall=no; grep -qxF '     hookfx-w rc=0' "$W/Ep.out" && epall=yes
 epnone=no; grep -qE '^     [A-Za-z0-9._-]+ rc=[0-9]+$' "$W/Ep.out" || epnone=yes
-in_group e drive_member "$W/rootEr" "$W/Er.out" base0; er=$?
+drive_member "$W/rootEr" "$W/Er.out" base0; er=$?
 ern=no; grep -qF '   PREDICTION UNAVAILABLE (no ' "$W/Er.out" && grep -qxF '     hookfx-w rc=0' "$W/Er.out" \
   && grep -qxF '   FAIL: red: hookfx' "$W/Er.out" && grep -qF 'hookfx: FAIL: the hook edit broke this world' "$W/Er.out" && grep -qF 'FINDINGS in e:hook-fixtures' "$W/Er.out" && ern=yes
-in_group e drive_base "$W/rootTs" "$W/Ts.out" base0; ts=$?
+drive_base "$W/rootTs" "$W/Ts.out" base0; ts=$?
 tsn=no; grep -qxF '   triggered by: scripts/validate-shell-portability.sh ' "$W/Ts.out" && grep -qF '   ok: 4 fixture(s) run green' "$W/Ts.out" && tsn=yes
-in_group e drive_base "$W/rootTn" "$W/Tn.out" base0; tn=$?
+drive_base "$W/rootTn" "$W/Tn.out" base0; tn=$?
 tnn=no; grep -qF '   SKIPPED: the diff from ' "$W/Tn.out" && tnn=yes
 seed_refusal() { # <name> <hook body above the marker> -> sets RC
   local T="$W/ref-$1"; mkdir -p "$T/.githooks" "$T/core/fixtures/validator-fork-budget" || exit 9
   echo 0.0.1 > "$T/VERSION"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$T/core/fixtures/validator-fork-budget/run.sh"
-  # A green section d, so a mutant that lets one of these roots past section a reads its own exit (m1's noverdict -> 1).
+  # A green section d, so a root that gets past section a reads its own exit.
   seed_counted "$T" ok || exit 9
   { printf '#!/usr/bin/env bash\nfail=0\n'; printf '%s\n' "$2"; printf 'step "fixture suite (12-way)" true\nexit $fail\n'; printf '%s\n' "$ARMFN"; } > "$T/.githooks/pre-push"
   seedgit "$T" || exit 9
@@ -307,7 +294,6 @@ seed_refusal() { # <name> <hook body above the marker> -> sets RC
 }
 STEPFN='step() { printf '"'"'\n── %s\n'"'"' "$1"; shift; if "$@"; then printf '"'"'   PASS\n'"'"'; else printf '"'"'   FAIL\n'"'"'; fail=1; fi; }'
 np=99; ns=99; nv=99
-if [ "$RW" != e ]; then
 seed_refusal noparse "$STEPFN
 step \"broken\" true
 if then"
@@ -320,7 +306,6 @@ step \"one\" true
 step \"dies mid-step\" exit 3
 step \"never reached\" true"
 nv=$RC
-fi
 # World A's own output, printed ABOVE the summary only when A is not clean, so a caller can read why; the
 # summary stays the last line.
 [ "$a" = 0 ] || sed 's/^/A| /' "$W/A.out"
@@ -335,9 +320,5 @@ shared_ok=0; base_ok=0; e_ok=0
   && [ "$u" = 2 ] && [ "$unamed" = yes ] && [ "$j" = 1 ] && [ "$jnamed" = yes ] && base_ok=1
 [ "$ep" = 0 ] && [ "$epn" = yes ] && [ "$epall" = no ] && [ "$epnone" = no ] \
   && [ "$er" = 1 ] && [ "$ern" = yes ] && [ "$ts" = 0 ] && [ "$tsn" = yes ] && [ "$tn" = 0 ] && [ "$tnn" = yes ] && e_ok=1
-case "$RW" in
-  all)  [ "$shared_ok$base_ok$e_ok" = 111 ] && exit 0 ;;
-  base) [ "$shared_ok$base_ok" = 11 ] && exit 0 ;;
-  e)    [ "$shared_ok$e_ok" = 11 ] && exit 0 ;;
-esac
+[ "$shared_ok$base_ok$e_ok" = 111 ] && exit 0
 exit 1

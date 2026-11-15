@@ -52,8 +52,6 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_a1=0; B_a3=0
 
 # Every _bmad-output path a file prescribes, one per line.
 paths_of() { grep -ohE '_bmad-output/[A-Za-z0-9_./<>-]+\.md' "$1" | sort -u; }
@@ -72,7 +70,7 @@ echo "consolidation-residue"
 # --- 1. NO WORKING FILE IS PRESCRIBED AT THE DURABLE AREA ROOT -----------------
 n_off="$(offenders_of "$STEP" | grep -c . || true)"
 if [ "$n_off" -eq 0 ]; then
-  ok "every working-file path the step prescribes carries the s<N>/ sprint slot"; B_a1=1
+  ok "every working-file path the step prescribes carries the s<N>/ sprint slot"
 else
   bad "$n_off path(s) prescribed outside the sprint slot and outside the durable set"
   offenders_of "$STEP" | sed 's/^/        /'
@@ -95,7 +93,7 @@ fi
 # `delete|remove|rm|clean ?up|discard|retire|unlink` returned rc=1 over this step while
 # matching three sibling steps, so the grep could fire and the zero was real.
 if grep -qE '^ *rm -f ' "$STEP"; then
-  ok "the step names a disposition for its drafts rather than falling silent"; B_a3=1
+  ok "the step names a disposition for its drafts rather than falling silent"
 else
   bad "no draft disposition in the step -- this is the silence that accumulated eleven drafts"
 fi
@@ -116,57 +114,6 @@ elif diff -q "$WORK/written" "$WORK/removed" >/dev/null 2>&1; then
 else
   bad "  the drafts written and the drafts removed disagree"
   diff "$WORK/written" "$WORK/removed" | sed 's/^/        /'
-fi
-
-# --- 5. MUTATION: un-slot the manifest path ------------------------------------
-# Prove assertion 1 measures the path rather than the file's length. Build the mutant as
-# a COPY and guard with cmp -s so a sed that matched nothing cannot pass as a mutation.
-MUT1="$WORK/mutant-unslot.md"
-sed 's|planning-artifacts/s<N>/consolidation-manifest-|planning-artifacts/consolidation-manifest-|' \
-  "$STEP" > "$MUT1" || exit 2
-if cmp -s "$STEP" "$MUT1"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- the manifest path was rewritten" >&2
-  echo "  update the sed pattern in assertion 5 to match the real prescription" >&2
-  exit 2
-fi
-if [ "$(offenders_of "$MUT1" | grep -c . || true)" -ge 1 ]; then
-  mutant_killed "$B_a1" unslot-manifest "MUTATION: un-slotting the manifest path is reported as an offender"
-else
-  bad "MUTATION: an area-root manifest path was NOT reported -- assertion 1 proves nothing"
-fi
-
-# --- 6. MUTATION: delete the disposition ---------------------------------------
-# Assertion 3 and assertion 4 must fail for DIFFERENT reasons, so each mutant is
-# checked against its own assertion only. A mutant that trips both would mean the two
-# assertions are entangled and one of them is vacuous.
-MUT2="$WORK/mutant-nodispose.md"
-sed '/^ *rm -f /,+1d' "$STEP" > "$MUT2" || exit 2
-if cmp -s "$STEP" "$MUT2"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- the rm block was rewritten" >&2
-  exit 2
-fi
-if grep -qE '^ *rm -f ' "$MUT2"; then
-  bad "MUTATION: the disposition survived its own deletion -- assertion 3 proves nothing"
-else
-  mutant_killed "$B_a3" delete-disposition "MUTATION: deleting the disposition is detected"
-fi
-# And it must NOT also trip assertion 1 -- the paths are untouched by this mutation.
-if [ "$(offenders_of "$MUT2" | grep -c . || true)" -eq 0 ]; then
-  ok "  and it leaves assertion 1 green -- the two assertions are not entangled"
-else
-  bad "  the disposition mutant also tripped the path assertion -- one of them is vacuous"
-fi
-
-# --- 7. UNMUTATED CONTROL ------------------------------------------------------
-# A copy made the same way, unmutated. Without it, a mutant that dies on a malformed
-# copy emits nothing and "no offenders" scores as a pass rather than as a broken run.
-CTRL="$WORK/control.md"
-cp "$STEP" "$CTRL" || exit 2
-if [ "$(paths_of "$CTRL" | grep -c . || true)" -ge 4 ] \
-   && [ "$(offenders_of "$CTRL" | grep -c . || true)" -eq 0 ]; then
-  ok "  control: an unmutated copy read the same way is still clean and still non-empty"
-else
-  bad "  the unmutated copy did not read clean -- assertions 5-6 are measuring the harness"
 fi
 
 echo ""

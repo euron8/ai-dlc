@@ -9,11 +9,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # hook is SOURCED in a subshell fed its PostToolUse payload on stdin, so every seal row still comes from the
 # real recorder and never from a hand-written row. What a READER does with an answer -- the merge's refusal,
 # the join's, --merge's -- stays end to end in merge-arms.sh, join-arms.sh and gate-arms.sh, one run per
-# distinct outcome (.claude/rules/fixture-mutants.md clauses 5 and 6).
-#
-# The admission mutants A3 and A4 edit content-seal.sh only, so they are scored here: the mutated library is
-# sourced in a subshell and asked the same seal_admit_marker question over the same world. `--matrix` prints
-# the full mutant x world matrix for them and stops (run.sh header MUTANT-MATRIX).
+# distinct outcome.
 #
 # Exit: 0 every cell passed, 1 a cell failed, 2 the fixture could not run.
 set -u
@@ -47,7 +43,6 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
 . "$CS_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 CS_SUBJ=core/scripts/content-seal.sh # each call of a library function below is one in-process pass, logged by fx_inproc
-MX=0; [ "${1:-}" = --matrix ] && MX=1
 US="$(printf '\037')"
 TOKEN="changed after its last sealed write"
 REMEDY="never amend a join input through Bash"
@@ -238,9 +233,8 @@ uclone "$TPL_U" current; bare_marks; seal_all; dD="$UD"; dDst="$UST"
 uclone "$TPL_U" legacy; bare_marks; seal_all; dLs="$UD"
 uclone "$TPL_S" current; sha_marks; fx_inproc $CS_SUBJ; seal_record "$UST" program:wait-for-deliverable "$UD"/*.md; dE="$UD"
 uclone "$TPL_U" current; sha_marks; perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$UD/1.md"; dF="$UD"
-adm() { # <shard dir> [mutated library] -> ARC, $WORK/adm.out: seal_admit_marker over every shard in it
-  if [ -n "${2:-}" ]; then ( fx_inproc $CS_SUBJ; . "$2"; seal_admit_marker "$1"/*.md ) > "$WORK/adm.out" 2>&1
-  else fx_inproc $CS_SUBJ; seal_admit_marker "$1"/*.md > "$WORK/adm.out" 2>&1; fi
+adm() { # <shard dir> -> ARC, $WORK/adm.out: seal_admit_marker over every shard in it
+  fx_inproc $CS_SUBJ; seal_admit_marker "$1"/*.md > "$WORK/adm.out" 2>&1
   ARC=$?
 }
 for w in dA dN dL dD dLs dE dF; do eval "adm \"\$$w\""; eval "SV_$w=$ARC"; cp "$WORK/adm.out" "$WORK/adm.$w"; done
@@ -254,59 +248,9 @@ chk_d=0; fx_inproc $CS_SUBJ; seal_check "$dDst" "$dD"/*.md > /dev/null 2>&1 || c
 { [ "$SV_dF" = 1 ] && says "is not the body above it" "$WORK/adm.dF"; } || a1="${a1}f "
 { [ "$SV_dLs" = 0 ]; } || a1="${a1}Ls "
 if [ -z "$a1" ]; then
-  s_a=1; s_b=1; s_c=1
   ok "CS-U-A1: admission: bare markers under CURRENT -> refused; NO role file -> refused; LEGACY -> admitted; bare then sealed under CURRENT -> refused while --check passes; a sealed sha= set -> admitted; a broken sha= digest -> refused; LEGACY sealed -> admitted"
 else
-  s_a=0; s_b=0; s_c=0
   bad "CS-U-A1: cases [$a1] did not hold: a[$(head -1 "$WORK/adm.dA")] b[$(head -1 "$WORK/adm.dN")] c[$(head -1 "$WORK/adm.dL")] d[$(head -1 "$WORK/adm.dD") chk=$chk_d] f[$(head -1 "$WORK/adm.dF")]"
-fi
-
-# ---- the admission MUTANTS, each a copy of content-seal.sh with one anchor applied exactly once. A3 lets a
-# missing role file acquit; A4 stops reading the fallback sentence, so a LEGACY role file reads as CURRENT.
-mut_lib() { # <id> <old> <new> -> MUTP, empty when the anchor is not in content-seal.sh exactly once
-  local m="$WORK/mut-$1.sh" n
-  MUTP=""
-  n="$(OLD="$2" awk 'BEGIN { o = ENVIRON["OLD"] } { s = $0; while ((i = index(s, o)) > 0) { n++; s = substr(s, i + length(o)) } } END { print n + 0 }' "$SEAL")"
-  [ "$n" = 1 ] || return 0
-  OLD="$2" NEW="$3" awk 'BEGIN { o = ENVIRON["OLD"]; w = ENVIRON["NEW"] } { i = index($0, o); if (i > 0) $0 = substr($0, 1, i - 1) w substr($0, i + length(o)); print }' \
-    "$SEAL" > "$m" && ! cmp -s "$SEAL" "$m" || return 0
-  MUTP="$m"
-}
-n0="$(OLD='NO-SUCH-ANCHOR-BL750-ADMIT' awk 'BEGIN { o = ENVIRON["OLD"] } { if (index($0, o)) n++ } END { print n + 0 }' "$SEAL")"
-mut_lib A3 'if [ -z "$rf" ] || [ ! -r "$rf" ]; then' 'if false; then'; mA3="$MUTP"
-mut_lib A4 "grep -qF -- 'unknown arg: --mark' \"\$rf\" && continue" ':'; mA4="$MUTP"
-cell() { # <mutated library> <world name> -> KILL yes|no: the mutant's admission verdict against the shipped one
-  local sv; eval "adm \"\$$2\" \"\$1\""; eval "sv=\$SV_$2"
-  if [ "$ARC" != "$sv" ]; then KILL=yes; else KILL=no; fi
-}
-if [ "$MX" = 1 ]; then
-  for _mm in A3 A4; do
-    eval "_mp=\$m$_mm"; [ -n "$_mp" ] || { echo "MATRIX $_mm DID-NOT-APPLY"; exit 2; }
-    _trip=""
-    for _mw in dA dN dL dD dLs dE dF; do
-      cell "$_mp" "$_mw"; eval "_sh=\$SV_$_mw"; echo "MATRIX $_mm $_mw shipped=$_sh mutant=$ARC killed=$KILL"
-      [ "$KILL" = yes ] && _trip="$_trip $_mw"
-    done
-    echo "MATRIX-ROW $_mm tripped=[${_trip# }]"
-  done
-  exit 0
-fi
-if [ "$n0" != 0 ]; then bad "CS-U-A3/A4: FIXTURE BROKEN -- the impossible anchor control matched $n0 line(s)"
-else
-  if [ -z "$mA4" ]; then bad "CS-U-A4: DID NOT APPLY -- the fallback-sentence anchor is not in content-seal.sh exactly once"
-  else
-    cell "$mA4" dL; d_k=$KILL; d_v=$ARC; d_r="$(head -1 "$WORK/adm.out")"; cell "$mA4" dA; t_k=$KILL
-    if [ "$d_k" = yes ] && [ "$d_v" = 1 ] && case "$d_r" in *"legacy window is closed"*) true ;; *) false ;; esac && [ "$t_k" = no ]; then
-      mutant_killed "$([ "$s_a" = 1 ] && [ "$s_c" = 1 ] && echo 1)" A4 "CS-U-A4: killed -- a LEGACY role file read as CURRENT is refused at (c) (dL); twin (a) (dA) stays refused for the same reason"
-    else bad "CS-U-A4: the fallback-sentence mutant did not die at (c) with (a) unchanged: (c) killed=$d_k rc=$d_v [$d_r], (a) killed=$t_k"; fi
-  fi
-  if [ -z "$mA3" ]; then bad "CS-U-A3: DID NOT APPLY -- the missing-role refusal anchor is not in content-seal.sh exactly once"
-  else
-    cell "$mA3" dN; d_k=$KILL; d_v=$ARC; cell "$mA3" dA; t_k=$KILL
-    if [ "$d_k" = yes ] && [ "$d_v" = 0 ] && [ "$t_k" = no ]; then
-      mutant_killed "$([ "$s_a" = 1 ] && [ "$s_b" = 1 ] && echo 1)" A3 "CS-U-A3: killed -- a missing role file acquits at (b) (dN); twin (a) (dA) stays refused"
-    else bad "CS-U-A3: the missing-role mutant did not die at (b) with (a) unchanged: (b) killed=$d_k rc=$d_v, (a) killed=$t_k"; fi
-  fi
 fi
 
 # CS-U-R1: the remedy for an adversary shard is the re-dispatch + --rerun one; a remediator part and a

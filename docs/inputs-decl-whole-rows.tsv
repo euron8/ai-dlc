@@ -33,7 +33,6 @@ changelog-sprint-slot	core/skills/ai-dlc/steps/	whole
 check-22-spawn-ledger	core/team-roles/	whole
 consumer-machinery-home	core/	legacy
 consumer-machinery-home	scripts/	legacy
-consumer-machinery-home	.githooks/	legacy
 consumer-machinery-home	templates/	legacy
 consumer-suite-pool	!core/git-hooks/pre-push	whole
 content-seal	core/fixtures/adversarial-shard-merge/	legacy
@@ -41,7 +40,6 @@ crosswalk-home-declaration	core/	legacy
 crosswalk-home-declaration	scripts/	legacy
 derived-fence-binding	core/	whole
 derived-fence-binding	scripts/	whole
-derived-fence-binding	.githooks/	whole
 derived-fence-binding	templates/	whole
 derived-fence-binding	patterns/	whole
 derived-fence-binding	.claude/rules/	whole
@@ -97,7 +95,6 @@ layer-adjudication-tier	core/skills/ai-dlc-update/reconcile/	whole
 layer-contract-conformance-b	scripts/	legacy
 layer-contract-conformance-b	core/	legacy
 layer-contract-conformance-b	templates/	legacy
-layer-contract-conformance-b	.githooks/	legacy
 layer-contract-conformance-b	patterns/	legacy
 layer-contract-conformance-b	.claude/rules/	legacy
 layer-contract-conformance	scripts/	legacy
@@ -121,20 +118,17 @@ ledger-status-vocabulary	.githooks/	legacy
 ledger-status-vocabulary	templates/	legacy
 ledger-status-vocabulary	patterns/	legacy
 ledger-status-vocabulary	.claude/rules/	legacy
-owed-derivations	core/skills/ai-dlc-update/reconcile/	whole
 post-write-gates	!core/skills/ai-dlc-update/reconcile/	legacy
 pregate-self-check	.githooks/pre-push	whole
 pregate-self-check	core/fixtures/procsub-staged-refusal/	legacy
 prepush-pool-depth	core/git-hooks/pre-push	whole
 prepush-pool-depth	.githooks/pre-push	whole
-prepush-pool-depth	core/scripts/hermetic-run.sh	whole
 prepush-ssh-keepalive	.githooks/pre-push	whole
 prepush-ssh-keepalive	core/git-hooks/pre-push	whole
 prepush-ssh-keepalive	core/scripts/hermetic-run.sh	whole
 prepush-worktree-env-scrub	!.githooks/pre-push	whole
 prepush-worktree-env-scrub	!core/git-hooks/pre-push	whole
 prepush-worktree-env-scrub	core/scripts/hermetic-run.sh	whole
-presuite-present-key	!.githooks/pre-push	whole
 process-rule-pins	!core/skills/ai-dlc/	legacy
 process-rule-pins	core/team-roles/	whole
 procsub-staged-refusal-b	core/scripts/	whole
@@ -200,12 +194,9 @@ shipped-rule-version-floor	core/git-hooks/	legacy
 shipped-rule-version-floor	core/ci-templates/	legacy
 shipped-rule-version-floor	templates/	legacy
 shipped-rule-version-floor	patterns/	legacy
-smoke-surface-ignored-mutants	core/scripts/	whole
 smoke-surface-ignored	core/scripts/	whole
-story-evidence-receipts-mutants	core/scripts/	whole
 story-evidence-receipts	core/scripts/	whole
 story-evidence-scaffold	core/scripts/	whole
-story-evidence-smoke-mutants	core/scripts/	whole
 suite-content-key	scripts/	whole
 suite-content-key	.githooks/	whole
 suite-content-key	templates/	whole

@@ -23,36 +23,6 @@
 # rewritten, so every later beat re-reads the same mtime and the join walks to a
 # non-delivery on a complete artifact. `since-clamp` is that scenario; it passes
 # only because the subject clamps --since to `now`.
-#
-# MUTANT MATRIX. A mutant is a copy of the subject with ONE mechanism removed; an ARM is a positive case
-# (C<nn>_*) that asserts the subject behaves correctly, run with that copy as the subject. A mutant is
-# dead on an arm iff the arm TRIPS (exits 1 having printed a FAIL line) under it. PER PUSH each mutant
-# runs its DECIDING arm, which must trip, and its TWIN, a different arm the measured matrix shows GREEN
-# for it, which must stay green: the kill is confined to the deciding arm. The kill is emitted through
-# mutant_killed (lib/mutant.sh) behind the same-run pass of the unmutated deciding arm, of the twin, and
-# of the unmutated copy MX0. `--matrix` runs every mutant (and MX0) on EVERY arm and prints one MATRIX
-# row per cell, polarity explicit, from the sourced lib/matrix.sh. These header lines ARE the table the
-# driver reads, so there is no second copy to drift. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run it from the
-# repo root, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir; it is not run through
-# hermetic-run.sh, which runs under env -i and forwards no argument.
-# C31 is not an arm: it re-launches C23 from / and takes no subject.
-#
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/wait-stale-deliverable/run.sh --matrix
-# MUTANT-MATRIX-DYNAMIC table-loop why=the driver reads the MUTANT-MATRIX rows below back from this file and passes each name to mutant_killed as a variable, so every name the loop produces has its own row
-# MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy must trip no arm; it is the base pass every kill is gated on
-# MUTANT-MATRIX grant-cap decides=C12_progress_bounded twins=C11_progress_extends
-# MUTANT-MATRIX unprune-wait-beats decides=C13_progress_ignores_own_state twins=C11_progress_extends
-# MUTANT-MATRIX unexclude-beat-inflight decides=C13_progress_ignores_own_state twins=C11_progress_extends
-# MUTANT-MATRIX state-dir-guard decides=C14_progress_guards twins=C13_progress_ignores_own_state
-# MUTANT-MATRIX path-exists-check decides=C14_progress_guards twins=C13_progress_ignores_own_state
-# MUTANT-MATRIX progress-sampling decides=C11_progress_extends twins=C13_progress_ignores_own_state
-# MUTANT-MATRIX no-restamp decides=C25_sleeping_restamp twins=C11_progress_extends
-# MUTANT-MATRIX grant-unconditional decides=C23_chained_noprogress twins=C12_progress_bounded
-# MUTANT-MATRIX lease-no-early decides=C38_lease_early twins=C44_bare_epoch
-# MUTANT-MATRIX preupgrade-taken decides=C44_bare_epoch twins=C38_lease_early
-# MUTANT-MATRIX lease-end-time decides=C10_marker_goes_stale twins=C44_bare_epoch
-#
 set -uo pipefail
 
 # HERMETIC — scrub the operator's tuning BEFORE this fixture sets its own (I10).
@@ -94,12 +64,9 @@ broken=0
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # PRECONDITIONS ARE NOT TARGETS. A precondition (the beats ran in their own shells, A was asleep when the
 # marker was read, the kill came early enough, ...) is a fact about the HARNESS. pre_bad counts one, and a
-# --run-one worker that saw any exits 2 (FIXTURE BROKEN), never 1 (an assertion regressed), so a mutant
-# cell whose precondition failed can never be read as a kill. pre_ok also records its text in PRE_FILE (the
-# driver's per-cell side channel) so the driver can re-print it under the mutant's name and compare its count
-# against the same arm's count on the real subject.
-PRE_FILE=""; pre_fails=0
-pre_ok()  { ok "$1"; if [ -n "$PRE_FILE" ]; then printf '%s\n' "$1" >> "$PRE_FILE"; fi; }
+# --run-one worker that saw any exits 2 (FIXTURE BROKEN), never 1 (an assertion regressed).
+pre_fails=0
+pre_ok()  { ok "$1"; }
 pre_bad() { bad "$1"; pre_fails=$((pre_fails+1)); }
 # lib/mutant.sh is loaded HERE, before the --run-one branch, because every worker records its in-process beats through
 # its fx_inproc (and its load guard needs ok/bad, defined just above). A literal-tail path, never `. "$VAR"`: in a
@@ -137,8 +104,7 @@ pre_bad() { bad "$1"; pre_fails=$((pre_fails+1)); }
 # cannot pass as a beat that never slept.
 setup_tmp() {
   BEATOUT="$(mktemp)"
-  MUTDIR="$(mktemp -d 2>/dev/null || mktemp -d -t wait-mutants)"
-  trap 'rm -f "$BEATOUT"; rm -rf "$MUTDIR"' EXIT
+  trap 'rm -f "$BEATOUT"' EXIT
 }
 # BW_Q / BW_PATH: the quantum and the PATH one beat runs with. Unset, a beat runs with quantum 1
 # against MARGIN 1, so its deadline is `now` and it leaves the poll loop at the first check
@@ -360,121 +326,6 @@ fx_mtime() {
   else stat -c "%Y" "$1" 2>/dev/null || echo 0; fi
 }
 
-# ---------------------------------------------------------------------------
-# MUTANTS ARE BUILT AS COPIES, AND THE SUBJECT IS NEVER EDITED.
-# A mutation proof carried as a prose note is a forgeable evidence cell: it can be
-# written without the run, and nothing in the suite re-checks it when the code it
-# describes moves. So the mutants live here, and section 14 runs them.
-#
-# Mutating a COPY is also the only reason the proof is safe to re-run. Mutating the
-# shipped script in place needs a revert, and the obvious revert -- `git checkout --
-# <file>` -- silently destroys any uncommitted work in that same file. That is not
-# hypothetical; it is how this fixture's own mutation evidence was first produced,
-# twice, and recovered by luck rather than design. There is nothing to revert here.
-#
-# `cmp -s` is the anti-vacuity guard, and it is the point of the helper. A mutant
-# whose pattern no longer matches produces a byte-identical copy, the "wrong
-# behaviour" assertion then runs against the UNMUTATED subject, and it passes --
-# reporting a proof that never happened. Renaming the code a mutant targets must
-# break this fixture LOUDLY (exit 2, fixture-broken) rather than quietly turn its
-# assertion green.
-# ---------------------------------------------------------------------------
-# Sets $MUT rather than printing it, and that is load-bearing twice over. `M="$(
-# mutant ...)"` would run this in a SUBSHELL, so its `exit 2` would kill only that
-# subshell: a mutant that matched nothing would leave M empty, `bash ""` would exit
-# 127, and a "the subject now misbehaves" assertion phrased as `!= 64` would read
-# 127 and go GREEN. That is not hypothetical -- it is what the first draft of this
-# section did. Separate `local` lines for the same family of reason: bash creates
-# every name on a single `local` before assigning any of them, so `local a=$1 b=$a`
-# leaves b empty (and trips `set -u`).
-MUT=""
-# THE SIX MUTATIONS LIVE HERE, ONCE. Case 21 re-runs every one of them against the FLAGLESS
-# path, so when each case ran in the same process it could reach for whatever the case above
-# had left in $MUTDIR. Each case now runs in its own process and builds what it needs, and a
-# second copy of these six sed programs would be a fork -- the defect half this fixture's
-# subject exists to catch. One home, two readers.
-#
-# SETS $MUT_EXPR RATHER THAN PRINTING IT, for the reason `mutant` below already records and
-# this function was written ignoring: `e="$(mutant_expr X)"` runs it in a SUBSHELL, so its
-# `exit 2` on an unregistered name kills only that subshell. The caller then gets an EMPTY
-# program, `sed ''` copies the file unchanged, and the `cmp -s` guard reports "matched
-# nothing -- the code it targets was renamed", which is a true sentence about the wrong
-# thing: a typo in a mutation NAME would read as a renamed SUBJECT. Caught by the driver
-# battery, not by review.
-MUT_EXPR=""
-mutant_expr() { # <name> -> sets $MUT_EXPR to the sed program that removes that ONE mechanism
-  case "$1" in
-    grant-cap)               MUT_EXPR='s/ \&\& \[ "\$g" -lt "\$MAX_BEATS" \]//' ;;
-    unprune-wait-beats)      MUT_EXPR='s/-o -name \.wait-beats/-o -name .no-such-name/' ;;
-    unexclude-beat-inflight) MUT_EXPR="s/! -name '\.beat-inflight' //" ;;
-    state-dir-guard)         MUT_EXPR='s/^  SD_ABS="\$(abs_of "\$STATE_DIR")"$/  SD_ABS=""/' ;;
-    path-exists-check)       MUT_EXPR='s/\[ -e "\$1" \] ||/[ 1 ] ||/' ;;
-    progress-sampling)       MUT_EXPR='/progressed_since "\$pg" \&\& PROGRESSED=1/d' ;;
-    # THE REDIRECT ONLY, NOT THE LINE. Deleting the line leaves `if ...; then` with
-    # `fi` and nothing between them, which is a bash SYNTAX ERROR: the mutant then
-    # exits 2 having executed nothing, the mark it was supposed to move is trivially
-    # unchanged, and the assertion scores a kill it did not earn. Measured -- the
-    # first draft of this mutation did exactly that, and it also showed up as three
-    # phantom kills in cases that mutation has no business touching. `bash -n` in
-    # `mutant` is now the standing guard.
-    no-restamp)              MUT_EXPR='s%^      : > "\$pg" 2>/dev/null || true$%      : 2>/dev/null || true%' ;;
-    # The over-correction C23 exists for: a subject that grants whether or not
-    # anything was written. Dropping the CALL and keeping the assignment is what "the
-    # sample no longer decides anything" looks like from the outside.
-    #
-    # AIMED INSIDE THE `-n "$PROGRESS_PATHS"` BLOCK, and the first draft was not.
-    # Seeding the initialiser -- `PROGRESSED=0` -> `PROGRESSED=1` -- looks equivalent
-    # and is not: that line sits OUTSIDE the guard, because the exhaustion arm reads
-    # PROGRESSED whether or not the flag was passed. So it granted on FLAGLESS joins
-    # too, which an existing arm caught as a mutant reaching the default path on the
-    # first full run, not review.
-    grant-unconditional)     MUT_EXPR='s/^    progressed_since "\$pg" \&\& PROGRESSED=1$/    PROGRESSED=1/' ;;
-    # ---- the lease mutations (C10, C38, C44) -----------------------------------------
-    # The early lease, deleted: the bare `beat_alive` directly beneath the trap line. The
-    # in-loop call before the sleep is ALSO a bare column-0 `beat_alive`, so the delete is
-    # keyed on the line after the trap rather than on the text, which matches both.
-    lease-no-early)           MUT_EXPR="/^trap 'lease_release' EXIT\$/{n;/^beat_alive\$/d;}" ;;
-    # A live pid-less (pre-upgrade) lease is taken instead of left alone.
-    preupgrade-taken)         MUT_EXPR='/^  \[ -n "\$ba_pid_" \] || return 0  *# a live pre-upgrade lease/d' ;;
-    # The pre-v0.81 marker: the lease is the beat's END time, fixed at its first write and
-    # re-written unchanged at every poll. `${BA_T0_:=...}` captures the first call's clock and
-    # every later call reuses it, so re-stamping still happens and only the VALUE is wrong --
-    # the defect case 10 exists for, and the one its old seconds-of-slack bound stood in for.
-    lease-end-time)           MUT_EXPR='s/^  ba_e_=\$(( \$(date +%s) + 3 \* POLL ))$/  ba_e_=$(( ${BA_T0_:=$(date +%s)} + BUDGET ))/' ;;
-    *) echo "FIXTURE ERROR: no mutation registered for '$1'" >&2; exit 2 ;;
-  esac
-}
-mutant() { # <name> -> sets $MUT to the mutant's path
-  local name="$1"
-  local expr
-  mutant_expr "$name"
-  expr="$MUT_EXPR"
-  # The copy keeps the subject's declared suffix, so its in-process passes count under the same inproc: row (J7).
-  local m="$MUTDIR/$name/core/scripts/wait-for-deliverable.sh"
-  mkdir -p "${m%/*}" || { echo "FIXTURE ERROR: cannot create the dir for mutant '$name'" >&2; exit 2; }
-  sed "$expr" "$SUBJ" > "$m" || { echo "FIXTURE ERROR: sed failed for mutant '$name'" >&2; exit 2; }
-  if cmp -s "$SUBJ" "$m"; then
-    echo "FIXTURE ERROR: mutant '$name' matched nothing -- the code it targets was" >&2
-    echo "  renamed or removed. Re-aim the mutation; do NOT delete the assertion." >&2
-    exit 2
-  fi
-  # A MUTANT THAT WILL NOT PARSE IS NOT A MUTANT, AND IT SCORES KILLS IT DID NOT
-  # EARN. A `sed` that removes the only statement from an `if` body leaves a syntax
-  # error, so the copy exits 2 having executed NOTHING -- and "nothing happened" is
-  # indistinguishable from the wrong behaviour every assertion here is looking for:
-  # no output to grep, no file touched, no counter moved. Measured while writing the
-  # chained-sibling mutants: one such mutant reported four kills, three of them in
-  # cases its mutation cannot reach. `cmp -s` above cannot see this -- the edit
-  # applied perfectly.
-  if ! bash -n "$m" 2>/dev/null; then
-    echo "FIXTURE ERROR: mutant '$name' does not parse -- the mutation removed a" >&2
-    echo "  statement its enclosing block requires. A mutant that cannot RUN passes" >&2
-    echo "  every assertion that looks for absence. Re-aim it to keep valid syntax." >&2
-    exit 2
-  fi
-  MUT="$m"
-}
-
 # --- 1. the headline: a file from a prior sprint is not this join's answer ------
 C01_stale() {
 W="$( bash "$SEED" stale )"
@@ -559,11 +410,6 @@ rm -rf "$W"
 }
 
 # --- 4. a rounded-UP dispatch stamp must not become an unmeetable threshold -----
-# MUTATION NOTE: this case reds only when BOTH guards in join_of are removed --
-# `[ "$SINCE" -lt "$j_" ]` (apply --since only if it lowers) and `[ "$j_" -gt
-# "$now_" ]` (never above now). Either alone defeats a future stamp, so mutating one
-# leaves the case green. That is redundancy, not vacuity: verified by removing both,
-# which reds it. Do not conclude this assertion is dead from a single-line mutation.
 C04_since_clamp() {
 W="$( bash "$SEED" since-clamp )"
 FUT=$(( $(date +%s) + 600 ))
@@ -768,8 +614,6 @@ if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}.grants" 2>/dev/null)" = "1" ]; t
   ok "progress-extends: one grant charged — the extension is counted, not free"
 else bad "progress-extends: .grants not 1 — an uncounted extension is an unbounded wait"; fi
 rm -rf "$W"
-
-# The mutation proof for cases 10-13 is section 14, which RUNS it.
 }
 
 # --- 11. ...but the extension is BOUNDED. This is the case that keeps Check C ----
@@ -849,16 +693,6 @@ if [ "$(guard wt)" != "64" ]; then
 else bad "progress-guards: every --progress-path is rejected; the flag does nothing"; fi
 rm -rf "$W"
 }
-
-# --- 14. the mutation proof, executed ------------------------------------------
-# Each mutant removes ONE mechanism and asserts the subject then does the WRONG
-# thing on the seed that mechanism exists for. That is a stronger claim than "the
-# fixture reds": it names the behaviour the mechanism buys, so a reader can see what
-# would ship without it. Every mutant is a copy; the subject is untouched throughout.
-#
-# The `.progress` mark: these reuse the same seeds as cases 10-13, which age the
-# mark deliberately. See the seed file -- without that, `progressed_since` has
-# nothing to compare against on its first call and every mutant looks equally dead.
 
 # --- 15. THE CHAINED-SIBLING PATH (MAY_SLEEP=0) ----------------------------------
 # Cases 10-13 all run with MAY_SLEEP=1. The arms below run a beat whose calling shell
@@ -1004,8 +838,8 @@ say_shells() { # <label>
 # The subject writes the marker strictly before it writes any `.since`, and never deletes it
 # mid-run, so the predicate is deterministic in both directions: AT THE FIRST OBSERVATION of a
 # sidecar, the marker exists. The sidecar count at that instant must be below N -- an
-# observation taken after the sweep would see a late marker too, and the fix and the mutant
-# would then score alike. The beat is reaped once observed: run out, a large wave costs a
+# observation taken after the sweep would see a late marker too, and a late marker would pass. The beat
+# is reaped once observed: run out, a large wave costs a
 # multi-second sweep plus a report that re-forks per target (measured at load ~60: 200 targets
 # swept in 9.3s, the marker at 0.08s, the first sidecar at 0.12s).
 EARLY_N=3
@@ -1183,8 +1017,7 @@ else bad "cwd-invariance: $n assertions from cwd=/ , expected 3 — the case exi
 # copy put back at the SAME path for the program. Both run under one fast sleep stub whose virtual clock lives
 # outside the world, and at quantum 1 against margin 1 the beat's deadline is `now`, so it never enters its poll
 # sleep and the clock never advances: the two `date +%s` readings agree whatever the load. Each cell also asserts
-# its own outcome (a positive conjunct), and the three must differ in exit. C48 is not an arm: like C31 it takes no
-# mutant (a mutant copy is no declared cli subject).
+# its own outcome (a positive conjunct), and the three must differ in exit.
 C48_cli_equivalence() {
   local EQD id
   # The beat's LIVENESS line reads this session's live transcripts ($HOME/.claude/projects/*/<session id>/), which a
@@ -1239,13 +1072,6 @@ if [ "${1:-}" = "--run-one" ]; then
     echo "FIXTURE ERROR: --run-one needs a case function name; '$FN' is not one" >&2
     exit 2
   }
-  # An optional third word names the SUBJECT this one arm runs against: a mutant copy, or the unmutated
-  # copy. Absent, the arm runs on the real subject. Every arm reads $SUBJ, so one arm and one subject are one cell.
-  PRE_FILE="${4:-}"
-  if [ -n "${3:-}" ] && [ "${3:-}" != "-" ]; then
-    [ -f "$3" ] || { echo "FIXTURE ERROR: --run-one subject '$3' is not a file" >&2; exit 2; }
-    SUBJ="$3"
-  fi
   setup_tmp
   echo "wait-stale-deliverable:"   >/dev/null   # the header belongs to the parent, not here
   "$FN"
@@ -1257,84 +1083,41 @@ fi
 # THE CASE LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order, with a zero
 # guard. A hand-written list would be the defect this fixture's own subject is about: a case
 # dropped from it runs nothing, prints nothing, and 20 greens read exactly like 21.
-MATRIX=0
-case "${1:-}" in
-  "") ;;
-  --matrix) MATRIX=1 ;;
-  *) echo "FIXTURE ERROR: unknown argument '${1:-}' (usage: run.sh [--matrix])" >&2; exit 2 ;;
-esac
 NAMES="$(grep -oE '^C[0-9]{2}_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
 N_LISTED="$(printf '%s\n' "$NAMES" | grep -c . || true)"
 if [ "$N_LISTED" -lt 10 ]; then
   echo "FIXTURE ERROR: derived $N_LISTED case(s) from this file — the C<nn>_ naming grammar moved" >&2
   exit 2
 fi
-# C31 re-launches C23 from / and takes no subject, so no mutant can reach it: a base arm only. C48 runs the declared
-# subject as a program in its cli cells, which a mutant copy is not: a base arm only.
-ARMS="$(printf '%s\n' "$NAMES" | grep -v '^C31_' | grep -v '^C48_')"
-N_ARMS="$(printf '%s\n' "$ARMS" | grep -c . || true)"
-# A here-string read, never a pipe into grep -q: has_arm <name> is 0 when <name> is one of the arms.
-has_arm() { grep -qx "$1" <<<"$ARMS"; }
-
-# lib/mutant.sh was loaded at the top (the workers need its fx_inproc); lib/matrix.sh only the driver reads.
-[ -f "$HERE/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: lib/matrix.sh not found beside $HERE" >&2; exit 2; }
-. "$HERE/../lib/matrix.sh" || { echo "FIXTURE ERROR: sourcing lib/matrix.sh failed" >&2; exit 2; }
+if [ "${1:-}" != "" ]; then echo "FIXTURE ERROR: unknown argument '${1:-}' (usage: run.sh)" >&2; exit 2; fi
 
 echo "wait-stale-deliverable:"
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$SUBJ")" && pwd)/$(basename "$SUBJ")"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 
 OUT="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$OUT"' EXIT
 SELF="$HERE/$(basename "$0")"
-MUTDIR="$OUT/mutants"
-mkdir "$MUTDIR" || { echo "FIXTURE ERROR: cannot create the mutant dir" >&2; exit 2; }
 
-# THE MUTANT TABLE IS THIS FILE'S OWN HEADER, read back: one `# MUTANT-MATRIX <m> decides=<arm>
-# twins=<arm>` line per mutant. The driver and the header cannot disagree because they are one text.
-grep -E '^# MUTANT-MATRIX [A-Za-z0-9_-]+ decides=[A-Za-z0-9_]+ twins=[A-Za-z0-9_]+$' "$0" \
-  | sed -e 's/^# MUTANT-MATRIX //' -e 's/ decides=/ /' -e 's/ twins=/ /' > "$OUT/table"
-N_MUT="$(grep -c . "$OUT/table" || true)"
-if [ "$N_MUT" -lt 10 ]; then echo "FIXTURE ERROR: read only $N_MUT mutant row(s) from the header" >&2; exit 2; fi
-while read -r m d t; do
-  has_arm "$d" && has_arm "$t" || { echo "FIXTURE ERROR: header row '$m' names an arm that does not exist ($d / $t)" >&2; exit 2; }
-  [ "$d" != "$t" ] || { echo "FIXTURE ERROR: header row '$m' has twin equal to deciding ($d)" >&2; exit 2; }
-  mutant "$m"
-done < "$OUT/table"
-# THE UNMUTATED COPY (MX0), built the way a mutant is: a copy in the mutant directory.
-mkdir -p "$MUTDIR/MX0/core/scripts" && cp "$SUBJ" "$MUTDIR/MX0/core/scripts/wait-for-deliverable.sh" || { echo "FIXTURE ERROR: cannot copy the subject for MX0" >&2; exit 2; }
-MX0_SAME=0; cmp -s "$SUBJ" "$MUTDIR/MX0/core/scripts/wait-for-deliverable.sh" && MX0_SAME=1
-
-# JOBS. Every worker is `--run-one <arm> [<subject>]`: one arm, one process, one subject. Base arms
-# run on the real subject. PER PUSH a mutant's cells are its DECIDING arm and its TWIN; under
-# --matrix they are EVERY arm. One cell, run once, serves the verdict and the matrix row.
+# JOBS. Every worker is `--run-one <arm>`: one arm, one process.
 : > "$OUT/jobs"
-while read -r m d t; do
-  if [ "$MATRIX" -eq 1 ]; then cells="$ARMS"; else cells="$d
-$t"; fi
-  for a in $cells; do printf 'x.%s.%s|%s|%s\n' "$m" "$a" "$a" "$MUTDIR/$m/core/scripts/wait-for-deliverable.sh" >> "$OUT/jobs"; done
-done < "$OUT/table"
-if [ "$MATRIX" -eq 1 ]; then mx0_cells="$ARMS"; else mx0_cells="C06_regression_guards"; fi
-for a in $mx0_cells; do printf 'x.MX0.%s|%s|%s\n' "$a" "$a" "$MUTDIR/MX0/core/scripts/wait-for-deliverable.sh" >> "$OUT/jobs"; done
-for a in $NAMES; do printf 'b.%s|%s|-\n' "$a" "$a" >> "$OUT/jobs"; done
+for a in $NAMES; do printf 'b.%s|%s\n' "$a" "$a" >> "$OUT/jobs"; done
 
 # EIGHT. This pool nests inside the pre-push suite's, so a knob here would multiply against a
 # knob there; the cases sleep rather than compute, so eight of them cost about one core.
 JOBS=8
 AI_DLC_WS_SELF="$SELF" AI_DLC_WS_OUT="$OUT" \
   xargs -P "$JOBS" -I{} bash -c '
-    IFS="|" read -r tag arm subj <<< "$1"
-    bash "$AI_DLC_WS_SELF" --run-one "$arm" "$subj" "$AI_DLC_WS_OUT/$tag.pre" > "$AI_DLC_WS_OUT/$tag" 2> "$AI_DLC_WS_OUT/$tag.err"
+    IFS="|" read -r tag arm <<< "$1"
+    bash "$AI_DLC_WS_SELF" --run-one "$arm" > "$AI_DLC_WS_OUT/$tag" 2> "$AI_DLC_WS_OUT/$tag.err"
     printf %s $? > "$AI_DLC_WS_OUT/$tag.rc"
   ' _ {} < "$OUT/jobs"
 
-# BASE ARMS, rendered in SOURCE order, never completion order, so the output is byte-comparable against
+# ARMS, rendered in SOURCE order, never completion order, so the output is byte-comparable against
 # the serial version. A MISSING VERDICT IS A FAILURE: serially a case that never ran could not
 # print an `ok`, because the loop and the report were the same thing. With a pool they are not,
 # and a case that exits nonzero having printed nothing would add zero to the count -- which is
-# what a clean case adds. An arm that passed sets B_<arm>=1, the same-run flag that gates the
-# mutant verdicts below.
+# what a clean case adds.
 while IFS= read -r n; do
   [ -n "$n" ] || continue
   if [ ! -f "$OUT/b.$n.rc" ]; then
@@ -1343,6 +1126,8 @@ while IFS= read -r n; do
     continue
   fi
   cat "$OUT/b.$n"
+  c="$(grep -c '^  ok' "$OUT/b.$n" || true)"
+  oks=$((oks + c))
   [ -s "$OUT/b.$n.err" ] && cat "$OUT/b.$n.err" >&2
   wrc="$(cat "$OUT/b.$n.rc")"
   # 2 IS NOT 1. `FIXTURE BROKEN` and `an assertion regressed` are different answers, and this
@@ -1350,7 +1135,6 @@ while IFS= read -r n; do
   # otherwise collapse them: the parent would see a nonzero rc, charge one assertion, and exit
   # 1 — reporting a regression where the truth is that nothing was tested.
   if [ "$wrc" = "2" ]; then broken=1; fi
-  if [ "$wrc" = "0" ]; then eval "B_$n=1"; fi
   if [ "$wrc" != "0" ]; then
     c="$(grep -c '^  FAIL' "$OUT/b.$n" || true)"
     [ "$c" -gt 0 ] || { printf '  FAIL  %s exited nonzero without an assertion line — the case did not run to a verdict\n' "$n"; c=1; }
@@ -1359,103 +1143,6 @@ while IFS= read -r n; do
 done <<EOF_NAMES
 $NAMES
 EOF_NAMES
-
-# A CELL is one arm run under one subject. cell_state sets CELL_RC and CELL_FAILS, and CELL_OK=0 when
-# the cell produced no verdict at all (the pool dropped it).
-CELL_RC=""; CELL_FAILS=0; CELL_OK=0
-cell_state() { # <mutant> <arm>
-  CELL_OK=0; CELL_RC=""; CELL_FAILS=0
-  [ -f "$OUT/x.$1.$2.rc" ] || return 0
-  CELL_OK=1
-  CELL_RC="$(cat "$OUT/x.$1.$2.rc")"
-  CELL_FAILS="$(grep -c '^  FAIL' "$OUT/x.$1.$2" || true)"
-}
-# TRIPPED means the arm exited 1 having printed at least one FAIL line. Exit 2 is FIXTURE BROKEN and
-# an exit 1 with no FAIL line printed nothing: neither is an arm tripping on the mutation.
-cell_tripped() { [ "$CELL_OK" -eq 1 ] && [ "$CELL_RC" = "1" ] && [ "$CELL_FAILS" -gt 0 ]; }
-cell_green() { [ "$CELL_OK" -eq 1 ] && [ "$CELL_RC" = "0" ]; }
-
-# THE UNMUTATED COPY, driven through the same harness as a mutant. It must be byte-identical to the
-# subject and its arm must pass, or every verdict below would be a verdict about the harness.
-cell_state MX0 C06_regression_guards
-B_MX0=0
-if [ "$MX0_SAME" -eq 1 ] && cell_green && grep -q '^  ok' "$OUT/x.MX0.C06_regression_guards"; then
-  ok "CONTROL MX0 (unmutated copy from the mutant directory): byte-identical to the subject, and the exhausted and absent arm passes under it"; B_MX0=1
-else bad "CONTROL MX0: the unmutated copy (identical=$MX0_SAME, rc ${CELL_RC:-none}) did not pass the arm — the mutant harness is not running the shipped behaviour"; fi
-
-# PER-MUTANT VERDICTS. The DECIDING arm must trip and the TWIN must stay green, so the kill is confined to
-# the one arm. Both unmutated arms and MX0 must have PASSED in this run first (mutant_killed refuses
-# otherwise): a deciding arm that already failed on the real subject would score every mutant dead.
-n_dead=0
-count_lines() { if [ -f "$1" ]; then grep -c . "$1" || true; else echo 0; fi; }
-while read -r m d t; do
-  # The base-pass flags are read back from the verdicts of THIS run: the rc each unmutated arm exited with in its
-  # worker, and the MX0 control's own flag.
-  bd="$(cat "$OUT/b.$d.rc" 2>/dev/null)"; bt="$(cat "$OUT/b.$t.rc" 2>/dev/null)"; mx0="$(printf '%s' "$B_MX0")"
-  cell_state "$m" "$d"
-  # A PRECONDITION FAILURE INSIDE A MUTANT CELL IS A FIXTURE ERROR, NEVER A KILL: the worker exits 2.
-  if [ "$CELL_OK" -eq 1 ] && [ "$CELL_RC" = "2" ]; then
-    bad "FIXTURE BROKEN: MUTANT $m on $d exited 2 — a precondition failed inside the mutant cell, so a trip there would not be earned"; broken=1; continue
-  fi
-  if cell_tripped; then dec_ok=1; else dec_ok=0; fi
-  # The preconditions must have RUN under the mutant: as many control lines as the same arm printed on
-  # the real subject. An arm that tripped before reaching them would otherwise score a kill unchecked.
-  n_pre_m="$(count_lines "$OUT/x.$m.$d.pre")"; n_pre_b="$(count_lines "$OUT/b.$d.pre")"
-  cell_state "$m" "$t"
-  if [ "$CELL_OK" -eq 1 ] && [ "$CELL_RC" = "2" ]; then
-    bad "FIXTURE BROKEN: MUTANT $m twin $t exited 2 — a precondition failed inside the mutant cell"; broken=1; continue
-  fi
-  if cell_green; then twin_ok=1; else twin_ok=0; fi
-  if [ "$dec_ok" -eq 0 ]; then
-    bad "MUTANT $m: deciding arm $d did not trip under the mutant — the mechanism is not what that arm measures"
-  elif [ "$n_pre_m" != "$n_pre_b" ]; then
-    bad "FIXTURE BROKEN: MUTANT $m on $d ran $n_pre_m precondition control(s) against $n_pre_b on the real subject — the kill is not earned"; broken=1
-  elif [ "$twin_ok" -eq 0 ]; then
-    bad "MUTANT $m: twin $t tripped (or gave no verdict) beside the deciding arm $d — the co-tripping changed; re-measure the matrix"
-  else
-    n_dead=$((n_dead + 1))
-    # The same controls the arm printed under its own name, re-printed under the mutant's, so the kill's
-    # preconditions are named per mutant.
-    if [ -f "$OUT/x.$m.$d.pre" ]; then
-      while IFS= read -r pl; do ok "MUTANT $m: ${pl#*: }"; done < "$OUT/x.$m.$d.pre"
-    fi
-    mutant_killed "$([ "$bd" = 0 ] && [ "$bt" = 0 ] && [ "$mx0" = 1 ] && echo 1 || echo 0)" "$m" "MUTANT $m: arm $d trips under the mutant while twin $t stays green"
-  fi
-done < "$OUT/table"
-
-# THE MATRIX, printed only under --matrix: every (mutant | MX0) x arm cell, with that cell's OWN
-# polarity. The tripped column is the arm's verdict under that subject, never the mutant's overall one.
-MROWS=0
-if [ "$MATRIX" -eq 1 ]; then
-  { cat "$OUT/table"; echo "MX0 - -"; } > "$OUT/table.all"
-  mx_bad=0; mx_pre=0
-  while read -r m d t; do
-    for a in $ARMS; do
-      cell_state "$m" "$a"
-      if [ "$CELL_OK" -ne 1 ]; then mx_bad=$((mx_bad + 1)); continue; fi
-      # rc 2 is a precondition failing inside the cell: the arm never reached its target, so the cell is neither
-      # green nor an arm tripping, and it is printed as such (killed=no). Only a DECIDING or TWIN cell at rc 2
-      # is fatal, and the verdict loop above already refuses that.
-      if [ "$CELL_RC" = "0" ]; then matrix_row "$m" "$a" "$CELL_RC" GREEN no
-      elif [ "$CELL_RC" = "2" ]; then mx_pre=$((mx_pre + 1)); matrix_row "$m" "$a" "$CELL_RC" PRECONDITION no
-      else matrix_row "$m" "$a" "$CELL_RC" TRIPPED yes; fi
-      MROWS=$((MROWS + 1))
-    done
-  done < "$OUT/table.all"
-  want_rows=$(( (N_MUT + 1) * N_ARMS ))
-  if [ "$MROWS" -eq "$want_rows" ] && [ "$mx_bad" -eq 0 ]; then ok "MATRIX: $MROWS cells printed, one per mutant-or-MX0 and arm"
-  else bad "MATRIX: $MROWS of $want_rows cells printed ($mx_bad produced no verdict)"; fi
-  ok "MATRIX: $mx_pre non-deciding cell(s) failed a precondition and are printed PRECONDITION, not TRIPPED"
-  # MX0 must be GREEN on every arm: a tripped MX0 cell is the harness, not a mutant.
-  mx0_tripped=0
-  for a in $ARMS; do cell_state MX0 "$a"; cell_green || mx0_tripped=$((mx0_tripped + 1)); done
-  if [ "$mx0_tripped" -eq 0 ]; then ok "CONTROL MX0: the unmutated copy trips none of the $N_ARMS arms"
-  else bad "CONTROL MX0: the unmutated copy tripped $mx0_tripped arm(s) — the harness is not neutral"; fi
-else
-  # A PLAIN run carries no matrix-only cell: the whole matrix block above is behind the flag.
-  if [ "$MROWS" -eq 0 ] && ! grep -q '^  MATRIX ' "$OUT/b.C06_regression_guards"; then ok "PLAIN-RUN: no matrix row printed and no matrix-only cell scheduled (jobs: $(grep -c '^x\.' "$OUT/jobs") mutant cells)"
-  else bad "PLAIN-RUN: a matrix row was printed by a plain run"; fi
-fi
 
 if [ "$broken" -ne 0 ]; then
   echo "wait-stale-deliverable: FIXTURE BROKEN — a case could not run to a verdict" >&2

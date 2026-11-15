@@ -9,8 +9,8 @@
 #   rb  a shard stub (`exec bash "$IMPL"`) whose IMPL is ra. Want: `H8 SCRUBBED rb`, judged by its IMPL.
 #   rc  no scrub, not on the allowlist. Want: FAIL H8, its one row naming rc.
 #   rd  no scrub, a row of scripts/env-scrub-allowlist.txt. Want: quiet (one allowlisted unscrubbed).
-#   rz  scrubbed, carrying one clean H1, H2 and H6 candidate, a MUTANT-MATRIX row with real twins and one receipt its
-#       run.sh runs: the populations the validator requires before it trusts a corpus.
+#   rz  scrubbed, carrying one clean H1, H2 and H6 candidate and one receipt its run.sh runs: the populations the
+#       validator requires before it trusts a corpus.
 # One validator run reads all five: rc 1, `FAIL H8:` the only FAIL section, its one row rc's, the self-probe's H8 line
 # ok, and the corpus count the probe's own (6 fixture .sh scanned, so the root walk did not reach the repo).
 #
@@ -49,7 +49,7 @@ bash "$HERE/seed.sh"
 EOF
 # The stub is written by printf ARGUMENTS, never a heredoc: validate-fixture-invocations.sh --impl-of reads every
 # fixture .sh line by line, and a column-0 `IMPL=` / `exec bash "$IMPL" --group` here would map fixture-hygiene
-# ITSELF to the seed's IMPL (measured: H5 then refused fixture-hygiene's own MUTANT-MATRIX block as a stub's).
+# ITSELF to the seed's IMPL.
 printf '%s\n' '#!/usr/bin/env bash' 'HERE="$(cd "$(dirname "$0")" && pwd)"' 'IMPL="$HERE/../ra/run.sh"' \
   'exec bash "$IMPL" --group b' > "$F/rb/run.sh"
 printf '#!/usr/bin/env bash\nset -u\nbash "$HERE/seed.sh"\n' > "$F/rc/run.sh"
@@ -58,14 +58,10 @@ printf 'jq\n' > "$F/rz/tools.decl"
 cat > "$F/rz/run.sh" <<'EOF'
 #!/usr/bin/env bash
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
-# MUTANT-MATRIX MR decides=A1 twins=B2
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/rz/run.sh --matrix
 [ -d "$R/.git" ] || { echo "FIXTURE BROKEN: no history"; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE BROKEN: no jq"; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-mkmut() { :; }
 ok "A1 holds"
-ok "B2 holds"
 bash "$HERE/receipt-z.sh"
 EOF
 printf '#!/usr/bin/env bash\nexit 0\n' > "$F/rz/receipt-z.sh"

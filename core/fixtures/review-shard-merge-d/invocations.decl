@@ -1,0 +1,17 @@
+# Measured by one counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge's own J3
+# and J7 output) after the BL-1095 split dealt this shard its units; every row is that run's count for this shard alone.
+76 *
+0 core/scripts/partition-review-diff.sh
+0 core/scripts/merge-review-shards.sh
+0 core/scripts/content-seal.sh
+0 core/scripts/wait-for-deliverable.sh
+0 core/hooks/ai-dlc-content-seal.sh
+0 core/scripts/record-only-diff.sh
+0 core/scripts/sprint-status.sh
+# The in-process passes fx_inproc logs in lib.sh's ip_run and ip_load and in the receipts, each at a subject's own path;
+# a mutant script directory's copy is no pass.
+0 inproc:core/scripts/sprint-status.sh
+118 inproc:core/scripts/merge-review-shards.sh
+48 inproc:core/scripts/partition-review-diff.sh
+2 inproc:core/hooks/ai-dlc-content-seal.sh
+22 inproc:core/scripts/record-only-diff.sh

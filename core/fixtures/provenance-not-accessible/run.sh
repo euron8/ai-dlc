@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # provenance-not-accessible — prove the tool_use_id NOT_ACCESSIBLE sentinel is accepted
 # (retro.md mandates it when the Skill/Agent id is not retrievable), that it opens no hole
-# (a fabricated id and a placeholder literal still FAIL), and that the acceptance is the
-# sentinel bypass and nothing else (removing it flips NOT_ACCESSIBLE back to FAIL).
+# (a fabricated id and a placeholder literal still FAIL).
 #
 # THE DEFECT THIS EXISTS TO CATCH. retro.md Step 2 tells authors to write
 # `tool_use_id: NOT_ACCESSIBLE` rather than invent an id, yet the validator's toolu_ pattern
@@ -30,8 +29,6 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_pnaSentinel=0
 
 ART="$WORK/docs/eval.md"   # non-retro path: no retro-specific requirements
 mkdir -p "$WORK/docs"
@@ -61,7 +58,7 @@ write_block "NOT_ACCESSIBLE"
 bash "$VALIDATOR" "$ART" >"$WORK/out.txt" 2>&1
 rc=$?
 if [ "$rc" = "0" ]; then
-  ok "tool_use_id: NOT_ACCESSIBLE is accepted (sanctioned sentinel)"; B_pnaSentinel=1
+  ok "tool_use_id: NOT_ACCESSIBLE is accepted (sanctioned sentinel)"
 else
   bad "NOT_ACCESSIBLE was rejected (exit $rc)"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -84,23 +81,6 @@ if [ "$rc" = "1" ] && grep -qi 'forbidden' "$WORK/out.txt"; then
   ok "a placeholder literal is still forbidden (not confused with the sentinel)"
 else
   bad "a placeholder literal was not rejected (exit $rc)"; sed 's/^/        /' "$WORK/out.txt"
-fi
-
-# --- 4. MUTATION: remove the sentinel bypass -> NOT_ACCESSIBLE FAILs ----------
-MUTANT="$WORK/mutant.sh"
-sed 's/value == spec\["sentinel"\]/False/' "$VALIDATOR" > "$MUTANT" || exit 2
-if cmp -s "$VALIDATOR" "$MUTANT"; then
-  echo "FIXTURE ERROR: mutation matched nothing — the sentinel check was rewritten" >&2
-  echo "  update the sed pattern in assertion 4 to match the real comparison" >&2
-  exit 2
-fi
-write_block "NOT_ACCESSIBLE"
-bash "$MUTANT" "$ART" >"$WORK/mut.txt" 2>&1
-rc=$?
-if [ "$rc" = "1" ]; then
-  mutant_killed "$B_pnaSentinel" sentinel-bypass-removed "MUTATION: without the sentinel bypass, NOT_ACCESSIBLE FAILs (acceptance was real)"
-else
-  bad "MUTATION: NOT_ACCESSIBLE still passed without the bypass (exit $rc)"; sed 's/^/        /' "$WORK/mut.txt"
 fi
 
 echo

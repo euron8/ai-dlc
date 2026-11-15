@@ -20,8 +20,8 @@
 # run.sh gains the m10 and m11 receipt runs, and each mutant's receipt run drives only its group (RECEIPT_WORLDS):
 # the control 21 self-check starts, m1-m8 base 17 each (136), m9-m11 section e 6 each (18) = 175. Mt and Mr carry a
 # predictor naming nothing, so their section e starts no seed. From one counted run through scripts/seed-verdict-store.sh.
-875 *
-175 scripts/pregate-self-check.sh
-17 core/fixtures/pregate-self-check/receipt-bl643.sh
-101 scripts/seed-verdict-store.sh
+127 *
+21 scripts/pregate-self-check.sh
+2 core/fixtures/pregate-self-check/receipt-bl643.sh
+15 scripts/seed-verdict-store.sh
 # 75 to 161, 27 to 56 and 3 to 4, BL-1020: the receipt drives five more roots (Hcwd, Hres, Htree, Hbehind, Habs) in each of its runs, and run.sh gains the m3 mutant run. From two agreeing counted runs.

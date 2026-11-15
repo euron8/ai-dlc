@@ -1,7 +1,6 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-1961 *
+# Measured by a counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge's own J3 output), once, after the owed-derivations shard split.
+552 *
 0 core/scripts/check-owed-derivations.sh
 0 core/scripts/core-paths.sh
-0 core/scripts/sprint-status.sh
-110 core/scripts/validate-artifact-derivations.sh
-20 core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+0 core/scripts/validate-artifact-derivations.sh
+3 core/skills/ai-dlc-update/reconcile/derivation-differential.sh

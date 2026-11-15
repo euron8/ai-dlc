@@ -3,7 +3,6 @@
 # fixture now reads SCRUBBED FAILs as stale, so the list only shrinks. Derived by
 # `bash scripts/validate-fixture-hygiene.sh --derive-h8`, which keeps an existing row's reason. Never hand-add a row:
 # give the fixture the scrub instead.
-apply-drift-refile	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 apply-legacy-script-path	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 apply-machinery-stamp	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 apply-restamp-theirs	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
@@ -14,7 +13,6 @@ architecture-index-cell-escaping	run.sh carries no AI_DLC_* scrub; unexposed at 
 artifact-path-conformance	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 artifact-section-heading-level	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 audit-anchors-schema	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
-backlog-receipt-fixture-join	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 backlog-rotate-fence-guard	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 blocker-adjudication-record	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 bmad-invocation-resolve	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
@@ -57,7 +55,6 @@ layer-extends-grain	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub
 layer-qualifier-grain	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 layer-retired-id-crosswalk	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 layer-title-join	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
-ledger-reverify	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 ledger-reverify-dist-only-reach	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 ledger-reverify-unfalsifiable	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 ledger-rotate	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment

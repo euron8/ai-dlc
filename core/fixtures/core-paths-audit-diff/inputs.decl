@@ -1,6 +1,5 @@
-# The validator under test; seed.sh walks up to it and copies it as the control and every mutant.
+# The validator under test; seed.sh walks up to it and copies it as the control copy.
 !core/scripts/core-paths.sh
 # The citation arm delegates to this sibling; seed.sh copies it beside the control copy.
 core/scripts/validate-escalation-resolution.sh
-core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh

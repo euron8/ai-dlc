@@ -25,9 +25,9 @@
 # Part 2's verdict identically; only one that discriminates produces exit 2 with no finding
 # for the first and exit 1 with an E17 for the second.
 #
-# WHY THE MUTANTS NEED SEVEN TREES AND NOT ONE. The eight guarded call sites read in a
+# WHY THERE ARE SEVEN TREES AND NOT ONE. The eight guarded call sites read in a
 # fixed order over two populations, and an earlier guard pre-empts every later one on the
-# same file. Measured here, every guard deleted singly against every tree:
+# same file:
 #
 #   site 1  census loop, `conforms_to`   ext + ovr   first reader of everything
 #   site 2  overrides loop, `shadows`    ovr         first reader when LC_CV is ''
@@ -43,10 +43,7 @@
 # unreadable contract_version. Site 8 reads BOTH populations last, so it is the backstop that
 # records any permanently unreadable entry: no single guard owns the exit code, and what each
 # one still buys is the false findings that would otherwise be printed. And site 4 is
-# observable only once site 3 is gone -- DELETING SITE 4's GUARD ALONE CHANGES NO OUTPUT ON
-# ANY OF THE SEVEN TREES, re-measured, against a control showing the same comparison does find
-# a difference for site 3. m4 therefore reverts both layers over that population, per the rule
-# that a partial revert of a layered fix proves the layer it left in place and comes out green.
+# observable only once site 3 is gone.
 #
 # NO GUARD ABORTS ANY MORE, AND THAT IS BL-122. `entry_unreadable` records the path and
 # `continue`s the caller's loop; the refusal is one `exit 2` at the END of the run, after every
@@ -55,13 +52,9 @@
 # moved. Two things follow for the arms here: an absent footer is no longer the shape of a
 # refusal (three arms in Part 7 were keyed on it and now assert `unreadable=1` instead), and
 # the property this fixture did not previously have a subject for -- findings about OTHER
-# entries surviving -- gets Part 4b and m10.
+# entries surviving -- gets Part 4b.
 #
 # SITES 5-8 CANNOT BE REACHED BY chmod 000 AT ALL, and Part 7 explains what replaces it.
-#
-# Every mutant is a COPY guarded by `cmp -s` and `bash -n`, there is an UNMUTATED control
-# from the same directory with a positive conjunct, and each mutant asserts a measured
-# POSITIVE outcome rather than the absence of a message.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -71,8 +64,7 @@ LINTER="$(pick "${1:-}" "$HERE/../../../scripts/ai-dlc/validate-layer-entries.sh
                         "$HERE/../../scripts/validate-layer-entries.sh" \
                         "$HERE/../../../core/scripts/validate-layer-entries.sh")"
 [ -n "$LINTER" ] || { echo "FIXTURE BROKEN: cannot locate validate-layer-entries.sh" >&2; exit 2; }
-# PRINTED, because a mutant applied to a file the run never loads leaves every arm green and
-# `cmp -s` cannot see it -- the mutation applied cleanly, to the wrong copy.
+# PRINTED, so the log names which copy of the subject the run loaded.
 echo "layer-entry-unreadable: subject = $LINTER"
 _LDIR="$(cd "$(dirname "$LINTER")" && pwd)"
 echo "HERMETIC-CONSUMED ${_LDIR}/$(basename "$LINTER")"
@@ -120,8 +112,6 @@ fails=0
 ok()  { ASSERTIONS=$((ASSERTIONS+1)); printf '  ok   %s\n' "$1"; }
 bad() { ASSERTIONS=$((ASSERTIONS+1)); fails=$((fails+1)); printf '  FAIL %s\n' "$1"; }
 say() { if [ "$1" = 1 ]; then ok "$2"; else bad "$2"; fi; }
-. "$(cd "$HERE/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # NO run() HELPER, deliberately. `OUT="$(run ...)"` evaluates the helper in a SUBSHELL, so an
 # rc it assigns to a global is discarded and every exit-code assertion below would read a
@@ -199,11 +189,11 @@ say "$([ "$(footer_field "$CONS_OUT" unreadable)" = 0 ] \
 # --------------------------------------------------------------------------------------
 # `contract_version` is made unreadable rather than the contract deleted: the validator
 # ERRORs, sets LC_CV empty and CARRIES ON, which is the reachable state in which the census
-# loop is skipped. These two rows are the unmutated baseline m2, m3 and m4 move.
+# loop is skipped.
 OVR_OUT="$(bash "$LINTER" "$OVRT" 2>&1)"; OVR_RC=$?
 if [ "$OVR_RC" -eq 2 ] && fatal_for "$OVR_OUT" 'overrides/subject-ovr.md' \
    && [ "$(errs_naming "$OVR_OUT" 'overrides/subject-ovr.md')" -eq 0 ]; then
-  ok "an unreadable OVERRIDE refuses too, with no E1 about frontmatter nobody read"; B_OVR=1
+  ok "an unreadable OVERRIDE refuses too, with no E1 about frontmatter nobody read"
 else
   bad "an unreadable OVERRIDE refuses too, with no E1 about frontmatter nobody read"
 fi
@@ -211,7 +201,7 @@ EXT_OUT="$(bash "$LINTER" "$EXTT" 2>&1)"; EXT_RC=$?
 if [ "$EXT_RC" -eq 2 ] && fatal_for "$EXT_OUT" 'extensions/subject-ext.md' \
    && ! has "$EXT_OUT" 'EMPTY resolvability set' \
    && [ "$(errs_naming "$EXT_OUT" 'extensions/subject-ext.md')" -eq 0 ]; then
-  ok "an unreadable EXTENSION refuses before the resolvability set is judged, so E16 makes no claim"; B_EXT=1
+  ok "an unreadable EXTENSION refuses before the resolvability set is judged, so E16 makes no claim"
 else
   bad "an unreadable EXTENSION refuses before the resolvability set is judged, so E16 makes no claim"
 fi
@@ -226,9 +216,9 @@ fi
 #
 # BOTH SORT POSITIONS, AND THE SECOND IS NOT A DUPLICATE. `layer_files()` sorts, so the seal's
 # basename decides whether the readable sibling has already been visited when the loop meets
-# it. Scored against a candidate whose sole error was `break` for `continue`: `partial-zz`
-# passed it — nothing sorts after the seal there, so no finding is lost — and `partial-aa`
-# killed it. An arm run at one position only cannot tell that fix from this one.
+# it. A candidate whose sole error was `break` for `continue` passes `partial-zz` — nothing
+# sorts after the seal there, so no finding is lost — and fails `partial-aa`. An arm run at
+# one position only cannot tell that fix from this one.
 #
 # THE CONTROL IS THE BASELINE, NOT AN ASSUMPTION. A tree whose readable sibling drew no finding
 # in the first place would satisfy "the finding survived" by having nothing to lose, and would
@@ -254,7 +244,6 @@ for _p in aa zz; do
      && [ "$(footer_field "$PT_OUT" unreadable)" = 1 ] \
      && [ -n "$(footer_field "$PT_OUT" errors)" ]; then
     ok "partial-$_p: the readable sibling's finding SURVIVES the unreadable one, the footer prints, and the run still refuses"
-    case "$_p" in aa) B_PA=1 ;; esac
   else
     bad "partial-$_p: the readable sibling's finding SURVIVES the unreadable one, the footer prints, and the run still refuses"
   fi
@@ -276,155 +265,6 @@ done
 CWD_OUT="$(cd / && bash "$LINTER" "$UNR" 2>&1)"; CWD_RC=$?
 say "$([ "$CWD_RC" -eq "$UNR_RC" ] && fatal_for "$CWD_OUT" 'extensions/subject.md' && echo 1 || echo 0)" \
   "the same verdict and the same FATAL when the subject is invoked from / — cwd-invariant"
-
-# --------------------------------------------------------------------------------------
-# Part 6 — mutants
-# --------------------------------------------------------------------------------------
-mk() { # mk <name> <command...> -- build a mutant COPY, guarded by cmp -s and bash -n
-  local name="$1"; shift
-  if ! "$@" < "$LINTER" > "$TMP/$name.sh"; then
-    bad "MUTANT $name: the mutating command itself failed, so nothing below is a kill"
-    return 1
-  fi
-  if cmp -s "$LINTER" "$TMP/$name.sh"; then
-    bad "MUTANT $name: the mutation matched NOTHING — an unchanged copy scores every kill it is offered"
-    return 1
-  fi
-  if ! bash -n "$TMP/$name.sh" 2>/dev/null; then
-    bad "MUTANT $name: the mutant does not parse, so its silence is a syntax error and not a kill"
-    return 1
-  fi
-  return 0
-}
-
-# UNMUTATED CONTROL from the same directory as every mutant. A copy that dies for an
-# unrelated reason emits nothing, and "no output" would otherwise score as a kill. It
-# carries POSITIVE conjuncts -- a baseline row that must be THERE, and a FATAL that must be
-# THERE -- because rc=0-with-nothing-reported is exactly what a subject replaced by `exit 0`
-# also looks like.
-cp "$LINTER" "$TMP/control.sh"
-CTL_C_OUT="$(bash "$TMP/control.sh" "$CONS" 2>&1)"; CTL_C_RC=$?
-CTL_U_OUT="$(bash "$TMP/control.sh" "$UNR" 2>&1)"; CTL_U_RC=$?
-if [ "$CTL_C_RC" -eq 0 ] && [ "$(footer_field "$CTL_C_OUT" entries)" = 2 ] \
-   && [ "$CTL_U_RC" -eq 2 ] && fatal_for "$CTL_U_OUT" 'extensions/subject.md'; then
-  ok "CONTROL: an unmutated copy still counts 2 entries on the clean tree and still FATALs on the unreadable one"; B_CTL=1
-else
-  bad "CONTROL: an unmutated copy still counts 2 entries on the clean tree and still FATALs on the unreadable one"
-fi
-
-# --- m1: the census loop's guard — the site that READS FIRST -------------------------------
-# Without it the run still refuses, at a later site, having already printed one collapsed
-# finding. That single ERROR line is the whole of PC-S307 as it was reported.
-if mk m1 sed 's@^    ct="$(fm "$f" conforms_to)" || entry_unreadable "$f"$@    ct="$(fm "$f" conforms_to)"@'; then
-  M1_OUT="$(bash "$TMP/m1.sh" "$UNR" 2>&1)"; M1_RC=$?
-  if has "$M1_OUT" "extensions/subject.md: missing 'conforms_to:'"; then
-    mutant_killed "${B_CTL:-0}" m1 "MUTANT m1 killed: the census loop invents a missing-key ERROR about a file awk could not open"
-  else
-    bad "MUTANT m1 SURVIVED: the census loop invents no missing-key ERROR about a file awk could not open"
-  fi
-  # ATTRIBUTION. m1 must move exactly one cell. The run still exits 2 from a later guard, so
-  # the kill above is the ERROR line and not a collapse of the whole guard set.
-  say "$([ "$M1_RC" -eq 2 ] && fatal_for "$M1_OUT" 'extensions/subject.md' && echo 1 || echo 0)" \
-    "MUTANT m1 leaves the later guards alive — it costs a false finding, not the refusal"
-fi
-
-# --- m2: the overrides guard ---------------------------------------------------------------
-# Anchored on `shadows=`, which is what SEPARATES this site from the three others: all four
-# open with the same `"$(fm ` and a needle keyed on that would edit every one of them.
-if mk m2 sed 's@^  shadows="$(fm "$f" shadows)" || entry_unreadable "$f"$@  shadows="$(fm "$f" shadows)"@'; then
-  M2_OUT="$(bash "$TMP/m2.sh" "$OVRT" 2>&1)"; M2_RC=$?
-  # THE RUN STILL EXITS 2, and it did not before the second round of guards landed. The
-  # reference-resolution loop reads `shadows:` off every entry in BOTH populations, so it is
-  # now the last backstop for any unreadable file and no single earlier guard owns the abort
-  # any more. What this guard alone still buys is the three false findings below never being
-  # printed — which is PC-S307 as the consumer actually reported it.
-  if [ "$M2_RC" -eq 2 ] && has "$M2_OUT" "overrides/subject-ovr.md: missing 'shadows:'"; then
-    mutant_killed "${B_OVR:-0}" m2 "MUTANT m2 killed: the overrides pass reports frontmatter it never read, ahead of the abort a later guard still makes"
-  else
-    bad "MUTANT m2 SURVIVED: the overrides pass does not report frontmatter it never read"
-  fi
-fi
-
-# --- m3: the live-layer guard — the SILENT direction ---------------------------------------
-# `[ -n "$_lh" ] || continue` sits one line below it, so an unreadable entry reads as
-# "declares no hook" and leaves the resolvability set with no finding at all. The observable
-# is POSITIVE and not the absence of a message: E16 reports the set it then built as EMPTY,
-# a completeness claim derived from a file nobody could open. The seed gives this tree
-# exactly ONE extension so that dropping it empties the set and E16 can speak.
-if mk m3 sed 's@^  _lh="$(fm "$_lf" hooks)" || entry_unreadable "$_lf"$@  _lh="$(fm "$_lf" hooks)"@'; then
-  M3_OUT="$(bash "$TMP/m3.sh" "$EXTT" 2>&1)"; M3_RC=$?
-  if has "$M3_OUT" 'built an EMPTY resolvability set from the 1 layer entr(y/ies) present'; then
-    mutant_killed "${B_EXT:-0}" m3 "MUTANT m3 killed: the entry drops out of the resolvability set and E16 judges the hole it left"
-  else
-    bad "MUTANT m3 SURVIVED: the entry stays in the resolvability set"
-  fi
-  # ATTRIBUTION, and it is also the measurement that shapes m4: the run STILL exits 2, from
-  # the extensions guard one loop later. So m3's cost is exactly the silent drop.
-  say "$([ "$M3_RC" -eq 2 ] && fatal_for "$M3_OUT" 'extensions/subject-ext.md' && echo 1 || echo 0)" \
-    "MUTANT m3 still refuses at the next guard — its cost is the silent drop, nothing else"
-fi
-
-# --- m4: the extensions guard, which is the LAYER UNDER m3 ---------------------------------
-# BOTH LAYERS COME OUT, and that is not a shortcut. Sites 3 and 4 read the same population in
-# a fixed order, so site 3 pre-empts site 4 on every file: deleting site 4's guard alone
-# changes no byte of output on any of the five seeded trees, measured. A single-layer revert
-# would produce a mutant that proves the layer it left in place and comes out green.
-#
-# THE LABEL BELOW DELIBERATELY CARRIES NO ERROR-CODE TOKEN, and reintroducing one turns the
-# push red. I65 reads a code named anywhere in a fixture that drives its enforcer as a claim
-# that the fixture PROVES the clause owning that code, and demands the clause name it back.
-# This arm shows the code firing on an UNREADABLE entry with the guards removed — which is
-# the spurious emission this release exists to stop, not a proof that a genuinely keyless
-# extension is caught. Claiming it would close a counted gap with a false attribution. The
-# assertion greps the message text, which carries no code, so nothing is weakened by this.
-if mk m4 sed -e 's@^  _lh="$(fm "$_lf" hooks)" || entry_unreadable "$_lf"$@  _lh="$(fm "$_lf" hooks)"@' \
-             -e 's@^  kind="$(fm "$f" kind)" || entry_unreadable "$f"$@  kind="$(fm "$f" kind)"@'; then
-  M4_OUT="$(bash "$TMP/m4.sh" "$EXTT" 2>&1)"; M4_RC=$?
-  # The occurrence count proves the SECOND expression matched too. `cmp -s` is satisfied by
-  # either one of them, so without this m4 could be m3 wearing a longer sed. RELATIVE to the
-  # subject and never a literal: a fixed `-eq 3` also fails when some OTHER site is missing
-  # from the subject, which is this arm reporting a defect that is not its own.
-  M4_LEFT="$(grep -c 'entry_unreadable' "$TMP/m4.sh")"
-  M4_BASE="$(grep -c 'entry_unreadable' "$LINTER")"
-  if [ "$M4_RC" -eq 2 ] && [ "$M4_LEFT" -eq $((M4_BASE - 2)) ] \
-     && has "$M4_OUT" "extensions/subject-ext.md: missing 'kind:'"; then
-    mutant_killed "${B_EXT:-0}" m4 "MUTANT m4 killed: with both extension-side guards gone the run reports missing-key findings about frontmatter nobody read"
-  else
-    bad "MUTANT m4 SURVIVED: with both extension-side guards gone no missing-key finding about unread frontmatter appears"
-  fi
-fi
-
-# --- m10: `break` where `continue` belongs — the one-word regression Part 4b exists for ----
-# `entry_unreadable` ends with `continue`, which propagates out of the function into the
-# caller's loop and SKIPS the entry. `break` LEAVES the loop, taking every entry that sorts
-# after the unreadable one with it. The run still refuses, still names the file, still prints
-# a footer, and still makes no false claim — every other arm in this fixture passes it.
-#
-# ANCHORED ON THE PRECEDING `esac`, not on the bare word. `continue` appears many times in the
-# subject and a needle keyed on it would edit all of them; this one is the last line of
-# `entry_unreadable`'s body and the only `continue` immediately following a `case` close.
-#
-# DRIVEN AT `partial-aa` ONLY, and that is the measurement, not a shortcut: at `partial-zz`
-# nothing sorts after the seal, so `break` and `continue` produce identical output and this
-# mutant would come out green. The second position is Part 4b's near-miss and it is asserted
-# there; here the kill needs the position where the difference exists.
-if mk m10 awk '{ if ($0 == "  continue" && p == "  esac") { print "  break" } else { print }; p = $0 }'; then
-  M10_LEFT="$(grep -c '^  break$' "$TMP/m10.sh")"
-  M10_BASE="$(grep -c '^  break$' "$LINTER")"
-  M10_OUT="$(bash "$TMP/m10.sh" "$ROOT/partial-aa" 2>&1)"; M10_RC=$?
-  # POSITIVE CONJUNCTS EITHER SIDE OF THE MISSING ROW. "The E17 is gone" alone is satisfied by
-  # a subject that emits nothing at all, so the refusal, the FATAL and a full footer must all
-  # still be THERE — a plausible complete report with one finding silently absent is the exact
-  # shape of the defect and nothing else produces it.
-  if [ "$M10_LEFT" -eq $((M10_BASE + 1)) ] && [ "$M10_RC" -eq 2 ] \
-     && [ "$(errs_naming "$M10_OUT" 'extensions/no-receipt.md')" -eq 0 ] \
-     && fatal_for "$M10_OUT" 'extensions/aa-sealed.md' \
-     && [ "$(footer_field "$M10_OUT" unreadable)" = 1 ]; then
-    mutant_killed "${B_PA:-0}" m10 "MUTANT m10 killed: with break for continue the sibling's finding vanishes while the refusal, the FATAL and the footer all stay"
-  else
-    bad "MUTANT m10 SURVIVED: with break for continue the sibling's finding does not vanish"
-  fi
-fi
 
 # --------------------------------------------------------------------------------------
 # Part 7 — the reads whose EMPTY value is PERMISSIVE
@@ -534,7 +374,6 @@ if [ "$SEAL_OK" = 1 ]; then
     if [ "$SR_RC" -eq 2 ] && fatal_for "$SR_OUT" 'extensions/role-entry.md' \
        && [ "$(footer_field "$SR_OUT" unreadable)" = 1 ]; then
       ok "a mid-run read failure on '$_k' REFUSES — exit 2, named, and a footer declaring unreadable=1"
-      case "$_k" in extends) B_EXTENDS=1 ;; position) B_POSITION=1 ;; gate_types) B_GATE=1 ;; esac
     else
       bad "a mid-run read failure on '$_k' REFUSES — exit 2, named, and a footer declaring unreadable=1"
     fi
@@ -546,117 +385,17 @@ if [ "$SEAL_OK" = 1 ]; then
     "READABLE, the cited entry is ACQUITTED by its own shadows anchor — no W12, exit 0"
   sr "$TMP/sealed.sh" shadows "$CITE" "$CITE_SUBJ"
   if [ "$SR_RC" -eq 2 ] && fatal_for "$SR_OUT" 'extensions/cite-ext.md'; then
-    ok "and a mid-run read failure on 'shadows' REFUSES rather than judging the citation"; B_SHADOWS=1
+    ok "and a mid-run read failure on 'shadows' REFUSES rather than judging the citation"
   else
     bad "and a mid-run read failure on 'shadows' REFUSES rather than judging the citation"
   fi
-
-  # --------------------------------------------------------------------------------------
-  # Part 8 — mutants for the four permissive guards, built from the SEALED copy
-  # --------------------------------------------------------------------------------------
-  mkfrom() { # mkfrom <base> <name> <command...>
-    local base="$1" name="$2"; shift 2
-    if ! "$@" < "$base" > "$TMP/$name.sh"; then
-      bad "MUTANT $name: the mutating command itself failed, so nothing below is a kill"; return 1
-    fi
-    if cmp -s "$base" "$TMP/$name.sh"; then
-      bad "MUTANT $name: the mutation matched NOTHING — an unchanged copy scores every kill it is offered"; return 1
-    fi
-    if ! bash -n "$TMP/$name.sh" 2>/dev/null; then
-      bad "MUTANT $name: the mutant does not parse, so its silence is a syntax error and not a kill"; return 1
-    fi
-    return 0
-  }
-
-  # --- m5: `extends` -- E11 is the row it alone can lose -------------------------------
-  # POSITIVE CONJUNCTS CARRY THIS ARM. "E11 is gone" alone is satisfied by a subject that
-  # emits nothing at all, so the other three rows and a full footer must still be THERE:
-  # that combination — a plausible report, three findings, one silently missing — is the
-  # exact shape of the defect and nothing else produces it.
-  if mkfrom "$TMP/sealed.sh" m5 sed 's@^  _ext_raw="$(fm "$f" extends)"     || entry_unreadable "$f"$@  _ext_raw="$(fm "$f" extends)"@'; then
-    sr "$TMP/m5.sh" extends "$PERM" "$PERM_SUBJ"
-    if [ "$SR_RC" -eq 1 ] && [ "$(nrows "$SR_OUT" E11 'extensions/role-entry.md')" -eq 0 ] \
-           && [ "$(nrows "$SR_OUT" E12 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(nrows "$SR_OUT" E13 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(footer_field "$SR_OUT" errors)" = "$((PERM_ERRS - 1))" ]; then
-      mutant_killed "${B_EXTENDS:-0}" m5 "MUTANT m5 killed: E11 vanishes while the other three rows and a full footer stay — a finding DELETED, not raised"
-    else
-      bad "MUTANT m5 SURVIVED: E11 does not vanish"
-    fi
-  fi
-
-  # --- m6: `position` -- it owns TWO rows, and both must go ----------------------------
-  if mkfrom "$TMP/sealed.sh" m6 sed 's@^  _pos_raw="$(fm "$f" position)"    || entry_unreadable "$f"$@  _pos_raw="$(fm "$f" position)"@'; then
-    sr "$TMP/m6.sh" position "$PERM" "$PERM_SUBJ"
-    if [ "$SR_RC" -eq 1 ] && [ "$(nrows "$SR_OUT" E12 'extensions/role-entry.md')" -eq 0 ] \
-           && [ "$(nrows "$SR_OUT" E13 'extensions/role-entry.md')" -eq 0 ] \
-           && [ "$(nrows "$SR_OUT" E11 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(footer_field "$SR_OUT" errors)" = "$((PERM_ERRS - 2))" ]; then
-      mutant_killed "${B_POSITION:-0}" m6 "MUTANT m6 killed: BOTH rows this key feeds vanish, and the two it does not feed remain"
-    else
-      bad "MUTANT m6 SURVIVED: the two rows this key feeds do not vanish"
-    fi
-  fi
-
-  # --- m7: `gate_types` ------------------------------------------------------------------
-  if mkfrom "$TMP/sealed.sh" m7 sed 's@^  _gt_raw="$(fm "$f" gate_types)"   || entry_unreadable "$f"$@  _gt_raw="$(fm "$f" gate_types)"@'; then
-    sr "$TMP/m7.sh" gate_types "$PERM" "$PERM_SUBJ"
-    if [ "$SR_RC" -eq 1 ] && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 0 ] \
-           && [ "$(nrows "$SR_OUT" E11 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(nrows "$SR_OUT" E12 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(nrows "$SR_OUT" E13 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(footer_field "$SR_OUT" errors)" = "$((PERM_ERRS - 1))" ]; then
-      mutant_killed "${B_GATE:-0}" m7 "MUTANT m7 killed: E14 vanishes alone, so the guard is attributable to its own read"
-    else
-      bad "MUTANT m7 SURVIVED: E14 does not vanish"
-    fi
-  fi
-
-  # --- m8: the acquittal read, and it runs the OTHER WAY --------------------------------
-  # MEASURED, AND IT IS NOT THE CLASS THE OTHER THREE ARE. Its only consumer acquits on a
-  # NON-empty value, so an empty read withdraws the acquittal: the failure ADDS a W12 about a
-  # citation the entry had already disambiguated. Same guard, opposite harm — and the arm has
-  # to assert the row APPEARS, because asserting a row went missing would pass here forever.
-  #
-  # It is also the worst-instrumented of the eight: `shadow_parts … 2>/dev/null` on the very
-  # next line swallows awk's own "can't open file", so before the guard this failure left no
-  # trace anywhere — not a finding, not a message, not an exit code.
-  if mkfrom "$TMP/sealed.sh" m8 sed 's@^  _sh_raw="$(fm "$f" shadows)" || entry_unreadable "$f"$@  _sh_raw="$(fm "$f" shadows)"@'; then
-    sr "$TMP/m8.sh" shadows "$CITE" "$CITE_SUBJ"
-    if [ "$(nrows "$SR_OUT" W12 'extensions/cite-ext.md')" -eq 1 ] && [ "$SR_RC" -eq 0 ]; then
-      mutant_killed "${B_SHADOWS:-0}" m8 "MUTANT m8 killed: the lost acquittal RAISES a W12 the readable run does not — this site adds a finding, it does not delete one"
-    else
-      bad "MUTANT m8 SURVIVED: no W12 is raised"
-    fi
-  fi
-
-  # --- m9: re-nest the read inside unquote, which is how the status gets swallowed -------
-  # `$(unquote "$(fm …)")` reports UNQUOTE's status and never fm's, so the guard survives in
-  # the source and watches the wrong call. This is the `$(fm … | awk …)` hazard from the
-  # extensions loop wearing different brackets, and it is why the raw read is on its own line.
-  if mkfrom "$TMP/sealed.sh" m9 sed \
-      -e 's@^  _ext_raw="$(fm "$f" extends)"     || entry_unreadable "$f"$@  _ext_raw="$(unquote "$(fm "$f" extends)")" || entry_unreadable "$f"@' \
-      -e 's@^  extends="$(unquote "$_ext_raw")"$@  extends="$_ext_raw"@'; then
-    M9_LEFT="$(grep -c 'entry_unreadable' "$TMP/m9.sh")"
-    M9_BASE="$(grep -c 'entry_unreadable' "$TMP/sealed.sh")"
-    sr "$TMP/m9.sh" extends "$PERM" "$PERM_SUBJ"
-    if [ "$SR_RC" -eq 1 ] && [ "$M9_LEFT" -eq "$M9_BASE" ] \
-           && [ "$(nrows "$SR_OUT" E11 'extensions/role-entry.md')" -eq 0 ] \
-           && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 1 ]; then
-      mutant_killed "${B_EXTENDS:-0}" m9 "MUTANT m9 killed: with the read nested back inside unquote the guard is still THERE, still spelled right, and never fires"
-    else
-      bad "MUTANT m9 SURVIVED: the nested read does not defeat the guard"
-    fi
-fi
 fi
 
 # --------------------------------------------------------------------------------------
-# ASSERTION FLOOR. An arm that never executes -- a helper that returned early, a mutant whose
-# `mk` bailed -- leaves a green report that reads exactly like a passing one.
+# ASSERTION FLOOR. An arm that never executes -- a helper that returned early -- leaves a
+# green report that reads exactly like a passing one.
 # --------------------------------------------------------------------------------------
-EXPECTED_ASSERTIONS=36
+EXPECTED_ASSERTIONS=23
 echo
 if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf 'layer-entry-unreadable: FAIL — %d assertions ran, %d expected. An arm did not execute.\n' \

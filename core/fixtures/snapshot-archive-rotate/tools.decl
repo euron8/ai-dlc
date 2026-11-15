@@ -33,3 +33,4 @@ pgrep
 grep
 find
 od
+uniq

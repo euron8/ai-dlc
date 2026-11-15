@@ -8,5 +8,4 @@ scripts/install-scaffold-ignore.sh
 core/
 patterns/
 templates/
-core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh

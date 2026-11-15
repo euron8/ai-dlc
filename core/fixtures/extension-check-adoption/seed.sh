@@ -95,8 +95,7 @@ EOF
 # --- (4) OUT OF SCOPE BY `kind:` ALONE ---------------------------------------------
 # It hooks the SAME file and carries a heading the grammar matches, so `kind:` is the
 # only thing keeping it out. That isolation is deliberate: an entry excluded by two
-# filters at once cannot tell you which one is load-bearing, and the mutant below has
-# to fail for exactly one reason.
+# filters at once cannot tell you which one is load-bearing.
 cat > "$S/extensions/checks/out-of-scope.md" <<'EOF'
 ---
 kind: step-domain

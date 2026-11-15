@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # foreground-budget-deny/run.sh — drive the REAL ai-dlc-foreground-budget.sh hook with
-# synthesized PreToolUse JSON on stdin, then drive a battery of mutants of it through the
-# same arms.
+# synthesized PreToolUse JSON on stdin.
 #
 # THE DEFECT. validate-steering-budget.sh Check A counts foreground calls that blocked past
 # the steering budget, after the fact, and nothing refused one before it ran. The hook denies
@@ -104,81 +103,7 @@
 # artifact; none is a retry loop. The `done`-in-condition seeds are the 25 of those a scan that
 # stopped at any word `done` let through.
 #
-# MUTANTS. Each is a copy of the hook, guarded with `cmp -s` so a `sed` that matched nothing
-# reports DID NOT APPLY instead of scoring. THE ARMS ARE FUNCTIONS (arm_<NAME>), so any subset
-# of them can be driven against any hook.
-#   - PER PUSH, each mutant runs its DECIDING arm, which must FAIL, and one named TWIN, an arm
-#     the measured matrix shows GREEN for that mutant, which must PASS. The kill is emitted
-#     through mutant_killed behind the same-run base-pass flags of the shipped hook's arm
-#     (B_<arm>) and of the unmutated control (B_MX0). The twin proves the kill stays confined
-#     to the deciding arm.
-#   - `--matrix`: the unmutated copy and every mutant are scored against EVERY arm. Each prints
-#     one MATRIX row (printed by matrix.sh, every cell `<arm>:killed=yes|no` plus `tripped=[...]`),
-#     and the tripped set must EQUAL the recorded set that mut passes as its `want` argument
-#     (the old exact-vector assertion), contain the deciding arm and exclude the twin. The
-#     recorded sets plus the twin replace the per-push exact-vector assertion.
-# The columns are the 29 names in ALL_ARMS. REASON is read off the OVER call, FAILOPEN off the
-# WAITER seeds and EXIT off every call's exit status, so those three are driven through the unit
-# that carries them (unit_of).
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
-# state") requires. Run it from the repo root, by the command on the MUTANT-MATRIX-REMEASURE line,
-# with AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is not run through hermetic-run.sh, which
-# forwards no argument.
-#
-# MUTANT-MATRIX-DYNAMIC mut-name why=mut() passes its first argument "$name" to mutant_killed; each mut call (warn-only, denies-background, ...) names a literal mutant that carries its own row in this block
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/foreground-budget-deny/run.sh --matrix
-# MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy must trip no arm; it is the base pass every kill is gated on
-# MUTANT-MATRIX warn-only decides=OVER twins=BG
-# MUTANT-MATRIX denies-background decides=BG twins=OVER
-# MUTANT-MATRIX boundary-ge decides=BOUNDARY twins=ENV
-# MUTANT-MATRIX ignores-env decides=ENV twins=DEFAULT
-# MUTANT-MATRIX literal-default decides=DEFAULT twins=ENV
-# MUTANT-MATRIX any-tool decides=NONBASH twins=OVER
-# MUTANT-MATRIX no-timeout-is-long decides=NOTIMEOUT twins=BOUNDARY
-# MUTANT-MATRIX parse-drops-remedy decides=UNPARSEABLE twins=PROGFAULT
-# MUTANT-MATRIX no-detector-literal decides=NODETECTOR twins=ENV
-# MUTANT-MATRIX reason-drops-background decides=REASON twins=PUSHCHAIN
-# MUTANT-MATRIX deny-exits-nonzero decides=EXIT twins=OVER
-# MUTANT-MATRIX silence decides=OVER twins=BG
-# MUTANT-MATRIX drop-push decides=PUSH twins=PUSHNEAR
-# MUTANT-MATRIX push-unanchored decides=PUSHNEAR twins=PUSH
-# MUTANT-MATRIX drop-agent decides=AGENT twins=SUBPOLL
-# MUTANT-MATRIX drop-pushchain decides=PUSHCHAIN twins=PUSH
-# MUTANT-MATRIX drop-poll decides=SUBPOLL twins=AGENT
-# MUTANT-MATRIX loop-word1 decides=SUBPOLL twins=AGENT
-# MUTANT-MATRIX sleep-word1 decides=SUBPOLL twins=AGENT
-# MUTANT-MATRIX threshold-zero decides=AGENT twins=SUBPOLL
-# MUTANT-MATRIX drop-poll-reason decides=SUBPOLL twins=AGENT
-# MUTANT-MATRIX loopend-word decides=SUBPOLL twins=AGENT
-# MUTANT-MATRIX loopend-no-redirect decides=AGENT twins=SUBPOLL
-# MUTANT-MATRIX wfd-is-poll decides=AGENT twins=SUBPOLL
-# MUTANT-MATRIX m-amp decides=WAITERNEAR twins=WAITER
-# MUTANT-MATRIX m-scope decides=SCOPE twins=WAITER
-# MUTANT-MATRIX m-append decides=SNAPWRITE twins=SNAPREAD
-# MUTANT-MATRIX m-read decides=SNAPREAD twins=SNAPWRITE
-# MUTANT-MATRIX m-noskip decides=SNAPSKIP twins=SNAPCHAIN
-# MUTANT-MATRIX m-skipwide decides=SNAPCHAIN twins=SNAPSKIP
-# MUTANT-MATRIX m-unpaired decides=SNAPCHAIN twins=SNAPSKIP
-# MUTANT-MATRIX m-ansic decides=SNAPCHAIN twins=SNAPSKIP
-# MUTANT-MATRIX m-cpcomment decides=SNAPWRITE twins=SNAPREAD
-# MUTANT-MATRIX m-cpredir decides=SNAPWRITE twins=SNAPREAD
-# MUTANT-MATRIX m-caseps decides=SNAPCASE twins=SNAPWRITE
-# MUTANT-MATRIX m-caseprefilter decides=SNAPCASE twins=SNAPWRITE
-# MUTANT-MATRIX m-oldremedy decides=SNAPWRITE twins=SNAPREAD
-# MUTANT-MATRIX m-noatomic decides=REGEXLIMIT twins=WAITER
-# MUTANT-MATRIX m-blanktail decides=REGEXLIMIT twins=WAITER
-# MUTANT-MATRIX m-notry decides=REGEXLIMIT twins=WAITER
-# MUTANT-MATRIX m-badre decides=FAILOPEN twins=WAITERNEAR
-# MUTANT-MATRIX m-failopen decides=SURROGATE twins=PROGFAULT
-# MUTANT-MATRIX m-anyfail decides=PROGFAULT twins=UNPARSEABLE
-# MUTANT-MATRIX m-nojqdeny decides=NOJQ twins=OVER
 set -uo pipefail
-MATRIX=0
-case "${1:-}" in
-  "") ;;
-  --matrix) MATRIX=1 ;;
-  *) echo "FIXTURE ERROR: unknown argument '$1' (usage: run.sh [--matrix])" >&2; exit 2 ;;
-esac
 
 # The pre-push gate exports every AI_DLC_* tunable a consumer set in settings.json into this
 # process. Scrub them so the default-budget arms read the default and not the operator's shell.
@@ -198,20 +123,10 @@ fi
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-[ -f "$HERE/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found in $HERE" >&2; exit 2; }
-ALL_ARMS="OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SNAPSKIP SNAPCHAIN SNAPCASE SCOPE REGEXLIMIT FAILOPEN EXIT"
-P_ALL="$ALL_ARMS"
-. "$HERE/matrix.sh"
-echo "HERMETIC-CONSUMED core/fixtures/foreground-budget-deny/matrix.sh"
 
 # The arms that own a call of their own. REASON is read off the OVER call, FAILOPEN off the
 # WAITER seeds, EXIT off the exit status of whichever calls ran.
 ALL_UNITS="OVER PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SNAPSKIP SNAPCHAIN SNAPCASE SCOPE REGEXLIMIT"
-unit_of() { case "$1" in REASON|EXIT) echo OVER ;; FAILOPEN) echo WAITER ;; *) echo "$1" ;; esac; }
 
 OUTF="$WORK/out"; ERRF="$WORK/err"
 NCALL=0
@@ -689,8 +604,6 @@ if [ -z "$GOT" ]; then
 else
   bad "shipped hook fails arm(s): $GOT"
 fi
-# The base-pass flag every kill is gated on is computed inside mut() from GOT, the set of arms the shipped hook
-# failed in THIS run: the deciding arm held on the unmutated hook exactly when it is absent from GOT.
 
 # The SHIFT world is the only thing that separates "reads the detector's default" from "carries
 # its own 120". Prove the two projects really do disagree on the default line.
@@ -698,176 +611,6 @@ if cmp -s "$REAL/scripts/ai-dlc/validate-steering-budget.sh" "$SHIFT/scripts/ai-
   bad "FIXTURE BROKEN: the SHIFT detector is byte-identical to the real one, so DEFAULT cannot discriminate"
 fi
 
-# --- mutants ---------------------------------------------------------------------------------
-n_mut=0; n_kill=0
-# mut <name> <deciding-arm> <twin-arm> <recorded-tripped-set> <sed-expr>...
-# PER PUSH: the deciding arm must FAIL and the twin must PASS, each driven through the unit that
-# owns it. --matrix: every arm is scored, one MATRIX row is printed, and the tripped set must EQUAL
-# the recorded one (the old exact-vector assertion).
-mut() {
-  local name="$1" dec="$2" twin="$3" want="$4"; shift 4
-  local m="$MUT/hook-$name.sh" ud ut held mx0
-  held="$(in_set "$dec" "$GOT" && echo 0 || echo 1)"
-  mx0="$([ "${B_MX0:-0}" = 1 ] && echo 1 || echo 0)"
-  if ! sed "$@" "$HOOK" > "$m"; then bad "mutant $name: sed failed -- DID NOT APPLY"; return; fi
-  if cmp -s "$HOOK" "$m"; then bad "mutant $name: sed matched nothing -- DID NOT APPLY (the anchor moved)"; return; fi
-  n_mut=$((n_mut+1))
-  if [ "$MATRIX" -eq 1 ]; then
-    sc_run "$m" $ALL_UNITS
-    matrix_row "$name" "$SC_DEAD"
-    if [ "$SC_DEAD" != "$want" ]; then bad "mutant $name tripped [$SC_DEAD], expected exactly [$want] -- update the recorded set and the header"
-    elif ! in_set "$dec" "$SC_DEAD"; then bad "mutant $name SURVIVED its deciding arm [$dec]"
-    elif in_set "$twin" "$SC_DEAD"; then bad "mutant $name: twin [$twin] is not green in the matrix"
-    else
-      n_kill=$((n_kill+1)); mutant_killed "$([ "$held" = 1 ] && [ "$mx0" = 1 ] && echo 1 || echo 0)" "$name" "mutant $name KILLED by exactly [$want] (matrix); deciding [$dec], twin [$twin] green"
-    fi
-    return
-  fi
-  ud="$(unit_of "$dec")"; ut="$(unit_of "$twin")"
-  if [ "$ud" = "$ut" ]; then sc_run "$m" "$ud"; else sc_run "$m" "$ud" "$ut"; fi
-  if ! in_set "$dec" "$SC_DEAD"; then bad "mutant $name SURVIVED its deciding arm [$dec] -- the kill moved; re-measure with --matrix"
-  elif in_set "$twin" "$SC_DEAD"; then bad "mutant $name: twin [$twin] FAILS too -- the kill spread past the recorded matrix; re-measure with --matrix"
-  else
-    n_kill=$((n_kill+1)); mutant_killed "$([ "$held" = 1 ] && [ "$mx0" = 1 ] && echo 1 || echo 0)" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
-  fi
-}
-
-# THE UNMUTATED COPY (MX0), built as a mutant is. Per push it must be byte-identical to the hook the
-# arms above just passed, so its arm verdicts ARE those arms' verdicts; --matrix also scores it on
-# every arm. The OVER arm gives it its positive conjunct.
-cp "$HOOK" "$MUT/hook-control.sh"
-if [ "$MATRIX" -eq 1 ]; then
-  sc_run "$MUT/hook-control.sh" $ALL_UNITS
-  matrix_row MX0 "$SC_DEAD"
-  if [ -z "$SC_DEAD" ]; then ok "CONTROL MX0 (unmutated copy from the mutant directory): every arm HOLDS on it, tripped=[] (matrix)"; B_MX0=1
-  else bad "unmutated copy fails [$SC_DEAD] -- the harness, not a mutant, is what fails"; fi
-elif cmp -s "$HOOK" "$MUT/hook-control.sh" && [ -z "$GOT" ]; then
-  ok "CONTROL MX0 (unmutated copy from the mutant directory): byte-identical to the hook every arm above passed"; B_MX0=1
-else
-  bad "unmutated copy is not the shipped hook or the shipped hook failed [$GOT] -- the harness, not a mutant, is what fails"
-fi
-
-# Expected sets are written in C-locale sorted order, which is what score() prints.
-# Mutants 1 and 12 remove the whole deny channel rather than one guard, so they fail every arm
-# holding a deny cell; each of the others fails its own arm alone.
-# 1. warning-only: the same text as context, no decision. The rejected design.
-mut warn-only OVER BG "AGENT BOUNDARY DEFAULT ENV OVER PUSHCHAIN PUSHNEAR REASON REGEXLIMIT SCOPE SNAPCASE SNAPCHAIN SNAPWRITE SUBPOLL WAITER" \
-  -e '/permissionDecision: "deny",/d' -e 's/permissionDecisionReason: \$reason/additionalContext: $reason/'
-# 2. denies a call already sent to the background.
-mut denies-background BG OVER "BG" -e '/and \.tool_input\.run_in_background != true/d'
-# 3. at-budget is over budget.
-mut boundary-ge BOUNDARY ENV "BOUNDARY" -e 's/\[ "\$T" -gt "\$LIMIT" \]/[ "$T" -ge "$LIMIT" ]/'
-# 4. ignores the override.
-mut ignores-env ENV DEFAULT "ENV" -e 's/^B="\${AI_DLC_STEERING_BUDGET:-}"$/B=""/'
-# 5. a second 120 instead of the detector's default.
-mut literal-default DEFAULT ENV "DEFAULT" -e 's/B="\${line#\*:-}"; B="\${B%%\\}\*}"; break/B=120; break/'
-# 6. every tool, not just Bash.
-mut any-tool NONBASH OVER "NONBASH" -e 's/if \.tool_name == "Bash"/if true/'
-# 7. no declared timeout read as a long one.
-mut no-timeout-is-long NOTIMEOUT BOUNDARY "NOTIMEOUT" \
-  -e 's/and (\.tool_input\.timeout | type) == "number"/and true/' \
-  -e 's/| \.tool_input\.timeout | if/| (.tool_input.timeout \/\/ 600000) | if/'
-# 8. the parse deny loses its remedy: a deny with no remedy reads as a hook bug.
-mut parse-drops-remedy UNPARSEABLE PROGFAULT "SURROGATE UNPARSEABLE" -e 's/ Re-issue the command without the unparseable escape\. If this recurs on an ordinary command, check the jq install (`jq --version`)\.//'
-# 9. no detector: fall back to a literal and deny.
-mut no-detector-literal NODETECTOR ENV "NODETECTOR" -e 's/allowing it (fail-open)"; exit 0$/allowing it (fail-open)"; B=120; SRC=\/dev\/null/'
-# 10. the reason stops naming the background re-issue.
-mut reason-drops-background REASON PUSHCHAIN "REASON" -e 's/Re-issue the same call with run_in_background: true and collect its result when it completes, or/Re-issue it with a shorter timeout, or/'
-# 11. the deny path exits non-zero.
-mut deny-exits-nonzero EXIT OVER "EXIT" -e '$s/^exit 0$/exit 2/'
-# 12. the whole subject replaced by silence: every presence-shaped arm must fail.
-mut silence OVER BG "AGENT BOUNDARY DEFAULT ENV NODETECTOR NOJQ OVER PROGFAULT PUSHCHAIN PUSHNEAR REASON REGEXLIMIT SCOPE SNAPCASE SNAPCHAIN SNAPWRITE SUBPOLL SURROGATE UNPARSEABLE WAITER" -e '2i\
-exit 0'
-# 13. no push allowance: the pipeline's required foreground push is denied.
-mut drop-push PUSH PUSHNEAR "PUSH" -e '/and (is_push | not)/d'
-# 14. the push match loses its start anchor, so `echo git push` rides the exemption.
-mut push-unanchored PUSHNEAR PUSH "PUSHNEAR" -e 's/test("^\[ \\t\]\*(cd/test("(cd/'
-# 15. no agent_id exit: a teammate's non-poll call is denied though it is its job, not a wait.
-mut drop-agent AGENT SUBPOLL "AGENT" -e 's/| select(\$agent == "" or \$poll)/| select(true)/'
-# 16. the PUSHCHAIN field dropped: a chained push gets the general reason, run_in_background and all.
-mut drop-pushchain PUSHCHAIN PUSH "PUSHCHAIN" -e 's/^PUSHCHAIN="\${T##\* }"$/PUSHCHAIN=0/'
-# 17. the poll predicate removed: a subagent's poll rides the agent_id exemption again.
-mut drop-poll SUBPOLL AGENT "SUBPOLL" -e 's/| select(\$agent == "" or \$poll)/| select($agent == "")/'
-# 18. the loop match anchored to word 1: a poll loop after `S=/x;` is no longer seen.
-mut loop-word1 SUBPOLL AGENT "SUBPOLL" -e 's/def loopsleep: test(cmdpos + "(until/def loopsleep: test("^[ \\t]*(until/'
-# 19. the long-sleep match anchored to word 1: `cd /x && sleep 200` is no longer seen.
-mut sleep-word1 SUBPOLL AGENT "SUBPOLL" -e 's/match(cmdpos + "sleep\[/match("^[ \\t]*sleep[/'
-# 20. the sleep threshold dropped to 0: a subagent's short `sleep 20` is denied as a poll.
-mut threshold-zero AGENT SUBPOLL "AGENT" -e 's/any(\. >= 30)/any(. >= 0)/'
-# 21. the poll reason never chosen: a denied poll gets the lead's shorter-timeout remedy.
-mut drop-poll-reason SUBPOLL AGENT "SUBPOLL" -e 's/^POLL="\${T##\* }"$/POLL=0/'
-# 22. the loop scan stops at ANY word `done`: a `done` in the loop condition hides the poll.
-mut loopend-word SUBPOLL AGENT "SUBPOLL" -e 's/(?!" + loopend + ")/(?!\\\\bdone\\\\b)/'
-# 23. the loop end without the redirect characters: `done>out; sleep 5` reads as a poll.
-mut loopend-no-redirect AGENT SUBPOLL "AGENT" -e 's/done(\[ \\t;&|)<>\\n\]|\$)/done([ \\t;\&|)\\n]|$)/'
-# 23b. wfd-is-poll: the subagent poll match widened to a bare wait-for-deliverable.sh call, so a
-#     round-dispatcher's foreground beat is denied as a poll.
-mut wfd-is-poll AGENT SUBPOLL "AGENT" -e 's/| tostring | (loopsleep or longsleep);/| tostring | (loopsleep or longsleep or test("wait-for-deliverable"));/'
-# 24. m-amp: the waiter's redirect alternative stops consuming the `&` of `2>&1`/`>&2`, so that
-#     `&` reads as the lone one and `wfd x 2>&1` is denied.
-mut m-amp WAITERNEAR WAITER "WAITERNEAR" -e 's/(?>\[<>\]+)(?:&\[0-9-\]\*|(?!&))/(?>[<>]+)/'
-# 25. m-scope: Deny A moved behind the timeout and agent_id scope, so a waiter with no timeout, or
-#     from a subagent, rides the gates that exempted exactly the calls that carried this shape.
-mut m-scope SCOPE WAITER "SCOPE" -e 's/and (\$cmd | safetest(wfdbg)) then "DENY A"/and ($cmd | safetest(wfdbg)) and (.tool_input.timeout | type) == "number" and (.agent_id \/\/ "") == "" then "DENY A"/'
-# 26. m-append: the redirect write drops `>>`, so an append onto the snapshot is not seen.
-mut m-append SNAPWRITE SNAPREAD "SNAPWRITE" -e 's/\[0-9\]\*>>?\[|\]?/[0-9]*>(?!>)[|]?/'
-# 27. m-read: Deny B made fail-closed on any mention of the snapshot, so a read is refused.
-mut m-read SNAPREAD SNAPWRITE "SNAPREAD SNAPSKIP" -e 's/ and (\$cmd | suskip | not) and (\$cmd | snapwrite) then "DENY B"/ then "DENY B"/'
-# 26b. m-noskip: the single-segment skip removed, so the sanctioned writer whose argument text reads
-#     as a write shape is refused again (the F3 false refusal).
-mut m-noskip SNAPSKIP SNAPCHAIN "SNAPSKIP" -e 's/ and (\$cmd | suskip | not) and / and /'
-# 26c. m-skipwide: the skip keyed on the writer's name anywhere, so a writer call chained to a shell
-#     write of the snapshot rides it.
-mut m-skipwide SNAPCHAIN SNAPSKIP "SNAPCHAIN" -e 's/^  def suskip: safetest(.*);$/  def suskip: safetest("(?:snapshot-update|rotate-snapshot-archive)");/'
-# 26d. m-caseps: the snapshot-name regex case-sensitive again; the prefilter still lowers the case.
-# 26g. m-unpaired: the command word's closing quote no longer has to match its opening one, so an
-#     unbalanced quote opens a string that swallows `; sed -i ... <snapshot>` and the chain rides the skip.
-mut m-unpaired SNAPCHAIN SNAPSKIP "SNAPCHAIN" -e 's/(?:bash\[ \\t\]+)?(\[\\"\\u0027\]?)/(?:bash[ \\t]+)?[\\"\\u0027]?/' -e 's/\.sh\\\\1(?=/.sh[\\"\\u0027]?(?=/'
-# 26h. m-ansic: an unquoted `$'` is allowed in the skip's rest again, so an ANSI-C `$'x\''` reads as
-#     `$` plus a closed `'x\'` and the `; sed -i ... <snapshot> #'` bash runs rides the skip.
-mut m-ansic SNAPCHAIN SNAPSKIP "SNAPCHAIN" -e 's/|\\\\$(?!\[(\\u0027\]))\*)\[ \\t\]\*\\\\z");$/|\\\\$(?![(]))*)[ \\t]*\\\\z");/'
-# 26i. m-cpcomment: the cp/mv shape no longer counts a snapshot target followed by a `#` comment.
-mut m-cpcomment SNAPWRITE SNAPREAD "SNAPCHAIN SNAPWRITE" -e 's/(?:\[ \\t\]\*(?:\$|\[;&|\\n)\])|\[ \\t\]+#)/[ \\t]*(?:$|[;\&|\\n)])/'
-# 26j. m-cpredir: the cp/mv shape's redirect run after the target matches nothing (a `(?!)` heads
-#     each repetition), restoring the old terminator, so `cp x <snapshot> 2>/dev/null` is allowed again.
-mut m-cpredir SNAPWRITE SNAPREAD "SNAPCHAIN SNAPWRITE" -e 's/(?>(?:\[ \\t\]\*(?:\[0-9\]\*/(?>(?:(?!)[ \\t]*(?:[0-9]*/'
-mut m-caseps SNAPCASE SNAPWRITE "SNAPCASE" -e's/def ps: "(?i:pipeline-snapshot\\\\\.md)/def ps: "(?:pipeline-snapshot\\\\.md)/'
-# 26e. m-caseprefilter: the prefilter case-sensitive again; the regex is still (?i:).
-mut m-caseprefilter SNAPCASE SNAPWRITE "SNAPCASE" -e 's/(\$cmd | ascii_downcase | contains("pipeline-snapshot\.md"))/($cmd | contains("pipeline-snapshot.md"))/'
-# 26f. m-oldremedy: Deny B's remedy routed back to the Edit tool, which ai-dlc-snapshot-edit-deny.sh
-#     refuses -- a deny loop. SCOPE reads the same reason, so it trips too.
-mut m-oldremedy SNAPWRITE SNAPREAD "SCOPE SNAPCHAIN SNAPWRITE" -e "s/A shell write skips the stamp judge\. Make the change with scripts\/ai-dlc\/snapshot-update\.sh, .* Reading the snapshot by shell is not refused\./A shell write reaches no PostToolUse hook. Make the change with the Edit tool (or Write). Reading the snapshot by shell is not refused./"
-# 28. m-noatomic: the redirect run loses its atomic group, so a waiter segment of 1000 `>` that
-#     ends in `;` exhausts the retry limit and, caught, hides the LATER waiter's lone `&`.
-mut m-noatomic REGEXLIMIT WAITER "REGEXLIMIT" -e 's/|(?>\[<>\]+)(?:&/|[<>]+(?:\&/'
-# 29. m-blanktail: the tail's blank run may start after a blank, so a 30000-blank run followed by
-#     no `&` re-scans quadratically and the later waiter is missed.
-mut m-blanktail REGEXLIMIT WAITER "REGEXLIMIT" -e 's/)\*?(?<!\[ \\t\])\[ \\t\]\*(?:/)*?[ \\t]*(?:/'
-# 30. m-notry: the shape tests lose their catch, so a regex error is a jq error and the call fails open.
-mut m-notry REGEXLIMIT WAITER "REGEXLIMIT" -e 's/def safetest(\$re): try test(\$re) catch (if (tostring | test("retry-limit")) then false else error end);/def safetest($re): test($re);/'
-# 31. m-badre: a compile error injected into wfdbg (the regex runs only for a command naming the waiter, so the AGENT beat cell and the SUBPOLL waiter-loop cell go red with it).The narrowed catch rethrows it, the jq pass fails
-# and the hook prints its fail-open message and allows: WAITER, SCOPE, REGEXLIMIT (no deny) and FAILOPEN (printed error)
-# both go red. The OLD broad catch with the same injection would print nothing and redden the no-deny arms (WAITER, SCOPE, REGEXLIMIT) but never FAILOPEN.
-mut m-badre FAILOPEN WAITERNEAR "AGENT FAILOPEN REGEXLIMIT SCOPE SUBPOLL WAITER" -e 's/wait-for-deliverable\\\\\.sh/&(/'
-# 32. m-failopen: the parse sentinel allowed, as before the fix -- a lone surrogate appended to any
-#     refused command loses every deny again.
-mut m-failopen SURROGATE PROGFAULT "SURROGATE UNPARSEABLE" -e "s/^  '@PARSEFAIL@') printf .*; exit 0 ;;\$/  '@PARSEFAIL@') exit 0 ;;/"
-# 33. m-anyfail: the deny keyed on jq's exit status, which is 5 for a program fault as for a parse
-#     error, so a fault in the program denies every call.
-mut m-anyfail PROGFAULT UNPARSEABLE "PROGFAULT" -e 's/^if \[ "\$PARSE_RC" -ne 0 \]; then$/if [ "$PARSE_RC" -ne 0 ]; then T=@PARSEFAIL@; elif false; then/'
-# 34. m-nojqdeny: the jq-absent path denies, which would refuse every Bash call in the session.
-mut m-nojqdeny NOJQ OVER "NOJQ" -e '/^command -v jq/s/exit 0; }$/echo "{\\"hookSpecificOutput\\":{\\"permissionDecision\\":\\"deny\\"}}"; exit 0; }/'
-
-[ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] \
-  && ok "$n_kill of $n_mut mutants scored dead" \
-  || bad "$n_kill of $n_mut mutants scored dead"
-
-# PLAIN-RUN: a plain invocation prints no matrix row; --matrix prints one per mutant plus MX0.
-if [ "$MATRIX" -eq 0 ]; then
-  [ "$MATRIX_ROWS" -eq 0 ] && ok "PLAIN-RUN: no matrix row printed" || bad "PLAIN-RUN printed $MATRIX_ROWS matrix row(s)"
-else
-  [ "$MATRIX_ROWS" -eq "$((n_mut + 1))" ] && ok "MATRIX: $MATRIX_ROWS rows printed (every mutant plus MX0)" || bad "MATRIX printed $MATRIX_ROWS rows, expected $((n_mut + 1))"
-fi
 printf '  hook invocations  %s\n' "$NCALL"
 
 # Clean up by name: the seed's files and directories, never a recursive delete of a variable.

@@ -1,15 +1,13 @@
 # wait-beat-liveness reads THREE files outside its own directory: the join script under test, and two siblings.
-# run.sh finds it by walking from $0, drives it for every arm, and copies it to build each mutant.
+# run.sh finds it by walking from $0 and drives it for every arm.
 !core/scripts/wait-for-deliverable.sh
 # --shard-header resolves merge-adversarial-shards.sh as the subject's sibling (run.sh MERGE=); the fixture also runs
-# its --check-header directly to read the expected refusal text, and copies it beside the M37 mutant.
+# its --check-header directly to read the expected refusal text.
 !core/scripts/merge-adversarial-shards.sh
 # --dispatch reads DISPATCH_ID_PREFIXES from validate-adversarial-convergence.sh beside the subject (run.sh GRAMMAR=);
 # sections 18-19 copy it beside every --dispatch subject, and section 19 seeds a duplicate declaration into a copy.
 !core/scripts/validate-adversarial-convergence.sh
 # Section 26 sources the start-time helper beside the subject and copies it beside every argv-record subject.
 !core/scripts/wfd-start-of.sh
-# The shared mutant-kill helper: every kill is emitted through its mutant_killed.
-!core/fixtures/lib/mutant.sh
-# Section 29 stages the base script from the optional pin in git.decl (absent on a consumer, where its SKIP branch decides).
+# Shared reporting helpers.
 core/fixtures/lib/report.sh

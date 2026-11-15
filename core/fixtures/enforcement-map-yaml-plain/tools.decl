@@ -1,6 +1,5 @@
 awk
 bash
-cmp
 dirname
 env
 grep

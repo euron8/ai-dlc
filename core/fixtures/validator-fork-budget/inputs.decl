@@ -10,7 +10,7 @@
 # The profiler, REQUIRED: run.sh drives it four times (cells.decl) and prints the sentinel once it has located it.
 !scripts/fork-profile.sh
 # The profiler walks up from itself for VERSION; the renderer it calls for the arm map does the same.
-# copy-only: core/fixtures/validator-fork-budget/run.sh:131 run.sh tests for the marker beside the profiler; nothing reads its content
+# copy-only: core/fixtures/validator-fork-budget/run.sh:61 run.sh tests for the marker beside the profiler; nothing reads its content
 VERSION
 scripts/
 .githooks/

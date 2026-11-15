@@ -65,8 +65,6 @@ _HD="$(cd "$(dirname "$STOP_HOOK")" && pwd)"; echo "HERMETIC-CONSUMED $_HD/ai-dl
 [ -f "$_HD/ai-dlc-handoff-pending.sh" ] && echo "HERMETIC-CONSUMED $_HD/ai-dlc-handoff-pending.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_2p=0
 
 drive_stop() { # <work> [hook] -> stdout (block JSON, or empty on allow)
   printf '{"session_id":"t","transcript_path":""}' \
@@ -103,13 +101,13 @@ fi
 rm -rf "$W"
 # 2p. THE PRODUCER'S FORM. wait-for-deliverable.sh writes `<epoch> <pid>`; the bare-epoch arm above
 #     is the backward-compatibility proof, this one is the marker the shipping beat writes. Scored
-#     by the same predicate so section 9's first-field mutant can drive it (yield_live).
+#     by the same predicate (yield_live).
 yield_live() { # yield_live <seed-case> [hook] -> 0 when the Stop is ALLOWED by Check 2b
   _yw="$(bash "$HERE/seed.sh" "$1")"; _yo="$(drive_stop "$_yw" "${2:-}")"
   if blocked "$_yo"; then YL_MSG=blocked; elif fired_live "$_yw"; then YL_MSG=live; else YL_MSG=allow-not-live; fi
   rm -rf "$_yw"; [ "$YL_MSG" = live ]
 }
-if yield_live live-marker-pid; then ok "live beat, producer form '<epoch> <pid>': the yield is ALLOWED via Check 2b (ALLOWED_BY_LIVE_BEAT logged)"; B_2p=1
+if yield_live live-marker-pid; then ok "live beat, producer form '<epoch> <pid>': the yield is ALLOWED via Check 2b (ALLOWED_BY_LIVE_BEAT logged)"
 else bad "live beat, producer form '<epoch> <pid>': $YL_MSG — the hook does not read the marker wait-for-deliverable.sh writes"; fi
 
 # =============================================================================
@@ -360,7 +358,7 @@ tx_rows() { sed -n 's/^- Tool call since previous block: //p' "$1/$LOG" 2>/dev/n
 tx_state() { printf '%s\n%s\n%s\n' "$2" "$3" "$4" > "$1/_bmad-output/pipeline-block-state.txt"; }
 
 # Each arm: arm_8x <hook> -> 0 pass, 1 fail; ARM_MSG carries the evidence. Written as
-# functions so section 9 drives the SAME arms against each mutant.
+# functions so each runs as one concurrent job.
 arm_8a() { # text-only at 45s and at 300s: blocks, then BACKOFF by the 4th Stop
   ARM_MSG=""; _rc=0
   for _sp in 45 300; do
@@ -517,9 +515,9 @@ arm_desc() {
     8i) echo "three Stops on handoff.md step 1's live beat are deferred (aaa) and the first Stop past the lease is the guard's block at 1/3 (H)" ;;
   esac
 }
-# EVERY ARM OF SECTIONS 8 AND 9 IS A CONCURRENT JOB. Each builds its own worlds and each mutant
-# its own hooks copy, so no two share a file; each job writes its verdict lines to its own file,
-# and the collector at the end of section 9 prints and counts them in dispatch order after
+# EVERY ARM OF SECTION 8 IS A CONCURRENT JOB. Each builds its own worlds, so no two share a file;
+# each job writes its verdict lines to its own file,
+# and the collector at the end of section 8 prints and counts them in dispatch order after
 # `wait`. Serially the two sections took this fixture from ~3s to ~43s. A `bad` inside a
 # subshell cannot move `fails`, so the collector counts FAIL lines from the files, fails an
 # EMPTY file (a job that died before printing scored nothing), and fails a dispatch count other
@@ -533,113 +531,9 @@ arm_job() { # arm_job <arm> <hook> <label-prefix>
 }
 for _a in $ARMS_8; do job arm_job "$_a" "$STOP_HOOK" ""; done
 
-# =============================================================================
-# 9. MUTANTS: each wrong implementation of the rule fails ITS OWN arm.
-# =============================================================================
-# Arms 8b-8e and 8g carry the ALLOW-shaped half of the rule -- "never BACKOFF",
-# "resets to 1" -- which a hook that emits nothing does not pass only because each
-# asserts a decision sequence by value. The mutants are what prove each arm is
-# watching the property it names rather than any property.
-#
-# EACH MUTANT IS A COPY OF THE WHOLE HOOKS DIRECTORY: the hook sources
-# ai-dlc-handoff-pending.sh from beside itself, and a lone copy silently skips it.
-# Each edit is guarded by `cmp -s` (a sed that matched nothing is FIXTURE STALE, never
-# a kill) and `bash -n`. The unmutated copy is driven through every arm of section 8
-# and must pass them all -- that is the control that the copy runs at all.
-HOOK_DIR="$(cd "$(dirname "$STOP_HOOK")" && pwd)"
-MUT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/join-yield-mut-XXXXXX")"
-mk_copy() { # mk_copy <name> -> path of ai-dlc-continue.sh inside a fresh copy of the hooks dir
-  mkdir -p "$MUT_ROOT/$1" && cp -R "$HOOK_DIR/." "$MUT_ROOT/$1/" \
-    && [ -f "$MUT_ROOT/$1/ai-dlc-handoff-pending.sh" ] && printf '%s' "$MUT_ROOT/$1/ai-dlc-continue.sh"
-}
-CTRL="$(mk_copy control)"
-if [ -z "$CTRL" ]; then
-  bad "FIXTURE BROKEN: the hooks directory copy is missing its sibling ai-dlc-handoff-pending.sh -- no mutant verdict below would be about a hook that ran"
-else
-  # A control arm that fails reads `FAIL  mutant control (unmutated hooks-dir copy): 8x ...`:
-  # a copy that cannot pass cannot score a kill, so every mutant verdict is then unreadable.
-  for _a in $ARMS_8; do job arm_job "$_a" "$CTRL" "mutant control (unmutated hooks-dir copy): "; done
-  # ARM 2p's MUTANT, synchronous and outside the job count. The first-field line deleted: the lease
-  # regex then sees "N 12345" and rejects it, so the producer form must BLOCK while the bare-epoch
-  # live-marker on the SAME copy still yields (the control that the copy runs and still defers).
-  _m2p="$(mk_copy no-first-field)"
-  if [ -z "$_m2p" ]; then bad "MUTANT no-first-field: could not copy the hooks dir"
-  elif ! sed '/^  BEAT_DEADLINE="\${BEAT_DEADLINE%% \*}"$/d' "$CTRL" > "$_m2p"; then bad "MUTANT no-first-field: sed DIED -- the mutation never existed"
-  elif cmp -s "$CTRL" "$_m2p"; then bad "FIXTURE STALE: mutation no-first-field matched nothing in $STOP_HOOK -- re-anchor it on the real line"
-  elif ! bash -n "$_m2p" 2>/dev/null; then bad "FIXTURE STALE: mutant no-first-field does not parse"
-  else
-    if yield_live live-marker-pid "$_m2p"; then bad "MUTANT SURVIVED (no-first-field: the marker read whole) -- arm 2p still yields ($YL_MSG)"
-    else mutant_killed "$B_2p" no-first-field "mutant (no-first-field: the marker read whole) fails arm 2p ($YL_MSG)"; fi
-    if yield_live live-marker "$_m2p"; then ok "...and the same copy still yields on the bare-epoch live-marker (it runs; the kill is the mutation's)"
-    else bad "MUTANT HARNESS BROKEN (no-first-field): the copy also fails the bare-epoch live-marker ($YL_MSG)"; fi
-  fi
-fi
-
-# mut <name> <owning-arm> <sed-program> <what it implements>
-# Scores the owning arm, and ONE arm the mutation must not touch (8f for every mutant but
-# the clamp's own, which uses 8a) as a same-copy, presence-shaped control. Set
-# JY_KILL_MATRIX=1 to score every section-8 arm against every mutant instead.
-mut() {
-  _m="$(mk_copy "$1")" || { bad "MUTANT $1: could not copy the hooks dir"; return; }
-  if ! sed "$3" "$CTRL" > "$_m"; then bad "MUTANT $1: sed DIED -- the mutation never existed"; return; fi
-  if cmp -s "$CTRL" "$_m"; then bad "FIXTURE STALE: mutation $1 matched nothing in $STOP_HOOK -- re-anchor it on the real line"; return; fi
-  if ! bash -n "$_m" 2>/dev/null; then bad "FIXTURE STALE: mutant $1 does not parse -- a kill would be a syntax error"; return; fi
-  if [ "${JY_KILL_MATRIX:-0}" = 1 ]; then
-    _row=""; for _a in $ARMS_8; do if "arm_$_a" "$_m"; then _row="$_row $_a:pass"; else _row="$_row $_a:KILL"; fi; done
-    printf '  matrix %-16s owner %s |%s\n' "$1" "$2" "$_row"
-  fi
-  if "arm_$2" "$_m"; then bad "MUTANT SURVIVED ($1: $4) -- arm $2 still passes, so it is not watching that property: $ARM_MSG"
-  else ok "mutant ($1: $4) fails arm $2"; fi
-  _ctl=8f; [ "$2" = 8f ] && _ctl=8a
-  if "arm_$_ctl" "$_m"; then ok "...and the same copy still passes arm $_ctl (it runs; the kill is the mutation's)"
-  else bad "MUTANT HARNESS BROKEN ($1): the copy also fails arm $_ctl -- $ARM_MSG"; fi
-}
-mut_bg() { job mut "$@"; }
-[ -n "$CTRL" ] && {
-  # (i) Draft 1: the tool rule alone where the transcript answers, time only as the fallback.
-  mut_bg tool-only 8b 's/^  elif \[ "\$RUN_DELTA" -lt "\$RAPID_WINDOW_SECONDS" \]; then$/  elif [ "$RUN_TOOL" = unknown ] \&\& [ "$RUN_DELTA" -lt "$RAPID_WINDOW_SECONDS" ]; then/' \
-      "the OR-delta dropped, a tool call alone resets"
-  # (ii) The window widened until every retry counts as rapid.
-  mut_bg window-3600 8c 's/^RAPID_WINDOW_SECONDS=30$/RAPID_WINDOW_SECONDS=3600/' "the rapid window widened to 3600s"
-  # (iii) A tool call never resets the run: release after N no matter what.
-  mut_bg no-reset-on-tool 8c 's/^    RUN_CNT=1; RUN_SIGNAL=reset$/    if [ "$RUN_TOOL" = yes ]; then RUN_CNT=$((RUN_CNT + 1)); else RUN_CNT=1; fi; RUN_SIGNAL=reset/' \
-      "release after EFF_MAX regardless of tool calls"
-  # (iv) The off-by-one clamp.
-  mut_bg clamp-cap-minus-1 8f 's/then EFF_MAX="\$_stop_cap"; fi$/then EFF_MAX=$((_stop_cap - 1)); fi/' "EFF_MAX clamped to CAP-1"
-  # (v) Check 3 writes its state as the old two lines, so the mark never reaches line 3.
-  mut_bg mark-not-persisted 8a 's/^stall_run_write "\$STATE_FILE"$/printf '"'"'%s\\n%s\\n'"'"' "$NOW" "$RUN_CNT" > "$STATE_FILE"/' \
-      "Check 3's tool mark not persisted to line 3"
-  # (vi) Check 0 keeps the inline time-only test it had before the shared helper.
-  mut_bg check0-time-only 8g 's/^      stall_run "\$HANDOFF_STATE"; H_CNT="\$RUN_CNT"$/      stall_run "$HANDOFF_STATE"; H_CNT="$RUN_CNT"; if [ "$RUN_DELTA" -lt "$RAPID_WINDOW_SECONDS" ]; then H_CNT=$RUN_CNT; else H_CNT=1; RUN_CNT=1; fi/' \
-      "Check 0 left on the time-only test"
-  # (vii) A raw count as the mark: prose that merely says tool_use moves it.
-  mut_bg raw-grep-mark 8a 's/^  _tm_id="\$(tail -n 400 .*$/  _tm_id="$(grep -c tool_use "$TRANSCRIPT")"/' "a raw grep -c tool_use as the mark"
-  # (viii) A mark that ignores the session: a new session over the same transcript reads `no`.
-  # Pinned to this fixture's default id rather than dropped, so the marks the other arms
-  # SEED stay byte-equal and the mutant moves only the one property arm 8e owns.
-  mut_bg mark-sans-session 8e 's/^  TOOL_MARK="\${SESSION_ID}:\${_tm_id:-none}"$/  TOOL_MARK="jy:${_tm_id:-none}"/' "the session id ignored by the mark"
-  # (ix) Check 0's exhausted backoff falls through to Check 3 again: the BACKOFF block and its
-  # `exit 0` deleted, the old `rm -f` of the guard's state kept.
-  mut_bg check0-fallthrough 8h '/^      # BACKOFF EXHAUSTED: ALLOW THE STOP HERE/,/^      exit 0$/{
-/# possible false positive, as before$/!d
-}' "Check 0's exhausted backoff falls through to Check 3"
-  # (x) Check 0's live-beat deferral writes the stall counter, so three deferrals and one guard
-  # block read as a four-block stall and the guard releases on the Stop it exists to catch.
-  mut_bg deferral-writes-counter 8i 's/^          echo "## \${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT"$/          stall_run_write "$HANDOFF_STATE"; echo "## ${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT"/' \
-      "Check 0's live-beat deferral writes the stall counter"
-  # (xi) BL-641: the unknown path increments whatever the session -- killed by the control arm.
-  mut_bg unknown-always-increments 8k 's/^    if \[ "\$_run_sess" = "\$SESSION_ID" \]; then RUN_CNT=\$((RUN_CNT + 1)); RUN_SIGNAL=session$/    if true; then RUN_CNT=$((RUN_CNT + 1)); RUN_SIGNAL=session/' \
-      "the unknown path increments on a changed session"
-  # (xii) BL-641: the unknown path always resets -- killed by the main arm.
-  mut_bg unknown-always-resets 8j 's/^    if \[ "\$_run_sess" = "\$SESSION_ID" \]; then RUN_CNT=\$((RUN_CNT + 1)); RUN_SIGNAL=session$/    if false; then RUN_CNT=$((RUN_CNT + 1)); RUN_SIGNAL=session/' \
-      "the unknown path resets on the same session"
-}
 wait
-# Every section-8 arm on the shipping hook, every one again on the unmutated copy, and the
-# twelve mutant lines above. With no control copy the FIXTURE BROKEN line above has already
-# failed the run and only the section-8 jobs exist.
 set -- $ARMS_8; N_ARMS=$#
-JOBS_WANT=$((2 * N_ARMS + 12)); [ -n "$CTRL" ] || JOBS_WANT=$N_ARMS
+JOBS_WANT=$N_ARMS
 _i=0
 while [ "$_i" -lt "$JOB_N" ]; do
   _i=$((_i + 1)); _vf="$JOBS/verdict.$_i"
@@ -650,8 +544,8 @@ while [ "$_i" -lt "$JOB_N" ]; do
   _no="$(grep -c '^  ok    ' "$_vf")" || _no=0
   oks=$((oks + _no))
 done
-[ "$JOB_N" -eq "$JOBS_WANT" ] || bad "sections 8-9 dispatched $JOB_N jobs, expected $JOBS_WANT -- a job line was lost"
-rm -rf "$MUT_ROOT" "$JOBS"
+[ "$JOB_N" -eq "$JOBS_WANT" ] || bad "section 8 dispatched $JOB_N jobs, expected $JOBS_WANT -- a job line was lost"
+rm -rf "$JOBS"
 
 echo
 report_end implementation-join-yield

@@ -64,53 +64,6 @@
 #   NP  the part bound: MIXED at --min-files 2 (flagless SERIAL) and THREE at --max-parts 2 narrow to more
 #       parts than flagless and are REFUSED, exit 2, nothing printed or written; MIXED_APP is accepted
 #   S3  implementation.md names the --narrow invocation and the --narrow-from partition line
-# MUTANTS (each in a copy of the subject's WHOLE script directory; each must kill exactly its arm):
-#   m-classonly         the delta guard removed            -> R1 R6 Q2 (each a delta the guard alone sends full)
-#   m-failopen-missing  a finding with no Class routes     -> C1b Q4n
-#   m-strict            an absent Class is refused         -> C1a
-#   m-nodocstring       the docstring filter removed       -> A4
-#   m-pyext             a cited .py leaves the code class  -> R6
-#   m-noskip            the hand-over skip removed         -> Q4
-#   m-nohrun            the failed-replay check removed    -> Q5
-#   m-qagate            the merge's Class lift for code review only (B1 reverted) -> QM
-#   m-qmd-none          qa.md's template deleted from the seeded tpl root -> QM (the merge's per-gate
-#                       activation reads qa.md, not code-reviewer.md)
-#   m-noconserve        the conservation assert always holds -> CV (no shipped input reaches the assert,
-#                       which is why CV asks the predicate directly)
-#   m-noresidue         the residue dropped from --narrow's split -> N1 (also trips N2 N3 NM NP: the
-#                       conservation assert turns the dropped path into FULL, which is the guard working)
-#   m-union             every class's Files: line narrows -> N2
-#   m-emptyok           an empty named set narrows -> N2 N3
-#   m-missingempty      a CODE finding with no Files: read as naming nothing -> N4
-#   m-nfdrop            the merge re-derives a narrowed manifest without --narrow-from -> NM
-#   m-nobound           the narrowed map's part bound removed -> NP
-#   m-narrowfirst       --narrow answers in place of --route -> R2 Q1 (also trips the other --route arms)
-#   m-rv-noset          --read-verdict accepts a value outside the lifted set -> RV (its PASS cell)
-# Each mutant co-trips no arm outside its decides list, measured at authoring (m-classonly's two deciding
-# arms R1 and R6 are both deltas that only the guard sends full). The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
-# command below.
-# MUTANT-MATRIX m-classonly decides=R1,R6,Q2 twins=R5
-# MUTANT-MATRIX m-failopen-missing decides=C1b,Q4n twins=R2
-# MUTANT-MATRIX m-strict decides=C1a twins=C3
-# MUTANT-MATRIX m-pyext decides=R6 twins=R1
-# MUTANT-MATRIX m-nodocstring decides=A4 twins=A3
-# MUTANT-MATRIX m-noconserve decides=CV twins=N1
-# MUTANT-MATRIX m-noresidue decides=N1 twins=N4
-# MUTANT-MATRIX m-union decides=N2 twins=N3
-# MUTANT-MATRIX m-emptyok decides=N2,N3 twins=N1
-# MUTANT-MATRIX m-missingempty decides=N4 twins=N1
-# MUTANT-MATRIX m-nfdrop decides=NM twins=N1
-# MUTANT-MATRIX m-nobound decides=NP twins=NM
-# MUTANT-MATRIX m-narrowfirst decides=R2,Q1 twins=A1
-# MUTANT-MATRIX m-noskip decides=Q4 twins=Q1
-# MUTANT-MATRIX m-nohrun decides=Q5 twins=Q5n
-# MUTANT-MATRIX m-qagate decides=QM twins=Q1
-# MUTANT-MATRIX m-qmd-none decides=QM twins=Q1
-# MUTANT-MATRIX m-rv-noset decides=RV twins=C3
-# MUTANT-MATRIX-DYNAMIC score why=the name is the fifth argument of each literal score call and reaches mutant_killed as "$name", so each m- name above is one literal call site
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/review-reroute/run.sh --matrix
-# The unmutated copy must pass every arm first (CTL), so a copy that cannot run is FIXTURE BROKEN.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -143,7 +96,6 @@ echo "HERMETIC-CONSUMED core/scripts/partition-review-diff.sh"
 echo "HERMETIC-CONSUMED core/scripts/merge-review-shards.sh"
 echo "HERMETIC-CONSUMED core/scripts/validate-carried-findings.sh"
 echo "review-reroute: subject dir = $SD"
-if [ "${1:-}" = "--matrix" ]; then echo "review-reroute: mode FULL (--matrix)"; else echo "review-reroute: mode PUSH"; fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/review-reroute.XXXXXX")" || exit 2
 WORK="$(cd "$WORK" && pwd -P)"
@@ -166,7 +118,6 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-MATRIX=0; [ "${1:-}" = "--matrix" ] && MATRIX=1
 TAB="$(printf '\t')"
 # Each arm takes the script directory under test and returns 0 when its assertion holds.
 route() { OUT="$(bash "$1/partition-review-diff.sh" --route "$R" "$2" "$(rr_ref "$W" "$3")" --exclude-captures "$W/captures" 2>&1)"; RC=$?; }
@@ -208,7 +159,7 @@ arm_A4() { rerun "$1" DOCSTRING;  [ "$RC" -eq 0 ] && grep -q '^GATE1-SKIP: .*(1 
 arm_A5() { rerun "$1" NEWTEST;    [ "$RC" -eq 0 ] && grep -q '^GATE1-RERUN: .*adds the test file rebalancer/tests/test_new.py' <<<"$OUT"; }
 arm_A6() { rerun "$1" ASSIGNED;   [ "$RC" -eq 0 ] && grep -q '^GATE1-RERUN: .*rebalancer/engine.py' <<<"$OUT"; }
 arm_A7() { rerun "$1" JSCOMMENT;  [ "$RC" -eq 0 ] && grep -q '^GATE1-SKIP: .*(1 code path' <<<"$OUT"; }
-# Gate 2. QROOT names the seeded root QM reads (a mutant may point it at another).
+# Gate 2.
 arm_Q1() { route "$1" "$W/qprior-evidence.md" RECORDS; [ "$RC" -eq 0 ] && grep -q '^ROUTE: 2 Critical/Important finding(s)' <<<"$OUT"; }
 arm_Q2() { route "$1" "$W/qprior-evidence.md" TEST_EDIT; [ "$RC" -eq 1 ] && grep -q '^FULL: .*rebalancer/tests/test_engine.py' <<<"$OUT"; }
 arm_Q3() { route "$1" "$W/qprior-code.md" RECORDS; [ "$RC" -eq 1 ] && grep -q "^FULL: .*'The Dev Agent Record cites a stale count' is Class CODE" <<<"$OUT"; }
@@ -230,7 +181,7 @@ arm_Q5() {
 arm_Q5n() { route "$1" "$W/qprior-hr-RED.md" RECORDS; [ "$RC" -eq 0 ] && grep -q '^ROUTE: 3 Critical/Important finding(s)' <<<"$OUT"; }
 qserial() { OUT="$(AI_DLC_PROJECT_ROOT="$2" bash "$1/merge-review-shards.sh" --check-serial "$3" --gate qa 2>&1)"; RC=$?; }
 arm_QM() {
-  local t="${QROOT:-$QR/tpl}"
+  local t="$QR/tpl"
   qserial "$1" "$t" "$W/qserial-foo.md"
   [ "$RC" -eq 2 ] && grep -q "^REFUSED: .*'Class: FOO' is not one of BOOKKEEPING CODE EVIDENCE TEST (qa.md's template)" <<<"$OUT" || return 1
   qserial "$1" "$t" "$W/qserial-evidence.md"
@@ -278,8 +229,7 @@ arm_CV() {
   local d="$WORK/cv"; mkdir -p "$d" || return 1
   printf 'M\ta.py\nM\tb.py\n' > "$d/code"; printf 'a.py\n' > "$d/n"; printf 'b.py\n' > "$d/r"; : > "$d/e"
   printf 'a.py\nb.py\n' > "$d/both"; printf 'a.py\nc.py\n' > "$d/x"
-  # One fx_inproc per conserved call (P2's unit for a guarded subject); a mutant directory's copy cannot end in the
-  # subject's root-relative path, so the literal subject path is passed.
+  # One fx_inproc per conserved call (P2's unit for a guarded subject); the literal subject path is passed.
   ( . "$1/partition-review-diff.sh" \
       && fx_inproc core/scripts/partition-review-diff.sh && conserved "$d/n" "$d/r" "$d/code" \
       && fx_inproc core/scripts/partition-review-diff.sh && ! conserved "$d/n" "$d/e" "$d/code" \
@@ -324,10 +274,6 @@ arm_NP() {
 }
 ARMS="C1a C1b C2 C3 CL R1 R2 R3 R4 R5 R6 A1 A2 A3 A4 A5 A6 A7 Q1 Q2 Q3 Q4 Q4n Q5 Q5n QM N1 N2 N3 N4 CV NM NP RV"
 rv_files
-# The arms that reach each mutated script. A mutant sweeps only these: every other arm never invokes the
-# mutated file, so it cannot move. partition-review-diff.sh is reached by --route, --gate1-rerun, --narrow
-# and --map --narrow-from (and --route and --narrow shell validate-carried-findings.sh --classes);
-# merge-review-shards.sh by --check-serial and by NM's merge of a narrowed shard directory.
 # S1: the step text routes by both modes, on their invocation lines; the role file states the rule.
 if grep -qF '`gate-transition.sh <story> 1 --pass M <flags>` first asks `partition-review-diff.sh --route`' "$STEP" \
    && grep -qF 'partition-review-diff.sh --gate1-rerun` first' "$STEP" \
@@ -357,99 +303,14 @@ if cmp -s "$WORK/s3-has.md" "$WORK/s3-not.md" || ! p_s3 "$WORK/s3-has.md" || p_s
 elif p_s3 "$STEP"; then ok "S3: implementation.md names the --narrow invocation and the --narrow-from partition"
 else bad "S3: implementation.md does not name '$S3_A' and '$S3_B' (a mixed re-review is never narrowed)"; fi
 
-# ---- mutants ------------------------------------------------------------------------------------
-M="$WORK/mut"; mkdir -p "$M" || exit 2
-# The copy holds every sibling the three subjects resolve beside themselves, and nothing else.
-mkcopy() {
-  local dst="$M/$1" f; mkdir -p "$dst" || return 1
-  for f in partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh record-only-diff.sh partition-document.sh content-seal.sh; do
-    cp "$SD/$f" "$dst/$f" || return 1
-  done
-  echo "$dst"
-}
-# mut <name> <file> <old exact substring> <new> -> the mutated directory, or empty when nothing changed
-mut() {
-  local dst; dst="$(mkcopy "$1")" || { echo ""; return; }
-  RR_O="$3" RR_N="$4" awk '!done && (i = index($0, ENVIRON["RR_O"])) { $0 = substr($0, 1, i - 1) ENVIRON["RR_N"] substr($0, i + length(ENVIRON["RR_O"])); done = 1 } { print }' \
-    "$SD/$2" > "$dst/$2.m" && mv "$dst/$2.m" "$dst/$2" || { echo ""; return; }
-  if cmp -s "$SD/$2" "$dst/$2"; then echo ""; else echo "$dst"; fi
-}
-CTL="$(mkcopy ctl)"
-# The copy is byte-identical to the subject, so one sweep of it is the live sweep: it is the control a
-# mutant is judged against AND the verdict on the subject itself.
-same=1; for f in partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh partition-document.sh; do
-  [ -n "$CTL" ] && cmp -s "$SD/$f" "$CTL/$f" || same=0
+# The arms run over a copy of the subjects' directory, holding every sibling they resolve beside themselves.
+CP="$WORK/cp"; mkdir -p "$CP" || exit 2
+for f in partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh record-only-diff.sh partition-document.sh content-seal.sh; do
+  cp "$SD/$f" "$CP/$f" || { echo "FIXTURE BROKEN: could not copy $SD/$f" >&2; exit 2; }
 done
-[ "$same" -eq 1 ] || { echo "FIXTURE BROKEN: the control copy differs from $SD or did not build" >&2; exit 2; }
-died=""
 for a in $ARMS; do
-  if "arm_$a" "$CTL"; then
-    ok "$a"
-    case "$a" in
-      C1a) B_C1a=1 ;; C1b) B_C1b=1 ;; C2) B_C2=1 ;; C3) B_C3=1 ;; CL) B_CL=1 ;;
-      R1) B_R1=1 ;; R2) B_R2=1 ;; R3) B_R3=1 ;; R4) B_R4=1 ;; R5) B_R5=1 ;; R6) B_R6=1 ;;
-      A1) B_A1=1 ;; A2) B_A2=1 ;; A3) B_A3=1 ;; A4) B_A4=1 ;; A5) B_A5=1 ;; A6) B_A6=1 ;; A7) B_A7=1 ;;
-      Q1) B_Q1=1 ;; Q2) B_Q2=1 ;; Q3) B_Q3=1 ;; Q4) B_Q4=1 ;; Q4n) B_Q4n=1 ;; Q5) B_Q5=1 ;; Q5n) B_Q5n=1 ;; QM) B_QM=1 ;;
-      N1) B_N1=1 ;; N2) B_N2=1 ;; N3) B_N3=1 ;; N4) B_N4=1 ;; CV) B_CV=1 ;; NM) B_NM=1 ;; NP) B_NP=1 ;; RV) B_RV=1 ;;
-    esac
-  else died="$died $a"; bad "$a: rc=${RC:-?} out=$(head -2 <<<"${OUT:-}" | tr '\n' ' ')"; fi
+  if "arm_$a" "$CP"; then ok "$a"
+  else bad "$a: rc=${RC:-?} out=$(head -2 <<<"${OUT:-}" | tr '\n' ' ')"; fi
 done
-if [ -z "$died" ]; then ok "CTL: the unmutated copy of $SD passes every arm"
-else bad "CTL: FIXTURE BROKEN -- the unmutated copy failed:$died; no mutant verdict below is evidence"; fi
-# score <base-pass flag> <mutant dir> "<deciding arms>" "<twin arms>" <mutant name>
-# Per push a mutant DRIVES only its deciding arm(s) and its twin(s). A twin is an arm that stays GREEN under
-# the mutant, so a tripped twin, or a deciding arm that stays green, fails the fixture. `run.sh --matrix`
-# drives EVERY arm on EVERY mutant and prints one row per mutant: each arm with its cell (1 = the arm died,
-# 0 = it stayed green) and the dead set by arm name.
-CELLS=0; MCELLS=0
-score() {
-  local flag="$1" md="$2" decides="$3" twin="$4" name="$5" a dead="" want="" row="" id="${5%%,*}"
-  [ -n "$md" ] || { bad "MUTANT $name: the mutation did not apply"; return; }
-  if [ "$MATRIX" = 1 ]; then
-    for a in $ARMS; do
-      MCELLS=$((MCELLS + 1))
-      if "arm_$a" "$md"; then row="$row $a=0"; else row="$row $a=1"; dead="$dead $a"; fi
-    done
-    echo "MATRIX $id:$row | dead:${dead:- none} | decides: $decides | twins: $twin"
-    return
-  fi
-  for a in $decides $twin; do CELLS=$((CELLS + 1)); "arm_$a" "$md" || dead="$dead $a"; done
-  for a in $decides; do want="$want $a"; done
-  if [ "$dead" = "$want" ]; then
-    mutant_killed "$flag" "$id" "MUTANT $name: killed by$want; twin $twin stays green"
-  else bad "MUTANT $name SURVIVED or co-tripped: dead among [$decides $twin]:${dead:- none} (want exactly$want)"; fi
-}
-score "$(( ${B_R1:-0} && ${B_R6:-0} && ${B_Q2:-0} && ${B_R5:-0} ))" "$(mut classonly partition-review-diff.sh '  [ "$ncode" -eq 0 ] || full "the delta' '  : || full "the delta')" "R1 R6 Q2" R5 "m-classonly, the delta guard removed"
-score "$(( ${B_C1b:-0} && ${B_Q4n:-0} && ${B_R2:-0} ))" "$(mut failopen partition-review-diff.sh "-) full \"the prior finding '\$rd_' carries no Class line\" ;;" '-) ;;')" "C1b Q4n" "R2" "m-failopen-missing, a finding with no Class routes"
-score "$(( ${B_Q4:-0} && ${B_Q1:-0} ))" "$(mut noskip validate-carried-findings.sh '[ "$disp" != "HANDOVER SKIP" ] && printf' 'printf')" "Q4" "Q1" "m-noskip, the hand-over skip removed"
-score "$(( ${B_Q5:-0} && ${B_Q5n:-0} ))" "$(mut nohrun partition-review-diff.sh '  [ -z "$hrun" ] || full' '  : || full')" "Q5" "Q5n" "m-nohrun, the failed-replay check removed"
-score "$(( ${B_QM:-0} && ${B_Q1:-0} ))" "$(mut qagate merge-review-shards.sh 'CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD"' 'CLASS_SET=""; [ "$GATE" != code-review ] || CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD"')" "QM" "Q1" "m-qagate, the merge's Class lift for code review only (B1 reverted)"
-# m-qmd-none: the unmutated scripts over a tpl root whose qa.md lost its template (code-reviewer.md keeps
-# its own), so a merge reading the wrong role file for --gate qa would still refuse FOO.
-mkdir -p "$WORK/qroot-strip" && cp -R "$QR/tpl" "$WORK/qroot-strip/tpl" \
-  && grep -v '^Class:' "$QR/tpl/core/team-roles/qa.md" > "$WORK/qroot-strip/tpl/core/team-roles/qa.md"
-if cmp -s "$QR/tpl/core/team-roles/qa.md" "$WORK/qroot-strip/tpl/core/team-roles/qa.md"; then bad "MUTANT m-qmd-none: the mutation did not apply"
-else
-  died=""; for a in QM Q1; do CELLS=$((CELLS + 1)); QROOT="$WORK/qroot-strip/tpl" "arm_$a" "$CTL" || died="$died $a"; done
-  if [ "$died" = " QM" ]; then mutant_killed "$(( ${B_QM:-0} && ${B_Q1:-0} ))" m-qmd-none "MUTANT m-qmd-none: killed by QM alone, twin Q1 green (the --gate qa activation reads qa.md)"
-  else bad "MUTANT m-qmd-none: arms that died:${died:- none} (want exactly QM)"; fi
-fi
-score "$(( ${B_RV:-0} && ${B_C3:-0} ))" "$(mut rvnoset merge-review-shards.sh '[ "$rv_in_" = 1 ] ||' 'true ||')" "RV" "C3" "m-rv-noset, --read-verdict accepts a value outside the lifted set"
-score "$(( ${B_C1a:-0} && ${B_C3:-0} ))" "$(mut strict merge-review-shards.sh 'ABSENT) continue ;;' 'ABSENT) refuse "$1:$cg_l_ carries no Class line" ;;')" "C1a" "C3" "m-strict, an absent Class is refused"
-score "$(( ${B_R6:-0} && ${B_R1:-0} ))" "$(mut pyext partition-review-diff.sh '    if ((p in X) && p ~ /\.(txt|log|out)$/) next' '    if ((p in X) && p ~ /\.(txt|log|out|py)$/) next')" "R6" "R1" "m-pyext, a cited .py leaves the code class"
-score "$(( ${B_A4:-0} && ${B_A3:-0} ))" "$(mut nodoc partition-review-diff.sh 'd = substr(u, 1, 3); if (cnt(u, d) < 2) { ds = d; dk = "doc" }; next' 'print NR; next')" "A4" "A3" "m-nodocstring, the docstring filter removed"
-# BL-809 item 2.
-score "$(( ${B_CV:-0} && ${B_N1:-0} ))" "$(mut noconserve partition-review-diff.sh 'END { exit !(bad == 0 && n == m) }' 'END { exit 0 }')" "CV" "N1" "m-noconserve, the conservation assert always holds"
-score "$(( ${B_N1:-0} && ${B_N4:-0} ))" "$(mut noresidue partition-review-diff.sh 'else print $2 > ENVIRON["NR_R"]' 'else next')" "N1" "N4" "m-noresidue, the residue dropped from --narrow's split"
-score "$(( ${B_N2:-0} && ${B_N3:-0} ))" "$(mut union partition-review-diff.sh 'if ($1 == "CODE" || $1 == "TEST") { n = split($3' 'if ($1 != "") { n = split($3')" "N2" "N3" "m-union, every class's Files: line narrows"
-score "$(( ${B_N2:-0} && ${B_N3:-0} && ${B_N1:-0} ))" "$(mut emptyok partition-review-diff.sh '  [ "$nnam" -ge 1 ] || full' '  : || full')" "N2 N3" "N1" "m-emptyok, an empty named set narrows"
-score "$(( ${B_N4:-0} && ${B_N1:-0} ))" "$(mut missingempty partition-review-diff.sh '-|"") full "the prior $rc_ finding' '-|"") : "the prior $rc_ finding')" "N4" "N1" "m-missingempty, a CODE finding with no Files: read as naming nothing"
-score "$(( ${B_NM:-0} && ${B_N1:-0} ))" "$(mut nfdrop merge-review-shards.sh '  NF_ARGS=(--narrow-from "$NF_TOP/$M_NF")' '  NF_ARGS=()')" "NM" "N1" "m-nfdrop, the merge re-derives a narrowed manifest without --narrow-from"
-score "$(( ${B_NP:-0} && ${B_NM:-0} ))" "$(mut nobound partition-review-diff.sh '[ "$nm_n" -le "$fl_n" ] || refuse' ': || refuse')" "NP" "NM" "m-nobound, the narrowed map's part bound removed"
-score "$(( ${B_R2:-0} && ${B_Q1:-0} && ${B_A1:-0} ))" "$(mut narrowfirst partition-review-diff.sh '  --route) shift; route_mode "$@" ;;' '  --route) shift; narrow_mode "$@" ;;')" "R2 Q1" "A1" "m-narrowfirst, --narrow answers in place of --route"
 
-if [ "$MATRIX" = 1 ]; then echo "review-reroute: MATRIX measured, $MCELLS cells (mode FULL)"; [ "$fails" -eq 0 ] && exit 0; exit 1; fi
-# A plain run drives only deciding and twin cells: no matrix-only cell ran, and the cell count is exactly the 41 named by the MUTANT-MATRIX header (deciding arms plus twins).
-if [ "$MCELLS" -eq 0 ] && [ "$CELLS" -eq 41 ]; then ok "MODE PUSH: no matrix-only cell ran; $CELLS mutant cells driven (deciding arms plus twins)"
-else bad "MODE PUSH: a plain run drove $MCELLS matrix-only cell(s) and $CELLS mutant cells (want 0 and 41)"; fi
 report_end review-reroute

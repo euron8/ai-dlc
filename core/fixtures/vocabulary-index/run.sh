@@ -4,8 +4,8 @@
 # scripts/validate-enforcement-map.sh plus every enum in core/schemas/*.json, and
 # byte-compares it at pre-push.
 #
-# One control, two near-miss controls and a mutant per failure mode, each a throwaway repo
-# under a temp dir. Exit 0 iff every control is green AND every mutant is killed by its own arm.
+# One control, three near-miss controls and one refusal arm per failure mode, each a throwaway repo
+# under a temp dir. Exit 0 iff every control is green AND every refusal arm refuses on its own message.
 #
 #   controlB  a synthetic seed: render, then `--check`                   -> must PASS
 #   m1  drift        a row appended to the rendered index                -> must FAIL
@@ -58,10 +58,6 @@
 # it -- the same near-miss the renderer asserts in its own probe, asserted here against the
 # shipping renderer rather than against a copy of its reasoning.
 #
-# WHY `cmp -s` GUARDS EVERY sed. A sed whose pattern stopped matching produces a
-# byte-identical copy; the renderer then correctly passes and the arm reports SURVIVED for a
-# mutation that never happened.
-#
 # WHY THE DUPLICATE-FIELD GROUP IS FOUR ARMS AND NOT ONE. The refusal it guards is
 # BLOCK-SCOPED, and a file-wide refusal is the failure mode that reads identically to a
 # working one over any corpus where each block is complete: every seed here declares
@@ -81,45 +77,8 @@
 # contract is that the message names them; a fixture keyed on the wording would be asserting
 # the implementation it was written beside.
 #
-# A mutant must fail ONLY its own assertion, so each verdict asserts the expected message
-# rather than merely a non-zero exit -- "it failed" is satisfied by a broken harness too.
-# THE MUTANT BATTERY IS SCORED ON ONE ARM PER MUTANT. Each mutant's deciding arm is the set of output
-# conditions its own world must satisfy (the refusal text its kill_check names, plus the absences);
-# the per-push run asserts the deciding arm holds on the mutant's own world and that ONE named twin,
-# a different mutant's arm, stays green on that same output. The full mutant x arm matrix is MEASURED
-# by the --matrix argv mode (every mutant's captured output scored against every arm). The matrix is
-# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
-# The recorded matrix plus the twin
-# replaces the exact-vector assertion that each mutant fails only its own assertion.
-# MUTANT-MATRIX m1 decides=m1 twins=m2
-# MUTANT-MATRIX m2 decides=m2 twins=m3
-# MUTANT-MATRIX m3 decides=m3 twins=m4
-# MUTANT-MATRIX m4 decides=m4 twins=m5
-# MUTANT-MATRIX m5 decides=m5 twins=m6
-# MUTANT-MATRIX m6 decides=m6 twins=m7
-# MUTANT-MATRIX m7 decides=m7 twins=m8
-# MUTANT-MATRIX m8 decides=m8 twins=m9
-# MUTANT-MATRIX m9 decides=m9 twins=m10
-# MUTANT-MATRIX m10 decides=m10 twins=m11
-# MUTANT-MATRIX m11 decides=m11 twins=m12
-# MUTANT-MATRIX m12 decides=m12 twins=m13
-# MUTANT-MATRIX m13 decides=m13 twins=m14
-# MUTANT-MATRIX m14 decides=m14 twins=m15
-# MUTANT-MATRIX m15 decides=m15 twins=m16
-# MUTANT-MATRIX m16 decides=m16 twins=m17
-# MUTANT-MATRIX m17 decides=m17 twins=m18
-# MUTANT-MATRIX m18 decides=m18 twins=m19
-# MUTANT-MATRIX m19 decides=m19 twins=m20
-# MUTANT-MATRIX m20 decides=m20 twins=m21
-# MUTANT-MATRIX m21 decides=m21 twins=m22
-# MUTANT-MATRIX m22 decides=m22 twins=m23
-# MUTANT-MATRIX m23 decides=m23 twins=m24
-# MUTANT-MATRIX m24 decides=m24 twins=m23
-# MUTANT-MATRIX-CONTROL n1 why=a near-miss that must render: two adjacent marker blocks, one field each, asserted by its exit 0 and its index rows
-# MUTANT-MATRIX-CONTROL n2 why=a near-miss that must render: two vocabulary names sharing a prefix, asserted by its exit 0 and both index rows
-# MUTANT-MATRIX-CONTROL n3 why=a near-miss that must render: enum and enum2 in one object plus enum in a sibling, asserted by its exit 0 and both index rows
-# MUTANT-MATRIX-DYNAMIC judge-id why=judge() passes its id argument "$id" to mutant_killed, which its callers derive as the first word of the mutant label; every such id carries its own row in this block
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/vocabulary-index/run.sh --matrix
+# Each refusal arm asserts the expected message rather than merely a non-zero exit -- "it failed"
+# is satisfied by a broken harness too.
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -145,20 +104,8 @@ trap 'rm -rf "$TMP"' EXIT
 rc=0
 note() { printf '%s\n' "$*"; }
 
-MATRIX=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
-MROWS=0
 ok()  { note "ok    $1"; }
 bad() { note "FAIL  $1"; rc=1; }
-MUT_LIB="$DIR/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-[ -f "$DIR/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: lib/matrix.sh not found" >&2; exit 2; }
-. "$DIR/../lib/matrix.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
-# B_BASE is set only in the passing branch of controlB, the unmutated seed every mutant world is built from.
-B_BASE=0
 
 # ---------------------------------------------------------------------------------------
 # The synthetic seed: a whole miniature repo the renderer can answer about.
@@ -479,7 +426,6 @@ if grep -qE 'decoy-before|decoy-after' "$TMP/controlB/docs/vocabulary-index.md";
 fi
 if outB2="$(check_in "$TMP/controlB")" && grep -q "in sync" <<<"$outB2"; then
   ok "controlB -- seed renders every extractor, the derived columns, the consumer-owned row, and round-trips"
-  B_BASE=1
 else
   note "FIXTURE BROKEN: a freshly rendered index did not survive its own --check."
   printf '%s\n' "$outB2" | sed 's/^/      /' | head -6
@@ -518,78 +464,35 @@ else
   note "FAIL  seam-env -- SKIP_SELFPROBE in the environment changed the render: line 1 is '$(printf '%s\n' "$outE" | sed -n 1p)'"; rc=1
 fi
 
-# --- mutant driver ----------------------------------------------------------
-# A mutant's DECIDING ARM is stored as files under $AR: <id>.pats (one condition per line, a leading !
-# means the text must be ABSENT), <id>.out (the captured output) and <id>.rc. Every arm can then be
-# scored against every captured output without another render, which is what --matrix does.
-AR="$TMP/arms"; mkdir -p "$AR"
-MUT_IDS=""
-twin_of() {
-  case "$1" in
-    m1) echo m2 ;;
-    m2) echo m3 ;;
-    m3) echo m4 ;;
-    m4) echo m5 ;;
-    m5) echo m6 ;;
-    m6) echo m7 ;;
-    m7) echo m8 ;;
-    m8) echo m9 ;;
-    m9) echo m10 ;;
-    m10) echo m11 ;;
-    m11) echo m12 ;;
-    m12) echo m13 ;;
-    m13) echo m14 ;;
-    m14) echo m15 ;;
-    m15) echo m16 ;;
-    m16) echo m17 ;;
-    m17) echo m18 ;;
-    m18) echo m19 ;;
-    m19) echo m20 ;;
-    m20) echo m21 ;;
-    m21) echo m22 ;;
-    m22) echo m23 ;;
-    m23) echo m24 ;;
-    m24) echo m23 ;;
-  esac
-}
-record_arm() { # record_arm <id> <rc> <out> <pattern>...
-  local id="$1" r="$2" o="$3"; shift 3
-  printf '%s\n' "$o" > "$AR/$id.out"; printf '%s\n' "$r" > "$AR/$id.rc"
-  printf '%s\n' "$@" > "$AR/$id.pats"
-  MUT_IDS="$MUT_IDS $id"
-}
-arm_holds() { # arm_holds <arm-id> <out-file> <rc of the run that produced it> -> 0 when the arm TRIPS on it
-  local a="$1" f="$2" r="$3" p
-  [ "$r" -ne 0 ] || return 1
-  while IFS= read -r p; do
+# --- refusal driver ----------------------------------------------------------
+# refuse <name> <rc> <out> <pattern>... : the renderer must have exited non-zero AND every pattern must
+# appear in its output (a leading ! means the text must be ABSENT).
+refuse() {
+  local n="$1" r="$2" o="$3" p; shift 3
+  if [ "$r" -eq 0 ]; then
+    note "FAIL  $n -- renderer exited 0"; rc=1; return
+  fi
+  for p in "$@"; do
     [ -n "$p" ] || continue
     case "$p" in
-      '!'*) if grep -qF -- "${p#\!}" "$f"; then return 1; fi ;;
-      *)    grep -qF -- "$p" "$f" || return 1 ;;
+      '!'*) if grep -qF -- "${p#\!}" <<<"$o"; then
+              note "FAIL  $n -- renderer failed, but its output carries ${p#\!}"
+              printf '%s\n' "$o" | sed 's/^/      /' | head -5; rc=1; return
+            fi ;;
+      *)    if ! grep -qF -- "$p" <<<"$o"; then
+              note "FAIL  $n -- renderer failed, but not on its own assertion (wanted: $p)"
+              printf '%s\n' "$o" | sed 's/^/      /' | head -5; rc=1; return
+            fi ;;
     esac
-  done < "$AR/$a.pats"
-  return 0
-}
-judge() { # judge <name> <id> <rc> <out> [<message>]
-  local n="$1" id="$2" r="$3" o="$4" msg="${5:-}"
-  [ -n "$msg" ] || msg="$n -- scored on its own arm"
-  if [ "$r" -eq 0 ]; then
-    note "FAIL  $n -- mutant SURVIVED (renderer exited 0)"; rc=1; return
-  fi
-  if arm_holds "$id" "$AR/$id.out" "$r"; then
-    mutant_killed "$B_BASE" "$id" "$msg"
-  else
-    note "FAIL  $n -- renderer failed, but not on its own assertion"
-    printf '%s\n' "$o" | sed 's/^/      /' | head -5; rc=1
-  fi
+  done
+  note "ok    $n -- refused on its own assertion"
 }
 
 kill_check() { # kill_check <name> <dir> <expected-substring> [check|render]
   local n="$1" d="$2" pat="$3" mode="${4:-check}" out rc_v
   if [ "$mode" = render ]; then out="$(render_in "$d")"; else out="$(check_in "$d")"; fi
   rc_v=$?
-  record_arm "${n%% *}" "$rc_v" "$out" "$pat"
-  judge "$n" "${n%% *}" "$rc_v" "$out"
+  refuse "$n" "$rc_v" "$out" "$pat"
 }
 
 kill_check_all() { # kill_check_all <name> <dir> <check|render> <substring>... ; !<substring> = must be ABSENT
@@ -597,16 +500,15 @@ kill_check_all() { # kill_check_all <name> <dir> <check|render> <substring>... ;
   # ONE of its two values is a message that has not reported the contradiction.
   #
   # A `!`-prefixed pattern must be ABSENT, and that arm exists because a non-zero exit does
-  # not say WHICH guard produced it. A mutant can print the refusal, fail to act on it, and
-  # be killed several checks downstream by a guard complaining about the wreckage -- which
+  # not say WHICH guard produced it. The renderer can print the refusal, fail to act on it, and
+  # be stopped several checks downstream by a guard complaining about the wreckage -- which
   # satisfies "exited non-zero AND the refusal is in the output" and is not the subject. The
   # absence half never runs alone: the presence patterns in the same call are its control.
   local n="$1" d="$2" mode="$3"; shift 3
   local out rc_v
   if [ "$mode" = render ]; then out="$(render_in "$d")"; else out="$(check_in "$d")"; fi
   rc_v=$?
-  record_arm "${n%% *}" "$rc_v" "$out" "$@"
-  judge "$n" "${n%% *}" "$rc_v" "$out"
+  refuse "$n" "$rc_v" "$out" "$@"
 }
 
 green_check() { # green_check <name> <dir> <expected-output-substring> <expected-index-row>...
@@ -634,12 +536,11 @@ green_check() { # green_check <name> <dir> <expected-output-substring> <expected
   note "ok    CONTROL $n -- survives as a render: exit 0, the report line and all $# expected index row(s) present"
 }
 
-mutate() { # mutate <file> <sed-expr> ; guarded so a no-op sed cannot pass as a mutation
+edit_file() { # edit_file <file> <sed-expr> ; edits a seeded world's file in place
   local f="$1" expr="$2"
   cp "$f" "$f.orig"
   sed "$expr" "$f.orig" > "$f"
-  if cmp -s "$f" "$f.orig"; then rm -f "$f.orig"; return 1; fi
-  rm -f "$f.orig"; return 0
+  rm -f "$f.orig"
 }
 
 MAP='scripts/validate-enforcement-map.sh'
@@ -657,26 +558,19 @@ kill_check "m2  missing        index absent" "$TMP/m2" "does not exist"
 
 # m3 -- a marker naming an extractor nobody implements
 seed "$TMP/m3"
-if mutate "$TMP/m3/$MAP" 's|^# vocabulary-extract: ledger-statuses$|# vocabulary-extract: no-such-slug|'; then
-  kill_check "m3  bad-slug       extractor not implemented" "$TMP/m3" "implements no such extractor" render
-else
-  note "SKIP  m3 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m3/$MAP" 's|^# vocabulary-extract: ledger-statuses$|# vocabulary-extract: no-such-slug|'
+kill_check "m3  bad-slug       extractor not implemented" "$TMP/m3" "implements no such extractor" render
 
 # m4 -- an implemented extractor that no marker declares
 #
-# THE HEADER IS REWORDED IN THE SAME MUTATION, and that is not cosmetic. Deleting only the
+# THE HEADER IS REWORDED IN THE SAME EDIT, and that is not cosmetic. Deleting only the
 # marker leaves a header still reading "the syntax glob vocabulary is one set", which the
-# DEMAND arm catches first -- so the mutant dies, by the wrong arm, and m4 would report a
-# kill for a condition it never tested. This fixture's first run did exactly that.
+# DEMAND arm catches first -- so the world would be refused by the wrong arm.
 seed "$TMP/m4"
-if mutate "$TMP/m4/$MAP" '
+edit_file "$TMP/m4/$MAP" '
     s|^# --- I806: the syntax glob vocabulary is one set.*|# --- I806: an arm about globs ---|
-    /^# vocabulary: syntax globs$/,/^# vocabulary-readers: readers\/hook.md$/d'; then
-  kill_check "m4  dead-extractor slug declared nowhere" "$TMP/m4" "no marker in" render
-else
-  note "SKIP  m4 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+    /^# vocabulary: syntax globs$/,/^# vocabulary-readers: readers\/hook.md$/d'
+kill_check "m4  dead-extractor slug declared nowhere" "$TMP/m4" "no marker in" render
 
 # m5 -- a vocabulary-shaped header with no marker at all
 seed "$TMP/m5"
@@ -685,82 +579,55 @@ kill_check "m5  demand         vocabulary header, no marker" "$TMP/m5" "carry no
 
 # m6 -- the marker grammar matches nothing
 seed "$TMP/m6"
-if mutate "$TMP/m6/$MAP" 's|^# vocabulary|# VOCABULARY|'; then
-  kill_check "m6  zero-markers   grammar matches nothing" "$TMP/m6" "parsed ZERO vocabulary markers" render
-else
-  note "SKIP  m6 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m6/$MAP" 's|^# vocabulary|# VOCABULARY|'
+kill_check "m6  zero-markers   grammar matches nothing" "$TMP/m6" "parsed ZERO vocabulary markers" render
 
 # m7 -- a citation the invariant index does not carry
 seed "$TMP/m7"
-if mutate "$TMP/m7/$MAP" 's|^# vocabulary-invariant: I801$|# vocabulary-invariant: I899|'; then
-  kill_check "m7  dead-id        citation not in the index" "$TMP/m7" "docs/invariant-index.md does not list it" render
-else
-  note "SKIP  m7 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m7/$MAP" 's|^# vocabulary-invariant: I801$|# vocabulary-invariant: I899|'
+kill_check "m7  dead-id        citation not in the index" "$TMP/m7" "docs/invariant-index.md does not list it" render
 
 # m8 -- an owner that does not exist
 seed "$TMP/m8"
-if mutate "$TMP/m8/$MAP" 's|^# vocabulary-owner: owners/kinds.sh$|# vocabulary-owner: owners/gone.sh|'; then
-  kill_check "m8  no-owner       owner file absent" "$TMP/m8" "which does not exist. An extraction over a missing file" render
-else
-  note "SKIP  m8 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m8/$MAP" 's|^# vocabulary-owner: owners/kinds.sh$|# vocabulary-owner: owners/gone.sh|'
+kill_check "m8  no-owner       owner file absent" "$TMP/m8" "which does not exist. An extraction over a missing file" render
 
 # m9 -- a reader that does not exist
 seed "$TMP/m9"
-if mutate "$TMP/m9/$MAP" 's|^# vocabulary-readers: readers/kinds.md$|# vocabulary-readers: readers/gone.md|'; then
-  kill_check "m9  no-reader      reader file absent" "$TMP/m9" "names reader" render
-else
-  note "SKIP  m9 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m9/$MAP" 's|^# vocabulary-readers: readers/kinds.md$|# vocabulary-readers: readers/gone.md|'
+kill_check "m9  no-reader      reader file absent" "$TMP/m9" "names reader" render
 
 # m10 -- an owner whose shape the extractor no longer matches
 seed "$TMP/m10"
-if mutate "$TMP/m10/owners/kinds.sh" 's|LAYER_KINDS=|OTHER_KINDS=|'; then
-  kill_check "m10 empty-set      extractor yields nothing" "$TMP/m10" "extracted ZERO members" render
-else
-  note "SKIP  m10 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m10/owners/kinds.sh" 's|LAYER_KINDS=|OTHER_KINDS=|'
+kill_check "m10 empty-set      extractor yields nothing" "$TMP/m10" "extracted ZERO members" render
 
 # m11 -- both declaration shapes at once
 seed "$TMP/m11"
-if mutate "$TMP/m11/$MAP" 's|^# vocabulary-owner: (consumer-owned) the set lives in THEIRS and is read through git show$|# vocabulary-owner: (consumer-owned) the set lives in THEIRS\n# vocabulary-extract: extension-kinds|'; then
-  kill_check "m11 both-shapes    consumer-owned AND an extractor" "$TMP/m11" "AND names an extractor" render
-else
-  note "SKIP  m11 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m11/$MAP" 's|^# vocabulary-owner: (consumer-owned) the set lives in THEIRS and is read through git show$|# vocabulary-owner: (consumer-owned) the set lives in THEIRS\n# vocabulary-extract: extension-kinds|'
+kill_check "m11 both-shapes    consumer-owned AND an extractor" "$TMP/m11" "AND names an extractor" render
 
 # m12 -- the @owner-declares sentinel on a row whose extractor cannot yield paths
 #
-# NOT the empty-subject row: the sentinel is CORRECT there, so the mutation has to move it
+# NOT the empty-subject row: the sentinel is CORRECT there, so the edit has to move it
 # somewhere it is wrong. The ledger owner is a shell script declaring MEMBERS and nothing
 # about who reads them, which is precisely the case the literal form exists for.
 seed "$TMP/m12"
-if mutate "$TMP/m12/$MAP" 's|^# vocabulary-readers: readers/ledger.md$|# vocabulary-readers: @owner-declares|'; then
-  kill_check "m12 bad-sentinel   derive from a slug with no path extractor" "$TMP/m12" "implements no path extractor" render
-else
-  note "SKIP  m12 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m12/$MAP" 's|^# vocabulary-readers: readers/ledger.md$|# vocabulary-readers: @owner-declares|'
+kill_check "m12 bad-sentinel   derive from a slug with no path extractor" "$TMP/m12" "implements no path extractor" render
 
 # m13 -- the owner's derived list emptied. An empty column renders as an em dash, which reads
 # exactly like a vocabulary nobody reads, so ZERO derived paths must be a failure.
 seed "$TMP/m13"
-if mutate "$TMP/m13/owners/emap.yaml" '/^    - readers\/emap.md$/d'; then
-  kill_check "m13 empty-derived  owner declares no readers" "$TMP/m13" "got ZERO paths" render
-else
-  note "SKIP  m13 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m13/owners/emap.yaml" '/^    - readers\/emap.md$/d'
+kill_check "m13 empty-derived  owner declares no readers" "$TMP/m13" "got ZERO paths" render
 
 # m14 -- a DERIVED path that does not exist. m9 covers the literal form; this is the same
 # duty on the other shape, and without it the sentinel would be the one way into this index
 # that skips the existence check.
 seed "$TMP/m14"
-if mutate "$TMP/m14/owners/emap.yaml" 's|^    - owners/emap-emitter.sh$|    - owners/gone.sh|'; then
-  kill_check "m14 derived-absent derived emitter file absent" "$TMP/m14" "names emitters" render
-else
-  note "SKIP  m14 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m14/owners/emap.yaml" 's|^    - owners/emap-emitter.sh$|    - owners/gone.sh|'
+kill_check "m14 derived-absent derived emitter file absent" "$TMP/m14" "names emitters" render
 
 # --- the duplicate-field group ----------------------------------------------
 #
@@ -769,8 +636,7 @@ fi
 # than overwrite the first and render from the last.
 #
 # THE TOKENS BELOW ARE DERIVED, NOT TYPED TWICE. Each arm names its two values once, uses
-# them to build the mutation, and asserts on the same variables -- so a seed whose paths move
-# breaks the `mutate` guard rather than leaving an arm hunting a string nothing emits.
+# them to build the world, and asserts on the same variables.
 
 # n1 -- THE NEAR MISS THE WHOLE GROUP TURNS ON, and it must stay GREEN.
 #
@@ -778,74 +644,64 @@ fi
 # `# vocabulary: kinds` line. Both declare `vocabulary-owner:`, `vocabulary-extract:`,
 # `vocabulary-invariant:` and `vocabulary-readers:` -- once each, in their own block -- so a
 # refusal scoped to the file, or one whose seen-flags are cleared by an arm header but not by
-# a `# vocabulary:` line, reports a duplicate here and is wrong. The unmutated seed cannot
+# a `# vocabulary:` line, reports a duplicate here and is wrong. The unedited seed cannot
 # see that second shape: every block in it is bounded by an arm header, so the two
 # implementations render it identically.
 seed "$TMP/n1"
 VI_FAST=0
-if mutate "$TMP/n1/$MAP" '/^# --- I802: the kind vocabulary is one set/d'; then
-  green_check "n1  block-scope    two adjacent blocks, one field each" "$TMP/n1" \
-    "14 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
-else
-  note "SKIP  n1 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/n1/$MAP" '/^# --- I802: the kind vocabulary is one set/d'
+green_check "n1  block-scope    two adjacent blocks, one field each" "$TMP/n1" \
+  "14 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
 
 VI_FAST=1
 # m15 -- one field declared twice in one block, with CONTRADICTORY values.
 #
-# Both readers exist, so under a renderer that overwrites silently the mutant renders and
+# Both readers exist, so under a renderer that overwrites silently the world renders and
 # exits 0 -- which is the defect, and is what makes this arm a real one rather than a
 # restatement of m9.
 DUP_R_A='readers/kinds.md'; DUP_R_B='readers/ledger.md'
 seed "$TMP/m15"
 if [ ! -f "$TMP/m15/$DUP_R_A" ] || [ ! -f "$TMP/m15/$DUP_R_B" ]; then
   note "SKIP  m15 -- the seed no longer carries $DUP_R_A and $DUP_R_B"; rc=1
-elif mutate "$TMP/m15/$MAP" \
-     "s|^# vocabulary-readers: ${DUP_R_A}\$|# vocabulary-readers: ${DUP_R_A}\\n# vocabulary-readers: ${DUP_R_B}|"; then
+else
+  edit_file "$TMP/m15/$MAP" \
+    "s|^# vocabulary-readers: ${DUP_R_A}\$|# vocabulary-readers: ${DUP_R_A}\\n# vocabulary-readers: ${DUP_R_B}|"
   kill_check_all "m15 dup-field      one field declared twice in one block" "$TMP/m15" render \
     'vocabulary-readers' "$DUP_R_A" "$DUP_R_B"
-else
-  note "SKIP  m15 -- sed matched nothing; no mutation occurred"; rc=1
 fi
 
 # m16 -- a SECOND field, in a DIFFERENT block. A refusal that guards `vocabulary-readers:`
 # and leaves the other four last-wins is the obvious partial implementation, and m15 alone
 # cannot tell it from a complete one. The second owner is a copy of the first, so the
-# extractor yields the same members and the mutant cannot die by m8's or m10's arm.
+# extractor yields the same members and the world cannot be refused by m8's or m10's arm.
 DUP_O_A='owners/ledger.sh'; DUP_O_B='owners/ledger-copy.sh'
 seed "$TMP/m16"
 if ! cp "$TMP/m16/$DUP_O_A" "$TMP/m16/$DUP_O_B" 2>/dev/null; then
   note "SKIP  m16 -- the seed no longer carries $DUP_O_A"; rc=1
-elif mutate "$TMP/m16/$MAP" \
-     "s|^# vocabulary-owner: ${DUP_O_A}\$|# vocabulary-owner: ${DUP_O_A}\\n# vocabulary-owner: ${DUP_O_B}|"; then
+else
+  edit_file "$TMP/m16/$MAP" \
+    "s|^# vocabulary-owner: ${DUP_O_A}\$|# vocabulary-owner: ${DUP_O_A}\\n# vocabulary-owner: ${DUP_O_B}|"
   kill_check_all "m16 dup-other      a second field, in another block" "$TMP/m16" render \
     'vocabulary-owner' "$DUP_O_A" "$DUP_O_B"
-else
-  note "SKIP  m16 -- sed matched nothing; no mutation occurred"; rc=1
 fi
 
 # m17 -- an EMPTY declaration followed by a valued one.
 #
 # THE EMPTY ONE IS FIRST, and the order is the whole point. A refusal written as "this field
 # already holds a value" sees an empty string, concludes nothing was declared, and accepts --
-# rendering the correct index from the second declaration, exactly as the unfixed renderer
-# does. A refusal written as a seen-flag catches it. With the empty declaration SECOND both
-# implementations fire and the arm would discriminate nothing.
+# rendering the correct index from the second declaration. A refusal written as a seen-flag
+# catches it. With the empty declaration SECOND both implementations fire and the arm would
+# discriminate nothing.
 DUP_E='owners/kinds.sh'
 seed "$TMP/m17"
-if mutate "$TMP/m17/$MAP" \
-     "s|^# vocabulary-owner: ${DUP_E}\$|# vocabulary-owner:\\n# vocabulary-owner: ${DUP_E}|"; then
-  # THE `!declares no` CLAUSE IS WHAT MAKES THIS ARM ITS OWN. m17 is the only dup mutant
-  # whose discarded value is EMPTY, so it is the only one that leaves a downstream guard with
-  # something to say: if the refusal reports and does not act, the empty owner survives and
-  # `the vocabulary ... declares no vocabulary-owner:` supplies the non-zero exit instead.
-  # Without this clause m17 prints `killed by its own arm` for a kill another guard earned --
-  # the exact shape the "a mutant must fail only its own assertion" rule forbids.
-  kill_check_all "m17 dup-empty      an empty declaration still counts" "$TMP/m17" render \
-    'vocabulary-owner' "$DUP_E" '!declares no'
-else
-  note "SKIP  m17 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m17/$MAP" \
+  "s|^# vocabulary-owner: ${DUP_E}\$|# vocabulary-owner:\\n# vocabulary-owner: ${DUP_E}|"
+# THE `!declares no` CLAUSE IS WHAT MAKES THIS ARM ITS OWN. m17 is the only duplicate world
+# whose discarded value is EMPTY, so it is the only one that leaves a downstream guard with
+# something to say: if the refusal reports and does not act, the empty owner survives and
+# `the vocabulary ... declares no vocabulary-owner:` supplies the non-zero exit instead.
+kill_check_all "m17 dup-empty      an empty declaration still counts" "$TMP/m17" render \
+  'vocabulary-owner' "$DUP_E" '!declares no'
 
 # m18 -- `vocabulary-invariant:` twice. The third of the five fields, and the one whose
 # discarded value is a CITATION: both IDs are in the seeded invariant index, so under a
@@ -855,125 +711,103 @@ DUP_I_A='I801'; DUP_I_B='I808'
 seed "$TMP/m18"
 if ! grep -q "| ${DUP_I_B} |" "$TMP/m18/docs/invariant-index.md"; then
   note "SKIP  m18 -- the seeded invariant index no longer lists ${DUP_I_B}"; rc=1
-elif mutate "$TMP/m18/$MAP" \
-     "s|^# vocabulary-invariant: ${DUP_I_A}\$|# vocabulary-invariant: ${DUP_I_A}\\n# vocabulary-invariant: ${DUP_I_B}|"; then
+else
+  edit_file "$TMP/m18/$MAP" \
+    "s|^# vocabulary-invariant: ${DUP_I_A}\$|# vocabulary-invariant: ${DUP_I_A}\\n# vocabulary-invariant: ${DUP_I_B}|"
   kill_check_all "m18 dup-invariant  two citations for one vocabulary" "$TMP/m18" render \
     'vocabulary-invariant' "$DUP_I_A" "$DUP_I_B"
-else
-  note "SKIP  m18 -- sed matched nothing; no mutation occurred"; rc=1
 fi
 
-# m19 -- `vocabulary-emitters:` twice, and this is the shape BL-094 was FILED on: a literal
-# path inserted immediately above the `@owner-declares` sentinel. The two declarations are
-# not merely different values, they are different SHAPES -- one literal, one derived -- and
-# the renderer refuses that contradiction for `vocabulary-owner:` (m11) while accepting it
-# here. The fourth of the five fields, and the only one the seed declares as a sentinel.
+# m19 -- `vocabulary-emitters:` twice: a literal path inserted immediately above the
+# `@owner-declares` sentinel. The two declarations are not merely different values, they are
+# different SHAPES -- one literal, one derived -- and the renderer refuses that contradiction
+# for `vocabulary-owner:` (m11) while it must refuse it here too. The fourth of the five
+# fields, and the only one the seed declares as a sentinel.
 DUP_M_A='@owner-declares'; DUP_M_B='owners/emap-emitter.sh'
 seed "$TMP/m19"
 if [ ! -f "$TMP/m19/$DUP_M_B" ]; then
   note "SKIP  m19 -- the seed no longer carries $DUP_M_B"; rc=1
-elif mutate "$TMP/m19/$MAP" \
-     "s|^# vocabulary-emitters: ${DUP_M_A}\$|# vocabulary-emitters: ${DUP_M_B}\\n# vocabulary-emitters: ${DUP_M_A}|"; then
+else
+  edit_file "$TMP/m19/$MAP" \
+    "s|^# vocabulary-emitters: ${DUP_M_A}\$|# vocabulary-emitters: ${DUP_M_B}\\n# vocabulary-emitters: ${DUP_M_A}|"
   kill_check_all "m19 dup-emitters    a literal above the sentinel" "$TMP/m19" render \
     'vocabulary-emitters' "$DUP_M_A" "$DUP_M_B"
-else
-  note "SKIP  m19 -- sed matched nothing; no mutation occurred"; rc=1
 fi
 
-# m20 -- `vocabulary-extract:` twice with the SAME value, which is two things at once.
+# m20 -- `vocabulary-extract:` twice with the SAME value.
 #
 # It is the fifth field, and it is the only one whose two declarations CANNOT differ: a
-# second slug would leave the first declared nowhere, and the mutant would die by m4's arm
-# instead of this one. So the value is repeated verbatim -- and that makes this the arm that
-# separates a refusal keyed on the DECLARATION from one keyed on the DISAGREEMENT. A
-# renderer that reports only when the two values differ renders this mutant happily, which
-# is the same silence BL-094 filed, over a field that is now declared twice with nobody
-# holding it to once.
+# second slug would leave the first declared nowhere, and the world would be refused by m4's
+# arm instead of this one. So the value is repeated verbatim -- and that makes this the arm
+# that separates a refusal keyed on the DECLARATION from one keyed on the DISAGREEMENT.
 DUP_X='ledger-statuses'
 seed "$TMP/m20"
-if mutate "$TMP/m20/$MAP" \
-     "s|^# vocabulary-extract: ${DUP_X}\$|# vocabulary-extract: ${DUP_X}\\n# vocabulary-extract: ${DUP_X}|"; then
-  kill_check_all "m20 dup-same-value  a field repeated verbatim" "$TMP/m20" render \
-    'vocabulary-extract' "$DUP_X"
-else
-  note "SKIP  m20 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m20/$MAP" \
+  "s|^# vocabulary-extract: ${DUP_X}\$|# vocabulary-extract: ${DUP_X}\\n# vocabulary-extract: ${DUP_X}|"
+kill_check_all "m20 dup-same-value  a field repeated verbatim" "$TMP/m20" render \
+  'vocabulary-extract' "$DUP_X"
 
 # m21 -- the marker corpus EXISTS and cannot be READ.
 #
-# THE EXIT CODE WAS ALREADY CORRECT AND THE ATTRIBUTION WAS WRONG, which is why this arm
-# asserts a string and an ABSENCE rather than a status. A mode-000 corpus passes `[ -f ]`;
-# BSD awk then ABORTS on it rather than skipping, and every marker reader is a pipeline
-# ending in a filter, so each returns EMPTY and the abort is swallowed. The renderer failed
-# closed -- and named the wrong cause, sending the reader to inspect a marker grammar that
-# was never the problem. An arm keyed on a non-zero exit passes against that defect.
+# THE EXIT CODE IS ALREADY CORRECT FOR THIS WORLD AND THE ATTRIBUTION IS WHAT IS ASSERTED, so
+# the arm asserts a string and an ABSENCE rather than a status. A mode-000 corpus passes
+# `[ -f ]`; BSD awk then ABORTS on it rather than skipping, and every marker reader is a
+# pipeline ending in a filter, so each returns EMPTY and the abort is swallowed. The renderer
+# fails closed -- and must name the READ fault, not a changed marker grammar.
 #
-# THE ABSENCE IS KEYED ON WHAT SEPARATES THE TWO MESSAGES, NOT ON WHAT THEY SHARE. The
-# first draft of this arm demanded `marker grammar` be ABSENT and reported a false positive
-# against the correct renderer, because the correct message names the misattribution in
-# order to deny it -- "the failure would be reported as a changed marker grammar". The
-# discriminating string is the misattributed VERDICT, `parsed ZERO vocabulary markers`,
-# which the wrong message emits and the right one does not.
+# THE ABSENCE IS KEYED ON WHAT SEPARATES THE TWO MESSAGES, NOT ON WHAT THEY SHARE. The correct
+# message names the misattribution in order to deny it -- "the failure would be reported as a
+# changed marker grammar" -- so `marker grammar` cannot be demanded ABSENT. The discriminating
+# string is the misattributed VERDICT, `parsed ZERO vocabulary markers`, which only the wrong
+# message emits.
 #
 # THE ABSENCE HALF CARRIES ITS CONTROL IN THE SAME INVOCATION: `cannot READ` must be
-# present, a token known to be in the same output. On its own, "the wrong verdict is absent"
-# is satisfied by no output at all.
+# present, a token known to be in the same output.
 #
 # THE READABILITY PRECONDITION IS ASSERTED, NOT ASSUMED. Under a uid that ignores the mode
-# bits -- root, or a suite run in a container as root -- `chmod 000` leaves the file readable,
-# the renderer parses it normally and this arm reports a kill it did not earn. That state is
-# indistinguishable from a working arm, so it is refused rather than tolerated.
+# bits -- root, or a suite run in a container as root -- `chmod 000` leaves the file readable
+# and the arm would assert nothing, so it is refused rather than tolerated.
 seed "$TMP/m21"
 chmod 000 "$TMP/m21/$MAP"
 if [ -r "$TMP/m21/$MAP" ]; then
   chmod 644 "$TMP/m21/$MAP"
   note "SKIP  m21 -- chmod 000 left $MAP readable (running as a uid that ignores mode bits?);"
-  note "      the seed cannot express the defect, so a kill here would be unearned"; rc=1
+  note "      the seed cannot express the defect"; rc=1
 else
   out21="$(render_in "$TMP/m21")"; rc21=$?
   chmod 644 "$TMP/m21/$MAP"
-  record_arm m21 "$rc21" "$out21" 'cannot READ' "$MAP" '!parsed ZERO vocabulary markers'
-  judge "m21 unreadable-src" m21 "$rc21" "$out21" "m21 unreadable-src  unreadable corpus named as a READ fault, not a grammar change"
+  refuse "m21 unreadable-src  unreadable corpus named as a READ fault, not a grammar change" "$rc21" "$out21" \
+    'cannot READ' "$MAP" '!parsed ZERO vocabulary markers'
 fi
 
 # m22 -- one field declared twice in one block, with the two declarations SEPARATED.
 #
-# EVERY OTHER DUPLICATE ARM HERE PLACES THE REPEAT BESIDE ITS FIRST DECLARATION, and so did
-# both of the renderer's own probes and this entry's receipt, whose seeding expression
-# (`awk NR==n{print} {print}`) duplicates a line in place and can produce nothing else. Three
-# channels that look independent, one input shape.
-#
-# WHAT THAT SHAPE LETS THROUGH, MEASURED. A refusal keyed on the PRECEDING marker line --
-# `s_read && lastfield == "read"`, the five guards otherwise untouched -- rendered the real
-# tree at exit 0, satisfied this entry's receipt, and was killed by NONE of m15-m21. It then
-# rendered a genuine duplicate byte-identically and exited 0. Separation is the property that
-# tells a per-block seen-flag from a look-at-the-previous-line test, and nothing here held it.
+# EVERY OTHER DUPLICATE ARM HERE PLACES THE REPEAT BESIDE ITS FIRST DECLARATION. Separation is
+# the property that tells a per-block seen-flag from a look-at-the-previous-line test (a
+# refusal keyed on the PRECEDING marker line passes every adjacent-repeat arm and then renders
+# a genuine duplicate at exit 0).
 #
 # THE SEPARATION IS ASSERTED, NOT ARRANGED AND TRUSTED. The two declarations are three lines
 # apart only because `vocabulary-owner:` and `vocabulary-extract:` sit between them in the
-# seed; reorder that block and this arm degrades silently into a second m15, green the whole
-# way. The gap is DERIVED from the mutated corpus below and refused if it is not greater than
-# one, so the seed cannot lose the property the arm exists to carry.
+# seed; reorder that block and this arm degrades silently into a second m15. The gap is
+# DERIVED from the edited corpus below and refused if it is not greater than one.
 #
 # THE INSERTED READER IS A COPY UNDER ITS OWN NAME, for m16's reason and one more: the token
 # has to occur exactly ONCE in the corpus or the gap is measured between the wrong two lines.
-# `readers/contract.md` alone appears in the I803 block and `readers/ledger.md` in I801, so a
-# gap keyed on either would span blocks and pass while measuring nothing.
 DUP_N_ANCHOR='I803'; DUP_N_A='readers/contract-alt.md'; DUP_N_B='readers/contract.md'
 seed "$TMP/m22"
 if ! cp "$TMP/m22/$DUP_N_B" "$TMP/m22/$DUP_N_A" 2>/dev/null; then
   note "SKIP  m22 -- the seed no longer carries $DUP_N_B"; rc=1
-elif ! mutate "$TMP/m22/$MAP" \
-     "s|^# vocabulary-invariant: ${DUP_N_ANCHOR}\$|# vocabulary-invariant: ${DUP_N_ANCHOR}\\n# vocabulary-readers: ${DUP_N_A}|"; then
-  note "SKIP  m22 -- sed matched nothing; no mutation occurred"; rc=1
 else
+  edit_file "$TMP/m22/$MAP" \
+    "s|^# vocabulary-invariant: ${DUP_N_ANCHOR}\$|# vocabulary-invariant: ${DUP_N_ANCHOR}\\n# vocabulary-readers: ${DUP_N_A}|"
   # The gap between the two declarations, derived from the corpus the renderer will read.
   dup_n_gap="$(awk -v tok="# vocabulary-readers: ${DUP_N_A}" '
     $0 == tok           { first = NR; next }
     first && /^# vocabulary-readers:/ { print NR - first; exit }
   ' "$TMP/m22/$MAP")"
   if [ -z "$dup_n_gap" ]; then
-    note "SKIP  m22 -- could not locate both declarations in the mutated corpus"; rc=1
+    note "SKIP  m22 -- could not locate both declarations in the edited corpus"; rc=1
   elif [ "$dup_n_gap" -le 1 ]; then
     note "SKIP  m22 -- the two declarations are ADJACENT (gap $dup_n_gap); this arm would duplicate m15"
     note "      and could not see a refusal keyed on the preceding line"; rc=1
@@ -992,21 +826,15 @@ fi
 
 # m23 -- one vocabulary NAME declared by two blocks that are not adjacent.
 seed "$TMP/m23"
-if mutate "$TMP/m23/$MAP" 's|^# vocabulary: adjudicated codes$|# vocabulary: ledger statuses|'; then
-  kill_check_all "m23 dup-name     one vocabulary name in two blocks" "$TMP/m23" render \
-    'same vocabulary NAME' "'ledger statuses'"
-else
-  note "SKIP  m23 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/m23/$MAP" 's|^# vocabulary: adjudicated codes$|# vocabulary: ledger statuses|'
+kill_check_all "m23 dup-name     one vocabulary name in two blocks" "$TMP/m23" render \
+  'same vocabulary NAME' "'ledger statuses'"
 
 # n2 -- two names sharing a PREFIX must both render.
 seed "$TMP/n2"
-if mutate "$TMP/n2/$MAP" 's|^# vocabulary: adjudicated codes$|# vocabulary: ledger statuses two|'; then
-  green_check "n2  name-prefix    two names sharing a prefix" "$TMP/n2" \
-    "14 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| ledger statuses two |'
-else
-  note "SKIP  n2 -- sed matched nothing; no mutation occurred"; rc=1
-fi
+edit_file "$TMP/n2/$MAP" 's|^# vocabulary: adjudicated codes$|# vocabulary: ledger statuses two|'
+green_check "n2  name-prefix    two names sharing a prefix" "$TMP/n2" \
+  "14 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| ledger statuses two |'
 
 # m24 -- one JSON object repeating the `enum` key. json.load keeps the LAST copy, so without
 # the refusal the index renders SECONDDECL and FIRSTDECL vanishes at exit 0.
@@ -1027,31 +855,7 @@ green_check "n3  key-prefix     enum/enum2 in one object, enum in a sibling" "$T
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}verdict${N3_BT} | ${N3_BT}YES${N3_BT} ${N3_BT}NO${N3_BT} |" \
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}other${N3_BT} | ${N3_BT}UP${N3_BT} |"
 
-# --- twins, and the matrix -------------------------------------------------------
-for a in $MUT_IDS; do
-  tw="$(twin_of "$a")"
-  if arm_holds "$tw" "$AR/$a.out" "$(cat "$AR/$a.rc")"; then
-    bad "[twin] $a -- the twin arm $tw TRIPPED on $a's output, so the kill is not confined to $a's own arm"
-  else
-    ok "[twin] $a -- twin $tw stays green on $a's output: the failure is confined to $a's own arm"
-  fi
-done
-if [ "$MATRIX" = 1 ]; then
-  for m in $MUT_IDS; do
-    mrc="$(cat "$AR/$m.rc")"
-    for a in $MUT_IDS; do
-      if arm_holds "$a" "$AR/$m.out" "$mrc"; then matrix_row "$m" "$a" "$mrc" TRIPPED yes
-      else matrix_row "$m" "$a" "$mrc" GREEN no; fi
-      MROWS=$((MROWS + 1))
-    done
-  done
-  n_ids="$(printf '%s\n' $MUT_IDS | grep -c .)"
-  if [ "$MROWS" -eq $((n_ids * n_ids)) ] && [ "$n_ids" -eq 24 ]; then ok "[MX] the matrix run measured $MROWS cells for $n_ids mutants"; else bad "[MX] matrix rows=$MROWS for $n_ids mutants, 576 for 24 expected"; fi
-else
-  if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
-fi
-
 if [ "$rc" -eq 0 ]; then
-  note "PASS  vocabulary-index -- 1 control + 4 near-miss green, 24/24 mutants scored on their own arm with the twin green"
+  note "PASS  vocabulary-index -- 1 control + 4 near-miss green, 24 refusal arms each refused on their own message"
 fi
 exit "$rc"

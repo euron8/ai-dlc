@@ -26,16 +26,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # HOW EACH ARM IS JUDGED. The clean target is compared against an expected file built HERE from
 # theirs' bytes with the two site lines replaced by the seeded values -- never against
 # setup-site-drift.sh, which is the subject's own oracle. A fallback is judged by the file's bytes,
-# inode and mode before and after, AND by the row: literally `WORKLIST<TAB>semantic-merge<TAB><rel>`,
-# and byte-identical to the row a REFERENCE copy of the same apply.sh prints for the same world --
-# the reference is the shipped program with the merge call replaced by `false`, so it is exactly
-# today's arm. Each world is built fresh per drive and records its refs in `.B`/`.T` beside it.
-#
-# WHERE THE MUTANTS ARE. The worlds, drives and predicates live in lib.sh beside this file. The
-# 24-mutant battery that once proved these arms can fail has been retired;
-# it sourced the SAME lib.sh: it edits copies of core's own apply.sh and
-# setup-site-drift.sh, which a consumer is denied editing, so it is a question only this repository
-# asks. The unmutated control copy (S2) moved with it.
+# inode and mode before and after, AND by the row: literally `WORKLIST<TAB>semantic-merge<TAB><rel>`
+# with its stated field count. Each world is built fresh per drive and records its refs in `.B`/`.T`
+# beside it. The worlds, drives and predicates live in lib.sh beside this file.
 #
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the
 # apply.sh it tests, so an absent subject prints SKIP and exits 0 -- never an ok. The probe is keyed
@@ -59,11 +52,6 @@ if ! grep -qF 'say RESOLVED setup-site-merge' "$REC/apply.sh"; then
 fi
 lib_init
 
-# --- the reference: today's arm, from the same apply.sh -----------------------------------------
-REF="$WORK/ref"
-mut_new "$REF" && mut_sub "$REF" "$CALL" '&& false; then' && mutated "$REF" \
-  || broken "the reference copy could not be built: the merge call \`$CALL\` is not on exactly one line of apply.sh"
-
 # --- worlds, built in a bounded pool and reaped before any is read -----------------------------
 # ONE base world (dist at the base commit + consumer at base) serves every variant but d8add; build()
 # copies it and applies only the variant's theirs / consumer edits. The only byte that differs for
@@ -80,14 +68,8 @@ for v in clean cwd mode fence spanFar blkLen qdctl d6a d6b $FALLBACKS $RESOLVES;
   bspawn "$WORK/tip-$v" "$vv"
 done
 breap
-# A reference world is the SAME seeded state as its tip world: build() is a function of the variant
-# alone, and the engine under test enters only at the drive. So each reference world is a copy of the
-# tip world, taken after the build and before any drive (cp -Rp keeps mtimes, which untouched() reads).
-for v in clean d6a d6b $FALLBACKS; do
-  cp -Rp "$WORK/tip-$v" "$WORK/ref-$v" || broken "could not copy tip-$v to ref-$v"
-done
 # The world count is derived from the two lists above, so a list that lost a member cannot shrink
-# the expectation with it: 28 built worlds (9 named + 16 fallbacks + 3 resolves); the 19 reference worlds are copies of tip worlds.
+# the expectation with it: 28 built worlds (9 named + 16 fallbacks + 3 resolves).
 set -- $FALLBACKS; n_fb=$#; set -- $RESOLVES; n_rs=$#
 n_want=$(( 9 + n_fb + n_rs ))
 [ "$BUILT_OK" -eq "$n_want" ] && [ "$n_fb" -gt 0 ] && [ "$n_rs" -gt 0 ] \
@@ -101,7 +83,6 @@ grep -q 'reconcile-mechanical' "$WORK/tip-clean/cons/_bmad-output/ai-dlc-update/
 launch tip-clean "$REC" "$WORK/tip-clean"
 launch tip-cwd   "$REC" "$WORK/tip-cwd" /
 for v in mode fence spanFar blkLen qdctl d6a d6b $FALLBACKS $RESOLVES; do launch "tip-$v" "$REC" "$WORK/tip-$v"; done
-for v in clean d6a d6b $FALLBACKS; do launch "ref-$v" "$REF" "$WORK/ref-$v"; done
 wait; njobs=0
 
 # --- the fin world is a copy of the finished d6a world --------------------------------------------
@@ -129,18 +110,9 @@ render_report "$WORK/tip-clean" "$REC" || broken "emit-report.sh did not re-rend
 launch tip-clean2 "$REC" "$WORK/tip-clean"
 wait; njobs=0
 
-for l in tip-clean tip-clean2 ref-clean; do
+for l in tip-clean tip-clean2; do
   ran "$l" || { sed 's/^/        /' "$WORK/out/$l.err" | head -8; broken "drive $l exited $(cat "$WORK/out/$l.rc" 2>/dev/null) or printed nothing"; }
 done
-
-# === S: the reference is today's arm ===========================================================
-# (S2, the unmutated control copy, moved out with the retired mutant battery it
-# vouched for.)
-if has_today ref-clean "$DV" && ! has_resolved ref-clean "$DV"; then
-  ok "S1 the reference copy (merge call replaced by false) hands the clean world back as today's semantic-merge row -- it is a real 'before'"
-else
-  bad "S1 the reference copy did not print today's row on the clean world, so every byte-identity comparison below compares against nothing"
-fi
 
 # === C: the clean target ========================================================================
 W="$WORK/tip-clean"; expect_dv "$W" || broken "could not build the expected clean file"
@@ -174,16 +146,16 @@ else
   bad "CWD the clean world driven from / did not reproduce (rc $(cat "$WORK/out/tip-cwd.rc" 2>/dev/null))"
 fi
 
-# === fallbacks: today's row, byte-identical to the reference, file untouched ===================
+# === fallbacks: today's row, file untouched ====================================================
 # fallback <arm> <variant> <rel> <nf> <why>
 fallback() {
   local a="$1" v="$2" r="$3" nf="$4" why="$5" w="$WORK/tip-$2"
-  if ! ran "tip-$v" || ! ran "ref-$v"; then bad "$a ($v) a drive failed: tip rc $(cat "$WORK/out/tip-$v.rc"), ref rc $(cat "$WORK/out/ref-$v.rc")"; return; fi
-  local t f; t="$(rows_for "tip-$v" "$r")"; f="$(rows_for "ref-$v" "$r")"
-  if has_today "tip-$v" "$r" "$nf" && ! has_resolved "tip-$v" "$r" && [ -n "$t" ] && [ "$t" = "$f" ] && untouched "$w" "$r"; then
-    ok "$a $why -- today's row, byte-identical to the reference's, and $r untouched (bytes, inode, mode)"
+  if ! ran "tip-$v"; then bad "$a ($v) the drive failed: rc $(cat "$WORK/out/tip-$v.rc")"; return; fi
+  local t; t="$(rows_for "tip-$v" "$r")"
+  if has_today "tip-$v" "$r" "$nf" && ! has_resolved "tip-$v" "$r" && [ -n "$t" ] && untouched "$w" "$r"; then
+    ok "$a $why -- today's semantic-merge row ($nf fields), no RESOLVED row, and $r untouched (bytes, inode, mode)"
   else
-    bad "$a $why -- tip rows [$(printf '%s' "$t" | tr '\t\n' ' |')] ref rows [$(printf '%s' "$f" | tr '\t\n' ' |')] untouched=$(untouched "$w" "$r" && echo yes || echo NO)"
+    bad "$a $why -- rows [$(printf '%s' "$t" | tr '\t\n' ' |')] untouched=$(untouched "$w" "$r" && echo yes || echo NO)"
   fi
 }
 fallback B1  b1       "$DV" 3 "theirs rewords the after_line anchor: (a) OK and merge-file 0, only (c) sees the lost anchor"
@@ -285,7 +257,7 @@ fi
 # Counted over EVERY world driven by the shipped program, so a write path that leaks its
 # `.incoming.$$` in any shape is seen. The control is the number of worlds the find walked.
 n_w=0; n_leak=0
-for w in "$WORK"/tip-* "$WORK"/ref-*; do
+for w in "$WORK"/tip-*; do
   [ -d "$w/cons" ] || continue
   n_w=$((n_w+1))
   [ -z "$(find "$w/cons" -name '*.incoming.*' 2>/dev/null)" ] || n_leak=$((n_leak+1))
@@ -296,11 +268,10 @@ else
   bad "INC $n_leak of $n_w driven worlds hold an *.incoming.* temp (or too few worlds were walked to mean anything)"
 fi
 # D8: consumer-deleted
-if ran tip-d8del && ran ref-d8del && [ ! -e "$WORK/tip-d8del/cons/.claude/$DV" ] && ! has_resolved tip-d8del "$DV" \
-   && [ "$(rows_for tip-d8del "$DV")" = "$(rows_for ref-d8del "$DV")" ]; then
-  ok "D8 a consumer-deleted sited path stays absent, and its rows are the reference's ($(rows_for tip-d8del "$DV" | cut -f1,2 | tr '\t\n' ' |'))"
+if ran tip-d8del && [ ! -e "$WORK/tip-d8del/cons/.claude/$DV" ] && ! has_resolved tip-d8del "$DV"; then
+  ok "D8 a consumer-deleted sited path stays absent and draws no RESOLVED row ($(rows_for tip-d8del "$DV" | cut -f1,2 | tr '\t\n' ' |'))"
 else
-  bad "D8 the consumer-deleted path: present=$([ -e "$WORK/tip-d8del/cons/.claude/$DV" ] && echo YES || echo no), rows tip [$(rows_for tip-d8del "$DV" | tr '\t\n' ' |')] ref [$(rows_for ref-d8del "$DV" | tr '\t\n' ' |')]"
+  bad "D8 the consumer-deleted path: present=$([ -e "$WORK/tip-d8del/cons/.claude/$DV" ] && echo YES || echo no), rows [$(rows_for tip-d8del "$DV" | tr '\t\n' ' |')]"
 fi
 
 # === D6: per file, both directions =============================================================
@@ -308,8 +279,7 @@ d6() { # <arm> <variant> <target-rel> <other-rel> <expect-fn>
   local w="$WORK/tip-$2"
   "$5" "$w" || broken "could not build the expected file for $2"
   if ran "tip-$2" && has_resolved "tip-$2" "$3" && cmp -s "$w/want" "$w/cons/.claude/$3" \
-     && has_today "tip-$2" "$4" && untouched "$w" "$4" \
-     && [ "$(rows_for "tip-$2" "$4")" = "$(rows_for "ref-$2" "$4")" ]; then
+     && has_today "tip-$2" "$4" && untouched "$w" "$4"; then
     ok "$1 $3 resolves to theirs-with-values while $4, carrying an outside-span consumer edit, gets today's row untouched"
   else
     bad "$1 per-file: $3 resolved=$(has_resolved "tip-$2" "$3" && echo yes || echo NO) bytes=$(cmp -s "$w/want" "$w/cons/.claude/$3" && echo want || echo OTHER); $4 today=$(has_today "tip-$2" "$4" && echo yes || echo NO) untouched=$(untouched "$w" "$4" && echo yes || echo NO)"

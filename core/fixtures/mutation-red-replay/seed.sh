@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # mutation-red-replay/seed.sh — resolve the REAL validate-mutation-red.sh and build a
-# sandbox holding a "production" file, three test commands with known outcomes, and the
-# mutant copies run.sh drives. Prints the WORK dir. Idempotent.
+# sandbox holding a "production" file and the test commands with known outcomes that
+# run.sh drives. Prints the WORK dir. Idempotent.
 #
 # Everything here is shell. The replay mechanism is language-agnostic and a fixture that
 # needed pytest to prove it would be testing pytest's availability on the pushing machine.

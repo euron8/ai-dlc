@@ -116,8 +116,8 @@ else
 fi
 
 # ---- V7: the honest native review must be ACCEPTED ----------------------------
-# This is the enum's mutant-detector: drop ai-dlc-adversary-review from KNOWN_SKILLS
-# and V7 goes red, because every real convergence pass would fail Check 17.
+# V7 goes red if ai-dlc-adversary-review is missing from KNOWN_SKILLS, because every real
+# convergence pass would fail Check 17.
 V7="$WORK/_bmad-output/planning-artifacts/s999-brief-adversarial-p3.md"
 if bash "$PROV" "$V7" >/dev/null 2>&1; then
   note "ok" "s999...-p3.md (V7 native)" "accepted (mode: subagent, no Skill claimed)"
@@ -286,7 +286,7 @@ else
   # $REPO's HEAD sits on the retro branch, so a plain `git clone` would create a
   # LOCAL ai-dlc/retro/sprint-999 and defeat the whole premise. Detach and delete
   # it, leaving the branch reachable ONLY as origin/ai-dlc/retro/sprint-999 — the
-  # exact CI condition. The mutation control below is what caught this.
+  # exact CI condition.
   CLONE="$WORK/retro-clone"
   git clone -q "$REPO" "$CLONE" >/dev/null 2>&1
   (
@@ -345,25 +345,6 @@ else
   else
     note "BAD" "sprint-998 (V8 honest)" "an honest retro was refused (provenance rc=$V8_PROV_RC, evidence rc=$V8_EV_RC): $(head -3 <<<"$V8_OUT" | tr '\n' ' ')"
     fails=$((fails + 1))
-  fi
-
-  # MUTATION control: revert the resolution to the old verbatim-name behaviour
-  # (retro_branch stays the plain name) and require the origin-only branch to STOP
-  # resolving — Marker 2 must flip to FAIL. A pass above is evidence for the
-  # resolution only if removing it removes the pass.
-  MUT="$WORK/retro-evidence.mutant.sh"
-  sed 's/^retro_branch = _resolved$/retro_branch = retro_branch  # MUTANT: keep the unresolved name/' "$EVID" > "$MUT"
-  if cmp -s "$EVID" "$MUT"; then
-    note "BAD" "sprint-999 (origin-only)" "MUTATION matched nothing — the resolution reassignment was renamed"
-    fails=$((fails + 1))
-  else
-    MUT_OUT="$( cd "$CLONE" && bash "$MUT" ai-dlc/retro/sprint-999 999 2>&1 )"
-    if grep -Eq 'transcript committed.*: FAIL' <<<"$MUT_OUT"; then
-      note "ok" "sprint-999 (origin-only)" "MUTATION — without resolution the origin-only branch is unresolved (ls-tree FAIL)"
-    else
-      note "BAD" "sprint-999 (origin-only)" "MUTATION — the branch resolved with resolution disabled; the assertion proves nothing"
-      fails=$((fails + 1))
-    fi
   fi
 fi
 

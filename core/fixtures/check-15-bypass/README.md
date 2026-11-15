@@ -40,10 +40,10 @@ so the driver can assert *which* element rejects it:
 | V33 | `AsyncMock` eleven lines above the comment, test file | 1 (item ref) |
 | V34 | `AsyncMock` ten lines above the comment, test file | 0 |
 
-V5 is what makes the fixture able to fail. Without it, an element mutated into
+V5 is what makes the fixture able to fail. Without it, an element broken into
 always-rejecting would still look correct: every adversary would be rejected
-and the fixture would report success. V6 and V7 exist because a mutation run
-showed the original four did not cover element 3's digit-only rule or element
+and the fixture would report success. V6 and V7 exist because the original
+four did not cover element 3's digit-only rule or element
 2's CLOSED case — a loosened element 3 and a CLOSED-accepting element 2 both
 passed the fixture unchanged.
 
@@ -75,12 +75,12 @@ Item 7 itself is left exactly as it was. Rewording it in place would make the
 fixture fire without the regex being fixed, and a receipt elsewhere substitutes
 on its literal title text.
 
-**V4 and V12 are element 4's pair**, and the same mutation run added V12 for
+**V4 and V12 are element 4's pair**, and V12 was added for
 the same reason. Element 4 has two independent floors — a 20-character length
 and a ≥10 non-whitespace density — and every earlier variant was under BOTH,
 so deleting either left the other catching all of them and the fixture stayed
 green with one published floor untestable. V4 is under density only; V12 is
-under length only. Each floor now has a mutant that flips exactly one variant.
+under length only. Each floor now has a variant that fails alone.
 
 **V13/V14/V15/V16 are the `Phase N` marker in both directions.** It is the one
 alternative in the marker set that is also ordinary English, and as a bare
@@ -110,7 +110,7 @@ V17–V22 decide *where* a prose marker is credible; these decide the word itsel
 once it is already in a comment, and they cover the two shapes the reference
 consumer's gate hit that the comment gate does not reach: a comment using `stub`
 to DENY a deferral, and a comment naming a test double. Both acquittals are
-absence-shaped and both have mutants.
+absence-shaped.
 
 The six positive variants are not one arm six times — each is one property short
 of an acquittal, and a *different* wrong fix acquits each. V25 is acquitted by a
@@ -145,8 +145,8 @@ narrowing that vocabulary failed this arm alongside its own.
 
 Why the pair rather than V8 alone: if the exemption were a blanket `.claude/`
 carve-out instead of a core-manifest resolve, V8 would pass **and so would
-V9** — a consumer hook smuggling an unaudited stub through the gate. Mutation
-runs confirm each fires alone: removing the exemption flips only V8; widening
+V9** — a consumer hook smuggling an unaudited stub through the gate. Each
+fires alone: removing the exemption flips only V8; widening
 it to all of `.claude/` flips only V9; deleting `skills/ai-dlc-update/**` from
 the seeded manifest flips only V8; hiding `core-paths.sh` makes the driver
 exit 2 rather than pass without ever running the filter.
@@ -161,7 +161,7 @@ would not notice. The stake on V10's side is higher than on V8's: a core
 fixture's markers are the payload its own assertions read, so the only way to
 clear a Check 16 finding against one is to edit it, which VACATES the fixture.
 
-Mutation runs confirm each fires alone: forcing `core-paths.sh` to answer
+Each fires alone: forcing `core-paths.sh` to answer
 not-core for `tests/fixtures/` flips only V10; making its glob loop over-capture
 `tests/fixtures/` flips only V11; and the dropped-slash entry flips V11 together
 with the guard fixture's consumer-editable assertion and I8's missing-entry
@@ -173,7 +173,7 @@ shape cannot leave this fixture passing against a stale stand-in. V10 therefore
 goes green only once the real manifest carries `fixtures/check-15-bypass/**`:
 the manifest edit and this fixture are atomic by construction.
 
-`run.sh` drives it and asserts the element-per-variant matrix.
+`run.sh` drives it and asserts the expected element for every variant.
 
 **What the driver runs, and what changed.** It used to run a RESTATEMENT.
 Check 16 carried `enforcer: []`, so there was no validator to call and `run.sh`
@@ -182,54 +182,13 @@ claim rather than the shipping path's, which its header said outright. The
 elements now live in `scripts/ai-dlc/validate-stub-audit.sh` and this driver
 calls it, so the code under test and the code that ships are the same bytes.
 
-**Four mutants, because two of the arms are absence-shaped.** V13 and V16 pass
-when the validator reports nothing about their file, and a validator that
-reported nothing about *any* file would pass them too — a seeded near-miss shows
-an arm discriminates between two inputs, not that it discriminates at all. So
-each of the three lines the phase rule is spelled on gets a mutant of its own,
-run against copies under `mktemp` with `core-paths.sh` copied beside each (the
-validator finds its resolver as a sibling, and a copy that cannot resolve one
-dies at exit 2, reports nothing, and every absence-shaped arm reads that silence
-as a pass). The control runs first and is presence-shaped for that reason.
-Restoring the bare alternative flips V13 and V16; deleting the phase marker
-flips only V14; widening the absence vocabulary to match anything flips V13 and
-V16; dropping `NotImplementedError` from the other markers flips only V15, which
-no other arm here notices.
-
-**Element 2's status test has two mutants, and they are applied by `awk` rather
-than by `sed`.** Both replacement texts carry `&&`, and an `&` in a `sed`
-replacement is the whole matched line — such a substitution re-inserts the line
-inside itself, produces a copy that differs from the original, satisfies the
-`cmp -s` guard, and tests something nobody wrote. `element2-unbounded` restores
-the unbounded `.*` and is killed by V36; `element2-token-blacklist` keeps that
-form and merely excludes the literal word `OPENAPI`, which closes the receipt
-while shipping the defect intact, and is killed by V35 — the variant whose title
-no blacklist can be keyed on.
-
-The comment-gate and carve-out mutants follow the same construction. Every one
-was profiled against all thirty variants and an unmutated control, and nine move
-exactly one cell. Two move two, and both overlaps are real rather than entangled:
-`carve-outs-disarmed` removes both carve-outs so V23 and V24 are its subject
-together, and `negation-window-not-adjacency` moves V25 and V27 because a
-boundary-only negation genuinely acquits both — V25 owns the kill and V27 stands
-down for it.
-
-Two of the older mutants were re-anchored in the same change, and both would
-otherwise have gone dead rather than wrong. `prose-gate-on-raw-line` was keyed on
-the exact text of the marker gate's condition, which the carve-outs edit — the
-`cmp -s` guard reports that as `BAD`, which reads as a regression in the change
-under test rather than as a lost anchor. `quote-guard-dropped` was keyed on
-`case "$pre" in`, a spelling the negation loop's occurrence walk now also uses;
-a mutant matching two lines silently tests two properties and its kill belongs to
-neither, so it is anchored on the quote class only the quote guard carries.
-
-Three assertions are deliberately NOT about the elements, so no element
-mutation can flip one: an all-out-of-scope set must exit **4**, not 0
+Three assertions are deliberately NOT about the elements, so no change to an element
+can flip one: an all-out-of-scope set must exit **4**, not 0
 (`EXAMINED NOTHING` — the state every vacuously-green gate check has collapsed
 into a pass); a finding must reach the caller as exit **1**; and the run must
 report what it LOOKED AT. Both the vacuity and the counts assertions drive the
 audited-nothing case through a non-hot-path file rather than an exempt one, so
-neither touches the ownership resolve — otherwise a single exemption mutation
+neither touches the ownership resolve — otherwise a single change to the exemption
 flips three assertions and two of them are vacuous.
 
 **What the driver still does not prove.** Check 16 stays `adjudication: llm`.

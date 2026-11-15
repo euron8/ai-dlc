@@ -1,7 +1,7 @@
 #!/bin/bash
 # seed-verdict-store.sh -- pre-seed the COUNTED verdict store that a push reads.
 #
-#   bash scripts/seed-verdict-store.sh [--keep <dir>] [--jobs <n>] [--dirty-ok] <fixture> [<fixture> ...]
+#   bash scripts/seed-verdict-store.sh [--keep <dir>] [--jobs <n>] [--dirty-ok] <fixture>[@consumer] [...]
 #
 # Run from the ROOT of a clean worktree detached at the exact sha to be pushed. Each named fixture runs through
 # core/scripts/hermetic-run.sh with the invocation counter armed, so every pass is recorded in
@@ -10,6 +10,12 @@
 # at most two workers) and stdin /dev/null. --jobs <n> runs <n> of them at once (xargs -P; default 1); <n> is 1 to
 # 99999, anything else a refusal, since BSD `xargs -P 0` is unlimited. Each unit writes its own rc file, and every
 # fixture must have one, so a unit that died without one is a refusal (exit 2), never a pass.
+# A name ending `@consumer` is a unit scripts/predict-push-set.sh prints as `run <fixture>@consumer`: it is run by
+# scripts/census-consumer-layout.sh --only (the hook's own cl_select and cl_publish over a scratch install, uncounted,
+# into the shared store base and the placement records a push reads), and printed as `<fixture>@consumer rc=<n>`; a
+# name the selection no longer holds prints `rc=0` (its record is current). Names are run in two groups, the plain
+# ones first.
+# Before any unit runs the script waits, printing why, while a push gate runs in this repository (scripts/gate-wait.sh).
 # --dirty-ok seeds from a work tree with uncommitted changes. hermetic-run.sh copies the sandbox from the work tree
 # and keys the entry on the same work tree (hr_population refuses when the copy population and the key manifest
 # disagree), so a dirty pass is recorded under the content that ran, which a push of a different tree never matches.
@@ -47,13 +53,13 @@ while [ "$#" -gt 0 ]; do
     *) break ;;
   esac
 done
-[ "$#" -gt 0 ] || { echo "usage: bash scripts/seed-verdict-store.sh [--keep <dir>] [--jobs <n>] [--dirty-ok] <fixture> [<fixture> ...]" >&2; exit 2; }
+[ "$#" -gt 0 ] || { echo "usage: bash scripts/seed-verdict-store.sh [--keep <dir>] [--jobs <n>] [--dirty-ok] <fixture>[@consumer] [...]" >&2; exit 2; }
 case "$jobs" in ''|*[!0-9]*|??????*) echo "seed-verdict-store: --jobs wants 1 to 99999, got '$jobs'" >&2; exit 2 ;; esac
 [ "$((10#$jobs))" -ge 1 ] || { echo "seed-verdict-store: --jobs wants 1 to 99999, got '$jobs'" >&2; exit 2; }
 jobs=$((10#$jobs))
 seen=" "
 for fx in "$@"; do
-  case "$fx" in ''|*[!A-Za-z0-9._-]*|.*) echo "seed-verdict-store: '$fx' is not a fixture name" >&2; exit 2 ;; esac
+  case "${fx%@consumer}" in ''|*[!A-Za-z0-9._-]*|.*) echo "seed-verdict-store: '$fx' is not a fixture name" >&2; exit 2 ;; esac
   case "$seen" in *" $fx "*) echo "seed-verdict-store: $fx is named twice" >&2; exit 2 ;; esac
   seen="$seen$fx "
 done
@@ -70,6 +76,7 @@ if [ ! -s "$work/arm.sh" ] || ! grep -q '^fxcount_arm() {' "$work/arm.sh" || ! g
 fi
 # shellcheck disable=SC1090
 . "$work/arm.sh" || exit 2
+if [ -f "$PWD/scripts/gate-wait.sh" ]; then . "$PWD/scripts/gate-wait.sh" && gate_wait seed-verdict-store; else echo "seed-verdict-store: wait skipped, no scripts/gate-wait.sh here, so a running push gate is not checked"; fi
 POOL_DEPTH_IN=0
 fxcount_arm > "$work/arm.out" 2>&1 || { cat "$work/arm.out" >&2; echo "seed-verdict-store: arming failed" >&2; exit 2; }
 case "${AI_DLC_VERDICT_STORE:-}" in */counted-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;; *) echo "seed-verdict-store: arming set no counted store" >&2; exit 2 ;; esac
@@ -82,7 +89,14 @@ PREPUSH_POOL_DEPTH=1 bash core/scripts/hermetic-run.sh "$fx" > "$w/$fx.out" 2>&1
 if [ -n "$k" ]; then cp "$w/$fx.out" "$k/$fx.out" || rc=keep; fi
 printf '%s\n' "$rc" > "$w/$fx.rc"
 UNIT_END
-printf '%s\n' "$@" | xargs -P "$jobs" -n 1 bash "$work/unit.sh" "$work" "$keep"
+# `<fx>@consumer` names are split off here and run last, by the census; the plain names keep the loop below.
+cons=""; plain=""
+for fx in "$@"; do
+  case "$fx" in *@consumer) cons="$cons ${fx%@consumer}" ;; *) plain="$plain $fx" ;; esac
+done
+# shellcheck disable=SC2086
+set -- $plain
+[ "$#" -eq 0 ] || printf '%s\n' "$@" | xargs -P "$jobs" -n 1 bash "$work/unit.sh" "$work" "$keep"
 fail=0
 for fx in "$@"; do
   rc="$(cat "$work/$fx.rc" 2>/dev/null)" || rc=""
@@ -100,4 +114,16 @@ for fx in "$@"; do
     else cat "$work/$fx.out"; fi
   fi
 done
+if [ -n "$cons" ]; then
+  cdo=""; [ "$dirty_ok" != 1 ] || cdo=--dirty-ok
+  # shellcheck disable=SC2086
+  bash scripts/census-consumer-layout.sh --only "$cons" --jobs "$jobs" $cdo > "$work/cons.out" 2>&1 < /dev/null; crc=$?
+  if [ -n "$keep" ]; then cp "$work/cons.out" "$keep/consumer.out" || { echo "seed-verdict-store: could not keep the consumer output in $keep" >&2; exit 2; }; fi
+  for fx in $cons; do
+    if grep -qxF "${fx}@consumer ok" "$work/cons.out" || grep -qF "${fx}@consumer not selected" "$work/cons.out"; then printf '%s@consumer rc=0\n' "$fx"
+    elif grep -qxF "${fx}@consumer FAIL" "$work/cons.out"; then printf '%s@consumer rc=1\n' "$fx"; fail=1
+    else echo "seed-verdict-store: ${fx}@consumer gave no verdict (census exit $crc):" >&2; tail -n 8 "$work/cons.out" >&2; exit 2; fi
+  done
+  [ "$fail" = 0 ] || grep -E '^census: |^--- |^ ' "$work/cons.out"
+fi
 exit "$fail"

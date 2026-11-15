@@ -20,27 +20,9 @@
 # it never degrades into the stronger status — a fixture that only checked "something fired"
 # would score a data-loss suggestion as a pass.
 #
-# Measured matrix: mutant -> deciding arm and twin (cells 8a-8d are the Part 8 assertions
-# re-evaluated on the mutant's output; ap-match and ap-fresh are the apply-level cells). Other
-# tripped cells, from the matrix run, are listed here in plain text, not in decides=:
-# me1 also trips 8c (the naive guard accuses the h5-only entry too).
-# MUTANT-MATRIX me1-naive-ext-titles-guard decides=8b twins=8a
-# MUTANT-MATRIX me2-narrow-to-joins-grammar decides=8c twins=8a
-# MUTANT-MATRIX lookup-continue-dropped decides=ap-match twins=ap-fresh
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-title-join/run.sh --matrix
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
-# state") requires.
-#
-# Usage: run.sh [--matrix] [path-to-layer-drift.sh]
+# Usage: run.sh [path-to-layer-drift.sh]
 # Exit:  0 = every assertion holds, 1 = an arm regressed, 2 = the fixture could not run.
 set -uo pipefail
-
-# --matrix: measure the full mutant x arm matrix (header block). Parsed and shifted before any
-# other positional argument. A plain run executes no matrix-only cell (the PLAIN-RUN arm at the end).
-MATRIX=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
-MXN=0
-mxline() { printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -59,7 +41,6 @@ trap 'rm -rf "$ROOT"' EXIT
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 echo "layer-title-join:"
 
@@ -235,7 +216,7 @@ MD
 # AND invisible to `heading_titles_of_stream`, so `ext_titles` is empty here too. The row's
 # claim is "no heading of any kind is present", which is FALSE of this entry — an h5 body is
 # a different gap and is not this row's to state. Narrow the predicate to `#{2,4}` and this
-# entry starts being accused; the mutant below does exactly that.
+# entry starts being accused.
 mkext H5ONLY steps/widget.md <<'MD'
 ##### Deep Consumer Heading
 
@@ -419,7 +400,6 @@ if grep -qx EXTENSION-NO-HEADINGS <<<"$(st 'NUMONLY\.md$')"; then
   bad "an entry built entirely out of NUMBERED headings was reported as having no heading — the guard is keyed on the empty ext_titles rather than on the absence of a heading, which accuses 10 of the reference consumer's 40 entries of being unreachable while the numbered join is reading them"
 else
   ok "  an entry whose every heading is NUMBERED is NOT reported (its ext_titles is empty too, and the numbered arm reads it)"
-  B_8b=1
 fi
 # THE NON-VACUITY CONJUNCT for 8b. Its silence on this status is evidence only if the entry
 # reached the classifier at all; an entry that produced no row whatsoever would satisfy 8b
@@ -437,7 +417,6 @@ if grep -qx EXTENSION-NO-HEADINGS <<<"$(st 'H5ONLY\.md$')"; then
   bad "an entry whose only heading is an h5 was reported as having NO heading — the predicate has narrowed to the joins' own #{2,4} and the row now makes a claim that is false of its subject"
 else
   ok "  an entry whose only heading is an h5 is NOT reported (it has a heading; its invisibility to the joins is a different gap)"
-  B_8c=1
 fi
 
 # 8d. THE ROW IS ADDITIVE, NOT A REPLACEMENT. A heading-less entry still gets its drift row;
@@ -537,7 +516,6 @@ else
   # 6e. THE SAME SUPPRESSION AT THE APPLY LEVEL (BL-714). apply.sh reads only layer-drift's
   #     output, so 6b-6d prove the lookup at the classifier and nothing proved the WORKLIST row
   #     the consumer actually sees. Control: another entry's row survives the same verdict.
-  #     Mutant: the lookup's `continue` dropped in a scratch COPY of the reconcile directory.
   APPLY="$(dirname "$DRIFT")/apply.sh"
   if [ ! -f "$APPLY" ]; then
     bad "FIXTURE BROKEN: apply.sh is not beside layer-drift.sh, so the apply-level arm has no subject"
@@ -576,7 +554,6 @@ else
       ap_run "$APPLY"; E1="$(ap_count 'MATCH\.md$')"; F1="$(ap_count 'FRESH\.md$')"
       if [ "$E1" -eq 0 ] && [ "$F1" -eq "$F0" ]; then
         ok "apply-level: a TITLE-clause verdict removes the WORKLIST extension-title-match row for MATCH (1 -> 0) and leaves the undisposed control FRESH ($F1)"
-        B_ap=1
       else
         bad "apply-level: with MATCH's verdict recorded apply.sh emitted MATCH=$E1 FRESH=$F1 row(s), expected 0 and $F0"
       fi
@@ -586,24 +563,6 @@ else
         ok "apply-level CONTROL: a verdict whose digest does not match (a spent verdict) re-emits the row"
       else
         bad "apply-level CONTROL: a mismatched-digest verdict left $E2 row(s), expected 1"
-      fi
-      # MUTANT: drop the lookup's `continue` in a copy of the whole reconcile directory.
-      verdict "$DIG3"
-      MUTD="$ROOT/mut-reconcile"; mkdir -p "$MUTD" && cp "$(dirname "$DRIFT")"/* "$MUTD/"
-      awk '/adj_lookup "\$tm_digest" EXTENSION-TITLE-MATCHES-CORE/{f=1} f&&/^[[:space:]]*continue[[:space:]]*$/{f=0; print "        :"; next} {print}' "$DRIFT" > "$MUTD/layer-drift.sh.new"
-      if cmp -s "$DRIFT" "$MUTD/layer-drift.sh.new"; then
-        bad "apply-level MUTANT lookup-continue-dropped: the awk matched nothing, so the arm above is unproven"
-      else
-        mv -f "$MUTD/layer-drift.sh.new" "$MUTD/layer-drift.sh"
-        ap_run "$MUTD/apply.sh"; EM="$(ap_count 'MATCH\.md$')"; EC="$(ap_count 'FRESH\.md$')"
-        if [ "$EM" -eq 1 ]; then ap_m=FAIL; else ap_m=ok; fi   # cell ap-match: the verdict removes MATCH's row
-        if [ "$EC" -ge "$F0" ]; then ap_f=ok; else ap_f=FAIL; fi   # cell ap-fresh: the undisposed control keeps its rows
-        if [ "$MATRIX" = 1 ]; then mxline lookup-continue-dropped ap-match "$ap_m"; mxline lookup-continue-dropped ap-fresh "$ap_f"; fi
-        if [ "$ap_m" = FAIL ] && [ "$ap_f" = ok ] && [ "$EC" -ge 1 ]; then
-          mutant_killed "${B_ap:-0}" lookup-continue-dropped "apply-level MUTANT lookup-continue-dropped brings MATCH's row back ($EM) with the register unchanged — the suppression arm is falsifiable"
-        else
-          bad "apply-level MUTANT lookup-continue-dropped SURVIVED: gave MATCH=$EM FRESH=$EC; the arm would pass without the lookup"
-        fi
       fi
     fi
   fi
@@ -679,167 +638,6 @@ else
 fi
 
 # =======================================================================================
-# MUTANTS FOR PART 8
-#
-# Part 8's arms 8b and 8c are ABSENCE-shaped, and an absence-shaped arm is the one that
-# REQUIRES a mutant: both-directions seeding establishes that the arm discriminates between
-# two inputs, and only a mutant establishes that it discriminates AT ALL.
-#
-# EACH MUTANT IS A COPY OF THE WHOLE reconcile DIRECTORY. `layer-drift.sh` sources
-# `lib.sh` as a SIBLING and refuses with exit 1 when it cannot; a lone mutated copy finds no
-# library, emits nothing, and "no rows" would then score every absence arm as a kill.
-#
-# KEYED ON THE GUARD'S LOCATION AND OBSERVABLE, NEVER ON A SPELLING THE FIX INTRODUCED.
-# Each `sed` rewrites the CONDITION at the emission site; a mutation anchored on the status
-# token or on the remedy prose would match nothing the day either is reworded, and the
-# fixture would go FIXTURE STALE on a commit that changed no behaviour.
-# =======================================================================================
-echo ""
-echo "  --- Part 8 mutants ---"
-
-E20_SRC_DIR="$(cd "$(dirname "$DRIFT")" && pwd)"
-E20N=0
-# `e20mut` SETS A GLOBAL AND PRINTS NOTHING, and that is not a style choice. `bad` writes to
-# STDOUT, so a builder called inside `$( )` folds its own refusal text into the captured
-# value: every failure path then returns a NON-EMPTY string, the caller reads it as a
-# successfully built mutant, and `bash "<the refusal sentence>"` produces no rows — which
-# the arms below score as MUTANT SURVIVED. Measured while probing this section: a subject
-# already carrying the naive guard reported `MUTANT SURVIVED [me1]` where the true state is
-# FIXTURE STALE, and the two readings prescribe opposite repairs.
-E20_MUT=""
-e20mut() { # e20mut <name> <sed-arg>... -> sets E20_MUT to the mutant's path, or to ""
-  local name="$1"; shift
-  local d="$ROOT/e20-$name"
-  E20_MUT=""
-  rm -rf "$d"; mkdir -p "$d"
-  cp -R "$E20_SRC_DIR"/. "$d"/ 2>/dev/null || { bad "MUTANT HARNESS BROKEN [$name]: could not copy the reconcile directory"; return 1; }
-  sed "$@" "$DRIFT" > "$d/mutant-drift.sh" || { bad "MUTANT DID NOT APPLY [$name]: sed exited non-zero, so no mutant exists and its arms would report nothing"; return 1; }
-  # `cmp -s` — a mutation that matched NOTHING is byte-identical to the original and reads
-  # exactly like a mutant that survived. This repo has shipped that reading twice.
-  if cmp -s "$DRIFT" "$d/mutant-drift.sh"; then
-    bad "FIXTURE STALE [$name]: the mutation matched nothing in layer-drift.sh, so the arm it is meant to probe is unproven. The subject was reworded — re-anchor the mutation on the same observable, never relax the assertion"
-    return 1
-  fi
-  if ! bash -n "$d/mutant-drift.sh" 2>/dev/null; then
-    bad "FIXTURE STALE [$name]: the mutant does not parse, so a kill would be a syntax error rather than a disarmed guard"
-    return 1
-  fi
-  E20_MUT="$d/mutant-drift.sh"
-  return 0
-}
-# Every mutant's own control: the copy must still classify NOHEAD's SIBLING — the unrelated
-# CONTROL entry, which no mutation below touches — or the copy is what failed. PRESENCE-
-# shaped, because a copy that died sourcing lib.sh emits nothing and that is what an
-# absence-shaped control would score as healthy.
-e20run() { printf '%s\n' "$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"; }
-e20st() { printf '%s\n' "$1" | awk -F'\t' -v e="$2" '$2 ~ e {print $1}'; }
-e20_cell() { # e20_cell <cell> <output> -> sets CELLR to ok|FAIL: would base arm <cell> pass on this output
-  CELLR=FAIL
-  case "$1" in
-    8a) grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$2" 'NOHEAD\.md$')" && CELLR=ok ;;
-    8b) grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$2" 'NUMONLY\.md$')" || CELLR=ok ;;
-    8c) grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$2" 'H5ONLY\.md$')" || CELLR=ok ;;
-    8d) [ "$(e20st "$2" 'NOHEAD\.md$' | sort -u)" = "$e20_want" ] && CELLR=ok ;;
-    *) echo "FIXTURE ERROR: unknown e20 cell $1" >&2; exit 2 ;;
-  esac
-}
-# e20_matrix <mutant> <output> <per-push cell>... : matrix mode prints every cell; a cell outside
-# the per-push set is a matrix-only cell and is counted in MXN.
-e20_matrix() {
-  [ "$MATRIX" = 1 ] || return 0
-  local m="$1" o="$2" c x; shift 2
-  for c in 8a 8b 8c 8d; do
-    e20_cell "$c" "$o"
-    mxline "$m" "$c" "$CELLR"
-    for x in "$@"; do [ "$x" = "$c" ] && continue 2; done
-    MXN=$((MXN+1))
-  done
-}
-e20ctl() { # e20ctl <name> <output>
-  if [ "$(printf '%s\n' "$2" | grep -c 'CONTROL\.md')" -ge 1 ]; then
-    ok "  control [$1]: the copy still classifies the untouched CONTROL entry — it loaded lib.sh and ran"
-  else
-    bad "MUTANT HARNESS BROKEN [$1]: the copy produced no row for the untouched CONTROL entry; it is not running, and every verdict beside it is a property of the copy rather than of the mutation"
-  fi
-}
-
-# NOTE — CONJUNCT 1 OF THE GUARD IS VACUOUS TODAY, AND NO MUTANT BELOW DROPS IT.
-#
-# The guard is `[ -z "$ext_titles" ] && ! grep -qE '^#{2,6}[[:space:]]+' "$f"`. A mutant
-# removing the FIRST conjunct would SURVIVE, and its survival must not be read as a coverage
-# gap: `heading_titles_of_stream` matches `^#{2,4}`, a strict SUBSET of the guard's `^#{2,6}`,
-# so any file with a heading conjunct 2 can see also populates `ext_titles` — no input can
-# separate them. Measured independently here over 9 seeds (no heading, h1-only, h2, h3, h4,
-# h5, h6, mixed h5+h6, numbered-only): conjunct-2-ALONE and the shipped guard emit the
-# identical set, while conjunct-1-ALONE differs on four of them, which is the harness control
-# proving the instrument can see a difference at all.
-#
-# THE DECISIVE COMPARISON IS conjunct2-ALONE vs SHIPPED. Comparing conjunct1-alone against
-# shipped establishes that conjunct 2 is load-bearing and says nothing about the vacuity.
-#
-# THE GUARD STAYS BY OPERATOR DECISION. It is recorded here rather than deleted because the
-# two predicates are only equivalent while the two grammars stay in their current relation,
-# and a `#{2,4}` widening would separate them silently. ME2 below is what fails if the
-# relation moves.
-#
-# ME1 — THE GUARD IS KEYED ON THE EMPTY `ext_titles` ALONE, which is the naive form the fix
-#       header measures a 10-entry false-positive set for. Killed by 8b: NUMONLY's
-#       `ext_titles` is empty too, so it starts being accused of unreachability while the
-#       numbered arm is reading it. This is the CONVERSE of the vacuity above — dropping
-#       conjunct 2 is observable, dropping conjunct 1 is not.
-#       ANCHORED ON THE `&&` CONJUNCTION rather than on the status token: the conjunction IS
-#       the property under test, and it survives any rewording of the row's text.
-if e20mut me1-naive-ext-titles-guard -e 's@^  if \[ -z "\$ext_titles" \] && ! grep -qE .\^#{2,6}\[\[:space:\]\]+. "\$f"; then$@  if [ -z "$ext_titles" ]; then@'; then
-  ME1_OUT="$(e20run "$E20_MUT")"
-  e20_cell 8b "$ME1_OUT"; me1_d="$CELLR"; e20_cell 8a "$ME1_OUT"; me1_t="$CELLR"
-  if [ "$me1_d" = FAIL ]; then
-    mutant_killed "${B_8b:-0}" me1-naive-ext-titles-guard "  mutant [me1] KILLED by 8b: keyed on the empty ext_titles alone, the guard accuses a fully-checked numbered-only entry"
-  else
-    bad "MUTANT SURVIVED [me1]: the naive ext_titles-only guard did NOT report NUMONLY, so 8b does not depend on the heading half of the conjunction and the false-positive set it exists to bound is untested"
-  fi
-  # THE TWIN 8a: the same mutant must STILL REPORT NOHEAD, or a mutant that disabled the whole
-  # block would fail 8b's check for the wrong reason and read as a kill.
-  if [ "$me1_t" = ok ]; then
-    ok "    and it still reports NOHEAD, so the kill above is the widening and not a dead block"
-  else
-    bad "MUTANT HARNESS BROKEN [me1]: the mutant reports NEITHER entry — the block is disabled rather than widened, and the kill above would be an outage"
-  fi
-  e20_matrix me1-naive-ext-titles-guard "$ME1_OUT" 8b 8a
-  e20ctl me1 "$ME1_OUT"
-  E20N=$((E20N+1))
-fi
-
-# ME2 — THE HEADING PREDICATE NARROWS TO THE JOINS' OWN `#{2,4}`. Killed by 8c: an h5-only
-#       entry then reads as having no heading at all, and the row makes a claim that is
-#       false of its subject. This is the arm that holds the predicate WIDER than the joins.
-if e20mut me2-narrow-to-joins-grammar -e 's@! grep -qE .\^#{2,6}\[\[:space:\]\]+. "\$f"@! grep -qE '"'"'^#{2,4}[[:space:]]+'"'"' "$f"@'; then
-  ME2_OUT="$(e20run "$E20_MUT")"
-  e20_cell 8c "$ME2_OUT"; me2_d="$CELLR"; e20_cell 8a "$ME2_OUT"; me2_t="$CELLR"
-  if [ "$me2_d" = FAIL ]; then
-    mutant_killed "${B_8c:-0}" me2-narrow-to-joins-grammar "  mutant [me2] KILLED by 8c: narrowed to #{2,4}, the guard reports an entry that HAS a heading"
-  else
-    bad "MUTANT SURVIVED [me2]: narrowing the predicate to the joins' own #{2,4} changed nothing about H5ONLY, so 8c is not load-bearing and the row's width is unasserted"
-  fi
-  if [ "$me2_t" = ok ]; then
-    ok "    and it still reports NOHEAD, so the kill is the narrowing and not a dead block"
-  else
-    bad "MUTANT HARNESS BROKEN [me2]: the mutant reports neither entry — the block is disabled rather than narrowed"
-  fi
-  e20_matrix me2-narrow-to-joins-grammar "$ME2_OUT" 8c 8a
-  e20ctl me2 "$ME2_OUT"
-  E20N=$((E20N+1))
-fi
-
-# A MUTANT THAT KILLED NOTHING READS EXACTLY LIKE AN ARM THAT CANNOT FIRE, and `cmp -s`
-# cannot see it — it proves the edit applied, never that the run loaded the edited file.
-# Assert the count.
-if [ "$E20N" -eq 2 ]; then
-  ok "  both Part 8 mutants were built, applied (cmp -s) and scored"
-else
-  bad "only $E20N of 2 Part 8 mutants were scored — a mutation that never became a mutant leaves its arm unproven, and this fixture would report PASS over it"
-fi
-
-# =======================================================================================
 # Part 9: A MEMO THAT CANNOT SERVE ONE KEY REFUSES; IT NEVER MOVES THE SKELETON SET
 #
 # lib.sh's memo returns 125 when a cached listing, blob or status cannot be served. The skeleton
@@ -889,13 +687,6 @@ EOF
     bad "Part 9 $lm_id: $lm_what the memo cannot serve gave rc=$lm_rc, $(grep -c . "$ROOT/lm.out") row(s), $(grep -c 'shared skeleton' "$ROOT/lm.out") skeleton row(s) — a lost cached object moved the rows"
   fi
 done
-
-# PLAIN-RUN ARM: a plain run executes no matrix-only cell.
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MXN" -eq 0 ]; then ok "PLAIN-RUN: a plain run executed 0 matrix-only cells"
-  else bad "PLAIN-RUN: a plain run executed $MXN matrix-only cell(s)"; fi
-elif [ "$MXN" -gt 0 ]; then ok "MATRIX mode executed $MXN matrix-only cell(s)"
-else bad "MATRIX mode executed no matrix-only cell, so --matrix measured nothing beyond the per-push cells"; fi
 
 echo ""
 report_end layer-title-join

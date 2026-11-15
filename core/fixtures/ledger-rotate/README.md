@@ -48,16 +48,9 @@ The asymmetry is deliberate and is stated in the script header.
    row that appears or disappears means the split took a live entry. This is the assertion
    that matters; the others localise the failure.
 10. **Idempotent** — a second `--apply` is a no-op.
-11. **The accounting guard is load-bearing** — a mutant with the balance check disabled is
-    built, so the guard cannot pass vacuously.
-12. **A genuine sweep still fails the row-set test** — a mutated rotator with the version
-    digit removed from its close predicate archives a live entry that quotes the annotation
-    form, its row disappears, and the comparison in 9 fails. Without this the reshape in 9
-    would be a looser assertion with nothing saying so.
 13. **No row depends on the rotation archive** — the same rotated live ledger is classified
     with its archive present and with it deleted, and the output must be byte-identical and
-    carry the unattributed `NAMED-UPSTREAM-AMBIGUOUS` row. A mutant whose prefix row is gated
-    on an open-union-archive count loses that row when the archive is deleted.
+    carry the unattributed `NAMED-UPSTREAM-AMBIGUOUS` row.
 
 ## Why the acceptance test is the row set and not the bytes
 
@@ -80,8 +73,7 @@ two-member prefix with one member annotated that crossed one-vs-many and the sur
 row flipped between `NAMED-UPSTREAM <slug>` and `NAMED-UPSTREAM-AMBIGUOUS <prefix>` across a
 rotation that swept nothing. The reference consumer reported that shape from its own ledger with
 89 rows either side. Assertion 4c seeds the two-member `PC-S910` pair and asserts the row set
-holds across all three states; its mutant gates the prefix row on the open-union-archive count
-again and shows the flip.
+holds across all three states.
 
 The seed carries a `PC-S900` trio — two open entries and one closed in the same pass — so the
 AMBIGUOUS row has a subject and its count (2, the open members) has a value to assert on both

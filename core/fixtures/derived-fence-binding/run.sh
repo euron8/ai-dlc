@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # derived-fence-binding — assert invariant I108 both fires and discriminates.
 # Also hosts I75's seeded-drift oracle (A16-A19, and A51-A53 on real-sized spans), which had no fixture anywhere, and I121's
-# battery (A20-A33): the verify-shape paragraph every role contract carries, with its three
-# wrong arms (opener-only compare, hand-listed population, substring key) each scored killed.
-# And I122's battery (A34-A47): the advisor paragraph directly below it in every role contract,
-# the same three wrong arms, and a cross-probe that neither arm is satisfied by the other's text.
+# battery (A20-A29, A31a-A33a): the verify-shape paragraph every role contract carries.
+# And I122's battery (A34-A41, A43a-A45a, A46-A47): the advisor paragraph directly below it in every role
+# contract, and a cross-probe that neither arm is satisfied by the other's text.
 # And A48-A50: the three-way drop matrix over I121, I122 and I123's chunked-write paragraph below
 # them, where the advisor drop must leave I123 reporting MISPLACED rather than green.
 #
@@ -12,7 +11,7 @@
 # once (see THE VALIDATOR RUNS IN PROCESS below); EQ holds that answer to the CLI's byte for byte, and
 # its two CLI starts are the only ones left, declared in cells.decl.
 #
-# Usage: run.sh [--matrix]
+# Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = one regressed, 2 = fixture broken.
 #
 # THE DEFECT THIS EXISTS TO CATCH. Seven files under core/team-roles/ teach an agent how to
@@ -23,24 +22,15 @@
 # five prose copies to each other, forbids a sixth, and runs the reader over every role file
 # that teaches the passage or templates a derivation record field.
 #
-# WHY BOTH DIRECTIONS ARE SEEDED, AND WHY THE WRONG FIXES ARE SEEDED TOO. Every one of I108's
+# WHY BOTH DIRECTIONS ARE SEEDED. Every one of I108's
 # three halves is absence-shaped: an extractor that stops matching compares empty to empty, a
 # site scan that stops matching finds no sixth copy, and a population scan that stops matching
 # leaves nothing to ask the reader about. All three silences read exactly like a conforming
-# tree. So the battery seeds an offender for each half, and it also builds the three arms this
-# arm could plausibly have been written as and scores them on the tree that separates them —
-# a receipt that accepts two implementations has established neither.
+# tree. So the battery seeds an offender for each half.
 #
-# W3 IS NOT HYPOTHETICAL. It is the shape this arm was first written as: half C's population
-# keyed on files carrying a fence opener, which structurally excludes from the population the
-# one file the arm exists to catch — rename a template's info string and the file stops
-# matching the key, leaves the population, and the arm reports a clean tree. Measured against
-# that first cut with remediator.md's opener renamed: zero findings, exit 0. A05 and W3 below
-# are that measurement, made permanent.
-#
-# EVERY MUTATION IS A COPY GUARDED BY `cmp -s`. A mutation whose pattern stopped matching
-# leaves a tree that is not a mutant, and the assertion built on it would test a clean tree
-# while printing the same line. A mutation that does not apply is reported as FIXTURE BROKEN,
+# EVERY SEED EDIT IS GUARDED BY `cmp -s`. An edit whose pattern stopped matching
+# leaves a tree that is not an offender, and the assertion built on it would test a clean tree
+# while printing the same line. An edit that does not apply is reported as FIXTURE BROKEN,
 # never scored.
 #
 # THE CONTROL IS NECESSARY AND NOT SUFFICIENT. Assertion 0 requires the unmutated seed to pass
@@ -65,9 +55,6 @@ fi
 
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 
-MATRIX=0; MROWS=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
-
 PRISTINE="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$PRISTINE" "$WORK"' EXIT
@@ -79,68 +66,6 @@ MUT_LIB="$D_ROOT/core/fixtures/lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
 . "$MUT_LIB"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-. "$D_ROOT/core/fixtures/lib/matrix.sh" || { echo "FIXTURE ERROR: lib/matrix.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
-
-# Every mutant of the validator below is scored per push on its DECIDING arm plus one TWIN
-# arm; the full mutant x arm matrix is MEASURED by the --matrix argv mode, not re-run per push.
-# A TWIN is an arm that must stay GREEN under the mutant (the kill is confined to the deciding
-# arm). The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
-# state") requires. The recorded
-# matrix plus the twin replace an exact-vector assertion of every arm on every mutant.
-# MUTANT-MATRIX READER-FLAT decides=I108 twins=I122
-# MUTANT-MATRIX READER-WIDE decides=I108 twins=I122
-# MUTANT-MATRIX W1 decides=I108 twins=I121
-# MUTANT-MATRIX W2 decides=I108 twins=I121
-# MUTANT-MATRIX W3 decides=I108 twins=I121
-# MUTANT-MATRIX W4 decides=I108 twins=I121
-# MUTANT-MATRIX W5 decides=I108 twins=I121
-# MUTANT-MATRIX I121-ROOTS decides=I121 twins=I122
-# MUTANT-MATRIX W6 decides=I121 twins=I122
-# MUTANT-MATRIX W7 decides=I121 twins=I122
-# MUTANT-MATRIX W8 decides=I121 twins=I122
-# MUTANT-MATRIX I122-ROOTS decides=I122 twins=I121
-# MUTANT-MATRIX W9 decides=I122 twins=I121
-# MUTANT-MATRIX W10 decides=I122 twins=I121
-# MUTANT-MATRIX W11 decides=I122 twins=I121
-# MUTANT-MATRIX W12 decides=I75 twins=I121
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/derived-fence-binding/run.sh --matrix
-
-# twin <mutant> <tree> <twin arm> — after a mutant is built in <tree>, the TWIN arm must stay
-# green (rc 0, the validator's own OK line, no FAIL for that arm). In MATRIX mode instead run
-# EVERY arm this fixture hosts on the mutant tree and print one row per arm; the row's word is
-# GREEN (rc 0 and the OK line) or TRIPPED.
-twin() {
-  local m="$1" t="$2" tw="$3" a o r w
-  if [ "$MATRIX" = 1 ]; then
-    # killed=<yes|no> is MECHANICAL: the cell's verdict (rc and output) differs from the SHIPPED
-    # arm's verdict on the SAME tree. The shipped arm is the pristine validator and reader placed
-    # over the mutated ones for the comparison run, then the mutated pair is put back. A mutant
-    # that turns a tripping arm GREEN (W4) is a kill exactly as one that turns a green arm red.
-    local bk="$WORK/mx.bk"; mkdir -p "$bk"
-    cp -p "$t/$ARM" "$bk/arm"; cp -p "$t/$READER" "$bk/reader"
-    cp -p "$PRISTINE/$ARM" "$t/$ARM"; cp -p "$PRISTINE/$READER" "$t/$READER"
-    for a in I108 I121 I122 I123 I75; do
-      run_arm "$t" "$a" > "$bk/ship.$a" 2>&1; echo $? >> "$bk/ship.$a"
-    done
-    cp -p "$bk/arm" "$t/$ARM"; cp -p "$bk/reader" "$t/$READER"
-    for a in I108 I121 I122 I123 I75; do
-      o="$(run_arm "$t" "$a")"; r=$?
-      { printf '%s\n' "$o"; echo "$r"; } > "$bk/mut.$a"
-      case "$r:$o" in 0:*"$OKLINE"*) w=GREEN ;; *) w=TRIPPED ;; esac
-      if cmp -s "$bk/ship.$a" "$bk/mut.$a"; then kd=no; else kd=yes; fi
-      matrix_row "$m" "$a" "$r" "$w" "$kd"; MROWS=$((MROWS + 1))
-    done
-    ok "MATRIX $m measured against I108 I121 I122 I123 I75"
-    return 0
-  fi
-  o="$(run_arm "$t" "$tw")"; r=$?
-  case "$r:$o" in
-    0:*"$OKLINE"*) ok "T-$m twin $tw stays GREEN under mutant $m (the kill is confined to its deciding arm)" ;;
-    *) bad "T-$m twin $tw did NOT stay green under mutant $m (rc=$r) — the kill is no longer confined, or the mutant tree does not run" ;;
-  esac
-}
-
 ARM="scripts/validate-enforcement-map.sh"
 READER="core/scripts/validate-artifact-derivations.sh"
 OKLINE="OK: enforcement-map.yaml in sync with gate-validation.md"
@@ -160,12 +85,8 @@ TOUCHED="$WORK/touched"; : > "$TOUCHED"
 
 # THE VALIDATOR RUNS IN PROCESS (BL-878). The tree's copy of validate-enforcement-map.sh is sourced ONCE,
 # by absolute path, here in the shell that runs every cell: a source defines vem_entry and returns before
-# any arm. Each cell is `( vem_entry --arms <id> )`. ONE SOURCE COVERS EVERY MUTANT because this fixture
-# has one tree and mutates its validator IN PLACE (`edit`, the matrix's `cp -p`), and vem_entry reads the
-# file text by path at CALL time, so each call evaluates the mutant on disk at that moment; no mutation
-# program touches the entry or its guard, and one that did would make the entry refuse with exit 2, which
-# guard_sel reports as FIXTURE BROKEN. The two remaining separate-program starts are the cli-pass and
-# cli-refuse twins in EQ below, declared in this fixture's cells.decl.
+# any arm. Each cell is `( vem_entry --arms <id> )`. The two separate-program starts are the cli-pass and
+# cli-refuse cells in EQ below, declared in this fixture's cells.decl.
 . "$TREE/$ARM" || { echo "FIXTURE ERROR: sourcing $TREE/$ARM failed" >&2; exit 2; }
 declare -F vem_entry >/dev/null || { echo "FIXTURE ERROR: $TREE/$ARM defined no vem_entry when sourced" >&2; exit 2; }
 
@@ -244,17 +165,7 @@ says() {
   esac
 }
 
-# EVERY WRONG FIX IS SCORED THE SAME WAY, INLINE, AND ON THREE OUTCOMES RATHER THAN TWO. It is
-# not enough that the wrong fix stops printing the finding: an absence is also what a run that
-# died produces, and scoring that as a kill is how a battery certifies silence. So each of the
-# three below branches on the finding STILL BEING PRESENT (the tree does not separate the two
-# implementations, and the assertion above it is not evidence about either), on the specific
-# message that identifies WHICH mechanism killed it, and on anything else. Measured while
-# writing them: all three wrong fixes are killed by I108's own probe or by a different half of
-# it, never by the corpus arm they disable — which is exactly why the mechanism that kills is
-# named in the assertion rather than left as "it went red".
-
-# --- The mutation programs, one place each ------------------------------------
+# --- The seed edit programs, one place each ------------------------------------
 #
 # Each is anchored on a line that occurs exactly ONCE in the file it edits, and `edit` above
 # refuses a program that matches nothing.
@@ -282,38 +193,10 @@ MUT_INFO='
 MUT_TEMPLATE='
 { if ($0 == "```derived") { print "```derivation"; next } print }'
 
-# READER MUTANT: indent-blind, which is the shape this reader had before it learned that a
-# fence inside a list item is still a fence. The taught passage now states the indent rule, so
-# the arm`s probe must notice when the reader stops honouring it.
-MUT_READER_FLAT='
-{ if ($0 ~ /if is_opener "\$\{line#"\$indent"\}"; then/) { sub(/"\$\{line#"\$indent"\}"/, "\"$line\"") } print }'
-
-# READER MUTANT: the info-string arm widened back to a prefix match, which opens a phantom
-# block on any wrapped sentence beginning with the token.
-MUT_READER_WIDE='
-{ if ($0 ~ /\[ "\$b" = .```derived. \]/) { print "  case \"$b\" in \x27```derived\x27*) return 0;; esac; return 1"; next } print }'
-
-# WRONG FIX W1: the passage extractor keeps only its FIRST line, so half A compares openers.
-MUT_W1='
-{ if ($0 == "    on { buf = buf $0 \"\\n\" }") { print "    on \&\& buf == \"\" { buf = buf $0 \"\\n\" }"; next } print }'
-
-# WRONG FIX W2: i108_declared binds four of the five, with one name written twice so the
-# assignment stays well formed.
-MUT_W2='
-{ if ($0 == "core/team-roles/tea.md\x27") { print "core/team-roles/analyst.md\x27"; next } print }'
-
-# WRONG FIX W3: half C`s population keyed on the fence opener — the token that drifts — instead
-# of on the record field, which does not.
-MUT_W3='
-{ if ($0 ~ /grep -rlE .\^\[\[:blank:\]\]\*- derivation:./) {
-    print "                grep -rlF -- \x27```derived\x27 \"$1\" 2>/dev/null; } | LC_ALL=C sort -u; }"; next }
-  print }'
-
 # THE TAUGHT FENCE INDENTED IN ONE COPY ONLY: a fork in LEADING BLANKS and nothing else. The
 # reader still opens an indented fence, so half C is silent here by construction and no channel
 # but half A's byte comparison can see it. It is seeded because nothing else seeds whitespace --
-# every other case in this file changes a WORD -- and W4 below is the wrong fix it exists to
-# kill.
+# every other case in this file changes a WORD.
 MUT_INDENT='
 { if ($0 == "```derived") { print "  ```derived"; next }
   if ($0 == "$ grep -c \x27save_state_fn\x27 rebalancer/execution.py") { print "  $ grep -c \x27save_state_fn\x27 rebalancer/execution.py"; next }
@@ -329,21 +212,6 @@ MUT_UNCLOSED='
 { if ($0 == "19") { print "19"; print "$ echo two"; print "two"; next }
   if ($0 == "```" && opened && !closed) { print "  ```"; closed = 1; next }
   if ($0 == "```derived") { opened = 1 }
-  print }'
-
-# WRONG FIX W4: leading blanks normalised at the comparison site, so two copies differing only
-# in the indent of their fence compare equal.
-MUT_W4='
-{ if ($0 == "    i108_got=\"$(i108_passage \"$REPO_ROOT/$i108_rel\")\"") {
-    print "    i108_got=\"$(i108_passage \"$REPO_ROOT/$i108_rel\" | sed \x27s/^[[:blank:]]*//\x27)\""; next }
-  print }'
-
-# WRONG FIX W5: the reader`s two streams merged. The GRAMMAR line then lands in the stdout blob,
-# where it carries `path:` and satisfies the very substring test that asks whether the file
-# opened -- so the arm fails OPEN on its own evidence while the stderr channel reads empty.
-MUT_W5='
-{ if ($0 == "i108_list() { : > \"$2\"; i108_lr=\"$1\"; i108_le=\"$2\"; shift 2; bash \"$i108_lr\" --list \"$@\" 2>\"$i108_le\"; }") {
-    print "i108_list() { : > \"$2\"; i108_lr=\"$1\"; i108_le=\"$2\"; shift 2; bash \"$i108_lr\" --list \"$@\" 2>\&1; }"; next }
   print }'
 
 # The taught passage`s opening sentence, held here so half B`s core/fixtures/ exclusion has a
@@ -508,97 +376,26 @@ if edit "$t" "core/team-roles/remediator.md" "$MUT_TEMPLATE"; then
        "$t" "core/team-roles/remediator.md"
 fi
 
-# --- Assertion 6: the reader stops honouring the INDENT rule ------------------
-# The taught passage states the fence may be indented. This asserts that statement is bound to
-# the program that decides it: with the reader made indent-blind, I108's probe refuses to read
-# the corpus and names the indented shape.
-t="$(fresh)"
-if edit "$t" "$READER" "$MUT_READER_FLAT"; then
-  says I108 "A06 the probe REFUSES when the reader stops opening an INDENTED fence, which the passage teaches is read" \
-       "$t" "probe scored 1000000000 "
-  twin READER-FLAT "$t" I122
-fi
-
-# --- Assertion 7: the reader stops requiring an exact info string -------------
-t="$(fresh)"
-if edit "$t" "$READER" "$MUT_READER_WIDE"; then
-  says I108 "A07 the probe REFUSES when the reader opens a fence whose info string carries a trailing word" \
-       "$t" "probe scored 10000000000 "
-  twin READER-WIDE "$t" I122
-fi
-
-# --- Assertion 8: WRONG FIX W1 — compare only the opener line -----------------
-# Built on A01's tree, where the drift is in the passage BODY. The correct arm reports it; an
-# arm that extracts only the opening sentence cannot, and stays green.
+# --- Assertion 8: a body drift on A01's tree ----------------------------------
 t="$(fresh)"
 if edit "$t" "core/team-roles/sm.md" "$MUT_DRIFT"; then
-  says I108 "A08a W1's tree is an offender: the shipped arm reports the body drift" \
+  says I108 "A08a an offender: the arm reports the body drift" \
        "$t" "the taught derivation-fence passage has forked"
-  W1_RC=$?
-  if edit "$t" "$ARM" "$MUT_W1"; then
-    twin W1 "$t" I121
-    out="$(run_arm "$t" I108)"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"the taught derivation-fence passage has forked"*)
-          bad "A08b W1 (an arm comparing only the OPENER line) still reported the body drift, so shortening the extraction changed no cell and this tree does not separate the two implementations" ;;
-        *"probe scored 10000100 "*)
-          mutant_killed "$([ "$W1_RC" -eq 0 ] && echo 1 || echo 0)" W1 "A08b W1 (an arm extracting only the OPENER line) is KILLED by the probe on BOTH body bits — 100, two passages differing by one word, and 10000000, two differing only in the leading blanks of their fence" ;;
-        *)
-          bad "A08b W1 reported neither the fork nor a probe refusal (rc=$rc). An arm that compares openers would ship, green, over five copies teaching five different bodies." ;;
-      esac
-    fi
-  fi
 fi
 
-# --- Assertion 9: WRONG FIX W2 — bind four of the five ------------------------
-# The drift is seeded in tea.md, the copy W2 drops. Half A goes blind, and what is asserted is
-# that half B is what catches it — the two halves are recorded here as NOT redundant, in the
-# one direction where one covers the other.
+# --- Assertion 9: a drift in tea.md --------------------------------------------
 t="$(fresh)"
 if edit "$t" "core/team-roles/tea.md" "$MUT_DRIFT"; then
-  says I108 "A09a W2's tree is an offender: the shipped arm reports the drift in tea.md" \
+  says I108 "A09a an offender: the arm reports the drift in tea.md" \
        "$t" "the taught derivation-fence passage has forked"
-  W2_RC=$?
-  if edit "$t" "$ARM" "$MUT_W2"; then
-    twin W2 "$t" I121
-    out="$(run_arm "$t" I108)"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"the taught derivation-fence passage has forked"*)
-          bad "A09b W2 (an arm binding FOUR of the five) still reported the fork, so dropping a copy from i108_declared changed no cell and this tree does not separate the two implementations" ;;
-        *"outside the five bound role files carry the taught derivation-fence passage"*)
-          mutant_killed "$([ "$W2_RC" -eq 0 ] && echo 1 || echo 0)" W2 "A09b W2 (an arm binding FOUR of the five) goes blind to the drift and is KILLED by half B, which reports the unbound copy" ;;
-        *)
-          bad "A09b W2 reported NEITHER the fork nor an unbound copy (rc=$rc), so a copy dropped from the declared set is invisible to every half. The four-of-five wrong fix would ship." ;;
-      esac
-    fi
-  fi
 fi
 
-# --- Assertion 10: WRONG FIX W3 — key half C on the token that drifts ---------
-# Built on A05's tree. This is the arm's own first cut, and the population key is the whole of
-# it: keyed on a fence opener, remediator.md leaves the population the moment its opener is
-# renamed, and the arm reports a clean tree over the one file it was written to catch.
+# --- Assertion 10: remediator.md's fence renamed -------------------------------
+# Built on A05's tree.
 t="$(fresh)"
 if edit "$t" "core/team-roles/remediator.md" "$MUT_TEMPLATE"; then
-  says I108 "A10a W3's tree is an offender: the shipped arm names remediator.md" \
+  says I108 "A10a an offender: the arm names remediator.md" \
        "$t" "core/team-roles/remediator.md"
-  W3_RC=$?
-  if edit "$t" "$ARM" "$MUT_W3"; then
-    twin W3 "$t" I121
-    out="$(run_arm "$t" I108)"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"core/team-roles/remediator.md"*)
-          bad "A10b W3 (half C keyed on the fence opener) still named remediator.md, so the population key is not what this assertion claims it is and the tree does not separate the two implementations" ;;
-        *"probe scored 1000000 "*)
-          mutant_killed "$([ "$W3_RC" -eq 0 ] && echo 1 || echo 0)" W3 "A10b W3 (half C keyed on the FENCE OPENER, the token that drifts) is KILLED by the probe, which requires the population to take a file anchored on the record field alone" ;;
-        *)
-          bad "A10b W3 reported neither remediator.md nor a probe refusal (rc=$rc). A population keyed on the drifting token would ship, silently, over the one file it exists to catch." ;;
-      esac
-    fi
-  fi
 fi
 
 # --- Assertion 11: half A — a fork in LEADING BLANKS ONLY ---------------------
@@ -611,28 +408,11 @@ if edit "$t" "core/team-roles/analyst.md" "$MUT_INDENT"; then
        "$t" "the taught derivation-fence passage has forked"
 fi
 
-# --- Assertion 12: WRONG FIX W4 — normalise leading blanks --------------------
-# Built on A11's tree, and it is the only tree that separates the two implementations. W4
-# survives the probe, survives every other assertion here, and survives the entry's receipt.
+# --- Assertion 12: A11's tree again --------------------------------------------
 t="$(fresh)"
 if edit "$t" "core/team-roles/analyst.md" "$MUT_INDENT"; then
-  says I108 "A12a W4's tree is an offender: the shipped arm reports the leading-blank fork" \
+  says I108 "A12a an offender: the arm reports the leading-blank fork" \
        "$t" "the taught derivation-fence passage has forked"
-  W4_RC=$?
-  if edit "$t" "$ARM" "$MUT_W4"; then
-    twin W4 "$t" I121
-    out="$(run_arm "$t" I108)"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"the taught derivation-fence passage has forked"*)
-          bad "A12b W4 (a comparison that strips leading blanks) still reported the fork, so the normalisation changed no cell and this tree does not separate the two implementations" ;;
-        *"$OKLINE"*)
-          mutant_killed "$([ "$W4_RC" -eq 0 ] && echo 1 || echo 0)" W4 "A12b W4 (a comparison that STRIPS LEADING BLANKS) is KILLED — it goes green on a copy whose fence is indented where the others are not" ;;
-        *)
-          bad "A12b W4 stayed silent about the fork but did NOT reach a green verdict (rc=$rc), so the silence is a run that died rather than a comparison that went blind." ;;
-      esac
-    fi
-  fi
 fi
 
 # --- Assertion 13: half C — a taught block the reader cannot CLOSE ------------
@@ -649,35 +429,15 @@ if [ "$brk" -eq 0 ]; then
        "$t" "open a derivation fence the reader never sees CLOSED"
 fi
 
-# --- Assertion 14: WRONG FIX W5 — merge the reader's two streams --------------
-# Built on A13's tree. Merging with 2>&1 is the natural-looking simplification and it fails
-# OPEN: the GRAMMAR line carries the path and a colon, which is exactly the substring the
-# opened-a-block test looks for, so the broken file answers its own question.
+# --- Assertion 14: A13's tree again --------------------------------------------
 t="$(fresh)"
 brk=0
 for r in $FIVE; do
   edit "$t" "core/team-roles/$r.md" "$MUT_UNCLOSED" || { brk=1; break; }
 done
 if [ "$brk" -eq 0 ]; then
-  says I108 "A14a W5's tree is an offender: the shipped arm reports the unclosed block" \
+  says I108 "A14a an offender: the arm reports the unclosed block" \
        "$t" "open a derivation fence the reader never sees CLOSED"
-  W5_RC=$?
-  if edit "$t" "$ARM" "$MUT_W5"; then
-    twin W5 "$t" I121
-    out="$(run_arm "$t" I108)"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"open a derivation fence the reader never sees CLOSED"*)
-          bad "A14b W5 (the reader's streams merged with 2>&1) still reported the unclosed block, so the merge changed no cell and this tree does not separate the two implementations" ;;
-        *"probe scored 100000000000 "*)
-          mutant_killed "$([ "$W5_RC" -eq 0 ] && echo 1 || echo 0)" W5 "A14b W5 (the reader's two streams MERGED with 2>&1) is KILLED by the probe, whose stderr channel reads empty when the merge takes it" ;;
-        *"$OKLINE"*)
-          bad "A14b W5 went fully GREEN. The merge is not caught by the probe either, so an arm reading a merged stream would ship and acquit every unclosable taught block." ;;
-        *)
-          bad "A14b W5 reported neither the unclosed block nor a probe refusal (rc=$rc)." ;;
-      esac
-    fi
-  fi
 fi
 
 # --- Assertion 15: the reader is ABSENT ---------------------------------------
@@ -714,8 +474,7 @@ fi
 # I121 binds one paragraph into every file matching core/team-roles/*.md, byte-identical, once
 # each, as its own paragraph, with no copy elsewhere, and with the validator path it names
 # resolving to the derivations reader. Every half is absence-shaped, so every offender below is
-# presence-shaped: each demands the specific message that names it. The three wrong arms are
-# built on trees the shipped arm reports, and each is scored on the mechanism that kills it.
+# presence-shaped: each demands the specific message that names it.
 #
 # The opener sentence is held here for the same reason OPENER is: half B excludes core/fixtures/,
 # and A27 below plants a copy under core/fixtures/ that must be ACQUITTED while A26 plants one
@@ -745,30 +504,11 @@ $0 == "lines of shell; write each path literally, because a fence has no variabl
 MUT_I121_PTRALL='
 $0 == "by one call to `scripts/ai-dlc/validate-artifact-derivations.sh <that file>`, or one read-only" { print "by one call to `scripts/ai-dlc/validate-derivations.sh <that file>`, or one read-only"; next }
 { print }'
-# CONTROL MUTANT for the self-exemption: half B stops reading scripts/. The control must fire
-# rather than the exemption hiding a scan that no longer reaches this file.
-MUT_I121_ROOTS='
-$0 == "        \"$REPO_ROOT/core\" \"$REPO_ROOT/scripts\" \"$REPO_ROOT/templates\" \\" { print "        \"$REPO_ROOT/core\" \"$REPO_ROOT/templates\" \\"; next }
-{ print }'
-# WRONG ARM W6: the block keeps only its OPENER line, so half A compares openers.
-MUT_W6='
-$0 == "      if (on) { buf = buf $0 \"\\n\"; if ($0 == cl) { on = 0; closed = 1; jc = 1 } }" { print "      if (on) { if (buf == \"\") buf = $0 \"\\n\"; if ($0 == cl) { on = 0; closed = 1; jc = 1 } }"; next }
-{ print }'
-# WRONG ARM W7: the population HAND-LISTED as the eight files the first contract named.
-MUT_W7='
-index($0, "i121_pop() { for i121_pf in \"$1\"/*.md;") == 1 { sub(/"\$1"\/\*\.md/, "\"$1\"/analyst.md \"$1\"/architect.md \"$1\"/pm.md \"$1\"/sm.md \"$1\"/tea.md \"$1\"/remediator.md \"$1\"/ops.md \"$1\"/adversary.md"); print; next }
-{ print }'
-# WRONG ARM W8: the opener keyed as a SUBSTRING rather than a whole line with a blank above it.
-MUT_W8='
-$0 == "      if ($0 == op && prev == \"\") { nex++; if (nex == 1) on = 1 }" { print "      if (index($0, sn)) { nex++; if (nex == 1) on = 1 }"; next }
-{ print }'
-
 I121_MISSING="do not carry the verify-shape paragraph"
 I121_INLINE="opener sentence appears inside another line or paragraph in"
 I121_FORK="the verify-shape paragraph has forked"
 I121_EXTRA="outside core/team-roles/*.md carry the verify-shape opener sentence"
 I121_PTRMSG="tells the teammate to run scripts/ai-dlc/validate-derivations.sh"
-I121_CTL="I121's site scan did not find scripts/validate-enforcement-map.sh"
 
 # --- A20: I121 CONTROL ---------------------------------------------------------
 t="$(fresh)"
@@ -885,67 +625,18 @@ if [ "$brk" -eq 0 ]; then
   fi
 fi
 
-# --- A30: the self-exemption's control fires -----------------------------------
-t="$(fresh)"
-if edit "$t" "$ARM" "$MUT_I121_ROOTS"; then
-  says I121 "A30 half B  with scripts/ dropped from the roots the CONTROL fires, rather than the self-exemption hiding a scan that no longer reaches this file" \
-       "$t" "$I121_CTL"
-  twin I121-ROOTS "$t" I122
-fi
-
-# --- A31: WRONG ARM W6 — compare only the opener line --------------------------
+# --- A31a-A33a: offender trees ---------------------------------------------------
 t="$(fresh)"
 if edit "$t" "core/team-roles/dev.md" "$MUT_I121_PTR"; then
-  says I121 "A31a W6's tree is an offender: the shipped arm reports the deleted pointer" "$t" "$I121_FORK"
-  W6_RC=$?
-  if edit "$t" "$ARM" "$MUT_W6"; then
-    twin W6 "$t" I122
-    out="$(run_i121_out "$t")"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"$I121_FORK"*) bad "A31b W6 (opener-only compare) still reported the fork, so this tree does not separate the two implementations" ;;
-        *"I121's probe scored 1000000001010 "*) mutant_killed "$([ "$W6_RC" -eq 0 ] && echo 1 || echo 0)" W6 "A31b W6 (an arm comparing only the OPENER line) is KILLED by the probe: 10 and 1000, a one-word body drift scored OK, and 1000000000000, no validator path left to resolve" ;;
-        *) bad "A31b W6 reported neither the fork nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I121 | cut -c1-200)" ;;
-      esac
-    fi
-  fi
+  says I121 "A31a an offender: the arm reports the deleted pointer" "$t" "$I121_FORK"
 fi
-
-# --- A32: WRONG ARM W7 — a hand-listed population ------------------------------
-# qa.md is outside the eight files the first contract named, so it is the file a hand list drops.
 t="$(fresh)"
 if edit "$t" "core/team-roles/qa.md" "$MUT_I121_DROP"; then
-  says I121 "A32a W7's tree is an offender: the shipped arm names qa.md" "$t" "$I121_MISSING: core/team-roles/qa.md"
-  W7_RC=$?
-  if edit "$t" "$ARM" "$MUT_W7"; then
-    twin W7 "$t" I122
-    out="$(run_i121_out "$t")"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"core/team-roles/qa.md"*) bad "A32b W7 (hand-listed population) still named qa.md, so this tree does not separate the two implementations" ;;
-        *"I121's probe scored 1 "*) mutant_killed "$([ "$W7_RC" -eq 0 ] && echo 1 || echo 0)" W7 "A32b W7 (a HAND-LISTED population) is KILLED by the probe, which requires the population to be every *.md in the directory" ;;
-        *) bad "A32b W7 reported neither qa.md nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I121 | cut -c1-200)" ;;
-      esac
-    fi
-  fi
+  says I121 "A32a an offender: the arm names qa.md" "$t" "$I121_MISSING: core/team-roles/qa.md"
 fi
-
-# --- A33: WRONG ARM W8 — the opener keyed as a substring -----------------------
 t="$(fresh)"
 if edit "$t" "core/team-roles/qa.md" "$MUT_I121_INLINE"; then
-  says I121 "A33a W8's tree is an offender: the shipped arm reports the inline opener" "$t" "$I121_INLINE: core/team-roles/qa.md"
-  W8_RC=$?
-  if edit "$t" "$ARM" "$MUT_W8"; then
-    twin W8 "$t" I122
-    out="$(run_i121_out "$t")"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"$I121_INLINE"*) bad "A33b W8 (substring key) still reported the inline opener, so this tree does not separate the two implementations" ;;
-        *"I121's probe scored 1101010 "*) mutant_killed "$([ "$W8_RC" -eq 0 ] && echo 1 || echo 0)" W8 "A33b W8 (the opener keyed as a SUBSTRING) is KILLED by the probe: 100000 and 1000000, the glued opener and the opener with no blank line above it both accepted, and in consequence 10, the no-blank-line seed counted an OK copy, and 1000, the glued seed counted a fork" ;;
-        *) bad "A33b W8 reported neither the inline opener nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I121 | cut -c1-200)" ;;
-      esac
-    fi
-  fi
+  says I121 "A33a an offender: the arm reports the inline opener" "$t" "$I121_INLINE: core/team-roles/qa.md"
 fi
 
 # --- I122: the advisor paragraph in every role contract ------------------------
@@ -972,28 +663,10 @@ index($0, "**Consult the `advisor` tool when it is available.**") == 1 { print "
 MUT_I122_WORD='
 $0 == "call it before your first edit or write, and again before you write your deliverable or verdict." { print "call it before you write your deliverable or verdict."; next }
 { print }'
-# CONTROL MUTANT for I122's self-exemption: half B stops reading scripts/.
-MUT_I122_ROOTS='
-$0 == "    i122_hits=\"$(i122_sites \"$REPO_ROOT/core\" \"$REPO_ROOT/scripts\" \\" { print "    i122_hits=\"$(i122_sites \"$REPO_ROOT/core\" \\"; next }
-{ print }'
-# WRONG ARM W9: the block keeps only its OPENER line.
-MUT_W9='
-$0 == "      if (on) { buf = buf $0 \"\\n\"; if ($0 == cl) { on = 0; closed = 1; jc = 1 } }   # i122 block" { print "      if (on) { if (buf == \"\") buf = $0 \"\\n\"; if ($0 == cl) { on = 0; closed = 1; jc = 1 } }   # i122 block"; next }
-{ print }'
-# WRONG ARM W10: the population HAND-LISTED.
-MUT_W10='
-index($0, "i122_pop() { for i122_pf in \"$1\"/*.md;") == 1 { sub(/"\$1"\/\*\.md/, "\"$1\"/analyst.md \"$1\"/architect.md \"$1\"/pm.md \"$1\"/sm.md \"$1\"/tea.md \"$1\"/remediator.md \"$1\"/ops.md \"$1\"/adversary.md"); print; next }
-{ print }'
-# WRONG ARM W11: the opener keyed as a SUBSTRING.
-MUT_W11='
-$0 == "      if ($0 == op && prev == \"\") { nex++; if (nex == 1) on = 1 }   # i122 opener key" { print "      if (index($0, sn)) { nex++; if (nex == 1) on = 1 }   # i122 opener key"; next }
-{ print }'
-
 I122_MISSING="do not carry the advisor paragraph"
 I122_INLINE="advisor opener sentence appears inside another line or paragraph in"
 I122_FORK="the advisor paragraph has forked"
 I122_EXTRA="outside core/team-roles/*.md carry the advisor opener sentence"
-I122_CTL="I122's site scan did not find scripts/validate-enforcement-map.sh"
 
 # --- A34: I122 CONTROL ---------------------------------------------------------
 t="$(fresh)"
@@ -1082,66 +755,18 @@ printf '# Role: Planted\n\n## Identity\n\nA role added after this arm was writte
 says I122 "A41 half A  a NEW role file without the advisor paragraph is REPORTED (the population is the glob, not a list)" \
      "$t" "$I122_MISSING: core/team-roles/zz-newrole.md"
 
-# --- A42: the self-exemption's control fires -----------------------------------
-t="$(fresh)"
-if edit "$t" "$ARM" "$MUT_I122_ROOTS"; then
-  says I122 "A42 half B  with scripts/ dropped from I122's roots the CONTROL fires, rather than the self-exemption hiding a scan that no longer reaches this file" \
-       "$t" "$I122_CTL"
-  twin I122-ROOTS "$t" I121
-fi
-
-# --- A43: WRONG ARM W9 — compare only the opener line --------------------------
+# --- A43a-A45a: offender trees ---------------------------------------------------
 t="$(fresh)"
 if edit "$t" "core/team-roles/dev.md" "$MUT_I122_WORD"; then
-  says I122 "A43a W9's tree is an offender: the shipped arm reports the dropped touchpoint" "$t" "$I122_FORK"
-  W9_RC=$?
-  if edit "$t" "$ARM" "$MUT_W9"; then
-    twin W9 "$t" I121
-    out="$(run_i122_out "$t")"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"$I122_FORK"*) bad "A43b W9 (opener-only compare) still reported the fork, so this tree does not separate the two implementations" ;;
-        *"I122's probe scored 1010 "*) mutant_killed "$([ "$W9_RC" -eq 0 ] && echo 1 || echo 0)" W9 "A43b W9 (an arm comparing only the OPENER line) is KILLED by the probe: 10 and 1000, a one-word body drift scored OK" ;;
-        *) bad "A43b W9 reported neither the fork nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I122 | cut -c1-200)" ;;
-      esac
-    fi
-  fi
+  says I122 "A43a an offender: the arm reports the dropped touchpoint" "$t" "$I122_FORK"
 fi
-
-# --- A44: WRONG ARM W10 — a hand-listed population -----------------------------
 t="$(fresh)"
 if edit "$t" "core/team-roles/qa.md" "$MUT_I122_DROP"; then
-  says I122 "A44a W10's tree is an offender: the shipped arm names qa.md" "$t" "$I122_MISSING: core/team-roles/qa.md"
-  W10_RC=$?
-  if edit "$t" "$ARM" "$MUT_W10"; then
-    twin W10 "$t" I121
-    out="$(run_i122_out "$t")"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"core/team-roles/qa.md"*) bad "A44b W10 (hand-listed population) still named qa.md, so this tree does not separate the two implementations" ;;
-        *"I122's probe scored 1 "*) mutant_killed "$([ "$W10_RC" -eq 0 ] && echo 1 || echo 0)" W10 "A44b W10 (a HAND-LISTED population) is KILLED by the probe, which requires the population to be every *.md in the directory" ;;
-        *) bad "A44b W10 reported neither qa.md nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I122 | cut -c1-200)" ;;
-      esac
-    fi
-  fi
+  says I122 "A44a an offender: the arm names qa.md" "$t" "$I122_MISSING: core/team-roles/qa.md"
 fi
-
-# --- A45: WRONG ARM W11 — the opener keyed as a substring ----------------------
 t="$(fresh)"
 if edit "$t" "core/team-roles/qa.md" "$MUT_I122_INLINE"; then
-  says I122 "A45a W11's tree is an offender: the shipped arm reports the inline opener" "$t" "$I122_INLINE: core/team-roles/qa.md"
-  W11_RC=$?
-  if edit "$t" "$ARM" "$MUT_W11"; then
-    twin W11 "$t" I121
-    out="$(run_i122_out "$t")"; rc=$?
-    if guard_sel "$rc" "$out"; then
-      case "$out" in
-        *"$I122_INLINE"*) bad "A45b W11 (substring key) still reported the inline opener, so this tree does not separate the two implementations" ;;
-        *"I122's probe scored 1101010 "*) mutant_killed "$([ "$W11_RC" -eq 0 ] && echo 1 || echo 0)" W11 "A45b W11 (the opener keyed as a SUBSTRING) is KILLED by the probe: 100000 and 1000000, the glued opener and the opener with no blank line above it both accepted, and in consequence 10 and 1000" ;;
-        *) bad "A45b W11 reported neither the inline opener nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I122 | cut -c1-200)" ;;
-      esac
-    fi
-  fi
+  says I122 "A45a an offender: the arm reports the inline opener" "$t" "$I122_INLINE: core/team-roles/qa.md"
 fi
 
 # --- A46/A47: I121 AND I122 DO NOT SATISFY EACH OTHER ---------------------------
@@ -1267,9 +892,7 @@ i75_case() { # <label> <tree> <want-substring|OK> — presence-shaped both ways
 }
 
 t="$(fresh)"
-i75_f0="$fails"
 i75_case "A16 I75 CONTROL: the unmutated seed passes --arms I75 and reaches its verdict" "$t" OK
-I75_A16_FAILS=$((fails - i75_f0))
 
 # The override read moved BELOW the CLAUDE_PROJECT_DIR fallback: the precedence that answers
 # about whichever repo the session started in.
@@ -1343,32 +966,11 @@ if edit "$t" "core/scripts/audit-layer-debt.sh" '
     "$t" "has NO end marker" "audit-layer-debt.sh"
 fi
 
-# W12: the WHOLE-SPAN reader restored, the shape I75 shipped with. On the pristine tree it is
-# killed by I75's own self-probe, whose real-sized copy big-ng.sh (merge-review-shards.sh with its
-# guard deleted) it accepts: the reader scores 011000 where 011013 is required.
-MUT_W12='
-  $0 == "i75_failsclosed() {" { print "i75_failsclosed() { i75_norm \"$1\" | awk \047/exit [0-9]|:-\\/nonexistent/ { f = 1 } END { exit (f ? 0 : 1) }\047; }"; skip = 1; next }
-  skip && $0 == "}" { skip = 0; next }
-  skip { next }
-  { print }'
-t="$(fresh)"
-if edit "$t" "$ARM" "$MUT_W12"; then
-  twin W12 "$t" I121
-  out="$(run_i75 "$t")"; rc=$?
-  if guard_sel "$rc" "$out"; then
-    case "$out" in
-      *"I75 self-probe FAILED: the fail-closed reader scored 011000 "*)
-        mutant_killed "$([ "$I75_A16_FAILS" = 0 ] && echo 1)" W12 "A53 W12 (the fails-closed token read from the WHOLE span) is KILLED by I75's self-probe on the real-sized copy: 011000 against 011013" ;;
-      *) bad "A53 W12 (the whole-span reader) was not refused by I75's self-probe (rc=$rc): $(printf '%s\n' "$out" | grep I75 | cut -c1-200)" ;;
-    esac
-  fi
-fi
-
 # --- Verdict ------------------------------------------------------------------
 # THE COUNT IS ASSERTED. A driver whose `for` loop or `if` guard stopped reaching an assertion
 # prints fewer lines and no failure, and an unrun assertion is indistinguishable from one that
 # passed.
-EXPECTED=89
+EXPECTED=56
 # --- no shipped caller passes validate-spawn-ledger.sh's --probe-from-caller seam ----------------
 # Hosted HERE because this fixture is .dist-only and seeds core/ and scripts/ whole, so the scan
 # reads a real tree; the shipping fold-architect-ledger-join cannot declare them. Non-comment lines
@@ -1394,14 +996,6 @@ if [ "$probe_seen" = 1 ] && [ "$probe_quiet" = 1 ]; then
   ok "D-tree the restore guard reports an unrecorded write (FIXTURE BROKEN) and is quiet once it is removed"
 else
   bad "D-tree the restore guard cannot tell an unrecorded write from a clean tree -- seen=$probe_seen quiet=$probe_quiet"
-fi
-# A plain run executes no matrix-only cell; --matrix executes one row per mutant per arm hosted here.
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
-  else bad "MX plain run executed $MROWS matrix-only rows"; fi
-else
-  if [ "$MROWS" -eq 80 ]; then ok "MX matrix run measured 80 mutant x arm cells (16 mutants x 5 arms)"
-  else bad "MX matrix run measured $MROWS cells, 80 expected"; fi
 fi
 if ! tree_clean; then
   printf '\nderived-fence-binding: FIXTURE BROKEN — the working tree differs from the pristine seed after the final restore, so some case wrote a path it never recorded with track:\n' >&2

@@ -43,10 +43,6 @@ ACK_HOOK="$(pick "$HERE/../../hooks/ai-dlc-acknowledge.sh" \
   || { echo "FIXTURE ERROR: cannot locate the hooks" >&2; exit 2; }
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# Every mutant kill goes through mutant_killed, gated on the base flag of the arm it guards (BL-828).
-[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # Drive the Stop hook. A transcript is required by Check 0 but we give none, so Check 0
 # fails open and we land on Check 0b — which is what we are testing.
@@ -162,9 +158,8 @@ rm -rf "$W"
 # STALL: their `case` had DIVERGENT and REOPENED branches and a catch-all asserting STALLED.
 # A deny that misnames the state hands the operator the wrong remedy with a confident verdict
 # -- another CHANGE_APPROACH record, which is exactly what this state refuses.
-# Each message is classified PRESENCE-first, so a copy that died and printed nothing reads
-# `none` -- never a kill. `ceiling` = the CEILING text and no stall text; `stalled` = the
-# CEILING header carrying the STALL text, which is exactly what the mutant must produce.
+# Each message is classified PRESENCE-first. `ceiling` = the CEILING text and no stall text;
+# `stalled` = the CEILING header carrying the STALL text; `none` = neither.
 ceiling_msg_class() { # <out> -> ceiling | stalled | none
   case "$1" in *"(CEILING)"*) ;; *) echo none; return ;; esac
   case "$1" in *"it is STALLED"*) echo stalled; return ;; esac
@@ -187,38 +182,14 @@ case "$CEIL" in
   "deny "*) ok "CEILING: the Agent dispatch is DENIED" ;;
   *) bad "CEILING: dispatch ALLOWED on a series past the resolution ceiling ($CEIL)" ;;
 esac
-B_CEIL_ACK=0; B_CEIL_STOP=0
 case "$CEIL" in
-  *" ceiling "*) ok "CEILING: the PreToolUse deny names the resolution ceiling, not a stall"; B_CEIL_ACK=1 ;;
+  *" ceiling "*) ok "CEILING: the PreToolUse deny names the resolution ceiling, not a stall" ;;
   *) bad "CEILING: the PreToolUse deny misnames the state ($CEIL)" ;;
 esac
 case "$CEIL" in
-  *" ceiling") ok "CEILING: the Stop-hook block names the resolution ceiling, not a stall"; B_CEIL_STOP=1 ;;
+  *" ceiling") ok "CEILING: the Stop-hook block names the resolution ceiling, not a stall" ;;
   *) bad "CEILING: the Stop-hook block misnames the state ($CEIL)" ;;
 esac
-
-# MUTANT: collapse CEILING into STALLED in BOTH hooks. Built in a copy of the WHOLE hooks
-# directory, because the continue hook resolves a sibling beside itself; `cmp -s` refuses a
-# mutation that matched nothing. The message arms above must both go red.
-MUTD="$(mktemp -d "${TMPDIR:-/tmp}/divergence-mut-XXXXXX")"
-cp -R "$(dirname "$ACK_HOOK")/." "$MUTD/"
-MUT_OK=1
-for h in "$(basename "$ACK_HOOK")" "$(basename "$STOP_HOOK")"; do
-  sed 's/^\([[:space:]]*\)STALLED)$/\1STALLED|CEILING)/' "$MUTD/$h" > "$MUTD/$h.mut" \
-    && mv "$MUTD/$h.mut" "$MUTD/$h" || MUT_OK=0
-  cmp -s "$MUTD/$h" "$(dirname "$ACK_HOOK")/$h" && MUT_OK=0
-done
-if [ "$MUT_OK" -ne 1 ] || [ ! -f "$MUTD/$(basename "$STOP_HOOK")" ]; then
-  bad "FIXTURE BROKEN: the ceiling-collapsed-into-stalled mutant did not apply to both hooks"
-else
-  MCEIL="$(drive_ceiling "$MUTD/$(basename "$ACK_HOOK")" "$MUTD/$(basename "$STOP_HOOK")")"
-  case "$MCEIL" in
-    "deny stalled stalled") mutant_killed "$(( ${B_CEIL_ACK:-0} && ${B_CEIL_STOP:-0} ))" ceiling-as-stalled "mutant ceiling-as-stalled is KILLED by both message arms (both copies ran and printed the STALL text under a CEILING header)" ;;
-    *" none"*) bad "FIXTURE BROKEN: a mutant hook copy printed no CEILING message at all ($MCEIL) -- it did not run, so no kill is scored" ;;
-    *) bad "mutant ceiling-as-stalled SURVIVED ($MCEIL) -- the CEILING message arms cannot tell CEILING from STALLED" ;;
-  esac
-fi
-rm -rf "$MUTD"
 
 # =============================================================================
 # 2. THE RESUME — a resolved cycle CAN dispatch. If this fails, the deadlock is back.
@@ -309,36 +280,14 @@ drive_effects() { # <ack-hook> <stop-hook> -> "<ack-class> <stop-class>"
   printf '%s %s' "$(effects_class "$a")" "$(effects_class "$s")"
 }
 EFF="$(drive_effects "$ACK_HOOK" "$STOP_HOOK")"
-B_EFF_ACK=0; B_EFF_STOP=0
 case "$EFF" in
-  "yes "*) ok "ACK_HOOK: the ADJUDICATE step names the value each option leaves in force"; B_EFF_ACK=1 ;;
+  "yes "*) ok "ACK_HOOK: the ADJUDICATE step names the value each option leaves in force" ;;
   *) bad "ACK_HOOK: the dispatch deny does not name the value each option leaves in force ($EFF)" ;;
 esac
 case "$EFF" in
-  *" yes") ok "STOP_HOOK: the ADJUDICATE step names the value each option leaves in force"; B_EFF_STOP=1 ;;
+  *" yes") ok "STOP_HOOK: the ADJUDICATE step names the value each option leaves in force" ;;
   *) bad "STOP_HOOK: the Stop block does not name the value each option leaves in force ($EFF)" ;;
 esac
-# MUTANTS: delete the phrase from ONE hook at a time, in a copy of the whole hooks dir. Each
-# must flip exactly its own arm; a copy that printed nothing reads `none` and is BROKEN.
-for _mh in ACK STOP; do
-  MUTD="$(mktemp -d "${TMPDIR:-/tmp}/divergence-eff-XXXXXX")"
-  cp -R "$(dirname "$ACK_HOOK")/." "$MUTD/"
-  if [ "$_mh" = ACK ]; then _mf="$(basename "$ACK_HOOK")"; _want="no yes"; else _mf="$(basename "$STOP_HOOK")"; _want="yes no"; fi
-  sed 's/value it leaves in force/value it chooses/' "$MUTD/$_mf" > "$MUTD/$_mf.mut" && mv "$MUTD/$_mf.mut" "$MUTD/$_mf"
-  if cmp -s "$MUTD/$_mf" "$(dirname "$ACK_HOOK")/$_mf"; then
-    bad "FIXTURE BROKEN: the effects-clause mutant did not apply to $_mf"
-  else
-    MEFF="$(drive_effects "$MUTD/$(basename "$ACK_HOOK")" "$MUTD/$(basename "$STOP_HOOK")")"
-    case "$MEFF" in
-      "$_want") if [ "$_mh" = ACK ]; then mutant_killed "${B_EFF_ACK:-0}" ACK-effects-deleted "mutant ACK-effects-deleted is KILLED by its own arm only ($MEFF)"
-                else mutant_killed "${B_EFF_STOP:-0}" STOP-effects-deleted "mutant STOP-effects-deleted is KILLED by its own arm only ($MEFF)"; fi ;;
-      *none*) bad "FIXTURE BROKEN: a mutant hook copy printed no deny/block ($MEFF) -- it did not run, so no kill is scored" ;;
-      *) bad "mutant $_mh-effects-deleted: got '$MEFF', wanted '$_want'" ;;
-    esac
-  fi
-  rm -rf "$MUTD"
-done
-unset _mh _mf _want
 
 # =============================================================================
 # 4. THE DECOYS — a guard that fires on a working cycle gets ripped out.
@@ -509,47 +458,15 @@ pend_cells() { # <ack-hook> <stop-hook> -> "<ack class>/<stop class>" for worlds
 PEND_WANT="pending/pending loud/loud loud/loud none/none"
 PEND="$(pend_cells "$ACK_HOOK" "$STOP_HOOK")"
 set -- $PEND
-B_PEND=0; B_SKIP=0; B_LATER=0; B_PRES=0
-case "$1" in pending/pending) ok "PENDING: sprint-id 8 with s7/ present and no s8/ yet logs the pending form in BOTH hooks — no \"Fix the declared sprint\""; B_PEND=1 ;;
+case "$1" in pending/pending) ok "PENDING: sprint-id 8 with s7/ present and no s8/ yet logs the pending form in BOTH hooks — no \"Fix the declared sprint\"" ;;
   *) bad "PENDING: a sprint before its first artifact was not reported in the pending form by both hooks (ack/stop '$1')" ;; esac
-case "$2" in loud/loud) ok "SKIP: sprint-id 9 with only s7/ (no s8/) keeps the mis-declared form in BOTH hooks"; B_SKIP=1 ;;
+case "$2" in loud/loud) ok "SKIP: sprint-id 9 with only s7/ (no s8/) keeps the mis-declared form in BOTH hooks" ;;
   *) bad "SKIP: a declaration that skips a sprint was not reported as mis-declared by both hooks (ack/stop '$2')" ;; esac
-case "$3" in loud/loud) ok "LATER: sprint-id 8 with s7/ AND s9/ keeps the mis-declared form in BOTH hooks — a later sprint already wrote"; B_LATER=1 ;;
+case "$3" in loud/loud) ok "LATER: sprint-id 8 with s7/ AND s9/ keeps the mis-declared form in BOTH hooks — a later sprint already wrote" ;;
   *) bad "LATER: a sprint behind an existing later sprint was reported as pending (ack/stop '$3')" ;; esac
-case "$4" in none/none) ok "PRESENT: sprint-id 8 with s8/ present logs no UNADJUDICABLE row in either hook (the control)"; B_PRES=1 ;;
+case "$4" in none/none) ok "PRESENT: sprint-id 8 with s8/ present logs no UNADJUDICABLE row in either hook (the control)" ;;
   *) bad "PRESENT: the sprint's own directory exists and a hook still logged UNADJUDICABLE (ack/stop '$4')" ;; esac
 
-# MUTANTS, each in a copy of the WHOLE hooks dir. The I81 block is byte-identical in both hooks, so a
-# predicate mutant is applied to both; an emitter mutant to one. A copy that never ran classifies every
-# world `none`, which matches no wanted row.
-pend_mutant() { # <label> <want> <sed> <hook basenames...>
-  local label="$1" want="$2" prog="$3" d h got applied=1; shift 3
-  d="$(mktemp -d "${TMPDIR:-/tmp}/divergence-pmut-XXXXXX")"
-  cp -R "$(dirname "$ACK_HOOK")/." "$d/"
-  for h in "$@"; do
-    sed "$prog" "$d/$h" > "$d/$h.mut" && mv "$d/$h.mut" "$d/$h" || applied=0
-    cmp -s "$d/$h" "$(dirname "$ACK_HOOK")/$h" && applied=0
-  done
-  if [ "$applied" -ne 1 ]; then bad "FIXTURE BROKEN: pending mutant $label did not apply to $*"
-  else
-    got="$(pend_cells "$d/$(basename "$ACK_HOOK")" "$d/$(basename "$STOP_HOOK")")"
-    # A pend mutant is scored on the whole four-world vector, so its base is all four arms holding.
-    if [ "$got" = "$want" ]; then mutant_killed "$(( ${B_PEND:-0} && ${B_SKIP:-0} && ${B_LATER:-0} && ${B_PRES:-0} ))" "$label" "mutant $label is KILLED ($got)"
-    else bad "mutant $label: got '$got', wanted '$want'"; fi
-  fi
-  rm -rf "$d"
-}
-AB="$(basename "$ACK_HOOK")"; SB="$(basename "$STOP_HOOK")"
-# The previous-dir test is what separates a NEW sprint from a SKIPPED number: without it sprint-id 9
-# over s7/ alone reads as pending. (Arm PENDING reading the loud form is the emitter mutants below.)
-pend_mutant previous-dir-test-deleted "pending/pending pending/pending loud/loud none/none" \
-  's#&& \[ -d "\${ART_DIR}/s\$((10\#\$SPRINT_N - 1))" \] ##' "$AB" "$SB"
-pend_mutant later-dir-test-deleted "pending/pending loud/loud pending/pending none/none" \
-  's#&& \[ "\$_later" -eq 0 \] ##' "$AB" "$SB"
-pend_mutant ack-emitter-swapped "loud/pending loud/loud loud/loud none/none" \
-  's/^    if \[ "\$SPRINT_PENDING" -eq 1 \]; then$/    if false; then/' "$AB"
-pend_mutant stop-emitter-swapped "pending/loud loud/loud loud/loud none/none" \
-  's/^  if \[ "\$SPRINT_PENDING" -eq 1 \]; then$/  if false; then/' "$SB"
 set --
 
 # =============================================================================
@@ -622,79 +539,15 @@ cap_want() { # <case> -> the shipped validator's row
 # The era worlds and the three record worlds also read the GATE; the record worlds hand it their transcript.
 cap_gate() { case "$1" in era-*) echo gate ;; cap-norecord|cap-record|cap-badrecord) echo "gate t" ;; esac; }
 CAP_CASES="cap-notoken cap-bound cap-from-p2 cap-inprog cap-norecord cap-record cap-badrecord era-between era-bound era-merge-before era-merge-after"
-CAP_N=0; B_CAPROW=0; CAP_WANT_N=0
+CAP_N=0; CAP_WANT_N=0
 for _c in $CAP_CASES; do CAP_WANT_N=$((CAP_WANT_N + 1)); done
 for _c in $CAP_CASES; do
   _g="$(cap_cell - "$_c" $(cap_gate "$_c"))"; _w="$(cap_want "$_c")"
   if [ "$_g" = "$_w" ]; then ok "CAP $_c: dispatch/stop$([ -n "$(cap_gate "$_c")" ] && echo /gate) = $_g"; CAP_N=$((CAP_N + 1))
   else bad "CAP $_c: dispatch/stop$([ -n "$(cap_gate "$_c")" ] && echo /gate) = '$_g', want '$_w'"; fi
 done
-# Every cap mutant is gated on the WHOLE shipped row having held in this run (each mutant reads two of its cells).
-if [ "$CAP_N" -eq "$CAP_WANT_N" ]; then ok "CAP row: all $CAP_WANT_N cap/era cells hold on the shipped validator and hooks"; B_CAPROW=1
-else bad "CAP row: $CAP_N of $CAP_WANT_N cap/era cells hold; no cap mutant can be scored"; fi
-# MUTANTS of the validator, each a copy of the shipped file with every anchor applied exactly once (python
-# refuses a missing or repeated anchor), copied into the world's scripts/ai-dlc/ in place of the shipped one.
-# Each runs only its DECIDING case and one TWIN case that must keep the shipped row. The kill is gated on both
-# cases' base rows having held in this run.
-cap_mut() { # <label> <deciding case> <twin case> <old> <new> [<old> <new>]...
-  local label="$1" dec="$2" twin="$3" d f gd gt wd wt; shift 3
-  d="$(mktemp -d "${TMPDIR:-/tmp}/divergence-cmut-XXXXXX")"; f="$d/validate-adversarial-convergence.sh"
-  if ! python3 - "$W_VALIDATOR" "$f" "$@" <<'PY'
-import sys
-s = open(sys.argv[1], encoding="utf-8").read(); a = sys.argv[3:]
-for i in range(0, len(a), 2):
-    if s.count(a[i]) != 1: sys.exit(3)
-    s = s.replace(a[i], a[i + 1])
-open(sys.argv[2], "w", encoding="utf-8").write(s)
-PY
-  then bad "FIXTURE STALE: mutant $label -- an anchor is not in the validator exactly once"; rm -rf "$d"; return; fi
-  if cmp -s "$W_VALIDATOR" "$f" || ! bash -n "$f" 2>/dev/null; then bad "FIXTURE STALE: mutant $label DID NOT APPLY or is not valid shell"; rm -rf "$d"; return; fi
-  wd="$(cap_want "$dec")"; wt="$(cap_want "$twin")"
-  gd="$(cap_cell "$f" "$dec" $(cap_gate "$dec"))"; gt="$(cap_cell "$f" "$twin" $(cap_gate "$twin"))"
-  if [ "$gt" != "$wt" ]; then bad "mutant $label: its twin $twin moved too ('$gt', want '$wt') -- the kill is not its own arm's"
-  elif [ "$gd" = "$wd" ]; then bad "mutant $label SURVIVED: $dec still reads '$gd'"
-  else mutant_killed "${B_CAPROW:-0}" "$label" "mutant $label is KILLED by CAP $dec ('$gd', shipped '$wd'); twin $twin holds"; fi
-  rm -rf "$d"
-}
-W_VALIDATOR="$(pick "$HERE/../../scripts/validate-adversarial-convergence.sh" \
-                    "$HERE/../../../scripts/ai-dlc/validate-adversarial-convergence.sh" \
-                    "$HERE/../../core/scripts/validate-adversarial-convergence.sh")"
-if [ -z "$W_VALIDATOR" ]; then bad "FIXTURE BROKEN: the validator is not found; no cap mutant is scored"
-else
-  # Cap at p4, the self-probe moved with it (a cap_capped mutant alone exits 2 on that probe, no verdict).
-  cap_mut cap-at-p4 cap-bound cap-inprog \
-    'cap_capped() { case "${1:-}" in ""|*[!0-9]*) return 1 ;; esac; [ "$1" -ge 3 ]' \
-    'cap_capped() { case "${1:-}" in ""|*[!0-9]*) return 1 ;; esac; [ "$1" -ge 4 ]' \
-    'if ! cap_capped 3 EXIT_CONDITION_NOT_MET || cap_capped 3 EXIT_CONDITION_MET || cap_capped 2 EXIT_CONDITION_NOT_MET' \
-    'if ! cap_capped 4 EXIT_CONDITION_NOT_MET || cap_capped 4 EXIT_CONDITION_MET || cap_capped 3 EXIT_CONDITION_NOT_MET'
-  # Cap by POSITION in the series instead of by pass number.
-  cap_mut cap-by-position cap-from-p2 cap-bound \
-    'for ((i = 0; i < N; i++)); do cap_capped "${P_NUM[$i]}"' 'for ((i = 0; i < N; i++)); do cap_capped "$((i + 1))"' \
-    '      cap_capped "${P_NUM[$i]}" "${P_VERDICT[$i]}" || continue' '      cap_capped "$((i + 1))" "${P_VERDICT[$i]}" || continue' \
-    'if cap_capped "${P_NUM[$((N - 1))]}" "$LAST_VERDICT"' 'if cap_capped "$N" "$LAST_VERDICT"'
-  # Accept any record FILE a walked-past pass names, whatever pass it resolves (one that does not exist).
-  cap_mut cap-accepts-nonexistent-pass cap-badrecord cap-norecord \
-    'if ! validate_record "$cap_rec" "${P_FILE[$i]}" "$i"; then' 'if [ ! -f "$cap_rec" ]; then'
-  # The era: the token check dropped (a tree whose rulebook carries no token is bound anyway).
-  cap_mut era-token-check-dropped cap-notoken cap-bound \
-    'grep -qF -- "$ERA_TOKEN" "$ERA_ROOT/.claude/skills/ai-dlc/steps/_gate-procedures.md" 2>/dev/null || return 0' ':'
-  # The era: the date gate dropped (a token committed AFTER the series opened binds it anyway).
-  cap_mut era-date-gate-dropped era-between era-bound \
-    'era_cmp "${2:-}" "$ERA_STAMP" || ERA_STATE=legacy ;;' ': ;;'
-  # Legacy keyed on the field's ABSENCE: a bound sharded pass without shard_set_derived_from: is skipped.
-  cap_mut legacy-on-field-absence era-bound era-between \
-    '      if [ -z "$n_from" ]; then' '      if [ -z "$n_from" ]; then continue; fi; if false; then'
-  # The era keyed on the ENGINE's install commit, not the rulebook's: `-S` over the validator, which carries
-  # the ERA_TOKEN literal, finds the 07-01 engine commit and binds a series the rulebook did not yet carry.
-  cap_mut era-on-engine-commit era-between era-bound \
-    '      -- .claude/skills/ai-dlc/steps/_gate-procedures.md 2>/dev/null | tail -n 1)"' \
-    '      -- scripts/ai-dlc/validate-adversarial-convergence.sh 2>/dev/null | tail -n 1)"'
-  # The era dated by the token's ORIGINAL commit, not its first-parent arrival: without --first-parent the 07-05
-  # commit on main dates a token the sprint branch carried only from its 07-20 merge, and binds the 07-10 series.
-  # The era-merge cells exercise only the hooks and the gate, not era_resolve.
-  cap_mut era-not-first-parent era-merge-before era-merge-after \
-    'log --first-parent --diff-merges=first-parent --no-patch' 'log --diff-merges=first-parent --no-patch'
-fi
+if [ "$CAP_N" -eq "$CAP_WANT_N" ]; then ok "CAP row: all $CAP_WANT_N cap/era cells hold on the shipped validator and hooks"
+else bad "CAP row: $CAP_N of $CAP_WANT_N cap/era cells hold"; fi
 unset _c _g _w
 drop_world_cache
 

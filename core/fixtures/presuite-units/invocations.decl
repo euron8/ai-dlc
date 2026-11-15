@@ -1,0 +1,3 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output). The one start is the fixture's
+# own bash: every queued stub step runs in a fork of the flushing subshell, never in a new bash.
+1 *

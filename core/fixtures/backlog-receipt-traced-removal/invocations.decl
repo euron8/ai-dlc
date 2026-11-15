@@ -10,6 +10,8 @@
 # * 553 (was 526) and validator 349 (was 335): +27 * and +14 validator from self-probe seeds p14/p15, their 4 removals,
 # and the mutant m-expand-any-named, as measured.
 # +2 * / +1 validator measured on the B4 tree (fixture, validator and libs blob-identical to the unit's 553/349; not hermetic-run's PIPE trap, by differential); counted once on the B4 tree, the push's counted run is the second.
-555 *
-350 scripts/validate-backlog-receipts.sh
-16 inproc:scripts/validate-backlog-receipts.sh
+# c-committed seeds one unguarded read per unit of DEFAULT_MAX_R13; 6 -> 5 drops one --r13-one worker start and its
+# receipt re-run: -2 * and -1 validator, as measured.
+286 *
+180 scripts/validate-backlog-receipts.sh
+10 inproc:scripts/validate-backlog-receipts.sh

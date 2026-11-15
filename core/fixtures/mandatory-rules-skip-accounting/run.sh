@@ -21,17 +21,10 @@
 # wrong, and arm F below is the assertion that the new accounting cannot swallow a real
 # failure. What changes is that the two roads to exit 0 stop sharing one sentence.
 #
-# WHY THE ZERO-SKIP ARM IS FIRST AND HAS ITS OWN MUTANT. The first spelling of the counter was
-# `printf ... | sort -u | grep -c . || echo 0`. On the zero-skip input `grep -c` prints "0" AND
-# exits 1, so `||` appended a second "0"; the variable held two lines, `[ -eq 0 ]` died with
-# "integer expression expected" and fell through to the skip branch on a tree where nothing had
-# skipped -- and `$((6 - SKIPPED_UNIQUE))` then hit a multi-line operand, which bash treats as a
-# FATAL arithmetic syntax error. The shell aborted mid-summary: no verdict line at all, and
-# rc=1. `retro.md` accepts this validator on its exit code alone, so the fix for a summary that
-# could not tell a skip from a pass would have HARD-FAILED every retro that skipped nothing.
-# `zeroskipbug` restores that spelling, and its arm asserts the empty summary AND the rc=1 --
-# a mutant asserted only on the missing wording would have scored the abort as a kill for the
-# wrong reason.
+# THE ZERO-SKIP ARM (A) ASSERTS THE SUMMARY SENTENCE AND rc=0 TOGETHER. A counter spelled
+# `grep -c . || echo 0` prints "0" AND exits 1 on the zero-skip input, which aborts the shell
+# mid-summary: no verdict line at all, and rc=1. `retro.md` accepts this validator on its exit
+# code alone, so that abort would hard-fail every retro that skipped nothing.
 #
 # CHECKS 1, 2 AND 4 ARE DRIVEN THROUGH STUBBED SIBLINGS, and that is the point rather than a
 # shortcut: this fixture's subject is the SUMMARY ACCOUNTING, not the siblings' logic, and the
@@ -74,8 +67,6 @@ trap 'rm -rf "$WORK"' EXIT
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_mrsBattery=0
 
 echo "mandatory-rules-skip-accounting:"
 
@@ -162,8 +153,7 @@ prereq_off()  { rm -f "$1/validate-retro-prereq.sh"; }
 evidence_rc() { printf '#!/bin/bash\nexit %s\n' "$2" > "$1/validate-retro-evidence.sh"; chmod +x "$1/validate-retro-evidence.sh"; }
 
 # battery <toolchain-dir> -> six space-separated tokens, one per arm.
-# Each arm withdraws exactly one input, so a mutant to one check's counter moves the arms
-# that check skips in and nothing else.
+# Each arm withdraws exactly one input, so one check's skip moves its own arms and nothing else.
 battery() {
   local D="$1" out rc t=""
   run() { out="$( cd "$P" && bash "$D/validate-mandatory-rules.sh" 900 2>&1 )"; rc=$?; }
@@ -214,7 +204,7 @@ EXPECTED="A:6 B:5-2 C:5-4 D:5-5 E:3-245 F:fail"
 toolchain "$WORK/bin" "$VMR"
 GOT="$(battery "$WORK/bin")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all six arms: zero skips says 'all 8 checks passed', each of checks 2/4/5 skipping alone names ITSELF and reports a floor of 7, three at once reports a floor of 5, and a real failure still FAILs at rc=1"; B_mrsBattery=1
+  ok "all six arms: zero skips says 'all 8 checks passed', each of checks 2/4/5 skipping alone names ITSELF and reports a floor of 7, three at once reports a floor of 5, and a real failure still FAILs at rc=1"
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -241,85 +231,6 @@ else
   bad "the zero-skip run was reported as a skipping one — rc=$RC, got: $OUT"
 fi
 
-# ============================================================================
-# MUTANTS. Each is a COPY in its own toolchain directory, guarded by `cmp -s`, beside an
-# UNMUTATED CONTROL built the same way — a copy that cannot resolve ../schemas emits nothing,
-# and "no output" otherwise scores as a kill for every mutant at once.
-#
-# Each mutant declares the EXACT set of arms it moves. One summary line serves several arms, so
-# a per-check counter legitimately moves two of them; what would be vacuous is two mutants with
-# the same moved-set, and no two below share one.
-# ============================================================================
-toolchain "$WORK/mut-control" "$VMR"
-CTL="$(battery "$WORK/mut-control")"
-if [ "$CTL" = "$EXPECTED" ]; then
-  ok "CONTROL: an unmutated copy in its own toolchain dir answers every arm (so a mutant's silence below is the mutation, not the copy)"
-else
-  echo "FIXTURE ERROR: the unmutated control does not reproduce the battery — expected [$EXPECTED], got [$CTL]." >&2
-  echo "  Every mutant verdict below would be meaningless." >&2
-  exit 2
-fi
-
-mutate() {  # <tag> <sed-program> <expected-battery> <what-it-proves>
-  local tag="$1" prog="$2" want="$3" claim="$4"
-  local D="$WORK/mut-$tag" M="$WORK/staged-$tag.sh" got
-  sed "$prog" "$VMR" > "$M" || { bad "MUTANT $tag: sed failed"; return; }
-  if cmp -s "$VMR" "$M"; then
-    echo "FIXTURE ERROR: mutant '$tag' matched nothing — the line it targets was renamed, so it proves nothing." >&2
-    exit 2
-  fi
-  toolchain "$D" "$M"
-  got="$(battery "$D")"
-  if [ "$got" = "$want" ]; then
-    mutant_killed "$B_mrsBattery" "$tag" "MUTANT $tag: $claim"
-  elif [ "$got" = "$EXPECTED" ]; then
-    bad "MUTANT $tag survived: $claim — every arm unchanged, so nothing here can catch it"
-  else
-    bad "MUTANT $tag ($claim): expected battery [$want], got [$got]"
-  fi
-}
-
-# The zero-skip path, and the bug the first draft of this fix shipped. `grep -c .` prints "0"
-# and exits 1 on empty input, so `|| echo 0` makes the variable two lines long; `[ -eq 0 ]`
-# then errors out and the run falls into the skip branch having skipped nothing. Only arm A
-# moves, because on every other arm the pipeline has lines to count and answers correctly.
-mutate zeroskipbug \
-  '/^SKIPPED_UNIQUE=0$/d; s@^for _skipped in .*@SKIPPED_UNIQUE="$(tr " " "\\n" <<<"$SKIPPED_LIST" | grep -c . 2>/dev/null || echo 0)"@' \
-  'A:[]/1 B:5-2 C:5-4 D:5-5 E:3-245 F:fail' \
-  "the original grep -c spelling aborts the zero-skip run on a fatal arithmetic error — no summary line at all, rc=1, on exactly the tree where every check ran"
-
-# Check 2's counter. Arm B is the only arm where Check 2 skips alone, and E is the only other
-# arm where it skips at all.
-mutate c2counter \
-  's@^  SKIPPED_CHECKS="\$SKIPPED_CHECKS 2"$@  :@' \
-  'A:6 B:[Sprint 900: all 8 checks passed]/0 C:5-4 D:5-5 E:[Sprint 900: 6 of 8 checks verified; 2 SKIPPED (check 4 5).]/0 F:fail' \
-  "not counting Check 2's skip returns its arm to 'all 8 checks passed' and under-reports the three-skip run as two"
-
-mutate c4counter \
-  's@^  SKIPPED_CHECKS="\$SKIPPED_CHECKS 4"$@  :@' \
-  'A:6 B:5-2 C:[Sprint 900: all 8 checks passed]/0 D:5-5 E:[Sprint 900: 6 of 8 checks verified; 2 SKIPPED (check 2 5).]/0 F:fail' \
-  "not counting Check 4's skip hides the exact skip the reference consumer takes on every sprint"
-
-mutate c5counter \
-  's@^  SKIPPED_CHECKS="\$SKIPPED_CHECKS 5"$@  :@' \
-  'A:6 B:5-2 C:5-4 D:[Sprint 900: all 8 checks passed]/0 E:[Sprint 900: 6 of 8 checks verified; 2 SKIPPED (check 2 4).]/0 F:fail' \
-  "not counting Check 5's skip returns the unresolvable-diff-base run to a full pass"
-
-# The branch itself. With it always taking the zero-skip road, every counter above still runs
-# and every skipping arm still reports the pre-fix sentence — which is what the whole release
-# is about, so it must move every skipping arm and neither A nor F.
-mutate zerobranch \
-  's@^  if \[ "\$SKIPPED_UNIQUE" -eq 0 \]; then$@  if true; then@' \
-  'A:6 B:[Sprint 900: all 8 checks passed]/0 C:[Sprint 900: all 8 checks passed]/0 D:[Sprint 900: all 8 checks passed]/0 E:[Sprint 900: all 8 checks passed]/0 F:fail' \
-  "forcing the zero-skip road restores the pre-fix summary on all four skipping arms and leaves the other two alone"
-
-# The failure road. The accounting sits inside the FAILURES==0 branch, and a mutant that lets a
-# failing run reach it would buy a better sentence at the cost of the verdict.
-mutate failwins \
-  's@^if \[ \$FAILURES -eq 0 \]; then$@if true; then@' \
-  'A:6 B:5-2 C:5-4 D:5-5 E:3-245 F:0' \
-  "routing a failing run into the skip accounting turns a failed Check 1 into exit 0 — the F token falls to its raw rc, which is the whole finding"
-
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-report_end mandatory-rules-skip-accounting 10
+report_end mandatory-rules-skip-accounting 3

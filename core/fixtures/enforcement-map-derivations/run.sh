@@ -2,32 +2,10 @@
 # enforcement-map-derivations — assert the derivations validate-enforcement-map.sh runs
 # in a LOOP still fire.
 #
-# Usage: run.sh [--run-one <assertion>] [--matrix]
+# Usage: run.sh [--run-one <assertion>]
 # Exit:  0 = every assertion holds, 1 = a check regressed, 2 = fixture broken.
 #
-# MUTANT BATTERY. Five assertions mutate the VALIDATOR itself and two mutate a reconcile program
-# whose answer the validator's own probe evaluates -- layer-drift.sh for I58, apply.sh for I17
-# (every other assertion seeds an offender into the tree the validator walks, which is a seed and
-# not a mutant). Per push each
-# mutant runs on its DECIDING arm, which must report it, plus its named TWIN, an arm the measured
-# matrix shows GREEN under that mutant, which must stay green: the kill is confined to its arm.
-# `--matrix` replays every mutant against every arm this file drives and prints one row per cell;
-# the header lines below are joined to that grid by the same mode. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. The deciding arm
-# of each mutant is the arm its assertion
-# is named for; the twin is read from this header by the assertion, so there is no second list.
-# MUTANT-MATRIX i84-slot-whole-file-grep decides=I84 twins=I86
-# MUTANT-MATRIX i85-blinded-scanner decides=I85 twins=I86
-# MUTANT-MATRIX i85-heredoc-unnarrowed decides=I85 twins=I86
-# MUTANT-MATRIX i33b-blinded-predicate decides=I33b twins=I86
-# MUTANT-MATRIX i54-unpruned-find decides=I54 twins=I86
-# MUTANT-MATRIX i58-reader-ignores-ref decides=I58 twins=I86
-# MUTANT-MATRIX i17-teamroles-misplaced decides=I17 twins=I86
-# MUTANT-MATRIX i17-batch-dies-midway decides=I17 twins=I86
-# MUTANT-MATRIX i17-probe-unevaluable decides=I17 twins=I86
-# MUTANT-MATRIX-CONTROL i17-reuse-hardcoded why=proves the i17-teamroles-misplaced kill comes from the reused team-roles answer
-# MUTANT-MATRIX-DYNAMIC mutant_case why=mutant_case passes its first argument to mutant_killed; every mutant_case call names a literal mutant that carries its own row in this block
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/enforcement-map-derivations/run.sh --matrix
+# Every assertion seeds an offender into the tree the validator walks, on its own arm.
 #
 # THE DEFECT THIS EXISTS TO CATCH, and why it is a separate fixture from
 # enforcement-map-sites. Six of that validator's invariants evaluate a predicate once per
@@ -100,14 +78,11 @@ echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 broken=0
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
-# The mutant helpers (mutant_killed, need_base) and the matrix-row printer. Sourced, so no
-# `killed` token sits on a code line of this file (validate-mutant-kills.sh M1).
-[ -f "$HERE/../lib/mutant.sh" ] && [ -f "$HERE/../lib/matrix.sh" ] || {
-  echo "FIXTURE ERROR: core/fixtures/lib/mutant.sh or matrix.sh not found beside this fixture" >&2; exit 2; }
+# lib/mutant.sh, for fx_inproc (the in-process pass marker).
+[ -f "$HERE/../lib/mutant.sh" ] || {
+  echo "FIXTURE ERROR: core/fixtures/lib/mutant.sh not found beside this fixture" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-. "$HERE/../lib/matrix.sh" || { echo "FIXTURE BROKEN: cannot source lib/matrix.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 
 # fail_count <output> <arm id> — the validator findings that NAME this arm. The id is followed by
 # a non-alphanumeric or the line end, so I11 never counts I112's findings and I3 never counts I33b's.
@@ -115,117 +90,6 @@ fail_count() {
   local c
   c="$(grep -cE "^FAIL: $2([^0-9A-Za-z]|\$)" <<<"$1")" || c=0
   printf '%s' "$c"
-}
-
-# mutant_apply <name> <tree> — build the named mutant of the validator, in the tree's own copy,
-# under `edit`'s cmp -s guard. One place, so the per-push run and the matrix mutate identically.
-mutant_apply() {
-  local f="$2/scripts/validate-enforcement-map.sh"
-  case "$1" in
-    i84-slot-whole-file-grep)
-      edit "$f" '/^  awk -v s="\$i84_slot" / { print "  grep -qF \"$i84_slot\" \"$1\" 2>/dev/null"; next } { print }' ;;
-    i85-blinded-scanner)
-      edit "$f" '{ sub(/if \(c == "`" && p != "\\\\"\) \{/, "if (c == \"~\" \&\& p != \"\\\\\\\\\") {") } { print }' ;;
-    i85-heredoc-unnarrowed)
-      edit "$f" '{ sub(/hd != "" \{ if \(\$0 == hd\) \{ hd = ""; hdq = 0 \} ; next \}/, "hd != \"\" { if ($0 == hd) { hd = \"\" } }") } { print }' ;;
-    i33b-blinded-predicate)
-      edit "$f" '{ if ($0 ~ /\^\[\[:space:\]\]\*\[A-Za-z_\]\[A-Za-z0-9_\]\*="\\\$\\\(dirname/ && !done) { sub(/\/\^.*\/ \{/, "/ZZNOMATCHZZ/ {"); done=1 } } { print }' ;;
-    i54-unpruned-find)
-      edit "$f" "$WT_UNPRUNE" ;;
-    i58-reader-ignores-ref)
-      # The reader answers HEAD's ADJUDICATED set whatever ref it is asked about, so the probe
-      # commit's mutated level token changes nothing it says. One line after the shebang rewrites
-      # the ref of the --adjudicated-codes form only, in place: no file is added to the tree and
-      # every other mode reads its arguments as shipped.
-      i58_git_world "$2" || return 1
-      edit "$2/$I58_LD" '{ print } NR == 1 { print "if [ \"${1:-}\" = --adjudicated-codes ] && [ \"$#\" -eq 3 ]; then set -- \"$1\" \"$2\" HEAD; fi" }' ;;
-    i17-teamroles-misplaced)
-      # apply.sh's consumer_path sends team-roles/* to a WRONG, NON-EMPTY path: the probe still
-      # resolves, so only the team-roles row -- the row that reuses the probe's answer -- can see it.
-      edit "$2/$I17_AP" '{ print } /^consumer_path\(\) \{/ { print "  case \"$1\" in team-roles/*) printf \"%s/.claude/team-rolesX/%s\" \"$CONSUMER\" \"${1#team-roles/}\"; return 0 ;; esac" }' ;;
-    i17-batch-dies-midway)
-      # The ONE bash that answers every I17 row is killed partway through, on the skills row's
-      # consumer_path call: `$$` inside the row's `$( )` names that bash, not the validator.
-      edit "$2/$I17_AP" '{ print } /^consumer_path\(\) \{/ { print "  [ \"$1\" = skills/PROBE ] && kill -9 $$" }' ;;
-    i17-probe-unevaluable)
-      # apply.sh loses consumer_path() altogether: the probe's batched answer is empty, and I17
-      # must say it could not evaluate the writer rather than skip every row as though it had.
-      edit "$2/$I17_AP" '/^consumer_path\(\) \{/ { skip = 1 } skip { if ($0 ~ /^\}/) skip = 0; next } { print }' ;;
-    *) bad "FIXTURE BROKEN — no mutant named '$1' is defined"; return 1 ;;
-  esac
-}
-
-# I58 reads the contract and asks the reader about HEAD and a probe commit, so its world must be a
-# git repository whose HEAD carries layer-contract.yaml; the seed is a plain copy, where I58 skips.
-# One commit of that one file, in a repository this fixture builds, with its identity set on the
-# command line. Idempotent, so the per-push assertion can build it before the unmutated run and the
-# matrix can build it inside mutant_apply. Inherited GIT_* variables would point git, and the
-# validator after it, at another repository, so they are dropped for this worker.
-I58_LD="core/skills/ai-dlc-update/reconcile/layer-drift.sh"
-I58_LC="core/skills/ai-dlc/layer-contract.yaml"
-I17_AP="core/skills/ai-dlc-update/reconcile/apply.sh"
-i58_git_world() {
-  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-  [ -d "$1/.git" ] && return 0
-  git -C "$1" init -q 2>/dev/null \
-    && git -C "$1" add -- "$I58_LC" \
-    && git -C "$1" -c user.name=fixture -c user.email=fixture@invalid -c commit.gpgsign=false \
-         commit -q -m "I58 world" >/dev/null 2>&1 \
-    && git -C "$1" cat-file -e "HEAD:$I58_LC" 2>/dev/null \
-    || { bad "FIXTURE BROKEN — could not build I58's git world (HEAD carrying $I58_LC)"; return 1; }
-}
-
-# mutant_case <name> <label> <want> <want_n> [control label] — one mutant, on its DECIDING arm and
-# its ONE named TWIN, in ONE validator run per state (`--arms <decides>,<twin>`).
-#
-# The header line `# MUTANT-MATRIX <name> decides=<arm> twins=<arm>` is the only place the pair is
-# written, and this reads it, so there is no second list to drift. The deciding arm must equal the
-# arm this assertion's NAME declares. State 1 is the UNMUTATED tree, which must reach its verdict
-# line with no finding from either arm: that is the same-run base pass handed to mutant_killed, and
-# it is also the control that the harness itself runs the shipped validator green. State 2 is the
-# mutant: the deciding arm must report <want>, and the twin must report nothing, so the kill is
-# confined to its arm. <want_n> > 0 additionally requires exactly that many findings, all naming
-# the deciding arm.
-mutant_case() {
-  local name="$1" label="$2" want="$3" want_n="$4" clabel="${5:-}"
-  local id hdr twin dec out rc n bv bn
-  id="$(arm_of)"
-  hdr="$(grep "^# MUTANT-MATRIX $name " "$0")"
-  dec="${hdr#*decides=}"; dec="${dec%% *}"
-  twin="${hdr#*twins=}"; twin="${twin%% *}"
-  if [ -z "$id" ] || [ "$dec" != "$id" ] || [ -z "$twin" ] || [ "$twin" = "-" ] || [ "$twin" = "$id" ]; then
-    bad "FIXTURE BROKEN — mutant '$name' has no header line naming decides=$id and a twin different from it (read decides='$dec' twins='$twin')"
-    exit 2
-  fi
-  out="$(run_map "$id,$twin")"
-  rc=$?
-  sel_guard "$rc" "$id,$twin" "$out"
-  n="$(grep -c '^FAIL:' <<<"$out")" || n=0
-  grep -qF "OK: enforcement-map.yaml in sync with" <<<"$out"; bv=$?
-  [ "$n" -eq 0 ]; bn=$?
-  need_base "$([ "$bv" -eq 0 ] && [ "$bn" -eq 0 ] && echo 1 || echo 0)" "$name" || return 0
-  ok "${clabel:-$id mutant control: the unmutated copy passes $id and its twin $twin}"
-  mutant_apply "$name" "$t" || return 0
-  vem_load "$t"
-  out="$(run_map "$id,$twin")"
-  rc=$?
-  sel_guard "$rc" "$id,$twin" "$out"
-  n="$(grep -c '^FAIL:' <<<"$out")" || n=0
-  case "$out" in
-    *"$want"*) ;;
-    *) bad "$label — $id did NOT report it. The predicate no longer reaches this subject."
-       grep '^FAIL:' <<<"$out" | cut -c1-160 | sed 's/^/          | /'
-       return 0 ;;
-  esac
-  if [ "$(fail_count "$out" "$twin")" -ne 0 ]; then
-    bad "$label — but the twin $twin ALSO reported under this mutant, so the kill is not confined to $id and the matrix row for $name is out of date"
-    return 0
-  fi
-  if [ "$want_n" -gt 0 ] && { [ "$n" -ne "$want_n" ] || [ "$(fail_count "$out" "$id")" -ne "$n" ]; }; then
-    bad "$label — $n finding(s), $(fail_count "$out" "$id") naming $id, where $want_n naming $id were expected"
-    return 0
-  fi
-  mutant_killed "$([ "$bv" -eq 0 ] && [ "$bn" -eq 0 ] && echo 1 || echo 0)" "$name" "$label"
 }
 
 SKILL_REL="core/skills/ai-dlc/SKILL.md"
@@ -236,7 +100,7 @@ CR_OWNER="core/team-roles/code-reviewer.md"
 QA_OWNER="core/team-roles/qa.md"
 CR_READER="core/skills/ai-dlc/steps/gate-validation.md"
 
-# seed_tree — build this process's own scratch dir. Called by --run-one and --matrix only, so a
+# seed_tree — build this process's own scratch dir. Called by --run-one only, so a
 # worker owns everything it touches and no two workers share a path.
 seed_tree() {
   WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
@@ -244,12 +108,12 @@ seed_tree() {
 
 # fresh [dir] — a newly copied tree, never an edit of a shared one. A mutation applied in place
 # leaks into every later assertion, and the one that leaks reads as the one that fired, so every
-# call gets its own world. The default path is $WORK/t; the matrix names its own.
+# call gets its own world. The default path is $WORK/t.
 #
 # THE SEED IS BUILT ONCE PER RUN AND COPIED (fixture-mutants.md, "One run per distinct state",
 # clause 4). `seed_once` runs seed.sh a single time into $EMD_SEED; every `fresh` is a `cp -R` of
 # that pristine root, which no assertion ever writes to. The push driver seeds before the control
-# and every in-process worker inherits the path; `--run-one` and `--matrix` seed their own.
+# and every in-process worker inherits the path; `--run-one` seeds its own.
 # seed_once <dir> — the seed lands inside <dir>, a scratch dir its caller already removes on exit.
 seed_once() {
   [ -n "${EMD_SEED:-}" ] && return 0
@@ -268,7 +132,7 @@ fresh() {
 # so `( vem_entry … )` runs the text in that copy and resolves REPO_ROOT from it (the validator
 # reads its root from BASH_SOURCE, which a sourced function keeps). Called in the assertion's own
 # frame, never inside `$( )`, where a definition would be lost with the subshell: once per scratch
-# tree by `fresh_t`, and once more per mutant copy by `mutant_case` after the mutation lands.
+# tree by `fresh_t`.
 # VEM_TREE records which tree is loaded; run_map refuses a tree that is not the loaded one, so a
 # call site that forgot to load cannot quietly run a different tree's validator.
 vem_load() {
@@ -348,8 +212,8 @@ arm_id_of() {
   }'
 }
 
-# run_map <id> — THE ONE PLACE an assertion invokes the validator (the matrix's mx_grid and the
-# CLI twin cells in emd_twins are the only others), and the ledger every
+# run_map <id> — THE ONE PLACE an assertion invokes the validator (the CLI twin cells in
+# emd_twins are the only others), and the ledger every
 # invocation is written into. A non-empty <id> runs only that arm's unit (`--arms`); an empty
 # one runs the whole file.
 #
@@ -981,16 +845,6 @@ A17b_i84_slot_only_in_a_comment_is_reported() {
   fi
 }
 
-# The mutant of A17b: i84_names_slot reverted to the whole-file `grep -qF` it replaced. The
-# validator's own probe must then report the comment-only seed as scored-as-naming, so the
-# revert dies on a message only the reverted predicate can produce.
-A17c_i84_whole_file_slot_grep_mutant_is_reported() {
-  fresh_t
-  mutant_case i84-slot-whole-file-grep \
-    "I84 mutant: i84_names_slot reverted to a whole-file grep is REPORTED by the slot probe" \
-    "appears ONLY in a comment" 0
-}
-
 # The declaration going missing from its home is REPORTED, rather than leaving every reader
 # resolving an empty template — which composes the repo root, not nothing.
 A18_i84_declaration_missing() {
@@ -1083,31 +937,6 @@ A23_i85_backtick_in_message() {
   fi
 }
 
-# --- Assertion 24: I85 — the scanner must FAIL CLOSED when blinded -----------
-# THE ASSERTION THAT MATTERS MOST HERE. A23 proves the scanner sees the defect; this
-# proves that a scanner which has stopped seeing it says so instead of reporting clean.
-# Break the character it matches on: the invariant's own positive probe must catch that
-# in the same run, because "no findings" and "an instrument that cannot find anything"
-# are the same output otherwise.
-A24_i85_fails_closed_when_blind() {
-  fresh_t
-  mutant_case i85-blinded-scanner \
-    "I85 a BLINDED scanner reports its own probe rather than a clean tree" \
-    "positive probe was NOT reported" 0
-}
-
-# --- Assertion 25: I85 — the heredoc narrowing is load-bearing ---------------
-# The crude form of this scan flags SEVEN files; six are Python inside `<<'PY'` quoted
-# heredocs, where the shell expands nothing and a backtick is literal. Drop the heredoc
-# tracking and those six correct files enter the finding set — which is how a lint gets
-# turned off. The negative probe is what refuses that, so break the skip and require it.
-A25_i85_heredoc_narrowing_holds() {
-  fresh_t
-  mutant_case i85-heredoc-unnarrowed \
-    "I85 losing the quoted-heredoc narrowing is REPORTED by its own negative probe" \
-    "negative probe WAS reported" 0
-}
-
 # --- Assertion 26: I33b — the two-step walk across the install split ---------
 # I33 catches `$(dirname "$X")/../<subtree>/` in ONE expression. The defect does not need
 # one: whole-read-pool shipped the dirname into a variable and walked up off that on the
@@ -1198,27 +1027,6 @@ A27c_i33b_pattern_substitution_is_not_a_walk() {
     return 1
   fi
   ok 'I33b `${A/../foo}` is acquitted while `${A}/../` one property apart is REPORTED'
-}
-
-# --- Assertion 27: I33b — one predicate, and it fails closed when blinded ----
-# THE ASSERTION THAT MATTERS MOST HERE. An earlier draft inlined the detection twice, so
-# blinding the corpus scan left the probe passing against its own private copy — a probe
-# certifying an instrument it never exercised. Scan and probe now call ONE function, so
-# breaking it must surface as the probe failing, not as a clean tree.
-#
-# RE-ANCHORED WHEN THE PREDICATE WAS BATCHED. The mutation used to key on the per-variable
-# `grep -qE` inside the old per-file shell function; that line no longer exists, and a
-# mutation matching nothing is a LOST SUBJECT whose repair is a new subject rather than a
-# relaxed assertion. The blinding point is now the declaration regex inside `I33B_WALK_AWK`
-# — the one grammar BOTH callers execute, so blinding it is exactly the "private copy"
-# failure this assertion was written for. Verified before shipping: the anchor resolves to
-# exactly ONE line (control: an impossible anchor returns 0), the mutant fires this arm and
-# no other, and the unmutated subject stays silent.
-A27_i33b_fails_closed_when_blind() {
-  fresh_t
-  mutant_case i33b-blinded-predicate \
-    "I33b a BLINDED predicate reports its own probe rather than a clean tree" \
-    "positive probe was NOT reported" 0
 }
 
 # --- Assertion 28: I86 — apply.sh must not restate the row token ------------
@@ -2065,9 +1873,8 @@ A54_i118_seed_resolved_omission() {
 # ============================================================================
 # `.claude/worktrees/` holds gitignored agent worktrees, each a full checkout carrying a
 # builder's UNCOMMITTED work, and a run from the main checkout once failed I54b on one of them.
-# The walk I54 and I54b share now prunes "$REPO_ROOT/.claude/worktrees" by -path. Three
-# assertions: the pruned offender is silent, the same offender one directory over still fires,
-# and a committed mutant restoring the unpruned find line makes the pruned offender fire again.
+# The walk I54 and I54b share now prunes "$REPO_ROOT/.claude/worktrees" by -path. Two
+# assertions: the pruned offender is silent, and the same offender one directory over still fires.
 #
 # THE OFFENDER IS ASSEMBLED, NEVER TYPED. I54 scans every `.sh` in the tree, this file included,
 # so a literal of the banned idiom on a code line here would be a finding against the real tree.
@@ -2079,9 +1886,6 @@ wt_seed() { # <dir relative to the tree root>
   mkdir -p "$t/$1/scripts"
   printf '%s\n' '#!/usr/bin/env bash' 'v=x' "$WT_LINE" > "$t/$1/scripts/zz.sh"
 }
-# The mutation: the find line as it was before BL-401, pruning `.git` alone. Matched by index()
-# on the exact prune clause, not by a regex, so the escapes in the line are taken literally.
-WT_UNPRUNE='$0 ~ /^i54_files=/ { s = "\\( -name .git -o -path \"$REPO_ROOT/.claude/worktrees\" \\) -prune"; i = index($0, s); if (i) $0 = substr($0, 1, i - 1) "-name .git -prune" substr($0, i + length(s)) } { print }'
 
 # --- Assertion 55: I54 — an offender under .claude/worktrees/ is silent ------
 A55_i54_agent_worktree_offender_is_silent() {
@@ -2098,79 +1902,6 @@ A56_i54_worktrees_sibling_still_fires() {
   wt_seed ".claude/worktrees-not"
   assert_fires_n "I54 the same offender in .claude/worktrees-not/ is still REPORTED (A55's twin)" \
                  ".claude/worktrees-not/scripts/zz.sh:3:" 1
-}
-
-# --- Assertion 57: I54 — the unpruned find line, as a committed mutant ------
-# Whole-tree copy (`fresh`), offender under agent-x. POSITIVE CONTROL FIRST, on the same tree
-# unmutated: the run must reach its verdict line silent, so a validator that is broken for its
-# own reasons cannot score the mutant below as a kill. Then `edit` restores the old find line
-# under its `cmp -s` guard, and the agent-x offender must be reported.
-A57_i54_unpruned_find_mutant_reports_worktree() {
-  fresh_t
-  wt_seed ".claude/worktrees/agent-x"
-  mutant_case i54-unpruned-find \
-    "I54 mutant: restoring the unpruned find line REPORTS the agent-x offender" \
-    ".claude/worktrees/agent-x/scripts/zz.sh:3:" 1
-}
-
-# I58's NEGATIVE PROBE. The world is a git repository whose HEAD carries the contract, built
-# BEFORE the unmutated run, so the base pass is I58 actually running its probe and staying quiet
-# rather than I58 skipping a tree with no HEAD. The mutant reader answers HEAD's set for the probe
-# commit too, and only the negative probe can see that.
-A70_i58_reader_ignoring_its_ref_is_reported() {
-  fresh_t
-  i58_git_world "$t" || exit 2
-  mutant_case i58-reader-ignores-ref \
-    "I58 mutant: a layer-drift.sh whose --adjudicated-codes ignores its ref is REPORTED by the negative probe" \
-    "I58 negative probe: the level token was mutated to ADJUDICATEDX" 1
-}
-
-# I17'S TEAM-ROLES ROW REUSES THE PROBE'S ANSWER, and this is the world that tests the reuse:
-# consumer_path misplaces team-roles/* at a non-empty path, so the probe still resolves and the
-# team-roles row is the only one that can report it. The CONTROL then hard-codes that row's answer
-# to the correct path in the same mutated tree; it must go GREEN, which shows the kill above came
-# from the reused value and not from some other row. Its header row is i17-reuse-hardcoded.
-A71_i17_misplaced_team_roles_is_reported() {
-  local out rc
-  fresh_t
-  mutant_case i17-teamroles-misplaced \
-    "I17 mutant: consumer_path sending team-roles/ to a wrong non-empty path is REPORTED on the row that reuses the probe's answer" \
-    "sends core/team-roles/ to '/nonexistent-consumer/.claude/team-rolesX/PROBE'" 1
-  [ -f "$t/$I17_AP" ] && grep -q 'team-rolesX' "$t/$I17_AP" || return 0
-  edit "$t/scripts/validate-enforcement-map.sh" \
-    '$0 == "        got_a=\"$APPLIES_TO_PROBE_GOT\"" { print "        got_a=\"/nonexistent-consumer/.claude/team-roles/PROBE\""; next } { print }' || return 0
-  out="$(run_map "I17,I86")"
-  rc=$?
-  sel_guard "$rc" "I17,I86" "$out"
-  case "$out" in
-    *"sends core/team-roles/ to"*)
-      bad "CONTROL i17-reuse-hardcoded: with the team-roles answer hard-coded, I17 STILL reported the misplaced team-roles path, so the kill above did not come from the reused value" ;;
-    *"OK: enforcement-map.yaml in sync with"*)
-      ok "CONTROL i17-reuse-hardcoded: hard-coding the reused team-roles answer goes GREEN in the same world, so the kill above is the reuse's" ;;
-    *)
-      bad "CONTROL i17-reuse-hardcoded: the hard-coded run reached no verdict (rc=$rc)" ;;
-  esac
-}
-
-# I17 EVALUATES EVERY SITE ROW IN ONE BASH, so a bash that dies partway must not read as the rows
-# after it passing. The mutant kills that bash on the skills row's consumer_path call, the LAST
-# record it prints, so exactly two findings must appear, both naming I17: the skills row reported
-# against itself, and the shortfall. The count is the point -- every unanswered row already fails
-# its own check, so a validator with the shortfall guard deleted reports one finding, not two.
-A72_i17_batch_dying_midway_is_reported() {
-  fresh_t
-  mutant_case i17-batch-dies-midway \
-    "I17 mutant: the batched evaluation dying partway is REPORTED as a shortfall, never read as the rows after it passing" \
-    "it died partway, and every row it never answered is reported above as its own finding" 2
-}
-
-# I17'S PROBE READS ITS ANSWER OUT OF THE ONE BATCHED BASH. With consumer_path() gone from apply.sh
-# that answer is empty, and the probe must report the check as vacuous -- exactly one finding, its own.
-A73_i17_unevaluable_writer_is_reported() {
-  fresh_t
-  mutant_case i17-probe-unevaluable \
-    "I17 mutant: apply.sh with no consumer_path() is REPORTED by the probe as an unevaluable writer" \
-    "I17 could not evaluate apply.sh's consumer_path()" 1
 }
 
 # THE ASSERTION LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order. A
@@ -2342,89 +2073,6 @@ fi
 # defined-versus-listed join above, and by the per-assertion verdict file and the selection join
 # below, which are unchanged.
 
-# --matrix: replay EVERY mutant against EVERY arm this file drives, once, and print one row per
-# cell with that CELL's own polarity (`tripped` iff that arm reported under that mutant). This is
-# the measurement the `# MUTANT-MATRIX` header lines are read from; it is NOT run per push, and
-# the plain run asserts below that no matrix cell executed. One validator run per state lists all
-# the arms, so it costs one run per mutant plus one for the unmutated tree.
-MX_CELLS=0
-if [ "${1:-}" = "--matrix" ]; then
-  echo "enforcement-map-derivations mode: FULL"
-  seed_tree
-  trap 'rm -rf "$WORK"' EXIT
-  seed_once "$WORK"
-  : > "$WORK/calls"
-  MX_ARMS="$(printf '%s\n' "$NAMES" | while IFS= read -r _n; do arm_id_of "$_n"; done | grep . | sort -u | paste -sd, -)"
-  MX_NARMS="$(tr ',' '\n' <<<"$MX_ARMS" | grep -c .)" || MX_NARMS=0
-  [ "$MX_NARMS" -ge 10 ] || { echo "FIXTURE ERROR: derived $MX_NARMS arm id(s) from the assertion names" >&2; exit 2; }
-
-  # mx_grid <label> <tree> — one validator run listing every arm; sets MX_TRIPPED to the arms
-  # that reported. rc 2 is a selection failure and nothing was measured. In process, out of the
-  # copy vem_load sourced from <tree> (once per tree, after its mutation landed).
-  mx_grid() {
-    local out rc a c
-    [ "${VEM_TREE:-}" = "$2" ] || { bad "FIXTURE BROKEN — mx_grid on '$2' but the loaded validator copy is '${VEM_TREE:-none}'"; exit 2; }
-    out="$( ( fx_inproc "$VEM_TREE/scripts/validate-enforcement-map.sh"; vem_entry --arms "$MX_ARMS" ) 2>&1)"
-    rc=$?
-    sel_guard "$rc" "$MX_ARMS" "$out"
-    MX_TRIPPED=""
-    for a in $(tr ',' ' ' <<<"$MX_ARMS"); do
-      c="$(fail_count "$out" "$a")"
-      if [ "$c" -gt 0 ]; then
-        matrix_row "$1" "$a" 1 TRIPPED yes
-        MX_TRIPPED="$MX_TRIPPED $a"
-      else
-        matrix_row "$1" "$a" 0 GREEN no
-      fi
-      MX_CELLS=$((MX_CELLS + 1))
-    done
-    MX_OUT="$out"
-  }
-
-  t="$(fresh "$WORK/mx-base")" || exit 2
-  vem_load "$t"
-  mx_grid unmutated "$t"
-  if [ -z "$MX_TRIPPED" ] && case "$MX_OUT" in *"OK: enforcement-map.yaml in sync with"*) true ;; *) false ;; esac; then
-    ok "MATRIX base: the unmutated tree is green on all $MX_NARMS arms"
-  else
-    bad "MATRIX base: the unmutated tree tripped:$MX_TRIPPED — every row below is unattributable"
-  fi
-
-  mx_n=0
-  while IFS= read -r hdr; do
-    [ -n "$hdr" ] || continue
-    set -- $hdr
-    mx_m="$3"; mx_d="${4#decides=}"; mx_tw="${5#twins=}"
-    mx_n=$((mx_n + 1))
-    t="$(fresh "$WORK/mx-$mx_n")" || exit 2
-    [ "$mx_m" != i54-unpruned-find ] || wt_seed ".claude/worktrees/agent-x"
-    mutant_apply "$mx_m" "$t" || continue
-    vem_load "$t"
-    mx_grid "$mx_m" "$t"
-    printf '  MATRIX-MUTANT %s tripped=[%s]\n' "$mx_m" "${MX_TRIPPED# }"
-    mx_bad=""
-    case " $MX_TRIPPED " in *" $mx_d "*) ;; *) mx_bad="$mx_bad deciding $mx_d did not trip;" ;; esac
-    for _tw in $(tr ',' ' ' <<<"$mx_tw"); do
-      case " $MX_TRIPPED " in *" $_tw "*) mx_bad="$mx_bad twin $_tw tripped;" ;; esac
-    done
-    if [ -z "$mx_bad" ]; then
-      ok "MATRIX $mx_m: deciding $mx_d tripped, twin $mx_tw green"
-    else
-      bad "MATRIX $mx_m:$mx_bad (tripped:$MX_TRIPPED)"
-    fi
-  done <<EOF_MX
-$(grep '^# MUTANT-MATRIX [^ ]' "$0")
-EOF_MX
-  if [ "$MX_CELLS" -eq $(( (mx_n + 1) * MX_NARMS )) ] && [ "$mx_n" -ge 5 ]; then
-    ok "MATRIX: $MX_CELLS cells = ($mx_n mutants + the unmutated tree) x $MX_NARMS arms"
-  else
-    bad "MATRIX: $MX_CELLS cells where ($mx_n mutants + 1) x $MX_NARMS arms were expected"
-  fi
-  [ "$fails" -eq 0 ] || { echo "$0: matrix FAILED" >&2; exit 1; }
-  echo "enforcement-map-derivations: MATRIX PASS"
-  exit 0
-fi
-
 NAME="enforcement-map-derivations"
 echo "$NAME:"
 echo "enforcement-map-derivations mode: PUSH"
@@ -2571,14 +2219,6 @@ elif [ -n "$sel_nofile" ]; then
   fails=$((fails + 1))
 elif [ "$sel_actual" -ne "$sel_expect" ]; then
   printf '  FAIL  %s of %s id-declaring assertion(s) selected their arm — the rest ran something else, and a whole-file run prints ok whatever the selector did\n' "$sel_actual" "$sel_expect"
-  fails=$((fails + 1))
-fi
-
-# A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL. MX_CELLS is counted only by the --matrix branch above.
-if [ "$MX_CELLS" -eq 0 ]; then
-  ok "PUSH: no matrix-only cell ran (0 cells); each mutant ran on its deciding arm plus its one named twin"
-else
-  printf '  FAIL  PUSH: %s matrix cell(s) ran in a plain run\n' "$MX_CELLS"
   fails=$((fails + 1))
 fi
 

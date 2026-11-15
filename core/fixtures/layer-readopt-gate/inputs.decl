@@ -1,11 +1,10 @@
-# layer-readopt-gate drives four scripts in the reconcile directory and copies the whole directory beside each mutant,
-# so the directory is declared whole. The scripts the verdict depends on carry a sentinel in run.sh.
+# layer-readopt-gate drives four scripts in the reconcile directory, so the directory is declared whole. The scripts the verdict depends on carry a sentinel in run.sh.
 core/skills/ai-dlc-update/reconcile/
 !core/skills/ai-dlc-update/reconcile/readopt-override.sh
 !core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 !core/skills/ai-dlc-update/reconcile/register-drift.sh
-!core/skills/ai-dlc-update/reconcile/layer-drift.sh
 # Sourced as the first line of run.sh.
 core/fixtures/lib/preamble.sh
-# Sourced after ok()/bad() for mutant_killed.
-core/fixtures/lib/mutant.sh
+# The shard drivers: the coverage join in run.sh reads every one. Their own directories are not copied unless declared.
+core/fixtures/layer-readopt-gate-c/run.sh
+# The dist-only shards (b, d, e) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.

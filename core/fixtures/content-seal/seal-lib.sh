@@ -2,7 +2,7 @@
 # AFTER the subject's own lib (adversarial-shard-merge/lib.sh, remediator-shard-join/lib.sh) or, for
 # the gate arms, after they resolve the validator. The caller sets SRCDIR to the directory holding
 # the reader it drives; the seal library is resolved as THAT reader's sibling, because that is where
-# each reader looks for it (`$(dirname "$0")/content-seal.sh`), so a mutated copy tree is read
+# each reader looks for it (`$(dirname "$0")/content-seal.sh`), so a copy tree is read
 # end to end and never half from the real one.
 #
 # The recorder hook is resolved by walking UP from this file in both layouts, never by counting `..`.

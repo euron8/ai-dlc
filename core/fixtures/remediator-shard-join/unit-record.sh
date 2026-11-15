@@ -6,8 +6,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # and each cell runs the join's own record_tail in a SUBSHELL, with the globals the top level would have set
 # for that world (SRCMODE=2, SPRINT, JR_ROOT, STATE, STATE_PARENT), so `exit`, refuse_n and every ESC_*/GAP_*
 # global reset per cell. record_tail and the SPEC-render functions it calls sit above the source guard, so
-# sourcing defines them; no join logic is copied here. What stays end to end in run.sh: DK1 and DK2 (the CLI's one refusal and one pass,
-# and the cells the DKm mutant is gated on), EC39a (gates EC39m), LN6 (gates LN6m; two records and the lane-name
+# sourcing defines them; no join logic is copied here. What stays end to end in run.sh: DK1 and DK2 (the CLI's one refusal and one pass),
+# EC39a, LN6 (two records and the lane-name
 # die live in the argument block, not in record_tail), and every parts-mode, --sources and spec-memlog cell.
 # The CLI entry (argument parse, content-seal check, the n_disp die) is not reached here; ER0 pins the seam.
 #

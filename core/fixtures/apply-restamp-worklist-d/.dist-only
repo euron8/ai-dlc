@@ -1,0 +1,3 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is a dist-only shard of a shipped fixture: shard d of apply-restamp-worklist runs units bl, hr and hu, the BL-276 routing rows, the BL-292 hook-registration row and the BL-103 unshipped-hook row. Every arm drives a cmp -s identical copy of the reconcile directory (written beside its siblings in a mktemp tree) or a copy of the located validate-hook-registration.sh, whose bytes are the same in both layouts. A consumer runs the shipped shards a, b and c, which keep the located apply.sh in place, the subject probe and the arms that read the installed pre-push and answer-capture hook.

@@ -16,3 +16,16 @@ rm
 sed
 tr
 xargs
+# BL-1092 adds the tools the census, the pool span, the waiter and the cells start.
+ls
+kill
+ps
+sleep
+tail
+wc
+date
+find
+head
+shasum
+sort
+cut

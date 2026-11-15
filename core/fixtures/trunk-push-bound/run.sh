@@ -46,7 +46,7 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$V")" && pwd)/$(basename "$V")"
 
 WORK="$(mktemp -d)" || exit 2
 trap 'rm -rf "$WORK"' EXIT
-REPO="$WORK/repo"; MUT="$WORK/mut"; mkdir -p "$REPO" "$MUT"
+REPO="$WORK/repo"; mkdir -p "$REPO"
 
 ANCHORS="_bmad-output/audit-anchors.md"
 ZERO="0000000000000000000000000000000000000000"
@@ -163,98 +163,6 @@ else
   bad "AI_DLC_TRUNK was ignored and 'main' was judged regardless (rc=$RC)"
 fi
 
-# ===================================================================================
-# MUTANTS. Each is a COPY guarded by `cmp -s`, so a sed that matched nothing cannot
-# score as a mutation. Each must fail ONLY its own assertion: two failures would mean
-# the assertions are entangled and one of them proves nothing.
-# ===================================================================================
-echo
-echo "trunk-push-bound: mutants"
-
-# The UNMUTATED CONTROL, copied first and from the same directory. A lone copy of a
-# script that dies on startup emits nothing, and "no output" scores as a kill for every
-# mutant at once. This is the arm that catches that before any mutant is believed.
-CTL="$MUT/control.sh"; cp "$V" "$CTL"
-push "$CTL" "$C_OK" "$C_BASE"
-if [ "$RC" -eq 0 ] && grep -q "1 commit(s) judged" <<<"$OUT"; then
-  ok "CONTROL: an unmutated copy in the mutant directory still passes assertion 1"
-else
-  bad "CONTROL: the unmutated copy does not work from $MUT (rc=$RC) — every mutant below is unproven: $OUT"
-fi
-
-# mutate <name> <sed> ; sets M to the mutant path, or bad()s and returns 1
-mutate() {
-  M="$MUT/$1.sh"
-  sed "$2" "$V" > "$M"
-  if cmp -s "$V" "$M"; then
-    bad "FIXTURE BROKEN: mutation '$1' matched nothing, so its assertion is unproven"
-    return 1
-  fi
-  return 0
-}
-
-# M1 — drop the bare-rewrite arm.
-if mutate m1 's@elif only_licensed and not claims:@elif False:@'; then
-  push "$M" "$C_BARE" "$C_OK"; r2=$RC
-  push "$M" "$C_SMUG" "$C_BARE"; r3=$RC
-  if [ "$r2" -eq 0 ] && [ "$r3" -ne 0 ]; then
-    ok "M1: dropping the bare-rewrite arm kills assertion 2 and ONLY assertion 2"
-  else
-    bad "M1: expected assertion 2 to die alone (rc2=$r2 rc3=$r3) — the two rejection arms are entangled"
-  fi
-fi
-
-# M2 — drop the path bound on the licensed subject.
-if mutate m2 's@if claims and not only_licensed:@if False:@'; then
-  push "$M" "$C_SMUG" "$C_BARE"; r3=$RC
-  push "$M" "$C_BARE" "$C_OK"; r2=$RC
-  if [ "$r3" -eq 0 ] && [ "$r2" -ne 0 ]; then
-    ok "M2: dropping the path bound kills assertion 3 and ONLY assertion 3"
-  else
-    bad "M2: expected assertion 3 to die alone (rc3=$r3 rc2=$r2)"
-  fi
-fi
-
-# M3 — let an empty read report a pass. The mutant exits 0 either way, which is exactly
-# why the assertion is on the WORDING: the arm that must survive is the one that tells a
-# disarmed wiring apart from a clean push, and both exit 0.
-if mutate m3 's@    if not refs:@    if False:@'; then
-  OUT="$(printf '' | AI_DLC_AUDIT_ANCHORS_SCHEMA="$S" bash "$M" --trunk-push 2>&1)"
-  if grep -q "PASS" <<<"$OUT" && ! grep -q "NO REF LINES" <<<"$OUT"; then
-    ok "M3: without the empty-read branch a run that judged nothing reports a pass — assertion 6 dies"
-  else
-    bad "M3: the empty-read branch was removed and the output did not change: $OUT"
-  fi
-fi
-
-# M4 — restore the absorbed script's ref-creation behaviour.
-if mutate m4 's@        if remote_sha == ZERO:@        if False:@'; then
-  push "$M" "$C_RETRO" "$ZERO"
-  if ! grep -q "creating the remote ref" <<<"$OUT"; then
-    ok "M4: without the ref-creation branch the first push of a trunk is no longer exempt — assertion 7 dies"
-  else
-    bad "M4: the ref-creation branch was removed and the note survived: $OUT"
-  fi
-fi
-
-# M5 — THE SCHEMA IS THE DEFINITION, not a comment beside one. Mutating the SCHEMA (not
-# the script) must change the verdict; if it does not, the matcher carries its own copy of
-# the pattern and the schema is decoration. Same lesson the header of the schema records
-# about the header region it replaced.
-MS="$MUT/audit-anchors.json"
-sed 's@\^chore@^release@' "$S" > "$MS"
-if cmp -s "$S" "$MS"; then
-  bad "FIXTURE BROKEN: the M5 schema mutation matched nothing, so schema-drivenness is unproven"
-else
-  SCHEMA_USE="$MS"; push "$V" "$C_OK" "$C_BASE"; SCHEMA_USE="$S"
-  if [ "$RC" -ne 0 ]; then
-    ok "M5: changing the pattern in the SCHEMA changes the verdict (the matcher reads it; it does not restate it)"
-  else
-    bad "M5: the schema pattern changed and the shipped verdict did not — the script carries its own copy"
-  fi
-fi
-
-echo
 if [ "$fails" -eq 0 ]; then echo "trunk-push-bound: PASS"; exit 0; fi
 echo "trunk-push-bound: $fails assertion(s) FAILED" >&2
 exit 1

@@ -6,4 +6,3 @@
 !core/scripts/artifact-path-config.sh
 core/skills/ai-dlc/layer-contract.yaml
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/mutant.sh

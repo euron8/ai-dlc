@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # enforcement-map-sites-b — shard 'b' of the enforcement-map-sites assertion set.
 #
-# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. The assertions, the seed, the
-# mutation discipline and the reasoning all live in the sibling's run.sh; what this directory
+# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. The assertions, the seed
+# and the reasoning all live in the sibling's run.sh; what this directory
 # buys is a unit the pre-push pool can start on its own. That suite is POLE-BOUND — its
 # makespan tracks its single longest DIRECTORY, and `core/fixtures/*/run.sh` is what it
 # globs — so the sibling's 253s was the whole suite's wall clock at every outer pool size

@@ -19,6 +19,44 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1130.0] - 2026-11-14
+
+### No fixture carries a mutation battery that runs on every push
+
+Every committed mutation battery is deleted: the `mutant_killed`/`need_base` calls, the mutant builders, the MUTANTS blocks, the `# MUTANT-MATRIX` headers and `--matrix` modes, the arms that ran an edited copy of the subject or a pinned old copy of it, and the controls that ran an unmutated copy only to read kills. Behavioural arms stay, including seeded bad inputs run against the real subject. Twenty fixture directories that held only a battery are deleted, none of them shipped (`backlog-receipt-binding` a-f, `backlog-receipt-efficiency` a-b, `backlog-receipt-fixture-join`, `mutant-kills-selfprobe`, `owed-derivations-d`, `smoke-surface-ignored-mutants`, `snapshot-archive-rotate-b`/`-c`, `story-evidence-receipts-mutants` a-c, `story-evidence-scaffold-e`/`-f`, `story-evidence-smoke-mutants`). `scripts/validate-mutant-kills.sh`, `scripts/kill-matrix.sh`, `core/fixtures/lib/matrix.sh`, hygiene arms H5 and H7, invocations arm J5 and five mutant allowlists are deleted; `core/fixtures/lib/mutant.sh` keeps `fx_inproc` only. Hygiene arm H12 fails the push on any fixture that calls or defines a mutant helper, carries a `# MUTANT-MATRIX` line, sources `lib/matrix.sh`, or defines a function whose name contains `mut`. CLAUDE.md builder step 4 and the fixture rules keep the probe and its mutant as a one-time hand run at authoring, never committed into a fixture.
+
+### BL-1091 — the pre-suite steps are units of the fixture mechanism and run concurrently; the second skip key is deleted
+
+The pre-suite's own present key (`pk_*`) is deleted. Each pre-suite step declares its inputs in the fixture grammar (`scripts/presuite/<slug>.decl`) and is skipped on a recorded pass by the same `readset_*` keys and verdict store the fixtures use. Thirteen steps are keyed. Thirteen always run: the git-reading steps, the two that read origin/main, `agent-definitions` (it reads the git-ignored `.claude/settings.json`) and `stray-party-mode` (it walks the whole tree). The steps run as forks of the hook under a fifo token pool of `FIXTURE_JOBS` tokens; without a fifo they run one after another and the hook prints `pre-suite pool OFF`. `presuite-present-key` is retired and `presuite-units` replaces it.
+
+### BL-1092 — a builder can predict and seed the `<fx>@consumer` units a push runs, and a seeder waits while a gate runs
+
+`scripts/predict-push-set.sh` prints `CONSUMER <m>` and `run <fx>@consumer` from the hook's own consumer-layout selection, and `scripts/seed-verdict-store.sh <fx>@consumer` records through the hook's own publish. The pre-push hook writes a gate-held marker after the pregate gate and removes it on every exit; the seeder and the consumer census wait on it, ignore a dead or reused pid, give up at a cap, and print when the wait is skipped. A seeded `@consumer` seed no longer passes `--dirty-ok` to the census unless it was given one.
+
+### BL-1090 — `@consumer` durations are kept when the durations record is merged
+
+Both pre-push hooks merge a `<fx>@consumer` row under its fixture's name, so the consumer-layout cost is on record.
+
+### BL-1093 — story-evidence-scaffold is split into units, and only the placement-dependent unit runs in the consumer layout
+
+Shards b, c, d and g carry `.dist-only`; shard a holds the cases that pass through `locate()` and is the one consumer-layout unit. The parent no longer declares its sibling drivers, which had made its consumer-layout run refuse.
+
+### BL-1094, BL-1095, BL-1096, BL-1097 — the pole-length fixture directories are split into shards under 300 s
+
+`adversarial-shard-merge` (a-d), `review-shard-merge` (a-g), `remediator-shard-join` (a-b), `owed-derivations` (a-c), `apply-drift-refile`, `ledger-reverify`, `apply-restamp-worklist-b`, `layer-readopt-gate` and `check-24-adversarial-convergence-d` are dealt over shard directories, each an eight-line exec driver. `validate-fixture-inprocess.sh` admits a shard's allowlist row (M4) and judges a shard's P2 rows under its family's baseline, and reads an absent allowlist as an empty one. `apply-drift-refile` and `ledger-reverify` scrub `AI_DLC_*` themselves, so their env-scrub allowlist rows are deleted.
+
+### BL-1098 — three fixtures that never open `.githooks/pre-push` stop keying it
+
+`layer-contract-conformance-b`, `consumer-machinery-home` and `derived-fence-binding` drop their `.githooks/` input line, with their `docs/inputs-decl-whole-rows.tsv` rows; the two `seed.sh` files stage `.githooks/` only where a run reads it. A one-byte hook edit selects 27 fixtures instead of 30.
+
+### BL-1099 — shard families run a shard as `<fx>@consumer` only where its verdict can depend on placement
+
+Fifteen shards of eight families leave the consumer layout and carry `.dist-only`; a new dist-only shard `apply-restamp-worklist-d` takes units bl, hr and hu out of shipped shard c. Each family names its dist-only shards in `DIST_SHARDS`, and its coverage join fails when a dist-only shard lacks its marker or another shard carries one. `ledger-reverify`, `adversarial-shard-merge` and `apply-restamp-worklist` name their placement-dependent units in `PLACED_UNITS`, and the join fails when one is dealt to a dist-only shard. `uninstall.sh` and both manifests drop the fifteen.
+
+### BL-1100 — the consumer layout names `<fx>@consumer` units skipped on passes recorded elsewhere
+
+A placement record is marked unconfirmed when written and confirmed when a hook run reaches its end, red or green. The consumer-layout selection prints the distribution's `verdict store: N fixture(s) skipped on a pass recorded elsewhere:` line over its store hits and its unconfirmed record skips, each name suffixed `@consumer`; `census-consumer-layout.sh --predict` and `predict-push-set.sh` print the same line. Records written before this release read as confirmed.
+
 ## [0.1129.0] - 2026-11-14
 
 ### BL-1016 — a handoff's "Full-collection run" is read through run-filter, so a partial pytest invocation is refused at handoff

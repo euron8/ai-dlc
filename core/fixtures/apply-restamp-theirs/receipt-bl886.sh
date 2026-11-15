@@ -4,8 +4,7 @@
 #   bash receipt-bl886.sh [<reconcile dir> [<cells> [<world cache>]]]
 # <reconcile dir> is the directory holding the apply.sh under test and its siblings; without it the
 # receipt resolves this tree's own by walking up from itself for either install layout. With <cells>
-# (space-separated names) only those cells run, each with the ordinary run its world needs: a mutant
-# run names its deciding cell and one twin. Without it, or with it empty, every cell runs.
+# (space-separated names) only those cells run, each with the ordinary run its world needs. Without it, or with it empty, every cell runs.
 # <world cache> builds the distribution and the four consumer worlds ONCE across invocations: a path
 # that does not exist yet is filled by this run's build (taken before any cell touches a world, with
 # B and T recorded inside it), and a filled one is copied instead of rebuilt. The worlds depend on no
@@ -197,7 +196,7 @@ if want pa || want pb || want pc || want pd || want pf || want pg || want pu || 
     fin "$x" "$R/pg.out"
     check pg '2.0.0|1' "$(stampv "$x")|$(rows "$R/pg.out" NOTE finish-template-unrecorded .claude/.ai-dlc-applying)"; fi
   if want pu || want pv; then x="$(cp_from "$P" pu)"
-    # No marker after pa is pa's own regression (a mutant that stamped there), scored as these cells
+    # No marker after pa is pa's own regression (a regression that stamped there), scored as these cells
     # failing on the stamp, never as a receipt that could not run. A reader that can still open a
     # mode-000 file (root) would make both cells assert nothing, which is a refusal.
     if [ -f "$x/.claude/.ai-dlc-applying" ]; then chmod 000 "$x/.claude/.ai-dlc-applying"

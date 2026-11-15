@@ -1,0 +1,3 @@
+# The two spans run.sh extracts and sources: the pre-suite queue, key pass and flush, and the readset_* functions they call.
+.githooks/pre-push PRESUITE_UNITS
+.githooks/pre-push FIXTURE_POOL

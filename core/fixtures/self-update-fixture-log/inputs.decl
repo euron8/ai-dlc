@@ -11,7 +11,6 @@ core/skills/ai-dlc-update/reconcile/self-update-gate.sh
 core/skills/ai-dlc-update/reconcile/setup-sites.md
 !core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/mutant.sh
 core/skills/ai-dlc-update/SKILL.md
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 core/skills/ai-dlc-update/reconcile/self-update-push.sh

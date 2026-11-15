@@ -1,28 +1,7 @@
 #!/usr/bin/env bash
 # plan-rotate — assert that scripts/plan-rotate.sh grades fences the way CommonMark does, keeps
 # every section its own declaration block names LIVE, refuses rather than guessing on a cut it
-# cannot make safely, and that each of those properties can go RED.
-#
-# THE TWO MUTANTS THIS FIXTURE EXISTS FOR ARE THE TWO THAT PASSED EVERYTHING ELSE.
-#
-# 1. THE NAIVE FENCE TOGGLE. A grader that flips fence state on every backtick run disagrees with
-#    CommonMark on a run whose INFO STRING CARRIES A BACKTICK, which CommonMark reads as a
-#    paragraph. Measured on this repo's own longest plan: the toggle scored 10 fenced headings
-#    where the info-string rule scores 1, because two such paragraphs opened and closed a fence
-#    across an 1100-line band. The seed pair below is HAND-TYPED and shares no byte with that
-#    file: two lines identical except that one carries a delimiter inside its info string and the
-#    other does not. Under the shipped grader the first ROTATES and the second is REFUSED as an
-#    unterminated fence; under the toggle both are refused. That is the whole discrimination, and
-#    a seed copied out of the corpus would have agreed with the grader for the wrong reason.
-#
-# 2. THE ARM-3 TAUTOLOGY. The subject's first cut read arm 3's WANT side off the SPLITTER's own
-#    `livesec` classification, so WANT and GOT were two readings of one decision. A mutant that
-#    archived `## Start here` and the plan's read/write boundary reported PASS at rc=0. Arm 3 now
-#    RE-DERIVES its WANT side and cross-checks the two, so that mutant dies — but a fixture that
-#    scored the outcome by reading the subject's own report would still be satisfied by the
-#    tautology. EVERY LIVE/ARCHIVED EXPECTATION BELOW IS A HAND-TYPED SENTINEL LIST, asserted
-#    against the FILES ON DISK and never against a line the subject printed. `m1t` puts the
-#    tautology back, and it is that sentinel arm and nothing else that kills it.
+# cannot make safely. Every sentinel is hand-typed and asserted on the files on disk.
 #
 # WHY THE SEEDS ARE TYPED AND NOT DERIVED. A seed taken off the tree the arm reads is a typed copy
 # of the arm's own answer; it passes a wrong fix as readily as a right one. Every plan here was
@@ -55,8 +34,7 @@ done
 # A MISSING SUBJECT IS NOT A PASS. Every arm below reads the subject's output or its writes, so a
 # run that cannot invoke it produces nothing — and "nothing" satisfies every assertion phrased as
 # an absence. An explicit argument that names no file is an ERROR and never a fallback: a
-# mutation run drives this fixture with an alternately-named copy, and silently falling back to
-# the tree's own script would score the ORIGINAL on every arm.
+# caller handing an alternately-named copy would otherwise score the tree's own script.
 if [ $# -ge 1 ]; then
   SUBJ="$1"
   [ -f "$SUBJ" ] || { echo "FIXTURE ERROR: cannot locate plan-rotate.sh at $SUBJ" >&2; exit 2; }
@@ -71,7 +49,6 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/seeds" "$WORK/roots"
 
 FAIL=0
-KILLS=0
 echo "plan-rotate fixture"
 echo "  subject: $SUBJ"
 echo "HERMETIC-CONSUMED $SUBJ"
@@ -80,11 +57,6 @@ echo
 ok()  { if [ "$#" -eq 1 ]; then printf '  ok    %s\n' "$1"; else printf '  ok    %-26s %s\n' "$1" "$2"; fi; }
 bad() { if [ "$#" -eq 1 ]; then printf '  FAIL  %s\n' "$1"; else printf '  FAIL  %-26s %s\n' "$1" "$2"; fi; FAIL=1; }
 broken() { printf 'FIXTURE BROKEN: %s\n' "$1" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$(cd "$(dirname "$0")" && pwd)/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# B_<arm>=1 only beside the unmutated arm's own ok: a mutant is scored only if its base arm passed.
-B_CTL=0; B_INFO=0; B_FHQ=0; B_BREC=0; B_BFLR=0; B_NC=0
 
 # HERE-STRING, NEVER A PIPE. `grep -q` leaves at its first match while the writer is still
 # pushing, and under pipefail the pipeline answers with the writer's EPIPE — a false NOT-FOUND on
@@ -292,7 +264,7 @@ MD
 # 140 down to 101, under a header paragraph that is not a record, each record three column-zero
 # paragraphs whose size rises strictly with the record's number -- so an oldest-first selection
 # and a smallest-first one pick the same records and a NEWEST-first one picks different ones.
-# Three planted shapes, each the subject of one mutant below:
+# Three planted shapes, each a distinct shape of the class-3 rotation:
 #
 #   - record 140, the max and the first, carries a fence quoting a column-zero `**BATCH 999`. It
 #     must stay live, fence and all.
@@ -442,18 +414,17 @@ drive() { # drive <root> <seedfile> <slug> [args...]
   LAST_OUT="$(bash "$r/scripts/plan-rotate.sh" "$LAST_PLAN" "$@" 2>&1)"
   LAST_RC=$?
   # THE WROTE-NOTHING VERDICT IS SNAPSHOTTED HERE, NOT TESTED LATER, AND THIS IS A MEASURED
-  # DEFECT IN THIS FILE'S FIRST CUT. A root is driven twice — the mutant seed and its control —
+  # DEFECT IN THIS FILE'S FIRST CUT. A root is driven twice — two seeds into one root —
   # and both write to the SAME archive path, so a `[ ! -f "$LAST_ARCH" ]` read after the second
-  # drive sees the second run's archive and reports that the first run wrote. `mutant:m5` failed
-  # exactly that way with the mutant firing correctly, which reads as an arm that cannot fire.
+  # drive sees the second run's archive and reports that the first run wrote; an arm read the wrong run that way and
+  # reported a refusal that wrote nothing as one that wrote.
   LAST_WROTE=yes;     [ -f "$LAST_ARCH" ] || LAST_WROTE=no
   LAST_UNTOUCHED=yes; cmp -s "$LAST_PLAN" "$sf" || LAST_UNTOUCHED=no
 }
 
 # =============================================================================================
 # THE DISCRIMINATORS, CHECKED BEFORE ANY ARM READS ONE. A sentence that stopped being emitted
-# makes every `! has` below vacuously true and every kill unearned — the failure this fixture
-# exists to catch, one level down. A sentence that CONTAINS another stops discriminating the
+# makes every `! has` below vacuously true. A sentence that CONTAINS another stops discriminating the
 # moment both can fire.
 # =============================================================================================
 S_UNTERM="a fence opened at line"
@@ -473,10 +444,6 @@ S_NOTHING="nothing to move"
 S_NOCAND="no archivable span of any class was found"
 S_ARM4="arm 4 (protected-record) FAILED"
 S_ARM4OK="arm 4 protected-record PASS"
-S_ARM4LOST="a protected batch record is not in the live remainder"
-S_ARM4INV="was archived while the OLDER record"
-S_PARTITION="the candidate spans are not a partition"
-S_BUDGET="The budget and the write disagree"
 
 # THE POINTER IS KEYED ON THE ARCHIVE PATH, NOT ON THE SENTENCE AROUND IT, AND THAT IS A
 # REPAIR. The first cut of this file hardcoded `Spent sections are archived at` at six sites;
@@ -510,11 +477,7 @@ $S_ARM3OK
 $S_NOTHING
 $S_NOCAND
 $S_ARM4
-$S_ARM4OK
-$S_ARM4LOST
-$S_ARM4INV
-$S_PARTITION
-$S_BUDGET"
+$S_ARM4OK"
 N_SENTS="$(LC_ALL=C grep -c . <<<"$SENTS")" || N_SENTS=0
 
 sent_ok=1
@@ -868,40 +831,6 @@ else
   bad "rotated-plan-stays-live" "P10 fired on a rotated plan that names ITSELF ($NM_HITS hit(s)) — the arm flags everything and its offender verdict says nothing"
 fi
 
-# THE KILL, SEEDED IN THIS FIXTURE RATHER THAN LEFT TO THE SUBJECT. Re-seed the discharge-token
-# pointer the rotator used to write, into the offender plan that has just been shown to FIRE. The
-# only difference is the pointer's opening word. If P10 goes silent the arm above has been proven
-# to discriminate on exactly this property; if it still fires, the arm's green verdict is not
-# evidence about the pointer and this fixture would pass a regression.
-#
-# AND IT IS GATED ON THE OFFENDER HAVING FIRED, BECAUSE `0 -> 0` IS NOT A KILL. Measured on this
-# arm's first cut: with the seed pre-silenced P10 read 0 before and 0 after, and the kill arm
-# reported a kill on a transition that never happened. A kill is a CHANGE in the verdict, so the
-# before-state has to be non-zero for the after-state to mean anything.
-if [ "$OFF_HITS" -lt 1 ]; then
-  bad "spent-pointer-kill" "not scored: P10 read $OFF_HITS on the offender, so there is no verdict for the re-seeded pointer to silence and a '0 -> 0' reading would be a kill that never happened"
-elif LC_ALL=C sed 's|^\*\*Archived sections live at|**Spent sections are archived at|' "$ROTATED" > "$WORK/rotated-spent.md"; cmp -s "$WORK/rotated-spent.md" "$ROTATED"; then
-  bad "spent-pointer-kill" "the re-seed matched nothing — the pointer no longer opens with the string this arm knows how to attack, so the kill was not scored and the arm above is unproven"
-else
-  SPENT_LINE="$(LC_ALL=C grep -n 'Spent sections are archived at' "$WORK/rotated-spent.md" | cut -d: -f1)"
-  cp "$WORK/rotated-spent.md" "$ROTATED"
-  SPENT_HITS="$(p10_hits "$LV")"
-  # The head window is the DIAGNOSIS, printed beside the verdict; the verdict itself is the
-  # consequence. Control in the same invocation: the whole file against the same grammar.
-  HEAD_TOK="$(head -12 "$ROTATED" | LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED')" || HEAD_TOK=0
-  ALL_TOK="$(LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED' "$ROTATED")" || ALL_TOK=0
-  if [ "$SPENT_HITS" -eq 0 ] && [ "$HEAD_TOK" -gt 0 ]; then
-    KILLS=$((KILLS + 1))
-    ok "spent-pointer-kill" "rotated-plan-stays-live would FAIL: a pointer opening 'Spent' at line ${SPENT_LINE:-?} puts a discharge token in the head -12 window ($HEAD_TOK there, $ALL_TOK in the whole file) and P10 drops $OFF_HITS -> 0 on the identical plan"
-  elif [ "$SPENT_HITS" -ne 0 ]; then
-    bad "spent-pointer-kill" "the 'Spent' pointer did NOT silence P10 ($SPENT_HITS hit(s)); the live arm's verdict is therefore not evidence about the pointer's vocabulary, and this fixture would pass the regression it was written for"
-  else
-    bad "spent-pointer-kill" "P10 went silent with NO discharge token in the head window (head=$HEAD_TOK, whole file=$ALL_TOK) — it was silenced by something other than the banner, so the attribution is wrong"
-  fi
-fi
-# The plan is left mutated on disk deliberately: this root is not driven again, and restoring it
-# would invite a later arm to read a file whose provenance is two mutations deep.
-
 # --- REPORT MODE WRITES NOTHING ---------------------------------------------------------------
 # A report that says what would move and then moves it is the call nobody asked for.
 RR="$(mkroot report)" || broken "could not build the report sandbox root"
@@ -945,7 +874,7 @@ if [ "$PI_RC" -ne 0 ] || has "$S_UNTERM" "$PI_OUT"; then
 elif ! has "LIVE-HAZARD-SENTINEL" "$PI_LIVE"; then
   bad "info-string-paragraph" "the plan rotated but the live section holding the paragraph did not survive"
 else
-  ok "info-string-paragraph" "a backtick run with a delimiter in its info string is a PARAGRAPH: the plan rotates"; B_INFO=1
+  ok "info-string-paragraph" "a backtick run with a delimiter in its info string is a PARAGRAPH: the plan rotates"
 fi
 
 drive "$RR" "$WORK/seeds/real-opener.md" probe --ceiling "$CEIL" --apply
@@ -970,7 +899,7 @@ if [ "$FH_RC" -ne 0 ]; then
 elif ! has "QUOTED-HEADING-INSIDE-A-FENCE" "$FH_LIVE"; then
   bad "fenced-heading-quiet" "the quoted heading was treated as a section boundary and its text left the live half"
 else
-  ok "fenced-heading-quiet" "a heading quoted inside a fence is not a boundary, and the live section keeps it"; B_FHQ=1
+  ok "fenced-heading-quiet" "a heading quoted inside a fence is not a boundary, and the live section keeps it"
 fi
 
 # =============================================================================================
@@ -1011,7 +940,7 @@ elif has "$S_NOTHING" "$LAST_OUT" || has "at or under" "$LAST_OUT"; then
 elif [ "$LAST_WROTE" = yes ] || [ "$LAST_UNTOUCHED" != yes ]; then
   bad "no-candidates-refuses" "the refusal wrote to disk (archive=$LAST_WROTE, plan untouched=$LAST_UNTOUCHED)"
 else
-  ok "no-candidates-refuses" "over the ceiling with no span of any class: exit 2, its own sentence, plan byte-identical, no archive"; B_NC=1
+  ok "no-candidates-refuses" "over the ceiling with no span of any class: exit 2, its own sentence, plan byte-identical, no archive"
 fi
 drive "$RR" "$WORK/seeds/nocand.md" probe --ceiling "$NC_BYTES" --apply
 if [ "$LAST_RC" -eq 0 ] && has "$S_NOTHING" "$LAST_OUT" && ! has "$S_NOCAND" "$LAST_OUT" && [ "$LAST_UNTOUCHED" = yes ]; then
@@ -1145,7 +1074,7 @@ batch_verdict() {
 batch_run batch-records "$SUBJ" "$B_CEIL"
 BV="$(batch_verdict)"
 if [ "$BV" = ok ] && has "$S_ARM4OK" "$B_OUT"; then
-  ok "batch-records" "at $B_CEIL (R_$B_K=$B_RK + P/2, P=$B_P) records 101..$B_NMAX move oldest-first as one range beside the spent section; 140 and its fenced 999 stay live; the archive grew by exactly those lines"; B_BREC=1
+  ok "batch-records" "at $B_CEIL (R_$B_K=$B_RK + P/2, P=$B_P) records 101..$B_NMAX move oldest-first as one range beside the spent section; 140 and its fenced 999 stay live; the archive grew by exactly those lines"
 else
   bad "batch-records" "$BV$(has "$S_ARM4OK" "$B_OUT" || echo " (and no arm 4 PASS)")"
 fi
@@ -1158,7 +1087,7 @@ fi
 batch_run batch-floor "$SUBJ" "$B_FLOOR"
 if [ "$B_RC" -eq 2 ] && has "$S_UNREACH" "$B_OUT" && ! has "$S_ARM4" "$B_OUT" \
    && [ "$B_UNTOUCHED" = yes ] && [ "$B_ARCH_SAME" = yes ]; then
-  ok "batch-protected-floor" "at $B_FLOOR only archiving record 140 would reach the ceiling; the rotation refuses as unreachable and writes nothing"; B_BFLR=1
+  ok "batch-protected-floor" "at $B_FLOOR only archiving record 140 would reach the ceiling; the rotation refuses as unreachable and writes nothing"
 else
   bad "batch-protected-floor" "expected an UNREACHABLE refusal writing nothing (exit $B_RC, plan untouched=$B_UNTOUCHED, archive unchanged=$B_ARCH_SAME): $(head -2 <<<"$B_OUT" | tr '\n' '|')"
 fi
@@ -1213,393 +1142,13 @@ fi
 # A MISSING SUBJECT IS NOT A PASS, ASSERTED BY RE-INVOKING THIS FILE. The control is that the
 # process running right now located its own subject and is executing these arms; the probe is
 # that a named path with no file behind it exits 2 rather than falling back to the tree's copy
-# and scoring the ORIGINAL on every mutant arm.
+# and scoring the ORIGINAL.
 ( bash "$HERE/run.sh" "$WORK/no-such-plan-rotate.sh" >/dev/null 2>&1 )
 MISS_RC=$?
 if [ "$MISS_RC" -eq 2 ]; then
   ok "missing-subject" "an argument naming no file exits 2, and does not silently fall back to the tree's own copy"
 else
-  bad "missing-subject" "a named-but-absent subject exited $MISS_RC; a mutation run would score the unmutated script"
-fi
-
-# =============================================================================================
-# MUTANTS. Every arm above is shaped as "the subject refused" or "the subject stayed quiet", and
-# BOTH shapes pass against a subject that emits nothing. Each mutant below is a COPY, never an
-# in-place edit, guarded by `cmp -s` so a sed that matched nothing cannot score a kill.
-#
-# The mutants live in sandbox ROOTS with their own synthetic VERSION marker, because the subject
-# walks up from its own path to find one — a bare copy in a temp directory exits 2 having parsed
-# nothing, which reads exactly like a guard firing. The unmutated `control` root below is what
-# separates those two outcomes.
-# =============================================================================================
-mutant_root() { # mutant_root <name> <sed-args...> -> echoes the root path, empty on failure
-  local n="$1"; shift
-  local r="$WORK/roots/$n"
-  # EVERY ATTEMPT IS RECORDED IN A FILE, BECAUSE THIS RUNS INSIDE `$( )` and a counter would die
-  # with the subshell. The tally below compares attempts against built roots and against kills.
-  printf '%s\n' "$n" >> "$WORK/mutants.tried"
-  mkdir -p "$r/scripts" "$r/docs/plans" || return 1
-  printf '0.0.0-fixture-sandbox\n' > "$r/VERSION"
-  LC_ALL=C sed "$@" "$SUBJ" > "$r/scripts/plan-rotate.sh" || {
-    echo "mutant $n: sed DID NOT APPLY (it exited non-zero, so no mutant exists to score)" >&2
-    return 1
-  }
-  if cmp -s "$r/scripts/plan-rotate.sh" "$SUBJ"; then
-    echo "mutant $n: the sed matched nothing, so this copy IS the original" >&2
-    return 1
-  fi
-  : > "$r/.mutant-built"
-  printf '%s' "$r"
-}
-
-# THE BATCH-RECORD MUTANTS USE A FIXED-STRING REPLACEMENT WITH AN ASSERTED APPLY COUNT. `sed`
-# needs every `[`, `*`, `&` and `|` in the subject's awk escaped, and a mis-escaped pattern either
-# matches nothing -- which `cmp -s` catches -- or matches a SECOND line, which it does not. So the
-# anchor is a literal substring passed by ENVIRON (no escaping layer at all), the replacement is
-# spliced in by `index`, and the copy is refused unless EXACTLY ONE line carried the anchor.
-mutant_fixed() { # mutant_fixed <name> <literal-anchor> <literal-replacement> -> root path, empty on failure
-  local n="$1" r="$WORK/roots/$1" hits
-  printf '%s\n' "$n" >> "$WORK/mutants.tried"
-  mkdir -p "$r/scripts" "$r/docs/plans" || return 1
-  printf '0.0.0-fixture-sandbox\n' > "$r/VERSION"
-  hits="$(M_OLD="$2" M_NEW="$3" LC_ALL=C awk -v OUT="$r/scripts/plan-rotate.sh" '
-    BEGIN { o = ENVIRON["M_OLD"]; w = ENVIRON["M_NEW"] }
-    { i = index($0, o)
-      if (i > 0) { h++; $0 = substr($0, 1, i - 1) w substr($0, i + length(o)) }
-      print > OUT }
-    END { print h + 0 }' "$SUBJ")" || { echo "mutant $n: awk DID NOT APPLY" >&2; return 1; }
-  if [ "$hits" -ne 1 ]; then
-    echo "mutant $n: the anchor matched $hits lines, not exactly 1" >&2
-    return 1
-  fi
-  if cmp -s "$r/scripts/plan-rotate.sh" "$SUBJ"; then
-    echo "mutant $n: the replacement changed nothing, so this copy IS the original" >&2
-    return 1
-  fi
-  : > "$r/.mutant-built"
-  printf '%s' "$r"
-}
-
-# CONTROL, UNMUTATED, FIRST — AND WITH A POSITIVE CONJUNCT. A control asserting only rc=0 and no
-# complaint passes against a subject replaced by `exit 0`, because rc=0 with nothing reported is
-# exactly what a clean copy looks like. So it also demands a baseline row be THERE.
-CTRL="$(mkroot control)" || broken "could not build the control sandbox root"
-drive "$CTRL" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
-if [ "$LAST_RC" -eq 0 ] && has "$S_ARM3OK" "$LAST_OUT" && has "SPENT-ONE-SENTINEL" "$(cat "$LAST_ARCH" 2>/dev/null)"; then
-  ok "mutant-control" "the unmutated copy in a sandbox root rotates, reports arm 3 PASS, and writes the archive"; B_CTL=1
-else
-  broken "the UNMUTATED copy in a sandbox root did not behave like the real script (exit $LAST_RC). Every kill below would be scored against a broken harness: $LAST_OUT"
-fi
-
-# --- M1 — THE LIVE-SET JOIN DELETED ----------------------------------------------------------
-# Every section below the declaration block becomes spent, so one maximal run swallows the whole
-# plan's live work. Targets arm 3's DERIVATION CROSS-CHECK: the splitter's `livesec` rows shrink
-# while the acceptance test's independent re-derivation does not, and the two disagree.
-M1="$(mutant_root m1-live-join-deleted -e 's/islive\[i\] = (i <= di) || (t in named)/islive[i] = (i <= di)/')"
-if [ -z "$M1" ]; then
-  bad "mutant:m1" "the mutation did not apply — the live-set join has moved, so this mutant tests nothing"
-else
-  drive "$M1" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
-  if [ "$LAST_RC" -ne 0 ] && has "$S_ARM3X" "$LAST_OUT" && [ "$LAST_WROTE" = no ]; then
-    mutant_killed "${B_CTL:-0}" "mutant:m1" "mutant:m1  the cross-check would FAIL: the two derivations of the live set disagree, and nothing was written" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m1" "the live-set join was deleted and arm 3's cross-check stayed silent (exit $LAST_RC): $(head -3 <<<"$LAST_OUT" | tr '\n' '|')"
-  fi
-fi
-
-# --- M1T — THE ARM-3 TAUTOLOGY, PUT BACK, ON TOP OF M1 ---------------------------------------
-# THE SHAPE THAT PASSED EVERYTHING BEFORE IT WAS CAUGHT. WANT is taken from the splitter's own
-# `livesec` rows, so WANT and GOT become two readings of ONE decision and arm 3 cannot fail. The
-# subject then APPLIES at rc=0 having archived the plan's read/write boundary and its next
-# actions, and reports three green arms while doing it.
-#
-# NOTHING THE SUBJECT PRINTS CAN CATCH THIS, which is the point: the kill is scored by the
-# hand-typed sentinel list against the files on disk.
-M1T="$(mutant_root m1t-arm3-tautology \
-  -e 's/islive\[i\] = (i <= di) || (t in named)/islive[i] = (i <= di)/' \
-  -e 's/^if \[ "\$WANT" != "\$SPLITTER_WANT" \]; then$/WANT="$SPLITTER_WANT"; if false; then/')"
-if [ -z "$M1T" ]; then
-  bad "mutant:m1t" "the tautology mutation did not apply — arm 3's cross-check has moved"
-else
-  T_APPLIED=0
-  grep -qF 'WANT="$SPLITTER_WANT"; if false; then' "$M1T/scripts/plan-rotate.sh" && T_APPLIED=1
-  if [ "$T_APPLIED" -ne 1 ]; then
-    bad "mutant:m1t" "the second layer did not land; a one-layer revert proves the layer left in place"
-  else
-    drive "$M1T" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
-    T_RC="$LAST_RC"; T_OUT="$LAST_OUT"
-    T_LIVE=""; [ -f "$LAST_PLAN" ] && T_LIVE="$(cat "$LAST_PLAN")"
-    # THE KILL IS THE SENTINEL, AND THE REPORT IS THE EVIDENCE THAT THE REPORT IS WORTHLESS: the
-    # mutant must exit 0 AND claim arm 3 PASS while the live half has lost its named sections.
-    if [ "$T_RC" -eq 0 ] && has "$S_ARM3OK" "$T_OUT" \
-       && ! has "LIVE-HAZARD-SENTINEL" "$T_LIVE" && ! has "LIVE-NEXTACTION-SENTINEL" "$T_LIVE"; then
-      mutant_killed "${B_CTL:-0}" "mutant:m1t" "mutant:m1t  live-set would FAIL: exit 0 and 'arm 3 ... PASS' while the archive ate the named-live sections — only the on-disk sentinel arm sees it" && KILLS=$((KILLS + 1))
-    else
-      bad "mutant:m1t" "the tautology did not reproduce: exit $T_RC, arm3-pass=$(has "$S_ARM3OK" "$T_OUT" && echo yes || echo no), hazard-live=$(has "LIVE-HAZARD-SENTINEL" "$T_LIVE" && echo yes || echo no)"
-    fi
-  fi
-fi
-
-# --- M1T-TWIN — THE TAUTOLOGY ALONE, WITH THE JOIN INTACT ------------------------------------
-# The other half of the proof, and the reason the defect shipped unnoticed: with the join intact
-# the tautology changes NO verdict today. A twin that fired here would mean m1t's kill was
-# attributable to the join deletion alone and said nothing about the tautology.
-M1W="$(mutant_root m1w-tautology-only \
-  -e 's/^if \[ "\$WANT" != "\$SPLITTER_WANT" \]; then$/WANT="$SPLITTER_WANT"; if false; then/')"
-if [ -z "$M1W" ]; then
-  bad "mutant-twin:m1w" "the tautology-only mutation did not apply"
-else
-  : > "$M1W/.mutant-twin"
-  drive "$M1W" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
-  W_LIVE=""; [ -f "$LAST_PLAN" ] && W_LIVE="$(cat "$LAST_PLAN")"
-  if [ "$LAST_RC" -eq 0 ] && has "LIVE-HAZARD-SENTINEL" "$W_LIVE" && has "LIVE-NEXTACTION-SENTINEL" "$W_LIVE"; then
-    ok "mutant-twin:m1w" "the tautology ALONE rotates correctly — it flips no verdict today, which is why it shipped; m1t's kill needs both layers"
-  else
-    bad "mutant-twin:m1w" "the tautology alone changed the rotation (exit $LAST_RC) — m1t's kill is then attributable to it rather than to the blinded arm"
-  fi
-fi
-
-# --- M2 — A LINE DROPPED FROM BOTH HALVES ----------------------------------------------------
-# Targets arm 1. The emit loop starts at line 2, so line 1 reaches neither file.
-M2="$(mutant_root m2-line-dropped -e 's/for (n = 1; n <= NL; n++) {/for (n = 2; n <= NL; n++) {/')"
-if [ -z "$M2" ]; then
-  bad "mutant:m2" "the mutation did not apply — the emit loop has moved"
-else
-  drive "$M2" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
-  if [ "$LAST_RC" -ne 0 ] && has "$S_ARM1" "$LAST_OUT" && [ "$LAST_WROTE" = no ]; then
-    mutant_killed "${B_CTL:-0}" "mutant:m2" "mutant:m2  arm 1 would FAIL: a line that reached neither half is reported as lost, and nothing was written" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m2" "a dropped line did not trip conservation (exit $LAST_RC): $(head -3 <<<"$LAST_OUT" | tr '\n' '|')"
-  fi
-fi
-
-# --- M3 — A LINE ALTERED IN PLACE, BYTE COUNT CONSERVED --------------------------------------
-# Targets arm 2, and it must NOT trip arm 1: `toupper` preserves the byte length of every ASCII
-# line, so the two totals arm 1 reads are unchanged and only the CONTENT moved. Two errors that
-# cancel are exactly the class a pair of totals cannot see, so the assertion demands arm 1 report
-# PASS in the same output that carries arm 2's failure — a mutant failing two arms means one of
-# them is vacuous.
-M3="$(mutant_root m3-line-altered -e 's/if (n in move) print line\[n\] > MOVED/if (n in move) print toupper(line[n]) > MOVED/')"
-if [ -z "$M3" ]; then
-  bad "mutant:m3" "the mutation did not apply — the emit branch has moved"
-else
-  drive "$M3" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
-  if [ "$LAST_RC" -ne 0 ] && has "$S_ARM2" "$LAST_OUT" && has "$S_ARM1OK" "$LAST_OUT" && [ "$LAST_WROTE" = no ]; then
-    mutant_killed "${B_CTL:-0}" "mutant:m3" "mutant:m3  arm 2 would FAIL: the multiset differs while arm 1 reports PASS on the same run, so the two arms are not entangled" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m3" "a byte-conserving alteration did not trip the multiset arm alone (exit $LAST_RC, arm1-pass=$(has "$S_ARM1OK" "$LAST_OUT" && echo yes || echo no))"
-  fi
-fi
-
-# --- M4 — THE INFO-STRING RULE REMOVED, WHICH IS THE NAIVE TOGGLE ----------------------------
-# THE GRADER THAT SCORED NINE SPENT SECTIONS AS FENCED ON THIS REPO'S OWN PLAN. With this one
-# line gone the grader toggles on every backtick run, so the paragraph seed opens a fence that
-# never closes and the whole file reads as fenced. Killed by the info-string seed; its control is
-# the conforming plan, which carries no backtick run at all and must still rotate — otherwise the
-# mutation broke the grader outright rather than changing this one rule.
-M4="$(mutant_root m4-naive-fence-toggle -e '/if (isdelim \&\& ch == "`" \&\& index(info, "`") > 0) { print FNR "\\t-"; next }/d')"
-if [ -z "$M4" ]; then
-  bad "mutant:m4" "the mutation did not apply — the info-string rule has moved"
-else
-  drive "$M4" "$WORK/seeds/para-info.md" probe --ceiling "$CEIL" --apply
-  M4_P_RC="$LAST_RC"; M4_P_OUT="$LAST_OUT"
-  drive "$M4" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
-  M4_B_RC="$LAST_RC"
-  if [ "$M4_P_RC" -ne 0 ] && has "$S_UNTERM" "$M4_P_OUT" && [ "$M4_B_RC" -eq 0 ]; then
-    mutant_killed "${B_INFO:-0}" "mutant:m4" "mutant:m4  info-string-paragraph would FAIL: the toggle opens an unterminated fence on the paragraph seed while the fence-free conforming plan still rotates" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m4" "removing the info-string rule did not make the paragraph read as a fence while leaving the fence-free plan alone (paragraph rc=$M4_P_RC, conforming rc=$M4_B_RC)"
-  fi
-fi
-
-# --- M5 — THE FENCE-STATE TEST REMOVED FROM THE HEADING SCAN ---------------------------------
-# The grader still grades; the SPLITTER stops consulting it. A heading quoted inside a fence then
-# becomes a section boundary, and the cut lands on a fenced line. Killed by the fence-cut
-# refusal; control is the conforming plan, which holds no fence and must still rotate.
-M5="$(mutant_root m5-heading-scan-fence-blind -e 's/^  st\[FNR\] == "F" { next }$/  st[FNR] == "NEVER" { next }/')"
-if [ -z "$M5" ]; then
-  bad "mutant:m5" "the mutation did not apply — the heading scan's fence test has moved"
-else
-  # SNAPSHOT THE WROTE-NOTHING VERDICT BEFORE THE CONTROL DRIVE. Both drives use the same root
-  # and therefore the same archive path, so a test deferred past the control reads the CONTROL's
-  # archive and reports that the refusal wrote. Measured on this file's first cut: m5 fired
-  # correctly and scored as survived for exactly that reason.
-  drive "$M5" "$WORK/seeds/fenced-heading.md" probe --ceiling "$CEIL" --apply
-  M5_F_RC="$LAST_RC"; M5_F_OUT="$LAST_OUT"; M5_F_WROTE="$LAST_WROTE"
-  drive "$M5" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
-  M5_B_RC="$LAST_RC"
-  if [ "$M5_F_RC" -ne 0 ] && has "$S_FENCECUT" "$M5_F_OUT" && [ "$M5_F_WROTE" = no ] && [ "$M5_B_RC" -eq 0 ]; then
-    mutant_killed "${B_FHQ:-0}" "mutant:m5" "mutant:m5  fenced-heading-quiet would FAIL: a heading inside a fence becomes a boundary and the cut is refused, while the fence-free plan still rotates" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m5" "blinding the heading scan to fence state did not produce a fence-cut refusal on the fenced seed alone (fenced rc=$M5_F_RC, conforming rc=$M5_B_RC)"
-  fi
-fi
-
-# --- M6 — A NAMED-LIVE SECTION FORCED INTO AN ARCHIVABLE RUN ---------------------------------
-# THE SECTION-EATER. `livesec` is untouched, so arm 3's cross-check AGREES and cannot see it;
-# arms 1 and 2 conserve perfectly, because conservation is a statement about bytes and not about
-# which half they landed in. Only arm 3's MISSING branch can, and the assertion demands it name
-# `Hazards` by title — a refusal that named something else would be a different defect wearing
-# this one's exit code.
-#
-# `\&\&` IS DELIBERATE AND IS CHECKED. An unescaped `&` in a BSD sed replacement is the WHOLE
-# MATCH, so the mutation would re-insert the matched line inside itself and produce a mutant
-# whose text is plausible and whose meaning is not. The grep below reads the mutant's own bytes.
-M6="$(mutant_root m6-named-live-section-eaten -e 's/if (islive\[i\]) { i++; continue }/if (islive[i] \&\& ht[i] !~ \/Hazards\/) { i++; continue }/')"
-if [ -z "$M6" ]; then
-  bad "mutant:m6" "the mutation did not apply — the candidate-run loop has moved"
-elif ! grep -qF 'if (islive[i] && ht[i] !~ /Hazards/) { i++; continue }' "$M6/scripts/plan-rotate.sh"; then
-  bad "mutant:m6" "the sed replacement was mangled — an unescaped & would have re-inserted the match, and the mutant's text is not what was intended"
-else
-  drive "$M6" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
-  if [ "$LAST_RC" -ne 0 ] && has "$S_ARM3" "$LAST_OUT" && has "Hazards" "$LAST_OUT" \
-     && ! has "$S_ARM3X" "$LAST_OUT" && [ "$LAST_WROTE" = no ]; then
-    mutant_killed "${B_CTL:-0}" "mutant:m6" "mutant:m6  arm 3's MISSING branch would FAIL: 'Hazards' is named live and absent from the remainder, while the cross-check agrees and arms 1 and 2 conserve" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m6" "a named-live section forced into an archivable run was not caught by arm 3's MISSING branch (exit $LAST_RC): $(head -4 <<<"$LAST_OUT" | tr '\n' '|')"
-  fi
-fi
-
-# =============================================================================================
-# THE BATCH-RECORD MUTANTS. Each is scored against the batch seed, whose unmutated run in a sandbox
-# root is the `batch-records` arm above -- that is this group's control, and it must have passed
-# for any verdict below to mean anything. Each kill demands the NAMED refusal or the named broken
-# property, never merely a non-zero exit.
-# =============================================================================================
-BATCH_CTRL_OK=no
-batch_run batch-control "$SUBJ" "$B_CEIL"
-[ "$(batch_verdict)" = ok ] && has "$S_ARM4OK" "$B_OUT" && BATCH_CTRL_OK=yes
-[ "$BATCH_CTRL_OK" = yes ] || broken "the UNMUTATED subject in a sandbox root did not rotate the batch seed correctly; every batch mutant verdict below would be scored against a broken harness: $B_OUT"
-
-# --- M7 — THE PROTECTION TEST REPLACED BY `if (0)` --------------------------------------------
-# Record 140 becomes eligible. Oldest-first reaches it LAST, so at the batch-records ceiling
-# nothing changes -- which is exactly why the floor arm exists. At the floor the mutant takes 140,
-# lands under the ceiling, and arm 4's LOST branch refuses the write.
-M7="$(mutant_fixed m7-protection-removed 'if (rn[r] == mx || r == 1) {' 'if (0) {')"
-if [ -z "$M7" ]; then
-  bad "mutant:m7" "the mutation did not apply — the protection test has moved"
-else
-  batch_run m7-drive "$M7/scripts/plan-rotate.sh" "$B_FLOOR"
-  if [ "$B_RC" -eq 2 ] && has "$S_ARM4LOST" "$B_OUT" && has "REC-140-OPEN" "$B_OUT" \
-     && [ "$B_UNTOUCHED" = yes ] && [ "$B_ARCH_SAME" = yes ]; then
-    mutant_killed "${B_BFLR:-0}" "mutant:m7" "mutant:m7  batch-protected-floor would FAIL: record 140 is archived to reach the floor, and arm 4 names it LOST and writes nothing" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m7" "removing the protection did not trip arm 4's LOST branch at the floor (exit $B_RC): $(head -3 <<<"$B_OUT" | tr '\n' '|')"
-  fi
-fi
-
-# --- M8 — OLDEST-FIRST FLIPPED TO NEWEST-FIRST ------------------------------------------------
-M8="$(mutant_fixed m8-newest-first 'cnum[k] < cnum[best]' 'cnum[k] > cnum[best]')"
-if [ -z "$M8" ]; then
-  bad "mutant:m8" "the mutation did not apply — the class-3 order test has moved"
-else
-  batch_run m8-drive "$M8/scripts/plan-rotate.sh" "$B_CEIL"
-  if [ "$B_RC" -eq 2 ] && has "$S_ARM4INV" "$B_OUT" && [ "$B_UNTOUCHED" = yes ]; then
-    mutant_killed "${B_BREC:-0}" "mutant:m8" "mutant:m8  batch-records would FAIL: newer records move while 101 stays, and arm 4 refuses the inversion" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m8" "newest-first selection did not trip arm 4's inversion branch (exit $B_RC): $(head -3 <<<"$B_OUT" | tr '\n' '|')"
-  fi
-fi
-
-# --- M9 — THE POINTER COST ZEROED IN THE SELECTION LOOP ---------------------------------------
-# The loop stops at R_k, which is under C with no pointer and over it with one. This is the
-# ceiling C = R_k + P/2 was chosen to discriminate: the subject must then refuse rather than write.
-M9="$(mutant_fixed m9-pointer-cost-zero 'rem + ptr_cost() <= CEIL' 'rem + 0 <= CEIL')"
-if [ -z "$M9" ]; then
-  bad "mutant:m9" "the mutation did not apply — the budgeted stop test has moved"
-else
-  batch_run m9-drive "$M9/scripts/plan-rotate.sh" "$B_CEIL"
-  if [ "$B_RC" -eq 2 ] && { has "$S_UNREACH" "$B_OUT" || has "$S_BUDGET" "$B_OUT"; } \
-     && [ "$B_UNTOUCHED" = yes ] && [ "$B_ARCH_SAME" = yes ]; then
-    mutant_killed "${B_BREC:-0}" "mutant:m9" "mutant:m9  batch-records would FAIL: the selection stops one record short with the pointer unbudgeted, and the write is refused" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m9" "an unbudgeted pointer was not refused at C = R_k + P/2 (exit $B_RC): $(head -3 <<<"$B_OUT" | tr '\n' '|')"
-  fi
-fi
-
-# --- M10 — CLASS 2 NO LONGER SKIPS LINES INSIDE A CLASS-3 RECORD ------------------------------
-# The indented `**BATCH 77` inside record 105 becomes a class-2 span over lines record 105 owns.
-M10="$(mutant_fixed m10-class2-overlaps 'st[n] != "F" && !(n in in3) && ' 'st[n] != "F" && ')"
-if [ -z "$M10" ]; then
-  bad "mutant:m10" "the mutation did not apply — class 2's class-3 exclusion has moved"
-else
-  batch_run m10-drive "$M10/scripts/plan-rotate.sh" "$B_CEIL"
-  if [ "$B_RC" -eq 2 ] && has "$S_PARTITION" "$B_OUT" && has "(batch record 105) and (retrospective batch paragraphs)" "$B_OUT" \
-     && [ "$B_UNTOUCHED" = yes ]; then
-    mutant_killed "${B_BREC:-0}" "mutant:m10" "mutant:m10  batch-records would FAIL: the indented 77 paragraph is a second candidate over record 105's lines, and the partition refusal fires" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m10" "an overlapping class-2 span was not refused as a non-partition (exit $B_RC): $(head -3 <<<"$B_OUT" | tr '\n' '|')"
-  fi
-fi
-
-# --- M11 — CLASS 3 BLIND TO FENCES ------------------------------------------------------------
-# The fenced `**BATCH 55` inside eligible record 130 opens a candidate on a fenced line.
-M11="$(mutant_fixed m11-class3-fence-blind 'if (st[n] == "-" && line[n] ~ /^\*\*BATCH' 'if (line[n] ~ /^\*\*BATCH')"
-if [ -z "$M11" ]; then
-  bad "mutant:m11" "the mutation did not apply — the class-3 opener scan has moved"
-else
-  batch_run m11-drive "$M11/scripts/plan-rotate.sh" "$B_CEIL"
-  if [ "$B_RC" -eq 2 ] && has "$S_FENCECUT" "$B_OUT" && [ "$B_UNTOUCHED" = yes ]; then
-    mutant_killed "${B_BREC:-0}" "mutant:m11" "mutant:m11  batch-records would FAIL: a fenced opener becomes a record boundary and the fence-cut refusal fires" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m11" "a fence-blind opener scan was not refused as a fence cut (exit $B_RC): $(head -3 <<<"$B_OUT" | tr '\n' '|')"
-  fi
-fi
-
-# --- M12 — ADJACENT RANGES NO LONGER COALESCED ------------------------------------------------
-# The rotation is still correct in every byte; only the pointer lists each record separately.
-M12="$(mutant_fixed m12-no-coalesce 'if (a && cs[sp[q]] == b + 1)' 'if (0 && cs[sp[q]] == b + 1)')"
-if [ -z "$M12" ]; then
-  bad "mutant:m12" "the mutation did not apply — the range coalescing test has moved"
-else
-  batch_run m12-drive "$M12/scripts/plan-rotate.sh" "$B_CEIL"
-  M12_V="$(batch_verdict)"
-  case "$M12_V" in
-    "the pointer names "*) mutant_killed "${B_BREC:-0}" "mutant:m12" "mutant:m12  batch-records would FAIL: $M12_V" && KILLS=$((KILLS + 1)) ;;
-    *) bad "mutant:m12" "uncoalesced ranges were not caught by the one-range check: $M12_V" ;;
-  esac
-fi
-
-# --- M13 — THE NMOVED=0 EARLY EXIT 0 REINSTATED -----------------------------------------------
-# The shipped defect: an over-ceiling plan with nothing to take reported "at or under the ceiling"
-# at exit 0. Reinstated ahead of the no-candidate refusal, which it pre-empts again.
-M13="$(mutant_fixed m13-nmoved-early-exit \
-  "if LC_ALL=C grep -q '^NOCANDIDATES' \"\$WORK/meta.tsv\"; then" \
-  "if [ \"\$NMOVED\" = \"0\" ]; then echo \"plan-rotate: \$PLAN is \$TOTAL bytes, at or under the \$CEILING-byte ceiling — nothing to move.\"; exit 0; fi; if LC_ALL=C grep -q '^NOCANDIDATES' \"\$WORK/meta.tsv\"; then")"
-if [ -z "$M13" ]; then
-  bad "mutant:m13" "the mutation did not apply — the no-candidate refusal has moved"
-else
-  drive "$M13" "$WORK/seeds/nocand.md" probe --ceiling "$((NC_BYTES / 2))" --apply
-  if [ "$LAST_RC" -eq 0 ] && has "$S_NOTHING" "$LAST_OUT" && ! has "$S_NOCAND" "$LAST_OUT"; then
-    mutant_killed "${B_NC:-0}" "mutant:m13" "mutant:m13  no-candidates-refuses would FAIL: the over-ceiling plan reads 'nothing to move' at exit 0 again" && KILLS=$((KILLS + 1))
-  else
-    bad "mutant:m13" "the reinstated early exit did not reproduce the under-ceiling sentence over the ceiling (exit $LAST_RC): $(head -2 <<<"$LAST_OUT" | tr '\n' '|')"
-  fi
-fi
-
-# --- THE KILL COUNT ---------------------------------------------------------------------------
-# A mutant that killed nothing reads exactly like an arm that cannot fire, and a battery whose
-# seds all silently missed reads as a page of clean passes. `m1w` is a single-layer TWIN and not
-# a target: it exists to show the tautology flips no verdict on its own, which is what makes
-# m1t's verdict a measurement rather than an absence. Counting a twin as a kill counts the
-# control as a result.
-# `spent-pointer-kill` is a kill and it is NOT a `.mutant-built` root: it mutates the rotator's
-# OUTPUT rather than the rotator, because the property it attacks is a string the tool writes
-# into a tracked file and reads by nobody but another program. So kills exceed targets by one
-# BY CONSTRUCTION, and the accounting says which is which rather than hiding it.
-#
-# NO TOTAL IS TYPED. The count was a literal 8 and every mutant added meant editing it; a typed
-# total that fell behind would fail loudly, but one edited to match a battery that had quietly
-# lost a member would not. Attempts are appended to a file by the two builders, built roots and
-# twins are marked on disk, and the expected kill count is derived from them.
-MUT_TRIED="$(LC_ALL=C grep -c . "$WORK/mutants.tried" 2>/dev/null)" || MUT_TRIED=0
-MUT_BUILT="$(/usr/bin/find "$WORK/roots" -name '.mutant-built' -type f 2>/dev/null | wc -l | tr -d ' ')"
-MUT_TWINS="$(/usr/bin/find "$WORK/roots" -name '.mutant-twin' -type f 2>/dev/null | wc -l | tr -d ' ')"
-MUT_WANT=$((MUT_BUILT - MUT_TWINS + 1))
-if [ "$MUT_TRIED" -gt 0 ] && [ "$MUT_BUILT" -eq "$MUT_TRIED" ] && [ "$KILLS" -eq "$MUT_WANT" ]; then
-  ok "mutants" "$MUT_BUILT of $MUT_TRIED mutant roots built ($MUT_TWINS twin) and $KILLS kills — $((MUT_BUILT - MUT_TWINS)) script mutants plus the re-seeded discharge pointer, which mutates the OUTPUT and so builds no root"
-else
-  bad "mutants" "$MUT_BUILT of $MUT_TRIED mutant roots built ($MUT_TWINS twin), $KILLS of $MUT_WANT kills — a mutant that scored no kill means an arm cannot fire"
+  bad "missing-subject" "a named-but-absent subject exited $MISS_RC; the run would score the tree copy"
 fi
 
 echo

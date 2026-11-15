@@ -56,8 +56,6 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_7u=0
 
 echo "extract-push-flag-decision:"
 
@@ -314,28 +312,10 @@ else bad "probe 7u-5: a file with no 7u section returned rc $rc"; fi
 # The corpus.
 step7u_ok "$SUBJ"; rc=$?
 case "$rc" in
-  0) ok "step 7u names UPSTREAM-ONLY-ADD and sets the exec bit in both directions"; B_7u=1 ;;
+  0) ok "step 7u names UPSTREAM-ONLY-ADD and sets the exec bit in both directions" ;;
   3) bad "FIXTURE STALE: no **7u. section found in $SUBJ" ;;
   *) bad "step 7u lacks UPSTREAM-ONLY-ADD, \`chmod +x\` or \`chmod -x\`: an untangle UPSTREAM-ONLY-ADD row is written at the umask's mode, and a wrong-bit row's whole action goes unstated" ;;
 esac
-
-# MUTANT, keyed on the predicate's own tokens rather than on a list of sites: every 7u
-# line carrying one of them is deleted from a COPY of the resolved subject. The token
-# count inside 7u must be non-zero before and zero after, or the mutation removed
-# less than the property and its verdict means nothing.
-M7U="$WORK/7u-mutant.md"
-LC_ALL=C awk '/^[*][*]7u[.]/ { f=1 } /^[*][*]7v[.]/ { f=0 }
-  f && (index($0, "UPSTREAM-ONLY-ADD") || index($0, "chmod +x") || index($0, "chmod -x")) { next }
-  { print }' "$SUBJ" > "$M7U"
-n_pre="$(step7u "$SUBJ" | grep -cE 'UPSTREAM-ONLY-ADD|chmod [+-]x')" || n_pre=0
-n_post="$(step7u "$M7U" | grep -cE 'UPSTREAM-ONLY-ADD|chmod [+-]x')" || n_post=0
-if cmp -s "$SUBJ" "$M7U" || [ "$n_pre" -eq 0 ] || [ "$n_post" -ne 0 ]; then
-  bad "FIXTURE BROKEN — the 7u mutant did not apply to $SUBJ (token lines in 7u: $n_pre before, $n_post after)"
-else
-  step7u_ok "$M7U"; rc=$?
-  if [ "$rc" -eq 1 ]; then mutant_killed "$B_7u" 7u-token-strip "mutant 7u: stripping the 7u token lines from $SUBJ is reported (rc 1)"
-  else bad "mutant 7u: the stripped copy returned rc $rc, not 1 — the arm survives deleting its own subject"; fi
-fi
 
 # --- CWD INVARIANCE ------------------------------------------------------------------
 # This fixture is green from the repo root because that is how the hook drives it. An

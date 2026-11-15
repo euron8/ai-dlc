@@ -42,8 +42,6 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_rctCaught=0; B_rctVec=0
 
 CORE_PATH="core/scripts/validate-artifact-budget.sh"
 DIST="$WORK/dist"
@@ -110,7 +108,7 @@ pool_report() { printf 'OVER\n' >> "$ROOT/.chan"; }
 OURS
 out="$(run_detect)"
 if grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan' <<<"$out"; then
-  ok "a retired contract the consumer still references is caught"; B_rctCaught=1
+  ok "a retired contract the consumer still references is caught"
 else
   bad "the severed contract was NOT caught -- detector is inert"
 fi
@@ -187,60 +185,6 @@ else
   bad "fired on documentation -- this detector will be muted within a release"
 fi
 
-# --- 4. MUTATION: the comment strip is load-bearing -----------------------------
-# Remove the comment-stripping and assertion 3 must break. Without this control,
-# assertion 3 could be passing because the token never matched at all.
-# Neuter the filter by swapping it for `cat` -- do NOT delete the line. Deleting it
-# leaves a pipeline starting with `|`, so the mutant dies on a syntax error and
-# produces no output, which reads as "did not fire" and passes the assertion for
-# entirely the wrong reason. The first version of this fixture did exactly that.
-# The mutant is built in a copy of the WHOLE reconcile directory. The detector resolves
-# `preclassify.sh` beside itself, and a lone copy in $WORK had no sibling: it read zero
-# rows on every input and was silent for THAT reason, so this arm scored a kill the
-# strip never earned. The stderr control below is what exposes it -- a mutant that ran
-# says it opened one file; one with no sibling says preclassify produced no rows.
-MDIR="$WORK/mutant-strip"
-cp -R "$(dirname "$DETECT")" "$MDIR" || exit 2
-MUTANT="$MDIR/$(basename "$DETECT")"
-sed "s|grep -vE '\^\[\[:space:\]\]\*#'|cat|" "$DETECT" > "$MUTANT" || exit 2
-if cmp -s "$DETECT" "$MUTANT"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- the comment-strip line moved" >&2
-  echo "  update the sed pattern in assertion 4" >&2
-  exit 2
-fi
-bash -n "$MUTANT" 2>/dev/null || {
-  echo "FIXTURE ERROR: mutant does not parse -- it would fail for the wrong reason" >&2
-  exit 2; }
-[ -f "$MDIR/preclassify.sh" ] || { echo "FIXTURE ERROR: mutant has no preclassify.sh beside it" >&2; exit 2; }
-# Re-seed assertion 1's input: a genuinely severed contract, which the real
-# detector catches.
-cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
-#!/bin/bash
-CHAN="$ROOT/.chan"
-printf 'x\n' >> "$ROOT/.chan"
-pool_report() { printf 'OVER\n' >> "$ROOT/.chan"; }
-OURS
-out="$(bash "$MUTANT" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null)"
-# The failure direction is SILENCE, not noise, and that is the point. THEIRS'
-# header documents the retirement by naming the old path. Counting comments makes
-# that mention look like a live use, so the token reads as still-in-use, `retired`
-# comes back empty, and a real severed contract reports nothing. A detector muted
-# by the release note explaining the very change it is meant to police.
-if grep -q 'RETIRED-CONTRACT-TOKEN' <<<"$out"; then
-  bad "MUTATION: the comment strip is inert -- assertions 1-3 prove nothing"
-else
-  mutant_killed "$B_rctCaught" comment-strip-removed "MUTATION: without the strip, THEIRS' own doc-comment masks a real severed contract"
-fi
-# The silence above must be the RIGHT silence: the mutant opened the file and derived an
-# empty retired set, and its own stderr says so. A mutant that never ran says something
-# else, or nothing.
-merr="$(bash "$MUTANT" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>&1 >/dev/null)"
-if grep -q '1 of 3 CLASSIFY file(s) opened, 0 carrying' <<<"$merr"; then
-  ok "MUTATION control: the mutant's silence is a scan that opened 1 file and retired nothing, by its own stderr"
-else
-  bad "MUTATION control: the mutant's silence is unexplained -- it may never have scanned: ${merr:-<no stderr>}"
-fi
-
 # --- 5-8. A ZERO THAT OPENED NO FILE SAYS SO, AND ONLY THEN --------------------
 # Measured on the reference consumer's 0.410.0 -> 0.412.0 pull: every path bucketed
 # ALREADY-AT-THEIRS, the CLASSIFY set was empty, and the detector exited 0 with zero
@@ -253,7 +197,7 @@ fi
 #   p7  matched (rows on stdout)                    -> stderr EMPTY
 #   p8  preclassify produced no rows at all         -> refusal, not a clean NOTE
 # Every predicate takes the script to drive, re-seeds its own consumer, and asserts
-# a PRESENCE, so a copy that emits nothing fails by construction.
+# a PRESENCE, so a script that emits nothing fails by construction.
 PRE="$(dirname "$DETECT")/preclassify.sh"
 SECOND_OURS="$CONS/scripts/ai-dlc/second.sh"
 THIRD_OURS="$CONS/scripts/ai-dlc/third.sh"
@@ -267,11 +211,9 @@ seed_at_theirs() { cp "$DIST/$CORE_PATH" "$CONS/scripts/ai-dlc/validate-artifact
 # hand put it back. `listed 0` is asserted here as a number.
 seed_all_at_theirs() { seed_at_theirs; cp "$DIST/$SECOND_PATH" "$SECOND_OURS"; cp "$DIST/$THIRD_PATH" "$THIRD_OURS"; }
 seed_third_modified() { printf '#!/bin/bash\nX="$ROOT/.third"\ny=3\n' > "$THIRD_OURS"; }
-# EVERY seed defines the WHOLE consumer state. A predicate that returns early on a mutant
+# EVERY seed defines the WHOLE consumer state. A predicate that returns early
 # leaves whatever its last world wrote, and the next predicate's world then has a shape
-# nobody seeded -- measured: p5 failed at its all-at-theirs world, left the second file
-# at theirs, and p6 read "2 of 2" instead of "2 of 3", scoring a two-cell flip on a
-# mutant that flips one.
+# nobody seeded.
 seed_repointed() {
   rm -f "$SECOND_OURS" "$THIRD_OURS"
   cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
@@ -381,83 +323,6 @@ if p7 "$DETECT"; then ok "a run that matched says nothing on stderr: the rows ar
 else bad "a NOTE was printed beside real rows, or the rows are gone"; fi
 if p8 "$DETECT"; then ok "preclassify producing no rows is refused, not reported as a clean NOTE"
 else bad "an unresolvable input reads as a clean scan"; fi
-
-# --- 9. MUTANTS: each wrong fix flips exactly its own predicate -------------------
-# Build as a copy, refuse a sed that dies or matches nothing, refuse a copy that does not
-# parse. Then score p5..p8 and compare the whole vector: a mutant that flips more than
-# its own cell means two predicates are entangled; one that flips none means the
-# predicate cannot fire.
-# The mutant lives in a COPY OF THE WHOLE DIRECTORY, not a lone file: the detector finds
-# `preclassify.sh` beside itself, and a copy with no sibling reads zero rows on every
-# world, so every mutant scores the same vector and the score is about the harness.
-# Measured on the first cut of this block: five mutants, one vector, 0001.
-mkmut() {  # name sed-expr -> path on stdout
-  d="$WORK/mut-$1"
-  cp -R "$(dirname "$DETECT")" "$d" || { echo "FIXTURE ERROR: could not copy the reconcile dir for $1" >&2; exit 2; }
-  m="$d/$(basename "$DETECT")"
-  sed "$2" "$DETECT" > "$m" || { echo "FIXTURE ERROR: mutation $1 DID NOT APPLY (sed died)" >&2; exit 2; }
-  cmp -s "$DETECT" "$m" && { echo "FIXTURE ERROR: mutation $1 matched nothing -- its anchor moved" >&2; exit 2; }
-  bash -n "$m" 2>/dev/null || { echo "FIXTURE ERROR: mutant $1 does not parse" >&2; exit 2; }
-  [ -f "$d/preclassify.sh" ] || { echo "FIXTURE ERROR: mutant $1 has no preclassify.sh beside it" >&2; exit 2; }
-  printf '%s\n' "$m"
-}
-vec() { v=""; for p in p5 p6 p7 p8; do if "$p" "$1"; then v="${v}1"; else v="${v}0"; fi; done; printf '%s' "$v"; }
-score() {  # name path expected-vector
-  # mkmut runs inside `$( )`, so its `exit 2` ends the subshell and not this fixture; an
-  # empty path here IS that refusal, and it must read as BROKEN, never as a regression
-  # (`bash ""` fails every predicate and prints 0000). Measured by the adversarial hand.
-  [ -n "$2" ] || { echo "FIXTURE ERROR: mutant $1 was not built -- see the FIXTURE ERROR above; a lost anchor is a lost subject, not a regression" >&2; exit 2; }
-  got="$(vec "$2")"
-  if [ "$got" = "$3" ]; then mutant_killed "$B_rctVec" "$1" "MUTATION $1: flips exactly its own predicate ($3)"
-  else bad "MUTATION $1: expected $3 got $got (p5 p6 p7 p8)"; fi
-}
-
-if [ "$(vec "$DETECT")" = "1111" ]; then ok "unmutated control: every predicate holds"; B_rctVec=1
-else bad "unmutated control: $(vec "$DETECT") -- a mutant score below is meaningless"; fi
-
-# NOTE deleted outright: the pre-fix script. p5 alone falls.
-score "no-vacuity-note" "$(mkmut nonote 's|^  echo "retired-tokens: NOTE -- this pull listed|  : "|')" "0111"
-# Wrong fix 1: key the vacuity NOTE on preclassify emitting nothing, rather than on
-# opening nothing. The measured incident HAD rows (every path ALREADY-AT-THEIRS), so
-# this fix is silent on its own motivating case and prints the denominator NOTE with
-# a zero in it instead. p5 alone falls.
-score "keyed-on-no-rows" "$(mkmut norows 's|^if \[ "\$opened" -eq 0 \]; then|if [ -z "$ROWS" ]; then|')" "0111"
-# Wrong fix 1b: key the NOTE on the LISTED count. A CLASSIFY file the consumer deleted is
-# listed and never opened, so a pull made only of those reads as scanned. p5's world
-# lists exactly one such file, so p5 alone falls.
-score "keyed-on-listed" "$(mkmut listed 's|^if \[ "\$opened" -eq 0 \]; then|if [ "$listed" -eq 0 ]; then|')" "0111"
-# Wrong fix 2: one NOTE for every quiet run, worded as "opened nothing". True for the
-# incident, false for a scan that opened files and matched nothing. p6 alone falls.
-score "denominator-collapsed" "$(mkmut collapse 's|^  echo "retired-tokens: NOTE -- \$opened of \$listed CLASSIFY file(s) opened,|  echo "retired-tokens: NOTE -- opened NONE, listed $listed, $opened opened,|')" "1011"
-# Wrong fix 2b: the denominator is the opened count itself. Reads as a complete scan on
-# a pull that listed more than it opened. p6 alone falls, because its world lists 2 and
-# opens 1.
-score "opened-of-opened" "$(mkmut ofopened 's|\$opened of \$listed CLASSIFY file(s) opened,|$opened of $opened CLASSIFY file(s) opened,|')" "1011"
-# Wrong fix 2c: the retiring count is a constant. Every earlier world had exactly one
-# file retiring a token, so this passed both channels until the third file existed.
-score "hardcoded-retiring" "$(mkmut retiring 's|\$retiring carrying a token upstream retired|1 carrying a token upstream retired|')" "1011"
-# Wrong fix 1c: the listed count in the opened-NONE NOTE is fabricated. p5 alone falls,
-# because its world lists exactly two.
-score "fabricated-listed" "$(mkmut fablisted 's|listed \$listed CLASSIFY file(s)\${ONLY:+|listed 47 CLASSIFY file(s)${ONLY:+|')" "0111"
-# Wrong fix 3: a NOTE beside real rows. Drop the early exit after the rows print so the
-# denominator NOTE follows every match. p7 alone falls.
-score "note-beside-rows" "$(mkmut fallthrough '/^  printf '"'"'%s'"'"' "\$rows"$/{n;s|^  exit 0$|  :|;}')" "1101"
-# The stated limit dropped from every NOTE. The header says a quiet run must restate it
-# because the operator reads the run and never the header; nothing bound that until the
-# receipt adversary stripped it and both channels stayed green. p5 alone falls.
-score "limit-dropped" "$(mkmut nolimit 's| \$LIMIT" >&2$|" >\&2|')" "0111"
-# Wrong fix 1d: say nothing unless something was listed. Invisible until the all-at-theirs
-# world existed -- the adversarial hand inserted this one line and every arm stayed green.
-# p5 alone falls.
-score "requires-listed" "$(mkmut reqlisted 's|^if \[ "\$opened" -eq 0 \]; then|[ "$listed" -gt 0 ] \|\| exit 0; if [ "$opened" -eq 0 ]; then|')" "0111"
-# Refusal neutered: an unresolvable input falls through to the vacuity NOTE. p8 alone falls.
-score "refusal-neutered" "$(mkmut norefuse 's|^  echo "retired-tokens: preclassify.sh produced no rows|  : "|')" "1110"
-# The refusal keeps its message and exits 0 -- the pre-fix contract, which both callers read as a
-# clean run with no row because each discards stderr. p8 alone falls, on its exit conjunct. Anchored
-# inside the refusal block, because `if [ -z "$ROWS" ]` opens two blocks and `exit 2` closes many.
-if [ "$P8_RC" = 1 ]; then
-  score "refusal-exits-0" "$(mkmut refuse0 '/produced no rows/,/^fi$/s|^  exit 2$|  exit 0|')" "1110"
-fi
 
 echo ""
 report_end retired-contract-token

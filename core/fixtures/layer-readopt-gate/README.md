@@ -44,25 +44,8 @@ blob's trailing newline, `diff` reported a phantom token-less final hunk, and
 The seed's `dev.md` therefore ends with an *unchanged* section **after** its
 template tokens. That is not cosmetic. With the tokens at EOF, the phantom
 newline hunk merges into the hunk the substitution already creates and the
-fixture **passes against the bug** — verified by mutation. Real core files end
+fixture **passes against the bug**. Real core files end
 with unchanged prose, so the fixture must too.
-
-## Non-vacuous by proof
-
-Every gate here was mutation-tested; each mutant is caught:
-
-| mutant | caught by |
-|---|---|
-| stale-line gate always reports clean | A (×2), B (×2) |
-| `--stamp` skips the refusal branch | A, B |
-| trailing-newline bug reintroduced in `unregistered-drift.sh` | D (template substitution misread as drift) |
-| base-side test put back on WHOLE LINES (set difference instead of containment) | J (faithful re-flow adoption refused; the near-miss still refuses, so exactly one cell moves) |
-| containment acquits without asking whether the body carries the CARRIER (bare containment) | J (the body teaching the negated rule passes; the faithful re-flow still passes, so exactly one cell moves) |
-| the plain arm back to `print v; exit` | B4b (the continuation vanishes while line 1 and the single-line form both still render, so it is the continuation being tested and not the run) |
-| E2 M1: layer 1 reverted (`substitution_only` two-valued, the caller refusal gone), the conservation check LEFT IN | E2 (a) and (b) only — the conservation check re-asks the same classifier, gets the same wrong `yes`, and passes the loss |
-| E2 M2: the conservation check's refusal a no-op | E2 (d) only |
-| E2 M3: the not-a-regular-file guard removed | E2 (c) only — `mv` onto a directory succeeds by moving the file inside it |
-| the clip notice deleted, the bound left in place (`head -20` exactly) | B4c (the same twenty lines are shown and the tail is silently dropped — the notice is the ONLY observable, which is why no arm reading the panel's content could have caught it) |
 
 `seed.sh` writes a real git repository with two commits and a real consumer tree
 to disk. It contains no `echo` describing a file it does not create — v0.48.0

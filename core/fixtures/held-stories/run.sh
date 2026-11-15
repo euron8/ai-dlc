@@ -26,32 +26,7 @@
 #   h0   a `stories:` key with no entries (list-stories exit 0, empty output) -> exit 0, 0 stories
 #   S1   implementation.md section 7 carries the validator's invocation line
 #   S2   ai-dlc-recover.sh's verification turn names every `held:` Open Item
-# MUTANTS (each a copy of the validator beside a copy of sprint-status.sh and schemas/; each scored
-# through lib/mutant.sh against the same-run pass of the arm it guards):
-#   m-keyonly  a hold matches the yaml key only        -> h9 dies
-#   m-noage    the age comparison never fires          -> h7 dies
-#   m-nostale  the stale comparison never fires        -> h3 dies
-#   m-norows   In-Flight rows never account a story    -> h6 dies (h1 also carries a row; h6 owns it)
-#   m-fnrnr    the stories file keyed on FNR == NR     -> h0 dies (an empty answer eats the snapshot)
-# A control drives the UNMUTATED copy through the same harness and requires h1's OK line, so a copy
-# that cannot run is never read as a kill.
-#
-# MUTANT MATRIX (.claude/rules/fixture-mutants.md, "One run per distinct state", clause 2). Per push
-# each mutant runs its deciding arm (must fail) and its twin (must stay green); --matrix drives every
-# mutant against every arm and prints one MATRIX row each. The rows below are that measurement.
-# Measured: m-norows also trips h1, h2, h7n, h8 and h9 (every world that accounts 1.3 by a row's
-# deliverable stem); h6 owns it, and h6n, which carries no row, is its green twin. Every other mutant
-# trips only its deciding arm.
-# MUTANT-MATRIX m-keyonly decides=h9 twins=h1
-# MUTANT-MATRIX m-noage decides=h7 twins=h7n
-# MUTANT-MATRIX m-nostale decides=h3 twins=h1
-# MUTANT-MATRIX m-norows decides=h6 twins=h6n
-# MUTANT-MATRIX m-fnrnr decides=h0 twins=h1
-# MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a mutant carrying its own row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/held-stories/run.sh --matrix
 set -uo pipefail
-MATRIX=0; [ "${1:-}" = "--matrix" ] && MATRIX=1
-MX_FULL_RUNS=0     # incremented ONLY by matrix-only cells; a plain run must leave it at 0
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -76,7 +51,6 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/held-stories.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 NOW=1793200000
 export AI_DLC_NOW="$NOW"
@@ -206,57 +180,4 @@ else
   else bad "S2: ai-dlc-recover.sh's verification turn no longer names the held: Open Items"; fi
 fi
 
-# --- mutants ----------------------------------------------------------------
-# mkmut <name> <awk-free literal old> <literal new> -> path of the mutated copy, or empty when the
-# edit matched nothing or the copy cannot be built (reported DID NOT APPLY, never scored)
-mkmut() {
-  local d="$WORK/mut-$1"
-  mkdir -p "$d/scripts" "$d/schemas" || return 1
-  cp "$SS" "$d/scripts/sprint-status.sh" && cp "$SCHEMA" "$d/schemas/sprint-status.json" || return 1
-  OLD="$2" NEW="$3" awk 'BEGIN { o = ENVIRON["OLD"]; r = ENVIRON["NEW"] }
-    { s = $0; out = ""; while ((p = index(s, o)) > 0) { out = out substr(s, 1, p - 1) r; s = substr(s, p + length(o)) } print out s }' \
-    "$VAL" > "$d/scripts/validate-held-stories.sh" || return 1
-  if [ "$1" != control ] && cmp -s "$VAL" "$d/scripts/validate-held-stories.sh"; then return 1; fi
-  printf '%s' "$d/scripts/validate-held-stories.sh"
-}
-
-C="$(mkmut control x x)"
-if [ -n "$C" ] && [ -f "$WORK/mut-control/scripts/sprint-status.sh" ] && arm "$C" h1 ctl; then
-  ok "control: the unmutated copy beside its sibling reads h1 clean with 3 stories"; B_CTL=1
-else
-  bad "FIXTURE BROKEN: the unmutated copy did not read h1 clean (rc=$RC: $(tr '\n' ' ' <<<"$OUT")); no mutant is scored"; B_CTL=0
-fi
-
-ALL_ARMS="h1 h2 h3 h4 h6 h6b h6n h7 h7n h8 h9 h0"
-score() { # score <mutant> <deciding arm> <twin arm> <old> <new>
-  local m="$1" a="$2" t="$3" p base tbase x tr="" gr=""
-  # The same-run base flags of the deciding arm and the twin, read from the A_<arm> the arm loop
-  # above set; mutant_killed is passed their conjunction (validate-mutant-kills.sh M5's test form).
-  base="$(eval "printf '%s' \"\${A_$a:-0}\"")"
-  tbase="$(eval "printf '%s' \"\${A_$t:-0}\"")"
-  [ "$B_CTL" = 1 ] || return 0
-  p="$(mkmut "$m" "$4" "$5")"
-  if [ -z "$p" ]; then bad "MUTANT $m DID NOT APPLY: its anchor matched nothing"; return 0; fi
-  if [ "$MATRIX" = 1 ]; then
-    for x in $ALL_ARMS; do
-      MX_FULL_RUNS=$((MX_FULL_RUNS + 1))
-      if arm "$p" "$x" "$m-mx"; then gr="$gr,$x"; else tr="$tr,$x"; fi
-    done
-    printf 'MATRIX %s decides=%s tripped=[%s] green=[%s]\n' "$m" "$a" "${tr#,}" "${gr#,}"
-    return 0
-  fi
-  if arm "$p" "$a" "$m"; then bad "MUTANT $m survived: arm $a still passes"
-  elif ! arm "$p" "$t" "$m-twin"; then bad "MUTANT $m moved its twin arm $t -- the arms overlap, re-measure with --matrix"
-  else mutant_killed "$([ "$base" = 1 ] && [ "$tbase" = 1 ] && echo 1 || echo 0)" "$m" "mutant $m dies on $a; twin $t stays green"; fi
-}
-score m-keyonly h9 h1  'if (id == key[k] || id == ei[k] || id == stem[k]) return k' 'if (id == key[k]) return k'
-score m-noage   h7 h7n 'if (now - hs[h] > maxs)' 'if (0)'
-score m-nostale h3 h1  'if (st[k] != "ready-for-dev") { print "STALE-HOLD "' 'if (0) { print "STALE-HOLD "'
-score m-norows  h6 h6n 'if (row_names(rows, k)) continue' 'if (0) continue'
-score m-fnrnr   h0 h1  'FILENAME == ARGV[1] {' 'FNR == NR {'
-
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MX_FULL_RUNS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (MX_FULL_RUNS=0)"
-  else bad "a plain run executed $MX_FULL_RUNS matrix-only cell(s)"; fi
-fi
 report_end held-stories

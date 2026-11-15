@@ -22,10 +22,8 @@
 # victim reads as a catastrophic deletion.
 #
 # WHY THIS IS NOT A TEXT ANCHOR. A grep for the scrub line establishes that the
-# line EXISTS. It cannot establish that the line executes, and the (m3) mutant
-# below — the real scrub text present but COMMENTED OUT — satisfies every
-# grep-shaped check while changing nothing. That mutant is the whole reason this
-# fixture drives a victim instead of reading a file. The same distinction retired
+# line EXISTS. It cannot establish that the line executes, so this fixture drives
+# a victim instead of reading a file. The same distinction retired
 # BL-191's original receipt, which 30 files containing nothing but `# env -i`
 # could close.
 #
@@ -39,29 +37,10 @@
 #
 # WHAT IT DRIVES. The shipping seam and a shipping fixture, unmodified, in a
 # sandbox that is a real repository with a real linked worktree, with GIT_DIR
-# exported the way git exports it. Every mutant is a COPY guarded by `cmp -s`, and
-# the UNMUTATED copy runs through the same harness in the same battery, so a
-# broken harness cannot let a mutant score a kill.
+# exported the way git exports it.
 #
-# THE MUTANT MATRIX. Six mutants (m1 m2 m3 m4 on arm A, b2 on arm B, u127 on arm URC; u127 is driven once,
-# outside the m-loop, and in --matrix prints its U and URC cells). Per push each runs on its DECIDING cell
-# and the TWIN cell U (the same driven fixture with GIT_DIR unset, which no seam mutation can reach, so it stays
-# green for every mutant). `--matrix` (an argv flag) runs every mutant over every cell A B U and prints one
-# MATRIX row per cell with killed=yes|no plus a MATRIX-ROW with tripped=[...], from matrix-lib.sh, then stops.
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
-# requires. The recorded matrix plus the twin
-# replaces a per-push exact-vector assertion.
-# MUTANT-MATRIX m1 decides=A twins=U
-# MUTANT-MATRIX m2 decides=A twins=U
-# MUTANT-MATRIX m3 decides=A twins=U
-# MUTANT-MATRIX m4 decides=A twins=U
-# MUTANT-MATRIX b2 decides=B twins=U
-# MUTANT-MATRIX u127 decides=URC twins=U
-# Measured --matrix (BL-965 re-measure, plain run, where `env` always resolved): m1 m3 m4 trip [A B], m2 [A],
-# b2 [B], u127 [URC]; every U cell is INTACT at inner rc 0. Under hermetic-run.sh the U cells first ran at all
-# when `env` entered tools.decl -- before it, each was an instant 127 that read INTACT.
-# MUTANT-MATRIX-DYNAMIC m-loop why=the loop for _m in m1 m2 m3 m4 b2 passes "$_m" to mutant_killed; each of the five carries its own row in this block
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-git-env-seam/run.sh --matrix
+# THE CELLS. A and B are the armed cells (GIT_DIR inherited); U is the same driven fixture with GIT_DIR unset,
+# the green twin that proves the driven fixture runs at all (arm URC reads its inner exit).
 set -u
 
 # shellcheck source=/dev/null
@@ -84,7 +63,6 @@ while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/core/fixtures/lib/preamble.sh" ]; do R
 [ -f "$ROOT/core/fixtures/lib/preamble.sh" ] || broken "no core/fixtures/lib/preamble.sh above $0 — cannot locate the repo root, and the seam is this fixture's subject"
 
 SEAM="$ROOT/core/fixtures/lib/preamble.sh"
-. "$ROOT/core/fixtures/lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 # The DRIVEN fixture. Chosen because it builds a scratch repo and is unrelated to
 # this subject, so it is not co-maintained with the thing under test.
@@ -151,8 +129,7 @@ victim_username() { # victim_username <victim-root>
 # THE UNARMED BRANCH RECORDS THE INNER FIXTURE'S EXIT (BL-965), and arm URC asserts it is 0. The call discards
 # the inner fixture's output, so before this field a runner that never started -- `env` undeclared in tools.decl,
 # command-not-found under hermetic-run.sh -- left the victim untouched and scored U INTACT: the twin every mutant
-# is compared against was a cell in which nothing ran. U_RUNNER is the command the branch runs through, a
-# variable so mutant u127 can route it to a name that resolves nowhere (instant 127). The armed branch reports `-`.
+# is compared against was a cell in which nothing ran. U_RUNNER is the command the branch runs through. The armed branch reports `-`.
 U_RUNNER=env
 drive() { # drive <tree> <victim-root> [fixture] [armed: yes|no] -> "<n> <yes|no> <bare> <name> <rc|->"
   local tree="$1" v="$2" who="${3:-$SUBJECT}" armed="${4:-yes}" admin urc=-
@@ -181,7 +158,7 @@ victim_intact() { # victim_intact <n> <repo> <bare> <name>
   return 0
 }
 
-# A mutable copy of the tree. Every mutant edits THIS, never $ROOT.
+# A copy of the tree, so the driven fixtures run against a tree that is not $ROOT.
 #
 # IT IS A WHOLE-TREE COPY, AND THE FIRST CUT OF THIS FIXTURE COPIED ONLY THE SEAM
 # AND THE DRIVEN FIXTURE. That tree is missing the validators the driven fixture
@@ -281,36 +258,22 @@ ok "H1b harness: core.bare reads not-true and user.name reads the sentinel on a 
 # pristine victim and arm A passed for the same reason. Two inert runs compare
 # equal. Establish that the mutable copy can reach its git calls at all, in the
 # UNMUTATED tree, before reading any mutant's verdict.
-# ONE COPY OF THE TREE SERVES EVERY ARM. The copy (`mktree`) is a tar walk plus a completeness count, and
-# the arms below differ from it by ONE file each (the seam, or the driven fixture's run.sh). Each mutant
-# overwrites that file in TREE, is driven, and is put back by `restore_tree`, which byte-compares every
-# file a mutant touches against $ROOT's before the next arm reads TREE. The canary and arm A read the
-# unmutated tree, so they share it too: they are the same bytes, driven unarmed and armed.
+# ONE COPY OF THE TREE SERVES EVERY ARM: the canary and arm A read the same bytes, driven unarmed and armed.
 TREE="$WORK/tree"
 mktree "$TREE" || broken "could not copy the tree"
-restore_tree() { # put back every file a mutant edits, and prove it
-  local f
-  for f in core/fixtures/lib/preamble.sh "core/fixtures/$SUBJECT/run.sh" "core/fixtures/$SUBJECT_C/run.sh"; do
-    [ -f "$ROOT/$f" ] || continue
-    cp -p "$ROOT/$f" "$TREE/$f" || broken "could not restore $f in the shared tree"
-    cmp -s "$ROOT/$f" "$TREE/$f" || broken "the shared tree's $f differs from the shipping one after a restore"
-  done
-}
 SUBJECT_C="setup-config-drift"
 canary_out="$( cd "$TREE" && bash "core/fixtures/$SUBJECT/run.sh" 2>&1 )"
 case "$canary_out" in
   *"FIXTURE ERROR"*|*"FIXTURE BROKEN"*)
     broken "the driven fixture $SUBJECT cannot run in a copied tree: $(printf '%s' "$canary_out" | head -1). Every mutant below would survive against an untouched victim and read as a working seam." ;;
 esac
-ok "H2 driven fixture $SUBJECT runs in the copy tree — mutant verdicts are about the seam, not about a broken copy"
+ok "H2 driven fixture $SUBJECT runs in the copy tree — verdicts are about the seam, not about a broken copy"
 
 # --- A. THE SHIPPING TREE, ON THREE CELLS ------------------------------------
 # A cell is one driven fixture in the shared tree against a fresh victim:
 #   A  $SUBJECT   with GIT_DIR armed at the victim (the arm the seam exists for)
 #   B  $SUBJECT_C with GIT_DIR armed (the `git -C` form, init in its seed.sh)
-#   U  $SUBJECT   with GIT_DIR UNSET: nothing is inherited, so no mutation of the seam can reach the victim.
-#      It is the measured-green twin of every mutant below: a mutant that wrecks A but also U would be
-#      wrecking by some route other than the inherited GIT_DIR.
+#   U  $SUBJECT   with GIT_DIR UNSET: nothing is inherited, so nothing can reach the victim through the seam.
 cell() { # <A|B|U> -> VERD (INTACT|WRECKED) and DET ("<n> <repo> <bare> <name> <rc|->")
   local who="$SUBJECT" armed=yes
   case "$1" in B) who="$SUBJECT_C" ;; U) armed=no ;; esac
@@ -324,146 +287,37 @@ cell() { # <A|B|U> -> VERD (INTACT|WRECKED) and DET ("<n> <repo> <bare> <name> <
   fi
 }
 u_cells=0; u_rc0=0
-# The ONE predicate URC and mutant u127 both read, so u127 scores URC's own test rather than a copy of it.
+# The predicate URC reads.
 urc_ran() { [ "$1" = 0 ]; }
-MX=0; [ "${1:-}" = --matrix ] && MX=1
-mx_pp=0; mx_only=0
-echo "HERMETIC-CONSUMED core/fixtures/fixture-git-env-seam/matrix-lib.sh"
-. "$(cd "$(dirname "$0")" && pwd)/matrix-lib.sh"
 
 if [ ! -f "$ROOT/core/fixtures/$SUBJECT_C/run.sh" ]; then
   broken "driven fixture $SUBJECT_C is absent -- the 'git -C' form has no subject in this battery"
 fi
-cell A; SV_A="$(printf '%s' "$VERD")"; mx_pp=$((mx_pp + 1)); DET_A="$DET"
+cell A; SV_A="$(printf '%s' "$VERD")"; DET_A="$DET"
 if [ "$SV_A" = INTACT ]; then
   ok "A  shipping tree: index 40, victim still a repository, core.bare not true, user.name still the sentinel"
 else
   fail "A  shipping tree: ($DET_A) — expected 40/yes/not-true/$VICTIM_SENTINEL. The seam is not protecting a directly-run fixture."
 fi
 # B1. SEAM INTACT on the `git -C` form (its init is in a seed.sh the run.sh never makes; the seam reaches it by inheritance).
-cell B; SV_B="$(printf '%s' "$VERD")"; mx_pp=$((mx_pp + 1)); DET_B="$DET"
+cell B; SV_B="$(printf '%s' "$VERD")"; DET_B="$DET"
 if [ "$SV_B" = INTACT ]; then
   ok "B1 $SUBJECT_C (git -C form, init in its seed.sh) with the seam: index 40, repo yes, bare not true, sentinel intact"
 else
   fail "B1 $SUBJECT_C with the seam intact still moved the victim ($DET_B). The seam does not reach an init the run.sh never makes."
 fi
-cell U; SV_U="$(printf '%s' "$VERD")"; mx_pp=$((mx_pp + 1)); DET_U="$DET"
+cell U; SV_U="$(printf '%s' "$VERD")"; DET_U="$DET"
 if [ "$SV_U" = INTACT ]; then
-  ok "U  shipping tree, GIT_DIR unset: victim untouched on all four channels — the twin cell every mutant below is compared against"
+  ok "U  shipping tree, GIT_DIR unset: victim untouched on all four channels"
 else
-  fail "U  with GIT_DIR unset the victim still moved ($DET_U): the twin cell is not green, so no mutant's confinement can be read"
+  fail "U  with GIT_DIR unset the victim still moved ($DET_U): the twin cell is not green"
 fi
 
-# --- MUTANTS ----------------------------------------------------------------
-# Each is applied to ONE file of the shared tree, driven, and put back by restore_tree. A cell is a mutant
-# verdict compared with the shipped verdict on the same cell (`--matrix` prints every one).
-# (m1) THE SEAM'S BODY IS GONE. The file still exists and is still sourced, so every "does it source the
-#      preamble" check passes.
-# (m2) THE SOURCE LINE IS GONE from the driven fixture. The seam is intact and every other fixture sources it.
-# (m3) THE SCRUB IS PRESENT BUT COMMENTED OUT. The file contains the exact correct text, so every grep-shaped
-#      check, including the receipt this entry replaces, reports the fix present.
-# (m4) THE SEAM UNSETS THE WRONG VARIABLE. Structurally a scrub, and it matches a regex looking for `unset`
-#      beside a GIT_-shaped name.
-# (b2) THE SEAM STRIPPED FROM THE `git -C` SUBJECT. Without it, B1 passing is consistent with a subject that
-#      never reaches a git write at all.
-sed_free_comment() { # prefix the unset line with '# ' by line surgery, never sed
-  local src="$1" dst="$2"
-  while IFS= read -r line; do
-    case "$line" in
-      unset\ GIT_DIR*) printf '# %s\n' "$line" ;;
-      *) printf '%s\n' "$line" ;;
-    esac
-  done < "$src" > "$dst"
-}
-mut_apply() { # <m1|m2|m3|m4|b2> -- every mutant is guarded by cmp -s
-  case "$1" in
-    m1) printf '# body removed by mutant m1\n' > "$TREE/core/fixtures/lib/preamble.sh"
-        cmp -s "$TREE/core/fixtures/lib/preamble.sh" "$SEAM" && broken "m1 did not apply — the mutated seam is byte-identical to the shipping one" ;;
-    m2) grep -v 'preamble\.sh' "$ROOT/core/fixtures/$SUBJECT/run.sh" > "$TREE/core/fixtures/$SUBJECT/run.sh" || broken "m2 rewrite failed"
-        chmod +x "$TREE/core/fixtures/$SUBJECT/run.sh"
-        cmp -s "$TREE/core/fixtures/$SUBJECT/run.sh" "$ROOT/core/fixtures/$SUBJECT/run.sh" && broken "m2 did not apply" ;;
-    m3) sed_free_comment "$SEAM" "$TREE/core/fixtures/lib/preamble.sh" || broken "m3 rewrite failed"
-        cmp -s "$TREE/core/fixtures/lib/preamble.sh" "$SEAM" && broken "m3 did not apply"
-        grep -q 'unset GIT_DIR' "$TREE/core/fixtures/lib/preamble.sh" || broken "m3 removed the text instead of commenting it — the mutant's whole point is that the text is still THERE" ;;
-    m4) printf '# m4: scrubs a variable git does not use\nunset GIT_DIRECTORY_OF_NOTHING\n' > "$TREE/core/fixtures/lib/preamble.sh"
-        cmp -s "$TREE/core/fixtures/lib/preamble.sh" "$SEAM" && broken "m4 did not apply" ;;
-    b2) grep -v 'preamble\.sh' "$ROOT/core/fixtures/$SUBJECT_C/run.sh" > "$TREE/core/fixtures/$SUBJECT_C/run.sh" || broken "B2 rewrite failed"
-        chmod +x "$TREE/core/fixtures/$SUBJECT_C/run.sh"
-        cmp -s "$TREE/core/fixtures/$SUBJECT_C/run.sh" "$ROOT/core/fixtures/$SUBJECT_C/run.sh" && broken "B2 did not apply — the stripped run.sh is byte-identical to the shipping one"
-        grep -qE '^[[:space:]]*(\.|source)[[:space:]]+.*preamble\.sh' "$TREE/core/fixtures/$SUBJECT_C/run.sh" && broken "B2 left a seam-sourcing line behind; the mutant would prove nothing" ;;
-  esac
-}
-# The kill message of each mutant, and the deciding cell.
-mut_msg() { case "$1" in
-  m1) echo "m1 seam body removed: victim wrecked on A ($2) while the unarmed twin U stays intact — arm A can fail" ;;
-  m2) echo "m2 source line removed: victim wrecked on A ($2) while the unarmed twin U stays intact — the seam must be SOURCED, not merely present" ;;
-  m3) echo "m3 scrub commented out (text still present): victim wrecked on A ($2) while the unarmed twin U stays intact — a text anchor cannot see this" ;;
-  m4) echo "m4 wrong variable unset: victim wrecked on A ($2) while the unarmed twin U stays intact — the arm is keyed on GIT_DIR specifically" ;;
-  b2) echo "B2 $SUBJECT_C with the seam stripped: victim wrecked on B ($2) while the unarmed twin U stays intact — B1 is a measurement, not a subject that never runs" ;;
-esac; }
-for _m in m1 m2 m3 m4 b2; do
-  mut_apply "$_m"
-  _dc=A; [ "$_m" = b2 ] && _dc=B
-  case "$_dc" in A) _sd="$(printf '%s' "$SV_A")" ;; *) _sd="$(printf '%s' "$SV_B")" ;; esac
-  if [ "$MX" = 1 ]; then
-    _trip=""
-    for _c in A B U; do
-      cell "$_c"; mx_only=$((mx_only + 1)); eval "_sc=\$SV_$_c"
-      mx_cell_row "$_m" "$_c" "$_sc" "$VERD" "$DET"
-      [ "$(mx_diverge "$_sc" "$VERD")" = yes ] && _trip="$_trip $_c"
-    done
-    mx_row "$_m" "${_trip# }"
-  else
-    cell "$_dc"; mx_pp=$((mx_pp + 1)); _dv="$VERD"; _dd="$DET"
-    cell U; mx_pp=$((mx_pp + 1)); _uv="$VERD"
-    if [ "$(mx_diverge "$_sd" "$_dv")" = yes ] && [ "$_uv" = INTACT ]; then
-      mutant_killed "$([ "$_sd" = INTACT ] && [ "$SV_U" = INTACT ] && echo 1 || echo 0)" "$_m" "$(mut_msg "$_m" "$_dd")"
-    else
-      fail "$_m did not decide on $_dc with U green: $_dc $_dv ($_dd), U $_uv. This fixture cannot distinguish a working seam from this mutation."
-    fi
-  fi
-  restore_tree
-done
-# (u127) THE UNARMED RUNNER RESOLVES NOWHERE. drive's U branch is routed through a command name no PATH carries,
-#      so the inner fixture never starts and exits 127 at once. The victim is untouched, so the verdict channel
-#      reads U INTACT exactly as the shipped twin does; only the rc channel (arm URC) can see it. Its allow twin is
-#      the shipped run's U cells, each rc 0. Driven directly, not through cell(), so URC's own tally is not moved.
-# URC: every U cell (the shipped twin, and the twin of each of the five mutants; six in a plain run and in
-# --matrix alike) ran its inner fixture to rc 0, and there were exactly 6 of them. Each nonzero cell has already
-# failed in cell(), by name. Its passing branch sets B_URC, the unmutated side u127 is scored against.
-B_URC=0
-if [ "$u_cells" = 6 ] && [ "$u_rc0" = 6 ]; then
-  ok "URC this run drove $u_cells unarmed U cells and the inner $SUBJECT exited 0 in all $u_rc0 -- the twin is a run, not an absence"
-  B_URC=1
+# URC: the one unarmed U cell ran its inner fixture to rc 0. A nonzero cell has already failed in cell(), by name.
+if [ "$u_cells" = 1 ] && [ "$u_rc0" = 1 ]; then
+  ok "URC this run drove $u_cells unarmed U cell and the inner $SUBJECT exited 0 in it -- the twin is a run, not an absence"
 else
-  fail "URC this run drove $u_cells U cell(s) (want 6), $u_rc0 of them at rc 0 (want 6)"
-fi
-U_RUNNER=ai_dlc_bl965_runner_resolves_nowhere
-command -v "$U_RUNNER" >/dev/null 2>&1 && broken "u127 did not apply -- $U_RUNNER resolves on this PATH"
-_xd="$(drive "$TREE" "$WORK/v_cell" "$SUBJECT" no)"; U_RUNNER=env
-_xrc="$(printf '%s\n' "$_xd" | awk '{ print $5 }')"
-# shellcheck disable=SC2086
-if victim_intact $_xd; then _xv=INTACT; else _xv=WRECKED; fi
-if [ "$MX" = 1 ]; then
-  mx_cell_row u127 U "$SV_U" "$_xv" "$_xd"
-  mx_cell_row u127 URC 0 "$_xrc" "$_xd"
-  _trip=""; [ "$(mx_diverge "$SV_U" "$_xv")" = yes ] && _trip="U"
-  [ "$(mx_diverge 0 "$_xrc")" = yes ] && _trip="${_trip:+$_trip }URC"
-  mx_row u127 "$_trip"
-else
-  # `= 127` proves the mutant applied for its own reason (the runner did not resolve); `! urc_ran` is URC's verdict on it.
-  if [ "$_xrc" = 127 ] && ! urc_ran "$_xrc" && [ "$_xv" = INTACT ]; then
-    mutant_killed "${B_URC:-0}" u127 "u127 unarmed runner resolves nowhere: rc 127 with the victim INTACT ($_xd) -- the verdict channel reads it as the green twin, and only URC fails it"
-  else
-    fail "u127 did not decide: rc $_xrc, victim $_xv ($_xd); want rc 127 over an INTACT victim"
-  fi
-fi
-[ "$MX" = 1 ] && exit 0
-# CS-MX: a PLAIN run executes no matrix-only cell and exactly the per-push cells (3 shipped + 5 mutants x 2).
-if [ "$mx_only" = 0 ] && [ "$mx_pp" = 13 ]; then
-  ok "MX a plain run executed $mx_pp shipped/deciding/twin cells and 0 matrix-only cells"
-else
-  fail "MX a plain run executed $mx_pp per-push cells (want 13) and $mx_only matrix-only cells (want 0)"
+  fail "URC this run drove $u_cells U cell(s) (want 1), $u_rc0 of them at rc 0 (want 1)"
 fi
 
 # --- W. THE VALIDATOR'S POPULATION GRAMMAR, driven against a probe tree ------
@@ -668,46 +522,6 @@ else
     *) ok "W7 the same shape with the seam ABOVE the seed call stays acquitted — W6 discriminates on position rather than on the shape itself" ;;
   esac
 
-  # W8. THE run.sh-ONLY DERIVATION, RESTORED AS A MUTANT. W6 asserts the seed-call
-  # offender is reported; this asserts that the OLD site derivation is what fails
-  # to report it, so a revert to reading run.sh alone dies here rather than
-  # passing. The mutation neuters the sibling half of init_site_line by making its
-  # loop body unreachable, which is the whole of the difference.
-  # THE ANCHOR IS MATCHED WITH `grep -F`, NOT WITH A `case` GLOB. The line carries
-  # `*`, which a case pattern reads as a wildcard rather than as the character --
-  # written as a case arm the mutation silently matched NOTHING, and `bash -n`
-  # cannot see that. Asserted unique in the file first, so the mutation cannot
-  # quietly edit two lines or none.
-  SIB_ANCHOR='  for s in "$dir"/*.sh; do'
-  anchor_n="$(grep -cF "$SIB_ANCHOR" "$V_SRC")" || anchor_n=0
-  [ "$anchor_n" -eq 1 ] || broken "W8 anchor matches $anchor_n lines in the validator, expected exactly 1 — the mutation would edit the wrong thing or nothing"
-  smut="$Wp/scripts/mutant-runsh-only.sh"
-  while IFS= read -r line; do
-    printf '%s\n' "$line"
-    if [ "$line" = "$SIB_ANCHOR" ]; then printf '    continue\n'; fi
-  done < "$V_SRC" > "$smut"
-  cmp -s "$smut" "$V_SRC" && broken "W8 mutant did not apply — the run.sh-only copy is byte-identical to the shipping validator, so its silence would prove nothing"
-  bash -n "$smut" || broken "W8 mutant does not parse"
-  chmod +x "$smut"
-  smut_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$smut" --max-unscrubbed 0 2>&1)"
-  smut_rc=$?
-  ship_row="$(printf '%s\n' "$w_out" | grep -F 'offender-seam-below-seedcall')" || ship_row=""
-  case "$ship_row" in
-    *"(seam-sourced-below-first-init)"*) : ;;
-    *) fail "W8 precondition: the SHIPPING run does not report the seed-call offender as (seam-sourced-below-first-init); its row is '${ship_row:-<none>}', so there is no position verdict for the mutant to lose." ;;
-  esac
-  # SINCE THE VALIDATOR SELF-PROBES ITS SITE READER (BL-988), THIS MUTANT DIES BEFORE THE CORPUS: its sp-1hop seed --
-  # a run.sh that runs the initing sibling itself -- reads init-site-unresolved, and the copy REFUSES (exit 2). That
-  # refusal names the one-hop seed losing its site, which is the same claim the row suffix used to carry: the
-  # directory-wide resolution is what places a sibling's init. A copy that still answered about the corpus would mean
-  # the self-probe cannot see the first hop.
-  case "$smut_rc:$smut_out" in
-    2:*"SELF-PROBE"*"1hop=init-site-unresolved"*)
-      ok "W8 with the sibling half dead the validator REFUSES at its own self-probe (exit 2): the one-hop seed loses its site and reads init-site-unresolved -- the directory-wide resolution is what places it, and W6 fires because of it" ;;
-    *)
-      fail "W8 the run.sh-only mutant was not refused by the self-probe naming its one-hop seed (exit $smut_rc). Output: $(printf '%s' "$smut_out" | head -2)" ;;
-  esac
-
   # W10/W11. THE TWO-HOP PAIR (BL-988). run.sh sources lib.sh, and lib.sh runs the sibling that inits: the site is the
   # sourcing line, so a seam BELOW it is REPORTED for its position, and a seam ABOVE it is acquitted.
   th_row="$(printf '%s\n' "$w_out" | grep -F 'offender-seam-below-twohop')" || th_row=""
@@ -725,77 +539,6 @@ else
       ok "W11 the same two-hop shape with the seam ABOVE the sourcing line stays acquitted: the unscrubbed count is exactly the ${n_off} offender trees, and it is not among them -- W10 discriminates on position, not on the shape" ;;
     *) fail "W11 the unscrubbed count is not the ${n_off} offender trees this probe built: $(printf '%s\n' "$w_out" | grep -F 'fixture run.sh build' | head -1)" ;;
   esac
-  # W12. THE SECOND HOP DROPPED, AS A MUTANT: run.sh's reaching lines read as none, so the two-hop site can only be
-  # unresolved. The validator's own self-probe runs before its corpus and must REFUSE that copy (exit 2), naming the
-  # two-hop seed it now misplaces; a copy that still answered about the corpus would mean the probe cannot see the hop.
-  HOP_ANCHOR='  srcl="$(noncomment_hits "$run" "$INVOKE_RE")"'
-  hop_n="$(grep -cF "$HOP_ANCHOR" "$V_SRC")" || hop_n=0
-  [ "$hop_n" -eq 1 ] || broken "W12 anchor matches $hop_n lines in the validator, expected exactly 1 -- the mutation would edit the wrong thing or nothing"
-  hmut="$Wp/scripts/mutant-no-second-hop.sh"
-  while IFS= read -r line; do
-    if [ "$line" = "$HOP_ANCHOR" ]; then printf '  srcl=""\n'; else printf '%s\n' "$line"; fi
-  done < "$V_SRC" > "$hmut"
-  cmp -s "$hmut" "$V_SRC" && broken "W12 mutant did not apply -- the no-second-hop copy is byte-identical to the shipping validator"
-  bash -n "$hmut" || broken "W12 mutant does not parse"
-  hmut_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$hmut" --max-unscrubbed 0 2>&1)"
-  hmut_rc=$?
-  case "$hmut_rc:$hmut_out" in
-    2:*"SELF-PROBE"*"below=init-site-unresolved"*"above=init-site-unresolved"*)
-      ok "W12 with the second hop dropped the validator REFUSES at its own self-probe (exit 2): both two-hop seeds read init-site-unresolved, so the hop is what places them" ;;
-    *) fail "W12 the no-second-hop mutant was not refused by the self-probe (exit $hmut_rc): $(printf '%s' "$hmut_out" | head -2)" ;;
-  esac
-  # W13. THE SOURCED-ONLY HOP RESTORED, AS A MUTANT: the second hop reads only the lines that SOURCE a sibling, the
-  # first cut. A sibling run.sh RUNS then reaches its init unseen, and a later sourced route masks it -- the self-probe's
-  # sp-ran seed (run.sh line 2 runs mid.sh, which runs x.sh; the seam at 3; lib.sh sourced at 4 runs x.sh too) reads
-  # ok at site 4 where the init runs at line 2, above the seam. That copy must be REFUSED, naming ran=ok.
-  smod="$Wp/scripts/mutant-sourced-only-hop.sh"
-  while IFS= read -r line; do
-    if [ "$line" = "$HOP_ANCHOR" ]; then printf '%s\n' "  srcl=\"\$(noncomment_hits \"\$run\" '(^|[[:space:]]|[;&|(])(source|\\.)[[:space:]]')\""; else printf '%s\n' "$line"; fi
-  done < "$V_SRC" > "$smod"
-  cmp -s "$smod" "$V_SRC" && broken "W13 mutant did not apply -- the sourced-only copy is byte-identical to the shipping validator"
-  grep -qF "(source|\\.)[[:space:]]')\"" "$smod" || broken "W13 mutant does not carry the sourced-only grammar; the mutation matched nothing"
-  bash -n "$smod" || broken "W13 mutant does not parse"
-  smod_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$smod" --max-unscrubbed 0 2>&1)"
-  smod_rc=$?
-  case "$smod_rc:$smod_out" in
-    2:*"SELF-PROBE"*"below=seam-sourced-below-first-init"*"ran=ok"*)
-      ok "W13 with the hop restricted to SOURCED siblings the validator REFUSES at its own self-probe (exit 2): the masked-route seed reads ran=ok while its two-hop sourced seed still places -- following every reached sibling is what reports it" ;;
-    *) fail "W13 the sourced-only mutant was not refused naming ran=ok (exit $smod_rc): $(printf '%s' "$smod_out" | head -2)" ;;
-  esac
-
-  # W5. THE OLD GRAMMAR MUST ACQUIT THE PROBE. This is what makes W1 a statement
-  # about the WIDENING rather than about the arm beside it: a mutant validator
-  # carrying the literal `git init` population, run against the same probe, must
-  # see no offender at all. A `cmp -s` guard because a mutation that did not apply
-  # reads exactly like a fix that works.
-  mut="$Wp/scripts/mutant-old-grammar.sh"
-  # Line surgery, never `sed`: the grammar line carries `[`, `(`, `*` and `$`, and
-  # an `&` in a sed replacement is the whole match.
-  while IFS= read -r line; do
-    case "$line" in
-      INIT_RE=*) printf "INIT_RE='git init'\n" ;;
-      *) printf '%s\n' "$line" ;;
-    esac
-  done < "$V_SRC" > "$mut"
-  cmp -s "$mut" "$V_SRC" && broken "W5 mutant did not apply — the old-grammar copy is byte-identical to the shipping validator, so its acquittal would prove nothing"
-  grep -qF "INIT_RE='git init'" "$mut" || broken "W5 mutant does not carry the old literal grammar; the mutation matched nothing"
-  chmod +x "$mut"
-  mut_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$mut" --max-unscrubbed 0 2>&1)"
-  mut_rc=$?
-  case "$mut_out" in
-    *"offender-c-form"*)
-      fail "W5 the OLD literal grammar also reported the \`git -C\` offender (exit $mut_rc). W1 is then not a measurement of the widening — something else in the file is doing the work." ;;
-    *)
-      # Exit 0 and only exit 0. A refusal (2) also fails to name the offender, and
-      # "the old grammar could not see it" and "the old grammar could not run" are
-      # different claims sharing one silence.
-      if [ "$mut_rc" -eq 0 ]; then
-        ok "W5 the old literal \`git init\` grammar ACQUITS the same probe at exit 0 — the widened population is what makes W1 fire"
-      else
-        fail "W5 the old-grammar mutant exits $mut_rc without naming the offender; it is failing for some reason other than the population, so W1's attribution is unproven. Output: $(printf '%s' "$mut_out" | head -2)"
-      fi ;;
-  esac
-
   # W9. AN UNRESOLVABLE INIT SITE IS REPORTED, NOT ACQUITTED. A member joins the
   # population by running an init somewhere in its directory, so a site resolving
   # to nothing means run.sh reaches it by a route this reader cannot see, and the

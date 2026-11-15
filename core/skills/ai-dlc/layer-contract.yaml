@@ -866,7 +866,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-gate-manifest.sh
     code: GM1
-    fixture: enforcement-map-sites
+    fixture: extension-check-adoption
 
   - id: LC-E18
     subject: extension

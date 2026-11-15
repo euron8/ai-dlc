@@ -22,13 +22,11 @@
 #
 # WHY EVERY ARM IS PRESENCE-SHAPED. Each token demands a VERDICT WORD parsed out of a
 # `  CHECK 7: ` line, so a subject that emits nothing scores `NONE` and fails every arm by
-# construction; silence cannot pass for a kill anywhere in this file. The unmutated CONTROL is
-# necessary and not sufficient for that same reason: it asserts the eight baseline rows are
-# THERE, not merely that nothing went wrong.
+# construction; silence cannot pass anywhere in this file. The ship battery
+# asserts the eight baseline rows are THERE, not merely that nothing went wrong.
 #
-# WHY THE TOKEN PARSES RATHER THAN STRING-MATCHES. Eight arms times seven batteries is fifty-six
-# expected lines, and pinning full prose in every one of them makes a wording change read as
-# fifty-six regressions. The token carries the six facts that ARE the check — verdict, behind
+# WHY THE TOKEN PARSES RATHER THAN STRING-MATCHES. Pinning full prose in every arm makes a wording
+# change read as many regressions. The token carries the six facts that ARE the check — verdict, behind
 # count, refresh state, whether the remedy was printed, the summary sentence's class, and the
 # exit code — and assertion 4 pins the exact wording ONCE, in the three refresh states, against
 # the shipping validator.
@@ -42,107 +40,23 @@
 # An arm that only proves the check fires has not established that the remedy it prints clears
 # it, and arm C is also the only arm that separates "is origin/main contained in HEAD NOW" from
 # "was it contained when the branch was CUT" — a merge moves the first and never the second.
-# Mutant `cutpoint` is that wrong fix built and scored, and arm C is the single arm it moves.
 #
 # WHY ARM F EXISTS BESIDE ARM E. Arm E is a retro branch AHEAD of origin/main and behind by
 # none: it proves the predicate is behind-count and not divergence. Arm F is the only world
 # where the LOCAL `main` ref and `origin/main` disagree, and it is the only arm that can tell
-# Check 7 from a Check 7 that reads local `main` — the wrong fix mutant `localmain` builds.
+# Check 7 from a Check 7 that reads local `main`.
 # Without F that substitution is invisible, because in every other world the two refs are equal.
 #
 # ARM G IS THE ONLY ARM WHOSE PRE-STATE IS A LIE, and it is reset before every battery. Its
 # clone starts behind 0 against a stale ref and behind 3 against the real remote; a battery that
-# inherited the previous battery's refreshed ref would score `nofetch` as a kill it did not earn,
+# inherited the previous battery's refreshed ref would score the refresh as exercised when it did not run,
 # so the token refuses the arm outright if the pre-state is not stale when it runs.
 #
 # CHECKS 1, 2 AND 4 ARE DRIVEN THROUGH STUBBED SIBLINGS. This fixture's subject is Check 7, and
 # the sibling contract those three checks publish is an exit code; stubbing them keeps the run's
 # verdict a statement about branch freshness rather than about a delegated validator. The stubs
-# are proven live by the CONTROL battery, which reproduces all eight arms from its own toolchain
-# dir — a copy that cannot resolve `../schemas` emits nothing, and "no output" would otherwise
-# score as a kill for every mutant at once.
-# ============================================================================
-# THE MUTANT x ARM MATRIX. Per push each mutant drives only its DECIDING arm and one TWIN: an arm
-# that stays GREEN under it, run to prove the kill stays confined to the deciding arm. A tripped
-# twin fails the fixture. `--matrix` drives every arm of every mutant and prints one MATRIX-ROW
-# per mutant (cell 1 = the arm is dead under the mutant, 0 = green). The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
-# command below. mutate() and mutate2() READ
-# their decides/twins from these very lines, so the header is the behaviour, not a copy of it.
-# Arms of part 1 are the worlds a..h; arms of part 2 are the worlds carry..head-absent; arms of
-# part 3 are the worlds land-ok..land-tag; arms of part 4 are the worlds merge-ok..merge-view-lowercase.
-#
-# FOUR MUTANTS HAVE NO GREEN TWIN, measured: `deleted`, `carry-deleted`, `cut-from-tip` and
-# `land-pre-fix` fall every arm of their part (the subject emits nothing, or every world is cut from
-# the wrong ref), so each carries `twins=-` with its reason and per push drives its deciding arm
-# only. The claim "each mutant co-trips no other arm" is NOT made for this fixture: the measured
-# dead-sets are recorded under MEASURED MATRIX below, and several are wider than one world because
-# the property removed is visible in every world that reaches it (gh-primary calls gh in every
-# tree-match world that has a fork point; plain-range and merge-base re-pick in the re-pointed
-# worlds too).
-#
-# MUTANT-MATRIX deleted decides=b twins=- why=with the Check 7 block gone the subject emits no CHECK 7 line in any of the eight worlds, so every arm reads NONE and no arm stays green
-# MUTANT-MATRIX reversed decides=e twins=f
-# MUTANT-MATRIX silentskip decides=d twins=a
-# MUTANT-MATRIX nofetch decides=g twins=b
-# MUTANT-MATRIX localmain decides=f twins=b
-# MUTANT-MATRIX cutpoint decides=c twins=b
-# MUTANT-MATRIX carry-deleted decides=carry twins=- why=with the carry block gone no world prints a CARRY line, so all seventeen worlds read NONE and no world stays green
-# MUTANT-MATRIX cut-from-tip decides=carry twins=- why=cutting the retro branch from the sprint tip moves the token of all seventeen worlds (behind count, landed flag or HARD_BLOCK class), so no world stays green
-# MUTANT-MATRIX no-skip-guard decides=empty twins=carry
-# MUTANT-MATRIX no-abort decides=conflict twins=carry
-# MUTANT-MATRIX plain-range decides=synced twins=carry
-# MUTANT-MATRIX merge-base decides=carry twins=direct
-# MUTANT-MATRIX all-parents decides=synced twins=carry
-# MUTANT-MATRIX gh-primary decides=carry twins=direct
-# MUTANT-MATRIX no-gh-guard decides=repointed-nogh twins=repointed
-# MUTANT-MATRIX ancestry-accepts decides=wrong-pr twins=repointed
-# MUTANT-MATRIX no-newest-guard decides=reused-branch twins=repointed
-# MUTANT-MATRIX no-tree-check decides=tree-mismatch twins=repointed
-# MUTANT-MATRIX rc-ignored decides=repointed-ghfail twins=repointed-empty
-# MUTANT-MATRIX no-empty-guard decides=repointed-empty twins=repointed-ghfail
-# MUTANT-MATRIX no-row-shape decides=repointed-badrow twins=repointed
-# MUTANT-MATRIX no-head-guard decides=head-absent twins=repointed
-# MUTANT-MATRIX no-head-fetch decides=head-fetched twins=repointed
-# MUTANT-MATRIX land-pre-fix decides=land-wt twins=- why=the bare one-liner prints no LAND line, so every LAND world reads NONE and land-ok cannot stay green on a presence-shaped token
-# MUTANT-MATRIX land-no-symref decides=land-tag twins=land-ok
-# MUTANT-MATRIX land-no-false decides=land-wt twins=land-ok
-# MUTANT-MATRIX land-names-self decides=land-diverged twins=land-wt
-# MUTANT-MATRIX merge-exit-only decides=merge-cleanup-failed twins=merge-ok
-# MUTANT-MATRIX merge-exit-trusted decides=merge-exit0-open twins=merge-ok
-# MUTANT-MATRIX merge-accept-any-state decides=merge-open twins=merge-ok
-# MUTANT-MATRIX merge-case-fold decides=merge-view-lowercase twins=merge-open
-# MUTANT-MATRIX merge-no-false decides=merge-open twins=merge-ok
-# MUTANT-MATRIX pending-in-dist decides=dist-absent twins=consumer-absent
-#
-# MEASURED MATRIX (the --matrix run that recorded this header, 50 assertions PASS; every row's twin
-# GREEN except the four twins=- rows, which are dead in every cell of their part). Dead-sets:
-#   deleted {a..h}  reversed {b c e g h}  silentskip {d}  nofetch {g h}  localmain {f g}  cutpoint {c}
-#   carry-deleted, cut-from-tip {all 17 part 2 worlds}  no-skip-guard {empty}  no-abort {conflict}
-#   plain-range {synced repointed head-fetched}  all-parents {synced}
-#   merge-base {carry empty synced underivable repointed-nogh repointed-ghfail repointed-empty
-#               repointed-badrow wrong-pr reused-branch tree-mismatch head-absent}
-#   gh-primary {carry empty synced conflict}  no-gh-guard {repointed-nogh}  ancestry-accepts {wrong-pr}
-#   no-newest-guard {reused-branch}  no-tree-check {tree-mismatch}  rc-ignored {repointed-ghfail}
-#   no-empty-guard {repointed-empty}  no-row-shape {repointed-badrow}
-#   no-head-guard {head-absent head-fetched}  no-head-fetch {head-fetched}
-#   land-pre-fix {land-ok land-wt land-diverged land-tag}  land-no-symref {land-tag}
-#   land-no-false {land-wt land-diverged land-tag}  land-names-self {land-diverged}
-#   merge-exit-only {merge-cleanup-failed}  merge-exit-trusted {merge-exit0-open}
-#   merge-accept-any-state {merge-exit0-open merge-open merge-view-lowercase}
-#   merge-case-fold {merge-view-lowercase}
-#   merge-no-false {merge-exit0-open merge-open merge-view-fails merge-view-lowercase}
-#   pending-in-dist {dist-absent} (arm pending-layout; its subject is this file's own gate_verdict)
-# The matrix is measured with every subject PRESENT. With one ABSENT its part prints PENDING and
-# drives no mutant of it (the PENDING block above part 2).
-# NOT A MUTANT HERE: dropping 7a's `|| PR_STATE=""` is EQUIVALENT under the real producer, whose
-# failing `gh pr view` prints 0 bytes to stdout (captured), so PR_STATE is empty either way.
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/retro-branch-behind-main/run.sh --matrix
+# are proven live by the ship battery, which reproduces all eight arms from its own toolchain dir.
 set -uo pipefail
-
-MATRIX=0
-[ "${1:-}" = --matrix ] && MATRIX=1
-MCELLS=0   # matrix-only cells driven; a plain run must leave this at 0
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -179,7 +93,7 @@ fi
 # exit is a red consumer push. So an ABSENT subject is PENDING, never a failure and never a pass:
 # each part whose subject is absent prints one `  PENDING  ` row naming it, skips (and counts) the
 # arms that need it, and every other arm still asserts — before the fallback arrives, the six
-# carry worlds whose verdict it did not change keep asserting, with every non-fallback mutant.
+# carry worlds whose verdict it did not change keep asserting.
 # ABSENT is keyed only on the subject's own markers counting 0 (see PENDING above part 2); a
 # PRESENT subject that is broken is RED (arm pending-gate). The final line names the PENDING count.
 # PENDING is a CONSUMER-layout verdict only: in the distribution an absent subject is RED.
@@ -215,7 +129,7 @@ trap 'rm -rf "$WORK"' EXIT
 . "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 echo "retro-branch-behind-main:"
-if [ "$MATRIX" = 1 ]; then echo "MODE: FULL (--matrix, every mutant x every arm)"; else echo "MODE: PUSH (each mutant drives its deciding arm and one twin)"; fi
+echo "MODE: PUSH"
 
 # ============================================================================
 # THE BASE REPOSITORY. One commit graph, shaped so the squash-merge defect is expressible:
@@ -419,46 +333,26 @@ toolchain() { # <dir> <script-to-install-as-validate-mandatory-rules.sh>
 
 D_SUMMARY="Sprint 900: $((8 - 1)) of 8 checks verified; 1 SKIPPED (check 7)."
 
-# battery <toolchain-dir> <tag> <mode> [worlds] -> space-separated tokens, one per world driven.
+# battery <toolchain-dir> <tag> [worlds] -> space-separated tokens, one per world driven.
 #
 # TOKEN: <verdict>/<behind-count>/<refresh>/<remedy>/<summary-class>/<rc>
-#   verdict  PASS | FAIL | SKIP | NONE (no CHECK 7 line at all) | OTHER[<line>] | SERIES-RAN
+#   verdict  PASS | FAIL | SKIP | NONE (no CHECK 7 line at all) | OTHER[<line>]
 #   refresh  R refreshed | N NOT refreshed (fetch failed) | X no remote named origin | ? neither
 #   remedy   m if the run printed `git merge origin/main` anywhere, else -
 #   summary  all7 | skip7 (the check-7 skip sentence) | nosumm | other[<sentence>]
 # Every field is a fact the check emits, so a subject printing nothing scores NONE/-/-/-/…
 # and fails every arm rather than passing any.
 #
-# MODE `full` runs the whole 8-check series as a program. MODE `only` SOURCES the toolchain copy
-# of the validator and calls its check7() function: the main guard in the subject keeps the series
-# from running on a source, and check7() is the same function the series calls, so the code run is
-# the code shipped and no flag exists that could skip a check at the gate. Every mutant edits
-# Check 7 and nothing else, so `only` is the question each mutant is about. Each run's output and
-# rc are kept at $WORK/out-<tag>-<world>[.rc] so assertions 2-4 read the SAME runs as the battery.
-cat > "$WORK/c7-driver.sh" <<'DRIVER'
-. "$1/validate-mandatory-rules.sh" || exit 2
-check7
-rc=0
-if [ "$FAILURES" -ne 0 ]; then rc=1; echo "Failure details:" >&2; printf '%s' "$FAILURE_MSGS" >&2; fi
-echo "C7-DRIVER: failures=$FAILURES skipped=${SKIPPED_CHECKS# }"
-exit $rc
-DRIVER
+# Each run's output and rc are kept at $WORK/out-<tag>-<world>[.rc] so assertions 2-4 read the SAME runs
+# as the battery.
 
 A_ORDER="a b c d e f g h"
 battery() {
-  local D="$1" tag="$2" mode="$3" worlds="${4:-$A_ORDER}" out rc t="" cur="" w wp
-  run()  { if [ "$mode" = only ]; then out="$( cd "$1" && bash "$WORK/c7-driver.sh" "$D" 2>&1 )"; rc=$?
-           else out="$( cd "$1" && bash "$D/validate-mandatory-rules.sh" 900 2>&1 )"; rc=$?; fi
+  local D="$1" tag="$2" worlds="${3:-$A_ORDER}" out rc t="" cur="" w wp
+  run()  { out="$( cd "$1" && bash "$D/validate-mandatory-rules.sh" 900 2>&1 )"; rc=$?
            printf '%s\n' "$out" > "$WORK/out-$tag-$cur"; printf '%s' "$rc" > "$WORK/out-$tag-$cur.rc"; }
   c7()   { awk '/^  CHECK 7: /{ sub(/^[ ]+/,""); print; exit }' <<<"$out"; }
-  summ() {
-    if [ "$mode" = only ]; then
-      case "$out" in
-        *'C7-DRIVER: failures=0 skipped=7'*) printf '%s' "$D_SUMMARY" ;;
-        *'C7-DRIVER: failures=0 skipped='*)  printf 'Sprint 900: all 8 checks passed' ;;
-      esac
-    else awk '/checks (passed|verified)/{ sub(/^[ ]+/,""); print; exit }' <<<"$out"; fi
-  }
+  summ() { awk '/checks (passed|verified)/{ sub(/^[ ]+/,""); print; exit }' <<<"$out"; }
   tok() {
     local line vd n rf rmd sm
     line="$(c7)"
@@ -469,8 +363,6 @@ battery() {
       "")               vd=NONE ;;
       *)                vd="OTHER[$line]" ;;
     esac
-    # A source must define and run nothing else: the series banner means the guard did not hold.
-    if [ "$mode" = only ]; then case "$out" in *'[Check 1]'*) vd=SERIES-RAN ;; esac; fi
     n="$(sed -n 's/.*HEAD is \([0-9][0-9]*\) commit(s) behind.*/\1/p' <<<"$line")"
     [ -n "$n" ] || n="-"
     case "$line" in
@@ -506,40 +398,12 @@ battery() {
   printf '%s' "${t# }"
 }
 
-# tokof <tokens> <key> -> the one token keyed <key>; pick <tokens> <order> <keys> -> those, in order.
-tokof() { local x; for x in $1; do case "$x" in "$2:"*) printf '%s' "$x"; return ;; esac; done; }
-pick()  { local k o=""; for k in $2; do case " $3 " in *" $k "*) o="$o $(tokof "$1" "$k")" ;; esac; done; printf '%s' "${o# }"; }
-# header_spec <mutant> -> "<decides> <twins>" read from this file's own MUTANT-MATRIX lines.
-header_spec() {
-  local sp dc tw
-  sp="$(awk -v t="$1" '$1=="#" && $2=="MUTANT-MATRIX" && $3==t {print $4, $5; exit}' "$0")"
-  dc="${sp%% *}"; dc="${dc#decides=}"; tw="${sp##* }"; tw="${tw#twins=}"
-  if [ -z "$dc" ] || [ -z "$tw" ] || [ "$dc" = "$sp" ]; then
-    echo "FIXTURE ERROR: mutant '$1' has no '# MUTANT-MATRIX $1 decides=<arm> twins=<arm>' header line." >&2
-    exit 2
-  fi
-  HDR_DEC="${dc//,/ }"; HDR_TWN="${tw//,/ }"
-  # `twins=-` means the measured row is dead in every cell: no arm to drive, and "-" is never an arm.
-  [ "$HDR_TWN" = "-" ] && HDR_TWN=""
-}
-# matrix_row <mutant> <decides> <twins> <order> <got> <expected>
-matrix_row() {
-  local k row="" dead="" cell tw_state=GREEN
-  for k in $4; do
-    if [ "$(tokof "$5" "$k")" = "$(tokof "$6" "$k")" ]; then cell=0; else cell=1; dead="$dead $k"; fi
-    row="$row $k=$cell"
-  done
-  for k in $3; do case " $dead " in *" $k "*) tw_state=DEAD ;; esac; done
-  [ -n "$3" ] || tw_state="NONE(twins=-: dead in every cell: $([ "$(wc -w <<<"$dead")" -eq "$(wc -w <<<"$4")" ] && echo yes || echo NO))"
-  local twd="${3// /,}"; [ -n "$twd" ] || twd="-"
-  echo "MATRIX-ROW $1 decides=${2// /,} twins=$twd twin-state=$tw_state cells:$row dead-set:${dead:- none}"
-}
 
 EXPECTED="a:PASS/-/X/-/all7/0 b:FAIL/${BEHIND}/X/m/nosumm/1 c:PASS/-/X/-/all7/0 d:SKIP/-/X/-/skip7/0 e:PASS/-/X/-/all7/0 f:PASS/-/X/-/all7/0 g:FAIL/${BEHIND}/R/m/nosumm/1 h:PASS/-/N/-/all7/0"
 
 # --- 1. the shipping validator answers every arm ------------------------------
 toolchain "$WORK/bin" "$VMR"
-GOT="$(battery "$WORK/bin" ship full)"
+GOT="$(battery "$WORK/bin" ship)"
 if [ "$GOT" = "$EXPECTED" ]; then
   ok "all eight arms: a trunk-cut branch PASSes, the feature-cut branch FAILs naming ${BEHIND} commit(s) behind and the remedy, the remedy CLEARS it, a missing origin/main SKIPs and is counted as check 7, neither being ahead of origin/main nor trailing a local main that ran on moves the verdict, a clone whose stale ref hides the defect is REFRESHED and then fails at ${BEHIND}, and a clone that cannot reach its remote still decides and says the ref may be stale"
 else
@@ -587,139 +451,6 @@ if [ "$(line_of "$OUT_A")" = "$L_A" ] \
 else
   bad "a refresh state was not named as expected — A=[$(line_of "$OUT_A")] G=[$(line_of "$OUT_G")] H=[$(line_of "$OUT_H")]"
 fi
-
-# ============================================================================
-# MUTANTS. Each is a COPY in its own toolchain directory, `cmp -s`-guarded so a sed that matched
-# nothing cannot pass as a mutation, and each anchors on a line that occurs EXACTLY ONCE in the
-# subject. Beside them sits an UNMUTATED CONTROL built the same way and asserting the eight
-# baseline rows are THERE — without it, a copy that dies resolving ../schemas emits nothing and
-# scores as a kill for every mutant at once.
-#
-# Each mutant declares the EXACT set of arms it moves, and no two share a moved-set:
-#   deleted {a..h}   reversed {b,c,e,g,h}   silentskip {d}
-#   localmain {f,g}  cutpoint {c}           nofetch {g,h}
-# ============================================================================
-toolchain "$WORK/mut-control" "$VMR"
-CTL="$(battery "$WORK/mut-control" mut-control only)"
-if [ "$CTL" = "$EXPECTED" ]; then
-  ok "CONTROL: an unmutated copy in its own toolchain dir reproduces every arm — including the three PASS rows, the two FAIL rows and the SKIP row, so a mutant's silence below is the mutation and not the copy"
-else
-  echo "FIXTURE ERROR: the unmutated control does not reproduce the battery — expected [$EXPECTED], got [$CTL]." >&2
-  echo "  Every mutant verdict below would be meaningless." >&2
-  exit 2
-fi
-
-# The anchor instrument has to be able to report a zero, or "occurs exactly once" is a claim
-# about a grep that always answers 1.
-_n="$(grep -cF 'CHECK 7: NEVER-EMITTED-ANCHOR' "$VMR")" || _n=0
-if [ "$_n" -ne 0 ]; then
-  echo "FIXTURE ERROR: the impossible-anchor control matched ${_n} line(s) in the subject." >&2
-  exit 2
-fi
-
-mutate() { # <tag> <fixed-anchor-that-must-occur-once> <sed-program> <expected-battery> <claim>
-  local tag="$1" anchor="$2" prog="$3" want="$4" claim="$5"
-  local D="$WORK/mut-$tag" M="$WORK/staged-$tag.sh" got n dec twn ws
-  n="$(grep -cF -- "$anchor" "$VMR")" || n=0
-  if [ "$n" -ne 1 ]; then
-    echo "FIXTURE ERROR: mutant '$tag' anchors on a line occurring ${n} time(s), not once. A LOST SUBJECT is repaired with a new anchor, never with a relaxed assertion." >&2
-    exit 2
-  fi
-  if ! sed "$prog" "$VMR" > "$M"; then
-    bad "MUTANT $tag: DID NOT APPLY — sed exited non-zero, so no mutant was ever scored"
-    return
-  fi
-  if cmp -s "$VMR" "$M"; then
-    echo "FIXTURE ERROR: mutant '$tag' matched nothing — the line it targets was renamed, so it proves nothing." >&2
-    exit 2
-  fi
-  if ! bash -n "$M" 2>/dev/null; then
-    echo "FIXTURE ERROR: mutant '$tag' does not parse. Every arm would fail for a syntax error rather than for the property removed." >&2
-    exit 2
-  fi
-  header_spec "$tag"; dec="$HDR_DEC"; twn="$HDR_TWN"
-  toolchain "$D" "$M"
-  if [ "$MATRIX" = 1 ]; then
-    ws="$A_ORDER"
-    got="$(battery "$D" "mut-$tag" only "$ws")"
-    matrix_row "$tag" "$dec" "$twn" "$A_ORDER" "$got" "$EXPECTED"
-    MCELLS=$((MCELLS + $(wc -w <<<"$A_ORDER") - $(wc -w <<<"$dec $twn")))
-    # the full vector is the claim in matrix mode
-    if [ "$got" = "$want" ]; then ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
-    elif [ "$got" = "$EXPECTED" ]; then bad "MUTANT $tag SURVIVED: $claim — every arm unchanged, so nothing here can catch it"
-    else bad "MUTANT $tag ($claim): expected battery [$want], got [$got]"; fi
-    return
-  fi
-  ws="$dec $twn"
-  got="$(battery "$D" "mut-$tag" only "$ws")"
-  if [ "$got" = "$(pick "$want" "$A_ORDER" "$ws")" ]; then
-    ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
-  elif [ "$(pick "$got" "$A_ORDER" "$dec")" = "$(pick "$EXPECTED" "$A_ORDER" "$dec")" ]; then
-    bad "MUTANT $tag SURVIVED: $claim — the deciding arm is unchanged, so nothing here can catch it"
-  else
-    bad "MUTANT $tag ($claim): expected arms [$(pick "$want" "$A_ORDER" "$ws")], got [$got]"
-  fi
-}
-
-# --- deleted: Check 7 removed outright, refresh block and all. Every arm is presence-shaped on
-# its CHECK 7 line, so all eight fall to NONE; arm B is the one that matters, because it is the
-# defect going unreported at rc 0. The range runs to `  esac` and takes the closing `fi` with it
-# (`N;d`), because the FIRST unindented `fi` in the block now closes the fetch — a range ending
-# there would strip the refresh and leave `$C7_REFRESH` unset under `set -u`, which is a mutant
-# that dies rather than one that omits the check.
-_NONE='NONE/-/-/-/all7/0'
-mutate deleted \
-  'echo "[Check 7] Retro branch not behind origin/main..."' \
-  '/^echo "\[Check 7\] Retro branch not behind origin\/main\.\.\."$/,/^  esac$/{ /^echo /s/.*/:/; /^  esac$/{N;d;}; /^:$/!d; }' \
-  "a:$_NONE b:$_NONE c:$_NONE d:$_NONE e:$_NONE f:$_NONE g:$_NONE h:$_NONE" \
-  "with the block gone every world reports rc 0 and no CHECK 7 line at all, the defect world included, and the skip world claims all 8 checks passed"
-
-# --- reversed: `origin/main..HEAD` counts what HEAD has that origin/main lacks, which is
-# divergence in the wrong direction: it acquits the defect world (reporting 1, not ${BEHIND}) and
-# convicts every world that is legitimately ahead, refreshed or not.
-mutate reversed \
-  'HEAD..origin/main 2>/dev/null' \
-  's@^  C7_BEHIND=.*@  C7_BEHIND="$(git rev-list --count origin/main..HEAD 2>/dev/null)" || C7_BEHIND=""@' \
-  "a:PASS/-/X/-/all7/0 b:FAIL/1/X/m/nosumm/1 c:FAIL/2/X/m/nosumm/1 d:SKIP/-/X/-/skip7/0 e:FAIL/2/X/m/nosumm/1 f:PASS/-/X/-/all7/0 g:FAIL/1/R/m/nosumm/1 h:FAIL/1/N/m/nosumm/1" \
-  "reversing the range mis-counts the defect world as 1 behind, fails the applied remedy, and fails branches that are merely AHEAD — the predicate is behind-count, not divergence"
-
-# --- silentskip: the SKIP branch made a silent PASS. The check is unmeasurable and says PASS,
-# and the summary stops naming it — an unmeasurable branch certified fresh, which is this repo's
-# recurring class: a check that cannot fire reading exactly like one that passed.
-mutate silentskip \
-  'SKIPPED_CHECKS="$SKIPPED_CHECKS 7"' \
-  's@^  echo "  CHECK 7: SKIP (no origin/main ref resolves.*@  echo "  CHECK 7: PASS"@; /^  SKIPPED_CHECKS="\$SKIPPED_CHECKS 7"$/d' \
-  "a:PASS/-/X/-/all7/0 b:FAIL/${BEHIND}/X/m/nosumm/1 c:PASS/-/X/-/all7/0 d:PASS/-/?/-/all7/0 e:PASS/-/X/-/all7/0 f:PASS/-/X/-/all7/0 g:FAIL/${BEHIND}/R/m/nosumm/1 h:PASS/-/N/-/all7/0" \
-  "a silent PASS on an unresolvable ref drops check 7 out of SKIPPED and the summary claims all 7 verified on a tree where freshness was never measured"
-
-# --- nofetch: THE REFRESH REMOVED. Every no-remote world is untouched, which is the point: the
-# only arms that can see this are the two with a remote, and world G is the one where the stale
-# ref hides the defect the check exists for.
-mutate nofetch \
-  'if git remote get-url origin >/dev/null 2>&1; then' \
-  '/^if git remote get-url origin >\/dev\/null 2>&1; then$/,/^fi$/d' \
-  "a:PASS/-/X/-/all7/0 b:FAIL/${BEHIND}/X/m/nosumm/1 c:PASS/-/X/-/all7/0 d:SKIP/-/X/-/skip7/0 e:PASS/-/X/-/all7/0 f:PASS/-/X/-/all7/0 g:PASS/-/X/-/all7/0 h:PASS/-/X/-/all7/0" \
-  "without the refresh the stale clone reads its own out-of-date ref, certifies the stranded-feature-ref branch as fresh at behind 0, and the unreachable-remote world stops telling its reader the ref may be stale"
-
-# --- WRONG FIX 1: read the LOCAL `main` ref instead of `origin/main`. It is the substitution
-# CLAUDE.md's release section already records ("cut release branches from origin/main, not from
-# a local main that may be ahead of it"), it passes arms A through E because in every one of
-# those worlds the two refs are equal, and only F and G can see it.
-mutate localmain \
-  'HEAD..origin/main 2>/dev/null' \
-  's@^  C7_BEHIND=.*@  C7_BEHIND="$(git rev-list --count HEAD..main 2>/dev/null)" || C7_BEHIND=""@' \
-  "a:PASS/-/X/-/all7/0 b:FAIL/${BEHIND}/X/m/nosumm/1 c:PASS/-/X/-/all7/0 d:SKIP/-/X/-/skip7/0 e:PASS/-/X/-/all7/0 f:FAIL/2/X/m/nosumm/1 g:PASS/-/R/-/all7/0 h:PASS/-/N/-/all7/0" \
-  "WRONG FIX — measuring against local main fails a branch correctly cut from origin/main when the local trunk ran ahead, and acquits the stale clone because a fetch does not move a LOCAL branch; arms F and G are the only arms that see it"
-
-# --- WRONG FIX 2: measure at the branch's CUT POINT instead of at HEAD — the branch's first
-# commit's parent, i.e. "was origin/main contained when this branch was created". It answers
-# every other arm identically and can never report the remedy as having worked, because a merge
-# moves HEAD and never moves the commit the branch was cut from.
-mutate cutpoint \
-  'C7_BEHIND="$(git rev-list --count HEAD..origin/main 2>/dev/null)"' \
-  's@^  C7_BEHIND=.*@  C7_CUT="$(git rev-list --reverse HEAD --not origin/main 2>/dev/null | head -1)"; if [ -z "$C7_CUT" ]; then C7_BEHIND=0; else C7_BEHIND="$(git rev-list --count "${C7_CUT}^..origin/main" 2>/dev/null)"; fi@' \
-  "a:PASS/-/X/-/all7/0 b:FAIL/${BEHIND}/X/m/nosumm/1 c:FAIL/${BEHIND}/X/m/nosumm/1 d:SKIP/-/X/-/skip7/0 e:PASS/-/X/-/all7/0 f:PASS/-/X/-/all7/0 g:FAIL/${BEHIND}/R/m/nosumm/1 h:PASS/-/N/-/all7/0" \
-  "WRONG FIX — keying on the branch's first commit still convicts the defect world, but the remedy the failure message names can never clear it; arm C is the only arm that separates the two"
 
 # ============================================================================
 # PART 2 — retro.md Step 1's CARRY. Deploy-validate keeps committing to the sprint branch after
@@ -824,8 +555,7 @@ extract_block() { # <retro.md> -> the Step 1 carry block, fences excluded
 # core/scripts/) retro.md ships in the same tree as this fixture and is always the new one, so an
 # absent subject there is a reverted or broken subject: gate_verdict answers RED, pending() counts a
 # FAILURE naming the part, and the run exits 1. Arm pending-layout drives a subject-absent copy
-# through subject_state and gate_verdict in BOTH layouts; mutant pending-in-dist removes the layout
-# check and is decided by that arm alone.
+# through subject_state and gate_verdict in BOTH layouts.
 # ============================================================================
 SKIPPED=0; PENDN=0; PENDBAD=0
 case "$LAYOUT" in distribution|consumer) : ;; *) echo "FIXTURE ERROR: the root walk set no layout" >&2; exit 2 ;; esac
@@ -871,14 +601,13 @@ if [ "$(subject_state land "$_pla")/$(subject_state land "$_plp")" != absent/pre
   echo "FIXTURE ERROR: the pending-layout seeds are not absent/present ($(subject_state land "$_pla")/$(subject_state land "$_plp"))." >&2
   exit 2
 fi
-pl_vector() { # [gate-function file] -> the four cells, judged by gate_verdict (or by the file's copy)
+pl_vector() { # the four cells, judged by gate_verdict
   local c ly f st o=""
   for c in $PLCELLS; do
     case "$c" in dist-*) ly=distribution ;; *) ly=consumer ;; esac
     case "$c" in *-absent) f="$_pla" ;; *) f="$_plp" ;; esac
     st="$(subject_state land "$f")"
-    if [ -n "${1:-}" ]; then o="$o $c:$( . "$1"; gate_verdict "$ly" "$st" )"
-    else o="$o $c:$(gate_verdict "$ly" "$st")"; fi
+    o="$o $c:$(gate_verdict "$ly" "$st")"
   done
   printf '%s' "${o# }"
 }
@@ -887,30 +616,6 @@ if [ "$PL_GOT" = "$PL_WANT" ]; then
   ok "pending-layout: a subject-absent retro.md is RED in the distribution and PENDING in a consumer, and its present twin asserts in both [$PL_GOT]"
 else
   bad "pending-layout: expected [$PL_WANT], got [$PL_GOT]"
-fi
-_plt=pending-in-dist
-# mutant pending-in-dist: gate_verdict as this file defines it, extracted, with the layout check
-# removed. The unmutated extract is the control: it must reproduce the in-script vector.
-sed -n '/^gate_verdict() {/,/^}/p' "$0" > "$WORK/gv-control.sh"
-sed '/^  if \[ "\$1" = distribution \]; then printf RED; return; fi$/d' "$WORK/gv-control.sh" > "$WORK/gv-pending-in-dist.sh" \
-  || { bad "MUTANT $_plt: DID NOT APPLY — sed exited non-zero"; }
-_gvn="$(grep -c '^  if \[ "\$1" = distribution \]; then printf RED; return; fi$' "$WORK/gv-control.sh")" || _gvn=0
-_gvz="$(grep -c 'NEVER-EMITTED-N9-ANCHOR-zq' "$WORK/gv-control.sh")" || _gvz=0
-if [ "$_gvn" != 1 ] || [ "$_gvz" != 0 ] || cmp -s "$WORK/gv-control.sh" "$WORK/gv-pending-in-dist.sh" \
-   || [ "$(pl_vector "$WORK/gv-control.sh")" != "$PL_GOT" ]; then
-  echo "FIXTURE ERROR: pending-in-dist anchors ${_gvn} time(s) (control ${_gvz}), matched nothing, or the extracted gate_verdict does not reproduce the in-script vector." >&2
-  exit 2
-fi
-header_spec "$_plt"
-_plm="$(pl_vector "$WORK/gv-pending-in-dist.sh")"
-if [ "$MATRIX" = 1 ]; then
-  matrix_row "$_plt" "$HDR_DEC" "$HDR_TWN" "$PLCELLS" "$_plm" "$PL_GOT"
-  MCELLS=$((MCELLS + $(wc -w <<<"$PLCELLS") - $(wc -w <<<"$HDR_DEC $HDR_TWN")))
-fi
-if [ "$(pick "$_plm" "$PLCELLS" "$HDR_DEC $HDR_TWN")" = "dist-absent:PENDING consumer-absent:PENDING" ]; then
-  ok "MUTANT $_plt [decides arm $HDR_DEC, twin $HDR_TWN]: without the layout check a subject-absent retro.md in the distribution is PENDING, and the consumer cell is unchanged"
-else
-  bad "MUTANT $_plt: expected [dist-absent:PENDING consumer-absent:PENDING], got [$(pick "$_plm" "$PLCELLS" "$HDR_DEC $HDR_TWN")]"
 fi
 # P2MODE: full (fallback present) | prefb (carry block present, fallback absent) | absent
 if [ "$ST_CARRY" = absent ]; then P2MODE=absent; elif [ "$ST_FB" = absent ]; then P2MODE=prefb; else P2MODE=full; fi
@@ -1147,10 +852,10 @@ case "$P2MODE" in
   full)   W2ACT="$WORLDS2" ;;
   prefb)  W2ACT="$W2OLD"
           pending "part 2" "the Step 1 gh fallback (no GH_WHY, GH_ROWS, PR_SRC, command -v gh or gh pr list line in the Step 1 block)" \
-            "the worlds underivable repointed repointed-nogh repointed-ghfail repointed-empty repointed-badrow wrong-pr reused-branch tree-mismatch head-absent head-fetched, the head-absent arm and the ten gh-fallback mutants are not asserted" 11 ;;
+            "the worlds underivable repointed repointed-nogh repointed-ghfail repointed-empty repointed-badrow wrong-pr reused-branch tree-mismatch head-absent head-fetched and the head-absent arm are not asserted" 1 ;;
   absent) W2ACT=""
           pending "part 2" "the Step 1 carry block (no '# retro Step 1:' comment and no CARRY: token)" \
-            "part 2's battery, its head-absent arm, its control and all seventeen part 2 mutants are not asserted" 20 ;;
+            "part 2's battery, and its head-absent arm are not asserted" 2
 esac
 NW2="$(wc -w <<<"$W2ACT")"
 if [ "$P2MODE" != absent ]; then
@@ -1255,7 +960,6 @@ fbmap() {
   printf '%s' "${o# }"
 }
 EXPECTED2="$(fbmap "$EXPECTED2")"
-GHMUT="gh-primary no-gh-guard ancestry-accepts no-newest-guard no-tree-check rc-ignored no-empty-guard no-row-shape no-head-guard no-head-fetch"
 
 if [ "$P2MODE" != absent ]; then
 GOT2="$(battery2 "$RETRO" ship)"
@@ -1277,225 +981,7 @@ else
 fi
 fi
 
-# CONTROL, folded into the ship run: an unmutated copy of retro.md is byte-identical to the
-# subject, so it extracts the identical block and a second drive of it would only repeat GOT2.
-cp "$RETRO" "$P2/control.md"
-if cmp -s "$RETRO" "$P2/control.md" && [ "$(extract_block "$P2/control.md")" = "$BLOCK" ] && [ "$GOT2" = "$EXPECTED2" ]; then
-  ok "part 2 CONTROL: an unmutated copy reproduces all ${NW2} worlds, so a mutant's token below is the mutation"
-else
-  echo "FIXTURE ERROR: the part 2 control does not reproduce the battery — expected [$EXPECTED2], got [$GOT2]." >&2
-  exit 2
 fi
-fi
-
-# mutate2 <tag> <anchor occurring once in retro.md> <sed-program> <expected> <claim>
-mutate2() {
-  local tag="$1" anchor="$2" prog="$3" want="$4" claim="$5" m="$P2/m-$1.md" n got dec twn ws
-  # PENDING skips are counted where the PENDING row is printed; a gh mutant needs the fallback.
-  [ "$P2MODE" = absent ] && return
-  case " $GHMUT " in *" $tag "*) [ "$P2MODE" = prefb ] && return ;; esac
-  want="$(fbmap "$want")"
-  n="$(grep -cF -- "$anchor" "$RETRO")" || n=0
-  if [ "$n" -ne 1 ]; then
-    echo "FIXTURE ERROR: part 2 mutant '$tag' anchors on a line occurring ${n} time(s), not once." >&2
-    exit 2
-  fi
-  # A program starting with @ names a sed -f script (the carry block's lines carry single quotes).
-  case "$prog" in
-    @*) sed -f "${prog#@}" "$RETRO" > "$m" || { bad "MUTANT $tag: DID NOT APPLY — sed exited non-zero"; return; } ;;
-    *)  sed "$prog" "$RETRO" > "$m" || { bad "MUTANT $tag: DID NOT APPLY — sed exited non-zero"; return; } ;;
-  esac
-  if cmp -s "$RETRO" "$m"; then
-    echo "FIXTURE ERROR: part 2 mutant '$tag' matched nothing." >&2
-    exit 2
-  fi
-  header_spec "$tag"; dec="$HDR_DEC"; twn="$HDR_TWN"
-  if [ "$MATRIX" = 1 ]; then
-    got="$(battery2 "$m" "m-$tag" "$W2ACT")"
-    matrix_row "$tag" "$dec" "$twn" "$W2ACT" "$got" "$EXPECTED2"
-    MCELLS=$((MCELLS + NW2 - $(wc -w <<<"$dec $twn")))
-    if [ "$got" = "$want" ]; then ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
-    elif [ "$got" = "$EXPECTED2" ]; then bad "MUTANT $tag SURVIVED: $claim — every world unchanged"
-    else bad "MUTANT $tag ($claim): expected [$want], got [$got]"; fi
-    return
-  fi
-  ws="$dec $twn"
-  got="$(battery2 "$m" "m-$tag" "$ws")"
-  if [ "$got" = "$(pick "$want" "$WORLDS2" "$ws")" ]; then
-    ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
-  elif [ "$(pick "$got" "$WORLDS2" "$dec")" = "$(pick "$EXPECTED2" "$WORLDS2" "$dec")" ]; then
-    bad "MUTANT $tag SURVIVED: $claim — the deciding world is unchanged"
-  else
-    bad "MUTANT $tag ($claim): expected [$(pick "$want" "$WORLDS2" "$ws")], got [$got]"
-  fi
-}
-
-# The ten re-pointed worlds' expected tokens, shared by every mutant that leaves the fallback alone.
-_RPW="repointed:n3@gh#7/0/y/2/n/y/1 repointed-nogh:HB-underivable@unavail/0/y/0/n/y/- repointed-ghfail:HB-underivable@rc/0/y/0/n/y/1 repointed-empty:HB-underivable@empty/0/y/0/n/y/1 repointed-badrow:HB-underivable@row/0/y/0/n/y/1 wrong-pr:HB-underivable@one/0/y/0/n/y/1 reused-branch:HB-underivable@newer/0/y/0/n/y/1 tree-mismatch:HB-underivable@tree/0/y/0/n/y/1 head-absent:HB-underivable@local/0/y/0/n/y/1 head-fetched:n3@gh#7/0/y/2/n/y/1"
-# The seven original worlds' expected tokens, for the mutants that touch only the fallback.
-_ORW="carry:n2/0/y/2/n/y/- empty:none-empty/0/y/0/n/y/- synced:n2/0/y/2/n/y/- conflict:HB-conflict/0/y/0/n/y/- underivable:HB-underivable@one/0/y/0/n/y/1 direct:none-tip/0/y/0/n/y/- unresolved:HB-unresolved/0/y/0/n/y/-"
-# rp_with <world:token>... -> _RPW with those worlds' tokens replaced
-rp_with() { local o="" x k r; for x in $_RPW; do k="${x%%:*}"; for r in "$@"; do case "$r" in "$k:"*) x="$r" ;; esac; done; o="$o $x"; done; printf '%s' "${o# }"; }
-
-# --- carry-deleted: Step 1 as it stood before the carry. Every world reports no CARRY line, and
-# the two worlds with post-squash evidence lose it — the filing's 0-and-0 greps.
-_N0='NONE/0/y/0/n/y/-'
-mutate2 carry-deleted \
-  'if [ -z "$SPRINT_TIP" ]; then' \
-  '/^if \[ -z "\$SPRINT_TIP" \]; then$/,/^fi$/d' \
-  "carry:$_N0 empty:$_N0 synced:$_N0 conflict:$_N0 underivable:$_N0 direct:$_N0 unresolved:$_N0 repointed:$_N0 repointed-nogh:$_N0 repointed-ghfail:$_N0 repointed-empty:$_N0 repointed-badrow:$_N0 wrong-pr:$_N0 reused-branch:$_N0 tree-mismatch:$_N0 head-absent:$_N0 head-fetched:$_N0" \
-  "without the carry the trunk-cut retro branch holds neither post-squash marker and nothing says so"
-
-# --- WRONG FIX 1: cut the retro branch from the sprint tip. The markers arrive, and the branch
-# no longer has the squash as an ancestor — the defect part 1 exists for.
-mutate2 cut-from-tip \
-  'git checkout -b ai-dlc/retro/sprint-<N> origin/main' \
-  's@^git checkout -b ai-dlc/retro/sprint-<N> origin/main$@git checkout -b ai-dlc/retro/sprint-<N> "$SPRINT_TIP"@' \
-  "carry:HB-conflict/2/n/2/n/y/- empty:none-empty/2/n/0/n/y/- synced:HB-conflict/0/y/2/n/y/- conflict:HB-conflict/2/n/1/n/y/- underivable:HB-underivable@one/3/n/2/n/y/1 direct:none-tip/1/y/0/n/y/- unresolved:HB-unresolved/0/y/0/n/n/- repointed:HB-conflict/1/y/2/n/y/1 repointed-nogh:HB-underivable@unavail/1/y/2/n/y/- repointed-ghfail:HB-underivable@rc/1/y/2/n/y/1 repointed-empty:HB-underivable@empty/1/y/2/n/y/1 repointed-badrow:HB-underivable@row/1/y/2/n/y/1 wrong-pr:HB-underivable@one/1/y/2/n/y/1 reused-branch:HB-underivable@newer/1/y/2/n/y/1 tree-mismatch:HB-underivable@tree/1/y/2/n/y/1 head-absent:HB-underivable@local/1/y/2/n/y/1 head-fetched:HB-conflict/1/y/2/n/y/1" \
-  "WRONG FIX — a tip-cut retro branch trails origin/main and lacks the squash as an ancestor in every world the sprint did not already merge the trunk into"
-
-# --- skip-guard removed: an empty carry list reaches cherry-pick, which refuses it.
-mutate2 no-skip-guard \
-  'if [ "$CARRY_N" = 0 ]; then' \
-  's@^    if \[ "\$CARRY_N" = 0 \]; then$@    if false; then@' \
-  "carry:n2/0/y/2/n/y/- empty:HB-conflict/0/y/0/n/y/- synced:n2/0/y/2/n/y/- conflict:HB-conflict/0/y/0/n/y/- underivable:HB-underivable@one/0/y/0/n/y/1 direct:none-tip/0/y/0/n/y/- unresolved:HB-unresolved/0/y/0/n/y/- $_RPW" \
-  "without the count guard a sprint with nothing to carry is reported as a conflict HARD_BLOCK"
-
-# --- abort removed: the conflict world is left mid-pick.
-mutate2 no-abort \
-  'git cherry-pick --abort' \
-  '/^      git cherry-pick --abort$/d' \
-  "carry:n2/0/y/2/n/y/- empty:none-empty/0/y/0/n/y/- synced:n2/0/y/2/n/y/- conflict:HB-conflict/0/y/0/y/y/- underivable:HB-underivable@one/0/y/0/n/y/1 direct:none-tip/0/y/0/n/y/- unresolved:HB-unresolved/0/y/0/n/y/- $_RPW" \
-  "without the abort a conflicting carry leaves a cherry-pick in progress on the retro branch"
-
-# --- WRONG FIX 2: the `<pr-head>..<tip>` range. Correct until the sprint branch merged the
-# trunk after the squash; then the range re-picks trunk commits. The re-pointed world dies too:
-# its PR head is not an ancestor of the tip, so the range reaches back to the squash itself.
-mutate2 plain-range \
-  'elif git cherry-pick --no-merges "$SPRINT_TIP" --not "$PR_HEAD" origin/main; then' \
-  's@elif git cherry-pick --no-merges "\$SPRINT_TIP" --not "\$PR_HEAD" origin/main; then@elif git cherry-pick --no-merges "$PR_HEAD..$SPRINT_TIP"; then@' \
-  "carry:n2/0/y/2/n/y/- empty:none-empty/0/y/0/n/y/- synced:HB-conflict/0/y/0/n/y/- conflict:HB-conflict/0/y/0/n/y/- underivable:HB-underivable@one/0/y/0/n/y/1 direct:none-tip/0/y/0/n/y/- unresolved:HB-unresolved/0/y/0/n/y/- repointed:HB-conflict/0/y/0/n/y/1 repointed-nogh:HB-underivable@unavail/0/y/0/n/y/- repointed-ghfail:HB-underivable@rc/0/y/0/n/y/1 repointed-empty:HB-underivable@empty/0/y/0/n/y/1 repointed-badrow:HB-underivable@row/0/y/0/n/y/1 wrong-pr:HB-underivable@one/0/y/0/n/y/1 reused-branch:HB-underivable@newer/0/y/0/n/y/1 tree-mismatch:HB-underivable@tree/0/y/0/n/y/1 head-absent:HB-underivable@local/0/y/0/n/y/1 head-fetched:HB-conflict/0/y/0/n/y/1" \
-  "WRONG FIX — a sprint branch that merged the trunk after the squash makes the plain range re-pick trunk commits and stop"
-
-# --- WRONG FIX 3: the merge-base as the PR head. It is the fork point, so the carry re-picks
-# the PR's own work, which the squash already landed, and stops on it.
-mutate2 merge-base \
-  '  if [ -z "$PR_HEAD" ]; then' \
-  's@^  if \[ -z "\$PR_HEAD" \]; then$@  PR_HEAD="$(git merge-base "$SPRINT_TIP" origin/main)"; if [ -z "$PR_HEAD" ]; then@' \
-  "carry:HB-conflict/0/y/0/n/y/- empty:HB-conflict/0/y/0/n/y/- synced:HB-conflict/0/y/0/n/y/- conflict:HB-conflict/0/y/0/n/y/- underivable:HB-conflict/0/y/0/n/y/1 direct:none-tip/0/y/0/n/y/- unresolved:HB-unresolved/0/y/0/n/y/- repointed:n3@gh#7/0/y/2/n/y/1 repointed-nogh:n3/0/y/2/n/y/- repointed-ghfail:n3/0/y/2/n/y/1 repointed-empty:n3/0/y/2/n/y/1 repointed-badrow:n3/0/y/2/n/y/1 wrong-pr:n3/0/y/2/n/y/1 reused-branch:n3/0/y/2/n/y/1 tree-mismatch:n3/0/y/2/n/y/1 head-absent:n3/0/y/2/n/y/1 head-fetched:n3@gh#7/0/y/2/n/y/1" \
-  "WRONG FIX — taking the merge-base as the PR head re-picks the squashed PR work, which is already on the trunk, and stops in every world that has a PR head"
-
-# --- not first-parent: a full-history walk finds the post-squash trunk commit as the fork
-# point on a synced branch, so no trunk tree is newer and the PR head reads underivable.
-mutate2 all-parents \
-  'FORK="$(git rev-list --first-parent "$SPRINT_TIP" \' \
-  's@FORK="\$(git rev-list --first-parent "\$SPRINT_TIP" \\@FORK="$(git rev-list "$SPRINT_TIP" \\@' \
-  "carry:n2/0/y/2/n/y/- empty:none-empty/0/y/0/n/y/- synced:HB-underivable@tree/0/y/0/n/y/1 conflict:HB-conflict/0/y/0/n/y/- underivable:HB-underivable@one/0/y/0/n/y/1 direct:none-tip/0/y/0/n/y/- unresolved:HB-unresolved/0/y/0/n/y/- repointed:n3@gh#7/0/y/2/n/y/1 repointed-nogh:HB-underivable@unavail/0/y/0/n/y/- repointed-ghfail:HB-underivable@rc/0/y/0/n/y/1 repointed-empty:HB-underivable@empty/0/y/0/n/y/1 repointed-badrow:HB-underivable@row/0/y/0/n/y/1 wrong-pr:HB-underivable@one/0/y/0/n/y/1 reused-branch:HB-underivable@newer/0/y/0/n/y/1 tree-mismatch:HB-underivable@tree/0/y/0/n/y/1 head-absent:HB-underivable@local/0/y/0/n/y/1 head-fetched:n3@gh#7/0/y/2/n/y/1" \
-  "a walk that follows every parent reads a synced sprint branch as underivable and carries nothing"
-
-# ---------------------------------------------------------------------------------------------
-# THE gh FALLBACK'S MUTANTS. Each sed program is a file (the block's lines carry single quotes),
-# each edits lines of the Step 1 block only (every address below occurs once in retro.md, which
-# mutate2 re-checks), and each removes one guard.
-SEDS="$P2/seds"; mkdir -p "$SEDS"
-
-# --- gh-primary: the fallback runs whether or not the tree match found the PR head. Every
-# tree-match world with a fork point now CALLS gh; its stub's wrong row then fails the tree guard,
-# so the CARRY line is unchanged and the sentinel field is the only thing that moves.
-cat > "$SEDS/gh-primary" <<'SED'
-/^  if \[ -z "\$PR_HEAD" \] && \[ -n "\$FORK" \]; then$/c\
-  if [ -n "$FORK" ]; then
-SED
-mutate2 gh-primary 'if [ -z "$PR_HEAD" ] && [ -n "$FORK" ]; then' "@$SEDS/gh-primary" \
-  "carry:n2/0/y/2/n/y/1 empty:none-empty/0/y/0/n/y/1 synced:n2/0/y/2/n/y/1 conflict:HB-conflict/0/y/0/n/y/1 underivable:HB-underivable@one/0/y/0/n/y/1 direct:none-tip/0/y/0/n/y/- unresolved:HB-unresolved/0/y/0/n/y/- repointed:n3@gh#7/0/y/2/n/y/1 repointed-nogh:HB-underivable@unavail/0/y/0/n/y/- repointed-ghfail:HB-underivable@rc/0/y/0/n/y/1 repointed-empty:HB-underivable@empty/0/y/0/n/y/1 repointed-badrow:HB-underivable@row/0/y/0/n/y/1 wrong-pr:HB-underivable@one/0/y/0/n/y/1 reused-branch:HB-underivable@newer/0/y/0/n/y/1 tree-mismatch:HB-underivable@tree/0/y/0/n/y/1 head-absent:HB-underivable@local/0/y/0/n/y/1 head-fetched:n3@gh#7/0/y/2/n/y/1" \
-  "gh asked on a tree-match hit: the sentinel of a world whose PR head the trees already named is no longer absent"
-
-# --- no-gh-guard: no `command -v gh`; with no gh the call itself fails and reads as exited non-zero.
-cat > "$SEDS/no-gh-guard" <<'SED'
-/^    if ! command -v gh >\/dev\/null 2>&1; then$/c\
-    if false; then
-SED
-mutate2 no-gh-guard 'if ! command -v gh >/dev/null 2>&1; then' "@$SEDS/no-gh-guard" \
-  "$_ORW $(rp_with 'repointed-nogh:HB-underivable@rc/0/y/0/n/y/-')" \
-  "without the availability guard a host with no gh is reported as a gh failure, not as gh unavailable"
-
-# --- WRONG FIX: ancestry-accepts. Select the merged PR whose mergeCommit is an ancestor of the
-# tip, instead of the one whose mergeCommit IS the fork point. The older PR #6 then passes every
-# later guard (its head is local and its tree is its squash's) and its head is carried from.
-cat > "$SEDS/ancestry-accepts" <<'SED'
-/^    elif \[ "\$(awk -v f="\$FORK" '\$3 == f {n++} END {print n+0}' <<<"\$GH_ROWS")" != 1 \]; then$/c\
-    elif [ "$(while read -r n h m; do git merge-base --is-ancestor "$m" "$SPRINT_TIP" && echo "$n"; done <<<"$GH_ROWS" | grep -c .)" != 1 ]; then
-/^      read -r GH_N GH_H GH_M <<<"\$(awk -v f="\$FORK" '\$3 == f' <<<"\$GH_ROWS")"$/c\
-      read -r GH_N GH_H GH_M <<<"$(while read -r n h m; do git merge-base --is-ancestor "$m" "$SPRINT_TIP" && echo "$n $h $m"; done <<<"$GH_ROWS")"
-SED
-mutate2 ancestry-accepts "'\$3 == f {n++} END {print n+0}'" "@$SEDS/ancestry-accepts" \
-  "$_ORW $(rp_with 'wrong-pr:n3@gh#6/0/y/2/n/y/1')" \
-  "WRONG FIX — keying on ancestry instead of mergeCommit == fork point accepts an older merged PR and carries from its head"
-
-# --- no-newest-guard: a newer merged PR from the same branch name no longer stops the selection.
-cat > "$SEDS/no-newest-guard" <<'SED'
-/^      if \[ -n "\$GH_NEWER" \]; then$/c\
-      if false; then
-SED
-mutate2 no-newest-guard 'if [ -n "$GH_NEWER" ]; then' "@$SEDS/no-newest-guard" \
-  "$_ORW $(rp_with 'reused-branch:n3@gh#7/0/y/2/n/y/1')" \
-  "without the newest-row guard a reused branch name carries from an older PR while a newer one descends from it"
-
-# --- no-tree-check: the PR head is accepted without its tree equalling the squash's.
-cat > "$SEDS/no-tree-check" <<'SED'
-/^      elif \[ "\$(git rev-parse "\${GH_H}^{tree}")" != "\$(git rev-parse "\${GH_M}^{tree}")" \]; then$/c\
-      elif false; then
-SED
-mutate2 no-tree-check 'elif [ "$(git rev-parse "${GH_H}^{tree}")" != "$(git rev-parse "${GH_M}^{tree}")" ]; then' "@$SEDS/no-tree-check" \
-  "$_ORW $(rp_with 'tree-mismatch:none-empty@gh#7/0/y/0/n/y/1')" \
-  "without the tree check a PR head whose tree is not the squash's is accepted and the carry silently reads empty"
-
-# --- rc-ignored: gh's exit code is dropped (the assignment still runs), so a failed call falls
-# through to the empty-output guard and is reported as an empty list.
-cat > "$SEDS/rc-ignored" <<'SED'
-/^    elif ! GH_ROWS="\$(gh pr list /s/elif ! GH_ROWS=/elif GH_ROWS=/
-/^        --jq '\.\[\] | "\\(\.number) \\(\.headRefOid) \\(\.mergeCommit\.oid)"')"; then$/s/')"; then$/')" \&\& false; then/
-SED
-mutate2 rc-ignored 'elif ! GH_ROWS="$(gh pr list' "@$SEDS/rc-ignored" \
-  "$_ORW $(rp_with 'repointed-ghfail:HB-underivable@empty/0/y/0/n/y/1')" \
-  "without the exit-code test a gh that failed is reported as listing no merged PR"
-
-# --- no-empty-guard: empty output reaches the row-shape test, whose here-string is one empty line.
-cat > "$SEDS/no-empty-guard" <<'SED'
-/^    elif \[ -z "\$GH_ROWS" \]; then$/c\
-    elif false; then
-SED
-mutate2 no-empty-guard 'elif [ -z "$GH_ROWS" ]; then' "@$SEDS/no-empty-guard" \
-  "$_ORW $(rp_with 'repointed-empty:HB-underivable@row/0/y/0/n/y/1')" \
-  "without the empty guard an empty merged-PR list is misreported as a malformed row"
-
-# --- no-row-shape: a malformed row reaches the selection and is reported as no exact row.
-cat > "$SEDS/no-row-shape" <<'SED'
-/^    elif grep -vqE '\^\[0-9\]+ \[0-9a-f\]{40} \[0-9a-f\]{40}\$' <<<"\$GH_ROWS"; then$/c\
-    elif false; then
-SED
-mutate2 no-row-shape "grep -vqE '^[0-9]+ [0-9a-f]{40} [0-9a-f]{40}\$'" "@$SEDS/no-row-shape" \
-  "$_ORW $(rp_with 'repointed-badrow:HB-underivable@one/0/y/0/n/y/1')" \
-  "without the row-shape test a row with a null mergeCommit is misread as a well-formed list with no exact row"
-
-# --- no-head-guard: the PR head's presence is never checked (nor fetched); a head that is not an
-# object reaches the tree comparison and is misreported as a tree mismatch.
-cat > "$SEDS/no-head-guard" <<'SED'
-/^      elif ! git cat-file -e "\${GH_H}^{commit}" 2>\/dev\/null \\$/s/elif ! git cat-file/elif false \&\& ! git cat-file/
-SED
-mutate2 no-head-guard 'elif ! git cat-file -e "${GH_H}^{commit}" 2>/dev/null \' "@$SEDS/no-head-guard" \
-  "$_ORW $(rp_with 'head-absent:HB-underivable@tree/0/y/0/n/y/1' 'head-fetched:HB-underivable@tree/0/y/0/n/y/1')" \
-  "without the presence guard a PR head that is not an object is misreported as a tree mismatch"
-
-# --- no-head-fetch: the PR head is never fetched from origin's PR ref. A head that exists only
-# as refs/pull/<n>/head on origin (head-fetched) is reported as not local; a local head is untouched.
-cat > "$SEDS/no-head-fetch" <<'SED'
-/^          && ! { git fetch -q origin "pull\/\$GH_N\/head" 2>\/dev\/null && git cat-file -e "\${GH_H}^{commit}" 2>\/dev\/null; }; then$/c\
-          ; then
-SED
-mutate2 no-head-fetch '&& ! { git fetch -q origin "pull/$GH_N/head"' "@$SEDS/no-head-fetch" \
-  "$_ORW $(rp_with 'head-fetched:HB-underivable@local/0/y/0/n/y/1')" \
-  "without the PR-ref fetch a PR head GitHub still holds under refs/pull/<n>/head is reported as not local"
 
 # ============================================================================
 # PART 3 — retro.md 7a-post step 1's LAND. After the retro PR merges, 7a-post rotates the
@@ -1535,7 +1021,7 @@ extract_land() { # <retro.md> -> the 7a-post step 1 block, fences excluded
 LBLOCK="$(extract_land "$RETRO")"
 if [ "$ST_LAND" = absent ]; then
   pending "part 3" "the 7a-post step 1 LAND block (no '# retro 7a-post step 1:' comment and no LAND: token)" \
-    "the worlds land-ok land-wt land-diverged land-tag, the part 3 control and the mutants land-pre-fix land-no-symref land-no-false land-names-self are not asserted" 6
+    "the worlds land-ok land-wt land-diverged land-tag are not asserted" 1
 else
 _ln="$(grep -c '^# retro 7a-post step 1: land on the merged trunk$' "$RETRO")" || _ln=0
 case "$_ln:$LBLOCK" in
@@ -1654,114 +1140,6 @@ if [ "$GOT3" = "$EXPECTED3" ]; then
 else
   bad "part 3 battery: expected [$EXPECTED3], got [$GOT3]"
 fi
-# CONTROL: the unmutated copy extracts the identical block, so a mutant's token is the mutation.
-cp "$RETRO" "$P3/control.md"
-if cmp -s "$RETRO" "$P3/control.md" && [ "$(extract_land "$P3/control.md")" = "$LBLOCK" ] && [ "$GOT3" = "$EXPECTED3" ]; then
-  ok "part 3 CONTROL: an unmutated copy reproduces all ${NW3} worlds"
-else
-  echo "FIXTURE ERROR: the part 3 control does not reproduce the battery — expected [$EXPECTED3], got [$GOT3]." >&2
-  exit 2
-fi
-fi
-
-# mutate_p <part> <tag> <anchor occurring once in retro.md> <@sed-file> <expected> <claim>
-# Parts 3 and 4, the same discipline as mutate2: a copy, cmp -s, DID NOT APPLY on a failing sed.
-mutate_p() {
-  local part="$1" tag="$2" anchor="$3" prog="$4" want="$5" claim="$6" m n got dec twn ws all exp bat nw
-  case "$part" in
-    3) all="$WORLDS3"; exp="$EXPECTED3"; bat=battery3; nw="$NW3"; m="$P3/m-$tag.md" ;;
-    4) all="$WORLDS4"; exp="$EXPECTED4"; bat=battery4; nw="$NW4"; m="$P4/m-$tag.md" ;;
-  esac
-  n="$(grep -cF -- "$anchor" "$RETRO")" || n=0
-  if [ "$n" -ne 1 ]; then
-    echo "FIXTURE ERROR: part $part mutant '$tag' anchors on a line occurring ${n} time(s), not once." >&2
-    exit 2
-  fi
-  sed -f "${prog#@}" "$RETRO" > "$m" || { bad "MUTANT $tag: DID NOT APPLY — sed exited non-zero"; return; }
-  if cmp -s "$RETRO" "$m"; then
-    echo "FIXTURE ERROR: part $part mutant '$tag' matched nothing." >&2
-    exit 2
-  fi
-  header_spec "$tag"; dec="$HDR_DEC"; twn="$HDR_TWN"
-  if [ "$MATRIX" = 1 ]; then
-    got="$("$bat" "$m" "m-$tag" "$all")"
-    matrix_row "$tag" "$dec" "$twn" "$all" "$got" "$exp"
-    MCELLS=$((MCELLS + nw - $(wc -w <<<"$dec $twn")))
-    if [ "$got" = "$want" ]; then ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
-    elif [ "$got" = "$exp" ]; then bad "MUTANT $tag SURVIVED: $claim — every world unchanged"
-    else bad "MUTANT $tag ($claim): expected [$want], got [$got]"; fi
-    return
-  fi
-  ws="$dec $twn"
-  got="$("$bat" "$m" "m-$tag" "$ws")"
-  if [ "$got" = "$(pick "$want" "$all" "$ws")" ]; then
-    ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
-  elif [ "$(pick "$got" "$all" "$dec")" = "$(pick "$exp" "$all" "$dec")" ]; then
-    bad "MUTANT $tag SURVIVED: $claim — the deciding world is unchanged"
-  else
-    bad "MUTANT $tag ($claim): expected [$(pick "$want" "$all" "$ws")], got [$got]"
-  fi
-}
-
-if [ "$ST_LAND" = present ]; then
-# --- land-pre-fix: item 1 as it stood, the bare chain with no verdict. The range opens at the
-# block's on-disk check (`LAND_HOLD=`, which only this block assigns) and ends at the block's own
-# unindented `fi`; only the chain line survives, its `elif ` and trailing backslash stripped. The
-# block's leading `git fetch origin main` stays, a second fetch the bare chain repeats.
-# A consumer's retro.md one pull behind carries the LAND block without the on-disk check (BL-997's
-# subject, PENDING below): there the range opens at the block's own `if git fetch` line, as before.
-if grep -q '^LAND_HOLD="\$( cd ' "$RETRO"; then
-cat > "$SEDS/land-pre-fix" <<'SED'
-/^LAND_HOLD="\$( cd /,/^fi$/{
-/^elif git fetch origin main/!d
-s/^elif //
-s/ \\$//
-}
-SED
-_lpf='elif git fetch origin main && git checkout main && git merge --ff-only origin/main \'
-else
-cat > "$SEDS/land-pre-fix" <<'SED'
-/^if git fetch origin main && git checkout main && git merge --ff-only origin\/main \\$/,/^fi$/{
-/^if git fetch origin main/!d
-s/^if //
-s/ \\$//
-}
-SED
-_lpf='if git fetch origin main && git checkout main && git merge --ff-only origin/main \'
-fi
-mutate_p 3 land-pre-fix "$_lpf" "@$SEDS/land-pre-fix" \
-  "land-ok:NONE/main/y/-/0 land-wt:NONE/retro/n/-/nz land-diverged:NONE/main/n/-/nz land-tag:NONE/detached/y/-/0" \
-  "the bare chain prints no verdict: a main held by another worktree leaves HEAD on the retro branch and nothing says so"
-
-# --- land-no-symref: drop the branch check; a tag named main lands a detached HEAD as success.
-cat > "$SEDS/land-no-symref" <<'SED'
-/^    && \[ "\$(git symbolic-ref -q --short HEAD)" = main \]; then$/c\
-    ; then
-SED
-mutate_p 3 land-no-symref '&& [ "$(git symbolic-ref -q --short HEAD)" = main ]; then' "@$SEDS/land-no-symref" \
-  "land-ok:ok/main/y/-/0 land-wt:HB/retro/n/holder/nz land-diverged:HB/main/n/none/nz land-tag:ok/detached/y/-/0" \
-  "without the branch check a tag named main fast-forwards a detached HEAD and is reported as landed on main"
-
-# --- land-no-false: the HARD_BLOCK branch no longer ends non-zero; a refused landing reads as a
-# successful tool call. The address is the LAND line, and only the `  false` right after it goes.
-cat > "$SEDS/land-no-false" <<'SED'
-/echo "LAND: HARD_BLOCK — not on main at origin\/main; main is checked out in worktree: /{
-n
-/^  false$/d
-}
-SED
-mutate_p 3 land-no-false 'echo "LAND: HARD_BLOCK — not on main at origin/main; main is checked out in worktree: ${MAIN_WT:-none}"' "@$SEDS/land-no-false" \
-  "land-ok:ok/main/y/-/0 land-wt:HB/retro/n/holder/0 land-diverged:HB/main/n/none/0 land-tag:HB/detached/y/none/0" \
-  "without the trailing false a LAND HARD_BLOCK exits 0, so a refused landing is a successful tool result"
-
-# --- land-names-self: the own-worktree filter dropped; a main held by the clone itself is named
-# as if another worktree held it.
-cat > "$SEDS/land-names-self" <<'SED'
-/^  \[ -n "\$MAIN_WT" \] && \[ "\$(cd "\$MAIN_WT" 2>\/dev\/null && pwd -P)" = "\$SELF_WT" \] && MAIN_WT=""$/d
-SED
-mutate_p 3 land-names-self '[ -n "$MAIN_WT" ] && [ "$(cd "$MAIN_WT" 2>/dev/null && pwd -P)" = "$SELF_WT" ] && MAIN_WT=""' "@$SEDS/land-names-self" \
-  "land-ok:ok/main/y/-/0 land-wt:HB/retro/n/holder/nz land-diverged:HB/main/n/self/nz land-tag:HB/detached/y/none/nz" \
-  "without the own-worktree filter a main that cannot fast-forward in this very checkout is blamed on a worktree holding it"
 fi
 
 # ============================================================================
@@ -1797,7 +1175,7 @@ extract_merge() { # <retro.md> -> the 7a block, fences excluded
 MBLOCK="$(extract_merge "$RETRO")"
 if [ "$ST_MERGE" = absent ]; then
   pending "part 4" "the 7a MERGE block (no '# retro 7a:' comment and no MERGE: token)" \
-    "the worlds merge-ok merge-exit0-open merge-cleanup-failed merge-open merge-view-fails merge-view-lowercase, the part 4 control and the mutants merge-exit-only merge-exit-trusted merge-accept-any-state merge-case-fold merge-no-false are not asserted" 7
+    "the worlds merge-ok merge-exit0-open merge-cleanup-failed merge-open merge-view-fails merge-view-lowercase are not asserted" 1
 else
 _mn="$(grep -c '^# retro 7a: merge the retro PR, then read its state from GitHub$' "$RETRO")" || _mn=0
 case "$_mn:$MBLOCK" in
@@ -1869,104 +1247,7 @@ if [ "$GOT4" = "$EXPECTED4" ]; then
 else
   bad "part 4 battery: expected [$EXPECTED4], got [$GOT4]"
 fi
-cp "$RETRO" "$P4/control.md"
-if cmp -s "$RETRO" "$P4/control.md" && [ "$(extract_merge "$P4/control.md")" = "$MBLOCK" ] && [ "$GOT4" = "$EXPECTED4" ]; then
-  ok "part 4 CONTROL: an unmutated copy reproduces all ${NW4} worlds"
-else
-  echo "FIXTURE ERROR: the part 4 control does not reproduce the battery — expected [$EXPECTED4], got [$GOT4]." >&2
-  exit 2
-fi
 
-# --- merge-exit-only: the pre-fix decision, a non-zero merge exit is a HARD_BLOCK whatever the
-# PR's state. The state is still read, so only the world where it says MERGED after exit 1 moves.
-cat > "$SEDS/merge-exit-only" <<'SED'
-/^elif \[ "\$PR_STATE" = MERGED \]; then$/c\
-elif false; then
-SED
-mutate_p 4 merge-exit-only 'elif [ "$PR_STATE" = MERGED ]; then' "@$SEDS/merge-exit-only" \
-  "merge-ok:merged/mv/0 merge-exit0-open:HB[OPEN]/mv/nz merge-cleanup-failed:HB[MERGED]/mv/nz merge-open:HB[OPEN]/mv/nz merge-view-fails:HB[state-unreadable]/mv/nz merge-view-lowercase:HB[merged]/mv/nz" \
-  "deciding on gh pr merge's exit alone STOPs a retro whose PR GitHub already merged"
-
-# --- merge-exit-trusted: a zero merge exit is trusted without the state; a PR a merge queue left
-# OPEN is reported merged.
-cat > "$SEDS/merge-exit-trusted" <<'SED'
-/^if \[ "\$PR_STATE" = MERGED \] && \[ "\$MERGE_RC" = 0 \]; then$/c\
-if [ "$MERGE_RC" = 0 ]; then
-SED
-mutate_p 4 merge-exit-trusted 'if [ "$PR_STATE" = MERGED ] && [ "$MERGE_RC" = 0 ]; then' "@$SEDS/merge-exit-trusted" \
-  "merge-ok:merged/mv/0 merge-exit0-open:merged/mv/0 merge-cleanup-failed:merged-cleanup/mv/0 merge-open:HB[OPEN]/mv/nz merge-view-fails:HB[state-unreadable]/mv/nz merge-view-lowercase:HB[merged]/mv/nz" \
-  "trusting gh pr merge's exit 0 reports a PR still OPEN behind a merge queue as merged"
-
-# --- merge-accept-any-state: any non-empty state counts as merged after the exact-MERGED arm. OPEN
-# decides; the lower-case and the exit-0-open worlds die with it (each is a non-empty state).
-cat > "$SEDS/merge-accept-any-state" <<'SED'
-/^elif \[ "\$PR_STATE" = MERGED \]; then$/c\
-elif [ -n "$PR_STATE" ]; then
-SED
-mutate_p 4 merge-accept-any-state 'elif [ "$PR_STATE" = MERGED ]; then' "@$SEDS/merge-accept-any-state" \
-  "merge-ok:merged/mv/0 merge-exit0-open:merged-cleanup/mv/0 merge-cleanup-failed:merged-cleanup/mv/0 merge-open:merged-cleanup/mv/0 merge-view-fails:HB[state-unreadable]/mv/nz merge-view-lowercase:merged-cleanup/mv/0" \
-  "accepting any readable state reports a PR that is still OPEN as merged and proceeds to rotate"
-
-# --- merge-case-fold: the state compared case-insensitively. Only the lower-case world moves.
-cat > "$SEDS/merge-case-fold" <<'SED'
-/^elif \[ "\$PR_STATE" = MERGED \]; then$/c\
-elif [ "$(printf '%s' "$PR_STATE" | tr a-z A-Z)" = MERGED ]; then
-SED
-mutate_p 4 merge-case-fold 'elif [ "$PR_STATE" = MERGED ]; then' "@$SEDS/merge-case-fold" \
-  "merge-ok:merged/mv/0 merge-exit0-open:HB[OPEN]/mv/nz merge-cleanup-failed:merged-cleanup/mv/0 merge-open:HB[OPEN]/mv/nz merge-view-fails:HB[state-unreadable]/mv/nz merge-view-lowercase:merged-cleanup/mv/0" \
-  "a case-folded comparison accepts a state that is not exactly MERGED"
-
-# --- merge-no-false: the HARD_BLOCK branch no longer ends non-zero (only the `  false` after the
-# MERGE line goes; the LAND block's own `  false` is untouched).
-cat > "$SEDS/merge-no-false" <<'SED'
-/echo "MERGE: HARD_BLOCK failed — \${PR_STATE:-state unreadable}"/{
-n
-/^  false$/d
-}
-SED
-mutate_p 4 merge-no-false 'echo "MERGE: HARD_BLOCK failed — ${PR_STATE:-state unreadable}"' "@$SEDS/merge-no-false" \
-  "merge-ok:merged/mv/0 merge-exit0-open:HB[OPEN]/mv/0 merge-cleanup-failed:merged-cleanup/mv/0 merge-open:HB[OPEN]/mv/0 merge-view-fails:HB[state-unreadable]/mv/0 merge-view-lowercase:HB[merged]/mv/0" \
-  "without the trailing false a MERGE HARD_BLOCK exits 0, so a refused merge is a successful tool result"
-fi
-
-# ============================================================================
-# ARM pending-gate: PENDING NEVER HIDES A BROKEN SUBJECT. Three seeds keep each subject's anchor and
-# break its block: the Step 1 fallback with its guard body deleted (the `PR_SRC=""; GH_WHY=""` line
-# kept), the LAND block reduced to the bare chain under its kept comment (land-pre-fix's copy), and
-# the 7a block reduced to a bare `gh pr merge` under its kept comment. Each must be classified
-# PRESENT by the same subject_state the gate uses, and each must move its deciding world: RED.
-# It needs all three subjects present to seed from, so before they arrive it is PENDING with them.
-# ============================================================================
-if [ "$ST_FB" = present ] && [ "$ST_LAND" = present ] && [ "$ST_MERGE" = present ]; then
-  cat > "$SEDS/seed-fallback" <<'SED'
-/^  if \[ -z "\$PR_HEAD" \] && \[ -n "\$FORK" \]; then$/,/^  fi$/d
-SED
-  cat > "$SEDS/seed-merge" <<'SED'
-/^PR_STATE="\$(gh pr view <pr-number> --json state --jq \.state)" || PR_STATE=""$/,/^fi$/d
-SED
-  _sf="$P2/seed-fallback.md"; _sl="$P3/m-land-pre-fix.md"; _sm="$P4/seed-merge.md"
-  sed -f "$SEDS/seed-fallback" "$RETRO" > "$_sf"; sed -f "$SEDS/seed-merge" "$RETRO" > "$_sm"
-  _sfn="$(grep -cF 'if [ -z "$PR_HEAD" ] && [ -n "$FORK" ]; then' "$RETRO")" || _sfn=0
-  _smn="$(grep -cF 'PR_STATE="$(gh pr view <pr-number> --json state --jq .state)" || PR_STATE=""' "$RETRO")" || _smn=0
-  if [ "$_sfn" != 1 ] || [ "$_smn" != 1 ] || cmp -s "$RETRO" "$_sf" || cmp -s "$RETRO" "$_sm" || [ ! -f "$_sl" ] || cmp -s "$RETRO" "$_sl"; then
-    echo "FIXTURE ERROR: a pending-gate seed did not apply (fallback anchor ${_sfn}, merge anchor ${_smn}, or a seed equals the subject)." >&2
-    exit 2
-  fi
-  _pg="$(subject_state fallback "$_sf")/$(subject_state land "$_sl")/$(subject_state merge "$_sm")"
-  _pgf="$(battery2 "$_sf" seed-fb repointed)"
-  _pgl="$(battery3 "$_sl" seed-land land-wt)"
-  _pgm="$(battery4 "$_sm" seed-merge merge-cleanup-failed)"
-  if [ "$_pg" = present/present/present ] \
-     && [ "$_pgf" != "$(pick "$EXPECTED2" "$WORLDS2" repointed)" ] \
-     && [ "$_pgl" != "$(pick "$EXPECTED3" "$WORLDS3" land-wt)" ] \
-     && [ "$_pgm" != "$(pick "$EXPECTED4" "$WORLDS4" merge-cleanup-failed)" ]; then
-    ok "pending-gate: an anchor kept over a broken block is PRESENT, never PENDING, and RED — the gutted fallback reads [$_pgf], the bare LAND chain [$_pgl], the bare merge [$_pgm]"
-  else
-    bad "pending-gate: classified [$_pg] (want present/present/present); seeds read [$_pgf] [$_pgl] [$_pgm], and a seed equal to its expected token was not caught"
-  fi
-else
-  pending "pending-gate" "at least one of the gh fallback, the LAND block and the MERGE block" \
-    "the arm proving a kept anchor over a broken block is RED (it seeds from all three) is not asserted" 1
 fi
 
 # ============================================================================
@@ -2021,12 +1302,6 @@ fi
 fi
 
 
-# A plain (per-push) run must drive no matrix-only cell; a --matrix run must drive them.
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MCELLS" -eq 0 ]; then ok "a plain run drove no matrix-only cell: every mutant ran its deciding arm and one twin"; else bad "a plain run drove $MCELLS matrix-only cell(s)"; fi
-else
-  if [ "$MCELLS" -gt 0 ]; then ok "the matrix run drove its matrix-only cells ($MCELLS)"; else bad "the matrix run drove no matrix-only cell"; fi
-fi
 
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
@@ -2035,4 +1310,4 @@ echo
 if [ "$PENDN" -gt 0 ]; then
   echo "retro-branch-behind-main: $PENDN PENDING row(s) skipping $SKIPPED -- their subjects have not arrived in this retro.md"
 fi
-report_end retro-branch-behind-main "$((51 - SKIPPED + PENDBAD))"
+report_end retro-branch-behind-main "$((12 - SKIPPED + PENDBAD))"

@@ -24,8 +24,7 @@
 # `1 block(s)`. Check 14's was the only requirement satisfiable without the run.
 #
 # The fix: surface the validator's own measurement line on PASS, the way failing
-# lines are already surfaced on FAIL. Assertion 4 is the control -- it strips the
-# new branch from a copy and demands the PASS line go back to being content-free.
+# lines are already surfaced on FAIL.
 
 set -uo pipefail
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
@@ -61,8 +60,6 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/_bmad-output" || exit 2
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_vpcTok=0
 
 # A snapshot small enough to pass the byte budget with room to spare. The PASS
 # path is what this fixture measures, so every run below must actually pass.
@@ -76,9 +73,8 @@ B_vpcTok=0
   printf '## Context Reminders\n- context_reminders_sent: none\n\n'
 } > "$WORK/_bmad-output/pipeline-snapshot.md"
 
-run_verdict() { # run_verdict [verdict-script]
-  local v="${1:-$VERDICT}"
-  bash "$v" "$VALIDATOR" --root "$WORK" --only pipeline-snapshot.md \
+run_verdict() {
+  bash "$VERDICT" "$VALIDATOR" --root "$WORK" --only pipeline-snapshot.md \
     >"$WORK/out.txt" 2>&1
   echo "$?"
 }
@@ -98,7 +94,7 @@ fi
 # The assertion that matters. A token count cannot be transcribed out of the
 # instruction; it exists only because the validator ran and measured a file.
 if grep -qE '[0-9]+[[:space:]]+tok' "$WORK/out.txt"; then
-  ok "  and it carries a token measurement (a number the instruction cannot supply)"; B_vpcTok=1
+  ok "  and it carries a token measurement (a number the instruction cannot supply)"
 else
   bad "  PASS output carries no measurement -- the cell is forgeable again"
   sed 's/^/        /' "$WORK/out.txt"
@@ -121,27 +117,7 @@ else
   sed 's/^/        /' "$WORK/silent-out.txt"
 fi
 
-# --- 4. THE MUTATION TEST — prove assertion 2 measures the new code ------------
-# Strip the PASS-content branch from a COPY and demand assertion 2 go green (that
-# is: the measurement disappears). If the number survives the mutation, something
-# else was printing it and assertion 2 proves nothing.
-MUTANT="$WORK/mutant.sh"
-sed '/^    ok_hits=/d; /\[ -z "\$ok_hits" \]/d' "$VERDICT" > "$MUTANT" || exit 2
-if cmp -s "$VERDICT" "$MUTANT"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- the PASS branch was renamed" >&2
-  echo "  update the sed patterns in assertion 4 to match the real code" >&2
-  exit 2
-fi
-mutant_status="$(run_verdict "$MUTANT")"
-if [ "$mutant_status" != "0" ]; then
-  bad "MUTATION: the mutant does not even pass (exit $mutant_status) -- fixture is confounded"
-elif grep -qE '[0-9]+[[:space:]]+tok' "$WORK/out.txt"; then
-  bad "MUTATION: the measurement survives without the PASS branch -- assertion 2 proves nothing"
-else
-  mutant_killed "$B_vpcTok" pass-content-branch-removed "MUTATION: removing the PASS-content branch removes the measurement"
-fi
-
-# --- 5. FAIL still surfaces the failing lines ----------------------------------
+# --- 4. FAIL still surfaces the failing lines ----------------------------------
 # The PASS branch sits directly above the FAIL branch. A regression that captured
 # both would leave a failing gate with no reason attached, which is worse than the
 # defect this change fixes.

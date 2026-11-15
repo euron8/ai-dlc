@@ -1,0 +1,15 @@
+# ledger-reverify-b is a shard driver: it runs the sibling ledger-reverify/run.sh --group b, which reads the reconcile engine, the shared preamble, the in-process lib and the fx_inproc counter lib, and the parent's seed and receipt files. The other shard drivers are read by the sibling's J0 join.
+!core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/consumer-read.sh
+core/skills/ai-dlc-update/reconcile/preclassify.sh
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/ledger-reverify/run.sh
+core/fixtures/ledger-reverify/seed.sh
+core/fixtures/ledger-reverify/receipt-bl890.sh
+core/fixtures/ledger-reverify/receipt-bl932.sh
+core/fixtures/ledger-reverify-c/run.sh
+# The coverage join reads each DIST_SHARDS shard's .dist-only marker (present, non-empty) in the distribution.
+core/fixtures/ledger-reverify-c/.dist-only

@@ -385,7 +385,7 @@ QUALORPHAN
 # (c) MUST STILL DISARM. Every tag is qualified and NONE is a capability. A widening
 # that dropped the type anchor -- `\([^)]*\)` -- reads the `(event ...)` verdict line as
 # a capability entry, closes join (1) on the spec's own self-report, and exits 0. This
-# corpus is what makes that vacuity visible; the mutation control below fires it.
+# corpus is what makes that vacuity visible.
 mkdir -p "$ROOT/real-qualified-noncap"
 cp "$ROOT/real/SPEC.md" "$ROOT/real-qualified-noncap/SPEC.md"
 cat > "$ROOT/real-qualified-noncap/.memlog.md" <<'QUALNONCAP'
@@ -453,8 +453,7 @@ RICHLOG
 # "are gap closures authored during discovery §5's validation cycle" and that two of them
 # are "named or entailed by NO entry inside the LOCKED_REQUIREMENTS block". Join (1) runs
 # LR -> CAP, so a capability with no LR is legal and closes nothing; seeding it that way
-# is what keeps the grammar mutant below from ALSO firing join (1), which would make its
-# assertion an entangled one.
+# is what keeps the grammar arms from ALSO firing join (1).
 mkdir -p "$ROOT/real-suffixed"
 cat > "$ROOT/real-suffixed/SPEC.md" <<'SUFFIXSPEC'
 ---
@@ -834,8 +833,8 @@ SPINEMB
 # `REASON:` PRESENT AND EMPTY. The id segment parses, so the bullet is well-formed enough
 # to name a capability, and the only thing standing between it and an excuse is the
 # requirement that a reason carry text. Two guards read that requirement, and both must
-# be reverted before this corpus can pass -- which is what makes it the mutant's subject
-# rather than the no-REASON payload above.
+# be defeated before this corpus can pass -- which is what separates it from the no-REASON
+# payload above.
 cat > "$ROOT/spine-noad-emptyreason.md" <<'SPINEER'
 # Architecture spine
 
@@ -1573,11 +1572,10 @@ SPINECB
 # list under the marker is the most idiomatic way to write a multi-capability binding.
 # Without this seed every arm above is satisfied by a fold that terminates unconditionally.
 # THE CASE container_start ITSELF DECIDES. Falling through the container branch continues
-# the item anyway, so a nested-list seed cannot kill a mutant that disables the predicate.
+# the item anyway, so a nested-list seed cannot exercise the predicate.
 # What it decides is TERMINATION on a same-or-less-indented sibling. This seed carries a
 # sibling bullet with NO `**<Key>:**` marker in it, deliberately: with a marker the
-# eaten-marker guard owns the case and the mutant dies by the wrong arm, reporting a kill
-# that says nothing about the predicate under test. The `- **Rule:**` bullet is placed
+# eaten-marker guard owns the case and the arm says nothing about the predicate under test. The `- **Rule:**` bullet is placed
 # ABOVE the Binds bullet for the same reason.
 cat > "$ROOT/spine-cont-sibling.md" <<'SPINECS'
 # Architecture spine
@@ -1743,8 +1741,8 @@ LRNOMARK
 
 # AN OPENER WITH NO CLOSER, and Tier 2 addenda below where the closer should be. If this
 # runs to EOF it does not fail loudly -- it silently WIDENS the population by two, both
-# of which are journalled and uncited in the addenda corpus, so the mutant that removes
-# the bound is convicted by a FAIL rather than by a missing DISARM.
+# of which are journalled and uncited in the addenda corpus, so a missing bound is convicted
+# by a FAIL rather than by a missing DISARM.
 cat > "$ROOT/lr-unclosed.md" <<'LRUNCLOSED'
 # S303 — locked requirements
 

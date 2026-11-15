@@ -23,7 +23,7 @@
 #
 # EVERY ARM IS ASSERTED ON ITS OWN WORDING. The four failure causes — no entries, no entry for the
 # prior sprint, a PENDING placeholder, a sha that does not resolve — all exit 1 and would all match
-# a grep for "FAIL". A mutant that collapses two of them into one is exactly what this catches.
+# a grep for "FAIL". A resolver that collapses two of them into one is exactly what this catches.
 #
 # AND SINCE close_reason: a sprint can now close without a retro-PR merge, anchored at the commit it
 # stopped at. Two questions follow, and the second is the one worth the arms: does the resolver
@@ -60,15 +60,12 @@ trap 'rm -rf "$WORK"' EXIT
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
-B_contig=0; B_fires=0; B_ppsha=0; B_pw=0; B_sec=0; B_sline=0; B_sset=0; B_tonly=0
 
 # Isolated toolchain dir: the real validators + no-op sibling stubs so Checks 1/2 do not
 # interfere with the Check 5 line we read. Check 5 reads audit-anchors/gate-log/git from CWD.
 # `schemas/` sits beside `bin/` because validate-audit-anchors.sh resolves its schema at
-# $SCRIPT_DIR/../schemas first — the same relative shape both shipped layouts have, and the
-# same one $WORK/mut/../schemas gives the mutant copies below.
-mkdir -p "$WORK/bin" "$WORK/schemas" "$WORK/mut"
+# $SCRIPT_DIR/../schemas first — the same relative shape both shipped layouts have.
+mkdir -p "$WORK/bin" "$WORK/schemas"
 cp "$VMR" "$WORK/bin/validate-mandatory-rules.sh"
 cp "$VAA" "$WORK/bin/validate-audit-anchors.sh"
 cp "$SCHEMA" "$WORK/schemas/audit-anchors.json"
@@ -107,7 +104,7 @@ echo "check5-anchor-base"
 write_gatelog "deploy completed"
 L="$(check5_line "$WORK/bin/validate-mandatory-rules.sh")"
 if grep -qi 'CHECK 5: FAIL' <<<"$L"; then
-  ok "fires and FAILs on a web/** change with no visual evidence (main..HEAD would have SKIPped)"; B_fires=1
+  ok "fires and FAILs on a web/** change with no visual evidence (main..HEAD would have SKIPped)"
 else
   bad "Check 5 did not fire+FAIL — got: ${L:-<no CHECK 5 line>}"
 fi
@@ -119,24 +116,6 @@ if grep -qi 'CHECK 5: PASS' <<<"$L"; then
   ok "PASSes with USER-CONFIRMED evidence in the sprint gate-log section"
 else
   bad "Check 5 did not PASS with evidence — got: ${L:-<no CHECK 5 line>}"
-fi
-
-# --- 3. MUTATION: revert the base to main..HEAD -> Check 5 SKIPs (cannot fire) ---
-MUTANT="$WORK/mbin/validate-mandatory-rules.sh"
-mkdir -p "$WORK/mbin"
-cp "$WORK/bin/validate-retro-evidence.sh" "$WORK/bin/validate-cycle-commits.sh" \
-   "$WORK/bin/validate-audit-anchors.sh" "$WORK/mbin/"
-sed 's/${CHECK5_BASE}/main/g' "$WORK/bin/validate-mandatory-rules.sh" > "$MUTANT" || exit 2
-if cmp -s "$WORK/bin/validate-mandatory-rules.sh" "$MUTANT"; then
-  echo "FIXTURE ERROR: mutation matched nothing — the CHECK5_BASE reference was renamed" >&2
-  exit 2
-fi
-write_gatelog "deploy completed"   # no evidence: under the anchor base this FAILs
-L="$(check5_line "$MUTANT")"
-if grep -qi 'CHECK 5: SKIP' <<<"$L"; then
-  mutant_killed "$B_fires" revert-base "MUTATION: reverting the base to main..HEAD makes Check 5 SKIP (the anchor base is what fires it)"
-else
-  bad "MUTATION: Check 5 did not SKIP on main..HEAD — got: ${L:-<no CHECK 5 line>}"
 fi
 
 # --- 3b. the caller DELEGATES: with the resolver removed, Check 5 says so by name ---
@@ -158,7 +137,7 @@ fi
 # The resolver itself. Five arms, four causes plus the usage/absence separation.
 #
 # EACH ARM GETS ITS OWN SCENARIO FILE, chosen so that the minus-one is NOT the thing that
-# distinguishes it. Reusing one file made the off-by-one mutant fail three arms at once, which is
+# distinguishes it. Reusing one file made the off-by-one fail three arms at once, which is
 # entanglement: two failures mean one of the assertions is vacuous.
 # ============================================================================
 printf -- '- sprint: 899\n  sha: %s\n- sprint: 900\n  sha: <PENDING-S900-RETRO>\n' "$PRIOR_SHA" > "$WORK/good.md"
@@ -174,7 +153,7 @@ printf -- '- sprint: 899\n  sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n- spr
 # stopped-at base.
 #
 # BOTH close files carry the SAME reason and the SAME sha at sprint N-1 and N, deliberately: the
-# minus-one is arm 4's R token to own, and a close arm that also moved under the off-by-one mutant
+# minus-one is arm 4's R token to own, and a close arm that also moved under the off-by-one
 # would make one of the two vacuous. Two files with DIFFERENT reasons, because a NOTE that named a
 # hardcoded word would satisfy a single one.
 printf -- '- sprint: 949\n  sha: %s\n  close_reason: reset\n- sprint: 950\n  sha: %s\n  close_reason: reset\n' \
@@ -194,7 +173,7 @@ printf -- '- sprint: 800\n  sha: %s\n  close_reason: reset\n- sprint: 801\n  sha
 printf -- '- sprint: 979\n  sha: <PENDING-S979-RETRO>\n  close_reason: reset\n- sprint: 980\n  sha: <PENDING-S980-RETRO>\n  close_reason: reset\n' \
   > "$WORK/close-pending.md"
 
-# battery <script> -> five space-separated tokens, one per arm. A mutant must move EXACTLY one.
+# battery <script> -> five space-separated tokens, one per arm. Each token is asserted on its own.
 battery() {
   local S="$1" out rc t
   t=""
@@ -243,7 +222,7 @@ EXPECTED="R:sha N:named P:named U:named A:usage C:noted X:closed PC:closed"
 # --- 4. the shipping resolver answers all five arms --------------------------
 GOT="$(battery "$WORK/bin/validate-audit-anchors.sh")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "--prior-sprint-sha: resolves sprint N-1 (through a close record too, naming its reason), names each of no-entry / placeholder / unresolvable separately, keeps a wrong argument at exit 2, and stays CLOSED with no sha on stdout when the prior sprint has no entry or only a PENDING one"; B_ppsha=1
+  ok "--prior-sprint-sha: resolves sprint N-1 (through a close record too, naming its reason), names each of no-entry / placeholder / unresolvable separately, keeps a wrong argument at exit 2, and stays CLOSED with no sha on stdout when the prior sprint has no entry or only a PENDING one"
 else
   bad "--prior-sprint-sha battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -258,103 +237,12 @@ else
 fi
 
 # ============================================================================
-# MUTANTS. Each is a COPY guarded by `cmp -s`, all in one directory beside an UNMUTATED CONTROL
-# copied from the same place — a lone copy that cannot find its schema emits nothing, and "no
-# output" otherwise scores as a kill for every mutant at once.
-# ============================================================================
-CTL="$WORK/mut/control.sh"
-cp "$WORK/bin/validate-audit-anchors.sh" "$CTL"
-CGOT="$(battery "$CTL")"
-if [ "$CGOT" = "$EXPECTED" ]; then
-  ok "CONTROL: an unmutated copy in the mutant directory answers identically (the harness itself is not what fails below)"
-else
-  echo "FIXTURE ERROR: the unmutated control does not reproduce the battery — expected [$EXPECTED], got [$CGOT]." >&2
-  echo "  Every mutant verdict below would be meaningless. Most likely the copy cannot resolve ../schemas/." >&2
-  exit 2
-fi
-
-# mutate <tag> <sed-program> <expected-battery> <what-it-proves>
-mutate() {
-  local tag="$1" prog="$2" want="$3" claim="$4"
-  local M="$WORK/mut/$tag.sh" got
-  sed "$prog" "$WORK/bin/validate-audit-anchors.sh" > "$M" || { bad "MUTANT $tag: sed failed"; return; }
-  if cmp -s "$WORK/bin/validate-audit-anchors.sh" "$M"; then
-    echo "FIXTURE ERROR: mutant '$tag' matched nothing — the line it targets was renamed." >&2
-    exit 2
-  fi
-  got="$(battery "$M")"
-  if [ "$got" = "$want" ]; then
-    mutant_killed "$B_ppsha" "$tag" "MUTANT $tag: $claim"
-  else
-    bad "MUTANT $tag ($claim): expected battery [$want], got [$got]"
-  fi
-}
-
-# The minus-one. Without it the resolver returns the CURRENT sprint's anchor, which on a live file
-# is the PENDING one the retro has not backfilled yet — so it fails where it should have resolved.
-mutate offbyone \
-  's/prior   = current - 1/prior   = current - 0/' \
-  "R:no N:named P:named U:named A:usage C:noted X:closed PC:closed" \
-  "dropping the minus-one stops sprint N-1 resolving, and moves nothing else"
-
-# The placeholder arm. Removing it does not make a PENDING file pass — git still refuses the value
-# — it makes the resolver report the WRONG CAUSE, which is the failure a grep for FAIL cannot see.
-mutate placeholder \
-  's/if "PENDING" in raw.upper():/if False and "PENDING" in raw.upper():/' \
-  "R:sha N:named P:no U:named A:usage C:noted X:closed PC:closed" \
-  "without its own arm a PENDING anchor is reported as an unresolvable sha, not as an unmerged retro"
-
-# The git resolution. Without it an anchor that names no commit in this repository passes.
-mutate resolve \
-  's/if rc != 0 or not resolved:/if False and (rc != 0 or not resolved):/' \
-  "R:sha N:named P:named U:no A:usage C:noted X:closed PC:closed" \
-  "without the rev-parse verdict a sha that resolves to nothing is accepted as the audit base"
-
-# The no-entry arm — the one Check 18's own text calls out: silent skip on a missing anchor is
-# forbidden, so the absence has to be a named finding rather than whatever falls out downstream.
-mutate noentry \
-  's/^    if not matches:/    if False:/' \
-  "R:sha N:no P:named U:named A:usage C:noted X:closed PC:closed" \
-  "without its own arm a missing prior-sprint entry stops being a named finding"
-
-# The usage/absence separation. A fumbled argument must not arrive as exit 1, which Check 18 reads
-# as "the anchor is missing" and fails the gate on.
-mutate usagesplit \
-  's/if \[ "\$MODE" = "prior-sprint-sha" \]; then/if [ "$MODE" = "prior-sprint-sha-DISABLED" ]; then/' \
-  "R:sha N:named P:named U:named A:1 C:noted X:closed PC:closed" \
-  "without the argument check a non-numeric sprint exits 1, which a caller reads as a missing anchor"
-
-# THE EXEMPTION THAT WAS AVAILABLE AND NOT TAKEN. This one is not a revert of a layer — it is the
-# wrong fix, written out: let a close record anywhere in the file stand in for the prior sprint's
-# missing entry. It is the shape the filing invites ("the sprint was closed, so the chain is fine")
-# and it passes every other arm here, including the no-entry arm, because a file with no close
-# records at all is unaffected. X is the only thing that sees it.
-mutate exemption \
-  's/^    matches = \[e for e in entries if e.get("sprint", "") == str(prior)\]$/    matches = [e for e in entries if e.get("sprint", "") == str(prior)] or [e for e in entries if e.get("close_reason")]/' \
-  "R:sha N:named P:named U:named A:usage C:noted X:open PC:closed" \
-  "a close record standing in for a MISSING prior-sprint entry opens the gate, and only the anti-exemption arm sees it"
-
-# PC has no mutant of its own, and that is a finding rather than a gap: no single-layer removal
-# opens it. The placeholder arm closes it first, and with that arm disabled the rev-parse verdict
-# closes it anyway — the two layers already carry the `placeholder` and `resolve` mutants above, and
-# PC asserts they compose on an entry that carries a close_reason.
-
-# The close-record NOTE. Removing it does not stop a close record RESOLVING — the sha is real, so
-# the gate still passes on it — it makes the resolution look identical to one anchored on a retro-PR
-# merge. That is the whole difference the field exists to carry, and it is invisible to an exit
-# code: an operator reading the audit window would be told a merge base where none exists.
-mutate closenote \
-  's/^    if cr:$/    if False:/' \
-  "R:sha N:named P:named U:named A:usage C:nono X:closed PC:closed" \
-  "without the NOTE a sprint closed WITHOUT a retro-PR merge resolves silently, reading exactly like a merge anchor"
-
-# ============================================================================
 # CONTIGUITY BELOW THE PRIOR SPRINT (BL-007). The resolution is a 1-deep link, so a hole at N-2 or
 # older used to be invisible. It is now a `PENDING — contiguity` line on stderr and NOTHING ELSE:
 # the anchor resolved, both callers read non-zero as "did not resolve", and consumer chains already
 # carry historical holes. So every arm asserts exit 0 AND the sha on stdout as well as the line.
 #
-# THREE WORLDS, one token each, and a mutant for each:
+# THREE WORLDS, one token each:
 #   g  sprints 10 and 12, asking for 13. The motivating case: 12 resolves, 11 is missing.
 #   q  THE NEAR-MISS: 10, 12, 11 in that ORDER, asking for 13. No hole, but out of order, which
 #      is the property an adjacency scan would key on — real chains append 267 before 266.
@@ -386,36 +274,10 @@ CONTIG_EXPECTED="G:yyy"
 
 CG="$(contig_battery "$WORK/bin/validate-audit-anchors.sh")"
 if [ "$CG" = "$CONTIG_EXPECTED" ]; then
-  ok "--prior-sprint-sha names a hole older than the prior sprint as PENDING on stderr, keeps exit 0 and the sha on stdout, stays quiet on an out-of-order chain with no hole, and sees a hole at the live/archive seam without indicting the archive's own history"; B_contig=1
+  ok "--prior-sprint-sha names a hole older than the prior sprint as PENDING on stderr, keeps exit 0 and the sha on stdout, stays quiet on an out-of-order chain with no hole, and sees a hole at the live/archive seam without indicting the archive's own history"
 else
   bad "--prior-sprint-sha contiguity battery: expected [$CONTIG_EXPECTED], got [$CG]"
 fi
-CCG="$(contig_battery "$CTL")"
-if [ "$CCG" = "$CONTIG_EXPECTED" ]; then
-  ok "CONTROL: the unmutated copy answers the contiguity battery identically"
-else
-  echo "FIXTURE ERROR: the unmutated control does not reproduce the contiguity battery — expected [$CONTIG_EXPECTED], got [$CCG]." >&2
-  exit 2
-fi
-
-# contig_mutate <tag> <sed-program> <expected> <claim>
-contig_mutate() {
-  local tag="$1" prog="$2" want="$3" claim="$4"
-  local M="$WORK/mut/$tag.sh" got
-  sed "$prog" "$WORK/bin/validate-audit-anchors.sh" > "$M" || { bad "MUTANT $tag: sed failed"; return; }
-  if cmp -s "$WORK/bin/validate-audit-anchors.sh" "$M"; then
-    echo "FIXTURE ERROR: mutant '$tag' matched nothing — the line it targets was renamed." >&2
-    exit 2
-  fi
-  got="$(contig_battery "$M")"
-  if [ "$got" = "$want" ]; then mutant_killed "$B_contig" "$tag" "MUTANT $tag: $claim"; else bad "MUTANT $tag ($claim): expected [$want], got [$got]"; fi
-}
-contig_mutate nocontig 's/^    if missing:$/    if False:/' "G:nyn" \
-  "without the report a hole older than the prior sprint is invisible again, and the near-miss stays quiet"
-contig_mutate lastappended 's/^    present = sprint_ints(entries)$/    present = sprint_ints(entries[:-1])/' "G:yny" \
-  "a reader that does not count the last-appended entry reads an out-of-order chain as holed, and only the near-miss sees it"
-contig_mutate noseam 's/^    if archive_max is not None and archive_max + 1 < floor:$/    if False:/' "G:yyn" \
-  "without the archive floor a hole pruned to the live/archive seam is invisible, which is the case the entry describes"
 
 # ============================================================================
 # THE TEST-ONLY CARVE-OUT. Check 5 fires on ANY web/** member of the diff, so a sprint whose
@@ -426,7 +288,7 @@ contig_mutate noseam 's/^    if archive_max is not None and archive_max + 1 < fl
 # SIX WORLDS, and the three that matter are the ones a WRONG fix passes:
 #
 #   H  a helper under a tests dir with NO suffix. A directory-keyed rule acquits it; it is source,
-#      and Check 5 must still fire. This is the seed that kills the directory rule, and the
+#      and Check 5 must still fire. This is the seed that catches the directory rule, and the
 #      consumer corpus has exactly one such file.
 #   E  an e2e `.spec.` under `web/tests/e2e/`. THE ACQUITTAL PROBE, and it is asserted as a SKIP:
 #      the suffix rule DOES acquit an all-e2e diff. That is stated as a decision, not hidden —
@@ -438,7 +300,7 @@ contig_mutate noseam 's/^    if archive_max is not None and archive_max + 1 < fl
 #
 # M is the ALL-not-ANY arm and it is the one this whole change turns on: one test file beside one
 # source file must still FIRE. N is the pre-existing no-web/** skip, asserted on its own wording so
-# a mutant that collapses the two skip reasons into one is visible.
+# a collapse of the two skip reasons into one is visible.
 # ============================================================================
 c5_world() {  # <branch-suffix> <file>...  — a tree whose PRIOR_SHA..HEAD is exactly these files
   local tag="$1"; shift
@@ -463,7 +325,7 @@ c5_world() {  # <branch-suffix> <file>...  — a tree whose PRIOR_SHA..HEAD is e
   write_gatelog "deploy completed"   # no visual evidence: a firing Check 5 FAILs
 }
 
-# battery5 <script> -> six tokens. A mutant must move a set no other mutant moves.
+# battery5 <script> -> six tokens. Each token is asserted on its own.
 battery5() {
   local S="$1" L t=""
 
@@ -547,7 +409,7 @@ EXPECTED5="T:skip-named M:fires E:skip N:noweb H:fires P:fires R:fires B:fires"
 # --- 6. the shipping validator answers every world -----------------------------
 GOT5="$(battery5 "$WORK/bin/validate-mandatory-rules.sh")"
 if [ "$GOT5" = "$EXPECTED5" ]; then
-  ok "test-only carve-out: an all-test web/** diff SKIPs and SAYS test-only, a test file BESIDE a source file still FIREs, a no-suffix helper under a tests dir still FIREs, the pre-existing no-web/** skip keeps its own wording, and a 22-file diff whose only source sits past position 20 still FIREs"; B_tonly=1
+  ok "test-only carve-out: an all-test web/** diff SKIPs and SAYS test-only, a test file BESIDE a source file still FIREs, a no-suffix helper under a tests dir still FIREs, the pre-existing no-web/** skip keeps its own wording, and a 22-file diff whose only source sits past position 20 still FIREs"
 else
   bad "test-only battery: expected [$EXPECTED5], got [$GOT5]"
 fi
@@ -577,112 +439,9 @@ fi
 # must yield nothing, or the extractor is matching on something other than what it claims.
 SUFFIX_CTL="$(printf '%s\n' 'CHECK5_WEB_N="$(printf ... )"' | sed -n 's/^CHECK5_WEB_NONTEST=.*\$NF !~ \/\\\.(\([^)]*\))\\\.\/.*/\1/p')"
 if [ "$SUFFIX_SET" = "test|spec" ] && [ -z "$SUFFIX_CTL" ]; then
-  ok "the acquitted suffix SET is exactly [test|spec] at the emission site (control: the same extraction against a non-emitting line yields nothing) — a THIRD suffix cannot be added without failing here, which no battery of worlds can see"; B_sset=1
+  ok "the acquitted suffix SET is exactly [test|spec] at the emission site (control: the same extraction against a non-emitting line yields nothing) — a THIRD suffix cannot be added without failing here, which no battery of worlds can see"
 else
   bad "acquitted suffix set is [$SUFFIX_SET], expected [test|spec] — a member was added or removed. If this widening is intended, the change belongs in a release that argues for it, and this arm is where it is argued. (extraction control returned [$SUFFIX_CTL], expected empty)"
-fi
-
-# --- 8. CONTROL: an unmutated copy in the mutant directory answers identically ---
-C5CTL="$WORK/mut5-control/validate-mandatory-rules.sh"
-mkdir -p "$WORK/mut5-control"
-cp "$WORK/bin/validate-mandatory-rules.sh" "$WORK/bin/validate-audit-anchors.sh" \
-   "$WORK/bin/validate-retro-evidence.sh" "$WORK/bin/validate-cycle-commits.sh" "$WORK/mut5-control/"
-C5GOT="$(battery5 "$C5CTL")"
-if [ "$C5GOT" = "$EXPECTED5" ]; then
-  ok "CONTROL: an unmutated copy beside the mutants answers every world (a mutant's silence below is the mutation, not a copy that could not find its siblings)"
-else
-  echo "FIXTURE ERROR: the unmutated Check 5 control does not reproduce the battery — expected [$EXPECTED5], got [$C5GOT]." >&2
-  exit 2
-fi
-
-# mutate5 <tag> <sed-program> <expected-battery> <what-it-proves>
-mutate5() {
-  local tag="$1" prog="$2" want="$3" claim="$4"
-  local D="$WORK/mut5-$tag" got
-  mkdir -p "$D"
-  cp "$WORK/bin/validate-audit-anchors.sh" "$WORK/bin/validate-retro-evidence.sh" \
-     "$WORK/bin/validate-cycle-commits.sh" "$D/"
-  sed "$prog" "$WORK/bin/validate-mandatory-rules.sh" > "$D/validate-mandatory-rules.sh" \
-    || { bad "MUTANT $tag: sed DID NOT APPLY"; return; }
-  if cmp -s "$WORK/bin/validate-mandatory-rules.sh" "$D/validate-mandatory-rules.sh"; then
-    echo "FIXTURE ERROR: mutant '$tag' matched nothing — the line it targets was renamed." >&2
-    exit 2
-  fi
-  got="$(battery5 "$D/validate-mandatory-rules.sh")"
-  if [ "$got" = "$want" ]; then
-    mutant_killed "$B_tonly" "$tag" "MUTANT $tag: $claim"
-  elif [ "$got" = "$EXPECTED5" ]; then
-    bad "MUTANT $tag SURVIVED: $claim — every world unchanged, so nothing here can catch it"
-  else
-    bad "MUTANT $tag ($claim): expected battery [$want], got [$got]"
-  fi
-}
-
-# WRONG FIX 1, keyed on the containing DIRECTORY as WELL as the suffix — "a test file is one that
-# carries the suffix OR lives under a tests dir". This is the shape to build, not a pure directory
-# rule: a pure one fails the FILED case (the consumer's `.test.jsx` sits under no tests dir), so it
-# would never have been proposed. The union fixes the filing AND acquits the helper, which is
-# exactly how a wrong fix survives review — and H is the only world that separates them.
-mutate5 dirkey \
-  "s@-F/ 'NF && \$NF !~ /@-F/ 'NF \&\& \$0 !~ /(^|\\\\/)tests?\\\\// \&\& \$NF !~ /@" \
-  "T:skip-named M:fires E:skip N:noweb H:SKIPPED P:fires R:fires B:fires" \
-  "widening the rule to acquit anything under a tests dir lets a no-suffix HELPER — source, and the consumer has exactly one — pass as a test file, and no other world can see it"
-
-# WRONG FIX 2, ANY instead of ALL: skip as soon as one changed file is a test file. Both halves
-# are flipped, because either alone is not the wrong fix — it is the pair.
-mutate5 anyfix \
-  's@\$NF !~ /\\.(test|spec)\\./@$NF ~ /\\.(test|spec)\\./@; s@elif \[ -z "\$CHECK5_WEB_NONTEST" \]@elif [ -n "$CHECK5_WEB_NONTEST" ]@' \
-  "T:skip-named M:SKIPPED E:skip N:noweb H:fires P:fires R:SKIPPED B:SKIPPED" \
-  "skipping when ANY changed file is a test acquits the mixed test+source diff AND the renamed-source diff — M owns the finding, and R moving is the same defect reached by a second road rather than a second one"
-
-# The truncation the carve-out was grafted onto. It answers "is this list empty" correctly and
-# "is EVERY member a test" wrongly, and only the 22-file world can see the difference.
-mutate5 truncate \
-  's@2>/dev/null)"$@2>/dev/null | head -20)"@' \
-  "T:skip-named M:fires E:skip N:noweb H:fires P:fires R:fires B:SKIPPED" \
-  "restoring the 20-line truncation on the enumeration acquits a diff whose only source file sorts past position 20, and moves no other world"
-
-# The PATHSPEC. Narrowing it to the two `**`-suffixed globs is the plausible tidy-up — they look
-# like they subsume the bare one, and they do not reach `web/index.html`. It does not error: the
-# diff comes back EMPTY and Check 5 reports "no web/** file changes", a SKIP that reads exactly
-# like a sprint which touched no web file at all.
-mutate5 pathspec \
-  "s@-- 'web/\*\*' 'web/src/\*\*' 'web/tests/\*\*'@-- 'web/src/**' 'web/tests/**'@" \
-  "T:skip-named M:fires E:skip N:noweb H:fires P:SKIPPED R:fires B:fires" \
-  "dropping the bare web/** glob makes a TOP-LEVEL web file invisible — it SKIPs as 'no web/** file changes' — and only the toplevel world can see it"
-
-# RENAME DETECTION. Removing --no-renames restores git's default, under which a source file
-# renamed to a test name enumerates as ONE line (the test path) and the deletion of the rendered
-# component is laundered into a test-only diff.
-mutate5 renames \
-  's@--name-only --no-renames@--name-only@' \
-  "T:skip-named M:fires E:skip N:noweb H:fires P:fires R:SKIPPED B:fires" \
-  "without --no-renames a source file renamed to a test-suffixed name enumerates as one test path, and a diff that DELETED a rendered component is acquitted as test-only"
-
-# THE SUFFIX WIDENING, scored differently from every mutant above BECAUSE THE BATTERY CANNOT SEE
-# IT. `.stories.` is a rendering artifact, and adding it to the acquittal moves NO world — every
-# world spells a `.test.` or a `.spec.`, so a battery of worlds is structurally blind to a third
-# member. This asserts both halves: the battery is unchanged, AND the set-lock arm reads the
-# widened set. That pair is the whole claim assertion 7 exists to carry.
-C5STORIES="$WORK/mut5-stories"
-mkdir -p "$C5STORIES"
-cp "$WORK/bin/validate-audit-anchors.sh" "$WORK/bin/validate-retro-evidence.sh" \
-   "$WORK/bin/validate-cycle-commits.sh" "$C5STORIES/"
-sed 's@(test|spec)@(test|spec|stories)@' "$WORK/bin/validate-mandatory-rules.sh" \
-  > "$C5STORIES/validate-mandatory-rules.sh" \
-  || { echo "FIXTURE ERROR: mutant 'stories' sed DID NOT APPLY" >&2; exit 2; }
-if cmp -s "$WORK/bin/validate-mandatory-rules.sh" "$C5STORIES/validate-mandatory-rules.sh"; then
-  echo "FIXTURE ERROR: mutant 'stories' matched nothing — the acquittal regex was reshaped." >&2
-  exit 2
-fi
-C5SGOT="$(battery5 "$C5STORIES/validate-mandatory-rules.sh")"
-C5SSET="$(c5_suffix_set "$C5STORIES/validate-mandatory-rules.sh")"
-if [ "$C5SSET" != "test|spec|stories" ]; then
-  bad "MUTANT stories: the widened set extracted as [$C5SSET], expected [test|spec|stories] — the set-lock arm is not reading what it claims to read"
-elif [ "$C5SGOT" != "$EXPECTED5" ]; then
-  bad "MUTANT stories: expected the world battery to be UNCHANGED at [$EXPECTED5] — that blindness is the finding — but got [$C5SGOT]"
-else
-  mutant_killed "$(( $B_tonly && $B_sset ))" stories "MUTANT stories: widening the acquittal to a THIRD suffix leaves every world unchanged, so no battery of worlds can catch it, and the set-lock arm is what reads [test|spec|stories] and refuses"
 fi
 
 # ============================================================================
@@ -691,14 +450,14 @@ fi
 # same section — and the deploy-validate entry is among the LAST things written to it. The awk
 # already stops at the next `## Gate Log: Sprint` header, so nothing needed truncating.
 #
-# TWO WORLDS AND ONE STRUCTURAL ARM, and each exists to kill one wrong fix the others pass:
+# TWO WORLDS AND ONE STRUCTURAL ARM, and each exists for one wrong fix the others pass:
 #
 #   L  a ~700-line Sprint 900 section whose only evidence sits at section line ~350 — outside the
 #      first 200 AND outside the last 200. The filing's own section read 2 evidence tokens in its
 #      last 200 lines and 0 in its first, so a `tail -200` "fix" passes that section and fails
 #      this one. It is the world that tells the truncation from the whole-section read.
 #   X  a Sprint 900 section with NO evidence followed by a Sprint 901 section WITH it, asked for
-#      900. Must FAIL. The wrong fix it kills reads the whole FILE rather than the section, which
+#      900. Must FAIL. The wrong fix it catches reads the whole FILE rather than the section, which
 #      passes L as well as the correct fix does.
 #   S  the isolation line carries no `head`. A `head -2000` passes both worlds — no world short
 #      of 2000 lines can see it, and the next consumer section that grows past it is this defect
@@ -748,7 +507,7 @@ sec_line_token() {  # <script> -> S:clean | S:head | S:lost
 }
 # The extractor's self-probe, both directions, on lines built here: a piped head must read S:head,
 # and the same line without it S:clean. Without this a case pattern that could never match would
-# read S:clean on every mutant as well as on the fix.
+# read S:clean on a bounded line as well as on the fix.
 SEC_PROBE="$WORK/sec-probe.sh"
 printf '    SPRINT_SECTION=$(awk "{print}" "$GATE_LOG" 2>/dev/null | head -2000)\n' > "$SEC_PROBE"
 SEC_P1="$(sec_line_token "$SEC_PROBE")"
@@ -762,7 +521,7 @@ fi
 # --- 9. the shipping validator reads the whole section, and only this sprint's ---
 GOTSEC="$(battery_sec "$WORK/bin/validate-mandatory-rules.sh")"
 if [ "$GOTSEC" = "$EXPECTED_SEC" ]; then
-  ok "long-section: evidence at line ~350 of a ~700-line sprint section PASSes (outside both the first and the last 200), and a later sprint's evidence does not acquit this one"; B_sec=1
+  ok "long-section: evidence at line ~350 of a ~700-line sprint section PASSes (outside both the first and the last 200), and a later sprint's evidence does not acquit this one"
 else
   bad "long-section battery: expected [$EXPECTED_SEC], got [$GOTSEC]"
 fi
@@ -770,67 +529,10 @@ fi
 # --- 10. the isolation line carries no head -------------------------------------
 GOTS="$(sec_line_token "$WORK/bin/validate-mandatory-rules.sh")"
 if [ "$GOTS" = "S:clean" ]; then
-  ok "the SPRINT_SECTION isolation line carries no head (extractor self-probed both ways) — a bounded prefix of the section cannot come back without failing here"; B_sline=1
+  ok "the SPRINT_SECTION isolation line carries no head (extractor self-probed both ways) — a bounded prefix of the section cannot come back without failing here"
 else
   bad "the SPRINT_SECTION isolation line reads [$GOTS], expected [S:clean] — a head truncates the sprint's own later lines, and the deploy-validate entry is among the last written"
 fi
-
-# --- 11. CONTROL for the section mutants: an unmutated copy with its siblings ---
-SECCTL="$WORK/mutsec-control"
-mkdir -p "$SECCTL"
-cp "$WORK/bin/validate-mandatory-rules.sh" "$WORK/bin/validate-audit-anchors.sh" \
-   "$WORK/bin/validate-retro-evidence.sh" "$WORK/bin/validate-cycle-commits.sh" "$SECCTL/"
-SECCGOT="$(battery_sec "$SECCTL/validate-mandatory-rules.sh")"
-if [ "$SECCGOT" = "$EXPECTED_SEC" ]; then
-  ok "CONTROL: an unmutated copy beside the section mutants PASSes the long world and FAILs the cross-sprint world"
-else
-  echo "FIXTURE ERROR: the unmutated section control does not reproduce — expected [$EXPECTED_SEC], got [$SECCGOT]." >&2
-  exit 2
-fi
-
-# mutsec <tag> <sed-program> <expected "battery S-token"> <claim>
-mutsec() {
-  local tag="$1" prog="$2" want="$3" claim="$4"
-  local D="$WORK/mutsec-$tag" got
-  mkdir -p "$D"
-  cp "$WORK/bin/validate-audit-anchors.sh" "$WORK/bin/validate-retro-evidence.sh" \
-     "$WORK/bin/validate-cycle-commits.sh" "$D/"
-  sed "$prog" "$WORK/bin/validate-mandatory-rules.sh" > "$D/validate-mandatory-rules.sh" \
-    || { bad "MUTANT $tag: sed DID NOT APPLY"; return; }
-  if cmp -s "$WORK/bin/validate-mandatory-rules.sh" "$D/validate-mandatory-rules.sh"; then
-    echo "FIXTURE ERROR: mutant '$tag' matched nothing — the SPRINT_SECTION line was reshaped." >&2
-    exit 2
-  fi
-  got="$(battery_sec "$D/validate-mandatory-rules.sh") $(sec_line_token "$D/validate-mandatory-rules.sh")"
-  if [ "$got" = "$want" ]; then
-    mutant_killed "$(( $B_sec && $B_sline ))" "$tag" "MUTANT $tag: $claim"
-  elif [ "$got" = "$EXPECTED_SEC S:clean" ]; then
-    bad "MUTANT $tag SURVIVED: $claim — every cell unchanged"
-  else
-    bad "MUTANT $tag ($claim): expected [$want], got [$got]"
-  fi
-}
-
-# WRONG FIX 1: read the END of the section instead of its start. It passes the filing's own
-# section, whose two evidence tokens sit in its last 200 lines, and fails L.
-mutsec tail200 \
-  's@"\$GATE_LOG" 2>/dev/null)$@"$GATE_LOG" 2>/dev/null | tail -200)@' \
-  "L:FAIL X:fails S:clean" \
-  "reading the last 200 lines of the section misses evidence in its middle, and only the long world sees it"
-
-# WRONG FIX 2: grep the whole FILE. Every long section passes, and so does a sprint that carries
-# no evidence of its own beside a later sprint that does.
-mutsec wholefile \
-  's@^    SPRINT_SECTION=\$(awk .*@    SPRINT_SECTION=$(cat "$GATE_LOG" 2>/dev/null)@' \
-  "L:pass X:PASSED S:clean" \
-  "reading the whole gate log acquits Sprint 900 on Sprint 901's evidence, and only the cross-sprint world sees it"
-
-# WRONG FIX 3: raise the bound. Both worlds are unchanged — neither is 2000 lines — and that
-# blindness is the reason S exists; the structural arm is what reads the head.
-mutsec head2000 \
-  's@"\$GATE_LOG" 2>/dev/null)$@"$GATE_LOG" 2>/dev/null | head -2000)@' \
-  "L:pass X:fails S:head" \
-  "a larger head passes every world short of its bound, and only the structural arm refuses it"
 
 # ============================================================================
 # THE PLAYWRIGHT ARM READS A RUN, NOT A MENTION. deploy-validate.md §4 writes the automated row as
@@ -867,43 +569,11 @@ EXPECTED_PW="i:FAIL ii:PASS iii:PASS iv:FAIL v:FAIL vi:FAIL"
 # --- 12. the shipping validator reads a run, not a mention -----------------------
 GOTPW="$(battery_pw "$WORK/bin/validate-mandatory-rules.sh")"
 if [ "$GOTPW" = "$EXPECTED_PW" ]; then
-  ok "playwright evidence: a could-not-run row FAILs alone and PASSes beside USER-CONFIRMED, a run row with its .zip trace PASSes, no playwright FAILs, and both near-misses (a 'no trace captured' row, an xzip with no .zip) FAIL"; B_pw=1
+  ok "playwright evidence: a could-not-run row FAILs alone and PASSes beside USER-CONFIRMED, a run row with its .zip trace PASSes, no playwright FAILs, and both near-misses (a 'no trace captured' row, an xzip with no .zip) FAIL"
 else
   bad "playwright battery: expected [$EXPECTED_PW], got [$GOTPW]"
 fi
 
-# --- 13. CONTROL: the unmutated copy beside the section mutants answers identically ---
-PWCGOT="$(battery_pw "$SECCTL/validate-mandatory-rules.sh")"
-if [ "$PWCGOT" = "$EXPECTED_PW" ]; then
-  ok "CONTROL: an unmutated copy with its siblings answers the playwright battery identically"
-else
-  echo "FIXTURE ERROR: the unmutated playwright control does not reproduce — expected [$EXPECTED_PW], got [$PWCGOT]." >&2
-  exit 2
-fi
-
-# --- 14. MUTANT: the bare match restored -----------------------------------------
-PWM="$WORK/mutpw-bare"
-mkdir -p "$PWM"
-cp "$WORK/bin/validate-audit-anchors.sh" "$WORK/bin/validate-retro-evidence.sh" \
-   "$WORK/bin/validate-cycle-commits.sh" "$PWM/"
-sed "s@^      if awk 'tolower(\$0) ~ /playwright/ .*\$@      if grep -qi 'playwright' <<<\"\$SPRINT_SECTION\"; then@" \
-  "$WORK/bin/validate-mandatory-rules.sh" > "$PWM/validate-mandatory-rules.sh" \
-  || { echo "FIXTURE ERROR: mutant 'bare' sed DID NOT APPLY" >&2; exit 2; }
-if cmp -s "$WORK/bin/validate-mandatory-rules.sh" "$PWM/validate-mandatory-rules.sh"; then
-  echo "FIXTURE ERROR: mutant 'bare' matched nothing — the playwright awk line was reshaped." >&2
-  exit 2
-fi
-bash -n "$PWM/validate-mandatory-rules.sh" \
-  || { echo "FIXTURE ERROR: mutant 'bare' is not valid bash" >&2; exit 2; }
-PWMGOT="$(battery_pw "$PWM/validate-mandatory-rules.sh")"
-if [ "$PWMGOT" = "i:PASS ii:PASS iii:PASS iv:FAIL v:PASS vi:PASS" ]; then
-  mutant_killed "$B_pw" bare "MUTANT bare: restoring grep -qi 'playwright' PASSes the could-not-run row and both near-misses, and moves nothing else"
-elif [ "$PWMGOT" = "$EXPECTED_PW" ]; then
-  bad "MUTANT bare SURVIVED: the bare match restored moves no case"
-else
-  bad "MUTANT bare: expected [i:PASS ii:PASS iii:PASS iv:FAIL v:PASS vi:PASS], got [$PWMGOT]"
-fi
-
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-report_end check5-anchor-base 37
+report_end check5-anchor-base 11

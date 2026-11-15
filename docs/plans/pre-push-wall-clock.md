@@ -1267,7 +1267,7 @@ that resolves in this tree can resolve nowhere in an installed one.
 - `.githooks/pre-push` — `:172-566` fenced pool region; merge at `:517-518`; expired width
   justification at `:133-158`
 - `core/git-hooks/pre-push` — the I66 twin; every pool-region edit lands here identically
-- `core/fixtures/enforcement-map-sites/run.sh:1717-1838` — the shard pattern to copy
+- `core/fixtures/enforcement-map-sites/run.sh:692-745` — the shard pattern to copy
 - `core/fixtures/enforcement-map-sites-b/` — the wrapper + `.dist-only` shape to copy
 - `core/fixtures/enforcement-map-derivations/run.sh` — Step 2
 - `core/fixtures/layer-contract-conformance/run.sh:80-97, 504-539, 589-596` — Step 3, the hard one

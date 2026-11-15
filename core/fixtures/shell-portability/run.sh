@@ -8,13 +8,10 @@
 # run and a scanner whose patterns stopped matching anything produce the identical line, so
 # the arms are proven here or not at all.
 #
-# TWO SHAPES OF UNIT, AND S8 AND S10 EACH NEED BOTH. `m*` seeds an OFFENDER into a sandbox
-# corpus and asserts the shipped validator reports it. `x*` seeds an offender AND THEN rewrites
-# one cell of the validator's own arm table in the sandbox copy, asserting the report changes.
-# S1-S7 are one pattern each and a seeded offender proves them; S8 is a pattern plus two per-arm
-# COLUMNS plus a split empty-corpus guard, and S10 is a pattern plus a context span plus a
-# whitespace exclusion plus a language subtraction plus the script-wide `LC_ALL=C`. A seeded
-# offender proves only that SOME combination of those found it. Each `x*` names which one.
+# `m*` seeds an OFFENDER into a sandbox corpus and asserts the shipped validator reports it, and
+# only the arm it names. `n*` seeds a measured near-miss (usually the fix an arm prescribes) and
+# asserts silence. `m8`/`m10*` empty one corpus and assert the refusal names that corpus. m14 runs
+# /bin/bash 3.2 as the oracle for S13. Each seed is one grammar the arm must spell.
 #
 #   control  a clean seed                                        -> must PASS
 #   m1  S1  `sed -i 's/x/y/'` with no suffix and no ''            -> must FAIL
@@ -41,49 +38,16 @@
 #   m12 S11 an unguarded `cd` above `git init` in a fixture seed  -> must FAIL
 #   m12b S11 the same under `set -euo pipefail`                   -> must FAIL
 #   m12c S11 four `cd`s whose only guard token sits past a `;`    -> must FAIL, 4 counted lines
-#   x1  S8  S8_CORPUS forced from `instr` to `shell`              -> the report must VANISH
-#   x2  S8  S8_COMMENTS forced from `keep` to `skip`              -> the report must VANISH
-#   x3  S8  S8_PAT narrowed to require `git` on the line          -> the report must VANISH
-#   x4      the CORE empty-corpus condition pointed at n_shell    -> its NAMED refusal must VANISH
-#   x5  S10 the context span narrowed from `.*` back to `[^#]*`   -> 5 lines must become 4
-#   x6  S10 S10_SKIP emptied                                      -> a report must APPEAR
-#   x7  S10 `export LC_ALL=C` deleted, run under en_US.UTF-8      -> the arm must REFUSE
-#   x8  S10 the class's whitespace exclusion widened to `[^]]`    -> a report must APPEAR
-#   x9  S11 S11_CORPUS forced from `fixture` to `shell`, seed in
-#           `scripts/`                                            -> a report must APPEAR
-#   x10 S11 S11_PAT's optional leading `(` removed                -> the report must VANISH
-#   x11     the FIXTURE empty-corpus condition pointed at n_shell -> its NAMED refusal must VANISH
-#   x12 S11 a file-level `set -e` acquittal spliced into the loop -> the report must VANISH
-#   x13 S11 S11_SKIP's `[^;]*` bound restored to `.*`            -> all 4 reports must VANISH
 #   m13 S12 a GNU escape reaching `[[ =~ ]]`, six join shapes     -> must FAIL, 6 counted lines
-#   x14 S12 the command-substitution exemption deleted            -> a report must APPEAR
-#   x15 S12 quoted-body blanking removed                          -> a report must APPEAR
-#   x16 S8b S8b_CORPUS forced from `doc` to `instr`, bash seed    -> a report must APPEAR
-#   x17 S8b dropped from ARMS                                     -> the report must VANISH
-#   x18 S8b the name grammar narrowed to `[A-Za-z_]+`, `$T1:` seed -> the report must VANISH
-#   x19 S8b the modifier class after the colon dropped            -> a report must APPEAR
-#   x20     the CORE TEXT empty-corpus condition at n_shell       -> its NAMED refusal must VANISH
 #   m14 S13 seeds per form, nested included, each accepted by `bash -n`: bash 3.2 RUN oracle AND the validator must agree -> all of them (count derived)
-#   x27 S13 dropped from ARMS                                     -> the report must VANISH
-#   x22 S13 S13_COMMENTS forced from `keep` to `skip`             -> the report must VANISH
-#   x25 S13 a bare `((` lexed as `(` again, so `<<` opens a heredoc -> the report must VANISH
-#   x26     a tracked file deleted from the worktree: S12/S13/S14
-#           must REFUSE (exit 2); the uncounted mutant PASSES it   -> refused, then PASS
 #   m15 S14 a lone apostrophe in a heredoc inside `"$( )"`, in a
 #           FIXTURE script the gate's `bash -n` never parses       -> must FAIL
-#   x23 S14 dropped from ARMS                                     -> the report must VANISH
-#   x24 S13 form (d)'s heredoc-body scan disconnected             -> the report must VANISH
 #   m16 S15 an unlisted tree-path `-x` test in a pre-suite step's
 #           script (BL-917)                                       -> must FAIL
-#   x28 S15 the corpus NEW-site report disconnected (the self-probe
-#           shares the program, so only the corpus wiring is here) -> the report must VANISH
-#   x29 S15 per-key count match reverted to SET matching: a duplicated
-#           listed site is acquitted                              -> the report must VANISH
 #   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
 #   m7b S7  plain and escaped-quote replacement backrefs          -> must FAIL, 2 counted lines
 #   n8  S7  octal escape past the replacement string (BL-681)     -> must NOT fail
-#   x21 S7  S7_PAT restored to the unscoped form                  -> a report must APPEAR
 #   n3      braced, `HEAD:`-literal, `"${SHA}:` and the braced
 #           ESCAPED-quote rev-paths                             -> must NOT fail
 #   n4  S10 alternations, python, message prose, a bracketed
@@ -102,103 +66,7 @@
 # the FIX S10 prescribes or one of the three narrowings its header records. An arm that flags
 # the fix is worse than no arm, so the fixture asserts silence on all four.
 #
-# EACH `x*` MUTANT MUST OWN A SUBJECT THE OTHERS CANNOT REACH, or two dead cells cover for
-# each other and both mutants come back green. x1's offender is in a `.md`, which the `shell`
-# corpus cannot contain but which survives a comment filter. x2's is a `#` COMMENT in a
-# `core/*.sh`, which stays in the corpus under x1's mutation but is dropped by x2's. x3's is a
-# WRAPPED rendering whose `git` sits on the previous line, so only the pattern's shape decides
-# it. x4's is an absent corpus, which no pattern or column can see. x5's is a line whose
-# `#{2,4}` sits BETWEEN the regex context and the class, which every other S10 seed lacks --
-# the other four m11 shapes survive the narrowed span, so the arm reads a COUNT and not a
-# presence. x6's is a python `re.compile(` reachable only because a `sed` edits it, which is
-# the corpus's own idiom and the only shape S10_SKIP can subtract. x7's is not a seed at all
-# but an ENVIRONMENT: the byte range only parses under `LC_ALL=C`, so removing the export makes
-# the arm unable to fire and the validator must say so rather than pass. x8's class carries
-# SPACES, which no other seed does.
-#
-# MUTANT MATRIX. The validator runs every arm in ONE invocation, so one run of a seed or of a mutated
-# copy already measures every arm: a cell is TRIPPED iff that arm's report differs from the same
-# world's unmutated report (a seeded offender is compared against the clean seed). Per push each
-# mutant asserts its DECIDING arm tripped and its TWIN stayed green, from the run it already made.
-# Columns: S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14 S15 PROBE (any arm's own probe) EMPTY_SHELL
-# EMPTY_CORE EMPTY_DOC EMPTY_FIXTURE (the four fail-closed corpus refusals) REFUSED (exit 2).
-# The decides=/twins= below are the recorded matrix; this file reads them back from its own header, so
-# there is one copy. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One
-# run per distinct state") requires. The exact-vector
-# assertion this battery used to make per mutant (kill_check: exactly one FAIL line, its own) is kept.
-# m14 (the S13 bash-3.2 oracle agreement) and n1-n9 (negative seeds that must stay silent) mutate
-# nothing and are not mutants, so they carry no row.
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/shell-portability/run.sh --matrix
-# MUTANT-MATRIX-DYNAMIC helpers why=kill_check, count_check, count_shrink_check, appear_check, blind_check, probe_owned_appear, corpus_cell_check and empty_check pass the mutant id as a variable; every id they produce has its own row above
-# MUTANT-MATRIX m1 decides=S1 twins=S2
-# MUTANT-MATRIX m2 decides=S2 twins=S1
-# MUTANT-MATRIX m3 decides=S3 twins=S4
-# MUTANT-MATRIX m4 decides=S4 twins=S3
-# MUTANT-MATRIX m5 decides=S5 twins=S6
-# MUTANT-MATRIX m6 decides=S6 twins=S5
-# MUTANT-MATRIX m7 decides=S7 twins=S13
-# MUTANT-MATRIX m9 decides=S8 twins=S8b
-# MUTANT-MATRIX m11 decides=S10 twins=S12
-# MUTANT-MATRIX m8 decides=EMPTY_SHELL twins=EMPTY_CORE
-# MUTANT-MATRIX m10 decides=EMPTY_CORE twins=EMPTY_SHELL
-# MUTANT-MATRIX m10b decides=EMPTY_FIXTURE twins=EMPTY_SHELL
-# MUTANT-MATRIX x1 decides=S8 twins=S8b
-# MUTANT-MATRIX x2 decides=S8 twins=S8b
-# MUTANT-MATRIX x3 decides=S8 twins=S8b
-# MUTANT-MATRIX x4 decides=EMPTY_CORE twins=EMPTY_SHELL
-# MUTANT-MATRIX x5 decides=S10 twins=S12
-# MUTANT-MATRIX x6 decides=S10 twins=S12
-# MUTANT-MATRIX x7 decides=S10 twins=S12
-# MUTANT-MATRIX x8 decides=S10 twins=S12
-# MUTANT-MATRIX m12 decides=S11 twins=S10
-# MUTANT-MATRIX m12b decides=S11 twins=S10
-# MUTANT-MATRIX m12c decides=S11 twins=S10
-# MUTANT-MATRIX x9 decides=S11 twins=S10
-# MUTANT-MATRIX x10 decides=S11 twins=S10
-# MUTANT-MATRIX x11 decides=EMPTY_FIXTURE twins=EMPTY_SHELL
-# MUTANT-MATRIX x12 decides=S11 twins=S10
-# MUTANT-MATRIX x13 decides=S11 twins=S10
-# MUTANT-MATRIX m9b decides=S8 twins=S8b
-# MUTANT-MATRIX m9c decides=S8 twins=S8b
-# MUTANT-MATRIX m9d decides=S8b twins=S8
-# MUTANT-MATRIX m10c decides=EMPTY_DOC twins=EMPTY_SHELL
-# MUTANT-MATRIX x16 decides=S8b twins=S8
-# MUTANT-MATRIX x17 decides=S8b twins=S8
-# MUTANT-MATRIX x18 decides=S8b twins=S8
-# MUTANT-MATRIX x20 decides=EMPTY_DOC twins=EMPTY_SHELL
-# MUTANT-MATRIX m13 decides=S12 twins=S13
-# MUTANT-MATRIX x14 decides=S12 twins=S13
-# MUTANT-MATRIX x15 decides=S12 twins=S13
-# MUTANT-MATRIX x19 decides=S8b twins=S8
-# MUTANT-MATRIX x27 decides=S13 twins=S12
-# MUTANT-MATRIX x22 decides=S13 twins=S12
-# MUTANT-MATRIX x25 decides=S13 twins=S12
-# MUTANT-MATRIX m7b decides=S7 twins=S13
-# MUTANT-MATRIX x21 decides=S7 twins=S13
-# MUTANT-MATRIX x24 decides=S13 twins=S12
-# MUTANT-MATRIX m15 decides=S14 twins=S13
-# MUTANT-MATRIX x23 decides=S14 twins=S13
-# MUTANT-MATRIX m16 decides=S15 twins=S14
-# MUTANT-MATRIX x28 decides=S15 twins=S14
-# MUTANT-MATRIX x29 decides=S15 twins=S14
-# MUTANT-MATRIX-CONTROL n1 why=the portable sed -i pair must stay unreported (survives by design)
-# MUTANT-MATRIX-CONTROL n2 why=python re.sub backreference must stay unreported (survives by design)
-# MUTANT-MATRIX-CONTROL n3 why=braced, HEAD-literal and "${SHA}: rev-paths must stay unreported (survives by design)
-# MUTANT-MATRIX-CONTROL n4 why=alternations, python, message prose, a bracketed aside and a comment must stay unreported (survives by design)
-# MUTANT-MATRIX-CONTROL n5 why=guarded cd in six spellings plus a comment must stay unreported (survives by design)
-# MUTANT-MATRIX-CONTROL n6 why=correct =~ forms and grep-only escapes must stay unreported (survives by design)
-# MUTANT-MATRIX-CONTROL n7 why=braced, dollar-after-colon, docs/ and literal-ref forms must stay unreported (survives by design)
-# MUTANT-MATRIX-CONTROL n8 why=an octal escape past the awk replacement must stay unreported (survives by design)
-# MUTANT-MATRIX-CONTROL n9 why=a balanced apostrophe pair, a backtick substitution and a function-held heredoc must stay unreported (survives by design)
-# MUTANT-MATRIX-CONTROL m14 why=bash 3.2 itself is the oracle and must AGREE with S13 on every declared seed; nothing is mutated
-# MUTANT-MATRIX-FULL x26 worlds=a0-present,a0-deleted why=the kill is a PAIR of runs over one tree (present PASSes rc 0, deleted REFUSES rc 2) against a mutant that must PASS the deleted tree; no single world decides it
 set -u
-MATRIX=0
-case "${1:-}" in
-  "") ;;
-  --matrix) MATRIX=1 ;;
-  *) echo "FIXTURE ERROR: unknown argument '$1' (usage: run.sh [--matrix])" >&2; exit 2 ;;
-esac
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Both layouts named, never a single walk-up (I33c).
@@ -216,83 +84,8 @@ rc=0
 note() { printf '%s\n' "$*"; }
 ok()  { note "ok    $1"; }
 bad() { note "FAIL  $1"; rc=1; }
-LIBDIR="$(cd "$DIR/../lib" 2>/dev/null && pwd)"
-[ -f "$LIBDIR/mutant.sh" ] && [ -f "$LIBDIR/matrix.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh or lib/matrix.sh not found beside $DIR" >&2; exit 2; }
-. "$LIBDIR/mutant.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-. "$LIBDIR/matrix.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
-
-# --- the mutant matrix plumbing ----------------------------------------------------------------
-# The validator runs EVERY arm in one invocation, so one run of a world already measures all of
-# them. An ARM here is one thing the validator can report: S1..S14 (S8b included) by their
-# `FAIL: <arm>:` block, the four fail-closed corpus refusals by their sentence, and REFUSED (exit 2).
-# A cell is TRIPPED iff that arm's signature differs between the UNMUTATED output (<pre>) and the
-# output under the mutant (<post>). A seeded offender is compared against the clean control.
-MX_ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14 S15 EMPTY_SHELL EMPTY_CORE EMPTY_DOC EMPTY_FIXTURE REFUSED"
-MX_CALLS=0; MX_ROWS=0; MX_ERR=""; B_CTL=0; CONTROL_OUT=""
-RCV="$TMP/run-rc"
 PRE_DIR="$TMP/pre"; mkdir -p "$PRE_DIR"
-corpus_arm() { # corpus_arm <name-in-the-refusal-message>
-  case "$1" in
-    SHELL) echo EMPTY_SHELL ;;
-    CORE) echo EMPTY_CORE ;;
-    "CORE TEXT") echo EMPTY_DOC ;;
-    "FIXTURE shell") echo EMPTY_FIXTURE ;;
-    *) echo "NO_SUCH_CORPUS" ;;
-  esac
-}
-cell_sig() { # cell_sig <output> <arm> -> the arm's signature in that output
-  local t n
-  case "$2" in
-    EMPTY_SHELL) t='the SHELL corpus is empty' ;;
-    EMPTY_CORE) t='the CORE corpus is empty' ;;
-    EMPTY_DOC) t='the CORE TEXT corpus is empty' ;;
-    EMPTY_FIXTURE) t='the FIXTURE shell corpus is empty' ;;
-    REFUSED) t='REFUSED:' ;;
-    *) awk -v a="FAIL: $2:" 'index($0, a) == 1 { f++; b = 1; next } /^    / { if (b) h++; next } { b = 0 } END { printf "%d/%d", f, h }' <<<"$1"; return 0 ;;
-  esac
-  n="$(grep -cF "$t" <<<"$1")" || n=0
-  printf '%s' "$n"
-}
-mx_header() { # mx_header decides|twins <mutant> -- read the value from this file's own header row
-  awk -v n="$2" -v f="$1" '$1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n { for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) { print substr($i, length(f) + 2); exit } }' "$0"
-}
-rcv() { local r=0; read -r r < "$RCV" 2>/dev/null; printf '%s' "$r"; }
-mx_rc() { local f r=0; f="$PRE_DIR/$(basename "$1").rc"; [ -f "$f" ] && read -r r < "$f"; printf '%s' "$r"; }
-# mx_score <mutant-id> <deciding-arm> <pre-out> <post-out> <post-rc>
-# --matrix: print one row per arm. Per push: the DECIDING arm must be tripped and every TWIN
-# (a different arm the recorded matrix shows green under this mutant) must be green, in the very
-# run the check already made. Returns 1 with MX_ERR set on a violation.
-mx_score() {
-  local m="$1" dec="$2" pre="$3" post="$4" prc="$5" a sp sq v k trip hd tws t
-  trip=""
-  MX_CALLS=$((MX_CALLS + 1))
-  if [ "$MATRIX" -eq 1 ]; then
-    for a in $MX_ARMS; do
-      sp="$(cell_sig "$pre" "$a")"; sq="$(cell_sig "$post" "$a")"
-      if [ "$sp" != "$sq" ]; then v=TRIPPED; k=yes; trip="$trip $a"; else v=GREEN; k=no; fi
-      matrix_row "$m" "$a" "$prc" "$v" "$k"; MX_ROWS=$((MX_ROWS + 1))
-    done
-    trip="${trip# }"
-    note "  MATRIX-SUMMARY $m decides=$dec tripped=[$trip]"
-    case " $trip " in *" $dec "*) return 0 ;; esac
-    MX_ERR="deciding arm $dec did not trip (tripped: [$trip])"; return 1
-  fi
-  hd="$(mx_header decides "$m")"; tws="$(mx_header twins "$m")"
-  if [ -z "$hd" ] || [ -z "$tws" ]; then MX_ERR="no '# MUTANT-MATRIX $m decides=.. twins=..' row in this header; re-measure with --matrix"; return 1; fi
-  if [ "$hd" != "$dec" ]; then MX_ERR="the header says $m decides=$hd but the check decides on $dec"; return 1; fi
-  sp="$(cell_sig "$pre" "$dec")"; sq="$(cell_sig "$post" "$dec")"
-  if [ "$sp" = "$sq" ]; then MX_ERR="deciding arm $dec did not trip"; return 1; fi
-  if [ "$tws" != "-" ]; then
-    for t in ${tws//,/ }; do
-      case " $MX_ARMS " in *" $t "*) ;; *) MX_ERR="twin $t names no arm"; return 1 ;; esac
-      sp="$(cell_sig "$pre" "$t")"; sq="$(cell_sig "$post" "$t")"
-      if [ "$sp" != "$sq" ]; then MX_ERR="twin $t tripped too -- the kill spread past the recorded matrix; re-measure with --matrix"; return 1; fi
-    done
-  fi
-  return 0
-}
+
 
 seed() { # seed <dir> [extra-line...]
   local d="$1"; shift
@@ -358,111 +151,23 @@ seed_shell() { # seed_shell <dir>   (subject lines on stdin)
 
 # `</dev/null` IS LOAD-BEARING, NOT TIDINESS. `scan` ends in `grep -HnE "$pat" "$@"`, and with
 # an empty file list grep reads STDIN -- so a subject whose corpus is empty blocks forever
-# instead of reporting. The shipped empty-corpus guard makes that unreachable, which is
-# exactly why the x4 mutant below reaches it: the mutant is the state the guard refuses. Under
-# the suite's 16-way pool stdin is a live descriptor, so the hang is real there and invisible
-# here, where an interactive run happens to get EOF. MEASURED: this fixture wedged two
-# processes for two minutes before this redirect existed, and reported nothing at all.
-run_v() { ( cd "$1" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null; r=$?; echo "$r" > "$RCV"; exit "$r" ); }
-# The UNMUTATED validator's output over a world, run ONCE per distinct world and cached on disk. A
-# kill check, an emptied-corpus check and a later mutate check over the same seed all read it.
+# instead of reporting. Under the suite's 16-way pool stdin is a live descriptor, so the hang is
+# real there and invisible in an interactive run, which happens to get EOF.
+run_v() { ( cd "$1" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null ); }
+# The validator's output over a world, run ONCE per distinct world and cached on disk.
 pre_out() { # pre_out <dir>
   local f
   f="$PRE_DIR/$(basename "$1").out"
   if [ ! -f "$f" ]; then
     run_v "$1" > "$f"
-    cp "$RCV" "$f.rc"
   fi
   cat "$f"
-}
-
-# x7 needs the validator run under a UTF-8 locale, and it needs the EXIT, which a command
-# substitution eats. The status goes to a file; the caller reads it from there.
-RCF="$TMP/last-rc"
-run_v_locale() { # run_v_locale <dir> <locale>
-  ( cd "$1" && LC_ALL="$2" LANG="$2" bash scripts/validate-shell-portability.sh 2>&1 </dev/null
-    echo "$?" > "$RCF" )
-}
-
-# x7 IS AN ENVIRONMENT TEST AND IT NEEDS ITS ENVIRONMENT ESTABLISHED, NOT ASSUMED. Two
-# preconditions, both measured here rather than believed: a UTF-8 locale exists on this
-# machine, and under it THIS machine's grep really does refuse the raw byte range S10's
-# pattern is built from. If either is false the mutant changes nothing and its green reads
-# exactly like a mutant that was killed, so x7 fails rather than skipping.
-#
-# `locale -a` goes through a variable, not a pipe into `grep -q`: `grep -q` leaves at its
-# first match while the writer is still pushing, and under `pipefail` the pipeline then
-# answers with the writer's EPIPE and reports NOT-FOUND on input that contains the pattern.
-UTF8_LOCALE=""
-_locales="$(locale -a 2>/dev/null)"
-for _l in en_US.UTF-8 C.UTF-8 en_GB.UTF-8; do
-  if grep -qxF "$_l" <<<"$_locales"; then UTF8_LOCALE="$_l"; break; fi
-done
-UTF8_REJECTS_RANGE=no
-if [ -n "$UTF8_LOCALE" ]; then
-  _hb="$(printf '\200-\377')"
-  if ! printf 'x\n' | LC_ALL="$UTF8_LOCALE" grep -E "[${_hb}]" >/dev/null 2>&1; then
-    # A non-match also exits 1, so the exit alone does not discriminate. The stderr does.
-    _e="$(printf 'x\n' | LC_ALL="$UTF8_LOCALE" grep -E "[${_hb}]" 2>&1 >/dev/null)"
-    [ -n "$_e" ] && UTF8_REJECTS_RANGE=yes
-  fi
-fi
-
-# Rewrite ONE cell of the validator's arm table inside an already-seeded sandbox. The sandbox
-# already holds a COPY; `sed` writes a second file and the result is compared before it is
-# installed, so an expression that matched nothing cannot pass as a mutation applied -- that
-# failure otherwise reads as "the mutated validator still reported, therefore the cell is
-# load-bearing", which is the opposite of the truth.
-#
-# `v` IS DECLARED ON ITS OWN LINE, DELIBERATELY. bash 3.2 expands every word of a `local`
-# before it assigns any of them, so `local d="$1" v="$d/..."` reads whatever `d` the DYNAMIC
-# scope happens to hold -- the caller's, if a caller has one. Written as one line this
-# resolved correctly from `blind_check` (whose `d` is the same directory) and aborted the
-# whole fixture at the first top-level call, which is the good version of that bug.
-mutate() { # mutate <dir> <sed-expr> <name>
-  local d="$1" expr="$2" n="$3"
-  local v="$d/scripts/validate-shell-portability.sh"
-  sed "$expr" "$v" > "$TMP/mutant.out" || { note "FIXTURE BROKEN: $n -- sed failed on $expr"; return 1; }
-  if cmp -s "$v" "$TMP/mutant.out"; then
-    note "FIXTURE BROKEN: $n -- the mutation matched NOTHING, so the run below is the UNMUTATED"
-    note "               validator wearing a mutant's name. expr: $expr"
-    return 1
-  fi
-  cp "$TMP/mutant.out" "$v"
-}
-
-# Two runs over ONE seed, asserting they DIFFER. The first must report the arm, report ONLY
-# that arm, and report a COUNTED non-zero number of offending lines -- a kill inferred from
-# silence is not a kill. The second must go quiet. Either step alone is satisfiable by a
-# mistake: step 1 alone passes on a mutation that was never applied, step 2 alone passes on a
-# seed no arm could ever see and on a mutation that simply broke the script.
-blind_check() { # blind_check <name> <dir> <sed-expr> <arm> <which-cell>
-  local n="$1" d="$2" expr="$3" arm="$4" cell="$5" pre post nfail nhits
-  pre="$(pre_out "$d")"
-  nfail="$(grep -c '^FAIL:' <<<"$pre")"
-  nhits="$(grep -c '^    ' <<<"$pre")"
-  pre_hit="$(grep -c "^FAIL: ${arm}:" <<<"$pre")"
-  if ! grep -q "^FAIL: ${arm}:" <<<"$pre" || [ "${nfail:-0}" -ne 1 ] || [ "${nhits:-0}" -lt 1 ]; then
-    note "FAIL  $n -- the UNMUTATED validator gave $nfail FAIL line(s) and $nhits hit line(s), not exactly one ${arm} with a hit. The mutant below could not have discriminated anything."
-    printf '%s\n' "$pre" | sed 's/^/      /' | head -4; rc=1; return
-  fi
-  mutate "$d" "$expr" "$n" || { rc=1; return; }
-  post="$(run_v "$d")"
-  if grep -q "^validate-shell-portability: PASS" <<<"$post"; then
-    mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$([ "$pre_hit" -ne 0 ] && [ "$nfail" -eq 1 ] && [ "$nhits" -ne 0 ] && echo 1 || echo 0)" "${n%% *}" "$n -- $cell is load-bearing: shipped $arm reports $nhits line(s), mutated reports 0"
-  else
-    note "FAIL  $n -- $cell: the mutated validator did NOT go quiet, so it is not what found this seed"
-    printf '%s\n' "$post" | sed 's/^/      /' | head -4; rc=1
-  fi
 }
 
 # --- control ---------------------------------------------------------------
 seed "$TMP/control"
 if out="$(run_v "$TMP/control")" && grep -q "^validate-shell-portability: PASS" <<<"$out"; then
-  # The resolved path is printed, not assumed. A mutant applied to the copy the run never
-  # loads leaves every arm green, and that reads exactly like an arm that cannot fire.
-  CONTROL_OUT="$out"; B_CTL=1
+  # The resolved path is printed, not assumed.
   ok "CONTROL control -- clean seed passes, harness is live (subject: $VALIDATOR)"
 else
   note "FIXTURE BROKEN: the clean control did NOT pass. Every verdict below is meaningless."
@@ -470,7 +175,7 @@ else
   exit 1
 fi
 
-kill_check() { # kill_check <name> <dir> <arm-id>
+arm_check() { # arm_check <name> <dir> <arm-id>
   local n="$1" d="$2" arm="$3" out nfail
   out="$(pre_out "$d")"
   if [ -z "$out" ]; then note "FAIL  $n -- validator produced NO output; the harness died"; rc=1; return; fi
@@ -480,14 +185,13 @@ kill_check() { # kill_check <name> <dir> <arm-id>
     printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return
   fi
   if [ "$nfail" -ne 1 ]; then
-    note "FAIL  $n -- $nfail FAIL lines; a mutant must fail ONLY its own arm, so the arms are entangled"
+    note "FAIL  $n -- $nfail FAIL lines; a seed must fail ONLY its own arm, so the arms are entangled"
     printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return
   fi
-  mx_score "${n%% *}" "$arm" "$CONTROL_OUT" "$out" "$(mx_rc "$d")" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-  mutant_killed "$B_CTL" "${n%% *}" "$n -- killed by its own arm, and only its own"
+  ok "$n -- fired on its own arm, and only its own"
 }
 
-# kill_check with the COUNT asserted. `kill_check` is satisfied by one hit line, so a pattern
+# arm_check with the COUNT asserted. `arm_check` is satisfied by one hit line, so a pattern
 # that found one of five seeded shapes passes it identically to one that found all five --
 # which is exactly the failure S10's first cut shipped (12 of 23 census lines, reported as a
 # pass on the other eleven). Every m11 shape is a distinct grammar from the census, so the
@@ -503,7 +207,7 @@ count_check() { # count_check <name> <dir> <arm-id> <expected-hit-lines>
     printf '%s\n' "$out" | sed 's/^/      /' | head -6; rc=1; return
   fi
   if [ "$nfail" -ne 1 ]; then
-    note "FAIL  $n -- $nfail FAIL lines; a mutant must fail ONLY its own arm, so the arms are entangled"
+    note "FAIL  $n -- $nfail FAIL lines; a seed must fail ONLY its own arm, so the arms are entangled"
     printf '%s\n' "$out" | sed 's/^/      /' | head -6; rc=1; return
   fi
   if [ "$nhits" -ne "$want" ]; then
@@ -511,74 +215,16 @@ count_check() { # count_check <name> <dir> <arm-id> <expected-hit-lines>
     note "               spells only some of its subject's grammars scores the rest as non-instances."
     printf '%s\n' "$out" | sed 's/^/      /' | head -10; rc=1; return
   fi
-  mx_score "${n%% *}" "$arm" "$CONTROL_OUT" "$out" "$(mx_rc "$d")" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-  mutant_killed "$B_CTL" "${n%% *}" "$n -- killed by its own arm, and only its own, on all $want seeded line(s)"
+  ok "$n -- fired on its own arm, and only its own, on all $want seeded line(s)"
 }
 
-# The x5 shape: a mutation that must NOT silence the arm, only SHRINK it. `blind_check` asserts
-# the report vanishes and would score this mutant a FAIL; asserting merely that a report
-# remains would score it a pass whatever it did. Both counts are named and both are checked.
-count_shrink_check() { # count_shrink_check <name> <dir> <sed-expr> <arm> <pre-n> <post-n> <cell>
-  local n="$1" d="$2" expr="$3" arm="$4" want_pre="$5" want_post="$6" cell="$7" pre post npre npost
-  pre="$(pre_out "$d")"
-  npre="$(grep -c '^    ' <<<"$pre")"
-  pre_hit="$(grep -c "^FAIL: ${arm}:" <<<"$pre")"
-  if ! grep -q "^FAIL: ${arm}:" <<<"$pre" || [ "$npre" -ne "$want_pre" ]; then
-    note "FAIL  $n -- the UNMUTATED validator reported $npre line(s), not the $want_pre seeded. Nothing below discriminates."
-    printf '%s\n' "$pre" | sed 's/^/      /' | head -6; rc=1; return
-  fi
-  mutate "$d" "$expr" "$n" || { rc=1; return; }
-  post="$(run_v "$d")"
-  npost="$(grep -c '^    ' <<<"$post")" || npost=0
-  if ! grep -q "^FAIL: ${arm}:" <<<"$post"; then
-    note "FAIL  $n -- $cell: the mutated validator went SILENT. It was meant to lose exactly the"
-    note "               $((want_pre - want_post)) line(s) the narrowing cannot cross, not all of them."
-    printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1; return
-  fi
-  if [ "$npost" -ne "$want_post" ]; then
-    note "FAIL  $n -- $cell: the mutated validator reported $npost line(s), not $want_post. The span is not"
-    note "               what decides the seed carrying \`#{2,4}\` between the context and the class."
-    printf '%s\n' "$post" | sed 's/^/      /' | head -10; rc=1; return
-  fi
-  mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-  mutant_killed "$([ "$pre_hit" -ne 0 ] && [ "$npre" -eq "$want_pre" ] && echo 1 || echo 0)" "${n%% *}" "$n -- $cell is load-bearing: shipped reports $npre line(s), narrowed reports $npost"
-}
-
-# The inverse of `blind_check`: the seed is a measured FALSE POSITIVE the shipped arm is
-# narrowed against, so the unmutated run must be SILENT and the mutated one must REPORT. A
-# vanishing-report mutant cannot prove a subtraction, because a subtraction that was never
-# reached vanishes exactly as convincingly as one that was.
-appear_check() { # appear_check <name> <dir> <sed-expr> <arm> <cell>
-  local n="$1" d="$2" expr="$3" arm="$4" cell="$5" pre post nfail nhits
-  pre="$(pre_out "$d")"
-  pre_pass="$(grep -c "^validate-shell-portability: PASS" <<<"$pre")"
-  if ! grep -q "^validate-shell-portability: PASS" <<<"$pre"; then
-    note "FAIL  $n -- the UNMUTATED validator already reported this seed, so $cell cannot be what acquits it"
-    printf '%s\n' "$pre" | sed 's/^/      /' | head -6; rc=1; return
-  fi
-  mutate "$d" "$expr" "$n" || { rc=1; return; }
-  post="$(run_v "$d")"
-  nfail="$(grep -c '^FAIL:' <<<"$post")" || nfail=0
-  nhits="$(grep -c '^    ' <<<"$post")" || nhits=0
-  if ! grep -q "^FAIL: ${arm}:" <<<"$post"; then
-    note "FAIL  $n -- $cell: the mutated validator stayed quiet, so the seed never reached the arm at all"
-    printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1; return
-  fi
-  if [ "$nfail" -ne 1 ] || [ "$nhits" -lt 1 ]; then
-    note "FAIL  $n -- $cell: $nfail FAIL line(s) and $nhits hit line(s); the mutant must move exactly one arm"
-    printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1; return
-  fi
-  mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-  mutant_killed "$([ "$pre_pass" -ne 0 ] && echo 1 || echo 0)" "${n%% *}" "$n -- $cell is load-bearing: shipped is silent on the near-miss, mutated reports $nhits line(s)"
-}
-
-seed "$TMP/m1" "sed -i 's/x/y/' f"                            ; kill_check "m1 S1 sed -i bare"        "$TMP/m1" S1
-seed "$TMP/m2" "mapfile -t arr < f"                           ; kill_check "m2 S2 mapfile"            "$TMP/m2" S2
-seed "$TMP/m3" "declare -A map"                               ; kill_check "m3 S3 declare -A"         "$TMP/m3" S3
-seed "$TMP/m4" "setsid sleep 1"                               ; kill_check "m4 S4 setsid"             "$TMP/m4" S4
-seed "$TMP/m5" "grep -E 'a\\sb' f"                            ; kill_check "m5 S5 backslash-s grep"   "$TMP/m5" S5
-seed "$TMP/m6" "sed -E 's/a\\sb/c/' f"                        ; kill_check "m6 S6 backslash-s sed"    "$TMP/m6" S6
-seed "$TMP/m7" "awk '{ gsub(/(a)b/, \"\\1x\") }' f"           ; kill_check "m7 S7 awk backreference"   "$TMP/m7" S7
+seed "$TMP/m1" "sed -i 's/x/y/' f"                            ; arm_check "m1 S1 sed -i bare"        "$TMP/m1" S1
+seed "$TMP/m2" "mapfile -t arr < f"                           ; arm_check "m2 S2 mapfile"            "$TMP/m2" S2
+seed "$TMP/m3" "declare -A map"                               ; arm_check "m3 S3 declare -A"         "$TMP/m3" S3
+seed "$TMP/m4" "setsid sleep 1"                               ; arm_check "m4 S4 setsid"             "$TMP/m4" S4
+seed "$TMP/m5" "grep -E 'a\\sb' f"                            ; arm_check "m5 S5 backslash-s grep"   "$TMP/m5" S5
+seed "$TMP/m6" "sed -E 's/a\\sb/c/' f"                        ; arm_check "m6 S6 backslash-s sed"    "$TMP/m6" S6
+seed "$TMP/m7" "awk '{ gsub(/(a)b/, \"\\1x\") }' f"           ; arm_check "m7 S7 awk backreference"   "$TMP/m7" S7
 
 # m9 -- S8. The offender is in a `.md`, which is where the sites that motivated the arm live:
 # the text a human copies out of a runbook is not usually in a script.
@@ -587,7 +233,7 @@ seed_core "$TMP/m9" skills/pull.md \
   'Recover the template from the distribution:' \
   '' \
   '    t=$(mktemp); git -C <dist> show <theirs>:templates/settings.json.template > "$t"'
-kill_check "m9 S8 unquoted rev-path" "$TMP/m9" S8
+arm_check "m9 S8 unquoted rev-path" "$TMP/m9" S8
 
 # m11 -- S10. FIVE SEEDS AND NOT ONE, because S10's subject is five different grammars and its
 # first cut could spell only some of them. Every line below is a VERBATIM census shape from the
@@ -599,9 +245,8 @@ kill_check "m9 S8 unquoted rev-path" "$TMP/m9" S8
 #   4  a `grep -oE` whose NEGATED class `[^--]*` spans to an em-dash  (layer-reference-resolution)
 #   5  the `#{2,4}` heading grammar bound to a variable               (validate-layer-entries.sh)
 #
-# Line 5 is the one the first cut's `[^#]*` context span could not cross, and it is x5's whole
-# subject: without it in the seed, narrowing the span back changes no cell and the mutant
-# reads as a guard that never fired.
+# Line 5 is the one the first cut's `[^#]*` context span could not cross; the other four shapes
+# carry no `#`, so the arm reads a COUNT and not a presence.
 seed_shell "$TMP/m11" <<'M11EOF'
 awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
   cid="$(printf '%s' "$h" | sed -E 's/[[:space:]]*[.—]$//')"
@@ -620,14 +265,14 @@ count_check "m11 S10 multibyte bracket class" "$TMP/m11" S10 5
 # read `grep -q "failing closed" || grep -q "empty corpus"`, and the first disjunct has never
 # matched anything: the emitted sentence is `Failing closed.` with a capital F. It passed on
 # the second disjunct the whole time, so a dead condition sat here reading exactly like a live
-# one -- which is what a second copy of it, written for x4 below, walked straight into.
+# one -- which is what a second copy of it walked straight into.
 refused() { grep -qF 'Failing closed.' <<<"$1"; }
 
 # THE CORPORA NEST, SO "A REFUSAL HAPPENED" IS NO LONGER THE OBSERVABLE. `core/fixtures/*/*.sh`
 # is a SUBSET of both `*.sh` and `core/*`: emptying either wider corpus necessarily empties the
 # fixture one too, and a single "did it refuse" assertion is then satisfied by whichever
 # condition happens to fire. `refused_for` requires the refusal to NAME the corpus this seed
-# emptied, which is the only property a mutant of one condition can move.
+# emptied, which is the only property one condition owns alone.
 refused_for() { grep -qF "the $2 corpus is empty" <<<"$1"; }
 
 empty_check() { # empty_check <name> <dir> <what-was-emptied> <corpus-name-in-the-message>
@@ -641,8 +286,7 @@ empty_check() { # empty_check <name> <dir> <what-was-emptied> <corpus-name-in-th
     note "               fired, so this seed proves nothing about the one it names."
     printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
   else
-    mx_score "${n%% *}" "$(corpus_arm "$which")" "$CONTROL_OUT" "$out" "$(mx_rc "$d")" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$B_CTL" "${n%% *}" "$n -- $what emptied: fails closed naming the $which corpus, rather than reporting a clean scan"
+    ok "$n -- $what emptied: fails closed naming the $which corpus, rather than reporting a clean scan"
   fi
 }
 
@@ -677,194 +321,21 @@ seed "$TMP/m10b"
 empty_fixture "$TMP/m10b"
 empty_check "m10b" "$TMP/m10b" "the FIXTURE shell corpus (both wider corpora still live)" "FIXTURE shell"
 
-# --- x arms: one cell of the arm table at a time ----------------------------
-# S8 is four decisions, not one, and a seeded offender is reported if ANY combination of them
-# happens to reach it. Each arm below removes exactly one and requires the report to vanish.
-
-# x1 -- the CORPUS column. `instr` is `git ls-files 'core/*'`; `shell` is `*.sh`. Forcing
-# `shell` leaves an arm that runs, probes green and scans a file set that structurally cannot
-# contain its subject. The seed is a `.md` for that reason.
-seed "$TMP/x1"
-seed_core "$TMP/x1" skills/pull.md \
-  '    git -C <dist> show <theirs>:templates/settings.json.template > "$t"'
-blind_check "x1 S8_CORPUS=instr" "$TMP/x1" 's/S8_CORPUS=instr/S8_CORPUS=shell/' S8 \
-  "the corpus column"
-
-# x2 -- the COMMENTS column. `skip` is right for S1-S7 (a comment naming `mapfile` is prose)
-# and WRONG for S8, whose subject is text a human copies -- a rev-path in a comment is pasted
-# as readily as one in a heredoc. The seed's ONLY offender is a comment, or the arm cannot
-# discriminate; and it sits in a `core/*.sh`, which x1's mutation leaves in the corpus, so the
-# two cells cannot cover for each other.
-seed "$TMP/x2"
-seed_core "$TMP/x2" scripts/pull.sh \
-  '#!/usr/bin/env bash' \
-  '#   Recover with: git -C <dist> show <theirs>:templates/settings.json.template > "$t"' \
-  'echo done'
-blind_check "x2 S8_COMMENTS=keep" "$TMP/x2" 's/S8_COMMENTS=keep/S8_COMMENTS=skip/' S8 \
-  "the comments column"
-
-# x3 -- the PATTERN's shape. Requiring the word `git` on the same line is the narrowing the
-# arm was written against, and the seed is the case that separates them: a WRAPPED rendering
-# whose `git -C <dist>` sits on the previous line. Both patterns fire on the validator's own
-# one-line self-probe, so the probe cannot tell them apart and only a seeded wrap can.
-seed "$TMP/x3"
-seed_core "$TMP/x3" skills/pull.md \
-  'Recover the template from the distribution:' \
-  '' \
-  '    t=$(mktemp); git -C <dist> \' \
-  '      show <theirs>:templates/settings.json.template > "$t"'
-blind_check "x3 S8_PAT" "$TMP/x3" 's/^S8_PAT="/S8_PAT="git.*/' S8 \
-  "keying on the placeholder rather than on the word git"
-
-# x4 and x11 -- the per-corpus empty-guard conditions, one each. m8/m10/m10b establish that
-# each dead listing is refused NAMING its own corpus; these establish that the naming comes
-# from that condition rather than from a sibling.
-#
-# THE OBSERVABLE IS THE CORPUS NAMED, NOT WHETHER A REFUSAL HAPPENED, and the corpora nesting
-# is what forces it. `core/fixtures/*/*.sh` is a SUBSET of both wider globs, so emptying
-# `core/*` empties the fixture listing too and the FIXTURE condition refuses whatever the CORE
-# condition does. A mutant that disables one condition therefore still produces a refusal, and
-# an assertion keyed on PASS would score it SURVIVED. Keying on the sentence naming the corpus
-# is the only property one condition owns alone.
-corpus_cell_check() { # corpus_cell_check <name> <dir> <sed-expr> <corpus-name> <cell>
-  local n="$1" d="$2" expr="$3" which="$4" cell="$5" pre post
-  pre="$(pre_out "$d")"
-  refused_for "$pre" "$which"; pre_ref=$?
-  if [ "$pre_ref" -ne 0 ]; then
-    note "FAIL  $n -- the UNMUTATED validator did not name the $which corpus; nothing below discriminates"
-    printf '%s\n' "$pre" | sed 's/^/      /' | head -4; rc=1; return
-  fi
-  mutate "$d" "$expr" "$n" || { rc=1; return; }
-  post="$(run_v "$d")"
-  if refused_for "$post" "$which"; then
-    note "FAIL  $n -- $cell: the mutated validator still named the $which corpus, so that condition is not what did it"
-    printf '%s\n' "$post" | sed 's/^/      /' | head -4; rc=1
-  else
-    mx_score "${n%% *}" "$(corpus_arm "$which")" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$([ "$pre_ref" -eq 0 ] && echo 1 || echo 0)" "${n%% *}" "$n -- $cell is load-bearing: shipped names the $which corpus, mutated does not"
-  fi
-}
-
-# x4's world IS m10's (seed + empty_instr): the unmutated report is read from the cache m10 filled.
-corpus_cell_check "x4 empty-guard CORE" "$TMP/m10" 's/n_instr:-0/n_shell:-0/' CORE \
-  "the CORE corpus condition"
-
-# x5 -- S10's CONTEXT SPAN. The shipped pattern puts `.*` between the regex context and the
-# class; the first cut put `[^#]*` there and could not cross the heading grammar's own
-# `#{2,4}`, so it reported 12 of the 23 census lines and read as a pass on the other eleven.
-# The mutation is that first cut, and the assertion is a COUNT: four of the five m11 shapes
-# carry no `#` and survive it, so a `blind_check` here would score the mutant a failure and a
-# "a report is still there" check would score it a pass. Only 5 -> 4 discriminates.
-# x5's seed is m11's, byte for byte: the unmutated report is read from the cache m11 filled.
-count_shrink_check "x5 S10_PAT context span" "$TMP/m11" \
-  '/^S10_PAT=/s/)\.\*\\\\\[/)[^#]*\\\\[/' S10 5 4 \
-  "the \`.*\` context span"
-
-# x6 -- S10's LANGUAGE SUBTRACTION. python's `re` is unicode-aware whatever the locale, so a
-# `re.compile(` line is a false positive and S10_SKIP removes it.
-#
-# THE SEED IS A `sed` EDITING A PYTHON LINE, AND THAT IS THE ONLY SHAPE THAT REACHES THE CELL.
-# Measured over the tracked shell corpus: 17 lines carry a multibyte bracket class, 15 of them
-# fail S10's context requirement, and every one of the four python sites is in that 15 -- so
-# S10_SKIP subtracts nothing from what S10_PAT actually matches there. A bare `re.compile(...)`
-# line seeded here would be silent under BOTH the shipped validator and the mutant, and the arm
-# would prove nothing. What does reach it is the corpus's own mutation-battery idiom
-# (`core/fixtures/check-3b-locked-anchor/run.sh:292`): a `sed` expression whose replacement text
-# IS a python `re.compile(...)`. The `sed` supplies the regex context, the `re.compile(`
-# supplies the subtraction, and the two are on one line.
-seed_shell "$TMP/x6" <<'X6EOF'
-sed -i.bak 's|^SECTION_RE = re.compile(r".*")$|SECTION_RE = re.compile(r"^## Sprint ([0-9]+) [—\-]+ (.+)")|' "$MUT" && rm -f "$MUT.bak"
-X6EOF
-appear_check "x6 S10_SKIP python" "$TMP/x6" '/^S10_SKIP=/s/=.*/=""/' S10 \
-  "the python language subtraction"
-
-# x7 -- THE SCRIPT-WIDE `export LC_ALL=C`, WHICH IS NOT AN ARM CELL BUT DECIDES WHETHER S10 CAN
-# RUN AT ALL. S10's pattern is a raw byte range; a UTF-8 grep rejects it as an illegal byte
-# sequence, `scan` swallows the error, and the arm returns EMPTY -- which is the exact shape of
-# a clean corpus. So the mutation must not be scored by "did the report vanish": it vanishes
-# either way. It is scored by WHICH ARM THE VALIDATOR NAMES.
-#
-# The seed is m11's, so the shipped validator under a UTF-8 environment reports S10 over the
-# corpus (proving the environment is not what silences it), and the mutant under the same
-# environment reports S10's own PROBE failing instead, with no corpus finding at all.
-if [ -z "$UTF8_LOCALE" ]; then
-  note "FAIL  x7 LC_ALL=C -- no UTF-8 locale on this machine, so the mutant cannot be driven. This arm"
-  note "               is not SKIPPED: an unrunnable locale test reads identically to a passing one."
-  rc=1
-elif [ "$UTF8_REJECTS_RANGE" != "yes" ]; then
-  note "FAIL  x7 LC_ALL=C -- under $UTF8_LOCALE this machine's grep ACCEPTED the raw byte range, so"
-  note "               removing the export changes nothing and the mutant below is vacuous."
-  rc=1
-else
-  seed_shell "$TMP/x7" <<'X7EOF'
-awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
-  cid="$(printf '%s' "$h" | sed -E 's/[[:space:]]*[.—]$//')"
-X7EOF
-  pre="$(run_v_locale "$TMP/x7" "$UTF8_LOCALE")"; pre_rc="$(cat "$RCF")"
-  pre_s10="$(grep -c "^FAIL: S10:" <<<"$pre")"
-  if ! grep -q "^FAIL: S10:" <<<"$pre" || grep -q "own probe did not fire" <<<"$pre"; then
-    note "FAIL  x7 LC_ALL=C -- the UNMUTATED validator under $UTF8_LOCALE did not report its seed as an"
-    note "               S10 CORPUS finding (rc=$pre_rc). The pinned locale is what makes that work, and"
-    note "               without it here the mutant's silence proves nothing."
-    printf '%s\n' "$pre" | sed 's/^/      /' | head -6; rc=1
-  elif ! mutate "$TMP/x7" '/^export LC_ALL=C$/d' "x7 LC_ALL=C"; then
-    rc=1
-  else
-    post="$(run_v_locale "$TMP/x7" "$UTF8_LOCALE")"; post_rc="$(cat "$RCF")"
-    if grep -q "^validate-shell-portability: PASS" <<<"$post" || [ "$post_rc" = "0" ]; then
-      note "FAIL  x7 LC_ALL=C -- the mutant PASSED under $UTF8_LOCALE. S10 could not parse its own pattern"
-      note "               and reported a clean scan, which is the silent-zero this whole arm exists to refuse."
-      printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1
-    elif ! grep -q "S10's own probe did not fire" <<<"$post"; then
-      note "FAIL  x7 LC_ALL=C -- the mutant failed (rc=$post_rc) but did NOT name S10's probe. It has to"
-      note "               refuse because the arm cannot fire, not for some other reason."
-      printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1
-    elif grep -q "^FAIL: S10:" <<<"$post"; then
-      note "FAIL  x7 LC_ALL=C -- the mutant reported an S10 CORPUS finding as well as the probe failure,"
-      note "               so the byte range still parsed and the two runs are not the pair claimed."
-      printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1
-    else
-      if mx_score x7 S10 "$pre" "$post" "$post_rc"; then
-        mutant_killed "$([ "$pre_s10" -ne 0 ] && echo 1 || echo 0)" "x7" "x7 LC_ALL=C -- the pinned locale is load-bearing: shipped reports the seed under $UTF8_LOCALE,"
-        note "               stripped of the export it REFUSES (rc=$post_rc, S10's probe cannot fire) rather than passing"
-      else
-        note "FAIL  x7 LC_ALL=C -- $MX_ERR"; rc=1
-      fi
-    fi
-  fi
-fi
-
-# x8 -- S10's WHITESPACE EXCLUSION. `[^][:space:]]` on both sides of the multibyte member is
-# what separates a bracket CLASS from a bracketed prose ASIDE, and the aside is the false
-# positive measured on the census. Widening it to `[^]]` is the natural-looking simplification,
-# and the seed is the aside: a quoted assignment (so the regex context is satisfied) whose
-# bracket holds spaces and an em-dash.
-seed_shell "$TMP/x8" <<'X8EOF'
-note=" [resolved by basename from '$path' — not dist-relative]"
-X8EOF
-appear_check "x8 S10_PAT whitespace" "$TMP/x8" \
-  '/^S10_PAT=/s/\[^\]\[:space:\]\]/[^]]/g' S10 \
-  "the class's whitespace exclusion"
-
 # m12 -- S11. The offender is a fixture SEED entering a sandbox it just built and then running
 # repo-mutating git, which is the shape the arm was written against: if the `cd` fails the
 # script keeps going and `git init` lands in the PROCESS working directory. The seed lives
 # under `core/fixtures/*/`, because that is S11's whole corpus and a `scripts/` copy of the
-# same line is structurally invisible to it -- which is x9's subject below.
+# same line is structurally invisible to it.
 seed "$TMP/m12"
 seed_fixture "$TMP/m12" some-unit seed.sh <<'M12EOF'
 WORK="$(mktemp -d)"
 cd "$WORK"
 git init -q .
 M12EOF
-kill_check "m12 S11 unguarded cd in a fixture script" "$TMP/m12" S11
+arm_check "m12 S11 unguarded cd in a fixture script" "$TMP/m12" S11
 
-# m12b -- THE `set -e` SEED, and the arm's "does not acquit on set -e" claim had NO CELL behind
-# it until this one. Measured: a one-line file-level `set -e` acquittal filter spliced into the
-# S11 loop (cmp -s confirmed applied) passed the whole battery AND the receipt, because not one
-# seed carried a `set -e` line -- the claim was prose over an untested predicate, which is the
-# "a check that cannot fire" shape one level up. m12b is m12's seed plus `set -euo pipefail`,
-# and x12 below is that filter as a mutant this cell must kill.
+# m12b -- THE `set -e` SEED: the arm's "does not acquit on set -e" claim needs a seed carrying a
+# `set -e` line. m12b is m12's seed plus `set -euo pipefail`.
 seed "$TMP/m12b"
 seed_fixture "$TMP/m12b" strict-unit seed.sh <<'M12BEOF'
 set -euo pipefail
@@ -872,7 +343,7 @@ WORK="$(mktemp -d)"
 cd "$WORK"
 git init -q .
 M12BEOF
-kill_check "m12b S11 unguarded cd under set -euo pipefail" "$TMP/m12b" S11
+arm_check "m12b S11 unguarded cd under set -euo pipefail" "$TMP/m12b" S11
 
 # m12c -- D1: THE SKIP MUST NOT REACH PAST A `;`. The first cut's skip was
 # `cd[[:space:]].*(\|\||&&|\\$)`, whose `.*` runs to end of line, so ANY guard token anywhere
@@ -891,73 +362,165 @@ cd "$W"; echo "a && b"
 M12CEOF
 count_check "m12c S11 guard token past a semicolon" "$TMP/m12c" S11 4
 
-# x9 -- S11's CORPUS column. `fixture` is `core/fixtures/*/*.sh`; forcing `shell` leaves an arm
-# that runs, probes green and scans a set that still CONTAINS the seed, so the report would
-# NOT vanish and `blind_check` cannot be used. The discriminating mutation is the other
-# direction: force the corpus to `instr` (`core/*`, every shipped file regardless of
-# extension) and the offending `.sh` is still in it -- so neither widening discriminates.
-# What DOES is narrowing the corpus to something the seed cannot be in: `S11_CORPUS=fixture`
-# forced to a corpus whose listing this seed's path is absent from. The seed is placed at
-# `scripts/` for x9 and the corpus forced to `fixture`, which is the shipped value -- so the
-# mutation runs the other way: the seed sits in `scripts/`, the SHIPPED arm is silent on it,
-# and forcing `S11_CORPUS=shell` makes the report APPEAR. That is `appear_check`, and it
-# proves the corpus column is what confines this arm to fixture shell.
-seed "$TMP/x9" 'WORK="$(mktemp -d)"' 'cd "$WORK"' 'git init -q .'
-appear_check "x9 S11_CORPUS=fixture" "$TMP/x9" '/^S9_CORPUS=shell; S10_CORPUS=shell; S11_CORPUS=fixture$/s/S11_CORPUS=fixture/S11_CORPUS=shell/' S11 \
-  "the corpus column confining S11 to fixture shell"
+# --- seeds whose verdict the SHIPPED validator must give: offenders reported by their own arm,
+# near-misses silent. Cache-sharing worlds (x4/x11/x20 on m10*, x5 on m11, x12 on m12b, x13 on m12c,
+# x21 on n8, x23 on m15, x28 on m16) are asserted by those m/n arms.
+silent_check() { # silent_check <label> <dir>
+  local n="$1" d="$2" out
+  out="$(pre_out "$d")"
+  if grep -q "^validate-shell-portability: PASS" <<<"$out"; then
+    ok "$n"
+  else
+    note "FAIL  $n -- the shipped validator reported this near-miss"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -6; rc=1
+  fi
+}
 
-# x10 -- S11's PATTERN, specifically the optional leading `(`. Without it the anchored pattern
-# cannot see the corpus's dominant guarded idiom at all, so the SKIP has nothing to acquit and
-# reads as load-bearing when it is not. The seed is a BARE-paren offender: `( cd "$x"` with the
-# guard on the NEXT line is out of scope (the arm's header states that hole), so this seed is
-# `( cd "$x"` with nothing after it on the line and no continuation -- an offender the shipped
-# pattern reports and the narrowed one cannot spell.
+seed "$TMP/x1"
+seed_core "$TMP/x1" skills/pull.md \
+  '    git -C <dist> show <theirs>:templates/settings.json.template > "$t"'
+arm_check "x1 S8 unquoted rev-path in a .md" "$TMP/x1" S8
+
+seed "$TMP/x2"
+seed_core "$TMP/x2" scripts/pull.sh \
+  '#!/usr/bin/env bash' \
+  '#   Recover with: git -C <dist> show <theirs>:templates/settings.json.template > "$t"' \
+  'echo done'
+arm_check "x2 S8 rev-path in a comment of a core/*.sh is reported" "$TMP/x2" S8
+
+seed "$TMP/x3"
+seed_core "$TMP/x3" skills/pull.md \
+  'Recover the template from the distribution:' \
+  '' \
+  '    t=$(mktemp); git -C <dist> \' \
+  '      show <theirs>:templates/settings.json.template > "$t"'
+arm_check "x3 S8 wrapped rev-path rendering is reported" "$TMP/x3" S8
+
+seed_shell "$TMP/x6" <<'X6EOF'
+sed -i.bak 's|^SECTION_RE = re.compile(r".*")$|SECTION_RE = re.compile(r"^## Sprint ([0-9]+) [—\-]+ (.+)")|' "$MUT" && rm -f "$MUT.bak"
+X6EOF
+silent_check "x6 S10 python re.compile line inside a sed replacement is silent under the shipped validator" "$TMP/x6"
+
+# x7 -- the shipped validator under a UTF-8 locale still reports S10's corpus finding.
+UTF8_LOCALE=""
+_locales="$(locale -a 2>/dev/null)"
+for _l in en_US.UTF-8 C.UTF-8 en_GB.UTF-8; do
+  if grep -qxF "$_l" <<<"$_locales"; then UTF8_LOCALE="$_l"; break; fi
+done
+if [ -z "$UTF8_LOCALE" ]; then
+  note "FAIL  x7 S10 under UTF-8 -- no UTF-8 locale on this machine, so the arm cannot be driven"; rc=1
+else
+  seed_shell "$TMP/x7" <<'X7EOF'
+awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
+  cid="$(printf '%s' "$h" | sed -E 's/[[:space:]]*[.—]$//')"
+X7EOF
+  x7_out="$( cd "$TMP/x7" && LC_ALL="$UTF8_LOCALE" LANG="$UTF8_LOCALE" bash scripts/validate-shell-portability.sh 2>&1 </dev/null )"
+  if grep -q "^FAIL: S10:" <<<"$x7_out" && ! grep -q "own probe did not fire" <<<"$x7_out"; then
+    ok "x7 S10 multibyte class is reported as a corpus finding under $UTF8_LOCALE, probe intact"
+  else
+    note "FAIL  x7 S10 under $UTF8_LOCALE -- not reported as a corpus finding"
+    printf '%s\n' "$x7_out" | sed 's/^/      /' | head -6; rc=1
+  fi
+fi
+
+seed_shell "$TMP/x8" <<'X8EOF'
+note=" [resolved by basename from '$path' — not dist-relative]"
+X8EOF
+silent_check "x8 S10 bracketed prose aside with spaces is silent under the shipped validator" "$TMP/x8"
+
+seed "$TMP/x9" 'WORK="$(mktemp -d)"' 'cd "$WORK"' 'git init -q .'
+silent_check "x9 S11 unguarded cd seeded under scripts/ is silent (outside S11's corpus)" "$TMP/x9"
+
 seed "$TMP/x10"
 seed_fixture "$TMP/x10" paren-unit seed.sh <<'X10EOF'
 WORK="$(mktemp -d)"
 ( cd "$WORK"
   git init -q . )
 X10EOF
-blind_check "x10 S11_PAT leading paren" "$TMP/x10" \
-  '/^S11_PAT=/s/(\\\\(\[\[:space:\]\]\*)?//' S11 \
-  "the optional leading \`(\` in the anchor"
+arm_check "x10 S11 bare-paren unguarded cd is reported" "$TMP/x10" S11
 
-# x11 -- the THIRD empty-corpus condition, the one S11 needs. Its seed empties ONLY the fixture
-# listing, so both wider corpora stay live and the other two conditions cannot fire: this is the
-# one world where a PASS after the mutation is the honest observable, and the shared helper's
-# name assertion holds it to the same standard as x4.
-# x11's world IS m10b's.
-corpus_cell_check "x11 empty-guard FIXTURE" "$TMP/m10b" 's/n_fixture:-0/n_shell:-0/' "FIXTURE shell" \
-  "the FIXTURE corpus condition"
+seed_shell "$TMP/x14" <<'X14EOF'
+id=$(grep -m1 -oE '\bID-[0-9]+\b' f)
+[[ $line =~ $id ]] && echo seen
+tok="$(grep -m1 -oE '\bLR-[0-9]+\b' f)"
+[[ $row =~ $tok ]] && echo seen
+X14EOF
+silent_check "x14 S12 command-substitution-valued variable on the right of =~ is silent" "$TMP/x14"
 
-# x12 -- THE `set -e` NON-ACQUITTAL, which is a claim in S11's header and needs a subject like
-# any other. The mutation splices a file-level `set -e` acquittal into the S11 branch of the
-# corpus loop -- the exact filter S11's header argues against -- and m12b's seed is the only
-# thing in this battery it can act on. Without m12b the mutant applies cleanly, changes no cell,
-# and reads as a claim that holds; measured, it passed the whole battery and the receipt.
-#
-# THE SEED IS m12b's AND NOT m12's, deliberately: m12's file carries no `set -e`, so the filter
-# cannot reach it and its survival would prove nothing about the claim.
-# x12's seed is m12b's, byte for byte (the file-level `set -e` world): m12b's cached report is its unmutated side.
-#
-# THE MUTANT MUST STILL PARSE, AND THE FIRST CUT OF THIS ONE DID NOT. A multi-line `sed` append
-# left an unbalanced `)`, so the mutated validator died at line 459 with a syntax error --
-# `blind_check` scored it correctly as "did not go quiet", but for the wrong reason entirely: a
-# script that cannot be parsed acquits nothing and proves nothing about the claim. `grep -L`
-# lists the files NOT carrying the pattern, which is the whole acquittal in one physical line
-# with no nesting, and the substitution below rewrites exactly one line.
-blind_check "x12 S11 set -e non-acquittal" "$TMP/m12b" \
-  's|^    hits="\$(run_arm "\$kd" "\$p" "\$sk" "\$cm" \$files)"$|    if [ "$a" = S11 ]; then files="$(grep -L "^set -e" $files)"; fi; hits="$(run_arm "$kd" "$p" "$sk" "$cm" $files)"|' \
-  S11 "refusing to acquit a file carrying \`set -e\`"
+seed_shell "$TMP/x15" <<'X15EOF'
+g='\bfoo\b'
+grep -E "$g" f
+echo 'if [[ $x =~ $g ]]; then' > f
+X15EOF
+silent_check "x15 S12 =~ named inside a quoted string is silent" "$TMP/x15"
 
-# x13 -- D1's cell: S11_SKIP's `[^;]*` anchor. The mutation restores the first cut's `.*`, which
-# runs to end of line and lets a guard token belonging to a DIFFERENT command acquit the `cd`.
-# m12c's four seeds are the subject; the assertion is that all four vanish, because a mutation
-# that loses one of them and keeps three would pass a presence check.
-# x13's seed is m12c's, byte for byte: m12c's cached report is its unmutated side.
-blind_check "x13 S11_SKIP semicolon anchor" "$TMP/m12c" \
-  '/^S11_SKIP=/s/\[^;\]\*/.*/' S11 \
-  "the \`[^;]*\` bound stopping the SKIP at the first command separator"
+seed "$TMP/x16"
+seed_core "$TMP/x16" scripts/restore.sh \
+  '#!/usr/bin/env bash' \
+  'git -C "$DIST" show "$BASE:core/scripts/validate-thing.sh" > "$DIST/core/scripts/validate-thing.sh"'
+silent_check "x16 S8b unbraced rev-path in a bash script under core/ is silent" "$TMP/x16"
+
+seed "$TMP/x17"
+seed_core "$TMP/x17" skills/pull.md \
+  '    git -C "$DIST" show "$THEIRS:core/scripts/validate-thing.sh" > "$t"'
+arm_check "x17 S8b unbraced \$VAR: rev-path in a .md is reported" "$TMP/x17" S8b
+
+seed "$TMP/x18"
+seed_core "$TMP/x18" skills/pull.md \
+  '    git show "$T1:templates/settings.json.template" > "$t"'
+arm_check "x18 S8b variable name carrying a digit is reported" "$TMP/x18" S8b
+
+seed "$TMP/x19"
+seed_core "$TMP/x19" skills/reconcile.md \
+  'theirs = git -C "$DIST" show "$THEIRS:$CORE_PATH"' \
+  'docs   = git -C "$DIST" show "$THEIRS:docs/notes.md"'
+silent_check "x19 S8b \$-after-colon and non-modifier-letter forms are silent" "$TMP/x19"
+
+seed_shell "$TMP/x22" <<'X22EOF'
+if true; then
+  x="$(
+    # the scorer's own subshell (bash -c's PPID) is excluded
+    echo "1 0"
+  )"
+fi
+X22EOF
+arm_check "x22 S13 comment-only apostrophe offender is reported" "$TMP/x22" S13
+
+seed_shell "$TMP/x24" <<'X24EOF'
+v="$(cat <<'X'
+a ) here
+X
+)"
+X24EOF
+arm_check "x24 S13 lone ) in a heredoc body inside \$( ) is reported" "$TMP/x24" S13
+
+seed_shell "$TMP/x25" <<'X25EOF'
+m=0; k=1
+(( m = 1 << k ))
+y="$(
+  case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac
+  echo "$k"
+)"
+X25EOF
+arm_check "x25 S13 bare case pattern after a (( << )) is reported" "$TMP/x25" S13
+
+seed_shell "$TMP/x27" <<'X27EOF'
+if true; then
+  amutant_arm a "$(amut n 'x "$(p"){y} 1')" z
+fi
+X27EOF
+arm_check "x27 S13 brace-expanded word after an unclosed quoted \$( is reported" "$TMP/x27" S13
+
+seed "$TMP/x29"
+printf '%s\n' '[ -s "$WORK/listed" ] || exit 2' >> "$TMP/x29/scripts/s15-step"
+( cd "$TMP/x29" && git add -A >/dev/null 2>&1 )
+x29_pre="$(pre_out "$TMP/x29")"
+if grep -q "^FAIL: S15:" <<<"$x29_pre" && grep -q 'scripts/s15-step:' <<<"$x29_pre" && [ "$(grep -c '^FAIL:' <<<"$x29_pre")" -eq 1 ]; then
+  ok "x29 S15 duplicated listed site is reported as NEW (S15 alone)"
+else
+  note "FAIL  x29 S15 -- the duplicated listed site was not reported as NEW (S15 alone)"
+  printf '%s\n' "$x29_pre" | sed 's/^/      /' | head -6; rc=1
+fi
 
 # --- negative arms: the measured false positives must stay silent -----------
 seed "$TMP/n1" "sed -i '' 's/x/y/' f" "sed -i.bak 's/x/y/' f && rm -f f.bak"
@@ -1014,7 +577,7 @@ seed_core "$TMP/m9b" skills/pull.md \
   'Recover the template from the distribution:' \
   '' \
   '    t=$(mktemp); git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"'
-kill_check "m9b S8 quoted-but-unbraced rev-path" "$TMP/m9b" S8
+arm_check "m9b S8 quoted-but-unbraced rev-path" "$TMP/m9b" S8
 
 # m9c -- the ESCAPED-quote form, and it is the shape that matters most in this class. The other
 # two seeds are text a reader may adapt; this one is a string a tool PRINTS at the moment the
@@ -1033,7 +596,7 @@ seed_core "$TMP/m9c" scripts/emit.sh \
   '#!/usr/bin/env bash' \
   'say WORKLIST settings-merge ".claude/settings.json" \' \
   '  "run: git -C <dist> show \"<theirs>:templates/settings.json.template\" > \"\$t\""'
-kill_check "m9c S8 escaped-quote rev-path (a PRINTED remedy)" "$TMP/m9c" S8
+arm_check "m9c S8 escaped-quote rev-path (a PRINTED remedy)" "$TMP/m9c" S8
 
 # m9d -- S8b. The ref is already a VARIABLE, which S8's `<ref>:` placeholder grammar cannot spell.
 # The seed is the shape the reader produces by dropping the braces from a correct site, in a
@@ -1043,7 +606,7 @@ seed_core "$TMP/m9d" skills/pull.md \
   'Read the incoming copy of the validator:' \
   '' \
   '    git -C "$DIST" show "$THEIRS:core/scripts/validate-thing.sh" > "$t"'
-kill_check "m9d S8b unbraced \$VAR: rev-path in a .md" "$TMP/m9d" S8b
+arm_check "m9d S8b unbraced \$VAR: rev-path in a .md" "$TMP/m9d" S8b
 
 # m10c -- the CORE TEXT corpus emptied. `doc` is `core/*` minus `*.sh`, a SUBSET of `instr`, so the
 # one world where ONLY its condition fires is a `core/` holding shell files and nothing else:
@@ -1056,41 +619,6 @@ seed "$TMP/m10c"
 empty_doc "$TMP/m10c"
 empty_check "m10c" "$TMP/m10c" "the CORE TEXT corpus (core and fixture shell still live)" "CORE TEXT"
 
-# x16 -- S8b's CORPUS column, which IS the `.sh` exclusion. The seed is a bash script under
-# `core/` carrying the unbraced form, which is CORRECT there (bash has no history modifiers) and
-# is the shape of all 37 real-corpus lines the exclusion subtracts. Shipped: silent. Forced from
-# `doc` to `instr`: reported. S8 cannot see it (no placeholder), so the mutant moves one arm.
-seed "$TMP/x16"
-seed_core "$TMP/x16" scripts/restore.sh \
-  '#!/usr/bin/env bash' \
-  'git -C "$DIST" show "$BASE:core/scripts/validate-thing.sh" > "$DIST/core/scripts/validate-thing.sh"'
-appear_check "x16 S8b_CORPUS=doc (.sh excluded)" "$TMP/x16" 's/S8b_CORPUS=doc/S8b_CORPUS=instr/' S8b \
-  "the corpus column excluding bash scripts"
-
-# x17 -- S8b's MEMBERSHIP in ARMS. Dropped, the probe loop and the corpus loop both skip it and
-# m9d's seed goes unreported. The anchor carries the SPACE before `S8b` and the ` S9` after it,
-# so it cannot touch `S8`.
-seed "$TMP/x17"
-seed_core "$TMP/x17" skills/pull.md \
-  '    git -C "$DIST" show "$THEIRS:core/scripts/validate-thing.sh" > "$t"'
-blind_check "x17 S8b in ARMS" "$TMP/x17" 's/ S8 S8b S9 / S8 S9 /' S8b \
-  "the arm's membership in ARMS"
-
-# x18 -- S8b's NAME grammar. The first candidate spelled the name `[A-Za-z_]+`, which cannot
-# cross a DIGIT, so `$T1:` scored 0. The seed is that name and nothing else discriminates it.
-seed "$TMP/x18"
-seed_core "$TMP/x18" skills/pull.md \
-  '    git show "$T1:templates/settings.json.template" > "$t"'
-blind_check "x18 S8b_PAT digit in name" "$TMP/x18" '/^S8b_PAT=/s/\[A-Za-z_\]\[A-Za-z0-9_\]\*/[A-Za-z_]+/' S8b \
-  "a variable name that may carry a digit"
-
-# x19 (S8b's modifier class) sits below `probe_owned_appear`'s definition, further down.
-
-# x20 -- the CORE TEXT empty-corpus condition, m10c's world, pointed at n_shell.
-# x20's world IS m10c's.
-corpus_cell_check "x20 empty-guard CORE TEXT" "$TMP/m10c" 's/n_doc:-0/n_shell:-0/' "CORE TEXT" \
-  "the CORE TEXT corpus condition"
-
 # n4 -- S10's negatives, one line per acquitting mechanism. Every line here is either the FIX
 # S10 prescribes or one of the three narrowings its header records, and each is acquitted by a
 # DIFFERENT cell, so a widening anywhere in the arm shows up as a line appearing:
@@ -1101,7 +629,7 @@ corpus_cell_check "x20 empty-guard CORE TEXT" "$TMP/m10c" 's/n_doc:-0/n_shell:-0
 #   4    a python `re.compile(` line ................ acquitted by the CONTEXT requirement
 #   5    a python raw-string continuation ........... acquitted by the CONTEXT requirement
 #   6    an `ok "... […] ..."` message .............. acquitted by the CONTEXT requirement
-#   7    a bracketed prose aside carrying spaces .... acquitted by the WHITESPACE exclusion (x8)
+#   7    a bracketed prose aside carrying spaces .... acquitted by the WHITESPACE exclusion
 #   8    a `#` comment naming the class ............. acquitted by S10_COMMENTS=skip
 #
 # LINE 8 CARRIES A `grep` BEFORE ITS CLASS ON PURPOSE. A comment with no regex context is
@@ -1115,8 +643,7 @@ corpus_cell_check "x20 empty-guard CORE TEXT" "$TMP/m10c" 's/n_doc:-0/n_shell:-0
 # LINES 4 AND 5 ARE ACQUITTED BY THE CONTEXT REQUIREMENT AND NOT BY S10_SKIP, MEASURED. Over
 # the tracked shell corpus S10_SKIP subtracts ZERO of S10_PAT's hits: all four python sites
 # fail the context test first. They are kept because they are the shapes the arm's header names
-# as its python false-positive set, and a widening of the context span would surface them --
-# but x6, which proves S10_SKIP itself, needs the different seed documented there.
+# as its python false-positive set, and a widening of the context span would surface them.
 seed_shell "$TMP/n4" <<'N4EOF'
 awk '{ sub(/[[:space:]]*(—|–|-)[[:space:]].*$/, "", s) }' f
 HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+)[[:space:]]*(\.|—)'
@@ -1176,32 +703,6 @@ else
   printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
 fi
 
-# `appear_check` for a cell the validator's OWN SELF-PROBE also exercises. S12's `good.sh` carries
-# the near-miss for each acquitting cell, so a mutant of that cell trips the probe as well as the
-# corpus: two FAIL lines, both S12. That is the probe doing its job, not entanglement with another
-# arm, so the assertion is: shipped silent; mutated names the probe misfire AND reports the seeded
-# corpus line named by <tag>; no OTHER arm moves. Line numbers in <tag> count the shebang.
-probe_owned_appear() { # probe_owned_appear <name> <dir> <sed-expr> <arm> <file:line: tag> <cell>
-  local n="$1" d="$2" expr="$3" arm="$4" tag="$5" cell="$6" pre post other
-  pre="$(pre_out "$d")"
-  pre_pass="$(grep -c "^validate-shell-portability: PASS" <<<"$pre")"
-  if ! grep -q "^validate-shell-portability: PASS" <<<"$pre"; then
-    note "FAIL  $n -- the UNMUTATED validator already reported this seed, so $cell cannot be what acquits it"
-    printf '%s\n' "$pre" | sed 's/^/      /' | head -4; rc=1; return
-  fi
-  mutate "$d" "$expr" "$n" || { rc=1; return; }
-  post="$(run_v "$d")"
-  other="$(grep '^FAIL:' <<<"$post" | grep -vc "^FAIL: ${arm}")" || other=0
-  if grep -q "${arm}'s own probe misfired" <<<"$post" && grep -q "^FAIL: ${arm}:" <<<"$post" \
-     && grep -qF "$tag" <<<"$post" && [ "$other" -eq 0 ]; then
-    mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$([ "$pre_pass" -ne 0 ] && echo 1 || echo 0)" "${n%% *}" "$n -- $cell is load-bearing: shipped is silent, mutated reports the seed ($tag) AND ${arm}'s probe misfires"
-  else
-    note "FAIL  $n -- $cell: the mutant did not report both the seeded line ($tag) and ${arm}'s probe, and nothing else"
-    printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1
-  fi
-}
-
 # m13 -- S12. SIX SEEDS, COUNTED, because S12 is a JOIN and each seed is a different way the two
 # ends meet: an inline escape (1), a double-quoted variable consumed below its assignment (2), a
 # single-quoted one consumed ABOVE its assignment -- the order-free half of the join (3), a braced
@@ -1220,46 +721,6 @@ w=^\\<local
 if [[ "$z" =~ x\sy ]]; then :; fi
 M13EOF
 count_check "m13 S12 GNU escape reaching [[ =~ ]]" "$TMP/m13" S12 6
-
-# x14 -- S12's COMMAND-SUBSTITUTION exemption. `id=$(grep -m1 -oE '\bID-[0-9]+\b' f)` stores grep's
-# OUTPUT, a token, and `[[ $line =~ $id ]]` is correct; this is the grep consumer the arm exists NOT
-# to convict. The mutation deletes the one line that refuses to taint a `$(`-valued assignment.
-# Both spellings are seeded, bare and double-quoted, because they reach the value by different
-# readers. THE TAINTED NAME SITS ON THE RIGHT OF `=~`: the first cut of this seed tested a grep
-# COUNT as `[[ $n =~ ^[0-9]+$ ]]`, whose variable is on the LEFT, which S12 never reads -- so the
-# mutant survived, correctly, and the seed was what was wrong.
-seed_shell "$TMP/x14" <<'X14EOF'
-id=$(grep -m1 -oE '\bID-[0-9]+\b' f)
-[[ $line =~ $id ]] && echo seen
-tok="$(grep -m1 -oE '\bLR-[0-9]+\b' f)"
-[[ $row =~ $tok ]] && echo seen
-X14EOF
-probe_owned_appear "x14 S12 command-substitution exemption" "$TMP/x14" '/index(val, "\$(")/d' \
-  S12 'scripts/subject.sh:5:' "refusing to taint a command-substitution value"
-
-# x15 -- S12's QUOTE BLANKING. Text ABOUT `=~` inside a quoted string is not a site: the seed is a
-# single-quoted echo naming a variable that IS tainted in the same file, so only the blanking
-# stands between it and a report.
-seed_shell "$TMP/x15" <<'X15EOF'
-g='\bfoo\b'
-grep -E "$g" f
-echo 'if [[ $x =~ $g ]]; then' > f
-X15EOF
-probe_owned_appear "x15 S12 quoted text is not a site" "$TMP/x15" 's/out = out "_"/out = out c/' \
-  S12 'scripts/subject.sh:4:' "blanking quoted bodies before looking for =~"
-
-# x19 -- S8b's MODIFIER CLASS. The seed is the two measured near-misses: `"$REF:$CP"`, the shape
-# live at `reconcile/classify-block.md:15-16` (next char `$`), and `"$THEIRS:docs/x"` (`d` is not a
-# modifier). Dropping the class reports both. The validator's own `good.sh` carries the same two,
-# so the probe misfires too -- that is S8b's probe doing its job, which `probe_owned_appear` allows.
-# It sits HERE, below the helper's definition: called above it, bash prints `command not found`,
-# `rc` is never touched, and the fixture reports PASS over a cell that never ran -- measured.
-seed "$TMP/x19"
-seed_core "$TMP/x19" skills/reconcile.md \
-  'theirs = git -C "$DIST" show "$THEIRS:$CORE_PATH"' \
-  'docs   = git -C "$DIST" show "$THEIRS:docs/notes.md"'
-probe_owned_appear "x19 S8b_PAT modifier class" "$TMP/x19" '/^S8b_PAT=/s/:\[acefghlqrstuwAFPQ\]"$/:"/' \
-  S8b 'core/skills/reconcile.md:1:' "the zsh modifier-letter class after the colon"
 
 # m14 -- S13, AND THE ORACLE IS BASH, NOT A SECOND GRAMMAR. S13 is a hand-written reading of how
 # /bin/bash 3.2 closes a command substitution, and `bash -n` accepts every shape it hunts, so the
@@ -1502,77 +963,30 @@ else
   note "FAIL  m14 S13 -- $S13_AGREE of $S13_N seeds agreed (expected $_s13_decl of $_s13_decl declared)"; rc=1
 fi
 
-# x27 -- S13's MEMBERSHIP in ARMS. Dropped, the probe loop and the corpus loop both skip it. The
-# anchor carries the space before `S13` and the closing quote, so it cannot touch S12.
-seed_shell "$TMP/x27" <<'X27EOF'
-if true; then
-  amutant_arm a "$(amut n 'x "$(p"){y} 1')" z
-fi
-X27EOF
-blind_check "x27 S13 in ARMS" "$TMP/x27" 's/ S13 S14"/ S14"/' S13 \
-  "the arm's membership in ARMS"
-
-# x22 -- S13's COMMENTS column. Form (a)'s whole subject is comment text, so `skip` blinds the arm
-# to it. The seed's ONLY offender is a comment, as x2's is for S8.
-seed_shell "$TMP/x22" <<'X22EOF'
-if true; then
-  x="$(
-    # the scorer's own subshell (bash -c's PPID) is excluded
-    echo "1 0"
-  )"
-fi
-X22EOF
-blind_check "x22 S13_COMMENTS=keep" "$TMP/x22" 's/S13_COMMENTS=keep/S13_COMMENTS=skip/' S13 \
-  "the comments column"
-
-# x25 -- S13's lexer opens ARITHMETIC at a bare `((`. Reverted to a plain `(`, the `<<` inside
-# `(( m = 1 << k ))` opens a heredoc that swallows the rest of the file, so the form (b) offender
-# below it -- the seed's ONLY offender -- must go unreported.
-seed_shell "$TMP/x25" <<'X25EOF'
-m=0; k=1
-(( m = 1 << k ))
-y="$(
-  case "$h" in ''|*[!0-9]*) k=x ;; *) k=1 ;; esac
-  echo "$k"
-)"
-X25EOF
-blind_check "x25 S13 bare (( is arithmetic" "$TMP/x25" 's/push("A"); fpd\[n\] = 2; return i + 2 }/push("P"); return i + 1 }/' S13 \
-  "the bare-\`((\` arithmetic rule"
-
-# x26 -- an awk arm that cannot OPEN a listed file refuses (exit 2), never PASS. BSD awk abandons
+# r1 -- an awk arm that cannot OPEN a listed file refuses (exit 2), never PASS. BSD awk abandons
 # the rest of its file list at an unopenable one, so a tracked file deleted from the worktree
 # made S12 and S13 report PASS over a partial corpus. Control first: the same tree, file present,
-# PASSES -- so the refusal below is the deletion and not the seed. The mutant restores the old
-# shape (stderr discarded, no count compared); it must PASS the deleted tree, which is the defect.
-x26_run() { ( cd "$1" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null; echo "rc=$?" ); }
-seed "$TMP/x26"
-printf '%s\n' '#!/usr/bin/env bash' 'echo listed' > "$TMP/x26/scripts/a0.sh"
-( cd "$TMP/x26" && git add -A >/dev/null 2>&1 )
-x26_ctl="$(x26_run "$TMP/x26")"
-rm "$TMP/x26/scripts/a0.sh"
-x26_out="$(x26_run "$TMP/x26")"
-x26_ok=1
-grep -q '^validate-shell-portability: PASS' <<<"$x26_ctl" && grep -qx 'rc=0' <<<"$x26_ctl" || x26_ok=0
-grep -qx 'rc=2' <<<"$x26_out" || x26_ok=0
-grep -q '^validate-shell-portability: PASS' <<<"$x26_out" && x26_ok=0
-grep -q '^validate-shell-portability: REFUSED' <<<"$x26_out" || x26_ok=0
-for x26_a in S12 S13 S14; do
-  grep -q "^REFUSED: ${x26_a}: .*unopenable: scripts/a0.sh" <<<"$x26_out" || x26_ok=0
+# PASSES -- so the refusal below is the deletion and not the seed.
+r1_run() { ( cd "$1" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null; echo "rc=$?" ); }
+seed "$TMP/r1"
+printf '%s\n' '#!/usr/bin/env bash' 'echo listed' > "$TMP/r1/scripts/a0.sh"
+( cd "$TMP/r1" && git add -A >/dev/null 2>&1 )
+r1_ctl="$(r1_run "$TMP/r1")"
+rm "$TMP/r1/scripts/a0.sh"
+r1_out="$(r1_run "$TMP/r1")"
+r1_ok=1
+grep -q '^validate-shell-portability: PASS' <<<"$r1_ctl" && grep -qx 'rc=0' <<<"$r1_ctl" || r1_ok=0
+grep -qx 'rc=2' <<<"$r1_out" || r1_ok=0
+grep -q '^validate-shell-portability: PASS' <<<"$r1_out" && r1_ok=0
+grep -q '^validate-shell-portability: REFUSED' <<<"$r1_out" || r1_ok=0
+for r1_a in S12 S13 S14; do
+  grep -q "^REFUSED: ${r1_a}: .*unopenable: scripts/a0.sh" <<<"$r1_out" || r1_ok=0
 done
-x26_v="$(printf '%s' "$x26_ok")"
-if [ "$x26_ok" -ne 1 ]; then
-  note "FAIL  x26 unopenable listed file -- control PASS rc 0 and refusal rc 2 naming S12, S13 and S14 and scripts/a0.sh were not both seen"
-  printf '%s\n' "$x26_ctl" "$x26_out" | sed 's/^/      /' | head -8; rc=1
-elif mutate "$TMP/x26" 's/^  AWKN_OUT="\$probe\/awkn" awk \(.*\) 2>"\$probe\/awke"$/  AWKN_OUT="$probe\/awkn" awk \1 2>\/dev\/null/; s/^  if \[ "\$rc" -ne 0 \] || \[ "\${got:-none}" != "\$want" \]; then$/  if false; then/' "x26"; then
-  x26_mut="$(x26_run "$TMP/x26")"
-  if grep -qx 'rc=0' <<<"$x26_mut" && grep -q '^validate-shell-portability: PASS' <<<"$x26_mut"; then
-    mutant_killed "$([ "$x26_v" -eq 1 ] && echo 1 || echo 0)" "x26" "x26 unopenable listed file -- refused rc 2 naming S12, S13 and S14 (control PASS rc 0); the uncounted mutant PASSES the same tree"
-  else
-    note "FAIL  x26 unopenable listed file -- the uncounted mutant did not PASS the deleted tree, so the count is not what refused it"
-    printf '%s\n' "$x26_mut" | sed 's/^/      /' | head -4; rc=1
-  fi
+if [ "$r1_ok" -ne 1 ]; then
+  note "FAIL  r1 unopenable listed file -- control PASS rc 0 and refusal rc 2 naming S12, S13 and S14 and scripts/a0.sh were not both seen"
+  printf '%s\n' "$r1_ctl" "$r1_out" | sed 's/^/      /' | head -8; rc=1
 else
-  rc=1
+  ok "r1 unopenable listed file -- refused rc 2 naming S12, S13 and S14 (control PASS rc 0)"
 fi
 
 # n6 -- S12's negatives. Every line is a correct `=~` or a correct `\b`: an anchored inline ERE, a
@@ -1624,11 +1038,11 @@ else
   printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
 fi
 
-# m7b / n8 / x21 -- S7 is scoped to the REPLACEMENT string (BL-681). The old pattern read a
+# m7b / n8 -- S7 is scoped to the REPLACEMENT string (BL-681). The old pattern read a
 # backslash-digit ANYWHERE after the first comma, so an octal escape in a later `print` on a
 # gsub line was reported as a backreference. m7b: a real backreference, plain and inside an
 # escaped-quote replacement -> both counted. n8: the original line, whose `\037` is past the
-# closing quote of `" "` -> silent. x21: the old pattern restored -> n8's report must APPEAR.
+# closing quote of `" "` -> silent.
 seed_shell "$TMP/m7b" <<'M7BEOF'
 awk '{ gsub(/x/, "\\1", s) }' f
 awk '{ gsub(/x/, "a\"\\1", s) }' f
@@ -1649,21 +1063,6 @@ else
   note "FAIL  n8 -- S7 flagged a backslash-digit outside the replacement string"
   printf '%s\n' "$out" | sed 's/^/      /' | head -6; rc=1
 fi
-appear_check "x21 S7_PAT replacement scope" "$TMP/n8" \
-  "/^S7_PAT=/s|.*|S7_PAT='g?sub\\\\(.*,.*\\\\\\\\[0-9]'|" S7 \
-  "the replacement-string scope (old pattern read any backslash-digit after the comma)"
-
-# x24 -- S13 form (d)'s heredoc-body scan. Disconnected (the body line no longer reaches `hbscan`),
-# the arm must go quiet on a seed whose ONLY offender is a lone `)` in a heredoc body in `$( )`.
-seed_shell "$TMP/x24" <<'X24EOF'
-v="$(cat <<'X'
-a ) here
-X
-)"
-X24EOF
-blind_check "x24 S13 form (d) body scan" "$TMP/x24" 's/    else if (hbsub) hbscan(\$0)/    else if (0) hbscan($0)/' S13 \
-  "form (d)'s heredoc-body scan"
-
 # m15 -- S14's subject, seeded where the gate's own `bash -n` never looks: a FIXTURE script. A
 # heredoc body carrying one apostrophe inside `"$( )"`, which `/bin/bash` 3.2 cannot parse.
 seed "$TMP/m15"
@@ -1674,7 +1073,7 @@ X
 )"
 echo "$v"
 M15EOF
-kill_check "m15 S14 apostrophe in a heredoc inside \$( )" "$TMP/m15" S14
+arm_check "m15 S14 apostrophe in a heredoc inside \$( )" "$TMP/m15" S14
 
 # n9 -- S14's near-misses, each one property from m15 and each parsed and RUN by 3.2: a balanced
 # apostrophe pair in the identical structure, a backtick substitution carrying the lone apostrophe,
@@ -1703,74 +1102,13 @@ else
   printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
 fi
 
-# x23 -- S14's MEMBERSHIP in ARMS, on m15's world. Dropped, both the probe loop and the corpus loop
-# skip it, so the fixture-script offender must go unreported. Anchored on the closing ` S14"` so an
-# arm inserted before it in the list does not move the anchor.
-# x23's seed is m15's, byte for byte: m15's cached report is its unmutated side.
-blind_check "x23 S14 in ARMS" "$TMP/m15" 's/ S14"$/"/' S14 "S14's membership in ARMS"
-
-# THE MUTANT COUNT IS DERIVED; THE OTHER TWO ARE NOT, AND THE ASYMMETRY IS DELIBERATE.
-# This line read a hardcoded `11/11 ... (24 assertions)` and went stale the moment `m9b` and
-# `m9c` landed -- it still said 11 with twelve corpus mutants live. A total that decays
-# silently reads exactly like a fresh one, so the mutant count now counts its own call sites.
-#
-# m16/x28: S15 over a seeded pre-suite closure. The offender is appended to the script the seed's hook
+# m16: S15 over a seeded pre-suite closure. The offender is appended to the script the seed's hook
 # STEPS (scripts/s15-step), so the seed derivation, the closure and the grammar must all hold to reach it.
 seed "$TMP/m16"
 printf '%s\n' '[ -x docs/x.sh ] || exit 1' >> "$TMP/m16/scripts/s15-step"
 ( cd "$TMP/m16" && git add -A >/dev/null 2>&1 )
-kill_check "m16 S15 unlisted metadata test in a pre-suite script" "$TMP/m16" S15
-blind_check "x28 S15 corpus NEW report" "$TMP/m16" \
-  "s/    if grep -q '^NEW' <<<\"\$s15_out\"; then/    if false; then/" S15 "S15's corpus NEW-site report"
-
-# x29: S15's per-key COUNT match (D1). The seed is m16's world with the LISTED line duplicated as live
-# code: sites 2, rows 1. Unmutated, the surplus site is reported as NEW (S15 alone). Reverted to SET
-# matching (a site is acquitted when its key has any row), the corpus run goes quiet on the duplicate,
-# and the validator's own self-probe, which seeds the same duplicate, reports it missed. The mutant must
-# fail ONLY S15 and the report must differ from the unmutated one.
-seed "$TMP/x29"
-printf '%s\n' '[ -s "$WORK/listed" ] || exit 2' >> "$TMP/x29/scripts/s15-step"
-( cd "$TMP/x29" && git add -A >/dev/null 2>&1 )
-x29_pre="$(pre_out "$TMP/x29")"
-x29_nfail="$(grep -c '^FAIL:' <<<"$x29_pre")" || x29_nfail=0
-if grep -q "^FAIL: S15:" <<<"$x29_pre" && grep -q 'scripts/s15-step:' <<<"$x29_pre" && [ "$x29_nfail" -eq 1 ] \
-   && mutate "$TMP/x29" 's/SEENK\[SK\[i\]\] > RC\[SK\[i\]\]/!(SK[i] in RC)/' "x29 S15 set matching"; then
-  x29_post="$(run_v "$TMP/x29")"
-  x29_nfail2="$(grep -c '^FAIL:' <<<"$x29_post")" || x29_nfail2=0
-  if grep -q "S15's own probe did not report exactly the seeded offenders" <<<"$x29_post" && [ "$x29_nfail2" -eq 1 ] \
-     && ! grep -q 'scripts/s15-step:' <<<"$x29_post"; then
-    mx_score x29 S15 "$x29_pre" "$x29_post" "$(rcv)" || { note "FAIL  x29 -- $MX_ERR"; rc=1; }
-    mutant_killed "$B_CTL" x29 "x29 S15 per-key count match is load-bearing: shipped reports the duplicated listed site as NEW, set matching acquits it and the self-probe notices"
-  else
-    note "FAIL  x29 -- the set-matching mutant did not go quiet on the duplicate AND trip S15's probe"
-    printf '%s\n' "$x29_post" | sed 's/^/      /' | head -6; rc=1
-  fi
-else
-  note "FAIL  x29 -- the unmutated validator did not report the duplicated listed site as NEW (S15 alone), or the mutation did not apply"
-  printf '%s\n' "$x29_pre" | sed 's/^/      /' | head -6; rc=1
-fi
-
-# THE ARM-TABLE COUNT IS LEFT AS A LITERAL BECAUSE DERIVING IT WAS WRONG. `x1`-`x3` go through
-# `blind_check`; `x4`-`x8` assert inline, because each needs a different observable (a count
-# falling, a report appearing, the validator REFUSING under a foreign locale). A
-# `grep -c blind_check` therefore reads 6 where the truth is 13 -- a derivation that is
-# confidently wrong is worse than a literal somebody must update, so this one stays a literal
-# and says why. If you add an `x*`, update the 25.
-# `m11` goes through `count_check` (it asserts a LINE COUNT, not merely a kill), and `m8`/`m10`
-# assert fail-closed rather than a kill, so all three are counted separately from `kill_check`.
-# A count that silently omitted them is what the first derivation of this line did.
-_n_kill=$(grep -o 'kill_check "' "$0" | grep -c .)
-_n_count=$(grep -o 'count_check "' "$0" | grep -c .)
-_n_kill=$((_n_kill - 1 + _n_count - 1))   # each counting line names its own helper
-if [ "$MATRIX" -eq 0 ]; then
-  if [ "$MX_ROWS" -eq 0 ]; then ok "PLAIN-RUN: no MATRIX row printed -- the full mutant x arm matrix is measured only under --matrix"
-  else bad "PLAIN-RUN: a plain run printed $MX_ROWS MATRIX row(s); the matrix-only path ran per push"; fi
-else
-  set -- $MX_ARMS
-  if [ "$MX_ROWS" -eq $((MX_CALLS * $#)) ] && [ "$MX_CALLS" -gt 0 ]; then ok "MATRIX-RUN: $MX_ROWS MATRIX rows printed ($MX_CALLS scored mutants x $# arms)"
-  else bad "MATRIX-RUN: $MX_ROWS MATRIX row(s) for $MX_CALLS scored mutants x $# arms"; fi
-fi
+arm_check "m16 S15 unlisted metadata test in a pre-suite script" "$TMP/m16" S15
 if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants scored by their own arm, 28/28 arm-table cells proven load-bearing, 9/9 negatives silent"
+  note "PASS  shell-portability -- control green, every seeded offender reported by its own arm, every negative silent"
 fi
 exit "$rc"

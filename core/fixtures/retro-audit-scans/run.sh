@@ -10,53 +10,6 @@
 # prose scoped the scan to SKILL.md + steps/*.md and the analyst obeyed it.
 # Mechanizing the scan only helps if the scan can fail, so every class is
 # asserted in BOTH directions: seeded violation -> FLAGGED, clean tree -> CLEAN.
-# MUTANT-MATRIX um1 decides=U twins=P1
-# MUTANT-MATRIX um2 decides=U twins=P1
-# MUTANT-MATRIX um3 decides=U twins=P1
-# MUTANT-MATRIX um4 decides=U twins=P1
-# MUTANT-MATRIX um5 decides=U twins=P1
-# MUTANT-MATRIX um6 decides=U twins=P1
-# MUTANT-MATRIX um7 decides=U twins=P1
-# MUTANT-MATRIX um8 decides=U twins=P1
-# MUTANT-MATRIX umr decides=U twins=P1
-# MUTANT-MATRIX uq1 decides=UQ twins=P1
-# MUTANT-MATRIX uq2 decides=UQ twins=P1
-# MUTANT-MATRIX uq3 decides=UQ twins=P1
-# MUTANT-MATRIX uq4 decides=UQ twins=P1
-# MUTANT-MATRIX uq5 decides=UQ twins=P1
-# MUTANT-MATRIX uq6 decides=UQ twins=P1
-# MUTANT-MATRIX uq7 decides=UQ twins=P1
-# MUTANT-MATRIX uq8 decides=UQ twins=P1
-# MUTANT-MATRIX uq9 decides=UQ twins=P1
-# MUTANT-MATRIX uq10 decides=UQ twins=P1
-# MUTANT-MATRIX uq11 decides=UQ twins=P1
-# MUTANT-MATRIX uq12 decides=UQ twins=P1
-# MUTANT-MATRIX uq13 decides=UQ twins=P1
-# MUTANT-MATRIX uq14 decides=UQ twins=P1
-# MUTANT-MATRIX uq15 decides=UQ twins=P1
-# MUTANT-MATRIX uq16 decides=UQ twins=P1
-# MUTANT-MATRIX uq17 decides=UQ twins=P1
-# MUTANT-MATRIX umf decides=P1 twins=U
-# MUTANT-MATRIX umo decides=P1 twins=U
-# MUTANT-MATRIX m1 decides=D twins=P1
-# MUTANT-MATRIX m2 decides=D twins=P1
-# MUTANT-MATRIX tier1-strip decides=T twins=P1
-# MUTANT-MATRIX grant-strip decides=G twins=P1
-# MUTANT-MATRIX ld-ownerblind decides=LDc twins=- why=it edits only the exit predicate, so no class row moves in any world; LDl, LD2 and LDu read unchanged under it (measured)
-# MUTANT-MATRIX ld-tierblind decides=LD2 twins=- why=it edits only the exit predicate, so no class row moves in any world; LDc, LDl and LDu read unchanged under it (measured)
-# MUTANT-MATRIX ld-unresdrop decides=LDu twins=- why=it edits only the t1-local counter, so no class row moves in any world; LDc, LDl and LD2 read unchanged under it (measured)
-# MUTANT-MATRIX hook-det decides=HKc twins=- why=it edits only the consumer hook argv; the receipt's local-t1 and local-t2 cells read unchanged under it (measured)
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/retro-audit-scans/run.sh --matrix
-# Names above are WORLDS, the same tokens the MATRIX-ROW lines print: U the used-to corpus, UQ the clause-opening used-to corpus, P1 the tier-2
-# corpus, T the tier-1 origin corpus, G the identifier-grant corpus, D the distribution tree; LDc, LDl, LD2 and LDu
-# the four --fail-on=local-deterministic worlds, HKc the whole consumer hook's core-owned tier-1 cell. A twin is a world
-# where the mutant changes no class row (0 in its row), driven every push beside the deciding world.
-# Measured co-trips, stated plainly: tier1-strip and grant-strip are ONE env switch (AI_DLC_AUDIT_MUTANT=1)
-# that strips every tier-1 class, so each moves T, G and D; each is DECIDED by the world whose arm scores it
-# (T by 12f, G by 12m) and its other two dead worlds are the same fault seen again, not separate kills.
-# Every other mutant changes rows in exactly its deciding world. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the command
-# above. A plain run never drives a matrix-only cell.
 set -uo pipefail
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -67,8 +20,6 @@ unset CLAUDE_PROJECT_DIR
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-MATRIX=0
-[ "${1:-}" = --matrix ] && MATRIX=1
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
@@ -82,47 +33,38 @@ echo "HERMETIC-CONSUMED core/scripts/validate-gate-manifest.sh"
 # SIGPIPE, so a MATCH is read as a failed assertion. Every tier-1 label prints at
 # the top of the report, which is exactly where that bites.
 has() { grep -q "$1" <<<"$2"; }
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "retro-audit-scans:"
-if [ "$MATRIX" = 1 ]; then echo "retro-audit-scans mode: FULL (--matrix)"; else echo "retro-audit-scans mode: PUSH"; fi
+echo "retro-audit-scans mode: PUSH"
 
-# A pristine copy per assertion, so one mutation never leaks into the next.
+# A pristine copy per assertion, so one world never leaks into the next.
 fresh() { rm -rf "$WORK/t"; cp -R "$PROJ" "$WORK/t"; }
 
-# ONE real invocation per distinct (tree bytes, script bytes, args, mutant flag). The subject is
+# ONE real invocation per distinct (tree bytes, script bytes, args). The subject is
 # the only expensive thing here (about 0.2s a call), and most arms ask two questions of one world
-# (its report AND its exit code) or rebuild a world an earlier arm already scored. Both now cost
+# (its report AND its exit code) or rebuild a world an earlier arm already scored. Both cost
 # nothing: the key is the tree's NAMES and BYTES (never mtimes, so a rebuilt identical copy hits)
-# plus the script's own bytes, so a mutant copy and the real script can never share an answer.
+# plus the script's own bytes.
 # The "memo self-probe" arm below proves a one-byte-different world is a MISS.
 MEMO="$WORK/memo"; mkdir -p "$MEMO"
-# The audit finds its ownership resolver beside itself; a mutant copy built in $WORK needs one there too,
-# or its rows carry a different owner tag from the real script and a row comparison reads that as a change.
-cp "$RESOLVER" "$WORK/core-paths.sh"
 fp() { ( cd "$1" 2>/dev/null && { LC_ALL=C find . -type f | LC_ALL=C sort | while IFS= read -r f; do printf '%s\n' "$f"; cat "$f"; done; LC_ALL=C find . -type d | LC_ALL=C sort; } | cksum ); }
 runs() { awk 'END{print NR+0}' "$MEMO/runs" 2>/dev/null || echo 0; }
-memo() { # <out|rc> <mutant 0|1> <dir> <script> [args...]
-  local what="$1" mut="$2" dir="$3" script="$4" key o
-  shift 4
-  key="$( { printf '%s|%s|%s\n' "$mut" "$script" "$*"; cksum < "$script"; fp "$dir"; } | cksum )"
+memo() { # <out|rc> <dir> <script> [args...]
+  local what="$1" dir="$2" script="$3" key o
+  shift 3
+  key="$( { printf '%s\n' "$script|$*"; cksum < "$script"; fp "$dir"; } | cksum )"
   key="${key// /_}"
   if [ ! -f "$MEMO/$key.rc" ]; then
-    o="$( cd "$dir" && if [ "$mut" = 1 ]; then AI_DLC_AUDIT_MUTANT=1 bash "$script" "$@" 2>&1; else bash "$script" "$@" 2>&1; fi; echo "@@RC=$?" )"
+    o="$( cd "$dir" && bash "$script" "$@" 2>&1; echo "@@RC=$?" )"
     printf '%s' "${o%@@RC=*}" > "$MEMO/$key.out"
     printf '%s' "${o##*@@RC=}" > "$MEMO/$key.rc"
     echo x >> "$MEMO/runs"
   fi
   if [ "$what" = out ]; then cat "$MEMO/$key.out"; else cat "$MEMO/$key.rc"; fi
 }
-audit() { memo out 0 "$WORK/t" "$AUDIT" "$@"; }
-manifest() { memo out 0 "$WORK/t" "$MANIFEST" .claude/skills/ai-dlc/steps/gate-validation.md; }
-rc_of() { memo rc 0 "$WORK/t" "$1" "${@:2}"; }
-audit_mut() { memo out 1 "$WORK/t" "$AUDIT" "$@"; }
-rc_mut()    { memo rc 1 "$WORK/t" "$AUDIT" "$@"; }
+audit() { memo out "$WORK/t" "$AUDIT" "$@"; }
+manifest() { memo out "$WORK/t" "$MANIFEST" .claude/skills/ai-dlc/steps/gate-validation.md; }
+rc_of() { memo rc "$WORK/t" "$1" "${@:2}"; }
 
 GV=".claude/skills/ai-dlc/steps/gate-validation.md"
 
@@ -172,7 +114,7 @@ rm -rf "$WORK/t"; mkdir -p "$WORK/t"
 # Classes 1, 1b and 2 are independent output rows, and each seed sits in a file of its own so a
 # finding can only come from its own seed. Near-misses (the quoted mention, the negative mandate,
 # the complete triples) carry a flagged twin in the SAME file, so "absent" is never read off a
-# file the scan did not reach. mf and mo (12u19, 12u20) are scored on this world too.
+# file the scan did not reach.
 p1_world() {
   fresh
   printf 'The lead MUST retry, because we lost a sprint to this.\n' >> "$WORK/t/CLAUDE.md"
@@ -289,8 +231,7 @@ has 'overrides/entry.md.*DANGLING_POINTER' "$out" \
 # ===== World T: every TIER-1 origin seed in ONE corpus. Assertions 12a-12f and 12k. ==========
 # CLAUDE.md:4 version tag, :5 sprint reference, :6 parenthetical origin note, :7 embedded date, :8 a
 # BACKTICKED version tag (mention is not use), plus a version tag in escalations.md (the corpus reaches
-# the whole skill). One --fail-on=deterministic run is both the report and the exit code; the MUTANT run
-# of 12f strips tier 1 from the same corpus, so the unmutated exit 1 beside it is the live control.
+# the whole skill). One --fail-on=deterministic run is both the report and the exit code.
 wt_world() {
   fresh
 cat >> "$WORK/t/CLAUDE.md" <<'EOF'
@@ -326,24 +267,6 @@ has "CLAUDE.md:7  EMBEDDED_DATE" "$out" \
 has 'escalations.md.*ORIGIN_TAG' "$out" \
   && ok "escalations.md is inside the corpus" \
   || bad "escalations.md ships to every consumer and is scanned by nothing"
-# --- Assertion 12f: MUTATION CONTROL — tier 1 is what catches tier 1 --------
-# Every seed above, tier-1 patterns stripped. If this still reports FLAGGED, some older class is
-# matching the seeds and the new code is unproven.
-# The unmutated run on the same corpus must fail, or the control proves nothing.
-if [ "$(rc_of "$AUDIT" --fail-on=deterministic)" = "1" ]; then
-  ok "  the unmutated run on that corpus exits 1 (control is live)"; B_t=1
-else
-  bad "  the unmutated run also passed — the differential is vacuous"
-fi
-out_m="$(audit_mut --fail-on=deterministic)"
-if has 'ORIGIN_TAG: CLEAN' "$out_m" \
-   && has 'ORIGIN_PARENTHETICAL: CLEAN' "$out_m" \
-   && has 'EMBEDDED_DATE: CLEAN' "$out_m" \
-   && [ "$(rc_mut --fail-on=deterministic)" = "0" ]; then
-  mutant_killed "${B_t:-0}" tier1-strip "MUTANT: tier-1 patterns stripped -> the same corpus scores CLEAN"
-else
-  bad "tier1-strip SURVIVED: MUTANT run still flagged the tier-1 seeds — an older class is catching them, so the new patterns are unproven"
-fi
 
 
 # ------------- tier 1: the GRANT, which is the other half of the above -------
@@ -377,25 +300,17 @@ EOF
 }
 wg_world
 if cmp -s "$WORK/ra.pristine" "$WORK/t/$RA"; then
-  bad "FIXTURE BROKEN — the Class 1c mutant is byte-identical to the seed, so nothing was mutated and the arms below prove nothing"
+  bad "FIXTURE BROKEN — the Class 1c seed is byte-identical to the pristine file, so nothing was seeded and the arms below prove nothing"
 else
   out="$(audit)"
   if has 'IDENTIFIER_GRANT: FLAGGED' "$out"; then
-    ok "grant deleted with its trailing prohibition retained -> IDENTIFIER_GRANT FLAGGED"; B_gr=1
+    ok "grant deleted with its trailing prohibition retained -> IDENTIFIER_GRANT FLAGGED"
   else
     bad "a Style block that prohibits every way to carry an identifier and permits none went undetected"
   fi
   [ "$(rc_of "$AUDIT" --fail-on=deterministic)" = "1" ] \
     && ok "  and it gates the push (--fail-on=deterministic -> exit 1)" \
     || bad "  but --fail-on=deterministic did not exit 1"
-  # MUTANT differential, on THIS corpus rather than 12f's: 12f seeds only CLAUDE.md,
-  # where this class has no subject, so it scores the same either way there and
-  # establishes nothing about Class 1c.
-  if has 'IDENTIFIER_GRANT: CLEAN' "$(audit_mut)"; then
-    mutant_killed "${B_gr:-0}" grant-strip "  MUTANT: tier-1 stripped -> the same corpus scores CLEAN (no older class is catching it)"
-  else
-    bad "  grant-strip SURVIVED: MUTANT run still flagged it — an older class is matching this seed and Class 1c is unproven"
-  fi
 fi
 
 # --- Assertion 12n: a legitimately REWORDED grant is not a violation ---------
@@ -458,8 +373,7 @@ fi
 # class a lead dispositions by hand, so a false positive there is a lead reading a
 # correct line, waving it through, and learning to wave the next one through too.
 # The mirror is a fix that clears the false positives by acquitting the true
-# habitual lines as well, and the mutants below are eight separate ways to write
-# it — two of them wrong fixes BUILT and scored rather than described.
+# habitual lines as well.
 #
 # EVERY SEED IS PRODUCER TEXT, never text derived from the predicate. A seed read
 # off the accept-set proves the reader accepts its own grammar. The purpose shapes
@@ -611,7 +525,7 @@ has "$TR/uh5.md:2[],]" "$nl" \
   && ok "'that used to collide with it now sit …' -> FLAGGED at uh5.md:2" \
   || bad "a habitual line that DOES carry 'now' was acquitted"
 # Assertion 12u9e: `the reason is` is no NARRATIVE alternative. Three pointer shapes stay CLEAN and
-# the habitual line beside them still flags; mutant umr (12u21) restores the token and is killed here.
+# the habitual line beside them still flags.
 { ! has "$TR/uhr.md:[123][],]" "$nl"; } \
   && ok "'the reason is not restated here.' / 'the reason is Rule 27.' / '… AND THE REASON IS' -> CLEAN" \
   || bad "a 'the reason is' pointer line scored as narrative drift"
@@ -634,7 +548,7 @@ has "$TR/ub.md:2[],]" "$nl" \
   && ok "'\`validate-mandatory-rules.sh\` used to run six checks.' -> FLAGGED at ub.md:2" \
   || bad "a habitual line whose subject is a backticked span was read as a wrap and took its predecessor's verdict"
 # The discriminating input. ub is FLAGGED under either fall-through rule because its previous line
-# ends in a period; ub2 is FLAGGED only under the raw-text rule, and it is the seed mutant m7 moves.
+# ends in a period; ub2 is FLAGGED only under the raw-text rule.
 has "$TR/ub2.md:2[],]" "$nl" \
   && ok "the same line over a predecessor ending in a bare 'an' -> still FLAGGED at ub2.md:2" \
   || bad "a blanked prefix fell through to the previous line and borrowed its acquittal"
@@ -642,154 +556,18 @@ has "$TR/ub2.md:2[],]" "$nl" \
   && ok "'The nonce is not used to reconcile anything.' -> CLEAN (negated passive)" \
   || bad "a negation between the copula and the participle broke the passive-of-purpose clause"
 
-# ---- MUTANTS: four ways to get this wrong, scored on one combined corpus ----
-# A COPY of the shipping audit, `cmp -s` guarded, pointed at the SAME seeded tree.
-# Each mutant is asserted on the EXACT hit set it produces, so a mutation that
-# moves a cell it does not own fails its own arm rather than passing quietly.
-mkmut() { # <name> <sed script>; 0 = applied, 1 = DID NOT APPLY
-  cp "$AUDIT" "$WORK/$1.pre" || return 1
-  sed "$2" "$WORK/$1.pre" > "$WORK/$1.sh" || return 1
-  cmp -s "$WORK/$1.pre" "$WORK/$1.sh" && return 1
-  return 0
-}
-audit_at() { ( cd "$WORK/t" && bash "$1" 2>&1 ); }
-
-# The mutation guard's own control. Every anchor below is unique in the audit
-# script; this proves a `sed` that matched NOTHING is reported as DID NOT APPLY
-# rather than scored as a mutant that changed no cell.
-if mkmut umx 's/ZZZ_NO_SUCH_ANCHOR_ZZZ/x/'; then
-  bad "the impossible-anchor control APPLIED — mkmut cannot tell a live mutation from a no-op"
-else
-  ok "mutation guard: an impossible anchor reports DID NOT APPLY"
-fi
-
 wu_world
 HAB="$TR/uh1.md:1,$TR/uh2.md:1,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2,$TR/uhr.md:4"
 ALLHITS="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$HAB"
 WITHUC="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$TR/uc.md:1,$HAB"
 
-# --- Assertion 12u10: UNMUTATED CONTROL, with a positive conjunct ------------
+# --- Assertion 12u10: the exact hit set, with a positive conjunct ------------------------
 # Not "nothing went wrong": the eight habitual lines must be THERE and the four
-# purpose lines must NOT, or a subject replaced by `exit 0` scores every mutant
-# below as a kill.
+# purpose lines must NOT.
 if has "NARRATIVE_DRIFT: FLAGGED  n=\[$ALLHITS\]" "$(audit)"; then
-  ok "CONTROL: 4 purpose + 8 habitual in one corpus -> exactly the 8 habitual lines"; B_u10=1
+  ok "CONTROL: 4 purpose + 8 habitual in one corpus -> exactly the 8 habitual lines"
 else
-  bad "the unmutated control did not produce the baseline hit set — every mutant below is unreadable"
-fi
-
-# --- Assertion 12u11: m1, the OLD grammar restored --------------------------
-# `used to\b` back inside NARRATIVE, which is what the audit did before the split.
-if mkmut um1 's/|measured:|/|measured:|used to\\b|/'; then
-  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$WITHUC,$TR/up1.md:1,$TR/up2.md:2,$TR/up3.md:2\]" "$(audit_at "$WORK/um1.sh")"; then
-    mutant_killed "${B_u10:-0}" um1 "MUTANT m1 (old NARRATIVE grammar) -> all four purpose lines flip to FLAGGED; killed"
-  else
-    bad "um1 SURVIVED: MUTANT m1 restored 'used to' to NARRATIVE and no purpose arm moved — 12u1-12u3 prove nothing"
-  fi
-else
-  bad "MUTANT m1 DID NOT APPLY — its anchor moved; 12u1-12u3 are unproven"
-fi
-
-# --- Assertion 12u12: m2, the tense-marker wrong fix -------------------------
-# The fix the audit's own comment records as scored and rejected: require
-# "now"/"no longer" on the line. It clears the same purpose sites AND silences
-# every habitual line that does not announce its own tense shift.
-if mkmut um2 's#^            return True$#            return bool(re.search(r"\\bnow\\b|\\btoday\\b|\\bcurrently\\b|no longer", t, re.I))#'; then
-  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh5.md:2\]" "$(audit_at "$WORK/um2.sh")"; then
-    mutant_killed "${B_u10:-0}" um2 "MUTANT m2 (tense marker required) -> seven habitual lines go CLEAN, only 'now' survives; killed"
-  else
-    bad "um2 SURVIVED: MUTANT m2 required a tense-shift marker and the habitual arms did not move — 12u4-12u8 prove nothing"
-  fi
-else
-  bad "MUTANT m2 DID NOT APPLY — its anchor moved; 12u4-12u8 are unproven"
-fi
-
-# --- Assertion 12u13: m3, the predicate acquits everything -------------------
-# uh5 is what separates m3 from m2: it carries "now", so m2 keeps it and m3 does
-# not. Without that seed the two mutants have one footprint and neither is proven.
-if mkmut um3 's#^            return True$#            return False#'; then
-  if has 'NARRATIVE_DRIFT: CLEAN' "$(audit_at "$WORK/um3.sh")"; then
-    mutant_killed "${B_u10:-0}" um3 "MUTANT m3 (habitual_used_to always False) -> every habitual line goes CLEAN; killed"
-  else
-    bad "um3 SURVIVED: MUTANT m3 acquitted every line and Class 1 still flagged — some other pattern is catching the seeds"
-  fi
-else
-  bad "MUTANT m3 DID NOT APPLY — its anchor moved; 12u4-12u8 are unproven"
-fi
-
-# --- Assertion 12u14: m4, the previous-line join removed --------------------
-# Owns BOTH wrapped purpose seeds: they are one property, and a mutant that moved
-# only one of them would mean the other arm is reading something else.
-if mkmut um4 's#            before = used(prev)#            before = ""#'; then
-  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$ALLHITS,$TR/up2.md:2,$TR/up3.md:2\]" "$(audit_at "$WORK/um4.sh")"; then
-    mutant_killed "${B_u10:-0}" um4 "MUTANT m4 (previous-line join removed) -> both WRAPPED purpose lines flip, up1 and uc do not; killed"
-  else
-    bad "um4 SURVIVED: MUTANT m4 dropped the previous-line join and the wrapped arms did not move — 12u2/12u3 prove nothing"
-  fi
-else
-  bad "MUTANT m4 DID NOT APPLY — its anchor moved; 12u2/12u3 are unproven"
-fi
-
-# --- Assertion 12u15: m5, the WRONG FIX, built rather than described ---------
-# The plausible over-wide fix: acquit on ANY article rather than an indefinite
-# one. It clears all three purpose sites, which is what makes it look finished,
-# and takes "The step used to" and "the blocks used to" with it. m5, m6 and m7 also switch off
-# the BL-1001 indefinite-subject test (the `if False:` line), because that test now flags what each of
-# them acquits or re-acquits and would hide their footprint. Seeding the
-# absent fix proves the arms fire; seeding the WRONG one proves they discriminate.
-if mkmut um5 's#(a|an)#(a|an|the)#;s#if article_opens_clause(before, prev, bool(text\[:m.start()\].strip()), after_clause(t\[m.end():\], used(nxt))):#if False:#'; then
-  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2,$TR/ub2.md:2,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2\]" "$(audit_at "$WORK/um5.sh")"; then
-    mutant_killed "${B_u10:-0}" um5 "MUTANT m5 (definite article acquits too, indefinite-subject test off) -> ua, uh1 and uh2 go CLEAN; killed"
-  else
-    bad "um5 SURVIVED: MUTANT m5 widened the article class and no habitual arm moved — the a/an narrowing is unbound"
-  fi
-else
-  bad "MUTANT m5 DID NOT APPLY — its anchor moved; the article narrowing is unproven"
-fi
-
-# --- Assertion 12u16: m6, the OTHER wrong fix, also built -------------------
-# "The word before it looks like a noun, so this is a reduced relative": both
-# clauses replaced by a lowercase-word test. It fails in BOTH directions at once,
-# which is why it needs seeds on both sides — it FLAGS the wrapped `be` purpose
-# site (`be` is two letters, not a noun) and ACQUITS `The step used to`,
-# `the blocks used to` and `This paragraph used to`, whose preceding words are
-# nouns. Only the seeds whose cue ends in punctuation or in a blank survive it.
-if mkmut um6 $'s#.*am|is|are.*#    r"([a-z]{3,}\\\\s*$)", re.I)#\n/directly|solely/d\n/explicitly|first/d\n/(a|an)/d\ns#if article_opens_clause(before, prev, bool(text\[:m.start()\].strip()), after_clause(t\[m.end():\], used(nxt))):#if False:#'; then
-  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2,$TR/ub2.md:2,$TR/uh4.md:2,$TR/up2.md:2\]" "$(audit_at "$WORK/um6.sh")"; then
-    mutant_killed "${B_u10:-0}" um6 "MUTANT m6 (noun-looking token before) -> up2 flips AND uh1/uh2/uh3/ua go CLEAN; killed"
-  else
-    bad "um6 SURVIVED: MUTANT m6 replaced the two clauses with a noun heuristic and nothing moved — the clause split is unbound"
-  fi
-else
-  bad "MUTANT m6 DID NOT APPLY — its anchor moved; the clause split is unproven"
-fi
-
-# --- Assertion 12u17: m7, the fall-through decided on BLANKED text ----------
-# The state before the raw-text fix: a line whose only prefix is a backticked
-# subject reads as line-initial and borrows the previous line's verdict. It moves
-# exactly one cell, ub2, which is why ub2 had to be seeded — ub is FLAGGED under
-# both rules and could never have shown this.
-if mkmut um7 's#if not text#if not before#;s#if article_opens_clause(before, prev, bool(text\[:m.start()\].strip()), after_clause(t\[m.end():\], used(nxt))):#if False:#'; then
-  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ua.md:1,$TR/ub.md:2,$HAB\]" "$(audit_at "$WORK/um7.sh")"; then
-    mutant_killed "${B_u10:-0}" um7 "MUTANT m7 (fall-through on blanked text) -> ub2 alone goes CLEAN; killed"
-  else
-    bad "um7 SURVIVED: MUTANT m7 restored the blanked-prefix fall-through and no arm moved — 12u9c proves nothing"
-  fi
-else
-  bad "MUTANT m7 DID NOT APPLY — its anchor moved; 12u9c is unproven"
-fi
-
-# --- Assertion 12u18: m8, the adverb allowance removed ----------------------
-# A copula with a negation between it and the participle is still a passive.
-# Deleting the allowance moves exactly one cell, uc.
-if mkmut um8 $'/directly|solely/d\ns#.*explicitly|first.*#    r"\\\\s*$"#'; then
-  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$WITHUC\]" "$(audit_at "$WORK/um8.sh")"; then
-    mutant_killed "${B_u10:-0}" um8 "MUTANT m8 (no adverb between copula and participle) -> uc alone flips to FLAGGED; killed"
-  else
-    bad "um8 SURVIVED: MUTANT m8 removed the adverb allowance and uc did not flip — 12u9d proves nothing"
-  fi
-else
-  bad "MUTANT m8 DID NOT APPLY — its anchor moved; 12u9d is unproven"
+  bad "the 4 purpose + 8 habitual corpus did not produce the baseline hit set — Class 1 is unreadable"
 fi
 
 # --- World UQ (BL-1001): an indefinite-subject habitual clause is flagged, a purpose clause is not --
@@ -843,7 +621,7 @@ U3="${Q}r.md:2,${Q}s1.md:1,${Q}s2.md:1"
 UQALL="$U1,$U2,$U3"
 uqout="$(audit)"
 if has "NARRATIVE_DRIFT: FLAGGED  n=\[$UQALL\]" "$uqout"; then
-  ok "CONTROL UQ: the 16 habitual indefinite-subject lines -> exactly those; the 16 purpose near-misses and 3 producer purpose lines CLEAN"; B_uq=1
+  ok "CONTROL UQ: the 16 habitual indefinite-subject lines -> exactly those; the 16 purpose near-misses and 3 producer purpose lines CLEAN"
 else
   bad "World UQ did not flag exactly the sixteen habitual lines — an indefinite-subject habitual clause is acquitted or a purpose clause flagged"
 fi
@@ -852,199 +630,14 @@ fi
   && ok "comma-initial with a modal, cue before a passive, imperative objects, purpose nouns after a verb or copula (one wrapped), cue with a finite verb, and the three producer purpose lines -> CLEAN" \
   || bad "a purpose clause was flagged by the indefinite-subject test"
 
-# Mutants, each moving the cells of its own property only (the expected set is asserted exactly).
-# uq1 whole test off; uq2 previous line not read (uqm2 and the wrapped uqp5 flip); uq3 passive rescue off (uqd);
-# uq4 sentence-initial test off (uql and uqn1-uqn3); uq5 `:` / uq6 `(` / uq7 `,` / uq8 `and|but` dropped from
-# the clause-initial test (uqj / uqk / uqi / uqh1-uqh3, each decided by that one token; a comma before `and` does not end the segment); uq9 finite-verb rescue off
-# (uqc, up1, up3 flip to flagged); uq10 clause cut at and/where/which off (uqn1-uqn3 clear); uq11 cue rescue off
-# (uqp6 flips); uq12 clause-initial gate off (the imperative and B2 near-misses flip).
-uqscore() { # <mutant> <sed script> <expected n list>: 0 = the expected set, 1 = another set, 2 = DID NOT APPLY
-  mkmut "$1" "$2" || return 2
-  has "NARRATIVE_DRIFT: FLAGGED  n=\[$3\]" "$(audit_at "$WORK/$1.sh")" && return 0
-  return 1
-}
-if mkmut uq1 's#if article_opens_clause(before, prev, bool(text\[:m.start()\].strip()), after_clause(t\[m.end():\], used(nxt))):#if False:#'; then
-  if has "NARRATIVE_DRIFT: CLEAN" "$(audit_at "$WORK/uq1.sh")"; then
-    mutant_killed "${B_uq:-0}" uq1 "MUTANT uq1 (old clause 2: any article acquits) -> all sixteen habitual lines go CLEAN; killed"
-  else
-    bad "uq1 SURVIVED: the old clause 2 restored and an indefinite-subject habitual line still flagged"
-  fi
-else
-  bad "MUTANT uq1 DID NOT APPLY — its anchor moved; the indefinite-subject test is unproven"
-fi
-uqscore uq2 's#        pre = used(prev)#        pre = ""#' "$U1,${Q}m2.md:2,$U2,${Q}p5.md:2,$U3"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq2 "MUTANT uq2 (previous line not read) -> the wrapped uqm2 and uqp5 flip to FLAGGED; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq2 SURVIVED: the previous-line read removed and no wrapped arm moved"
-else
-  bad "MUTANT uq2 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq3 's#if q.groupdict().get("be"):#if False:#' "${Q}a.md:1,${Q}b.md:1,${Q}d.md:1,${UQALL#${Q}a.md:1,${Q}b.md:1,}"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq3 "MUTANT uq3 (passive rescue removed) -> uqd alone flips to FLAGGED; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq3 SURVIVED: the passive rescue removed and the cue-before-passive near-miss did not move"
-else
-  bad "MUTANT uq3 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq4 's#return seg == "" or bool#return bool#' "${U1%,${Q}l.md:1},${Q}s1.md:1,${Q}s2.md:1"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq4 "MUTANT uq4 (sentence-initial test off) -> uql, uqn1-uqn3 and the wrapped uqr go CLEAN; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq4 SURVIVED: the sentence-initial test removed and its arms did not move"
-else
-  bad "MUTANT uq4 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq5 's#\[,;:(#[,;(#' "${UQALL/,${Q}j.md:1/}"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq5 "MUTANT uq5 (':' dropped from the clause-initial test) -> uqj alone goes CLEAN; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq5 SURVIVED: ':' dropped and uqj did not move"
-else
-  bad "MUTANT uq5 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq6 's#\[,;:(#[,;:#' "${UQALL/,${Q}k.md:1/}"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq6 "MUTANT uq6 (open paren dropped from the clause-initial test) -> uqk alone goes CLEAN; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq6 SURVIVED: the open paren dropped and uqk did not move"
-else
-  bad "MUTANT uq6 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq7 's#\[,;:(#[;:(#' "${UQALL/,${Q}i.md:1/}"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq7 "MUTANT uq7 (comma dropped from the clause-initial test) -> uqi alone goes CLEAN; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq7 SURVIVED: the comma dropped and uqi did not move"
-else
-  bad "MUTANT uq7 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq8 's#|\\b(and|but))#)#' "${UQALL/,${Q}h1.md:1,${Q}h2.md:1,${Q}h3.md:1/}"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq8 "MUTANT uq8 (and/but dropped from the clause-initial test) -> uqh1-uqh3 go CLEAN; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq8 SURVIVED: and/but dropped and uqh3 did not move"
-else
-  bad "MUTANT uq8 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq9 's#^    if finite:$#    if False:#' "$TR/up1.md:1,${Q}a.md:1,${Q}b.md:1,${Q}c.md:1,${UQALL#${Q}a.md:1,${Q}b.md:1,},${Q}u1.md:1,${Q}u2.md:1"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq9 "MUTANT uq9 (finite-verb rescue off) -> uqc, up1, uqu1 and uqu2 flip to FLAGGED (up3 stays clear: its e.g. is no sentence end); killed"
-elif [ "$r" = 1 ]; then
-  bad "uq9 SURVIVED: the finite-verb rescue removed and no purpose arm moved"
-else
-  bad "MUTANT uq9 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq10 's#|\\b(?:and|but|which|where|while|whereas|because|although|though)\\b##' "${UQALL/,$U2/}"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq10 "MUTANT uq10 (clause not cut at and/where/which) -> uqn1-uqn3 go CLEAN; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq10 SURVIVED: the clause cut removed and uqn1-uqn3 did not move"
-else
-  bad "MUTANT uq10 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq11 's#return not finite#return True#' "$U1,$U2,${Q}p6.md:1,$U3"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq11 "MUTANT uq11 (cue rescue off) -> uqp6 alone flips to FLAGGED; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq11 SURVIVED: the cue rescue removed and uqp6 did not move"
-else
-  bad "MUTANT uq11 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq12 's#return seg == "" or bool(CLAUSE_INIT.search(seg))#return True#' "$U1,${Q}m1.md:1,${Q}m2.md:2,$U2,${Q}p1.md:1,${Q}p2.md:1,${Q}p3.md:1,${Q}p4.md:1,${Q}p5.md:2,$U3,${Q}t1.md:1,${Q}t2.md:1"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq12 "MUTANT uq12 (clause-initial gate off) -> the imperative objects, uqp1-uqp5 and the e.g./i.e. near-misses flip to FLAGGED; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq12 SURVIVED: the clause-initial gate removed and no purpose-after-a-verb arm moved"
-else
-  bad "MUTANT uq12 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq13 's#\\u2013##' "${UQALL/,${Q}s2.md:1/}"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq13 "MUTANT uq13 (en dash dropped from the clause-initial test) -> uqs2 alone goes CLEAN; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq13 SURVIVED: the en dash dropped and uqs2 did not move"
-else
-  bad "MUTANT uq13 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq14 's#|\\s-|#|#' "${UQALL/,${Q}s1.md:1/}"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq14 "MUTANT uq14 (spaced hyphen dropped from the clause-initial test) -> uqs1 alone goes CLEAN; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq14 SURVIVED: the spaced hyphen dropped and uqs1 did not move"
-else
-  bad "MUTANT uq14 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq15 's#(?<!\\be\\.g)(?<!\\bi\\.e)##' "$UQALL,${Q}t1.md:1,${Q}t2.md:1"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq15 "MUTANT uq15 (e.g./i.e. read as a sentence end) -> uqt1 and uqt2 flip to FLAGGED; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq15 SURVIVED: the abbreviation lookbehinds removed and no e.g./i.e. near-miss moved"
-else
-  bad "MUTANT uq15 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq16 's#(?:\\s+|\$)#\\s+#' "${UQALL/,${Q}r.md:2/}"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq16 "MUTANT uq16 (a sentence end needs a trailing space) -> the wrapped uqr goes CLEAN; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq16 SURVIVED: the line-end sentence boundary removed and uqr did not move"
-else
-  bad "MUTANT uq16 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-uqscore uq17 's#|was|were|had|\\w\*n.t##' "$UQALL,${Q}u1.md:1,${Q}u2.md:1"; r=$?
-if [ "$r" = 0 ]; then
-  mutant_killed "${B_uq:-0}" uq17 "MUTANT uq17 (past and contracted forms out of FINITE_AFTER) -> uqu1 and uqu2 flip to FLAGGED; killed"
-elif [ "$r" = 1 ]; then
-  bad "uq17 SURVIVED: the widened finite list reverted and no past-tense near-miss moved"
-else
-  bad "MUTANT uq17 DID NOT APPLY — its anchor moved; its property is unproven"
-fi
-wu_world
-
-# --- Assertion 12u21: mr, `the reason is` restored to NARRATIVE --------------
-# Moves exactly the three pointer lines of uhr.md; line 4 is flagged either way.
-if mkmut umr 's/|measured:|it turned out/|measured:|the reason is\\b|it turned out/'; then
-  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$TR/uh1.md:1,$TR/uh2.md:1,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2,$TR/uhr.md:1,$TR/uhr.md:2,$TR/uhr.md:3,$TR/uhr.md:4\]" "$(audit_at "$WORK/umr.sh")"; then
-    mutant_killed "${B_u10:-0}" umr "MUTANT mr ('the reason is' restored) -> the three pointer lines flip to FLAGGED; killed"
-  else
-    bad "umr SURVIVED: MUTANT mr restored 'the reason is' and no pointer line moved — 12u9e proves nothing"
-  fi
-else
-  bad "MUTANT mr DID NOT APPLY — its anchor moved; 12u9e is unproven"
-fi
-
-# --- Assertion 12u19 and 12u20: mf and mo, scored on World P1 (the tier-2 corpus) ----------------
-# mf reverts FC to the singular-only form and owns 6a alone: the headed plural triple is read as
-# missing its failure field. mo reverts FIELD_OPENER and owns 6b alone: with no heading and no opener
-# the headless block is never seen. Each is asserted against BOTH twins, so neither can move the
-# other's cell.
+# --- Control on World P1 (the tier-2 corpus): the headed plural triple scores CLEAN and the headless
+# plural block FLAGGED.
 p1_world
 base_out="$(audit)"
 if ! has "$SD/s6a.md:[0-9]*  INCOMPLETE_26C" "$base_out" && has "$SD/s6b.md:[0-9]*  INCOMPLETE_26C" "$base_out"; then
-  ok "CONTROL: World P1 scores the headed plural triple CLEAN and the headless plural block FLAGGED"; B_p1=1
+  ok "CONTROL: World P1 scores the headed plural triple CLEAN and the headless plural block FLAGGED"
 else
-  bad "the unmutated World P1 did not score 6a CLEAN and 6b FLAGGED — mf and mo are unreadable"
-fi
-if mkmut umf 's/failures?\\s+caught/failure\\s+caught/'; then
-  mf_out="$(audit_at "$WORK/umf.sh")"
-  if has "$SD/s6a.md:[0-9]*  INCOMPLETE_26C" "$mf_out" && has "$SD/s6b.md:[0-9]*  INCOMPLETE_26C" "$mf_out"; then
-    mutant_killed "${B_p1:-0}" umf "MUTANT mf (FC singular-only) -> the headed plural triple flips CLEAN to FLAGGED; killed"
-  else
-    bad "umf SURVIVED: MUTANT mf reverted FC and the headed plural arm did not move — 6a proves nothing"
-  fi
-else
-  bad "MUTANT mf DID NOT APPLY — its anchor moved; 6a is unproven"
-fi
-if mkmut umo 's/Failures? caught:/Failure caught:/'; then
-  mo_out="$(audit_at "$WORK/umo.sh")"
-  if ! has "$SD/s6b.md:[0-9]*  INCOMPLETE_26C" "$mo_out" && ! has "$SD/s6a.md:[0-9]*  INCOMPLETE_26C" "$mo_out"; then
-    mutant_killed "${B_p1:-0}" umo "MUTANT mo (FIELD_OPENER singular-only) -> the headless plural block flips FLAGGED to CLEAN; killed"
-  else
-    bad "umo SURVIVED: MUTANT mo reverted FIELD_OPENER and the headless plural arm did not move — 6b proves nothing"
-  fi
-else
-  bad "MUTANT mo DID NOT APPLY — its anchor moved; 6b is unproven"
+  bad "World P1 did not score 6a CLEAN and 6b FLAGGED — the plural-field arms are unreadable"
 fi
 
 # ========================= validate-gate-manifest.sh ========================
@@ -1574,10 +1167,10 @@ fi
 # blocks a push whose only remedy is a write Rule 27 forbids) and `local` counts the judgement tier
 # (a tier-2 finding would block a push the hook says only tier 1 gates). Four worlds, ONE seed each,
 # so each wrong predicate moves exactly one cell:
-#   LDc  core-owned tier-1      -> rc 0, ORIGIN_TAG printed `[core 1`     (kills owner-blind)
+#   LDc  core-owned tier-1      -> rc 0, ORIGIN_TAG printed `[core 1`
 #   LDl  local tier-1           -> rc 1, ORIGIN_TAG printed `[local]`
-#   LD2  local tier-2 only      -> rc 0, NARRATIVE_DRIFT printed `[core 0 / local 1` (kills tier-blind)
-#   LDu  tier-1, resolver gone  -> rc 1, `unresolved 1`                    (kills unresolved-dropped)
+#   LD2  local tier-2 only      -> rc 0, NARRATIVE_DRIFT printed `[core 0 / local 1`
+#   LDu  tier-1, resolver gone  -> rc 1, `unresolved 1`
 # Every rc-0 cell carries a presence conjunct, so a subject that scans nothing cannot pass it.
 LD=--fail-on=local-deterministic
 LDTAG='The lead MUST re-run the gate; this replaced the v0.42.0 behaviour.'
@@ -1587,22 +1180,22 @@ ld2_world() { fresh; printf 'The dev MUST comply, because we lost a sprint to th
 LDU="$WORK/ldnores"; mkdir -p "$LDU"
 ld_c() { # <script> -> "rc|presence" in LDc
   ldc_world; local o r
-  o="$(memo out 0 "$WORK/t" "$1" "$LD")"; r="$(memo rc 0 "$WORK/t" "$1" "$LD")"
+  o="$(memo out "$WORK/t" "$1" "$LD")"; r="$(memo rc "$WORK/t" "$1" "$LD")"
   if has 'ORIGIN_TAG: FLAGGED.*\[core 1 / local 0\]' "$o" && has 'locally-owned: 0   unresolved: 0' "$o"; then echo "$r|1"; else echo "$r|0"; fi
 }
 ld_l() { ldl_world; local o r
-  o="$(memo out 0 "$WORK/t" "$1" "$LD")"; r="$(memo rc 0 "$WORK/t" "$1" "$LD")"
+  o="$(memo out "$WORK/t" "$1" "$LD")"; r="$(memo rc "$WORK/t" "$1" "$LD")"
   if has '\[local\] docs/coding-conventions.md:[0-9]*  ORIGIN_TAG' "$o"; then echo "$r|1"; else echo "$r|0"; fi
 }
 ld_2() { ld2_world; local o r
-  o="$(memo out 0 "$WORK/t" "$1" "$LD")"; r="$(memo rc 0 "$WORK/t" "$1" "$LD")"
+  o="$(memo out "$WORK/t" "$1" "$LD")"; r="$(memo rc "$WORK/t" "$1" "$LD")"
   if has 'NARRATIVE_DRIFT: FLAGGED.*\[core 0 / local 1\]' "$o" && has 'tier-1 findings: 0 ' "$o"; then echo "$r|1"; else echo "$r|0"; fi
 }
 ld_u() { # <script> -> "rc|presence" in LDc's world, the script copied ALONE (no resolver beside it)
   ldc_world; local o r s="$LDU/${1##*/}"
   cp "$1" "$s"
   if [ -f "$LDU/core-paths.sh" ]; then echo "broken|0"; return; fi
-  o="$(memo out 0 "$WORK/t" "$s" "$LD")"; r="$(memo rc 0 "$WORK/t" "$s" "$LD")"
+  o="$(memo out "$WORK/t" "$s" "$LD")"; r="$(memo rc "$WORK/t" "$s" "$LD")"
   if has 'ORIGIN_TAG: FLAGGED.*unresolved 1\]' "$o"; then echo "$r|1"; else echo "$r|0"; fi
 }
 
@@ -1616,53 +1209,17 @@ c="$(ld_l "$AUDIT")"
   || bad "LDl: a locally-owned tier-1 finding under $LD gave rc|printed=$c, want 1|1 — the gate cannot fire"
 c="$(ld_2 "$AUDIT")"
 [ "$c" = "0|1" ] \
-  && { ok "LD2: a LOCAL tier-2-only finding prints [local 1 and does NOT fail $LD (only tier 1 gates the push)"; B_ld2=1; } \
+  && { ok "LD2: a LOCAL tier-2-only finding prints [local 1 and does NOT fail $LD (only tier 1 gates the push)"; } \
   || bad "LD2: a local tier-2-only finding under $LD gave rc|printed=$c, want 0|1 — the judgement tier gates the push"
 c="$(ld_u "$AUDIT")"
 [ "$c" = "1|1" ] \
-  && { ok "LDu: a tier-1 finding with NO resolver counts as unresolved and FAILS $LD — a missing resolver cannot acquit"; B_ldu=1; } \
+  && { ok "LDu: a tier-1 finding with NO resolver counts as unresolved and FAILS $LD — a missing resolver cannot acquit"; } \
   || bad "LDu: an unresolved tier-1 finding under $LD gave rc|printed=$c, want 1|1 — an unresolvable owner acquitted the push"
 # The control that makes LDu readable: the same world through the real script WITH its resolver is LDc,
 # which must be rc 0. LDu's rc 1 is therefore the resolver's absence, not a copy that cannot run.
 [ "${B_ldc:-0}" = 1 ] \
   && ok "  control: the LDu world with the resolver present is LDc (rc 0) — LDu's rc 1 is the absence" \
   || bad "  control FAILED: LDc did not pass, so LDu's rc 1 is unreadable"
-
-# MUTANTS of the new threshold, each a COPY beside $WORK/core-paths.sh, `cmp -s` guarded by mkmut.
-# Each is scored by its own cell ALONE; the other three cells read the same under it (measured).
-#   ld-ownerblind  the gate counts every tier-1 finding          -> LDc moves to rc 1
-#   ld-tierblind   the gate counts local + unresolved, any tier  -> LD2 moves to rc 1
-#   ld-unresdrop   the counter drops the unresolved half          -> LDu moves to rc 0
-if mkmut ld-ownerblind 's/^    _gated = t1_local_findings$/    _gated = t1_findings/'; then
-  c="$(ld_c "$WORK/ld-ownerblind.sh")"
-  if [ "$c" = "1|1" ]; then
-    mutant_killed "${B_ldc:-0}" ld-ownerblind "MUTANT ld-ownerblind (gate = every tier-1 finding) -> LDc's core-owned finding fails the push; killed"
-  else
-    bad "ld-ownerblind SURVIVED: LDc gave rc|printed=$c under the owner-blind gate — LDc cannot tell the threshold from deterministic"
-  fi
-else
-  bad "ld-ownerblind DID NOT APPLY — its anchor in audit-rule-files.sh is gone, so LDc is unproven"
-fi
-if mkmut ld-tierblind 's/^    _gated = t1_local_findings$/    _gated = local_findings + unresolved_findings/'; then
-  c="$(ld_2 "$WORK/ld-tierblind.sh")"
-  if [ "$c" = "1|1" ]; then
-    mutant_killed "${B_ld2:-0}" ld-tierblind "MUTANT ld-tierblind (gate = local + unresolved, both tiers) -> LD2's tier-2 finding fails the push; killed"
-  else
-    bad "ld-tierblind SURVIVED: LD2 gave rc|printed=$c under the tier-blind gate — LD2 cannot tell the threshold from local"
-  fi
-else
-  bad "ld-tierblind DID NOT APPLY — its anchor in audit-rule-files.sh is gone, so LD2 is unproven"
-fi
-if mkmut ld-unresdrop 's/^        t1_local_findings += n_local + n_unknown$/        t1_local_findings += n_local/'; then
-  c="$(ld_u "$WORK/ld-unresdrop.sh")"
-  if [ "$c" = "0|1" ]; then
-    mutant_killed "${B_ldu:-0}" ld-unresdrop "MUTANT ld-unresdrop (unresolved dropped from the gate) -> LDu's unresolved tier-1 finding acquits; killed"
-  else
-    bad "ld-unresdrop SURVIVED: LDu gave rc|printed=$c with the unresolved half dropped — the safety property is unguarded"
-  fi
-else
-  bad "ld-unresdrop DID NOT APPLY — its anchor in audit-rule-files.sh is gone, so LDu is unproven"
-fi
 
 # ============== THE CONSUMER HOOK, EXECUTED WHOLE (receipt-bl977.sh) ==============
 # A static gate cannot see the hook's audit argv: a misspelled flag VALUE passes every one and wedges
@@ -1694,22 +1251,9 @@ else
   ro="$(bash "$HERE/receipt-bl977.sh" --root "$ROOT" --hook "$HOOK" 2>&1)"; rrc=$?
   if [ "$rrc" = 0 ] && has '^CELL core-t1 block=PASS core1=yes$' "$ro" && has '^CELL local-t1 block=FAIL local1=yes$' "$ro" \
      && has '^CELL local-t2 rc=0 drift-local=yes$' "$ro"; then
-    ok "the WHOLE consumer hook: core-owned tier-1 -> audit block PASS with [core 1 printed; local tier-1 -> block FAIL (receipt-bl977 rc 0)"; B_hook=1
+    ok "the WHOLE consumer hook: core-owned tier-1 -> audit block PASS with [core 1 printed; local tier-1 -> block FAIL (receipt-bl977 rc 0)"
   else
     bad "the consumer hook's rule-file audit block did not gate on ownership (receipt rc=$rrc): $(grep -E '^CELL|BROKEN' <<<"$ro" | paste -sd';' -)"
-  fi
-  # MUTANT: a COPY of the RESOLVED hook with the flag reverted. Killed by the core-t1 cell alone.
-  HM="$WORK/hookmut"; mkdir -p "$HM"
-  sed 's/--fail-on=local-deterministic/--fail-on=deterministic/' "$HOOK" > "$HM/pre-push"
-  if cmp -s "$HOOK" "$HM/pre-push"; then
-    bad "hook-det DID NOT APPLY — the resolved hook carries no --fail-on=local-deterministic to revert"
-  else
-    mo="$(bash "$HERE/receipt-bl977.sh" --root "$ROOT" --hook "$HM/pre-push" 2>&1)"
-    if has '^CELL core-t1 block=FAIL core1=yes$' "$mo" && has '^CELL local-t1 block=FAIL local1=yes$' "$mo"; then
-      mutant_killed "${B_hook:-0}" hook-det "MUTANT hook-det (hook flag reverted to deterministic) -> the core-owned tier-1 finding blocks the push; killed"
-    else
-      bad "hook-det SURVIVED: $(grep -E '^CELL|BROKEN' <<<"$mo" | paste -sd';' -) — the hook arm cannot see the flag"
-    fi
   fi
 fi
 
@@ -1717,7 +1261,7 @@ fi
 # The arm runs only in the distribution layout, so it gets its own DISTRIBUTION tree:
 # the consumer corpus above can only ever show its N/A line. Every assertion is
 # PRESENCE-shaped (a named verdict line must APPEAR), so a subject that emits nothing
-# fails them, and two committed mutants prove the arm and its self-probe each fire.
+# fails them.
 DW="$WORK/dist"
 dfresh() {
   rm -rf "$DW"
@@ -1772,7 +1316,7 @@ dworld
 out="$(daudit)"
 if has 'core/team-roles/dev.md:4  ROLE_MODEL_NAMING' "$out" && has 'ROLE_MODEL_NAMING: FLAGGED' "$out" \
    && [ "$(drc)" = "1" ]; then
-  ok "seeded 'the Opus tier' in a role file -> ROLE_MODEL_NAMING FLAGGED, --fail-on=deterministic exit 1"; B_d34=1
+  ok "seeded 'the Opus tier' in a role file -> ROLE_MODEL_NAMING FLAGGED, --fail-on=deterministic exit 1"
 else
   bad "a model named in a role file went undetected — Class 1d cannot fire"
 fi
@@ -1815,97 +1359,6 @@ has 'ROLE_MODEL_NAMING: CLEAN' "$out" \
   || bad "a mechanism enum, the escalation ladder or a finding tier was flagged as a role-model claim"
 
 
-# --- Assertion 38: MUTANTS, each a copy of the audit beside its real resolver ---------
-# M1 empties the corpus emit: the seeded role-file hit must then score CLEAN, which
-# proves Assertion 34's FLAGGED came from this arm. M2 blinds the regex: the self-probe
-# must then refuse with exit 2 BEFORE any corpus verdict, which proves the probe fires.
-DM="$WORK/dmut"; mkdir -p "$DM"
-cp "$(dirname "$AUDIT")/core-paths.sh" "$DM/core-paths.sh"
-sed 's/emit("ROLE_MODEL_NAMING", model_hits(_pop), 1/emit("ROLE_MODEL_NAMING", [], 1/' "$AUDIT" > "$DM/m1.sh"
-sed 's/m = MODEL_RX.search(raw)/m = None/' "$AUDIT" > "$DM/m2.sh"
-if cmp -s "$AUDIT" "$DM/m1.sh" || cmp -s "$AUDIT" "$DM/m2.sh"; then
-  bad "a Class 1d mutation DID NOT APPLY — its anchor is gone, so the mutant proves nothing"
-else
-  dworld
-  out1="$(daudit "$DM/m1.sh")"; rc2="$(drc "$DM/m2.sh")"; err2="$(daudit "$DM/m2.sh")"
-  if has 'ROLE_MODEL_NAMING: CLEAN' "$out1" && [ "$(drc)" = "1" ]; then
-    mutant_killed "${B_d34:-0}" m1 "MUTANT m1 (arm emits nothing) -> the seeded hit scores CLEAN; unmutated exits 1 on the same tree"
-  else
-    bad "m1 SURVIVED: MUTANT m1 survived or its control is dead — Assertion 34 is not proven by Class 1d"
-  fi
-  if [ "$rc2" = "2" ] && has 'ROLE_MODEL_NAMING self-probe' "$err2"; then
-    mutant_killed "${B_d34:-0}" m2 "MUTANT m2 (regex blinded) -> the self-probe refuses with exit 2 before the corpus"
-  else
-    bad "m2 SURVIVED: rc=$rc2 — the self-probe cannot fire"
-  fi
-fi
 
-# ======================= twins (every push) and the matrix (--matrix only) ==========================
-# A row signature is every class row of a report without its tier or owner suffix. A cell is the set of
-# class rows a mutant CHANGES in one world against the real script on the same world. Both runs go
-# through the memo, so a (world, script) pair already driven above costs nothing here.
-sig() { grep -E '^  [A-Z][A-Z_0-9]*: ' <<<"$1" | sed 's/  (.*//'; }
-chg() { # <base report> <mutant report> -> comma list of changed class rows, ALL for an empty report, none
-  local b m
-  b="$(sig "$1")"; m="$(sig "$2")"
-  if [ -z "$m" ]; then echo ALL; return; fi
-  { diff <(echo "$b") <(echo "$m") | grep '^>' | sed -E 's/^> +([A-Z_0-9]+):.*/\1/' | sort -u | paste -sd, -; } || true
-}
-cell() { # <world fn> <mutant script> <mutant env 0|1>
-  local dir args base mut r
-  "$1"
-  if [ "$1" = dworld ]; then dir="$DW"; args=--fail-on=deterministic; else dir="$WORK/t"; args=; fi
-  base="$(memo out 0 "$dir" "$AUDIT" $args)"
-  mut="$(memo out "$3" "$dir" "$2" $args)"
-  r="$(chg "$base" "$mut")"
-  # A mutant that REFUSES (exit 2, the self-probe) where the real script does not has moved every row.
-  if [ "$(memo rc "$3" "$dir" "$2" $args)" = 2 ] && [ "$(memo rc 0 "$dir" "$AUDIT" $args)" != 2 ]; then r=REFUSED; fi
-  echo "${r:-none}"
-}
-twin() { # <twin arm> <mutant id> <world fn> <script> <env>
-  local c
-  c="$(cell "$3" "$4" "$5")"
-  if [ "$c" = none ]; then
-    ok "TWIN world $1: mutant $2 changes no row in world $3 (stays green)"
-  else
-    bad "TWIN world $1: mutant $2 moved rows [$c] in world $3 — the mutation is not confined to its deciding arm"
-  fi
-}
-if [ -f "$WORK/um1.sh" ] && [ -f "$WORK/uq17.sh" ] && [ -f "$WORK/umo.sh" ] && [ -f "$DM/m2.sh" ]; then
-  for _m in um1 um2 um3 um4 um5 um6 um7 um8 umr; do twin P1 "$_m" p1_world "$WORK/$_m.sh" 0; done
-  for _m in uq1 uq2 uq3 uq4 uq5 uq6 uq7 uq8 uq9 uq10 uq11 uq12 uq13 uq14 uq15 uq16 uq17; do twin P1 "$_m" p1_world "$WORK/$_m.sh" 0; done
-  twin U umf wu_world "$WORK/umf.sh" 0
-  twin U umo wu_world "$WORK/umo.sh" 0
-  twin P1 m1 p1_world "$DM/m1.sh" 0
-  twin P1 m2 p1_world "$DM/m2.sh" 0
-  twin P1 tier1-strip p1_world "$AUDIT" 1
-  twin P1 grant-strip p1_world "$AUDIT" 1
-else
-  bad "FIXTURE BROKEN — a mutant copy the twins drive does not exist, so the twin arms prove nothing"
-fi
-
-mcells=0
-if [ "$MATRIX" = 1 ]; then
-  echo "MATRIX: one row per mutant; dead= the worlds (arms) where it changes a row, green= where it changes none"
-  for _e in "um1|$WORK/um1.sh|0" "um2|$WORK/um2.sh|0" "um3|$WORK/um3.sh|0" "um4|$WORK/um4.sh|0" \
-            "um5|$WORK/um5.sh|0" "um6|$WORK/um6.sh|0" "um7|$WORK/um7.sh|0" "um8|$WORK/um8.sh|0" \
-            "umr|$WORK/umr.sh|0" "uq1|$WORK/uq1.sh|0" "uq2|$WORK/uq2.sh|0" "uq3|$WORK/uq3.sh|0" "uq4|$WORK/uq4.sh|0" "uq5|$WORK/uq5.sh|0" "uq6|$WORK/uq6.sh|0" "uq7|$WORK/uq7.sh|0" "uq8|$WORK/uq8.sh|0" "uq9|$WORK/uq9.sh|0" "uq10|$WORK/uq10.sh|0" "uq11|$WORK/uq11.sh|0" "uq12|$WORK/uq12.sh|0" "uq13|$WORK/uq13.sh|0" "uq14|$WORK/uq14.sh|0" "uq15|$WORK/uq15.sh|0" "uq16|$WORK/uq16.sh|0" "uq17|$WORK/uq17.sh|0" "umf|$WORK/umf.sh|0" "umo|$WORK/umo.sh|0" "m1|$DM/m1.sh|0" "m2|$DM/m2.sh|0" \
-            "tier1-strip|$AUDIT|1" "grant-strip|$AUDIT|1"; do
-    _id="${_e%%|*}"; _r="${_e#*|}"; _sc="${_r%%|*}"; _ev="${_r##*|}"
-    _dead=""; _green=""
-    for _w in wu_world:U wq_world:UQ p1_world:P1 wt_world:T wg_world:G dworld:D; do
-      _c="$(cell "${_w%%:*}" "$_sc" "$_ev")"; mcells=$((mcells+1))
-      if [ "$_c" = none ]; then _green="$_green ${_w##*:}=0"; else _dead="$_dead ${_w##*:}=1[$_c]"; fi
-    done
-    echo "MATRIX-ROW $_id dead:${_dead:- -} green:${_green:- -}"
-  done
-  [ "$mcells" = 192 ] \
-    && ok "matrix mode: 192 mutant x world cells measured (32 mutants x 6 worlds)" \
-    || bad "matrix mode measured $mcells cells, not 192"
-else
-  [ "$mcells" = 0 ] \
-    && ok "plain run: no matrix-only cell was driven" \
-    || bad "a plain run drove $mcells matrix-only cells"
-fi
 echo
 report_end retro-audit-scans

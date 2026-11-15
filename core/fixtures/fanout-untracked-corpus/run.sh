@@ -38,26 +38,6 @@
 # thing standing between this tool and an empty worklist off an unrelated repository, so
 # assertion 4 drives a genuinely wrong tree and requires exit 3 to still come back.
 #
-# WHY THE MUTANTS ARE A `git` SHIM AND NOT A `sed`.
-#
-# The union can be spelled at least two ways a competent author would write — two
-# `ls-files` calls joined, or one `git ls-files --cached --others --exclude-standard`.
-# A `sed` keyed on either spelling matches nothing against the other, and a mutation that
-# applied to no line scores a kill it never earned. So the mutants intercept `git` itself
-# and rewrite the ARGUMENTS of any `ls-files` invocation, which is the location the
-# behaviour actually lives at and is the same location under both spellings. Each shim
-# records that it really did alter an invocation; an arm whose shim changed nothing
-# reports itself unproven rather than passing.
-#
-# The mutant by arm matrix, measured from one hermetic run (core/scripts/hermetic-run.sh with
-# AI_DLC_VERDICT_STORE set to a fresh mktemp dir). Arms: a1-untracked (assertion 1), a2-ignored
-# (assertion 2), a3-tracked (assertion 3). Each mutant runs the subject once, on the one seeded tree;
-# the not-entangled arm it must leave green (M1: a3, M2 and M3: a1) reads that same run.
-# MUTANT-MATRIX tracked-only decides=a1-untracked twins=- why=one subject run on the single seeded tree, and the a3-tracked entanglement check reads that run rather than a second world
-# MUTANT-MATRIX no-exclude-standard decides=a2-ignored twins=- why=one subject run on the single seeded tree, and the a1-untracked entanglement check reads that run rather than a second world
-# MUTANT-MATRIX untracked-only decides=a3-tracked twins=- why=one subject run on the single seeded tree, and the a1-untracked entanglement check reads that run rather than a second world
-# MUTANT-MATRIX-CONTROL pass-through why=the shim alters no ls-files invocation and must still yield both baseline worklist rows and rc=0, so the kills above are the mutations and not the harness
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/fanout-untracked-corpus/run.sh --matrix
 set -uo pipefail
 
 # HERMETIC — scrub the operator's tuning before invoking anything (I10). AI_DLC_PROJECT_ROOT
@@ -82,8 +62,6 @@ done
   echo "  looked in: $ROOT/core/scripts (distribution), $ROOT/scripts/ai-dlc (consumer)" >&2
   exit 2
 }
-# Printed because a mutant applied to a copy the run never loads leaves every arm green,
-# and that reads exactly like an arm that cannot fire.
 echo "  subject resolved: $SUBJ"
 
 command -v python3 >/dev/null 2>&1 || {
@@ -97,8 +75,6 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/fanout-untracked.XXXXXX")" \
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_a1_untracked=0; B_a2_ignored=0; B_a3_tracked=0
 
 # ============================================================================
 # THE TREES
@@ -168,17 +144,12 @@ fi
 # ============================================================================
 # THE HARNESS
 # ============================================================================
-# `run <subject> <tree> <base> [shimdir]` -> prints the subject's output with a trailing
+# `run <subject> <tree> <base>` -> prints the subject's output with a trailing
 # `rc=<n>` line. The rc is appended INSIDE the substitution because zsh has no PIPESTATUS
 # and a caller reading $? after a pipe would read the wrong program's status.
 run() {
-  local subj="$1" tree="$2" base="$3" shim="${4:-}" out rc
-  if [ -n "$shim" ]; then
-    out="$( PATH="$shim:$PATH" AI_DLC_REAL_GIT="$REAL_GIT" AI_DLC_SHIM_MARK="$shim/.fired" \
-            AI_DLC_PROJECT_ROOT="$tree" bash "$subj" "$base" 2>&1 )"; rc=$?
-  else
-    out="$( AI_DLC_PROJECT_ROOT="$tree" bash "$subj" "$base" 2>&1 )"; rc=$?
-  fi
+  local subj="$1" tree="$2" base="$3" out rc
+  out="$( AI_DLC_PROJECT_ROOT="$tree" bash "$subj" "$base" 2>&1 )"; rc=$?
   printf '%s\nrc=%d\n' "$out" "$rc"
 }
 # Every predicate below reads a captured string with a here-string, never a pipe: `grep -q`
@@ -186,30 +157,6 @@ run() {
 # EPIPE and reports NOT-FOUND on input that contains the pattern.
 has()  { grep -qF -- "$2" <<<"$1"; }
 rows() { grep -cE '^  [^ ].*  ->  ' <<<"$1"; }
-
-# Build a `git` shim whose `ls-files` argument rewriting is described by <awk-filter>.
-# The shim marks itself as FIRED only when the rewritten argument list actually differs
-# from the original, which is this battery's `cmp -s`: a mutation that altered no
-# invocation must not be readable as a kill.
-mkshim() { # mkshim <dir> <sed-program applied to the space-joined args>
-  local d="$1" prog="$2"
-  mkdir -p "$d" || return 2
-  cat > "$d/git" <<SHIM
-#!/usr/bin/env bash
-orig="\$*"
-case " \$orig " in
-  *" ls-files "*)
-      new="\$(printf '%s' "\$orig" | sed '$prog')"
-      [ "\$new" != "\$orig" ] && : > "\$AI_DLC_SHIM_MARK"
-      exec "\$AI_DLC_REAL_GIT" \$new ;;
-  *)  exec "\$AI_DLC_REAL_GIT" "\$@" ;;
-esac
-SHIM
-  chmod +x "$d/git" || return 2
-  rm -f "$d/.fired"
-  return 0
-}
-fired() { [ -f "$1/.fired" ]; }
 
 # The REQUIRED input of inputs.decl: every assertion drives this file, and this is the first
 # point it is run. SUBJ is built from a pwd-resolved ROOT, so it carries no `..` segment.
@@ -224,13 +171,13 @@ OUT="$(run "$SUBJ" "$TREE" "$BASE")"
 if has "$OUT" "rc=0" \
    && ! has "$OUT" "SCOPING FAILURE" \
    && has "$OUT" "_bmad-output/planning-artifacts/s306/story-1.md:1  ->  docs/architecture.md:16"; then
-  ok "an UNTRACKED file under the current sprint's artifact root is scanned, and its stale citation reaches the worklist"; B_a1_untracked=1
+  ok "an UNTRACKED file under the current sprint's artifact root is scanned, and its stale citation reaches the worklist"
 else
   bad "an untracked sprint artifact is invisible to the corpus — the filed sprint-306 defect: $(grep -c 'SCOPING FAILURE' <<<"$OUT") scoping failure(s), $(grep -o 'rc=[0-9]*' <<<"$OUT")"
 fi
 # The in-band control the header owes its reader. `>= 1`, not `== 1`, deliberately: the
 # exact count is arm 2's subject, and an arm that also pinned it would go red on arm 2's
-# mutant and leave two failures where one defect exists.
+# regression and leave two failures where one defect exists.
 n_untracked="$(sed -n 's/.*untracked (not yet git-added): \([0-9][0-9]*\).*/\1/p' <<<"$OUT" | head -1)"
 if [ -n "$n_untracked" ] && [ "$n_untracked" -ge 1 ]; then
   ok "the header states the untracked contribution ($n_untracked), so a consumer can see what its .gitignore admitted"
@@ -245,7 +192,7 @@ fi
 # conjunct — the worklist must be non-empty — is what stops this arm scoring a kill
 # against a subject that produced no worklist at all.
 if [ "$(rows "$OUT")" -ge 1 ] && ! has "$OUT" "docs/junk/ignored-cite.md"; then
-  ok "a gitignored file under a corpus root stays OUT of the corpus — the union is --exclude-standard, not bare --others"; B_a2_ignored=1
+  ok "a gitignored file under a corpus root stays OUT of the corpus — the union is --exclude-standard, not bare --others"
 else
   bad "a gitignored file reached the worklist (or the worklist was empty and this arm proved nothing): rows=$(rows "$OUT")"
 fi
@@ -257,7 +204,7 @@ fi
 # silently stops scanning every artifact the consumer HAS committed — which on the
 # reference consumer is 10666 files against a handful of uncommitted ones.
 if has "$OUT" "docs/tracked-cite.md:1  ->  docs/architecture.md:15"; then
-  ok "TRACKED files are still scanned — the untracked set was added to the corpus, not substituted for it"; B_a3_tracked=1
+  ok "TRACKED files are still scanned — the untracked set was added to the corpus, not substituted for it"
 else
   bad "a tracked citing file no longer reaches the worklist: the untracked half replaced the tracked half instead of joining it"
 fi
@@ -273,96 +220,6 @@ if has "$WOUT" "rc=3" && has "$WOUT" "SCOPING FAILURE"; then
   ok "a tree whose declared sprint has no artifact directory in EITHER tracked or untracked form still exits 3 — the wrong-tree exit is still reachable"
 else
   bad "SCOPING FAILURE can no longer fire: the corpus fix made the wrong-tree exit unreachable, so an empty worklist off an unrelated repository now reads as a clean result. $(grep -o 'rc=[0-9]*' <<<"$WOUT")"
-fi
-
-# ============================================================================
-# 5. THE MUTANTS.
-# ============================================================================
-# Each rewrites `git ls-files` arguments, so it lands under either spelling of the union.
-# Each must fail ONLY its own assertion; two failures would mean the arms are entangled
-# and one of them is vacuous.
-
-# M1 — strip the untracked flags. This is the shipped defect exactly: whatever the author
-# wrote, ls-files comes back tracked-only. Owns assertion 1.
-M1="$WORK/m1"
-mkshim "$M1" 's/ --others//g; s/ --exclude-standard//g' || { echo "FIXTURE ERROR: mkshim m1" >&2; exit 2; }
-M1OUT="$(run "$SUBJ" "$TREE" "$BASE" "$M1")"
-if ! fired "$M1"; then
-  bad "MUTANT tracked-only: the shim altered no ls-files invocation, so assertion 1 is UNPROVEN — an arm nothing can turn red is not an assertion"
-elif has "$M1OUT" "_bmad-output/planning-artifacts/s306/story-1.md"; then
-  bad "MUTANT tracked-only: the untracked artifact reached the worklist anyway, so assertion 1 passes over a corpus rule it is not measuring"
-else
-  mutant_killed "$B_a1_untracked" tracked-only "MUTANT tracked-only turns assertion 1 red — the untracked artifact vanishes from the worklist, reproducing the filed defect"
-  has "$M1OUT" "docs/tracked-cite.md:1  ->  docs/architecture.md:15" \
-    && ok "MUTANT tracked-only leaves assertion 3 GREEN — the two arms are not entangled" \
-    || bad "MUTANT tracked-only also took assertion 3 down; one of the two arms is vacuous"
-fi
-
-# M2 — strip only `--exclude-standard`, leaving `--others`. Owns assertion 2.
-M2="$WORK/m2"
-mkshim "$M2" 's/ --exclude-standard//g' || { echo "FIXTURE ERROR: mkshim m2" >&2; exit 2; }
-M2OUT="$(run "$SUBJ" "$TREE" "$BASE" "$M2")"
-if ! fired "$M2"; then
-  bad "MUTANT no-exclude-standard: the shim altered no ls-files invocation, so assertion 2 is UNPROVEN"
-elif ! has "$M2OUT" "docs/junk/ignored-cite.md"; then
-  bad "MUTANT no-exclude-standard: the gitignored file stayed out of the worklist even with the flag gone, so assertion 2 passes over a filter it is not measuring"
-else
-  mutant_killed "$B_a2_ignored" no-exclude-standard "MUTANT no-exclude-standard turns assertion 2 red — the gitignored file reaches the worklist"
-  has "$M2OUT" "_bmad-output/planning-artifacts/s306/story-1.md" \
-    && ok "MUTANT no-exclude-standard leaves assertion 1 GREEN — the two arms are not entangled" \
-    || bad "MUTANT no-exclude-standard also took assertion 1 down; one of the two arms is vacuous"
-fi
-
-# M3 — make the TRACKED listing come back empty, by forcing every ls-files call to list
-# untracked files only. Owns assertion 3.
-M3="$WORK/m3"
-mkshim "$M3" 's/$/ --others --exclude-standard/; s/--cached//g' \
-  || { echo "FIXTURE ERROR: mkshim m3" >&2; exit 2; }
-M3OUT="$(run "$SUBJ" "$TREE" "$BASE" "$M3")"
-if ! fired "$M3"; then
-  bad "MUTANT untracked-only: the shim altered no ls-files invocation, so assertion 3 is UNPROVEN"
-elif has "$M3OUT" "docs/tracked-cite.md"; then
-  bad "MUTANT untracked-only: the tracked citing file reached the worklist anyway, so assertion 3 passes over a corpus rule it is not measuring"
-else
-  mutant_killed "$B_a3_tracked" untracked-only "MUTANT untracked-only turns assertion 3 red — the tracked citing file vanishes from the worklist"
-  has "$M3OUT" "_bmad-output/planning-artifacts/s306/story-1.md" \
-    && ok "MUTANT untracked-only leaves assertion 1 GREEN — the two arms are not entangled" \
-    || bad "MUTANT untracked-only also took assertion 1 down; one of the two arms is vacuous"
-fi
-
-# THE UNMUTATED CONTROL, through the same shim mechanism. A shim that broke `git` outright
-# would make every mutant above look like a kill, and the arms it kills are absence-shaped
-# by nature — so the control passes ls-files through untouched and DEMANDS the baseline
-# rows are present, rather than merely asserting nothing went wrong.
-CTL="$WORK/ctl"
-mkshim "$CTL" 's/^$//' || { echo "FIXTURE ERROR: mkshim ctl" >&2; exit 2; }
-COUT="$(run "$SUBJ" "$TREE" "$BASE" "$CTL")"
-if fired "$CTL"; then
-  bad "CONTROL: the pass-through shim reported altering an invocation, so it is not a control"
-elif has "$COUT" "docs/tracked-cite.md:1  ->  docs/architecture.md:15" \
-  && has "$COUT" "_bmad-output/planning-artifacts/s306/story-1.md:1  ->  docs/architecture.md:16" \
-  && has "$COUT" "rc=0"; then
-  ok "CONTROL: an unaltered git through the same shim still yields BOTH baseline worklist rows — the kills above are the mutations, not the harness"
-else
-  bad "CONTROL: a pass-through shim loses the baseline rows, so every mutant above scored a kill against a broken harness rather than against its mutation"
-fi
-
-# --matrix: one MATRIX row per shim, read off the runs the arms above already scored. fires= is the
-# deciding arm turning red on that run; same-run= is the not-entangled arm, read from that same run.
-if [ "${1:-}" = "--matrix" ]; then
-  mxg() { if has "$1" "$2"; then printf GREEN; else printf TRIPPED; fi; }
-  f=no; fired "$M1" && ! has "$M1OUT" "_bmad-output/planning-artifacts/s306/story-1.md" && f=yes
-  printf 'MATRIX %s decides=%s fires=%s twins=- same-run=a3-tracked:%s\n' tracked-only a1-untracked "$f" \
-    "$(mxg "$M1OUT" "docs/tracked-cite.md:1  ->  docs/architecture.md:15")"
-  f=no; fired "$M2" && has "$M2OUT" "docs/junk/ignored-cite.md" && f=yes
-  printf 'MATRIX %s decides=%s fires=%s twins=- same-run=a1-untracked:%s\n' no-exclude-standard a2-ignored "$f" \
-    "$(mxg "$M2OUT" "_bmad-output/planning-artifacts/s306/story-1.md")"
-  f=no; fired "$M3" && ! has "$M3OUT" "docs/tracked-cite.md" && f=yes
-  printf 'MATRIX %s decides=%s fires=%s twins=- same-run=a1-untracked:%s\n' untracked-only a3-tracked "$f" \
-    "$(mxg "$M3OUT" "_bmad-output/planning-artifacts/s306/story-1.md")"
-  f=no; ! fired "$CTL" && has "$COUT" "docs/tracked-cite.md:1  ->  docs/architecture.md:15" \
-    && has "$COUT" "_bmad-output/planning-artifacts/s306/story-1.md:1  ->  docs/architecture.md:16" && has "$COUT" "rc=0" && f=yes
-  printf 'MATRIX-CONTROL %s baseline-rows=%s\n' pass-through "$f"
 fi
 
 echo

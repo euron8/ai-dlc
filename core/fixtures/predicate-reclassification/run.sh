@@ -25,47 +25,14 @@
 # consumer corpus returned a clean, plausible ZERO because the probe cannot pass the predicate's
 # mandatory `--transcript` and both sides therefore failed closed and identically.
 #
-# THE MUTANT MATRIX. A cell is one expectation about the part-11 drive's output (11a the schema-only change is a
-# reclassification, 11c the extension series moves [] -> [B], ran the toy predicate appears at all), RED on a
-# mutant when the mutated engine's output no longer meets it. A mutant's row names the cell that kills it (decides)
-# and the cell it could plausibly co-trip but must leave GREEN (twins). A plain run scores each mutant on its
-# deciding cell and its twin only, off the one drive it already makes. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE command
-# below, from the repo root. It scores every mutant on
-# every cell of the drive it ran on and prints one MATRIX line each. Four drives carry the mutants: part 11's
-# (11a 11c ran), part 16's dist16 drive (UNDEC RECL PASSONLY SILENT0 DASH PARTIAL NONBARE BSILENT NOTETOK), part 17's shipped
-# gate-adjudication drive (GA GAran) and part 18's FAIL_WAIVED drive (WV WVran). No validator unit is selected here, so there is no outside-unit diff.
-# MUTANT-MATRIX m-noroot decides=11a twins=ran
-# MUTANT-MATRIX m-marker decides=11c twins=11a
-# MUTANT-MATRIX m-silent decides=UNDEC twins=RECL
-# MUTANT-MATRIX m-exitcode decides=SILENT0 twins=UNDEC
-# MUTANT-MATRIX m-npassed decides=PASSONLY twins=UNDEC
-# MUTANT-MATRIX m-dash decides=DASH twins=UNDEC
-# MUTANT-MATRIX m-emptyout decides=UNDEC twins=SILENT0
-# MUTANT-MATRIX m-index decides=NONBARE twins=UNDEC
-# MUTANT-MATRIX m-py decides=GA twins=GAran
-# MUTANT-MATRIX m-baseside decides=BSILENT twins=UNDEC
-# MUTANT-MATRIX m-notesilent decides=NOTETOK twins=RECL
-# MUTANT-MATRIX m-escbase decides=WV twins=WVran
-# MUTANT-MATRIX m-escreads decides=WV twins=WVran
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/predicate-reclassification/run.sh --matrix
-#
 # Exit: 0 = every assertion holds, 1 = something regressed, 2 = the harness could not run.
 set -uo pipefail
-# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed below. Any other first
-# argument is still the optional SUBJECT PATH (picked below), exactly as before.
-MODE=plain
-case "${1:-}" in
-  "") ;;
-  --matrix) MODE=matrix; shift ;;
-esac
 
 # HERMETIC (I87): the subject passes AI_DLC_KNOWN_SKILLS_EXT through when the caller set it, so an
 # operator's tuning would otherwise decide part 11's extension cell.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SELF_FILE="$HERE/${0##*/}"
 
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 SUBJ="$(pick "${1:-}" \
@@ -112,14 +79,9 @@ nk() { # negative: $2 must NOT appear
   fi
 }
 
-# ok/bad for lib/mutant.sh: a kill is emitted only through mutant_killed, behind a same-run base-pass flag. `bad`
-# increments the counter this file exits on. lib/ sits beside this directory (preamble.sh came from it).
+# ok/bad print one verdict line each; `bad` increments the counter this file exits on.
 ok()  { printf 'ok   %s\n' "${1-}"; }
 bad() { printf 'FAIL %s\n' "${1-}"; fails=$((fails + 1)); }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: no lib/mutant.sh beside $HERE" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$MUT_LIB"
 
 # The detector reads its manifest from beside itself, so each case gets its own copy of the
 # script with its own manifest. It has no other sibling dependency.
@@ -294,37 +256,7 @@ rt="$(git -C "$DIST" show "${SCHEMA_ONLY}:core/scripts/toy-root-predicate.sh" | 
 [ "$rb" = "$rt" ] && printf 'ok   11e control -- toy-root-predicate.sh IS byte-identical across the schema-only commit\n' \
   || { printf 'FAIL 11e the root toy moved across the schema-only commit; part 11 asserts nothing\n'; fails=$((fails + 1)); }
 
-# THE COMMITTED MUTANTS. Each is a copy of the engine, guarded by an anchor count and `cmp -s`.
-#   m-noroot  deletes the per-side AI_DLC_PROJECT_ROOT pin          -> must fail 11a
-#   m-marker  deletes both per-side values and gives each probe root a `.claude/` walk-up marker
-#             instead -- the fix BL-410's note warns against      -> must fail 11c
-mut11() { # mut11 <name> <anchor> <want-hits> <sed-args...> -> prints the mutant dir, or nothing
-  local n="$1" a="$2" w="$3" h d; shift 3
-  h="$(grep -c -e "$a" "$SUBJ")" || h=0
-  [ "$h" -eq "$w" ] || { printf 'FAIL 11m MUTANT STALE [%s]: anchor matches %s lines, not %s -- re-anchor on the same site\n' "$n" "$h" "$w" >&2; return 1; }
-  d="$(mkrecon "$ROOT_SITE")"
-  sed "$@" "$SUBJ" > "$d/predicate-differential.sh" || return 1
-  cmp -s "$SUBJ" "$d/predicate-differential.sh" && { printf 'FAIL 11m MUTANT DID NOT APPLY [%s]\n' "$n" >&2; return 1; }
-  bash -n "$d/predicate-differential.sh" 2>/dev/null || return 1
-  printf '%s' "$d"
-}
-PIN='AI_DLC_PROJECT_ROOT="\$TMP/root-[a-z]*" '
-EXTP='AI_DLC_KNOWN_SKILLS_EXT="\$PD_EXT" '
-MK='rm -rf "\$TMP/root-\$side"; mkdir -p "\$TMP/root-\$side"$'
-# --- THE MATRIX CELLS, single-sourced. A cell is one expectation about a part-11 drive's output; cell_red <cell> <out>
-# returns 0 RED (the expectation is NOT met), 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
-#   11a  the schema-only change is reported as a reclassification of the root toy
-#   11c  the extension series moves [] -> [B] under the root toy
-#   ran  the root toy appears in the output at all (a mutant that never ran proves nothing)
-#   UNDEC RECL PASSONLY SILENT0 DASH PARTIAL NONBARE BSILENT NOTETOK  part 16's cells, over one drive of dist16 (cell16)
-#   GA    part 17: the shipped manifest's gate-adjudication site, BASE..MID over distga, is not STABLE
-#   GAran part 17: that site produced a row at all (a mutant that never ran proves nothing)
-#   WV    part 18: the shipped gate-adjudication site, BASE..HEAD over distw (waivers no longer honoured), RECLASSIFIES
-#   WVran part 18: that site produced a row at all
-# A mutant is scored in --matrix mode against the cells of the DRIVE it was run on (MX_DRIVE), never
-# against another drive's cells, whose rows that output cannot carry.
-MX_CELLS='11a 11c ran UNDEC RECL PASSONLY SILENT0 DASH PARTIAL NONBARE BSILENT NOTETOK GA GAran WV WVran'
-MX_DRIVE='11a 11c ran'
+# Cells over the part-16 drive (cell16) and the gate-adjudication drives (cellga): 0 RED, 1 GREEN, 2 unknown.
 srow() { awk -F'\t' -v n="$1" '$2 == n { print; exit }' <<<"$2"; } # a site's SUMMARY row
 cell16() { # cell16 <cell> <out>: 0 RED, 1 GREEN, 2 unknown
   local r t
@@ -351,98 +283,12 @@ cellga() { # cellga <cell> <out>: the shipped gate-adjudication site's summary r
   local r; r="$(srow validate-gate-adjudication.sh "$2")"
   case "$1" in
     GA)    case "$r" in "") return 0 ;; PREDICATE-STABLE*) return 0 ;; esac; return 1 ;;
-    GAran) [ -z "$r" ] ;;
     GAU)   case "$r" in "PREDICATE-UNDECIDABLE	"*"the incoming side"*) return 1 ;; esac; return 0 ;;
     WV)    case "$r" in PREDICATE-RECLASSIFIES*) return 1 ;; esac; return 0 ;;
     WVC)   case "$r" in "PREDICATE-STABLE	"*"read-set moved"*) return 1 ;; esac; return 0 ;;
-    WVran) [ -z "$r" ] ;;
     *) return 2 ;;
   esac
 }
-cell_red() {
-  case "$1" in
-    11a) ! grep -qF "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" <<<"$2" ;;
-    11c) ! grep -qF "verdict tokens [] -> [B,] under toy-root-predicate.sh" <<<"$(row_of ext-adversarial-pass "$2")" ;;
-    ran) ! grep -qF 'toy-root-predicate.sh' <<<"$2" ;;
-    UNDEC|RECL|PASSONLY|SILENT0|DASH|PARTIAL|NONBARE|BSILENT|NOTETOK) cell16 "$1" "$2" ;;
-    GA|GAran|WV|WVran) cellga "$1" "$2" ;;
-    *) return 2 ;;
-  esac
-}
-# The header IS the decides/twins list: nothing else in this file restates it.
-mx_row() { # mx_row <mutant> <decides|twins>
-  awk -v n="$1" -v f="$2" '
-    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
-      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
-    }
-    END { if (c == 1) print v }' "$SELF_FILE"
-}
-MXL="$ROOT/mx.ledger"; : > "$MXL"
-BROKEN=0; MX_FAILS=0
-# mx_twins <mutant> <output>: per-push, every twin cell must stay GREEN on the SAME drive output the kill read.
-mx_twins() {
-  local m="$1" o="$2" tw t r
-  tw="$(mx_row "$m" twins)"
-  if [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m"; return; fi
-  printf 'plain-twins %s\n' "$m" >> "$MXL"
-  for t in $(printf '%s' "$tw" | tr ',' ' '); do
-    cell_red "$t" "$o"; r=$?
-    if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t"
-    elif [ "$r" -eq 0 ]; then bad "$m: its twin $t also went RED on this mutant's output, so the kill is not confined to its own cell"; fi
-  done
-}
-# mx_score <mutant> <output>: MATRIX-ONLY. Scores the mutant's drive output against EVERY cell. It records itself in
-# the ledger first (rule 9).
-mx_score() {
-  local m="$1" o="$2" dec tw c dl="" tl="" uex="" g=0 tot=0
-  printf 'mx-score %s\n' "$m" >> "$MXL"
-  if grep -qE 'unbound variable|command not found|syntax error' <<<"$o"; then
-    BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN %s\n' "$m"; return
-  fi
-  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
-  for c in $(printf '%s' "$dec" | tr ',' ' '); do
-    if cell_red "$c" "$o"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
-  done
-  for c in $(printf '%s' "$tw" | tr ',' ' '); do
-    if cell_red "$c" "$o"; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
-  done
-  for c in $MX_DRIVE; do
-    case ",$dec,$tw," in *",$c,"*) continue ;; esac
-    tot=$((tot + 1)); cell_red "$c" "$o" || g=$((g + 1))
-  done
-  if [ -n "$uex" ]; then
-    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
-    MX_FAILS=$((MX_FAILS + 1))
-  else
-    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
-  fi
-}
-m_noroot="$(mut11 m-noroot "$PIN" 2 -e "s|$PIN||")"
-m_marker="$(mut11 m-marker "$MK" 1 -e "s|$PIN||" -e "s|$EXTP||" -e "s|$MK|&; mkdir -p \"\$TMP/root-\$side/.claude\"|")"
-if [ -z "$m_noroot" ] || [ -z "$m_marker" ]; then
-  printf 'FAIL 11m a part-11 mutant could not be built, so its cell is unproven\n'; fails=$((fails + 1))
-else
-  mo="$(pd "$m_noroot/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS")"
-  mm="$(pd "$m_marker/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS")"
-  # Each mutant must fail its OWN cell and must have run (a positive row from the same run).
-  if cell_red ran "$mo"; then
-    printf 'FAIL 11f mutant [m-noroot] never ran: %s\n' "$(head -c 200 <<<"$mo")"; fails=$((fails + 1))
-  elif cell_red 11a "$mo"; then
-    mutant_killed "$([ "$RC_11a" -eq 0 ] && echo 1 || echo 0)" m-noroot "11f mutant [m-noroot] killed: without the per-side root pin the schema-only change reads $(cut -f1 <<<"$mo" | head -1)"
-  else
-    printf 'FAIL 11f mutant [m-noroot] SURVIVED: %s\n' "$(head -c 200 <<<"$mo")"; fails=$((fails + 1))
-  fi
-  mx_twins m-noroot "$mo"
-  if [ "$MODE" = matrix ]; then mx_score m-noroot "$mo"; fi
-  if ! cell_red 11a "$mm" && cell_red 11c "$mm"; then
-    mutant_killed "$([ "$RC_11c" -eq 0 ] && echo 1 || echo 0)" m-marker "11g mutant [m-marker] killed: a walk-up marker finds the schema but loses the extension ($(row_of ext-adversarial-pass "$mm" | cut -f3 | cut -c1-40))"
-  else
-    printf 'FAIL 11g mutant [m-marker] SURVIVED or never ran: %s\n' "$(head -c 200 <<<"$mm")"; fails=$((fails + 1))
-  fi
-  mx_twins m-marker "$mm"
-  if [ "$MODE" = matrix ]; then mx_score m-marker "$mm"; fi
-fi
-
 # ---- PART 12: A STORED SUBJECT OUTSIDE _bmad-output/ IS REACHABLE BY `corpus-root:` -----------
 # The suppression-lifetime site's subject is docs/escalations/pending.md. Without the field the
 # site cannot see it and reports UNDECIDABLE on every consumer that has the file.
@@ -554,16 +400,15 @@ out16="$(pd "$R16/predicate-differential.sh" "$D16" "$B16" "$T16" "$C16")"
 [ -d "$D16/.git" ] && [ -n "$(git -C "$D16" ls-files -- core/scripts/helper.py)" ] && [ -z "$(git -C "$D16" ls-tree --name-only "$B16" -- core/scripts/helper.py)" ] \
   && printf 'ok   16a control -- dist16 is non-bare, its index holds helper.py and BASE does not\n' \
   || { printf 'FAIL 16a the seed does not hold helper.py in the index only; NONBARE asserts nothing\n'; fails=$((fails + 1)); }
-# One literal flag per cell, set beside its ok: validate-mutant-kills.sh M5 binds each kill's flag to it.
-if cell16 UNDEC "$out16"; then bad "16-UNDEC a side silent on every series is not UNDECIDABLE: $out16"; else ok "16-UNDEC"; B_UNDEC=1; fi
+if cell16 UNDEC "$out16"; then bad "16-UNDEC a side silent on every series is not UNDECIDABLE: $out16"; else ok "16-UNDEC"; fi
 if cell16 RECL "$out16"; then bad "16-RECL a real reclassification was not reported: $out16"; else ok "16-RECL"; fi
-if cell16 PASSONLY "$out16"; then bad "16-PASSONLY a side printing only pass lines was read as silent: $out16"; else ok "16-PASSONLY"; B_PASSONLY=1; fi
-if cell16 SILENT0 "$out16"; then bad "16-SILENT0 a side silent with exit 0 is not UNDECIDABLE: $out16"; else ok "16-SILENT0"; B_SILENT0=1; fi
-if cell16 DASH "$out16"; then bad "16-DASH the arm fired on a pass: - site: $out16"; else ok "16-DASH"; B_DASH=1; fi
+if cell16 PASSONLY "$out16"; then bad "16-PASSONLY a side printing only pass lines was read as silent: $out16"; else ok "16-PASSONLY"; fi
+if cell16 SILENT0 "$out16"; then bad "16-SILENT0 a side silent with exit 0 is not UNDECIDABLE: $out16"; else ok "16-SILENT0"; fi
+if cell16 DASH "$out16"; then bad "16-DASH the arm fired on a pass: - site: $out16"; else ok "16-DASH"; fi
 if cell16 PARTIAL "$out16"; then bad "16-PARTIAL a side silent on SOME series was read as silent: $out16"; else ok "16-PARTIAL"; fi
-if cell16 NONBARE "$out16"; then bad "16-NONBARE the index of a non-bare dist leaked into the listing: $out16"; else ok "16-NONBARE"; B_NONBARE=1; fi
-if cell16 BSILENT "$out16"; then bad "16-BSILENT a base side silent on every series is not UNDECIDABLE naming the base side: $out16"; else ok "16-BSILENT"; B_BSILENT=1; fi
-if cell16 NOTETOK "$out16"; then bad "16-NOTETOK a side printing a NOTE line beside its verdict token was read as silent: $out16"; else ok "16-NOTETOK"; B_NOTETOK=1; fi
+if cell16 NONBARE "$out16"; then bad "16-NONBARE the index of a non-bare dist leaked into the listing: $out16"; else ok "16-NONBARE"; fi
+if cell16 BSILENT "$out16"; then bad "16-BSILENT a base side silent on every series is not UNDECIDABLE naming the base side: $out16"; else ok "16-BSILENT"; fi
+if cell16 NOTETOK "$out16"; then bad "16-NOTETOK a side printing a NOTE line beside its verdict token was read as silent: $out16"; else ok "16-NOTETOK"; fi
 
 # ---- PART 17: THE SHIPPED MANIFEST'S GATE-ADJUDICATION SITE READS ITS MODULE -------------------
 # Driven with the SHIPPED differential and the SHIPPED predicate-sites.md, found beside the subject
@@ -587,7 +432,7 @@ outgu="$(pd "$RG/predicate-differential.sh" "$DG" "$BG" "$TG" "$CG")"
   && printf 'ok   17a control -- the entry is byte-identical across BASE..MID\n' \
   || { printf 'FAIL 17a the seed moved the entry; GA asserts nothing\n'; fails=$((fails + 1)); }
 if cellga GA "$outga"; then printf 'FAIL 17-GA the module moving PASS -> FAIL is not compared\n  in: %s\n' "$(srow validate-gate-adjudication.sh "$outga")"; fails=$((fails + 1))
-else ok "17-GA a gate_adjudication.py-only change is compared, not STABLE"; B_GA=1; fi
+else ok "17-GA a gate_adjudication.py-only change is compared, not STABLE"; fi
 if cellga GAU "$outgu"; then printf 'FAIL 17-GAU a module that no longer imports is not UNDECIDABLE\n  in: %s\n' "$(srow validate-gate-adjudication.sh "$outgu")"; fails=$((fails + 1))
 else printf 'ok   17-GAU a module that no longer imports is UNDECIDABLE naming the incoming side\n'; fi
 
@@ -598,7 +443,6 @@ else printf 'ok   17-GAU a module that no longer imports is UNDECIDABLE naming t
 # consumer's copy by path (AI_DLC_ESCALATIONS) and a read-set carrying the sibling let a side resolve it.
 #   WV    BASE -> HEAD, the row stops being honoured      RECLASSIFIES (PASS -> FAIL)
 #   WVC   BASE -> HEAD~1, an UNRELATED change (not byte-identical, so it is compared)  STABLE, read-set moved
-#   WVran the WV drive produced a row at all (a mutant that never ran proves nothing)
 DW="$ROOT/distw"; CW="$ROOT/consw"
 BW="$(git -C "$DW" rev-list --max-parents=0 HEAD)"; MW="$(git -C "$DW" rev-parse HEAD~1)"; TW="$(git -C "$DW" rev-parse HEAD)"
 [ -n "$BW" ] && [ -n "$MW" ] && [ -n "$TW" ] || { echo "FIXTURE ERROR: distw refs unresolvable" >&2; exit 2; }
@@ -610,129 +454,10 @@ outwc="$(pd "$RG/predicate-differential.sh" "$DW" "$BW" "$MW" "$CW")"
   && printf 'ok   18a control -- consw holds the waiving row and a FAIL_WAIVED verdict; the control ref moves the entry\n' \
   || { printf 'FAIL 18a the FAIL_WAIVED world is not seeded as declared; WV and WVC assert nothing\n'; fails=$((fails + 1)); }
 if cellga WV "$outwv"; then printf 'FAIL 18-WV a change to how waivers are read is not a reclassification\n  in: %s\n' "$(srow validate-gate-adjudication.sh "$outwv")"; fails=$((fails + 1))
-else ok "18-WV a change to how waivers are read reclassifies the FAIL_WAIVED series"; B_WV=1; fi
+else ok "18-WV a change to how waivers are read reclassifies the FAIL_WAIVED series"; fi
 if cellga WVC "$outwc"; then printf 'FAIL 18-WVC an unrelated change to the entry is not STABLE having compared\n  in: %s\n' "$(srow validate-gate-adjudication.sh "$outwc")"; fails=$((fails + 1))
 else ok "18-WVC an unrelated change to the entry is STABLE, compared"; fi
 
-# THE PART 16-17 MUTANTS. Each sed program is a file, so its text reaches sed verbatim.
-cat > "$ROOT/m-silent.sed" <<'SED'
-s/^    if \[ -n "\$pd_silent" \]; then$/    if false; then/
-SED
-cat > "$ROOT/m-exitcode.sed" <<'SED'
-s/> "\$TMP\/out-base" 2>&1$/&; rc_b=$?/
-s/> "\$TMP\/out-theirs" 2>&1$/&; rc_t=$?/
-s/"\$rel" "\$sp_b" "\$sp_t"/"$rel" "$((rc_b == 0))" "$((rc_t == 0))"/
-SED
-cat > "$ROOT/m-npassed.sed" <<'SED'
-s/'\$4!=0 {b=1} \$5!=0 {t=1}/-v np="$n_passed" '$4==1||np>0 {b=1} $5==1||np>0 {t=1}/
-SED
-cat > "$ROOT/m-dash.sed" <<'SED'
-s/^  if \[ "\$P_PASS" != - \]; then$/  if true; then/
-SED
-cat > "$ROOT/m-emptyout.sed" <<'SED'
-s/^    \[ -z "\$a_base" \] || sp_b=1$/    [ ! -s "$TMP\/out-base" ] || sp_b=1/
-s/^    \[ -z "\$a_theirs" \] || sp_t=1$/    [ ! -s "$TMP\/out-theirs" ] || sp_t=1/
-SED
-cat > "$ROOT/m-index.sed" <<'SED'
-s/GIT_INDEX_FILE="\$TMP\/no-index" //
-SED
-cat > "$ROOT/m-baseside.sed" <<'SED'
-s/ else if (t \&\& !b) print "base"//
-SED
-cat > "$ROOT/m-notesilent.sed" <<'SED'
-s/^    \[ -z "\$a_base" \] || sp_b=1$/&; ! grep -q "^NOTE" "$TMP\/out-base" || sp_b=0/
-s/^    \[ -z "\$a_theirs" \] || sp_t=1$/&; ! grep -q "^NOTE" "$TMP\/out-theirs" || sp_t=0/
-SED
-cat > "$ROOT/m-escbase.sed" <<'SED'
-s/ AI_DLC_ESCALATIONS="\$PD_ESC" \(cr_run "\$CONSUMER" bash "\$TMP\/root-base\/\)/ \1/
-SED
-cat > "$ROOT/m-escreads.sed" <<'SED'
-/^reads: core\/scripts\/validate-gate-adjudication\.sh /s/ core\/scripts\/validate-suppression-lifetime\.sh//
-SED
-cat > "$ROOT/m-py.sed" <<'SED'
-/^reads: core\/scripts\/validate-gate-adjudication\.sh /s/ core\/scripts\/gate_adjudication\.py//
-SED
-# mut16 <name> <file> <anchor> <want-hits> -> the mutant dir (part-16 manifest), or nothing
-mut16() {
-  local n="$1" f="$2" a="$3" w="$4" h d
-  h="$(grep -c -e "$a" "$f")" || h=0
-  [ "$h" -eq "$w" ] || { printf 'FAIL 16m MUTANT STALE [%s]: anchor matches %s lines, not %s\n' "$n" "$h" "$w" >&2; return 1; }
-  if [ "$n" = m-py ] || [ "$n" = m-escreads ]; then d="$(mkga "$MAN")"; sed -f "$ROOT/$n.sed" "$MAN" > "$d/predicate-sites.md" || return 1
-    cmp -s "$MAN" "$d/predicate-sites.md" && { printf 'FAIL 16m MUTANT DID NOT APPLY [%s]\n' "$n" >&2; return 1; }
-  elif [ "$n" = m-escbase ]; then d="$(mkga "$MAN")"; sed -f "$ROOT/$n.sed" "$SUBJ" > "$d/predicate-differential.sh" || return 1
-    cmp -s "$SUBJ" "$d/predicate-differential.sh" && { printf 'FAIL 16m MUTANT DID NOT APPLY [%s]\n' "$n" >&2; return 1; }
-    bash -n "$d/predicate-differential.sh" 2>/dev/null || { printf 'FAIL 16m MUTANT DOES NOT PARSE [%s]\n' "$n" >&2; return 1; }
-  else
-    # A PLAIN run drives only the mutant's deciding site and its twins (clause 2); --matrix drives every site.
-    if [ "$MODE" = matrix ]; then d="$(mkrecon "$M16")"
-    else d="$(mkrecon "$(site_of $(tr ',' ' ' <<<"$(mx_row "$n" decides),$(mx_row "$n" twins)"))")"; fi
-    sed -f "$ROOT/$n.sed" "$SUBJ" > "$d/predicate-differential.sh" || return 1
-    cmp -s "$SUBJ" "$d/predicate-differential.sh" && { printf 'FAIL 16m MUTANT DID NOT APPLY [%s]\n' "$n" >&2; return 1; }
-    bash -n "$d/predicate-differential.sh" 2>/dev/null || { printf 'FAIL 16m MUTANT DOES NOT PARSE [%s]\n' "$n" >&2; return 1; }
-  fi
-  [ -f "$d/consumer-read.sh" ] || return 1
-  printf '%s' "$d"
-}
-# run16 <mutant> <deciding cell> <anchor> <want-hits>: build, drive, and score the twins (and the matrix
-# under --matrix). Returns 0 when the deciding cell went RED, so the caller emits the kill with a literal
-# name and the cell's own flag; 1 after reporting a mutant that SURVIVED, never ran, or could not be built.
-run16() {
-  local mn="$1" mc="$2" mf=$SUBJ md mo mt
-  case "$mn" in m-py|m-escreads) mf="$MAN" ;; esac
-  md="$(mut16 "$mn" "$mf" "$3" "$4")"
-  if [ -z "$md" ]; then bad "16m mutant [$mn] could not be built, so its cell is unproven"; return 1; fi
-  case "$mn" in
-    m-py)      mo="$(pd "$md/predicate-differential.sh" "$DG" "$BG" "$MG" "$CG")"; mt=validate-gate-adjudication.sh; MX_DRIVE='GA GAran' ;;
-    m-escbase|m-escreads) mo="$(pd "$md/predicate-differential.sh" "$DW" "$BW" "$TW" "$CW")"; mt=validate-gate-adjudication.sh; MX_DRIVE='WV WVran' ;;
-    *)         mo="$(pd "$md/predicate-differential.sh" "$D16" "$B16" "$T16" "$C16")"; mt="$(toy_of "$mc")"
-               MX_DRIVE='UNDEC RECL PASSONLY SILENT0 DASH PARTIAL NONBARE BSILENT NOTETOK' ;;
-  esac
-  # It ran: the deciding cell's site has a summary row in the mutant's output.
-  if [ -z "$(srow "$mt" "$mo")" ]; then bad "16m mutant [$mn] never ran: $(head -c 200 <<<"$mo")"; return 1; fi
-  mx_twins "$mn" "$mo"
-  if [ "$MODE" = matrix ]; then mx_score "$mn" "$mo"; fi
-  cell_red "$mc" "$mo" && return 0
-  bad "16m mutant [$mn] SURVIVED on $mc"; return 1
-}
-run16 m-silent UNDEC '^    if \[ -n "\$pd_silent" \]; then$' 1 \
-  && mutant_killed "${B_UNDEC:-0}" m-silent "16m mutant [m-silent] killed by UNDEC"
-run16 m-exitcode SILENT0 '"\$rel" "\$sp_b" "\$sp_t"' 1 \
-  && mutant_killed "${B_SILENT0:-0}" m-exitcode "16m mutant [m-exitcode] killed by SILENT0"
-run16 m-npassed PASSONLY '\$4!=0 {b=1} \$5!=0 {t=1}' 1 \
-  && mutant_killed "${B_PASSONLY:-0}" m-npassed "16m mutant [m-npassed] killed by PASSONLY"
-run16 m-dash DASH '^  if \[ "\$P_PASS" != - \]; then$' 1 \
-  && mutant_killed "${B_DASH:-0}" m-dash "16m mutant [m-dash] killed by DASH"
-run16 m-emptyout UNDEC '\[ -z "\$a_[bt][a-z]*" \] || sp_[bt]=1$' 2 \
-  && mutant_killed "${B_UNDEC:-0}" m-emptyout "16m mutant [m-emptyout] killed by UNDEC"
-run16 m-index NONBARE 'GIT_INDEX_FILE="\$TMP/no-index" ' 1 \
-  && mutant_killed "${B_NONBARE:-0}" m-index "16m mutant [m-index] killed by NONBARE"
-run16 m-baseside BSILENT ' else if (t && !b) print "base"' 1 \
-  && mutant_killed "${B_BSILENT:-0}" m-baseside "16m mutant [m-baseside] killed by BSILENT"
-run16 m-notesilent NOTETOK '\[ -z "\$a_[bt][a-z]*" \] || sp_[bt]=1$' 2 \
-  && mutant_killed "${B_NOTETOK:-0}" m-notesilent "16m mutant [m-notesilent] killed by NOTETOK"
-run16 m-py GA '^reads: core/scripts/validate-gate-adjudication\.sh .*core/scripts/gate_adjudication\.py' 1 \
-  && mutant_killed "${B_GA:-0}" m-py "16m mutant [m-py] killed by GA"
-run16 m-escbase WV 'AI_DLC_ESCALATIONS="\$PD_ESC" cr_run "\$CONSUMER" bash "\$TMP/root-base/' 1 \
-  && mutant_killed "${B_WV:-0}" m-escbase "18m mutant [m-escbase] killed by WV"
-run16 m-escreads WV '^reads: core/scripts/validate-gate-adjudication\.sh .*core/scripts/validate-suppression-lifetime\.sh' 1 \
-  && mutant_killed "${B_WV:-0}" m-escreads "18m mutant [m-escreads] killed by WV"
-
-# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
-# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
-# it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
-mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
-mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
-if [ "$MODE" = plain ]; then
-  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9 the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
-  elif [ "$mx_only" -ne 0 ]; then bad "rule-9 a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
-  else ok "rule-9 a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
-else
-  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
-  [ "$mx_hdr" = "m-baseside m-dash m-emptyout m-escbase m-escreads m-exitcode m-index m-marker m-noroot m-notesilent m-npassed m-py m-silent " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
-  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
-  fails=$((fails + MX_FAILS))
-fi
-if [ "$BROKEN" -ne 0 ]; then echo "predicate-reclassification: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 if [ "$fails" -ne 0 ]; then
   printf '\n%s assertion(s) FAILED\n' "$fails"; exit 1

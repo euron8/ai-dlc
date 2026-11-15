@@ -1,6 +1,6 @@
 # self-update-fixture-log/lib.sh -- the resolution, the seeded distribution and consumer trees,
 # the per-part worlds and the log readers of self-update-fixture-log, sourced by that fixture's
-# run.sh (the behavioural arms, shipped) (the retired mutation battery sourced it too).
+# run.sh.
 # ONE copy, so every arm is driven against the very
 # worlds, and read by the very readers, that the shipped arms use -- never a second implementation.
 #
@@ -331,9 +331,9 @@ D_QUIET="$(G rev-parse HEAD 2>/dev/null)"
 D_TREE="$(G rev-parse "${D_THEIRS}^{tree}" 2>/dev/null)"
 
 # A range carrying ONE diff-touched fixture and no exempt directory at all. Part 8 runs over
-# this rather than over base..theirs so that a mutant which breaks an EXEMPTION cannot also
-# fail Part 8: the exemptions are Part 7's to own, and two arms failing on one mutation means
-# one of them is asserting the other's subject.
+# this rather than over base..theirs so that a broken EXEMPTION cannot also fail Part 8: the
+# exemptions are Part 7's to own, and two arms failing on one fault means one of them is asserting
+# the other's subject.
 dput "core/fixtures/touched-shippable/run.sh" 'after quiet'
 G add -A >/dev/null 2>&1; G commit -q --no-verify -m ship >/dev/null 2>&1
 D_SHIP="$(G rev-parse HEAD 2>/dev/null)"
@@ -403,29 +403,6 @@ I_T="$(IG rev-parse HEAD 2>/dev/null)"
 I_MB="$(IG rev-parse -q --verify "${I_M}:core/scripts/gate-changed.sh" 2>/dev/null)"
 I_BB="$(IG rev-parse -q --verify "${I_B}:core/scripts/gate-changed.sh" 2>/dev/null)"
 I_TB="$(IG rev-parse -q --verify "${I_T}:core/scripts/gate-changed.sh" 2>/dev/null)"
-}
-
-SUFL_NL='
-'
-# aw_replace_once <src> <dst> <old> <new> -> <dst> is <src> with the ONE occurrence of <old> replaced;
-# exit 3, and no <dst> worth reading, unless <old> occurs exactly once. awk rather than a `sed`
-# (an `&` in the replacement is the whole match) and rather than python3 (a tool this shipping
-# fixture would otherwise carry onto every consumer). index()/substr() are literal, not regex;
-# the strings come in through ENVIRON, which `-v` would strip a level of backslashes from; the
-# file is joined into one string so a multi-line <old> can match; LC_ALL=C so a multibyte byte in
-# the subject cannot abort a BSD awk mid-file.
-aw_replace_once() {
-  AW_OLD="$3" AW_NEW="$4" LC_ALL=C awk '
-    { s = s $0 "\n" }
-    END {
-      o = ENVIRON["AW_OLD"]; n = ENVIRON["AW_NEW"]
-      if (o == "") exit 3
-      c = 0; t = s
-      while ((i = index(t, o)) > 0) { c++; t = substr(t, i + length(o)) }
-      if (c != 1) exit 3
-      i = index(s, o)
-      printf "%s%s%s", substr(s, 1, i - 1), n, substr(s, i + length(o))
-    }' "$1" > "$2"
 }
 
 # --- ck: the checker, driven with its four arguments, its stdout kept as the arm's log ----------

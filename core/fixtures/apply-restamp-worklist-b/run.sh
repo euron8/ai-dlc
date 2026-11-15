@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # apply-restamp-worklist-b -- shard 'b' of the apply-restamp-worklist fixture.
 #
-# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. Every world, mutant and control lives in the
+# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. Every world and control lives in the
 # sibling's run.sh; what this directory buys is a unit the pre-push pool can start on its own, because
 # that suite is POLE-BOUND and the unsharded fixture was one of its longest directories. The shard split,
 # the units each shard runs and the coverage join over them are declared in the sibling, and every

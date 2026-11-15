@@ -1,10 +1,9 @@
 # prepush-worktree-env-scrub drives the two shipping pre-push hooks end to end: it copies each into a
-# sandbox repository with a linked worktree, mutates the copies, and runs them. Both are REQUIRED, since a
+# sandbox repository with a linked worktree and runs them. Both are REQUIRED, since a
 # run that dropped one would still pass on the other. The runner's sentinel is printed at the point of use.
 !.githooks/pre-push
 !core/git-hooks/pre-push
 # run.sh sources ../lib/preamble.sh first; the runner copies only the fixture's own directory.
-core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
 # The BL-1048 receipt copies the real store writer and its sibling into its world.
 core/scripts/core-paths.sh

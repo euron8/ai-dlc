@@ -9,7 +9,6 @@
 # Every other tree the fixture drives is seeded by seed.sh or built per arm under mktemp.
 !core/skills/ai-dlc-update/reconcile/
 # Sourced by the parent run.sh's first line.
-core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
 # The shard drivers: the parent's coverage join reads every one. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.
 core/fixtures/self-update-gate-b/run.sh

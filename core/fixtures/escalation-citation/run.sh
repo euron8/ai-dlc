@@ -20,80 +20,9 @@
 #   (j) CONTROL   a fabrication, over the same corpus                   -> FAIL (no fail-open)
 #   (k) ORDER     both flags: the corpus wins over the named file       -> PASS
 #
-# THE MUTANT MATRIX. Every kill is emitted through mutant_killed (core/fixtures/lib/mutant.sh) with
-# a flag captured from the UNMUTATED arm the mutant decides, in this same run: a `$?` capture right
-# after that arm against the shipped validator, the M-control, R-control and F-control copies for
-# the empty-file, refusal and floor batteries (en-<cell>, er-<cell>, fl-<cell> tokens), and the
-# unmutated cell of LR_CELLS (with the L-control copy) for the lead-interpretation battery. Arm
-# tokens are the letters of the arms below, `l-prime` for (l'); fl-<cell> and the bare LR_NAMES are the
-# cells of the floor and lead-interpretation vectors. A plain run scores each mutant on its deciding
-# arms and the twins named here; `--matrix` runs every mutant against every arm of its family and
-# prints one MATRIX row per pair.
-# MUTANT-MATRIX no-dir-arm decides=i twins=h,j
-# MUTANT-MATRIX dir-loses-order decides=k twins=i,j
-# MUTANT-MATRIX revert-existence-only decides=l,l-prime,m twins=i,j,k
-# MUTANT-MATRIX clear-after-chain decides=l,n twins=m,i,j
-# MUTANT-MATRIX last-segment-wins decides=p,q twins=d,c
-# MUTANT-MATRIX drop-unterminated-tail decides=s,r twins=d,p
-# MUTANT-MATRIX drop-corpus-report decides=t twins=j
-# MUTANT-MATRIX ts-truncates-offset decides=w twins=d,u
-# MUTANT-MATRIX drop-unbounded-count decides=v twins=d
-# MUTANT-MATRIX pass-drops-corpus decides=x twins=y
-# MUTANT-MATRIX pass-renders-constant decides=x twins=z
-# MUTANT-MATRIX report-on-every-path decides=y twins=x
-# MUTANT-MATRIX vacuous-claims-corpus decides=z twins=x
-# MUTANT-MATRIX-FULL F-m1 worlds=fl-P,fl-Q,fl-R,fl-S,fl-T,fl-t,fl-U,fl-V,fl-W,fl-X,fl-Np,fl-Nb,fl-Na,fl-Nab,fl-E,fl-Ea,fl-F11,fl-F12 why=the floor mutants are separated from each other only by cells their neighbours leave alone, so each is held to the whole 18-cell vector
-# MUTANT-MATRIX-FULL F-m3 worlds=fl-P,fl-Q,fl-R,fl-S,fl-T,fl-t,fl-U,fl-V,fl-W,fl-X,fl-Np,fl-Nb,fl-Na,fl-Nab,fl-E,fl-Ea,fl-F11,fl-F12 why=separated from F-m1 by cell fl-W alone, which only the whole vector reads
-# MUTANT-MATRIX-FULL F-m5 worlds=fl-P,fl-Q,fl-R,fl-S,fl-T,fl-t,fl-U,fl-V,fl-W,fl-X,fl-Np,fl-Nb,fl-Na,fl-Nab,fl-E,fl-Ea,fl-F11,fl-F12 why=held to moving only the two empty-needle cells, which only the whole vector reads
-# MUTANT-MATRIX-FULL F-m6 worlds=fl-P,fl-Q,fl-R,fl-S,fl-T,fl-t,fl-U,fl-V,fl-W,fl-X,fl-Np,fl-Nb,fl-Na,fl-Nab,fl-E,fl-Ea,fl-F11,fl-F12 why=held to moving only the eleven-character cell, which only the whole vector reads
-# MUTANT-MATRIX-FULL F-m2 worlds=fl-P,fl-Q,fl-R,fl-S,fl-T,fl-t,fl-U,fl-V,fl-W,fl-X,fl-Np,fl-Nb,fl-Na,fl-Nab,fl-E,fl-Ea,fl-F11,fl-F12 why=held to moving only the three --any-authorized cells, which only the whole vector reads
-# MUTANT-MATRIX-FULL F-m4 worlds=fl-P,fl-Q,fl-R,fl-S,fl-T,fl-t,fl-U,fl-V,fl-W,fl-X,fl-Np,fl-Nb,fl-Na,fl-Nab,fl-E,fl-Ea,fl-F11,fl-F12 why=held to moving only the two NBSP --any-authorized cells, which only the whole vector reads
-# MUTANT-MATRIX-FULL F-m2b worlds=fl-P,fl-Q,fl-R,fl-S,fl-T,fl-t,fl-U,fl-V,fl-W,fl-X,fl-Np,fl-Nb,fl-Na,fl-Nab,fl-E,fl-Ea,fl-F11,fl-F12 why=held to moving only the two caller-message cells, which only the whole vector reads
-# MUTANT-MATRIX L-no-label-rule decides=free twins=strike
-# MUTANT-MATRIX L-ignore-id decides=wrongid twins=free
-# MUTANT-MATRIX L-no-disposition-match decides=mismatch twins=neither
-# MUTANT-MATRIX L-gate-dq-into-auth decides=plain twins=nodq
-# MUTANT-MATRIX L-any-dq-into-auth decides=shortq-any twins=plain-any
-# MUTANT-MATRIX L-drop-sentinel decides=nodq twins=plain
-# MUTANT-MATRIX L-rule-short-circuits decides=nohit twins=strike
-# MUTANT-MATRIX L-header-tab-kept decides=hdrtab twins=plain
-# MUTANT-MATRIX L-header-tab-kept-any decides=hdrtabq-any twins=shortq-any
-# MUTANT-MATRIX-FULL M-revert worlds=en-A,en-B,en-C,en-D,en-E,en-F why=the empty-file mutants are each held to the whole six-cell vector so a mutant moving a cell it does not own fails
-# MUTANT-MATRIX-FULL M-zero-records worlds=en-A,en-B,en-C,en-D,en-E,en-F why=held to moving only the populated-zero-record cell, which only the whole vector reads
-# MUTANT-MATRIX-FULL M-hoist worlds=en-A,en-B,en-C,en-D,en-E,en-F why=held to moving only the --any-authorized cell, which only the whole vector reads
-# MUTANT-MATRIX-FULL R-revert-all worlds=er-A,er-B,er-C,er-D,er-E,er-F why=the refusal mutants are each held to the whole six-cell vector, one per layer of the guard plus every layer reverted
-# MUTANT-MATRIX-FULL R-nonregular worlds=er-A,er-B,er-C,er-D,er-E,er-F why=separated from R-no-symlink by cell er-B alone, which only the whole vector reads
-# MUTANT-MATRIX-FULL R-no-symlink worlds=er-A,er-B,er-C,er-D,er-E,er-F why=held to moving only the dangling-symlink cell, which only the whole vector reads
-# MUTANT-MATRIX-FULL R-rc worlds=er-A,er-B,er-C,er-D,er-E,er-F why=held to moving only the mode-000 and grep-status cells, which only the whole vector reads
-# MUTANT-MATRIX-FULL R-readable-never worlds=er-A,er-B,er-C,er-D,er-E,er-F why=held to moving only the mode-000 cell, which only the whole vector reads
-# MUTANT-MATRIX-FULL R-readable-always worlds=er-A,er-B,er-C,er-D,er-E,er-F why=held to moving only the grep-status cell, which only the whole vector reads
-# MUTANT-MATRIX-DYNAMIC en-score why=en_score passes its 2nd argument to the kill helper; each call names a literal mutant carrying its own FULL row above
-# MUTANT-MATRIX-DYNAMIC er-score why=er_score passes its 2nd argument to the kill helper; each call names a literal mutant carrying its own FULL row above
-# MUTANT-MATRIX-DYNAMIC fl-score why=fl_score passes F-<name> from its 4th argument to the kill helper; each call names a literal mutant carrying its own FULL row above
-# MUTANT-MATRIX-DYNAMIC lr-score why=lr_score passes L-<name> from its 1st argument to the kill helper; each call names a literal mutant carrying its own row above
-# MUTANT-MATRIX S-revert decides=sbad twins=sanyres
-# MUTANT-MATRIX S-any-widened decides=sany twins=sanyres
-# MUTANT-MATRIX S-no-archive decides=apop twins=sbad
-# MUTANT-MATRIX S-absent-exits-early decides=aabs twins=apop
-# MUTANT-MATRIX S-empty-exits-early decides=aemp twins=apop
-# MUTANT-MATRIX S-archive-all-statuses decides=ares twins=apop
-# MUTANT-MATRIX S-no-file-boundary decides=bound twins=sbad
-# MUTANT-MATRIX S-no-progress-guard decides=argv twins=sanyres
-# MUTANT-MATRIX S-no-archive-refusal decides=adir twins=apop
-# MUTANT-MATRIX-DYNAMIC sv-score why=sv_score passes S-<name> from its 1st argument to the kill helper; each call names a literal mutant carrying its own row above
-# MUTANT-MATRIX I-header-only decides=ioff,ioffg,inone,iarch,icur,icurg twins=iexp
-# MUTANT-MATRIX I-every-suppressed decides=iexp twins=ioff
-# MUTANT-MATRIX I-no-archive-inforce decides=iarch twins=ioff
-# MUTANT-MATRIX I-no-sibling-refusal decides=inosib twins=iexp
-# MUTANT-MATRIX I-probe-header-scope decides=icur,icurg twins=ioff
-# MUTANT-MATRIX-DYNAMIC if-score why=if_score passes I-<name> from its 1st argument to the kill helper; each call names a literal mutant carrying its own row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/escalation-citation/run.sh --matrix
-#
-# Usage: run.sh [--matrix]
+# Usage: run.sh
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
-MATRIX=0; MROWS=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
 
 VALIDATOR=""
 for cand in \
@@ -112,7 +41,6 @@ trap 'rm -rf "$ROOT"' EXIT
 FAIL=0; N=0
 
 # ok/bad in this fixture's own line format, the first word of the message being the label column.
-# Defined before lib/mutant.sh is sourced, which refuses to load without them.
 ok()  { printf '  ok   %-30s %s\n' "${1%% *}" "${1#* }"; }
 bad() {
   FAIL=$((FAIL + 1))
@@ -121,17 +49,9 @@ bad() {
     *) printf '  FAIL %-30s %s\n' "${1%% *}" "${1#* }" ;;
   esac
 }
-[ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: $DIR/../lib/mutant.sh is absent; no kill can be scored" >&2; exit 2; }
-# shellcheck source=../lib/mutant.sh
-. "$DIR/../lib/mutant.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-[ -f "$DIR/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: $DIR/../lib/matrix.sh is absent" >&2; exit 2; }
-# shellcheck source=../lib/matrix.sh
-. "$DIR/../lib/matrix.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 
 # $1 pending-file  $2 sprint  $3 transcript-basename (or "")  $4 want-exit  $5 why  $6 optional validator
-# Returns 0 when the arm held, 1 when it did not: a kill below captures that status as its base.
+# Returns 0 when the arm held, 1 when it did not.
 g() {
   local f="$1" sp="$2" t="$3" want="$4" why="$5" v="${6:-$VALIDATOR}"; N=$((N + 1))
   local args=(--escalations "$ROOT/$f" --sprint "$sp")
@@ -152,8 +72,7 @@ says() {
 
 echo "escalation-citation proof (Check 2)"
 # The candidate list above spans both install layouts and takes the first that EXISTS. Print
-# what this run actually loaded: a mutant applied to the other copy leaves every arm green
-# and reads exactly like an arm that cannot fire, and `cmp -s` cannot tell the two apart.
+# what this run actually loaded.
 echo "escalation-citation: resolved subject = $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
 echo
 
@@ -168,12 +87,7 @@ g pending-real.md        50 ""             1 "gate fail-closed: real citation bu
 
 # --- the cross-session corpus arm -----------------------------------------------------------
 # $1 pending  $2 sprint  $3 dir-or-""  $4 single-transcript-or-""  $5 want-exit  $6 why
-# $7 optional validator override, so the mutants below reuse exactly these assertions.
-# GXQ=1 silences the ok line only (a FAIL still prints): a mutant arm that held is reported once,
-# by the kill helper, which refuses it unless the unmutated arm held in this run.
-GXQ=0
-gxq()  { GXQ=1; gx "$@";  local r=$?; GXQ=0; return "$r"; }
-gsxq() { GXQ=1; gsx "$@"; local r=$?; GXQ=0; return "$r"; }
+# $7 optional validator override, so the control copy below reuses exactly these assertions.
 gx() {
   local f="$1" sp="$2" d="$3" t="$4" want="$5" why="$6" v="${7:-$VALIDATOR}"; N=$((N + 1))
   local args=(--escalations "$ROOT/$f" --sprint "$sp")
@@ -181,7 +95,7 @@ gx() {
   [ -n "$d" ] && args+=(--transcript-dir "$ROOT/$d")
   local out got
   out="$(bash "$v" "${args[@]}" 2>&1)"; got=$?
-  if [ "$got" -eq "$want" ]; then [ "$GXQ" = 1 ] || printf '  ok   %-26s exit=%s  (%s)\n' "$f" "$got" "$why"; return 0
+  if [ "$got" -eq "$want" ]; then printf '  ok   %-26s exit=%s  (%s)\n' "$f" "$got" "$why"; return 0
   else FAIL=$((FAIL + 1)); printf '  FAIL %-26s exit=%s want=%s  (%s)\n' "$f" "$got" "$want" "$why"; printf '%s\n' "$out" | sed 's/^/       | /'; return 1; fi
 }
 
@@ -210,7 +124,7 @@ gsx() {
   [ "$got" -eq "$want" ] || why="$why [exit=$got want=$want]"
   grep -qF -- "$yes" <<<"$out" || why="$why [missing: $yes]"
   grep -qF -- "$no"  <<<"$out" && why="$why [PRESENT but must not be: $no]"
-  if [ -z "$why" ]; then [ "$GXQ" = 1 ] || printf '  ok   %-30s exit=%s  (%s)\n' "$f/${d:-nodir}/${t:-nofile}" "$got" "$why2"; return 0
+  if [ -z "$why" ]; then printf '  ok   %-30s exit=%s  (%s)\n' "$f/${d:-nodir}/${t:-nofile}" "$got" "$why2"; return 0
   else FAIL=$((FAIL + 1)); printf '  FAIL %-30s%s  (%s)\n' "$f/${d:-nodir}/${t:-nofile}" "$why" "$why2"; return 1; fi
 }
 
@@ -360,330 +274,17 @@ VL="$(vac_lines "$VALIDATOR")"
 if [ "$RC_Z" -eq 0 ]; then printf '  ok   %-30s (z) a PASS that examined nothing names no corpus\n' "pending-clean.md"
 else FAIL=$((FAIL + 1)); printf '  FAIL %-30s (z) the vacuous PASS printed %s line(s), not 1\n' "pending-clean.md" "$VL"; fi
 
-# --- mutants ---------------------------------------------------------------------------------
-# Built as COPIES, guarded by `cmp -s` (a sed that matched nothing must not pass as a mutation)
-# and `bash -n` (a mutant that is no longer a program emits nothing, and nothing scores as a
-# kill). The validator resolves its steering sibling from `dirname "$0"`, so BOTH files are
-# copied -- a lone copy dies with "cannot verify the citation" and that failure would be read as
-# the mutant working.
+# --- scratch space for the sections below ------------------------------------------------------
 echo
 MWORK="$(mktemp -d)"; trap 'rm -rf "$ROOT" "$MWORK"' EXIT
 SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
-cp "$SRC_DIR/validate-steering-budget.sh" "$MWORK/" 2>/dev/null \
-  || { echo "  FAIL mutants: cannot copy the steering sibling from $SRC_DIR"; FAIL=$((FAIL + 1)); }
-cp "$VALIDATOR" "$MWORK/control.sh"
-KILLS=0; KF_EXTRA=0
-# --matrix: one row per cell of a vector-scored mutant, TRIPPED where its cell differs from the
-# unmutated control's.  $1 mutant  $2 family prefix  $3 roster "X:name ..."  $4 control  $5 cells
-cell_matrix() {
-  local i=0 nm
-  for nm in $3; do
-    i=$((i + 1))
-    if [ "$(printf '%s' "$5" | cut -c"$i")" = "$(printf '%s' "$4" | cut -c"$i")" ]; then matrix_row "$1" "$2-${nm%%:*}" 0 GREEN no
-    else matrix_row "$1" "$2-${nm%%:*}" 1 TRIPPED yes; fi
-    MROWS=$((MROWS + 1))
-  done
-}
-
-mutate() {  # mutate <name> <sed-expr>  -> prints the mutant path
-  local name="$1" expr="$2"
-  cp "$VALIDATOR" "$MWORK/m-$name.sh" || { echo "  FAIL mutant $name: copy failed"; return 1; }
-  sed -i.bak "$expr" "$MWORK/m-$name.sh" && rm -f "$MWORK/m-$name.sh.bak"
-  if cmp -s "$VALIDATOR" "$MWORK/m-$name.sh"; then
-    echo "  FAIL mutant $name changed no bytes -- its sed matched nothing and would score as a kill"; return 1
-  fi
-  bash -n "$MWORK/m-$name.sh" || { echo "  FAIL mutant $name does not parse; its silence would score as a kill"; return 1; }
-  printf '%s\n' "$MWORK/m-$name.sh"
-}
-
-# Assertion 0 -- the UNMUTATED CONTROL COPY reproduces the whole corpus baseline. Refuse to
-# believe any mutant until a copy in this same directory has produced all four verdicts.
-echo "  -- unmutated control copy --"
-gx pending-crosssession.md 50 ""      corpus/gate.jsonl 1 "control reproduces (h)" "$MWORK/control.sh"
-gx pending-crosssession.md 50 corpus  ""                0 "control reproduces (i)" "$MWORK/control.sh"
-gx pending-crossfake.md    50 corpus  ""                1 "control reproduces (j)" "$MWORK/control.sh"
-gx pending-crosssession.md 50 corpus  corpus/gate.jsonl 0 "control reproduces (k)" "$MWORK/control.sh"
-
-# Mutant A -- the corpus arm is never taken. Scored on (i), with (h) and (j) as twins: (h) passes
-# no dir, and (j) still FAILs because with no usable ground truth the gate fails closed for a
-# different stated reason. MEASURED by --matrix, it also turns (k), (t), (x) and (y) red -- every
-# other arm that reads the corpus -- so (i) is its cheapest deciding arm, not its only one.
-echo "  -- mutant A: corpus arm disabled (expect (i) to go red; (h) and (j) unchanged) --"
-MA="$(mutate no-dir-arm 's@steer_dir_has_transcript "\$TRANSCRIPT_DIR"; then@[ -n "" ]; then@')" || FAIL=$((FAIL + 1))
-if [ -n "${MA:-}" ]; then
-  gxq pending-crosssession.md 50 corpus "" 1 "A: (i) is red -- corpus no longer consulted" "$MA" \
-    && mutant_killed "$([ "$RC_I" = 0 ] && echo 1 || echo 0)" no-dir-arm "pending-crosssession.md A: (i) is red -- corpus no longer consulted" && KILLS=$((KILLS + 1))
-  gx pending-crosssession.md 50 ""     corpus/gate.jsonl 1 "A: (h) unchanged" "$MA"
-  gx pending-crossfake.md    50 corpus "" 1 "A: (j) unchanged" "$MA"
-fi
-
-# Mutant C -- the corpus is consulted only when no single file was named, i.e. precedence
-# inverted. Kills (k) ONLY: (i) and (j) pass no --transcript, so their branch is unchanged.
-echo "  -- mutant C: precedence inverted (expect ONLY (k) to go red) --"
-MC="$(mutate dir-loses-order 's@steer_dir_has_transcript "\$TRANSCRIPT_DIR"; then@steer_dir_has_transcript "$TRANSCRIPT_DIR" \&\& [ -z "$TRANSCRIPT" ]; then@')" || FAIL=$((FAIL + 1))
-if [ -n "${MC:-}" ]; then
-  gxq pending-crosssession.md 50 corpus corpus/gate.jsonl 1 "C: (k) is red -- named file beat the corpus" "$MC" \
-    && mutant_killed "$([ "$RC_K" = 0 ] && echo 1 || echo 0)" dir-loses-order "pending-crosssession.md C: (k) is red -- named file beat the corpus" && KILLS=$((KILLS + 1))
-  gx pending-crosssession.md 50 corpus ""                0 "C: (i) unchanged" "$MC"
-  gx pending-crossfake.md    50 corpus ""                1 "C: (j) unchanged" "$MC"
-fi
-
-# Mutant R -- the narrowing REVERTED to the shipped-defect predicate, byte for byte. The
-# corpus arm is still taken, so (h)/(i)/(j)/(k) are all unchanged; what moves is exactly the
-# empty-corpus set, which is what makes those arms arms rather than restatements of the fix.
-echo "  -- mutant R: the pre-fix existence-only predicate restored (expect ONLY the empty-corpus arms to go red) --"
-MR="$(mutate revert-existence-only 's@steer_dir_has_transcript "\$TRANSCRIPT_DIR"; then@[ -n "$TRANSCRIPT_DIR" ] \&\& [ -d "$TRANSCRIPT_DIR" ]; then@')" || FAIL=$((FAIL + 1))
-if [ -n "${MR:-}" ]; then
-  gxq pending-real.md 50 dir-empty   real.jsonl 1 "R: (l) is red -- the empty dir outranks a readable transcript" "$MR" \
-    && mutant_killed "$([ "$RC_L" = 0 ] && echo 1 || echo 0)" revert-existence-only "pending-real.md R: (l) is red -- the empty dir outranks a readable transcript" && KILLS=$((KILLS + 1))
-  gxq pending-real.md 50 dir-sidecar real.jsonl 1 "R: (l') is red -- a sidecar-only dir does too" "$MR" \
-    && mutant_killed "$([ "$RC_LP" = 0 ] && echo 1 || echo 0)" revert-existence-only "pending-real.md R: (l') is red -- a sidecar-only dir does too" && KILLS=$((KILLS + 1))
-  gsxq pending-real.md dir-empty "" 1 "appears in NO genuine" "no readable transcript was provided" \
-      "R: (m) is red -- the empty corpus is reported as the OPERATOR having said nothing" "$MR" \
-    && mutant_killed "$([ "$RC_M" = 0 ] && echo 1 || echo 0)" revert-existence-only "pending-real.md R: (m) is red -- the empty corpus is reported as the OPERATOR having said nothing" && KILLS=$((KILLS + 1))
-  # ...and the four corpus verdicts do not move. More failures than these would mean the
-  # assertions are entangled and one of them is vacuous.
-  gx pending-crosssession.md 50 corpus  ""                0 "R: (i) unchanged" "$MR"
-  gx pending-crossfake.md    50 corpus  ""                1 "R: (j) unchanged" "$MR"
-  gx pending-crosssession.md 50 corpus  corpus/gate.jsonl 0 "R: (k) unchanged" "$MR"
-fi
-
-# Mutant W -- the WRONG FIX SHAPE, and the one the entry's own prose lists as a legitimate
-# option: the existence-only predicate left where it was, and the narrowing moved BELOW the
-# if/elif chain as a clearing of STEER_FLAG. It repairs (m) -- which is why it looks like a
-# fix -- and skips the `--transcript` fallback entirely, so a caller that passed BOTH flags
-# loses the file that holds the words. `steps/gate-validation.md` instructs the operator to
-# pass both, so that caller is the normal one.
-echo "  -- mutant W: the narrowing moved below the chain (expect (l) and (n) to go red, (m) not) --"
-MW="$(mutate clear-after-chain 's@steer_dir_has_transcript "\$TRANSCRIPT_DIR"; then@[ -n "$TRANSCRIPT_DIR" ] \&\& [ -d "$TRANSCRIPT_DIR" ]; then@; s@^  if \[ -z "\$STEER_FLAG" \]; then@  [ "$STEER_FLAG" = "--dir" ] \&\& ! steer_dir_has_transcript "$STEER_ARG" \&\& { STEER_FLAG=""; STEER_ARG=""; }; if [ -z "$STEER_FLAG" ]; then@')" || FAIL=$((FAIL + 1))
-if [ -n "${MW:-}" ]; then
-  gxq pending-real.md 50 dir-empty real.jsonl 1 "W: (l) is red -- the fallthrough to the named file is gone" "$MW" \
-    && mutant_killed "$([ "$RC_L" = 0 ] && echo 1 || echo 0)" clear-after-chain "pending-real.md W: (l) is red -- the fallthrough to the named file is gone" && KILLS=$((KILLS + 1))
-  gsxq pending-real.md dir-empty silent.jsonl 1 "no readable transcript was provided" "appears in NO genuine" \
-      "W: (n) is red -- the file was never read, so the gate reports an absence it does not have" "$MW" \
-    && mutant_killed "$([ "$RC_N" = 0 ] && echo 1 || echo 0)" clear-after-chain "pending-real.md W: (n) is red -- the file was never read, so the gate reports an absence it does not have" && KILLS=$((KILLS + 1))
-  # (m) is UNCHANGED under W. That is the whole hazard: the shape repairs the case with no
-  # fallback available and breaks only the case that has one.
-  gsx pending-real.md dir-empty "" 1 "no readable transcript was provided" "appears in NO genuine" \
-      "W: (m) unchanged -- which is why this shape reads as a fix" "$MW"
-  gx pending-crosssession.md 50 corpus "" 0 "W: (i) unchanged" "$MW"
-  gx pending-crossfake.md    50 corpus "" 1 "W: (j) unchanged" "$MW"
-fi
-
-# Mutant Q -- the pick reverts to LAST-segment-wins, which is what the greedy capture did. It
-# owns BOTH order arms deliberately: they are one property from each other, so a mutant moving
-# only one of them would mean the other arm is asserting something else. The single-segment
-# twins must not move -- 98 of the reference consumer's 106 citations are that shape, and a
-# mutant that moved them would mean these arms fire on every citation rather than on this one.
-echo "  -- mutant Q: last quoted segment wins (the pre-fix greedy capture) --"
-MQ="$(mutate last-segment-wins 's@\[ -n "\$_cq_pick" \] || _cq_pick="\$_cq_seg"@_cq_pick="$_cq_seg"@')" || FAIL=$((FAIL + 1))
-if [ -n "${MQ:-}" ]; then
-  gxq pending-order-good-first.md 50 "" real.jsonl 1 "Q: (p) is red -- the trailing text is taken as the citation" "$MQ" \
-    && mutant_killed "$([ "$RC_P" = 0 ] && echo 1 || echo 0)" last-segment-wins "pending-order-good-first.md Q: (p) is red -- the trailing text is taken as the citation" && KILLS=$((KILLS + 1))
-  gxq pending-order-good-last.md  50 "" real.jsonl 0 "Q: (q) is red -- an invented disposition passes on a trailing genuine quote" "$MQ" \
-    && mutant_killed "$([ "$RC_Q" = 0 ] && echo 1 || echo 0)" last-segment-wins "pending-order-good-last.md Q: (q) is red -- an invented disposition passes on a trailing genuine quote" && KILLS=$((KILLS + 1))
-  gx pending-real.md             50 "" real.jsonl 0 "Q: (d) unchanged -- one segment, one answer" "$MQ"
-  gx pending-fabricated.md       50 "" real.jsonl 1 "Q: (c) unchanged" "$MQ"
-fi
-
-# Mutant U -- the unterminated trailing segment is dropped. `split` on `"` puts the inside-quote
-# fields at the EVEN indices and an odd quote count leaves the final field unterminated, also
-# even-indexed; `i < n` skips exactly that one. Balanced citations are untouched, which is why
-# (d) and (p) must stay green here.
-echo "  -- mutant U: the unterminated trailing segment is dropped --"
-MU="$(mutate drop-unterminated-tail 's@for (i = 2; i <= n; i += 2)@for (i = 2; i < n; i += 2)@')" || FAIL=$((FAIL + 1))
-if [ -n "${MU:-}" ]; then
-  gxq pending-unterminated.md     50 "" real.jsonl 1 "U: (s) is red -- the tail is gone and the label line becomes the needle" "$MU" \
-    && mutant_killed "$([ "$RC_S" = 0 ] && echo 1 || echo 0)" drop-unterminated-tail "pending-unterminated.md U: (s) is red -- the tail is gone and the label line becomes the needle" && KILLS=$((KILLS + 1))
-  gxq pending-connective.md       50 "" real.jsonl 1 "U: (r) is red -- only the too-short segment survives" "$MU" \
-    && mutant_killed "$([ "$RC_R" = 0 ] && echo 1 || echo 0)" drop-unterminated-tail "pending-connective.md U: (r) is red -- only the too-short segment survives" && KILLS=$((KILLS + 1))
-  gx pending-real.md             50 "" real.jsonl 0 "U: (d) unchanged -- a balanced citation has no tail" "$MU"
-  gx pending-order-good-first.md 50 "" real.jsonl 0 "U: (p) unchanged" "$MU"
-fi
-
-# Mutant V -- the sibling's corpus report is captured and then not printed. The verdict does not
-# move, which is the whole point: this arm is about ATTRIBUTION, and the exit code cannot see it.
-echo "  -- mutant V: the corpus report is dropped from the accusation --"
-MV="$(mutate drop-corpus-report 's@\[ -n "\$CITE_REPORT" \] && printf@[ -n "" ] \&\& printf@')" || FAIL=$((FAIL + 1))
-if [ -n "${MV:-}" ]; then
-  gsxq pending-crossfake.md corpus "" 1 "appears in NO genuine" "transcript(s) from" \
-      "V: (t) is red -- the accusation no longer says which corpus produced it" "$MV" \
-    && mutant_killed "$([ "$RC_T" = 0 ] && echo 1 || echo 0)" drop-corpus-report "pending-crossfake.md V: (t) is red -- the accusation no longer says which corpus produced it" && KILLS=$((KILLS + 1))
-  # The twin: the verdict over the same corpus is unchanged -- only the attribution moved.
-  gx pending-crossfake.md 50 corpus "" 1 "V: (j) unchanged -- the exit cannot see the dropped report" "$MV"
-fi
-
-# Mutant T -- cite_ts TRUNCATES a zone offset, the shape it had before this round: the regex
-# stops before `+`/`-`, the naive part is handed to the verifier, and the owner reads it as UTC.
-# Kills (w) ONLY -- every other citation here carries `Z`, which the truncating form returns
-# whole, so this mutant and the fixed one are the same program for them.
-echo "  -- mutant T: cite_ts truncates a zone offset (expect ONLY (w) to go red) --"
-MT="$(mutate ts-truncates-offset 's@(Z|\[+-\]\[0-9\]{2}:?\[0-9\]{2})?@Z?@')" || FAIL=$((FAIL + 1))
-if [ -n "${MT:-}" ]; then
-  gxq pending-offset.md 50 "" real.jsonl 1 "T: (w) is red -- the offset stamp is read seven hours from the instant it names" "$MT" \
-    && mutant_killed "$([ "$RC_W" = 0 ] && echo 1 || echo 0)" ts-truncates-offset "pending-offset.md T: (w) is red -- the offset stamp is read seven hours from the instant it names" && KILLS=$((KILLS + 1))
-  gx pending-real.md   50 "" real.jsonl 0 "T: (d) unchanged -- a Z stamp is returned whole either way" "$MT"
-  gx pending-before.md 50 "" real.jsonl 1 "T: (u) unchanged" "$MT"
-fi
-
-# Mutant B2 -- the UNBOUNDED-VERIFY COUNT dropped from the PASS line. The verdict does not move,
-# which is the whole point: a gate log then cannot tell a bounded pass from an unbounded one,
-# and no exit code anywhere can see it.
-echo "  -- mutant B2: the unbounded-verify count is not reported --"
-MB2="$(mutate drop-unbounded-count 's@ unbounded-citation: \${UNBOUNDED} verified with no timestamp bound\.@@')" || FAIL=$((FAIL + 1))
-if [ -n "${MB2:-}" ]; then
-  N=$((N + 1))
-  OUTB2="$(bash "$MB2" --escalations "$ROOT/pending-space.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>/dev/null)"; rcb2=$?
-  if [ "$rcb2" -eq 0 ] && ! grep -qF -- "unbounded-citation:" <<<"$OUTB2"; then
-    mutant_killed "$([ "$RC_V" = 0 ] && echo 1 || echo 0)" drop-unbounded-count "pending-space.md B2: the count is gone while the verdict stays PASS -- (v) has teeth" && KILLS=$((KILLS + 1))
-  else
-    FAIL=$((FAIL + 1)); printf '  FAIL %-26s B2 DID NOT FAIL (rc=%s): the count survived the mutation, so (v) is not testing it\n' "pending-space.md" "$rcb2"
-  fi
-  # The twin: a canonical citation's verdict does not move when only the count's rendering is gone.
-  gx pending-real.md 50 "" real.jsonl 0 "B2: (d) unchanged -- the verdict never read the count" "$MB2"
-fi
-
-# Mutant P1 -- the PASS path captures the corpus report and discards it, which is the shape this
-# validator shipped with. The verdict does not move: every exit code, the FAIL branch and the
-# vacuous branch are untouched, and only an operator asking WHAT the pass was taken over can see
-# the difference. Kills (x) ONLY.
-echo "  -- mutant P1: the PASS path discards the corpus report --"
-MP1="$(mutate pass-drops-corpus 's@^echo "      \${CITE_REPORT:-@echo "      " #@')" || FAIL=$((FAIL + 1))
-if [ -n "${MP1:-}" ]; then
-  N=$((N + 1))
-  if ! pass_corpus_pair "$MP1"; then
-    mutant_killed "$([ "$RC_X" = 0 ] && echo 1 || echo 0)" pass-drops-corpus "corpus-live P1: (x) is red -- the PASS says nothing about its corpus" && KILLS=$((KILLS + 1))
-  else
-    FAIL=$((FAIL + 1)); printf '  FAIL %-30s P1 SURVIVED: (x) passes with the render deleted, so it is not testing it\n' "corpus-live"
-  fi
-  N=$((N + 1))
-  [ "$(cite_lines "$MP1")" -eq 1 ] && printf '  ok   %-30s P1: (y) unchanged\n' "pending-crossfake.md" \
-    || { FAIL=$((FAIL + 1)); printf '  FAIL %-30s P1 moved (y) too -- the arms are entangled\n' "pending-crossfake.md"; }
-fi
-
-# Mutant P2 -- THE FIRST PLAUSIBLE WRONG FIX: the PASS path renders a fixed sentence instead of
-# the verifier's own report. It satisfies every presence-shaped reading of "the PASS names its
-# corpus" and is blind to the thing that moves, which is why (x) asserts the COUNT and asserts
-# the two runs DIFFER rather than asserting a phrase. Kills (x) ONLY.
-echo "  -- mutant P2: the PASS path renders a constant, not the corpus state --"
-MP2="$(mutate pass-renders-constant 's@\${CITE_REPORT:-[^}]*}@cite: scanned the transcript corpus@')" || FAIL=$((FAIL + 1))
-if [ -n "${MP2:-}" ]; then
-  N=$((N + 1))
-  if ! pass_corpus_pair "$MP2"; then
-    mutant_killed "$([ "$RC_X" = 0 ] && echo 1 || echo 0)" pass-renders-constant "corpus-live P2: (x) is red -- a constant renders identically over both corpora" && KILLS=$((KILLS + 1))
-  else
-    FAIL=$((FAIL + 1)); printf '  FAIL %-30s P2 SURVIVED: (x) accepts a sentence that never moves\n' "corpus-live"
-  fi
-  N=$((N + 1))
-  [ "$(vac_lines "$MP2")" -eq 1 ] && printf '  ok   %-30s P2: (z) unchanged\n' "pending-clean.md" \
-    || { FAIL=$((FAIL + 1)); printf '  FAIL %-30s P2 moved (z) too -- the arms are entangled\n' "pending-clean.md"; }
-fi
-
-# Mutant P3 -- THE SECOND PLAUSIBLE WRONG FIX, and the one a hand builds by accident: render the
-# report unconditionally, above the branch that forks. It satisfies (x) completely -- the PASS
-# does name its corpus -- and gives the accusation the same line TWICE. Kills (y) ONLY, which is
-# why (y) counts the lines instead of grepping for one: presence is true under both.
-echo "  -- mutant P3: the report is rendered unconditionally, on both branches --"
-MP3="$(mutate report-on-every-path 's@^if \[ "\$FAIL" -ne 0 \]; then@printf "      %s\\n" "$CITE_REPORT"; if [ "$FAIL" -ne 0 ]; then@')" || FAIL=$((FAIL + 1))
-if [ -n "${MP3:-}" ]; then
-  N=$((N + 1))
-  MP3CL="$(cite_lines "$MP3")"
-  if [ "$MP3CL" -ne 1 ]; then
-    mutant_killed "$([ "$RC_Y" = 0 ] && echo 1 || echo 0)" report-on-every-path "pending-crossfake.md P3: (y) is red -- the accusation carries $MP3CL corpus lines" && KILLS=$((KILLS + 1))
-  else
-    FAIL=$((FAIL + 1)); printf '  FAIL %-30s P3 SURVIVED: an unconditional dump left the FAIL branch at one line\n' "pending-crossfake.md"
-  fi
-  # ...and it PASSES (x), which is the hazard: the over-broad shape reads as the fix.
-  N=$((N + 1))
-  if pass_corpus_pair "$MP3"; then printf '  ok   %-30s P3: (x) unchanged -- which is why this shape reads as a fix\n' "corpus-live"
-  else FAIL=$((FAIL + 1)); printf '  FAIL %-30s P3 moved (x) too -- the arms are entangled\n' "corpus-live"; fi
-fi
-
-# Mutant P4 -- the corpus line is attached to the branch that VERIFIED NOTHING. No citation was
-# checked there, so the line attests a scan that never ran: the same unfalsifiable claim, in the
-# other direction. Kills (z) ONLY -- and (z) is absence-shaped, so nothing but a mutant can
-# establish that it fires at all.
-echo "  -- mutant P4: the nothing-in-scope PASS claims a corpus --"
-MP4="$(mutate vacuous-claims-corpus 's@^  echo "OK: no S\${SPRINT_NUM} RESOLVED/OVERRIDDEN escalation requires an operator citation."@  echo "OK: no S${SPRINT_NUM} RESOLVED/OVERRIDDEN escalation requires an operator citation."; echo "      cite: scanned 0 transcript(s)"@')" || FAIL=$((FAIL + 1))
-if [ -n "${MP4:-}" ]; then
-  N=$((N + 1))
-  MP4VL="$(vac_lines "$MP4")"
-  if [ "$MP4VL" -ne 1 ]; then
-    mutant_killed "$([ "$RC_Z" = 0 ] && echo 1 || echo 0)" vacuous-claims-corpus "pending-clean.md P4: (z) is red -- the vacuous PASS printed $MP4VL lines" && KILLS=$((KILLS + 1))
-  else
-    FAIL=$((FAIL + 1)); printf '  FAIL %-30s P4 SURVIVED: (z) cannot see a corpus line on a path that verified nothing\n' "pending-clean.md"
-  fi
-  N=$((N + 1))
-  if pass_corpus_pair "$MP4"; then printf '  ok   %-30s P4: (x) unchanged\n' "corpus-live"
-  else FAIL=$((FAIL + 1)); printf '  FAIL %-30s P4 moved (x) too -- the arms are entangled\n' "corpus-live"; fi
-fi
-
-# --matrix: every mutant above against every arm (a)..(z), each arm the same assertion its own row
-# makes against the shipped validator, run in a subshell so its counters and output are discarded.
-# GREEN = the arm holds against the mutant, as it does against the shipped validator in this run.
-GX_ARMS="a b c d e f g h i j k l l-prime m n o p q r s t u v w x y z"
-gx_arm() {  # $1 arm  $2 validator -> 0 when the arm holds
-  ( v="$2"
-    case "$1" in
-      a) g pending-clean.md 50 real.jsonl 0 a "$v" ;;
-      b) g pending-missing.md 50 real.jsonl 1 b "$v" ;;
-      c) g pending-fabricated.md 50 real.jsonl 1 c "$v" ;;
-      d) g pending-real.md 50 real.jsonl 0 d "$v" ;;
-      e) g pending-legacy.md 50 real.jsonl 0 e "$v" ;;
-      f) g pending-autonomous.md 50 real.jsonl 0 f "$v" ;;
-      g) g pending-real.md 50 "" 1 g "$v" ;;
-      h) gx pending-crosssession.md 50 "" corpus/gate.jsonl 1 h "$v" ;;
-      i) gx pending-crosssession.md 50 corpus "" 0 i "$v" ;;
-      j) gx pending-crossfake.md 50 corpus "" 1 j "$v" ;;
-      k) gx pending-crosssession.md 50 corpus corpus/gate.jsonl 0 k "$v" ;;
-      l) gx pending-real.md 50 dir-empty real.jsonl 0 l "$v" ;;
-      l-prime) gx pending-real.md 50 dir-sidecar real.jsonl 0 l-prime "$v" ;;
-      m) gsx pending-real.md dir-empty "" 1 "no readable transcript was provided" "appears in NO genuine" m "$v" ;;
-      n) gsx pending-real.md dir-empty silent.jsonl 1 "appears in NO genuine" "no readable transcript was provided" n "$v" ;;
-      o) gx pending-crossfake.md 50 corpus "" 1 o "$v" ;;
-      p) g pending-order-good-first.md 50 real.jsonl 0 p "$v" ;;
-      q) g pending-order-good-last.md 50 real.jsonl 1 q "$v" ;;
-      r) g pending-connective.md 50 real.jsonl 0 r "$v" ;;
-      s) g pending-unterminated.md 50 real.jsonl 0 s "$v" ;;
-      t) gsx pending-crossfake.md corpus "" 1 "transcript(s) from" "IMPOSSIBLE-TOKEN-NEVER-EMITTED" t "$v" ;;
-      u) g pending-before.md 50 real.jsonl 1 u "$v" ;;
-      v) o="$(bash "$v" --escalations "$ROOT/pending-space.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>/dev/null)" \
-           && grep -qF -- "unbounded-citation: 1" <<<"$o" ;;
-      w) g pending-offset.md 50 real.jsonl 0 w "$v" ;;
-      x) pass_corpus_pair "$v" ;;
-      y) [ "$(cite_lines "$v")" -eq 1 ] ;;
-      z) [ "$(vac_lines "$v")" -eq 1 ] ;;
-      *) exit 3 ;;
-    esac ) >/dev/null 2>&1
-}
-if [ "$MATRIX" = 1 ]; then
-  echo "  -- MATRIX: each corpus-arm mutant against every arm (a)..(z) --"
-  # The shipped validator first: the matrix reads a row as TRIPPED only against an arm that holds here.
-  GX_BASE_RED=""
-  for a in $GX_ARMS; do gx_arm "$a" "$VALIDATOR" || GX_BASE_RED="$GX_BASE_RED $a"; done
-  if [ -z "$GX_BASE_RED" ]; then ok "MX-base every arm (a)..(z) holds against the shipped validator"
-  else bad "MX-base arm(s)$GX_BASE_RED do not hold against the shipped validator; no matrix row below means anything"; fi
-  for mv in "no-dir-arm|${MA:-}" "dir-loses-order|${MC:-}" "revert-existence-only|${MR:-}" \
-            "clear-after-chain|${MW:-}" "last-segment-wins|${MQ:-}" "drop-unterminated-tail|${MU:-}" \
-            "drop-corpus-report|${MV:-}" "ts-truncates-offset|${MT:-}" "drop-unbounded-count|${MB2:-}" \
-            "pass-drops-corpus|${MP1:-}" "pass-renders-constant|${MP2:-}" "report-on-every-path|${MP3:-}" \
-            "vacuous-claims-corpus|${MP4:-}"; do
-    mp="${mv#*|}"
-    [ -n "$mp" ] || { bad "MX-${mv%%|*} was never built, so it has no matrix row"; continue; }
-    for a in $GX_ARMS; do
-      if gx_arm "$a" "$mp"; then matrix_row "${mv%%|*}" "$a" 0 GREEN no
-      else matrix_row "${mv%%|*}" "$a" 1 TRIPPED yes; fi
-      MROWS=$((MROWS + 1))
-    done
-  done
-fi
 
 # --- an EMPTY escalations file is the ABSENT state, and only an empty one ---------------------
 # A file that exists and holds no non-whitespace byte used to fall through to the parser, parse
 # zero records and print the ordinary nothing-in-scope line -- a verdict over entries when there
 # were none. The gate mode now prints the absent-file `EXAMINED NOTHING` line for it.
 #
-# SIX CELLS, SCORED AS ONE STRING, so a mutant can be held to moving ONLY its own cell:
+# SIX CELLS, SCORED AS ONE STRING:
 #   A empty          rc 0, the token, and the "present but empty" reason
 #   B whitespace     the same -- a `[ -s ]` fix calls this file populated and fails here
 #   C absent         rc 0, the token, the absent-file reason and NOT the empty one (unchanged)
@@ -742,64 +343,6 @@ if [ "$(printf '%s' "$EN_CELLS" | cut -c1-2)" = "00" ] && [ "$(printf '%s' "$EN_
   printf '  SKIP %-30s the installed validator predates the empty-file verdict; this fixture ships one pull ahead of it\n' "pending-empty.md"
 else
   en_report "$EN_CELLS"
-
-  # --- the three mutants, each in a copy of the WHOLE scripts dir -----------------------------
-  # The validator resolves validate-steering-budget.sh beside itself, so a lone copy fails cell F
-  # for a reason the mutant does not own. The control is the same copy, unmutated, and must score
-  # all seven cells -- which include six presence rows, so a copy that never ran cannot pass it.
-  EN_MW="$(mktemp -d)"; trap 'rm -rf "$ROOT" "$MWORK" "$EN_MW"' EXIT
-  # en_mk RUNS INSIDE `$( )`: anything it echoes becomes the captured PATH and any counter it
-  # bumps dies with the subshell. So it writes its refusal to EN_MW/<name>.why, prints no path,
-  # and en_score fails the empty path with that reason.
-  en_mk() {  # $1 name  $2 anchor (literal, must match exactly one line)  $3 replacement file
-    local d="$EN_MW/$1" n
-    cp -R "$EN_SRC_DIR" "$d" || { echo "could not copy $EN_SRC_DIR" > "$EN_MW/$1.why"; return 1; }
-    [ -f "$d/validate-steering-budget.sh" ] || { echo "the steering sibling is missing from the copy" > "$EN_MW/$1.why"; return 1; }
-    [ -n "$2" ] || { printf '%s\n' "$d/$EN_BASE"; return 0; }
-    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
-    [ "$n" -eq 1 ] || { echo "anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm" > "$EN_MW/$1.why"; return 1; }
-    awk -v A="$2" -v R="$3" '
-      index($0, A) { while ((getline l < R) > 0) print l; close(R); next }
-      { print }' "$VALIDATOR" > "$d/$EN_BASE"
-    cmp -s "$VALIDATOR" "$d/$EN_BASE" && { echo "changed no bytes -- it would score as a kill" > "$EN_MW/$1.why"; return 1; }
-    bash -n "$d/$EN_BASE" 2>/dev/null || { echo "does not parse" > "$EN_MW/$1.why"; return 1; }
-    printf '%s\n' "$d/$EN_BASE"
-  }
-  # $1 the base flag (EN_B: the unmutated copy scored every cell in this run)  $2 name
-  # $3 path-or-empty  $4 expected cells  $5 why  $6 mk-name
-  en_score() {
-    N=$((N + 1))
-    if [ -z "$3" ]; then
-      FAIL=$((FAIL + 1)); printf '  FAIL %-30s was never built: %s\n' "$2" "$(cat "$EN_MW/$6.why" 2>/dev/null || echo 'no reason recorded')"; return
-    fi
-    en_cells "$3"
-    [ "$MATRIX" = 1 ] && cell_matrix "$2" en "$en_names" 111111 "$EN_CELLS"
-    if [ "$EN_CELLS" = "$4" ]; then mutant_killed "$1" "$2" "$2 $4 -> $EN_CELLS ($5)" && KILLS=$((KILLS + 1))
-    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s scored %s, wanted %s -- %s\n' "$2" "$EN_CELLS" "$4" "$5"; fi
-  }
-  EN_R="$EN_MW/replace"; mkdir -p "$EN_R"
-  printf '%s\n' '  if false; then' > "$EN_R/revert"
-  printf '%s\n' 'if [ -z "$RECORDS" ]; then echo "OK: EXAMINED NOTHING — zero parsed records ($ESCALATIONS)."; exit 0; fi' \
-                'if [ -z "$RECORDS" ]; then' > "$EN_R/zero"
-  printf '%s\n' 'STEER_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-steering-budget.sh"' \
-                'if [ -f "$ESCALATIONS" ] && ! grep -q '"'"'[^[:space:]]'"'"' "$ESCALATIONS"; then echo "OK: EXAMINED NOTHING — escalations file present but empty ($ESCALATIONS); nothing to check."; exit 0; fi' > "$EN_R/hoist"
-  EN_CTL="$(en_mk control "" "")" || EN_CTL=""
-  # M-control: the unmutated copy of the whole dir. EN_B, the base flag every empty-file kill is
-  # gated on, is raised only in this arm's passing branch.
-  N=$((N + 1)); EN_B=0
-  if [ -n "$EN_CTL" ]; then en_cells "$EN_CTL"; else EN_CELLS="never-built:$(cat "$EN_MW/control.why" 2>/dev/null)"; fi
-  if [ "$EN_CELLS" = 111111 ]; then
-    EN_B=1; ok "M-control 111111 -> $EN_CELLS (an unmutated copy of the whole dir scores every cell)"
-  else
-    bad "M-control scored $EN_CELLS, wanted 111111 -- no empty-file mutant below can be scored"
-  fi
-  KF_EXTRA=$((KF_EXTRA + 3))
-  EN_M1="$(en_mk revert 'if [ "$ESC_BLANK_RC" -eq 1 ]; then' "$EN_R/revert")" || EN_M1=""
-  en_score "$EN_B" "M-revert" "$EN_M1" 001111 "the fix removed: ONLY the empty and whitespace cells go red" revert
-  EN_M2="$(en_mk zero-records 'if [ -z "$RECORDS" ]; then' "$EN_R/zero")" || EN_M2=""
-  en_score "$EN_B" "M-zero-records" "$EN_M2" 111011 "zero parsed records read as empty: ONLY the populated-zero-record cell goes red" zero-records
-  EN_M3="$(en_mk hoist 'STEER_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-steering-budget.sh"' "$EN_R/hoist")" || EN_M3=""
-  en_score "$EN_B" "M-hoist" "$EN_M3" 111110 "the check above the mode split: ONLY the --any-authorized cell goes red" hoist
 fi
 
 # --- an UNREADABLE or NON-REGULAR escalations path REFUSES (gate mode), exit 2 ------------------------
@@ -808,7 +351,7 @@ fi
 # "no S<N> ... requires an operator citation" line over a file nobody read. A DIRECTORY at the path
 # failed `-f` and printed "no escalations file" -- the line Check 2a reads as a pass.
 #
-# SIX CELLS, ONE STRING, each mutant held to the cells its layer owns:
+# SIX CELLS, ONE STRING:
 #   A  mode-000 file carrying an S50 RESOLVED entry with no citation -> exit 2, `could not be read`
 #   B  a DIRECTORY at the path                                   -> exit 2, `is not a regular file`
 #   C  a DANGLING SYMLINK at the path                            -> exit 2, `is not a regular file`
@@ -879,80 +422,6 @@ else
       *) N=$((N + 1)); FAIL=$((FAIL + 1)); printf '  FAIL %-30s refusal cell %s does not hold (cells=%s)\n' "${nm#*:}" "${nm%%:*}" "$ER_CELLS" ;;
     esac
   done
-
-  # --- the mutants: one per layer of the guard, and one reverting EVERY layer -----------------------
-  # Siblings in ONE copy of the whole scripts dir, so validate-steering-budget.sh is beside each; the
-  # unmutated sibling control must score every presence cell, so a copy that cannot run is not a kill.
-  ER_MD="$ER/mut"
-  cp -R "$EN_SRC_DIR" "$ER_MD" || { FAIL=$((FAIL + 1)); echo "  FAIL refusal mutants: could not copy $EN_SRC_DIR"; }
-  ER_SRC="$ER_MD/$EN_BASE"
-  N=$((N + 1))
-  if [ -f "$ER_MD/validate-steering-budget.sh" ]; then printf '  ok   %-30s the mutant copy carries the steering sibling\n' "R-harness"
-  else FAIL=$((FAIL + 1)); printf '  FAIL %-30s the steering sibling is missing from the mutant copy\n' "R-harness"; fi
-  # er_sub <out> <anchor> <replacement> [...] -- a COPY of ER_SRC, each anchor on exactly one line.
-  # Strings reach awk through ENVIRON, never `-v`, which strips a level of backslash escaping.
-  ER_WHY=""
-  er_sub() {
-    local out="$1" n
-    shift
-    cp "$ER_SRC" "$out.work" || { ER_WHY="could not copy"; return 1; }
-    while [ "$#" -ge 2 ]; do
-      n="$(grep -cF -- "$1" "$out.work")" || n=0
-      [ "$n" -eq 1 ] || { ER_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm: $1"; return 1; }
-      A="$1" R="$2" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
-        "$out.work" > "$out.next" || { ER_WHY="awk died applying: $1"; return 1; }
-      mv "$out.next" "$out.work"
-      shift 2
-    done
-    cmp -s "$ER_SRC" "$out.work" && { ER_WHY="changed no bytes -- it would score as a kill"; return 1; }
-    mv "$out.work" "$out"
-  }
-  ER_G1='if { [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; } && [ ! -f "$ESCALATIONS" ]; then'
-  ER_G1L='{ [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; }'
-  ER_G2='if [ "$ESC_BLANK_RC" -gt 1 ]; then'
-  ER_G3='if [ ! -r "$ESCALATIONS" ]; then'
-  # <base flag: ER_B, the unmutated copy scored every cell in this run> <label> <name> <want>
-  # <anchor> <replacement> [...]
-  er_score() {
-    local flag="$1" label="$2" name="$3" want out
-    want="$(er_want "$4")"
-    # A want that, once the SKIP mask is applied, equals the control's is a mutant whose every
-    # deciding cell is masked on this host: its "kill" would be the control's own vector. SKIP it,
-    # call no kill helper, and leave it out of KF_EXTRA (ER_SKIPPED).
-    if [ "$want" = "$(er_want 111111)" ]; then
-      ER_SKIPPED=$((ER_SKIPPED + 1))
-      printf '  SKIP %-30s wants %s, which differs from the control only in a masked cell -- %s\n' "$label" "$4" "$ER_SKIP_A"
-      return 0
-    fi
-    shift 4
-    out="$ER_MD/_er_$name.sh"
-    N=$((N + 1))
-    if ! er_sub "$out" "$@"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: %s\n' "$label" "$ER_WHY"; return 0
-    elif ! bash -n "$out" 2>/dev/null; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: the copy does not parse\n' "$label"; return 0; fi
-    er_cells "$out"
-    [ "$MATRIX" = 1 ] && cell_matrix "$label" er "$er_names" "$ER_CTL_CELLS" "$ER_CELLS"
-    if [ "$ER_CELLS" = "$want" ]; then mutant_killed "$flag" "$label" "$label $want -> $ER_CELLS" && KILLS=$((KILLS + 1))
-    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s scored %s, wanted %s\n' "$label" "$ER_CELLS" "$want"; fi
-  }
-  # R-control: the unmutated copy beside its sibling. ER_B, the base flag every refusal kill is
-  # gated on, is raised only in this arm's passing branch.
-  N=$((N + 1)); ER_B=0
-  cp "$ER_SRC" "$ER_MD/_er_ctl.sh"
-  er_cells "$ER_MD/_er_ctl.sh"; ER_CTL_CELLS="$ER_CELLS"
-  if [ "$ER_CELLS" = "$(er_want 111111)" ]; then
-    ER_B=1; ok "R-control $(er_want 111111) -> $ER_CELLS"
-  else
-    bad "R-control scored $ER_CELLS, wanted $(er_want 111111) -- no refusal mutant below can be scored"
-  fi
-  ER_SKIPPED=0
-  er_score "$ER_B" "R-revert-all"      revert-all      000011 "$ER_G1" 'if false; then' "$ER_G2" 'if false; then'
-  er_score "$ER_B" "R-nonregular"      nonregular      100111 "$ER_G1" 'if false; then'
-  er_score "$ER_B" "R-no-symlink"      no-symlink      110111 "$ER_G1L" '[ -e "$ESCALATIONS" ]'
-  er_score "$ER_B" "R-rc"              rc              011011 "$ER_G2" 'if false; then'
-  er_score "$ER_B" "R-readable-never"  readable-never  011111 "$ER_G3" 'if false; then'
-  er_score "$ER_B" "R-readable-always" readable-always 111011 "$ER_G3" 'if true; then'
-  # Six refusal kills, less any a masked cell made unscorable on this host.
-  KF_EXTRA=$((KF_EXTRA + 6 - ER_SKIPPED))
 fi
 
 # --- the citation FLOOR is measured on the NORMALISED needle, and the predicate owns it ----------
@@ -962,7 +431,7 @@ fi
 # corpus-short holds a genuine in-window operator turn carrying `yes`, so the pre-fix build MATCHES
 # both: every cell below is about the floor and nothing else.
 #
-# FOURTEEN CELLS, ONE STRING, so each mutant is held to moving only the cells it owns:
+# EIGHTEEN CELLS, ONE STRING:
 #   P  padded quote                   -> rc 1, "(3 chars once whitespace is collapsed)"
 #   Q  blank quote of 12 spaces       -> rc 1, "(0 chars once whitespace is collapsed)"
 #   R  the incident, quoted WHOLE     -> rc 0, and the PASS names a 2-transcript corpus
@@ -1052,108 +521,12 @@ fl_cells "$FL_SRC_DIR"
 if [ "$FL_CELLS" = "001001000100000001" ] && [ "$EN_IS_DIST" -ne 1 ]; then
   printf '  SKIP %-30s the installed validators predate the normalised citation floor; this fixture ships one pull ahead of them\n' "pending-padded.md"
 else
-  KF_EXTRA=$((KF_EXTRA + 7))
   i=0
   for nm in $fl_names; do
     i=$((i + 1)); N=$((N + 1))
     if [ "$(printf '%s' "$FL_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s floor cell %s holds\n' "${nm#*:}" "${nm%%:*}"
     else FAIL=$((FAIL + 1)); printf '  FAIL %-30s floor cell %s does not hold (cells=%s)\n' "${nm#*:}" "${nm%%:*}" "$FL_CELLS"; fi
   done
-
-  # --- the mutants, each in a copy of the WHOLE scripts dir -----------------------------------
-  # The validator resolves the predicate beside itself, so every copy carries both; the unmutated
-  # copy must score all fourteen presence cells before any mutant verdict is read. Strings reach awk
-  # through ENVIRON, never `-v`, which strips a level of backslash escaping.
-  FL_MW="$(mktemp -d)"; trap 'chmod -R u+rwX "${ER:-/nonexistent}" 2>/dev/null; rm -rf "$ROOT" "$MWORK" "${EN_MW:-}" "${ER:-}" "$FL_MW"' EXIT
-  FL_WHY=""
-  fl_mk() {  # $1 name  $2 target basename  $3 anchor (one line, exactly once)  $4 replacement -> FL_DIR
-    local d="$FL_MW/$1" n
-    FL_DIR=""
-    cp -R "$FL_SRC_DIR" "$d" || { FL_WHY="could not copy $FL_SRC_DIR"; return 1; }
-    [ -f "$d/validate-steering-budget.sh" ] && [ -f "$d/$FL_BASE" ] || { FL_WHY="the copy lacks the validator or its predicate"; return 1; }
-    [ -n "$2" ] || { FL_DIR="$d"; return 0; }
-    n="$(grep -cF -- "$3" "$FL_SRC_DIR/$2")" || n=0
-    [ "$n" -eq 1 ] || { FL_WHY="anchor matches $n line(s) in $2, not 1 -- re-anchor it, never relax the arm"; return 1; }
-    A="$3" R="$4" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
-      "$FL_SRC_DIR/$2" > "$d/$2" || { FL_WHY="awk died"; return 1; }
-    cmp -s "$FL_SRC_DIR/$2" "$d/$2" && { FL_WHY="changed no bytes -- it would score as a kill"; return 1; }
-    bash -n "$d/$2" 2>/dev/null || { FL_WHY="does not parse"; return 1; }
-    FL_DIR="$d"
-  }
-  # --matrix: one row per floor cell for the mutant whose vector FL_CELLS now holds; the control
-  # copy scores every cell 1, so a 0 is a cell this mutant moved.
-  fl_matrix() {  # $1 mutant name
-    local i=0 nm
-    for nm in $fl_names; do
-      i=$((i + 1))
-      if [ "$(printf '%s' "$FL_CELLS" | cut -c"$i")" = "1" ]; then matrix_row "$1" "fl-${nm%%:*}" 0 GREEN no
-      else matrix_row "$1" "fl-${nm%%:*}" 1 TRIPPED yes; fi
-      MROWS=$((MROWS + 1))
-    done
-  }
-  # $1 the base flag (FL_B: the unmutated copy scored every cell in this run)  $2 label
-  # $3 expected cells  $4 name  $5 target  $6 anchor  $7 replacement
-  fl_score() {
-    N=$((N + 1))
-    if ! fl_mk "$4" "$5" "$6" "$7"; then
-      FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: %s\n' "$2" "$FL_WHY"; return 1
-    fi
-    fl_cells "$FL_DIR"
-    [ "$MATRIX" = 1 ] && fl_matrix "F-$4"
-    if [ "$FL_CELLS" = "$3" ]; then
-      mutant_killed "$1" "F-$4" "$2 $3 -> $FL_CELLS" || return 1
-      KILLS=$((KILLS + 1)); return 0
-    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s scored %s, wanted %s\n' "$2" "$FL_CELLS" "$3"; return 1; fi
-  }
-  FL_FLOOR='  if (needle.length < CITE_MIN_NORM_CHARS) {'
-  # F-control: the unmutated copy of the whole dir. FL_B, the base flag every floor kill is gated
-  # on, is raised only in this arm's passing branch.
-  N=$((N + 1)); FL_B=0
-  if fl_mk ctl "" "" ""; then fl_cells "$FL_DIR"; else FL_CELLS="never-built:$FL_WHY"; fi
-  if [ "$FL_CELLS" = 111111111111111111 ]; then
-    FL_B=1; ok "F-control 111111111111111111 -> $FL_CELLS"
-  else
-    bad "F-control scored $FL_CELLS, wanted 111111111111111111 -- no floor mutant below can be scored"
-  fi
-  # m1: the predicate's floor removed. ONLY the predicate-direct cells move: every caller refuses
-  # on the normalised length before asking, so P, Q, S and the NBSP pair still FAIL at the caller.
-  # The empty needle now scans and `includes("")` matches, and eleven characters verify.
-  fl_score "$FL_B" "F-m1 floor removed"   111111000111110001 m1 validate-steering-budget.sh "$FL_FLOOR" '  if (false) {'
-  # m3: the floor measured on the RAW needle, i.e. normalisation applied after it. Twelve spaces
-  # is twelve raw characters and passes; `yes` is three raw and is still refused -- which is the
-  # cell (W) that separates this mutant from m1. The padded eleven is fifteen raw and verifies.
-  fl_score "$FL_B" "F-m3 floor before norm" 111111001111111101 m3 validate-steering-budget.sh "$FL_FLOOR" '  if (CITE_TEXT.length < CITE_MIN_NORM_CHARS) {'
-  # m5: cite mode keyed on the needle's TEXT rather than on the flag. An empty needle skips the
-  # citation block and the checks mode answers rc 0. Only the two empty-needle cells move.
-  fl_score "$FL_B" "F-m5 cite mode keyed on text" 111111111111110011 m5 validate-steering-budget.sh \
-    'const CITE = process.env.AI_DLC_CITE_SET === "1";' 'const CITE = !!process.env.AI_DLC_CITE;'
-  # m6: the floor's VALUE lowered to 4, callers untouched. Every short needle in the other cells is
-  # under 4 (or a caller refuses it first), so only the eleven-character cell moves.
-  fl_score "$FL_B" "F-m6 floor is 4" 111111111111111101 m6 validate-steering-budget.sh \
-    'const CITE_MIN_NORM_CHARS = 12;' 'const CITE_MIN_NORM_CHARS = 4;'
-  # m2: --any-authorized measures the un-normalised quote again. It never calls the predicate, so
-  # this site's own check is the whole check: the padded entry and both NBSP entries count.
-  fl_score "$FL_B" "F-m2 any-authorized raw" 111101111111001111 m2 "$FL_BASE" \
-    '    nquote="$(cite_norm "$(cite_quote "$authline")")"' '    nquote="$(cite_quote "$authline")"'
-  # m4: cite_norm collapses ASCII whitespace only -- the first fix's body. At the gate the
-  # predicate's own `\s` still refuses the NBSP quotes, so the ONLY cells that move are the two
-  # --any-authorized NBSP entries, where the caller's measure is the whole check.
-  fl_score "$FL_B" "F-m4 cite_norm ASCII-only" 111111111111001111 m4 "$FL_BASE" \
-    '      gsub("\302\240|\341\232\200|\342\200[\200-\212]|\342\200\250|\342\200\251|\342\200\257|\342\201\237|\343\200\200|\357\273\277", " ", s)' \
-    '      s = s'
-  # m2b: the GATE site measures the un-normalised quote again. The predicate still refuses (rc
-  # stays 1), so the cells that move are the messages naming the normalised length -- the defence
-  # in depth the floor's single home is meant to provide, asserted separately below.
-  if fl_score "$FL_B" "F-m2b gate-mode raw" 001111111111111111 m2b "$FL_BASE" \
-       '  nquote="$(cite_norm "$quote")"' '  nquote="$quote"'; then
-    N=$((N + 1))
-    FL_O="$(bash "$FL_DIR/$FL_BASE" --escalations "$ROOT/pending-padded.md" --sprint 50 --transcript-dir "$ROOT/corpus-short" 2>&1)"; FL_RC=$?
-    if [ "$FL_RC" -eq 1 ] && grep -qF "NOMATCH-SHORT" <<<"$FL_O"; then
-      printf '  ok   %-30s m2b: the padded quote still FAILs -- the predicate refused it (NOMATCH-SHORT)\n' "pending-padded.md"
-    else
-      FAIL=$((FAIL + 1)); printf '  FAIL %-30s m2b: with the caller measuring raw bytes the padded quote was not refused by the predicate (rc=%s)\n' "pending-padded.md" "$FL_RC"
-    fi
-  fi
 fi
 
 # --- a LEAD-INTERPRETATION entry resolves only on an exact disposition option (BL-944) -----------
@@ -1209,7 +582,6 @@ for c in $LR_NAMES; do if lr_cell "$VALIDATOR" "$c"; then LR_CELLS="${LR_CELLS}1
 # cells included (measured against d87a5940f^: `NO genuine` at the gate, `NONE` at --any-authorized).
 # SKIP on a consumer,
 # FAIL in the distribution.
-# The kill floor is computed at KILL COUNT below, after every section that raises KF_EXTRA.
 if [ "$LR_CELLS" = "0111100101111111" ] && [ "$EN_IS_DIST" -ne 1 ]; then
   printf '  SKIP %-30s the installed validator predates the lead-interpretation rule; this fixture ships one pull ahead of it\n' "lr/"
 else
@@ -1220,98 +592,10 @@ else
     else FAIL=$((FAIL + 1)); printf '  FAIL %-30s lead-interpretation cell does not hold (cells=%s)\n' "lr/$c" "$LR_CELLS"; fi
   done
 
-  # The mutants. Each is a copy of the validator beside the steering sibling in $MWORK, built by
-  # an exactly-once literal anchor (awk ENVIRON, never sed: the anchors carry `$`, `[` and `"`).
-  # A mutant runs only the cell its arm decides and one twin that must NOT move.
-  LR_WHY=""; LR_V=""
-  lr_mk() {  # $1 name  $2 anchor  $3 replacement -> LR_V
-    local d="$MWORK/lr-$1" n
-    LR_V=""
-    mkdir -p "$d" && cp "$SRC_DIR/validate-steering-budget.sh" "$d/" || { LR_WHY="could not copy the steering sibling"; return 1; }
-    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
-    [ "$n" -eq 1 ] || { LR_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm"; return 1; }
-    A="$2" R="$3" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
-      "$VALIDATOR" > "$d/validate-escalation-resolution.sh" || { LR_WHY="awk died"; return 1; }
-    cmp -s "$VALIDATOR" "$d/validate-escalation-resolution.sh" && { LR_WHY="changed no bytes -- it would score as a kill"; return 1; }
-    bash -n "$d/validate-escalation-resolution.sh" 2>/dev/null || { LR_WHY="does not parse"; return 1; }
-    LR_V="$d/validate-escalation-resolution.sh"
-  }
-  lr_score() {  # $1 label  $2 decisive cell  $3 twin cell  $4 anchor  $5 replacement
-    N=$((N + 1))
-    if [ "$LR_BASE" -ne 1 ]; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: not scored -- the unmutated copy did not hold its cells in this run\n' "L-$1"; return 2; fi
-    if ! lr_mk "$1" "$4" "$5"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: %s\n' "L-$1" "$LR_WHY"; return 1; fi
-    [ "$MATRIX" = 1 ] && lr_matrix "L-$1"
-    if lr_cell "$LR_V" "$2"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s SURVIVED: cell %s still holds\n' "L-$1" "$2"; return 1; fi
-    if ! lr_cell "$LR_V" "$3"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s moved its twin %s too -- the arms are entangled\n' "L-$1" "$3"; return 1; fi
-    # The base: the decisive cell AND its twin held against the shipped validator in this run
-    # (LR_CELLS, above), and the unmutated copy held its control cells (LR_BASE).
-    local lr_b
-    lr_b="$(lr_held "$2" "$3")"
-    mutant_killed "$([ "$lr_b" = 1 ] && echo 1 || echo 0)" "L-$1" "L-$1 $2 is red, $3 unchanged" && KILLS=$((KILLS + 1))
-  }
-  # lr_held <cell>... -> prints 1 when LR_BASE is 1 and every named cell held in LR_CELLS, else 0.
-  lr_held() {
-    local want c i nm held=1
-    [ "$LR_BASE" = 1 ] || held=0
-    for want in "$@"; do
-      i=0; c=0
-      for nm in $LR_NAMES; do
-        i=$((i + 1))
-        [ "$nm" = "$want" ] && c="$(printf '%s' "$LR_CELLS" | cut -c"$i")"
-      done
-      [ "$c" = 1 ] || held=0
-    done
-    printf '%s' "$held"
-  }
-  # --matrix: the mutant LR_V against every lead-interpretation cell. The shipped validator holds
-  # every cell (LR_CELLS, above), so a cell that fails here is one this mutant moved.
-  lr_matrix() {  # $1 mutant name
-    local c
-    for c in $LR_NAMES; do
-      if lr_cell "$LR_V" "$c"; then matrix_row "$1" "$c" 0 GREEN no
-      else matrix_row "$1" "$c" 1 TRIPPED yes; fi
-      MROWS=$((MROWS + 1))
-    done
-  }
-  # The unmutated control, in the same kind of directory, must PASS a cell that needs the sibling.
-  # No mutant below is scored unless this control held in this same run.
-  N=$((N + 1)); LR_BASE=0
-  mkdir -p "$MWORK/lr-ctl" && cp "$SRC_DIR/validate-steering-budget.sh" "$VALIDATOR" "$MWORK/lr-ctl/"
-  if lr_cell "$MWORK/lr-ctl/validate-escalation-resolution.sh" strike && lr_cell "$MWORK/lr-ctl/validate-escalation-resolution.sh" free; then
-    LR_BASE=1; ok "L-control the unmutated copy holds strike and free"
-  else bad "L-control the unmutated copy does not reproduce the baseline; no mutant verdict below means anything"; fi
-  KF_EXTRA=$((KF_EXTRA + 9))
-  # L1: the label rule removed. The free text verifies as a descope again (the filed defect).
-  lr_score no-label-rule free strike '  if [ -n "$lr_id" ]; then' '  if false; then'
-  # L2: the id ignored -- any `Strike/Reword/Confirm LR-S<x>-<y>` passes. Only the wrong-id entry
-  # moves, because its answer IS in the corpus.
-  lr_score ignore-id wrongid free '    lr_body="${nquote% (Recommended)}"' '    lr_body="${nquote% (Recommended)}"; lr_body="${lr_body% LR-S*} $lr_id"'
-  # L3: the disposition not matched -- a descope line accepts a Confirm body.
-  lr_score no-disposition-match mismatch neither \
-    '      descope*) { [ "$lr_body" = "Strike $lr_id" ] ||' '      descope*) { [ "$lr_body" = "Confirm $lr_id" ] || [ "$lr_body" = "Strike $lr_id" ] ||'
-  # L4: the gate row reads three fields, so the Decision/Question text joins the authorization and
-  # its quoted phrase is cited instead of the operator's words. `dq` is still set (empty) so the
-  # mutant fails on the citation and not on an unbound variable under `set -u`.
-  lr_score gate-dq-into-auth plain nodq \
-    'while IFS="$(printf '"'"'\t'"'"')" read -r header status dq authline; do' 'while IFS="$(printf '"'"'\t'"'"')" read -r header status authline; do dq="";'
-  # L4b: the same in --any-authorized: the long quoted phrase on the Decision/Question line counts.
-  lr_score any-dq-into-auth shortq-any plain-any \
-    '  while IFS="$(printf '"'"'\t'"'"')" read -r header status _dq authline; do' '  while IFS="$(printf '"'"'\t'"'"')" read -r header status authline; do'
-  # L5: the sentinel dropped. An entry with no Decision/Question line writes an empty field, bash
-  # merges the tab run, and its citation is read as the Decision/Question value.
-  lr_score drop-sentinel nodq plain '(dq == "" ? "__NODQ__" : dq)' 'dq'
-  # L6: a label-rule PASS `continue`s past the transcript check. An exact option nobody chose passes.
-  lr_score rule-short-circuits nohit strike '    if [ "$lr_ok" -ne 1 ]; then' '    [ "$lr_ok" -eq 1 ] && continue; if [ "$lr_ok" -ne 1 ]; then'
-  # L7: the header written with its tab. Every later field shifts one variable right, the auth
-  # variable reads `<Decision/Question><TAB><auth>`, and the Decision/Question phrase is cited: the
-  # fabricated quote verifies at the gate (L7) and the 6-char quote authorizes (L7b).
-  lr_score header-tab-kept hdrtab plain '      gsub(/\t/, " ", hh)' '      hh = hh'
-  lr_score header-tab-kept-any hdrtabq-any shortq-any '      gsub(/\t/, " ", hh)' '      hh = hh'
 fi
 
 # --- a SUPPRESSED entry's citation is verified at the gate, archive included (BL-960) ----------
-# Twelve cells over the sup/ layouts seed.sh writes, scored as one string so each mutant is held
-# to its own cell and a named twin. Every cell is PRESENCE-shaped: an rc AND a line that must
+# Twelve cells over the sup/ layouts seed.sh writes, scored as one string. Every cell is PRESENCE-shaped: an rc AND a line that must
 # appear, so a subject that prints nothing fails all of them.
 #   sbad    gate, S50 SUPPRESSED citing invented words      rc 1, `appears in NO genuine`
 #   sgood   gate, S50 SUPPRESSED citing the genuine turn    rc 0, `OK: all 1 S50` (base says `no S50`)
@@ -1376,77 +660,6 @@ else
     if [ "$(printf '%s' "$SV_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s SUPPRESSED-citation cell holds\n' "sup/$c"
     else FAIL=$((FAIL + 1)); printf '  FAIL %-30s SUPPRESSED-citation cell does not hold (cells=%s)\n' "sup/$c" "$SV_CELLS"; fi
   done
-  # The mutants: a copy of the validator beside the steering sibling, built by an exactly-once
-  # literal anchor (awk ENVIRON, never sed: the anchors carry `$`, `[`, `!` and `"`).
-  SV_WHY=""; SV_V=""
-  sv_mk() {  # $1 name  $2 anchor  $3 replacement -> SV_V
-    local d="$MWORK/sv-$1" n
-    SV_V=""
-    mkdir -p "$d" && cp "$SRC_DIR/validate-steering-budget.sh" "$d/" || { SV_WHY="could not copy the steering sibling"; return 1; }
-    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
-    [ "$n" -eq 1 ] || { SV_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm"; return 1; }
-    A="$2" R="$3" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
-      "$VALIDATOR" > "$d/validate-escalation-resolution.sh" || { SV_WHY="awk died"; return 1; }
-    cmp -s "$VALIDATOR" "$d/validate-escalation-resolution.sh" && { SV_WHY="changed no bytes -- it would score as a kill"; return 1; }
-    bash -n "$d/validate-escalation-resolution.sh" 2>/dev/null || { SV_WHY="does not parse"; return 1; }
-    SV_V="$d/validate-escalation-resolution.sh"
-  }
-  sv_held() {  # sv_held <cell>... -> 1 when SV_BASE is 1 and every named cell held in SV_CELLS
-    local want nm i c held=1
-    [ "$SV_BASE" = 1 ] || held=0
-    for want in "$@"; do
-      i=0; c=0
-      for nm in $SV_NAMES; do i=$((i + 1)); [ "$nm" = "$want" ] && c="$(printf '%s' "$SV_CELLS" | cut -c"$i")"; done
-      [ "$c" = 1 ] || held=0
-    done
-    printf '%s' "$held"
-  }
-  sv_score() {  # $1 label  $2 decisive cell  $3 twin cell  $4 anchor  $5 replacement
-    N=$((N + 1))
-    if [ "$SV_BASE" -ne 1 ]; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: not scored -- the unmutated copy did not hold its cells in this run\n' "S-$1"; return 2; fi
-    if ! sv_mk "$1" "$4" "$5"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: %s\n' "S-$1" "$SV_WHY"; return 1; fi
-    if [ "$MATRIX" = 1 ]; then
-      local mc
-      for mc in $SV_NAMES; do
-        if sv_cell "$SV_V" "$mc"; then matrix_row "S-$1" "$mc" 0 GREEN no; else matrix_row "S-$1" "$mc" 1 TRIPPED yes; fi
-        MROWS=$((MROWS + 1))
-      done
-    fi
-    if sv_cell "$SV_V" "$2"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s SURVIVED: cell %s still holds\n' "S-$1" "$2"; return 1; fi
-    if ! sv_cell "$SV_V" "$3"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s moved its twin %s too -- the arms are entangled\n' "S-$1" "$3"; return 1; fi
-    local sv_b
-    sv_b="$(sv_held "$2" "$3")"
-    mutant_killed "$([ "$sv_b" = 1 ] && echo 1 || echo 0)" "S-$1" "S-$1 $2 is red, $3 unchanged" && KILLS=$((KILLS + 1))
-  }
-  # The unmutated control, in the same kind of directory, must hold a cell that needs the sibling
-  # (sgood verifies a citation) and the bounded argv cell.
-  N=$((N + 1)); SV_BASE=0
-  mkdir -p "$MWORK/sv-ctl" && cp "$SRC_DIR/validate-steering-budget.sh" "$VALIDATOR" "$MWORK/sv-ctl/"
-  if sv_cell "$MWORK/sv-ctl/validate-escalation-resolution.sh" sgood && sv_cell "$MWORK/sv-ctl/validate-escalation-resolution.sh" argv; then
-    SV_BASE=1; ok "S-control the unmutated copy holds sgood and argv"
-  else bad "S-control the unmutated copy does not reproduce the baseline; no mutant verdict below means anything"; fi
-  # S1: SUPPRESSED dropped from the parser's status filter (the filed defect).
-  sv_score revert sbad sanyres ' && !(status == "SUPPRESSED" && anyauth != 1))' ')'
-  # S2: --any-authorized widened to count a suppression as an operator decision.
-  sv_score any-widened sany sanyres ' && anyauth != 1))' '))'
-  # S3: the archive never read.
-  sv_score no-archive apop sbad 'inarch=1 "$ESC_ARCH"' 'inarch=1 /dev/null'
-  # S4: an absent pending.md exits EXAMINED NOTHING before the archive is read.
-  sv_score absent-exits-early aabs apop '[ -f "$ESCALATIONS" ] || [ "$ESC_ARCH" != /dev/null ] ||' '[ -f "$ESCALATIONS" ] ||'
-  # S5: an empty pending.md exits EXAMINED NOTHING before the archive is read.
-  sv_score empty-exits-early aemp apop '    [ "$ESC_ARCH" != /dev/null ] || { echo "OK: EXAMINED NOTHING' '    { echo "OK: EXAMINED NOTHING'
-  # S6: the archive admits every status, so a RESOLVED entry gated when it was archived is re-gated.
-  sv_score archive-all-statuses ares apop '    if (harch == 1 && status != "SUPPRESSED") return' '    harch = harch'
-  # S7: no flush at the file boundary: the archive preamble's authorization line completes the
-  # uncited last entry of pending.md.
-  sv_score no-file-boundary bound sbad '  FNR == 1 { flush(); header = "" }' '  FNR == 0 { }'
-  # S8: the progress guard removed -- the trailing flag loops until the trace cap kills it.
-  sv_score no-progress-guard argv sanyres '[ $# -lt "$_argc" ] ||' 'true ||'
-  # S9: the archive refusal removed -- a pending-archive.md that is a directory fails `-f`, is
-  # read as absent, and the run reports OK over an archive nobody read.
-  sv_score no-archive-refusal adir apop \
-    'if { [ -e "$ESC_ARCH" ] || [ -L "$ESC_ARCH" ]; } && { [ ! -f "$ESC_ARCH" ] || [ ! -r "$ESC_ARCH" ]; }; then' 'if false; then'
-  KF_EXTRA=$((KF_EXTRA + 9))
 fi
 
 # --- a SUPPRESSED entry IN FORCE is checked whatever sprint its header names (BL-960, ruling (c)) ---
@@ -1501,107 +714,6 @@ else
     if [ "$(printf '%s' "$IF_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s in-force SUPPRESSED cell holds\n' "inf/$c"
     else FAIL=$((FAIL + 1)); printf '  FAIL %-30s in-force SUPPRESSED cell does not hold (cells=%s)\n' "inf/$c" "$IF_CELLS"; fi
   done
-  # The mutants: a copy of the validator beside BOTH siblings, built by an exactly-once literal
-  # anchor (awk ENVIRON, as sv_mk). A mutant runs only its decisive cells and its one twin.
-  IF_WHY=""; IF_V=""
-  if_mk() {  # $1 name  $2 anchor  $3 replacement -> IF_V
-    local d="$MWORK/if-$1" n
-    IF_V=""
-    mkdir -p "$d" && cp "$SRC_DIR/validate-steering-budget.sh" "$SRC_DIR/validate-suppression-lifetime.sh" "$d/" || { IF_WHY="could not copy the siblings"; return 1; }
-    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
-    [ "$n" -eq 1 ] || { IF_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm"; return 1; }
-    A="$2" R="$3" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
-      "$VALIDATOR" > "$d/validate-escalation-resolution.sh" || { IF_WHY="awk died"; return 1; }
-    cmp -s "$VALIDATOR" "$d/validate-escalation-resolution.sh" && { IF_WHY="changed no bytes -- it would score as a kill"; return 1; }
-    bash -n "$d/validate-escalation-resolution.sh" 2>/dev/null || { IF_WHY="does not parse"; return 1; }
-    IF_V="$d/validate-escalation-resolution.sh"
-  }
-  if_held() {  # if_held <cell>... -> 1 when IF_BASE is 1 and every named cell held in IF_CELLS
-    local want nm i c held=1
-    [ "$IF_BASE" = 1 ] || held=0
-    for want in "$@"; do
-      i=0; c=0
-      for nm in $IF_NAMES; do i=$((i + 1)); [ "$nm" = "$want" ] && c="$(printf '%s' "$IF_CELLS" | cut -c"$i")"; done
-      [ "$c" = 1 ] || held=0
-    done
-    printf '%s' "$held"
-  }
-  if_score() {  # $1 label  $2 decisive cells (comma-separated)  $3 twin cell  $4 anchor  $5 replacement
-    local dc mc if_b
-    N=$((N + 1))
-    if [ "$IF_BASE" -ne 1 ]; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: not scored -- the unmutated copy did not hold its cells in this run\n' "I-$1"; return 2; fi
-    if ! if_mk "$1" "$4" "$5"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: %s\n' "I-$1" "$IF_WHY"; return 1; fi
-    if [ "$MATRIX" = 1 ]; then
-      for mc in $IF_NAMES; do
-        if if_cell "$IF_V" "$mc"; then matrix_row "I-$1" "$mc" 0 GREEN no; else matrix_row "I-$1" "$mc" 1 TRIPPED yes; fi
-        MROWS=$((MROWS + 1))
-      done
-    fi
-    for dc in $(printf '%s' "$2" | tr ',' ' '); do
-      if if_cell "$IF_V" "$dc"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s SURVIVED: cell %s still holds\n' "I-$1" "$dc"; return 1; fi
-    done
-    if ! if_cell "$IF_V" "$3"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s moved its twin %s too -- the arms are entangled\n' "I-$1" "$3"; return 1; fi
-    if_b="$(if_held $(printf '%s' "$2" | tr ',' ' ') "$3")"
-    mutant_killed "$([ "$if_b" = 1 ] && echo 1 || echo 0)" "I-$1" "I-$1 $2 red, $3 unchanged" && KILLS=$((KILLS + 1))
-  }
-  # The unmutated control, in the same kind of directory, must hold a cell that needs the in-force
-  # sibling AND the citation predicate (ioffg), and its twin (ioff).
-  N=$((N + 1)); IF_BASE=0
-  mkdir -p "$MWORK/if-ctl" && cp "$SRC_DIR/validate-steering-budget.sh" "$SRC_DIR/validate-suppression-lifetime.sh" "$VALIDATOR" "$MWORK/if-ctl/"
-  if if_cell "$MWORK/if-ctl/validate-escalation-resolution.sh" ioffg && if_cell "$MWORK/if-ctl/validate-escalation-resolution.sh" ioff; then
-    IF_BASE=1; ok "I-control the unmutated copy holds ioffg and ioff"
-  else bad "I-control the unmutated copy does not reproduce the baseline; no mutant verdict below means anything"; fi
-  # I1 (m1): narrowed back to the header-only scope -- the in-force set is never consulted.
-  if_score header-only ioff,inone,iarch iexp 'inf = (anyauth != 1 && (' 'inf = (0 && ('
-  # I2 (m2): widened to every SUPPRESSED entry, in force or not -- the expired entry is checked.
-  if_score every-suppressed iexp ioff 'inf = (anyauth != 1 && (' 'inf = (anyauth != 1 && (status == "SUPPRESSED" || '
-  # I3: the archive side of the in-force set dropped -- only pending.md is widened.
-  if_score no-archive-inforce iarch ioff '(harch == 1 && (ekey(header) in infa))' '(0)'
-  # I4: the refusal removed -- an owed in-force set read from a missing sibling reads as empty.
-  if_score no-sibling-refusal inosib iexp '      if [ "$ER_RC" -ne 0 ]; then' '      if false; then'
-  # I5: the probe owed only outside the header scope again -- a current-sprint in-force entry whose
-  # status this parser cannot read is never asked about, so the sibling waives it and this gate passes.
-  if_score probe-header-scope icur,icurg ioff 'if (anyauth != 1 && hassupp && !(harch in owed))' 'if (anyauth != 1 && !hs && hassupp && !(harch in owed))'
-  KF_EXTRA=$((KF_EXTRA + 5))
-fi
-
-# MATRIX ROW COUNT. A plain run prints no matrix row; a --matrix run prints one per mutant x arm:
-# 13 corpus-arm mutants x the arms (a)..(z), 7 floor mutants x the floor cells, 9 lead-interpretation
-# mutants x their cells, 9 SUPPRESSED-citation mutants x their 12 cells, 5 in-force-scope mutants x
-# their 8 cells, the last four only where their sections ran (not a consumer SKIP).
-N=$((N + 1))
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MROWS" -eq 0 ]; then ok "MX plain run printed no matrix row"; else bad "MX plain run printed $MROWS matrix row(s)"; fi
-else
-  MX_WANT=$(( $(printf '%s\n' $GX_ARMS | grep -c .) * 13 ))
-  [ -n "${EN_MW:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $en_names | grep -c .) * 3 ))
-  [ -n "${ER_MD:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $er_names | grep -c .) * (6 - ER_SKIPPED) ))
-  [ -n "${FL_MW:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $fl_names | grep -c .) * 7 ))
-  [ -n "${LR_BASE:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $LR_NAMES | grep -c .) * 9 ))
-  [ -n "${SV_BASE:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $SV_NAMES | grep -c .) * 9 ))
-  [ -n "${IF_BASE:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $IF_NAMES | grep -c .) * 5 ))
-  if [ "$MROWS" -eq "$MX_WANT" ]; then ok "MX matrix run measured $MROWS mutant x arm cells"
-  else bad "MX matrix run measured $MROWS cells, $MX_WANT expected"; fi
-fi
-
-# 18 always-run corpus kills, plus 3 empty-file, 6 refusal, 7 citation-floor, 9 lead-interpretation,
-# 9 SUPPRESSED-citation and 5 in-force-scope kills where those sections ran, less any refusal mutant a
-# masked cell made unscorable (KF_EXTRA, raised inside each non-SKIP branch, so a consumer SKIP of any
-# section does not demand kills it cannot score). Computed HERE, below every section that raises
-# KF_EXTRA: a floor taken above a section never counts that section's kills.
-KILL_FLOOR=$((18 + KF_EXTRA))
-# KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
-# like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
-N=$((N + 1))
-if [ "$KILLS" -ge "$KILL_FLOOR" ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
-else FAIL=$((FAIL + 1)); printf '  FAIL %-30s %s kill(s); the mutants changed bytes in a file these arms never loaded\n' "KILL-COUNT" "$KILLS"; fi
-# KILL-FLOOR EQUALITY. In the distribution no section SKIPs, so every kill site the run reaches is
-# one the floor must count: a floor below KILLS is a floor that stopped counting a section (an
-# increment the constant at KILL_FLOOR= then overwrites reads exactly like one that landed).
-if [ "$EN_IS_DIST" -eq 1 ]; then
-  N=$((N + 1))
-  if [ "$KILLS" -eq "$KILL_FLOOR" ]; then printf '  ok   %-30s %s kill(s) = floor %s -- every section that ran is counted\n' "KILL-FLOOR-EQ" "$KILLS" "$KILL_FLOOR"
-  else FAIL=$((FAIL + 1)); printf '  FAIL %-30s %s kill(s) != floor %s; a release adding kills to this fixture must raise KILL_FLOOR by exactly its additions (18 + KF_EXTRA, KF_EXTRA raised inside the section that scores them)\n' "KILL-FLOOR-EQ" "$KILLS" "$KILL_FLOOR"; fi
 fi
 
 echo

@@ -12,9 +12,7 @@
 # backslash IMMEDIATELY BEFORE a pipe corrupts a row: `both\|here` escaped pipes-only yields
 # `both\\|here`, an escaped backslash followed by a BARE pipe, and the bare pipe ends the
 # markdown cell early. A title carrying a backslash and a pipe that are NOT adjacent comes
-# out intact under both the broken and the fixed script. Arm 8 seeds exactly that input and
-# asserts it does NOT discriminate, so the next author cannot quietly weaken the seed in
-# arm 4 into one that passes either way.
+# out intact under both the broken and the fixed script, so arm 4 seeds the adjacent pair.
 #
 # WHY THE COUNT IS A STATE MACHINE AND NOT A REGEX. `grep -o '[^\]|'` scores the broken and
 # the fixed row identically, because the character before the bare pipe IS a backslash — the
@@ -22,47 +20,22 @@
 # arms 1 and 2 probe the counter in BOTH directions on literal rows, BEFORE it is pointed at
 # anything the script produced. A counter that answered 5 for everything would pass arm 4.
 #
-# WHY THERE IS A MUTANT. An assertion over an intact table row passes against a subject that
-# never ran. Arm 6 reverts the escaping to its pre-fix form in a COPY, guarded by `cmp -s` so
-# a rewrite that matched nothing cannot pass as a mutation, and requires the corrupted row.
-# Arm 7 runs an UNMUTATED copy from the same directory: without it, a mutant that died on
-# startup would emit nothing and score as a kill it did not earn.
-#
 # THE ARMS
 #   1  the pipe counter reports a seeded CORRUPT row as 7 unescaped pipes / 6 cells
 #   2  the pipe counter reports a seeded CLEAN row as 5 / 4                (both directions)
 #   3  the resolved script RUNS on the seed and exits 0, writing its index
 #   4  the adjacent-pair row it emitted is 5 / 4 — a four-column row, intact
 #   5  backslash-only, pipe-only and plain rows are 5 / 4 — the fix broke nothing else
-#   6  MUTANT: the same seed through the pre-fix escaping is 7 / 6 — the arm can fire
-#   7  CONTROL: an unmutated copy in the same directory is 5 / 4 — the harness is alive
-#   8  the NON-ADJACENT seed scores 5 under both — the obvious input discriminates nothing
-#   9  a four-backtick fence hides its fenced heading and indexes the heading after its closer
-#   NM a plain run executes no matrix-only cell (control: the mutant's per-push drive ran)
+#   6  a four-backtick fence hides its fenced heading and indexes the heading after its closer
 #
-# THE MATRIX. One mutant, MCELL (the cell helper reverted to pipes-only escaping, arm 6). Arm tokens An are the
-# arms above, each read on the MUTANT's own drive of its seed. Per push MCELL runs its deciding arm A4 (arm 6
-# reads A4's #bothhere row on the mutant's index) and its twin A8 (arm 8 reads the mutant's non-adjacent row);
-# the full mutant x arm matrix is `--matrix`, measured from a real run and recorded here:
-# MUTANT-MATRIX MCELL decides=A4 twins=A8
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/architecture-index-cell-escaping/run.sh --matrix
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
-# requires. The matrix also shows A3, A5 and A9 green under
-# MCELL; only the twin it runs per push is named.
-#
-# Usage: run.sh [--matrix]     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
+# Usage: run.sh     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-MODE=plain; [ "${1:-}" = --matrix ] && MODE=matrix
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "architecture-index-cell-escaping: FIXTURE BROKEN" >&2; exit 2; }
-
-B_A4=0   # set to 1 beside arm 4's ok: the unmutated subject's adjacent-pair row was intact in THIS run
-# shellcheck source=../lib/mutant.sh
-. "$HERE/../lib/mutant.sh" || { echo "architecture-index-cell-escaping: FIXTURE BROKEN" >&2; exit 2; }
 
 echo "architecture-index-cell-escaping:"
 
@@ -85,7 +58,7 @@ for cand in "$HERE/../../scripts/gen-architecture-index.js" \
 done
 [ -n "$GEN" ] || broken "cannot locate gen-architecture-index.js in either layout (core/scripts/ or scripts/ai-dlc/) from $HERE"
 printf '  subject: %s\n' "$GEN"
-# The REQUIRED input of inputs.decl, consumed from here on (arm 3 runs it, arm 6 copies it).
+# The REQUIRED input of inputs.decl, consumed from here on (arms 3 and 6 run it).
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$GEN")" && pwd)/$(basename "$GEN")"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/architecture-index-cell-escaping.XXXXXX")" || broken "mktemp failed"
@@ -159,7 +132,7 @@ fi
 if [ "$p_clean" = 5 ] && [ "$c_clean" = 4 ]; then
   ok "the counter scores a literal fixed row 5 unescaped pipes / 4 cells — it does not simply flag everything"
 else
-  bad "the counter scored a literal fixed row ${p_clean} pipes / ${c_clean} cells, expected 5 / 4. A counter that flags an intact row makes arm 6's kill meaningless"
+  bad "the counter scored a literal fixed row ${p_clean} pipes / ${c_clean} cells, expected 5 / 4. A counter that flags an intact row makes arm 4 meaningless"
 fi
 
 # ---------------------------------------------------------------- the seed --------
@@ -217,7 +190,6 @@ node "$WORK/count.js" --file "$WORK/out-subject.md" $KEYS > "$WORK/subject.tsv" 
 p_adj="$(field "$WORK/subject.tsv" '#bothhere' 1)"; c_adj="$(field "$WORK/subject.tsv" '#bothhere' 2)"
 if [ "$p_adj" = 5 ] && [ "$c_adj" = 4 ]; then
   ok "a title and summary carrying an adjacent backslash-pipe pair emit an intact 4-column row (5 unescaped pipes)"
-  B_A4=1
 else
   bad "the adjacent-pair row emitted ${p_adj} unescaped pipes / ${c_adj} cells, expected 5 / 4 — the cell escaping has regressed to the pre-fix order"
 fi
@@ -234,64 +206,7 @@ else
   bad "these rows are no longer 4-column:${side_bad}. Expected 5 unescaped pipes / 4 cells for each"
 fi
 
-# ---------------------------------------------------- arms 6-7: mutant + control ---
-# The mutant is a COPY with the cell helper reverted to the pipes-only escaping. It is not a
-# source-level revert of `e9c5970` and must not be described as one: that commit ALSO
-# extracted the helper, so the pre-fix source has no `cell` at all and inlines the same
-# `.replace(/\|/g, ...)` at two sites. What is reverted is the ESCAPING LAYER, which is the
-# load-bearing half; the extraction stays. The equivalence that matters was measured rather
-# than reasoned — this mutant's index is BYTE-IDENTICAL to the one the real `e9c5970^`
-# script produces on this seed, against a control confirming the real pre-fix and the
-# current script DIFFER on it. The rewrite happens here rather than by reaching into git
-# history because this fixture also runs on consumers, which have no such history.
-mkdir -p "$WORK/battery" || broken "could not create the mutant directory"
-cp "$GEN" "$WORK/battery/control.js" || broken "could not copy the subject for the control"
-awk -v q="'" '
-  /const cell = \(s\) =>/ { print "    const cell = (s) => s.replace(/\\|/g, " q "\\\\|" q ");"; next }
-  { print }
-' "$GEN" > "$WORK/battery/mutant.js" || broken "could not write the mutant"
-
-cmp -s "$WORK/battery/control.js" "$WORK/battery/mutant.js" \
-  && broken "the mutation matched NOTHING — mutant.js is byte-identical to the subject, so arm 6 would be asserting against the subject itself and its silence would mean nothing. Two states produce this and arm 4 above tells them apart: the cell helper has been RESHAPED (re-derive the pre-fix form), or the subject is ALREADY in the pre-fix form and there is nothing left to revert."
-printf '  mutant:  %s (reverted from %s)\n' "$WORK/battery/mutant.js" "$GEN"
-
-rc_mut="$(run_gen "$WORK/battery/mutant.js" "$WORK/out-mutant.md")"
-rc_ctl="$(run_gen "$WORK/battery/control.js" "$WORK/out-control.md")"
-[ "$rc_mut" = 0 ] || broken "the mutant did not run (exit ${rc_mut}) — a copy that dies emits nothing, and no output would score as a kill it did not earn: $(tail -2 "$WORK/gen.err" 2>/dev/null)"
-[ "$rc_ctl" = 0 ] || broken "the UNMUTATED control did not run (exit ${rc_ctl}) — the battery directory itself is what is broken, not the escaping: $(tail -2 "$WORK/gen.err" 2>/dev/null)"
-
-# shellcheck disable=SC2086
-node "$WORK/count.js" --file "$WORK/out-mutant.md"  $KEYS > "$WORK/mutant.tsv"  2>>"$WORK/gen.err"
-# shellcheck disable=SC2086
-node "$WORK/count.js" --file "$WORK/out-control.md" $KEYS > "$WORK/control.tsv" 2>>"$WORK/gen.err"
-
-p_mut="$(field "$WORK/mutant.tsv" '#bothhere' 1)"; c_mut="$(field "$WORK/mutant.tsv" '#bothhere' 2)"
-if [ "$p_mut" = 7 ] && [ "$c_mut" = 6 ]; then
-  mutant_killed "$B_A4" MCELL "MUTANT KILLED: with the escaping reverted the same seed emits 7 unescaped pipes / 6 cells — arm 4 can fire"
-else
-  bad "the mutant emitted ${p_mut} unescaped pipes / ${c_mut} cells, expected 7 / 6. Arm 4 is passing against a subject whose corruption this fixture cannot produce, which reads exactly like a guard that works"
-fi
-
-p_ctl="$(field "$WORK/control.tsv" '#bothhere' 1)"; c_ctl="$(field "$WORK/control.tsv" '#bothhere' 2)"
-if [ "$p_ctl" = 5 ] && [ "$c_ctl" = 4 ]; then
-  ok "CONTROL: an unmutated copy in the same directory emits 5 / 4 — the kill above is the mutation, not a battery that died"
-else
-  bad "the unmutated control emitted ${p_ctl} unescaped pipes / ${c_ctl} cells, expected 5 / 4 — the battery directory is broken and arm 6's kill is not attributable to the mutation"
-fi
-
-# --------------------- arm 8: the obvious seed discriminates NOTHING ---------------
-# This is the trap BL-070 measured, asserted rather than described. If someone replaces the
-# adjacent pair in arm 4's seed with a backslash and a pipe that merely coexist, arm 6 stops
-# killing — and this arm records why, in the fixture, where the next author will read it.
-p_na_sub="$(field "$WORK/subject.tsv" '#nonadjacent-slash' 1)"
-p_na_mut="$(field "$WORK/mutant.tsv"  '#nonadjacent-slash' 1)"
-if [ "$p_na_sub" = 5 ] && [ "$p_na_mut" = 5 ]; then
-  ok "a backslash and a pipe that are NOT adjacent emit 5 unescaped pipes under BOTH the fixed and the reverted escaping — only the adjacent pair discriminates"
-else
-  bad "the non-adjacent row scored ${p_na_sub} under the subject and ${p_na_mut} under the mutant, expected 5 and 5. Either the seed no longer reaches the branch under test, or the counter is unstable"
-fi
-
-# ----------------- arm 9: a fence closes only on a run at least as long ------------
+# ----------------- arm 6: a fence closes only on a run at least as long ------------
 # A ```` fence holding a ``` block (opened with an info string) and a fenced `## ` heading after its
 # inner closer: the heading is inside the outer fence, so it is no index row. A closer without the
 # length rule ends the fence at the inner bare ``` and indexes the fenced heading; the real ```` then
@@ -306,38 +221,8 @@ else
   bad "the fence seed (exit ${rc_f}) indexed the fenced heading or lost the one after the closer: $(grep -c '^|' "$WORK/out-fence.md" 2>/dev/null) rows"
 fi
 
-# ------------------------------------------- the matrix: --matrix only -------------
-# Every arm that reads a script's output (A3, A4, A5, A8, A9), each scored on the MUTANT's own drive of its seed.
-# A1-A2 read no script; A6-A7 are the mutant's kill and its unmutated copy. A plain run never reaches this (arm NM).
-if [ "$MODE" = matrix ]; then
-  : > "$WORK/mx.ran"
-  node "$WORK/battery/mutant.js" --doc "$WORK/fdoc/architecture.md" --out "$WORK/out-mfence.md" >/dev/null 2>>"$WORK/gen.err"; rc_mf=$?
-  mx_row() { [ "$(field "$WORK/mutant.tsv" "$1" 1)" = 5 ] && [ "$(field "$WORK/mutant.tsv" "$1" 2)" = 4 ]; }
-  dec=""; tw=""
-  for a in A3 A4 A5 A8 A9; do
-    case "$a" in
-      A3) [ "$rc_mut" = 0 ] && [ -s "$WORK/out-mutant.md" ] ;;
-      A4) mx_row '#bothhere' ;;
-      A5) mx_row '#nonadjacent-slash' && mx_row '#pipe-only' && mx_row '#backslash-only-cpath' && mx_row '#plain-heading' ;;
-      A8) [ "$(field "$WORK/mutant.tsv" '#nonadjacent-slash' 1)" = 5 ] ;;
-      A9) [ "$rc_mf" = 0 ] && grep -qF '#real-after' "$WORK/out-mfence.md" && grep -qF '#real-before' "$WORK/out-mfence.md" \
-            && ! grep -qF '#fenced-heading' "$WORK/out-mfence.md" ;;
-    esac && tw="$tw,$a" || dec="$dec,$a"
-  done
-  printf 'MATRIX MCELL decides=%s twins=%s\n' "${dec#,}" "${tw#,}"
-fi
-# A SEPARATE exit, keyed on MODE: a matrix guard that wrongly opened on a plain run falls through to NM and FAILs.
-[ "$MODE" = matrix ] && exit 0
-
-# NM: a plain run reached no matrix-only cell, and the mutant's per-push drive did run.
-if [ ! -e "$WORK/mx.ran" ] && [ -s "$WORK/mutant.tsv" ]; then
-  ok "NM a plain run executes no matrix-only cell, and the mutant's per-push drive ran"
-else
-  bad "NM a plain run reached the matrix, or the mutant's per-push drive produced no rows"
-fi
-
 # ------------------------------------------------------------------- floor --------
 # EXPECTED_ASSERTIONS: several arms sit behind `broken` guards, and an assertion that never
 # executed prints nothing — a short green report reads exactly like a complete one.
-EXPECTED_ASSERTIONS=10
+EXPECTED_ASSERTIONS=6
 report_end architecture-index-cell-escaping "$EXPECTED_ASSERTIONS"

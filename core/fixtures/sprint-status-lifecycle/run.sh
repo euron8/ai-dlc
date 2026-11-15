@@ -17,76 +17,7 @@
 #
 # SHAPE. Every question is an ARM: a function that builds its own tiny world, drives the tool it
 # is handed ONCE per distinct state, and prints `<id> PASS|FAIL` lines. The shipping tool runs
-# every arm. A mutant is a copy of the tool; per push it drives only its DECIDING arm(s) plus one
-# named TWIN that the measured matrix shows green.
-#
-# MUTANT MATRIX. "A mutant fails only its own assertion" (.claude/rules/fixture-mutants.md) is a
-# test-quality property, measured ONCE for every mutant against EVERY arm and recorded below; per
-# push each mutant runs its deciding arm(s) (must flip) and one twin (must stay green). The matrix
-# is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
-# Run the REMEASURE command below.
-# Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
-# 4d-degenerate-pre-change also trips TB_empty and TB_implpre in the measured matrix (the other refusal states; TB_preamble is the one it targets).
-# d8-close-skips-malformed also trips D10 and D11 in the measured matrix (a misindented key reaches close as a malformed value; D8 is the one it targets).
-# MUTANT-MATRIX 4d-degenerate-pre-change decides=TB_preamble twins=TB_done6
-# MUTANT-MATRIX a16-compared-nothing-exits-0 decides=A16 twins=A13
-# MUTANT-MATRIX a17-empty-block-as-finding decides=A17 twins=A13
-# MUTANT-MATRIX a14-mismatch-disabled decides=A14 twins=A13
-# MUTANT-MATRIX a15-header-reader-removed decides=A15 twins=A13
-# MUTANT-MATRIX a18-list-form-as-empty decides=A18 twins=A13
-# MUTANT-MATRIX a19-unresolvable-skipped decides=A19 twins=A13
-# MUTANT-MATRIX a20-duplicate-detection-removed decides=A20 twins=A13
-# MUTANT-MATRIX a21-cross-view-removed decides=A21 twins=A13
-# MUTANT-MATRIX a22-glob-prefix-widened decides=A22 twins=A13
-# MUTANT-MATRIX a23-require-done-never-fires decides=A23 twins=A13
-# MUTANT-MATRIX a24-remedy-unscoped decides=A24 twins=A13
-# MUTANT-MATRIX a24-remedy-substring decides=A24 twins=A13
-# MUTANT-MATRIX a24-remedy-deleted decides=A24 twins=A13
-# MUTANT-MATRIX a24-remedy-prefix decides=A24 twins=A13
-# MUTANT-MATRIX a24-remedy-case-folded decides=A24 twins=A13
-# MUTANT-MATRIX a24-remedy-reworded decides=A24 twins=A13
-# MUTANT-MATRIX a24-closing-writes-appended decides=A24 twins=A13
-# MUTANT-MATRIX a24-section-cite-appended decides=A24 twins=A13
-# MUTANT-MATRIX d1-owed-ids-never-printed decides=D1 twins=D2
-# MUTANT-MATRIX d2-absent-and-empty-differ decides=D2 twins=D1
-# MUTANT-MATRIX d3-block-form-read-as-empty decides=D3 twins=D4
-# MUTANT-MATRIX d4-unclosed-bracket-accepted decides=D4 twins=D3
-# MUTANT-MATRIX d5-cross-view-join-removed decides=D5 twins=D2
-# MUTANT-MATRIX d6-writer-forgot-report-removed decides=D6 twins=D1
-# MUTANT-MATRIX d7-refusal-reads-first-view-only decides=D7 twins=D9
-# MUTANT-MATRIX d8-close-skips-malformed decides=D8 twins=D9
-# MUTANT-MATRIX d9-close-refuses-on-empty decides=D9 twins=D7
-# MUTANT-MATRIX d10-d11-misindent-dropped-again decides=D10,D11 twins=D9
-# MUTANT-MATRIX d10-only-tab-caught decides=D10 twins=D11
-# MUTANT-MATRIX d11-only-deeper-spaces-caught decides=D11 twins=D10
-# MUTANT-MATRIX j1-join-off decides=J1,J1CASE twins=J1N
-# MUTANT-MATRIX j1-id-case-folded decides=J1CASE twins=J1
-# MUTANT-MATRIX l4-planning-view-read decides=L4 twins=L1
-# MUTANT-MATRIX l2-absent-printed-empty decides=L2 twins=L1
-# MUTANT-MATRIX l3-no-canonical-exits-0 decides=L3 twins=L1
-# MUTANT-MATRIX l1-sorted-not-yaml-order decides=L1 twins=L2
-# bmad-predicate-off also trips R12e, R12crlf, R12leg, R17, R20 and R24 in the measured matrix (every world holding a BMAD copy reads it as a freeze; R12, R12i and R16 are the ones it targets).
-# relocate-skipped also trips R12i, R12e, R12crlf and R12leg in the measured matrix (every relocating world; R12 is the one it targets).
-# two-phase-collapsed also trips R18, R22, R22b, R23, R24s and R24p in the measured matrix (each is a refusal beside a writable view, whose no-write conjunct IS the two-phase property; R14 and R15 are the ones it targets).
-# refuse-disagree-deleted also trips R22b in the measured matrix (the F refusal deleted refuses neither disagreement; R22 is the one it targets).
-# MUTANT-MATRIX bmad-predicate-off decides=R12,R12i,R16 twins=R13
-# MUTANT-MATRIX bmad-predicate-widened decides=R13b twins=R13
-# MUTANT-MATRIX bmad-sprint-conjunct-dropped decides=R13 twins=R13b
-# MUTANT-MATRIX bmad-inline-empty-missed decides=R12e twins=R12
-# MUTANT-MATRIX two-phase-collapsed decides=R14,R15 twins=R13
-# MUTANT-MATRIX relocate-in-decide-loop decides=R18 twins=R12
-# MUTANT-MATRIX stop-at-first-refusal decides=R19 twins=R14
-# MUTANT-MATRIX overwrite-differing-target decides=R17 twins=R20
-# MUTANT-MATRIX relocate-skipped decides=R12 twins=R20
-# MUTANT-MATRIX refuse-ahead-deleted decides=R21 twins=R22
-# MUTANT-MATRIX refuse-disagree-deleted decides=R22 twins=R21
-# MUTANT-MATRIX refuse-preamble-deleted decides=R23 twins=R22
-# MUTANT-MATRIX disagree-behind-only decides=R22b twins=R16
-# MUTANT-MATRIX nonfile-target-unchecked decides=R24 twins=R20
-# MUTANT-MATRIX nonfile-slot-unchecked decides=R24s twins=R24
-# MUTANT-MATRIX nonfile-parent-unchecked decides=R24p twins=R24s
-# MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/sprint-status-lifecycle/run.sh --matrix
+# every arm.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -98,17 +29,6 @@ echo "HERMETIC-CONSUMED core/scripts/sprint-status.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-
-# --matrix is an ARGV flag (never an env var, never via hermetic-run.sh): it replaces the per-push
-# mutant stage with the full mutant x arm matrix. A plain run executes no matrix-only cell.
-MATRIX=0; [ "${1:-}" = "--matrix" ] && MATRIX=1
-MX_FULL_RUNS=0     # incremented ONLY by matrix-only cells; a plain run must leave it at 0
-if [ "$MATRIX" = 1 ]; then echo "MODE FULL (--matrix)"; else echo "MODE PUSH"; fi
 
 P="$WORK/proj"
 IMPL="$P/_bmad-output/implementation-artifacts"
@@ -239,7 +159,7 @@ stories:
   rt "$1" roll --sprint 292 --root "$P" >/dev/null 2>&1
   # Resolve the freeze WHEREVER it landed, so the byte-faithfulness and idempotency arms test BYTES
   # and not location. The destination has its own arm; an arm that tests two things cannot say which
-  # of them a mutant broke.
+  # of them failed.
   SLOTTED="$IMPL/s291/sprint-status.yaml"
   LEGACY_FROZEN="$IMPL/sprint-status/sprint-291.yaml"
   FROZEN="$SLOTTED"; [ -f "$FROZEN" ] || FROZEN="$LEGACY_FROZEN"
@@ -275,7 +195,7 @@ a_legacy() {
 }
 # A freeze that DIFFERS still HARD_BLOCKs. Without this, "no twin was minted" passes on a writer that
 # skips the freeze unconditionally. The divergent freeze is seeded under BOTH spellings on purpose:
-# seeded under only one, the arm also fails whenever a mutant changes WHICH spelling the writer
+# seeded under only one, the arm also fails whenever the writer changes WHICH spelling it
 # consults, and then it is a second reading of the destination arm.
 a_divergent() {
   local DIVERGENT
@@ -507,8 +427,7 @@ a_R12leg() { # an identical LEGACY freeze beside a BMAD slot: relocate, write no
      && cmp -s "$PLAN/sprint-status/sprint-321.yaml" "$SD/plan321" && rolled; then res R12leg PASS; else res R12leg FAIL; fi
 }
 # The refusal worlds below put the implementation view at 322 (the half-rolled shape) wherever the
-# arm's subject is a single view, so no OTHER view is writable and a mutant that collapses the two
-# phases cannot reach them; R14 and R15 are the atomicity arms, and own that mutant.
+# arm's subject is a single view, so no OTHER view is writable; R14 and R15 are the atomicity arms.
 a_R13() { # near-miss: `sprint:` AND `development_status:`, differing -> the divergent-freeze refusal
   reset_tree; w impl322 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"; w r13 "$PLAN/s321/sprint-status.yaml"
   rr "$1" R13
@@ -739,7 +658,7 @@ stories:
   cs_run "$1" --require-done; RDR_OUT="$CS_OUT"; RDR_RC=$CS_RC; RDR_TOOL="$1"
 }
 a_A23() { # --require-done: a story still `review`, consistent everywhere, is a NOT DONE finding
-  # Its two near-misses ride in the same arm, because the mutant must flip THIS id and no other: the
+  # Its two near-misses ride in the same arm, so one id carries the flag's whole property: the
   # SAME tree without the flag passes (the flag is what fires, not a mismatch), and a `done` story
   # under the flag passes (the flag keys on status).
   local a23_plain a23_done
@@ -765,8 +684,7 @@ a_A24() { # the --require-done REMEDY is scoped to `review`
   # a non-`review` status is the same wrong instruction. The PRESENCE of "prescribes no remedy for
   # `<s>`" keeps the arm from passing a build that simply says nothing. A24 stands down only when NO
   # twin produced any NOT DONE line: the flag never firing, which A23 owns.
-  # SEVEN drives, none cuttable: each of the eight A24 mutants keys on a DIFFERENT status spelling
-  # (substring, prefix, case, file/yaml split), so no subset of the shapes decides them all.
+  # SEVEN drives, one per status spelling (substring, prefix, case, file/yaml split).
   local a24_rem='dispatch its closing writer' a24_nd=0 a24_ok=1 a24_twin a24_f a24_y a24_line a24_out a24_rc a24_n a24_r
   for a24_twin in review:review done-pending-liveness:done-pending-liveness in-progress:in-progress \
                   in-review:in-review review-pending:review-pending Review:Review review:in-progress; do
@@ -949,7 +867,7 @@ a_D11() { d_misindent "$1" D11; }
 # J1 — a `done` story whose AC carries `defers_to:` that `deferred_acs` does not list (BL-840). A REPORT in
 # writer_forgot's tier: it never moves the exit code, compares AC ids exactly (case-sensitive) and never the CO
 # value, and fires only when `deferred_acs` parsed ok. The id list comes from the sibling validator's
-# --list-defers, so a mutant copy of the tool runs beside a copy of that sibling (MUT below).
+# --list-defers, read from the sibling validator beside the tool.
 story_defers() { # <name> <live_ops> <CO>: AC4 carries defers_to, AC5 does not
   printf -- '---\nstatus: done\nsprint: 291\nlayered_ac_count:\n  unit: 2\n  live_ops: %s\n  manual_operator: 0\n---\n\n# story\n\n- **AC4 (unit).** thing\n  defers_to: %s\n- **AC5 (unit).** other\n' "$2" "$3" > "$CSTORIES/$1.md"
 }
@@ -996,7 +914,7 @@ a_J1CASE() { # `[ac4]` against `AC4`: ids are compared case-sensitively, so J1 s
 # ===== PART 4 — `list-stories`: the implementation view's entries, one tab-separated line each ====
 # The mode exists so a validator never parses the yaml itself. Every arm is PRESENCE-shaped on
 # stdout or on the exit code, so a subject that prints nothing fails L1, L2 and L4 by construction.
-# L1 and L2 seed BOTH views identically, so the planning-view mutant cannot reach them; L4 is the
+# L1 and L2 seed BOTH views identically, so a wrong-view read cannot reach them; L4 is the
 # near-miss where the views differ, and only it may die when the wrong view is read.
 ls_run() {
   LS_OUT="$(AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA" bash "$1" list-stories --root "$CS" 2>"$CS.err")"
@@ -1084,9 +1002,8 @@ story-291-2${TAB}in-progress${TAB}stories/story-2.md"
 # ===== registry: keys (one function each) and the ids they print =================================
 ALL_KEYS="P0 P1 P2 P3 TB_preamble TB_empty TB_done6 TB_inprog7 TB_none TB_implpre P5 roll legacy divergent greenroll H8 H9 R10 R11 R12 R12i R12e R12crlf R12leg R13 R13b R14 R15 R16 R17 R18 R19 R20 R21 R22 R22b R23 R24 R24s R24p A13 A14 A15 A16 A17 A18 A19 A20 A21 A22 A23 A24 D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 J1 J1N J1X J1ABS J1CASE L1 L2 L3 L4"
 ids_of() { case "$1" in roll) echo "R6a R6b R6c R6d R7" ;; legacy) echo "R7a1 R7a2 R7a3" ;; divergent) echo "R7ac" ;; greenroll) echo "R7b1 R7b2" ;; *) echo "$1" ;; esac; }
-ALL_IDS=""; ID_KEY=" "
-for _k in $ALL_KEYS; do for _i in $(ids_of "$_k"); do ALL_IDS="$ALL_IDS $_i"; ID_KEY="$ID_KEY$_i:$_k "; done; done
-key_of() { local e; for e in $ID_KEY; do [ "${e%%:*}" = "$1" ] && { printf '%s' "${e#*:}"; return 0; }; done; return 1; }
+ALL_IDS=""
+for _k in $ALL_KEYS; do for _i in $(ids_of "$_k"); do ALL_IDS="$ALL_IDS $_i"; done; done
 arm() { # <key> <tool>
   case "$1" in
     TB_*) tb_state "$2" "${1#TB_}" ;;
@@ -1120,8 +1037,8 @@ okmsg() { case "$1" in
   R7ac) echo "control: a freeze that DIFFERS from the canonical -> exit 3" ;;
   R7b1) echo "roll creates the canonical on greenfield (the missing creator)" ;;
   R7b2) echo "greenfield creation mints NO second copy" ;;
-  H8) echo "MUTANT: a housekeeping block alone is NOT parsed as sprint 291" ;;
-  H9) echo "MUTANT: canonical WITH housekeeping still derives N+1 correctly" ;;
+  H8) echo "a housekeeping block alone is NOT parsed as sprint 291" ;;
+  H9) echo "canonical WITH housekeeping still derives N+1 correctly" ;;
   R10) echo "roll refuses an unclosed sprint (exit 3) — never freezes live state" ;;
   R11) echo "fail-closed on an unreadable schema (never guesses the grammar)" ;;
   R12) echo "BL-938: a BMAD copy in the planning slot is relocated byte-for-byte and the real freeze lands in the slot" ;;
@@ -1211,286 +1128,10 @@ case "$r938" in
   *) bad "BL-938 receipt exited $r938: $(tr '\n' ' ' < "$WORK/r938.out")" ;;
 esac
 
-# ===== mutants ====================================================================================
-# Each is a COPY (never an in-place edit), guarded by `cmp -s` so a sed that matched nothing cannot
-# pass as a mutation. Name | decides arms | twin arm | sed program. The decides list holds every arm
-# the measured matrix shows tripping; the twin is an arm the matrix shows green that the mutant could
-# plausibly co-trip (the same branch of the tool).
-MN=(); MD=(); MT=(); MP=(); NM=0
-defm() { MN[$NM]="$1"; MD[$NM]="$2"; MT[$NM]="$3"; MP[$NM]="$4"; NM=$((NM+1)); }
-
-DMI='            if dm is not None and dm.group(2) == "deferred_acs" and indent != field_indent:$'
-
-# 4d: the control that the property table CAN FAIL. A copy whose degenerate branch is replaced by the
-# PRE-CHANGE behaviour (max frozen archive + 1, else 1), built as a copy and guarded with cmp -s so an
-# anchor that matched nothing cannot pass as a mutation (a sandbox has no history, so this does not
-# depend on `git show`). It must break the preamble-only row: 291 with archives, 1 without.
-defm 4d-degenerate-pre-change TB_preamble TB_done6 @py4d
-# A16: collapse "compared nothing" into a pass. The single most important mutation here.
-defm a16-compared-nothing-exits-0 A16 A13 's/^        return 4$/        return 0/'
-# A17: treat an empty `stories:` block as a content-bearing one, so `roll` output reports a finding.
-defm a17-empty-block-as-finding A17 A13 's/return ("no-entries" if content else "empty", \[\])/return ("no-entries", [])/'
-# A14: never report a mismatch.
-defm a14-mismatch-disabled A14 A13 's/            if fstatus != ystatus:/            if False:/'
-# A15: drop the `**Status:**` fallback, so a file with no frontmatter yields nothing.
-defm a15-header-reader-removed A15 A13 's/^    m = HDR_STATUS_RE.search(text)$/    m = None/'
-# A18: report a keyless block as empty instead of as a finding.
-defm a18-list-form-as-empty A18 A13 's/^    if entries:$/    if True:/'
-# A19: skip an entry whose file will not resolve.
-defm a19-unresolvable-skipped A19 A13 's/^            if resolved is None:$/            if False and resolved is None:/'
-# A20: stop detecting a repeated key.
-defm a20-duplicate-detection-removed A20 A13 's/^            if key in seen:$/            if False:/'
-# A21: drop the cross-view comparison.
-defm a21-cross-view-removed A21 A13 's/^        if len(vals) > 1 and len(set(vals.values())) > 1:$/        if False:/'
-# A22: widen the index glob to `<stem>*`, the collision that compares story-1 against story-10.
-defm a22-glob-prefix-widened A22 A13 's/stories.glob(stem + "-\*.md")/stories.glob(stem + "*.md")/'
-# A23: the --require-done branch disabled, so a story past gate 3 still `review` deploys.
-defm a23-require-done-never-fires A23 A13 's/^            if os.environ.get("REQUIRE_DONE") and ystatus != "done":$/            if False:/'
-# A24: the closing-writer remedy given for every non-`done` status.
-defm a24-remedy-unscoped A24 A13 's/^                if ystatus == "review":$/                if True:/'
-# A24: the remedy keyed on a substring, so `in-review` is told to dispatch a closing writer.
-defm a24-remedy-substring A24 A13 's/^                if ystatus == "review":$/                if "review" in ystatus:/'
-# A24: the remedy deleted from the `review` branch too, so no status is ever told what to do.
-defm a24-remedy-deleted A24 A13 's/writes: dispatch its closing writer (implementation.md section 3, "/writes: bring it to done ("/'
-# A24: the remedy keyed on a prefix, so `review-pending` is told to dispatch a closing writer.
-defm a24-remedy-prefix A24 A13 's/^                if ystatus == "review":$/                if ystatus.startswith("review"):/'
-# A24: the remedy keyed case-insensitively, so `Review` is told to dispatch a closing writer.
-defm a24-remedy-case-folded A24 A13 's/^                if ystatus == "review":$/                if ystatus.lower() == "review":/'
-# A24: the remedy REWORDED onto the else branch in place of the no-remedy sentence, so the exact
-# review-branch phrase is absent (killed by the presence conjunct).
-defm a24-remedy-reworded A24 A13 's/^                                    "prescribes no remedy for `%s`: bring the story to `done` under "$/                                    "owes its closing writes (implementation.md section 3, item 4) for `%s`: bring it to `done` under "/'
-# A24: the no-remedy sentence KEPT and a closing-writes remedy appended, so presence holds and only
-# the `closing writ` absence can kill it.
-defm a24-closing-writes-appended A24 A13 's/^                                    "the step or extension that defines `%s`, then re-run."$/                                    "the step or extension that defines `%s`, or finish its closing writes, then re-run."/'
-# A24: the same, citing only the section, so only the `section 3, item 4` absence can kill it.
-defm a24-section-cite-appended A24 A13 's/^                                    "the step or extension that defines `%s`, then re-run."$/                                    "the step or extension that defines `%s` (implementation.md section 3, item 4), then re-run."/'
-defm d1-owed-ids-never-printed D1 D2 's/^                if dids:$/                if False:/'
-defm d2-absent-and-empty-differ D2 D1 's/deferred_view.setdefault(key, {})\[view\] = ", ".join(sorted(dids))/deferred_view.setdefault(key, {})[view] = dstate + ", ".join(sorted(dids))/'
-defm d3-block-form-read-as-empty D3 D4 's/^        return ("malformed", "empty value/        return ("ok", []) or ("malformed", "empty value/'
-defm d4-unclosed-bracket-accepted D4 D3 's/if not (v.startswith("\[") and v.endswith("\]")):/if not v.startswith("["):/'
-defm d5-cross-view-join-removed D5 D2 's/^        if len(set(vals.values())) > 1:$/        if False:/'
-defm d6-writer-forgot-report-removed D6 D1 's/^                if owed_n:$/                if False:/'
-# D7: the pre-write scan reads only the FIRST view — the shape of a refusal made inside the write
-# loop, which has stamped the implementation view before it reads the planning one.
-defm d7-refusal-reads-first-view-only D7 D9 '/^    owed = \[\]$/,/^    if owed:$/s/in existing:$/in existing[:1]:/'
-# D8 owns D10 and D11's CLOSE half too, by design rather than entanglement: a misindented
-# `deferred_acs` reaches close as a malformed value, so skipping malformed values in close closes
-# over it as well. The parser guard D10/D11 exist for is isolated by their own three mutants below.
-defm d8-close-skips-malformed D8,D10,D11 D9 's/^            if state == "malformed":$/            if False:/'
-defm d9-close-refuses-on-empty D9 D7 's/^            elif state == "ok" and ids:$/            elif True:/'
-# D10/D11: the misindented-key guard. The full revert restores the drop and must fail both; the two
-# partial fixes each handle one indent form, and each must fail only the other form's cell.
-defm d10-d11-misindent-dropped-again D10,D11 D9 "s/^${DMI}/            if False:/"
-defm d10-only-tab-caught D10 D11 "s/^\\(${DMI%:\$}\\):\$/\\1 and \"\\\\t\" in dm.group(1):/"
-defm d11-only-deeper-spaces-caught D11 D10 "s/^\\(${DMI%:\$}\\):\$/\\1 and \"\\\\t\" not in dm.group(1):/"
-# J1: the join disabled (no AC is ever missing), so neither the plain world nor the case world reports.
-defm j1-join-off J1,J1CASE J1N 's/missing = \[a for a in (dacs or \[\]) if a not in dids\]/missing = []/'
-# J1: the id comparison case-folded, so `[ac4]` is taken to list AC4; only the case world flips.
-defm j1-id-case-folded J1CASE J1 's/if a not in dids\]/if a.lower() not in [d.lower() for d in dids]]/'
-# L4: the planning view read in place of the implementation view.
-defm l4-planning-view-read L4 L1 's/^    lp = VIEWS\[PRIMARY\]$/    lp = VIEWS["planning"]/'
-# L2: an absent field printed as an empty cell rather than `-`.
-defm l2-absent-printed-empty L2 L1 's/^        return "-" if v is None or v == "" else/        return "" if v is None or v == "" else/'
-# L3: no canonical folded into an empty success.
-defm l3-no-canonical-exits-0 L3 L1 '/list-stories UNEVALUABLE — no %s canonical/,/^        return 2$/s/^        return 2$/        return 0/'
-# L1: the entries printed sorted by key instead of in yaml order.
-defm l1-sorted-not-yaml-order L1 L2 's/^    for key, fields, _ in entries:$/    for key, fields, _ in sorted(entries):/'
-# BL-938 (mk_py holds each edit). The BMAD predicate never true, so the copy reads as a divergent freeze.
-defm bmad-predicate-off R12,R12i,R16 R13 @py938
-# The predicate widened to any sprint-less slot file, so the housekeeping-first shape is relocated.
-defm bmad-predicate-widened R13b R13 @py938
-# The `sprint is None` conjunct dropped, so a freeze carrying development_status: is relocated.
-defm bmad-sprint-conjunct-dropped R13 R13b @py938
-# The key anchored to `[ \t]*$` only, so `development_status: {}` is not recognised.
-defm bmad-inline-empty-missed R12e R12 @py938
-# The old order: each view written inside the decide loop, before the next view is read.
-defm two-phase-collapsed R14,R15 R13 @py938
-# The BMAD move made in phase 1, ahead of a later view's refusal.
-defm relocate-in-decide-loop R18 R12 @py938
-# Only the first refusal printed.
-defm stop-at-first-refusal R19 R14 @py938
-# A differing relocation target never checked, so os.replace overwrites it.
-defm overwrite-differing-target R17 R20 @py938
-# The freeze written over the BMAD copy without relocating it.
-defm relocate-skipped R12 R20 @py938
-defm refuse-ahead-deleted R21 R22 @py938
-defm refuse-disagree-deleted R22 R21 @py938
-defm refuse-preamble-deleted R23 R22 @py938
-# F's target-level view never joins the comparison (the `< target`-only filter), so R22b's tree rolls.
-defm disagree-behind-only R22b R16 @py938
-# The non-file relocation target never checked, so phase 2's os.replace fails after phase 1 passed.
-defm nonfile-target-unchecked R24 R20 @py938
-# The non-file freeze slot never checked, so phase 2 tries to freeze into a directory.
-defm nonfile-slot-unchecked R24s R24 @py938
-# The slot parent never checked, so phase 2's mkdir hits a file after the implementation view rolled.
-defm nonfile-parent-unchecked R24p R24s @py938
-
-MUT="$WORK/mut"; mkdir -p "$MUT"
-# J1 reads its ids through the sibling validator beside the tool; a mutant copy finds none and J1
-# never fires, which would score a kill for the wrong reason. One sibling copy serves every mutant.
+# J1 reads its ids through the sibling validator beside the tool.
 J1_SIB="$(dirname "$TOOL")/validate-ac-falsifiability.sh"
 echo "HERMETIC-CONSUMED core/scripts/validate-ac-falsifiability.sh"
 [ -f "$J1_SIB" ] || { echo "FIXTURE ERROR: validate-ac-falsifiability.sh is not beside $TOOL; J1 has no id source" >&2; exit 2; }
-cp "$J1_SIB" "$MUT/validate-ac-falsifiability.sh" || { echo "FIXTURE ERROR: could not copy the J1 sibling" >&2; exit 2; }
-mk_4d() { # the PRE-CHANGE behaviour: the degenerate branch returns max frozen archive + 1, else 1
-  cp "$TOOL" "$1"
-  python3 -I - "$1" <<'PYEOF'
-import sys
-p = sys.argv[1]
-t = open(p).read()
-anchor = "    degenerate = sorted(v for v, r in seen.items() if r[0] is None)\n"
-ins = anchor + (
-    "    if degenerate:\n"
-    "        import re as _re\n"
-    "        ns = []\n"
-    "        for _v in VIEWS:\n"
-    "            _b = VIEWS[_v].parent\n"
-    "            for _p in list(_b.glob('s*/sprint-status.yaml')) + list(_b.glob('sprint-status/sprint-*.yaml')):\n"
-    "                _m = _re.search(r'(\\d+)', _p.parent.name if _p.name == 'sprint-status.yaml' else _p.stem)\n"
-    "                if _m:\n"
-    "                    ns.append(int(_m.group(1)))\n"
-    "        return (max(ns) + 1) if ns else 1\n")
-if t.count(anchor) == 1:
-    open(p, "w").write(t.replace(anchor, ins))
-PYEOF
-}
-mk_py() { # <mutant> <out>: the BL-938 mutants, each a set of exact anchor -> replacement edits. Every
-  # anchor must occur EXACTLY once or the copy is left unmutated, which the cmp -s guard below then
-  # reports as a mutation that never happened. Python, not sed: the anchors carry `$`, `\t`, `{` and
-  # `(?:`, which BSD sed mangles silently.
-  cp "$TOOL" "$2"
-  python3 -I - "$1" "$2" <<'PYEOF'
-import sys
-name, p = sys.argv[1], sys.argv[2]
-t = open(p).read()
-PRED = "    return parse(text)[0] is None and BMAD_DEV_STATUS_RE.search(text) is not None\n"
-RE_LINE = r'''BMAD_DEV_STATUS_RE = re.compile(r"^development_status:(?:[ \t]*$|[ \t]*\{|[ \t]*#|[ \t]+\S)", re.M)''' + "\n"
-RELOC = '                    relocate = ("replace", slot, bmad_target)\n'
-EXEC = ("            if relocate is not None:\n"
-        "                (os.replace(str(relocate[1]), str(relocate[2])) if relocate[0] == \"replace\" else relocate[1].unlink())\n")
-FWD = "            write_verified(VIEWS[view], new_envelope(target), \"%s roll-forward\" % view)\n"
-M = {
-  "bmad-predicate-off":           [(PRED, "    return False\n")],
-  "bmad-predicate-widened":       [(PRED, "    return parse(text)[0] is None\n")],
-  "bmad-sprint-conjunct-dropped": [(PRED, "    return BMAD_DEV_STATUS_RE.search(text) is not None\n")],
-  "bmad-inline-empty-missed":     [(RE_LINE, 'BMAD_DEV_STATUS_RE = re.compile(r"^development_status:[ \\t]*$", re.M)\n')],
-  # the OLD order: each view's writes made inside the decide loop, before a later view is read
-  "two-phase-collapsed": [
-      ("            plans.append((view, relocate, None))\n", EXEC + FWD),
-      ("            plans.append((view, relocate, (slot, text)))\n",
-       EXEC + "            write_verified(slot, text, \"%s freeze\" % view)\n" + FWD)],
-  # the move made in phase 1, so a refusal in a later view finds it already done
-  "relocate-in-decide-loop":      [(RELOC, "                    os.replace(str(slot), str(bmad_target)); relocate = None\n")],
-  "relocate-skipped":             [(RELOC, "                    relocate = None\n")],
-  "stop-at-first-refusal":        [("        for _, msg in refusals:\n", "        for _, msg in refusals[:1]:\n")],
-  "overwrite-differing-target":   [("                if bmad_target.is_file():\n", "                if False:\n")],
-  "refuse-ahead-deleted":         [("        if sprint is not None and sprint > target:\n", "        if False:\n")],
-  "refuse-disagree-deleted":      [("    if len(set(compared.values())) > 1:\n", "    if False:\n")],
-  "refuse-preamble-deleted":      [("    if degenerate and behind:\n", "    if False:\n")],
-  "disagree-behind-only":         [("    if any(s != target - 1 for s in behind.values()):\n", "    if False:\n")],
-  "nonfile-target-unchecked":     [("                if not_a_file(bmad_target):\n", "                if False:\n")],
-  "nonfile-slot-unchecked":       [("        if not_a_file(slot):\n", "        if False:\n")],
-  "nonfile-parent-unchecked":     [("        if os.path.lexists(str(slot.parent)) and not slot.parent.is_dir():\n", "        if False:\n")],
-}
-edits = M.get(name)
-if not edits or any(t.count(a) != 1 for a, _ in edits):
-    sys.exit(0)
-for a, b in edits:
-    t = t.replace(a, b)
-open(p, "w").write(t)
-PYEOF
-}
-# build every mutant copy once; a copy that did not apply is a FAIL, never a silent skip
-MUT_OK=" "
-mut_i=0
-while [ "$mut_i" -lt "$NM" ]; do
-  _m="$MUT/${MN[$mut_i]}.sh"
-  if [ "${MP[$mut_i]}" = "@py4d" ]; then mk_4d "$_m"
-  elif [ "${MP[$mut_i]}" = "@py938" ]; then mk_py "${MN[$mut_i]}" "$_m"
-  else sed "${MP[$mut_i]}" "$TOOL" > "$_m" 2>/dev/null; fi
-  if cmp -s "$TOOL" "$_m"; then
-    bad "FIXTURE BROKEN — MUTANT ${MN[$mut_i]} changed nothing; the mutation never happened"
-  else
-    MUT_OK="$MUT_OK${MN[$mut_i]} "
-  fi
-  mut_i=$((mut_i+1))
-done
-
-# --- Unmutated control -------------------------------------------------------
-# A copy of the tool in another directory, mutated not at all. It proves ONE property: the tool
-# resolves from a location outside core/scripts/ (its schema handed explicitly) and answers
-# check-stories there. Everything else a control battery would prove is already the shipping run's,
-# and each mutant's own green twin proves its copy runs.
-CTRL="$WORK/mutant-control.sh"
-cp "$TOOL" "$CTRL"
-RES=""; arm A13 "$CTRL"; sets_from "$RES"
-CTRL_OK=0
-if in_set A13 "$PASS_OUT"; then
-  ok "CONTROL: a copy of the tool in another directory resolves its schema and answers check-stories as the shipping tool does (A13)"; CTRL_OK=1
-else
-  bad "CONTROL: an unmutated copy in another directory failed A13 — the mutant harness, not the mutations, is what those mutants proved"
-fi
-base_ok() { [ "$CTRL_OK" = 1 ] && in_set "$1" "$SHIP_PASS"; } # the arm passed unmutated in THIS run on the shipping tool, and the copy mechanism works
-
-mut_witness() { # <mutant> -> 0 when the mutant's extra observable holds
-  case "$1" in
-    4d-degenerate-pre-change) [ "$TBWA_preamble" = "291|0" ] && [ "$TBWN_preamble" = "1|0" ] ;;   # preamble-only: 291 with archives, 1 without
-    *) return 0 ;;
-  esac
-}
-
-join_set() { local o="" x; for x in "$@"; do o="$o,$x"; done; printf '%s' "${o#,}"; }
-
-if [ "$MATRIX" = 1 ]; then
-  # FULL MATRIX: every mutant driven against EVERY arm; every cell printed, 1 = the arm FAILS under
-  # the mutant. Row format: MATRIX <mutant> decides=<declared> cells=<id:0|1,...> tripped=[..] declared=<match|DIFFERS>.
-  mut_i=0
-  while [ "$mut_i" -lt "$NM" ]; do
-    n="${MN[$mut_i]}"
-    case "$MUT_OK" in *" $n "*) ;; *) mut_i=$((mut_i+1)); continue ;; esac
-    RES=""; MX_FULL_RUNS=$((MX_FULL_RUNS + 1))
-    for k in $ALL_KEYS; do arm "$k" "$MUT/$n.sh"; done
-    sets_from "$RES"
-    cells=""; tripped=""
-    for i in $ALL_IDS; do
-      if in_set "$i" "$FAIL_OUT"; then cells="$cells,$i:1"; tripped="$tripped $i"; else cells="$cells,$i:0"; fi
-    done
-    decl="$(printf '%s' " ${MD[$mut_i]//,/ } " | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
-    meas="$(printf '%s' "$tripped" | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
-    st=match; for _d in ${MD[$mut_i]//,/ }; do case " $tripped " in *" $_d "*) ;; *) st=DIFFERS ;; esac; done
-    tw=green; for _t in ${MT[$mut_i]//,/ }; do in_set "$_t" "$FAIL_OUT" && tw=TRIPPED; done
-    printf 'MATRIX %s decides=%s cells=%s tripped=[%s] declared=%s twins=%s\n' "$n" "${MD[$mut_i]}" "${cells#,}" "$(join_set $tripped)" "$st" "$tw"
-    mut_i=$((mut_i+1))
-  done
-else
-  # PER PUSH: each mutant drives its DECIDING arm(s) and its measured-green TWIN only.
-  mut_i=0
-  while [ "$mut_i" -lt "$NM" ]; do
-    n="${MN[$mut_i]}"
-    case "$MUT_OK" in *" $n "*) ;; *) mut_i=$((mut_i+1)); continue ;; esac
-    dec=" ${MD[$mut_i]//,/ } "; twn=" ${MT[$mut_i]//,/ } "
-    bsig="$(for a in $dec $twn; do base_ok "$a" || echo "$a"; done)"
-    keys=" "
-    for a in $twn $dec; do _k="$(key_of "$a")"; case "$keys" in *" $_k "*) ;; *) keys="$keys$_k " ;; esac; done
-    RES=""
-    for k in $keys; do arm "$k" "$MUT/$n.sh"; done
-    sets_from "$RES"
-    wrong=""
-    for a in $dec; do in_set "$a" "$FAIL_OUT" || wrong="$wrong $a-did-not-flip"; done
-    for i in $FAIL_OUT; do case "$dec" in *" $i "*) ;; *) wrong="$wrong $i-tripped-outside-decides" ;; esac; done
-    for a in $twn; do in_set "$a" "$PASS_OUT" || wrong="$wrong $a-twin-not-green"; done
-    if [ -n "$wrong" ]; then
-      if [ "$bsig" = "" ]; then bad "MUTANT $n scored [$wrong ], wanted decides=[${MD[$mut_i]}] and twin=[${MT[$mut_i]}] green"; else need_base "$([ "$bsig" = "" ] && echo 1 || echo 0)" "$n" || true; fi
-    elif ! mut_witness "$n"; then
-      bad "MUTANT $n flipped its arm but its witness did not hold (archives='${TBWA_preamble:-}' none='${TBWN_preamble:-}')"
-    else
-      mutant_killed "$([ "$bsig" = "" ] && echo 1 || echo 0)" "$n" "MUTANT $n dies on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
-    fi
-    mut_i=$((mut_i+1))
-  done
-  if [ "$MX_FULL_RUNS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (MX_FULL_RUNS=0)"
-  else bad "a plain run executed $MX_FULL_RUNS matrix-only cell(s)"; fi
-fi
 
 echo
 report_end sprint-status-lifecycle

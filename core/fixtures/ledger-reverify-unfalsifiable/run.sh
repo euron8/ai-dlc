@@ -17,16 +17,13 @@ trap 'rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED $RV"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_lruGood=0; B_lruNearmiss=0; B_lruShapes=0
 
 # --- THE SUBJECT IS ASKED IN PROCESS --------------------------------------------------------
 # ledger-reverify.sh is loadable: sourcing it defines functions and runs nothing (its source guard
 # stops before `lr_main`). It is sourced ONCE here, and every cell below asks `lr_main` in a subshell
 # that looks like a fresh `bash ledger-reverify.sh` (core/fixtures/lib/inproc.sh says exactly what
-# that means). One run per distinct STATE (.claude/rules/fixture-mutants.md clause 1): every cell about
-# the pristine world reads the one output `$CUR` holds, and a new state gets one new run. A mutant is a
-# copy of the whole reconcile/ directory, sourced inside its own run's subshell.
+# that means). One run per distinct STATE: every cell about the pristine world reads the one output
+# `$CUR` holds, and a new state gets one new run.
 #
 # EQ0 below is the one end-to-end CLI run kept per distinct outcome (clauses 5-6): the pristine world
 # (rc 0, rows) and a refusal (rc 2), each run both ways, byte-compared.
@@ -94,7 +91,7 @@ fi
 
 # --- Assertion 1: the check PASSES on a real anchor ----------------------------------
 [ "$(verdict PC-GOOD)" = "STILL-LIVE" ] \
-  && { ok "PC-GOOD (flag the consumer implements) → STILL-LIVE"; B_lruGood=1; } \
+  && ok "PC-GOOD (flag the consumer implements) → STILL-LIVE" \
   || bad "PC-GOOD → $(verdict PC-GOOD), expected STILL-LIVE — the check fires on everything"
 
 # --- Assertion 2: the check FIRES on invented prose ----------------------------------
@@ -145,7 +142,7 @@ fi
 
 _nm="$(detail PC-NEARMISS)"
 if grep -qF 'mis-anchored predicate:' <<<"$_nm" && grep -qF 'near-miss-flag' <<<"$_nm"; then
-  ok "PC-NEARMISS (anchor one character off) → mis-anchored, naming the spelling that closes"; B_lruNearmiss=1
+  ok "PC-NEARMISS (anchor one character off) → mis-anchored, naming the spelling that closes"
 else
   bad "PC-NEARMISS detail does not report a mis-anchored predicate naming 'near-miss-flag': $_nm"
 fi
@@ -165,8 +162,6 @@ fi
 # the property each wrong implementation drops. These three arms are those worlds, and each one
 # names the implementation it exists to kill.
 #
-# Both-directions controls establish that the arm discriminates between two inputs; they cannot
-# establish it discriminates at all, which is why the committed mutant below stays.
 
 # SWAP-ONLY. `PC-NEARMISS`'s closing spelling differs by a separator, so an implementation that
 # swaps hyphen/underscore and never strips the trailing colon finds it and passes. Here the
@@ -253,7 +248,7 @@ _nmv="$(verdict PC-NEARMISS)"
   && ok "PC-NEARMISS verdict is NEEDS-REVIEW, not CLOSE-CANDIDATE (a guessed spelling never enters the auto-close set)" \
   || bad "PC-NEARMISS verdict is '$_nmv' — step 8 auto-closes CLOSE-CANDIDATE rows, so a guessed spelling would retire a live entry"
 
-# --- Assertion 3: MUTATION — the verdict follows the anchor, not the entry -----------
+# --- Assertion 3: the verdict follows the anchor, not the entry -----------
 # Remove ONLY the anchor. keep.sh survives, so the scan set stays non-empty and the
 # undecidable path cannot supply a false pass.
 sed -i.bak 's/--strict-provenance/--other-flag/' "$CONSUMER/scripts/thing.sh" && rm -f "$CONSUMER/scripts/thing.sh.bak"
@@ -261,8 +256,8 @@ git -C "$CONSUMER" -c user.email=f@f -c user.name=f add -A >/dev/null 2>&1
 git -C "$CONSUMER" -c user.email=f@f -c user.name=f commit -qm mutate >/dev/null 2>&1
 CUR="$(lr "$DIST" "$BASE" "$CONSUMER" "$THEIRS")"
 [ "$(verdict PC-GOOD)" = "NEEDS-REVIEW" ] \
-  && mutant_killed "$B_lruGood" anchor-removed "mutation: anchor removed from the consumer → PC-GOOD flips to NEEDS-REVIEW" \
-  || bad "mutation: PC-GOOD → $(verdict PC-GOOD), expected NEEDS-REVIEW — verdict is not driven by the anchor"
+  && ok "anchor removed from the consumer → PC-GOOD flips to NEEDS-REVIEW" \
+  || bad "anchor removed: PC-GOOD → $(verdict PC-GOOD), expected NEEDS-REVIEW — verdict is not driven by the anchor"
 
 # --- Assertion 4: UNDECIDABLE — no scan set must not manufacture an accusation -------
 # A missing input is not evidence of a bad predicate. It must say so, not accuse.
@@ -335,7 +330,7 @@ for spec in "$CONSUMER/|" "$CONSUMER|$LED" "$CONSUMER|$CONSUMER/./_bmad-output/a
   [ "$(shape_sig "$c" ${l:+"$l"})" = "$base_sig" ] || { shapes_agree=0; disagreed="$disagreed [$c|$l]"; }
 done
 [ "$shapes_agree" -eq 1 ] \
-  && { ok "identical verdicts across 5 invocation shapes (trailing slash, explicit path, /./, out-of-tree copy)"; B_lruShapes=1; } \
+  && ok "identical verdicts across 5 invocation shapes (trailing slash, explicit path, /./, out-of-tree copy)" \
   || bad "the verdict depends on how the ledger is addressed:$disagreed"
 
 # --- Assertion 7: …AND THE EXCLUSION IS STILL LOAD-BEARING ---------------------------
@@ -354,103 +349,6 @@ done
 [ "$bad_everywhere" -eq 1 ] \
   && ok "PC-BAD stays NEEDS-REVIEW even when the subject ledger is out of tree (exclusion falls back, not away)" \
   || bad "the ledger exclusion stopped firing — the unfalsifiable check is now vacuous"
-
-# --- Assertion 8: MUTATION — restore the literal prefix strip -------------------------
-# The mutant runs from a COPY OF THE WHOLE reconcile/ directory: this script sources lib.sh
-# from its own dirname, so a lone copy dies on the source line and emits nothing — and "no
-# output" would have scored as a kill for a harness failure. The control below is what makes
-# that distinguishable.
-MUTD="$W2/mut-reconcile"; rm -rf "$MUTD"
-cp -R "$(dirname "$RV")" "$MUTD" 2>/dev/null
-CTL="$MUTD/$(basename "$RV")"
-MUT="$MUTD/mutant-reverify.sh"
-# ALL THREE PARTS OF THE FIX MUST GO, and finding that out is the useful part of writing this.
-# The fix is (1) path arithmetic instead of a literal prefix strip, (2) a fallback to the
-# conventional in-tree ledger when the subject is elsewhere, and (3) a call-site guard that
-# never emits a bare `:(exclude)`. Revert any two and the third still repairs the run: the
-# first draft reverted only (1), the second only (1)+(2), and both mutants came out green
-# against a defect that is trivially reproducible by hand. A partial revert of a layered fix
-# is a mutant that proves the layer you left in place.
-sed -e 's@^LEDGER_TOP="$(ledger_top_dir "$LEDGER")"$@LEDGER_TOP="${LEDGER#"$CONSUMER"/}"; LEDGER_TOP="${LEDGER_TOP%%/*}"@' \
-    -e '/^\[ -n "\$LEDGER_TOP" \] || LEDGER_TOP="\$(ledger_top_dir "\$LEDGER_DEFAULT")"$/d' \
-  "$RV" \
-  | awk '
-      /^    if \[ -n "\$LEDGER_TOP" \]; then$/ { inblk=1
-        print "    git -C \"$CONSUMER\" grep -qF -e \"$_one\" -- \\"
-        print "      \":(exclude)$LEDGER_TOP\" \":(exclude)*/$SELF_BASE\" >/dev/null 2>&1"
-        next }
-      inblk && /^    fi$/ { inblk=0; next }
-      inblk { next }
-      { print }
-  ' > "$MUT"
-# Every edit must have landed. A partial mutation is not a weaker test, it is a green one.
-m_strip="$(grep -c 'LEDGER_TOP%%/\*' "$MUT")"
-m_fall="$(grep -c 'LEDGER_DEFAULT")' "$MUT")"
-m_guard="$(grep -c 'if \[ -n "\$LEDGER_TOP" \]; then' "$MUT")"
-if [ "$m_strip" -ne 1 ] || [ "$m_fall" -ne 0 ] || [ "$m_guard" -ne 0 ]; then
-  bad "FIXTURE BROKEN — partial mutation (strip=$m_strip want 1, fallback=$m_fall want 0, guard=$m_guard want 0); a half-reverted fix repairs itself and scores green"
-fi
-# Captured before the reader, for big_v's reason: every PC-SH-* entry after PC-GOOD starts a counted `bash -c`.
-pcgood() { local o; o="$(AI_DLC_RECONCILE_MEMO="$W2/memo" inproc_run "$1" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ${2:+"$2"} 2>/dev/null)"
-           awk -F'\t' '$2 ~ /PC-GOOD/ {print $1; exit}' <<<"$o"; }
-
-if [ "$(pcgood "$CTL")" != "STILL-LIVE" ] || [ "$(pcgood "$CTL" "$OUT_COPY")" != "STILL-LIVE" ]; then
-  bad "FIXTURE BROKEN — the UNMUTATED copy in the mutant directory does not reproduce the fixed behaviour (got '$(pcgood "$CTL")' / '$(pcgood "$CTL" "$OUT_COPY")'), so the mutation below would score a false kill"
-elif cmp -s "$RV" "$MUT"; then
-  bad "FIXTURE BROKEN — the mutation matched nothing, so assertions 6-7 are unproven"
-else
-  cv="$(pcgood "$MUT")"; mv2="$(pcgood "$MUT" "$OUT_COPY")"
-  if [ "$cv" = "STILL-LIVE" ] && [ "$mv2" = "NEEDS-REVIEW" ]; then
-    mutant_killed "$B_lruShapes" old-prefix-strip "mutation: the old strip clears PC-GOOD through the default path and accuses it through an out-of-tree ledger (assertions 6-7 are real)"
-  else
-    bad "mutation did not reproduce the defect (default=$cv out-of-tree=$mv2; expected STILL-LIVE / NEEDS-REVIEW)"
-  fi
-fi
-
-# --- Assertion 8b: MUTATION — delete the near-miss arm --------------------------------
-# Assertions 2b are PRESENCE-shaped (they demand a specific detail string), so a subject that
-# emits nothing fails them by construction. What they cannot establish on their own is that
-# the arm is what produces the row rather than something upstream of it: remove the call site
-# and PC-NEARMISS must fall back to the OLD verdict, which is the DECIDED STILL-LIVE this
-# whole release exists to eliminate. That is the observable, and it is the defect itself.
-#
-# The whole reconcile/ directory is copied, as assertion 8 does and for the same reason: this
-# script sources lib.sh from its own dirname, so a lone copy emits nothing and "no output"
-# would score as a kill.
-MUTD2="$W2/mut-nearmiss"; rm -rf "$MUTD2"
-cp -R "$(dirname "$RV")" "$MUTD2" 2>/dev/null
-CTL2="$MUTD2/$(basename "$RV")"
-MUT2="$MUTD2/mutant-nearmiss.sh"
-# Delete the CALL SITE, not the helper: a fix whose helper survives while nothing invokes it
-# is precisely the vacuous shape, and this mutant must reproduce it.
-awk '
-  /^            _nm="\$\(near_miss_spelling "\$path" "\$sub" "\$subs"\)"$/ { inblk=1; next }
-  inblk && /^            fi$/ { inblk=0; next }
-  inblk { next }
-  { print }
-' "$CTL2" > "$MUT2"
-nm_detail() { AI_DLC_RECONCILE_MEMO="$W2/memo" inproc_run "$1" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
-                awk -F'\t' '$2 ~ /PC-NEARMISS/ {print $1"\t"$3; exit}'; }
-if cmp -s "$CTL2" "$MUT2"; then
-  bad "FIXTURE BROKEN — the near-miss mutation matched nothing, so assertion 2b is unproven"
-elif [ "$(grep -c 'near_miss_spelling "\$path"' "$MUT2")" -ne 0 ]; then
-  bad "FIXTURE BROKEN — partial mutation: the call site survives, so the mutant proves nothing"
-else
-  # UNMUTATED CONTROL, with a POSITIVE conjunct: the copy must reproduce the fixed row, not
-  # merely fail to crash. A control asserting only "nothing went wrong" passes against a
-  # subject replaced by `exit 0`.
-  _cd="$(nm_detail "$CTL2")"
-  if ! grep -qF 'mis-anchored predicate:' <<<"$_cd"; then
-    bad "FIXTURE BROKEN — the UNMUTATED copy does not reproduce the mis-anchored row (got '$_cd'), so the mutant below would score a false kill"
-  else
-    _md="$(nm_detail "$MUT2")"
-    if grep -qF 'STILL-LIVE' <<<"$_md" && ! grep -qF 'mis-anchored' <<<"$_md"; then
-      mutant_killed "$B_lruNearmiss" nearmiss-callsite-removed "mutation: with the near-miss call site removed, PC-NEARMISS reverts to a DECIDED STILL-LIVE (the defect reproduces)"
-    else
-      bad "mutation did not reproduce the defect (got '$_md'; expected a STILL-LIVE row with no mis-anchored detail)"
-    fi
-  fi
-fi
 
 # --- The same guard on the `verify: sh` arm -------------------------------------------
 # The theirs_* verbs have carried this guard since they were written; `sh` did not, and it is

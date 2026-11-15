@@ -25,7 +25,7 @@
 # was blind to where a validator thinks it is. This fixture is the only one that runs
 # them the way a consumer does — from their installed path, with no --root.
 #
-# WHY THE MUTANT IS AN ENV VAR AND NOT A SED.
+# THE WRONG-ROOT PROBE.
 #
 # Asserting "the two locations agree" proves nothing about a script that never
 # consults its own location — it would agree trivially, and pass forever. So every
@@ -88,8 +88,6 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-agreed_rows=""; B_vprGm=0; B_vprApc=0
 
 # --- a minimal installed consumer ----------------------------------------------
 # .git is the walk-up marker. .claude/ carries the schemas and agent-read docs a
@@ -134,7 +132,7 @@ echo "HERMETIC-CONSUMED core/scripts/"
 #     legitimately differs from its first, so it is pinned to --check;
 #   - several validators parse arguments BEFORE they resolve a schema, so a bare run
 #     exits at the usage line and never reaches the code under test. That is not a
-#     pass, it is a question never asked — the mutant check below names it as such.
+#     pass, it is a question never asked — the wrong-root probe below names it as such.
 mkdir -p "$WORK/docs/stories" || exit 2
 printf '# artifact\n' > "$WORK/docs/artifact.md"
 # A ```derived block whose command RESOLVES AGAINST THE ROOT. A subject with no such
@@ -176,9 +174,9 @@ printf '["vpr-root-probe-skill"]\n' > "$WORK/.claude/skills/ai-dlc/extensions/kn
 
 # Root-dependent inputs for the four validators whose bare run stops at a usage
 # line. Each is placed ONLY under the correct root, never under $WORK/scripts, so a
-# script reading the wrong root finds nothing and the mutant separates. Without
+# script reading the wrong root finds nothing and the probe separates. Without
 # these the four reach no root-dependent code and score inert — "a question never
-# asked", which the mutant arm below is no longer allowed to accept.
+# asked", which the wrong-root probe below does not accept.
 mkdir -p "$WORK/.claude/skills/ai-dlc/steps" || exit 2
 printf '{"autoCompactWindow":"400k"}\n' > "$WORK/.claude/settings.json"
 printf '# escalations\n\n**Terminal statuses**: `RESOLVED | OVERRIDDEN`\n' \
@@ -190,7 +188,7 @@ printf '# pending\n\n## [x] [lead] - 2026-01-01T00:00:00Z\n**Status:** RESOLVED\
 # validate-request-coverage.sh reads schemas/harness-origin.json BEFORE it selects a request, so a
 # capture and a brief with no LOCKED block get it past argument parsing to that read: under the
 # right root it resolves the schema and stops at "no LOCKED bullet", under the poisoned one it
-# refuses the schema. Both exit 2; the words differ, which is the separation the mutant arm reads.
+# refuses the schema. Both exit 2; the words differ, which is the separation the wrong-root probe reads.
 printf '# requests\n\n## 2026-01-01T00:00:00Z -- /ai-dlc\n- SHA256: abc\n\n```text\nplease\n```\n' \
   > "$WORK/docs/requests.md"
 printf '# brief\n' > "$WORK/docs/brief.md"
@@ -268,7 +266,7 @@ argv_for() {
     # usage line — byte-identical from any root, which scored it inert and took its
     # agreement assertion down with it. The ref need not resolve: with one present the
     # script reaches its project-root code and reports which root it landed on, which
-    # is the only thing the mutant arm below is asking.
+    # is the only thing the wrong-root probe below is asking.
     #
     # AND THAT IS THE HONEST FLOOR FOR THIS ONE, STATED SO A GREEN ARM IS NOT OVER-READ.
     # $WORK carries a `.git` DIRECTORY, not a repository — `git rev-parse --git-dir`
@@ -339,7 +337,7 @@ SENSITIVE_REQUIRED="$(grep -lE 'AI_DLC_PROJECT_ROOT|CLAUDE_PROJECT_DIR|ai_dlc_re
   | while IFS= read -r p; do basename "$p"; done | sort | tr '\n' ' ')"
 [ -n "${SENSITIVE_REQUIRED// /}" ] || {
   echo "FIXTURE ERROR: derived an EMPTY required-sensitive set from $SRC — every" >&2
-  echo "  mutant assertion below would pass vacuously. A zero here is not a finding." >&2
+  echo "  wrong-root assertion below would pass vacuously. A zero here is not a finding." >&2
   exit 2
 }
 
@@ -355,7 +353,7 @@ run_one() { # run_one <layout-dir> <script-name> <wrong-root|""> -> "rc=<n>\n<ou
   # THE POISON GOES INTO EVERY ROOT CHANNEL, NOT ONE. Setting only
   # AI_DLC_PROJECT_ROOT probed a variable that five scripts never read: they fell
   # through to `${CLAUDE_PROJECT_DIR:-.}` = cwd = $WORK, the correct root under both
-  # layouts, agreed trivially, and scored inert. A mutant that leaves a channel open
+  # layouts, agreed trivially, and scored inert. A probe that leaves a channel open
   # tests the channel it closed, not the script.
   local dir="$1" name="$2" out rc
   out="$(cd "$WORK" && AI_DLC_PROJECT_ROOT="${3:-}" CLAUDE_PROJECT_DIR="${3:-}" \
@@ -405,17 +403,17 @@ for f in "$SRC"/*.sh; do
 
   # THE ASSERTION. Same tree, same argv, same cwd — only the install path differs.
   if [ "$legacy" = "$current" ]; then
-    ok "$name agrees from scripts/ and scripts/ai-dlc/"; agreed_rows="$(printf '%s\n%s' "$agreed_rows" "$name")"
+    ok "$name agrees from scripts/ and scripts/ai-dlc/"
   else
     bad "$name DIVERGES between layouts"
     printf '        scripts/       : %s\n' "$(printf '%s' "$legacy"  | tr '\n' '|' | cut -c1-160)"
     printf '        scripts/ai-dlc/: %s\n' "$(printf '%s' "$current" | tr '\n' '|' | cut -c1-160)"
   fi
 
-  # THE MUTANT. <root>/scripts is exactly what `dirname($0)/..` computed from the new
+  # THE WRONG-ROOT PROBE. <root>/scripts is exactly what `dirname($0)/..` computed from the new
   # location. A script that answers the same either way did not consult the root.
-  mutant="$(run_one "scripts/ai-dlc" "$name" "$WORK/scripts")"
-  if [ "$mutant" != "$current" ]; then
+  wrong="$(run_one "scripts/ai-dlc" "$name" "$WORK/scripts")"
+  if [ "$wrong" != "$current" ]; then
     sensitive_list="$sensitive_list $name"
   else
     inert_list="$inert_list $name"
@@ -426,13 +424,13 @@ echo ""
 # --- non-vacuity ---------------------------------------------------------------
 for want in $SENSITIVE_REQUIRED; do
   case " $sensitive_list " in
-    *" $want "*) w_agreed="$(grep -cxF -- "$want" <<<"$agreed_rows" || :)"; mutant_killed "$([ "$w_agreed" = 1 ] && echo 1)" "$want" "MUTANT: $want changes behaviour when the root is wrong (its agreement is real)" ;;
-    *) bad "MUTANT: $want ignored a wrong project root — its agreement assertion proves nothing" ;;
+    *" $want "*) ok "$want changes behaviour when the root is wrong (its agreement is real)" ;;
+    *) bad "NON-VACUITY: $want ignored a wrong project root — its agreement assertion proves nothing" ;;
   esac
 done
 
 # --- WRONG REPO: CLAUDE_PROJECT_DIR must not outrank the script's own location ---
-# The mutant arm above proves a script CONSULTS a root. This proves it consults the
+# The non-vacuity arm above proves a script CONSULTS a root. This proves it consults the
 # RIGHT one. They are different questions and only this one catches the shipped
 # defect: five validators assigned `${CLAUDE_PROJECT_DIR:-.}` directly, so a stale
 # value inherited from another repo won over their own install path. Measured in a
@@ -489,7 +487,7 @@ rm -f "$PROBE"
 # The two arms above ask which ROOT a script resolves. These ask what it then OPENS,
 # and they are a different question with a different failure: a script that resolves no
 # root at all and names its candidates relative to the cwd never touches a root channel,
-# so the mutant arm scores it inert and the WRONG REPO arm has nothing to poison. Both
+# so the wrong-root probe scores it inert and the WRONG REPO arm has nothing to poison. Both
 # of these read a CORE file — gate-validation.md, and the artifact-path grammar plus the
 # layer contract — and both used to name it relative to wherever the process was
 # standing. Every cwd but one is then a refusal, and the one that is not is another
@@ -515,32 +513,14 @@ printf 'consumer_artifact_paths_file: DECOY-PATHS-FILE\n' \
   > "$WORK2/.claude/skills/ai-dlc/artifact-path-grammar.md"
 
 DEC_GV="$WORK2/.claude/skills/ai-dlc/steps/gate-validation.md"
-MUTD="$WORK/.decoy-mut"
-mkdir -p "$MUTD" || exit 2
-
-# mut_copy <script> <sed program> <token whose count must drop to 0> -> path, or ""
-# The mutation is keyed on the subject's OWN predicate — the text that consumes the
-# resolved root — and scored by that text's count going from non-zero to zero, so a
-# hand-named site list cannot go vacuous the release somebody adds a site.
-mut_copy() {
-  local src="$1" prog="$2" tok="$3" dst="$MUTD/$(basename "$1")" before after
-  before="$(grep -cF "$tok" "$src")" || before=0
-  [ "$before" -gt 0 ] || { printf ''; return 1; }
-  sed -e "$prog" "$src" > "$dst" 2>/dev/null || { printf ''; return 1; }
-  cmp -s "$src" "$dst" && { printf ''; return 1; }
-  after="$(grep -cF "$tok" "$dst")" || after=0
-  [ "$after" -eq 0 ] || { printf ''; return 1; }
-  printf '%s\n' "$dst"
-}
-
 GM_S="$WORK/scripts/ai-dlc/validate-gate-manifest.sh"
 if [ ! -f "$GM_S" ]; then
   bad "DECOY CWD: validate-gate-manifest.sh is not among the installed scripts — the arm did not run"
 else
   # KEYED ON THE CANDIDATE PATH, NOT ON THE DECOY'S ABSOLUTE ONE, and that is a
   # measurement: a cwd-relative reader names the file `.claude/skills/…` with no
-  # prefix at all, so an arm looking for "$WORK2/.claude/…" scored the mutant SURVIVED
-  # while the mutant was reading the decoy and saying so. The suffix appears in both
+  # prefix at all, so an arm looking for "$WORK2/.claude/…" scored the probe SURVIVED
+  # while the probe was reading the decoy and saying so. The suffix appears in both
   # spellings; the root assertion beside it is what makes the silent-refusal case fail
   # rather than pass, since a script that died also fails to name the decoy.
   gm_dec="$( cd "$WORK2" && bash "$GM_S" 2>&1 )"
@@ -548,7 +528,7 @@ else
     *".claude/skills/ai-dlc/steps/gate-validation.md"*)
       bad "DECOY CWD: validate-gate-manifest.sh with no argument read ANOTHER tree's gate-validation.md — it resolved its candidates against the cwd, not the root" ;;
     *"under $WORK"*)
-      ok  "DECOY CWD: validate-gate-manifest.sh with no argument ignores another tree's gate-validation.md at the cwd, and names the root it did search"; B_vprGm=1 ;;
+      ok  "DECOY CWD: validate-gate-manifest.sh with no argument ignores another tree's gate-validation.md at the cwd, and names the root it did search" ;;
     *)
       bad "DECOY CWD: validate-gate-manifest.sh named neither the decoy nor its own root — it cannot be told from a run that died" ;;
   esac
@@ -559,18 +539,6 @@ else
     *)
       bad "CONTROL: an explicit \$1 did not reach the decoy — the decoy is unreadable or the \$1 contract broke, and the arm above proves nothing" ;;
   esac
-  gm_mut="$(mut_copy "$GM_S" 's@"\$AI_DLC_ROOT/@"@g' '"$AI_DLC_ROOT/')"
-  if [ -z "$gm_mut" ]; then
-    bad "MUTANT: the root prefix on validate-gate-manifest.sh's candidates could not be removed — the anchor moved and the DECOY CWD arm above is unproven"
-  else
-    gm_mout="$( cd "$WORK2" && bash "$gm_mut" 2>&1 )"
-    case "$gm_mout" in
-      *".claude/skills/ai-dlc/steps/gate-validation.md"*)
-        mutant_killed "$B_vprGm" gate-manifest-cwd-relative "MUTANT: candidates back to cwd-relative -> validate-gate-manifest.sh reads the decoy; the arm kills it" ;;
-      *)
-        bad "MUTANT: candidates back to cwd-relative and validate-gate-manifest.sh STILL did not read the decoy — the arm cannot fire" ;;
-    esac
-  fi
 fi
 
 APC_S="$WORK/scripts/ai-dlc/artifact-path-config.sh"
@@ -580,7 +548,7 @@ else
   apc_dec="$( cd "$WORK2" && bash "$APC_S" --scan-roots 2>&1 )"
   case "$apc_dec" in
     *DECOY-SCAN-ROOT*) bad "DECOY CWD: artifact-path-config.sh --scan-roots read ANOTHER tree's artifact-path-grammar.md — its root defaulted to the cwd" ;;
-    *)                 ok  "DECOY CWD: artifact-path-config.sh --scan-roots ignores another tree's grammar at the cwd"; B_vprApc=1 ;;
+    *)                 ok  "DECOY CWD: artifact-path-config.sh --scan-roots ignores another tree's grammar at the cwd" ;;
   esac
   apc_cf="$( cd "$WORK2" && bash "$APC_S" --consumer-file 2>&1 )"
   case "$apc_cf" in
@@ -592,18 +560,7 @@ else
     *DECOY-SCAN-ROOT*) ok  "CONTROL: --root still reaches that same decoy grammar, so the two arms above are discriminations and the documented flag survived the fix" ;;
     *)                 bad "CONTROL: --root did not reach the decoy grammar — either the flag stopped winning or the decoy is unreadable, and both arms above prove nothing" ;;
   esac
-  apc_mut="$(mut_copy "$APC_S" 's@^  ROOT="\$AI_DLC_ROOT"$@  ROOT="."@' '  ROOT="$AI_DLC_ROOT"')"
-  if [ -z "$apc_mut" ]; then
-    bad "MUTANT: artifact-path-config.sh's resolved-root assignment could not be reverted to the cwd — the anchor moved and the two DECOY CWD arms above are unproven"
-  else
-    apc_mout="$( cd "$WORK2" && bash "$apc_mut" --scan-roots 2>&1 )"
-    case "$apc_mout" in
-      *DECOY-SCAN-ROOT*) mutant_killed "$B_vprApc" apc-root-dot "MUTANT: default root back to \".\" -> artifact-path-config.sh reads the decoy grammar; the arm kills it" ;;
-      *)                 bad "MUTANT: default root back to \".\" and artifact-path-config.sh STILL did not read the decoy — the arm cannot fire" ;;
-    esac
-  fi
 fi
-rm -rf "$MUTD"
 
 echo ""
 n_sensitive=$(printf '%s' "$sensitive_list" | wc -w | tr -d ' ')

@@ -1,0 +1,16 @@
+# layer-readopt-gate-d: shard 'd' of layer-readopt-gate (G, H, J); the driver execs the parent's run.sh --group d. Only the reconcile scripts this shard's units run or source are declared, so the parent's whole-directory row is not repeated.
+core/skills/ai-dlc-update/reconcile/readopt-override.sh
+core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/consumer-read.sh
+core/skills/ai-dlc-update/reconcile/preclassify.sh
+core/fixtures/lib/preamble.sh
+# The driver's own run.sh is the directory's; the parent's run.sh and seed.sh are what it execs, and the parent's coverage join reads every shard driver.
+core/fixtures/layer-readopt-gate/run.sh
+core/fixtures/layer-readopt-gate/seed.sh
+core/fixtures/layer-readopt-gate-b/run.sh
+core/fixtures/layer-readopt-gate-c/run.sh
+core/fixtures/layer-readopt-gate-e/run.sh
+# The coverage join reads each DIST_SHARDS shard's .dist-only marker (present, non-empty) in the distribution.
+core/fixtures/layer-readopt-gate-b/.dist-only
+core/fixtures/layer-readopt-gate-e/.dist-only

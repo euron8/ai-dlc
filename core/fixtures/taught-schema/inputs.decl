@@ -1,6 +1,5 @@
-# reason: core/scripts/ is copied whole -- for d in scripts schemas skills team-roles ... cp -R "$UP2/$d", core/fixtures/taught-schema/run.sh:108-109.
+# reason: core/scripts/ is copied whole -- for d in scripts schemas skills team-roles ... cp -R "$UP2/$d", core/fixtures/taught-schema/run.sh:96-97.
 !core/scripts/
 core/schemas/
 core/skills/
 core/team-roles/
-core/fixtures/lib/mutant.sh

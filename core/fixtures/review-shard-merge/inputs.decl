@@ -6,8 +6,7 @@
 !core/scripts/record-only-diff.sh
 !core/scripts/sprint-status.sh
 core/scripts/partition-document.sh
-# BL-755: siblings wait-for-deliverable.sh resolves beside itself, so the derived mutant copy (run.sh
-# sib_set) holds them in the sandbox as it does in the tree; arm SIB requires each.
+# BL-755: siblings wait-for-deliverable.sh and the merge resolve beside themselves.
 core/scripts/merge-adversarial-shards.sh
 core/scripts/validate-adversarial-convergence.sh
 core/scripts/wfd-start-of.sh
@@ -21,3 +20,6 @@ core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
 # BL-906: the coverage join (J0) reads shard b's driver, which must carry `--group b`.
 core/fixtures/review-shard-merge-b/run.sh
+core/fixtures/review-shard-merge-c/run.sh
+core/fixtures/review-shard-merge-d/run.sh
+# The dist-only shards (e, f, g) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.

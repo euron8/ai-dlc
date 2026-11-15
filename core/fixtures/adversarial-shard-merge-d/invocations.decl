@@ -1,0 +1,9 @@
+# Shard d of adversarial-shard-merge: the rows below are this shard's own counted run (the unsharded fixture's measurement history is in the parent's decl).
+# BL-1095 (the four-way split): each shard's rows measured by a counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the
+# judge's own J3 output), the counter armed as .githooks/pre-push fxcount_arm arms it. Every shard pays the seed, the harness, the MX0 control and
+# the base-pass fills of the arms it does not own (bf_fill), so the four * rows sum above the unsharded 3125; the merge row's four values sum to the
+# unsharded 53. The older measurement history above belongs to the unsharded fixture.
+# Re-measured for BL-1099 (units re-dealt so the dist-only shards hold no placement-dependent unit): one counted run (scripts/seed-verdict-store.sh).
+635 *
+2 core/scripts/merge-adversarial-shards.sh
+166 core/scripts/content-seal.sh

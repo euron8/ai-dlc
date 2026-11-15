@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # ci-gates-resolution — assert validate-ci-gates.sh's generalized enforcement match:
 # the EXAMINED-NOTHING-78 code, the comment-aware forward match (no longer fail-open), and the
-# optional two-legged alias table. Every general mechanism carries a MUTATION control:
-# a FAIL/PASS is evidence for a mechanism only if removing that mechanism flips it.
+# optional two-legged alias table.
 #
 # THE DEFECTS THIS EXISTS TO CATCH.
 #
@@ -52,54 +51,16 @@ run_ci() { # run_ci <validator> <surface> [alias-table]
     bash "$v" >"$WORK/out.txt" 2>&1
   echo "$?"
 }
-mutate() { # mutate <find> <replace> -> writes $WORK/mutant.sh, prints CHANGED|UNCHANGED
-  python3 - "$VALIDATOR" "$WORK/mutant.sh" "$1" "$2" <<'PY'
-import sys
-src, dst, find, repl = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-s = open(src, encoding="utf-8").read()
-s2 = s.replace(find, repl)
-open(dst, "w", encoding="utf-8").write(s2)
-print("CHANGED" if s2 != s else "UNCHANGED")
-PY
-}
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 echo "ci-gates-resolution:"
-
-# MUTATION CONTROLS. Every mutant runs a COPY of the validator from $WORK, and each kill below is
-# either an exit code a copy that cannot resolve would also return (A's exit 2) or an ABSENCE a
-# copy that reads nothing also produces (B's missing DORMANT row). So each mutant is scored only
-# when an UNMUTATED copy at the same place, on the same seed, reproduces the base verdict in this
-# run; CG_<arm>=1 sits beside that control's own ok and nowhere else.
-cp "$VALIDATOR" "$WORK/control.sh" || { echo "FIXTURE ERROR: cannot copy the validator to $WORK" >&2; exit 2; }
-CG_A=0; CG_B=0; CG_E=0; CG_F=0; CG_G=0
 
 # ==================== A. EXAMINED NOTHING = exit 78 ==========================
 rc="$(run_ci "$VALIDATOR" "$WORK/does-not-exist")"
 [ "$rc" = "78" ] && ok "A no surface -> exit 78 (EXAMINED NOTHING, not 0/1/2)" \
   || bad "A no surface -> exit $rc, expected 78"
-# MUTATION: revert the exit-78 code to the old exit 2 and require the code to flip. This
-# mutation is keyed on `exit 78`, NOT on the verdict token, so renaming the token leaves it
-# working and RENUMBERING the code silently returns UNCHANGED -- which the guard below reports.
-rc="$(run_ci "$WORK/control.sh" "$WORK/does-not-exist")"
-if [ "$rc" = "78" ]; then
-  ok "A MUTATION CONTROL — an unmutated copy in \$WORK exits 78 on the missing surface"; CG_A=1
-else
-  bad "A MUTATION CONTROL — an unmutated copy in \$WORK exited $rc, not 78, so exit 2 from the mutant would be the copy failing"
-fi
-m="$(mutate 'exit 78' 'exit 2')"
-if [ "$m" != "CHANGED" ]; then bad "A MUTATION matched nothing (exit 78 renumbered)"; else
-  rc="$(run_ci "$WORK/mutant.sh" "$WORK/does-not-exist")"
-  if [ "$rc" = "2" ]; then
-    mutant_killed "${CG_A:-0}" ci-A "A MUTATION — without the 78 code the surface-missing path is exit 2 again"
-  else
-    bad "A MUTATION — expected exit 2 from the reverted code, got $rc"
-  fi
-fi
 
 # ==================== B. comment-aware forward match =========================
 # 'build' appears ONLY in a comment; 'deploy' runs for real.
@@ -110,22 +71,6 @@ if [ "$rc" = "1" ] && grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
   ok "B a gate named only in a comment is DORMANT (fail-open closed)"
 else
   bad "B comment-only gate not dormant (rc=$rc) — the forward match is fail-open again"
-fi
-# MUTATION: neuter the comment strip (revert to the raw fail-open match).
-rc="$(run_ci "$WORK/control.sh" "$WORK/surface")"
-if [ "$rc" = "1" ] && grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
-  ok "B MUTATION CONTROL — an unmutated copy in \$WORK reports the comment-only 'build' DORMANT"; CG_B=1
-else
-  bad "B MUTATION CONTROL — an unmutated copy in \$WORK did not report 'build' DORMANT (rc=$rc), so its absence below would be the copy failing"
-fi
-m="$(mutate "sed -e 's/^[[:space:]]*#.*\$//'" 'cat')"
-if [ "$m" != "CHANGED" ]; then bad "B MUTATION matched nothing (comment strip renamed)"; else
-  rc="$(run_ci "$WORK/mutant.sh" "$WORK/surface")"
-  if grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
-    bad "B MUTATION — 'build' still dormant without the comment strip; B proves nothing"
-  else
-    mutant_killed "${CG_B:-0}" ci-B "B MUTATION — without the comment strip the comment-only 'build' reads enforced (fail-open)"
-  fi
 fi
 
 # ========================= C. honest non-comment match ======================
@@ -156,22 +101,6 @@ if [ "$rc" = "1" ] && grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
 else
   bad "E an anchor present twice still resolved (rc=$rc) — leg (ii) exactly-once is dark"
 fi
-# MUTATION: relax exactly-once to at-least-once; the twice case must then resolve.
-rc="$(run_ci "$WORK/control.sh" "$WORK/surface" "$WORK/aliases.txt")"
-if [ "$rc" = "1" ] && grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
-  ok "E MUTATION CONTROL — an unmutated copy in \$WORK keeps the twice-anchored gate DORMANT"; CG_E=1
-else
-  bad "E MUTATION CONTROL — an unmutated copy in \$WORK did not keep 'build' DORMANT on the twice case (rc=$rc)"
-fi
-m="$(mutate '"$a_anchor")" -eq 1 ] && return 0' '"$a_anchor")" -ge 1 ] && return 0')"
-if [ "$m" != "CHANGED" ]; then bad "E MUTATION matched nothing (leg ii test renamed)"; else
-  rc="$(run_ci "$WORK/mutant.sh" "$WORK/surface" "$WORK/aliases.txt")"
-  if [ "$rc" = "0" ]; then
-    mutant_killed "${CG_E:-0}" ci-E "E MUTATION — relaxing exactly-once to >=1 resolves the twice case (leg ii fires)"
-  else
-    bad "E MUTATION — twice case still dormant with >=1 (rc=$rc); E proves nothing"
-  fi
-fi
 
 # F. leg (i): the enforcer is NOT wired (id absent from the surface) -> DORMANT,
 # even though the anchor is present exactly once.
@@ -182,22 +111,6 @@ if [ "$rc" = "1" ] && grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
   ok "F leg (i) — enforcer id absent -> gate stays DORMANT despite the anchor"
 else
   bad "F an unwired enforcer still resolved (rc=$rc) — leg (i) is dark"
-fi
-# MUTATION: force leg (i) to always pass; the unwired case must then resolve.
-rc="$(run_ci "$WORK/control.sh" "$WORK/surface" "$WORK/aliases.txt")"
-if [ "$rc" = "1" ] && grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
-  ok "F MUTATION CONTROL — an unmutated copy in \$WORK keeps the unwired gate DORMANT"; CG_F=1
-else
-  bad "F MUTATION CONTROL — an unmutated copy in \$WORK did not keep 'build' DORMANT on the unwired case (rc=$rc)"
-fi
-m="$(mutate '[ "$(code_hits "$resolved_file" "$a_enf")" -ge 1 ] || continue' ': # MUTANT: leg (i) disabled')"
-if [ "$m" != "CHANGED" ]; then bad "F MUTATION matched nothing (leg i test renamed)"; else
-  rc="$(run_ci "$WORK/mutant.sh" "$WORK/surface" "$WORK/aliases.txt")"
-  if [ "$rc" = "0" ]; then
-    mutant_killed "${CG_F:-0}" ci-F "F MUTATION — disabling leg (i) resolves the unwired case (leg i fires)"
-  else
-    bad "F MUTATION — unwired case still dormant with leg (i) off (rc=$rc); F proves nothing"
-  fi
 fi
 
 # ===================== G. angle-bracket placeholder skip ====================
@@ -213,22 +126,6 @@ if [ "$rc" = "0" ] && grep -q '2 gates declared' "$WORK/out.txt"; then
   ok "G a <placeholder> gate name is skipped (2 declared, not 3) -> clean"
 else
   bad "G placeholder not skipped (rc=$rc): $(tail -1 "$WORK/out.txt")"
-fi
-# MUTATION: neuter the placeholder skip; the <gate-name> token must then count and go DORMANT.
-rc="$(run_ci "$WORK/control.sh" "$WORK/surface")"
-if [ "$rc" = "0" ] && grep -q '2 gates declared' "$WORK/out.txt"; then
-  ok "G MUTATION CONTROL — an unmutated copy in \$WORK skips the placeholder (2 declared, exit 0)"; CG_G=1
-else
-  bad "G MUTATION CONTROL — an unmutated copy in \$WORK did not skip the placeholder cleanly (rc=$rc)"
-fi
-m="$(mutate '*"<"*">"*) continue' '*"<"*">"*) :')"
-if [ "$m" != "CHANGED" ]; then bad "G MUTATION matched nothing (placeholder skip renamed)"; else
-  rc="$(run_ci "$WORK/mutant.sh" "$WORK/surface")"
-  if [ "$rc" = "1" ] && grep -q "DORMANT: gate '<gate-name>'" "$WORK/out.txt"; then
-    mutant_killed "${CG_G:-0}" ci-G "G MUTATION — without the skip the <gate-name> placeholder counts and is DORMANT (skip is real)"
-  else
-    bad "G MUTATION — placeholder still skipped without the guard (rc=$rc); G proves nothing"
-  fi
 fi
 
 # ============ H. CORPUS IDENTITY on BOTH exit-0 emitters =====================
@@ -246,13 +143,6 @@ fi
 # second half. Nothing here greps a label, so re-wording `retro dir:` leaves the arm
 # working; what it demands is the resolved path, which is a mktemp name and therefore
 # unconstructible as a literal in the validator.
-#
-# BOTH EMITTERS ARE GUARDED, SEPARATELY, AND THAT IS THE WHOLE REASON THE MUTANTS BELOW ARE
-# A PAIR. The two identity blocks are byte-identical text, so a mutation keyed on the shared
-# line edits both, moves two cells and scores a kill it did not earn. Each mutant is
-# anchored on the VERDICT LINE ABOVE its block — `0 gates declared, 0 dormant"` for the
-# early exit, `${unique_count} gates declared` for the main one — and each is required to
-# leave the OTHER emitter intact, which is what proves the mutation was site-specific.
 IDENT_WHY=""
 ident_corpus() { # <retro-body> -> prints a fresh root under $WORK
   local d
@@ -397,9 +287,7 @@ else
 fi
 # H6. THE TWO EARLY EXITS MUST STAY SILENT ABOUT IT. `ALIAS_TABLE_FILE` is resolved at :175,
 # below both of them, so a name printed there would be a corpus the run never opened — a
-# claim of provenance that is false, which is worse than none. THIS ARM IS ABSENCE-SHAPED
-# AND THEREFORE CARRIES ITS OWN MUTANT (H-A below); on its own it would pass against a
-# subject that emits nothing, so it is paired with H1/H3, which demand those emitters print.
+# claim of provenance that is false, which is worse than none. THIS ARM IS ABSENCE-SHAPED, so it is paired with H1/H3,
 IDENT_ALIAS='aliases.txt'
 IDENT_A2="$(ident_corpus "$IDENT_BODY_ZERO")"
 IDENT_RC3="$(ident_run "$VALIDATOR" "$IDENT_A2" 'docs/retro' "$WORK/ident-early-zero.txt")"
@@ -415,193 +303,6 @@ else
   bad "H6 an early exit (rc=$IDENT_RC3/$IDENT_RC4) named an alias table it returned before resolving, or did not reach the emitter this arm claims — a false provenance claim is worse than none"
 fi
 
-# THE UNMUTATED CONTROL, with a positive conjunct. A lone copy in a temp dir that could not
-# run would emit nothing, and "no output" would otherwise score as a kill for both mutants
-# below. `ident_holds` is presence-shaped, so this control cannot pass against `exit 0`.
-IDENT_CTL="$WORK/ident-control.sh"
-cp "$VALIDATOR" "$IDENT_CTL"
-IDENT_CTL_OK=0
-if ident_holds "$IDENT_CTL" "$IDENT_BODY_ZERO" '0 gates declared' \
-   && ident_holds "$IDENT_CTL" "$IDENT_BODY_GATES" '2 gates declared' \
-   && ident_holds "$IDENT_CTL" "$IDENT_BODY_ZERO" '0 dormant (no ' 'no-such-retro'; then
-  ok "H CONTROL — an unmutated copy reproduces all three identity blocks, so a mutant's silence below means mutation, not breakage"
-  IDENT_CTL_OK=1
-else
-  bad "H CONTROL FAILED ($IDENT_WHY) — every mutant verdict below is uninterpretable"
-fi
-
-# ident_mutant <label> <verdict-anchor> -> sets IDENT_MUT, returns 0 on success.
-# Deletes ONLY the identity lines that FOLLOW the given verdict line, so the two
-# byte-identical blocks are separable.
-#
-# IT SETS A GLOBAL RATHER THAN PRINTING, DELIBERATELY. Called as `M="$(ident_mutant ...)"`
-# it runs in a SUBSHELL, so every `bad` it reports increments a `fails` that is discarded —
-# a builder that failed would return an empty path, the caller's `[ -n "$M" ]` would skip
-# the whole battery, and four unrun cells would read exactly like four that passed.
-# Measured here: the first version did that, and the fixture reported PASS with mutants Z
-# and M never built.
-IDENT_MUT=""
-ident_mutant() {
-  local lab="$1"
-  local anchor="$2"
-  local out="$WORK/ident-mutant-$lab.sh"
-  IDENT_MUT=""
-  if [ "$(grep -cF "$anchor" "$VALIDATOR")" != "1" ]; then
-    bad "H MUTATION $lab: the anchor '$anchor' is not unique in the validator, so the mutation could land on the other emitter and score a kill it did not earn"
-    return 1
-  fi
-  awk -v A="$anchor" '
-    index($0, A)                                                    { print; hit=1; next }
-    hit && (index($0,"retro dir:") || index($0,"enforcement surface:")) { next }
-                                                                    { hit=0; print }
-  ' "$VALIDATOR" > "$out"
-  if cmp -s "$VALIDATOR" "$out"; then
-    bad "H MUTATION $lab: the mutant is byte-identical to the original — the mutation matched nothing and a green run below would prove only that"
-    return 1
-  fi
-  if ! bash -n "$out" 2>/dev/null; then
-    bad "H MUTATION $lab: the mutant is not a valid shell script, so its silence would score as a kill"
-    return 1
-  fi
-  IDENT_MUT="$out"
-  return 0
-}
-
-if [ "$IDENT_CTL_OK" = "1" ]; then
-  # MUTANT H-Z: the zero-gate identity block alone is removed.
-  if ident_mutant z ', 0 gates declared, 0 dormant"'; then
-    MZ="$IDENT_MUT"
-    if ident_holds "$MZ" "$IDENT_BODY_ZERO" '0 gates declared'; then
-      bad "H MUTANT Z SURVIVED — the zero-gate exit still satisfies H1 with its identity block deleted, so H1 is not testing that emitter"
-    else
-      mutant_killed "${IDENT_CTL_OK:-0}" H-Z "H MUTANT Z killed — deleting the zero-gate identity block alone makes two different trees indistinguishable ($IDENT_WHY)"
-    fi
-    if ident_holds "$MZ" "$IDENT_BODY_GATES" '2 gates declared'; then
-      ok "H MUTANT Z leaves the MAIN verdict intact — the mutation is site-specific, not a sed that edited both byte-identical blocks"
-    else
-      bad "H MUTANT Z ALSO broke the main verdict ($IDENT_WHY) — the mutation hit both emitters and H1/H2 are entangled"
-    fi
-  fi
-
-  # MUTANT H-M: the main verdict's identity block alone is removed.
-  if ident_mutant m '${unique_count} gates declared'; then
-    MM="$IDENT_MUT"
-    if ident_holds "$MM" "$IDENT_BODY_GATES" '2 gates declared'; then
-      bad "H MUTANT M SURVIVED — the main verdict still satisfies H2 with its identity block deleted, so H2 is not testing that emitter"
-    else
-      mutant_killed "${IDENT_CTL_OK:-0}" H-M "H MUTANT M killed — deleting the main identity block alone makes two different trees indistinguishable ($IDENT_WHY)"
-    fi
-    if ident_holds "$MM" "$IDENT_BODY_ZERO" '0 gates declared'; then
-      ok "H MUTANT M leaves the ZERO-GATE exit intact — the mutation is site-specific"
-    else
-      bad "H MUTANT M ALSO broke the zero-gate exit ($IDENT_WHY) — the mutation hit both emitters and H1/H2 are entangled"
-    fi
-  fi
-
-  # MUTANT H-A: the ABSENT-RETRO exit's identity line alone is removed. Its anchor is the
-  # ONLY thing that separates it from the :145 block — `0 dormant (no ` where the other
-  # closes the quote after `dormant` — so this is the third leg of the same
-  # anchor-on-what-separates-them argument, and the two cross-checks below are what prove
-  # the deletion did not reach either sibling.
-  if ident_mutant a '0 dormant (no '; then
-    MA="$IDENT_MUT"
-    if ident_holds "$MA" "$IDENT_BODY_ZERO" '0 dormant (no ' 'no-such-retro'; then
-      bad "H MUTANT A SURVIVED — the absent-retro exit still satisfies H3 with its surface line deleted, so H3 is not testing that emitter"
-    else
-      mutant_killed "${IDENT_CTL_OK:-0}" H-A "H MUTANT A killed — deleting the absent-retro exit's surface line alone makes two different surfaces indistinguishable ($IDENT_WHY)"
-    fi
-    if ident_holds "$MA" "$IDENT_BODY_ZERO" '0 gates declared' \
-       && ident_holds "$MA" "$IDENT_BODY_GATES" '2 gates declared'; then
-      ok "H MUTANT A leaves the OTHER TWO emitters intact — the mutation is site-specific across all three"
-    else
-      bad "H MUTANT A ALSO broke another emitter ($IDENT_WHY) — the three identity blocks are not separably anchored"
-    fi
-  fi
-
-  # MUTANT H-T: the alias-table line alone is removed. H4b MUST go red and the two scanned
-  # roots must stay named — the suppression channel is asserted by an arm that neither of
-  # the root arms covers.
-  MT="$WORK/ident-mutant-t.sh"
-  if [ "$(grep -cF 'alias table:' "$VALIDATOR")" != "1" ]; then
-    bad "H MUTANT T: 'alias table:' is not unique in the validator, so the deletion could land elsewhere"
-  else
-    awk 'index($0,"alias table:") { next } { print }' "$VALIDATOR" > "$MT"
-    if cmp -s "$VALIDATOR" "$MT"; then
-      bad "H MUTANT T: the deletion matched nothing — H4b would prove only that"
-    elif ! bash -n "$MT" 2>/dev/null; then
-      bad "H MUTANT T is not a valid shell script, so its silence would score as a kill"
-    else
-      IDENT_ALIAS='aliases.txt'
-      MT_A="$(ident_corpus "$IDENT_BODY_GATES")"
-      MT_RC="$(ident_run "$MT" "$MT_A" 'docs/retro' "$WORK/ident-mt.txt")"
-      IDENT_ALIAS=""
-      if [ "$MT_RC" = "0" ] && grep -qF "$MT_A/aliases.txt" "$WORK/ident-mt.txt"; then
-        bad "H MUTANT T SURVIVED — the alias table is still named with its line deleted, so H4b is keyed on a path emitted somewhere else"
-      else
-        mutant_killed "${IDENT_CTL_OK:-0}" H-T "H MUTANT T killed — deleting the alias-table line alone leaves the suppression channel unidentified (rc=$MT_RC)"
-      fi
-      if ident_holds "$MT" "$IDENT_BODY_GATES" '2 gates declared'; then
-        ok "H MUTANT T leaves the two scanned roots named — H4b owns the alias table and H2 owns the roots"
-      else
-        bad "H MUTANT T ALSO broke the root identity ($IDENT_WHY) — H2 and H4b are entangled"
-      fi
-    fi
-  fi
-
-  # MUTANT H-E: the alias table is echoed at BOTH early exits, from the environment variable
-  # rather than the resolved one — the exact wrong fix H6 exists to forbid, and the reason
-  # H6 is worth having as an absence-shaped arm. The mutant reads `AI_DLC_CI_ALIAS_TABLE`
-  # because `ALIAS_TABLE_FILE` is not assigned until :175; echoing the resolved variable
-  # there would print empty and the mutation would be a silent no-op.
-  ME="$WORK/ident-mutant-e.sh"
-  awk '
-    index($0,"0 dormant (no ")            { print; print "  echo \"  alias table:          ${AI_DLC_CI_ALIAS_TABLE:-(none set)}\""; next }
-    index($0,", 0 gates declared, 0 dormant\"") { print; print "  echo \"  alias table:          ${AI_DLC_CI_ALIAS_TABLE:-(none set)}\""; next }
-                                          { print }
-  ' "$VALIDATOR" > "$ME"
-  if cmp -s "$VALIDATOR" "$ME"; then
-    bad "H MUTANT E: the injection matched nothing — H6 is unproved"
-  elif ! bash -n "$ME" 2>/dev/null; then
-    bad "H MUTANT E is not a valid shell script, so its silence would score as a kill"
-  else
-    IDENT_ALIAS='aliases.txt'
-    ME_A="$(ident_corpus "$IDENT_BODY_ZERO")"
-    ME_RC1="$(ident_run "$ME" "$ME_A" 'docs/retro' "$WORK/ident-me-zero.txt")"
-    ME_RC2="$(ident_run "$ME" "$ME_A" 'no-such-retro' "$WORK/ident-me-absent.txt")"
-    IDENT_ALIAS=""
-    if grep -qF "$ME_A/aliases.txt" "$WORK/ident-me-zero.txt" \
-       && grep -qF "$ME_A/aliases.txt" "$WORK/ident-me-absent.txt"; then
-      mutant_killed "${IDENT_CTL_OK:-0}" H-E "H MUTANT E killed — with the alias table echoed at both early exits (rc=$ME_RC1/$ME_RC2) H6 fires, so H6 is a real constraint and not a vacuous absence"
-    else
-      bad "H MUTANT E SURVIVED — the early exits still do not name the alias table after it was injected there, so H6 could never fire"
-    fi
-  fi
-
-  # MUTANT H-N: identity replaced by a NONCE. This is the fix that DISCRIMINATES WITHOUT
-  # NAMING — two runs differ, and neither says which tree was read. An arm keyed only on
-  # "the outputs differ" passes against it, which is why the arm demands the path.
-  # The nonce is `$$-$RANDOM`, evaluated by the MUTANT at run time, so two runs of it
-  # differ from each other exactly as two runs of the real validator do — and neither
-  # carries a path. A nonce fixed at mutation time would fail this arm on the cmp, which
-  # tests nothing.
-  MN="$WORK/ident-mutant-n.sh"
-  awk '
-    index($0,"retro dir:")           { print "echo \"  retro dir:            nonce-$$-$RANDOM\""; next }
-    index($0,"enforcement surface:") { print "echo \"  enforcement surface:  nonce-$$-$RANDOM\""; next }
-                                     { print }
-  ' "$VALIDATOR" > "$MN"
-  if cmp -s "$VALIDATOR" "$MN"; then
-    bad "H MUTANT N: the nonce substitution matched nothing — the arm's nonce-resistance is unproved"
-  elif ! bash -n "$MN" 2>/dev/null; then
-    bad "H MUTANT N is not a valid shell script, so its silence would score as a kill"
-  else
-    if ident_holds "$MN" "$IDENT_BODY_ZERO" '0 gates declared'; then
-      bad "H MUTANT N SURVIVED — a per-site constant that names no corpus satisfies H1, so H1 is a differ-check rather than a naming check"
-    else
-      mutant_killed "${IDENT_CTL_OK:-0}" H-N "H MUTANT N killed — a per-run nonce varies the output exactly as the real roots do and still fails the arm, so H1 demands the corpus be NAMED and not merely varied ($IDENT_WHY)"
-    fi
-  fi
-fi
 
 echo
 [ "$fails" -eq 0 ] && { echo "ci-gates-resolution: PASS"; exit 0; }

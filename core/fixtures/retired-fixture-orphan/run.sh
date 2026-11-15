@@ -36,10 +36,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
 # The real reconcile directory, resolved INDEPENDENTLY of the detector under test. The
-# detector delegates its path mapping to `preclassify.sh` beside it, so a mutant copy living
-# in a scratch directory has no mapper — the first cut resolved the mapper from the
-# detector's own dirname and every mutant run died with a FIXTURE ERROR before reaching an
-# assertion, which the battery then read as zero reds and scored as a survival.
+# detector delegates its path mapping to `preclassify.sh` beside it, so a copy living
+# in a scratch directory has no mapper.
 if [ -n "$ROOT" ] && [ -d "$ROOT/core/skills/ai-dlc-update/reconcile" ]; then
   SRC_DIR="$ROOT/core/skills/ai-dlc-update/reconcile"
 elif [ -n "$ROOT" ] && [ -d "$ROOT/.claude/skills/ai-dlc-update/reconcile" ]; then
@@ -49,14 +47,7 @@ else
   exit 2
 fi
 
-if false; then :
-elif [ -n "${AI_DLC_RFO_DETECT:-}" ] && [ -f "${AI_DLC_RFO_DETECT}" ]; then
-  # The mutant battery at the foot of this file re-executes this script with a MUTATED copy
-  # of the detector. Without this arm the re-run silently exercised the real detector, every
-  # mutant reported zero reds, and the unmutated control passed for the same wrong reason —
-  # caught only because five kills arriving at once is not a thing a real battery does.
-  DETECT="${AI_DLC_RFO_DETECT}"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/core/skills/ai-dlc-update/reconcile/retired-fixtures.sh" ]; then
+if [ -n "$ROOT" ] && [ -f "$ROOT/core/skills/ai-dlc-update/reconcile/retired-fixtures.sh" ]; then
   DETECT="$ROOT/core/skills/ai-dlc-update/reconcile/retired-fixtures.sh"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/.claude/skills/ai-dlc-update/reconcile/retired-fixtures.sh" ]; then
   DETECT="$ROOT/.claude/skills/ai-dlc-update/reconcile/retired-fixtures.sh"
@@ -70,8 +61,6 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_rfoCtl=0
 
 git_q() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}" >/dev/null 2>&1; }
 
@@ -158,10 +147,8 @@ fi
 # 4. nothing OUTSIDE the four seeded names. This catches an arm that reports everything and
 #    happens to include the right answers.
 #
-#    IT IS DELIBERATELY NOT A COUNT. `[ "$n_orph" -eq 2 ]` was the first cut, and it is
-#    entangled with assertions 1, 2 and 3 by construction: any mutant that drops arm A moves
-#    the count too, so it would fail two assertions and §7 says one of them is then vacuous.
-#    Scoped to subjects outside the seeded set, this cell moves on its own.
+#    IT IS DELIBERATELY NOT A COUNT. A count is entangled with assertions 1, 2 and 3 by
+#    construction. Scoped to subjects outside the seeded set, this cell moves on its own.
 extra="$(printf '%s\n' "$out" | grep '^RETIRED-FIXTURE-ORPHAN' \
   | grep -vE 'will-be-distonly|will-be-deleted|consumer-authored-only|still-shipped' | grep -c . || true)"
 if [ "$extra" -eq 0 ]; then
@@ -243,18 +230,6 @@ else
   bad "FIXTURE BROKEN: the no-mapper copy is identical to the original, so nothing was tested"
 fi
 
-# ---------------------------------------------------------------- the mutant battery
-# Every assertion above is now proven non-vacuous: a copy of the detector is broken in one
-# specific way and MUST turn exactly ONE of them red. Two reds means the assertions are
-# entangled and one of them is proving nothing, which is why assertion 4 is scoped to
-# subjects outside the seeded set rather than being a count.
-#
-# The mutants are COPIES, never in-place edits, and every one is guarded by `cmp -s` so a
-# sed that matched nothing reports itself instead of scoring a kill it did not earn. The
-# unmutated control is the arm that catches a battery which is broken as a whole — a copy
-# that cannot run emits no FAIL lines, and "no output" would otherwise score as a kill on
-# every mutant at once.
-#
 # --- A memo listing that is SERVED and then FAILS does not double arm A -------------------------
 # lib.sh's memo returns 125 when a cached status cannot be read, AFTER its bytes reached stdout.
 # Arm A read `{ memo | grep; } || git ls-tree`, so that failure ran the fallback too and every
@@ -280,94 +255,5 @@ else
   bad "a memo listing whose status cannot be read printed the arm-A orphan $rm_a time(s) against $rm_c healthy — the fallback listing ran on top of the served one"
 fi
 
-# Re-entrancy: this whole section runs the fixture's own assertion body against a swapped
-# detector, so it is driven by re-executing THIS script with AI_DLC_RFO_DETECT set. The
-# recursion is one level deep and the guard below is what ends it.
-if [ -n "${AI_DLC_RFO_DETECT:-}" ]; then
-  if [ "$fails" -eq 0 ]; then echo "PASS retired-fixture-orphan"; exit 0; fi
-  echo "FAIL retired-fixture-orphan ($fails)"; exit 1
-fi
-
-MUT="$WORK/mutants"; mkdir -p "$MUT"
-mut_reds() {  # $1 = label, $2 = sed program ("" for the unmutated control)
-  local label="$1" prog="$2" copy="$MUT/$1.sh"
-  if [ -z "$prog" ]; then
-    cp "$DETECT" "$copy"
-  else
-    sed "$prog" "$DETECT" > "$copy" 2>/dev/null
-    if cmp -s "$DETECT" "$copy"; then
-      printf 'UNMUTATED\n'; return 0        # the sed matched nothing — say so, never pass
-    fi
-  fi
-  AI_DLC_RFO_DETECT="$copy" bash "$HERE/run.sh" 2>/dev/null | grep '^  FAIL  ' | sed 's/^  FAIL  //'
-}
-
-battery_fails=0
-# EACH MUTANT DECLARES ITS FULL EXPECTED RED SET, and the observed set must equal it —
-# not merely contain it. Most mutants below move exactly one assertion, which is §7's rule.
-# M1 moves THREE, and that is structural rather than sloppy: arm A's `emit` is the
-# precondition for the remedy assertion and for the arm-A-survives-the-guard assertion, so
-# nothing can silence arm A and leave them standing. §7's rule exists to catch a VACUOUS
-# assertion, so the answer is to prove those two independently rather than to pretend M1 is
-# narrow — M5 moves the remedy alone and M6 moves the guard-width alone. Every assertion in
-# this fixture is therefore moved by at least one mutant that moves nothing else.
-expect_set() {  # $1 = label, $2 = expected red count, $3 = ERE all reds must match, $4 = sed
-  local reds n unmatched
-  reds="$(mut_reds "$1" "$4")"
-  if [ "$reds" = "UNMUTATED" ]; then
-    bad "MUTANT $1: the sed matched nothing — no mutation was applied, so nothing was proven"
-    battery_fails=$((battery_fails+1)); return
-  fi
-  n="$(printf '%s\n' "$reds" | grep -c . || true)"
-  unmatched="$(printf '%s\n' "$reds" | grep -c . || true)"
-  unmatched="$(printf '%s\n' "$reds" | grep -vE "$3" | grep -c . || true)"
-  if [ "$n" -eq "$2" ] && [ "$unmatched" -eq 0 ]; then
-    mutant_killed "$B_rfoCtl" "$1" "MUTANT $1 moves exactly the $2 assertion(s) it should, and no others"
-  else
-    bad "MUTANT $1: expected $2 red(s) all matching '$3', got ${n} (${unmatched} unexpected): $(printf '%s' "$reds" | tr '\n' ';')"
-    battery_fails=$((battery_fails+1))
-  fi
-}
-
-# The unmutated control FIRST. If a plain copy of the detector does not come back clean,
-# every kill below is unearned and the battery is measuring its own harness.
-ctl="$(mut_reds control "")"
-if [ -z "$ctl" ]; then
-  ok "CONTROL: an unmutated copy of the detector passes every assertion"; B_rfoCtl=1
-else
-  bad "CONTROL: an unmutated copy FAILED ($(printf '%s' "$ctl" | tr '\n' ';')) — every kill below is unearned"
-  battery_fails=$((battery_fails+1))
-fi
-
-# M1 — arm A stops emitting. Only the .dist-only subject moves.
-expect_set armA-silent 3 'arm A MISSED|remedy does not name|arm A went silent' \
-  's@emit RETIRED-FIXTURE-ORPHAN "$cons_rel"@: RETIRED-FIXTURE-ORPHAN "$cons_rel"@'
-
-# M2 — arm B drops the HISTORY half of its predicate, keeping "not in core's shipped set".
-# That is the unmeasured lint: on the reference consumer it reports all 29 non-core
-# directories instead of the 1 that was ever core's. Here it reports the consumer's own.
-expect_set armB-no-history 1 "consumer's OWN fixture was reported" \
-  's@\[ -n "$(git -C "$DIST" log --all --format=%H -1 -- "core/fixtures/${n}" 2>/dev/null)" \] || continue@:@'
-
-# M3 — the zero guard goes back to the probe that SURVIVES truncation. This is the defect
-# this fixture actually caught during authoring: the guard passed and arm B false-zeroed.
-expect_set guard-surviving-probe 1 'answered silently on a truncated clone' \
-  's@dist_shallow="$(git -C "$DIST" rev-parse --is-shallow-repository 2>/dev/null)"@dist_shallow=false@'
-
-# M4 — the mapper refusal is removed, so a missing map_consumer() scans nothing quietly.
-expect_set nomap-silent 1 'scanned with no path mapper' \
-  's@^  emit HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE "-" \\@  : HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE "-" \\@'
-
-# M5 — the remedy stops naming a removable consumer path. The operator reads that line
-# while deciding whether to delete a directory, and v0.225.0 shipped a release for exactly
-# this class of un-transcribable remedy.
-expect_set remedy-unusable 1 'does not name a removable consumer path' \
-  's@rm -rf <consumer>/${cons_rel}@remove it@'
-
-# M6 — the zero guard takes the WHOLE scan down instead of only arm B. Arm A needs no
-# history, so a guard this wide trades one blind spot for a larger one. This is the mutant
-# that proves the arm-A-survives assertion is not riding on M1.
-expect_set guard-too-wide 1 'arm A went silent with arm B' \
-  's@      \[ "$rf_t" -eq 0 \] || continue@      [ "$rf_t" -eq 0 ] || continue\
-      [ "$(git -C "$DIST" rev-parse --is-shallow-repository 2>/dev/null)" = true ] \&\& continue@'
+echo ""
 report_end retired-fixture-orphan

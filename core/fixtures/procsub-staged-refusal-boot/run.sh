@@ -61,11 +61,9 @@
 #                        it: the OVERRIDES loop's own stop, which L5b (extensions) cannot see.
 #   L5-pre               THE PRECONDITION: a world whose layer-contract.yaml is larger than the limit.
 #                        bash 3.2 writes a here-string to a temp file under the same limit, and the
-#                        a0a9c556 engine read the contract through `<<<`: a failed one read as an
-#                        EMPTY contract (no HARD row, rc 0, for a reason that is not the emit). On
-#                        that engine this cell must read BROKEN-HEREDOC, proving the detector the
-#                        L5b/L5d cells refuse on can fire; any OTHER cell reading it ends the fixture
-#                        FIXTURE BROKEN, never a verdict. The tip carries no here-string (BL-359) and
+#                        an engine that read the contract through `<<<` took a failed one as an
+#                        EMPTY contract (no HARD row, rc 0, for a reason that is not the emit); any
+#                        cell reading BROKEN-HEREDOC ends the fixture FIXTURE BROKEN, never a verdict. The tip carries no here-string (BL-359) and
 #                        refuses naming the contract read instead: REFUSED-CONTRACT.
 #   C*  layer-drift      BL-359: an input the engine used to read through a `<<<` that could not be
 #                        staged, read as EMPTY at rc 0. Each cell's base shape is that silent read.
@@ -73,17 +71,15 @@
 #                        -> rc 0 with no HARD row; now a refusal naming the contract read.
 #   C1w                  the same with a WARM memo, so the contract reaches the engine with no file
 #                        written: the tip classifies in full under the limit, base still loses it.
-#                        The discriminating input for M3 (the awk fed by `<<<` again).
 #   C4                   C1's world and limit, --adjudicated-codes -> rc 0 and an EMPTY code set,
 #                        which that mode documents as a legitimate answer; now a refusal.
 #   C2                   an override whose shadow target at theirs is larger than the limit, cold
 #                        memo -> OVERRIDE-OK read as OVERRIDE-DRIFT-FILE at rc 0 (the consumer's
 #                        measured exposure); now a refusal naming the target read.
 #   C2w                  the same, warm memo: the target's STAGING write is the first to fail.
-#                        The discriminating input for M1 (the staging write's status ignored).
 #   C2s                  C2's world, no limit, `section_of`'s own mktemp copy failed by a stub ->
 #                        OVERRIDE-DRIFT-FILE; now a refusal naming section_of. C2 and C2w refuse
-#                        at the read or the staging BEFORE section_of runs, so neither can see M4.
+#                        at the read or the staging BEFORE section_of runs.
 #   C3                   an `awk` stub that reads the contract program's input and prints nothing
 #                        -> the tier switched off at rc 0; now the R2 post-condition refuses.
 #   C5-ld hard-blockers  --ld-rows supplied with --ld-rc 2 -> `0 HARD blockers.` over a partial
@@ -99,8 +95,7 @@
 # EACH ARM IS FORCED WITH A PATH STUB, NEVER SAMPLED. The stub fails ONE call shape and execs
 # the real binary for every other call, and it appends a line to its own FIRED file per call it
 # claims. Every forced arm requires FIRED > 0: a stub that stopped matching the engine's call
-# shape would otherwise read exactly like an engine that stopped refusing -- or, under a mutant,
-# like a kill. Every forced arm is paired with a NO-STUB control over the same world, which must
+# shape would otherwise read exactly like an engine that stopped refusing. Every forced arm is paired with a NO-STUB control over the same world, which must
 # reach that world's ordinary verdict, so the world is shown to express the case before the
 # forced run is read.
 #
@@ -115,68 +110,8 @@
 # SHAPES, NOT PASS/FAIL. Every arm classifies its run into a named SHAPE, and the expectation
 # table below names the shape the fixed code must produce (tip) and the one the base spelling
 # produces (base). Run on the four scripts as they stood at the parent release, every forced arm
-# reports its base shape. A MUTANT IS KILLED ONLY WHEN ITS OWN ARM REPORTS THE BASE SHAPE, never
-# merely when the arm fails: every base shape is presence-shaped (a named row, a record verdict,
-# exit 3, a non-O row), so a mutant copy that died on its own -- a lib.sh it could not source --
-# cannot score a kill. A mutant must also leave its TWIN arm at the tip shape, or the two arms are
-# entangled; under --matrix it must leave every other arm of its key there.
-#
-# THE MUTANT MATRIX. A plain run drives each mutant against its decides= arm(s) and its twin only, read from
-# the row below by `score_as` (never restated at the call). `--matrix` drives every arm of the mutant's key,
-# prints one MATRIX row per cell, checks the header row's twins against that measurement, and runs every unit in one
-# shard. A plain run asserts it executed no matrix-only cell.
-#
-# MUTANTS restore ONE site's base block verbatim in a copy of the WHOLE reconcile/ directory
-# (these scripts resolve lib.sh and each other beside themselves). Each mutation's anchors are
-# counted exactly once before it is applied, the copy must differ (`cmp -s`), must parse
-# (`bash -n`), and must carry the base spelling once and the staged spelling zero times.
-# MUTANT-MATRIX M-L1 decides=L1 twins=L2
-# MUTANT-MATRIX M-L2 decides=L2 twins=L1
-# MUTANT-MATRIX M-L3 decides=L3 twins=L1
-# MUTANT-MATRIX M-P1 decides=P1 twins=- why=the pc key carries one arm, so no other arm reads the copy
-# MUTANT-MATRIX M-P2 decides=P2 twins=P3
-# MUTANT-MATRIX M-P3 decides=P3 twins=P2
-# MUTANT-MATRIX M-E1 decides=E1 twins=- why=the er key carries one arm, so no other arm reads the copy
-# MUTANT-MATRIX M-S1 decides=S1 twins=S2
-# MUTANT-MATRIX M-S2 decides=S2 twins=S1
-# MUTANT-MATRIX M-S3 decides=S3 twins=S1
-# MUTANT-MATRIX M-U-base decides=U1,U2,U2b,U3,U4,U5,U5b twins=U6-hit
-# MUTANT-MATRIX M-U-emit-status decides=U5,U5b twins=U1
-# MUTANT-MATRIX M-U-exit decides=U5,U5b twins=U1
-# MUTANT-MATRIX M-U-probe decides=U5b twins=U1
-# MUTANT-MATRIX M-U-nobreak decides=U5b twins=U1
-# MUTANT-MATRIX M-U-memo decides=U2,U2b,U6-hit,U6-fill twins=U1
-# MUTANT-MATRIX M-L-cat-status decides=U6-hit twins=U1
-# MUTANT-MATRIX M-L-commit-status decides=U6-fill twins=U1
-# MUTANT-MATRIX M-U-ext decides=U3 twins=U1
-# MUTANT-MATRIX M-U-pfx decides=U4 twins=U1
-# MUTANT-MATRIX M-Art-merge decides=Art twins=Aud
-# MUTANT-MATRIX M-LD-nobreak decides=L5b,L5e twins=L5
-# MUTANT-MATRIX M-LD-nobreak-ovr decides=L5e twins=L5
-# MUTANT-MATRIX M-LD-nobreak-ext decides=L5b twins=L5
-# MUTANT-MATRIX M-LD-probe decides=L5b,L5b-hard,L5d,L5e twins=L5
-# MUTANT-MATRIX M-LD-ds-subshell decides=L5d twins=L5
-# MUTANT-MATRIX M-LD-raw-uncounted decides=L5b-hard twins=L5
-# MUTANT-MATRIX M1-stage-status decides=C2w twins=C2
-# MUTANT-MATRIX M2-no-r2 decides=C3 twins=C1
-# MUTANT-MATRIX M3-codes-herestring decides=C1w twins=C1
-# MUTANT-MATRIX M3b-codes-herestring-unread decides=C1w twins=C1
-# MUTANT-MATRIX M4-section-status decides=C2s twins=C2
-# MUTANT-MATRIX M5-hb-ld decides=C5-ld twins=C5-ud
-# MUTANT-MATRIX M6-hb-ud decides=C5-ud twins=C5-ld
-# MUTANT-MATRIX M-Aud decides=Aud twins=Art
-# MUTANT-MATRIX M-Art decides=Art twins=Aud
-# MUTANT-MATRIX M-Arlp decides=Arlp twins=Aud
-# MUTANT-MATRIX M-Ald decides=Ald twins=Aud
-# MUTANT-MATRIX M-Ana decides=Ana twins=Aud
-# MUTANT-MATRIX M-B360-O1 decides=O1 twins=O2
-# MUTANT-MATRIX M-B360-O2 decides=O2 twins=O1
-# MUTANT-MATRIX M-B360-O3 decides=O3 twins=- why=the ek world carries one cell, so no other cell reads the render
-# MUTANT-MATRIX M-B360-V1 decides=V1 twins=- why=the ev world carries one cell, so no other cell reads the render
-# MUTANT-MATRIX-DYNAMIC psb-kill why=psb_kill passes the mutant name score_as received to mutant_killed, and score_as refuses a name with no MUTANT-MATRIX row in this block, so every name it reports carries one
-# MUTANT-MATRIX-DYNAMIC b360-loop why=the BL-360 loop names its mutants from the literal list M-B360-O1 M-B360-O2 M-B360-O3 M-B360-V1, each of which carries a row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/procsub-staged-refusal-boot/run.sh --matrix
-#
+# reports its base shape. Every shape is presence-shaped (a named row, a record verdict, exit 3, a
+# non-O row), so a copy that died on its own reads OTHER, never a tip or base shape.
 set -uo pipefail
 
 # HERMETIC -- scrub the operator's tuning before invoking any reconcile script (I10).
@@ -212,20 +147,17 @@ done
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/pb.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 EW=""
-# A RUN THAT NEVER REACHED ITS VERDICT EXITS 2. A `set -u` abort mid-battery reaches this trap with
-# `$?` = 0 on bash 3.2 (measured: the fixture exited 0 over an unbound-variable abort, every later
-# mutant unscored), so the status cannot be recovered here -- only the flag the verdict sets can say
-# whether the run got that far.
+# A RUN THAT NEVER REACHED ITS VERDICT EXITS 2. A `set -u` abort mid-run reaches this trap with
+# `$?` = 0 on bash 3.2 (measured: the fixture exited 0 over an unbound-variable abort), so the
+# status cannot be recovered here -- only the flag the verdict sets can say whether the run got that far.
 PSB_DONE=0
 trap 'rm -rf "$WORK"; [ -n "$EW" ] && rm -rf "$EW"; [ "$PSB_DONE" = 1 ] || { echo "FIXTURE BROKEN: procsub-staged-refusal-boot stopped before its verdict" >&2; exit 2; }' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/report.sh is absent" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
-. "$HERE/../lib/matrix.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/matrix.sh is absent" >&2; exit 2; }
 # ---------------------------------------------------------------------------- shards ----
 # THIS FILE IS THREE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
 # BOUNDARY. Every assertion-bearing section below is a UNIT guarded by `if sg <unit>; then ... fi`, or, for
-# the control/forced loop, by the key-to-unit map; `--group <x>` runs the units dealt to shard <x>. The two
+# the control/forced loop, by the key-to-unit map (the declared set is both, joined); `--group <x>` runs the units dealt to shard <x>. The two
 # siblings `procsub-staged-refusal-boot-{b,c}/run.sh` are one-line drivers that `exec bash` this file with
 # their group (the readset-skip shape), so the pre-push pool starts each on its own. No `--group` runs
 # shard 'a', so `bash core/fixtures/procsub-staged-refusal-boot/run.sh` is shard a.
@@ -233,27 +165,23 @@ trap 'rm -rf "$WORK"; [ -n "$EW" ] && rm -rf "$EW"; [ "$PSB_DONE" = 1 ] || { ech
 # THE WORLDS, THE SHARED HELPERS AND THE STAGED PRE-FIX ENGINES ARE NOT UNITS: every shard builds them,
 # because the units read each other's worlds (hb reads the ld ext world's rows, b360 the ld block size).
 #   a  lrpe ud      ledger-reverify, preclassify, emit-report --verify, self-update-gate; unregistered-drift
-#   b  ld b360      layer-drift L cells and mutants; the BL-360 emit-report cells and mutants
-#   c  lc ap spell  the BL-359 C cells and mutants, hard-blockers; apply.sh; the two preclassify/layer-drift spell probes
+#   b  ld b360      layer-drift L cells; the BL-360 emit-report cells
+#   c  lc ap spell  the BL-359 C cells, hard-blockers; apply.sh; the two preclassify/layer-drift spell probes
 # A unit may carry several guards (ld has three); the declared set is the DISTINCT names.
 SHARDS="a b c"
 UNITS_a="lrpe ud"
 UNITS_b="ld b360"
 UNITS_c="lc ap spell"
 GROUP=a
-MATRIX=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; fi
 if [ "${1:-}" = "--group" ]; then
   GROUP="${2:-}"
   [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
-  [ "$MATRIX" -eq 0 ] || { echo "FIXTURE ERROR: --matrix runs every unit in one shard and takes no --group" >&2; exit 2; }
 fi
 case " $SHARDS " in
   *" $GROUP "*) ;;
   *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
 esac
 eval "MINE=\"\${UNITS_$GROUP:-}\""
-[ "$MATRIX" -eq 0 ] || MINE="$UNITS_a $UNITS_b $UNITS_c"
 NAME="procsub-staged-refusal-boot"; [ "$GROUP" = a ] || NAME="procsub-staged-refusal-boot-$GROUP"
 [ -n "$MINE" ] || { echo "FIXTURE ERROR: shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
 sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
@@ -285,11 +213,12 @@ if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmi
    || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
   echo "FIXTURE ERROR: the coverage join's self-probe did not discriminate (duplicate, omission, exact)" >&2; exit 2
 fi
-sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$SELF" | sort -u > "$JW/declared"
+{ sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$SELF"
+  sed -n 's/^    [a-z|]*) echo \([a-z0-9_][a-z0-9_]*\) ;;$/\1/p' "$SELF"; } | sort -u > "$JW/declared"
 for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$JW/dealt"
 ndecl="$(grep -c . "$JW/declared")" || ndecl=0
 if [ "$ndecl" -eq 0 ]; then
-  echo "FIXTURE ERROR: 0 unit guards derived from $SELF" >&2; exit 2
+  echo "FIXTURE ERROR: 0 units derived from $SELF's sg guards and key map" >&2; exit 2
 fi
 # THE KEY MAP MUST NAME A DECLARED UNIT FOR EVERY EXPECT KEY, or a key's control arms run in no shard.
 if ! _why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
@@ -302,22 +231,8 @@ for _s in $SHARDS; do
     echo "FIXTURE ERROR: shard '$_s' is declared but $_drv does not drive it" >&2; exit 2
   fi
 done
-echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
+echo "  [J0] coverage join: $ndecl units derived from the sg guards and the key map, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 echo "$NAME:"
-if [ "$MATRIX" -eq 1 ]; then echo "  mode: FULL (--matrix: every mutant against every arm of its key)"; else echo "  mode: PUSH (each mutant drives its deciding arm(s) and its twin only)"; fi
-
-# THE MUTANT TABLE, read from this file's `# MUTANT-MATRIX` rows: `<mutant> <decides> <twins>`. Its reader is
-# probed first: two rows and a no-twin row read, a FULL row and an unprefixed line do not.
-mt_parse() { awk '$1 == "#" && $2 == "MUTANT-MATRIX" { d = ""; t = ""; for (i = 4; i <= NF; i++) { split($i, kv, "="); if (kv[1] == "decides") d = kv[2]; if (kv[1] == "twins") t = kv[2] } print $3, d, t }' "$1"; }
-MT_TAG=MUTANT-MATRIX
-printf '# %s probe-a decides=x,y twins=z\n# %s probe-b decides=x twins=- why=all dead\n# %s-FULL probe-c worlds=w why=none\n%s probe-d decides=x twins=z\n' "$MT_TAG" "$MT_TAG" "$MT_TAG" "$MT_TAG" > "$JW/mt-probe"
-if [ "$(mt_parse "$JW/mt-probe" | tr '\n' '|')" != "probe-a x,y z|probe-b x -|" ]; then
-  echo "FIXTURE ERROR: the mutant-table reader did not discriminate (two rows, a no-twin row; a FULL row and an unprefixed line must not read)" >&2; exit 2
-fi
-mt_parse "$SELF" > "$JW/mtab"
-[ -s "$JW/mtab" ] || { echo "FIXTURE ERROR: no MUTANT-MATRIX rows in $SELF's header" >&2; exit 2; }
-mt_get() { awk -v m="$1" -v f="$2" '$1 == m { print (f == "d" ? $2 : $3); exit }' "$JW/mtab"; }
-MROWS=0
 
 # --- STUBS ---------------------------------------------------------------------------------------
 # stub <dir> <tool> <real-binary> <case-pattern over "$*"> <action>
@@ -769,7 +684,7 @@ ud_shape() { # <recon> <arm> <stub-dir or ->
     nm="$(ud_named "$err")"
     # rc 2 WITHOUT the line, or the line with another rc, is OTHER: an early exit 2 for a different
     # reason must not pass. rc 0 is the parent release (the row lost silently); rc 1 is the
-    # pipe-to-`while` listing before it (M-U-base), where the failed write became the loop's status.
+    # pipe-to-`while` listing before it, where the failed write became the loop's status.
     if [ "$rc" -eq 2 ] && [ "$nm" -eq 1 ]; then echo CLOSED-RC2-NAMED
     elif [ "$rc" -le 1 ] && [ "$nm" -eq 0 ]; then echo "CLOSED-RC$rc"
     else echo "OTHER(rc=$rc,named=$nm)"
@@ -905,10 +820,6 @@ ap_shape() { # <recon> <arm> <stub-dir or ->
 }
 
 # === WORLDS ld: layer-drift =======================================================================
-# THE FAILING CONTROL IS THE PRE-FIX ENGINE ITSELF, staged from the release before the fix into a
-# copy of the whole reconcile/ directory (it sources lib.sh beside itself). Every L cell runs on it
-# in the same run and must read its base shape there -- that is what proves each cell can fail.
-LD_BASE_SHA=a0a9c556
 #   ext  twelve extensions hooking a core step that never moves (EXTENSION-OK), and ONE hooking a
 #        step that moves, sorted LAST: its EXTENSION-HOOK-DRIFT row is at an ADJUDICATED clause, so
 #        `emit_raw` writes a HARD-LAYER-ADJUDICATION-MISSING row after it, the last row of the run.
@@ -982,8 +893,8 @@ mk_ld_world() { # <dir> <ext|ds|big|huge>
 # one ABSOLUTE path per entry, 13 entries in ext and 14 in ds, so every character of $WORK adds 13
 # and 14 bytes to it. Measured on the unpadded worlds: at a $WORK of 88 characters ds listed 2020 B
 # and ext 1946 B, so `_fo` was 2 and L5e cut after 6 rows; at 96 they listed 2132 B and 2050 B, so
-# `_fo` was 3 and L5e cut after 9 -- a different regime, in which M-LD-probe's L5e reads RC1-MEMO
-# where the table says RC0-LOST. $WORK is $TMPDIR plus 40 under hermetic-run.sh, so the default
+# `_fo` was 3 and L5e cut after 9 -- a different regime, in which L5e on an engine that probes
+# stdout once reads RC1-MEMO where the table says RC0-LOST. $WORK is $TMPDIR plus 40 under hermetic-run.sh, so the default
 # /private/var/folders TMPDIR sat in one regime and TMPDIR=/tmp in the other: a verdict keyed on the
 # scratch path's length.
 # THE RECONCILE MEMO IS THE SECOND QUANTITY, AND IT MOVES WITH THE PATH TOO. lib.sh names each cache
@@ -993,7 +904,7 @@ mk_ld_world() { # <dir> <ext|ds|big|huge>
 # but it moves at other lengths and L5-pre READS it: that cell's REFUSED-CONTRACT is the contract's
 # memo FILL failing under the limit, and a contract read uncached goes through a pipe the limit never
 # touches. Measured: the big world unpadded under a 90-character TMPDIR read L5-pre as
-# OTHER(no-heredoc-failure,rc=2,whole=7,contract-refusal=0), and every L mutant ENTANGLED with it.
+# OTHER(no-heredoc-failure,rc=2,whole=7,contract-refusal=0).
 # So the memo is pinned as well -- by padding to a fixed ENCODED length (characters plus two per `/`),
 # which is what the key carries, rather than to a character count.
 # LD_ENC_LEN is that encoded length of all four world dirs, each padded as ONE path component.
@@ -1071,20 +982,6 @@ done
   && [ $(( _mmax + ${#_sw} )) -le $(( 255 - LD_MEMO_MARGIN )) ] && [ $(( _hmin + ${#_sn} )) -gt 255 ] \
   || { echo "FIXTURE ERROR: memo calibration: the longest key that must be cached ($_mmaxp, $_mmax characters over $_np path(s)) makes a fill file of $(( _mmax + ${#_sw} )) at the widest suffix '$_sw' (want at most $(( 255 - LD_MEMO_MARGIN )), $LD_MEMO_MARGIN under the 255-character filename limit), and the shortest hooked-step key ($_hmin over $_nh, want 8) one of $(( _hmin + ${#_sn} )) at the narrowest suffix '$_sn' (want over 255)" >&2; exit 2; }
 echo "  (ld memo: longest cached key $_mmax ($_mmaxp), fill file at most $(( _mmax + ${#_sw} )) of 255, margin $(( 255 - _mmax - ${#_sw} )); hooked-step keys at least $_hmin, direct)"
-# The base copy carries a0a9c556's hard-blockers.sh too: the C5 cells' failing control.
-LD_BASE="$WORK/ld-base"
-mkdir -p "$LD_BASE" && cp -R "$RECON/." "$LD_BASE/" \
-  && git -C "$TREE_TOP" show "${LD_BASE_SHA}:core/skills/ai-dlc-update/reconcile/layer-drift.sh" > "$LD_BASE/layer-drift.sh" 2>/dev/null \
-  && git -C "$TREE_TOP" show "${LD_BASE_SHA}:core/skills/ai-dlc-update/reconcile/hard-blockers.sh" > "$LD_BASE/hard-blockers.sh" 2>/dev/null \
-  || { echo "FIXTURE BROKEN: could not stage layer-drift.sh and hard-blockers.sh at ${LD_BASE_SHA}, the failing control of every L and C cell" >&2; exit 2; }
-if cmp -s "$RECON/hard-blockers.sh" "$LD_BASE/hard-blockers.sh"; then
-  echo "FIXTURE BROKEN: the staged ${LD_BASE_SHA} hard-blockers.sh is identical to tip, so the C5 cells have no failing control" >&2; exit 2
-fi
-_h="$("$REAL_GREP" -c 'ld_finish\|ld_emit_failed' "$LD_BASE/layer-drift.sh")" || _h=0
-_t="$("$REAL_GREP" -c 'ld_finish' "$RECON/layer-drift.sh")" || _t=0
-if cmp -s "$RECON/layer-drift.sh" "$LD_BASE/layer-drift.sh" || [ "$_h" -ne 0 ] || [ "$_t" -eq 0 ]; then
-  echo "FIXTURE BROKEN: the staged ${LD_BASE_SHA} layer-drift.sh is not the pre-fix engine (identical to tip, or it carries $_h ld_finish/ld_emit_failed line(s); tip carries $_t ld_finish)" >&2; exit 2
-fi
 # `ulimit -f` counts in BLOCKS, and the block is measured here rather than assumed.
 LD_BLK="$( ( trap '' XFSZ; ulimit -f 1; printf '%08192d' 0 > "$WORK/ld-blk" ) 2>/dev/null; wc -c < "$WORK/ld-blk" | tr -d ' ')"
 case "$LD_BLK" in ''|*[!0-9]*|0) echo "FIXTURE ERROR: could not measure the ulimit -f block (got '$LD_BLK')" >&2; exit 2 ;; esac
@@ -1238,9 +1135,9 @@ ld_shape() {
        && awk '!/^\+/ && /could not be served by the reconcile memo/ { f=1 } END { exit !f }' <<<"$err"; then echo XFSZ-RC1-MEMO
   else echo "OTHER(rc=$rc,whole=$nw,N=$nn,iterations=$nit,subject=$nsub,named=$nm,bytes=$nb)"; fi
 }
-# A non-precondition L cell that hit the here-string floor ends the run BROKEN. Only a pre-fix copy
-# (the a0a9c556 engine, a mutant restoring a `<<<`) can: the tip carries none. The C cells below
-# reach the floor on purpose on the base engine and keep their own reading, so they never log here.
+# A non-precondition L cell that hit the here-string floor ends the run BROKEN: the tip carries no
+# here-string, so one reaching the floor means a `<<<` came back. The C cells below reach the floor
+# on purpose and keep their own reading, so they never log here.
 ld_heredoc_gate() {
   if [ -s "$LD_HEREDOC_BAD" ]; then
     echo "FIXTURE BROKEN: an L cell's run failed a here-string under its file-size limit ($(tr '\n' ';' < "$LD_HEREDOC_BAD")) -- its shape is not a verdict about the emit" >&2
@@ -1296,8 +1193,8 @@ lc_shape() {
     case "$A" in
       C1w|C2w)
         # A FRESH memo per drive, COPIED from the one warmed once per world below: a memo holds git's
-        # blobs keyed by dist and ref, never an engine's answer, so a copy warmed by the tip serves a
-        # mutant or the base the same bytes -- and a fresh copy means no drive reads another's fills.
+        # blobs keyed by dist and ref, never an engine's answer, so a copy warmed by the tip serves the
+        # base the same bytes -- and a fresh copy means no drive reads another's fills.
         memo="$(mktemp -d "$WORK/lc-memo.XXXXXX")" || { echo "OTHER(mktemp)"; return 0; }
         case "$A" in C1w) cp -R "$LC_MEMO_BIG/." "$memo/" ;; *) cp -R "$LC_MEMO_HUGE/." "$memo/" ;; esac \
           || { echo "OTHER(memo-copy)"; return 0; }
@@ -1308,11 +1205,10 @@ lc_shape() {
         # C2w's BASE EXISTENCE KEY IS DROPPED FROM THE COPY, so the only guard deciding the cell is
         # the THEIRS staging write it is about. The engine gates its base read of the shadowed file
         # on `have`, and a warm `have` answers from the `e` key's `.s` file through a `$( )` capture.
-        # Under M1 the staging write fails EFBIG and the run CONTINUES, leaving bytes in bash 3.2's
-        # stdout buffer that the capture then reads back as the status: `have` misreads a healthy
-        # store as "object is missing" and refuses, which pre-empts the OK-LOST shape M1 is scored on
-        # and makes the two guards cover one subject. With the key absent `have` asks git fresh and
-        # passes. A memo warmed by an engine that does not gate that read (pre-0.680.0) carries no
+        # An engine whose staging write fails EFBIG and CONTINUES leaves bytes in bash 3.2's stdout
+        # buffer that the capture then reads back as the status: `have` misreads a healthy store as
+        # "object is missing" and refuses, which pre-empts the shape this cell reads. With the key
+        # absent `have` asks git fresh and passes. A memo warmed by an engine that does not gate that read (pre-0.680.0) carries no
         # such key, so 0 is accepted; more than one is a harness fault. The theirs `.c` check above
         # stays the warm control: the cell still reads the subject from the memo.
         # Keyed on the `e ` PREFIX and the ref:path SUFFIX, never on the dist spelling between them
@@ -1367,8 +1263,8 @@ lc_shape() {
       # these cells are about a silent read of the shadow target, not about LC-O7's whole-file shadow,
       # and naming that clause's code at a code line would enter this fixture in I65's index as LC-O7's
       # proof. Measured on the base engine: the lost row is the unprovable-anchor one (the anchor
-      # resolves to nothing in an empty blob); under M1 it is the section-drift one (a truncated blob).
-      # The -HEREDOC suffix is what separates base's lost row from M1's on C2w.
+      # resolves to nothing in an empty blob). The -HEREDOC suffix marks a lost row caused by a
+      # here-string that could not be staged.
       if [ "$ovr" = OVERRIDE-OK ]; then echo OVERRIDE-OK
       elif [ -z "$ovr" ]; then echo "OTHER(no-row-for-the-override)"
       elif [ "$her" -eq 1 ]; then echo OK-LOST-HEREDOC
@@ -1469,10 +1365,7 @@ C2s lo OVERRIDE-OK REFUSED-SECTION OK-LOST
 C3 lc ALL-ROWS REFUSED-R2 TIER-OFF
 C5-ld hb AFFIRMATIVE REFUSED-ROW AFFIRMATIVE
 C5-ud hb AFFIRMATIVE NO-AFFIRMATIVE AFFIRMATIVE'
-# The base cells whose base reading IS a here-string that could not be staged. On a bash that feeds
-# a here-string without a temp file the base cannot lose one, and those cells then read INCONCLUSIVE
-# -- keyed on the base run printing bash's own message, never on the bash version.
-LC_HEREDOC_ARMS=' C1 C1w C4 C2w '
+
 col() { awk -v a="$1" -v c="$2" '$1==a {print $c}' <<<"$EXPECT"; }
 arms_of() { awk -v k="$1" '$2==k {print $1}' <<<"$EXPECT"; }
 
@@ -1485,34 +1378,17 @@ forced() {
 }
 
 # --- CONTROLS AND FORCED ARMS ON THE SHIPPED SCRIPTS ----------------------------------------------
-# baseok_set <arm> / baseok_key <key> -> 1 when EVERY arm of <key> passed its control and its forced
-# run in this run, so a mutant kill is only read against arms whose unmutated shape was proven.
-BASEOK="$WORK/baseok"; mkdir -p "$BASEOK" || { echo "FIXTURE ERROR: mkdir $BASEOK" >&2; exit 2; }
-baseok_set() { : > "$BASEOK/$1"; }
-# psb_kill <key> <mutant> <message> -- the one kill emission for the EXPECT-keyed cells: the flag is 1 only when
-# every arm of <key> proved its unmutated shape in this run.
-psb_kill() {
-  local ak bo
-  ak="$(arms_of "$1")"; bo="$(baseok_key $ak)"
-  mutant_killed "$([ "$bo" = 1 ] && echo 1 || echo 0)" "$2" "$3"
-}
-baseok_key() { # <arm...> -> 1 when every arm named has a marker and there is at least one
-  local a n=0
-  for a in "$@"; do [ -f "$BASEOK/$a" ] || { echo 0; return 0; }; n=$((n+1)); done
-  [ "$n" -gt 0 ] && echo 1 || echo 0
-}
 for A in $(awk '{print $1}' <<<"$EXPECT"); do
   sg "$(unit_of_key "$(col "$A" 2)")" || continue
-  c="$(arm_shape "$A" "$RECON" -)"; _ctl_ok=0
+  c="$(arm_shape "$A" "$RECON" -)"
   if [ "$c" = "$(col "$A" 3)" ]; then
-    ok "$A control (no stub): $c -- the world expresses the healthy verdict"; _ctl_ok=1
+    ok "$A control (no stub): $c -- the world expresses the healthy verdict"
   else
     bad "$A control (no stub): $c, expected $(col "$A" 3) -- the world does not express the case, so the forced arm below is unattributable"
   fi
   set -- $(forced "$A" "$RECON" tip)
   if [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 4)" ]; then
     ok "$A forced (stub fired ${2}x): $1 -- the tip shape (base spelling reads $(col "$A" 5))"
-    [ "$_ctl_ok" = 1 ] && baseok_set "$A"
   elif [ "${2:-0}" -eq 0 ]; then
     bad "$A FIXTURE BROKEN: the stub never fired, so its shape ($1) says nothing about the site"
   else
@@ -1520,457 +1396,10 @@ for A in $(awk '{print $1}' <<<"$EXPECT"); do
   fi
 done
 
-# --- MUTANTS: one per forced site, the site's base block restored verbatim ------------------------
-# mut <name> <script> <awk-program> <base-line-literal> <staged-token> <anchor-literal...>
-# The awk program reads ENVIRON; every anchor must match exactly one whole line before mutation.
-MUTROOT="$WORK/mut"
-mkdir -p "$MUTROOT" || { echo "FIXTURE ERROR: mkdir $MUTROOT" >&2; exit 2; }
-# `mut` runs inside `$( )`, where a `bad` would lose both its line and its count. It writes the
-# reason to a file instead and returns 1; the caller's `mutreport` turns that into the FAIL, and a
-# mut that returned 1 with no reason written is reported as a harness fault, never as silence.
-mutbad() { printf '%s\n' "$1" > "$MUTROOT/$n.why"; }
-mutreport() {
-  if [ -s "$MUTROOT/$1.why" ]; then bad "$(cat "$MUTROOT/$1.why")"
-  else bad "MUTANT HARNESS [$1]: the mutant was not scored and no reason was recorded"; fi
-}
-mut() {
-  local n="$1" s="$2" prog="$3" base_line="$4" staged="$5" d="$MUTROOT/$1" a h
-  shift 5
-  for a in "$@"; do
-    h="$("$REAL_GREP" -cxF -- "$a" "$RECON/$s")" || h=0
-    [ "$h" -eq 1 ] || { mutbad "MUTANT STALE [$n]: anchor matches $h line(s) of $s, not 1 -- re-anchor on the same site, never relax the arm: $a"; return 1; }
-  done
-  h="$("$REAL_GREP" -cxF -- 'ZZ-PSB-NO-SUCH-LINE-ZZ' "$RECON/$s")" || h=0
-  [ "$h" -eq 0 ] || { mutbad "MUTANT HARNESS [$n]: the impossible-anchor control matched $h line(s)"; return 1; }
-  mkdir -p "$MUTROOT"; cp -R "$RECON" "$d" || { mutbad "MUTANT HARNESS [$n]: copy failed"; return 1; }
-  awk "$prog" "$RECON/$s" > "$d/$s" || { mutbad "MUTANT DID NOT APPLY [$n]: awk failed"; return 1; }
-  if cmp -s "$RECON/$s" "$d/$s"; then mutbad "MUTANT DID NOT APPLY [$n]: the copy is byte-identical"; return 1; fi
-  bash -n "$d/$s" 2>/dev/null || { mutbad "MUTANT DID NOT APPLY [$n]: the mutant does not parse"; return 1; }
-  h="$("$REAL_GREP" -cxF -- "$base_line" "$d/$s")" || h=0
-  [ "$h" -eq 1 ] || { mutbad "MUTANT DID NOT APPLY [$n]: the base spelling is present $h time(s), not 1"; return 1; }
-  # `-` for a mutant that DELETES a line with no staged counterpart (M-Art-merge): its anchors and
-  # its base line still bind it, and `cmp -s` proves it applied.
-  if [ "$staged" != - ]; then
-    h="$("$REAL_GREP" -cF -- "$staged" "$d/$s")" || h=0
-    [ "$h" -eq 0 ] || { mutbad "MUTANT PARTIAL [$n]: the staged spelling '$staged' survives $h time(s) -- a partial revert proves the layer left in place"; return 1; }
-  fi
-  [ -f "$d/lib.sh" ] || { mutbad "MUTANT HARNESS [$n]: lib.sh is not beside the mutant"; return 1; }
-  printf '%s\n' "$d"
-}
-# Line-for-line replacement: drop each line equal to $DROP1/$DROP2, replace the line equal to $OLD.
-SWAP='$0==ENVIRON["DROP1"] {next} $0==ENVIRON["DROP2"] {next} $0==ENVIRON["OLD"] {print ENVIRON["NEW"]; next} {print}'
-# Block replacement: from the line equal to $START through the $NFI-th following line equal to $END
-# (inclusive), print $NEW instead.
-BLOCK='!inb && $0==ENVIRON["START"] {inb=1; seen=0; print ENVIRON["NEW"]; next}
-       inb { if ($0==ENVIRON["END"]) { seen++; if (seen==ENVIRON["NFI"]+0) inb=0 } next }
-       {print}'
-
-# psb_arms <mutant> <key> <decides, comma-joined> -- sets PSB_ARMS to the arms this run drives for the mutant, in
-# key order (every arm of the key under --matrix; else its decides= arm(s) and its twin) and PSB_HELD to the words
-# the kill line names for the arms that must hold. Returns 1 after a `bad` when the mutant's MUTANT-MATRIX row is
-# missing, names other decides= arms than the call scores, or names a twin outside the key.
-psb_arms() {
-  local m="$1" k="$2" dec="$3" rd rt A n=0 want
-  PSB_ARMS=""; PSB_HELD=""
-  rd="$(mt_get "$m" d)"; rt="$(mt_get "$m" t)"
-  if [ -z "$rd" ]; then bad "MUTANT HARNESS [$m]: no MUTANT-MATRIX row in the header -- re-measure with: bash core/fixtures/procsub-staged-refusal-boot/run.sh --matrix"; return 1; fi
-  if [ "$rd" != "$dec" ]; then bad "MUTANT STALE [$m]: its MUTANT-MATRIX row reads decides=$rd, the call scores $dec -- re-measure the matrix"; return 1; fi
-  for A in $(arms_of "$k"); do
-    if [ "$MATRIX" -eq 1 ]; then PSB_ARMS="$PSB_ARMS $A"; continue; fi
-    case ",$dec,$rt," in *",$A,"*) PSB_ARMS="$PSB_ARMS $A"; n=$((n+1)) ;; esac
-  done
-  want="$(printf '%s,%s' "$dec" "$rt" | tr ',' '\n' | grep -cvx -- '-')" || want=0
-  if [ "$MATRIX" -eq 0 ] && [ "$n" -ne "$want" ]; then bad "MUTANT STALE [$m]: its row names $want arm(s) (decides=$rd twins=$rt), $n of them in key $k"; return 1; fi
-  if [ "$MATRIX" -eq 1 ]; then PSB_HELD="every other $k arm stays at its tip shape"
-  elif [ "$rt" = - ]; then PSB_HELD="no twin (key $k carries one arm)"
-  else PSB_HELD="twin $rt stays at its tip shape"; fi
-  return 0
-}
-# psb_cell <mutant> <arm> <shape> <fired> -- under --matrix, one MATRIX row: GREEN when the arm fired and reads
-# its tip shape, TRIPPED otherwise.
-psb_cell() {
-  [ "$MATRIX" -eq 1 ] || return 0
-  MROWS=$((MROWS+1))
-  if [ "$4" -gt 0 ] && [ "$3" = "$(col "$2" 4)" ]; then matrix_row "$1" "$2" 0 GREEN no; PSB_GREEN="$PSB_GREEN $2"
-  else matrix_row "$1" "$2" 1 TRIPPED yes; PSB_TRIP="$PSB_TRIP $2"; fi
-}
-# psb_header <mutant> -- under --matrix, the header row's twins checked against the measured row: every twin
-# green. 0 when it agrees (or outside --matrix). A decides= arm is judged by the scoring itself, against the
-# shape its call names, never by TRIPPED: U2b, M-U-base's near-miss arm, is named at SCANNED, its tip shape.
-psb_header() {
-  local c rt
-  [ "$MATRIX" -eq 1 ] || return 0
-  rt="$(mt_get "$1" t)"
-  [ "$rt" = - ] && return 0
-  for c in $(printf '%s' "$rt" | tr ',' ' '); do
-    case " $PSB_GREEN " in *" $c "*) ;; *) bad "MATRIX [$1]: header twin $c is not green (green:$PSB_GREEN) -- re-measure and rewrite the row"; return 1 ;; esac
-  done
-  return 0
-}
-
-# score <mutant-name> <own-arm> <recon-copy>
-score() {
-  local m="$1" own="$2" d="$3" k A s want got_own="" others_ok=1 detail=""
-  k="$(col "$own" 2)"
-  psb_arms "$m" "$k" "$own" || return 0
-  PSB_TRIP=""; PSB_GREEN=""
-  for A in $PSB_ARMS; do
-    set -- $(forced "$A" "$d" "$m")
-    psb_cell "$m" "$A" "$1" "${2:-0}"
-    if [ "$A" = "$own" ]; then
-      got_own="$1 fired=${2:-0}"
-      [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 5)" ] || got_own="!$got_own"
-    else
-      [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 4)" ] || { others_ok=0; detail="$detail $A=$1"; }
-    fi
-  done
-  psb_header "$m" || return 0
-  report_score "$m" "$own" "$k" "$got_own" "$others_ok" "$detail" "$(col "$own" 5)"
-  return 0
-}
-# score_as <mutant-name> <key> <recon-copy> <arm=shape>... -- for a mutant whose own arm lands on a
-# shape OTHER than the base spelling's (M-U2a reads EMPTY, the silent clear, where the whole base
-# pipeline read rc 1), or that two arms genuinely both own. Every driven arm NOT named (the twin; every
-# other arm of the key under --matrix) must stay at its tip shape, so an undeclared move is still ENTANGLED.
-# ITS LOCAL IS `sfails`, NEVER `fails`: a local of that name shadows the global counter, and `bad`'s
-# `$((fails+1))` then evaluates the SURVIVED detail (`U5b=XFSZ-RC0-LOST(...)`) as arithmetic, which
-# under `set -u` aborts the whole fixture on its first unbound word -- exit 0 through the EXIT trap,
-# every later mutant unscored. Measured on the first survivor this function ever reported.
-score_as() {
-  local m="$1" k="$2" d="$3" A want got sfails="" others_ok=1 detail="" named="" dec=""
-  shift 3
-  for _p in "$@"; do dec="$dec${dec:+,}${_p%%=*}"; done
-  psb_arms "$m" "$k" "$dec" || return 0
-  PSB_TRIP=""; PSB_GREEN=""
-  for A in $PSB_ARMS; do
-    want=""
-    for _p in "$@"; do [ "${_p%%=*}" = "$A" ] && want="${_p#*=}"; done
-    set -- $(forced "$A" "$d" "$m") "$@"
-    got="$1"; local fired="${2:-0}"; shift 2
-    psb_cell "$m" "$A" "$got" "$fired"
-    if [ -n "$want" ]; then
-      named="$named $A=$got"
-      [ "$fired" -gt 0 ] && [ "$got" = "$want" ] || sfails="$sfails $A=$got(want $want,fired=$fired)"
-    else
-      [ "$fired" -gt 0 ] && [ "$got" = "$(col "$A" 4)" ] || { others_ok=0; detail="$detail $A=$got"; }
-    fi
-  done
-  psb_header "$m" || return 0
-  if [ -n "$sfails" ]; then bad "MUTANT SURVIVED [$m]:$sfails -- the arm cannot see its own site revert"
-  elif [ "$others_ok" -eq 1 ]; then psb_kill "$k" "$m" "MUTANT [$m] scored as a kill:$named, $PSB_HELD"
-  else bad "MUTANT ENTANGLED [$m]:$named but undeclared arm(s) moved too:$detail"; fi
-  return 0
-}
-report_score() { # <m> <own> <k> <got_own> <others_ok> <detail> <base-shape>
-  local m="$1" own="$2" k="$3" got_own="$4" others_ok="$5" detail="$6"
-  case "$got_own" in
-    '!'*) bad "MUTANT SURVIVED [$m]: arm $own read ${got_own#!}, expected the base shape $7 -- the arm cannot see its own site revert" ;;
-    *) if [ "$others_ok" -eq 1 ]; then
-         psb_kill "$k" "$m" "MUTANT [$m] scored as a kill: $own reads $got_own (the base shape), $PSB_HELD"
-       else
-         bad "MUTANT ENTANGLED [$m]: $own reads $got_own but other arm(s) moved too:$detail"
-       fi ;;
-  esac
-  return 0
-}
-
-LR=ledger-reverify.sh
-if sg lrpe; then
-  d="$(DROP1='  receipt_path_tokens "$_norev" > "$LR_STAGE/absent-tokens" || return 3' DROP2='ZZ-PSB-NONE' \
-       OLD='  done < "$LR_STAGE/absent-tokens"' NEW='  done < <(receipt_path_tokens "$_norev")' \
-       mut M-L1 "$LR" "$SWAP" '  done < <(receipt_path_tokens "$_norev")' 'absent-tokens' \
-         '  receipt_path_tokens "$_norev" > "$LR_STAGE/absent-tokens" || return 3' '  done < "$LR_STAGE/absent-tokens"')" \
-    && score M-L1 L1 "$d" \
-    || mutreport M-L1
-  d="$(DROP1='  receipt_path_tokens "$1" > "$LR_STAGE/named-tokens" || return 3' DROP2='ZZ-PSB-NONE' \
-       OLD='  done < "$LR_STAGE/named-tokens"' NEW='  done < <(receipt_path_tokens "$1")' \
-       mut M-L2 "$LR" "$SWAP" '  done < <(receipt_path_tokens "$1")' 'named-tokens' \
-         '  receipt_path_tokens "$1" > "$LR_STAGE/named-tokens" || return 3' '  done < "$LR_STAGE/named-tokens"')" \
-    && score M-L2 L2 "$d" \
-    || mutreport M-L2
-  d="$(DROP1='  git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/ > "$LR_STAGE/core-map-ls-tree" 2>/dev/null || return 1' DROP2='ZZ-PSB-NONE' \
-       OLD='  done < "$LR_STAGE/core-map-ls-tree" > "$CORE_MAP"' \
-       NEW='  done < <(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/ 2>/dev/null) > "$CORE_MAP"' \
-       mut M-L3 "$LR" "$SWAP" '  done < <(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/ 2>/dev/null) > "$CORE_MAP"' 'core-map-ls-tree' \
-         '  git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/ > "$LR_STAGE/core-map-ls-tree" 2>/dev/null || return 1' \
-         '  done < "$LR_STAGE/core-map-ls-tree" > "$CORE_MAP"')" \
-    && score M-L3 L3 "$d" \
-    || mutreport M-L3
-  # The walk and its sort are four lines (two commands, each with its `|| pc_refuse` continuation);
-  # all four go, and the reader line gets the base substitution back, in one copy.
-  d="$(START='  cr_walk "$CONS" "$old_prefix" -type f > "$PC_STAGE/orphan-walk" 2>/dev/null \' \
-       END='    || pc_refuse "the orphan walk of $CONS/$old_prefix could not be sorted (sort exited $?)"' NFI=1 NEW='' \
-       OLD='  done < "$PC_STAGE/orphan-sorted"' NEW2='  done < <(cr_walk "$CONS" "$old_prefix" -type f 2>/dev/null | sort)' \
-       mut M-P1 preclassify.sh '!inb && $0==ENVIRON["START"] {inb=1; next}
-             inb { if ($0==ENVIRON["END"]) inb=0; next }
-             $0==ENVIRON["OLD"] {print ENVIRON["NEW2"]; next} {print}' \
-         '  done < <(cr_walk "$CONS" "$old_prefix" -type f 2>/dev/null | sort)' 'orphan-walk' \
-         '  cr_walk "$CONS" "$old_prefix" -type f > "$PC_STAGE/orphan-walk" 2>/dev/null \' \
-         '    || pc_refuse "the orphan walk of $CONS/$old_prefix could not be sorted (sort exited $?)"' \
-         '  done < "$PC_STAGE/orphan-sorted"')" \
-    && score M-P1 P1 "$d" \
-    || mutreport M-P1
-  # M-P2 / M-P3: each membership test fed by its 1749b545 here-string / heredoc again. The base
-  # shape is keyed on bash's own staging message, so a bash that stages nothing reads OTHER, not a kill.
-  PM_S_T='setup_sited() { pc_has_line "$SETUP_SITED_PATHS" "$1"; }'
-  PM_S_B='setup_sited() { grep -qxF "$1" <<<"$SETUP_SITED_PATHS"; }'
-  d="$(DROP1=ZZ-PSB-NONE DROP2=ZZ-PSB-NONE OLD="$PM_S_T" NEW="$PM_S_B" \
-       mut M-P2 preclassify.sh "$SWAP" "$PM_S_B" 'pc_has_line "$SETUP_SITED_PATHS"' "$PM_S_T")" \
-    && score M-P2 P2 "$d" \
-    || mutreport M-P2
-  PM_M_T='is_machinery() { pc_has_line "$MACHINERY_PATHS" "$1"; }'
-  PM_HD='<''<'
-  PM_M_B='is_machinery() { grep -qxF "$1" '"${PM_HD}"'EOF'
-  PM_M_N="$(printf '%s\n%s\n%s\n%s' "$PM_M_B" '$MACHINERY_PATHS' EOF '}')"
-  d="$(DROP1=ZZ-PSB-NONE DROP2=ZZ-PSB-NONE OLD="$PM_M_T" NEW="$PM_M_N" \
-       mut M-P3 preclassify.sh "$SWAP" "$PM_M_B" 'pc_has_line "$MACHINERY_PATHS"' "$PM_M_T")" \
-    && score M-P3 P3 "$d" \
-    || mutreport M-P3
-  E_B1='only_render="$(LC_ALL=C comm -23 <(printf '"'"'%s\n'"'"' "$want" | norm_rows) <(printf '"'"'%s\n'"'"' "$got" | norm_rows))"'
-  E_B2='only_report="$(LC_ALL=C comm -13 <(printf '"'"'%s\n'"'"' "$want" | norm_rows) <(printf '"'"'%s\n'"'"' "$got" | norm_rows))"'
-  d="$(START='er_sets_why=""' END='fi' NFI=1 NEW="$E_B1
-$E_B2
-er_sets_why=\"\"" \
-       mut M-E1 emit-report.sh "$BLOCK" "$E_B1" 'sets.want-rows' 'er_sets_why=""')" \
-    && score M-E1 E1 "$d" \
-    || mutreport M-E1
-  S_B1='    r1_missing="$(comm -23 <(printf '"'"'%s\n'"'"' "$r1_theirs") <(printf '"'"'%s\n'"'"' "$r1_ours") | tr '"'"'\n'"'"' '"'"' '"'"' | sed '"'"'s/ *$//'"'"')"'
-  d="$(START='    r1_why=""' END='    elif [ -n "$r1_missing" ]; then' NFI=1 NEW="$S_B1
-    if [ -n \"\$r1_missing\" ]; then" \
-       mut M-S1 self-update-gate.sh "$BLOCK" "$S_B1" 'r1-theirs' '    r1_why=""' '    elif [ -n "$r1_missing" ]; then')" \
-    && score M-S1 S1 "$d" \
-    || mutreport M-S1
-  S_B2='GATING="$(printf '"'"'%s\n'"'"' "$INVOKED" | grep -Fxf <(printf '"'"'%s\n'"'"' "$CHANGED") 2>/dev/null || true)"'
-  # The staged block closes with TWO column-0 `fi`s: the staging if/elif/else, then the refusal.
-  d="$(START='gating_why=""' END='fi' NFI=2 NEW="$S_B2" \
-       mut M-S2 self-update-gate.sh "$BLOCK" "$S_B2" 'gating-changed' 'gating_why=""')" \
-    && score M-S2 S2 "$d" \
-    || mutreport M-S2
-  # S3: the staging block and its refusal, through the sed that reads the staged file, become the
-  # base two-line pipeline again -- every layer in one copy.
-  S_B3='CHANGED="$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- core/scripts/ 2>/dev/null \'
-  S_B3b='            | sed '"'"'s|.*/||'"'"' | sort -u)"'
-  d="$(START='changed_why=""' END='CHANGED="$(sed '"'"'s|.*/||'"'"' "$TMP/changed-raw" | sort -u)"' NFI=1 NEW="$S_B3
-$S_B3b" \
-       mut M-S3 self-update-gate.sh "$BLOCK" "$S_B3" 'changed-raw' 'changed_why=""' \
-         'CHANGED="$(sed '"'"'s|.*/||'"'"' "$TMP/changed-raw" | sort -u)"')" \
-    && { score M-S3 S3 "$d"
-         # THE HEALTHY PATH IS BYTE-IDENTICAL TO THE BASE SPELLING on the world S3 forces: same
-         # stdout rows from the staged diff and from the pipeline it replaced, sides shown to differ.
-         _o() { local r; r="$(mktemp -d "$WORK/sg-bi.XXXXXX")" && cp -R "$WORK/gw-gt/consumer/." "$r/" \
-                  && "$REAL_BASH" "$1/self-update-gate.sh" "$WORK/gw-gt/dist" "$(cat "$WORK/gw-gt/B")" "$(cat "$WORK/gw-gt/T")" "$r" 2>/dev/null; }
-         _a="$(_o "$RECON")"; _b="$(_o "$d")"
-         if cmp -s "$RECON/self-update-gate.sh" "$d/self-update-gate.sh"; then bad "S3 healthy differential: the two gate copies are identical"
-         elif [ -n "$_a" ] && [ "$_a" = "$_b" ]; then ok "S3 healthy: the staged diff prints byte-identical rows to the base pipeline ($(cut -f1 <<<"$_a" | sort | uniq -c | tr -s ' ' | tr '\n' ';'))"
-         else bad "S3 healthy: the staged diff and the base pipeline disagree on a readable range"; fi; } \
-    || mutreport M-S3
-fi
-
-UD=unregistered-drift.sh
-N0='ZZ-PSB-NONE'
-if sg ud; then
-# M-U-base: THE WHOLE BASE LISTING PIPELINE RESTORED, which makes the copy byte-identical to
-# unregistered-drift.sh at the parent release apart from its comments. It is the in-fixture form of
-# "the parent's copy exits 1 on an empty scan set": every U arm must read its base shape at once.
-# WRITTEN STRAIGHT TO A FILE, never through `$( )` or ENVIRON: bash 3.2 mis-scans the body's
-# unbalanced `(` inside a heredoc in a command substitution, and BSD awk joins a backslash-newline
-# inside an ENVIRON value. Measured both ways: the base-line count read 0 each time.
-U_BASE_F="$MUTROOT/u-base-head.txt"
-cat > "$U_BASE_F" <<'EOB' || { echo "FIXTURE ERROR: could not write $U_BASE_F" >&2; exit 2; }
-{ { command -v memo_ls_tree >/dev/null 2>&1 \
-    && memo_ls_tree "$DIST" "$BASE" \
-       | grep -E '^(core/skills/ai-dlc/|core/skills/ai-dlc-setup/|core/team-roles/|core/hooks/|core/schemas/)'; } \
-  || git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
-      core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks core/schemas 2>/dev/null; } \
-  | grep -E '\.(md|sh|json)$' \
-  | while IFS= read -r cp; do
-EOB
-_h="$("$REAL_GREP" -c . "$U_BASE_F")" || _h=0
-[ "$_h" -eq 7 ] || { echo "FIXTURE ERROR: the base listing block is $_h line(s), not 7" >&2; exit 2; }
-# THE EMIT, EVERY LAYER. The tip counts each failed write and leaves through `ud_finish`; the base
-# spelling discards printf's status and exits where it stands. M-U-base restores all of it, so the
-# copy is the whole earlier program and not a hybrid whose listing is old and whose exit is new.
-# U_EMIT_T is the tip emit's FAILURE branch -- the line that counts a lost row; U_EMIT_B the whole
-# one-line base emit. U_BREAK_T is the scan loop's stop at the first failed write.
-U_EMIT_T='  else ud_emit_failed=$(( ud_emit_failed + 1 )); fi'
-U_EMIT_B="emit() { printf '%s\\t%s\\t%s\\n' \"\$1\" \"\$2\" \"\$3\"; }"
-U_BREAK_T='      [ "$ud_emit_failed" -eq 0 ] || break'
-U_BASE_PROG='!inb && $0==ENVIRON["START"] {inb=1; while ((getline l < ENVIRON["NEWF"]) > 0) print l; next}
-  inb { if ($0==ENVIRON["END"]) inb=0; next }
-  $0=="emit() {" {print ENVIRON["EMIT_B"]; ine=1; next}
-  ine { if ($0=="}") ine=0; next }
-  $0=="ud_emit_failed=0" || $0=="ud_emit_ok=0" || $0==ENVIRON["BREAK_T"] {next}
-  $0=="ud_finish() {" {inf=1; next}
-  inf { if ($0=="}") inf=0; next }
-  $0=="  ud_finish" {print "  exit 0"; next}
-  $0==ENVIRON["DONE_T"] {print "    done"; tail=1; next}
-  tail && ($0 ~ /^#/ || $0=="ud_finish") {next}
-  {print}'
-  d="$(START='ud_scan_why=""' END='while IFS= read -r cp; do' NEWF="$U_BASE_F" DONE_T='    done < "$UD_DIFF_TMP/scan-set"' \
-       EMIT_B="$U_EMIT_B" BREAK_T="$U_BREAK_T" \
-       mut M-U-base "$UD" "$U_BASE_PROG" "  | grep -E '\\.(md|sh|json)\$' \\" 'ud_scan_why' \
-         'ud_scan_why=""' 'while IFS= read -r cp; do' '    done < "$UD_DIFF_TMP/scan-set"' 'ud_finish' \
-         'ud_emit_failed=0' 'ud_emit_ok=0' 'emit() {' 'ud_finish() {' "$U_EMIT_T" "$U_BREAK_T")" \
-    && { _h="$("$REAL_GREP" -v '^ *#' "$d/$UD" | "$REAL_GREP" -c 'ud_finish\|ud_emit_failed\|ud_emit_ok')" || _h=0
-         [ "$_h" -eq 0 ] || bad "MUTANT PARTIAL [M-U-base]: $_h code line(s) still carry ud_finish/ud_emit_failed/ud_emit_ok -- the emit layer was not restored"
-         # U5 reads rc 1 here, not the parent release's 0: before the scan set was staged the loop
-         # was the last stage of a pipeline, and the failed write became its status. U5b reads rc 0
-         # even so (measured on the d1c72fa9 copy: rc 0, 11 of 21 rows, the HARD row lost) -- the
-         # pipeline status carried a closed fd's failure and not EFBIG's.
-         score_as M-U-base ud "$d" U1=RC1-NOROW U2=RC1-NOROW U2b=SCANNED U3=RC2-NOROW U4=SCANNED U5=CLOSED-RC1 U5b=XFSZ-RC0-LOST
-         # THE HEALTHY PATH IS BYTE-IDENTICAL TO THE BASE SPELLING, on every world that scans a file.
-         # The two sides are asserted to DIFFER first, or the comparison reads the same program twice.
-         for _w in "$UW_OK" "$UW_HU" "$UW_BIG"; do
-           _a="$("$REAL_BASH" "$RECON/$UD" "$_w/dist" "$(cat "$_w/B")" "$_w/consumer" "$(cat "$_w/T")" 2>/dev/null)"
-           _b="$("$REAL_BASH" "$d/$UD" "$_w/dist" "$(cat "$_w/B")" "$_w/consumer" "$(cat "$_w/T")" 2>/dev/null)"
-           if cmp -s "$RECON/$UD" "$d/$UD"; then bad "U healthy differential: the two unregistered-drift.sh copies are identical, so the comparison reads one program twice"
-           elif [ -n "$_a" ] && [ "$_a" = "$_b" ]; then ok "U healthy ($(basename "$_w")): the staged listing prints byte-identical rows to the base pipeline ($(cut -f1 <<<"$_a" | tr '\n' ' '))"
-           else bad "U healthy ($(basename "$_w")): the staged listing and the base pipeline disagree on a world both can scan (tip [$(cut -f1 <<<"$_a" | tr '\n' ' ')] base [$(cut -f1 <<<"$_b" | tr '\n' ' ')])"; fi
-         done; } \
-    || mutreport M-U-base
-# THE WRITE-FAILURE FIX IS TWO LAYERS -- the per-emit COUNT and the CHECK in `ud_finish` that reads
-# it -- and each has its own mutant. Either one alone restores the parent release's behaviour, so
-# both land on U5 AND U5b at the parent's shapes: the two arms genuinely both own each of them.
-# M-U-emit-status: emit discards printf's status again, so the count never moves. The emit's
-# failure branch becomes a no-op; the success count is left as it is (nothing reads it on rc 0).
-  d="$(DROP1="$N0" DROP2="$N0" OLD="$U_EMIT_T" NEW='  else :; fi' \
-       mut M-U-emit-status "$UD" "$SWAP" '  else :; fi' 'else ud_emit_failed=$((' "$U_EMIT_T")" \
-    && score_as M-U-emit-status ud "$d" U5=CLOSED-RC0 U5b=XFSZ-RC0-LOST \
-    || mutreport M-U-emit-status
-# M-U-exit: the final write-failure check deleted, so `ud_finish` exits 0 whatever the count says.
-# (Before the fix this mutant deleted a trailing `exit 0`; that line is gone, and deleting the check
-# is the mutation that asserts the same observable -- a lost row is not an rc-0 clean scan.)
-  d="$(START='  if [ "$ud_emit_failed" -gt 0 ]; then' END='  fi' NFI=1 NEW='  : ZZ-PSB-M-UEXIT' \
-       mut M-U-exit "$UD" "$BLOCK" '  : ZZ-PSB-M-UEXIT' 'the scan stopped there and its output is INCOMPLETE' \
-         '  if [ "$ud_emit_failed" -gt 0 ]; then')" \
-    && score_as M-U-exit ud "$d" U5=CLOSED-RC0 U5b=XFSZ-RC0-LOST \
-    || mutreport M-U-exit
-# M-U-probe: the per-emit count replaced by ONE pre-flight test of stdout at start -- the wrong fix
-# that satisfies a closed-stdout arm. U5 CANNOT kill it (a closed fd fails the probe and the named
-# refusal follows); U5b is its killer, because a file that accepts the first write and refuses a
-# later one passes a probe taken before any row. That asymmetry is why U5b exists.
-# The probe is `( exec 3>&1 )`, measured to fail on a closed fd and to PASS on a file that will hit
-# EFBIG -- the pre-flight test a closed-stdout arm cannot tell from a count.
-  d="$(E="$U_EMIT_T" \
-       mut M-U-probe "$UD" '$0==ENVIRON["E"] {print "  else :; fi"; next}
-         $0=="ud_emit_ok=0" {print; print "( exec 3>&1 ) 2>/dev/null || ud_emit_failed=1"; next} {print}' \
-         '( exec 3>&1 ) 2>/dev/null || ud_emit_failed=1' 'else ud_emit_failed=$((' "$U_EMIT_T" 'ud_emit_ok=0')" \
-    && score M-U-probe U5b "$d" \
-    || mutreport M-U-probe
-# M-U-nobreak: the scan loop's stop at the first failed write deleted. Its rc, its rows and its N
-# are all the fixed script's (a leaked row makes every later iteration skip its file), so only the
-# ITERATION count U5b reads can see it: XFSZ-RC2-NOSTOP. U5's one-file world cannot.
-  d="$(BREAK_T="$U_BREAK_T" mut M-U-nobreak "$UD" '$0==ENVIRON["BREAK_T"] {next} {print}' '      rel="${cp#core/}"' '|| break' \
-         "$U_BREAK_T" '      rel="${cp#core/}"')" \
-    && score_as M-U-nobreak ud "$d" U5b=XFSZ-RC2-NOSTOP \
-    || mutreport M-U-nobreak
-# M-U-memo: the memo branch's status unread, so a failed memo listing is taken as an empty one and
-# the direct listing is never tried. U2 reads EMPTY -- the silent clear, not the base's rc 1 -- and
-# U2b, the near-miss whose direct listing WOULD have answered, reads EMPTY too: both own it. So do
-# U6-hit and U6-fill: the memo's 125 for a failed serve reaches the fallback only through this read.
-  d="$(DROP1="$N0" DROP2="$N0" OLD='    ud_memo_rc=$?' NEW='    ud_memo_rc=0' \
-       mut M-U-memo "$UD" "$SWAP" '    ud_memo_rc=0' 'ud_memo_rc=$?' '    ud_memo_rc=$?')" \
-    && score_as M-U-memo ud "$d" U2=EMPTY U2b=EMPTY U6-hit=EMPTY U6-fill=EMPTY \
-    || mutreport M-U-memo
-# lib.sh's two serves of the cached ls-tree listing, one mutant each, each killed by its own cell.
-# M-L-cat-status: memo_ls_tree's HIT path returns the cached status whatever its `cat` did. The hit
-# line is spelled identically in all four memo functions, so the mutation anchors on what SEPARATES
-# them -- the first such line after `memo_ls_tree() {` -- and the other three stay fixed.
-LIB=lib.sh
-  d="$(mut M-L-cat-status "$LIB" '$0=="memo_ls_tree() {" {inl=1}
-         inl && $0=="  cat \"$_f.c\" || return 125" {print "  cat \"$_f.c\""; inl=0; next} {print}' \
-         '  cat "$_f.c"' - 'memo_ls_tree() {')" \
-    && score M-L-cat-status U6-hit "$d" \
-    || mutreport M-L-cat-status
-# M-L-commit-status: `_ai_dlc_memo_commit` returns 0 after a failed serve of the fill. Returning
-# cat's own 1 would NOT be this mutant: the callers fold any non-zero into 125.
-  d="$(DROP1="$N0" DROP2="$N0" OLD='  cat "$1.c" || return 125' NEW='  cat "$1.c"; return 0' \
-       mut M-L-commit-status "$LIB" "$SWAP" '  cat "$1.c"; return 0' - '  cat "$1.c" || return 125')" \
-    && score M-L-commit-status U6-fill "$d" \
-    || mutreport M-L-commit-status
-# M-U-ext / M-U-pfx: a grep status >1 accepted as "no match", one filter each.
-  d="$(DROP1="$N0" DROP2="$N0" OLD='    [ "$ud_rc" -le 1 ] || ud_scan_why="the file-type filter over the tree listing exited ${ud_rc}"' NEW='    : ZZ-PSB-M-UEXT' \
-       mut M-U-ext "$UD" "$SWAP" '    : ZZ-PSB-M-UEXT' 'the file-type filter over the tree listing exited' \
-         '    [ "$ud_rc" -le 1 ] || ud_scan_why="the file-type filter over the tree listing exited ${ud_rc}"')" \
-    && score_as M-U-ext ud "$d" U3=EMPTY \
-    || mutreport M-U-ext
-  d="$(DROP1="$N0" DROP2="$N0" OLD='      [ "$ud_rc" -le 1 ] || ud_scan_why="the scan-set prefix filter over the cached tree listing exited ${ud_rc}"' NEW='      : ZZ-PSB-M-UPFX' \
-       mut M-U-pfx "$UD" "$SWAP" '      : ZZ-PSB-M-UPFX' 'the scan-set prefix filter over the cached tree listing exited' \
-         '      [ "$ud_rc" -le 1 ] || ud_scan_why="the scan-set prefix filter over the cached tree listing exited ${ud_rc}"')" \
-    && score_as M-U-pfx ud "$d" U4=EMPTY \
-    || mutreport M-U-pfx
-fi
-
-# apply.sh: each site's exit read turned off, one copy per site. The other four A arms must stay
-# REFUSED, so a mutant cannot be killed by an arm that watches a different detector.
-if sg ap; then
-AP=apply.sh
-ap_off() { # <mutant> <own-arm> <indent> <line-literal> <staged-token>
-  local d
-  d="$(DROP1="$N0" DROP2="$N0" OLD="$3$4" NEW="${3}if false; then" \
-       mut "$1" "$AP" "$SWAP" "${3}if false; then" "$5" "$3$4")" \
-    && score "$1" "$2" "$d" \
-    || mutreport "$1"
-}
-ap_off M-Aud  Aud  ''       'if [ "$UD_RC" -ne 0 ]; then'         'UD_RC" -ne 0'
-ap_off M-Art  Art  '      ' 'if [ "$rt_rc" -ne 0 ]; then'         'rt_rc" -ne 0'
-ap_off M-Arlp Arlp ''       'if [ "${RLP_RC:-0}" -ne 0 ]; then'   'RLP_RC:-0}" -ne 0'
-ap_off M-Ald  Ald  ''       'if [ "$LD_RC" -ne 0 ]; then'         'LD_RC" -ne 0'
-ap_off M-Ana  Ana  '  '     'if [ -n "$UD_NA" ]; then'            'if [ -n "$UD_NA" ]; then'
-# M-Art-merge: the refusal branch stops emitting the merge row. The row is spelled identically in the
-# refusal branch and the plain branch, so the mutation anchors on what SEPARATES them: the line
-# directly after the refusal test.
-  d="$(mut M-Art-merge "$AP" '{ if (skip && $0=="        say WORKLIST semantic-merge \"$rel\"") { skip=0; next } skip=0 }
-       $0=="      if [ \"$rt_rc\" -ne 0 ]; then" {skip=1} {print}' \
-         '        detector_refused retired-tokens retired-tokens.sh "$rel" "$rt_rc" rt' - \
-         '      if [ "$rt_rc" -ne 0 ]; then' '        detector_refused retired-tokens retired-tokens.sh "$rel" "$rt_rc" rt')" \
-    && { _h="$("$REAL_GREP" -cxF '        say WORKLIST semantic-merge "$rel"' "$d/$AP")" || _h=0
-         if [ "$_h" -eq 1 ]; then score_as M-Art-merge ap "$d" Art=REFUSED-NOMERGE
-         else bad "MUTANT DID NOT APPLY [M-Art-merge]: the plain merge row is present $_h time(s) in the copy, want 1 (the refusal branch's removed, the plain branch's kept)"; fi; } \
-    || mutreport M-Art-merge
-fi
-
-# === layer-drift: THE PRE-FIX ENGINE, EVERY L CELL ================================================
-# Each L cell must read its BASE shape on the a0a9c556 engine in this same run: the cell is shown
-# able to fail, on the input it discriminates, before its tip reading above is believed.
-if sg ld; then
-for A in $(arms_of ld); do
-  set -- $(forced "$A" "$LD_BASE" base)
-  if [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 5)" ]; then
-    ok "$A on the ${LD_BASE_SHA} engine (stub fired ${2}x): $1 -- the cell fails the pre-fix engine"
-  elif [ "${2:-0}" -eq 0 ]; then
-    bad "$A FIXTURE BROKEN: on the ${LD_BASE_SHA} engine the stub never fired, so its shape ($1) says nothing"
-  else
-    bad "$A on the ${LD_BASE_SHA} engine: $1, expected $(col "$A" 5) -- the cell cannot tell the pre-fix engine from the fix"
-  fi
-done
-fi
-# The C cells on the same pre-fix copy (whose hard-blockers.sh is a0a9c556's too). A here-string cell
-# whose base run did NOT print bash's here-string message reads INCONCLUSIVE, never ok and never FAIL:
-# that bash lost nothing, so the cell discriminates nothing on it.
-if sg lc; then
-for A in $(arms_of lc) $(arms_of lo) $(arms_of hb); do
-  set -- $(forced "$A" "$LD_BASE" base)
-  case "$LC_HEREDOC_ARMS" in
-    *" $A "*) if [ ! -f "$WORK/stub/base-$A/HEREDOC" ]; then
-                printf '  INCONCLUSIVE  %s on the %s engine: %s, and the run printed no here-string failure -- this bash staged nothing it could lose, so the cell cannot fail the pre-fix engine here\n' "$A" "$LD_BASE_SHA" "$1"
-                continue
-              fi ;;
-  esac
-  if [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 5)" ]; then
-    ok "$A on the ${LD_BASE_SHA} engine (stub fired ${2}x): $1 -- the cell fails the pre-fix engine"
-  elif [ "${2:-0}" -eq 0 ]; then
-    bad "$A FIXTURE BROKEN: on the ${LD_BASE_SHA} engine the stub never fired, so its shape ($1) says nothing"
-  else
-    bad "$A on the ${LD_BASE_SHA} engine: $1, expected $(col "$A" 5) -- the cell cannot tell the pre-fix engine from the fix"
-  fi
-done
-fi
-
 # === SPELL: layer-drift.sh carries no here-string =================================================
 # A non-comment `<<<` count, probed on a mktemp copy BEFORE the corpus in both directions: a seeded
 # offender must count, and a seeded near-miss -- the operator inside a comment, indented as the
-# engine's own comments are -- must not. The a0a9c556 engine is the positive control on the real text.
+# engine's own comments are -- must not.
 spell_count() { awk '/^[[:space:]]*#/ { next } /<<</ { n++ } END { print n + 0 }' "$1"; }
 if sg spell; then
 _sp="$(mktemp -d "$WORK/spell.XXXXXX")" || { echo "FIXTURE ERROR: mktemp spell" >&2; exit 2; }
@@ -1979,11 +1408,10 @@ cp "$RECON/layer-drift.sh" "$_sp/offender.sh" && cp "$RECON/layer-drift.sh" "$_s
 printf '  x="$(awk %s <<<"$y")"\n' "'{print}'" >> "$_sp/offender.sh"
 printf '    # a comment naming the here-string operator, <<<"$y", is not a site\n' >> "$_sp/nearmiss.sh"
 _so="$(spell_count "$_sp/offender.sh")"; _sn="$(spell_count "$_sp/nearmiss.sh")"; _st="$(spell_count "$RECON/layer-drift.sh")"
-_sb="$(spell_count "$LD_BASE/layer-drift.sh")"
-if [ "$_so" -ne $(( _st + 1 )) ] || [ "$_sn" -ne "$_st" ] || [ "$_sb" -eq 0 ]; then
-  bad "SPELL probe: a seeded offender counted $_so (want $(( _st + 1 ))), a seeded comment near-miss $_sn (want $_st), the ${LD_BASE_SHA} engine $_sb (want > 0) -- the count cannot discriminate, so its zero below is no finding"
+if [ "$_so" -ne $(( _st + 1 )) ] || [ "$_sn" -ne "$_st" ]; then
+  bad "SPELL probe: a seeded offender counted $_so (want $(( _st + 1 ))), a seeded comment near-miss $_sn (want $_st) -- the count cannot discriminate, so its zero below is no finding"
 elif [ "$_st" -eq 0 ]; then
-  ok "SPELL: layer-drift.sh carries 0 non-comment here-strings (probe: offender +1, comment near-miss +0, the ${LD_BASE_SHA} engine $_sb)"
+  ok "SPELL: layer-drift.sh carries 0 non-comment here-strings (probe: offender +1, comment near-miss +0)"
 else
   bad "SPELL: layer-drift.sh carries $_st non-comment here-string(s) -- a \`<<<\` whose temp file cannot be written feeds its command EMPTY stdin at the command's own exit status (BL-359)"
 fi
@@ -1994,7 +1422,7 @@ fi
 # before the orphan pass, so any limit that fails that heredoc refuses the run earlier, at base and
 # tip alike. This spelling count is its guard, and it also refuses `done < <(printf …)`, which
 # passes every forced cell because a `printf` producer cannot fail to stage. Probed on mktemp copies
-# BEFORE the corpus, in both directions, with the 1749b545 engine as the positive control.
+# BEFORE the corpus, in both directions.
 # The program spans lines so the `gsub` and the octal quote escape never share one: S7 of
 # validate-shell-portability.sh reads `sub(` plus a later backslash-digit as a backreference.
 pc_spell() { awk '/^[[:space:]]*#/ { next }
@@ -2002,217 +1430,21 @@ pc_spell() { awk '/^[[:space:]]*#/ { next }
   l ~ /<<</ || l ~ /<<-?[\047"]?[A-Za-z_]/ || l ~ /< <\(/ { n++ }
   END { print n + 0 }' "$1"; }
 cp "$RECON/preclassify.sh" "$_sp/pc-offender.sh" && cp "$RECON/preclassify.sh" "$_sp/pc-nearmiss.sh" \
-  && git -C "$TREE_TOP" show "1749b545:core/skills/ai-dlc-update/reconcile/preclassify.sh" > "$_sp/pc-base.sh" 2>/dev/null \
   || { echo "FIXTURE ERROR: preclassify spell probe copies" >&2; exit 2; }
 printf 'done < <(printf %s "$x")\n' "'%s\n'" >> "$_sp/pc-offender.sh"
 _spd='<''<'
 printf '  # a comment naming done %sEOF and < <(x) is not a site; echo "<<<<<<< x" neither\n' "$_spd" >> "$_sp/pc-nearmiss.sh"
 printf 'echo "<<<<<<< x"\n' >> "$_sp/pc-nearmiss.sh"
 _po="$(pc_spell "$_sp/pc-offender.sh")"; _pn="$(pc_spell "$_sp/pc-nearmiss.sh")"
-_pt="$(pc_spell "$RECON/preclassify.sh")"; _pb="$(pc_spell "$_sp/pc-base.sh")"
-if [ "$_po" -ne $(( _pt + 1 )) ] || [ "$_pn" -ne "$_pt" ] || [ "$_pb" -ne 3 ]; then
-  bad "SPELL probe (preclassify): a seeded \`< <(\` counted $_po (want $(( _pt + 1 ))), a seeded comment/conflict-marker near-miss $_pn (want $_pt), the 1749b545 engine $_pb (want its 3 sites) -- the count cannot discriminate, so its zero below is no finding"
+_pt="$(pc_spell "$RECON/preclassify.sh")"
+if [ "$_po" -ne $(( _pt + 1 )) ] || [ "$_pn" -ne "$_pt" ]; then
+  bad "SPELL probe (preclassify): a seeded \`< <(\` counted $_po (want $(( _pt + 1 ))), a seeded comment/conflict-marker near-miss $_pn (want $_pt) -- the count cannot discriminate, so its zero below is no finding"
 elif [ "$_pt" -eq 0 ]; then
-  ok "SPELL: preclassify.sh carries 0 non-comment here-strings, heredocs or \`< <(\` (probe: offender +1, near-miss +0, the 1749b545 engine 3)"
+  ok "SPELL: preclassify.sh carries 0 non-comment here-strings, heredocs or \`< <(\` (probe: offender +1, near-miss +0)"
 else
   bad "SPELL: preclassify.sh carries $_pt non-comment here-string/heredoc/\`< <(\` site(s) -- an input bash 3.2 stages to a temp file reads EMPTY when that write fails (BL-360)"
 fi
 fi
-if sg ld; then
-# THE HEALTHY PATH IS BYTE-IDENTICAL TO THE PRE-FIX ENGINE, in both modes, on every L world. The two
-# engine files are asserted to DIFFER first, or the comparison reads one program twice.
-# ONE CARVE-OUT, BL-620's: the tip's HARD-LAYER-ADJUDICATION-MISSING row ends in the `read`-evidence
-# instruction layer-drift.sh's adj_read_ask prints, which the pre-fix engine never did. ldh_noread
-# strips that one span (" The record must also carry" through "a verdict without them does not clear.")
-# from HARD rows only, and never from any other row. The markers are a second spelling of
-# adj_read_ask, so a rewording there fails this arm loudly. Before the compare, the span must be
-# absent from the base output, present exactly once per tip HARD row and on no other row, and present
-# at least once on ext classify, so the carve-out can be shown to have fired and to cover nothing else.
-LDH_RA_A=' The record must also carry'; LDH_RA_Z='a verdict without them does not clear.'
-ldh_noread() { "$REAL_AWK" -F'\t' -v a="$LDH_RA_A" -v z="$LDH_RA_Z" '
-  $1 == "HARD-LAYER-ADJUDICATION-MISSING" { i = index($0, a)
-    if (i) { r = substr($0, i); j = index(r, z); if (j) $0 = substr($0, 1, i - 1) substr(r, j + length(z)) } }
-  { print }' "$1"; }
-if cmp -s "$RECON/layer-drift.sh" "$LD_BASE/layer-drift.sh"; then
-  bad "L healthy differential: the tip and ${LD_BASE_SHA} layer-drift.sh copies are identical"
-else
-  for _w in ext ds; do
-    for _m in classify --list-adjudications; do
-      case "$_w" in ext) _W="$LW_EXT" ;; *) _W="$LW_DS" ;; esac
-      set -- ; [ "$_m" = classify ] || set -- "$_m"
-      "$REAL_BASH" "$RECON/layer-drift.sh" "$@" "$_W/dist" "$(cat "$_W/B")" "$(cat "$_W/T")" "$_W/consumer" > "$WORK/ldh-tip" 2>/dev/null; _ra=$?
-      "$REAL_BASH" "$LD_BASE/layer-drift.sh" "$@" "$_W/dist" "$(cat "$_W/B")" "$(cat "$_W/T")" "$_W/consumer" > "$WORK/ldh-base" 2>/dev/null; _rb=$?
-      _n="$("$REAL_GREP" -c . "$WORK/ldh-tip")" || _n=0
-      _rb0="$("$REAL_GREP" -cF -- "$LDH_RA_Z" "$WORK/ldh-base")" || _rb0=0
-      _rt="$("$REAL_GREP" -cF -- "$LDH_RA_Z" "$WORK/ldh-tip")" || _rt=0
-      _rh="$("$REAL_AWK" -F'\t' -v a="$LDH_RA_A" -v z="$LDH_RA_Z" '$1 == "HARD-LAYER-ADJUDICATION-MISSING" && index($0, a) && index($0, z) > index($0, a) { n++ } END { print n + 0 }' "$WORK/ldh-tip")"
-      _nh="$("$REAL_AWK" -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING" { n++ } END { print n + 0 }' "$WORK/ldh-tip")"
-      ldh_noread "$WORK/ldh-tip" > "$WORK/ldh-tip-nr"
-      if [ "$_rb0" -ne 0 ] || [ "$_rt" -ne "$_nh" ] || [ "$_rh" -ne "$_nh" ] || { [ "$_w:$_m" = ext:classify ] && [ "$_nh" -lt 1 ]; }; then
-        bad "L healthy ($_w, $_m): the read-evidence carve-out cannot be scoped -- base carries the span on $_rb0 line(s) (want 0), tip on $_rt line(s) and on $_rh of its $_nh HARD row(s) (want every HARD row and nothing else$([ "$_w:$_m" = ext:classify ] && echo ', at least one'))"
-      # ds has no adjudicable row, so its listing is legitimately empty; every other pair must carry rows.
-      elif [ "$_ra" -eq 0 ] && [ "$_rb" -eq 0 ] && cmp -s "$WORK/ldh-tip-nr" "$WORK/ldh-base" \
-         && { [ "$_n" -gt 0 ] || [ "$_w:$_m" = "ds:--list-adjudications" ]; }; then
-        ok "L healthy ($_w, $_m): rc 0 both, tip stdout byte-identical to ${LD_BASE_SHA} ($_n row(s)) once BL-620's read-evidence span is removed from its $_nh HARD row(s)"
-      else
-        bad "L healthy ($_w, $_m): tip rc $_ra, ${LD_BASE_SHA} rc $_rb, $_n tip row(s), outputs $(cmp -s "$WORK/ldh-tip-nr" "$WORK/ldh-base" && echo equal || echo DIFFER) after removing the read-evidence span from $_nh HARD row(s)"
-      fi
-    done
-  done
-fi
-fi
-
-# === layer-drift MUTANTS ==========================================================================
-# Each applied by anchor to a copy of the TIP engine in a copy of the whole reconcile/ directory.
-LDS=layer-drift.sh
-if sg ld; then
-LD_BRK_O='  [ "$ld_emit_failed" -eq 0 ] || break'
-LD_BRK_E='  [ "$ld_emit_failed" -eq 0 ] || break   # as in the overrides loop'
-LD_EXT_WALK='layer_files "$EXT_DIR" > "$LD_T/extensions" || _lw_rc=$?'
-ld_nobreak_check() { # <copy> <want-overrides-break> <want-extensions-break>
-  local a b
-  a="$("$REAL_GREP" -cxF -- "$LD_BRK_O" "$1/$LDS")" || a=0
-  b="$("$REAL_GREP" -cxF -- "$LD_BRK_E" "$1/$LDS")" || b=0
-  [ "$a" -eq "$2" ] && [ "$b" -eq "$3" ] && return 0
-  bad "MUTANT PARTIAL: the overrides-loop break is present $a time(s) (want $2) and the extensions-loop break $b (want $3)"
-  return 1
-}
-# m1: NO BREAK at either outer loop. Rows, rc and N are the fix's (every writer is guarded), so only
-# the ITERATION count after the first failed write can see it: L5b (extensions) and L5e (overrides).
-  d="$(O1="$LD_BRK_O" O2="$LD_BRK_E" mut M-LD-nobreak "$LDS" '$0==ENVIRON["O1"] || $0==ENVIRON["O2"] {next} {print}' \
-         "$LD_EXT_WALK" - "$LD_BRK_O" "$LD_BRK_E" "$LD_EXT_WALK")" \
-    && { ld_nobreak_check "$d" 0 0 && score_as M-LD-nobreak ld "$d" L5b=XFSZ-RC2-NOSTOP L5e=XFSZ-RC2-NOSTOP; } \
-    || mutreport M-LD-nobreak
-# m1a / m1b: one loop's break each, so each break has a cell the other cannot cover.
-  d="$(O1="$LD_BRK_O" mut M-LD-nobreak-ovr "$LDS" '$0==ENVIRON["O1"] {next} {print}' \
-         "$LD_EXT_WALK" - "$LD_BRK_O" "$LD_EXT_WALK")" \
-    && { ld_nobreak_check "$d" 0 1 && score_as M-LD-nobreak-ovr ld "$d" L5e=XFSZ-RC2-NOSTOP; } \
-    || mutreport M-LD-nobreak-ovr
-  d="$(O2="$LD_BRK_E" mut M-LD-nobreak-ext "$LDS" '$0==ENVIRON["O2"] {next} {print}' \
-         "$LD_EXT_WALK" - "$LD_BRK_E" "$LD_EXT_WALK")" \
-    && { ld_nobreak_check "$d" 1 0 && score_as M-LD-nobreak-ext ld "$d" L5b=XFSZ-RC2-NOSTOP; } \
-    || mutreport M-LD-nobreak-ext
-# m2: the per-write count replaced by ONE pre-flight probe of stdout at start. A closed fd fails the
-# probe, so L5 and L5c cannot kill it; every EFBIG cell does, because a file that accepts the first
-# write and refuses a later one passes a probe taken before any row.
-LD_FAILBR='  else ld_emit_failed=$(( ld_emit_failed + 1 )); fi'
-LD_PROBE='( exec 3>&1 ) 2>/dev/null || ld_emit_failed=1'
-  d="$(E="$LD_FAILBR" P="$LD_PROBE" mut M-LD-probe "$LDS" '$0==ENVIRON["E"] {print "  else :; fi"; next}
-         $0=="ld_emit_failed=0" {print; print ENVIRON["P"]; next} {print}' \
-         "$LD_PROBE" 'else ld_emit_failed=$((' "$LD_FAILBR" 'ld_emit_failed=0')" \
-    && score_as M-LD-probe ld "$d" L5b=XFSZ-RC0-LOST L5b-hard=XFSZ-RC0-LOST L5d=XFSZ-RC1-MEMO L5e=XFSZ-RC0-LOST \
-    || mutreport M-LD-probe
-# m3: the OVERRIDE-DOUBLE-SHADOW block back in its `| while | while` subshells, the pre-fix shape
-# restored line for line: the emit's count lands in a copy that is thrown away. L5d owns it.
-LD_DS1="  ' | sort > \"\$LD_T/double-shadow\" || _ds_rc=\$?"
-LD_DS2='  [ "$_ds_rc" -eq 0 ] || ld_refuse "the grouping of shadow targets for OVERRIDE-DOUBLE-SHADOW" "$_ds_rc"'
-LD_DS3='  while IFS="$TAB" read -r label entries cnt; do'
-LD_DS4='    while IFS= read -r one; do'
-LD_DS5='    done < "$LD_T/double-shadow-entries"'
-LD_DS6='  done < "$LD_T/double-shadow"'
-# The entry split is staged too (its own status read, its own ld_refuse): the mutant deletes those
-# three lines along with the grouping's, so the restored block is the pre-fix pipe and nothing else.
-LD_DS7='    _dse_rc=0'
-LD_DS8="    printf '%s\\n' \"\$entries\" | tr ',' '\\n' | sed 's/^ *//' > \"\$LD_T/double-shadow-entries\" || _dse_rc=\$?"
-LD_DS9='    [ "$_dse_rc" -eq 0 ] || ld_refuse "the entry split for OVERRIDE-DOUBLE-SHADOW '"'"'${label}'"'"'" "$_dse_rc"'
-LD_DS1B="  ' | sort | while IFS=\"\$TAB\" read -r label entries cnt; do"
-LD_DS4B="    printf '%s\\n' \"\$entries\" | tr ',' '\\n' | sed 's/^ *//' | while IFS= read -r one; do"
-  d="$(A1="$LD_DS1" A2="$LD_DS2" A3="$LD_DS3" A4="$LD_DS4" A5="$LD_DS5" A6="$LD_DS6" A7="$LD_DS7" A8="$LD_DS8" A9="$LD_DS9" N1="$LD_DS1B" N4="$LD_DS4B" \
-       mut M-LD-ds-subshell "$LDS" '$0==ENVIRON["A1"] {print ENVIRON["N1"]; next}
-         $0==ENVIRON["A2"] || $0==ENVIRON["A3"] {next}
-         $0==ENVIRON["A7"] || $0==ENVIRON["A8"] || $0==ENVIRON["A9"] {next}
-         $0==ENVIRON["A4"] {print ENVIRON["N4"]; next}
-         $0==ENVIRON["A5"] {print "    done"; next}
-         $0==ENVIRON["A6"] {print "  done"; next} {print}' \
-         "$LD_DS4B" 'LD_T/double-shadow' "$LD_DS1" "$LD_DS2" "$LD_DS3" "$LD_DS4" "$LD_DS5" "$LD_DS6" "$LD_DS7" "$LD_DS8" "$LD_DS9")" \
-    && { _h="$("$REAL_GREP" -cxF -- "$LD_DS1B" "$d/$LDS")" || _h=0
-         if [ "$_h" -eq 1 ] && "$REAL_GREP" -qxF -- "$LD_DS1B" "$LD_BASE/$LDS" && "$REAL_GREP" -qxF -- "$LD_DS4B" "$LD_BASE/$LDS"; then
-           score_as M-LD-ds-subshell ld "$d" L5d=XFSZ-RC0-LOST
-         else bad "MUTANT DID NOT APPLY [M-LD-ds-subshell]: the restored pipe lines are not the ${LD_BASE_SHA} spelling (outer present $_h time(s))"; fi; } \
-    || mutreport M-LD-ds-subshell
-# m4: emit_raw uncounted -- the writer of every HARD-LAYER-ADJUDICATION-MISSING row. L5b-hard, whose
-# one failed write is that row, reads rc 0; no other cell's failing write is emit_raw's.
-LD_RAW="  printf '%s\\t%s\\t%s\\t%s\\n' \"\$1\" \"\$2\" \"\$3\" \"\$4\"; ld_wrote \$?"
-LD_RAWB="  printf '%s\\t%s\\t%s\\t%s\\n' \"\$1\" \"\$2\" \"\$3\" \"\$4\""
-  d="$(DROP1="$N0" DROP2="$N0" OLD="$LD_RAW" NEW="$LD_RAWB" \
-       mut M-LD-raw-uncounted "$LDS" "$SWAP" "$LD_RAWB" - "$LD_RAW")" \
-    && score_as M-LD-raw-uncounted ld "$d" L5b-hard=XFSZ-RC0-LOST \
-    || mutreport M-LD-raw-uncounted
-fi
-
-if sg lc; then
-# === BL-359 MUTANTS: each restores ONE silent-read site, anchored on the line that decides it ======
-# TWO SCORING KEYS, lc (the contract cells, big world) and lo (the override cells, huge world), and
-# the split is a COST decision: one key made every mutant re-run all seven cells, and the unit rose
-# ~31% over its pre-change wall clock (interleaved, alone). Each mutant is now held to its own key's
-# cells staying at the tip shape; every cell of both keys still runs once on the tip and once on the
-# a0a9c556 engine above, so no cell is unscored -- what is given up is a cross-key ENTANGLEMENT read.
-# M1: ld_stage's write status ignored. Under `trap '' XFSZ` the write fails EFBIG and leaves a
-# TRUNCATED file, which the readers then take as whole: C2w's anchor sits past the cut, and the
-# override loses its OK row at rc 0 (measured: to the section-drift row) with NO here-string failure
-# -- OK-LOST, not base's OK-LOST-HEREDOC: the truncation alone is the wrong read.
-LD_STAGE_T="  printf '%s\\n' \"\$2\" > \"\$1\" || _rc=\$?"
-LD_STAGE_M="  printf '%s\\n' \"\$2\" > \"\$1\" || true"
-  d="$(DROP1="$N0" DROP2="$N0" OLD="$LD_STAGE_T" NEW="$LD_STAGE_M" \
-       mut M1-stage-status "$LDS" "$SWAP" "$LD_STAGE_M" - "$LD_STAGE_T")" \
-    && score_as M1-stage-status lo "$d" C2w=OK-LOST \
-    || mutreport M1-stage-status
-# M2: the R2 post-condition deleted -- its test line through its closing `fi` (the ld_refuse line
-# inside is anchored too, so the block the mutation removes is that one and no other).
-LD_R2_IF='if [ "$_ac_n" -gt 0 ] && [ -z "$ADJ_CODES" ]; then'
-LD_R2_REF='  ld_refuse "the ADJUDICATED code set out of $ADJ_CONTRACT_REL" 1'
-  d="$(START="$LD_R2_IF" END='fi' NFI=1 NEW=': ZZ-PSB-M2-NO-R2' \
-       mut M2-no-r2 "$LDS" "$BLOCK" ': ZZ-PSB-M2-NO-R2' 'set read out of it is EMPTY' "$LD_R2_IF" "$LD_R2_REF")" \
-    && score M2-no-r2 C3 "$d" \
-    || mutreport M2-no-r2
-# M3: the ADJUDICATED code-set awk fed by `<<<` again. A cold contract read refuses before the awk
-# runs, so only C1w -- the contract served from a warm memo with nothing written -- reaches it; there
-# the here-string's temp file is what fails. THE FIX IS THREE LAYERS AT THIS SITE and each is scored:
-#   M3  the feed alone: bash 3.2 does not run a command whose here-string cannot be staged and the
-#       site returns 1, which the KEPT status read refuses -- REFUSED-CODES, not the tip's ALL-ROWS.
-#   M3b the feed AND the status read: the capture comes back empty at 0, and R2 -- the contract carries
-#       a level-ADJUDICATED line, the code set is empty -- is what refuses: REFUSED-R2.
-#   M2 above deletes R2 alone, on C3. The three together say no one layer is standing in for another.
-LD_CODES_T="ADJ_CODES=\"\$(printf '%s\\n' \"\$ADJ_CONTRACT_TEXT\" | awk '"
-LD_CODES_E="')\" || _ac_rc=\$?"
-LD_CODES_B="' <<<\"\$ADJ_CONTRACT_TEXT\")\" || _ac_rc=\$?"
-LD_CODES_B2="' <<<\"\$ADJ_CONTRACT_TEXT\")\""
-M3_PROG='$0==ENVIRON["S"] {print "ADJ_CODES=\"$(awk '"'"'"; inb=1; next}
-         inb && $0==ENVIRON["E"] {print ENVIRON["NB"]; inb=0; next} {print}'
-  d="$(S="$LD_CODES_T" E="$LD_CODES_E" NB="$LD_CODES_B" \
-       mut M3-codes-herestring "$LDS" "$M3_PROG" "$LD_CODES_B" "$LD_CODES_T" "$LD_CODES_T")" \
-    && score_as M3-codes-herestring lc "$d" C1w=REFUSED-CODES \
-    || mutreport M3-codes-herestring
-  d="$(S="$LD_CODES_T" E="$LD_CODES_E" NB="$LD_CODES_B2" \
-       mut M3b-codes-herestring-unread "$LDS" "$M3_PROG" "$LD_CODES_B2" "$LD_CODES_T" "$LD_CODES_T")" \
-    && score_as M3b-codes-herestring-unread lc "$d" C1w=REFUSED-R2 \
-    || mutreport M3b-codes-herestring-unread
-# M4: section_of's status discarded at the override site -- the refusal line after it deleted.
-# C2 and C2w refuse at the blob's read or staging before section_of runs; C2s fails section_of's own
-# mktemp and is the only cell that reaches this line with a failing call.
-LD_SEC_R='    [ "$_at_rc" -eq 0 ] || ld_refuse_staging "section_of for ${entry} #${id}" "$_at_rc"'
-  d="$(DROP1="$N0" DROP2="$N0" OLD="$LD_SEC_R" NEW='    : ZZ-PSB-M4-SECTION-UNREAD' \
-       mut M4-section-status "$LDS" "$SWAP" '    : ZZ-PSB-M4-SECTION-UNREAD' '"section_of for ${entry}' \
-         "$LD_SEC_R" '    s_theirs="$(section_of "$id" < "$LD_T/a_text")" || _at_rc=$?')" \
-    && score M4-section-status C2s "$d" \
-    || mutreport M4-section-status
-# M5 / M6: hard-blockers.sh's two suppressions restored to the 31a056c3 spelling, one each. Anchored
-# on the TEST lines, never on the DETECTOR-REFUSED row text, which is reworded independently.
-HB=hard-blockers.sh
-HB_LD_T='if [ "${LD_RC:-0}" -ne 0 ]; then'
-HB_LD_B='if [ -z "$LD_ROWS_FILE" ] && [ "${LD_RC:-0}" -ne 0 ]; then'
-  d="$(DROP1="$N0" DROP2="$N0" OLD="$HB_LD_T" NEW="$HB_LD_B" \
-       mut M5-hb-ld "$HB" "$SWAP" "$HB_LD_B" - "$HB_LD_T")" \
-    && score M5-hb-ld C5-ld "$d" \
-    || mutreport M5-hb-ld
-HB_UD_T='    [ -z "$REFUSALS" ] && [ -z "$UD_SUPPLIED_REFUSED" ] && echo "0 HARD blockers."'
-HB_UD_B='    [ -z "$REFUSALS" ] && echo "0 HARD blockers."'
-  d="$(DROP1="$N0" DROP2="$N0" OLD="$HB_UD_T" NEW="$HB_UD_B" \
-       mut M6-hb-ud "$HB" "$SWAP" "$HB_UD_B" - "$HB_UD_T")" \
-    && score M6-hb-ud C5-ud "$d" \
-    || mutreport M6-hb-ud
-fi
-
 if sg b360; then
 # === BL-360: emit-report.sh reads no here-string ==================================================
 # Each cell FORCES its site under `trap '' XFSZ; ulimit -f N` (SIGXFSZ ignored: the full-disk model,
@@ -2232,20 +1464,14 @@ if sg b360; then
 # CALIBRATED, NOT ASSUMED, per world before any shape is read: the site's own input, fed as a
 # here-string under the limit, must FAIL with bash's message; every other blob in the world must
 # fit under it; and on the tip the forced render may differ from its unforced control ONLY in the
-# cell's own lines -- or a cell's shape could be some other write failing. Each mutant restores ONE
-# site's base text in a copy and must move only its own cell to the base shape. Every forced run's
+# cell's own lines -- or a cell's shape could be some other write failing. Every forced run's
 # PATH stub logs the call that proves the render reached the site (FIRED > 0).
 B360="$WORK/b360"; mkdir -p "$B360" || { echo "FIXTURE ERROR: mkdir b360" >&2; exit 2; }
-ER_BASE_SHA=1749b545b2e05010adb5b197a5bfd67891c1bf3b
-ER_BASE="$WORK/er-base"
-mkdir -p "$ER_BASE" && cp -R "$RECON/." "$ER_BASE/" \
-  && git -C "$TREE_TOP" show "${ER_BASE_SHA}:core/skills/ai-dlc-update/reconcile/emit-report.sh" > "$ER_BASE/emit-report.sh" 2>/dev/null \
-  || { echo "FIXTURE BROKEN: could not stage emit-report.sh at ${ER_BASE_SHA}, the failing control of every BL-360 cell" >&2; exit 2; }
 # THE PREDICATE SECTION IS KEPT OUT OF EVERY BL-360 WORLD. BL-360's sites are the orientation, token
 # and verify stagings; the predicate section is a different detector whose projection a later release
-# changed on purpose (STABLE rows now render their population), so tip and base render it differently
-# for a reason that is not BL-360. Every BL-360 render already runs under a `bash` PATH stub, so that
-# stub answers `predicate-differential.sh` with no rows: tip, base and every mutant render `none` there.
+# changed on purpose (STABLE rows now render their population), which is not a BL-360 site. Every
+# BL-360 render already runs under a `bash` PATH stub, so that stub answers `predicate-differential.sh`
+# with no rows: the render carries `none` there.
 # Its firings are logged apart, and a run where it never fired is refused below: an exclusion that
 # stopped matching would otherwise read as a healthy-path regression.
 nopd() { # nopd <stub-dir>
@@ -2254,30 +1480,6 @@ nopd() { # nopd <stub-dir>
     printf '%s\n' "case \"\$*\" in *'/predicate-differential.sh '*) echo x >> \"$d/PD_FIRED\"; exit 0 ;; esac"
     tail -n +3 "$d/bash"; } > "$d/bash.nopd" && mv "$d/bash.nopd" "$d/bash" && chmod +x "$d/bash"
 }
-# THE PUSH-CANDIDATE LEDGER HEADING IS LIKEWISE NOT A BL-360 SITE, and a later release moved it on
-# purpose: 0.706.0 added `NAMED-UPSTREAM-CITED-ONLY` to the status list it names. Tip and base would
-# otherwise render that heading differently for a reason that is not BL-360, so the tip's one heading
-# line is carried into the staged base, by awk keyed on the line's prefix -- never sed, whose
-# replacement would read any `&` in the heading as the whole match. Exactly ONE line must be
-# replaced: zero means the heading moved and the carry stopped matching; two means the prefix is no
-# longer a single site. Both are FIXTURE BROKEN, never a silent skip. The `<<<"$want"` count below
-# still proves the staged engine is the pre-fix one, which this carry does not touch. The Deletions
-# heading is carried by the same loop for the same reason: BL-916 reworded it, which is not a BL-360 site.
-for _erp in 'Push-candidate ledger — ' 'Deletions (apply would git rm a consumer file — '; do
-  _erh="$("$REAL_GREP" -F "  sub \"${_erp}" "$RECON/emit-report.sh")" || _erh=""
-  _erhn="$(printf '%s\n' "$_erh" | "$REAL_GREP" -c .)" || _erhn=0
-  if [ "$_erhn" -ne 1 ]; then
-    echo "FIXTURE BROKEN: the tip emit-report.sh carries $_erhn '${_erp}' heading line(s), want exactly 1 to carry into the staged base" >&2; exit 2
-  fi
-  ERH="$_erh" ERP="  sub \"${_erp}" awk 'index($0, ENVIRON["ERP"]) == 1 { print ENVIRON["ERH"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
-    "$ER_BASE/emit-report.sh" > "$ER_BASE/emit-report.sh.carry" \
-    && mv "$ER_BASE/emit-report.sh.carry" "$ER_BASE/emit-report.sh" \
-    || { echo "FIXTURE BROKEN: the '${_erp}' heading did not replace exactly ONE line of the staged ${ER_BASE_SHA} emit-report.sh" >&2; exit 2; }
-done
-_h="$("$REAL_GREP" -cF '<<<"$want"' "$ER_BASE/emit-report.sh")" || _h=0
-if cmp -s "$RECON/emit-report.sh" "$ER_BASE/emit-report.sh" || [ "$_h" -ne 2 ]; then
-  echo "FIXTURE BROKEN: the staged ${ER_BASE_SHA} emit-report.sh is not the pre-fix engine (identical to tip, or it carries $_h \`<<<\"\$want\"\` line(s), want 2)" >&2; exit 2
-fi
 # --- the worlds ---
 # eo: a.sh -- the consumer's copy is 600 lines larger than theirs, so the diff is past the limit while
 #     theirs is not (O1 alone, not O3). b.sh -- 400 `$R/tNNNN` tokens at base, all gone at theirs, all
@@ -2411,53 +1613,18 @@ b360_shape() { # <cell> <tag>
         else echo "OTHER(rc=${a:-none})"; fi ;;
   esac
 }
-B360_EXPECT='O1 eo SAMPLE REFUSED-STAGING REFUSED-RC1
-O2 eo TOKENS-ALL REFUSED-STAGING REFUSED-PROJECTION
-O3 ek SAMPLE REFUSED-NOLEAK LEAKED
-V1 ev PRECLASSIFY-REFUSED UNDECIDED-STAGING VERIFIED'
+B360_EXPECT='O1 eo SAMPLE REFUSED-STAGING
+O2 eo TOKENS-ALL REFUSED-STAGING
+O3 ek SAMPLE REFUSED-NOLEAK
+V1 ev PRECLASSIFY-REFUSED UNDECIDED-STAGING'
 b360_col() { awk -v a="$1" -v c="$2" '$1==a {print $c}' <<<"$B360_EXPECT"; }
-b360_cells() { awk -v k="$1" '$2==k {print $1}' <<<"$B360_EXPECT"; }
-
-# --- the mutants: each restores ONE site's base text ---
-ER=emit-report.sh
-B360_O1_B='              END { printf "%d\n%s", c, s }'"'"' <<<"$d")"; samp_rc=$?'
-B360_O1_NEW='            samp="$(awk -v m="$marker" '"'"'
-              substr($0, 1, 2) == m " " { x = substr($0, 3); if (x ~ /[^[:space:]]/) { c++; s = s x "\n" } }
-'"$B360_O1_B"
-B360_O2_B='          [ "$rt_rc" -eq 0 ] && { rt="$(awk -F'"'"'\t'"'"' '"'"'{print $3}'"'"' <<<"$rt")" || rt_rc="projection-$?"; }'
-B360_O3_T='          if ! er_stage orient.theirs "$t" 2>/dev/null; then'
-B360_O3_B='          if [ -z "$_er_tmp" ] || ! printf '"'"'%s\n'"'"' "$t" > "$_er_tmp/orient.theirs" 2>/dev/null; then'
-B360_V1_B="if grep -Eq '^DETECTOR-REFUSED  preclassify\\.sh (exited|returned) ' <<<\"\$want\"; then"
-B360_V1_NEW="$B360_V1_B
-  echo \"FAIL: preclassify.sh did not classify on this run, so the mechanical region cannot be verified — its buckets, worklist and deletions are unknown, not empty.\" >&2
-  _pc_cause=\"\$(grep -m1 -E '^DETECTOR-REFUSED  preclassify\\.sh (exited|returned) ' <<<\"\$want\")\"
-  _pc_cause=\"\$(sed -E 's/^DETECTOR-REFUSED  //; s/, so this section.*//' <<<\"\$_pc_cause\")\"
-  echo \"  cause: PRECLASSIFY-REFUSED — \${_pc_cause}. Run reconcile/preclassify.sh <dist> <base> <theirs> <consumer> directly, fix what it reports, then re-render and re-approve.\" >&2
-  exit 1
-fi"
-_mo1="$(START='            samp=""; samp_rc=0' END='            fi' NFI=1 NEW="$B360_O1_NEW" \
-        mut M-B360-O1 "$ER" "$BLOCK" "$B360_O1_B" 'orient.diff' \
-          '            samp=""; samp_rc=0' '            er_stage orient.diff "$d" 2>/dev/null || samp_rc="staging-$?"')" || mutreport M-B360-O1
-_mo2="$(START='          if [ "$rt_rc" -eq 0 ]; then' END='          fi' NFI=1 NEW="$B360_O2_B" \
-        mut M-B360-O2 "$ER" "$BLOCK" "$B360_O2_B" 'orient.rt' \
-          '          if [ "$rt_rc" -eq 0 ]; then' '            if er_stage orient.rt "$rt" 2>/dev/null; then')" || mutreport M-B360-O2
-_mo3="$(DROP1="$N0" DROP2="$N0" OLD="$B360_O3_T" NEW="$B360_O3_B" \
-        mut M-B360-O3 "$ER" "$SWAP" "$B360_O3_B" 'er_stage orient.theirs' "$B360_O3_T")" || mutreport M-B360-O3
-_mv1="$(START='if er_stage verify.render "$want" 2>/dev/null; then' END='fi' NFI=3 NEW="$B360_V1_NEW" \
-        mut M-B360-V1 "$ER" "$BLOCK" "$B360_V1_B" 'verify.render' \
-          'if er_stage verify.render "$want" 2>/dev/null; then' 'if [ "$_pc_rc" = 0 ]; then')" || mutreport M-B360-V1
 
 # All renders are independent: run them in waves of six, each a background job writing its own files.
-B360_JOBS="tip:eo:ctl tip:eo:forced tip:ek:ctl tip:ek:forced tip:ev:ctl tip:ev:forced tip:evp:forced
-base:eo:ctl base:eo:forced base:ek:ctl base:ek:forced base:ev:forced base:evp:ctl"
-[ -n "$_mo1" ] && B360_JOBS="$B360_JOBS M-B360-O1:eo:forced"
-[ -n "$_mo2" ] && B360_JOBS="$B360_JOBS M-B360-O2:eo:forced"
-[ -n "$_mo3" ] && B360_JOBS="$B360_JOBS M-B360-O3:ek:forced"
-[ -n "$_mv1" ] && B360_JOBS="$B360_JOBS M-B360-V1:ev:forced"
+B360_JOBS="tip:eo:ctl tip:eo:forced tip:ek:ctl tip:ek:forced tip:ev:ctl tip:ev:forced tip:evp:forced"
 _i=0
 for _j in $B360_JOBS; do
   _p="${_j%%:*}"; _r="${_j#*:}"; _w="${_r%%:*}"; _m="${_r#*:}"
-  case "$_p" in tip) _R="$RECON" ;; base) _R="$ER_BASE" ;; *) _R="$MUTROOT/$_p" ;; esac
+  _R="$RECON"
   b360_run "$_R" "$_w" "$_m" "$_p-$_w-$_m" &
   _i=$((_i + 1)); [ $((_i % 6)) -eq 0 ] && wait
 done
@@ -2496,44 +1663,14 @@ if [ -n "$_cx" ]; then
 fi
 ok "BL-360 calibration (c): each forced tip render differs from its control only in its cells' own lines, and the ev render under the limit is byte-identical to the unlimited one"
 
-# --- cells, then the base engine, then the healthy-path differential, then the mutants ---
+# --- cells ---
 for _A in O1 O2 O3 V1; do
   _k="$(b360_col "$_A" 2)"
-  _c="$(b360_shape "$_A" "tip-$_k-ctl")"; _f="$(b360_shape "$_A" "tip-$_k-forced")"; _b="$(b360_shape "$_A" "base-$_k-forced")"
-  _c_ok=0; _f_ok=0
-  if [ "$_c" = "$(b360_col "$_A" 3)" ]; then ok "BL-360 $_A control (no limit): $_c"; _c_ok=1
+  _c="$(b360_shape "$_A" "tip-$_k-ctl")"; _f="$(b360_shape "$_A" "tip-$_k-forced")"
+  if [ "$_c" = "$(b360_col "$_A" 3)" ]; then ok "BL-360 $_A control (no limit): $_c"
   else bad "BL-360 $_A control (no limit): $_c, expected $(b360_col "$_A" 3) -- the world does not express the case"; fi
-  if [ "$_f" = "$(b360_col "$_A" 4)" ]; then ok "BL-360 $_A forced (${_k}): $_f -- the tip shape"; _f_ok=1
+  if [ "$_f" = "$(b360_col "$_A" 4)" ]; then ok "BL-360 $_A forced (${_k}): $_f -- the tip shape"
   else bad "BL-360 $_A forced (${_k}): $_f, expected $(b360_col "$_A" 4) -- a staging failure read as $_f"; fi
-  [ "$_c_ok$_f_ok" = 11 ] && baseok_set "b360-$_A"
-  [ "$_b" = "$(b360_col "$_A" 5)" ] && ok "BL-360 $_A on the ${ER_BASE_SHA%"${ER_BASE_SHA#????????}"} engine: $_b -- the cell fails the pre-fix engine" \
-    || bad "BL-360 $_A on the ${ER_BASE_SHA%"${ER_BASE_SHA#????????}"} engine: $_b, expected $(b360_col "$_A" 5) -- the cell cannot tell the pre-fix engine from the fix"
-done
-_bh="$(b360_c 'cannot create temp file for here' "$B360/base-eo-forced.err")"
-[ "$_bh" -ge 2 ] && ok "BL-360 base eo run printed bash's here-string failure ${_bh}x -- O1/O2's base shapes are the lost here-string, not another fault" \
-  || bad "BL-360 base eo run printed bash's here-string failure ${_bh}x, want >= 2"
-_hd=""
-cmp -s "$B360/tip-eo-ctl.out" "$B360/base-eo-ctl.out" || _hd="$_hd eo"
-cmp -s "$B360/tip-ek-ctl.out" "$B360/base-ek-ctl.out" || _hd="$_hd ek"
-cmp -s "$B360/base-evp-ctl.out" "$B360/ev-region" || _hd="$_hd ev"
-cmp -s "$RECON/emit-report.sh" "$ER_BASE/emit-report.sh" && _hd="$_hd (the two engines are identical)"
-[ -z "$_hd" ] && ok "BL-360 healthy path: tip and ${ER_BASE_SHA%"${ER_BASE_SHA#????????}"} render the eo, ek and ev worlds byte-identically with no limit (an approved region does not move)" \
-  || bad "BL-360 healthy path: tip and base renders differ with no limit:$_hd"
-for _mm in M-B360-O1:O1 M-B360-O2:O2 M-B360-O3:O3 M-B360-V1:V1; do
-  _m="${_mm%%:*}"; _own="${_mm#*:}"; _k="$(b360_col "$_own" 2)"
-  [ -s "$B360/$_m-$_k-forced.rc" ] || continue
-  _got="" _oth=""
-  for _A in $(b360_cells "$_k"); do
-    _s="$(b360_shape "$_A" "$_m-$_k-forced")"
-    if [ "$_A" = "$_own" ]; then _got="$_s"
-    elif [ "$_s" != "$(b360_col "$_A" 4)" ]; then _oth="$_oth $_A=$_s"; fi
-  done
-  if [ "$_got" != "$(b360_col "$_own" 5)" ]; then bad "MUTANT SURVIVED [$_m]: $_own reads $_got, expected the base shape $(b360_col "$_own" 5)"
-  elif [ -n "$_oth" ]; then bad "MUTANT ENTANGLED [$_m]: $_own reads $_got but other $_k cell(s) moved:$_oth"
-  else
-    _bo="$(baseok_key "b360-$_own")"
-    mutant_killed "$([ "$_bo" = 1 ] && echo 1 || echo 0)" "$_m" "MUTANT KILLED [$_m]: $_own reads $_got (the base shape), every other $_k cell stays at its tip shape"
-  fi
 done
 
 # --- SPELL: emit-report.sh carries no non-comment here-string (secondary to the cells above) ---
@@ -2543,20 +1680,16 @@ cp "$RECON/emit-report.sh" "$_sp/offender.sh" && cp "$RECON/emit-report.sh" "$_s
 printf '  x="$(awk %s <<<"$y")"\n' "'{print}'" >> "$_sp/offender.sh"
 printf '    # a comment naming the here-string operator, <<<"$y", is not a site\n' >> "$_sp/nearmiss.sh"
 _so="$(spell_count "$_sp/offender.sh")"; _sn="$(spell_count "$_sp/nearmiss.sh")"; _st="$(spell_count "$RECON/emit-report.sh")"
-_sb="$(spell_count "$ER_BASE/emit-report.sh")"
-if [ "$_so" -ne $(( _st + 1 )) ] || [ "$_sn" -ne "$_st" ] || [ "$_sb" -eq 0 ]; then
-  bad "SPELL emit-report probe: offender $_so (want $(( _st + 1 ))), comment near-miss $_sn (want $_st), the base engine $_sb (want > 0) -- the count cannot discriminate"
+if [ "$_so" -ne $(( _st + 1 )) ] || [ "$_sn" -ne "$_st" ]; then
+  bad "SPELL emit-report probe: offender $_so (want $(( _st + 1 ))), comment near-miss $_sn (want $_st) -- the count cannot discriminate"
 elif [ "$_st" -eq 0 ]; then
-  ok "SPELL: emit-report.sh carries 0 non-comment here-strings (probe: offender +1, comment near-miss +0, the base engine $_sb)"
+  ok "SPELL: emit-report.sh carries 0 non-comment here-strings (probe: offender +1, comment near-miss +0)"
 else
   bad "SPELL: emit-report.sh carries $_st non-comment here-string(s) (BL-360)"
 fi
 fi
 ld_heredoc_gate
 
-if [ "$MATRIX" -eq 1 ]; then ok "matrix: $MROWS cell(s) measured"
-elif [ "$MROWS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (rows=0)"
-else bad "a plain run executed $MROWS matrix-only cell(s)"; fi
 echo
 PSB_DONE=1
 report_end "$NAME"

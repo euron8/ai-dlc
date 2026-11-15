@@ -16,12 +16,11 @@
 # WHY THE ANTI-STUB ARM. Every "the hook exits 0" arm passes against a hook replaced by `exit 0`.
 # A2 writes a file whose two touched pairs are the tree-dependent one and a pair stale in BOTH
 # trees, and requires exit 2 naming ONLY the second. A stub fails it (no exit 2); the defect fails
-# it (names both). The mutant arms then revert the fix inside a copy of the hook and require a kill.
+# it (names both).
 #
 # WHY THE NESTED-REPO ARM. A file in a nested repository (or a submodule) under the project is
 # NOT another checkout of the project, and its fences keep the project root. The fix accepts the
-# file's toplevel only when its git common dir is the project's; M2 deletes that check and must be
-# killed by A4.
+# file's toplevel only when its git common dir is the project's; A4 holds that.
 set -uo pipefail
 
 # The pre-push gate exports every AI_DLC_* tunable a consumer set into this process. Scrub them so
@@ -59,11 +58,6 @@ trap 'rm -rf "$WORK"' EXIT
 WORK="$(cd "$WORK" && pwd -P)"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# B_A<n>=1 only beside the unmutated hook's own ok for that arm: a mutant is scored only if its base arm passed.
-B_A1=0; B_A2=0; B_A3=0; B_A4=0; B_A7=0; B_A8=0
 broken() { echo "FIXTURE BROKEN: $1" >&2; exit 2; }
 
 g() { # g <dir> <git args...> -- hermetic identity, no hooks, no signing
@@ -140,7 +134,7 @@ fi
 
 # --- A1: a correct fence written in a worktree OUTSIDE the project dir is accepted --------------
 fire "$HOOK" "$MAIN" "$WT_OUT/notes/one.md"
-if silent_pass; then ok "A1 worktree outside the project dir: the worktree-correct fence is accepted (rc 0, silent)"; B_A1=1
+if silent_pass; then ok "A1 worktree outside the project dir: the worktree-correct fence is accepted (rc 0, silent)"
 else bad "A1 worktree outside the project dir: expected rc 0 and no output, got rc $RC: $(head -3 "$ERR" | tr '\n' ' ')"; fi
 
 # --- A1b: the twin — a fence wrong FOR THE WORKTREE (main's value) is refused there -------------
@@ -156,7 +150,7 @@ LN_BOTH="$(grep -n '^\$ cat fixed.txt$' "$WT_OUT/notes/two.md" | cut -d: -f1)"
 [ -n "$LN_TREE" ] && [ -n "$LN_BOTH" ] || broken "could not locate the two pairs' lines in two.md"
 fire "$HOOK" "$MAIN" "$WT_OUT/notes/two.md"
 if refused && grep -qF "two.md:$LN_BOTH" "$ERR" && ! grep -qF "two.md:$LN_TREE" "$ERR"; then
-  ok "A2 anti-stub: rc 2 names two.md:$LN_BOTH (stale in both trees) and not two.md:$LN_TREE (correct in the worktree)"; B_A2=1
+  ok "A2 anti-stub: rc 2 names two.md:$LN_BOTH (stale in both trees) and not two.md:$LN_TREE (correct in the worktree)"
 else
   bad "A2 anti-stub: expected rc 2 naming only two.md:$LN_BOTH, got rc $RC: $(grep -E 'two\.md:[0-9]' "$ERR" | tr '\n' ' ')"
 fi
@@ -164,7 +158,7 @@ fi
 # --- A3: the same for a worktree INSIDE the project dir (.claude/worktrees/) --------------------
 art_one 3 "$WT_IN/notes/one.md"
 fire "$HOOK_B" "$MAIN_B" "$WT_IN/notes/one.md"
-if silent_pass; then ok "A3 worktree inside the project dir: the worktree-correct fence is accepted (rc 0, silent)"; B_A3=1
+if silent_pass; then ok "A3 worktree inside the project dir: the worktree-correct fence is accepted (rc 0, silent)"
 else bad "A3 worktree inside the project dir: expected rc 0 and no output, got rc $RC: $(head -3 "$ERR" | tr '\n' ' ')"; fi
 
 # --- A4: a NESTED repository under the project keeps the project root --------------------------
@@ -176,7 +170,7 @@ g "$NEST" init -q 2>/dev/null && [ -d "$NEST/.git" ] && g "$NEST" add -A && g "$
   || broken "could not build the nested repository"
 art_one 1 "$NEST/notes/n.md"
 fire "$HOOK" "$MAIN" "$NEST/notes/n.md"
-if silent_pass; then ok "A4 nested repository: the project root is kept, the project-correct fence is accepted"; B_A4=1
+if silent_pass; then ok "A4 nested repository: the project root is kept, the project-correct fence is accepted"
 else bad "A4 nested repository: expected rc 0 and no output, got rc $RC: $(head -3 "$ERR" | tr '\n' ' ')"; fi
 art_one 2 "$NEST/notes/n2.md"
 fire "$HOOK" "$MAIN" "$NEST/notes/n2.md"
@@ -223,7 +217,7 @@ SC="$(grep -c alpha "$SUB_WT/app/data.txt") $(grep -c alpha "$SUB_WT/data.txt") 
 [ "$SC" = "3 2 1" ] || broken "A7 seed: <wt>/app, <wt> and <main>/app read [$SC], expected [3 2 1]"
 art_one 3 "$SUB_WT/app/notes/s.md"
 fire "$HOOK_SUB" "$SUB_PROJ" "$SUB_WT/app/notes/s.md"
-if silent_pass; then ok "A7 subdirectory project dir, worktree edit: judged from <worktree>/app, the worktree-correct fence is accepted (rc 0, silent)"; B_A7=1
+if silent_pass; then ok "A7 subdirectory project dir, worktree edit: judged from <worktree>/app, the worktree-correct fence is accepted (rc 0, silent)"
 else bad "A7 subdirectory project dir, worktree edit: expected rc 0 and no output, got rc $RC: $(head -3 "$ERR" | tr '\n' ' ')"; fi
 art_one 2 "$SUB_WT/app/notes/s-top.md"
 fire "$HOOK_SUB" "$SUB_PROJ" "$SUB_WT/app/notes/s-top.md"
@@ -245,102 +239,12 @@ fire_env() { # fire_env <hook> <project dir> <file> <VAR=value...>
   RC=$?
 }
 fire_env "$HOOK" "$MAIN" "$MAIN/notes/m.md" GIT_DIR="$MAIN/.git"
-if silent_pass; then ok "A8 GIT_DIR=<main>/.git exported, main-tree subdirectory edit: judged from the project dir (rc 0, silent)"; B_A8=1
+if silent_pass; then ok "A8 GIT_DIR=<main>/.git exported, main-tree subdirectory edit: judged from the project dir (rc 0, silent)"
 else bad "A8 GIT_DIR exported, main-tree subdirectory edit: expected rc 0 and no output, got rc $RC: $(head -3 "$ERR" | tr '\n' ' ')"; fi
 fire_env "$HOOK" "$MAIN" "$WT_OUT/notes/one.md" GIT_DIR="$MAIN/.git"
 if silent_pass; then ok "A8b GIT_DIR=<main>/.git exported, worktree edit: still judged from the worktree (rc 0, silent)"
 else bad "A8b GIT_DIR exported, worktree edit: expected rc 0 and no output, got rc $RC: $(head -3 "$ERR" | tr '\n' ' ')"; fi
 
-# --- MUTANTS — copies of the hook, never the installed one --------------------------------------
-# mkmut <name> <sed program>: a copy with the program applied; refuses a no-op (cmp -s) and a sed
-# that died, so a mutation that matched nothing cannot score a kill.
-mkmut() {
-  local m="$WORK/mut-$1.sh"
-  # Runs inside $( ): it must NOT call bad (the count dies with the subshell). Each caller counts
-  # the failure at top level in its else-arm.
-  sed "$2" "$HOOK" > "$m" 2>/dev/null || { printf '  mutant %s DID NOT APPLY (sed failed)\n' "$1" >&2; return 1; }
-  if cmp -s "$HOOK" "$m"; then printf '  mutant %s DID NOT APPLY (no change)\n' "$1" >&2; return 1; fi
-  bash -n "$m" 2>/dev/null || { printf '  mutant %s does not parse\n' "$1" >&2; return 1; }
-  printf '%s' "$m"
-}
-
-# M1: the fix reverted — every use of the resolved root at the invocation back to PROJECT_DIR, the
-# env var AND the cd (the env var is the layer the validator reads; the cd is reverted too so no
-# layer is left standing). A1 and A2 must redden: A1 by a refusal, A2 by naming both pairs.
-# Occurrences, not lines: the cd and the env var share one line.
-n_before="$(grep -o '"\$DERIV_ROOT"' "$HOOK" | wc -l | tr -d ' ')"
-if M1="$(mkmut revert 's/"\$DERIV_ROOT"/"$PROJECT_DIR"/g')"; then
-  n_after="$(grep -o '"\$DERIV_ROOT"' "$M1" | wc -l | tr -d ' ')"
-  [ "$n_before" -ge 2 ] && [ "$n_after" = 0 ] || bad "M1 revert: expected every \"\$DERIV_ROOT\" use replaced, before $n_before after $n_after"
-  fire "$M1" "$MAIN" "$WT_OUT/notes/one.md"
-  if refused && grep -qF 'one.md:6' "$ERR"; then mutant_killed "$B_A1" "A1" "M1 revert-to-PROJECT_DIR killed by A1 (the worktree-correct fence is refused, naming one.md:6)"
-  else bad "M1 revert-to-PROJECT_DIR SURVIVED A1: rc $RC"; fi
-  fire "$M1" "$MAIN" "$WT_OUT/notes/two.md"
-  if refused && grep -qF "two.md:$LN_TREE" "$ERR" && grep -qF "two.md:$LN_BOTH" "$ERR"; then
-    mutant_killed "$B_A2" "A2" "M1 revert-to-PROJECT_DIR killed by A2 (both pairs named)"
-  else bad "M1 revert-to-PROJECT_DIR SURVIVED A2: rc $RC"; fi
-  # The inside layout, driven through the second project's own hook path with the mutant's bytes.
-  cp "$M1" "$WORK/mut-revert-b.sh"
-  fire "$WORK/mut-revert-b.sh" "$MAIN_B" "$WT_IN/notes/one.md"
-  if refused && grep -qF 'one.md:6' "$ERR"; then mutant_killed "$B_A3" "A3" "M1 revert-to-PROJECT_DIR killed by A3 (the inside-worktree fence is refused)"
-  else bad "M1 revert-to-PROJECT_DIR SURVIVED A3: rc $RC"; fi
-else bad "M1: mutant revert: did not apply -- see stderr"
-fi
-
-# M2: the common-dir check deleted — show-toplevel alone. A4 must redden (the nested repo's root
-# is taken and the project-correct fence is refused); A1 must stay green (one property apart).
-if M2="$(mkmut nocommon '/\[ -n "\$fc" \] && \[ "\$fc" = "\$pc" \] || exit 1/d')"; then
-  fire "$M2" "$MAIN" "$NEST/notes/n.md"
-  if refused && grep -qF 'n.md:6' "$ERR"; then mutant_killed "$B_A4" "A4" "M2 no-common-dir-check killed by A4 (the nested repo's root is taken)"
-  else bad "M2 no-common-dir-check SURVIVED A4: rc $RC"; fi
-  fire "$M2" "$MAIN" "$WT_OUT/notes/one.md"
-  if silent_pass; then ok "M2 control: the same mutant still accepts the worktree fence (A1 green), so it fails only A4"
-  else bad "M2 control: the mutant also broke A1 (rc $RC) — the mutation is not confined to the common-dir check"; fi
-else bad "M2: mutant nocommon: did not apply -- see stderr"
-fi
-
-# M3: the worktree's TOPLEVEL returned instead of its copy of the project dir (the 0.773.0 shape).
-# A7 must redden (the fence runs from <worktree>, reads 2); A1 must stay green (project dir is the
-# toplevel there, so the two forms agree).
-if M3="$(mkmut toplevel 's/^    printf .%s. "\${ft}\${pp#"\$pt"}"$/    printf "%s" "$ft"/')"; then
-  fire "$M3" "$SUB_PROJ" "$SUB_WT/app/notes/s.md"
-  if refused && grep -qF 's.md:6' "$ERR"; then mutant_killed "$B_A7" "A7" "M3 toplevel-not-project-subdir killed by A7 (the fence runs from the worktree toplevel)"
-  else bad "M3 toplevel-not-project-subdir SURVIVED A7: rc $RC"; fi
-  fire "$M3" "$MAIN" "$WT_OUT/notes/one.md"
-  if silent_pass; then ok "M3 control: the same mutant still accepts the A1 worktree fence, so it fails only A7"
-  else bad "M3 control: the mutant also broke A1 (rc $RC)"; fi
-else bad "M3: mutant toplevel: did not apply -- see stderr"
-fi
-
-# M4: the repository environment left set inside deriv_file_root. A8 must redden; A6 (clean env)
-# must stay green.
-if M4="$(mkmut gitenv '/^    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR$/d')"; then
-  fire_env "$M4" "$MAIN" "$MAIN/notes/m.md" GIT_DIR="$MAIN/.git"
-  if refused && grep -qF 'm.md:6' "$ERR"; then mutant_killed "$B_A8" "A8" "M4 GIT_DIR-not-unset killed by A8 (the main-tree edit is judged from notes/)"
-  else bad "M4 GIT_DIR-not-unset SURVIVED A8: rc $RC"; fi
-  fire "$M4" "$MAIN" "$MAIN/notes/m.md"
-  if silent_pass; then ok "M4 control: the same mutant still accepts the main-tree fence with a clean env (A6 green)"
-  else bad "M4 control: the mutant also broke A6 (rc $RC)"; fi
-else bad "M4: mutant gitenv: did not apply -- see stderr"
-fi
-
-# BL-849: a mutant that does not apply must reach the TOP-LEVEL exit counter. The anchor below is
-# verified absent from the subject first, so the helper really fails; the real caller shape is then
-# driven and the counter must move by exactly 1. The probe's own count is restored afterwards.
-ZANCHOR='ZZQX_NEVER_ANCHOR_849'
-if grep -qF -- "$ZANCHOR" "$HOOK"; then
-  bad "BL-849: the impossible anchor $ZANCHOR is present in the hook, so the control proves nothing"
-else
-  _f0=$fails
-  if MZ="$(mkmut zz-never "s/$ZANCHOR//" 2>/dev/null)"; then
-    bad "BL-849: a mutant with an absent anchor was reported as applied"
-  else bad "mutant zz-never: did not apply (BL-849 probe, expected)" >/dev/null
-  fi
-  if [ "$fails" -eq $((_f0 + 1)) ]; then
-    fails=$_f0; ok "BL-849: a mutant that does not apply reaches the exit counter"
-  else bad "BL-849: a DID-NOT-APPLY mutant did not reach the exit counter (moved $((fails - _f0)), want 1)"
-  fi
-fi
 
 echo
 report_end derivation-capture-worktree-root

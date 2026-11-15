@@ -43,8 +43,6 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_rpG=0
 
 # --- a synthetic distribution, two commits ------------------------------------
 # Three validators upstream ships under core/scripts/. One is MODIFIED between base and
@@ -142,9 +140,7 @@ fi
 # Its OWN world: the range above changes a validator's content, so it cannot host a zero-row pull.
 #
 # G is one arm with two conjuncts: the row is printed, and the render carries no preclassify
-# refusal. The mutant below restores the silent skip and must fail G and move nothing A-F read:
-# A-F read only the main world's preclassify output, and over that world the mutant's output is
-# asserted byte-identical to the subject's once the PRE-RELOCATION-NOOP rows are removed.
+# refusal.
 case "$RECON" in */core/skills/ai-dlc-update/reconcile) G_DIST=1 ;; *) G_DIST=0 ;; esac
 G_RUN=1
 if ! grep -qF 'PRE-RELOCATION-NOOP' "$RECON/preclassify.sh"; then
@@ -192,46 +188,9 @@ if [ "$G_RUN" = 1 ]; then
   }
   g="$(g_score "$RECON" tip)"
   if [ -z "$g" ]; then
-    ok "G a pre-relocation consumer pulling a lone core/scripts/ deletion gets a PRE-RELOCATION-NOOP row, and the render carries 0 preclassify refusals"; B_rpG=1
+    ok "G a pre-relocation consumer pulling a lone core/scripts/ deletion gets a PRE-RELOCATION-NOOP row, and the render carries 0 preclassify refusals"
   else
     bad "G the zero-work pre-relocation pull was not classified as zero work: $g"
-  fi
-
-  # THE MUTANT: the emitted row removed, restoring the silent `continue`.
-  GM="$WORK/g-mutant"
-  cp -R "$RECON" "$GM" || exit 2
-  _ga="$(printf '        printf %s %s %s %s %s\n' "'%s\\t%s\\t%s\\t%s\\n'" '"$status"' '"$path"' '"$cons"' '"PRE-RELOCATION-NOOP"')"
-  _gh="$(grep -cxF "$_ga" "$RECON/preclassify.sh")" || _gh=0
-  _gc="$(grep -cxF 'ZZ-NO-SUCH-PRECLASSIFY-LINE-ZZ' "$RECON/preclassify.sh")" || _gc=0
-  G_A="$_ga" awk '$0 == ENVIRON["G_A"] { next } { print }' "$RECON/preclassify.sh" > "$GM/preclassify.sh"
-  _grc=0; cmp -s "$RECON/preclassify.sh" "$GM/preclassify.sh" || _grc=$?
-  if [ "$_gh" -ne 1 ] || [ "$_gc" -ne 0 ]; then
-    bad "FIXTURE STALE [G mutant]: the row-emitter anchor matches $_gh lines of preclassify.sh (want 1; impossible-anchor control $_gc, want 0). Re-anchor on the same observable"
-  elif [ "$_grc" -gt 1 ]; then
-    bad "FIXTURE BROKEN [G mutant]: cmp exited $_grc (cmp absent or unreadable input), so the mutation-applied guard cannot be read"
-  elif [ "$_grc" -eq 0 ] || ! bash -n "$GM/preclassify.sh"; then
-    bad "FIXTURE STALE [G mutant]: the mutation did not apply or does not parse"
-  else
-    gm="$(g_score "$GM" mutant)"
-    # Subject and mutant over the SAME current main world. Not against `$PC`: E and F have moved
-    # the consumer since `$PC` was taken, so that comparison would read the world's movement.
-    # The main world ALSO carries a PRE-RELOCATION-NOOP row (alpha is modified in range and sits
-    # at the old path), which the mutant rightly drops. A-F never read that row -- they key on the
-    # old-path consumer column and on CLASSIFY -- so the mutant may differ by exactly those rows
-    # and nothing else.
-    _gs="$(run_pc "$RECON")"
-    _gs_rest="$(printf '%s\n' "$_gs" | LC_ALL=C awk -F'\t' '$4 != "PRE-RELOCATION-NOOP"')"
-    if [ -z "$_gs_rest" ]; then
-      bad "FIXTURE BROKEN [G mutant]: the subject classified nothing else over the main world, so the comparison below compares empty to empty"
-    elif [ "$(printf '%s\n' "$(run_pc "$GM")")" != "$_gs_rest" ]; then
-      bad "MUTANT [G] moved main-world rows OTHER than PRE-RELOCATION-NOOP, so it reaches arms A-F -- entangled"
-    elif ! grep -qF 'BEGIN GENERATED: reconcile-mechanical' "$WORK/g-mutant.md"; then
-      bad "MUTANT HARNESS BROKEN [G]: the copy rendered no region, so its verdict is a copy that did not run"
-    elif [ -z "$gm" ]; then
-      bad "MUTANT SURVIVED [G]: with the row removed, G still passed -- it cannot see the silent skip"
-    else
-      mutant_killed "$B_rpG" G-noop-row-removed "MUTANT (PRE-RELOCATION-NOOP row removed) fails G ($gm) and leaves every other main-world row, which A-F read, byte-identical"
-    fi
   fi
 fi
 

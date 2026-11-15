@@ -37,8 +37,7 @@ find_up() { # <rel-dist> <rel-consumer> -> first existing path walking up from $
 }
 if [ -f "$D" ]; then RO="$D"
 else RO="$(find_up core/scripts/record-only-diff.sh scripts/ai-dlc/record-only-diff.sh)" || RO=""; fi
-# A pass is logged only for a subject at its own path (a core/scripts directory); a mutant script directory's
-# copy is no pass of the subject.
+# A pass is logged only for a subject at its own path (a core/scripts directory).
 case "${RO%/*}" in */core/scripts) RO_PASS=1 ;; *) RO_PASS=0 ;; esac
 [ -n "$RO" ] || { echo "  FAIL  receipt-bl988: no core/scripts/record-only-diff.sh or scripts/ai-dlc/record-only-diff.sh above $D"; exit 2; }
 rfail=0

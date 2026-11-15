@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # readset-stage1-verdict -- drive scripts/readset-stage1-verdict.sh (the stage-1 scorer) and
-# scripts/readset-stage1-run.sh (the stage-1 run wrapper) over SEEDED worlds, and kill a mutant of
-# every arm, refusal and wrapper property they claim.
+# scripts/readset-stage1-run.sh (the stage-1 run wrapper) over SEEDED worlds.
 #
 # WHY THE SEEDED ALL-MET WORLD IS THE CENTRE OF THIS FILE. Stage 1 has never been met on real data,
 # so the MET verdict has never fired anywhere. A scorer that can only refuse or report NOT-MET reads
 # exactly like one that has simply not seen three good runs yet. The ALL-MET world below is the only
-# evidence that MET can fire, and every mutant is required to still score it MET (its liveness
-# arm), so a copy that died on a syntax error cannot score as a kill.
+# evidence that MET can fire.
 #
 # EVERY WORLD IS THE ALL-MET BASE PLUS ONE EDIT, and a NOT-MET world is asserted on the EXACT set
 # of (run, subject, arm) tuples it prints, never on arm IDs alone: a substring name match in A1/A5
 # emits the SAME arm id on one EXTRA subject, which an arm-id assertion cannot see. A refusal world
-# is asserted on exit 2 plus its reason text, because R2's string-compare mutant still refuses the
-# symlinked world -- for a different reason, which only the message shows.
+# is asserted on exit 2 plus its reason text, which tells two refusals apart.
 #
 # TWO ARMS CANNOT FAIL ALONE IN THE DERIVER'S REAL SHAPE, AND ARE ISOLATED DELIBERATELY. The deriver
 # prints `<fx> OMITTED (...)` INSTEAD OF `<fx> <n> paths` (:1037/:1041), so a real A1 always drags
@@ -22,15 +19,9 @@
 # world keeps the paths line and adds the OMITTED line; the unreadable-canary world is asserted as
 # the A1+A3 pair it really is, and the 1-line `.canary` world carries A3 alone.
 #
-# MUTANTS ARE BUILT FROM A SCRATCH COPY, never the tree. A scorer mutant is built from a CONTROL copy
-# whose `self_probe` call is disabled -- otherwise most arm deletions would die at exit 2 inside the
-# scorer's own self-probe, which proves the probe and not these worlds. The control copy must agree
-# with the shipping scorer on every world. Each mutation must replace exactly one line, and the copy
-# must differ from its source (`cmp -s` non-zero), or the mutant is reported DID NOT APPLY.
-#
 # IN PROCESS, ONE END-TO-END RUN PER CLI OUTCOME. Both subjects carry a BASH_SOURCE guard over sections that are
 # functions (scorer: stage1_entry, stage1_score; wrapper: stage1_preflight .. stage1_launch, sample, finish). Every
-# world and every mutant is asked in process -- the copy sourced in a subshell, the section called -- and the CLI
+# world is asked in process -- the subject sourced in a subshell, the section called -- and the CLI
 # runs as a process only once per distinct outcome: the scorer's MET/NOT-MET/REFUSED (the equivalence cell, which
 # also proves the two paths byte-identical) and --self-probe; the wrapper's exit 0, 1, 143 (TERM), 137 (SIGKILL)
 # and one exit-2 refusal.
@@ -44,75 +35,11 @@
 # on two worlds is byte-compared across three working directories, one a dirty decoy repo, and the
 # wrapper's ok run is driven from inside that decoy.
 #
-# The mutant matrix: outside its declared decides set, each mutant co-trips no other arm, measured at authoring; a
-# twins=- row is dead in every cell by construction, as its why= states. Per push a mutant drives its
-# deciding cell(s) and one named twin that the matrix shows green for it. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
-#
-# MUTANT-MATRIX del-A1 decides=a1,a3u twins=met
-# MUTANT-MATRIX del-A2 decides=a2 twins=met
-# MUTANT-MATRIX del-A3 decides=a3,a3u twins=met
-# MUTANT-MATRIX del-A4 decides=a4,a4-after twins=met
-# MUTANT-MATRIX del-A5 decides=a5,a5n twins=met
-# MUTANT-MATRIX del-A6 decides=a6,a6-gitignore,a6-owntree,a6-p2,a6-dir twins=met
-# MUTANT-MATRIX a6-owntree decides=a6-owntree twins=met
-# MUTANT-MATRIX a6-caret-git decides=a6-gitignore twins=met
-# MUTANT-MATRIX a1-substring decides=a1,a3u twins=met
-# MUTANT-MATRIX a5-substring decides=a5 twins=met
-# MUTANT-MATRIX a2-reads-log decides=a2 twins=met
-# MUTANT-MATRIX a4-whole-file decides=a4,a4-after twins=met
-# MUTANT-MATRIX del-R0 decides=r0-log,r0-sb,r0-profile twins=met
-# MUTANT-MATRIX r2-string decides=r2-link twins=met
-# MUTANT-MATRIX rl-skip decides=rl-rc,rl-skip twins=met
-# MUTANT-MATRIX rl-skip-started decides=rl-started,rl-foreign twins=met
-# MUTANT-MATRIX a2-ending decides=a2 twins=met
-# MUTANT-MATRIX a4-open-end decides=a4-after twins=met
-# MUTANT-MATRIX a6-regular-file decides=a6-dir twins=met
-# MUTANT-MATRIX r0-no-profile decides=r0-profile twins=met
-# MUTANT-MATRIX r6-paths-only decides=r6-omitted twins=met
-# MUTANT-MATRIX r2-first-only decides=r2-one twins=met
-# MUTANT-MATRIX rl-pair-unchecked decides=rl-foreign,rl-epoch,rl-head twins=met
-# MUTANT-MATRIX rl-pair-no-epoch decides=rl-epoch twins=met
-# MUTANT-MATRIX rl-pair-no-head decides=rl-head twins=met
-# MUTANT-MATRIX probe-owntree decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
-# MUTANT-MATRIX probe-a2-ending decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
-# MUTANT-MATRIX probe-a4-open-end decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
-# MUTANT-MATRIX probe-a6-regular-file decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
-# MUTANT-MATRIX probe-r0-no-profile decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
-# MUTANT-MATRIX probe-r6-paths-only decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
-# MUTANT-MATRIX probe-r2-first-only decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
-# MUTANT-MATRIX probe-rl-no-pairing decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
-# MUTANT-MATRIX probe-rl-pair-unchecked decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
-# MUTANT-MATRIX load-under-root decides=sample twins=profile
-# MUTANT-MATRIX load-5min decides=sample twins=profile
-# MUTANT-MATRIX profile-passed-through decides=profile twins=sample
-# MUTANT-MATRIX no-started-line decides=started twins=sample
-# MUTANT-MATRIX no-orphan-check decides=orphan-live twins=orphan-dead
-# MUTANT-MATRIX no-restore decides=restore twins=groupkill
-# MUTANT-MATRIX single-pid-kill decides=groupkill twins=restore
-# MUTANT-MATRIX sampler-term decides=samplerstop twins=profile
-# MUTANT-MATRIX sampler-pid-kill decides=samplerstop,holdsampler twins=profile
-# MUTANT-MATRIX no-kill-fallback decides=killgrace twins=samplerstop
-# MUTANT-MATRIX no-hold decides=holdlaunch,holdsampler twins=samplerstop
-# MUTANT-MATRIX pk-bare decides=pk-site1,pk-site2 twins=clause-count
-# MUTANT-MATRIX pk-wrong-parent decides=pk-site1,pk-site2 twins=clause-count
-# MUTANT-MATRIX sb-one-emitter decides=clause-count twins=pk-sites
-# MUTANT-MATRIX og-pass decides=og-stall twins=og-reaped
-# MUTANT-MATRIX-DYNAMIC smut why=every scorer-mutant name reaches mutant_killed as a variable; each name carries its own row above
-# MUTANT-MATRIX-DYNAMIC pmut why=every self-probe mutant name reaches mutant_killed as a variable; each carries its own row above
-# MUTANT-MATRIX-DYNAMIC wmut why=every wrapper-mutant name reaches mutant_killed as a variable; each carries its own row above
-# MUTANT-MATRIX-DYNAMIC pkmut why=each pkill-reaping mutant name reaches mutant_killed as a variable; each carries its own row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/readset-stage1-verdict/run.sh --matrix
-#
-# Usage: run.sh            the per-push run (mode PUSH)
-#        run.sh --matrix   the full mutant x cell matrix (mode FULL), measured at authoring
-# Exit:  0 = every arm and mutant holds, 1 = one regressed, 2 = fixture broken.
+# Usage: run.sh
+# Exit:  0 = every arm holds, 1 = one regressed, 2 = fixture broken.
 set -u
 
-MATRIX=0
-[ "${1:-}" = --matrix ] && MATRIX=1
-MCELLS=0
-if [ "$MATRIX" = 1 ]; then echo "readset-stage1-verdict: mode FULL (--matrix)"; else echo "readset-stage1-verdict: mode PUSH"; fi
+echo "readset-stage1-verdict: mode PUSH"
 
 # Every ambient AI_DLC_* key is cleared (I10/I87): the subjects read AI_DLC_READSET_STAGE1_LEDGER,
 # and an inherited one would point them at the operator's ledger. Each arm passes its own.
@@ -152,7 +79,7 @@ trap 'reap; hang_release' EXIT
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { echo "readset-stage1-verdict: FIXTURE BROKEN: $*" >&2; echo "  (work kept at $WORK)" >&2; exit 2; }
-MUT_LIB="$HERE/../lib/mutant.sh"
+MUT_LIB="$HERE/../lib/mutant.sh"   # fx_inproc lives in this library
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
@@ -247,17 +174,17 @@ w_of() { printf '%s\n' "$WORK/w/$1"; }
 log_sub() { ENV_OLD="$2" ENV_NEW="$3" awk 'index($0, ENVIRON["ENV_OLD"]) { print ENVIRON["ENV_NEW"]; next } { print }' "$1" > "$1.new" && mv "$1.new" "$1"; }
 log_del_paths() { awk -v f="$2" '!($1 == f && $3 == "paths")' "$1" > "$1.new" && mv "$1.new" "$1"; }
 
-# score_in <scorer copy> <world> <cwd> [probe]: the scoring the CLI runs, ASKED IN PROCESS. The copy is sourced in a
+# score_in <scorer> <world> <cwd> [probe]: the scoring the CLI runs, ASKED IN PROCESS. The scorer is sourced in a
 # subshell (its BASH_SOURCE guard keeps the CLI body from running; its own `set -uo pipefail` stays inside the
 # subshell, as it is inside the CLI) and stage1_score is called -- the function the CLI calls after its self-probe.
 # `probe` runs stage1_entry first, the self-probe path the CLI takes. A per-cell subshell rather than one top-level
-# source: the scorer defines a seed_run of its own that would replace this file's, and every mutant is its own copy.
+# source: the scorer defines a seed_run of its own that would replace this file's.
 score_in() {
   ( cd "$3" || exit 2
     TMPDIR="$2/tmp"; AI_DLC_READSET_STAGE1_LEDGER="$2/ledger"; export TMPDIR AI_DLC_READSET_STAGE1_LEDGER
     . "$1" || exit 2
     [ "${4:-}" = probe ] && stage1_entry
-    [ "$1" = "$SCORER" ] && fx_inproc "$SCORER"; stage1_score ) 2>&1
+    fx_inproc "$SCORER"; stage1_score ) 2>&1
 }
 # score_cli <scorer> <world> <cwd>: the same question through the CLI, for the equivalence cell and one run per outcome.
 score_cli() { ( cd "$3" && TMPDIR="$2/tmp" AI_DLC_READSET_STAGE1_LEDGER="$2/ledger" bash "$1" 2>&1 ); }
@@ -329,8 +256,7 @@ W="$(mkworld rl-rc)" || broken seed; { lline "$W/r1" 1; lline "$W/r2" 2 1; lline
 want rl-rc 2 "RL run 2: $W/r2 is recorded with rc '1'"
 W="$(mkworld rl-rcfile)" || broken seed; printf '1\n' > "$W/r2/rc"
 want rl-rcfile 2 "RL run 2: $W/r2/rc reads '1'"
-# THE DISCRIMINATING LEDGER for the skip mutant: FOUR lines, the first three good and the LAST bad.
-# A three-line ledger with one bad line refuses under both the scorer and the mutant.
+# THE DISCRIMINATING LEDGER for a skipped bad run: FOUR lines, the first three good and the LAST bad.
 W="$(mkworld rl-skip)" || broken seed; seed_run "$W/r4" 4 || broken seed; printf '%s\n' "$KILLTOK" > "$W/r4/rc"; lline "$W/r4" 4 "$KILLTOK" >> "$W/ledger"
 want rl-skip 2 "RL run 3: $W/r4 is recorded with rc '$KILLTOK'"
 
@@ -439,24 +365,12 @@ NWORLDS="$(grep -c . "$TABLE")" || NWORLDS=0
 # ------------------------------------------------------------------ the shipping scorer ----
 echo " the shipping scorer, every world:"
 sp="$(TMPDIR="$WORK/w" FXCELL=score-selfprobe bash "$SCORER" --self-probe 2>&1)"; rc=$?
-case "$rc|$sp" in "0|self-probe: "*" probes answered as expected") B_sp=1; ok "--self-probe exits 0 ($sp)" ;; *) bad "--self-probe: rc=$rc $sp" ;; esac
+case "$rc|$sp" in "0|self-probe: "*" probes answered as expected") ok "--self-probe exits 0 ($sp)" ;; *) bad "--self-probe: rc=$rc $sp" ;; esac
 while IFS="$(printf '\t')" read -r name wrc wspec; do
   got="$(verdict "$SCORER" "$(w_of "$name")")"
   eval "GOT_${name//-/_}=\$got"
   if matches "$got" "$wrc" "$wspec"; then
     ok "$name -> $got"
-    # Each base-pass flag a mutant gates on is assigned LITERALLY, here in the passing branch, so the
-    # flag is a value this run set beside its world's ok (validate-mutant-kills.sh M5 reads it).
-    case "$name" in
-      met) B_w_met=1 ;; a1) B_w_a1=1 ;; a2) B_w_a2=1 ;; a3) B_w_a3=1 ;; a3u) B_w_a3u=1 ;;
-      a4) B_w_a4=1 ;; a4-after) B_w_a4_after=1 ;; a5) B_w_a5=1 ;; a5n) B_w_a5n=1 ;;
-      a6) B_w_a6=1 ;; a6-gitignore) B_w_a6_gitignore=1 ;; a6-owntree) B_w_a6_owntree=1 ;;
-      a6-p2) B_w_a6_p2=1 ;; a6-dir) B_w_a6_dir=1 ;;
-      r0-log) B_w_r0_log=1 ;; r0-sb) B_w_r0_sb=1 ;; r0-profile) B_w_r0_profile=1 ;;
-      r2-link) B_w_r2_link=1 ;; r2-one) B_w_r2_one=1 ;; r6-omitted) B_w_r6_omitted=1 ;;
-      rl-rc) B_w_rl_rc=1 ;; rl-skip) B_w_rl_skip=1 ;; rl-started) B_w_rl_started=1 ;;
-      rl-foreign) B_w_rl_foreign=1 ;; rl-epoch) B_w_rl_epoch=1 ;; rl-head) B_w_rl_head=1 ;;
-    esac
   else bad "$name -> $got (want $wrc|$wspec)"; fi
 done < "$TABLE"
 
@@ -497,180 +411,6 @@ for name in met a4; do
   eval "a=\$GOT_$name"; b="$(verdict "$SCORER" "$(w_of "$name")" /)"; c="$(verdict "$SCORER" "$(w_of "$name")" "$DECOY")"
   if [ "$a" = "$b" ] && [ "$b" = "$c" ] && [ -n "$a" ]; then ok "cwd-invariant on $name ($a)"; else bad "cwd changes $name: [$a] [$b] [$c]"; fi
 done
-
-# ------------------------------------------------------------------ scorer mutants ----
-# mut <src> <dst>: replace exactly ONE line equal to $MUT_OLD with $MUT_NEW. Fails if the count is
-# not 1, if the copy does not differ from its source, or if the copy does not parse.
-mut() {
-  awk -v CF="$2.count" '$0 == ENVIRON["MUT_OLD"] { $0 = ENVIRON["MUT_NEW"]; c++ } { print } END { print c + 0 > CF }' "$1" > "$2" || return 1
-  [ "$(cat "$2.count")" = 1 ] || return 1
-  if cmp -s "$1" "$2"; then return 1; fi
-  bash -n "$2" 2>/dev/null
-}
-MD="$WORK/mut"; mkdir -p "$MD"
-CTL="$MD/control.sh"
-export MUT_OLD='self_probe' MUT_NEW=': self_probe disabled in the control copy'
-mut "$SCORER" "$CTL" || broken "the control copy did not apply (self_probe call line not found exactly once)"
-WORLDS="$WORK/worlds"; cut -f1 "$TABLE" > "$WORLDS"
-
-# THE CONTROL COPY IS A DIFFERENT PROGRAM FROM THE SHIPPING SCORER, so its differences are counted, not
-# read: `diff` lines of the copy against the shipping scorer must be exactly one removed and one added,
-# and the same count of the scorer against itself is the control that the count can read zero.
-dn_same="$(diff "$SCORER" "$SCORER" | grep -c '^[<>]')" || dn_same=0
-dn_ctl="$(diff "$SCORER" "$CTL" | grep -c '^[<>]')" || dn_ctl=0
-if [ "$dn_same" = 0 ] && [ "$dn_ctl" = 2 ]; then ok "the control copy differs from the shipping scorer in exactly one line (diff: $dn_ctl changed lines; the scorer against itself: $dn_same)"; else bad "the control copy differs from the shipping scorer in $dn_ctl diff line(s) (want 2); self-diff $dn_same (want 0)"; fi
-
-# world_hit <script> <world> [probe]: 1 when the script answers the world differently from the table, else 0.
-# `probe` asks it the way the CLI does, self-probe first (the self-probe mutants' matrix rows need that path).
-world_hit() {
-  local wrc wspec got
-  wrc="$(awk -F'\t' -v n="$2" '$1 == n { print $2 }' "$TABLE")"; wspec="$(awk -F'\t' -v n="$2" '$1 == n { print $3 }' "$TABLE")"
-  got="$(verdict "$1" "$(w_of "$2")" "$WORK" "${3:-}")"
-  if matches "$got" "$wrc" "$wspec"; then echo 0; else echo 1; fi
-}
-# mx_judge <name> <decides csv> <killed csv>: the measured killed set equals the declared deciding set.
-mx_judge() {
-  local d k
-  d="$(printf '%s\n' ${2//,/ } | LC_ALL=C sort | tr '\n' ',')"; k="$(printf '%s\n' ${3//,/ } | LC_ALL=C sort | tr '\n' ',')"
-  if [ "$d" = "$k" ]; then ok "MATRIX $1: the tripped cells are exactly the deciding set ($2)"; else bad "MATRIX $1: tripped cells [$3] differ from the deciding set [$2]"; fi
-}
-# matrix_row <name> <script> <decides csv>: every world scored against the mutant, one row, matrix mode only.
-matrix_row() {
-  local w h cells="" ks=""
-  while IFS= read -r w; do
-    MCELLS=$((MCELLS + 1))
-    h="$(world_hit "$2" "$w")"
-    cells="$cells $w:$h"
-    [ "$h" = 1 ] && ks="$ks,$w"
-  done < "$WORLDS"
-  echo "MATRIX $1$cells"
-  mx_judge "$1" "$3" "${ks#,}"
-}
-
-echo " the probe-disabled control copy agrees with the shipping scorer (one world per outcome class):"
-for name in met a1 r1; do
-  eval "a=\$GOT_${name//-/_}"; b="$(verdict "$CTL" "$(w_of "$name")")"
-  case "$name" in met) cls=MET ;; a1) cls=NOT-MET ;; *) cls=REFUSED ;; esac
-  if [ "$a" = "$b" ]; then ok "control copy = shipping scorer on $name ($cls: $a)"; else bad "control copy disagrees with the shipping scorer on $name ($cls): [$a] vs [$b]"; fi
-done
-if [ "$MATRIX" = 1 ]; then
-  echo " matrix: the control copy on every other world:"
-  while IFS= read -r name; do
-    case "$name" in met|a1|r1) continue ;; esac
-    MCELLS=$((MCELLS + 1))
-    eval "a=\$GOT_${name//-/_}"; b="$(verdict "$CTL" "$(w_of "$name")")"
-    if [ "$a" = "$b" ]; then ok "matrix: control copy = shipping scorer on $name"; else bad "matrix: control copy disagrees with the shipping scorer on $name: [$a] vs [$b]"; fi
-  done < "$WORLDS"
-fi
-
-# smut <flag> <name> <decides csv> <twin world> <old line> <new line>: a scorer mutant from the CONTROL
-# copy. KILLED on each deciding world (the verdict differs from the table); the twin world must stay
-# GREEN under it, which is also the liveness check that the mutant still scores the ALL-MET world.
-# The flag is the conjunction of the base-pass flags of the worlds it reads, set by the shipping loop.
-smut() {
-  local flag="$1" name="$2" decides="$3" twin="$4" dst="$MD/$2.sh" w
-  export MUT_OLD="$5" MUT_NEW="$6"
-  mut "$CTL" "$dst" || { bad "mutant $name DID NOT APPLY"; return; }
-  [ "$(world_hit "$dst" "$twin")" = 0 ] || { bad "mutant $name is not confined: its twin world $twin answers differently under it"; return; }
-  for w in ${decides//,/ }; do
-    if [ "$(world_hit "$dst" "$w")" = 1 ]; then mutant_killed "$flag" "$name" "mutant $name KILLED on $w (applied; twin $twin green)"; else bad "mutant $name SURVIVED on $w"; fi
-  done
-  if [ "$MATRIX" = 1 ]; then matrix_row "$name" "$dst" "$decides"; fi
-}
-echo " scorer mutants:"
-smut "$(( ${B_w_a1:-0} && ${B_w_a3u:-0} && ${B_w_met:-0} ))" del-A1 a1,a3u met '    a1_omitted "$rd/deriver.log" "$fx" "$label" || FAILED=1' '    :'
-smut "$(( ${B_w_a2:-0} && ${B_w_met:-0} ))" del-A2 a2 met '    a2_dropped "$rd/root/w/$fx.win" "$fx" "$label" || FAILED=1' '    :'
-smut "$(( ${B_w_a3:-0} && ${B_w_a3u:-0} && ${B_w_met:-0} ))" del-A3 a3,a3u met '    a3_canary "$rd/root/w/$fx.canary" "$rd/deriver.log" "$fx" "$label" || FAILED=1' '    :'
-smut "$(( ${B_w_a4:-0} && ${B_w_a4_after:-0} && ${B_w_met:-0} ))" del-A4 a4,a4-after met '  a4_load "$rd/load.tsv" "$ws" "$we" "$label" || FAILED=1' '  :'
-smut "$(( ${B_w_a5:-0} && ${B_w_a5n:-0} && ${B_w_met:-0} ))" del-A5 a5,a5n met '    a5_paths "$rd/deriver.log" "$rd/root/w/$fx.set" "$fx" "$label" || FAILED=1' '    :'
-smut "$(( ${B_w_a6:-0} && ${B_w_a6_gitignore:-0} && ${B_w_a6_owntree:-0} && ${B_w_a6_p2:-0} && ${B_w_a6_dir:-0} && ${B_w_met:-0} ))" del-A6 a6,a6-gitignore,a6-owntree,a6-p2,a6-dir met '  a6_compare "$RD1" "$RD2" "$RD3" "$fx" "$SCRATCH" || FAILED=1' '  :'
-smut "$(( ${B_w_a6_owntree:-0} && ${B_w_met:-0} ))" a6-owntree a6-owntree met \
-  '    LC_ALL=C comm -12 "$s/a6.$i" "$s/a6.keep" > "$s/a6.f$i"' \
-  '    eval "rd=\"\$$i\""; while IFS= read -r p; do if [ -e "$rd/root/t/$p" ] || [ -L "$rd/root/t/$p" ]; then printf "%s\n" "$p"; fi; done < "$s/a6.$i" > "$s/a6.f$i"'
-smut "$(( ${B_w_a6_gitignore:-0} && ${B_w_met:-0} ))" a6-caret-git a6-gitignore met \
-  "    awk '\$0 != \"\" && \$0 != \".git\" && index(\$0, \".git/\") != 1' \"\$rd/root/w/\$fx.set\" | LC_ALL=C sort -u > \"\$s/a6.\$i\" \\" \
-  "    awk '\$0 != \"\" && \$0 !~ /^\\.git/' \"\$rd/root/w/\$fx.set\" | LC_ALL=C sort -u > \"\$s/a6.\$i\" \\"
-smut "$(( ${B_w_a1:-0} && ${B_w_a3u:-0} && ${B_w_met:-0} ))" a1-substring a1,a3u met \
-  "  hit=\"\$(awk -v f=\"\$2\" '\$1 == f && \$2 == \"OMITTED\" { print; exit }' \"\$1\")\"" \
-  "  hit=\"\$(awk -v f=\"\$2\" 'index(\$1, f) == 1 && \$2 == \"OMITTED\" { print; exit }' \"\$1\")\""
-smut "$(( ${B_w_a5:-0} && ${B_w_met:-0} ))" a5-substring a5 met \
-  "  logged=\"\$(awk -v f=\"\$3\" '\$1 == f && \$3 == \"paths\" { print \$2; exit }' \"\$1\")\"" \
-  "  logged=\"\$(awk -v f=\"\$3\" 'index(\$1, f) == 1 && \$3 == \"paths\" { print \$2; exit }' \"\$1\")\""
-smut "$(( ${B_w_a2:-0} && ${B_w_met:-0} ))" a2-reads-log a2 met '    a2_dropped "$rd/root/w/$fx.win" "$fx" "$label" || FAILED=1' '    a2_dropped "$rd/deriver.log" "$fx" "$label" || FAILED=1'
-smut "$(( ${B_w_a4:-0} && ${B_w_a4_after:-0} && ${B_w_met:-0} ))" a4-whole-file a4,a4-after met '  cp="$(window_load "$1" "$2" "$3")"; peak="${cp#* }"' '  cp="$(window_load "$1" 0 99999999999)"; peak="${cp#* }"'
-smut "$(( ${B_w_r0_log:-0} && ${B_w_r0_sb:-0} && ${B_w_r0_profile:-0} && ${B_w_met:-0} ))" del-R0 r0-log,r0-sb,r0-profile met '  why="$(r0_sandbox "$rd" "$SCRATCH")" || refuse "$why"' '  :'
-smut "$(( ${B_w_r2_link:-0} && ${B_w_met:-0} ))" r2-string r2-link met \
-  '  a="$(cd "$1/root" 2>/dev/null && pwd -P)"; b="$(cd "$2/root" 2>/dev/null && pwd -P)"; c="$(cd "$3/root" 2>/dev/null && pwd -P)"' \
-  '  a="$1/root"; b="$2/root"; c="$3/root"'
-# The ledger read, two skip mutants. Each drops the bad run's lines BOTH (started and terminal), so
-# what is left is three well-formed pairs and the mutant scores MET: a skip, not a different refusal.
-L6_OLD="awk 'NF > 0' \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
-smut "$(( ${B_w_rl_rc:-0} && ${B_w_rl_skip:-0} && ${B_w_met:-0} ))" rl-skip rl-rc,rl-skip met "$L6_OLD" \
-  "awk -F'\\t' 'NR == FNR { if (\$2 != \"started\" && \$2 != \"0\") b[\$1] = 1; next } NF > 0 && !(\$1 in b)' \"\$LEDGER\" \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
-smut "$(( ${B_w_rl_started:-0} && ${B_w_rl_foreign:-0} && ${B_w_met:-0} ))" rl-skip-started rl-started,rl-foreign met "$L6_OLD" \
-  "awk -F'\\t' 'NR == FNR { if (\$2 != \"started\") t[\$1] = 1; next } NF > 0 && !(\$2 == \"started\" && !(\$1 in t))' \"\$LEDGER\" \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
-# A2 keyed on an ending `log stream` never writes: dies on the producer's verbatim line.
-A2_OLD="  n=\"\$(grep -c 'dropped during' \"\$1\" 2>/dev/null)\""
-A2_NEW="  n=\"\$(grep -c 'dropped during live streaming ===\$' \"\$1\" 2>/dev/null)\""
-smut "$(( ${B_w_a2:-0} && ${B_w_met:-0} ))" a2-ending a2 met "$A2_OLD" "$A2_NEW"
-# A4 bounded at the start only (15 s of slack past the end): dies on 6.00 sampled after the window.
-A4_OLD='    $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+(\.[0-9]+)?$/ && $1 + 0 >= s + 0 && $1 + 0 <= e + 0 {'
-A4_NEW='    $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+(\.[0-9]+)?$/ && $1 + 0 >= s + 0 && $1 + 0 <= e + 15 {'
-smut "$(( ${B_w_a4_after:-0} && ${B_w_met:-0} ))" a4-open-end a4-after met "$A4_OLD" "$A4_NEW"
-# A6 with a regular-file-only existence filter: dies on the directory row.
-A6P_OLD='a6_present() { [ -e "$1" ] || [ -L "$1" ]; }'
-A6P_NEW='a6_present() { [ -f "$1" ]; }'
-smut "$(( ${B_w_a6_dir:-0} && ${B_w_met:-0} ))" a6-regular-file a6-dir met "$A6P_OLD" "$A6P_NEW"
-# R0 without the profile comparison: dies on the narrowed profile.
-R0_OLD='  cmp -s "$2/r0.sb" "$1/root/w/sandbox.sb" \'
-R0_NEW='  true \'
-smut "$(( ${B_w_r0_profile:-0} && ${B_w_met:-0} ))" r0-no-profile r0-profile met "$R0_OLD" "$R0_NEW"
-# R6 reading only `paths` lines: dies on a foreign OMITTED line.
-R6_OLD="    substr(\$0, 1, 2) == \"  \" && (\$2 == \"OMITTED\" || \$3 == \"paths\") && index(subj, \" \" \$1 \" \") == 0 { print \$1; exit }' \"\$1/deriver.log\")\""
-R6_NEW="    substr(\$0, 1, 2) == \"  \" && \$3 == \"paths\" && index(subj, \" \" \$1 \" \") == 0 { print \$1; exit }' \"\$1/deriver.log\")\""
-smut "$(( ${B_w_r6_omitted:-0} && ${B_w_met:-0} ))" r6-paths-only r6-omitted met "$R6_OLD" "$R6_NEW"
-# R2 comparing run 1 with run 2 for the FIRST subject only (1-3 and 2-3 for all): dies on the one
-# middle subject copied from run 1 to run 2, while r2-copy, which copies all five, cannot tell it
-# from the scorer.
-R2_OLD='    if cmp -s "$1/root/w/$fx.raw" "$2/root/w/$fx.raw" || cmp -s "$1/root/w/$fx.raw" "$3/root/w/$fx.raw" \'
-R2_NEW='    if [ "$fx" = "$FIRST_SUBJECT" ] && cmp -s "$1/root/w/$fx.raw" "$2/root/w/$fx.raw" || cmp -s "$1/root/w/$fx.raw" "$3/root/w/$fx.raw" \'
-smut "$(( ${B_w_r2_one:-0} && ${B_w_met:-0} ))" r2-first-only r2-one met "$R2_OLD" "$R2_NEW"
-# The pair check itself: unchecked, and with either the epoch or the HEAD conjunct dropped. Each
-# dies on the one world whose started line differs from its terminal in that field alone.
-RLP_OLD='    [ "$sr" = "$tr" ] && [ "$ss" = "$ts" ] && [ "$sh" = "$th" ] \'
-smut "$(( ${B_w_rl_foreign:-0} && ${B_w_rl_epoch:-0} && ${B_w_rl_head:-0} && ${B_w_met:-0} ))" rl-pair-unchecked rl-foreign,rl-epoch,rl-head met "$RLP_OLD" '    true \'
-smut "$(( ${B_w_rl_epoch:-0} && ${B_w_met:-0} ))" rl-pair-no-epoch rl-epoch met "$RLP_OLD" '    [ "$sr" = "$tr" ] && [ "$sh" = "$th" ] \'
-smut "$(( ${B_w_rl_head:-0} && ${B_w_met:-0} ))" rl-pair-no-head rl-head met "$RLP_OLD" '    [ "$sr" = "$tr" ] && [ "$ss" = "$ts" ] \'
-
-# THE SCORER'S OWN SELF-PROBE must refuse each of these mutations too: applied to the SHIPPING
-# scorer, self-probe live, `--self-probe` exits 2.
-pmut() { # pmut <flag> <name> <old> <new>: decides selfprobe alone (the self-probe runs before any world, so every world refuses: dead in every cell)
-  local flag="$1" name="$2" rc sp m w
-  export MUT_OLD="$3" MUT_NEW="$4"
-  if mut "$SCORER" "$MD/$name.sh"; then
-    # IN PROCESS: the mutated copy sourced in a subshell and asked stage1_entry --self-probe, the path `--self-probe` takes.
-    sp="$( ( TMPDIR="$MD"; export TMPDIR; . "$MD/$name.sh" || exit 9; stage1_entry --self-probe ) 2>&1)"; rc=$?
-    if [ "$rc" = 2 ]; then mutant_killed "$flag" "$name" "the scorer's --self-probe refuses $name (rc 2)"; else bad "the scorer's --self-probe passed $name (rc $rc: $sp)"; fi
-    if [ "$MATRIX" = 1 ]; then
-      m=""; while IFS= read -r w; do MCELLS=$((MCELLS + 1)); m="$m $w:$(world_hit "$MD/$name.sh" "$w" probe)"; done < "$WORLDS"
-      echo "MATRIX $name selfprobe:$([ "$rc" = 2 ] && echo 1 || echo 0)$m"
-    fi
-  else
-    bad "self-probe mutant $name DID NOT APPLY"
-  fi
-}
-pmut "${B_sp:-0}" probe-owntree '    LC_ALL=C comm -12 "$s/a6.$i" "$s/a6.keep" > "$s/a6.f$i"' \
-  '    eval "rd=\"\$$i\""; while IFS= read -r p; do if [ -e "$rd/root/t/$p" ] || [ -L "$rd/root/t/$p" ]; then printf "%s\n" "$p"; fi; done < "$s/a6.$i" > "$s/a6.f$i"'
-pmut "${B_sp:-0}" probe-a2-ending "$A2_OLD" "$A2_NEW"
-pmut "${B_sp:-0}" probe-a4-open-end "$A4_OLD" "$A4_NEW"
-pmut "${B_sp:-0}" probe-a6-regular-file "$A6P_OLD" "$A6P_NEW"
-pmut "${B_sp:-0}" probe-r0-no-profile "$R0_OLD" "$R0_NEW"
-pmut "${B_sp:-0}" probe-r6-paths-only "$R6_OLD" "$R6_NEW"
-pmut "${B_sp:-0}" probe-r2-first-only "$R2_OLD" "$R2_NEW"
-# The pairing walk with no pair check at all: the self-probe's killed-run ledger must refuse.
-pmut "${B_sp:-0}" probe-rl-no-pairing '  for k in 3 2 1; do' '  for k in; do'
-# The pair check unchecked: the self-probe's foreign-started ledger must refuse.
-pmut "${B_sp:-0}" probe-rl-pair-unchecked "$RLP_OLD" '    true \'
 
 # ------------------------------------------------------------------ the wrapper ----
 STUB="$WORK/stub.sh"
@@ -732,7 +472,7 @@ printf '(version 3)\n(allow default)\n' > "$WORK/narrow.sb"
 
 # wrap_ok <wrapper-source> <tag>: the exit-0 run, driven from the dirty decoy with the stub sysctl
 # first on PATH and AI_DLC_READSET_SANDBOX_PROFILE set. Echoes nothing; records failures. Returns 1
-# if any property failed (the mutant scorer uses that).
+# if any property failed.
 wrap_ok() {
   local src="$1" t="$2" R="$WORK/wr/$2" rd L f
   mkrepo "$R/repo" "$src" || broken "mkrepo $t"
@@ -878,7 +618,7 @@ wrap_term() {
 }
 
 echo " the wrapper, against a stub deriver:"
-if wrap_ok "$WRAPPER" ok; then B_wr_ok=1; ok "exit 0 run (driven from a dirty decoy repo, stub sysctl first on PATH, a replacement profile in the env): map restored, started + terminal ledger lines, load.tsv is the 1-min figure, profile not passed on, files beside root/ and not under it, override delivered"; else bad "the exit 0 run"; fi
+if wrap_ok "$WRAPPER" ok; then ok "exit 0 run (driven from a dirty decoy repo, stub sysctl first on PATH, a replacement profile in the env): map restored, started + terminal ledger lines, load.tsv is the 1-min figure, profile not passed on, files beside root/ and not under it, override delivered"; else bad "the exit 0 run"; fi
 
 R="$WORK/wr/fail"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo fail"
 FXCELL=wrap-fail AI_DLC_READSET_STAGE1_LEDGER="$R/ledger" STUB_MODE=fail bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run" > "$R/out" 2>&1; rc=$?
@@ -890,7 +630,7 @@ else
   bad "exit 1 run: rc=$rc"
 fi
 
-if wrap_term "$WRAPPER" term; then B_wr_term=1; ok "TERM: exit 143, map restored, ledger says $KILLTOK, and every pid in the stub's tree is gone"; else bad "the TERM run"; fi
+if wrap_term "$WRAPPER" term; then ok "TERM: exit 143, map restored, ledger says $KILLTOK, and every pid in the stub's tree is gone"; else bad "the TERM run"; fi
 
 
 # wrap_kill9 <wrapper-source> <tag>: SIGKILL, which no trap sees, against a stub that writes the
@@ -947,7 +687,7 @@ wrap_kill9() {
   [ "$rc2" = 0 ] || { echo "    [$t] (c) with the orphan gone and the map clean the next run did not proceed: rc=$rc2 $out"; f=1; }
   return "$f"
 }
-if wrap_kill9 "$WRAPPER" kill9; then B_wr_kill9=1; ok "SIGKILL: exit 137, the started line alone; (a) map clean, orphan alive, next run refuses on the orphan; (b) orphan writes the map and exits, next run refuses on the dirty tree; (c) map clean and orphan gone, next run proceeds"; else bad "the SIGKILL run"; fi
+if wrap_kill9 "$WRAPPER" kill9; then ok "SIGKILL: exit 137, the started line alone; (a) map clean, orphan alive, next run refuses on the orphan; (b) orphan writes the map and exits, next run refuses on the dirty tree; (c) map clean and orphan gone, next run proceeds"; else bad "the SIGKILL run"; fi
 
 # The refusals: exit 2, the reason, and NOTHING recorded or created. ONE refusal runs end to end (the exit-2 CLI
 # outcome, so the wiring of the guarded entry stays tested); the rest ask stage1_preflight IN PROCESS -- the
@@ -987,13 +727,12 @@ want="$(cd "$R/repo/.git" && pwd -P)/ai-dlc-readset-stage1.ledger"
 if [ "$rc" = 0 ] && [ "$n" = 1 ] && [ "$out" = "LEDGER=$want" ]; then ok "with no override the ledger is the git common dir's (stage1_preflight resolves it; stage1_started writes its line there)"
 else bad "default ledger: rc=$rc lines=$n out=[$out] want LEDGER=$want"; fi
 
-# ------------------------------------------------------------------ wrapper mutants ----
-# THE WRAPPER'S PROPERTIES, ASKED IN PROCESS. Each cell sources a wrapper copy (the shipping one, or a mutant) in a
+# ------------------------------------------------------------------ wrapper sections, in process ----
+# THE WRAPPER'S PROPERTIES, ASKED IN PROCESS. Each cell sources the wrapper in a
 # subshell -- its BASH_SOURCE guard keeps the launch from running -- and calls the ONE section the property lives in:
 # sample (the load sampler), stage1_profile (the profile unset), stage1_started (the started line), stage1_preflight
 # (the live-orphan refusal and its ALLOW twin), and finish (the map restore, and the deriver's process-group kill).
-# The end-to-end runs above (exit 0, 1, 143, 137 and one refusal) keep the wiring between those sections tested; a
-# mutant runs only the in-process cell its property decides, plus its twin.
+# The end-to-end runs above (exit 0, 1, 143, 137 and one refusal) keep the wiring between those sections tested.
 # ic_<cell> <wrapper copy> <dir>: 0 when the property holds, else 1 with the why on stdout.
 ic_repo() { mkrepo "$1" "$2" >/dev/null 2>&1 || broken "mkrepo $1"; }
 ic_sample() { # sample() appends `<epoch>\t<1-min load>` to RUN_DIR/load.tsv, never under root/
@@ -1183,75 +922,8 @@ echo " the wrapper's sections, in process (the shipping wrapper):"
 for c in $IC_CELLS; do
   if wcell "$WRAPPER" "$c" shipping; then
     ok "in process: $c holds under the shipping wrapper"
-    case "$c" in
-      sample) B_ic_sample=1 ;;
-      profile) B_ic_profile=1 ;;
-      started) B_ic_started=1 ;;
-      orphan-live) B_ic_orphan_live=1 ;;
-      orphan-dead) B_ic_orphan_dead=1 ;;
-      restore) B_ic_restore=1 ;;
-      groupkill) B_ic_groupkill=1 ;;
-      samplerstop) B_ic_samplerstop=1 ;;
-      killgrace) B_ic_killgrace=1 ;;
-      holdlaunch) B_ic_holdlaunch=1 ;;
-      holdsampler) B_ic_holdsampler=1 ;;
-    esac
   else bad "in process: $c fails under the shipping wrapper: $(head -1 "$WORK/wr/m-shipping-$c.why")"; fi
 done
-# wmut <flag> <name> <decides csv> <twin cell | -> <old> <new> [<expected killed csv>]: KILLED iff a deciding
-# cell's properties fail under the mutant; the twin cell is GREEN under it. Matrix mode runs the remaining
-# cells and prints every one; <expected> overrides the deciding set for a row dead in every cell.
-wmut() {
-  local flag="$1" name="$2" decides="$3" twin="$4" dst="$MD/w-$2.sh" c ks="" cells=""
-  export MUT_OLD="$5" MUT_NEW="$6"
-  mut "$WRAPPER" "$dst" || { bad "wrapper mutant $name DID NOT APPLY"; return; }
-  for c in ${decides//,/ }; do
-    if wcell "$dst" "$c" "$name"; then bad "wrapper mutant $name SURVIVED on $c"
-    else mutant_killed "$flag" "$name" "wrapper mutant $name KILLED on $c (applied; twin $twin; $(head -1 "$WORK/wr/m-$name-$c.why" | sed 's/^ *//'))"; fi
-  done
-  if [ "$twin" != - ]; then wcell "$dst" "$twin" "$name" && ok "wrapper mutant $name leaves its twin $twin green" || bad "wrapper mutant $name is not confined: its twin $twin fails under it"; fi
-  if [ "$MATRIX" = 1 ]; then
-    for c in $IC_CELLS; do
-      MCELLS=$((MCELLS + 1))
-      if wcell "$dst" "$c" "$name"; then cells="$cells $c:0"; else cells="$cells $c:1"; ks="$ks,$c"; fi
-      reap
-    done
-    echo "MATRIX $name$cells"
-    mx_judge "$name" "${7:-$decides}" "${ks#,}"
-  fi
-}
-echo " wrapper mutants:"
-S1="sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/load.tsv\"; }"
-wmut "${B_ic_sample:-0}" load-under-root sample profile "$S1" \
-  "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/root/load.tsv\"; }"
-wmut "${B_ic_sample:-0}" load-5min sample profile "$S1" \
-  "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$3 }')\" >> \"\$RUN_DIR/load.tsv\"; }"
-wmut "${B_ic_profile:-0}" profile-passed-through profile sample 'unset AI_DLC_READSET_SANDBOX_PROFILE' ': profile left in the environment'
-wmut "${B_ic_started:-0}" no-started-line started sample "printf '%s\\tstarted\\t%s\\t%s\\n' \"\$RUN_DIR\" \"\$S_EPOCH\" \"\$HEAD_SHA\" >> \"\$LEDGER\" \\" ': \'
-reap
-# No orphan check: the run beside a live SIGKILLed deriver proceeds, which (a) refuses. The mutated line is
-# read from the wrapper itself, whole, so the fixture restates none of the wrapper's refusal vocabulary.
-OPEN_LINE="$(awk 'index($0, "if [ -n \"$OPEN_PG\" ] && kill -0 --") == 1 { print; exit }' "$WRAPPER")"
-[ -n "$OPEN_LINE" ] || broken "no orphan-check line in $WRAPPER"
-wmut "$(( ${B_ic_orphan_live:-0} && ${B_ic_orphan_dead:-0} ))" no-orphan-check orphan-live orphan-dead "$OPEN_LINE" ': orphan check removed'
-if grep -q '(a) the run beside the live orphan did not refuse' "$WORK/wr/m-no-orphan-check-orphan-live.why" 2>/dev/null; then mutant_killed "${B_ic_orphan_live:-0}" no-orphan-check "the no-orphan-check mutant died on arm (a), the live-orphan refusal"; else bad "the no-orphan-check mutant did not die on arm (a)"; fi
-reap
-RESTORE='  cp -p "$SNAP" "$MAP" 2>/dev/null'
-wmut "${B_ic_restore:-0}" no-restore restore groupkill "$RESTORE" '  :'
-wmut "${B_ic_groupkill:-0}" single-pid-kill groupkill restore \
-  '    kill -TERM -- "-$DPID" 2>/dev/null' \
-  '    kill -TERM "$DPID" 2>/dev/null'
-if grep -q 'never received the TERM' "$WORK/wr/m-single-pid-kill-groupkill.why" 2>/dev/null; then mutant_killed "${B_ic_groupkill:-0}" single-pid-kill "the single-pid-kill mutant died on the group-TERM arm ($(grep 'never received' "$WORK/wr/m-single-pid-kill-groupkill.why" | sed 's/.*TERM: //'))"; else bad "the single-pid-kill mutant did not die on the group-TERM arm"; fi
-reap
-# BL-1075: a stop that relies on a TERM being honoured. The sampler stopped by TERM, or by a KILL to its pid alone,
-# leaves its sleep; finish() with no KILL after the grace waits forever on a leader its TERM did not end.
-SSTOP='  kill -KILL -- "-$sp" 2>/dev/null; wait "$sp" 2>/dev/null'
-wmut "${B_ic_samplerstop:-0}" sampler-term samplerstop profile "$SSTOP" '  kill -TERM -- "-$sp" 2>/dev/null; wait "$sp" 2>/dev/null'
-wmut "$(( ${B_ic_samplerstop:-0} && ${B_ic_holdsampler:-0} ))" sampler-pid-kill samplerstop,holdsampler profile "$SSTOP" '  kill -KILL "$sp" 2>/dev/null; wait "$sp" 2>/dev/null'
-wmut "${B_ic_killgrace:-0}" no-kill-fallback killgrace samplerstop '    kill -0 -- "-$DPID" 2>/dev/null && kill -KILL -- "-$DPID" 2>/dev/null' '    :'
-reap
-# BL-1076: with no hold, a TERM between a launch's `&` and its recorded pid runs finish() with nothing to stop.
-wmut "$(( ${B_ic_holdlaunch:-0} && ${B_ic_holdsampler:-0} ))" no-hold holdlaunch,holdsampler samplerstop "trap 'HELD=143' TERM" "trap 'finish; exit 143' TERM"
 reap
 
 # ------------------------------------------------------------------ the deriver's tracer reaping (BL-466) ----
@@ -1262,7 +934,7 @@ reap
 # it: the child must die and the decoy must live. fs_usage needs root, so a real one is never started.
 # THE STUB CARRIES A UNIQUE NAME, substituted for `fs_usage` in the extracted line, because a stub
 # named `fs_usage` is killed by any other run's reaping on the same box -- measured, within 2.5 s --
-# and a mutant must never reach a tracer this fixture did not start. The probe does NOT `wait` on the
+# and a probe must never reach a tracer this fixture did not start. The probe does NOT `wait` on the
 # pipeline before the pkill: `wait` on a pipeline job blocks until its left element ends, which is
 # the stub's whole sleep, after which both stubs are dead for a reason that is not the pkill.
 echo " the deriver reaps only its own fs_usage (BL-466):"
@@ -1274,7 +946,7 @@ pk_lines() { # $1 deriver -> the uncommented lines carrying both `pkill` and `fs
 # The stub tracer is `cat` of the hang fifo under the fs_usage-like name: it never ends on its own, so only a
 # kill can make a probe read `dead` (BL-868; a `sleep 60` stub died by itself on a slow enough box).
 # The extracted lines call `rs_sleep`, which the deriver defines once. It is extracted from the SAME file being
-# scored (so a mutated copy carries it) and handed to the generated deriver.sh; READSET_SLEEP_CMD=: makes it
+# scored and handed to the generated deriver.sh; READSET_SLEEP_CMD=: makes it
 # add no sleep. pk_def prints the definition lines; pk_lines never matches one (no `pkill`).
 pk_def() { awk 'index($0, "rs_sleep() {") == 1' "$1"; }
 PKN="fsux$$"; PKB="$WORK/pkbin"; mkdir -p "$PKB" && ln -s /bin/cat "$PKB/$PKN" || broken "cannot build the fs_usage stub"
@@ -1314,25 +986,7 @@ n="$(pk_lines "$DERIVER" | grep -c .)" || n=0
 [ "$n" = 2 ] || broken "the deriver carries $n uncommented pkill fs_usage line(s), not the 2 reaping sites"
 got="$(pk_score "$DERIVER")"
 case "$got" in *none*) broken "the stub pipeline left no child of the deriver-shaped shell: $got" ;; esac
-if [ "$got" = 'child=dead decoy=alive;child=dead decoy=alive;' ]; then B_pk=1; ok "both reaping lines kill the deriver's own stub tracer and leave a decoy outside it alive ($got)"; else bad "the deriver's reaping lines: $got (want child=dead decoy=alive at both sites)"; fi
-# Mutants: every site edited (a fix layered on one site only reverts at both), on a COPY.
-# pkmut <name> <awk gsub from> <awk gsub to>: decides pk-site1 (the first reaping line, probed alone per push),
-# twin clause-count (the root-literal clause count on the same copy stays 3). Matrix mode scores both sites.
-pkmut() {
-  local dst="$MD/pk-$1.sh" c g cc
-  awk -v f="$2" -v t="$3" -v CF="$dst.count" '{ c += gsub(f, t) } { print } END { print c + 0 > CF }' "$DERIVER" > "$dst" || { bad "pkill mutant $1 DID NOT APPLY"; return; }
-  c="$(cat "$dst.count")"
-  if [ "$c" != 2 ] || cmp -s "$DERIVER" "$dst"; then bad "pkill mutant $1 DID NOT APPLY ($c site(s))"; return; fi
-  g="$(pk_score "$dst")"; cc="$(cl_count "$dst")"
-  if [ "$g" = 'child=dead decoy=alive;child=dead decoy=alive;' ]; then bad "pkill mutant $1 SURVIVED ($g)"; else mutant_killed "${B_pk:-0}" "pk-$1" "pkill mutant $1 KILLED ($g; twin clause-count $cc)"; fi
-  [ "$cc" = 3 ] || bad "pkill mutant $1 is not confined: the root-literal clause count is $cc under it, not 3"
-  if [ "$MATRIX" = 1 ]; then
-    MCELLS=$((MCELLS + 3))
-    echo "MATRIX pk-$1 pk-site1:$([ "${g%%;*}" = 'child=dead decoy=alive' ] && echo 0 || echo 1) pk-site2:$([ "${g#*;}" = 'child=dead decoy=alive;' ] && echo 0 || echo 1) clause-count:$([ "$cc" = 3 ] && echo 0 || echo 1)"
-  fi
-}
-pkmut bare 'pkill -P [$][$] -x fs_usage' 'pkill -x fs_usage'
-pkmut wrong-parent 'pkill -P [$][$] -x fs_usage' 'pkill -P $PPID -x fs_usage'
+if [ "$got" = 'child=dead decoy=alive;child=dead decoy=alive;' ]; then ok "both reaping lines kill the deriver's own stub tracer and leave a decoy outside it alive ($got)"; else bad "the deriver's reaping lines: $got (want child=dead decoy=alive at both sites)"; fi
 
 # ------------------------------------------------------------------ the sandbox profile's root clause (BL-470) ----
 # TEXT ARMS ONLY. Every profile emitter ends with an allow clause on the tree ROOT literal carrying no
@@ -1343,15 +997,7 @@ pkmut wrong-parent 'pkill -P [$][$] -x fs_usage' 'pkill -P $PPID -x fs_usage'
 # `log` or `sandbox-exec`.
 echo " the sandbox profile's root-literal clause (BL-470), text:"
 n="$(cl_count "$DERIVER")"
-if [ "$n" = 3 ]; then B_cl=1; ok "the root-literal clause is emitted by all three profile emitters (3 uncommented lines)"; else bad "the root-literal clause is on $n uncommented emitter line(s), not 3"; fi
-OM="$MD/sb-one-emitter.sh"
-awk -v k="$CLAUSE" '{ l = $0; sub(/^[ \t]+/, "", l) } index($0, k) && !index($0, "> \"$PROFILE\" \\") && substr(l, 1, 1) != "#" { print "      :"; c++; next } { print } END { exit c != 2 }' "$DERIVER" > "$OM" && ! cmp -s "$DERIVER" "$OM" \
-  || bad "clause mutant one-emitter DID NOT APPLY"
-n="$(cl_count "$OM")"
-pkn="$(pk_lines "$OM" | grep -c .)" || pkn=0
-if [ "$n" != 3 ]; then mutant_killed "${B_cl:-0}" sb-one-emitter "clause mutant one-emitter KILLED (the clause on $n emitter line(s); twin pk-sites $pkn)"; else bad "clause mutant one-emitter SURVIVED"; fi
-[ "$pkn" = 2 ] || bad "clause mutant one-emitter is not confined: $pkn pkill fs_usage line(s) under it, not 2"
-if [ "$MATRIX" = 1 ]; then MCELLS=$((MCELLS + 2)); echo "MATRIX sb-one-emitter clause-count:$([ "$n" != 3 ] && echo 1 || echo 0) pk-sites:$([ "$pkn" = 2 ] && echo 0 || echo 1)"; fi
+if [ "$n" = 3 ]; then ok "the root-literal clause is emitted by all three profile emitters (3 uncommented lines)"; else bad "the root-literal clause is on $n uncommented emitter line(s), not 3"; fi
 
 # NO STUB PROCESS OUTLIVES THE FIXTURE, counted from the pid file every arm appended to -- never from
 # the process table. The control is that the file holds pids at all. The property is binary: every
@@ -1392,22 +1038,7 @@ printf '%s\n' "$ogl" > "$OGP.live"; printf '%s\n' "$ogd" > "$OGP.dead"
 orphans_gone "$OGP.live" 50; ogr1=$?
 orphans_gone "$OGP.dead" 50; ogr2=$?
 kill -KILL "$ogl" 2>/dev/null; wait "$ogl" 2>/dev/null
-if [ "$ogr1" = 2 ] && [ "$ogr2" = 0 ]; then B_og=1; ok "orphans_gone refuses on a pid that never dies (rc $ogr1) and passes a reaped pid (rc $ogr2)"; else bad "orphans_gone probe: live pid rc=$ogr1 (want 2), reaped pid rc=$ogr2 (want 0)"; fi
-# MUTANT: the decision on a stall replaced by a pass, built as a copy of the function and scored by the same probe.
-OGM="$MD/og-pass.sh"
-awk '/^orphans_gone\(\) \{$/,/^}$/' "$HERE/run.sh" > "$OGM.src" 2>/dev/null
-export MUT_OLD='    if st_settled "$WORK/og.live"; then ORPHANS_WHY="recorded pid(s)$live alive, each blocked with no signal pending"; return 2; fi' \
-  MUT_NEW='    if st_settled "$WORK/og.live"; then return 0; fi'
-mut "$OGM.src" "$OGM" \
-  || broken "orphans_gone mutant og-pass DID NOT APPLY"
-cat "$HANG" </dev/null >/dev/null 2>&1 & ogl=$!
-printf '%s\n' "$ogl" > "$OGP.live"
-( . "$OGM"; orphans_gone "$OGP.live" 50 ); ogr1=$?
-printf '%s\n' "$ogd" > "$OGP.dead"; ( . "$OGM"; orphans_gone "$OGP.dead" 50 ); ogr2=$?
-kill -KILL "$ogl" 2>/dev/null; wait "$ogl" 2>/dev/null
-if [ "$ogr1" != 2 ]; then mutant_killed "${B_og:-0}" og-pass "orphans_gone mutant og-pass KILLED (a never-dying pid read rc $ogr1; twin reaped-pid rc $ogr2)"; else bad "orphans_gone mutant og-pass SURVIVED"; fi
-[ "$ogr2" = 0 ] || bad "orphans_gone mutant og-pass is not confined: the reaped pid reads rc $ogr2, not 0"
-if [ "$MATRIX" = 1 ]; then MCELLS=$((MCELLS + 2)); echo "MATRIX og-pass og-stall:$([ "$ogr1" != 2 ] && echo 1 || echo 0) og-reaped:$([ "$ogr2" = 0 ] && echo 0 || echo 1)"; fi
+if [ "$ogr1" = 2 ] && [ "$ogr2" = 0 ]; then ok "orphans_gone refuses on a pid that never dies (rc $ogr1) and passes a reaped pid (rc $ogr2)"; else bad "orphans_gone probe: live pid rc=$ogr1 (want 2), reaped pid rc=$ogr2 (want 0)"; fi
 NREC="$(grep -c '^[0-9][0-9]*$' "$ORPHANS")" || NREC=0
 if [ "$NREC" -lt 1 ]; then
   bad "the pid file records no stub or sampler pid, so the orphan check reads nothing"
@@ -1417,13 +1048,6 @@ else
 fi
 # The hang fifo is released once, here, after the last orphan check: any reader still blocked on it ends now.
 hang_release
-
-# A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL (the counter only moves under --matrix).
-if [ "$MATRIX" = 1 ]; then
-  if [ "$MCELLS" -gt 0 ]; then ok "matrix mode drove $MCELLS matrix-only cell(s)"; else bad "matrix mode drove no matrix-only cell"; fi
-else
-  if [ "$MCELLS" = 0 ]; then ok "a plain run executed no matrix-only cell"; else bad "a plain run executed $MCELLS matrix-only cell(s)"; fi
-fi
 
 echo
 if [ "$fails" -ne 0 ]; then echo "readset-stage1-verdict: work kept at $WORK"

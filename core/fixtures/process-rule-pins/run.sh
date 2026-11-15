@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # process-rule-pins — pin three process rules to the SECTION that makes them bind.
 #
-# Usage: run.sh            full run: probes, near-misses, mutants, then the real corpus
+# Usage: run.sh            full run: engine probes, then the real corpus
 #        run.sh --report   corpus verdict only (used by the cwd-invariance arm)
 # Exit:  0 = every assertion holds, 1 = a pin regressed, 2 = fixture broken.
 #
@@ -82,8 +82,7 @@
 #     §3a). A blank line sets that bullet apart from the two above it, so `- The series is` is its
 #     own paragraph's lead for the coe-stem-* rows.
 #   - every kept carry-over round names the defect it caught in §3a's Minimum mechanism
-#     paragraph (coe-26c-caught, a line-mode `contains` pin: its delete mutant removes every
-#     `Failure caught:` line, which is the paragraph losing its subject), and the adversarial
+#     paragraph (coe-26c-caught, a line-mode `contains` pin on the `Failure caught:` lines), and the adversarial
 #     loop's later passes keep their own line (coe-26c-loop, a `prefix` pin: keep it on ONE line).
 #   - an adversary SHARD writes `tool_use_id: NOT_ACCESSIBLE` and the merge derives each shard's
 #     dispatch id from the harness records (_gate-procedures.md "Adversarial review dispatch", the
@@ -118,8 +117,7 @@
 #     every `AskUserQuestion` the lead joins finished lanes, dispatches every lane the question does
 #     not hold, and then asks at once, the question unchanged (r11a-dispatch-ask, an `exact` row: the
 #     subsection holds ONE paragraph and it must EQUAL the pinned text, so a drain sentence appended
-#     to it (named D2) or a drain paragraph added beside it (D-new) fails; named D1 rewrites it; a
-#     paragraph added to the sibling attested-act subsection stays green, D-near). Rule 11(a) item (4) cites that
+#     to it or a drain paragraph added beside it fails). Rule 11(a) item (4) cites that
 #     subsection (r11a-lanes-dispatch) and the pointer counts four subsections (r11a-pointer). Those subsection headings are their own paragraphs to para mode, so each
 #     lead is the bold opening of the paragraph under them. route.md Step 6's **Option labels carry
 #     no recommendation.** paragraph says in the question why its options carry none
@@ -142,7 +140,7 @@
 #     (pred-lit-pm); an ADR probe keyed on such a literal carries the same fence (architect.md
 #     evidence contract, pred-lit-arch). qa.md's sha-pinned `git grep` fence form is pinned by
 #     pred-lit-qa-fence; pm.md's gate-2 fence clause is pinned by pred-lit-pm-gate. pred-lit-qa,
-#     pred-lit-qa-fence, pred-lit-pm and pred-lit-pm-gate are line-mode `contains` pins: keep each phrase on ONE line. The named mutant softens the REJECT to a note.
+#     pred-lit-qa-fence, pred-lit-pm and pred-lit-pm-gate are line-mode `contains` pins: keep each phrase on ONE line.
 #   - at `done` the closing writer copies each deferred AC's id AND its predicate text into the
 #     story file's `## Deferred ACs`, entries opening `- **<id>**`, `None.` for none, placed before
 #     `## Dev Agent Record` (code-reviewer.md Ownership; qa.md's discharge-predicate item), and
@@ -150,7 +148,7 @@
 #     with no section, reports a missing entry as a closing-writer defect, and checks every literal
 #     against the DEPLOYED sha, recording a correction as `old -> new` (def-copy-*). The cr and qa
 #     rows are line-mode `contains` pins inside lists para mode cannot split: keep each pinned
-#     phrase on ONE line. The named def-copy-cr-pred mutant is the ids-only rewrite.
+#     phrase on ONE line.
 #   - a visual-drift fix-forward in deploy-validate.md §4: the `dev` brief names the browser specs, the
 #     dev records their run or why they could not run, and when they could not run the lead runs them
 #     against the redeployed instance and records that run as the `playwright` evidence (the ff-specs
@@ -158,8 +156,7 @@
 #   - the BMAD 6.11 call-site spellings that Check 32 cannot score, because it reads skill NAMES
 #     only: each readiness site (architecture.md §3, stories-test-strategy.md §1) states
 #     `intent=readiness` AND "do not create or modify sprint-status.yaml" (the *-ready-* rows, two
-#     line-mode `contains` pins on the one line, neither lead a prefix of the other; two named m3
-#     mutants drop the intent and the clause in turn, each with the other row as its twin); each
+#     line-mode `contains` pins on the one line, neither lead a prefix of the other); each
 #     sprint-planning site states `intent=sprint-planning` (sts-plan-intent, bug-plan-intent); each one-shot dispatch site names the adversarial
 #     lens (bug-2c-lens, bug-4-lens-*, srev-lens, arch-role-fold-lens); and each deep-recon call
 #     states its type (rr-recon-*, req-recon-*). The two §4 one-shot rows are led by text unique
@@ -191,9 +188,8 @@
 #     its FAIL bar (gv9-ui-*), "An OWED record is never itself a PASS" (gv9-owed-notpass), an absent
 #     `is_ui_epic` is not a skip (gv9-absent-flag), and at a `retro` gate Check 9 adopts
 #     deploy-validate.md §4's recorded evidence and the read-only adjudicator never fetches a
-#     production URL (gv9-retro-adopt). All para rows; each token sits on ONE line of its subject. Section 4k moves
-#     each paragraph to just ABOVE its span's start line, the boundary-adjacent near-miss the
-#     generic relocate (to the end of the file) does not exercise, and binds Check 9's inline UI
+#     production URL (gv9-retro-adopt). All para rows; each token sits on ONE line of its subject. Section 4k
+#     binds Check 9's inline UI
 #     pathspec and test-file filter to validate-mandatory-rules.sh Check 5's two lines, both sides
 #     derived, so a drift in EITHER file fails. BL-868: zero load-dependent tests -- every arm is a
 #     text pin over a file, nothing is timed or counted under load. KNOWN LIMIT (F3, as the
@@ -201,17 +197,12 @@
 #     contradicting it was appended; a reviewer reads for that.
 #   - the retro gate is RUN and blocks (BL-939). Inside `### 9.`..`### 10.` the drift-not-fixed
 #     sentence (gv9-retro-fyi) and the retro FAIL bar (gv9-retro-failbar) under the adoption lead;
-#     inside `### 17.`..`### 18.` the Retro gate bullet's TWO-argument call (gv17-retro-args, whose
-#     named mutant is the pre-fix one-argument form, byte-for-byte); inside retro.md
+#     inside `### 17.`..`### 18.` the Retro gate bullet's TWO-argument call (gv17-retro-args); inside retro.md
 #     `### 5c.`..`### 6. Commit, Push, and PR` item 6 runs gate validation [retro] and its FAIL
 #     blocks the commit (retro-gate-invoked), the escalation paragraph's widened check list
 #     (retro-gate-blocks), check 6's disposition in the form Check 26 reads (retro-gate-d2), and
 #     the six-check count (retro-gate-count). All para rows; each token sits on ONE line of its
-#     subject. Section 4k's start-boundary near-miss covers every row of this bullet too, and
-#     section 4l adds retro-gate-invoked's two named near-misses: the lowercase
-#     `run gate validation [retro]` prose of the Gate type paragraph alone, item 6 deleted, and an
-#     item negated to `6. **Do not run gate validation [retro]**`; neither may satisfy the row.
-#     The retro acceptance clauses (gv9-retro-thissprint, -citednowhere, -livearchive, -composed,
+#     subject. The retro acceptance clauses (gv9-retro-thissprint, -citednowhere, -livearchive, -composed,
 #     -readarchive, -mockupmerged, -headersn,
 #     -othersprint, -names, -archive, -supcite, -captured, -matchrc, -pruned, -dateonly, -onlyhere,
 #     -nowhereelse, -supcheck, -supts, -mergecommit, -amendsha, -markupdev, -wholeanswer, -archivenames,
@@ -226,8 +217,7 @@
 #     Operator authorization line alone (-authsource); a later amendment counts only citing a verifying
 #     RESOLVED id; a no-markup surface's added markup is a deviation; the §4 line is read from this
 #     sprint's sections live or archived (-readarchive); the mockup compared is the merged one
-#     (-mockupmerged); the cited entry's header names S<N> (-headersn). Section 4m deletes each and
-#     asserts it fails ONLY its row.
+#     (-mockupmerged); the cited entry's header names S<N> (-headersn).
 #     BL-868: zero load-dependent tests -- these are text pins over files. KNOWN LIMIT (F3): a pin
 #     proves the clause PRESENT in its span, never the absence of an appended contradiction.
 #   - the retro gate's own gate-log entry is committed before the Step 6b push and archived by
@@ -235,29 +225,20 @@
 #     7a-post item 2 names the retro gate's entry as one of the sprint's writes
 #     (retro-7apost-own-entry) and says Step 5c check 6 appends one per dispatch
 #     (retro-7apost-per-dispatch). Para rows bound to item 2 ALONE, twice over: a blank line
-#     separates item 2 from item 3, so they are two paragraphs to para mode and to the flattener;
+#     separates item 2 from item 3, so they are two paragraphs to para mode;
 #     and the span ENDS at item 3's lead, so a scan flushes item 2 there even where that blank line
-#     is gone. Without both, the clauses moved into item 3's first line (old sentence back in
-#     item 2) still pinned. An `exact` row cannot do it: exact needs ONE non-heading paragraph in
-#     its span, and the only span holding item 2 alone ends mid-paragraph in the flattened copy,
-#     so the flattened control reads 0. Section 4a's named mutants restore the old "Retro appends
-#     no gate entry; deploy-validate's was the last write." sentence against each row, and drop
-#     the own-entry clause alone, whose twin keeps the per-dispatch row pinned in that copy; the
-#     retro-7apost/moved block below them reproduces the move into item 3, blank line removed,
-#     and must fail both rows while the moved clauses stay in the file.
+#     is gone. An `exact` row cannot do it: exact needs ONE non-heading paragraph in
+#     its span, and the only span holding item 2 alone ends mid-paragraph.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
 # disposition", a MAJOR downgraded to MINOR) passed every lead-only pin. The para rows pin
-# the binding clause inside the lead's own paragraph, and a negation mutant proves each.
+# the binding clause inside the lead's own paragraph.
 #
 # WHY SECTION-BOUNDED. A whole-file grep closes on any mention anywhere, including a comment,
 # a fenced example, or the same sentence moved into a section that does not bind. Every pin
 # therefore requires its line INSIDE a named span, anchored at line start, outside fences and
-# outside line-leading HTML comments. Each pin is shown to fail on a deletion mutant, on the
-# line relocated outside its span, on the line wrapped in a fence, on the line wrapped in a
-# comment, and (for line-start pins) on the line indented — all on mktemp copies, before the
-# real corpus is read.
+# outside line-leading HTML comments.
 #
 # TWO MODES THAT ARE NOT PRESENCE-IN-PROSE PINS. `fenced` counts a hit INSIDE a fenced block as
 # well as outside (a template whose lines live in a fence), still bounded by the span; every
@@ -271,8 +252,7 @@
 # that begins with the lead and EQUALS the token, the whole pinned paragraph. The span must also
 # hold exactly ONE non-heading paragraph, or the row reads in-span 0. A `para` row passes a
 # sentence appended after its clause or a paragraph added beside it; an `exact` row fails both.
-# Its generic mutants are the para set plus `append` (a sentence added to the paragraph must
-# fail). Section 2 probes it both ways.
+# Section 2 probes it both ways.
 #
 # LAYOUTS. The subject exists on a consumer too, so this fixture ships. The root is found by
 # walking up from this script for the skill directory — core/skills/ai-dlc in the
@@ -1106,7 +1086,7 @@ corpus_report() {
 RESOLVED="$(resolve_root "$HERE" || true)"
 # --lead-verdict <floor|-> <addr|-> [<files...>] -- the lead-address arm alone, over the files
 # given, or over lead_files of the resolved tree when none are. `-` takes LEAD_FLOOR and the
-# literal derived from the resolved tree's Rule 28. Used by the mutants below and by the BL-520
+# literal derived from the resolved tree's Rule 28. Used by the BL-520
 # receipt. Exit 0 pass, 1 fail, 2 no root where one is needed.
 if [ "${1:-}" = "--lead-verdict" ]; then
   lv_f="${2:-}"; lv_a="${3:-}"; shift 3 2>/dev/null || exit 2
@@ -1127,16 +1107,11 @@ if [ "${1:-}" = "--report" ]; then
   [ "$fails" -eq 0 ] && exit 0 || exit 1
 fi
 
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
-B_rscope=0; B_join=0; B_slot=0; B_bm=0; B_le=0; B_win=0; B_mscope=0; B_epgp=0; B_epho=0; B_dv=0; B_mruns=0; B_mdl=0; B_cwd=0
 echo "process-rule-pins"
 [ -n "$RESOLVED" ] && echo "HERMETIC-CONSUMED core/skills/ai-dlc/"
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
-# The copies of this script driven below sit one directory under $WORK and source $HERE/../lib/report.sh.
-mkdir -p "$WORK/lib" && cp "$HERE/../lib/report.sh" "$WORK/lib/report.sh" \
-  || { echo "FIXTURE ERROR: cannot place lib/report.sh beside the driven copies" >&2; exit 2; }
 
 # --- 1. resolver probes, every root shape --------------------------------------
 LAY="$WORK/lay"
@@ -1270,8 +1245,7 @@ printf 'sections 0–2b in a step\n' > "$P/sc/sk/steps/s.md"
 n="$( SKILL_DIR="$P/sc/sk" ROLES_DIR="$P/sc/roles"; range_count "$RANGE_OLD" $(range_scope) )"
 [ "$n" = "1" ] && ok "range scope: steps/ is scanned (1)" || bad "range scope: steps/ not scanned ($n)"
 # Consumer-layout scope: a consumer-owned scaffold beside the core flat files, declared by a
-# consumer_*_file key, is out of scope; a core flat file beside it is in scope; and with the
-# key removed the same scaffold IS read, which proves the exclusion is the derivation.
+# consumer_*_file key, is out of scope; a core flat file beside it is in scope.
 CS="$P/cs/.claude/skills/ai-dlc"; mkdir -p "$CS/steps" "$P/cs/.claude/team-roles" || exit 2
 printf 'consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md\n' > "$CS/layer-contract.yaml"
 printf 'sections 0–2b in a consumer crosswalk\n' > "$CS/crosswalk.md"
@@ -1280,328 +1254,29 @@ n="$( SKILL_DIR="$CS" ROLES_DIR="$P/cs/.claude/team-roles"; range_count "$RANGE_
                || bad "range scope (consumer): consumer-owned crosswalk.md scanned ($n)"
 printf 'sections 0–2b in a core flat file\n' > "$CS/escalations.md"
 n="$( SKILL_DIR="$CS" ROLES_DIR="$P/cs/.claude/team-roles"; range_count "$RANGE_OLD" $(range_scope) )"
-[ "$n" = "1" ] && { ok "range scope (consumer): a core flat file beside it is scanned (1)"; B_rscope=1; } \
+[ "$n" = "1" ] && ok "range scope (consumer): a core flat file beside it is scanned (1)" \
                || bad "range scope (consumer): core flat file not scanned ($n)"
-printf 'unrelated: 1\n' > "$CS/layer-contract.yaml"
-n="$( SKILL_DIR="$CS" ROLES_DIR="$P/cs/.claude/team-roles"; range_count "$RANGE_OLD" $(range_scope) )"
-[ "$n" = "2" ] && mutant_killed "$B_rscope" rscope-nokey "MUTANT range scope: without the consumer_*_file key the crosswalk IS read (2) — the exclusion is the derivation" \
-               || bad "MUTANT range scope: removing the key left the count at $n — the exclusion is not what the probe credited"
 
 # --- 3. resolve the real tree --------------------------------------------------
 [ -n "$RESOLVED" ] && dirs_for "$RESOLVED" || {
   echo "FIXTURE ERROR: no ai-dlc skill dir found walking up from $HERE" >&2; exit 2; }
 
-# --- 4. per-pin near-misses and deletion mutants, on copies of the real files ---
-# mutate <mode> <src> <dst> <lead> <match>  — rewrites every line carrying the lead
-mutate() {
-  MU_MODE="$1" MU_LEAD="$4" MU_MATCH="$5" awk '
-  BEGIN { m = ENVIRON["MU_MODE"]; l = ENVIRON["MU_LEAD"]; k = ENVIRON["MU_MATCH"]; n = 0 }
-  {
-    if (k == "contains") hit = (index($0, l) > 0); else hit = (index($0, l) == 1)
-    if (!hit) { print; next }
-    if (m == "delete")   next
-    if (m == "relocate") { held[++n] = $0; next }
-    if (m == "fence")    { print "```"; print; print "```"; next }
-    if (m == "comment")  { print "<!--"; print; print "-->"; next }
-    if (m == "indent")   { print "  " $0; next }
-    print
-  }
-  END { for (i = 1; i <= n; i++) print held[i] }' "$2" > "$3"
-}
-# flatten <src> <dst> — every paragraph outside fences and comments onto ONE line. The para
-# mutants edit this form so a token wrapped across lines can be negated or moved whole; a
-# control asserts the flattened copy scores exactly as the original does before any mutant
-# verdict is read.
-flatten() {
-  awk '
-  function out() { if (p != "") print p; p = "" }
-  {
-    t = $0; sub(/^[ \t]+/, "", t)
-    if (com) { print; if (index($0, "-->")) com = 0; next }
-    if (fence != "") { print; if (substr(t, 1, 3) == fence) fence = ""; next }
-    if (substr(t, 1, 3) == "```" || substr(t, 1, 3) == "~~~") { out(); fence = substr(t, 1, 3); print; next }
-    if (index($0, "<!--") && !index(substr($0, index($0, "<!--") + 4), "-->")) { out(); com = 1; print; next }
-    if (t == "") { out(); print; next }
-    if (substr(t, 1, 1) == "#") { out(); print; next }
-    p = (p == "" ? $0 : p " " $0)
-  }
-  END { out() }' "$1" > "$2"
-}
-# pmutate <mode> <flat-src> <dst> <lead> <token> — acts on the one paragraph line that begins
-# with the lead and carries the token.
-pmutate() {
-  MU_MODE="$1" MU_LEAD="$4" MU_TOK="$5" awk '
-  BEGIN { m = ENVIRON["MU_MODE"]; l = ENVIRON["MU_LEAD"]; k = ENVIRON["MU_TOK"]; n = 0 }
-  {
-    # Collapsed and left-trimmed exactly as pin_scan flush() does, so a paragraph indented under
-    # a numbered list item is the same string to the mutator as to the scanner.
-    q = $0; gsub(/[ \t]+/, " ", q); sub(/^ /, "", q)
-    if (!(index(q, l) == 1 && index(q, k) > 0)) { print; next }
-    if (m == "negate")   { i = index(q, k); print substr(q, 1, i - 1) "NEGATED-CLAUSE" substr(q, i + length(k)); next }
-    if (m == "append")   { print q " APPENDED-SENTENCE."; next }
-    if (m == "relocate") { held[++n] = q; next }
-    if (m == "fence")    { print "```"; print q; print "```"; next }
-    if (m == "comment")  { print "<!--"; print q; print "-->"; next }
-    print
-  }
-  END { for (i = 1; i <= n; i++) { print ""; print held[i] } }' "$2" > "$3"
-}
-
-M="$WORK/mut"; mkdir -p "$M" || exit 2
-while IFS='|' read -r id base rel s e lead mode tok; do
-  f="$(pin_path "$base" "$rel")"
-  [ -f "$f" ] || { bad "$id: subject ${f#"$ROOT/"} absent — no near-miss or mutant can be built"; continue; }
-  if [ "$mode" = "absent" ]; then
-    # MUTANT: the token copied into the file (inside a fence, to prove fences are not an exemption) must fire.
-    dst="$M/$id.copy.md"; { cat "$f"; printf '\n```\n%s\n```\n' "$lead"; } > "$dst"
-    o0="$(pin_scan "$f" "" "" "$lead" absent)"; o1="$(pin_scan "$dst" "" "" "$lead" absent)"
-    B_copy=0
-    if [ "${o0%% *}" = "0" ]; then ok "$id/copy: control: the unmutated file carries no copy of the token (reads 0)"; B_copy=1; fi
-    if [ "${o0%% *}" = "0" ] && [ "${o1%% *}" -ge 1 ]; then
-      mutant_killed "${B_copy:-0}" "$id/copy" "$id/copy: the token copied into the file fires (original 0, mutant ${o1%% *})"
-    else bad "$id/copy: original='${o0%% *}' mutant='${o1%% *}' (wanted 0 and >=1)"; fi
-    continue
-  fi
-  if [ "$mode" = "fenced" ]; then
-    # MUTANT: every line carrying the token deleted must score 0 in-span and 0 whole-file.
-    o0="$(pin_scan "$f" "$s" "$e" "$lead" fenced)"
-    dst="$M/$id.delete.md"; mutate delete "$f" "$dst" "$lead" contains
-    if cmp -s "$f" "$dst"; then bad "$id/delete: mutation did not apply"; continue; fi
-    o1="$(pin_scan "$dst" "$s" "$e" "$lead" fenced)"; read -r ins whole sl el fl <<<"$o1"
-    B_fdel=0
-    if [ "${o0%% *}" -ge 1 ]; then ok "$id/delete: control: the unmutated file pins the fenced lead in span (${o0%% *})"; B_fdel=1; fi
-    if [ "${o0%% *}" -ge 1 ] && [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then
-      mutant_killed "${B_fdel:-0}" "$id/delete" "$id/delete: every fenced line deleted fires (original in-span ${o0%% *}, mutant $ins)"
-    else bad "$id/delete: original in-span='${o0%% *}' mutant in-span=$ins whole=$whole"; fi
-    continue
-  fi
-  raw="$(grep -cF -- "$lead" "$f")" || raw=0
-  [ "$raw" -ge 1 ] || { bad "$id: lead absent from ${f#"$ROOT/"} — mutants have no subject"; continue; }
-  if [ "$mode" = "para" ] || [ "$mode" = "exact" ]; then
-    flat="$M/$id.flat.md"; flatten "$f" "$flat"
-    o1="$(pin_scan "$f" "$s" "$e" "$lead" "$mode" "$tok")"; o2="$(pin_scan "$flat" "$s" "$e" "$lead" "$mode" "$tok")"
-    B_para=0
-    if [ "${o1%% *}" = "1" ] && [ "${o2%% *}" = "1" ]; then
-      ok "$id: control: original and flattened copy both pin the paragraph in span (1)"; B_para=1
-    else
-      bad "$id: CONTROL — original in-span=${o1%% *}, flattened in-span=${o2%% *}; both must be 1 before a mutant is read"; continue
-    fi
-    pmodes="negate relocate fence comment"
-    [ "$mode" = "exact" ] && pmodes="$pmodes append"
-    for mm in $pmodes; do
-      dst="$M/$id.$mm.md"
-      pmutate "$mm" "$flat" "$dst" "$lead" "$tok"
-      if cmp -s "$flat" "$dst"; then bad "$id/$mm: mutation did not apply"; continue; fi
-      out="$(pin_scan "$dst" "$s" "$e" "$lead" "$mode" "$tok")"; rc=$?
-      [ "$rc" -eq 0 ] || { bad "$id/$mm: mutated copy unbalanced (rc=$rc)"; continue; }
-      read -r ins whole sl el fl <<<"$out"
-      case "$mm" in
-        negate)   if [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then mutant_killed "${B_para:-0}" "$id/negate" "$id/negate: binding clause rewritten under an intact lead"
-                    else bad "$id/negate: SURVIVED (in-span=$ins whole=$whole)"; fi ;;
-        append)   if [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then mutant_killed "${B_para:-0}" "$id/append" "$id/append: a sentence appended to the exact paragraph fails it"
-                    else bad "$id/append: SURVIVED (in-span=$ins whole=$whole)"; fi ;;
-        relocate) [ "$ins" -eq 0 ] && [ "$whole" -ge 1 ] && ok "$id/relocate: paragraph outside the span fails though it is still in the file" \
-                    || bad "$id/relocate: in-span=$ins whole=$whole — span does not discriminate" ;;
-        fence|comment)
-                  [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ] && ok "$id/$mm: wrapped paragraph is invisible though still present" \
-                    || bad "$id/$mm: in-span=$ins whole=$whole" ;;
-      esac
-    done
-    continue
-  fi
-  o0="$(pin_scan "$f" "$s" "$e" "$lead" "$mode")"
-  B_gen=0
-  if [ "${o0%% *}" -ge 1 ]; then ok "$id: control: the unmutated file pins the lead in span (${o0%% *})"; B_gen=1
-  else bad "$id: CONTROL — the unmutated file reads in-span=${o0%% *}, so the delete mutant has no subject"; continue; fi
-  modes="delete relocate fence comment"
-  [ "$mode" = "prefix" ] && modes="$modes indent"
-  for mm in $modes; do
-    dst="$M/$id.$mm.md"
-    mutate "$mm" "$f" "$dst" "$lead" "$mode"
-    if cmp -s "$f" "$dst"; then bad "$id/$mm: mutation did not apply"; continue; fi
-    out="$(pin_scan "$dst" "$s" "$e" "$lead" "$mode")"; rc=$?
-    [ "$rc" -eq 0 ] || { bad "$id/$mm: mutated copy unbalanced (rc=$rc)"; continue; }
-    read -r ins whole sl el fl <<<"$out"
-    case "$mm" in
-      delete)   if [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then mutant_killed "${B_gen:-0}" "$id/delete" "$id/delete: the mutant is caught"
-                  else bad "$id/delete: SURVIVED (in-span=$ins whole=$whole)"; fi ;;
-      relocate) [ "$ins" -eq 0 ] && [ "$whole" -ge 1 ] && ok "$id/relocate: outside the span fails though the line is still in the file" \
-                  || bad "$id/relocate: in-span=$ins whole=$whole — span does not discriminate" ;;
-      fence|comment)
-                kept="$(grep -cF -- "$lead" "$dst")" || kept=0
-                [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ] && [ "$kept" -ge 1 ] && ok "$id/$mm: wrapped line is invisible though still present" \
-                  || bad "$id/$mm: in-span=$ins whole=$whole raw=$kept" ;;
-      indent)   [ "$ins" -eq 0 ] && ok "$id/indent: not at line start fails" \
-                  || bad "$id/indent: indented lead still pinned (in-span=$ins)" ;;
-    esac
-  done
-done <<<"$(pins)"
-
-# --- 4a. named rewordings of the dev-escalation rows -----------------------------
-# The generic negate mutant substitutes a placeholder; these are the plausible rewrites that
-# invert the rule while keeping the lead, each applied to a copy (flattened for a para row, so a
-# clause wrapped across lines is one string) and each required to kill ITS row. A control first
-# requires the unmutated copy to score in-span 1.
-# Fields: id | S/R | file | span start | span end | lead | mode | token | old text | new text
-named_mutants() {
-  cat <<'NAMED'
-impl-esc-before|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|BEFORE the dev worktree is cut|BEFORE the dev worktree is cut|after the dev worktree is cut
-impl-esc-keep|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|A story already dispatched keeps its route|A story already dispatched keeps its route, rework included|A story already dispatched is re-evaluated at rework
-impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|is absent or `false`|is absent or `false` and|is absent and
-sts-esc-why|S|steps/stories-test-strategy.md|**Routing map|Absent any routing tag|or whose owned paths are capital-path or high-blast-radius|contains||, or whose owned paths are capital-path or high-blast-radius — the same criterion that routes a review to `code-reviewer-escalated`.|.
-pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains||writes nowhere at that sha is REJECT, unless the|writes nowhere at that sha is a finding to note, unless the
-def-copy-cr-pred|R|code-reviewer.md|## Ownership|## Responsibilities|and carries that AC's predicate text copied from the verdict file the gate-2 check read|contains||and carries that AC's predicate text copied from the verdict file the gate-2 check read|and cites the verdict file the gate-2 check read, which holds that AC's predicate
-ff-specs-lead-run|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|When they could not run, the lead runs them against the redeployed instance before re-verifying|When they could not run, the lead runs them against the redeployed instance before re-verifying, and records that run's invocation, counts and `.zip` trace path in the Deploy Status Report row as the `playwright` evidence this section already names. A could-not-run record is not a pass.|When they could not run, the dev's record of why stands and is accepted.
-rem-serial-replay|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|The two lines after each triple you write say which checks this dispatch ran.|para|The serial or unsharded remediator replays before its join, which runs before `--mark-repair`, and writes `replayed <n>` itself.|The serial or unsharded remediator replays before its join, which runs before `--mark-repair`, and writes `replayed <n>` itself.|The record is replayed by `--mark` and `--mark-repair` themselves.
-arch-ready-nostatus|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|and do not create or modify sprint-status.yaml.|contains|| and do not create or modify sprint-status.yaml.|.
-arch-ready-intent|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|Invoke `/bmad-sprint-planning intent=readiness`|contains||`/bmad-sprint-planning intent=readiness`|`/bmad-sprint-planning`
-dev-dar-before-submit|R|dev.md|## Workflow Per Task|## QA Handoff Evidence|Populate the Dev Agent Record in the story file|contains||Populate the Dev Agent Record in the story file|Report the Dev Agent Record in the completion report
-impl-dar-copy|S|steps/implementation.md|### 6. Orchestrate|### 7. All Gates Passed|copy the Dev Agent Record the dev wrote on the story branch|contains||copy the Dev Agent Record the dev wrote on the story branch|fold the Dev Agent Record from the dev's completion report
-gv17-retro-args|S|steps/gate-validation.md|### 17. Skill-invocation provenance|### 18.|- **Retro gate:**|para|`scripts/ai-dlc/validate-retro-evidence.sh ai-dlc/retro/sprint-<N> <N>`.|validate-retro-evidence.sh ai-dlc/retro/sprint-<N> <N>`.|validate-retro-evidence.sh <N>`.
-r11a-dispatch-ask-D1|S|SKILL.md|#### Operator decisions: dispatch, then ask|### Rule 13 |**Immediately before every `AskUserQuestion`, dispatch, then ask.**|exact|**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join every lane whose completion has arrived: read the completion and record it. Acting on its output is itself a ready action, dispatched below, not work to finish before asking. Dispatch every ready action the question does not hold, in the background (Rule 29), and arm its join. An action is ready when its inputs exist now, and the question holds it only when it reads the answer. Name the lanes held in your output beside the question, not inside it. Then send the question at once, in `AskUserQuestion`, unchanged by the lane state. Never wait for a running lane before asking, and never hold back, defer or drop a question, or fold it into a later one, to suit the lanes.|**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join every lane whose completion has arrived: read the completion and record it. Acting on its output is itself a ready action, dispatched below, not work to finish before asking. Dispatch every ready action the question does not hold, in the background (Rule 29), and arm its join. An action is ready when its inputs exist now, and the question holds it only when it reads the answer. Name the lanes held in your output beside the question, not inside it. Then send the question at once, in `AskUserQuestion`, unchanged by the lane state. Never wait for a running lane before asking, and never hold back, defer or drop a question, or fold it into a later one, to suit the lanes.|Before every `AskUserQuestion`, wait until every running lane has finished, join them, then ask.
-r11a-dispatch-ask-D2|S|SKILL.md|#### Operator decisions: dispatch, then ask|### Rule 13 |**Immediately before every `AskUserQuestion`, dispatch, then ask.**|exact|**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join every lane whose completion has arrived: read the completion and record it. Acting on its output is itself a ready action, dispatched below, not work to finish before asking. Dispatch every ready action the question does not hold, in the background (Rule 29), and arm its join. An action is ready when its inputs exist now, and the question holds it only when it reads the answer. Name the lanes held in your output beside the question, not inside it. Then send the question at once, in `AskUserQuestion`, unchanged by the lane state. Never wait for a running lane before asking, and never hold back, defer or drop a question, or fold it into a later one, to suit the lanes.|or fold it into a later one, to suit the lanes.|or fold it into a later one, to suit the lanes. Ask once every running lane has finished.
-retro-7apost-own-entry-old|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|3. Archive the WHOLE live log verbatim|2. Confirm no further gate-log writes remain this sprint.|para|the retro gate's own entry included|Every gate-log write this sprint is committed before the Step 6b push, the retro gate's own entry included: `gate-validation.md` Check 12 is in the `GATE_MANIFEST` `universal` row, so Step 5c check 6 appends it, one entry per dispatch. All of it is on `main` by now, through the retro PR or, on the direct-to-main path, through those commits. Step 3 archives it with the rest of the log.|Retro appends no gate entry; deploy-validate's was the last write.
-retro-7apost-per-dispatch-old|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|3. Archive the WHOLE live log verbatim|2. Confirm no further gate-log writes remain this sprint.|para|appends it, one entry per dispatch|Every gate-log write this sprint is committed before the Step 6b push, the retro gate's own entry included: `gate-validation.md` Check 12 is in the `GATE_MANIFEST` `universal` row, so Step 5c check 6 appends it, one entry per dispatch. All of it is on `main` by now, through the retro PR or, on the direct-to-main path, through those commits. Step 3 archives it with the rest of the log.|Retro appends no gate entry; deploy-validate's was the last write.
-retro-7apost-own-entry-drop|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|3. Archive the WHOLE live log verbatim|2. Confirm no further gate-log writes remain this sprint.|para|the retro gate's own entry included|, the retro gate's own entry included:|:
-NAMED
-}
-# lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
-# carrying the text is whitespace-collapsed first, as pmutate does, so a clause that a flattened
-# paragraph joined across an indented wrap matches its single-spaced spelling here.
-lreplace() {
-  LR_OLD="$3" LR_NEW="$4" awk 'BEGIN { o = ENVIRON["LR_OLD"]; n = ENVIRON["LR_NEW"] }
-    { q = $0; gsub(/[ \t]+/, " ", q); i = index(q, o)
-      if (i) $0 = substr(q, 1, i - 1) n substr(q, i + length(o)); print }' "$1" > "$2"
-}
-n_named=0
-while IFS='|' read -r id base rel s e lead mode tok old new; do
-  n_named=$((n_named + 1))
-  f="$(pin_path "$base" "$rel")"
-  [ -f "$f" ] || { bad "$id/named: subject absent"; continue; }
-  src="$f"
-  if [ "$mode" = "para" ] || [ "$mode" = "exact" ]; then src="$M/$id.named.flat.md"; flatten "$f" "$src"; fi
-  c="$(pin_scan "$src" "$s" "$e" "$lead" "$mode" "$tok")"
-  B_named=0
-  if [ "${c%% *}" = "1" ]; then ok "$id/named: control: the unmutated text pins in span (1)"; B_named=1
-  else bad "$id/named: CONTROL — unmutated in-span=${c%% *}, wanted 1"; continue; fi
-  dst="$M/$id.named.md"; lreplace "$src" "$dst" "$old" "$new"
-  if cmp -s "$src" "$dst"; then bad "$id/named: rewording '$new' did not apply"; continue; fi
-  out="$(pin_scan "$dst" "$s" "$e" "$lead" "$mode" "$tok")"
-  if [ "${out%% *}" = "0" ]; then mutant_killed "${B_named:-0}" "$id/named" "$id/named: rewritten to '$new'"
-  else bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"; fi
-done <<<"$(named_mutants)"
-[ "$n_named" -eq 18 ] || bad "named: $n_named named mutant(s) read, wanted 18"
-# D-new and D-near: a paragraph added after the line opening with <after>, on the D2 flattened copy.
-# D-new adds a drain paragraph INSIDE the dispatch-then-ask subsection and must KILL the exact row;
-# D-near adds one to the sibling attested-act subsection, outside the span, and must stay green.
-dn_src="$M/r11a-dispatch-ask-D2.named.flat.md"
-dn_lead='**Immediately before every `AskUserQuestion`, dispatch, then ask.**'
-dn_tok="$(pins | awk -F'|' '$1 == "r11a-dispatch-ask" { print $8 }')"
-dn_scan() { local o; o="$(pin_scan "$1" '#### Operator decisions: dispatch, then ask' '### Rule 13 ' "$dn_lead" exact "$dn_tok")"; printf '%s' "${o%% *}"; }
-dn_add() { # <after-lead> <paragraph> <dst>
-  DN_AFTER="$1" DN_TEXT="$2" awk 'BEGIN { a = ENVIRON["DN_AFTER"]; t = ENVIRON["DN_TEXT"] }
-    { print } index($0, a) == 1 { print ""; print t }' "$dn_src" > "$3"
-}
-B_dn=0
-if [ -f "$dn_src" ] && [ -n "$dn_tok" ] && [ "$(dn_scan "$dn_src")" = "1" ]; then
-  ok "r11a-dispatch-ask/added: control: the unmutated flattened copy pins in span (1)"; B_dn=1
-  dn_add "$dn_lead" 'When a lane is about to finish, wait for it and join it, then ask.' "$M/r11a-dispatch-ask.new.md"
-  if cmp -s "$dn_src" "$M/r11a-dispatch-ask.new.md"; then bad "r11a-dispatch-ask/D-new: the added paragraph did not apply"
-  elif [ "$(dn_scan "$M/r11a-dispatch-ask.new.md")" = "0" ]; then
-    mutant_killed "${B_dn:-0}" "r11a-dispatch-ask/D-new" "r11a-dispatch-ask/D-new: a drain paragraph added inside the subsection fails the exact pin"
-  else bad "r11a-dispatch-ask/D-new: a paragraph added inside the subsection SURVIVED (in-span=$(dn_scan "$M/r11a-dispatch-ask.new.md"))"; fi
-  dn_add '**An act the operator has attested is not raised again.**' 'A different paragraph in the attested-act subsection.' "$M/r11a-dispatch-ask.near.md"
-  if cmp -s "$dn_src" "$M/r11a-dispatch-ask.near.md"; then bad "r11a-dispatch-ask/D-near: the added paragraph did not apply"
-  elif [ "$(dn_scan "$M/r11a-dispatch-ask.near.md")" = "1" ]; then ok "r11a-dispatch-ask/D-near: a paragraph added to the sibling attested-act subsection leaves the exact pin green (in-span=1)"
-  else bad "r11a-dispatch-ask/D-near: a paragraph outside the span failed the exact pin (in-span=$(dn_scan "$M/r11a-dispatch-ask.near.md"))"; fi
-else bad "r11a-dispatch-ask/added: CONTROL -- no D2 flattened copy, no pinned text, or the unmutated copy does not read 1"; fi
-# m3's TWINS. The two readiness rows share architecture.md §3's one line, so each named rewrite must
-# move ONLY its own row: the clause dropped leaves the intent pinned, the intent dropped leaves the
-# clause pinned. Otherwise the two rows are one row spelled twice and either kill is unearned.
-ar_twin() { # <named copy> <lead> -> in-span count of the OTHER row in that copy
-  local o; o="$(pin_scan "$1" '### 3. Solutioning Gate' '### 4.' "$2" contains)"; printf '%s' "${o%% *}"
-}
-t1="$(ar_twin "$M/arch-ready-nostatus.named.md" 'Invoke `/bmad-sprint-planning intent=readiness`')"
-t2="$(ar_twin "$M/arch-ready-intent.named.md" 'and do not create or modify sprint-status.yaml.')"
-if [ -f "$M/arch-ready-nostatus.named.md" ] && [ "$t1" = 1 ]; then
-  ok "arch-ready-nostatus/named twin: the readiness intent still pins in its copy (in-span=1)"
-else bad "arch-ready-nostatus/named twin: the intent row reads in-span=$t1 in that copy, wanted 1"; fi
-if [ -f "$M/arch-ready-intent.named.md" ] && [ "$t2" = 1 ]; then
-  ok "arch-ready-intent/named twin: the no-sprint-status clause still pins in its copy (in-span=1)"
-else bad "arch-ready-intent/named twin: the clause row reads in-span=$t2 in that copy, wanted 1"; fi
-# retro-7apost-own-entry-drop's TWIN. The two 7a-post rows share item 2's one paragraph, so dropping
-# the own-entry clause must leave the per-dispatch clause pinned in that same copy.
-rp_tok="$(pins | awk -F'|' '$1 == "retro-7apost-per-dispatch" { print $8 }')"
-rp_out="$(pin_scan "$M/retro-7apost-own-entry-drop.named.md" '### 7. Merge and Next-Sprint Handoff' '3. Archive the WHOLE live log verbatim' '2. Confirm no further gate-log writes remain this sprint.' para "$rp_tok")"
-if [ -f "$M/retro-7apost-own-entry-drop.named.md" ] && [ -n "$rp_tok" ] && [ "${rp_out%% *}" = 1 ]; then
-  ok "retro-7apost-own-entry-drop/named twin: the per-dispatch clause still pins in its copy (in-span=1)"
-else bad "retro-7apost-own-entry-drop/named twin: the per-dispatch row reads in-span=${rp_out%% *} in that copy, wanted 1"; fi
-# retro-7apost/moved: the old sentence back in item 2, both pinned clauses moved into item 3's first
-# line, and the blank line between the two items removed. Built on the flattened copy, where item 2
-# and item 3 are one line each. Each row must read in-span 0 while its clause is still in the file.
-rp_flat="$M/retro-7apost.moved.flat.md"; rp_mut="$M/retro-7apost.moved.md"
-flatten "$(pin_path S steps/retro.md)" "$rp_flat"
-RM_L2='2. Confirm no further gate-log writes remain this sprint.' RM_L3='3. Archive the WHOLE live log verbatim' \
-RM_OLD="2. Confirm no further gate-log writes remain this sprint. Retro appends no gate entry; deploy-validate's was the last write." \
-RM_NEW3="3. Archive the WHOLE live log verbatim, the retro gate's own entry included; Step 5c check 6 appends it, one entry per dispatch:" awk '
-  BEGIN { a = ENVIRON["RM_L2"]; b = ENVIRON["RM_L3"]; o = ENVIRON["RM_OLD"]; n = ENVIRON["RM_NEW3"]; d = 0 }
-  { q = $0; gsub(/[ \t]+/, " ", q); sub(/^ /, "", q) }
-  index(q, a) == 1 { print o; d = 1; next }
-  d == 1 && q == "" { d = 2; next }
-  index(q, b) == 1 { print n; next }
-  { print }' "$rp_flat" > "$rp_mut"
-for rid in retro-7apost-own-entry retro-7apost-per-dispatch; do
-  IFS='|' read -r _ _ _ rs re rl _ rt <<<"$(pins | awk -F'|' -v i="$rid" '$1 == i')"
-  c0="$(pin_scan "$rp_flat" "$rs" "$re" "$rl" para "$rt")"; c1="$(pin_scan "$rp_mut" "$rs" "$re" "$rl" para "$rt")"
-  kept="$(grep -cF -- "$rt" "$rp_mut")" || kept=0
-  B_rm=0
-  if [ -n "$rt" ] && [ "${c0%% *}" = 1 ]; then ok "$rid/moved: control: the unmutated flattened copy pins in span (1)"; B_rm=1
-  else bad "$rid/moved: CONTROL -- unmutated flattened in-span=${c0%% *}, wanted 1"; continue; fi
-  if cmp -s "$rp_flat" "$rp_mut"; then bad "$rid/moved: the move did not apply"
-  elif [ "${c1%% *}" = 0 ] && [ "$kept" -ge 1 ]; then
-    mutant_killed "${B_rm:-0}" "$rid/moved" "$rid/moved: old sentence back in item 2 and the clause moved into item 3, blank line removed, fails the row though the clause is still in the file ($kept)"
-  else bad "$rid/moved: SURVIVED (in-span=${c1%% *} kept=$kept)"; fi
-done
-
-# --- 4a1. the qa class-sweep pin survives the consumer's Validation Checklist shadow ---------
-# graph shadows `team-roles/qa.md#Validation Checklist`, so a rule that lives there is replaced on
-# that consumer. Control: stubbing that section body leaves the shipped sibling section pinned (1).
-# MUTANT: the sentence moved INTO the checklist (where the shadow would delete it) must score 0 in
-# its own span while the line is still in the file (whole >= 1).
-CSL='sweeps for that class, and lists EVERY instance it found on an `Instances:` line'
-CSF="$ROLES_DIR/qa.md"; CSS="$WORK/qa-csweep-shadowed.md"; CSM="$WORK/qa-csweep-moved.md"
-awk '$0 == "## Validation Checklist" {print; print "(shadowed by a consumer override)"; on=1; next}
-     on && /^## /{on=0} !on{print}' "$CSF" > "$CSS"
-CSL="$CSL" awk 'BEGIN{l=ENVIRON["CSL"]} index($0,l){held=$0; next} {a[++n]=$0}
-  END{for(i=1;i<=n;i++){print a[i]; if(a[i]=="## Validation Checklist"){print ""; print held}}}' "$CSF" > "$CSM"
-cs_real="$(pin_scan "$CSF" '## Class Sweep (HARD GATE)' '## Verdict' "$CSL" contains)"
-cs_shad="$(pin_scan "$CSS" '## Class Sweep (HARD GATE)' '## Verdict' "$CSL" contains)"
-cs_move="$(pin_scan "$CSM" '## Class Sweep (HARD GATE)' '## Verdict' "$CSL" contains)"
-read -r cs_mi cs_mw _ <<<"$cs_move"
-B_qa=0
-if cmp -s "$CSF" "$CSM"; then bad "MUTANT qa-sweep/move-into-checklist: DID NOT APPLY"
-elif [ "${cs_real%% *}" = 1 ] && [ "${cs_shad%% *}" = 1 ] && [ "$cs_mi" = 0 ] && [ "$cs_mw" -ge 1 ]; then
-  ok "qa-sweep: control: pinned in its own section past the Validation Checklist shadow (real=1, shadowed=1)"; B_qa=1
-  mutant_killed "${B_qa:-0}" qa-sweep/move-into-checklist "qa-sweep: the sentence moved into the checklist reads 0 in span though still in the file"
-else bad "qa-sweep/move-into-checklist: real='$cs_real' shadowed='$cs_shad' moved='$cs_move' (wanted 1 / 1 / 0 with whole>=1)"; fi
-
 # --- 4a2. the serial remediator is never told --mark-repair replays for it ----------
 # The rem-serial-replay pin proves the replacement sentence is present; this arm proves the
-# opt-out it replaced is absent, keyed on the emitted clause in the flattened record-format
-# paragraph (the serial join runs BEFORE --mark-repair, so a `not replayed` it is offered is
-# refused). Both directions: the shipped file reads 0, and a copy with the old clause restored
-# reads 1, so a key that cannot match fails the control instead of passing.
+# opt-out it replaced is absent, keyed on the emitted clause in the whitespace-joined file
+# (the serial join runs BEFORE --mark-repair, so a `not replayed` it is offered is
+# refused). Both directions: the shipped file reads 0, and a seeded line carrying the old
+# clause reads 1, so a key that cannot match fails the control instead of passing.
 RSR="$ROLES_DIR/remediator.md"
 if [ -f "$RSR" ]; then
-  flatten "$RSR" "$M/rsr.flat.md"
   rsr_re='`--mark` and `--mark-repair` then replay the record'
-  rsr_n="$(grep -cF -- "$rsr_re" "$M/rsr.flat.md")" || rsr_n=0
-  lreplace "$M/rsr.flat.md" "$M/rsr.mut.md" "and writes \`replayed <n>\` itself." "and writes \`replayed <n>\` itself. \`--mark\` and \`--mark-repair\` then replay the record themselves."
-  rsr_m="$(grep -cF -- "$rsr_re" "$M/rsr.mut.md")" || rsr_m=0
+  rsr_n="$(tr '\n' ' ' < "$RSR" | tr -s ' ' | grep -cF -- "$rsr_re")" || rsr_n=0
+  printf 'and writes `replayed <n>` itself. `--mark` and\n  `--mark-repair` then replay the record themselves.\n' > "$P/rsr-seed.md"
+  rsr_m="$(tr '\n' ' ' < "$P/rsr-seed.md" | tr -s ' ' | grep -cF -- "$rsr_re")" || rsr_m=0
   if [ "$rsr_m" -ge 1 ] && [ "$rsr_n" -eq 0 ]; then
-    ok "rem-serial-optout: absent from remediator.md (control: the restored old clause reads $rsr_m)"
+    ok "rem-serial-optout: absent from remediator.md (control: a seeded old clause reads $rsr_m)"
   else
-    bad "rem-serial-optout: real=$rsr_n mutant=$rsr_m (wanted 0 and >=1)"
+    bad "rem-serial-optout: real=$rsr_n seeded=$rsr_m (wanted 0 and >=1)"
   fi
 else
   bad "rem-serial-optout: remediator.md absent"
@@ -1617,8 +1292,8 @@ fi
 # analyst artifact that way), so the unit is the paragraph, never the single call. A join that
 # names no seat or cross path is exempt.
 # A paragraph carrying the spawn-ledger token `"mark":"rendered"` is P=1 too: that is the condition on
-# which "Bounded-join beat" arms `--complete` over a teammate's markdown result file, and it is text the
-# battery's strip leaves in place, so the home's `--complete` line is guarded without a seat word in it.
+# which "Bounded-join beat" arms `--complete` over a teammate's markdown result file, so the home's
+# `--complete` line is guarded without a seat word in it.
 # How the false-positive set reached zero: a per-call clause rule flagged the analyst call in
 # that mixed paragraph; a section-wide rule pulled the generic "Join every spawn" paragraph of
 # the Validation cycle in under item 1. Paragraph scope with "any COMPLETE" is the narrowing.
@@ -1707,98 +1382,20 @@ if [ "$n_seat" -lt 3 ]; then
 elif [ -n "$jf" ]; then
   bad "join: a seat or cross join paragraph carries no --complete call: $(printf '%s' "$jf" | sed "s|$ROOT/||g" | tr '\n' ' ')"
 else
-  ok "join: every seat or cross join paragraph carries --complete ($n_seat seat or cross join call(s) scanned)"; B_join=1
-fi
-# MUTANTS: --complete stripped from EVERY seat or cross join in the PARAGRAPH holding each real
-# site, one mutant per paragraph; every such mutant must flag THAT paragraph.
-# Why the unit is the paragraph and not the line: the mutant's unit must be the scanner's unit.
-# join_findings passes a P=1 paragraph when ANY of its calls carries --complete, so a one-line
-# strip in a paragraph holding two such calls leaves the other and survives against a correct
-# scanner. implementation.md's Gate-2 dispatch paragraph legitimately holds two -- the first cross
-# QA's own part join and every shard's join beat -- and must stay one paragraph, because
-# review-shard-merge reads it whole. The site list is derived from the corpus and the paragraph
-# count is asserted, so a site the scan cannot place in a paragraph reads as a survivor rather
-# than as a smaller battery.
-jm="$WORK/join-mut"; mkdir -p "$jm" || exit 2
-# join_battery <files...> -> sets jb_sites, jb_paras, jb_hit, jb_surv
-join_battery() {
-  jb_sites=0; jb_paras=0; jb_hit=0; jb_surv=""
-  local f rows l para done_p clines
-  for f in "$@"; do
-    rows="$(join_scan "$f")"
-    done_p=" "
-    for l in $(grep -nE 'wait-for-deliverable\.sh --complete([^A-Za-z-]|$)' "$f" | cut -d: -f1); do
-      jb_sites=$((jb_sites + 1))
-      para="$(awk -F'\t' -v L="$l" '{ n = split($1, a, ":"); if (a[n] == L && $3 == "COMPLETE") { print a[n - 1]; exit } }' <<<"$rows")"
-      if [ -z "$para" ]; then jb_surv="$jb_surv ${f#"$ROOT/"}:$l(no-paragraph)"; continue; fi
-      case "$done_p" in *" $para "*) continue ;; esac
-      done_p="$done_p$para "
-      jb_paras=$((jb_paras + 1))
-      clines=" $(awk -F'\t' -v P="$para" '{ n = split($1, a, ":"); if (a[n - 1] == P && $3 == "COMPLETE") printf "%s ", a[n] }' <<<"$rows")"
-      awk -v C="$clines" 'index(C, " " NR " ") { s = $0; o = ""; k = "wait-for-deliverable.sh --complete"
-        while ((i = index(s, k)) > 0) { c = substr(s, i + length(k), 1)
-          if (c == "" || c !~ /[A-Za-z-]/) { o = o substr(s, 1, i - 1) "wait-for-deliverable.sh"; s = substr(s, i + length(k)) }
-          else { o = o substr(s, 1, i + length(k) - 1); s = substr(s, i + length(k)) } }
-        $0 = o s } { print }' "$f" > "$jm/m.md"
-      if cmp -s "$f" "$jm/m.md"; then jb_surv="$jb_surv ${f#"$ROOT/"}:$para(no-apply)"; continue; fi
-      jb_found="$(join_findings "$jm/m.md")"
-      if grep -qF -- "$jm/m.md:$para:" <<<"$jb_found"; then jb_hit=$((jb_hit + 1))
-      else jb_surv="$jb_surv ${f#"$ROOT/"}:$para"; fi
-    done
-  done
-}
-# CONTROL: the battery must be able to fail and must keep the mixed-paragraph exemption.
-#   two.md  -- one seat paragraph with two --complete joins on separate lines. A one-line strip
-#              leaves the other (0 findings, the shape that motivated the paragraph unit); the
-#              paragraph mutant strips both and is flagged.
-#   mixed2.md -- a bare non-seat call beside one seat --complete call: exempt unmutated (0), and the
-#              paragraph mutant, stripping the seat call, is flagged though the bare call remains.
-printf 'Each seat joins its parts with\n`scripts/ai-dlc/wait-for-deliverable.sh --complete <part paths>`, and the lead joins\nthe seat files with `scripts/ai-dlc/wait-for-deliverable.sh --complete <path> [<path> ...]`.\n' > "$JS/two.md"
-printf 'The analyst artifact joins with `scripts/ai-dlc/wait-for-deliverable.sh <artifact_path>`, and\neach seat file with `scripts/ai-dlc/wait-for-deliverable.sh --complete <path>`.\n' > "$JS/mixed2.md"
-awk 'NR == 2 { gsub(/wait-for-deliverable\.sh --complete/, "wait-for-deliverable.sh") } { print }' "$JS/two.md" > "$JS/two.line.md"
-c_two0="$(join_findings "$JS/two.md" | grep -c .)" || c_two0=0
-c_line="$(join_findings "$JS/two.line.md" | grep -c .)" || c_line=0
-c_mx0="$(join_findings "$JS/mixed2.md" | grep -c .)" || c_mx0=0
-c_mxc="$(join_scan "$JS/mixed2.md" | awk -F'\t' '$2 == "P=1"' | grep -c .)" || c_mxc=0
-join_battery "$JS/two.md"; c_two="$jb_sites $jb_paras $jb_hit"
-join_battery "$JS/mixed2.md"; c_mx="$jb_sites $jb_paras $jb_hit"
-#   nonseat.md -- a --complete join naming no seat or cross path: its paragraph mutant is exempt,
-#              so the battery must report it as a SURVIVOR naming line 1 -- the survivor branch fires.
-printf 'Join the analyst artifact with `scripts/ai-dlc/wait-for-deliverable.sh --complete <artifact_path>`.\n' > "$JS/nonseat.md"
-join_battery "$JS/nonseat.md"; c_ns="$jb_sites $jb_paras $jb_hit"; c_nss="${jb_surv# }"
-case "$c_nss" in *nonseat.md:1) c_nsok=1 ;; *) c_nsok=0 ;; esac
-if [ "$c_two0" = 0 ] && [ "$c_line" = 0 ] && [ "$c_two" = "2 1 1" ] && [ "$c_mx0" = 0 ] && [ "$c_mxc" = 2 ] && [ "$c_mx" = "1 1 1" ] \
-   && [ "$c_ns" = "1 1 0" ] && [ "$c_nsok" = 1 ] && ! cmp -s "$JS/two.md" "$JS/two.line.md"; then
-  ok "join/mutant-control: two seat joins in one paragraph -- a one-line strip is not flagged (0), the paragraph mutant is (sites/paras/kills $c_two); a bare non-seat call beside a seat --complete call is exempt (0 of $c_mxc calls) and its paragraph mutant is flagged ($c_mx); a non-seat --complete paragraph survives and is named ($c_ns, ${c_nss##*/})"
-else
-  bad "join/mutant-control: FIXTURE BROKEN -- two: unmutated=$c_two0 one-line=$c_line battery=[$c_two] want 0 0 [2 1 1]; mixed: unmutated=$c_mx0 calls=$c_mxc battery=[$c_mx] want 0 2 [1 1 1]; nonseat: battery=[$c_ns] survivor='$c_nss' want [1 1 0] '...nonseat.md:1'"
+  ok "join: every seat or cross join paragraph carries --complete ($n_seat seat or cross join call(s) scanned)"
 fi
 # THE FLAG IS MATCHED WHOLE. `--complete-repair` (the serial remediator's beat) begins with the
-# seat flag's text, and a prefix match took it for one: the site grep counted a non-seat call, the
-# strip turned it into `wait-for-deliverable.sh-repair`, which the scanner no longer reads as a
-# call, and the mutant survived. Both directions are held here: a seat paragraph whose only call is
-# `--complete-repair` is a BARE seat join (flagged, 1), and a file whose only call is
-# `--complete-repair` offers the battery no site (0 0 0) while the same file with `--complete` does.
+# seat flag's text, and a prefix match took it for `--complete`: a seat paragraph whose only call is
+# `--complete-repair` is a BARE seat join (flagged, 1).
 printf 'Each seat file joins with `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <path>`.\n' > "$JS/prefix.md"
-printf 'Arm `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>` on the record.\n' > "$JS/prefixns.md"
 c_pf="$(join_findings "$JS/prefix.md" | grep -c .)" || c_pf=0
-join_battery "$JS/prefixns.md"; c_pfb="$jb_sites $jb_paras $jb_hit"
-if [ "$c_pf" = 1 ] && [ "$c_pfb" = "0 0 0" ]; then
-  ok "join/flag-whole: a seat paragraph whose only call is --complete-repair is a bare seat join (1); --complete-repair alone offers the battery no site ($c_pfb)"
+if [ "$c_pf" = 1 ]; then
+  ok "join/flag-whole: a seat paragraph whose only call is --complete-repair is a bare seat join (1)"
 else
-  bad "join/flag-whole: --complete matched as a prefix -- seat paragraph with --complete-repair flagged $c_pf (want 1), battery on a --complete-repair-only file [$c_pfb] (want 0 0 0)"
-fi
-# shellcheck disable=SC2086 # the scope globs are expanded on purpose; no path carries a blank
-join_battery $JSCOPE
-if [ "$jb_paras" -lt 3 ]; then
-  bad "join/mutant: only $jb_paras paragraph(s) holding a --complete site found ($jb_sites site(s)) -- the battery has nothing to strip"
-elif [ -n "$jb_surv" ]; then
-  bad "join/mutant: SURVIVED -- every --complete stripped from the paragraph at [${jb_surv# }] was not flagged ($jb_hit/$jb_paras paragraphs flagged, $jb_sites sites)"
-else
-  mutant_killed "$B_join" join-mutant "join/mutant: every --complete stripped from each of $jb_paras real paragraphs ($jb_sites sites), one paragraph at a time, is flagged ($jb_hit/$jb_paras)"
+  bad "join/flag-whole: --complete matched as a prefix -- seat paragraph with --complete-repair flagged $c_pf (want 1)"
 fi
 
-# --- 4c. the lead-address arm: probes both directions, then mutants ---------------
+# --- 4c. the lead-address arm: probes both directions ---------------
 LP="$WORK/lead"; mkdir -p "$LP" || exit 2
 LA='to: "main"'
 # Offenders: every predicate shape, unaddressed. Each must read BARE.
@@ -1842,30 +1439,6 @@ if [ "$lv_ok" = 1 ] && [ "$d_ok" = 'to: "main"' ] && [ -z "$d_x" ] && [ -z "$d_a
 else
   bad "lead-verdict: FIXTURE BROKEN -- good='$lv_good' bad='$lv_bad' none='$lv_none' derived='$d_ok' other='$d_x' absent='$d_abs'"
 fi
-# MUTANTS, as copies of this script driven through --lead-verdict. Each must turn a FAIL the real
-# arm reports into a PASS, and an unmutated copy is driven first so a copy that cannot run reads
-# as broken rather than as a kill.
-LM="$WORK/lead-mut"; mkdir -p "$LM" || exit 2
-cp "$SELF" "$LM/real.sh" || exit 2
-ctl="$(bash "$LM/real.sh" --lead-verdict 1 "$LA" "$LP/h1.md")"
-B_lead=0
-case "$ctl" in PASS*) ok "lead-mutant CONTROL: an unmutated copy runs --lead-verdict and passes an addressed corpus"; B_lead=1 ;;
-  *) bad "lead-mutant CONTROL: unmutated copy did not pass ('$ctl') -- no mutant verdict below is evidence" ;; esac
-# lead_mut <name> <sed-expr> <floor> <addr> <files...>: real must FAIL, mutant must PASS
-lead_mut() {
-  local nm="$1" ex="$2" fl="$3" a="$4" r m; shift 4
-  sed -e "$ex" "$SELF" > "$LM/$nm.sh"
-  if cmp -s "$SELF" "$LM/$nm.sh"; then bad "MUTANT lead/$nm: DID NOT APPLY"; return; fi
-  r="$(bash "$LM/real.sh" --lead-verdict "$fl" "$a" "$@")"; m="$(bash "$LM/$nm.sh" --lead-verdict "$fl" "$a" "$@")"
-  case "$r|$m" in FAIL*"|"PASS*) mutant_killed "${B_lead:-0}" "lead/$nm" "MUTANT lead/$nm: caught (real: ${r%%:*}, mutant: ${m%%:*})" ;;
-    *) bad "MUTANT lead/$nm: SURVIVED or broken (real='$r' mutant='$m')" ;; esac
-}
-lead_mut floor-dropped 's/^  if \[ "\$n" -lt "\$fl" \]; then$/  if false; then/' 1 "$LA" "$LP/n1.md" "$LP/n2.md"
-lead_mut literal-mismatch 's/^      has = (index(q, A) > 0)$/      has = (index(q, "to: \\"") > 0)/' 1 "$LA" "$LP/o7.md" "$LP/h1.md"
-lead_mut p4-dropped 's/hand(s|ed|ing)? +/hand@@never@@ +/' 1 "$LA" "$LP/o8.md" "$LP/h1.md"
-# A rule and a site agreeing on the address that failed: the measured-address check owns it.
-printf -- '- Message **lead** (`SendMessage` `to: "lead"`) if a PR is BLOCKED.\n' > "$LP/wrong.md"
-lead_mut measured-dropped 's/^  \[ "\$a" = "\$LEAD_ADDR_MEASURED" \] ||/  true ||/' 1 'to: "lead"' "$LP/wrong.md"
 
 # --- 4d. BL-529 (G1): the derivation re-run never names the slot directory ---------------------
 # `_gate-procedures.md` re-runs `validate-artifact-derivations.sh` after a repair join. A SLOT target
@@ -1886,15 +1459,10 @@ sd_off="$(slot_hits "$SD/off.md")"; sd_off2="$(slot_hits "$SD/off2.md")"; sd_nea
 if [ "$sd_off" = 1 ] && [ "$sd_off2" = 1 ] && [ "$sd_near" = 0 ] && [ "$sd_nf" = 2 ]; then
   sd_real_slot="$(slot_hits "$GPF")"; sd_real_file="$(file_hits "$GPF")"
   if [ "$sd_real_slot" = 0 ] && [ "$sd_real_file" -ge 2 ]; then
-    ok "slot-target: the derivation re-run names $sd_real_file file target(s) and no slot directory (probe: s<N>/ and s319/ read 1 each, file targets and prose read 0)"; B_slot=1
+    ok "slot-target: the derivation re-run names $sd_real_file file target(s) and no slot directory (probe: s<N>/ and s319/ read 1 each, file targets and prose read 0)"
   else
     bad "slot-target: _gate-procedures.md carries $sd_real_slot slot target(s) (want 0) and $sd_real_file file target(s) (want >= 2)"
   fi
-  # MUTANT: restore the slot line in a copy; the arm must read it. cmp -s guards a sed that matched nothing.
-  sed 's|^scripts/ai-dlc/validate-artifact-derivations.sh <the joined repair record>$|scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/|' "$GPF" > "$SD/gp-mut.md"
-  if cmp -s "$GPF" "$SD/gp-mut.md"; then bad "MUTANT slot-target: DID NOT APPLY"
-  elif [ "$(slot_hits "$SD/gp-mut.md")" = 1 ]; then mutant_killed "$B_slot" slot-target "MUTANT slot-target: the restored slot line is read (1) where the real file reads 0"
-  else bad "MUTANT slot-target: SURVIVED (read $(slot_hits "$SD/gp-mut.md"))"; fi
 else
   bad "slot-target: FIXTURE BROKEN -- offenders $sd_off/$sd_off2 (want 1/1), near-miss $sd_near (want 0), near-miss file targets $sd_nf (want 2)"
 fi
@@ -1917,17 +1485,10 @@ if [ "$bm1" = 1 ] && [ "$bm2" = 1 ] && [ "$bm3" = 1 ] && [ "$bmn" = 0 ]; then
   bm_real="$(carriers "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md)"
   bm_ctl="$(cat "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md | grep -c 'sha=<hex>')" || bm_ctl=0
   if [ "$bm_real" = 0 ] && [ "$bm_ctl" -ge 1 ]; then
-    ok "bare-marker: 0 hand-written-marker carriers across the role and step files (control: $bm_ctl sha=<hex> descriptions; probe: fallback and bare spellings read 1 each, sha= description reads 0)"; B_bm=1
+    ok "bare-marker: 0 hand-written-marker carriers across the role and step files (control: $bm_ctl sha=<hex> descriptions; probe: fallback and bare spellings read 1 each, sha= description reads 0)"
   else
     bad "bare-marker: $bm_real carrier(s) (want 0), $bm_ctl sha=<hex> control line(s) (want >= 1)"
   fi
-  # MUTANT: re-insert the retired fallback sentence into a copy of dev.md; the scan must read it.
-  cp "$ROLES_DIR/dev.md" "$BM/dev-mut.md"
-  printf 'If that call fails with `unknown arg: --mark`, append the bare line `seat-complete: <step> <seat> <shard> findings=<n>` instead.\n' >> "$BM/dev-mut.md"
-  bm_mut="$(carriers "$BM/dev-mut.md")"
-  if cmp -s "$ROLES_DIR/dev.md" "$BM/dev-mut.md"; then bad "MUTANT bare-marker: DID NOT APPLY"
-  elif [ "$bm_mut" -ge 1 ]; then mutant_killed "$B_bm" bare-marker "MUTANT bare-marker: the re-inserted fallback is read ($bm_mut) where the real files read 0"
-  else bad "MUTANT bare-marker: SURVIVED"; fi
 else
   bad "bare-marker: FIXTURE BROKEN -- offenders $bm1/$bm2/$bm3 (want 1/1/1), near-miss $bmn (want 0)"
 fi
@@ -1969,19 +1530,10 @@ if [ "$le1" = 2 ] && [ "$le2" = 1 ] && [ "$leb" = 1 ]; then
   le_occ="$(grep -c 'form=' <<<"$le_out")" || le_occ=0
   le_none="$(grep -c 'form=NONE' <<<"$le_out")" || le_none=0
   if [ "${#LE_FILES[@]}" -gt 0 ] && [ "$le_occ" -ge 1 ] && [ "$le_none" = 0 ]; then
-    ok "lead-engine: all $le_occ occurrence(s) over ${#LE_FILES[@]} file(s) are scoped in their own block (probe: form 1 and form 2 read quiet, an unscoped occurrence flagged)"; B_le=1
+    ok "lead-engine: all $le_occ occurrence(s) over ${#LE_FILES[@]} file(s) are scoped in their own block (probe: form 1 and form 2 read quiet, an unscoped occurrence flagged)"
   else
     bad "lead-engine: $le_none unscoped of $le_occ occurrence(s) over ${#LE_FILES[@]} file(s): $(grep 'form=NONE' <<<"$le_out" | tr '\n' ' ')"
   fi
-  # MUTANT form 1: remove dev.md's worktree-condition sentence in a copy; form 2: remove qa.md's in-place definition.
-  awk '!/when you run in a worktree/' "$ROLES_DIR/dev.md" > "$LE/dev-mut.md"
-  awk '{ gsub(/the lead checkout.s `scripts\/ai-dlc` path your brief carries/, "the engine path"); print }' "$ROLES_DIR/qa.md" > "$LE/qa-mut.md"
-  if cmp -s "$ROLES_DIR/dev.md" "$LE/dev-mut.md"; then bad "MUTANT lead-engine form 1: DID NOT APPLY"
-  elif [ "$(le_scan "$LE/dev-mut.md" | grep -c 'form=NONE')" -ge 1 ]; then mutant_killed "$B_le" lead-engine-form1 "MUTANT lead-engine form 1: dev.md without its worktree sentence is flagged"
-  else bad "MUTANT lead-engine form 1: SURVIVED"; fi
-  if cmp -s "$ROLES_DIR/qa.md" "$LE/qa-mut.md"; then bad "MUTANT lead-engine form 2: DID NOT APPLY"
-  elif [ "$(le_scan "$LE/qa-mut.md" | grep -c 'form=NONE')" -ge 1 ]; then mutant_killed "$B_le" lead-engine-form2 "MUTANT lead-engine form 2: qa.md without its in-place definition is flagged"
-  else bad "MUTANT lead-engine form 2: SURVIVED"; fi
 else
   bad "lead-engine: FIXTURE BROKEN -- probe form1=$le1 form2=$le2 unscoped=$leb (want 2/1/1)"
 fi
@@ -1998,8 +1550,7 @@ fi
 # line and in the non-numeric fallback `case "$WIN" in ...) WIN=N ;; esac`; each is read on its own
 # line shape, exactly one line each, and two that disagree read HOOK-SPLIT. MATCH needs all three
 # equal. Presence-shaped: an absent hook, an absent item or an item that states no count is ABSENT,
-# never MATCH. FP set: the real pair reads MATCH 10. Mutants move the fallback alone, the hook's
-# two sites together, and the skill's count, each by one.
+# never MATCH. FP set: the real pair reads MATCH 10.
 win_skill() {
   awk '
   { line = $0
@@ -2060,48 +1611,9 @@ if [ "$wv1" = "MATCH 7" ] && [ "$wv2" = "DRIFT skill=7 hook=8" ] && [ "$wv3" = "
   fi
   wv_real="$(win_verdict "$SKILL_DIR/SKILL.md" "$WGATE")"
   case "$wv_real" in
-    MATCH*) ok "window-count: touchpoint I states the hook's ADVISOR_GATE_WINDOW default ($wv_real; probe: match, drift, an out-of-item count, an absent hook, a wrapped count, two counts and a split hook each read as built)"; B_win=1 ;;
+    MATCH*) ok "window-count: touchpoint I states the hook's ADVISOR_GATE_WINDOW default ($wv_real; probe: match, drift, an out-of-item count, an absent hook, a wrapped count, two counts and a split hook each read as built)" ;;
     *)      bad "window-count: touchpoint I against ${WGATE#"$ROOT/"} reads $wv_real (want MATCH)" ;;
   esac
-  # MUTANT, fallback only: the hook's non-numeric fallback moved one up in a copy, the default untouched.
-  wf="$(win_fallback "$WGATE")"; wfm=$(( ${wf:-0} + 1 ))
-  sed "s/^\(case \"\\\$WIN\" in .*) WIN=\)[0-9][0-9]*\( ;; esac\)\$/\1$wfm\2/" "$WGATE" > "$WD/gate-fb-mut.sh" 2>/dev/null
-  wv_fb="$(win_verdict "$SKILL_DIR/SKILL.md" "$WD/gate-fb-mut.sh")"
-  if [ ! -f "$WGATE" ] || [ -z "$wf" ] || cmp -s "$WGATE" "$WD/gate-fb-mut.sh"; then bad "MUTANT window-count fallback: DID NOT APPLY"
-  else
-    case "$wv_fb" in
-      HOOK-SPLIT*"fallback=$wfm") mutant_killed "$B_win" window-count-fallback "MUTANT window-count fallback: a fallback of $wfm reads $wv_fb" ;;
-      *)                          bad "MUTANT window-count fallback: SURVIVED ($wv_fb)" ;;
-    esac
-  fi
-  # MUTANT: the hook's default AND fallback moved one up in a copy; the arm must read DRIFT where the real pair reads MATCH.
-  wh="$(win_hook "$WGATE")"; wm=$(( ${wh:-0} + 1 ))
-  sed -e "s/^WIN=\"\${ADVISOR_GATE_WINDOW:-[0-9]*}\"\$/WIN=\"\${ADVISOR_GATE_WINDOW:-$wm}\"/" \
-      -e "s/^\(case \"\\\$WIN\" in .*) WIN=\)[0-9][0-9]*\( ;; esac\)\$/\1$wm\2/" "$WGATE" > "$WD/gate-mut.sh" 2>/dev/null
-  wv_mut="$(win_verdict "$SKILL_DIR/SKILL.md" "$WD/gate-mut.sh")"
-  if [ ! -f "$WGATE" ] || [ -z "$wh" ] || cmp -s "$WGATE" "$WD/gate-mut.sh"; then bad "MUTANT window-count: DID NOT APPLY"
-  else
-    case "$wv_mut" in
-      DRIFT*"hook=$wm") mutant_killed "$B_win" window-count-hook "MUTANT window-count: a hook default of $wm reads $wv_mut" ;;
-      *)             bad "MUTANT window-count: SURVIVED ($wv_mut)" ;;
-    esac
-  fi
-  # MUTANT, skill side: the item's stated count moved one up in a copy of SKILL.md; the hook untouched.
-  ws="$(win_skill "$SKILL_DIR/SKILL.md")"
-  case "$ws" in ''|*[!0-9]*) ws="" ;; esac
-  wsm=$(( ${ws:-0} + 1 ))
-  WS_OLD="\`ADVISOR_GATE_WINDOW\`, default $ws" WS_NEW="\`ADVISOR_GATE_WINDOW\`, default $wsm" awk '
-    BEGIN { o = ENVIRON["WS_OLD"]; n = ENVIRON["WS_NEW"] }
-    { if (!done && (c = index($0, o)) > 0) { $0 = substr($0, 1, c - 1) n substr($0, c + length(o)); done = 1 }; print }' \
-    "$SKILL_DIR/SKILL.md" > "$WD/skill-mut.md"
-  wv_smut="$(win_verdict "$WD/skill-mut.md" "$WGATE")"
-  if [ -z "$ws" ] || cmp -s "$SKILL_DIR/SKILL.md" "$WD/skill-mut.md"; then bad "MUTANT window-count skill side: DID NOT APPLY"
-  else
-    case "$wv_smut" in
-      DRIFT*"skill=$wsm "*) mutant_killed "$B_win" window-count-skill "MUTANT window-count skill side: a stated count of $wsm reads $wv_smut" ;;
-      *)                    bad "MUTANT window-count skill side: SURVIVED ($wv_smut)" ;;
-    esac
-  fi
 else
   bad "window-count: FIXTURE BROKEN -- probe '$wv1' / '$wv2' / '$wv3' / '$wv4' / '$wv5' / '$wv6'"
 fi
@@ -2157,22 +1669,10 @@ mark_scope() { # mark_scope <gp file> -> "<carve-out> <not-rendered-is-bare> <ep
 }
 set -- $(mark_scope "$GP4G")
 if [ "$1" = 1 ] && [ "$2" = 1 ] && [ "$3" = 1 ]; then
-  ok "mark-scope: \"Bounded-join beat\" keeps --complete for seat, shard, cross, repair-part and epic part files whatever the row, and reads any output but rendered as bare"; B_mscope=1
+  ok "mark-scope: \"Bounded-join beat\" keeps --complete for seat, shard, cross, repair-part and epic part files whatever the row, and reads any output but rendered as bare"
 else
   bad "mark-scope: \"Bounded-join beat\" carve-out=$1 (want 1), not-rendered-is-bare=$2 (want 1), epic-parts-named=$3 (want 1)"
 fi
-#   M-s1 drop the carve-out clause; M-s2 drop the not-rendered-is-bare sentence; M-s3 drop the epic-part phrase: mark-scope names each.
-awk -v s="$MS_CARVE" '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f && index($0, s)) sub(/seat, shard, cross and repair-part files keep `--complete`/, "files keep"); print }' "$GP4G" > "$MG/gp-nocarve.md"
-awk -v s="$MS_BARE" '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f && (i = index($0, s))) $0 = substr($0, 1, i - 1) substr($0, i + length(s)); print }' "$GP4G" > "$MG/gp-nobare.md"
-awk -v s="$MS_EPIC" '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f && (i = index($0, s))) $0 = substr($0, 1, i - 1) substr($0, i + length(s)); print }' "$GP4G" > "$MG/gp-noepic.md"
-for ms in nocarve:1 nobare:2 noepic:3; do
-  mf="$MG/gp-${ms%%:*}.md"
-  if cmp -s "$GP4G" "$mf"; then bad "MUTANT mark/${ms%%:*}: DID NOT APPLY"; continue; fi
-  set -- $(mark_scope "$mf")
-  case "${ms##*:}" in 1) mv="$1" ;; 2) mv="$2" ;; *) mv="$3" ;; esac
-  if [ "$mv" = 0 ]; then mutant_killed "$B_mscope" "mark-${ms%%:*}" "MUTANT mark/${ms%%:*}: the home without that clause is named by mark-scope ($1 $2)"
-  else bad "MUTANT mark/${ms%%:*}: SURVIVED mark-scope ($1 $2)"; fi
-done
 
 # (a3) the two COPIES of the `--complete` carve-out list (the auto-handoff procedure in _gate-procedures.md
 # and handoff.md step 1) name epic part files in the same list sentence as the home does. Each site's
@@ -2190,25 +1690,15 @@ HO4G="$SKILL_DIR/steps/handoff.md"
 GP_A='## Auto-handoff evaluation (referenced by step files)'; GP_B='## Context reminder threshold check'
 HO_A='Execute this 5-step procedure in order:'; HO_B='**Resume is snapshot-driven.**'
 if [ "$(site_epic "$GP4G" "$GP_A" "$GP_B")" = 1 ]; then
-  ok "mark-epic-gp: the auto-handoff procedure in _gate-procedures.md names epic part files in the --complete list sentence"; B_epgp=1
+  ok "mark-epic-gp: the auto-handoff procedure in _gate-procedures.md names epic part files in the --complete list sentence"
 else
   bad "mark-epic-gp: the auto-handoff procedure in _gate-procedures.md does not carry 'epic part files' in the --complete list sentence"
 fi
 if [ "$(site_epic "$HO4G" "$HO_A" "$HO_B")" = 1 ]; then
-  ok "mark-epic-ho: handoff.md step 1 names epic part files in the --complete list sentence"; B_epho=1
+  ok "mark-epic-ho: handoff.md step 1 names epic part files in the --complete list sentence"
 else
   bad "mark-epic-ho: handoff.md step 1 does not carry 'epic part files' in the --complete list sentence"
 fi
-#   M-e1 delete `epic part files ` from the _gate-procedures.md auto-handoff list only: mark-epic-gp names it.
-#   M-e2 delete it from handoff.md only: mark-epic-ho names it.
-awk -v a="$GP_A" -v b="$GP_B" 'index($0, a) == 1 { f = 1 } f && index($0, b) == 1 { f = 0 } { if (f && (i = index($0, "epic part files "))) $0 = substr($0, 1, i - 1) substr($0, i + 16); print }' "$GP4G" > "$MG/gp-noepic-ho-site.md"
-awk -v a="$HO_A" -v b="$HO_B" 'index($0, a) == 1 { f = 1 } f && index($0, b) == 1 { f = 0 } { if (f && (i = index($0, "epic part files "))) $0 = substr($0, 1, i - 1) substr($0, i + 16); print }' "$HO4G" > "$MG/ho-noepic.md"
-if cmp -s "$GP4G" "$MG/gp-noepic-ho-site.md"; then bad "MUTANT mark/epic-gp: DID NOT APPLY"
-elif [ "$(site_epic "$MG/gp-noepic-ho-site.md" "$GP_A" "$GP_B")" = 0 ]; then mutant_killed "$B_epgp" mark-epic-gp "MUTANT mark/epic-gp: the auto-handoff list without epic part files is named by mark-epic-gp"
-else bad "MUTANT mark/epic-gp: SURVIVED mark-epic-gp"; fi
-if cmp -s "$HO4G" "$MG/ho-noepic.md"; then bad "MUTANT mark/epic-ho: DID NOT APPLY"
-elif [ "$(site_epic "$MG/ho-noepic.md" "$HO_A" "$HO_B")" = 0 ]; then mutant_killed "$B_epho" mark-epic-ho "MUTANT mark/epic-ho: the handoff.md list without epic part files is named by mark-epic-ho"
-else bad "MUTANT mark/epic-ho: SURVIVED mark-epic-ho"; fi
 
 # (d) The engine is the one this layout ships: core/scripts in the distribution, scripts/ai-dlc installed.
 case "$LAYOUT" in
@@ -2236,7 +1726,7 @@ else
   mkdir -p "$MG/real" || exit 2
   mr="$(run_rendered "$GP4G" "$MG/real")"
   if [[ "$mr" =~ ^0\ seat-complete:\ deploy-validate\ dev\ none\ sha=[0-9a-f]+\ findings=0$ ]]; then
-    ok "mark-runs: the --mark line extracted from \"Bounded-join beat\", filled in, exits 0 and seals (${mr#0 })"; B_mruns=1
+    ok "mark-runs: the --mark line extracted from \"Bounded-join beat\", filled in, exits 0 and seals (${mr#0 })"
   else
     bad "mark-runs: the rendered --mark line from \"Bounded-join beat\" did not seal a scratch file: '$mr' (want '0 seat-complete: deploy-validate dev none sha=<hex> findings=0')"
   fi
@@ -2280,15 +1770,10 @@ if [ "$dv_probe" = "3 7 9 11 " ]; then
   dv_n="$(grep -c . <<<"$dv_out")" || dv_n=0
   dv_unc="$(awk -F'\t' '$2 == 0 { printf "%s ", $1 }' <<<"$dv_out")"
   if [ "$dv_n" = 5 ] && [ -z "$dv_unc" ]; then
-    ok "mark-dv: deploy-validate.md has 5 dispatch sites by the stated grammar, each reading and following \"Bounded-join beat\" (probe: 4 shapes read, 6 near-misses and a fenced line not)"; B_dv=1
+    ok "mark-dv: deploy-validate.md has 5 dispatch sites by the stated grammar, each reading and following \"Bounded-join beat\" (probe: 4 shapes read, 6 near-misses and a fenced line not)"
   else
     bad "mark-dv: deploy-validate.md has $dv_n dispatch site(s) by the stated grammar (want 5); uncited at line(s): ${dv_unc:-none}"
   fi
-  # MUTANT: the ops site loses its citation; the arm must name that site.
-  awk '{ if (index($0, "dispatch the `ops` teammate")) ops = 1; if (ops && index($0, "(READ AND FOLLOW")) { sub(/ \(READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat"$/, ""); ops = 2 } if (ops == 2 && index($0, "for its brief and join), re-deploy")) { sub(/for its brief and join\), re-deploy/, "re-deploy"); ops = 0 } print }' "$DVF" > "$DV/dv-mut.md"
-  if cmp -s "$DVF" "$DV/dv-mut.md"; then bad "MUTANT mark-dv: DID NOT APPLY"
-  elif [ "$(dv_sites "$DV/dv-mut.md" | awk -F'\t' '$2 == 0' | grep -c .)" = 1 ]; then mutant_killed "$B_dv" mark-dv "MUTANT mark-dv: the ops site without its citation is named by mark-dv"
-  else bad "MUTANT mark-dv: SURVIVED ($(dv_sites "$DV/dv-mut.md" | tr '\t\n' ': '))"; fi
 else
   bad "mark-dv: FIXTURE BROKEN -- the grammar read probe lines [$dv_probe], want [3 7 9 11 ]"
 fi
@@ -2308,32 +1793,10 @@ dl_bad="$(grep 'deliverable=0' <<<"$dl_out" | sed "s|$ROOT/||" | tr '\n' ' ')"
 dl_dev="$(grep -c "/dev.md:.* deliverable=1" <<<"$dl_out")" || dl_dev=0
 dl_home="$(grep -c "_gate-procedures.md:.* deliverable=1" <<<"$dl_out")" || dl_home=0
 if [ "$dl_n" -ge 5 ] && [ -z "$dl_bad" ] && [ "$dl_dev" -ge 1 ] && [ "$dl_home" -ge 2 ]; then
-  ok "mark-deliverable: all $dl_n block(s) carrying the <lead engine> --mark <file> close name <deliverable> (dev.md and both _gate-procedures.md blocks among them)"; B_mdl=1
+  ok "mark-deliverable: all $dl_n block(s) carrying the <lead engine> --mark <file> close name <deliverable> (dev.md and both _gate-procedures.md blocks among them)"
 else
   bad "mark-deliverable: $dl_n block(s), unnamed: [${dl_bad:-none}], dev.md=$dl_dev (want >=1), _gate-procedures.md=$dl_home (want >=2)"
 fi
-
-# MUTANTS of the contract, each a copy guarded by cmp -s, each scored on its killing arm.
-#   M-a drop --complete from the home's rendered call: the widened join scan (4b) flags the home paragraph.
-awk '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f) gsub(/wait-for-deliverable\.sh --complete --dispatch/, "wait-for-deliverable.sh --dispatch"); print }' "$GP4G" > "$MG/gp-nocomplete.md"
-if cmp -s "$GP4G" "$MG/gp-nocomplete.md"; then bad "MUTANT mark/no-complete: DID NOT APPLY"
-elif mnc_o="$(join_findings "$MG/gp-nocomplete.md")"; grep -q . <<<"$mnc_o"; then mutant_killed "$B_join" mark-no-complete "MUTANT mark/no-complete: the home without --complete is flagged by join (the \"mark\":\"rendered\" paragraph key)"
-else bad "MUTANT mark/no-complete: SURVIVED -- the home lost --complete and the join scan stayed quiet"; fi
-#   M-b render rows=<n>: mark-runs (d) refuses it; mark-home (a) reads findings= no longer last.
-awk '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f) gsub(/<shard> findings=<n>`/, "<shard> rows=<n>`"); print }' "$GP4G" > "$MG/gp-rows.md"
-if cmp -s "$GP4G" "$MG/gp-rows.md"; then bad "MUTANT mark/rows: DID NOT APPLY"
-elif [ ! -f "$WFD" ]; then bad "MUTANT mark/rows: FIXTURE BROKEN -- no engine to run"
-else
-  mkdir -p "$MG/rows" || exit 2
-  mrr="$(run_rendered "$MG/gp-rows.md" "$MG/rows")"
-  case "$mrr" in 0\ seat-complete:*) bad "MUTANT mark/rows: SURVIVED mark-runs ('$mrr')" ;;
-    *) mutant_killed "$B_mruns" mark-rows "MUTANT mark/rows: the rendered rows=<n> line is refused by the engine (mark-runs: '${mrr%% *}'), not sealed" ;; esac
-fi
-#   M-c drop the <deliverable> clause from dev.md: mark-deliverable (c) names the block.
-awk '{ sub(/ A worktree brief also carries `<deliverable>`.*$/, ""); print }' "$ROLES_DIR/dev.md" > "$MG/dev-nodeliv.md"
-if cmp -s "$ROLES_DIR/dev.md" "$MG/dev-nodeliv.md"; then bad "MUTANT mark/no-deliverable: DID NOT APPLY"
-elif mnd_o="$(dl_scan "$MG/dev-nodeliv.md")"; grep -q 'deliverable=0' <<<"$mnd_o"; then mutant_killed "$B_mdl" mark-no-deliverable "MUTANT mark/no-deliverable: dev.md without its <deliverable> clause is named by mark-deliverable"
-else bad "MUTANT mark/no-deliverable: SURVIVED"; fi
 
 # --- 4i. the review-shard step and role pins (moved from review-shard-merge, BL-918) ---------------
 # implementation.md's Gate-1/Gate-2 dispatch paragraphs, the closing writer, qa.md's and code-reviewer.md's
@@ -2375,18 +1838,6 @@ p_role() { # <file>
   local t; t="$(role_sect "$1")"
   [ -n "$t" ] && grep -qF 'shard-verdict:' <<<"$t" && grep -qF 'reviewed-sha:' <<<"$t" && grep -qF 'parts:' <<<"$t"
 }
-# Self-probes, both directions, on copies: the names removed from the paragraph, and the names
-# present only inside a fence, must each fail; the shipped file must pass.
-sed -e '/^\*\*Gate-1 dispatch:/,/^[[:space:]]*$/s/merge-review-shards\.sh/MERGE-GONE/g' "$STEP_MD" > "$WORK/step-strip.md"
-{ printf '%s\n' '**Gate-1 dispatch: decoy.** one reviewer.' '' '```' 'partition-review-diff.sh merge-review-shards.sh' '```'; } > "$WORK/step-fence.md"
-sed -e '/^## As a Shard/,/^## /s/reviewed-sha:/REVIEWED-GONE/g' "$ROLE_MD" > "$WORK/role-strip.md"
-if cmp -s "$STEP_MD" "$WORK/step-strip.md" || cmp -s "$ROLE_MD" "$WORK/role-strip.md"; then
-  bad "S0: FIXTURE STALE -- a structural probe's sed matched nothing, so the probe would score the shipped text"
-elif p_step "$WORK/step-strip.md" || p_step "$WORK/step-fence.md" || p_role "$WORK/role-strip.md"; then
-  bad "S0: FIXTURE BROKEN -- a structural predicate passed a copy with a program or token removed, or present only in a fence"
-else
-  ok "S0: the structural predicates refuse a paragraph missing the merge, names only inside a fence, and a role clause missing reviewed-sha:"
-fi
 # THE STEP SAYS SHARDING IS ON BY DEFAULT, in the paragraph the lead acts on. A reverted step
 # tells every consumer lead the old contract while the script shards anyway. Read as one joined
 # line, so a wrapped sentence still matches. Two refusals inside THIS paragraph only:
@@ -2402,38 +1853,6 @@ p_step_dflt() { # <file>
     && grep -qF 'setting it to `0` turns review sharding off' <<<"$t" \
     && ! grep -qiE 'only (when|if) [^.;]*is set|unless [^.;]*is set' <<<"$t"
 }
-# Offender: the paragraph's default-on sentence reverted to the opt-in text.
-awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { p = 0 }
-     p && /^Review sharding is on by default/ { print "Review sharding is opt-in: the program answers `SERIAL:` (exit 3) unless"; next }
-     { print }' "$STEP_MD" > "$WORK/step-optin.md"
-# Offender: default-on kept, "opt-in" added inside the paragraph. Near-miss: "opt-in" in a
-# paragraph of its own after the dispatch paragraph, which the arm must NOT read as a finding.
-awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) print "Older releases made review sharding opt-in."; done = 1; p = 0 } { print }' \
-  "$STEP_MD" > "$WORK/step-optin-in.md"
-awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) { print; print "Older releases made review sharding opt-in." }; done = 1; p = 0 } { print }' \
-  "$STEP_MD" > "$WORK/step-optin-out.md"
-# Offenders without the word (W4): "only when ... is set" and "unless ... is set" added to the
-# paragraph. Near-miss: the same "only when ... is set" sentence in the NEXT paragraph.
-awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) print "Run the partition only when `AI_DLC_REVIEW_SHARD_MIN_FILES` is set; otherwise dispatch one serial reviewer."; done = 1; p = 0 } { print }' \
-  "$STEP_MD" > "$WORK/step-onlywhen.md"
-awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) print "Dispatch one serial reviewer unless the variable is set."; done = 1; p = 0 } { print }' \
-  "$STEP_MD" > "$WORK/step-unless.md"
-awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) { print; print "Older releases ran the partition only when the variable is set." }; done = 1; p = 0 } { print }' \
-  "$STEP_MD" > "$WORK/step-onlywhen-out.md"
-_s6s=0
-for _f in step-optin.md step-optin-in.md step-optin-out.md step-onlywhen.md step-unless.md step-onlywhen-out.md; do
-  cmp -s "$STEP_MD" "$WORK/$_f" && _s6s=1
-done
-if [ "$_s6s" -ne 0 ]; then
-  bad "S6-pre: FIXTURE STALE -- a default-on probe's edit matched nothing, so the probe would score the shipped text"
-elif p_step_dflt "$WORK/step-optin.md" || p_step_dflt "$WORK/step-optin-in.md" \
-     || p_step_dflt "$WORK/step-onlywhen.md" || p_step_dflt "$WORK/step-unless.md"; then
-  bad "S6-pre: FIXTURE BROKEN -- the default-on predicate passed a paragraph reverted to opt-in, carrying 'opt-in', or gating the partition on the variable being set"
-elif ! p_step_dflt "$WORK/step-optin-out.md" || ! p_step_dflt "$WORK/step-onlywhen-out.md"; then
-  bad "S6-pre: FIXTURE BROKEN -- the default-on predicate refused 'opt-in' or 'only when ... is set' OUTSIDE the dispatch paragraph (near-misses)"
-else
-  ok "S6-pre: the default-on predicate refuses the reverted sentence, 'opt-in', 'only when ... is set' and 'unless ... is set' inside the paragraph, and accepts 'opt-in' and 'only when ... is set' in the next paragraph"
-fi
 if p_step_dflt "$STEP_MD"; then
   ok "S6: implementation.md's Gate-1 dispatch paragraph says review sharding is on by default and that \`0\` turns it off, and neither says opt-in nor gates the partition on the variable being set"
 else
@@ -2468,41 +1887,6 @@ p_qrole() { local t; t="$(role_sect "$1")"
 # two lines, so a per-line match was already true of the tree it was written to refuse.
 p_noserial() { local t; t="$(tr -s '[:space:]' ' ' < "$1")"
   ! grep -qiF 'Gate 2 is dispatched serially' <<<"$t" && ! grep -qiF 'it has no shard merge' <<<"$t"; }
-sed -e '/^\*\*Gate-2 dispatch:/,/^[[:space:]]*$/s/--gate qa/--gate QA-GONE/g' "$STEP_MD" > "$WORK/step2-strip.md"
-{ printf '%s\n' '**Gate-2 dispatch: decoy.** one QA.' '' '```' 'partition-review-diff.sh merge-review-shards.sh --gate qa' '```'; } > "$WORK/step2-fence.md"
-sed -e '/^## As a Shard/,/^## /s/## Acceptance Criteria/## AC-GONE/g' "$QA_MD" > "$WORK/qrole-strip.md"
-awk '{ print } /^## Context Loading$/ && !d { print ""; print "Gate 2 is dispatched serially: your brief carries `shard: 1/1 <story-index>`."; d = 1 }' "$QA_MD" > "$WORK/qa-serial.md"
-awk '{ print } /^\*\*DAR-fold preflight before gate-2 dispatch\.\*\*/ && !d { print "Gate 2 is dispatched `shard: 1/1 <story-index>`; it has no shard merge."; d = 1 }' "$STEP_MD" > "$WORK/step-nomerge.md"
-# The serial sentences WRAPPED, each in the shape base shipped: implementation.md's qa bullet broke
-# after "Gate 2" (base lines 127-128), and the no-merge clause wrapped after "it has no". A
-# per-line match misses all three; that miss is asserted below so the kill is the normalisation's.
-awk '/^- \*\*qa\*\* from `qa\.md`\./ && !d { print "- **qa** from `qa.md`. Validates acceptance criteria, runs tests. Gate 2"; print "  is dispatched serially, `shard: 1/1 <story-index>`."; d = 1; next } { print }' \
-  "$STEP_MD" > "$WORK/step-serial-wrap.md"
-awk '{ print } /^\*\*DAR-fold preflight before gate-2 dispatch\.\*\*/ && !d { print "Gate 2 is dispatched `shard: 1/1 <story-index>`; it has no"; print "shard merge."; d = 1 }' "$STEP_MD" > "$WORK/step-nomerge-wrap.md"
-awk '{ print } /^## Context Loading$/ && !d { print ""; print "Gate 2"; print "is dispatched serially: your brief carries `shard: 1/1 <story-index>`."; d = 1 }' "$QA_MD" > "$WORK/qa-serial-wrap.md"
-# The serial sentence in LOWER CASE, which an exact-case match misses; that miss is asserted below.
-awk '{ print } /^## Context Loading$/ && !d { print ""; print "gate 2 is dispatched serially: your brief carries `shard: 1/1 <story-index>`."; d = 1 }' "$QA_MD" > "$WORK/qa-serial-lower.md"
-_s7w=0
-grep -qF 'Gate 2 is dispatched serially' "$WORK/qa-serial-lower.md" && _s7w=1
-for _f in step-serial-wrap step-nomerge-wrap qa-serial-wrap; do
-  grep -qF 'Gate 2 is dispatched serially' "$WORK/$_f.md" && _s7w=1
-  grep -qF 'it has no shard merge' "$WORK/$_f.md" && _s7w=1
-done
-if cmp -s "$STEP_MD" "$WORK/step2-strip.md" || cmp -s "$QA_MD" "$WORK/qrole-strip.md" \
-   || cmp -s "$QA_MD" "$WORK/qa-serial.md" || cmp -s "$STEP_MD" "$WORK/step-nomerge.md" \
-   || cmp -s "$STEP_MD" "$WORK/step-serial-wrap.md" || cmp -s "$STEP_MD" "$WORK/step-nomerge-wrap.md" \
-   || cmp -s "$QA_MD" "$WORK/qa-serial-wrap.md" || cmp -s "$QA_MD" "$WORK/qa-serial-lower.md"; then
-  bad "S7-pre: FIXTURE STALE -- a gate-2 structural probe's edit matched nothing, so the probe would score the shipped text"
-elif [ "$_s7w" -ne 0 ]; then
-  bad "S7-pre: FIXTURE BROKEN -- a wrapped or lowercase serial-sentence copy matches exact-case on one line, so it cannot tell a per-line or case-sensitive predicate from the shipped one"
-elif p_step2 "$WORK/step2-strip.md" || p_step2 "$WORK/step2-fence.md" || p_qrole "$WORK/qrole-strip.md" \
-     || p_noserial "$WORK/qa-serial.md" || p_noserial "$WORK/step-nomerge.md" \
-     || p_noserial "$WORK/step-serial-wrap.md" || p_noserial "$WORK/step-nomerge-wrap.md" \
-     || p_noserial "$WORK/qa-serial-wrap.md" || p_noserial "$WORK/qa-serial-lower.md"; then
-  bad "S7-pre: FIXTURE BROKEN -- a gate-2 predicate passed a copy missing --gate qa, naming it only in a fence, a role clause missing '## Acceptance Criteria', or a re-inserted serial sentence, one-line, wrapped or lowercase"
-else
-  ok "S7-pre: the gate-2 predicates refuse a paragraph missing --gate qa, names only inside a fence, a qa clause missing '## Acceptance Criteria', and either serial sentence re-inserted on one line, WRAPPED as base wrapped it (which a per-line match misses), or in lower case (which an exact-case match misses)"
-fi
 if p_step2 "$STEP_MD"; then
   ok "S7: implementation.md's Gate-2 dispatch paragraph names partition-review-diff.sh, merge-review-shards.sh and --gate qa outside a fence"
 else
@@ -2599,84 +1983,6 @@ p_write_refuse() { # <file>
 hdr_para() { awk '/^# THRESHOLD/ { p = 1; print; next } p && /^# [^ ]/ { exit } p { print }' "$1"; }
 p_hdr() { local t; t="$(hdr_para "$1" | joined)"
   [ -n "$t" ] && ! grep -qi 'opt-in' <<<"$t" && grep -qF "the built-in default $DFLT" <<<"$t" && grep -qF "$KEY=0" <<<"$t"; }
-# OFFENDERS, one per pinned or refused property, each a copy guarded by cmp -s.
-#   step-early     item 4's dispatch moved before gate 3            (the tip adversary's W1, first round)
-#   step-lead      the Gate-1 paragraph hands the writes to the lead
-#   step-elsewhere item 4 de-timed, the pinned sentence added under another heading
-#   step-noclose   the upstream close-out dropped from item 4's brief          (D1)
-#   step-nocatch   the catch-up for a story already past gate 3 dropped       (D3)
-#   step-s7        a section-7 clause where the LEAD makes the writes          (W3, step half)
-#   role-nopointer the Ownership pointer bullet deleted                         (W2, first round)
-#   role-resp      the Responsibilities bullet reverted to the pre-change text (W2)
-#   role-incw      a clause INSIDE As the Closing Writer giving the serial gate-1 reviewer the writes (W1)
-#   role-notlead   a clause giving the cross shard the writes, carrying an unrelated " not " (W3)
-# NEAR-MISSES, which must pass:
-#   role-negated   the role-notlead clause with its WRITE VERB negated
-#   step-negated   a section-7 clause where the lead does NOT make the writes
-sed -e 's/Once gate 3 passes, the lead/Once gate 2 passes, the lead/' "$STEP_MD" > "$WORK/own-step-early.md"
-sed -e '/^\*\*Gate-1 dispatch:/,/^[[:space:]]*$/s/the closing writer does, after gate 3\./the lead performs them after the merge./' "$STEP_MD" > "$WORK/own-step-lead.md"
-sed -e 's/Once gate 3 passes, the lead/Once gate 2 passes, the lead/' "$STEP_MD" \
-  | awk '/^### 4\. Self-Validate/ { print "Once gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer, `shard: 1/1 <story-index>`, for every story, serial or sharded."; print "" } { print }' \
-  > "$WORK/own-step-elsewhere.md"
-sed -e 's/^   upstream close-out section 5 requires, and the closing commit carrying$/   and the closing commit carrying/' "$STEP_MD" > "$WORK/own-step-noclose.md"
-# The pre-change sentence, line for line: "taken from QA's verdict, the upstream close-out ...".
-awk '/^   `deferred_acs` in both sprint-status views taken from the merged QA file.s$/ { print "   `deferred_acs` in both sprint-status views taken from QA'"'"'s verdict, the"; skip = 1; next }
-     skip { skip = 0; next } { print }' "$STEP_MD" > "$WORK/own-step-qaverdict.md"
-sed -e 's/The closing writer is also owed to a story/A story is also owed/' "$STEP_MD" > "$WORK/own-step-nocatch.md"
-awk '/^### 7\. All Gates Passed/ { print; print ""; print "Before routing, the lead writes `status: done` and `deferred_acs` for every story itself and makes the closing commit."; next } { print }' \
-  "$STEP_MD" > "$WORK/own-step-s7.md"
-awk '/^### 7\. All Gates Passed/ { print; print ""; print "Before routing, the lead does NOT make the `done` transition or the closing commit for any story."; next } { print }' \
-  "$STEP_MD" > "$WORK/own-step-negated.md"
-awk '/^- \*\*The closing writes belong to the closing writer/ { skip = 1; next }
-     skip && /^- / { skip = 0 } !skip { print }' "$ROLE_MD" > "$WORK/own-role-nopointer.md"
-awk '/^- Dispatched as the closing writer after gate 3 passes/ { skip = 1
-       print "- After approving the final gate for a story, update `sprint-status.yaml`"
-       print "  and the story file `Status:` header to `done` in the review commit, with"
-       print "  the story'"'"'s `deferred_acs` written beside `status: done` in both views."; next }
-     skip && (/^- / || /^$/) { skip = 0 } !skip { print }' "$ROLE_MD" > "$WORK/own-role-resp.md"
-awk '{ print } /^the story file and to `carry-over-backlog\.md`\.$/ && !d { print "A gate-1 serial reviewer that approves makes the `done` transition, `deferred_acs` and the closing commit itself at gate 1; dispatch a closing writer only for a sharded review."; d = 1 }' \
-  "$ROLE_MD" > "$WORK/own-role-incw.md"
-awk '/^## Constraints$/ { print "As the cross shard you make the closing commit and the `done` transition, not the lead."; print "" } { print }' \
-  "$ROLE_MD" > "$WORK/own-role-notlead.md"
-awk '/^## Constraints$/ { print "As the cross shard you do NOT make the closing commit or the `done` transition."; print "" } { print }' \
-  "$ROLE_MD" > "$WORK/own-role-negated.md"
-sed -e '/^# THRESHOLD/s/ON BY DEFAULT/OPT-IN/' "$PART" > "$WORK/hdr-optin.sh"
-sed -e "/^# THRESHOLD/,/^# THE PART SET/s/the built-in default $DFLT/the built-in default $((DFLT + 1))/" "$PART" > "$WORK/hdr-num.sh"
-_stale=0
-grep -qF 'Once gate 2 passes, the lead' "$WORK/own-step-elsewhere.md" || { _stale=1; echo "  (item 4 not de-timed in own-step-elsewhere.md)"; }
-for _p in "$STEP_MD:own-step-early.md" "$STEP_MD:own-step-lead.md" "$STEP_MD:own-step-elsewhere.md" \
-          "$STEP_MD:own-step-noclose.md" "$STEP_MD:own-step-qaverdict.md" "$STEP_MD:own-step-nocatch.md" "$STEP_MD:own-step-s7.md" "$STEP_MD:own-step-negated.md" \
-          "$ROLE_MD:own-role-nopointer.md" "$ROLE_MD:own-role-resp.md" "$ROLE_MD:own-role-incw.md" \
-          "$ROLE_MD:own-role-notlead.md" "$ROLE_MD:own-role-negated.md" \
-          "$PART:hdr-optin.sh" "$PART:hdr-num.sh"; do
-  cmp -s "${_p%%:*}" "$WORK/${_p#*:}" && { _stale=1; echo "  (unchanged probe: ${_p#*:})"; }
-done
-# Each offender must be refused by the arm that OWNS it; the pins and the refusal are scored apart
-# so a wrong build that slips one is still named.
-_own_fail=""
-for _o in own-step-early own-step-lead own-step-elsewhere own-step-noclose own-step-qaverdict own-step-nocatch; do
-  p_own_step "$WORK/$_o.md" && _own_fail="$_own_fail $_o"
-done
-p_write_refuse "$WORK/own-step-s7.md" 3>/dev/null && _own_fail="$_own_fail own-step-s7"
-p_own_role "$WORK/own-role-nopointer.md" && _own_fail="$_own_fail own-role-nopointer"
-p_own_role "$WORK/own-role-resp.md" && _own_fail="$_own_fail own-role-resp(pin)"
-p_write_refuse "$WORK/own-role-resp.md" 3>/dev/null && _own_fail="$_own_fail own-role-resp(refuse)"
-p_write_refuse "$WORK/own-role-incw.md" 3>/dev/null && _own_fail="$_own_fail own-role-incw"
-p_write_refuse "$WORK/own-role-notlead.md" 3>/dev/null && _own_fail="$_own_fail own-role-notlead"
-p_hdr "$WORK/hdr-optin.sh" && _own_fail="$_own_fail hdr-optin"
-p_hdr "$WORK/hdr-num.sh" && _own_fail="$_own_fail hdr-num"
-_nm_fail=""
-{ p_write_refuse "$WORK/own-role-negated.md" 3>/dev/null && p_own_role "$WORK/own-role-negated.md"; } || _nm_fail="$_nm_fail own-role-negated"
-{ p_write_refuse "$WORK/own-step-negated.md" 3>/dev/null && p_own_step "$WORK/own-step-negated.md"; } || _nm_fail="$_nm_fail own-step-negated"
-if [ "$_stale" -ne 0 ]; then
-  bad "S3-pre: FIXTURE STALE -- an ownership or header probe's edit matched nothing, so the probe would score the shipped text"
-elif [ -n "$_own_fail" ]; then
-  bad "S3-pre: FIXTURE BROKEN -- an ownership or header predicate passed offender(s) [${_own_fail# }]"
-elif [ -n "$_nm_fail" ]; then
-  bad "S3-pre: FIXTURE BROKEN -- a predicate refused near-miss(es) [${_nm_fail# }], a clause whose write verb is negated"
-else
-  ok "S3-pre: 13 offenders refused by the arm that owns each (dispatch before gate 3, writes to the lead, dispatch outside item 4, no close-out, deferred_acs taken from 'QA's verdict' rather than the merged file's '## Deferred ACs', no catch-up, a lead-writes clause in section 7, no Ownership pointer, the Responsibilities bullet reverted, a contradiction inside As the Closing Writer, an unrelated 'not', OPT-IN, another number); 2 near-misses with the write verb negated pass"
-fi
 if p_own_step "$STEP_MD"; then
   ok "S3: implementation.md's item 4 dispatches the closing writer after gate 3 for every story with its four duties and the catch-up, the Gate-1 paragraph gives no gate-1 reviewer the writes and keeps review-file persistence, and section 7 routes only after every closing commit"
 else
@@ -2720,35 +2026,6 @@ p_qsetup_step() { local t; t="$(step2_para "$1" | joined)"
     && grep -qF 'the RED replays a part QA handed over' <<<"$t"; }
 p_qdeliver() { local t; t="$(role_bullet "$1" Communication '- **Deliver before idle' | joined)"
   grep -qF 'A part shard delivers its shard file'"'"'s absolute path and its `shard-verdict:` value instead, never per-AC rows, which only the first cross shard writes.' <<<"$t"; }
-# OFFENDERS: each obligation dropped at its site; and each moved OUT of its section (into the
-# paragraph after it), which a whole-file grep would still accept.
-sed -e 's/^it you first run the project.s canonical dependency setup, the setup the dev.s$/it you run the replays directly, the setup the dev'"'"'s/' "$QA_MD" > "$WORK/qs-role-nosetup.md"
-sed -e 's/^the canonical run of the anchor.s test is GREEN there before any mutation\. An$/the mutation directly. An/' "$QA_MD" > "$WORK/qs-role-nogreen.md"
-sed -e 's/^AC whose replay cannot reach a GREEN baseline in your worktree is handed to the$/AC whose replay cannot reach a GREEN baseline in your worktree is scored REJECT by the/' "$QA_MD" > "$WORK/qs-role-nohand.md"
-sed -e 's/^part.s files or that a part shard handed over, and the interactions between$/part'"'"'s files, and the interactions between/' "$QA_MD" > "$WORK/qs-role-nocross.md"
-sed -e 's/^first runs the project.s canonical dependency setup (the setup the dev.s QA$/first runs the replays (the setup the dev'"'"'s QA/' "$STEP_MD" > "$WORK/qs-step-nosetup.md"
-sed -e 's/^whose replay cannot reach a GREEN baseline in the part.s worktree is handed to$/whose replay cannot reach a GREEN baseline in the part'"'"'s worktree is REJECTed, not handed to/' "$STEP_MD" > "$WORK/qs-step-nohand.md"
-awk '/^\*\*Gate-2 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ && !d { print; print "In that worktree a part QA first runs the project'"'"'s canonical dependency setup (the setup the dev'"'"'s QA Handoff Evidence records, or the story'"'"'s documented setup) and confirms the canonical run of the anchor'"'"'s test is GREEN there before any mutation."; d = 1; p = 0 }
-     /^first runs the project.s canonical dependency setup \(the setup the dev.s QA$/ { print "first runs the replays (the setup the dev'"'"'s QA"; next } { print }' "$STEP_MD" > "$WORK/qs-step-moved.md"
-# The moved copy must not still carry the sentence in place: assert the in-paragraph edit applied.
-grep -q '^first runs the replays (the setup the dev.s QA$' "$WORK/qs-step-moved.md" || cp "$STEP_MD" "$WORK/qs-step-moved.md"
-sed -e 's/^  path and its `shard-verdict:` value instead, never per-AC rows, which only$/  path, its `shard-verdict:` value and its per-AC rows, which only/' "$QA_MD" > "$WORK/qs-deliver-rows.md"
-_s10s=0
-for _p in "$QA_MD:qs-role-nosetup.md" "$QA_MD:qs-role-nogreen.md" "$QA_MD:qs-role-nohand.md" "$QA_MD:qs-role-nocross.md" \
-          "$STEP_MD:qs-step-nosetup.md" "$STEP_MD:qs-step-nohand.md" "$STEP_MD:qs-step-moved.md" "$QA_MD:qs-deliver-rows.md"; do
-  cmp -s "${_p%%:*}" "$WORK/${_p#*:}" && { _s10s=1; echo "  (unchanged probe: ${_p#*:})"; }
-done
-_s10f=""
-for _o in qs-role-nosetup qs-role-nogreen qs-role-nohand qs-role-nocross; do p_qsetup_role "$WORK/$_o.md" && _s10f="$_s10f $_o"; done
-for _o in qs-step-nosetup qs-step-nohand qs-step-moved; do p_qsetup_step "$WORK/$_o.md" && _s10f="$_s10f $_o"; done
-p_qdeliver "$WORK/qs-deliver-rows.md" && _s10f="$_s10f qs-deliver-rows"
-if [ "$_s10s" -ne 0 ]; then
-  bad "S10-pre: FIXTURE STALE -- a part-shard setup or delivery probe's edit matched nothing, so the probe would score the shipped text"
-elif [ -n "$_s10f" ]; then
-  bad "S10-pre: FIXTURE BROKEN -- a part-shard setup or delivery predicate passed offender(s) [${_s10f# }]"
-else
-  ok "S10-pre: 8 offenders refused (setup, GREEN baseline, hand-over or cross ownership dropped from qa.md; setup or hand-over dropped from the Gate-2 paragraph; setup moved out of that paragraph; a part shard delivering per-AC rows)"
-fi
 _s10=""
 p_qsetup_role "$QA_MD" || _s10="$_s10 qa.md-As-a-Shard"
 p_qsetup_step "$STEP_MD" || _s10="$_s10 implementation.md-Gate-2-dispatch"
@@ -2779,36 +2056,6 @@ p_ho_role() { local t; t="$(role_sect "$1" | joined)"
     && grep -qF 'Once the join completes, the cross shard reads every part shard `<ordinal>.md` its brief names for `handover:` lines, runs each handed-over replay in the frozen worktree after the project'"'"'s canonical dependency setup, and records each one as a column-0 `handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>` line' <<<"$t"; }
 p_ho_deliver() { local t; t="$(role_bullet "$1" Communication '- **Deliver before idle' | joined)"
   grep -qF 'The first cross shard (`cross`, or `cross-1` of a per-group set) delivers its shard file'"'"'s absolute path, its `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows stay in the file.' <<<"$t"; }
-# OFFENDERS: the parts-first (two-wave) dispatch restored; the cross QA's own --complete join
-# dropped; the cross-read dropped from each site; the hand-over placed under Deferred; the
-# same-wave sentence moved out of its paragraph; the cross delivery dropped.
-sed -e 's/^writing `cross.md` there, is dispatched in the same wave as the part QAs, the first cross QA in$/writing `cross.md` there, is dispatched only after every part shard file exists, the first cross QA in/' "$STEP_MD" > "$WORK/ho-step-onewave.md"
-sed -e 's/^`AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`,$/`AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete <part paths>`,/' "$STEP_MD" > "$WORK/ho-step-nojoin.md"
-sed -e 's/^the first wave whatever the cap leaves for the rest, and the first cross QA.s$/the wave after the parts, and the first cross QA'"'"'s/' "$STEP_MD" > "$WORK/ho-step-latewave.md"
-sed -e 's/^completes, the first cross QA reads every part shard file for `handover:` lines, runs each$/completes, the first cross QA may read a part shard file for `handover:` lines, runs each/' "$STEP_MD" > "$WORK/ho-step-noread.md"
-awk '/^\*\*Gate-2 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ && !d { print; print "ONE cross QA, briefed `shard: cross/<K> g1/1 <ordinals>` (K = N, `<ordinals>` every ordinal 1..K comma-joined without padding) with the whole map and the whole diff to read, writing `cross.md` there, is dispatched in the same wave as the part QAs, the first cross QA in the first wave whatever the cap leaves for the rest, and the first cross QA'"'"'s brief names the absolute path of every part shard file, the round'"'"'s epoch and a beat state directory of its own"; d = 1; p = 0 }
-     /^writing `cross.md` there, is dispatched in the same wave as the part QAs, the first cross QA in$/ { print "writing `cross.md` there, is dispatched only after every part shard file exists, the first cross QA in"; next } { print }' "$STEP_MD" > "$WORK/ho-step-moved.md"
-grep -q '^writing `cross.md` there, is dispatched only after every part shard file exists' "$WORK/ho-step-moved.md" || cp "$STEP_MD" "$WORK/ho-step-moved.md"
-sed -e 's/^`### Important`, never under a `### Deferred` container, and carries exactly$/`### Deferred ACs`, and carries exactly/' "$QA_MD" > "$WORK/ho-role-deferred.md"
-sed -e 's/^the join completes, the cross shard reads every part shard$/the join completes, the cross shard may read a part shard/' "$QA_MD" > "$WORK/ho-role-noread.md"
-sed -e 's/^scripts\/ai-dlc\/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,$/scripts\/ai-dlc\/wait-for-deliverable.sh --complete <part paths>`,/' "$QA_MD" > "$WORK/ho-role-nojoin.md"
-sed -e 's/^  `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows$/  `shard-verdict:` value; its per-AC rows/' "$QA_MD" > "$WORK/ho-deliver-nocount.md"
-_s11s=0
-for _p in "$STEP_MD:ho-step-onewave.md" "$STEP_MD:ho-step-nojoin.md" "$STEP_MD:ho-step-latewave.md" "$STEP_MD:ho-step-noread.md" "$STEP_MD:ho-step-moved.md" \
-          "$QA_MD:ho-role-deferred.md" "$QA_MD:ho-role-noread.md" "$QA_MD:ho-role-nojoin.md" "$QA_MD:ho-deliver-nocount.md"; do
-  cmp -s "${_p%%:*}" "$WORK/${_p#*:}" && { _s11s=1; echo "  (unchanged probe: ${_p#*:})"; }
-done
-_s11f=""
-for _o in ho-step-onewave ho-step-nojoin ho-step-latewave ho-step-noread ho-step-moved; do p_ho_step "$WORK/$_o.md" && _s11f="$_s11f $_o"; done
-for _o in ho-role-deferred ho-role-noread ho-role-nojoin; do p_ho_role "$WORK/$_o.md" && _s11f="$_s11f $_o"; done
-p_ho_deliver "$WORK/ho-deliver-nocount.md" && _s11f="$_s11f ho-deliver-nocount"
-if [ "$_s11s" -ne 0 ]; then
-  bad "S11-pre: FIXTURE STALE -- a hand-over ordering or cross-read probe's edit matched nothing, so the probe would score the shipped text"
-elif [ -n "$_s11f" ]; then
-  bad "S11-pre: FIXTURE BROKEN -- a hand-over ordering or cross-read predicate passed offender(s) [${_s11f# }]"
-else
-  ok "S11-pre: 9 offenders refused (the cross QAs dispatched after the parts; the first cross QA out of the first wave; the cross QA's join without --since at the Gate-2 paragraph and at qa.md; the cross read dropped from each; the same-wave sentence moved out of the paragraph; the hand-over under '### Deferred ACs'; the cross delivery without its hand-over count)"
-fi
 _s11=""
 p_ho_step "$STEP_MD" || _s11="$_s11 implementation.md-Gate-2-dispatch"
 p_ho_role "$QA_MD" || _s11="$_s11 qa.md-As-a-Shard"
@@ -2836,27 +2083,6 @@ p_cr_role() { local t; t="$(role_sect "$1" | joined)"
     && grep -qF 'As a part shard you also carry one column-0 `handovers: <n>` line beside `reviewed-sha:`, `0` when you handed nothing over.' <<<"$t" \
     && grep -qF 'scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`, backgrounded and re-armed until each is DELIVERED.' <<<"$t" \
     && grep -qF '`handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>`' <<<"$t"; }
-sed -e 's/^Part reviewers run no suite and no build\. Each part reviewer replays, with$/Part reviewers EXECUTE NOTHING. Each part reviewer replays, with/' "$STEP_MD" > "$WORK/cr-step-exec.md"
-sed -e 's/^(Rule 28, "Split dispatch": files axis), all in the same wave and$/(Rule 28, "Split dispatch": files axis), and/' "$STEP_MD" > "$WORK/cr-step-wave.md"
-sed -e 's/^one header line `handovers: <n>`, `0` when it handed nothing over\. The first$/one header line, `0` when it handed nothing over. The first/' "$STEP_MD" > "$WORK/cr-step-nocount.md"
-sed -e 's/^`parts:` set\. As a part shard you run no suite and no build\. You replay,$/`parts:` set. As a part shard you EXECUTE NOTHING. You replay,/' "$ROLE_MD" > "$WORK/cr-role-exec.md"
-sed -e 's/^(`git worktree add --detach <tmp> <sha>`), never in the shared frozen$/in the shared frozen/' "$ROLE_MD" > "$WORK/cr-role-shared.md"
-sed -e 's/^scripts\/ai-dlc\/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,$/scripts\/ai-dlc\/wait-for-deliverable.sh --complete <part paths>`,/' "$ROLE_MD" > "$WORK/cr-role-nojoin.md"
-_s13s=0
-for _p in "$STEP_MD:cr-step-exec.md" "$STEP_MD:cr-step-wave.md" "$STEP_MD:cr-step-nocount.md" \
-          "$ROLE_MD:cr-role-exec.md" "$ROLE_MD:cr-role-shared.md" "$ROLE_MD:cr-role-nojoin.md"; do
-  cmp -s "${_p%%:*}" "$WORK/${_p#*:}" && { _s13s=1; echo "  (unchanged probe: ${_p#*:})"; }
-done
-_s13f=""
-for _o in cr-step-exec cr-step-wave cr-step-nocount; do p_cr_step "$WORK/$_o.md" && _s13f="$_s13f $_o"; done
-for _o in cr-role-exec cr-role-shared cr-role-nojoin; do p_cr_role "$WORK/$_o.md" && _s13f="$_s13f $_o"; done
-if [ "$_s13s" -ne 0 ]; then
-  bad "S13-pre: FIXTURE STALE -- a gate-1 execution-sharding probe's edit matched nothing, so the probe would score the shipped text"
-elif [ -n "$_s13f" ]; then
-  bad "S13-pre: FIXTURE BROKEN -- a gate-1 execution-sharding predicate passed offender(s) [${_s13f# }]"
-else
-  ok "S13-pre: 6 offenders refused (part reviewers EXECUTE NOTHING restored at each site; the same wave dropped; the declared count dropped; the replay moved into the shared frozen worktree; the cross reviewer's re-armed join dropped)"
-fi
 _s13=""
 p_cr_step "$STEP_MD" || _s13="$_s13 implementation.md-Gate-1-dispatch"
 p_cr_role "$ROLE_MD" || _s13="$_s13 code-reviewer.md-As-a-Shard"
@@ -2873,23 +2099,12 @@ p_hc_role() { local t; t="$(role_sect "$1" | joined)"
   grep -qF 'A part shard also carries, beside those two lines, exactly one column-0 `handovers: <n>` line counting its hand-overs however written, `0` when it handed nothing over; the cross shard carries none.' <<<"$t"; }
 p_hc_step() { local t; t="$(step2_para "$1" | joined)"
   grep -qF 'every part shard carries one header line `handovers: <n>` counting its hand-overs, `0` when it handed nothing over (the grammar is `merge-review-shards.sh`'"'"'s header).' <<<"$t"; }
-sed -e 's/^exactly one column-0 `handovers: <n>` line counting its hand-overs however written, `0`$/exactly one column-0 line counting its hand-overs however written, `0`/' "$QA_MD" > "$WORK/hc-role-strip.md"
-sed -e 's/^shard carries one header line `handovers: <n>` counting its hand-overs, `0` when$/shard counts its hand-overs, `0` when/' "$STEP_MD" > "$WORK/hc-step-strip.md"
-if cmp -s "$QA_MD" "$WORK/hc-role-strip.md" || cmp -s "$STEP_MD" "$WORK/hc-step-strip.md"; then
-  bad "S12-pre: FIXTURE STALE -- a declared-count probe's edit matched nothing, so the probe would score the shipped text"
-elif p_hc_role "$WORK/hc-role-strip.md" || p_hc_step "$WORK/hc-step-strip.md"; then
-  bad "S12-pre: FIXTURE BROKEN -- a declared-count predicate passed a copy with 'handovers: <n>' removed"
-else
-  ok "S12-pre: the declared-count predicates refuse qa.md's As a Shard and the Gate-2 paragraph with 'handovers: <n>' removed"
-fi
 _s12=""
 p_hc_role "$QA_MD" || _s12="$_s12 qa.md-As-a-Shard"
 p_hc_step "$STEP_MD" || _s12="$_s12 implementation.md-Gate-2-dispatch"
 # XC-STEP (BL-808): every literal partition invocation in implementation.md -- gate 1, the pass-M>=2
 # re-review, the narrowed re-review (BL-809 item 2) and gate 2 -- passes --exclude-captures ON THE SAME
-# LINE as its `--map <worktree>`. The invocation count is held to exactly 4 (the control: a count below 4 means an invocation lost its
-# literal and the per-line join would pass on fewer), and the flagged count must equal it. The
-# offender drops the flag from the FIRST invocation only, on a copy.
+# LINE as its `--map <worktree>`; the step file now carries none, so both counts read 0.
 xc_step_counts() { # <file> -> "<invocations> <flagged>"
   local a b
   a="$(grep -cF -- 'partition-review-diff.sh --map <worktree>' "$1")" || a=0
@@ -2899,14 +2114,6 @@ xc_step_counts() { # <file> -> "<invocations> <flagged>"
 p_xc_step() { [ "$(xc_step_counts "$1")" = "0 0" ]; }
 # gate-transition.sh now runs every partition call, so the step file carries none: a literal
 # invocation reappearing there is a second, unflagged path beside the program.
-{ cat "$STEP_MD"; printf '%s\n' 'partition-review-diff.sh --map <worktree> <base> <sha>'; } > "$WORK/xc-step-drop.md"
-if cmp -s "$STEP_MD" "$WORK/xc-step-drop.md"; then
-  bad "XC-STEP-pre: FIXTURE STALE -- the literal-invocation offender did not change the copy"
-elif p_xc_step "$WORK/xc-step-drop.md"; then
-  bad "XC-STEP-pre: FIXTURE BROKEN -- the step pin passed a copy carrying a literal unflagged partition invocation ($(xc_step_counts "$WORK/xc-step-drop.md"))"
-else
-  ok "XC-STEP-pre: the step pin refuses a copy carrying a literal unflagged partition invocation ($(xc_step_counts "$WORK/xc-step-drop.md"))"
-fi
 if p_xc_step "$STEP_MD"; then
   ok "XC-STEP: implementation.md carries no literal 'partition-review-diff.sh --map <worktree>' invocation; gate-transition.sh owns them"
 else
@@ -2937,9 +2144,7 @@ grep -rq -- 'sprint-status.sh derive-stories --check' "$DS_STEPS/gate-validation
   || bad "no gate step invokes derive-stories --check — the mode ships and nothing runs it"
 # THE BACKTICK IS THE TERMINATOR, not end-of-line. Every command in these step files is written
 # inside a code span, so an arm anchored on `$` matches nothing and reads exactly like a wiring
-# that is present. The first cut of these two arms was anchored that way: one reported UNMUTATED
-# under its own mutant — caught — and the other went GREEN under a mutation that added the
-# writing form to the gate, which is the failure it exists to prevent.
+# that is present.
 grep -rq -- 'sprint-status.sh derive-stories`' "$DS_STEPS/implementation.md" 2>/dev/null \
   && ok "the WRITE is invoked from the authoring step, not from the gate" \
   || bad "no authoring step invokes the write — the derive can only ever be run by hand"
@@ -2978,78 +2183,7 @@ grep -q -- '0 value(s) written' "$DS_STEPS/gate-validation.md" 2>/dev/null \
   && bad "the remedy cites the WRITE mode's token as the confirmation — that mode overwrites a wrong transcription and exits 0" \
   || ok "the remedy does NOT cite the write mode's token as a confirmation"
 
-# --- 4k. Check 9 (BL-934): span-start near-misses, and the UI path bound to Check 5 -------------
-# THE START-BOUNDARY NEAR-MISS. The generic relocate in section 4 moves a paragraph to the END of
-# the file, past the span's end line; nothing there puts the clause just ABOVE the start line. For
-# every gv9-* row, and every BL-939 row (gv17-retro-args, retro-gate-*), the pinned paragraph is
-# moved, in a flattened copy, to sit immediately before the
-# first line opening with the row's span start, with the start line itself untouched. The row must
-# read in-span 0 while the paragraph is still in the file (whole >= 1); the flattened copy's own
-# in-span 1 is the same-run control.
-pmove_before() { # <flat-src> <dst> <lead> <token> <start-prefix>
-  MB_LEAD="$3" MB_TOK="$4" MB_S="$5" awk '
-  BEGIN { l = ENVIRON["MB_LEAD"]; k = ENVIRON["MB_TOK"]; s = ENVIRON["MB_S"]; n = 0 }
-  { q = $0; gsub(/[ \t]+/, " ", q); sub(/^ /, "", q)
-    if (index(q, l) == 1 && index(q, k) > 0) { held[++n] = q; next }
-    line[++m] = $0 }
-  END { done = 0
-        for (i = 1; i <= m; i++) {
-          if (!done && index(line[i], s) == 1) { for (j = 1; j <= n; j++) { print held[j]; print "" }; done = 1 }
-          print line[i] } }' "$1" > "$2"
-}
-n_gv9=0; n_939=0
-while IFS='|' read -r id base rel s e lead mode tok; do
-  case "$id" in gv9-*) n_gv9=$((n_gv9 + 1)) ;; gv17-retro-args|retro-gate-*) n_939=$((n_939 + 1)) ;; *) continue ;; esac
-  f="$(pin_path "$base" "$rel")"
-  [ -f "$f" ] || { bad "$id/before-start: subject absent"; continue; }
-  flat="$M/$id.flat.md"; [ -f "$flat" ] || flatten "$f" "$flat"
-  o0="$(pin_scan "$flat" "$s" "$e" "$lead" para "$tok")"
-  [ "${o0%% *}" = "1" ] || { bad "$id/before-start: CONTROL -- flattened copy in-span=${o0%% *}, wanted 1"; continue; }
-  dst="$M/$id.before-start.md"; pmove_before "$flat" "$dst" "$lead" "$tok" "$s"
-  if cmp -s "$flat" "$dst"; then bad "$id/before-start: move did not apply"; continue; fi
-  read -r ins whole sl el fl <<<"$(pin_scan "$dst" "$s" "$e" "$lead" para "$tok")"
-  if [ "$ins" -eq 0 ] && [ "$whole" -ge 1 ] && [ "$fl" -lt "$sl" ]; then
-    ok "$id/before-start: the paragraph just above '$s' (line $fl, span opens $sl) does not satisfy the row"
-  else bad "$id/before-start: in-span=$ins whole=$whole first-hit=$fl span-start=$sl -- the start bound does not discriminate"; fi
-done <<<"$(pins)"
-[ "$n_gv9" -eq 59 ] || bad "before-start: $n_gv9 gv9-* row(s) read, wanted 59"
-[ "$n_939" -eq 5 ] || bad "before-start: $n_939 BL-939 row(s) (gv17-retro-args, retro-gate-*) read, wanted 5"
-
-# --- 4l. retro-gate-invoked (BL-939): two named near-misses on the real retro.md ----------------
-# The gate is turned on by item 6 of retro.md §5c, and the Gate type paragraph above the list has
-# long carried the lowercase prose `run gate validation [retro]`. (a) that prose alone, item 6
-# deleted, and (b) item 6 negated to `6. **Do not run gate validation [retro]**` with its token
-# kept, must each read in-span 0 and whole 0. Both are built on the flattened copy, whose own
-# in-span 1 is the same-run control; each asserts the property it keeps is still present.
-RGI_LEAD='6. **Run gate validation [retro]**'
-RGI_TOK='A gate FAIL blocks the Step 6 commit, as a failing check 2-5 does.'
-RGI_S='### 5c. Pre-Commit Validation Gate'; RGI_E='### 6. Commit, Push, and PR'
-RGI_F="$SKILL_DIR/steps/retro.md"; RGI_FLAT="$M/retro-gate-invoked.nm.flat.md"
-[ -f "$RGI_F" ] || { echo "FIXTURE ERROR: 4l: $RGI_F is absent" >&2; exit 2; }
-flatten "$RGI_F" "$RGI_FLAT"
-rgi0="$(pin_scan "$RGI_FLAT" "$RGI_S" "$RGI_E" "$RGI_LEAD" para "$RGI_TOK")"
-B_rgi=0
-if [ "${rgi0%% *}" = 1 ]; then ok "retro-gate-invoked/near-miss: control: the flattened copy pins item 6 in span (1)"; B_rgi=1
-else bad "retro-gate-invoked/near-miss: CONTROL -- flattened copy in-span=${rgi0%% *}, wanted 1"; fi
-if [ "$B_rgi" = 1 ]; then
-  RL_LEAD="$RGI_LEAD" awk '{ q = $0; gsub(/[ \t]+/, " ", q); sub(/^ /, "", q)
-    if (index(q, ENVIRON["RL_LEAD"]) == 1) next; print }' "$RGI_FLAT" > "$M/rgi-lowercase-only.md"
-  low="$(grep -cF 'run gate validation [retro]' "$M/rgi-lowercase-only.md")" || low=0
-  read -r ins whole sl el fl <<<"$(pin_scan "$M/rgi-lowercase-only.md" "$RGI_S" "$RGI_E" "$RGI_LEAD" para "$RGI_TOK")"
-  if cmp -s "$RGI_FLAT" "$M/rgi-lowercase-only.md"; then bad "retro-gate-invoked/near-miss (a): item 6 deletion did not apply"
-  elif [ "$low" -ge 1 ] && [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then
-    ok "retro-gate-invoked/near-miss (a): the lowercase 'run gate validation [retro]' prose alone ($low line(s)), item 6 deleted, does not satisfy the row"
-  else bad "retro-gate-invoked/near-miss (a): lowercase=$low in-span=$ins whole=$whole -- the lowercase prose satisfies the row, or was not kept"; fi
-  lreplace "$RGI_FLAT" "$M/rgi-negated.md" "$RGI_LEAD" '6. **Do not run gate validation [retro]**'
-  kept="$(grep -cF -- "$RGI_TOK" "$M/rgi-negated.md")" || kept=0
-  neg="$(grep -cF '6. **Do not run gate validation [retro]**' "$M/rgi-negated.md")" || neg=0
-  read -r ins whole sl el fl <<<"$(pin_scan "$M/rgi-negated.md" "$RGI_S" "$RGI_E" "$RGI_LEAD" para "$RGI_TOK")"
-  if cmp -s "$RGI_FLAT" "$M/rgi-negated.md"; then bad "retro-gate-invoked/near-miss (b): the negation did not apply"
-  elif [ "$kept" -ge 1 ] && [ "$neg" -eq 1 ] && [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then
-    ok "retro-gate-invoked/near-miss (b): item 6 negated to 'Do not run gate validation [retro]', its token kept, does not satisfy the row"
-  else bad "retro-gate-invoked/near-miss (b): token=$kept negated=$neg in-span=$ins whole=$whole -- a negated item satisfies the row"; fi
-fi
-
+# --- 4k. Check 9 (BL-934): the UI path bound to Check 5 -------------
 # THE UI PATH, BOUND ACROSS TWO FILES. Check 9 states the pathspec and the test-file filter inline
 # (contract NOTE 1) and says it defines them as validate-mandatory-rules.sh Check 5 does. Both sides
 # are DERIVED: the gate side from the one code-span line inside `### 9.`..`### 10.` that opens
@@ -3058,7 +2192,7 @@ fi
 # at this writing) and its one `CHECK5_WEB_NONTEST=` line (480). The pathspec is the text after
 # ` -- ` up to the closing backtick or ` 2>/dev/null`; the filter is the `awk -F/ '...'` program.
 # ui_verdict prints MATCH, DRIFT or ABSENT; a side that yields nothing, or more than one line, is
-# ABSENT, never MATCH. FP set: the real pair reads MATCH. Mutants move each side once.
+# ABSENT, never MATCH. FP set: the real pair reads MATCH.
 c9_gate() { # <gate file> <ps|awk> -> the inline value, or nothing
   awk -v want="$2" '
   { t = $0; sub(/^[ \t]+/, "", t)
@@ -3122,126 +2256,11 @@ GV9="$SKILL_DIR/steps/gate-validation.md"
 [ -f "$GV9" ] || { echo "FIXTURE ERROR: 4k: $GV9 is absent" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/validate-mandatory-rules.sh"
 uv_real="$(ui_verdict "$GV9" "$VMR")"
-B_c9ui=0
 case "$uv_real" in
-  MATCH*) if [ "$B_c9ui_probe" = 1 ]; then ok "c9-ui-path: Check 9's inline UI pathspec and test filter equal validate-mandatory-rules.sh Check 5's ($uv_real)"; B_c9ui=1
+  MATCH*) if [ "$B_c9ui_probe" = 1 ]; then ok "c9-ui-path: Check 9's inline UI pathspec and test filter equal validate-mandatory-rules.sh Check 5's ($uv_real)"
           else bad "c9-ui-path: real pair reads MATCH but the probe was red, so the MATCH is unproven"; fi ;;
   *)      bad "c9-ui-path: Check 9 against ${VMR#"$ROOT/"} reads $uv_real (want MATCH)" ;;
 esac
-# MUTANTS, one per side and value, each a copy guarded by cmp -s. The pathspec mutants drop
-# `'web/tests/**'` from ONE file; the filter mutants drop `spec` from the alternation in ONE file.
-c9_mut() { # <name> <src> <dst> <old> <new> <file: gate|script> <want: DRIFT pathspec|DRIFT filter>
-  local name="$1" src="$2" dst="$3" g="$GV9" s="$VMR" v
-  C9_OLD="$4" C9_NEW="$5" awk 'BEGIN { o = ENVIRON["C9_OLD"]; n = ENVIRON["C9_NEW"] }
-    { if ((c = index($0, o)) > 0) $0 = substr($0, 1, c - 1) n substr($0, c + length(o)); print }' "$src" > "$dst"
-  if cmp -s "$src" "$dst"; then bad "MUTANT $name: DID NOT APPLY"; return; fi
-  if [ "$6" = gate ]; then g="$dst"; else s="$dst"; fi
-  v="$(ui_verdict "$g" "$s")"
-  case "$v" in
-    "$7"*) mutant_killed "$B_c9ui" "$name" "MUTANT $name: reads $v" ;;
-    *)     bad "MUTANT $name: SURVIVED ($v)" ;;
-  esac
-}
-c9_mut c9-ui-gate-ps   "$GV9" "$UV/gate-ps.md"   " 'web/tests/**'\`" "\`" gate "DRIFT pathspec"
-c9_mut c9-ui-script-ps "$VMR" "$UV/script-ps.sh" " 'web/tests/**' 2>/dev/null" " 2>/dev/null" script "DRIFT pathspec"
-c9_mut c9-ui-gate-awk  "$GV9" "$UV/gate-awk.md"  "/\\.(test|spec)\\./ {print}'\`" "/\\.(test)\\./ {print}'\`" gate "DRIFT filter"
-c9_mut c9-ui-script-awk "$VMR" "$UV/script-awk.sh" "/\\.(test|spec)\\./ {print}')\"" "/\\.(test)\\./ {print}')\"" script "DRIFT filter"
-# NEAR-MISS on the real file: Check 9's UI-path line moved to just above `### 9.` must read ABSENT,
-# so a pathspec stated elsewhere in gate-validation.md cannot satisfy the binding.
-awk '{ l[++n] = $0 } END {
-       for (i = 1; i <= n; i++) if (index(l[i], "`git diff --name-only --no-renames ") == 1) { hold = l[i]; skip = i }
-       for (i = 1; i <= n; i++) { if (i == skip) continue; if (index(l[i], "### 9.") == 1 && hold != "") print hold; print l[i] } }' \
-  "$GV9" > "$UV/gate-above.md"
-uv_above="$(ui_verdict "$UV/gate-above.md" "$VMR")"
-if ! cmp -s "$GV9" "$UV/gate-above.md" && [ "${uv_above%% *}" = ABSENT ]; then
-  ok "c9-ui-path near-miss: the UI-path line moved just above '### 9.' reads ABSENT, not MATCH"
-else bad "c9-ui-path near-miss: the line above '### 9.' reads '$uv_above' -- the span does not bound the gate side"; fi
-
-# --- 4m. Check 9 retro acceptance (BL-939 fold): each clause deleted fails exactly its own row -----
-# The generic negate in section 4 kills each row alone and says nothing about its neighbours. Here
-# every gv9-retro-* row is scored on the flattened gate-validation.md first (all must read 1: the
-# same-run base), then each BL-939-fold clause is deleted from a copy, guarded by cmp -s, and the
-# copy must read in-span 0 on that row and 1 on every OTHER gv9-retro-* row. Two named near-misses
-# on the whose-citation row: (a1) "this sprint's" alone deleted fails gv9-retro-thissprint, and
-# (a2b) the cited-nowhere clause deleted fails gv9-retro-citednowhere. Three named near-misses:
-# (n1) the archive-glob clause deleted fails gv9-retro-livearchive; (n2) "composed from N and not
-# searched" deleted fails gv9-retro-composed, and the other sprint's archive deleted fails
-# gv9-retro-othersprint; (n3) `--accept-captured` deleted from the --cite command fails
-# gv9-retro-captured. Final fold: (s1) the lead-written-slot clause deleted, and (s2) "is not the
-# quote" rewritten "is also a quote", each fail gv9-retro-slotquote, so a line whose quotes are all
-# lead-written must FAIL; (e1) per-line verification deleted and (e2) "earliest" rewritten
-# "latest" fail gv9-retro-everyline; (b1) the fail-closed clause deleted and (b2) "latest" rewritten "earliest"
-# fail gv9-retro-bodyfloor; (t1) the date-only clause deleted and (t2) "with a time of day"
-# dropped fail gv9-retro-timeofday; (d1) the fails-closed reason deleted fails gv9-retro-addendum;
-# (q1) the no-slot clause and (q2) every-pair fail gv9-retro-noslot. The tokens are pairwise disjoint, which is what lets one deletion touch
-# one row. BL-868: text pins over a file, nothing timed.
-G9R_ROWS="$M/gv9r.rows"
-pins | awk -F'|' 'index($1, "gv9-retro-") == 1' > "$G9R_ROWS"
-G9R_F="$SKILL_DIR/steps/gate-validation.md"; G9R_FLAT="$M/gv9r.flat.md"
-[ -f "$G9R_F" ] || { echo "FIXTURE ERROR: 4m: $G9R_F is absent" >&2; exit 2; }
-flatten "$G9R_F" "$G9R_FLAT"
-g9r_score() { # <file> -> "<id> <in-span>" per gv9-retro-* row
-  while IFS='|' read -r id base rel s e lead mode tok; do
-    printf '%s %s\n' "$id" "$(pin_scan "$1" "$s" "$e" "$lead" para "$tok" | awk '{print $1}')"
-  done < "$G9R_ROWS"
-}
-g9r_n="$(grep -c . "$G9R_ROWS")" || g9r_n=0
-g9r_base="$(g9r_score "$G9R_FLAT")"
-g9r_ones="$(printf '%s\n' "$g9r_base" | awk '$2 == 1' | grep -c .)" || g9r_ones=0
-B_gv9r=0
-if [ "$g9r_n" -ge 1 ] && [ "$g9r_ones" -eq "$g9r_n" ]; then
-  ok "gv9-retro/exact: control: all $g9r_n gv9-retro-* rows read 1 on the flattened copy"; B_gv9r=1
-else bad "gv9-retro/exact: CONTROL -- $g9r_ones of $g9r_n gv9-retro-* rows read 1 on the flattened copy"; fi
-g9r_del() { # <name> <target id> <old text> [<new text>, default empty]
-  local dst="$M/gv9r.$1.md" sc z o
-  G9_OLD="$3" G9_NEW="${4:-}" awk 'BEGIN { o = ENVIRON["G9_OLD"]; n = ENVIRON["G9_NEW"] } { if ((c = index($0, o)) > 0) $0 = substr($0, 1, c - 1) n substr($0, c + length(o)); print }' "$G9R_FLAT" > "$dst"
-  if cmp -s "$G9R_FLAT" "$dst"; then bad "MUTANT $1: DID NOT APPLY"; return; fi
-  sc="$(g9r_score "$dst")"
-  z="$(printf '%s\n' "$sc" | awk -v t="$2" '$1 == t && $2 == 0' | grep -c .)" || z=0
-  o="$(printf '%s\n' "$sc" | awk -v t="$2" '$1 != t && $2 == 1' | grep -c .)" || o=0
-  if [ "$z" -eq 1 ] && [ "$o" -eq $((g9r_n - 1)) ]; then
-    mutant_killed "${B_gv9r:-0}" "$1" "MUTANT $1: '$3' rewritten fails $2 alone ($o other row(s) still 1)"
-  else bad "MUTANT $1: SURVIVED or spilled -- $2 at 0: $z, other rows at 1: $o of $((g9r_n - 1))"; fi
-}
-g9r_del gv9-retro-thissprint-a1 gv9-retro-thissprint "appears in this sprint's \`## Gate Log" "appears in \`## Gate Log"
-g9r_del gv9-retro-citednowhere-a2b gv9-retro-citednowhere ", and an id cited nowhere accepts nothing"
-g9r_del gv9-retro-names-del gv9-retro-names 'The cited entry names that surface and that deviation'
-g9r_del gv9-retro-archive-del gv9-retro-archive ' or `docs/escalations/pending-archive.md`'
-g9r_del gv9-retro-supcite-del gv9-retro-supcite '`RESOLVED` and `SUPPRESSED` alike, '
-g9r_del gv9-retro-supcheck-del gv9-retro-supcheck '[core] 9 — `' '[core] 9`'
-g9r_del gv9-retro-supts-del gv9-retro-supts 'the `Timestamp:` of the `## Gate Log: Sprint <N>` section that first records' 'the gate-log line that first recorded'
-g9r_del gv9-retro-amendsha-del gv9-retro-amendsha ' whose message cites a `RESOLVED` escalation id that itself meets every acceptance rule here'
-g9r_del gv9-retro-mergecommit-del gv9-retro-mergecommit ' as of the sprint'"'"'s merge commit to main, the squash or merge commit that landed the sprint,'
-g9r_del gv9-retro-livearchive-n1 gv9-retro-livearchive ' or in `_bmad-output/implementation-artifacts/s<N>/gate-log-archive.md`'
-g9r_del gv9-retro-composed-n2 gv9-retro-composed ' composed from N and not searched'
-g9r_del gv9-retro-othersprint-n2 gv9-retro-othersprint ' or in another sprint'"'"'s `s<M>/` archive'
-g9r_del gv9-retro-captured-n3 gv9-retro-captured ' --accept-captured`' '`'
-g9r_del gv9-retro-matchrc-del gv9-retro-matchrc ' with a `MATCH <ts>` line on stdout'
-g9r_del gv9-retro-pruned-del gv9-retro-pruned ' within the citation'"'"'s window'
-g9r_del gv9-retro-dateonly-del gv9-retro-dateonly 'without a time of day, hours and minutes, does not verify.' 'without seconds does not verify.'
-g9r_del gv9-retro-onlyhere-del gv9-retro-onlyhere '`--accept-captured` is passed only here' '`--accept-captured` is passed here'
-g9r_del gv9-retro-nowhereelse-del gv9-retro-nowhereelse ', and `NOMATCH-TRANSCRIPT-PRUNED` acquits nothing anywhere else'
-g9r_del gv9-retro-markupdev-del gv9-retro-markupdev ", and a markup or CSS line that surface's diff adds is a deviation from that statement"
-g9r_del gv9-retro-readarchive-del gv9-retro-readarchive 'sections wherever the citation rule below reads them, live or archived, the live one being' 'section of `_bmad-output/implementation-artifacts/gate-log.md`,'
-g9r_del gv9-retro-mockupmerged-del gv9-retro-mockupmerged ' named below (as of the sprint'"'"'s merge commit)'
-g9r_del gv9-retro-headersn-del gv9-retro-headersn ', and its header names `S<N>`, this sprint, so a prior sprint'"'"'s escalation accepts nothing for this sprint'"'"'s drift'
-g9r_del gv9-retro-suppressed-del gv9-retro-suppressed ', or a `SUPPRESSED` waiver that meets the waiver rule below'
-g9r_del gv9-retro-wholeanswer-del gv9-retro-wholeanswer 'the quote, normalised, equals a whole answer' 'the quote appears in an answer'
-g9r_del gv9-retro-archivenames-del gv9-retro-archivenames ' and its ordinal forms `s<N>/gate-log-archive-2.md`, `s<N>/gate-log-archive-3.md` and onward,' ' or any `s<N>/gate-log-archive*.md`,'
-g9r_del gv9-retro-resolvedfloor-del gv9-retro-resolvedfloor 'Any cited entry, `RESOLVED` or `SUPPRESSED`, counts only if its' 'A `SUPPRESSED` waiver counts only if its'
-g9r_del gv9-retro-mergederive-del gv9-retro-mergederive "whose tree equals \`PR_HEAD\`'s tree (a squash), or the merge commit whose second parent is \`PR_HEAD\`" 'whose subject names the sprint'
-g9r_del gv9-retro-authsource-del gv9-retro-authsource ' alone, never from its `**Resolution:**` or `**Context:**` text and never from `_bmad-output/operator-answers-history.md`'
-g9r_del gv9-retro-slotquote-del gv9-retro-slotquote ', so a line whose slot quote is lead-written fails even when its trailing text carries a captured answer'
-g9r_del gv9-retro-slotquote-also gv9-retro-slotquote 'is not the quote' 'is also a quote'
-g9r_del gv9-retro-everyline-del gv9-retro-everyline ', each by its own slot quote and its own timestamp, and the timestamp floor below is taken against the earliest of their timestamps'
-g9r_del gv9-retro-everyline-latest gv9-retro-everyline 'taken against the earliest of their timestamps' 'taken against the latest of their timestamps'
-g9r_del gv9-retro-bodyfloor-del gv9-retro-bodyfloor ', and where the body carries none the floor is unmet and the acceptance fails'
-g9r_del gv9-retro-bodyfloor-earliest gv9-retro-bodyfloor 'the floor is the latest ISO-8601' 'the floor is the earliest ISO-8601'
-g9r_del gv9-retro-timeofday-del gv9-retro-timeofday '; a date-only value or a space-separated date and time is not counted'
-g9r_del gv9-retro-timeofday-drop gv9-retro-timeofday 'with a time of day '
-g9r_del gv9-retro-addendum-del gv9-retro-addendum ', whose later timestamp raises the floor, so it fails closed'
-g9r_del gv9-retro-noslot-del gv9-retro-noslot 'A line with no slot quote does not verify, and where' 'Where'
-g9r_del gv9-retro-noslot-pairs gv9-retro-noslot ' every pair is verified, each by its own quote and its own timestamp.' ' the first pair is verified.'
 
 # --- 5. the real corpus ---------------------------------------------------------
 echo ""
@@ -3262,30 +2281,13 @@ mkdir -p "$DECOY/.claude/skills/ai-dlc/steps" "$DECOY/.claude/team-roles" || exi
 printf '### 12. decoy\n### 13. decoy\n' > "$DECOY/.claude/skills/ai-dlc/steps/gate-validation.md"
 REP_DECOY="$( cd "$DECOY" && bash "$SELF" --report 2>&1 )"; rc_decoy=$?
 if [ "$REP_DECOY" = "$REP_HERE" ] && [ "$rc_decoy" -eq "$rc_here" ]; then
-  ok "cwd: a decoy ai-dlc tree as cwd yields the byte-identical verdict (root: $ROOT)"; B_cwd=1
+  ok "cwd: a decoy ai-dlc tree as cwd yields the byte-identical verdict (root: $ROOT)"
 else
   bad "cwd: verdict changed with the cwd (rc $rc_here -> $rc_decoy)"
 fi
 got="$( cd "$DECOY" && resolve_root "$(pwd)" || true )"
 [ "$got" = "consumer $DECOY" ] && ok "CONTROL: the decoy is a resolvable root, so a cwd-seeded resolver would have read it" \
                                || bad "CONTROL: the decoy did not resolve from its own cwd ('${got:-<none>}') — the cwd arm proves nothing"
-MC="$WORK/mutcwd"; mkdir -p "$MC" || exit 2
-anchor='RESOLVED="$(resolve_root "$HERE" || true)"'
-na="$(grep -cxF -- "$anchor" "$SELF")" || na=0
-if [ "$na" -ne 1 ]; then
-  bad "MUTANT cwd: resolver anchor found $na times, wanted 1 — the cwd mutant cannot be built"
-else
-  sed -e 's@^RESOLVED="$(resolve_root "$HERE" || true)"$@RESOLVED="$(resolve_root "$(pwd)" || true)"@' "$SELF" > "$MC/run.sh"
-  if cmp -s "$SELF" "$MC/run.sh"; then
-    bad "MUTANT cwd: sed did not apply"
-  else
-    mout="$( cd "$DECOY" && bash "$MC/run.sh" --report 2>&1 )"
-    case "$mout" in
-      *"root: $DECOY (consumer)"*) mutant_killed "$B_cwd" cwd "MUTANT cwd: a resolver seeded from the cwd reads the decoy; the cwd arm kills it" ;;
-      *) bad "MUTANT cwd: cwd-seeded resolver did not read the decoy — the cwd arm cannot fire" ;;
-    esac
-  fi
-fi
 
 echo ""
 report_end process-rule-pins

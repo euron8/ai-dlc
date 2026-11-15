@@ -55,8 +55,6 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_a1=0; B_a3=0
 
 # The instruction, as a line pattern. Deliberately loose on what sits between the verb and
 # the noun -- "append a changelog", "append a brief changelog", "Append the step's
@@ -112,7 +110,7 @@ set -- $(cat "$mapfile_files")
 # --- 1. NO PRESCRIPTION NAMES A DURABLE TARGET --------------------------------
 n_off="$(offenders "$@" | grep -c . || true)"
 if [ "$n_off" -eq 0 ]; then
-  ok "every changelog prescription names the sprint slot or a story file"; B_a1=1
+  ok "every changelog prescription names the sprint slot or a story file"
 else
   bad "$n_off prescription(s) name neither the sprint slot nor a story"
   offenders "$@" | cut -c1-160 | sed 's/^/        /'
@@ -138,7 +136,7 @@ fi
 # phrase-keyed test would be satisfied by the pointers alone -- green with the section they
 # point at deleted, which is the exact shape of a check that cannot fail.
 if grep -qE '^#{2,3} Where a changelog is written' "$GATEPROC"; then
-  ok "the canonical declaration section is in _gate-procedures.md"; B_a3=1
+  ok "the canonical declaration section is in _gate-procedures.md"
 else
   bad "no 'Where a changelog is written' SECTION in _gate-procedures.md -- the pointers dangle"
 fi
@@ -149,99 +147,19 @@ else
   bad "  only $n_point file(s) reference the declaration -- the path is being restated again"
 fi
 
-# --- 4. MUTATION: point one convergence line back at the durable artifact -----
-# Prove assertion 1 measures the TARGET rather than the presence of the word. Built as a
-# copy and guarded with cmp -s so a sed that matched nothing cannot pass as a mutation.
+# --- 4. CONTROL: a plain copy of one real step file reads clean and non-empty -
+# Without it a copy that fails to read emits nothing, and "no offenders" scores as a pass
+# rather than as a broken run.
 SRC="$SKILLDIR/steps/research-requirements.md"
 [ -f "$SRC" ] || { echo "FIXTURE ERROR: research-requirements.md not found at $SRC" >&2; exit 2; }
-# The revert this mutant models is the WHOLE prescription going back to naming the durable
-# artifact -- the path AND the pointer, since leaving either behind would let the
-# classifier pass it for a reason a real regression would not supply.
-MUT1="$WORK/mutant-durable.md"
-# Two independent substitutions rather than one, because the prescription wraps across
-# four lines and the path and the pointer land on different ones.
-sed -e 's|_bmad-output/planning-artifacts/s<N>/changelog-prd.md|the PRD|' \
-    -e 's|"Where a changelog is written"|the step loop|' \
-    "$SRC" > "$MUT1" || exit 2
-if cmp -s "$SRC" "$MUT1"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- the convergence line was rewritten" >&2
-  echo "  update the sed patterns in assertion 4 to match the real prescription" >&2
-  exit 2
-fi
-if grep -q 's<N>/changelog-prd.md' "$MUT1" || grep -q 'Where a changelog is written' "$MUT1"; then
-  echo "FIXTURE ERROR: mutation left the slot path or the pointer in place -- it would be" >&2
-  echo "  measuring the leftover rather than the revert" >&2
-  exit 2
-fi
-if [ "$(offenders "$MUT1" | grep -c . || true)" -ge 1 ]; then
-  mutant_killed "$B_a1" prd-durable-target "MUTATION: a prescription pointed back at the durable artifact is reported"
-else
-  bad "MUTATION: a durable target was NOT reported -- assertion 1 proves nothing"
-fi
 
-# --- 4b. MUTATION: same probe against requirements.md's changelog prescription ---
-# requirements.md (the `feature`/`carry-over` merge of discovery +
-# research-requirements) carries its own convergence changelog line at
-# s<N>/changelog-requirements.md. It is authored by a concurrent hand and may not
-# be on disk yet; report that plainly and skip rather than FIXTURE ERROR, since a
-# fixture that could not fire must not print a false PASS or a false FIXTURE ERROR.
-REQSRC="$SKILLDIR/steps/requirements.md"
-if [ -f "$REQSRC" ]; then
-  echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/requirements.md"
-  MUT1B="$WORK/mutant-durable-requirements.md"
-  sed -e 's|_bmad-output/planning-artifacts/s<N>/changelog-requirements.md|the PRD|' \
-      -e 's|"Where a changelog is written"|the step loop|' \
-      "$REQSRC" > "$MUT1B" || exit 2
-  if cmp -s "$REQSRC" "$MUT1B"; then
-    echo "FIXTURE ERROR: mutation matched nothing -- requirements.md's convergence line" >&2
-    echo "  was rewritten; update the sed patterns in assertion 4b to match it" >&2
-    exit 2
-  fi
-  if grep -q 's<N>/changelog-requirements.md' "$MUT1B" || grep -q 'Where a changelog is written' "$MUT1B"; then
-    echo "FIXTURE ERROR: mutation left the slot path or the pointer in place in" >&2
-    echo "  requirements.md -- it would be measuring the leftover rather than the revert" >&2
-    exit 2
-  fi
-  if [ "$(offenders "$MUT1B" | grep -c . || true)" -ge 1 ]; then
-    mutant_killed "$B_a1" requirements-durable-target "MUTATION: requirements.md pointed back at the durable artifact is reported"
-  else
-    bad "MUTATION: requirements.md durable target was NOT reported -- assertion 1 proves nothing for it"
-  fi
-else
-  echo "  SKIP  requirements.md not yet on disk -- assertion 4b cannot fire"
-fi
-
-# --- 5. MUTATION: delete the canonical declaration ----------------------------
-# Assertion 3 and assertion 1 must fail for DIFFERENT reasons, so this mutant is checked
-# against assertion 3 only and then asserted NOT to trip assertion 1. Two failures would
-# mean the assertions are entangled and one of them is vacuous.
-MUT2="$WORK/mutant-nodecl.md"
-grep -vE '^#{2,3} Where a changelog is written' "$GATEPROC" > "$MUT2" || exit 2
-if cmp -s "$GATEPROC" "$MUT2"; then
-  echo "FIXTURE ERROR: mutation matched nothing -- the declaration heading was renamed" >&2
-  exit 2
-fi
-if grep -qE '^#{2,3} Where a changelog is written' "$MUT2"; then
-  bad "MUTATION: the declaration survived its own deletion -- assertion 3 proves nothing"
-else
-  mutant_killed "$B_a3" declaration-deleted "MUTATION: deleting the canonical declaration is detected"
-fi
-if [ "$(offenders "$MUT2" | grep -c . || true)" -eq 0 ]; then
-  ok "  and it leaves assertion 1 green -- the two assertions are not entangled"
-else
-  bad "  the declaration mutant also tripped the target assertion -- one of them is vacuous"
-fi
-
-# --- 6. UNMUTATED CONTROL -----------------------------------------------------
-# A copy made the same way, unmutated. Without it a mutant that dies on a malformed copy
-# emits nothing, and "no offenders" scores as a pass rather than as a broken run.
 CTRL="$WORK/control.md"
 cp "$SRC" "$CTRL" || exit 2
 if [ "$(prescriptions "$CTRL" | grep -c . || true)" -ge 1 ] \
    && [ "$(offenders "$CTRL" | grep -c . || true)" -eq 0 ]; then
-  ok "  control: an unmutated copy read the same way is still clean and still non-empty"
+  ok "  control: a plain copy read the same way is still clean and still non-empty"
 else
-  bad "  the unmutated copy did not read clean -- assertions 4-5 are measuring the harness"
+  bad "  the plain copy did not read clean -- the harness is not reading step files"
 fi
 
 echo ""

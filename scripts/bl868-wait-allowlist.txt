@@ -14,4 +14,4 @@ core/fixtures/wait-beat-liveness/run.sh	wbl-clock-shim-probe	the clock shim prob
 core/fixtures/wait-beat-liveness/run.sh	wbl-clock-shim-control	the clock shim control: one real 1s sleep whose outcome is which binary it reached
 core/fixtures/wait-beat-liveness/run.sh	wbl-clock-ip-probe	the in-process clock probe: sleep is the clock function, no real sleep
 core/fixtures/wait-beat-liveness/run.sh	wbl-clock-ip-control	the in-process clock control: which binary the sleep reached
-core/fixtures/presuite-present-key/run.sh	ppk-l1-control-child	L1.control's live child: it must exist while the scoped listing is read, and is killed by pid and reaped at `kill "$SLP" 2>/dev/null; wait "$SLP"`; no elapsed time decides a verdict
+core/fixtures/presuite-units/run.sh	psu-meet-bound	the read timeout only ends a pool that cannot meet: the verdict is the other step's token arriving on a fifo, whose bytes die with its last fd, so a serial pool fails under any bound and a concurrent one returns on the token; the bound is 120 s where steps run together and 3 s only under m1

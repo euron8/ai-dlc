@@ -18,7 +18,7 @@
 # BL-880 (receipts R1 generic pass): 140 -> 118 *, 95 -> 83 validator, four agreeing counted runs of the change (two
 # on e3d2dfc35, one rebased on f11a8e566, one on its comment-only fold; each read 118 * / 83 validator). R1's generic pass now scores six receipts filtered from $P's ledger, not all twelve across $P and
 # $PH, so each FIRED run (j1p's first run and the m-r9call copy) scores six fewer receipts and makes no $PH generic call.
-126 *
-91 scripts/validate-backlog-receipts.sh
+68 *
+44 scripts/validate-backlog-receipts.sh
 4 scripts/validate-backlog-size.sh
 8 scripts/backlog-reverify.sh

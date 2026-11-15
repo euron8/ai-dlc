@@ -10,5 +10,4 @@
 !core/schemas/pause-routing.json
 !core/schemas/harness-origin.json
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh

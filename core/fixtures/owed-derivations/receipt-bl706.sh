@@ -5,8 +5,7 @@
 #   exit 0   every cell run holds
 #   exit 1   a cell failed
 #   exit 9   the receipt cannot measure: a subject is missing, or a world could not be built
-#   <cell groups> is a space-separated subset of: a bd c e f g h i j k   (default: all). A mutant battery passes
-#   only the groups where its mutant decides, plus its twins.
+#   <cell groups> is a space-separated subset of: a bd c e f g h i j k   (default: all).
 #   Cells: a  core paths changed, no fence names them -> record present with 0 OWED rows (the reader prints it)
 #          b  a derivation reading a changed file its command line never names -> NEWLY-FAILING, recorded
 #          c  no fence in scope -> record created
@@ -26,8 +25,7 @@
 #             NOTE row for a seeded untracked file, its SUMMARY row (a6) and its UNASSESSABLE row for a fence the validator
 #             refuses (b6) and its INFO out-of-scope row for a past-sprint file (b7) each reach the manifest as one 4-field
 #             NOTE derivation-* row
-#   The negative for cell a (the code before this change leaves NO record on the same world) is the mutant that
-#   deletes the call; run.sh scores it. This script never names a git ref of the distribution.
+#   This script never names a git ref of the distribution.
 set -uo pipefail
 H="$(cd "$(dirname "$0")" && pwd)"
 pick() { for c in "$@"; do [ -n "$c" ] && [ -e "$c" ] && { printf '%s' "$c"; return; }; done; }

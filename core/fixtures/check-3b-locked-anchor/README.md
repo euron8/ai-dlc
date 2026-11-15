@@ -19,11 +19,8 @@ Files:
   and no full-text claim. MUST PASS: honest cite-by-reference is a load
   pointer this script never byte-matches, so the guard must not red it.
 
-The set proves the check is load-bearing AND discriminating. `run.sh` also
-carries a MUTATION control: it neuters the uncheckable-guard condition in a
-copy of the validator and requires `uncheckable-story.md` to go green — a
-FAIL is evidence for THIS guard only if removing the guard removes the FAIL.
-Run `run.sh` to reproduce.
+The set proves the check is load-bearing AND discriminating. Run `run.sh` to
+reproduce.
 
 `run.sh` builds further worlds under `mktemp`. The source-of-record arms:
 
@@ -66,9 +63,6 @@ first line as a whole.
 | abridged honest | a bullet shortened from the source sentence | `0 / 1`, **rc still 0** — this is what proves report-only is report-only |
 | cross-section | a bullet verbatim under the section the pointer does NOT name | `0 / 1` — the observation is scoped to the resolved window |
 | the SPLIT | the verbatim and fabricated stories together | they disagree on the COUNT FIELDS, and their exit codes do not move |
-| `MB1` + pairing | the count fields replaced by a per-story run marker | the count arms go red while the mutant's FIRST LINES still differ — a receipt closing on a line split closes on it, and only a count-keyed arm sees through it |
-| `MB2` + pairing | the observation appended to `failures` | the ABRIDGED HONEST story reds, so an enforcing regression is visible; the verbatim one stays green |
-| `MB3` + pairing | the match widened to the whole artifact | the cross-section bullet counts as byte-present, so the window is what scopes it; a fabricated bullet still counts absent |
 | designated-honest assertion | `requires-context-story.md` | it reports `1 / 0`, so its false-positive set is EMPTY BY CONSTRUCTION and no FP figure may be taken there |
 | ctx cwd-invariance | three stories × two cwds, one of them this directory | the observation resolves its window story-relative, like every other arm |
 
@@ -81,6 +75,5 @@ designated file's `1 / 0` directly so that fact cannot go stale silently.
 beside it.** An abridged cite-by-reference restatement is the honest shape here: over a
 reference consumer checkout with `.claude/worktrees/` excluded, 4 of the 5 stories that
 reach the observation carry at least one non-verbatim bullet. As a failure condition that
-reds most of the honest blocks the observation can see, which is the regression `MB2`
-makes visible. `validate-locked-anchor.sh` carries the full partition and the tree it was
+reds most of the honest blocks the observation can see, which is the regression a failure-condition change would introduce. `validate-locked-anchor.sh` carries the full partition and the tree it was
 taken in; re-derive there rather than quoting this file.

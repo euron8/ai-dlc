@@ -27,3 +27,5 @@ core/team-roles/pm-escalated.md
 !core/scripts/serial-remediation-worklist.sh
 # SRT1 and SR_LINE read the real rulebook sentence the join's SEAT_ROW_TOKEN must match on one line.
 core/skills/ai-dlc/steps/_gate-procedures.md
+# The shard driver: the parent's coverage join reads it. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.
+core/fixtures/remediator-shard-join-b/run.sh

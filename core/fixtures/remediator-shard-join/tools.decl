@@ -4,6 +4,7 @@ basename
 bash
 cat
 cmp
+comm
 cp
 cut
 date

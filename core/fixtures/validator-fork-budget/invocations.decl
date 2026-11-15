@@ -5,10 +5,10 @@
 # moves with files added to core/**/*.sh, scripts/** or .githooks/**. Measured by one counted hermetic-run.sh run on this
 # tree (509); on the 0.1094.0-based build the same fix read 484, 484 with one more scripts/*.txt, and 488 with one more
 # small-world file (+4, one file in four worlds).
-509 *
-8 scripts/validate-enforcement-map.sh
-18 inproc:scripts/validate-enforcement-map.sh
-4 scripts/fork-profile.sh
+172 *
+5 scripts/validate-enforcement-map.sh
+7 inproc:scripts/validate-enforcement-map.sh
+3 scripts/fork-profile.sh
 # Re-measured for BL-878 (validator-fork-budget in process) from two agreeing counted hermetic-run.sh runs. Base 0bd891bd7
 # declares 1116 and 22; the 22 validator starts were, by logged parent: 16 from receipt-bl898.sh (5 full-run worlds plus
 # m16-m19's 4+2+2+3), 2 from receipt-bl981.sh's live run, 2 from m20's stub receipt run, 2 from scripts/fork-profile.sh

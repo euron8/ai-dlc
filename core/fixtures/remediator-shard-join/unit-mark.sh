@@ -175,7 +175,7 @@ else bad "MK7: SKIP/no-verdict (skip=$(rc_ a-skip) n=$_n crash=$(rc_ a-crash) w=
 # MK8: exit 4 is the sibling's HARNESS fault (--check-shard and --check-part headers: a self-probe or mktemp that
 # failed, a shard never parsed), no verdict on the file: from either sibling, one WARN line BEFORE the MARKED line
 # and no refusal remedy. Control in the same drive: the same stand-ins exiting 2 -> 64, bytes unchanged.
-# <wfd> is the mark to drive, so MK8m (below) runs this same predicate over a mutated copy.
+# <wfd> is the mark to drive.
 p_mk8() { # <wfd> -> MK8_H (1: both exit-4 marks held), MK8_C (1: both exit-2 refusals held)
   local _e="$EWFD" _t _w _wl _ml
   EWFD="$1"; MK8_H=1; MK8_C=1
@@ -192,27 +192,10 @@ p_mk8() { # <wfd> -> MK8_H (1: both exit-4 marks held), MK8_C (1: both exit-2 re
   for _t in a-h4c p-h4c; do { [ "$(rc_ $_t)" = 64 ] && same_ $_t && has "$sw/$_t.out" "REFUSED: stand-in refuses"; } || MK8_C=0; done
 }
 cp "$st/merge-in" "$eng/merge-adversarial-shards.sh"; cp "$st/join-in" "$eng/join-remediator-shards.sh"
-p_mk8 "$EWFD"; B_MK8=0
-if [ "$MK8_H" = 1 ] && [ "$MK8_C" = 1 ]; then B_MK8=1
+p_mk8 "$EWFD"
+if [ "$MK8_H" = 1 ] && [ "$MK8_C" = 1 ]; then
   ok "MK8: --check-shard and --check-part exiting 4 (a harness fault, no verdict) -> one WARN, then MARKED, no remedy; the same stand-ins exiting 2 -> 64, bytes unchanged (the control)"
 else bad "MK8: the harness-fault exit (harness=$MK8_H control=$MK8_C a=$(rc_ a-h4) p=$(rc_ p-h4): $(head -2 "$sw/a-h4.out" | tr '\n' ' '))"; fi
-# MK8m: exit 4 relayed as a refusal (the exit-2 relay arm widened to take it). Built in a copy of the stand-in engine
-# dir, wait-for-deliverable.sh alone mutated (cmp -s guarded): MK8's exit-4 half must die and its control half hold.
-. "$(cd "$UM_HERE/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: $NAME: cannot source lib/mutant.sh" >&2; exit 2; }
-mk8d="$(mktemp -d "$sw/mk8m.XXXXXX")" && cp "$eng"/*.sh "$mk8d/" || exit 2
-if M_OLD="          2) mk_jr_=\"\$(printf '%s\\n' \"\$MK_JO\" | grep '^REFUSED:')\" || mk_jr_=\"\$MK_JO\"" \
-   M_NEW="          2|4) mk_jr_=\"\$(printf '%s\\n' \"\$MK_JO\" | grep '^REFUSED:')\" || mk_jr_=\"\$MK_JO\"" \
-   python3 - "$EWFD" "$mk8d/wait-for-deliverable.sh" <<'PY' && ! cmp -s "$EWFD" "$mk8d/wait-for-deliverable.sh" && bash -n "$mk8d/wait-for-deliverable.sh"
-import os, sys
-t = open(sys.argv[1], encoding="utf-8").read(); o = os.environ["M_OLD"]
-if t.count(o) != 1: sys.exit(3)
-open(sys.argv[2], "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
-PY
-then
-  p_mk8 "$mk8d/wait-for-deliverable.sh"
-  if [ "$MK8_H" = 0 ] && [ "$MK8_C" = 1 ] && [ "$(rc_ a-h4)" = 64 ]; then mutant_killed "$B_MK8" MK8m "MK8m exit 4 relayed as a refusal: KILLED by [MK8] (rc 64 on a harness fault) while its exit-2 control held"
-  else bad "MK8m exit 4 relayed as a refusal: harness half held=$MK8_H, control held=$MK8_C, a rc=$(rc_ a-h4) (expected 0, 1, 64)"; fi
-else bad "MK8m: FIXTURE STALE -- the exit-2 relay anchor is not in wait-for-deliverable.sh exactly once; re-anchor it, never relax the arm"; fi
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
 echo "$NAME: $fails assertion(s) FAILED" >&2
 exit 1

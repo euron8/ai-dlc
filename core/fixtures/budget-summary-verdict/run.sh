@@ -31,47 +31,7 @@
 # runs in. The three candidates below are relative to THIS FILE, name both install
 # layouts explicitly, and make the fixture independent of cwd entirely.
 
-# EACH MUTANT IS SCORED ON ITS DECIDING ARM PLUS ONE NAMED TWIN. An ARM is one seeded world plus one
-# predicate (a1warn, f_five, lg, ...), built fresh for every cell and driven through a validator
-# directory and a verdict wrapper. Per push a mutant runs its deciding arm (it must trip) and its twin
-# (an arm the measured matrix shows GREEN for it), so the kill is confined to the arm that owns it. The
-# full mutant x arm matrix is MEASURED by the --matrix argv mode. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. The recorded matrix
-# plus the twin replaces the exact-vector assertion
-# that a mutant fails only its own assertion. Kills go through mutant_killed behind the same-run pass
-# of the unmutated arm (B_<arm>), and an unmutated copy of the LATE validator is asserted green first.
-# MUTANT-MATRIX M1 decides=a1warn twins=a3noflag
-# MUTANT-MATRIX M2 decides=a1warn twins=a6schema
-# MUTANT-MATRIX M3 decides=a5cov twins=a4clean
-# MUTANT-MATRIX M4 decides=a10struck twins=a11marker
-# MUTANT-MATRIX M5 decides=a11marker twins=a10struck
-# MUTANT-MATRIX MF1 decides=f_five twins=- why=the mutated validator trips every arm that drives it, so every one of the 27 arms trips on it and none stays green
-# MUTANT-MATRIX MF2 decides=f_range twins=- why=the mutated validator trips every arm that drives it, so every one of the 27 arms trips on it and none stays green
-# MUTANT-MATRIX MF3 decides=f_history twins=f_five
-# MUTANT-MATRIX MF4 decides=f_spaced twins=- why=the mutated validator trips every arm that drives it, so every one of the 27 arms trips on it and none stays green
-# MUTANT-MATRIX MF5 decides=f_dash twins=- why=the mutated validator trips every arm that drives it, so every one of the 27 arms trips on it and none stays green
-# MUTANT-MATRIX MF6 decides=f8 twins=f9
-# MUTANT-MATRIX MP1 decides=p_basename twins=p_noitem
-# MUTANT-MATRIX MP2 decides=p_noitem twins=p_basename
-# MUTANT-MATRIX MW1 decides=f8 twins=lg
-# MUTANT-MATRIX MW2 decides=f9 twins=f8
-# MUTANT-MATRIX MW3 decides=lg twins=f8
-# MUTANT-MATRIX MW4 decides=vs twins=vt_under
-# MUTANT-MATRIX MW5 decides=vt_more twins=vt_under
-# MUTANT-MATRIX MW6 decides=vt_under twins=vt_more
-# MUTANT-MATRIX ML1 decides=l1b twins=l0eq
-# MUTANT-MATRIX ML2 decides=le_skip twins=l0eq
-# MUTANT-MATRIX ML4 decides=lh_clear twins=l0eq
-# MUTANT-MATRIX ML5 decides=la_amb twins=l0eq
-# MUTANT-MATRIX ML6 decides=ls_same twins=la_amb
-# MUTANT-MATRIX-CONTROL ML0 why=the probe-off copy of the LATE validator beside its siblings must stay green on every LATE arm; it survives by design
-# MUTANT-MATRIX-CONTROL CTRL why=an unmutated copy of the validator staged by the same helper must reproduce the shipped behaviour on a1warn and a5cov; it survives by design
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/budget-summary-verdict/run.sh --matrix
 set -u
-
-MATRIX=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
-MROWS=0
 
 # THE PRE-PUSH GATE INHERITS EVERY AI_DLC_* TUNABLE A CONSUMER SET IN settings.json, and a
 # fixture that drives a validator while inheriting them tests the CONFIG, not the CODE.
@@ -97,25 +57,18 @@ VW="$(dirname "$V")/verdict.sh"
 echo "HERMETIC-CONSUMED core/scripts/verdict.sh"
 
 
-MUT_LIB="$DIR/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
 rc=0
 ok()  { echo "ok: $1"; }
 bad() { echo "FAIL: $1" >&2; rc=1; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-[ -f "$DIR/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: lib/matrix.sh not found" >&2; exit 2; }
-. "$DIR/../lib/matrix.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 VD="$(dirname "$V")"
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "run.sh: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
-# A marker at the scratch root so a validator COPY staged under $WORK/bin resolves its
+# A marker at the scratch root so the validator resolves its
 # root by walking up to $WORK rather than to whatever tree the cwd happens to sit in.
 # Every arm still passes --root explicitly; this only removes the pre-parse resolution
-# as a source of difference between the mutants and the unmutated subject.
+# as a source of difference between arms.
 mkdir -p "$WORK/.claude" "$WORK/bin" "$WORK/runs" || exit 2
 
 # THE STRING IS PINNED AS A LITERAL, BYTE FOR BYTE. The clean line is the one anything
@@ -258,21 +211,11 @@ RETRO_FLAGS="--warn-only --fail-on pipeline-snapshot.md"
 seed_marker() { printf -- '- the old plan SUPERSEDED\n' >> "$1/_bmad-output/pipeline-snapshot.md"; }
 
 # =====================================================================================
-# ARMS, MUTANTS, TWINS AND THE MATRIX.
-#
-# An ARM is one seeded world plus one predicate, run through a validator directory MD (the validator
-# and the siblings it resolves) and a verdict wrapper MW. Every arm builds its OWN fresh world, so a
-# mutant is driven over exactly the state the unmutated arm saw and no arm inherits another's seed.
-# An arm returns 0 when the behaviour HOLDS (GREEN) and non-zero when it TRIPS. Per push each mutant
-# runs its DECIDING arm (it must trip) and ONE named TWIN (it must stay green); the --matrix argv mode
-# runs every mutant over every arm. The unmutated arm's pass in THIS run is the flag B_<arm>, set by
-# the base block above that asserts the same behaviour, and a kill is emitted only through
-# mutant_killed behind that flag.
+# ARMS. An ARM is one seeded world plus one predicate, run through a validator directory (the validator
+# and the siblings it resolves) and a verdict wrapper. Every arm builds its OWN fresh world. An arm returns
+# 0 when the behaviour HOLDS and non-zero when it TRIPS.
 # =====================================================================================
-MUTS="$WORK/muts"; mkdir -p "$MUTS" || exit 2
-MREG=""
 AXC=0
-ARMS="a1warn a3noflag a4clean a5cov a6schema a10struck a11marker f_five f_range f_history f_spaced f_dash f_past f8 f9 p_basename p_noitem lg vs vt_more vt_under l1b l0eq le_skip la_amb ls_same lh_clear"
 axw() { AXD="$(arm_dir "$1")"; }   # axw <world name> -- the SAME world the inline blocks use for that state
 axl() { AXC=$((AXC + 1)); AXL="$1.$AXC"; }
 vtool() { printf '%s/validate-artifact-budget.sh' "$1"; }
@@ -306,103 +249,13 @@ arm_a11marker() { axw marker; seed_clean "$AXD"; seed_snapshot "$AXD" "$INFLIGHT
   drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only
   [ "$(status_of "$AXL")" = 0 ] && has 'WARN: pipeline-snapshot.md marks superseded content in place.' \
     && has 'WARN  this run reported superseded content marked in place and is NOT a clean result.' && ! has "$PASS_LINE"; }
-# the stamp arms: one snapshot line, driven with now pinned. farm_ok = accepted (rc 0, no FUTURE row).
-farm_ok() { axw future; rm -f "$AXD/_bmad-output/pipeline-snapshot-history.md"; seed_clean "$AXD"; seed_stamped "$AXD" "$2" "$IF_HDR"; axl "$3"
-  drive_now "$AXL" "$(vtool "$1")" "$AXD" --only pipeline-snapshot.md
-  [ "$(status_of "$AXL")" = 0 ] && ! grep -q '^FUTURE ' "$OUT"; }
-arm_f_five() { farm_ok "$1" '- 2026-10-14T11:05Z five minutes ahead' f_five; }
-arm_f_range() { farm_ok "$1" '- 2026-10-14T09:55-10:45Z window, and 2026-10-14T12:00Z-12:45Z planned' f_range; }
-arm_f_spaced() { farm_ok "$1" '- 2026-10-14T12:00Z - 12:45Z, 2026-10-14T12:00Z to 12:45Z, 2026-10-14T12:00Z → 12:45Z, 2026-10-14T12:00Z – 12:45Z planned' f_spaced; }
-arm_f_past() { farm_ok "$1" '- 2026-10-14T10:59Z just now' f_past; }
-arm_f_dash() { axw future; rm -f "$AXD/_bmad-output/pipeline-snapshot-history.md"; seed_clean "$AXD"; seed_stamped "$AXD" '- 2026-10-14T12:00Z - DEPLOY DONE' "$IF_HDR"; axl f_dash
-  drive_now "$AXL" "$(vtool "$1")" "$AXD" --only pipeline-snapshot.md
-  [ "$(status_of "$AXL")" = 1 ] && grep -q '^FUTURE .*2026-10-14T12:00Z' "$OUT"; }
 arm_f_history() { axw future; seed_clean "$AXD"; seed_stamped "$AXD" '- nothing notable' "$IF_HDR"
   printf '## Recent Activity\n- 2026-12-01T00:00Z archived future line\n' > "$AXD/_bmad-output/pipeline-snapshot-history.md"
   axl f_history; drive_now "$AXL" "$(vtool "$1")" "$AXD" --only pipeline-snapshot.md
   local _r=0; [ "$(status_of "$AXL")" = 0 ] || _r=1
   rm -f "$AXD/_bmad-output/pipeline-snapshot-history.md"; return "$_r"; }
-arm_f8() { axw wrapper; AW="$AXD"; seed_breach "$AW"
-  seed_stamped "$AW" '- 2026-10-14T12:00Z DEPLOY DONE
-- 2026-10-14T12:05Z MERGED
-- 2026-10-14T12:10Z HANDOFF
-- 2026-10-14T12:15Z DISPATCHED dev
-- 2026-10-14T12:20Z GATE PASS' "$IF_HDR"
-  axl f8; wdrive "$AXL" "$2" "$1"; wcheck "$AXL"; }
-arm_f9() { axw backdated; AB="$AXD"; seed_clean "$AB"
-  seed_stamped "$AB" '- 2026-10-14T12:00Z DEPLOY DONE' "$IF_HDR
-fold | pm-escalated | d1 | 2026-10-14T10:15:40Z | in-flight"
-  printf '{"ts":"2026-10-14T10:17:32Z","name":"pm-escalated","role":"pm"}\n' > "$AB/_bmad-output/spawn-ledger.jsonl"
-  axl f9; BDIR="$1"; bdrive "$AXL" "$2"; BDIR=""; bcheck "$AXL"; }
-pool_world() { axw pool; seed_clean "$AXD"; mkdir -p "$AXD/_bmad-output/planning-artifacts" || exit 2
-  head -c 300000 /dev/zero | tr '\0' 'x' > "$AXD/_bmad-output/planning-artifacts/prd.md"
-  printf '# Carry-over backlog\n### CO-S1-OTHER\n**Status:** OPEN\nunrelated\n### CO-S1-WHOLE-READ-POOL-OLD\n**Status:** CLOSED\nold breach\n' \
-    > "$AXD/_bmad-output/planning-artifacts/carry-over-backlog.md"; }
-arm_p_basename() { pool_world; axl p_basename
-  AI_DLC_READER_WINDOW_TOKENS=200000 drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only --fail-on WHOLE-READ
-  [ "$(status_of "$AXL")" = 0 ]; }
-arm_p_noitem() { pool_world; axl p_noitem
-  AI_DLC_READER_WINDOW_TOKENS=200000 drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only --fail-on whole-read-pool
-  [ "$(status_of "$AXL")" = 1 ] && grep -q 'no OPEN carry-over item cites it' "$OUT"; }
-# the LATE arms
-arm_l1b() { late_world late-off "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight
-$DECO | remediator | r2 | 2026-10-14T10:01:00Z | in-flight
-a1111111111111111 | dev | d1 | 2026-10-14T10:30Z | in-flight
-a1111111111111111 | dev | d2 | 2026-10-14T10:27:45Z | in-flight
-toolu_01LateSubjectBBBBBBBBB | remediator | r3 | 2026-10-14T10:01:00Z | in-flight"
-  axl l1b; ldrive "$AXL" "$(vtool "$1")" "$LW"
-  [ "$(status_of "$AXL")" = 1 ] && grep -qF "$LATE_HEAD" "$(lout "$AXL")" && [ "$(nlate "$AXL")" = 5 ] \
-    && haslate "$AXL" 14 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z \
-    && haslate "$AXL" 17 a1111111111111111 2026-10-14T10:27:45Z 2026-10-14T10:27:46Z && ! grep -q '^BACKDATED ' "$(lout "$AXL")"; }
-arm_l0eq() { late_world late-eq "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:00:03Z | in-flight
-$DECO | remediator | r2 | 2026-10-14T10:00:03Z | in-flight
-toolu_01LateSubjectBBBBBBBBB | remediator | r3 | 2026-10-14T10:00:03Z | in-flight"
-  axl l0eq; ldrive "$AXL" "$(vtool "$1")" "$LW"
-  [ "$(status_of "$AXL")" = 0 ] && [ "$(nlate "$AXL")" = 0 ] && grep -qxF "$PASS_LINE" "$(lout "$AXL")" && ! grep -q 'not judged for LATE' "$(lout "$AXL")"; }
-arm_le_skip() { late_world late-skip "fold-x | pm | p1 | 2026-10-14T10:00:03Z | in-flight
-afffffffffffffff0 | qa | q1 | 2026-10-14T10:00:03Z | in-flight
-fix (commit 1a2b3c4d) | qa | q2 | 2026-10-14T10:00:03Z | in-flight
-a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:09:00Z | delivered-reachable
-a7ffc8dcd555207b8 | remediator | r2 | 2026-10-14T10:09:00Z | stopped
-a7ffc8dcd555207b8 | remediator | r3 | 2026-10-14T10:00:03Z | in-flight"
-  axl le_skip; ldrive "$AXL" "$(vtool "$1")" "$LW"
-  [ "$(status_of "$AXL")" = 0 ] && grep -qxF "$LSKIP" "$(lout "$AXL")" && [ "$(nlate "$AXL")" = 0 ]; }
-arm_la_amb() { late_world late-amb "remediator (a7ffc8dcd555207b8 then a1111111111111111) | remediator | r1 | 2026-10-14T10:27:46Z | in-flight"
-  axl la_amb; ldrive "$AXL" "$(vtool "$1")" "$LW"
-  [ "$(status_of "$AXL")" = 0 ] && grep -qxF "$LAMB" "$(lout "$AXL")" && [ "$(nlate "$AXL")" = 0 ]; }
-arm_ls_same() { late_world late-same "$LSCELL | remediator | r1 | 2026-10-14T10:01:00Z | in-flight"
-  axl ls_same; ldrive "$AXL" "$(vtool "$1")" "$LW"
-  [ "$(status_of "$AXL")" = 1 ] && [ "$(nlate "$AXL")" = 1 ] \
-    && haslate "$AXL" 14 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z && ! grep -q 'ambiguous agent cell' "$(lout "$AXL")"; }
-arm_lh_clear() { AXC=$((AXC + 1)); late_clear "lc$AXC" "$(vtool "$1")" late-clear
-  [ "$LH_FIRST" = 2 ] && [ "$(status_of "lc$AXC-1")" = 1 ] && [ "$LH_CHANGED" = 1 ] && [ "$LH_SECOND" = 0 ] \
-    && [ "$(status_of "lc$AXC-2")" = 0 ] && ! grep -qF "$LATE_HEAD" "$(lout "lc$AXC-2")"; }
-arm_lg() { late_world late-wrap "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight"
-  LGW="$LW"; axl lg; gdrive "$AXL" "$2"; gcheck "$AXL"; }
-arm_vs() { late_world vskip "fold-x | pm | p1 | 2026-10-14T10:00:03Z | in-flight"
-  axl vs; vdrive "$AXL" "$2" "$LW"
-  [ "$(status_of "$AXL")" = 0 ] && grep -qxF 'PASS  validate-artifact-budget.sh' "$WORK/runs/$AXL.out" && vline "$AXL" "$VSKIP" && ! vmore "$AXL"; }
-vt_rows() { local n="$1" i=1 rows=""
-  while [ "$i" -le "$n" ]; do rows="${rows}${rows:+
-}a7ffc8dcd555207b8 | remediator | r$i | 2026-10-14T10:0$i:00Z | in-flight"; i=$((i + 1)); done
-  printf '%s' "$rows"; }
-arm_vt_more() { late_world vtmore "$(vt_rows 8)"; local vw="$LW" d v n
-  if [ "$1" = "$VD" ] && [ -n "${VTM_D:-}" ]; then d="$VTM_D"; else axl vtd; d="$AXL"; ldrive "$d" "$(vtool "$1")" "$vw"; [ "$1" != "$VD" ] || VTM_D="$d"; fi
-  n=$(( $(vmatched "$d") - 6 ))
-  axl vtm; v="$AXL"; vdrive "$v" "$2" "$vw"
-  [ "$(nlate "$d")" = 8 ] && [ "$n" -gt 0 ] && [ "$(status_of "$v")" = 1 ] && [ "$(vshown "$v")" = 6 ] \
-    && grep -qxF "      … $n more matching line(s); run scripts/ai-dlc/validate-artifact-budget.sh directly for all" "$WORK/runs/$v.out"; }
-arm_vt_under() { late_world vtunder "$(vt_rows 5)"; local vw="$LW" d v
-  if [ "$1" = "$VD" ] && [ -n "${VTU_D:-}" ]; then d="$VTU_D"; else axl vud; d="$AXL"; ldrive "$d" "$(vtool "$1")" "$vw"; [ "$1" != "$VD" ] || VTU_D="$d"; fi
-  axl vuu; v="$AXL"; vdrive "$v" "$2" "$vw"
-  [ "$(vmatched "$d")" = 6 ] && [ "$(status_of "$v")" = 1 ] && [ "$(vshown "$v")" = 6 ] && ! vmore "$v"; }
 
-# --- 1, 3, 4, 5, 6, 10, 11. THE BASE: each arm on the UNMUTATED validator, in this run. ----------
-# The mutant block below scores its mutants on these same arm functions, and a kill is emitted only
-# behind the flag set here. Arm 1 is the run that filed the defect (--warn-only over an unhardened
-# breach); 3 the blocking posture; 4 the byte-identical PASS line in both drive modes; 5 the coverage
-# qualifier and its control; 6 the schema channel; 10 the struck row under retro's literal flags; 11 the
-# superseded marker under --warn-only.
+# --- 1, 3, 4, 5, 6, 10, 11. THE BASE: each arm on the validator, in this run. ----------
 for _a in a1warn a3noflag a4clean a5cov a6schema a10struck a11marker; do
   case "$_a" in
     a1warn)   _t="--warn-only over an unhardened breach exits 0 and closes with the WARN summary" ;;
@@ -414,8 +267,7 @@ for _a in a1warn a3noflag a4clean a5cov a6schema a10struck a11marker; do
     a11marker) _t="a superseded marker under --warn-only exits 0, names the marker in the summary, and prints no PASS line" ;;
   esac
   if "arm_$_a" "$VD" "$VW"; then ok "[$_a] $_t"
-    case "$_a" in a1warn) B_a1warn=1 ;; a5cov) B_a5cov=1 ;; a10struck) B_a10struck=1 ;; a11marker) B_a11marker=1 ;; esac
-  else bad "[$_a] the unmutated validator tripped this arm: exit $(status_of "$AXL")"; sed 's/^/      /' "$OUT" >&2; fi
+  else bad "[$_a] the validator tripped this arm: exit $(status_of "$AXL")"; sed 's/^/      /' "$OUT" >&2; fi
 done
 # --- 0. THE SEED IS ACTUALLY MEASURED, read from the a1warn and a4warn drives above ----------------
 if ! grep -q '^OVER  _bmad-output/gate-log\.md' "${SEED_BREACH_OUT:-/dev/null}"; then
@@ -484,9 +336,7 @@ fi
 # the same way. The two controls below are the difference between "no violation" and
 # "nothing was looked at".
 #
-# THE PREDICATE IS A FUNCTION, AND M1 BELOW CALLS THE SAME ONE. An absence-shaped arm
-# needs a mutant, and a mutant that is scored by a hand-written second copy of the
-# predicate proves the copy, not the arm. `join_violations` is the only implementation.
+# THE PREDICATE IS A FUNCTION: `join_violations` is the only implementation.
 join_violations() { # join_violations [label-filter]  -> prints violating labels
   awk -F'\t' -v want="${1:-}" '$3==1 && $4==1 && (want=="" || $1==want) {print $1}' "$LEDGER"
 }
@@ -554,8 +404,6 @@ while IFS='|' read -r nlabel nline; do
   drive_now "nm-$nlabel" "$V" "$AF" --only pipeline-snapshot.md
   if [ "$(status_of "nm-$nlabel")" != "0" ] || grep -q '^FUTURE ' "$OUT"; then
     nm_ok=0; bad "near-miss '$nlabel' was refused: $(grep '^FUTURE ' "$OUT" | head -1)"
-  else
-    case "$nlabel" in range) B_f_range=1 ;; five) B_f_five=1 ;; spaced) B_f_spaced=1 ;; esac
   fi
 done <<'NEAR'
 range|- 2026-10-14T09:55-10:45Z window, and 2026-10-14T12:00Z-12:45Z planned
@@ -582,8 +430,6 @@ while IFS='|' read -r olabel oline; do
   drive_now "off-$olabel" "$V" "$AF" --only pipeline-snapshot.md
   if [ "$(status_of "off-$olabel")" != "1" ] || ! grep -q '^FUTURE .*2026-10-14T12:00Z' "$OUT"; then
     f1c_ok=0; bad "offender twin '$olabel' was accepted: exit $(status_of "off-$olabel")"
-  elif [ "$olabel" = dashtext ]; then
-    B_f_dash=1
   fi
 done <<'OFF'
 dashtext|- 2026-10-14T12:00Z - DEPLOY DONE
@@ -620,7 +466,7 @@ wcheck() { # wcheck <label> -> 0 when the wrapper output carries the remedy and 
 }
 wdrive f8 "$VW" "$(dirname "$V")"
 if wcheck f8; then
-  ok "F8 through verdict.sh under a co-occurring OVER: the stamp FAIL line carries the remedy and all 5 FUTURE rows survive the 6-line cap"; B_f8=1
+  ok "F8 through verdict.sh under a co-occurring OVER: the stamp FAIL line carries the remedy and all 5 FUTURE rows survive the 6-line cap"
 else
   bad "F8 through verdict.sh: stamp remedy or FUTURE rows missing (exit $(status_of f8))"
   sed 's/^/      /' "$WORK/runs/f8.out" >&2
@@ -661,12 +507,12 @@ if [ "$p_seed" -ne 1 ]; then
   echo "FIXTURE ERROR: the 300000-byte prd.md was not reported as an OVER pool row" >&2; exit 2
 fi
 if [ "$(status_of pool-warn)" = "0" ] && [ "$(status_of pool-basename)" = "0" ]; then
-  ok "P1 an over pool under --warn-only, and under --fail-on WHOLE-READ (a label word, not the token), stays rc 0"; B_p_basename=1
+  ok "P1 an over pool under --warn-only, and under --fail-on WHOLE-READ (a label word, not the token), stays rc 0"
 else
   bad "P1 warn-only=$(status_of pool-warn), --fail-on WHOLE-READ=$(status_of pool-basename) (want 0 and 0)"
 fi
 if [ "$(status_of pool-noitem)" = "1" ] && grep -q 'no OPEN carry-over item cites it' "$WORK/runs/pool-noitem.out"; then
-  ok "P2 --fail-on whole-read-pool with no OPEN citing item (an OPEN non-citing and a CLOSED citing one present) is rc 1"; B_p_noitem=1
+  ok "P2 --fail-on whole-read-pool with no OPEN citing item (an OPEN non-citing and a CLOSED citing one present) is rc 1"
 else
   bad "P2 pool with no OPEN citing item: exit $(status_of pool-noitem) (want 1 and the remedy)"
 fi
@@ -685,7 +531,7 @@ fold | pm-escalated | d1 | 2026-10-14T10:15:40Z | in-flight"
 printf '{"ts":"2026-10-14T10:17:32Z","name":"pm-escalated","role":"pm"}\n' > "$AB/_bmad-output/spawn-ledger.jsonl"
 bdrive() { # bdrive <label> <wrapper>
   OUT="$WORK/runs/$1.out"
-  ( cd "$AB" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="${BDIR:-$(dirname "$V")}" \
+  ( cd "$AB" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$(dirname "$V")" \
       bash "$2" validate-artifact-budget --root "$AB" ) > "$OUT" 2>&1
   printf '%s\t%s\t0\t0\n' "$1" "$?" >> "$LEDGER"
 }
@@ -698,7 +544,7 @@ bcheck() { # bcheck <label> -> 0 when the wrapper shows the BACKDATED headline A
 }
 bdrive backdated "$VW"
 if bcheck backdated; then
-  ok "F9 a back-dated in-flight row is refused through verdict.sh, its row and a co-firing FUTURE row both shown"; B_f9=1
+  ok "F9 a back-dated in-flight row is refused through verdict.sh, its row and a co-firing FUTURE row both shown"
 else
   bad "F9 back-dated row through verdict.sh: exit $(status_of backdated), headline, row or FUTURE row missing"
   sed 's/^/      /' "$WORK/runs/backdated.out" >&2
@@ -780,7 +626,7 @@ L1W="$LW"
 ldrive late-off "$V" "$L1W"
 if [ "$(status_of late-off)" = 1 ] && grep -qF "$LATE_HEAD" "$(lout late-off)" && [ "$(nlate late-off)" = 5 ] \
    && haslate late-off 14 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z; then
-  ok "L1a a bare agentId stamped 57 s late is LATE at the gate (rc 1), named with its ledger ts"; B_l1a=1
+  ok "L1a a bare agentId stamped 57 s late is LATE at the gate (rc 1), named with its ledger ts"
 else
   bad "L1a late bare agentId: exit $(status_of late-off), $(nlate late-off) LATE line(s) (want 1 and 5)"
   sed 's/^/      /' "$(lout late-off)" >&2
@@ -793,7 +639,7 @@ haslate late-off 16 a1111111111111111 2026-10-14T10:30Z 2026-10-14T10:27:46Z \
   || bad "L1c the minute-only stamp was not LATE"
 if haslate late-off 17 a1111111111111111 2026-10-14T10:27:45Z 2026-10-14T10:27:46Z \
    && ! grep -q '^BACKDATED ' "$(lout late-off)"; then
-  ok "L1b' a row 1 s EARLY is LATE while BACKDATED stays quiet (inside its tolerance)"; B_l1b="${B_l1a:-0}"
+  ok "L1b' a row 1 s EARLY is LATE while BACKDATED stays quiet (inside its tolerance)"
 else
   bad "L1b' the 1 s early row: LATE missing, or BACKDATED fired: $(grep '^BACKDATED ' "$(lout late-off)" | head -1)"
 fi
@@ -808,7 +654,7 @@ toolu_01LateSubjectBBBBBBBBB | remediator | r3 | 2026-10-14T10:00:03Z | in-fligh
 ldrive late-eq "$V" "$LW"
 if [ "$(status_of late-eq)" = 0 ] && [ "$(nlate late-eq)" = 0 ] && grep -qxF "$PASS_LINE" "$(lout late-eq)" \
    && ! grep -q 'not judged for LATE' "$(lout late-eq)"; then
-  ok "L0 bare, decorated and toolu_ rows stamped equal to their ts are quiet (rc 0, PASS, every row judged)"; B_l0eq=1
+  ok "L0 bare, decorated and toolu_ rows stamped equal to their ts are quiet (rc 0, PASS, every row judged)"
 else
   bad "L0 equal rows: exit $(status_of late-eq), $(nlate late-eq) LATE line(s), or a SKIP count (want 0, 0, none)"
   sed 's/^/      /' "$(lout late-eq)" >&2
@@ -827,7 +673,7 @@ LEW="$LW"
 ldrive late-skip "$V" "$LEW"
 LSKIP='SKIP  _bmad-output/pipeline-snapshot.md: 3 in-flight row(s) not judged for LATE (agent cell does not resolve in this session)'
 if [ "$(status_of late-skip)" = 0 ] && grep -qxF "$LSKIP" "$(lout late-skip)" && [ "$(nlate late-skip)" = 0 ]; then
-  ok "LE three unresolvable rows (bare name, no meta.json, a commit sha) print the SKIP count 3; delivered and stopped rows are not judged"; B_le_skip=1
+  ok "LE three unresolvable rows (bare name, no meta.json, a commit sha) print the SKIP count 3; delivered and stopped rows are not judged"
 else
   bad "LE skip world: exit $(status_of late-skip), $(nlate late-skip) LATE line(s); want rc 0, no LATE, and: $LSKIP"
   sed 's/^/      /' "$(lout late-skip)" >&2
@@ -846,7 +692,7 @@ LA_T1="$(la_ts toolu_01LateSubjectBBBBBBBBB)"; LA_T2="$(la_ts toolu_01LateMinute
 ldrive late-amb "$V" "$LAW"
 LAMB='SKIP  _bmad-output/pipeline-snapshot.md line 14: ambiguous agent cell (2 ids resolve to 2 distinct ts), not judged for LATE'
 if [ "$(status_of late-amb)" = 0 ] && grep -qxF "$LAMB" "$(lout late-amb)" && [ "$(nlate late-amb)" = 0 ]; then
-  ok "LA a cell with two ids of different dispatches ($LA_T1, $LA_T2) SKIPs as ambiguous (2 distinct ts), not judged"; B_la_amb=1
+  ok "LA a cell with two ids of different dispatches ($LA_T1, $LA_T2) SKIPs as ambiguous (2 distinct ts), not judged"
 else
   bad "LA ambiguous cell: exit $(status_of late-amb), $(nlate late-amb) LATE line(s); want rc 0, no LATE, and: $LAMB"
   sed 's/^/      /' "$(lout late-amb)" >&2
@@ -862,7 +708,7 @@ ldrive late-same "$V" "$LSW"
 if [ "$(status_of late-same)" = 1 ] && [ "$(nlate late-same)" = 1 ] \
    && haslate late-same 14 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z \
    && ! grep -q 'ambiguous agent cell' "$(lout late-same)"; then
-  ok "LS an agentId beside its own toolu_ id (one dispatch) stamped 57 s late is LATE (rc 1), named by the agentId"; B_ls_same=1
+  ok "LS an agentId beside its own toolu_ id (one dispatch) stamped 57 s late is LATE (rc 1), named by the agentId"
 else
   bad "LS same-dispatch pair: exit $(status_of late-same), $(nlate late-same) LATE line(s); want rc 1 and exactly the line 14 LATE naming a7ffc8dcd555207b8"
   sed 's/^/      /' "$(lout late-same)" >&2
@@ -900,7 +746,7 @@ a1111111111111111 | dev | d1 | 2026-10-14T10:29:00Z | in-flight"
 late_clear late-clear "$V"
 if [ "$LH_FIRST" = 2 ] && [ "$(status_of late-clear-1)" = 1 ] && [ "$LH_CHANGED" = 1 ] && [ "$LH_SECOND" = 0 ] \
    && [ "$(status_of late-clear-2)" = 0 ] && ! grep -qF "$LATE_HEAD" "$(lout late-clear-2)"; then
-  ok "LH the printed remedy clears: 2 LATE (rc 1), each cell rewritten from its own LATE line, then 0 LATE (rc 0)"; B_lh_clear=1
+  ok "LH the printed remedy clears: 2 LATE (rc 1), each cell rewritten from its own LATE line, then 0 LATE (rc 0)"
 else
   bad "LH remedy: first $LH_FIRST LATE rc $(status_of late-clear-1) (want 2, 1), rewrite changed=$LH_CHANGED, second $LH_SECOND LATE rc $(status_of late-clear-2) (want 0, 0)"
   sed 's/^/      /' "$(lout late-clear-2)" >&2
@@ -911,7 +757,7 @@ late_world late-wrap "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z
 LGW="$LW"
 gdrive() { # gdrive <label> <wrapper>
   OUT="$WORK/runs/$1.out"
-  ( cd "$LGW" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="${ADIR:-$VD}" AI_DLC_TEAMMATE_DIR="$LGW/sub" \
+  ( cd "$LGW" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$VD" AI_DLC_TEAMMATE_DIR="$LGW/sub" \
       bash "$2" validate-artifact-budget --root "$LGW" ) > "$OUT" 2>&1
   printf '%s\t%s\t0\t0\n' "$1" "$?" >> "$LEDGER"
 }
@@ -923,7 +769,7 @@ gcheck() { # gcheck <label> -> 0 when the wrapper shows the LATE headline AND it
 }
 gdrive late-verdict "$VW"
 if gcheck late-verdict; then
-  ok "LG a LATE row is refused through verdict.sh, its headline and its row both shown"; B_lg=1
+  ok "LG a LATE row is refused through verdict.sh, its headline and its row both shown"
 else
   bad "LG LATE through verdict.sh: exit $(status_of late-verdict), headline or row missing"
   sed 's/^/      /' "$WORK/runs/late-verdict.out" >&2
@@ -936,20 +782,13 @@ vdrive() { # vdrive <label> <wrapper> <world> -- verdict.sh over the snapshot, n
   # --root is load-bearing: without it the validator walks up from the world to $WORK's own
   # .claude marker and measures an empty tree, so every arm below reads a bare PASS.
   OUT="$WORK/runs/$1.out"
-  ( cd "$3" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="${ADIR:-$VD}" AI_DLC_TEAMMATE_DIR="$3/sub" \
+  ( cd "$3" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$VD" AI_DLC_TEAMMATE_DIR="$3/sub" \
       bash "$2" validate-artifact-budget --root "$3" --only pipeline-snapshot.md ) > "$OUT" 2>&1
   printf '%s\t%s\t0\t0\n' "$1" "$?" >> "$LEDGER"
 }
 vline() { sed -n 's/^      [0-9][0-9]*://p' "$WORK/runs/$1.out" | grep -qxF "$2"; } # vline <label> <validator line>
 vshown() { _n="$(grep -cE '^      [0-9]+:' "$WORK/runs/$1.out")" || _n=0; printf '%s' "$_n"; }
 vmore() { grep -q '^      … [0-9-]* more matching line(s); run scripts/ai-dlc/validate-artifact-budget.sh directly for all$' "$WORK/runs/$1.out"; }
-vmut() { # vmut <out> <find> <replace> -- a verdict.sh copy; the find text sits on exactly one line
-  _c="$(F="$2" awk 'index($0, ENVIRON["F"]) { c++ } END { print c + 0 }' "$VW")" || _c=0
-  [ "$_c" = 1 ] || { echo "FIXTURE ERROR: verdict.sh mutation anchor on $_c line(s), want 1: $2" >&2; exit 2; }
-  F="$2" R="$3" awk '{ i = index($0, ENVIRON["F"]) } i { $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["F"])) } { print }' \
-    "$VW" > "$1" || { echo "FIXTURE ERROR: awk died building $1" >&2; exit 2; }
-  if cmp -s "$VW" "$1"; then echo "FIXTURE ERROR: verdict.sh mutation did not apply: $2" >&2; exit 2; fi
-}
 # The validator's match set, counted on the DIRECT run, for the expected notice count: the
 # rc!=0 alternation for a failing run, the rc=0 one for a passing run, as verdict.sh picks.
 vmatched() {
@@ -968,7 +807,7 @@ ldrive vskip-direct "$V" "$VSW"
 vdrive vs "$VW" "$VSW"
 if [ "$(status_of vs)" = 0 ] && grep -qxF 'PASS  validate-artifact-budget.sh' "$WORK/runs/vs.out" && vline vs "$VSKIP" \
    && ! vmore vs; then
-  ok "VS an rc-0 run carrying a SKIP line renders PASS through verdict.sh WITH the SKIP line, verbatim, and no notice"; B_vs=1
+  ok "VS an rc-0 run carrying a SKIP line renders PASS through verdict.sh WITH the SKIP line, verbatim, and no notice"
 else
   bad "VS SKIP through verdict.sh: exit $(status_of vs), PASS or the SKIP line missing, or a notice under the cap"
   sed 's/^/      /' "$WORK/runs/vs.out" >&2
@@ -985,13 +824,12 @@ done
 late_world vtmore "$VT_ROWS"
 VTW="$LW"
 ldrive vtmore-direct "$V" "$VTW"
-VTM_D=vtmore-direct
 VT_N=$(( $(vmatched vtmore-direct) - 6 ))
 vdrive vtmore "$VW" "$VTW"
 if [ "$(nlate vtmore-direct)" = "$VT_SEED" ] && [ "$VT_N" -gt 0 ] && [ "$(status_of vtmore)" = 1 ] \
    && [ "$(vshown vtmore)" = 6 ] \
    && grep -qxF "      … $VT_N more matching line(s); run scripts/ai-dlc/validate-artifact-budget.sh directly for all" "$WORK/runs/vtmore.out"; then
-  ok "VT-more $VT_SEED LATE rows through verdict.sh: 6 lines shown and the notice names the $VT_N cut, counted off the direct run"; B_vt_more=1
+  ok "VT-more $VT_SEED LATE rows through verdict.sh: 6 lines shown and the notice names the $VT_N cut, counted off the direct run"
 else
   bad "VT-more: direct LATE $(nlate vtmore-direct) (want $VT_SEED), n $VT_N, exit $(status_of vtmore) (want 1), shown $(vshown vtmore) (want 6), or the notice is missing or wrong"
   sed 's/^/      /' "$WORK/runs/vtmore.out" >&2
@@ -1001,11 +839,11 @@ fi
 VT_ROWS="$(printf '%s\n' "$VT_ROWS" | sed -n '1,5p')"
 late_world vtunder "$VT_ROWS"
 VUW="$LW"
-ldrive vtunder-direct "$V" "$VUW"; VTU_D=vtunder-direct
+ldrive vtunder-direct "$V" "$VUW"
 vdrive vtunder "$VW" "$VUW"
 if [ "$(vmatched vtunder-direct)" = 6 ] && [ "$(status_of vtunder)" = 1 ] && [ "$(vshown vtunder)" = 6 ] && ! vmore vtunder \
    && [ "$(vmatched vskip-direct)" -le 6 ] && ! vmore vs; then
-  ok "VT-at-or-under a match set of exactly 6 (rc 1) and VS's rc-0 run ($(vmatched vskip-direct) matched) print no notice"; B_vt_under=1
+  ok "VT-at-or-under a match set of exactly 6 (rc 1) and VS's rc-0 run ($(vmatched vskip-direct) matched) print no notice"
 else
   bad "VT-at-or-under: matched $(vmatched vtunder-direct) (want 6), exit $(status_of vtunder), shown $(vshown vtunder), or a notice printed"
   sed 's/^/      /' "$WORK/runs/vtunder.out" >&2
@@ -1039,254 +877,9 @@ else
   bad "LC --stamps-only: exit $(status_of cost-stamps) (want 0), row forks $s_w (want 1), self-probe forks $s_p (want 0)"
 fi
 
-# --- mutant builders (each leaves the mutated validator in a directory beside its siblings) ---
-mutdir() { # mutdir <name> -> MDIR, MV (an unedited copy of the validator beside the LATE siblings)
-  MDIR="$MUTS/$1"; mkdir -p "$MDIR" || { echo "FIXTURE ERROR: mkdir $MDIR" >&2; exit 2; }
-  cp "$VD/wait-for-deliverable.sh" "$VD/validate-adversarial-convergence.sh" "$MDIR/" \
-    || { echo "FIXTURE ERROR: cannot copy the LATE siblings into $MDIR" >&2; exit 2; }
-  if [ -f "$VD/wfd-start-of.sh" ]; then cp "$VD/wfd-start-of.sh" "$MDIR/" || { echo "FIXTURE ERROR: cp wfd-start-of.sh" >&2; exit 2; }; fi
-  MV="$MDIR/validate-artifact-budget.sh"
-  cp "$V" "$MV" || { echo "FIXTURE ERROR: cp validator" >&2; exit 2; }
-}
-mut_sed() { # mut_sed <sed-expr> -- edit MV in place, refusing a sed that dies or matches nothing
-  sed "$1" "$MV" > "$MV.n" || { echo "FIXTURE ERROR: sed died building $MV" >&2; exit 2; }
-  if cmp -s "$MV" "$MV.n"; then echo "FIXTURE ERROR: mutant $MV matched nothing: $1" >&2; exit 2; fi
-  cp "$MV.n" "$MV" && rm -f "$MV.n"
-}
-lmsub() { # lmsub <in> <out> <find> <replace> -- the find text must sit on exactly one line
-  _c="$(F="$3" awk 'index($0, ENVIRON["F"]) { c++ } END { print c + 0 }' "$1")" || _c=0
-  [ "$_c" = 1 ] || { echo "FIXTURE ERROR: mutation anchor on $_c line(s), want 1: $3" >&2; exit 2; }
-  F="$3" R="$4" awk '{ i = index($0, ENVIRON["F"]) } i { $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["F"])) } { print }' \
-    "$1" > "$2" || { echo "FIXTURE ERROR: awk died building $2" >&2; exit 2; }
-  if cmp -s "$1" "$2"; then echo "FIXTURE ERROR: mutation did not apply: $3" >&2; exit 2; fi
-}
-# lmut carries the probe-off layer (the LATE self-probe block never runs), because the self-probe would
-# otherwise refuse each LATE mutant first and the kill would not be read off its own arm.
-lmut() { # lmut <name> [<find> <replace>]
-  mutdir "$1"
-  lmsub "$V" "$MV.0" 'if [ -z "$STAMPS_ONLY" ]; then' 'if false; then'
-  if [ $# -ge 3 ]; then lmsub "$MV.0" "$MV" "$2" "$3"; else cp "$MV.0" "$MV" || exit 2; fi
-  rm -f "$MV.0"
-}
-wmut() { # wmut <name> -> MWF, a verdict.sh copy
-  MWD="$MUTS/$1"; mkdir -p "$MWD" || exit 2; MWF="$MWD/verdict.sh"
-}
-wsed() { # wsed <expr> -- build MWF from VW, refusing a sed that dies or matches nothing
-  sed "$1" "$VW" > "$MWF" || { echo "FIXTURE ERROR: sed died building $MWF" >&2; exit 2; }
-  if cmp -s "$VW" "$MWF"; then echo "FIXTURE ERROR: mutant $MWF matched nothing" >&2; exit 2; fi
-}
-
-# score_mut <id> <validator dir> <wrapper> <deciding arm> <twin arm> -- 0 when the deciding arm TRIPPED.
-# The twin runs every time and must stay green: that is what confines the kill to its deciding arm.
-score_mut() {
-  local id="$1" md="$2" mw="$3" da="$4" tw="$5" trip=1
-  MREG="${MREG}${id}|${md}|${mw}
-"
-  ADIR="$md"
-  if "arm_$da" "$md" "$mw"; then trip=1; else trip=0; fi
-  DLBL="$AXL"
-  if [ "$tw" = "-" ]; then :
-  elif "arm_$tw" "$md" "$mw"; then ok "[$tw] twin of $id stays green: the effect of $id is confined to [$da]"
-  else bad "[$tw] twin of $id TRIPPED: the effect of $id is not confined to [$da]"; fi
-  ADIR=""
-  return "$trip"
-}
-
-# the unmutated arm f_history has no base block above, so it is asserted here and sets its own flag
-if arm_f_history "$VD" "$VW"; then ok "F-history a future stamp in the history file is not read by the shipped arm (rc 0)"; B_f_history=1
+# F-history: a future stamp in the history file is not read by the shipped arm
+if arm_f_history "$VD" "$VW"; then ok "F-history a future stamp in the history file is not read by the shipped arm (rc 0)"
 else bad "F-history the shipped arm refused a snapshot whose history file carries a future stamp"; fi
-
-# --- CONTROL. An UNMUTATED copy, staged by the same helper as every mutant below, driven the same way.
-# A lone copy that dies for its own reasons emits nothing, and "no output" scores as a kill on every
-# mutant. This is what separates a mutation from a broken staging, and it establishes that the missing
-# sprint-status.sh sibling changes no verdict, rather than a reading of the subject's code.
-mutdir CTRL
-ctl_bad=""
-for _a in a1warn a5cov; do "arm_$_a" "$MDIR" "$VW" || ctl_bad="$ctl_bad $_a"; done
-if [ -z "$ctl_bad" ]; then ok "CONTROL: an unmutated copy staged the same way reproduces both branches -- M1-M3 died of their edits (driven over a1warn and a5cov)"; B_ctrl=1
-else bad "CONTROL: the unmutated copy did not reproduce the subject (tripped:$ctl_bad) -- every mutant verdict below is unattributable"; fi
-
-# --- M1. REVERT BOTH LAYERS: the summary block goes back to being RC-gated ------------
-# The historical form, restored whole: the flags stop being consulted and the only line a passing RC
-# can print is the PASS line. Reverting only the branch, or only the flag assignments, would leave a
-# layer in place and prove that layer instead.
-mutdir M1
-awk -v pass="$PASS_LINE" '
-  skip && /^exit "\$RC"$/ { skip=0 }
-  skip { next }
-  /^if \[ "\$RC" -eq 0 \]; then$/ {
-    print
-    print "  say \"\""
-    printf "  say \"%s\"\n", pass
-    print "fi"
-    skip=1
-    next
-  }
-  { print }
-' "$V" > "$MV.n" || exit 2
-if cmp -s "$V" "$MV.n"; then
-  echo "FIXTURE ERROR: M1 matched nothing -- the summary block's anchors were rewritten" >&2; exit 2
-fi
-if grep -q 'WARN  this run reported' "$MV.n" || [ "$(grep -cF "$PASS_LINE" "$MV.n")" -ne 1 ]; then
-  echo "FIXTURE ERROR: M1 did not produce the RC-gated form" >&2; exit 2
-fi
-cp "$MV.n" "$MV" && rm -f "$MV.n"
-if score_mut M1 "$MDIR" "$VW" a1warn a3noflag; then
-  # Arm 9 asserts an ABSENCE: its own predicate must return this run's label, or it cannot fire.
-  if [ "$(join_violations "$DLBL")" = "$DLBL" ]; then
-    mutant_killed "$(( ${B_a1warn:-0} && ${B_ctrl:-0} ))" M1 "MUTANT M1 (summary re-gated on RC): the breach run reappears as a join violation -- arms 1 and 9 can fire"
-  else bad "MUTANT M1: the deciding arm tripped but join_violations returned '$(join_violations "$DLBL")' -- arm 9 cannot fire"; fi
-else bad "MUTANT M1 SURVIVED: the re-gated summary still withheld the PASS line on a breach run"; fi
-
-# --- M2. REVERT ONE FLAG: SAW_BREACH is never raised -----------------------------------
-mutdir M2; mut_sed 's/^  SAW_BREACH=1$/  SAW_BREACH=0/'
-if score_mut M2 "$MDIR" "$VW" a1warn a6schema; then
-  mutant_killed "$(( ${B_a1warn:-0} && ${B_ctrl:-0} ))" M2 "MUTANT M2 (SAW_BREACH never raised): the breach run prints PASS while the schema run is untouched"
-else bad "MUTANT M2 SURVIVED: the breach run still withheld the PASS line with SAW_BREACH pinned to 0"; fi
-
-# --- M3. REVERT THE COVERAGE QUALIFIER ONLY ---------------------------------------------
-mutdir M3
-sed -e '/Measured is not everything: this run also reported/d' \
-    -e '/NO budget governs\. They are unmeasured, not within budget\./d' "$V" > "$MV.n" || exit 2
-if cmp -s "$V" "$MV.n"; then echo "FIXTURE ERROR: M3 matched nothing -- the coverage qualifier was rewritten" >&2; exit 2; fi
-if [ "$(( $(wc -l < "$V") - $(wc -l < "$MV.n") ))" -ne 2 ]; then
-  echo "FIXTURE ERROR: M3 deleted $(( $(wc -l < "$V") - $(wc -l < "$MV.n") )) line(s), expected exactly 2" >&2; exit 2
-fi
-cp "$MV.n" "$MV" && rm -f "$MV.n"
-if score_mut M3 "$MDIR" "$VW" a5cov a4clean; then
-  mutant_killed "$(( ${B_a5cov:-0} && ${B_ctrl:-0} ))" M3 "MUTANT M3 (qualifier deleted): the coverage run prints a bare PASS -- assertion 5 measures the qualifier"
-else bad "MUTANT M3 SURVIVED: the qualifier still appeared with its say lines deleted"; fi
-
-# --- M4 / M5. REVERT ONE NEW FLAG EACH (BL-020) -----------------------------------------
-mutdir M4; mut_sed 's/^  SAW_INFLIGHT=1$/  SAW_INFLIGHT=0/'
-if score_mut M4 "$MDIR" "$VW" a10struck a11marker; then
-  mutant_killed "${B_a10struck:-0}" M4 "MUTANT M4 (SAW_INFLIGHT never raised): the struck-row run prints a bare PASS while the marker run is untouched"
-else bad "MUTANT M4 SURVIVED: the struck-row run still withheld the PASS line"; fi
-mutdir M5; mut_sed 's/^  SAW_MARKER=1$/  SAW_MARKER=0/'
-if score_mut M5 "$MDIR" "$VW" a11marker a10struck; then
-  mutant_killed "${B_a11marker:-0}" M5 "MUTANT M5 (SAW_MARKER never raised): the marker run prints a bare PASS while the struck-row run is untouched"
-else bad "MUTANT M5 SURVIVED: the marker run still withheld the PASS line"; fi
-
-# --- MF1-MF6, MP1-MP2: the future-stamp and pool mutants -------------------------------
-mutdir MF1; mut_sed 's/^FUTURE_SLACK_S=600$/FUTURE_SLACK_S=0/'
-if score_mut MF1 "$MDIR" "$VW" f_five -; then
-  mutant_killed "${B_f_five:-0}" MF1 "MUTANT MF1 (slack 0) killed: the 5-min stamp is refused"
-else bad "MUTANT MF1 (slack 0) SURVIVED"; fi
-mutdir MF2; mut_sed '/if (substr(str, b, 1) ~ \/\[-0-9\]\/ || wide(b3)) continue/d'
-if score_mut MF2 "$MDIR" "$VW" f_range -; then
-  mutant_killed "${B_f_range:-0}" MF2 "MUTANT MF2 (range not skipped) killed"
-else bad "MUTANT MF2 (range not skipped) SURVIVED"; fi
-mutdir MF3; mut_sed 's|check_future_stamps "\$f" "\$rel" "\$SNAP_NOW"|check_future_stamps "${f%.md}-history.md" "$rel" "$SNAP_NOW"|'
-if score_mut MF3 "$MDIR" "$VW" f_history f_five; then
-  mutant_killed "${B_f_history:-0}" MF3 "MUTANT MF3 (history file read) killed: the shipped arm ignores the history file, the mutant refuses it"
-else bad "MUTANT MF3 (history file read) SURVIVED"; fi
-mutdir MF4; mut_sed '/^        if (spaced(str, b)) continue$/d'
-if score_mut MF4 "$MDIR" "$VW" f_spaced -; then
-  mutant_killed "${B_f_spaced:-0}" MF4 "MUTANT MF4 (spaced-range skip deleted) killed"
-else bad "MUTANT MF4 (spaced-range skip deleted) SURVIVED"; fi
-mutdir MF5; mut_sed 's|      return (substr(s, n, 1) ~ /\[0-9\]/)|      return 1|'
-if score_mut MF5 "$MDIR" "$VW" f_dash -; then
-  mutant_killed "${B_f_dash:-0}" MF5 "MUTANT MF5 (spaced skip needs no digit) killed: the ' - text' offender loses its FUTURE row"
-else bad "MUTANT MF5 (spaced skip needs no digit) SURVIVED"; fi
-# MF6 ORDER: the stamp verdict printed AFTER the budget verdict (the pre-fix position). F8's wrapper
-# run must lose the remedy or rows. Built with awk (a moved line is two edits) and cmp-guarded.
-mutdir MF6
-awk '/^report_future_stamps$/ { next }
-     /^rm -f "\$FUTURE_FILE"$/ { next }
-     { print }
-     /^rm -f "\$MARKER_FILE"$/ { print "report_future_stamps"; print "rm -f \"$FUTURE_FILE\"" }' "$V" > "$MV.n" \
-  || { echo "FIXTURE ERROR: awk died building $MV" >&2; exit 2; }
-if cmp -s "$V" "$MV.n" || [ "$(grep -c '^report_future_stamps$' "$MV.n")" != "1" ]; then
-  echo "FIXTURE ERROR: mutant MF6 did not move the call" >&2; exit 2
-fi
-cp "$MV.n" "$MV" && rm -f "$MV.n"
-if score_mut MF6 "$MDIR" "$VW" f8 f9; then
-  mutant_killed "${B_f8:-0}" MF6 "MUTANT MF6 (stamp verdict printed after the budget verdict) killed by F8"
-else bad "MUTANT MF6 (stamp verdict order) SURVIVED"; fi
-mutdir MP1; mut_sed '/\[ "\$brel" = "WHOLE-READ" \] && continue/d'
-if score_mut MP1 "$MDIR" "$VW" p_basename p_noitem; then
-  mutant_killed "${B_p_basename:-0}" MP1 "MUTANT MP1 (pool hardened by basename) killed by P1"
-else bad "MUTANT MP1 (pool hardened by basename) SURVIVED"; fi
-mutdir MP2; mut_sed 's|POOL_ITEM="\$(pool_open_item "\$ROOT/\$_bl")"|POOL_ITEM="$_bl"|'
-if score_mut MP2 "$MDIR" "$VW" p_noitem p_basename; then
-  mutant_killed "${B_p_noitem:-0}" MP2 "MUTANT MP2 (item citation dropped) killed by P2"
-else bad "MUTANT MP2 (item citation dropped) SURVIVED"; fi
-
-# --- MW1-MW6: mutants of the verdict.sh wrapper, driven over the REAL validator -----------
-wmut MW1; wsed 's/|FUTURE|/|/g'
-if score_mut MW1 "$VD" "$MWF" f8 lg; then
-  mutant_killed "${B_f8:-0}" MW1 "MUTANT MW1 (verdict.sh drops FUTURE) killed by F8"
-else bad "MUTANT MW1 (verdict.sh drops FUTURE) SURVIVED"; fi
-wmut MW2; wsed 's/|BACKDATED|/|/g'
-if score_mut MW2 "$VD" "$MWF" f9 f8; then
-  mutant_killed "${B_f9:-0}" MW2 "MUTANT MW2 (verdict.sh drops BACKDATED) killed by F9"
-else bad "MUTANT MW2 (verdict.sh drops BACKDATED) SURVIVED"; fi
-wmut MW3
-[ "$(grep -c '|LATE)' "$VW")" = 2 ] || { echo "FIXTURE ERROR: verdict.sh no longer carries |LATE) in both alternations" >&2; exit 2; }
-wsed 's/|LATE)/)/g'
-if score_mut MW3 "$VD" "$MWF" lg f8; then
-  mutant_killed "${B_lg:-0}" MW3 "MUTANT MW3 (verdict.sh drops LATE) killed by LG"
-else bad "MUTANT MW3 (verdict.sh drops LATE) SURVIVED"; fi
-wmut MW4; vmut "$MWF" 'OVER|FUTURE|BACKDATED|SKIP|LATE)' 'OVER|FUTURE|BACKDATED|LATE)'
-if score_mut MW4 "$VD" "$MWF" vs vt_under; then
-  mutant_killed "${B_vs:-0}" MW4 "MUTANT MW4 (verdict.sh drops SKIP from the rc=0 set) killed by VS"
-else bad "MUTANT MW4 (verdict.sh drops SKIP) SURVIVED"; fi
-wmut MW5; vmut "$MWF" '[ "$_n" -le "$LINES" ] || printf' '[ "$_n" -le "$LINES" ] || true || printf'
-if score_mut MW5 "$VD" "$MWF" vt_more vt_under; then
-  mutant_killed "${B_vt_more:-0}" MW5 "MUTANT MW5 (truncation notice removed) killed by VT-more"
-else bad "MUTANT MW5 (truncation notice removed) SURVIVED"; fi
-wmut MW6; vmut "$MWF" '[ "$_n" -le "$LINES" ] || printf' 'printf'
-if score_mut MW6 "$VD" "$MWF" vt_under vt_more; then
-  mutant_killed "${B_vt_under:-0}" MW6 "MUTANT MW6 (truncation notice printed unconditionally) killed by VT-at-or-under"
-else bad "MUTANT MW6 (notice unconditional) SURVIVED"; fi
-
-# --- LATE MUTANTS. Each is a copy of the validator beside its siblings WITH the probe-off layer. ML0
-# is that layer ALONE and must pass every LATE arm a mutant is scored on: it proves the copies run and
-# the probe-off layer kills nothing by itself. A failed copy or edit is FIXTURE ERROR, never a kill.
-lmut ML0
-ml0_bad=""
-for _a in l1b le_skip la_amb ls_same lh_clear; do "arm_$_a" "$MDIR" "$VW" || ml0_bad="$ml0_bad $_a"; done
-if [ -z "$ml0_bad" ]; then ok "ML0 control: the probe-off copy beside its siblings passes L1, LE, LA, LS and LH (CONTROL ML0: arms l1b, le_skip, la_amb, ls_same, lh_clear, none tripped)"; B_ml0=1
-else bad "CONTROL ML0: the probe-off copy tripped these LATE arms:$ml0_bad -- every LATE mutant verdict below is void"; fi
-lmut ML1 '[ "$dc" = "$ts" ] || printf "LATE  ' '[[ ! "$dc" > "$ts" ]] || printf "LATE  '
-if score_mut ML1 "$MDIR" "$VW" l1b l0eq; then
-  mutant_killed "${B_ml0:-0}" ML1 "MUTANT ML1 (LATE means later-than) killed by L1b': the 1 s early row loses its LATE line"
-else bad "MUTANT ML1 (LATE means later-than) SURVIVED"; fi
-lmut ML2 '[ "$k" -eq 0 ] || printf '"'"'SKIP  %s: %d in-flight' '[ "$k" -eq 0 ] || true || printf '"'"'SKIP  %s: %d in-flight'
-if score_mut ML2 "$MDIR" "$VW" le_skip l0eq; then
-  mutant_killed "${B_ml0:-0}" ML2 "MUTANT ML2 (unresolvable rows silent) killed by LE: the run passes with no SKIP count"
-else bad "MUTANT ML2 (unresolvable rows silent) SURVIVED"; fi
-lmut ML4 '"$id" "$dc" "$ts"' '"$id" "$dc" "$dc"'
-if score_mut ML4 "$MDIR" "$VW" lh_clear l0eq; then
-  mutant_killed "${B_ml0:-0}" ML4 "MUTANT ML4 (LATE names the stamp, not the ts) killed by LH: after the printed rewrite, still 2 LATE"
-else bad "MUTANT ML4 (LATE names the stamp) SURVIVED"; fi
-lmut ML5 '{ id="$c"; ts="$t"; }' '{ id="$c"; ts="$t"; }; m=1; break'
-if score_mut ML5 "$MDIR" "$VW" la_amb l0eq; then
-  mutant_killed "${B_ml0:-0}" ML5 "MUTANT ML5 (first resolving candidate) killed by LA: no ambiguous SKIP, the first id read LATE"
-else bad "MUTANT ML5 (first resolving candidate) SURVIVED"; fi
-lmut ML6 'if [ "$m" -gt 1 ]; then' 'if [ "$n" -gt 1 ]; then'
-if score_mut ML6 "$MDIR" "$VW" ls_same la_amb; then
-  mutant_killed "${B_ml0:-0}" ML6 "MUTANT ML6 (count resolving ids, not distinct ts) killed by LS: the one-dispatch pair SKIPs as ambiguous, no LATE"
-else bad "MUTANT ML6 (count resolving ids) SURVIVED"; fi
-
-# --- THE MATRIX: every mutant over every arm, only in --matrix mode -----------------------------
-if [ "$MATRIX" = 1 ]; then
-  while IFS='|' read -r mid mmd mmw; do
-    [ -n "$mid" ] || continue
-    for a in $ARMS; do
-      ADIR="$mmd"
-      if "arm_$a" "$mmd" "$mmw"; then matrix_row "$mid" "$a" 0 GREEN no; else matrix_row "$mid" "$a" 1 TRIPPED yes; fi
-      MROWS=$((MROWS + 1))
-    done
-  done <<EOF
-$MREG
-EOF
-  n_mut="$(printf '%s' "$MREG" | grep -c .)"; n_arm="$(printf '%s\n' $ARMS | grep -c .)"
-  if [ "$n_mut" -eq 24 ] && [ "$MROWS" -eq $((n_mut * n_arm)) ]; then ok "[MX] the matrix run measured $MROWS cells for $n_mut mutants over $n_arm arms"
-  else bad "[MX] matrix rows=$MROWS for $n_mut mutants over $n_arm arms"; fi
-else
-  if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
-fi
 
 echo ""
 [ "$rc" -eq 0 ] && echo "budget-summary-verdict fixture: PASS"

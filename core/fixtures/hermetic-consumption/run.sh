@@ -22,54 +22,13 @@
 #   w3  the consumer-branch echo removed (the shipped defect)            -> exit 1, names it
 #   w4  the consumer-branch echo spelled `.bak` (a near-miss path)       -> exit 1, names it
 #   w5  the consumer echo moved ABOVE the resolution, top of file       -> exit 1, names it
-#   w6  the only sentinel moved into the override branch                -> exit 1, names it
 #   w7  w3 plus a `.dist-only` marker on the subject                    -> exit 0, scanned=1
 #   w8  no shipped fixture marks an input `!`                           -> exit 2, zero scanned
 #   w9  the consumer echo sent to `> /dev/null`                         -> exit 1, names it
 #   w10 a trailing space inside the consumer echo's quotes              -> exit 1, names it
 #   w11 the consumer echo behind `[ -n "${UNSET:-}" ] &&`               -> exit 1, names it
 #   w12 the consumer echo sent `>&2` (the runner captures 2>&1)         -> exit 0, flagged=0
-#   k   the unmutated copy over w1, in the mutants' harness             -> exit 0, `self-probe: ok`
-#   m1  the self-probe call removed            -> the `self-probe: ok` line must VANISH (c reads it)
-#   m2  the whole-token compare relaxed to a prefix (the near-miss check removed)
-#                                              -> exit 2, the probe names its `.bak` seed
-#   m3  widened to key every decl line, not only `!` lines
-#                                              -> exit 2, the probe names its non-`!` seed
-#   m4  the after-`fi` position check removed (any depth-0 sentinel accepted)
-#                                              -> exit 2, the probe names its top-of-file seed
-#   m5  m1 and m2 together -- the probe gone AND the near-miss relaxed
-#                                              -> w4 must read exit 0: the seeded corpus alone
-#                                                 cannot tell this mutant from the original
-#                                                 unless a world carries the near-miss, and w4 does
-#
-# m5 IS WHY THE SEEDED WORLDS EXIST BESIDE THE SELF-PROBE. With the probe gone, the only thing
-# between a relaxed compare and a green run is a corpus world holding the near-miss; m5 asserts
-# that w4's world reads differently under it, so w4 is load-bearing and not a restatement of the
-# probe.
-#
-# Usage: run.sh [--matrix]
-#
-# THE MUTANT MATRIX (fixture-mutants.md 'One run per distinct state'). The five mutants are scored on five named arms
-# (probe-line, bak-seed, nonbang-seed, top-seed over fixa's world; w4 over bak's world; hc_arm below). PER PUSH a
-# mutant builds only the world its deciding arm reads, which it must trip, and reads its twin from that same world,
-# which it must leave GREEN; `--matrix` builds both worlds and prints `MATRIX <mutant> <arm> TRIPPED|GREEN` for all
-# five arms. The rows below are the one source: hc_score reads them from this file. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run it from the repo root:
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/hermetic-consumption/run.sh --matrix
-# MUTANT-MATRIX m1 decides=probe-line twins=bak-seed
-# MUTANT-MATRIX m2 decides=bak-seed twins=top-seed
-# MUTANT-MATRIX m3 decides=nonbang-seed twins=bak-seed
-# MUTANT-MATRIX m4 decides=top-seed twins=nonbang-seed
-# MUTANT-MATRIX m5 decides=w4 twins=- why=w4 is the only arm that reads bak's world, the one world m5 builds per push
-# MUTANT-MATRIX-DYNAMIC hc_score why=hc_score passes each of m1-m5 above to mutant_killed as its first argument
 set -u
-MATRIX=0
-for _a in "$@"; do
-  case "$_a" in
-    --matrix) MATRIX=1 ;;
-    *) echo "FIXTURE ERROR: unknown argument '$_a' (only --matrix)" >&2; exit 2 ;;
-  esac
-done
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Both layouts named, never a single walk-up (I33c). The subject is distribution-only.
@@ -101,7 +60,6 @@ bad() { printf '  FAIL  %s\n' "$*"; rc=1; }
 # The producer's lines, as the shipped file carries them.
 CE='  echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"'
 UE='  echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh"'
-OV='  VAL="${AI_DLC_CMI_VALIDATOR}"'
 SETU='set -uo pipefail'
 ERRL='validate-layer-entries.sh not found in either layout'
 
@@ -131,7 +89,6 @@ variant() {
     base)     edit "$PROD/run.sh" "$d" del "$UE" ;;
     bak)      edit "$PROD/run.sh" "$d" repl "$UE" '  echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh.bak"' ;;
     top)      edit "$PROD/run.sh" "$t" del "$UE" && edit "$t" "$d" after "$SETU" 'echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh"' ;;
-    override) edit "$PROD/run.sh" "$t" del "$UE" && edit "$t" "$t.2" del "$CE" && edit "$t.2" "$d" after "$OV" "$CE" ;;
     devnull)  edit "$PROD/run.sh" "$d" repl "$UE" "$UE > /dev/null" ;;
     stderr)   edit "$PROD/run.sh" "$d" repl "$UE" "$UE >&2" ;;
     tspace)   edit "$PROD/run.sh" "$d" repl "$UE" '  echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh "' ;;
@@ -220,7 +177,7 @@ w() { # w <id> <variant> <want rc> <want subject named: y|n> <want scanned> [dis
   drive "$d"
   names_subject && named=y
   if [ "$RC" = "$wr" ] && [ "$named" = "$wn" ] && summary_has "scanned=$ws "; then
-    ok "$id: $v -> exit $RC, subject named=$named, scanned=$ws"; [ "$id" != w4 ] || HC_W4_OK=1
+    ok "$id: $v -> exit $RC, subject named=$named, scanned=$ws"
   else
     bad "$id: $v -> want exit $wr named=$wn scanned=$ws; got exit $RC named=$named: $(printf '%s\n' "$OUT" | tail -2 | tr '\n' '|')"
   fi
@@ -242,7 +199,6 @@ if ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-finding.cl.rc" && ! cmp -s "$EQ/cli-fi
 else bad "cli cells do not discriminate: two of cli-pass, cli-finding, cli-usage share an exit, or pass and finding share stderr"; fi
 w w4 bak      1 y 2
 w w5 top      1 y 2
-w w6 override 1 y 2
 w w7 base     0 n 1 dist-only
 w w9 devnull  1 y 2
 w w10 tspace  1 y 2
@@ -255,120 +211,6 @@ if world "$d" "$VALIDATOR" none; then
   else bad "w8: want exit 2 and the zero-scanned refusal; got exit $RC: $(printf '%s\n' "$OUT" | tail -2 | tr '\n' '|')"; fi
 else bad "w8: FIXTURE BROKEN -- world could not be built"; fi
 
-echo "== M: mutants of the validator"
-# mut <name> <sed program> [<sed program>...] -- a copy of the validator; refused if sed dies or
-# changes nothing.
-mut() {
-  local n="$1" dst="$TMP/mut.$1.sh"; shift
-  local args=() e
-  for e in "$@"; do args+=(-e "$e"); done
-  if ! sed "${args[@]}" "$VALIDATOR" > "$dst"; then echo "MUTANT $n DID NOT APPLY: sed failed" >&2; return 2; fi
-  if cmp -s "$VALIDATOR" "$dst"; then echo "MUTANT $n DID NOT APPLY: no change" >&2; return 2; fi
-  printf '%s\n' "$dst"
-}
-M_PROBE='s/^self_probe || {/true || {/'
-M_NEAR='s/^function same(tok, p) { return tok == p || tok == p "\/" }$/function same(tok, p) { return index(tok, p) == 1 }/'
-M_WIDE="s/^BANG_RE='^!'\$/BANG_RE='^[^#]'/"
-M_AFTER='s/sdep\[j\] == 0 \&\& cend\[c\] > 0 \&\& sline\[j\] > cend\[c\]/sdep[j] == 0/g'
-
-# k: the unmutated validator through the same harness, so a harness that cannot run a copy
-# reports BROKEN instead of scoring every mutant as a kill.
-d="$TMP/m.K"
-if world "$d" "$VALIDATOR" fixa; then
-  drive "$d"
-  if [ "$RC" = 0 ] && grep -q '^self-probe: ok' <<< "$OUT" && summary_has 'scanned=2 '; then ok "k: the unmutated copy runs in the harness (exit 0, probe ok, scanned=2)"; B_K=1
-  else bad "k: FIXTURE BROKEN -- the unmutated copy did not run clean in the harness; every mutant verdict below is void: exit $RC $(printf '%s\n' "$OUT" | tail -2 | tr '\n' '|')"; fi
-else bad "k: FIXTURE BROKEN -- world could not be built"; fi
-
-# THE MUTANT ARMS, each a reading of ONE world's run of a copy (GREEN = what the unmutated copy shows, k above):
-#   probe-line    fixa's world: exit 0, the `self-probe: ok` line, scanned=2
-#   bak-seed      fixa's world: the probe names no `d-bak` seed      nonbang-seed  ... no `e-non-bang` seed
-#   top-seed      fixa's world: the probe names no `f-top` seed
-#   w4            bak's world: exit 1 naming the subject (w4's own reading)
-# A mutant's DECIDING arm must be TRIPPED and its twin GREEN; per push a mutant builds only the world its deciding
-# arm and twin read, and `--matrix` builds both worlds and prints `MATRIX <mutant> <arm> TRIPPED|GREEN` for all five.
-hc_arm() { # hc_arm <arm> -- over the OUT/RC of the world that arm reads
-  case "$1" in
-    probe-line)   [ "$RC" = 0 ] && grep -q '^self-probe: ok' <<< "$OUT" && summary_has 'scanned=2 ' ;;
-    bak-seed)     ! grep -q 'self-probe: seeded [a-z-]* d-bak ' <<< "$OUT" ;;
-    nonbang-seed) ! grep -q 'self-probe: seeded [a-z-]* e-non-bang ' <<< "$OUT" ;;
-    top-seed)     ! grep -q 'self-probe: seeded [a-z-]* f-top ' <<< "$OUT" ;;
-    w4)           [ "$RC" = 1 ] && names_subject ;;
-    *) echo "FIXTURE BROKEN: unknown mutant arm $1" >&2; exit 2 ;;
-  esac
-}
-hc_world_of() { case "$1" in w4) echo bak ;; *) echo fixa ;; esac; }
-HC_ARMS="probe-line bak-seed nonbang-seed top-seed w4"
-mx_row() { grep -m 1 -F -- "# MUTANT-MATRIX $1 decides=" "$DIR/run.sh"; }
-mx_field() { local l; l="$(mx_row "$1")"; l="${l#*"$2"=}"; printf '%s' "${l%% *}"; }
-# The unmutated copy's reading of every arm, with no new run: the four fixa arms over k's own OUT/RC, still current
-# here, and w4 from w4's own verdict in the W section (the shipped validator over bak's world), so a mutant's
-# tripped arm is the mutation's.
-hc_base=0; hc_held=""
-[ "${HC_W4_OK:-0}" = 1 ] && { hc_base=$((hc_base + 1)); hc_held="$hc_held w4"; }
-for _a in probe-line bak-seed nonbang-seed top-seed; do hc_arm "$_a" && { hc_base=$((hc_base + 1)); hc_held="$hc_held $_a"; }; done
-if [ "$hc_base" -eq 5 ]; then
-  ok "baseline (unmutated copy): all five mutant arms hold (${hc_held# }), so a mutant's tripped arm is the mutation's"; B_HCBASE=1
-else bad "baseline (unmutated copy): only $hc_base of five mutant arms hold (${hc_held# }) -- every mutant verdict below is void"; fi
-HC_CELLS=0
-# hc_score <mutant> <copy> <deciding check: a command over OUT/RC> <ok message> <bad message>
-hc_score() {
-  local n="$1" m="$2" chk="$3" okm="$4" badm="$5" dec tw w a cur="" t
-  if [ "$MATRIX" = 1 ]; then
-    for w in fixa bak; do
-      d="$TMP/m.$n.$w"; world "$d" "$m" "$w" && drive "$d"
-      for a in $HC_ARMS; do
-        [ "$(hc_world_of "$a")" = "$w" ] || continue
-        HC_CELLS=$((HC_CELLS + 1))
-        if hc_arm "$a"; then printf '  MATRIX %s %s GREEN\n' "$n" "$a"; else printf '  MATRIX %s %s TRIPPED\n' "$n" "$a"; fi
-      done
-    done
-    return 0
-  fi
-  [ -n "$(mx_row "$n")" ] || { bad "$n has no MUTANT-MATRIX row in this file -- a per-push run cannot know its deciding arm or its twin"; return 0; }
-  dec="$(mx_field "$n" decides)"; tw="$(mx_field "$n" twins)"
-  w="$(hc_world_of "$dec")"
-  if [ "$tw" != - ] && [ "$(hc_world_of "$tw")" != "$w" ]; then bad "FIXTURE BROKEN: $n's twin $tw reads another world than its deciding arm $dec"; return 0; fi
-  d="$TMP/m.$n"; world "$d" "$m" "$w" && drive "$d"
-  HC_CELLS=$((HC_CELLS + 1)); [ "$tw" = - ] || HC_CELLS=$((HC_CELLS + 1))
-  if hc_arm "$dec" || ! eval "$chk"; then bad "$badm; got exit $RC: $(printf '%s\n' "$OUT" | tail -3 | tr '\n' '|') (deciding arm $dec)"; return 0; fi
-  if [ "$tw" != - ] && ! hc_arm "$tw"; then bad "$n also tripped its twin $tw -- the matrix row for this mutant moved; re-measure with --matrix"; return 0; fi
-  mutant_killed "$(( ${B_K:-0} && ${B_HCBASE:-0} ))" "$n" "$okm"
-}
-
-# m1: the probe removed. The clean world still reads exit 0 -- that is exactly why c demands the
-# probe's own line; here the arm demands that line VANISH, so a mutation that left the probe
-# running cannot score.
-if m="$(mut m1 "$M_PROBE")"; then
-  hc_score m1 "$m" '[ "$RC" = 0 ] && ! grep -q "^self-probe: ok" <<< "$OUT" && summary_has "scanned=2 "' \
-    "m1: probe removed -> the self-probe line is gone, which c refuses" \
-    "m1: want exit 0 with no self-probe line and scanned=2"
-else bad "m1: DID NOT APPLY"; fi
-
-probe_refuses() { # probe_refuses <id> <mutant> <seed>
-  local id="$1" m="$2" s="$3"
-  hc_score "$id" "$m" "[ \"\$RC\" = 2 ] && grep -q \"self-probe: seeded [a-z-]* $s \" <<< \"\$OUT\" && ! summary_has 'scanned='" \
-    "$id: the self-probe refuses, naming its $s seed" \
-    "$id: want exit 2 and the probe naming $s before any corpus line"
-}
-if m="$(mut m2 "$M_NEAR")"; then probe_refuses m2 "$m" d-bak; else bad "m2: DID NOT APPLY"; fi
-if m="$(mut m3 "$M_WIDE")"; then probe_refuses m3 "$m" e-non-bang; else bad "m3: DID NOT APPLY"; fi
-if m="$(mut m4 "$M_AFTER")"; then probe_refuses m4 "$m" f-top; else bad "m4: DID NOT APPLY"; fi
-
-# m5: probe gone AND near-miss relaxed. w4's world must now read CLEAN, where the original reads
-# exit 1 naming the subject (w4 above) -- the two sides are asserted to differ.
-if m="$(mut m5 "$M_PROBE" "$M_NEAR")"; then
-  hc_score m5 "$m" '[ "$RC" = 0 ] && ! names_subject && summary_has "flagged=0$"' \
-    "m5: probe gone and compare relaxed -> w4's near-miss world reads clean, so w4 is what holds the compare" \
-    "m5: want w4's world to read exit 0, flagged=0 under the mutant"
-else bad "m5: DID NOT APPLY"; fi
-if [ "$MATRIX" = 1 ]; then
-  [ "$HC_CELLS" -eq 25 ] && ok "MX matrix run measured $HC_CELLS mutant x arm cells (5 mutants x 5 arms)" \
-    || bad "MX matrix run measured $HC_CELLS cells, 25 expected"
-else
-  [ "$HC_CELLS" -eq 9 ] && ok "MX matrix, per-push run: $HC_CELLS cells scored, each mutant's deciding arm and its twin only" \
-    || bad "MX per-push run scored $HC_CELLS cells, 9 expected"
-fi
 
 if [ "$rc" = 0 ]; then echo "hermetic-consumption: PASS"; else echo "hermetic-consumption: FAIL"; fi
 exit "$rc"

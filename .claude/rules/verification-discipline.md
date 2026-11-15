@@ -20,9 +20,8 @@ A control on an input ADJACENT to the one that matters reads as working. Where t
 Channels converge on the obvious input and agree for that reason. Give each channel its own seed shape (for
 example a duplicate NOT adjacent to the original); never add another arm instead.
 
-A mutant that scores identical may mean the corpus lacks the discriminating input. Before reading a null as
-"not load-bearing, drop the guard", construct the input that would separate them (for a miss-vs-empty-blob
-memo, a corpus with an empty blob) and compare behaviour and call counts.
+A hand-run mutant that scores identical may mean the corpus lacks the discriminating input: construct the input
+that would separate them before dropping the guard.
 
 ## Point a search grammar at its own subject before trusting its zero
 

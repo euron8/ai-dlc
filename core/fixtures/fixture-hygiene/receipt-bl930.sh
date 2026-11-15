@@ -9,7 +9,7 @@
 #   ga  drives a hook and scrubs AI_DLC_* (the near-miss: the identical loop over the other prefix). Want: SCRUBBED.
 #   gl  drives a hook from its lib.sh, unscrubbed, and is a row of the allowlist -- I10 flagged it, so H8 must too: the
 #       list never acquits a hook driver. Want: FAIL H8 naming gl.
-#   gz  scrubbed, carrying the populations the validator requires (H1, H2, H6, H5, E1).
+#   gz  scrubbed, carrying the populations the validator requires (H1, H2, H6, E1).
 # usage:  receipt-bl930.sh [--validator <path>]   (as receipt-bl929.sh: a copy's stderr passes through, no PASS)
 # Exit: 0 PASS, 1 FAIL, 2 the validator refused (its exit 2, passed through), 9 the receipt could not run.
 set -uo pipefail
@@ -50,14 +50,10 @@ printf 'jq\n' > "$F/gz/tools.decl"
 cat > "$F/gz/run.sh" <<'EOF'
 #!/usr/bin/env bash
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
-# MUTANT-MATRIX MR decides=A1 twins=B2
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/gz/run.sh --matrix
 [ -d "$R/.git" ] || { echo "FIXTURE BROKEN: no history"; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE BROKEN: no jq"; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-mkmut() { :; }
 ok "A1 holds"
-ok "B2 holds"
 bash "$HERE/receipt-z.sh"
 EOF
 printf '#!/usr/bin/env bash\nexit 0\n' > "$F/gz/receipt-z.sh"

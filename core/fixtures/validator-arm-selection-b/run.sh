@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # validator-arm-selection-b — shard 'b' of the validator-arm-selection phase set.
 #
-# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. The assertions, the seed, the mutant
-# discipline and the reasoning all live in the sibling's run.sh; what this directory buys is a
+# THIS IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY. The assertions, the seed
+# and the reasoning all live in the sibling's run.sh; what this directory buys is a
 # unit the pre-push pool can start on its own. That suite is POLE-BOUND — its makespan tracks
-# its single longest DIRECTORY, and `core/fixtures/*/run.sh` is what it globs — so the
-# sibling's 220s was the whole suite's wall clock, and the 6-way pool already inside that one
-# directory could not change it.
+# its single longest DIRECTORY, and `core/fixtures/*/run.sh` is what it globs — so the 6-way
+# pool already inside one directory could not change it.
 #
 # THE SPLIT IS ON THE PREREQUISITE BOUNDARY, not round-robin. The sibling's phases fall into
-# two clusters: four differential against a plain-tree validator run, six against a SEEDED
+# two clusters: some differential against a plain-tree validator run, some against a SEEDED
 # tree. Dealing them out in turn would make both shards pay both prerequisites; splitting on
 # the cluster boundary means each is computed exactly once, so this shard costs no extra CPU.
 # This directory holds the seeded-tree cluster.

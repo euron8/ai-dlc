@@ -4,4 +4,4 @@
 # <tree>/scripts/validate-claude-rules.sh.
 4 *
 3 scripts/validate-claude-rules.sh
-18 inproc:scripts/validate-claude-rules.sh
+15 inproc:scripts/validate-claude-rules.sh

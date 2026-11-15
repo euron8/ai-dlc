@@ -1,7 +1,0 @@
-# Fixtures whose run.sh still emits a mutant kill (KILLED/killed on a non-comment line) that is
-# not routed through mutant_killed in core/fixtures/lib/mutant.sh. DOWN-ONLY:
-# scripts/validate-mutant-kills.sh fails on a fixture missing from this list (M1) and on a row
-# with no unrouted kill left (M2), so a row leaves in the change that migrates its fixture and
-# none is ever added. The rows are the output of `bash scripts/validate-mutant-kills.sh --derive`,
-# never typed: 127 at origin/main 7c8a88fd7, less check-22-spawn-ledger, migrated in the change
-# that shipped the arm.

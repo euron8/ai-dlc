@@ -533,8 +533,7 @@ for _c in reordered partial atform; do
   _p='='; [ "$_c" = atform ] && _p='@'
   pass "$TARGET/sharded-revert-$_c/s1-adversarial-p1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET 2 "story-1-a$_p$_s1a story-2-b$_p$_s2a"
   pass "$TARGET/sharded-revert-$_c/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 "story-1-a$_p$_s1b story-2-b$_p$_s2b"
-  # partial lists `before` in ORDINAL order, so it reaches F5 under either reader and the
-  # tr -cd mutant stays attributable to the reordered case alone.
+  # partial lists `before` in ORDINAL order, so it reaches F5 under either reader.
   if [ "$_c" = reordered ] || [ "$_c" = atform ]; then
     _before="story-2-b=$_s2b story-1-a=$_s1b"; _after="story-2-b=$_s2a story-1-a=$_s1a"
   else
@@ -1142,7 +1141,7 @@ pass "$TARGET/ceiling-plateau-below/s1-adversarial-p4.md" 4 0 2 3 EXIT_CONDITION
 pass "$TARGET/ceiling-plateau-below/s1-adversarial-p5.md" 5 2 0 1 DIVERGENT_HARD_BLOCK   2 NOSHA
 # p1->p2 and p4->p5 both FALL, so arm H owns those two transitions and wants a record for each.
 # Seeded, deliberately: without them arm H fires and this case reports two findings that have
-# nothing to do with the ceiling, which is the entanglement `fixture-mutants.md` forbids.
+# nothing to do with the ceiling.
 repair "$TARGET/ceiling-plateau-below/s1-brief-repair-p1.md"
 repair "$TARGET/ceiling-plateau-below/s1-brief-repair-p4.md"
 

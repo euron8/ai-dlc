@@ -43550,3 +43550,242 @@ Provenance: batch 257, H1 (ai-dlc-79), from the operator's hook-fixture ruling a
 
 verify: manual
 
+## BL-1091 — no pre-suite step skipped on a recorded pass in B6 or B7 (`0 of 24`), the steps ran one after another, and a second skip mechanism sat beside the fixture one
+
+**LANDED (v0.1130.0).** The pre-suite steps are units of the fixture mechanism and `pk_*` is deleted (`.githooks/pre-push` loses the k3 records, the whole-tree present key, the atime trace and the git replay, about 535 lines, and gains the `PRESUITE_UNITS` span, about 115). A `step` before `PRESUITE_DONE` is queued; `ps_flush` decides every queued step in one pass through `readset_manifest`, `readset_declared` and `readset_keys` with `FXROOT=scripts/presuite/` (the way `cl_select` keys the consumer layout), runs the steps that must run concurrently as forks of the hook, admitted by a fifo holding `FIXTURE_JOBS` tokens (two in a nested pool; no polling, and without a fifo they run one after another and the hook says so), prints each step in declaration order with `step elapsed <n>s`, and publishes a pass through `readset_keys_write` into `<verdict store base>/presuite-keys/<root commit>`. 13 steps declare their inputs in `scripts/presuite/<slug>/inputs.decl` (the top-level directories each read, plus the hook file, which holds the step command and flags). The other 13 queued steps have no key and run on every push, concurrently: 11 read git state (HEAD, origin/main, the push refs, `ls-files`, `log`), which a declared file cannot express; agent definitions reads the git-ignored `.claude/settings.json`, outside the key universe; stray party-mode walks the whole tree, and a new top-level file is under no declarable directory. `fxcount_arm` sets suite environment and stays an inline step. The in-process static half and the whole-row ratchet moved above `ps_flush` as `PS_ALWAYS=1` steps, so `AI_DLC_PRESUITE_SKIP=1` still runs them. Fixture `presuite-units` drives the span in a mktemp repo: an unchanged tree skips, an unrelated add skips, an edited declared file runs, a file added to a declared directory (the `cells.decl` shape) runs, two steps that each read the other's token off a fifo pass only when live at once, output order is declaration order; mutants `m1` (one token), `m2` and `m3` (never skip, never publish), `m4` (a moved key reads as a skip), `m5` (an added path outside every declaration voids every record) and `m6` (tracked paths only, so an added file moves no key) are each killed by their deciding arm with their twin green. `presuite-present-key` is removed with the mechanism it asserted.
+
+**DEFECT.** Filed 2026-11-14. Owner: `.githooks/pre-push`. B6 and B7 both printed `pre-suite keys: 0 of 24 step(s) skipped on a recorded pass`. The push-cost audit's row 2 (the step keys hash git-ignored paths) is stale: `pk_ign` pruned them since BL-1054. The cause was the present key: a record was named and compared by the path set of the whole tree, so one added or removed path voided all 24 records (B6 to B7 added 3 paths). Reproduced in a scratch clone: the same tree skipped 24 of 24, one added file gave 0 of 24. Beside it, the steps ran strictly one after another (sum of step times 273 s with keys off, longest step 70 s), and a pre-suite step was keyed by a grammar no fixture shared.
+
+NOTE: every hook edit re-runs the 13 declared pre-suite steps (each declares the hook file or `.githooks/`) and the 30 of 273 declared fixtures whose `inputs.decl` keys the whole hook file (a `.githooks/pre-push`, `!.githooks/pre-push` or `.githooks/` row): backlog-real-ledger, census-hermetic-coverage, consumer-machinery-home, derived-fence-binding, enforcement-map-derivations, enforcement-map-sites, enforcement-map-sites-b, enforcement-map-sites-c, enforcement-map-sites-d, fixture-inprocess, fixture-invocation-budget, hermetic-runner, layer-contract-conformance, layer-contract-conformance-b, ledger-status-vocabulary, pregate-self-check, prepush-pool-depth, prepush-ssh-keepalive, prepush-worktree-env-scrub, readset-skip, readset-skip-b, readset-skip-c, readset-skip-d, shell-portability, suite-content-key, suite-pole-info, validator-arm-selection, validator-arm-selection-b, validator-fork-budget, vocabulary-index.
+
+Residual: a declaration is the read set, so a step that tests `[ -f x ]` of a path in a directory it did not declare is not keyed on that path. The declarations are the top-level directories the step read, so the case needs a directory the step never read at all.
+
+Receipt: `bash core/fixtures/presuite-units/run.sh`.
+
+Provenance: batch 257, push wall-clock fix release (PW1, T3); id allocated by lead ai-dlc-35.
+
+verify: sh bash core/fixtures/presuite-units/run.sh >/dev/null 2>&1
+
+## BL-1093 — story-evidence-scaffold was the suite's pole, and its consumer-layout run repeated the whole distribution run
+
+**LANDED (v0.1130.0).** The fixture is dealt across seven units, and only the placement-dependent one runs in the consumer layout.
+- `story-evidence-scaffold/run.sh` gains `--group <g>` and one deal table, GDEAL, with one row per block. A coverage join, GROUP JOIN, runs in every dist-only group, b to g, whose `inputs.decl` declares the sibling drivers; group a declares none, so the consumer run reads no path a consumer lacks. It fails on a block with no row, a row with no call site, a block dealt twice, a group with no driver or no `.dist-only` marker, and a driver dealt nothing. Its probe seeds one offender of each kind beside a clean control.
+- Group a is the shipped run with no argument. It keeps the arms whose verdict can depend on placement: the located prose subjects, the capability guard, the installed validator in place, `--list-captures` through it, B3 and the join probe. Groups b to g drive copies of `validate-handoff-evidence.sh`, `record-only-diff.sh` and `sprint-status.sh`, built by `mk_tree`, and so run in the distribution only. Their drivers are `story-evidence-scaffold-b` to `-g`, each the exact shard-driver shape, each `.dist-only`.
+- Worlds are seeded per block (`se_need` in `world.sh`), so no group builds a world it does not read.
+
+Figures, derived from a recorded run with no new timing run. The source is a plain run of the unsplit fixture at 70ef6ee87 with per-line epoch stamps, 970 log-seconds in all. Each group's span was summed from those stamps and scaled ×0.459 to the fixture's 445 s row in `.git/ai-dlc-fixture-durations`. In log-seconds, then push-equivalent seconds: a ~15 → ~7; b ~106 → ~49; c ~124 → ~57; d 225 → ~103; e 210 → ~96; f 233 → ~107; g ~176 → ~81. The longest unit is about 107 s. The RUN-FILTER setup that d, e and f each repeat is 58 log-seconds of each group's span. Merging the three would make one unit of 552 log-seconds, about 253 s. The measurement is the push durations of the release that delivers this split.
+
+**DEFECT.** Filed 2026-11-14. The consumer-layout run took 2233 s in one push, the distribution run 445 s loaded.
+
+Provenance: batch 257, PW release, builder pw3; id allocated by lead ai-dlc-35.
+
+verify: manual
+## BL-1094 — `backlog-receipt-binding` and `backlog-receipt-efficiency` each run as one pool unit, so the push waits on their whole cost
+
+**LANDED (v0.1130.0).**
+
+**DEFECT.** Filed 2026-11-14. Owner: `core/fixtures/backlog-receipt-binding/`, `core/fixtures/backlog-receipt-efficiency/`.
+
+`.git/ai-dlc-fixture-durations` records `backlog-receipt-binding 1001` and `backlog-receipt-efficiency 370` (loaded seconds). The suite is pole-bound, and each ran as a single pool unit, so the push could not finish before the longer of them did.
+
+Landed: `backlog-receipt-binding/run.sh` is six shards, a to f, in the `apply-restamp-worklist` shape. Every section is a unit guarded by `if sg <unit>; then ... fi`, `--group <x>` runs shard x, and `backlog-receipt-binding-{b,c,d,e,f}/run.sh` are drivers that run it with their group. The deal is a: `pra m2 m3 m4 m5 m6`; b: `prb m8 m8b m8c`; c: `prc m8e m8d`; d: `c5r rat`; e: `c5 r10 r11 q1 c1`; f: `memo m7 m12 m14 m17`. m7 and m14 share shard f because m16 reads m7b's capture. Every shard builds the seed template and runs the control. A J0 coverage join derives the units from the `sg` guards and refuses (exit 2) when a unit is dealt twice, dealt to no shard, or dealt but not declared, or when a declared shard has no driver. It carries an inline self-probe. `backlog-receipt-efficiency` is split the same way into a and `backlog-receipt-efficiency-b`, with its own join. The harness above the binding file's `BASH_SOURCE` guard is unchanged, so efficiency still sources it. Every new directory carries `.dist-only`, as do both parents, so `scripts/install.sh` (the `.dist-only` skip in its fixture ship loop) ships none of them and this changes nothing a consumer receives. `scripts/fixture-inprocess-allowlist.txt` gains a row for each of `backlog-receipt-binding-{b..f}`.
+
+Evidence: every shard passes. Every `ok` line of the unsplit fixtures at 0eefdee5b appears in the union of the shard outputs. The join refuses a dropped unit, a duplicated unit, a ghost unit and an undriven shard, each with rc 2 and the cause named.
+
+Provenance: batch 257, PW release (push wall clock), builder pw4; id allocated by lead ai-dlc-35.
+
+verify: has core/fixtures/backlog-receipt-binding/run.sh "UNITS_f="
+
+## BL-1095 — adversarial-shard-merge, review-shard-merge, review-shard-merge-b and remediator-shard-join ran 302 to 773 s loaded as one directory, so each set the suite's wall clock
+
+**LANDED (v0.1130.0).** `adversarial-shard-merge`, `review-shard-merge` and `remediator-shard-join` are dealt across shard directories by case and mutant count, each new one driven by the eight-line shard driver that M4's shard narrowing admits. The adversarial and remediator shards are judged under their family's OWED P2 baseline (BL-1096).
+- `review-shard-merge` (builder pw5a, `b97651fc9`) deals its units over a to g, at 28, 117, 96, 115, 139, 107 and 133 static cells. `review-shard-merge-b` keeps its driver as shard b. CR1's 43 mutants are 31 in e and 12 in g, inside `if sgm canon_merge` groups. Every byte-identical mutant pair is dealt to one shard, and J0 refuses a split pair. The union of the seven plain runs' DEALT-IDS is 177 unique ids, sorted-equal to the pre-split deal, and the seven KS1 lines sum to 177. CS1 and OT1 move into unit `arms`, beside the hand-offs they read.
+- `adversarial-shard-merge` deals its units over a, b, c and d (drivers `-b`, `-c`, `-d`), with mutants 14, 9, 36 and 29. A counted run of each shard is green, and the 88 `KILLED` mutant ids are the 88 of the unsplit run, disjoint across shards. Every ok label of the unsplit run is printed by some shard, except its `88 of 88` tally, which becomes one per-shard tally.
+- `remediator-shard-join` deals unit `head` to a and `tail` to b (driver `-b`). A counted run of each shard is green. Its 91 `KILLED` lines (31 and 60, no id in both) and its 350 ok ids equal the unsplit run's on origin/main.
+- Each new shard declares the parent's `run.sh`, `lib.sh`, seeds and units by name, not the parent directory, so the whole-rows list does not grow. Each has an allowlist row and its own `invocations.decl` from a counted run.
+
+**DEFECT.** Filed 2026-11-14. The suite's wall clock tracks its single longest directory; these four were 773, 752, 651 and 302 loaded seconds.
+
+Provenance: batch 257, PW split, builders pw5a and pw5b; id allocated by lead ai-dlc-35.
+
+verify: manual
+
+
+## BL-1096 — owed-derivations, apply-drift-refile, ledger-reverify and apply-restamp-worklist-b ran 334 to 701 s loaded as one directory, so each set the suite's wall clock
+
+**LANDED (v0.1130.0).** The four are dealt across shard directories, each under the 300 s unit target by case and mutant count, with the shard rows `<family>-<letter>` admitted by one named narrowing of M4.
+- `owed-derivations` gains `--group` and `sg` units over its record, writer, living-sweep, and BL-706 receipt sections, and drivers `-b`, `-c`, `-d`. The BL-706 mutants M8-M14 run in `-d` from their own quiet receipt pass.
+- `apply-drift-refile` is dealt a, b, c with drivers `-b`, `-c` (the layout its comment records from before the earlier merge, re-sized by case and mutant count).
+- `ledger-reverify` gains `--group` and a coverage join over its `lr_unit_` functions, dealt dependency-closed across `-b` and `-c`.
+- `apply-restamp-worklist` unit `arm` is split into `arm1` and `arm2`, each running only the shipped flows its mutants gate on when `ar` is dealt elsewhere; `arm2` moves into shard c. No new directory.
+- `validate-fixture-inprocess.sh` M4 admits a new row `<family>-<letter>` only when the family is on origin/main's list, its own row stays, and the directory's run.sh is exactly the shard driver shape. Each of the three conditions has a mutant in the self-probe.
+- `validate-fixture-inprocess.sh` P2 judges an M4 shard driver's rows under its family's name, and m4sf reads an absent current allowlist as an empty one.
+- `apply-drift-refile` and `ledger-reverify` scrub `AI_DLC_*` after `set -u`, and their two `scripts/env-scrub-allowlist.txt` rows are deleted, so their shards pass H8.
+
+**DEFECT.** Filed 2026-11-14. The suite's wall clock tracks its single longest directory; these four were 701, 658, 555 and 334 loaded seconds.
+
+Provenance: batch 257, PW split, builder pw6; id allocated by lead ai-dlc-35.
+
+verify: manual
+## BL-1097 — four pole-length fixture directories hold the push wall clock: layer-readopt-gate, check-24-adversarial-convergence-d, story-evidence-receipts-mutants and snapshot-archive-rotate
+
+**LANDED (v0.1130.0).** Each directory is split into shards the pre-push pool starts on its own. Every new driver is the exact shard-driver shape (`exec bash <parent>/run.sh --group <x>`), and every parent runs a coverage join over its `sg` unit guards, so a unit dealt to no shard, or a shard with no driver, is FIXTURE BROKEN in every shard.
+- `layer-readopt-gate` → shards a to e (units `main f`, `e2`, `c3`, `gh j`, `sup`). `!core/skills/ai-dlc-update/reconcile/layer-drift.sh` moves from the parent to shard c, which runs C3 and emits its sentinel unconditionally. The parent's allowlist row drops that clause and `layer-readopt-gate-c` gets its own row. Every `!` subject of the unsplit fixture is still declared by at least one shard.
+- `snapshot-archive-rotate` → shards a to c (control and live arms, 30 mutants, 13 sweep-decided mutants). All 7 `!` subjects stay in the parent.
+- `story-evidence-receipts-mutants` → shards a to c (u815, u809, u843 and u845). `-b` and `-c` are `.dist-only` with the parent's reason. All 12 `!` subjects stay in the parent.
+- `check-24-adversarial-convergence-d` → `-d`, `-e` and `-f`: unit k3 is split into k3 and k3c (d), k3w (e) and j2s (f). Each builds only its own worlds, and each has an allowlist row.
+
+Kill sets are unchanged, as measured by the first pw7 builder against an unsplit base run. The mutant ids of each family before and after are equal: layer 35 `ok` mutant lines out of 176 identical `ok` lines, snapshot 43, story 55 and check-24 29 rows. The three manifests and `scripts/uninstall.sh` name every new directory.
+
+**DEFECT.** CLOSED. Filed 2026-11-14. Owner: the four fixture families named in the title. `.git/ai-dlc-fixture-durations` recorded `layer-readopt-gate` 395, `check-24-adversarial-convergence-d` 390, `story-evidence-receipts-mutants` 368 and `snapshot-archive-rotate` 321. The suite is pole-bound, so its wall clock follows its single longest directory, and each of these was one undivided directory.
+
+Provenance: batch 257, PW release (push-wall-clock), builder pw7; id allocated by lead ai-dlc-35.
+
+verify: manual
+## BL-1098 — an edit to `.githooks/pre-push` reruns fixtures that never open the hook
+
+**LANDED (v0.1130.0).** Three fixtures stop keying `.githooks/`:
+- `layer-contract-conformance-b` drops the line from its `inputs.decl`.
+- `consumer-machinery-home` drops the line, and its `seed.sh` copies `.githooks/` only when it is present. Its plain run selects `--arms I43,I44`, which never open the hook. Only its `--matrix` run (`_arms=""`, a full run started by hand at the real root) reads the hook.
+- `derived-fence-binding` drops the line, and its `seed.sh` no longer stages `.githooks/`. Every run it makes, `--matrix` included, selects `--arms` I75, I108, I121, I122 or I123.
+
+Each fixture's `docs/inputs-decl-whole-rows.tsv` row goes with its line. On 356c6745b, `scripts/predict-push-set.sh` gives RUN 30 for a one-byte hook edit and RUN 0 without one. Once this tree's keys are recorded, a hook edit selects 27. Two counts from the composer's own key rows (`.dkeys` from `predict-push-set.sh`) give that figure:
+- Fixtures carrying a `.githooks/pre-push` row: 30 before, 27 after.
+- On this tree, every fixture a hook edit adds is hook-keyed: the run set with the edit equals the set without it united with the 27.
+
+The 30 fixtures carry 3132 s of recorded loaded cost, and the three removed account for 158 s of it (18 + 105 + 35).
+
+Probe: `core/scripts/hermetic-run.sh`, which stages declared inputs only, runs each of the three without the hook, so the sandbox holds one file fewer. Each gives rc 0, and its ok lines are byte-identical to a with-hook control run: 30, 9 and 89 lines. Mutant: restoring `.githooks/` in `layer-contract-conformance-b/inputs.decl` makes 28 fixtures carry the hook row, `layer-contract-conformance-b` among them. Mutant: the bare `cp -R .githooks` with the line removed makes `consumer-machinery-home` and `derived-fence-binding` go red, rc 2, `cp: .../sb/.githooks: No such file or directory`.
+
+Kept, each still keyed on the hook:
+- The hook is a `!` subject: `fixture-inprocess`, `prepush-worktree-env-scrub`, `suite-pole-info`.
+- The fixture drives, copies, mutates or scans the hook (`.githooks/pre-push` line classed `whole`): `backlog-real-ledger`, `census-hermetic-coverage`, `fixture-invocation-budget`, `hermetic-runner`, `pregate-self-check`, `prepush-pool-depth`, `prepush-ssh-keepalive`, `readset-skip`, `readset-skip-b`, `readset-skip-c`, `readset-skip-d`, `shell-portability`.
+- `suite-content-key` copies `.githooks/` and keys spans of the hook copy.
+- The fixture makes a plain-mode `validate-enforcement-map.sh` run with no `--arms`, whose I30, I55 and I66 arms read the hook whole-file: `enforcement-map-sites`, `-b`, `-c`, `-d` (A00 sanity in every shard), `enforcement-map-derivations` (A00_control), `layer-contract-conformance` (FULL runs), `ledger-status-vocabulary` (the `control` run), `validator-arm-selection` (full baseline).
+- `validator-arm-selection-b` goes red in a sandbox without the hook (the MUTANT m2 twin fires).
+- `validator-fork-budget` runs I84, whose corpus includes `.githooks/**`.
+- `vocabulary-index`: its `seam_ctl` greps `$REPO/.githooks` and must hit.
+
+**DEFECT.** CLOSED. Filed 2026-11-14. Owner: the `inputs.decl` of the three named fixtures, and `consumer-machinery-home/seed.sh` and `derived-fence-binding/seed.sh`. On 356c6745b a one-byte hook edit selected 30 dist fixtures (`predict-push-set.sh` RUN 30, CONSUMER 0), against a 15-minute whole-push target.
+
+Provenance: batch 257, PW release (push-wall-clock), builder pw8; id allocated by lead ai-dlc-35.
+
+verify: manual
+
+
+## BL-1099 — shard families run every shard as `<fx>@consumer`, though most shards' verdicts cannot depend on placement
+
+**LANDED (v0.1130.0).** Fifteen shards leave the consumer layout. Three of them do so after a re-deal, and a new dist-only shard takes three units out of a shipped one.
+
+**DEFECT.** Filed 2026-11-14. Owner: the shard families' `run.sh` coverage joins, their `.dist-only` markers, `scripts/uninstall.sh`, `core/skills/ai-dlc/core-manifest.md` and `core/skills/ai-dlc-update/fixture-manifest.md`.
+
+In the 9-way gate of 356c6745b the 41 `@consumer` units that ran cost 4173 s of 7024 s, and every shard of a split family was a candidate.
+
+**The criterion** is BL-1093's. A unit is placement-dependent, and keeps its shard shipped, when it does any of these:
+- resolves a subject in either layout and drives it in place as the family's subject probe;
+- reads an installed file other than the subject's own bytes, such as a hook, schema, role file, rulebook or pre-push;
+- branches on which layout it is in;
+- walks up from the subject to a root.
+
+A unit is placement-independent when it drives copies or mutants of core's sources. It is also independent when it drives a subject in place that a shipped shard already drives, over worlds it builds itself, and that subject resolves its siblings from its own path. `install.sh` copies the reconcile directory, hooks and team roles verbatim.
+
+**The mechanism**, per family, is BL-1093's shape. `DIST_SHARDS` names the dist-only shards. Only a `DIST_SHARDS` shard checks the dist-only siblings, and its `inputs.decl` declares every sibling's driver and every dist-only marker. It checks that each sibling's driver drives it, that each `DIST_SHARDS` shard carries a non-empty `.dist-only`, and that no other shard carries one. A shipped shard declares none of the dist-only siblings' files and skips them in both layouts, because a consumer carries none of them and `hermetic-run.sh` refuses an absent declared file. Every shard checks the shipped siblings' drivers, and that shard a carries no `.dist-only`. The check adds only builtins. In the three re-dealt families (ledger-reverify, adversarial-shard-merge, apply-restamp-worklist), `PLACED_UNITS` names the units listed under "Kept" below, and the join fails when one of them is undeclared or dealt to a `DIST_SHARDS` shard. Shards whose units did not move were not re-measured. Shards whose units moved were re-measured by one counted run: apply-restamp-worklist c and d, ledger-reverify a, b and c, and adversarial-shard-merge b and d. Apply-restamp-worklist a and b passed that run unchanged.
+
+**Taken out of the consumer layout:**
+- **snapshot-archive-rotate-b, -c**: mutant batteries over copies of the located rotator, hooks and schemas.
+- **layer-readopt-gate-b (e2), -d (gh, j), -e (sup)**: register-drift.sh, readopt-override.sh and layer-drift.sh in place over the fixture's own dist/cons worlds, plus mutants on copies. Shards a and c drive each of those subjects in place.
+- **review-shard-merge-e (canon), -f (run_rec, bl808), -g (canon_merge, wv955, bind956)**: the merge and record-only-diff in place over mktemp worlds, plus copies. Their mutants already skip on a consumer.
+- **owed-derivations-d (b7m)**: mutants BL706-M8 to M14 on copies, plus a repeat of shard c's in-place receipt run.
+- **check-24-adversarial-convergence-d (k3, k3c), -e (k3w), -f (j2s)**: the validator in place over K3 worlds the fixture builds. The validator resolves its root from `--series` and its siblings from its own path. The remediation-guard hook these units record with is run in place by its own shipped fixtures.
+- **apply-restamp-worklist-d (new; bl, hr, hu, moved from shard c)**: they drive cmp -s identical copies of the reconcile directory or of the located `validate-hook-registration.sh`. No `B_` flag set outside them is read by them.
+- **ledger-reverify-b, -c (re-dealt)**: cited_only, bare_bold_record and bl932 move from b to a, and id_class and naming_set move from c to a, because each branches on `B2_ISDIST` or `LR_EQ_GUARD`. The 19 units left in b and c run the located engine over synthetic ledgers and copies of its directory. No `R_`/`B_` variable or unit-defined function crosses the new deal.
+- **adversarial-shard-merge-b (re-dealt)**: t moves to d, because it drives the real remediation-guard hook. xs, fi and fg run the merge in place over worlds the file builds itself, and FI's mutants run on copies.
+
+**Kept as `@consumer`, and why:**
+- **apply-restamp-worklist a (cf, u, mut)**: cf reads the installed pre-push for C6 and runs apply.sh in place; u runs apply.sh in place. mut drives copies, but it gates on cf's and u's `B_` flags, so it cannot leave their shard.
+- **apply-restamp-worklist b (ar, arm1)**: ar runs the in-place reconcile directory. arm1 drives copies, but it gates on ar's `B_ar_*` flags, so it cannot leave their shard.
+- **apply-restamp-worklist c (t, vf, arm2)**: t walks up four levels from apply.sh to a root and resolves the renderer and schema by layout; vf runs apply.sh in place from `/`; arm2 runs the in-place AR flows and the real answer-capture hook.
+- **adversarial-shard-merge a, c, d**:
+  - a: core runs the in-place merge CLI and `--pair-sep` readers.
+  - c: dv reads the located rulebook and runs the validator siblings in place; b726 reads the installed provenance schema.
+  - d: cs runs wait-for-deliverable in place, k reads the located schema, and t drives the real located hook.
+  - The mutants of these units ride with them and run on a consumer too, because no layout guard exists. They are not taken out here, and the file's header, which said the battery was retired there, now says so.
+- **review-shard-merge a-d**:
+  - a: seam runs the located recorder hook, seal and wait-for-deliverable.
+  - b: arms copies the installed gate and role files.
+  - c: bl737 runs EV1 and the hook ledger.
+  - d: bl885 reads the installed role and QA files.
+- **remediator-shard-join a, b**: both walk up for the join and hook in either layout and drive them in place. b's unit-reader-a walks up for `provenance-block.json`, and SRT1 reads the real `_gate-procedures.md`.
+- **owed-derivations a, b, c**:
+  - a: wr runs the writer at its resolved location.
+  - b: lw branches on the reader's layout (SC1/M23) and copies the resolved sprint-status.sh and schema.
+  - c: b7 runs the receipt over the in-place reconcile directory.
+- **apply-drift-refile a, b, c**:
+  - a: base, fh and w run apply.sh in place, and fh branches on layout.
+  - b: t has a layout SKIP.
+  - c: q has a layout SKIP, and x walks up four levels from apply.sh to a root.
+- **ledger-reverify a**: the engine locator in either layout and the baseline, plus every unit that branches on `B2_ISDIST` or `LR_EQ_GUARD` or runs a receipt over the in-place reconcile directory: off_subject, unreadable_path, bl890, cited_only, bare_bold_record, bl932, id_class and naming_set. Its other units stay with it.
+- **layer-readopt-gate a (main, f), c (c3)**: these locate readopt-override.sh, unregistered-drift.sh, register-drift.sh and layer-drift.sh in either layout and drive each in place.
+- **snapshot-archive-rotate a**: the located rotator, the live assertions and the sweep against the installed hooks.
+- **check-24-adversarial-convergence a-c**:
+  - a: the validator lookup in either layout and the in-place series cases.
+  - b: the installed acknowledge hook and remediator role.
+  - c: the in-place validator and the receipts.
+- **story-evidence-receipts-mutants, -b, -c**: already `.dist-only`, each with a reason. The shipped story-evidence-receipts names them only in comments.
+
+**Receipts.** `scripts/install.sh` into an empty directory installs 219 shipping fixtures (234 at the base) and none of the sixteen dist-only shards.
+- In that tree the installed `hermetic-run.sh --key-only`, which runs the declared-file check, keys all 20 shipped shards of the eight families: rc 0.
+- adversarial-shard-merge-c with the decl from before this shape (one that declared its dist-only sibling) exits 2: `declared file absent: tests/fixtures/adversarial-shard-merge-b/...`. That was the PW2 push's refusal of 20 `@consumer` units.
+- The fixed decl with one restored sibling row also exits 2.
+- In the distribution, each family's base run.sh was run to the end of its join with one dist-only marker moved aside. The dist-only shard exits 2 naming the marker: snapshot-archive-rotate-b, layer-readopt-gate-d, owed-derivations-d, check-24-adversarial-convergence-e, apply-restamp-worklist-d, review-shard-merge-f, ledger-reverify-c and adversarial-shard-merge-b. Shard a passes (rc 0). With the marker in place both pass.
+- One counted run of the 20 shipped shards in the distribution passes: 20/20 rc 0, with no `invocations.decl` row moved.
+- `PLACED_UNITS`, run in the distribution up to the end of each re-dealt family's join: shard a passes unmutated (rc 0). Moving one named unit into a dist-only shard makes it exit 2 naming the unit and shard: id_class from a to c in ledger-reverify, t from d to b in adversarial-shard-merge, t from c to d in apply-restamp-worklist. The same move on the file before this check passes the join.
+
+Provenance: batch 257, PW release, builder pw9; id allocated by lead ai-dlc-35.
+
+verify: manual
+
+
+## BL-1100 — the consumer layout skips `<fx>@consumer` units on passes recorded elsewhere without naming them
+
+**LANDED (v0.1130.0).** **DEFECT.** Filed 2026-11-14. Owner: `.githooks/pre-push` and `core/git-hooks/pre-push` (one runner, **I66**), `scripts/census-consumer-layout.sh`, `scripts/predict-push-set.sh`.
+
+A run stopped before its end left two kinds of pass, and the next gate treated them differently. The distribution keeps a stopped run's passes only in the verdict store (its key records are published at the run's end, red or green), so the next push names them on `verdict store: N fixture(s) skipped on a pass recorded elsewhere: …`. The consumer layout publishes a unit's placement record THE MOMENT it passes (`cl_publish`), so the next push skipped those units on the record and named none of them. Measured on the 9-way gate of 356c6745b: the stopped 6-way run (16:04-16:17) passed 8 distribution units and 29 `@consumer` units; the gate named all 8 on the distribution store-skip line and none of the 29 (all declared, their records `#state ok` with mtimes 16:08-16:17). A `@consumer` unit skipped on a store entry was not named either.
+
+Landed: `cl_publish` marks each record it writes as unconfirmed (`<keys dir>/.unconfirmed/<fx>`, written before the record). `cl_confirm`, called only at the hook run's two ends beside `cl_write`, red or green, clears the mark of every unit the run passed or named. `cl_select` names, on the distribution's own line with each name suffixed `@consumer`, every store hit (`.vs`) and every record skip whose mark is still set (`.vs.u`). A record a completed run published or confirmed stays counted on the selection line, as the distribution counts its key-record skips. A census or `--only` seed calls `cl_write` and never `cl_confirm`, so the next push names its passes once, as the distribution names seeded store hits. Records written before this change carry no mark and read as confirmed, so the 29 are not named retroactively; a stopped run's passes from now on are. `scripts/census-consumer-layout.sh --predict` calls `cl_select` unredirected and `scripts/predict-push-set.sh` passes every line but the six-space run rows, so the prediction prints the same line.
+
+Receipt: `core/fixtures/prepush-pool-depth`. Cell `cl_resume` (world K: a census stopped after cl-ok passed, then a second census) wants the exact line naming only `cl-ok@consumer`, count 1. Cell `cl_cstore` (world A7: cl-dec's store entry seeded; cl-ok's census record confirmed by A1's push, cl-rd passed by A6's pool) wants the exact line naming only `cl-dec@consumer`, count 1: the confirmed near-miss. Hand mutants, each failing its own cell alone (rc 1): the print deleted and the line listing every skip row (`cl_cstore` `none|rec|0`); the mark write removed from `cl_publish` (`cl_resume` `cl-ok|3 of 4|0|0`); both `cl_confirm` calls removed (`cl_cstore` `none|rec|0`).
+
+NOTE: the mark is not tied to the record's content, so a completed run that passes a unit while a stopped run is writing the same unit's record can clear that mark: a missed name, never a wrong skip.
+
+Provenance: batch 257, PW release (BL-1092's subject); id allocated by the lead.
+
+verify: manual
+## BL-1092 — a builder cannot predict or seed the `<fx>@consumer` units a push runs, and a seeder loads the box while a gate runs
+
+**LANDED (v0.1130.0).** **DEFECT.** Filed 2026-11-14. Owner: `scripts/predict-push-set.sh`, `scripts/seed-verdict-store.sh`, `scripts/census-consumer-layout.sh`, `.githooks/pre-push`.
+
+Landed: `scripts/predict-push-set.sh` prints `CONSUMER <m>` and one `run <fixture>@consumer` line per unit a push of the tree runs, decided by `scripts/census-consumer-layout.sh --predict` (the hook's own `cl_select` over a scratch install, read-only). `scripts/seed-verdict-store.sh <fixture>@consumer` runs exactly those units through `census-consumer-layout.sh --only` (the hook's own `cl_publish`, uncounted, into the shared store base and placement records a push reads); a name whose record is current prints `rc=0` and runs nothing. `.githooks/pre-push` writes `<git common dir>/ai-dlc-gate-held.<pid>` for a push that delivers a tree; `scripts/gate-wait.sh`, sourced by the seeder and the census, waits while a marker's pid is alive with its recorded start time, deletes a dead marker, and proceeds after `AI_DLC_GATE_WAIT_MAX` seconds (default 7200). A missing `scripts/gate-wait.sh` prints that the wait was skipped.
+
+Measured on the base store: origin/main predicts 8 dist and 23 `@consumer` units; a seed of two `@consumer` units took the consumer set from 23 to 21 and the re-predict dropped exactly those two names. The push-cost audit's row 9 ("all 210 placement records carry the runner row") is stale: 13 of 210 records carry the whole-file runner row, 208 carry the `#HR_EXIT` and `#HR_SANDBOX` span rows.
+
+Receipt: `core/fixtures/seed-verdict-store-red-print` drives 21 cells and scores 16 mutants, each killed by its own cell: census `--predict` and `--only` (seeding `X@consumer` removes it from the re-predict, and moving that fixture's `run.sh` puts it back, decided by the hook span's key comparison) and the census's printed `wait skipped` line, `gate_wait` (live waits and releases, dead pid and reused pid ignored, the cap fires, a dead marker is deleted), the hook's GATE_HELD marker (one while running, none after a green, red, INT or TERM exit, none without a pushed tree), the seed's `@consumer` routing (passing `--dirty-ok` to the census only when the seed was given it) and its printed `wait skipped` line when `scripts/gate-wait.sh` is absent, and predict's consumer tail.
+
+NOTE: 13 of the 210 placement records key the whole `scripts/ai-dlc/hermetic-run.sh` row (awk exact match on column 1 over the base store's `consumer-placement-keys` directory; control `scripts/ai-dlc/zznope.sh` gives 0), so a runner edit outside the spans selects 13 `@consumer` units. Not built here.
+
+Provenance: batch 257, push wall clock fix release, targets T1 and T6; id allocated by the lead.
+
+verify: manual
+
+## BL-1090 — `@consumer` fixture durations are dropped when the durations record is merged
+
+**LANDED (v0.1130.0).** **DEFECT.** Filed 2026-11-14. Owner: `.githooks/pre-push` and `core/git-hooks/pre-push` (one runner, **I66**).
+
+The durations merge kept a row only when `${FXROOT}${k}/run.sh` existed, which a `<fx>@consumer` key never satisfies, so no consumer unit's cost reached `.git/ai-dlc-fixture-durations`. The test now strips the suffix (`${k%@consumer}`) in both hooks.
+
+Provenance: batch 257, push wall clock fix release, target T4; id allocated by the lead.
+
+verify: manual
+**Progress (batch 257, PW release; the entry stays open, `verify: manual` unchanged).** BL-1093 splits the `story-evidence-scaffold` pole into seven units and runs only its placement-dependent group in the consumer layout. The owed work above is unchanged.
+
+

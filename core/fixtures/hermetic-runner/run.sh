@@ -2,50 +2,8 @@
 # hermetic-runner — drive the REAL hermetic-run.sh against a probe project and assert what the
 # sandbox holds, what it refuses, and what its key rows say.
 #
-# Usage: run.sh [--matrix]
+# Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = the runner regressed, 2 = fixture broken.
-#
-# THE MUTANT MATRIX (mutant-battery rule). Per push each M mutant runs its DECIDING arm(s) and the TWIN arm(s) named
-# below, the arm list its run_mutant / run_hook_mutant call carries; a DC mutant runs the declared copy, whose arms
-# are A and L. With --matrix every M mutant runs against EVERY arm and one `MATRIX <mutant> <arm> DEAD|GREEN` row is
-# printed per cell; a plain run executes no matrix-only cell. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. hermetic-run.sh forwards no
-# argument, so the matrix is run directly, from the repo root.
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/hermetic-runner/run.sh --matrix
-# MUTANT-MATRIX M1 decides=B twins=D
-# MUTANT-MATRIX M2 decides=A,C,D,L twins=B
-# MUTANT-MATRIX M3 decides=F twins=B
-# MUTANT-MATRIX M4 decides=L twins=A
-# MUTANT-MATRIX M5 decides=K twins=A
-# MUTANT-MATRIX M6 decides=F twins=B
-# MUTANT-MATRIX M7 decides=P twins=Q
-# MUTANT-MATRIX M8 decides=Q,W twins=R
-# MUTANT-MATRIX M9 decides=R,W twins=Q
-# MUTANT-MATRIX M10 decides=T twins=G
-# MUTANT-MATRIX M11 decides=U twins=G
-# MUTANT-MATRIX M12 decides=X twins=A
-# MUTANT-MATRIX M13 decides=X twins=A
-# MUTANT-MATRIX M14 decides=X twins=A
-# MUTANT-MATRIX M15 decides=X twins=A
-# MUTANT-MATRIX M16 decides=X twins=A
-# MUTANT-MATRIX M17 decides=V twins=A
-# MUTANT-MATRIX M18 decides=V twins=A
-# MUTANT-MATRIX M19 decides=L twins=A
-# MUTANT-MATRIX M20 decides=Y,Y3 twins=Y2,A
-# MUTANT-MATRIX M21 decides=Y3 twins=Y,Y2,A
-# MUTANT-MATRIX M22 decides=Y2 twins=Y,Y3,A
-# MUTANT-MATRIX M23 decides=Z1,Z2 twins=A
-# MUTANT-MATRIX M24 decides=Z1 twins=Z2,A
-# MUTANT-MATRIX M25 decides=Z3 twins=Z1,A
-# MUTANT-MATRIX M26 decides=Z4 twins=Z3
-# MUTANT-MATRIX M27 decides=XR twins=A
-# MUTANT-MATRIX DC1 decides=DC.DC1 twins=- why=the copy cannot find its runner and exits 2 before any arm
-# MUTANT-MATRIX DC2 decides=L twins=A
-# MUTANT-MATRIX DC3 decides=DC.DC3 twins=- why=the copy cannot source its preamble and exits 2 before any arm
-# MUTANT-MATRIX DC4 decides=DC.DC4 twins=- why=the copy has no distribution hook and exits 2 before any arm
-# MUTANT-MATRIX-CONTROL DC0 why=the unmutated declared copy must pass arms A and L so a DC verdict is attributable
-# Only M27 routes its kill through mutant_killed (lib/mutant.sh), behind B_XR, the same-run pass of arm XR; the
-# others are scored by an exact failed-arm-set `eq`, which emits no kill token.
 #
 # THE SUBJECT is `hermetic-run.sh`: it runs one fixture inside a sandbox holding ONLY the inputs
 # that fixture declared. A runner that leaks the project root into the sandbox makes every
@@ -99,13 +57,7 @@
 #      "Remove the marker", never "Point TMPDIR"
 #   Z4 the same shape with the system temp dir under a $HOME that carries a marker: neither remedy
 #      ("Point TMPDIR", "Remove the marker") is given
-#   M  mutants of the runner, each built on a COPY and guarded by `cmp -s`, each of which
-#      must fail exactly its own arms. The declaration parse lives in the hook's READSET_KEYROWS
-#      span, so M4/M5 mutate a copy of the hook the probes copy (run_hook_mutant), not the runner.
 #   cwd  the verdict is the same from two different working directories
-#   DC   this fixture's own inputs.decl is complete: removing one declared line, in a copy of the declared
-#        tree run through the runner under test, fails the run for that line (DC4, the hook line, in the
-#        distribution layout only)
 #
 # The probe is a throwaway git repo under mktemp: the runner's --key-only reads `git ls-files`.
 # This fixture is declared (inputs.decl, tools.decl) and runs under hermetic-run.sh; its exclusion seed is its own file.
@@ -113,7 +65,7 @@
 # Sourced FIRST: a fixture invoked directly from a linked worktree inherits an absolute GIT_DIR,
 # and every scratch `git init` below would then silently redirect onto the caller's repository.
 # A missing preamble refuses: without the guard the source fails, the run continues, and the line below
-# redoes the preamble's work, so a declaration that drops core/fixtures/lib/ passed (DC3).
+# redoes the preamble's work, so a declaration that drops core/fixtures/lib/ passed.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "hermetic-runner: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
 set -uo pipefail
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
@@ -121,20 +73,12 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset CLAUDE_PROJECT_DIR
 for _v in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
-MATRIX=0
-for _a in "$@"; do
-  case "$_a" in
-    --matrix) MATRIX=1 ;;
-    *) echo "FIXTURE ERROR: unknown argument '$_a' (only --matrix)" >&2; exit 2 ;;
-  esac
-done
 NESTED="${HERMETIC_FX_NESTED:-0}"
+[ "$#" -eq 0 ] || { echo "FIXTURE ERROR: unknown argument '$1' (this fixture takes none)" >&2; exit 2; }
 unset HERMETIC_FX_NESTED
 
 # The repo root: walk up from this script for whichever runner layout is present. No hop count.
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# A DC copy (below) marks its own directory, and runs as NESTED: arms only, so DC cannot recurse.
-[ -f "$HERE/.decl-mutant" ] && NESTED=1
 RUN=""
 d="$HERE"
 while [ -n "$d" ] && [ "$d" != "/" ]; do
@@ -176,7 +120,6 @@ no() {
   if grep -qF -- "$3" <<<"$2"; then bad "$CUR: $1 ('$3' present)"; else ok "$CUR: $1"; fi
 }
 rowhas() { if grep -qxF -- "$3" <<<"$2"; then ok "$CUR: $1"; else bad "$CUR: $1 (row absent: $3)"; fi; }
-. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "hermetic-runner: FIXTURE BROKEN: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
 
 # --- stubs: the fake fixture's run.sh bodies --------------------------------------------------
 stub_read_all()  { cat <<'EOF'
@@ -348,12 +291,6 @@ hook_dump() {
     && readset_keys "$o/list" "$o" ) >/dev/null 2>&1
 }
 hook_fxroot() { sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$HOOK_SRC" | head -1; }
-# mutate_file <in> <out> <old> <new>: replace exactly one occurrence, require a real change.
-mutate_file() {
-  OLD="$3" NEW="$4" awk '{ i = index($0, ENVIRON["OLD"]); if (i > 0) { $0 = substr($0, 1, i - 1) ENVIRON["NEW"] substr($0, i + length(ENVIRON["OLD"])); n++ } print } END { if (n != 1) exit 3 }' "$1" > "$2" || return 1
-  cmp -s "$1" "$2" && return 1
-  return 0
-}
 
 # --- the arms ---------------------------------------------------------------------------------
 arm_A() {
@@ -645,12 +582,6 @@ arm_J() {
   hj="$(grep -v '^#' "$WK/J2.o/.k/probe" 2>/dev/null)"
   if [ "$hj" = "$rq" ] && [ -n "$hj" ]; then ok "$CUR: ?b207tool: hook and runner rows agree"; else bad "$CUR: ?b207tool: hook and runner rows differ"; fi
   no "?b207tool: the hook's decision is not 'tool unresolved'" "$(cat "$WK/J2.o/.kdec" 2>/dev/null)" "tool unresolved" "probe"
-  # hook copy with `?` ignored (treated as a keyed name): it must DISAGREE with the runner.
-  mutate_file "$PQ/.githooks/pre-push" "$PQ/.githooks/pre-push.mut" "'?'*)" "'NEVER?'*)" && \
-    hook_dump "$PQ" "$PQ/.githooks/pre-push.mut" "$WK/J2m.o"
-  hn="$(cat "$WK/J2m.o/.dunres" 2>/dev/null)"
-  yes "mutant hook (? ignored) is caught: it puts ?b207tool in .dunres" "$hn" "?b207tool"
-  no "control: the unmutated hook has no .dunres row for it" "$(cat "$WK/J2.o/.dunres" 2>/dev/null)x" "?b207tool" "x"
   # (2) a consumer-layout probe: declaration in distribution coordinates, mapped on both sides.
   PM="$WK/J3"; mk_probe "$PM" stub_named $'core/scripts/x.sh\ndata/a.txt'
   mkdir -p "$PM/scripts/ai-dlc" && printf 'x\n' > "$PM/scripts/ai-dlc/x.sh" && cp "$mapper" "$PM/scripts/ai-dlc/core-paths.sh"
@@ -660,11 +591,6 @@ arm_J() {
   rq="$(bash "$RUN" --root "$PM" --key-only probe 2>/dev/null)"
   yes "consumer layout: the runner keys the mapped path" "$rq" "scripts/ai-dlc/x.sh${T}"
   if [ "$hm" = "$rq" ] && [ -n "$hm" ]; then ok "$CUR: consumer layout: hook and runner rows agree on the mapped path"; else bad "$CUR: consumer layout: hook and runner rows differ"; diff <(printf '%s\n' "$hm") <(printf '%s\n' "$rq") | head -10; fi
-  # hook copy with the IDENTITY map: it keys core/scripts/x.sh (absent) and so DISAGREES with the runner.
-  mutate_file "$PM/.githooks/pre-push" "$PM/.githooks/pre-push.mut" '| bash "$mp" --map >' '| cat >' && \
-    hook_dump "$PM" "$PM/.githooks/pre-push.mut" "$WK/J3m.o"
-  hn="$(grep -v '^#' "$WK/J3m.o/.k/probe" 2>/dev/null)"
-  if [ -n "$hn" ] && [ "$hn" != "$rq" ]; then ok "$CUR: mutant hook (identity map) disagrees with the runner"; else bad "$CUR: mutant hook (identity map) was not caught"; fi
   # (3) a declared mapped file ABSENT in both: runner exit 2 (declared file absent), hook no row and no error.
   PA="$WK/J4"; mk_probe "$PA" stub_named $'core/scripts/gone.sh\ndata/a.txt'
   mkdir -p "$PA/scripts/ai-dlc" && cp "$mapper" "$PA/scripts/ai-dlc/core-paths.sh"
@@ -1440,12 +1366,9 @@ stray_check
 # DENY cells can say anything: every other arm SKIPs, naming the marker, rather than reading as a regression.
 ARMS="A B C D E F H I K L N G J P Q R S T U V W X XR Y Y2 Y3 Z1 Z2 Z3 Z4"
 if [ -n "$STRAY" ]; then
-  echo "  SKIP  arms A B C D E F H I K L N G J P Q R S T U V W X XR Y Y2 Y3, mutants M1-M22, M27 and cwd: each needs a probe run the stray marker refuses"
+  echo "  SKIP  arms A B C D E F H I K L N G J P Q R S T U V W X XR Y Y2 Y3 and cwd: each needs a probe run the stray marker refuses"
   ARMS="Z1 Z2 Z3 Z4"
 fi
-# A DC copy runs only the arms its marker names: the control's positive conjunct (A) and the arm that reads the
-# mapper (L).
-[ -f "$HERE/.decl-mutant" ] && ARMS="$(cat "$HERE/.decl-mutant")"
 for _a in $ARMS; do
   ( "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s' "$FAILED" > "$WORK/par/$_a.failed" ) &
 done
@@ -1455,233 +1378,13 @@ for _a in $ARMS; do
   [ -f "$WORK/par/$_a.failed" ] || { echo "FIXTURE ERROR: arm $_a produced no verdict" >&2; exit 2; }
   FAILED="$FAILED$(cat "$WORK/par/$_a.failed")"
 done
-MAIN_FAILED="$FAILED"
 
-# --- mutants of the runner ----------------------------------------------------------------------
-mutate() { # mutate <out> <old> <new>: replace exactly one line occurrence, require a real change
-  OLD="$2" NEW="$3" awk '{ i = index($0, ENVIRON["OLD"]); if (i > 0) { $0 = substr($0, 1, i - 1) ENVIRON["NEW"] substr($0, i + length(ENVIRON["OLD"])); n++ } print } END { if (n != 1) exit 3 }' "$RUN_ORIG" > "$1" || return 1
-  cmp -s "$RUN_ORIG" "$1" && return 1
-  return 0
-}
 failed_set() { tr ' ' '\n' <<<"$1" | grep -v '^$' | LC_ALL=C sort -u | tr '\n' ' '; }
-# run_mutant <name> <arms> <old> <new>: only the mutant's expected arms plus ONE control arm run, so the
-# verdict is "the expected arms fail and the control arm passes".
-run_mutant() {
-  # The mutant lives in its own directory WITH the mapper beside it: the runner resolves core-paths.sh
-  # from its own directory, so a lone copy would fail arm L as `mapper absent` and score every mutant
-  # as an L failure it did not earn. The sibling is asserted present (a mutant verdict is evidence only
-  # about a subject that ran).
-  local m="$WORK/mutdir-$1/hermetic-run.sh"
-  mkdir -p "$WORK/mutdir-$1" && cp "$(dirname "$RUN_ORIG")/core-paths.sh" "$WORK/mutdir-$1/core-paths.sh" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
-  mutate "$m" "$3" "$4" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
-  ( RUN="$m"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $(mx_arms "$2"); do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
-}
-# mx_arms <per-push arm list>: that list, or under --matrix every arm this run could run (the matrix cells).
-mx_arms() { if [ "$MATRIX" = 1 ]; then printf '%s\n' "$ARMS"; else printf '%s\n' "$1"; fi; }
-# run_hook_mutant <name> <arms> <old> <new>: the same, but the mutation is applied to a copy of the HOOK
-# every probe copies (HOOK_SRC, the file the runner under test sources its READSET_KEYROWS span from), and
-# the runner is the unmutated one. The declaration parse lives in that span, so a mutant of the parse the
-# runner OBSERVES has to be built there; a runner mutant cannot reach it.
-run_hook_mutant() {
-  local h="$WORK/hmutdir-$1/pre-push"
-  mkdir -p "$WORK/hmutdir-$1" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
-  mutate_file "$HOOK_SRC" "$h" "$3" "$4" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
-  ( HOOK_SRC="$h"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $(mx_arms "$2"); do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
-}
-
-# --- DC: this fixture's own declaration is complete (BL-584 item 1) ------------------------------------
-# Each DC mutant copies every declared path and this fixture's own directory into a fresh git tree, removes ONE
-# line from the copy's inputs.decl, and runs the copy through its own runner. The file stays on disk in the copy;
-# only the declaration loses it, so the runner leaves it out of the inner sandbox, which is the state a fixture
-# with an incomplete declaration runs in. Each mutant asserts its exit code AND the message that names its line,
-# so a copy that failed for some other reason cannot score the kill. DC0, the unmutated copy, must pass with ok
-# lines from both arms it runs: without it a copy that cannot run at all would score every mutant as killed.
-# The copy marks its own directory (.decl-mutant), which makes it NESTED (no M battery, no cwd pass, no DC) and
-# limits it to arms A and L.
-# NOT COVERED, and why (a removal mutant of these lines cannot fail):
-#   every tools.decl line: removing one is not a DC mutant here, because DC mutates inputs.decl only. The
-#     sandbox PATH is the declared farm alone, so an undeclared tool is `command not found` in the sandbox:
-#     tools.decl keys the tools AND restricts them, and a missing line fails the arm whose run.sh forks it.
-#   core/git-hooks/pre-push: the distribution reads .githooks/pre-push first and never opens this file; on a
-#     consumer both hook lines map to .githooks/pre-push, so either one alone covers it. DC4 is therefore
-#     distribution-only.
-DC_DECL="$HERE/inputs.decl"
-DC_FXREL="${HERE#"$ROOT"/}"
-DC_RUNREL="${RUN_TREE#"$ROOT"/}"
-dc_paths() { # the declared paths, markers stripped, in this tree's own spelling (mapped on a consumer)
-  local raw
-  raw="$(grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$DC_DECL" | sed 's/^[!+]*//')"
-  if [ -d "$ROOT/core/scripts" ]; then printf '%s\n' "$raw"
-  else printf '%s\n' "$raw" | bash "$(dirname "$RUN_TREE")/core-paths.sh" --map; fi
-}
-dc_build() { # <copy dir> <inputs.decl line to remove, or empty>
-  local c="$1" drop="$2" p n0 n1
-  mkdir -p "$c" || return 1
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    case "$p" in
-      */) mkdir -p "$c/$p" && cp -R "$ROOT/$p." "$c/$p" || return 1 ;;
-      *) mkdir -p "$c/$(dirname "$p")" && cp -p "$ROOT/$p" "$c/$p" || return 1 ;;
-    esac
-  done <<<"$(dc_paths)"
-  mkdir -p "$c/$DC_FXREL" && cp -R "$HERE/." "$c/$DC_FXREL/" || return 1
-  printf 'A L\n' > "$c/$DC_FXREL/.decl-mutant" || return 1
-  if [ -n "$drop" ]; then
-    grep -vxF -- "$drop" "$DC_DECL" > "$c/$DC_FXREL/inputs.decl"
-    n0="$(grep -c . "$DC_DECL")" || n0=0
-    n1="$(grep -c . "$c/$DC_FXREL/inputs.decl")" || n1=0
-    # Exactly one line gone: a line that matched nothing is a lost anchor, not a mutant.
-    [ "$n1" -eq $((n0 - 1)) ] || return 1
-  fi
-  ( cd "$c" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm dc ) >/dev/null 2>&1 || return 1
-}
-dc_run() { # <id> <inputs.decl line to remove, or empty>: writes $WORK/dc-<id>.rc and .out, or BROKEN
-  local c="$WORK/dc-$1" out rc
-  if ! dc_build "$c" "$2"; then echo "BROKEN" > "$WORK/dc-$1.rc"; return; fi
-  out="$(bash "$c/$DC_RUNREL" --root "$c" hermetic-runner 2>&1)"; rc=$?
-  printf '%s\n' "$out" > "$WORK/dc-$1.out"
-  printf '%s\n' "$rc" > "$WORK/dc-$1.rc"
-}
-
-# Under a stray marker only M23/M24 can be scored, and against the Z arms alone: arm A, their control, is
-# refused there for the stray marker's own reason.
-if [ "$NESTED" != 1 ] && [ -n "$STRAY" ]; then
-  run_mutant M23 "Z1 Z2" 'if [ -n "$hr_tdir_root" ] && {' 'if false && {' &
-  run_mutant M24 "Z1 Z2" 'ai_dlc_resolve_root "$(dirname "$HR_WORK")"' 'ai_dlc_resolve_root "$(dirname "$(dirname "$HR_WORK")")"' &
-  run_mutant M25 "Z3 Z1" '[ "$hr_honours" = 1 ]; }; then' 'true; }; then' &
-  run_mutant M26 "Z4 Z3" 'TMPDIR cannot move a bare mktemp -d here; do not remove the marker. Run under an account whose system temp dir is outside $HOME.' 'Point TMPDIR outside $HOME; do not remove the marker.' &
-  wait
-  CUR=M
-  for pair in "M23:Z1 Z2" "M24:Z1" "M25:Z3" "M26:Z4"; do
-    mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
-    got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
-    [ "$got" = "BROKEN" ] && { echo "FIXTURE ERROR: mutant $mname did not apply to $RUN_ORIG (the target line moved)" >&2; exit 2; }
-    eq "$mname fails exactly its own arms [$want]" "$got" "$want"
-  done
-fi
 if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
-  run_mutant M1 "B D" 'if ! grep -qxF -e "HERMETIC-CONSUMED $rr"' 'if false && grep -qxF -e "HERMETIC-CONSUMED $rr"' &
-  run_mutant M2 "A C D L B" 'mkdir -p "$HR_SB/$HR_FXROOT" || exit 2' 'cp -Rp "$HR_ROOT/." "$HR_SB/" ; mkdir -p "$HR_SB/$HR_FXROOT" || exit 2' &
-  run_mutant M3 "F B" 'env -i PATH=' 'env PATH=' &
-  # M4: the span's mapper call made the identity, in the hook the runner sources: a core/ declaration on a
-  # consumer is not mapped, so the runner refuses it as absent.
-  run_hook_mutant M4 "L A" '| bash "$mp" --map >' '| cat >' &
-  # M5: the span's `?name` branch never taken, in the hook the runner sources: `?b207tool` is resolved as a
-  # keyed tool name and refused.
-  run_hook_mutant M5 "K A" "'?'*)" "'NEVER?'*)" &
-  # M17/M18: the same two properties in the runner's own skew parser, which runs only when the hook carries
-  # no READSET_KEYROWS span, so only arm V (span removed) can see them.
-  run_mutant M17 "V A" "'?'*) printf" "'NEVER?'*) printf" &
-  run_mutant M18 "V A" '| bash "$4" --map >' '| cat >' &
-  # M19: the runner hands the span the DISTRIBUTION layout on a consumer: no mapping, the declaration refused.
-  run_mutant M19 "L A" 'hr_lay=cons; [ "$HR_LAYOUT" = distribution ] && hr_lay=dist' 'hr_lay=dist' &
-  run_mutant M6 "F B" 'HR_WORK="$(cd "$HR_WORK" && pwd -P)" || exit 2' 'HR_WORK="$HR_WORK"' &
-  # M7: a declared directory copied whole again (`cp -Rp`): the ignored link and file reach the sandbox.
-  run_mutant M7 "P Q" '  mkdir -p "$HR_SB/$d" || exit 2' '  { mkdir -p "$HR_SB/$(dirname "$d")" && { [ -e "$HR_SB/$d" ] || cp -Rp "$HR_ROOT/$d" "$HR_SB/$d"; }; } || exit 2' &
-  # M8: the link test placed behind an `-f` filter: a dir-link and a dangling link pass.
-  run_mutant M8 "Q W R" '    if [ -L "$HR_ROOT/$e" ]; then' '    if [ -f "$HR_ROOT/$e" ] && [ -L "$HR_ROOT/$e" ]; then' &
-  # M9: the link test scoped to TRACKED entries: untracked-unignored links pass.
-  run_mutant M9 "R W Q" '    if [ -L "$HR_ROOT/$e" ]; then' '    if [ -L "$HR_ROOT/$e" ] && ( cd "$HR_ROOT" && git ls-files --error-unmatch -- "$e" >/dev/null 2>&1 ); then' &
-  # M10: the copy population fed into the key: a deleted tracked file moves the listing row.
-  run_mutant M10 "T G" 'cut -f1 "$HR_WORK/m/.now" > "$HR_WORK/m/.is"' 'cat "$o/.paths" > "$HR_WORK/m/.is"' &
-  # M11: the key subshell's exit lost again: an unhashable tree prints nothing at exit 0.
-  run_mutant M11 "U G" ') > "$HR_WORK/krows"; hr_kr=$?' ') > "$HR_WORK/krows"; hr_kr=0' &
-  # M12: the pin pack never reaches the sandbox: a pinned blob is unreadable there.
-  run_mutant M12 "X A" 'pack-objects -q "$HR_SB/.git/objects/pack/pack"' 'pack-objects -q "$HR_WORK/pack"' &
-  # M13: a required pin absent from the project is treated as optional: no exit 2.
-  run_mutant M13 "X A" 'elif [ "${line%% *}" = pin ]; then' 'elif false; then' &
-  # M14: the seed commit skipped: the sandbox repository has no HEAD.
-  run_mutant M14 "X A" '  if [ "$hr_seed" = 1 ]; then' '  if false; then' &
-  # M15: an abbreviated pin accepted: the full-sha guard removed.
-  run_mutant M15 "X A" '[ "${#hr_ps}" -eq 40 ] ||' 'true ||' &
-  # M16: a pass with an optional pin skipped is recorded anyway, so a shallow clone's pass is reused by a full one.
-  run_mutant M16 "X A" '[ "${hr_pin_skipped:-0}" = 0 ] || return 0' ':' &
-  # M20: the own-directory copy restored to `cp -Rp <dir> <dest>`, which nests onto a dest `core/` already made.
-  run_mutant M20 "Y Y2 Y3 A" 'mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' 'cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2' &
-  # M21: the copy skipped when the destination already exists. Harmless where the population already holds
-  # the whole own dir (Y) and where the override filter leaves no destination (Y2); it strands the consumer's
-  # declared run.sh without the rest of its directory (Y3).
-  run_mutant M21 "Y Y2 Y3 A" 'mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' '{ [ -d "$HR_SB/$HR_FXROOT/$HR_FX" ] || cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX"; } || exit 2' &
-  # M22: the override filter dropped: the in-tree own dir is copied first and the override lands on it.
-  run_mutant M22 "Y Y2 Y3 A" 'if [ "$HR_FXDIR" != "$HR_ROOT/$HR_FXROOT/$HR_FX" ]; then' 'if false; then' &
-  # M23: the work-dir escape guard deleted: no marker above TMPDIR is refused.
-  run_mutant M23 "Z1 Z2 A" 'if [ -n "$hr_tdir_root" ] && {' 'if false && {' &
-  # M24: the walk starts one level too high: a marker in the work dir's own parent is missed.
-  run_mutant M24 "Z1 Z2 A" 'ai_dlc_resolve_root "$(dirname "$HR_WORK")"' 'ai_dlc_resolve_root "$(dirname "$(dirname "$HR_WORK")")"' &
-  # M25: the work-dir message taken whenever a marker sits above the work dir, even where a bare mktemp -d
-  # ignores TMPDIR: the remedy points TMPDIR elsewhere, which cannot help.
-  run_mutant M25 "Z3 Z1 A" '[ "$hr_honours" = 1 ]; }; then' 'true; }; then' &
-  # M26: the $HOME message advises moving TMPDIR, which cannot move a bare mktemp -d where this branch is reachable.
-  run_mutant M26 "Z4 Z3" 'TMPDIR cannot move a bare mktemp -d here; do not remove the marker. Run under an account whose system temp dir is outside $HOME.' 'Point TMPDIR outside $HOME; do not remove the marker.' &
-  # M27: the composer ignores the span's G row, in the hook the runner sources: the range fold leaves the key, so a
-  # commit on a declared range path no longer moves it. The parse, the pack and the refs are untouched.
-  run_hook_mutant M27 "XR A" 'else if (a[2] == "G") PL[a[1]] = PL[a[1]] "\n" a[3] "\t" a[4] }' '}' &
-  # DC: the declaration-completeness mutants (definitions and the uncovered lines above dc_run).
-  dc_run DC0 "" &
-  dc_run DC1 "core/scripts/hermetic-run.sh" &
-  dc_run DC2 "core/scripts/core-paths.sh" &
-  dc_run DC3 "core/fixtures/lib/" &
-  [ ! -d "$ROOT/core/scripts" ] || dc_run DC4 ".githooks/pre-push" &
   # cwd-invariance: two nested runs of this fixture from different working directories.
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
   ( cd "$(dirname "$RUN_TREE")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
-  CUR=M
-  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F" "M7:P" "M8:Q W" "M9:R W" "M10:T" "M11:U" "M12:X" "M13:X" "M14:X" "M15:X" "M16:X" "M17:V" "M18:V" "M19:L" "M20:Y Y3" "M21:Y3" "M22:Y2" "M23:Z1 Z2" "M24:Z1" "M25:Z3" "M26:Z4"; do
-    mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
-    got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
-    if [ "$got" = "BROKEN" ] || [ -z "$got" ] && [ "$want" != "" ] && [ "$got" = "BROKEN" ]; then
-      echo "FIXTURE ERROR: mutant $mname did not apply to $RUN_ORIG (the target line moved)" >&2; exit 2
-    fi
-    # Under --matrix every mutant ran every arm, so its failed set is the matrix row, printed below, not this cell.
-    [ "$MATRIX" = 1 ] && continue
-    eq "$mname fails exactly its own arms [$want]" "$got" "$want"
-  done
-  xr_set=" $(failed_set "$MAIN_FAILED") "; xr_hit="$(grep -c ' XR ' <<<"$xr_set")" || true
-  got="$(cat "$WORK/mut-M27.res" 2>/dev/null)"
-  [ "$got" != BROKEN ] || { echo "FIXTURE ERROR: mutant M27 did not apply to $HOOK_SRC (the G-row line of readset_decl_keys moved)" >&2; exit 2; }
-  if [ "$MATRIX" = 1 ]; then :
-  elif [ "$got" = "$(failed_set XR)" ]; then mutant_killed "$([ "$xr_hit" = 0 ] && echo 1 || echo 0)" M27 "M: M27 fails exactly its own arms [XR] (the range fold dropped from the composer)"
-  else bad "M: M27 should fail exactly arm XR (got '$got')"; fi
-  if [ "$MATRIX" = 1 ]; then
-    for mname in M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M14 M15 M16 M17 M18 M19 M20 M21 M22 M23 M24 M25 M26 M27; do
-      got=" $(cat "$WORK/mut-$mname.res" 2>/dev/null) "
-      for _a in $ARMS; do case "$got" in *" $_a "*) echo "MATRIX $mname $_a DEAD" ;; *) echo "MATRIX $mname $_a GREEN" ;; esac; done
-    done
-  fi
-  CUR=DC
-  [ "$(cat "$WORK/dc-DC0.rc" 2>/dev/null)" != BROKEN ] || { echo "FIXTURE ERROR: DC0, the unmutated declared copy, could not be built" >&2; exit 2; }
-  eq "DC0 the unmutated declared copy passes: exit" "$(cat "$WORK/dc-DC0.rc" 2>/dev/null)" 0
-  yes "DC0 the copy ran arm A" "$(cat "$WORK/dc-DC0.out" 2>/dev/null)" "  ok    A: declared file+dir: exit 0"
-  yes "DC0 the copy ran arm L" "$(cat "$WORK/dc-DC0.out" 2>/dev/null)" "  ok    L: consumer layout, core/ declaration: exit 0"
-  dc_pairs="DC1|2|FIXTURE ERROR: hermetic-run.sh not found walking up from
-DC2|1|FAIL  L: no core-paths.sh beside the runner under test
-DC3|2|FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent"
-  [ ! -d "$ROOT/core/scripts" ] || dc_pairs="$dc_pairs
-DC4|2|FIXTURE ERROR: a distribution tree (core/scripts/ present) with no .githooks/pre-push"
-  while IFS='|' read -r dcid dcrc dcmsg; do
-    [ "$(cat "$WORK/dc-$dcid.rc" 2>/dev/null)" != BROKEN ] || { echo "FIXTURE ERROR: $dcid did not apply: its inputs.decl line is gone, or the copy could not be built" >&2; exit 2; }
-    eq "$dcid one declared line removed: exit" "$(cat "$WORK/dc-$dcid.rc" 2>/dev/null)" "$dcrc"
-    yes "$dcid fails for its own line" "$(cat "$WORK/dc-$dcid.out" 2>/dev/null)" "$dcmsg"
-  done <<<"$dc_pairs"
-  # Under --matrix the DC copies are scored in the same row format. The cell DC.<id> is DEAD when the copy fails with its
-  # exit code AND its own message (the per-push assertion above); arms A and L are scored only where the copy printed
-  # that arm's verdict line (a copy that exits 2 before any arm runs none), DEAD on a FAIL line and GREEN on an ok line.
-  # DC0, the unmutated copy, prints no DC.<id> cell: it is the control, and A and L must be GREEN on it.
-  if [ "$MATRIX" = 1 ]; then
-    for _dc in DC0 DC1 DC2 DC3 DC4; do
-      [ -f "$WORK/dc-$_dc.out" ] || continue
-      _dcout="$(cat "$WORK/dc-$_dc.out")"
-      for _a in A L; do
-        if grep -q "^  FAIL  $_a:" <<<"$_dcout"; then echo "MATRIX $_dc $_a DEAD"
-        elif grep -q "^  ok    $_a:" <<<"$_dcout"; then echo "MATRIX $_dc $_a GREEN"; fi
-      done
-    done
-    while IFS='|' read -r dcid dcrc dcmsg; do
-      if [ "$(cat "$WORK/dc-$dcid.rc" 2>/dev/null)" = "$dcrc" ] && grep -qF -- "$dcmsg" "$WORK/dc-$dcid.out"; then echo "MATRIX $dcid DC.$dcid DEAD"
-      else echo "MATRIX $dcid DC.$dcid GREEN"; fi
-    done <<<"$dc_pairs"
-  fi
   CUR=cwd
   eq "from the root: exit 0" "$(cat "$WORK/cwd1.rc" 2>/dev/null)" 0
   eq "from the runner's dir: exit 0" "$(cat "$WORK/cwd2.rc" 2>/dev/null)" 0
@@ -1696,5 +1399,5 @@ if [ -n "$(failed_set "$FAILED")" ]; then
   echo "hermetic-runner: FAIL arms:$(failed_set "$FAILED")"
   exit 1
 fi
-if [ -n "$STRAY" ]; then echo "hermetic-runner: every arm that could run holds (Z1 and Z2 DENY cells, Z3, Z4, M23, M24, M25, M26); the rest SKIPPED for the stray marker named above"; else echo "hermetic-runner: every arm holds"; fi
+if [ -n "$STRAY" ]; then echo "hermetic-runner: every arm that could run holds (Z1 and Z2 DENY cells, Z3, Z4); the rest SKIPPED for the stray marker named above"; else echo "hermetic-runner: every arm holds"; fi
 exit 0

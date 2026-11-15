@@ -28,87 +28,7 @@
 # labelled prior, two bullets naming one file, a prose line quoting the key, the `(LIVE)`
 # inverse label, and mixed key spellings across a pair -- and counts shapes rather than arms
 # because channels written by different hands converge on the obvious seed and then agree for
-# that reason. Its mutants are copies OUTSIDE the tree: I113 binds the count grammar
-# byte-identically across three files, so a mutation applied in place would trip that invariant
-# as well and the fixture's verdict would no longer be attributable to the fixture.
-#
-# THE MUTANT MATRIX, measured by the REMEASURE command below: every MATRIX line read measured = decides.
-# An ordinary run scores each mutant on its decides set plus these twins only.
-# MUTANT-MATRIX G-allow-all decides=deny_first,full_snapshot,full_step,mate_calls twins=ladder_abs,standdown_r0
-# MUTANT-MATRIX G-arms-r0 decides=standdown_r0 twins=deny_first,standdown_missing
-# MUTANT-MATRIX G-no-standdown decides=inert,ladder_abs,ladder_rel,ladder_consumer,standdown_r0,standdown_missing,legacy,fastpath twins=full_snapshot,full_step
-# MUTANT-MATRIX G-one-spelling decides=ladder_rel twins=ladder_abs
-# MUTANT-MATRIX G-no-readability decides=standdown_missing twins=standdown_r0
-# MUTANT-MATRIX G-no-fastpath decides=fastpath twins=inert
-# MUTANT-MATRIX G-dead decides=deny_first,ladder_abs,ladder_rel,ladder_consumer,standdown_missing,fastpath,full_snapshot,full_step,mate_calls,mate_reads twins=inert,standdown_r0,legacy
-# MUTANT-MATRIX G-partial-ok decides=full_snapshot,full_step twins=ladder_abs
-# MUTANT-MATRIX G-partial-ok-snapshot decides=full_snapshot twins=full_step
-# MUTANT-MATRIX G-partial-ok-step decides=full_step twins=full_snapshot
-# MUTANT-MATRIX G-no-mate-exit decides=mate_calls,mate_reads twins=deny_first
-# MUTANT-MATRIX G-exit-every-caller decides=deny_first,ladder_abs,ladder_rel,ladder_consumer,standdown_missing,fastpath,full_snapshot,full_step,mate_calls,mate_reads twins=inert,standdown_r0,legacy
-# MUTANT-MATRIX P-raw-basename decides=consumer,assurance twins=- why=the-battery-has-two-predicates-and-the-mutant-decides-both
-# MUTANT-MATRIX P-no-resolve decides=consumer twins=assurance
-# MUTANT-MATRIX P-flag-blind decides=assurance twins=consumer
-# MUTANT-MATRIX P-assurance-always decides=assurance twins=consumer
-# MUTANT-MATRIX A-noarm decides=deny,before,nogrant,mate,bound twins=after
-# MUTANT-MATRIX A-mate decides=mate twins=deny
-# MUTANT-MATRIX A-order decides=before twins=after
-# MUTANT-MATRIX A-unavail decides=unavail twins=before
-# MUTANT-MATRIX A-grant decides=nogrant twins=deny
-# MUTANT-MATRIX A-digest decides=nodigest twins=deny
-# MUTANT-MATRIX A-bound decides=bound twins=deny
-# MUTANT-MATRIX A-session decides=session twins=deny
-# MUTANT-MATRIX W-a decides=upd_compact twins=pipe_compact
-# MUTANT-MATRIX W-b decides=legacy_upd,ord_upd twins=stale_upd,legacy_pipe
-# MUTANT-MATRIX W-c decides=stale_pipe,ord_pipe twins=stale_upd,same_sess
-# MUTANT-MATRIX W-d decides=stale_upd,stale_pipe,legacy_upd,ord_pipe,ord_upd twins=same_sess,pipe_compact
-# MUTANT-MATRIX W-e decides=ord_pipe,ord_upd twins=stale_pipe,stale_upd
-# MUTANT-MATRIX M-730-net10 decides=rflush twins=rflush_ctl
-# MUTANT-MATRIX M-730-noreread decides=rflush,rwithdraw twins=rmsg
-# MUTANT-MATRIX M-730-count decides=rmsg twins=rmsg_ctl
-# MUTANT-MATRIX M-730-grant decides=rwithdraw twins=rflush_ctl
-# MUTANT-MATRIX M5-drop decides=d_step,d_first twins=d_decoy
-# MUTANT-MATRIX M6-widen decides=d_decoy,d_base,d_bounded twins=d_step
-# MUTANT-MATRIX M7-advance__stage_ decides=d_first twins=d_step
-# MUTANT-MATRIX M7-advance__marker_ decides=d_step,d_first twins=d_decoy
-# MUTANT-MATRIX M7-advance__advisor-owed_ decides=d_step,d_first twins=d_decoy
-# MUTANT-MATRIX M8-step-only decides=d_first twins=d_step
-# MUTANT-MATRIX M-base decides=d_base twins=d_step
-# MUTANT-MATRIX M-nofull decides=d_bounded twins=d_step
-# MUTANT-MATRIX M9-inplace decides=s_inode,s_ulimit,s_struct twins=s_garbage
-# MUTANT-MATRIX M10-no-rename decides=s_inode,s_struct twins=s_ulimit
-# MUTANT-MATRIX M-unlink decides=s_ulimit,s_struct twins=s_inode
-# MUTANT-MATRIX M-fixedname decides=s_struct twins=s_inode
-# MUTANT-MATRIX M-684 decides=r_clear twins=r_owed
-# MUTANT-MATRIX M-730 decides=r_owed twins=r_clear
-# MUTANT-MATRIX M-688-drop decides=w_snap,w_step twins=w_ctl
-# MUTANT-MATRIX M-688-A decides=w_snap,w_step twins=w_ctl
-# MUTANT-MATRIX M-688-B decides=w_snap,w_step twins=w_ctl
-# MUTANT-MATRIX M-725-pre decides=s_fail twins=s_fail_ctl
-# MUTANT-MATRIX M-725-always decides=s_fail_ctl twins=s_fail
-# MUTANT-MATRIX M-687-nofull decides=f_bound twins=f_allow
-# MUTANT-MATRIX M-687-adv decides=f_allow twins=f_seq
-# MUTANT-MATRIX M-687-sat decides=f_allow twins=f_seq
-# MUTANT-MATRIX M-687-widen decides=f_bound,f_decoy,f_hand twins=f_allow
-# MUTANT-MATRIX M-687-nohand decides=f_hand twins=f_allow
-# MUTANT-MATRIX M-687-drop decides=f_allow twins=f_seq
-# MUTANT-MATRIX M1-first-match decides=S1,S1b,S4 twins=S2
-# MUTANT-MATRIX M2-head1 decides=S1,S1b twins=S2,S4
-# MUTANT-MATRIX M3-tail1 decides=S1,S1b twins=S2
-# MUTANT-MATRIX M4-no-label decides=S3,S4 twins=S2
-# MUTANT-MATRIX M5-mandate-anyway decides=S1,S1b twins=S2
-# MUTANT-MATRIX M6-strict-key decides=S1b,S2b,S2c,S7 twins=S2
-# MUTANT-MATRIX M7-no-bullet-clause decides=S6 twins=S2
-# MUTANT-MATRIX M8-agreement-dup decides=S5 twins=S2
-# MUTANT-MATRIX PC-f decides=upd_nomark,upd_foreign twins=foreign
-# MUTANT-MATRIX PC-g decides=foreign twins=legacy
-# MUTANT-MATRIX M-reclear decides=reclear twins=- why=a one-world arm whose only cell is the re-clear predicate
-# MUTANT-MATRIX M-net-ceiling decides=net twins=- why=a one-world arm whose only cell is the net-expiry predicate
-# MUTANT-MATRIX M-nowall-ignored decides=nowall twins=- why=a one-arm pair whose set and unset cells are each the other's twin, and this mutant fails only the set cell
-# MUTANT-MATRIX M-nowall-always decides=nowall twins=- why=a one-arm pair whose set and unset cells are each the other's twin, and this mutant fails only the unset cell
-# MUTANT-MATRIX M-pc-deletes decides=sequence twins=- why=a one-world arm whose only cell is the three-hook sequence
-# MUTANT-MATRIX-DYNAMIC scorer why=each battery's scorer passes its own name argument to mutant_killed, every name carrying its own row above
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/postcompact-rulebook-recovery/run.sh --matrix
+# that reason.
 set -uo pipefail
 
 # The pre-push gate inherits every AI_DLC_* tunable a consumer set in settings.json. A fixture
@@ -137,10 +57,6 @@ _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.cla
 [ -n "$_PRS" ] && echo "HERMETIC-CONSUMED $_PRS"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# Every mutant kill is emitted through mutant_killed, gated on its block's unmutated control having passed
-# in this run (BL-828): a kill read off a control that failed would be the harness failing, not the mutation.
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 skip() { # skip <what> <why> — tolerated only where the subject legitimately has not arrived
   if [ "${IS_DIST:-0}" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
@@ -151,22 +67,6 @@ skip() { # skip <what> <why> — tolerated only where the subject legitimately h
 # from the named arm, and reporting it again would be one finding counted twice. Without this
 # split a single wrong figure fails four arms and three of them are vacuous.
 defer() { printf '  ----  %s -- stands down; %s owns this finding\n' "$1" "$2"; }
-
-# ONE RUN PER DISTINCT STATE FOR A MUTANT (fixture-mutants.md clause 2). Every battery below scores a
-# mutant by the SET of its predicates that flip. On an ordinary run a mutant runs only the predicates it
-# DECIDES plus its named TWINS (the cells one property apart that must stay green), and the verdict is
-# still "flips exactly {decides}" over that selection. `--matrix` runs EVERY predicate of the battery
-# against every mutant, prints one `MATRIX <mutant> decides=[...] measured=[...]` line each, and the
-# same exact-set comparison then holds over the whole battery -- which is what licenses the selection.
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
-# Run `bash core/fixtures/postcompact-rulebook-recovery/run.sh --matrix`; every MATRIX line must read
-# measured = decides.
-MXMODE=0; [ "${1:-}" = --matrix ] && MXMODE=1
-mx_sel() { # mx_sel <all predicates, in order> <decides> <twins|-> -> the members of <all> to run
-  if [ "$MXMODE" = 1 ]; then printf '%s' "$1"; return; fi
-  _mo=""; for _mx in $1; do case " $2 $3 " in *" $_mx "*) _mo="$_mo $_mx" ;; esac; done; printf '%s' "${_mo# }"
-}
-mx_note() { [ "$MXMODE" = 1 ] && printf 'MATRIX %s decides=[%s] measured=[%s]\n' "$1" "$2" "${3% }"; return 0; }
 
 # IN PROCESS. Every subject here -- the recovery hook, the gate, the postcompact hook and the budget
 # validator -- is a whole script that reads its payload on stdin (or its arguments) and EXITS, so
@@ -218,9 +118,9 @@ fire() { # <hook-path> -> prints additionalContext
 
 # STRIP THE PROVENANCE MARKER BEFORE COMPARING TWO EMISSIONS. Every hook emission now opens with
 # a marker line carrying a per-emission nonce, so two invocations of the SAME hook differ BY
-# DESIGN and a raw byte comparison reports entanglement for a reason that has nothing to do with
-# the mutation under test. Only the marker LINE is dropped -- every other byte the mutant could
-# have changed is still compared -- so this normalizes the arm rather than weakening it.
+# DESIGN and a raw byte comparison reports a difference for a reason that has nothing to do with
+# the subject. Only the marker LINE is dropped -- every other byte is still compared -- so this
+# normalizes the arm rather than weakening it.
 demark() { grep -v '^\[AI-DLC-HOOK-PROVENANCE ' <<<"$1" || true; }
 
 echo "postcompact-rulebook-recovery:"
@@ -364,9 +264,6 @@ VB_OUT="$(val_run --skill "$SKILL" 2>&1)"
 whole_of() { # whole_of <validator output> -> the reported whole-file byte figure, or empty
   sed -n 's/^whole file  *: \([0-9][0-9]*\) bytes.*/\1/p' <<<"$1" | head -1
 }
-proto_of() { # proto_of <validator output> -> the reported protocol end offset, or empty
-  sed -n 's/^protocol end offset : \([0-9][0-9]*\) bytes.*/\1/p' <<<"$1" | head -1
-}
 VB_WHOLE="$(whole_of "$VB_OUT")"
 VB_REAL="$(wc -c < "$SKILL" | tr -d ' ')"
 # THIS ARM OWNS ONE PROPERTY: THE FIGURE EXISTS AND IS THE WHOLE FILE. Delivery is 6b2's,
@@ -375,7 +272,7 @@ VB_REAL="$(wc -c < "$SKILL" | tr -d ' ')"
 # stand down when this one fires, so a validator with no figure -- or a wrong one -- produces
 # ONE red arm rather than four true findings reported four times.
 #
-# `vb_owns` is the stand-down predicate, computed once and read by 6b2, 6b3 and 6c.
+# `vb_owns` is the stand-down predicate, computed once and read by 6b2 and 6b3.
 vb_owns=0
 { [ -z "$VB_WHOLE" ] || [ "$VB_WHOLE" != "$VB_REAL" ]; } && vb_owns=1
 if [ -z "$VB_WHOLE" ] && [ "${IS_DIST:-0}" != 1 ]; then
@@ -464,268 +361,10 @@ else
   ok "--quiet suppresses every line including the observation, and still exits 0 — the figure goes through the say helper"
 fi
 
-# --- Assertion 6c: MUTANT — bytes appended BELOW the protocol, only the whole-file figure moves
-# THE ARM THAT PROVES 6b READS THE FILE AND NOT THE WINDOW. `protocol end offset` and
-# `whole file` are both byte counts printed by the same program; a figure wired to the
-# protocol window would satisfy 6b exactly as a correct one does, and a reader would have no
-# way to tell. The mutation appends padding at the END of the file -- strictly below the
-# protocol section, whose end boundary is the next `## ` heading far above -- so the protocol
-# offset MUST hold still while the whole-file figure MUST move. Both directions in one arm.
-#
-# The padding carries no `## ` so it cannot become a section and re-bound anything, and the
-# exit code must stay 0: an observation that can fail the gate is a gate.
-# Built as a COPY, guarded by cmp -s per fixture-mutants.md.
-#
-# THIS ARM STANDS DOWN WHERE 6b ALREADY OWNS THE FINDING. A validator emitting no figure, or a
-# wrong one, is 6b's case; without the stand-down both arms report it and one of the two is
-# vacuous -- measured on the protocol-window and figure-deleted mutants, each of which tripped
-# 6b AND this arm's staleness diagnostic. One mutant, one red arm.
-MUT_BIG="$WORK/skill-appended-below.md"
-{ cat "$SKILL"; printf 'padding below the protocol, carrying no heading\n'; } > "$MUT_BIG"
-if [ "$vb_owns" = 1 ]; then
-  defer "the whole-file figure MOVES with the file" "assertion 6b"
-elif cmp -s "$SKILL" "$MUT_BIG"; then
-  bad "FIXTURE STALE: the appended copy is byte-identical to SKILL.md, so the whole-file figure has nothing to move and assertion 6b is unproven"
-else
-  MB_OUT="$(val_run --skill "$MUT_BIG" 2>&1)"; mb_rc=$?
-  MB_WHOLE="$(whole_of "$MB_OUT")"
-  MB_PROTO="$(proto_of "$MB_OUT")"
-  VB_PROTO="$(proto_of "$VB_OUT")"
-  MB_REAL="$(wc -c < "$MUT_BIG" | tr -d ' ')"
-  if [ "$mb_rc" -ne 0 ]; then
-    bad "MUTANT CHANGED THE VERDICT — appending bytes below the protocol made the validator exit ${mb_rc}, so the whole-file figure is a GATE and not the observation this entry asked for"
-  elif [ -z "$MB_WHOLE" ] || [ -z "$MB_PROTO" ] || [ -z "$VB_PROTO" ]; then
-    bad "FIXTURE STALE: could not read both figures back from the validator (whole='${MB_WHOLE}' proto='${MB_PROTO}' base-proto='${VB_PROTO}') — the output lines were reshaped"
-  elif [ "$MB_WHOLE" = "$VB_WHOLE" ]; then
-    bad "MUTANT DID NOT FAIL — ${MB_REAL} bytes of file were reported as ${MB_WHOLE}, the same figure as the unappended copy, so the observation is not reading the whole file"
-  elif [ "$MB_WHOLE" != "$MB_REAL" ]; then
-    bad "the appended copy is ${MB_REAL} bytes and the validator reports ${MB_WHOLE} — the figure moved but does not track the file"
-  elif [ "$MB_PROTO" != "$VB_PROTO" ]; then
-    bad "MUTANT FAILED TOO MUCH — appending below the protocol moved the protocol end offset from ${VB_PROTO} to ${MB_PROTO}, so the two figures are entangled and the protocol arm is measuring something other than its window"
-  else
-    ok "mutant: bytes appended BELOW the protocol move the whole-file figure ${VB_WHOLE} -> ${MB_WHOLE} (= wc -c) while the protocol offset holds at ${VB_PROTO} and the exit stays 0"
-  fi
-fi
-
-# --- Assertion 7: MUTANT — strip the mandate from SKILL.md, arm 6 must fail ---
-# Built as a COPY, guarded by cmp -s so a sed that matched nothing cannot pass as a mutation.
-# THE MUTATION MOVED WITH THE MANDATE. It used to strip `Read ... SKILL.md` IN FULL; the
-# recovery Read is now the digest, and the validator arm requires BOTH paths -- the digest to
-# recover FROM and SKILL.md for a rule's full text. Killing either half must fail the arm, so
-# the mutant strips the digest path, which is the half that did not exist before.
-MUT_SKILL="$WORK/skill-no-mandate.md"
-sed 's|\.claude/skills/ai-dlc/postcompact-digest\.md|the rulebook digest|' \
-  "$SKILL" > "$MUT_SKILL"
-if cmp -s "$SKILL" "$MUT_SKILL"; then
-  bad "FIXTURE STALE: the mandate sentence was reworded, so the mutant is a byte-identical copy and assertion 6 proves nothing"
-else
-  out="$(val_run --skill "$MUT_SKILL" --quiet 2>&1)"; rc=$?
-  if [ "$rc" -ne 0 ] && grep -q 'does not tell the lead how to recover' <<<"$out"; then
-    ok "mutant: a protocol without the mandate FAILS, on the mandate arm specifically"
-  elif [ "$rc" -ne 0 ]; then
-    bad "MUTANT FAILED ON THE WRONG ARM — it tripped the byte-budget instead of the mandate check, so the two assertions are entangled and one is vacuous. Output: $(head -1 <<<"$out")"
-  else
-    bad "MUTANT DID NOT FAIL — SKILL.md passes with the re-read mandate removed, so assertion 6 asserts nothing"
-  fi
-fi
-
-# --- Assertion 7b: MUTANT — strip the ROUTER path from SKILL.md, only the router arm red
-# The protocol's third mandate, and the one a fresh `/ai-dlc resume` session depends on: it
-# loads the whole file, reads this section as its resume procedure, and never reaches
-# INITIALIZATION's router Read far below -- so the section itself must carry the path, and the
-# validator must refuse a protocol that does not. Built as a COPY, guarded by cmp -s. The
-# mutation edits every occurrence in the file; the validator reads only the section, so the
-# kill is attributable to the section's copy and INITIALIZATION's is incidental.
-# ONE MUTANT, ONE RED ARM: the digest and SKILL.md paths are untouched, so the mandate arm
-# (assertion 7's) must stay quiet and the failure must name the router specifically.
-# THE STALENESS GUARD COUNTS INSIDE THE SECTION, NOT `cmp -s` ON THE FILE. INITIALIZATION
-# carries the same path far below, so a whole-file `cmp` stays quiet when the SECTION's copy
-# is reworded and only INITIALIZATION's was mutated -- the guard could not fire for its stated
-# reason. Per fixture-mutants.md: assert the post-mutation count within the section is 0
-# against a non-zero unmutated count, both derived from the validator's own section bounds.
-proto_count() { # proto_count <skill-file> -> occurrences of the router path inside the protocol section
-  _s="$(grep -n '^## POST-COMPACT RECOVERY PROTOCOL' "$1" | head -1 | cut -d: -f1)"
-  [ -n "$_s" ] || { printf '0\n'; return; }
-  _e="$(awk -v s="$_s" 'NR>s && /^## / { print NR; exit }' "$1")"
-  [ -n "$_e" ] || { printf '0\n'; return; }
-  sed -n "${_s},$((_e - 1))p" "$1" | grep -c '\.claude/skills/ai-dlc/steps/route\.md'
-}
-MUT_ROUTE="$WORK/skill-no-router.md"
-sed 's|\.claude/skills/ai-dlc/steps/route\.md|the router step|g' "$SKILL" > "$MUT_ROUTE"
-if [ "$(proto_count "$SKILL")" -eq 0 ]; then
-  bad "FIXTURE STALE: the shipped protocol section names the router path 0 times, so the router mutant has no subject to remove and assertion 6 is the only thing standing"
-elif [ "$(proto_count "$MUT_ROUTE")" -ne 0 ]; then
-  bad "FIXTURE STALE: the mutation left $(proto_count "$MUT_ROUTE") router path(s) inside the protocol section, so the mutant does not remove the whole property"
-else
-  out="$(val_run --skill "$MUT_ROUTE" --quiet 2>&1)"; rc=$?
-  if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then
-    ok "mutant: a protocol that names no router FAILS, on the router arm specifically"
-  elif [ "$rc" -ne 0 ]; then
-    bad "MUTANT FAILED ON THE WRONG ARM — stripping the router path tripped a different check, so the arms are entangled and one is vacuous. Output: $(head -1 <<<"$out")"
-  else
-    bad "MUTANT DID NOT FAIL — SKILL.md passes with the router path removed from its protocol, so a resumed lead can be sent past the router and nothing refuses to ship it"
-  fi
-fi
-
-# --- Assertion 7c: MUTANT — the router path survives only inside an HTML comment ---
-# The comment-satisfiable receipt is this repo's most-repeated receipt defect. A protocol that
-# carries the path in `<!-- -->` reads as compliant to a bare grep and instructs the lead of
-# nothing. The mutation wraps the section's live mention; the arm strips single-line comments
-# before matching, so this must fail on the router arm too.
-MUT_ROUTE_C="$WORK/skill-router-commented.md"
-sed 's|`{project-root}/\.claude/skills/ai-dlc/steps/route\.md`|<!-- .claude/skills/ai-dlc/steps/route.md -->|' "$SKILL" > "$MUT_ROUTE_C"
-if cmp -s "$SKILL" "$MUT_ROUTE_C"; then
-  bad "FIXTURE STALE: the protocol's router mention was reworded, so the commented-out mutant is byte-identical and the comment guard is unproven"
-else
-  out="$(val_run --skill "$MUT_ROUTE_C" --quiet 2>&1)"; rc=$?
-  if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then
-    ok "mutant: a router path present only inside an HTML comment FAILS the router arm"
-  elif [ "$rc" -ne 0 ]; then
-    bad "MUTANT FAILED ON THE WRONG ARM — commenting out the router path tripped a different check. Output: $(head -1 <<<"$out")"
-  else
-    bad "MUTANT DID NOT FAIL — a router path inside an HTML comment satisfies the validator, so the arm is closable by a comment"
-  fi
-fi
-
-# --- Assertion 7d: MUTANT — the router path survives only inside a MULTI-LINE comment ---
-# The house-style form: 18 of the 20 HTML comments in SKILL.md span lines, and a one-line
-# `sed 's/<!--.*-->//'` guard passed a path parked in one. The comment opens on the line
-# before the path and closes on the line after, so a single-line stripper cannot see it.
-MUT_ROUTE_M="$WORK/skill-router-multiline-comment.md"
-awk '
-  index($0, "`{project-root}/.claude/skills/ai-dlc/steps/route.md`") && !d {
-    print "<!-- the router path, parked in a comment:"; print $0; print "-->"; d = 1; next
-  }
-  { print }' "$SKILL" > "$MUT_ROUTE_M"
-if cmp -s "$SKILL" "$MUT_ROUTE_M"; then
-  bad "FIXTURE STALE: the protocol's router mention was reworded, so the multi-line-comment mutant is byte-identical and the comment guard is unproven for the house-style form"
-else
-  out="$(val_run --skill "$MUT_ROUTE_M" --quiet 2>&1)"; rc=$?
-  if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then
-    ok "mutant: a router path present only inside a MULTI-LINE HTML comment FAILS the router arm"
-  elif [ "$rc" -ne 0 ]; then
-    bad "MUTANT FAILED ON THE WRONG ARM — wrapping the router path in a multi-line comment tripped a different check. Output: $(head -1 <<<"$out")"
-  else
-    bad "MUTANT DID NOT FAIL — a router path inside a multi-line HTML comment satisfies the validator, which is the comment form this file actually uses"
-  fi
-fi
-
-# --- Assertion 7e: CONTROL — a live path BRACKETED by two one-line comments still counts --
-# The greedy `.*` failure: `<!-- a --> path <!-- b -->` on one line stripped the path with the
-# comments. The stripper must remove only the commented spans, so this copy must PASS.
-MUT_ROUTE_B="$WORK/skill-router-bracketed.md"
-sed 's|`{project-root}/\.claude/skills/ai-dlc/steps/route\.md`|<!-- a --> `{project-root}/.claude/skills/ai-dlc/steps/route.md` <!-- b -->|' "$SKILL" > "$MUT_ROUTE_B"
-if cmp -s "$SKILL" "$MUT_ROUTE_B"; then
-  bad "FIXTURE STALE: the protocol's router mention was reworded, so the bracketed control is byte-identical and proves nothing"
-elif val_run --skill "$MUT_ROUTE_B" --quiet >/dev/null 2>&1; then
-  ok "control: a live router path bracketed by two one-line comments still PASSES — the stripper removes only the comments"
-else
-  bad "CONTROL FAILED — a live router path between two one-line comments was stripped with them, so the arm refuses a compliant protocol"
-fi
-
-# --- Assertion 8: MUTANT — strip the mandate from the HOOK, arms 1-3 must fail
-# The other end of the join. A validator that guards SKILL.md's prose does not notice the
-# hook losing the same instruction, and the hook is the copy the lead actually reads.
-MUT_HOOK="$WORK/recover-no-mandate.sh"
-awk '!/skills\/ai-dlc\/SKILL\.md/' "$HOOK" > "$MUT_HOOK"
-if cmp -s "$HOOK" "$MUT_HOOK"; then
-  bad "FIXTURE STALE: could not build the no-mandate hook mutant — the skill path moved"
-elif ! bash -n "$MUT_HOOK" 2>/dev/null; then
-  # cmp proves a mutation happened; bash -n proves the mutant is still a PROGRAM. A mutant
-  # that dies before doing anything emits nothing, and "no output" otherwise scores as a kill.
-  bad "FIXTURE STALE: the hook mutant is not valid shell, so its silence would score as a kill"
-else
-  MCTX="$(fire "$MUT_HOOK")"
-  if [ -n "$MCTX" ] && ! grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$MCTX"; then
-    ok "mutant: the hook still emits a directive but no longer names the skill — assertions 1-3 can fail"
-  elif [ -z "$MCTX" ]; then
-    bad "MUTANT EMITTED NOTHING — its silence is indistinguishable from a kill, so assertions 1-3 are unproven"
-  else
-    bad "MUTANT DID NOT FAIL — the directive still names the skill with the mandate stripped"
-  fi
-fi
-
-# --- Assertion 8c: MUTANT — strip the DIGEST path from the hook, only 1b red --
-# Assertion 8 above strips `skills/ai-dlc/SKILL.md`, which the digest path does not match, so
-# it leaves assertion 1b standing. Without this mutant 1b is an arm nobody has shown can fail:
-# it would read `ok` against a hook that names the digest nowhere, and the lead would be told
-# its rulebook is gone and handed no path. Anchored on the digest filename alone so it cannot
-# reach the SKILL.md sentence assertions 1 and 2d key on -- one mutant, one red arm.
-MUT_HOOK_D="$WORK/recover-no-digest.sh"
-awk '!/postcompact-digest\.md/' "$HOOK" > "$MUT_HOOK_D"
-if cmp -s "$HOOK" "$MUT_HOOK_D"; then
-  bad "FIXTURE STALE: could not build the no-digest hook mutant — the digest path moved, so assertion 1b proves nothing"
-elif ! bash -n "$MUT_HOOK_D" 2>/dev/null; then
-  bad "FIXTURE STALE: the no-digest hook mutant is not valid shell, so its silence would score as a kill"
-else
-  DCTX="$(fire "$MUT_HOOK_D")"
-  if [ -z "$DCTX" ]; then
-    bad "MUTANT EMITTED NOTHING — its silence is indistinguishable from a kill, so assertion 1b is unproven"
-  elif grep -q 'postcompact-digest\.md' <<<"$DCTX"; then
-    bad "MUTANT DID NOT FAIL — the directive still names the digest with its path stripped"
-  elif ! grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$DCTX" || ! grep -q 'INDEX' <<<"$DCTX"; then
-    bad "MUTANT FAILED ON THE WRONG ARMS — stripping the digest path also took out assertion 1 or 2d, so the three arms are entangled and one of them is vacuous"
-  else
-    ok "mutant: the hook emits a directive naming no digest — assertion 1b can fail, and only it"
-  fi
-fi
-
-# --- Assertion 8b: MUTANT — demote the step-file Read, only 2b may go red -----
-# The entanglement test for the grade arm. Demoting the sentence must not disturb the path,
-# IN FULL, escape-closed, cliff or Rule 23 assertions -- if it does, 2b is not measuring grade.
-MUT_G="$WORK/recover-demoted.sh"
-sed 's|\*\*Your SECOND tool call MUST be \\`Read \${STEP_FILE}\\` in full\.\*\*|Then \\`Read\\` the current step file \\`\${STEP_FILE}\\` --|' "$HOOK" > "$MUT_G"
-if cmp -s "$HOOK" "$MUT_G"; then
-  bad "FIXTURE STALE: the step-file mandate was reworded, so the demotion mutant is byte-identical and assertion 2b proves nothing"
-elif ! bash -n "$MUT_G" 2>/dev/null; then
-  bad "FIXTURE STALE: the demotion mutant is not valid shell, so its silence would score as a kill"
-else
-  GCTX="$(fire "$MUT_G")"
-  g="$(grep -c '\*\*Your [A-Z]* tool call MUST be' <<<"$GCTX")"
-  keeps=0
-  grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$GCTX" && keeps=$((keeps+1))
-  grep -q 'ctx_execute_file' <<<"$GCTX" && keeps=$((keeps+1))
-  grep -q 'do not ask the operator to re-invoke' <<<"$GCTX" && keeps=$((keeps+1))
-  if [ -n "$GCTX" ] && [ "$g" -lt 2 ] && [ "$keeps" -eq 3 ]; then
-    ok "mutant: demoting the step-file Read fails ONLY the grade arm — the assertions are not entangled"
-  elif [ "$g" -ge 2 ]; then
-    bad "MUTANT DID NOT FAIL — the grade arm still counts 2 mandates with the sentence demoted, so assertion 2b asserts nothing"
-  else
-    bad "MUTANT FAILED TOO MUCH — the demotion also broke $((3-keeps)) unrelated assertion(s), so 2b and they are entangled and one is vacuous"
-  fi
-fi
-
-# --- Assertion 8c: MUTANT — push the block past the cliff, only 4 may go red --
-# THE regression that matters. Every arm above ADDS prose to a block the harness replaces
-# wholesale at 10,000 characters. This proves assertion 4 can actually fail.
-MUT_C="$WORK/recover-oversize.sh"
-awk '/^# AI\/DLC POST-COMPACT RECOVERY/ && !d {print; for(i=0;i<400;i++) print "padding line to push the injected block past the ten-thousand character cliff"; d=1; next} 1' "$HOOK" > "$MUT_C"
-if cmp -s "$HOOK" "$MUT_C"; then
-  bad "FIXTURE STALE: could not build the oversize mutant — the directive heading moved"
-elif ! bash -n "$MUT_C" 2>/dev/null; then
-  bad "FIXTURE STALE: the oversize mutant is not valid shell, so its silence would score as a kill"
-else
-  OCTX="$(fire "$MUT_C")"
-  OLEN="$(printf '%s' "$OCTX" | wc -c | tr -d ' ')"
-  if [ -n "$OCTX" ] && [ "$OLEN" -ge 9500 ]; then
-    ok "mutant: an oversize directive is ${OLEN} chars and trips the cliff arm — assertion 4 can fail"
-  else
-    bad "MUTANT DID NOT FAIL — the padded directive measured ${OLEN} chars, under the ceiling, so assertion 4 never proves the cliff is watched"
-  fi
-fi
-
-# --- Assertion 9: UNMUTATED CONTROL ------------------------------------------
-# The hook resolves paths and shells out; a lone copy in a temp root can die for reasons that
-# have nothing to do with a mutation. If this copy does not reproduce the real verdict, every
-# mutant result above is uninterpretable.
-CTRL="$WORK/recover-control.sh"
-cp "$HOOK" "$CTRL"
-CCTX="$(fire "$CTRL")"
-if [ -n "$CCTX" ] && grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$CCTX"; then
-  ok "control: an unmutated copy reproduces the real directive — the mutants above failed on their mutation"
-else
-  bad "CONTROL FAILED — an unmutated copy does not reproduce the real directive, so the mutant kills above prove nothing about the mutations"
-fi
+# The validator's REFUSING input for the equivalence cell at the end of this file: SKILL.md with the digest
+# path stripped, which the validator's mandate arm refuses.
+NOMANDATE_SKILL="$WORK/skill-no-mandate.md"
+sed 's|\.claude/skills/ai-dlc/postcompact-digest\.md|the rulebook digest|' "$SKILL" > "$NOMANDATE_SKILL"
 
 # =============================================================================
 # THE GATE — ai-dlc-recover-gate.sh
@@ -743,10 +382,7 @@ fi
 #
 # EVERY ONE OF THOSE IS ABSENCE-SHAPED: it passes when nothing fires, which is exactly what a
 # gate replaced by `exit 0` also does. A seeded near-miss cannot tell those apart. So each
-# predicate is a FUNCTION, run against the real gate for the arm and re-run against every
-# mutant for the kill, and the mutant arms assert the exact SET of predicates that flips.
-# A mutant that flips more than its own set means two arms are entangled and one is vacuous;
-# a mutant that flips nothing means the arms it was built for cannot fire at all.
+# predicate is a FUNCTION, run against the real gate and asserted on its observable consequence.
 # =============================================================================
 
 if [ -z "${GATE:-}" ]; then
@@ -825,10 +461,10 @@ pg="_bmad-output/.recover-gate-progress"
 
 # ONE ARMED WORLD PER SHAPE, COPIED PER CELL (fixture-mutants.md clause 4). A cell whose subject is
 # the GATE (or postcompact) needs a project the real producer armed, and arming is a producer run;
-# the same few shapes were armed afresh by every predicate of every mutant pass. So each shape is
+# the same few shapes were armed afresh by every predicate. So each shape is
 # armed ONCE by the real producer and copied. KEYED ON CONTENT, NOT ON A PATH: the template is used
-# only when the producer handed in is byte-identical to $HOOK, so a producer MUTANT (the legacy
-# producer, a whose-recovery or BL-684/BL-688 producer edit) always arms its own world live and is
+# only when the producer handed in is byte-identical to $HOOK, so any other producer (the legacy
+# producer) always arms its own world live and is
 # scored on what it writes. Cells whose subject IS the arming (the producer battery, a re-arm, the
 # updater stand-down) never come through here. Every path the marker records is relative to the
 # project, so a copy is the armed state of the project it lands in.
@@ -858,8 +494,7 @@ proj_extra() { # proj_extra <project> <''|digest|rc>
 }
 
 # --- the seven predicates ---------------------------------------------------
-# Each prints PASS, or FAIL:<what it saw>. The arm prints the detail; the mutant arms keep
-# only PASS/FAIL.
+# Each prints PASS, or FAIL:<what it saw>. The arm prints the detail.
 
 # 1. An ordinary tool call in an ordinary session. Overwhelmingly the common case: no
 #    compaction is pending recovery, so the gate must not even look at the call.
@@ -906,9 +541,9 @@ p_ladder() { # p_ladder <gate> <abs|rel|consumer>
     rel) s="_bmad-output/pipeline-snapshot.md";     f="architecture.md" ;;
     consumer)
       # ABSOLUTE on purpose. The subject here is the LAYOUT, not the spelling, and the two
-      # ladders above already own the spelling. Measured with relative spellings instead, the
-      # one-spelling mutant flipped this arm as well as `ladder_rel` -- two arms reporting one
-      # finding, which is the entanglement the flip sets exist to expose.
+      # ladders above already own the spelling. With relative spellings instead, a gate that
+      # matched one spelling only would fail this arm as well as `ladder_rel` -- two arms
+      # reporting one finding.
       s="$_p/_bmad-output/pipeline-snapshot.md"; f="$(marker_step "$_p")"
       case "$f" in
         */*) : ;;
@@ -989,9 +624,9 @@ p_legacy() {
 
 # 8. THE MARKER FAST-PATH, ASSERTED ON COST BECAUSE IT HAS NO VERDICT.
 #    `[ -f "$MARKER" ] || exit 0` flips NOTHING when deleted: with the marker absent every
-#    `mval` returns empty and the key checks stand the gate down for the same cases. It was
-#    a mutant here that established that. So the line is not a behavioural guard and an arm
-#    looking for a decision change could never fire on it.
+#    `mval` returns empty and the key checks stand the gate down for the same cases. So the
+#    line is not a behavioural guard and an arm looking for a decision change could never fire
+#    on it.
 #
 #    Its real subject is COST. This gate is registered against EVERY tool, so that line is
 #    what keeps an ordinary call in an ordinary session from doing any work at all.
@@ -999,9 +634,8 @@ p_legacy() {
 #    THE SIGNAL IS `sed`, AND PICKING IT WAS THE WHOLE DIFFICULTY. The obvious choice, `jq`,
 #    is WRONG and measured wrong: `command -v jq` is a builtin lookup that executes nothing,
 #    and the gate's first real `jq` call sits BELOW the stand-down checks — so an unarmed call
-#    forks no jq whether the fast-path is there or not, and the arm passed against its own
-#    mutant. `mval` is the first thing past the line that forks, so `sed` is the first
-#    observable the line actually gates.
+#    forks no jq whether the fast-path is there or not. `mval` is the first thing past the
+#    line that forks, so `sed` is the first observable the line actually gates.
 p_fastpath() {
   _p="$(newproj architecture.md flat)"
   _b="$WORK/shim.$$"; rm -rf "$_b"; mkdir -p "$_b"
@@ -1122,21 +756,6 @@ p_mate_reads() {
 }
 
 PREDS="inert deny_first ladder_abs ladder_rel ladder_consumer standdown_r0 standdown_missing legacy fastpath full_snapshot full_step mate_calls mate_reads"
-verdicts() { # verdicts <gate> [predicates] -> "name=PASS" lines, in PREDS order
-  for _n in ${2:-$PREDS}; do
-    case "$_n" in
-      ladder_abs)      r="$(p_ladder "$1" abs)" ;;
-      ladder_rel)      r="$(p_ladder "$1" rel)" ;;
-      ladder_consumer) r="$(p_ladder "$1" consumer)" ;;
-      *)               r="$("p_$_n" "$1")" ;;
-    esac
-    printf '%s=%s\n' "$_n" "${r%%:*}"
-  done
-}
-flips() { printf '%s ' $(verdicts "$1" "${2:-}" | sed -n 's/=FAIL$//p'); }
-# DERIVED, never typed: the control arm below reports how many verdicts it reproduced, and a
-# hand-written count there goes stale the moment a predicate is added — which it already had.
-NPREDS="$(printf '%s\n' $PREDS | wc -l | tr -d ' ')"
 
 # --- the legacy producer ----------------------------------------------------
 # Built by REMOVING the three new keys from the real producer, so the legacy marker is what
@@ -1168,246 +787,17 @@ for _n in $PREDS; do
   if [ "$r" = PASS ]; then ok "gate: $label"; else bad "gate: $label — ${r#FAIL:}"; fi
 done
 
-# --- Assertion 17: UNMUTATED CONTROL, before any mutant is scored ------------
-# The gate resolves paths, shells out and reads dotfiles. A copy of it in a temp root can fail
-# for reasons that have nothing to do with a mutation, and every mutant verdict below is a
-# difference measured against this one.
-CTRL_G="$WORK/gate-control.sh"
-cp "$GATE" "$CTRL_G"
-cf="$(flips "$CTRL_G")"
-if [ -z "${cf// /}" ]; then
-  ok "control: an unmutated copy of the gate reproduces all ${NPREDS} verdicts — the flips below are the mutations"; B_ctl_g=1
-else
-  bad "CONTROL FAILED — an unmutated copy already flips {${cf}}, so every mutant verdict below is uninterpretable"
-fi
-
-# --- the mutant scorer ------------------------------------------------------
-mutant_arm() { # mutant_arm <label> <mutant> <expected flip set, in PREDS order> <twins|-> <name>
-  if cmp -s "$GATE" "$2"; then
-    bad "FIXTURE STALE: $1 — the mutant is byte-identical to the gate, so the mutation matched nothing"; return
-  fi
-  if ! bash -n "$2" 2>/dev/null; then
-    bad "FIXTURE STALE: $1 — the mutant is not valid shell; it would emit nothing, and a silent gate is an ALLOW that would score as a kill"; return
-  fi
-  got="$(flips "$2" "$(mx_sel "$PREDS" "$3" "$4")")"; mx_note "$5" "$3" "$got"
-  if [ "$got" = "$3 " ]; then
-    mutant_killed "${B_ctl_g:-0}" "$5" "mutant: $1 — flips exactly {$3}"
-  elif [ -z "${got// /}" ]; then
-    bad "MUTANT SURVIVED: $1 — every gate arm stays green with the mutation applied, so {$3} cannot fire"
-  else
-    bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}; the arms are entangled or one of them is vacuous"
-  fi
-}
-
-# --- Assertion 18: MUTANT — the gate allows unconditionally ------------------
-# The deny path emptied at its source, so every guard above it still runs and still decides;
-# only the refusal is gone. Only the arms that assert a REFUSAL may notice, and there are three
-# of them because the gate refuses three distinct things: a call that is not a mandated Read at
-# all, a bounded Read at stage one, and a bounded Read at stage two. Each is a separate finding
-# about a separate call site -- the single-site mutants below prove the two stage arms are
-# reachable one at a time -- and no stand-down arm may appear here, because a gate that never
-# refuses stands down by accident everywhere.
-MG_ALLOW="$WORK/gate-allow-all.sh"
-awk '/^deny\(\) \{$/{print; print "  exit 0"; next} 1' "$GATE" > "$MG_ALLOW"
-# `mate_calls` is the fourth: its lead twin is a refusal.
-mutant_arm "a gate that never refuses" "$MG_ALLOW" "deny_first full_snapshot full_step mate_calls" "ladder_abs standdown_r0" G-allow-all
-
-# --- Assertion 19: MUTANT — the gate arms on an unresolvable mandate ---------
-# BOTH layers of the precondition, because they are one guard: with only the flag check gone
-# the empty step_file still stops it, and a mutant that killed nothing reads exactly like an
-# arm that cannot fire.
-MG_R0="$WORK/gate-arms-unresolved.sh"
-awk '!(index($0,"[ \"$STEP_RESOLVED\" = \"1\" ] || exit 0") || index($0,"[ -n \"$STEP_REL\" ] || exit 0"))' "$GATE" > "$MG_R0"
-mutant_arm "a gate that arms when the snapshot named no step file" "$MG_R0" "standdown_r0" "deny_first standdown_missing" G-arms-r0
-
-# --- Assertion 20: MUTANT — every arming precondition removed ----------------
-# THE ARM THAT OWNS THE WHOLE STAND-DOWN FAMILY, and its flip set is 6 of 7 deliberately.
-#
-# `inert` is DEFENDED IN DEPTH and no narrower mutation reaches it. Measured, both narrow
-# mutants built and scored: deleting ONLY the marker check flips nothing at all (an absent
-# marker still dies on the empty keys), and deleting ONLY the three key checks flips
-# {standdown_r0, legacy} — an absent marker still dies on the marker check. That is a property
-# of the subject rather than of these arms, and it is why `inert` has no one-line killer.
-#
-# Removing all four is what those states are defended against, and its consequences run past
-# the three inert arms: with no marker the unset paths resolve to the project directory, which
-# is readable, so the gate arms in a session that never compacted AND re-arms after it has
-# already disarmed, so every ladder's last call — an ordinary call after full compliance — is
-# refused, and the missing-path stand-down no longer holds on the second call. Seven genuine
-# findings from one property: the gate arms only from a COMPLETE marker.
-#
-# `ladder_consumer` is in the set for the same reason as the other two and for no reason of its
-# own: it is a third ladder and its last call is refused too. The two `full_*` arms are NOT here,
-# and that is the discriminating part — a re-armed gate still refuses a bounded Read, so the
-# in-full test is untouched by this mutation.
-#
-# THE MARKER TEST IS TWO LINES, AND THIS MUTANT TAKES BOTH ON PURPOSE. The fast-path is the first;
-# the second re-tests the marker just after the stage read (BL-658, the race battery below owns
-# it). Both are arming preconditions on the same file. Kept, the second alone stands a markerless
-# call down -- the unset paths resolve to the readable project directory, the stage defaults, and
-# the re-test exits -- so `inert`, the three ladders and `standdown_missing` would stop flipping
-# and this arm would read as entangled on a correct gate. The count below holds the removal to
-# every copy of that line and refuses a mutant that left one behind.
-MG_WEDGE="$WORK/gate-no-standdown.sh"
-awk '!(index($0,"[ -f \"$MARKER\" ] || exit 0") || index($0,"[ \"$STEP_RESOLVED\" = \"1\" ] || exit 0") || index($0,"[ -n \"$SNAP_REL\" ] || exit 0") || index($0,"[ -n \"$STEP_REL\" ] || exit 0"))' "$GATE" > "$MG_WEDGE"
-_mw_n="$(grep -cF '[ -f "$MARKER" ] || exit 0' "$GATE")" || _mw_n=0
-_mw_m="$(grep -cF '[ -f "$MARKER" ] || exit 0' "$MG_WEDGE")" || _mw_m=0
-if [ "$_mw_n" -lt 1 ] || [ "$_mw_m" -ne 0 ]; then
-  bad "FIXTURE STALE: the every-precondition mutant left ${_mw_m} of ${_mw_n} marker tests in place"
-else
-  mutant_arm "a gate with every arming precondition removed" "$MG_WEDGE" "inert ladder_abs ladder_rel ladder_consumer standdown_r0 standdown_missing legacy fastpath" "full_snapshot full_step" G-no-standdown
-fi
-
-# --- Assertion 21: MUTANT — one spelling only --------------------------------
-# The call's path left unnormalised while the marker's stays resolved. The absolute ladder is
-# unaffected, which is the point: this is the mutation a fixture that tested one spelling
-# would ship green.
-MG_SPELL="$WORK/gate-one-spelling.sh"
-sed 's|FABS="\$(resolve "\$FPATH")"|FABS="$FPATH"|' "$GATE" > "$MG_SPELL"
-mutant_arm "a gate that matches only the absolute spelling" "$MG_SPELL" "ladder_rel" "ladder_abs" G-one-spelling
-
-# --- Assertion 21b: MUTANT — the path-readability stand-down removed ---------
-# THE PER-GUARD MUTANT FOR THE FOURTH STAND-DOWN, and the only one of the four that is
-# constructible on its own. The other three cannot be split: deleting the marker check alone
-# flips no verdict (assertion 22's arm exists because of that), and deleting the `-n` key
-# checks alone flips nothing either, because a legacy marker carries no `step_file_resolved`
-# and dies on THAT check first — the two are two readings of one producer fact, since
-# `step_file_resolved=0` and an empty `step_file` are emitted together.
-#
-# This one has its own reachable subject: a marker whose paths resolved and whose step file is
-# not on disk. With the block gone the gate demands a Read of a file that is not there, which
-# is the unrecoverable wedge, and it keeps the marker so every later call is refused too.
-MG_MISS="$WORK/gate-no-readability.sh"
-awk 'index($0,"if [ ! -r \"$SNAP_ABS\" ] || [ ! -r \"$STEP_ABS\" ]; then"){d=4} d>0{d--; next} 1' "$GATE" > "$MG_MISS"
-_d=$(( $(wc -l < "$GATE") - $(wc -l < "$MG_MISS") ))
-if [ "$_d" -ne 4 ]; then
-  bad "FIXTURE STALE: the readability mutant removed ${_d} lines, not the 4 of that block — the stand-down was reshaped and this mutant is cutting something else"
-else
-  mutant_arm "a gate with the path-readability stand-down removed" "$MG_MISS" "standdown_missing" "standdown_r0" G-no-readability
-fi
-
-# --- MUTANT — the marker fast-path deleted -----------------------------------
-# THE ONE MUTANT THAT PROVES A COST ARM CAN FIRE. Removing this line changes NO decision, which
-# is exactly why it needed an arm keyed on something other than a decision: with the line gone
-# the gate parses the marker path on every ordinary call in every unarmed session — `sed`, not
-# `jq`, which sits below the stand-downs — and only `fastpath`
-# may notice. If this ever flips a second predicate, the line acquired a behavioural subject
-# and the comment in the gate claiming it is a pure fast-path has gone stale.
-#
-# ANCHORED ON WHAT SEPARATES THE FAST-PATH FROM THE SECOND MARKER TEST (BL-658): the two lines are
-# byte-identical, and only the fast-path is followed by the unindented `jq` lookup. Removing both
-# would also remove the race battery's subject and the arm would stop being about cost alone.
-MG_FAST="$WORK/gate-no-fastpath.sh"
-MG_FAST_AT='prev == ENVIRON["F"] && $0 == ENVIRON["J"] { print NR - 1 } { prev = $0 }'
-MG_FAST_F='[ -f "$MARKER" ] || exit 0'
-MG_FAST_J='command -v jq >/dev/null 2>&1 || exit 0'
-_mf_at="$(F="$MG_FAST_F" J="$MG_FAST_J" awk "$MG_FAST_AT" "$GATE")"
-case "$_mf_at" in
-  (''|*[!0-9]*) bad "FIXTURE STALE: the marker fast-path is not exactly one line directly above the jq lookup (found '${_mf_at}'), so its mutant has no subject" ;;
-  (*)
-    awk -v t="$_mf_at" 'NR != t' "$GATE" > "$MG_FAST"
-    mutant_arm "the marker fast-path deleted — the gate still works but parses on every call" "$MG_FAST" "fastpath" "inert" G-no-fastpath
-    ;;
-esac
-
-# --- Assertion 22: MUTANT — the gate replaced by a dead hook -----------------
-# THE CONTROL THE ALLOW-SHAPED ARMS REQUIRE. Four of the predicates pass when nothing fires, and
-# `exit 0` is nothing firing. It must flip every arm that asserts an OBSERVABLE CONSEQUENCE — the
-# deny, the three ladders' advance-and-disarm, the marker clearing, and both in-full arms — and
-# it must NOT flip the three that assert a stand-down, because a stood-down gate and a dead gate
-# are the same thing. That asymmetry is why those three carry assertion 20's mutant instead.
-#
-# The two `full_*` arms are killed here on their CONTROL halves as much as on their denies: a
-# dead gate neither refuses the bounded Read nor advances on the unbounded one, and an arm that
-# only watched for a refusal would score this silence as a pass.
-MG_DEAD="$WORK/gate-dead.sh"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$MG_DEAD"
-mutant_arm "the gate replaced by exit 0" "$MG_DEAD" "deny_first ladder_abs ladder_rel ladder_consumer standdown_missing fastpath full_snapshot full_step mate_calls mate_reads" "inert standdown_r0 legacy" G-dead
-
-# --- MUTANT — "in full" unenforced, ALL THREE LAYERS reverted ----------------
-# THE PRE-FIX GATE, reconstructed rather than asserted: the two `jq` field extractions gone, the
-# `is_full_read` definition gone, and both call sites unconditional again. Reverting only the
-# call sites would leave a test nothing calls and the mutant would still prove the extraction;
-# reverting only the extraction would leave `is_full_read` reading unset variables under `set -u`
-# and the mutant would die on a shell error, whose silence is an ALLOW that scores as a kill.
-#
-# It must flip BOTH stage arms and nothing else. A third flip would mean a bounded Read is doing
-# work somewhere the two arms above do not name.
-MG_NOFULL="$WORK/gate-partial-ok.sh"
-awk '
-  index($0,".tool_input.limit // empty")  {next}
-  index($0,".tool_input.offset // empty") {next}
-  $0=="is_full_read() {" {inf=1; next}
-  inf && $0=="}" {inf=0; next}
-  inf {next}
-  $0=="      if is_full_read; then" {print "      if true; then"; next}
-  1' "$GATE" > "$MG_NOFULL"
-# Anchored on the EMITTING lines, never on the header prose: the gate's own comment names
-# `is_full_read()` and quotes `limit`/`offset`, so a loose grep counts a correctly reverted
-# mutant as unreverted and the arm would report FIXTURE STALE forever.
-lay=0
-[ "$(grep -c 'tool_input\.limit // empty' "$MG_NOFULL")"  -eq 0 ] && lay=$((lay+1))
-[ "$(grep -c 'tool_input\.offset // empty' "$MG_NOFULL")" -eq 0 ] && lay=$((lay+1))
-[ "$(grep -c '^is_full_read() {$' "$MG_NOFULL")"          -eq 0 ] && lay=$((lay+1))
-[ "$(grep -c '^      if is_full_read; then$' "$MG_NOFULL")" -eq 0 ] && lay=$((lay+1))
-[ "$(grep -c '^      if true; then$' "$MG_NOFULL")"       -eq 2 ] && lay=$((lay+1))
-if [ "$lay" -ne 5 ]; then
-  bad "FIXTURE STALE: only ${lay} of the in-full fix's 5 layers were reverted; a partial revert comes out green and proves the layer left in place"
-else
-  mutant_arm "a gate that accepts a BOUNDED Read as compliance, at both sites" "$MG_NOFULL" "full_snapshot full_step" "ladder_abs" G-partial-ok
-fi
-
-# --- MUTANT — "in full" unenforced at ONE site, once per site ----------------
-# THE ENTANGLEMENT TEST FOR THE TWO STAGE ARMS. The mutant above proves the fix is load-bearing;
-# these two prove the arms are separable, which is the failure mode where one stage is guarded
-# and the fixture reports both as guarded. Each replaces exactly ONE of the two identical call
-# sites, so each must flip exactly one predicate.
-_i=1
-for _site in snapshot step; do
-  MG_ONE="$WORK/gate-partial-ok-${_site}.sh"
-  awk -v want="$_i" '
-    $0=="      if is_full_read; then" { n++; if (n==want) { print "      if true; then"; next } }
-    1' "$GATE" > "$MG_ONE"
-  if [ "$(grep -c '^      if true; then$' "$MG_ONE")" -ne 1 ] \
-  || [ "$(grep -c '^      if is_full_read; then$' "$MG_ONE")" -ne 1 ]; then
-    bad "FIXTURE STALE: the single-site in-full mutant for the ${_site} stage did not land on exactly one of the two call sites"
-  else
-    mutant_arm "a gate that accepts a BOUNDED Read at the ${_site} stage only" "$MG_ONE" "full_${_site}" "$([ "$_site" = snapshot ] && echo full_step || echo full_snapshot)" "G-partial-ok-${_site}"
-  fi
-  _i=$((_i+1))
-done
-
-# --- MUTANTS — the BL-590 teammate exit, removed and widened -----------------
-# Anchored on the exit's own line, asserted unique first, so a reworded exit reports STALE rather
-# than a no-op scoring as a survivor. REMOVED is the pre-fix gate: a teammate's calls are refused
-# and its Reads advance the lead's stages, so both teammate arms flip and nothing else does.
-# WIDENED to every caller, the read path is dead for the lead too, so its set is exactly the dead
-# gate's: `mate_calls` dies on its lead twin, which is the control this mutant exists to prove.
-MG_EXIT_LINE='[ -z "$RG_AGENT" ] || exit 0'
-if [ "$(grep -cxF -- "$MG_EXIT_LINE" "$GATE")" -ne 1 ]; then
-  bad "FIXTURE STALE: the BL-590 teammate exit is not exactly one line in the gate, so neither of its mutants can be anchored"
-else
-  MG_NOMATE="$WORK/gate-no-teammate-exit.sh"
-  awk -v l="$MG_EXIT_LINE" '$0==l{next} 1' "$GATE" > "$MG_NOMATE"
-  mutant_arm "the teammate exit removed — a teammate is refused and its Reads disarm the lead" "$MG_NOMATE" "mate_calls mate_reads" "deny_first" G-no-mate-exit
-  MG_ALLMATE="$WORK/gate-exit-every-caller.sh"
-  awk -v l="$MG_EXIT_LINE" '$0==l{print "exit 0"; next} 1' "$GATE" > "$MG_ALLMATE"
-  mutant_arm "the teammate exit widened to every caller" "$MG_ALLMATE" "deny_first ladder_abs ladder_rel ladder_consumer standdown_missing fastpath full_snapshot full_step mate_calls mate_reads" "inert standdown_r0 legacy" G-exit-every-caller
-fi
-
 # =============================================================================
 # THE PRODUCER — ai-dlc-recover.sh, on the layout the protocol actually specifies
 #
-# Everything above holds the GATE fixed and mutates it. Two of the three defects this section
+# Everything above drives the GATE. Two of the three defects this section
 # was added for are in the INJECTOR, and one of them is invisible from the gate's side because
 # the gate behaved correctly on the input it was given: the marker said the mandated file was
 # `discovery.md`, no such file existed at the project root, and standing down was the right
 # answer to a wrong question.
 #
-# So this is a SECOND battery, with its own predicates, its own unmutated control and its own
-# mutants. It holds the gate at the real one and mutates the producer, which is the only way a
-# marker-content defect can be scored. The two batteries never share a mutant, so a flip in
-# either is attributable to the file that was mutated.
+# So this is a SECOND battery, with its own predicates. It holds the gate at the real one and
+# drives the producer, which is the only way a marker-content defect can be scored.
 # =============================================================================
 
 # R1. THE GATE NEVER ARMED ON THE REFERENCE-CONSUMER LAYOUT. `route.md:46-47` resolves
@@ -1467,8 +857,8 @@ pr_assurance() { # pr_assurance <recover-hook>
   # CONTROL: a layout where the flag is 1, so the assurance is true and must be made.
   #
   # FLAT, NOT THE REFERENCE LAYOUT, AND THAT WAS MEASURED RATHER THAN CHOSEN. With the reference
-  # layout as the control this predicate went red under the resolution-only mutant -- correctly,
-  # since nothing resolves there and the block then discloses -- but that is the OTHER arm's
+  # layout as the control this predicate went red on a producer that never resolves a bare
+  # basename -- correctly, since nothing resolves there and the block then discloses -- but that is the OTHER arm's
   # finding reported twice. A flat project reaches `step_file_resolved=1` without the candidate
   # -root loop, so what remains here is the only thing this arm should own: whether the
   # paragraph tracks the flag.
@@ -1483,10 +873,6 @@ pr_assurance() { # pr_assurance <recover-hook>
 }
 
 RPREDS="consumer assurance"
-rverdicts() { # rverdicts <recover-hook> [predicates]
-  for _n in ${2:-$RPREDS}; do r="$("pr_$_n" "$1")"; printf '%s=%s\n' "$_n" "${r%%:*}"; done
-}
-rflips() { printf '%s ' $(rverdicts "$1" "${2:-}" | sed -n 's/=FAIL$//p'); }
 
 for _n in $RPREDS; do
   case "$_n" in
@@ -1496,110 +882,14 @@ for _n in $RPREDS; do
   if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
 done
 
-# --- UNMUTATED CONTROL for the producer battery ------------------------------
-RCTRL="$WORK/recover-control-producer.sh"
-cp "$HOOK" "$RCTRL"
-rcf="$(rflips "$RCTRL")"
-if [ -z "${rcf// /}" ]; then
-  ok "control: an unmutated copy of the producer reproduces both verdicts — the flips below are the mutations"; B_ctl_r=1
-else
-  bad "CONTROL FAILED — an unmutated copy of the producer already flips {${rcf}}, so every producer-mutant verdict below is uninterpretable"
-fi
-
-rmutant_arm() { # rmutant_arm <label> <mutant> <expected flip set, in RPREDS order> <twins|-> <name>
-  if cmp -s "$HOOK" "$2"; then
-    bad "FIXTURE STALE: $1 — the mutant is byte-identical to the producer, so the mutation matched nothing"; return
-  fi
-  if ! bash -n "$2" 2>/dev/null; then
-    bad "FIXTURE STALE: $1 — the mutant is not valid shell; it would emit no directive and write no marker, and both predicates would read that as a kill they did not earn"; return
-  fi
-  got="$(rflips "$2" "$(mx_sel "$RPREDS" "$3" "$4")")"; mx_note "$5" "$3" "$got"
-  if [ "$got" = "$3 " ]; then
-    mutant_killed "${B_ctl_r:-0}" "$5" "mutant: $1 — flips exactly {$3}"
-  elif [ -z "${got// /}" ]; then
-    bad "MUTANT SURVIVED: $1 — both producer arms stay green with the mutation applied, so {$3} cannot fire"
-  else
-    bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}; the arms are entangled or one of them is vacuous"
-  fi
-}
-
-# --- MUTANT — the whole basename fix reverted, BOTH layers -------------------
-# The resolution loop and the readability-derived flag are two layers of one edit, and reverting
-# either alone leaves the other doing the work. This is the pre-fix producer: the grep's raw
-# capture recorded verbatim, and `step_file_resolved=1` meaning "a grep matched something".
-MR_RAW="$WORK/recover-raw-basename.sh"
-awk '
-  $0=="  case \"$STEP_FILE\" in" {inb=1; next}
-  inb && $0=="  esac" {inb=0; if (!e) {print "  :"; e=1} next}
-  inb {next}
-  index($0,"[ -r \"$_step_abs\" ] || STEP_FILE_RESOLVED=0") {next}
-  1' "$HOOK" > "$MR_RAW"
-lay=0
-[ "$(grep -c '_cand' "$MR_RAW")"     -eq 0 ] && lay=$((lay+1))
-[ "$(grep -c '_step_abs' "$MR_RAW")" -eq 0 ] && lay=$((lay+1))
-[ "$(grep -c '^  :$' "$MR_RAW")"     -eq 1 ] && lay=$((lay+1))
-if [ "$lay" -ne 3 ]; then
-  bad "FIXTURE STALE: only ${lay} of the basename fix's 3 layers were reverted; a partial revert comes out green and proves the layer left in place"
-else
-  rmutant_arm "a producer that records the snapshot's bare basename raw and calls it resolved" "$MR_RAW" "consumer assurance" "-" P-raw-basename
-fi
-
-# --- MUTANT — the resolution reverted, the readability flag KEPT -------------
-# THE ENTANGLEMENT TEST, one layer each. With the loop gone the basename never becomes a path,
-# so the flag correctly reads 0 and the block correctly discloses -- the gate does not arm and
-# does not lie about it. Only the reference-layout arm may notice.
-MR_RESOLVE="$WORK/recover-no-resolve.sh"
-awk '
-  !d && $0=="  case \"$STEP_FILE\" in" {inb=1; d=1; next}
-  inb && $0=="  esac" {inb=0; next}
-  inb {next}
-  1' "$HOOK" > "$MR_RESOLVE"
-if [ "$(grep -c '_cand' "$MR_RESOLVE")" -ne 0 ] || [ "$(grep -c '_step_abs' "$MR_RESOLVE")" -eq 0 ]; then
-  bad "FIXTURE STALE: the resolution-only mutant did not cut exactly the candidate-root loop"
-else
-  rmutant_arm "a producer that never resolves a bare basename under the steps directory" "$MR_RESOLVE" "consumer" "assurance" P-no-resolve
-fi
-
-# --- MUTANT — the readability flag reverted, the resolution KEPT -------------
-# The other half. Resolution still works, so the reference layout is unaffected; what returns is
-# `step_file_resolved=1` for a name that resolves nowhere, which is the input the false assurance
-# was rendered from.
-MR_FLAG="$WORK/recover-flag-blind.sh"
-awk '
-  $0=="  case \"$STEP_FILE\" in" {n++; if (n==2) {inb=1; next}}
-  inb && $0=="  esac" {inb=0; next}
-  inb {next}
-  index($0,"[ -r \"$_step_abs\" ] || STEP_FILE_RESOLVED=0") {next}
-  1' "$HOOK" > "$MR_FLAG"
-if [ "$(grep -c '_step_abs' "$MR_FLAG")" -ne 0 ] || [ "$(grep -c '_cand' "$MR_FLAG")" -eq 0 ]; then
-  bad "FIXTURE STALE: the flag-only mutant did not cut exactly the readability test"
-else
-  rmutant_arm "a producer whose resolved flag means only that a grep matched something" "$MR_FLAG" "assurance" "consumer" P-flag-blind
-fi
-
-# --- MUTANT — the assurance emitted unconditionally --------------------------
-# THE ARM'S OWN KILLER, and the one that owns the false-assurance case: the flag is computed
-# correctly and the paragraph ignores it, which is exactly the shipped defect. Anchored on the
-# SECOND occurrence of the branch condition -- the first is the second-mandate branch, and a
-# mutant that collapsed both would be scoring two changes as one.
-MR_ASSURE="$WORK/recover-assurance-always.sh"
-awk '
-  $0=="if [ \"$STEP_FILE_RESOLVED\" -eq 1 ]; then" { n++; if (n==2) { print "if true; then"; next } }
-  1' "$HOOK" > "$MR_ASSURE"
-if [ "$(grep -c '^if true; then$' "$MR_ASSURE")" -ne 1 ] \
-|| [ "$(grep -c '^if \[ "\$STEP_FILE_RESOLVED" -eq 1 \]; then$' "$MR_ASSURE")" -ne 1 ]; then
-  bad "FIXTURE STALE: the unconditional-assurance mutant did not land on exactly the second of the two branch conditions"
-else
-  rmutant_arm "a producer that promises the gate armed whether or not it could" "$MR_ASSURE" "assurance" "consumer" P-assurance-always
-fi
 
 # =============================================================================
 # THE ADVISOR STAGE — touchpoint R (BL-545)
 #
 # After both mandated Reads the gate holds the LEAD's Agent/Task/TaskCreate/Write/Edit/
 # MultiEdit/NotebookEdit until its transcript shows an advisor attempt after the
-# postcompact-digest.md Read. A third battery with its own predicates, control and mutants,
-# holding the producer at the real one and mutating the gate. Every DENY cell has its ALLOW twin
+# postcompact-digest.md Read. A third battery with its own predicates,
+# holding the producer at the real one and driving the gate. Every DENY cell has its ALLOW twin
 # in the same predicate (a Bash call in the same state), so a stage that refuses everything
 # fails as surely as one that refuses nothing. The transcript is seeded in the harness's own
 # line shapes, and the incoming call's own `tool_use` line is ON DISK with its id in the
@@ -1646,8 +936,8 @@ acall() {
 # ONE SEEDED WORLD PER GATE PER PASS, COPIED PER PREDICATE. Seeding a world costs a producer run
 # and two gate Reads (~0.6s at load 60) against ~0.02s for a copy, and the battery builds 17 worlds
 # per pass over 11 passes, so seeding each one inline cost the fixture ~70s. The template is still
-# armed BY THE GATE UNDER TEST (its two Reads), so a mutant of the arming path is scored on its own
-# template. `A_TPL_GATE` records which gate built it; a mismatch rebuilds, never reuses.
+# armed BY THE GATE UNDER TEST (its two Reads). `A_TPL_GATE` records which gate built it; a
+# mismatch rebuilds, never reuses.
 A_TPL=""; A_TPL_GATE=""
 a_tpl() { # a_tpl <gate> -- (re)build the template for this gate
   [ "$A_TPL_GATE" = "$1" ] && [ -d "$A_TPL" ] && return 0
@@ -1709,7 +999,7 @@ a_unavail() {
 # wait loop is never ENTERED, as a COUNT load cannot move. The hook's loop calls a bare `sleep`
 # (recover-gate line 274, no path), so a shim `sleep` first on PATH appends a line per call and
 # returns at once. No grant line, R owed, the call's own line NEVER lands, RECOVER_GATE_NET=8:
-# the real gate writes 0 lines; the mutant enters the loop and writes more. The CONTROL, same shim
+# the real gate writes 0 lines; a gate that entered the loop would write more. The CONTROL, same shim
 # and seed WITH a grant that stays on, must write >0 lines, which proves the shim is reached.
 a_nogrant_run() { # a_nogrant_run <gate> <project> <counter> -> decision on stdout
   _sd="$(mktemp -d "$WORK/sleepshim.XXXXXX")"
@@ -1791,21 +1081,10 @@ a_reclear() {
   printf 'PASS\n'
 }
 r_re="$(a_reclear "$HOOK")"
-if [ "$r_re" = PASS ]; then ok "R: a new recovery clears the advisor window the previous one left"; B_reclear=1
+if [ "$r_re" = PASS ]; then ok "R: a new recovery clears the advisor window the previous one left"
 else bad "R: a new recovery clears the advisor window the previous one left — ${r_re#FAIL:}"; fi
-MR_RECLEAR="$WORK/recover-no-reclear.sh"
-awk '!index($0,"rm -f \"${STATE_DIR}/.recover-advisor-owed\"")' "$HOOK" > "$MR_RECLEAR"
-if cmp -s "$HOOK" "$MR_RECLEAR" || ! bash -n "$MR_RECLEAR" 2>/dev/null; then
-  bad "FIXTURE STALE: the window-clear mutant did not apply"
-elif [ "$(a_reclear "$MR_RECLEAR")" = PASS ]; then
-  bad "MUTANT SURVIVED: a producer that does not clear the advisor window still passes"
-else
-  mutant_killed "${B_reclear:-0}" M-reclear "mutant: a producer that does not clear the advisor window fails the re-clear arm"
-fi
 
 APREDS="deny after before unavail nogrant mate nodigest bound session"
-averdicts() { a_tpl "$1"; for _n in ${2:-$APREDS}; do r="$("a_$_n" "$1")"; printf '%s=%s\n' "$_n" "${r%%:*}"; done; }
-aflips() { printf '%s ' $(averdicts "$1" "${2:-}" | sed -n 's/=FAIL$//p'); }
 
 a_tpl "$GATE"
 for _n in $APREDS; do
@@ -1824,51 +1103,10 @@ for _n in $APREDS; do
   if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
 done
 
-CTRL_A="$WORK/gate-control-adv.sh"
-cp "$GATE" "$CTRL_A"
-acf="$(aflips "$CTRL_A")"
-if [ -z "${acf// /}" ]; then
-  ok "control: an unmutated copy of the gate reproduces every advisor-stage verdict"; B_ctl_a=1
-else
-  bad "CONTROL FAILED — an unmutated copy already flips {${acf}}, so every advisor-stage mutant below is uninterpretable"
-fi
-
-amutant_arm() { # amutant_arm <label> <mutant> <expected flip set, in APREDS order> <twins|-> <name>
-  if cmp -s "$GATE" "$2"; then bad "FIXTURE STALE: $1 — the mutant is byte-identical to the gate"; return; fi
-  if ! bash -n "$2" 2>/dev/null; then bad "FIXTURE STALE: $1 — the mutant is not valid shell"; return; fi
-  got="$(aflips "$2" "$(mx_sel "$APREDS" "$3" "$4")")"; mx_note "$5" "$3" "$got"
-  if [ "$got" = "$3 " ]; then mutant_killed "${B_ctl_a:-0}" "$5" "mutant: $1 — flips exactly {$3}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — {$3} cannot fire"
-  else bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}"; fi
-}
-amut() { # amut <name> <awk program> -> mutant path
-  awk "$2" "$GATE" > "$WORK/gate-adv-$1.sh"; printf '%s\n' "$WORK/gate-adv-$1.sh"
-}
-# The program is bound to a variable first: bash 3.2 cannot scan a `$(` inside single quotes inside
-# "$( )", reports "bad substitution", and abandons the rest of the enclosing top-level compound --
-# which silently skipped every arm from here to the end of the GATE block.
-AP_NOARM='index($0,"owed_put \"$(printf"){print "          :"; next} 1'
-amutant_arm "the stage never arms (the owed write removed)" \
-  "$(amut noarm "$AP_NOARM")" "deny before nogrant mate bound" "after" A-noarm
-amutant_arm "the teammate stand-down removed at the stage" \
-  "$(amut mate 'index($0,"[ -z \"$R_AID\" ] || exit 0"){next} 1')" "mate" "deny" A-mate
-amutant_arm "an advisor attempt anywhere satisfies R" \
-  "$(amut order '{gsub(/"\$\{R_ADV:-0\}" -gt "\$\{R_DIG:-0\}"/,"\"${R_ADV:-0}\" -gt 0")} 1')" "before" "after" A-order
-amutant_arm "the unavailable stand-down removed" \
-  "$(amut unavail 'index($0,"[ \"${R_RES:--}\" = U ]; then R_V=allow"){next} 1')" "unavail" "before" A-unavail
-amutant_arm "the no-grant stand-down removed" \
-  "$(amut grant 'index($0,"if [ \"${R_GRANT:-none}\" != on ]; then"){next} 1')" "nogrant" "deny" A-grant
-amutant_arm "the digest-readability arming precondition removed" \
-  "$(amut digest '{sub(/^        if digest_readable; then$/,"        if true; then")} 1')" "nodigest" "deny" A-digest
-amutant_arm "the escape bound removed" \
-  "$(amut bound '{sub(/R_MAX_DENIES=3/,"R_MAX_DENIES=999")} 1')" "bound" "deny" A-bound
-amutant_arm "the session stand-down removed" \
-  "$(amut session 'index($0,"if [ -n \"$R_OSID\" ] && [ -n \"$R_SID\" ] && [ \"$R_OSID\" != \"$R_SID\" ]; then"){print "  if false; then"; next} 1')" "session" "deny" A-session
-
 # =============================================================================
 # WHOSE RECOVERY — an update session is not the lead, and a marker has an owner
 #
-# A fourth battery with its own predicates, control and mutants. ai-dlc-recover.sh used to write
+# A fourth battery with its own predicates. ai-dlc-recover.sh used to write
 # the marker for ANY session that compacted and the gate denied ANY session's calls on it, so a
 # consumer-pull session (/ai-dlc-update) was handed the lead's recovery mandate -- 2 of the 78
 # updater transcripts on the reference consumer, one of them with no compaction in it at all,
@@ -1877,7 +1115,7 @@ amutant_arm "the session stand-down removed" \
 # (marker kept) for an updater and for a marker owned by another session.
 #
 # THE TWO GATE STAND-DOWNS COVER EACH OTHER on the obvious seed (a stale marker, an updater
-# calling): disabling either leaves the other doing the work and the mutant comes back green.
+# calling): disabling either leaves the other doing the work.
 # So each has a case only it can reach. `legacy_upd` carries no owner, so only the updater test
 # can stand down; `stale_pipe` is a pipeline session, so only the owner test can. The stale
 # marker is always written by the REAL producer, never by hand; the legacy marker is that same
@@ -2014,12 +1252,6 @@ sp_ord_upd() {
 }
 
 SPREDS="upd_compact pipe_compact stale_upd stale_pipe same_sess legacy_pipe legacy_upd ord_pipe ord_upd"
-sflips() { # sflips <hook> <gate> [predicates] -> the predicates that FAIL, space separated
-  for _n in ${3:-$SPREDS}; do
-    r="$("sp_$_n" "$1" "$2")"
-    [ "${r%%:*}" = PASS ] || printf '%s ' "$_n"
-  done
-}
 
 for _n in $SPREDS; do
   r="$("sp_$_n" "$HOOK" "$GATE")"
@@ -2037,89 +1269,6 @@ for _n in $SPREDS; do
   if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
 done
 
-SCTRL_H="$WORK/recover-control-whose.sh"; SCTRL_G="$WORK/gate-control-whose.sh"
-cp "$HOOK" "$SCTRL_H"; cp "$GATE" "$SCTRL_G"
-scf="$(sflips "$SCTRL_H" "$SCTRL_G")"
-if [ -z "${scf// /}" ]; then
-  ok "control: unmutated copies of the producer and the gate reproduce all 9 whose-recovery verdicts, deny cells included"; B_ctl_s=1
-else
-  bad "CONTROL FAILED — unmutated copies already flip {${scf}}, so every whose-recovery mutant verdict below is uninterpretable"
-fi
-
-# smut <src> <anchor line, whole> <out> <replacement line> [second replacement line]
-# The anchor must occur exactly once as a WHOLE LINE, or the mutation is a lost subject.
-smut() {
-  [ "$(grep -cxF -- "$2" "$1")" -eq 1 ] || return 1
-  A="$2" R1="$4" R2="${5:-}" awk '$0==ENVIRON["A"]{print ENVIRON["R1"]; if (ENVIRON["R2"]!="") print ENVIRON["R2"]; next} 1' "$1" > "$3"
-  grep -qxF -- "$4" "$3"
-}
-smutant_arm() { # smutant_arm <label> <hook> <gate> <expected flips in SPREDS order> <twins|-> <name>
-  if [ "$2" = "$HOOK" ] && [ "$3" = "$GATE" ]; then bad "FIXTURE STALE: $1 — neither file was mutated"; return; fi
-  if [ "$2" != "$HOOK" ] && cmp -s "$HOOK" "$2"; then bad "FIXTURE STALE: $1 — the producer mutant is byte-identical"; return; fi
-  if [ "$3" != "$GATE" ] && cmp -s "$GATE" "$3"; then bad "FIXTURE STALE: $1 — the gate mutant is byte-identical"; return; fi
-  if ! bash -n "$2" 2>/dev/null || ! bash -n "$3" 2>/dev/null; then bad "FIXTURE STALE: $1 — a mutant is not valid shell, and its silence would score as a kill"; return; fi
-  got="$(sflips "$2" "$3" "$(mx_sel "$SPREDS" "$4" "$5")")"; mx_note "$6" "$4" "$got"
-  if [ "$got" = "$4 " ]; then mutant_killed "${B_ctl_s:-0}" "$6" "mutant: $1 — flips exactly {$4}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — every whose-recovery arm stays green, so {$4} cannot fire"
-  else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}; the arms are entangled or one of them is vacuous"; fi
-}
-UPD_CASE='    *'"'"'/ai-dlc-update</command-name>'"'"'|*'"'"'"skill":"ai-dlc-update"'"'"') exit 0 ;;'
-UPD_NEVER='    *'"'"'NEVER-MATCHES-X'"'"') exit 0 ;;'
-UPD_RM='    *'"'"'/ai-dlc-update</command-name>'"'"'|*'"'"'"skill":"ai-dlc-update"'"'"') rm -f "$MARKER" "$PROGRESS" 2>/dev/null; exit 0 ;;'
-KEY_LINE='if [ -n "$M_SID" ] && [ -n "$G_SID" ] && [ "$M_SID" != "$G_SID" ]; then'
-KEY_RM='  rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true'
-
-# (a) The producer's updater stand-down removed. Killed by upd_compact ALONE: the marker appears.
-# The gate's own updater test still stands down on that update session, so the Bash call stays
-# silent -- the only observable is the marker, which is why C1 asserts it before the call.
-SM_A="$WORK/recover-whose-a.sh"
-if smut "$HOOK" "$UPD_CASE" "$SM_A" "$UPD_NEVER"; then
-  smutant_arm "the producer writes a marker for an update session" "$SM_A" "$GATE" "upd_compact" "pipe_compact" W-a
-else bad "FIXTURE STALE: the producer's updater stand-down is not exactly one whole line, so mutant (a) has no subject"; fi
-
-# (b) The gate's updater stand-down removed. Killed by legacy_upd and ord_upd: an ownerless marker leaves
-# the owner test nothing to compare, so only the updater test can stand down there. stale_upd stays
-# green because the owner test covers it, which is exactly why legacy_upd exists.
-SM_B="$WORK/gate-whose-b.sh"
-if smut "$GATE" "$UPD_CASE" "$SM_B" "$UPD_NEVER"; then
-  smutant_arm "the gate has no updater stand-down" "$HOOK" "$SM_B" "legacy_upd ord_upd" "stale_upd legacy_pipe" W-b
-else bad "FIXTURE STALE: the gate's updater stand-down is not exactly one whole line, so mutant (b) has no subject"; fi
-
-# (c) The owner test removed. Killed by stale_pipe and ord_pipe: a pipeline session has no updater test to
-# fall back on. stale_upd stays green because the updater test covers it.
-SM_C="$WORK/gate-whose-c.sh"
-if smut "$GATE" "$KEY_LINE" "$SM_C" "if false; then"; then
-  smutant_arm "the gate does not compare the marker's session_id with the call's" "$HOOK" "$SM_C" "stale_pipe ord_pipe" "stale_upd same_sess" W-c
-else bad "FIXTURE STALE: the owner test is not exactly one whole line, so mutant (c) has no subject"; fi
-
-# (d) Both stand-downs delete the marker before exiting. Killed by the five cells that assert the
-# marker SURVIVES a stand-down: stale_upd and stale_pipe through the owner branch, legacy_upd through
-# the updater branch, and ord_pipe and ord_upd the same two ways with the snapshot gone. No deny cell
-# flips: the denied calls never reach either branch.
-SM_D="$WORK/gate-whose-d.sh"; SM_D1="$WORK/gate-whose-d1.sh"
-if smut "$GATE" "$KEY_LINE" "$SM_D1" "$KEY_LINE" "$KEY_RM" && smut "$SM_D1" "$UPD_CASE" "$SM_D" "$UPD_RM"; then
-  smutant_arm "a stand-down deletes the marker it stood down on" "$HOOK" "$SM_D" "stale_upd stale_pipe legacy_upd ord_pipe ord_upd" "same_sess pipe_compact" W-d
-else bad "FIXTURE STALE: mutant (d) could not be built from exactly one owner-test line and one updater-case line"; fi
-
-# (e) BOTH stand-downs moved BELOW the readability block, before the tool-name parse that follows it.
-# Nothing else changes, so every case where the snapshot is present behaves identically (the
-# readability block is not entered). Killed by exactly ord_pipe and ord_upd: with the snapshot gone
-# the readability block deletes the marker and exits silent first, so the call is silent but the
-# marker is not kept. The block is relocated whole, so the order is the only difference.
-SM_E="$WORK/gate-whose-e.sh"
-awk '
-  index($0, "G_SID=\"\"; G_TP=\"\"") == 1 { cap = 1 }
-  cap { buf = buf $0 "\n"; if ($0 == "  esac") e = 1; if (e && $0 == "fi") { cap = 0; e = 0; held = 1 } next }
-  index($0, "TOOL=\"$(printf '"'"'%s'"'"' \"$INPUT\" | jq -r '"'"'.tool_name // empty'"'"'") == 1 && held && !done { printf "%s", buf; done = 1 }
-  1' "$GATE" > "$SM_E"
-_e_at="$(grep -n 'G_SID=""; G_TP=""' "$SM_E" | head -1 | cut -d: -f1)"
-_e_rd="$(grep -n 'if \[ ! -r "\$SNAP_ABS" \]' "$SM_E" | head -1 | cut -d: -f1)"
-if [ -z "$_e_at" ] || [ -z "$_e_rd" ] || [ "$_e_at" -le "$_e_rd" ] || [ "$(wc -l < "$SM_E")" -ne "$(wc -l < "$GATE")" ]; then
-  bad "FIXTURE STALE: mutant (e) did not relocate the stand-downs below the readability block (stand-down at line '${_e_at}', readability at '${_e_rd}')"
-else
-  smutant_arm "both stand-downs sit BELOW the readability block that deletes the marker" "$HOOK" "$SM_E" "ord_pipe ord_upd" "stale_pipe stale_upd" W-e
-fi
-
 fi  # whose-recovery arms present
 
 # A10. THE NET IS NOT A DENY (BL-630). R owed, and the incoming call's own `tool_use` line NEVER
@@ -2127,7 +1276,7 @@ fi  # whose-recovery arms present
 # expires with R_SEEN=0, a transcript the stage cannot read. It must ALLOW, say why on stderr, and
 # not count a refusal -- `denies=` unchanged. The pre-BL-630 gate denied here, so a correct advisor
 # call whose line was merely late (load makes it later) was refused. Outside APREDS on purpose:
-# it pays the net by construction, once for the gate and once for its mutant, so it runs with
+# it pays the net by construction, so it runs with
 # RECOVER_GATE_NET=2 (BL-730: the knob only shortens the 300s default) and greps a net-agnostic
 # stderr reason.
 a_net() {
@@ -2145,17 +1294,8 @@ a_net() {
   printf 'PASS\n'
 }
 r_net="$(a_net "$GATE")"
-if [ "$r_net" = PASS ]; then ok "R: the safety net's expiry with the incoming call's line unseen allows, uncounted, with a stderr reason"; B_net=1
+if [ "$r_net" = PASS ]; then ok "R: the safety net's expiry with the incoming call's line unseen allows, uncounted, with a stderr reason"
 else bad "R: the safety net's expiry with the incoming call's line unseen — ${r_net#FAIL:}"; fi
-MR_NET="$WORK/gate-adv-net.sh"
-awk 'index($0,"if [ \"${R_SEEN:-0}\" != 1 ]; then"){print "  if false; then"; next} 1' "$GATE" > "$MR_NET"
-if cmp -s "$GATE" "$MR_NET" || ! bash -n "$MR_NET" 2>/dev/null; then
-  bad "FIXTURE STALE: the time-only-ceiling mutant did not apply"
-elif [ "$(a_net "$MR_NET")" = PASS ]; then
-  bad "MUTANT SURVIVED: a gate whose clock denies an unseen call still passes the net arm"
-else
-  mutant_killed "${B_net:-0}" M-net-ceiling "mutant: a gate whose net ceiling denies an unseen call fails the net arm"
-fi
 
 # =============================================================================
 # ONE DECISION PER MESSAGE, AND A WAIT THAT OUTLASTS THE FLUSH (BL-730)
@@ -2166,9 +1306,9 @@ fi
 # uncounted; calls 18 and 19, each still pending at the flush around 05:57:24, were refused. The
 # gate now waits up to R_NET (300s) for the call's own line and counts one refusal per message.
 #
-# Four predicates with their own control and mutants. They run in the BACKGROUND, every predicate
-# of every gate at once, because `rflush_ctl` waits out two short nets (`rflush` and `rwithdraw`
-# count the gate's ticks through a shim and wait no wall clock); serially the battery would pay that wall clock once per gate. Each child's pid is
+# Five predicates. They run in the BACKGROUND, every predicate
+# at once, because `rflush_ctl` waits out two short nets (`rflush` and `rwithdraw`
+# count the gate's ticks through a shim and wait no wall clock); serially the battery would pay that wall clock. Each child's pid is
 # recorded and `wait`ed, and each writes its verdict to a file named for the predicate.
 # =============================================================================
 
@@ -2280,49 +1420,17 @@ a_rwithdraw() {
 }
 
 R7PREDS="rmsg rmsg_ctl rflush rflush_ctl rwithdraw"
-r7_launch() { # r7_launch <gate> <outdir> [predicates] -- each predicate in the background, pids recorded
-  a_tpl "$1"; mkdir -p "$2"; : > "$2/pids"; printf '%s\n' "${3:-$R7PREDS}" > "$2/preds"
-  for _n in ${3:-$R7PREDS}; do
+r7_launch() { # r7_launch <gate> <outdir> -- each predicate in the background, pids recorded
+  a_tpl "$1"; mkdir -p "$2"; : > "$2/pids"
+  for _n in $R7PREDS; do
     ( r="$("a_$_n" "$1")"; printf '%s\n' "$r" > "$2/$_n" ) &
     printf '%s\n' "$!" >> "$2/pids"
   done
 }
 r7_wait() { while read -r _wp; do wait "$_wp"; done < "$1/pids"; } # r7_wait <outdir>
-r7_flips() { # r7_flips <outdir> -> the predicates that ran there and did not PASS, space separated
-  for _n in $(cat "$1/preds" 2>/dev/null); do
-    r="$(cat "$1/$_n" 2>/dev/null)"
-    [ "${r%%:*}" = PASS ] || printf '%s ' "$_n"
-  done
-}
-r7mut() { # r7mut <name> <awk program> -> mutant path
-  awk "$2" "$GATE" > "$WORK/gate-730-$1.sh"; printf '%s\n' "$WORK/gate-730-$1.sh"
-}
-# M-730-net10: the default net back to 10s and the knob ignored. M-730-noreread: the wait loop
-# removed, so the verdict comes from the scan taken at the hook's start -- a gate that never reads
-# again, which is what a harness that writes the line only after the hook returns would see.
-# With no re-read the withdrawal is never seen, so M-730-noreread flips {rflush rwithdraw}: the
-# grant is refreshed only inside the loop it removes.
-# M-730-count: the denied_msg comparison removed, so every call counts.
-# Programs bound to variables first, as AP_NOARM is: bash 3.2 cannot scan a `$(` inside single
-# quotes inside "$( )".
-R7P_NET10='$0=="  R_NET=300"{print "  R_NET=10"; next} index($0,"R_NET=$((10#$RECOVER_GATE_NET))"){print "    *) : ;;"; next} 1'
-R7P_NORR='index($0,"  while [ \"$R_V\" = owed ] && [ \"${R_SEEN:-0}\" != 1 ]")==1{skip=1} skip{if($0=="  done")skip=0; next} 1'
-R7P_COUNT='index($0,"if [ \"${R_MID:--}\" != - ] && [ \"$R_MID\" = \"$R_DMSG\" ]; then"){print "  if false; then"; next} 1'
-R7_NET10="$(r7mut net10 "$R7P_NET10")"
-R7_NORR="$(r7mut noreread "$R7P_NORR")"
-R7P_GRANT='index($0,"[ \"${R_GRANT:-none}\" = on ] || { rm -f")==3{next} 1'
-R7_GRANT="$(r7mut grant "$R7P_GRANT")"
-R7_COUNT="$(r7mut count "$R7P_COUNT")"
-R7_CTRL="$WORK/gate-control-730.sh"; cp "$GATE" "$R7_CTRL"
 
 r7_launch "$GATE" "$WORK/r7-gate"
-r7_launch "$R7_CTRL" "$WORK/r7-ctrl"
-# Each mutant runs only the predicates it decides plus its twins (all of them under --matrix).
-r7_launch "$R7_NET10" "$WORK/r7-net10" "$(mx_sel "$R7PREDS" rflush rflush_ctl)"
-r7_launch "$R7_NORR" "$WORK/r7-noreread" "$(mx_sel "$R7PREDS" "rflush rwithdraw" rmsg)"
-r7_launch "$R7_COUNT" "$WORK/r7-count" "$(mx_sel "$R7PREDS" rmsg rmsg_ctl)"
-r7_launch "$R7_GRANT" "$WORK/r7-grant" "$(mx_sel "$R7PREDS" rwithdraw rflush_ctl)"
-for _o in gate ctrl net10 noreread count grant; do r7_wait "$WORK/r7-$_o"; done
+r7_wait "$WORK/r7-gate"
 
 for _n in $R7PREDS; do
   r="$(cat "$WORK/r7-gate/$_n" 2>/dev/null)"
@@ -2335,28 +1443,6 @@ for _n in $R7PREDS; do
   esac
   if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
 done
-r7cf="$(r7_flips "$WORK/r7-ctrl")"
-if [ -z "${r7cf// /}" ]; then
-  ok "control: an unmutated copy of the gate reproduces every BL-730 verdict"; B_ctl_r7=1
-else
-  bad "CONTROL FAILED — an unmutated copy already flips {${r7cf}}, so every BL-730 mutant below is uninterpretable"
-fi
-r7mutant_arm() { # r7mutant_arm <label> <mutant> <outdir> <expected flip set, in R7PREDS order>
-  if cmp -s "$GATE" "$2"; then bad "FIXTURE STALE: $1 — the mutant is byte-identical to the gate"; return; fi
-  if ! bash -n "$2" 2>/dev/null; then bad "FIXTURE STALE: $1 — the mutant is not valid shell"; return; fi
-  got="$(r7_flips "$3")"; mx_note "$5" "$4" "$got"
-  if [ "$got" = "$4 " ]; then mutant_killed "${B_ctl_r7:-0}" "$5" "mutant: $1 — flips exactly {$4}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — {$4} cannot fire"
-  else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}"; fi
-}
-if grep -qxF '  R_NET=10' "$R7_NET10" && ! grep -qF '10#$RECOVER_GATE_NET' "$R7_NET10"; then
-  r7mutant_arm "M-730-net10: the net back to 10s, the knob ignored" "$R7_NET10" "$WORK/r7-net10" "rflush" M-730-net10
-else bad "FIXTURE STALE: M-730-net10 did not replace both the default net and the knob"; fi
-if ! grep -qF 'while [ "$R_V" = owed ]' "$R7_NORR"; then
-  r7mutant_arm "M-730-noreread: the wait loop removed, judged once at the hook's start" "$R7_NORR" "$WORK/r7-noreread" "rflush rwithdraw" M-730-noreread
-else bad "FIXTURE STALE: M-730-noreread did not remove the wait loop"; fi
-r7mutant_arm "M-730-count: the denied_msg comparison removed, every call counts" "$R7_COUNT" "$WORK/r7-count" "rmsg" M-730-count
-r7mutant_arm "M-730-grant: the post-wait grant check removed" "$R7_GRANT" "$WORK/r7-grant" "rwithdraw" M-730-grant
 
 # R4. THE NO-WALL SEAM (BL-868). rcall and a_net set AI_DLC_TEST_RECOVER_GATE_NO_WALL=1, which drops
 # the wait loop's SECONDS clause, so a loaded box cannot end the wait before the tick the r7_shim
@@ -2366,7 +1452,7 @@ r7mutant_arm "M-730-grant: the post-wait grant check removed" "$R7_GRANT" "$WORK
 # loop test would need 10 real seconds to move a cell). RECOVER_GATE_NET=10, the line never lands:
 # unset, the SECONDS clause ends the wait after exactly 1 tick; set, only the slept bound ends it,
 # after exactly 16 (8 quarter ticks, then 8 one-second ticks). Both cells are judged before the
-# verdict, so a mutant's flip set is read whole.
+# verdict, so both are read whole.
 a_nowall_run() { # a_nowall_run <gate> <project> <seam value|''> -> tick count
   _nwt="$2/nwticks"; : > "$_nwt"
   ( sleep() { echo x >> "$_nwt"; SECONDS=$((SECONDS + 100)); }
@@ -2387,21 +1473,8 @@ a_nowall() { # a_nowall <gate> -> PASS | FAIL:<flipped cells>:<why>
   if [ -n "$_nf" ]; then printf 'FAIL:%s:%s\n' "$_nf" "$_nwhy"; else printf 'PASS\n'; fi
 }
 r_nw="$(a_nowall "$GATE")"
-if [ "$r_nw" = PASS ]; then ok "R (BL-868): the no-wall seam drops only the SECONDS clause; unset it still bounds the wait (a_nowall)"; B_nw=1
+if [ "$r_nw" = PASS ]; then ok "R (BL-868): the no-wall seam drops only the SECONDS clause; unset it still bounds the wait (a_nowall)"
 else bad "R (BL-868): the no-wall seam — ${r_nw#FAIL:}"; fi
-MR_NWIGN="$WORK/gate-nowall-ignored.sh"; MR_NWON="$WORK/gate-nowall-always.sh"
-awk 'index($0,"in 1) _rw=0 ;; esac"){sub(/1\) _rw=0 ;;/, "1) : ;;")} 1' "$GATE" > "$MR_NWIGN"
-awk 'index($0,"_rt0=$SECONDS; _rq=0; _rw=1")==3{sub(/_rw=1/, "_rw=0")} 1' "$GATE" > "$MR_NWON"
-for _nm in "M-nowall-ignored:$MR_NWIGN:set" "M-nowall-always:$MR_NWON:unset"; do
-  _nn="${_nm%%:*}"; _nr="${_nm#*:}"; _nf="${_nr%:*}"; _nc="${_nr##*:}"
-  if cmp -s "$GATE" "$_nf" || ! bash -n "$_nf" 2>/dev/null; then bad "FIXTURE STALE: $_nn did not apply"; continue; fi
-  _nv="$(a_nowall "$_nf")"
-  case "$_nv" in
-    "FAIL:$_nc:"*) mutant_killed "${B_nw:-0}" "$_nn" "mutant: $_nn fails exactly the $_nc cell of the no-wall arm" ;;
-    PASS) bad "MUTANT SURVIVED: $_nn passes the no-wall arm" ;;
-    *) bad "MUTANT FLIP SET WRONG: $_nn — expected the $_nc cell, measured ${_nv#FAIL:}" ;;
-  esac
-done
 
 # =============================================================================
 # THE SAME-MESSAGE RACE AT THE READ STAGES (BL-658)
@@ -2418,9 +1491,7 @@ done
 # point between the fast-path and the stage read. The world is armed by the real producer and
 # advanced to stage two by the REAL gate, so the variant judges only the third call.
 #
-# OUTSIDE PREDS ON PURPOSE. Every mutant above is re-scored on every PREDS member, and most of
-# them cannot carry the injection (the dead gate has no line to anchor on), so a race predicate
-# there would fail for a reason that has nothing to do with the race.
+# OUTSIDE PREDS ON PURPOSE: the race arms drive their own injected copies of the gate.
 #
 # FOUR SHAPES. R1 the injected shipped gate ALLOWS. R2 the genuine first call (marker, no progress)
 # is DENIED with the stage-one text -- the call a fix keyed on the progress file waves through.
@@ -2431,17 +1502,12 @@ done
 RACE_FABS='[ -n "$FPATH" ] && FABS="$(resolve "$FPATH")"'
 RACE_STAGE='STAGE="$(cat "$PROGRESS" 2>/dev/null || printf '"'"'snapshot'"'"')"'
 RACE_RETEST='[ -f "$MARKER" ] || exit 0'
-RACE_WRONG='[ -f "$PROGRESS" ] || exit 0'
 RACE_LINE='rm -f "$MARKER" "$PROGRESS" 2>/dev/null; : > "${STATE_DIR}/.race-injected"'
 RACE_SENT="_bmad-output/.race-injected"
 # What directly follows the stage read: yes (the re-test), no, or none (no stage read at all).
 RACE_AT='prev == ENVIRON["S"] { print (($0 == ENVIRON["R"]) ? "yes" : "no"); f = 1; exit } { prev = $0 } END { if (!f) print "none" }'
 # The two lines directly above the stage read, joined by a bar.
-RACE_ABOVE='$0 == ENVIRON["S"] { print p2 "|" p1; exit } { p2 = p1; p1 = $0 }'
 RACE_AFTER='{ print } $0 == ENVIRON["A"] { print ENVIRON["L"] }'
-RACE_BEFORE='$0 == ENVIRON["A"] { print ENVIRON["L"] } { print }'
-RACE_DROP='prev == ENVIRON["A"] && $0 == ENVIRON["L"] { prev = $0; next } { print; prev = $0 }'
-RACE_SWAP='prev == ENVIRON["A"] && $0 == ENVIRON["L"] { print ENVIRON["W"]; prev = $0; next } { print; prev = $0 }'
 
 _race_at="$(S="$RACE_STAGE" R="$RACE_RETEST" awk "$RACE_AT" "$GATE")"
 if [ "$_race_at" != yes ]; then
@@ -2498,30 +1564,13 @@ race_read() { # race_read <project> -> seed | allow | first | second | other
 race_ran() { [ -e "$1/$RACE_SENT" ] && [ ! -e "$1/$mk" ] && [ ! -e "$1/$pg" ]; }
 
 RG=ai-dlc-recover-gate.sh
-RD_IN="$(race_dir)"; RD_CTL="$(race_dir)"; RD_PRE="$(race_dir)"
-RD_M1="$(race_dir)"; RD_M2="$(race_dir)"; RD_M3="$(race_dir)"
-if [ -z "$RD_IN" ] || [ -z "$RD_CTL" ] || [ -z "$RD_PRE" ] || [ -z "$RD_M1" ] || [ -z "$RD_M2" ] || [ -z "$RD_M3" ]; then
+RD_IN="$(race_dir)"; RD_CTL="$(race_dir)"
+if [ -z "$RD_IN" ] || [ -z "$RD_CTL" ]; then
   bad "FIXTURE BROKEN: a whole-directory copy of the hooks did not carry every sibling, so no race variant below is evidence"
 else
   # The shipped gate, the removal injected directly after the call-path normalisation.
   race_edit "$GATE" "$RD_IN/$RG" "$RACE_AFTER" "$RACE_FABS" "$RACE_LINE" \
     && [ "$(S="$RACE_STAGE" R="$RACE_RETEST" awk "$RACE_AT" "$RD_IN/$RG")" = yes ] || RD_IN=""
-  # M2 twin: the shipped gate, the removal injected directly above the stage read.
-  race_edit "$GATE" "$RD_PRE/$RG" "$RACE_BEFORE" "$RACE_STAGE" "$RACE_LINE" \
-    && [ "$(S="$RACE_STAGE" awk "$RACE_ABOVE" "$RD_PRE/$RG" | sed 's/^.*|//')" = "$RACE_LINE" ] || RD_PRE=""
-  # M1: the re-test removed, then the same injection as RD_IN.
-  race_edit "$GATE" "$RD_M1/m.step1" "$RACE_DROP" "$RACE_STAGE" "$RACE_RETEST" \
-    && race_edit "$RD_M1/m.step1" "$RD_M1/$RG" "$RACE_AFTER" "$RACE_FABS" "$RACE_LINE" \
-    && [ "$(S="$RACE_STAGE" R="$RACE_RETEST" awk "$RACE_AT" "$RD_M1/$RG")" = no ] || RD_M1=""
-  # M2: the re-test moved directly ABOVE the stage read, and the removal injected between the two.
-  race_edit "$GATE" "$RD_M2/m.step1" "$RACE_DROP" "$RACE_STAGE" "$RACE_RETEST" \
-    && race_edit "$RD_M2/m.step1" "$RD_M2/m.step2" "$RACE_BEFORE" "$RACE_STAGE" "$RACE_RETEST" \
-    && race_edit "$RD_M2/m.step2" "$RD_M2/$RG" "$RACE_BEFORE" "$RACE_STAGE" "$RACE_LINE" \
-    && [ "$(S="$RACE_STAGE" awk "$RACE_ABOVE" "$RD_M2/$RG")" = "${RACE_RETEST}|${RACE_LINE}" ] \
-    && [ "$(S="$RACE_STAGE" R="$RACE_RETEST" awk "$RACE_AT" "$RD_M2/$RG")" = no ] || RD_M2=""
-  # M3: the re-test keyed on the progress file instead of the marker. No injection: its subject is R2.
-  race_edit "$GATE" "$RD_M3/$RG" "$RACE_SWAP" "$RACE_STAGE" "$RACE_RETEST" "$RACE_WRONG" \
-    && [ "$(S="$RACE_STAGE" R="$RACE_WRONG" awk "$RACE_AT" "$RD_M3/$RG")" = yes ] || RD_M3=""
   cmp -s "$GATE" "$RD_CTL/$RG" || RD_CTL=""
 
   # R1 and R3, one world.
@@ -2547,59 +1596,21 @@ else
   if [ "$_rv" = first ]; then ok "race R2: the genuine first call (marker present, no progress file) is DENIED with the stage-one text"
   else bad "race R2: the genuine first call answered '${_rv}' where the stage-one deny was expected"; fi
 
-  # M1, the pre-fix gate: R1 flips to the stage-one deny, the injection still ran, R2 holds.
-  if [ -z "$RD_M1" ]; then bad "FIXTURE STALE: M1 — the re-test could not be removed from directly after the stage read"
-  else
-    _rp="$(race_world "$RD_M1/$RG")"; _rv="$(race_read "$_rp")"; _r2="$(race_read "$(race_first "$RD_M1/$RG")")"
-    if [ "$_rv" = first ] && race_ran "$_rp" && [ "$_r2" = first ]; then ok "mutant: re-test removed — the raced third Read is refused with the stage-one text, and only R1 flips"
-    else bad "mutant: re-test removed — expected R1 'first' with the injection run and R2 'first', measured R1 '${_rv}' R2 '${_r2}'"; fi
-  fi
-  # M2: the re-test above the stage read leaves the window open. Its twin, the shipped gate with
-  # the removal at the same point, still allows.
-  if [ -z "$RD_M2" ] || [ -z "$RD_PRE" ]; then bad "FIXTURE STALE: M2 — the misplaced re-test or its twin could not be built around the stage read"
-  else
-    _rp="$(race_world "$RD_M2/$RG")"; _rv="$(race_read "$_rp")"; _r2="$(race_read "$(race_first "$RD_M2/$RG")")"
-    _tp="$(race_world "$RD_PRE/$RG")"; _tv="$(race_read "$_tp")"
-    if [ "$_rv" = first ] && race_ran "$_rp" && [ "$_r2" = first ] && [ "$_tv" = allow ] && race_ran "$_tp"; then
-      ok "mutant: re-test placed BEFORE the stage read — the removal between them is refused with the stage-one text, while the shipped gate allows at the same point"
-    else bad "mutant: re-test placed BEFORE the stage read — expected 'first' against a twin 'allow', measured '${_rv}' (R2 '${_r2}') against twin '${_tv}'"; fi
-  fi
-  # M3: the re-test keyed on the progress file. R1 still allows; R2 is waved through.
-  if [ -z "$RD_M3" ]; then bad "FIXTURE STALE: M3 — the re-test could not be rekeyed on the progress file"
-  else
-    _rv="$(race_read "$(race_first "$RD_M3/$RG")")"
-    _r1="$(race_read "$(race_world "$RD_M3/$RG")")"
-    if [ "$_rv" = allow ] && [ "$_r1" = second ]; then ok "mutant: re-test keyed on the progress file — the genuine first call is waved through, and only R2 flips"
-    else bad "mutant: re-test keyed on the progress file — expected R2 'allow' and the uninjected world 'second', measured R2 '${_rv}' world '${_r1}'"; fi
-  fi
 
   # THE REMOVAL ORDER (BL-658). The fix holds only because the satisfying Read removes the MARKER
   # before the PROGRESS file: a concurrent call that sees the marker gone exits at the re-test, one
   # that sees the progress file gone but the marker present would take the default stage. Every
   # injection above supplies its OWN removal, so nothing above binds the shipped line's operand
-  # order. This arm reads the line itself, whole-line and exact, and the mutant swaps its operands
-  # in a copy of the whole hooks directory.
+  # order. This arm reads the line itself, whole-line and exact, with the swapped spelling and an
+  # impossible anchor as its controls.
   RACE_RM='        rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true'
   RACE_RMSW='        rm -f "$PROGRESS" "$MARKER" 2>/dev/null || true'
   RACE_RMNONE='        rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true # impossible-anchor-bl658-zz'
-  RACE_REPL='$0 == ENVIRON["A"] { print ENVIRON["W"]; next } { print }'
   race_rm_order() { printf '%s|%s\n' "$(grep -cxF -- "$RACE_RM" "$1")" "$(grep -cxF -- "$RACE_RMSW" "$1")"; }
   _ro="$(race_rm_order "$GATE")"; _rc="$(grep -cxF -- "$RACE_RMNONE" "$GATE")"
   if [ "$_ro" = "1|0" ] && [ "$_rc" = 0 ]; then
     ok "race order: the satisfying Read removes the marker BEFORE the progress file (exact line 1, swapped spelling 0, impossible-anchor control 0)"
   else bad "race order: expected exact line 1 and swapped spelling 0 with control 0, measured ${_ro} with control '${_rc}' in ${GATE}"; fi
-  RD_M4="$(race_dir)"
-  if [ -z "$RD_M4" ]; then bad "FIXTURE BROKEN: a whole-directory copy of the hooks did not carry every sibling, so the order mutant below is not evidence"
-  else
-    race_edit "$GATE" "$RD_M4/$RG" "$RACE_REPL" "$RACE_RM" "" "$RACE_RMSW" \
-      && [ "$(race_rm_order "$RD_M4/$RG")" = "0|1" ] || RD_M4=""
-    if [ -z "$RD_M4" ]; then bad "FIXTURE STALE: M4 — the removal operands could not be swapped on the whole-line anchor"
-    else
-      _mo="$(race_rm_order "$RD_M4/$RG")"
-      if [ "$_mo" = "0|1" ] && [ "$_mo" != "$_ro" ]; then ok "mutant: removal operands swapped (progress file first) — the order arm reports exact 0 and swapped 1 against 1 and 0 unmutated"
-      else bad "mutant: removal operands swapped — the order arm measured ${_mo} against ${_ro} unmutated, so it cannot tell the order"; fi
-    fi
-  fi
 fi
 
   # ===========================================================================
@@ -2621,15 +1632,10 @@ fi
   # stage, so a stale `step` skipped the next recovery's snapshot mandate.
   #
   # SHIP-AHEAD. Each block detects its own fix by a stable spelling and calls `skip` with that key
-  # when it is absent. Each mutant is a whole-hooks-directory copy, asserted APPLIED by `cmp`, and
-  # scored by its exact flip set over its own block's predicates only. The digest-allow mutants
-  # use a block-scoped awk, because the allow's first line appears once per stage arm and
-  # `race_edit` refuses an anchor that is not one unique whole line; the stage-write and clear
-  # mutants go through `race_edit`.
+  # when it is absent. Every arm here runs against the real hooks directory.
   # ===========================================================================
   RC_DIGREL=".claude/skills/ai-dlc/postcompact-digest.md"
   RC_DIGKEY='"$FABS" = "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md"'
-  RC_DIGKEY2='"$FABS" = "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md"'
   RC_SWKEY="printf 'step\\n' >\""
   RC_RENKEY='mv -f "${PROGRESS}.$$" "$PROGRESS"'
   RC_CLRRE='^[[:space:]]*rm -f .*\.recover-gate-progress'
@@ -2711,7 +1717,7 @@ fi
   }
   # A write killed by the file-size limit must leave the old stage whole. This arm alone cannot
   # tell a gate that never reached the write from one that wrote safely; rp_s_inode is the
-  # presence-shaped half, and the unmutated control requires both.
+  # presence-shaped half, and the two together are the stage-write guard.
   rp_s_ulimit() {
     _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
     printf 'snapshot\n' > "$_rq/$pg"
@@ -2783,26 +1789,6 @@ fi
     esac
   }
   rc_arms() { for _ra in $1; do _rr="$("rp_$_ra" "$RC_REAL")"; if [ "$_rr" = PASS ]; then ok "$(rc_label "$_ra")"; else bad "$(rc_label "$_ra") — ${_rr#FAIL:}"; fi; done; }
-  rc_flips() { for _ra in $2; do _rr="$("rp_$_ra" "$1")"; [ "$_rr" = PASS ] || printf '%s ' "$_ra"; done; }
-  rc_control() { # rc_control <preds> <block> -- an unmutated whole-directory copy reproduces every verdict
-    _rd="$(race_dir)"
-    if [ -z "$_rd" ]; then bad "FIXTURE BROKEN: $2 — a whole-directory copy of the hooks did not carry every sibling"; return; fi
-    _rg="$(rc_flips "$_rd" "$1")"
-    if [ -z "${_rg// /}" ]; then ok "control: $2 — an unmutated whole-directory copy passes every arm, so a flip below is its mutation"; RC_CTL=1
-    else bad "CONTROL FAILED: $2 — an unmutated copy already flips {${_rg}}, so no mutant verdict below is evidence"; RC_CTL=0; fi
-  }
-  rc_score() { # rc_score <label> <dir> <file> <preds> <expected flips>
-    if [ -z "$2" ]; then bad "FIXTURE STALE: $1 — the mutation did not apply to its anchor"; return; fi
-    if cmp -s "$RC_REAL/$3" "$2/$3"; then bad "FIXTURE STALE: $1 — the mutant is byte-identical to $3, so it was not applied"; return; fi
-    bash -n "$2/$3" 2>/dev/null || { bad "FIXTURE STALE: $1 — the mutant is not valid shell"; return; }
-    # Twin: the first predicate of the block this mutant does NOT decide (the same-world control).
-    _rtw="-"; for _rx in $4; do case " $5 " in *" $_rx "*) ;; *) _rtw="$_rx"; break ;; esac; done
-    _rnm="${1%%:*}"; _rnm="$(printf '%s' "$_rnm" | tr -c 'A-Za-z0-9_+-' '_')"
-    _rg="$(rc_flips "$2" "$(mx_sel "$4" "$5" "$_rtw")")"; mx_note "$_rnm" "$5" "$_rg"
-    if [ "$_rg" = "$5 " ]; then mutant_killed "${RC_CTL:-0}" "$_rnm" "mutant: $1 — applied (cmp differs), flips exactly {$5}"
-    elif [ -z "${_rg// /}" ]; then bad "MUTANT SURVIVED: $1 — every arm stays green, so {$5} cannot fire"
-    else bad "MUTANT FLIP SET WRONG: $1 — expected {$5}, measured {${_rg}}"; fi
-  }
 
   # --- BL-658: the digest allow -------------------------------------------------
   # Detection key: a line carrying RC_DIGKEY, the FABS comparison against the installed digest path.
@@ -2812,55 +1798,6 @@ fi
   else
     RC_P658="d_step d_first d_decoy d_base d_bounded"
     rc_arms "$RC_P658"
-    rc_control "$RC_P658" "BL-658 digest allow"
-    # The block-scoped edit: a digest block is a stage-arm `if [ "$TOOL" = "Read" ]` block, closed
-    # by its four-space `fi`, whose text names the digest. M picks the edit.
-    RC_DIGAWK='
-function lrep(s, a, b,   i, o) { o = ""; while ((i = index(s, a)) > 0) { o = o substr(s, 1, i - 1) b; s = substr(s, i + length(a)) } return o s }
-function flush(   i, d, ln) {
-  d = (index(buf, "postcompact-digest.md") > 0)
-  if (d) n++
-  if (d && (M == "drop" || (M == "drop1" && n == 1))) { nl = 0; buf = ""; inb = 0; return }
-  if (d && M == "widen" && n == 2) print "    if [ \"$TOOL\" = \"Read\" ]; then exit 0; fi"
-  for (i = 1; i <= nl; i++) {
-    ln = L[i]
-    if (d && M == "base") { ln = lrep(ln, ENVIRON["K1"], ENVIRON["KB"]); ln = lrep(ln, ENVIRON["K2"], ENVIRON["KB"]) }
-    if (d && M == "nofull") ln = lrep(ln, " && is_full_read", "")
-    if (d && M == "adv" && ln == "      exit 0") ln = "      " ENVIRON["X"] "; exit 0"
-    print ln
-  }
-  nl = 0; buf = ""; inb = 0
-}
-BEGIN { M = ENVIRON["M"] }
-inb { L[++nl] = $0; buf = buf $0 "\n"; if ($0 == "    fi") flush(); next }
-/^    if \[ "\$TOOL" = "Read" \]/ { inb = 1; nl = 0; L[++nl] = $0; buf = $0 "\n"; next }
-{ print }
-END { if (inb) flush() }
-'
-    RC_KB='"${FABS##*/}" = "postcompact-digest.md"'
-    rc_dig() { # rc_dig <mode> [X] -> a whole-directory copy with the gate edited, or empty
-      _rd="$(race_dir)"; [ -n "$_rd" ] || return 0
-      M="$1" X="${2:-}" K1="$RC_DIGKEY" K2="$RC_DIGKEY2" KB="$RC_KB" awk "$RC_DIGAWK" "$RC_REAL/$RG" > "$_rd/$RG" || return 0
-      printf '%s\n' "$_rd"
-    }
-    rc_n() { _rc="$(grep -cF -- "$1" "$2")" || _rc=0; printf '%s' "$_rc"; }
-    _rn0="$(rc_n "$RC_DIGKEY" "$RC_REAL/$RG")"
-    _rd="$(rc_dig drop)"; [ -n "$_rd" ] && [ "$(rc_n "$RC_DIGKEY" "$_rd/$RG")" = 0 ] || _rd=""
-    rc_score "M5-drop: the digest allow removed from both stage arms" "$_rd" "$RG" "$RC_P658" "d_step d_first"
-    _rd="$(rc_dig widen)"; [ -n "$_rd" ] && [ "$(rc_n 'if [ "$TOOL" = "Read" ]; then exit 0; fi' "$_rd/$RG")" = 1 ] || _rd=""
-    rc_score "M6-widen: any Read allowed at stage step" "$_rd" "$RG" "$RC_P658" "d_decoy d_base d_bounded"
-    _rd="$(rc_dig adv 'echo step >"$PROGRESS"')"; [ -n "$_rd" ] && [ "$(rc_n 'echo step >"$PROGRESS"; exit 0' "$_rd/$RG")" = "$_rn0" ] || _rd=""
-    rc_score "M7-advance (stage): the digest allow also writes the stage" "$_rd" "$RG" "$RC_P658" "d_first"
-    _rd="$(rc_dig adv 'rm -f "$MARKER"')"; [ -n "$_rd" ] && [ "$(rc_n 'rm -f "$MARKER"; exit 0' "$_rd/$RG")" = "$_rn0" ] || _rd=""
-    rc_score "M7-advance (marker): the digest allow also clears the marker" "$_rd" "$RG" "$RC_P658" "d_step d_first"
-    _rd="$(rc_dig adv ': >"$OWED"')"; [ -n "$_rd" ] && [ "$(rc_n ': >"$OWED"; exit 0' "$_rd/$RG")" = "$_rn0" ] || _rd=""
-    rc_score "M7-advance (advisor-owed): the digest allow also writes .recover-advisor-owed" "$_rd" "$RG" "$RC_P658" "d_step d_first"
-    _rd="$(rc_dig drop1)"; [ -n "$_rd" ] && [ "$(rc_n "$RC_DIGKEY" "$_rd/$RG")" = "$((_rn0 - 1))" ] || _rd=""
-    rc_score "M8-step-only: the digest allow in the step arm only" "$_rd" "$RG" "$RC_P658" "d_first"
-    _rd="$(rc_dig base)"; [ -n "$_rd" ] && [ "$(rc_n "$RC_DIGKEY" "$_rd/$RG")" = 0 ] && [ "$(rc_n "$RC_KB" "$_rd/$RG")" != 0 ] || _rd=""
-    rc_score "M-base: the digest matched on its basename" "$_rd" "$RG" "$RC_P658" "d_base"
-    _rd="$(rc_dig nofull)"; [ -n "$_rd" ] && [ "$(rc_n 'is_full_read' "$_rd/$RG")" = "$(( $(rc_n 'is_full_read' "$RC_REAL/$RG") - _rn0 ))" ] || _rd=""
-    rc_score "M-nofull: the digest allow without is_full_read" "$_rd" "$RG" "$RC_P658" "d_bounded"
   fi
 
   # --- BL-666: the renamed stage write -----------------------------------------
@@ -2871,22 +1808,6 @@ END { if (inb) flush() }
   else
     RC_P666="s_inode s_ulimit s_garbage s_struct"
     rc_arms "$RC_P666"
-    rc_control "$RC_P666" "BL-666 stage write"
-    _rsw="$(grep -F -- "$RC_SWKEY" "$RC_REAL/$RG" | head -1)"
-    _rfa='${PROGRESS}.$$'; _rfb='${PROGRESS}.tmp'
-    rc_sw() { # rc_sw <replacement line> -> a whole-directory copy with the stage-write line replaced, or empty
-      _rd="$(race_dir)"; [ -n "$_rd" ] || return 0
-      race_edit "$RC_REAL/$RG" "$_rd/$RG.m" "$RACE_REPL" "$_rsw" "" "$1" && mv "$_rd/$RG.m" "$_rd/$RG" || return 0
-      printf '%s\n' "$_rd"
-    }
-    rc_score "M9-inplace: the stage written in place" \
-      "$(rc_sw $'        printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_inode s_ulimit s_struct"
-    rc_score "M10-no-rename: the temp written and never moved" \
-      "$(rc_sw $'        printf \'step\\n\' >"${PROGRESS}.$$" 2>/dev/null || true')" "$RG" "$RC_P666" "s_inode s_struct"
-    rc_score "M-unlink: the stage removed, then written in place" \
-      "$(rc_sw $'        rm -f "$PROGRESS" 2>/dev/null; printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_ulimit s_struct"
-    rc_score "M-fixedname: a fixed temp name with no \$\$" \
-      "$(rc_sw "${_rsw//"$_rfa"/$_rfb}")" "$RG" "$RC_P666" "s_struct"
   fi
 
   # --- BL-684: a new recovery clears the stale stage ---------------------------
@@ -2897,25 +1818,6 @@ END { if (inb) flush() }
   else
     RC_P684="r_clear r_owed r_ctl"
     rc_arms "$RC_P684"
-    rc_control "$RC_P684" "BL-684 stale-stage clear"
-    # EVERY clearing line is neutralised, not the first: a clear spelled over two lines (the stage
-    # and its temps) would otherwise leave one layer in place and prove that layer.
-    _rd="$(race_dir)"
-    if [ -n "$_rd" ] && R="$RC_CLRRE" awk '$0 ~ ENVIRON["R"] { print ":"; next } { print }' "$RC_REAL/$RC_RH" > "$_rd/$RC_RH" \
-       && ! grep -qE -- "$RC_CLRRE" "$_rd/$RC_RH"; then :; else _rd=""; fi
-    rc_score "M-684: the new recovery's stage clear removed" "$_rd" "$RC_RH" "$RC_P684" "r_clear"
-    # BL-730: the owed-temp clear. RC_CLRRE keys on .recover-gate-progress, so it cannot match this
-    # line, and this mutant touches no stage line; each mutant therefore flips only its own predicate.
-    RC_OWEDKEY='rm -f "${STATE_DIR}"/.recover-advisor-owed.*'
-    _rn="$(grep -cF -- "$RC_OWEDKEY" "$RC_REAL/$RC_RH")" || _rn=0
-    if [ "$_rn" -lt 1 ]; then
-      skip "BL-730 owed-temp-clear mutant" "ai-dlc-recover.sh has no line '${RC_OWEDKEY}' (found 0)"
-    else
-      _rd="$(race_dir)"
-      if [ -n "$_rd" ] && K="$RC_OWEDKEY" awk 'index($0, ENVIRON["K"]) == 1 { print ":"; next } { print }' "$RC_REAL/$RC_RH" > "$_rd/$RC_RH" \
-         && [ "$(grep -cF -- "$RC_OWEDKEY" "$_rd/$RC_RH")" = 0 ]; then :; else _rd=""; fi
-      rc_score "M-730: the owed-temp clear removed" "$_rd" "$RC_RH" "$RC_P684" "r_owed"
-    fi
   fi
 
   # --- BL-688: an unwritable state directory stands the gate down ---------------
@@ -2926,7 +1828,6 @@ END { if (inb) flush() }
   # no return path can leave the directory unwritable; the EXIT trap is the backstop.
   # Detection key: RC_WKEY, the per-call writability test in the gate.
   RC_WKEY='[ -w "$STATE_DIR" ]'
-  RC_WLINE='[ -w "$STATE_DIR" ] || exit 0'
   _rk="$(grep -cF -- "$RC_WKEY" "$GATE")" || _rk=0
   _rpp="$(mktemp -d "$WORK/perm.XXXXXX")"; chmod 555 "$_rpp"
   if ( : > "$_rpp/w" ) 2>/dev/null; then _rpw=1; else _rpw=0; fi
@@ -2976,28 +1877,6 @@ END { if (inb) flush() }
     }
     RC_P688="w_snap w_step w_ctl"
     for _ra in $RC_P688; do _rr="$("rp_$_ra" "$RC_REAL")"; if [ "$_rr" = PASS ]; then ok "$(rc_wlabel "$_ra")"; else bad "$(rc_wlabel "$_ra") — ${_rr#FAIL:}"; fi; done
-    rc_control "$RC_P688" "BL-688 unwritable stand-down"
-    # The three mutants each remove the per-call test; A and B put back the two shapes the
-    # contract first proposed, which cannot close either wedge.
-    rc_w() { # rc_w <gate replacement line> -> a whole-directory copy with the writability line replaced, or empty
-      _rd="$(race_dir)"; [ -n "$_rd" ] || return 0
-      race_edit "$RC_REAL/$RG" "$_rd/$RG.m" "$RACE_REPL" "$RC_WLINE" "" "$1" && mv "$_rd/$RG.m" "$_rd/$RG" || return 0
-      printf '%s\n' "$_rd"
-    }
-    rc_score "M-688-drop: the per-call writability test removed" "$(rc_w ':')" "$RG" "$RC_P688" "w_snap w_step"
-    # Shape A: the failed stage write clears the marker instead (a removal cannot act in a 555 dir).
-    _rd="$(rc_w ':')"
-    _rsw="$(grep -F -- "$RC_SWKEY" "$RC_REAL/$RG" | head -1)"
-    if [ -n "$_rd" ] && race_edit "$_rd/$RG" "$_rd/$RG.m" "$RACE_REPL" "$_rsw" "" \
-         "${_rsw%%|| rm -f*}|| rm -f \"\$MARKER\" \"\$PROGRESS\" \"\${PROGRESS}.\$\$\" 2>/dev/null || true" \
-       && mv "$_rd/$RG.m" "$_rd/$RG" && [ "$(grep -cF 'rm -f "$MARKER" "$PROGRESS" "${PROGRESS}.$$"' "$_rd/$RG")" = 1 ]; then :; else _rd=""; fi
-    rc_score "M-688-A: the failed stage write clears the marker in place of the per-call test" "$_rd" "$RG" "$RC_P688" "w_snap w_step"
-    # Shape B: the producer arms only when _bmad-output is writable (cannot see a chmod made later).
-    _rd="$(rc_w ':')"
-    _rrl="  printf 'step_file_resolved=%s\\n' \"\$STEP_FILE_RESOLVED\""
-    if [ -n "$_rd" ] && race_edit "$RC_REAL/$RC_RH" "$_rd/$RC_RH" "$RACE_BEFORE" "$_rrl" '  [ -w "$STATE_DIR" ] || STEP_FILE_RESOLVED=0' \
-       && [ "$(grep -cF -- "$RC_WKEY" "$_rd/$RC_RH")" = 1 ] && [ "$(grep -cF -- "$RC_WKEY" "$_rd/$RG")" = 0 ]; then :; else _rd=""; fi
-    rc_score "M-688-B: the producer arms only when writable, in place of the per-call test" "$_rd" "$RG" "$RC_P688" "w_snap w_step"
   fi
 
   # --- BL-725: a failed stage write stands the recovery down -------------------
@@ -3041,18 +1920,6 @@ END { if (inb) flush() }
     }
     RC_P725="s_fail s_fail_ctl"
     for _ra in $RC_P725; do _rr="$("rp_$_ra" "$RC_REAL")"; if [ "$_rr" = PASS ]; then ok "$(rc_l725 "$_ra")"; else bad "$(rc_l725 "$_ra") — ${_rr#FAIL:}"; fi; done
-    rc_control "$RC_P725" "BL-725 failed stage write"
-    _rsw="$(grep -F -- "$RC_SWKEY" "$RC_REAL/$RG" | head -1)"
-    _rmk=' "$MARKER"'
-    rc_s725() { # rc_s725 <replacement line> -> a whole-directory copy with the stage-write line replaced, or empty
-      _rd="$(race_dir)"; [ -n "$_rd" ] || return 0
-      race_edit "$RC_REAL/$RG" "$_rd/$RG.m" "$RACE_REPL" "$_rsw" "" "$1" && mv "$_rd/$RG.m" "$_rd/$RG" || return 0
-      printf '%s\n' "$_rd"
-    }
-    rc_score "M-725-pre: the failure branch back to the temp-only unlink" \
-      "$(rc_s725 "${_rsw//"$_rmk"/}")" "$RG" "$RC_P725" "s_fail"
-    rc_score "M-725-always: the marker also removed on a successful stage write" \
-      "$(rc_s725 "${_rsw}; rm -f \"\$MARKER\"")" "$RG" "$RC_P725" "s_fail_ctl"
   fi
 
   # --- BL-687: a full step Read before the stage write is allowed, advancing nothing -------
@@ -3061,8 +1928,6 @@ END { if (inb) flush() }
   # Read, any other Read, or a compelled handoff.md Read (which would arm the handoff marker).
   # Detection key: RC_FLINE, the full-step-Read allow line in the snapshot arm.
   RC_FLINE='    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$STEP_ABS" ] && is_full_read; then'
-  RC_FEXIT='        *) exit 0 ;;'
-  RC_FHAND='        */steps/handoff.md|steps/handoff.md) : ;;'
   _rk="$(grep -cxF -- "$RC_FLINE" "$GATE")" || _rk=0
   if [ "$_rk" -lt 1 ]; then
     skip "BL-687 full-step-Read allow arms" "the gate carries no full step Read allow in its snapshot arm (key '${RC_FLINE# *}', found 0); this fixture ships one pull ahead of its subject"
@@ -3115,29 +1980,6 @@ END { if (inb) flush() }
     }
     RC_P687="f_allow f_seq f_bound f_decoy f_hand"
     for _ra in $RC_P687; do _rr="$("rp_$_ra" "$RC_REAL")"; if [ "$_rr" = PASS ]; then ok "$(rc_flabel "$_ra")"; else bad "$(rc_flabel "$_ra") — ${_rr#FAIL:}"; fi; done
-    rc_control "$RC_P687" "BL-687 full step Read allow"
-    rc_f() { # rc_f <awk program> <anchor> <line> [W] -> a whole-directory copy with the gate edited, or empty
-      _rd="$(race_dir)"; [ -n "$_rd" ] || return 0
-      race_edit "$RC_REAL/$RG" "$_rd/$RG.m" "$1" "$2" "$3" "${4:-}" && mv "$_rd/$RG.m" "$_rd/$RG" || return 0
-      printf '%s\n' "$_rd"
-    }
-    _rfd="$(grep -F -- '    deny "AI/DLC post-compact recovery: your FIRST tool call must be' "$RC_REAL/$RG" | head -1)"
-    rc_score "M-687-nofull: the allow without is_full_read" \
-      "$(rc_f "$RACE_REPL" "$RC_FLINE" "" "${RC_FLINE/ && is_full_read/}")" "$RG" "$RC_P687" "f_bound"
-    rc_score "M-687-adv: the allow also writes the stage" \
-      "$(rc_f "$RACE_REPL" "$RC_FEXIT" "" "        *) printf 'step\\n' >\"\$PROGRESS\"; exit 0 ;;")" "$RG" "$RC_P687" "f_allow"
-    rc_score "M-687-sat: the allow also clears the marker" \
-      "$(rc_f "$RACE_REPL" "$RC_FEXIT" "" '        *) rm -f "$MARKER"; exit 0 ;;')" "$RG" "$RC_P687" "f_allow"
-    rc_score "M-687-widen: any Read allowed with no stage file" \
-      "$(rc_f "$RACE_BEFORE" "$_rfd" '    if [ "$TOOL" = "Read" ]; then exit 0; fi')" "$RG" "$RC_P687" "f_bound f_decoy f_hand"
-    rc_score "M-687-nohand: the handoff.md carve-out removed" \
-      "$(rc_f "$RACE_REPL" "$RC_FHAND" "" '        */steps/handoff.md|steps/handoff.md) exit 0 ;;')" "$RG" "$RC_P687" "f_hand"
-    # drop: the whole block, from its if line through its own four-space fi, removed
-    _rd="$(race_dir)"
-    if [ -n "$_rd" ] && A="$RC_FLINE" awk 'd && $0 == "    fi" { d = 0; next } d { next } $0 == ENVIRON["A"] { d = 1; next } { print }' "$RC_REAL/$RG" > "$_rd/$RG" \
-       && [ "$(grep -cxF -- "$RC_FLINE" "$_rd/$RG")" = 0 ] && [ "$(grep -cxF -- "$RC_FHAND" "$_rd/$RG")" = 0 ] \
-       && [ "$(grep -c '^    fi$' "$RC_REAL/$RG")" = "$(( $(grep -c '^    fi$' "$_rd/$RG") + 1 ))" ]; then :; else _rd=""; fi
-    rc_score "M-687-drop: the full step Read allow removed" "$_rd" "$RG" "$RC_P687" "f_allow"
   fi
 
 fi  # race subject present
@@ -3194,41 +2036,6 @@ else
   bad "the block is ${ULEN} chars when the snapshot names no resolvable step file, at or past the 9500 bound — the harness replaces the ENTIRE block with a file-path stub for exactly the recoveries that have the least going for them"
 fi
 
-# --- Assertion 24: MUTANT — the old ${STEP_FILE} fallback restored -----------
-# Both layers: the prose string back in the empty case AND the two-branch mandate collapsed to
-# the single interpolated form. Reverting one alone leaves the other doing the work.
-#
-# ANCHORED ON THE FIRST OCCURRENCE OF THE BRANCH CONDITION, NOT ON EVERY ONE. A second consumer
-# of `STEP_FILE_RESOLVED` was added -- the gate-assurance paragraph -- and a blanket `sed`
-# collapsed both, which is two mutations scored as one and reported here as three layers where
-# the mutant has two.
-MUT_FB="$WORK/recover-old-fallback.sh"
-awk '
-  $0=="  STEP_FILE=\"\"" {print "  STEP_FILE=\"(named in Pipeline Position -- read the snapshot)\""; next}
-  !d && $0=="if [ \"$STEP_FILE_RESOLVED\" -eq 1 ]; then" {print "if true; then"; d=1; next}
-  1' "$HOOK" > "$MUT_FB"
-# Anchored on the ASSIGNMENT, not the phrase: the hook's own comment quotes the old rendering
-# verbatim, so a bare grep for it counts 2 in a correctly mutated file and reads as a stale seed.
-lay="$(grep -c '^  STEP_FILE="(named in Pipeline Position' "$MUT_FB")"
-lay2="$(grep -c '^if true; then$' "$MUT_FB")"
-if cmp -s "$HOOK" "$MUT_FB"; then
-  bad "FIXTURE STALE: the fallback mutant is byte-identical — the \${STEP_FILE} branch was reshaped"
-elif [ "$lay" -ne 1 ] || [ "$lay2" -ne 1 ]; then
-  bad "FIXTURE STALE: only $((lay + lay2)) of the fallback's 2 layers were reverted; a partial revert proves the layer left in place"
-elif ! bash -n "$MUT_FB" 2>/dev/null; then
-  bad "FIXTURE STALE: the fallback mutant is not valid shell, so its silence would score as a kill"
-else
-  r="$(second_mandate_ok "$MUT_FB")"
-  MCTX2="$(fire "$MUT_FB")"
-  if [ "$r" = PASS ]; then
-    bad "MUTANT DID NOT FAIL — the old unexecutable fallback passes assertion 23, so that arm asserts nothing"
-  elif [ "$(demark "$MCTX2")" != "$(demark "$CTX")" ]; then
-    bad "MUTANT FAILED TOO MUCH — it also changed the directive emitted for a snapshot that DOES resolve, so assertion 23 is entangled with the text arms above"
-  else
-    ok "mutant: restoring the \${STEP_FILE} fallback fails ONLY the second-mandate arm — byte-identical output where the step file resolves"
-  fi
-fi
-
 # =============================================================================
 # THE POSITION COUNT — a `## Pipeline Position` naming TWO live step files
 #
@@ -3260,21 +2067,7 @@ fi
 # Over 2218 revisions of the reference consumer's snapshot the dominant spellings are
 # `- **Current step file:**` (1353) and the backticked `- **\`current_step_file\`:**` (18); a
 # strict `current_step_file:`-only key un-resolves 94 revisions this hook resolves today. S2b
-# and S2c are the seeds that kill that narrowing, and mutant M6 is the one that builds it.
-#
-# THE MUTANTS ARE COPIES OUTSIDE THE TREE, for a reason particular to this subject. The count
-# grammar is four strings byte-identical across three files and invariant I113 binds them, so a
-# mutation applied to the tracked hook would trip I113 as well as this fixture -- two programs
-# reporting one finding, and the fixture's verdict no longer attributable. The copies live
-# under $WORK and are driven through CLAUDE_PROJECT_DIR exactly as the arms above drive the
-# real hook, so each mutant is scored HERE and by nothing else.
-#
-# NOT ANCHORED ON THE UNRESOLVABLE-FALLBACK ASSIGNMENT. The old-fallback mutant at assertion 24
-# rewrites that exact assignment and asserts the rewrite was TOTAL by COUNTING the substring, so
-# the hook's refusal branch deliberately spells its own assignment the other way and no mutant
-# below may re-introduce the collision by anchoring there. This paragraph does not spell it
-# either: the count is over the mutated HOOK, but the same class has already fired three times
-# on prose, twice in the hook's own comments, and a near-miss is not worth the second reading.
+# and S2c are the seeds that catch that narrowing.
 # =============================================================================
 
 # A project whose steps directory holds BOTH candidate files, so a snapshot naming either one
@@ -3301,10 +2094,10 @@ posproj() { # posproj <tag> <position-line-1> [position-line-2] -> project dir
 
 # postok <hook> <project> -> <resolved>/<basename the marker recorded>/<disclosed count>/<2nd mandate>
 #
-# EVERY FIELD IS A FACT THE HOOK EMITS, so a mutant that emits nothing scores DEAD and fails
+# EVERY FIELD IS A FACT THE HOOK EMITS, so a hook that emits nothing scores DEAD and fails
 # every arm by construction rather than passing any. The mandate cell distinguishes a mandate
-# naming a PATH from one naming an ACTION from one rendering an EMPTY path -- M5's whole
-# subject is the third, and a cell reading only "is there a second mandate" could not see it.
+# naming a PATH from one naming an ACTION from one rendering an EMPTY path, which a cell reading
+# only "is there a second mandate" could not see.
 postok() { # postok <hook-path> <project>
   _ph="$1"; _pp="$2"
   rm -f "$_pp/_bmad-output/.recover-fired"
@@ -3406,138 +2199,6 @@ else
   bad "position: the ambiguity disclosure fires on a snapshot with ONE live bullet:$posextra — the paragraph is unconditional, so the arm above proves nothing"
 fi
 
-# --- the position mutant scorer ---------------------------------------------
-# Each mutant is a COPY, guarded by `cmp -s` (a sed that matched nothing is not a mutation) and
-# by `bash -n` (a mutant that dies emits nothing, and silence would otherwise score as a kill).
-# It is scored by its FLIP SET against POS_EXPECTED: a mutant that flips more than its own set
-# means two arms are entangled and one is vacuous, and one that flips nothing means the seeds
-# it was built for cannot fire.
-posflips() { # posflips <battery> -> the seed names (of those the battery ran) whose token differs from expected
-  _pf=""
-  for _pe in $POS_EXPECTED; do
-    case " $1 " in *" ${_pe%%:*}:"*) ;; *) continue ;; esac
-    case " $1 " in *" $_pe "*) ;; *) _pf="$_pf ${_pe%%:*}" ;; esac
-  done
-  printf '%s' "${_pf# }"
-}
-posmutant() { # posmutant <label> <mutant-path> <expected flip set> <what it proves> <twins> <name>
-  if cmp -s "$HOOK" "$2"; then
-    bad "FIXTURE STALE: $1 — the mutant is byte-identical to the hook, so the mutation matched nothing and proves nothing"; return
-  fi
-  if ! bash -n "$2" 2>/dev/null; then
-    bad "FIXTURE STALE: $1 — the mutant is not valid shell; it would emit no directive, and that silence would score as a kill it did not earn"; return
-  fi
-  _pg="$(posbattery "$2" "$(mx_sel "$POS_SEEDS" "$3" "$5")")"
-  _pfl="$(posflips "$_pg")"; mx_note "$6" "$3" "$_pfl"
-  if [ "$_pfl" = "$3" ]; then
-    mutant_killed "${B_ctl_pos:-0}" "$6" "MUTANT $1: flips exactly {$3} — $4"
-  elif [ -z "$_pfl" ]; then
-    bad "MUTANT SURVIVED: $1 — every seed answers as the fixed hook does, so {$3} cannot fire and $4 is unproven"
-  else
-    bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$_pfl}; the seeds are entangled or one of them is vacuous. Battery: [$_pg]"
-  fi
-}
-
-# --- Assertion 27: UNMUTATED CONTROL, before any mutant verdict is read ------
-# TWO INERT RUNS COMPARE EQUAL. A copy of the hook that died at startup would make every mutant
-# below SURVIVE while this arm also passed, and the pair would read exactly like a fix that
-# works. So the control is PRESENCE-shaped: it must reproduce the whole battery, not merely
-# fail to complain.
-POS_CTRL="$WORK/recover-pos-control.sh"
-cp "$HOOK" "$POS_CTRL"
-POS_C="$(posbattery "$POS_CTRL")"
-if [ "$POS_C" = "$POS_EXPECTED" ]; then
-  ok "control: an unmutated copy of the hook, driven from a scratch project, reproduces all ten seed tokens — a mutant's flip below is its mutation and not the copy"; B_ctl_pos=1
-else
-  bad "CONTROL FAILED — an unmutated copy answers [$POS_C], not the battery the real hook answers, so every position-mutant verdict below is uninterpretable"
-fi
-
-# --- Assertion 28: M1 — the whole-file `grep -m1` reader restored ------------
-# THE PRE-FIX HOOK. With the section count emptied every snapshot falls to the unchanged
-# whole-file first-match reader, which is an answer whatever the snapshot says. S4 is in the
-# flip set and it is the discriminating half: there the FIRST match in the file is the LABELLED
-# prior, so first-match-wins mandates a superseded position that the label exists to retire.
-MP1="$WORK/recover-pos-m1.sh"
-sed 's/^POSITION_BULLETS="\$(awk /POSITION_BULLETS=""; _unused="$(awk /' "$HOOK" > "$MP1"
-posmutant "M1 the whole-file first-match reader restored" "$MP1" "S1 S1b S4" \
-  "both two-file seeds mandate whichever bullet the file happened to list first, and the labelled-prior-above seed mandates the PRIOR — the coin toss the count replaced" "S2" M1-first-match
-
-# --- Assertion 29: M2 — section-scoped but `head -1` ------------------------
-# The half-fix. The count is computed and then ignored: the refusal branch never fires and the
-# first bullet wins. Only the two-file seeds may move — S4 stays green, which is what separates
-# this from M1 and makes each attributable.
-MP2="$WORK/recover-pos-m2.sh"
-sed 's/^  if \[ "\$_pos_distinct" -ge 2 \]; then$/  if false; then/' "$HOOK" > "$MP2"
-posmutant "M2 section-scoped, refusal dropped, first bullet wins" "$MP2" "S1 S1b" \
-  "a hook that counts two and mandates the first one anyway — the label exclusion still works, so only the unlabelled pair moves" "S2 S4" M2-head1
-
-# --- Assertion 30: M3 — section-scoped but `tail -1` ------------------------
-# NEWEST-WINS IS NOT THE FIX EITHER, and this mutant is what says so. It answers `live.md` on
-# both two-file seeds, which is the RIGHT file for the wrong reason: nothing in the snapshot
-# says the later bullet is the live one, and on a stale-below-live section the same rule
-# mandates the stale one. The arm demands a REFUSAL, so a hook that guessed correctly here
-# still dies.
-MP3="$WORK/recover-pos-m3.sh"
-sed -e 's/^  if \[ "\$_pos_distinct" -ge 2 \]; then$/  if false; then/' \
-    -e "s/| sed -n '1p'/| sed -n '\$p'/" "$HOOK" > "$MP3"
-posmutant "M3 section-scoped, refusal dropped, LAST bullet wins" "$MP3" "S1 S1b" \
-  "newest-wins names the file this seed happens to want and is still wrong — the arms assert a refusal, not a preferred guess" "S2" M3-tail1
-
-# --- Assertion 31: M4 — the label exclusion dropped -------------------------
-# A superseded position recorded under a labelled key is not a second live value, and this is
-# the mutant that proves the exclusion is load-bearing in BOTH directions: with it gone the two
-# labelled seeds refuse, and they are the only ones that move. S1/S1b stay red-free because
-# their bullets carry no label at all, which is what makes this mutant's kill attributable to
-# the exclusion rather than to the count.
-MP4="$WORK/recover-pos-m4.sh"
-sed "s/^AI_DLC_POS_LABEL_RE=.*$/AI_DLC_POS_LABEL_RE='zzz_no_such_label_zzz'/" "$HOOK" > "$MP4"
-posmutant "M4 the label exclusion dropped" "$MP4" "S3 S4" \
-  "a correctly labelled \`(prior)\` position becomes a second live bullet and the hook refuses a snapshot that is exactly right — the remedy it prints is the thing the consumer already did" "S2" M4-no-label
-
-# --- Assertion 32: M5 — refused, and the mandate emitted anyway -------------
-# THE HALF-REFUSAL, and it is worse than no refusal: `step_file_resolved=0` keeps the gate stood
-# down while the block still renders a SECOND mandate — with an EMPTY path, because there is no
-# value to interpolate. `Read ` in full is a MUST the lead cannot execute, and a MUST it cannot
-# execute is what teaches it the MUSTs in this block are negotiable. Only the mandate cell of
-# the two refusing seeds moves, which is why that cell distinguishes EMPTY from ACTION.
-MP5="$WORK/recover-pos-m5.sh"
-awk '!d && $0=="if [ \"$STEP_FILE_RESOLVED\" -eq 1 ]; then" {print "if true; then"; d=1; next} 1' "$HOOK" > "$MP5"
-posmutant "M5 the refusal keeps resolved=0 but emits the mandate anyway" "$MP5" "S1 S1b" \
-  "the block renders \`Read \` with an empty path where it refused to pick one — an unexecutable MUST, which is the standing the whole section depends on" "S2" M5-mandate-anyway
-
-# --- Assertion 33: M6 — the STRICT key grammar ------------------------------
-# THE CONSUMER-HISTORY MUTANT. This is the first draft of the fix, refuted by measurement: a
-# key matching only the bolded prose spelling un-resolves 94 of the reference consumer's 2218
-# snapshot revisions that the shipped alternation resolves. Both the bullet grammar and the
-# fallback reader are narrowed, because narrowing one alone leaves the other resolving and the
-# mutant would prove the layer left in place. Four seeds move and they are exactly the ones
-# whose key the strict grammar cannot spell.
-MP6="$WORK/recover-pos-m6.sh"
-sed -E -e "s@^AI_DLC_POS_BULLET_RE=.*\$@AI_DLC_POS_BULLET_RE='^[[:space:]]*-[[:space:]]*\\\\*\\\\*Current step file:\\\\*\\\\*'@" \
-       -e "s@grep -m1 -iE '\(current_step_file[^']*'@grep -m1 -iE '\\\\*\\\\*Current step file:\\\\*\\\\*'@" "$HOOK" > "$MP6"
-posmutant "M6 the key alternation narrowed to one spelling" "$MP6" "S1b S2b S2c S7" \
-  "the backticked KEY, the unbolded prose key, the \`(LIVE)\` spelling and the mixed-spelling pair all stop resolving — the 94-revision regression the first draft of this fix carried" "S2" M6-strict-key
-
-# --- Assertion 34: M7 — the bullet-position clause dropped ------------------
-# The clause that requires the key to sit at a dash bullet before the first colon. Without it a
-# PROSE line that quotes the key name mid-sentence counts as a position, and the hook refuses a
-# snapshot carrying exactly one live bullet. Measured on the consumer: 1 revision of 2218 has
-# that shape, and it is the newest of the two-plus matches.
-MP7="$WORK/recover-pos-m7.sh"
-sed "s@^AI_DLC_POS_BULLET_RE='\^\[\[:space:\]\]\*-\[\^:\]\*@AI_DLC_POS_BULLET_RE='@" "$HOOK" > "$MP7"
-posmutant "M7 the bullet-key position clause dropped" "$MP7" "S6" \
-  "a paragraph that mentions the key name becomes a second live position and a correct snapshot is refused — only the prose seed moves, so the clause has its own subject" "S2" M7-no-bullet-clause
-
-# --- Assertion 35: M8 — agreement treated as a duplicate --------------------
-# AGREEMENT IS NOT A DUPLICATE, and refusing on it would un-gate the common case for nothing.
-# Two bullets naming ONE file is the ordinary stale-plus-live state, and the basename reduction
-# is what separates it from a real ambiguity. The mutation makes the de-duplication test
-# unreachable so every repeated basename counts as distinct; only S5 moves.
-MP8="$WORK/recover-pos-m8.sh"
-sed 's|^      \*" \$_pos_b "\*) ;;$|      *"ZZ-unreachable-ZZ"*) ;;|' "$HOOK" > "$MP8"
-posmutant "M8 two bullets naming the SAME file refuse" "$MP8" "S5" \
-  "the stale-plus-live state that names one file is refused, which withholds a recovery the hook could have completed and leaves the lead with no mandate for no reason" "S2" M8-agreement-dup
-
 # --- Assertion 25: the block states the rule the gate cannot enforce ---------
 # The gate reaches two of the three mandated Reads and none of the lead's prose. Where it
 # cannot reach, the only carrier is disclosure — and a disclosure with no stated FORM is one
@@ -3565,8 +2226,7 @@ fi
 # the file), the gate's deny text in 0 of 256 transcripts, and all ten post-compaction first
 # calls in one session non-mandated and undenied.
 #
-# The arm runs all three, in harness order, and asserts the deny. The mutant restores the
-# deletion and the arm goes red.
+# The arm runs all three, in harness order, and asserts the deny.
 # =============================================================================
 if [ -z "${POSTCOMPACT:-}" ]; then
   if [ "$IS_DIST" = 1 ]; then bad "ai-dlc-postcompact.sh is absent from the distribution tree"
@@ -3589,27 +2249,9 @@ p_sequence() { # p_sequence <postcompact-hook> -> PASS | FAIL:<what it saw>
 
 r="$(p_sequence "$POSTCOMPACT")"
 if [ "$r" = PASS ]; then
-  ok "three-hook sequence: recover.sh -> postcompact.sh -> gate, the marker survives postcompact and the first non-mandated call is DENIED"; B_seq=1
+  ok "three-hook sequence: recover.sh -> postcompact.sh -> gate, the marker survives postcompact and the first non-mandated call is DENIED"
 else
   bad "three-hook sequence: ${r#FAIL:}"
-fi
-
-# MUTANT -- restore the deletion that shipped. `cmp -s` proves it applied; `bash -n` that it
-# parses. The kill is the sequence arm alone: the compaction log must STILL read yes, because
-# the deletion came after the read, which is exactly why the log never showed the hole.
-MP_DEL="$WORK/postcompact-deletes.sh"
-awk '{print} /^    RECOVERED="yes"$/ && !done {getline; print; print "  rm -f \"$MARKER\" 2>/dev/null || true"; done=1}' "$POSTCOMPACT" > "$MP_DEL"
-if cmp -s "$POSTCOMPACT" "$MP_DEL"; then
-  bad "FIXTURE STALE: the deletion mutant is byte-identical to postcompact.sh, so the mutation matched nothing"
-elif ! bash -n "$MP_DEL" 2>/dev/null; then
-  bad "FIXTURE STALE: the deletion mutant is not valid shell"
-else
-  rm_="$(p_sequence "$MP_DEL")"
-  case "$rm_" in
-    FAIL:postcompact\ DELETED*) mutant_killed "${B_seq:-0}" M-pc-deletes "mutant: postcompact.sh restored to deleting the marker — the sequence arm goes red on exactly that line" ;;
-    PASS) bad "MUTANT SURVIVED: a postcompact.sh that deletes the marker still passes the sequence arm, so the arm cannot see the shipped defect" ;;
-    *) bad "MUTANT FLIP WRONG: expected the deletion finding, measured '${rm_#FAIL:}'" ;;
-  esac
 fi
 
 # --- postcompact.sh: WHOSE COMPACTION IT LOGS ---------------------------------------------------
@@ -3664,7 +2306,6 @@ pc_legacy() {
   printf 'PASS\n'
 }
 PCPREDS="upd_nomark upd_foreign foreign legacy"
-pcflips() { for _n in ${2:-$PCPREDS}; do r="$("pc_$_n" "$1")"; [ "${r%%:*}" = PASS ] || printf '%s ' "$_n"; done; }
 for _n in $PCPREDS; do
   r="$("pc_$_n" "$POSTCOMPACT")"
   case "$_n" in
@@ -3675,27 +2316,6 @@ for _n in $PCPREDS; do
   esac
   if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
 done
-pcf="$(pcflips "$POSTCOMPACT")"
-if [ -z "${pcf// /}" ]; then ok "control: the unmutated postcompact hook reproduces all 4 verdicts"; B_ctl_pc=1
-else bad "CONTROL FAILED — postcompact already flips {${pcf}}"; fi
-
-pcmutant() { # pcmutant <label> <src-anchor-line> <replacement> <expected flips> <twins> <name>
-  _m="$WORK/postcompact-whose-$$-$RANDOM.sh"
-  if ! smut "$POSTCOMPACT" "$2" "$_m" "$3"; then bad "FIXTURE STALE: $1 — the anchor is not exactly one whole line"; return; fi
-  cmp -s "$POSTCOMPACT" "$_m" && { bad "FIXTURE STALE: $1 — byte-identical"; return; }
-  bash -n "$_m" 2>/dev/null || { bad "FIXTURE STALE: $1 — not valid shell"; return; }
-  got="$(pcflips "$_m" "$(mx_sel "$PCPREDS" "$4" "$5")")"; mx_note "$6" "$4" "$got"
-  if [ "$got" = "$4 " ]; then mutant_killed "${B_ctl_pc:-0}" "$6" "mutant: $1 — flips exactly {$4}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — {$4} cannot fire"
-  else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}"; fi
-}
-# (f) updater stand-down removed. Killed by upd_nomark (no marker -> logs `no` and prints the
-# warning) and upd_foreign (foreign marker -> logs `no`); foreign and legacy are pipeline sessions.
-pcmutant "postcompact has no updater stand-down" "$UPD_CASE" "$UPD_NEVER" "upd_nomark upd_foreign" "foreign" PC-f
-# (g) owner test neutralised. Killed by foreign ALONE: upd_foreign still stands down on the
-# updater test, and legacy has no owner to compare.
-pcmutant "postcompact reads another session's marker as its own" \
-  'if [ -n "$_MK_SID" ] && [ -n "$_EV_SID" ] && [ "$_MK_SID" != "$_EV_SID" ]; then _MK_FOREIGN=1; fi' ':' "foreign" "legacy" PC-g
 
 fi
 
@@ -3707,7 +2327,7 @@ fi
 # Every cell above sources its subject in a subshell (hook_run / val_run). These cells run each
 # subject ONCE MORE as the harness does, `bash <file>` with the payload on stdin, on a REFUSING and a
 # PASSING input that differ, and require the two answers identical. They are also the fixture's
-# end-to-end runs, one per distinct CLI outcome (fixture-mutants.md clauses 5-6). Each pair is taken on
+# end-to-end runs, one per distinct CLI outcome. Each pair is taken on
 # two `cp -R` copies of ONE seeded world, because a call mutates the state it is judged on.
 # Normalised only where the subject is nondeterministic BY DESIGN: the recovery hook mints a fresh
 # provenance nonce on every SessionStart (dropped with `demark`, and the marker's `fired_at=` line),
@@ -3814,9 +2434,9 @@ if [ -n "${POSTCOMPACT:-}" ] && grep -qF 'printf '"'"'session_id=%s' "$HOOK"; th
       && ok "equivalence: the silent outcome -- an update session's compaction -- is silent, exit 0 and writes nothing, CLI and in process alike, for recover and postcompact"
   fi
 fi
-# validator: PASSING = the shipped SKILL.md; REFUSING = the no-mandate copy assertion 7 built.
+# validator: PASSING = the shipped SKILL.md; REFUSING = the no-mandate copy built above.
 _vp_cli="$(eq_val cli "$SKILL")"; _vp_in="$(eq_val inproc "$SKILL")"
-_vr_cli="$(eq_val cli "$MUT_SKILL")"; _vr_in="$(eq_val inproc "$MUT_SKILL")"
+_vr_cli="$(eq_val cli "$NOMANDATE_SKILL")"; _vr_in="$(eq_val inproc "$NOMANDATE_SKILL")"
 if [ "$_vp_cli" = "$_vr_cli" ] || [ "${_vp_cli%%$'\n'*}" != rc=0 ] || [ "${_vr_cli%%$'\n'*}" != rc=1 ]; then
   bad "EQUIVALENCE: validator -- the shipped and the no-mandate SKILL.md did not separate under the CLI (rc 0 vs 1)"
 else

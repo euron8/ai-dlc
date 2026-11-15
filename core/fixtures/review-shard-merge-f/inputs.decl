@@ -1,0 +1,40 @@
+!core/scripts/partition-review-diff.sh
+!core/scripts/merge-review-shards.sh
+!core/scripts/content-seal.sh
+!core/scripts/wait-for-deliverable.sh
+!core/hooks/ai-dlc-content-seal.sh
+!core/scripts/record-only-diff.sh
+!core/scripts/sprint-status.sh
+core/scripts/partition-document.sh
+# Shard f of review-shard-merge (BL-1095): every input the parent declares, since the driver execs the parent's run.sh,
+# which sources its lib.sh and seeds the same worlds; and, by name, the parent's files a shard reads: run.sh, lib.sh,
+# tools.decl (lib.sh's EV1 PATH) and the receipts lib.sh drives, because the runner copies only a fixture's OWN directory.
+core/fixtures/review-shard-merge/run.sh
+core/fixtures/review-shard-merge/lib.sh
+core/fixtures/review-shard-merge/tools.decl
+core/fixtures/review-shard-merge/receipt-bl885-frozen.sh
+core/fixtures/review-shard-merge/receipt-bl885.sh
+core/fixtures/review-shard-merge/receipt-bl904.sh
+core/fixtures/review-shard-merge/receipt-bl956.sh
+core/fixtures/review-shard-merge/receipt-bl980.sh
+core/fixtures/review-shard-merge/receipt-bl988.sh
+core/fixtures/review-shard-merge-b/run.sh
+core/fixtures/review-shard-merge-c/run.sh
+core/fixtures/review-shard-merge-d/run.sh
+core/fixtures/review-shard-merge-e/run.sh
+core/fixtures/review-shard-merge-f/run.sh
+core/fixtures/review-shard-merge-g/run.sh
+core/scripts/merge-adversarial-shards.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/wfd-start-of.sh
+core/scripts/artifact-path-config.sh
+core/skills/ai-dlc/artifact-path-grammar.md
+core/skills/ai-dlc/steps/gate-validation.md
+core/team-roles/code-reviewer.md
+core/team-roles/qa.md
+core/schemas/sprint-status.json
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh
+# The coverage join reads each DIST_SHARDS shard's .dist-only marker (present, non-empty) in the distribution.
+core/fixtures/review-shard-merge-e/.dist-only
+core/fixtures/review-shard-merge-g/.dist-only

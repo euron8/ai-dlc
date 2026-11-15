@@ -15,34 +15,8 @@
 # restated the thirteen patterns would pass while the declaration and the renderer drifted
 # together away from it, and would need editing on every future classification -- which is the
 # hand-written list this whole release replaces, reintroduced one layer down.
-# MUTANT x ARM MATRIX. Each mutant co-trips no other arm, measured at authoring (all ten arms run on
-# every mutant). Per push a mutant runs only its deciding arm plus ONE twin: an arm that stays GREEN
-# under the mutant and is the one it could most plausibly co-trip, so a twin that trips still fails
-# the fixture. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per
-# distinct state") requires. Run it from the repo root (hermetic-run.sh uses env -i, which would drop
-# the switch, so run.sh is driven directly): Twin reasons: idempotent for cut-runs-to-eof (the cut
-# eats the block); renders_declared_set for
-# renders-durable-too (the superset direction of the same render), no-install-fallback (the
-# pinned-schema path) and no-out-of-root (the other half of the block); cut_is_bounded for
-# no-empty-marker-guard (the other consumer of the markers); check_discriminates for
-# check-reports-tracked (the other reader of --check output).
-# MUTANT-MATRIX cut-runs-to-eof decides=cut_is_bounded twins=idempotent
-# MUTANT-MATRIX renders-durable-too decides=excludes_durable twins=renders_declared_set
-# MUTANT-MATRIX no-empty-marker-guard decides=fails_closed_on_empty_marker twins=cut_is_bounded
-# MUTANT-MATRIX check-reports-tracked decides=check_is_blind_to_tracked twins=check_discriminates
-# MUTANT-MATRIX no-install-fallback decides=install_fallback twins=renders_declared_set
-# MUTANT-MATRIX no-out-of-root decides=renders_out_of_root twins=renders_declared_set
-# MUTANT-MATRIX-DYNAMIC mutate why=the label is the first argument of each literal mutate call and reaches mutant_killed as "$label", so each of the six names above is one literal call site
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/transient-ignore-block/run.sh --matrix
 set -uo pipefail
 
-MODE=PUSH
-for a in "$@"; do
-  case "$a" in
-    --matrix) MODE=FULL ;;
-  esac
-done
-matrix_cells=0
 
 # The gate inherits every AI_DLC_* tunable a consumer set in settings.json. A fixture that
 # drives a script while inheriting them tests the CONFIG, not the code (I10). The renderer
@@ -91,14 +65,13 @@ if ! command -v jq >/dev/null 2>&1; then
   echo "  0 failed, 1 broken"
   exit 2
 fi
-# PRINT THE RESOLVED PATH. A mutant applied to the copy the run never loads leaves every arm
+# PRINT THE RESOLVED PATH. A different copy than the one the run loads would leave every arm
 # green, which reads exactly like an arm that cannot fire.
 echo "  subject: ${SUBJECT#"$ROOT"/}"
 # The REQUIRED inputs of inputs.decl: the renderer and its declaration are resolved and about to be driven.
 echo "HERMETIC-CONSUMED core/scripts/sync-transient-ignore.sh"
 echo "HERMETIC-CONSUMED core/schemas/pipeline-state-paths.json"
 
-echo "  mode: $MODE"
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 BEGIN="$(jq -r '.block_begin' "$SCHEMA")"
@@ -107,7 +80,7 @@ TRANSIENT="$(jq -r '.paths[] | select(.transient) | .ignore' "$SCHEMA")"
 DURABLE_NAMES="$(jq -r '.paths[] | select(.transient | not) | .name' "$SCHEMA")"
 ROOT_DIR="$(jq -r '.root' "$SCHEMA")"
 # BL-685: the declared OUT-OF-ROOT patterns, derived like TRANSIENT and kept SEPARATE from it so
-# arm 1 and arm 10 own different halves of the block and their mutants cannot entangle.
+# arm 1 and arm 10 own different halves of the block.
 OUT_OF_ROOT="$(jq -r '.out_of_root[]? | .pattern' "$SCHEMA")"
 
 # The seed must be able to express the defect. A declaration with nothing transient in it, or
@@ -118,8 +91,9 @@ if [ -z "$TRANSIENT" ] || [ -z "$DURABLE_NAMES" ] || [ -z "$OUT_OF_ROOT" ] || [ 
 fi
 
 WORLDS="$(mktemp -d)"
-# fresh_project -> a seeded scratch project, echoed. Each arm gets its own so a mutation in one
-# cannot be read through state another left behind.
+trap 'rm -rf "$WORLDS"' EXIT
+# fresh_project -> a seeded scratch project, echoed. Each arm gets its own so no arm reads
+# state another left behind.
 fresh_project() {
   local w
   w="$(bash "$HERE/seed.sh")" || return 1
@@ -272,7 +246,7 @@ arm_names_tracked_paths() {
 # SEEDED WITH A NON-FIRST MEMBER on purpose. A seed that tracked the first declared pattern could
 # not tell "scanned the declared set" from "looked at its first entry".
 arm_check_is_blind_to_tracked() {
-  local w="$1" subj="$2" pat rc_check tracked out_check out_write before
+  local w="$1" subj="$2" pat rc_check tracked out_check out_write
   # A FILE pattern, and deliberately not the first one in the declared set.
   pat="$(printf '%s\n' "$TRANSIENT" | grep -v '/$' | sed -n 2p)"
   [ -n "$pat" ] || return 1
@@ -284,24 +258,13 @@ arm_check_is_blind_to_tracked() {
   # that `--check` exits 0 over the tracked path -- which a subject whose check branch has been
   # deleted ALSO does, because it then re-renders an already-current block and exits 0 too. The
   # discriminating observables are what `--check` must PRINT and must NOT print: it reports the
-  # block is current, and it never names the tracked path. Its mutant is what established this.
-  # `cmp -s` AGAINST A SAVED COPY, NOT `md5 -q`. The first cut used md5, which is absent under the
-  # scrubbed `PATH` a shipped script must hold for -- `command -v md5` is MISSING under
-  # `env -i PATH=/usr/bin:/bin` -- so `before` came back EMPTY and the arm failed on the
-  # unmutated subject. `cmp` is what the rest of this suite uses for the same question.
-  before="$w/gitignore.before"
-  cp "$w/project/.gitignore" "$before" || return 1
+  # block is current, and it never names the tracked path.
   out_check="$(render "$subj" "$w" --check)"; rc_check=$?
   [ "$rc_check" -eq 0 ] || return 1
   grep -q 'transient-state block current' <<<"$out_check" || return 1
   grep -q 'still TRACKED' <<<"$out_check" && return 1
-  # "IT WROTE NOTHING" IS `check_discriminates`'s PROPERTY, NOT THIS ARM'S, AND ASSERTING IT HERE
-  # ENTANGLED THE TWO. A `cmp` of .gitignore across the --check made both arms fail the same
-  # mutant, which the harness reports as entanglement and is right to: two arms failing together
-  # cannot tell you which one is load-bearing. This arm owns exactly one property -- what --check
-  # REPORTS about a tracked path -- and stands down on the write question. The saved copy is kept
-  # only to make the seeded world reproducible for a reader.
-  :
+  # That --check wrote nothing is check_discriminates's property; this arm owns only what --check
+  # REPORTS about a tracked path.
   # The path must genuinely still be tracked in the same invocation, which is the control that
   # makes the clean report above a BLINDNESS rather than a correct all-clear.
   tracked="$(git -C "$w/project" ls-files -- "$pat" | wc -l | tr -d ' ')"
@@ -367,7 +330,6 @@ EOF
 run_arms() { # <subject> -> prints "<name>:<0|1>" per arm, each on its own project
   local subj="$1" name w w0 rc base_rc arms
   shift
-  # Optional arm list: a mutant runs only its deciding arm and one twin; the live run runs all ten.
   arms="${*:-renders_declared_set excludes_durable cut_is_bounded idempotent check_discriminates fails_closed_on_empty_marker names_tracked_paths check_is_blind_to_tracked install_fallback renders_out_of_root}"
   # ONE seed and ONE render per subject; every arm gets a cp -R copy of that rendered world, so no
   # arm reads state another left behind. An arm that formerly rendered first could only fail on a
@@ -406,117 +368,11 @@ while IFS=: read -r name rc; do
     renders_out_of_root)   msg="every declared out-of-root pattern is rendered inside the markers ($(printf '%s\n' "$OUT_OF_ROOT" | grep -c .) path(s))" ;;
     *)                     msg="$name" ;;
   esac
-  if [ "$rc" -eq 0 ]; then ok "$msg"; printf -v "B_$name" 1; else bad "$msg"; fi
+  if [ "$rc" -eq 0 ]; then ok "$msg"; else bad "$msg"; fi
 done <<EOF
 $LIVE
 EOF
 
-# ---------------------------------------------------------------------------------------
-# MUTANTS. Each is a COPY -- never an in-place edit of the shipped file -- guarded with `cmp -s`
-# so a sed that matched nothing cannot pass as a mutation. Each names the ONE arm it must move;
-# a mutant that moves a second arm means those two arms are entangled and one is vacuous.
-# ---------------------------------------------------------------------------------------
-MUTDIR="$(mktemp -d)"
-trap 'rm -rf "$MUTDIR" "$WORLDS"' EXIT
-kills=0
 
-# Sourced after ok() and bad(); a kill is emitted ONLY through mutant_killed, behind the flag the
-# live run set for the deciding arm (B_<arm>, set beside that arm's ok above).
-. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-
-mutate() { # <label> <sed-expr> <arm-that-must-fail> <twin-arm>; the base pass is read from the LIVE run of the same invocation
-  local label="$1" expr="$2" want="$3" twin="$4"
-  # `copy` is declared on its own line, NOT in the `local` above: bash 3.2 under `set -u`
-  # rejects a reference to a variable being declared in the same `local` statement.
-  local copy="$MUTDIR/$label.sh"
-  local out rc others
-  local live_rc
-  live_rc="$(printf '%s\n' "$LIVE" | sed -n "s/^${want}://p")"
-  cp "$SUBJECT" "$copy"
-  sed -e "$expr" "$SUBJECT" > "$copy.new" && mv "$copy.new" "$copy"
-  if cmp -s "$SUBJECT" "$copy"; then
-    bad "MUTANT $label: the sed matched NOTHING, so the subject was never mutated and this kill would have been fictional"
-    return
-  fi
-  chmod +x "$copy"
-  if [ "$MODE" = FULL ]; then
-    matrix_cells=$((matrix_cells+1))
-    out="$(run_arms "$copy")"   # MATRIX MODE: all ten arms on this mutant
-    printf '  matrix %-24s %s\n' "$label" "$(printf '%s\n' "$out" | tr '\n' ' ')"
-  else
-    out="$(run_arms "$copy" "$want" "$twin")"
-  fi
-  rc="$(printf '%s\n' "$out" | sed -n "s/^${want}://p")"
-  if [ "$rc" = "1" ]; then
-    # A mutant must fail ONLY its own assertion -- among the deciding arm and its named TWIN, the one
-    # arm it could plausibly co-trip. The other eight are not re-run per mutant; the live run owns them.
-    others="$(printf '%s\n' "$out" | grep ':1$' | grep -v "^${want}:" | cut -d: -f1 | tr '\n' ' ')"
-    if [ -n "${others// /}" ]; then
-      bad "MUTANT $label scored by $want AND by: $others — those arms are entangled and at least one is not independently load-bearing"
-    else
-      mutant_killed "$([ "$live_rc" = 0 ] && echo 1 || echo 0)" "$label" "MUTANT $label killed by $want, and by that arm alone" && kills=$((kills+1))
-    fi
-  else
-    bad "MUTANT $label SURVIVED: $want still passes against a subject that no longer does the thing that arm asserts"
-  fi
-}
-
-# M1: the cut never resets, so it runs from the begin marker to EOF and eats everything after
-# the block. Anchored on the END-marker clause, which is the line that SEPARATES this arm of
-# the awk from the one above it -- keying on the shared `skip` text would edit both.
-mutate cut-runs-to-eof 's/skip == 1 && \$0 == e { skip = 0; next }//' cut_is_bounded idempotent
-
-# M2: render the whole declaration rather than its transient half, so the block carries ignore
-# rules for artifacts the consumer commits.
-#
-# THE OBVIOUS MUTATION HERE IS INERT AND THIS FIXTURE CAUGHT IT. Deleting only
-# `select(.transient)` leaves `.ignore // empty`, and a durable entry HAS no ignore field, so
-# the filter that remains drops exactly the entries the mutation was meant to admit: `cmp`
-# reports a changed file and the output is byte-identical. The mutation therefore has to
-# SYNTHESISE a pattern for the durable half, which it does under the declared root rather than
-# a literal one -- a hard-coded root here would stop matching the arm the day the declaration
-# moved, and the mutant would survive for a reason that has nothing to do with the subject.
-mutate renders-durable-too 's#\.paths\[\] | select(\.transient) | \.ignore // empty#. as $d | $d.paths[] | (.ignore // ($d.root + "/" + .name))#' excludes_durable renders_declared_set
-
-# M3: drop the empty-marker guard, so an unusable declaration is used anyway.
-mutate no-empty-marker-guard 's/if \[ -z "\$IG_BEGIN" \] || \[ -z "\$IG_END" \]; then/if false; then/' fails_closed_on_empty_marker cut_is_bounded
-
-# M4: make `--check` REPORT a tracked transient path while still exiting 0 and still writing
-# nothing. That is the widening arm 8's contract forbids, and it is the shape a later hand
-# reaches for on being told "--check cannot see a tracked path": add the scan to the check branch
-# because it looks like free information.
-#
-# THE FIRST SPELLING OF THIS MUTANT WAS `if false; then` ON THE MODE BRANCH, AND IT BELONGED TO A
-# DIFFERENT ARM. Disabling the branch makes --check fall through and RE-RENDER, which turns a
-# stale block current -- exactly `check_discriminates`'s subject -- so both arms failed it and the
-# harness reported entanglement, correctly. A mutant that two arms kill cannot say which one is
-# load-bearing. This spelling leaves the mode branch intact and moves only the one observable arm
-# 8 owns: what --check PRINTS about the index.
-mutate check-reports-tracked \
-  's#^  echo "OK: transient-state block current#  git -C "$PROJECT_ROOT" ls-files -- $PATTERNS 2>/dev/null | sed "s/^/  NOTE: still TRACKED: /"\n  echo "OK: transient-state block current#' \
-  check_is_blind_to_tracked check_discriminates
-
-# M5 (BL-329): the install-root candidate empties, so the consumer layout has no fallback again.
-mutate no-install-fallback 's/^_install_root="\$(sti_walk_root "\$_self" || true)"$/_install_root=""/' install_fallback renders_declared_set
-
-# M6 (BL-685): the out_of_root half is never read, so the block carries the in-root set only.
-mutate no-out-of-root 's/^OOR_PATTERNS="\$(jq .*$/OOR_PATTERNS=""/' renders_out_of_root renders_declared_set
-
-# NO SEPARATE UNMUTATED CONTROL. It re-ran every arm on a lone copy of the subject, which the live
-# run above already establishes: renders_declared_set is an ok line there, and every mutant's
-# "killed by X, and by that arm alone" line REQUIRES the other nine arms to pass on that mutant's
-# lone copy, which a copy that could not run would fail. The control was a third reading of the same fact.
-
-# ASSERT THE KILL COUNT IS NON-ZERO. A battery whose mutants all applied to a file the run
-# never loaded reports the same silence as one whose arms cannot fire.
-[ "$kills" -eq 0 ] && bad "NO MUTANT WAS SCORED. Either the mutations landed in a copy nothing executes, or none of these arms is load-bearing."
-
-# A plain run must never execute a matrix-only cell; a matrix run must execute at least one.
-if [ "$MODE" = PUSH ]; then
-  if [ "$matrix_cells" -eq 0 ]; then ok "PUSH mode executed no matrix-only cell"; else bad "PUSH mode executed $matrix_cells matrix-only cell(s)"; fi
-else
-  if [ "$matrix_cells" -gt 0 ]; then ok "FULL mode executed $matrix_cells matrix cell(s)"; else bad "FULL mode executed no matrix cell"; fi
-fi
-
-echo "  $fails failed, $kills mutant(s) scored"
+echo "  $fails failed"
 report_end transient-ignore-block

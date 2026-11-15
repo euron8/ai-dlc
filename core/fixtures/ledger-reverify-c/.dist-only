@@ -1,0 +1,3 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Shard c of ledger-reverify runs units dist_checkout, receipt_suffix, two_line_sh, no_colon_swallow, entry_swallowed, close_anchor, backslash_anchor and receiptless_named: the located engine over synthetic mktemp ledgers and copies of its directory, with no B2_ISDIST branch and no in-place receipt. A consumer runs the shipped shard a, which locates the engine in either layout, renders the baseline and holds every unit that branches on the layout or runs a receipt over the installed reconcile directory.

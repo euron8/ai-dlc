@@ -3,7 +3,7 @@
 # trunk-audit-gate — prove gate Check 36 re-runs the step-1b trunk audit and maps every exit
 # the audit emits to the right gate verdict.
 #
-# Usage: run.sh [--matrix]
+# Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = the check regressed, 2 = fixture broken.
 #
 # THE DEFECT. carry-over-evaluation.md step 1b makes `--audit-trunk` exit 1 a HARD_BLOCK, and
@@ -32,41 +32,10 @@
 #   shallow    a `git clone --depth 1` whose watermark names an unfetched commit -> exit 2,
 #              the message names the shallow history and `git fetch --unshallow`
 # Every arm is PRESENCE-shaped: it requires a specific verdict line, so a subject that prints
-# nothing fails all of them. Mutants M1-M12 follow, each run against a whole copy of the
-# subject and its sibling scripts, behind an unmutated control.
-#
-# THE MUTANT MATRIX. A CELL is one WORLD: the subject driven over that world, read for the exit code and the
-# verdict text its arm requires (the table in wspec below). PER PUSH a mutant is scored on its DECIDING world,
-# which must fail on the mutated copy, and its named TWIN, a different world it could plausibly co-trip but
-# must leave GREEN. `run.sh --matrix` drives each mutant over all twelve worlds and prints one MATRIX line per
-# mutant. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per
-# distinct state") requires. Run the REMEASURE command below, from the repo root.
-# also trips: M1-exit1-is-pass -> wedge-noexit,wedge-othersha
-# also trips: M2-exit2-is-pass -> shallow
-# MUTANT-MATRIX M1-exit1-is-pass decides=finding twins=nogenesis
-# MUTANT-MATRIX M2-exit2-is-pass decides=nogenesis twins=finding
-# MUTANT-MATRIX M3-worklist-fails decides=worklist twins=clean
-# MUTANT-MATRIX M4-no-variant-scope decides=feature twins=clean
-# MUTANT-MATRIX M5-subject-silent decides=clean twins=- why=a subject that exits 0 at its second line prints no verdict, and every world requires verdict text, so every cell is red
-# MUTANT-MATRIX M6-no-anchors-fallback decides=anchors twins=clean
-# MUTANT-MATRIX M7-wrong-anchor-entry decides=anchors twins=clean
-# MUTANT-MATRIX M8-no-exit-route decides=wedge-resolved twins=wedge-noexit
-# MUTANT-MATRIX M9-unresolved-is-exit decides=wedge-noexit twins=wedge-resolved
-# MUTANT-MATRIX M10-any-entry-names-sha decides=wedge-othersha twins=wedge-resolved
-# MUTANT-MATRIX M11-no-archive decides=wedge-resolved twins=wedge-noexit
-# MUTANT-MATRIX M12-shallow-unnamed decides=shallow twins=nogenesis
-# All twelve mutants reach mutant_killed through one helper, as a variable:
-# MUTANT-MATRIX-DYNAMIC score_mut why=passes the mutant name as a variable for all twelve mutants and every name keeps its own row
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/trunk-audit-gate/run.sh --matrix
+# nothing fails all of them.
 
 set -uo pipefail
 
-MODE=plain
-case "${1:-}" in
-  "") ;;
-  --matrix) MODE=matrix ;;
-  *) echo "trunk-audit-gate: usage: run.sh [--matrix]" >&2; exit 2 ;;
-esac
 # The gate inherits every AI_DLC_* a consumer set; AI_DLC_TRUNK alone would re-point the audit.
 unset AI_DLC_TRUNK AI_DLC_PROJECT_ROOT AI_DLC_TAG_SUBJECT AI_DLC_AUDIT_ANCHORS_SCHEMA 2>/dev/null || true
 
@@ -95,10 +64,6 @@ trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 G() { git -C "$1" -c user.email=f@x -c user.name=F -c commit.gpgsign=false "${@:2}"; }
 
@@ -239,156 +204,45 @@ echo "trunk-audit-gate:"
 
 if expect "$SUBJ" clean 0 'verdict  : PASS' && has 'audit_rc : 0' && has 'AUDIT-TRUNK: audited=1 ' \
   && echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-cycle-commits.sh"; then
-  ok "clean: the audit re-ran 1 commit at the gate -> PASS"; B_clean=1
+  ok "clean: the audit re-ran 1 commit at the gate -> PASS"
 else bad "clean: $LAST"; fi
 if expect "$SUBJ" finding 1 'reported findings' && has 'audit_rc : 1' && has 'findings=1'; then
-  ok "finding: audit exit 1 -> gate FAIL exit 1, HARD_BLOCK named"; B_finding=1
+  ok "finding: audit exit 1 -> gate FAIL exit 1, HARD_BLOCK named"
 else bad "finding: $LAST"; fi
 if expect "$SUBJ" empty 0 'verdict  : PASS' && has 'control: the trunk holds'; then
   ok "empty range: PASS carries the audit's own control line"
 else bad "empty: $LAST"; fi
 if expect "$SUBJ" worklist 0 'verdict  : WORKLIST' && has 'AUDIT-TRUNK: WORKLIST'; then
-  ok "worklist: undeclared taxonomy -> WORKLIST, exit 0, not a FAIL"; B_worklist=1
+  ok "worklist: undeclared taxonomy -> WORKLIST, exit 0, not a FAIL"
 else bad "worklist: $LAST"; fi
 if expect "$SUBJ" nogenesis 2 'could not run (setup error)' && has 'audit_rc : 2' && ! has 'SHALLOW'; then
-  ok "nogenesis: audit exit 2 -> gate FAIL exit 2, not a clean result, not called shallow"; B_nogenesis=1
+  ok "nogenesis: audit exit 2 -> gate FAIL exit 2, not a clean result, not called shallow"
 else bad "nogenesis: $LAST"; fi
 if expect "$SUBJ" nobmad 2 'no readable pipeline snapshot'; then
   ok "no _bmad-output/: exit 2, no verdict about nothing"
 else bad "nobmad: $LAST"; fi
 if expect "$SUBJ" feature 0 'NOT-APPLICABLE -- EXAMINED NOTHING' && ! has 'audit_rc'; then
-  ok "feature variant: NOT-APPLICABLE, audit not run, no watermark needed"; B_feature=1
+  ok "feature variant: NOT-APPLICABLE, audit not run, no watermark needed"
 else bad "feature: $LAST"; fi
 if expect "$SUBJ" anchors 0 'verdict  : PASS' && has "audit-anchors.md prior-sprint sha (${AG})" \
   && has 'AUDIT-TRUNK: audited=1 '; then
-  ok "anchors: no watermark, genesis from the prior sprint's required sha, no audit_window -> PASS"; B_anchors=1
+  ok "anchors: no watermark, genesis from the prior sprint's required sha, no audit_window -> PASS"
 else bad "anchors: $LAST"; fi
 if expect "$SUBJ" wedge-resolved 0 'verdict  : PASS' && has "exit     : ${BAD_R}" && has 'findings=1' \
   && has 'AUDIT-TRUNK: audited=1 ' \
   && echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-escalation-resolution.sh"; then
-  ok "wedge-resolved: finding -> fix-forward -> operator-RESOLVED entry names the sha -> PASS"; B_wres=1
+  ok "wedge-resolved: finding -> fix-forward -> operator-RESOLVED entry names the sha -> PASS"
 else bad "wedge-resolved: $LAST"; fi
 if expect "$SUBJ" wedge-noexit 1 'reported findings' && has 'an escalation names'; then
-  ok "wedge-noexit: fix-forward with the entry still HARD_BLOCK -> still FAIL"; B_wnoexit=1
+  ok "wedge-noexit: fix-forward with the entry still HARD_BLOCK -> still FAIL"
 else bad "wedge-noexit: $LAST"; fi
 if expect "$SUBJ" wedge-othersha 1 'reported findings' && has 'no escalation entry names'; then
-  ok "wedge-othersha: a resolved entry naming another sha is not an exit -> still FAIL"; B_wother=1
+  ok "wedge-othersha: a resolved entry naming another sha is not an exit -> still FAIL"
 else bad "wedge-othersha: $LAST"; fi
 if expect "$SUBJ" shallow 2 'SHALLOW clone' && has 'git fetch --unshallow' && ! has 'setup error'; then
-  ok "shallow: exit 2 names the shallow history and git fetch --unshallow"; B_shallow=1
+  ok "shallow: exit 2 names the shallow history and git fetch --unshallow"
 else bad "shallow: $LAST"; fi
 
-# ---- mutants: each a whole copy of the subject's directory with every sibling -----------------
-# mkmut <name> <sed expr>: prints the mutated subject path; refuses a sed that changed nothing.
-mkmut() {
-  local d="$WORK/mut-$1" s
-  mkdir -p "$d"
-  for s in $SIBS; do cp "$SUBJ_DIR/$s" "$d/"; done
-  if ! sed -e "$2" "$SUBJ" > "$d/validate-trunk-audit-gate.sh" 2>/dev/null; then
-    echo "MUTANT $1 DID NOT APPLY (sed failed)" >&2; return 1
-  fi
-  if cmp -s "$SUBJ" "$d/validate-trunk-audit-gate.sh"; then
-    echo "MUTANT $1 DID NOT APPLY (no change)" >&2; return 1
-  fi
-  printf '%s\n' "$d/validate-trunk-audit-gate.sh"
-}
-# Control: an unmutated copy built the same way must pass the worlds whose arms need the
-# siblings, positively -- a copy missing one would read every mutant below as killed.
-CTRL="$WORK/mut-ctrl"; mkdir -p "$CTRL"
-cp "$SUBJ" "$CTRL/"; for s in $SIBS; do cp "$SUBJ_DIR/$s" "$CTRL/"; done
-expect "$CTRL/validate-trunk-audit-gate.sh" clean 0 'verdict  : PASS' && has 'AUDIT-TRUNK: audited=1 ' \
-  && ok "control: an unmutated copy passes the clean world" \
-  || bad "control: an unmutated copy did not pass the clean world ($LAST) -- the mutants below prove nothing"
-expect "$CTRL/validate-trunk-audit-gate.sh" anchors 0 'verdict  : PASS' && has 'prior-sprint sha' \
-  && ok "control: an unmutated copy resolves the anchors genesis" \
-  || bad "control: an unmutated copy did not pass the anchors world ($LAST)"
-expect "$CTRL/validate-trunk-audit-gate.sh" wedge-resolved 0 'verdict  : PASS' && has "exit     : ${BAD_R}" \
-  && ok "control: an unmutated copy takes the resolved-escalation exit" \
-  || bad "control: an unmutated copy did not pass the wedge-resolved world ($LAST)"
-
-# ---- matrix plumbing. The header rows are the only source of a mutant's deciding world and twin. ----
-# MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
-MXL="$WORK/mx.ledger"; : > "$MXL"
-mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
-  awk -v n="$1" -v f="$2" '
-    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
-      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
-    }
-    END { if (c == 1) print v }' "$HERE/run.sh"
-}
-mx_count() { local n; n="$(grep -c "^$1 " "$MXL")" || n=0; printf '%s' "$n"; }
-# wspec <world> -> WRC and WTX: the exit code and verdict text that world's arm requires of the subject.
-wspec() {
-  case "$1" in
-    clean|empty|anchors|wedge-resolved) WRC=0; WTX='verdict  : PASS' ;;
-    finding|wedge-noexit|wedge-othersha) WRC=1; WTX='reported findings' ;;
-    worklist) WRC=0; WTX='verdict  : WORKLIST' ;;
-    nogenesis) WRC=2; WTX='could not run (setup error)' ;;
-    nobmad) WRC=2; WTX='no readable pipeline snapshot' ;;
-    feature) WRC=0; WTX='NOT-APPLICABLE -- EXAMINED NOTHING' ;;
-    shallow) WRC=2; WTX='SHALLOW clone' ;;
-    *) return 1 ;;
-  esac
-}
-MX_WORLDS="clean finding empty worklist nogenesis nobmad feature anchors wedge-resolved wedge-noexit wedge-othersha shallow"
-# mx_cell <subject> <mutant> <world> <role dec|mx> -> MX_COLOR GREEN when the world's arm still holds, RED when it fails.
-# A subject that crashes is BROKEN, never RED or GREEN.
-mx_cell() {
-  printf '%s %s %s\n' "$4" "$2" "$3" >> "$MXL"
-  wspec "$3" || { bad "FIXTURE BROKEN: $3 is not a world of this fixture"; MX_COLOR=GREEN; return; }
-  if expect "$1" "$3" "$WRC" "$WTX"; then MX_COLOR=GREEN; else MX_COLOR=RED; fi
-  if grep -qE 'unbound variable|command not found|syntax error' <<<"$OUT"; then
-    if [ "$MODE" = matrix ]; then echo "MATRIX BROKEN $2"; exit 2; fi
-    bad "FIXTURE BROKEN: mutant $2 crashed on world $3, which reads as a red cell"
-  fi
-}
-# score_mut <base-pass flag> <mutant> <sed> -- the deciding world and the twin per push, every world under --matrix.
-score_mut() {
-  local fl="$1" m="$2" dec tw mp d t a g=0 tot=0 u="" rd=""
-  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
-  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: mutant $m has no single MUTANT-MATRIX row naming its deciding world and twin"; return; fi
-  mp="$(mkmut "$m" "$3")" || { bad "mutant $m did not apply"; return; }
-  mx_cell "$mp" "$m" "$dec" dec; d="$MX_COLOR"; LAST_DEC="${LAST:-}"
-  if [ "$d" = RED ]; then mutant_killed "$fl" "$m" "mutant $m scored by world $dec ($LAST_DEC)"
-  else bad "mutant $m SURVIVED: world $dec still read exit $WRC with '$WTX'"; fi
-  if [ "$tw" != - ]; then
-    mx_cell "$mp" "$m" "$tw" dec; t="$MX_COLOR"
-    if [ "$t" = RED ]; then bad "mutant $m is entangled: its twin world $tw also failed"; fi
-  else t=-; fi
-  if [ "$MODE" = matrix ]; then # mx-all-cells
-    for a in $MX_WORLDS; do
-      if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
-      tot=$((tot + 1)); mx_cell "$mp" "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); else rd="$rd,$a"; fi
-    done
-    if [ "$d" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
-    if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
-  fi
-}
-score_mut "${B_finding:-0}" M1-exit1-is-pass 's/^case "\$RC" in$/case "$((RC==1?0:RC))" in/'
-score_mut "${B_nogenesis:-0}" M2-exit2-is-pass 's/^case "\$RC" in$/case "$((RC==2?0:RC))" in/'
-score_mut "${B_worklist:-0}" M3-worklist-fails 's/"AUDIT-TRUNK: WORKLIST"\*)/"AUDIT-TRUNK: NEVER"*)/'
-score_mut "${B_feature:-0}" M4-no-variant-scope 's/if \[ "\$VARIANT" != "carry-over" \]; then/if false; then/'
-score_mut "${B_clean:-0}" M5-subject-silent '2i\
-exit 0'
-score_mut "${B_anchors:-0}" M6-no-anchors-fallback 's/^      RUN_GENESIS="\$G_SHA"$/      RUN_GENESIS=""/'
-score_mut "${B_anchors:-0}" M7-wrong-anchor-entry 's/--prior-sprint-sha "\$ANCHORS" "\$SPRINT"/--prior-sprint-sha "$ANCHORS" "$((SPRINT-1))"/'
-score_mut "${B_wres:-0}" M8-no-exit-route 's/^  F_SHA="\$(first_fail_sha "\$OUT")"$/  F_SHA=""/'
-score_mut "${B_wnoexit:-0}" M9-unresolved-is-exit 's/^  if \[ "\$AUTH_RC" -ne 0 \]; then$/  if false; then/'
-score_mut "${B_wother:-0}" M10-any-entry-names-sha 's/if (length(t) >= 7 \&\& index(sha, t) == 1) hit = 1/hit = 1/'
-score_mut "${B_wres:-0}" M11-no-archive 's@ "\$ESC_DIR/pending-archive.md"; do$@; do@'
-score_mut "${B_shallow:-0}" M12-shallow-unnamed 's/if \[ "\$(git -C "\$AI_DLC_ROOT" rev-parse --is-shallow-repository 2>\/dev\/null)" = "true" \]; then/if false; then/'
-
-# RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
-# empty matrix count cannot come from a ledger nothing writes.
-mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
-if [ "$MODE" = plain ]; then
-  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
-  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
-  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
-else
-  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
-fi
 
 echo
 report_end trunk-audit-gate

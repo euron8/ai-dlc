@@ -7,4 +7,4 @@
 # Re-measured once on the 0.1110.0 bundle tip (F5 + F6 + F14 + F15): one counted run, 1297; then 1294 after BL-868's unbounded waits replaced the stop world's bounded ones (one counted run).
 # Re-measured for BL-1050 (stdin from /dev/null): 492 with the caller's stdin forced to a socket and to /dev/null, one counted run each; base read 489 and 492 the same way.
 # Re-measured on the rebuilt bundle tip (F5 + F6 + F14 + F15 on 0.1124.0, stdin from /dev/null per BL-1050/BL-1053): one counted run through scripts/seed-verdict-store.sh, scratch store, judged green at 1297.
-1297 *
+355 *

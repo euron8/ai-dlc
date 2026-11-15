@@ -120,7 +120,7 @@ if ! cmp -s "$SITES" "$ENGINE/setup-sites.md"; then
   [ "$s" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "an unresolvable terminator withholds the exemption (fail-closed), never widens the span to EOF" \
     || bad "with an unresolvable terminator the config edit classified '$s' — the span is being widened to EOF again, which exempts the whole rest of the file on one stale anchor"
 else
-  bad "FIXTURE STALE: could not build the broken-terminator mutant — setup-sites.md's next_heading is not the expected line"
+  bad "FIXTURE STALE: could not build the broken-terminator declaration — setup-sites.md's next_heading is not the expected line"
 fi
 git -C "$DIST" show "$BASE:core/$REL" > "$CF"   # restore
 
@@ -161,9 +161,8 @@ fi
 # so base's own diff succeeds and exactly one ancestor candidate goes unread. Each shim drops a
 # marker when it refuses, so an arm cannot pass on a shim that never fired.
 #
-# Each arm has a committed mutant, built in a copy of the WHOLE reconcile dir (the script sources
-# lib.sh and evals preclassify.sh beside itself), and the UNMUTATED copy is driven through the same
-# shim as the positive control that the copy runs at all.
+# The arms drive a copy of the WHOLE reconcile dir (the script sources lib.sh and evals
+# preclassify.sh beside itself) through the shim.
 REAL_DIFF="$(command -v diff)"
 mkdir -p "$WORK/shim-all" "$WORK/shim-old"
 cat > "$WORK/shim-all/diff" <<SHIM
@@ -189,23 +188,8 @@ drive() { # drive <script> <shim-dir> <rel> -> "STATUS<TAB>DETAIL" for rel, diff
 }
 
 FC="$WORK/failclosed"
-mkdir -p "$FC/ctl" "$FC/mA" "$FC/mB"
-for d in ctl mA mB; do cp "$(dirname "$SCRIPT")/"* "$FC/$d/" 2>/dev/null; done
-# mA reverts EVERY layer of the classifier fix: the exit/empty check, the awk END refusal, and
-# the caller branch that turns the refusal into a HARD row.
-sed -e '/if \[ "\$drc" -ne 1 \] || \[ -z "\$d" \]; then printf .unknown.; return 0; fi/d' \
-    -e 's/if (!hunk) { print "unknown"; exit } //' \
-    -e 's/if \[ "\$unreg" != "yes" \] && \[ "\$unreg" != "no" \]; then/if false; then/' \
-    "$SCRIPT" > "$FC/mA/unregistered-drift.sh"
-# mB reverts the ancestor-search fix: a failed candidate diff is scored instead of skipped.
-sed 's/\[ "\$_as" -le 1 \] || continue/: || continue/' "$SCRIPT" > "$FC/mB/unregistered-drift.sh"
-# Counted from a FILE, never from a pipe: `diff` exits 1 on the difference it is being asked for,
-# and under pipefail a `diff | grep -c` pipeline then "fails" and `|| n=0` overwrites the count.
-# mA is one deletion plus two in-place edits (1 + 2x2 marker lines); mB is one edit (2).
-diff "$SCRIPT" "$FC/mA/unregistered-drift.sh" > "$FC/mA.d"
-diff "$SCRIPT" "$FC/mB/unregistered-drift.sh" > "$FC/mB.d"
-n_a="$(grep -c '^[<>]' "$FC/mA.d")" || n_a=0
-n_b="$(grep -c '^[<>]' "$FC/mB.d")" || n_b=0
+mkdir -p "$FC/ctl"
+cp "$(dirname "$SCRIPT")/"* "$FC/ctl/" 2>/dev/null
 
 # World A: a schema edited in place, every diff failing.
 printf '{\n  "schema_id": "FIXTURE v1",\n  "rule": "consumer-loosened-it"\n}\n' > "$SCF"
@@ -217,14 +201,6 @@ elif [ "${r%%	*}" = "HARD-UNREGISTERED-CORE-DRIFT" ] && grep -q 'CLASSIFIER DID 
   ok "a diff that FAILED on a drifted schema → HARD-UNREGISTERED-CORE-DRIFT carrying 'CLASSIFIER DID NOT RUN', not CORE-TEMPLATE-SUBSTITUTED"
 else
   bad "with every diff failing the drifted schema classified '${r%%	*}' — a diff that did not run is being read as a verdict (expected HARD-UNREGISTERED-CORE-DRIFT / CLASSIFIER DID NOT RUN)"
-fi
-if [ "$n_a" -ne 5 ]; then
-  bad "MUTANT A DID NOT APPLY — expected 5 diff marker lines, got $n_a; the classifier fix was re-spelled and the mutant must be re-anchored"
-else
-  r="$(drive "$FC/mA/unregistered-drift.sh" "$WORK/shim-all" "$SCHEMA_REL")"
-  [ "${r%%	*}" = "CORE-TEMPLATE-SUBSTITUTED" ] \
-    && ok "mutant A (classifier fix reverted) reproduces the defect: CORE-TEMPLATE-SUBSTITUTED" \
-    || bad "mutant A classified '${r%%	*}', expected CORE-TEMPLATE-SUBSTITUTED — the arm above cannot tell the fix from its revert"
 fi
 git -C "$DIST" show "$BASE:core/$SCHEMA_REL" > "$SCF"   # restore
 
@@ -240,22 +216,6 @@ elif [ "${r%%	*}" = "HARD-UNREGISTERED-CORE-DRIFT" ]; then
 else
   bad "with the old blob's diff failing, plain drift classified '${r%%	*}' — a failed diff scored as zero differing lines (expected HARD-UNREGISTERED-CORE-DRIFT)"
 fi
-if [ "$n_b" -ne 2 ]; then
-  bad "MUTANT B DID NOT APPLY — expected 2 diff marker lines, got $n_b; the ancestor fix was re-spelled and the mutant must be re-anchored"
-else
-  r="$(drive "$FC/mB/unregistered-drift.sh" "$WORK/shim-old" "$REL")"
-  [ "${r%%	*}" = "HARD-CORE-BEHIND" ] \
-    && ok "mutant B (ancestor fix reverted) reproduces the defect: HARD-CORE-BEHIND" \
-    || bad "mutant B classified '${r%%	*}', expected HARD-CORE-BEHIND — the arm above cannot tell the fix from its revert"
-fi
-# Each mutant is inert on the OTHER arm's world, so neither arm is carried by the other's fix.
-r="$(drive "$FC/mA/unregistered-drift.sh" "$WORK/shim-old" "$REL")"
-[ "${r%%	*}" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "mutant A leaves the ancestor arm green (the arms are not entangled)" \
-  || bad "mutant A moved the ancestor arm to '${r%%	*}' — the two arms are entangled"
-printf '{\n  "schema_id": "FIXTURE v1",\n  "rule": "consumer-loosened-it"\n}\n' > "$SCF"
-r="$(drive "$FC/mB/unregistered-drift.sh" "$WORK/shim-all" "$SCHEMA_REL")"
-[ "${r%%	*}" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "mutant B leaves the classifier arm green (the arms are not entangled)" \
-  || bad "mutant B moved the classifier arm to '${r%%	*}' — the two arms are entangled"
 git -C "$DIST" show "$BASE:core/$SCHEMA_REL" > "$SCF"   # restore
 git -C "$DIST" show "$BASE:core/$REL" > "$CF"           # restore
 

@@ -2,8 +2,7 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # owed-derivations — assert a derivation an operator LEAVES broken stays owed until it is re-pointed.
 #
-# Usage: run.sh [--matrix] [<check-owed-derivations.sh> [<derivation-differential.sh>]]
-#   The arguments existed for a retired mutation battery, which drove this file against mutated copies.
+# Usage: run.sh [--group <shard>] [<check-owed-derivations.sh> [<derivation-differential.sh>]]
 # Exit: 0 every assertion holds | 1 something regressed | 2 the harness could not run.
 #
 # TWO SUBJECTS. The WRITER is reconcile/derivation-differential.sh --record-owed; the READER is
@@ -30,8 +29,7 @@
 # pair outside the ledger does not; S11a-c `git -C` operands and a `-f` value block, S11n their consumer
 # twins stay silent; S12a-e core DIRECTORIES block (lead ruling A), S12n consumer directories stay silent;
 # CH1/CH2 a chain FAILing ALLOWLIST with a core operand (before `;`, in a second `&&` segment) blocks as
-# LIVING-ALLOWLIST, CH1n its consumer twin stays silent, MV1 a validator mutant without its explain_chain
-# call fails CH1 and CH2 only;
+# LIVING-ALLOWLIST, CH1n its consumer twin stays silent;
 # S13 a validator exit 2 with no UNRUN line is a refusal (S13c its control); S14 a root-absolute core
 # operand blocks. S6e-S6g a later ledger copy the validator never RUNS (unclosed fence, indented output
 # line, CRLF opener) acquits nothing; PU an OWED row whose only copy is in an unclosed fence reads MOVED;
@@ -48,91 +46,106 @@
 # must then exist, be readable by find and hold 0 entries; SC1t its twin, the same calls' exit 0 and exact tokens. Its
 # counter is proven in the same run: SC1c a seeded entry reads 1, SC1m a missing dir is refused (find's exit is also read).
 # In the CONSUMER layout an installed reader without the here-string dispatch SKIPS SC1/SC1t loudly (it predates the fix
-# and lands with the pull that carries this fixture); in the distribution they always run. M23 is scored only where
-# SC1p, a behavioural probe on the same `bash` (with its exit-ending control), reads the returning pipeline-side EXIT
-# trap as unrun (bash 3.2); where it runs (bash 5) the piped form leaks nothing and M23 SKIPs loudly.
-# Mutants M1-M11, mA and mB each copy the reader, are guarded by cmp -s (no-apply is FIXTURE BROKEN), and
-# must fail a named arm: M1 filter dropped, M2 filter inverted, M3 sweep removed, M4 sweep over PAST, M5
-# refusal made silent, M6 absent-record early exit restored, M7 a core-paths.sh lookup ahead of the
-# dispatch, M8 ledger supersession removed, M9 `-C` prefixing removed, M10 `-f` values not asked, M11 the
-# directory prefix test removed, mA ls_accept_rc accepts every exit, mB the root-absolute strip and the
-# trailing-slash variant removed, M12 the raw-scan locator restored in the ledger supersession, M12b the
-# same in pass 2, M13 a `git -C` segment's WORD lines asked again, M14 a failing `--list` in pass 2 read
-# UNASSESSED over a file whose own run gave no verdict, M20 a reproducing LIVING fence opened, M21 LIVING
-# verdicts leaking into --scope-batch, M22 every validator exit refused, M23 the piped `--scope` dispatch restored (its
-# scope_batch runs in a pipeline subshell whose EXIT trap never fires on rc 0, so the scratch dir is left).
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
-# requires. `--matrix` runs every
-# mutant over every LIVING world and prints a `MATRIX<TAB><mutant><TAB><arm><TAB><FAIL|ok>` row per arm.
-# Per push each mutant runs only its DECIDING arm (which must FAIL) and its TWINS (arms the matrix shows
-# GREEN under it, which must HOLD), so only the worlds holding them. Whether a mutant kills its own arm alone
-# is a property of the battery, settled here and not on every push.
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/owed-derivations/run.sh --matrix
-# MUTANT-MATRIX M1 decides=S1 twins=GC
-# MUTANT-MATRIX M2 decides=S1 twins=S3
-# MUTANT-MATRIX M3 decides=S1 twins=S2
-# MUTANT-MATRIX M4 decides=S2 twins=S1
-# MUTANT-MATRIX M5 decides=S5 twins=S1
-# MUTANT-MATRIX M6 decides=S1 twins=S3
-# MUTANT-MATRIX M7 decides=S10 twins=S9
-# MUTANT-MATRIX M8 decides=S6b twins=S6c
-# MUTANT-MATRIX M9 decides=S11a twins=S11n
-# MUTANT-MATRIX M10 decides=S11c twins=S11n
-# MUTANT-MATRIX M11 decides=S12a twins=S12n
-# MUTANT-MATRIX M12 decides=S6e twins=S6b
-# MUTANT-MATRIX M12b decides=PU twins=S7
-# MUTANT-MATRIX M13 decides=G1 twins=GC
-# MUTANT-MATRIX M14 decides=B8c twins=LF
-# MUTANT-MATRIX M15 decides=RP3 twins=RP2
-# MUTANT-MATRIX M16 decides=RP5 twins=RP2
-# MUTANT-MATRIX M17 decides=PP twins=G1
-# MUTANT-MATRIX M18 decides=CDD1 twins=CDD4
-# MUTANT-MATRIX M19 decides=CDD5 twins=CDD4
-# MUTANT-MATRIX M20 decides=S3 twins=S4b
-# MUTANT-MATRIX M21 decides=S9 twins=S10
-# MUTANT-MATRIX M22 decides=S13c twins=S13
-# MUTANT-MATRIX M23 decides=SC1 twins=SC1t
-# MUTANT-MATRIX mA decides=S13 twins=S13c
-# MUTANT-MATRIX mB decides=S14 twins=S1
-# MUTANT-MATRIX MV1 decides=CH1 twins=CH1n
-# The full failing sets, as measured: M1 S1 S4b S7 S8 S6f G1 G2 RP2 SL1 SL2 CD1 CDD4 S15n S11n S12n CH1n CH3
-# CH4 CH6; M2 every core-blocking arm plus S4b S7 RP2 SL1 SL2 CD1 CDD4 S11n S12n CH1n (48 arms); M3 and M6
-# every blocking arm (39); M4 S2; M5 S5; M7 S10; M8 S6b; M9 RP1 CD2 RP3 RP5 CDD1-3 CDD5 S15n S11a S11b; M10
-# S11c; M11 S12a-e; M12 S6e S6f S6g; M12b PU; M13 G1 G2 S15n; M14 B8c; M15 RP3 RP4 S15n; M16 RP3 RP5 S15n;
-# M17 PP S15n; M18 CDD1-3 CDD5 S15n; M19 CDD5 S15n; M20 S1 S3 S4a S6 S8 S6b-g S15n CH1-6 S14; M21 S9; M22
-# S13c plus every blocking arm (40); M23 SC1 (alone of 61 arms; no other mutant fails SC1 or SC1t); mA S13; mB S14;
-# MV1 CH1-CH6.
-# `lw_world` RESETS every shared world-level global (LW_RESET_VARS) on entry, in both modes, so a filtered mutant
-# run starts each selected world from the same state the live pass does. RSET holds that list EQUAL to the set of
-# variables the drivers and world bodies assign, derived from this file's own text; RSETf and RSETp seed a copy both
-# ways, and RSETr drives a world pair through the real lw_world. CPY holds the copy lw_all runs byte-identical to the reader.
-# MUTANT-MATRIX-DYNAMIC mut_score why=mut_case and MV1 pass their mutant id to mutant_killed as a variable; each id keeps its own MUTANT-MATRIX row above
-# MUTANT-MATRIX BL706-M1 decides=B7b twins=B7a,B7c
-# MUTANT-MATRIX BL706-M2 decides=B7e twins=B7a,B7b
-# MUTANT-MATRIX BL706-M3 decides=B7g twins=B7b
-# MUTANT-MATRIX BL706-M4 decides=B7d twins=B7b
-# MUTANT-MATRIX BL706-M5 decides=B7c twins=B7a
-# MUTANT-MATRIX BL706-M6 decides=B7h twins=B7a
-# MUTANT-MATRIX BL706-M7 decides=B7h twins=B7a
-# MUTANT-MATRIX BL706-M8 decides=B7a twins=B7h
-# MUTANT-MATRIX BL706-M9 decides=B7j twins=B7b
-# MUTANT-MATRIX BL706-M10 decides=B7k twins=B7e
-# MUTANT-MATRIX BL706-M11 decides=B7i twins=B7f
-# MUTANT-MATRIX BL706-M12 decides=B7l twins=B7b,B7d
-# MUTANT-MATRIX BL706-M13 decides=B7e2 twins=B7e
-# MUTANT-MATRIX BL706-M14 decides=B7a4,B7a5,B7a6,B7b4,B7b5,B7b6,B7b7 twins=B7a,B7b
-# MUTANT-MATRIX-DYNAMIC b7_mut why=b7_mut passes its mutant id (BL706-M1, M2, M4 to M14) to mutant_killed as a variable; each id keeps its own MUTANT-MATRIX row above
-# BL706 (B7 cells) measured by: bash core/fixtures/owed-derivations/receipt-bl706.sh, whose CELL lines the B7 arms read; mutants M1 to M8 each copy the whole reconcile/ directory.
+# and lands with the pull that carries this fixture); in the distribution they always run.
+# BL706 (B7 cells) measured by: bash core/fixtures/owed-derivations/receipt-bl706.sh, whose CELL lines the B7 arms read.
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset CLAUDE_PROJECT_DIR 2>/dev/null || true
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# `--matrix`, parsed FIRST and shifted off, is the MATRIX mode (see the MUTANT-MATRIX header lines): every
-# mutant runs over every LIVING world. It is an argument because hermetic-run.sh runs a fixture under `env -i`.
-OWED_MATRIX=0
-if [ "${1:-}" = --matrix ]; then OWED_MATRIX=1; shift; fi
+GROUP=a
+while :; do
+  case "${1:-}" in
+    --group)
+      [ -n "${2:-}" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+      GROUP="$2"; shift 2 ;;
+    *) break ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------- shards ----
+# THIS FILE IS THREE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY.
+# Every section below the shared prelude is a UNIT guarded by `if sg <unit>; then ... fi`; `--group <x>` runs the
+# units dealt to shard <x>, and `owed-derivations-{b,c}/run.sh` are one-line drivers that `exec bash` this file with
+# their group, so the pre-push pool starts each on its own. No `--group` runs shard 'a'.
+#
+# THE PRELUDE IS NOT A UNIT: every shard resolves the subjects, builds the reader's root R (seeds only, no reader
+# call) and sources the helpers, because a shard that skipped them would score its units against a harness that
+# never ran. Units share no world: rec owns R..R8 and the arm records, wr owns the writer world, lw owns the LS*
+# worlds, its harness and its real pass, b7 owns the BL-706 receipt.
+#
+# THE COVERAGE JOIN runs in EVERY shard before anything else: the declared units are DERIVED from this file's own
+# `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal the declared set
+# exactly, and every declared shard must have a driver directory. The join proves it can fire first, on a seeded
+# duplicate and a seeded omission.
+#   a  rec wr   B0-B8, Sc, H, Bt, Sp, Sn, Rp, G (the reader over R and its siblings); W (the writer, then the reader over its record)
+#   b  lw       S1-S15 living sweep, SC1
+#   c  b7       B7a-B7k (the shipping apply.sh over seeded worlds)
+SHARDS="a b c"
+UNITS_a="rec wr"
+UNITS_b="lw"
+UNITS_c="b7"
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${UNITS_$GROUP:-}\""
+NAME="owed-derivations"; [ "$GROUP" = a ] || NAME="owed-derivations-$GROUP"
+shard_broken() { echo "$NAME: FIXTURE BROKEN — $1" >&2; exit 2; }
+[ -n "$MINE" ] || shard_broken "shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked"
+sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
+SELF="$0"
+[ -f "$SELF" ] || shard_broken "cannot read $SELF for the coverage join"
+partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d "${TMPDIR:-/tmp}/owed-derivations-join.XXXXXX")" || shard_broken "mktemp failed"
+printf '%s\n' u1 u2 u3 > "$JW/pd"; printf '%s\n' u1 u2 u2 u3 > "$JW/pdup"; printf '%s\n' u1 u3 > "$JW/pmiss"; printf '%s\n' u3 u1 u2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  rm -rf "$JW"; shard_broken "the coverage join's self-probe did not discriminate (duplicate, omission, exact)"
+fi
+sed -n 's/^[[:space:]]*if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$SELF" > "$JW/declared"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  rm -rf "$JW"; shard_broken "$ndecl unit guards derived from $SELF ($ndupdecl declared twice)"
+fi
+if ! _why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  rm -rf "$JW"; shard_broken "the shard partition does not cover the guarded units exactly -- $_why"
+fi
+# THE DIST-ONLY SHARDS: DIST_SHARDS reach no consumer. Each carries a non-empty .dist-only and no other shard does,
+# and a consumer holds none of their directories, so only a DIST_SHARDS shard, whose inputs.decl declares its
+# dist-only siblings, checks their drivers and markers; a shipped shard declares none and skips them.
+DIST_SHARDS=""
+case " $DIST_SHARDS " in *" $GROUP "*) _me=dist ;; *) _me=ship ;; esac
+[ ! -e "$HERE/.dist-only" ] || { rm -rf "$JW"; shard_broken "shard 'a' carries $HERE/.dist-only, but shard a ships"; }
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  case " $DIST_SHARDS " in *" $_s "*) _do=1 ;; *) _do=0 ;; esac
+  [ "$_do" = 1 ] && [ "$_me" = ship ] && continue
+  _drv="$HERE/../owed-derivations-$_s/run.sh"
+  if [ ! -f "$_drv" ] || ! grep -qF -- "--group $_s" "$_drv"; then
+    rm -rf "$JW"; shard_broken "shard '$_s' is declared but $_drv does not drive it"
+  fi
+  if [ "$_do" = 1 ] && [ ! -s "${_drv%/run.sh}/.dist-only" ]; then
+    rm -rf "$JW"; shard_broken "shard '$_s' is in DIST_SHARDS but ${_drv%/run.sh}/.dist-only is absent or empty"
+  fi
+  if [ "$_do" = 0 ] && [ -e "${_drv%/run.sh}/.dist-only" ]; then
+    rm -rf "$JW"; shard_broken "shard '$_s' carries ${_drv%/run.sh}/.dist-only but is not in DIST_SHARDS"
+  fi
+done
+rm -rf "$JW"
+echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
+
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 READER="$(pick "${1:-}" "$HERE/../../scripts/check-owed-derivations.sh" \
   "$HERE/../../../scripts/ai-dlc/check-owed-derivations.sh" "$HERE/../../../core/scripts/check-owed-derivations.sh")"
@@ -155,11 +168,6 @@ MANIFEST="$(pick "$HERE/../../skills/ai-dlc/core-manifest.md" \
   "$HERE/../../../.claude/skills/ai-dlc/core-manifest.md" "$HERE/../../../core/skills/ai-dlc/core-manifest.md")"
 [ -n "$COREPATHS" ] || { echo "FIXTURE ERROR: cannot locate core-paths.sh" >&2; exit 2; }
 [ -n "$MANIFEST" ] || { echo "FIXTURE ERROR: cannot locate core-manifest.md" >&2; exit 2; }
-SPRINTSTATUS="$(pick "$HERE/../../scripts/sprint-status.sh" \
-  "$HERE/../../../scripts/ai-dlc/sprint-status.sh" "$HERE/../../../core/scripts/sprint-status.sh")"
-SSSCHEMA="$(pick "$HERE/../../schemas/sprint-status.json" \
-  "$HERE/../../../.claude/schemas/sprint-status.json" "$HERE/../../../core/schemas/sprint-status.json")"
-[ -n "$SPRINTSTATUS" ] && [ -n "$SSSCHEMA" ] || { echo "FIXTURE ERROR: cannot locate sprint-status.sh or its schema" >&2; exit 2; }
 READER="$(cd "$(dirname "$READER")" && pwd)/$(basename "$READER")"
 DIFFER="$(cd "$(dirname "$DIFFER")" && pwd)/$(basename "$DIFFER")"
 
@@ -183,26 +191,15 @@ echo "owed-derivations:"
 printf '  reader: %s\n' "$READER"
 printf '  writer: %s\n' "$DIFFER"
 printf 'HERMETIC-CONSUMED core/scripts/check-owed-derivations.sh\n'
-printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/derivation-differential.sh\n'
 printf 'HERMETIC-CONSUMED core/scripts/validate-artifact-derivations.sh\n'
 printf 'HERMETIC-CONSUMED core/scripts/core-paths.sh\n'
 printf 'HERMETIC-CONSUMED core/skills/ai-dlc/core-manifest.md\n'
-printf 'HERMETIC-CONSUMED core/scripts/sprint-status.sh\n'
-printf 'HERMETIC-CONSUMED core/schemas/sprint-status.json\n'
 
 g() { local d="$1"; shift; git -C "$d" -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 ck() { if grep -qF -- "$2" <<<"$3"; then ok "$1"; else bad "$1 -- expected to find: $2"; printf '%s\n' "$3" | sed 's/^/        | /' | head -12; fi; }
 nk() { if grep -qF -- "$2" <<<"$3"; then bad "$1 -- must NOT contain: $2"; else ok "$1"; fi; }
 rc_is() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 -- exit was $3, expected $2"; fi; }
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-# MATRIX mode (`--matrix`): every mutant runs over every LIVING world and prints one
-# `MATRIX<TAB><mutant><TAB><arm><TAB><FAIL|ok>` row per recorded arm. Per-push (the default) runs each mutant's
-# deciding arm and its named twins only.
-[ "$OWED_MATRIX" = 1 ] && echo "MATRIX-MODE on"
 TAB="$(printf '\t')"
 
 # rd <root> <record> -> sets OUT (stdout), ERR (stderr), RC
@@ -244,7 +241,7 @@ REC3="_bmad-output/planning-artifacts/s1/requirements-elicitation-repair.md"
 PM="_bmad-output/party-mode/session.md"
 { printf '# PRD\n\n'; fence 5; } > "$R/$PRD"
 { printf '# Story\n\n'; fence 5; } > "$R/$STORY"
-# the prose-looks-closed document is its OWN file, used by B2 only, so a mutant trusting status text
+# the prose-looks-closed document is its OWN file, used by B2 only, so a reader trusting status text
 # moves B2 and nothing else
 CLOSEDDOC="_bmad-output/planning-artifacts/s1/closed.md"
 { printf '# Closed\n\nThis row is CLOSED and re-pointed, the debt is closed.\n\n'; fence 5; } > "$R/$CLOSEDDOC"
@@ -271,6 +268,7 @@ for k in "$K_CLOSED" "$K_LIVE2" "$K_ODD" "$K_PRD" "$K_STORY" "$K_REC1" "$K_REC2E
   case "$k" in *:|*::*) echo "FIXTURE ERROR: a seeded derivation line was not found ($k)" >&2; exit 2 ;; esac
 done
 
+if sg rec; then
 # ---- B0: the seed is what the world claims -------------------------------------------------------
 # CONTROL: the real validator, run on the same files, must FAIL the stale ones and PASS the fresh one.
 v_rc() { ( cd "$R" && AI_DLC_PROJECT_ROOT="$R" bash "$R/scripts/ai-dlc/validate-artifact-derivations.sh" "$R/$1" >/dev/null 2>"$WORK/v.err" ); echo $?; }
@@ -666,15 +664,35 @@ printf 'REPOINTED\t%s\n' "$K_RPO" > "$WORK/rp5.tsv"
 rd "$R" "$WORK/rp5.tsv"
 rc_is "Rp5 a malformed REPOINTED row refuses the record -> exit 2" 2 "$RC"
 
+# ---- G: the callers (rulebook prose) --------------------------------------------------------------
+# The prose-presence arms for the three callers lived in a retired dist-only mutation battery: on a
+# consumer at update step 2 the rulebook is still the old one, so a shipping arm grepping it would go red.
+# GATE ARM, executed: the gate site passes iff the reader exits 0. Open row -> refuse; control -> pass.
+gate_site() { rd "$1" "$2"; [ "$RC" = 0 ] && echo PASS || echo REFUSE; }
+rc_is "Gd gate arm: an open row REFUSES the gate" REFUSE "$(gate_site "$R" "$WORK/b1.tsv")"
+rc_is "Ge gate arm control: no open row PASSES the gate" PASS "$(gate_site "$R2" "$WORK/b1e.tsv")"
+# SPRINT-CLOSE ARM, executed: every OPEN line becomes a carry-over item; the count must equal the open rows.
+co="$(gate_site "$R" "$WORK/b7.tsv" >/dev/null; rd "$R" "$WORK/b7.tsv"; awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$OUT")"
+rc_is "Gf sprint-close: three open rows are three carried-forward items, none dropped" 3 "$co"
+rd "$R2" "$WORK/b1e.tsv"
+rc_is "Gg sprint-close control: with the record's rows all closed nothing is carried" 0 "$(awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$OUT")"
+fi  # ---- end of unit rec
+
+if sg lw; then
+SPRINTSTATUS="$(pick "$HERE/../../scripts/sprint-status.sh" \
+  "$HERE/../../../scripts/ai-dlc/sprint-status.sh" "$HERE/../../../core/scripts/sprint-status.sh")"
+SSSCHEMA="$(pick "$HERE/../../schemas/sprint-status.json" \
+  "$HERE/../../../.claude/schemas/sprint-status.json" "$HERE/../../../core/schemas/sprint-status.json")"
+[ -n "$SPRINTSTATUS" ] && [ -n "$SSSCHEMA" ] || { echo "FIXTURE ERROR: cannot locate sprint-status.sh or its schema" >&2; exit 2; }
+printf 'HERMETIC-CONSUMED core/scripts/sprint-status.sh\n'
+printf 'HERMETIC-CONSUMED core/schemas/sprint-status.json\n'
 # ---- S1-S10: THE LIVING SWEEP and its core-operand predicate (operator ruling (A)) ------------------
 # The reader sweeps every LIVING `_bmad-output/**/*.md` carrying a derived fence, whether or not a record
 # exists, and BLOCKS only on a FAIL/UNRUN whose command has an ai-dlc CORE operand (core-paths.sh --is-core).
 # Consumer-code drift is silent, and THAT SILENCE IS A PREDICATE: S1 puts a core-operand FAIL and a
 # consumer-operand FAIL in ONE world, so a reader that acquits everything and one that blocks everything
 # both fail it. Every arm asserts the exit AND the exact set of OPEN lines.
-# The roots are built ONCE and never edited, so the mutants M1-M7 below re-drive the same seeds against
-# a mutated copy of the reader. lw_all <reader> <mode>: mode `real` reports each arm; mode `mut` collects
-# the names of the arms that failed into LW_FAILED.
+# The roots are built ONCE and never edited. lw_all <reader> <tag> runs every world against the reader copy it makes.
 LCMD='grep -n -F qqalpha scripts/ai-dlc/x.sh'      # a CORE operand (scripts/ai-dlc/ is manifest-owned)
 LCON='grep -n -F qqalpha server/x.py'              # a CONSUMER operand
 LUNC="awk 'END { exit 137 }' scripts/ai-dlc/x.sh"  # ended by a signal: UNRUN, on a core operand
@@ -875,94 +893,33 @@ v13="$( ( cd "$LS13" && AI_DLC_PROJECT_ROOT="$LS13" bash scripts/ai-dlc/validate
 rc_is "S13c0 control: the wrapper's run exits 2 with NO UNRUN line, and the removed file is back afterwards" 0 "$([ "$v13" = 2 ] && ! grep -q '^UNRUN: ' "$WORK/v13.err" && [ -f "$LS13/_bmad-output/planning-artifacts/notes.md" ] && echo 0 || echo 1)"
 
 # SC1's subject is the here-string `--scope` dispatch. A consumer's installed reader may predate it, because this
-# fixture ships ahead of it, and a consumer with a locally modified reader keeps its own: there SC1/SC1t (and M23,
-# whose anchor is that line) SKIP loudly. In the distribution they always run, so a pre-fix reader goes red.
+# fixture ships ahead of it, and a consumer with a locally modified reader keeps its own: there SC1/SC1t SKIP loudly. In the distribution they always run, so a pre-fix reader goes red.
 SC1_FIXED='  scope_batch tokens <<<"$2"; exit $?'
 case "$READER" in */core/scripts/check-owed-derivations.sh) SC1_ISDIST=1 ;; *) SC1_ISDIST=0 ;; esac
 SC1_RUN=1
 if ! grep -qxF -- "$SC1_FIXED" "$READER"; then
   if [ "$SC1_ISDIST" = 0 ]; then
-    printf '  SKIP  SC1/SC1t and M23 -- the installed check-owed-derivations.sh predates the here-string --scope dispatch; it lands with the pull that carries this fixture\n'
+    printf '  SKIP  SC1/SC1t -- the installed check-owed-derivations.sh predates the here-string --scope dispatch; it lands with the pull that carries this fixture\n'
     SC1_RUN=0
   else
     printf '  --    (SC1: this reader carries no here-string --scope dispatch; in the distribution SC1 runs anyway and must go red)\n'
   fi
 fi
-# SC1p: M23's leak exists only on a bash whose pipeline subshell skips the EXIT trap of a function that RETURNS (bash
-# 3.2 does; bash 5 runs it, so the piped form leaks nothing there and M23 cannot be killed). Decided by BEHAVIOUR, on
-# the same `bash` the reader is started with: scope_batch's shape (a function on the right of a pipe that makes a
-# file, sets an EXIT trap removing it, and returns), and its control, the same function ending in `exit`, which must
-# fire on every bash. A `ran` marker the trap never removes proves the function ran. An unreadable probe is a FAIL.
-sc1_probe() { # <return|exit> -> SC1P_FIRED (1 the trap removed the file, 0 it did not, x the function never ran), SC1P_BASH
-  local d="$WORK/sc1p.$1"
-  mkdir -p "$d"
-  SC1P_BASH="$(bash -c 'f() { : > "$1/ran"; : > "$1/made"; trap "rm -f \"$1/made\"" EXIT; cat > /dev/null; [ "$2" = exit ] && exit 0; return 0; }; printf "a\n" | f "$1" "$2"; printf "%s" "$BASH_VERSION"' _ "$d" "$1")"
-  if [ ! -e "$d/ran" ]; then SC1P_FIRED=x; elif [ -e "$d/made" ]; then SC1P_FIRED=0; else SC1P_FIRED=1; fi
-}
-sc1_probe exit; SC1P_CTL="$SC1P_FIRED"
-sc1_probe return; SC1P_RET="$SC1P_FIRED"
-rc_is "SC1p0 probe control: on bash ${SC1P_BASH:-?} a pipeline-side function's EXIT trap fires when it ends in exit (control 1 = fired), and the return probe ran" "1 ran" "$SC1P_CTL $([ "$SC1P_RET" != x ] && echo ran || echo not-ran)"
-SC1_M23=0
-if [ "$SC1P_CTL" = 1 ] && [ "$SC1P_RET" = 0 ]; then
-  SC1_M23=1
-  printf '  --    (SC1p: on bash %s a returning pipeline-side function leaves its EXIT trap unrun (probe read 0), so the piped form leaks here and M23 is scored wherever SC1 runs)\n' "${SC1P_BASH:-?}"
-elif [ "$SC1P_CTL" = 1 ] && [ "$SC1P_RET" = 1 ]; then
-  printf '  SKIP  M23 -- on bash %s a returning pipeline-side function runs its EXIT trap (probe read 1), so the piped --scope form leaks nothing here and M23 has no leak to detect; SC1, SC1t, SC1c and SC1m are still asserted\n' "${SC1P_BASH:-?}"
-fi
 
-# ---- lw-harness: begin (the lines between these two markers are extracted into a harness file below) ----------------
-# THE WORLD FILTER. Every LIVING-sweep world is one gated block, `if lw_world <name>; then <its reader
-# invocations> <its lw_arm lines>; lw_end; fi`. The REAL pass runs every world and records each arm's
-# world in LW_MAP as it is asserted, so the map is derived from the lw_arm calls themselves and never
-# hand-listed. In MUT mode a world runs only when one of its recorded arms is in LW_REQ, the mutant's
-# required set: mut_case asserts only the required arms, so a world holding none of them changes no
-# verdict. An lw_arm outside a gated block is FIXTURE BROKEN in either mode, because no filter could
-# ever select it. A world whose arms read state another invocation set runs as ONE unit (S9 and S10:
-# S10 compares against S9's batch output), and lw_world resets every shared global (LW_RESET_VARS) on entry, so no
-# arm reads a value an earlier world left.
+# The LIVING-sweep worlds: each is one reader invocation (or two, for S9/S10, whose arms compare outputs) followed by its
+# lw_arm lines. lw_arm <id> <description> <0 holds | 1 does not>.
 open_lines() { awk -F'\t' '$1 == "OPEN"' <<<"$OUT"; }
 lopen() { printf 'OPEN\t%s\tLIVING-%s\t$ %s\t-\tliving-sweep' "$1" "$2" "$3"; }
 lw_rd() { # <bin> <root> <record>
   local o="$WORK/lw.out" e="$WORK/lw.err"
-  [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
   ( cd / && AI_DLC_PROJECT_ROOT="$2" bash "$1/check-owed-derivations.sh" "$3" > "$o" 2> "$e" ); RC=$?
   OUT="$(cat "$o")"; ERR="$(cat "$e")"
 }
 lw_batch() { # <bin> <root> -> BOUT BRC
-  [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
   BOUT="$( cd / && printf '%s\n' "$LIN" | AI_DLC_PROJECT_ROOT="$2" bash "$1/check-owed-derivations.sh" --scope-batch 2>/dev/null )"; BRC=$?
 }
-# LW_MAP holds ` <world>:<arm> ` tokens from the real pass, LW_PASS the arms that HELD in it (the same-run
-# base-pass record a kill's flag is read from); LW_SEEN the arms a mut pass evaluated;
-# LW_NINV counts the mut-mode reader invocations and LW_NWORLD the mut-mode world runs, printed after the battery.
-LW_MODE=real; LW_FAILED=""; LW_CUR=""; LW_MAP=" "; LW_REQ=""; LW_SEEN=" "; LW_NINV=0; LW_NWORLD=0; LW_PASS=" "
-# LW_RESET_VARS: every shared world-level global the drivers (lw_rd, lw_batch) and the world bodies assign. `local`
-# variables are scoped to lw_all and cannot leak between worlds, so they are not in it. Arm RSET derives the
-# assigned set from this file's own text and holds the two equal.
-LW_RESET_VARS="OUT ERR RC BOUT BRC"
-lw_reset() { local v; for v in $LW_RESET_VARS; do printf -v "$v" '%s' ''; done; }
-lw_world() { # <world> -> 0 run it, 1 skip it
-  local a
-  lw_reset
-  LW_CUR=""
-  if [ "$LW_MODE" = real ]; then LW_CUR="$1"; return 0; fi
-  for a in $LW_REQ; do
-    case "$LW_MAP" in *" $1:$a "*) LW_CUR="$1"; LW_NWORLD=$((LW_NWORLD + 1)); return 0 ;; esac
-  done
-  return 1
-}
-lw_end() { LW_CUR=""; }
 lw_arm() { # <id> <description> <0 holds | 1 does not>
-  if [ -z "$LW_CUR" ]; then
-    bad "$1 FIXTURE BROKEN: lw_arm ran outside a gated world (if lw_world <name>; then ... lw_end; fi), so no mutant filter can select it"; return
-  fi
-  if [ "$LW_MODE" = real ]; then
-    LW_MAP="$LW_MAP$LW_CUR:$1 "
-    if [ "$3" = 0 ]; then ok "$1 $2"; LW_PASS="$LW_PASS$1 "; else bad "$1 $2 (exit $RC)"; printf '%s\n%s\n' "$OUT" "$ERR" | sed 's/^/        | /' | head -8; fi
-  else
-    LW_SEEN="$LW_SEEN$1 "
-    if [ "$3" != 0 ]; then LW_FAILED="$LW_FAILED $1"; fi
-  fi
+  if [ "$3" = 0 ]; then ok "$1 $2"; else bad "$1 $2 (exit $RC)"; printf '%s\n%s\n' "$OUT" "$ERR" | sed 's/^/        | /' | head -8; fi
 }
 # sc_entries <dir>: prints <dir>'s entry count and returns 0; returns 2 and prints nothing when <dir> is not a directory
 # or find exits non-zero, so a missing or unreadable directory never reads as 0. find and awk, both in tools.decl.
@@ -981,86 +938,49 @@ lw_all() { # <reader> <tag>
   # S10's caller shape (apply.sh's scope join): the reader ALONE beside the real sprint-status.sh and its
   # schema, with no core-paths.sh and no validator.
   cp "$1" "$lone/scripts/check-owed-derivations.sh"; cp "$SPRINTSTATUS" "$lone/scripts/sprint-status.sh"; cp "$SSSCHEMA" "$lone/schemas/sprint-status.json"
-  if lw_world ls1; then
   lw_rd "$b" "$LS1" "$none"
   lw_arm S1 "acquittal probe: no record, one LIVING doc with a stale CORE fence and a stale CONSUMER fence -> exit 1 and exactly ONE OPEN line, the core one, LIVING-STALE living-sweep" \
     "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS1" STALE "$LCMD")" ] && grep -qF 'UNMEASURED: no owed-derivations record' <<<"$OUT"; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls2; then
   lw_rd "$b" "$LS2" "$none"
   lw_arm S2 "the same core fence in a PAST-sprint file (s0, current 1) -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls3; then
   lw_rd "$b" "$LS3" "$none"
   lw_arm S3 "every LIVING fence reproduces -> exit 0, no OPEN line, and the UNMEASURED line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ] && grep -qF 'UNMEASURED: no owed-derivations record' <<<"$OUT"; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls4c; then
   lw_rd "$b" "$LS4C" "$none"
   lw_arm S4a "a core-operand UNRUN in a LIVING doc -> exit 1, exactly one OPEN, LIVING-UNRUN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS4C" UNRUN "$LUNC")" ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls4s; then
   lw_rd "$b" "$LS4S" "$none"
   lw_arm S4b "a consumer-operand UNRUN in a LIVING doc -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls1-nocorepaths; then
   lw_rd "$b5" "$LS1" "$none"
   lw_arm S5 "core-paths.sh absent beside the reader, S1's seed -> exit 2 with a REFUSED line and no OPEN line" "$({ [ "$RC" = 2 ] && grep -qF 'REFUSED: no core-paths.sh beside' <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls6; then
   lw_rd "$b" "$LS6" "$none"
   lw_arm S6 "push-candidate-ledger.md stays LIVING (lead ruling): its stale core fence -> exit 1, its OPEN line printed" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls1-owed; then
   lw_rd "$b" "$LS1" "$WORK/ls7.tsv"
   lw_arm S7 "collision: an OWED row on prd.md:K whose fence is stale prints ONCE, as STALE, never again as LIVING-STALE" \
     "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(printf 'OPEN\t%s\tSTALE\t$ %s\tbase..theirs\treconcile-log-x' "$K_LS1" "$LCMD")" ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls8; then
   lw_rd "$b" "$LS8" "$none"
   lw_arm S8 "deleted core operands block (git show HEAD:scripts/ai-dlc/gone.sh, plain scripts/ai-dlc/deleted.sh); a deleted consumer one does not" \
     "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS8A" STALE 'git show HEAD:scripts/ai-dlc/gone.sh')
 $(lopen "$K_LS8B" STALE 'grep -c qqalpha scripts/ai-dlc/deleted.sh')" ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls6b; then
   lw_rd "$b" "$LS6B" "$none"
   lw_arm S6b "the ledger's stale core fence plus a LATER copy of the same command that reproduces (a superseding row) -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ] && grep -qF 'UNMEASURED: no owed-derivations record' <<<"$OUT"; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls6c; then
   lw_rd "$b" "$LS6C" "$none"
   lw_arm S6c "near-miss: the later ledger copy is stale too -> exit 1, BOTH lines OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6C1" STALE "$LCMD")
 $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls6d; then
   lw_rd "$b" "$LS6D" "$none"
   lw_arm S6d "near-miss: the same stale-then-fresh pair in prd.md (not the ledger) -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6D" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls6e; then
   lw_rd "$b" "$LS6E" "$none"
   lw_arm S6e "a later ledger copy in a derived fence that is never CLOSED acquits nothing -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6E" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls6f; then
   lw_rd "$b" "$LS6F" "$none"
   lw_arm S6f "a later ledger copy that is an INDENTED OUTPUT line acquits nothing -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6F" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls6g; then
   lw_rd "$b" "$LS6G" "$none"
   lw_arm S6g "a later ledger copy behind a CRLF opener acquits nothing -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6G" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world lspu; then
   lw_rd "$b" "$LSPU" "$WORK/lspu.tsv"
   lw_arm PU "pass 2: an OWED row whose only same-command copy is in an unclosed fence is not located there -> exit 1, exactly one OPEN, MOVED" \
     "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(printf 'OPEN\t%s\tMOVED\t$ %s\tbase..theirs\treconcile-log-x' "$K_LSPU" "$LCMD")" ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world lslf; then
   lw_rd "$b" "$LSLF" "$none"
   lw_arm LF "the validator's --list fails over a LIVING file with a stale core fence -> exit 2 with the --list REFUSED line, no OPEN" "$({ [ "$RC" = 2 ] && grep -qF 'REFUSED: validate-artifact-derivations.sh --list exited 3 on' <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world lsb8c; then
   lw_rd "$b" "$LSB8C" "$WORK/lsb8c.tsv"
   lw_arm B8c "an OWED row whose file gets NO verdict and whose --list fails -> exit 2 with the --list REFUSED line naming the file, never UNASSESSED" \
     "$({ [ "$RC" = 2 ] && grep -qF "REFUSED: validate-artifact-derivations.sh --list exited 2 on $LPRD" <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls15; then
   lw_rd "$b" "$LS15" "$none"
   local o15="$OUT" r15="$RC"
   has15() { awk -F'\t' -v k="$1" '$1 == "OPEN" && $2 == k && $6 == "living-sweep" { f = 1 } END { exit f ? 0 : 1 }' <<<"$o15"; }
@@ -1083,8 +1003,6 @@ $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
   lw_arm CDD4 "git -C web show HEAD:../server/y.txt (collapses to a consumer path) stays silent" "$(! has15 "$K_DD4" && echo 0 || echo 1)"
   lw_arm CDD5 "git -C lnk show HEAD:../x.sh (lnk is a symlink into core; the segment before .. over-asks) blocks" "$({ [ "$r15" = 1 ] && has15 "$K_DD5"; } && echo 0 || echo 1)"
   lw_arm S15n "and the G/RP/SL/CD world opens EXACTLY the eleven blocking lines" "$([ "$(awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$o15")" = 11 ] && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls11; then
   lw_rd "$b" "$LS11" "$none"
   local o11="$OUT" r11="$RC"
   has_open() { awk -F'\t' -v k="$1" '$1 == "OPEN" && $2 == k && $6 == "living-sweep" { f = 1 } END { exit f ? 0 : 1 }' <<<"$o11"; }
@@ -1106,47 +1024,32 @@ $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
   lw_arm CH4 "cd .claude/skills && grep -n ai-dlc README.md opens NO row: grep is off the cd list, so the segment is not explained and its pattern never becomes .claude/skills/ai-dlc (control: CH1 opens in this same run)" "$({ [ "$r11" = 1 ] && [ "$(reason11 "$K_13A")" = LIVING-ALLOWLIST ] && ! has_open "$K_13D"; } && echo 0 || echo 1)"
   lw_arm CH5 "cd .claude/skills && cat ai-dlc/SKILL.md OPENS as LIVING-ALLOWLIST living-sweep: the carried cd reaches the core path (CH4's positive twin)" "$({ [ "$r11" = 1 ] && [ "$(reason11 "$K_13E")" = LIVING-ALLOWLIST ]; } && echo 0 || echo 1)"
   lw_arm CH6 "cd scripts && echo ai-dlc opens NO row: echo is off the cd list, so its word is never prefixed into scripts/ai-dlc (control: CH5 opens in this same run)" "$({ [ "$r11" = 1 ] && [ "$(reason11 "$K_13E")" = LIVING-ALLOWLIST ] && ! has_open "$K_13F"; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls13; then
   lw_rd "$b" "$LS13" "$none"
   lw_arm S13 "the validator exits 2 with no UNRUN line (a candidate vanished) -> exit 2 with the no-verdict REFUSED line, no OPEN" "$({ [ "$RC" = 2 ] && grep -qF 'with no verdict for every file it was given' <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls13c; then
   lw_rd "$b" "$LS13C" "$none"
   lw_arm S13c "control: the same world with nothing removed -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
-  lw_end; fi
-  if lw_world ls14; then
   lw_rd "$b" "$LS14" "$none"
   lw_arm S14 "a ROOT-ABSOLUTE core operand (\$ROOT/scripts/ai-dlc/x.sh) blocks" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS14" STALE "$C14")" ]; } && echo 0 || echo 1)"
-  lw_end; fi
   # SC1: two rc-0 --scope calls (the only path that leaked) with TMPDIR, set per call and never exported, at a fresh
   # dir of this pass's own; afterwards that dir must exist, be readable and hold nothing.
-  if lw_world sc1; then
   if [ "$SC1_RUN" = 1 ]; then
   mkdir -p "$st"
-  [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
   OUT="$( cd / && TMPDIR="$st" AI_DLC_PROJECT_ROOT="$LS3" bash "$b/check-owed-derivations.sh" --scope "$LPRD" 2>"$st.err1" )"; RC=$?
   local sc1o="$OUT" sc1r="$RC"
-  [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
   OUT="$( cd / && TMPDIR="$st" AI_DLC_PROJECT_ROOT="$LS3" bash "$b/check-owed-derivations.sh" --scope "$LPAST" 2>"$st.err2" )"; RC=$?
   local sc1n="$(sc_entries "$st" || echo REFUSED)"
   lw_arm SC1 "--scope leaves no scratch directory: after 2 rc-0 --scope calls the fixture-owned TMPDIR exists, find reads it and it holds 0 entries (read: $sc1n)" "$([ "$sc1n" = 0 ] && echo 0 || echo 1)"
   lw_arm SC1t "twin, the same 2 --scope calls: $LPRD -> exit 0 LIVING, $LPAST -> exit 0 PAST" "$({ [ "$sc1r" = 0 ] && [ "$sc1o" = LIVING ] && [ "$RC" = 0 ] && [ "$OUT" = PAST ]; } && echo 0 || echo 1)"
   fi
-  lw_end; fi
-  if lw_world batch; then
   lw_batch "$b" "$LS1"; local s9a="$BOUT" s9r="$BRC"
   lw_batch "$b" "$LS3"
   lw_arm S9 "--scope-batch output and exit are byte-identical with (S1 root) and without (S3 root) a stale LIVING core fence" \
     "$({ [ "$s9r" = 0 ] && [ "$BRC" = 0 ] && [ "$s9a" = "$BOUT" ] && [ "$(printf '%s\n' "$BOUT" | cut -f1 | tr '\n' ' ')" = "LIVING PAST CURRENT LIVING " ]; } && echo 0 || echo 1)"
   local s10full="$s9a"
-  [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
   BOUT="$( cd / && printf '%s\n' "$LIN" | AI_DLC_PROJECT_ROOT="$LS1" bash "$lone/scripts/check-owed-derivations.sh" --scope-batch 2>/dev/null )"; BRC=$?
   lw_arm S10 "apply.sh's copy shape (reader + real sprint-status.sh + schema, NO core-paths.sh, no validator): --scope-batch over a root with a stale LIVING core fence -> exit 0, byte-identical to the full sibling set" \
     "$({ [ ! -e "$lone/scripts/core-paths.sh" ] && [ "$BRC" = 0 ] && [ -n "$s10full" ] && [ "$BOUT" = "$s10full" ]; } && echo 0 || echo 1)"
-  lw_end; fi
 }
-# ---- lw-harness: end ---------------------------------------------------------------------------------
 lw_all "$BIN/check-owed-derivations.sh" real
 # SC1c/SC1m: the counter SC1 reads, proven in this run. A seeded entry reads 1, so SC1's 0 is a reading; a missing
 # directory is refused, so it cannot read as 0.
@@ -1154,253 +1057,10 @@ mkdir -p "$WORK/sc1c"; : > "$WORK/sc1c/seed"
 rc_is "SC1c counter control: sc_entries reads 1 on a directory seeded with one entry" 1 "$(sc_entries "$WORK/sc1c")"
 sc_entries "$WORK/sc1-absent" > /dev/null; rc_is "SC1m counter control: sc_entries refuses (exit 2) a directory that does not exist" 2 "$?"
 
-# ---- M1-M7: each mutant is a COPY of the reader, guarded by cmp -s; one that does not apply is BROKEN --
-# mut_line <src> <dst> <occurrence> <exact old line> <new text>: replaces that occurrence of the whole line.
-mut_line() {
-  O="$4" N="$5" awk -v occ="$3" 'BEGIN { o = ENVIRON["O"]; nw = ENVIRON["N"] } $0 == o && ++c == occ { print nw; next } { print }' "$1" > "$2" || return 1
-  ! cmp -s "$1" "$2"
-}
+fi  # ---- end of unit lw
 
-# ---- RSET: the reset list EQUALS the set of globals the drivers and world bodies assign ---------------
-# Derived from run.sh's own text: the lines of lw_rd, lw_batch and every `if lw_world <name>; then ... lw_end; fi`
-# body, at statement position (line start or after `;`) as `NAME=`. `local NAME=` is excluded, because a local is
-# scoped to lw_all and cannot leak between worlds. Pointed at its own subject: the set must hold OUT, RC and BOUT.
-rset_derive() { awk '
-  /^# ---- lw-harness: begin/ { h = 1 } /^# ---- lw-harness: end/ { h = 0 }
-  h && /^lw_(rd|batch)\(\) \{/ { s = 1; next }
-  h && s && /^\}/ { s = 0; next }
-  h && /^  if lw_world / { s = 1; next }
-  h && s && /lw_end; fi/ { s = 0; next }
-  h && s && $0 !~ /^[ \t]*#/ {
-    rest = $0
-    while (match(rest, /(^|;)[ \t]*[A-Za-z_][A-Za-z0-9_]*=/)) {
-      t = substr(rest, RSTART, RLENGTH); sub(/^;?[ \t]*/, "", t); sub(/=$/, "", t); print t
-      rest = substr(rest, RSTART + RLENGTH)
-    }
-  }' "$1"; }
-rset_check() { # <run.sh copy> -> 0 when the listed reset set equals the derived set; 2 when the derived set lacks OUT, RC or BOUT
-  local d l
-  d="$(rset_derive "$1" | LC_ALL=C sort -u | tr '\n' ' ')"
-  l="$(sed -n 's/^LW_RESET_VARS="\(.*\)"$/\1/p' "$1" | head -1 | tr ' ' '\n' | LC_ALL=C sort -u | tr '\n' ' ')"
-  RSET_D="$d"; RSET_L="$l"
-  case " $d" in *" OUT "*) ;; *) return 2 ;; esac
-  case " $d" in *" RC "*) ;; *) return 2 ;; esac
-  case " $d" in *" BOUT "*) ;; *) return 2 ;; esac
-  [ -n "$l" ] && [ "$d" = "$l" ]
-}
-SELF="$HERE/run.sh"
-rset_check "$SELF"; _rr=$?
-rc_is "RSET the globals reset at lw_world entry [$RSET_L] EQUAL the globals the drivers and world bodies assign [$RSET_D], and the derived set holds OUT, RC and BOUT" 0 "$_rr"
-RS_F="$WORK/rset.fail.sh"; RS_P="$WORK/rset.pass.sh"
-mut_line "$SELF" "$RS_F" 1 '  lw_rd "$b" "$LS14" "$none"' '  lw_rd "$b" "$LS14" "$none"
-  ZZSEED=1'; _a1=$?
-mut_line "$RS_F" "$RS_P" 1 'LW_RESET_VARS="OUT ERR RC BOUT BRC"' 'LW_RESET_VARS="OUT ERR RC BOUT BRC ZZSEED"'; _a2=$?
-if [ "$_a1" != 0 ] || [ "$_a2" != 0 ]; then bad "RSET FIXTURE BROKEN: the probe copies did not apply"
-else
-  rset_check "$RS_F"; _pf=$?
-  rc_is "RSETf probe: a copy with a world-level ZZSEED assigned in a world body and MISSING from the reset list is refused (derived set [$RSET_D])" 1 "$_pf"
-  rset_check "$RS_P"; _pp=$?
-  rc_is "RSETp probe: the same copy with ZZSEED PRESENT in the reset list passes" 0 "$_pp"
-fi
-# RSETr: the real lw_world/lw_arm/reset code over a seeded pair. World pa sets RC; world pb's arm reads it.
-RS_H="$WORK/rset.harness.sh"; sed -n '/^# ---- lw-harness: begin/,/^# ---- lw-harness: end/p' "$SELF" > "$RS_H"
-RS_VARS="$(sed -n 's/^LW_RESET_VARS="\(.*\)"$/\1/p' "$SELF" | head -1)"
-rset_pair() { # <LW_RESET_VARS value> -> the verdict of arms PA and PB
-  ( . "$RS_H"; LW_RESET_VARS="$1"; LW_MODE=real
-    if lw_world pa; then RC=7; lw_arm PA "pa sets RC" 0; lw_end; fi
-    if lw_world pb; then lw_arm PB "pb reads RC set by pa" "$([ "$RC" = 7 ] && echo 0 || echo 1)"; lw_end; fi ) 2>&1 \
-    | awk '/^  (ok    |FAIL  )P[AB] /{ print (($1 == "ok") ? "ok" : "bad") " " $2 }' | tr '\n' ' '
-}
-rc_is "RSETr reset probe: with the reset, world pb's arm reading pa's RC FAILS, and without the reset it PASSES (same run, same worlds)" "ok PA bad PB ok PA ok PB " "$(rset_pair "$RS_VARS")$(rset_pair "")"
-
-LW_MODE=mut
-# req_ok <id> <required set>: a required set must be non-empty and every arm in it must be one the real
-# pass recorded in a world. A misspelled arm would otherwise select no world and read as SURVIVED.
-req_ok() {
-  local a
-  [ -n "$(printf '%s' "$2" | tr -d ' ')" ] || { bad "$1 FIXTURE BROKEN: the required set is empty, so nothing is scored"; return 1; }
-  for a in $2; do
-    case "$LW_MAP" in *":$a "*) ;; *) bad "$1 FIXTURE BROKEN: required arm $a is in no recorded world (misspelled, or asserted outside lw_all)"; return 1 ;; esac
-  done
-}
-# req_seen <id> <required set>: every required arm was evaluated by this pass (its world ran).
-req_seen() {
-  local a
-  for a in $2; do
-    case "$LW_SEEN" in *" $a "*) ;; *) bad "$1 FIXTURE BROKEN: required arm $a was not evaluated, so its world never ran"; return 1 ;; esac
-  done
-}
-LW_ALLARMS="$(for _t in $LW_MAP; do printf '%s ' "${_t#*:}"; done)"
-# lw_base_passed <arms>: every named arm HELD in this run's real pass.
-lw_base_passed() { local a; for a in $1; do case "$LW_PASS" in *" $a "*) ;; *) return 1 ;; esac; done; }
-# mut_score <id> <deciding arm> <twins>: scores LW_FAILED from the pass just run. The kill is the deciding
-# arm FAILING while every twin HOLDS; its flag is 1 only when the deciding arm and every twin held in the
-# real pass of THIS run. MATRIX mode prints a row per recorded arm first, and scores the deciding arm alone
-# (the twins are chosen FROM the matrix).
-mut_score() {
-  local a tbad="" dfail=0 tw="$3" base_rc
-  if [ "$OWED_MATRIX" = 1 ]; then
-    for a in $LW_ALLARMS; do
-      case " $LW_FAILED " in *" $a "*) printf 'MATRIX\t%s\t%s\tFAIL\n' "$1" "$a" ;; *) printf 'MATRIX\t%s\t%s\tok\n' "$1" "$a" ;; esac
-    done
-    tw=""
-  fi
-  lw_base_passed "$2 $tw"; base_rc=$?
-  for a in $tw; do case " $LW_FAILED " in *" $a "*) tbad="$tbad $a" ;; esac; done
-  case " $LW_FAILED " in *" $2 "*) dfail=1 ;; esac
-  if [ "$dfail" = 1 ] && [ -z "$tbad" ]; then
-    mutant_killed "$([ "$base_rc" -eq 0 ] && echo 1 || echo 0)" "$1" "$1 killed: deciding arm $2 failed, twin(s) ${tw:-none} held (failed:$LW_FAILED)"
-  elif [ "$dfail" = 0 ]; then
-    bad "$1 SURVIVED: deciding arm $2 did not fail (failed:${LW_FAILED:- none})"
-  else
-    bad "$1 ENTANGLED: twin arm(s)$tbad failed beside deciding arm $2 (failed:$LW_FAILED)"
-  fi
-}
-mut_case() { # <id> <deciding arm> <twin arms, space-separated> <occurrence> <old line> <new text> [<occ2> <old2> <new2>]
-  local m="$WORK/mut.$1.sh" req="$2 $3"
-  req_ok "$1" "$req" || return
-  [ "$OWED_MATRIX" = 1 ] && req="$LW_ALLARMS"
-  if ! mut_line "$BIN/check-owed-derivations.sh" "$m" "$4" "$5" "$6"; then
-    bad "$1 FIXTURE BROKEN: the mutation did not apply (anchor not found), so it is not scored"; return
-  fi
-  if [ "$#" -ge 9 ]; then
-    if ! mut_line "$m" "$m.2" "$7" "$8" "$9"; then
-      bad "$1 FIXTURE BROKEN: the second mutation did not apply (anchor not found), so it is not scored"; return
-    fi
-    mv "$m.2" "$m"
-  fi
-  LW_REQ="$req"; LW_FAILED=""; LW_SEEN=" "; lw_all "$m" "$1"
-  req_seen "$1" "$req" || return
-  mut_score "$1" "$2" "$3"
-}
-mut_case M1 S1 "GC" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    :'
-mut_case M2 S1 "S3" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    grep -qxF -- "$_id" "$TMP/ls.core" && continue'
-mut_case M3 S1 "S2" 1 '  living_sweep' '  :'
-mut_case M4 S2 "S1" 1 '    [ "$SCOPE_TOKEN" = LIVING ] || continue' '    [ "$SCOPE_TOKEN" = LIVING ] || [ "$SCOPE_TOKEN" = PAST ] || continue'
-mut_case M5 S5 "S1" 1 '  [ -f "$SELF_DIR/core-paths.sh" ] \' '  [ -f "$SELF_DIR/core-paths.sh" ] || return 0; [ -f "$SELF_DIR/core-paths.sh" ] \'
-mut_case M6 S1 "S3" 1 '  sweep_and_exit 0' '  exit 0'
-mut_case M7 S10 "S9" 1 'if [ "${1:-}" = "--scope-batch" ]; then' '[ -f "$SELF_DIR/core-paths.sh" ] || { echo "REFUSED: no core-paths.sh beside $0" >&2; exit 2; }
-if [ "${1:-}" = "--scope-batch" ]; then'
-mut_case M8 S6b "S6c" 1 '    if [ "$_c" = "$LEDGER_REL" ] && ledger_superseded "$_i" "$_c" "$_ln" "$_cmd"; then continue; fi' '    :'
-mut_case M9 S11a "S11n" 1 '    case "$_q" in git\ *) ;; *) continue ;; esac' '    continue'
-# The anchors below carry single quotes, so they are read from quoted heredocs, byte for byte.
-WORDS_LINE="$(cat <<'EOF'
-  awk -F'\t' '$2 == "ARGV" { gc = (substr($3, 1, 7) == "git -C ") } $2 == "WORD" && !gc && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
-EOF
-)"
-WORDS_NOVAL="$(cat <<'EOF'
-  awk -F'\t' '$2 == "ARGV" { gc = (substr($3, 1, 7) == "git -C ") } $2 == "WORD" && !gc && $5 == "operand" { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
-EOF
-)"
-# M13: the pre-fold line, which asked a `git -C` segment's WORD lines unprefixed.
-WORDS_ALLGIT="$(cat <<'EOF'
-  awk -F'\t' '$2 == "WORD" && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
-EOF
-)"
-# M12/M12b: the pre-fold RAW-SCAN locator (a second fence grammar), restored at one caller each.
-RAWSCAN="$(cat <<'EOF'
-derived_cmd_lines() {
-  C="$2" awk 'BEGIN { st = 0; fc = sprintf("%c%c%c", 96, 96, 96); want = ENVIRON["C"] }
-    { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t\r]+$/, "", t) }
-    st == 0 && substr(t, 1, 3) == fc { st = (t == fc "derived") ? 2 : 1; next }
-    st != 0 && substr(t, 1, 3) == fc { st = 0; next }
-    st == 2 && substr(t, 1, 2) == "$ " && substr(t, 3) == want { print NR }' "$1"
-}
-LST=""; LST_N=0
-EOF
-)"
-LEDGER_CALL='  _all="$(list_cmd_lines "$LST" "$2" "$4")" \'
-PASS2_CALL='    found="$(list_cmd_lines "$LST" "$rel" "$tcmd")" \'
-mut_case M10 S11c "S11n" 1 "$WORDS_LINE" "$WORDS_NOVAL"
-mut_case M12 S6e "S6b" 1 'LST=""; LST_N=0' "$RAWSCAN" 1 "$LEDGER_CALL" '  _all="$(derived_cmd_lines "$ROOT/$2" "$4")" \'
-mut_case M12b PU "S7" 1 'LST=""; LST_N=0' "$RAWSCAN" 1 "$PASS2_CALL" '    found="$(derived_cmd_lines "$ROOT/$rel" "$tcmd")" \'
-SOFT_LINE='    list_of "$rel"'
-SOFT_NEW="$(cat <<'EOF'
-    j="$(idx_of "$rel")"; rc="$(cat "$TMP/f.$j.rc" 2>/dev/null)"
-    if [ "$rc" != 0 ] && [ "$rc" != 1 ] && ! ( list_of "$rel" ) 2> /dev/null; then
-      nopen=$((nopen + 1)); printf 'OPEN\t%s\t%s\t$ %s\t%s\t%s\n' "$key" "UNASSESSED" "$tcmd" "$range" "$logn"; continue
-    fi
-    list_of "$rel"
-EOF
-)"
-mut_case M14 B8c "LF" 1 "$SOFT_LINE" "$SOFT_NEW"
-mut_case M15 RP3 "RP2" 1 '        *:*) case "$_w" in :[0-3]:*) _p="${_w#:?:}" ;; :*) _p="${_w#:}" ;; *) _p="${_w#*:}" ;; esac' '        *:*) _p="${_w#*:}"' \
-  1 '    for _t in "$_w" "$_rw"; do' '    for _t in "$_w" "${_w#*:}"; do'
-mut_case M16 RP5 "RP2" 1 '             case "$_p" in ./*) _p="${_gd%/}/${_p#./}" ;; ../*) _p="${_gd%/}/$_p" ;; esac ;;' '             case "$_p" in ../*) _p="${_gd%/}/$_p" ;; esac ;;'
-STICKY_OLD="$(cat <<'EOF'
-  awk -F'\t' '$2 == "ARGV" { gc = (substr($3, 1, 7) == "git -C ") } $2 == "WORD" && !gc && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
-EOF
-)"
-STICKY_NEW="$(cat <<'EOF'
-  awk -F'\t' '$2 == "ARGV" { if ($1 != pid) { gc = 0; pid = $1 } if (substr($3, 1, 7) == "git -C ") gc = 1 } $2 == "WORD" && !gc && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
-EOF
-)"
-mut_case M17 PP "G1" 1 "$STICKY_OLD" "$STICKY_NEW"
-mut_case M18 CDD1 "CDD4" 1 '      collapse_dots "$_p"' '      CP="$_p"; CSYM=0'
-mut_case M19 CDD5 "CDD4" 1 '      [ "$CSYM" = 0 ] || printf '"'"'%s\n'"'"' "$_id" >> "$TMP/ls.force"' '      :'
-mut_case M13 G1 "GC" 1 "$WORDS_LINE" "$WORDS_ALLGIT"
-mut_case M11 S12a "S12n" 1 '      case "$_globsnl" in *"$NL${_t%/}/"*) printf '"'"'%s\n'"'"' "$_id" >> "$TMP/ls.core"; break ;; esac' '      :'
-mut_case mA S13 "S13c" 1 '  local nref' '  return 0'
-mut_case mB S14 "S1" 1 '      _t="${_t#"$ROOT"/}"' '      :' 1 '      for _k in "$_t" "${_t%/}/"; do' '      for _k in "$_t"; do'
-# M20: every command the validator LISTS in a kept file becomes a candidate, FAIL line or not, so a
-# reproducing core fence is opened.
-VERD_NEW="$(cat <<'EOF'
-  : > "$TMP/ls.verd"
-  _i=0; while IFS= read -r _c; do _i=$((_i + 1)); list_of "$_c"; awk -v i="$_i" 'match($0, /:[0-9]+  /) { print i "\t" substr($0, RSTART + 1, RLENGTH - 3) "\tSTALE" }' "$LST" >> "$TMP/ls.verd"; done < "$TMP/ls.rel"
-EOF
-)"
-mut_case M20 S3 "S4b" 1 '  : > "$TMP/ls.verd"' "$VERD_NEW"
-# M21: --scope-batch lets the LIVING documents' verdicts reach its stdout.
-BATCH_LEAK="$(cat <<'EOF'
-  find "$ROOT/_bmad-output" -name '*.md' -exec bash "$ROOT/scripts/ai-dlc/validate-artifact-derivations.sh" {} + 2>&1 >/dev/null | grep '^FAIL ('; exit 0
-EOF
-)"
-mut_case M21 S9 "S10" 1 '  exit 0' "$BATCH_LEAK"
-# M22: the sweep refuses on EVERY validator exit, a verdict included (the always-refuse mirror of mA).
-mut_case M22 S13c "S13" 1 '    0|1) return 0 ;;' '    0|1) ;;'
-# M23: the piped --scope dispatch restored, so scope_batch runs in a pipeline subshell and its scratch dir is left on rc 0.
-# Scored only where SC1p measured the leak (see SC1p above); elsewhere its SKIP line was printed.
-if [ "$SC1_RUN" = 1 ] && [ "$SC1_M23" = 1 ]; then
-  mut_case M23 SC1 "SC1t" 1 "$SC1_FIXED" '  printf '"'"'%s\n'"'"' "$2" | scope_batch tokens; exit $?'
-fi
-# CPY: the copy lw_all makes for every mutant starts as a `cp` of the reader, so the copies the real pass ran
-# must be byte-identical to $BIN/check-owed-derivations.sh, and M1's mutated copy must differ (the control).
-rc_is "CPY the copies lw_all ran in the real pass are byte-identical to the reader, and M1's mutated copy is not" "same differs" "$({ cmp -s "$BIN/check-owed-derivations.sh" "$WORK/lw.real/bin/check-owed-derivations.sh" && cmp -s "$BIN/check-owed-derivations.sh" "$WORK/lw.real/bin5/check-owed-derivations.sh" && printf same; } || printf DIFFERENT) $(cmp -s "$BIN/check-owed-derivations.sh" "$WORK/mut.M1.sh" && printf same || printf differs)"
-# MV1: a VALIDATOR mutant. The reader runs the validator copied into the ROOT, so the mutant is a copy of
-# the LS11 world whose validator has its `explain_chain` call removed (base: a refused chain explains no
-# segment, so no core operand is asked). The real reader is driven over that copy through the same world
-# filter; its deciding arm CH1 must fail and its twin CH1n must hold. Its control is the same copy with the
-# validator unmutated, under which every arm it runs holds.
-mv_world() { # <tag> <validator source> -> sets MVW
-  MVW="$WORK/ls11.$1"; cp -R "$LS11" "$MVW"; cp "$2" "$MVW/scripts/ai-dlc/validate-artifact-derivations.sh"
-}
-mv_case() { # <tag> <validator source> -> LW_FAILED over the CH arms in the copied world
-  local keep="$LS11"
-  mv_world "$1" "$2"; LS11="$MVW"
-  LW_REQ="CH1 CH1n"; [ "$OWED_MATRIX" = 1 ] && LW_REQ="$LW_ALLARMS"
-  LW_FAILED=""; LW_SEEN=" "; lw_all "$BIN/check-owed-derivations.sh" "$1"
-  LS11="$keep"
-}
-MVSRC="$WORK/mv1.validator.sh"
-mut_line "$VALIDATOR" "$MVSRC" 1 '      [ "$EXPLAIN" = 1 ] && explain_chain "$c"' '      :'
-mv_rc=$?
-if [ "$mv_rc" != 0 ]; then
-  bad "MV1 FIXTURE BROKEN: the explain_chain call line was not found in the validator, so the mutant is not scored"
-elif ! bash -n "$MVSRC"; then
-  bad "MV1 FIXTURE BROKEN: the mutated validator does not parse"
-else
-  mv_case mv1 "$MVSRC"
-  req_seen MV1 "$LW_REQ" && mut_score MV1 CH1 "CH1n"
-  mv_case mv1null "$VALIDATOR"
-  req_seen "MV1 control" "$LW_REQ" && {
-    if [ -z "$LW_FAILED" ]; then ok "MV1 control: the same copied world with the UNMUTATED validator holds every arm it runs"
-    else bad "MV1 control: arm(s)$LW_FAILED failed under the unmutated validator in the copied world"; fi
-  }
-fi
-printf '  mutant-phase reader invocations: %s\n' "$LW_NINV"
-printf '  mutant-phase world runs: %s\n' "$LW_NWORLD"
-LW_MODE=real
-
+if sg wr; then
+printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/derivation-differential.sh\n'
 # ---- W: the WRITER over the real differential, then the reader over ITS record --------------------
 DIST="$WORK/dist"; mkdir -p "$DIST/core/scripts"; g "$DIST" init -q
 printf 'qqprev\n' > "$DIST/core/scripts/toy.sh"; g "$DIST" add -A; g "$DIST" commit -qm prev
@@ -1460,124 +1120,29 @@ printf 'qqalpha\nqqgamma\n' > "$C/scripts/ai-dlc/toy.sh"
 rd "$C" "$OWED"
 rc_is "Wh once the tree reproduces the derivation again the writer's rows read closed -> exit 0" 0 "$RC"
 
+fi  # ---- end of unit wr
+
 # ---- B7: BL-706 -- the shipping apply.sh runs the differential on EVERY ordinary pull ------------------------
 # receipt-bl706.sh drives the shipping apply.sh and the helper beside it over seeded worlds (cells a a2 a3 a4 a5 a6 b b4 b5 b6 b7 d l c e e2 f g h i i2 j k,
-# its header names each) and prints one `CELL <id> ok|FAIL` line per cell. It runs once unmutated here. Each mutant is a
-# COPY of the whole reconcile/ directory (the helper lifts vd_join out of the apply.sh beside it and apply.sh shells to
-# its siblings, so a lone mutated file would find none), mutated by ONE exact-once replacement, and is scored on its
-# deciding cell and its twins only. The twins' `ok` is also the control that the copy RAN: a copy that never ran prints
-# no CELL line, which reads MISSING, never ok.
-printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/apply.sh\n'
-B7_RECON="$(dirname "$DIFFER")"
-B7_RCPT="$HERE/receipt-bl706.sh"
-[ -f "$B7_RCPT" ] && [ -f "$B7_RECON/apply.sh" ] || { echo "FIXTURE ERROR: receipt-bl706.sh or the reconcile/ directory is missing" >&2; exit 2; }
+# its header names each) and prints one `CELL <id> ok|FAIL` line per cell. It runs once here and every cell is asserted.
 b7_state() { awk -v c="$2" '$1 == "CELL" && $2 == c { print $3; f = 1; exit } END { if (!f) print "MISSING" }' <<<"$1"; }
 b7_text() { awk -v c="$2" '$1 == "CELL" && $2 == c { sub(/^CELL [^ ]+ [^ ]+ /, ""); print; exit }' <<<"$1"; }
-B7_REAL="$(TMPDIR="$WORK" bash "$B7_RCPT" "$B7_RECON" "$READER" 2>&1)"; B7_RC=$?
-for _c in a a2 a3 a4 a5 a6 b b4 b5 b6 b7 d l c e e2 f g h i i2 j k; do
-  if [ "$(b7_state "$B7_REAL" "$_c")" = ok ]; then
-    case "$_c" in a) B_B7a=1 ;; b) B_B7b=1 ;; c) B_B7c=1 ;; d) B_B7d=1 ;; e) B_B7e=1 ;; e2) B_B7e2=1 ;; f) B_B7f=1 ;; g) B_B7g=1 ;; h) B_B7h=1 ;; i) B_B7i=1 ;; j) B_B7j=1 ;; k) B_B7k=1 ;; l) B_B7l=1 ;; a4) B_B7a4=1 ;; a5) B_B7a5=1 ;; a6) B_B7a6=1 ;; b4) B_B7b4=1 ;; b5) B_B7b5=1 ;; b6) B_B7b6=1 ;; b7) B_B7b7=1 ;; esac
-    ok "B7$_c $(b7_text "$B7_REAL" "$_c" | cut -c1-200)"
-  else bad "B7$_c the shipping apply.sh/helper did not hold cell $_c: $(b7_text "$B7_REAL" "$_c" | cut -c1-300) (state $(b7_state "$B7_REAL" "$_c"))"; fi
-done
-rc_is "B7rc the receipt exits 0 over the unmutated reconcile/ directory" 0 "$B7_RC"
-
-# b7_sub <file>: replace the text in B7_OLD with B7_NEW exactly once, or fail (a mutation that matches nothing is a lost subject).
-b7_sub() {
-  B7_F="$1" B7_OLD="$B7_OLD" B7_NEW="$B7_NEW" python3 -I -c 'import os, sys
-f = os.environ["B7_F"]; s = open(f).read(); o = os.environ["B7_OLD"]; n = os.environ["B7_NEW"]
-if s.count(o) != 1: sys.exit(1)
-open(f, "w").write(s.replace(o, n))'
+b7_real() {
+  printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/apply.sh\n'
+  B7_RECON="$(dirname "$DIFFER")"
+  B7_RCPT="$HERE/receipt-bl706.sh"
+  [ -f "$B7_RCPT" ] && [ -f "$B7_RECON/apply.sh" ] || { echo "FIXTURE ERROR: receipt-bl706.sh or the reconcile/ directory is missing" >&2; exit 2; }
+  B7_REAL="$(TMPDIR="$WORK" bash "$B7_RCPT" "$B7_RECON" "$READER" 2>&1)"; B7_RC=$?
+  for _c in a a2 a3 a4 a5 a6 b b4 b5 b6 b7 d l c e e2 f g h i i2 j k; do
+    if [ "$(b7_state "$B7_REAL" "$_c")" = ok ]; then
+      ok "B7$_c $(b7_text "$B7_REAL" "$_c" | cut -c1-200)"
+    else bad "B7$_c the shipping apply.sh/helper did not hold cell $_c: $(b7_text "$B7_REAL" "$_c" | cut -c1-300) (state $(b7_state "$B7_REAL" "$_c"))"; fi
+  done
+  rc_is "B7rc the receipt exits 0 over the reconcile/ directory" 0 "$B7_RC"
 }
-# b7_mut <id> <file in reconcile/> <deciding cells> <twin cells> <receipt groups> <base flag>   (B7_OLD / B7_NEW carry the replacement)
-# <base flag> is the $(( )) conjunction of the B_B7<cell> flags the unmutated pass set for the deciding cell and its twins.
-b7_mut() {
-  local id="$1" f="$2" dec="$3" tw="$4" grp="$5" d="$WORK/b7/$1" c out ndead=0 note=""
-  mkdir -p "$WORK/b7" && cp -R "$B7_RECON" "$d" || { bad "$id FIXTURE BROKEN: could not copy reconcile/"; return; }
-  [ -f "$d/preclassify.sh" ] && [ -f "$d/derivation-differential.sh" ] || { bad "$id FIXTURE BROKEN: the copied reconcile/ lacks a sibling the subject resolves beside itself"; return; }
-  if ! b7_sub "$d/$f" || cmp -s "$B7_RECON/$f" "$d/$f"; then bad "$id FIXTURE BROKEN: the mutation did not apply exactly once to $f, so it is not scored"; return; fi
-  bash -n "$d/$f" || { bad "$id FIXTURE BROKEN: the mutated $f does not parse"; return; }
-  out="$(TMPDIR="$WORK" bash "$B7_RCPT" "$d" "$READER" "$grp" 2>&1)"
-  for c in $dec; do [ "$(b7_state "$out" "$c")" = FAIL ] || { ndead=1; note="$note deciding cell $c read $(b7_state "$out" "$c");"; }; done
-  for c in $tw; do [ "$(b7_state "$out" "$c")" = ok ] || { ndead=1; note="$note twin cell $c read $(b7_state "$out" "$c");"; }; done
-  if [ "$ndead" = 0 ]; then mutant_killed "$6" "$id" "$id killed: deciding cell(s) $dec failed, twin(s) $tw held"
-  else bad "$id SURVIVED or ENTANGLED:$note"; fi
-}
-# M1 join-only: record mode stops widening the set, so a derivation reading a changed file it does not name is never run.
-B7_OLD='[ "$OWED_SET" -eq 1 ] && VD_ALL=1' B7_NEW='[ "$OWED_SET" -eq 1 ] && VD_ALL=0'
-b7_mut BL706-M1 derivation-differential.sh b "a c" "bd a c" "$(( ${B_B7b:-0} && ${B_B7a:-0} && ${B_B7c:-0} ))"
-# M2 exit 2 swallowed: apply.sh reads a refusal as exit 0, so no DECISION row is drawn.
-B7_OLD='case "$dd_rc" in' B7_NEW='case "$((dd_rc == 2 ? 0 : dd_rc))" in'
-b7_mut BL706-M2 apply.sh e "a b" "a bd e" "$(( ${B_B7e:-0} && ${B_B7a:-0} && ${B_B7b:-0} ))"
-# M3 call before the writes: the whole call block moves above the phases that write the tree.
-B7_OLD='DD_HELPER="$SELF/derivation-differential.sh"' B7_NEW='DD_HELPER="$SELF/derivation-differential.sh"'
-B7_F="$WORK/b7-m3.py"
-printf '%s\n' 'import os, sys' 'f = os.environ["B7_F2"]; s = open(f).read()' \
-  'a = s.index("DD_HELPER=\"$SELF/derivation-differential.sh\""); b = s.index("fi  # ---- end of the resolution phases")' \
-  'blk = s[a:b]; s = s[:a] + s[b:]; m = "# THE DRIVER REPLACED ITSELF, AND THE OPERATOR IS TOLD SO"' \
-  'if s.count(m) != 1: sys.exit(1)' 'i = s.index(m); s = s[:i] + blk + s[i:]; open(f, "w").write(s)' > "$B7_F"
-mkdir -p "$WORK/b7" && cp -R "$B7_RECON" "$WORK/b7/BL706-M3" \
-  && B7_F2="$WORK/b7/BL706-M3/apply.sh" python3 -I "$B7_F" && ! cmp -s "$B7_RECON/apply.sh" "$WORK/b7/BL706-M3/apply.sh" && bash -n "$WORK/b7/BL706-M3/apply.sh"; B7_M3=$?
-if [ "$B7_M3" != 0 ]; then bad "BL706-M3 FIXTURE BROKEN: the call block did not move, so it is not scored"
-else
-  B7_M3OUT="$(TMPDIR="$WORK" bash "$B7_RCPT" "$WORK/b7/BL706-M3" "$READER" "g bd" 2>&1)"
-  if [ "$(b7_state "$B7_M3OUT" g)" = FAIL ] && [ "$(b7_state "$B7_M3OUT" b)" = ok ]; then
-    mutant_killed "$(( ${B_B7g:-0} && ${B_B7b:-0} ))" BL706-M3 "BL706-M3 killed: with the call above the writes the relocation's break is missed (cell g failed), while a derivation the earlier phases break is still found (cell b held)"
-  else bad "BL706-M3 SURVIVED or ENTANGLED: cell g read $(b7_state "$B7_M3OUT" g), cell b read $(b7_state "$B7_M3OUT" b)"; fi
-fi
-# M4 dedup removed: a second run of the same range appends a duplicate OWED row.
-B7_OLD="!((\$2 SUBSEP \$6) in S)'" B7_NEW="1'"
-b7_mut BL706-M4 derivation-differential.sh d b "bd" "$(( ${B_B7d:-0} && ${B_B7b:-0} ))"
-# M5 empty-join record skipped: a pull with no fence in scope leaves no record.
-B7_OLD='    make_record
-    print_dropped
-    say_row INFO join' B7_NEW='    print_dropped
-    say_row INFO join'
-b7_mut BL706-M5 derivation-differential.sh c a "a c" "$(( ${B_B7c:-0} && ${B_B7a:-0} ))"
-# M6 apply.sh no longer clears an inherited VD_ALL before its own WORKLIST join.
-B7_OLD='  unset VD_ALL
-  vd_join "$DIST" "$BASE" "$THEIRS" "$VD_ART"' B7_NEW='  vd_join "$DIST" "$BASE" "$THEIRS" "$VD_ART"'
-b7_mut BL706-M6 apply.sh h a "a h" "$(( ${B_B7h:-0} && ${B_B7a:-0} ))"
-# M7 the helper no longer clears an inherited VD_ALL before its non-record join.
-B7_OLD='unset VD_ALL
-[ "$OWED_SET" -eq 1 ] && VD_ALL=1' B7_NEW='[ "$OWED_SET" -eq 1 ] && VD_ALL=1'
-b7_mut BL706-M7 derivation-differential.sh h a "a h" "$(( ${B_B7h:-0} && ${B_B7a:-0} ))"
-# M8 the NEGATIVE: the call is deleted, which is what the apply was before this change. No record is left.
-B7_OLD='if [ -d "$VD_ART" ] && [ -f "$VD_VALIDATOR" ]; then
-  if [ ! -f "$DD_HELPER" ]; then' B7_NEW='if false; then
-  if [ ! -f "$DD_HELPER" ]; then'
-b7_mut BL706-M8 apply.sh a h "a h" "$(( ${B_B7a:-0} && ${B_B7h:-0} ))"
-# M9 no fold: a moved-path hit that the differential finds newly failing draws BOTH the held WORKLIST artifact-derivations row and the -owed row.
-B7_OLD='          if [ -n "$DD_OLD_ROW" ]; then
-            # ONE ROW PER CAUSE: a fence named' B7_NEW='          if false; then
-            # ONE ROW PER CAUSE: a fence named'
-b7_mut BL706-M9 apply.sh j b "bd j" "$(( ${B_B7j:-0} && ${B_B7b:-0} ))"
-# M10 duplicate scope refusal not suppressed: a scope-classifier failure draws -unscoped AND the -differential refusal.
-B7_OLD='          if [ "$dd_dup" = 0 ]; then' B7_NEW='          if true; then'
-b7_mut BL706-M10 apply.sh k e "k e" "$(( ${B_B7k:-0} && ${B_B7e:-0} ))"
-# M11 the tree-moved test skips ignored files again: the short-circuit records 0 where the full differential finds a break.
-B7_OLD='ls-files --others 2>/dev/null)" || _tm_u' B7_NEW='ls-files --others --exclude-standard 2>/dev/null)" || _tm_u'
-b7_mut BL706-M11 derivation-differential.sh i f "i f" "$(( ${B_B7i:-0} && ${B_B7f:-0} ))"
-# M12 the minted log name is not passed: the record carries the helper default, a name no log has.
-B7_OLD=' --record-owed "$DD_RECORD" --log-name "$DD_LOG" 2>&1)"' B7_NEW=' --record-owed "$DD_RECORD" 2>&1)"'
-b7_mut BL706-M12 apply.sh l "b d" "bd" "$(( ${B_B7l:-0} && ${B_B7b:-0} && ${B_B7d:-0} ))"
-# M13 the base-root hand remedy drops --base-root.
-B7_OLD='            base-root:*) dd_hand=' B7_NEW='            base-rootX:*) dd_hand='
-b7_mut BL706-M13 apply.sh e2 e "e" "$(( ${B_B7e2:-0} && ${B_B7e:-0} ))"
-# M14 the differential's INFO, NOTE, UNASSESSABLE and SUMMARY rows are not carried into the manifest (the re-emit loop deleted).
-B7_OLD='      while IFS= read -r _ddl; do' B7_NEW='      while false; do'
-b7_mut BL706-M14 apply.sh "a4 a5 a6 b4 b5 b6 b7" "a b" "a bd" "$(( ${B_B7a4:-0} && ${B_B7a5:-0} && ${B_B7a6:-0} && ${B_B7b4:-0} && ${B_B7b5:-0} && ${B_B7b6:-0} && ${B_B7b7:-0} && ${B_B7a:-0} && ${B_B7b:-0} ))"
+if sg b7; then
+printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/derivation-differential.sh\n'
+b7_real
+fi  # ---- end of unit b7
 
-# ---- G: the callers (rulebook prose) --------------------------------------------------------------
-# The prose-presence arms for the three callers lived in a retired dist-only mutation battery: on a
-# consumer at update step 2 the rulebook is still the old one, so a shipping arm grepping it would go red.
-# GATE ARM, executed: the gate site passes iff the reader exits 0. Open row -> refuse; control -> pass.
-gate_site() { rd "$1" "$2"; [ "$RC" = 0 ] && echo PASS || echo REFUSE; }
-rc_is "Gd gate arm: an open row REFUSES the gate" REFUSE "$(gate_site "$R" "$WORK/b1.tsv")"
-rc_is "Ge gate arm control: no open row PASSES the gate" PASS "$(gate_site "$R2" "$WORK/b1e.tsv")"
-# SPRINT-CLOSE ARM, executed: every OPEN line becomes a carry-over item; the count must equal the open rows.
-co="$(gate_site "$R" "$WORK/b7.tsv" >/dev/null; rd "$R" "$WORK/b7.tsv"; awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$OUT")"
-rc_is "Gf sprint-close: three open rows are three carried-forward items, none dropped" 3 "$co"
-rd "$R2" "$WORK/b1e.tsv"
-rc_is "Gg sprint-close control: with the record's rows all closed nothing is carried" 0 "$(awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$OUT")"
-report_end owed-derivations
+report_end "$NAME"

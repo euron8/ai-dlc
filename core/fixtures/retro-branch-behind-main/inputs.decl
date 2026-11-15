@@ -1,5 +1,4 @@
-# The two subjects: Check 7 of the validator (worlds A-H, every mutant is a sed rewrite of it)
-# and retro.md Step 1 (part 2, extracted and driven, mutated by sed).
+# The two subjects: Check 7 of the validator (worlds A-H) and retro.md Step 1 (part 2, extracted and driven).
 !core/scripts/validate-mandatory-rules.sh
 !core/skills/ai-dlc/steps/retro.md
 # Sibling validators copied into each synthetic toolchain dir, and the sprint-status roller.

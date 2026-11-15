@@ -109,8 +109,7 @@ PROSE
 # reference consumer writes them. Block A (line 6) is stale, block B (line 13) is fresh. Kept
 # in its own file so the arms that drive it are the only ones an indent-blind hook moves:
 # the hook's two cheap rejects and its mask all matched the opener at column 0 until
-# v0.500.0, and each of the three sites has a mutant in the sibling battery keyed on this
-# file. PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT.
+# v0.500.0. PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT.
 IND_ART="$CONSUMER/_bmad-output/planning-artifacts/s1/indented-repair-p1.md"
 cat > "$IND_ART" <<'INDENTED'
 # Indented repair p1

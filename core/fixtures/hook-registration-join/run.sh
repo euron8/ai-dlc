@@ -97,7 +97,7 @@ JSON
 # mutate <dir> <relative-file> <python-transform-name> — copy-then-edit, guarded by cmp -s.
 # The guard is the rule: a transform that matched nothing produces a mutant identical to the
 # base, which passes the validator and scores as a kill it never earned.
-apply_mut() { # apply_mut <file> <old> <new>
+apply_seed() { # apply_seed <file> <old> <new>
   local f="$1" old="$2" new="$3" tmp
   tmp="$(mktemp)"
   python3 - "$f" "$old" "$new" > "$tmp" <<'PY'
@@ -129,7 +129,7 @@ esac
 
 # --- arm 2: a shipped hook is not registered — THE DEFECT ------------------------------------
 cp -R "$T/base" "$T/m2"
-apply_mut "$T/m2/.claude/settings.json" '$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-beta.sh' '$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-UNWIRED.sh' \
+apply_seed "$T/m2/.claude/settings.json" '$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-beta.sh' '$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-UNWIRED.sh' \
   || { echo "hook-registration-join: FIXTURE BROKEN — arm 2 mutation matched nothing" >&2; exit 2; }
 run "$T/m2"
 if [ "$RC" = "1" ] && grep -q 'ai-dlc-beta\.sh' <<<"$OUT"; then
@@ -144,7 +144,7 @@ else bad "DANGLING: the registration for a nonexistent hook was not reported: $(
 
 # --- arm 3: re-registering the same hook clears it — the finding is the registration ---------
 cp -R "$T/m2" "$T/m3"
-apply_mut "$T/m3/.claude/settings.json" 'ai-dlc-UNWIRED.sh' 'ai-dlc-beta.sh' \
+apply_seed "$T/m3/.claude/settings.json" 'ai-dlc-UNWIRED.sh' 'ai-dlc-beta.sh' \
   || { echo "hook-registration-join: FIXTURE BROKEN — arm 3 mutation matched nothing" >&2; exit 2; }
 run "$T/m3"
 if [ "$RC" = "0" ]; then ok "REVERSIBLE: restoring the registration clears the finding (rc=0) — it is the join, not the tree"
@@ -152,7 +152,7 @@ else bad "REVERSIBLE: restoring the registration left rc=$RC: $(printf '%s' "$OU
 
 # --- arm 4: the third-party hook may be unregistered without penalty ------------------------
 cp -R "$T/base" "$T/m4"
-apply_mut "$T/m4/.claude/settings.json" '$CLAUDE_PROJECT_DIR/.claude/hooks/context-mode-decoy.sh' '$CLAUDE_PROJECT_DIR/.claude/hooks/context-mode-gone.sh' \
+apply_seed "$T/m4/.claude/settings.json" '$CLAUDE_PROJECT_DIR/.claude/hooks/context-mode-decoy.sh' '$CLAUDE_PROJECT_DIR/.claude/hooks/context-mode-gone.sh' \
   || { echo "hook-registration-join: FIXTURE BROKEN — arm 4 mutation matched nothing" >&2; exit 2; }
 run "$T/m4"
 if [ "$RC" = "0" ]; then ok "DECOY: another tool's hook, present and unregistered, is not our finding"
@@ -175,14 +175,14 @@ else bad "LOCAL: settings.local.json was not consulted: $(printf '%s' "$OUT" | t
 SM=".claude/skills/ai-dlc-update/reconcile/settings-merge.sh"
 
 cp -R "$T/base" "$T/m6"
-apply_mut "$T/m6/$SM" 'ai-dlc-[^/]+' 'THE-PATTERN-IS-GONE' \
+apply_seed "$T/m6/$SM" 'ai-dlc-[^/]+' 'THE-PATTERN-IS-GONE' \
   || { echo "hook-registration-join: FIXTURE BROKEN — arm 6 mutation matched nothing" >&2; exit 2; }
 run "$T/m6"
 if [ "$RC" = "2" ]; then ok "BOUND: an unextractable ownership pattern fails CLOSED (rc=2), never falls back to a literal"
 else bad "BOUND: settings-merge.sh lost its pattern and the check still returned rc=$RC — it is reading a private copy: $(printf '%s' "$OUT" | tr '\n' ' ')"; fi
 
 cp -R "$T/base" "$T/m7"
-apply_mut "$T/m7/$SM" 'ai-dlc-[^/]+\\.sh' '(ai-dlc-[^/]+|[^/]+)\\.sh' \
+apply_seed "$T/m7/$SM" 'ai-dlc-[^/]+\\.sh' '(ai-dlc-[^/]+|[^/]+)\\.sh' \
   || { echo "hook-registration-join: FIXTURE BROKEN — arm 7 mutation matched nothing" >&2; exit 2; }
 run "$T/m7"
 if [ "$RC" = "2" ]; then ok "BOUND: a pattern broadened to match a NON-ai-dlc command fails CLOSED (the negative probe fires)"

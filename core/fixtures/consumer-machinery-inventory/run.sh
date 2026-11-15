@@ -31,12 +31,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
-if [ -n "${AI_DLC_CMI_VALIDATOR:-}" ] && [ -f "${AI_DLC_CMI_VALIDATOR}" ]; then
-  # The mutant battery re-executes this script with a mutated validator. Without reading the
-  # override here every mutant would exercise the real one, report zero reds, and score a
-  # survival — the defect retired-fixture-orphan produced first and caught by its control.
-  VAL="${AI_DLC_CMI_VALIDATOR}"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-layer-entries.sh" ]; then
+if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-layer-entries.sh" ]; then
   VAL="$ROOT/core/scripts/validate-layer-entries.sh"
   echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/validate-layer-entries.sh" ]; then
@@ -63,8 +58,6 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_ctl=0
 
 # Build a minimal consumer: the skill dir with the contract and the manifest, a home, and an
 # inventory whose contents each case supplies.
@@ -280,111 +273,4 @@ fi
 # ---- the run itself is a control: a validator that died prints nothing, and so does a clean tree
 [ -n "$out1" ] && ok "the validator produced output (the run is not a silent death)" \
                || bad "the validator printed NOTHING — every assertion above is vacuous"
-
-# ================================ mutant battery ================================
-# Each mutant is a cmp -s guarded COPY and must turn exactly the assertions it should red.
-if [ -n "${AI_DLC_CMI_VALIDATOR:-}" ]; then
-  if [ "$fails" -eq 0 ]; then echo "PASS consumer-machinery-inventory"; exit 0; fi
-  echo "FAIL consumer-machinery-inventory ($fails)"; exit 1
-fi
-
-MUT="$WORK/mutants"; mkdir -p "$MUT"
-battery_fails=0
-mut_reds() {
-  local label="$1" prog="$2" copy="$MUT/$1.sh"
-  if [ -z "$prog" ]; then cp "$VAL" "$copy"; else
-    sed "$prog" "$VAL" > "$copy" 2>/dev/null
-    if cmp -s "$VAL" "$copy"; then printf 'UNMUTATED\n'; return 0; fi
-  fi
-  AI_DLC_CMI_VALIDATOR="$copy" bash "$HERE/run.sh" 2>/dev/null | grep '^  FAIL  ' | sed 's/^  FAIL  //'
-}
-expect_set() { # $1 label, $2 expected count, $3 ERE every red must match, $4 sed
-  local reds n unmatched
-  reds="$(mut_reds "$1" "$4")"
-  if [ "$reds" = "UNMUTATED" ]; then
-    bad "MUTANT $1: the sed matched nothing — no mutation was applied, so nothing was proven"
-    battery_fails=$((battery_fails+1)); return
-  fi
-  n="$(grep -c . <<<"$reds" || true)"
-  unmatched="$(grep -vE "$3" <<<"$reds" | grep -c . || true)"
-  if [ "$n" -eq "$2" ] && [ "$unmatched" -eq 0 ]; then
-    mutant_killed "$B_ctl" "$1" "MUTANT $1 moves exactly the $2 assertion(s) it should, and no others"
-  else
-    bad "MUTANT $1: expected $2 red(s) matching '$3', got ${n} (${unmatched} unexpected): $(tr '\n' ';' <<<"$reds")"
-    battery_fails=$((battery_fails+1))
-  fi
-}
-
-ctl="$(mut_reds control "")"
-[ -z "$ctl" ] && { ok "CONTROL: an unmutated copy of the validator passes every assertion"; B_ctl=1; } \
-              || { bad "CONTROL: an unmutated copy FAILED ($(tr '\n' ';' <<<"$ctl")) — every kill below is unearned"; battery_fails=$((battery_fails+1)); }
-
-# M1 — the home comparison always matches, so nothing is ever "outside" it. The segregation
-# arm goes silent while the existence arm keeps working.
-# THE THIRD RED IS CASE 10's REACHABILITY CONTROL, and it is overlap rather than entanglement.
-# That control asserts case 10's tree reaches the segregation arm, which is the exact arm this
-# mutant disables, so any faithful control here MUST move with it. Goal 2's assertion still OWNS
-# the finding; the control is a precondition for cases 11-13 and stands down to it in wording.
-expect_set home-always-matches 3 'outside the home|does not name a runnable move|READABLE home: no segregation finding' \
-  's@^          "\$MACHINERY_HOME"\*) ;;@          *) ;;@'
-
-# M2 — the absent-path arm is removed. Only the absent-path assertion moves.
-# REPOINTED at v0.240.0 and the repoint is the point: the old sed targeted a one-line
-# `[ -e … ] || err E18` that the git-tracking arm turned into an if/elif, so it stopped matching
-# and reported UNMUTATED rather than scoring a kill. That is the `cmp -s` guard doing its job --
-# a mutation that matches nothing is indistinguishable from a surviving one without it.
-expect_set no-existence-check 1 'does not exist' \
-  's@^        if \[ ! -e "\$PROJECT_ROOT/\$mpath" \]; then@        if false; then@'
-
-# M7 — the git-tracking arm is removed, so a path satisfied by ignored leftovers passes again.
-# THIS IS THE DEFECT AS IT SHIPPED, held as a mutant: it read GREEN on a working tree while the
-# same commit read RED on a fresh clone. ONE red, not two — the second case-7 assertion checks
-# that the leftover is not reported as ABSENT, and with this arm gone nothing is reported at all.
-expect_set no-tracked-check 1 'satisfied by ignored build output' \
-  's@^        elif \[ -e "\$PROJECT_ROOT/.git" \] && ! git -C@        elif false \&\& ! git -C@'
-
-# M3 — `none` stops being recognised, so an explicitly empty inventory is reported. This is
-# the arm that keeps a compliant consumer from being punished for compliance.
-expect_set none-not-honoured 1 "explicit 'none' was reported" \
-  's@\[ "\$MACHINERY_LINES" = "none" \]@[ "$MACHINERY_LINES" = "NONEXX" ]@'
-
-# M4 — the missing-inventory warning is removed. Silence and emptiness look alike again,
-# which is the state the reference consumer sat in for the whole program.
-expect_set no-missing-warning 1 'unscaffolded inventory is SILENT' \
-  's@^    warn W10 "\$MACHINERY_REL: the ai-dlc machinery inventory has not been scaffolded@    : W10 "$MACHINERY_REL: the ai-dlc machinery inventory has not been scaffolded@'
-
-# M5 — the arms stop being scoped to a contract that declares the key, so a consumer whose
-# contract predates it is reported. v0.228.0's defect, reproduced deliberately.
-expect_set unscoped-to-declaration 1 'predates the declaration' \
-  's@^if \[ -n "\$MACHINERY_REL" \] && \[ -n "\$MACHINERY_HOME" \]; then@if [ -n "$MACHINERY_HOME" ]; then MACHINERY_REL="${MACHINERY_REL:-.claude/skills/ai-dlc/machinery.md}"@'
-
-# M6 — the arm still fires and its remedy stops naming a runnable move. This is what keeps
-# M1's two-cell expectation honest: without it the remedy cell is proven only by the mutant
-# that silences the whole arm.
-#
-# IT SHIPPED INSIDE THE CHILD-RUN BRANCH AND HAD NEVER EXECUTED. `expect_set` and `mut_reds`
-# are defined BELOW that branch, so in a child run the call was a command-not-found swallowed
-# by the battery's own `2>/dev/null`, and in the parent run the branch is not taken at all.
-# Measured: five MUTANT lines in the output and zero occurrences of this mutant's label.
-# A mutant that cannot run reads exactly like one that killed — this repo's named class,
-# produced inside the fixture whose control caught a different instance of it one release
-# earlier.
-expect_set remedy-unusable 1 'does not name a runnable move' \
-  's@git mv @move @'
-
-# M8 — the unread-home refusal is removed, which is the FALSE PASS exactly as it shipped.
-# TWO reds, and both are POSITIVE assertions about a finding that must appear: an arm keyed on
-# "no ERROR mentioning the home" would have passed against this mutant, because a retired
-# clause and a satisfied one print the same nothing. The two states share one refusal, so a
-# mutant that silences it must move both or the arms are not measuring the same guard.
-expect_set no-unread-home-refusal 2 'UNREADABLE manifest: no finding|MISSPELLED key: silent' \
-  's@^if \[ -z "\$MACHINERY_HOME" \] && \[ -f "\$SKILL_DIR/core-manifest.md" \]; then@if false; then@'
-
-# M9 — the refusal stops being scoped to a manifest that EXISTS. One red, and it is the
-# absent-file case: every other consumer here is built by mk_consumer, which copies the
-# manifest, so nothing else in this file can see the difference. This is the mutant that
-# keeps M8's exemption honest — without it "scoped to a file that is there" is a clause no
-# assertion would notice the loss of, and it would silently widen back.
-expect_set refusal-ignores-file-presence 1 'ABSENT manifest: reported' \
-  's@^if \[ -z "\$MACHINERY_HOME" \] && \[ -f "\$SKILL_DIR/core-manifest.md" \]; then@if [ -z "$MACHINERY_HOME" ]; then@'
 report_end consumer-machinery-inventory

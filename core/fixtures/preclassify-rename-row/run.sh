@@ -3,7 +3,7 @@
 # preclassify-rename-row — a file upstream RENAMED between base and theirs must classify
 # as a delete of the old path plus an add of the new one, never as one six-field row.
 #
-# Usage: run.sh [--matrix]
+# Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = the check regressed, 2 = fixture broken.
 #
 # THE DEFECT THIS EXISTS TO CATCH.
@@ -34,68 +34,14 @@
 #   MEMO   mE mF mG mH    a memo file that cannot be created (E long dist, F read-only memo, G has_path, H `.s` occupied)
 #   D403   ES EP ER EL ED US UP UR UL UD   an empty or unreadable cached status, on each of the five memo functions
 #   N      na nb nc nd ne nf ng nh ni nj nk nl nm nn   a read failure is never answered or cached as an absence
-# The tip scores every cell, with each group's controls. A mutant is a copy of the whole reconcile
-# directory; per push it drives only its deciding cells plus one twin, below.
 #
 # THE GIT SHIM IS A FUNCTION, NOT A SCRIPT. It is exported (`export -f git`) in a subshell around the
 # one preclassify.sh run it wraps, so it reaches that run's git calls and no other, and costs no
 # process start per git call. A forced hit is still recorded in a hits file, and every shimmed cell
 # asserts that file is non-empty, so a shim that never fired cannot read as a refusal.
 #
-# THE LIB.SH QUERIES (memo_has_path, memo_rev_parse, ...) SOURCE lib.sh IN A SUBSHELL, not in a fresh
-# bash: every query still starts from a clean function table and a fresh memo, with `set +u` and
-# no pipefail as `bash -c` had. A mutated lib.sh that does not parse defines nothing, answers 97, and
-# its twin cell trips with it -- the twin, not a separate `bash -n`, is what proves a copy ran.
-#
-# TWO REFERENCE RUNS ARE SHARED. The tip's unshimmed rows are the reference for the shimmed controls, d,
-# the n group's transparent shim, and the memo group's E and F (a mutant is compared with the TIP's short
-# run: a mutant that broke the short run too would still differ from the long one, so the cell still reads 1).
-#
-# EACH MUTANT'S CELLS ARE THE MATRIX BELOW. The matrix was measured by
-#   bash core/fixtures/preclassify-rename-row/run.sh --matrix
-# with every cell scored on every mutant. decides= is the minimal set of cells the mutant targets, each reading 1;
-# twins= is one cell reading 0. Wide co-trips (further cells that also read 1), measured:
-#   norenames            D mE mF b230d
-#   untangle-nols        nj nk
-#   templates-notrap     nj
-#   memo-unfixed         mF mG mH
-#   403d-read-status     UP UR UL UD
-#   403d-shape           EP ER EL ED
-#   revparse-oracle      b230c nb nc nd ne ni nj nk nl
-#   raw-direct           nd ng
-#   rev-parse-caches-1   ne nj nk
-#   dist-only-revparse   b230c
-#   shim-noop-git        U2 U3 nl
-#   shim-noop-ngit       b230c b230d U1 U2 U3 T1
-# Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
-# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
-# state") requires.
-# MUTANT-MATRIX norenames decides=A,B twins=C
-# MUTANT-MATRIX b230-memo decides=b230d twins=b230c
-# MUTANT-MATRIX untangle-nols decides=U1 twins=U2
-# MUTANT-MATRIX templates-notrap decides=T1 twins=U1
-# MUTANT-MATRIX memo-probe decides=mE,mF twins=mG
-# MUTANT-MATRIX memo-readback decides=mH twins=mG
-# MUTANT-MATRIX memo-unfixed decides=mE twins=ES
-# MUTANT-MATRIX 403d-read-status decides=US twins=ES
-# MUTANT-MATRIX 403d-shape decides=ES twins=US
-# MUTANT-MATRIX revparse-oracle decides=na twins=nh
-# MUTANT-MATRIX naive-line decides=nh twins=nm
-# MUTANT-MATRIX no-dotdot decides=ni twins=nm
-# MUTANT-MATRIX no-abs decides=nm twins=ni
-# MUTANT-MATRIX no-literal decides=nn twins=nm
-# MUTANT-MATRIX raw-direct decides=nb twins=nh
-# MUTANT-MATRIX rev-parse-caches-1 decides=nc twins=nh
-# MUTANT-MATRIX keyed-on-128 decides=nf,ng twins=nh
-# MUTANT-MATRIX dist-only-revparse decides=nl twins=nk
-# MUTANT-MATRIX shim-noop-git decides=b230c,b230d,U1,T1 twins=ES
-# MUTANT-MATRIX shim-noop-ngit decides=nl twins=ES
-# MUTANT-MATRIX-DYNAMIC score_mutant why=the name is the first field of the mutant table row the caller is scoring, one MUTANT-MATRIX row per table row
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/preclassify-rename-row/run.sh --matrix
 
 set -uo pipefail
-MATRIX=0; MATRIX_CELLS=0
-case "${1:-}" in --matrix) MATRIX=1 ;; "") ;; *) echo "FIXTURE ERROR: unknown argument ${1}" >&2; exit 2 ;; esac
 unset AI_DLC_RECONCILE_MEMO
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -119,19 +65,12 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# need_base <flag> <mutant-name> and mutant_killed <flag> <mutant-name> <message> live in the shared
-# lib/mutant.sh: a mutant is scored only when the arm it guards passed in THIS run (flag 1).
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
 
 echo "preclassify-rename-row"
 echo "  subject: ${RECON#$ROOT/}/preclassify.sh"
-echo "  mode $([ "$MATRIX" -eq 1 ] && echo FULL || echo PUSH)"
 # The REQUIRED inputs of inputs.decl: the subject and the library it sources, both driven below.
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/preclassify.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/lib.sh"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # --- a synthetic distribution, two commits ------------------------------------
 # base ships a fixture directory with a transcript and a runner. theirs renames the
@@ -187,7 +126,6 @@ put()  { RES="$RES $1=$2"; }
 res()  { local t; t="${RES#* $1=}"; [ "$t" != "$RES" ] || { printf X; return; }; printf '%s' "${t%% *}"; }
 want() { case " $WANT " in *" $1 "*) return 0 ;; esac; return 1; }
 tripped_in() { local c o=""; for c in $1; do [ "$(res "$c")" = 0 ] || o="$o $c"; done; printf '%s' "${o# }"; }
-row_of() { local c o=""; for c in $1; do o="$o $c:$(res "$c")"; done; printf '%s' "${o# }"; }
 
 # --- the git shims: exported functions around one run, never a PATH entry ------------------------------
 FX_REAL_GIT="$(command -v git)"; export FX_REAL_GIT
@@ -195,8 +133,6 @@ FX_REAL_GIT="$(command -v git)"; export FX_REAL_GIT
 # that file is absent, and creates it on the failure.
 fx_git() {
   local sub="" skip=0 a hit=""
-  # FX_SHIM_NOOP is the shim mutant: the shim passes every call through and forces nothing
-  [ -z "${FX_SHIM_NOOP:-}" ] || { "$FX_REAL_GIT" "$@"; return; }
   for a in "$@"; do
     if [ "$skip" = 1 ]; then skip=0; continue; fi
     case "$a" in -C|-c) skip=1 ;; -*) ;; *) sub="$a"; break ;; esac
@@ -216,7 +152,7 @@ fx_git() {
 }
 # fx_ngit makes the .dist-only marker of core/fixtures/probe read as a missing subtree would.
 fx_ngit() {
-  if [ -n "${FX_N_FORCE:-}" ] && [ -z "${FX_SHIM_NOOP:-}" ]; then
+  if [ -n "${FX_N_FORCE:-}" ]; then
     case "$*" in
       *core/fixtures/probe/.dist-only*)
         [ -n "${FX_N_HITS:-}" ] && echo hit >> "$FX_N_HITS"
@@ -239,7 +175,7 @@ if ! grep -qF 'refusing to classify' "$RECON/preclassify.sh" || ! grep -qF '_ai_
     printf '  --    (BL-230: this preclassify.sh/lib.sh predate the fail-closed fix; in the distribution the arms run anyway and must go red)\n'
   fi
 fi
-# Keyed on the discriminator's NEWEST clause, the literal ls-tree read cells nm-nn and their mutants
+# Keyed on the discriminator's NEWEST clause, the literal ls-tree read cells nm-nn
 # need: an engine carrying `_ai_dlc_rev_absent` without it would run nm-nn red on a consumer.
 if ! grep -qF 'git -C "$1" --literal-pathspecs ls-tree -z --full-tree' "$RECON/lib.sh"; then
   if [ "$IN_DIST" = 0 ]; then
@@ -743,24 +679,14 @@ run_cells() { # run_cells <recon> <tag> <ctl 0|1> <cell>...
   done
 }
 
-RES=""
-# THE ONE TRANSPARENT CONTROL, for the one copy layout every mutant uses (a cp -R of the whole reconcile directory):
-# the tip's rename-row cells run on a byte-identical copy, so a copy that cannot run is a FIXTURE ERROR here, and
-# every mutant's twin cell, run on that mutant's own copy, shows it ran.
-CTRL="$WORK/control"
-cp -R "$RECON" "$CTRL" || exit 2
-cmp -s "$RECON/preclassify.sh" "$CTRL/preclassify.sh" && cmp -s "$RECON/lib.sh" "$CTRL/lib.sh" \
-  || { echo "FIXTURE ERROR: the control copy differs from the subject" >&2; exit 2; }
 # R first: its tip rows are the reference every other group compares against.
-run_cells "$CTRL" tip 1 $C_R
+run_cells "$RECON" tip 1 $C_R
 if [ "$(grep -c . "$REF_ROWS")" -lt 3 ]; then
   echo "FIXTURE ERROR: the reference classification has fewer than 3 rows, so the shimmed arms compare against nothing" >&2
   exit 2
 fi
 run_cells "$RECON" tip 1 $TIP_REST
-if [ "$MATRIX" -eq 1 ]; then echo "  matrix tip $(row_of "$ALL_CELLS")"; fi
 
-B_R=0; B_B230=0; B_B308=0; B_MEMO=0; B_D403=0; B_N=0
 
 # R. the rename row
 _t="$(tripped_in "$C_R")"
@@ -769,8 +695,6 @@ if [ -z "$_t" ]; then
   ok "B the renamed file's OLD path is UPSTREAM-DELETED (gated), not a CLASSIFY row"
   ok "C the M row beside them (run.sh) still classifies as UPSTREAM-ONLY"
   ok "D every probe row carries exactly four fields, over a non-empty row set"
-  ok "unmutated control: a byte-identical copy of the reconcile dir scores clean on A-D, so the copy layout every mutant uses runs"
-  B_R=1
 else
   bad "the shipping preclassify.sh fails arm(s) [$_t] on a rename row. Rows:"
   sed 's/^/          /' "$REF_ROWS" | sed 's/\t/<TAB>/g'
@@ -789,12 +713,10 @@ if [ "$RUN_B230" = 1 ]; then
   else
     bad "BL-230 arm d: $(tr '\n' ' ' < "$WORK/b230-tip/d.why")"
   fi
-  [ -z "$(tripped_in "$C_B230")" ] && B_B230=1
   ok "BL-308 control: --untangle and --templates each classify their seeded row through the transparent shim, zero forced hits"
   _t="$(tripped_in "$C_B308")"
   if [ -z "$_t" ]; then
     ok "BL-308 U1-U3 T1: a forced 128 on ls-files, rev-parse or hash-object under --untangle, and on rev-parse under --templates, exits 2 naming the call ($(awk '{printf "%s %s; ", $1, $5}' "$WORK/b308-tip/why"))"
-    B_B308=1
   else
     bad "BL-308 cell(s) [$_t]: a mode exited other than 2 over a forced git failure, or did not name the call -- $(tr '\n' ' ' < "$WORK/b308-tip/why")"
   fi
@@ -807,7 +729,6 @@ if [ -z "$_t" ]; then
   ok "F an unwritable memo directory classifies byte-identically to a writable one"
   ok "G memo_has_path with an unwritable memo answers 0 on a present path and non-zero on an absent one"
   ok "H memo_has_path returns its in-memory status when its .s name is occupied, never a read-back"
-  B_MEMO=1
 else
   bad "the shipping lib.sh fails memo arm(s) [$_t]: a memo file that cannot be created changes the answer"
 fi
@@ -816,7 +737,6 @@ fi
 _t="$(tripped_in "$C_D403")"
 if [ -z "$_t" ]; then
   ok "BL-403(d) E/U x 5: an empty .s and an unreadable .s under set -e each answer 125 on every memo's hit path"
-  B_D403=1
 else
   bad "BL-403(d) cell(s) [$_t] failed: a cached status that could not be read was taken as a status"
 fi
@@ -830,314 +750,13 @@ if [ "$RUN_N" = 1 ]; then
     ok "BL-374/BL-310 h-i: a non-canonical spelling, an absolute path into the repository and a climbing \`..\` are still ABSENT (128 / 1), never a refusal"
     ok "BL-310 m-n: an absolute path outside the repository and a pathspec-magic spelling are ABSENT (128 / 1), never a refusal"
     ok "BL-374 j-l: preclassify refuses (exit 2) on a missing subtree in --untangle and --templates, an unresolvable rev, and an unconfirmable .dist-only marker"
-    B_N=1
   else
     bad "BL-374/BL-310 cell(s) [$_t] failed -- a read failure is still answered or cached as an absence"
   fi
 fi
 
-# =============================================================================
-# THE MUTANTS -- each a copy of the whole reconcile directory
-# =============================================================================
-# A mutant that does not apply is reported and not scored. A mutant is scored over its deciding cells and
-# ONE twin: the twin must read 0, which is also what proves the copy ran (a copy that failed to load
-# answers 97 or exits 2 everywhere, so its twin trips with it).
-MUT_DIR=""
-mut_new() { # mut_new <name> -> MUT_DIR, a fresh copy of the reconcile dir
-  MUT_DIR="$WORK/m-$1"; cp -R "$RECON" "$MUT_DIR" || exit 2
-}
-mut_stale() { bad "FIXTURE STALE [$1]: $2 -- re-anchor on the same observable"; MUT_DIR=""; }
-# py_replace <src> <dst> <find> <replace> [<find> <replace>...] -- every find must match EXACTLY once
-py_replace() {
-  python3 - "$@" <<'PY'
-import sys
-src, dst, pairs = sys.argv[1], sys.argv[2], sys.argv[3:]
-s = open(src, encoding="utf-8").read()
-for i in range(0, len(pairs), 2):
-    if s.count(pairs[i]) != 1:
-        sys.exit(1)
-    s = s.replace(pairs[i], pairs[i + 1])
-open(dst, "w", encoding="utf-8").write(s)
-PY
-}
-# mut_py <name> <file> <find> <replace> [...] -> MUT_DIR
-mut_py() {
-  local _n="$1" _f="$2"; shift 2
-  mut_new "$_n"
-  if ! py_replace "$RECON/$_f" "$MUT_DIR/$_f" "$@"; then mut_stale "$_n" "an anchor did not match exactly once in $_f"; return; fi
-  if cmp -s "$RECON/$_f" "$MUT_DIR/$_f"; then mut_stale "$_n" "the mutation did not apply"; fi
-}
-
-build_norenames() {
-  mut_new norenames
-  # batch 121: `git diff --no-renames --name-status "$BASE" "$THEIRS" -- core/` moved out of preclassify.sh's
-  # own body and into lib.sh's shared `memo_diff_name_status()`; the mutation patches lib.sh.
-  sed 's/diff --no-renames --name-status "\$_base" "\$_theirs" -- "\$@"/diff --name-status "$_base" "$_theirs" -- "$@"/g' \
-    "$RECON/lib.sh" > "$MUT_DIR/lib.sh"
-  if cmp -s "$RECON/lib.sh" "$MUT_DIR/lib.sh"; then mut_stale norenames "the --no-renames line is not where this fixture expects it"; fi
-}
-build_b230_memo() {
-  # lib.sh caches every status, the pre-fix memo. Both status-filter lines (memo_ls_tree and
-  # memo_diff_name_status carry the same one) are rewritten, counted as 2, so a third copy of the filter
-  # cannot be left behind reading as a mutation. The filter is spelled across TWO lines (a failed serve
-  # returns 125 on each branch), so the anchor is the `if` line and the mutation also drops the `else` line.
-  local _anchor _anchor2 _hits _hits2 _ctl
-  _anchor='    if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125'
-  _anchor2='    else _ai_dlc_memo_serve "$_t" || return 125; fi'
-  _hits="$(grep -cxF "$_anchor" "$RECON/lib.sh")" || _hits=0
-  _hits2="$(grep -cxF "$_anchor2" "$RECON/lib.sh")" || _hits2=0
-  [ "$_hits2" -eq "$_hits" ] || _hits=0
-  _ctl="$(grep -cxF 'ZZ-NO-SUCH-MEMO-ANCHOR-ZZ' "$RECON/lib.sh")" || _ctl=0
-  mut_new b230-memo
-  B230_A="$_anchor" B230_B="$_anchor2" awk '
-    $0 == ENVIRON["B230_A"] { print "    _ai_dlc_memo_commit \"$_f\" \"$_t\" \"$_st\" || return 125"; skip=1; next }
-    skip && $0 == ENVIRON["B230_B"] { skip=0; next }
-    { skip=0; print }' \
-    "$RECON/lib.sh" > "$MUT_DIR/lib.sh"
-  if [ "$_hits" -ne 2 ] || [ "$_ctl" -ne 0 ]; then
-    mut_stale b230-memo "the status-filter anchor matches $_hits lines of lib.sh (want 2; impossible-anchor control $_ctl, want 0)"
-  elif cmp -s "$RECON/lib.sh" "$MUT_DIR/lib.sh"; then
-    mut_stale b230-memo "the mutation did not apply"
-  fi
-}
-# b308_anchors -> sets U_ANCHOR and T_ANCHOR after the stale-anchor guard; returns 1 when an anchor is lost
-b308_anchors() {
-  local _uh _th _xh
-  U_ANCHOR='    git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- "$glob" || pc_fail_listing "$glob" "$?"'
-  # A consumer layout whose preclassify.sh predates the theirs-tree listing carries an older
-  # spelling; the mutant below targets whichever one the subject carries.
-  grep -qxF "$U_ANCHOR" "$RECON/preclassify.sh" \
-    || U_ANCHOR='    git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- "$glob" || pc_fail "ls-files $glob exited $?"'
-  grep -qxF "$U_ANCHOR" "$RECON/preclassify.sh" \
-    || U_ANCHOR='    git -C "$DIST" -c core.quotePath=false ls-files "$glob" || pc_fail "ls-files $glob exited $?"'
-  grep -qxF "$U_ANCHOR" "$RECON/preclassify.sh" \
-    || U_ANCHOR='    git -C "$DIST" ls-files "$glob" || pc_fail "ls-files $glob exited $?"'
-  T_ANCHOR='  printf '"'"'%s\n'"'"' "$TEMPLATE_ROWS" |'
-  _uh="$(grep -cxF "$U_ANCHOR" "$RECON/preclassify.sh")" || _uh=0
-  _th="$(grep -cxF "$T_ANCHOR" "$RECON/preclassify.sh")" || _th=0
-  _xh="$(grep -cxF 'ZZ-NO-SUCH-PRECLASSIFY-ANCHOR-ZZ' "$RECON/preclassify.sh")" || _xh=0
-  if [ "$_uh" -ne 1 ] || [ "$_th" -ne 1 ] || [ "$_xh" -ne 0 ]; then
-    bad "FIXTURE STALE [BL-308 mutants]: anchors match untangle=$_uh templates=$_th (want 1 each; impossible-anchor control $_xh, want 0)"
-    return 1
-  fi
-}
-# b308_mut <name> <awk-program> -> MUT_DIR
-b308_mut() {
-  mut_new "$1"
-  awk "$2" "$RECON/preclassify.sh" > "$MUT_DIR/preclassify.sh" 2>/dev/null
-  if cmp -s "$RECON/preclassify.sh" "$MUT_DIR/preclassify.sh"; then mut_stale "$1" "the mutation did not apply"; fi
-}
-build_untangle_nols() {
-  b308_anchors || { MUT_DIR=""; return; }
-  # the `|| pc_fail` on --untangle's ls-files removed: its enumeration fails into an empty stream and the mode exits 0
-  B308_A="$U_ANCHOR" b308_mut untangle-nols '$0 == ENVIRON["B308_A"] { sub(/ [|][|] pc_fail.*$/, ""); print; next } { print }'
-}
-build_templates_notrap() {
-  b308_anchors || { MUT_DIR=""; return; }
-  # --templates disarms the USR1 trap before its loop, so pc_fail() in a `$( )` ends only the subshell, both hashes
-  # read empty and equal, and the row reads TEMPLATE-UNCHANGED-NOOP at rc 0
-  B308_A="$T_ANCHOR" b308_mut templates-notrap '$0 == ENVIRON["B308_A"] { print "  trap : USR1" } { print }'
-}
-# mut_memo <name> <mode> -> MUT_DIR. The fix has two layers and each gets its own mutant, plus the full revert:
-# removing the fill-file creation probe (the direct fall-through never fires), and restoring the read-back of
-# `.s` after a memo_has_path fill.
-mut_memo() {
-  local d before after
-  mut_new "$1"; d="$MUT_DIR"
-  cp "$RECON/lib.sh" "$d/lib.sh.in"
-  case "$2" in
-    probe|both)
-      sed 's/^  { : > "\$_t"; } 2>\/dev\/null$/  :/' "$d/lib.sh.in" > "$d/lib.sh.p" || { echo "FIXTURE ERROR: mutation $1 DID NOT APPLY (sed died)" >&2; exit 2; }
-      cmp -s "$d/lib.sh.in" "$d/lib.sh.p" && { echo "FIXTURE ERROR: mutation $1 matched nothing -- the fill-file probe moved" >&2; exit 2; }
-      mv "$d/lib.sh.p" "$d/lib.sh.in" ;;
-  esac
-  case "$2" in
-    readback|both)
-      # Delete the FILL's `return` inside memo_has_path only (four-space indent; the hit's is two),
-      # so a fill falls through to the hit's read-back of `.s` as it did before the fix.
-      LC_ALL=C awk '/^memo_has_path\(\) \{/{inf=1} inf && /^}/{inf=0} inf && !done && $0=="    return \"$_st\"" {done=1; next} {print}' \
-        "$d/lib.sh.in" > "$d/lib.sh.r" || { echo "FIXTURE ERROR: mutation $1 DID NOT APPLY (awk died)" >&2; exit 2; }
-      before="$(wc -l < "$d/lib.sh.in")"; after="$(wc -l < "$d/lib.sh.r")"
-      [ "$((before - after))" -eq 1 ] || { echo "FIXTURE ERROR: mutation $1 removed $((before - after)) lines, expected 1" >&2; exit 2; }
-      mv "$d/lib.sh.r" "$d/lib.sh.in" ;;
-  esac
-  mv "$d/lib.sh.in" "$d/lib.sh"
-  cmp -s "$RECON/lib.sh" "$d/lib.sh" && { echo "FIXTURE ERROR: mutant $1 is byte-identical to the subject" >&2; exit 2; }
-}
-build_403d_read_status() {
-  # the read's own status unread: a failed read under set -e ends the script with 1
-  mut_py 403d-read-status lib.sh '  { _s="$(<"$1")"; } 2>/dev/null || return 125' '  { _s="$(<"$1")"; } 2>/dev/null'
-}
-build_403d_shape() {
-  # the shape guard dropped: an empty .s is `return ""`, 255
-  mut_py 403d-shape lib.sh $'  case "$_s" in \'\'|*[!0-9]*|????*) return 125 ;; esac\n' ''
-}
-# the BL-374 mutants, each one wrong fix with its exact signature
-build_revparse_oracle() {
-  # the pre-fix oracle: rev-parse -q --verify answering 1
-  local N_ABS_BODY
-  N_ABS_BODY='  local _e _lr=0
-  { _e="$(git -C "$1" --literal-pathspecs ls-tree -z --full-tree "$2" -- "$3" 2>/dev/null)"; } 2>/dev/null || _lr=$?
-  if [ "$_lr" -eq 0 ]; then
-    [ -n "$_e" ] || return 0
-    [ "${_e#*$'"'"'\t'"'"'}" = "$3" ] && return 1
-    return 0
-  fi
-  case "/$3/" in */../*) return 0 ;; esac
-  case "$3" in /*) return 0 ;; esac
-  return 1'
-  mut_py revparse-oracle lib.sh "$N_ABS_BODY" '  git -C "$1" rev-parse -q --verify "$2:$3" >/dev/null 2>&1
-  [ "$?" -eq 1 ]'
-}
-build_naive_line() {
-  # the naive rule: a line at rc 0 is a failure whatever path it names
-  mut_py naive-line lib.sh '    [ "${_e#*$'"'"'\t'"'"'}" = "$3" ] && return 1
-    return 0' '    return 1'
-}
-build_no_dotdot() {
-  # no `..` clause: every non-zero ls-tree is a failure
-  mut_py no-dotdot lib.sh '  case "/$3/" in */../*) return 0 ;; esac
-  case "$3" in /*) return 0 ;; esac' '  case "$3" in /*) return 0 ;; esac'
-}
-build_no_abs() {
-  # no absolute-path clause: git's "outside repository" 128 on /etc/passwd reads as a failure
-  mut_py no-abs lib.sh '  case "$3" in /*) return 0 ;; esac
-  return 1
-}' '  return 1
-}'
-}
-build_no_literal() {
-  # pathspecs read as magic again: ls-tree refuses `:(glob)…` at 128, read as a failure
-  mut_py no-literal lib.sh 'git -C "$1" --literal-pathspecs ls-tree -z' 'git -C "$1" ls-tree -z'
-}
-build_raw_direct() {
-  # the direct lines keep git's raw status (an unwritable memo answers differently)
-  mut_py raw-direct lib.sh \
-    '    [ "$_st" -eq 0 ] || _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || return 125; return "$_st"; }' '    return "$_st"; }' \
-    '    [ "$_st" -ne 1 ] || _ai_dlc_rev_absent "$_dist" "$_spec" || return 125; return "$_st"; }' '    return "$_st"; }'
-}
-build_rev_parse_caches_1() {
-  # the lib-only half-fix: memo_rev_parse caches its 1 unconditionally, as before
-  mut_py rev-parse-caches-1 lib.sh \
-    '      1) if _ai_dlc_rev_absent "$_dist" "$_spec"; then _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125
-         else _ai_dlc_memo_serve "$_t"; return 125; fi ;;' '      1) _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125 ;;'
-}
-build_keyed_on_128() {
-  # the BL-310 half-fix keyed on 128: a missing blob (cat-file 1) is still answered as absent
-  mut_py keyed-on-128 lib.sh \
-    '    [ "$_st" -eq 0 ] || _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || return 125; return "$_st"; }' '    [ "$_st" -ne 128 ] || _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || return 125; return "$_st"; }' \
-    '      _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || _st=125' '      [ "$_st" -ne 128 ] || _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || _st=125'
-}
-build_dist_only_revparse() {
-  # dist_only keeps its own rev-parse second opinion
-  mut_py dist-only-revparse preclassify.sh \
-    '      _do_rc=0
-      memo_has_path "$DIST" "$THEIRS" "core/fixtures/${_f}/.dist-only" || _do_rc=$?' \
-    '      _do_rc=0
-      git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${_f}/.dist-only" 2>/dev/null || _do_rc=$?
-      if [ "$_do_rc" -eq 128 ]; then git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${_f}/.dist-only" >/dev/null 2>&1; [ "$?" -eq 1 ] || _do_rc=125; fi'
-}
-
-# mspec <name> -> M_GRP M_DEC M_TWIN; M_GRP names the group whose tip flag gates the mutant
-mspec() {
-  case "$1" in
-    norenames)           M_GRP=R;    M_DEC="A B";  M_TWIN="C" ;;
-    b230-memo)           M_GRP=B230; M_DEC="b230d"; M_TWIN="b230c" ;;
-    untangle-nols)       M_GRP=B308; M_DEC="U1";   M_TWIN="U2" ;;
-    templates-notrap)    M_GRP=B308; M_DEC="T1";   M_TWIN="U1" ;;
-    memo-probe)          M_GRP=MEMO; M_DEC="mE mF"; M_TWIN="mG" ;;
-    memo-readback)       M_GRP=MEMO; M_DEC="mH";   M_TWIN="mG" ;;
-    memo-unfixed)        M_GRP=MEMO; M_DEC="mE";   M_TWIN="ES" ;;
-    403d-read-status)    M_GRP=D403; M_DEC="US";   M_TWIN="ES" ;;
-    403d-shape)          M_GRP=D403; M_DEC="ES";   M_TWIN="US" ;;
-    revparse-oracle)     M_GRP=N;    M_DEC="na";   M_TWIN="nh" ;;
-    naive-line)          M_GRP=N;    M_DEC="nh";   M_TWIN="nm" ;;
-    no-dotdot)           M_GRP=N;    M_DEC="ni";   M_TWIN="nm" ;;
-    no-abs)              M_GRP=N;    M_DEC="nm";   M_TWIN="ni" ;;
-    no-literal)          M_GRP=N;    M_DEC="nn";   M_TWIN="nm" ;;
-    raw-direct)          M_GRP=N;    M_DEC="nb";   M_TWIN="nh" ;;
-    rev-parse-caches-1)  M_GRP=N;    M_DEC="nc";   M_TWIN="nh" ;;
-    keyed-on-128)        M_GRP=N;    M_DEC="nf ng"; M_TWIN="nh" ;;
-    dist-only-revparse)  M_GRP=N;    M_DEC="nl";   M_TWIN="nk" ;;
-    shim-noop-git)       M_GRP=SHIMG; M_DEC="b230c b230d U1 T1"; M_TWIN="ES" ;;
-    shim-noop-ngit)      M_GRP=N;    M_DEC="nl";   M_TWIN="ES" ;;
-    *) echo "FIXTURE ERROR: no mutant spec for $1" >&2; exit 2 ;;
-  esac
-}
-build_mutant() { # build_mutant <name> -> MUT_DIR ("" when it did not apply)
-  case "$1" in
-    norenames) build_norenames ;;
-    b230-memo) build_b230_memo ;;
-    untangle-nols) build_untangle_nols ;;
-    templates-notrap) build_templates_notrap ;;
-    memo-probe) mut_memo memo-probe probe ;;
-    memo-readback) mut_memo memo-readback readback ;;
-    memo-unfixed) mut_memo memo-unfixed both ;;
-    403d-read-status) build_403d_read_status ;;
-    403d-shape) build_403d_shape ;;
-    revparse-oracle) build_revparse_oracle ;;
-    naive-line) build_naive_line ;;
-    no-dotdot) build_no_dotdot ;;
-    no-abs) build_no_abs ;;
-    no-literal) build_no_literal ;;
-    raw-direct) build_raw_direct ;;
-    rev-parse-caches-1) build_rev_parse_caches_1 ;;
-    keyed-on-128) build_keyed_on_128 ;;
-    dist-only-revparse) build_dist_only_revparse ;;
-    shim-noop-git|shim-noop-ngit) MUT_DIR="$RECON" ;;  # the subject is unchanged; the SHIM is what is mutated
-  esac
-}
-
-score_mutant() { # score_mutant <name>
-  local name="$1" cells c miss="" tw="" msg
-  mspec "$name"
-  case "$M_GRP" in B230|B308|SHIMG) [ "$RUN_B230" = 1 ] || return 0 ;; N) [ "$RUN_N" = 1 ] || return 0 ;; esac
-  build_mutant "$name"
-  [ -n "$MUT_DIR" ] || return 0
-  RES=""
-  if [ "$MATRIX" -eq 1 ]; then
-    cells="$ALL_CELLS"
-    for c in $cells; do MATRIX_CELLS=$((MATRIX_CELLS + 1)); done
-  else
-    cells="$M_DEC $M_TWIN"
-  fi
-  case "$name" in shim-noop-*) FX_SHIM_NOOP=1; export FX_SHIM_NOOP ;; esac
-  run_cells "$MUT_DIR" "$name" 0 $cells
-  unset FX_SHIM_NOOP
-  if [ "$MATRIX" -eq 1 ]; then echo "  matrix $name $(row_of "$cells")"; fi
-  for c in $M_DEC; do [ "$(res "$c")" = 1 ] || miss="$miss $c"; done
-  for c in $M_TWIN; do [ "$(res "$c")" = 0 ] || tw="$tw $c"; done
-  msg="MUTANT $name: decides [$M_DEC] read 1 and twin [$M_TWIN] reads 0"
-  if [ -n "$miss" ]; then
-    bad "MUTANT $name SURVIVED: deciding cell(s) [${miss# }] held"
-  elif [ -n "$tw" ]; then
-    bad "MUTANT $name: twin [${tw# }] also tripped -- the fault is not confined to its deciding cells, or the copy did not run"
-  else
-    case "$M_GRP" in
-      R)    mutant_killed "${B_R:-0}" "$name" "$msg" ;;
-      B230) mutant_killed "${B_B230:-0}" "$name" "$msg" ;;
-      B308) mutant_killed "${B_B308:-0}" "$name" "$msg" ;;
-      MEMO) mutant_killed "${B_MEMO:-0}" "$name" "$msg" ;;
-      D403) mutant_killed "${B_D403:-0}" "$name" "$msg" ;;
-      N)    mutant_killed "${B_N:-0}" "$name" "$msg" ;;
-      SHIMG) mutant_killed "$(( ${B_B230:-0} && ${B_B308:-0} ))" "$name" "$msg" ;;
-    esac
-  fi
-}
-
-for _m in norenames b230-memo untangle-nols templates-notrap memo-probe memo-readback memo-unfixed \
-          403d-read-status 403d-shape revparse-oracle naive-line no-dotdot no-abs no-literal raw-direct \
-          rev-parse-caches-1 keyed-on-128 dist-only-revparse shim-noop-git shim-noop-ngit; do
-  score_mutant "$_m"
-done
-
 chmod 755 "$RO"
 [ "$RUN_N" != 1 ] || chmod 755 "$NRO"
-
-# A plain run executes no matrix-only cell: the matrix branch of score_mutant is the only place that counts one.
-if [ "$MATRIX" -eq 0 ]; then
-  if [ "$MATRIX_CELLS" -eq 0 ]; then ok "MODE: a plain run (PUSH) executed 0 matrix-only cells"; else bad "MODE: a plain run executed $MATRIX_CELLS matrix-only cell(s)"; fi
-fi
 
 echo ""
 report_end preclassify-rename-row

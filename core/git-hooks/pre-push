@@ -2299,6 +2299,8 @@ readset_keys_write() { # <out> [<keys dir>, default $KEYS_DIR]
 # run_fixtures reads. Only AI_DLC_FIXTURE_NO_SKIP=1 (`all`) runs every candidate.
 # cl_select <out> <all|keys|census>: writes <out>/.cl.sel, the bare names this push runs as `<fx>@consumer`.
 # `census` is scripts/census-consumer-layout.sh's mode, the only one that selects with no record present.
+# It prints the selection line, up to ten `<fx>@consumer: <reason>` rows, and the verdict-store line naming every
+# `<fx>@consumer` unit skipped on a store entry or on an unconfirmed placement record.
 cl_select() {
   local out="$1" c b n_c n_s why="" kd vh base p
   [ -n "${cl_tree:-}" ] || return 0
@@ -2354,6 +2356,17 @@ cl_select() {
   n_s="$(grep -c . "$out/.cl.sel")"; case "$n_s" in ''|*[!0-9]*) n_s=0 ;; esac
   printf '   ..    consumer layout: %s of %s shipping fixture(s) run as <fx>@consumer in %s%s\n' "$n_s" "$n_c" "$cl_tree" "${why:+ -- every one, because $why}"
   [ -n "$why" ] || awk -F'\t' '$2 == "run" && n < 10 { n++; print "   ..      " $1 "@consumer: " $3 }' "$c/.kdec"
+  # EVERY UNIT SKIPPED ON A PASS RECORDED ELSEWHERE IS NAMED, in the distribution's own verdict-store line: a store hit
+  # (`.vs`, readset_verdicts' hit list) and a record skip whose record is still UNCONFIRMED (`.vs.u`: cl_publish marked
+  # it and no run that reached its end has cleared the mark, so a stopped run or a census wrote it). A record a
+  # completed run published or confirmed is counted on the selection line and not named, as the distribution counts
+  # its key-record skips.
+  if [ -z "$why" ]; then
+    awk -F'\t' '$2 == "skip" && $4 != "v" { print $1 }' "$c/.kdec" > "$c/.rskip"
+    while IFS= read -r b; do [ ! -f "$kd/.unconfirmed/$b" ] || printf '%s\n' "$b"; done < "$c/.rskip" > "$c/.vs.u"
+    cat "$c/.vs" "$c/.vs.u" > "$c/.vs.all" 2>/dev/null
+  fi
+  [ -n "$why" ] || [ ! -s "$c/.vs.all" ] || printf '   ..    verdict store: %s fixture(s) skipped on a pass recorded elsewhere: %s\n' "$(grep -c . "$c/.vs.all")" "$(sed 's/$/@consumer/' "$c/.vs.all" | tr '\n' ' ' | sed 's/ $//')"
   return 0
 }
 # cl_tree_init <dir>: `git init` and the consumer tree's FIXED root commit (empty tree, fixed identity, date and
@@ -2378,11 +2391,13 @@ cl_any_record() {
 # cl_publish <out> <fx>: publishes <fx>'s consumer-layout record THE MOMENT its unit passed, so a run stopped or red
 # later keeps every pass it made. cl_select writes this definition to <out>/.cl.pub, which the pool worker and the
 # census unit source: ONE implementation. hermetic-run.sh writes a declared unit's store entry at the same moment.
+# The record lands UNCONFIRMED (`<keys dir>/.unconfirmed/<fx>`, written first) until cl_confirm clears the mark.
 cl_publish() {
   local kd=""
   read -r kd 2>/dev/null < "$1/.cl.keys" || return 0
   [ -n "$kd" ] && [ -s "$1/.cl/.k/$2" ] || return 0
-  mkdir -p "$kd" 2>/dev/null && cp "$1/.cl/.k/$2" "$kd/$2.key.tmp.$$" 2>/dev/null && mv "$kd/$2.key.tmp.$$" "$kd/$2.key" 2>/dev/null
+  mkdir -p "$kd/.unconfirmed" 2>/dev/null && : > "$kd/.unconfirmed/$2" 2>/dev/null \
+    && cp "$1/.cl/.k/$2" "$kd/$2.key.tmp.$$" 2>/dev/null && mv "$kd/$2.key.tmp.$$" "$kd/$2.key" 2>/dev/null
   return 0
 }
 # cl_write <out>: publishes the remaining consumer-layout records through
@@ -2401,6 +2416,24 @@ cl_write() {
     [ "$(cat "$out/$b@consumer" 2>/dev/null)" = ok ] || rm -f "$c/.k/$b"
   done < "$out/.cl.sel"
   readset_keys_write "$c" "$CL_KEYS_DIR"
+  return 0
+}
+# cl_confirm <out>: at the end of a hook run, red or green (the distribution publishes its key records on a red run
+# too), clears the unconfirmed mark of every unit this run passed or named on its verdict-store line. Only the hook's
+# run calls it, so a stopped run's passes and a census's stay marked and are named once by the next push.
+cl_confirm() {
+  local out="$1" c="$1/.cl" kd="" b v
+  [ -n "${cl_tree:-}" ] && [ -d "$c" ] && [ ! -e "$out/.cl.refused" ] && [ -s "$out/.cl.keys" ] || return 0
+  read -r kd < "$out/.cl.keys"
+  [ -n "$kd" ] && [ -d "$kd/.unconfirmed" ] || return 0
+  set --
+  while IFS= read -r b; do
+    [ -n "$b" ] || continue
+    v=""; read -r v < "$out/$b@consumer" 2>/dev/null
+    [ "$v" != ok ] || set -- "$@" "$kd/.unconfirmed/$b"
+  done < "$out/.cl.sel"
+  while IFS= read -r b; do [ -z "$b" ] || set -- "$@" "$kd/.unconfirmed/$b"; done < "$c/.vs.all" 2>/dev/null
+  [ "$#" -eq 0 ] || rm -f -- "$@" 2>/dev/null
   return 0
 }
 
@@ -2705,6 +2738,7 @@ run_fixtures() {
     # A seed that skips every fixture still publishes its records, so it lands once.
     readset_keys_write "$out"
     cl_write "$out"
+    cl_confirm "$out"
     readset_pending_recorded "$out"
     readset_pending_line 0 "" "$out/.precorded"
     rm -rf "$out"; trap - EXIT INT TERM HUP
@@ -3068,7 +3102,7 @@ run_fixtures() {
     if rec_lock "$DURATIONS_RECORD.lock"; then
       { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
         | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
-        | while read -r k v; do [ -f "${FXROOT}${k}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
+        | while read -r k v; do [ -f "${FXROOT}${k%@consumer}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
         | sort > "$out/.merged"
       [ -s "$out/.merged" ] && rec_put "$out/.merged" "$DURATIONS_RECORD"
       rec_unlock "$DURATIONS_RECORD.lock"
@@ -3086,6 +3120,7 @@ run_fixtures() {
   # PER-FIXTURE KEY RECORDS ARE PUBLISHED ON A RED RUN TOO: each one is gated on its own verdict.
   readset_keys_write "$out"
   cl_write "$out"
+  cl_confirm "$out"
 
   # PUBLISH THIS RUN'S UNMERGED COSTS WHATEVER `rc` IS, and copy the PRE-MERGE file:
   # "$out/.durations" is exactly the units this pool timed, whereas "$out/.merged" above has

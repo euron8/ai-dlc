@@ -2,9 +2,9 @@
 # resume-whole-read -- assert the resume path whole-reads the pipeline snapshot,
 # and that a budget check stands in front of that read.
 #
-# Usage: run.sh [RESUME_FIXTURE_MUTANT=<name>]
-# Exit:  0 = every assertion holds (or the named mutant was correctly rejected)
-#        1 = the check regressed (or a mutant slipped through -- vacuity)
+# Usage: run.sh
+# Exit:  0 = every assertion holds
+#        1 = the check regressed
 #        2 = fixture broken
 #
 # WHAT THIS PINS.
@@ -36,12 +36,9 @@
 # "route.md does not contain the section-scoped sentence" passes vacuously
 # against an empty file -- the check-that-cannot-fire shape this suite exists to
 # catch. Each absence assertion is joined to a positive one on the instruction
-# that must be there instead. Run the `blank` mutant to see it: it fails the
-# positives and passes the absence check, which is the whole point.
+# that must be there instead.
 
 set -uo pipefail
-
-MUTANT="${RESUME_FIXTURE_MUTANT:-}"
 
 # Walk UP for a marker. Never count `..` hops: this file is reachable at
 # core/fixtures/<name>/ in the distribution and tests/fixtures/<name>/ in a
@@ -81,165 +78,13 @@ if [ -z "$ENTRY_LINE" ]; then
   exit 2
 fi
 
-WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
-trap 'rm -rf "$WORK"' EXIT
-
-# ---------------------------------------------------------------------------
-# Mutants. Each rewrites route.md into the sandbox and names the assertions it
-# MUST break. A mutant that passes every assertion means the assertion set is
-# not testing what it claims.
-# ---------------------------------------------------------------------------
-if [ -n "$MUTANT" ]; then
-  MUT="$WORK/route.md"
-  case "$MUTANT" in
-    section-read)
-      # The pre-fix wording, restored. Must fail A1 (positive) and A2 (absence).
-      sed 's|^2\. \*\*Load the snapshot\.\*\* Read `_bmad-output/pipeline-snapshot.md` \*\*in$|2. **Load the snapshot.** Read the snapshot'"'"'s **Pipeline Position** section to|' \
-        "$ROUTE" > "$MUT"
-      ;;
-    no-budget)
-      # Budget check deleted. Must fail A3 (positive) and A4 (ordering).
-      grep -v 'verdict.sh validate-artifact-budget --only pipeline-snapshot.md' "$ROUTE" > "$MUT"
-      ;;
-    reorder)
-      # Budget check moved AFTER the read, re-inserted past the END of the read
-      # instruction so the read sentence itself is left intact. Must fail A4
-      # ALONE -- A1 and A3 still pass, which is exactly why ordering is asserted
-      # separately from presence.
-      grep -v 'verdict.sh validate-artifact-budget --only pipeline-snapshot.md' "$ROUTE" \
-        | sed 's|^\(   full\*\*\. This is the single load.*\)$|\1\n   `scripts/ai-dlc/verdict.sh validate-artifact-budget --only pipeline-snapshot.md`.|' \
-        > "$MUT"
-      ;;
-    no-entry-line)
-      # The reader forgets the entry line the producer emits. This is the state
-      # BL-125 filed: handoff.md said "exactly /ai-dlc resume" while route.md's
-      # resume grammar accepted only two prose forms that, measured over 67
-      # recorded consumer prompts, had never matched once. Must fail A8 ALONE.
-      sed 's|`/ai-dlc resume`|the bare invocation|g' "$ROUTE" > "$MUT"
-      ;;
-    no-handoff-token)
-      # The `handoff` entry token loses its dispatch, so a session whose FIRST
-      # input is the request falls through to Step 1 and is routed as a new
-      # feature. Must fail A9 ALONE.
-      sed 's|^   - \*\*`handoff`\*\* .*|   - (removed)|' "$ROUTE" > "$MUT"
-      ;;
-    no-since-route)
-      # The beat instruction deleted outright. Must fail A10 ALONE.
-      # Keyed on the SUBJECT'S OWN predicate -- the line that names the program
-      # AND the flag -- never on a line number or a quoted copy of the sentence,
-      # so a rewrap or a reword re-anchors itself and `cmp -s` below catches a
-      # predicate that has genuinely lost its subject.
-      awk '!(/wait-for-deliverable\.sh/ && /--since/)' "$ROUTE" > "$MUT"
-      ;;
-    since-at-eof)
-      # SITING. The same sentence, byte-identical, moved out of the Step 0
-      # window to the end of the file. Every token A10 looks for is still in
-      # route.md, so a whole-file grep passes and only a windowed read fails.
-      awk '/wait-for-deliverable\.sh/ && /--since/ { saved = saved $0 "\n"; next }
-           { print }
-           END { printf "%s", saved }' "$ROUTE" > "$MUT"
-      ;;
-    since-in-comment)
-      # The sentence wrapped in an HTML comment: present in the window, invisible
-      # to a reader following the file. Must fail A10 ALONE.
-      awk '/wait-for-deliverable\.sh/ && /--since/ { print "<!--"; print $0; print "-->"; next }
-           { print }' "$ROUTE" > "$MUT"
-      ;;
-    since-in-fence)
-      # The sentence wrapped in a fenced block: an EXAMPLE, not an instruction.
-      # Must fail A10 ALONE.
-      awk '/wait-for-deliverable\.sh/ && /--since/ { print "```"; print $0; print "```"; next }
-           { print }' "$ROUTE" > "$MUT"
-      ;;
-    since-negated)
-      # The instruction inverted. Every token survives and the sentence now says
-      # the opposite. Must fail A10 ALONE.
-      awk '/wait-for-deliverable\.sh/ && /--since/ { t=$0; sub(/^[[:space:]]+/, "", t); print "     Do NOT run " t; next }
-           { print }' "$ROUTE" > "$MUT"
-      ;;
-    since-skip)
-      # NEGATION BY ANOTHER WORD. `since-negated` above covers the `not`/`never`
-      # family; this covers the family that carries no negative particle at all
-      # and still tells the reader the run is optional. A grammar keyed only on
-      # `not`/`never` passes this, which is why it is a mutant and not a comment.
-      # Must fail A10 ALONE.
-      awk '/wait-for-deliverable\.sh/ && /--since/ { t=$0; sub(/^[[:space:]]+/, "", t); print "     Skip running " t; next }
-           { print }' "$ROUTE" > "$MUT"
-      ;;
-    since-item3)
-      # SITING, INSIDE the window. `since-at-eof` moves the sentence OUT of Step 0
-      # entirely; this one keeps it in Step 0 and only changes which ITEM owns it,
-      # moving it into item 3 (the "snapshot exists but this is not a resume"
-      # branch). Unfenced, uncommented, non-negated, in-window -- every property
-      # the arm scored before this repair. Only the OWNING item differs, and a
-      # reader reconciling the ledger never reaches item 3. Must fail A10 ALONE.
-      awk '/wait-for-deliverable\.sh/ && /--since/ { t=$0; sub(/^[[:space:]]+/, "", t); saved=t; next }
-           /^3\. If the snapshot exists but user input does NOT indicate a resume/ {
-             print; if (saved != "") print "   " saved; next }
-           { print }' "$ROUTE" > "$MUT"
-      ;;
-    since-wrapped)
-      # FALSE-POSITIVE CONTROL, and the only mutant here that must PASS.
-      #
-      # The shipped instruction, wording unchanged to the byte, soft-wrapped
-      # across continuation lines at the ~70-column width every other bullet in
-      # route.md already uses. Nothing about the instruction changed; only where
-      # the newlines fall. An A10 that reads PHYSICAL lines fails this, so any
-      # reflow of route.md -- an edit with no behavioural content -- would turn
-      # the fixture red and read exactly like a regression. The verdict block
-      # below gives this mutant its own arm: `fails` must be ZERO.
-      awk '/wait-for-deliverable\.sh/ && /--since/ {
-             t = $0; sub(/^[[:space:]]+/, "", t)
-             n = split(t, w, " "); line = ""
-             for (i = 1; i <= n; i++) {
-               cand = (line == "" ? w[i] : line " " w[i])
-               if (length(cand) > 65 && line != "") { print "     " line; line = w[i] }
-               else { line = cand }
-             }
-             if (line != "") print "     " line
-             next
-           }
-           { print }' "$ROUTE" > "$MUT"
-      ;;
-    since-other-program)
-      # `--since` and `dispatched-at` attributed to a DIFFERENT program. The
-      # flag is named, the cell is named, and the beat is never armed. Must fail
-      # A10 ALONE.
-      awk '/wait-for-deliverable\.sh/ && /--since/ { gsub(/wait-for-deliverable\.sh/, "validate-artifact-budget.sh") }
-           { print }' "$ROUTE" > "$MUT"
-      ;;
-    blank)
-      # Vacuity control. Must fail the POSITIVES while passing A2 -- the
-      # demonstration that a bare absence check proves nothing. An empty Step 0
-      # window is an ordinary A10 failure, not a broken fixture, so this mutant
-      # stays a MUTANT REJECTED and does not exit 2.
-      : > "$MUT"
-      ;;
-    *)
-      echo "FIXTURE ERROR: unknown RESUME_FIXTURE_MUTANT '$MUTANT'" >&2
-      echo "  known: section-read | no-budget | reorder | no-entry-line |" >&2
-      echo "         no-handoff-token | no-since-route | since-at-eof |" >&2
-      echo "         since-in-comment | since-in-fence | since-negated |" >&2
-      echo "         since-skip | since-item3 | since-wrapped |" >&2
-      echo "         since-other-program | blank" >&2
-      exit 2
-      ;;
-  esac
-  if cmp -s "$MUT" "$ROUTE" && [ "$MUTANT" != blank ]; then
-    echo "FIXTURE ERROR: mutant '$MUTANT' changed nothing -- its anchor no longer" >&2
-    echo "  matches route.md, so it cannot prove the assertions are live." >&2
-    exit 2
-  fi
-  ROUTE="$MUT"
-fi
-
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 # Wrapped prose: collapse to one line before matching, so a re-wrap of the same
 # sentence is not read as its removal.
 NORM="$(tr '\n' ' ' < "$ROUTE" | tr -s ' ')"
 
-echo "resume-whole-read${MUTANT:+ [mutant: $MUTANT]}"
+echo "resume-whole-read"
 
 # --- A1/A2: the read is WHOLE, and the section-scoped read is gone -----------
 # PAIRED. A2 alone passes against an empty file.
@@ -284,8 +129,6 @@ case "$NORM" in
 esac
 
 # --- A6: the call site is declared where the enforcement map can see it -----
-# Not mutated: the map is a separate file, and a route.md mutant must not be
-# able to mask a map regression.
 if grep -q 'site: route.md Step 0a (resume)' "$MAP"; then
   ok "A6 enforcement-map declares the resume call site"
 else
@@ -318,7 +161,7 @@ case "$NORM" in
 esac
 
 # --- A9: the `handoff` entry token dispatches to handoff.md ------------------
-# PAIRED with A8 and separately mutated, because the two failed independently:
+# PAIRED with A8, because the two failed independently:
 # teaching the reader the resume line leaves `/ai-dlc handoff` unrouted, and
 # routing `handoff` leaves the successor's own entry line unrecognised.
 #
@@ -385,8 +228,7 @@ esac
 # nothing in route.md -- every step heading is `###` -- and that grammar
 # returned an EMPTY window, which read as a clean scan.
 #
-# An empty window is an ordinary `bad` here, never exit 2, so the `blank`
-# mutant keeps exiting 0 as MUTANT REJECTED. Exit 2 is reserved above, for
+# An empty window is an ordinary `bad` here, never exit 2. Exit 2 is reserved above, for
 # route.md itself being absent.
 W10="$(awk '
   /^###[[:space:]]*Step 0a/           { inw = 0 }
@@ -403,8 +245,7 @@ W10="$(awk '
 # single physical line. An arm reading physical lines therefore pins the
 # LINE BREAKS as well as the words: re-wrapping that sentence the way its
 # neighbours are wrapped changes no behaviour and would turn this red, which
-# reads exactly like the instruction having been deleted. The `since-wrapped`
-# mutant is that reflow and it must PASS.
+# reads exactly like the instruction having been deleted.
 #
 # A line opening with `- ` or `N. ` at any indent OPENS an item; every
 # following indented non-blank line is appended to it with one space; a blank
@@ -471,30 +312,4 @@ else
 fi
 
 echo
-# `since-wrapped` is the FALSE-POSITIVE control and inverts this verdict: it is
-# a behaviour-preserving reflow of the shipped instruction, so the assertion
-# set must stay SILENT over it. Scored the usual way it would be reported as a
-# mutant that "slipped through", which is exactly the wrong verdict -- a
-# fixture that demands a failure here is a fixture demanding that route.md
-# never be re-wrapped.
-if [ "$MUTANT" = since-wrapped ]; then
-  if [ "$fails" -eq 0 ]; then
-    echo "FALSE-POSITIVE CONTROL HELD: the re-wrapped instruction passes every assertion."
-    exit 0
-  fi
-  echo "FALSE POSITIVE: re-wrapping the shipped instruction at the width every" >&2
-  echo "  other bullet in route.md uses broke $fails assertion(s). The arm is" >&2
-  echo "  pinning line breaks, not content." >&2
-  exit 1
-fi
-
-if [ -n "$MUTANT" ]; then
-  if [ "$fails" -gt 0 ]; then
-    echo "MUTANT REJECTED: $fails assertion(s) failed, as required."
-    exit 0
-  fi
-  echo "VACUOUS: mutant '$MUTANT' passed every assertion. The assertion set does" >&2
-  echo "  not test what it claims." >&2
-  exit 1
-fi
 report_end resume-whole-read

@@ -170,7 +170,7 @@
 #   both programs' real output (a format drift that empties a reading is caught there, not acquitted),
 #   the join must hold on the seeded truth, and it must FAIL with the arm's count one short (j1) and
 #   with a ceiling reading one more entry (b16). Where this tree carries no validate-backlog-size.sh
-#   (the receipt-binding fixture's seeds) or its HEAD no scripts/backlog-reverify.sh, R9 prints
+#   (a seeded ledger tree) or its HEAD no scripts/backlog-reverify.sh, R9 prints
 #   `R9: NOT RUN` and observes nothing, said as such in every verbosity. A zero on both sides is not
 #   refused: an all-manual ledger has no `sh` receipt, and the probe, not the corpus, proves the join
 #   can fire.
@@ -1980,7 +1980,6 @@ score_ledger() {
   _sl_i=0; _sl_e=0; _sl_m=0
   : > "$WORK/unrec"
   # The has/lacks verb pair is bound to the classifier's own case arm: if it moves, refuse rather than drift.
-  # Fixture backlog-receipt-binding arm m8e-drift proves this fires (a copy with the arm renamed exits 2).
   grep -qE '^[[:space:]]*has\|lacks\)' "$SELF_ROOT/scripts/backlog-reverify.sh" 2>/dev/null || { echo "$(me): FAIL -- backlog-reverify.sh no longer dispatches 'has|lacks)', so the verb pair recognised here has drifted from it." >&2; return 2; }
   while IFS="$(printf '\t')" read -r _l _c _r; do
     [ -n "$_l" ] || continue
@@ -3802,16 +3801,17 @@ R12_PROBED="R12 fired both directions over 20 seeded entries"
 # TWO-SIDED RATCHET: the run FAILS when the live UNGUARDED-READ count is ABOVE it, and ALSO when it is BELOW it (a
 # stale-high ceiling hides a regrowth, as in the fork-budget gate), with a message naming the live count to lower it
 # to. `--max-unguarded` / AI_DLC_BACKLOG_MAX_UNGUARDED keep the same two-sided meaning.
-# THE SIX ROWS, measured on the live ledger in the batch 256 window, all against BL-878's receipt (`bash
-# scripts/validate-fixture-inprocess.sh --complete`, base exit 1). They are findings against THAT RECEIPT, not R13's
-# own failures, in two classes by consequence:
-#   (a) THE REAL DEFECT, three rows: scripts/fixture-inprocess-allowlist.txt, scripts/fixture-matrix-allowlist.txt and
+# THE FIVE ROWS, measured on the live ledger in the batch 256 window, all against BL-878's receipt (`bash
+# scripts/validate-fixture-inprocess.sh --complete`, base exit 1), less scripts/fixture-matrix-allowlist.txt, deleted
+# with every mutation battery. They are findings against THAT RECEIPT, not R13's own failures, in two classes by
+# consequence:
+#   (a) THE REAL DEFECT, two rows: scripts/fixture-inprocess-allowlist.txt and
 #       scripts/validate-enforcement-map.sh. Removed, the driver exits 1 -- the receipt's own STILL-LIVE code -- on a
 #       DELETED input, which reads as "rows remain". R7 reads exit 1 as a measurement, so a rename of any of them would
 #       leave BL-878 with no instrument.
 #       THE scripts/validate-enforcement-map.sh ROW was introduced by 0.1098.0: BL-982's P2 self-probe in
 #       scripts/validate-fixture-invocations.sh names scripts/validate-enforcement-map.sh on an executable line, and
-#       BL-878's run reads it; removed, the driver exits 1 (cause not determined). The ceiling drops back to 5 when it
+#       BL-878's run reads it; removed, the driver exits 1 (cause not determined). The ceiling drops to 4 when it
 #       is guarded.
 #   (b) THE CONTRACT MISMATCH, three rows: core/fixtures/lib/mutant.sh, scripts/validate-fixture-hygiene.sh and
 #       scripts/validate-fixture-invocations.sh. Removed, the driver gives its DOCUMENTED refusal, exit 2 (its header
@@ -3822,7 +3822,7 @@ R12_PROBED="R12 fired both directions over 20 seeded entries"
 # Any release that moves BL-878's unguarded count (rotating BL-878, or changing its driver or the files it reads) must
 # edit DEFAULT_MAX_R13 in scripts/validate-backlog-receipts.sh in the same commit; the two-sided ceiling fails the
 # 'backlog receipts' step otherwise.
-DEFAULT_MAX_R13=6
+DEFAULT_MAX_R13=5
 R13_MAX_REMOVALS=32
 
 # THE FIXTURE'S CHEAP MODE (fixture-mutants.md clause 5), never passed by the hook. core/fixtures/
@@ -4884,7 +4884,6 @@ exit 0
 
 # THE SOURCE GUARD. Sourced, this file defines its functions and its constants and stops; vbr_main
 # is the whole CLI, in the order the file always ran: scrub, worker dispatch, arguments, parent.
-# core/fixtures/backlog-receipt-binding/run.sh (its vin helper) sources it and calls vbr_main in a subshell.
 vbr_main() {
 vbr_sec_env "$@"
 vbr_worker "$@"

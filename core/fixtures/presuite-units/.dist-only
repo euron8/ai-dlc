@@ -1,0 +1,5 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is the PRESUITE_UNITS span of .githooks/pre-push -- the distribution's own gate, which install.sh never
+ships. The consumer's pre-push is core/git-hooks/pre-push, which carries no pre-suite steps, so on a consumer this
+fixture would find no subject.

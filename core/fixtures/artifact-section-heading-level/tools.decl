@@ -2,7 +2,6 @@ bash
 awk
 sed
 grep
-cmp
 cp
 cut
 head

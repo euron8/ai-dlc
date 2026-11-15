@@ -166,7 +166,7 @@ render_def defnoeffort opus
 #
 # defnoline: the body carries NEITHER line of the rendered sentence. Line 2 is removed as well
 # as line 1 on purpose: line 2 is identical in every role body, so a body keeping it would make
-# this world and `defwrongrole` the same world to a guard keyed on line 2, and the two mutants
+# this world and `defwrongrole` the same world to a guard keyed on line 2, and the two arms
 # in run.sh could not be told apart.
 {
   printf -- '---\nname: defnoline\ndescription: AI/DLC role defnoline — rendered from aiDlcRoles.defnoline; do not edit by hand\nmodel: opus\neffort: high\n---\n'

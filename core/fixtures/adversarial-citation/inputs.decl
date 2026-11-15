@@ -1,9 +1,8 @@
 # adversarial-citation reads the validator under test (REQUIRED) and its steering sibling
-# (validate-steering-budget.sh), which seed.sh and run.sh resolve beside it. The floor and BL-923 mutants
-# cp -R the validator's directory; the BL-923 worlds (arms K2, K3, L) make the validator and its copies
-# execute partition-document.sh, partition-subject.sh and merge-adversarial-shards.sh beside it, and
+# (validate-steering-budget.sh), which seed.sh and run.sh resolve beside it. The BL-923 worlds (arms K2, K3, L)
+# make the validator execute partition-document.sh, partition-subject.sh and merge-adversarial-shards.sh beside it, and
 # seed.sh runs partition-subject.sh --map and partition-document.sh --cross-groups to build the K3 worlds.
-# reason: the mutants run cp -R "$FL_SRC_DIR" and execute only the files declared here, core/fixtures/adversarial-citation/run.sh fl_mk.
+# reason: the BL-923 worlds execute only the files declared here, core/fixtures/adversarial-citation/run.sh bl_cells.
 core/scripts/validate-steering-budget.sh
 core/scripts/partition-document.sh
 core/scripts/partition-subject.sh

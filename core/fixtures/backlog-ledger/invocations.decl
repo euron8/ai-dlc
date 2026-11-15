@@ -5,6 +5,6 @@
 # BL-874 (PENDING kept): 404 / 163 / 52 -> 469 / 190 / 63, measured. The pending arm runs the rotator up to
 # three times (cells a, c, b) and is driven unmutated, in the mutant-control loop and against
 # mutation-pending-applied, whose twin (sha) also runs once; each rotator run also starts backlog-reverify.sh.
-469 *
-190 scripts/backlog-reverify.sh
-63 scripts/backlog-rotate.sh
+97 *
+55 scripts/backlog-reverify.sh
+23 scripts/backlog-rotate.sh

@@ -166,7 +166,7 @@ done
 # changed a gating script (0.805.0, validate-layer-entries.sh), and would again at any HEAD whose
 # range moved one. Putting each such script back at its BASE bytes builds the state step 2 really
 # gates: the pull's machinery is incoming, its rulebook already held. A script the range ADDS is
-# removed. Each restore is checked by blob, and the list goes to env.sh for run.sh's mutant.
+# removed. Each restore is checked by blob, and the list goes to env.sh for run.sh.
 SUJG_RESTORED=""
 sc_list="$(git -C "$DIST" -c core.quotePath=false diff --name-only "${BASE}..${THEIRS}" -- core/scripts/)" || {
   echo "FIXTURE ERROR: could not list core/scripts/ changes in ${BASE}..${THEIRS}" >&2; exit 2; }

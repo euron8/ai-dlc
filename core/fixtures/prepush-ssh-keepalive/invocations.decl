@@ -8,4 +8,4 @@
 # counter's DEBUG trap never fires (0 start rows on both sides).
 # The +11: arms S1-S2 and D1-D4 (BL-999, BL-1010), the same +11 measured on that unit alone (19 -> 30) before BL-984:
 # the S2 span and control probes, the D2 predicate cells, D3's two real-hook drives and D4's six gate-cut drives.
-33 *
+26 *

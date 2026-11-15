@@ -32,8 +32,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 [ "$#" -eq 1 ] && [ -f "$1" ] && [ "$(basename "$1")" = record-only-diff.sh ] \
   || { echo "REFUSED: usage: bash receipt-bl885.sh <path to record-only-diff.sh>" >&2; exit 9; }
 RO="$(cd "$(dirname "$1")" && pwd)/record-only-diff.sh"
-# A pass is logged only for a subject at its own path (a core/scripts directory); a mutant script directory's
-# copy is no pass of the subject.
+# A pass is logged only for a subject at its own path (a core/scripts directory).
 case "${RO%/*}" in */core/scripts) RO_PASS=1 ;; *) RO_PASS=0 ;; esac
 ( set +u +o pipefail; . "$RO" && declare -F ro_main > /dev/null ) > /dev/null 2>&1 \
   || { echo "REFUSED: $RO defines no ro_main when sourced" >&2; exit 9; }

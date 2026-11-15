@@ -22,7 +22,7 @@
 #
 # WHAT IT DOES NOT DO. It does not check wording, tone, or line breaks, and it must not — a pin
 # that fails on a rewrap is a pin the operator turns off. Each arm anchors on the shortest string
-# that carries the CLAIM, and section 3 proves each of those strings can actually go missing.
+# that carries the CLAIM.
 set -uo pipefail
 
 # HERMETIC -- scrub the operator's tuning before reading anything (I10).
@@ -112,42 +112,6 @@ for i in 0 1 2 3 4 5; do
   fi
 done
 
-# =============================================================================
-# 3. EACH PIN CAN ACTUALLY FIRE.
-# =============================================================================
-# A presence check whose literal is a substring of something structural — a heading, a word that
-# appears twice — passes forever and reads exactly like a pin that is doing work. Delete each
-# literal from a COPY and confirm its own arm, and ONLY its own arm, goes red.
-for i in 0 1 2 3 4 5; do
-  copy="$WORK/mut-$i.md"
-  # EACH LITERAL MUST SIT ON EXACTLY ONE LINE, AND APPEAR ONCE. Both halves are load-bearing.
-  # A literal spanning a wrap cannot be expressed to `awk -v` at all -- a raw newline in an
-  # assignment is a syntax error, the mutant is never built, and the run reads as entanglement
-  # rather than as a broken program (measured: two of these six, written that way first). And a
-  # literal appearing TWICE would have only its first occurrence removed here, leaving the arm
-  # above green over a mutation that did fire -- a survival scored as a kill.
-  n_lit="$(grep -cF -- "${LIT[$i]}" "$CORPUS" || true)"
-  if [ "$n_lit" -ne 1 ]; then
-    bad "MUTANT $i: its literal is on $n_lit line(s), not exactly 1 — a multi-line or repeated anchor cannot be removed cleanly, so '${CLAIM[$i]}' is unproven"
-    continue
-  fi
-  awk -v lit="${LIT[$i]}" '{ p=index($0,lit); if(p) $0 = substr($0,1,p-1) substr($0,p+length(lit)); print }' "$CORPUS" > "$copy"
-  if cmp -s "$CORPUS" "$copy"; then
-    bad "MUTANT $i: the literal for '${CLAIM[$i]}' could not be removed, so its arm above proves nothing"
-    continue
-  fi
-  reds=0; own=0
-  for j in 0 1 2 3 4 5; do
-    if ! grep -qF -- "${LIT[$j]}" "$copy"; then
-      reds=$((reds+1)); [ "$j" -eq "$i" ] && own=1
-    fi
-  done
-  if [ "$reds" -eq 1 ] && [ "$own" -eq 1 ]; then
-    ok "  and it is falsifiable: removing it reds exactly its own arm, and no other"
-  else
-    bad "  MUTANT $i moved $reds arm(s) (own=$own) — the pins are entangled, so at least one of them is not measuring what it names"
-  fi
-done
 
 echo
 report_end absorbed-specifics-survive

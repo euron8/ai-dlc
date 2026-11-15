@@ -10,7 +10,7 @@
 #   unconverged/  terminal pass p1 = EXIT_CONDITION_NOT_MET. The writer must refuse to stamp.
 #
 #   --mixed-into <dir>   build ONLY the mixed-sprint world into <dir> (see mk_mixed) and print
-#                        nothing. Each mutant of the mixed arms gets its own fresh world, because
+#                        nothing. Each mixed arm world is fresh, because
 #                        the arms stamp and a world a previous run stamped is not the seeded one.
 set -u
 

@@ -43,16 +43,12 @@ reads right.
 - `seed.sh` — a consumer **mid-migration**: some ids renamed into the band, some not,
   with a crosswalk carrying its two rows in both accepted forms. It is a git repo,
   because a consumer is one and a seed that is not makes `E16` refuse.
-- `run.sh` — 14 assertions: 3 premises read without the code under test, the pristine
-  vector, 2 applicability arms, the crosswalk row proven load-bearing by removing it, the
-  migration **exit condition**, 5 mutants and 1 unmutated control.
+- `run.sh` — 13 assertions: the premises read without the code under test, the pristine
+  vector, 2 applicability arms, the code-attribution arm, the crosswalk row proven
+  load-bearing by removing it, the migration **exit condition**.
+- `vector.sh` — the scoring function: one `cell=value` token per cell, sourced by `run.sh`.
 
-Mutants are copies guarded by `cmp -s`, scored as a complete vector so that a mutant
-moving two cells reports entanglement rather than a kill.
-
-**The first cut of this fixture seeded only the bare crosswalk row**, so the mutant
-deleting the namespaced branch changed a line, passed `cmp -s`, and proved nothing. Two
-rows, two mutants, one cell each.
+The seed carries the crosswalk's two rows, bare and namespaced, one cell each.
 
 ## Run
 

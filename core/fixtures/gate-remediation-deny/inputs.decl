@@ -18,6 +18,5 @@ core/skills/ai-dlc/enforcement-map.yaml
 core/team-roles/remediator.md
 # arm RR-B: the hook's repair_value / repair_list are cmp'd against the validator's repair_value.
 core/scripts/validate-adversarial-convergence.sh
-# lib/ carries preamble.sh and mutant.sh (mutant_killed), sourced by run.sh.
+# lib/ carries preamble.sh, sourced by run.sh.
 core/fixtures/lib/preamble.sh
-core/fixtures/lib/mutant.sh

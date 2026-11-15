@@ -25,6 +25,8 @@ core_manifest:
   - core/fixtures/adversarial-citation/**
   - core/fixtures/apply-drift-after-write/**
   - core/fixtures/apply-drift-refile/**
+  - core/fixtures/apply-drift-refile-b/**
+  - core/fixtures/apply-drift-refile-c/**
   - core/fixtures/apply-legacy-script-path/**
   - core/fixtures/apply-restamp-theirs/**
   - core/fixtures/apply-restamp-worklist/**
@@ -70,7 +72,6 @@ core_manifest:
   - core/fixtures/check-24-adversarial-convergence/**
   - core/fixtures/check-24-adversarial-convergence-b/**
   - core/fixtures/check-24-adversarial-convergence-c/**
-  - core/fixtures/check-24-adversarial-convergence-d/**
   - core/fixtures/check-25-steering-conduct/**
   - core/fixtures/check-31-ac-falsifiability/**
   - core/fixtures/check-3b-locked-anchor/**
@@ -114,9 +115,14 @@ core_manifest:
   - core/fixtures/gate-remediation-deny/**
   - core/fixtures/gate-repair-record/**
   - core/fixtures/adversarial-shard-merge/**
+  - core/fixtures/adversarial-shard-merge-c/**
+  - core/fixtures/adversarial-shard-merge-d/**
   - core/fixtures/review-shard-merge/**
   - core/fixtures/review-shard-merge-b/**
+  - core/fixtures/review-shard-merge-c/**
+  - core/fixtures/review-shard-merge-d/**
   - core/fixtures/remediator-shard-join/**
+  - core/fixtures/remediator-shard-join-b/**
   - core/fixtures/content-seal/**
   - core/fixtures/document-partition/**
   - core/fixtures/subject-partition/**
@@ -145,6 +151,7 @@ core_manifest:
   - core/fixtures/layer-debt-due-and-discharge/**
   - core/fixtures/layer-debt-ledger/**
   - core/fixtures/layer-readopt-gate/**
+  - core/fixtures/layer-readopt-gate-c/**
   - core/fixtures/ledger-reverify/**
   - core/fixtures/ledger-reverify-unfalsifiable/**
   - core/fixtures/ledger-reverify-dist-only-reach/**
@@ -172,6 +179,8 @@ core_manifest:
   - core/fixtures/predicate-reclassification/**
   - core/fixtures/derivation-differential/**
   - core/fixtures/owed-derivations/**
+  - core/fixtures/owed-derivations-b/**
+  - core/fixtures/owed-derivations-c/**
   - core/fixtures/deploy-validate-smoke-classification/**
   - core/fixtures/story-evidence-scaffold/**
   - core/fixtures/smoke-surface-ignored/**

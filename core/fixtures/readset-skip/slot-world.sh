@@ -2,15 +2,14 @@
 # slot-world.sh -- drives the read-set deriver's TRACE-WINDOW SLOT (BL-584) in a stub-stream world.
 #
 # Usage: slot-world.sh <deriver> <hook> [scenario ...]
-#   <deriver>  a copy of core/scripts/derive-fixture-readsets.sh (the shipped one, or a mutant)
+#   <deriver>  a copy of core/scripts/derive-fixture-readsets.sh (the shipped one)
 #   <hook>     the pre-push hook whose READSET_LOCK span the world's runner carries
 #   scenario   any of: order nested stalemark foreign stale beat plain file stray noparent rebreak oldempty
 #              (default: all)
 # Prints one `PASS <scenario>` or `FAIL <scenario>: <why>` line per scenario.
 # Exit:  0 = every scenario passed, 1 = one did not, 9 = the world could not be built (not a verdict).
 #
-# core/fixtures/readset-skip's `slot` unit runs it against the shipped deriver and against one mutant
-# per property, and BL-584 names it as the evidence that drives the slot (that entry's receipt is manual).
+# core/fixtures/readset-skip's `slot` unit runs it against the shipped deriver, and BL-584 names it as the evidence that drives the slot (that entry's receipt is manual).
 # It DRIVES the deriver; it never greps its text.
 #
 # NO REAL `log stream`, AND NO CLOCK. The deriver's one LOG_BIN line is pointed at a stub that tails a
@@ -121,7 +120,7 @@ STUB
 # from its TERM trap, so the order record also places every window's stream: <t> is the fixture tag with
 # its leading `f` dropped (`fa` -> a), `p` for an untagged plain-mode stream, and the liveness probe's
 # stream is not recorded. The deriver kills it and then `wait`s on it, so the down line is on disk before
-# the deriver's next statement. ONE FORCED INTERLEAVING, so the `early` mutant is not a race: in a pair
+# the deriver's next statement. ONE FORCED INTERLEAVING, so the early-release order is not a race: in a pair
 # scenario, a stream of A's stopped while the slot's pid file no longer names A (its deriver, `$PPID`)
 # after B has recorded `b-waited`, holds its down line until another stream has come up (bounded polls).
 # The shipped deriver releases after the stop, so its pid file names A at every stop and the hold never runs.
@@ -178,7 +177,7 @@ if [ -n "${SW_SLEEP_MARK:-}" ] && [ -n "${SW_AOUT:-}" ] && grep -q 'slot: waitin
   : > "$SW_AOUT.blocked"
   exec tail -f /dev/null
 fi
-# The same for an unbounded breaker (a mutant with no break bound): the sleep after its 20th `slot: broke` line
+# The same for an unbounded breaker (a deriver with no break bound): the sleep after its 20th `slot: broke` line
 # BLOCKS, so it takes exactly 20 sleeps before failopen's kill, never 19 or 20 by how the kill raced the next one.
 if [ -n "${SW_SLEEP_MARK:-}" ] && [ -n "${SW_AOUT:-}" ]; then
   nb="$(grep -c 'slot: broke' "$SW_AOUT" 2>/dev/null)" || nb=0
@@ -325,7 +324,7 @@ failopen() {
     [ "$n" -ge 20 ] && break
     /bin/sleep 0.1
   done
-  # A rebreak waiter (a mutant that never breaks) is killed only once its first wait sleep has BLOCKED, so the
+  # A rebreak waiter (a deriver that never breaks) is killed only once its first wait sleep has BLOCKED, so the
   # number of sleeps it took is one whatever the load; an unbounded breaker that sleeps between breaks (nobound)
   # only once the sleep after its 20th break has BLOCKED, so it took twenty. An unbounded breaker that never
   # slept would have no sleep to block, so the wait is skipped for it rather than hung. Bounded; the bound reads

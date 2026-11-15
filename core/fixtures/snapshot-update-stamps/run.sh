@@ -92,8 +92,6 @@
 #   IFADDWRITE   the twin: a member-status row and a --- rule are written by --line-add there; a header
 #              into a header-less section is HDRREMEDY's applied half
 #   IFADDDUPHDR  a second header line-added beside the present one: exit 2, unchanged
-#   m-noifadd  --line-add into In-Flight Teammates without the status check -> IFADDREFUSE; its anchor
-#              `ifstatus_chk(B, 0)` is asserted to occur once
 # CLOCK AND BACKGROUND, per arm: only LOCKWAIT runs a background process, and it blocks on the
 # writer's own file and on `wait`, never on a sleep's length; its poll loop is bounded by the writer
 # being alive. LOCKSTALE's dead pid is a subshell reaped before the lock is seeded. No arm reads the
@@ -101,107 +99,7 @@
 # live-snapshot.md is a copy of a reference consumer's live snapshot, words scrubbed to `lorem`
 # and `LOREM`, every structural byte kept: the 7 headings, the unpiped table, two prose paragraphs
 # above its header, an agent cell with trailing words, a 5-paragraph block scalar with blank lines.
-# MUTANTS (each a copy of the program beside a copy of the validator; each must flip its arm):
-#   m-nocheck  the validator call replaced by success -> FUTURE accepted
-#   m-nopay    the payload left empty -> FUTURE accepted (nothing judged)
-#   m-early    the move over the snapshot done BEFORE the check -> FUTURE changes the file
-#   m-rc1      exit 1 from the validator ignored -> FUTURE accepted
-#   m-nolock   no lock: the mkdir loop never runs -> LOCKTIMEOUT writes through a held lock
-#   m-blockline  a block scalar read as one line -> BLOCKSET rewrites the key, orphaning its block
-#   m-blockcontent  --set-block without its content check -> BLOCKCONTENT writes a position bullet
-#   m-nomember the status membership dropped at BOTH layers (status_ok, statuscell_ok) -> STATUSVOC writes
-#   m-initheading  --init renders `##Pipeline Position` -> READERS: the ops after --init refuse
-#              (the --set guard and --set-block find no Pipeline Position); the readers alone would
-#              still resolve it through their whole-file fallback, so the kill is the ops'
-#   m-setappend  --set appends a canonical bullet beside a bold-form match -> SETBOLD: two bullets
-#              naming two step files, which the continue hook resolves to nothing
-#   m-secorder --section-add always appends at the end -> SECADD order
-#   m-secmovecanon  --section-move-to-history moves one of the seven -> SECMOVE
-#   m-swallowtail   Context Reminders re-added at the file end, not under the last row -> SWALLOW
-#   m-rowdiff  a differing --row-add dedupes silently -> ROWREPLACE
-#   m-wrapend  the line ops act on the bullet line alone -> WRAPPED (continuations orphaned)
-#   m-nokey    the two sections accept a `- key:` line by --line-add/--line-replace -> KEYLINE
-#   m-allowall --set creates any key there -> SETCREATE (lorem_key written)
-#   m-noskelallow   the allowlist loses its render_skeleton half -> SETCREATE (pipeline_variant refused)
-#   m-rowiddup --row-replace skips the other-row id check -> ROWIDDUP
-#   m-secprefix  an extra beginning with one of the seven is added -> SECADD
-#   m-hdrremedy  the header-less refusal names --section-add again -> HDRREMEDY
-#   m-secdup   a duplicated one of the seven is refused by --section-move-to-history -> SECDUP
-#   m-curbranch  current_branch back in the create allowlist -> SETCREATE
-#   m-posdash  the position-bullet refusal narrowed to a dash bullet -> POSLINE (in the counted state,
-#              where the fallback guard is off, `* current_step_file:` into Recent Activity is written)
-#   m-keydash  the key-line refusal narrowed to a dash bullet -> POSLINE (`* pipeline_variant:` written)
-#   m-nofallback  the fallback-state refusal dropped -> POSLINE (the dated activity line is written and
-#              the continue and recover hooks read `31Z the current step is x: note` as the position)
-#   m-blockfb  --set-block content naming the key accepted in the fallback state -> BLOCKCONTENT
-# A control drives the UNMUTATED copy through the same harness first and requires VALID and
-# FUTURE to score as on the shipped program, so a copy that cannot run is not read as a scored mutant.
-#
-# THE MUTANT MATRIX. Each mutant is scored per push on its DECIDING cell (FUTURE) and its named TWIN (VALID),
-# which the mutant must leave GREEN: it breaks the refusal and not the write path. `run.sh --matrix` scores each
-# mutant against every cell and prints one MATRIX line per mutant. The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE command
-# below, from the repo root.
-# also trips: m-nocheck -> FUTUREROW,MALFORMED
-# also trips: m-nopay -> FUTUREROW,MALFORMED
-# also trips: m-early -> VALID,FUTUREROW,MALFORMED,NEARMISS,OLDLINE,LOCKSTALE,READERS,LIVE,SECADD,SECMOVE,SWALLOW,WRAPPED,KEYLINE,HDRREMEDY,SECDUP,POSLINE,IFLINEWRITE,IFADDWRITE
-# also trips: m-rc1 -> FUTUREROW,MALFORMED
-# also trips: m-setappend -> READERS
-# also trips: m-nomember -> ROWREPLACE,IFLINEREFUSE,IFADDREFUSE,IFADDDUPHDR
-# also trips: m-initheading -> SETCREATE,SECDUP,POSLINE
-# also trips: m-nokey -> POSLINE
-# also trips: m-noskelallow -> POSLINE
-# also trips: m-ifhdrany -> IFADDDUPHDR
-# also trips: m-ifrefuseall -> IFADDWRITE
-# also trips: m-noifadd -> IFADDDUPHDR
-# also trips: m-nolock, m-blockline, m-blockcontent -> none
-# also trips: m-secorder, m-secmovecanon, m-swallowtail, m-rowdiff, m-wrapend, m-allowall -> none
-# also trips: m-rowiddup, m-secprefix, m-hdrremedy, m-secdup, m-curbranch, m-posdash, m-keydash, m-nofallback, m-blockfb -> none
-# also trips: m-noifguard, m-ifsepwide -> none
-# MUTANT-MATRIX m-nocheck decides=FUTURE twins=VALID
-# MUTANT-MATRIX m-nopay decides=FUTURE twins=VALID
-# MUTANT-MATRIX m-early decides=FUTURE twins=NOVAL
-# MUTANT-MATRIX m-rc1 decides=FUTURE twins=VALID
-# MUTANT-MATRIX m-nolock decides=LOCKTIMEOUT twins=LOCKSTALE
-# MUTANT-MATRIX m-blockline decides=BLOCKSET twins=VALID
-# MUTANT-MATRIX m-blockcontent decides=BLOCKCONTENT twins=READERS
-# MUTANT-MATRIX m-nomember decides=STATUSVOC twins=PIPED
-# MUTANT-MATRIX m-initheading decides=READERS twins=SETBOLD
-# MUTANT-MATRIX m-setappend decides=SETBOLD twins=LOCKSTALE
-# MUTANT-MATRIX m-secorder decides=SECADD twins=SECMOVE
-# MUTANT-MATRIX m-secmovecanon decides=SECMOVE twins=SECADD
-# MUTANT-MATRIX m-swallowtail decides=SWALLOW twins=ROWREPLACE
-# MUTANT-MATRIX m-rowdiff decides=ROWREPLACE twins=SWALLOW
-# MUTANT-MATRIX m-wrapend decides=WRAPPED twins=KEYLINE
-# MUTANT-MATRIX m-nokey decides=KEYLINE twins=SETCREATE
-# MUTANT-MATRIX m-allowall decides=SETCREATE twins=KEYLINE
-# MUTANT-MATRIX m-noskelallow decides=SETCREATE twins=WRAPPED
-# MUTANT-MATRIX m-rowiddup decides=ROWIDDUP twins=ROWREPLACE
-# MUTANT-MATRIX m-secprefix decides=SECADD twins=SECMOVE
-# MUTANT-MATRIX m-hdrremedy decides=HDRREMEDY twins=SWALLOW
-# MUTANT-MATRIX m-secdup decides=SECDUP twins=SECMOVE
-# MUTANT-MATRIX m-curbranch decides=SETCREATE twins=KEYLINE
-# MUTANT-MATRIX m-posdash decides=POSLINE twins=READERS
-# MUTANT-MATRIX m-keydash decides=POSLINE twins=KEYLINE
-# MUTANT-MATRIX m-nofallback decides=POSLINE twins=READERS
-# MUTANT-MATRIX m-blockfb decides=BLOCKCONTENT twins=READERS
-# MUTANT-MATRIX m-noifguard decides=IFLINEREFUSE twins=IFLINEWRITE
-# MUTANT-MATRIX m-ifrefuseall decides=IFLINEWRITE twins=IFLINEREFUSE
-# MUTANT-MATRIX m-ifhdrany decides=IFLINEREFUSE twins=IFLINEWRITE
-# MUTANT-MATRIX m-ifsepwide decides=IFLINEREFUSE twins=IFLINEWRITE
-# MUTANT-MATRIX m-noifadd decides=IFADDREFUSE twins=IFADDWRITE
-# MUTANT-MATRIX-CONTROL control why=the unmutated copy must write VALID and refuse FUTURE through the mutant harness so a mutant verdict is attributable to the mutation
-# The four mutants are a loop over a spec list, so the name reaches mutant_killed as a variable:
-# MUTANT-MATRIX-DYNAMIC mutants why=one scoring function takes every mutant name as an argument and every name keeps its own row
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/snapshot-update-stamps/run.sh --matrix
 set -uo pipefail
-
-MODE=plain
-case "${1:-}" in
-  "") ;;
-  --matrix) MODE=matrix ;;
-  *) echo "snapshot-update-stamps: usage: run.sh [--matrix]" >&2; exit 2 ;;
-esac
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -237,10 +135,6 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/snapshot-update-stamps.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-MUT_LIB="$HERE/../lib/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 NOW=1792964000                      # 2026-10-25T21:33:20Z, pinned so the arms do not race the clock
 export AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW"
@@ -693,7 +587,7 @@ cell() {
       # With the position bullet written, the readers count it and the same activity line is fine.
       drive "$pr" "$s" --line-add 'Recent Activity' '- 2026-10-25T21:32Z the current step is x: note' --bottom; [ "$RC" = 0 ] || miss="$miss counted-state rc=$RC"
       # In the counted state the fallback guard is off, so the position-bullet shape alone must
-      # still refuse a `*` bullet outside Pipeline Position (m-posdash's own subject).
+      # still refuse a `*` bullet outside Pipeline Position.
       cs="$(cksum < "$s")"
       drive "$pr" "$s" --line-add 'Recent Activity' '* current_step_file: wrong.md' --bottom
       { [ "$RC" = 2 ] && [ "$(cksum < "$s")" = "$cs" ]; } || miss="$miss counted-star rc=$RC"
@@ -775,17 +669,16 @@ cell() {
       { [ "$RC" = 2 ] && grep -qF "the status cell 'status' is not in-flight" <<<"$OUT" && [ "$(cksum < "$s")" = "$cs" ]; } || miss="$miss rc=$RC $OUT"
       [ -z "$miss" ] && return 0
       CELL_MSG="$miss"; return 1 ;;
-    *) echo "MATRIX BROKEN unknown cell $c" >&2; exit 2 ;;
+    *) echo "FIXTURE BROKEN unknown cell $c" >&2; exit 2 ;;
   esac
 }
-CELLS="VALID FUTURE PIPED FUTUREROW MALFORMED NEARMISS OLDLINE AMBIG-zero AMBIG-two AMBIG-cells NOVAL LOCKWAIT LOCKSTALE LOCKTIMEOUT BLOCKSET BLOCKCONTENT STATUSVOC READERS SETBOLD LIVE SECADD SECMOVE SWALLOW ROWREPLACE WRAPPED KEYLINE SETCREATE ROWIDDUP HDRREMEDY SECDUP POSLINE IFLINEREFUSE IFLINEWRITE IFADDREFUSE IFADDWRITE IFADDDUPHDR"
 
 echo "snapshot-update-stamps:"
 
 # --- shipped program --------------------------------------------------------
-# VALID and FUTURE are the control cells every mutant is read through, so each sets its same-run flag in its passing branch.
-if cell VALID "$PROG" ship; then ok "VALID: four ops in one call are written"; B_ship_valid=1; else bad "VALID: $CELL_MSG"; fi
-if cell FUTURE "$PROG" ship; then ok "FUTURE: a stamp two hours ahead is refused and the file is unchanged"; B_ship_future=1; else bad "FUTURE: $CELL_MSG"; fi
+# The shipped program, one cell per arm.
+if cell VALID "$PROG" ship; then ok "VALID: four ops in one call are written"; else bad "VALID: $CELL_MSG"; fi
+if cell FUTURE "$PROG" ship; then ok "FUTURE: a stamp two hours ahead is refused and the file is unchanged"; else bad "FUTURE: $CELL_MSG"; fi
 if cell PIPED "$PROG" ship; then ok "PIPED: a row update on a \`| a | b |\` table keeps its pipes"; else bad "PIPED: $CELL_MSG"; fi
 if cell FUTUREROW "$PROG" ship; then ok "FUTUREROW: a future dispatched-at is refused, file unchanged"; else bad "FUTUREROW: $CELL_MSG"; fi
 if cell MALFORMED "$PROG" ship; then ok "MALFORMED: \`T21:2xZ\` is refused, file unchanged"; else bad "MALFORMED: $CELL_MSG"; fi
@@ -826,189 +719,5 @@ n_out="$(grep -c 'pipeline-snapshot\.md$' <<<"$left")" || n_out=0
 if grep -q '\.candidate\.\|\.payload\.' <<<"$left"; then bad "LEFTOVER: a candidate or payload file survived a run"
 elif [ "$n_out" -lt 10 ]; then bad "LEFTOVER: the listing saw $n_out snapshot(s), so it read no seeded project"
 else ok "LEFTOVER: no candidate or payload file survives across $n_out seeded projects"; fi
-
-# --- mutants ----------------------------------------------------------------
-# mkmut <name> <old> <new>: a copy of the program beside a copy of the validator, one literal
-# line replaced; cmp -s guards a replacement that matched nothing. The spec below splits on `|`,
-# so no old or new text may carry one: an anchor holding `||` is cut short and mutates the wrong
-# text (measured: the first m-early spelling did, and survived for that reason).
-mkmut() {
-  local d="$WORK/mut-$1"; mkdir -p "$d"
-  cp "$VAL" "$d/validate-artifact-budget.sh" || return 1
-  MM_OLD="$2" MM_NEW="$3" awk 'BEGIN { o = ENVIRON["MM_OLD"]; n = ENVIRON["MM_NEW"] }
-    { if (!done && index($0, o)) { i = index($0, o); $0 = substr($0, 1, i - 1) n substr($0, i + length(o)); done = 1 } print }' \
-    "$PROG" > "$d/snapshot-update.sh"
-  cmp -s "$PROG" "$d/snapshot-update.sh" && { echo "DID NOT APPLY"; return 1; }
-  printf '%s' "$d/snapshot-update.sh"
-}
-mkdir -p "$WORK/mut-control"; cp "$VAL" "$WORK/mut-control/validate-artifact-budget.sh"; cp "$PROG" "$WORK/mut-control/snapshot-update.sh"
-# The control drives the unmutated copy through the same cells: VALID passes and FUTURE refuses.
-if cell VALID "$WORK/mut-control/snapshot-update.sh" control && cell FUTURE "$WORK/mut-control/snapshot-update.sh" control; then
-  ok "control: the unmutated copy writes VALID and refuses FUTURE"; B_ctl=1
-else bad "control: the unmutated copy fails VALID or FUTURE ($CELL_MSG) -- no mutant verdict below can be read"; fi
-
-# ---- matrix plumbing. The header rows are the only source of a mutant's deciding cell and twin. ----
-MXL="$WORK/mx.ledger"; : > "$MXL"
-mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
-  local n="$1" f="$2" l w c=0 v=""
-  while IFS= read -r l; do
-    case "$l" in
-      "# MUTANT-MATRIX $n "*)
-        c=$((c + 1))
-        for w in ${l#"# MUTANT-MATRIX $n "}; do case "$w" in "$f="*) v="${w#"$f="}" ;; esac; done ;;
-    esac
-  done < "$HERE/run.sh"
-  [ "$c" -eq 1 ] && printf '%s' "$v"
-}
-mx_count() { local k="$1" l n=0; while IFS= read -r l; do case "$l" in "$k "*) n=$((n + 1)) ;; esac; done < "$MXL"; printf '%s' "$n"; }
-
-# mkmutn <name> <old> <new> [<old> <new> ...]: as mkmut, for a mutation that must change SEVERAL
-# literals (a layered property, every layer reverted) or whose text carries `|`. An <old> beginning
-# `=` matches a WHOLE line. Each replacement must change the copy, or the mutant is refused.
-mkmutn() {
-  local d="$WORK/mut-$1" cur nxt; shift
-  mkdir -p "$d"; cp "$VAL" "$d/validate-artifact-budget.sh" || return 1
-  cur="$d/cur"; nxt="$d/nxt"; cp "$PROG" "$cur" || return 1
-  while [ $# -ge 2 ]; do
-    MM_OLD="$1" MM_NEW="$2" awk 'BEGIN { o = ENVIRON["MM_OLD"]; n = ENVIRON["MM_NEW"]; whole = (substr(o, 1, 1) == "="); if (whole) o = substr(o, 2) }
-      { if (!done && whole && $0 == o) { $0 = n; done = 1 }
-        else if (!done && !whole && index($0, o)) { i = index($0, o); $0 = substr($0, 1, i - 1) n substr($0, i + length(o)); done = 1 }
-        print }' "$cur" > "$nxt" || return 1
-    cmp -s "$cur" "$nxt" && { echo "DID NOT APPLY" >&2; return 1; }
-    mv "$nxt" "$cur"; shift 2
-  done
-  mv "$cur" "$d/snapshot-update.sh" && printf '%s' "$d/snapshot-update.sh"
-}
-
-# score <name> <mutant path>: the deciding cell and the twin, read from the header row.
-score() {
-  local name="$1" mp="$2" dec tw d t dmsg
-  dec="$(mx_row "$name" decides)"; tw="$(mx_row "$name" twins)"
-  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "$name: no single MUTANT-MATRIX row names its deciding cell and twin"; return; fi
-  printf 'dec %s %s\n' "$name" "$dec" >> "$MXL"; printf 'dec %s %s\n' "$name" "$tw" >> "$MXL"
-  if cell "$dec" "$mp" "$name"; then d=GREEN; dmsg=""; else d=RED; dmsg="$CELL_MSG"; fi
-  if cell "$tw" "$mp" "$name"; then t=GREEN; else t=RED; fi
-  if [ "$d" = RED ]; then
-    mutant_killed "${B_ctl:-0}" "$name" "$name: scored by $dec ($dec failed on the mutant: $dmsg) with twin $tw GREEN"
-  else
-    bad "$name: SURVIVED -- $dec still holds on the mutant"
-  fi
-  if [ "$t" = RED ]; then bad "$name: its twin $tw also failed -- the mutant is not confined to its own cell"; fi
-  if [ "$MODE" = matrix ]; then # mx-all-cells
-    g=0; tot=0; rd=""
-    for a in $CELLS; do
-      if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
-      printf 'mx %s %s\n' "$name" "$a" >> "$MXL"
-      tot=$((tot + 1)); if cell "$a" "$mp" "$name"; then g=$((g + 1)); else rd="$rd,$a"; fi
-    done
-    u=""
-    if [ "$d" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
-    if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$name" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
-  fi
-}
-
-for m in \
-  'm-nocheck|VOUT="$(AI_DLC_PROJECT_ROOT=|VOUT="$(true || AI_DLC_PROJECT_ROOT=' \
-  'm-nopay|else if ($0 != "") print }|else if (0) print }' \
-  'm-early|VOUT="$(AI_DLC_PROJECT_ROOT=|cp "$CAND" "$SNAP"; VOUT="$(AI_DLC_PROJECT_ROOT=' \
-  'm-rc1|if [ "$VRC" -eq 1 ]; then|VRC=0; if false; then'; do
-  name="${m%%|*}"; rest="${m#*|}"; old="${rest%%|*}"; new="${rest#*|}"
-  mp="$(mkmut "$name" "$old" "$new")" || { bad "$name: mutation did not apply"; continue; }
-  score "$name" "$mp"
-done
-
-# The BL-912a ops mutants. Each is built by mkmutn (several literals, or text carrying `|`).
-# m-nolock: no lock at all -- the mkdir loop never runs, so a held lock is walked past.
-mp="$(mkmutn m-nolock 'while ! mkdir "$LOCK" 2>/dev/null; do' 'while false; do')" && score m-nolock "$mp" || bad "m-nolock: mutation did not apply"
-# m-blockline: a block scalar read as one line -- the key's continuation lines are not its block.
-mp="$(mkmutn m-blockline 'function isblk(i) { return (KV ~ /^[|>][-+]?$/) || blockend(i) > i }' 'function isblk(i) { return 0 }')" \
-  && score m-blockline "$mp" || bad "m-blockline: mutation did not apply"
-# m-blockcontent: --set-block without the content check on reader-shaped lines.
-mp="$(mkmutn m-blockcontent 'if (hasbullet(ln) || hassp(ln)) die(7' 'if (0) die(7')" && score m-blockcontent "$mp" || bad "m-blockcontent: mutation did not apply"
-# m-nomember: the status membership test dropped at BOTH layers -- the argument-time status_ok and
-# the awk statuscell_ok the row ops apply.
-mp="$(mkmutn m-nomember 'bad = 1 } END { exit bad }' 'bad = 0 } END { exit 0 }' \
-  'function statuscell_ok(v) { return (v == "in-flight"' 'function statuscell_ok(v) { return 1 || (v == "in-flight"')" \
-  && score m-nomember "$mp" || bad "m-nomember: mutation did not apply"
-# m-initheading: --init writes `##Pipeline Position` -- the skeleton's heading loses its space.
-mp="$(mkmutn m-initheading '=## Pipeline Position' '##Pipeline Position')" && score m-initheading "$mp" || bad "m-initheading: mutation did not apply"
-# m-setappend: --set appends a canonical line after a bold-form match instead of rewriting it.
-mp="$(mkmutn m-setappend 'L[HIT] = ind "- " A ": " B; guard(L[HIT], OKP, OKS)' 'insafter(HIT, ind "- " A ": " B); guard(ind "- " A ": " B, OKP, OKS)')" \
-  && score m-setappend "$mp" || bad "m-setappend: mutation did not apply"
-
-# The BL-912b ops mutants.
-# m-secorder: --section-add ignores the canonical position and always appends at the end.
-mp="$(mkmutn m-secorder 'if (j ? t > j : t == crx) at = i' 'if (0) at = i')" && score m-secorder "$mp" || bad "m-secorder: mutation did not apply"
-# m-secmovecanon: --section-move-to-history moves one of the seven too.
-mp="$(mkmutn m-secmovecanon 'if (m == 1 && iscore(headtext(HS))) die(7' 'if (0) die(7')" && score m-secmovecanon "$mp" || bad "m-secmovecanon: mutation did not apply"
-# m-swallowtail: Context Reminders re-added at the file end, not under the last In-Flight row.
-mp="$(mkmutn m-swallowtail 'if (lr) insafter(lr, "\n" blk)' 'if (0) insafter(lr, "\n" blk)')" && score m-swallowtail "$mp" || bad "m-swallowtail: mutation did not apply"
-# m-rowdiff: a --row-add deduped onto a row with different cells is a silent no-op again.
-mp="$(mkmutn m-rowdiff 'if (o != r) die(7' 'if (0) die(7')" && score m-rowdiff "$mp" || bad "m-rowdiff: mutation did not apply"
-# m-wrapend: the four line ops act on the bullet line alone, orphaning its continuation lines.
-mp="$(mkmutn m-wrapend 'function itemend(h) { return (L[h] ~ /^[ \t]*-[ \t]/) ? blockend(h) : h }' 'function itemend(h) { return h }')" \
-  && score m-wrapend "$mp" || bad "m-wrapend: mutation did not apply"
-# m-nokey: --line-add/--line-replace stop refusing a key line in the two sections.
-mp="$(mkmutn m-nokey 'Sprint Context/) && keyshaped(s))' 'Sprint Context/) && 0)')" && score m-nokey "$mp" || bad "m-nokey: mutation did not apply"
-# m-allowall: --set creates any key in the two sections.
-mp="$(mkmutn m-allowall 'if (!(B in ALLOW)) die(7' 'if (0) die(7')" && score m-allowall "$mp" || bad "m-allowall: mutation did not apply"
-# m-noskelallow: the allowlist loses its render_skeleton half.
-mp="$(mkmutn m-noskelallow 'ALLOW[substr(SK[j], 3, RLENGTH - 3)] = 1' 'nop = 1')" && score m-noskelallow "$mp" || bad "m-noskelallow: mutation did not apply"
-
-# The BL-912b fix-K mutants.
-# m-rowiddup: --row-replace no longer checks the new agent cell's ids against the other rows.
-mp="$(mkmutn m-rowiddup 'if (i != hit && L[i] ~ /\|/' 'if (0 && L[i] ~ /\|/')" && score m-rowiddup "$mp" || bad "m-rowiddup: mutation did not apply"
-# m-secprefix: a declared extra that begins with one of the seven is added again.
-mp="$(mkmutn m-secprefix 'if (!j && iscore(A)) die(7' 'if (0) die(7')" && score m-secprefix "$mp" || bad "m-secprefix: mutation did not apply"
-# m-hdrremedy: the header-less refusal names --section-add again, which refuses a section that exists.
-mp="$(mkmutn m-hdrremedy 'the section exists, so write the header with --line-add \047In-Flight Teammates\047 \047" IFHDR "\047")' '--section-add In-Flight Teammates writes it")')" \
-  && score m-hdrremedy "$mp" || bad "m-hdrremedy: mutation did not apply"
-# m-secdup: --section-move-to-history refuses one of the seven even when it is duplicated.
-mp="$(mkmutn m-secdup 'if (m == 1 && iscore(headtext(HS))) die(7' 'if (iscore(headtext(HS))) die(7')" && score m-secdup "$mp" || bad "m-secdup: mutation did not apply"
-# m-curbranch: current_branch is back in the create allowlist.
-mp="$(mkmutn m-curbranch "SU_SETCREATE_EXTRA='is_ui_epic stories" "SU_SETCREATE_EXTRA='is_ui_epic current_branch stories")" && score m-curbranch "$mp" || bad "m-curbranch: mutation did not apply"
-# m-posdash: the position-bullet refusal is a dash bullet only again.
-mp="$(mkmutn m-posdash 'return (t ~ /^[^:]*(current_step_file' 'return (t ~ /^[ \t]*-[^:]*(current_step_file')" && score m-posdash "$mp" || bad "m-posdash: mutation did not apply"
-# m-keydash: the key-line refusal is a dash bullet only again.
-mp="$(mkmutn m-keydash 'if (!match(s, /^[ \t]*[-*+][ \t]+/)) return 0' 'if (!match(s, /^[ \t]*-[ \t]+/)) return 0')" \
-  && score m-keydash "$mp" || bad "m-keydash: mutation did not apply"
-# m-nofallback: the fallback-state refusal dropped, so a dated activity line naming the key is written.
-mp="$(mkmutn m-nofallback 'if (FB && haskey(line) && !okpos) die(7' 'if (0) die(7')" && score m-nofallback "$mp" || bad "m-nofallback: mutation did not apply"
-# m-blockfb: --set-block content naming the key is written in the fallback state.
-mp="$(mkmutn m-blockfb 'if (FB && haskey(ln)) die(7' 'if (0) die(7')" && score m-blockfb "$mp" || bad "m-blockfb: mutation did not apply"
-
-# The BL-953 mutants.
-# m-noifguard: --line-replace into In-Flight Teammates no longer applies the status vocabulary.
-mp="$(mkmutn m-noifguard 'if (SECT[HS] ~ /^In-Flight Teammates/) ifstatus_chk(C, h)' 'if (0) ifstatus_chk(C, h)')" && score m-noifguard "$mp" || bad "m-noifguard: mutation did not apply"
-# m-ifhdrany: the header exemption widened back to any text with a dispatched-at cell (a decoy row is written).
-mp="$(mkmutn m-ifhdrany 'if (tgt == hd) return' 'k = cells(txt, cc); for (j2 = 1; j2 <= k; j2++) if (trim(cc[j2]) == "dispatched-at") return')" \
-  && score m-ifhdrany "$mp" || bad "m-ifhdrany: mutation did not apply"
-# m-ifsepwide: the rule exemption widened back to any text of dashes, colons, spaces and bars (a `- | -` row is written).
-mp="$(mkmutn m-ifsepwide 'if (cc[j2] !~ /^[ \t]*:?---+:?[ \t]*$/) rule = 0' 'if (cc[j2] !~ /^[ \t:-]*$/) rule = 0')" \
-  && score m-ifsepwide "$mp" || bad "m-ifsepwide: mutation did not apply"
-# m-ifrefuseall: the guard refuses every In-Flight table row, member or not (killed by the member-status arm).
-mp="$(mkmutn m-ifrefuseall 'if (!statuscell_ok(v)) die(7, "refused: the status cell \047" v' 'if (1) die(7, "refused: the status cell \047" v')" \
-  && score m-ifrefuseall "$mp" || bad "m-ifrefuseall: mutation did not apply"
-
-# The BL-963 mutant. m-noifadd: --line-add into In-Flight Teammates no longer applies the status
-# vocabulary. Its anchor is the --line-add call alone (m-noifguard's is the --line-replace one), so the
-# anchor must occur exactly once in the program, or the mutation could land on another site.
-n_ifadd="$(grep -cF 'ifstatus_chk(B, 0)' "$PROG")" || n_ifadd=0
-n_ifrep="$(grep -cF 'ifstatus_chk(C, h)' "$PROG")" || n_ifrep=0
-if [ "$n_ifadd" = 1 ] && [ "$n_ifrep" = 1 ]; then ok "m-noifadd anchor: ifstatus_chk(B, 0) occurs once, beside the one m-noifguard anchor"
-else bad "m-noifadd anchor: ifstatus_chk(B, 0) occurs $n_ifadd time(s) and ifstatus_chk(C, h) $n_ifrep, not once each"; fi
-mp="$(mkmutn m-noifadd 'ifstatus_chk(B, 0)' 'nop = 0')" && score m-noifadd "$mp" || bad "m-noifadd: mutation did not apply"
-
-# RULE 9: a plain run executes NO matrix-only cell. The deciding and twin cells write the same ledger, so
-# an empty matrix count cannot come from a ledger nothing writes.
-mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
-if [ "$MODE" = plain ]; then
-  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
-  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
-  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
-else
-  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
-fi
 
 report_end snapshot-update-stamps

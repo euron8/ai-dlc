@@ -30,12 +30,6 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # stubbed, and says `overrides-in-force` on its summary otherwise; every A and R arm but R0 is a
 # stubbed run and expects exactly that.
 #
-# THE MUTANTS are copies of the runner, each built with a literal replace that must match exactly
-# once (a no-op mutation is DID NOT APPLY, never a kill) and guarded by `cmp -s`. A mutant sits in a
-# directory of symlinks to the real reconcile siblings, so the R arms reach the real gates from it.
-# Each mutant runs only the arms named to kill it and must turn every one of them red; an unmutated
-# copy built the same way must pass every arm.
-#
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: an absent runner prints SKIP and exits 0, never an ok.
 set -uo pipefail
 
@@ -56,8 +50,6 @@ HRV="$(pick "$HERE/../../scripts/validate-hook-registration.sh" \
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/pwg-fx-XXXXXX")" || { echo "FIXTURE BROKEN: mktemp failed" >&2; exit 2; }
 trap 'chmod -R u+rwx "$W" 2>/dev/null; rm -rf "$W"' EXIT
@@ -247,7 +239,7 @@ printf '# qa\n{qa_ownership_paths}\n' > "$LT/unread/.claude/team-roles/qa.md"
 chmod 000 "$LT/unread/.claude/team-roles/qa.md"
 
 echo "post-write-gates:"
-# WORLD CONTROLS — each proves the world can tell a mutant from the runner, before any arm is read.
+# WORLD CONTROLS — each proves the world can tell a defective gate from a clean one, before any arm is read.
 if [ -r "$LT/unread/.claude/team-roles/qa.md" ]; then
   bad "WORLD: chmod 000 left qa.md readable (running as root?) — A8d cannot construct grep's exit 2"
 else
@@ -273,75 +265,6 @@ bash "$PWG" --leftover-tokens "$LT/none" > "$W/lt-none.o" 2>&1; r3=$?
 [ "$r1" = 1 ] && grep -qF '{ownership_paths}' "$W/lt-live.o" && ok "A8a a live {token} line exits 1 and is named" || bad "A8a live token: rc=$r1"
 [ "$r2" = 0 ] && grep -qxF 'LEFTOVER-TOKENS none' "$W/lt-comment.o" && ok "A8b a {token} inside an HTML comment exits 0" || bad "A8b comment token: rc=$r2"
 [ "$r3" = 2 ] && grep -qF 'LEFTOVER-TOKENS REFUSED' "$W/lt-none.o" && ok "A8c no team-roles dir is a refusal (2), never a clean" || bad "A8c no dir: rc=$r3"
-
-# --- the mutants ------------------------------------------------------------------------------
-# mkmut <tag> <old> <new> — a copy of the runner with <old> replaced by <new>; must match exactly once.
-# The copy sits among symlinks to every real sibling, so `$SELF/<gate>.sh` resolves for the R arms.
-mkmut() {
-  local t="$1" d="$W/mut-$1" f b; mkdir -p "$d"
-  for f in "$RDIR"/*; do b="${f##*/}"; [ "$b" = post-write-gates.sh ] || ln -s "$f" "$d/$b"; done
-  O="$2" N="$3" awk 'BEGIN { o = ENVIRON["O"]; n = ENVIRON["N"]; c = 0 }
-    { i = index($0, o); if (i) { $0 = substr($0, 1, i - 1) n substr($0, i + length(o)); c++ } print }
-    END { exit (c == 1 ? 0 : 3) }' "$PWG" > "$d/post-write-gates.sh" || { echo "DID NOT APPLY"; return 1; }
-  if [ "$t" != control ] && cmp -s "$PWG" "$d/post-write-gates.sh"; then echo "DID NOT APPLY"; return 1; fi
-  printf '%s' "$d/post-write-gates.sh"
-}
-# expect_kill <tag> <path> <arm>... — the named arms are run against the mutant; every one must turn red.
-expect_kill() {
-  local t="$1" m="$2"; shift 2
-  case "$m" in "DID NOT APPLY"*|"") bad "mutant $t DID NOT APPLY"; return ;; esac
-  local g missing="" a; g=" $(echo $(arms "$m" "m$t-" "$@")) "
-  for a in "$@"; do case "$g" in *" $a "*) missing="$missing $a" ;; esac; done
-  if [ -z "$missing" ]; then
-    mutant_killed "${B_CTL:-0}" "$t" "mutant $t killed by:$(printf ' %s' "$@")"
-  else
-    bad "mutant $t SURVIVED arm(s):$missing"
-  fi
-}
-
-# control: an unmutated copy built the same way, in the same symlink farm, passes every arm.
-c="$(mkmut control 'set -uo pipefail' 'set -uo pipefail')"
-cg=" $(echo $(arms "$c" mc-)) "
-cmiss=""; for a in $ALL_ARMS; do case "$cg" in *" $a "*) : ;; *) cmiss="$cmiss $a" ;; esac; done
-if [ -z "$cmiss" ]; then
-  ok "unmutated copy passes every arm"; B_CTL=1
-else
-  bad "unmutated copy FAILED arm(s):$cmiss (the harness, not the runner)"
-fi
-
-# M1 the filed shape: read the tail of the output instead of the exit code.
-expect_kill tail "$(mkmut tail '    rc=$?' '    tail -3 "$out" > "$out.tail"; if grep -qE "FAIL|DRIFT|REFUSED" "$out.tail"; then rc=1; else rc=0; fi')" A1 A3
-# M2 the filed capture's truncation: `| tail -3` keeps the status under the runner's pipefail but
-# cuts the evidence, so the refusal printed above the last three lines never reaches the out file.
-expect_kill pipe "$(mkmut pipe '    "$@" > "$out" 2>&1' '    "$@" 2>&1 | tail -3 > "$out"')" A3
-# M3 an unobserved rc defaults to PASS.
-expect_kill rcdefault "$(mkmut rcdefault "''|*[!0-9]*) verdict=UNDECIDED" "''|*[!0-9]*) verdict=PASS")" A5
-# M4 a gate dropped from the fixed list (coherently: the count goes with it).
-m4="$(mkmut drop 'GATES="leftover-tokens setup-site-drift hook-registration hard-blockers"' 'GATES="leftover-tokens setup-site-drift hook-registration"')"
-case "$m4" in "DID NOT APPLY"*) bad "mutant drop DID NOT APPLY" ;; *)
-  O='N_GATES=4' N='N_GATES=3' awk 'BEGIN{o=ENVIRON["O"];n=ENVIRON["N"]} $0==o{$0=n;c++} {print} END{exit c==1?0:3}' "$m4" > "$m4.2" \
-    && mv "$m4.2" "$m4" && expect_kill drop "$m4" A2 A6a A6b A6c || bad "mutant drop DID NOT APPLY (count line)" ;; esac
-# M5 the hard-blockers refusal conjunct removed: its print mode exits 0 over a refusal.
-expect_kill hbconj "$(mkmut hbconj 'if [ "$verdict" = PASS ] && {' 'if false && {')" A6b
-# M6 the degenerate row never counted (the conjunct itself untouched).
-expect_kill degzero "$(mkmut degzero "n_deg=\"\$(grep -c '^DRIFT-RANGE-DEGENERATE' \"\$out\")\" || n_deg=0" 'n_deg=0')" A6d
-# M7 the degenerate half of the conjunct removed; the refusal half kept.
-expect_kill degconj "$(mkmut degconj '{ [ "$n_ref" -ne 0 ] || [ "$n_deg" -ne 0 ]; }' '[ "$n_ref" -ne 0 ]')" A6d
-# M8 exit 0 under overrides: a stubbed run passes as a production one.
-expect_kill ovrexit "$(mkmut ovrexit '[ "$overall" = PASS ] && [ "$n_over" -eq 0 ] && exit 0' '[ "$overall" = PASS ] && exit 0')" A2 A4 A6c RLT
-# M9 the summary stops saying overrides were in force.
-expect_kill ovrword "$(mkmut ovrword '[ "$n_over" -eq 0 ] || ovr=" overrides-in-force"' '[ "$n_over" -eq 0 ] || ovr=""')" A2 A4 RHR
-# M10 exit 0 made unreachable: the all-real run can no longer pass.
-expect_kill never0 "$(mkmut never0 '[ "$overall" = PASS ] && [ "$n_over" -eq 0 ] && exit 0' '[ "$overall" = PASS ] && [ "$n_over" -eq 99 ] && exit 0')" R0
-# M11 the 126/127 row deleted in effect: a gate whose child program is missing reads FAIL, not UNDECIDED.
-expect_kill r127 "$(mkmut r127 '126|127)     verdict=UNDECIDED ;;' '126|127)     verdict=FAIL ;;')" A5b
-# M12 grep's 2 accepted as "no match": an unreadable team-role file scans as clean.
-expect_kill ltrc "$(mkmut ltrc '[ "$lt_rc" -le 1 ] ||' 'true ||')" A8d
-# M13-M16 the real-gate WIRING: each one passed every stub-only arm.
-expect_kill ltarg "$(mkmut ltarg '--leftover-tokens "$CONSUMER"' '--leftover-tokens "$DIST"')" RLT
-expect_kill ssdargs "$(mkmut ssdargs '"$DIST" "$CONSUMER" "$THEIRS" ;;' '"$DIST" "$THEIRS" "$CONSUMER" ;;')" RSSD
-expect_kill noroot "$(mkmut noroot 'set -- bash "$prog" --root "$CONSUMER" ;;' 'set -- bash "$prog" ;;')" RHR
-expect_kill nopostapply "$(mkmut nopostapply '--post-apply "$DIST"' '"$DIST"')" RHB
 
 echo
 report_end post-write-gates

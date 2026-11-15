@@ -277,47 +277,6 @@ untouched() {
 expect_dv() { git -C "$1/dist" show "$(cat "$1/.T"):core/$DV" > "$1/want" && fill_dv "$1/want" both; }
 expect_im() { git -C "$1/dist" show "$(cat "$1/.T"):core/$IM" > "$1/want" && fill_im "$1/want"; }
 
-# --- the reference: today's arm, from the same apply.sh -----------------------------------------
-# mut_new <dir> copies the WHOLE reconcile directory (apply.sh evals map_consumer() out of
-# preclassify.sh and shells to its sibling detectors, so a lone copy dies before printing a row).
-# mut_sub <dir> <old> <new> replaces a literal substring on exactly ONE line of the copy's apply.sh;
-# mut_del <dir> <anchor> <k> deletes the one line carrying <anchor> and the <k> lines after it.
-# Both refuse unless exactly one line matched, so a respelled anchor reports DID NOT APPLY.
-mut_new() { mkdir -p "$1" && cp "$REC"/* "$1"/ 2>/dev/null && [ -f "$1/apply.sh" ] && [ -f "$1/setup-site-drift.sh" ]; }
-mut_sub() {
-  local n; n="$(grep -cF -- "$2" "$1/apply.sh")" || n=0
-  [ "$n" = 1 ] || return 1
-  MS_OLD="$2" MS_NEW="$3" awk '{ i = index($0, ENVIRON["MS_OLD"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["MS_NEW"] substr($0, i + length(ENVIRON["MS_OLD"])); print }' \
-    "$1/apply.sh" > "$1/apply.sh.m" && mv "$1/apply.sh.m" "$1/apply.sh"
-}
-# mut_subn <dir> <old> <new> <n> -- the same, for an anchor that must be on exactly <n> lines; every
-# one is replaced. For a property the subject states at more than one site.
-mut_subn() {
-  local n; n="$(grep -cF -- "$2" "$1/apply.sh")" || n=0
-  [ "$n" = "$4" ] || return 1
-  MS_OLD="$2" MS_NEW="$3" awk '{ i = index($0, ENVIRON["MS_OLD"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["MS_NEW"] substr($0, i + length(ENVIRON["MS_OLD"])); print }' \
-    "$1/apply.sh" > "$1/apply.sh.m" && mv "$1/apply.sh.m" "$1/apply.sh"
-}
-mut_del() {
-  local n; n="$(grep -cF -- "$2" "$1/apply.sh")" || n=0
-  [ "$n" = 1 ] || return 1
-  MS_A="$2" awk -v k="$3" 'index($0, ENVIRON["MS_A"]) { skip = k + 1 } skip > 0 { skip--; next } { print }' \
-    "$1/apply.sh" > "$1/apply.sh.m" && mv "$1/apply.sh.m" "$1/apply.sh"
-}
-mutated() { ! cmp -s "$REC/apply.sh" "$1/apply.sh"; }
-# ssd_sub <dir> <old> <new> -- the same literal one-line replacement, in the copy's
-# setup-site-drift.sh; ssd_mutated is its cmp guard. apply.sh shells to its sibling, so a mutation
-# of the checker lives in the same directory copy as every other mutant.
-ssd_sub() {
-  local n; n="$(grep -cF -- "$2" "$1/setup-site-drift.sh")" || n=0
-  [ "$n" = 1 ] || return 1
-  MS_OLD="$2" MS_NEW="$3" awk '{ i = index($0, ENVIRON["MS_OLD"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["MS_NEW"] substr($0, i + length(ENVIRON["MS_OLD"])); print }' \
-    "$1/setup-site-drift.sh" > "$1/ssd.m" && mv "$1/ssd.m" "$1/setup-site-drift.sh"
-}
-ssd_mutated() { ! cmp -s "$REC/setup-site-drift.sh" "$1/setup-site-drift.sh"; }
-
-CALL='&& setup_site_merge "$path" "$rel" "$cons"; then'
-
 fin_note() { awk -F'\t' -v r=".claude/$2" '$1=="NOTE" && $2=="finish-unverified" && $3==r {print $4}' "$WORK/out/$1.out" 2>/dev/null; }
 
 # lib_init -- after the caller's subject probe: the siblings apply.sh shells to, WORK, the trap.

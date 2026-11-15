@@ -1,0 +1,3 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh), once.
+158 *
+8 core/scripts/validate-adversarial-convergence.sh

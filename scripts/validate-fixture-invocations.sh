@@ -16,9 +16,8 @@
 # not repeat it (about 0.8 CPU-s each, across every declared fixture, would be the very regrowth this budget refuses).
 # It also runs standalone, and core/fixtures/fixture-invocation-budget drives it. Every arm is probed in both directions, and three end-to-end legs drive the
 # REAL rc this script generates: a known script under `env -i` with the BASH_ENV/FXCOUNT_LOG passthrough logs its
-# known number of starts, and without the passthrough (both variables exported in the invoker) logs none; under
-# xtrace the script's stderr is byte-identical with the counter on and off, while the counter-on run logged rows;
-# and a seeded loop sourcing the real core/fixtures/lib/mutant.sh reports its names for J5. Every child bash the
+# known number of starts, and without the passthrough (both variables exported in the invoker) logs none; and under
+# xtrace the script's stderr is byte-identical with the counter on and off, while the counter-on run logged rows. Every child bash the
 # self-probe starts runs under `env -i`, so a self-probe running inside a counted fixture writes nothing into that
 # fixture's log and answers the same counted or not.
 #
@@ -47,7 +46,7 @@
 # It then restores the default XFSZ action (a disposition ignored on entry stays ignored; bash cannot reset it). The
 # judge reads the log plus one row per marker. The markers are not truncated by hermetic-run.sh with the log, so a
 # start log is judged once per FXCOUNT_DIR: the hook makes a fresh `mktemp -d` run dir per push. Still unseen there: a
-# mutant_killed name appended to `<log>.mutants` under the limit is lost (J5 sees fewer names, never a false FAIL); an fx_inproc row appended to `<log>.inproc` under the limit is lost
+# fx_inproc row appended to `<log>.inproc` under the limit is lost
 # too, and there the `inproc:` row reads LOW and FAILs J3 -- a false FAIL, never an acquittal.
 #
 # THE DECLARATION: core/fixtures/<f>/invocations.decl. `#` comments and blank lines ignored. Rows:
@@ -91,14 +90,6 @@
 #   J2  no invocations.decl -> FAIL, printing the measured rows as the declaration to write.
 #   J3  measured != declared on any row -> FAIL, naming fixture, row, measured, declared and the remedy.
 #   J4  grammar: a malformed row (a `±` count included), a duplicate path, no `*` row or two, a path row naming no `!` line -> FAIL.
-#   J5  every mutant name core/fixtures/lib/mutant.sh's mutant_killed appended to <log>.mutants must carry a
-#       `# MUTANT-MATRIX <name> ...` or `# MUTANT-MATRIX-FULL <name> ...` row in the fixture's run.sh (a shard stub
-#       `exec bash "$IMPL" --group ...` is joined against its IMPL's run.sh). A name with no row, or with a
-#       `# MUTANT-MATRIX-CONTROL <name>` row, FAILs. The join sees only kills scored through mutant_killed: a battery
-#       on scripts/mutant-kills-allowlist.txt emits its kills its own way and is covered by the static join alone.
-#       EXEMPT: a fixture (a shard stub resolved to its IMPL) that is a row of scripts/fixture-matrix-allowlist.txt,
-#       validate-fixture-hygiene.sh's derived down-only H5 allowlist of batteries with no block yet, is not joined;
-#       J5 prints `J5 EXEMPT, not judged` for it, never the ok line alone. An absent allowlist exempts nothing.
 #   J6  a `!` (REQUIRED) file line of inputs.decl naming a BASH SUBJECT with no invocations.decl row -> FAIL, printing
 #       the row to add with this run's measured count; `0 <path>` satisfies it. The population is decided from the file
 #       (fxc_subject_kind): a `.sh` name, or a first line that is a `sh`/`bash` shebang, direct or through `env`. Data
@@ -157,8 +148,7 @@
 #   B2  fixtures with no inputs.decl (the `.undeclarable` ones) never run through hermetic-run.sh: out of population,
 #       derived by listing `core/fixtures/*/.undeclarable`.
 #   B3  fixtures running a child under their own `env -i`: starts beneath it are uncounted, deterministically, so
-#       the declared count still binds what the fixture runs outside it. B3 BLINDS J5 TOO: mutant_killed under an
-#       inner `env -i` has no FXCOUNT_LOG, so the names it reports there are never appended to <log>.mutants.
+#       the declared count still binds what the fixture runs outside it.
 #   B4  a fixture setting its own BASH_ENV (snapshot-archive-rotate) replaces the counter for its children.
 #   B5  a nested hermetic-run.sh is inert: only FXCOUNT_LOG (with BASH_ENV) crosses its `env -i`, never the three
 #       arming variables. An UNDECLARED fixture's direct run is not under that `env -i`, so FXCOUNT_RC, FXCOUNT_DIR and
@@ -176,10 +166,6 @@
 #       wait-beat-liveness, wait-stale-deliverable (background and kill); foreground-budget-deny, retro-audit-scans
 #       (timeout); readset-skip carries both. Their per-fixture reasons are not yet read: the counting slot's two passes
 #       decide which of them move, and each one that moves is fixed or listed here with its reason.
-#   J5 ATTRIBUTION. FXCOUNT_LOG crosses into every child that is not under its own `env -i`, so a fixture that runs
-#   another fixture's run.sh directly has the inner fixture's mutant_killed names joined against the OUTER header.
-#   Today no other run.sh names one of the four mutant_killed users by path; a driver looping over a glob is not seen
-#   by that check.
 #   Also unseen: `bash --posix`, `bash -p` and `bash -n` (no BASH_ENV), a script whose first command is a bare
 #   subshell, and an empty script. `bash -s` and `bash < f` log an empty path, process substitution `/dev/fd/<n>`;
 #   both still count toward `*`.
@@ -197,8 +183,8 @@
 # Distribution-only: repo-root scripts/ is never installed, and nothing on a consumer sets the three variables.
 #
 # THE JUDGE'S IDENTITY IS A FORMAT VERSION, NOT A HASH OF ITS BYTES. A counted verdict-store entry carries one
-# `#judge f<FXC_FORMAT> <J5 key> <listed|unlisted>` row for its fixture (--key-rows, read by the hook's READSET_VS
-# span), and the counted store is named for FXC_FORMAT alone, so a judge or allowlist edit re-runs only the fixtures
+# `#judge f<FXC_FORMAT> <key> <listed|unlisted>` row for its fixture (--key-rows, read by the hook's READSET_VS
+# span), and the counted store is named for FXC_FORMAT alone, so a judge edit re-runs only the fixtures
 # whose row it moves. FXC_FORMAT changes only when what the judge DECIDES for a fixture changes. Every semantic sha of
 # this file (comment and blank lines dropped, readset_span_sha's rule) is pinned on one row,
 # `# FXC-IDENTITY <format> <sha> <reason>`; --identity-check, run by the hook's fxcount_arm, fails arming when the
@@ -207,6 +193,7 @@
 # counted entry re-runs).
 # FXC-IDENTITY 1 cc011bb8430f348d037ed2a565be3f493f1074da7f072c919c65ef67776784ad the per-fixture judge row (BL-1057)
 # FXC-IDENTITY 1 f4035938f576baa486a7c6acd4b69d429eb974eecac63c27277279fb6af02691 cost only: per-row forks cut, C5's guard table built once, the --b2-census self-probe memoised (BL-1065); every output byte-identical
+# FXC-IDENTITY 1 773c3d37115fb87226d647e883483c839cffc54dddd02a8750483c73805dcb8a the J5 arm and the matrix allowlist removed with every mutation battery; every judged fixture's row format unchanged
 set -u
 FXC_FORMAT=1
 
@@ -217,12 +204,12 @@ FXC_REMEDY_TAIL="otherwise this is the regrowth fixture-mutants.md 'One run per 
 FXC_GUARD_A='[ "${BASH_SOURCE[0]}" = "$0" ] || return 0'
 FXC_GUARD_B='if [ "${BASH_SOURCE[0]}" = "$0" ]; then'
 
-# THE HEREDOC TRACKER, one awk function string read by fxc_mutant_rows (J5) and by P2's scan; never copied. A heredoc
+# THE HEREDOC TRACKER, one awk function string read by P2's scan; never copied. A heredoc
 # body is data. A `<<` outside quotes on a non-comment line, not `<<<`, opens a body whose delimiter is the next word
 # (quoted, backslashed or bare; `<<-` strips leading tabs); a word that cannot start a name opens nothing; several
 # heredocs on one line close in order. NO BODY OPENS INSIDE `((` OR `$((` (hd_arith masks the arithmetic span first):
 # `$((1<<n))` and `(( m = 1 << k ))` once opened a body delimited by `n`/`k`, which swallowed the rest of
-# shell-portability/run.sh from its line 1387, MUTANT-MATRIX rows included. The caller passes -v SQ=<apostrophe>,
+# shell-portability/run.sh from its line 1387, header rows included. The caller passes -v SQ=<apostrophe>,
 # calls hd_body(line) first (1: a body or delimiter line, consumed) and opens(line) on every other line -- or
 # opens_m(line, mask) with its own same-length mask, as P2 does with its cross-line one (a `<<` inside a multi-line
 # string opens nothing there). opens is opens_m over this file's line-local qmask.
@@ -322,19 +309,11 @@ fxc_impl_of() {
     END { flush() }' "$@"
 }
 
-# fxc_allowlisted <fixture>: 0 when <fixture> is a row of scripts/fixture-matrix-allowlist.txt beside this script
-# (field 1, exact). An absent allowlist exempts nothing -- the fail-closed direction.
-# FXC_ALLOW is assigned here, never read from the environment; only the self-probe repoints it, at its own seed.
-FXC_ALLOW="${FXC_SELF%/*}/fixture-matrix-allowlist.txt"
-fxc_allowlisted() {
-  [ -f "$FXC_ALLOW" ] || return 1
-  F="$1" awk -F'\t' '$0 ~ /^[[:space:]]*(#|$)/ { next } $1 == ENVIRON["F"] { f = 1 } END { exit f ? 0 : 1 }' "$FXC_ALLOW"
-}
-
-# fxc_key_rows <root> [<fixture>...]: one `<fixture>\t#judge f<FXC_FORMAT> <J5 key> <listed|unlisted>` row per fixture
+# fxc_key_rows <root> [<fixture>...]: one `<fixture>\t#judge f<FXC_FORMAT> <key> <listed|unlisted>` row per fixture
 # (every core/fixtures/*/run.sh under <root> when none is named): everything this judge decides for a fixture that the
-# fixture's own content key does not hold. The J5 key is fxc_judge's (the shard stub's IMPL through fxc_impl_of, else
-# the fixture), and its membership is fxc_allowlisted's. One awk resolves every stub, one awk reads the allowlist.
+# fixture's own content key does not hold. The key is the judged key (the shard stub's IMPL through fxc_impl_of, else
+# the fixture); the last field is always `unlisted`, the row format being kept for the verdict stores written under it.
+# One awk resolves every stub.
 fxc_key_rows() {
   local root="$1" w f; shift
   w="$(mktemp -d "${TMPDIR:-/tmp}/fxc-keyrows.XXXXXX")" || return 2
@@ -346,11 +325,9 @@ fxc_key_rows() {
   set --
   while IFS= read -r f; do set -- "$@" "$f"; done < "$w/runs"
   fxc_impl_of "$@" > "$w/impl" 2>/dev/null || :
-  : > "$w/allow"
-  [ -f "$FXC_ALLOW" ] && awk -F'\t' '$0 ~ /^[[:space:]]*(#|$)/ { next } { print $1 }' "$FXC_ALLOW" > "$w/allow"
-  FMT="$FXC_FORMAT" awk -F'\t' 'FILENAME == ARGV[1] { A[$0] = 1; next } FILENAME == ARGV[2] { I[$1] = $2; next }
+  FMT="$FXC_FORMAT" awk -F'\t' 'FILENAME == ARGV[1] { I[$1] = $2; next }
     { fx = $0; sub(/\/run\.sh$/, "", fx); sub(/.*\//, "", fx); k = ($0 in I && I[$0] != "") ? I[$0] : fx
-      printf "%s\t#judge f%s %s %s\n", fx, ENVIRON["FMT"], k, ((k in A) ? "listed" : "unlisted") }' "$w/allow" "$w/impl" "$w/runs"
+      printf "%s\t#judge f%s %s unlisted\n", fx, ENVIRON["FMT"], k }' "$w/impl" "$w/runs"
   rm -rf "$w"
 }
 
@@ -358,8 +335,8 @@ fxc_key_rows() {
 # alone. The hook's fxcount_arm and scripts/collect-counted-stores.sh both read it here.
 fxc_store_key() { printf 'counted-%s\n' "$(printf 'fxcount judge format f%s\n' "$FXC_FORMAT" | shasum -a 256 | cut -c1-12)"; }
 
-# fxc_legacy_ok <old allowlist> <key rows> <format>: the fixtures whose --key-rows row carries <format> and whose J5 key
-# has the same membership in <old allowlist> (an allowlist as fxc_allowlisted reads one) as the row records: the
+# fxc_legacy_ok <old allowlist> <key rows> <format>: the fixtures whose --key-rows row carries <format> and whose key
+# has the same membership in <old allowlist> (an old allowlist blob, one fixture per row; none exists now) as the row records: the
 # fixtures whose judgement a store written under <old allowlist> and <format> still holds.
 fxc_legacy_ok() {
   [ -f "$1" ] && [ -f "$2" ] || return 2
@@ -376,28 +353,6 @@ fxc_identity_check() {
     END { exit (ok && n == 1) ? 0 : 1 }' "$FXC_SELF" && { printf 'judge identity f%s %s pinned\n' "$FXC_FORMAT" "$s"; return 0; }
   printf '   %s: semantic sha %s has no `# FXC-IDENTITY %s <sha> <reason>` row: add one under the current FXC_FORMAT if no fixture'"'"'s judgement moves, else under a bumped FXC_FORMAT\n' "$FXC_SELF" "$s" "$FXC_FORMAT"
   return 1
-}
-
-# fxc_mutant_rows <run.sh> <root>: print `M <name>` and `C <name>` rows, following a shard stub to its IMPL.
-fxc_mutant_rows() {
-  local f="$1" impl
-  impl="$(fxc_impl_of "$f")"
-  if [ -n "$impl" ]; then
-    impl="${impl##*$'\t'}"
-    [ "$impl" != '!' ] || return 3
-    f="$(dirname "$(dirname "$f")")/$impl/run.sh"
-    [ -f "$f" ] || return 3
-  fi
-  # A heredoc body is data, never the header: a MUTANT-MATRIX line a battery SEEDS into a probe file (fixture-hygiene
-  # does) is not this fixture's row. validate-fixture-hygiene.sh's H5 skips heredoc bodies through its masker, which
-  # lives inside that script's `read -d ''` awk string behind a top-level self-probe and has no callable entry point,
-  # so this reads THE HEREDOC TRACKER (FXC_HEREDOC_AWK above), the one P2's scan reads too.
-  LC_ALL=C awk -v SQ="'" "$FXC_HEREDOC_AWK"'
-    { orig = $0 }
-    hd_body(orig) { next }
-    $1 == "#" && ($2 == "MUTANT-MATRIX" || $2 == "MUTANT-MATRIX-FULL") && NF >= 3 { print "M\t" $3 }
-    $1 == "#" && $2 == "MUTANT-MATRIX-CONTROL" && NF >= 3 { print "C\t" $3 }
-    { opens(orig) }' "$f"
 }
 
 # fxc_req <inputs.decl>: the `!` (REQUIRED) FILE lines, markers stripped, one per line. A directory line is never one.
@@ -697,8 +652,7 @@ fxc_cells_judge() {
 #   on main 62a88119c with this change). The route lists below were measured on that main 62a88119c tree.
 #   THE B ROUTE, the LARGER open route (execution through an UNGUARDED subject's functions after its counted source
 #   is not counted): 312 call sites in 350 rows over 4 fixtures, against the 116 sites the scan flags --
-#   backlog-receipt-efficiency 221 (control: it sources the unguarded backlog-receipt-binding/run.sh, then
-#   calls vin, seed, mut, record, ok, bad, note ...), story-evidence-receipts-mutants 75 and
+#   a since-deleted receipt-validator battery 221, story-evidence-receipts-mutants 75 and
 #   story-evidence-smoke-mutants 36 (story-evidence-receipts/run.sh), smoke-surface-ignored-mutants 18
 #   (smoke-surface-ignored/run.sh).
 #   GATED unresolvable command words (a word that resolves to nothing literal, with no guarded source in scope),
@@ -1052,7 +1006,7 @@ END {
 #   in a fixture with an unguarded subject, and unresolvable words after a guarded source).
 #   THEN the one-level helper gate (13 sources on the corpus gate as helpers, the row set unchanged) and the lead
 #   ruling OPTION S (a positional reads the union of every caller argument, index-free) moved it to 524 rows over 215
-#   sites in 43 fixtures, 357 TRUE and 167 GATED, on this tree: 6 rows added, every one a PHANTOM -- readset-skip/run.sh:3242
+#   sites in 43 fixtures, 357 TRUE and 167 GATED, on that release's tree (line numbers below as measured there): 6 rows added, every one a PHANTOM -- readset-skip/run.sh:3242
 #   in its 4 fixtures and spec-join-integrity/run.sh:1651 (a `. "$1"` whose other caller arguments are unresolvable),
 #   remediator-shard-join/unit-reader-a.sh:113 (the `"$@"` after `shift` picks up the mutant path the shift drops) --
 #   and 4 removed, readset-skip/run.sh:7856 in its 4 fixtures (a `. "$3"` behind `${3:-}`: a caller passing no third
@@ -1322,32 +1276,6 @@ EOF
       fi
     fi
   fi
-  # J5
-  local key="${fd##*/}"
-  if [ -s "$log.mutants" ]; then
-    key="$(fxc_impl_of "$fd/run.sh" 2>/dev/null)"; key="${key##*$'\t'}"; [ -n "$key" ] || key="${fd##*/}"
-  fi
-  if [ -s "$log.mutants" ] && fxc_allowlisted "$key"; then
-    printf '%s: J5 EXEMPT, not judged: %s is a row of scripts/fixture-matrix-allowlist.txt (no MUTANT-MATRIX block yet); its %s reported mutant name(s) were not joined\n' \
-      "$fx" "$key" "$(LC_ALL=C sort -u "$log.mutants" | awk 'END { print NR }')"
-  elif [ -s "$log.mutants" ]; then
-    if ! fxc_mutant_rows "$fd/run.sh" "$root" > "$w/mrows"; then
-      printf '%s: FIXTURE BROKEN (J5): %s is a shard stub whose IMPL run.sh cannot be resolved\n' "$fx" "${fd#"$root"/}/run.sh"; rm -rf "$w"; return 2
-    fi
-    while IFS= read -r m; do
-      [ -n "$m" ] || continue
-      if grep -qxF "C$(printf '\t')$m" "$w/mrows"; then
-        printf '%s: FAIL (J5): mutant_killed reported %s, which carries a MUTANT-MATRIX-CONTROL row -- a control is not a mutant and never routes through mutant_killed\n' "$fx" "$m"; rc=1
-      elif ! grep -qxF "M$(printf '\t')$m" "$w/mrows"; then
-        printf '%s: FAIL (J5): mutant_killed reported %s, which has no `# MUTANT-MATRIX %s ...` or `# MUTANT-MATRIX-FULL %s ...` row in the fixture header\n' "$fx" "$m" "$m" "$m"; rc=1
-      fi
-    done <<EOF
-$(LC_ALL=C sort -u "$log.mutants")
-EOF
-    [ "$rc" = 0 ] && printf 'ok J5: %s: %s name(s) joined\n' "$fx" "$(LC_ALL=C sort -u "$log.mutants" | awk 'END { print NR }')"
-  else
-    printf 'ok J5: %s: 0 name(s) (no mutant_killed emission)\n' "$fx"
-  fi
   # C1-C3 and the stale allowlist row, over this run's start log (THE IN-PROCESS CELLS above). Judged only beside a
   # declaration: with none, J2 has already FAILed and there is no subject to attribute a start to.
   if [ "$FXC_CELLS" = 1 ] && [ -f "$decl" ]; then
@@ -1405,7 +1333,7 @@ sp_seed() { local n0="$SP_N" f0="$SP_FAIL"; sp_cell "$@"; [ "$SP_FAIL" = "$f0" ]
 # THE C-ARM CELLS, both directions, run by fxc_self_probe after the J cells. <S> its scratch dir, <rc> the generated
 # counter rc, <bash>. Every world is a fixture dir under $SPR judged in-process by sp_cell with the C arms on; the
 # synthetic logs carry the rc's four fields (path, pid, FXCELL, parent pid), and one leg drives the REAL rc.
-FXC_SP_CELLS=118
+FXC_SP_CELLS=103
 fxc_cells_self_probe() {
   local S="$1" rcf="$2" bash_bin="$3" T=$'\t' g out n
   FXC_CELLS=1
@@ -1821,48 +1749,6 @@ fxc_self_probe() {
     printf '%s\n' "$r" | tr '|' '\n' > "$SPR/$SPN/invocations.decl"
     sp_cell "J4 ± seed ${spec%%:*}" "$wrc" "$SPN" "$SPR/log" "$want"
   done
-  # J5 both directions, a header, a shard stub, a control
-  mkdir -p "$SPR/j5" "$SPR/j5s" "$SPR/j5c"
-  for d in j5 j5s j5c; do cp "$fd/inputs.decl" "$SPR/$d/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/$d/invocations.decl"; done
-  cp "$SPR/log" "$SPR/logm"; printf 'Ma\nMb\nMa\n' > "$SPR/logm.mutants"
-  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n# MUTANT-MATRIX-REMEASURE x\n' > "$SPR/j5/run.sh"
-  sp_cell "J5 an unrowed reported name FAILs" 1 j5 "$SPR/logm" "reported Mb, which has no"
-  printf '# MUTANT-MATRIX-FULL Mb worlds=w1,w2 why=x\n' >> "$SPR/j5/run.sh"
-  sp_cell "J5 every reported name rowed passes" 0 j5 "$SPR/logm" "ok"
-  printf '#!/usr/bin/env bash\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../j5/run.sh"\nexec bash "$IMPL" --group b\n' > "$SPR/j5s/run.sh"
-  sp_cell "J5 a shard stub joins its IMPL's rows" 0 j5s "$SPR/logm" "ok"
-  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n# MUTANT-MATRIX-CONTROL Mb why=x\n' > "$SPR/j5c/run.sh"
-  sp_cell "J5 a reported name with a CONTROL row FAILs" 1 j5c "$SPR/logm" "MUTANT-MATRIX-CONTROL row"
-  # J5 on a pass prints its count of distinct names (logm reports Ma, Mb, Ma); no emission prints 0.
-  mkdir -p "$SPR/j5ok"; cp "$fd/inputs.decl" "$SPR/j5ok/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5ok/invocations.decl"
-  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n# MUTANT-MATRIX Mb decides=A twins=B\n' > "$SPR/j5ok/run.sh"
-  sp_cell "J5 a pass with 2 rowed names prints its ok line with the count" 0 j5ok "$SPR/logm" "ok J5: p: 2 name(s) joined"
-  sp_cell "J5 a run with no mutant_killed emission prints the 0 line" 0 j5ok "$SPR/log" "ok J5: p: 0 name(s) (no mutant_killed emission)"
-  # A row inside a heredoc body is a seed, not the header: Mb rowed only there FAILs (its twin, rowed in code, passed above).
-  mkdir -p "$SPR/j5h"; cp "$fd/inputs.decl" "$SPR/j5h/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5h/invocations.decl"
-  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\ncat > p <<'"'"'EOF'"'"'\n# MUTANT-MATRIX Mb decides=A twins=B\nEOF\n' > "$SPR/j5h/run.sh"
-  sp_cell "J5 a name rowed only inside a heredoc body FAILs" 1 j5h "$SPR/logm" "reported Mb, which has no"
-  # Its twin: the heredoc CLOSES, and `$((1<<3))`, `$((1<<k))`, `(( m = 1 << k ))` and `<<<` open nothing (the two
-  # name-shifted forms once opened a body delimited by `k`), so Mb rowed after all of them counts.
-  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\ncat > p <<'"'"'EOF'"'"'\nseed\nEOF\nx=$((1<<3))\ny=$((1<<k))\n(( m = 1 << k ))\ncat <<<"x"\n# MUTANT-MATRIX Mb decides=A twins=B\n' > "$SPR/j5h/run.sh"
-  sp_cell "J5 a name rowed after a closed heredoc, shifts in \$(( )) and (( )), and a here-string passes" 0 j5h "$SPR/logm" "ok"
-  # A non-exec shard stub (`bash "$IMPL" --group x > out`, the ledger-reverify-b form) resolves to its IMPL too.
-  mkdir -p "$SPR/j5n"; cp "$fd/inputs.decl" "$SPR/j5n/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5n/invocations.decl"
-  printf '#!/usr/bin/env bash\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../j5/run.sh"\nbash "$IMPL" --group b > "$HERE/o"\n' > "$SPR/j5n/run.sh"
-  sp_cell "J5 a non-exec shard stub joins its IMPL's rows" 0 j5n "$SPR/logm" "ok"
-  # The allowlist exemption, both ways. Each world reports Mb with no row for it, so only the exemption passes it.
-  mkdir -p "$SPR/heldfx" "$SPR/heldfx2" "$SPR/heldst"
-  for d in heldfx heldfx2 heldst; do cp "$fd/inputs.decl" "$SPR/$d/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/$d/invocations.decl"
-    printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n' > "$SPR/$d/run.sh"; done
-  printf '#!/usr/bin/env bash\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../heldfx/run.sh"\nexec bash "$IMPL" --group b\n' > "$SPR/heldst/run.sh"
-  local fxc_allow_real="$FXC_ALLOW"
-  FXC_ALLOW="$S/allow.txt"; printf '# probe allowlist\nheldfx\tS1 a mutation helper\n' > "$FXC_ALLOW"
-  sp_cell "J5 a fixture on the allowlist is EXEMPT, with a printed line" 0 heldfx "$SPR/logm" "heldfx is a row of scripts/fixture-matrix-allowlist.txt"
-  sp_cell "J5 a stub of an allowlisted IMPL is EXEMPT" 0 heldst "$SPR/logm" "J5 EXEMPT, not judged: heldfx"
-  sp_cell "J5 a fixture whose name only shares a prefix with a row (heldfx2) FAILs" 1 heldfx2 "$SPR/logm" "reported Mb, which has no"
-  FXC_ALLOW="$S/absent-allow.txt"
-  sp_cell "J5 an absent allowlist exempts nothing" 1 heldfx "$SPR/logm" "reported Mb, which has no"
-  FXC_ALLOW="$fxc_allow_real"
   # END TO END through the generated rc. Every child bash is under env -i; the invoker exports BASH_ENV and
   # FXCOUNT_LOG naming the probe's own files, so the no-passthrough leg's zero is a statement about env -i.
   bash_bin="${BASH:-/bin/bash}"
@@ -1907,18 +1793,7 @@ fxc_self_probe() {
   if [ -z "$(ls -A "$S/cwd")" ] && [ "$(ls "$S/ro" | grep -c '\.lim\.')" = 0 ]; then
     sp_ok "E2E under ulimit -f 0 a read-only log and an empty FXCOUNT_LOG leave no marker beside the log or in the cwd"
   else sp_bad "E2E a read-only or empty log left a marker: cwd [$(ls -A "$S/cwd" | tr '\n' ' ')] ro [$(ls "$S/ro" | tr '\n' ' ')]"; fi
-  # The seeded loop through the REAL mutant.sh: an unrowed name FAILs J5, the same loop rowed passes.
   local mlib="${FXC_SELF%/scripts/*}/core/fixtures/lib/mutant.sh"
-  if [ ! -f "$mlib" ]; then sp_bad "E2E the real core/fixtures/lib/mutant.sh is absent beside this script ($mlib)"
-  else
-    mkdir -p "$SPR/lp"; cp "$fd/inputs.decl" "$SPR/lp/"; printf '2 *\n0 core/scripts/sub.sh\n' > "$SPR/lp/invocations.decl"
-    printf 'ok() { :; }\nbad() { :; }\n. %s\nfor m in La Lb; do mutant_killed 1 "$m" x; done\nbash -c :\n' "$mlib" > "$SPR/lp/loop.sh"
-    env -i PATH="/usr/bin:/bin" BASH_ENV="$rcf" FXCOUNT_LOG="$S/lp.log" "$bash_bin" "$SPR/lp/loop.sh" >/dev/null 2>&1
-    printf '#!/usr/bin/env bash\n# MUTANT-MATRIX La decides=A twins=B\n' > "$SPR/lp/run.sh"
-    sp_cell "E2E a loop reporting an unrowed name through mutant_killed FAILs J5" 1 lp "$S/lp.log" "reported Lb, which has no"
-    printf '# MUTANT-MATRIX Lb decides=A twins=B\n' >> "$SPR/lp/run.sh"
-    sp_cell "E2E the same loop with its row passes" 0 lp "$S/lp.log" "ok"
-  fi
   fxc_inproc_self_probe "$S" "$fd" "$rcf" "$bash_bin" "$mlib"
   fxc_cells_self_probe "$S" "$rcf" "$bash_bin"
   rm -rf "$S"

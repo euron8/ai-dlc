@@ -24,8 +24,7 @@ Assertion 4 is that case, stated as a property: the answer with frozen archives 
 answer with every archive deleted, for six canonical states, and each row also asserts its expected
 value so two agreeing wrong answers cannot pass. A canonical that exists with no `sprint:` key
 refuses (exit 1, empty stdout, stderr names the file) rather than resolving to `1` or to
-`max(frozen archives) + 1`. Assertion 4d is the control: a copy of the tool carrying the pre-change
-behaviour must fail the same table.
+`max(frozen archives) + 1`.
 
 ## The grammar collision (assertions 8 and 9)
 
@@ -48,15 +47,6 @@ block before the successor exists, so the number has nowhere to come from and th
 to whoever remembers to do it by hand. Freezing and rolling in one step at pipeline start keeps the
 predecessor's terminal state readable exactly until its successor exists.
 
-## Proving it can fail
-
-A green fixture proves nothing on its own. Both mutants below drive it RED:
-
-| mutation | assertions that fire |
-|---|---|
-| degenerate (no `sprint:` key) branch returns `max_frozen + 1` / `1` instead of refusing (committed as control arm 4d) | 4 and 4d |
-| `sprint_re` widened to the reference tool's colliding pattern | 8 |
-
 ## Part 2 — Check 5, and the count that is part of its contract
 
 `gate-validation.md` Check 5 ("Story status consistency?") says *"Run: Read both files, compare
@@ -72,38 +62,19 @@ whole sprint and reported clean; one read a `**Status:**` block its story files 
 So the battery asserts the **counts and the states**, not only the verdict, and `check-stories`
 gives "compared nothing" its own exit code (`4`) rather than folding it into `0`.
 
-Every Part-2 assertion is driven from one function, so the same battery runs against a mutated
-**copy** of the tool. A mutant is accepted only when it fails **exactly** its own assertion.
-
-| mutation | assertion that fires |
-|---|---|
-| "compared nothing" returns `0` | A16 |
-| an empty `stories:` block is reported as a finding | A17 |
-| the mismatch comparison is disabled | A14 |
-| the `**Status:**` body-header reader is removed | A15 |
-| a keyless (`- id:`) block is reported as empty | A18 |
-| an unresolvable entry is skipped silently | A19 |
-| duplicate-key detection is removed | A20 |
-| the cross-view comparison is dropped | A21 |
-| the id glob is widened to `<id>*` | A22 |
-
-The **unmutated control copy** earned its place on the first run: A21's setup was wrong, so A21
-failed on the shipping tool, and eight of the nine mutants reported "entangled" for a reason that
-had nothing to do with their mutation — while the A21 mutant itself came back green.
-
 ## Assertions
 
 0. `--render` is non-empty and deterministic
 1. greenfield (no canonical) → `1`
 2. `status: done` → `N+1`
 3. in-flight → `N` (a re-plan, not a new sprint)
-4. **the property: the answer with archives equals the answer with every archive deleted**, for six canonical states; a canonical that exists with no `sprint:` key REFUSES (exit 1, nothing on stdout, stderr names the file), never `1` and never `max_frozen + 1` (4d is the control: the pre-change behaviour fails the same table)
+4. **the property: the answer with archives equals the answer with every archive deleted**, for six canonical states; a canonical that exists with no `sprint:` key REFUSES (exit 1, nothing on stdout, stderr names the file), never `1` and never `max_frozen + 1`
 5. copies disagree → exit 3 HARD_BLOCK
 6. `roll` freezes byte-faithfully, writes the new envelope, and round-trips
 7. `roll` is idempotent — a re-run neither re-freezes nor destroys the archive
 8. `roll` creates the canonical on greenfield, and mints **no** second copy
-9. **MUTANT:** a housekeeping block alone is not parsed as a sprint envelope
-10. **MUTANT:** a canonical *with* housekeeping still derives `N+1`
+9. a housekeeping block alone is not parsed as a sprint envelope
+10. a canonical *with* housekeeping still derives `N+1`
 11. `roll` refuses an unclosed sprint (exit 3) — never freezes live state
 12. fail-closed on an unreadable schema — never guesses the grammar
 

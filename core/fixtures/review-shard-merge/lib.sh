@@ -1,5 +1,5 @@
 # review-shard-merge/lib.sh -- the resolution, seeded repositories, worlds and predicates of
-# review-shard-merge, sourced by that fixture's run.sh (the behavioural arms, shipped) (the retired mutation battery sourced it too).
+# review-shard-merge, sourced by that fixture's run.sh (the behavioural arms, shipped).
 # ONE copy, so the predicates the shipped arms run are never restated.
 #
 # The caller sets NAME and sources this file; nothing else. This file sets the shell options,
@@ -66,8 +66,7 @@ echo "$NAME: resolved subjects = $PART , $MERGE , $SEAL_SRC , $WFD_SRC , $HOOK"
 # fixture function and every non-exported fixture variable removed (a fresh bash's own variables kept), so
 # a defaulted read in the subject (`${v:-}`, `${nf:-}`, ...) sees what it sees as a process; the -e
 # assignments exported (what the CLI line prefixed: AI_DLC_PROJECT_ROOT, CLAUDE_PROJECT_DIR, PATH, the
-# threshold key); the positionals cleared; the script SOURCED from the path given, so a mutant drive loads its
-# mutant copy; the entry function asserted and called with the CLI's arguments. Stdin, stdout and stderr are
+# threshold key); the positionals cleared; the script SOURCED from the path given; the entry function asserted and called with the CLI's arguments. Stdin, stdout and stderr are
 # the caller's redirections. EQ1-EQ6 (run.sh) hold the in-process answer byte-equal to the CLI's, one
 # refusing and one passing input per subject, and those are the end-to-end runs kept.
 IP_FRESH=" $(env -i "$BASH" -c 'compgen -v' | tr '\n' ' ') "
@@ -103,7 +102,7 @@ ip_run() {
     while IFS= read -r _ip_v; do [ -z "$_ip_v" ] || export "$_ip_v"; done <<< "$_ip_x"
     set --
     # A pass is logged only for a file at a declared subject's own path (a core/scripts or core/hooks directory: the
-    # sandbox's, or a seeded tree's copy at that tail); a mutant script directory's copy is no pass of the subject, and
+    # sandbox's, or a seeded tree's copy at that tail); and
     # partition-document.sh is no `!` line of inputs.decl, which an inproc: row must name (validate-fixture-invocations.sh J4).
     case "${_ip_s%/*}" in */core/scripts|*/core/hooks) _ip_p=1 ;; *) _ip_p=0 ;; esac
     [ "${_ip_s##*/}" != partition-document.sh ] || _ip_p=0
@@ -117,8 +116,7 @@ ip_run() {
 # SOURCED ONCE: the merge, the subject most cells ask, is loaded into THIS shell once per script directory
 # (ip_load), so each ip_run of it forks a subshell that already holds its functions and parses nothing. IP_FNS
 # names exactly the functions that file defines (the scrub keeps those and no fixture function); any other
-# script, or a merge copy not loaded, is sourced inside the subshell as before. A mutant drive loads its own
-# copy (run.sh mut_run) and SRCDIR's is loaded back before the next arm. The merge defines no name lib.sh,
+# script, or a merge copy not loaded, is sourced inside the subshell as before. The merge defines no name lib.sh,
 # run.sh or mutant.sh defines (ip_load refuses one that does), and sourcing it runs `set -u`, which lib.sh already set.
 IP_LOADED=""; IP_FNS=" "
 ip_load() { # <merge-review-shards.sh path>
@@ -210,7 +208,7 @@ cp "$QA_MD" "$PROJ/core/team-roles/qa.md"
 # sprint-status.sh fails closed without its schema; the CR world's view is read against this copy.
 cp "$SS_SCHEMA" "$PROJ/core/schemas/sprint-status.json"
 # STORY-BIND calls sprint-status.sh with AI_DLC_PROJECT_ROOT unset (merge-review-shards.sh ss_bound), so a flat script
-# copy under $WORK (every mutant's and the control's) finds its schema the way an install does, by walking up from its
+# copy under $WORK finds its schema the way an install does, by walking up from its
 # own directory to a root marker: $WORK/.claude, holding the subject's schema. PROJ_Q is PROJ with the schema's
 # stories_dir rewritten to q{sprint}, the root a seat would point AI_DLC_PROJECT_ROOT at to move the stories directory.
 PROJ_Q="$WORK/proj-q"
@@ -228,7 +226,7 @@ G() { git -c user.name=fixture -c user.email=fixture@example.invalid -c commit.g
           -c core.hooksPath=/dev/null -c maintenance.auto=false "$@"; }
 # gm_children <wrapper> <repo> <n>: the number of `git maintenance run` children ONE commit through <wrapper> spawns,
 # read off its trace2 child_start events (a count of spawns, never of whether a repack happened, so no load moves it).
-# Prints nothing when git wrote no trace, which the caller reads as broken. Every drive (G, the control, the mutant)
+# Prints nothing when git wrote no trace, which the caller reads as broken. Every drive (G, the control)
 # reads no system and no global gitconfig, so an operator's inherited maintenance.auto=false cannot zero the control.
 gm_children() {
   local t="$WORK/gm-trace.$3.json" n
@@ -266,29 +264,19 @@ gm_vacuous() {
   fi
   GM_GITV="$v"
 }
-p_gmaint() { # GM1: a G commit spawns 0 maintenance children; raw git spawns 1 (control); G with the flag stripped spawns 1
-  local r="$WORK/gm-repo" fx ctl mu n0 n1 last
+p_gmaint() { # GM1: a G commit spawns 0 maintenance children; raw git spawns 1 (control)
+  local r="$WORK/gm-repo" fx ctl last
   WHY=""
-  # Each drive commits into a FRESH repository of its own, so the control's detached maintenance child cannot race the
-  # mutant's counted commit (or G's).
-  G init -q "$r" && G init -q "$WORK/gm-repo-ctl" && G init -q "$WORK/gm-repo-mut" || { WHY=" the probe repositories were not built"; return 1; }
+  # Each drive commits into a FRESH repository of its own, so the control's detached maintenance child cannot race G's
+  # counted commit.
+  G init -q "$r" && G init -q "$WORK/gm-repo-ctl" || { WHY=" the probe repositories were not built"; return 1; }
   fx="$(gm_children G "$r" 1)" || fx=""
   ctl="$(gm_children gm_raw "$WORK/gm-repo-ctl" 2)" || ctl=""
   [ "$ctl" = 1 ] || { echo "FIXTURE BROKEN: GM1's control, one commit through raw $(command -v git), spawned '${ctl}' maintenance children (want 1): this git cannot show the defect, so GM1 would pass whatever G sets" >&2; exit 2; }
-  # The mutant: G's own body with the flag stripped, built from `declare -f G` so it is the shipped wrapper less one word.
-  declare -f G > "$WORK/gm-g.orig" || { WHY=" declare -f G failed"; return 1; }
-  sed -e 's/ -c maintenance\.auto=false//' -e '1s/^G /gm_mut /' "$WORK/gm-g.orig" > "$WORK/gm-g.mut"
-  n0="$(grep -c 'maintenance\.auto' "$WORK/gm-g.orig")" || n0=0
-  n1="$(grep -c 'maintenance\.auto' "$WORK/gm-g.mut")" || n1=0
-  ! cmp -s "$WORK/gm-g.orig" "$WORK/gm-g.mut" && [ "$n0" = 1 ] && [ "$n1" = 0 ] && . "$WORK/gm-g.mut" \
-    && [ "$(type -t gm_mut)" = function ] \
-    || { echo "FIXTURE BROKEN: GM1's mutant did not apply (flag in G $n0 time(s), in the mutant $n1, want 1 and 0)" >&2; exit 2; }
-  mu="$(gm_children gm_mut "$WORK/gm-repo-mut" 3)" || mu=""
   [ "$fx" = 0 ] || { WHY=" a commit through G spawned '${fx}' git maintenance run child(ren), want 0"; return 1; }
-  [ "$mu" = 1 ] || { WHY=" the mutant (G less -c maintenance.auto=false) spawned '${mu}', want 1: the arm cannot fail"; return 1; }
   # BL-980: every receipt-*.sh in this directory (receipt-bl904.sh copies the repository its commits just wrote) is
   # DRIVEN by receipt-bl980.sh, run with the arguments its call site below gives it and judged by the maintenance
-  # children its whole run spawns; that receipt owns its must-fire. Its LAST stdout line is the verdict (stderr kept
+  # children its whole run spawns. Its LAST stdout line is the verdict (stderr kept
   # apart, so a git warning cannot turn a pass into BROKEN). A BROKEN receipt is a broken fixture, never a FAIL.
   GM_RO="$(bash "$LIB_DIR/receipt-bl980.sh" "$1" "$PROJ" 2> "$WORK/gm-receipt.err")"; GM_RRC=$?
   last="${GM_RO##*$'\n'}"
@@ -372,8 +360,8 @@ p_branch shape-hi
 _i=0; while [ "$_i" -lt "$DFLT" ]; do _i=$((_i + 1)); lines "$REPO_HI/t$_i/f.txt" 5 "hi-$_i"; done
 G -C "$REPO_HI" add -A && G -C "$REPO_HI" commit -q -m frozen
 HI_BASE="$P_ROOT"; HI_SHA="$(G -C "$REPO_P" rev-parse HEAD)"
-# D: DFLT+2 reviewable files, the default-built MERGE world. Off the boundary on purpose, so the
-# `<`/`<=` mutant is owned by the HI arm alone and this world owns what the manifest records.
+# D: DFLT+2 reviewable files, the default-built MERGE world. Off the boundary on purpose, so this world
+# owns what the manifest records.
 p_branch shape-d
 _i=0; while [ "$_i" -lt "$((DFLT + 2))" ]; do _i=$((_i + 1)); lines "$REPO_D/u$_i/f.txt" 5 "d-$_i"; done
 G -C "$REPO_D" add -A && G -C "$REPO_D" commit -q -m frozen
@@ -385,7 +373,7 @@ D_SHA12="$(printf '%s' "$D_SHA" | cut -c1-12)"
 REPO_E="$WORK/repo-e"; REPO_F="$WORK/repo-f"
 new_repo "$REPO_E" old && new_repo "$REPO_F" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
 for _i in 1 2 3 4 5 6 7 8; do lines "$REPO_E/e$_i/a.txt" 5 "e$_i-a"; lines "$REPO_E/e$_i/b.txt" 5 "e$_i-b"; done
-# Six files, off the --min-files 4 boundary, so the `<`/`<=` mutant is owned by P2b alone.
+# Six files, off the --min-files 4 boundary.
 for _i in 1 2; do for _f in a b c; do lines "$REPO_F/f$_i/$_f.txt" 5 "f$_i-$_f"; done; done
 G -C "$REPO_E" add -A && G -C "$REPO_E" commit -q -m frozen
 G -C "$REPO_F" add -A && G -C "$REPO_F" commit -q -m frozen
@@ -495,22 +483,14 @@ wdir() { # -> a fresh <tree>/docs/reviews/s9<digits>/shards, the tree $WROOT (de
 # builders below write the map, its stderr and the manifest, and no shard, before they return. So the
 # FIRST build of each tuple runs the real partition and publishes the world it wrote, and every later
 # build of the same tuple clones it into its own fresh directory instead of re-running the partition,
-# which the arms and the battery otherwise re-ran for the same tuple many times over. Two guards:
-#   - a builder runs the cache only when the scripts it would run (tpl_ok) are byte-identical to
-#     SRCDIR's, so a mutant copy of the partition or its siblings always builds its own world;
-#   - the key is the builder's whole argument tuple; every other input -- the seeded repos (no arm
+# which the arms otherwise re-ran for the same tuple many times over. The key is the
+# builder's whole argument tuple; every other input -- the seeded repos (no arm
 #     edits one in place; p_moved partitions a COPY), the environment, the scripts -- is this run's.
 #     No world records its own path: the manifest records the REPO, never the world directory.
-# TPL0 (seed_controls) builds one world twice, cached and uncached, and requires the two byte-equal and
-# the cache to have been read, so a cache that serves a wrong world, or none, is not silent.
+# TPL0 (seed_controls) builds one world twice and requires the two byte-equal and the cache to have been
+# read, so a cache that serves a wrong world, or none, is not silent.
 # TPL_BUILD counts the real partition runs a builder made, TPL_HITS the clones.
 tpl_key() { printf '%s\n' "$@" | shasum | cut -c1-16; }
-tpl_ok() { # <script-dir> <script...> -> 0 when each named script is byte-identical to SRCDIR's, or absent from both
-  local sd="$1" f; shift
-  for f in "$@"; do
-    if [ -e "$SRCDIR/$f" ]; then cmp -s "$sd/$f" "$SRCDIR/$f" || return 1; else [ ! -e "$sd/$f" ] || return 1; fi
-  done
-}
 tpl_has() { [ -n "$1" ] && [ -n "${RSM_TPL:-}" ] && [ -d "$RSM_TPL/$1" ]; }
 tpl_hit() { printf '%s\n' "$1" >> "$RSM_TPL.hits"; }
 tpl_build() { [ -z "${RSM_TPL:-}" ] || printf '%s\n' "$1" >> "$RSM_TPL.builds"; }
@@ -520,15 +500,12 @@ tpl_put() { # <key> <world dir>: never over a published template
   [ -d "$RSM_TPL/$1" ] && return 0
   mkdir "$RSM_TPL/$1.part" && cp -R "$2/." "$RSM_TPL/$1.part/" && mv "$RSM_TPL/$1.part" "$RSM_TPL/$1"
 }
-# Every script a builder runs, and every sibling the partition resolves beside itself (sib_set's closure
-# rule, applied to partition-review-diff.sh: artifact-path-config.sh, validate-carried-findings.sh).
-WORLD_SCRIPTS="partition-review-diff.sh artifact-path-config.sh validate-carried-findings.sh partition-document.sh"
 # new_world <script-dir> [repo] -> prints the shard dir
 new_world() { # <script-dir> [repo] [dir-suffix] [pass-marker, e.g. -p2]
   local sd="$1" repo="${2:-$REPO_B}" sfx="${3:-code-review}" pm="${4:-}" w d tk=""
   w="$(wdir)" || return 1
   d="$w/1-$sfx-$B_SHA12$pm"
-  [ -z "${RSM_TPL:-}" ] || ! tpl_ok "$sd" $WORLD_SCRIPTS || tk="$(tpl_key nw "$repo" "$B_BASE" "$B_SHA" 4 3 "$sfx" "$pm")"
+  [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key nw "$repo" "$B_BASE" "$B_SHA" 4 3 "$sfx" "$pm")"
   if tpl_has "$tk"; then
     cp -R "$RSM_TPL/$tk/." "$w/" || return 1; tpl_hit "$tk"
   else
@@ -579,7 +556,7 @@ shard() {
 xshards() {
   local sd="$1" d="$2" v="$3" gate="${4:-code-review}" k n g gl first last key tk=""
   k="$(awk -F'\t' '$1 == "part" { n++ } END { print n + 0 }' "$d/.manifest")"
-  [ -z "${RSM_TPL:-}" ] || ! tpl_ok "$sd" partition-document.sh || tk="$(tpl_key xs "$k")"
+  [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key xs "$k")"
   if tpl_has "$tk"; then
     cp "$RSM_TPL/$tk/groups" "$d.groups" || return 1; tpl_hit "$tk"
   else
@@ -611,7 +588,7 @@ kworld() {
   local sd="$1" repo="$2" base="$3" sha="$4" mp="$5" sfx="$6" v="$7" gate="${8:-code-review}" w d k tk=""
   w="$(wdir)" || return 1
   d="$w/${KIDX:-1}-$sfx-$(printf '%s' "$sha" | cut -c1-12)"
-  [ -z "${RSM_TPL:-}" ] || ! tpl_ok "$sd" $WORLD_SCRIPTS || tk="$(tpl_key kw "$repo" "$base" "$sha" 4 "$mp" "$sfx" ${KIDX:+"$KIDX"})"
+  [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key kw "$repo" "$base" "$sha" 4 "$mp" "$sfx" ${KIDX:+"$KIDX"})"
   if tpl_has "$tk"; then
     cp -R "$RSM_TPL/$tk/." "$w/" || return 1; tpl_hit "$tk"
   else
@@ -644,22 +621,17 @@ run_merge() { # <script-dir> <shard-dir> -> RC, $MO
 # NAMED HAND-OFFS (no key, no memo). Where two top-level arms merge the SAME state -- the same shard bytes, shard-directory
 # name, files in the directory, --out name and project root -- the later arm reads the earlier arm's saved answer instead
 # of merging again. SAME RUN ONLY: the answers live in $HAND, which is "$WORK/hand", and $WORK is this invocation's own
-# mktemp -d tree (removed by the EXIT trap); nothing is read from a previous run and nothing outlives this one. Only the
-# source script directory ($1 = SRCDIR) saves or reads; a mutant drive (any other script directory) always runs its own
-# merge, because hand_use returns 1 for it. A source-directory hand_use whose answer was never saved FAILS LOUDLY (a `bad`
-# line, RC=99, empty $MO): it never falls back to a merge. Under --matrix, reuse_proof runs the reading arm's OWN merge in
-# its own world and cmps it with the answer it read, one `REUSE <arm> reads=<source>` row per reuse.
+# mktemp -d tree (removed by the EXIT trap); nothing is read from a previous run and nothing outlives this one. A hand_use whose answer was never saved FAILS LOUDLY (a `bad`
+# line, RC=99, empty $MO): it never falls back to a merge.
 HAND="$WORK/hand"; mkdir -p "$HAND"
 # hand_keep <script-dir> <name> <out file> <shard dir>: save the last merge's $MO, RC and --out file under <name>.
 hand_keep() {
-  [ "$1" = "$SRCDIR" ] || return 0
   cp "$MO" "$HAND/$2.mo" && printf '%s' "$RC" > "$HAND/$2.rc" && printf '%s' "$3" > "$HAND/$2.o" && printf '%s' "$4" > "$HAND/$2.d"
   if [ -f "$3" ]; then cp "$3" "$HAND/$2.out"; else rm -f "$HAND/$2.out"; fi
   return 0
 }
-# hand_use <script-dir> <name>: restore RC and $MO from <name> (0); 1 for a mutant drive, which merges for itself.
+# hand_use <script-dir> <name>: restore RC and $MO from <name> (0).
 hand_use() {
-  [ "$1" = "$SRCDIR" ] || return 1
   if [ ! -f "$HAND/$2.mo" ]; then
     bad "HAND $2: no earlier arm of THIS run saved it; the reading arm does not fall back to a merge"
     : > "$MO"; RC=99; : > "$HAND/$2.o"; : > "$HAND/$2.d"; return 0
@@ -687,7 +659,7 @@ check1_value() { # <file>
 check1_count() { local n; n="$(grep -ciE -- "$PAT" "$1")" || n=0; printf '%s' "$n"; }
 
 # ------------------------------------------------------------------------------- predicates
-# Each takes the SCRIPT DIRECTORY to drive, so the mutant battery scores the arm's own body.
+# Each takes the SCRIPT DIRECTORY to drive, so the arm's own body is what runs.
 p_part() { # repo A partitions to >= 2 parts, and the dominant app/ was split, never one key
   local sd="$1" out n spread
   out="$(ip_run "$sd/partition-review-diff.sh" prd_main --map "$REPO_A" "$A_BASE" "$A_SHA" --min-files 4 < /dev/null 2>&1)" || return 1
@@ -773,7 +745,7 @@ p_env_key() { # the key set to 4 in the environment, no flag -> partitions (name
   [ "$n" -ge 2 ]
 }
 p_worst() { # three worlds where count/cross/last disagree with worst-of, and the all-APPROVED control
-  # Each world is a cell (w-disc, w-bn, w-ok), so the worst-of claim mutant runs one world; WHY names the cell.
+  # Each world is a cell (w-disc, w-bn, w-ok), WHY names the cell.
   local sd="$1" d o w want c
   for w in "w-disc BLOCKED APPROVED APPROVED APPROVED BLOCKED" \
            "w-bn NEEDS_REWORK BLOCKED NEEDS_REWORK APPROVED BLOCKED" \
@@ -963,7 +935,7 @@ p_knob() { # E2: a value over 9 digits refuses before arithmetic; a 9-digit thre
   part_refused "$KEY '18446744073709551617' is longer than 9 digits" "$d" || return 1
   run_part "$sd" "$REPO_B" "$B_BASE" "$B_SHA" --min-files 4 --max-parts 18446744073709551617 --shard-dir "$d"
   part_refused "--max-parts '18446744073709551617' is longer than 9 digits" "$d" || return 1
-  # 65, not a 9-digit K: with the ceiling mutated away a 9-digit K spins the packer, and the
+  # 65, not a 9-digit K: with the ceiling absent a 9-digit K spins the packer, and the
   # arm must die by a map appearing, not by the fixture hanging.
   run_part "$sd" "$REPO_B" "$B_BASE" "$B_SHA" --min-files 4 --max-parts 65 --shard-dir "$d"
   part_refused "--max-parts 65 is above 64" "$d" || return 1
@@ -1126,8 +1098,7 @@ p_q_rank() { # a qa shard carrying a gate-1 verdict is refused (APPROVED is not 
   local d o; d="$(qworld "$1" PASS PASS PASS PASS)" || return 1
   qshard "$d" 2 APPROVED 2; q_chk "$1" "$d" 2; chk_refused "$QT_RANK"; }
 p_q_pm() { # A4, both gates: dir and --out pass markers agree -> merge; either one alone -> refused.
-  # The merging cells assert MERGED and the file, never the verdict, so the verdict mutants are
-  # owned by V1/Q1 alone.
+  # The merging cells assert MERGED and the file, never the verdict, which V1/Q1 own.
   local sd="$1" d o
   d="$(qworld "$sd" PASS PASS PASS PASS -p2)" || return 1
   o="$(qout "$d" "$QA_SFX" -p2)"; run_mg "$sd" "$d" qa "$o"
@@ -1585,8 +1556,7 @@ p_x_seat() { # X9: seat-complete -- one shard without the marker beside shards w
 }
 # X10 (BL-763): every owner-duplicate refusal in one run. K=3 world (groups 1:(1,2) 2:(1,3) 3:(2,3), each
 # default cross shard citing its own group's set). Seven cases on one world, each reset from a clean copy;
-# each row that answers wrongly writes its own WHY token, so M21 (only the first duplicate printed) and
-# M22 (the --check-shard barrier dropped) are each scored on the one row they move.
+# each row that answers wrongly writes its own WHY token, so the first-duplicate-only print and the --check-shard barrier are each held by the one row they move.
 xcrit() { # <shard-file>: a '#### ' finding under '### Critical' citing the shard's own set -- refused under APPROVED
   awk '/^### Critical/ && !d { print; printf "\n#### F-crit a critical interaction\nparts: 1, 3\n\nBody.\n"; d = 1; next } { print }' \
     "$1" > "$1.x" && mv "$1.x" "$1" && grep -q '^#### F-crit ' "$1"
@@ -1718,7 +1688,7 @@ Q_ALL="q_worst q_table q_title q_fenced q_part_ac q_part_def q_cross_noac q_cros
 
 # ===================================================================== BL-737: the shard pre-check,
 # owner tails, the marker key, the content seal on review shards, and the legacy rule. Every predicate
-# below sets WHY to what it saw when it fails; each takes the SCRIPT DIRECTORY so a mutant copy drives it.
+# below sets WHY to what it saw when it fails; each takes the SCRIPT DIRECTORY to drive.
 #
 # THE ROWS ARE THE RECORDER'S. fire() hands the SHIPPED PostToolUse hook a payload exactly as the harness
 # would -- `agent_id` present for a dispatched seat, absent for the top-level session -- with
@@ -1757,13 +1727,11 @@ seal_mark() { # <script-dir> <file> <seat>: the seat's own close, `<shard>` the 
 # row each) and closed with the real --mark. Run under WROOT to build it in another tree.
 seal_world() {
   local sd="$1" g="$2" d f seat=code-reviewer tk="" t w0 w1 n0 n1
-  # BUILT ONCE, COPIED AFTER (MAIN only, and only when every script the build reaches is SRCDIR's): the first
+  # BUILT ONCE, COPIED AFTER (MAIN only): the first
   # build fires the recorder and runs the real --mark per shard, and records the world directory and the ledger
   # rows it appended; a later build copies the directory into a fresh `wdir` and appends those rows with the
   # world's path prefix rewritten to the copy's. SW0 (seed_controls) holds the copy to a fresh build.
-  [ -n "${WROOT:-}" ] || [ -z "${RSM_TPL:-}" ] \
-    || ! tpl_ok "$sd" merge-review-shards.sh wait-for-deliverable.sh content-seal.sh $WORLD_SCRIPTS \
-    || tk="$(tpl_key sw "$g")"
+  [ -n "${WROOT:-}" ] || [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key sw "$g")"
   if tpl_has "$tk"; then
     t="$RSM_TPL/$tk"; w1="$(wdir)" || return 1
     cp -R "$t/w/." "$w1/" || return 1
@@ -1878,16 +1846,9 @@ cs_run() { # <script-dir> <gate> <seeder> <clean copy>
   else WHY="$WHY ${3}{the seed did not apply}"; fi
   cs_reset "$CSD" "$4"
 }
-# CS_LIST (run.sh --matrix only): every cell gate answers "selected" so each group's setup runs, and
-# every `cell` appends its name to the file CS_LIST names and runs nothing -- the predicate's cell list.
-cs_sel() { [ -n "${CS_LIST:-}" ] || [ -z "${CS_ONLY:-}" ] || [ "$1" = "$CS_ONLY" ]; }
-# cell <name>: 0 when this cell runs (no CS_ONLY, or CS_ONLY names it), counting it in CS_RAN. Every
-# predicate a mutant drives gates each of its cells on it (BL-755), so a mutant runs the one cell its
-# kill token names and nothing else; run.sh's mut_run asserts exactly one cell ran.
-cell() {
-  if [ -n "${CS_LIST:-}" ]; then printf '%s\n' "$1" >> "$CS_LIST"; return 1; fi
-  cs_sel "$1" || return 1; CS_RAN=$(( ${CS_RAN:-0} + 1 ))
-}
+# cell <name>: every cell runs. The predicates gate each of their cells on it, and run.sh --deal counts the
+# `cell <name>` declarations of a predicate as its static unit-cell count.
+cell() { return 0; }
 p_cs() {
   local sd="$1" c n any=0
   WHY=""
@@ -1965,9 +1926,7 @@ p_owner() {
   if cell set-level; then o="$(qout "$d" code-review -p2)"; hand_use "$sd" own_qpm_set || run_mg "$sd" "$d" code-review "$o"; own_case set-level lead; fi
   # The owner duplicate, K=8: cross-3 and its owner cross-1 report the identical set -> the NON-owner.
   # Under --check-shard the owner is read only once it is finished and sealed: unmarked, cross-3 passes.
-  # The two --check-shard cells read the state the cell before them left, so selecting one runs its
-  # prerequisite steps without counting them as cells.
-  if cs_sel dup-merge || cs_sel dup-check-owner-unsealed; then
+  {
     SHARD_SHA="$E_SHA"
     d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || { WHY="$WHY the K=8 world was not built"; return 1; }
     xfinding "$d/cross-3.md" F-dup "1, 2" && xfinding "$d/cross-1.md" F-own "1, 2" || return 1
@@ -1976,7 +1935,7 @@ p_owner() {
       run_check "$sd" "$d" code-review "$d/cross-3.md"
       [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK: $d/cross-3.md" || WHY="$WHY dup-check-owner-unsealed{rc=$CRC $(head -1 "$CO")}"
     fi
-  fi
+  }
   [ -z "$WHY" ]
 }
 
@@ -2263,7 +2222,7 @@ p_unmarked() {
 # 2 of a clean world (the first read is shard 1, so the refusal is the case's own), and is driven through
 # the full merge AND --check-shard: a refusal must be one REFUSED line, byte-equal between the two
 # (cs_same, CS1's comparison), carrying the case's own token; a pass must MERGE and answer SHARD-OK. Every
-# case writes its own WHY token, `<case>{...}`, so a mutant's kill is read on the cell it moved.
+# case writes its own WHY token, `<case>{...}`, so a failure is read on the cell it moved.
 # THE TOKENS are the merge's own message fragments. The code-review ones stop before the Important name
 # on purpose: a container lift that loses that name changes the text after it, and the cell that owns
 # that defect is cr-nr-imp, not the refusals beside it.
@@ -2327,7 +2286,7 @@ vb_q() {
 VB_O=""
 vb_refuse() { # <script-dir> <shard-dir> <gate> <target key> <case> <token> [second token]
   CS_TOK="$6"
-  if [ "${VB_E2E:-0}" = 1 ] && [ "$1" = "$SRCDIR" ]; then
+  if [ "${VB_E2E:-0}" = 1 ]; then
     VB_O="$MO"
     if cs_same "$1" "$2" "$3" "$2/$4.md" && { [ -z "${7:-}" ] || has "$CO" "$7"; }; then :
     else WHY="$WHY $5{$CS_LAST}"; fi
@@ -2341,7 +2300,7 @@ vb_refuse() { # <script-dir> <shard-dir> <gate> <target key> <case> <token> [sec
 }
 vb_pass() { # <script-dir> <shard-dir> <gate> <target key> <case>
   local o
-  if [ "${VB_E2E:-0}" = 1 ] && [ "$1" = "$SRCDIR" ]; then
+  if [ "${VB_E2E:-0}" = 1 ]; then
     VB_O="$MO"
     if [ "$3" = qa ]; then o="$(qout "$2")"; else o="$(out_of "$2")"; fi
     run_mg "$1" "$2" "$3" "$o"
@@ -2389,9 +2348,8 @@ p_vb_qa() {
   if cell q-unclassed; then vb_q "$d" 2 PASS "$(qf none)"; vb_refuse "$sd" "$d" qa 2 q-unclassed "$VB_UNC"; cs_reset "$d" "$c"; fi
   [ -z "$WHY" ]
 }
-# ---- VB2M (qa, BL-746): the MODE alone, in one cell, so a mutant that keeps QA count-only under a
-# three-container qa.md moves exactly this assertion -- VB2's cells all move with the mode too, which is
-# why M12 is scored here and not there. NEEDS_REWORK backed only by a Suggestions finding is REFUSED.
+# ---- VB2M (qa, BL-746): the MODE alone, in one cell, so a QA verdict kept count-only under a
+# three-container qa.md moves exactly this assertion -- VB2's cells all move with the mode too. NEEDS_REWORK backed only by a Suggestions finding is REFUSED.
 p_vb_qmode() {
   local sd="$1" d
   WHY=""
@@ -2483,7 +2441,7 @@ p_files() {
 # REPO_B so no other world's refs move: it deletes alpha/a1.txt and edits beta/b1.txt, two groups at
 # --min-files 2. Part shard 1 (alpha/) carries `parts: 1`, `Class: CODE`, `Files: alpha/a1.txt`: SHARD-OK.
 # Controls in the same world: a path tracked at the frozen sha (beta/b2.txt) is SHARD-OK, a path tracked
-# nowhere (alpha/zz.txt) is REFUSED; neither moves under M57, which drops the diff-name-only allowance.
+# nowhere (alpha/zz.txt) is REFUSED.
 fl_del() {
   local sd="$1" r w d s m b
   r="$WORK/repo-fldel"
@@ -2581,8 +2539,8 @@ fr_merged() { # <script-dir> <dir> <case> <want verdict>; FR_KEEP=<name> saves t
 fr_refused() { # <script-dir> <dir> <case> <token>
   local o; o="$(qout "$2")"; q_merge "$1" "$2"
   refused_at "$4" "$o" && owner_in "$MO" cross-1 || WHY="$WHY $3{rc=$RC $(reline "$MO")}"
-  # A mutant that MERGES here writes --out; left on disk it makes the NEXT cell's merge refuse as
-  # "already exists and differs", so the mutant would move a second cell for a reason it does not own.
+  # A merge that succeeds here writes --out; left on disk it makes the NEXT cell's merge refuse as
+  # "already exists and differs".
   rm -f "$o"
 }
 # FR1: the verdict rule. PASS over a FAIL row is refused in three spellings and in a reordered table;
@@ -2594,8 +2552,8 @@ p_fr_verdict() {
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
   if cell fr-plain; then fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED | none |'; fr_refused "$sd" "$d" fr-plain "$FR_VERD"; cs_reset "$d" "$c"; fi
   if cell fr-reorder; then fr_x1 "$d" PASS "" '| AC | Expected | Result | Got |' '| AC4 | green | FAIL | none |'; fr_refused "$sd" "$d" fr-reorder "$FR_VERD"; cs_reset "$d" "$c"; fi
-  # The near-miss puts FAIL in Got, the column AFTER the named one, so a read-by-position mutant (M16,
-  # rc = ac + 1, which lands on Expected) moves only fr-reorder, never this cell.
+  # The near-miss puts FAIL in Got, the column AFTER the named one, so a read-by-position reader
+  # (which lands on Expected) moves only fr-reorder, never this cell.
   if cell fr-expected-only; then fr_x1 "$d" PASS "" '| AC | Expected | Verdict | Got |' '| AC4 | green | PASS | FAIL then green |'; fr_merged "$sd" "$d" fr-expected-only PASS; cs_reset "$d" "$c"; fi
   if cell fr-all-pass; then fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | PASS | a RED | RED |'; fr_merged "$sd" "$d" fr-all-pass PASS; cs_reset "$d" "$c"; fi
   if cell fr-nr-elsewhere; then vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'AC4 has no committed RED' 'Body.')"
@@ -2667,7 +2625,7 @@ p_fr_bound() {
   local sd="$1" d o SHARD_SHA
   WHY=""
   if cell frb-legacy; then
-    if hand_use "$sd" frg_post; then   # FR4's post-F2 world is this world (REUSE-proved EQUAL under --matrix)
+    if hand_use "$sd" frg_post; then   # FR4's post-F2 world is this world
       [ "$RC" -eq 0 ] && has "$MO" "verdict=NEEDS_REWORK " || WHY="$WHY frb-legacy{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
     else
       d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
@@ -2979,7 +2937,7 @@ CR_B6="$(b956_w b956 story-1-6 stories/story-1-6-a.md)" && CR_B6O="$(b956_w b956
 # story-1-7, and the base commit re-keys that row to story-1-6, BEFORE the range; the range moves only the story and
 # the view's status. The history names (story-1-7, a) from the creation, but the no-run exemption claim holds --story's
 # pairs to the index from --base to frozen only, so it binds.
-# CR_SIBP0..CR_SIBP (m-no-index's world): the same plumbing shape for story-2-1-y.md, listed by a KEY-ONLY row story-2-1
+# CR_SIBP0..CR_SIBP: the same plumbing shape for story-2-1-y.md, listed by a KEY-ONLY row story-2-1
 # (no file:; resolve_story_file finds it by the key's resolver stem, story-2-*.md, the only such file), so no version of
 # the view pairs any value with it, neither history check sees it, and only the literal index check at the frozen bind
 # (then the row's key, story-2-1, naming index 2-1) refuses it under the 1-2 review.
@@ -3042,7 +3000,7 @@ grep -qF 'stories/story-q.md' <<<"$_b6q" && ! grep -qF 'story-q.md' <<<"$_b6h" &
 #   CR_SHAL (B2) a copy whose .git/shallow names CR_LRD, so CR_LRD reads as a root.
 #   CR_LRDZ, CR_LRDZF (B2, BL-904) over CR_LRD, z at ready-for-dev (no label, view unchanged), then z at review and row
 #               story-1-1 repointed to it. z is a blob at the base, so story-base answers 0 and never reaches its own
-#               shallow refusal: in CR_SHAL the view history's shallow refusal is the only guard (m-shallow-ok's subject).
+#               shallow refusal: in CR_SHAL the view history's shallow refusal is the only guard.
 #   CR_HS2OK    over CR_HS2, story-1-3-q.md in s2's stories directory and its row: sprint 2 at both ends, an ALLOW range;
 CR_ZZ=zz/story-1-1-z.md; CR_S2Z="${CR_SDIR%/s1/stories}/s2/stories/story-1-1-z.md"; CR_S2Q="${CR_S2Z%/*}/story-1-3-q.md"
 cr_v1() { printf 'sprint: %s\nstatus: in_progress\nstories:\n  story-1-1:\n    status: review\n    file: %s\n' "$1" "$2" > "$CR_REPO/$CR_VIEW"; }
@@ -3268,8 +3226,7 @@ ad_out() { if [ "$2" = qa ]; then qout "$1"; else out_of "$1"; fi; }
 ad_ok() { # <script-dir> <gate> <case> <variant> [LEGACY line, by value]: merges, the LEGACY line exactly when named
   local o; o="$(ad_out "$AD_D" "$2")"
   ad_var "$AD_D" "$AD_C" "$4" || { WHY="$WHY $3{the variant did not apply}"; return; }
-  if [ "${AD_E2E:-0}" != 1 ] || [ "$1" != "$SRCDIR" ]; then
-    # (a mutant drive, script dir != SRCDIR, always takes this path: the mutants sit in check_shard/adv_gate, which --check-shard reaches)
+  if [ "${AD_E2E:-0}" != 1 ]; then
     # one shard's gate (adv_gate, the function the merge calls per shard): --check-shard on shard 1, the first shard read
     run_check "$1" "$AD_D" "$2" "$AD_D/1.md"
     if [ -n "${5:-}" ]; then
@@ -3292,7 +3249,7 @@ ad_ok() { # <script-dir> <gate> <case> <variant> [LEGACY line, by value]: merges
 ad_no() { # <script-dir> <gate> <case> <variant> <token> [second token]: REFUSED [owner: 1], the first shard read
   local o; o="$(ad_out "$AD_D" "$2")"
   ad_var "$AD_D" "$AD_C" "$4" || { WHY="$WHY $3{the variant did not apply}"; return; }
-  if [ "${AD_E2E:-0}" != 1 ] || [ "$1" != "$SRCDIR" ]; then
+  if [ "${AD_E2E:-0}" != 1 ]; then
     run_check "$1" "$AD_D" "$2" "$AD_D/1.md"
     chk_refused "$5" "${6:-}" && owner_in "$CO" 1 && ! has "$CO" "LEGACY: advisor:" || WHY="$WHY $3{rc=$CRC $(reline "$CO")}"
     return
@@ -3307,9 +3264,7 @@ p_adv_gate() { # <script-dir> <gate>
   local sd="$1" g="$2" x CR; CR="$(printf '\r')"
   if [ "$g" = qa ]; then x=q; else x=c; fi
   WHY=""
-  if cs_sel "ad-$x-present-absent" || cs_sel "ad-$x-called" || cs_sel "ad-$x-unavailable" || cs_sel "ad-$x-cr" \
-     || cs_sel "ad-$x-maybe" || cs_sel "ad-$x-two" || cs_sel "ad-$x-bullet" || cs_sel "ad-$x-deco" \
-     || cs_sel "ad-$x-fence" || cs_sel "ad-$x-prose"; then
+  {
     ad_world "$sd" "$g" ADP || { WHY="the sentinel world was not built"; return 1; }
     if cell "ad-$x-present-absent"; then AD_E2E=1 ad_no "$sd" "$g" "ad-$x-present-absent" ABSENT "$AD_ABS" "$AD_HELD"; fi
     if cell "ad-$x-called"; then AD_E2E=1 ad_ok "$sd" "$g" "ad-$x-called" 'advisor: called'; fi
@@ -3321,16 +3276,16 @@ p_adv_gate() { # <script-dir> <gate>
     if cell "ad-$x-deco"; then ad_no "$sd" "$g" "ad-$x-deco" '**advisor:** called' "$AD_MAL"; fi
     if cell "ad-$x-fence"; then ad_ok "$sd" "$g" "ad-$x-fence" "$AD_FENCE"; fi
     if cell "ad-$x-prose"; then ad_ok "$sd" "$g" "ad-$x-prose" "$(printf '%s\nadvisor: called' "$AD_PROSE")"; fi
-  fi
+  }
   # The era: the role file the shards were written under, read at the frozen sha.
-  if cs_sel "ad-$x-legacy-absent" || cs_sel "ad-$x-legacy-prose"; then
+  {
     ad_world "$sd" "$g" ADL || { WHY="$WHY the legacy world was not built"; return 1; }
     if cell "ad-$x-legacy-absent"; then
       AD_E2E=1 ad_ok "$sd" "$g" "ad-$x-legacy-absent" ABSENT "$(ad_leg ".claude/team-roles/$(ad_role "$g") at $AD_S")"
       ad_no "$sd" "$g" "ad-$x-legacy-absent" 'advisor: maybe' "$AD_VAL"; fi
     if cell "ad-$x-legacy-prose"; then
       ad_ok "$sd" "$g" "ad-$x-legacy-prose" "$AD_PROSE" "$(ad_leg ".claude/team-roles/$(ad_role "$g") at $AD_S")"; fi
-  fi
+  }
   if cell "ad-$x-unreadable-absent"; then ad_world "$sd" "$g" B || { WHY="$WHY the unreadable world was not built"; return 1; }
     ad_no "$sd" "$g" "ad-$x-unreadable-absent" ABSENT "$AD_ABS" "$AD_UNR"; fi
   # Lead world (a): frozen before the reconcile, the new role file on disk; world (b) the reverse.
@@ -3398,7 +3353,7 @@ cr_no() { local sd="$1" f="$2" c="$3" t="$4"; shift 4; cr_run "$sd" "$f" "$@"
 p_canon() {
   local sd="$1" f="$CR_REPO/docs/reviews/s1/1-1-qa-validation.md" f2="$CR_REPO/docs/reviews/s1/1-2-qa-validation.md" f3="$CR_REPO/docs/reviews/s1/1-3-qa-validation.md" f2p="$CR_REPO/docs/reviews/s1/1-2-qa-validation-p2.md" f4="$CR_REPO/docs/reviews/s1/1-4-qa-validation.md" ft="$CR_REPO/docs/reviews/s1/2-qa-validation.md" ft2="$CR_REPO/docs/reviews/s1/2-1-qa-validation.md" fl="$CR_REPO/docs/reviews/s1/1-1-z-qa-validation.md" fa="$CR_REPO/docs/reviews/s1/2-3a-qa-validation.md" f5="$CR_REPO/docs/reviews/s1/1-5-qa-validation.md" fsh="$CR_SHAL/docs/reviews/s1/1-1-qa-validation.md" frp="$CR_REPL/docs/reviews/s1/1-1-qa-validation.md" fs2="$CR_REPO/docs/reviews/s2/1-3-qa-validation.md" fs4="$CR_REPO/docs/reviews/s4/1-1-qa-validation.md" fs6="$CR_REPO/docs/reviews/s6/1-1-qa-validation.md" fnp="$CR_REPO/docs/reviews/1-2-qa-validation.md" fb1="$CR_REPO/docs/reviews/s1/B1-qa-validation.md" fsl="$CR_REPO/docs/reviews/s1/sprint-review-fix-qa-validation.md" fgl="$CR_REPO/docs/reviews/s1/B?-qa-validation.md" pv nv; pv="$(printf '## Verdict\nPASS')"
   WHY=""
-  # Every cell is gated by `cell` (BL-755), so a mutant runs only the cell its kill token names. Each
+  # Every cell is gated by `cell` (BL-755). Each
   # cell writes the whole file it reads, and the conventions-file cells write and remove their own copy.
   cr_f() { SR_CANON="$(printf 'Canonical run: `%s` from the root\nCanonical result: 9 passed' "$1")" sr_file "$f" "$pv"; }
   cr_conv() { printf -- '- canonical: `pytest suite/tests` and `<venv>/bin/python -m pytest -m unit`\n' > "$CR_REPO/docs/coding-conventions.md"; }
@@ -3454,7 +3409,7 @@ p_canon() {
   # A story that is no file at the base or at the frozen sha (a typo, a directory) is not a gate-1 base, even over the
   # empty range; its ALLOW twin is a story created after the base (absent there, a blob at the frozen sha).
   # BL-895: STORY-BIND now refuses both before story-base runs (neither is a story sprint-status lists); story-base's own
-  # refusal of them is asked directly by receipt-bl885-frozen.sh (arm story_frozen, M51).
+  # refusal of them is asked directly by receipt-bl885-frozen.sh (arm story_frozen).
   if cell cr-exempt-typo; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-typo "$CR_BIND" --story "$CR_SDIR/typo.md" --range "$CR_CODE" "$CR_CODE"; fi
   if cell cr-exempt-dir; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-dir "$CR_BIND" --story "$CR_SDIR" --range "$CR_CODE" "$CR_CODE"; fi
   # Its own review file: the index a review name carries is the story's, so story-1-2 is reviewed in 1-2-*.
@@ -3465,34 +3420,33 @@ p_canon() {
   # cr-bind-ok: the correct story at CR_NEWS, whose row the checked-out view lacks, reviewed in a pass-2 file (the index
   # parsed from <idx>-qa-validation-p<M>.md).
   # The seed is reviewed under index 1-4 and the sibling under 1-2, indexes no other file is listed under, so the
-  # one-story-per-index check cannot cover m-row-exit's or m-no-index's subject.
+  # one-story-per-index check cannot cover them.
   if cell cr-bind-seed; then SR_CANON="$SR_NONE" sr_file "$f4" "$pv"; cr_no "$sd" "$f4" cr-bind-seed "$CR_BROW" --story "$CR_SEEDF" --range "$CR_REC" "$CR_SEED"; fi
   if cell cr-bind-sibling; then SR_CANON="$SR_NONE" sr_file "$f2" "$pv"; cr_no "$sd" "$f2" cr-bind-sibling "$CR_BIDX" --story "$CR_STORY4" --range "$CR_BASE" "$CR_TRUNC"; fi
   # cr-bind-sibling-pre: the same story under the 1-2 review over CR_SIBP0..CR_SIBP, where no version of the view pairs a
-  # value with it (its row is key-only), so only the frozen bind's index check refuses it (m-no-index's subject; in
+  # value with it (its row is key-only), so only the frozen bind's index check refuses it (in
   # cr-bind-sibling the history's re-key check refuses it too).
   if cell cr-bind-sibling-pre; then SR_CANON="$SR_NONE" sr_file "$f2" "$pv"; cr_no "$sd" "$f2" cr-bind-sibling-pre "$CR_BIDX" --story "$CR_STORY4" --range "$CR_SIBP0" "$CR_SIBP"; fi
   # BL-895 B1. cr-bind-repoint-k / -a: a fresh story-1-1-z.md the view lists under another key, or by repointing row
   # story-1-1's file:, over CR_REC where story-1-1-x.md is already `review` -- refused because x is listed under index 1-1
-  # at the base (m-single-file's subject). D1. cr-bind-trunc: story-2-1-y.md, the only file under index 2, under a review
-  # named 2-qa-validation.md -- refused by the digit rule alone (m-digit-slug's subject); cr-bind-trunc-ok, its ALLOW twin
+  # at the base. D1. cr-bind-trunc: story-2-1-y.md, the only file under index 2, under a review
+  # named 2-qa-validation.md -- refused by the digit rule alone; cr-bind-trunc-ok, its ALLOW twin
   # one property apart, the same story under 2-1-qa-validation.md.
   if cell cr-bind-repoint-k; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-bind-repoint-k "$CR_BONE" --story "$CR_STORYZ" --range "$CR_REC" "$CR_RK"; fi
   if cell cr-bind-trunc; then SR_CANON="$SR_NONE" sr_file "$ft" "$pv"; cr_no "$sd" "$ft" cr-bind-trunc "$CR_BDIG" --story "$CR_STORY4" --range "$CR_BASE" "$CR_TRUNC"; fi
   if cell cr-bind-trunc-ok; then SR_CANON="$SR_NONE" sr_file "$ft2" "$pv"; cr_ok "$sd" "$ft2" cr-bind-trunc-ok --story "$CR_STORY4" --range "$CR_BASE" "$CR_TRUNC"; fi
   # BL-895 R1. The laundered base (CR_LVD, CR_LREN, CR_LNS, CR_LDUP): each C..F is record-only and z is absent at C, so
   # only the one-story-per-index check refuses it -- the view at C gives no answer (viewdel, which is also W2's state), or
-  # an entry still names x by its declared file: (ren), carries no status: (nostat, m-status-skip's subject), or names it
+  # an entry still names x by its declared file: (ren), carries no status: (nostat), or names it
   # twice (dup). R2: cr-bind-longidx, a review named for a slug (1-1-z-qa-validation.md) over CR_REC..CR_RK, refused by the
-  # review-index grammar alone (m-index-grammar's subject); cr-bind-letter, its ALLOW twin, a letter-suffixed index 2-3a.
+  # review-index grammar alone; cr-bind-letter, its ALLOW twin, a letter-suffixed index 2-3a.
   # BL-895 b1, THE VIEW'S HISTORY. A base whose record-only commit deletes x's row (rowdel: the view stays ok through a
   # story-1-2 row) or renames x and repoints the row off the index (ren-repoint) names nothing under 1-1, so every endpoint
-  # check passes and only the view's history since the stories directory was created still names x (m-endpoint-only's
-  # subject). rowdel-ok, its ALLOW twin one property apart: over the same laundered base, story-1-2-y.md under its own
+  # check passes and only the view's history since the stories directory was created still names x.
+  # rowdel-ok, its ALLOW twin one property apart: over the same laundered base, story-1-2-y.md under its own
   # review 1-2, whose index no history entry but itself names.
   # The endpoint check's own subjects, which the view's history cannot see (another directory's file:): xdir and its
-  # status-less twin xdir-nostat, each REFUSED under review 1-5 over CR_REC..CR_XD / CR_XDN (m-single-file's and
-  # m-status-skip's deciding cells).
+  # status-less twin xdir-nostat, each REFUSED under review 1-5 over CR_REC..CR_XD / CR_XDN.
   if cell cr-bind-xdir; then SR_CANON="$SR_NONE" sr_file "$f5" "$pv"; cr_no "$sd" "$f5" cr-bind-xdir "$CR_BONE" --story "$CR_STORY5" --range "$CR_REC" "$CR_XD"; fi
   if cell cr-bind-xdir-nostat; then SR_CANON="$SR_NONE" sr_file "$f5" "$pv"; cr_no "$sd" "$f5" cr-bind-xdir-nostat "$CR_BONE" --story "$CR_STORY5" --range "$CR_REC" "$CR_XDN"; fi
   if cell cr-launder-rowdel; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-launder-rowdel "$CR_BHIST" --story "$CR_STORYZ" --range "$CR_LRD" "$CR_LRDF"; fi
@@ -3512,14 +3466,14 @@ p_canon() {
   if cell cr-hist-sprint; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-hist-sprint "$CR_BSPR" --story "$CR_S2Z" --range "$CR_LRD" "$CR_HS2"; fi
   # BL-895 U1h, THE REVIEW'S SPRINT (worlds where CR_FR1 is seeded). The faked roll in one commit (roll1), in two (roll2)
   # and with s2's stories directory existing at the base (roll3), each reviewed under docs/reviews/s1/: REFUSED, the view
-  # reading sprint 2 where the review is sprint 1 (m-view-sprint's subject: the sprint read from the view accepts all three).
+  # reading sprint 2 where the review is sprint 1 (the sprint read from the view accepts all three).
   # sprint-view: a story in sprint 1's own directory with the view's `sprint:` moved to 2, refused only by the view-sprint
-  # check (m-sprint's subject). nopath: a review outside any docs/reviews/s<N>/ slot. schema-env: the seat's
+  # check. nopath: a review outside any docs/reviews/s<N>/ slot. schema-env: the seat's
   # AI_DLC_SPRINT_STATUS_SCHEMA names q{sprint}, z in q1/stories over the rowdel base: REFUSED, the override ignored
-  # (m-schema-env). gwt: GIT_WORK_TREE at a second checkout whose history never named x, the range its shas: REFUSED,
-  # read in the review file's own repository (m-gwt). roll-ok (ALLOW): a real roll to sprint 6 that retires sprint 1's
-  # `stories/story-1-1-x.md` row, reviewed under s6 (m-roll-drop-off). roll-mid: the intermediate-sprint launder, a value
-  # resolved into sprint 5's directory at a commit after the creation: REFUSED (m-roll-drop-every).
+  #. gwt: GIT_WORK_TREE at a second checkout whose history never named x, the range its shas: REFUSED,
+  # read in the review file's own repository. roll-ok (ALLOW): a real roll to sprint 6 that retires sprint 1's
+  # `stories/story-1-1-x.md` row, reviewed under s6. roll-mid: the intermediate-sprint launder, a value
+  # resolved into sprint 5's directory at a commit after the creation: REFUSED.
   if cell cr-sprint-roll1; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-sprint-roll1 "$CR_BSPR" --story "$CR_S2Z" --range "$CR_FR1" "$CR_FR1F"; fi
   if cell cr-sprint-view; then SR_CANON="$SR_NONE" sr_file "$f3" "$pv"; cr_no "$sd" "$f3" cr-sprint-view "$CR_BSPR" --story "$CR_SPQ" --range "$CR_BASE" "$CR_SPF"; fi
   if cell cr-sprint-nopath; then SR_CANON="$SR_NONE" sr_file "$fnp" "$pv"; cr_no "$sd" "$fnp" cr-sprint-nopath "$CR_BNOSPR" --story "$CR_STORY2" --range "$CR_BASE" "$CR_NEWS"; fi
@@ -3527,10 +3481,9 @@ p_canon() {
   if cell cr-gwt; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; CR_ENV="GIT_WORK_TREE=$CR_GWO" cr_no "$sd" "$f" cr-gwt "$CR_BROW" --story "$CR_STORYZ" --range "$CR_GWB" "$CR_GWF"; fi
   if cell cr-roll-ok; then SR_CANON="$SR_NONE" sr_file "$fs6" "$pv"; cr_ok "$sd" "$fs6" cr-roll-ok --story "$CR_S6N" --range "$CR_RL" "$CR_RLF"; fi
   # cr-root-env: the seat's AI_DLC_PROJECT_ROOT names PROJ_Q (stories_dir q{sprint}), z in q1/stories over the rowdel
-  # base: REFUSED. In the distribution layout SRCDIR reads core/schemas script-relative, so only a flat copy (every
-  # mutant's) consults the root; m-root-env, which lets the variable through to sprint-status.sh, dies here.
+  # base: REFUSED. In the distribution layout SRCDIR reads core/schemas script-relative, so the root is consulted only by a flat copy.
   # cr-sprint-relpath (ALLOW): cr-bind-ok's world, the review named relatively (./1-2-qa-validation.md) from inside
-  # docs/reviews/s1/, the seat's own cwd: the sprint is parsed from the logical directory, not `.` (m-relpath).
+  # docs/reviews/s1/, the seat's own cwd: the sprint is parsed from the logical directory, not `.`.
   if cell cr-root-env; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; CR_ROOT="$PROJ_Q" cr_no "$sd" "$f" cr-root-env "$CR_BSDIR" --story "$CR_QZ" --range "$CR_LRD" "$CR_SCF"; fi
   if cell cr-sprint-relpath; then SR_CANON="$SR_NONE" sr_file "$f2" "$pv"; _crw="$PWD"; cd "${f2%/*}" || return 1
     cr_ok "$sd" ./1-2-qa-validation.md cr-sprint-relpath --story "$CR_STORY2" --range "$CR_BASE" "$CR_NEWS"; cd "$_crw" || return 1; fi
@@ -3540,8 +3493,8 @@ p_canon() {
   if cell cr-bind-letter; then SR_CANON="$SR_NONE" sr_file "$fa" "$pv"; cr_ok "$sd" "$fa" cr-bind-letter --story "$CR_SDIR/story-2-3a-q.md" --range "$CR_BASE" "$CR_LET"; fi
   # A3b, LETTER-LED INDICES (graph s316's B1, B-1, DASH; the lead's prescribed re-run with --story), each a run claim over
   # CR_BASE..CR_LTR, so only the index and view-row binding decide. cr-b1-right: B1 with the story the view lists under
-  # it, SERIAL-OK (m-letter-idx's subject: the numeric-only grammar refuses B1). cr-glob-literal: index `B?`, which as a pattern would match the listed story-B1-x.md, REFUSED by the literal
-  # index match (m-idx-pattern's subject).
+  # it, SERIAL-OK. cr-glob-literal: index `B?`, which as a pattern would match the listed story-B1-x.md, REFUSED by the literal
+  # index match.
   _ltr() { sr_file "$1" "$pv"; shift; cr_no "$sd" "$@"; }
   if cell cr-b1-right; then sr_file "$fb1" "$pv"; cr_ok "$sd" "$fb1" cr-b1-right --story "$CR_SDIR/story-B1-x.md" --range "$CR_BASE" "$CR_LTR"; fi
   if cell cr-glob-literal; then _ltr "$fgl" "$fgl" cr-glob-literal "is not story-B?.md or story-B?-*.md" --story "$CR_SDIR/story-B1-x.md" --range "$CR_BASE" "$CR_LTR"; fi
@@ -3568,7 +3521,7 @@ p_canon() {
   # cr-serial-legacy (ALLOW): a review inside PROJ_CRS, the root and the review's repository one tree, whose qa.md lacks
   # the sentinel: LEGACY, and it accepts. cr-serial-redirect (KILL, one property apart): the same root and the same
   # run-less PASS, the review in CR_REPO, whose own installed qa.md carries the sentinel. The seat's
-  # AI_DLC_PROJECT_ROOT cannot skip the rule for a repository that prescribes it (m-legacy-env reads ROLE_MD again).
+  # AI_DLC_PROJECT_ROOT cannot skip the rule for a repository that prescribes it.
   if cell cr-serial-legacy; then
     _crl_f="$PROJ_CRS/docs/reviews/s1/1-1-qa-validation.md"; SR_CANON='' sr_file "$_crl_f" "$pv"
     CR_ROOT="$PROJ_CRS" cr_run "$sd" "$_crl_f"
@@ -3583,19 +3536,19 @@ p_canon() {
   fi
   # BL-895 U1k F2, THE INTERPRETER'S IMPORT PATH. cr-launder-rowdel's world (only the view's history names x), with a
   # forged json.py that answers story-status and view-history itself: in the seat's cwd (py-cwd) and on PYTHONPATH
-  # (py-path). REFUSED as the clean world is, sprint-status.sh's python being isolated (m-py-isolated's subject).
+  # (py-path). REFUSED as the clean world is, sprint-status.sh's python being isolated.
   if cell cr-py-cwd; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; _crw="$PWD"; cd "$(py_jack)" || return 1
     cr_no "$sd" "$f" cr-py-cwd "$CR_BHIST" --story "$CR_STORYZ" --range "$CR_LRD" "$CR_LRDF"; cd "$_crw" || return 1; fi
   # BL-895 U1k F3, ONE SPRINT PER PATH. The sprint-2 world (SERIAL-OK under docs/reviews/s2/), the review
   # written in docs/reviews/s1/ and named through a link `s2` to that directory: the logical directory reads sprint 2, the
-  # physical one sprint 1, REFUSED naming both (m-one-sprint's subject; the logical sprint alone acquits it). Its ALLOW
+  # physical one sprint 1, REFUSED naming both (the logical sprint alone acquits it). Its ALLOW
   # twin one property apart: the same link shape onto docs/reviews/s2/, both spellings sprint 2.
   if cell cr-sprint-link; then SR_CANON="$SR_NONE" sr_file "$f3" "$pv"; _crl="$(mktemp -d "$WORK/crl.XXXXXX")" && ln -s "${f3%/*}" "$_crl/s2" || return 1
     cr_no "$sd" "$_crl/s2/${f3##*/}" cr-sprint-link "$CR_B2S" --story "$CR_S2Q" --range "$CR_HS2" "$CR_HS2OK"; fi
   if cell cr-sprint-link-ok; then mkdir -p "${fs2%/*}"; SR_CANON="$SR_NONE" sr_file "$fs2" "$pv"; _crl="$(mktemp -d "$WORK/crl.XXXXXX")" && ln -s "${fs2%/*}" "$_crl/s2" || return 1
     cr_ok "$sd" "$_crl/s2/${fs2##*/}" cr-sprint-link-ok --story "$CR_S2Q" --range "$CR_HS2" "$CR_HS2OK"; fi
-  # BL-895 U1k (adversary 5a): a record-class entry committed as a symlink is not a record (cr-exempt-link, REFUSED;
-  # m-ro-mode's subject), and the same path as a regular file is (cr-exempt-link-ok, its control, SERIAL-OK).
+  # BL-895 U1k (adversary 5a): a record-class entry committed as a symlink is not a record (cr-exempt-link, REFUSED),
+  # and the same path as a regular file is (cr-exempt-link-ok, its control, SERIAL-OK).
   if cell cr-exempt-link; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-link "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_LINK"
     has "$CO" "mode 120000" || WHY="$WHY cr-exempt-link{no mode 120000 in $(head -1 "$CO")}"; fi
   if cell cr-exempt-link-ok; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_ok "$sd" "$f" cr-exempt-link-ok --story "$CR_STORY" --range "$CR_BASE" "$CR_LINKF"; fi
@@ -3629,11 +3582,11 @@ p_bind956() {
     has "$CO" "entry story-6 " || WHY="$WHY bind956-onestory{the refusal does not name entry story-6: $(head -1 "$CO")}"; fi
   if cell bind956-hist; then b956 bind956-hist none "the implementation view named stories/story-q.md under that index between" "$CR_B6H"; fi
   # THE RE-KEY: --story story-1-1-x.md, bound at the frozen sha by the swapped row story-1-6, was keyed story-1-1 at the
-  # base; story 6 absent there (rekey) or key-only (rekey-ko). Only the history's re-key refusal decides (m956-rekey).
+  # base; story 6 absent there (rekey) or key-only (rekey-ko). Only the history's re-key refusal decides.
   if cell bind956-rekey; then b956 bind956-rekey none "$B956_RK" "$CR_B6RA" "$CR_STORY" "$CR_BASE"; fi
   if cell bind956-rekey-ko; then b956 bind956-rekey-ko none "$B956_RK" "$CR_B6RK" "$CR_STORY" "$CR_B6RKB"; fi
   # bind956-prebase: the lead re-keyed story-1-6-a.md from story-1-7 to story-1-6 in planning, before --base; it binds
-  # (SERIAL-OK), the re-key check reading --story's pairs from --base to frozen only (m956-window's subject).
+  # (SERIAL-OK), the re-key check reading --story's pairs from --base to frozen only.
   if cell bind956-prebase; then b956 bind956-prebase none ok "$CR_B6PF" "$CR_S956" "$CR_B6PB"; fi
   # bind956-withkey: sprint-status.sh view-history over CR_BASE..CR_B6H, asked directly. The default output is the
   # value lines alone, byte for byte as before BL-956; --with-key prints `file<TAB><key><TAB><value>` per (key, value),
@@ -3667,7 +3620,7 @@ p_bind956() {
 }
 # SP1 (BL-885): the story path record-only-diff.sh resolves, asked of its story-base and paths modes by
 # receipt-bl885.sh (beside this file in both layouts) over <script-dir>'s copy. Presence-shaped: every one of the
-# receipt's 14 cells must print its `ok` row; a failing cell's FAIL row is the reason a mutant's kill must carry.
+# receipt's 14 cells must print its `ok` row; a failing cell's FAIL row is the reason the arm reports.
 SP_CELLS=14
 p_story_path() { # <script-dir>
   local sd="$1" o rc n
@@ -3842,20 +3795,20 @@ p_canon_merge() {
     rm -f "$o"
   fi
   # BL-895 U1k F2 on the MERGE: crm-bind-hist's world, a forged json.py in the lead's cwd (py-cwd) and on PYTHONPATH
-  # (py-path). REFUSED as the clean world is, naming the execution owner (m-py-isolated-merge's subject).
+  # (py-path). REFUSED as the clean world is, naming the execution owner.
   if cell crm-py-cwd; then
     CRM_JACK="$(py_jack)" crm_hist crm-py-cwd "$CRB_STORY" "$REPO_CRH" "$CRH_BASE" "$CRH_SHA" "the implementation view named stories/story-1-y.md under that index between" || return 1; fi
   # BL-895 U1k F3 on the MERGE. The world's slot directory <B> (a name opening s1) holds shards/<dir>; crm_link moves or
   # links it, then merges through the logical path. link: crm-sprint-roll's world (REPO_CMR, refused under sprint 1), the
   # slot moved to its sibling s2<B without the s1> and named through a link <B> elsewhere: logical sprint 1, physical 2,
-  # REFUSED naming both (m-one-sprint-merge's subject; the physical sprint alone merges it). link-rev: the reverse, the
+  # REFUSED naming both (the physical sprint alone merges it). link-rev: the reverse, the
   # slot left in place and named through a link s2<...>: logical 2, physical 1, REFUSED the same way -- neither spelling
   # is authoritative, and whoever lays out the path chooses both, so a disagreement is refused in either direction.
   # link-out: crm-bind-ok's world, named through a link of the same name <B> elsewhere: one sprint, but the shard
   # directory is reached through a symlink, so the record name could be moved: REFUSED [owner: lead] by shard_slot
   # (D1; a link onto the same sprint MERGED before 0.995.0). link-check: link's world, --check-shard through the
   # logical path: REFUSED naming both sprints. The record block (shard_slot) never runs under --check-shard, so
-  # one_sprint is the only guard there (m-one-sprint-merge's subject).
+  # one_sprint is the only guard there.
   crm_link() { # <cell> <story> <repo> <base> <sha> <move|rev|same> -> RC, $MO, o, cf
     local cl_b cl_p cl_l cl_n
     SHARD_SHA="$5"
@@ -4058,8 +4011,8 @@ p_serial_role() { # <qa.md> <code-reviewer.md>
 }
 
 # ------------------------------------------------------------------------------------ BL-808
-# --exclude-captures. One cell per predicate, so each mutant runs exactly its owner. Failures land in
-# WHY as `xc-<cell>{want ... got ...}`; mut_run keys each kill on a token only that cell can print.
+# --exclude-captures. One cell per predicate. Failures land in
+# WHY as `xc-<cell>{want ... got ...}`.
 xc_serial() { # <file> -> the SERIAL line, or empty
   grep '^SERIAL: ' "$1" 2>/dev/null | head -1
 }
@@ -4135,31 +4088,21 @@ p_xc_missing() { # a list file that does not exist -> REFUSED exit 2, nothing on
 }
 
 # Seed controls: the worlds must be able to express what the arms are named for. Both callers run
-# them before any arm or mutant verdict is read.
+# them before any arm verdict is read.
 seed_controls() { # TPL0, W0, W1, W2, W3, W4, SW0
-local A_NAMES A_REV na nn n1 c1 c0 nb ns nr0 nr1 pf tw1 tw2 tb0 th0 tb1 th1 tb2 th2 tp tpw
+local A_NAMES A_REV na nn n1 c1 c0 nb ns nr0 nr1 pf tw1 tw2 tb0 th0 tb1 th1 tb2 th2
 # TPL0: the world cache. One tuple built twice: the first a real partition run (builds +1, hits +0),
-# the second a clone (builds +0, hits +1), byte-equal in map, map.err and manifest. And the bypass: a
-# script dir whose partition differs from SRCDIR's by one byte builds its own world, never the cache's.
+# the second a clone (builds +0, hits +1), byte-equal in map, map.err and manifest.
 tb0="$(tpl_n builds)"; th0="$(tpl_n hits)"
 tw1="$(kworld "$SRCDIR" "$REPO_B" "$B_BASE" "$B_SHA" 2 tplprobe APPROVED)"; tb1="$(tpl_n builds)"; th1="$(tpl_n hits)"
 tw2="$(kworld "$SRCDIR" "$REPO_B" "$B_BASE" "$B_SHA" 2 tplprobe APPROVED)"; tb2="$(tpl_n builds)"; th2="$(tpl_n hits)"
-# The bypass copy: the world scripts and every sibling the partition resolves that SRCDIR holds.
-tp="$WORK/tpl-bypass"; mkdir "$tp" && for _f in $WORLD_SCRIPTS; do
-  [ ! -f "$SRCDIR/$_f" ] || cp "$SRCDIR/$_f" "$tp/$_f"; done
-printf '# one byte\n' >> "$tp/partition-review-diff.sh"
-tpw="$(kworld "$tp" "$REPO_B" "$B_BASE" "$B_SHA" 2 tplprobe APPROVED)"
-# The partition differs, so its world is rebuilt (builds +1); partition-document.sh does not, so the
-# cross-group table is still a clone (hits +1).
 if [ -n "$tw1" ] && [ -n "$tw2" ] && [ "$tw1" != "$tw2" ] && [ $((tb1 - tb0)) = 2 ] && [ $((th1 - th0)) = 0 ] \
    && [ $((tb2 - tb1)) = 0 ] && [ $((th2 - th1)) = 2 ] \
    && cmp -s "$tw1/.manifest" "$tw2/.manifest" && cmp -s "$(dirname "$tw1")/map" "$(dirname "$tw2")/map" \
-   && cmp -s "$(dirname "$tw1")/map.err" "$(dirname "$tw2")/map.err" && grep -q '^part	' "$tw2/.manifest" \
-   && [ -n "$tpw" ] && [ $(( $(tpl_n builds) - tb2 )) = 1 ] && [ $(( $(tpl_n hits) - th2 )) = 1 ] \
-   && ! tpl_ok "$tp" $WORLD_SCRIPTS && tpl_ok "$SRCDIR" $WORLD_SCRIPTS; then
-  ok "TPL0: the world cache serves a repeated world as a byte-equal clone (map, map.err, manifest), runs the partition for the first build only, and a script dir whose partition is one byte off SRCDIR's runs its own partition"
+   && cmp -s "$(dirname "$tw1")/map.err" "$(dirname "$tw2")/map.err" && grep -q '^part	' "$tw2/.manifest"; then
+  ok "TPL0: the world cache serves a repeated world as a byte-equal clone (map, map.err, manifest) and runs the partition for the first build only"
 else
-  bad "TPL0: FIXTURE BROKEN -- the world cache did not build once and clone after, or served a differing script dir (builds $tb0 $tb1 $tb2 $(tpl_n builds), hits $th0 $th1 $th2 $(tpl_n hits))"
+  bad "TPL0: FIXTURE BROKEN -- the world cache did not build once and clone after (builds $tb0 $tb1 $tb2 $(tpl_n builds), hits $th0 $th1 $th2 $(tpl_n hits))"
 fi
 A_NAMES="$(G -C "$REPO_A" diff --name-only "$A_BASE..$A_SHA")"
 A_REV="$(grep -v '^docs/reviews/' <<<"$A_NAMES")"
@@ -4235,81 +4178,6 @@ fi
 rm -f "$(out_of "$sw2")"
 }
 
-# ---- REUSE PROOF (--matrix only; a plain run never executes it). Every top-level arm that reads another arm's saved
-# answer (hand_use) is run here a second time as ITS OWN merge in ITS OWN world, and the two answers are cmp'd: rc, merge
-# stdout+stderr and the written --out file, with only the mktemp paths normalised. A pair prints `REUSE <arm>
-# reads=<source> EQUAL` or fails as DIFFER; a DIFFER row is restored to its own merge and classed (a) with the differing
-# input named. The self-probe pairs a class-(a) state (a shard directory whose name carries another sha12 than the
-# manifest) with the all-APPROVED answer it would otherwise read: it must score DIFFER, or the proof reports BROKEN.
-ru_mk_ap4() { D="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" || return 1; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_nr3() { D="$(world4 "$SRCDIR" NEEDS_REWORK APPROVED NEEDS_REWORK NEEDS_REWORK)" || return 1; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_qp4() { D="$(qworld "$SRCDIR" PASS PASS PASS PASS)" || return 1; O="$(qout "$D")"; q_merge "$SRCDIR" "$D"; }
-ru_mk_k8() { SHARD_SHA="$E_SHA"; D="$(kworld "$SRCDIR" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || return 1; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_xdup() { SHARD_SHA="$E_SHA"; D="$(kworld "$SRCDIR" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || return 1
-  xfinding "$D/cross-3.md" F-dup "1, 2" && xfinding "$D/cross-1.md" F-own "1, 2" || return 1; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_partcite() { D="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" || return 1; shard "$D" 2 APPROVED 3; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_miss() { D="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" || return 1; rm -f "$D/2.md"; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_dup() { D="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" || return 1; cp "$D/1.md" "$D/01.md"; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_a3() { D="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" || return 1; shard "$D" 2 APPROVED 2 "" "$(printf '## Verdict\nAPPROVED')"; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_g3() { D="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" || return 1; crs "$D" 2 APPROVED 2 1 "$(crho 2 AC7)"; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_g4() { D="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" || return 1; crs "$D" 2 APPROVED 2 1 "$(crho 2 AC7)"
-  crs "$D" cross-1 APPROVED "1, 2" - "$(printf '%s\n\n%s' "$(crrun 2 '2 AC7 RED')" "$(crrun 2 '2 AC7 RED' | sed 's/F-cross-H/F-cross-H2/')")"; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_qpmset() { D="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" || return 1; O="$(qout "$D" code-review -p2)"; run_mg "$SRCDIR" "$D" code-review "$O"; }
-ru_mk_seal() { D="$(seal_world "$SRCDIR" code-review)" || return 1; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-ru_mk_frg() { SHARD_SHA="$QL_SHA"; D="$(fr_g_world "$SRCDIR" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || return 1; O="$(qout "$D")"; q_merge "$SRCDIR" "$D"; }
-ru_mk_shadir() { D="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)" || return 1; local n; n="$(dirname "$D")/1-code-review-000000000000"; mv "$D" "$n"; D="$n"; O="$(out_of "$D")"; run_merge "$SRCDIR" "$D"; }
-# ru_saved <name> <file>: the saved answer, as the reading arm sees it; ru_own <builder> <file>: the arm's own merge.
-# The LEGACY-UNRECORDED line names the record s<N>-<idx>, and a world's slot <N> is drawn per world (wdir), so it is
-# normalised like the directory it comes from.
-ru_norm() { sed -e "s|$1|DIR|g" -e "s|$WORK|WORK|g" -e 's/(s9[0-9]*-/(sSLOT-/g'; }
-ru_saved() {
-  local dd; dd="$(cat "$HAND/$1.d" 2>/dev/null)"; [ -f "$HAND/$1.mo" ] && [ -n "$dd" ] || return 1
-  { echo "rc=$(cat "$HAND/$1.rc")"; ru_norm "$(dirname "$dd")" < "$HAND/$1.mo"
-    if [ -f "$HAND/$1.out" ]; then ru_norm "$(dirname "$dd")" < "$HAND/$1.out"; else echo NO-OUT-FILE; fi; } > "$2"
-}
-ru_own() {
-  ( D=""; O=""; "$1" || exit 1
-    { echo "rc=$RC"; ru_norm "$(dirname "$D")" < "$MO"
-      if [ -f "$O" ]; then ru_norm "$(dirname "$D")" < "$O"; else echo NO-OUT-FILE; fi; } > "$2" )
-}
-# ru_pair <arm> <source> <saved name> <builder> -> prints EQUAL, DIFFER or BROKEN
-ru_pair() {
-  local t="$WORK/ru.$1"; mkdir -p "$t"
-  ru_saved "$3" "$t/saved" && ru_own "$4" "$t/own" && [ -s "$t/saved" ] && [ -s "$t/own" ] || { echo BROKEN; return; }
-  if cmp -s "$t/saved" "$t/own"; then echo EQUAL; else echo DIFFER; fi
-}
-ru_row() { # <arm> <source> <saved name> <builder>
-  local r; r="$(ru_pair "$1" "$2" "$3" "$4")"
-  case "$r" in
-    EQUAL) ok "REUSE $1 reads=$2 EQUAL" ;;
-    *) bad "REUSE $1 reads=$2 $r (restore the arm's own merge and class it (a), naming the input that differs)" ;;
-  esac
-}
-reuse_proof() {
-  ru_row conserve c1 c1 ru_mk_nr3
-  ru_row rerun worst3 worst3 ru_mk_ap4
-  ru_row fence_nested worst3 worst3 ru_mk_ap4
-  ru_row q_title-cr worst3 worst3 ru_mk_ap4
-  ru_row q_title-qa q_worst1 qw1 ru_mk_qp4
-  ru_row q_table q_worst1 qw1 ru_mk_qp4
-  ru_row q_hc_none q_worst1 qw1 ru_mk_qp4
-  ru_row canon_merge-crm-ok q_worst1 qw1 ru_mk_qp4
-  ru_row x_owner-n0 x_k8 xk8 ru_mk_k8
-  ru_row owner-per-shard cs_partcite cs_csc_partcite ru_mk_partcite
-  ru_row owner-missing R1 own_miss ru_mk_miss
-  ru_row owner-dup-key R3 own_dup ru_mk_dup
-  ru_row owner-handover-unrun G3 own_cr_ho_unm ru_mk_g3
-  ru_row owner-run-twice G4 own_cr_ho_runtwice ru_mk_g4
-  ru_row owner-check1-multi R9 own_a3 ru_mk_a3
-  ru_row owner-set-level q_pm own_qpm_set ru_mk_qpmset
-  ru_row owner-dup-merge x_owner x_owner_dup ru_mk_xdup
-  ru_row frb-legacy fr_graph frg_post ru_mk_frg
-  ru_row session-control key key_ctl ru_mk_seal
-  local p; p="$(ru_pair selfprobe-sha_dir worst3 worst3 ru_mk_shadir)"
-  if [ "$p" = DIFFER ]; then ok "REUSE self-probe: a class-(a) sha_dir state against the all-APPROVED answer scores DIFFER"
-  else bad "REUSE self-probe BROKEN: a class-(a) sha_dir state against the all-APPROVED answer scored $p, so every EQUAL above is unattributable"; fi
-}
-
 # ---- LR1 (BL-895 F1): THE LEAD'S RE-RUN, `--check-serial <file> --gate qa --story <f> --lead-range <seat base>
 # <go-signal>`, its base the story's lead record written by `--record-dispatch` (merge-review-shards.sh header:
 # CHECK-SERIAL, THE LEAD'S RE-RUN). REPO_LR, consumer-shaped, qa.md TRACKED, story-1-2-zz.md listed beside x:
@@ -4350,16 +4218,16 @@ LR_RECF="$(cd "$REPO_LR" && git rev-parse --git-common-dir)" && LR_RECF="$(cd "$
 # ONE RECORD OF LR_D, SHARED (BL-906). Thirteen SRCDIR lead cells each began by having the subject write the same
 # record of LR_D. The first two SRCDIR writes of LR_D still go through the subject, and the second must be byte-identical
 # to the first (LR_REC_PROOF=1); every later one rewrites those captured bytes and output with builtins (LR_REC_HITS).
-# Never shared: a mutant or control copy (always its own writer, so a writer mutant is scored on its own record), any
+# Never shared: any
 # other sha (lr-rsha-legacy records LR_OLD), and LR_REC_FRESH=1 (lr-record, whose subject IS the writer).
 LR_REC_N=0; LR_REC_PROOF=0; LR_REC_HITS=0; LR_REC_BYTES=""; LR_REC_OUT=""
 lr_rec() { # <script-dir> <sha> -> RRC, $CO: the dispatch record written by the subject, from REPO_LR
-  if [ "$1" = "$SRCDIR" ] && [ "$2" = "$LR_D" ] && [ -z "${LR_REC_FRESH:-}" ] && [ "$LR_REC_PROOF" = 1 ] && [ -d "${LR_RECF%/*}" ]; then
+  if [ "$2" = "$LR_D" ] && [ -z "${LR_REC_FRESH:-}" ] && [ "$LR_REC_PROOF" = 1 ] && [ -d "${LR_RECF%/*}" ]; then
     printf '%s' "$LR_REC_BYTES" > "$LR_RECF" && printf '%s' "$LR_REC_OUT" > "$CO"; RRC=$?
     [ "$RRC" != 0 ] || LR_REC_HITS=$((LR_REC_HITS + 1)); return
   fi
   rm -f "$LR_RECF"; ( cd "$REPO_LR" && ip_run "$1/merge-review-shards.sh" mrs_main --record-dispatch s1-1-1 "$2" ) > "$CO" 2>&1 < /dev/null; RRC=$?
-  [ "$1" = "$SRCDIR" ] && [ "$2" = "$LR_D" ] && [ -z "${LR_REC_FRESH:-}" ] && [ "$RRC" = 0 ] && [ -f "$LR_RECF" ] || return 0
+  [ "$2" = "$LR_D" ] && [ -z "${LR_REC_FRESH:-}" ] && [ "$RRC" = 0 ] && [ -f "$LR_RECF" ] || return 0
   local b o
   IFS= read -r -d '' b < "$LR_RECF"; IFS= read -r -d '' o < "$CO"
   LR_REC_N=$((LR_REC_N + 1))
@@ -4478,7 +4346,7 @@ p_lead() {
   # checkout) at LR_F, the review at its docs/reviews/s1/. The record names LR_D and the seat passes LR_D too, so a run
   # that reads no record checks LR_D..LR_F (record-only) and acquits. a1-redirect: the seat points LR_WT's gitfile at a
   # --shared clone of REPO_LR, so the review's repository keeps its common dir in the clone, where no record is: REFUSED
-  # [owner: lead] naming the remedy, never LEGACY-UNRECORDED (m-lc-serial's subject). a1-alias (ALLOW twin): the lead
+  # [owner: lead] naming the remedy, never LEGACY-UNRECORDED. a1-alias (ALLOW twin): the lead
   # runs from a SYMLINKED alias of REPO_LR, gitfile intact: the canonical-label-stripped (non-record-only) range is still
   # REFUSED as not record-only, and the record-only range read with no seat base reads SERIAL-OK.
   if cell a1-redirect; then lr_wt || return 1; lr_rec "$sd" "$LR_D"; lr_file "$LR_WT/docs/reviews/s1/1-1-qa-validation.md" "$none" "reviewed-sha: $LR_F"
@@ -4654,8 +4522,8 @@ p_lead_rec() {
   # --record-partition and the merge from LR_S. a2-redirect: recorded and merged with the gitfile intact (MERGED, the
   # control), then the seat points LR_SW's gitfile at a --shared clone of LR_S and copies a re-partition's .manifest
   # over the lead's (row 5): a merge reading no record would take it, LEGACY-UNRECORDED, so REFUSED [owner: lead] naming
-  # the remedy (m-lc-merge's subject). a2-record: --record-partition after the same redirect is REFUSED and writes no
-  # record (m-lc-record's subject). a2-cwd: the merge run with the frozen worktree's own repository (the manifest's
+  # the remedy. a2-record: --record-partition after the same redirect is REFUSED and writes no
+  # record. a2-cwd: the merge run with the frozen worktree's own repository (the manifest's
   # worktree) as the cwd: REFUSED with the remedy.
   local a2r=0 a2c=0; ! cell a2-redirect || a2r=1; ! cell a2-record || a2c=1
   if [ "$a2r$a2c" != 00 ]; then
@@ -4678,7 +4546,7 @@ p_lead_rec() {
           refused_at "$LR_LEADCO" "$o" && owner_in "$MO" lead && has "$MO" "the qa merge: the shard directory" && ! has "$MO" LEGACY-UNRECORDED \
             || WHY="$WHY a2-redirect{rc=$RC $(reline "$MO")}"; fi
         if [ "$a2c" = 1 ]; then rt="$LR_PATH"
-          # The clone is built once per run, so an earlier drive (m-lc-record's own) may have written this record into it.
+          # The clone is built once per run, so an earlier drive (an earlier one) may have written this record into it.
           rm -f "$LR_SCLONE/.git/ai-dlc/stories/s1-1"
           ip_run -C "$LR_S" -e "AI_DLC_PROJECT_ROOT=$PROJ" "$sd/merge-review-shards.sh" mrs_main --record-partition "$d" > "$MO" 2>&1 < /dev/null; RC=$?
           [ "$RC" -eq 2 ] && owner_in "$MO" lead && has "$MO" "$LR_LEADCO" && has "$MO" "--record-partition: the shard directory" && ! has "$MO" RECORDED: \
@@ -4701,10 +4569,10 @@ p_lead_rec() {
   # in place; the record name is s<N>-<idx> read off the directory's path below its worktree top.
   # d1-symlink-sprint: recorded, then the seat moves the directory under docs/reviews/s5/shards/ and leaves a symlink
   #   at the lead-assigned path; the merge through that path is REFUSED [owner: lead], never LEGACY-UNRECORDED
-  #   (m-d1-merge's subject).
-  # d1-record-link: the symlink laid before --record-partition: REFUSED, nothing RECORDED (m-d1-record's subject).
+  #.
+  # d1-record-link: the symlink laid before --record-partition: REFUSED, nothing RECORDED.
   # d1-outside: a real directory outside any shards/ (no symlink): the merge is REFUSED naming no story record, never
-  #   `s?-<idx>` LEGACY-UNRECORDED (m-d1-name's subject).
+  #   `s?-<idx>` LEGACY-UNRECORDED.
   # d1-prefix-alias (ALLOW): the whole repository reached through a symlinked prefix, the shard directory intact:
   #   --record-partition RECORDED and the merge MERGED through the alias (m-d1-abs's subject: an absolute comparison).
   local d1l d1n d1a
@@ -5203,13 +5071,13 @@ WR_C1='`python3 scripts/w.py --cwd <repo-root> -- <pytest args>`'
 WR_PRE="--record-run: the check half would refuse this record:"
 WR_DW="hands the declared wrapper scripts/w.py"
 # EVERY ASK IS BOUNDED BY CPU TIME, never by a wall clock (BL-868): a non-consuming loop in the declaration reader burns
-# CPU, and its awk dies of SIGXCPU whatever the box's load, so a mutant (m988-loop) or a regression that loops reads as
-# a wrong answer in the cell that asked, and `run.sh --matrix` completes under it. wr_ask runs ro_main under
+# CPU, and its awk dies of SIGXCPU whatever the box's load, so a regression that loops reads as
+# a wrong answer in the cell that asked. wr_ask runs ro_main under
 # `ulimit -t 5` and `ulimit -f 2048`; wr_rec and wr_crun run a --record-run and a --check-serial under `ulimit -t 10`
 # (the merge runs in process, in that subshell) and carry their exit back.
 # NO WALL-CLOCK WATCHDOG (BL-868: no verdict may be decided by real time; a `sleep 600` backstop stood here, in
 # wr_bounded, and is removed). The CPU limit (`ulimit -t`) ends the only hang an ask can reach, the declaration
-# reader's awk spinning (the termination seed, m988-loop). Nothing else in an ask can block: its stdin is /dev/null,
+# reader's awk spinning (the termination seed). Nothing else in an ask can block: its stdin is /dev/null,
 # it reads only regular files to EOF, and it reads no fifo, starts no background child and opens no network. So a
 # hang that remains would be a new defect, and it now shows as a hang -- the push's own watchdog reports a stalled
 # fixture -- rather than as a silent pass or fail that real time decided.
@@ -5304,7 +5172,7 @@ p_wrap() {
   wr_cell wr-d4w "$sd" run-filter "\`$WR_W '--junitxml=x>y' suite/tests/test_one.py\`" "$cv" 1 "names a file or test node (suite/tests/test_one.py)"
   # wr-d4q / wr-d4wq: the quoted token IS the filter (`'--deselect=x>y'`), plain and on a wrapper's payload. Since the
   # reader skips a redirection with its target and reads on (BL-1016), wr-d4 and wr-d4w hold even when the quoted token
-  # is read as an operator; only a quoted token that itself narrows separates the quote guards from their mutants.
+  # is read as an operator; only a quoted token that itself narrows separates the quote guards.
   wr_cell wr-d4q "$sd" run-filter "\`python -m pytest '--deselect=x>y' suite/tests\`" "$cv" 1 "deselects tests (--deselect=x>y)"
   wr_cell wr-d4wq "$sd" run-filter "\`$WR_W '--deselect=x>y' suite/tests\`" "$cv" 1 "deselects tests (--deselect=x>y)"
   # N5: a relative program matches by equality only, so evil/scripts/w.py is no declared wrapper (the base reading); an

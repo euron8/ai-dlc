@@ -62,7 +62,7 @@ consolidate them here.
   `# EXCLUDE_BEGIN` and `# EXCLUDE_END`. Both skips in `.githooks/pre-push` read it (the whole-suite key, and
   `readset_excluded_re` for the per-fixture read-set skip). A `+`-declared fixture input (e.g.
   `+docs/backlog.archive.md`) is hashed by BOTH keys, so every edit to it moves the whole-suite key and
-  dispatches its declarers. Every added line needs the two-tree mutation measurement its header describes.
+  dispatches its declarers. Every added line needs the two-tree measurement its header describes.
 - `core/scripts/derive-fixture-readsets.sh --reconcile` traces every stale, changed and unmapped fixture, no
   sudo; the hook prints that command when it finds stale fixtures. Traces go to
   `.git/ai-dlc-fixture-readsets.local` (the `--local-map` the hook passes); the committed map is
@@ -163,8 +163,8 @@ Builder:
 3. Make one commit on `origin/main`, carrying the entry's LANDED or PARTIAL line. When the change alters what
    `install.sh` ships, the subject, `VERSION` and the CHANGELOG heading name the next version and the commit
    runs `scripts/backlog-rotate.sh --apply`; otherwise the subject names no version.
-4. Run `bash -n` on every edited script, one probe that fails without the change plus a mutant it kills, and
-   each fixture you edited, once.
+4. Run `bash -n` on every edited script, one probe that fails without the change plus a mutant it kills (by
+   hand, once; the output goes in the sha message, never into a fixture), and each fixture you edited, once.
 5. Run `bash scripts/pregate-self-check.sh` on the exact tree (`--member` when it edits `.githooks/pre-push`).
 6. Send the lead the sha and remove your worktree.
 

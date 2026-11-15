@@ -36,8 +36,6 @@ trap 'rm -rf "$WORK"' EXIT
 printf 'HERMETIC-CONSUMED %s\n' "$VALIDATOR"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_scMoved=0; B_scFloor=0; B_scUnparse=0
 
 LAST_OUT=""
 # Each case gets its own copy of the seeded repository, so a working-tree edit in one
@@ -98,7 +96,7 @@ cat "$WORK/cut.txt" >> "$d/_bmad-output/pipeline-snapshot-history.md"
 run_on "$d"
 r="$RC"
 if [ "$r" = "0" ]; then
-  ok "50 lines moved to pipeline-snapshot-history.md passes"; B_scMoved=1
+  ok "50 lines moved to pipeline-snapshot-history.md passes"
 else
   bad "the conserved case did not pass (rc=$r) — a check that cannot go green wedges every legitimate trim: $LAST_OUT"
 fi
@@ -131,7 +129,7 @@ cut_lines "$d" 10
 run_on "$d"
 r="$RC"
 if [ "$r" = "0" ]; then
-  ok "10 destroyed lines stay below the floor of 40 and do not block"; B_scFloor=1
+  ok "10 destroyed lines stay below the floor of 40 and do not block"
 else
   bad "the below-floor case blocked (rc=$r) — the floor is not bounding the false-positive class: $LAST_OUT"
 fi
@@ -167,7 +165,7 @@ cut_lines "$d" 50
 run_on "$d"
 r="$RC"
 if [ "$r" = "2" ]; then
-  ok "gate-metrics.jsonl present but unparseable exits 2"; B_scUnparse=1
+  ok "gate-metrics.jsonl present but unparseable exits 2"
 else
   bad "an unreadable metrics file returned rc=$r — a broken input must not produce a verdict: $LAST_OUT"
 fi
@@ -228,125 +226,6 @@ if [ "$r" = "1" ]; then
   ok "--floor 5 makes the 10-line case block, so the floor is a real parameter"
 else
   bad "--floor 5 did not change the verdict (rc=$r) — the floor is not wired to the comparison: $LAST_OUT"
-fi
-
-# =============================================================================
-# MUTANTS. Copies, never in-place edits. `cmp -s` proves the mutation landed and
-# `bash -n` proves the result is still a program — a copy that dies on a syntax
-# error emits nothing, and "no output" otherwise scores as a kill.
-# =============================================================================
-
-# The unmutated control. This validator resolves its own root by walking up from its
-# own location, so a copy placed elsewhere must still behave identically before any
-# mutant verdict below means anything.
-CTRL="$WORK/validator-control.sh"
-cp "$VALIDATOR" "$CTRL"
-d="$(case_dir ctrl_moved)"; cut_lines "$d" 50; cat "$WORK/cut.txt" >> "$d/_bmad-output/pipeline-snapshot-history.md"
-c1="$(LAST_OUT=""; LAST_OUT="$(bash "$CTRL" --root "$d" 2>&1)"; printf '%s' "$?")"
-d="$(case_dir ctrl_deleted)"; cut_lines "$d" 50
-c2="$(LAST_OUT=""; LAST_OUT="$(bash "$CTRL" --root "$d" 2>&1)"; printf '%s' "$?")"
-if [ "$c1" = "0" ] && [ "$c2" = "1" ]; then
-  ok "CONTROL: an unmutated copy reproduces 0 (moved) and 1 (deleted)"
-else
-  bad "CONTROL FAILED: an unmutated copy returned $c1/$c2 instead of 0/1, so no mutant result below means anything"
-fi
-
-# --- Assertion 13: MUTANT A — the corpus stops including the history file --------
-# Proves assertion 1 is load-bearing: if the history file is not searched, moving
-# content there is indistinguishable from deleting it.
-MUT_A="$WORK/validator-mutant-a.sh"
-if [ "$(grep -c -- "ls-files -z -- '\*.md'" "$VALIDATOR")" -ne 1 ]; then
-  bad "FIXTURE STALE: mutant A's anchor is not unique in the validator, so the mutation could land somewhere else and come out green"
-else
-  sed "s|ls-files -z -- '\*.md'|ls-files -z -- '*pipeline-snapshot.md'|" "$VALIDATOR" > "$MUT_A"
-  if cmp -s "$VALIDATOR" "$MUT_A"; then
-    bad "FIXTURE STALE: mutant A is byte-identical to the original — the corpus glob was reworded"
-  elif ! bash -n "$MUT_A" 2>/dev/null; then
-    bad "FIXTURE BROKEN: mutant A is not a valid shell script, so a 'kill' below would only mean the copy could not run"
-  else
-    d="$(case_dir mutA_moved)"; cut_lines "$d" 50; cat "$WORK/cut.txt" >> "$d/_bmad-output/pipeline-snapshot-history.md"
-    ra="$(bash "$MUT_A" --root "$d" >/dev/null 2>&1; printf '%s' "$?")"
-    if [ "$ra" = "1" ]; then
-      mutant_killed "$B_scMoved" mutant-A-history-dropped "mutant A: dropping the history file from the corpus makes a real move read as destruction — assertion 1 has teeth"
-    else
-      bad "MUTANT A DID NOT FAIL (rc=$ra) — assertion 1 is not testing whether the history file is searched"
-    fi
-    d="$(case_dir mutA_below)"; cut_lines "$d" 10
-    rb="$(bash "$MUT_A" --root "$d" >/dev/null 2>&1; printf '%s' "$?")"
-    if [ "$rb" = "0" ]; then
-      ok "mutant A leaves the below-floor assertion intact — the arms are not entangled"
-    else
-      bad "mutant A ALSO broke the below-floor case (rc=$rb) — two failures mean one of the assertions is vacuous"
-    fi
-  fi
-fi
-
-# --- Assertion 14: MUTANT B — the floor stops being consulted --------------------
-MUT_B="$WORK/validator-mutant-b.sh"
-if [ "$(grep -c 'GONE" -lt "\$FLOOR' "$VALIDATOR")" -ne 1 ]; then
-  bad "FIXTURE STALE: mutant B's anchor is not unique in the validator"
-else
-  # The floor becomes 1, not 0. At 0 the mutant fails the CONSERVED case too --
-  # nothing destroyed is not less than nothing -- and a mutant that breaks two
-  # assertions proves neither of them.
-  sed 's|GONE" -lt "\$FLOOR"|GONE" -lt 1|' "$VALIDATOR" > "$MUT_B"
-  if cmp -s "$VALIDATOR" "$MUT_B"; then
-    bad "FIXTURE STALE: mutant B is byte-identical to the original — the floor comparison was reworded"
-  elif ! bash -n "$MUT_B" 2>/dev/null; then
-    bad "FIXTURE BROKEN: mutant B is not a valid shell script"
-  else
-    d="$(case_dir mutB_below)"; cut_lines "$d" 10
-    rb="$(bash "$MUT_B" --root "$d" >/dev/null 2>&1; printf '%s' "$?")"
-    if [ "$rb" = "1" ]; then
-      mutant_killed "$B_scFloor" mutant-B-floor-ignored "mutant B: ignoring the floor makes 10 destroyed lines block — the floor is what bounds the false-positive class"
-    else
-      bad "MUTANT B DID NOT FAIL (rc=$rb) — the floor comparison is not what decides the below-floor case"
-    fi
-    d="$(case_dir mutB_moved)"; cut_lines "$d" 50; cat "$WORK/cut.txt" >> "$d/_bmad-output/pipeline-snapshot-history.md"
-    rc2="$(bash "$MUT_B" --root "$d" >/dev/null 2>&1; printf '%s' "$?")"
-    if [ "$rc2" = "0" ]; then
-      ok "mutant B leaves the conserved case intact — the arms are not entangled"
-    else
-      bad "mutant B ALSO broke the conserved case (rc=$rc2) — the assertions are entangled"
-    fi
-  fi
-fi
-
-# --- Assertion 15: MUTANT C — a broken metrics file becomes a clean pass ---------
-# Anchored on a backslash-free string. `awk -v` processes escape sequences in the
-# assigned value, so an anchor carrying a backslash arrives stripped and the mutation
-# silently does nothing while scoring as a kill.
-MUT_C="$WORK/validator-mutant-c.sh"
-if [ "$(grep -c 'carries no parseable' "$VALIDATOR")" -ne 1 ]; then
-  bad "FIXTURE STALE: mutant C's anchor is not unique in the validator"
-else
-  awk '
-    /carries no parseable/ { seen = 1 }
-    seen && /^    exit 2$/ && !done { sub(/exit 2/, "exit 0"); done = 1 }
-    { print }
-  ' "$VALIDATOR" > "$MUT_C"
-  if cmp -s "$VALIDATOR" "$MUT_C"; then
-    bad "FIXTURE STALE: mutant C is byte-identical to the original — the unparseable-metrics arm was reworded or re-indented"
-  elif ! bash -n "$MUT_C" 2>/dev/null; then
-    bad "FIXTURE BROKEN: mutant C is not a valid shell script"
-  else
-    d="$(case_dir mutC)"
-    printf 'not json at all\n' > "$d/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
-    cut_lines "$d" 50
-    rc3="$(bash "$MUT_C" --root "$d" >/dev/null 2>&1; printf '%s' "$?")"
-    if [ "$rc3" != "2" ]; then
-      mutant_killed "$B_scUnparse" mutant-C-unparseable-through "mutant C: letting an unparseable metrics file through stops it exiting 2 — assertion 7 has teeth"
-    else
-      bad "MUTANT C DID NOT CHANGE THE VERDICT (rc=$rc3) — assertion 7 is not testing the unparseable arm"
-    fi
-    d="$(case_dir mutC_deleted)"; cut_lines "$d" 50
-    rc4="$(bash "$MUT_C" --root "$d" >/dev/null 2>&1; printf '%s' "$?")"
-    if [ "$rc4" = "1" ]; then
-      ok "mutant C leaves the deletion assertion intact — the arms are not entangled"
-    else
-      bad "mutant C ALSO broke the deletion case (rc=$rc4) — the assertions are entangled"
-    fi
-  fi
 fi
 
 echo

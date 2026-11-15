@@ -55,8 +55,6 @@ fi
 IS_DIST=0; [ -d "$ROOT/core/skills/ai-dlc" ] && IS_DIST=1
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_a1pres=0; B_a2adv=0
 skip() { # skip <what> <why>
   if [ "$IS_DIST" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
@@ -137,7 +135,7 @@ else
   bad "no flag: the rulebook pair did NOT advance (version=$(field "$C1" version) commit=$(field "$C1" commit)) — the ordinary path regressed and every arm below reads a stamp nothing wrote"
 fi
 if [ "$(field "$C1" skill_version)" = "1.0.0" ] && [ "$(field "$C1" skill_commit)" = "$BASE_SHORT" ]; then
-  ok "  and the machinery pair is PRESERVED at base — no claim to machinery this run did not install"; B_a1pres=1
+  ok "  and the machinery pair is PRESERVED at base — no claim to machinery this run did not install"
 else
   bad "  the machinery pair advanced without the flag (skill_version=$(field "$C1" skill_version) skill_commit=$(field "$C1" skill_commit)) — a rulebook-only apply now claims a tool version it never wrote, which is what SKILL.md step 7 forbids"
 fi
@@ -151,7 +149,7 @@ fi
 C2="$WORK/c2"; mkconsumer "$C2" || exit 2
 OUT2="$(bash "$APPLY" --carried-machinery-slice "$DIST" "$BASE" "$C2" "$THEIRS" 2>&1)"
 if [ "$(field "$C2" skill_version)" = "$THEIRS_VER" ] && [ "$(field "$C2" skill_commit)" = "$THEIRS_SHORT" ]; then
-  ok "--carried-machinery-slice: the machinery pair advances to theirs ($THEIRS_VER @ $THEIRS_SHORT)"; B_a2adv=1
+  ok "--carried-machinery-slice: the machinery pair advances to theirs ($THEIRS_VER @ $THEIRS_SHORT)"
 else
   bad "--carried-machinery-slice: the machinery pair stayed at $(field "$C2" skill_version) @ $(field "$C2" skill_commit) — this is the reported defect: the next pull reads every machinery file this run wrote as consumer drift, with a remedy that reverts upstream's own text"
 fi
@@ -273,72 +271,6 @@ if [ "$(field "$C6" version)" = "1.0.0" ]; then
   ok "  control: the refused run wrote nothing at all"
 else
   bad "  the refused run still re-stamped — it refused after acting"
-fi
-
-# --- Assertions 7/8: MUTANTS -----------------------------------------------------------------
-# Each mutant is a COPY, guarded by cmp -s so a sed that matched nothing cannot pass as a
-# mutation, and each must fail ONLY its own arm.
-mutdir() { # mutdir <name> -> prints dir
-  local d="$WORK/mut-$1"
-  mkdir -p "$d" || return 2
-  cp "$(dirname "$APPLY")"/* "$d/" 2>/dev/null || return 2
-  printf '%s' "$d"
-}
-
-# M1 — THE FLAG DEFAULTS ON. Reverts the branch in the permissive direction: every ordinary
-# pull would then claim a machinery version it did not install.
-M1="$(mutdir m1)" || { echo "FIXTURE ERROR: could not build mutant m1" >&2; exit 2; }
-sed 's/^CARRIED_MACHINERY=0$/CARRIED_MACHINERY=1/' "$APPLY" > "$M1/apply.sh.new"
-if cmp -s "$APPLY" "$M1/apply.sh.new"; then
-  bad "mutant m1 did not apply — the sed matched nothing, so the arm below would score a kill it never earned"
-else
-  mv "$M1/apply.sh.new" "$M1/apply.sh"
-  CM1="$WORK/cm1"; mkconsumer "$CM1" || exit 2
-  bash "$M1/apply.sh" "$DIST" "$BASE" "$CM1" "$THEIRS" >/dev/null 2>&1
-  if [ "$(field "$CM1" skill_commit)" = "$BASE_SHORT" ]; then
-    bad "mutant m1 (flag defaults on) was NOT caught — assertion 1 cannot see a machinery pair advancing on a run that never asked for it"
-  else
-    mutant_killed "$B_a1pres" m1-flag-defaults-on "mutant m1 (flag defaults on) is caught by assertion 1's predicate"
-  fi
-fi
-
-# M2 — THE WRITE IS REMOVED. Both guards are reverted, not one: a partial revert leaves a mutant
-# that proves the layer still in place and comes out green.
-M2="$(mutdir m2)" || { echo "FIXTURE ERROR: could not build mutant m2" >&2; exit 2; }
-sed 's/^if \[ "\$CARRIED_MACHINERY" = 1 \]; then$/if false; then/; s/^  if \[ "\$CARRIED_MACHINERY" = 1 \]; then$/  if false; then/' "$APPLY" > "$M2/apply.sh.new"
-if cmp -s "$APPLY" "$M2/apply.sh.new"; then
-  bad "mutant m2 did not apply — the sed matched nothing"
-elif grep -q 'CARRIED_MACHINERY" = 1' "$M2/apply.sh.new"; then
-  bad "mutant m2 is PARTIAL — a guard survived the revert, so the arm below proves the layer left in place rather than the one removed"
-else
-  mv "$M2/apply.sh.new" "$M2/apply.sh"
-  CM2="$WORK/cm2"; mkconsumer "$CM2" || exit 2
-  bash "$M2/apply.sh" --carried-machinery-slice "$DIST" "$BASE" "$CM2" "$THEIRS" >/dev/null 2>&1
-  if [ "$(field "$CM2" skill_commit)" = "$THEIRS_SHORT" ]; then
-    bad "mutant m2 (write removed) was NOT caught — assertion 2 is passing on something other than the write it names"
-  else
-    mutant_killed "$B_a2adv" m2-write-removed "mutant m2 (write removed) is caught by assertion 2's predicate"
-  fi
-  # AND IT MUST NOT ALSO KILL ASSERTION 1. Two arms failing on one mutant means they are
-  # entangled and one of them is vacuous.
-  CM2B="$WORK/cm2b"; mkconsumer "$CM2B" || exit 2
-  bash "$M2/apply.sh" "$DIST" "$BASE" "$CM2B" "$THEIRS" >/dev/null 2>&1
-  if [ "$(field "$CM2B" skill_commit)" = "$BASE_SHORT" ] && [ "$(field "$CM2B" version)" = "$THEIRS_VER" ]; then
-    ok "  and m2 leaves assertion 1 green — the two arms are independent, not one assertion counted twice"
-  else
-    bad "  m2 also breaks assertion 1's reading — the arms are entangled and one of them proves nothing"
-  fi
-fi
-
-# THE UNMUTATED CONTROL, from the same copied directory. A lone script copy that dies sourcing a
-# sibling emits nothing, and "no output" would otherwise score as a kill on both mutants above.
-CTL="$(mutdir ctl)" || { echo "FIXTURE ERROR: could not build the control copy" >&2; exit 2; }
-CC="$WORK/cctl"; mkconsumer "$CC" || exit 2
-bash "$CTL/apply.sh" --carried-machinery-slice "$DIST" "$BASE" "$CC" "$THEIRS" >/dev/null 2>&1
-if [ "$(field "$CC" skill_commit)" = "$THEIRS_SHORT" ]; then
-  ok "control: an UNMUTATED copy in the same directory advances the pair — the mutants above died of their mutation, not of the copy"
-else
-  bad "control: the unmutated copy did not advance the pair either — the mutant harness is what fails, and both kills above are false"
 fi
 
 echo

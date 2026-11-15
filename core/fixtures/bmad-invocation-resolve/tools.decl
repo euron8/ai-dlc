@@ -12,7 +12,6 @@ head
 mkdir
 mktemp
 mv
-perl
 rm
 sed
 sort

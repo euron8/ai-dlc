@@ -33,12 +33,6 @@ fixed (v0.63.2); the *report* un-reported it.
   the set is smaller than it should be but honestly computed, so reddening it would wedge an
   accurate report.
 
-The stale-base arms carry three mutants, each keyed on a render **site** rather than on the
-status spelling: deleting the print site, deleting the check-mode warn site (which changes no
-exit code, so the warning is its only observable), and widening the rows-supplied gate that keeps
-the row out of `emit-report.sh`'s region — where a duplicate would double the count `--verify`'s
-`unseen_rows()` reads.
-
 ## Run
 
     bash run.sh

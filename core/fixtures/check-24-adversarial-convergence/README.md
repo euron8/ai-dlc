@@ -74,8 +74,7 @@ the two cases that prove it is real are a **differential**:
 `repaired-delegated` and `repaired-inline-no-record` carry **byte-identical pass series**;
 the only difference on disk is the two repair records. A validator that reads the series
 instead of statting the record cannot separate them — neutralize arm H and
-`repaired-inline-no-record` flips to exit 0, which is the mutation proof baked into the
-pair. This is the S295 defect: a lead that repairs inline leaves a series indistinguishable
+`repaired-inline-no-record` flips to exit 0. This is the S295 defect: a lead that repairs inline leaves a series indistinguishable
 from a delegated one, and arms A–G pass over it.
 
 ## v0.355.0 — the field reader, pinned from both sides, and joined to what is taught
@@ -117,20 +116,6 @@ every assertion would pass over an empty set and report clean — so the extract
 guarded (`want 1` definition, `want 3` template lines) and a miss says `FIXTURE BROKEN`. That
 guard fired on this arm's first run: the draft used `\|` alternation, which is a GNU sed
 extension and matches nothing under BSD sed, and it extracted 0 lines.
-
-Mutation-tested on four full-tree copies, `cmp -s` guarded, against an unmutated control that
-passes 80 of 80:
-
-| Mutant | Kills |
-|---|---|
-| reader narrowed to the 0.354.0 class | `repaired-delegated-bold`, `H-BIND` grammar (2) |
-| `remediator.md` relabels one template field | `H-BIND` extraction guard only (1) |
-| `repair_field` returns 0 unconditionally | `repair-record-empty`, `repair-record-off-label`, both messages, `H-BIND` controls (5) |
-| `gate-validation.md` drops the `derivation:` label | `requirements-step` arm (k) only (1) |
-
-The control must be a **full-tree** copy. A partial one — the four files this arm reads,
-copied into a skeleton — fails 8 unrelated assertions because the other arms cannot resolve
-their own dependencies, and 8 pre-existing failures score as kills.
 
 ## Pass 1 has no previous pass — the seed gap that hid a live misfire
 
@@ -176,24 +161,6 @@ guards a careful author would write, and neither is what the arm needs:
   file of a series that starts higher. Of the consumer's **84** adversarial series, **5**
   have no pass 1 on disk; 2 of those are multi-pass and can reach arm D as a series.
 
-The battery is four cells and five rows, and each wrong fix is killed by exactly one cell:
-
-| Mutant | `unconverged` | `then-growth` | `zero-prior` | `starts-p2` |
-|---|---|---|---|---|
-| *shipped* | `GENERIC` | `MOVING` | `MOVING` | `GENERIC` |
-| the guard removed | `MOVING` ← | `MOVING` | `MOVING` | `MOVING` ← |
-| the guard on `STALL_FROM` | `GENERIC` | `GENERIC` ← | `GENERIC` | `GENERIC` |
-| the guard on `prior > 0` | `GENERIC` | `MOVING` | `GENERIC` ← | `GENERIC` |
-| the guard on the pass number | `GENERIC` | `MOVING` | `MOVING` | `MOVING` ← |
-
-**The discrimination is behavioural, not byte-locked, and that is the point.** A byte-lock
-on the shipped condition flags a wrong fix too — but an author who re-anchors the mutations,
-exactly as `fixture-mutants.md` prescribes, is then green on a validator that lost real
-coverage. Measured: with every anchor re-pointed at its own wrong condition, the `prior > 0`
-tree still fails `D-moving-at-zero-prior` and the pass-number tree still fails
-`D-generic-at-first-file`. `scope-grew-unconverged` above is the same claim on a longer
-series and is unchanged by any of this.
-
 **A dead arm was found writing this.** Both `stall-preempts-d` and `ceiling-preempts-d`
 grep the validator's output for the absence of `Either run another pass to a clean
 verdict` — a phrase arm D's message **wraps across a newline** and therefore never emits.
@@ -231,10 +198,8 @@ comparison and cannot discriminate.
 | `chrono-fraction-equal` | `19.000Z` then `19Z` — the same instant | **PASS**, G silent |
 | `chrono-fraction-backward` | `19.497Z` then `19Z` — written 497 ms first | **FAIL** (G) |
 
-Three wrong comparisons are committed mutants, and each moves a different cell
-(`forward backward equal`): shipped `- G -`, raw string `G - -` (the BL-371 defect), `Z`
-stripped `- G G`, arm G off `- - -`. The unmutated copy is scored first, and its `G` cell is
-the positive control that stops a copy which ran nothing from scoring as a kill.
+Each wrong comparison moves a different cell (`forward backward equal`): shipped `- G -`,
+raw string `G - -` (the BL-371 defect), `Z` stripped `- G G`.
 
 ## Arm F on a sharded series — `artifact_sha` compared per story
 
@@ -248,9 +213,8 @@ the same sha.
 | `sharded-revert-reordered` | REVERT_REPAIR back to p1's pairs, stories listed in reverse order | **PASS** |
 | `sharded-revert-partial` | story 1 reverted, story 2 lands on a sha no pass notarized | **FAIL** (F5); `--cycle-state` DIVERGENT/3 |
 
-The mutant restores the old `tr -cd '0-9a-fA-F'` read at all three sites. That reading glued the
-hex letters of the stem names onto the shas, so the reordered case flips to F4 "never saw" while
-the partial case still fails on F5, and the unmutated copy is the control.
+The old `tr -cd '0-9a-fA-F'` read glued the hex letters of the stem names onto the shas, so the
+reordered case read F4 "never saw" while the partial case still failed on F5.
 
 ## The prose-only arms live in `requirements-step`
 
@@ -258,7 +222,7 @@ Three arms read step prose and nothing this fixture seeds: the test-strategy ser
 Check 24's text to the program (BL-723, formerly unit `tstrat`), `gate-validation.md`'s statement
 of arm H's three labels (formerly H-BIND's fourth arm), and the `J3_SUCCESSORS` binding to the step
 files (J3-MAP). They are `requirements-step` arms (m), (k) and (l), keyed on the steps directory
-there, so an edit to that prose no longer re-runs these four shards.
+there, so an edit to that prose no longer re-runs these six shards.
 
 ## The `skill:` field in the seeded blocks is INERT — do not read it as coverage
 

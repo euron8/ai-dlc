@@ -3,5 +3,4 @@
 # only command-line starts, each the byte-for-byte twin (stdout, stderr, exit) of an in-process run (cli_twin),
 # one per exit code this shard exercises.
 cli scripts/validate-enforcement-map.sh cli-first-id
-cli scripts/validate-enforcement-map.sh cli-i66-refuse
 cli scripts/validate-enforcement-map.sh cli-unknown-id

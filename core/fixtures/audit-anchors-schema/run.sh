@@ -4,13 +4,6 @@
 # enforced: the header is RENDERED from schemas/audit-anchors.json, --check catches header drift,
 # validate catches entry shape drift, and the reader fails CLOSED on an unreadable schema.
 #
-# Per push the one mutant runs its deciding arm and one twin; the measured matrix replaces an
-# exact-vector assertion (the old "E:no V:pass" pair). The matrix is re-measured as
-# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Arm names are the
-# column names `--matrix` prints.
-# MUTANT-MATRIX no-enum-check decides=E twins=V
-# MUTANT-MATRIX-REMEASURE bash core/fixtures/audit-anchors-schema/run.sh --matrix
-#
 # THE DEFECT THIS EXISTS TO CATCH. The schema lived in two places — templates/audit-anchors.md.template
 # (never shipped) and each project's live audit-anchors.md header (hand-carried) — with nothing
 # comparing them. They diverged, and the de-facto schema survived only in whichever file was carried
@@ -166,7 +159,7 @@ printf -- '# Audit Anchors\n\n## Entries\n\n- sprint: 902\n  sha: %s\n  close_re
 VALIDCR="$WORK/valid-reason.md"
 printf -- '# Audit Anchors\n\n## Entries\n\n- sprint: 902\n  sha: %s\n  close_reason: abandoned\n' "$REPO_SHA" > "$VALIDCR"
 
-enum_battery() {   # <script> -> two space-separated tokens. A mutant must move EXACTLY one.
+enum_battery() {   # <script> -> two space-separated tokens
   local S="$1" out rc t
   out="$( bash "$S" --entries "$BOGUS" 2>&1 >/dev/null )"; rc=$?
   if [ "$rc" -ne 0 ] && grep -qF "'close_reason'='paused' is not one of reset, abandoned" <<<"$out"
@@ -184,73 +177,6 @@ else
   bad "enum battery: expected [$ENUM_EXPECTED], got [$GOT]"
 fi
 
-# An UNMUTATED control from the same directory: a lone copy that cannot resolve ../schemas/ fails
-# every arm, and "it failed" would otherwise score as a kill for the mutant below.
-CTL="$WORK/mut/control.sh"
-cp "$VALIDATOR" "$CTL"
-CGOT="$(enum_battery "$CTL")"
-if [ "$CGOT" = "$ENUM_EXPECTED" ]; then
-  ok "CONTROL: an unmutated copy beside the mutant answers identically (the harness is not what fails below)"
-else
-  echo "FIXTURE ERROR: the unmutated control does not reproduce the enum battery — expected" >&2
-  echo "  [$ENUM_EXPECTED], got [$CGOT]. Most likely the copy cannot resolve ../schemas/." >&2
-  exit 2
-fi
-
-# The enum check in the ENTRY loop, removed. Its sibling read inside --close-record is a different
-# line (`spec.get("enum") or []`), so this reverts the reader half only — which is the half the
-# arm above claims. Without it a hand-written `paused` reaches Check 18 as a valid close record.
-MUT_ENUM="$WORK/mut/no-enum-check.sh"
-sed 's/^        allowed = spec\.get("enum")$/        allowed = None/' "$VALIDATOR" > "$MUT_ENUM"
-if cmp -s "$VALIDATOR" "$MUT_ENUM"; then
-  echo "FIXTURE ERROR: mutant 'no-enum-check' matched nothing — the entry-loop enum read was renamed." >&2
-  exit 2
-fi
-# ARMS of the validator, each one call on a script S; the raw token is what killed=yes|no diverges on.
-# E and V are the enum battery above; the others are the assertions 1-6b that exercise the same
-# validator on a file. Holding means the arm's own expectation holds for S.
-MATRIX=0; MROWS=0
-if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-. "$HERE/matrix.sh" || { echo "FIXTURE ERROR: matrix.sh not found" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/fixtures/audit-anchors-schema/matrix.sh"
-ARMS="E V GOOD MISS BADSPRINT COMMENTED MIG"
-arm_raw() { # arm_raw <arm> <script>
-  local a="$1" S="$2" rc
-  case "$a" in
-    E)         enum_battery "$S" | cut -d' ' -f1 ;;
-    V)         enum_battery "$S" | cut -d' ' -f2 ;;
-    GOOD)      bash "$S" "$GOOD" >/dev/null 2>&1; echo "rc$?" ;;
-    MISS)      bash "$S" "$MISS" >/dev/null 2>&1; echo "rc$?" ;;
-    BADSPRINT) bash "$S" "$BADSPRINT" >/dev/null 2>&1; echo "rc$?" ;;
-    COMMENTED) bash "$S" "$COMMENTED" >/dev/null 2>&1; echo "rc$?" ;;
-    MIG)       bash "$S" --entries "$MIG" >/dev/null 2>&1; echo "rc$?" ;;
-  esac
-}
-arm_holds() { # arm_holds <arm> <raw>
-  case "$1:$2" in E:E:named|V:V:pass|GOOD:rc0|COMMENTED:rc0|MIG:rc0) return 0 ;; MISS:rc0|BADSPRINT:rc0) return 1 ;; MISS:rc*|BADSPRINT:rc*) return 0 ;; esac
-  return 1
-}
-if [ "$MATRIX" = 1 ]; then
-  for a in $ARMS; do
-    r="$(arm_raw "$a" "$MUT_ENUM")"; sr="$(arm_raw "$a" "$VALIDATOR")"
-    if arm_holds "$a" "$r"; then w=GREEN; else w=TRIPPED; fi
-    if [ "$r" = "$sr" ]; then kd=no; else kd=yes; fi
-    matrix_row no-enum-check "$a" 0 "$w" "$kd"; MROWS=$((MROWS + 1))
-  done
-  ok "MATRIX no-enum-check measured against $MROWS arms"
-else
-  # Per push: deciding arm E must stop holding (and diverge from the shipped answer), twin V must hold.
-  arm_holds E "$(arm_raw E "$VALIDATOR")"; _base_rc=$?
-  r="$(arm_raw E "$MUT_ENUM")"
-  if ! arm_holds E "$r"; then
-    mutant_killed "$([ "$_base_rc" -eq 0 ] && echo 1 || echo 0)" no-enum-check "MUTANT no-enum-check (E): removing the entry-loop enum read lets a hand-written 'paused' validate"
-  else bad "MUTANT no-enum-check SURVIVED on E ($r)"; fi
-  r="$(arm_raw V "$MUT_ENUM")"
-  if arm_holds V "$r"; then ok "T-no-enum-check twin V stays GREEN under mutant no-enum-check (a member of the enum still passes)"
-  else bad "T-no-enum-check twin V TRIPPED ($r) under mutant no-enum-check -- the matrix row moved"; fi
-fi
 
 # --- the closed set is READ FROM the schema, not restated --------------------
 # Mutate the schema's `enum` ARRAY and the accepted set has to move with it. A pattern restated in
@@ -329,15 +255,4 @@ usage_is_2 "a non-integer sprint" "needs <sprint-n> as a positive integer" nine 
 usage_is_2 "no reason at all"     "needs <reason>"                          902
 usage_is_2 "no sha at all"        "needs <sha>"                             902 reset
 
-echo
-# Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$MATRIX" = 0 ]; then
-  if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
-  else bad "MX plain run executed $MROWS matrix-only rows"; fi
-  _want=25
-else
-  if [ "$MROWS" -eq 7 ]; then ok "MX matrix run measured 7 mutant x arm cells (1 mutant x 7 arms)"
-  else bad "MX matrix run measured $MROWS cells, 7 expected"; fi
-  _want=24
-fi
-report_end audit-anchors-schema "$_want"
+report_end audit-anchors-schema 21

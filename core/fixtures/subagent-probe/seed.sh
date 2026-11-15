@@ -114,8 +114,8 @@ jq -nc '{type:"assistant", message:{model:"claude-opus-4-8",
 # "$_pad"` dies with `Argument list too long` at this size -- argv is capped by ARG_MAX
 # -- and because this script sets `pipefail` but not `-e`, the failure printed to a
 # stderr nobody reads and the seed carried on. The result was a 153-BYTE hugetail.jsonl:
-# the arm asserting the escalation was asserting the ordinary path, and it passed. Only
-# the mutant that deletes the escalation exposed it. `printf` is a bash builtin, so it
+# the arm asserting the escalation was asserting the ordinary path, and it passed.
+# `printf` is a bash builtin, so it
 # never execs and ARG_MAX does not apply; the payload is a fixed alphabet, so nothing
 # here needs quoting.
 _pad=XXXXXXXXXXXXXXXX

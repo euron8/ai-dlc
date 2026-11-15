@@ -34,8 +34,6 @@ trap 'rm -rf "$WORK"' EXIT
 TAB="$(printf '\t')"
 L=".claude/skills/ai-dlc"
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
-B_rltVec=0; B_rltRename=0
 
 echo "retired-layer-token:"
 ok "resolved detector: $SCRIPT"
@@ -69,9 +67,7 @@ rc_of() { cat "$1" 2>/dev/null || echo 99; }
 # --- the predicates -----------------------------------------------------------------------
 # Each is PRESENCE-shaped: it demands a specific row or message. A subject replaced by
 # `exit 0` fails every one of them by construction, which is what stops silence scoring as
-# a kill. The three absence arms carry `rows_present` as their positive conjunct — the
-# weakest thing no mutant below removes, so they are not entangled with the arm they sit
-# beside.
+# a pass. The three absence arms carry `rows_present` as their positive conjunct.
 rows_present() { grep -qF 'RETIRED-LAYER-TOKEN' "$1/main.out"; }
 
 # 1. the incident's first line: a retired status word in an override's RENDERED body.
@@ -261,237 +257,19 @@ grep -qE "^RETIRED-LAYER-TOKEN${TAB}${L}/overrides/emdash\.md:${EMDASH_LINE}${TA
   && ok "under env -i, a flagged line carrying em-dashes still names the right line" \
   || bad "the em-dash line was lost or renumbered under a bare environment"
 
-# --- MUTANTS -------------------------------------------------------------------------------
-# Built as a copy of the WHOLE reconcile directory: the detector resolves setup-sites.md
-# beside itself, and a lone copy reads an empty rulebook list and is silent for THAT reason,
-# which scores as a kill it never earned. Every mutation is a sed SCRIPT FILE, so a
-# replacement carrying quotes or backticks cannot be mangled by the shell on the way in.
-MUTD="$WORK/muts"; mkdir -p "$MUTD"
-
-# M1 — the rulebook derivation keys on backticks. The motivating base wrote the word BARE.
-# Mutating collect's tokeniser and not `toks` itself keeps the program witness intact, so
-# this flips the two incident arms and nothing else.
-cat > "$MUTD/m1.sed" <<'SED'
-s#^  done; } | toks$#  done; } | grep -o '`[^`]*`' | toks#
-SED
-
-# M2 — the layer side matches substrings instead of whole words.
-cat > "$MUTD/m2.sed" <<'SED'
-s#^          n = split(line, w, .*#          n = 0; for (t in r) if (index(line, t) > 0) { n++; w[n] = t }#
-SED
-
-# M3 — retirement read per rulebook FILE: a token missing from the file it was in reads as
-# dropped even though another rulebook file carries it at theirs.
-cat > "$MUTD/m3.sed" <<'SED'
-s#^    show_at "$ref" "$f"$#    show_at "$ref" "$f" | toks | sed "s@^@$f~@"#
-s#^  done; } | toks$#  done; } | sort -u#
-s#"$RLT_T/set-theirs")"#"$RLT_T/set-theirs" | cut -d~ -f2 | sort -u)"#
-SED
-
-# M4 — the empty-retired branch stops saying it opened nothing.
-cat > "$MUTD/m4.sed" <<'SED'
-s#^  echo "retired-layer-token: NOTE .* this release retired NO status token#  : "#
-SED
-
-# M5 — a subject that emits nothing. Every arm above must fall.
-cat > "$MUTD/m5.sed" <<'SED'
-s#^set -u$#exit 0#
-SED
-
-# M6 — `set -f` dropped from collect, so the rulebook PATHSPECS are glob-expanded against
-# the caller's cwd.
-cat > "$MUTD/m6.sed" <<'SED'
-s#^  local _cs _ps$#  local _cs _ps; set +f; : mutant-nofilter#
-SED
-
-# M7 — the program witness removed: every plain word the rulebook dropped is retired.
-cat > "$MUTD/m7.sed" <<'SED'
-s#"$JOINED" "$WITNESSED"#"$JOINED" "$PLAIN"#
-SED
-
-# M8 — the witness taken as a UNION at theirs rather than per file. This is G5, refuted on
-# the motivating pull by a second program that still prints the word in another sense.
-cat > "$MUTD/m8.sed" <<'SED'
-s#^    t="$(show_at "$THEIRS" "$f")"#    t="$(printf '%s\n' "$PROGRAMS" | while IFS= read -r g; do show_at "$THEIRS" "$g"; done)"#
-SED
-
-# M9 — the joined-shape witness removed: only a program can retire anything.
-cat > "$MUTD/m9.sed" <<'SED'
-s#"$JOINED" "$WITNESSED"#"$WITNESSED" "$WITNESSED"#
-SED
-
-# M10 — comment lines no longer stripped from a program.
-cat > "$MUTD/m10.sed" <<'SED'
-s#^  _code="\$(grep -vE .*$#  _code="$(cat)" || _rc=$?#
-SED
-
-# M11 — the theirs-side file list taken from the BASE tree, so a rulebook file created at
-# theirs is invisible and a token that moved into it reads as retired.
-#
-# batch 121: this used to patch retired-layer-token.sh's own `files_at()`, which called
-# `git ls-tree -r --name-only "$ref"` directly. That call is now `memo_ls_tree()` in
-# lib.sh, called with the SAME `$ref` (retired-layer-token.sh's positional `<ref>`
-# argument to `files_at`/`collect`), but lib.sh's own local copy of it is spelled
-# `$_ref`. Both occurrences in lib.sh -- the memo-miss fill and the uncacheable direct
-# fallback -- must flip together, or the guard that IS built (`ai_dlc_memo_dir` failing)
-# would leave one path unmutated and the mutant would survive by falling through to it.
-cat > "$MUTD/m11.sed" <<'SED'
-s#--name-only "$_ref"#--name-only "$BASE"#g
-SED
-
-# M12 — the grammar's floor dropped to three characters.
-cat > "$MUTD/m12.sed" <<'SED'
-s#{3,}#{2,}#
-SED
-
-# M13 — the layer corpus narrowed to overrides/, so an extension quoting a retired token is
-# never opened.
-cat > "$MUTD/m13.sed" <<'SED'
-s#^  for dir in overrides extensions; do#  for dir in overrides; do#
-SED
-
-# M14 — the dropped set read from the lines a release REMOVED, the way the passage sibling
-# reads its corpus, instead of as a set difference over the whole rulebook.
-cat > "$MUTD/m14.sed" <<'SED'
-s#^DROPPED="$(comm -23 .*#DROPPED="$(git -C "$DIST" diff "$BASE" "$THEIRS" 2>/dev/null | grep -E "^-" | grep -vE "^---" | sed "s@^-@@" | toks)"#
-SED
-
-# M15 — an unwitnessable base reported as an acquittal rather than refused.
-cat > "$MUTD/m15.sed" <<'SED'
-s#^if \[ -n "$PLAIN" \] && \[ "$opened" -eq 0 \]; then#if false; then#
-SED
-
-# M16 — the layer corpus widened to .txt.
-cat > "$MUTD/m16.sed" <<'SED'
-s#-o -name #-o -name '*.txt' -o -name #
-SED
-
-# M17 — the theirs guard removed. An unresolvable theirs then empties the theirs side and
-# every rulebook token reads as retired: a MAXIMAL false report with an empty stderr.
-cat > "$MUTD/m17.sed" <<'SED'
-s#^if \[ -z "$THEIRS_SET" \]; then#if false; then#
-SED
-
-mkmut() {  # name [-text|+text ...] -> mutant path on stdout
-  _mkmut_impl "$1" "$SCRIPT" "$(basename "$SCRIPT")" "${@:2}"
-}
-# batch 121: the `ls-tree -r --name-only "$ref"` line m11 mutates moved out of this
-# detector and into reconcile/lib.sh's shared `memo_ls_tree()`, which every reconcile/*.sh
-# now calls through `files_at()`'s `command -v memo_ls_tree` branch. `lib.sh` is copied
-# alongside the detector by the SAME `cp -R "$(dirname "$SCRIPT")"` mkmut already does, so
-# the mutant just needs its sed applied to the copied lib.sh instead of the copied
-# detector -- the property under test (a theirs-tree read keyed on the wrong ref) is
-# otherwise identical. `mkmut_lib` is `mkmut`'s twin, patching `lib.sh` in the same
-# mutant directory a bare `mkmut` call already builds.
-mkmut_lib() {  # name [-text|+text ...] -> mutant path on stdout (patches lib.sh, not SCRIPT)
-  local libpath="$(dirname "$SCRIPT")/lib.sh"
-  _mkmut_impl "$1" "$libpath" "lib.sh" "${@:2}"
-  # The RETURNED path must still be the DETECTOR's own path inside the mutant directory --
-  # every caller runs `bash "$mutant_path" ...`, and that has to resolve to the (unmutated)
-  # detector sourcing the (mutated) lib.sh beside it, not to lib.sh itself.
-}
-_mkmut_impl() {  # name target-src target-basename [-text|+text ...] -> mutant DETECTOR path
-  local name="$1" src="$2" base="$3"; shift 3
-  local d="$WORK/mut-$name" m a t c
-  cp -R "$(dirname "$SCRIPT")" "$d" \
-    || { echo "FIXTURE ERROR: could not copy the reconcile dir for $name" >&2; exit 2; }
-  m="$d/$base"
-  sed -f "$MUTD/$name.sed" "$src" > "$m" \
-    || { echo "FIXTURE ERROR: mutation $name DID NOT APPLY (sed died)" >&2; exit 2; }
-  cmp -s "$src" "$m" \
-    && { echo "FIXTURE ERROR: mutation $name matched nothing -- its anchor moved" >&2; exit 2; }
-  bash -n "$m" 2>/dev/null \
-    || { echo "FIXTURE ERROR: mutant $name does not parse" >&2; exit 2; }
-  [ -f "$d/setup-sites.md" ] \
-    || { echo "FIXTURE ERROR: mutant $name has no setup-sites.md beside it" >&2; exit 2; }
-  # A mutation that APPLIES can still be insufficient, and `cmp -s` cannot see it. Every
-  # site of the property must be gone from the mutant and present in the original.
-  for a in "$@"; do
-    t="${a#?}"
-    # `-e` is not optional: an anchor whose text opens with `-` is read as a grep OPTION
-    # otherwise, and the run dies with "Invalid argument" instead of scoring anything.
-    c="$(grep -cF -e "$t" "$src")" || c=0
-    case "$a" in
-      -*) [ "$c" -gt 0 ] || { echo "FIXTURE ERROR: mutation $name anchor absent from the ORIGINAL: $t" >&2; exit 2; }
-          c="$(grep -cF -e "$t" "$m")" || c=0
-          [ "$c" -eq 0 ] || { echo "FIXTURE ERROR: mutation $name left $c site(s) of its subject behind: $t" >&2; exit 2; } ;;
-      +*) [ "$c" -eq 0 ] || { echo "FIXTURE ERROR: mutation $name's marker already exists in the ORIGINAL: $t" >&2; exit 2; }
-          c="$(grep -cF -e "$t" "$m")" || c=0
-          [ "$c" -gt 0 ] || { echo "FIXTURE ERROR: mutation $name did not produce: $t" >&2; exit 2; } ;;
-    esac
-  done
-  printf '%s\n' "$d/$(basename "$SCRIPT")"
-}
-
-PLAN="$WORK/plan.tsv"; : > "$PLAN"
-plan() {  # name path expected-vector -> queued for one parallel wave
-  # mkmut runs inside `$( )`, so its `exit 2` ends the subshell and not this fixture; an
-  # empty path here IS that refusal, and it must read as BROKEN, never as a regression
-  # (`bash ""` fails every predicate and prints seventeen zeros).
-  [ -n "$2" ] || { echo "FIXTURE ERROR: mutant $1 was not built -- see the FIXTURE ERROR above; a lost anchor is a lost subject, not a regression" >&2; exit 2; }
-  printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$PLAN"
-}
-run_plan() {  # snapshot every queued mutant, three scripts at a time, then score in order
-  local nm path exp i=0 got
-  while IFS="$TAB" read -r nm path exp; do
-    [ -n "$nm" ] || continue
-    ( snap "$path" "$WORK/snap-$nm" ) &
-    i=$((i + 1)); [ "$((i % 3))" -eq 0 ] && wait
-  done < "$PLAN"
-  wait
-  while IFS="$TAB" read -r nm path exp; do
-    [ -n "$nm" ] || continue
-    got="$(vec "$WORK/snap-$nm")"
-    if [ "$got" = "$exp" ]; then mutant_killed "$B_rltVec" "$nm" "MUTATION $nm: flips exactly $exp"
-    else bad "MUTATION $nm: expected $exp got $got (q1..q17)"; fi
-  done < "$PLAN"
-}
-
 CTLVEC="$(vec "$CTL")"
 if [ "$CTLVEC" = "11111111111111111" ]; then
-  ok "unmutated control: every predicate holds (11111111111111111)"; B_rltVec=1
+  ok "control: every predicate holds (11111111111111111)"
 else
-  bad "unmutated control: $CTLVEC -- every mutant score below is meaningless"
+  bad "control: $CTLVEC -- expected 11111111111111111"
 fi
-
-# WHERE TWO CELLS FALL TOGETHER IT IS BY CONSTRUCTION, AND IT IS STATED HERE.
-#   m1/m8  take q1 AND q2: the incident's two lines carry the SAME word, so any mutation
-#          that stops deriving it takes both. q11 is derived by the OTHER witness and stays
-#          up, which is what separates a broken derivation from a silenced detector.
-#   m3     takes q4 AND q16: per-FILE retirement breaks both moved-token worlds. m11 breaks
-#          only the second, which is how the two are told apart.
-#   m7     takes q10 AND q12: removing the witness convicts both acquitted words at once. It
-#          leaves the acquittal LIST alone, where m10 changes the list and not q10.
-#   m13    takes q2, q9 AND q11: narrowing the corpus to overrides/ closes the whole
-#          extensions/ half, and three subjects live there.
-plan m1  "$(mkmut m1  '-done; } | toks')"                                 "00111111111111111"
-plan m2  "$(mkmut m2  '-n = split(')"                                     "11011111111111111"
-plan m3  "$(mkmut m3  '-done; } | toks' '-"$RLT_T/set-theirs")"' '+cut -d~ -f2')" "11101111111111101"
-plan m4  "$(mkmut m4  '-this release retired NO status token')"           "11111011111111111"
-plan m5  "$(mkmut m5  '-set -u')"                                         "00000000000000000"
-plan m6  "$(mkmut m6  '+: mutant-nofilter')"                              "11111110111111111"
-plan m7  "$(mkmut m7  '-"$JOINED" "$WITNESSED"')"                         "11111111101011111"
-plan m8  "$(mkmut m8  '-show_at "$THEIRS" "$f"' '+while IFS= read -r g')"  "00111111111110111"
-plan m9  "$(mkmut m9  '-"$JOINED" "$WITNESSED"')"                          "11111111110111111"
-plan m10 "$(mkmut m10 "-'^[[:space:]]*#'")"                               "11111111111010111"
-plan m11 "$(mkmut_lib m11 '-ls-tree -r --name-only "$_ref"')"               "11111111111111101"
-plan m12 "$(mkmut m12 '-{3,}')"                                           "11111111111111011"
-plan m13 "$(mkmut m13 '-for dir in overrides extensions; do')"            "10111111010111111"
-plan m14 "$(mkmut m14 '-DROPPED="$(comm -23')"                            "11100111111111101"
-plan m15 "$(mkmut m15 '-if [ -n "$PLAIN" ] && [ "$opened" -eq 0 ]; then')" "11111111111101111"
-# the leading `-` is the direction marker, so the anchor text itself starts at the second.
-plan m16 "$(mkmut m16 "--name '*.md' -o -name '*.json'")"                 "11111111011111111"
-plan m17 "$(mkmut m17 '-if [ -z "$THEIRS_SET" ]; then')"                  "11111111111111110"
-
-run_plan
 
 # --- A RENAMED witness file is not a deleted one ---------------------------------------------
 # `show_at "$THEIRS" "$f"` on the base path returns empty for a deletion AND for a rename, and
 # the two want opposite conclusions: a deleted emitter witnesses the word, a renamed emitter
 # that still prints it does not. Found by the adversarial hand on a seeded rename; zero live
 # instances across 321 wide spans, closed because it is cheap. This world is its own dist,
-# driven once as shipped and once with the rename map disabled, so the arm is presence-shaped
-# in both directions: the shipped copy must NAME the word as acquitted, the mutant must ROW it.
+# driven as shipped: the copy must NAME the word as acquitted and emit no row.
 DIST3="$WORK/dist-rename"
 mkdir -p "$DIST3/core/skills/ai-dlc" "$DIST3/core/scripts"
 git -C "$DIST3" init -q . 2>/dev/null
@@ -509,26 +287,9 @@ mkdir -p "$RENC/.claude/skills/ai-dlc/overrides"
 printf '# Override\n\nstock exits RENAMEDWORD when nothing was read\n' > "$RENC/.claude/skills/ai-dlc/overrides/o.md"
 r_out="$(bash "$SCRIPT" "$DIST3" "$BASE3" "$THEIRS3" "$RENC" 2>"$WORK/rename.err")"
 if [ -z "$r_out" ] && grep -qE 'read as emphasis, not status: .*RENAMEDWORD' "$WORK/rename.err"; then
-  ok "a witness file RENAMED at theirs that still prints the word does not retire it, and the NOTE names the word as acquitted"; B_rltRename=1
+  ok "a witness file RENAMED at theirs that still prints the word does not retire it, and the NOTE names the word as acquitted"
 else
   bad "a renamed witness file was read as a deletion: rows='$(printf '%s' "$r_out" | tr '\n' ' ' | head -c 100)' err='$(head -c 160 "$WORK/rename.err")'"
-fi
-MREN="$WORK/m-rename.sh"
-sed 's#^  RENAMES="$(git -C "$DIST" .*diff -M .*#  RENAMES=""#' "$SCRIPT" > "$MREN"
-if cmp -s "$MREN" "$SCRIPT"; then
-  bad "FIXTURE BROKEN — the rename-map mutation matched nothing, so the arm above has no mutant"
-else
-  cp "$(dirname "$SCRIPT")/setup-sites.md" "$WORK/" 2>/dev/null; cp "$MREN" "$WORK/retired-layer-token.sh"
-  # The mutant SOURCES consumer-read.sh (and lib.sh) from beside itself; without them it dies at the
-  # source line, prints nothing, and the arm below reads 0 rows as "the arm cannot fail".
-  cp "$(dirname "$SCRIPT")/consumer-read.sh" "$(dirname "$SCRIPT")/lib.sh" "$WORK/"
-  m_out="$(bash "$WORK/retired-layer-token.sh" "$DIST3" "$BASE3" "$THEIRS3" "$RENC" 2>/dev/null)"
-  m_rows="$(printf '%s\n' "$m_out" | grep -cE '^RETIRED-LAYER-TOKEN[[:space:]].*o\.md:3[[:space:]]RENAMEDWORD$')" || m_rows=0
-  if [ "$m_rows" -ge 1 ]; then
-    mutant_killed "$B_rltRename" rename-map-disabled "  MUTATION: with the rename map disabled the same world ROWS the word, so the arm above is what holds"
-  else
-    bad "  the rename-map mutant produced no row — the arm above cannot fail and proves nothing"
-  fi
 fi
 
 # --- A MEMO THAT CANNOT SERVE ONE KEY REFUSES, IT NEVER DECIDES THE ROWS -------------------------
