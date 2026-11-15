@@ -997,6 +997,12 @@ src_probe() {
 #       ... parts: ...` per lane, `LANE-ITEM: <n> <item>`, `FANIN: <item>`, `LANE-COUNT:`,
 #       `FANIN-COUNT:`. Not printed in a record mode, nor for a lane round's own join (`--artifact
 #       <name>-serial`): its escalations are the fan-in's, and lanes of lanes would recurse.
+#   (4c) THE PLAN FILE (BL-716). A join writes its record once and refuses to run again over it, so
+#       what it prints after the record is the only copy of the serial plan. Every line from
+#       `JOINED:` to the end of that output (the ESCALATED and SERIAL lines, every LANE, LANE-ITEM,
+#       FANIN and ADJUDICATE line, and the counts) is also written, byte for byte, to
+#       `<shard dir>/.join-plan`, and the join's LAST line is `PLAN-FILE: <shard dir>/.join-plan`.
+#       Read the plan from that file; a join over an existing record refuses and names it.
 #   (6) THE DISPOSITION KEY AND ITS VOCABULARY (BL-542). Every check above keys on an entry's
 #       `disposition:` line, so an entry that spells the key otherwise escaped all of them: graph's
 #       s319 requirements-d-answers-fold.md renamed it `outcome:` on six entries and joined at exit
@@ -3412,7 +3418,14 @@ if [ "$SUBJMODE" = 1 ]; then
   else SPEC_LINE="SPEC-RENDER: SKIP -- the split gave the SPEC no part, so no SPEC was repaired in this join"; fi
 fi
 
-[ -e "$OUT" ] && refuse "${OUT} already exists; a join never overwrites a repair record"
+PLAN="${SHARD_DIR}/.join-plan"
+if [ -e "$OUT" ]; then
+  if [ -f "$PLAN" ]; then
+    refuse "${OUT} already exists; a join never overwrites a repair record. Its serial plan (every line the join printed after JOINED:, the LANE, FANIN and ADJUDICATE lines included) is in ${PLAN}: read the plan there and dispatch from it, never re-run the join"
+  else
+    refuse "${OUT} already exists; a join never overwrites a repair record. No plan file is at ${PLAN}, so the join that wrote this record printed its plan only to its own output"
+  fi
+fi
 
 [ "$refuse_n" -eq 0 ] || exit 2
 
@@ -3500,18 +3513,31 @@ mv "$TMP" "$OUT" || { echo "REFUSED: could not move the joined record into ${OUT
 _jx=""
 [ -z "$RERUN" ] || _jx=", ${RR_SUPERSEDED} superseded rows"
 [ "$AL_N" = 0 ] || _jx="${_jx}, ${AL_N} alias rows"
+# THE PLAN FILE (header 4c): the lines below are captured once, printed, and written to $PLAN, so a
+# lead whose capture of this output is cut short, by a tail for one, reads the plan back from the file.
+# The plan: JOINED, then every escalated entry by part and the count, then the repaired edits whose
+# cross-file siblings and moved cites only the serial remediator can check; either count above 0
+# dispatches the serial remediator, in every mode, with every ESCALATED: line in its brief
+# (_gate-procedures.md, "Adversarial repair dispatch"); then the lanes, except in a lane round
+# (an artifact ending -serial). The substitution holds no comment and no case: bash 3.2 ends a
+# command substitution at the closing parenthesis of a case pattern.
+_plan="$(
 echo "JOINED: ${OUT} ($(printf '%s\n' "$PARTS" | grep -c .) parts, $(printf '%s\n' "$WRITERS" | grep -c .) writers${_jx})"
 [ -z "$NEST_LINES" ] || printf '%s' "$NEST_LINES"
-# Every escalated entry, by part, and the count; then the repaired edits whose cross-file siblings
-# and moved cites only the serial remediator can check. Either count above 0 dispatches the serial
-# remediator, in every mode, with every ESCALATED: line in its brief (_gate-procedures.md,
-# "Adversarial repair dispatch").
 printf '%s' "$ESC_LINES"
 echo "ESCALATED-COUNT: ${ESC_N}"
 printf '%s' "$GAP_LINES"
 echo "SERIAL-REQUIRED: ${SERIAL_N}"
-case "$ARTIFACT" in *-serial) ;; *) lane_report ;; esac
+[ "${ARTIFACT%-serial}" = "$ARTIFACT" ] && lane_report
 [ -z "$SPEC_LINE" ] || printf '%s\n' "$SPEC_LINE"
+)"; _prc=$?
+printf '%s\n' "$_plan"
+[ "$_prc" = 0 ] || exit "$_prc"
+if printf '%s\n' "$_plan" > "${PLAN}.join.$$" && mv "${PLAN}.join.$$" "$PLAN"; then
+  echo "PLAN-FILE: ${PLAN}"
+else
+  echo "NOTE: the plan file ${PLAN} was not written; the lines above are the only copy of the plan" >&2
+fi
 exit 0
 }
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0

@@ -714,14 +714,21 @@ if sg v; then
 #       with NOTE finish-classify-unrecorded (the fix cannot fire on the pull that delivers it)
 # Cell: "<Vu stamp>|<Vu row>|<Vm stamp>|<Vr stamp>|<Vo stamp>|<Vo note>" ; a world whose ordinary run moved
 # the schema, or drew no semantic-merge row, is BROKEN.
-v_drive() { # v_drive <reconcile-dir> <u|m|r|o> -> "<stamp>|<unmerged row?>|<unrecorded note?>"
-  local rec="$1" w b t sch h0 o fo
-  w="$(t_aworld 1)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+v_base() { # v_base <reconcile-dir> -> V0: arm t's Ap world after its ONE ordinary run, which every world below copies
+  local w b t sch h0 o
+  V0=""
+  w="$(t_aworld 1)" && [ -d "$w/cons" ] || return 1
   b="$(cat "$w/.B")"; t="$(cat "$w/.T")"; sch="$w/cons/.claude/schemas/provenance-block.json"
-  h0="$(git hash-object "$sch")" || { printf 'BROKEN'; return; }
-  o="$(bash "$rec/apply.sh" "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  h0="$(git hash-object "$sch")" || return 1
+  o="$(bash "$1/apply.sh" "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
   awk -F'\t' '$1=="WORKLIST" && $2=="semantic-merge" && $3=="schemas/provenance-block.json" {f=1} END {exit !f}' <<<"$o" \
-    && [ "$(git hash-object "$sch")" = "$h0" ] || { printf 'BROKEN'; return; }
+    && [ "$(git hash-object "$sch")" = "$h0" ] || return 1
+  V0="$w"
+}
+v_drive() { # v_drive <reconcile-dir> <u|m|r|o> -> "<stamp>|<unmerged row?>|<unrecorded note?>", on a copy of V0
+  local rec="$1" w b t sch fo
+  [ -n "${V0:-}" ] && w="$(mktemp -d "$WORK/v.XXXXXX")" && cp -Rp "$V0/." "$w/" || { printf 'BROKEN'; return; }
+  b="$(cat "$w/.B")"; t="$(cat "$w/.T")"; sch="$w/cons/.claude/schemas/provenance-block.json"
   case "$2" in
     m|r) printf '{\n  "known_skills": [\n    "bmad-party-mode",\n    "my-persona-skill"\n  ]\n}\n' > "$sch" || { printf 'BROKEN'; return; } ;;
   esac
@@ -735,6 +742,7 @@ v_drive() { # v_drive <reconcile-dir> <u|m|r|o> -> "<stamp>|<unmerged row?>|<unr
 }
 v_score() { # v_score <reconcile-dir> [worlds] -> the cell above (`.` for a world not asked for), or BROKEN
   local rec="$1" ws=" ${2:-vU vM vR vO} " c1=. c2=. c3=. c4=. c5=. c6=. x
+  v_base "$rec" || { printf 'BROKEN'; return; }
   case "$ws" in *" vU "*) x="$(v_drive "$rec" u)"; [ "$x" = BROKEN ] && { printf 'BROKEN'; return; }; c1="${x%%|*}"; c2="$(printf '%s' "$x" | cut -d'|' -f2)" ;; esac
   case "$ws" in *" vM "*) x="$(v_drive "$rec" m)"; [ "$x" = BROKEN ] && { printf 'BROKEN'; return; }; c3="${x%%|*}" ;; esac
   case "$ws" in *" vR "*) x="$(v_drive "$rec" r)"; [ "$x" = BROKEN ] && { printf 'BROKEN'; return; }; c4="${x%%|*}" ;; esac
@@ -806,9 +814,19 @@ y_two() { # y_two <world> -- m.sh and n.sh, both changed by theirs at T and by t
   printf 'a-C\nb\nc\n' > "$1/cons/scripts/ai-dlc/m.sh"; printf 'a-C\nb\nc\n' > "$1/cons/scripts/ai-dlc/n.sh"
   y_stampat "$1"
 }
+y_post() { # y_post <rec> -> YP0: a y_two world after its ONE ordinary run at T, which worlds d, l and f copy
+  local w
+  YP0=""
+  w="$(y_init)" && [ -d "$w/cons" ] && y_two "$w" || return 1
+  y_run "$1" "$w" T | y_sm scripts/m.sh || return 1
+  YP0="$w"
+}
 y_drive() { # y_drive <rec> <m|p|s|d|x|l|n> -> that world's cell, or BROKEN
   local rec="$1" w o fo M="a-C\nb\nc-T\n"
-  w="$(y_init)" && [ -d "$w/cons" ] || { printf BROKEN; return; }
+  case "$2" in
+    d|l|f) [ -n "${YP0:-}" ] && w="$(mktemp -d "$WORK/y.XXXXXX")" && cp -Rp "$YP0/." "$w/" || { printf BROKEN; return; } ;;
+    *) w="$(y_init)" && [ -d "$w/cons" ] || { printf BROKEN; return; } ;;
+  esac
   case "$2" in
     m)
       printf '#!/bin/sh\necho base\n' > "$w/dist/core/scripts/x.sh"; chmod 644 "$w/dist/core/scripts/x.sh"
@@ -840,8 +858,6 @@ y_drive() { # y_drive <rec> <m|p|s|d|x|l|n> -> that world's cell, or BROKEN
       printf 'a-C\nb\nc-T\nd-T2\n' > "$w/cons/scripts/ai-dlc/m.sh"
       y_run "$rec" "$w" T2 --finish >/dev/null; y_stamp "$w" ;;
     d)
-      y_two "$w" || { printf BROKEN; return; }
-      y_run "$rec" "$w" T | y_sm scripts/m.sh || { printf BROKEN; return; }
       # The previous engine's marker: `base:` and `theirs:` and nothing else.
       printf 'base: %s\ntheirs: %s\n' "$(cat "$w/.B")" "$(cat "$w/.T")" > "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
       printf "$M" > "$w/cons/scripts/ai-dlc/m.sh"
@@ -862,8 +878,6 @@ y_drive() { # y_drive <rec> <m|p|s|d|x|l|n> -> that world's cell, or BROKEN
       fo="$(y_run "$rec" "$w" T --finish)"
       printf '%s/%s' "$(y_stamp "$w")" "$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-classify-unmerged" {n++} END {print n+0}' <<<"$fo")" ;;
     l)
-      y_two "$w" || { printf BROKEN; return; }
-      y_run "$rec" "$w" T | y_sm scripts/m.sh || { printf BROKEN; return; }
       grep -q '	scripts/ai-dlc/m\.sh$' "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
       awk '!/^classify: .*\tscripts\/ai-dlc\/m\.sh$/' "$w/cons/.claude/.ai-dlc-applying" > "$w/mk" \
         && cat "$w/mk" > "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
@@ -873,8 +887,6 @@ y_drive() { # y_drive <rec> <m|p|s|d|x|l|n> -> that world's cell, or BROKEN
       y_run "$rec" "$w" T --finish >/dev/null
       printf '%s>%s:%s' "$o" "$(y_stamp "$w")" "$([ -e "$w/cons/.claude/.ai-dlc-applying" ] && echo kept || echo gone)" ;;
     f)
-      y_two "$w" || { printf BROKEN; return; }
-      y_run "$rec" "$w" T | y_sm scripts/m.sh || { printf BROKEN; return; }
       [ -f "$w/cons/.claude/.ai-dlc-applying" ] || { printf BROKEN; return; }
       mv "$w/cons/.claude/.ai-dlc-applying" "$w/marker.saved" && mkdir "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
       fo="$(y_run "$rec" "$w" T --finish)"
@@ -890,6 +902,7 @@ y_drive() { # y_drive <rec> <m|p|s|d|x|l|n> -> that world's cell, or BROKEN
 }
 y_score() { # y_score <reconcile-dir> [<case>...] -> "|"-joined cells, or BROKEN
   local c g out=""
+  case " ${2:-d} " in *" d "*|*" l "*|*" f "*) y_post "$1" || { printf BROKEN; return; } ;; esac
   for c in ${2:-m p s d x l n f}; do
     g="$(y_drive "$1" "$c")"
     [ "$g" = BROKEN ] && { printf BROKEN; return; }

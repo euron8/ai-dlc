@@ -1,2 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-142 *
+# 142 to 124, BL-1059: arm y's worlds d, l and f copy one y_two world after its ordinary run at T (y_post)
+# instead of each building and running it. From one counted run through core/scripts/hermetic-run.sh.
+124 *

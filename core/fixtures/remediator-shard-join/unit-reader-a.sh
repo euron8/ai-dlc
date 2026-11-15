@@ -372,6 +372,8 @@ p_adjthree "$JOIN" && ok "LN11: three fan-in items -> no ADJUDICATE line, ADJUDI
   || bad "LN11: three items were dealt (rc=$RC): $(grep -E '^(FANIN|ADJUDICAT)' "$JO")"
 p_adjcap "$JOIN" && ok "LN12: eleven fan-in items -> k capped at 4, no batch over 3, ADJUDICATOR-COUNT: 4" \
   || bad "LN12: eleven items were not dealt into four batches (rc=$RC): $(grep -E '^(FANIN|ADJUDICAT)' "$JO")"
+if p_planfile "$JOIN"; then ok "LN17: the join's last line is PLAN-FILE naming <shard dir>/.join-plan, which holds every line from JOINED: on byte for byte (fan-in dealt 2/2); a re-join refuses naming that file; with it gone the refusal says no plan file is there"
+else bad "LN17: the plan file failed at case ${RPLAN:-?} (rc=$RC): $(tail -n 3 "$JO")"; fi
 if p_escown "$JOIN"; then ok "LN13: an escalation naming an unedited story in the slot -> a lane of its own, the escalation its LANE-ITEM, not FANIN"
 else bad "LN13: the unedited-file escalation was not a lane (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"; fi
 p_escnear "$JOIN" && ok "LN14: the same escalation naming an absent story, a file outside the slot, or two part lanes' files -> FANIN, LANE-COUNT: 2 (no lane added, none merged)" \

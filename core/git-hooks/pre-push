@@ -2796,9 +2796,9 @@ run_fixtures() {
   # report below are both taken from "$out/list" and never from the dispatch order.
   cp "$out/list" "$out/.order"
   if [ -s "$DURATIONS_RECORD" ]; then
-    awk 'NR==FNR { if (NF == 2) prev[$1] = $2; next }
+    awk 'NR==FNR { if (NF == 2) { k = $1; if (sub(/@red$/, "", k)) red[k] = $2; else prev[k] = $2 }; next }
          { b = $0; sub(/\/$/, "", b); sub(/.*\//, "", b); sub(/@consumer$/, "", b)
-           print ((b in prev) ? prev[b] : 999999) " " $0 }' \
+           print ((b in prev) ? prev[b] : ((b in red) ? red[b] : 999999)) " " $0 }' \
         "$DURATIONS_RECORD" "$out/list" 2>/dev/null \
       | sort -k1,1nr | cut -d' ' -f2- > "$out/.order.lpt" 2>/dev/null
     n_ordered="$(grep -c . "$out/.order.lpt" 2>/dev/null)"
@@ -3019,7 +3019,9 @@ run_fixtures() {
     fi
     [ -f "$pr.refused" ] || printf "%s %s\n" "$b" "$SECONDS" > "$AI_DLC_FX_OUT/.dur/$b"
     printf "%s\n" "$b" >> "$AI_DLC_FX_OUT/.done"
-    printf "   done %s/%s  %s %s\n" "$(grep -c . "$AI_DLC_FX_OUT/.done" 2>/dev/null)" "$AI_DLC_FX_TOTAL" "$(cat "$AI_DLC_FX_OUT/$b" 2>/dev/null)" "$b"
+    dn=0; while IFS= read -r dl; do [ -z "$dl" ] || dn=$((dn + 1)); done 2>/dev/null < "$AI_DLC_FX_OUT/.done"
+    dv=""; read -r dv 2>/dev/null < "$AI_DLC_FX_OUT/$b"
+    printf "   done %s/%s  %s %s\n" "$dn" "$AI_DLC_FX_TOTAL" "$dv" "$b"
     : > "$pr.k"
   ' _ {} < "$out/.order"
   } &
@@ -3105,19 +3107,20 @@ run_fixtures() {
   # row is not harmless: this record is where the slowest fixture is read off, and old rows
   # for deleted fixtures sat at the top of it. FXROOT, not a literal path, because this
   # code is shared byte-for-byte with the distribution's hook, whose fixtures live elsewhere.
-  # A RUN WITH ANY RED FIXTURE RECORDS NO COSTS. Even the fixtures that passed in it were timed
-  # under that run's conditions, and a cost recorded from a run that went wrong elsewhere can be
-  # several times the fixture's real cost -- which then puts it at the front of every later run.
-  # The trade: a fixture that has only ever run inside red runs keeps its old cost, or none,
-  # until a green run times it.
+  # A RUN WITH ANY RED FIXTURE RECORDS ITS COSTS UNDER `<fixture>@red`, never over a clean row. The
+  # fixtures that passed in it were timed under that run's conditions and the failing ones may have
+  # stopped early, so a red figure is kept but never displaces a green one: the ordering step reads
+  # `<fixture>@red` only for a fixture with no clean row. A fixture that was refused, or gave no
+  # verdict, records nothing. The prune tests the name with `@red` stripped.
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
+  dur_sfx=""; [ "$rc" -eq 0 ] || dur_sfx=@red
   # The merge reads the record and writes it back, so it runs under the record's lock: two pushes
   # merging at once would otherwise each drop the rows the other timed.
-  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then
+  if [ -s "$out/.durations" ]; then
     if rec_lock "$DURATIONS_RECORD.lock"; then
-      { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
+      { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; awk -v s="$dur_sfx" 'NF == 2 { print $1 s, $2 }' "$out/.durations"; } 2>/dev/null \
         | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
-        | while read -r k v; do [ -f "${FXROOT}${k%@consumer}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
+        | while read -r k v; do kb="${k%@red}"; [ -f "${FXROOT}${kb%@consumer}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
         | sort > "$out/.merged"
       [ -s "$out/.merged" ] && rec_put "$out/.merged" "$DURATIONS_RECORD"
       rec_unlock "$DURATIONS_RECORD.lock"
@@ -3141,7 +3144,7 @@ run_fixtures() {
   # "$out/.durations" is exactly the units this pool timed, whereas "$out/.merged" above has
   # already absorbed rows from earlier runs. `.last` is this run's own measurement and is read
   # only by the pole line, so it is true on a red run too; gating it on `rc` made a red run
-  # print "no suite run, no pole". The merged record above steers dispatch and stays green-only.
+  # print "no suite run, no pole". The merged record above steers dispatch; a red run's rows there carry `@red`.
   # LASTRUN_OWN is the same figures held in this process: the shared file can be another push's by the
   # time a reader opens it, so this run's pole line reads the variable, never the file.
   if [ -s "$out/.durations" ]; then rec_put "$out/.durations" "$LASTRUN_RECORD"; LASTRUN_OWN="$(cat "$out/.durations")"; fi

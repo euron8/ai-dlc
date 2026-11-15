@@ -41,10 +41,10 @@
 #
 # WHAT THE REMEDY STATES DO TO THE ARMS (this is the fixture's whole claim):
 #
-#   (a) unfixed                A1 A2 A3 A4 all FAIL
+#   (a) unfixed                A1 A2 A3 A4 A5 all FAIL
 #   (b) flag added only        A1 A2 A4 FAIL   (A3 passes: the flag reaches the no-block
 #                                               rung at the legacy path, and only that one)
-#   (c) all five paths, no flag   all pass
+#   (c) all five paths, no flag   A5 FAILS
 #   (d) paths + flag           all pass
 #
 # TWO SEEDED REPOS, AND THEY MUST STAY TWO.
@@ -133,7 +133,7 @@ if [ -z "$WF" ] || [ -z "$VP" ] || [ -z "$SCHEMA" ]; then
     [ -z "$SCHEMA" ] && miss="$miss provenance-block.json"
     for a in "A1 trigger paths" "A2 changed-set filter + sprint extraction" \
              "A3 blockless retro rejected" "A4 transcript_path required" \
-             "A6 compliant retro accepted" \
+             "A5 caller declares its own requirement" "A6 compliant retro accepted" \
              "A7 empty extraction hard-fails"; do
         skip "$a — subject absent in both layouts:$miss"
     done
@@ -146,7 +146,7 @@ trap 'rm -rf "$WORK"' EXIT
 SEED="$WORK/seed"
 mkdir -p "$SEED"
 if ! bash "$HERE/seed.sh" "$SEED" >/dev/null 2>"$WORK/seed.err"; then
-    for a in "A1" "A2" "A3" "A4" "A6" "A7"; do
+    for a in "A1" "A2" "A3" "A4" "A5" "A6" "A7"; do
         skip "$a — seed unavailable: $(tr -d '\n' < "$WORK/seed.err")"
     done
     exit 0
@@ -365,6 +365,29 @@ arms() {
         esac
     done
 
+    # --- A5 the caller declares its own requirement ----------------------------
+    # The only arm that separates state (c) from (d). On the real validator every rung the
+    # flag reaches is also reached by is_retro at the migrated path, so no seeded document
+    # can tell them apart. What differs is what the STEP passes, so A5 drives the step
+    # against a stand-in validator that records its argv and exits 0, and requires the
+    # argv to carry `--require-skill bmad-party-mode`. Presence-shaped: a stand-in that was
+    # never reached leaves no argv, and that is its own failure.
+    local ra="$WORK/${tag}.argv"
+    rm -rf "$ra"
+    printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\n" "$@" > .argv' 'exit 0' > "$WORK/argv-stub.sh"
+    if ! build_repo "$ra" "$SEED/docs/blockless.md" both "$WORK/argv-stub.sh" >/dev/null; then
+        echo "A5:fail:could not build the argv repo (fixture broken, not a finding)"
+    else
+        r="$(drive_provenance "$wf" "$ra" 302)"
+        if [ "$r" != 0 ] || [ ! -s "$ra/.argv" ]; then
+            echo "A5:fail:the stand-in validator was not reached (rc=$r, argv $( [ -s "$ra/.argv" ] && echo present || echo absent )) — harness, not subject"
+        elif awk 'p == "--require-skill" && $0 == "bmad-party-mode" { f = 1 } { p = $0 } END { exit !f }' "$ra/.argv"; then
+            echo "A5:pass"
+        else
+            echo "A5:fail:the step called the validator with [$(tr '\n' ' ' < "$ra/.argv")] and no --require-skill bmad-party-mode — it depends on RETRO_PATH_RE in another file and declares no requirement of its own"
+        fi
+    fi
+
     # --- A7 the empty extraction is a HARD FAIL, and only when retros changed --
     # A2 asserts that a canonical retro RESOLVES. It cannot see what happens when one does
     # not, and that is the whole silent-skip class: a step that writes `sprint=` and exits 0
@@ -409,14 +432,14 @@ probe_fixed="$(arms "$SEED/probe-fixed.yml"  pfixed)"
 n_leg_fail="$(grep -c ':fail:' <<<"$probe_legacy")"
 n_fix_fail="$(grep -c ':fail:' <<<"$probe_fixed")"
 
-# Offender direction: the synthetic legacy workflow must trip A1 A2 A3 A4 A7 — each named,
+# Offender direction: the synthetic legacy workflow must trip A1 A2 A3 A4 A5 A7 — each named,
 # because "five findings" would also be satisfied by five copies of one finding.
 p_missing=""
-for id in A1 A2 A3 A4 A7; do
+for id in A1 A2 A3 A4 A5 A7; do
     grep -q "^${id}:fail:" <<<"$probe_legacy" || p_missing="$p_missing $id"
 done
 if [ -z "$p_missing" ]; then
-    ok "P1 self-probe: the synthetic LEGACY workflow trips A1 A2 A3 A4 A7 by name"
+    ok "P1 self-probe: the synthetic LEGACY workflow trips A1 A2 A3 A4 A5 A7 by name"
 else
     bad "P1 self-probe: the synthetic LEGACY workflow did NOT trip$p_missing — those arms cannot fire, and a clean corpus run would mean nothing"
     sed 's/^/        /' <<<"$probe_legacy" >&2
@@ -426,10 +449,10 @@ fi
 # token to be PRESENT. Measured twice elsewhere in this repo, a control asserting only
 # rc=0-and-no-findings passes against a subject replaced by `exit 0`.
 n_fix_tok="$(grep -c '^A[1-7]:' <<<"$probe_fixed")"
-if [ "$n_fix_fail" = 0 ] && [ "$n_fix_tok" = 6 ]; then
-    ok "P2 self-probe: the synthetic FIXED workflow trips nothing, and all 6 arms reported"
-elif [ "$n_fix_tok" != 6 ]; then
-    bad "P2 self-probe: only $n_fix_tok of 6 arms produced a verdict — arms went silent, which is not the same as passing"
+if [ "$n_fix_fail" = 0 ] && [ "$n_fix_tok" = 7 ]; then
+    ok "P2 self-probe: the synthetic FIXED workflow trips nothing, and all 7 arms reported"
+elif [ "$n_fix_tok" != 7 ]; then
+    bad "P2 self-probe: only $n_fix_tok of 7 arms produced a verdict — arms went silent, which is not the same as passing"
 else
     bad "P2 self-probe: the synthetic FIXED workflow tripped $n_fix_fail arm(s); the arms are over-broad"
     grep ':fail:' <<<"$probe_fixed" | sed 's/^/        /' >&2
@@ -472,11 +495,12 @@ name_of() {
         A2) echo "A2 the changed-set filter and the sprint extraction resolve a sprint number" ;;
         A3) echo "A3 a blockless retro is REJECTED" ;;
         A4) echo "A4 a party-mode block with no transcript_path is REJECTED" ;;
+        A5) echo "A5 the step declares its own requirement (--require-skill bmad-party-mode reaches the validator)" ;;
         A6) echo "A6 a compliant retro is ACCEPTED" ;;
         A7) echo "A7 a changed retro that yields no sprint HARD-FAILS, and an unrelated PR does not" ;;
     esac
 }
-for id in A1 A2 A3 A4 A6 A7; do
+for id in A1 A2 A3 A4 A5 A6 A7; do
     line="$(grep "^${id}:" <<<"$real" | head -n 1)"
     if [ -z "$line" ]; then
         bad "$(name_of "$id") — the arm produced no verdict at all"

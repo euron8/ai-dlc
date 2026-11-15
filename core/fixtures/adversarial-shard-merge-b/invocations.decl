@@ -4,6 +4,8 @@
 # the base-pass fills of the arms it does not own (bf_fill), so the four * rows sum above the unsharded 3125; the merge row's four values sum to the
 # unsharded 53. The older measurement history above belongs to the unsharded fixture.
 # Re-measured for BL-1099 (units re-dealt so the dist-only shards hold no placement-dependent unit): one counted run (scripts/seed-verdict-store.sh).
-629 *
+# 629 to 438, BL-1059: p_xgroups (X1-X3) builds each mode's K=8 groups world and lone-cross world once (wc_get xg-<mode>-<shape>)
+# and copies it per cell, instead of writing every shard afresh per cell. From one counted run through core/scripts/hermetic-run.sh.
+438 *
 0 core/scripts/merge-adversarial-shards.sh
 120 core/scripts/content-seal.sh

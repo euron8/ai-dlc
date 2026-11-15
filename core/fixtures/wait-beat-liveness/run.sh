@@ -3062,6 +3062,80 @@ S29q_agent_reused_in_new_join_breaks_again() {
   else bad "dispatch-failed: an agent reused in a new join lost its early break or refund, or join 1 kept its sidecar [${dfx_bad_# }] (rc=$RC, virtual seconds: $DFX_EL): $OUT"; fi
 }
 
+# ===========================================================================
+# 30. A ROLE-LESS SPAWN'S DISPATCH TIME IS ITS Agent tool_use LINE (BL-975). The guard writes no
+#     ledger row for a role-less spawn, so a lead beat over a round-dispatcher's return file refused
+#     `--dispatch` (0 rows) and was re-armed without it: the dispatcher had no DISPATCH FAILED arm.
+#     The lead transcript `<sess>.jsonl` carries one Agent tool_use line per spawn, in the harness's
+#     key order. Seeds, in this order (the subject is not first): a launched role-less epoch spawn, a
+#     guard-denied role-bound spawn (no meta.json), the launched role-less dispatcher, a guard-denied
+#     role-less spawn (no meta.json), two launched spawns with no row that name a role one way each
+#     (`subagent_type` only, `team-roles/` only), and a launched role-less spawn on two lines. Only the
+#     two launched role-less spawns resolve, each to its own line's stamp cut to the second; the
+#     other three keep the 0-row refusal. One beat over the dead dispatcher names it FAILED.
+# ===========================================================================
+S30_X=a975d15c00000e005; S30_E=a975e90c00000e006; S30_R=a975b0d000000e007
+s30_spawn() {  # $1 = tool_use_id, $2 = age, $3 = roleless|role|stype|troles, $4 = agent id to launch ('' = guard-denied)
+  ss_t_="$(df_iso_ms "$2" 273)"
+  case "$3" in
+    roleless) ss_in_='{"description":"Run sprint-review party round","prompt":"You are a round-dispatcher.","run_in_background":true}' ;;
+    role) ss_in_='{"description":"Party PM seat","prompt":"Read .claude/team-roles/pm.md first.","subagent_type":"pm","run_in_background":true}' ;;
+    stype) ss_in_='{"description":"Party PM seat","prompt":"You are the PM seat.","subagent_type":"pm","run_in_background":true}' ;;
+    troles) ss_in_='{"description":"Party PM seat","prompt":"Read .claude/team-roles/pm.md first.","run_in_background":true}' ;;
+  esac
+  printf '{"parentUuid":"p0","isSidechain":false,"message":{"id":"msg_s30","type":"message","role":"assistant","content":[{"type":"tool_use","id":"%s","name":"Agent","input":%s}],"stop_reason":"tool_use"},"type":"assistant","uuid":"u%s","timestamp":"%s"}\n' \
+    "$1" "$ss_in_" "$2" "$ss_t_" >> "$W/sess.jsonl" || broken "cannot write the section 30 lead transcript"
+  [ -z "$4" ] || printf '{"agentType":"general-purpose","isBuiltIn":true,"description":"Run sprint-review party round","toolUseId":"%s","spawnDepth":1}\n' "$1" \
+    > "$TD/agent-$4.meta.json" || broken "cannot write the section 30 meta.json"
+}
+S30_roleless_dispatch_ts() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world
+  s30_spawn toolu_s30epoch 1900 roleless "$S30_E"
+  s30_spawn toolu_s30denrole 1800 role ""
+  s30_spawn toolu_s30disp 1700 roleless "$S30_X"
+  s30_spawn toolu_s30denless 1650 roleless ""
+  s30_spawn toolu_s30stype 1600 stype "$S30_R"
+  s30_spawn toolu_s30troles 1590 troles a975b0d000000e008
+  s30_spawn toolu_s30dup 1580 roleless a975d0b000000e009
+  s30_spawn toolu_s30dup 1570 roleless ""
+  # A compaction later in the same session: the transcript keeps the Agent lines above it.
+  printf '{"parentUuid":null,"logicalParentUuid":"u1600","isSidechain":false,"type":"system","subtype":"compact_boundary","content":"Conversation compacted","compactMetadata":{"trigger":"auto"},"uuid":"c1","timestamp":"%s"}\n' \
+    "$(df_iso_ms 1550 100)" >> "$W/sess.jsonl" || broken "cannot write the section 30 compaction line"
+  s30_x_="$(df_iso_ms 1700 273)"; s30_x_="${s30_x_%.273Z}Z"
+  s30_e_="$(df_iso_ms 1900 273)"; s30_e_="${s30_e_%.273Z}Z"
+  s30_bad_=""
+  r28_ts "$SUBJ" "$S30_X" "$TD"
+  { [ "$RC" -eq 0 ] && [ "$R28_OUT" = "$s30_x_" ] && [ -z "$R28_ERR" ]; } || s30_bad_="$s30_bad_ agentid[$OUT]"
+  r28_ts "$SUBJ" toolu_s30disp "$TD"
+  { [ "$RC" -eq 0 ] && [ "$R28_OUT" = "$s30_x_" ]; } || s30_bad_="$s30_bad_ toolu[$OUT]"
+  r28_ts "$SUBJ" "$S30_E" "$TD"
+  { [ "$RC" -eq 0 ] && [ "$R28_OUT" = "$s30_e_" ]; } || s30_bad_="$s30_bad_ epoch[$OUT]"
+  for s30_d_ in toolu_s30denless toolu_s30denrole toolu_s30stype toolu_s30troles toolu_s30dup; do
+    r28_refuse_arm "$SUBJ" "$s30_d_" "$TD" "the ledger holds 0 row(s) for tool_use_id $s30_d_, not one" \
+      || s30_bad_="$s30_bad_ $s30_d_[$OUT]"
+  done
+  if [ -z "$s30_bad_" ]; then
+    ok "dispatch-ts: a launched role-less spawn with no ledger row prints its own Agent tool_use stamp cut to the second ($s30_x_ by agentId and by toolu_ id; the epoch spawn $s30_e_), while a guard-denied role-less, a guard-denied role-bound, a launched spawn naming only a subagent_type, one naming only a team-roles/ path and a launched role-less id on two lines each keep the 0-row refusal"
+  else bad "dispatch-ts: the role-less fallback answered wrongly [${s30_bad_# }]"; fi
+  df_tx "$S30_X" user:1690 assistant:1680 req:1500
+  df_beat "$DFS" --dispatch "$S30_X" _bmad-output/planning-artifacts/s1/rounds/r1.return
+  if [ "$RC" -eq 0 ] && has "${DF_HDR}$S30_X (Run sprint-review party round)" \
+     && has "  arm B: its last record is an api-request sent 1500s ago with no reply (bound 1200s)"; then
+    ok "dispatch-failed: a lead beat over a round-return file armed with --dispatch <role-less dispatcher> names the dead dispatcher FAILED by arm B"
+  else bad "dispatch-failed: a beat on a dead role-less dispatcher did not name it FAILED (rc=$RC): $OUT"; fi
+  # A LATER session re-arms with `--since <epoch>` alone: its own subagents dir holds no meta.json and
+  # its transcript no Agent line for the dispatcher, and the beat waits exactly as before the fallback.
+  TD="$W/sess2/subagents"; mkdir -p "$TD" || broken "cannot create the section 30 later session"
+  rm -rf "$W/_bmad-output/.wait-beats"; mkdir -p "$W/_bmad-output/.wait-beats" || broken "cannot reset the section 30 beats"
+  df_beat "$DFS" --since "$(( $(fx_now "$W") - 1800 ))" _bmad-output/planning-artifacts/s1/rounds/r1.return
+  if [ "$RC" -eq 0 ] && has "WAITING   _bmad-output/planning-artifacts/s1/rounds/r1.return" \
+     && ! has "$DF_HDR" && ! has "FAIL:"; then
+    ok "dispatch-failed: a later session's beat over the same return file with --since alone still WAITS (rc 0), with no refusal and no FAILED block"
+  else bad "dispatch-failed: a later session's --since-alone beat did not wait as before (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE WIRING, END TO END: ONE CLI RUN PER DISTINCT OUTCOME, EACH HELD BYTE-IDENTICAL TO wbl_ip.
 # Every cell above calls the subject in process. This is where `bash wait-for-deliverable.sh` still

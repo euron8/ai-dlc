@@ -26,7 +26,6 @@ paste
 cmp
 diff
 xargs
-python3
 comm
 uniq
 date

@@ -372,18 +372,25 @@ xk_of() { # <mode> <shard dir> -> the unit count the merge will read
     elicit) grep -c . "$(subj_root "$(dirname "$2")/requirements-p1")/subject.map" ;;
   esac
 }
+# xg_build <mode> <K> <groups|single> -> a K=8 shard dir of that mode holding every shard of that cross shape. Built
+# once per (mode, shape) through wc_get; every later cell of p_xgroups edits its own copy.
+xg_build() {
+  local d; d="$(xworld "$1" 8)" || return 1
+  xset "$1" "$d" "$2" "$3"; printf '%s' "$d"
+}
+xg_world() { wc_get "xg-$1-$3" xg_build "$1" "$2" "$3"; }
 # p_xgroups <merge> <mode>: the four cells for one mode, every one PRESENCE-shaped.
 p_xgroups() {
   local m="$1" mode="$2" d K own non
   d="$(xworld "$mode" 8)" || return 1; K="$(xk_of "$mode" "$d")"
   [ "$K" -ge 5 ] || return 1                       # G = 6 needs K >= 5; the seed must express it
-  xset "$mode" "$d" "$K" groups; xmerge "$m" "$mode" "$d"
+  d="$(xg_world "$mode" "$K" groups)" || return 1; xmerge "$m" "$mode" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
   # THE LONE CROSS (BL-811): one cross.md in place of the groups at K=8 is the dispatched shape and
   # MERGES -- titled K+1 shards, the per-unit bodies first and the one cross body last under the
   # group-less header, tool_use_id the lone cross's derived id and its id keyed `cross=`, never `cross-`.
   local lo lx lh lp
-  d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" single; xmerge "$m" "$mode" "$d"
+  d="$(xg_world "$mode" "$K" single)" || return 1; xmerge "$m" "$mode" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
   case "$mode" in
     files) lo="$(out_of "$d")"; lh="## Shard: cross-story"; lp="## Shard: story $K" ;;
@@ -395,7 +402,7 @@ p_xgroups() {
     && grep -qF "(merged from $((K + 1)) shards)" "$lo" && grep -qx "tool_use_id: $(did_of "$d" cross)" "$lo" \
     && grep -q '^shard_tool_use_ids:.* cross=' "$lo" && ! grep -q '^shard_tool_use_ids:.* cross-[0-9]' "$lo" || return 1
   # A partial grouped set (cross-6 missing) is refused by name, never read as some other shape.
-  d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" groups; rm -f "$d/cross-6.md"; xmerge "$m" "$mode" "$d"
+  d="$(xg_world "$mode" "$K" groups)" || return 1; rm -f "$d/cross-6.md"; xmerge "$m" "$mode" "$d"
   [ "$RC" -eq 2 ] && has "$MO" "shard cross-6 is missing from" || return 1
   # The duplicate: the pair (1, 2) sits in the first quarter, so SEVERAL groups cover it and exactly
   # one owns it. Seed the finding in its owner AND in another group that also covers it (the overlap
@@ -403,12 +410,12 @@ p_xgroups() {
   own="$(bash "$PARTITION" --cross-owner "$K" "1,2")" || return 1
   non="$(bash "$PARTITION" --cross-groups "$K" | awk -F'\t' -v o="$own" '$1 != o && ("," $2 ",") ~ /,1,/ && ("," $2 ",") ~ /,2,/ { print $1; exit }')"
   [ -n "$non" ] || return 1
-  d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" groups
+  d="$(xg_world "$mode" "$K" groups)" || return 1
   xfind "$mode" "$d" "cross-$own" "1, 2"; xfind "$mode" "$d" "cross-$non" "1, 2"
   xmerge "$m" "$mode" "$d"
   [ "$RC" -eq 2 ] && has "$MO" "a finding owned by cross-$own" || return 1
   # Its ALLOW twin: the same finding in its owner alone merges, with major=1 (counted once).
-  d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" groups; xfind "$mode" "$d" "cross-$own" "1, 2"
+  d="$(xg_world "$mode" "$K" groups)" || return 1; xfind "$mode" "$d" "cross-$own" "1, 2"
   xmerge "$m" "$mode" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "major=1" || return 1
   # A finding citing (1, 2, K-1) reported ONLY by a non-owner holding 1 and K-1: a cross shard reads
@@ -416,7 +423,7 @@ p_xgroups() {
   local non3
   non3="$(bash "$PARTITION" --cross-groups "$K" | awk -F'\t' -v o="$own" -v z="$((K - 1))" '$1 != o && ("," $2 ",") ~ /,1,/ && ("," $2 ",") ~ ("," z ",") { print $1; exit }')"
   [ -n "$non3" ] || return 1
-  d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" groups; xfind "$mode" "$d" "cross-$non3" "1, 2, $((K - 1))"
+  d="$(xg_world "$mode" "$K" groups)" || return 1; xfind "$mode" "$d" "cross-$non3" "1, 2, $((K - 1))"
   xmerge "$m" "$mode" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "major=1" || return 1
   # The merged tool_use_id is cross-1's DERIVED id and the id keys are cross-1..cross-6.
@@ -1328,9 +1335,12 @@ p_probe_absent() { # D4: shard 2's writer has a meta file and NO probe row -- a 
 # ------------------------------------------------ BL-544, BL-554, BL-548 (merge half)
 # Every world below is the B3 world seeded the bl536 way (shard -> harness_record), because the
 # dispatch-id derivation refuses a shard with no harness record before any of these checks runs.
-hdr_world() { # <replacement for the `## Findings` line of shard 2> -> a B3 shard dir, shard 2 holding 0 findings
+hdr_base_build() { # -> a B3 shard dir with shard 2 rewritten to hold 0 findings; built once through wc_get hdr0
   local d; d="$(b3_world)" || return 1
-  shard "$d" 2 0 EXIT_CONDITION_MET 2
+  shard "$d" 2 0 EXIT_CONDITION_MET 2; printf '%s' "$d"
+}
+hdr_world() { # <replacement for the `## Findings` line of shard 2> -> a B3 shard dir, shard 2 holding 0 findings
+  local d; d="$(wc_get hdr0 hdr_base_build)" || return 1
   awk -v r="$1" '$0 == "## Findings" { print r; next } { print }' "$d/2.md" > "$d/2.tmp" && mv "$d/2.tmp" "$d/2.md" || return 1
   printf '%s' "$d"
 }

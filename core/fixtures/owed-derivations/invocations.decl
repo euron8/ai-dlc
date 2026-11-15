@@ -1,5 +1,7 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge's own J3 output), once, after the owed-derivations shard split.
-552 *
+# 552 to 452, BL-1059: the per-path --scope arms on the H roots ($RH, $RN) read one --scope-batch per root instead of
+# one --scope run each (52 runs, 2 starts each, become 2 batches). From one counted run through core/scripts/hermetic-run.sh.
+452 *
 0 core/scripts/check-owed-derivations.sh
 0 core/scripts/core-paths.sh
 0 core/scripts/validate-artifact-derivations.sh

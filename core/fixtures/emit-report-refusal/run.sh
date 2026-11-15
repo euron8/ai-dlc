@@ -498,19 +498,34 @@ else
   # it, refusing 5 of 5 with the writer delayed 0s, 0.3s or 2s. A builtin (`:`) or a forking command
   # substitution refuses 0 of 5. So the shadow runs one `cat </dev/null`: the same forcing with no
   # elapsed time in it, and a slow box cannot move it.
+  # The reference: the process-substitution spelling the engine shipped before 0.647.0, one line. Under
+  # the forcing it must refuse 5 of 5; anything else means this bash keeps the fd open, the forcing
+  # reproduces no race, and the engine's 0 refusals measure nothing.
+  printf '%s\n' 'd="$(diff "$local_ours" <(printf '"'"'%s\n'"'"' "$t") 2>/dev/null)"; d_rc=$?' > "$R/race-ref.sh"
   cat > "$R/race.sh" <<'RACE'
 #!/usr/bin/env bash
-# race.sh <body> <ours> <iterations> <calls-file> <fn> -> "<refused> <shadow-calls>"
+# race.sh <body> <ours> <iterations> <calls-file> <fn> <ref body>
+#   -> "<refused> <shadow-calls> <ref refused> <ref shadow-calls>"
 t="$(printf 'shared line\nSENTINEL-THEIRS-ONLY upstream process class\n')"; local_ours="$2"
 . "$5"; _er_tmp="$(mktemp -d)" || exit 3
-CALLS="$4"; : > "$CALLS"
+CALLS="$4"
 diff() { echo x >> "$CALLS"; command cat </dev/null; command diff "$@"; }
-n=0; i=0
-while [ "$i" -lt "$3" ]; do i=$((i+1)); . "$1"; case "$d_rc" in 0|1) : ;; *) n=$((n+1)) ;; esac; done
-rm -rf "$_er_tmp"; echo "$n $(grep -c . "$CALLS")"
+for b in "$1" "$6"; do
+  : > "$CALLS"; n=0; i=0
+  while [ "$i" -lt "$3" ]; do i=$((i+1)); . "$b"; case "$d_rc" in 0|1) : ;; *) n=$((n+1)) ;; esac; done
+  printf '%s %s ' "$n" "$(grep -c . "$CALLS")"
+done
+rm -rf "$_er_tmp"; echo
 RACE
-  _rs="$(bash "$R/race.sh" "$RB" "$R/race-ours" 5 "$R/calls.s" "$RF")"
-  if [ "${_rs#* }" != 5 ]; then
+  _rr="$(bash "$R/race.sh" "$RB" "$R/race-ours" 5 "$R/calls.s" "$RF" "$R/race-ref.sh")"
+  read -r _ra _rb _rc _rd <<<"$_rr"; _rs="$_ra $_rb"; _rref="$_rc $_rd"
+  # A bash that holds the substitution's fd open across the call (bash 5) reads the reference `0 5`:
+  # a fact about that shell, so INCONCLUSIVE, not a failure. Any other reading but `5 5` is a broken harness.
+  if [ "${_rref#* }" != 5 ] || { [ "$_rref" != "0 5" ] && [ "$_rref" != "5 5" ]; }; then
+    bad "A7 HARNESS BROKEN: the process-substitution reference refused/called [$_rref] under the forcing, want [5 5] (bash 3.2) or [0 5] (a bash that holds the fd), so the engine's result would mean nothing"
+  elif [ "$_rref" = "0 5" ]; then
+    printf '  INCONCLUSIVE  A7 forced: this bash (%s) keeps a process substitution'"'"'s fd open across the call, so the forcing cannot reproduce the bash 3.2 race and the engine'"'"'s 0 refusals are not read\n' "$BASH_VERSION"
+  elif [ "${_rs#* }" != 5 ]; then
     bad "A7 the engine's orientation diff did not call the shadowed diff (calls: '${_rs#* }', want 5) — it bypasses \`diff\` by path or \`command\`, so this arm cannot reach it; re-point the arm, never relax it"
   elif [ "${_rs% *}" = 0 ]; then
     ok "A7 forced: the engine's orientation diff survives a forced interleaving 5 of 5"

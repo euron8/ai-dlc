@@ -21,6 +21,10 @@
 #   content  two worktrees of one repo, one path set, core/a.txt differing: after the other tree records, a tree skips on
 #            its own pass (the one <slug>.key holds the other's rows), and a third content no run passed runs (BL-1058)
 #   order    the steps print in declaration order, each followed by its own verdict
+#   trewrite a step rewrites a declared file and puts it back by cp -p while the steps run: its pass is not
+#            recorded, and the next flush runs it (BL-919: the keys were taken before the change)
+#   tcreate  the same for a file created and removed in a declared directory
+#   tunrel   the near-miss: a path outside the step's inputs changed the same way leaves its pass recorded
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -61,7 +65,19 @@ flush() {
     # ps_meet <me> <other> <bound>: send my token on my fifo, then read the other's off its fifo. A fifo's bytes die with
     # its last open fd, so reading the other's token proves both steps held their fifos open AT ONCE.
     ps_meet() { local t=""; exec 3<>"$W.f.$1" 4<>"$W.f.$2" || return 1; printf '%s\n' "$1" >&3; read -r -t "$3" -u 4 t; exec 3>&- 4>&-; [ "$t" = "$2" ]; } # bl868-allow: psu-meet-bound
+    # ps_flip <kind>: stepb as a step that changes a path and puts it back while the steps run; it passes only on the
+    # state it made, and the tree after it is the keyed tree again (content and listing).
+    ps_flip() {
+      printf 'b\n' >> "$RAN"
+      case "$1" in
+        rewrite) cp -p docs/b.txt "$W.orig" && printf 'GOOD\n' > docs/b.txt && [ "$(cat docs/b.txt)" = GOOD ] && cp -p "$W.orig" docs/b.txt ;;
+        create) printf 'GOOD\n' > docs/t.txt && [ "$(cat docs/t.txt)" = GOOD ] && rm -f docs/t.txt ;;
+        unrel) printf 'GOOD\n' > zz/t.txt && [ "$(cat zz/t.txt)" = GOOD ] && rm -f zz/t.txt ;;
+        *) return 1 ;;
+      esac
+    }
     if [ "$mode" = conc ]; then step "meet p" ps_meet p q "$MEET_BOUND"; step "meet q" ps_meet q p "$MEET_BOUND"
+    elif [ "$mode" = flip ]; then step stepa ps_probe a; step stepb ps_flip "$FLIP"; step stepc ps_probe c
     else step stepa ps_probe a; step stepb ps_probe b; step stepc ps_probe c; fi
     ps_flush
     exit "$fail"
@@ -113,6 +129,20 @@ content_arm() {
   : > "$b.ran"; VS="$w.vs" flush "$b" "$psu" "$b.out2" > /dev/null; rb="$(ran_of "$b")"
   echo "A=$ra;B=$rb"
 }
+# flip_arm <psu> <tag> <rewrite|create|unrel>: the first flush runs ps_flip as stepb; the world must read the same after it
+# as before. The second flush runs the plain stubs. Prints the second flush's ran set and the first's not-recorded count.
+flip_arm() {
+  local psu="$1" w="$WORK/flip-$2-$3" rc1 rc2
+  world "$w" || broken "could not build the $3 flip world"
+  ( cd "$w" && find . -path ./.git -prune -o -print | sort && cat docs/b.txt ) > "$w.pre" 2>&1
+  rc1="$(FLIP="$3" flush "$w" "$psu" "$w.out1" flip)"
+  [ "$rc1" = 0 ] && [ "$(ran_of "$w")" = "a b c " ] || { echo "first:rc=$rc1:ran=$(ran_of "$w")"; return 0; }
+  ( cd "$w" && find . -path ./.git -prune -o -print | sort && cat docs/b.txt ) > "$w.post" 2>&1
+  cmp -s "$w.pre" "$w.post" || broken "the $3 flip world did not read the same after the step put its path back"
+  : > "$w.ran"
+  rc2="$(flush "$w" "$psu" "$w.out2")"
+  echo "rc=$rc2:ran=$(ran_of "$w"):$(grep -c '   ..    not recorded: ' "$w.out1")"
+}
 chk() { # chk <tag> <arm> <pass 0|1> <ok message> <fail message>
   if [ "$3" = 0 ]; then ok "$4"; else bad "$5"; fi
 }
@@ -131,13 +161,19 @@ run_arm() { # run_arm <tag> <psu> <arm>
       chk "$tag" conc "$p" "two steps that each read the other's token off a fifo both pass: the steps were live at once (a serial pool drops the first step's token with its fd)" "the meeting steps gave '$r', want rc=0 and 2 PASS (a serial pool cannot pass both)" ;;
     content) r="$(content_arm "$psu" "$tag")"; [ "$r" = "A=c ;B=a c " ] && p=0
       chk "$tag" content "$p" "a tree whose declared input differs from another tree's at the same path set skips on its own pass after the other recorded, and content no run passed still runs" "two trees at one path set gave '$r', want A=c ;B=a c  (a tree's pass must survive another tree's record, and must not cover content it never passed)" ;;
+    trewrite) r="$(flip_arm "$psu" "$tag" rewrite)"; [ "$r" = "rc=0:ran=b c :1" ] && p=0
+      chk "$tag" trewrite "$p" "a declared file rewritten and put back by cp -p while the steps ran leaves that step unrecorded, so the next flush runs it" "a declared file put back during the run gave '$r', want rc=0:ran=b c :1 (a pass keyed on the restored tree must not be recorded)" ;;
+    tcreate) r="$(flip_arm "$psu" "$tag" create)"; [ "$r" = "rc=0:ran=b c :1" ] && p=0
+      chk "$tag" tcreate "$p" "a file created and removed in a declared directory while the steps ran leaves that step unrecorded, so the next flush runs it" "a file created and removed in a declared directory gave '$r', want rc=0:ran=b c :1 (the listing is back, the directory's inode moved)" ;;
+    tunrel) r="$(flip_arm "$psu" "$tag" unrel)"; [ "$r" = "rc=0:ran=c :0" ] && p=0
+      chk "$tag" tunrel "$p" "a file created and removed outside the step's declared inputs leaves its pass recorded, so the next flush skips it" "a path outside stepb's inputs, changed during the run, gave '$r', want rc=0:ran=c :0 (only the step's own key rows may void its record)" ;;
   esac
 }
-for _a in skip unrel moved absent conc content; do run_arm base "$WORK/psu.sh" "$_a"; done
+for _a in skip unrel moved absent conc content trewrite tcreate tunrel; do run_arm base "$WORK/psu.sh" "$_a"; done
 # the order arm reads the base `none` world's second flush output
 cp "$WORK/base-none.out2" "$WORK/o.txt" 2>/dev/null || broken "the skip world left no second-flush output"
 r="$(sed -n '/^── /p;/^   PASS$/p;/^   skipped on/p' "$WORK/o.txt" | tr '\n' '|')"
 chk base order "$([ "$r" = "── stepa|   skipped on a recorded pass: none of its declared inputs changed|   PASS|── stepb|   skipped on a recorded pass: none of its declared inputs changed|   PASS|── stepc|   PASS|" ] && echo 0 || echo 1)" \
   "the steps print in declaration order, each title followed by its own verdict" "the print order was '$r', want stepa stepb stepc in order, each with its own verdict"
-report_end presuite-units 7
+report_end presuite-units 10
 

@@ -2,8 +2,9 @@
 # `#program<TAB><path>` names a shared program: a file whose whole-file key row moves for every edit, however
 # narrow. Rows: `<fixture><TAB><declared line, markers included><TAB>whole|legacy`. `whole`: the fixture drives,
 # scans or copies the whole program or enumerates the whole directory. `legacy`: not yet narrowed.
-# Arm I130 (scripts/validate-enforcement-map.sh) refuses a whole line with no row, a row no inputs.decl carries,
-# and a list with more rows than its base copy. scripts/invalidation-guard.sh reads the classes at push time.
+# scripts/invalidation-guard.sh --ratchet (arms r1-r5, the pre-push step inputs_decl_ratchet) refuses a whole line
+# with no row, a row no inputs.decl carries, and a list with more rows than its base copy; the same script reads
+# the classes at push time.
 #program	.githooks/pre-push
 #program	core/git-hooks/pre-push
 #program	core/scripts/hermetic-run.sh

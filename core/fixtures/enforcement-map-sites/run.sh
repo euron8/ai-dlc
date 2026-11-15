@@ -599,8 +599,11 @@ rm -f "$esv_core_new"
 # enumerator must be able to spell one.
 NAMES="$(grep -oE '^A[0-9]{2}[a-z]?_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
 N_LISTED="$(printf '%s\n' "$NAMES" | grep -c . || true)"
-if [ "$N_LISTED" -lt 5 ]; then
-  echo "FIXTURE ERROR: derived $N_LISTED assertion(s) from this file — the A<nn>_ naming grammar moved" >&2
+# EXACT, not a floor: a floor below the live count lets an assertion vanish with the enumerator still
+# above it. Adding or removing an A<nn>_ function changes this number in the same edit.
+EXPECTED_ASSERTIONS=9
+if [ "$N_LISTED" -ne "$EXPECTED_ASSERTIONS" ]; then
+  echo "FIXTURE ERROR: derived $N_LISTED assertion(s) from this file, expected exactly $EXPECTED_ASSERTIONS — the A<nn>_ naming grammar moved, or an assertion was added or removed without updating EXPECTED_ASSERTIONS" >&2
   exit 2
 fi
 
@@ -824,7 +827,7 @@ SELF="$HERE/$(basename "$0")"
 #                own copy -- changes it. tree_state RECORDS the directory it actually hashed, and
 #                that is compared against the very paths handed to the cells.
 # --- THE EQUIVALENCE CELLS: full runs in the `eq` group (enforcement-map-sites-d),
-# --- `--arms I12` in shards a, b and c ---------------------------------------------------------------
+# --- `--arms I12` in shard a ------------------------------------------------------------------------
 # Every run in the cells is `vem_entry`, the validator evaluated inside this process. These cells
 # prove that answer IS the program's: for each distinct command-line outcome, the in-process call and
 # a command-line start of the same file, from the same cwd, under this file's own `set -uo pipefail`,
@@ -838,9 +841,10 @@ SELF="$HERE/$(basename "$0")"
 # alone, which builds the seed and nothing else (below the seed): no decoy, no control, no pool. It
 # carries no A00: eq-pass's own predicate (exit 0 and the verdict block's OK line) is the full run
 # over the pristine tree that A00 would have been.
-# Shards a, b and c each carry their own pair, eq-arms-pass and eq-arms-refuse, on the same two
-# trees through the selected form every one of its cells uses: `--arms I12`, an arm the refusing
-# tree's offender trips. Each shard directory's own cells.decl carries those two rows.
+# Shard a alone carries the pair eq-arms-pass and eq-arms-refuse, on the same two trees through the
+# selected form every one of its cells uses: `--arms I12`, an arm the refusing tree's offender trips.
+# Shards b and c build the same template from the same distribution and would run the same pair on
+# the same bytes, so they carry none; shard a's cells.decl carries the two rows.
 # The two inputs DIFFER and are asserted to: the refusing run must exit 1 and name the offender, the
 # passing one exit 0 and print the verdict block's OK line, so two empty or two crashed runs cannot
 # read as agreement. Each copy's validator is sourced once, in the subshell that runs its in-process
@@ -970,9 +974,9 @@ if [ "$ctl_rc" -ne 0 ]; then
   exit 2
 fi
 
-# The `--arms I12` equivalence trees (shards a, b and c), built from the template the cells use; the pair
+# The `--arms I12` equivalence trees (shard a only), built from the template the cells use; the pair
 # runs after the pool, in eq_finish. The functions and the reasoning are above the seed.
-eq_start
+[ "$GROUP" = a ] && eq_start
 
 # EIGHT BY DEFAULT, and the pre-push suite never sets EMS_POOL_WIDTH: this pool nests inside
 # the suite's own pool, so the product is what lands on the machine. The knob exists only so
@@ -1001,7 +1005,7 @@ AI_DLC_EMS_SELF="$SELF" AI_DLC_EMS_OUT="$OUT" \
   ' _ {} "$CELL_TPL" "$CELL_DCY" < "$OUT/list"
 
 # THE `--arms I12` EQUIVALENCE PAIR runs and is read here, after the pool (see eq_start, above the seed).
-eq_finish
+[ "$GROUP" = a ] && eq_finish
 
 TPL_S1="$(tree_state "$CELL_TPL")"
 DCY_S1="$(tree_state "$CELL_DCY")"

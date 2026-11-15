@@ -141,6 +141,11 @@ drive1() {                     # drive1 <tree> <outfile>  -> rc
 
 SEEDREC="$WORK/seed.durations"
 printf 'aaa 1\nmmm 5\nzzz 9\n' > "$SEEDREC" || broken "could not write the seeded durations record"
+# THE ORDER ARM'S OWN SEED, with red-run rows. mmm has ONLY a red row, so it is ordered by it (5) and not
+# as unknown (999999, which would put it first); aaa has a clean 1 AND a red 99, so the clean row wins
+# (a red row preferred would put aaa first). One drive tells all three apart.
+LPTREC="$WORK/lpt.durations"
+printf 'aaa 1\naaa@red 99\nmmm@red 5\nzzz 9\n' > "$LPTREC" || broken "could not write the order arm's seeded record"
 
 # --------------------------------- THE WORLDS AND THE ARMS ---------------------------------------
 # Every arm is a verdict on one seeded world, driven through a HOOK PATH given as an argument; the
@@ -167,14 +172,14 @@ w_lpt() { # w_lpt <tag> <hook>
   seed "$T" "$h" || broken "seed failed"
   export SDO_TRACE="$T/trace"
   mkfx_trace "$T" aaa; mkfx_trace "$T" mmm; mkfx_trace "$T" zzz
-  cp "$SEEDREC" "$T/.git/ai-dlc-fixture-durations" || broken "could not install the seeded durations record"
+  cp "$LPTREC" "$T/.git/ai-dlc-fixture-durations" || broken "could not install the seeded durations record"
   : > "$SDO_TRACE"
   rc="$(drive1 "$T" "$WORK/$tag-lpt2.out")"
   order="$(tr '\n' ' ' < "$SDO_TRACE")"
   p=1; [ "$rc" = 0 ] && [ "$order" = "zzz mmm aaa " ] && p=0
   chk "$tag" order "$p" \
-    "a record costing aaa=1 mmm=5 zzz=9 dispatches longest-first (zzz mmm aaa) — the ORDERING RULE, with no stopwatch in the assertion" \
-    "the seeded record did not dispatch longest-first (rc=$rc, got '$order', glob order is 'aaa mmm zzz') — a pool's makespan is decided by when its longest unit starts"
+    "a record costing aaa=1 (aaa@red=99) mmm@red=5 zzz=9 dispatches longest-first (zzz mmm aaa) — a clean row wins over a red one, a red-only unit is ordered by its red cost, with no stopwatch in the assertion" \
+    "the seeded record did not dispatch longest-first (rc=$rc, got '$order', glob order is 'aaa mmm zzz'; 'mmm zzz aaa' = a red-only unit read as unknown, 'aaa zzz mmm' = a red row preferred over a clean one) — a pool's makespan is decided by when its longest unit starts"
   # CONTROL. Same tree, same fixtures, same width — only the record removed.
   rm -f "$T/.git/ai-dlc-fixture-durations"
   : > "$SDO_TRACE"
@@ -263,32 +268,36 @@ w_prune() { # w_prune <tag> <hook>   a row whose fixture DIRECTORY IS GONE is pr
   mkfx_trace "$T" aaa; mkfx_trace "$T" mmm; mkfx_trace "$T" zzz
   mkdir -p "$T/tests/fixtures/dead" && : > "$T/tests/fixtures/dead/notes.txt" || broken "could not seed the run.sh-less dir"
   seed_mapped "$T" || broken "could not seed the read-set map for arm 4c"
-  printf 'aaa 1\nmmm 5\nzzz 9\ngone 777\ndead 555\n' > "$WORK/prune.seed" || broken "could not write the arm 4c seed"
+  # Red-run rows are pruned on the same test with `@red` stripped, `@consumer@red` included: aaa's two
+  # red rows survive (its run.sh exists), the gone/dead ones go.
+  printf 'aaa 1\naaa@consumer@red 2\naaa@red 4\nmmm 5\nzzz 9\ngone 777\ngone@red 7\ngone@consumer@red 8\ndead 555\ndead@red 6\n' > "$WORK/prune.seed" || broken "could not write the arm 4c seed"
   rc="$(narrow_by_skip "$T" "$tag-prune" "$WORK/prune.seed")"
   case "$rc" in broken:*) world_broken "$tag" "arm 4c ${rc#broken:}" prune; unset SDO_TRACE; return 0 ;; esac
-  pr_gone="$(awk '$1 == "gone" || $1 == "dead"' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
-  pr_aaa="$(awk '$1 == "aaa" { print $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+  pr_gone="$(awk '$1 ~ /^(gone|dead)(@|$)/' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+  pr_aaa="$(awk '$1 == "aaa" || $1 == "aaa@red" || $1 == "aaa@consumer@red" { print $1 "=" $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')"
   pr_n="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)" || pr_n=0
-  p=1; [ "$rc" = 0 ] && [ -z "$pr_gone" ] && [ "$pr_aaa" = 1 ] && [ "$pr_n" -eq 3 ] && p=0
+  p=1; [ "$rc" = 0 ] && [ -z "$pr_gone" ] && [ "$pr_aaa" = "aaa=1 aaa@consumer@red=2 aaa@red=4 " ] && [ "$pr_n" -eq 5 ] && p=0
   chk "$tag" prune "$p" \
-    "a green narrowed run drops the rows for a deleted dir and a run.sh-less dir and keeps the undispatched live unit at its seeded 1 (3 rows) — the prune keys on the disk, not on the dispatch list" \
-    "after a green narrowed run the record holds $pr_n row(s), aaa='${pr_aaa:-gone}', dead rows '$(printf '%s' "$pr_gone" | tr '\n' ',')' (rc=$rc) — a row with no run.sh on disk survives and names a dead pole, or a skipped live unit lost its cost"
+    "a green narrowed run drops the rows, red ones included, for a deleted dir and a run.sh-less dir and keeps the undispatched live unit's rows (aaa=1, aaa@red=4, aaa@consumer@red=2; 5 rows) — the prune keys on the disk, not on the dispatch list" \
+    "after a green narrowed run the record holds $pr_n row(s), aaa rows '${pr_aaa:-gone}', dead rows '$(printf '%s' "$pr_gone" | tr '\n' ',')' (rc=$rc) — a row with no run.sh on disk survives and names a dead pole, or a skipped live unit lost its cost"
   unset SDO_TRACE
 }
 
-w_red() { # w_red <tag> <hook>   a RED pool leaves the record exactly as it found it
-  local tag="$1" h="$2" T="$WORK/$1-red" rc g_good p l_n l_names
+w_red() { # w_red <tag> <hook>   a RED pool records every verdict-giving unit under <unit>@red, never over a clean row
+  local tag="$1" h="$2" T="$WORK/$1-red" rc g_good g_red p l_n l_names r_clean r_red r_n
   seed "$T" "$h" || broken "seed failed"
   mkfx "$T" good 0; mkfx "$T" sick 1
   printf 'good 900\nsick 900\n' > "$T/.git/ai-dlc-fixture-durations" || broken "could not seed the red-run record"
-  cp "$T/.git/ai-dlc-fixture-durations" "$WORK/$tag-red.before" || broken "could not keep the red-run record's before copy"
   rc="$(drive "$T" "$WORK/$tag-red.out")"
+  r_clean="$(awk '$1 == "good" || $1 == "sick" { print $1 "=" $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')"
+  r_red="$(awk '($1 == "good@red" || $1 == "sick@red") && $2 ~ /^[0-9]+$/ && $2 != 900 { print $1 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')"
+  r_n="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)" || r_n=0
   p=1
   if [ "$rc" != 0 ] && grep -q 'FAIL  sick' "$WORK/$tag-red.out" && grep -q 'ok    good' "$WORK/$tag-red.out" \
-     && cmp -s "$WORK/$tag-red.before" "$T/.git/ai-dlc-fixture-durations"; then p=0; fi
+     && [ "$r_clean" = "good=900 sick=900 " ] && [ "$r_red" = "good@red sick@red " ] && [ "$r_n" -eq 4 ]; then p=0; fi
   chk "$tag" red "$p" \
-    "a pool red on one unit leaves the durations record byte-identical, the ok unit it timed included" \
-    "a red pool (rc=$rc) changed the durations record, or did not run as seeded: an ok unit of a red run is recorded at that run's load and becomes a phantom pole"
+    "a pool red on one unit records both units it timed, the ok one and the failing one, as good@red and sick@red at this run's cost, and leaves the clean rows at their seeded 900 (4 rows)" \
+    "a red pool (rc=$rc) left clean rows '$r_clean' (want good=900 sick=900), red rows '$r_red' (want good@red sick@red at this run's cost), $r_n row(s) (want 4): a red run's timings are thrown away, or an ok unit of a red run overwrote a clean row and becomes a phantom pole"
   # `.last` is this run's own measurement and is published on a red run too: one line per unit the pool timed.
   l_n="$(grep -c . "$T/.git/ai-dlc-fixture-durations.last" 2>/dev/null)" || l_n=0
   l_names="$(awk 'NF == 2 && $2 ~ /^[0-9]+$/ { print $1 }' "$T/.git/ai-dlc-fixture-durations.last" 2>/dev/null | sort | tr '\n' ' ')"
@@ -299,10 +308,11 @@ w_red() { # w_red <tag> <hook>   a RED pool leaves the record exactly as it foun
   mkfx "$T" sick 0
   rc="$(drive "$T" "$WORK/$tag-green.out")"
   g_good="$(awk '$1 == "good" { print $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
-  p=1; [ "$rc" = 0 ] && [ -n "$g_good" ] && [ "$g_good" != 900 ] && p=0
+  g_red="$(awk '$1 == "good@red" || $1 == "sick@red" { print $1 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')"
+  p=1; [ "$rc" = 0 ] && [ -n "$g_good" ] && [ "$g_good" != 900 ] && [ "$g_red" = "good@red sick@red " ] && p=0
   chk "$tag" green "$p" \
-    "the same tree made green records this run's cost (good: 900 -> $g_good), so the red arm above is the gate and not a writer that never runs" \
-    "the green control (rc=$rc) left good at '${g_good:-gone}', not this run's cost -- the red arm cannot tell a gated merge from no merge at all"
+    "the same tree made green writes this run's cost to the CLEAN row (good: 900 -> $g_good) and keeps the red rows, so the red arm above is the suffix and not a writer that never runs" \
+    "the green control (rc=$rc) left good at '${g_good:-gone}' and red rows '$g_red' (want good@red sick@red kept) -- the red arm cannot tell a suffixed merge from no clean merge at all"
 }
 
 run_world() { "w_$1" "$2" "$3"; }         # run_world <world> <tag> <hook>
