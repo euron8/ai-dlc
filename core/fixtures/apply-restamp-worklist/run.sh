@@ -623,12 +623,15 @@ fi
 # --- the three runs ---------------------------------------------------------------------------
 # ONLY units cf and vf READ OUT_GREEN/C_GREEN (and S2 below), and only unit cf reads the worklist and decision
 # seeds (and S1), so a shard builds and runs only the consumers its units read.
-SEED_RUNS=0; if sg cf || sg vf; then SEED_RUNS=1; fi
+SEED_RUNS=0; if sg cf || sg vf || sg u; then SEED_RUNS=1; fi
 SEED_CF=0; if sg cf; then SEED_CF=1; fi
 if [ "$SEED_RUNS" = 1 ]; then
 C_GREEN="$WORK/cons-green"; C_WORK="$WORK/cons-worklist"; C_DEC="$WORK/cons-decision"
 mk_consumer "$C_GREEN" green    || { echo "FIXTURE BROKEN — could not build the green consumer" >&2; exit 2; }
-OUT_GREEN="$(run_apply "$APPLY" "$C_GREEN")"
+OUT_GREEN="$(run_apply "$APPLY" "$C_GREEN")"; RC_GREEN=$?
+# U3's state is this one (a green consumer, no report), so U3 reads this run; later cf arms touch C_GREEN, so
+# its stamp is read here, before any of them.
+GREEN_VER0="$(stamp_ver "$C_GREEN")"
 fi
 if [ "$SEED_CF" = 1 ]; then
 mk_consumer "$C_WORK"  worklist || { echo "FIXTURE BROKEN — could not build the worklist consumer" >&2; exit 2; }
@@ -900,10 +903,10 @@ cfu_copy() { # cfu_copy <src-world> <dst-world>
   [ -f "$1/_bmad-output/ai-dlc-update/reconcile-report.md" ] || return 0
   cmp -s "$1/_bmad-output/ai-dlc-update/reconcile-report.md" "$2/_bmad-output/ai-dlc-update/reconcile-report.md"
 }
-C_U1="$WORK/cons-u1"; C_U2="$WORK/cons-u2"; C_U3="$WORK/cons-u3"; C_U4="$WORK/cons-u4"
+C_U1="$WORK/cons-u1"; C_U2="$WORK/cons-u2"; C_U4="$WORK/cons-u4"
 C_UCUR="$WORK/cons-ucur"; C_USTALE="$WORK/cons-ustale"
 C_X0="$WORK/ra-x0-$$"; C_X1="$WORK/ra-x1-$$"
-for c in "$C_UCUR" "$C_USTALE" "$C_U3"; do
+for c in "$C_UCUR" "$C_USTALE"; do
   mk_consumer "$c" green || { echo "FIXTURE BROKEN — could not build a union-gate consumer" >&2; exit 2; }
 done
 mk_report "$C_UCUR"   "$THEIRS"   # current: rendered at the ref apply will use
@@ -932,7 +935,7 @@ fi
 
 OUT_U1="$(run_apply "$APPLY" "$C_U1")"; RC_U1=$?
 OUT_U2="$(run_apply "$APPLY" "$C_U2")"; RC_U2=$?
-OUT_U3="$(run_apply "$APPLY" "$C_U3")"; RC_U3=$?
+OUT_U3="$OUT_GREEN"; RC_U3="$RC_GREEN"; U3_VER="$GREEN_VER0"
 
 # U1: a report matching THIS run's theirs verifies, and the NOTE does not withhold the stamp.
 if [ "$RC_U1" -eq 0 ] && has_row "$OUT_U1" NOTE report-verified \
@@ -952,10 +955,10 @@ fi
 # U3: no report does NOT block — two dozen fixture directories drive this program without one —
 # but the manifest says nobody checked rather than staying silent about it.
 if [ "$RC_U3" -eq 0 ] && has_row "$OUT_U3" NOTE report-unverified \
-   && [ "$(stamp_ver "$C_U3")" = "$THEIRS_VER" ]; then
+   && [ "$U3_VER" = "$THEIRS_VER" ]; then
   ok "U3 an absent report does not block, and says so as NOTE report-unverified rather than passing silently"
 else
-  bad "U3 an absent report changed the outcome (rc=$RC_U3, stamp '$(stamp_ver "$C_U3")', row $(has_row "$OUT_U3" NOTE report-unverified && echo present || echo ABSENT)) — either it wedged a driver that has never required a report, or it passed with no row at all"
+  bad "U3 an absent report changed the outcome (rc=$RC_U3, stamp '$U3_VER', row $(has_row "$OUT_U3" NOTE report-unverified && echo present || echo ABSENT)) — either it wedged a driver that has never required a report, or it passed with no row at all"
 fi
 
 # U4: --finish must NOT consult the gate. It writes no core file, so there is no write to

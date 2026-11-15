@@ -28,6 +28,15 @@
 #   w10 a trailing space inside the consumer echo's quotes              -> exit 1, names it
 #   w11 the consumer echo behind `[ -n "${UNSET:-}" ] &&`               -> exit 1, names it
 #   w12 the consumer echo sent `>&2` (the runner captures 2>&1)         -> exit 0, flagged=0
+#   w13 e: an UNMARKED input (`core/skills/ai-dlc/`, appended to the subject's inputs.decl) echoed in
+#       its core branch only, beside the fixed `!` input -- quiet only because keying is on `!` lines
+#                                                                       -> exit 0, flagged=0
+#   w14 m: a branch naming the consumer path in a `grep -qF`, not as a file-test operand
+#                                                                       -> exit 0, flagged=0
+#   w15 o: a second, layout-detecting chain whose sentinel is emitted later through `$LAY`
+#                                                                       -> exit 0, flagged=0
+#   w16 p: w3 plus a heredoc body after the chain carrying both sentinels at column 0
+#                                                                       -> exit 1, names it
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -49,9 +58,8 @@ for f in "$CP" "$PROD/run.sh" "$PROD/inputs.decl" "$QUIET/run.sh" "$QUIET/inputs
 done
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-rc=0
-ok()  { printf '  ok    %s\n' "$*"; }
-bad() { printf '  FAIL  %s\n' "$*"; rc=1; }
+[ -f "$DIR/../lib/report.sh" ] || { echo "FIXTURE ERROR: lib/report.sh not found beside $DIR" >&2; exit 2; }
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: sourcing lib/report.sh failed" >&2; exit 2; }
 # fx_inproc lives in lib/mutant.sh, which needs ok() and bad() first. A literal-tail path, never `. "$VAR"`: in a
 # fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
 [ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
@@ -62,16 +70,19 @@ CE='  echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"'
 UE='  echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh"'
 SETU='set -uo pipefail'
 ERRL='validate-layer-entries.sh not found in either layout'
+SKC='  SRC="$ROOT/core/skills/ai-dlc"'
 
 # edit <src> <dst> <op> <anchor> [text] -- one exact-line edit of a copy. ops: del, repl, after,
 # afterfi (insert after the first `fi` that follows the line CONTAINING the anchor). The anchor
-# must occur exactly once and the copy must differ, or the world is refused as broken.
+# must occur exactly once and the copy must differ, or the world is refused as broken. The text
+# reaches awk through ENVIRON, never `-v`, so a multi-line text keeps its newlines and its bytes.
 edit() {
   local src="$1" dst="$2" op="$3" an="$4" tx="${5:-}" n
   if [ "$op" = afterfi ]; then n="$(grep -cF -e "$an" "$src")" || n=0
   else n="$(grep -cxF -e "$an" "$src")" || n=0; fi
   [ "$n" = "1" ] || { echo "FIXTURE BROKEN: anchor matches $n lines, not 1, in $src: $an" >&2; return 2; }
-  awk -v op="$op" -v an="$an" -v tx="$tx" '
+  HC_TX="$tx" awk -v op="$op" -v an="$an" '
+    BEGIN { tx = ENVIRON["HC_TX"] }
     op == "afterfi" { print; if (index($0, an) > 0) seen = 1; else if (seen == 1 && $0 == "fi") { print tx; seen = 2 }; next }
     $0 == an && op == "del" { next }
     $0 == an && op == "repl" { print tx; next }
@@ -94,6 +105,19 @@ variant() {
     tspace)   edit "$PROD/run.sh" "$d" repl "$UE" '  echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh "' ;;
     andand)   edit "$PROD/run.sh" "$d" repl "$UE" '  [ -n "${AI_DLC_HC_UNSET:-}" ] && echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh"' ;;
     fixb)     edit "$PROD/run.sh" "$t" del "$UE" && edit "$t" "$t.2" del "$CE" && edit "$t.2" "$d" afterfi "$ERRL" 'echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"' ;;
+    nonbang)  edit "$PROD/run.sh" "$d" after "$SKC" '  echo "HERMETIC-CONSUMED core/skills/ai-dlc"' ;;
+    grepq)    edit "$PROD/run.sh" "$d" after "$UE" 'elif grep -qF "scripts/ai-dlc/validate-layer-entries.sh" "$ROOT/manifest.txt"; then
+  VAL="$ROOT/manifest.txt"' ;;
+    varlater) edit "$PROD/run.sh" "$d" afterfi "$ERRL" 'if [ -f "$ROOT/core/scripts/validate-layer-entries.sh" ]; then
+  LAY=core/scripts
+elif [ -f "$ROOT/scripts/ai-dlc/validate-layer-entries.sh" ]; then
+  LAY=scripts/ai-dlc
+fi
+echo "HERMETIC-CONSUMED $LAY/validate-layer-entries.sh"' ;;
+    heredoc)  edit "$PROD/run.sh" "$t" del "$UE" && edit "$t" "$d" afterfi "$ERRL" 'cat > /dev/null <<EOF
+echo "HERMETIC-CONSUMED scripts/ai-dlc/validate-layer-entries.sh"
+echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
+EOF' ;;
     *) return 2 ;;
   esac
 }
@@ -114,6 +138,12 @@ world() {
   else
     cp "$PROD/inputs.decl" "$w/core/fixtures/b-subject/inputs.decl" || return 2
     variant "$v" "$w/core/fixtures/b-subject/run.sh" || return 2
+  fi
+  # nonbang's unmarked input: its directory row is the one path whose consumer location the producer's
+  # second chain tests as a file-test operand. Refused if the producer already declares it.
+  if [ "$v" = nonbang ]; then
+    grep -qxF -e 'core/skills/ai-dlc/' "$PROD/inputs.decl" && { echo "FIXTURE BROKEN: $PROD/inputs.decl already declares core/skills/ai-dlc/" >&2; return 2; }
+    printf '%s\n' 'core/skills/ai-dlc/' >> "$w/core/fixtures/b-subject/inputs.decl" || return 2
   fi
   [ "$mark" != dist-only ] || printf '%s\n' 'seeded: not shipped' > "$w/core/fixtures/b-subject/.dist-only"
   return 0
@@ -204,6 +234,10 @@ w w9 devnull  1 y 2
 w w10 tspace  1 y 2
 w w11 andand  1 y 2
 w w12 stderr  0 n 2
+w w13 nonbang 0 n 2
+w w14 grepq   0 n 2
+w w15 varlater 0 n 2
+w w16 heredoc 1 y 2
 d="$TMP/w.w8"
 if world "$d" "$VALIDATOR" none; then
   drive "$d"
@@ -211,6 +245,4 @@ if world "$d" "$VALIDATOR" none; then
   else bad "w8: want exit 2 and the zero-scanned refusal; got exit $RC: $(printf '%s\n' "$OUT" | tail -2 | tr '\n' '|')"; fi
 else bad "w8: FIXTURE BROKEN -- world could not be built"; fi
 
-
-if [ "$rc" = 0 ]; then echo "hermetic-consumption: PASS"; else echo "hermetic-consumption: FAIL"; fi
-exit "$rc"
+report_end hermetic-consumption 20

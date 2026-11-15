@@ -1,6 +1,8 @@
 # release-version-triple reads three things outside its own directory.
 # The preamble is sourced on line 2; the runner copies only the fixture's own directory.
 core/fixtures/lib/preamble.sh
+# The ok/bad/report_end seam, sourced before mutant.sh.
+core/fixtures/lib/report.sh
 # The fx_inproc helper (in-process drives of the subject).
 core/fixtures/lib/mutant.sh
 # The validator under test. Distribution tooling in scripts/, not core/scripts/. The fixture

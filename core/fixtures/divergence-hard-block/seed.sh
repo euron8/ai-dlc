@@ -132,10 +132,14 @@ cap_siblings() {
     cp "$d/$s" "$WORK/scripts/ai-dlc/$s"
   done
 }
+# NO AUTO-MAINTENANCE IN A SEEDED WORLD. Every `commit` and `merge` otherwise ends in a DETACHED
+# `git maintenance run --auto`, which outlives this script; when its trigger is met it repacks and
+# prune-packs the store, removing `.git/objects/<xx>` while run.sh's seed_world moves and copies it.
+# `maintenance.auto=false` stops the spawn; `gc.auto=0` does not.
 cap_git() { # <iso date> <message> -- commit the scripts and the installed rulebook at that FIXED date
   ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
     g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$WORK" -c user.name=f -c user.email=f@example.invalid \
-          -c core.hooksPath=/dev/null -c commit.gpgsign=false "$@"; }
+          -c core.hooksPath=/dev/null -c commit.gpgsign=false -c maintenance.auto=false "$@"; }
     [ -d "$WORK/.git" ] || g init -q . || exit 1
     g add scripts .claude || exit 1
     GIT_COMMITTER_DATE="$1" GIT_AUTHOR_DATE="$1" g commit -q -m "$2" || exit 1 ) >/dev/null 2>&1 \
@@ -280,7 +284,7 @@ case "$CASE" in
     cap_rulebook notoken; cap_siblings
     ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
       g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$WORK" -c user.name=f -c user.email=f@example.invalid \
-            -c core.hooksPath=/dev/null -c commit.gpgsign=false "$@"; }
+            -c core.hooksPath=/dev/null -c commit.gpgsign=false -c maintenance.auto=false "$@"; }
       at() { GIT_COMMITTER_DATE="$1" GIT_AUTHOR_DATE="$1" g "${@:2}"; }
       g init -q . && g checkout -q -b main && g add scripts .claude && at 2026-07-01T00:00:00Z commit -q -m engine-update \
         && g checkout -q -b sprint || exit 1

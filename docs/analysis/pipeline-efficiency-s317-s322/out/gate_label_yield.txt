@@ -1,0 +1,107 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z; graph file:// scratch clone at 6c30b864f (ship ref fb6f198e7). Command: the extractor chain of lead_class_value.txt into $OUT, then python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/gate_label_yield.py $OUT <graph clone>
+== 1. per-label spawns, subagent $ and agent-minutes (spawns.jsonl); agent-minutes SUM parallel spawns
+s319 gate-validation[implementation] spawns 134  $  92.11    724.1 min (12.07 h)  per story 6.70 spawns $4.61  | BL-812: 6.70 $4.61 $ MATCH, spawns MATCH
+s321 gate-validation[implementation] spawns 126  $ 160.70   1224.2 min (20.40 h)  per story 5.04 spawns $6.43  | BL-812: 5.04 $6.43 $ MATCH, spawns MATCH
+s319 gate-validation[architecture]   spawns   1  $   0.92      9.0 min ( 0.15 h)  per story 0.05 spawns $0.05  | BL-812: - $0.05 $ MATCH
+s321 gate-validation[architecture]   spawns   4  $   2.40     10.7 min ( 0.18 h)  per story 0.16 spawns $0.10  | BL-812: 0.16 $0.10 $ MATCH, spawns MATCH
+s319 gate-validation[requirements]   spawns   2  $   1.72     11.2 min ( 0.19 h)  per story 0.10 spawns $0.09  | BL-812: - $0.09 $ MATCH
+s321 gate-validation[requirements]   spawns   4  $   3.24     15.8 min ( 0.26 h)  per story 0.16 spawns $0.13  | BL-812: 0.16 $0.13 $ MATCH, spawns MATCH
+s319 implementation                  spawns 496  $ 521.54   5708.6 min (95.14 h)  per story 24.80 spawns $26.08  | BL-812: 24.80 $26.08 $ MATCH, spawns MATCH
+s321 implementation                  spawns 154  $ 286.46   1903.3 min (31.72 h)  per story 6.16 spawns $11.46  | BL-812: 6.16 $11.46 $ MATCH, spawns MATCH
+s319 NEVER-STEP-ZZQ                  spawns   0  $   0.00      0.0 min ( 0.00 h)  per story 0.00 spawns $0.00  | impossible-step control, must be 0 spawns
+s321 NEVER-STEP-ZZQ                  spawns   0  $   0.00      0.0 min ( 0.00 h)  per story 0.00 spawns $0.00  | impossible-step control, must be 0 spawns
+like-for-like pair, implementation + gate-validation[implementation] (subagent $, spawns.jsonl):
+   s319 impl $521.54 + gate $92.11 = $613.65  $30.68/story  spawns 630  107.2 h  | impl share of pair 85%
+   s321 impl $286.46 + gate $160.70 = $447.16  $17.89/story  spawns 280  52.1 h  | impl share of pair 64%
+   pair change s319 -> s321: $30.68/story -> $17.89/story (-12.80); gate label alone +1.82/story, implementation alone -14.62/story
+   token-equivalent $ (roll.py --seats) is NOT derivable from spawns.jsonl; BL-812 records pair $41.3 -> $25.5. spawns.jsonl tok/story:
+   s319 pair tokens 1643.0M  82.15M/story
+   s321 pair tokens 1014.7M  40.59M/story
+
+== 2. gate-validation[implementation] by role class (sum checked against the label)
+s319 class sum: 134 spawns $92.11 vs label 134 spawns $92.11  MATCH
+s321 class sum: 126 spawns $160.70 vs label 126 spawns $160.70  MATCH
+class                  s319 n  $  min         s321 n  $  min         change $ (per story)
+code review             40 $ 48.39  192.9    10 $ 16.73  105.9   -1.75/story  (-31.66 total $)
+qa                      28 $  1.83  210.1    15 $ 15.14   73.3   +0.51/story  (+13.31 total $)
+gate adjudicator        54 $ 35.52  264.4    90 $ 51.28  314.4   +0.28/story  (+15.77 total $)
+dev build or rework      2 $  0.19   30.5     8 $ 73.58  716.0   +2.93/story  (+73.39 total $)
+remediator              10 $  6.17   26.2     0 $  0.00    0.0   -0.31/story  (-6.17 total $)
+ops reads                0 $  0.00    0.0     3 $  3.96   14.6   +0.16/story  (+3.96 total $)
+per-story changes sum to +1.82; label change +1.82  MATCH
+dev build or rework spawns carry 46% of the s321 label $ (8 spawns, 11.9 agent-h); the same class in s319 was $0.19
+s321 'code review' class rows whose description is not a review: ['Closing writer story 1.3', 'Closing writer story 2.2', 'Closing writer story 5.2']
+
+== 3a. verdict tokens in the spawns' own final_text (<=1500 chars kept, so a cut-off token reads absent)
+s319 code review          n=40  spawns naming: {'APPROVED': 14, 'FAIL': 1, 'NEEDS_REWORK': 5, 'PASS': 4}
+s319 qa                   n=28  spawns naming: {'FAIL': 1, 'PASS': 11, 'NEEDS_REWORK': 4}
+s319 gate adjudicator     n=54  spawns naming: {'FAIL': 16, 'PASS': 29, 'APPROVED': 8}
+s319 dev build or rework  n=2   spawns naming: -
+s319 remediator           n=10  spawns naming: {'PASS': 2, 'APPROVED': 1, 'MAJOR': 3}
+s319 ops reads            n=0   spawns naming: -
+s321 code review          n=10  spawns naming: {'APPROVED': 2, 'PASS': 1}
+s321 qa                   n=15  spawns naming: {'PASS': 5, 'NEEDS_REWORK': 1}
+s321 gate adjudicator     n=90  spawns naming: {'PASS': 63, 'FAIL': 14, 'NEEDS_REWORK': 8, 'APPROVED': 20}
+s321 dev build or rework  n=8   spawns naming: {'PASS': 1}
+s321 remediator           n=0   spawns naming: -
+s321 ops reads            n=3   spawns naming: -
+
+== 3b. review-file series, whole sprint, ALL step labels (cannot attribute a file to one label)
+s319 code-review   series 18 files  54 unverdicted 0  NEEDS_REWORK files 29 in 12 series; series last file APPROVED/PASS at ship: 12 of 12; C/M headings 295 (regex heading grammar)
+s319 qa-validation series 18 files  32 unverdicted 0  NEEDS_REWORK files 11 in  8 series; series last file APPROVED/PASS at ship: 8 of 8; C/M headings 80 (regex heading grammar)
+s321 code-review   series 24 files  52 unverdicted 0  NEEDS_REWORK files 23 in 16 series; series last file APPROVED/PASS at ship: 16 of 16; C/M headings 73 (regex heading grammar)
+s321 qa-validation series 24 files  37 unverdicted 0  NEEDS_REWORK files 11 in  8 series; series last file APPROVED/PASS at ship: 8 of 8; C/M headings 61 (regex heading grammar)
+
+== 3c. gate-adjudication verdict files in the sprint's date window (verdict.json, not part files)
+s319 window 20261021..20261022 (from adjudicator spawn dates): 0 verdict files of 93 implementation verdict files in the tree  | not in the clone, s319 not derivable at verdict level
+s321 window 20261106..20261107 (from adjudicator spawn dates): 27 verdict files of 93 implementation verdict files in the tree
+   405 verdicts, 5 non-PASS in 5 of 27 verdict files; adjudicator $51.28 = $1.90 per verdict file, $10.26 per file that returned a FAIL if only those counted
+   FAIL 20261106T041548 check 19 -> next verdict on the same check: ('20261106T042243', 'PASS') | Self-discrimination half: no discrimination-evidence AC in scope (diff has no CI gate flip or detector; story grep for 'discrimina
+   FAIL 20261106T234811 check 9 -> next verdict on the same check: ('20261106T235408', 'FAIL') | Cannot resolve against the text; failing closed per contract item 5. pipeline-snapshot.md:35 reads 'is_ui_epic: true' (sprint_id 3
+   FAIL 20261106T235408 check 9 -> next verdict on the same check: ('20261107T000942', 'FAIL') | Fail closed: the text cannot decide it. Body (gate-validation.md 749-752): heading 'Visual verification? (UI sprint gates only)'; 
+   FAIL 20261107T000942 check 9 -> next verdict on the same check: ('20261107T011003', 'PASS') | Check 9 applies: is_ui_epic is true and 4.3 is the UI story. Its text: 'Agent must fetch the deployed production URL and verify re
+   FAIL 20261107T092638 check 19 -> next verdict on the same check: ('20261107T093809', 'PASS') | Core-path wiring-citation extension is in scope and unmet. The diff base..33e780fe changes execute_offramp_sweep, a public (non-un
+
+== 3d. gate-labelled dev and ops spawns, s321, against the story's review series at ship
+   11-06T04:02 dev-escalated   Dev story 1.1 Matic replay fixture            $  4.20   23.2 min | story 1.1: code-review NEEDS/APPRO/APPRO; qa-validation PASS/PASS
+   11-06T04:17 ops             Ops read-only Matic execution_log SELECT      $  1.56    5.7 min | story None: 
+   11-06T05:48 ops             Ops re-check Matic execution_log (same reads) $  1.28    4.6 min | story None: 
+   11-06T06:03 ops             Ops read Matic execution_mode and status      $  1.12    4.3 min | story None: 
+   11-06T06:49 dev-escalated   Dev-escalated story 3.3 deploy scripts        $ 13.78  128.7 min | story 3.3: code-review NEEDS/APPRO; qa-validation PASS
+   11-06T06:50 dev-escalated   Dev-escalated story 1.2 chain selector        $ 24.94  130.6 min | story 1.2: code-review NEEDS/NEEDS/NEEDS/APPRO/NEEDS/APPRO/APPRO; qa-validation NEEDS/NEEDS/PASS
+   11-06T06:50 dev             Dev story 3.4 execution-state gate lambda     $  6.17  191.4 min | story 3.4: code-review NEEDS/NEEDS/APPRO; qa-validation NEEDS/PASS
+   11-06T06:50 dev             Dev story 4.1 aggregator Base prefix          $  3.06   67.0 min | story 4.1: code-review NEEDS/APPRO; qa-validation NEEDS/PASS
+   11-06T16:50 dev-escalated   1.2 consolidated gate-1 p2 rework             $  6.67  106.8 min | story 1.2: code-review NEEDS/NEEDS/NEEDS/APPRO/NEEDS/APPRO/APPRO; qa-validation NEEDS/NEEDS/PASS
+   11-07T04:51 dev-escalated   Story 1.6 dev-escalated build                 $  3.96   20.3 min | story 1.6: code-review APPRO; qa-validation PASS
+   11-07T06:52 dev-escalated   Story 2.3 dev-escalated build                 $ 10.80   48.0 min | story 2.3: code-review NEEDS/APPRO; qa-validation PASS
+
+== 4. the small gate labels, s321 (and s319 for comparison): every spawn and what it produced
+s319 gate-validation[architecture]: 1 spawns $0.92 9.0 min (0.15 h)
+   10-18T14:00 gate-adjudicator       Gate adjudicator planning architecture     $ 0.92   9.0 min  agent-a499a3238c1790db3
+s321 gate-validation[architecture]: 4 spawns $2.40 10.7 min (0.18 h)
+   11-04T04:34 remediator             Fix p5 record triple order and usage examp $ 0.74   3.5 min  agent-aafca51440c03d5c8
+   11-04T04:41 protected-path-editor  Fix out-of-vocabulary escalation status    $ 0.22   0.2 min  agent-a5b4e2a03c739a7c8
+   11-04T04:41 gate-adjudicator       Gate adjudicator shard 1 of 2              $ 0.80   3.4 min  agent-a589d736c04a45d9a
+   11-04T04:41 gate-adjudicator       Gate adjudicator shard 2 of 2              $ 0.63   3.6 min  agent-a8c87922b83a322fd
+s319 gate-validation[requirements]: 2 spawns $1.72 11.2 min (0.19 h)
+   10-17T14:15 gate-adjudicator       Gate adjudicator shard 1/2                 $ 0.60   3.2 min  agent-a517a804e28af1b8c
+   10-17T14:15 gate-adjudicator       Gate adjudicator shard 2/2                 $ 1.11   8.0 min  agent-af8f0cf2158642b03
+s321 gate-validation[requirements]: 4 spawns $3.24 15.8 min (0.26 h)
+   10-30T16:25 adversary              Repair brief line 166 false claim          $ 0.44   2.9 min  agent-a8f4f5f00f218f005
+   11-03T03:48 pm-escalated           Run bmad-prd validate intent, stamp proven $ 1.49   5.7 min  agent-aa3d70d50b07b39de
+   11-03T03:54 gate-adjudicator       Gate adjudicator shard 1/2 planning        $ 0.50   2.5 min  agent-aff0b3a056a62b1d8
+   11-03T03:55 gate-adjudicator       Gate adjudicator shard 2/2 planning        $ 0.81   4.7 min  agent-aad191bfcca3a3ea6
+architecture planning gate verdict file 20261104T044138Z: 10 checks {'PASS': 10} (both shards' adjudication; the two adjudicator spawns of that label wrote it)
+requirements planning gate verdict file 20261103T035443Z: 10 checks {'PASS': 10} (both shards' adjudication; the two adjudicator spawns of that label wrote it)
+architecture protected-path-editor: that entry's status line at ship: '**Status:** DEFERRAL_REQUEST'
+architecture remediator: repair-p5 record present True, dispositions {'repaired': 1}; fixed text in docs/architecture.md x1; stale text 'yields 0 and keeps FAIL' x0
+requirements pm-escalated final_text tally: ['**Findings:** 0 critical, 1 major, 12 minor. The grade is Fair.']
+requirements pm-escalated major (stale pending.md derivation): prd.md still says 'carries no RESOLVED or OVERRIDDEN entry' x1 while pending.md has 1 RESOLVED status lines; prd.md still tallies '160 **Status:** DECIDED_AUTONOMOUSLY' x1  -> unrepaired at ship if both >0
+requirements adversary: repair-p3 dispositions {'repaired': 1}; product-brief.md carries the repaired claim x1, the false claim 'holds only "Fix" and "Then,"' x0
+
+== 5. controls
+impossible role in the label: 0 (must be 0)
+impossible token ZQX-NEVER-TOKEN-77: in prd.md x0, in tree grep: empty (must be 0 and empty)
+positive token 'DEFERRAL_REQUEST' in pending.md x11 (must be >0); 'yields 0 and therefore passes' in architecture.md x1 (>0)
+positive: s321 implementation verdict files read 27 (>0); FILE-grammar review files s321 89, s319 86 (>0)
+units counted twice across s319/s321 (a unit in two lead transcripts): [('agent-a422ac9aa8d949aab', [(321, 'deploy-validate')])]

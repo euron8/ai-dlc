@@ -1,0 +1,179 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z; graph file:// scratch clone at 6c30b864f. Command: the extractor chain of lead_class_value.txt into $OUT, then python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/arch_yield.py $OUT <graph clone>
+graph <graph clone> ref fb6f198e7 spawns <OUT>
+
+== 1. cost s321 architecture: 118 spawns $260.19 1830.5 agent-min over 25 stories = 4.72 spawns $10.41 1.22 agent-h per story
+   sub-part           spawns         $ agent-min |  sp/st     $/st agent-h/st
+   party                  35     42.90     161.6 |   1.40     1.72     0.11
+   elic                   14     52.10     422.5 |   0.56     2.08     0.28
+   p1                      8     43.06     494.7 |   0.32     1.72     0.33
+       review              8     43.06     494.7 |   0.32     1.72     0.33
+   p2                     14     29.03     192.4 |   0.56     1.16     0.13
+       review              7     22.53     167.1 |   0.28     0.90     0.11
+       repair              7      6.50      25.3 |   0.28     0.26     0.02
+   p3                     15     46.39     331.5 |   0.60     1.86     0.22
+       review              7     39.35     303.4 |   0.28     1.57     0.20
+       repair              8      7.04      28.1 |   0.32     0.28     0.02
+   p4                     15     22.44     126.6 |   0.60     0.90     0.08
+       review              7     16.21     100.1 |   0.28     0.65     0.07
+       repair              8      6.22      26.5 |   0.32     0.25     0.02
+   p5                      8      6.71      26.4 |   0.32     0.27     0.02
+       review              7      5.87      22.8 |   0.28     0.23     0.02
+       repair              1      0.83       3.6 |   0.04     0.03     0.00
+   other                   9     17.56      74.8 |   0.36     0.70     0.05
+
+== 1. cost s319 architecture: 135 spawns $189.54 1137.8 agent-min over 20 stories = 6.75 spawns $9.48 0.95 agent-h per story
+   sub-part           spawns         $ agent-min |  sp/st     $/st agent-h/st
+   party                  55     50.92     501.5 |   2.75     2.55     0.42
+   elic                   19     32.64     168.5 |   0.95     1.63     0.14
+   p1                     17     27.80     130.8 |   0.85     1.39     0.11
+       review             11     23.09     111.6 |   0.55     1.15     0.09
+       repair              6      4.71      19.2 |   0.30     0.24     0.02
+   p2                     11     24.46     103.7 |   0.55     1.22     0.09
+       review             11     24.46     103.7 |   0.55     1.22     0.09
+   p3                     17     21.22      90.4 |   0.85     1.06     0.08
+       review             11     17.19      67.7 |   0.55     0.86     0.06
+       repair              6      4.02      22.7 |   0.30     0.20     0.02
+   p4                     11     18.33      73.8 |   0.55     0.92     0.06
+       review             11     18.33      73.8 |   0.55     0.92     0.06
+   other                   5     14.17      69.1 |   0.25     0.71     0.06
+
+== 1b. where the s319 -> s321 rise sits (per story; both sprints' stories counts as stated above)
+   sub-part    $/st 319  $/st 321    delta | sp/st 319 sp/st 321 | ah/st 319 ah/st 321
+   party           2.55      1.72    -0.83 |      2.75      1.40 |      0.42      0.11
+   elic            1.63      2.08    +0.45 |      0.95      0.56 |      0.14      0.28
+   p1              1.39      1.72    +0.33 |      0.85      0.32 |      0.11      0.33
+   p2              1.22      1.16    -0.06 |      0.55      0.56 |      0.09      0.13
+   p3              1.06      1.86    +0.79 |      0.85      0.60 |      0.08      0.22
+   p4              0.92      0.90    -0.02 |      0.55      0.60 |      0.06      0.08
+   p5              0.00      0.27    +0.27 |      0.00      0.32 |      0.00      0.02
+   other           0.71      0.70    -0.01 |      0.25      0.36 |      0.06      0.05
+   sum of deltas +0.93 against step delta +0.93
+
+== 2. findings (C/M `### ` headings) per round, from the shards; read sha per round
+  s321
+    elic   7 shards  C/M  38 (CRITICAL 1, MAJOR 37)  1.52 C/M per story  read sha b47b764f
+    p1     7 shards  C/M  10 (CRITICAL 2, MAJOR 8)  0.40 C/M per story  read sha bed2fca2
+    p2     7 shards  C/M  10 (CRITICAL 0, MAJOR 10)  0.40 C/M per story  read sha bed2fca2   SAME SHA AS p1
+    p3     7 shards  C/M  10 (CRITICAL 0, MAJOR 10)  0.40 C/M per story  read sha bb4a43b5
+    p4     7 shards  C/M   4 (CRITICAL 1, MAJOR 3)  0.16 C/M per story  read sha 24a6aff4
+    p5     7 shards  C/M   1 (CRITICAL 0, MAJOR 1)  0.04 C/M per story  read sha 3f72546d
+  s319
+    elic  11 shards  C/M  26 (CRITICAL 0, MAJOR 26)  1.30 C/M per story  read sha eed4a78a
+    p1    11 shards  C/M   8 (CRITICAL 1, MAJOR 7)  0.40 C/M per story  read sha e55d0e6b
+    p2    11 shards  C/M   7 (CRITICAL 2, MAJOR 5)  0.35 C/M per story  read sha 6e202408
+    p3    11 shards  C/M   8 (CRITICAL 0, MAJOR 8)  0.40 C/M per story  read sha ad720a48
+    p4    11 shards  C/M   4 (CRITICAL 0, MAJOR 4)  0.20 C/M per story  read sha f32f50f9
+  s321 party round: review shards committed under shards/: 0 (party seats' own files are not in the clone); stand-in = 38 C/M repair blocks naming 105 distinct seat findings
+  s319 party round: review shards committed under shards/: 0 (party seats' own files are not in the clone); stand-in = 56 C/M repair blocks naming 115 distinct seat findings
+
+   span-overlap proxy for refound (NOT a judgment): a C/M finding sharing >=2 backtick spans (12+ chars) with some C/M finding of an EARLIER round
+    s321 p1   3 of 10 C/M findings overlap an earlier round
+    s321 p2   7 of 10 C/M findings overlap an earlier round   (4 of them overlap p1 itself; p1 and p2 read the SAME sha)
+    s321 p3   6 of 10 C/M findings overlap an earlier round
+    s321 p4   2 of  4 C/M findings overlap an earlier round
+    s321 p5   0 of  1 C/M findings overlap an earlier round
+    s319 p1   5 of  8 C/M findings overlap an earlier round
+    s319 p2   6 of  7 C/M findings overlap an earlier round
+    s319 p3   8 of  8 C/M findings overlap an earlier round
+    s319 p4   3 of  4 C/M findings overlap an earlier round
+
+== 3. survival s321 (ship = sprint merge fb6f198e7; docs/architecture.md + spine)
+   states resolvable by read sha: 11 (committed doc states and sections/.before files)
+   party BEFORE: BASE 72e1cd749 (read sha d36664af has no committed text)
+         38 C/M repair blocks (0 CRITICAL): OLD-ONLY 4  NO-SPAN 5  NOT-REPAIRED 8  BASE-NEW-SHIPPED 20  BASE-NEW-GONE 1
+   elic  BEFORE: BASE 72e1cd749 (read sha b47b764f has no committed text)
+         57 C/M repair blocks (3 CRITICAL): OLD-ONLY 5  NO-SPAN 8  NO-TARGET 1  NOT-REPAIRED 13  BASE-NEW-SHIPPED 26  BASE-NEW-GONE 4
+   p2    BEFORE: .before of architecture-repair-p2
+         record split: 3 blocks carry an earlier pass's finding (`carry:architecture-adversarial-p1/...`), 13 name a p2 shard finding; carry classes {'OLD-ONLY': 2, 'NOT-REPAIRED': 1}; own classes {'NEW-SHIPPED': 1, 'OLD-ONLY': 8, 'NO-SPAN': 3, 'NOT-REPAIRED': 1}
+         16 C/M repair blocks (3 CRITICAL): NEW-SHIPPED 1  OLD-ONLY 10  NO-SPAN 3  NOT-REPAIRED 2
+         floor: 1 NEW-SHIPPED; sub-part $29.03 / 1 = $29.03 per surviving block; repair spawns alone $6.50
+   p3    BEFORE: commit 0a8242345
+         22 C/M repair blocks (0 CRITICAL): NEW-SHIPPED 5  NEW-NOT-SEEN-AFTER 1  OLD-ONLY 5  NO-SPAN 9  NOT-REPAIRED 2
+         floor: 5 NEW-SHIPPED; sub-part $46.39 / 5 = $9.28 per surviving block; repair spawns alone $7.04
+   p4    BEFORE: commit 443c4e352
+         18 C/M repair blocks (2 CRITICAL): NEW-SHIPPED 7  NEW-NOT-SEEN-AFTER 2  OLD-ONLY 4  NO-SPAN 1  NOT-REPAIRED 4
+         floor: 7 NEW-SHIPPED; sub-part $22.44 / 7 = $3.21 per surviving block; repair spawns alone $6.22
+   p5    BEFORE: commit 9d5b7c938
+          1 C/M repair blocks (0 CRITICAL): NEW-SHIPPED 1
+         floor: 1 NEW-SHIPPED; sub-part $6.71 / 1 = $6.71 per surviving block; repair spawns alone $0.83
+
+== 3. survival s319 (ship = sprint merge 1da426ef9; docs/architecture.md)
+   states resolvable by read sha: 9 (committed doc states and sections/.before files)
+   party BEFORE: BASE 28a15fce4 (read sha 16732d50 has no committed text)
+         56 C/M repair blocks (0 CRITICAL): OLD-ONLY 5  NO-SPAN 11  NO-TARGET 1  NOT-REPAIRED 12  BASE-NEW-SHIPPED 25  BASE-NEW-GONE 2
+   elic  BEFORE: .before of architecture-elicitation-repair-p1
+         48 C/M repair blocks (0 CRITICAL): NEW-SHIPPED 6  OLD-ONLY 8  NO-SPAN 28  NOT-REPAIRED 6
+         floor: 6 NEW-SHIPPED; sub-part $32.64 / 6 = $5.44 per surviving block
+   p1    BEFORE: .before of architecture-adversarial-repair-p1
+          8 C/M repair blocks (1 CRITICAL): NEW-SHIPPED 4  NEW-SUPERSEDED 2  OLD-ONLY 2
+         floor: 4 NEW-SHIPPED; sub-part $27.80 / 4 = $6.95 per surviving block; repair spawns alone $4.71
+   p3    BEFORE: commit 1812ccbb4
+          9 C/M repair blocks (0 CRITICAL): NEW-SHIPPED 2  NEW-NOT-SEEN-AFTER 2  OLD-ONLY 1  NO-SPAN 2  NO-TARGET 1  NOT-REPAIRED 1
+         floor: 2 NEW-SHIPPED; sub-part $21.22 / 2 = $10.61 per surviving block; repair spawns alone $4.02
+
+== 3b. CRITICAL findings (rare high-consequence): shard finding joined to its repair blocks by `- source: N.md#F-k`
+  s321 elic 3.md#F-1     The staged Base file deterministically fails the Base startup self-tes -> elic/elicitation-repair-p1:BASE-NEW-SHIPPED, elic/elicitation-repair-p1:NOT-REPAIRED, elic/elicitation-serial-repair-p1:NO-SPAN
+  s321 p1   3.md#F-1     ADR-S321-5 forwards the Base audit GET unmodified, but the panel reads -> p2/serial-repair-p2:OLD-ONLY
+  s321 p1   cross.md#F-1 A Base audit panel built to the written design lists no entries and sh -> p2/serial-repair-p2:OLD-ONLY
+  s321 p4   6.md#F-1     The §2d write-verb guard pattern is blind to a line that begins with a -> p4/serial-repair-p4:OLD-ONLY
+  s319 p1   cross-2.md#F-1 The dust-floor rebind turns the S318 HODL fixtures into below-floor sk -> p1/repair-p1:NEW-SHIPPED
+  s319 p2   4.md#F-1     The repair's new exclusion ("not on an engine whose `_data_provider` r -> NO SOURCE-JOINED BLOCK; span-linked blocks (>=2 shared spans): elicitation-repair-p1:NEW-SHIPPED
+  s319 p2   cross-2.md#F-1 The rebind's provider-driven fixtures are unpriced: `test_s208_gas_thr -> NO SOURCE-JOINED BLOCK; span-linked blocks (>=2 shared spans): elicitation-repair-p1:NEW-SHIPPED, repair-p1:NEW-SUPERSEDED
+
+   s321 p2 re-reviewed the SAME sha as p1: each p2 C/M finding, and whether it shares >=2 spans with a p1 C/M finding
+    p2 1.md#F-1     MAJOR    OVERLAPS-p1 The Executive Summary leaves the mTLS actor gate UNVERIFIED after the ops read a
+    p2 1.md#F-2     MAJOR    OVERLAPS-p1 Two new S321 universals in the Executive Summary carry no derivation (the count 
+    p2 2.md#F-1     MAJOR    OVERLAPS-p1 Operating Constraint 3's "grep of the diff returns nothing" evidence cannot pass
+    p2 2.md#F-2     MAJOR    p2-ONLY  The staged pre-deploy checks at line 530 and the database-name check at line 608
+    p2 3.md#F-1     MAJOR    p2-ONLY  `REBALANCER_ABSENT_INSTANCES` 2e gate resolved by (c) without the sibling field 
+    p2 3.md#F-2     MAJOR    p2-ONLY  `ADR-S321-5` alert-evaluator "per instance" change omits the single-reachability
+    p2 5.md#F-1     MAJOR    p2-ONLY  ADR-S164-state-reconciler-pattern says the `--no-change-set` fix is "carried to 
+    p2 6.md#F-1     MAJOR    OVERLAPS-p1 The section 2d "executable guard" cannot fail on lowercase write SQL, and prints
+    p2 cross.md#F-1 MAJOR    p2-ONLY  ADR-S321-1 grant list names Matic's DB-secret symbol as a Base-service grant, an
+    p2 cross.md#F-4 MAJOR    p2-ONLY  Table rows state amendments and guard cases that the governing spine does not ca
+
+   span grammar: 55 of 266 claim lines (all C/M repair blocks, both sprints) read a different span set under the pre-fix grammar than under claim_spans
+
+== 4. controls
+  MATCH   s321 partition sums to step total (118, $260.19, 1830.5 min)
+  MATCH   s321 step reads 118 spawns, 4.72 spawns/story, $10.41/story (lead's control (118, 4.72, 10.41))
+  MATCH   s321 numbered repairs agree with the start-time rule (0 disagree)
+  MATCH   s319 partition sums to step total (135, $189.54, 1137.8 min)
+  MATCH   s319 step reads 135 spawns, 6.75 spawns/story, $9.48/story (lead's control (135, 6.75, 9.48))
+  MATCH   s319 numbered repairs agree with the start-time rule (0 disagree)
+  MATCH   rise deltas sum to the step delta
+  MATCH   s321 architecture-adversarial-p1 shards byte-identical to architecture-p1 (7 files; counted once)
+  MATCH   s321 party review shard dirs found by the same ls-tree (must be 0, repair dirs excluded)
+  MATCH   s319 party review shard dirs found by the same ls-tree (must be 0, repair dirs excluded)
+  MATCH   overlap arm fires on a seeded 2-span pair (also with short spans interleaved) and stays quiet on a 1-span near-miss
+  MATCH   s321 architecture-repair-p2.md: BEFORE text sha bed2fca2 equals the round's read sha bed2fca2 (.before of architecture-repair-p2); record's own first before-sha bed2fca2
+  MATCH   s321 architecture-repair-p3.md: BEFORE text sha bb4a43b5 equals the round's read sha bb4a43b5 (commit 0a8242345); record's own first before-sha bb4a43b5
+  MATCH   s321 architecture-repair-p4.md: BEFORE text sha 24a6aff4 equals the round's read sha 24a6aff4 (commit 443c4e352); record's own first before-sha 24a6aff4
+  MATCH   s321 architecture-repair-p5.md: BEFORE text sha 3f72546d equals the round's read sha 3f72546d (commit 9d5b7c938); record's own first before-sha e3b7a5e7
+  MATCH   s321 architecture-serial-repair-p2.md: BEFORE text sha bed2fca2 equals the round's read sha bed2fca2 (.before of architecture-repair-p2); record's own first before-sha 5a20d2f3
+  MATCH   s321 architecture-serial-repair-p3.md: BEFORE text sha bb4a43b5 equals the round's read sha bb4a43b5 (commit 0a8242345); record's own first before-sha b42a634b
+  MATCH   s321 architecture-serial-repair-p4.md: BEFORE text sha 24a6aff4 equals the round's read sha 24a6aff4 (commit 443c4e352); record's own first before-sha a2c4ad1c
+  MATCH   s321 every architecture-*repair*.md file (10) is assigned to a sub-part (10)
+  MATCH   s321 architecture-elicitation-repair-p1.md C/M repair blocks 41 against a second count 41
+  MATCH   s321 architecture-elicitation-serial-repair-p1.md C/M repair blocks 16 against a second count 16
+  MATCH   s321 architecture-party-repair-p1.md C/M repair blocks 38 against a second count 38
+  MATCH   s321 architecture-repair-p2.md C/M repair blocks 11 against a second count 11
+  MATCH   s321 architecture-repair-p3.md C/M repair blocks 9 against a second count 9
+  MATCH   s321 architecture-repair-p4.md C/M repair blocks 7 against a second count 7
+  MATCH   s321 architecture-repair-p5.md C/M repair blocks 1 against a second count 1
+  MATCH   s321 architecture-serial-repair-p2.md C/M repair blocks 5 against a second count 5
+  MATCH   s321 architecture-serial-repair-p3.md C/M repair blocks 13 against a second count 13
+  MATCH   s321 architecture-serial-repair-p4.md C/M repair blocks 11 against a second count 11
+  MATCH   s319 architecture-elicitation-repair-p1.md: BEFORE text sha eed4a78a equals the round's read sha eed4a78a (.before of architecture-elicitation-repair-p1); record's own first before-sha eed4a78a
+  MATCH   s319 architecture-repair-p1.md: BEFORE text sha e55d0e6b equals the round's read sha e55d0e6b (.before of architecture-adversarial-repair-p1); record's own first before-sha e55d0e6b
+  MATCH   s319 architecture-repair-p3.md: BEFORE text sha ad720a48 equals the round's read sha ad720a48 (commit 1812ccbb4); record's own first before-sha ad720a48
+  MATCH   s319 every architecture-*repair*.md file (4) is assigned to a sub-part (4)
+  MATCH   s319 architecture-elicitation-repair-p1.md C/M repair blocks 48 against a second count 48
+  MATCH   s319 architecture-party-repair-p1.md C/M repair blocks 56 against a second count 56
+  MATCH   s319 architecture-repair-p1.md C/M repair blocks 8 against a second count 8
+  MATCH   s319 architecture-repair-p3.md C/M repair blocks 9 against a second count 9
+  MATCH   impossible description token QZXV-ARCH-NEVER-8841 counts 0; positive token 'Elicitation' counts 34 (same rows)
+  MATCH   impossible finding token QZXV-ARCH-FINDING-NEVER-8842 found in 0 of 123 loaded texts; positive token 'MAJOR' in 103
+  MATCH   classify seeds: NEW-SHIPPED=NEW-SHIPPED NEW-GONE=NEW-GONE OLD-ONLY=OLD-ONLY impossible-span=NEW-GONE
+  MATCH   seeded claim: this script's pairing reads ['config.py:346', 'longer-span-xyz']; the pre-fix grammar reads [' residual and ', ' stated, plus '] (must differ, proving the mispairing is real)
+controls: 41, DIFFERS: 0

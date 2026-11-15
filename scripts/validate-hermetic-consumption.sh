@@ -70,9 +70,13 @@
 #     unmarked input echoed in its core branch only) can tell the two apart;
 #   - the sentinel token compared as a PREFIX: flagged 0 here, and accepts a `.bak` near-miss, so it
 #     is compared whole.
-# No input was exempted by name, and none is. The first two narrowings were held only by today's
-# corpus until they got seeds of their own, in the fixture: a layout chain whose sentinel is emitted
-# later through a variable, and a branch that names the consumer path in a `grep -qF`.
+# No input was exempted by name, and none is. Each narrowing, and the heredoc skip, has a world of its
+# own in core/fixtures/hermetic-consumption/run.sh, seeded from the real producer, that reads wrong
+# when the narrowing is reverted: w15 (a layout chain whose sentinel is emitted later through a
+# variable) for the own-sentinel restriction, w14 (a branch naming the consumer path in a `grep -qF`)
+# for the file-test-operand restriction, w13 (an unmarked input echoed in its core branch only) for
+# `!`-only keying, w4 (a `.bak` near-miss) for the whole-token compare, and w16 (both sentinels at
+# column 0 in a heredoc body after the chain) for the heredoc skip.
 #
 # WHY A STANDALONE SCRIPT AND NOT AN ARM IN THE ENFORCEMENT MAP. That validator is invoked by
 # the suite's slowest fixtures and is held to `FORK_BUDGET`; this scan forks a fixed handful of
