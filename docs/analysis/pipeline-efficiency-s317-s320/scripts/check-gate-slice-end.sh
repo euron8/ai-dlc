@@ -9,10 +9,13 @@ set -uo pipefail
 #   w3sliceother: carry-over-evaluation read whole, open, an in-gate spawn, an offset/limit slice of requirements.md
 #     with no record 26 written, then a spawn (check-gate-terminator.sh's w4 "sliced read of another step stays").
 #     It fails an UNCONDITIONED candidate 2, where any slice of another step file leaves the gate.
+#   w4fail: w1 with record 26 FAIL in place of PASS. A failed terminal verdict re-dispatches the gate (gate-validation.md:
+#     'Adopt ... through the terminal Check 26 (fail-closed)'), so the spawn after the slices keeps the gate label. It
+#     fails a form that ends the span on any record 26 verdict.
 # Prints one line per spawn; exit 1 if any reads FAIL (the defect is live); exit 9 if an input is missing or the
 # extractor itself fails (cannot measure).
 X="$1"; R="$2"
-[ -f "$X" ] && [ -f "$R/w1terminal.jsonl" ] && [ -f "$R/w2twin.jsonl" ] && [ -f "$R/w3sliceother.jsonl" ] || exit 9
+[ -f "$X" ] && [ -f "$R/w1terminal.jsonl" ] && [ -f "$R/w2twin.jsonl" ] && [ -f "$R/w3sliceother.jsonl" ] && [ -f "$R/w4fail.jsonl" ] || exit 9
 O=$(mktemp -d) || exit 9
 trap 'rm -rf "$O"' EXIT
 EXTRACT_ROOT="$R" python3 -I "$X" "$O" >/dev/null 2>"$O/err" || exit 9
@@ -29,6 +32,8 @@ want = [
  ("w2 twin: a non-terminal record inside a live gate keeps the gate label", "w2_after_record", M),
  ("w3 in-gate spawn carries the gate label", "w3_in_gate", M),
  ("w3 a slice of another step file before any record 26 keeps the gate label", "w3_after_slice", M),
+ ("w4 in-gate spawn carries the gate label", "w4_in_gate", M),
+ ("w4 spawn after record 26 FAIL and a sliced read of requirements.md keeps the gate label", "w4_after_fail", M),
 ]
 miss = [t for _, t, _ in want if t not in o]
 if miss:

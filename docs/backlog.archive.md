@@ -43789,3 +43789,173 @@ verify: manual
 **Progress (batch 257, PW release; the entry stays open, `verify: manual` unchanged).** BL-1093 splits the `story-evidence-scaffold` pole into seven units and runs only its placement-dependent group in the consumer layout. The owed work above is unchanged.
 
 
+## BL-993 — deploy-validate does not record the sprint PR number and squash sha, so retro Step 1 must re-derive them through a `gh` fallback
+
+**LANDED (v0.1131.0).** The operator ruled "extension writes record", the second of the two fixes the entry named.
+
+- **`core/skills/ai-dlc/steps/deploy-validate.md` Step 2.** The `{deploy_command}` that merges the sprint PR runs the core block `# deploy-validate Step 2: record the sprint-PR merge` right after the merge, on the sprint branch, with `<N> <pr-number> <pr-head> <squash>`. The block:
+  - refuses a row that is not `<number> <40 hex> <40 hex>`, a squash not on `origin/main` after a fetch, and a PR head that is not a local commit, each with a `RECORD: HARD_BLOCK` line that stops deploy-validate;
+  - otherwise writes the row to `${AI_DLC_STATE_DIR:-_bmad-output}/implementation-artifacts/s<N>/sprint-pr-merge.txt`, commits that one path, and prints `RECORD: PR #<n> ... committed at <path>`. A re-run on an identical committed record is a no-op.
+- **`core/skills/ai-dlc/steps/retro.md` Step 1 reads the record first,** with `git show <sprint tip>:<path>`. It accepts the record under the lead-acceptance rule Step 1 already states for an operator-supplied pair: squash on `origin/main`, PR head local or fetchable as `pull/<n>/head`, and PR head an ancestor of the tip or squash equal to the fork point. The count line then names `from the sprint-merge record`. A present record that fails a check prints `HARD_BLOCK underivable` naming the refusal, and neither the tree match nor `gh` runs.
+- Only a sprint with no record reaches the tree match and the `gh` fallback, which are byte-identical. That keeps a consumer whose extension does not yet run the block, and a sprint in flight at the pull, on the old behaviour. The removal condition now reads: retire both when no sprint the retro still runs on lacks the record.
+
+Consumer side, not built here: the reference consumer's `deploy-validate-domain` Step 2a must call the block after `gh pr merge --squash`. Until it does, behaviour is unchanged.
+
+Receipt `core/fixtures/retro-branch-behind-main/receipt-bl993.sh`, invoked by the fixture like the BL-990 and BL-997 receipts (PENDING in a consumer whose step files lack the subject). Every world is re-pointed onto its squash, with a `gh` stub that logs each call and exits 97. Five cells:
+- `record`: the block commits `7 <head> <squash>` on the sprint branch.
+- `carry`: Step 1 prints `CARRY: 4 commit(s) past PR head <P> (merged PR #7, from the sprint-merge record)` with the gh log empty.
+- `norecord` control: underivable, gh asked.
+- `badrecord`: refused by name, gh never asked.
+- `statedir`: record and carry under `AI_DLC_STATE_DIR=state`, nothing at the default path.
+
+Results:
+- At the base: exit 1 (record and carry FAIL).
+- Mutant "drop the write": record, carry and statedir FAIL.
+- Mutant "retro hard-codes `_bmad-output`": statedir FAIL.
+
+**DEFECT.** CLOSED. Filed 2026-11-12. Retro Step 1's carry block found the sprint PR head after the fact: by tree-match, and by BL-990's `gh pr list` fallback when deploy-validate left the sprint branch reset onto the squash. Both re-derived two facts the merge already knows.
+
+Provenance: batch 256, cluster N9; built in batch 257, M8 (fast track).
+
+verify: sh bash core/fixtures/retro-branch-behind-main/receipt-bl993.sh
+
+## BL-1035 — the gate span ends only on a whole step-file read, so slices after the gate's terminal record keep 32 s322 spawns ($77.39, 6.50 agent-h) on the gate label
+
+**LANDED (v0.1131.0).** `extract.py` ends a gate's span at a SLICED read of another step file once that gate's terminal verdict is recorded. `gate_event()` returns `terminal` for `gate-checkpoint.sh … record 26 PASS`, matching the two words after `record` by position. The scan arms the remembered gate on it (`garmed`, cleared by `open` and `close`). In every other respect a terminal record is an ordinary verb: after the gate has been left it returns to it. The leave test is now `gate is not None and (garmed or not isslice) and name != gmain and gmain != "pre-step"`.
+- The form chosen is candidate 2 conditioned on the terminal record, not candidate 1. Candidate 1 clears the gate at `record 26`. That relabels the lead's time between `record 26` and the gate's `close` in every gate that is closed properly: `gate-validation.md` orders `close` after Check 15, and records follow 26 (s322 records `record 12 PASS` at 13:59:05Z). It also removes the 15:08:37Z LEFT event, which moves BL-1003 item 2's table and BL-1009's carried column. The conditioned form moves that LEFT to the first slice instead (14:00:05Z), so every `gate-terminator` line is identical at all three windows below.
+- PASS only. A `record 26 FAIL` is fail-closed and re-dispatches the gate under a fresh nonce (`gate-validation.md`, "Adopt the adjudicator's per-check verdicts through the terminal **Check 26** (fail-closed)" and the re-dispatch sentence after it). A `FAIL_WAIVED` is checkpointed PASS. So the repair spawns after a failed gate keep the gate label, and s319's 5 spawns after lead 888e1365's two `record 26 FAIL` do not move.
+- Receipt world 4, `w4fail.jsonl`, is world 1 with `record 26 FAIL`; its spawn after the slices must keep the gate label. It separates PASS-keyed from any-verdict, which the three original worlds could not. Five-row proof, each mutant a scratch copy of this `extract.py`, never committed: this extractor exits 0 (9 ok); base c75a7c323's exits 1 and fails world 1 only; any `record 26` verdict arms (`args[i + 1:i + 2] == ["26"]`): exit 1, world 4 only; unconditioned candidate 2 (`(garmed or not isslice)` replaced by `True`): exit 1, worlds 3 and 4; the terminal event never arms (revert of the fix's state change): exit 1, world 1 only. `check-gate-terminator.sh` and `check-slice-reads.sh` exit 0 on this extractor.
+
+Owed 2, re-derived: base c75a7c323's `extract.py` against this one at the same window, with every other script this tree's. `spawns.py` and `analyze.py` from s317-s318, and `roll.py` and `roll.py --seats` where a reading needs them, all as `bl1003_rederive.py` builds them.
+- Owners at each window: exactly 32 spawns change owner, all in s322 and all from `gate-validation[carry-over-evaluation]` to `requirements`, starting 14:00:33Z to 15:07:10Z. The populations are 6142 spawns at 10:16:23Z, 6017 at 10:30:00Z and 6157 at 18:53:06Z, with the same unit sets on both sides. `owner.json` changes 32 of 6394, 6236 and 6423 rows. No other sprint moves; s319 included.
+- `bl1035_gate_slice.py` at 10:16:23Z, with this extractor's output as `<OUT2>`. CONTROL OK on the whole label (52, $84.45, 6.87) and on the before-14:00Z bucket (20, $7.06, 0.37). An impossible label reads 0 against 644 s322 spawns. The 32 land on `requirements` and the 20 stay on the label.
+- BL-812 Projection (c): recorded in place, in that entry's "Re-derived (batch b257, BL-1035)" paragraph.
+- `out/poles.txt` s322 rows at 10:30:00Z. The gate goes from 52 intervals, 1.4 h busy and 6.9 h serial to 20, 0.1 h and 0.4 h. `requirements` goes from 92, 4.8 h and 17.3 h to 124, 6.0 h and 23.8 h. `out/seats_adversary.txt`: the gate's `remediator:other n9 0.9h $11` row goes, and `requirements` `remediator:other` goes from n28 9.0h $33 to n37 10.0h $44. The control: the base side reproduces BL-1003's recorded after-figures for both files. `out/ask_split.txt`, and so BL-972's per-ask step column: 0 of 310 lines change. No other line of the three moves.
+- Lead-side rows at 18:53:06Z, from `bl1003_rederive.py --only w3` with base as its old side. Only lead 6c14d949's rows differ: 3 segs rows, 23 and 19 hooks rows, and 115 and 104 tools rows. The gate's lead active goes from 1.22 to 0.39 h, gap from 0.33 to 0.00 h and tokens from 35.94M to 20.36M. `requirements` goes from 4.23 to 5.02 h, with gap from 4.72 to 5.05 h and tokens from 137.35M to 151.68M. `carry-over-evaluation` goes from 3.70 to 3.74 h and 128.86M to 130.11M, from the lead's 14:02:09Z whole read of its own step file after leaving the gate at 14:00:05Z. Its controls on item 2's table and on no row moving at left=0 read OK. Its last control reads FAIL by construction: it was written for the pre-terminator extractor e3cb7710f, and between these two sides s317 and s318 do not move. Its overlap heuristic also names 189712ad and e444bf13, whose rows are byte-identical on both sides.
+- Should not move, and does not: BL-975's 17:54Z remediators, since no changed spawn starts after 15:07:10Z, and every reading before 2026-11-09T14:00Z.
+- BL-1003 subject 2 is discharged: the slices after the terminal record now end the span. The archived BL-1003's "carried by BL-1035 (OPEN)" sentence is left as written; this entry's close is the record.
+
+**DEFECT.** Filed 2026-11-13. Split from BL-1003, the parent. This entry carries BL-1003's second subject: "Whether the 14:00Z to 15:08Z slices should also end the span is a rule change, and it was not made" (BL-1003, the sentence opening "Whether the 14:00Z to 15:08Z slices"), and the 32 spawns its item 2 says keep the label (BL-1003's item-2 bullet "32 spawns between 14:00Z and 15:08:37Z keep the label"). BL-1003's item 1 rule stands: a whole read of another step file leaves a gate the lead never closed. There is no graph pipeline step; the cost lives in `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py`, analysis tooling, and in every reading that counts a `gate-validation[<step>]` label. The fix owner is that file.
+
+Mechanism, read at 473152973. In `scan()`, a live gate is left only when `leave = gate is not None and not isslice and name != gmain and gmain != "pre-step"`, so a Read with an offset or a limit never leaves. `gate_event()` maps `record` to `verb`, which returns to a left gate and changes nothing inside a live one. So a gate whose terminal verdict is recorded (`core/skills/ai-dlc/steps/gate-validation.md:212`, "the terminal **Check 26**") and that is never closed keeps its label until the lead's first whole read of another step file.
+
+Measured on graph s322 (read only; lead transcripts under `~/.claude/projects/-Users-n8-git-graph/`, no graph ref read). Command: `EXTRACT_WIN_END=2026-11-12T10:16:23Z python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/bl1035_gate_slice.py <OUT> <6c14d949 transcript> docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py [<OUT2>]`, where `<OUT>` is written by this tree's `extract.py` and `spawns.py` (the README's order) at `EXTRACT_WIN_END=2026-11-12T10:16:23Z`. Output: `docs/analysis/pipeline-efficiency-s317-s322/out/bl1035_gate_slice.txt`.
+- Lead 6c14d949 opens the planning gate at 13:40:29Z and again at 13:49:03Z. It runs `record 26 PASS` at 13:55:24Z, then one more record (`record 12 PASS`) at 13:59:05Z, and no `close`.
+- It reads `requirements.md` as slices at 14:00:05Z (limit 160), 14:00:08Z (offset 160), 14:04:17Z (limit 150) and 14:04:19Z (offset 151). Its first whole read is at 15:08:37Z. A whole read of the gate's own step file, `carry-over-evaluation.md`, at 14:02:09Z does not leave.
+- 32 spawns, starting 14:00:33Z to 15:07:10Z, keep `gate-validation[carry-over-evaluation]`: $77.39 and 6.50 agent-h. By their descriptions they are requirements work: "Requirements context digest s322", "Authoring chain s322 requirements", "Dispatch requirements-party round", two cross seats, architect parts 1 to 9, dev parts 1 to 9, and nine "Party repair part N" remediators at 15:07:10Z. No spawn starts under the label after 15:08:37Z at this window.
+- Controls, same invocation: the whole label reads 52 spawns, $84.45 and 6.87 agent-h, and the bucket before 14:00Z reads 20, $7.06 and 0.37 agent-h, both as BL-812's "Re-derived (batch b257, BL-1003 item 3): Projection (c)" paragraph records them at this window, in its bullets "The excluded label moves." and "At `EXTRACT_WIN_END=2026-11-12T18:53:06Z` (`… split`)" (CONTROL OK on both). An impossible label reads 0 against 644 s322 spawns. 52 minus 20 is 32, and the 32 equal BL-812's 18:53:06Z split reading (that paragraph's bullet opening "At `EXTRACT_WIN_END=2026-11-12T18:53:06Z` (`… split`)").
+
+Fix candidates, not chosen:
+1. End the span at the gate's terminal verdict record, `gate-checkpoint.sh … record 26 …`, as a close, so the remembered gate is cleared. A form that only sets the live gate to none is undone at 13:59:05Z, because a record after leaving returns to the gate (BL-1003 item 1). A mutant of this candidate (`or ("record" in args and "26" in args)` added to `gate_event()`'s close test, in a scratch copy, never committed) was run at this window, its output passed as the script's fourth argument (sections 4 and 5 of the output file). It moves all 32 to `requirements` ($77.39), and the 20 spawns before 14:00Z stay on the label (the control). It changes no other s322 owner. It also moves 5 s319 spawns (2026-10-22, 16:26Z to 17:28Z) from `gate-validation[implementation]` to `implementation`. Those follow lead 888e1365's `record 26 FAIL` at 16:25:21Z and 17:13:02Z; that gate reopens at 17:03:05Z and 17:36:00Z. In graph's lead Bash calls from 2026-10-05 to the window end, `record 26` carries PASS 30 times, FAIL 5 times and PENDING once. So the owner must decide whether this candidate keys on the PASS verdict, which decides where a failed gate's repair spawns belong.
+2. End the span at a slice read of a different step file. Unconditioned, this fails `check-gate-terminator.sh`'s world "w4 sliced read of another step stays", and this entry's receipt world 3, so it needs a condition, for example only after the terminal record.
+
+The twin that must not break: a resume `done` inside a live gate keeps the gate label (`gate-validation.md`'s post-compaction resume pass, and BL-1003's item 1). A non-terminal record inside a live gate keeps it too.
+
+Receipt. The sibling check `docs/analysis/pipeline-efficiency-s317-s320/scripts/check-gate-slice-end.sh <extract.py> <fixture-root>` runs the real extractor over the synthetic lead transcripts in `docs/analysis/pipeline-efficiency-s317-s320/fixture-gate-slice-end/`. Its shape is BL-813's archived `check-slice-reads.sh` receipt.
+- World 1, `w1terminal.jsonl`: an in-gate spawn, `done`, `record 26 PASS`, a late `record 12 PASS`, two slices of `requirements.md`, then a spawn. That spawn must join `requirements`.
+- World 2, the twin, `w2twin.jsonl`: an in-gate spawn, a resume `done`, a spawn, `record 14 PASS`, a spawn. Both later spawns must keep the gate label.
+- World 3, `w3sliceother.jsonl`: an in-gate spawn, an offset/limit slice of `requirements.md` with no `record 26` written, then a spawn. That spawn must keep the gate label. It mirrors `check-gate-terminator.sh`'s world "w4 sliced read of another step stays", and it is the world that rules out candidate 2 unconditioned.
+- Four-row proof, each mutant in a scratch copy of `extract.py` and never committed (batch 257, hand U11):
+
+| `extract.py` | Exit | Lines that fail |
+|---|---|---|
+| today's (base) | 1 | world 1's spawn after the terminal record only |
+| candidate 1 (`or ("record" in args and "26" in args)` added to `gate_event()`'s close test) | 0 | none |
+| candidate 2 unconditioned (`not isslice` dropped from `leave`) | 1 | world 3's spawn after the slice only |
+| the wrong fix that treats any `record` or `done` as a close | 1 | both twin lines of world 2; world 1 passes |
+
+- It exits 9 when an input is missing or the extractor fails.
+- `check-gate-terminator.sh` and `check-slice-reads.sh` both exit 0 on the base, and both exited 0 on candidate 1's mutant when this entry was filed.
+- What a weaker receipt would accept: a `has` on `extract.py` for `26`, which a comment satisfies.
+
+The ledger line below is what makes the check runner-wired. `scripts/validate-backlog-receipts.sh` runs it at push as a DRIVER receipt (R7, R13). The E1 arm of `scripts/validate-fixture-hygiene.sh` judges only `core/fixtures/*/receipt*.sh` and `scripts/receipt*.sh`, so a `docs/analysis/` check sits outside it, as `check-slice-reads.sh` and `check-gate-terminator.sh` do.
+
+Owed:
+1. The fix in `extract.py`, with the receipt below exiting 0, and `check-gate-terminator.sh` and `check-slice-reads.sh` still exiting 0.
+2. The s322 readings BL-1003 lists that count `gate-validation[carry-over-evaluation]` or `requirements`, re-derived on the fixed extractor and recorded in place beside the originals.
+
+Provenance: batch 257, release cluster F1, hand U8; id allocated by the lead (ai-dlc-15).
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s320/scripts/check-gate-slice-end.sh docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py docs/analysis/pipeline-efficiency-s317-s320/fixture-gate-slice-end
+
+## BL-1031 — the efficiency close arm of `scripts/validate-backlog-receipts.sh` never checks a `fell` verdict against a value citation, and its header still says "12 live Step lines" and "BL-810 carries no Step: line"
+
+**LANDED (v0.1131.0).** `eff_close()`'s live branch now holds a `fell` verdict to `eff_fell_ok`, a rule of its own. When BEFORE and AFTER figures (`before X ... after Y`, or `X to Y`) can be read, they must fall, and figures that rose read `FELL-ROSE`. When none can be read, the `fell` needs the value citation a `did not fall` owes, or it reads `NO-VALUE-CITATION`. The header's design sentence now names this one comparison. The Step-line count was re-derived by the header's own command: 27 live and 10 archive at c75a7c323. The BL-810 sentence is rewritten, since all five Basis entries carry Step lines. E0 seeds four new `fell` closes: rising before/after figures and a rising `X to Y` (both must read FELL-ROSE), a figureless prose `fell` (must read NO-VALUE-CITATION), and the same prose with a value citation (must stay quiet). Mutant (the `fell` branch removed): E0 refuses with rc 2. On both real ledgers the OK lines are byte-equal at base and tip, with 0 live closes and 43 archive closes, whose rule is unchanged. The receipt below reads base 1, tip 0.
+
+**DEFECT.** Filed 2026-11-13. In `eff_close()` (`scripts/validate-backlog-receipts.sh:1620`), the live branch checks a value citation only when the Verdict direction is `did not fall` (`:1636`-`:1639`, `eff_cite_ok` under `[ "$6" = dnf ]`); a `fell` verdict returns with nothing checking that the figures it cites fell, or that any value citation resolves. A close can therefore state `Verdict: <group> fell` beside figures that rose and pass E1. Found by R1's close verifier (batch 257, 0.1103.0).
+
+Also stale in the same header: `:1561` says "12 live, 3 archive at ca6a6f941 (0.1070.0) and this tip (BL-809, BL-812 gained Step lines)", and `:1576` says "BL-810 carries no `Step:` line"; 0.1103.0 declared Step lines on BL-508, BL-541, BL-543, BL-550, BL-552, BL-810 and BL-912, so both statements no longer describe the ledger: the header's own command, `grep -cE '^(<br>|- )?(\*\*)?Step:' docs/backlog.md`, reads 27 live at 0.1104.0 (6ee555c87), against 0 for the negative control `BasisZZQ`.
+
+The header at `:1200`-`:1201` says by design that "no threshold or comparison is applied to any number"; the fix reconciles that design statement rather than contradicting it silently.
+
+Owed: a `fell` verdict is held to a rule of its own (a resolving value citation, or BEFORE and AFTER figures for the declared step that fell), with an E0 self-probe seeding a `fell` close beside figures that rose (must fire) and one beside figures that fell (must stay quiet); and the header's Step-line count and BL-810 sentence re-derived by the commands the header names.
+
+Receipt: runner-wired, run from the repo root. It writes two scratch ledgers holding one LANDED efficiency close whose BEFORE and AFTER figures ROSE (1.0 h to 2.0 h) and which carries no value citation, and runs the validator `--efficiency-only` over each. Control: the `did not fall` copy must fire `NO-VALUE-CITATION`, else exit 9. Subject: the `fell` copy draws no finding today, exit 1; any finding naming the entry, exit 0. Measured once each: base 0.1105.0 exit 1; a stand-in fix (a `fell` whose AFTER exceeds its BEFORE reads FELL-ROSE at `:1636`, E0 still green) exit 0. A `fell` with NO figures is already refused at `NO-FIGURES`, so the discriminating input is rising figures.
+
+Provenance: batch 257, R1's close verifier; id reserved by the lead (cluster F9), filed at the close docs because no session took it.
+
+verify: sh grep -q 'eff_cite_ok' scripts/validate-backlog-receipts.sh || exit 9; V=scripts/validate-backlog-receipts.sh; T=$(mktemp -d) || exit 9; R='Cites "A step with no measured value goes" in `.claude/rules/operator-rulings.md`.'; L='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive, 2.1M tokens, lead active 0.4 h, subagent $5, measured by '; P=docs/anal; L="${L}${P}ysis/"'pipeline-efficiency-s317-s320/scripts/roll.py, before 1.0 h and after 2.0 h'; E='(efficien'; E="${E}cy)"; for v in fell 'did not fall'; do printf '# probe\n\n## BL-9001\n\n**DEFECT %s.** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; rose.\n\nStep: implementation\n\nVerdict: implementation %s.\n' "$E" "$R" "$L" "$v" > "$T/l-${v%% *}.md"; done; c=$(bash "$V" "$T/l-did.md" --efficiency-only --root . </dev/null 2>&1); case "$c" in *BL-9001*NO-VALUE-CITATION*) ;; *) exit 9 ;; esac; s=$(bash "$V" "$T/l-fell.md" --efficiency-only --root . </dev/null 2>&1); case "$s" in *BL-9001*) exit 0 ;; esac; exit 1
+
+
+## BL-1041 — the E arm of `scripts/validate-backlog-receipts.sh` classes an entry by text inside its own `verify:` line
+
+**LANDED (v0.1131.0).** The EFFAWK entry scan now skips an entry's `verify:` line before it classes the entry or reads the citer path, so the receipt is not the entry. E0 seeds BL-1065, an untagged entry carrying the tag and a `docs/analysis` path only in its `verify:` line, which must stay quiet and stay out of the filing population. Beside it, BL-1066 carries the same text on a body line and must fire F-BASELINE, F-MOVEMENT, F-RULING and F-STEP. Mutant (the skip line deleted): E0 refuses with rc 2, and BL-1065 fires four F- rows. On both real ledgers the OK lines are byte-equal at base and tip. The receipt below is now runner-wired and reads base 1, tip 0. Its control (the tag on a body line) must name the entry, or it exits 9.
+
+**NOTE.** Filed 2026-11-13. The E arm's entry scan in `scripts/validate-backlog-receipts.sh` runs `backlog_efficiency_tagged($0)` on every line of an entry (`:1304`, `if (backlog_efficiency_tagged($0)) tagged = 1`; the regex is `core/skills/ai-dlc-update/reconcile/lib.sh:560`), and appends every line to `text` (`:1303`), whose `index(text, ...)` on the `docs/analysis` directory path sets the citer field (`:1250`). The `verify:` line is one of those lines, so a receipt that writes a scratch ledger carrying the bold efficiency tag or that path makes its own entry an efficiency entry. That is a classifier false positive: text about a program read as the program.
+
+Measured instance: BL-1031, a plain DEFECT, failed `FAIL: E BL-1031 F-BASELINE`, `F-STEP` and `F-MOVEMENT` at the 0.1107.0 bundle, from the literal bold tag and `docs/analysis` path inside its receipt's scratch ledger. This release works around it by building both tokens at run time in BL-1031's receipt (the scratch ledgers it writes are byte-equal to before, and it still exits 1); the check itself is unfixed.
+
+Owed: the class scan excludes the `verify:` line (or fenced receipt text), with an E0 self-probe seeding an untagged entry whose receipt writes the tag (must stay quiet) beside a tagged one (must fire).
+
+Receipt: runner-wired, run from the repo root. It writes two scratch ledgers, each holding one LANDED entry, and runs the validator `--efficiency-only` over each. Both tokens are built at run time. Control: the tag and a `docs/analysis` path on a body line must name the entry, else exit 9. Subject: an untagged entry whose `verify:` line writes the same two tokens. Any row naming it exits 1, and silence exits 0. Measured once each: base c851405b5 exit 1, this tip exit 0.
+
+Provenance: batch 257, the 0.1107.0 bundle's receipts gate; id allocated by the lead.
+
+verify: sh V=scripts/validate-backlog-receipts.sh; T=$(mktemp -d) || exit 9; E='(efficien'; E="${E}cy)"; P=docs/anal; P="${P}ysis/x/roll.py"; printf '# probe\n\n## BL-9001\n\n**DEFECT %s.** x, see %s.\n\n**LANDED (v0.1.0, verified abc1234).**\n\nverify: manual\n' "$E" "$P" > "$T/c.md"; printf '# probe\n\n## BL-9001\n\n**DEFECT.** x.\n\n**LANDED (v0.1.0, verified abc1234).**\n\nverify: sh printf "**DEFECT %s.** %s" > "$T/l.md"\n' "$E" "$P" > "$T/s.md"; c=$(bash "$V" "$T/c.md" --efficiency-only --root . </dev/null 2>&1); case "$c" in *BL-9001*) ;; *) exit 9 ;; esac; s=$(bash "$V" "$T/s.md" --efficiency-only --root . </dev/null 2>&1); case "$s" in *BL-9001*) exit 1 ;; esac; exit 0
+
+## BL-1079 — matrix fixtures compare their header rows with a hand-written literal list, so adding a matrix cell drifts the check
+
+**LANDED (v0.1131.0).** Closed by subtraction, not by a derived join: 0.1130.0 (56877eb4d) deleted every fixture's mutation battery, and `scripts/validate-fixture-hygiene.sh` arm H12 fails the push on any fixture run.sh or lib.sh with a line opening `# MUTANT-MATRIX`, so no fixture can carry a header list or a literal copy of one. The derived-header helper built for this entry (`core/fixtures/lib/matrix-header.sh`, unlanded sha 8d9eba030) is not carried: no fixture has a `--matrix` mode left to source it. Control, one invocation: `git grep -lE '"\$mx_hdr" = "' <rev> -- 'core/fixtures/*/run.sh' | wc -l` reads 13 at 9cad095fe and 0 at 56877eb4d; a token no file carries reads 0. Files opening `# MUTANT-MATRIX` under `core/fixtures/*/run.sh` read 153 at 9cad095fe and 0 at 56877eb4d. The one `MUTANT-MATRIX` hit left under core/fixtures is prose in `backlog-real-ledger/ledger.snapshot`, outside H12's population.
+
+**DEFECT.** Filed 2026-11-14. Thirteen matrix fixtures check their `# MUTANT-MATRIX` header rows by comparing `"$mx_hdr"` against a literal list written by hand. Adding a mutant row without editing that literal makes `--matrix` exit 2 with MATRIX BROKEN; the plain run never reaches the check, so the gate does not see it. BL-1078 is the instance: m5 in pregate-self-check. The other twelve are apply-restamp-theirs, artifact-section-heading-level, backlog-rotate-fence-guard, gate-series-rung, path-mapping-render, prepush-ssh-keepalive, provenance-flagless-default, push-drain-refusals, ledger-reverify-dist-only-reach, predicate-reclassification, prepush-worktree-env-scrub and readset-sandbox-root-clause.
+
+Owed: derive the expected header from the fixture's own matrix block, the set of mutants it actually scores, instead of a literal. layer-contract-conformance, prepush-pool-depth and reconcile-emit-report already join their header rows to a derived set.
+
+Control, one line, at 9cad095fe: `git grep -lE '"\$mx_hdr" = "' -- 'core/fixtures/*/run.sh' | wc -l` reads 13, the twelve plus pregate-self-check. The same grep with a token no file carries reads 0.
+
+Provenance: batch 257, from BL-1078 (ai-dlc-0e's finding); id allocated by the lead.
+
+verify: manual
+
+## BL-1087 — readset-stage1-verdict's [term] cell reads FIXTURE BROKEN under load: its settle test fires while the TERMed wrapper sits in finish()'s grace poll
+
+**LANDED (v0.1131.0).** `core/fixtures/readset-stage1-verdict/run.sh` replaces `st_tree_settled` with `st_unreached <stub pids> <wrapper pid>`, which is the [term] cell's only "will never exit" test. It holds only when the wrapper is blocked with no signal pending AND every pid the stub recorded is ALIVE and blocked, meaning the group kill never reached them. A dead recorded pid means the kill landed. The wrapper's remaining path is then finite (the grace, its KILL, the sampler's KILL), and the cell waits it out by pid. The wrapper is read first: between taking the TERM and sending its group kill, finish() runs builtins only. The other `st_settled` sites are unchanged.
+
+**DEFECT.** Filed 2026-11-14. On unmodified main c75a7c323 the fixture went `FIXTURE BROKEN: [term] the TERMed wrapper did not exit ... every process it waits on is blocked with no signal pending` in 2 of 3 loaded runs (0e alongside its seed; 43 on 88d57ea71 in a JOBS=9 hook-fixture part). It was green in 2 of 2 solo runs. The subject did not drop the TERM. In 0e's kept work dir the stub appears only through the recorded pids and not among the wrapper's live descendants, which were the sampler, its `sleep 15` and one later child. The wrapper's output, `RUN_DIR/rc` and the terminal ledger line were all empty: finish() had group-killed the stub and was still in its grace poll. The old test skipped dead pids and required only one live pid, so once the stub's pids were gone it read "the wrapper and its live descendants are all S". That is true of the wrapper waiting on `sleep 0.1`, and of the sampler waiting on `sleep 15`. The fixture then KILLed a wrapper that was about to exit. Load decides only whether one of the fixture's 0.1 s polls lands in that window.
+
+Forced in scratch worktrees, with no load generator. In `hang` mode only, the stub's second recorded child runs `trap '' TERM; exec cat <fifo>`. finish()'s group TERM then leaves that child alive and blocked, and the stub and the first child dead, so the wrapper polls its full grace. Results:
+- Old fixture: FIXTURE BROKEN with the exact signature. Its `ps` dump at the BROKEN point shows the wrapper S and the stub gone.
+- New fixture: the `TERM: exit 143 ...` ok line, after the grace KILL.
+- Mutant (dead recorded pids skipped again): FIXTURE BROKEN.
+
+A first forcing, with an unrecorded TERM-ignoring member, also turned the old fixture red and the new one green.
+
+Receipt: `verify: manual`. The interleaving needs a TERM-ignoring child in the stub, which the shipped [term] world deliberately does not carry. The evidence is the forced scratch runs above.
+
+Provenance: batch 257, M1 (ai-dlc-aa, fast track), from 0e's H5b2 finding and 43's F2 hook-fixture run; id allocated by the lead.
+
+verify: manual
+## BL-1058 — trees with the same path set but different content share one pre-suite record per step, so a run between pushes overwrites the next push's skips
+
+**DEFECT.** Filed 2026-11-13. Owner: `.githooks/pre-push`, `ps_select` and `ps_flush` (the PRESUITE_UNITS span): one record `<slug>.key` per step under the shared `<verdict store base>/presuite-keys/<root commit>/`. The filed site, `pk_step` and the present key, was deleted by BL-1091; the defect survived it, because every tree sharing a root commit reads and writes that one record.
+
+**LANDED (v0.1131.0).** A passed step's record is also kept as `<slug>.<first 16 hex of the sha256 of its key rows>.key` (`ps_keep`, the 16 newest per step). A step run only because its rows differ from `<slug>.key` (unrecorded, changed, tools changed) skips when a kept record carries its current rows' name (`ps_select`). Rows are root-relative, so equal declared inputs in any tree give one name, and `<slug>.key` is read and written as before, so existing records carry forward. Fixture `presuite-units` arm `content` drives two worktrees of one repo through the span: red on the 0.1130.0 hook (`A=a c`), green at the fix. Its second half, content no run passed, still runs.
+
+A record's filename carries only the present key, which hashes the set of paths, never their content. Every tree with the same path set therefore reads and writes the same record for a step. Clean worktrees of consecutive releases usually share a path set, and since BL-1054 so does the main checkout when it holds no untracked unignored file. Measured in batch 257: F22's prefix run at its tip wrote `shell-syntax-every-shipped-script-and-hook.eb7fdc709c953ec4.key`, F17's push from another tree with the same path set overwrote it at 20:55:47, and F22's next run read F17's record (`runs: changed .githooks/pre-push`) instead of its own. Any builder's self-check or prefix run between two pushes can cost the next push its skips in the same way. The prune keeps the newest 4 records per slug, so the collision also evicts records that other trees would have used.
+
+Receipt: `verify: manual`. The fixture `presuite-units` arm `content` drives the span on every push that moves it.
+
+Provenance: batch 257, F22's prefix runs; id allocated by the lead.
+
+verify: manual
+

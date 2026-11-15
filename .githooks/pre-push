@@ -225,7 +225,8 @@ RED_STEPS=""
 # gate log reads as a serial one. The key pass is the fixture mechanism's own: a step that declares its inputs in
 # scripts/presuite/<slug>/inputs.decl (the inputs.decl grammar, directories allowed) is keyed by readset_manifest,
 # readset_declared and readset_keys with FXROOT=scripts/presuite/, exactly as cl_select keys the consumer layout, and
-# its pass is a record under <verdict store base>/presuite-keys/<root commit>, published the moment the step passes. A
+# its pass is a record under <verdict store base>/presuite-keys/<root commit>, published the moment the step passes, and
+# kept a second time under its rows' own name (ps_keep), which a step run only on moved keys skips on (ps_select). A
 # step with no declaration has no key and runs on every push. A step that reads git state (HEAD, origin/main, the push
 # refs, ls-files, log) declares nothing: a declared file cannot express it. Nor does one that reads a git-ignored path
 # (agent definitions: .claude/settings.json) or walks the whole tree (stray party-mode: a new top-level file).
@@ -254,7 +255,7 @@ ps_run() { # <n>: one queued step in a forked subshell (a fork, never a new bash
   echo $((SECONDS - s)) > "$PS_W/$n.sec"
 }
 ps_select() { # decides every keyed step in the runlist from the fixture mechanism's own key pass; a skip leaves `<n>.keyskip`
-  local c="$PS_W/k" n slug base pr kd keyed=0
+  local c="$PS_W/k" n slug base pr kd h keyed=0
   PS_KD=""
   mkdir -p "$c" || return 0
   : > "$c/.list"; : > "$c/.mapped.all"; : > "$c/.kdec"
@@ -278,8 +279,32 @@ ps_select() { # decides every keyed step in the runlist from the fixture mechani
     readset_keys "$c/.list" "$c" ) > "$c/.log" 2>&1 || { : > "$c/.kdec"; printf '   ..    pre-suite keys: the step keys could not be built (%s) -- every step runs\n' "$(sed -n 1p "$c/.log")"; }
   [ "${AI_DLC_FIXTURE_NO_SKIP:-}" != 1 ] || return 0
   for n in $(cat "$PS_W/runlist"); do
-    awk -F'\t' -v s="$(cat "$PS_W/$n.slug")" '$1 == s && $2 == "skip" { f = 1 } END { exit f ? 0 : 1 }' "$c/.kdec" && : > "$PS_W/$n.keyskip"
+    slug="$(cat "$PS_W/$n.slug")"
+    if awk -F'\t' -v s="$slug" '$1 == s && $2 == "skip" { f = 1 } END { exit f ? 0 : 1 }' "$c/.kdec"; then : > "$PS_W/$n.keyskip"; continue; fi
+    # A STEP RUN ONLY BECAUSE ITS KEY ROWS DIFFER FROM <slug>.key (unrecorded, changed, tools changed) SKIPS ON A PASS
+    # KEPT UNDER ITS ROWS' OWN NAME (ps_keep): every tree sharing the keys dir writes the one <slug>.key, so another
+    # tree's pass at other content must not cost this tree its own. Any other run reason runs.
+    awk -F'\t' -v s="$slug" '$1 == s && $2 == "run" && ($3 == "unrecorded" || $3 == "tools changed" || index($3, "changed ") == 1) { f = 1 } END { exit f ? 0 : 1 }' "$c/.kdec" || continue
+    h="$(ps_rowkey "$c/.k/$slug")" && [ -f "$kd/$slug.$h.key" ] || continue
+    touch "$kd/$slug.$h.key" 2>/dev/null; : > "$PS_W/$n.keyskip"
   done
+}
+# ps_rowkey <record>: the first 16 hex of the sha256 of a key record's rows (its `#` header lines left out). Rows are
+# root-relative, so two trees whose declared inputs hold the same bytes print the same name.
+ps_rowkey() {
+  local h
+  [ -s "$1" ] || return 1
+  h="$(grep -v '^#' "$1" | shasum -a 256 | cut -c1-16)"
+  case "$h" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) printf '%s' "$h" ;; *) return 1 ;; esac
+}
+# ps_keep <record> <slug> <keys dir>: keeps a passed step's record as <slug>.<rowkey>.key beside <slug>.key, and prunes
+# that step's kept records to the 16 newest (a skip on one touches it).
+ps_keep() {
+  local h f
+  h="$(ps_rowkey "$1")" || return 0
+  cp "$1" "$3/$2.$h.key.tmp.$$" 2>/dev/null && mv "$3/$2.$h.key.tmp.$$" "$3/$2.$h.key" 2>/dev/null
+  ls -t "$3/$2".*.key 2>/dev/null | sed 1,16d | while IFS= read -r f; do rm -f "$f"; done
+  return 0
 }
 ps_stop() { # <exit status>: an interrupted flush stops the step forks it started, by their recorded pids
   local p
@@ -343,6 +368,7 @@ ps_flush() {
   if [ -n "$PS_KD" ] && [ -s "$PS_W/k/.passed" ]; then
     while IFS= read -r slug; do printf ok > "$PS_W/k/$slug"; done < "$PS_W/k/.passed"
     readset_keys_write "$PS_W/k" "$PS_KD"
+    while IFS= read -r slug; do ps_keep "$PS_W/k/.k/$slug" "$slug" "$PS_KD"; done < "$PS_W/k/.passed"
   fi
   printf '\n   ..    pre-suite keys: %s of %s step(s) skipped on a recorded pass\n' "$ps_nskip" "$PS_N"
   case "$PS_W" in */presuite.*) rm -rf -- "$PS_W" ;; esac

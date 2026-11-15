@@ -18,6 +18,8 @@
 #            file read could see): the step declaring that directory runs, the other skips
 #   conc     two undeclared steps that each read the other's token off a fifo both pass: a fifo's bytes die with its last
 #            open fd, so each token read proves the two steps were live at once (ordering, not timing)
+#   content  two worktrees of one repo, one path set, core/a.txt differing: after the other tree records, a tree skips on
+#            its own pass (the one <slug>.key holds the other's rows), and a third content no run passed runs (BL-1058)
 #   order    the steps print in declaration order, each followed by its own verdict
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -51,7 +53,7 @@ flush() {
   (
     cd "$w" || exit 125
     unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY PREPUSH_POOL_DEPTH
-    export AI_DLC_VERDICT_STORE="$w.vs" AI_DLC_FIXTURE_JOBS=4 RAN="$w.ran" W="$w" GIT_AUTHOR_NAME=f
+    export AI_DLC_VERDICT_STORE="${VS:-$w.vs}" AI_DLC_FIXTURE_JOBS=4 RAN="$w.ran" W="$w" GIT_AUTHOR_NAME=f
     . "$WORK/pool.sh" > /dev/null 2>&1
     . "$psu" || exit 126
     fail=0; RED_STEPS=""; PRESUITE_DONE=0
@@ -92,6 +94,25 @@ conc_arm() {
   rc="$(MEET_BOUND="$b" flush "$w" "$psu" "$w.out" conc)"
   echo "rc=$rc:$(grep -c '   PASS' "$w.out")"
 }
+# content_arm <psu> <tag>: two worktrees of one repo share one root commit, so one keys dir; their path sets are equal and
+# core/a.txt differs. A records, B records, A again must skip stepa on its own pass; then B moves to content no run
+# passed, and stepa must run there.
+content_arm() {
+  local psu="$1" w="$WORK/content-$2" b ra rb
+  world "$w" || broken "could not build the content world"
+  b="$w.B"
+  ( cd "$w" && unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY && git worktree add -q --detach "$b" ) >/dev/null 2>&1 \
+    || broken "could not add the content world's second worktree"
+  printf 'a2\n' > "$b/core/a.txt"
+  [ "$(cd "$w" && git ls-files)" = "$(cd "$b" && git ls-files)" ] && ! cmp -s "$w/core/a.txt" "$b/core/a.txt" \
+    || broken "the content world's two trees must share a path set and differ in core/a.txt"
+  VS="$w.vs" flush "$w" "$psu" "$w.out1" > /dev/null
+  VS="$w.vs" flush "$b" "$psu" "$b.out1" > /dev/null
+  : > "$w.ran"; VS="$w.vs" flush "$w" "$psu" "$w.out2" > /dev/null; ra="$(ran_of "$w")"
+  printf 'a3\n' > "$b/core/a.txt"
+  : > "$b.ran"; VS="$w.vs" flush "$b" "$psu" "$b.out2" > /dev/null; rb="$(ran_of "$b")"
+  echo "A=$ra;B=$rb"
+}
 chk() { # chk <tag> <arm> <pass 0|1> <ok message> <fail message>
   if [ "$3" = 0 ]; then ok "$4"; else bad "$5"; fi
 }
@@ -108,13 +129,15 @@ run_arm() { # run_arm <tag> <psu> <arm>
       chk "$tag" absent "$p" "a file ADDED to a declared directory (cells.decl under core/fixtures/x/) runs the step declaring it: the directory listing moved" "an added file in a declared directory ran '$r', want a and c (the absent-path case: no file read could see it)" ;;
     conc) r="$(conc_arm "$psu" "$tag")"; [ "$r" = "rc=0:2" ] && p=0
       chk "$tag" conc "$p" "two steps that each read the other's token off a fifo both pass: the steps were live at once (a serial pool drops the first step's token with its fd)" "the meeting steps gave '$r', want rc=0 and 2 PASS (a serial pool cannot pass both)" ;;
+    content) r="$(content_arm "$psu" "$tag")"; [ "$r" = "A=c ;B=a c " ] && p=0
+      chk "$tag" content "$p" "a tree whose declared input differs from another tree's at the same path set skips on its own pass after the other recorded, and content no run passed still runs" "two trees at one path set gave '$r', want A=c ;B=a c  (a tree's pass must survive another tree's record, and must not cover content it never passed)" ;;
   esac
 }
-for _a in skip unrel moved absent conc; do run_arm base "$WORK/psu.sh" "$_a"; done
+for _a in skip unrel moved absent conc content; do run_arm base "$WORK/psu.sh" "$_a"; done
 # the order arm reads the base `none` world's second flush output
 cp "$WORK/base-none.out2" "$WORK/o.txt" 2>/dev/null || broken "the skip world left no second-flush output"
 r="$(sed -n '/^── /p;/^   PASS$/p;/^   skipped on/p' "$WORK/o.txt" | tr '\n' '|')"
 chk base order "$([ "$r" = "── stepa|   skipped on a recorded pass: none of its declared inputs changed|   PASS|── stepb|   skipped on a recorded pass: none of its declared inputs changed|   PASS|── stepc|   PASS|" ] && echo 0 || echo 1)" \
   "the steps print in declaration order, each title followed by its own verdict" "the print order was '$r', want stepa stepb stepc in order, each with its own verdict"
-report_end presuite-units 6
+report_end presuite-units 7
 

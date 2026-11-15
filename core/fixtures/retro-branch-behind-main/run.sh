@@ -105,6 +105,8 @@ if [ -z "$RETRO" ]; then
   echo "FIXTURE ERROR: steps/retro.md not found under $ROOT in either layout — an absent subject is not a passing one" >&2
   exit 2
 fi
+DVSTEP="$(dirname "$RETRO")/deploy-validate.md"
+[ -f "$DVSTEP" ] || { echo "FIXTURE ERROR: steps/deploy-validate.md not found beside $RETRO" >&2; exit 2; }
 
 VMR="$TOOLS/validate-mandatory-rules.sh"
 VAA="$TOOLS/validate-audit-anchors.sh"
@@ -1301,6 +1303,34 @@ else
 fi
 fi
 
+# ============================================================================
+# BL-993's RECEIPT. Deploy-validate Step 2's record block commits the sprint PR number, its head and
+# its squash sha to the sprint branch, and retro Step 1 reads that record before any derivation. It
+# builds four re-pointed worlds from the resolved retro.md and deploy-validate.md: the block's
+# record, the carry from it with gh never asked, the no-record control that is underivable, and a
+# refused record that gh never overrides. Its subject is ABSENT when deploy-validate.md carries
+# neither the block's comment nor a `RECORD: ` token, or retro.md never names
+# `sprint-pr-merge.txt`, and then PENDING (RED in the distribution), like every subject above.
+# ============================================================================
+RCPT993="$DIR/receipt-bl993.sh"
+[ -f "$RCPT993" ] || { echo "FIXTURE ERROR: missing $RCPT993" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/deploy-validate.md"
+_recw="$(grep -c -e '^# deploy-validate Step 2: record the sprint-PR merge' -e 'RECORD: ' "$DVSTEP")" || _recw=0
+_recr="$(grep -c 'sprint-pr-merge\.txt' "$RETRO")" || _recr=0
+if [ "$_recw" -eq 0 ] || [ "$_recr" -eq 0 ] || [ "$ST_CARRY" = absent ]; then
+  pending "BL-993 receipt" "the sprint-merge record (deploy-validate.md's record block, retro.md's read of it)" "receipt-bl993.sh is not run" 1
+else
+bash "$RCPT993" "$RETRO" "$DVSTEP" > "$WORK/r993.out" 2>"$WORK/r993.err"; r993_rc=$?
+r993_pass="$(grep -cE '^CELL (record|carry|norecord|badrecord|statedir) PASS ' "$WORK/r993.out")" || r993_pass=0
+if [ "$r993_rc" = 9 ]; then
+  bad "FIXTURE BROKEN: receipt-bl993.sh refused to build its worlds: $(head -1 "$WORK/r993.err")"
+elif [ "$r993_rc" = 0 ] && [ "$r993_pass" = 5 ]; then
+  ok "BL-993 receipt: exit 0, all five cells PASS: $(grep '^CELL ' "$WORK/r993.out" | cut -d' ' -f2-3 | tr '\n' ' ')"
+else
+  bad "BL-993 receipt: exit $r993_rc with $r993_pass of 5 CELL PASS lines: $(cat "$WORK/r993.out" "$WORK/r993.err" | head -c 600 | tr '\n' ' ')"
+fi
+fi
+
 
 
 echo
@@ -1310,4 +1340,4 @@ echo
 if [ "$PENDN" -gt 0 ]; then
   echo "retro-branch-behind-main: $PENDN PENDING row(s) skipping $SKIPPED -- their subjects have not arrived in this retro.md"
 fi
-report_end retro-branch-behind-main "$((12 - SKIPPED + PENDBAD))"
+report_end retro-branch-behind-main "$((13 - SKIPPED + PENDBAD))"
