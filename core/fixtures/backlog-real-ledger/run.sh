@@ -76,10 +76,8 @@ cleanup() {
   rm -rf "$TMP"
 }
 trap cleanup EXIT
-rc=0
-note() { printf '%s\n' "$*"; }
-ok()  { note "ok    $1"; }
-bad() { note "FAIL  $1"; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # --- j1's seed: a throwaway REPOSITORY, because the receipts validator checks each receipt out of
 # HEAD. It carries the validator, both reconcile files it loads, the classifier (R2's declared-empty
@@ -174,9 +172,9 @@ printf '## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MAR
 j1p_anch_out="$(run_r "" "$TMP/j1p" $J1_ARGS)"
 j1p_anch="$(j1_read "$j1p_anch_out")"
 if [ -z "$j1p_zero" ] && [ "${j1p_anch#* }" = 1 ]; then
-  note "ok    j1 probe -- a zero-scored ledger yields no SUMMARY reading, and the same ledger plus the anchor yields scored=1"
+  ok "j1 probe -- a zero-scored ledger yields no SUMMARY reading, and the same ledger plus the anchor yields scored=1"
 else
-  note "FAIL  j1 probe -- zero-scored reading '$j1p_zero' (want none), anchored reading '$j1p_anch' (want '<n> 1'); the j1 reader or its anchor cannot discriminate, so j1 below proves nothing"; rc=1
+  bad "j1 probe -- zero-scored reading '$j1p_zero' (want none), anchored reading '$j1p_anch' (want '<n> 1'); the j1 reader or its anchor cannot discriminate, so j1 below proves nothing"
 fi
 seed_r "$TMP/j1"
 cp "$REAL_LEDGER" "$TMP/j1/docs/backlog.md"
@@ -191,11 +189,11 @@ cp "$SIZE" "$TMP/j1/scripts/validate-backlog-size.sh"
 # then supplies the arm's whole population and the join below still runs.
 ( cd "$TMP/j1" && bash scripts/backlog-reverify.sh --declared-empty docs/backlog.md >/dev/null 2>&1 ); j1_de=$?
 if [ "$j1_de" -ne 0 ] && [ "$j1_de" -ne 1 ]; then
-  note "FAIL  j1 -- backlog-reverify.sh --declared-empty exited $j1_de on the real ledger, an environment failure"; rc=1
+  bad "j1 -- backlog-reverify.sh --declared-empty exited $j1_de on the real ledger, an environment failure"
 fi
 if grep -qE "^## ${J1_ANCHOR}([^0-9]|\$)" "$TMP/j1/docs/backlog.md" \
    || { [ "$j1_de" -ne 0 ] && ! grep -q '^## BL-' "$TMP/j1/docs/backlog.md"; }; then
-  note "FAIL  j1 -- the real ledger already carries ${J1_ANCHOR}, or carries no '## BL-' entry at all while not declared empty; the anchor cannot be told apart"; rc=1
+  bad "j1 -- the real ledger already carries ${J1_ANCHOR}, or carries no '## BL-' entry at all while not declared empty; the anchor cannot be told apart"
 fi
 printf '\n## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1/docs/backlog.md"
 ( cd "$TMP/j1" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m real >/dev/null 2>&1 )
@@ -209,7 +207,7 @@ j1_out="$(run_r "" "$TMP/j1" $J1_ARGS --base "$(git -C "$TMP/j1" rev-parse HEAD)
 j1_rd="$(j1_read "$j1_out")"
 j1_arm="${j1_rd%% *}"; j1_sc="${j1_rd#* }"
 if [ -z "$j1_rd" ] || [ "$j1_sc" -eq 0 ]; then
-  note "FAIL  j1 -- the validator printed no SUMMARY or scored nothing on the real ledger plus a receipt it always scores (reading '$j1_rd'); nothing was observed"; rc=1
+  bad "j1 -- the validator printed no SUMMARY or scored nothing on the real ledger plus a receipt it always scores (reading '$j1_rd'); nothing was observed"
   j1_arm=""
 fi
 # Reverify's own view: one row per entry, id in field 2, restricted to the rows whose verb it
@@ -223,13 +221,13 @@ fi
 j1_rows="$( cd "$TMP/j1" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null )"
 j1_rev="$(printf '%s\n' "$j1_rows" | awk -F'\t' '$3 ~ /^sh receipt exited/ { print $2 }' | sort -u | grep -c . )"
 if [ -z "$j1_arm" ] || [ -z "$j1_rev" ]; then
-  note "FAIL  j1 -- a side produced no value (arm='$j1_arm' reverify='$j1_rev')"; rc=1
+  bad "j1 -- a side produced no value (arm='$j1_arm' reverify='$j1_rev')"
 elif [ "$j1_arm" -eq 0 ] || [ "$j1_rev" -eq 0 ]; then
-  note "FAIL  j1 -- a side counted ZERO (arm=$j1_arm reverify=$j1_rev); two predicates that both find nothing agree perfectly and prove nothing"; rc=1
+  bad "j1 -- a side counted ZERO (arm=$j1_arm reverify=$j1_rev); two predicates that both find nothing agree perfectly and prove nothing"
 elif [ "$j1_arm" -lt "$j1_rev" ]; then
-  note "FAIL  j1 -- the arm sees $j1_arm sh receipts and backlog-reverify.sh resolves $j1_rev. The arm's population is SMALLER than the classifier's, so receipts exist that it never scores."; rc=1
+  bad "j1 -- the arm sees $j1_arm sh receipts and backlog-reverify.sh resolves $j1_rev. The arm's population is SMALLER than the classifier's, so receipts exist that it never scores."
 else
-  note "ok    j1 -- on the real ledger the arm's sh population ($j1_arm) covers the classifier's resolved set ($j1_rev)"
+  ok "j1 -- on the real ledger the arm's sh population ($j1_arm) covers the classifier's resolved set ($j1_rev)"
 fi
 
 # ===== b16: THE CEILING JOIN ON THE REAL LEDGER. ============================================
@@ -252,25 +250,25 @@ if [ "$b16_de" -eq 0 ]; then
 else
   b16_rows="$(printf '%s\n' "$j1_rows" | awk -F'\t' -v a="$J1_ANCHOR" '$2 != a')"
   b16_gone=$(( $(printf '%s\n' "$j1_rows" | grep -c .) - $(printf '%s\n' "$b16_rows" | grep -c .) ))
-  [ "$b16_gone" -eq 1 ] || { note "FAIL  b16 -- removing the anchor's row from the classifier's rows removed $b16_gone rows, want exactly 1"; rc=1; }
+  [ "$b16_gone" -eq 1 ] || bad "b16 -- removing the anchor's row from the classifier's rows removed $b16_gone rows, want exactly 1"
 fi
 b16_rev="$(printf '%s\n' "$b16_rows" | cut -f2 | sort -u | grep -c . )"
 if [ "$b16_de" -eq 0 ]; then
   b16_nrow="$(printf '%s\n' "$b16_rows" | grep -c .)" || b16_nrow=0
   if [ "$b16_arm" = 0 ] && grep -qF ', declared empty (' <<<"$b16_out" \
      && [ "$b16_nrow" -eq 1 ] && [ "$(printf '%s\n' "$b16_rows" | cut -f1)" = DECLARED-EMPTY ]; then
-    note "ok    b16 -- the real ledger is declared empty, and the ceiling (0, declared empty) and the classifier (one DECLARED-EMPTY row) both say so"
+    ok "b16 -- the real ledger is declared empty, and the ceiling (0, declared empty) and the classifier (one DECLARED-EMPTY row) both say so"
   else
-    note "FAIL  b16 -- the real ledger is declared empty but the sides disagree (arm='$b16_arm', classifier rows=$b16_nrow first='$(printf '%s\n' "$b16_rows" | sed -n '1p' | cut -f1)')"; rc=1
+    bad "b16 -- the real ledger is declared empty but the sides disagree (arm='$b16_arm', classifier rows=$b16_nrow first='$(printf '%s\n' "$b16_rows" | sed -n '1p' | cut -f1)')"
   fi
 elif [ "$b16_de" -ne 1 ]; then
-  note "FAIL  b16 -- backlog-reverify.sh --declared-empty exited $b16_de on the real ledger, an environment failure"; rc=1
+  bad "b16 -- backlog-reverify.sh --declared-empty exited $b16_de on the real ledger, an environment failure"
 elif [ -z "$b16_arm" ] || [ -z "$b16_rev" ] || [ "$b16_arm" -eq 0 ] || [ "$b16_rev" -eq 0 ]; then
-  note "FAIL  b16 -- a side produced no usable value (arm='$b16_arm' reverify='$b16_rev')"; rc=1
+  bad "b16 -- a side produced no usable value (arm='$b16_arm' reverify='$b16_rev')"
 elif [ "$b16_arm" -ne "$b16_rev" ]; then
-  note "FAIL  b16 -- on the REAL ledger the ceiling counts $b16_arm and backlog-reverify.sh classifies $b16_rev"; rc=1
+  bad "b16 -- on the REAL ledger the ceiling counts $b16_arm and backlog-reverify.sh classifies $b16_rev"
 else
-  note "ok    b16 -- on the real ledger the ceiling and the classifier agree at $b16_arm entries"
+  ok "b16 -- on the real ledger the ceiling and the classifier agree at $b16_arm entries"
 fi
 
 # ===== r9: THE VALIDATOR'S OWN LIVE-LEDGER ARM, BOTH DIRECTIONS (BL-872). ===================
@@ -305,7 +303,4 @@ else
   bad "j1-m1x -- the M1 line is '$(printf '%s\n' "$j1_out" | grep '^M1-EXCLUDED' )', want '$M1X_WANT'"
 fi
 
-if [ "$rc" -eq 0 ]; then
-  note "PASS  backlog-real-ledger -- j1 and b16 hold on the frozen ledger snapshot"
-fi
-exit "$rc"
+report_end backlog-real-ledger

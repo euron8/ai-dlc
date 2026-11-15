@@ -134,9 +134,8 @@ new_sandbox() { # new_sandbox <name>  -> path on stdout
 }
 
 echo "HERMETIC-CONSUMED $SRC_DIR/$(basename "$SCRIPT")"
-fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
 [ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
 . "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
@@ -302,6 +301,4 @@ refusal_arm not-single-homed "$REF2_DIR" "expected exactly 1" "two candidate clo
 
 
 echo
-[ "$fails" -eq 0 ] && { echo "shadowed-local-validators: PASS"; exit 0; }
-echo "shadowed-local-validators: $fails assertion(s) violated." >&2
-exit 1
+report_end shadowed-local-validators

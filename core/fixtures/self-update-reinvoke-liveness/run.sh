@@ -45,9 +45,8 @@ echo "HERMETIC-CONSUMED $RECON/setup-sites.md"
 
 W="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$W"' EXIT
-FAILS=0
-ok()   { echo "ok   $1"; }
-bad()  { echo "FAIL $1"; FAILS=$((FAILS+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 eq()   { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1: got [$2] want [$3]"; fi; }
 G()    { git -c user.name=fx -c user.email=fx@fx -c commit.gpgsign=false "$@"; }
 
@@ -215,5 +214,4 @@ eq "UN-SYNCED vs DEFER: same step 3 value, but only DEFER lands at step 7" "$(va
 eq "self-probe: re-invoke step 3 (B) and DEFER step 3 (A) are different values" \
    "$( [ "$(val base inv2.step3)" != "$(val defer inv1.step3)" ] && echo differ || echo same )" "differ"
 
-if [ "$FAILS" -eq 0 ]; then echo "PASS self-update-reinvoke-liveness"; exit 0; fi
-echo "FAILED $FAILS"; exit 1
+report_end self-update-reinvoke-liveness

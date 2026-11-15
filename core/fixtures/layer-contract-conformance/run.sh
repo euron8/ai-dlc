@@ -52,10 +52,8 @@ echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 # fx_inproc (one row per in-process vem_entry pass, BL-982) comes from lib/mutant.sh, which refuses to load
 # without ok() and bad().
 [ -f "$DIR/../lib/mutant.sh" ] || { echo "$NAME: FIXTURE ERROR -- lib/mutant.sh not found beside $DIR" >&2; exit 2; }
-FAILURES=0
-ASSERTIONS=0
-ok() { ASSERTIONS=$((ASSERTIONS + 1)); printf '%s\n' "$1"; }
-bad() { ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "$NAME: FIXTURE ERROR -- lib/report.sh not found beside $DIR" >&2; exit 2; }
 . "$DIR/../lib/mutant.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
@@ -157,7 +155,7 @@ if [ "$GROUP" = a ]; then
 
   # THE CONTROL: the real contract passes the whole validator, so nothing below is read against a dirty run.
   if [ ! -s "$OUTD/control.txt" ]; then
-    ok "  ok    control            clean  (the real contract passes)"
+    ok "control            clean  (the real contract passes)"
   else
     bad "control            the real contract already fails"
     sed 's/^/          | /' "$OUTD/control.txt" | head -5
@@ -166,12 +164,12 @@ if [ "$GROUP" = a ]; then
   if grep -q '^FAIL: I64' "$OUTD/control.txt"; then
     bad "i64-control        I64 fires on the shipping contract"
   else
-    ok "  ok    i64-control        I64 is silent on the shipping contract"
+    ok "i64-control        I64 is silent on the shipping contract"
   fi
   if grep -q '^FAIL: I65' "$OUTD/control.txt"; then
     bad "i65-control        I65 fires on the shipping contract"
   else
-    ok "  ok    i65-control        I65 is silent on the shipping contract"
+    ok "i65-control        I65 is silent on the shipping contract"
   fi
 
   # ---------------------------------------------------------------------------
@@ -191,7 +189,7 @@ if [ "$GROUP" = a ]; then
   if grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_a" \
      && grep -q '^layer-contract-conformance-b: SKIP' <<<"$_sk_b" \
      && ! grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_b"; then
-    ok "  ok    skip-name          on a consumer-shaped tree each shard's SKIP line names its own directory"
+    ok "skip-name          on a consumer-shaped tree each shard's SKIP line names its own directory"
   else
     bad "skip-name          the consumer SKIP lines do not name their shards — a: [${_sk_a}] b: [${_sk_b}]"
   fi
@@ -217,7 +215,7 @@ done
 grep -q '^OK' "$TWD/pass.ip.o" && grep -q '^FAIL' "$TWD/refuse.ip.e" || _why="$_why outcome-lines"
 cmp -s "$TWD/pass.ip.e" "$TWD/refuse.ip.e" && _why="$_why pass-and-refuse-stderr-identical"
 if [ -z "$_why" ]; then
-  ok "  ok    vem-cli-twin: in-process vem_entry equals bash validate-enforcement-map.sh byte for byte (stdout, stderr, exit) on a pass (rc 0) and on a refused contract (rc 1)"
+  ok "vem-cli-twin: in-process vem_entry equals bash validate-enforcement-map.sh byte for byte (stdout, stderr, exit) on a pass (rc 0) and on a refused contract (rc 1)"
 else
   bad "vem-cli-twin: the in-process answer differs from the CLI, or the two outcomes did not separate:$_why"
 fi
@@ -225,15 +223,6 @@ fi
 # THE ASSERTION-COUNT FLOOR, per shard: a shard that stops evaluating an arm prints a shorter green report, which
 # reads exactly like a passing one.
 EXPECTED_ASSERTIONS=1; [ "$GROUP" = a ] && EXPECTED_ASSERTIONS=5
-if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "FAIL: $ASSERTIONS assertions evaluated in shard '$GROUP', $EXPECTED_ASSERTIONS expected — an arm did not execute."
-  exit 1
-fi
 
 echo
-if [ "$FAILURES" -gt 0 ]; then
-  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong in shard '$GROUP' of '$SHARDS'."
-  exit 1
-fi
-echo "PASS: all $ASSERTIONS assertions correct in shard '$GROUP' of '$SHARDS'."
-exit 0
+report_end "$NAME" "$EXPECTED_ASSERTIONS"

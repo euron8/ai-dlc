@@ -8,3 +8,4 @@ core/fixtures/lib/preamble.sh
 # The shard drivers: the coverage join in run.sh reads every one. Their own directories are not copied unless declared.
 core/fixtures/layer-readopt-gate-c/run.sh
 # The dist-only shards (b, d, e) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.
+core/fixtures/lib/report.sh

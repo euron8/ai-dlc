@@ -10,3 +10,4 @@ core/skills/ai-dlc/enforcement-map.yaml
 core/scripts/validate-adversarial-convergence.sh
 # The --waivers owner the rung asks whether a FAIL_WAIVED waiver resolves.
 core/scripts/validate-suppression-lifetime.sh
+core/fixtures/lib/report.sh

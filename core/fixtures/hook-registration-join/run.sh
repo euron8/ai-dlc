@@ -61,9 +61,8 @@ command -v python3 >/dev/null 2>&1 || { echo "hook-registration-join: FIXTURE BR
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 
-fails=0
-ok()  { echo "  ok    $*"; }
-bad() { echo "  FAIL  $*" >&2; fails=$((fails + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # --- the unmutated base: two ai-dlc hooks, both registered, plus a third-party block ---------
 #
@@ -286,6 +285,4 @@ else
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "hook-registration-join: PASS"; exit 0; fi
-echo "hook-registration-join: $fails assertion(s) FAILED" >&2
-exit 1
+report_end hook-registration-join

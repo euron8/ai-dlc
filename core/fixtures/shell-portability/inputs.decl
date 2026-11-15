@@ -9,3 +9,4 @@ VERSION
 .githooks/pre-push
 scripts/presuite-metadata-allowlist.txt
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh

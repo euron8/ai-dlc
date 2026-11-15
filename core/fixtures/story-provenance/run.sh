@@ -37,25 +37,21 @@ NM_EXTRA=""
 trap 'rm -rf "$ROOT" ${NM_EXTRA:+"$NM_EXTRA"}' EXIT
 
 REAL_TID="toolu_FIXTUREaaaaaaaa"
-FAILURES=0
-ASSERTIONS=0
-ok()  { printf '  ok    %-46s\n' "$1"; }
-bad() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s\n' "$1"; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # $1 label  $2 want-exit  $3 want-substring (or "")  then command...
 expect() {
   local label="$1" want="$2" needle="$3"; shift 3
-  local out got
-  ASSERTIONS=$((ASSERTIONS + 1))
+  local out got _m
   out="$("$@" 2>&1)"; got=$?
   local ok=1
   [ "$got" -eq "$want" ] || ok=0
   if [ -n "$needle" ] && ! grep -qF "$needle" <<<"$out"; then ok=0; fi
   if [ "$ok" -eq 1 ]; then
-    printf '  ok    %-46s exit=%s\n' "$label" "$got"
+    printf -v _m '%-46s exit=%s' "$label" "$got"; ok "$_m"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-46s exit=%s want=%s needle=%q\n' "$label" "$got" "$want" "$needle"
+    printf -v _m '%-46s exit=%s want=%s needle=%q' "$label" "$got" "$want" "$needle"; bad "$_m"
     printf '        out: %s\n' "$(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
   fi
   [ "$ok" -eq 1 ]
@@ -151,14 +147,12 @@ expect "oneshot: stamp under the bug profile" 0 "one-shot, no verdict" \
 expect "oneshot: --check post-stamp = OK" 0 "OK" \
   bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance --check \
     "$O/stories/story-bug-1.md"
-ASSERTIONS=$((ASSERTIONS + 1))
 if grep -q '^skill: bmad-review$' "$O/stories/story-bug-1.md" \
    && grep -q '^lens: adversarial$' "$O/stories/story-bug-1.md" \
    && ! grep -q '^verdict:' "$O/stories/story-bug-1.md"; then
-  printf '  ok    %-46s\n' "oneshot: block cites the bmad skill, no verdict"
+  ok "oneshot: block cites the bmad skill, no verdict"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-46s\n' "oneshot: block cites the bmad skill, no verdict"
+  bad "oneshot: block cites the bmad skill, no verdict"
 fi
 
 # 16. THE REVERSE DOOR. A convergence pass carrying the one-shot's skill name must still be
@@ -184,9 +178,7 @@ expect "unknown profile is refused (exit 2)" 2 "is not a profile in the schema" 
 # permanent stop on the self-update, not a nuisance.
 SCHEMA_SRC="$(bash "$WRITER" --print-schema 2>/dev/null)"
 if [ ! -f "$SCHEMA_SRC" ]; then
-  ASSERTIONS=$((ASSERTIONS + 1))
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: writer --print-schema resolved nothing (got: ${SCHEMA_SRC:-<empty>})"
+  bad "FIXTURE BROKEN: writer --print-schema resolved nothing (got: ${SCHEMA_SRC:-<empty>})"
 fi
 
 # --- MIXED SPRINT. One planning slot holding a convergence-validated story and a FOLDED bug-fix
@@ -221,8 +213,7 @@ forge_unfolded_bug_block() { # $1 world  $2 writer
 
 MW="$(mixed_world)"
 if [ -z "$MW" ] || [ ! -f "$MW/$ONESHOT" ]; then
-  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: seed.sh --mixed-into built no world"
+  bad "FIXTURE BROKEN: seed.sh --mixed-into built no world"
 else
   # M1/M2 — the two stamps. M2 is the per-bug one-shot name ACCEPTED by --terminal.
   expect "mixed: convergence stories stamp via --series" 0 "stamped 2 of 2" \
@@ -269,8 +260,7 @@ fi
 # is already stamped and would print "stamped 0 of 1".
 RW="$(mixed_world)"
 if [ -z "$RW" ] || [ ! -f "$RW/$ONESHOT" ]; then
-  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: seed.sh --mixed-into built no world (R)"
+  bad "FIXTURE BROKEN: seed.sh --mixed-into built no world (R)"
 else
   expect "mixed: bind resolves artifact via project root" 0 "stamped 1 of 1" \
     env AI_DLC_PROJECT_ROOT="$RW" bash -c 'cd "$1/s1" && bash "$2" --terminal "$3" --profile "$4" "$5"' _ \
@@ -315,7 +305,6 @@ f13_pred() {
 f13ok=1; f13why=""
 for c in N0 N1 N2; do
   tpl="$F13_OLD"; [ "$c" = N0 ] && tpl="$F13_NEW"
-  ASSERTIONS=$((ASSERTIONS + 1))
   if f13_stamp "$(mktemp -d "$ROOT/f13base.XXXXXX")" "$tpl" "$WRITER" "" && f13_pred "$c"; then
     ok "F13-$c: stamped bytes hold (current name, lens, no old name)"
   else
@@ -323,7 +312,6 @@ for c in N0 N1 N2; do
   fi
 done
 # Seed control: the old-name template really carries the old name, so N1's zero is about the WRITER.
-ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$f13ok" = 1 ] && grep -qx 'skill: bmad-review-adversarial-general' "$F13_OLD" && ! grep -q '^lens:' "$F13_OLD"; then
   ok "F13: an old-name one-shot (no lens line) is stamped as skill: bmad-review + lens: adversarial"
 else
@@ -334,7 +322,6 @@ fi
 # line put back to the old name and the lens line dropped. The shipped writer's --check and the
 # reader's pin both accept it.
 READER="$(dirname "$WRITER")/validate-provenance-block.sh"
-ASSERTIONS=$((ASSERTIONS + 1))
 HD="$(mktemp -d "$ROOT/f13hist.XXXXXX")"
 if f13_stamp "$HD" "$F13_OLD" "$WRITER" "" \
    && sed 's/^skill: bmad-review$/skill: bmad-review-adversarial-general/' "$HD/story.md" | grep -v '^lens: adversarial$' > "$HD/story.hist" \
@@ -424,10 +411,8 @@ cons_vector() { local v="" r
   printf '%s\n' "$v"
 }
 
-ASSERTIONS=$((ASSERTIONS + 1))
 if [ ! -f "$READER" ] || [ ! -f "$SCHEMA_SRC" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: no reader beside the writer, or no source schema"
+  bad "FIXTURE BROKEN: no reader beside the writer, or no source schema"
   BASEV="broken"
 else
   BASEV="$(cons_vector stamp-story-provenance.sh validate-provenance-block.sh "")"
@@ -435,10 +420,9 @@ else
   if [ -z "$pw" ] || cmp -s "$SCHEMA_SRC" "$pw/t/.claude/schemas/$SCH" \
      || cmp -s "$SCHEMA_SRC" "$pw/f/.claude/schemas/$SCH" \
      || cmp -s "$pw/t/.claude/schemas/$SCH" "$pw/f/.claude/schemas/$SCH"; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-46s\n' "FIXTURE BROKEN: sandbox schemas do not differ in bytes"
+    bad "FIXTURE BROKEN: sandbox schemas do not differ in bytes"
   else
-    printf '  ok    %-46s\n' "install schema: sandbox schemas differ in bytes"
+    ok "install schema: sandbox schemas differ in bytes"
   fi
 fi
 i=0
@@ -446,11 +430,11 @@ for lbl in "consumer: writer resolves the install schema (CI)" \
            "consumer: reader passes the writer's stamp (CR)" \
            "near-miss: writer resolves foreign schema (NI)" \
            "near-miss: reader resolves foreign schema (NR)"; do
-  i=$((i + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+  i=$((i + 1))
   c="$(printf '%s' "$BASEV" | cut -c"$i")"
   if [ "$c" = 0 ]; then
     ok "$lbl"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s result=%s\n' "$lbl" "${c:-none}"; fi
+  else printf -v _m '%-46s result=%s' "$lbl" "${c:-none}"; bad "$_m"; fi
 done
 
 # --- THE EMPTY-WALK GUARD. Without it an install walk that finds no marker makes the candidate
@@ -461,7 +445,6 @@ done
 # It runs from a directory with no root marker above it — asserted first,
 # by the writer's own refusal to resolve a root there — because anywhere else the walk succeeds
 # and the guard has no subject.
-ASSERTIONS=$((ASSERTIONS + 1))
 NM=""
 for base in "$ROOT" /tmp; do
   cand_nm="$(mktemp -d "$base/nomark.XXXXXX" 2>/dev/null)" || continue
@@ -474,9 +457,9 @@ for base in "$ROOT" /tmp; do
   if [ "$prc" -eq 2 ] && grep -qF "cannot resolve the project root" <<<"$pre"; then NM="$cand_nm"; break; fi
 done
 if [ -z "$NM" ]; then
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s\n' "FIXTURE BROKEN: no marker-free directory for arm G"
+  bad "FIXTURE BROKEN: no marker-free directory for arm G"
 else
-  printf '  ok    %-46s\n' "arm G: sandbox has no root marker above it"
+  ok "arm G: sandbox has no root marker above it"
 fi
 ROOTSTAT=" -f /.claude/schemas/$SCH"
 trace_of() { # $1 script basename in $NM/scripts/ai-dlc  then its args -> the xtrace
@@ -487,7 +470,6 @@ trace_of() { # $1 script basename in $NM/scripts/ai-dlc  then its args -> the xt
 # The two guarded scripts: the trace names the override candidate and never stats the filesystem root.
 g_ctl() { # <label> <script> args...
   local lbl="$1" sc="$2" tr; shift 2
-  ASSERTIONS=$((ASSERTIONS + 1))
   if [ -z "$NM" ]; then bad "FIXTURE BROKEN: no sandbox ($lbl)"; return 1; fi
   tr="$(trace_of "$sc" "$@")"
   if ! grep -qF " -f $NM/f/.claude/schemas/$SCH" <<<"$tr" || ! grep -qF "$SCH not found" <<<"$tr"; then
@@ -559,10 +541,10 @@ i=0
 for lbl in "BL-302 dist: writer resolves the root's schema (DP)" \
            "BL-302 dist: reader accepts the writer's stamp (DS)" \
            "BL-302 dist: control refuses without it (DC)"; do
-  i=$((i + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+  i=$((i + 1))
   c="$(printf '%s' "$B302V" | cut -c"$i")"
-  if [ "$c" = 0 ]; then printf '  ok    %-46s\n' "$lbl"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s result=%s\n' "$lbl" "${c:-none}"; fi
+  if [ "$c" = 0 ]; then ok "$lbl"
+  else printf -v _m '%-46s result=%s' "$lbl" "${c:-none}"; bad "$_m"; fi
 done
 
 # --- BL-729: --series resolves every spelling of the prefix to the highest REAL pass.
@@ -588,15 +570,14 @@ b729_vector() { local v="" pre
   printf '%s\n' "$v"
 }
 B729_CTL="$(b729_vector "$WRITER")"
-ASSERTIONS=$((ASSERTIONS + 1))
 # Positive conjunct: the seeded story really carries p10 tool_use_id (every other pass carries another), and all three spellings pass.
 # p10 sorts BETWEEN p1 and p2 in glob order and p9 sorts last of the real passes; the resolution decoy is p11, above p10, so a resolver that keeps the last
 # file in glob order resolves p9 and fails; only a numeric compare reaches p10.
 if [ "$B729_CTL" = 000 ] && grep -qF "tool_use_id: toolu_FIXTUREdddddddd" "$B729/story.md"; then
   ok "BL-729: three prefix spellings resolve p10 (--check 0)"
 else
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s vector %s, want 000\n' "BL-729: three prefix spellings resolve p10" "$B729_CTL"
+  printf -v _m '%-46s vector %s, want 000' "BL-729: three prefix spellings resolve p10" "$B729_CTL"; bad "$_m"
 fi
 
-echo "  ---- $ASSERTIONS assertions, $FAILURES failing ----"
-[ "$FAILURES" -eq 0 ]
+echo
+report_end story-provenance

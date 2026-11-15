@@ -1,0 +1,13 @@
+# scripts/validate-fixture-hygiene.sh arm H13: fixtures that extract a record-binding hook span (FIXTURE_POOL or
+# RECORD_HOME) by a hand sed or awk of its BEGIN marker instead of pool_span (core/fixtures/lib/pool-span.sh).
+# Rows `<fixture>\t<reason>`, LC_ALL=C sorted. DOWN-ONLY (arm H13-M4): a row not on this list at origin/main FAILs, and
+# a row whose fixture no longer extracts by hand FAILs as stale, so the list only shrinks. The rows are the arm's own
+# FAIL output on the tree that first ships it. Never add a row: extract the span through pool_span instead.
+fixture-invocation-budget	extracts FIXTURE_POOL by hand (run.sh:204, a heredoc-written driver); predates pool_span
+hermetic-runner	extracts FIXTURE_POOL by hand (run.sh:288, :541); predates pool_span
+pregate-self-check	extracts READSET_VS and RECORD_HOME by hand (receipt-bl643.sh:46, :104); predates pool_span
+prepush-pool-depth	extracts FIXTURE_POOL by hand (run.sh:290, :1412); predates pool_span
+readset-skip	extracts FIXTURE_POOL and RECORD_HOME by hand (run.sh, 10 lines from :380); predates pool_span
+seed-verdict-store-red-print	extracts FIXTURE_POOL by hand (run.sh:150); predates pool_span
+self-update-gate	extracts FIXTURE_POOL by hand (run.sh:2618); predates pool_span
+suite-content-key	extracts FIXTURE_POOL by hand (run.sh:325, :445, heredoc-written drivers); predates pool_span

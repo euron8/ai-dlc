@@ -42,9 +42,8 @@ done
 [ -n "$V" ] || { echo "run.sh: could not locate validate-artifact-budget.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/validate-artifact-budget.sh"
 
-rc=0
-ok()  { echo "ok: $1"; }
-bad() { echo "FAIL: $1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "run.sh: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -147,5 +146,4 @@ else
   bad "--fail-on 'snapshot.md' hardened pipeline-snapshot.md — the match is a substring match"
 fi
 
-[ "$rc" -eq 0 ] && echo "snapshot-supersession-marker fixture: PASS"
-exit "$rc"
+report_end snapshot-supersession-marker

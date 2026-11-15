@@ -44,10 +44,8 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 broken() { echo "FIXTURE BROKEN: push-drain-refusals -- $1" >&2; echo "FAIL  push-drain-refusals -- fixture broken: $1"; exit 2; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)" || broken "cannot resolve the fixture directory"
-fails=0
-# `bad` counts into the variable this file exits on.
-ok()  { echo "ok    ${1-}"; }
-bad() { echo "FAIL  ${1-}"; fails=$((fails + 1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || broken "no lib/report.sh beside $HERE"
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || broken "no lib/mutant.sh beside $HERE"
 # shellcheck source=/dev/null
@@ -278,7 +276,9 @@ cat "$WORK/real/arms"
 n_arms="$(grep -c . "$WORK/real/arms" || true)"
 [ "$n_arms" -eq 21 ] || broken "expected 21 arm lines from the shipped reader, got $n_arms"
 n_bad="$(grep -c '^FAIL' "$WORK/real/arms" || true)"
-fails=$((fails + n_bad))
+n_ok="$(grep -c '^ok' "$WORK/real/arms" || true)"
+# The arm lines are written by chk into the arms file, not by ok/bad, so their counts are added here.
+fails=$((fails + n_bad)); oks=$((oks + n_ok))
 
 # PEQ -- THE END-TO-END RUNS KEPT, one per distinct CLI outcome: `bash <reader>` on the shipped world's
 # drain (exit 0, rows), its no-such-ref refusal (exit 2, REFUSED), and one --digest (exit 0). Each is
@@ -320,9 +320,4 @@ if [ "$pe_ok" = 1 ]; then ok "PEQ  the in-process pd_main equals bash <reader> b
 else bad "PEQ  the in-process drive differs from the CLI:$pe_why"; fi
 fi
 
-if [ "$fails" -eq 0 ]; then
-  echo "PASS  push-drain-refusals -- 21 arms green"
-  exit 0
-fi
-echo "FAIL  push-drain-refusals -- $fails failure(s)"
-exit 1
+report_end push-drain-refusals

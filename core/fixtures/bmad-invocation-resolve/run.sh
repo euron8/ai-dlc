@@ -51,9 +51,8 @@ trap 'rm -rf "$ROOT"' EXIT
 S="$ROOT/.claude/skills"
 R="$ROOT/rules"
 
-rc=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # Run, then read $?. Never `out=$(...)` for a verdict.
 rcof() { bash "$V" --skills-root "$S" --rules-root "$R" >/dev/null 2>&1; echo $?; }
 
@@ -314,5 +313,4 @@ g=$(rg "$GR")
 mv "$G/rg.md" "$GS/bmad-sprint-planning/references/readiness-gate.md"
 
 echo
-if [ "$rc" -eq 0 ]; then echo "bmad-invocation-resolve: PASS"; else echo "bmad-invocation-resolve: FAILED" >&2; fi
-exit $rc
+report_end bmad-invocation-resolve

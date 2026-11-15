@@ -35,9 +35,8 @@ for cand in \
 done
 [ -n "$V" ] || { echo "run.sh: could not locate validate-gate-manifest.sh" >&2; exit 2; }
 
-rc=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 fresh() { bash "$DIR/seed.sh"; }
 # The operator's answer to the NEEDS DECISION row: the entry really is a check and its
@@ -448,5 +447,4 @@ else
 fi
 
 echo
-if [ "$rc" -eq 0 ]; then echo "extension-check-adoption: PASS"; else echo "extension-check-adoption: FAILED" >&2; fi
-exit $rc
+report_end extension-check-adoption

@@ -10,3 +10,4 @@
 !core/scripts/wait-for-deliverable.sh
 !core/scripts/validate-adversarial-convergence.sh
 core/scripts/wfd-start-of.sh
+core/fixtures/lib/report.sh

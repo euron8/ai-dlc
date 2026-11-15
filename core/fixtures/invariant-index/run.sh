@@ -38,11 +38,9 @@ echo "HERMETIC-CONSUMED scripts/render-invariant-index.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-rc=0
 note() { printf '%s\n' "$*"; }
-# ok/bad: bad sets rc, the variable this script exits on.
-ok()  { note "ok    $1"; }
-bad() { note "FAIL  $1"; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # The synthetic source. Three arms declaring three invariants: a solo arm, an OVERVIEW header
 # declaring two, and one of those two carrying its own solo arm below it. That last pair is
 # the case that must NOT score as a collision, and it is the shape the real file has at
@@ -99,13 +97,10 @@ printf '# --- I30 / I4: a second overview, a prefix neighbour ---\n[ -n "${z:-}"
   >> "$TMP/n1/scripts/validate-enforcement-map.sh"
 if outN="$(render_in "$TMP/n1")" && grep -q "5 invariant(s) across 4 arm(s)" <<<"$outN" \
    && grep -qF "| I30 | a second overview, a prefix neighbour |" "$TMP/n1/docs/invariant-index.md"; then
-  note "ok    n1 group-prefix  two overviews sharing a prefix render"
+  ok "n1 group-prefix  two overviews sharing a prefix render"
 else
-  note "FAIL  n1 group-prefix  a prefix neighbour was refused or did not render"
-  printf '%s\n' "$outN" | sed 's/^/      /' | head -5; rc=1
+  bad "n1 group-prefix  a prefix neighbour was refused or did not render"
+  printf '%s\n' "$outN" | sed 's/^/      /' | head -5
 fi
 
-if [ "$rc" -eq 0 ]; then
-  note "PASS  invariant-index -- 1 control + 1 near-miss green"
-fi
-exit "$rc"
+report_end invariant-index 2

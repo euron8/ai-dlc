@@ -93,9 +93,8 @@ ROOT="${_fr#* }"
 # Arm Z re-execs this script for a root reading. Handled first so nothing below can recurse.
 if [ "${1:-}" = "--print-root" ]; then echo "${ROOT:-NONE}"; exit 0; fi
 
-fails=0
-ok()   { printf '  ok    %s\n' "$1"; }
-bad()  { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 skip() { printf '  SKIP  %s\n' "$1"; }
 echo "retro-compliance-workflow:"
 
@@ -511,8 +510,4 @@ for id in A1 A2 A3 A4 A5 A6 A7; do
     fi
 done
 
-if [ "$fails" -ne 0 ]; then
-    echo "retro-compliance-workflow: $fails FAILED" >&2
-    exit 1
-fi
-echo "retro-compliance-workflow: all arms passed"
+report_end retro-compliance-workflow

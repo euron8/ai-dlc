@@ -13,3 +13,4 @@ core/scripts/
 # cap_span and cap_region read this file's own `# CAPGUARD-*` and `# CAPCALL-END` comment lines, so its own run.sh
 # is keyed whole, not on its comment-stripped text.
 core/fixtures/story-evidence-scaffold/run.sh
+core/fixtures/lib/report.sh

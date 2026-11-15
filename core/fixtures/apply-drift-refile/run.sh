@@ -109,9 +109,8 @@ world_once() { # world_once <copy prefix> <builder> [<arg>...] -> path of a fres
 . "$WORK/env.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
 
-fails=0; asserts=0
-ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # Helpers hoisted above the units: units use each other's worlds, so a helper inside a unit another shard owns would be undefined there.
 # THE FORCING MECHANISM (arms q, r, t). The `did not run` row (apply.sh, the ap_ks_diff failure branch) needs
@@ -1241,6 +1240,4 @@ fi
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then echo "$NAME: PASS ($asserts assertions)"; exit 0; fi
-echo "$NAME: $fails assertion(s) FAILED" >&2
-exit 1
+report_end "$NAME"

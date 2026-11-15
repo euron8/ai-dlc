@@ -48,9 +48,8 @@ unset PREPUSH_POOL_DEPTH
 # 1 + PN_STALL) while a growing one does not; a unit that is refused is killed at that poll, before its last step.
 PN_STALL=3; PN_STEPS=$((3 * PN_STALL))
 
-asserts=0; fails=0
-ok()     { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
-bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "prepush-pool-depth: FIXTURE BROKEN" >&2; exit 2; }
 # SIGINT IGNORED ON ENTRY IS A REFUSAL, NOT A RED. A plain `&` from a non-interactive shell starts this
 # fixture with SIGINT ignored, every drive inherits that, and bash cannot re-enable a signal ignored at
@@ -1771,6 +1770,4 @@ else
 fi
 
 echo
-if [ "$fails" -gt 0 ]; then echo "FAIL: $fails of $asserts assertions wrong."; exit 1; fi
-echo "PASS: all $asserts assertions correct."
-exit 0
+report_end prepush-pool-depth

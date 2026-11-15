@@ -103,9 +103,6 @@ GIANT="$WORK/giant-tool-result.jsonl"
 head -1 "$FIXTURES/at-yellow.jsonl" > "$GIANT"
 { printf '{"type":"user","toolUseResult":"'; head -c 400000 /dev/zero | tr '\0' 'x'; printf '"}\n'; } >> "$GIANT"
 
-PASS=0
-FAIL=0
-
 # Every case starts from a clean sidecar AND an explicit ceiling. The committed transcripts
 # and the at() helper record the model as claude-haiku-4-5, so `reset1m` declares the HAIKU
 # family at 1M -- the role a cached `row=1M` seed played before the sensor stopped caching
@@ -127,9 +124,9 @@ at()     { # $1 = tokens  [$2 = model id] -> writes a one-line transcript, retur
 }
 raw()    { printf '{"transcript_path":"%s","session_id":"t"}' "$1" | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null; }
 
-ok()   { PASS=$((PASS+1)); printf '  PASS  %s\n' "$1"; }
-bad()  { FAIL=$((FAIL+1)); printf '  FAIL  %s -- %s\n' "$1" "$2"; }
-check(){ [ "$2" = "$3" ] && ok "$1" || bad "$1" "expected '$3', got '$2'"; }
+# shellcheck source=/dev/null
+. "$FIXTURES/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+check(){ [ "$2" = "$3" ] && ok "$1" || bad "$1 -- expected '$3', got '$2'"; }
 
 echo "context-sensor fixtures"
 
@@ -212,7 +209,7 @@ case "$OUT" in *"RED threshold (120000)"*) ok "red escalates from yellow" ;;
 case "$OUT" in *"not an instruction to hand off"*) ok "red keeps the prohibition" ;;
   *) bad "red keeps the prohibition" "got: ${OUT:-<silent>}" ;; esac
 case "$OUT" in *"let the operator decide"*|*"say so in one line"*)
-    bad "red does not ask the lead to offer a handoff" "advice re-offers the handoff" ;;
+    bad "red does not ask the lead to offer a handoff -- advice re-offers the handoff" ;;
   *) ok "red does not ask the lead to offer a handoff" ;; esac
 
 # --- self-healing reset on a compaction-sized drop ---------------------------
@@ -435,7 +432,7 @@ case "$OUT" in *"Auto-compact will fire"*) ok "imminent escalates from red insid
 case "$OUT" in *"A threshold is not a request"*) ok "imminent keeps the prohibition" ;;
   *) bad "imminent keeps the prohibition" "got: ${OUT:-<silent>}" ;; esac
 case "$OUT" in *"SURFACE that trade-off"*|*"let THEM call it"*)
-    bad "imminent does not ask the lead to offer a handoff" "advice re-offers the handoff" ;;
+    bad "imminent does not ask the lead to offer a handoff -- advice re-offers the handoff" ;;
   *) ok "imminent does not ask the lead to offer a handoff" ;; esac
 
 # BL-297: the refresh must not displace an operator-facing finding. At d5ba4ec4 23:12 the
@@ -551,7 +548,7 @@ reset
 printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatch"}' "$(at 150000)" \
   | AI_DLC_MODEL_HAIKU_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1   # first read: not throttled, records last_read_size
 SIZE1="$(evfield last_read_size)"
-[ -n "$SIZE1" ] && ok "PostToolBatch records last_read_size" || bad "PostToolBatch records last_read_size" "absent"
+[ -n "$SIZE1" ] && ok "PostToolBatch records last_read_size" || bad "PostToolBatch records last_read_size -- absent"
 # second PostToolBatch on the SAME tiny size class, cached reading far from any threshold:
 # below throttle delta -> skipped, so last_measured must NOT change.
 BEFORE="$(evfield last_measured)"
@@ -644,5 +641,4 @@ check "  no active pipeline writes no arm record" "$([ -f "$ARM" ] && echo prese
 mv "$WORK/snap.bak" "$WORK/_bmad-output/pipeline-snapshot.md"
 
 echo
-echo "  $PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+report_end context-sensor

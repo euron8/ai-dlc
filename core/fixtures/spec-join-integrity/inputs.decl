@@ -3,3 +3,4 @@
 !core/scripts/validate-spec-join.sh
 core/scripts/validate-locked-anchor.sh
 core/fixtures/lib/settled-net.sh
+core/fixtures/lib/report.sh

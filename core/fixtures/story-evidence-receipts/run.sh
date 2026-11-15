@@ -32,9 +32,8 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/story-evidence-receipts.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 # he-inproc.sh appends every subject call it could NOT answer in process here; the INPROC arm reads it.
 export UT_FALLBACK_LOG="$WORK/.fallback"; : > "$UT_FALLBACK_LOG"
-rc=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # Each receipt by the fixture-relative path its verify: lines and BL-915 E1 name it.
 R809="$DIR/../story-evidence-scaffold/receipt-bl809.sh"
 R815="$DIR/../story-evidence-scaffold/receipt-bl815.sh"
@@ -209,5 +208,4 @@ if [ -f "$UT_FALLBACK_LOG" ] && [ ! -s "$UT_FALLBACK_LOG" ]; then
 else
   bad "INPROC: subject calls ran as processes: $(sort "$UT_FALLBACK_LOG" 2>/dev/null | uniq -c | tr '\n' ' ')"
 fi
-if [ "$rc" -eq 0 ]; then echo "PASS story-evidence-receipts"; else echo "FAIL story-evidence-receipts"; fi
-exit "$rc"
+report_end story-evidence-receipts

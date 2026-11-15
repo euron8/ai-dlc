@@ -67,15 +67,17 @@ RV="$LR/scripts/backlog-reverify.sh"
 RT="$LR/scripts/backlog-rotate.sh"
 RLIB="$LR/scripts/backlog-receipt-lib.sh"
 
-FAIL=0
 echo "backlog-ledger fixture"
 echo
 
-ok()   { printf '  ok    %-18s %s\n' "$1" "${2-}"; }
-bad()  { printf '  FAIL  %-18s %s\n' "$1" "${2-}"; FAIL=1; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# ok2/bad2 <arm> <detail>: one ok/bad line with the arm in an 18-column field.
+ok2()  { local m; printf -v m '%-18s %s' "$1" "${2-}"; ok "$m"; }
+bad2() { local m; printf -v m '%-18s %s' "$1" "${2-}"; bad "$m"; }
 want() { # want <arm> <expected-status> <entry> <output>
-  if grep -qE "^$2	$3	" <<<"$4"; then ok "$3" "$2  ($1)"
-  else bad "$3" "expected $2, got: $(grep -E "	$3	" <<<"$4" | cut -f1 | tr "\n" " ")"; fi
+  if grep -qE "^$2	$3	" <<<"$4"; then ok2 "$3" "$2  ($1)"
+  else bad2 "$3" "expected $2, got: $(grep -E "	$3	" <<<"$4" | cut -f1 | tr "\n" " ")"; fi
 }
 
 # ---------------------------------------------------------------------------------------
@@ -175,7 +177,7 @@ if [ "$ROWS" -lt 16 ]; then
   printf '%s\n' "$OUT" >&2
   exit 2
 fi
-ok "harness"          "classifier produced $ROWS rows over a 16-entry seed"
+ok2 "harness"          "classifier produced $ROWS rows over a 16-entry seed"
 
 want "anchor present"     CLOSE-CANDIDATE BL-101 "$OUT"
 want "anchor present"     STILL-LIVE      BL-102 "$OUT"
@@ -209,9 +211,9 @@ want "open heredoc"       NEEDS-REVIEW    BL-116 "$OUT"
 # brace-wrapped parse it read CLOSE-CANDIDATE: a live entry proposed for close on half a receipt.
 BL113_ROW="$(grep -E '	BL-113	' <<<"$OUT")"
 if grep -q "MALFORMED sh receipt" <<<"$BL113_ROW"; then
-  ok "malformed-named" "the two-line receipt's refusal names it MALFORMED"
+  ok2 "malformed-named" "the two-line receipt's refusal names it MALFORMED"
 else
-  bad "malformed-named" "BL-113's detail does not say MALFORMED: $(cut -c1-120 <<<"$BL113_ROW")"
+  bad2 "malformed-named" "BL-113's detail does not say MALFORMED: $(cut -c1-120 <<<"$BL113_ROW")"
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -275,9 +277,9 @@ route_ok() {
 
 COUT="$(bash "$RV" "$LC" 2>&1)"
 if why="$(route_ok "$COUT")"; then
-  ok "exit-9-routing" "exit 9 reads NEEDS-REVIEW unresolved:, beside 0 CLOSE-CANDIDATE and 1/126/bare-127 STILL-LIVE"
+  ok2 "exit-9-routing" "exit 9 reads NEEDS-REVIEW unresolved:, beside 0 CLOSE-CANDIDATE and 1/126/bare-127 STILL-LIVE"
 else
-  bad "exit-9-routing" "$why"
+  bad2 "exit-9-routing" "$why"
 fi
 
 
@@ -324,9 +326,9 @@ stdin_ok() { # <output> — 0 when all four rows are present, once each, with th
 }
 DOUT="$(bash "$RV" "$LD" 2>&1)"
 if why="$(stdin_ok "$DOUT")"; then
-  ok "stdin-receipt" "a receipt reading stdin leaves all four rows with their verdicts"
+  ok2 "stdin-receipt" "a receipt reading stdin leaves all four rows with their verdicts"
 else
-  bad "stdin-receipt" "a stdin-reading receipt swallowed later entries: $why"
+  bad2 "stdin-receipt" "a stdin-reading receipt swallowed later entries: $why"
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -367,9 +369,9 @@ R142='! type ai_dlc_memo_dir >/dev/null 2>&1'
 INMEMO="$WORK/inbound-memo"; mkdir -p "$INMEMO"
 LEAK_RC="$(AI_DLC_RECONCILE_MEMO="$INMEMO" bash -c "$R141" </dev/null >/dev/null 2>&1; echo $?)"
 if [ "$LEAK_RC" -ne 0 ] && [ "$(bare_rc "$R141")" -eq 0 ]; then
-  ok "memo-discriminates" "BL-141 exits 0 bare and $LEAK_RC with the memo exported — the seed can see a leak"
+  ok2 "memo-discriminates" "BL-141 exits 0 bare and $LEAK_RC with the memo exported — the seed can see a leak"
 else
-  bad "memo-discriminates" "BL-141 exits $(bare_rc "$R141") bare and $LEAK_RC with the memo set; the seed cannot separate a leak from none"
+  bad2 "memo-discriminates" "BL-141 exits $(bare_rc "$R141") bare and $LEAK_RC with the memo set; the seed cannot separate a leak from none"
 fi
 # leak_ok <output> — every row present once, BL-140 STILL-LIVE (the copy ran), and BL-141/142
 # carrying their BARE verdicts. Presence-shaped throughout.
@@ -395,12 +397,12 @@ leak_both() { # <engine> — both drives; prints the first failure
   return 0
 }
 if why="$(leak_both "$RV")"; then
-  ok "memo-leak" "engine verdicts equal bare verdicts for BL-141/142, with and without a caller-exported memo"
+  ok2 "memo-leak" "engine verdicts equal bare verdicts for BL-141/142, with and without a caller-exported memo"
 else
-  bad "memo-leak" "$why"
+  bad2 "memo-leak" "$why"
 fi
-[ -d "$INMEMO" ] && ok "memo-caller-owned" "a caller's memo directory survives the engine run" \
-  || bad "memo-caller-owned" "the engine removed a memo directory its caller owns"
+[ -d "$INMEMO" ] && ok2 "memo-caller-owned" "a caller's memo directory survives the engine run" \
+  || bad2 "memo-caller-owned" "the engine removed a memo directory its caller owns"
 
 # ---------------------------------------------------------------------------------------
 # Seed F — a receipt that exits non-zero having MEASURED NOTHING (BL-089, second subject).
@@ -446,27 +448,27 @@ cm_ok() {
 }
 FOUT="$(bash "$RV" "$LF" 2>&1)"
 if why="$(cm_ok "$FOUT")"; then
-  ok "cant-measure" "missing helper and eval-time syntax error read NEEDS-REVIEW; three subject-side near-misses stay STILL-LIVE"
+  ok2 "cant-measure" "missing helper and eval-time syntax error read NEEDS-REVIEW; three subject-side near-misses stay STILL-LIVE"
 else
-  bad "cant-measure" "$why"
+  bad2 "cant-measure" "$why"
 fi
 
 # The preamble and the `## Receipts` prose section must contribute NO row. A parser that
 # treated any heading as an entry produced a phantom `Receipts` entry that came back
 # ALREADY-CLOSED, because that section quotes the closing form while explaining it.
 if grep -qE '	(Receipts|Probe ledger)	' <<<"$OUT"; then
-  bad "no-phantom-entry" "prose parsed as an entry"
+  bad2 "no-phantom-entry" "prose parsed as an entry"
 else
-  ok "no-phantom-entry" "preamble and prose sections contribute no row"
+  ok2 "no-phantom-entry" "preamble and prose sections contribute no row"
 fi
 
 # The consumer verb must be refused BY NAME, not merely land in NEEDS-REVIEW for some other
 # reason — that is the whole mechanical basis for the two ledgers not being interchangeable.
 BL106_ROW="$(grep -E '	BL-106	' <<<"$OUT")"
 if grep -q "theirs_has" <<<"$BL106_ROW"; then
-  ok "scope-separation" "the consumer's verb is named in the refusal"
+  ok2 "scope-separation" "the consumer's verb is named in the refusal"
 else
-  bad "scope-separation" "BL-106's detail does not name theirs_has"
+  bad2 "scope-separation" "BL-106's detail does not name theirs_has"
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -496,31 +498,31 @@ verify: lacks VERSION "."
 EOM
 
 ROT="$(bash "$RT" "$LB" --check 2>&1)"
-if grep -q "BL-202" <<<"$ROT"; then ok "rotate-moves" "the annotated entry is selected"
-else bad "rotate-moves" "the annotated entry was NOT selected: $ROT"; fi
+if grep -q "BL-202" <<<"$ROT"; then ok2 "rotate-moves" "the annotated entry is selected"
+else bad2 "rotate-moves" "the annotated entry was NOT selected: $ROT"; fi
 
 if grep -q "BL-203" <<<"$ROT"; then
-  bad "rotate-decoy" "an OPEN entry whose prose QUOTES the annotation form was selected for archive — this is the data-loss case"
+  bad2 "rotate-decoy" "an OPEN entry whose prose QUOTES the annotation form was selected for archive — this is the data-loss case"
 else
-  ok "rotate-decoy" "prose quoting the annotation form does not close an entry"
+  ok2 "rotate-decoy" "prose quoting the annotation form does not close an entry"
 fi
 
-if grep -q "check PASS" <<<"$ROT"; then ok "rotate-check" "the acceptance test passes on a correct rotation"
-else bad "rotate-check" "--check did not report PASS: $ROT"; fi
+if grep -q "check PASS" <<<"$ROT"; then ok2 "rotate-check" "the acceptance test passes on a correct rotation"
+else bad2 "rotate-check" "--check did not report PASS: $ROT"; fi
 
 bash "$RT" "$LB" --apply >/dev/null 2>&1
 if grep -q "BL-203" "$LB" && grep -q "BL-201" "$LB" && grep -q "must never move" "$LB"; then
-  ok "rotate-preserves" "open entries and the preamble survive --apply"
+  ok2 "rotate-preserves" "open entries and the preamble survive --apply"
 else
-  bad "rotate-preserves" "--apply removed a live entry or the preamble"
+  bad2 "rotate-preserves" "--apply removed a live entry or the preamble"
 fi
 if [ -f "$WORK/backlog.archive.md" ] && grep -q "BL-202" "$WORK/backlog.archive.md"; then
-  ok "rotate-archives" "the closed entry landed in the archive — moved, not deleted"
+  ok2 "rotate-archives" "the closed entry landed in the archive — moved, not deleted"
 else
-  bad "rotate-archives" "the closed entry is not in the archive"
+  bad2 "rotate-archives" "the closed entry is not in the archive"
 fi
-if grep -q "BL-202" "$LB"; then bad "rotate-removes" "the closed entry is still in the live ledger"
-else ok "rotate-removes" "the closed entry left the live ledger"; fi
+if grep -q "BL-202" "$LB"; then bad2 "rotate-removes" "the closed entry is still in the live ledger"
+else ok2 "rotate-removes" "the closed entry left the live ledger"; fi
 
 # THE SUBSET RELATION, PINNED. rotate's closed-set must stay a STRICT subset of reverify's, or
 # the acceptance test compares two readers that share a defect. Seeded: an entry reverify calls
@@ -538,9 +540,9 @@ EOM
 RVC="$(bash "$RV" "$LC" 2>&1)"
 RTC="$(bash "$RT" "$LC" 2>&1)"
 if grep -q '^ALREADY-CLOSED	BL-301' <<<"$RVC" && grep -q "nothing to move" <<<"$RTC"; then
-  ok "subset" "reverify closes it, rotate refuses to move it — the predicates still differ"
+  ok2 "subset" "reverify closes it, rotate refuses to move it — the predicates still differ"
 else
-  bad "subset" "the two predicates have converged; --check is now self-confirming"
+  bad2 "subset" "the two predicates have converged; --check is now self-confirming"
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -550,13 +552,13 @@ fi
 # check, only when the remainder parses to zero entries, with the text the classifier prints.
 # The marker is read from `--print-marker`, never typed here.
 MARK="$(bash "$RV" --print-marker 2>/dev/null)"
-[ -n "$MARK" ] && ok "marker-source" "backlog-reverify.sh --print-marker yields the marker" \
-  || bad "marker-source" "backlog-reverify.sh --print-marker returned nothing; no arm below can be built"
+[ -n "$MARK" ] && ok2 "marker-source" "backlog-reverify.sh --print-marker yields the marker" \
+  || bad2 "marker-source" "backlog-reverify.sh --print-marker returned nothing; no arm below can be built"
 # B (above) rotated with entries remaining: no marker may have been written.
 if [ -z "$MARK" ] || ! grep -qF -- "$MARK" "$LB"; then
-  ok "no-marker-with-entries" "a rotation that left live entries wrote no marker"
+  ok2 "no-marker-with-entries" "a rotation that left live entries wrote no marker"
 else
-  bad "no-marker-with-entries" "a rotation that left live entries wrote the empty marker"
+  bad2 "no-marker-with-entries" "a rotation that left live entries wrote the empty marker"
 fi
 LG="$WORK/g/backlog.md"; mkdir -p "$WORK/g"
 cat > "$LG" <<'EOM'
@@ -574,12 +576,12 @@ cp "$LG" "$LG.orig"
 G_O="$(wc -l < "$LG.orig" | tr -d ' ')"
 G_P="$(awk '/^## BL-/ { print NR - 1; exit }' "$LG.orig")"
 GROT="$(bash "$RT" "$LG" --check 2>&1)"
-if grep -q "check PASS" <<<"$GROT"; then ok "last-check" "--check passes when the last entry rotates"
-else bad "last-check" "--check did not PASS on the last entry: $(printf '%s' "$GROT" | tail -3 | tr '\n' ' ')"; fi
+if grep -q "check PASS" <<<"$GROT"; then ok2 "last-check" "--check passes when the last entry rotates"
+else bad2 "last-check" "--check did not PASS on the last entry: $(printf '%s' "$GROT" | tail -3 | tr '\n' ' ')"; fi
 bash "$RT" "$LG" --apply >/dev/null 2>&1
 G_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LG")"
-if [ -n "$MARK" ] && [ "$G_LAST" = "$MARK" ]; then ok "last-marker" "the marker is the last non-blank line after --apply"
-else bad "last-marker" "the last non-blank line is '$G_LAST', not the marker"; fi
+if [ -n "$MARK" ] && [ "$G_LAST" = "$MARK" ]; then ok2 "last-marker" "the marker is the last non-blank line after --apply"
+else bad2 "last-marker" "the last non-blank line is '$G_LAST', not the marker"; fi
 # CONSERVATION, BYTE-EXACT ON BOTH SIDES: the preamble is a prefix of the new ledger, the entry is
 # the tail of the archive, and the ledger grew by exactly k = 2 lines (a blank and the marker).
 G_L="$(wc -l < "$LG" | tr -d ' ')"
@@ -590,20 +592,20 @@ if [ -z "$G_T1" ] || [ -z "$G_T2" ]; then
 fi
 if [ "$G_L" -eq $(( G_P + 2 )) ] && [ "$(head -n "$G_P" "$LG")" = "$(head -n "$G_P" "$LG.orig")" ] \
    && [ "$G_T1" = "$G_T2" ]; then
-  ok "last-conserves" "preamble ($G_P lines) kept as a prefix, the entry ($(( G_O - G_P )) lines) is the archive's tail, ledger = preamble + 2"
+  ok2 "last-conserves" "preamble ($G_P lines) kept as a prefix, the entry ($(( G_O - G_P )) lines) is the archive's tail, ledger = preamble + 2"
 else
-  bad "last-conserves" "conservation broken: ledger $G_L lines, want $(( G_P + 2 )); or a prefix/tail differs"
+  bad2 "last-conserves" "conservation broken: ledger $G_L lines, want $(( G_P + 2 )); or a prefix/tail differs"
 fi
 GRV="$(bash "$RV" "$LG" 2>&1)"
 if [ "$(printf '%s\n' "$GRV" | grep -c .)" -eq 1 ] && grep -qE '^DECLARED-EMPTY	' <<<"$GRV"; then
-  ok "last-reverify" "the rotated ledger reads exactly one DECLARED-EMPTY row"
-else bad "last-reverify" "the rotated ledger reads: $(cut -f1 <<<"$GRV" | tr '\n' ' ')"; fi
+  ok2 "last-reverify" "the rotated ledger reads exactly one DECLARED-EMPTY row"
+else bad2 "last-reverify" "the rotated ledger reads: $(cut -f1 <<<"$GRV" | tr '\n' ' ')"; fi
 # The near-miss: the same remainder emptied BY HAND, no marker, is still unresolved.
 head -n "$G_P" "$LG.orig" > "$WORK/g/hand.md"
 GHV="$(bash "$RV" "$WORK/g/hand.md" 2>&1)"
 if grep -qE '^INPUT-UNRESOLVED	.*ZERO entries' <<<"$GHV" && ! grep -q '^DECLARED-EMPTY' <<<"$GHV"; then
-  ok "hand-emptied" "the same remainder emptied by hand reads INPUT-UNRESOLVED"
-else bad "hand-emptied" "a hand-emptied ledger reads: $(cut -f1 <<<"$GHV" | tr '\n' ' ')"; fi
+  ok2 "hand-emptied" "the same remainder emptied by hand reads INPUT-UNRESOLVED"
+else bad2 "hand-emptied" "a hand-emptied ledger reads: $(cut -f1 <<<"$GHV" | tr '\n' ' ')"; fi
 
 # THE ROTATOR DRIFT AND MARKER ARMS, in a root of their own. `scripts/backlog-reverify.sh` there is a WRAPPER
 # over a real copy that adds one live row for the ledger named in DRIFT_LEDGER, and only in row
@@ -633,9 +635,9 @@ mkdir -p "$WORK/h"; LH="$WORK/h/backlog.md"; cp "$LG.orig" "$LH"
 cp "$RT" "$RRT"
 HC="$(DRIFT_LEDGER="$LH" bash "$RRT" "$LH" --check 2>&1)"; HC_RC=$?
 if [ "$HC_RC" -eq 2 ] && grep -q "check FAIL" <<<"$HC" && grep -q "BL-999" <<<"$HC"; then
-  ok "drift-control" "the unmutated rotator fails --check when the original carries a live row and the remainder is DECLARED-EMPTY"
+  ok2 "drift-control" "the unmutated rotator fails --check when the original carries a live row and the remainder is DECLARED-EMPTY"
 else
-  bad "drift-control" "the unmutated rotator exited $HC_RC on the drift seed"
+  bad2 "drift-control" "the unmutated rotator exited $HC_RC on the drift seed"
 fi
 
 # THE ROTATOR ASKS --marker-last BEFORE APPENDING, so a presence-keyed position rule in the
@@ -650,8 +652,8 @@ cp "$RT" "$RRT"
 bash "$RRT" "$LQ" --apply >/dev/null 2>&1
 Q_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LQ")"
 if [ -n "$MARK" ] && [ "$Q_LAST" = "$MARK" ]; then
-  ok "quoted-marker" "a preamble quoting the marker still gets it appended as the last line"
-else bad "quoted-marker" "with the marker quoted in the preamble the last line is '$Q_LAST'"; fi
+  ok2 "quoted-marker" "a preamble quoting the marker still gets it appended as the last line"
+else bad2 "quoted-marker" "with the marker quoted in the preamble the last line is '$Q_LAST'"; fi
 
 # ---------------------------------------------------------------------------------------
 # Seed J — a LIVE entry the parser cannot see, below the last entry it can.
@@ -674,9 +676,9 @@ for j_i in 1 2 3 4; do
   bash "$RT" "$LJ" --apply --archive "$WORK/j/archive-$j_i.md" >/dev/null 2>&1; JA_RC=$?
   if [ "$JC_RC" -eq 2 ] && grep -q "entry-like id lines" <<<"$JC" && grep -qF "BL-501" <<<"$JC" \
      && [ "$JA_RC" -eq 2 ] && cmp -s "$LJ" "$LJ.orig" && [ ! -e "$WORK/j/archive-$j_i.md" ]; then
-    ok "census-$j_i" "'$j_sp' below the last parseable entry: --check exits 2 naming it, --apply writes nothing"
+    ok2 "census-$j_i" "'$j_sp' below the last parseable entry: --check exits 2 naming it, --apply writes nothing"
   else
-    bad "census-$j_i" "'$j_sp': --check rc=$JC_RC, --apply rc=$JA_RC, ledger $(cmp -s "$LJ" "$LJ.orig" && echo unchanged || echo CHANGED), archive $([ -e "$WORK/j/archive-$j_i.md" ] && echo WRITTEN || echo absent)"
+    bad2 "census-$j_i" "'$j_sp': --check rc=$JC_RC, --apply rc=$JA_RC, ledger $(cmp -s "$LJ" "$LJ.orig" && echo unchanged || echo CHANGED), archive $([ -e "$WORK/j/archive-$j_i.md" ] && echo WRITTEN || echo absent)"
   fi
 done
 # CONTROL: the census does not fire on a plain last-entry rotation (seed G's shape, re-run).
@@ -685,8 +687,8 @@ mkdir -p "$WORK/jc"; cp "$LG.orig" "$WORK/jc/backlog.md"
 # EPIPE under pipefail and reads NOT-FOUND on output that contains the pattern.
 JCC="$(bash "$RT" "$WORK/jc/backlog.md" --check 2>&1)"
 if grep -q "check PASS" <<<"$JCC"; then
-  ok "census-control" "a plain last-entry rotation still passes --check with the census in place"
-else bad "census-control" "the census fires on a plain last-entry rotation"; fi
+  ok2 "census-control" "a plain last-entry rotation still passes --check with the census in place"
+else bad2 "census-control" "the census fires on a plain last-entry rotation"; fi
 
 # --apply WITHOUT --check must not write an invalid declaration: a preamble mentioning BL-1 leaves
 # a zero-entry remainder the classifier will not call declared, so --apply refuses before writing.
@@ -696,8 +698,8 @@ mkdir -p "$WORK/k"; LK="$WORK/k/backlog.md"
 cp "$LK" "$LK.orig"
 KA="$(bash "$RT" "$LK" --apply 2>&1)"; KA_RC=$?
 if [ "$KA_RC" -eq 2 ] && grep -q "declared-empty answers" <<<"$KA" && cmp -s "$LK" "$LK.orig" && [ ! -e "$WORK/k/backlog.archive.md" ]; then
-  ok "apply-declares-valid" "--apply refuses a zero-entry remainder whose preamble carries a BL- id, and writes nothing"
-else bad "apply-declares-valid" "--apply exited $KA_RC on a remainder that cannot be declared; ledger $(cmp -s "$LK" "$LK.orig" && echo unchanged || echo CHANGED)"; fi
+  ok2 "apply-declares-valid" "--apply refuses a zero-entry remainder whose preamble carries a BL- id, and writes nothing"
+else bad2 "apply-declares-valid" "--apply exited $KA_RC on a remainder that cannot be declared; ledger $(cmp -s "$LK" "$LK.orig" && echo unchanged || echo CHANGED)"; fi
 
 # SHA READ ANCHORED ON THE ANNOTATION FORM. The ledger must live in a GIT repo, or the rotator's sha arm
 # SKIPS and nothing below can fire. Seeds: A = LANDED line whose LATER prose says "was verified against"
@@ -715,8 +717,8 @@ LS="$GS/backlog.md"
 SA="$(bash "$RT" "$LS" --check 2>&1)"
 n_res="$(grep -c "\[sha $GSHA resolves\]" <<<"$SA")" || n_res=0
 if [ "$n_res" -eq 4 ] &&! grep -q "DOES NOT RESOLVE" <<<"$SA"; then
-  ok "sha-anchored" "all four LANDED lines resolve their OWN sha, including the one whose later prose says \"verified against\" and the archive form ending \"<sha>.)**\""
-else bad "sha-anchored" "$n_res of 4 LANDED lines resolved $GSHA; output: $(grep -E 'sha ' <<<"$SA" | tr '\n' '|')"; fi
+  ok2 "sha-anchored" "all four LANDED lines resolve their OWN sha, including the one whose later prose says \"verified against\" and the archive form ending \"<sha>.)**\""
+else bad2 "sha-anchored" "$n_res of 4 LANDED lines resolved $GSHA; output: $(grep -E 'sha ' <<<"$SA" | tr '\n' '|')"; fi
 
 # ---------------------------------------------------------------------------------------
 # Seed P — a PROSE LEAD-IN BULLET inside an entry body is not an entry (BL-820).
@@ -736,8 +738,8 @@ p_ok() { # p_ok <output> — 0 when the host keeps its receipt, the list entry p
   return 0
 }
 PO="$(bash "$RV" "$LP" 2>&1)"
-if pm="$(p_ok "$PO")"; then ok "phantom-bullet" "a '- **BL-632 is LANDED**' lead-in inside BL-150 opens no entry; BL-150 keeps its receipt and the list entry BL-151 parses (2 rows)"
-else bad "phantom-bullet" "$pm"; fi
+if pm="$(p_ok "$PO")"; then ok2 "phantom-bullet" "a '- **BL-632 is LANDED**' lead-in inside BL-150 opens no entry; BL-150 keeps its receipt and the list entry BL-151 parses (2 rows)"
+else bad2 "phantom-bullet" "$pm"; fi
 
 # SHA-LESS LANDED LINES ARE BOUND TO A RELEASE (BL-874). The ledger's tree is a git repository whose
 # VERSION is 0.995.0 and whose CHANGELOG.md carries `## [0.995.0]` and `## [0.990.0]`. ACCEPT ledger:
@@ -759,8 +761,8 @@ arm_shaless() { local o rcv
     && grep -qF 'BL-813  PENDING, not moved: v0.1000.0 is not yet released (VERSION 0.995.0)' <<<"$o" || return 1
   o="$(bash "$RT" "$GSL/ref.md" --check 2>&1)"; rcv=$?
   [ "$rcv" -eq 2 ] && grep -qF 'BL-815  sha-less LANDED v0.991.0 names no release in CHANGELOG.md or VERSION.' <<<"$o"; }
-if arm_shaless; then ok "shaless-bound" "sha-less LANDED lines: a CHANGELOG heading and VERSION accept, v0.1000.0 is PENDING, v0.991.0 is refused"
-else bad "shaless-bound" "the rotator did not give the three sha-less outcomes"; fi
+if arm_shaless; then ok2 "shaless-bound" "sha-less LANDED lines: a CHANGELOG heading and VERSION accept, v0.1000.0 is PENDING, v0.991.0 is refused"
+else bad2 "shaless-bound" "the rotator did not give the three sha-less outcomes"; fi
 
 # A PENDING SHA-LESS LINE IS KEPT, NEVER ARCHIVED (BL-874). Each run builds its own git tree (VERSION
 # 0.995.0, CHANGELOG `## [0.995.0]`), because cell (b) moves VERSION. (a) BL-821 at v9.9.9 alone under
@@ -788,14 +790,9 @@ arm_pending() { local d o rcv; d="$(mktemp -d "$WORK/pd.XXXXXX")"
   o="$(bash "$RT" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
   [ "$rcv" -eq 0 ] && ! grep -q '^## BL-821 ' "$d/a/backlog.md" && grep -q '^## BL-821 ' "$d/a/backlog.archive.md" \
     && [ "$(pd_n "$d/a/backlog.archive.md")" = 2 ]; }
-if arm_pending; then ok "pending-kept" "a v9.9.9 sha-less line is kept and reported PENDING under --check --apply; beside it a VERSION line moves alone; once VERSION and a heading reach v9.9.9 it moves"
-else bad "pending-kept" "the rotator did not keep the PENDING entry, move the released one, and move the held one once VERSION reached it"; fi
+if arm_pending; then ok2 "pending-kept" "a v9.9.9 sha-less line is kept and reported PENDING under --check --apply; beside it a VERSION line moves alone; once VERSION and a heading reach v9.9.9 it moves"
+else bad2 "pending-kept" "the rotator did not keep the PENDING entry, move the released one, and move the held one once VERSION reached it"; fi
 
 
 echo
-if [ "$FAIL" -eq 0 ]; then
-  echo "PASS: every assertion holds."
-  exit 0
-fi
-echo "FAIL: an assertion regressed." >&2
-exit 1
+report_end backlog-ledger

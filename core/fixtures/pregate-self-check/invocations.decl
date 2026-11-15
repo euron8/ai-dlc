@@ -22,8 +22,12 @@
 # predictor naming nothing, so their section e starts no seed. From one counted run through scripts/seed-verdict-store.sh.
 # 127 to 120, 21 to 20 and 15 to 14, BL-1039: world A is driven once, from a cwd that is not its root (drive_away),
 # so the separate Hcwd drive of the same root A is gone. From one counted run through core/scripts/hermetic-run.sh.
-120 *
-20 scripts/pregate-self-check.sh
+# 120 to 137, 20 to 21 and 14 to 16, BL-1122 and BL-1129: the receipt drives world Fs (section f seeds three units)
+# and Ts and Tn now carry a stub predictor. +17 starts: Fs's self-check (1), its prefix and two step validators (3),
+# its section d and f seeds (2), their unit.sh and runner starts (4 + 4), and the predictor in Fs, Ts and Tn (3).
+# From one counted run through scripts/seed-verdict-store.sh.
+137 *
+21 scripts/pregate-self-check.sh
 2 core/fixtures/pregate-self-check/receipt-bl643.sh
-14 scripts/seed-verdict-store.sh
+16 scripts/seed-verdict-store.sh
 # 75 to 161, 27 to 56 and 3 to 4, BL-1020: the receipt drives five more roots (Hcwd, Hres, Htree, Hbehind, Habs) in each of its runs, and run.sh gains the m3 mutant run. From two agreeing counted runs.

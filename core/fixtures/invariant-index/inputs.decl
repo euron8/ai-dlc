@@ -4,3 +4,4 @@
 scripts/validate-enforcement-map.sh
 # copy-only: core/fixtures/invariant-index/run.sh:28 run.sh tests for the marker beside the renderer; nothing reads its content
 VERSION
+core/fixtures/lib/report.sh

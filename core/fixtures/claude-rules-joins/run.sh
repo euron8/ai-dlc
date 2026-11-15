@@ -43,10 +43,9 @@ printf 'HERMETIC-CONSUMED %s\n' "$(cd "$(dirname "$VALIDATOR")" && pwd)/$(basena
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-rc=0
 note() { printf '%s\n' "$*"; }
-ok()  { note "ok    $1"; }
-bad() { note "FAIL  $1"; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 seed() {
@@ -288,8 +287,7 @@ mkdir -p "$m13victim"
 m13_vclaude="$( ( cd "$m13victim" && git ls-files -- '.claude' | wc -l ) | tr -d ' ' )"
 m13_corpus="$( ( cd "$TMP/m13" && git ls-files -- '.claude' | grep -c 'settings.json' ) || true )"
 if [ "$m13_vclaude" -ne 0 ] || [ "$m13_corpus" -ne 1 ]; then
-  note "FIXTURE BROKEN: m13 needs a corpus tracking .claude/settings.json (got $m13_corpus) and a victim clean under .claude/ (got $m13_vclaude tracked). The arm cannot discriminate."
-  rc=1
+  bad "FIXTURE BROKEN: m13 needs a corpus tracking .claude/settings.json (got $m13_corpus) and a victim clean under .claude/ (got $m13_vclaude tracked). The arm cannot discriminate."
 else
   # BOTH DIRECTIONS, in the same run. Scrubbed: A1 must convict. Inherited: A1 must convict
   # the SAME offender. A build that reads the victim prints `A1  ok` on the second only.
@@ -297,20 +295,15 @@ else
   m13_clean="$(run_v_env "AI_DLC_UNUSED=1" "$TMP/m13")"
   m13_armed="$(run_v_env "GIT_DIR=$m13victim/.git" "$TMP/m13")"
   if ! grep -qF "A1: tracked path(s) under .claude/" <<<"$m13_clean"; then
-    note "FIXTURE BROKEN: m13's offender was NOT convicted in a clean environment, so the armed arm below proves nothing."
-    rc=1
+    bad "FIXTURE BROKEN: m13's offender was NOT convicted in a clean environment, so the armed arm below proves nothing."
   elif grep -qF "A1  ok" <<<"$m13_armed"; then
-    note "FAIL  m13 corpus read redirected -- A1 reported ok under an inherited GIT_DIR while the corpus tracks a real offender."
-      The scrub does not cover the arms' READ; the arm's own subject is acquitted with nothing to give it away.
-    rc=1
+    bad "m13 corpus read redirected -- A1 reported ok under an inherited GIT_DIR while the corpus tracks a real offender. The scrub does not cover the arms' READ; the arm's own subject is acquitted with nothing to give it away."
   elif ! grep -qF "A1: tracked path(s) under .claude/" <<<"$m13_armed"; then
-    note "FAIL  m13 -- A1 neither convicted nor acquitted under an inherited GIT_DIR; the run is unreadable."
+    bad "m13 -- A1 neither convicted nor acquitted under an inherited GIT_DIR; the run is unreadable."
     printf '%s\n' "$m13_armed" | sed 's/^/      /' | head -4
-    rc=1
   else
-    note "ok    m13 -- corpus read survives an inherited GIT_DIR; A1 convicts the same offender scrubbed and armed"
+    ok "m13 -- corpus read survives an inherited GIT_DIR; A1 convicts the same offender scrubbed and armed"
   fi
 fi
 
-if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- every arm held"; fi
-exit "$rc"
+report_end claude-rules-joins

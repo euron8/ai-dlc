@@ -10,3 +10,4 @@ core/fixtures/lib/preamble.sh
 core/fixtures/layer-readopt-gate/run.sh
 core/fixtures/layer-readopt-gate/seed.sh
 # The dist-only shards (b, d, e) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.
+core/fixtures/lib/report.sh

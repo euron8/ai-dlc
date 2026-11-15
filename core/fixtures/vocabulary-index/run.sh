@@ -101,11 +101,9 @@ echo "HERMETIC-CONSUMED scripts/render-vocabulary-index.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-rc=0
 note() { printf '%s\n' "$*"; }
-
-ok()  { note "ok    $1"; }
-bad() { note "FAIL  $1"; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 # ---------------------------------------------------------------------------------------
 # The synthetic seed: a whole miniature repo the renderer can answer about.
@@ -440,18 +438,18 @@ seed "$TMP/seam"
 VI_FAST=1; outS="$(render_in "$TMP/seam")"; VI_FAST=0
 if [ "$(printf '%s\n' "$outS" | sed -n 1p | cut -c1-14)" = "NOT-A-VERDICT:" ] \
    && cmp -s "$TMP/seam/docs/vocabulary-index.md" "$TMP/controlB/docs/vocabulary-index.md"; then
-  note "ok    seam -- --skip-selfprobe prints the not-a-verdict banner first and renders the byte-identical index"
+  ok "seam -- --skip-selfprobe prints the not-a-verdict banner first and renders the byte-identical index"
 else
-  note "FAIL  seam -- the fast render lacks the banner on line 1 or differs from the full render"; rc=1
+  bad "seam -- the fast render lacks the banner on line 1 or differs from the full render"
 fi
 # No shipped caller passes the flag. Control in the same invocation: the same scan for the flag every
 # shipped caller DOES pass (--check) must find the pre-push hook, or the scan looked at nothing.
 seam_hits="$(grep -rlF -e '--skip-selfprobe' "$REPO/.githooks" "$REPO/core/scripts" "$REPO/core/git-hooks" "$REPO/core/skills" "$REPO/scripts" "$REPO/templates" 2>/dev/null | grep -v '/scripts/render-vocabulary-index.sh$')" || seam_hits=""
 seam_ctl="$(grep -rlF -e 'render-vocabulary-index.sh --check' "$REPO/.githooks" "$REPO/scripts" 2>/dev/null | grep -c .)" || seam_ctl=0
 if [ -z "$seam_hits" ] && [ "$seam_ctl" -ge 1 ]; then
-  note "ok    seam-callers -- no shipped caller passes --skip-selfprobe (control: $seam_ctl file(s) pass --check)"
+  ok "seam-callers -- no shipped caller passes --skip-selfprobe (control: $seam_ctl file(s) pass --check)"
 else
-  note "FAIL  seam-callers -- a shipped file passes --skip-selfprobe ('$seam_hits') or the control found $seam_ctl callers"; rc=1
+  bad "seam-callers -- a shipped file passes --skip-selfprobe ('$seam_hits') or the control found $seam_ctl callers"
 fi
 # The seam reads one variable, SKIP_SELFPROBE, and the renderer initialises it to 0 before it reads
 # argv. An inherited SKIP_SELFPROBE=1 with no flag must therefore NOT skip the probes: no banner, and
@@ -459,9 +457,9 @@ fi
 seed "$TMP/seamenv"
 outE="$( cd "$TMP/seamenv" && env SKIP_SELFPROBE=1 bash scripts/render-vocabulary-index.sh 2>&1 )"
 if [ "$(printf '%s\n' "$outE" | sed -n 1p | cut -c1-14)" != "NOT-A-VERDICT:" ] && [ "$outE" = "$outB" ]; then
-  note "ok    seam-env -- an inherited SKIP_SELFPROBE=1 with no flag does not skip the probes: no banner, output equals the plain render"
+  ok "seam-env -- an inherited SKIP_SELFPROBE=1 with no flag does not skip the probes: no banner, output equals the plain render"
 else
-  note "FAIL  seam-env -- SKIP_SELFPROBE in the environment changed the render: line 1 is '$(printf '%s\n' "$outE" | sed -n 1p)'"; rc=1
+  bad "seam-env -- SKIP_SELFPROBE in the environment changed the render: line 1 is '$(printf '%s\n' "$outE" | sed -n 1p)'"
 fi
 
 # --- refusal driver ----------------------------------------------------------
@@ -470,22 +468,22 @@ fi
 refuse() {
   local n="$1" r="$2" o="$3" p; shift 3
   if [ "$r" -eq 0 ]; then
-    note "FAIL  $n -- renderer exited 0"; rc=1; return
+    bad "$n -- renderer exited 0"; return
   fi
   for p in "$@"; do
     [ -n "$p" ] || continue
     case "$p" in
       '!'*) if grep -qF -- "${p#\!}" <<<"$o"; then
-              note "FAIL  $n -- renderer failed, but its output carries ${p#\!}"
-              printf '%s\n' "$o" | sed 's/^/      /' | head -5; rc=1; return
+              bad "$n -- renderer failed, but its output carries ${p#\!}"
+              printf '%s\n' "$o" | sed 's/^/      /' | head -5; return
             fi ;;
       *)    if ! grep -qF -- "$p" <<<"$o"; then
-              note "FAIL  $n -- renderer failed, but not on its own assertion (wanted: $p)"
-              printf '%s\n' "$o" | sed 's/^/      /' | head -5; rc=1; return
+              bad "$n -- renderer failed, but not on its own assertion (wanted: $p)"
+              printf '%s\n' "$o" | sed 's/^/      /' | head -5; return
             fi ;;
     esac
   done
-  note "ok    $n -- refused on its own assertion"
+  ok "$n -- refused on its own assertion"
 }
 
 kill_check() { # kill_check <name> <dir> <expected-substring> [check|render]
@@ -520,20 +518,20 @@ green_check() { # green_check <name> <dir> <expected-output-substring> <expected
   out="$(render_in "$d")"
   rc_v=$?
   if [ "$rc_v" -ne 0 ]; then
-    note "FAIL  $n -- near-miss REFUSED (renderer exited $rc_v); the refusal is not block-scoped"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -5; rc=1; return
+    bad "$n -- near-miss REFUSED (renderer exited $rc_v); the refusal is not block-scoped"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -5; return
   fi
   if ! grep -qF "$pat" <<<"$out"; then
-    note "FAIL  $n -- renderer exited 0 but did not report a render (wanted: $pat)"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -5; rc=1; return
+    bad "$n -- renderer exited 0 but did not report a render (wanted: $pat)"
+    printf '%s\n' "$out" | sed 's/^/      /' | head -5; return
   fi
   for p in "$@"; do
     grep -qF "$p" "$d/docs/vocabulary-index.md" 2>/dev/null || miss="$miss [$p]"
   done
   if [ -n "$miss" ]; then
-    note "FAIL  $n -- rendered, but the index is missing row(s):$miss"; rc=1; return
+    bad "$n -- rendered, but the index is missing row(s):$miss"; return
   fi
-  note "ok    CONTROL $n -- survives as a render: exit 0, the report line and all $# expected index row(s) present"
+  ok "CONTROL $n -- survives as a render: exit 0, the report line and all $# expected index row(s) present"
 }
 
 edit_file() { # edit_file <file> <sed-expr> ; edits a seeded world's file in place
@@ -662,7 +660,7 @@ VI_FAST=1
 DUP_R_A='readers/kinds.md'; DUP_R_B='readers/ledger.md'
 seed "$TMP/m15"
 if [ ! -f "$TMP/m15/$DUP_R_A" ] || [ ! -f "$TMP/m15/$DUP_R_B" ]; then
-  note "SKIP  m15 -- the seed no longer carries $DUP_R_A and $DUP_R_B"; rc=1
+  bad "SKIP  m15 -- the seed no longer carries $DUP_R_A and $DUP_R_B"
 else
   edit_file "$TMP/m15/$MAP" \
     "s|^# vocabulary-readers: ${DUP_R_A}\$|# vocabulary-readers: ${DUP_R_A}\\n# vocabulary-readers: ${DUP_R_B}|"
@@ -677,7 +675,7 @@ fi
 DUP_O_A='owners/ledger.sh'; DUP_O_B='owners/ledger-copy.sh'
 seed "$TMP/m16"
 if ! cp "$TMP/m16/$DUP_O_A" "$TMP/m16/$DUP_O_B" 2>/dev/null; then
-  note "SKIP  m16 -- the seed no longer carries $DUP_O_A"; rc=1
+  bad "SKIP  m16 -- the seed no longer carries $DUP_O_A"
 else
   edit_file "$TMP/m16/$MAP" \
     "s|^# vocabulary-owner: ${DUP_O_A}\$|# vocabulary-owner: ${DUP_O_A}\\n# vocabulary-owner: ${DUP_O_B}|"
@@ -710,7 +708,7 @@ kill_check_all "m17 dup-empty      an empty declaration still counts" "$TMP/m17"
 DUP_I_A='I801'; DUP_I_B='I808'
 seed "$TMP/m18"
 if ! grep -q "| ${DUP_I_B} |" "$TMP/m18/docs/invariant-index.md"; then
-  note "SKIP  m18 -- the seeded invariant index no longer lists ${DUP_I_B}"; rc=1
+  bad "SKIP  m18 -- the seeded invariant index no longer lists ${DUP_I_B}"
 else
   edit_file "$TMP/m18/$MAP" \
     "s|^# vocabulary-invariant: ${DUP_I_A}\$|# vocabulary-invariant: ${DUP_I_A}\\n# vocabulary-invariant: ${DUP_I_B}|"
@@ -726,7 +724,7 @@ fi
 DUP_M_A='@owner-declares'; DUP_M_B='owners/emap-emitter.sh'
 seed "$TMP/m19"
 if [ ! -f "$TMP/m19/$DUP_M_B" ]; then
-  note "SKIP  m19 -- the seed no longer carries $DUP_M_B"; rc=1
+  bad "SKIP  m19 -- the seed no longer carries $DUP_M_B"
 else
   edit_file "$TMP/m19/$MAP" \
     "s|^# vocabulary-emitters: ${DUP_M_A}\$|# vocabulary-emitters: ${DUP_M_B}\\n# vocabulary-emitters: ${DUP_M_A}|"
@@ -771,8 +769,8 @@ seed "$TMP/m21"
 chmod 000 "$TMP/m21/$MAP"
 if [ -r "$TMP/m21/$MAP" ]; then
   chmod 644 "$TMP/m21/$MAP"
-  note "SKIP  m21 -- chmod 000 left $MAP readable (running as a uid that ignores mode bits?);"
-  note "      the seed cannot express the defect"; rc=1
+  bad "SKIP  m21 -- chmod 000 left $MAP readable (running as a uid that ignores mode bits?);"
+  note "      the seed cannot express the defect"
 else
   out21="$(render_in "$TMP/m21")"; rc21=$?
   chmod 644 "$TMP/m21/$MAP"
@@ -797,7 +795,7 @@ fi
 DUP_N_ANCHOR='I803'; DUP_N_A='readers/contract-alt.md'; DUP_N_B='readers/contract.md'
 seed "$TMP/m22"
 if ! cp "$TMP/m22/$DUP_N_B" "$TMP/m22/$DUP_N_A" 2>/dev/null; then
-  note "SKIP  m22 -- the seed no longer carries $DUP_N_B"; rc=1
+  bad "SKIP  m22 -- the seed no longer carries $DUP_N_B"
 else
   edit_file "$TMP/m22/$MAP" \
     "s|^# vocabulary-invariant: ${DUP_N_ANCHOR}\$|# vocabulary-invariant: ${DUP_N_ANCHOR}\\n# vocabulary-readers: ${DUP_N_A}|"
@@ -807,10 +805,10 @@ else
     first && /^# vocabulary-readers:/ { print NR - first; exit }
   ' "$TMP/m22/$MAP")"
   if [ -z "$dup_n_gap" ]; then
-    note "SKIP  m22 -- could not locate both declarations in the edited corpus"; rc=1
+    bad "SKIP  m22 -- could not locate both declarations in the edited corpus"
   elif [ "$dup_n_gap" -le 1 ]; then
-    note "SKIP  m22 -- the two declarations are ADJACENT (gap $dup_n_gap); this arm would duplicate m15"
-    note "      and could not see a refusal keyed on the preceding line"; rc=1
+    bad "SKIP  m22 -- the two declarations are ADJACENT (gap $dup_n_gap); this arm would duplicate m15"
+    note "      and could not see a refusal keyed on the preceding line"
   else
     kill_check_all "m22 dup-nonadjacent a repeat separated from its first declaration" "$TMP/m22" render \
       'vocabulary-readers' "$DUP_N_A" "$DUP_N_B"
@@ -855,7 +853,4 @@ green_check "n3  key-prefix     enum/enum2 in one object, enum in a sibling" "$T
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}verdict${N3_BT} | ${N3_BT}YES${N3_BT} ${N3_BT}NO${N3_BT} |" \
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}other${N3_BT} | ${N3_BT}UP${N3_BT} |"
 
-if [ "$rc" -eq 0 ]; then
-  note "PASS  vocabulary-index -- 1 control + 4 near-miss green, 24 refusal arms each refused on their own message"
-fi
-exit "$rc"
+report_end vocabulary-index

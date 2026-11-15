@@ -107,7 +107,7 @@ awk -v aflight="$A_FLIGHT" -v astep="$A_STEP" -v acut="$A_CUT" '
   $0 == acut {
     print "printf \"RCPT B0=%s\\n\" \"${B0:-_}\""
     print "for _c in pn_hlink pn_fifo pn_silent; do printf \"RCPT %s=%s\\n\" \"$_c\" \"$(pn_val fix \"$_c\")\"; done"
-    print "printf \"RCPT END fails=%s asserts=%s\\n\" \"$fails\" \"$asserts\""
+    print "printf \"RCPT END fails=%s asserts=%s\\n\" \"$fails\" \"$((oks + fails))\""
     print "exit 0"; cut = 1; exit }
   { print }
   END { if (!cut) exit 3 }

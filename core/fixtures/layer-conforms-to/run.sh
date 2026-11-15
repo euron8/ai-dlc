@@ -32,10 +32,8 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/layer-conforms-to-m.XXXXXX")"
 trap 'rm -rf "$ROOT" "$TMP"' EXIT
 CONS="$ROOT/consumer"; BAD="$ROOT/bad-consumer"; NOLC="$ROOT/no-contract"
 
-fails=0
-ASSERTIONS=0
-ok()  { ASSERTIONS=$((ASSERTIONS+1)); printf '  ok    %s\n' "$1"; }
-bad() { ASSERTIONS=$((ASSERTIONS+1)); fails=$((fails+1)); printf '  FAIL  %s\n' "$1"; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 say() { if [ "$1" = 1 ]; then ok "$2"; else bad "$2"; fi; }
 
 # NO run() HELPER, deliberately. `OUT="$(run ...)"` evaluates the helper in a SUBSHELL, so an
@@ -174,13 +172,4 @@ say "$(grep -Fq "$UNREAD_MSG" <<<"$CLEAN_OUT" && echo 0 || echo 1)" \
 # THE ASSERTION-COUNT FLOOR. A skipped arm prints a shorter green report, which reads exactly like a passing one.
 EXPECTED_ASSERTIONS=20
 echo
-if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
-  printf 'layer-conforms-to: FAIL — %d assertions ran, %d expected. An arm did not execute.\n' \
-    "$ASSERTIONS" "$EXPECTED_ASSERTIONS"
-  exit 1
-fi
-if [ "$fails" -gt 0 ]; then
-  printf 'layer-conforms-to: FAIL (%d of %d assertions)\n' "$fails" "$ASSERTIONS"
-  exit 1
-fi
-printf 'layer-conforms-to: PASS (%d assertions)\n' "$ASSERTIONS"
+report_end layer-conforms-to "$EXPECTED_ASSERTIONS"

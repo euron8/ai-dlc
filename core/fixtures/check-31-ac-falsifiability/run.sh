@@ -47,9 +47,8 @@ done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/check-31.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
-rc=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
 echo "check-31-ac-falsifiability:"
 
@@ -268,9 +267,4 @@ else
 fi
 
 echo
-if [ "$rc" -eq 0 ]; then
-  echo "check-31-ac-falsifiability: PASS"
-else
-  echo "check-31-ac-falsifiability: FAILED" >&2
-fi
-exit $rc
+report_end check-31-ac-falsifiability

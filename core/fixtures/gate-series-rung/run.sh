@@ -51,18 +51,16 @@ ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 [ -n "$ROOT" ] && [ -d "$ROOT" ] || { echo "FIXTURE BROKEN: seed.sh produced no root"; exit 2; }
 trap 'rm -rf "$ROOT"' EXIT
 
-ASSERTIONS=0
-FAILURES=0
-note_fail() { echo "FAIL: $*"; FAILURES=$((FAILURES + 1)); }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+note_fail() { bad "$*"; }
 gd() { printf '%s/%s/_bmad-output/gate-adjudication' "$ROOT" "$1"; }
-ok()  { printf 'ok: %s\n' "$1"; }
 
 # Run a case; set RC and OUT.
 run_case() { OUT="$(bash "$VALIDATOR" --series "$(gd "$1")" 2>&1)"; RC=$?; }
 
 # expect <case> <rc> <marker|-> <human name>
 expect() {
-  ASSERTIONS=$((ASSERTIONS + 1))
   run_case "$1"
   if [ "$RC" -ne "$2" ]; then
     note_fail "$1 exited $RC, expected $2. $4
@@ -73,7 +71,9 @@ expect() {
     note_fail "$1 exited $2 as expected but did NOT carry '$3'. The right exit for the wrong
   reason is the failure this fixture is shaped to refuse. $4
   validator said: $(head -3 <<<"$OUT")"
+    return
   fi
+  if [ "$3" = "-" ]; then ok "$1 exited $2"; else ok "$1 exited $2 carrying '$3'"; fi
 }
 
 # --------------------------------------------------------------------------
@@ -91,37 +91,43 @@ print("\n".join(sorted(out)))
 PY
 }
 
-ASSERTIONS=$((ASSERTIONS + 1))
 if ! diff -q <(payloads "$(gd split-joined)") <(payloads "$(gd split-defeat)") >/dev/null; then
   note_fail "split-joined and split-defeat do NOT carry byte-identical verdict payloads.
   The entire claim of that pair is that gate_series_id is the ONLY difference; with a second
   one present, a validator could separate them by reading the verdicts and the boundary arm
   would score as held without existing."
+else
+  ok "seed: split-joined and split-defeat carry byte-identical verdict payloads"
 fi
 
-ASSERTIONS=$((ASSERTIONS + 1))
 if ! diff -q <(payloads "$(gd nonce-sortable)") <(payloads "$(gd nonce-unsortable)") >/dev/null; then
   note_fail "nonce-sortable and nonce-unsortable do NOT carry byte-identical verdict payloads.
   That pair asserts the NONCE alone re-sequences the run; a verdict-value difference would
   prove the ordinary stall rung instead."
+else
+  ok "seed: nonce-sortable and nonce-unsortable carry byte-identical verdict payloads"
 fi
 
 # The intended difference must actually be present, or a pair is one case twice.
-ASSERTIONS=$((ASSERTIONS + 1))
 n_sids="$(python3 -c '
 import json,glob,sys
 print(len({json.load(open(f))["gate_series_id"] for f in glob.glob(sys.argv[1]+"/*.json")}))' "$(gd split-defeat)")"
-[ "$n_sids" = "2" ] || note_fail "split-defeat carries $n_sids distinct gate_series_id(s); expected 2.
+if [ "$n_sids" = "2" ]; then
+  ok "seed: split-defeat carries 2 distinct gate_series_id(s)"
+else
+  note_fail "split-defeat carries $n_sids distinct gate_series_id(s); expected 2.
   The independent variable is not set, so it is split-joined twice."
+fi
 
 # K IS PINNED HERE. If K changes, this assertion tells you, instead of the silent cases
 # quietly going red and being blamed on whatever else changed.
-ASSERTIONS=$((ASSERTIONS + 1))
 run_case stall-fires
 if ! grep -q 'across 3 consecutive passes' <<<"$OUT"; then
   note_fail "the stall rung did not report a threshold of 3. This fixture's silent cases are
   built one short of K=3; a different K makes them meaningless rather than wrong, so the
   threshold is asserted here explicitly."
+else
+  ok "K: the stall rung reports a threshold of 3"
 fi
 
 # --------------------------------------------------------------------------
@@ -152,21 +158,21 @@ w_p2() { w_series "$1" waived-then-fail
   [ "$RC" -eq 1 ] && grep -qF "$W2_SPAN" <<<"$OUT"; }
 w_p3() { w_series "$1" unresolved-x3
   [ "$RC" -eq 1 ] && grep -q "STALLED: series .* check '7' has held FAIL across 3" <<<"$OUT"; }
-ASSERTIONS=$((ASSERTIONS + 1))
 if ! w_p1 "$VALIDATOR"; then
   note_fail "waived-x3 (check 7 FAIL_WAIVED on three consecutive passes, waiver RESOLVES) exited $RC or
   reported STALLED. A FAIL_WAIVED under a resolving waiver breaks the check's run.
-  validator said: $(head -3 <<<"$OUT")"; fi
-ASSERTIONS=$((ASSERTIONS + 1))
+  validator said: $(head -3 <<<"$OUT")"
+else ok "W1 waived-x3: a resolving waiver breaks the run (exit 0, no STALLED)"; fi
 if ! w_p2 "$VALIDATOR"; then
   note_fail "waived-then-fail (FAIL_WAIVED, FAIL, FAIL, FAIL) did not stall with the run starting
   AFTER the waiver ('$W2_SPAN'). A later FAIL starts a new run from 1.
-  validator said: $(head -3 <<<"$OUT")"; fi
-ASSERTIONS=$((ASSERTIONS + 1))
+  validator said: $(head -3 <<<"$OUT")"
+else ok "W2 waived-then-fail: the run restarts after the waiver ('$W2_SPAN')"; fi
 if ! w_p3 "$VALIDATOR"; then
   note_fail "unresolved-x3 (three FAIL_WAIVED under a waiver_id naming no entry) did not STALL. A
   FAIL_WAIVED whose waiver does not resolve continues the run as FAIL.
-  validator said: $(head -3 <<<"$OUT")"; fi
+  validator said: $(head -3 <<<"$OUT")"
+else ok "W3 unresolved-x3: an unresolved waiver continues the run as FAIL (STALLED)"; fi
 
 # --- the --sprint cells (section 5 below states them).
 # H byte-locks every unscoped --series message. A DELIBERATE wording change turns it red: re-take both digests
@@ -279,19 +285,11 @@ expect legacy-interleaved 1 'falls at or after' \
 SC_CELLS='A B C D E F F1 F3 UR UU G H'
 SC_RED=0
 for c in $SC_CELLS; do
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if "sc_$c" "$VALIDATOR"; then echo "ok: sprint-scope $c"
+  if "sc_$c" "$VALIDATOR"; then ok "sprint-scope $c"
   else SC_RED=$((SC_RED + 1)); note_fail "sprint-scope $c did not hold on the shipped validator (rc=$RC).
   validator said: $(head -3 <<<"$OUT")"; fi
 done
 [ "$SC_RED" -eq 0 ] && ok "sprint-scope: all 12 cells hold on the shipped validator"
 
 echo
-if [ "$FAILURES" -eq 0 ]; then
-  echo "ok: gate-series-rung — $ASSERTIONS assertion(s); the stall rung, the boundary arm,"
-  echo "    the nonce sort key and both halves of the legacy posture each fire and each stay"
-  echo "    silent on the case that must not fire."
-  exit 0
-fi
-echo "FAILED: gate-series-rung — $FAILURES of $ASSERTIONS assertion(s)" >&2
-exit 1
+report_end gate-series-rung
