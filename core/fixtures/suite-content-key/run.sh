@@ -252,6 +252,49 @@ mv "$WORK/gamma.decl" "$T/core/fixtures/gamma/inputs.decl"
 printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n' > "$T/core/fixtures/gamma/inputs.decl"
 [ "$(key)" = "$KP" ] || broken "the gamma declaration was not restored"
 
+# --- BL-1071. ANOTHER FIXTURE'S DECLARATION IS KEYED ONLY BY A FIXTURE THAT NAMES IT -----------------------------
+# The READSET_KEYROWS span, sourced, over a world of two other fixtures (alpha, beta), each with run.sh, inputs.decl
+# and invocations.decl, every file a `.now` row. Run from the world with the fixture root core/fixtures/, as the hook
+# passes it; the declaring fixture gx sits beside the other two.
+#   k8  a fixture declaring core/fixtures/ is keyed on alpha's run.sh and on NEITHER of alpha's declarations
+#   k9  the same plus `core/fixtures/*/inputs.decl` is keyed on alpha's and beta's inputs.decl at their manifest values,
+#       still on neither invocations.decl, and the parse refuses nothing
+G="$WORK/g"
+for _f in alpha beta; do
+  mkdir -p "$G/core/fixtures/$_f"
+  printf 'body %s\n' "$_f" > "$G/core/fixtures/$_f/run.sh"
+  printf 'core/scripts/x-%s.sh\n' "$_f" > "$G/core/fixtures/$_f/inputs.decl"
+  printf '1 *\n' > "$G/core/fixtures/$_f/invocations.decl"
+done
+( cd "$G" && for _f in core/fixtures/*/*; do printf '%s\t%s\n' "$_f" "$(shasum -a 256 < "$_f" | cut -d' ' -f1)"; done ) > "$WORK/g.now"
+[ "$(grep -c . "$WORK/g.now")" -eq 6 ] || broken "the BL-1071 world's manifest does not hold its six files"
+grows() { # grows <decl body> -> the composed key rows, under the span copy GSPAN names, of a fixture declaring <decl body>, run from $G
+  mkdir -p "$G/core/fixtures/gx"; printf '%s\n' "$1" > "$G/core/fixtures/gx/inputs.decl"
+  ( cd "$G" && . "$GSPAN" && : > "$WORK/g.ls" && : > "$WORK/g.th" \
+      && readset_decl_parse gx core/fixtures/gx dist "" "/usr/bin:/bin" "$WORK/g.w" > "$WORK/g.parse" \
+      && readset_decl_keys "$WORK/g.now" "$WORK/g.ls" "$WORK/g.parse" "$WORK/g.th" core/fixtures/ )
+}
+gval() { awk -F'\t' -v p="$1" '$1 == p { print $2 }' "$WORK/g.now"; }
+g_k8() { # under GSPAN: 0 when k8's predicate holds; G_K8 names what it saw
+  local r; r="$(grows 'core/fixtures/')"
+  G_K8="$(awk -F'\t' '$2 == "core/fixtures/alpha/run.sh" { r++ } $2 == "core/fixtures/alpha/inputs.decl" { i++ }
+    $2 == "core/fixtures/alpha/invocations.decl" { v++ } END { print "run.sh:" r + 0 " inputs:" i + 0 " invocations:" v + 0 }' <<< "$r")"
+  [ "$G_K8" = "run.sh:1 inputs:0 invocations:0" ]
+}
+g_k9() { # under GSPAN: 0 when k9's predicate holds; G_K9 names what it saw
+  local r; r="$(grows 'core/fixtures/
+core/fixtures/*/inputs.decl')"
+  G_K9="$(GA="$(gval core/fixtures/alpha/inputs.decl)" GB="$(gval core/fixtures/beta/inputs.decl)" awk -F'\t' '
+    $2 == "core/fixtures/alpha/inputs.decl" && $3 == ENVIRON["GA"] { a++ } $2 == "core/fixtures/beta/inputs.decl" && $3 == ENVIRON["GB"] { b++ }
+    $2 ~ /\/invocations\.decl$/ { v++ } END { printf "alpha:%d beta:%d invocations:%d", a, b, v }' <<< "$r") refused:$(awk -F'\t' '$2 == "X" { n++ } END { print n + 0 }' "$WORK/g.parse")"
+  [ "$G_K9" = "alpha:1 beta:1 invocations:0 refused:0" ]
+}
+GSPAN="$WORK/span.sh"
+if g_k8; then ok "k8 a core/fixtures/ declarer is keyed on another fixture's run.sh and on neither of its declarations ($G_K8)"
+else bad "k8 a core/fixtures/ declarer's rows for alpha read $G_K8, want run.sh:1 inputs:0 invocations:0"; fi
+if g_k9; then ok "k9 a core/fixtures/*/inputs.decl declarer is keyed on every fixture's inputs.decl at its manifest value ($G_K9)"
+else bad "k9 a core/fixtures/*/inputs.decl declarer read $G_K9, want alpha:1 beta:1 invocations:0 refused:0"; fi
+
 # --- BL-954. THE FINAL BANNER NAMES THE ARM THAT DECIDED THE SKIP ---------------------------------
 # Two arms skip the suite and each is its own decision with its own log line: the whole-suite content key
 # (HIT) and the read-set skip inside run_fixtures (the key MISSED, then no fixture's inputs moved). The

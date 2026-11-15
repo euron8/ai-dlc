@@ -227,6 +227,52 @@ if ! nred nm fix; then ok "shim: under the deny channel its marker read is denie
 else bad "shim: no denied marker read on its stderr before the exec: $(tr '\n' ' ' < "$R/fix/nm.err")"; fi
 if ! nred nc fix; then ok "shim: the composed profile is the caller's (version 1), the inserted clause, then the caller's rule, with -D kept"
 else bad "shim: the composed profile or argv is wrong: [$(tr '\n' ' ' < "$R/fix/prof" 2>/dev/null)]"; fi
+
+# ------------------------------------------------------------------ the traced run's QoS clamp (BL-1068) ----
+# Two cells from the deriver's OWN rs_qos_decide, rs_qos and sandboxed, each case run with a recorder taskpolicy
+# (RS_TASKPOLICY) and a recorder sandbox-exec first on PATH, so every case must reach sandbox-exec (the control that
+# an absent clamp record is not an absent launch):
+#   nq  the plain-emitter fixture launch (`sandboxed env ...` with RS_NEST_PATH set) goes through `taskpolicy -c
+#       background sandbox-exec`;
+#   nl  a `--local-map` launch (detached, or the `--in-pool` push run, which sets it too) reaches sandbox-exec
+#       unclamped.
+qos_cells() {
+  local d="$1" o="$2/q" fn c
+  mkdir -p "$o/stub" || return 1
+  for fn in rs_qos_decide rs_qos sandboxed; do
+    awk -v f="$fn" '$0 == f "() {" || index($0, f "() { ") == 1 { p = 1 } p { print } p && /^}$/ { exit }' "$d" > "$o/$fn.fn" || return 1
+    [ -s "$o/$fn.fn" ] || return 1
+  done
+  printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s/tp.$QCASE"\nshift 2\nexec "$@"\n' "$o" > "$o/taskpolicy" && chmod +x "$o/taskpolicy" || return 1
+  printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s/sb.$QCASE"\nexit 0\n' "$o" > "$o/stub/sandbox-exec" && chmod +x "$o/stub/sandbox-exec" || return 1
+  for c in nq nl; do
+    (
+      . "$o/rs_qos_decide.fn"; . "$o/rs_qos.fn"; . "$o/sandboxed.fn"
+      export QCASE="$c"; PATH="$o/stub:$PATH"; hash -r
+      RS_TASKPOLICY="$o/taskpolicy"; TRACER=sandbox; PROFILE="$o/p.sb"; CUR_FX=fx; RUN_AS=nobody
+      IN_POOL=""; LOCAL_MAP=""; RS_NEST_PATH=""
+      case "$c" in
+        nq) RS_NEST_PATH="$o/stub:$PATH" ;;
+        nl) LOCAL_MAP="$o/lm" ;;
+      esac
+      rs_qos_decide
+      if [ "$c" = nq ]; then sandboxed env /usr/bin/true; else sandboxed /usr/bin/true; fi
+    ) < /dev/null > "$o/$c.out" 2>&1
+    [ -s "$o/sb.$c" ] || return 1
+    if [ "$c" = nl ]; then
+      [ ! -e "$o/tp.$c" ]
+    else
+      [ "$(sed -n 1p "$o/tp.$c" 2>/dev/null)" = -c ] && [ "$(sed -n 2p "$o/tp.$c")" = background ] && [ "$(sed -n 3p "$o/tp.$c")" = sandbox-exec ]
+    fi
+    printf '%s\n' "$?" | awk '{ print ($1 == 0 ? 0 : 1) }' > "$2/$c.red"
+  done
+}
+qos_cells "$DERIVER" "$R/fix" || broken "cannot build the QoS cells: $(cat "$R/fix/q/"*.out 2>/dev/null | tr '\n' ' ')"
+echo " the traced run's QoS clamp:"
+if ! nred nq fix; then ok "clamp: the plain emitter's fixture launch runs taskpolicy -c background sandbox-exec"
+else bad "clamp: the plain emitter's fixture launch is not clamped: [$(tr '\n' ' ' < "$R/fix/q/tp.nq" 2>/dev/null)]"; fi
+if ! nred nl fix; then ok "clamp: a --local-map launch reaches sandbox-exec unclamped"
+else bad "clamp: a --local-map launch was clamped: [$(tr '\n' ' ' < "$R/fix/q/tp.nl" 2>/dev/null)]"; fi
 echo
 if [ "$fails" -ne 0 ]; then echo "readset-sandbox-root-clause: work kept at $WORK"
 else case "$WORK" in */readset-sandbox-root-clause.??????) rm -rf "$WORK" ;; esac; fi

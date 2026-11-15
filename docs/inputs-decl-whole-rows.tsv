@@ -93,10 +93,7 @@ install-scaffold-ignored	templates/	legacy
 layer-absorption-retire	core/skills/ai-dlc-update/reconcile/	whole
 layer-adjudication-tier	core/skills/ai-dlc-update/reconcile/	whole
 layer-contract-conformance-b	scripts/	legacy
-layer-contract-conformance-b	core/	legacy
-layer-contract-conformance-b	templates/	legacy
-layer-contract-conformance-b	patterns/	legacy
-layer-contract-conformance-b	.claude/rules/	legacy
+layer-contract-conformance-b	core/	whole
 layer-contract-conformance	scripts/	legacy
 layer-contract-conformance	core/	legacy
 layer-contract-conformance	templates/	legacy

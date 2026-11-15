@@ -138,16 +138,40 @@ printf '%s\n' "$AREAS" > "$TMP/areas"
 
 # THE SUBJECT IS TRACKED FILES UNDER THE SCAN ROOTS. `git ls-files` with a pathspec per root, so
 # a root that matches nothing contributes nothing rather than erroring the whole read.
+#
+# NUL-DELIMITED, RAW PATHS. A plain `ls-files` prints a path holding a non-ASCII byte, a quote or a
+# backslash C-QUOTED (`"docs/retro/s322/caf\303\251.md"`), and the classifier then judges a string
+# that names no file: its leading `"` moves every component, so a conforming path is BLOCKED.
+# `-z` prints every path as its bytes whatever `core.quotePath` says. Both count lines below count
+# NUL records, so they count the same paths.
+#
+# A TAB OR A NEWLINE IN THE PATH cannot travel through the classifier's tab-separated rows, and the
+# migrator never moves one (`UNSAFE-NAME` there), so it is never BLOCKING here: it is listed
+# shell-quoted under REPORTED as UNSAFE-NAME and is not classified.
+: > "$TMP/paths.z"
 : > "$TMP/paths"
-SCANNED_ALL="$(git ls-files 2>/dev/null | grep -c . || true)"
+: > "$TMP/unsafe"
+git ls-files -z 2>/dev/null > "$TMP/all.z"
+SCANNED_ALL=0
+while IFS= read -r -d '' p; do SCANNED_ALL=$((SCANNED_ALL + 1)); done < "$TMP/all.z"
 while IFS= read -r r; do
   [ -n "$r" ] || continue
-  git ls-files -- "$r" 2>/dev/null >> "$TMP/paths"
+  git ls-files -z -- "$r" 2>/dev/null >> "$TMP/paths.z"
 done <<EOF
 $SCAN_ROOTS
 EOF
-sort -u -o "$TMP/paths" "$TMP/paths"
-N_SUBJECT="$(grep -c . "$TMP/paths" || true)"
+_NL=$'\n'; _TAB=$'\t'
+while IFS= read -r -d '' p; do
+  [ -n "$p" ] || continue
+  case "$p" in
+    *"$_NL"*|*"$_TAB"*) printf '%q\n' "$p" >> "$TMP/unsafe" ;;
+    *)                  printf '%s\n' "$p" >> "$TMP/paths" ;;
+  esac
+done < "$TMP/paths.z"
+LC_ALL=C sort -u -o "$TMP/paths" "$TMP/paths"
+LC_ALL=C sort -u -o "$TMP/unsafe" "$TMP/unsafe"
+N_UNSAFE="$(grep -c . "$TMP/unsafe" || true)"
+N_SUBJECT=$(( $(grep -c . "$TMP/paths" || true) + N_UNSAFE ))
 
 # --- the classification -------------------------------------------------------
 #
@@ -355,7 +379,7 @@ if [ "$N_SELF" -ne 0 ]; then
   exit 2
 fi
 
-if [ "$N_AMBIG" -gt 0 ] || [ "$N_NOAREA" -gt 0 ] || [ "$N_STORY" -gt 0 ]; then
+if [ "$N_AMBIG" -gt 0 ] || [ "$N_NOAREA" -gt 0 ] || [ "$N_STORY" -gt 0 ] || [ "$N_UNSAFE" -gt 0 ]; then
   echo "REPORTED — non-conforming, and NOT blocking this push. Each class is computed from the"
   echo "path, never from a list, so an entry leaves it the moment the obstruction is removed:"
   [ "$N_AMBIG" -gt 0 ] && {
@@ -378,6 +402,11 @@ if [ "$N_AMBIG" -gt 0 ] || [ "$N_NOAREA" -gt 0 ] || [ "$N_STORY" -gt 0 ]; then
     echo "                        rather than falling back to the name, because for a carry-over story"
     echo "                        that leading number is the ITEM. Fix the header, or rename to"
     echo "                        story-<sprint>-<index>-<slug>.md, and the next push judges it."
+  }
+  [ "$N_UNSAFE" -gt 0 ] && {
+    echo "  UNSAFE-NAME       $N_UNSAFE  path holds a tab or a newline, so it was not judged and the"
+    echo "                        migration will not move it. Rename it without them and the next push judges it:"
+    sed 's/^/                          /' "$TMP/unsafe" | head -30
   }
   echo ""
 fi
@@ -404,7 +433,7 @@ fi
 
 if [ "$N_BLOCK" -eq 0 ]; then
   echo "VERDICT: PASS — no MIGRATABLE non-conforming path under the scan roots."
-  echo "  $N_CONF conforming, $N_AMBIG ambiguous, $N_NOAREA with no area, $N_STORY story file(s) with no derivable sprint,"
+  echo "  $N_CONF conforming, $N_AMBIG ambiguous, $N_NOAREA with no area, $N_STORY story file(s) with no derivable sprint, $N_UNSAFE unsafe name(s),"
   echo "  out of $N_SUBJECT tracked file(s) read. The zero above is a zero over that corpus, not"
   echo "  over an empty one."
   exit 0

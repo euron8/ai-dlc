@@ -192,6 +192,47 @@
 #      column-0, and a mid-line phrase is something neither side treats as a
 #      citation. The self-probe below pins that acquittal.
 #
+# A FIFTH JOIN, ON WHAT A BUNDLE'S INTEGRATOR REBUILT.
+#
+#   G. A bundle release (a subject opening `x.y.z ` and carrying `bundle`, or any message
+#      with a `Members` paragraph) names each member commit as the first object name on a
+#      `- ` line of that paragraph, and its docs/backlog.md, docs/backlog.archive.md and
+#      CHANGELOG.md are compared, section by section, against the base (the release's
+#      parent) and each member (against its own parent). A section runs from one `## `
+#      heading to the next, trailing newlines dropped; a `## BL-<n>` section is keyed by its
+#      id across both ledger files, so a rotation that moves it is not a change.
+#        - A section no member changed equals the base's. One the release adds and no
+#          member carries is a NOTE (an integrator's filing), never silent.
+#        - A section one member changed (the top of a stack of members, when a member is
+#          another's parent) equals that member's bytes. One substitution is acquitted: a
+#          member writes `vVERSION_PLACEHOLDER` on its status line (one opening `**LANDED`
+#          or `**PARTIAL`), and the integrator sets it to `v` and the release VERSION.
+#          Every other byte compares exactly, that line's included.
+#        - A section two members changed, or one member built on a base whose copy
+#          differs, carries per line the base's count plus each member's change, blank
+#          lines aside. That is where a union drops one of two identical lines.
+#        - The release's own CHANGELOG block carries every line its members add to it.
+#        - A BL id or release heading twice in the release (and not at the base) fails, as
+#          does a bundle subject with no member, or a member that does not resolve.
+#
+#      MEASURED. The case that motivated it fires: B3 (9cad095fe) and B1 (4c3a82362)
+#      rebuilt from their real members by the integrator's `git merge-file --union`, as a
+#      commit on the landed tree, read FAIL naming BL-1073's and BL-1058's dropped
+#      `verify: manual`. FALSE-POSITIVE SET, over every subject on origin/main at
+#      c75a7c323 (2539 commits): 12 bundle subjects and 5 Members paragraphs, none
+#      outside a bundle. B2-B5 (0.1125.0-0.1128.0) read 0 FAIL (members 10, 5, 18, 3
+#      sections; multi-member 1; one NOTE, B2's BL-1070, filed by its integrator), and so
+#      does B6's combine c851405b5 (13 member sections, 1 changed by two members:
+#      BL-1056's line merge). ENUMERATED: B1 (4c3a82362) reads 9 FAIL, every one a version
+#      its members wrote before the placeholder form: 5 status lines (BL-1052, -1053,
+#      -1055, -1056, -1057) whose only difference is the version, and 4 CHANGELOG blocks
+#      (0.1116.0, 0.1123.0, 0.1125.0, 0.1126.0) the release folded into its own. The seven
+#      earlier bundles (0.1091.0-0.1100.0, 0.1108.0) carry no Members paragraph and read
+#      FAIL: a bundle that names no member cannot be compared, which is the refusal the
+#      rule intends. Every one of these is history; the arm judges only a pushed range.
+#      The narrowing that got it there: a subject merely naming a bundle (3ac0b54d2,
+#      `spec the export bundle format`) is out by the leading version.
+#
 # USAGE
 #   scripts/validate-release-version.sh [--range A..B] [--commit SHA]
 #                                       [--push-remote NAME --push-refs LINES]
@@ -231,7 +272,8 @@
 #      the branch inherits nothing unpushed from local main, no tracked file
 #      carries conflict markers, and no not-discharged citation is misspelled
 #   1  a disagreement, a multi-release range, a removed heading, an unpushed-main inheritance, a
-#      committed conflict, a misspelled citation, or a commit that could not be read
+#      committed conflict, a misspelled citation, a bundle whose ledger sections are not its
+#      members' and its base's, or a commit that could not be read
 
 set -uo pipefail
 
@@ -311,6 +353,11 @@ arm_e_ran=0
 # sourced drive) still reaches rv_report, which reads both under `set -u`.
 form_fail=0
 arm_f_ran=0
+# Arm G's likewise: the fixture's sourced drive skips arm_g.
+ledger_fail=0
+arm_g_ran=0
+arm_g_why=""
+arm_g_stat=""
 }
 
 semver_of() { printf '%s' "$1" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; }
@@ -754,6 +801,490 @@ else
 fi
 }
 
+# ---------------------------------------------------------------------------
+# G. A BUNDLE'S LEDGER SECTIONS ARE ITS MEMBERS' BYTES.
+#
+# See the header for the rule set and the measured false-positive set. Evaluated over the same
+# commit list as A and B, and only on a commit whose subject names a bundle or whose message
+# carries a `Members` paragraph: a push carrying neither pays one `git log` and no probe.
+# ---------------------------------------------------------------------------
+ledger_members_of() { # one message on stdin -> the first object name on each `- ` line of its Members paragraph
+  LC_ALL=C awk '
+    /^Members([ ,:]|$)/ { m = 1; next }
+    m && /^[[:space:]]*$/ { m = 0; next }
+    m && /^- / {
+      s = $0
+      while (match(s, /[0-9a-f]+/)) {
+        pre = (RSTART > 1) ? substr(s, RSTART - 1, 1) : ""
+        post = substr(s, RSTART + RLENGTH, 1)
+        if (RLENGTH >= 7 && RLENGTH <= 64 && pre !~ /[0-9A-Za-z]/ && post !~ /[0-9A-Za-z]/) { print substr(s, RSTART, RLENGTH); break }
+        s = substr(s, RSTART + RLENGTH)
+      }
+    }'
+}
+
+# The comparison, one awk over one `git cat-file --batch` stream. ENVIRON: G_ROLES ("<rev> <kind> <blob|->"
+# per line; rev R, P, m<i>, b<i>; kind V VERSION, B docs/backlog.md, A docs/backlog.archive.md, C
+# CHANGELOG.md), G_NM (member count), G_PAR (per member, the index of the member that is its parent, else
+# 0), G_SHORT (per member, its short name). A section is the text from one `## ` heading to the next, its
+# trailing newlines dropped; a `## BL-<n>` section is keyed by its id across both ledger files, so a
+# rotation that moves it is not a change; a CHANGELOG section is keyed by its `## [x.y.z]` version.
+LEDGER_AWK='
+function strip(t) { while (substr(t, length(t), 1) == "\n") t = substr(t, 1, length(t) - 1); return t }
+function put(b, k, t) {
+  t = strip(t)
+  if ((b, k) in SEC) { SEC[b, k] = SEC[b, k] "\n\001DUP\001\n" t; DUPN[b, k]++ }
+  else { SEC[b, k] = t; NK[b]++; KEYS[b, NK[b]] = k }
+}
+function line_in(t,   nk) {
+  nk = ""
+  if (KIND == "B" || KIND == "A") {
+    if (match(t, /^## BL-[0-9]+/)) nk = substr(t, 4, RLENGTH - 3)
+    else if (t ~ /^## /) { OCC[CUR, t]++; nk = "@" KIND "@" t "@" OCC[CUR, t] }
+  } else if (KIND == "C") {
+    if (match(t, /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/)) nk = "CL " substr(t, 5, RLENGTH - 5)
+  } else if (KIND == "V") { if (!((CUR) in VER)) { VER[CUR] = t; gsub(/[[:space:]]/, "", VER[CUR]) } return }
+  if (nk != "") { put(CUR, KEY, BUF); KEY = nk; BUF = "" }
+  BUF = BUF t "\n"
+}
+function look(rev, k,   kinds, x, b) {
+  LHAS = 0
+  if (k ~ /^CL / || k ~ /^@C@/) kinds = "C"; else if (k ~ /^@B@/) kinds = "B"; else if (k ~ /^@A@/) kinds = "A"; else kinds = "BA"
+  for (x = 1; x <= length(kinds); x++) {
+    b = BLOB[rev, substr(kinds, x, 1)]
+    if (b != "" && b != "-" && ((b, k) in SEC)) { LHAS = 1; return SEC[b, k] }
+  }
+  return ""
+}
+# The one substitution the arm acquits: a member writes `vVERSION_PLACEHOLDER` in its status line (a line
+# opening `**LANDED` or `**PARTIAL`), and the integrator replaces it with `v` and the release VERSION. Every
+# other byte of every member line is compared as written.
+function ren(t,   n, x, ln, out, s) {
+  if (index(t, "vVERSION_PLACEHOLDER") == 0) return t
+  n = split(t, ln, "\n"); out = ""
+  for (x = 1; x <= n; x++) {
+    s = ln[x]
+    if (s ~ /^\*\*(LANDED|PARTIAL)/) gsub(/vVERSION_PLACEHOLDER/, "v" V, s)
+    out = out (x > 1 ? "\n" : "") s
+  }
+  return out
+}
+function count_lines(t, arr, sign,   n, x, ln) {
+  n = split(t, ln, "\n")
+  for (x = 1; x <= n; x++) if (ln[x] != "") arr[ln[x]] += sign
+}
+function cut(t) { gsub(/\001/, "^A", t); return (length(t) > 110) ? substr(t, 1, 110) "..." : t }
+function firstdiff(w, g,   a, b, na, nb, x) {
+  na = split(w, a, "\n"); nb = split(g, b, "\n")
+  for (x = 1; x <= na || x <= nb; x++) if (a[x] != b[x]) return "line " x ": member [" cut(a[x]) "] release [" cut(b[x]) "]"
+  return "the same lines, in a different order"
+}
+function isanc(i, j) { j = PAR[j]; while (j > 0) { if (j == i) return 1; j = PAR[j] } return 0 }
+function root(i) { while (PAR[i] > 0) i = PAR[i]; return i }
+function lab(k) { return (k ~ /^@/) ? "section [" substr(k, 4) "]" : k }
+BEGIN {
+  nr = split(ENVIRON["G_ROLES"], RL, "\n")
+  for (x = 1; x <= nr; x++) { if (split(RL[x], f, " ") == 3) { BLOB[f[1], f[2]] = f[3]; if (f[3] != "-") BKIND[f[3]] = f[2] } }
+  NM = ENVIRON["G_NM"] + 0
+  split(ENVIRON["G_PAR"], pp, " "); split(ENVIRON["G_SHORT"], ss, " ")
+  for (i = 1; i <= NM; i++) { PAR[i] = pp[i] + 0; SHORT[i] = ss[i] }
+  INOBJ = 0
+}
+INOBJ == 0 {
+  if ($0 ~ / missing$/ || split($0, h, " ") != 3) { BROKEN = BROKEN " [" $0 "]"; next }
+  CUR = h[1]; SIZE = h[3] + 0; GOT = 0; KIND = BKIND[CUR]; KEY = "@" KIND "@prelude"; BUF = ""; INOBJ = 1
+  next
+}
+{
+  GOT += length($0) + 1
+  line_in($0)
+  if (GOT >= SIZE + 1) { if (KIND != "V") put(CUR, KEY, BUF); INOBJ = 0; LOADED++ }
+}
+END {
+  if (INOBJ) { print "G FAIL - the object stream ended inside an object"; exit }
+  if (BROKEN != "") { print "G FAIL - objects the comparison asked for could not be read:" BROKEN; exit }
+  V = VER[BLOB["R", "V"]]
+  # Each member: the sections it changed, and its text with the status-line placeholder set to the release.
+  for (i = 1; i <= NM; i++) {
+    m = "m" i; b = "b" i; nch = 0
+    for (fk = 1; fk <= 3; fk++) {
+      fc = substr("BAC", fk, 1)
+      if (BLOB[m, fc] == BLOB[b, fc]) continue
+      for (side = 1; side <= 2; side++) {
+        bb = BLOB[(side == 1) ? m : b, fc]
+        if (bb == "-") continue
+        for (x = 1; x <= NK[bb]; x++) {
+          k = KEYS[bb, x]
+          if ((i, k) in SEEN) continue
+          SEEN[i, k] = 1
+          tm = look(m, k); hm = LHAS; tb = look(b, k); hb = LHAS
+          if (hm == hb && tm == tb) continue
+          nch++; CH[i, nch] = k; CHT[i, nch] = tm; CHH[i, nch] = hm; CHB[i, nch] = tb
+        }
+      }
+    }
+    NCH[i] = nch
+    for (x = 1; x <= nch; x++) {
+      k = CH[i, x]
+      MT[i, k] = ren(CHT[i, x]); MH[i, k] = CHH[i, x]; RK[i, k] = k
+      TL[k] = TL[k] " " i; ALLK[k] = 1
+    }
+  }
+  for (rv = 1; rv <= 2; rv++) for (fk = 1; fk <= 3; fk++) {
+    bb = BLOB[(rv == 1) ? "R" : "P", substr("BAC", fk, 1)]
+    if (bb == "-") continue
+    for (x = 1; x <= NK[bb]; x++) ALLK[KEYS[bb, x]] = 1
+  }
+  # A BL id twice in the release: within one file, or once in each.
+  for (k in ALLK) {
+    if (k ~ /^@/) continue
+    rb = BLOB["R", "B"]; ra = BLOB["R", "A"]; pb = BLOB["P", "B"]; pa = BLOB["P", "A"]
+    if (k ~ /^CL /) { rb = BLOB["R", "C"]; ra = "-"; pb = BLOB["P", "C"]; pa = "-" }
+    rd = ((rb, k) in DUPN) + ((ra, k) in DUPN) + (((rb, k) in SEC) && ((ra, k) in SEC))
+    pd = ((pb, k) in DUPN) + ((pa, k) in DUPN) + (((pb, k) in SEC) && ((pa, k) in SEC))
+    if (rd > 0 && pd == 0) { print "G FAIL " lab(k) ": its heading appears more than once in the release"; FAILS++ }
+  }
+  for (k in ALLK) {
+    pT = look("P", k); pH = LHAS; rT = look("R", k); rH = LHAS
+    ne = 0; split("", E); n = split(TL[k], tl, " ")
+    for (x = 1; x <= n; x++) {
+      sup = 0
+      for (y = 1; y <= n; y++) if (y != x && isanc(tl[x] + 0, tl[y] + 0)) sup = 1
+      if (!sup) { ne++; E[ne] = tl[x] + 0 }
+    }
+    if (k == "CL " V && !pH) {
+      split("", W); split("", G)
+      for (x = 1; x <= ne; x++) {
+        j = E[x]; rb = root(j)
+        count_lines(MT[j, k], W, 1); count_lines(ren(look("b" rb, RK[j, k])), W, -1)
+      }
+      count_lines(rT, G, 1)
+      for (ln in W) if (W[ln] > 0 && G[ln] < W[ln] && ln !~ /^## \[/) { print "G FAIL " lab(k) ": the release block carries [" cut(ln) "] " (G[ln] + 0) " time(s), its members add it " W[ln]; FAILS++ }
+      NTOP++
+      continue
+    }
+    if (ne == 0) {
+      if (pH == rH && pT == rT) { NBASE++; continue }
+      if (!pH && rH) { print "G NOTE " lab(k) ": added by the release, and no member carries it"; NNOTE++; continue }
+      if (pH && !rH) { print "G FAIL " lab(k) ": present at the base, absent from the release, and no member removed it"; FAILS++; continue }
+      print "G FAIL " lab(k) ": no member changed it, and the release differs from the base at " firstdiff(pT, rT); FAILS++
+      continue
+    }
+    j = E[1]; rb = root(j)
+    bT = ren(look("b" rb, RK[j, k])); bH = LHAS
+    if (ne == 1 && bH == pH && bT == ren(pT)) {
+      NMEM++
+      if (MH[j, k] != rH) { print "G FAIL " lab(k) ": member " SHORT[j] (MH[j, k] ? " carries it and the release does not" : " removed it and the release still carries it"); FAILS++ }
+      else if (MT[j, k] != rT) { print "G FAIL " lab(k) ": differs from member " SHORT[j] " at " firstdiff(MT[j, k], rT); FAILS++ }
+      continue
+    }
+    NMULTI++
+    split("", W); split("", G)
+    count_lines(pT, W, 1)
+    who = ""
+    for (x = 1; x <= ne; x++) {
+      j = E[x]; rb = root(j); who = who " " SHORT[j]
+      count_lines(MT[j, k], W, 1); count_lines(ren(look("b" rb, RK[j, k])), W, -1)
+    }
+    count_lines(rT, G, 1)
+    for (ln in W) if (W[ln] != G[ln] + 0) { print "G FAIL " lab(k) ": changed by" who ", and the release carries [" cut(ln) "] " (G[ln] + 0) " time(s) where the base plus each member change gives " W[ln]; FAILS++ }
+    for (ln in G) if (!(ln in W)) { print "G FAIL " lab(k) ": changed by" who ", and the release carries [" cut(ln) "], which neither the base nor any member change does"; FAILS++ }
+  }
+  print "G STAT " (NMEM + 0) " " (NMULTI + 0) " " (NBASE + 0) " " (NNOTE + 0) " " (NTOP + 0) " " (FAILS + 0) " " (LOADED + 0)
+}'
+
+# A BUNDLE SUBJECT is a release subject (a leading x.y.z) carrying the word `bundle` in any case. The
+# leading version keeps a commit that only mentions a bundle (`spec the export bundle format`) out.
+ledger_is_bundle() { # <subject> -> 0 when it names a bundle release
+  local re='^[0-9]+\.[0-9]+\.[0-9]+ .*[Bb][Uu][Nn][Dd][Ll][Ee]'
+  [[ $1 =~ $re ]]
+}
+
+ledger_check() { # <repo-dir> <release sha> <message> -> `G FAIL|G NOTE|G STAT ...` lines on stdout
+  local d="$1" r="$2" msg="$3" subj ms info cnt got=0 h p1 rest rsha="" psha="" i j k path rev req="" roles="" loads="" par="" short="" bl
+  local -a M=() MP=() REVS=()
+  subj="${msg%%$'\n'*}"
+  ms="$(printf '%s\n' "$msg" | ledger_members_of)"
+  if [ -z "$ms" ]; then
+    ledger_is_bundle "$subj" && echo "G FAIL - the subject names a bundle and no Members paragraph names a member commit"
+    return 0
+  fi
+  cnt="$(printf '%s\n' "$ms" | grep -c .)"
+  # shellcheck disable=SC2086
+  info="$(git -C "$d" log --no-walk=unsorted --format='%H %P' "$r" $ms 2>/dev/null)"
+  while IFS=' ' read -r h p1 rest; do
+    [ -n "$h" ] || continue
+    if [ "$got" = 0 ]; then rsha="$h"; psha="$p1"; else M[got]="$h"; MP[got]="$p1"; fi
+    got=$((got+1))
+  done <<<"$info"
+  if [ "$got" != $((cnt+1)) ]; then
+    for k in $ms; do
+      git -C "$d" rev-parse -q --verify "${k}^{commit}" >/dev/null 2>&1 \
+        || echo "G FAIL - member $k, named in the Members paragraph, does not resolve to a commit here"
+    done
+    echo "G FAIL - the Members paragraph names $cnt member(s), and $((got > 0 ? got-1 : 0)) resolved to distinct commits"
+    return 0
+  fi
+  i=1
+  for k in $ms; do
+    case "${M[i]}" in "$k"*) ;; *) echo "G FAIL - member $k resolved out of order, to ${M[i]}"; return 0 ;; esac
+    i=$((i+1))
+  done
+  [ -n "$psha" ] || { echo "G FAIL - the release commit has no parent to compare against"; return 0; }
+  REVS=(R P)
+  i=1
+  while [ "$i" -le "$cnt" ]; do
+    REVS[${#REVS[@]}]="m$i"; REVS[${#REVS[@]}]="b$i"
+    j=0; k=1
+    while [ "$k" -le "$cnt" ]; do [ "${M[k]}" = "${MP[i]}" ] && j="$k"; k=$((k+1)); done
+    par="$par $j"; short="$short ${M[i]:0:9}"
+    i=$((i+1))
+  done
+  for rev in "${REVS[@]}"; do
+    case "$rev" in R) h="$rsha" ;; P) h="$psha" ;; m*) h="${M[${rev#m}]}" ;; b*) h="${MP[${rev#b}]}" ;; esac
+    for k in V B A C; do
+      case "$k" in V) path=VERSION ;; B) path=docs/backlog.md ;; A) path=docs/backlog.archive.md ;; C) path=CHANGELOG.md ;; esac
+      req="$req$h:$path
+"
+    done
+  done
+  i=0
+  while IFS= read -r bl; do
+    rev="${REVS[$((i / 4))]}"
+    case "$((i % 4))" in 0) k=V ;; 1) k=B ;; 2) k=A ;; 3) k=C ;; esac
+    case "$bl" in *' missing'|'') bl=- ;; esac
+    roles="$roles$rev $k $bl
+"
+    i=$((i+1))
+  done < <(printf '%s' "$req" | git -C "$d" cat-file --batch-check='%(objectname)' 2>/dev/null)
+  [ "$i" = $(( ${#REVS[@]} * 4 )) ] || { echo "G FAIL - the object lookup answered $i of $(( ${#REVS[@]} * 4 )) requests"; return 0; }
+  # Loaded: every file of R and P, each VERSION, each member base's CHANGELOG (its released set), and both
+  # sides of each file a member changed. sort -u loads a blob shared by several revisions once.
+  loads="$(printf '%s' "$roles" | LC_ALL=C awk '
+    { B[$1, $2] = $3; R[NR] = $0 }
+    END {
+      for (x = 1; x <= NR; x++) {
+        split(R[x], f, " "); rev = f[1]; k = f[2]; b = f[3]
+        if (b == "-") continue
+        if (rev == "R" || rev == "P" || k == "V" || (k == "C" && rev ~ /^b/)) { print b; continue }
+        o = (substr(rev, 1, 1) == "m") ? "b" substr(rev, 2) : "m" substr(rev, 2)
+        if (B[o, k] != b) print b
+      }
+    }' | sort -u)"
+  # shellcheck disable=SC2086
+  printf '%s\n' $loads | git -C "$d" cat-file --batch 2>/dev/null \
+    | G_ROLES="$roles" G_NM="$cnt" G_PAR="${par# }" G_SHORT="${short# }" LC_ALL=C awk "$LEDGER_AWK"
+}
+
+# THE PROBE REPOSITORY: a base, two members on it, and four release commits on it. Written by two
+# fast-imports, because a release message names its members by object name, known only after the first.
+rv_probe_g_tree() { # <empty dir> -> "<name> <sha>" per release commit, on stdout
+  local d="$1" P bl1 bl2 bl0 a b
+  bl0='# Archive
+
+## BL-0 — zero
+
+old
+
+verify: manual
+'
+  bl1='## BL-1 — one
+
+body one
+
+verify: manual
+'
+  bl2='## BL-2 — two
+
+body two
+
+verify: manual
+'
+  P="# Backlog
+
+$bl1
+$bl2"
+  (
+    cd "$d" || exit 1
+    git init -q --initial-branch=probe . || exit 1
+    {
+      rv_fi_commit 'probe base'
+      rv_fi_file VERSION "0.1.0
+_"
+      rv_fi_file CHANGELOG.md "# Changelog
+
+## [0.1.0] - d
+
+- base
+_"
+      rv_fi_file docs/backlog.md "${P}_"
+      rv_fi_file docs/backlog.archive.md "${bl0}_"
+      printf 'commit refs/heads/ma\ncommitter probe <probe@example.com> 0 +0000\n'; rv_fi_data 'member A
+'
+      printf 'from refs/heads/probe\n'
+      rv_fi_file docs/backlog.md "${P}
+Note: same
+
+## BL-3 — three
+
+**LANDED (vVERSION_PLACEHOLDER).** three
+
+verify: manual
+_"
+      printf 'commit refs/heads/mb\ncommitter probe <probe@example.com> 0 +0000\n'; rv_fi_data 'member B
+'
+      printf 'from refs/heads/probe\n'
+      rv_fi_file docs/backlog.md "${P}
+Note: same
+
+## BL-4 — four
+
+body four, vVERSION_PLACEHOLDER kept
+
+verify: manual
+_"
+    } | git -c fastimport.unpackLimit=0 fast-import --quiet || exit 1
+  ) >/dev/null 2>&1 || return 1
+  a="$(git -C "$d" rev-parse -q --verify refs/heads/ma 2>/dev/null)" || return 1
+  b="$(git -C "$d" rev-parse -q --verify refs/heads/mb 2>/dev/null)" || return 1
+  rv_probe_g_rel() { # <ref> <message> <backlog> <archive>
+    printf 'commit refs/heads/%s\ncommitter probe <probe@example.com> 0 +0000\n' "$1"; rv_fi_data "$2
+"
+    printf 'from refs/heads/probe\n'
+    rv_fi_file VERSION "0.3.0
+_"
+    rv_fi_file CHANGELOG.md "# Changelog
+
+## [0.3.0] - d
+
+- the bundle
+
+## [0.1.0] - d
+
+- base
+_"
+    rv_fi_file docs/backlog.md "$3"
+    rv_fi_file docs/backlog.archive.md "$4"
+  }
+  local msg="0.3.0 — probe bundle
+
+Members:
+- A (probe) $a
+- B (probe) $b
+" good gooda
+  # The near-miss: BL-1 rotated into the archive, BL-2 carrying BOTH members' identical note, BL-3's
+  # status-line placeholder set to v0.3.0, BL-4 whole at the end of its file (its body-line placeholder
+  # as written), and a BL-9 the release adds.
+  good="# Backlog
+
+$bl2
+Note: same
+Note: same
+
+## BL-3 — three
+
+**LANDED (v0.3.0).** three
+
+verify: manual
+
+## BL-4 — four
+
+body four, vVERSION_PLACEHOLDER kept
+
+verify: manual
+"
+  gooda="$bl0
+$bl1
+## BL-9 — nine
+
+filed by the integrator
+"
+  (
+    cd "$d" || exit 1
+    {
+      rv_probe_g_rel good "$msg" "${good}_" "${gooda}_"
+      # One of the two identical member lines dropped, the union shape.
+      rv_probe_g_rel dropmulti "$msg" "$(printf '%s' "$good" | awk '/^Note: same$/ && ++n == 2 { next } { print }')
+_" "${gooda}_"
+      # BL-4's closing line dropped at the end of the file.
+      rv_probe_g_rel dropeof "$msg" "$(printf '%s' "$good" | awk '{ l[NR] = $0 } END { for (i = 1; i <= NR; i++) if (!(l[i] == "verify: manual" && l[i-4] == "## BL-4 — four")) print l[i] }')
+_" "${gooda}_"
+      rv_probe_g_rel nomembers '0.3.0 — probe bundle' "${good}_" "${gooda}_"
+      # The status line edited beyond its placeholder: the substitution acquits that token only.
+      rv_probe_g_rel renbody "$msg" "$(printf '%s' "$good" | sed 's/^\*\*LANDED (v0\.3\.0)\.\*\* three$/**LANDED (v0.3.0).** three, amended/')
+_" "${gooda}_"
+      # The placeholder set to a version that is not the release's.
+      rv_probe_g_rel wrongver "$msg" "$(printf '%s' "$good" | sed 's/^\*\*LANDED (v0\.3\.0)\./**LANDED (v0.2.9)./')
+_" "${gooda}_"
+      # The placeholder substituted on a line that is not a status line.
+      rv_probe_g_rel bodysub "$msg" "$(printf '%s' "$good" | sed 's/^body four, vVERSION_PLACEHOLDER kept$/body four, v0.3.0 kept/')
+_" "${gooda}_"
+    } | git -c fastimport.unpackLimit=0 fast-import --quiet || exit 1
+  ) >/dev/null 2>&1 || return 1
+  for k in good dropmulti dropeof nomembers renbody wrongver bodysub; do
+    printf '%s %s\n' "$k" "$(git -C "$d" rev-parse -q --verify "refs/heads/$k" 2>/dev/null)"
+  done
+}
+
+arm_g() {
+ledger_fail=0
+arm_g_ran=0
+arm_g_why=""
+local rec sha msg cands="" out all="" probe_g_bad="" name psha pmsg nl=$'\n'
+while IFS= read -r -d '' rec || [ -n "$rec" ]; do
+  sha="${rec%%$'\n'*}"; msg="${rec#*$'\n'}"
+  ledger_is_bundle "${msg%%$'\n'*}" && { cands="$cands $sha"; continue; }
+  case "$nl$msg" in *"${nl}Members"*) cands="$cands $sha" ;; esac
+done < <(git log -z --no-walk=unsorted --format='%H%n%B' $COMMITS 2>/dev/null)
+if [ -z "$cands" ]; then
+  arm_g_why="none"
+  return 0
+fi
+probe_g="$(mktemp -d 2>/dev/null)" || {
+  echo "FAIL: arm G could not create its probe directory" >&2; exit 1; }
+trap 'rm -rf "${probe_e:-}" "${probe_f:-}" "$probe_g"' EXIT
+while read -r name psha; do
+  [ -n "$psha" ] || { probe_g_bad="${probe_g_bad:+$probe_g_bad; }the probe release $name was not written"; continue; }
+  pmsg="$(git -C "$probe_g" log -1 --format=%B "$psha" 2>/dev/null)"
+  out="$(ledger_check "$probe_g" "$psha" "$pmsg")"
+  grep -q -e '^G STAT ' -e '^G FAIL - the subject names a bundle' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }the probe release $name produced no verdict"
+  case "$name" in
+    good)
+      grep -q '^G FAIL' <<<"$out" && probe_g_bad="${probe_g_bad:+$probe_g_bad; }the near-miss release WAS reported: $(grep -m1 '^G FAIL' <<<"$out")"
+      grep -q '^G NOTE BL-9:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }the release-added BL-9 was not named" ;;
+    dropmulti) grep -q '^G FAIL BL-2:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }one of two identical member lines dropped from BL-2 was NOT reported" ;;
+    dropeof) grep -q '^G FAIL BL-4:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }BL-4's last line dropped at the end of the file was NOT reported" ;;
+    nomembers) grep -q '^G FAIL - the subject names a bundle' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }a bundle naming no member was NOT reported" ;;
+    renbody) grep -q '^G FAIL BL-3:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }a status line edited beyond its placeholder in BL-3 was NOT reported" ;;
+    wrongver) grep -q '^G FAIL BL-3:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }a placeholder set to a version other than the release's in BL-3 was NOT reported" ;;
+    bodysub) grep -q '^G FAIL BL-4:' <<<"$out" || probe_g_bad="${probe_g_bad:+$probe_g_bad; }a placeholder substituted off the status line in BL-4 was NOT reported" ;;
+  esac
+done < <(rv_probe_g_tree "$probe_g")
+[ -n "$probe_g_bad" ] || [ "$(git -C "$probe_g" rev-parse -q --verify refs/heads/nomembers 2>/dev/null)" ] \
+  || probe_g_bad="the probe repository was not built"
+if [ -n "$probe_g_bad" ]; then
+  echo "FAIL  arm G's own probe did not discriminate -- $probe_g_bad. A clean bundle below would then be a comparison that cannot find a dropped line." >&2
+  ledger_fail=1
+  return 0
+fi
+arm_g_ran=1
+for sha in $cands; do
+  msg="$(git log -1 --format=%B "$sha" 2>/dev/null)" || { echo "FAIL  ${sha:0:9}  arm G could not read the message" >&2; ledger_fail=1; continue; }
+  out="$(ledger_check . "$sha" "$msg")"
+  grep '^G NOTE' <<<"$out" | sed "s/^G NOTE /NOTE  ${sha:0:9}  arm G: /"
+  if grep -q '^G FAIL' <<<"$out"; then
+    grep '^G FAIL' <<<"$out" | sed "s/^G FAIL /FAIL  ${sha:0:9}  arm G: /" >&2
+    ledger_fail=1
+  elif ! grep -q '^G STAT ' <<<"$out"; then
+    echo "FAIL  ${sha:0:9}  arm G's comparison produced no verdict" >&2
+    ledger_fail=1
+  else
+    all="$all $(grep -m1 '^G STAT ' <<<"$out" | cut -d' ' -f3-6)"
+  fi
+done
+arm_g_stat="$all"
+}
+
 # ONE `git log -z` READS EVERY SHORT NAME AND SUBJECT, as `form_findings_in` reads its messages:
 # taken only when every member is a full object name, and its answer kept only when it returned
 # exactly one record per member, in order, each naming that member as its %H. Anything else
@@ -929,8 +1460,23 @@ if [ "$form_fail" -ne 0 ]; then
 EOF
 fi
 
+if [ "$ledger_fail" -ne 0 ]; then
+  cat >&2 <<'EOF'
+
+      A bundle's ledger sections must be its members' bytes: each `## BL-` entry and each
+      CHANGELOG block a member changed is the member's text (a `vVERSION_PLACEHOLDER` on
+      its `**LANDED`/`**PARTIAL` line set to the release's version), an entry two members changed carries every line each of them added,
+      and an entry no member changed is the base's. A three-way union of the members'
+      appends can drop one of two identical lines where they meet, and no count notices.
+
+      Remedy: rebuild docs/backlog.md, docs/backlog.archive.md and CHANGELOG.md from the
+      base and each member's commit, entry by entry, never by a union merge, and amend.
+      `git show <member>:docs/backlog.md` has each member's text.
+EOF
+fi
+
 if [ "$fails" -ne 0 ] || [ "$range_fail" -ne 0 ] || [ "$base_fail" -ne 0 ] \
-  || [ "$conflict_fail" -ne 0 ] || [ "$form_fail" -ne 0 ]; then
+  || [ "$conflict_fail" -ne 0 ] || [ "$form_fail" -ne 0 ] || [ "$ledger_fail" -ne 0 ]; then
   exit 1
 fi
 
@@ -948,6 +1494,9 @@ if [ "$arm_e_ran" -eq 1 ]; then summary="$summary; no committed conflict markers
 else                            summary="$summary; CONFLICT-MARKER ARM NOT EVALUATED"; fi
 if [ "$arm_f_ran" -eq 1 ]; then summary="$summary; no misspelled not-discharged citation (probe fired both ways)"
 else                            summary="$summary; CITATION-FORM ARM NOT EVALUATED"; fi
+if [ "$arm_g_ran" -eq 1 ]; then summary="$summary; every bundle's ledger sections match its members (probe fired both ways; member, multi-member, base, release-added:$arm_g_stat)"
+elif [ "$arm_g_why" = "none" ]; then summary="$summary; bundle-ledger arm n/a, no bundle in the range"
+else                            summary="$summary; BUNDLE-LEDGER ARM NOT EVALUATED"; fi
 echo "$summary."
 exit 0
 }
@@ -965,6 +1514,7 @@ rv_main() {
   arm_d
   arm_e
   arm_f
+  arm_g
   arm_ab
   rv_report
 }

@@ -1,8 +1,9 @@
-# External tools run.sh, validate-held-stories.sh and sprint-status.sh invoke. python3 is the
-# sprint-status.sh list-stories reader.
+# External tools run.sh, validate-held-stories.sh, sprint-status.sh, snapshot-update.sh and
+# validate-artifact-budget.sh invoke. python3 is the sprint-status.sh list-stories reader.
 awk
 bash
 cat
+cksum
 cmp
 cp
 date
@@ -12,7 +13,9 @@ grep
 head
 mkdir
 mktemp
+mv
 python3
 rm
+rmdir
 sed
 tr

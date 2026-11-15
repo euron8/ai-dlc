@@ -1,4 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once.
-30 *
-15 core/scripts/validate-held-stories.sh
-14 core/scripts/sprint-status.sh
+38 *
+17 core/scripts/validate-held-stories.sh
+16 core/scripts/sprint-status.sh
+2 core/scripts/snapshot-update.sh
+2 core/scripts/validate-artifact-budget.sh

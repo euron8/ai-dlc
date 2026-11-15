@@ -57,7 +57,7 @@ printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
 # PASS. Every assertion below reaches the validator through `$( )`, so the same
 # shape is available here. A failed assertion is loud; one that never executed is
 # not, and this is what tells them apart.
-EXPECTED_ASSERTIONS=32
+EXPECTED_ASSERTIONS=34
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -666,6 +666,58 @@ if [ "$e_names" = "nospace.md offender.md openonly.md setext.md " ]; then
 else
   bad "arm E's probe tree lists [$e_names], want the offender and the three near-misses"
 fi
+
+# --- 25-26. ARM G: A BUNDLE'S LEDGER SECTIONS ARE ITS MEMBERS' BYTES ---------------------------------
+# A union merge of two members' appends can drop one of two identical lines where they meet, and a count of
+# lines or headings cannot see it. A repository of its own: a base, two members each appending the SAME note
+# to BL-1, and two releases naming both members, one keeping both notes and one keeping a single note. Both
+# runs execute the whole program, so arm G's probe runs before the corpus each time.
+G_DIR="$WORK/g"
+mkdir -p "$G_DIR/docs" || exit 2
+cd "$G_DIR" || exit 2
+git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
+git config user.email f@example.com
+git config user.name Fixture
+git config commit.gpgsign false
+printf '0.1.0\n' > VERSION
+printf '# Changelog\n\n## [0.1.0] - 2026-01-01\n\n- base\n' > CHANGELOG.md
+printf '# Backlog\n\n## BL-1 — one\n\nverify: manual\n' > docs/backlog.md
+git add -A && git commit -q -m 'base' 2>/dev/null || exit 2
+g_base="$(git rev-parse HEAD)"
+for g_who in a b; do
+  git checkout -q -b "m$g_who" "$g_base" || exit 2
+  printf '\nNote: same\n' >> docs/backlog.md
+  git commit -q -am "member $g_who" 2>/dev/null || exit 2
+done
+g_a="$(git rev-parse ma)"; g_b="$(git rev-parse mb)"
+g_rel() { # <branch> <BL-1 tail> -> a release commit off the base naming both members
+  git checkout -q -b "$1" "$g_base" || exit 2
+  printf '0.2.0\n' > VERSION
+  printf '# Changelog\n\n## [0.2.0] - 2026-01-02\n\n- the bundle\n\n## [0.1.0] - 2026-01-01\n\n- base\n' > CHANGELOG.md
+  printf '# Backlog\n\n## BL-1 — one\n\nverify: manual\n\n%s\n' "$2" > docs/backlog.md
+  git commit -q -am "0.2.0 — fixture bundle
+
+Members:
+- A (fx) $g_a
+- B (fx) $g_b" 2>/dev/null || exit 2
+}
+g_rel g-drop 'Note: same'
+g_rel g-keep "$(printf 'Note: same\nNote: same')"
+bash "$VALIDATOR" --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
+if [ "$status" = 0 ] && grep -q 'ledger sections match its members (probe fired both ways' "$WORK/out.txt"; then
+  ok "arm G: a bundle keeping both members' identical note passes, with its probe fired both ways"
+else
+  bad "arm G: the bundle keeping both members' notes did not pass with arm G evaluated -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+git checkout -q g-drop || exit 2
+bash "$VALIDATOR" --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
+if [ "$status" = 1 ] && grep -q 'arm G: BL-1: changed by' "$WORK/out.txt"; then
+  ok "arm G: a bundle keeping one of its two members' identical notes fails and names BL-1"
+else
+  bad "arm G: one of two identical member lines dropped was not refused -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+cd "$WORK" || exit 2
 
 echo ""
 if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then

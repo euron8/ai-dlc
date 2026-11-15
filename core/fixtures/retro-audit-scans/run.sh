@@ -571,15 +571,17 @@ else
 fi
 
 # --- World UQ (BL-1001): an indefinite-subject habitual clause is flagged, a purpose clause is not --
-# The audit's header (CLAUSE 2 AS SHIPPED) carries the rule; this world holds its arms. SELF-PROBE FIRST:
-# every offender is producer text (the two lines BL-1001 cites and the verifier's probe lines) and every
-# near-miss carries the property a wrong fix keys on. OFFENDERS (flagged): uqa "Where a ... used to sit",
-# uqb "— a ... used to" (wrapped), uqe the wrapped cue, uqh1-uqh3 ", and" / ", but" / "and", uqi
-# "Before 0.9,", uqj "Before:", uqk "(...)", uql sentence-initial, uqn1-uqn3 a finite verb that only
-# follows a cut (and / where / which). NEAR-MISSES (clear): uqc a comma-initial noun with a modal after,
-# uqd a cue before a passive, uqm1/uqm2 an imperative object (one line and wrapped), uqp1-uqp5 a purpose
-# noun after a verb or a copula (the verifier's B2 shapes, one wrapped), uqp6 a cue with a finite verb
-# after, plus the producer purpose lines up1, up2, up3.
+# The audit's header (CLAUSE 2 IS LEXICAL) carries the rule: after `a/an`, the head noun before `used to`
+# decides, and only an INSTRUMENT head reads as purpose. SELF-PROBE FIRST: every offender is producer text
+# (the two lines BL-1001 cites, the verifier's probe lines and the entry's owed acquittals) and every
+# near-miss carries the property a wrong fix keys on. OFFENDERS (flagged): uqa-uql, uqn1-uqn3, uqr, uqs1,
+# uqs2 (cue, comma, colon, paren, and/but, dash and sentence-initial shapes on an actor head), and uqv1-uqv9
+# (an opening phrase before the article, a finite verb or a cue after it, one wrapped). NEAR-MISSES
+# (clear): uqd and up2 a passive, and every instrument head: uqc, uqm1/uqm2, uqp1-uqp6, uqt1/uqt2,
+# uqu1/uqu2, uqw1-uqw7 (the entry's owed false positives: an appositive, a parenthetical, a sentence-
+# initial instrument with no predicate or a present-tense one), uqw8 a bold-wrapped head, uqw9 a
+# title-case head, and the producer lines up1 and up3. ORIGIN_PARENTHETICAL reads the same test: uqw2's purpose
+# parenthetical is clear in every class, uqk's habitual one and uqx1's `formerly` one stay tier-1 origin notes.
 wq_world() { fresh
   printf '%s\n' 'Where a per-sprint block used to sit, write a pointer.' > "$WORK/t/$TR/uqa.md"
   printf '%s\n' 'Before this gate it did not deadlock — a failed push used to' 'commit locally and not block the run.' > "$WORK/t/$TR/uqb.md"
@@ -611,6 +613,25 @@ wq_world() { fresh
   printf '%s\n' 'Pass a token, i.e. a path used to name the file.' > "$WORK/t/$TR/uqt2.md"
   printf '%s\n' 'A file used to record the verdicts was removed in 0.9.' > "$WORK/t/$TR/uqu1.md"
   printf '%s\n' "A script used to seed the store won't move." > "$WORK/t/$TR/uqu2.md"
+  printf '%s\n' 'Earlier a step used to fail.' > "$WORK/t/$TR/uqv1.md"
+  printf '%s\n' 'In 0.9 a step used to fail.' > "$WORK/t/$TR/uqv2.md"
+  printf '%s\n' 'Back then an agent used to skip it.' > "$WORK/t/$TR/uqv3.md"
+  printf '%s\n' 'Note that a step used to stop here.' > "$WORK/t/$TR/uqv4.md"
+  printf '%s\n' 'Sometimes a step used to stop here.' > "$WORK/t/$TR/uqv5.md"
+  printf '%s\n' 'In older releases' 'a step used to stop here.' > "$WORK/t/$TR/uqv6.md"
+  printf '%s\n' 'A step used to say nothing is worse.' > "$WORK/t/$TR/uqv7.md"
+  printf '%s\n' 'A step used to fail when the store has entries.' > "$WORK/t/$TR/uqv8.md"
+  printf '%s\n' 'Once upon a time a step used to fail.' > "$WORK/t/$TR/uqv9.md"
+  printf '%s\n' 'Pass --root, a flag used to select the tree.' > "$WORK/t/$TR/uqw1.md"
+  printf '%s\n' 'Set ROOT (a variable used to locate the tree).' > "$WORK/t/$TR/uqw2.md"
+  printf '%s\n' 'A flag used to select the root.' > "$WORK/t/$TR/uqw3.md"
+  printf '%s\n' 'A file used to record the verdicts lives at the root.' > "$WORK/t/$TR/uqw4.md"
+  printf '%s\n' 'A script used to seed the store runs first.' > "$WORK/t/$TR/uqw5.md"
+  printf '%s\n' 'A script used to seed the store takes a path.' > "$WORK/t/$TR/uqw6.md"
+  printf '%s\n' 'A flag used to select the root and name it MUST be set.' > "$WORK/t/$TR/uqw7.md"
+  printf '%s\n' 'Pass **a flag** used to select the root.' > "$WORK/t/$TR/uqw8.md"
+  printf '%s\n' 'A Flag Used To Select The Root.' > "$WORK/t/$TR/uqw9.md"
+  printf '%s\n' '(formerly a flag used to select the root)' > "$WORK/t/$TR/uqx1.md"
   u_p1; u_p2; u_p3
 }
 wq_world
@@ -618,17 +639,22 @@ Q="$TR/uq"
 U1="${Q}a.md:1,${Q}b.md:1,${Q}e.md:2,${Q}h1.md:1,${Q}h2.md:1,${Q}h3.md:1,${Q}i.md:1,${Q}j.md:1,${Q}k.md:1,${Q}l.md:1"
 U2="${Q}n1.md:1,${Q}n2.md:1,${Q}n3.md:1"
 U3="${Q}r.md:2,${Q}s1.md:1,${Q}s2.md:1"
-UQALL="$U1,$U2,$U3"
+UV="${Q}v1.md:1,${Q}v2.md:1,${Q}v3.md:1,${Q}v4.md:1,${Q}v5.md:1,${Q}v6.md:2,${Q}v7.md:1,${Q}v8.md:1,${Q}v9.md:1"
+UQALL="$U1,$U2,$U3,$UV"
 uqout="$(audit)"
 if has "NARRATIVE_DRIFT: FLAGGED  n=\[$UQALL\]" "$uqout"; then
-  ok "CONTROL UQ: the 16 habitual indefinite-subject lines -> exactly those; the 16 purpose near-misses and 3 producer purpose lines CLEAN"
+  ok "CONTROL UQ: the 25 habitual actor-head lines -> exactly those; the 2 passives, 25 instrument-head near-misses and 3 producer purpose lines CLEAN"
 else
-  bad "World UQ did not flag exactly the sixteen habitual lines — an indefinite-subject habitual clause is acquitted or a purpose clause flagged"
+  bad "World UQ did not flag exactly the twenty-five habitual lines — an actor-head habitual clause is acquitted or an instrument-head purpose clause flagged"
 fi
 { ! has "$TR/uqc.md" "$uqout"; } && { ! has "$TR/uqd.md" "$uqout"; } && { ! has "$TR/uqm1.md" "$uqout"; } && { ! has "$TR/uqm2.md" "$uqout"; } \
-  && { ! has "$TR/uqp[1-6].md" "$uqout"; } && { ! has "$TR/uqt[12].md" "$uqout"; } && { ! has "$TR/uqu[12].md" "$uqout"; } && { ! has "$TR/up1.md" "$uqout"; } && { ! has "$TR/up2.md" "$uqout"; } && { ! has "$TR/up3.md" "$uqout"; } \
-  && ok "comma-initial with a modal, cue before a passive, imperative objects, purpose nouns after a verb or copula (one wrapped), cue with a finite verb, and the three producer purpose lines -> CLEAN" \
+  && { ! has "$TR/uqp[1-6].md" "$uqout"; } && { ! has "$TR/uqt[12].md" "$uqout"; } && { ! has "$TR/uqu[12].md" "$uqout"; } && { ! has "$TR/uqw[1-9].md" "$uqout"; } \
+  && { ! has "$TR/up1.md" "$uqout"; } && { ! has "$TR/up2.md" "$uqout"; } && { ! has "$TR/up3.md" "$uqout"; } \
+  && ok "passives, instrument heads after a verb, copula, cue, comma, paren or sentence start (one wrapped, one bold, one title-case), and the three producer purpose lines -> CLEAN" \
   || bad "a purpose clause was flagged by the indefinite-subject test"
+has "ORIGIN_PARENTHETICAL: FLAGGED  n=\[${Q}k.md:1,${Q}x1.md:1\]" "$uqout" \
+  && ok "ORIGIN_PARENTHETICAL: the habitual uqk and the 'formerly' uqx1 -> exactly those; the purpose parenthetical uqw2 CLEAN" \
+  || bad "ORIGIN_PARENTHETICAL did not flag exactly uqk and uqx1 — a purpose parenthetical flagged, or an origin one acquitted"
 
 # --- Control on World P1 (the tier-2 corpus): the headed plural triple scores CLEAN and the headless
 # plural block FLAGGED.

@@ -23,6 +23,16 @@
 # changed by another writer on every retry: each is exit 2 and writes nothing. There is no path that
 # writes unchecked.
 #
+# THE HELD-STORIES RUN (BL-1015). `_gate-procedures.md` "Sub-step snapshot update" item 2 runs
+# validate-held-stories.sh after every story transition, and a transition is written as --activity.
+# So a call carrying --activity runs the sibling validate-held-stories.sh on the snapshot it just
+# wrote, AFTER the write and after the lock is released, and prints its output under the success
+# line: the OK line, or its findings followed by a line saying the snapshot WAS written and the call
+# is not re-run. The write stands and the exit is 0 whatever it reports, because a story can sit
+# ready-for-dev outside implementation (measured on the reference consumer's committed snapshots: 1
+# such state of 563). A validator that is absent or exits 2 prints one `held-stories NOT EVALUATED`
+# line with its reason, never nothing.
+#
 # usage:
 #   snapshot-update.sh [--snapshot <path>] <op> [<op> ...]
 # ops, applied in order to one candidate. <section> is the heading text after `## ` (a prefix match
@@ -117,7 +127,8 @@
 # to 3 attempts. Wait: AI_DLC_SNAPSHOT_LOCK_TENTHS tenths of a second (default 100).
 #
 # exit:
-#   0  every op applied, the stamp check passed, the snapshot was written
+#   0  every op applied, the stamp check passed, the snapshot was written (with --activity, whatever
+#      the held-stories run above printed)
 #   1  the stamp check refused the candidate (its FUTURE/MALFORMED/BACKDATED/LATE lines are printed);
 #      the snapshot is unchanged
 #   2  a refusal: bad usage, an op matching zero or several targets, a block scalar, a refused
@@ -240,7 +251,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT HUP
-nops=0; FIRSTOP=""
+nops=0; FIRSTOP=""; HASACT=0
 # Ops go to a file, one per record, fields separated by an ASCII unit separator, so a cell or a
 # line of text can carry any byte but a newline and the separator.
 US=$'\037'
@@ -257,7 +268,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --snapshot)     [ $# -ge 2 ] || refuse "--snapshot needs a path"; SNAP="$2"; shift 2 ;;
     --activity|--open-item|--row-add)
-                    need 2 "$@"; nonempty "$2"; nl "$2"; nohash "$2"; rec "${1#--}" "$2"; shift 2 ;;
+                    need 2 "$@"; nonempty "$2"; nl "$2"; nohash "$2"; rec "${1#--}" "$2"
+                    [ "$1" != --activity ] || HASACT=1; shift 2 ;;
     --close-item|--row-delete)
                     need 2 "$@"; nonempty "$2"; nl "$2"; rec "${1#--}" "$2"; shift 2 ;;
     --open-item-file)
@@ -785,4 +797,21 @@ fi
 mv "$CAND" "$SNAP" || refuse "cannot move the candidate over $SNAP"
 printf 'snapshot-update: %d op(s) written to %s (stamp check passed on %d added line(s))\n' \
   "$nops" "$SNAP" "$(grep -c . "$PAY" 2>/dev/null || true)"
+[ "$HASACT" = 1 ] || exit 0
+
+# --- the held-stories run (header: THE HELD-STORIES RUN) ------------------------------------
+rm -f "$LOCK/pid"; rmdir "$LOCK" 2>/dev/null; HELD=0
+HSV="$SU_SELF_DIR/validate-held-stories.sh"
+if [ ! -f "$HSV" ]; then
+  printf 'snapshot-update: held-stories NOT EVALUATED: validate-held-stories.sh is not beside this program (%s)\n' "$SU_SELF_DIR"
+  exit 0
+fi
+HOUT="$(AI_DLC_PROJECT_ROOT="$SU_ROOT" bash "$HSV" --root "$SU_ROOT" --snapshot "$SNAP" 2>&1 </dev/null)"
+HRC=$?
+case "$HRC" in
+  0) printf '%s\n' "$HOUT" ;;
+  1) printf '%s\n' "$HOUT"
+     printf 'snapshot-update: the snapshot WAS written; do not re-run this call. Act on the held-stories findings above before the next wave.\n' ;;
+  *) printf 'snapshot-update: held-stories NOT EVALUATED (validate-held-stories.sh exit %s):\n%s\n' "$HRC" "$HOUT" ;;
+esac
 exit 0

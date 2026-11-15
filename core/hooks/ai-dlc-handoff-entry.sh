@@ -86,16 +86,14 @@
 #     older step would turn the next gate's re-read of its own step into a leave. For a non-handoff
 #     `x` it consumes the breadcrumb so
 #     a later genuine Read of `x` is a real entry (for handoff.md the block further down stays the
-#     one consumer). The breadcrumb is read where its one writer puts it, `_bmad-output/` --
-#     recover-gate does not honour AI_DLC_STATE_DIR -- and under the state dir when the two differ.
+#     one consumer). The breadcrumb is read where its one writer puts it, under the state dir
+#     (recover-gate resolves AI_DLC_STATE_DIR as this hook does).
 #     A breadcrumb naming another step stays until the next recovery clears it; after a forced
 #     exemption a forgotten close stands until the lead's next genuine whole Read of another step.
 # Replayed over 160 lead and 6207 subagent transcripts in time order this rule made one close, 3 s
 # before that lead's own close, and none inside a window where the gate was still being worked; the
 # same replay with the forced-Read exemption removed made five, four of them inside worked windows.
-# Anything unreadable -- no session id, no STEP, no OPEN, no checkpoint script -- does nothing, and
-# so does a state dir other than `_bmad-output` until recover-gate honours AI_DLC_STATE_DIR (the
-# guard at the block says why, and which release lifts it).
+# Anything unreadable -- no session id, no STEP, no OPEN, no checkpoint script -- does nothing.
 #
 # INSTALL
 #   .claude/settings.json:
@@ -132,22 +130,13 @@ case "$FPATH" in
     # It empties the step rather than exiting, so for handoff.md the exit further down stays the
     # one that decides -- an exit here would shadow it and leave that exit with no subject.
     [ -z "$_m1_aid" ] || _m1_x=""
-    # INERT OFF THE DEFAULT STATE DIR. ai-dlc-recover-gate.sh reads its arming marker at the literal
-    # `_bmad-output/.recover-fired` while ai-dlc-recover.sh writes it under AI_DLC_STATE_DIR, so on
-    # any other state dir the gate never arms and never writes the breadcrumb. With no breadcrumb a
-    # forced post-compaction Read of another step is indistinguishable from a leave and would close
-    # a live gate -- the 3-of-43 case above. So the whole block does nothing there: no STEP, no
-    # rebind, no close, which is the prior behaviour. Cluster F10, which makes recover-gate honour
-    # AI_DLC_STATE_DIR, must lift this guard; until then the state-dir half of the breadcrumb read
-    # below names the same file as the first half and is kept only for that release.
-    [ "$STATE_DIR" = "${PROJECT_DIR}/_bmad-output" ] || _m1_x=""
     _m1_dir="${STATE_DIR}/.gate-checkpoint"
     _m1_open=""; _m1_st=""; _m1_ss=""
     [ -f "${_m1_dir}/OPEN" ] && read -r _m1_open < "${_m1_dir}/OPEN" 2>/dev/null
     [ -f "${_m1_dir}/STEP" ] && IFS="$(printf '\t')" read -r _m1_st _m1_ss < "${_m1_dir}/STEP" 2>/dev/null
-    # Forced Read: the breadcrumb names this step, under recover-gate's literal dir or the state dir.
+    # Forced Read: the breadcrumb under the state dir names this step.
     _m1_forced=0
-    for _m1_rs in "${PROJECT_DIR}/_bmad-output/.recover-satisfied" "${STATE_DIR}/.recover-satisfied"; do
+    for _m1_rs in "${STATE_DIR}/.recover-satisfied"; do
       [ -n "$_m1_x" ] && [ -f "$_m1_rs" ] || continue
       _m1_rsf="$(sed -n 's/^step_file=//p' "$_m1_rs" 2>/dev/null | head -1)"
       case "$_m1_rsf" in
