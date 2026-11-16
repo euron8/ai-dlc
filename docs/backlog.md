@@ -854,6 +854,27 @@ The five parts that read "no measured value" (carry-over p3, gate QA on clean st
 
 Item 1's step-value clause now carries a reading for every label that rose on s321, and on s322 for every label but architecture and stories-test-strategy, which wait on BL-819's `other`. Items 2 and 3 stay as ruled (BL-810 PARTIAL; BL-809 item 3). The entry closes only on a measured sprint after the fixes: s323 is running. No `Outcome measured:` line is written.
 
+**Progress (batch 257, W12-06; the entry stays open, `verify: manual` unchanged).** Item 1 on s322 for architecture and stories-test-strategy. These are the two steps that rose on token-equivalent dollars only, and they waited on BL-819's `other`.
+- Source: the run in BL-819's W12-06 paragraph, its BL-812 block (`out/lead_other_split.s322.txt`).
+- C6: each step's lead classes, summed through `lead_class_value`'s own cells and pricing, equal `out/outcome_row.s322-complete.txt`'s lead calls and lead $ cells. 6 of 6 MATCH, s322 / s321 / s319:
+  - architecture 60.2 / $2.6, 20.5 / $1.5 and 21.1 / $1.5;
+  - stories-test-strategy 147.5 / $5.6, 52.4 / $3.3 and 38.1 / $2.9.
+- architecture, s319 to s322: lead +$1.07 per story ($1.50 to $2.57).
+  - By class: other +$0.48, merge +$0.44, repair +$0.10, snapshot +$0.08, compaction-recovery +$0.07, gate-run −$0.08, dispatch −$0.02.
+  - Inside `other`: merge reading +$0.26, open +$0.21, procedure +$0.02, gate-run +$0.01, did-nothing +$0.01, text −$0.03.
+- stories-test-strategy: lead +$2.69 per story ($2.93 to $5.62).
+  - By class: other +$1.66, merge +$0.38, snapshot +$0.34, compaction-recovery +$0.17, dispatch +$0.16, step-reread +$0.06, gate-run −$0.04, repair −$0.04.
+  - Inside `other`: open +$0.95, merge reading +$0.53, procedure +$0.36, did-nothing +$0.08, wait-poll +$0.05, gate-run +$0.01, text −$0.33.
+- Readings. Every part of both rises carries one except `open` and `procedure`:
+  - the classes merge, repair, dispatch and step-reread, and `other`'s merge, gate-run and wait-poll readings: KEEP (BL-819);
+  - compaction-recovery: KEEP by ruling;
+  - snapshot: L3, judged on BL-912;
+  - did-nothing: a narrowing candidate;
+  - text fell in both steps;
+  - `open` plus `procedure`: $0.23 per story of architecture's rise and $1.31 of stories-test-strategy's, NOT DECIDED, as in BL-819.
+
+Still owed under item 1: those two `open` and `procedure` shares. Items 2 and 3 stay as ruled: BL-810 and BL-809 item 3 are live PARTIAL. No `Outcome measured:` line: s323 is still in carry-over-evaluation at graph 3abb1edd6.
+
 Step: pipeline
 
 verify: manual
@@ -1163,6 +1184,57 @@ Still owed: `other` on s322 (the classifier extension above); repair with BL-812
 - **Correction (the W9-18 merge reading above).** It said merge "rose at the lead seat's call rate ... so the rise is the local lead's call rate, not more merging". `out/lead_class_denied.s322.txt` prints merge ABOVE the lead seat's ratio in two places: all steps (3.77 against 3.65) and `gate[implementation]` (2.91 against 2.55). Only in implementation is it below (1.45 against 1.71). So the call-rate explanation holds for implementation alone. Elsewhere merge grew somewhat faster than the lead as a whole, and that excess is not explained. The KEEP stands on merge's failure case, not on the rate.
 
 Still owed: `other` on s322 (the classifier extension in the W9-18 paragraph above); item 3's closing graph sprint (s323 running); and L3 on BL-912's outcome line.
+
+**Progress (batch 257, W12-06; the entry stays open, `verify: manual` unchanged).** `other` on s322, decided wherever a program can say what the call read or wrote.
+- Command: `EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/lead_other_split.py <SCRATCH_OUT> $OUT 322 321 319`, over a reference extraction at the same window (`extract.py`, `analyze.py`, `roll.py --classes`); output `out/lead_other_split.s322.txt`, with the command in its first line.
+  - extract.py is unchanged. The script injects one Classer subclass at the anchor `lead_class_denied.py` uses.
+  - Per `other` call it records the tool_use blocks, extract.py's own `invoked()` programs and `norm_paths()` targets, and the call's fate (`lead_class_denied.py`'s DENIED, ERRORED, TEXT or RAN). Targets come from the shell text a call runs, or a file tool's path field alone; never from the text an Edit or Write carries.
+- Controls, same run, all MATCH:
+  - C1: the scratch `classes.jsonl` is byte-equal to the reference.
+  - C2, conservation: the sub-class rows sum to `classes.jsonl`'s `other` calls, active and gap on 450 of 450 (lead unit, step) pairs.
+  - C3: the fate column reproduces `lead_class_denied.py`'s committed first-tool lines for s322, s321, and s319 in both files.
+  - C4: an impossible program reads 0 beside `git` 12822.
+  - C5: pipeline-bucket `other` calls and active seconds equal `lead_class_value.cells()` on 102 of 102 (sprint, step) cells.
+  - C6: in BL-812.
+  - Token control: units==segs 24709666393 on both sides.
+- C2 and C5 count rows whatever their bucket, so a row in the wrong bucket passes both. The output therefore prints every rule's hit set with its top targets.
+- Hand-run once:
+  - M3, an injection that drops the message-less time rows, reads C2 156 DIFFERS. It ran on the version before the target fix below, whose time-row code this version keeps unchanged.
+  - Each of these is killed only by `--self-test`:
+    - M1 drops the wait-poll rule (FAIL 1); on the real run it still reads C2 and C5 MATCH;
+    - M2 drops the task-output target rule (FAIL 1);
+    - M4 drops the write-shape exclusion (FAIL 1);
+    - M5 takes targets from a block's whole input again (FAIL 5);
+    - M6 empties the non-read program rule (FAIL 2).
+  - Base against tip at the same window: origin/main's `lead_class_denied.py` output (`out/lead_class_denied.s322.txt`) has 0 reading blocks, 0 C6 lines and 0 rule hit-set lines; this output has 22, 6 and 15.
+- Packaging is not the rise. `other` tool_use blocks per story read s319 65.7, s321 63.6 and s322 471.9 (0.45, 0.64 and 0.87 blocks per call).
+- Total `other` calls per story rose 146.9 to 542.0, a ratio of 3.69 against the lead seat's 3.65. The sub-classes do not share that rate:
+  - every tool sub-class rose faster than 3.65 except wait-poll (1.3 to 3.9), sleep (1.0 to 2.9) and AskUserQuestion with PushNotification (1.1 to 2.5);
+  - the large risers are shell reads (26.6 to 180.6), Read, Grep and Glob (4.0 to 60.9), Edit and Write (1.1 to 38.1), and context-mode `ctx_execute` (0.2 to 59.8);
+  - text fell, 97.5 to 87.6.
+- What the rules caught on s322 (all in the output; per story unless a sprint total is named):
+  - 41.0 reading calls whose targets span families, and 14.6 with a write shape (a redirect onto a file, `sed -i`, `tee`), go to `open`.
+  - 3.0 delegate- or procedure-family reads that also run a non-read program (git, a script, `rm`) go to `open`.
+  - Of 121 Edits (sprint total) whose file a later prompt names, 5 are briefs and go to `dispatch`. The rest are the lead editing artifacts itself (`gate-log.md` 28, `carry-over-backlog.md` 16, the retro 15, `docs/escalations/pending.md` 14, `prd.md` 9), so they stay `open`.
+  - 54.5 `ctx_execute` shell calls. 37 of them (sprint total) ran a validator that extract.py's `GATE_RUN_RE` matches, but extract.py classes such a call only when it is a Bash call. 1 ran `snapshot-update.sh`; `bl912_counts.py` counts Bash calls only, so that call is outside BL-912's counts.
+  - The sibling-of-a-prompt flag is no rule: alone it would have taken 24.8 more calls. Their largest targets are `pipeline-snapshot.md`, `gate-log.md`, `gate-metrics.jsonl`, `carry-over-backlog.md` and `spawn-ledger.jsonl`, which are state, not a delegate's output.
+- Readings, s322 per story (calls / active h / token-equivalent $), with s319 beside each:
+  - **merge**, 67.1 / 0.140 / $2.70 (6.0 / 0.009 / $0.34). Reading calls with no write shape and no non-read program, every target a delegate's output. A delegate's output is a background task's output under the harness tmp `tasks/` directory (211 calls, sprint total), or a sprint-scoped `_bmad-output/…/sNNN/` artifact that is not a gate record (314; 12 hit both). extract.py's `merge_hit` misses them, because it matches only paths a prompt names. The sprint-dir rule goes by path, not authorship. Reading: MERGE into `merge`, KEEP on merge's failure case.
+  - **gate-run**, 4.6 / 0.018 / $0.19 (none): validators run through `ctx_execute`. Reading: MERGE into gate-run, KEEP on consequence.
+  - **snapshot** 0.1, **dispatch** 0.6 / 0.001 / $0.03 (the 5 brief Edits), and **wait-poll** 4.0 / 0.023 / $0.15 (`wait-for-deliverable.sh`, L1's program). Readings: snapshot L3, judged on BL-912; dispatch and wait-poll KEEP.
+  - **did-nothing**, 20.8 / 0.064 / $0.77 (1.1 / 0.004 / $0.23). Every tool_use of the call was refused by a hook or errored; a Read refused by a hook is 5.9 of it. Reading: narrowing candidate, recorded only.
+  - **text**, 87.6 / 0.520 / $3.40 (97.5 / 0.272 / $5.58). Its dollars are end-of-turn calls and belong with the lead turn count, as b255 ruled. Its hours rose 0.25 h per story; the b256 fold retired the hours basis, so they are NOT DECIDED.
+  - **procedure**, 67.6 / 0.118 / $2.17 (3.2 / 0.016 / $0.29): NOT DECIDED. These are reading calls whose every target is the lead's own procedure: `.claude/skills/`, team roles, agents, hooks, rules, `scripts/ai-dlc/` and settings. The largest targets are `_gate-procedures.md`, `postcompact-digest.md`, `extensions/checks` and validator sources. A first read is not a re-read, and the step-reread overlap reading was not run on them.
+  - **open**, 289.5 / 0.901 / $10.97 (37.8 / 0.196 / $2.75): NOT DECIDED; the data is available. The output enumerates it by (sub-class, target family). The largest parts are:
+    - shell reads of graph's own code and docs, 35.0;
+    - shell reads of `_bmad-output` state, 23.9;
+    - shell reads spanning families, 21.0;
+    - `ctx_search` with no path, 20.1;
+    - `ctx_execute` spanning families, 14.6;
+    - Edits: 12.0 to graph's code and docs, 11.9 to state, and 10.1 to a delegate's output that no later prompt names.
+- So on s322, 184.8 of 542.0 `other` calls per story (34%) and $7.24 of $20.38 carry a reading. That counts merge, gate-run, snapshot, dispatch and wait-poll; did-nothing; and text's dollars. Text's 0.520 h is not counted as read.
+
+Still owed: `procedure`, `open` and text's hours on s322; item 3's closing graph sprint (s323 is still in carry-over-evaluation at graph 3abb1edd6); and L3 on BL-912's outcome line.
 
 verify: manual
 
@@ -2041,6 +2113,8 @@ Hand-run mutants, once, each killed by the self-probe: classifying parked-until-
 The readings above were taken at f29ff3693. Between f29ff3693 and edb812bc1, none of the files they read changed: extract.py, roll.py, `docs/analysis/subagent-poll-bl514/`, the hook and wait-for-deliverable.sh show 0 changed files, against 29 changed files across the whole range.
 
 Still owed: the close this entry's route allows, either value evidence or a measured fall. The fall on the proposed measure, 0.91 h at s318 to 0.48 h at s322, is not attributed to this mechanism and stands only if the operator re-keys the route.
+
+**OPERATOR RULING (batch 257, relayed by lead ai-dlc-7b).** The close route is re-keyed to the subagent wait EXCLUDING parked-until-message time, by `gapclass.py`, as the v0.1146.0 paragraph above proposed. Under that key the gap reads 0.91 h at s318 and 0.48 h at s322 (the "Without parked-until-message" bullet above). The entry closes on the next complete sprint's confirming reading on that key. Until then it stays open, with no LANDED line.
 
 verify: manual
 

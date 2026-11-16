@@ -1,0 +1,648 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z. Command: EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/analyze.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py $OUT --classes > $OUT/classes.txt, then EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/lead_other_split.py <SCRATCH_OUT> $OUT 322 321 319 (extract.py progress lines of the injected run dropped; token control units==segs 24709666393 on both sides)
+C1 scratch classes.jsonl BYTE-EQUAL to the reference: MATCH
+C2 conservation per (lead unit, step), `other` calls, active and gap: 450 MATCH, 0 DIFFERS
+C4 invoked programs: git 12822, impossible qzxvnoprog4417.sh 0 (MATCH)
+C5 pipeline-bucket `other` calls and active s per (sprint, step) against lead_class_value.cells(): 102 MATCH, 0 DIFFERS
+C3 s322 fate line against out/lead_class_denied.s322.txt: MATCH
+C3 s321 fate line against out/lead_class_denied.s321.txt: MATCH
+C3 s319 fate line against out/lead_class_denied.s321.txt: MATCH
+C3 s319 fate line against out/lead_class_denied.s322.txt: MATCH
+controls: ALL MATCH
+-- packaging: `other` tool_use blocks per story (blocks per call): s322 471.9 (0.87), s321 63.6 (0.64), s319 65.7 (0.45)
+-- s322 reading calls (RAN) by target family, per story: delegate 71.0, procedure 72.0, state 43.2, project 53.8, mixed 41.0, none 36.8
+-- s321 reading calls (RAN) by target family, per story: delegate 6.6, procedure 4.1, state 3.3, project 6.1, mixed 7.4, none 1.4
+-- s319 reading calls (RAN) by target family, per story: delegate 6.2, procedure 3.2, state 5.5, project 5.5, mixed 9.8, none 2.2
+-- s322 edit calls (RAN): 283, of them the edited path appears in a LATER Agent/Task prompt of the unit 121
+-- s321 edit calls (RAN): 89, of them the edited path appears in a LATER Agent/Task prompt of the unit 11
+-- s319 edit calls (RAN): 21, of them the edited path appears in a LATER Agent/Task prompt of the unit 4
+-- BL-812 architecture: lead $ per story by class (token-equivalent), `other` by reading
+   s322: dispatch $0.06, merge $0.82, repair $0.13, gate-run $0.00, step-reread $0.07, compaction-recovery $0.12, snapshot $0.30, other $1.06, idle-wait $0.00; sum $2.57, 60.2 calls | C6 against outcome_row ('60.2', '2.6'): MATCH
+        other by reading: merge $0.29, gate-run $0.01, did-nothing $0.01, text $0.36, procedure $0.09, open $0.29
+   s321: dispatch $0.10, merge $0.57, repair $0.05, gate-run $0.05, step-reread $0.02, compaction-recovery $0.05, snapshot $0.24, other $0.44, idle-wait $0.00; sum $1.53, 20.5 calls | C6 against outcome_row ('20.5', '1.5'): MATCH
+        other by reading: merge $0.03, wait-poll $0.00, text $0.35, procedure $0.01, open $0.05
+   s319: dispatch $0.08, merge $0.38, repair $0.03, gate-run $0.08, step-reread $0.07, compaction-recovery $0.05, snapshot $0.22, other $0.58, idle-wait $0.00; sum $1.50, 21.1 calls | C6 against outcome_row ('21.1', '1.5'): MATCH
+        other by reading: merge $0.03, text $0.39, procedure $0.07, open $0.08
+-- BL-812 stories-test-strategy: lead $ per story by class (token-equivalent), `other` by reading
+   s322: dispatch $0.34, merge $1.02, repair $0.04, gate-run $0.06, step-reread $0.14, compaction-recovery $0.22, snapshot $0.92, other $2.87, idle-wait $0.00; sum $5.62, 147.5 calls | C6 against outcome_row ('147.5', '5.6'): MATCH
+        other by reading: merge $0.61, gate-run $0.01, dispatch $0.00, wait-poll $0.06, did-nothing $0.08, text $0.50, procedure $0.38, open $1.23
+   s321: dispatch $0.14, merge $0.82, repair $0.06, gate-run $0.14, step-reread $0.06, compaction-recovery $0.07, snapshot $0.46, other $1.54, idle-wait $0.00; sum $3.29, 52.4 calls | C6 against outcome_row ('52.4', '3.3'): MATCH
+        other by reading: merge $0.19, dispatch $0.00, wait-poll $0.04, did-nothing $0.02, text $0.70, procedure $0.08, open $0.51
+   s319: dispatch $0.18, merge $0.64, repair $0.08, gate-run $0.10, step-reread $0.08, compaction-recovery $0.05, snapshot $0.58, other $1.21, idle-wait $0.00; sum $2.93, 38.1 calls | C6 against outcome_row ('38.1', '2.9'): MATCH
+        other by reading: merge $0.08, wait-poll $0.01, did-nothing $0.00, text $0.83, procedure $0.02, open $0.28
+controls with C6: ALL MATCH
+-- READINGS, all steps, pipeline bucket, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                  67.1 / 0.140 / $2.70         6.3 / 0.014 / $0.35         6.0 / 0.009 / $0.34
+   gate-run                4.6 / 0.018 / $0.19                           -                           -
+   snapshot                0.1 / 0.000 / $0.00                           -                           -
+   dispatch                0.6 / 0.001 / $0.03         0.0 / 0.000 / $0.00                           -
+   wait-poll               4.0 / 0.023 / $0.15         1.0 / 0.002 / $0.06         1.3 / 0.003 / $0.07
+   did-nothing            20.8 / 0.064 / $0.77         0.8 / 0.001 / $0.05         1.1 / 0.004 / $0.23
+   text                   87.6 / 0.520 / $3.40        53.2 / 0.210 / $3.04        97.5 / 0.272 / $5.58
+   procedure              67.6 / 0.118 / $2.17         3.9 / 0.011 / $0.27         3.2 / 0.016 / $0.29
+   open                 289.5 / 0.901 / $10.97        34.3 / 0.160 / $2.29        37.8 / 0.196 / $2.75
+   all other            542.0 / 1.785 / $20.38        99.5 / 0.397 / $6.05       146.9 / 0.500 / $9.25
+-- s322 reading calls (RAN): 81.8 per story with more than one target, 41.0 spanning families (-> open), 14.6 with a write shape (-> open), 54.5 ctx_execute shell calls (calls by reading: open 249, procedure 77, merge 71, gate-run 37, snapshot 1, wait-poll 1); the retired sibling flag alone would have taken 24.8 more
+   delegate- or procedure-family reads running a non-read program (-> open): 3.0 per story; programs: git 9, check-owed-derivations.sh 4, rm 2, verdict.sh 2, audit-rule-files.sh 1, validate-artifact-paths.sh 1, gate-checkpoint.sh 1, wait-for-deliverable.sh 1, join-remediator-shards.sh 1, gh 1
+   merge calls by target rule: sprint-dir 314, task-output 211, sprint-dir+task-output 12
+   retired sibling flag, targets of the calls it alone would have taken: _bmad-output/pipeline-snapshot.md 15, _bmad-output/implementation-artifacts/gate-log.md 14, _bmad-output/planning-artifacts/s322 14, _bmad-output/implementation-artifacts/gate-metrics.jsonl 13, _bmad-output/planning-artifacts/carry-over-backlog.md 12, _bmad-output/spawn-ledger.jsonl 10, _bmad-output/pipeline-paused.flag 10, _bmad-output/planning-artifacts/.artifact-writes.jsonl 10, _bmad-output/implementation-artifacts/sprint-status.yaml 8, _bmad-output/implementation-artifacts 7
+   rule task-output    253 target hits; top: private/tmp/claude-501/-Users-n8-git-graph/<uuid> 253
+   rule sprint-dir     763 target hits; top: _bmad-output/planning-artifacts/sNNN/architecture-spine/ARCHITECTURE-SPINE.md 26, _bmad-output/planning-artifacts/sNNN/shards/requirements-repair-p1 21, _bmad-output/specs/sNNN/per-chain-rebalancer-epic5-closeout/SPEC.md 18, _bmad-output/planning-artifacts/sNNN/stories 17, _bmad-output/planning-artifacts/sNNN/locked-requirements.md 16, _bmad-output/planning-artifacts/sNNN/shards/requirements-p1 15, _bmad-output/planning-artifacts/sNNN/stories/story-1-3-smoke-nav-button-count-derived.md 13, _bmad-output/planning-artifacts/sNNN/test-strategy.md 13
+   rule gate-record    142 target hits; top: _bmad-output/implementation-artifacts/gate-log.md 54, _bmad-output/implementation-artifacts/gate-metrics.jsonl 26, _bmad-output/implementation-artifacts/sNNN/gate-adjudication/implementation-20261111T014202Z.verdict.json 4, _bmad-output/implementation-artifacts/sNNN/gate-transition/3-g1-p2.plan 3, _bmad-output/implementation-artifacts/sNNN/gate-adjudication/implementation-20261111T102922Z.verdict.json 2, _bmad-output/implementation-artifacts/sNNN/gate-transition/8-g3-p2.plan 2, _bmad-output/gate-adjudication/* 2, _bmad-output/implementation-artifacts/sNNN/gate-transition/3-g2-p1.plan 2
+   rule state          482 target hits; top: _bmad-output/pipeline-snapshot.md 47, _bmad-output/planning-artifacts/s322 44, _bmad-output/ai-dlc-update/push-candidate-ledger.md 40, _bmad-output/planning-artifacts/carry-over-backlog.md 31, _bmad-output/planning-artifacts/prd.md 28, _bmad-output/implementation-artifacts/sprint-status.yaml 25, _bmad-output/pipeline-paused.flag 24, _bmad-output/spawn-ledger.jsonl 22
+   rule procedure      911 target hits; top: .claude/skills/ai-dlc/steps/_gate-procedures.md 81, .claude/skills/ai-dlc/postcompact-digest.md 68, .claude/skills/ai-dlc/extensions/checks 50, scripts/ai-dlc/validate-adversarial-convergence.sh 42, .claude/skills/ai-dlc/steps/gate-validation.md 30, .claude/skills/ai-dlc/enforcement-map.yaml 26, scripts/ai-dlc/snapshot-update.sh 25, scripts/ai-dlc/wait-for-deliverable.sh 23
+   edits whose path a LATER prompt names: 121, of them brief-shaped (-> dispatch) 5; targets: _bmad-output/implementation-artifacts/gate-log.md 28, _bmad-output/planning-artifacts/carry-over-backlog.md 16, docs/retro/sNNN/retro.md 15, docs/escalations/pending.md 14, _bmad-output/planning-artifacts/prd.md 9, _bmad-output/ai-dlc-update/push-candidate-ledger.md 5, _bmad-output/planning-artifacts/sNNN/stories/story-1-6-test-harness-repair-measure-and-cap.md 5, _bmad-output/implementation-artifacts/sprint-status.yaml 5, _bmad-output/planning-artifacts/sNNN/carry-over-evaluation.md 4, _bmad-output/planning-artifacts/sprint-status.yaml 4, _bmad-output/specs/sNNN/per-chain-rebalancer-epic5-closeout/.memlog.md 3, _bmad-output/planning-artifacts/product-brief.md 3
+-- s321 reading calls (RAN): 12.4 per story with more than one target, 7.4 spanning families (-> open), 1.2 with a write shape (-> open), 0.0 ctx_execute shell calls (calls by reading: none); the retired sibling flag alone would have taken 3.1 more
+   delegate- or procedure-family reads running a non-read program (-> open): 0.3 per story; programs: git 6, wait-for-deliverable.sh 1, gh 1
+   merge calls by target rule: task-output 81, sprint-dir 53, sprint-dir+task-output 24
+   retired sibling flag, targets of the calls it alone would have taken: _bmad-output/.beat-inflight 18, _bmad-output/planning-artifacts/s321 10, _bmad-output/implementation-artifacts/gate-log.md 9, _bmad-output/gate-adjudication 6, _bmad-output/implementation-artifacts/gate-metrics.jsonl 5, private/tmp/claude-501/-Users-n8-git-graph/<uuid> 4, Users/n8/git/graph-s321-deploy-2625acc 4, R/smoke-test-output-rerun12.rc 3, R/smoke-test-output-rerun12.txt 3, _bmad-output/pipeline-paused.flag 3
+   rule task-output    154 target hits; top: private/tmp/claude-501/-Users-n8-git-graph/<uuid> 154
+   rule sprint-dir     233 target hits; top: _bmad-output/planning-artifacts/sNNN/shards/stories-party-serial-repair-p1 24, _bmad-output/planning-artifacts/sNNN/shards/requirements-elicitation 16, _bmad-output/planning-artifacts/sNNN/stories-party-serial-repair-p1.md 14, _bmad-output/planning-artifacts/sNNN/shards/stories-p1 13, _bmad-output/planning-artifacts/sNNN/stories-party-repair-p1.md 13, _bmad-output/planning-artifacts/sNNN/shards/requirements-p1 12, _bmad-output/planning-artifacts/sNNN/stories 10, _bmad-output/implementation-artifacts/sNNN/gate-transition 8
+   rule gate-record     48 target hits; top: _bmad-output/implementation-artifacts/gate-log.md 15, _bmad-output/implementation-artifacts/gate-metrics.jsonl 7, _bmad-output/gate-adjudication/implementation-20261107T063600Z 2, _bmad-output/gate-adjudication/*.verdict.json 2, _bmad-output/implementation-artifacts/sNNN/gate-transition/1-2-g2-p2.plan 2, _bmad-output/gate-adjudication/implementation-20261106T234617Z.verdict.json 2, _bmad-output/implementation-artifacts/sNNN/gate-transition/3.1-g1-p2.plan 1, _bmad-output/implementation-artifacts/sNNN/gate-transition/3.1-g1-p3.plan 1
+   rule state          192 target hits; top: _bmad-output/.beat-inflight 28, _bmad-output/planning-artifacts/s321 25, _bmad-output/gate-adjudication 14, _bmad-output/pipeline-snapshot.md 14, _bmad-output/ai-dlc-update/push-candidate-ledger.md 12, _bmad-output/pipeline-paused.flag 10, _bmad-output/spawn-ledger.jsonl 9, _bmad-output/party-mode/s321 7
+   rule procedure      182 target hits; top: .claude/skills/ai-dlc/steps/_gate-procedures.md 19, .claude/skills/ai-dlc/extensions/checks 17, scripts/ai-dlc/wait-for-deliverable.sh 12, .claude/skills/ai-dlc/steps/handoff.md 11, .claude/skills/ai-dlc/rule-bodies/rule-28.md 9, .claude/skills/ai-dlc/rule-bodies/rule-19.md 8, .claude/team-roles/remediator.md 7, .claude/skills/ai-dlc/steps/stories-test-strategy.md 6
+   edits whose path a LATER prompt names: 11, of them brief-shaped (-> dispatch) 1; targets: docs/escalations/pending.md 3, _bmad-output/planning-artifacts/sNNN/requirements-party-serial-repair-p1.md 2, _bmad-output/planning-artifacts/carry-over-backlog.md 1, _bmad-output/planning-artifacts/prd.md 1, _bmad-output/planning-artifacts/sNNN/requirements-elicitation-serial-repair-p1.md 1, _bmad-output/planning-artifacts/sNNN/requirements-repair-p1.md 1, private/tmp/claude-501/-Users-n8-git-graph/<uuid> 1, docs/retro/sNNN/retro.md 1
+-- s319 reading calls (RAN): 13.2 per story with more than one target, 9.8 spanning families (-> open), 2.0 with a write shape (-> open), 0.0 ctx_execute shell calls (calls by reading: none); the retired sibling flag alone would have taken 3.9 more
+   delegate- or procedure-family reads running a non-read program (-> open): 0.1 per story; programs: git 2, verdict.sh 1
+   merge calls by target rule: task-output 98, sprint-dir 14, sprint-dir+task-output 8
+   retired sibling flag, targets of the calls it alone would have taken: _bmad-output/.beat-inflight 49, private/tmp/claude-501/-Users-n8-git-graph/<uuid> 13, _bmad-output/gate-adjudication 10, _bmad-output/planning-artifacts/s319 7, _bmad-output/party-mode/s319 3, _bmad-output/planning-artifacts/.artifact-writes.jsonl 3, _bmad-output/spawn-ledger.jsonl 2, shards/test-strategy-p2/*.md 2, _bmad-output/ai-dlc-update/push-candidate-ledger.md 2, _bmad-output/retro-artifacts/update-0786 2
+   rule task-output    177 target hits; top: private/tmp/claude-501/-Users-n8-git-graph/<uuid> 177
+   rule sprint-dir     100 target hits; top: _bmad-output/planning-artifacts/sNNN/shards/requirements-p1 23, _bmad-output/planning-artifacts/sNNN/carry-over-evaluation-party-repair-p1.md 8, _bmad-output/planning-artifacts/sNNN/shards 5, _bmad-output/planning-artifacts/sNNN/stories/story-2-3b-net-pnl-unavailable-contract.md 5, _bmad-output/planning-artifacts/sNNN/shards/carry-over-evaluation-party-repair-p1 4, _bmad-output/planning-artifacts/sNNN/shards/coe-p1 4, _bmad-output/planning-artifacts/sNNN/shards/requirements-repair-p1 4, _bmad-output/planning-artifacts/sNNN/requirements-repair-p1.md 3
+   rule gate-record      2 target hits; top: _bmad-output/implementation-artifacts/gate-log.md 1, _bmad-output/gate-adjudication/planning-20261017T141509Z.* 1
+   rule state          285 target hits; top: _bmad-output/.beat-inflight 118, _bmad-output/planning-artifacts/s319 21, _bmad-output/gate-adjudication 13, _bmad-output/pipeline-snapshot.md 11, _bmad-output/ai-dlc-update/push-candidate-ledger.md 10, _bmad-output/planning-artifacts/prd.md 9, _bmad-output/party-mode/s319 8, _bmad-output/spawn-ledger.jsonl 7
+   rule procedure      189 target hits; top: .claude/skills/ai-dlc/steps/_gate-procedures.md 23, scripts/ai-dlc/join-remediator-shards.sh 22, .claude/skills/ai-dlc/extensions/steps-domain 12, .claude/skills/ai-dlc/steps/stories-test-strategy.md 8, .claude/skills/ai-dlc/steps/handoff.md 8, scripts/ai-dlc/merge-adversarial-shards.sh 8, .claude/skills/ai-dlc/extensions/checks 7, .claude/skills/ai-dlc/rule-bodies/rule-28.md 7
+   edits whose path a LATER prompt names: 4, of them brief-shaped (-> dispatch) 0; targets: _bmad-output/specs/sNNN/offramp-config-and-rewards/ARCHITECTURE-SPINE.md 1, docs/architecture.md 1, _bmad-output/implementation-artifacts/gate-log.md 1, _bmad-output/planning-artifacts/prd.md 1
+-- s322 `open` calls per story by (sub-class, target family), all 289.5: shell-read/project 35.0, shell-read/state 23.9, shell-read/mixed 21.0, ctx-search/none 20.1, ctx-exec/mixed 14.6, shell-read/none 14.2, read/state 12.0, edit/project 12.0, edit/state 11.9, harness/none 11.6, git/none 10.8, edit/delegate 10.1, git/project 8.6, ctx-exec/project 7.9, read/project 7.5, shell-write/state 6.0, ctx-exec/state 6.0, mcp-other/none 4.9, bash-other/project 4.6, script/mixed 4.2, script/project 3.1, git/mixed 2.9, inline-interp/project 2.6, script/procedure 2.4, shell-read/procedure 2.4, git/state 2.0, ctx-exec/delegate 2.0, bash-other/none 1.9, operator/project 1.8, shell-read/delegate 1.8, ctx-exec/none 1.6, inline-interp/state 1.4, ctx-exec/procedure 1.4, git/delegate 1.2, shell-write/mixed 1.1, sleep/mixed 1.1, inline-interp/mixed 1.0, ctx-search/project 0.8, sleep/project 0.8, inline-interp/none 0.6, git/procedure 0.6, operator/none 0.6, shell-write/none 0.6, shell-builtin/none 0.6, bash-other/mixed 0.5, edit/procedure 0.5, harness/delegate 0.5, harness/project 0.5, test-build/project 0.4, test-build/mixed 0.4, shell-write/delegate 0.4, edit/none 0.2, bash-other/state 0.2, shell-builtin/state 0.2, shell-write/project 0.2, shell-builtin/delegate 0.2, bash-other/procedure 0.2, sleep/delegate 0.2, shell-builtin/project 0.1, read/none 0.1, operator/mixed 0.1, inline-interp/delegate 0.1, inline-interp/procedure 0.1, sleep/none 0.1, sleep/state 0.1, shell-write/procedure 0.1, test-build/procedure 0.1, shell-builtin/procedure 0.1, test-build/none 0.1
+-- s321 `open` calls per story by (sub-class, target family), all 34.3: shell-read/mixed 6.7, shell-read/project 3.8, edit/project 2.7, shell-read/state 2.1, shell-write/state 1.8, harness/none 1.6, read/project 1.4, git/none 1.4, script/mixed 1.1, shell-read/none 1.0, inline-interp/project 1.0, script/project 0.9, read/state 0.9, inline-interp/mixed 0.7, edit/delegate 0.6, bash-other/project 0.5, shell-builtin/state 0.5, git/mixed 0.5, operator/none 0.4, git/project 0.4, bash-other/none 0.4, sleep/project 0.4, inline-interp/state 0.3, mcp-other/none 0.3, shell-read/delegate 0.3, operator/project 0.3, edit/state 0.2, ctx-search/none 0.2, bash-other/mixed 0.2, harness/mixed 0.2, shell-write/project 0.2, shell-read/procedure 0.2, git/state 0.1, script/procedure 0.1, git/delegate 0.1, shell-write/mixed 0.1, read/none 0.1, bash-other/procedure 0.1, test-build/mixed 0.1, harness/project 0.1, shell-write/none 0.1, inline-interp/none 0.1, operator/mixed 0.0, sleep/mixed 0.0, harness/delegate 0.0, ctx-exec/state 0.0, ctx-exec/project 0.0, sleep/delegate 0.0, test-build/project 0.0, bash-other/state 0.0, sleep/none 0.0
+-- s319 `open` calls per story by (sub-class, target family), all 37.8: shell-read/mixed 8.6, shell-read/project 4.8, shell-read/state 4.5, git/none 1.9, shell-read/none 1.8, git/project 1.5, harness/none 1.4, git/mixed 1.4, script/mixed 1.4, inline-interp/mixed 1.2, shell-write/state 1.1, read/state 0.8, edit/state 0.6, shell-write/mixed 0.6, operator/none 0.6, operator/project 0.5, sleep/state 0.5, bash-other/mixed 0.4, bash-other/project 0.4, read/project 0.3, inline-interp/project 0.3, inline-interp/state 0.2, git/state 0.2, edit/project 0.2, bash-other/none 0.2, sleep/mixed 0.2, edit/delegate 0.2, read/none 0.2, sleep/delegate 0.2, shell-read/delegate 0.1, harness/mixed 0.1, ctx-search/none 0.1, inline-interp/none 0.1, harness/project 0.1, script/procedure 0.1, shell-write/delegate 0.1, sleep/project 0.1, shell-read/procedure 0.1, sleep/none 0.1, edit/none 0.1, operator/mixed 0.1, script/project 0.1, shell-write/none 0.1, shell-write/project 0.1, test-build/project 0.1, test-build/mixed 0.1, shell-builtin/none 0.1, bash-other/delegate 0.1, ctx-exec/state 0.1, ctx-exec/project 0.1, shell-builtin/delegate 0.1, ctx-exec/delegate 0.1
+-- READINGS, architecture, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   6.5 / 0.011 / $0.29         0.4 / 0.000 / $0.03         0.6 / 0.001 / $0.03
+   gate-run                0.2 / 0.002 / $0.01                           -                           -
+   wait-poll                                 -         0.0 / 0.000 / $0.00                           -
+   did-nothing             0.1 / 0.000 / $0.01                           -                           -
+   text                    8.4 / 0.022 / $0.36         5.8 / 0.006 / $0.35         7.5 / 0.010 / $0.39
+   procedure               2.8 / 0.005 / $0.09         0.2 / 0.000 / $0.01         0.6 / 0.001 / $0.07
+   open                    5.6 / 0.017 / $0.29         0.7 / 0.002 / $0.05         1.2 / 0.005 / $0.08
+   all other              23.6 / 0.058 / $1.06         7.1 / 0.009 / $0.44         9.9 / 0.017 / $0.58
+-- READINGS, bug-investigation, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   0.9 / 0.003 / $0.03                           -                           -
+   wait-poll               0.1 / 0.000 / $0.00                           -                           -
+   did-nothing             0.4 / 0.000 / $0.02                           -                           -
+   text                    2.9 / 0.019 / $0.11                           -                           -
+   procedure               2.4 / 0.003 / $0.07                           -                           -
+   open                    7.5 / 0.023 / $0.29                           -                           -
+   all other              14.1 / 0.049 / $0.53         0.0 / 0.000 / $0.00         0.0 / 0.000 / $0.00
+-- READINGS, carry-over-evaluation, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                  10.6 / 0.021 / $0.38                           -         0.3 / 0.001 / $0.03
+   gate-run                0.2 / 0.000 / $0.01                           -                           -
+   snapshot                0.1 / 0.000 / $0.00                           -                           -
+   wait-poll                                 -                           -         0.5 / 0.001 / $0.02
+   did-nothing             1.9 / 0.004 / $0.07                           -                           -
+   text                   10.8 / 0.050 / $0.38                           -         4.1 / 0.005 / $0.23
+   procedure               5.4 / 0.007 / $0.12                           -         0.3 / 0.001 / $0.02
+   open                   26.8 / 0.054 / $0.99                           -         2.5 / 0.010 / $0.15
+   all other              55.8 / 0.136 / $1.96         0.0 / 0.000 / $0.00         7.7 / 0.018 / $0.45
+-- READINGS, deploy-validate, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   1.5 / 0.003 / $0.11         0.0 / 0.000 / $0.00                           -
+   wait-poll                                 -         0.1 / 0.000 / $0.00                           -
+   did-nothing             1.1 / 0.001 / $0.10         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.01
+   text                    4.1 / 0.024 / $0.21         6.5 / 0.035 / $0.39         2.1 / 0.018 / $0.13
+   procedure               2.0 / 0.002 / $0.05         0.2 / 0.001 / $0.01                           -
+   open                   21.5 / 0.051 / $0.79         5.3 / 0.028 / $0.35         3.3 / 0.011 / $0.23
+   all other              30.2 / 0.081 / $1.25        12.1 / 0.064 / $0.76         5.6 / 0.029 / $0.37
+-- READINGS, gate[architecture], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   0.6 / 0.002 / $0.08                           -         0.1 / 0.000 / $0.00
+   gate-run                0.6 / 0.002 / $0.03                           -                           -
+   did-nothing             0.2 / 0.000 / $0.01                           -                           -
+   text                    1.0 / 0.040 / $0.09         0.1 / 0.000 / $0.02         0.1 / 0.000 / $0.00
+   procedure               0.9 / 0.001 / $0.03         0.0 / 0.000 / $0.00                           -
+   open                    3.5 / 0.007 / $0.14         0.0 / 0.000 / $0.00         0.1 / 0.001 / $0.01
+   all other               6.9 / 0.053 / $0.37         0.2 / 0.000 / $0.02         0.3 / 0.002 / $0.02
+-- READINGS, gate[bug-investigation], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   0.1 / 0.000 / $0.01                           -                           -
+   text                    0.1 / 0.000 / $0.01                           -                           -
+   open                    0.5 / 0.000 / $0.02                           -                           -
+   all other               0.8 / 0.001 / $0.03         0.0 / 0.000 / $0.00         0.0 / 0.000 / $0.00
+-- READINGS, gate[carry-over-evaluation], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   gate-run                1.0 / 0.005 / $0.05                           -                           -
+   did-nothing             0.1 / 0.000 / $0.01                           -                           -
+   procedure               2.6 / 0.003 / $0.10                           -         0.1 / 0.000 / $0.00
+   open                    2.0 / 0.004 / $0.11                           -         0.3 / 0.003 / $0.02
+   all other               5.8 / 0.013 / $0.27         0.0 / 0.000 / $0.00         0.3 / 0.003 / $0.02
+-- READINGS, gate[implementation], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   3.9 / 0.010 / $0.14         0.2 / 0.000 / $0.01         0.2 / 0.000 / $0.02
+   gate-run                0.1 / 0.000 / $0.00                           -                           -
+   did-nothing             2.5 / 0.004 / $0.10                           -                           -
+   text                    5.8 / 0.034 / $0.22         3.3 / 0.013 / $0.20         8.1 / 0.023 / $0.49
+   procedure               3.0 / 0.005 / $0.11         0.2 / 0.001 / $0.03         0.1 / 0.002 / $0.04
+   open                   25.4 / 0.091 / $0.90         3.7 / 0.012 / $0.32         2.0 / 0.015 / $0.13
+   all other              40.6 / 0.144 / $1.47         7.5 / 0.027 / $0.57        10.5 / 0.041 / $0.67
+-- READINGS, gate[requirements], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   0.1 / 0.000 / $0.00         0.2 / 0.001 / $0.02                           -
+   gate-run                0.5 / 0.001 / $0.02                           -                           -
+   wait-poll               0.1 / 0.000 / $0.01         0.0 / 0.000 / $0.00                           -
+   did-nothing             0.1 / 0.000 / $0.00         0.0 / 0.000 / $0.01                           -
+   text                    1.0 / 0.002 / $0.04         0.2 / 0.000 / $0.01         0.1 / 0.000 / $0.01
+   procedure               2.4 / 0.006 / $0.10         0.1 / 0.000 / $0.03         0.1 / 0.001 / $0.02
+   open                    4.2 / 0.008 / $0.15         0.6 / 0.004 / $0.05         0.2 / 0.000 / $0.01
+   all other               8.5 / 0.017 / $0.32         1.2 / 0.005 / $0.12         0.4 / 0.002 / $0.04
+-- READINGS, gate[retro], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   0.9 / 0.002 / $0.03                           -                           -
+   did-nothing             0.1 / 0.000 / $0.01                           -                           -
+   procedure               1.0 / 0.004 / $0.04                           -                           -
+   open                    4.6 / 0.011 / $0.20                           -                           -
+   all other               6.6 / 0.017 / $0.28         0.0 / 0.000 / $0.00         0.0 / 0.000 / $0.00
+-- READINGS, gate[sprint-review], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   0.5 / 0.000 / $0.02                           -                           -
+   did-nothing             0.4 / 0.002 / $0.02                           -                           -
+   text                    0.1 / 0.002 / $0.01                           -         0.3 / 0.000 / $0.02
+   procedure               1.1 / 0.001 / $0.04         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   open                    5.6 / 0.016 / $0.20         0.2 / 0.007 / $0.02         0.4 / 0.001 / $0.03
+   all other               7.8 / 0.021 / $0.29         0.2 / 0.007 / $0.02         0.8 / 0.002 / $0.05
+-- READINGS, gate[stories-test-strategy], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   0.6 / 0.007 / $0.04         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   gate-run                0.2 / 0.001 / $0.01                           -                           -
+   did-nothing             0.4 / 0.000 / $0.01                           -                           -
+   text                                      -         0.1 / 0.000 / $0.01         2.8 / 0.002 / $0.18
+   procedure               3.4 / 0.007 / $0.15         0.0 / 0.000 / $0.01         0.1 / 0.000 / $0.01
+   open                    4.5 / 0.007 / $0.17         0.2 / 0.002 / $0.02         0.4 / 0.001 / $0.02
+   all other               9.1 / 0.023 / $0.38         0.4 / 0.002 / $0.04         3.3 / 0.003 / $0.21
+-- READINGS, handoff, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   1.0 / 0.002 / $0.06         0.4 / 0.001 / $0.02         0.7 / 0.002 / $0.03
+   wait-poll                                 -                           -         0.1 / 0.001 / $0.01
+   did-nothing             1.8 / 0.019 / $0.06         0.2 / 0.000 / $0.01         0.2 / 0.002 / $0.02
+   text                    4.5 / 0.028 / $0.15         1.8 / 0.005 / $0.09         4.2 / 0.008 / $0.25
+   procedure               1.1 / 0.002 / $0.04         0.2 / 0.003 / $0.01         0.0 / 0.001 / $0.00
+   open                   15.9 / 0.065 / $0.64         2.3 / 0.009 / $0.12         3.6 / 0.027 / $0.24
+   all other              24.2 / 0.116 / $0.94         4.9 / 0.018 / $0.25         8.9 / 0.040 / $0.54
+-- READINGS, implementation, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   9.8 / 0.020 / $0.34         0.4 / 0.000 / $0.02         1.8 / 0.002 / $0.10
+   gate-run                0.9 / 0.002 / $0.04                           -                           -
+   dispatch                0.1 / 0.000 / $0.01                           -                           -
+   wait-poll               2.0 / 0.020 / $0.07                           -                           -
+   did-nothing             3.4 / 0.005 / $0.11         0.0 / 0.000 / $0.00         0.1 / 0.001 / $0.00
+   text                   11.0 / 0.077 / $0.40        11.7 / 0.082 / $0.68        39.7 / 0.149 / $2.26
+   procedure               9.0 / 0.013 / $0.27         0.4 / 0.001 / $0.02         0.5 / 0.003 / $0.03
+   open                   47.4 / 0.161 / $1.82         4.5 / 0.024 / $0.28         3.6 / 0.033 / $0.22
+   all other              83.5 / 0.298 / $3.06        17.0 / 0.106 / $1.00        45.7 / 0.187 / $2.62
+-- READINGS, pre-step, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   did-nothing             0.6 / 0.000 / $0.01                           -         0.2 / 0.000 / $0.18
+   procedure               0.4 / 0.001 / $0.00         0.2 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   open                    2.1 / 0.015 / $0.09         1.1 / 0.003 / $0.17         0.8 / 0.004 / $0.15
+   all other               3.1 / 0.016 / $0.10         1.3 / 0.003 / $0.18         1.1 / 0.004 / $0.33
+-- READINGS, requirements, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                  10.1 / 0.023 / $0.41         0.8 / 0.001 / $0.05         0.7 / 0.001 / $0.03
+   gate-run                0.1 / 0.000 / $0.00                           -                           -
+   dispatch                0.4 / 0.001 / $0.02                           -                           -
+   wait-poll                                 -         0.1 / 0.000 / $0.01         0.5 / 0.001 / $0.03
+   did-nothing             1.0 / 0.002 / $0.03         0.0 / 0.000 / $0.00         0.3 / 0.001 / $0.02
+   text                   17.1 / 0.083 / $0.68         8.0 / 0.011 / $0.43        10.8 / 0.025 / $0.61
+   procedure               9.2 / 0.016 / $0.26         0.4 / 0.001 / $0.03         0.7 / 0.003 / $0.04
+   open                   27.0 / 0.074 / $1.07         4.0 / 0.017 / $0.22         8.2 / 0.036 / $0.62
+   all other              65.0 / 0.199 / $2.48        13.4 / 0.030 / $0.74        21.1 / 0.066 / $1.33
+-- READINGS, retro, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   2.4 / 0.007 / $0.09         0.1 / 0.000 / $0.01         0.1 / 0.000 / $0.00
+   gate-run                0.1 / 0.000 / $0.01                           -                           -
+   wait-poll                                 -         0.0 / 0.000 / $0.00                           -
+   did-nothing             1.8 / 0.013 / $0.06         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   text                    3.8 / 0.008 / $0.14         0.7 / 0.001 / $0.04         0.9 / 0.002 / $0.06
+   procedure               3.6 / 0.008 / $0.11         0.0 / 0.000 / $0.01         0.1 / 0.000 / $0.00
+   open                   38.8 / 0.158 / $1.40         1.6 / 0.007 / $0.11         3.4 / 0.022 / $0.31
+   all other              50.4 / 0.194 / $1.81         2.6 / 0.009 / $0.18         4.4 / 0.024 / $0.38
+-- READINGS, route, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   0.5 / 0.003 / $0.02                           -                           -
+   gate-run                0.2 / 0.003 / $0.01                           -                           -
+   wait-poll               0.1 / 0.001 / $0.01                           -                           -
+   did-nothing             1.2 / 0.005 / $0.03         0.0 / 0.000 / $0.00                           -
+   procedure               3.8 / 0.017 / $0.10         0.2 / 0.000 / $0.01         0.3 / 0.000 / $0.03
+   open                    9.6 / 0.046 / $0.29         0.9 / 0.004 / $0.03         0.9 / 0.006 / $0.05
+   all other              15.5 / 0.074 / $0.45         1.1 / 0.005 / $0.05         1.2 / 0.006 / $0.09
+-- READINGS, sprint-review, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                   1.4 / 0.002 / $0.05         0.1 / 0.000 / $0.00         0.1 / 0.000 / $0.01
+   did-nothing             1.4 / 0.005 / $0.05                           -                           -
+   text                    2.8 / 0.045 / $0.11         2.5 / 0.028 / $0.12         1.9 / 0.004 / $0.12
+   procedure               3.2 / 0.004 / $0.10         0.2 / 0.001 / $0.01         0.1 / 0.000 / $0.00
+   open                    5.1 / 0.009 / $0.16         0.4 / 0.002 / $0.03         3.1 / 0.005 / $0.20
+   all other              13.9 / 0.064 / $0.47         3.2 / 0.031 / $0.16         5.2 / 0.010 / $0.34
+-- READINGS, stories-test-strategy, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   merge                  15.8 / 0.024 / $0.61         3.6 / 0.009 / $0.19         1.4 / 0.002 / $0.08
+   gate-run                0.2 / 0.001 / $0.01                           -                           -
+   dispatch                0.1 / 0.000 / $0.00         0.0 / 0.000 / $0.00                           -
+   wait-poll               1.6 / 0.002 / $0.06         0.6 / 0.001 / $0.04         0.2 / 0.000 / $0.01
+   did-nothing             2.2 / 0.003 / $0.08         0.3 / 0.000 / $0.02         0.1 / 0.000 / $0.00
+   text                   14.4 / 0.084 / $0.50        12.4 / 0.029 / $0.70        14.7 / 0.025 / $0.83
+   procedure              10.4 / 0.013 / $0.38         1.4 / 0.003 / $0.08         0.3 / 0.003 / $0.02
+   open                   31.9 / 0.083 / $1.23         8.8 / 0.039 / $0.51         3.8 / 0.016 / $0.28
+   all other              76.6 / 0.210 / $2.87        27.2 / 0.081 / $1.54        20.4 / 0.046 / $1.21
+-- READINGS, ui-direction, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   reading                    s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   text                                      -         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   all other               0.0 / 0.000 / $0.00         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+-- all steps, pipeline bucket, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll               3.9 / 0.023 / $0.14         1.0 / 0.002 / $0.06         1.3 / 0.003 / $0.07
+   sleep                   2.9 / 0.023 / $0.11         0.6 / 0.008 / $0.04         1.0 / 0.005 / $0.06
+   git                    27.9 / 0.111 / $0.98         2.6 / 0.015 / $0.16         5.2 / 0.038 / $0.49
+   script                 10.2 / 0.032 / $0.34         2.2 / 0.010 / $0.14         1.6 / 0.004 / $0.11
+   inline-interp           8.9 / 0.021 / $0.32         2.2 / 0.009 / $0.14         2.1 / 0.013 / $0.16
+   shell-read            180.6 / 0.354 / $6.54        21.0 / 0.056 / $1.30        26.6 / 0.066 / $1.82
+   shell-write             8.5 / 0.011 / $0.37         2.2 / 0.003 / $0.25         1.9 / 0.006 / $0.23
+   test-build              1.0 / 0.002 / $0.03         0.1 / 0.000 / $0.01         0.1 / 0.000 / $0.01
+   shell-builtin           1.4 / 0.004 / $0.05         0.5 / 0.000 / $0.01         0.1 / 0.000 / $0.01
+   bash-other              8.1 / 0.016 / $0.32         1.2 / 0.005 / $0.08         1.1 / 0.006 / $0.08
+   ctx-exec               59.8 / 0.189 / $2.24         0.1 / 0.000 / $0.01         0.2 / 0.000 / $0.02
+   ctx-search             21.6 / 0.043 / $0.76         0.2 / 0.000 / $0.01         0.1 / 0.004 / $0.01
+   mcp-other               4.9 / 0.047 / $0.23         0.3 / 0.004 / $0.01                           -
+   read                   60.9 / 0.131 / $2.06         5.7 / 0.018 / $0.35         4.0 / 0.016 / $0.30
+   edit                   38.1 / 0.134 / $1.68         3.7 / 0.015 / $0.30         1.1 / 0.004 / $0.09
+   harness                12.9 / 0.050 / $0.66         1.9 / 0.006 / $0.11         1.8 / 0.008 / $0.13
+   operator                2.5 / 0.061 / $0.13         0.8 / 0.032 / $0.05         1.1 / 0.051 / $0.08
+   tool-other              0.4 / 0.001 / $0.01                           -                           -
+   text                   87.6 / 0.520 / $3.40        53.2 / 0.210 / $3.04        97.5 / 0.272 / $5.58
+   no-message              0.0 / 0.012 / $0.00         0.0 / 0.002 / $0.00         0.0 / 0.004 / $0.00
+   all other            542.0 / 1.785 / $20.38        99.5 / 0.397 / $6.05       146.9 / 0.500 / $9.25
+-- architecture, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll                                 -         0.0 / 0.000 / $0.00                           -
+   sleep                                     -         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   git                     0.5 / 0.001 / $0.02                           -         0.1 / 0.000 / $0.00
+   script                                    -         0.0 / 0.000 / $0.00                           -
+   inline-interp           0.1 / 0.001 / $0.00                           -         0.1 / 0.000 / $0.01
+   shell-read              3.1 / 0.006 / $0.11         0.6 / 0.001 / $0.04         1.4 / 0.003 / $0.08
+   shell-write             0.2 / 0.000 / $0.01         0.0 / 0.000 / $0.00                           -
+   test-build              0.1 / 0.000 / $0.00                           -                           -
+   bash-other              0.1 / 0.000 / $0.00                           -                           -
+   ctx-exec                3.1 / 0.013 / $0.20                           -                           -
+   ctx-search              0.5 / 0.001 / $0.02         0.0 / 0.000 / $0.00                           -
+   read                    6.4 / 0.012 / $0.29         0.2 / 0.000 / $0.02         0.5 / 0.001 / $0.07
+   edit                    0.6 / 0.001 / $0.03         0.2 / 0.000 / $0.01         0.2 / 0.001 / $0.01
+   harness                 0.4 / 0.001 / $0.01         0.1 / 0.000 / $0.01         0.1 / 0.000 / $0.01
+   operator                                  -                           -         0.1 / 0.001 / $0.01
+   text                    8.4 / 0.022 / $0.36         5.8 / 0.006 / $0.35         7.5 / 0.010 / $0.39
+   all other              23.6 / 0.058 / $1.06         7.1 / 0.009 / $0.44         9.9 / 0.017 / $0.58
+-- bug-investigation, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll               0.1 / 0.000 / $0.00                           -                           -
+   git                     1.0 / 0.002 / $0.04                           -                           -
+   script                  0.1 / 0.001 / $0.00                           -                           -
+   inline-interp           0.2 / 0.001 / $0.01                           -                           -
+   shell-read              5.6 / 0.013 / $0.20                           -                           -
+   shell-write             0.2 / 0.000 / $0.01                           -                           -
+   bash-other              0.2 / 0.000 / $0.01                           -                           -
+   ctx-exec                0.6 / 0.004 / $0.02                           -                           -
+   ctx-search              0.2 / 0.001 / $0.01                           -                           -
+   read                    1.2 / 0.002 / $0.04                           -                           -
+   edit                    0.1 / 0.000 / $0.01                           -                           -
+   harness                 1.2 / 0.001 / $0.06                           -                           -
+   operator                0.1 / 0.004 / $0.00                           -                           -
+   text                    2.9 / 0.019 / $0.11                           -                           -
+   all other              14.1 / 0.049 / $0.53         0.0 / 0.000 / $0.00         0.0 / 0.000 / $0.00
+-- carry-over-evaluation, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll                                 -                           -         0.5 / 0.001 / $0.02
+   sleep                   0.1 / 0.000 / $0.01                           -                           -
+   git                     0.1 / 0.000 / $0.00                           -                           -
+   script                  0.5 / 0.002 / $0.02                           -         0.1 / 0.000 / $0.01
+   inline-interp           1.4 / 0.003 / $0.06                           -         0.1 / 0.000 / $0.01
+   shell-read             22.5 / 0.036 / $0.82                           -         2.4 / 0.010 / $0.16
+   shell-write             0.8 / 0.001 / $0.03                           -         0.1 / 0.000 / $0.00
+   test-build              0.4 / 0.002 / $0.02                           -                           -
+   shell-builtin           0.1 / 0.000 / $0.01                           -                           -
+   bash-other              2.1 / 0.004 / $0.10                           -         0.1 / 0.000 / $0.00
+   ctx-exec                6.4 / 0.015 / $0.19                           -                           -
+   ctx-search              2.0 / 0.003 / $0.07                           -                           -
+   read                    5.6 / 0.010 / $0.15                           -         0.1 / 0.000 / $0.01
+   edit                    2.4 / 0.009 / $0.10                           -                           -
+   harness                 0.4 / 0.002 / $0.01                           -         0.1 / 0.000 / $0.01
+   operator                0.1 / 0.000 / $0.00                           -         0.1 / 0.001 / $0.01
+   tool-other              0.1 / 0.000 / $0.00                           -                           -
+   text                   10.8 / 0.050 / $0.38                           -         4.1 / 0.005 / $0.23
+   all other              55.8 / 0.136 / $1.96         0.0 / 0.000 / $0.00         7.7 / 0.018 / $0.45
+-- deploy-validate, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll                                 -         0.1 / 0.000 / $0.00                           -
+   sleep                   0.8 / 0.011 / $0.03         0.4 / 0.008 / $0.02                           -
+   git                     3.6 / 0.007 / $0.13         0.2 / 0.004 / $0.03         0.2 / 0.002 / $0.02
+   script                  0.2 / 0.000 / $0.01         0.1 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   inline-interp           0.4 / 0.000 / $0.01                           -         0.1 / 0.000 / $0.01
+   shell-read             10.2 / 0.012 / $0.39         2.7 / 0.008 / $0.18         2.4 / 0.007 / $0.16
+   shell-write             0.9 / 0.001 / $0.05         0.6 / 0.001 / $0.03         0.1 / 0.000 / $0.01
+   test-build              0.1 / 0.000 / $0.00         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   bash-other              1.8 / 0.002 / $0.06         0.2 / 0.000 / $0.01         0.3 / 0.001 / $0.02
+   ctx-exec                1.1 / 0.002 / $0.04                           -                           -
+   ctx-search              0.9 / 0.001 / $0.02         0.1 / 0.000 / $0.00                           -
+   mcp-other               0.6 / 0.006 / $0.02                           -                           -
+   read                    1.5 / 0.002 / $0.04         0.3 / 0.001 / $0.02                           -
+   edit                    2.9 / 0.007 / $0.13         0.4 / 0.001 / $0.03         0.1 / 0.000 / $0.01
+   harness                 1.1 / 0.005 / $0.10         0.2 / 0.001 / $0.01         0.1 / 0.000 / $0.01
+   operator                                  -         0.2 / 0.004 / $0.02                           -
+   text                    4.1 / 0.024 / $0.21         6.5 / 0.035 / $0.39         2.1 / 0.018 / $0.13
+   all other              30.2 / 0.081 / $1.25        12.1 / 0.064 / $0.76         5.6 / 0.029 / $0.37
+-- gate[architecture], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   sleep                   0.1 / 0.000 / $0.00                           -                           -
+   git                                       -                           -         0.1 / 0.000 / $0.00
+   script                  0.1 / 0.000 / $0.00                           -                           -
+   inline-interp           0.5 / 0.001 / $0.02                           -                           -
+   shell-read              2.1 / 0.002 / $0.08                           -         0.1 / 0.000 / $0.00
+   shell-write             0.1 / 0.000 / $0.01                           -                           -
+   bash-other              0.1 / 0.000 / $0.01                           -                           -
+   ctx-exec                1.4 / 0.006 / $0.06                           -                           -
+   ctx-search              0.5 / 0.001 / $0.01                           -                           -
+   read                    0.8 / 0.002 / $0.08         0.1 / 0.000 / $0.01         0.1 / 0.000 / $0.00
+   edit                    0.1 / 0.000 / $0.01                           -                           -
+   harness                                   -                           -         0.1 / 0.001 / $0.00
+   text                    1.0 / 0.040 / $0.09         0.1 / 0.000 / $0.02         0.1 / 0.000 / $0.00
+   all other               6.9 / 0.053 / $0.37         0.2 / 0.000 / $0.02         0.3 / 0.002 / $0.02
+-- gate[bug-investigation], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   git                     0.1 / 0.000 / $0.01                           -                           -
+   shell-read              0.2 / 0.000 / $0.01                           -                           -
+   read                    0.1 / 0.000 / $0.01                           -                           -
+   edit                    0.1 / 0.000 / $0.01                           -                           -
+   text                    0.1 / 0.000 / $0.01                           -                           -
+   all other               0.8 / 0.001 / $0.03         0.0 / 0.000 / $0.00         0.0 / 0.000 / $0.00
+-- gate[carry-over-evaluation], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   script                  0.2 / 0.000 / $0.01                           -                           -
+   inline-interp           0.2 / 0.000 / $0.01                           -                           -
+   shell-read              2.5 / 0.004 / $0.10                           -         0.1 / 0.000 / $0.01
+   bash-other              0.1 / 0.000 / $0.01                           -         0.1 / 0.000 / $0.01
+   ctx-exec                1.4 / 0.006 / $0.07                           -                           -
+   ctx-search              0.1 / 0.000 / $0.02                           -                           -
+   read                    0.9 / 0.001 / $0.03                           -         0.1 / 0.000 / $0.00
+   edit                    0.1 / 0.000 / $0.01                           -                           -
+   harness                 0.1 / 0.001 / $0.00                           -                           -
+   operator                                  -                           -         0.1 / 0.002 / $0.00
+   all other               5.8 / 0.013 / $0.27         0.0 / 0.000 / $0.00         0.3 / 0.003 / $0.02
+-- gate[implementation], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   sleep                                     -                           -         0.1 / 0.000 / $0.00
+   git                     1.1 / 0.003 / $0.04         0.2 / 0.001 / $0.01                           -
+   script                  0.1 / 0.000 / $0.01         0.2 / 0.001 / $0.02                           -
+   inline-interp           1.8 / 0.004 / $0.05         0.4 / 0.002 / $0.03         0.1 / 0.000 / $0.01
+   shell-read             12.1 / 0.022 / $0.44         2.1 / 0.003 / $0.17         1.5 / 0.002 / $0.11
+   shell-write                               -         0.0 / 0.000 / $0.00                           -
+   bash-other              0.2 / 0.000 / $0.01         0.1 / 0.001 / $0.01                           -
+   ctx-exec                5.4 / 0.020 / $0.22                           -                           -
+   ctx-search              2.4 / 0.004 / $0.07                           -                           -
+   mcp-other               1.0 / 0.011 / $0.04                           -                           -
+   read                    6.1 / 0.012 / $0.18         0.4 / 0.001 / $0.04         0.2 / 0.003 / $0.03
+   edit                    3.2 / 0.012 / $0.15         0.6 / 0.004 / $0.08         0.1 / 0.000 / $0.01
+   harness                 0.9 / 0.003 / $0.03         0.2 / 0.000 / $0.01         0.2 / 0.001 / $0.02
+   operator                0.4 / 0.019 / $0.02                           -         0.1 / 0.012 / $0.01
+   tool-other              0.1 / 0.000 / $0.00                           -                           -
+   text                    5.8 / 0.034 / $0.22         3.3 / 0.013 / $0.20         8.1 / 0.023 / $0.49
+   all other              40.6 / 0.144 / $1.47         7.5 / 0.027 / $0.57        10.5 / 0.041 / $0.67
+-- gate[requirements], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll               0.1 / 0.000 / $0.01         0.0 / 0.000 / $0.00                           -
+   git                     0.1 / 0.000 / $0.01         0.0 / 0.001 / $0.00                           -
+   inline-interp           0.6 / 0.004 / $0.03                           -                           -
+   shell-read              1.4 / 0.002 / $0.06         0.6 / 0.003 / $0.05         0.1 / 0.000 / $0.01
+   ctx-exec                3.0 / 0.006 / $0.10                           -                           -
+   ctx-search              0.2 / 0.000 / $0.01                           -                           -
+   read                    1.4 / 0.002 / $0.06         0.2 / 0.001 / $0.04         0.1 / 0.001 / $0.02
+   edit                    0.2 / 0.001 / $0.01         0.1 / 0.000 / $0.01         0.1 / 0.000 / $0.00
+   harness                 0.2 / 0.000 / $0.01                           -                           -
+   operator                0.1 / 0.000 / $0.00                           -                           -
+   text                    1.0 / 0.002 / $0.04         0.2 / 0.000 / $0.01         0.1 / 0.000 / $0.01
+   all other               8.5 / 0.017 / $0.32         1.2 / 0.005 / $0.12         0.4 / 0.002 / $0.04
+-- gate[retro], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   git                     0.4 / 0.001 / $0.01                           -                           -
+   inline-interp           0.1 / 0.001 / $0.00                           -                           -
+   shell-read              2.4 / 0.005 / $0.09                           -                           -
+   ctx-exec                2.4 / 0.006 / $0.10                           -                           -
+   ctx-search              0.1 / 0.000 / $0.00                           -                           -
+   mcp-other               0.1 / 0.002 / $0.01                           -                           -
+   read                    0.2 / 0.001 / $0.01                           -                           -
+   edit                    0.9 / 0.002 / $0.04                           -                           -
+   all other               6.6 / 0.017 / $0.28         0.0 / 0.000 / $0.00         0.0 / 0.000 / $0.00
+-- gate[sprint-review], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   git                     0.4 / 0.001 / $0.01                           -         0.1 / 0.000 / $0.00
+   script                  0.2 / 0.000 / $0.01                           -                           -
+   inline-interp           0.4 / 0.001 / $0.01                           -                           -
+   shell-read              3.4 / 0.003 / $0.13         0.1 / 0.000 / $0.00         0.2 / 0.000 / $0.02
+   bash-other              0.2 / 0.000 / $0.01                           -         0.1 / 0.000 / $0.01
+   ctx-search              1.1 / 0.003 / $0.04                           -                           -
+   mcp-other               0.8 / 0.006 / $0.03                           -                           -
+   read                    0.1 / 0.000 / $0.00                           -         0.1 / 0.000 / $0.00
+   edit                    1.0 / 0.004 / $0.04         0.1 / 0.001 / $0.01                           -
+   harness                                   -                           -         0.1 / 0.000 / $0.00
+   operator                                  -         0.0 / 0.006 / $0.00                           -
+   text                    0.1 / 0.002 / $0.01                           -         0.3 / 0.000 / $0.02
+   all other               7.8 / 0.021 / $0.29         0.2 / 0.007 / $0.02         0.8 / 0.002 / $0.05
+-- gate[stories-test-strategy], per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   sleep                                     -                           -         0.1 / 0.000 / $0.01
+   git                                       -         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   script                  0.9 / 0.002 / $0.04                           -                           -
+   inline-interp                             -                           -         0.1 / 0.000 / $0.00
+   shell-read              6.4 / 0.017 / $0.27         0.2 / 0.002 / $0.02         0.3 / 0.001 / $0.02
+   bash-other              0.1 / 0.000 / $0.00                           -                           -
+   ctx-exec                0.2 / 0.001 / $0.01                           -                           -
+   ctx-search              0.1 / 0.000 / $0.01                           -                           -
+   read                    1.1 / 0.001 / $0.04         0.0 / 0.000 / $0.00                           -
+   edit                    0.2 / 0.001 / $0.01                           -                           -
+   text                                      -         0.1 / 0.000 / $0.01         2.8 / 0.002 / $0.18
+   all other               9.1 / 0.023 / $0.38         0.4 / 0.002 / $0.04         3.3 / 0.003 / $0.21
+-- handoff, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll                                 -                           -         0.1 / 0.001 / $0.01
+   sleep                                     -                           -         0.2 / 0.003 / $0.02
+   git                     4.8 / 0.035 / $0.16         0.8 / 0.004 / $0.04         1.8 / 0.020 / $0.12
+   script                  0.4 / 0.001 / $0.01         0.2 / 0.000 / $0.01                           -
+   inline-interp           0.8 / 0.002 / $0.03         0.1 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   shell-read              7.8 / 0.020 / $0.30         1.0 / 0.003 / $0.05         1.4 / 0.004 / $0.09
+   shell-write             1.2 / 0.003 / $0.05         0.3 / 0.000 / $0.01         0.5 / 0.001 / $0.03
+   shell-builtin           0.1 / 0.000 / $0.00                           -                           -
+   bash-other              1.0 / 0.004 / $0.04                           -         0.1 / 0.000 / $0.00
+   ctx-exec                0.5 / 0.002 / $0.01                           -                           -
+   ctx-search              0.5 / 0.001 / $0.03                           -         0.1 / 0.001 / $0.00
+   mcp-other               0.1 / 0.001 / $0.00         0.0 / 0.001 / $0.00                           -
+   read                    0.2 / 0.001 / $0.01         0.2 / 0.003 / $0.01         0.1 / 0.001 / $0.00
+   edit                    1.1 / 0.004 / $0.05         0.2 / 0.001 / $0.01                           -
+   harness                 0.9 / 0.009 / $0.07         0.3 / 0.001 / $0.02         0.2 / 0.002 / $0.02
+   operator                0.4 / 0.006 / $0.02                           -                           -
+   text                    4.5 / 0.028 / $0.15         1.8 / 0.005 / $0.09         4.2 / 0.008 / $0.25
+   all other              24.2 / 0.116 / $0.94         4.9 / 0.018 / $0.25         8.9 / 0.040 / $0.54
+-- implementation, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll               1.9 / 0.020 / $0.07                           -                           -
+   sleep                   0.1 / 0.000 / $0.01         0.1 / 0.000 / $0.00         0.2 / 0.000 / $0.01
+   git                     5.1 / 0.016 / $0.17         0.3 / 0.002 / $0.02         0.3 / 0.001 / $0.03
+   script                  0.6 / 0.001 / $0.02         0.2 / 0.001 / $0.02         0.1 / 0.000 / $0.00
+   inline-interp           0.2 / 0.000 / $0.01         0.1 / 0.000 / $0.00                           -
+   shell-read             25.8 / 0.055 / $0.91         2.5 / 0.005 / $0.15         3.9 / 0.005 / $0.21
+   shell-write             1.1 / 0.001 / $0.04         0.2 / 0.000 / $0.01         0.1 / 0.000 / $0.00
+   bash-other              1.6 / 0.003 / $0.06         0.4 / 0.002 / $0.03         0.1 / 0.004 / $0.02
+   ctx-exec                8.5 / 0.033 / $0.31                           -                           -
+   ctx-search              2.4 / 0.006 / $0.09         0.0 / 0.000 / $0.00         0.1 / 0.003 / $0.01
+   mcp-other               1.1 / 0.012 / $0.09                           -                           -
+   read                   13.8 / 0.035 / $0.44         0.6 / 0.002 / $0.03         0.6 / 0.003 / $0.03
+   edit                    7.6 / 0.019 / $0.31         0.5 / 0.001 / $0.03         0.1 / 0.001 / $0.01
+   harness                 2.1 / 0.008 / $0.10         0.2 / 0.001 / $0.01         0.3 / 0.000 / $0.02
+   operator                0.5 / 0.012 / $0.03         0.2 / 0.012 / $0.01         0.2 / 0.020 / $0.01
+   text                   11.0 / 0.077 / $0.40        11.7 / 0.082 / $0.68        39.7 / 0.149 / $2.26
+   all other              83.5 / 0.298 / $3.06        17.0 / 0.106 / $1.00        45.7 / 0.187 / $2.62
+-- pre-step, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   git                                       -         0.0 / 0.000 / $0.00                           -
+   shell-read              1.1 / 0.001 / $0.01         0.1 / 0.000 / $0.00         0.2 / 0.000 / $0.17
+   shell-write             0.8 / 0.000 / $0.06         0.5 / 0.000 / $0.15         0.6 / 0.000 / $0.14
+   shell-builtin           0.1 / 0.000 / $0.00         0.5 / 0.000 / $0.01                           -
+   mcp-other               0.1 / 0.000 / $0.01                           -                           -
+   read                    0.8 / 0.001 / $0.01         0.2 / 0.000 / $0.02         0.2 / 0.000 / $0.01
+   harness                 0.2 / 0.001 / $0.01                           -         0.1 / 0.000 / $0.01
+   no-message              0.0 / 0.012 / $0.00         0.0 / 0.002 / $0.00         0.0 / 0.004 / $0.00
+   all other               3.1 / 0.016 / $0.10         1.3 / 0.003 / $0.18         1.1 / 0.004 / $0.33
+-- requirements, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll                                 -         0.1 / 0.000 / $0.01         0.5 / 0.001 / $0.03
+   sleep                   0.1 / 0.000 / $0.01         0.0 / 0.000 / $0.00         0.2 / 0.001 / $0.01
+   git                     1.2 / 0.002 / $0.04         0.1 / 0.001 / $0.01         1.2 / 0.004 / $0.18
+   script                  2.2 / 0.003 / $0.07         0.1 / 0.000 / $0.01         0.8 / 0.002 / $0.05
+   inline-interp           1.0 / 0.001 / $0.03         0.3 / 0.001 / $0.02         1.2 / 0.007 / $0.09
+   shell-read             21.5 / 0.038 / $0.75         2.7 / 0.007 / $0.15         4.4 / 0.015 / $0.25
+   shell-write             0.5 / 0.001 / $0.02         0.3 / 0.000 / $0.02         0.1 / 0.001 / $0.01
+   shell-builtin           0.1 / 0.000 / $0.00                           -         0.1 / 0.000 / $0.00
+   bash-other              0.1 / 0.000 / $0.01         0.3 / 0.001 / $0.02         0.2 / 0.000 / $0.02
+   ctx-exec                7.2 / 0.020 / $0.26         0.0 / 0.000 / $0.00                           -
+   ctx-search              2.5 / 0.008 / $0.10                           -                           -
+   read                    5.4 / 0.011 / $0.20         0.6 / 0.001 / $0.03         0.8 / 0.002 / $0.04
+   edit                    4.0 / 0.008 / $0.19         0.4 / 0.001 / $0.02         0.1 / 0.000 / $0.02
+   harness                 1.1 / 0.010 / $0.09         0.2 / 0.000 / $0.01         0.1 / 0.000 / $0.01
+   operator                0.6 / 0.012 / $0.03         0.2 / 0.005 / $0.01         0.3 / 0.007 / $0.02
+   tool-other              0.1 / 0.001 / $0.00                           -                           -
+   text                   17.1 / 0.083 / $0.68         8.0 / 0.011 / $0.43        10.8 / 0.025 / $0.61
+   all other              65.0 / 0.199 / $2.48        13.4 / 0.030 / $0.74        21.1 / 0.066 / $1.33
+-- retro, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll                                 -         0.0 / 0.000 / $0.00                           -
+   sleep                   0.6 / 0.010 / $0.02                           -                           -
+   git                     6.8 / 0.040 / $0.24         0.4 / 0.001 / $0.03         1.2 / 0.010 / $0.11
+   script                  0.4 / 0.001 / $0.01         0.2 / 0.003 / $0.01         0.5 / 0.001 / $0.03
+   inline-interp           0.2 / 0.000 / $0.01         0.2 / 0.001 / $0.02         0.1 / 0.004 / $0.01
+   shell-read             18.2 / 0.054 / $0.63         0.4 / 0.001 / $0.03         1.2 / 0.003 / $0.11
+   shell-write             1.2 / 0.002 / $0.05         0.1 / 0.000 / $0.01         0.1 / 0.000 / $0.00
+   test-build              0.2 / 0.000 / $0.01         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   bash-other                                -         0.1 / 0.000 / $0.01                           -
+   ctx-exec                1.8 / 0.013 / $0.08                           -                           -
+   ctx-search              3.4 / 0.006 / $0.10                           -                           -
+   mcp-other               0.8 / 0.008 / $0.03                           -                           -
+   read                    3.6 / 0.010 / $0.11         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.01
+   edit                    7.1 / 0.038 / $0.31         0.2 / 0.001 / $0.02         0.2 / 0.001 / $0.03
+   harness                 2.2 / 0.004 / $0.07         0.1 / 0.000 / $0.01         0.1 / 0.000 / $0.00
+   operator                                  -                           -         0.1 / 0.002 / $0.00
+   text                    3.8 / 0.008 / $0.14         0.7 / 0.001 / $0.04         0.9 / 0.002 / $0.06
+   all other              50.4 / 0.194 / $1.81         2.6 / 0.009 / $0.18         4.4 / 0.024 / $0.38
+-- route, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll               0.1 / 0.001 / $0.01                           -                           -
+   git                     0.6 / 0.002 / $0.02         0.1 / 0.000 / $0.00                           -
+   script                  1.2 / 0.011 / $0.03         0.1 / 0.000 / $0.01         0.1 / 0.000 / $0.00
+   inline-interp           0.1 / 0.000 / $0.00                           -                           -
+   shell-read              5.6 / 0.024 / $0.17         0.4 / 0.001 / $0.02         0.3 / 0.000 / $0.02
+   shell-write             0.4 / 0.001 / $0.01                           -         0.1 / 0.000 / $0.02
+   shell-builtin           0.1 / 0.002 / $0.00         0.0 / 0.000 / $0.00                           -
+   bash-other              0.1 / 0.001 / $0.01                           -                           -
+   ctx-exec                1.6 / 0.008 / $0.03                           -                           -
+   ctx-search              0.4 / 0.001 / $0.03                           -                           -
+   read                    4.2 / 0.016 / $0.09         0.5 / 0.001 / $0.02         0.6 / 0.001 / $0.04
+   edit                    0.5 / 0.004 / $0.02                           -         0.1 / 0.000 / $0.00
+   harness                 0.2 / 0.001 / $0.00                           -                           -
+   operator                0.1 / 0.002 / $0.01         0.1 / 0.001 / $0.00         0.1 / 0.004 / $0.00
+   all other              15.5 / 0.074 / $0.45         1.1 / 0.005 / $0.05         1.2 / 0.006 / $0.09
+-- sprint-review, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   git                     0.4 / 0.001 / $0.01         0.2 / 0.000 / $0.01         0.1 / 0.000 / $0.00
+   inline-interp           0.2 / 0.001 / $0.01         0.0 / 0.001 / $0.00                           -
+   shell-read              5.0 / 0.005 / $0.17         0.3 / 0.001 / $0.01         3.0 / 0.005 / $0.19
+   shell-write             0.4 / 0.000 / $0.01                           -                           -
+   ctx-exec                1.8 / 0.003 / $0.06                           -                           -
+   ctx-search              0.8 / 0.001 / $0.02                           -                           -
+   mcp-other               0.2 / 0.001 / $0.00                           -                           -
+   read                    1.2 / 0.002 / $0.03         0.1 / 0.001 / $0.01         0.1 / 0.000 / $0.01
+   edit                    1.1 / 0.005 / $0.05                           -                           -
+   harness                                   -         0.1 / 0.000 / $0.00         0.1 / 0.001 / $0.02
+   text                    2.8 / 0.045 / $0.11         2.5 / 0.028 / $0.12         1.9 / 0.004 / $0.12
+   all other              13.9 / 0.064 / $0.47         3.2 / 0.031 / $0.16         5.2 / 0.010 / $0.34
+-- stories-test-strategy, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   wait-poll               1.6 / 0.002 / $0.06         0.6 / 0.001 / $0.04         0.2 / 0.000 / $0.01
+   sleep                   1.0 / 0.001 / $0.04         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   git                     1.6 / 0.002 / $0.06         0.2 / 0.000 / $0.01         0.1 / 0.000 / $0.01
+   script                  2.9 / 0.008 / $0.10         1.0 / 0.004 / $0.06         0.1 / 0.000 / $0.01
+   inline-interp           0.5 / 0.001 / $0.02         1.0 / 0.004 / $0.06         0.2 / 0.000 / $0.02
+   shell-read             23.6 / 0.034 / $0.89         7.4 / 0.021 / $0.42         3.6 / 0.008 / $0.23
+   shell-write             0.6 / 0.001 / $0.02         0.2 / 0.001 / $0.01         0.2 / 0.003 / $0.02
+   test-build              0.1 / 0.000 / $0.00         0.0 / 0.000 / $0.00                           -
+   shell-builtin           0.8 / 0.001 / $0.03                           -         0.1 / 0.000 / $0.01
+   bash-other              0.1 / 0.000 / $0.00         0.1 / 0.000 / $0.01         0.1 / 0.000 / $0.01
+   ctx-exec               13.4 / 0.032 / $0.46         0.0 / 0.000 / $0.00         0.2 / 0.000 / $0.02
+   ctx-search              3.5 / 0.007 / $0.11         0.0 / 0.000 / $0.00                           -
+   mcp-other                                 -         0.3 / 0.003 / $0.01                           -
+   read                    6.1 / 0.009 / $0.23         2.2 / 0.007 / $0.11         0.5 / 0.003 / $0.03
+   edit                    4.6 / 0.020 / $0.23         1.0 / 0.005 / $0.08         0.1 / 0.000 / $0.01
+   harness                 1.6 / 0.005 / $0.10         0.5 / 0.002 / $0.02         0.1 / 0.002 / $0.02
+   operator                0.1 / 0.005 / $0.00         0.1 / 0.004 / $0.01         0.1 / 0.002 / $0.01
+   text                   14.4 / 0.084 / $0.50        12.4 / 0.029 / $0.70        14.7 / 0.025 / $0.83
+   all other              76.6 / 0.210 / $2.87        27.2 / 0.081 / $1.54        20.4 / 0.046 / $1.21
+-- ui-direction, per story: calls / active h / lead token-equivalent $ (s322 at s321's hosted mix, roll.FALLBACK)
+   sub                        s322 (8 stories)           s321 (25 stories)           s319 (20 stories)
+   text                                      -         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+   all other               0.0 / 0.000 / $0.00         0.0 / 0.000 / $0.00         0.1 / 0.000 / $0.00
+-- fate of `other` calls per sub-class, per story, pipeline bucket: DENIED / ERRORED / RAN (TEXT is the text row)
+   wait-poll                   0.0 / 0.0 / 3.9             0.0 / 0.0 / 1.0             0.0 / 0.0 / 1.3
+   sleep                       0.0 / 0.5 / 2.4             0.0 / 0.1 / 0.5             0.1 / 0.0 / 0.9
+   git                        0.4 / 1.4 / 26.1             0.0 / 0.0 / 2.5             0.1 / 0.1 / 5.0
+   script                      0.2 / 0.2 / 9.8             0.0 / 0.0 / 2.2             0.1 / 0.1 / 1.6
+   inline-interp               0.0 / 0.8 / 8.1             0.0 / 0.1 / 2.1             0.0 / 0.1 / 2.1
+   shell-read                0.8 / 3.0 / 176.9            0.1 / 0.1 / 20.8            0.2 / 0.2 / 26.1
+   shell-write                 0.0 / 0.0 / 8.5             0.0 / 0.0 / 2.2             0.0 / 0.1 / 1.9
+   test-build                  0.0 / 0.0 / 1.0             0.0 / 0.0 / 0.1             0.0 / 0.0 / 0.1
+   shell-builtin               0.0 / 0.0 / 1.4             0.0 / 0.0 / 0.5             0.0 / 0.0 / 0.1
+   bash-other                  0.0 / 0.6 / 7.5             0.0 / 0.0 / 1.2             0.0 / 0.0 / 1.1
+   ctx-exec                   0.1 / 2.8 / 56.9             0.0 / 0.0 / 0.1             0.0 / 0.1 / 0.1
+   ctx-search                 0.0 / 0.5 / 21.1             0.0 / 0.0 / 0.2             0.0 / 0.0 / 0.1
+   mcp-other                   0.0 / 0.0 / 4.9             0.0 / 0.0 / 0.3                           -
+   read                       5.9 / 0.2 / 54.8             0.0 / 0.0 / 5.7             0.0 / 0.0 / 4.0
+   edit                       1.8 / 1.0 / 35.4             0.1 / 0.0 / 3.6             0.1 / 0.0 / 1.1
+   harness                    0.0 / 0.2 / 12.6             0.0 / 0.0 / 1.8             0.1 / 0.0 / 1.7
+   operator                    0.0 / 0.0 / 2.5             0.0 / 0.0 / 0.8             0.0 / 0.1 / 1.1
+   tool-other                  0.0 / 0.4 / 0.0                           -                           -
+-- s322 shell-read calls by program (all 1445, pipeline bucket): grep 541, sed 179, ls 150, tail 133, cat 111, date 82, echo 70, wc 46, head 39, awk 27, find 21, ps 14, pgrep 8, shasum 5, printf 4, jq 3, diff 3, cut 3, printenv 3, which 1, lsof 1, tr 1
+-- s322 bash-other calls by program (all 65, pipeline bucket): awsr(){ 16, gitleaks 13, aws 8, 1 5, curl 5, merge-base 2, rev-parse 2, ecs 2, python3 2, dev-report-story-322-2.md 1, pre-commit 1, brew 1, vm_stat 1, mdfind 1, NR>=5503 1, $S 1, show 1, python 1, \ 1
+-- s322 tool-other calls by tool (all 3, pipeline bucket): advisor 3
+-- s322 script calls by program (all 82, pipeline bucket): merge-adversarial-shards.sh 11, join-remediator-shards.sh 11, check-owed-derivations.sh 6, partition-document.sh 4, serial-remediation-worklist.sh 4, core-paths.sh 3, rotate-snapshot-archive.sh 3, verdict.sh 3, report-propagation-fanout.sh 3, seed.sh 2, retro-replay-harness.sh 2, trim-snapshot.sh 2, retro-step1.sh 2, s322-trim.sh 2, audit-rule-files.sh 1, sprint-status.sh 1, gen-party-briefs.sh 1, join-party.sh 1, gen-repair-briefs.sh 1, addrows.sh 1, stamp-story-provenance.sh 1, partition-subject.sh 1, $s.sh 1, gen_elicitation_briefs.py 1, run.sh 1, test-check18-debt-audit.sh 1, run-deployed-ranges.sh 1, roll-322.sh 1, gen-p2-briefs.sh 1, gen-p2-cross.sh 1, gen-repair-p2.sh 1, gen-lanes-p2.sh 1, gen-ts-p1.sh 1, gen-ts-repair-p1.sh 1, gen-ts-p2.sh 1, s322-gate14.sh 1, s322-worktrees.sh 1, s322-rows.sh 1
+-- s322 shell-builtin calls by program (all 11, pipeline bucket): None 11
+-- s321 shell-read calls by program (all 525, pipeline bucket): grep 159, tail 68, cat 63, ls 61, sed 56, echo 33, date 23, head 13, cut 11, wc 10, find 6, printenv 5, pgrep 4, diff 4, awk 3, ps 2, shasum 1, sort 1, stat 1, jq 1
+-- s321 bash-other calls by program (all 31, pipeline bucket): aws 12, $(date 6, 1 3, *-resolution-p*.md 1, rev-parse 1, merge-base 1, # 1, graph 1, $(ls 1, next} 1, gitleaks 1, $S 1, T.txt 1
+-- s321 script calls by program (all 56, pipeline bucket): join-remediator-shards.sh 6, merge-adversarial-shards.sh 5, check-owed-derivations.sh 3, sprint-status.sh 3, rotate-snapshot-archive.sh 2, verdict.sh 2, route-party-findings.py 2, gen-briefs.py 2, handoff-collect.py 2, merge-review-shards.sh 2, stamp-story-provenance.sh 1, partition-document.sh 1, serial-remediation-worklist.sh 1, record.sh 1, gate16.py 1, trim22.py 1, gate22.py 1, merge22.py 1, trim23.py 1, retro-replay-harness.sh 1, gen-p1-briefs.py 1, gen-p1-repair-briefs.py 1, gen-p2-briefs.py 1, resolve_customization.py 1, partition-subject.sh 1, seat-status.sh 1, finalize-routing.py 1, map-ids.py 1, map-ids2.py 1, map-ids3.py 1, test-aws-smoke.sh 1, retro-step1.sh 1, migrate-artifact-paths.sh 1, rotate-gate-adjudication.sh 1, trim.sh 1, merge12.sh 1, holds.sh 1
+-- s321 shell-builtin calls by program (all 12, pipeline bucket): None 12
+-- s319 shell-read calls by program (all 532, pipeline bucket): cat 132, grep 130, tail 86, ls 42, echo 36, sed 33, date 22, cut 14, head 10, wc 5, ps 5, jq 4, pgrep 3, awk 3, find 3, shasum 3, printf 1
+-- s319 bash-other calls by program (all 21, pipeline bucket): aws 6, logts 2, gitleaks 2, nonce.txt 2, $f 2, merge-base 1, +%s 1, 1 1, status 1, sprint-review-pm-0*.md 1, rev-parse 1, .beat-inflight 1
+-- s319 script calls by program (all 33, pipeline bucket): emit-report.sh 5, self-update-gate.sh 4, merge-adversarial-shards.sh 3, push-drain.sh 2, serial-remediation-worklist.sh 2, apply.sh 2, merge-review-shards.sh 1, hard-blockers.sh 1, derivation-differential.sh 1, rotate-snapshot-archive.sh 1, report-propagation-fanout.sh 1, join-remediator-shards.sh 1, self-update-fixtures.sh 1, self-update-push.sh 1, post-write-gates.sh 1, readopt-override.sh 1, layer-drift.sh 1, ecs-deploy.sh 1, partition-subject.sh 1, resolve_customization.py 1, partition-document.sh 1
+-- s319 shell-builtin calls by program (all 2, pipeline bucket): None 2
