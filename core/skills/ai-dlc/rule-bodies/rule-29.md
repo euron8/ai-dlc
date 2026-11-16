@@ -133,8 +133,8 @@ brief closes with the `--mark` line; `steps/_gate-procedures.md`, "Bounded-join 
 the same beat. Never chain beats (`wait a.md; wait b.md`) into one `Bash` call:
 two beats is two budgets, the call overruns, and the harness backgrounds it --
 Check A starvation committed by the caller instead of by the loop. The script
-refuses to sleep twice in one call; the right shape is one call carrying every
-path.
+refuses to start a second beat in one call; the right shape is one call carrying
+every path.
 
 It enforces both bounds so you do not have to hold them:
 
@@ -173,8 +173,10 @@ It enforces both bounds so you do not have to hold them:
 (i) a hand-typed wait, in the foreground, that outlasts the steering budget and
 gags the operator (Check A); and (ii) a hand-typed wait with no sequence bound,
 which advances nothing forever (Check C). The script can commit neither -- the
-beat is clamped inside the quantum, and beats are counted in a sidecar so
-exhaustion declares Rule 20 non-delivery. `--progress-path`, on a bare beat
+beat is clamped inside the quantum (the `--complete-repair --dispatch` exception
+polls on only while its agent's transcript advances, one counted beat per
+quantum), and beats are counted in a sidecar so exhaustion declares Rule 20
+non-delivery. `--progress-path`, on a bare beat
 (never beside `--complete`), extends that sequence on observed work, and its grants are counted against the same bound, so
 the wait stays finite and this sentence stays true. False-positive cost: a
 deliverable landing in the same second the sequence exhausts is re-dispatched
@@ -185,7 +187,9 @@ primitive that takes the handle an `Agent` actually returns.
 Check A (duration) and Check C (count) bind different things: an over-budget
 call is a window in which the operator cannot be heard; an unbounded beat
 sequence advances nothing forever. An unbounded wait is a hang, not a gag.
-**The loop goes in the beat count, never inside the call.** (Now that the beat
+**The loop goes in the beat count, never inside the call.** The
+`--complete-repair --dispatch` exception keeps that bound: each quantum it polls
+on inside one call is charged to the beat count. (Now that the beat
 is backgrounded, `validate-steering-budget.sh` Check C sees fewer *foreground*
 wait-shaped calls; the sequence bound lives in the sidecar counter, where it
 already did. Do not read a quiet Check C as "leads stopped over-waiting.")
