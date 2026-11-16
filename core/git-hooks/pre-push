@@ -1467,6 +1467,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 b2ec0b25c1096bc624ac08968284825ee5ec5aecd6f3f5540127caa1e7701f0c an entry may end in `#pending <n>` (BL-998); an entry without it is reused with its count unrecorded, so no existing entry changes meaning
 # VS-IDENTITY 1 786022459096dffaab204f2ccb876acf8a4f6d6f38fa1e237af948531f071c77 another fixture's inputs.decl is no longer keyed through a covering directory and a `<dir>/*/<name>` line expands to F rows (BL-1071); every row an existing entry carries keeps its value
 # VS-IDENTITY 1 f89e84291bd6c193454135df357f44d0c104e2cec7d76423cdbd7d1f138bee89 the tools.decl search path is walked with builtins, no fork per line (BL-1124); every parse row is byte-identical, so no entry changes meaning
+# VS-IDENTITY 1 65784a8c67e1cc03e26571fcc5442467221877352a6a29be7be13f9fd00fb91d readset_decl_parse folds its per-fixture awk and cat forks into one awk and takes an optional premap (BL-1124); every parse row is byte-identical, so no entry changes meaning
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -1643,32 +1644,45 @@ readset_section_of() {
 readset_tail_sha() { # <file>: the top-level lines after its last line that is exactly `}`, comments and blanks dropped
   awk '{ a[NR] = $0 } $0 == "}" { e = NR } END { for (i = e + 1; i <= NR; i++) print a[i] }' "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
 }
-readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix>
-  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" t k p rq dp name found seen="|" ga gb gn gf ge xr
+readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix> [<premap>]
+  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" pm="${7:-}" t k p rq dp name found seen="|" ga gb gn gf ge xr fc=0 fg=0 xs="" xl
   printf '%s\tN\n' "$fx"
-  awk -v fx="$fx" -v pl="$w.p" 'BEGIN { printf "" > pl } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
+  # ONE AWK PER DECLARATION: the rows (`.n`), the unmapped five-field rows (`.r`), the mapper input (`.mi`, a D row
+  # with its `/`) and the flags (`.f`: `<core line> <F row spelling /*/>`), read back with builtins.
+  awk -v fx="$fx" -v pl="$w.p" -v rf="$w.r" -v mf="$w.mi" -v ff="$w.f" 'BEGIN { printf "" > pl; printf "" > rf; printf "" > mf }
+    { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
       r = 0; x = 0; while ((c = substr($0, 1, 1)) == "!" || c == "+") { if (c == "!") r = 1; else x = 1; $0 = substr($0, 2) }
       if (r && x) { print fx "\tX\tplusbang\t" $0; bad = 1; next }
       if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) { print fx "\tX\tabs\t" $0; bad = 1; next }
       k = "F"; if ($0 ~ /\/$/) { k = "D"; sub(/\/+$/, "") }
       if (x && k == "D") { print fx "\tX\tplusdir\t" $0; bad = 1; next }
       if (x && $0 != "") print $0 > pl
-      if ($0 != "") print fx "\t" k "\t" $0 "\t" r }
-    END { exit bad ? 3 : 0 }' "$fd/inputs.decl" > "$w.n"
+      if ($0 != "") { print fx "\t" k "\t" $0 "\t" r; print fx "\t" k "\t" $0 "\t" r "\t" $0 > rf; print $0 ((k == "D") ? "/" : "") > mf
+        if ($0 == "core" || index($0, "core/") == 1) fc = 1
+        if (k == "F" && index($0, "/*/")) fg = 1 } }
+    END { print (fc + 0) " " (fg + 0) > ff; exit bad ? 3 : 0 }' "$fd/inputs.decl" > "$w.n"
   if [ $? -ne 0 ]; then awk -F'\t' '$2 == "X"' "$w.n"; return 0; fi
-  if [ "$lay" = cons ] && awk -F'\t' '$3 == "core" || index($3, "core/") == 1 { f = 1 } END { exit f ? 0 : 1 }' "$w.n"; then
+  read -r fc fg < "$w.f" || { fc=0; fg=0; }
+  if [ "$lay" = cons ] && [ "$fc" = 1 ]; then
     if [ -z "$mp" ] || [ ! -f "$mp" ]; then printf '%s\tX\tnomap\t%s\n' "$fx" "$mp"; return 0; fi
-    awk -F'\t' '{ print $3 (($2 == "D") ? "/" : "") }' "$w.n" | bash "$mp" --map > "$w.m" 2> "$w.e" \
-      || { printf '%s\tX\tmaprefuse\t%s\n' "$fx" "$(sed -n 1p "$w.e" | tr '\t' ' ')"; return 0; }
-    [ "$(awk 'END { print NR }' "$w.m")" = "$(awk 'END { print NR }' "$w.n")" ] || { printf '%s\tX\tmapcount\t-\n' "$fx"; return 0; }
-    awk -F'\t' 'NR == FNR { m[FNR] = $0; next } { p = m[FNR]; sub(/\/+$/, "", p); print $1 "\t" $2 "\t" p "\t" $4 "\t" $3 }' "$w.m" "$w.n" > "$w.r"
-  else
-    awk -F'\t' '{ print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $3 }' "$w.n" > "$w.r"
+    # A PREMAP (`<mapper input>\t<mapper output>` rows, one mapper start for a whole list of fixtures) answers every
+    # line it holds; a line it lacks, or no premap, starts the mapper for this fixture alone. The join keeps the
+    # mapper's own count check (mapcount) and rewrites `.r` and the glob flag on the mapped paths.
+    if [ -z "$pm" ] || [ ! -f "$pm" ] \
+      || ! awk -F'\t' 'FILENAME == ARGV[1] { M[$1] = $2; next } !($0 in M) { exit 5 } { print M[$0] }' "$pm" "$w.mi" > "$w.m" 2>/dev/null; then
+      bash "$mp" --map < "$w.mi" > "$w.m" 2> "$w.e" \
+        || { printf '%s\tX\tmaprefuse\t%s\n' "$fx" "$(sed -n 1p "$w.e" | tr '\t' ' ')"; return 0; }
+    fi
+    awk -F'\t' -v ff="$w.f" 'FILENAME == ARGV[1] { m[FNR] = $0; nm = FNR; next }
+      { nn = FNR; p = m[FNR]; sub(/\/+$/, "", p); print $1 "\t" $2 "\t" p "\t" $4 "\t" $3; if ($2 == "F" && index(p, "/*/")) fg = 1 }
+      END { if (nm + 0 != nn + 0) exit 4; print "1 " (fg + 0) > ff }' "$w.m" "$w.n" > "$w.r" \
+      || { printf '%s\tX\tmapcount\t-\n' "$fx"; return 0; }
+    read -r fc fg < "$w.f" || fg=0
   fi
   # A `<dir>/*/<name>` LINE expands here, after mapping, into one F row per file on disk matching it, each carrying the
   # line as its declared spelling. A fixture that reads every fixture's inputs.decl declares `core/fixtures/*/inputs.decl`.
   # Any other `*` spelling, or one matching nothing, stays one row and is refused absf below.
-  if awk -F'\t' '$2 == "F" && index($3, "/*/") { f = 1 } END { exit f ? 0 : 1 }' "$w.r"; then
+  if [ "$fg" = 1 ]; then
     while IFS="$(printf '\t')" read -r t k p rq dp; do
       ga="${p%%/\**}"; gb="${p##*/}"; gn=0
       if [ "$k" = F ] && [ -n "$ga" ] && [ "$p" = "$ga/*/$gb" ]; then case "$ga$gb" in *\**) ;; *)
@@ -1679,13 +1693,15 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
     done < "$w.r" > "$w.g"
     mv -f "$w.g" "$w.r"
   fi
-  cat "$w.r"
-  # Absent ON DISK under the root (the cwd): -f for a file, -d for a directory. A path on disk but outside the
-  # universe (an excluded top, a git-ignored file) is NOT refused; it simply has no key row.
+  # The rows, then the refusals of the rows absent ON DISK under the root (the cwd): -f for a file, -d for a
+  # directory. A path on disk but outside the universe (an excluded top, a git-ignored file) is NOT refused; it
+  # simply has no key row. One builtin pass prints both, rows first, so no fork prints `.r`.
   while IFS="$(printf '\t')" read -r t k p rq dp; do
-    if [ "$k" = D ]; then [ -d "$p" ] || printf '%s\tX\tabsd\t%s\t%s\n' "$fx" "$p" "$dp"
-    else [ -f "$p" ] || printf '%s\tX\tabsf\t%s\t%s\n' "$fx" "$p" "$dp"; fi
+    printf '%s\t%s\t%s\t%s\t%s\n' "$t" "$k" "$p" "$rq" "$dp"
+    if [ "$k" = D ]; then [ -d "$p" ] || { printf -v xl '%s\tX\tabsd\t%s\t%s\n' "$fx" "$p" "$dp"; xs="$xs$xl"; }
+    else [ -f "$p" ] || { printf -v xl '%s\tX\tabsf\t%s\t%s\n' "$fx" "$p" "$dp"; xs="$xs$xl"; }; fi
   done < "$w.r"
+  printf '%s' "$xs"
   # THE `+` ROWS, keyed on the declared spelling (field 5) so a mapped path still finds its marker. An absent file
   # is already refused (absf) above and gets no row.
   if [ -s "$w.p" ]; then
@@ -1904,16 +1920,37 @@ readset_tools() { # <out>
 # A `.dunres` row makes the decision `run` with reason `tool unresolved <row>` (or the row itself where it begins
 # `mapper ` or `git.decl range refused `, whose cause is not a tool), so the hermetic runner reports the refusal (exit 2). The record format is unchanged (`#format k1`).
 readset_declared() { # <list> <out>
-  local list="$1" out="$2" d b p lay mp="" xp xpd
+  local list="$1" out="$2" d b p lay mp="" xp xpd pm=""
   : > "$out/.dparse"; : > "$out/.dfx"; : > "$out/.dunres"; : > "$out/.dkeys"; : > "$out/.dtools"
   lay=cons; [ -d core/scripts ] && lay=dist
   for p in scripts/ai-dlc/core-paths.sh core/scripts/core-paths.sh; do [ -f "$p" ] && { mp="$p"; break; }; done
   xp="$READSET_TOOL_XP"; [ -n "$xp" ] || xp="$(readset_git_exec_path)"; xpd="$xp:$READSET_TOOL_DIRS"
   while IFS= read -r d; do
     b="${d%/}"; b="${b##*/}"
-    [ -f "${FXROOT}${b}/inputs.decl" ] || continue
-    readset_decl_parse "$b" "${FXROOT}${b}" "$lay" "$mp" "$xpd" "$out/.dp.$b" >> "$out/.dparse"
-  done < "$list"
+    [ -f "${FXROOT}${b}/inputs.decl" ] && printf '%s\n' "${FXROOT}${b}/inputs.decl"
+  done < "$list" > "$out/.dlist"
+  # THE PREMAP, consumer layout: every declared line of the listed fixtures, spelled as readset_decl_parse sends it to
+  # the mapper, through ONE mapper start. It is built only when two or more listed fixtures carry a `core/` line, the
+  # only case in which it saves a start. A refusal anywhere, or a count that differs, leaves no premap, and each
+  # fixture then starts the mapper alone, as it would with none (its own maprefuse or mapcount row).
+  if [ "$lay" = cons ] && [ -n "$mp" ] && [ -f "$mp" ] && [ -s "$out/.dlist" ]; then
+    if awk 'NR == FNR { f[++n] = $0; next } END { for (i = 1; i <= n; i++) { c1 = 0; while ((getline l < f[i]) > 0) {
+        sub(/\r$/, "", l); if (l == "" || l ~ /^#/) continue
+        while ((c = substr(l, 1, 1)) == "!" || c == "+") l = substr(l, 2)
+        if (l ~ /^\// || l ~ /(^|\/)\.\.(\/|$)/) continue
+        k = ""; if (l ~ /\/$/) { k = "/"; sub(/\/+$/, "", l) }
+        if (l == "core" || index(l, "core/") == 1) c1 = 1
+        if (l != "" && !((l k) in s)) { s[l k] = 1; print l k } }
+        close(f[i]); nc += c1 }
+      exit (nc >= 2) ? 0 : 1 }' "$out/.dlist" > "$out/.pm.in" \
+    && bash "$mp" --map < "$out/.pm.in" > "$out/.pm.out" 2>/dev/null \
+      && awk 'FILENAME == ARGV[1] { a[FNR] = $0; n = FNR; next } { print a[FNR] "\t" $0; m = FNR } END { exit (n + 0 == m + 0) ? 0 : 1 }' \
+        "$out/.pm.in" "$out/.pm.out" > "$out/.pm"; then pm="$out/.pm"; fi
+  fi
+  while IFS= read -r d; do
+    b="${d%/inputs.decl}"; b="${b##*/}"
+    readset_decl_parse "$b" "${FXROOT}${b}" "$lay" "$mp" "$xpd" "$out/.dp.$b" "$pm" >> "$out/.dparse"
+  done < "$out/.dlist"
   awk -F'\t' '$2 == "N" { print $1 }' "$out/.dparse" > "$out/.dfx"
   [ -s "$out/.dfx" ] || return 0
   awk -F'\t' '$2 != "X" { next }
@@ -2028,12 +2065,14 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
   for c in scripts/ai-dlc/hermetic-run.sh core/scripts/hermetic-run.sh; do [ -f "$c" ] && { rn="$c"; break; }; done
   rraw="$(sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$rn" | shasum -a 256 | cut -d' ' -f1)"
   : > "$out/.vs.hit"; : > "$out/.vs.want"
-  awk -F'\t' '$2 == "run" && ($4 == "k" || $4 == "u" || $4 == "s") { print $1 }' "$out/.kdec" > "$out/.vs.cand"
+  # ONE FILTER for every candidate: a declared fixture (a line of `.dfx`) with no `.dunres` and no `.qfx` row (first
+  # field), in `.kdec` order. A `.qfx` that cannot be opened reads as empty.
+  VD="$out/.dfx" VU="$out/.dunres" VQ="$out/.qfx" awk -F'\t' 'BEGIN { while ((getline l < ENVIRON["VD"]) > 0) D[l] = 1
+      while ((getline l < ENVIRON["VU"]) > 0) { t = index(l, "\t"); U[t ? substr(l, 1, t - 1) : l] = 1 }
+      while ((getline l < ENVIRON["VQ"]) > 0) { t = index(l, "\t"); U[t ? substr(l, 1, t - 1) : l] = 1 } }
+    $2 == "run" && ($4 == "k" || $4 == "u" || $4 == "s") && $1 != "" && ($1 in D) && !($1 in U) { print $1 }' \
+    "$out/.kdec" > "$out/.vs.cand"
   while IFS= read -r fx; do
-    [ -n "$fx" ] || continue
-    grep -qxF -- "$fx" "$out/.dfx" || continue
-    awk -F'\t' -v f="$fx" '$1 == f { x = 1 } END { exit x ? 0 : 1 }' "$out/.dunres" && continue
-    awk -F'\t' -v f="$fx" '$1 == f { x = 1 } END { exit x ? 0 : 1 }' "$out/.qfx" && continue
     [ -f "$out/.k/$fx" ] || continue
     readset_key_rows "$out/.k/$fx" > "$out/.vs.rows" 2>/dev/null && [ -s "$out/.vs.rows" ] || continue
     { readset_vs_inproc "$fx" . | awk -v f="$fx" '{ print f "\tI\t" $0 }'
