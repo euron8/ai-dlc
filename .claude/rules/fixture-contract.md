@@ -83,9 +83,9 @@ change. Building good arms is `fixture-mutants.md`'s; shipping is `fixture-ship-
 - **C21** The store identity is `#universe f<READSET_VS_FORMAT>` plus `#runner`; a code change in a `READSET_*` span
   carries a `# VS-IDENTITY <format> <sha> <reason>` pin row. A push reads only `counted-<vk>`. Enforcer:
   `scripts/validate-verdict-identity.sh`; `core/fixtures/readset-skip/run.sh` vs_world.
-- **C22** A recorded pass is reused when every current key row is in it with the same value, so narrowing a
-  declaration with no other change to the fixture reuses its pass. Enforcer: `core/fixtures/readset-skip/run.sh`
-  vs_world.
+- **C22** A recorded pass is reused when every current key row is in it with the same value. The fixture's own
+  `inputs.decl` is one of its rows, so any edit to it, a narrowing or a comment included, runs the fixture once in
+  each layout before its pass is reused. Enforcer: `core/fixtures/readset-skip/run.sh` vs_world w, stale-declared dnar.
 - **C23** No change invalidates a verdict whose read inputs it did not change: a fixture selected only by a change it
   cannot read fails the push. Enforcer: `.githooks/pre-push` readset_invalidation_guard; `scripts/invalidation-guard.sh`.
 - **C24** A counted run outside the pool gives the fixture stdin `/dev/null`, as the pool does; seed a push with

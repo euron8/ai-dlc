@@ -46025,3 +46025,57 @@ verify: manual
 Provenance: batch 257, wave 12, found by ai-dlc-c2 (W12-14) on its pregate; id allocated by the lead.
 
 verify: manual
+## BL-1151 — a pure narrowing of inputs.decl is never run by the gate, in either layout
+
+**DEFECT.** OPEN. Filed 2026-11-16. Owner: `.githooks/pre-push` (and `core/git-hooks/pre-push`, one program by I66) readset_keys, the `.dfull` drop at `:2643` and `:2650`; `scripts/seed-verdict-store.sh:124`. Line numbers are read on 0.1149.0.
+
+Under C22 (`.githooks/pre-push:2639-2650`), a declared fixture whose `inputs.decl` only narrows moves no key, so the gate never runs the narrowed declaration:
+- Its own `inputs.decl` row is dropped from both sides when every path it declares has a row (`.dfull`, `:2643`, `:2650`).
+- A recorded row it no longer keys is ignored outside its own directory (`:2644`).
+- So the fixture is decided `skip` on the record taken under the WIDER declaration (`:2661`), with no store lookup. Its `.kdec` row reads `<fx>\tskip\t\t\tok`.
+
+The consumer layout runs the same program: its keys are taken inside the installed tree (`:2733-2736`), so the same drop applies there too, and a narrowing moves no `<fx>@consumer` key either. No builder run fills that gap. `bash scripts/seed-verdict-store.sh <fx>@consumer` prints `<fx>@consumer rc=0` for a unit the selection does not hold, because `:124` maps the census's `not selected` to the same line as `ok`. So a builder who asks for the consumer verdict by name reads a current record as a pass, and nothing ran.
+
+Evidence, the B24 case (0.1148.0, layer-readopt-gate):
+- `core/skills/ai-dlc-update/reconcile/` was narrowed to the 8 files a guarded trace showed it reading.
+- `scripts/predict-push-set.sh` on the tip named it in neither the RUN list nor the store-skip line. Its `.kdec` row was `layer-readopt-gate\tskip\t\t\tok`, compared against the B22 key record, which still held the old `inputs.decl` hash and the whole `reconcile/` rows.
+- The pregate of the same tree did not name it.
+- The only run of the narrowed declaration was the builder's counted seed (56 assertions, `required_missing=0`).
+- `seed-verdict-store.sh layer-readopt-gate@consumer` printed `rc=0`, and the census had not selected the unit.
+
+Cost: a narrowing that drops a path the fixture still reads lands green. The fixture then fails `cannot source` or `No such file` on the first later push that moves any of its keys. That push is red on a change it did not make, and its owner is the one who notices. In the consumer layout the paths are mapped through `core-paths.sh --map`, so a narrowing correct in the distribution can still be short there. The first consumer push that moves the unit's keys notices.
+
+Mechanism question: C22 reuses a pass taken under a wider declaration, and operator-rulings ("A change never invalidates a verdict whose read inputs it did not change") forbids re-running it on that ground alone. The sandbox a narrowed declaration builds is a different input set, though, so a pass under the wider one does not prove the narrower is sufficient. Should a narrowing run once per layout, and record its pass, before its record is reused?
+
+Fix, the part the code shows is simple: at `scripts/seed-verdict-store.sh:124`, print the census's `not selected` as its own line, for example `<fx>@consumer rc=0 not-selected (record current, not run)`. A builder can then tell a fresh consumer pass from a current record. Run the seeder on one selected and one unselected unit and read both lines. The gate half waits on a ruling on the question above.
+
+Provenance: batch 257, wave 10, found by ai-dlc-da (W10-01) on the B24 layer-readopt-gate narrowing; id allocated by the lead.
+
+**LANDED (v0.1156.0).** Batch 257, W12-09 (ai-dlc-da, the seeder half and the gate-half design and draft) and W12-15 (ai-dlc-4d, the gate half). Both halves have landed.
+- Seeder half (W12-09, landed ahead of this release): `scripts/seed-verdict-store.sh` prints a unit the census did not select as `<fx>@consumer not-selected (record current; nothing ran)`, never as an `rc=` line. `core/fixtures/seed-verdict-store-red-print` cell `s_route` holds it.
+- Gate half, under the operator ruling that a narrowed declaration runs once per layout: the `.dfull` drop is deleted from both hooks (I66). That removes the `.dfull` build in `readset_declared`, the `VF` and `KDL` hand-offs, the `DF` lines in `readset_verdicts`'s matcher, and the `DFULL` conditions in `readset_keys`'s compare.
+- A fixture's own `inputs.decl` is now an ordinary own-directory row in both the key compare and the store matcher. Any edit to it, a narrowing or a comment included, runs the fixture once in each layout before its pass is reused. `scripts/invalidation-guard.sh` classes an own-directory row READ, so C23 never refuses that run. C22 in `.claude/rules/fixture-contract.md` states the rule.
+- Enforcer: `core/fixtures/readset-skip/run.sh` (shard d), cells `dnar` (the stale-declared world, key-record path) and `w` (`vs_world`, store path, both hooks). Each has its skip twin in the same run.
+- Each half is killed by one mutant, by hand: keeping the drop in `readset_keys` alone fails `dnar` only; keeping it in `readset_verdicts` alone fails `w` only.
+- Cost, once per narrowing: one run of that fixture per layout. First-push carry is none. It was measured as the difference between the run lists `scripts/predict-push-set.sh` gives on the base 0.1155.0 and on this change over it: 61 tip-only units (44 distribution, 17 `@consumer`; the base runs none), every one keyed on a file this change edits (the two hooks, `.claude/rules/fixture-contract.md`, `core/fixtures/readset-skip/run.sh`) or, for two `.undeclarable` fixtures, on its consumer layout, and none on an `inputs.decl`. On the earlier base fa4ebd966, the same difference had found one carry, `layer-readopt-gate@consumer`; its record has since been refreshed.
+
+verify: manual
+
+## BL-1158 — graph's reconcile to 0.1152.0 is blocked by gate-adjudication S23-pre finding the trap farm's node stub (PC-S323-GATE-ADJUDICATION-S23-PRE-STRIPS-HR_BIN-BUT-NOT-THE-TRAP-FARM)
+
+**DEFECT.** OPEN. Filed 2026-11-16. Owner: `core/fixtures/gate-adjudication/run.sh` (S23-pre), already fixed by BL-1154.
+
+The graph consumer filed PC-S323-GATE-ADJUDICATION-S23-PRE-STRIPS-HR_BIN-BUT-NOT-THE-TRAP-FARM in its push-candidate ledger, on its reconcile branch `ai-dlc-update/0.1152.0-reconcile-20261116T153000Z` at 022040ae2. Under 0.1152.0's `hermetic-run.sh` the PATH is the farm followed by the undeclared-tool trap dir, which holds a `node` stub. S23-pre strips only the farm dir, so `command -v node` still finds the stub and the fixture reads FIXTURE BROKEN. The consumer's pre-push is red, so the reconcile cannot be delivered. This is the BL-1154 defect, seen from the consumer side.
+
+**LANDED (v0.1156.0).** (batch 257, W12-21; closed by BL-1154, v0.1153.0, with no code change here.)
+- **Measured on a scratch `file://` clone of graph at 022040ae2.** graph itself was never written. Each reading ran the PC's own re-check, `bash scripts/ai-dlc/hermetic-run.sh gate-adjudication`, from the clone root.
+  - Clone as filed: rc 1, `FAIL S23-pre: FIXTURE BROKEN — node is still on PATH after stripping <sandbox>/bin`. The installed fixture and runner are md5-identical to 52ac10fdb (0.1152.0): fixture `914c4908…`, runner `0d109d83…`.
+  - After `scripts/install.sh` from d2137329e (0.1154.0): rc 0, `ok S23-pre` and `PASS: gate-adjudication -- 117 assertion(s)`. Fixture `1f3bf2d3…` and runner `29d9be69…` are md5-identical to 63c3a7659 (0.1153.0). Neither file changed after BL-1154, so the flip is BL-1154's.
+  - Control: the same installed clone with only the fixture reverted to 52ac10fdb's bytes, and the runner still `29d9be69…`. rc 1, the same S23-pre reading, `1 assertion(s) failed, 115 passed`. The fixture's diff between those two versions is exactly BL-1154's three added lines.
+- **Not measured, though available on the clone:** the consumer's full pre-push and the reconcile itself. This entry establishes that the PC's re-check flips, not that the reconcile is unblocked.
+- **How the consumer credits this.** Its `ledger-reverify.sh` gives the entry no path receipt, so this commit's full-slug citation reads `NAMED-UPSTREAM-DOCS-ONLY`. That was measured with the installed engine against a scratch dist clone: no row on the control, `NAMED-UPSTREAM-DOCS-ONLY` on a docs-only naming commit, and `NAMED-UPSTREAM` with a VERSION change. The absorbing release is v0.1153.0.
+
+Provenance: batch 257, wave 12, absorbed from the graph consumer's push-candidate ledger by W12-21; id allocated by the lead.
+
+verify: manual
+

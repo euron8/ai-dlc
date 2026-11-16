@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1156.0] - 2026-11-16
+
+### BL-1151: a narrowed inputs.decl runs once in each layout
+
+Both pre-push hooks (one program, I66) no longer drop a declared fixture's own `inputs.decl` row when every path it declares has a key row (the `.dfull` set, now deleted with its build, its two hand-offs and its readers in `readset_keys` and `readset_verdicts`). The declaration is an ordinary own-directory row in the key compare and in the verdict-store matcher. Any edit to it, a narrowing or a comment included, therefore runs the fixture once in each layout before its pass is reused, where a narrowing used to be decided `skip` on a pass taken under the wider declaration. `scripts/invalidation-guard.sh` classes an own-directory row READ, so C23 does not refuse that run. `core/fixtures/readset-skip` (shard d) holds both readers: cell `dnar` (key-record path) and cell `w` (`vs_world`, store path, both hooks), each beside its skip twin.
+
+### Rules and records
+
+- BL-1151 closes: the seeder half (W12-09) and this gate half have both landed. C22 in `.claude/rules/fixture-contract.md` states the once-per-layout rule. First-push carry on 0.1155.0 is none.
+
 ## [0.1155.0] - 2026-11-16
 
 ### BL-538: a sharded repair round may be run by a round-dispatcher
