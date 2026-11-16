@@ -3487,6 +3487,8 @@ Fix, the part the code shows is simple: at `scripts/seed-verdict-store.sh:124`, 
 
 Provenance: batch 257, wave 10, found by ai-dlc-da (W10-01) on the B24 layer-readopt-gate narrowing; id allocated by the lead.
 
+**Progress (batch 257, W12-09).** ai-dlc-da. The seeder half is built. `scripts/seed-verdict-store.sh` now prints a unit the census did not select as `<fx>@consumer not-selected (record current; nothing ran)`, never as an `rc=` line, and still does not count it as a failure. `core/fixtures/seed-verdict-store-red-print` cell `s_route` requires that line and no `s-cur@consumer rc=` line, and it fails on the base seeder. Remainder: the gate half, under the operator ruling that a narrowed declaration runs once per layout. It is the next W12-09 release.
+
 verify: manual
 
 

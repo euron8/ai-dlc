@@ -13,7 +13,8 @@
 # A name ending `@consumer` is a unit scripts/predict-push-set.sh prints as `run <fixture>@consumer`: it is run by
 # scripts/census-consumer-layout.sh --only (the hook's own cl_select and cl_publish over a scratch install, uncounted,
 # into the shared store base and the placement records a push reads), and printed as `<fixture>@consumer rc=<n>`; a
-# name the selection no longer holds prints `rc=0` (its record is current). Names are run in two groups, the plain
+# name the selection no longer holds prints `<fixture>@consumer not-selected (record current; nothing ran)`, never an
+# rc line, and is not a failure. Names are run in two groups, the plain
 # ones first.
 # Before any unit runs the script waits, printing why, while a push gate runs in this repository (scripts/gate-wait.sh).
 # --dirty-ok seeds from a work tree with uncommitted changes. hermetic-run.sh copies the sandbox from the work tree
@@ -121,7 +122,8 @@ if [ -n "$cons" ]; then
   bash scripts/census-consumer-layout.sh --only "$cons" --jobs "$jobs" $cdo > "$work/cons.out" 2>&1 < /dev/null; crc=$?
   if [ -n "$keep" ]; then cp "$work/cons.out" "$keep/consumer.out" || { echo "seed-verdict-store: could not keep the consumer output in $keep" >&2; exit 2; }; fi
   for fx in $cons; do
-    if grep -qxF "${fx}@consumer ok" "$work/cons.out" || grep -qF "${fx}@consumer not selected" "$work/cons.out"; then printf '%s@consumer rc=0\n' "$fx"
+    if grep -qxF "${fx}@consumer ok" "$work/cons.out"; then printf '%s@consumer rc=0\n' "$fx"
+    elif grep -qF "${fx}@consumer not selected" "$work/cons.out"; then printf '%s@consumer not-selected (record current; nothing ran)\n' "$fx"
     elif grep -qxF "${fx}@consumer FAIL" "$work/cons.out"; then printf '%s@consumer rc=1\n' "$fx"; fail=1
     else echo "seed-verdict-store: ${fx}@consumer gave no verdict (census exit $crc):" >&2; tail -n 8 "$work/cons.out" >&2; exit 2; fi
   done

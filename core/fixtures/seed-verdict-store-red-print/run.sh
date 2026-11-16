@@ -308,7 +308,9 @@ drive_s() { # <variant> <out> <names...>
 }
 cell_s_route() { # <variant>
   drive_s "$1" "$T/s.route.out" s-ok@consumer s-red@consumer s-cur@consumer
-  has "$T/s.route.out" "s-ok@consumer rc=0" && has "$T/s.route.out" "s-red@consumer rc=1" && has "$T/s.route.out" "s-cur@consumer rc=0" \
+  # s-cur, not selected, prints its own line and no rc line: a current record is never read as a fresh pass
+  has "$T/s.route.out" "s-ok@consumer rc=0" && has "$T/s.route.out" "s-red@consumer rc=1" \
+    && has "$T/s.route.out" "s-cur@consumer not-selected (record current; nothing ran)" && ! grep -qF "s-cur@consumer rc=" "$T/s.route.out" \
     && has "$T/s.route.out" "exit=1" && [ "$(sed -n 1p "$T/census.argv" 2>/dev/null)" = "--only" ] \
     && [ "$(sed -n 2p "$T/census.argv" 2>/dev/null)" = " s-ok s-red s-cur" ] \
     && ! grep -qxF -- --dirty-ok "$T/census.argv"
