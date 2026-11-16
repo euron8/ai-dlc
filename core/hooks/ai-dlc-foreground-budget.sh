@@ -46,9 +46,11 @@
 # or under the budget; the poll reason names the first, and backgrounding the job itself rather
 # than the wait. A WAITER deny (DENY A, below): the same command without the `&`, with
 # `run_in_background: true`. A SNAPSHOT deny (DENY B, below): the same change made with the Edit
-# or Write tool. Apart from those two command shapes, a call with no timeout, a timeout within
-# budget, `run_in_background: true`, a `git push`, or a teammate's non-poll call is never
-# touched; the two shapes are refused whatever the call's timeout, caller or backgrounding. The
+# or Write tool. A REPAIR-BEAT deny (DENY C, below): the same command with
+# `run_in_background: true`. Apart from those three command shapes, a call with no timeout, a
+# timeout within budget, `run_in_background: true`, a `git push`, or a teammate's non-poll call is
+# never touched; DENY A and DENY B are refused whatever the call's timeout, caller or
+# backgrounding, and DENY C whatever its timeout or caller. The
 # split for a call this hook cannot read: no `jq` ALLOWS it, with a stderr line; jq present and a
 # payload that is not parseable JSON DENIES it (UNPARSEABLE, below); any other fault of the jq
 # pass (a program fault, a regex compile error) ALLOWS it, with a stderr line. An unreadable
@@ -80,6 +82,20 @@
 # segment at any quote or `$(`/`|`, which missed 4 of the 25; the quoted-word, `$(...)` and pipe
 # alternatives in the segment class are that narrowing. `wfd ...; sleep 5 & y` and
 # `T=$(wfd --dispatch-ts a) && sleep 1 &` stay allowed: the `&` closes another segment.
+#
+# DENY C, A FOREGROUND REPAIR BEAT. A command that runs `wait-for-deliverable.sh` as a command word
+# (DENY A's command-word grammar) whose segment carries a `--complete-repair` word and no `--status`,
+# `--help` or `-h` word, on a call without `run_in_background: true`. Under `--complete-repair
+# --dispatch` the beat polls past its quantum while the agent's transcript advances, so a
+# foreground call outlives its timeout, the harness backgrounds it, and the caller loses the
+# verdict; rule-29 runs every beat backgrounded. It runs before the timeout and `agent_id` gates,
+# because a subagent's call and a call with no timeout are exactly the ones those gates admit.
+# `--status` and `--help` return at once and stay allowed. Measured on graph's transcripts
+# (366,803 Bash calls; 133 naming the script and `--complete-repair`, 14 of them foreground): 5
+# denied, each a foreground beat, one of them moved to the background past 120 s. The other 9
+# stay allowed: three grep and two pgrep mentions, two `--help` reads, a `--dispatch-ts` call whose
+# `--complete-repair` is in another segment's heredoc, and a `sed -i` naming the beat inside its
+# quoted text (DENY B's, unchanged). FP set: empty.
 #
 # DENY B, A SHELL WRITE OF THE SNAPSHOT. A command naming `pipeline-snapshot.md` (as a path ending
 # there: `pipeline-snapshot.md.bak` and `pipeline-snapshot-history.md` are other files) that
@@ -299,6 +315,12 @@ T="$(jq -Rrs '
   def bind: "(?:^|[^A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(?:Path\\([ \t]*)?[\"\u0027]?[^ \t\n;&|()<>\"\u0027]*" + ps + "[\\s\\S]*?(?:";
   def var: "[\"\u0027]?(?:\\$\\{?)?(?<![A-Za-z0-9_.])\\1\\}?(?![A-Za-z0-9_/-])(?!\\.(?!write_|open\\())[\"\u0027]?";
   def safetest($re): try test($re) catch (if (tostring | test("retry-limit")) then false else error end);
+  def wfdseg: "(?:^|[;&|\n(]|(?:^|[ \t;\n])(?:then|do|else)[ \t\n])[ \t\n]*(?:(?:nohup|env|exec|bash|sh)[ \t]+|[A-Za-z_][A-Za-z0-9_]*=[^ \t;&|\n]*[ \t]+)*[\"\u0027]?[^ \t\n;&|()<>\"\u0027]*wait-for-deliverable\\.sh[\"\u0027]?(?=[ \t\n;&|)<>]|$)((?:\"[^\"\n]*\"|\u0027[^\u0027\n]*\u0027|\\$\\([^()\n]*\\)|[^;&|\n()\"\u0027])*)";
+  def tok($t): "(?:^|[ \t])" + $t + "(?=[ \t]|$)";
+  def crfg: try ([match(wfdseg; "g") | .captures[0].string // ""]
+      | any(test(tok("--complete-repair")) and (test(tok("(?:--status|--help|-h)")) | not)))
+    catch (if (tostring | test("retry-limit")) then false else error end);
+  def bgset: (if (.tool_input | type) == "object" then .tool_input.run_in_background else null end) == true;
   def suskip: safetest("\\A[ \t]*(?:[A-Za-z_][A-Za-z0-9_]*=[^ \t\n;&|()<>{}\"\u0027`$\\\\]*[ \t]+)*(?:bash[ \t]+)?([\"\u0027]?)[^ \t\n;&|()<>{}\"\u0027`$\\\\]*/(?:snapshot-update|rotate-snapshot-archive)\\.sh\\1(?=[ \t]|\\z)(?>(?:\u0027[^\u0027\n]*\u0027|\"(?:[^\"\n`$\\\\]|\\$(?![(]))*\"|[^;&|\n<>(){}\"\u0027`$\\\\]|\\$(?![(\u0027]))*)[ \t]*\\z");
   def snapwrite: safetest(shwrite(lit) + "|" + pywrite(lit)) or safetest(bind + shwrite(var) + "|" + pywrite(var) + ")");
   def cmdpos: "(^|[;&|\n(]|(^|[ \t;\n])(then|do|else)[ \t\n])[ \t\n]*";
@@ -317,6 +339,7 @@ T="$(jq -Rrs '
   else $w[0] | (
   (if .tool_name == "Bash" then cmdtext else "" end) as $cmd
   | if ($cmd | contains("wait-for-deliverable.sh")) and ($cmd | safetest(wfdbg)) then "DENY A"
+  elif ($cmd | contains("--complete-repair")) and (bgset | not) and ($cmd | contains("wait-for-deliverable.sh")) and ($cmd | crfg) then "DENY C"
   elif ($cmd | ascii_downcase | contains("pipeline-snapshot.md")) and ($cmd | suskip | not) and ($cmd | snapwrite) then "DENY B"
   else
   pushchain as $pc
@@ -350,7 +373,7 @@ deny() {
   exit 0
 }
 
-# The two command-shape denies are decided HERE, before the empty-scope exit and before every
+# The three command-shape denies are decided HERE, before the empty-scope exit and before every
 # budget and detector fail-open below, so no timeout, agent_id, run_in_background or missing
 # detector can exempt them.
 case "$T" in
@@ -358,6 +381,7 @@ case "$T" in
   # The `\\u` is JSON for a literal backslash-u.
   '@PARSEFAIL@') printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"AI/DLC: the tool call payload could not be parsed as JSON, so this hook cannot read the command or its timeout and refuses the call rather than skip every check it carries. The usual cause is an escape JSON cannot decode, such as a lone surrogate `\\ud800` in the command. Re-issue the command without the unparseable escape. If this recurs on an ordinary command, check the jq install (`jq --version`)."}}'; exit 0 ;;
   'DENY A') deny "AI/DLC: this Bash call backgrounds wait-for-deliverable.sh with a shell \`&\`. The waiter's completion notification then never reaches you: the call returns at once and the beat is orphaned. Re-issue the same command WITHOUT the trailing \`&\` and with run_in_background: true, one waiter per call, and act on its completion notification." ;;
+  'DENY C') deny "AI/DLC: this FOREGROUND Bash call runs wait-for-deliverable.sh --complete-repair. That beat keeps polling past its quantum while the dispatched agent's transcript advances, so it outlives any foreground timeout; the harness then moves it to the background and the caller loses the verdict (rule-29). Re-issue the same command with run_in_background: true, one waiter per call, and act on its completion notification. A --status or --help call of it may stay in the foreground." ;;
   'DENY B') deny "AI/DLC: this Bash call writes pipeline-snapshot.md by shell (sed -i, perl -i, a > or >> redirect, tee, cp/mv/install/ln onto it, git checkout/restore of it, or an interpreter open/write_text on it). A shell write skips the stamp judge. Make the change with scripts/ai-dlc/snapshot-update.sh, which judges the stamps before it writes: one Bash call, nothing chained after it, ops applied in order -- --set <key> <value> [<section>], --set-block <section> <key> <file>, --key-delete <section> <key>, --line-add <section> <text> [--bottom], --line-replace <section> <match> <text>, --line-delete <section> <match>, --move-to-history <section> <match>, --activity <text>, --open-item <text>, --open-item-file <file>, --close-item <match>, --row-add <c1 | c2 | ...>, --row-replace <agent> <row>, --row-status <agent> <status>, --row-set <agent> <col> <value>, --row-delete <agent>, --section-add <heading>, --section-move-to-history <heading>, --init <step-file> <sprint-id>. Reading the snapshot by shell is not refused." ;;
 esac
 

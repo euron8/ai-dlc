@@ -3289,27 +3289,7 @@ Provenance: batch 257, wave 8, the BL-1134 remainder named by ai-dlc-d4 (W8-03);
 
 Remaining: the row-narrowing half (a lossless trace deciding whether BL-1134's 5 `legacy` rows narrow) is blocked on BL-1144: by operator ruling, traced map rows are frozen until that is fixed.
 
-verify: manual
-
-## BL-1140 — the whole-row ratchet refuses a same-fixture replacement that keeps the row count level
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `scripts/invalidation-guard.sh --ratchet` arm r3 (`:264`).
-
-r3 keys a list row on its fixture and declared line, and refuses any key the base copy lacks. A fixture that narrows a whole directory line to a smaller whole directory line therefore cannot keep a row for it, even when it drops its old row in the same change and the list does not grow. Measured on fixture-git-env-seam (BL-1117): the trace showed it reads the listing of `core/skills/ai-dlc-update/reconcile/` (setup-config-drift/run.sh:113 globs that directory). Replacing its row `fixture-git-env-seam	core/fixtures/	legacy` with `fixture-git-env-seam	core/skills/ai-dlc-update/reconcile/	whole` is refused with `r3 a list row the base copy lacks (the list may only shrink): fixture-git-env-seam core/skills/ai-dlc-update/reconcile/`. So BL-1117 declares the 36 files one per line instead, and a file added to that directory does not move the fixture's key.
-
-Fix: let r3 accept a new row for a fixture that drops one of its own base rows in the same change, provided the new line is narrower than the dropped one and the list's row count does not grow. Then declare `core/skills/ai-dlc-update/reconcile/` in `core/fixtures/fixture-git-env-seam/inputs.decl` with a `whole` row, in place of its 36 file lines.
-
-Provenance: batch 257, wave 9, named by ai-dlc-19 (W9-05) while landing BL-1117; id allocated by the lead.
-
-**PARTIAL (v0.1146.0) — r3 accepts a prefix narrowing, and `derived-fence-binding` is narrowed with it; the `fixture-git-env-seam` half stays open.** Built by ai-dlc-8c.
-- r3 now accepts a new row when all of these hold; any other new row is still refused with r3's message:
-  - the same fixture drops a base directory row in the same change;
-  - the new line strictly extends that row's line, with the same leading `!`/`+` markers;
-  - the fixture's row count does not grow. The count is per fixture, so another fixture's shrink cannot fund the growth.
-- Each accepted row prints `narrowing accepted: <fx> <parent> -> <row>`, and the success summary counts them.
-- `g_ratchet_probe` gains a near-miss, where fixture `c` narrows `core/hooks/` to `core/hooks/sub/` and must be accepted and printed, and an offender, where `c` takes `core/hookz/` and must fire r3.
-- `derived-fence-binding` is narrowed. The seed copies only the read set of its five selected arms, and its five whole rows (`core/`, `scripts/`, `templates/`, `patterns/`, `.claude/rules/`) become `core/team-roles/` and `core/scripts/`. Its key rows go from 2,024 to 152 (`hermetic-run.sh --key-only`, on ea8c9fb0c and on the 0.1146.0 tree, which also declares `core/fixtures/lib/layout.sh`), with 53 assertions and the same labels.
-- Remainder: `fixture-git-env-seam`. It has no row left to narrow from: BL-1117 dropped its `core/fixtures/` row and declares 36 `reconcile/` files one per line. A `reconcile/` whole row would therefore be a pure addition, and it was never a prefix narrowing (`core/fixtures/` to `core/skills/ai-dlc-update/reconcile/`). The premise that the fixture reads that directory's listing comes from ai-dlc-19's trace and has not been re-derived. An acceptance for a directory row replacing a fixture's own file lines would acquit a widening to any directory where the fixture already declares a file, so it was not built (lead ruling, batch 257).
+**Progress (batch 257, W12-04, ai-dlc-bf; the entry stays OPEN).** At 99c662068, `scripts/install.sh:24` (`diff-index --quiet HEAD --`) is install.sh's only git call that walks the source tree. The others are `rev-parse` at `:22`, `:23` and `:83`, `ls-files` on one fixture directory at `:744`, and `config core.hooksPath` on the project root at `:605`. The two libraries it sources (`scaffold-ignore.sh`, `install-scaffold-ignore.sh`) and the three scripts it runs (`settings-merge.sh`, `sync-transient-ignore.sh`, `render-agent-definitions.sh`) call git only on the project root: `rev-parse`, `check-ignore` and `ls-files`. The bursts therefore count `install.sh` runs, and a second whole-tree git call inside install.sh is excluded. A whole-tree git call made by the fixtures themselves is not excluded. The per-fixture run count is still not reconciled against the large `git` pids: schema-install-fallback runs install.sh both as a program (`run.sh:162`) and in process (`:165`, `:540`), so the count needs a trace. Owner of the remainder (that run-count trace, then the lossless trace and the 5-row narrowing): W12-09 (ai-dlc-da), after BL-1144.
 
 verify: manual
 
@@ -3427,18 +3407,6 @@ Unverified inference: the push gate's `cl_select` runs after `fxcount_arm`, so i
 Fix: key the consumer-layout lookup the way its entries are written. Either drop the judge row from `cl_select`'s lookup, or write the `#judge` row into `<fx>@consumer` entries. Then prove on a counted predict that a consumer pass recorded uncounted is reused.
 
 Provenance: batch 257, wave 8, found by ai-dlc-63 (W8-02) in BL-1133's hand probe; id allocated by the lead.
-
-verify: manual
-
-## BL-1142 — rule-29's "never call `--complete-repair --dispatch` in the foreground" has no enforcer, and the foreground-budget hook admits a subagent's call
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/hooks/ai-dlc-foreground-budget.sh` (the subagent exemption and `is_poll`), with `core/skills/ai-dlc/rule-bodies/rule-29.md` stating the rule.
-
-BL-541's batch-257 W9-11 change lets a `--complete-repair --dispatch` beat poll in one call for up to `max_wait_beats` quanta while its agent's transcript advances (`live_extend` in `core/scripts/wait-for-deliverable.sh`). Backgrounded, that only removes the lead's re-arm wakes. In the foreground the call outlives the declared Bash timeout, and the harness then backgrounds it and the caller loses the verdict. `rule-29.md` says not to call that mode in the foreground, and that sentence is prose only. The hook's jq pass decides the budget scope at `ai-dlc-foreground-budget.sh:328-330`: a call with a non-empty `agent_id` is in scope only when `is_poll` holds (`:306-308`, a loop that sleeps or a `sleep` of 30 s or more in the command text). A subagent's foreground `wait-for-deliverable.sh --complete-repair --dispatch <id> <rec>` at `timeout: 600000` has neither, so it is ADMITTED with no deny. The lead's own foreground call above the 120 s budget is denied by the general budget arm. A lead call that declares no timeout is out of the hook's scope (`:326`) and is admitted too. Read from the hook's text, not driven with a payload.
-
-Fix: deny a foreground Bash call whose command runs `wait-for-deliverable.sh` with `--complete-repair` as a command word, from any caller and whatever its timeout, with the remedy "the same call with `run_in_background: true`"; the remedy is always available, so the deny cannot wedge. Drive the hook with a subagent payload and a lead payload, each in both directions, before shipping.
-
-Provenance: batch 257, wave 9, the W9-11 roll-call note; id allocated by the lead.
 
 verify: manual
 

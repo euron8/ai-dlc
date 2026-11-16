@@ -148,7 +148,8 @@ It enforces both bounds so you do not have to hold them:
   --dispatch <agentId>` beat keeps polling past the quantum while that agent's own
   transcript took a turn inside the quantum just ended, charging one beat per
   quantum, and returns at the quantum once the transcript stops advancing. It runs
-  backgrounded only; never call that mode in the foreground.
+  backgrounded only; never call that mode in the foreground (the foreground-budget
+  hook denies it).
 - **The beat quantum is not `steering_budget`.** `steering_budget` (still **120
   seconds**) bounds a FOREGROUND call, because the operator cannot be heard while
   one is in flight. A backgrounded beat gags nobody, so it is not bound by it.
