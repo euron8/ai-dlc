@@ -38,6 +38,10 @@
 # $ROOT/.githooks/pre-push, else exit 2. A scratch root with no core.hooksPath therefore refuses (no hook would run).
 #
 # Usage: pregate-self-check.sh [--member] [<base>]     (default base: origin/main)
+# A STACKED BASE (BL-1156): when <base> is absent from origin/main and a proper ancestor of HEAD (a release stacked on
+# an unlanded one; pass the predecessor's sha), section a's prefix runs with AI_DLC_PREGATE_RV_BASE=<base sha>, and the
+# hook's release-version step ranges from it rather than origin/main. That run scopes out arm D (local-main
+# inheritance); the push still judges in default mode. Any other <base> runs the step exactly as a ref-less run does.
 # Exit: 0 = clean, 1 = at least one finding (the check and the lines are named), 2 = cannot run.
 # MANDATORY: .githooks/pre-push refuses a push of any tree this script has not recorded green (PREGATE_GATE span).
 #
@@ -96,6 +100,18 @@ cd "$ROOT" || exit 2
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "pregate-self-check: $ROOT is not a git work tree" >&2; exit 2; }
 git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null 2>&1 \
   || { echo "pregate-self-check: base '$BASE' does not resolve to a commit in $ROOT" >&2; exit 2; }
+# rv_base -> the base sha when it is a stacked base (see the usage block), else nothing.
+rv_base() {
+  local b h
+  b="$(git rev-parse --verify --quiet "${BASE}^{commit}")" || return 0
+  h="$(git rev-parse --verify --quiet 'HEAD^{commit}')" || return 0
+  git rev-parse --verify --quiet 'origin/main^{commit}' >/dev/null 2>&1 || return 0
+  [ "$b" != "$h" ] || return 0
+  git merge-base --is-ancestor "$b" origin/main 2>/dev/null && return 0
+  git merge-base --is-ancestor "$b" "$h" 2>/dev/null || return 0
+  printf '%s\n' "$b"
+}
+RV_BASE="$(rv_base)"
 
 W="$(mktemp -d)" || exit 2
 # THE PREGATE RECORD (BL-1055). .githooks/pre-push refuses a push that delivers a tree with no record written here.
@@ -189,8 +205,9 @@ ns="$(grep -cE '^[[:space:]]*step "' "$W/prefix.sh")" || ns=0
 [ "$ns" -ge 1 ] || { printf 'pregate-self-check: no step calls above the fixture suite in %s\n' "$HOOK" >&2; exit 2; }
 # No store override (BL-1066): the prefix runs under the caller's verdict store, as a push runs it. No step above
 # the cut writes a verdict (hermetic-run.sh is the store's only writer and runs below it), so this writes none.
+[ -z "$RV_BASE" ] || printf '   stacked base %s: the release-version step ranges from it, not origin/main (arm D scoped out)\n' "$RV_BASE"
 arm_start
-bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1
+AI_DLC_PREGATE_RV_BASE="$RV_BASE" bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1
 a_rc=$?
 arm_took
 # One verdict per step: the hook prints "── <name>" then, after the step's own output, "   PASS" or "   FAIL".
