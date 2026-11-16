@@ -3370,15 +3370,24 @@ verify: manual
 
 
 
-## BL-1156 — a stacked versioned release cannot pregate: the version-triple step ranges from origin/main
+## BL-1160 — validate-adversarial-convergence.sh expands an empty SORTED array under set -u when no pass file carries a pass number
 
-**LANDED (vVERSION_PLACEHOLDER).** batch 257, W12-20, filed and closed in one release. `scripts/pregate-self-check.sh` `rv_base` (:103-114) takes `<base>` as a STACKED base when origin/main resolves, `<base>` is not its ancestor, and `<base>` is a proper ancestor of HEAD; section a then runs the hook prefix with `AI_DLC_PREGATE_RV_BASE=<base sha>` and prints the base. `.githooks/pre-push` (:502-512, net 0 lines) captures and unsets that variable before any step runs, and `rv_triple` calls `validate-release-version.sh --range "<base>..HEAD"` only when the run has NO push ref lines; a push always has them and runs today's call. Every other `<base>` runs the step exactly as before. The pregate record already wrote `base` (:563). Not changed: `core/git-hooks/pre-push`, which carries no version-triple step (I66 binds only FIXTURE_POOL). Loss, stacked pregate only: `--range` scopes out arm D (local-main inheritance); the push still judges in default mode.
-- Probe (a pregate `--member <A>` on a scratch clone where origin/main carries the SQUASHED copy of release A and the stack carries the original A then release B): with the fix, rc 0, the stacked-base line, 26 of 26 steps PASS; the same world without the fix, rc 1, the release-version triple the only red step. Hand cells on the extracted region: push lines present plus a base, rc 1 (base ignored); no base, rc 1 (today's call); base and no push lines, rc 0. Mutants: dropping the empty-push-lines guard reads that first cell rc 0; dropping each of `rv_base`'s three conditions returns a sha for origin/main, for an unrelated commit, and for HEAD respectively, where the shipped function returns nothing.
+**NOTE.** OPEN. Filed 2026-11-16. Owner: unassigned (`core/scripts/validate-adversarial-convergence.sh` series ordering, `:294-297` and `:679`).
 
-**DEFECT.** Filed 2026-11-16. Owner: `scripts/pregate-self-check.sh`, `.githooks/pre-push` version-triple step (1c).
+When every file in a series lacks a `pass<N>`/`p<N>` token, `SORTED` stays empty. `for f in "${SORTED[@]}"` at `:679` then aborts under bash 3.2's `set -u` with `SORTED[@]: unbound variable`. Every arm after `:679` is skipped, along with the closing `N convergence violation(s)` line. A series named `...-pass-1.md`, `...-pass-2.md` reaches this, because `order_key` (`:258`) does not admit the hyphen.
 
-`scripts/pregate-self-check.sh [<base>]` ran the hook's prefix with no push ref lines, so the version-triple step called `validate-release-version.sh` with empty `--push-remote`/`--push-refs`, whose stacked-base search fails closed and ranges from origin/main. A versioned release stacked on an unlanded versioned one therefore read two CHANGELOG headings and could not pregate until its predecessor landed. Observed on 259382e1f: "this range adds 2 release headings: 0.1151.0 0.1152.0".
+Evidence, on a file:// clone of the consumer at d6bc37b5a under `/bin/bash` 3.2.57, `AI_DLC_PROJECT_ROOT` set to the clone, `--series docs/reviews/s170/adversarial-review`:
+- installed engine (consumer 0.1157.0, `scripts/ai-dlc/`): rc 1, two `FAIL (ORDER)` blocks, then `SORTED[@]: unbound variable`;
+- distribution engine (0.1159.0, `core/scripts/` with its siblings): the same, and a `PS4` line trace puts the abort after `:677`, at the `:679` loop;
+- `--cycle-state` on the same series: rc 1, empty stdout;
+- the same series on a scratch copy with only `:679` guarded (`${SORTED[@]+"${SORTED[@]}"}`): gate mode rc 1, 0 `unbound` lines, the two `ORDER` findings, then `FAIL (D -- TERMINAL): the series ends at  with no verdict at all.` with an empty path, and `FAIL: 3 convergence violation(s).`; `--cycle-state` rc 1, empty stdout.
 
-Provenance: batch 257, wave 12, operator ruling via the lead (ai-dlc-7b); id allocated by the lead.
+Consequence measured, crash against guard on the same input: the exit code is the same in both modes, and `--cycle-state` stdout is empty in both, so the hooks act the same way. Gate mode loses the summary line and shows an engine abort in the consumer's log. The guard alone is not the fix: past `:679` arm D judges an empty series and prints a finding with no file.
+
+Owed: when `SORTED` is empty, exit after the `ORDER` findings with the summary, so arm D never runs on an empty series. Then add a fixture cell with an all-unorderable series that asserts no `unbound` line, no `D -- TERMINAL` row and the summary.
+
+Receipt: `verify: manual`. The fix is proved when the all-unorderable series above prints its `ORDER` findings and the summary line under `/bin/bash` 3.2, with no `unbound variable` on stderr.
+
+Provenance: batch 257, wave 13 (W13-02), reported by ai-dlc-94 from the consumer's s170 review; id allocated by the lead.
 
 verify: manual

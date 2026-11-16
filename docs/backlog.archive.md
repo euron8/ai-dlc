@@ -46164,3 +46164,18 @@ Remaining: the row-narrowing half, superseded by the LANDED line below. BL-1134'
 
 verify: manual
 
+## BL-1156 — a stacked versioned release cannot pregate: the version-triple step ranges from origin/main
+
+**LANDED (v0.1160.0).** batch 257, W12-20, filed and closed in one release. `scripts/pregate-self-check.sh` `rv_base` (:103-114) takes `<base>` as a STACKED base when origin/main resolves, `<base>` is not its ancestor, and `<base>` is a proper ancestor of HEAD; section a then runs the hook prefix with `AI_DLC_PREGATE_RV_BASE=<base sha>` and prints the base. `.githooks/pre-push` (:502-512, net 0 lines) captures and unsets that variable before any step runs, and `rv_triple` calls `validate-release-version.sh --range "<base>..HEAD"` only when the run has NO push ref lines; a push always has them and runs today's call. Every other `<base>` runs the step exactly as before. The pregate record already wrote `base` (:563). Not changed: `core/git-hooks/pre-push`, which carries no version-triple step (I66 binds only FIXTURE_POOL). Loss, stacked pregate only: `--range` scopes out arm D (local-main inheritance); the push still judges in default mode.
+- Probe (a pregate `--member <A>` on a scratch clone where origin/main carries the SQUASHED copy of release A and the stack carries the original A then release B): with the fix, rc 0, the stacked-base line, 26 of 26 steps PASS; the same world without the fix, rc 1, the release-version triple the only red step. Hand cells on the extracted region: push lines present plus a base, rc 1 (base ignored); no base, rc 1 (today's call); base and no push lines, rc 0. Mutants: dropping the empty-push-lines guard reads that first cell rc 0; dropping each of `rv_base`'s three conditions returns a sha for origin/main, for an unrelated commit, and for HEAD respectively, where the shipped function returns nothing.
+
+**DEFECT.** Filed 2026-11-16. Owner: `scripts/pregate-self-check.sh`, `.githooks/pre-push` version-triple step (1c).
+
+`scripts/pregate-self-check.sh [<base>]` ran the hook's prefix with no push ref lines, so the version-triple step called `validate-release-version.sh` with empty `--push-remote`/`--push-refs`, whose stacked-base search fails closed and ranges from origin/main. A versioned release stacked on an unlanded versioned one therefore read two CHANGELOG headings and could not pregate until its predecessor landed. Observed on 259382e1f: "this range adds 2 release headings: 0.1151.0 0.1152.0".
+
+Provenance: batch 257, wave 12, operator ruling via the lead (ai-dlc-7b); id allocated by the lead.
+
+verify: manual
+
+
+
