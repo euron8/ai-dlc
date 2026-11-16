@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1150.0] - 2026-11-16
+
+### BL-1142: the foreground-budget hook denies a foreground `--complete-repair` beat
+
+`core/hooks/ai-dlc-foreground-budget.sh` DENY C refuses a Bash call without `run_in_background: true` that runs `wait-for-deliverable.sh` as a command word with `--complete-repair` in its segment, from any caller and whatever its timeout. A `--status` or `--help` call stays allowed. The remedy is the same call backgrounded. `rule-29.md` names the hook beside its "never call that mode in the foreground" sentence. `foreground-budget-deny` gains the REPAIRBEAT and REPAIRNEAR arms.
+
+### Rules and records
+
+- BL-1140 closes: its `fixture-git-env-seam` remainder is withdrawn, because the fixture's 36 one-per-line `reconcile/` declarations are sound.
+- BL-1138 records that `install.sh:24` is install.sh's only git call that walks the source tree. Its remainder moves to the BL-1144 owner.
+
 ## [0.1149.0] - 2026-11-16
 
 ### BL-1150: the local-map discard report counts lost-stat omissions as `stat-loss`

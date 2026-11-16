@@ -62,6 +62,12 @@
 #               `bash -c 'wfd x &'` and `w=.../wfd; $w x &`, are KNOWN NON-COVERAGE (23 of
 #               graph's 25 backgrounded waiters are denied; these wrappers are the 2 misses), so
 #               a widening of the matcher flips them here visibly
+#   REPAIRBEAT  Deny C: a foreground wait-for-deliverable.sh --complete-repair beat from a subagent at 600000,
+#               from the lead with no timeout and no detector, and from the lead at 5000 (behind `cd` and a
+#               pipe, and with no --dispatch) -> deny with Deny C's reason, never the budget's
+#   REPAIRNEAR  its allow twins: the same beat with run_in_background: true (subagent at 600000, lead
+#               with no timeout), its --status and --help reads, a plain --complete beat, and grep and
+#               pgrep mentions that are not a command word, at 5000
 #   SNAPWRITE   Deny B: `sed -i` (BSD, GNU, `.bak`, `--in-place`), `perl -pi`, `>`/`>>`, `tee
 #               [-a]`, cp/mv/install/ln onto (with flags, and with a trailing redirect run:
 #               `2>/dev/null`, `>/dev/null`, `2>&1`, `</dev/null`, `1>&2`, `2>/dev/null; echo`),
@@ -154,7 +160,7 @@ INF="$WORK/in"
 
 # The arms that own a call of their own. REASON is read off the OVER call, FAILOPEN off the
 # WAITER seeds, EXIT off the exit status of whichever calls ran.
-ALL_UNITS="OVER PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SNAPSKIP SNAPCHAIN SNAPCASE SCOPE REGEXLIMIT"
+ALL_UNITS="OVER PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR REPAIRBEAT REPAIRNEAR SNAPWRITE SNAPREAD SNAPSKIP SNAPCHAIN SNAPCASE SCOPE REGEXLIMIT"
 
 OUTF="$WORK/out"; ERRF="$WORK/err"
 NCALL=0
@@ -475,6 +481,42 @@ arm_WAITERNEAR() {
   done
 }
 
+arm_REPAIRBEAT() {
+  local h="$1"
+  # REPAIRBEAT (Deny C): a foreground wait-for-deliverable.sh --complete-repair beat, from a subagent at 600000 (which
+  # the agent_id exemption admits), from the lead with no timeout and no detector (which the budget never reads), and
+  # from the lead at 5000 behind `cd` with a pipe and with no --dispatch (which the budget admits). Each is
+  # refused with Deny C's own reason, never the budget's.
+  local _p
+  for _p in "$(cmd_call "bash $W --complete-repair --dispatch a0123456789abcdef x-repair-p1.md" 'a1b2c3')" \
+            "$(jq -nc --arg c "$W --complete-repair --dispatch a0123456789abcdef x-repair-p1.md" '{tool_name:"Bash", tool_input:{command:$c}}')" \
+            "$(jq -nc --arg c "cd /r && $W --complete-repair --dispatch a1 x.md 2>&1 | tail -3" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')" \
+            "$(jq -nc --arg c "$W --complete-repair x-repair-p1.md" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')"; do
+    call "$h" "$NONE" - "$_p"; chk_rc
+    [ "$DEC" = deny ] || note REPAIRBEAT
+    case "$REASON_TXT" in *'runs wait-for-deliverable.sh --complete-repair'*'run_in_background: true'*) ;; *) note REPAIRBEAT ;; esac
+    case "$REASON_TXT" in *'steering budget'*) note REPAIRBEAT ;; esac
+  done
+}
+
+arm_REPAIRNEAR() {
+  local h="$1"
+  # REPAIRNEAR: Deny C's allow twins, one property apart, at a timeout within budget: the same beat with
+  # run_in_background: true from a subagent at 600000 and from the lead with no timeout, its --status and --help
+  # reads, a plain --complete beat, and two mentions that are not a command word (a grep and a pgrep pattern).
+  local _p
+  for _p in "$(jq -nc --arg c "$W --complete-repair --dispatch a1 x.md" '{tool_name:"Bash", agent_id:"a1b2c3", tool_input:{command:$c, timeout:600000, run_in_background:true}}')" \
+            "$(jq -nc --arg c "$W --complete-repair --dispatch a1 x.md" '{tool_name:"Bash", tool_input:{command:$c, run_in_background:true}}')" \
+            "$(jq -nc --arg c "$W --complete-repair --status x.md" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')" \
+            "$(jq -nc --arg c "$W --complete-repair --help" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')" \
+            "$(jq -nc --arg c "$W --complete --dispatch a1 x.md" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')" \
+            "$(jq -nc --arg c "grep -n -- '--complete-repair' $W" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')" \
+            "$(jq -nc --arg c "pgrep -f '$W --complete-repair' | wc -l" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')"; do
+    call "$h" "$REAL" - "$_p"; chk_rc
+    [ "$DEC" = allow ] || note REPAIRNEAR
+  done
+}
+
 arm_SNAPWRITE() {
   local h="$1"
   # SNAPWRITE (Deny B): a shell or interpreter write of pipeline-snapshot.md. Driven at 600000,
@@ -635,7 +677,7 @@ printf 'HERMETIC-CONSUMED %s\n' "$DETECTOR"
 sc_run "$HOOK" $ALL_UNITS
 GOT="$SC_DEAD"
 if [ -z "$GOT" ]; then
-  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SNAPSKIP SNAPCHAIN SNAPCASE SCOPE REGEXLIMIT FAILOPEN EXIT)"
+  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR REPAIRBEAT REPAIRNEAR SNAPWRITE SNAPREAD SNAPSKIP SNAPCHAIN SNAPCASE SCOPE REGEXLIMIT FAILOPEN EXIT)"
 else
   bad "shipped hook fails arm(s): $GOT"
 fi

@@ -2,4 +2,4 @@
 8 *
 5 core/hooks/ai-dlc-foreground-budget.sh
 0 core/scripts/validate-steering-budget.sh
-168 inproc:core/hooks/ai-dlc-foreground-budget.sh
+179 inproc:core/hooks/ai-dlc-foreground-budget.sh
