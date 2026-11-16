@@ -112,6 +112,7 @@
 #      pass stamps EXIT_CONDITION_MET.
 #   1  any check above failed (offenders named), or no series was resolved.
 #   2  a producer this script reads did not run (reason on stderr) -- no verdict.
+vac_main() {
 set -u
 
 SERIES_PREFIX=""
@@ -4544,3 +4545,7 @@ echo "PASS: the cycle converged -- last pass stamps EXIT_CONDITION_MET, no diver
 echo "      left unresolved, every verdict adjudicable, the series in chronological order."
 echo "      unbounded-citation: ${CITE_UNBOUNDED} verified with no timestamp bound."
 exit 0
+}
+# Loadable: sourcing defines vac_main and runs nothing; run as a program, it runs vac_main.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vac_main "$@"

@@ -19,6 +19,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1158.0] - 2026-11-16
+
+### BL-878 (first batch): the adversarial-convergence validator runs in process in its fixtures
+
+`core/scripts/validate-adversarial-convergence.sh` is wrapped as `vac_main` behind the column-0 source guard; the body is unchanged. `check-24-adversarial-convergence` (shards a-f) and `adversarial-citation` call it in process, keeping one cli cell per distinct CLI outcome compared byte for byte with the in-process call. A shipped copy of either fixture SKIPs, through `fx_skip_exit`, against a validator that predates the wrap. Validator starts drop from 151 to 4 (shard a), 98 to 41 (b), 89 to 9 (c), 14, 9 and 6 to 0 (d, e, f) and 27 to 3 (adversarial-citation). Five rows leave `scripts/fixture-inprocess-allowlist.txt` (143 to 138); shards b and c stay, because their archived receipts still start the validator.
+
 ## [0.1157.0] - 2026-11-16
 
 ### BL-1124 (c): the push's select phase drops its per-fixture parse forks and mapper starts

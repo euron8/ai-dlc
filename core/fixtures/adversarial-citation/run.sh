@@ -32,6 +32,51 @@ for cand in \
 done
 [ -n "$VALIDATOR" ] || { echo "FAIL: cannot locate validate-adversarial-convergence.sh from $DIR"; exit 1; }
 
+# IN PROCESS (BL-878). Every drive goes through vac_run. The validator (or a copy at a core/scripts/ path) is SOURCED in
+# a subshell, which its column-0 guard stops after defining vac_main, and vac_main is called there: its `exit`, `set -u`
+# and EXIT trap end with that subshell, and BASH_SOURCE inside it is the sourced file, so siblings resolve beside it as
+# they do for the program. The subshell first drops every fixture function and unexported fixture variable and turns
+# pipefail off, so the call starts as the program would; exported variables and prefix assignments reach it as they
+# reach the program. Any other script (a relocated copy) still runs as a program: its location is the property. A CORE
+# FIXTURE SHIPS AHEAD OF ITS SUBJECT: a validator with neither its `vac_main() {` line nor the column-0 source guard
+# predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE BROKEN in the distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+grep -q '^vac_main() {$' "$VALIDATOR"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$DIR" ;;
+  10) echo "  FAIL $VALIDATOR defines \`vac_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vac_main in this shell"; echo "FAIL: 1 of 1 assertions wrong."; exit 1 ;;
+  *) echo "  FAIL $VALIDATOR carries the column-0 source guard but no \`vac_main() {\` line -- a respelled subject this fixture cannot drive"; echo "FAIL: 1 of 1 assertions wrong."; exit 1 ;;
+esac
+VALIDATOR="$(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
+vac_run() { # vac_run <script> <args...> -> the program's stdout, stderr and exit status
+  case "$1" in
+    "$VALIDATOR"|*/core/scripts/validate-adversarial-convergence.sh) ;;
+    *) bash "$@"; return ;;
+  esac
+  ( set +o pipefail +u
+    _vr_keep='^(BASH.*|IFS|OPTIND|OPTERR|LINENO|RANDOM|SRANDOM|SECONDS|EPOCH.*|PIPESTATUS|FUNCNAME|GROUPS|EUID|UID|PPID|SHELLOPTS|HOSTNAME|HOSTTYPE|MACHTYPE|OSTYPE|DIRSTACK|PS[0-9]|SHLVL|PWD|OLDPWD|HOME|PATH|TMPDIR|_vr_.*)$'
+    _vr_exp=" $(compgen -e | tr '\n' ' ') "
+    for _vr_i in 1 2 3 4 5 6 7 8; do # a caller's local, unset, uncovers the caller's caller's binding: repeat
+      _vr_n=0
+      for _vr_v in $(compgen -v); do
+        [[ $_vr_v =~ $_vr_keep ]] && continue
+        case "$_vr_exp" in *" $_vr_v "*) continue ;; esac
+        unset "$_vr_v" 2>/dev/null && _vr_n=$((_vr_n + 1))
+      done
+      [ "$_vr_n" -eq 0 ] && break
+    done
+    for _vr_v in $(compgen -A function); do case "$_vr_v" in fx_inproc) ;; *) unset -f "$_vr_v" ;; esac; done
+    unset _vr_keep _vr_exp _vr_i _vr_n _vr_v
+    . "$1" || exit 125
+    fx_inproc "$1"; shift; vac_main "$@" )
+}
+
 ROOT="$(bash "$DIR/seed.sh" "$(cd "$(dirname "$VALIDATOR")" && pwd)" | tail -1)"
 MEMO="$(mktemp -d)"
 trap 'rm -rf "$ROOT" "$MEMO"' EXIT
@@ -55,7 +100,7 @@ vcall() {
   f="$MEMO/$k"
   if [ ! -f "$f.rc" ]; then
     [ -z "${AC_COUNT_FILE:-}" ] || echo "$line" >> "$AC_COUNT_FILE"
-    bash "$@" >"$f.out" 2>"$f.err"; echo "$?" >"$f.rc"
+    vac_run "$@" >"$f.out" 2>"$f.err"; echo "$?" >"$f.rc"
   fi
   VC_OUT="$(cat "$f.out")"; VC_ERR="$(cat "$f.err")"; VC_RC="$(cat "$f.rc")"
 }
@@ -183,6 +228,27 @@ echo "adversarial-citation: resolved subject = $(cd "$(dirname "$VALIDATOR")" &&
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd -P)/$(basename "$VALIDATOR")"
 echo
 
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome this fixture asserts --
+# Each is compared with the in-process vac_run on the same input: stdout, stderr and exit separately, byte for byte,
+# and each asserts its own outcome, so two runs that both printed nothing cannot read as equivalent.
+EQ="$MEMO/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: cannot create $EQ" >&2; exit 2; }
+eq_cell() { # eq_cell <cell-id> <want rc> <must-say on stdout> <args...>
+  local id="$1" want="$2" say="$3" s; shift 3; N=$((N + 1))
+  vac_run "$VALIDATOR" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+     && [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && grep -qF -- "$say" "$EQ/$id.cl.out"; then
+    printf '  ok   %-38s the program answers exit %s exactly as the in-process call does (stdout, stderr, exit)\n' "$id" "$want"
+  else
+    FAIL=$((FAIL + 1))
+    printf '  FAIL %-38s in-process rc=%s / program rc=%s want %s, saying "%s"\n' "$id" "$(cat "$EQ/$id.ip.rc")" "$(cat "$EQ/$id.cl.rc")" "$want" "$say"
+    head -3 "$EQ/$id.ip.out" "$EQ/$id.cl.out" "$EQ/$id.ip.err" "$EQ/$id.cl.err" | sed 's/^/       | /'
+  fi
+}
+eq_cell cli-pass  0 "PASS: the cycle converged" --series "$ROOT/clean/s-adversarial-p" --transcript "$ROOT/silent.jsonl"
+eq_cell cli-fail  1 "operator did not say this" --series "$ROOT/resolved/s-adversarial-p" --transcript "$ROOT/silent.jsonl"
+eq_cell cli-state 3 "DIVERGENT" --series "$ROOT/terminal/s-adversarial-p" --cycle-state --transcript "$ROOT/silent.jsonl"
+
 # (a) VACUOUS -----------------------------------------------------------------------------
 g clean 0 "no divergence: citation gate dormant" silent.jsonl
 
@@ -272,14 +338,14 @@ FL_CELLS=""
 fl_cells() {  # $1 validator -> FL_CELLS
   local v="$1" c="" n o rc s
   for n in padded blank; do
-    o="$(bash "$v" --series "$ROOT/resolved-$n/s-adversarial-p" --transcript-dir "$ROOT/dir-yes" 2>&1)"; rc=$?
+    o="$(vac_run "$v" --series "$ROOT/resolved-$n/s-adversarial-p" --transcript-dir "$ROOT/dir-yes" 2>&1)"; rc=$?
     case "$n" in padded) s="(3 chars once whitespace is collapsed)" ;; *) s="(0 chars once whitespace is collapsed)" ;; esac
     if [ "$rc" -eq 1 ] && grep -qF -- "$s" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
   done
-  bash "$v" --series "$ROOT/resolved-whole/s-adversarial-p" --transcript-dir "$ROOT/dir-yes" >/dev/null 2>&1; rc=$?
+  vac_run "$v" --series "$ROOT/resolved-whole/s-adversarial-p" --transcript-dir "$ROOT/dir-yes" >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 0 ]; then c="${c}1"; else c="${c}0"; fi
   for n in padded:DIVERGENT:3 blank:DIVERGENT:3 whole:RESOLVED:0; do
-    o="$(bash "$v" --series "$ROOT/terminal-${n%%:*}/s-adversarial-p" --cycle-state --transcript-dir "$ROOT/dir-yes" 2>/dev/null)"; rc=$?
+    o="$(vac_run "$v" --series "$ROOT/terminal-${n%%:*}/s-adversarial-p" --cycle-state --transcript-dir "$ROOT/dir-yes" 2>/dev/null)"; rc=$?
     s="$(printf '%s' "$o" | cut -f1)"
     n="${n#*:}"
     if [ "$s" = "${n%%:*}" ] && [ "$rc" -eq "${n#*:}" ]; then c="${c}1"; else c="${c}0"; fi

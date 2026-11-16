@@ -1,3 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge own J2 output), once.
-365 *
-14 core/scripts/validate-adversarial-convergence.sh
+351 *
+0 core/scripts/validate-adversarial-convergence.sh
+# Re-measured (BL-878, W12-18) by one counted run: the validator runs in process through vac_run (inproc row); it starts only in its cli cells; this shard holds none.
+14 inproc:core/scripts/validate-adversarial-convergence.sh

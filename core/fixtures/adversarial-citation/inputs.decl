@@ -8,3 +8,6 @@ core/scripts/partition-document.sh
 core/scripts/partition-subject.sh
 core/scripts/merge-adversarial-shards.sh
 !core/scripts/validate-adversarial-convergence.sh
+# lib/mutant.sh defines fx_inproc, which counts each in-process call of the validator.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

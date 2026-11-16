@@ -87,7 +87,7 @@ bash() {
         UB_P=""; case "$UB_F" in "$DVAL") UB_P="$DVAL" ;; "$CONV") UB_P="$CONV" ;; esac
         case "$UB_F" in
           */validate-artifact-derivations.sh) [ -z "$UB_P" ] || fx_inproc "$UB_P"; ub_scrub "" ""; . "$UB_F"; vad_cli "$@" ;; # the loadable validator: sourcing runs nothing
-          *) [ -z "$UB_P" ] || fx_inproc "$UB_P"; ub_scrub "" ""; . "$UB_F" "$@" ;;
+          *) [ -z "$UB_P" ] || fx_inproc "$UB_P"; ub_scrub "" ""; ( . "$UB_F"; vac_main "$@" ) ;; # wrapped: sourcing defines vac_main only
         esac ;;
     esac
   )

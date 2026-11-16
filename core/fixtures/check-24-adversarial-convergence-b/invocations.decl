@@ -2,5 +2,7 @@
 # Re-measured (two agreeing counted runs) when receipt-bl814 gained nestfence, findp2 and keyless and J3-14/J3-15 were added (BL-958),
 # and again when it gained ordk10, ordpad and ordctl and J3-16 was added (BL-962),
 # and again when it gained unshrep and J3-17 was added, and unshrep joined J3-2's and J3-11's deciding worlds (BL-958, unsharded pass).
-302 *
-98 core/scripts/validate-adversarial-convergence.sh
+245 *
+41 core/scripts/validate-adversarial-convergence.sh
+# Re-measured (BL-878, W12-18) by one counted run: the validator runs in process through vac_run (inproc row); it starts only in its cli cells and in the BL-733/BL-814 receipts, which stay untagged (allowlisted, C3/NP).
+74 inproc:core/scripts/validate-adversarial-convergence.sh
