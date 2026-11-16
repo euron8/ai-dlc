@@ -3149,6 +3149,27 @@ Width 12, re-derived on r1135 (0.1135.0's first push, 12-way, 156 units, every u
 - A `VS-IDENTITY 1` row pins the new span sha in both hooks. Every parse row is unchanged, so no stored entry changes meaning.
 - Still owed: the other per-fixture forks of the parse (4 to 6 awk/cat per declared fixture) and of `readset_verdicts` (per run candidate), and the consumer layout's `bash <mapper> --map` start per shipping fixture with a `core/` path. The `select` figure on the push that delivers this cut is its measurement.
 
+**PARTIAL (v0.1157.0) — (c)'s three named fork sites are cut; `select`'s unattributed fixed cost and the per-candidate readers inside READSET_VS stay owed.**
+
+(c), both hooks, identical lines (I66):
+- `readset_decl_parse` (READSET_KEYROWS span). One awk per declaration now writes the rows, the unmapped five-field rows, the mapper input and a flags file (a `core/` line; an F row spelled `/*/`), which builtins read back. The mapper's count check moved into the join awk's END. A builtin loop prints the rows and then the absent-path refusals, in the old order, so no `cat` remains. An optional 7th argument names a PREMAP (`<mapper input>\t<mapper output>` rows). A line the premap lacks, or no premap, starts the mapper for that fixture alone. hermetic-run.sh and invalidation-guard.sh pass 6 arguments, so their path is unchanged.
+- `readset_declared` (consumer layout). It builds the premap from every listed fixture's declared lines, spelled as the parse sends them, through ONE mapper start. It does so only when two or more listed fixtures carry a `core/` line, the only case in which a start is saved: a list with one such fixture still starts the mapper once, and a list with none starts it zero times, as before. A mapper refusal or a count mismatch leaves no premap, and each fixture then starts the mapper alone, so its own `maprefuse` or `mapcount` row stands.
+- `readset_verdicts`. One awk filters the candidates: a declared fixture with no `.dunres` row and no `.qfx` row, in `.kdec` order, with an unopenable `.qfx` read as empty. That replaces a `grep -qxF` and two awks per candidate.
+- Exec counts, from a PATH shim over the probe runs below (no timing run):
+  - The parse, distribution layout, 290 declared fixtures: 1249 → 379.
+  - The parse, consumer layout, 218 shipping fixtures in a tree built by `scripts/install.sh`, on the hook's premap path (P1 at 9da8a081b's base): 1974 → 667. That total includes the mapper starts, 219 → 2 (the premap and one `spans.decl`).
+  - `readset_verdicts`: 3 fewer execs per candidate. On r1146 that is about 215 candidates (dist plus `@consumer`), and on r1148 about 19.
+- Proof, by hand probes, old against new on one base:
+  - P1: the parse over every declared fixture, both layouts, byte-identical (6 arguments and premap). Two rows of the distribution run differ only against the edited tree: they are `spans.decl` hashes of `.githooks/pre-push#FIXTURE_POOL`, which encloses the edited span. Against a clean tree the run is identical.
+  - P2: a 29-case matrix (nomap, maprefuse, mapcount, abs, `..`, plusbang, plusdir, glob, glob matching nothing, a `+` row, CRLF, absent file and directory, no `core/` line, a premap miss), both layouts, identical with and without the premap. Mapper starts 8 → 2; the 2 are the refusal and the premap miss falling back.
+  - P4: `readset_declared`'s `.dparse`, `.dfx`, `.dunres` and `.dtools`, identical in the distribution, the installed tree, and an installed tree carrying one fixture the mapper refuses (the batch fails, every fixture falls back, its `maprefuse` row stands). In trimmed installed trees, mapper starts are 0 → 0 with no `core/` fixture, 1 → 1 with one, and 2 → 1 with two.
+  - P3: `.vs.want` identical, counted and uncounted, with `.qfx` absent and present.
+  - Mutants, all killed: no fallback on a premap miss (refuse and pmiss read `mapcount`); no mapcount check (rows instead of `mapcount`); no premap count check, under a mapper that drops a line (wrong rows instead of `mapcount`); `.qfx` ignored (`inqfx` reaches `.vs.want`).
+- A `VS-IDENTITY 1` row pins the new READSET_* span sha in both hooks. Every parse row is byte-identical, so no stored entry changes meaning.
+- Still owed:
+  - `select`'s fixed cost outside these sites. On r1148 `select` read 43 s with about 19 candidates. The uncounted candidates: `readset_manifest`, `readset_decl_keys`, `readset_decl_tool_hashes`, `readset_tools`, `rec_import` and `readset_local_validate`.
+  - The per-candidate readers inside READSET_VS: `readset_key_rows`, `readset_vs_inproc` and `readset_vs_judge`. They also build the runner's store entries.
+
 verify: manual
 
 ## BL-1133 — the push runs every selected `<fx>@consumer` twin, though a static join would make the one catch the twins have on record

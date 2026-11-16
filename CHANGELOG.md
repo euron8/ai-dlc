@@ -19,6 +19,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1157.0] - 2026-11-16
+
+### BL-1124 (c): the push's select phase drops its per-fixture parse forks and mapper starts
+
+`readset_decl_parse` (the READSET_KEYROWS span) writes its rows, mapper input and flags in one awk per declaration, and takes an optional premap. `readset_declared` maps a consumer-layout list through one `core-paths.sh --map` start when two or more listed fixtures carry a `core/` line. `readset_verdicts` filters every candidate in one awk. The edits are byte-identical in `.githooks/pre-push` and `core/git-hooks/pre-push`. Over the declared fixtures, the parse's execs drop from 1249 to 379 in the distribution layout and from 1974 to 667 in the consumer layout on the hook's premap path (P1 at 9da8a081b's base), a total that includes the mapper starts' drop from 219 to 2. The output is byte-identical, and a `VS-IDENTITY 1` row pins the new span sha, so no stored verdict changes meaning.
+
 ## [0.1156.0] - 2026-11-16
 
 ### BL-1151: a narrowed inputs.decl runs once in each layout
