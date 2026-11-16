@@ -491,25 +491,25 @@ step "stray party-mode provenance (distribution tree)" \
 step "no dead doc refs (core/ cites no unshipped dev-repo doc)" \
   bash scripts/validate-no-dead-doc-refs.sh
 
-# 1c. Three things name a release -- the commit subject, VERSION, and the CHANGELOG's
-#     top heading -- and until v0.125.0 nothing joined them. v0.124.1 was committed
-#     with a subject one patch ahead of both. Push is the right seam: it is the last
-#     point before the version becomes a claim other people read.
-#     The push's own remote and ref lines go in as arguments, never the environment: the
-#     keyed step hashes its argv, so a skip can never reuse a verdict taken for other refs.
-#     ONLY to a validator whose parser takes them: this hook judges the PUSHING tree, and a
-#     tree cut before they existed refuses them as an unknown argument. Such a tree gets the
-#     bare call, which is the origin/main range it was built against.
-#     ONE column-0 step line (the pre-suite step parser reads only those): the choice lives in rv_triple, and the
-#     remote and ref lines still reach the step's argv as its arguments.
-rv_triple() { # <push remote> <push ref lines>
-  if grep -qF -e '--push-refs)' scripts/validate-release-version.sh 2>/dev/null; then
+# 1c. Three things name a release -- the commit subject, VERSION, and the CHANGELOG's top heading;
+#     until v0.125.0 nothing joined them (v0.124.1 carried a subject one patch ahead). Push is the
+#     seam: the last point before the version becomes a claim other people read.
+#     The push's remote and ref lines go in as arguments, never the environment (the keyed step hashes
+#     its argv), and only to a validator whose parser takes them; an older tree gets the bare call.
+#     ONE column-0 step line (the pre-suite step parser reads only those). A run with NO ref lines (the
+#     pregate's prefix) of a release STACKED on an unlanded one ranges from AI_DLC_PREGATE_RV_BASE, the
+#     base scripts/pregate-self-check.sh sets (BL-1156); a push always has ref lines and ignores it.
+RV_BASE="${AI_DLC_PREGATE_RV_BASE:-}"; unset AI_DLC_PREGATE_RV_BASE
+rv_triple() { # <push remote> <push ref lines> <pregate stacked base>
+  if [ -z "$2" ] && [ -n "$3" ]; then
+    bash scripts/validate-release-version.sh --range "$3..HEAD"
+  elif grep -qF -e '--push-refs)' scripts/validate-release-version.sh 2>/dev/null; then
     bash scripts/validate-release-version.sh --push-remote "$1" --push-refs "$2"
   else
     bash scripts/validate-release-version.sh
   fi
 }
-step "release version triple (subject == VERSION == CHANGELOG heading)" rv_triple "$PUSH_REMOTE" "$PUSH_LINES"
+step "release version triple (subject == VERSION == CHANGELOG heading)" rv_triple "$PUSH_REMOTE" "$PUSH_LINES" "$RV_BASE"
 
 # 1d. A plan in docs/plans/ is a handoff to a session that has never seen this one. Push
 #     is the seam: it is the last point before the file becomes the thing someone else is
