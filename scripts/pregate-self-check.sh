@@ -301,9 +301,12 @@ pred_once() {
   fi
 }
 # THE SEED of one section's units, $1/torun, through this tree's seed-verdict-store.sh into the counted store a push
-# reads: one rc line per unit (a unit with none is a refusal), and any red is a finding under $4.
+# reads: one rc line per unit (a unit with none is a refusal), and any red is a finding under $4. The one exception
+# is the seeder's own non-failure line for an @consumer unit the selection no longer holds,
+# `<fx>@consumer not-selected (record current; nothing ran)`: it is printed as not-selected and counted neither as
+# red nor as a run or recorded pass.
 seed_set() { # <section dir> <jobs> <unit count> <finding name>
-  local d="$1" j="$2" k="$3" s_rc s_red="" s_rec=0 n r
+  local d="$1" j="$2" k="$3" s_rc s_red="" s_rec=0 s_ns=0 n r
   arm_start
   if [ "$k" -gt 0 ]; then
     bash "$SEED" --keep "$d/keep" --jobs "$j" ${d_dok:+"$d_dok"} $(cat "$d/torun") > "$d/seed" 2>&1
@@ -314,6 +317,14 @@ seed_set() { # <section dir> <jobs> <unit count> <finding name>
   arm_took
   while IFS= read -r n; do
     r="$(sed -n "s/^${n} rc=\([0-9][0-9]*\)\$/\1/p" "$d/seed")"
+    if [ -z "$r" ]; then
+      case "$n" in
+        *@consumer)
+          if grep -qxF "$n not-selected (record current; nothing ran)" "$d/seed"; then
+            printf '     %s not-selected (record current)\n' "$n"; s_ns=$((s_ns + 1)); continue
+          fi ;;
+      esac
+    fi
     [ -n "$r" ] || { printf '   cannot run: seed-verdict-store.sh (exit %s) gave %s no rc:\n' "$s_rc" "$n" >&2; tail -5 "$d/seed" | sed 's/^/     /' >&2; exit 2; }
     printf '     %s rc=%s\n' "$n" "$r"
     [ "$r" = 0 ] || s_red="$s_red $n"
@@ -324,7 +335,9 @@ seed_set() { # <section dir> <jobs> <unit count> <finding name>
     grep -vE '^[A-Za-z0-9._-]+ rc=[0-9]+$|^counted store: ' "$d/seed" | tail -20 | sed 's/^/     /'
     note_fail "$4"
   else
-    printf '   ok: %s fixture(s) run green; %s pass(es) recorded in the counted store (%s)\n' "$k" "$s_rec" "$(sed -n 's/^counted store: //p' "$d/seed")"
+    printf '   ok: %s fixture(s) run green; %s pass(es) recorded in the counted store (%s)' "$((k - s_ns))" "$s_rec" "$(sed -n 's/^counted store: //p' "$d/seed")"
+    [ "$s_ns" -eq 0 ] || printf '; %s not-selected (record current)' "$s_ns"
+    printf '\n'
   fi
 }
 

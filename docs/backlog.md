@@ -2564,6 +2564,12 @@ Folded from BL-836 (batch b248, operator ruling): BL-836's three remaining shape
 
 Still owed: a single enumerated or variable-built read removed ALONE (only the whole enumerated set is removed).
 
+**LANDED (vVERSION_PLACEHOLDER).** batch 257, W12-14: the variable-built half, and the glob-member half closed by operator ruling. NAMED now resolves a variable-built path: `r13_named_awk` remembers `V=<literal path>` (unquoted or quoted, no expansion, outside an open quote; any later non-literal assignment to V forgets it; the scope is the receipt or one expanded script, as for ASG), and resolves a later `$V/<literal>` or `${V}/<literal>` as a bare token, so such a read is NAMED and removed ALONE. A loop or glob member, or a computed path, stays ENUMERATED and removed together.
+- Probe (a scratch world whose driver guards its glob population with exit 9 and reads `F=w/d; grep -q x "$F/a.txt" || exit 1`), validator copy run `--r13-drive corpus --traced-removal`: at 99c662068 `0 UNGUARDED-READ`, R13-RC 0 (a.txt sits in `2 enumerated, removed together`, caught by the population guard); with this change `UNGUARDED-READ BL-1401 w/d/a.txt exit=1`, R13-RC 1, the same rows as the control world that names `w/d/a.txt` literally.
+- Fixture: world y reads `G=w/d; ... "$G/a.txt" || exit 9` then `F="w/d"; ... "${F}/b.txt" || exit 1`; cell `c-var-built` requires 4 named removals, 0 enumerated and the one row `UNGUARDED-READ BL-1401 w/d/b.txt exit=1`. Mutant (the `LITV` lookup replaced by `continue`): the fixture reads 27 passed, 1 failed, `c-var-built` alone (2 enumerated, 0 UNGUARDED-READ). World e reads `F=w; F=${NOPE:-w}; cat "$F/hidden.txt"`, so its read stays enumerated; mutant (the non-literal assignment no longer forgets): 26 passed, 2 failed, `c-pop-live` and `c-replay-pop` (3 named removals, 0 enumerated).
+- Live ledger: BL-878's NAMED closure by the shipping awk is the same 7 paths at base and tip (2 scanned), so its removal set and `DEFAULT_MAX_R13` (3) are unchanged.
+- The glob-member half. OPERATOR RULING (batch 257, relayed by the lead): a single glob member removed alone is NOT a finding; removing one member is a population change. A glob or loop member therefore stays ENUMERATED and is removed only together with the rest, as the `ENUMERATED(<n>)` removal already does. Nothing remains owed.
+
 verify: manual
 
 
@@ -3006,6 +3012,8 @@ verify: manual
 
 
 ## BL-1056 — fixtures have no written contract, so each is built bespoke and every builder rediscovers how the fixture system works
+
+**LANDED (vVERSION_PLACEHOLDER).** batch 257, W12-14. The last row is gone: backlog-receipt-traced-removal now reports through `core/fixtures/lib/report.sh` (sourced, guarded, before `lib/mutant.sh`; its own `ok`/`bad` and `FAILS` are gone; it ends `report_end "$NAME" 28`), declares `core/fixtures/lib/report.sh` in its `inputs.decl`, and its `:report` row is dropped. `fixture-contract-allowlist.txt` is its header alone: `validate-fixture-hygiene.sh --derive-h10` prints 0 rows on this tree and 1 (this row) at c9c7c370a. The Receipt (no row left) is met. The normalised ok/FAIL line set is identical at base and tip apart from the one new cell (`c-var-built`, BL-899) and the cells line's count (21 to 22). World adoption, the unbound duty carried by the PARTIAL lines below, is refiled as BL-1153.
 
 **PARTIAL (v0.1145.0; batch 257, W9-03).** apply-restamp-worklist, ledger-reverify, plan-rotate, readset-skip and reconcile-emit-report now report through `core/fixtures/lib/report.sh`, and their 5 `:report` rows are dropped from `fixture-contract-allowlist.txt`. The file is its header plus `validate-fixture-hygiene.sh --derive-h10` on the edited tree.
 - apply-restamp-worklist and readset-skip: `asserts` is `oks + fails`. readset-skip's arm-count floor is a `bad`. Each ends with `report_end "$NAME"`, and apply-restamp-worklist's subject-absent exit is `report_end` too.
@@ -3485,3 +3493,28 @@ Provenance: batch 257, wave 12 (W12-03, ai-dlc-b2), carried from BL-982's owed i
 
 verify: manual
 
+
+## BL-1153 — world adoption is bound by no arm: fixtures build their git worlds by hand instead of through lib/world.sh
+
+**DEFECT.** OPEN. Filed 2026-11-16. Owner: `scripts/validate-fixture-hygiene.sh` (a new arm) and `core/fixtures/*/run.sh`.
+
+`.claude/rules/fixture-contract.md` C8 names `core/fixtures/lib/world.sh` (`world_git`, `world_repo`, `world_commit`, `world_install`) as the entry point for a fixture's git world, but no arm requires a fixture to use it: BL-1056's PARTIAL lines (v0.1124.0, v0.1138.0, v0.1145.0) counted 66 fixtures running `git init` by hand, and carried "World adoption is still not bound by an arm" as a remainder. BL-1056 closed on its Receipt (no `fixture-contract-allowlist.txt` row left), and this duty moves here.
+
+Fix: an arm in `scripts/validate-fixture-hygiene.sh`, down-only over an allowlist like H10, that refuses a run.sh building a git world by hand. Its false-positive set is unmeasured: measure and enumerate it before shipping the arm.
+
+Provenance: batch 257, wave 12, refiled from BL-1056 by ai-dlc-c2 (W12-14); id allocated by the lead.
+
+verify: manual
+
+## BL-1157 — pregate-self-check refuses the seeder's own non-failure line for a not-selected @consumer unit
+
+**LANDED (vVERSION_PLACEHOLDER).** batch 257, W12-14 (ai-dlc-c2), filed and closed in one release. `seed_set` in `scripts/pregate-self-check.sh` now accepts, for an `@consumer` unit only, the exact line `<fx>@consumer not-selected (record current; nothing ran)`, prints it as `<fx>@consumer not-selected (record current)`, and counts it neither as red nor as a run or recorded pass; the section's `ok:` line names the not-selected count. Every other unit with no `rc=` line still refuses with exit 2.
+- Probe (`seed_set` extracted from the file and driven over a stubbed seeder, five cases): at 266a772bd every case exits 2, the not-selected one included; on this tree the not-selected unit and the mix `p rc=0` plus a not-selected unit exit 0, a red plus a not-selected unit is a finding on the red alone, and an `@consumer` line with no rc and no not-selected text, and a plain unit printing the not-selected text, both still exit 2. The base line is the mutant: it refuses the not-selected case.
+
+**DEFECT.** Filed 2026-11-16. Owner: `scripts/pregate-self-check.sh` `seed_set`.
+
+`scripts/seed-verdict-store.sh` (its header, and the census join beside `census-consumer-layout.sh --only`) prints a unit the census no longer selects as `<fx>@consumer not-selected (record current; nothing ran)`, never an `rc=` line, and states that this is not a failure. `seed_set` read every unit's verdict from an `rc=` line and refused, exit 2, on a unit with none. A pregate whose section f set holds such a unit therefore refused before it could record green. Observed on 266a772bd (W12-14 stacked on 304a77ff9): section f selected `hook-registration-join@consumer` by `NAME:validate-enforcement-map.sh` and printed `cannot run: seed-verdict-store.sh (exit 0) gave hook-registration-join@consumer no rc:`.
+
+Provenance: batch 257, wave 12, found by ai-dlc-c2 (W12-14) on its pregate; id allocated by the lead.
+
+verify: manual

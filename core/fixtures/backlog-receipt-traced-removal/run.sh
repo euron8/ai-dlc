@@ -48,9 +48,8 @@ for _t in git awk sed find touch xargs sort cmp mktemp; do command -v "$_t" >/de
 echo "HERMETIC-CONSUMED scripts/validate-backlog-receipts.sh"
 echo "HERMETIC-CONSUMED scripts/backlog-rotate.sh"
 
-FAILS=0
-ok()  { echo "ok    $*"; }
-bad() { echo "FAIL  $*"; FAILS=$(( FAILS + 1 )); }
+# shellcheck source=/dev/null
+. "$FX/../lib/report.sh" || broken "cannot source lib/report.sh"
 # shellcheck source=/dev/null
 . "$FX/../lib/mutant.sh" || broken "cannot source lib/mutant.sh"
 
@@ -71,14 +70,16 @@ mkdist() {
 }
 # mkworld <dir> g|u|o|x|e -- a one-receipt repository: g reads a guarded file, u an unguarded one, o 33 named files,
 # x has its driver deleted on HEAD (the seed commit recorded in .git/fx-base), e reads one enumerated file it guards
-# and names one unread file, v reads two enumerated files by a glob it does not guard.
+# (through `F=w; F=${NOPE:-w}`: the non-literal reassignment forgets the literal, so `$F/hidden.txt` stays
+# enumerated) and names one unread file, v reads two enumerated files by a glob it does not guard, y reads two
+# VARIABLE-BUILT files (`V=w/d` then `$V/<file>`) behind a population guard, the first guarded, the second not.
 mkworld() {
   local d="$1" l i
   mkdir -p "$d/docs" "$d/w" || return 1
   case "$2" in
     g) printf 'grep -q GUARDTOKEN w/data.txt || exit 9\n' > "$d/w/drv.sh"; printf 'GUARDTOKEN\n' > "$d/w/data.txt" ;;
     u) printf 'grep -q x w/data.txt || exit 1\n' > "$d/w/drv.sh"; printf 'x\n' > "$d/w/data.txt" ;;
-    e) printf '%s\n' 'F=w' 'cat "$F/hidden.txt" > /dev/null || exit 9' 'if false; then cat w/nev.txt; fi' \
+    e) printf '%s\n' 'F=w; F=${NOPE:-w}; cat "$F/hidden.txt" > /dev/null || exit 9' 'if false; then cat w/nev.txt; fi' \
          'grep -q GUARDTOKEN w/data.txt || exit 9' > "$d/w/drv.sh"
        printf 'GUARDTOKEN\n' > "$d/w/data.txt"; printf 'h\n' > "$d/w/hidden.txt"; printf 'n\n' > "$d/w/nev.txt" ;;
     o) l="cat"; i=1
@@ -86,6 +87,11 @@ mkworld() {
        printf '%s > /dev/null\n' "$l" > "$d/w/drv.sh" ;;
     v) mkdir -p "$d/w/d" || return 1
        printf '%s\n' 'cat w/d/*.txt > /dev/null 2>&1' 'grep -q GUARDTOKEN w/data.txt || exit 9' > "$d/w/drv.sh"
+       printf 'GUARDTOKEN\n' > "$d/w/data.txt"; printf 'a\n' > "$d/w/d/a.txt"; printf 'b\n' > "$d/w/d/b.txt" ;;
+    y) mkdir -p "$d/w/d" || return 1
+       printf '%s\n' 'cat w/d/*.txt > /dev/null 2>&1 || exit 9' 'n=$(ls w/d | wc -l); [ "$n" -gt 0 ] || exit 9' \
+         'G=w/d; grep -q a "$G/a.txt" || exit 9' 'F="w/d"; grep -q b "${F}/b.txt" || exit 1' \
+         'grep -q GUARDTOKEN w/data.txt || exit 9' > "$d/w/drv.sh"
        printf 'GUARDTOKEN\n' > "$d/w/data.txt"; printf 'a\n' > "$d/w/d/a.txt"; printf 'b\n' > "$d/w/d/b.txt" ;;
     x) printf 'exit 0\n' > "$d/w/drv.sh" ;;
     m) printf 'grep -q GUARDTOKEN w/gd.txt || exit 9\n' > "$d/w/g.sh"; printf 'GUARDTOKEN\n' > "$d/w/gd.txt"
@@ -109,7 +115,7 @@ mkworld() {
 }
 mkdist "$TMP/dist" "$R/scripts/validate-backlog-receipts.sh" || broken "the validator copy did not build"
 D="$TMP/dist/scripts/validate-backlog-receipts.sh"
-for _k in g u o x e m n v; do mkworld "$TMP/tpl-$_k" "$_k" || broken "world $_k did not build"; done
+for _k in g u o x e m n v y; do mkworld "$TMP/tpl-$_k" "$_k" || broken "world $_k did not build"; done
 # world / store are called inside $( ), so a counter would be lost to the subshell: each takes a fresh mktemp dir.
 world() { local d; d="$(mktemp -d "$TMP/w.XXXXXX")" && cp -R "$TMP/tpl-$1/." "$d/" || broken "world $1 did not copy"; printf '%s' "$d"; }
 store() { local d; d="$(mktemp -d "$TMP/s.XXXXXX")" || broken "a record store did not create"; printf '%s' "$d"; }
@@ -357,6 +363,17 @@ cli c-enum-unguarded "$D" "$C/enumu" "$(store)" - --r13-drive corpus --traced-re
 if cell_c_enum_unguarded "$C/enumu"; then ok "c-enum-unguarded -- a glob that answers 0 with every enumerated file gone is one UNGUARDED-READ ENUMERATED(2) row"
 else bad "c-enum-unguarded -- $(grep -E 'R13-POPULATION|R13-RC|UNGUARDED|BROKEN' "$C/enumu" | tr '\n' ' ')"; fi
 
+# c-var-built: world y's two variable-built reads are NAMED (`G=w/d` .. `$G/a.txt`, `F="w/d"` .. `${F}/b.txt`), so
+# each is removed ALONE: a.txt's guard reads exit 9, b.txt's missing guard is one UNGUARDED-READ row. Nothing is
+# enumerated, so the population guard that catches a together-removal cannot hide b.txt.
+YROW="$(printf 'UNGUARDED-READ\tBL-1401\tw/d/b.txt\texit=1')"
+cell_c_var_built() { has "$1" "$YROW" && has "$1" ", 4 named removals (0 replayed), 0 named-unread (0 replayed), 0 enumerated, removed together (0 replayed), " \
+  && has "$1" "removals: 2 exit 9, 3 in the cannot-measure set, 1 UNGUARDED-READ (ceiling 1)" && has "$1" "R13-RC 0"; }
+WY="$(world y)"; wcheck "$WY"
+cli c-var-built "$D" "$C/varb" "$(store)" - --r13-drive corpus --traced-removal --max-unguarded 1 "$WY/docs/backlog.md"
+if cell_c_var_built "$C/varb"; then ok "c-var-built -- two variable-built reads were removed alone: the guarded one read exit 9, the unguarded one is UNGUARDED-READ w/d/b.txt"
+else bad "c-var-built -- $(grep -E 'R13-POPULATION|R13-RC|UNGUARDED|BROKEN' "$C/varb" | tr '\n' ' ')"; fi
+
 # within_run <copy> <prefix> <id-prefix> -- world u, one store, three starts: write at ceiling 1, replay at 1, replay at 0.
 within_run() {
   local s w; s="$(store)"; w="$(world u)"; wcheck "$w"
@@ -416,6 +433,4 @@ if cmp -s "$TMP/cells.used.s" "$TMP/cells.decl.s"; then
   ok "cells -- the $(grep -c . "$TMP/cells.used.s") tagged starts are exactly the cli cells of cells.decl, each once"
 else bad "cells -- tagged and declared differ: $(diff "$TMP/cells.decl.s" "$TMP/cells.used.s" | grep '^[<>]' | tr '\n' ' ')"; fi
 
-if [ "$FAILS" -ne 0 ]; then echo "$NAME: $FAILS failure(s)"; exit 1; fi
-echo "PASS: $NAME"
-exit 0
+report_end "$NAME" 28

@@ -25,4 +25,5 @@ cli scripts/validate-backlog-receipts.sh c-m1-e2e
 cli scripts/validate-backlog-receipts.sh c-empty-stale
 cli scripts/validate-backlog-receipts.sh c-nothing-judged
 cli scripts/validate-backlog-receipts.sh c-enum-unguarded
+cli scripts/validate-backlog-receipts.sh c-var-built
 nested scripts/validate-backlog-receipts.sh scripts/validate-backlog-receipts.sh why=worker re-starts of --score-one, --closed-one and --r13-one
