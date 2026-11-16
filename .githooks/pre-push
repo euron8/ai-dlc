@@ -2302,7 +2302,7 @@ readset_tools() { # <out>
 # `mapper ` or `git.decl range refused `, whose cause is not a tool), so the hermetic runner reports the refusal (exit 2). The record format is unchanged (`#format k1`).
 readset_declared() { # <list> <out>
   local list="$1" out="$2" d b p lay mp="" xp xpd
-  : > "$out/.dparse"; : > "$out/.dfx"; : > "$out/.dunres"; : > "$out/.dkeys"; : > "$out/.dtools"; : > "$out/.dfull"
+  : > "$out/.dparse"; : > "$out/.dfx"; : > "$out/.dunres"; : > "$out/.dkeys"; : > "$out/.dtools"
   lay=cons; [ -d core/scripts ] && lay=dist
   for p in scripts/ai-dlc/core-paths.sh core/scripts/core-paths.sh; do [ -f "$p" ] && { mp="$p"; break; }; done
   xp="$READSET_TOOL_XP"; [ -n "$xp" ] || xp="$(readset_git_exec_path)"; xpd="$xp:$READSET_TOOL_DIRS"
@@ -2331,12 +2331,6 @@ readset_declared() { # <list> <out>
   awk -F'\t' '$2 == "T" { print $1 "\t" $3 }' "$out/.dparse" > "$out/.dtools"
   readset_decl_tool_hashes "$out/.dparse" "$out/.tools"
   HR_ROOT=. readset_decl_keys "$out/.now" "$out/.ls.now" "$out/.dparse" "$out/.tools" "$FXROOT" > "$out/.dkeys"
-  # `.dfull`: the declared fixtures EVERY declared file and directory of which has a key row. Only these may drop their
-  # own inputs.decl row when compared (readset_keys, readset_verdicts): a newly declared path with no row (an excluded
-  # top or a git-ignored file, not `+`) widens the sandbox without adding a row, so its decl row must still move.
-  awk -F'\t' 'NR == FNR { K[$1 SUBSEP $2] = 1; next } $2 == "N" { n[$1] = 1 }
-    ($2 == "F" && !(($1 SUBSEP $3) in K)) || ($2 == "D" && !(($1 SUBSEP $3 "/") in K)) { bad[$1] = 1 }
-    END { for (f in n) if (!(f in bad)) print f }' "$out/.dkeys" "$out/.dparse" | LC_ALL=C sort > "$out/.dfull"
 }
 
 # THE RECORD, `$KEYS_DIR/<fx>.key`: `#format k1`, `#state ok|stale|seeded`, `#tools canonical`
@@ -2387,10 +2381,10 @@ readset_declared() { # <list> <out>
 # entry's name stays the sha256 of its digest input). Every reader takes the count from that last line, or `-` when
 # the entry has none: an entry written before the count was recorded is reused with its count unrecorded, never
 # re-run for it.
-# A STORED PASS COVERS THE CURRENT ROWS, IT NEED NOT EQUAL THEM (readset_verdicts). With the fixture's OWN inputs.decl
-# row dropped from both sides when every path it declares has a row (`.dfull`), an entry is reused when every current row is in it with the same value, its rows
-# under the fixture's own directory are exactly the current ones, and its `#inproc` and identity lines match: a
-# narrowed declaration reuses the pass taken under the wider one, a widened one adds a row and runs. An entry written
+# A STORED PASS COVERS THE CURRENT ROWS, IT NEED NOT EQUAL THEM (readset_verdicts). An entry is reused when every
+# current row is in it with the same value, its rows under the fixture's own directory are exactly the current ones,
+# and its `#inproc` and identity lines match. The own inputs.decl is an own-directory row, so a declaration changed in
+# any way, a narrowing included, runs once in each layout. An entry written
 # under the LEGACY identity (`#runner` the raw span sha, `#universe` one of READSET_VS_LEGACY_UNIVERSE, the runner
 # keyed whole-file) is read the same way with the runner row as it was then keyed, at today's whole-file hash.
 # hermetic-run.sh writes the same entry on a clean pass; it is the store's ONLY writer -- this hook reads the
@@ -2449,13 +2443,12 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
   { find "$store" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null
     [ -z "$vld" ] || find "$vld" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null; } | xargs -0 grep -l -x -F -f "$out/.vs.pat" -- 2>/dev/null > "$out/.vs.files"
   [ -s "$out/.vs.files" ] || return 0
-  tr '\n' '\000' < "$out/.vs.files" | VW="$out/.vs.want" VN="$out/.now" VF="$out/.dfull" VR="${ident%% *}" VU="${ident#* }" VL="$rraw" VLU="$READSET_VS_LEGACY_UNIVERSE" VJ="$vj" VLD="$vld" VLOK="$vlok" \
+  tr '\n' '\000' < "$out/.vs.files" | VW="$out/.vs.want" VN="$out/.now" VR="${ident%% *}" VU="${ident#* }" VL="$rraw" VLU="$READSET_VS_LEGACY_UNIVERSE" VJ="$vj" VLD="$vld" VLOK="$vlok" \
     xargs -0 awk -v root="$FXROOT" '
     function addw(md, f, r, o) { if ((md SUBSEP f SUBSEP r) in W) return; W[md SUBSEP f SUBSEP r] = 1; NW[md SUBSEP f]++; if (o) NO[md SUBSEP f]++ }
     function fin() { if (ok && fx != "" && md != "" && !(fx in HIT) && m == NW[md SUBSEP fx] && own == NO[md SUBSEP fx] + 0) { HIT[fx] = 1; print fx "\t" pn } }
     BEGIN {
       n = split(ENVIRON["VLU"], a, " "); for (j = 1; j <= n; j++) LU[a[j]] = 1
-      while ((getline l < ENVIRON["VF"]) > 0) DF[l] = 1
       if (ENVIRON["VLOK"] != "") while ((getline l < ENVIRON["VLOK"]) > 0) LOK[l] = 1
       vj = (ENVIRON["VJ"] != ""); vld = ENVIRON["VLD"]
       while ((getline l < ENVIRON["VN"]) > 0) { t = index(l, "\t"); p = substr(l, 1, t - 1)
@@ -2466,7 +2459,6 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
         if (kd == "J") { JR[f] = r; continue }
         t = index(r, "\t"); k = substr(r, 1, t - 1)
         if (k == root f "/run.sh") SV[f] = substr(r, t + 1)
-        if ((f in DF) && k == root f "/inputs.decl") continue
         o = (index(k, root f "/") == 1)
         addw("n", f, r, o)
         if (k ~ /#HR_(SANDBOX|EXIT)$/) { sub(/#HR_[A-Z]+$/, "", k); if (!(k in NOW)) continue; r = k "\t" NOW[k] }
@@ -2484,7 +2476,6 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
     FNR > 6 && /^#pending (0|[1-9][0-9]*)$/ { pn = substr($0, 10); next }
     !ok { next }
     { t = index($0, "\t"); k = substr($0, 1, t - 1); row = $0
-      if ((fx in DF) && k == root fx "/inputs.decl") next
       if (k == root fx "/run.sh" && (fx in SV) && (k in RAW) && substr($0, t + 1) == RAW[k]) row = k "\t" SV[fx]
       if ((md SUBSEP fx SUBSEP row) in W) { m++; if (index(k, root fx "/") == 1) own++ }
       else if (index(k, root fx "/") == 1) ok = 0 }
@@ -2543,7 +2534,7 @@ readset_keys() { # <list> <out>
   : > "$out/.khdr"; : > "$out/.kout"; : > "$out/.kpn"
   KPN="$out/.kpn" KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
   KM="$out/.mapped.all" KLOC="$out/.local.valid" KC="$out/.krecs" KF="$out/.kl" KH="$out/.khdr" KO="$out/.kout" \
-  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" KDL="$out/.dfull" KRL="$READSET_RUNNER_LEGACY" KRC="$READSET_RUNNER_CARRY" awk -v seed="$seed" -v root="$FXROOT" '
+  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" KRL="$READSET_RUNNER_LEGACY" KRC="$READSET_RUNNER_CARRY" awk -v seed="$seed" -v root="$FXROOT" '
     function rd(file, arr,   l, t) { while ((getline l < file) > 0) { t = index(l, "\t"); arr[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     function kids(file, set,   l, t, p, i) { while ((getline l < file) > 0) { t = index(l, "\t"); p = (t ? substr(l, 1, t - 1) : l)
         while ((i = match(p, /\/[^\/]*$/)) > 0) { set[substr(p, 1, i - 1) SUBSEP substr(p, i + 1)] = 1; p = substr(p, 1, i - 1) } } }
@@ -2600,7 +2591,6 @@ readset_keys() { # <list> <out>
         if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1) OWN[substr(r, 1, i - 1)] = OWN[substr(r, 1, i - 1)] "\n" p } }
       while ((getline l < ENVIRON["KM"]) > 0) MAPPED[l] = 1
       while ((getline l < ENVIRON["KDF"]) > 0) DECL[l] = 1
-      while ((getline l < ENVIRON["KDL"]) > 0) DFULL[l] = 1
       while ((getline l < ENVIRON["KDK"]) > 0) { split(l, a, "\t"); DK[a[1]] = DK[a[1]] "\n" a[2]; DV[a[1] SUBSEP a[2]] = a[3] }
       while ((getline l < ENVIRON["KDU"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); if (!(f in UN)) UN[f] = substr(l, t + 1) }
       while ((getline l < ENVIRON["KQ"]) > 0) { t = index(l, "\t"); QF[substr(l, 1, t - 1)] = substr(l, t + 1) }
@@ -2638,17 +2628,17 @@ readset_keys() { # <list> <out>
         # A RECORD UNDER A CARRIED RUNNER SPAN (READSET_RUNNER_CARRY): its old HR_SANDBOX row reads as the current one.
         if (has && (f in DECL)) for (k in K) if (k ~ /#HR_SANDBOX$/ && (k in R) && ((R[k] SUBSEP cv(f, k)) in RCY)) { R[k] = cv(f, k); lg = 1 }
         # A DECLARED FIXTURE IS COMPARED ON THE ROWS IT HAS NOW: a recorded row it no longer keys is ignored, except under
-        # its own directory, where a recorded file now absent runs it; its own inputs.decl row is dropped when every path
-        # it declares has a row (`.dfull`: a narrowed declaration skips, a widened one gains a row and runs).
+        # its own directory, where a recorded file now absent runs it. Its own inputs.decl is one of those files, so ANY edit
+        # to the declaration, a narrowing included, runs the fixture once in each layout.
         if (has) {
-          for (k in R) { if ((f in DFULL) && k == root f "/inputs.decl") continue
+          for (k in R) {
             if ((f in DECL) && !(k in K) && index(k, root f "/") != 1) continue
             if (k ~ /\/$/) rl = 1
             if (cv(f, k) == R[k]) continue
             if (substr(k, 1, 1) == "/") { if (!mig) tch = 1; continue }
             if (k == root && sibs_only(k)) { SB = 1; continue }
             if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else fch = 1 }
-          for (k in K) if (!(k in R) && !((f in DFULL) && k == root f "/inputs.decl")) { if (substr(k, 1, 1) == "/") { if (!mig) tch = 1 } else if (first == "" || k < first) first = k } }
+          for (k in K) if (!(k in R)) { if (substr(k, 1, 1) == "/") { if (!mig) tch = 1 } else if (first == "" || k < first) first = k } }
         run = 1; why = ""; c = ""
         if (!has) { why = "unrecorded"; c = "u" }
         else if (st == "stale" && !(f in LOC) && !((f in DECL) && RK[f] != "")) { why = "stale"; c = "s" }

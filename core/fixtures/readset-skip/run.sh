@@ -4582,6 +4582,8 @@ fi
 #          never executed -- this world only decides). Without that row it reads skip.
 #   rout   the same, but a code line added OUTSIDE that span and before the exit mapping (the HR_EXIT row) -> skip:
 #          the key carries the span and the exit mapping, never the whole runner
+#   dnar   the same, but decl's inputs.decl NARROWED from src/a.sh + src/b.sh to src/a.sh, every path still keyed ->
+#          run, changed <root>decl/inputs.decl: a narrowing runs once (dsame is its skip twin on the same record)
 #   dempty the declared fixture's stale record holds NO key rows        -> run (a missing stored key is changed)
 #   ctl    UNDECLARED alpha, record stale, nothing moved                -> run, reason stale (the near-miss)
 #   beta   undeclared and ok in the same invocation                     -> skip (proves the driver decided)
@@ -4596,7 +4598,7 @@ ckd_dec() { # <pool> <t> <tag> -> the decision dir $t.dd.<tag>
 ckd_cell() { awk -F'\t' -v f="$2" '$1 == f && ($2 == "run" || $2 == "skip") { printf "%s:%s:%s", $2, $4, $5 }' "$1/.kdec" 2>/dev/null; }
 ckd_world() { local p="$1" x="$2" t="$3" k kd
   ck_seed "$t" "$x" || { printf SEED; return; }
-  mkdir -p "$t/$x/decl" "$t/core/scripts" && printf 'exit 0\n' > "$t/$x/decl/run.sh" && printf 'src/a.sh\n' > "$t/$x/decl/inputs.decl" \
+  mkdir -p "$t/$x/decl" "$t/core/scripts" && printf 'exit 0\n' > "$t/$x/decl/run.sh" && printf 'src/a.sh\nsrc/b.sh\n' > "$t/$x/decl/inputs.decl" \
     && printf '# HR_SANDBOX_BEGIN\nr1\n# HR_SANDBOX_END\nf() {\n}\nexit 1\n' > "$t/core/scripts/hermetic-run.sh" \
     && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm decl ) >/dev/null 2>&1 || { printf SEED; return; }
   kd="$t/.git/ai-dlc-fixture-keys"; mkdir -p "$kd" || { printf SEED; return; }
@@ -4613,11 +4615,12 @@ ckd_world() { local p="$1" x="$2" t="$3" k kd
   printf '# HR_SANDBOX_BEGIN\nr2\n# HR_SANDBOX_END\nf() {\n}\nexit 1\n' > "$t/core/scripts/hermetic-run.sh"; ckd_dec "$p" "$t" rchg
   printf '# HR_SANDBOX_BEGIN\nr1\n# HR_SANDBOX_END\nf() {\n  : store\n}\nexit 1\n' > "$t/core/scripts/hermetic-run.sh"; ckd_dec "$p" "$t" rout
   printf '# HR_SANDBOX_BEGIN\nr1\n# HR_SANDBOX_END\nf() {\n}\nexit 1\n' > "$t/core/scripts/hermetic-run.sh"
+  printf 'src/a.sh\n' > "$t/$x/decl/inputs.decl"; ckd_dec "$p" "$t" nar; printf 'src/a.sh\nsrc/b.sh\n' > "$t/$x/decl/inputs.decl"
   sed -n 1,3p "$kd/decl.key" > "$kd/decl.key.t" && mv "$kd/decl.key.t" "$kd/decl.key"; ckd_dec "$p" "$t" empty
-  printf 'dsame=%s unrel=%s dchg=%s rchg=%s rout=%s dempty=%s ctl=%s beta=%s' "$(ckd_cell "$t.dd.same" decl)" "$(ckd_cell "$t.dd.unrel" decl)" \
-    "$(ckd_cell "$t.dd.chg" decl)" "$(ckd_cell "$t.dd.rchg" decl)" "$(ckd_cell "$t.dd.rout" decl)" "$(ckd_cell "$t.dd.empty" decl)" "$(ckd_cell "$t.dd.same" alpha)" "$(ckd_cell "$t.dd.same" beta)"
+  printf 'dsame=%s unrel=%s dchg=%s rchg=%s rout=%s dnar=%s dempty=%s ctl=%s beta=%s' "$(ckd_cell "$t.dd.same" decl)" "$(ckd_cell "$t.dd.unrel" decl)" \
+    "$(ckd_cell "$t.dd.chg" decl)" "$(ckd_cell "$t.dd.rchg" decl)" "$(ckd_cell "$t.dd.rout" decl)" "$(ckd_cell "$t.dd.nar" decl)" "$(ckd_cell "$t.dd.empty" decl)" "$(ckd_cell "$t.dd.same" alpha)" "$(ckd_cell "$t.dd.same" beta)"
 }
-CKD_WANT='dsame=skip:v:ok unrel=skip:v:ok dchg=run:k:ok rchg=run:k:ok rout=skip:v:ok dempty=run:s:ok ctl=run:s:stale beta=skip::ok'
+CKD_WANT='dsame=skip:v:ok unrel=skip:v:ok dchg=run:k:ok rchg=run:k:ok rout=skip:v:ok dnar=run:k:ok dempty=run:s:ok ctl=run:s:stale beta=skip::ok'
 # THE FIRST RESOLVED HOOK ONLY: the decision this world drives is inside the FIXTURE_POOL block, which I66 holds
 # code-identical across both hooks, and the second hook's own fixture root is proven wired by ckw's (d) arm.
 CKD_N="$CK_N"; CKD_P1="${CK_P1:-}"; CKD_X1="${CK_X1:-}"
@@ -5382,10 +5385,13 @@ vs_world() { # <pool> <fixture root> <runner file> <t> [<cells>]: one vector
   # <cells>, when given, is a space-joined subset of b t g e d f p: the base (rcd..ann, A's four runs, the
   # clone and decision a, which every later cell reads) always runs, and only the named later cells are
   # driven and printed. Empty or absent drives every cell.
-  local p="$1" x="$2" rn="$3" t="$4" SB="$4.S" S A="$4/A" B="$4/B" rd e v n1 rcs ra cs=" ${5:-b t g e d f p} "
+  local p="$1" x="$2" rn="$3" t="$4" SB="$4.S" S A="$4/A" B="$4/B" rd e v n1 rcs ra cs=" ${5:-b t g e d f p w} "
   case "$x" in core/fixtures) rd=core/scripts ;; *) rd=scripts/ai-dlc ;; esac
   mkdir -p "$t" "$SB" || { printf SEED; return; }
   vs_mk "$A" "$x" "$rn" || { printf SEED; return; }
+  # decl declares a second, unrequired path here, so cell w can NARROW it with every path still keyed
+  printf 'v1\n' > "$A/src/b.sh" && printf '!src/a.sh\nsrc/b.sh\n' > "$A/$x/decl/inputs.decl" \
+    && ( cd "$A" && git add -A && git -c user.email=f@f -c user.name=f commit -qm wide ) >/dev/null 2>&1 || { printf SEED; return; }
   ra="$(cd "$A" && git rev-list --max-parents=0 HEAD | sed -n 1p)"; S="$SB/$ra"
   v="rcd=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" decl "$SB") rcb=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" bad "$SB") rcn=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" nosent "$SB") rcu=$(vs_hr "$A/$rd/hermetic-run.sh" "$A" undecl "$SB")"
   n1="$(vs_n "$S")"
@@ -5444,9 +5450,14 @@ vs_world() { # <pool> <fixture root> <runner file> <t> [<cells>]: one vector
   git clone -q --depth 1 "file://$A" "$t/Sh" >/dev/null 2>&1; vs_dec "$p" "$t/Sh" "$SB" p2
   vs_hr "$A/$rd/hermetic-run.sh" "$t/Sh" decl "$t.S3" >/dev/null 2>&1
   v="$v p=$(vs_cell "$t/C2.vd.p1" decl)/$(vs_cell "$t/Sh.vd.p2" decl)/$(grep -c 'verdict store OFF' "$t/Sh.vd.p2/ann" 2>/dev/null)/$(ls -A "$t.S3" 2>/dev/null | grep -c .)" ;; esac
+  # w: B's decl NARROWED to `!src/a.sh` against A's pass under the wider declaration -> run (a's decl=skip is its twin)
+  case "$cs" in *" w "*)
+  cp "$B/$x/decl/inputs.decl" "$t/w.save"; printf '!src/a.sh\n' > "$B/$x/decl/inputs.decl"; vs_dec "$p" "$B" "$SB" w
+  cp "$t/w.save" "$B/$x/decl/inputs.decl"
+  v="$v w=$(vs_cell "$B.vd.w" decl)" ;; esac
   printf '%s' "$v"
 }
-VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/skip/skip/skip/run/skip e=run/run/run/skip d=run/run/skip f=0/0/intact p=run/run/1/0'
+VS_WANT='rcd=0 rcb=1 rcn=1 rcu=2 a=skip/run/run/run n=1 ann=1 b=run t=run/run g=run/skip/skip/skip/run/skip e=run/run/run/skip d=run/run/skip f=0/0/intact p=run/run/1/0 w=run'
 # (v) THE SPAN CANNOT GO VACUOUS: the digested runner span is non-empty and still holds the env -i line and the copy loop.
 VS_ARMS=$((VS_ARMS+1)); sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$VS_RUN" > "$WORK/vs.span"
 if [ "$(grep -c . "$WORK/vs.span")" -gt 50 ] && grep -qF 'env -i PATH=' "$WORK/vs.span" && grep -qF 'cp -Rp "$HR_FXDIR/."' "$WORK/vs.span" \
