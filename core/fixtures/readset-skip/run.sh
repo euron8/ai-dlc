@@ -4090,6 +4090,66 @@ STUB
     ( cd "$BR" && git reset -q --hard HEAD^ ) >/dev/null 2>&1 || broken "could not undo the declared seed's commit in BR"
     [ ! -e "$BR/core/fixtures/fxd" ] || broken "the declared seed fxd is still in BR after the undo, so later worlds would see it"
 
+    # `--declared-out` KEEPS A LOSS-ONLY WINDOW'S SET AS `#lower` ROWS, END TO END. fxa is declared here (its
+    # inputs.decl committed into BR, undone after the arm) and traced on the lossy list: the stream reports run.sh
+    # and a lone metadata stat, and loses fxa's src/a.sh read, which only the atime leg sees. Refused for loss
+    # alone, the out file must carry fxa's `#omitted` row naming STAT LOSS AND a `#lower` row for src/a.sh, a path
+    # the stream never reported. Its DENY twin is fxe, in the SAME run, one property apart: the same lossy window and
+    # the same atime-only src/a.sh read, but it exits 1, a reason before the loss lines, so it must get its `#omitted`
+    # row (naming the exit and STAT LOSS) and no `#lower` row.
+    mkdir -p "$BR/core/fixtures/fxe" || broken "mkdir failed"
+    printf '#!/bin/bash\ncat src/a.sh >/dev/null\nexit 1\n' > "$BR/core/fixtures/fxe/run.sh"
+    printf 'src/a.sh\n' > "$BR/core/fixtures/fxe/inputs.decl"
+    printf 'src/a.sh\n' > "$BR/core/fixtures/fxa/inputs.decl"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm declared-fxa-fxe ) >/dev/null 2>&1 || broken "could not commit fxa's and fxe's inputs.decl"
+    cp "$SB/deriver.sh" "$STUB_DERIVER"; rm -f "$WORK/lo.out"
+    ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/lossy.list" \
+        AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list "fxa fxe" --tracer sandbox --declared-out "$WORK/lo.out" ) > "$WORK/lo.log" 2>&1 </dev/null
+    stub_reap "${SB:-}"
+    ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+    LO_OM="$(grep -c '^fxa	#omitted	.*STAT LOSS: 1 metadata' "$WORK/lo.out" 2>/dev/null)" || LO_OM=0
+    LO_A="$(grep -cxF "$(printf 'fxa\t#lower\tsrc/a.sh')" "$WORK/lo.out" 2>/dev/null)" || LO_A=0
+    LO_R="$(grep -cxF "$(printf 'fxa\t#lower\tcore/fixtures/fxa/run.sh')" "$WORK/lo.out" 2>/dev/null)" || LO_R=0
+    LO_EOM="$(grep -c '^fxe	#omitted	fixture exited 1; .*STAT LOSS: 1 metadata' "$WORK/lo.out" 2>/dev/null)" || LO_EOM=0
+    LO_EL="$(grep -c '^fxe	#lower	' "$WORK/lo.out" 2>/dev/null)" || LO_EL=0
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ "$LO_OM" = 1 ] && [ "$LO_A" = 1 ] && [ "$LO_R" = 1 ]; then
+      ok "LOWER END TO END: --declared-out on a window refused for loss alone writes fxa's #omitted row naming STAT LOSS and #lower rows for run.sh and for src/a.sh, the read only the atime leg saw"
+    else
+      bad "LOWER END TO END: expected 1|1|1 (#omitted naming STAT LOSS | #lower src/a.sh | #lower run.sh), got $LO_OM|$LO_A|$LO_R — $(tr '\t\n' '  ' < "$WORK/lo.out" 2>/dev/null | cut -c1-300) / $(tail -2 "$WORK/lo.log" | tr '\n' ' ')"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ "$LO_EOM" = 1 ] && [ "$LO_EL" = 0 ]; then
+      ok "LOWER DENY END TO END: in the same run, fxe (the same lossy window, but it exited 1) gets its #omitted row naming the exit and STAT LOSS, and no #lower row"
+    else
+      bad "LOWER DENY END TO END: expected 1|0 (fxe #omitted naming 'fixture exited 1' and STAT LOSS | fxe #lower rows), got $LO_EOM|$LO_EL — $(grep '^fxe' "$WORK/lo.out" 2>/dev/null | tr '\t\n' '  ' | cut -c1-300)"
+    fi
+    ( cd "$BR" && git reset -q --hard HEAD^ ) >/dev/null 2>&1 || broken "could not undo the fxa/fxe inputs.decl commit in BR"
+    [ ! -e "$BR/core/fixtures/fxa/inputs.decl" ] && [ ! -e "$BR/core/fixtures/fxe" ] || broken "fxa's inputs.decl or fxe is still in BR after the undo, so later worlds would see them"
+
+    # THE LOSS-ONLY TEST AND ITS NEAR-MISSES, one in-process pass of the deriver's READSET_LOWER span per call: a window
+    # refused for loss alone (a) is the only one that keeps `#lower` rows; a reason BEFORE the loss lines (b), a
+    # reason AFTER them (c), and no reason at all (d) do not. The writer handed a non-loss refusal writes its
+    # `#omitted` row and no `#lower` row (w), the DENY twin of the end-to-end ALLOW above.
+    LW_SPAN="$WORK/lower.sh"; LW_W="$WORK/lw"
+    sed -n '/^# READSET_LOWER_BEGIN$/,/^# READSET_LOWER_END$/p' "$DERIVER" > "$LW_SPAN"
+    mkdir -p "$LW_W" && printf 'src/a.sh\n' > "$LW_W/fxw.set" || broken "could not seed the READSET_LOWER world"
+    LWO="$( . "$LW_SPAN"
+      r=""
+      fx_inproc "$DERIVER"; if readset_loss_only "" "STAT LOSS: 1" "STAT LOSS: 1"; then r="${r}a"; fi
+      fx_inproc "$DERIVER"; if readset_loss_only "fixture exited 1" "fixture exited 1; STAT LOSS: 1" "fixture exited 1; STAT LOSS: 1"; then r="${r}b"; fi
+      fx_inproc "$DERIVER"; if readset_loss_only "" "STAT LOSS: 1" "STAT LOSS: 1; empty read-set"; then r="${r}c"; fi
+      fx_inproc "$DERIVER"; if readset_loss_only "" "" ""; then r="${r}d"; fi
+      WORK="$LW_W" DECLARED_OUT="$LW_W/out"
+      fx_inproc "$DERIVER"; rs_declared_write fxw "fixture exited 1" "" && r="${r}|$(grep -c '^fxw	#omitted	fixture exited 1$' "$LW_W/out")|$(grep -c '#lower' "$LW_W/out")"
+      printf '%s' "$r" )" 2>/dev/null
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ "$LWO" = "a|1|0" ]; then
+      ok "LOSS-ONLY TEST: only the loss-alone refusal keeps #lower rows (a); a reason before (b) or after (c) the loss lines, or none (d), does not; a non-loss refusal writes its #omitted row and no #lower row"
+    else
+      bad "LOSS-ONLY TEST: expected 'a|1|0' (cases kept | #omitted rows | #lower rows), got '$LWO' (span lines: $(grep -c . "$LW_SPAN"))"
+    fi
+
     # `--local-map` WITH THE RUNNER'S READSET_UNIVERSE SPAN (BL-480), DRIVEN WHOLE. The local-map world above
     # runs before the BR runner gained the span (:3608), so it sees only the fallback. Here the runner carries
     # it, fxl's stream reports a read of the DIRECTORY src, and the local map must record that row by its

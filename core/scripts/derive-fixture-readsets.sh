@@ -203,7 +203,10 @@ done
 # `--declared-out <file>` TRACES DECLARED FIXTURES FOR THEIR inputs.decl (C13). The merge drops a declared
 # fixture's rows from the map (BL-897), so a plain --list trace of one is discarded. This mode keeps each
 # accepted set in <file> as `<fx>\t<path>`, an omitted one as `<fx>\t#omitted\t<why>`, replacing that fixture's
-# rows (temp + mv) after every fixture, and exits before the committed map is written. Every listed fixture
+# rows (temp + mv) after every fixture, and exits before the committed map is written. A fixture omitted ONLY for
+# loss (drop notices, LOSS CANARY, STAT LOSS) also gets its set as `<fx>\t#lower\t<path>` rows: a lost report only
+# shortens a set, so these rows are a LOWER BOUND. They confirm that a `whole` row reads every file it names and
+# never narrow a declaration. Any other reason writes no `#lower` row. Every listed fixture
 # must carry an inputs.decl; the refusals below and after the fixture root run before any trace.
 if [ -n "$DECLARED_OUT" ]; then
   [ "$MODE" = --list ] && [ "$RECONCILE" = 0 ] && [ -z "$LOCAL_MAP" ] && [ -z "$IN_POOL" ] && [ -z "$MERGE_POOL" ] \
@@ -2200,9 +2203,12 @@ rs_fx_judge() {
   [ "$rc" -eq 0 ]     || why="fixture exited $rc"
   [ "$settled" -eq 1 ] || why="${why:+$why; }tracing never settled"
   [ "$flushed" -eq 1 ] || why="${why:+$why; }no end sentinel in the stream -- the tail of the window is unknown"
+  # why_pre is every reason before the three loss lines and why_loss is why after them, for readset_loss_only.
+  why_pre="$why"
   [ "$lost" -eq 0 ]    || why="${why:+$why; }the stream dropped reports $lost time(s) in this window"
   [ "$canary" = 0 ]    || why="${why:+$why; }LOSS CANARY: $canary path(s) the fixture read (atime) are absent from the stream -- see $WORK/$fx.canary"
   [ "$statpair" = 0 ]  || why="${why:+$why; }STAT LOSS: $statpair metadata report(s) with no existence report from the same process for the same path -- see $WORK/$fx.statpair"
+  why_loss="$why"
   [ "$unread_moved" -eq 0 ] || why="${why:+$why; }UNREAD CONTROL: $UNREAD_CTL left the 2001 atime epoch -- the reset did not hold or something walked the tree"
   [ "$nest_bypass" = 0 ] || why="${why:+$why; }NEST BYPASS: $nest_bypass escaped sandbox-exec exec(s) not made by the nest shim -- a nested run went unreported"
   [ "$n" -gt 0 ]      || why="${why:+$why; }empty read-set"
@@ -2257,7 +2263,8 @@ rs_fx_judge() {
       MAPPED=$(( MAPPED + 1 )); TOTAL_PATHS=$(( TOTAL_PATHS + n ))
       printf '  %-32s %5s paths\n' "$fx" "$n"
     fi
-    rs_declared_write "$fx" "$why" || die "could not write $DECLARED_OUT after tracing $fx"
+    lossonly=""; if readset_loss_only "$why_pre" "$why_loss" "$why"; then lossonly=1; fi
+    rs_declared_write "$fx" "$why" "$lossonly" || die "could not write $DECLARED_OUT after tracing $fx"
   elif [ -n "$why" ]; then
     OMITTED="${OMITTED}${OMITTED:+ }$fx"
     [ "$TRACER" = both ] || printf '  %-32s OMITTED (%s) -- will always run\n' "$fx" "$why"
@@ -2287,15 +2294,22 @@ rs_fx_judge() {
   fi
 }
 
-# rs_declared_write <fx> <why>: replace <fx>'s rows in DECLARED_OUT with its accepted set ($WORK/<fx>.set) when
-# <why> is empty, else with one `#omitted` row. A temp file beside it, then mv.
+# READSET_LOWER_BEGIN
+# readset_loss_only <why_pre> <why_loss> <why>: true when the window was refused ONLY for loss -- no reason before
+# the three loss lines (why_pre empty), and none after them (why equals why_loss, and is non-empty).
+readset_loss_only() { [ -z "$1" ] && [ -n "$3" ] && [ "$3" = "$2" ]; }
+# rs_declared_write <fx> <why> [<lossonly>]: replace <fx>'s rows in DECLARED_OUT with its accepted set
+# ($WORK/<fx>.set) when <why> is empty, else with one `#omitted` row, followed by the set as `#lower` rows when
+# <lossonly> is non-empty. A temp file beside it, then mv.
 rs_declared_write() {
   local _t="$DECLARED_OUT.tmp.$$"
   { [ ! -f "$DECLARED_OUT" ] || awk -F'\t' -v f="$1" '$1 != f' "$DECLARED_OUT"
     if [ -z "$2" ]; then awk -v f="$1" 'NF { print f "\t" $0 }' "$WORK/$1.set"
-    else printf '%s\t#omitted\t%s\n' "$1" "$(printf '%s' "$2" | tr '\t\n' '  ')"; fi
+    else printf '%s\t#omitted\t%s\n' "$1" "$(printf '%s' "$2" | tr '\t\n' '  ')"
+      [ -z "${3:-}" ] || awk -v f="$1" 'NF { print f "\t#lower\t" $0 }' "$WORK/$1.set"; fi
   } > "$_t" && mv -f "$_t" "$DECLARED_OUT" || { rm -f "$_t"; return 1; }
 }
+# READSET_LOWER_END
 
 rs_fx_record() {
   # `--in-pool` writes NO local map: it leaves its one fixture's rows or discard for `--merge-pool`.
