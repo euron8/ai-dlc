@@ -90,6 +90,20 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# IN PROCESS (BL-878). install.sh is driven through lib/inproc.sh's inproc_run, which calls ai_dlc_install_main in a
+# subshell made to look like a fresh `bash install.sh`. No call sits under if, !, && or ||: install.sh's own `set -e`
+# would be suspended there, and the in-process answer would stop being the program's. The program runs only in the
+# two cli cells (cells.decl). Both halves of the wrap must be present: sourcing a subject with neither would run its
+# body in the subshell, and one half alone is a respelled subject this fixture cannot drive.
+grep -qx 'ai_dlc_install_main() {' "$INSTALL"; _gm=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$INSTALL"; _gg=$?
+if [ "$_gm" -gt 1 ] || [ "$_gg" -gt 1 ]; then echo "FIXTURE ERROR: cannot read $INSTALL" >&2; exit 2; fi
+if [ "$_gm" -ne 0 ] || [ "$_gg" -ne 0 ]; then
+  echo "  FAIL  $INSTALL is not loadable: \`ai_dlc_install_main() {\` line $([ "$_gm" -eq 0 ] && echo present || echo MISSING), column-0 source guard $([ "$_gg" -eq 0 ] && echo present || echo MISSING)" >&2
+  echo "schema-install-fallback: FAILED" >&2; exit 1
+fi
+unset _gm _gg
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
 
 SCRIPTS="sprint-status sync-taught-schema validate-audit-anchors validate-write-format-steering validate-gate-adjudication"
 schema_of() {
@@ -135,9 +149,42 @@ want_base() {
 # install.sh refuses a target with no _bmad/, and a .git makes the target its own root so the
 # resolver's walk stops there and never finds a schema above the sandbox.
 BASE="$WORK/base"
-mkdir -p "$BASE/t/_bmad" || exit 2
-git init -q "$BASE/t" || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
-if ! bash "$INSTALL" "$BASE/t" </dev/null >"$WORK/install.log" 2>&1; then
+# The cli cells (cells.decl): install.sh run as a PROGRAM once per distinct CLI outcome, each compared with the
+# in-process call on the same input, in the same world rebuilt at the same path: stdout, stderr, exit code and the
+# target's file list. cli-install-ok IS this fixture's install: its in-process twin builds the tree every arm reads.
+EQ="$WORK/eq"; mkdir -p "$EQ" || exit 2
+eq_world() { rm -rf "$1"; mkdir -p "$1/_bmad" && git init -q "$1" || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }; }
+eq_nobmad() { rm -rf "$1"; mkdir -p "$1" || exit 2; }
+eq_tree() { ( cd "$1" && find . -path ./.git -prune -o -print | LC_ALL=C sort ); }
+eq_run() { # <id> <world-builder> <target> -> $EQ/<id>.{cl,ip}.{out,err,rc,tree}
+  local id="$1" mk="$2" t="$3"
+  "$mk" "$t"
+  FXCELL="$id" bash "$INSTALL" "$t" </dev/null > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  eq_tree "$t" > "$EQ/$id.cl.tree"
+  "$mk" "$t"
+  inproc_run "$INSTALL" ai_dlc_install_main "$t" </dev/null > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  eq_tree "$t" > "$EQ/$id.ip.tree"
+  return 0
+}
+eq_same() { local x; for x in out err rc tree; do cmp -s "$EQ/$1.cl.$x" "$EQ/$1.ip.$x" || { echo "$x"; return 1; }; done; }
+eq_verdict() { # <id> <want rc> <positive stdout regex> <what>
+  local d s
+  d="$(eq_same "$1")"; s=$?
+  if [ "$s" -eq 0 ] && [ "$(cat "$EQ/$1.cl.rc")" = "$2" ] && grep -Eq "$3" "$EQ/$1.cl.out"; then
+    ok "$1: the program $4 exactly as the in-process call does (stdout, stderr, exit $2, file list)"
+  else
+    bad "$1: the program and the in-process call differ (${d:-none}) or the outcome is not exit $2 with /$3/ (program exit $(cat "$EQ/$1.cl.rc"))"
+  fi
+}
+eq_run cli-install-refuse eq_nobmad "$BASE/t"
+eq_verdict cli-install-refuse 1 '^Warning: BMAD Method not detected' "refuses a target with no _bmad/"
+eq_run cli-install-ok eq_world "$BASE/t"
+eq_verdict cli-install-ok 0 '^Installation complete!$' "installs into a fresh target"
+[ "$(cat "$EQ/cli-install-ok.cl.rc")" != "$(cat "$EQ/cli-install-refuse.cl.rc")" ] \
+  && ok "cli cells discriminate: install.sh exits 0 and 1" \
+  || bad "cli cells do not discriminate: cli-install-ok and cli-install-refuse share an exit code"
+cp "$EQ/cli-install-ok.ip.out" "$WORK/install.log" || exit 2
+if [ "$(cat "$EQ/cli-install-ok.ip.rc")" != 0 ]; then
   echo "FIXTURE ERROR: install.sh failed into $BASE/t" >&2; tail -5 "$WORK/install.log" >&2; exit 2
 fi
 for s in $SCRIPTS; do
@@ -490,7 +537,7 @@ elif [ -f "$BASE/t/$CW_REL" ]; then
   printf '\n%s\n' '| 33 | `[ext:domain]` | Cross-story test-strategy deliverable presence | pre-migration gate logs | became 934 |' \
     >> "$BASE/t/$CW_REL"
   _cw_sum="$(cksum < "$BASE/t/$CW_REL")"
-  bash "$INSTALL" "$BASE/t" </dev/null >"$WORK/reinstall.log" 2>&1
+  inproc_run "$INSTALL" ai_dlc_install_main "$BASE/t" </dev/null >"$WORK/reinstall.log" 2>&1
   [ "$(cksum < "$BASE/t/$CW_REL")" = "$_cw_sum" ] \
     && ok "CW2 (layer-crosswalk-home): a re-install PRESERVES a populated crosswalk file — the rows are the consumer's" \
     || bad "CW2 (layer-crosswalk-home): a re-install overwrote the populated crosswalk file, which is the defect LC-N7 exists to end"

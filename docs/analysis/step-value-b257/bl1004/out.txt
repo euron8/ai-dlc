@@ -1,0 +1,89 @@
+# command: EXTRACT_WIN_END=2026-11-12T09:38:14Z python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/spawns.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/analyze.py $OUT && python3 -I docs/analysis/step-value-b257/bl1004/pm_seats_s322.py $OUT ~/git/graph  (extraction token control units==segs 24564297029 24564297029)
+== 1. cost (spawns.jsonl, labels sprint-review + gate-validation[sprint-review])
+s321 step 169 spawns $ 209.09 13.96 agent-h (label sprint-review alone 165 $206.31) | pm 26 $17.00 0.75 agent-h   | s321 reading and BL-1004: pm 26 $17.00 0.75 h, step 169 $209.09 MATCH
+   s321 adversary one-shot                         1  $   1.98   0.13 agent-h
+   s321 fix, review and QA of fixes               32  $  42.48   4.62 agent-h
+   s321 gate adjudicator                           4  $   2.78   0.19 agent-h
+   s321 party consolidation, triage, dispatch      2  $   6.95   0.48 agent-h
+   s321 party seat, cross                          5  $  10.84   0.59 agent-h
+   s321 party seat, per-story                    125  $ 144.06   7.95 agent-h
+   s321 seats by (role, model ran): architect/opus 26 $71.35, dev/sonnet 26 $24.13, pm/sonnet 26 $17.00, qa/sonnet 26 $19.66, tea/sonnet 26 $22.76
+s322 step  65 spawns $  82.08  4.04 agent-h (label sprint-review alone 57 $76.95) | pm 9 $6.51 0.23 agent-h
+   s322 adversary one-shot                         1  $   2.84   0.14 agent-h
+   s322 fix, review and QA of fixes                9  $   7.51   0.88 agent-h
+   s322 gate adjudicator                           8  $   5.13   0.32 agent-h
+   s322 party consolidation, triage, dispatch      2  $   5.84   0.45 agent-h
+   s322 party seat, cross                          5  $  13.51   0.54 agent-h
+   s322 party seat, per-story                     40  $  47.24   1.70 agent-h
+   s322 seats by (role, model ran): architect/opus 9 $23.26, dev/sonnet 9 $5.05, pm/sonnet 9 $6.51, qa/sonnet 9 $5.04, tea/opus 9 $20.91
+impossible step NEVER-STEP-ZZQ: 0 spawns (must be 0)
+
+== 2. s322 seat findings (graph 39aa9db6f)
+seat files 45  C/M 45 {'architect': 10, 'dev': 2, 'pm': 9, 'qa': 9, 'tea': 15}  minor 112   | triage: 45 files, 45 major, 112 minor MATCH
+impossible role 'zzq' seat files: 0 (must be 0)
+
+== 3. pm C/M findings and the triage entries that cite them
+triage entries 69 (major 26)
+pm-1::F-1      -> T-1   (major)  other roles: architect-1::F-1(major), qa-1::F-1(minor), qa-cross::F-5(minor)
+pm-1::F-3      -> T-2   (major)  other roles: dev-1::F-2(minor), qa-cross::F-6(minor), qa-1::F-2(minor)
+pm-3::F-1      -> T-11  (major)  other roles: dev-3::F-3(minor)
+pm-4::F-1      -> T-4   (major)  other roles: architect-4::F-1(major), architect-cross::F-3(major), qa-4::F-3(major), tea-4::F-1(major), dev-4::F-2(minor)
+pm-4::F-2      -> T-12  (major)  other roles: qa-4::F-5(minor)
+pm-5::F-1      -> T-13  (major)  other roles: tea-5::F-1(major), architect-5::F-1(minor), qa-cross::F-3(minor), architect-cross::F-5(minor)
+pm-cross::F-1  -> T-1   (major)  other roles: architect-1::F-1(major), qa-1::F-1(minor), qa-cross::F-5(minor)
+pm-cross::F-2  -> T-2   (major)  other roles: dev-1::F-2(minor), qa-cross::F-6(minor), qa-1::F-2(minor)
+pm-cross::F-3  -> T-14  (major)  other roles: qa-2::F-2(minor)
+pm C/M findings 9; entries with no other role's seat: 0
+control: an entry cited by no source spelling 'pm-zzq': 0 (must be 0)
+
+== 4. fix survival: added lines (>= 12 chars) present at 95d831207 (pre) and e0ebaf019 (ship)
+T-1   95a8f1ba2  lines    4  pre    0  ship    4 (100.0%)
+T-2   95a8f1ba2  lines    4  pre    0  ship    4 (100.0%)
+T-2   b2f0cbc41  lines  139  pre    0  ship  139 (100.0%)
+T-4   e946cb60b  lines   46  pre    3  ship   46 (100.0%)
+T-13  28388fb70  lines    7  pre    0  ship    7 (100.0%)
+T-13  fcca51cad  lines   47  pre    0  ship   46 ( 97.9%)
+T-12/T-14 snapshot precondition list at 95d831207: 0
+T-12/T-14 snapshot precondition list at 39aa9db6f: 1
+T-12/T-14 snapshot precondition list at e0ebaf019: 1
+impossible line at ship: 0 (must be 0)
+
+== 5. earlier raises: token hits at 95d831207 over docs/reviews/s322, _bmad-output/implementation-artifacts/s322, _bmad-output/planning-artifacts/s322, the round's own briefs excluded
+T-4        DEPLOY_RANGE            10 files  (positive control: story 1.4 raised it before the round)
+            _bmad-output/implementation-artifacts/s322/4-dev-report.md
+            _bmad-output/implementation-artifacts/s322/gate-transition/4-g1-p2.plan
+            _bmad-output/implementation-artifacts/s322/gate-transition/4-g1-p3.plan
+            _bmad-output/planning-artifacts/s322/stories/story-1-4-check-926-path-keyed-clean-line.md
+            docs/reviews/s322/1-4-qa-validation-p3.md
+            docs/reviews/s322/4-code-review-p2.md
+T-12       AC8(a)                  16 files
+            _bmad-output/planning-artifacts/s322/shards/test-strategy-p2/1.md
+            _bmad-output/planning-artifacts/s322/shards/test-strategy-p2/4.md
+            _bmad-output/planning-artifacts/s322/shards/test-strategy-p2/6.md
+            _bmad-output/planning-artifacts/s322/shards/test-strategy-p3/4.md
+            _bmad-output/planning-artifacts/s322/shards/test-strategy-p3/6.md
+            _bmad-output/planning-artifacts/s322/shards/test-strategy-repair-p1/4.md
+T-2        46aa113d2fa5             3 files
+            _bmad-output/implementation-artifacts/s322/live-ops-observation.md
+            _bmad-output/planning-artifacts/s322/stories/story-1-1-story-5-6-closeout-observation-and-predicate.md
+            docs/reviews/s322/1-qa-validation.md
+T-1        AC4-ORGANIC-READ        22 files
+            _bmad-output/implementation-artifacts/s322/gate-adjudication/implementation-20261112T022714Z.verdict.json
+            _bmad-output/implementation-artifacts/s322/gate-adjudication/implementation-20261112T024822Z.verdict.json
+            _bmad-output/implementation-artifacts/s322/gate-adjudication/implementation-20261112T030947Z.verdict.json
+            _bmad-output/planning-artifacts/s322/shards/stories-elicitation-repair-p1/1.md
+            _bmad-output/planning-artifacts/s322/shards/stories-elicitation-serial-repair-p1/lane-1.md
+            _bmad-output/planning-artifacts/s322/shards/stories-p1/1.md
+T-14       deploy precondition     16 files
+            _bmad-output/planning-artifacts/s322/carry-over-evaluation-party-repair-p1.md
+            _bmad-output/planning-artifacts/s322/carry-over-evaluation-party-serial-repair-p1.md
+            _bmad-output/planning-artifacts/s322/carry-over-evaluation.md
+            _bmad-output/planning-artifacts/s322/coe-adversarial-p1.md
+            _bmad-output/planning-artifacts/s322/coe-adversarial-p3.md
+            _bmad-output/planning-artifacts/s322/coe-repair-p1.md
+impossible ZQX-NEVER-TOKEN-77       0 files  (impossible token, must be 0)
+
+== 6. decision rule (BL-1004): pm $ per pm-raised survivor against the step's $ per survivor
+step both labels                $82.08 / at most 26 survivors = at least $3.16 per survivor
+step label sprint-review alone  $76.95 / at most 26 survivors = at least $2.96 per survivor
+pm $6.51: survivors needed for pm $ per survivor <= the step's lower bound: 3

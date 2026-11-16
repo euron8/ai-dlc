@@ -9,8 +9,13 @@
 # seeded receipt run. The rest of * is the seeded receipts those removals run. Measured the same way.
 # Every distinct state is ONE FXCELL-tagged cli start of a validator copy (21 cells, cells.decl), its workers covered by
 # the one self-nested row. c-m1-e2e and cli-wire drive real --score-one and --r13-one workers.
-# inproc 9: untraced_fn 3 (one per r13_untraced call) and base_setup 3 per pass (vbr_sec_env, vbr_sec_args,
-# vbr_sec_setup) x 2 passes = 6; every in-process call is paired with its own fx_inproc (arm P2).
-105 *
-70 scripts/validate-backlog-receipts.sh
-9 inproc:scripts/validate-backlog-receipts.sh
+# inproc 12: untraced_fn 3 (one per r13_untraced call), m1_chain_fn 3 (one per m1_driver_absent call) and base_setup
+# 3 per pass (vbr_sec_env, vbr_sec_args, vbr_sec_setup) x 2 passes = 6; every in-process call is paired with its own
+# fx_inproc (arm P2).
+# W6-11 (BL-899): 105 -> 106 *, 70 -> 71 validator, 9 -> 12 inproc, on W6-10's tree (DEFAULT_MAX_R13 = 3). World m's
+# fourth receipt (`bash -e w/never2.sh`, EXCLUDED, no removal) is the one start-moving change, so it accounts for the
+# +1 start and +1 validator start; the in-process cell c-m1-chain adds three fx_inproc passes and no start. Measured by one counted run through core/scripts/hermetic-run.sh
+# at AI_DLC_FIXTURE_JOBS=12 (the judge's own J3 output).
+106 *
+71 scripts/validate-backlog-receipts.sh
+12 inproc:scripts/validate-backlog-receipts.sh

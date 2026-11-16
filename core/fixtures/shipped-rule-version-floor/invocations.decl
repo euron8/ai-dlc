@@ -1,7 +1,9 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-# Re-measured for arm I (BL-892): one more install and one more uninstall of the nested-subdirectory world.
-# Re-measured for BL-892's tracked-only copy: the non-git refusal install, the dotfile-only install,.
-33 *
-5 scripts/install.sh
-3 scripts/uninstall.sh
-5 core/hooks/ai-dlc-rules-floor.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output).
+# BL-878: the subjects run in process (inproc: rows, one per inproc_run pass); the program runs only in the six cli cells.
+31 *
+2 scripts/install.sh
+2 scripts/uninstall.sh
+2 core/hooks/ai-dlc-rules-floor.sh
+6 inproc:scripts/install.sh
+4 inproc:scripts/uninstall.sh
+7 inproc:core/hooks/ai-dlc-rules-floor.sh

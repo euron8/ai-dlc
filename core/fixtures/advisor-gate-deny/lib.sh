@@ -22,9 +22,16 @@
 #                cells, one phrase each); twin: the same MCP consult followed by a built-in `advisor`
 #                attempt -> SILENT. The operator's instructions prefer the built-in advisor wherever
 #                it is held, so the MCP tool is never an attempt for an agent that has the grant
-#   NOGRANT      the same push with the grant line absent -> SILENT; a teammate whose own file has
-#                no grant while its parent's does -> SILENT
-#   WITHDRAWN    grant then `available:false` -> SILENT; twin: withdrawn then re-granted -> DENY
+#   NOGRANT      the same push with the grant line absent and no tool roster -> SILENT; a teammate
+#                whose own file has no grant and no roster while its parent's has a grant -> SILENT
+#   NOGRANTMCP   BL-1135, no grant and `mcp__advisor__consult` in the tool roster, no consult: push,
+#                merge, a teammate's verdict write -> DENY, the reason naming the consult; a withdrawn
+#                grant (also after a stale `unavailable`) -> DENY; no roster line but a consult on disk
+#                before a shipped push -> DENY. Twins -> SILENT: a consult after the last gated action
+#                (lead, teammate, withdrawn), the roster without the consult, the consult removed, a
+#                consult 3 turns back (window); twins -> DENY: 11 turns back, and a GRANTED agent with
+#                the roster and a consult (the consult never clears a granted agent)
+#   WITHDRAWN    grant then `available:false`, no roster -> SILENT; twin: withdrawn then re-granted -> DENY
 #   ORDER        push then advisor -> SILENT; twin: advisor then push -> DENY
 #   ERRCLEAR     push, advisor, an errored (non-unavailable) result -> SILENT
 #   UNAV         advisor, `unavailable`, push -> WARN; twin REARM: then advisor + success -> DENY
@@ -324,6 +331,28 @@ MCPR="$(tr_ mc1 false 'advice: proceed')"
 mk "$P1/mcp-done.jsonl" "$GRANT" "$USER" "$MCPU" "$MCPR"
 mk "$P1/mcp-bare.jsonl" "$GRANT" "$USER" "$MCPU"
 mk "$P1/mcp-adv.jsonl"  "$GRANT" "$USER" "$MCPU" "$MCPR" "$ADV" "$OKRES"
+# NOGRANTMCP worlds (BL-1135). ROSTER is the tool roster a no-grant lead's transcript carries, the
+# keys and addedNames copied from a graph session on `deepseek41` (its first deferred_tools_delta,
+# the large surfaced-definition keys dropped); ROSTERX is the same line without the consult (the
+# shape of graph's sessions from before the advisor MCP server existed); ROSTERRM removes it, in the
+# measured removedNames shape.
+ROSTER='{"type":"attachment","attachment":{"type":"deferred_tools_delta","addedNames":["CronCreate","CronDelete","CronList","EnterPlanMode","EnterWorktree","ExitPlanMode","ExitWorktree","Monitor","NotebookEdit","PushNotification","SendMessage","TaskStop","WebSearch","mcp__advisor__consult","mcp__claude_ai_Claude_Docs__batch","mcp__easel__chart","mcp__plugin_context-mode_context-mode__ctx_search"],"removedNames":[],"readdedNames":[],"wireHiddenNames":[],"failedMcpServers":[{"name":"github","errorCode":"CONNECTION_CLOSED","error":"Connection closed"}],"pendingMcpServers":[]}}'
+ROSTERX="$(printf '%s' "$ROSTER" | jq -c '.attachment.addedNames -= ["mcp__advisor__consult"]')"
+ROSTERRM='{"type":"attachment","attachment":{"type":"deferred_tools_delta","addedNames":[],"removedNames":["mcp__advisor__consult"],"readdedNames":[]}}'
+mk "$P1/ng-r.jsonl"     "$USER" "$ROSTER"
+mk "$P1/ng-rx.jsonl"    "$USER" "$ROSTERX"
+mk "$P1/ng-rc.jsonl"    "$USER" "$ROSTER" "$MCPU" "$MCPR"
+mk "$P1/ng-rrm.jsonl"   "$USER" "$ROSTER" "$ROSTERRM"
+# No roster line, a consult on disk, then a push that shipped: held by the call, owed by the push.
+mk "$P1/ng-call.jsonl"  "$USER" "$MCPU" "$MCPR" "$PUSHL" "$OK1"
+mk "$P1/ng-callok.jsonl" "$USER" "$PUSHL" "$OK1" "$MCPU" "$MCPR"
+mk "$P1/ng-off.jsonl"   "$GRANT" "$ROSTER" "$GOFF"
+mk "$P1/ng-offc.jsonl"  "$GRANT" "$ROSTER" "$GOFF" "$MCPU" "$MCPR"
+# A granted agent's stale `unavailable`, then the grant withdrawn: the WARN is the granted arm's only.
+mk "$P1/ng-offunav.jsonl" "$GRANT" "$ROSTER" "$ADV" "$UNAV" "$GOFF" "$PUSHL" "$OK1"
+mk "$P1/ng-grc.jsonl"   "$GRANT" "$ROSTER" "$USER" "$MCPU" "$MCPR"
+mk "$P1/par/subagents/agent-a20.jsonl" "$USER" "$ROSTER"
+mk "$P1/par/subagents/agent-a21.jsonl" "$USER" "$ROSTER" "$MCPU" "$MCPR"
 mkdir -p "$P1/q/subagents"
 # WINDOW worlds. Real assistant lines carry `message.id`, and one message spans several lines; these
 # helpers stamp it, so a turn is a message and not a line. Every push after the advisor SHIPPED, so
@@ -350,10 +379,18 @@ $(tr_ "x$_i" false ok)
 done
 mk "$P1/win-out.jsonl"  "$GRANT" "$USER" "$(advm m1)" "$(okm m1)" "$(tum m2 p2 Bash "$PUSHC")" "$(shipm p2)"
 printf '%s' "$_wo" >> "$P1/win-out.jsonl"
+# The no-grant window: the same two worlds with the roster for the grant and a consult for the advisor.
+mcpm() { jq -cn --arg m "$1" '{type:"assistant",message:{id:$m,content:[{type:"tool_use",id:"mc1",name:"mcp__advisor__consult",input:{question:"q"}}]}}'; }
+mk "$P1/ng-win-in.jsonl" "$ROSTER" "$USER" "$(mcpm m1)" "$MCPR" \
+  "$(tum m2 p2 Bash "$PUSHC")" "$(shipm p2)" "$(tum m3 p3 Bash "$PUSHC")" "$(shipm p3)"
+mk "$P1/ng-win-out.jsonl" "$ROSTER" "$USER" "$(mcpm m1)" "$MCPR" "$(tum m2 p2 Bash "$PUSHC")" "$(shipm p2)"
+printf '%s' "$_wo" >> "$P1/ng-win-out.jsonl"
 _wt="$(jq -r '.message.id? // empty' "$P1/win-out.jsonl" | sort -u | grep -c .)" || _wt=0
 [ "$_wt" -eq 11 ] || { echo "FIXTURE BROKEN: WINDOW-OUT holds $_wt assistant turns (want 11)" >&2; exit 2; }
 for _f in g none off regrant pa ap err unav rearm denied pushed deniedarr ran ranfull okenv apok apm amp ap1 ac par q \
           mcp-done mcp-bare mcp-adv \
+          ng-r ng-rx ng-rc ng-rrm ng-call ng-callok ng-off ng-offc ng-offunav ng-grc ng-win-in ng-win-out \
+          par/subagents/agent-a20 par/subagents/agent-a21 \
           win-in win-out \
           f404 fmergeok fmergedel fmerge404 f141 fdots fforced frej fsafe fhook fred fokref fokutd \
           par/subagents/agent-a7 par/subagents/agent-a9 par/subagents/agent-a10 par/subagents/agent-a11 par/subagents/agent-a12 \
@@ -409,6 +446,21 @@ ct MCPCONSULT SILENT m-twin-adv "$(bash_in "$P1/mcp-adv.jsonl" "$SPRINT" 'git pu
 
 c NOGRANT SILENT "$(bash_in "$P1/none.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 c NOGRANT SILENT "$(write_in "$P1/par.jsonl" "$VERDICT" a4)"
+# NOGRANTMCP (BL-1135): no grant, the consult in the roster, no consult -> DENY naming the consult.
+ct NOGRANTMCP DENY n-push "$(bash_in "$P1/ng-r.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP DENY n-merge "$(bash_in "$P1/ng-r.jsonl" "$SPRINT" 'gh pr merge 7 --squash --delete-branch')"
+cell NOGRANTMCP DENY 'R:call mcp__advisor__consult in a message of its own' n-reason "$(bash_in "$P1/ng-r.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP SILENT n-consult "$(bash_in "$P1/ng-rc.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP SILENT n-unheld "$(bash_in "$P1/ng-rx.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP SILENT n-removed "$(bash_in "$P1/ng-rrm.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP DENY n-heldbycall "$(bash_in "$P1/ng-call.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP SILENT n-callafter "$(bash_in "$P1/ng-callok.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP DENY n-withdrawn "$(bash_in "$P1/ng-off.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP SILENT n-withdrawn-consult "$(bash_in "$P1/ng-offc.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP DENY n-withdrawn-unav "$(bash_in "$P1/ng-offunav.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP DENY n-granted-roster "$(bash_in "$P1/ng-grc.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct NOGRANTMCP DENY n-mate "$(write_in "$P1/par.jsonl" "$VERDICT" a20)"
+ct NOGRANTMCP SILENT n-mate-consult "$(write_in "$P1/par.jsonl" "$VERDICT" a21)"
 
 c WITHDRAWN SILENT "$(bash_in "$P1/off.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 c WITHDRAWN DENY "$(bash_in "$P1/regrant.jsonl" "$SPRINT" 'git push -u origin HEAD')"
@@ -636,6 +688,10 @@ printf '%s\n' 20 > "$CELLS/$nc.fast"
 ct WINDOW SILENT win-in "$(bash_in "$P1/win-in.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 : > "$CELLS/$nc.win"
 ct WINDOW DENY win-out "$(bash_in "$P1/win-out.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+: > "$CELLS/$nc.win"
+ct NOGRANTMCP SILENT n-win-in "$(bash_in "$P1/ng-win-in.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+: > "$CELLS/$nc.win"
+ct NOGRANTMCP DENY n-win-out "$(bash_in "$P1/ng-win-out.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 : > "$CELLS/$nc.win"
 
 # L3: outgoing commits touching only `_bmad-output/` -> SILENT; one code path -> DENY; and every

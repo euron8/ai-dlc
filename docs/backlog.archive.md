@@ -45021,3 +45021,84 @@ Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b; id allocated 
 
 verify: manual
 
+## BL-1004 — s321 sprint-review's pm seats made 0 of the step's 15 unique survivors, at $17.00
+
+**NOTE (efficiency).** OPEN. Filed 2026-11-12. This is ONE sprint's reading: graph s321, from `docs/analysis/step-value-sprint-review-deploy-validate-s321.md`, by the method of `docs/analysis/step-value-s317-s319.md`, with every count and dollar figure from `docs/analysis/pipeline-efficiency-s317-s322/scripts/sr_dv_yield.py` (EXTRACT_WIN_END=2026-11-09T00:00:00Z). Over the labels `sprint-review` and `gate-validation[sprint-review]`, the step ran 169 spawns for $209.09 and made 15 distinct step-unique survivors ($13.94 each), 3 of them high-consequence (D2, D4, D8). The pm seats (sonnet, 26 seats; s319: 26, $11.02) cost $17.00 and made none of the 15. Their one MAJOR, pm-02#F-1, is D1, which is counted REFOUND (open). The document reads the step as KEEP and records the pm seats as a narrowing candidate that one sprint does not decide.
+
+Hours: the pm seats are 26 spawns, $17.00 and 0.75 agent-h. That figure is agent-hours (the spawns' own `minutes` summed and divided by 60), not wall clock. The document gives no hours for the pm seats, because `sr_dv_yield.py` prints the seat block as spawns and dollars by (role, model ran) and prints agent-minutes only per phase. Derivation: the release owner's query over the re-extracted `spawns.jsonl` (EXTRACT_WIN_END=2026-11-12T18:53:06Z), filtered to sprint 321, step `sprint-review` and role `pm`. Control: the $17.00 matches the document's pm row, and the step's other roles sum to the document's step total. This filing ran nothing.
+
+The population counts `gate-validation[sprint-review]` into the step, so this reading is one of BL-1003's suspect readings.
+
+What decides it: the same reading on the next measured graph sprint, by the same method and script, giving the pm seats' step-unique survivors, their dollars and their hours. Remove the pm seats from sprint-review if that sprint also reads 0 step-unique survivors from them and no high-consequence catch is theirs alone. Keep them if they make at least one step-unique survivor at a cost per survivor no higher than the step's own on that sprint. Keep them whatever the count on any high-consequence step-unique catch that no other seat raised: the high-consequence guard judges a rare catch on its consequence, not its frequency.
+
+Baseline: s321
+Step: sprint-review
+Expected movement: if the second reading also reads 0, removing the pm seats takes about 26 spawns and $17.00 a sprint out of sprint-review ($0.68 per story at s321's 25 stories), and the step's step-unique survivor count stays at what the other seats made.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), with its high-consequence guard.
+
+Receipt: `verify: manual`. The close is a measurement on a future sprint, so no tree receipt exists. It closes on an `Outcome measured:` line from the second measured sprint that names that sprint, the measuring script, the pm seats' step-unique survivors, and their dollars and hours, the form BL-810 and BL-812 use. What else would satisfy a weaker receipt: a `has` on `sprint-review.md` for a narrowed seat set, which a prose edit satisfies without any measurement.
+
+Provenance: batch 256, release cluster b256-N3, from the s321 sprint-review and deploy-validate step-value reading; id allocated by the lead.
+
+**LANDED (v0.1144.0).** KEEP the pm seats, by the keep branch of the decision rule above, on the second measured sprint, graph s322. The reading is `docs/analysis/step-value-sprint-review-pm-seats-s322.md` (the s321 method, per finding for the pm seats), with every count and dollar figure from `docs/analysis/step-value-b257/bl1004/pm_seats_s322.py` and its output beside it. The pm seats (sonnet, 9 seats) cost $6.51 and 0.23 agent-h and raised 5 step-unique survivors (triage entries T-1, T-2, T-12, T-13, T-14), $1.30 each. The step's own cost per survivor is at least $3.16 ($82.08 over at most 26 distinct majors), so the keep branch holds without classifying the other roles' entries. No pm survivor is high-consequence, and none is the pm seats' alone: each entry was also raised by another role's seat, in T-2, T-12 and T-14 at minor only. The s321 control reproduces in the same run (pm 26 spawns, $17.00, 0.75 agent-h; step 169 spawns, $209.09). No step file changes.
+
+Outcome measured: graph s322, the second measured sprint, by `docs/analysis/step-value-b257/bl1004/pm_seats_s322.py` (the pm seats' survivors, dollars and hours) and `docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py` --seats (per story), over one extraction with EXTRACT_WIN_END=2026-11-12T09:38:14Z; pm seats 9 spawns, $6.51, 0.23 agent-h, 5 step-unique survivors at $1.30 each against the step's at least $3.16. Per story, sprint-review plus gate-validation[sprint-review]: before s321 (25 stories) 0.14 h gap-inclusive, token-equivalent $9.4 (API $9.4), 19.7M tokens, lead $1.1, subagent $8.4; after s322 (8 stories) 0.29 h gap-inclusive, token-equivalent $12.6 (API $10.3), 30.2M tokens, lead $2.3 (API $0.0), subagent $10.3. The pm seats' value: docs/analysis/step-value-sprint-review-pm-seats-s322.md:68 "T-14 pm-cross::F-3".
+
+Verdict: sprint-review plus gate-validation[sprint-review] did not fall.
+
+verify: manual
+
+## BL-1045 — verdicts recorded outside the shared content-keyed verdict store are thrown away, and no mechanism prevents it
+
+**LANDED (v0.1144.0).** The remainder closed with BL-1114 (v0.1140.0) and BL-1115 (v0.1136.0): at f29ff3693 arm W1 carries 0 `# VS-WRITER BL-` rows (6 `shared` rows in the same count), and `scripts/validate-verdict-identity.sh` exits 0. One writer class W1 cannot see remained: a counter-armed `core/scripts/hermetic-run.sh` run in the distribution that names no `AI_DLC_VERDICT_STORE` recorded its pass into `<base>/<root commit>`, because `hr_store_put`'s store-OFF guard exempted armed runs. W1 scans tracked lines, and every tracked arming path (`.githooks/pre-push` `fxcount_arm`, and `scripts/seed-verdict-store.sh` through that same function) sets `<base>/counted-<vk>`, so these runs were hand invocations with no line to scan. At f29ff3693 the root-keyed store held 182 such entries of 340 (each carries `#judge`; 33 written since 12:00 that day), against 4387 of 4387 judged entries in the live `counted-b4f3542dc948`. The guard now records nothing for any distribution run that names no store, armed or not. The armed branch prints `verdict store OFF: a counter-armed distribution run names no store; a push reads only counted-<vk>, so seed it with scripts/seed-verdict-store.sh`, and the unarmed branch's text is unchanged. Recording nothing is right: those passes went to a store no push reads, so nothing a later run reads is lost, and the message points at the seeder, which writes the store a push does read. The existing entries were left in place.
+
+**PARTIAL (v0.1133.0) — the arm shipped; the sites it names as owed move under BL-1114 and BL-1115.** Arm W1 of `scripts/validate-verdict-identity.sh` (the pre-suite step `verdict-store identity`) refuses every unreviewed verdict-store or pass-record writer site. A site is a non-comment line, in a tracked shell file under `.githooks/`, `core/` (excluding `core/fixtures/`) or `scripts/`, that assigns `AI_DLC_VERDICT_STORE` or names a per-clone `ai-dlc-*` record under a git dir. Each site is keyed on its path and its whitespace-normalized text. The `# VS-WRITER` rows must equal the sites as a multiset, so a new site, a second copy, a copy in another file and a stale row all fail. At the base sha the scan reads 178 files and 38 sites: 9 `shared`, 1 `probe` (`scripts/invalidation-guard.sh`'s e2e world), 16 `not-a-pass` (durations, failures, stall, suite-key log, read-set map, install log, one reader), 1 owed under BL-1114 (`scripts/census-hermetic-coverage.sh`'s per-pair store) and 11 owed under BL-1115 (the per-clone key, verified, suite-key, placement-key, presuite-key and pregate records in both hooks and `scripts/pregate-self-check.sh`). The `core/fixtures/` exclusion covers 39 assignment lines in 13 files, and every one runs a mktemp probe world (one, `fixture-invocation-budget/run.sh:116`, is a message string). Remainder: BL-1114 (the runner's unarmed default store) and BL-1115 (the per-clone records).
+
+**DEFECT.** Filed 2026-11-13. The operator requirement, relayed by the lead: every fixture, census or gate verdict is recorded in the shared, content-keyed verdict store (`AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`), keyed on what the run actually read; any run from any clone or worktree reuses a recorded pass whose key matches; a stopped or red run keeps every pass it recorded; and no verdict is recorded in a per-clone or per-worktree location. It is codified in `.claude/rules/operator-rulings.md`, "Valid measurements are never thrown away", and has no enforcer.
+
+Owed: a validator arm that refuses a pass-record writer outside the shared store, with its false-positive set measured first. The subjects, each quoted with its file:line at the base sha:
+- A plain `hermetic-run.sh` pass is recorded in the parent store (`core/scripts/hermetic-run.sh:657-678`, `hr_store_put`), while an armed push reads only `counted-<vk>` (`.githooks/pre-push:3513`, `AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}/counted-$vk"`), so a hand run's valid pass is never reused by the gate.
+- `CLAUDE.md:51`: "Clear the shared verdict store by EXACT LISTING before a gate, never by glob or `rm -rf`."
+- `scripts/census-hermetic-coverage.sh:93`: "It writes nothing to `.git/ai-dlc-fixture-durations` or to the real verdict store".
+- ai-dlc-d7's F14 consumer-layout census writes its records into a scratch clone's `.git`; as reported by the lead, and it has no file at the base sha, so no file:line is quoted.
+
+Provenance: batch 257, operator requirement relayed by lead ai-dlc-a9; id allocated by the lead.
+
+verify: manual
+
+## BL-1126 — BL-878's "a sixth unguarded read" line and BL-899's class (a) list name a row set R13 no longer reads
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `docs/backlog.md`, BL-878 (the paragraph before its `verify:` line) and BL-899 (the class (a) bullet of its UNGUARDED-READ findings).
+
+BL-878 says "A sixth unguarded read, scripts/validate-enforcement-map.sh ... BL-899's R13 ceiling DEFAULT_MAX_R13 drops from 6 to 5 when it is guarded". BL-899's class (a) lists `scripts/fixture-matrix-allowlist.txt`, `scripts/fixture-inprocess-allowlist.txt` and `scripts/validate-enforcement-map.sh`, and says "The ceiling drops back to 5 when it is guarded". Both lines were written when BL-878's six rows were six NAMED reads that included `scripts/fixture-matrix-allowlist.txt`.
+
+At d619fe62a, `scripts/validate-fixture-inprocess.sh` names `fixture-matrix-allowlist` 0 times. The control: it names `fixture-inprocess-allowlist` 2 times. R13's record for BL-878's receipt, `.git/ai-dlc-r13-records/be17c2bb8c112d5ee06092cf35fb76b19a12cea8.green`, has all seven `named` blob ids equal to d619fe62a's. It carries 5 named UNGUARDED-READ rows: `core/fixtures/lib/mutant.sh`, `scripts/fixture-inprocess-allowlist.txt`, `scripts/validate-enforcement-map.sh`, `scripts/validate-fixture-hygiene.sh` and `scripts/validate-fixture-invocations.sh`. It also carries `ENUMERATED(1270) exit=1`, the enumeration-removal row from BL-899's batch-257 PARTIAL, which took `DEFAULT_MAX_R13` from 5 to 6 (`scripts/validate-backlog-receipts.sh:2799`; it read 5 at 39184970b). Guarding `validate-enforcement-map.sh` still takes the count from 6 to 5. The rows that make up the count have changed: it is no longer six named reads.
+
+Fix: restate both lines as "5 named rows plus `ENUMERATED(<n>)`", and drop `scripts/fixture-matrix-allowlist.txt` from BL-899's class (a).
+
+Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b; id allocated by the lead.
+
+**LANDED (v0.1144.0).** Both lines now name the row set R13 reads, though not in the filed form "5 named rows plus `ENUMERATED(<n>)`": W6-10's guard left two named rows. Read from the hook step's own run on 45162340e plus this change: `core/fixtures/lib/mutant.sh`, `scripts/fixture-inprocess-allowlist.txt` and `ENUMERATED(1286)`, all exit 1, ceiling 3.
+- BL-878's paragraph before its `verify:` line was restated by W6-10 and no longer carries the "sixth unguarded read" claim.
+- BL-899's UNGUARDED-READ bullet lists the three rows and drops `scripts/fixture-matrix-allowlist.txt`.
+
+verify: manual
+
+## BL-1135 — the advisor gate is silent for an agent with no built-in advisor grant, so a lead that holds `mcp__advisor__consult` pushes and merges ungated
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/hooks/ai-dlc-advisor-gate.sh`, its fixture `core/fixtures/advisor-gate-deny`, and SKILL.md Rule 32 (`core/skills/ai-dlc/SKILL.md`, rendered into `postcompact-digest.md`).
+
+The consumer graph filed this as a push candidate at graph 037a6bc75. At f29ff3693 the hook exits before its scan unless the latest `advisor_tool` attachment is a live grant (`:630`). An agent with no grant, or a withdrawn one, is therefore never gated, even when it holds the MCP consult. A probe against the hook at f29ff3693, `ADVISOR_GATE_REREADS=0`:
+- no grant, consult in the tool roster, no consult: push and merge SILENT
+- the granted control, no advisor: push and merge DENY
+- graph session f7ff0ac0 (no `advisor_tool` line, model `deepseek41`, `mcp__advisor__consult` in 3 `deferred_tools_delta` attachments, 0 consult calls), cut just before its `gh pr merge 1327`: SILENT
+
+Fix (operator ruling, batch 257): an agent whose grant is not `on` must call `mcp__advisor__consult` before a gated action, as the operator-home ancestor's no-grant arm does. A granted agent stays on the built-in advisor only (BL-459 option A). The arm binds only an agent whose transcript shows it holds the consult: the latest `deferred_tools_delta` naming it lists it as added, or, with no such attachment, a consult call is on disk. Graph's two no-grant sessions from 2026-11-09 (80c96d42, cc52f106) list no advisor server, so an ancestor-exact arm would have shipped an unclearable deny on 80c96d42's `git push -u origin HEAD` and cc52f106's `gh pr merge 1309`.
+
+Provenance: batch 257, wave 8, push candidate PC-S323 from the consumer graph; filed and fixed by ai-dlc-d8 (W8-01); id allocated by the lead.
+
+**LANDED (v0.1144.0).** `ai-dlc-advisor-gate.sh` gates an agent with no grant (none or withdrawn) that holds `mcp__advisor__consult`. A consult after the last gated action, or inside THE WINDOW, clears it, and the deny names the consult. An agent holding neither advisor stays SILENT. The `unavailable` WARN is the granted arm's alone. Granted verdicts are unchanged: the 227 earlier cells pass on the fixed hook. `advisor-gate-deny` arm NOGRANTMCP adds 16 cells, for 243. Against the f29ff3693 hook it fails 8 of them. Each of five hand mutants (WARN unguarded, consult credited to a granted agent, no held test, removedNames ignored, no consult window) fails its own cells. Replaying graph f7ff0ac0 at each of its 8 push/merge calls gives 4 DENY: both merges and two pushes to non-update branches. Each clears with a consult appended. The other 4 are update-branch pushes, a branch delete and a `gh pr create` mention. Rule 32 names the consult as the no-grant path. KNOWN GAP: a harness that loads MCP tools without a `deferred_tools_delta` line reads as holding nothing and stays SILENT.
+
+verify: manual
+

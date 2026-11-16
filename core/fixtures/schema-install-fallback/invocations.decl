@@ -1,3 +1,5 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-50 *
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output).
+# BL-878: install.sh runs in process (the inproc: row, one per inproc_run pass); the program runs only in the two cli cells.
+54 *
 2 scripts/install.sh
+3 inproc:scripts/install.sh

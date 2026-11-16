@@ -2,9 +2,12 @@
 # AI/DLC Installation Script
 # Copies core files into a target project and generates config scaffolding
 
+# The whole program is ai_dlc_install_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition.
+ai_dlc_install_main() {
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PROJECT_ROOT="${1:-.}"
 AI_DLC_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -827,3 +830,7 @@ fi
 echo "   Or manually: search for {template_variable} placeholders"
 echo "3. Review patterns in docs/ai-dlc-patterns/ for optional enforcement"
 echo "4. Run /ai-dlc to start your first pipeline"
+}
+# Executed, it runs; sourced, it has defined ai_dlc_install_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ai_dlc_install_main "$@"

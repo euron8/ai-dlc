@@ -2688,6 +2688,20 @@ END { r12_flush(); printf "R12-COUNTS %d %d %d\n", ne, np, nx }' "$_l")" || retu
 #   "Present at --base" is `git cat-file -e "${BASE}:${P}"`. M1 lives HERE and not in
 #   scripts/backlog-receipt-lib.sh because only this validator has a base to compare; the two
 #   programs therefore differ by exactly this base-dependent route, which both files record.
+#   THE FALSE-POSITIVE CENSUS (batch 257, at 27fded102, by this file's `--r13-drive score` over a ledger of the
+#   archive's receipts). A false positive is a driver-absent label on a receipt whose exit its own absent driver did
+#   not cause. docs/backlog.archive.md holds 810 column-0 `verify: sh` receipts (and 2 indented ones, neither a driver
+#   receipt); 138 have a driver segment (m1_driver_ops); in 84 the FIRST segment's driver is absent at HEAD, and in
+#   none is only a later segment's driver absent. All 84 exit 127 and read EXCLUDED-DRIVER-ABSENT-AT-BASE at --base
+#   origin/main (= HEAD); at --base 20784dea2 (before those drivers were deleted) 81 read DRIVER-REMOVED and 3
+#   EXCLUDED. 0 are false: a first-segment `bash <absent P>` runs nothing else. NOT EXECUTED, AND AVAILABLE: the 54
+#   whose drivers are all present (the `[ ! -e ]` conjunct cannot hold; read from the code and an `-e` test, not a
+#   run; some recurse into pre-push) and the 672 with no driver segment (m1_driver_ops prints nothing). The open
+#   ledger's one sh receipt (BL-878) has its driver present. None of the 84 carries an option before P, so the exit-1
+#   admission is held by core/fixtures/backlog-receipt-traced-removal's world m (`bash -e w/never2.sh`).
+#   `bash A && bash B` with a present A is 0 in the corpus. The fixture's c-m1-chain cell calls m1_driver_absent
+#   in process: a present A that exits 1 after printing B's diagnostic admits nothing, while `-e` before B, or
+#   exit 127, names B. No real-worker run drives the chain.
 #
 # R13, traced removal over the NAMED closure (`--traced-removal`, which the hook passes; a run
 #   without it prints `R13-POPULATION: NOT RUN`, so the fixtures that drive this file over seeded
