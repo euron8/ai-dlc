@@ -28,3 +28,4 @@ find
 tar
 comm
 uniq
+iconv

@@ -30,3 +30,4 @@ tar
 tr
 uniq
 wc
+iconv

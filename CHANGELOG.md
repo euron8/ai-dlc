@@ -19,6 +19,21 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1153.0] - 2026-11-16
+
+### BL-1143: an undeclared tool call fails a distribution-layout fixture run
+
+`core/scripts/hermetic-run.sh` turns its undeclared-tool trap report into a FAIL in the distribution layout: a fixture that calls a tool from the fixed tool dirs without declaring it in `tools.decl` exits 1 and records no pass. The consumer layout keeps the WARNING and the verdict unchanged. A counted seed of all 292 fixtures found 26 that call undeclared tools; their 40 (fixture, tool) pairs are declared. `READSET_RUNNER_CARRY` in both pre-push hooks carries every recorded pass across the runner span edit, so a fixture meets the FAIL on its next run and no release re-runs the whole suite. `hermetic-runner` arm TR now expects exit 1 in the distribution cells.
+
+### BL-1154: gate-adjudication hides node from the trap dir too
+
+Since 0.1146.0 the trap dir after the tool farm holds a stub for every tool name, so gate-adjudication's S23 still found `node` after replacing the farm dir and read FIXTURE BROKEN under hermetic-run. The fixture now also drops the trap dir (marked `.hr-trap-farm`) from the PATH it builds.
+
+### Rules and records
+
+- BL-1145 closes: I87 (`scripts/validate-enforcement-map.sh`) counts an `AI_DLC_*` assignment that follows `$(`, so `"$(AI_DLC_PROJECT_ROOT=… cmd)"` no longer reads as an unassigned key.
+- BL-984 advances: its main subject is closed by BL-1143; the arm's blind spots stay open.
+
 ## [0.1152.0] - 2026-11-16
 
 ### BL-982: remediator-shard-join's in-process passes are counted

@@ -28,3 +28,4 @@ id
 env
 paste
 uniq
+iconv

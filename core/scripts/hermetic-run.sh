@@ -53,7 +53,7 @@
 #
 # THE SANDBOX. A fresh `mktemp -d`, `env -i`, PATH set to a symlink farm of the declared tools (keyed and
 # unkeyed) and then the undeclared-tool trap, so an undeclared tool is not found and a call to one that exists in the
-# fixed tool dirs is logged and WARNED, `AI_DLC_PROJECT_ROOT` set to the sandbox root, and the fixture invoked as
+# fixed tool dirs is logged and FAILS the run (a WARNING in the consumer layout), `AI_DLC_PROJECT_ROOT` set to the sandbox root, and the fixture invoked as
 # `<absolute bash> core/fixtures/<f>/run.sh` from the sandbox ROOT -- the pre-push pool's own invocation, never
 # a `cd` into the fixture directory (CLAUDE.md measures that as five fabricated failures).
 # The sandbox is removed on exit unless `AI_DLC_HERMETIC_KEEP=1`. A declared DIRECTORY is copied by
@@ -677,13 +677,18 @@ HR_LOG="$HR_WORK/log"
     "$HR_BASH" "$HR_FXROOT/$HR_FX/run.sh" ) > "$HR_LOG" 2>&1
 hr_rc=$?
 cat "$HR_LOG"
-# AN UNDECLARED TOOL CALLED is a WARNING in both layouts, and the verdict is unchanged: a fixture carried across this
-# arm's landing meets it on another change's push, so a FAIL here would block work that did not cause it (BL-1143
-# measures the population and makes it a FAIL). Names are listed once each, in call order.
+# AN UNDECLARED TOOL CALLED is a FAIL in the distribution layout: the run is rc 1 and records no pass. In the consumer
+# layout it is a WARNING and the verdict is unchanged, because a consumer's own fixtures are not this repo's to declare.
+# Names are listed once each, in call order.
 if [ -s "$HR_WORK/trap.log" ]; then
   hr_und=" "
   while IFS= read -r hr_tp; do case "$hr_und" in *" $hr_tp "*) ;; *) hr_und="$hr_und$hr_tp " ;; esac; done < "$HR_WORK/trap.log"
-  printf 'hermetic-run: %s: WARNING undeclared tool(s) called:%s-- each exists in %s and is absent from tools.decl, so the call answered rc 127; declare it (the verdict is unchanged)\n' "$HR_FX" "$hr_und" "$HR_TOOL_DIRS"
+  if [ "$HR_LAYOUT" = distribution ]; then
+    printf 'hermetic-run: %s: FAIL undeclared tool(s) called:%s-- each exists in %s and is absent from tools.decl, so the call answered rc 127; declare it\n' "$HR_FX" "$hr_und" "$HR_TOOL_DIRS"
+    [ "$hr_rc" -ne 0 ] || hr_rc=1
+  else
+    printf 'hermetic-run: %s: WARNING undeclared tool(s) called:%s-- each exists in %s and is absent from tools.decl, so the call answered rc 127; declare it (the verdict is unchanged)\n' "$HR_FX" "$hr_und" "$HR_TOOL_DIRS"
+  fi
 fi
 
 # REQUIRED inputs: each must have a `HERMETIC-CONSUMED <path>` line in the fixture's output, the

@@ -19,3 +19,6 @@ sed
 sort
 tr
 wc
+uniq
+comm
+iconv

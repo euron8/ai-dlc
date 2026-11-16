@@ -26,3 +26,4 @@ wc
 rm
 env
 seq
+locale

@@ -24,3 +24,5 @@ cut
 diff
 date
 mv
+uniq
+iconv

@@ -29,3 +29,4 @@ tr
 wc
 xargs
 uniq
+iconv

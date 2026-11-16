@@ -22,3 +22,4 @@ find
 env
 uniq
 chmod
+iconv

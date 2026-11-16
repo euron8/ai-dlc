@@ -32,3 +32,5 @@ date
 sleep
 python3
 jq
+env
+iconv
