@@ -2114,8 +2114,9 @@ READSET_RUNNER_LEGACY="424152daacd574e7998875de703bcfa957951fe690809e7208bcb95b3
 # row holds the OLD sha, read while the current span sha is the NEW one, is read as holding the new one and republished
 # (c `m`), so a runner span edit that only ADDS a way to fail re-runs no fixture its other rows do not move: a pass
 # carried this way is exactly the guarantee it had before the edit, and the new arm judges each fixture on its next
-# run. A pair whose NEW sha is not the current span is inert. One pair: the undeclared-tool trap (BL-1118).
-READSET_RUNNER_CARRY="ad96b5dbb41480ae48a6dd818f8ead71a3fe6618d5f897a95bc7b58e5a0069e1:366c7a6c930e1b61a719e0d5122fa54c2c3626ee89943c19652bd0b5d1e64238"
+# run. A pair whose NEW sha is not the current span is inert. Each span a key record may still hold maps to the current
+# one: the undeclared-tool trap (BL-1118) and its distribution-layout FAIL (BL-1143).
+READSET_RUNNER_CARRY="ad96b5dbb41480ae48a6dd818f8ead71a3fe6618d5f897a95bc7b58e5a0069e1:059bbe1a035443c9e2e31a2d395cc11120e27cac4bd01cfc7097bb6bd5a977c9 366c7a6c930e1b61a719e0d5122fa54c2c3626ee89943c19652bd0b5d1e64238:059bbe1a035443c9e2e31a2d395cc11120e27cac4bd01cfc7097bb6bd5a977c9"
 readset_keys() { # <list> <out>
   local list="$1" out="$2" seed=0 v2=/dev/null lp=/dev/null lv=/dev/null pp=/dev/null pv=/dev/null tab
   tab="$(printf '\t')"

@@ -638,6 +638,9 @@ if [ -d "$GA_NODE_DIR" ]; then
   done
 fi
 GA_P2="$(printf '%s' "$PATH" | tr ':' '\n' | GA_D="$GA_NODE_DIR" GA_N="$GA_NN" awk '$0 == ENVIRON["GA_D"] { print ENVIRON["GA_N"]; next } { print }' | paste -sd: -)"
+# Under hermetic-run.sh the undeclared-tool trap dir (marked .hr-trap-farm) follows the farm and holds a stub named
+# node, so it is dropped as well.
+GA_P2="$(printf '%s' "$GA_P2" | tr ':' '\n' | while IFS= read -r ga_d; do [ -f "$ga_d/.hr-trap-farm" ] || printf '%s\n' "$ga_d"; done | paste -sd: -)"
 if [ -n "$(PATH="$GA_P2" command -v node 2>/dev/null)" ]; then
   bad "S23-pre: FIXTURE BROKEN — node is still on PATH after stripping $GA_NODE_DIR, so the verifier-failure arm cannot be built"
 else

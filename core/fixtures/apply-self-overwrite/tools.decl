@@ -28,3 +28,7 @@ tail
 touch
 tr
 wc
+iconv
+paste
+xargs
+rmdir

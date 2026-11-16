@@ -2877,6 +2877,15 @@ LEFT OPEN by this progress, in addition to every LEFT OPEN item above: the herme
 - **The arm's own blind spots.** Names outside the fixed tool dirs; a call under a fixture's own `env -i`, which drops `HR_TRAP_LOG`; a PATH a fixture builds without the trap directory (the 7 fixtures that set `PATH=/usr/bin:/bin:…`); and branches a green run never executes (failing-branch-only and `--matrix`-only sites).
 - Every LEFT OPEN item above that the arm does not reach.
 
+**PARTIAL (v0.1153.0).** (batch 257, W12-02, ai-dlc-c3.) The entry's main subject is closed. An undeclared call to a tool in the fixed tool dirs now FAILS the run in the distribution layout (BL-1143), and hermetic-runner arm TR is the receipt. In the same release, 40 (fixture, tool) pairs across 26 fixtures are declared, from a counted seed of all 292 fixtures (BL-1143 lists them). What survives:
+- names outside the fixed tool dirs;
+- a call under a fixture's own `env -i`, which drops `HR_TRAP_LOG`;
+- a PATH a fixture builds without the trap dir, such as the constructed-PATH sites BL-1154 lists;
+- failing-branch-only and `--matrix`-only sites, which a green run never executes;
+- the consumer layout, which still only WARNS;
+- the carried set, where each fixture meets the FAIL on its next run;
+- every LEFT OPEN item above that none of these reaches.
+
 Receipt: `verify: manual`. No runner-wired receipt exists for an unbuilt hermetic-run arm. A `has` on `hermetic-run.sh` for `command not found` is closable by a comment. A fixture arm that seeds a fixture calling an undeclared tool and asserts hermetic-run refuses it is the receipt shape, and it lands with the arm. What else would satisfy a weaker receipt: declaring every tool the census found, which fixes today's population and leaves the next undeclared tool as silent as this one.
 
 Provenance: batch 255, release F15 (BL-983's population question); id allocated by lead ruling.
@@ -3406,54 +3415,6 @@ Remaining (the second owed item, the part on disk is done):
 Remaining:
 - The 7 `whole` rows of dispatch-model-guard, validator-arm-selection and schema-install-fallback. The guard refuses all three on today's tree, so these rows need a fix to the loss itself, not a retry.
 - The `inputs.decl` lines narrowed by earlier `--declared-out` traces whose windows are no longer on disk. They are not yet enumerated, and the map re-trace did not cover them.
-
-verify: manual
-
-## BL-1145 — I87 cannot see a `$(VAR=...` prefix assignment
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `scripts/validate-enforcement-map.sh` I87, the assignment match in `I87_EXPOSED_AWK` (`:8870`).
-
-I87 counts `AI_DLC_X=` as an assignment only after `^`, a blank, `;` or `export`. A prefix assignment opening a command substitution, `"$(AI_DLC_X=... cmd)"`, follows a `(` and is not counted, so a fixture that assigns the key there is reported as naming it unassigned. Measured on fixture-git-env-seam (BL-1117): with arm V's `  AI_DLC_PROJECT_ROOT="$ROOT" bash` deleted, its only assignments were arm W's two `w_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash ...)"` lines, and `bash scripts/validate-enforcement-map.sh` exited 1 with `FAIL: I87 ... fixture-git-env-seam AI_DLC_PROJECT_ROOT`. The same two lines spelled `"$( AI_DLC_PROJECT_ROOT=..."` exited 0 with no I87 line. The program is the same in both spellings; only the grammar differs. BL-1117 shipped the spaced spelling.
-
-Fix: add `\(` (and the `$(` form) to the match's leading alternation, prove on a probe tree that the unspaced form is acquitted and an unassigned name is still reported, and measure the false-positive set across the live fixtures.
-
-Provenance: batch 257, wave 9, found by ai-dlc-19 (W9-05) on BL-1117's pregate; id allocated by the lead.
-
-verify: manual
-
-## BL-1143 — hermetic-run's undeclared-tool arm only warns: its subject-script population is unmeasured
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/scripts/hermetic-run.sh` (HR_SANDBOX, the undeclared-tool trap's report) and the `tools.decl` of each fixture it names.
-
-BL-1118's arm prints `WARNING undeclared tool(s) called: <names>` and leaves the verdict unchanged, in both layouts. A FAIL would turn every fixture carried across its landing (`READSET_RUNNER_CARRY`) red on the push of whatever change next re-runs it, so the arm cannot fail a run until that population is measured.
-
-The dominant shape is a PROBE ORDER, for example `if command -v shasum …; then shasum …; elif command -v sha256sum …; then sha256sum …; else <fallback>` (`core/scripts/content-seal.sh:207`, `core/scripts/merge-review-shards.sh:1434-1435`, `core/scripts/wait-for-deliverable.sh:577-578`). With the first leg undeclared, the subject silently takes its fallback in the sandbox. Under the trap, `command -v` finds the stub, the stub is called, and the arm reports it: a true positive, because the subject ran a path production does not take. The same class covers the hooks' tracer probes (`.githooks/pre-push:1440`, `:1442` sandbox-exec and python3) and `pgrep` (`:3066`).
-
-The static population, at f29ff3693: 128 non-comment sites in `*.sh` files and both hooks probe a tool-dir name the reaching fixture does not declare. 79 fixtures name such a script in `inputs.decl`, and 132 do counting directory reach. The join's control is 3351 declared-reach pairs. The 12 names, by fixtures reaching by name:
-
-| tool | fixtures |
-|---|---|
-| sha256sum | 32 |
-| file | 24 |
-| sandbox-exec | 20 |
-| pgrep | 18 |
-| jq | 16 |
-| python3 | 14 |
-| shasum | 14 |
-| node | 11 |
-| git | 9 |
-| fs_usage | 7 |
-| uniq | 2 |
-| gh | 1 |
-
-Fix:
-1. Measure the union of the 79 direct-reach fixtures and the 57 that BL-1118's delivering push re-runs, under the trap, in one counted seed.
-2. Declare or fix each hit, and re-seed the changed fixtures.
-3. Make the report a FAIL in the distribution layout. The receipt then flips hermetic-runner arm TR's distribution cell to exit 1.
-
-The 53 directory-reach-only fixtures are named in the result: measured, or stated as static only.
-
-Provenance: batch 257, wave 9, the remainder of BL-1118 named by ai-dlc-49 (W9-07); id allocated by the lead.
 
 verify: manual
 

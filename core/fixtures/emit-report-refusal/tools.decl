@@ -29,3 +29,4 @@ find
 env
 python3
 uniq
+iconv

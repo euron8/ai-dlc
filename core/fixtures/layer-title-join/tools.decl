@@ -43,3 +43,6 @@ tr
 uniq
 wc
 xargs
+cksum
+paste
+iconv

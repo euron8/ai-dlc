@@ -1,4 +1,4 @@
 # Measured by one counted run through scripts/seed-verdict-store.sh (the judge's own J3 output), after the mutation battery was removed.
-476 *
+478 *
 0 core/scripts/validate-hook-registration.sh
 2 core/skills/ai-dlc-update/reconcile/emit-report.sh

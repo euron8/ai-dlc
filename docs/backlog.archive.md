@@ -45695,3 +45695,119 @@ Provenance: batch 255, fixture cluster F14; id allocated by the lead.
 
 verify: manual
 
+## BL-1145 — I87 cannot see a `$(VAR=...` prefix assignment
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `scripts/validate-enforcement-map.sh` I87, the assignment match in `I87_EXPOSED_AWK` (`:8870`).
+
+I87 counts `AI_DLC_X=` as an assignment only after `^`, a blank, `;` or `export`. A prefix assignment opening a command substitution, `"$(AI_DLC_X=... cmd)"`, follows a `(` and is not counted, so a fixture that assigns the key there is reported as naming it unassigned. Measured on fixture-git-env-seam (BL-1117): with arm V's `  AI_DLC_PROJECT_ROOT="$ROOT" bash` deleted, its only assignments were arm W's two `w_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash ...)"` lines, and `bash scripts/validate-enforcement-map.sh` exited 1 with `FAIL: I87 ... fixture-git-env-seam AI_DLC_PROJECT_ROOT`. The same two lines spelled `"$( AI_DLC_PROJECT_ROOT=..."` exited 0 with no I87 line. The program is the same in both spellings; only the grammar differs. BL-1117 shipped the spaced spelling.
+
+Fix: add `\(` (and the `$(` form) to the match's leading alternation, prove on a probe tree that the unspaced form is acquitted and an unassigned name is still reported, and measure the false-positive set across the live fixtures.
+
+**LANDED (v0.1153.0).** (batch 257, W12-02, ai-dlc-c3.)
+- The assignment match in `I87_EXPOSED_AWK` takes `$(` as a leading alternative: `(^|[ \t]|;|\$\(|export[ \t]+)AI_DLC_[A-Z0-9_]+=`. It takes `$(`, not a bare `(`: of the 47 live fixture lines matching `\(AI_DLC_[A-Z0-9_]+=`, 44 open `"$(` and are prefix assignments, and 3 are prose comments, for example `(AI_DLC_PROJECT_ROOT=…)` (adversarial-shard-merge/lib.sh:486, gate-transition/run.sh:16, readset-skip/run.sh:4202). A bare `(` would count those 3 comments as assignments; `$(` counts none of them.
+- Probe: the `I87_EXPOSED_AWK` text is extracted from the validator and run over four seeded dirs with key `AI_DLC_PROJECT_ROOT`. Tip: `"$(AI_DLC_…=` acquitted, `"$( AI_DLC_…=` acquitted, a read with no assignment REPORTED, the near-miss `$(foo)AI_DLC_…=1` REPORTED. Mutant (the base regex): the unspaced form REPORTED, the rest unchanged.
+- The motivating case on the real corpus: I87's own definitions, extracted from the validator, run over a copy of `core/fixtures/` whose fixture-git-env-seam carries its two `$( AI_DLC_PROJECT_ROOT=` lines unspaced. Base: 1 exposed dir, fixture-git-env-seam `AI_DLC_PROJECT_ROOT`. Tip: 0. On the live fixtures base and tip both read 0 exposed dirs over 150 readable keys.
+- No fixture drives I87's grammar: its 11 mentions under `core/fixtures/` are comments.
+
+Provenance: batch 257, wave 9, found by ai-dlc-19 (W9-05) on BL-1117's pregate; id allocated by the lead.
+
+verify: manual
+
+## BL-1143 — hermetic-run's undeclared-tool arm only warns: its subject-script population is unmeasured
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/scripts/hermetic-run.sh` (HR_SANDBOX, the undeclared-tool trap's report) and the `tools.decl` of each fixture it names.
+
+BL-1118's arm prints `WARNING undeclared tool(s) called: <names>` and leaves the verdict unchanged, in both layouts. A FAIL would turn every fixture carried across its landing (`READSET_RUNNER_CARRY`) red on the push of whatever change next re-runs it, so the arm cannot fail a run until that population is measured.
+
+The dominant shape is a PROBE ORDER, for example `if command -v shasum …; then shasum …; elif command -v sha256sum …; then sha256sum …; else <fallback>` (`core/scripts/content-seal.sh:207`, `core/scripts/merge-review-shards.sh:1434-1435`, `core/scripts/wait-for-deliverable.sh:577-578`). With the first leg undeclared, the subject silently takes its fallback in the sandbox. Under the trap, `command -v` finds the stub, the stub is called, and the arm reports it: a true positive, because the subject ran a path production does not take. The same class covers the hooks' tracer probes (`.githooks/pre-push:1440`, `:1442` sandbox-exec and python3) and `pgrep` (`:3066`).
+
+The static population, at f29ff3693: 128 non-comment sites in `*.sh` files and both hooks probe a tool-dir name the reaching fixture does not declare. 79 fixtures name such a script in `inputs.decl`, and 132 do counting directory reach. The join's control is 3351 declared-reach pairs. The 12 names, by fixtures reaching by name:
+
+| tool | fixtures |
+|---|---|
+| sha256sum | 32 |
+| file | 24 |
+| sandbox-exec | 20 |
+| pgrep | 18 |
+| jq | 16 |
+| python3 | 14 |
+| shasum | 14 |
+| node | 11 |
+| git | 9 |
+| fs_usage | 7 |
+| uniq | 2 |
+| gh | 1 |
+
+Fix:
+1. Measure the union of the 79 direct-reach fixtures and the 57 that BL-1118's delivering push re-runs, under the trap, in one counted seed.
+2. Declare or fix each hit, and re-seed the changed fixtures.
+3. Make the report a FAIL in the distribution layout. The receipt then flips hermetic-runner arm TR's distribution cell to exit 1.
+
+The 53 directory-reach-only fixtures are named in the result: measured, or stated as static only.
+
+**LANDED (v0.1153.0).** (batch 257, W12-02, ai-dlc-c3.)
+- **The arm is a FAIL in the distribution layout.** Under `core/scripts/hermetic-run.sh:683-692`, a non-empty trap log prints `FAIL undeclared tool(s) called: <names>` and sets rc 1 (an rc that is already non-zero is kept). The run therefore records no pass, and the invocation judge does not run. The consumer layout keeps the WARNING and an unchanged rc, because a consumer's own fixtures are not this repository's to declare. The layout is the runner's existing `HR_LAYOUT` test (`core/scripts/`). A consumer root that carries its own `core/scripts/` therefore takes the distribution branch and gets the FAIL.
+- **The population, all 292 distribution fixtures, not the static union** (lead ruling D2). One counted seed, `scripts/seed-verdict-store.sh --keep <dir> --jobs 12` over every `core/fixtures/*/run.sh`, ran on a clean c9c7c370a tree, which has the same keys as 99c662068.
+  - Results: 289 rc 0. hook-registration-join and retro-compliance-workflow rc 2, the known no-decl refusals, so not measured. gate-adjudication rc 1, whose cause is the trap itself (BL-1154).
+  - Control, in the same invocation: a distribution probe whose run.sh calls `cmp` undeclared read `rc=0 warn=1`. 290 of the 292 kept outputs carry the runner's rc line.
+  - 26 fixtures printed a WARNING, every one for its own run (0 nested). Every tool named lives in `/usr/bin` or `/bin` on this box, so each is a plain declaration. That is 40 (fixture, tool) pairs:
+    - `iconv` in 19 fixtures, at the `if iconv -f UTF-8 -t UTF-8 …` probe at `core/skills/ai-dlc-update/reconcile/lib.sh:197`: apply-drift-refile, -b, -c; apply-machinery-stamp; apply-relabel-noop-row; apply-restamp-theirs; apply-self-overwrite; apply-worklist-rows; emit-report-refusal; layer-crosswalk-home; layer-title-join; owed-derivations-c; procsub-staged-refusal-boot, -b, -c; reconcile-emit-report-b; relocation-preclassify; retired-layer-token; self-update-fixture-log.
+    - `env`: apply-drift-refile-b and -c, in the H8 unset loop.
+    - `rmdir`: apply-drift-refile-c, at the apply.sh and check-owed-derivations.sh cleanups.
+    - `paste`: apply-self-overwrite, layer-title-join and procsub-staged-refusal-boot-c, at `reconcile/apply.sh` `paste -sd`.
+    - `uniq`: layer-extends-grain, relocation-preclassify and retired-layer-token, at `layer-drift.sh:1773` and `push-drain.sh:170`.
+    - `cksum`: layer-title-join, at `layer-drift.sh:1230`.
+    - `comm`: relocation-preclassify, at `emit-report.sh:1255`.
+    - `shasum`: reconcile-emit-report-b, at the `emit-report.sh:1046` probe.
+    - `locale`: h2-attest-scripts-dir. Its UTF-8 cell skipped on the stub.
+    - `git`: implementation-join-yield, at the `ai-dlc-continue.sh:963` probe.
+    - `mv`: retired-contract-token.
+    - `ls`: suite-dispatch-order, at `core/git-hooks/pre-push`'s `ls -1`.
+    - `sh`, `python3`, `jq` and `diff`: suite-content-key, whose subject version-probes its `TOOLS` list.
+    - `jq`: validator-arm-selection-b.
+- **Hand probe** (a distribution probe tree through the worktree's runner).
+  - Tip: undeclared `cmp` rc=1, the call still answering not found. Declared `cmp` rc=0.
+  - Mutant, the `hr_rc=1` line deleted: undeclared rc=0.
+- **The receipt is `core/fixtures/hermetic-runner` arm TR.**
+  - Distribution, undeclared: exit 1, the FAIL line, and an rc=1 line. The store writer runs only on rc 0.
+  - Distribution, declared: exit 0, with no FAIL or WARNING.
+  - Consumer, undeclared: exit 0 with the WARNING.
+  - A farm on PATH: exit 1 with the FAIL.
+- **No whole-suite re-run.** The span edit moves `<runner>#HR_SANDBOX`. A code-byte edit in the span predicted `RUN 290` and `CONSUMER 220`, against `RUN 0` unedited. `READSET_RUNNER_CARRY` in both hooks (I66) therefore maps both spans a key record still holds to the new one, so a fixture carried across this release meets the rc-1 arm on its next run. A carried fixture that calls an undeclared tool then fails loudly, under its own name, on the push that next runs it; it is never a silent pass. Rows moved by the declarations, from a counted seed of the 26 on the final value: apply-restamp-theirs `229 *` to 230, emit-report-refusal `476 *` to 478, h2-attest-scripts-dir `115 *` to 117 and `93 core/scripts/validate-h2-attestation.sh` to 95. Once `iconv` answers, `_norm_fold_probe` runs its second probe `printf … | awk '{ print tolower($0) }'` (core/skills/ai-dlc-update/reconcile/lib.sh:169), and in apply-restamp-theirs's sited world `awk` is the fixture's own bash shim `sited/sh/awk`, so that call is one more counted start. A second layer was hidden behind the first 127: with `iconv` and `paste` declared, apply-self-overwrite reached an `xargs … rmdir` path and read FIXTURE BROKEN, so it also declares `xargs` and `rmdir`; its counted re-run is green with its row unchanged (123 starts). Before the change the main root held 290 records on the previous span and 24 on the one before it.
+- **Not measured:** fixtures reaching an undeclared tool only on a failing branch or under `--matrix`, which a green seed never executes. They meet the FAIL when they run.
+
+Provenance: batch 257, wave 9, the remainder of BL-1118 named by ai-dlc-49 (W9-07); id allocated by the lead.
+
+verify: manual
+
+## BL-1154 — the undeclared-tool trap stubs a declared tool, so a fixture that hides it by dropping the farm dir still finds it
+
+**DEFECT.** OPEN. Filed 2026-11-16. Owner: `core/fixtures/gate-adjudication/run.sh` (S23), with `core/scripts/hermetic-run.sh` HR_SANDBOX as the cause.
+
+Since 0.1146.0 (BL-1118) the fixture's PATH under hermetic-run is the farm followed by the trap dir (`core/scripts/hermetic-run.sh:675`). The trap dir holds a stub for every executable name in the fixed tool dirs, declared names included. A fixture that hides a declared tool by replacing the farm dir on its PATH still resolves that tool, to the stub. gate-adjudication's S23 does this with `node` (`run.sh:631-640`), so its control S23-pre read `FIXTURE BROKEN — node is still on PATH after stripping <farm>`.
+- The c9c7c370a seed run: rc 1, `1 assertion(s) failed, 115 passed`.
+- A solo hermetic-run on the clean c9c7c370a tree: rc 1, the same reading.
+- A solo plain run on the same tree: rc 0, `PASS: gate-adjudication -- 117 assertion(s)`.
+So the reading comes from content, not load. The fixture had stayed carried, so no push had yet run it under the trap.
+
+**LANDED (v0.1153.0).** (batch 257, W12-02, ai-dlc-c3; lead ruling (A): the fix is in the fixture, not the runner.)
+- **The fix.** gate-adjudication also drops any PATH entry carrying `.hr-trap-farm`, the trap dir's marker, from the node-less PATH it builds (`run.sh:641-643`).
+- **Rejected alternative.** A runner-side fix that stubs no declared name was refused: it ends the shared per-name-set trap cache, at a cost on every fixture run.
+- **Census of the shape, over every `core/fixtures/*/*.sh`.**
+  - A filter of the inherited PATH (`tr ':'` over `$PATH`): 1 site, gate-adjudication:640, the only one red. The control: gate-adjudication's own `GA_NODE_DIR` lines, 6.
+  - `command -v` under a substituted PATH: 12 sites.
+    - Building the PATH from an explicit list or from `/bin` and `/usr/bin`, never from the inherited PATH: handoff-completion-assertion:1365-1367 (`fc-nojq`); readset-skip:1905 (`noperl`); retro-branch-behind-main:792 (a FARM of 13 named tools, all 13 declared); wait-beat-liveness:2072 (`noperl_path`, built from the fixture's own `tools.decl`).
+    - Prepending a shim and asserting it resolves first: derivation-differential:492; handoff-completion-assertion:696; wait-beat-liveness:2008.
+    - Copying every inherited PATH dir, the trap dir among them, and then `rm -f` both hidden names: apply-restamp-worklist:570-571 (`ar_notool`), which still removes the stub links.
+    - All read correctly.
+  - A bare `command -v` of a name the fixture does not declare that exists on the box: 5 of 177 (fixture, word) pairs.
+    - apply-restamp-worklist `sha256sum` and derivation-differential `ps` are the sites above.
+    - fixture-hygiene `jq` is in `receipt-bl929.sh`; the seed's fixture-hygiene run printed no trap hit.
+    - hermetic-runner `node` (:728-729) already reads a stub in a `.hr-trap-farm` dir as absent.
+    - retro-branch-behind-main `gh` at :549 is a comment.
+- **Hand probe.** One hermetic-run on the tip reads S23-pre ok. The mutant (the new line deleted) is the c9c7c370a reading above.
+
+Provenance: batch 257, wave 12, found by ai-dlc-c3 (W12-02) in BL-1143's population seed; id allocated by the lead.
+
+verify: manual
+

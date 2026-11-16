@@ -21,3 +21,4 @@ sed
 sh
 sort
 tr
+uniq

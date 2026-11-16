@@ -28,3 +28,7 @@ xargs
 cksum
 env
 tail
+sh
+python3
+jq
+diff

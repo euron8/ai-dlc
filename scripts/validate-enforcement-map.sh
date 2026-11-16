@@ -8867,7 +8867,8 @@ I87_EXPOSED_AWK='
         if (index(line, "unset \"$_v\"") > 0) cleared = 1
         if (index(line, "unset AI_DLC") > 0) cleared = 1
         l2 = line
-        while (match(l2, /(^|[ \t]|;|export[ \t]+)AI_DLC_[A-Z0-9_]+=/)) {
+        # A prefix assignment that opens a command substitution follows its `$(`; a bare `(` in prose does not count.
+        while (match(l2, /(^|[ \t]|;|\$\(|export[ \t]+)AI_DLC_[A-Z0-9_]+=/)) {
           seg = substr(l2, RSTART, RLENGTH)
           if (match(seg, /AI_DLC_[A-Z0-9_]+/)) assigned[substr(seg, RSTART, RLENGTH)] = 1
           l2 = substr(l2, RSTART + RLENGTH)

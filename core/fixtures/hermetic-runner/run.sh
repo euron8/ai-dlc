@@ -57,8 +57,9 @@
 #      "Remove the marker", never "Point TMPDIR"
 #   Z4 the same shape with the system temp dir under a $HOME that carries a marker: neither remedy
 #      ("Point TMPDIR", "Remove the marker") is given
-#   TR the undeclared-tool trap: an undeclared cmp is exit 0 with a warning naming it, in both layouts; ALLOW twin:
-#      cmp declared -> 0 and no warning; a trap farm on PATH is reused, none built
+#   TR the undeclared-tool trap: an undeclared cmp is exit 1 with a FAIL naming it and an rc=1 line in the
+#      distribution layout, exit 0 with a warning in the consumer layout; ALLOW twin: cmp declared -> 0, no FAIL or
+#      warning; a trap farm on PATH is reused, none built
 #   cwd  the verdict is the same from two different working directories
 #
 # The probe is a throwaway git repo under mktemp: the runner's --key-only reads `git ls-files`.
@@ -1365,22 +1366,23 @@ arm_Z4() {
   no "system temp dir under a marked HOME: the remedy does NOT say to remove the marker" "$OUT" "Remove the marker." "do not remove the marker"
 }
 # TR: the undeclared-tool trap. The probe calls cmp, undeclared, in the swallowed shape (an `if` on its status, stderr
-# to /dev/null). The run WARNS naming cmp, in both layouts (a probe root with core/scripts/ is the distribution layout,
-# one without it the consumer layout), with exit 0 and the call still answering as not found. ALLOW twin: cmp
-# declared, exit 0, no warning. COST: a run whose PATH carries a built trap farm reuses it, building none in its own
-# TMPDIR.
+# to /dev/null). In the distribution layout (a probe root with core/scripts/) the run FAILS naming cmp, exit 1, its
+# rc line reading 1 (the store writer runs only on rc 0); in the consumer layout (no core/scripts/) it WARNS with
+# exit 0. In both the call still answers as not found. ALLOW twin: cmp declared, exit 0, no FAIL or warning. COST: a
+# run whose PATH carries a built trap farm reuses it, building none in its own TMPDIR.
 arm_TR() {
   CUR=TR
-  local P1="$WK/TR1" P2="$WK/TR2" P3="$WK/TR3" farm="" d n w="WARNING undeclared tool(s) called: cmp --"
+  local P1="$WK/TR1" P2="$WK/TR2" P3="$WK/TR3" farm="" d n w="WARNING undeclared tool(s) called: cmp --" f="FAIL undeclared tool(s) called: cmp --"
   mk_probe "$P1" stub_trap 'data/a.txt'; mk_dist "$P1"
   run_hr "$P1"
-  eq "distribution, undeclared cmp: exit 0, the verdict unchanged" "$RC" 0
-  yes "distribution, undeclared cmp: the warning names it" "$OUT" "$w"
+  eq "distribution, undeclared cmp: exit 1" "$RC" 1
+  yes "distribution, undeclared cmp: the FAIL names it" "$OUT" "$f"
   yes "distribution, undeclared cmp: the call still answered as not found" "$OUT" "trap-cmp-differ"
+  yes "distribution, undeclared cmp: the rc line reads 1" "$OUT" "hermetic-run: probe: rc=1 "
   mk_probe "$P2" stub_trap 'data/a.txt' 'cmp'; mk_dist "$P2"
   run_hr "$P2"
   eq "distribution, cmp declared: exit 0" "$RC" 0
-  no "distribution, cmp declared: no warning" "$OUT" "WARNING undeclared tool" "trap-cmp-same"
+  no "distribution, cmp declared: no FAIL or warning" "$OUT" "undeclared tool(s) called" "trap-cmp-same"
   mk_probe "$P3" stub_trap 'data/a.txt'
   run_hr "$P3"
   eq "consumer layout, undeclared cmp: exit 0, the verdict unchanged" "$RC" 0
@@ -1389,8 +1391,8 @@ arm_TR() {
   [ -n "$farm" ] || { bad "$CUR: no trap farm on PATH or in TMPDIR after a distribution run"; return; }
   mkdir -p "$WK/TRt" || exit 2
   OUT="$(PATH="$PATH:$farm" TMPDIR="$WK/TRt" bash "$RUN" --root "$P1" probe 2>&1)"; RC=$?
-  eq "a farm on PATH: exit 0" "$RC" 0
-  yes "a farm on PATH: the warning names cmp" "$OUT" "$w"
+  eq "a farm on PATH: exit 1" "$RC" 1
+  yes "a farm on PATH: the FAIL names cmp" "$OUT" "$f"
   n="$(ls -A "$WK/TRt" | grep -c '^ai-dlc-hr-trap')" || n=0
   eq "a farm on PATH is reused: none built in the run's own TMPDIR" "$n" 0
 }

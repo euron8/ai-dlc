@@ -32,3 +32,4 @@ ps
 kill
 jq
 uniq
+iconv
