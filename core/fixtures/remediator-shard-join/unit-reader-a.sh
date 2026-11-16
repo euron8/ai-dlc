@@ -4,7 +4,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # remediator-shard-join/unit-reader-a.sh -- the reader-level cells of half A, asked IN PROCESS. Driven by run.sh;
 # the header block is run.sh's.
 #
-# Families: SJ1-SJ9 and SJ1o; EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38; RR1-RR20; AL1-AL9; NW1; LN1-LN8 and LN10-LN16;
+# Families: SJ1-SJ9 and SJ1o; EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38; RR1-RR20; AL1-AL9; NW1-NW2; LN1-LN8 and LN10-LN16;
 # LP1-LP5; NL1-NL8c. Each cell asserts the decision its end-to-end cell in
 # run.sh asserted, through the SAME lib.sh predicate, unchanged. What changes is how a predicate's `bash <subject>`
 # runs: the `bash` function below catches the two subjects by path and runs each in a subshell of this process --
@@ -359,6 +359,7 @@ p_altool "$JOIN" && ok "AL9: the one tool_use holding the id is a Read -> REFUSE
   || bad "AL9: an id held by a non-write tool_use was aliased (rc=$RC): $(cat "$JO")"
 p_rronly "$JOIN" && ok "RR15: a record-only re-run of 5.md -> JOINED with 'record-only', nothing on sections/5.md dropped; writing nothing -> PRNONE; the original rewriting 5.md, or two agents writing it -> REFUSED; a nested child of the re-run writer writing sections/5.md -> the re-run writer" || bad "RR15: the record-only re-run did not hold (rc=$RC): $(cat "$JO")"
 p_nested "$JOIN" && ok "NW1: a nested writer (its probe row and a spawn row naming its dispatcher) on its dispatcher's file -> JOINED as one writer with the nested: line; a lead-issued spawn, a key-less spawn row and a missing probe row -> REFUSED naming the ledger" || bad "NW1: the nested-writer fold did not hold (rc=$RC): $(cat "$JO")"
+p_member "$JOIN" && ok "NW2: a round-dispatcher's members (its meta.json spawn has no spawn-ledger row) are their own writers: one member per story -> JOINED, 3 writers, no nested: line; two members on one story -> REFUSED naming each as a round member" || bad "NW2: a round member was folded into its dispatcher (rc=$RC): $(cat "$JO")"
 fi
 
 # ------------------------------------------------------------------------- LN: serial lanes

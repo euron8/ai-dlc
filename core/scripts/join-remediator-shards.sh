@@ -234,6 +234,12 @@
 #   the row.
 #   Residual, stated: two children of one dispatcher, run in parallel and editing one file, read as
 #   ONE writer. The fold cannot tell them apart, because both resolve to P.
+#   A ROUND MEMBER IS NOT A NESTED WRITER. A fold is undone when P's own spawn, the `toolUseId` of
+#   `<session dir>/subagents/agent-P.meta.json` beside one of A's in-window write rows'
+#   `transcript_path`, has no row in the spawn ledger. The dispatch guard writes no row for a
+#   role-less dispatch from the lead, which is how a round-dispatcher is spawned (rule-28.md "A wide
+#   round is run by a round-dispatcher"), so its members join as their own writers, one per part,
+#   and a file two members both edit is refused. A P whose meta.json is absent keeps the fold.
 #   No fold is owed elsewhere: merge-adversarial-shards.sh refuses a nested writer earlier, on role
 #   (an adversary is a leaf and spawns nothing), and validate-gate-adjudication.sh counts no writers.
 #
@@ -2775,6 +2781,40 @@ if [ -n "$_fwr" ]; then
     }')"
   FOLD_MAP="$(printf '%s\n' "$_fres" | sed -n 's/^F	//p')"
   FOLD_WHY="$(printf '%s\n' "$_fres" | sed -n 's/^U	//p')"
+  # A ROUND MEMBER IS NOT A NESTED WRITER (see "A NESTED WRITER IS ITS DISPATCHER'S"): a fold
+  # whose parent P's own spawn, read from P's meta.json beside A's session, has no spawn-ledger
+  # row is undone, and A stays its own writer.
+  if [ -n "$FOLD_MAP" ]; then
+    _fsids="$(printf '%s\n' "$_fsp" | awk -F'\t' '{ print $1 }' | sort -u)"; _fkeep=""
+    while IFS='	' read -r _fa _fp _ft; do
+      [ -n "$_fa" ] || continue
+      _fmt=""; _fpu=""
+      # A ledger jq that fails leaves no transcript path, so the fold stands (the behaviour before this check).
+      if ! _ftps="$(jq -rn --arg a "$_fa" --arg since "$SINCE" --arg until "$UNTIL" 'inputs | select(type == "object")
+  | select(.kind == "artifact-write") | select((.agent_id // "" | tostring) == $a)
+  | select((.ts | type) == "string") | select(.ts >= $since and .ts <= $until)
+  | (.transcript_path // empty | tostring)' "$LEDGER" 2>/dev/null)"; then
+        _ftps=""
+      fi
+      while IFS= read -r _ftp; do
+        [ -n "$_ftp" ] && [ -f "${_ftp%.jsonl}/subagents/agent-${_fp}.meta.json" ] || continue
+        _fmt="${_ftp%.jsonl}/subagents/agent-${_fp}.meta.json"
+        _fpu="$(jq -r '.toolUseId // empty | tostring' "$_fmt" 2>/dev/null)"; break
+      done <<FMEOF
+$_ftps
+FMEOF
+      if [ -n "$_fpu" ] && ! grep -qxF -- "$_fpu" <<<"$_fsids"; then
+        FOLD_WHY="${FOLD_WHY:+${FOLD_WHY}
+}${_fa}	its parent ${_fp} is a round-dispatcher (its spawn ${_fpu}, from ${_fmt}, has no row in ${SPAWN_LEDGER}), so ${_fa} is a round member and its own writer"
+      else
+        _fkeep="${_fkeep:+${_fkeep}
+}${_fa}	${_fp}	${_ft}"
+      fi
+    done <<FKEOF
+$FOLD_MAP
+FKEOF
+    FOLD_MAP="$_fkeep"
+  fi
 fi
 
 _ovl0="$(printf '%s\n' "$ROWS" | awk -F'\t' 'NF >= 2 { n[$1]++ } END { for (f in n) if (n[f] > 1) { print f; exit } }')"

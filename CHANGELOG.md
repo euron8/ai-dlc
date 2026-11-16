@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1155.0] - 2026-11-16
+
+### BL-538: a sharded repair round may be run by a round-dispatcher
+
+`core/scripts/join-remediator-shards.sh` folds a nested writer into its parent only when the parent's own spawn (the `toolUseId` in the parent's `subagents/agent-<id>.meta.json`) has a spawn-ledger row. A round-dispatcher is spawned role-less, with no ledger row, so each remediator it runs joins as its own writer, and a member's own subagent still folds into that member. `rule-28.md` and `_dispatch-protocol.md` now let one round-dispatcher run a sharded repair round (one remediator per part, `Axis: none`), with the lead still running the join. `core/fixtures/remediator-shard-join` arm NW2 holds both directions: a dispatcher-run round of two members on split files JOINS with 3 writers, and two members editing one section are refused, each named as a round member.
+
+### Rules and records
+
+- BL-538 advances (stays PARTIAL): option A ships; options B (sharded adversary and cross wakes, 24 idle in s322) and C (interim notices, 20) are named and unbuilt; the per-wake count on the next complete graph sprint stays owed. `docs/analysis/pipeline-efficiency-s317-s322/scripts/idle_wakes_by_role.py` re-derives the by-role split.
+
 ## [0.1154.0] - 2026-11-16
 
 ### BL-1144: a sandbox window refused for loss alone keeps its lower bound

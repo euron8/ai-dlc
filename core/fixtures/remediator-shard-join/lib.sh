@@ -1900,10 +1900,41 @@ spawn_row() { # <world> <tool_use_id> <parent_agent_id | "-" for a row with no s
     definition_stale:false, name_stripped:null, tool_use_id:$u, parent_agent_id:$p, shard:null}
     | if $p == "-" then del(.parent_agent_id) else . end' >> "$1/_bmad-output/spawn-ledger.jsonl"
 }
+meta_json() { # <session dir> <agent_id> <toolUseId> -- the harness's agent-<id>.meta.json, keys as graph's carry
+  jq -nc --arg u "$3" '{agentType:"general-purpose", description:"Round-dispatcher: stories repair", toolUseId:$u,
+    spawnDepth:1, requestShape:"background", requestNonInteractive:true}' > "$1/subagents/agent-$2.meta.json"
+}
+NEST_D=ad15c0a7e2b4f6981
+member_world() { # <variant: split | shared> -> AG1 and AG2 are members of the role-less round-dispatcher NEST_D
+  # (meta.json present, no spawn-ledger row for its spawn), AG3 the lead's own; shared: AG2 also edits story 2.1
+  local w tp sd; w="$(new_world)" || return 1
+  tp="$w/projects/sess-1.jsonl"; sd="$w/projects/sess-1"; mkdir -p "$sd/subagents" || return 1
+  : > "$sd/subagents/agent-$NEST_D.jsonl"; : > "$sd/subagents/agent-$AG1.jsonl"; : > "$sd/subagents/agent-$AG2.jsonl"
+  meta_json "$sd" "$NEST_D" toolu_SPDSP
+  spawn_row "$w" toolu_SPAG3 ""; spawn_row "$w" toolu_SPM1 "$NEST_D"; spawn_row "$w" toolu_SPM2 "$NEST_D"
+  probe_row "$w" "$AG1" toolu_SPM1; probe_row "$w" "$AG2" toolu_SPM2
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" toolu_E1 "$tp" "$(gts 19:25:00)"
+  [ "$1" = shared ] && drive "$w" Edit "$w/$REL/$S21" "$AG2" toolu_E2 "$tp" "$(gts 19:25:30)"
+  drive "$w" Edit "$w/$REL/$S22" "$AG2" toolu_E3 "$tp" "$(gts 19:26:00)"
+  drive "$w" Edit "$w/$REL/$S31" "$AG3" toolu_E4 "$tp" "$(gts 19:27:00)"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  printf '%s' "$w"
+}
+p_member() { # a round-dispatcher's members are their own writers: split -> JOINED as 3 writers with no nested: line;
+  # shared (two members on story 2.1, which the fold would have read as the dispatcher alone) -> REFUSED naming both
+  local w why; w="$(member_world split)" || return 1; run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "JOINED: " && has "$JO" "(3 parts, 3 writers)" && ! has "$JO" "nested: " || return 1
+  w="$(member_world shared)" || return 1; run_join "$1" "$w"
+  why="its parent $NEST_D is a round-dispatcher (its spawn toolu_SPDSP, from $w/projects/sess-1/subagents/agent-$NEST_D.meta.json, has no row in $w/_bmad-output/spawn-ledger.jsonl), so"
+  refused "$w" "$REL/$S21 was written by more than one agent in the window: " \
+    && has "$JO" "$AG1 ($why $AG1 is a round member and its own writer)" \
+    && has "$JO" "$AG2 ($why $AG2 is a round member and its own writer)" && ! has "$JO" "nested: "
+}
 nest_world() { # <variant: fold | lead | nokey | noprobe> -> world: three writers, and AG1's subagent NEST_C also editing story 2.1
   local w tp sd; w="$(new_world)" || return 1
   tp="$w/projects/sess-1.jsonl"; sd="$w/projects/sess-1"; mkdir -p "$sd/subagents" || return 1
   : > "$sd/subagents/agent-$AG1.jsonl"; : > "$sd/subagents/agent-$NEST_C.jsonl"
+  meta_json "$sd" "$AG1" toolu_SPAG1   # the parent's spawn HAS a ledger row: still a fold
   spawn_row "$w" toolu_SPAG1 ""
   case "$1" in
     lead) spawn_row "$w" toolu_SPNC "" ;;

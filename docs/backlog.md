@@ -141,6 +141,41 @@ Seats, `roll.py --seats`, "the whole pipeline bucket", per story, gap-inclusive,
 
 Both readings stand side by side (lead ruling, batch 257; the entry stays PARTIAL). The mechanism measure FELL: idle wakes went from 49% (520 of 1070) on s321 to 27% (143 of 538) on s322. The bound Step measure ROSE: the whole pipeline bucket went from $95.5 to $167.6 per story, token-equivalent. Question for the next batch: is `Step: pipeline` the right binding for a mechanism whose subject is idle wakes, or should the entry bind to a measure that idle wakes can move? The binding is not changed here.
 
+**PARTIAL (v0.1155.0) — a sharded repair round may be dispatcher-run (option A, 16 idle wakes in s322); options B (24, the larger lever) and C (20) are named below and unbuilt; the per-wake count on the next complete graph sprint stays owed (batch 257, W12-05).**
+- The population is s322's idle agent-exit wakes, attributed to the agent that sent each notice. The counter is the new `docs/analysis/pipeline-efficiency-s317-s322/scripts/idle_wakes_by_role.py`, which imports `idle_wakes.py`'s `count()` unchanged:
+  `python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/idle_wakes_by_role.py --ledger <graph>/_bmad-output/spawn-ledger.jsonl --bound e444bf13=20963 <the 7 s322 lead transcripts>`
+  The 7 transcripts are `6249c621`, `6c14d949`, `70fd1d6d`, `80c96d42`, `9a646a3b`, `e444bf13` and `fdc4249a`. The script maps each wake's `<task-id>` to the lead's `Agent` spawn by `toolUseResult.agentId`, and that spawn to its ledger row by `tool_use_id`. Each wake is then classed by the row's `role` and `shard` line. It refuses a `--bound` that names no given transcript (exit 2).
+- Control, same run: 143 idle of 538 wakes and 128 of 304 agent-exit wakes, the recorded figures.
+- Idle wakes from round members a dispatcher could carry:
+  - sharded adversaries and their cross agents, 24 (20 sharded of 23, 4 cross of 4), already allowed under the dispatcher;
+  - sharded remediators, 16 of 24 (a floor: a row with a null `shard` was counted serial), which `rule-28.md` barred from it: `join-remediator-shards.sh` folded every nested writer into its parent, so a dispatcher's members would read as ONE writer.
+- Idle wakes from single agents no round-dispatcher reaches:
+  - single adversaries, 28;
+  - serial remediators, 23;
+  - "waiting on its own background work" interim notices from dev, QA, code-reviewer and protected-path-editor agents, 20;
+  - the remainder across other roles.
+- An earlier keyword classing of the same wakes put repair at 61. It counted every brief that mentioned a repair, and is superseded.
+- The spawn ledger tells a dispatcher's members from a remediator's own helpers. Measured read only over graph's 403 `spawnDepth: 2` agents, against `_bmad-output/spawn-ledger.jsonl` (9640 rows):
+  - 399 have a role-less round-dispatcher parent whose spawn has no row (the dispatch guard writes none for a role-less dispatch from the lead), and each child's own row names that parent;
+  - 4 have a role-bound parent (architect, pm-escalated) whose spawn has a row.
+- Shipped:
+  - `join-remediator-shards.sh` undoes a fold when the parent's spawn has no spawn-ledger row (header at `:237`, code at `:2784`). The parent's spawn is the `toolUseId` of `<session dir>/subagents/agent-<P>.meta.json` beside the writer's in-window `transcript_path`. The member then joins as its own writer, and FOLD_WHY names it as a round member.
+  - A parent with no meta.json, or a write row with no `transcript_path`, keeps the fold: the acquitting direction, since a collision between two such members still joins. In graph's write ledger, 2762 depth-1 rows resolve their own meta.json by that path and 683 older rows carry no `transcript_path`. 2 rows are by depth-2 writers: 1 resolves and 1 carries no `transcript_path`. Both are a "PRD rubric walker" under a `pm-escalated` parent whose spawn has a ledger row (s319 and s320 `prd-validate/review-rubric.md`), so the tip keeps both folds as the base did. The unfold's false-positive set on graph's write ledger is 0 of 2, enumerated.
+  - `rule-28.md:200` lets a sharded repair round be run by ONE round-dispatcher, with the lead still running the join.
+  - `_dispatch-protocol.md:292` "A repair round through this brief." gives the brief's repair case (`Axis: none`, part files as deliverables).
+  - The `process-rule-pins` rows: `r28-rd-repair-out` is replaced by `r28-rd-repair-in` and `r28-rd-repair-member`, and `dp-rd-repair` is new.
+- Receipt: `remediator-shard-join` NW2 (`p_member`, `lib.sh:1923`):
+  - one member per story JOINS as 3 writers with no `nested:` line;
+  - two members editing one story are REFUSED, each named as a round member.
+  - NW1's fold world now carries its parent's meta.json, whose spawn has a row: the near-miss, still folded.
+- Hand-run mutants, once (`UA_ONLY=RR`):
+  - origin/main's join (no unfold) fails NW2: the two-member collision JOINED with rc 0;
+  - unfolding whenever the meta resolves, without the ledger test, fails NW1.
+- Named and NOT built:
+  - option B, an adversarial-pass round that IS dispatcher-run rather than "may be" (24 idle wakes in s322, more than option A's 16);
+  - option C, a member with children of its own joins them in the foreground (20 interim-notice idle wakes).
+- Still owed: the per-wake re-count on the next complete graph sprint that runs this release. The `Step: pipeline` binding is unchanged (lead ruling, batch 257).
+
 Step: pipeline
 
 verify: manual
