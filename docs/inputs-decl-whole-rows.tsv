@@ -80,9 +80,9 @@ hermetic-runner	core/scripts/hermetic-run.sh	whole
 hermetic-runner	core/git-hooks/pre-push	whole
 hermetic-runner	.githooks/pre-push	whole
 hermetic-runner	core/fixtures/lib/	legacy
-install-scaffold-ignored	core/	legacy
-install-scaffold-ignored	patterns/	legacy
-install-scaffold-ignored	templates/	legacy
+install-scaffold-ignored	core/	whole
+install-scaffold-ignored	patterns/	whole
+install-scaffold-ignored	templates/	whole
 layer-absorption-retire	core/skills/ai-dlc-update/reconcile/	whole
 layer-adjudication-tier	core/skills/ai-dlc-update/reconcile/	whole
 layer-contract-conformance-b	scripts/	legacy
@@ -159,9 +159,9 @@ retired-layer-token	core/skills/ai-dlc-update/reconcile/	whole
 retro-audit-scans	!core/git-hooks/pre-push	whole
 review-shard-merge-b	core/fixtures/review-shard-merge/	legacy
 route-defect-classification	core/fixtures/route-defect-classification/	legacy
-schema-install-fallback	core/	legacy
+schema-install-fallback	core/	whole
 schema-install-fallback	patterns/	whole
-schema-install-fallback	templates/	legacy
+schema-install-fallback	templates/	whole
 self-update-gate-b	!core/git-hooks/pre-push	whole
 self-update-gate-c	!core/git-hooks/pre-push	whole
 self-update-gate-d	!core/skills/ai-dlc-update/reconcile/	legacy

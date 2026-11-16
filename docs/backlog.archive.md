@@ -46079,3 +46079,88 @@ Provenance: batch 257, wave 12, absorbed from the graph consumer's push-candidat
 
 verify: manual
 
+## BL-1134 — install-scaffold-ignored and schema-install-fallback omit on every sandbox trace, so their 5 legacy rows cannot narrow
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: the sandbox tracer in `core/scripts/derive-fixture-readsets.sh` (the `log stream` window and the drop-notice guard in `rs_fx_judge`).
+
+Both fixtures run `scripts/install.sh` into empty targets. Each of their windows carries `=== Messages dropped during live streaming` notices, and the deriver's fail-closed judge omits the fixture. Four sandbox traces, all OMITTED for both fixtures:
+
+| trace | install-scaffold-ignored | schema-install-fallback |
+|---|---|---|
+| `--list "<8>"` at 27fded102 | 24 drops | 23 drops |
+| `--list "<8>"` at b53b3d642, 155 s in total | 10 drops | 2 drops |
+| solo `--list` at b53b3d642 | 47 s, 6 drops | — |
+| solo `--list` at b53b3d642 | — | 31 s, 9 drops |
+
+Every trace used `--tracer sandbox`, in the main checkout. Solo runs did not clear it, so the loss is in the fixture's own report volume, not in its list neighbours. With no trace, their 5 `legacy` rows in `docs/inputs-decl-whole-rows.tsv` cannot be narrowed or reclassed by trace (C13):
+- install-scaffold-ignored: `core/`, `patterns/`, `templates/`
+- schema-install-fallback: `core/`, `templates/`
+
+`install.sh` copies `core/` in part and 4 of the 5 templates by name, and no install-scaffold-ignored world asserts the `patterns/` copy at `install.sh:436`.
+
+Fix: make the sandbox tracer deliver a lossless window for an install-heavy fixture, then trace both with `--declared-out` and narrow or reclass the 5 rows. One way is to scope the profile's reported operations so the install's copy volume stays under `log stream`'s delivery rate.
+
+Provenance: batch 257, wave 7, the BL-1124 (d) remainder named by ai-dlc-82 (W7-07); id allocated by the lead.
+
+**PARTIAL (v0.1145.0; batch 257, W8-03).** None of the tracer changes tried here delivers this window, and no window on record has carried the `install.sh` burst whole. Measured at f29ff3693 in the main checkout, `--tracer sandbox --declared-out`, with no other deriver window running:
+- Three runs, all OMITTING both fixtures. The step-1 run, at load 4.7-6.0, dropped 6 and 14 times. Run 1, at load 13.7-16.8, dropped 6 and 24 times. Run 2, at load 16.8-24.9 with the traced run clamped to `taskpolicy -c maintenance` instead of `background`, dropped 7 and 36 times in windows of 36 s and 85 s, against 27 s and 49 s.
+- Every drop instant is preceded by the same burst. In the 100 ms before each of the 8 distinct instants of the step-1 run there are 2,630-3,439 reports, all from `git`: `file-read-metadata` and `file-test-existence` in about equal halves, spread across the tracked tree of the trace copy. Each burst is one `git` pid lasting about 20 ms, consistent with `scripts/install.sh:24`, `git -C "$AI_DLC_ROOT" diff-index --quiet HEAD --`, once per install run. That command lstats every tracked entry: in a scratch clone of f29ff3693, `GIT_TRACE2_PERF` reads `preload/sum_lstat:2399` against `read/cache_nr:2399`, on 3 of 3 runs. The burst pid's own argv was not observed. cp and the per-second averages (4.5-5k/s) are not the trigger, and the burst holds no `.git/**` or `file-read-xattr` line, so cutting those reports relieves nothing.
+- The loss is upstream of every stream client. In run 1, two observer streams used the deriver's predicate narrowed to one operation. The `file-read-data` observer matches almost nothing in the burst, yet it lost messages at all 8 of the main stream's drop instants, each about 20 ms earlier, and nowhere else. The `file-test-existence` observer lost messages at the same 8. Splitting a window across op-partitioned clients therefore cannot help.
+- Unreporting either operation class is excluded. In two windows from earlier traces with no drop notice, 299 and 342 paths were reported by `file-test-existence` alone, and 66 and 152 by `file-read-metadata` alone.
+- THE WINDOWS WITH NO DROP NOTICE WERE NOT LOSSLESS. Two earlier sandbox traces in this batch were ACCEPTED with 0 drop notices: install-scaffold-ignored in `/private/tmp/ai-dlc-readset-sandbox-501-f19-s4`, and schema-install-fallback in `-f19-s1`. In them, each `git` pid with over 800 reports reported only 536-1,073 of the copy's 2,281 tracked files (all 8 such pids) and 807-909 of 2,280 (both such pids), where the lstat count above says it statted all of them. These ranges are a floor on the loss, because the 800-report cut drops a burst that lost more. So the kernel or logd loses stat reports with no notice, and the loss canary cannot see it, because atime moves only on a data read. The drop-notice guard and the canary together accept a short set. Through other readers, the two accepted sets still hold 1,757 and 1,615 of the 1,767 tracked `core/` files, and every tracked `templates/` and `patterns/` file.
+
+The 5 `legacy` rows are SUPPORTED, not narrowable, for as long as `install.sh:24` stats the whole tracked tree: `diff-index` lstats every tracked path under `core/`, `templates/` and `patterns/`. The raw windows are scratch files and are not committed, so these counts cannot be re-derived from the tree.
+
+Remaining:
+- BL-1138: whether `install.sh:24` needs a whole-tree `diff-index`. A cheaper dirty probe would remove the burst, and a trace would then decide whether the 5 rows narrow.
+- BL-1144: the silent stat loss above. An accepted sandbox window can be short with no drop notice and a zero canary.
+
+**LANDED (v0.1159.0).** Batch 257, W12-17, ai-dlc-7c. All 5 rows are decided as `whole` (lead ruling A), from the code plus a lower bound, while `scripts/install.sh:24` stands. The lossless window this entry's Fix asked for was not delivered. The rows no longer need it, and the tracer loss moves to BL-1155.
+- The code: `install.sh:24`, `git diff-index --quiet HEAD --`, lstats every tracked path. On a clone of the traced copy (acd67c1ee, 2,407 tracked files), `GIT_TRACE2_PERF` reads `preload/sum_lstat:2407` against `read/cache_nr:2407`. The fixture therefore scans the whole tracked tree, which is the whole-rows header's `whole`.
+- Lower bounds come from `--declared-out --tracer sandbox` windows that the STAT LOSS guard refused. A lost report only shortens a set, so each set is a floor.
+  - install-scaffold-ignored, traced at acd67c1ee (0.1152.0 with the 0.1154.0 deriver) with the main checkout detached there (11 drop notices, `STAT LOSS: 1876`): `core/` 1,836 of 1,841, `patterns/` 5 of 5, `templates/` 4 of 5.
+  - schema-install-fallback, W12-16's window at 99c662068 (0.1149.0) with the 0.1154.0 deriver (30 drop notices, `STAT LOSS: 10`, all `git`): `core/` 1,807 of 1,841, `patterns/` 5 of 5, `templates/` 4 of 5.
+  - Every missing `core/` path is in another fixture's directory. The missing template is `templates/audit-anchors.md.template` in both windows (BL-1155).
+- The run count is reconciled. Each `:24` run is one `git` pid reporting over 800 tracked paths:
+  - install-scaffold-ignored: 6 such pids of 1,199. That is 4 `scripts/install.sh` starts (`run.sh:432`-`:435`) plus the 2 install.sh copies AB1 and AB2 (`run.sh:478`-`:479`). `run_inst` (`:359`) runs each copy as `bash -c "$(cat <copy>)" "$INSTALL"`, so each copy runs `:24`'s text against the source tree before it reaches its absent function file.
+  - schema-install-fallback: 5 of 821, which is 2 program runs plus 3 in-process runs.
+  - No other whole-tree scanner shows up in either window.
+- `docs/inputs-decl-whole-rows.tsv`: install-scaffold-ignored `core/`, `patterns/` and `templates/`, and schema-install-fallback `core/` and `templates/`, go from `legacy` to `whole`. schema-install-fallback `patterns/` was already `whole`. These rows hold `whole` while `install.sh:24` stands, and the AB copies carry its text. A change to `:24` reopens them.
+- Probe, by hand, once: `scripts/invalidation-guard.sh --out <seeded> --keys <seeded>`, with one fixture selected by one moved row.
+  - schema-install-fallback, base 70d4bfea6: a moved `core/scripts/gate-transition.sh` reads UNATTRIBUTED ("legacy directory line; no traced read set"). The tip reads READ. A moved `templates/QUICKSTART.md.template` behaves the same way.
+  - install-scaffold-ignored: a moved `patterns/` row reads UNATTRIBUTED at acd67c1ee and READ at the tip.
+  - Mutant: the tip with only `core/` set back to `legacy`. It reads UNATTRIBUTED on the `core/` row, so it is killed, and READ on the `templates/` twin.
+  - `--ratchet` gives rc 0.
+
+verify: manual
+
+## BL-1138 — install.sh's dirty probe lstats the whole tracked source tree on every install, which a sandbox trace cannot carry
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `scripts/install.sh` (the dirty probe at `:24`; `:21` at f29ff3693, where the measurements were taken).
+
+`scripts/install.sh:24` runs `git -C "$AI_DLC_ROOT" diff-index --quiet HEAD --` on every install to decide whether the source tree is dirty. That lstats every tracked path of the source tree (`GIT_TRACE2_PERF` `preload/sum_lstat` equals `read/cache_nr`). Under the sandbox tracer one such probe is a burst of 2,630-3,439 reports in 100 ms. The kernel or logd loses part of every such burst on record, upstream of every `log stream` client (BL-1134). Sometimes there is a drop notice, which omits the fixture, and sometimes there is none. Both fixtures measured, install-scaffold-ignored and schema-install-fallback, were omitted on every trace in this batch's wave 8, and their read-set rows must cover the whole tracked tree. Other fixtures that run `install.sh` were not measured.
+
+Fix: answer the same dirty question without a whole-tree lstat, or show that the whole-tree answer is needed. A probe and a mutant show the flag answers the same on a clean tree, a modified tracked file, a staged change and an untracked file. Then a lossless sandbox trace of install-scaffold-ignored and schema-install-fallback decides whether BL-1134's 5 `legacy` rows in `docs/inputs-decl-whole-rows.tsv` narrow.
+
+Provenance: batch 257, wave 8, the BL-1134 remainder named by ai-dlc-d4 (W8-03); id allocated by the lead.
+
+**Progress (batch 257, W8-03b; the lead ruled no `install.sh` change; the entry stays OPEN).** The whole-tree answer is needed. Every measurement below is from a scratch clone of 903875300 (B20's `install.sh`), with 2,405 tracked files:
+- The current probe, `diff-index --quiet HEAD --`, reads `preload/sum_lstat:2405`. It answers rc 0 on a clean tree, rc 1 on a modified tracked file, rc 1 on a staged change, rc 0 when the only change is an untracked file, and rc 1 on a docs-only edit.
+- `diff-index --cached --quiet HEAD` makes 0 lstats, but answers rc 0 on an unstaged edit where the current probe answers 1. That is a wrong answer.
+- `diff-index --quiet HEAD -- core templates patterns` reads `sum_lstat:1867` (`core/` alone is 1,857), so the burst stays. It answers rc 0 on a docs-only edit where the current probe answers 1. That is a different answer.
+- `-c core.preloadIndex=false diff-index --quiet HEAD --` gives the same answers. Its lstat count is unmeasured, because `sum_lstat` counts preload threads only. It reschedules the same whole-tree lstat and does not remove it.
+- So any correct answer to "does any tracked file differ" lstats every tracked file. No candidate above is a counter-example.
+- The `-dirty` suffix has a behavioural reader. A stamp that does not resolve, such as `<sha>-dirty`, still renders its row in `core/skills/ai-dlc-update/reconcile/emit-report.sh:288`-`:290`, where "it records no base this render can confirm". Without the suffix, a dirty install's stamp would resolve. `validate-hook-registration.sh:362` strips the suffix and is not behavioural.
+- The attribution of the burst to `install.sh:24` is still "consistent with". The number of `install.sh` runs each fixture makes has not been reconciled against the large `git` pids per window: 6 with over 1,000 reports in install-scaffold-ignored's step-1 window, and 2 with over 800 in schema-install-fallback's `f19-s1` window, so a second whole-tree git call is not excluded.
+
+Remaining: the row-narrowing half, superseded by the LANDED line below. BL-1134's 5 rows are decided as `whole` without a lossless window.
+
+**Progress (batch 257, W12-04, ai-dlc-bf; the entry stays OPEN).** At 99c662068, `scripts/install.sh:24` (`diff-index --quiet HEAD --`) is install.sh's only git call that walks the source tree. The others are `rev-parse` at `:22`, `:23` and `:83`, `ls-files` on one fixture directory at `:744`, and `config core.hooksPath` on the project root at `:605`. The two libraries it sources (`scaffold-ignore.sh`, `install-scaffold-ignore.sh`) and the three scripts it runs (`settings-merge.sh`, `sync-transient-ignore.sh`, `render-agent-definitions.sh`) call git only on the project root: `rev-parse`, `check-ignore` and `ls-files`. The bursts therefore count `install.sh` runs, and a second whole-tree git call inside install.sh is excluded. A whole-tree git call made by the fixtures themselves is not excluded. The per-fixture run count is still not reconciled against the large `git` pids: schema-install-fallback runs install.sh both as a program (`run.sh:162`) and in process (`:165`, `:540`), so the count needs a trace. Owner of the remainder (that run-count trace and the 5 rows): W12-17 (ai-dlc-7c), closed in the LANDED line below.
+
+**LANDED (v0.1159.0).** Batch 257, W12-17, ai-dlc-7c. `install.sh` is unchanged; the whole-tree answer is needed (Progress, W8-03b). BL-1134's LANDED line closes the remainder:
+- The run count is reconciled. install-scaffold-ignored has 6 large `git` pids: 4 starts plus the 2 install.sh copies AB1 and AB2, which run `:24`'s text. schema-install-fallback has 5: 2 program runs plus 3 in-process runs. No whole-tree git call by the fixtures themselves shows up.
+- The 5 rows are `whole` while `:24` stands.
+- The lossless trace this entry named is not needed to decide them. The tracer loss on these bursts is BL-1155's.
+
+verify: manual
+
