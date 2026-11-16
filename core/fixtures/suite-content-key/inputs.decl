@@ -8,3 +8,4 @@ templates/
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/pool-span.sh

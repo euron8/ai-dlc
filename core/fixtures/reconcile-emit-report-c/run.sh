@@ -33,7 +33,7 @@ trap 'rm -f "$RER_OUT"' EXIT
 bash "$IMPL" --group c > "$RER_OUT"
 rc=$?
 cat "$RER_OUT" || { echo "FIXTURE ERROR: could not replay shard 'c' output" >&2; exit 2; }
-grep -qE "^(PASS|FAIL): .* in shard 'c' of '[a-z ]+'\.\$" "$RER_OUT" || {
+grep -qE "^(PASS|FAIL): reconcile-emit-report shard 'c' of '[a-z ]+' -- " "$RER_OUT" || {
   echo "FIXTURE BROKEN: the sibling's verdict does not name shard 'c' (rc=$rc) — it ran another shard or none, and shard 'c' ran nowhere" >&2
   exit 2
 }

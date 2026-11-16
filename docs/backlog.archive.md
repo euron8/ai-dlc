@@ -45102,3 +45102,151 @@ Provenance: batch 257, wave 8, push candidate PC-S323 from the consumer graph; f
 
 verify: manual
 
+## BL-1101 — no step asks whether an expensive mechanism should exist before it is optimized
+
+**LANDED (v0.1145.0).**
+
+**DEFECT.** Filed 2026-11-14. Owner: CLAUDE.md "## Build process" (lead steps) and a premise-reviewer subagent definition.
+
+The lead and its advisor review HOW a change is built, never WHETHER its subject should exist. Batch 257's PW release spent a builder splitting the 1001 s `backlog-receipt-binding` battery into six shards before the operator asked, in one sentence, whether it should exist; every mutation battery was then deleted. The advisor saw the same evidence and did not ask either: a reviewer sharing the lead's rulebook and the code's own justification headers shares its frame.
+
+Fix: (1) a premise reviewer, `.claude/agents/premise-reviewer.md` with `omitClaudeMd: true` and read-only tools, given ONLY a data directory built outside the repo (the durations record, the gate's step timings, the fixture and validator list with one-line subjects and ship status; no code, no fixture headers, since path-scoped rules load again on a matching read), the operator ruling "a step with no measured value goes", and one question: what would you delete, and what evidence would keep each item. (2) A lead step in CLAUDE.md's "## Build process", before dispatching a build: the brief states what the mechanism costs, what it buys and who would notice it gone. (3) A periodic subtraction pass over `.claude/rules/` and the validators, judged on the cost each adds. Before relying on (1), confirm the subagent cannot quote `operator-rulings.md`, since the docs imply but do not state that unconditional rule files are omitted.
+
+Receipt: the first premise-review run over the post-PW gate, its deletion list, and the operator's ruling on it.
+
+Landed: item (2) only, as CLAUDE.md "## Build process" lead step 1. Lead steps 1-6 become 2-7. No tracked file cites a lead step by number. Items (1) and (3) are dropped under "A step with no measured value goes", by operator ruling on the backtest below. Item (3) had been folded into (1): its data file carried the rule files and validators.
+- Premise: five releases optimized mutation batteries that PW then deleted: BL-906, BL-918 (three releases), BL-1094 and BL-1095. BL-1094's entry gave the cost (1001 s), but no catch and no one who would notice it gone.
+- Backtest, run in place of the receipt's post-PW run, on the tree where the miss happened (PW base 396bac7db):
+  - Input: the pre-PW durations record (`.git/ai-dlc-fixture-durations.prev`, md5 aba67abeb8db678be713c86dd50c192a). A scratch data builder turned it into 341 item rows (md5 cb6af23f3aa124175e5a258b51dd07f2), with names, loaded seconds, ship status, subject paths, rule headings and the ruling. The word "battery" appears in none of them, and "mutant" in none of the three target rows.
+  - Vehicle: a headless session at that tree, defining the reviewer by `--agents` with `tools: Read`, `omitClaudeMd: true` and a PreToolUse Read hook confined to the data directory.
+  - Result: the reviewer listed 339 of the 341 items for deletion, with generic keep-evidence ("failure in <subject>"). This was a whole-token join of the data file's names against its answer; an impossible name scored absent. The two it omitted (agent-definition-render, 36 s, and h2-attest-scripts-dir, 60 s) are silent omissions, not keeps: its preamble deletes everything. The three batteries the operator deleted (adversarial-shard-merge 1567 s, backlog-receipt-binding 1001 s, backlog-receipt-efficiency 370 s) appear in that list only as members of the whole population. By cost alone they rank 1, 2 and 14 of 275. So the list discriminates nothing.
+  - Isolation probe, same run: the reviewer answered NONE when asked for the text under "## Merges are preapproved", and the hook denied its Read of CLAUDE.md. The positive control, a general-purpose subagent in the same session, quoted "No plan and no task stops to ask for merge authorization." So `omitClaudeMd` does drop the unconditional rules.
+  - Cost: $0.71. Run artifacts in the builder's scratchpad (perishable): `run.jsonl` 5cfd7cfa8d4652da7bdb29defac99ef9, the final answer a3cd255312dba99ef9c169ade1e55cb0, `agents.json` 977e2e64a86d0e28cdcbf64ea284209b, the prompt 64f9a2d72467413a247f4fe1936790bd.
+- Durable channel after the step: A6 reads 48299/48530 bytes.
+
+Provenance: batch 257, operator request to file it and not take it on now; id allocated by lead ai-dlc-35.
+
+verify: manual
+
+## BL-1117 — fixture-git-env-seam reads every file's data twice, so its sandbox trace drops reports and its `core/fixtures/` line cannot be narrowed
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/fixture-git-env-seam/run.sh` `:191` (the whole-tree copy, `tar cf - --exclude=… . | tar xf -`) and `:214` (the population count, `tar cf - … . | tar tf -`).
+
+Traced with `--list --tracer sandbox` in the main checkout at 30a78d884, at load 19-28. The fixture was omitted with 61 drop notices and a 2-path loss canary (`core/fixtures/apply-drift-refile-b/invocations.decl` and `tools.decl`). bsdtar made 107,071 of its window's 114,221 reports, in two sequential processes:
+- the `:191` copy: 54,651 reports, peaking at 3,839 per 100 ms, with 4 notices;
+- the `:214` count: 52,420 reports, peaking at 5,192 per 100 ms, with 57 notices.
+
+All 61 notices fall in those bsdtar seconds. In the same run, ledger-status-vocabulary's single tar of the tracked set peaked at 2,551 per 100 ms and lost nothing. Removing the `:214` tar alone still leaves the `:191` copy's 4 notices.
+
+Owed: a copy and a count that do not read every file's data, so the fixture traces completely at push load. Then its whole-directory `core/fixtures/` declaration (a `docs/inputs-decl-whole-rows.tsv` row), which reruns it on almost every push, can be narrowed against an accepted trace. The count can be taken from the list the copy is made from. Measure the fix with one `--list --tracer sandbox` trace in the main checkout.
+
+Receipt: `verify: manual`. Completeness is the deriver's drop count and loss canary over a live stream.
+
+Provenance: batch 257, wave 3 (ai-dlc-73), from BL-1068's trace; id allocated by the lead.
+
+**PARTIAL (v0.1135.0) — the copy and the count shipped; the trace still omits the fixture, and the narrowing is OPEN.** `mktree` now copies with one `scandir` walk and APFS clonefile(2), reading no file's data, and takes the source count from that walk; the `:214` tar is gone. Where the first clone fails it prints `copy: tar` and falls back to the tar copy, counted by a metadata-only `find`. Traced with `--list --tracer sandbox` in the main checkout at 140e429ed: OMITTED on 19 drop notices, with no loss-canary finding. The clone walk made 7,855 reports in 0.6 s. No notice fell in the clone walk (peak 1,744 per 100 ms) or the git burst (2,019 per 100 ms); the window does not name the source of the 19. Open: (1) the sender of those notices, and a clean trace. (2) The `core/fixtures/` narrowing cannot be taken from a trace. The deriver keys every `file*` op under the trace tree as a read, so the clone walk makes every path a row. The driven fixtures read the copy in `$WORK`, outside the traced subpaths, so the trace never sees what the verdict depends on.
+
+**LANDED (v0.1145.0).** The fixture no longer copies the tree. Cells A, B and U drive trunk-push-bound and setup-config-drift from the root, with GIT_DIR armed at the mktemp victim. Arm URC still proves the unarmed twin ran. Arm V is gone: it ran `scripts/validate-fixture-git-env.sh --max-unscrubbed 0` on the shipping tree, which is the pre-push step `fixture git-env scrub`. V is why the fixture read every fixture's files. The fixture is `.dist-only`, so no consumer layout loses that check. `git.decl` (`seed`, for V's `git grep`) and `tar` in `tools.decl` went with them. Traced with `--list fixture-git-env-seam --tracer sandbox --declared-out`, with the main checkout detached at the build commit, at load 39-70: ACCEPTED, 104 paths, 0 omitted, no drop notice. `inputs.decl` is set from that trace: 44 file lines, none of them a directory, and the `core/fixtures/ legacy` row is gone from `docs/inputs-decl-whole-rows.tsv`. The 40 bare `f1`-`f40` rows the trace also recorded are the victim's own files, relative to its cwd; none is a tracked path. The 36 `core/skills/ai-dlc-update/reconcile/` files are declared one per line, because r3 refuses the directory line's `whole` row (BL-1140): a file added to core/skills/ai-dlc-update/reconcile/ does not move this fixture's key; setup-config-drift's whole row does. The earlier 19 notices' sender has no remaining subject: the whole-tree reads that produced them are gone, and the trace shows 0 notices.
+
+verify: manual
+
+## BL-1119 — two fixtures' counted starts move with pool width, and divergence-hard-block's cached world loses objects mid-copy
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/budget-summary-verdict/`, `core/fixtures/whole-read-pool/` (subject 1); `core/fixtures/divergence-hard-block/run.sh:74`-`:84` (`seed_world`) and `seed.sh:279`-`:303` (subject 2).
+
+Two subjects, and the entry closes only when both do. All rows below are ai-dlc-f1's, from its BL-1102 hands g3 and g4. The trees were working trees over 30a78d884 and are gone. The logs named here are still on disk and were read by this filing.
+
+1. **Counted starts move with the outer width.** Each run was `FXCOUNT_JUDGE=… FXCOUNT_DIR=<one shared dir> FXCOUNT_RC=… bash core/scripts/hermetic-run.sh --root <wt> <fx> </dev/null` under `xargs -P N`, with no `AI_DLC_*` variable set. The `*` row is invocations.decl's J3 bash-starts count.
+   - budget-summary-verdict: `*` reads 222 and the `core/scripts/wait-for-deliverable.sh` row reads 78 at width 1 (two runs) and width 2. At width 6, alongside 24 other fixtures, they read 220 and 77.
+   - whole-read-pool: `*` reads 91 at widths 1 and 2, and 90 at width 6.
+   - The logs are under `/var/folders/yz/_m377xss13g_h6cfz2wt0kdc0000gn/T/tmp.ZD1gsK9syv/`. `out2/` (width 6) reads `measured 220`, `measured 77` and `measured 90`. `out3/` (width 2) reads `measured 222`, `measured 78` and `measured 91`. `o4/` (width 1) reads `invocation budget ok: 222`.
+   - The committed rows at 39184970b are `222 *`, `78 core/scripts/wait-for-deliverable.sh` and `91 *`. The B10 re-push gate, at 6 jobs and load near 15, passed both fixtures on those rows.
+   - So the low reading appeared once, in one hand batch: 25 fixtures queued under `xargs -P 6`. It is not reproduced. No base run was made under load. Every run had `/dev/null` stdin, so the stdin-kind cause (counted starts bimodal on a socket against `/dev/null` stdin) was neither tested nor ruled out.
+2. **divergence-hard-block went red intermittently: 2 of 6 tip runs, one of them solo.** Each red was `FAIL  CAP era-merge-after: dispatch/stop/gate = 'SEED SEED SEED', want 'capped capped fail'`, 2 failed and 48 passed.
+   - The red log, `/private/tmp/claude-501/-Users-n8-git-ai-dlc/56bb0546-dd4e-4212-8dd4-95ece924cacf/scratchpad/g4.5ahsLG/old/cr.divergence-hard-block.out`, carries 20 `cp:` lines. One is `<cache>/era-merge-after/./.git/objects/64: unable to copy extended attributes … No such file or directory`.
+   - The base log beside it (`base-cr.divergence-hard-block.out`, solo, 215 starts) carries 0.
+   - Object directories vanished from the cached world while `seed_world`'s `cp -Rp` read them. The cache is a per-run `mktemp -d` (`run.sh:65`), and `run.sh` starts no background work: `wait` and trailing `&` both count 0. So another run sharing the cache is ruled out.
+   - The untested candidate is a detached child of `seed.sh`'s own `git commit` and `git merge`. Its `g()` sets neither `gc.auto` nor `maintenance.auto` (git 2.56.0 on this box).
+   - The diff 30a78d884..e81fdf387 does not touch `run.sh`, and its 4 `seed.sh` lines are all comments. So the red is not shown to come from the BL-1102 change, and it is not shown to come from load.
+
+Fix: for subject 1, run base and tip at widths 1, 2 and 6, with stdin forced to a socket and then to `/dev/null`. Also run with one `FXCOUNT_DIR` per run against a shared one. All the g3 runs shared one directory. Each fixture's start log is `$FXCOUNT_DIR/<fixture>`, and `core/scripts/hermetic-run.sh:609` truncates it when a run starts. So separate a lost update in the counter from a change in the fixture before opening the fixtures. Fix the cause in the fixture, so that the count is the same at every width and stdin kind. Never use a ± row, a widened bound or a retry (`.claude/rules/operator-rulings.md`, "Zero tests depend on load"). For subject 2, find which process removes `.git/objects/<xx>` from the cached world, and make the world quiescent before `mv` puts it in the cache. One candidate is `-c gc.auto=0 -c maintenance.auto=false` in `seed.sh`'s `g()`. Prove the fix with a forced-interleaving probe, not with repeated runs.
+
+**PARTIAL (v0.1137.0) — subject 2 shipped; subject 1 (counted starts that move with pool width) is OPEN.** The process that removes `.git/objects/<xx>` is the detached `git maintenance run --auto --quiet --detach` that every `git commit` and `git merge` in `seed.sh` starts: `GIT_TRACE` counts 4 such starts per era-merge world, and nothing waits for them. When a run's trigger is met, the run repacks and prune-packs the store. On Apple git 2.54.0 the trigger is two loose objects in `objects/17`; on Homebrew git 2.56.0 it is 28 (27 does not pack). Both readings come from a fresh repository with `maintenance.autoDetach=false`. The sandbox's `git` is Apple git 2.54.0: `readset_tools` puts `/usr/bin/git --exec-path`, `/Library/Developer/CommandLineTools/usr/libexec/git-core`, ahead of `/opt/homebrew/bin`. The red's tree is gone, so the reading was taken at commit e81fdf387, BL-1102 g4, under that git. There, the unpatched `seed.sh` era-merge-after world holds 2 loose objects in `objects/17`, and its own maintenance packs it (4 starts, 30 objects in-pack). All ten of the red's vanished directories (64 dc b0 a1 f0 ce 2d 48 12 40) are in that world. At this tree the same world holds 0 in `objects/17`, so the defect is latent and returns with the content. Both `g()` definitions in `seed.sh` now pass `-c maintenance.auto=false`. The forced probe was a scratch copy of the base and fixed `seed.sh`, with 20000 loose blobs and two `objects/17` blobs planted before the era-merge `--no-ff` merge, under Apple git 2.54.0. Base detached: 4 maintenance starts, and 256 object directories when `seed.sh` returned, settling to 0 (20034 in-pack). Fix: 0 starts, and 256 directories that stay 256. Mutant `-c gc.auto=0` alone: 4 starts, settling to 76 directories, so it is not the fix. A single forced run of `seed_world`'s `mv` plus `cp -Rp` on the base did not land inside the window (cp rc 0).
+
+**LANDED (v0.1145.0).** Subject 1 closed; its cause is the counter's rc generator, not either fixture. g3's harness (`run2.sh` in the log directory above) ran `--gen-rc` once per fixture into the one shared `cnt` dir under `xargs -P 6`. `fxc_gen_rc` wrote with `cat > <dir>/fxcount.rc`: it truncated the rc, then wrote it. Every regeneration therefore truncated the `BASH_ENV` rc that the other running fixtures' bash starts were sourcing, and a start that read an empty or partial rc installed no trap and logged no row. Width 1 never regenerates, and width 2 only at its two fixtures' starts. Width 6 with 25 fixtures regenerates throughout, and only that run read low. In `out2` the fixture's own resolver-fork assertions passed, so the starts ran and only their rows were missing. budget-summary-verdict lost 2 (the bash shim and the `wait-for-deliverable.sh` it execs, one pid); whole-read-pool lost 1 (no shim). Neither fixture, and no subject they start, backgrounds work, kills or times out a process, or uses process substitution. budget-summary-verdict pins the validator's clock (`AI_DLC_SNAPSHOT_NOW_EPOCH`, 6 sites); whole-read-pool does not (0 sites). There the validator reads `date -u +%s` (`validate-artifact-budget.sh:1738`), and that value reaches only `check_future_stamps` (`:1790`, `:1945`), an awk scan, so no bash start depends on it. The rows 222, 78 and 91 stand. The hook generates once per push into a fresh `mktemp -d` before fan-out (`.githooks/pre-push:4023`), and so it was never exposed. `fxc_gen_rc` now writes a `mktemp` file in `<dir>` and renames it onto `fxcount.rc`. The rc bytes are unchanged, and a new `FXC-IDENTITY` row sits under format 1. Probe: 1500 two-start shim chains under `xargs -P 24`, with 400 concurrent `--gen-rc` runs into the SAME dir. The tip judge logged 3000/3000; the base judge (the mutant) logged 2738 and 2732 on two runs. Near-miss: regeneration into another dir, 3000. Without regeneration the counter logged 3000/3000 on three reps, so its appends are lossless under concurrency. The width-6 start logs were overwritten, so this shows a mechanism that produces the reading, not a replay of it.
+
+Provenance: batch 257, wave 4, filed by ai-dlc-a8 from ai-dlc-f1's rows (relayed by lead ai-dlc-35); id allocated by the lead.
+
+verify: manual
+
+## BL-1130 — a fixture world that drives or sources the pre-push pool without its own `AI_DLC_VERDICT_STORE` writes records into the real verdict store
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: one of `scripts/validate-fixture-hygiene.sh` (a static arm), `core/scripts/hermetic-run.sh` (per-run stores) or `.githooks/pre-push` (a post-suite root check). Choose by the false-positive set each one measures.
+
+BL-1115 (B12) moves the pass and key records from the per-clone git dir into the shared store. They go to `<store>/<kind>/<repository root commit>/`, where `<store>` is `AI_DLC_VERDICT_STORE`, or `$HOME/.cache/ai-dlc/verdicts` when that is unset. The kinds are fixture-keys, fixture-verified, suite-key, presuite-keys, consumer-placement-keys and pregate-green. A fixture world is its own repository with its own root commit. If it runs the hook without a store of its own, it writes those records into the real store under a throwaway root.
+
+Two effects:
+- throwaway roots accumulate in the real store without bound;
+- a world that sources the pool from the repo root can inherit `REC_ROOT` and write under ai-dlc's own root commit (`89857cfe9`), which corrupts the real key and verified records.
+
+Verified, with the tree named:
+- At 5a2319f46 (67's BL-1115 commit, parent 39184970b), `.githooks/pre-push:1953`-`:1958` builds the base from `AI_DLC_VERDICT_STORE`, or `$HOME/.cache/ai-dlc/verdicts` when it is unset. It resolves `REC_ROOT` only when `REC_ROOT` is empty (`:1957`), so a value already set in the process is used as is. `REC_ROOT` is not exported (`export REC_ROOT` occurs 0 times), so the leak needs a pool sourced into the same shell, not a child hook.
+- The shape already occurs at d619fe62a for one kind. `cl_publish` writes `<base>/consumer-placement-keys/<root>` (`.githooks/pre-push:2729`). The real store holds two roots under `consumer-placement-keys/`: `89857cfe9` (ai-dlc's root) and `0196bbccda293ee7aa4ccf0f282cafd2a291787f`, which is no object in this repository. The stray root holds one record, `stub-shipping.key`, written 2026-11-14 00:55. The stub-shipping world is built only by prepush-worktree-env-scrub (`run.sh:131`). At d619fe62a that fixture passes a per-world store on both hook drives (`:165`, `:301`), and its last three edits (70ef6ee87, 56877eb4d, d619fe62a) all postdate the record. So which version wrote it is not determined.
+- Static screen at d619fe62a: 32 fixtures' `run.sh` name a pre-push hook. 12 of them name `AI_DLC_VERDICT_STORE` in their shell files and 20 do not. Neither group bounds the offenders. Naming the variable does not show that every drive sets it: prepush-worktree-env-scrub is in the 12, and its world wrote the stray record above. And a fixture that drives the hook through another fixture's `run.sh` is not among the 32 at all (pregate step e's wrapper rounds, `scripts/pregate-self-check.sh:351`-`:365`).
+
+Reported by ai-dlc-67's BL-1115 report, not verified here: one prepush-pool-depth run at 5a2319f46 wrote 12 roots into the real store, and 0 after per-world stores were added. The other hook-declaring fixtures were screened only statically.
+
+Owed: one mechanism, with its false-positive set measured on the B12 tree before it ships. Candidates are a fixture-hygiene arm (a world that drives the hook sets its own store), per-run stores in hermetic-run, or a post-suite check that every root under the real store is ai-dlc's or a declared consumer's. Removing the stray `0196bbccd` root is part of the fix.
+
+**LANDED (v0.1145.0).** (batch 257, W9-08.) The four Remaining items of the v0.1138.0 list below are closed.
+- The allowlist rows. fixture-invocation-budget (k.sh K5), pregate-self-check (receipt-bl643.sh, both cuts), readset-skip (10 sites, the rc_seed stub hook included) and suite-content-key (both heredoc drivers, through `export -f pool_span`) extract through `pool_span`. `scripts/pool-span-allowlist.txt` carries no row, and H13 reads 0 hand extraction lines. A plain run with a scratch HOME and no store left 0 records in that HOME's default store, at base and at tip, for pregate-self-check, suite-content-key, fixture-invocation-budget and readset-skip's four shards; their verdicts and assertion counts are unchanged (4, 42, 15; readset-skip a/b/c/d 73, 76, 70, 38).
+- Path (b) reduces to path (a). Every fixture that extracts a record-binding span and ships is SCRUBBED under H8; the two on `scripts/env-scrub-allowlist.txt` that extract one (fixture-invocation-budget, suite-content-key) are `.dist-only`. A store the hook hands a plain `@consumer` run is therefore unset before `pool_span`'s default reads it. Probe: with `AI_DLC_VERDICT_STORE` set to a base, a world's `rec_home` resolves under `<world>.verdicts` after the scrub and under the base without it.
+- Scripts that load the spans themselves. The loaders are `scripts/pregate-self-check.sh`, `scripts/predict-push-set.sh`, `scripts/census-consumer-layout.sh`, `scripts/invalidation-guard.sh` and `core/scripts/derive-fixture-readsets.sh`. One was a live writer: `invalidation-guard.sh --self-probe`'s `g_e2e_run` sourced the pool before it exported its own store, then ran `readset_keys_write`; one run with a scratch HOME left 3 records under a throwaway root (`fixture-keys/<root>/sr.key`, `wr.key`, `.prev`). It now exports the store first, and the same run leaves 0. census-consumer-layout writes the real store on purpose, under `cl_tree_init`'s fixed consumer root. Every fixture drive of pregate-self-check.sh sets a store.
+- `REC_ROOT` inheritance, reproduced: one shell sourcing the record spans in repo A and then in repo B filed B's record under A's root, in the real store in the hand-`sed` form and in `A.verdicts` through `pool_span`. `pool_span` now writes `unset REC_ROOT` after its store line, so each source resolves its own root; the same probe files B's record under B's root.
+- Observed, writer not determined, left in place by the lead's ruling: the top-level `076cb79c7039140446ad5c619dd6cf2d38c1980e/` of the real store, one consumer-layout per-fixture verdict (absorbed-specifics-survive). No repository under `~/git`, `/private/tmp` or `/private/var/folders` has that root commit (control: the same scan finds `b28e8f33`, the consumer-layout census root). H13 cannot see it: it is a runner verdict, not a record-binding span.
+
+**PARTIAL (v0.1142.0; batch 257, W7-06).** prepush-pool-depth now extracts both its FIXTURE_POOL spans through `pool_span` (`run.sh:291`, `:1412`), and its row is dropped from `scripts/pool-span-allowlist.txt`. Its verdict and its 66 assertions are the same at base and tip. Whether a plain run at base left records in the real store was not measured.
+
+Remaining: the 4 rows still in `scripts/pool-span-allowlist.txt` (fixture-invocation-budget, pregate-self-check, readset-skip, suite-content-key), and the three non-fixture items under the v0.1138.0 "Remaining" list below.
+
+**PARTIAL (v0.1141.0; batch 257, W7-04).** hermetic-runner, seed-verdict-store-red-print and self-update-gate now extract FIXTURE_POOL through `pool_span`, and their 3 rows are dropped from `scripts/pool-span-allowlist.txt`.
+- self-update-gate-c's pu-readset world was a live writer. Its world sourced the hand-extracted pool and ran `run_fixtures` with no store, because the preamble's `AI_DLC_*` unset loop had cleared it. A plain run with its own scratch HOME left 4 records in that HOME's default store at base, all under one throwaway root: `fixture-keys/<root>/fa.key` and `.prev`, and `fixture-verified/<root>` and `.format`. At tip the same run leaves 0.
+- hermetic-runner pins its own store (`run.sh:106`), and every census drive in seed-verdict-store-red-print sets one. Both left 0 records at base, so for them the migration is clause C25 only. The `AI_DLC_VERDICT_STORE=""` in seed-verdict-store-red-print's `pw_run` drives a hand-written stub hook, not a `pool_span` output, so that cell still gets its empty store.
+
+Remaining: the 5 rows still in `scripts/pool-span-allowlist.txt` (fixture-invocation-budget, pregate-self-check, prepush-pool-depth, readset-skip, suite-content-key), and the three non-fixture items under the v0.1138.0 "Remaining" list below.
+
+**PARTIAL (v0.1138.0).** The mechanism ships; the remainder is named under "Remaining" below.
+
+The pool path cannot reach the real store: `core/scripts/hermetic-run.sh:617` runs every declared fixture under `env -i ... HOME="$HR_WORK/home"`. The stray records come from plain `bash core/fixtures/<fx>/run.sh` runs, which CLAUDE.md sanctions, and the defect stands on that path.
+
+What landed:
+- `core/fixtures/lib/pool-span.sh`, `pool_span <hook> <out> <SPAN>...`: writes the named hook spans under a first line `export AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$PWD.verdicts}"`, so a world that sources `<out>` after a `cd` into itself files every record (the RECORD_HOME span at source, later `rec_home` calls, and every child) under `<world>.verdicts` unless the caller set a store.
+- `scripts/validate-fixture-hygiene.sh` H13, keyed on the emission site: a command-position `sed` or `awk` whose quoted argument carries `FIXTURE_POOL_BEGIN` or `RECORD_HOME_BEGIN` FAILs, heredoc-written drivers included. Its down-only allowlist is `scripts/pool-span-allowlist.txt` (H13STALE, H13DUP, H13NOREASON, H13-M4). Fixture contract clause C25.
+- consumer-suite-pool and presuite-units extract through `pool_span`.
+
+Stray records removed by exact listing (contents in the sha message): `consumer-placement-keys/0196bbccda293ee7aa4ccf0f282cafd2a291787f/`, which held `stub-shipping.key` AND `stub-shipping.key.prev` (the entry above names only the first), and a second stray, the top-level `40b46e0f45ea8896d46fdf5f1144ae8ffbb1555c/` holding one story-evidence-scaffold consumer-layout record. Its writer is not determined.
+
+Remaining:
+- the 8 rows of `scripts/pool-span-allowlist.txt` (fixture-invocation-budget, hermetic-runner, pregate-self-check, prepush-pool-depth, readset-skip, seed-verdict-store-red-print, self-update-gate, suite-content-key), each migrated to `pool_span` by the owner of its fixture-contract or fixture-inprocess allowlist row, dropping its row;
+- path (b): an undeclared `@consumer` fixture runs plain as `bash tests/fixtures/<f>/run.sh` with `AI_DLC_VERDICT_STORE` set to the real store base (`.githooks/pre-push:3441`-`:3446`); a world it builds without a store of its own writes there;
+- scripts that load a record-binding span themselves rather than through a fixture (`scripts/pregate-self-check.sh:432` writes pregate-green through `rec_home`); H13 reads only fixture files;
+- the `REC_ROOT` inheritance effect stated above was never reproduced; no stray under `89857cfe9` was observed.
+
+Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b from ai-dlc-67's BL-1115 report; id allocated by the lead. W6-14 by ai-dlc-b7. W7-06 by ai-dlc-bf.
+
+verify: manual
+
+## BL-1139 — the role contracts' advisor paragraph never names `mcp__advisor__consult`, though the advisor gate now denies a no-grant teammate that holds it
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: the advisor paragraph in every `core/team-roles/*.md` (byte-identical, bound by invariant **I122**).
+
+BL-1135 gates an agent with no built-in grant that holds `mcp__advisor__consult`, a teammate's verdict write included (`advisor-gate-deny` cell n-mate). The deny names the consult, so it can always be cleared. But the role paragraph all 18 role files carry tells a teammate to call the `advisor` tool and, "If the tool is absent or returns an error, continue without it." It never names the consult, so the contract a teammate reads FIRST contradicts the hook. Measured population today: 1779 of 1780 graph subagent transcripts since 2026-11-01 carry a grant, and the one without carries no consult in its roster, so no teammate is denied yet.
+
+Fix: one sentence inside the paragraph naming the consult as the no-grant path. The opener and closing lines stay byte-identical, because I122, I123 and `derived-fence-binding` key on them.
+
+Provenance: batch 257, wave 8, raised by ai-dlc-d8 (W8-01) in BL-1135's sha report; id allocated by the lead (W8-01b).
+
+**LANDED (v0.1145.0).** In all 18 role files, the paragraph's two middle lines now read: "If you hold no `advisor` tool but hold `mcp__advisor__consult`, call that at the same two points instead; while you hold `advisor`, a consult does not count. Weigh what either returns, ...". The opener and closing lines are unchanged. The 18 copies hash to one md5. `process-rule-pins` passes.
+
+verify: manual
+

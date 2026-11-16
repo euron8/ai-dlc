@@ -3,7 +3,3 @@
 # Rows `<fixture>\t<reason>`, LC_ALL=C sorted. DOWN-ONLY (arm H13-M4): a row not on this list at origin/main FAILs, and
 # a row whose fixture no longer extracts by hand FAILs as stale, so the list only shrinks. The rows are the arm's own
 # FAIL output on the tree that first ships it. Never add a row: extract the span through pool_span instead.
-fixture-invocation-budget	extracts FIXTURE_POOL by hand (run.sh:204, a heredoc-written driver); predates pool_span
-pregate-self-check	extracts READSET_VS and RECORD_HOME by hand (receipt-bl643.sh:46, :104); predates pool_span
-readset-skip	extracts FIXTURE_POOL and RECORD_HOME by hand (run.sh, 10 lines from :380); predates pool_span
-suite-content-key	extracts FIXTURE_POOL by hand (run.sh:325, :445, heredoc-written drivers); predates pool_span

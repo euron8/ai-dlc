@@ -29,6 +29,7 @@
 #   on the deny shape from a clean copy of G (E2E), which must stop at the gate. Prints one summary line; exit 0 when it
 #   is the expected line, 1 when it differs, 9 when the world cannot be built.
 set -uo pipefail
+. "$(cd "$(dirname "$0")/../lib" && pwd)/pool-span.sh" || { echo "receipt-bl643: cannot source lib/pool-span.sh" >&2; exit 9; }
 if [ "${1:-}" = --gate ]; then
   HK="${2:-}"
   [ -s "$HK" ] || exit 9
@@ -40,10 +41,11 @@ if [ "${1:-}" = --gate ]; then
   [ "$nb" = 1 ] && [ "$ne" = 1 ] || { echo "gate receipt: PREGATE_GATE_BEGIN/END occur $nb/$ne times in $HK, expected 1/1" >&2; exit 9; }
   # The gate resolves its record through the RECORD_HOME and READSET_VS spans it reads out of its own file, so the cut
   # carries both after its last line; G's records live in G's own store, $G.vs.
+  pool_span "$HK" "$W/rh.sh" READSET_VS RECORD_HOME || exit 9
   { printf '%s\n' '#!/usr/bin/env bash' 'PUSH_LINES="$(cat)"'
     sed -n '/^# PREGATE_GATE_BEGIN$/,/^# PREGATE_GATE_END$/p' "$HK"
     printf '%s\n' 'echo PAST-THE-GATE' 'exit 0'
-    sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p;/^# RECORD_HOME_BEGIN$/,/^# RECORD_HOME_END$/p' "$HK"; } > "$W/gate.sh" || exit 9
+    cat "$W/rh.sh"; } > "$W/gate.sh" || exit 9
   bash -n "$W/gate.sh" || exit 9
   export AI_DLC_VERDICT_STORE="$G.vs"
   ( cd "$G" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git init -q . && echo one > f && git add -A \
@@ -101,7 +103,8 @@ ARMFN='fxcount_arm() {
 # The pregate record's home is the hook's RECORD_HOME span (with READSET_VS, which it calls), read by the self-check out
 # of the root's hook; each stub hook carries both spans, cut from the real hook, below its exit. Each root's records live
 # in that root's own store, <root>.vs (drive and its siblings export it).
-RHSPANS="$(sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p;/^# RECORD_HOME_BEGIN$/,/^# RECORD_HOME_END$/p' .githooks/pre-push)"
+pool_span .githooks/pre-push "$W/rh.sh" READSET_VS RECORD_HOME || exit 9
+RHSPANS="$(cat "$W/rh.sh")"
 [ "$(grep -c '^rec_home() {' <<< "$RHSPANS")" = 1 ] || exit 9
 seedgit() { # <root> -> commit everything in it; the root pushes through .githooks, as the distribution does (BL-1020)
   ( cd "$1" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE && git init -q . && git config core.hooksPath .githooks && git add -A \

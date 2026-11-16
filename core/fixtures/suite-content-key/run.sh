@@ -33,6 +33,8 @@ DIST="$(cd "$HERE/../../.." && pwd)"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/pool-span.sh" || { echo "FIXTURE BROKEN: cannot source lib/pool-span.sh" >&2; exit 2; }
+export -f pool_span
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "suite-content-key: FIXTURE BROKEN" >&2; exit 2; }
 
 echo "suite-content-key:"
@@ -368,7 +370,7 @@ cp -Rp "$4" "$t" || exit 3
 cd "$t" || exit 3
 sp="$t.spans"; mkdir -p "$sp"
 export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$t.vs"
-sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$hook" > "$sp/pool"
+pool_span "$hook" "$sp/pool" FIXTURE_POOL || { echo "DRIVER: no FIXTURE_POOL span"; exit 3; }
 sed -n '/^# SUITE_STEP_BEGIN$/,/^# SUITE_STEP_END$/p' "$hook" > "$sp/step"
 sed -n '/^# SUITE_BANNER_BEGIN$/,/^# SUITE_BANNER_END$/p' "$hook" > "$sp/banner"
 [ -s "$sp/pool" ] && [ -s "$sp/step" ] && [ -s "$sp/banner" ] || { echo "DRIVER: a span is empty"; exit 3; }
@@ -489,7 +491,7 @@ set -uo pipefail
 hook="$1"; t="$2"; v="$3"; sp="$4"
 cd "$t" || exit 3
 mkdir -p "$sp"
-sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$hook" > "$sp/pool"
+pool_span "$hook" "$sp/pool" FIXTURE_POOL || { echo "DRIVER: no FIXTURE_POOL span"; exit 3; }
 sed -n '/^inproc_vs_hit() {/,/^}$/p; /^inproc_pending_step() {$/,/^}$/p' "$hook" > "$sp/ip"
 [ -s "$sp/pool" ] && [ "$(grep -cE '^(inproc_vs_hit|inproc_pending_step)\(\) \{' "$sp/ip")" = 2 ] || { echo "DRIVER: a span is empty"; exit 3; }
 fail=0; PENDING_N=0

@@ -196,6 +196,7 @@
 # FXC-IDENTITY 1 773c3d37115fb87226d647e883483c839cffc54dddd02a8750483c73805dcb8a the J5 arm and the matrix allowlist removed with every mutation battery; every judged fixture's row format unchanged
 # FXC-IDENTITY 1 4ab7b9213aef40bc9e9cfa591abbab63a184703d40186176cd88c5dad937be0e cost only: the --b2-census self-probe and its memo removed (BL-1102); no fixture's judgement moves
 # FXC-IDENTITY 1 0889dc63e00b73cd2d67c4ddd77760a23176d8b7db276e28565303de8be1c90a the static join's `A` row for an absent or unopenable cli subject (BL-878); fxc_judge is unchanged, so no counted fixture's judgement moves
+# FXC-IDENTITY 1 23e7b1c0546c4cacfb343a221e840f02e5e1f7701eb0bf5343fae282ef207418 fxc_gen_rc writes a temp file and renames it onto fxcount.rc (BL-1119); the rc bytes are unchanged, so no fixture's judgement moves
 set -u
 FXC_FORMAT=1
 
@@ -260,11 +261,16 @@ function hd_body(s,   l) {
 }
 '
 
+# The rc is written to a temp file in <dir> and renamed onto fxcount.rc, so a bash start sourcing it while another
+# --gen-rc regenerates the same dir reads the old or the new rc whole, never a truncated one that installs no trap.
 fxc_gen_rc() { # <dir>: write <dir>/fxcount.rc, print its path
+  local t
   mkdir -p "$1" || return 2
-  cat > "$1/fxcount.rc" <<'RC' || return 2
+  t="$(/usr/bin/mktemp "$1/fxcount.rc.XXXXXXXX")" || return 2
+  cat > "$t" <<'RC' || { rm -f "$t"; return 2; }
 { trap '{ trap - DEBUG; trap "" XFSZ; __fxcp="${BASH_SOURCE[0]:-${BASH_EXECUTION_STRING:+-c}}"; case "$__fxcp" in /*|-c|"") ;; *) __fxcp="$PWD/$__fxcp" ;; esac; printf "%s\t%s\t%s\t%s\n" "$__fxcp" "$$" "${FXCELL:-}" "${FXCOUNT_PARENT:-}" >> "$FXCOUNT_LOG" || { echo > /dev/null; [ -w "$FXCOUNT_LOG" ] && /bin/ln -s "$__fxcp	$$	${FXCELL:-}	${FXCOUNT_PARENT:-}" "$(/usr/bin/mktemp -u "$FXCOUNT_LOG.lim.XXXXXXXX")"; }; unset __fxcp; trap - XFSZ; export FXCOUNT_PARENT=$$; unset FXCELL; } 2>/dev/null' DEBUG; } 2>/dev/null
 RC
+  /bin/chmod 0644 "$t" && /bin/mv -f "$t" "$1/fxcount.rc" || { rm -f "$t"; return 2; }
   printf '%s\n' "$1/fxcount.rc"
 }
 

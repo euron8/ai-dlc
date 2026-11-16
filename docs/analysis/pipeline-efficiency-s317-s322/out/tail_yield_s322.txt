@@ -1,0 +1,227 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z (OUT = extract.py, spawns.py, analyze.py, roll.py, roll.py --seats at that window). Command: python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/tail_yield_s322.py $OUT $GRAPH_CLONE, where GRAPH_CLONE is a file:// clone of graph holding main plus graph's refs/remotes/origin/* (the s322 sprint-review fix commits are reachable only from origin/ai-dlc/carry-over/epic5-closeout)
+== 0. repo and refs (repo given: $GRAPH_CLONE)
+  SHIP       e0ebaf019  PRESENT
+  CLOSE      f7e60625b  PRESENT
+  RETRO_BASE 6ee289617  PRESENT
+  PRE_SR     95d831207  PRESENT
+  ADV_BASE   14bc28d2c  PRESENT
+  GATE_HEAD  af307b314  PRESENT
+  HANDOFF    0140ef67d  PRESENT
+  LR         28388fb70  PRESENT
+  impossible ref control: absent (as it must be)
+  s322 seat files at f7e60625b: 45 (need 45); rounds/sprint-review-party holds .brief files: 45 (briefs) and 0 non-brief
+  impossible role seat count (must be 0): 0
+
+== 1. cost per label, s322 against s319 (spawns.jsonl, every bucket; STORIES from bl812_rederive: s322 8, s319 20)
+s322 sprint-review                   spawns  57  $  76.95   222.7 agent-min  per story 7.12 spawns, $9.62   | lead 9.62 MATCH
+s322 gate-validation[sprint-review]  spawns   8  $   5.13    19.4 agent-min  per story 1.00 spawns, $0.64
+s322 deploy-validate                 spawns   3  $   5.16    15.3 agent-min  per story 0.38 spawns, $0.65   | lead 0.65 MATCH
+s322 retro                           spawns  22  $  14.22    67.2 agent-min  per story 2.75 spawns, $1.78   | lead 1.78 MATCH
+s322 gate-validation[retro]          spawns   9  $   3.49    12.8 agent-min  per story 1.12 spawns, $0.44   | lead 0.44 MATCH
+s322 handoff                         spawns   1  $   0.26     0.4 agent-min  per story 0.12 spawns, $0.03   | lead 0.03 MATCH
+s322 QZXV-NO-SUCH-STEP-5512          spawns   0  $   0.00     0.0 agent-min  per story 0.00 spawns, $0.00   | impossible step, must be 0
+s322 the six labels together: 100 spawns $105.21 337.8 min (B.agg)  vs summed above: MATCH
+s322 sprint-review + gate-validation[sprint-review] (the s321 document's population): 65 spawns $82.08  per story $10.26
+s319 sprint-review                   spawns  73  $  38.50   372.6 agent-min  per story 3.65 spawns, $1.93   | lead 1.93 MATCH
+s319 gate-validation[sprint-review]  spawns  75  $  60.49   359.6 agent-min  per story 3.75 spawns, $3.02
+s319 deploy-validate                 spawns   9  $  11.11   120.8 agent-min  per story 0.45 spawns, $0.56   | lead 0.56 MATCH
+s319 retro                           spawns  12  $   8.06    36.3 agent-min  per story 0.60 spawns, $0.40   | lead 0.40 MATCH
+s319 gate-validation[retro]          spawns   0  $   0.00     0.0 agent-min  per story 0.00 spawns, $0.00   | lead 0.00 MATCH
+s319 handoff                         spawns   0  $   0.00     0.0 agent-min  per story 0.00 spawns, $0.00   | lead 0.00 MATCH
+s319 QZXV-NO-SUCH-STEP-5512          spawns   0  $   0.00     0.0 agent-min  per story 0.00 spawns, $0.00   | impossible step, must be 0
+s319 the six labels together: 169 spawns $118.17 889.3 min (B.agg)  vs summed above: MATCH
+s319 sprint-review + gate-validation[sprint-review] (the s321 document's population): 148 spawns $98.99  per story $4.95
+duplicate units across lead transcripts in these labels: 0 (control: 269 units counted)
+s319 gate-adjudicator rows by label: {'gate-validation[architecture]': 1, 'gate-validation[carry-over-evaluation]': 2, 'gate-validation[implementation]': 54, 'gate-validation[requirements]': 2, 'gate-validation[sprint-review]': 4, 'gate-validation[stories-test-strategy]': 5}
+s322 gate-adjudicator rows by label: {'gate-validation[architecture]': 10, 'gate-validation[bug-investigation]': 1, 'gate-validation[carry-over-evaluation]': 20, 'gate-validation[implementation]': 13, 'gate-validation[requirements]': 20, 'gate-validation[retro]': 9, 'gate-validation[sprint-review]': 8, 'gate-validation[stories-test-strategy]': 8}
+s319 retro-gate: no verdict file under s319 gate-adjudication at the clone HEAD (a retro gate did not run, not a mislabel): retro verdicts 0, sprint-review verdicts 5 (control)
+
+== 2. partitions by description (each must SUM to the label total, 0 unmatched, 0 double-matched)
+-- sprint-review, s322 (label sprint-review + gate-validation[sprint-review])
+  party seats, per-story (pm dev qa tea architect x 1-8)  40  $  47.24   101.8 min
+  party seats, cross (x5)                          5  $  13.51    32.4 min
+  party-round dispatcher                           1  $   2.71    15.8 min
+  party triage (analyst)                           1  $   3.13    11.4 min
+  adversary one-shot                               1  $   2.84     8.3 min
+  adversary comment fixes (S-1, S-2)               1  $   0.29     0.3 min
+  fixes, dev (batch A, B, T-22/23, ci-local lane)   4  $   1.56     9.7 min
+  fixes, protected-path editor                     1  $   1.23     6.6 min
+  fixes, artifact remediator                       1  $   2.26     4.8 min
+  bug root-cause, instance-selector pollution      1  $   1.34    26.1 min
+  gate repair, Check 3 story 1.8                   1  $   0.82     5.5 min
+  gate adjudicators, pass 1 (4 shards)             4  $   2.80    11.3 min
+  gate adjudicators, pass 2 (4 shards)             4  $   2.33     8.1 min
+  PARTITION SUM                                   65  $  82.08   242.1 min
+  label total s322 sprint-review + gate           65  $  82.08   242.1 min   sum control: MATCH   unmatched 0  double-matched 0 (both must be 0)
+  of which label sprint-review alone:  57  $  76.95   222.7 min ; gate label alone:   8  $   5.13    19.4 min
+-- sprint-review, s319 (both labels)
+  party seats, per-story                         100  $  51.57   344.3 min
+  party seats, cross                              30  $  35.08   200.6 min
+  party consolidation                              1  $   0.71     3.3 min
+  adversary one-shot                               1  $   4.67    22.3 min
+  fixes, with their review and QA                 12  $   5.14   151.1 min
+  gate adjudicators (4 shards)                     4  $   1.83    10.6 min
+  PARTITION SUM                                  148  $  98.99   732.2 min
+  label total s319 sprint-review + gate          148  $  98.99   732.2 min   sum control: MATCH   unmatched 0  double-matched 0 (both must be 0)
+  s322 seats by (role, model ran): architect/opus 9 $23.26, dev/sonnet 9 $5.05, pm/sonnet 9 $6.51, qa/sonnet 9 $5.04, tea/opus 9 $20.91
+-- deploy-validate, s322 / s319
+  ops pre-roll live reads (4b: AC1, AC4, AC8, 1.3 AC5)   1  $   3.54    10.9 min
+  ops execution_lock re-reads (x2)                 2  $   1.62     4.4 min
+  PARTITION SUM                                    3  $   5.16    15.3 min
+  label total s322 deploy-validate                 3  $   5.16    15.3 min   sum control: MATCH   unmatched 0  double-matched 0 (both must be 0)
+  ops reads (Aurora, config, P&L, smoke cases)     3  $   7.37    47.5 min
+  deferred-AC predicate extraction                 1  $   0.11    13.6 min
+  diagnosis (smoke red, stale rewards)             2  $   2.30    22.8 min
+  fix-forward dev, code review and QA              3  $   1.33    36.9 min
+  PARTITION SUM                                    9  $  11.11   120.8 min
+  label total s319 deploy-validate                 9  $  11.11   120.8 min   sum control: MATCH   unmatched 0  double-matched 0 (both must be 0)
+-- retro, s322 / s319
+  party persona rounds (6)                         6  $   2.90     9.1 min
+  analyst draft shards (6)                         6  $   4.86    18.5 min
+  analyst close-out gather (4)                     4  $   2.64    24.2 min
+  Dispatch C next-sprint inputs (6, after the 12:32Z close)   6  $   3.81    15.4 min
+  PARTITION SUM                                   22  $  14.22    67.2 min
+  label total s322 retro                          22  $  14.22    67.2 min   sum control: MATCH   unmatched 0  double-matched 0 (both must be 0)
+  party persona seats (6)                          6  $   2.44    11.9 min
+  analyst gather, draft, close-out (5)             5  $   3.17    11.3 min
+  ops discharge reads (1)                          1  $   2.46    13.1 min
+  PARTITION SUM                                   12  $   8.06    36.3 min
+  label total s319 retro                          12  $   8.06    36.3 min   sum control: MATCH   unmatched 0  double-matched 0 (both must be 0)
+-- gate-validation[retro], s322 (s319: 0 rows)
+  retro gate shards (9)                            9  $   3.49    12.8 min
+  PARTITION SUM                                    9  $   3.49    12.8 min
+  label total s322 gate-validation[retro]          9  $   3.49    12.8 min   sum control: MATCH   unmatched 0  double-matched 0 (both must be 0)
+-- handoff, s322 (s319: 0 rows)
+  fix-forward dev commit 0140ef67d (label attribution)   1  $   0.26     0.4 min
+  PARTITION SUM                                    1  $   0.26     0.4 min
+  label total s322 handoff                         1  $   0.26     0.4 min   sum control: MATCH   unmatched 0  double-matched 0 (both must be 0)
+  retro spawns that start after the close commit (12:32Z): 6  $3.81  (the Dispatch C inputs; their records sit at the clone HEAD, not at f7e60625b)
+
+== 3. sprint-review yield (seat files at e0ebaf019; triage and its lead disposition at f7e60625b)
+  seat files 45; C/M headings 45 (critical 0); minor headings 112; total 157
+  C/M by role and kind: {('architect', 'cross'): 4, ('architect', 'story'): 6, ('dev', 'story'): 2, ('pm', 'cross'): 3, ('pm', 'story'): 6, ('qa', 'cross'): 2, ('qa', 'story'): 7, ('tea', 'cross'): 4, ('tea', 'story'): 11}
+  C/M by role: {'architect': 10, 'dev': 2, 'pm': 9, 'qa': 9, 'tea': 15}
+  triage file's own input counts (45 major, 112 minor, 0 critical, 157): ('45', '112', '0', '157') ; headings give 45 / 112 / 0 / 157 : MATCH
+  second count, triage `sources:` pairs: 69 entries, 163 pairs, 157 distinct, 0 not in the seat headings (0 expected), 0 seat headings not in any entry (0 expected)
+  merged major entries 26 (their major-labelled source pairs: 45), minor entries 43
+  impossible seat token 'ZQX-NEVER-TOKEN-77' in the triage: 0 (must be 0); a real one 'architect-1::F-1': 3 (must be > 0)
+  triage recommend vs the lead's final class, by severity: {('major', 'ARTIFACT-FIX'): 16, ('major', 'CARRY-OVER'): 2, ('major', 'CODE-FIX'): 6, ('major', 'DECIDED record-only'): 1, ('major', 'REJECTED'): 1, ('minor', 'ARTIFACT-FIX'): 27, ('minor', 'CARRY-OVER'): 5, ('minor', 'CODE-FIX'): 8, ('minor', 'DECLINED'): 1, ('minor', 'REJECTED'): 2}
+  triage verdicts: {('major', 'PARTLY'): 2, ('major', 'VERIFIED'): 24, ('minor', 'PARTLY'): 8, ('minor', 'VERIFIED'): 35}
+  entries the lead fixed (CODE-FIX or ARTIFACT-FIX): 57 (major 22)
+  major fixed entries (22): raised by one role only {'architect': 1, 'qa': 1, 'tea': 4}; by one seat only {'qa': 1, 'tea': 4}; by cross seats only 2, by per-story seats only 9
+  major CODE-FIX entries (6): raised by one role only {'tea': 3}; by one seat only {'tea': 3}; by cross seats only 2, by per-story seats only 2
+  multiplicity: major entries' distinct-seat counts [(1, 5), (2, 5), (3, 8), (4, 2), (5, 4), (6, 1), (7, 1)]
+  adversary one-shot: finding headings (### S-) 2, graded Suggestion 2, 'no Critical or Important' line present 1; C/M raised 0
+
+== 4. sprint-review fix survival (added lines >= 12 chars; base = round-start tree 95d831207; ship = e0ebaf019)
+  commits in 95d831207..af307b314: 34 ; T-ids are read from the full commit message, subject plus body
+  f27efbbe6 [not a fix: round record] lines 1906 at ship 1906  chore(s322): sprint-review party round delivered — 45/45 seats, 157 fi
+  e1a184bb8 [not a fix: round record] lines 2223 at ship 2223  chore(s322): party-round triage (69 merged entries, 157 sources) + lea
+  20d059db6 lines    4  at base    0  at ship    4 (100.0%)  T:--  ): lane-15a call-site comment names the three twins an
+  5861581cb lines    2  at base    0  at ship    2 (100.0%)  T:--  ): correct execution.py off-Matic strip line citations
+  9296c5fb6 lines    8  at base    2  at ship    8 (100.0%)  T:--  ): smoke records FAIL not SKIP on missing pytest under
+  95a8f1ba2 lines    4  at base    0  at ship    4 (100.0%)  T:1,2,20  ): story 1.1 deferred AC4/AC5/AC7 owner, route, deadli
+  fcca51cad lines   47  at base    0  at ship   46 ( 97.9%)  T:13,15,16  ): story 1.4 capture citations, producing-commit label
+  28388fb70 lines    7  at base    0  at ship    7 (100.0%)  T:13,28,48  ): story 1.5/1.8 frontmatter deferred_acs and LR align
+  1e19fc2d4 lines    4  at base    0  at ship    4 (100.0%)  T:6  ): story 1.6 supersession line and dangling AC3/AC4 ci
+  921f7ac4c lines    2  at base    0  at ship    2 (100.0%)  T:17  ): story 1.7 capture binding to current pins, pin-site
+  8d5433742 lines    2  at base    0  at ship    2 (100.0%)  T:30  ): story 1.2 driver line and capture-head label after 
+  89bfc2fb0 lines   13  at base    0  at ship   13 (100.0%)  T:25  ): watchdog exits with the child's return code; non-ze
+  037212264 lines    3  at base    0  at ship    3 (100.0%)  T:49  ): watchdog docstring and artifact label name the deri
+  bb576e676 lines    1  at base    0  at ship    0 (  0.0%)  T:22  ): relabel P_GIB provenance as a lead-chosen ceiling (
+  e946cb60b lines   46  at base    3  at ship   46 (100.0%)  T:4,5  ): DEPLOY_RANGE producer, fail-closed empty range, HEA
+  185abce65 lines    1  at base    0  at ship    1 (100.0%)  T:50  ): workers_from_args puts PYTEST_ADDOPTS before the co
+  eece6c3e7 lines    6  at base    0  at ship    5 ( 83.3%)  T:21,22,23,55  ): story 1.8 control-2 provenance, kill-limit decision
+  db03ee0e6 lines   15  at base    0  at ship   15 (100.0%)  T:8  ): re-home dev/qa pytest admission obligations in codi
+  216e4f5cf lines    6  at base    0  at ship    6 (100.0%)  T:10  ): name honest-green watchdog invocations and the bare
+  abb538684 lines    5  at base    0  at ship    5 (100.0%)  T:7  ): story 1.8 regression scope names the rebalancer/tes
+  782a01985 lines    2  at base    0  at ship    2 (100.0%)  T:7,21  ): spine CAP-7 reopen-trigger disposition, conftest ho
+  0c3f51f27 lines   15  at base    0  at ship   12 ( 80.0%)  T:8,18,37,46,47  ): carry-over backlog closures, predicate fix, and two
+  aaf7731ed lines   44  at base    0  at ship   44 (100.0%)  T:4,5,16  ): story 1.4 cites the post-T-4/T-5 39-arm harness cap
+  92e8980ee lines   24  at base    0  at ship   24 (100.0%)  T:23  ): harness arm proving the in-process pytest.__version
+  b2f0cbc41 lines  139  at base    0  at ship  139 (100.0%)  T:2  ): commit ac5_compare.py and the AC5 13-leaf named-gap
+  303a1b8c5 lines    3  at base    0  at ship    3 (100.0%)  T:8  ): carrier-removal item — no push candidate owed (T-8 
+  82652cbd9 lines    1  at base    0  at ship    1 (100.0%)  T:--  ): P_GIB comment cites the execution-n2 capture for th
+  632e45f36 lines    1  at base    0  at ship    1 (100.0%)  T:23  ): story 1.8 T-23 cites the crash-shape harness arm li
+  7c6288f2e lines   10  at base    0  at ship   10 (100.0%)  T:9  ): wire the admission verifier into ci-local (T-9)
+  ad1cf6d3c lines    7  at base    1  at ship    7 (100.0%)  T:--  ): restore os.environ after importing scripts whose lo
+  1fea832c8 lines    8  at base    1  at ship    8 (100.0%)  T:--  ): rebalancer tests must not inherit the operator's RE
+  61639cb6d [not a fix: round record] lines 4865 at ship 4865  docs(s322): bug analysis + evidence for the instance-selector .env pol
+  a29d105ca [not a fix: round record] lines   40 at ship   40  chore(s322): sprint-review gate FAIL round pass 1 (nonce 051649Z) — Ch
+  af307b314 lines   37  at base    0  at ship   37 (100.0%)  T:--  ): add LOCKED_REQUIREMENTS block to story 1.8 (gate sp
+  all 30 fix commits: added lines 467, at ship 461 ( 98.7%)
+  must-differ control: post-merge commit 6ee289617 (follow-up after the merge): lines 350, at ship 55 ( 15.7%)  <- must read far below the fix commits
+  per entry (commits naming it; a commit naming several entries counts in each): entries with a commit 25 of 57 fixed entries
+   major entries with a commit 16: added lines 603, at ship 597 ( 99.0%)
+   minor entries with a commit 9: added lines 71, at ship 61 ( 85.9%)
+  fixed major entries whose commits keep >= 80% of their lines at ship: 15 ; both-label cost $82.08 -> $5.47 per such entry (per entry, not per distinct defect; seats double-raise)
+  accepted-fix entries with NO commit naming them: major [3, 11, 12, 14, 19, 24] ; minor count 26
+  commits in the range with no T-id: 7  [('20d059db6', 'fix(s322): lane-15a call-site comment names the three twins and App.js'), ('5861581cb', 'fix(s322): correct execution.py off-Matic strip line citations in anvi'), ('9296c5fb6', 'fix(s322): smoke records FAIL not SKIP on missing pytest under SMOKE_D'), ('82652cbd9', 'fix(s322): P_GIB comment cites the execution-n2 capture for the 0.648 '), ('ad1cf6d3c', 'fix(s322): restore os.environ after importing scripts whose load_doten'), ('1fea832c8', "fix(s322): rebalancer tests must not inherit the operator's REBALANCER")]
+  adversary S-1/S-2 fix b6b5d8df9 (base 14bc28d2c): lines 8 at ship 6
+
+  earlier-raise candidates: regex hit counts at 95d831207 over docs/reviews/s322 + planning/implementation artifacts of s322, EXCLUDING the round's own briefs (hand-read; positive control = the same regex over the triage)
+   T-4 DEPLOY_RANGE producer/contract                         earlier hits 21 in 9 files ['4-dev-report.md', '4-g1-p2.plan', '4-g1-p3.plan', 'story-1-4-check-926-path-keyed-clean-line.md'] | triage hits 4 (positive control)
+   T-9 admission verifier wired into no lane (narrow)         earlier hits  0 in 0 files [] | triage hits 1 (positive control)
+   T-9 same file named at all (broad; file listings)          earlier hits 85 in 27 files ['implementation-20261111T102922Z.verdict.json', '3-g1-p2.plan', '8-g1-p1.plan', '8-g2-p1.plan'] | triage hits 7 (positive control)
+   T-25 watchdog exit status (narrow)                         earlier hits  4 in 4 files ['story-1-1-story-5-6-closeout-observation-and-predicate.md', 'story-1-2-anvil-driver-zero-gas-strip-matic-scoped.md', 'story-1-5-offramp-gas-estimate-payload-wrap.md', '2-qa-validation.md'] | triage hits 4 (positive control)
+   T-25 watchdog named at all (broad; usage lines)            earlier hits 77 in 40 files ['ac5-full-suite-post-wrap.txt', 'ac5-full-suite-post-wrap.txt.log', 'ac5-full-suite-pre-wrap.txt', 'ac5-full-suite-pre-wrap.txt.log'] | triage hits 7 (positive control)
+   gate Check 3: story 1.8 LOCKED_REQUIREMENTS block absent   earlier hits  2 in 2 files ['implementation-20261111T102922Z.verdict.json', 'implementation-20261111T105218Z.verdict.json'] | triage hits 0 (positive control)
+   impossible                                                 earlier hits  0 in 0 files [] | triage hits 0 (positive control)
+
+== 5. sprint-review gate (gate-validation[sprint-review] + repair) and the Check 3 catch
+  pass 20261112T051649Z: 8 checks, {'PASS': 7, 'FAIL': 1} ; non-PASS: [('3', 'FAIL')]
+  pass 20261112T053127Z: 8 checks, {'PASS': 8} ; non-PASS: []
+  repair record: repaired_checks line '3' ; names story 1.8 and LR-S322-9: True ; impossible token: 0
+  story 1.8 frontmatter locked_requirements: at 95d831207 [] ; at 28388fb70^ [] ; at af307b314^ [LR-S322-9] ; at ship [LR-S322-9]
+  `## LOCKED_REQUIREMENTS` block count in story 1.8: at 95d831207 0 ; at af307b314^ 0 ; at af307b314 1 ; at ship 1 (absent before the gate repair, present at ship)
+  repair commit af307b314: added lines 37, at its parent 0, at ship 37 (100.0%)
+  the commit that set the frontmatter to [LR-S322-9], 28388fb70, names T-ids [13, 28, 48] (a sprint-review fix; the gate caught what the step's own fix introduced)
+  implementation gate at story 1.8 had read `locked_requirements: []` and PASSED with a disclosed exemption: verdict 102922Z check 3 mentions 'locked_requirements: []': 1
+  lines in the seat files or triage naming LOCKED_REQUIREMENTS together with story 1.8: 0 (the Check 3 defect is not raised by any seat; the one LOCKED_REQUIREMENTS line is a clean-bill line for another story)
+  does any seat file or the triage name the Check 3 defect? 'LOCKED_REQUIREMENTS' 1, 'LR-S322-9' 32, impossible 0, positive control 'DEPLOY_RANGE' 43
+
+== 6. deploy-validate (labels: deploy-validate only; no gate label in either sprint)
+  s322 ops    opus   $ 0.88   2.2 min 11-12T08:10  Ops lock recheck pre-roll
+  s322 ops    opus   $ 0.75   2.2 min 11-12T08:02  Ops: fresh lock re-read pre-roll
+  s322 ops    opus   $ 3.54  10.9 min 11-12T07:45  Ops seat: s322 pre-roll live reads
+  ops-4b-preroll-report      13508 bytes, `## Task` headings 5, Finding headings 0, dispositions []
+  ops-lock-reread-report      3883 bytes, `## Task` headings 0, Finding headings 1, dispositions ['n/a (read-only state check, no']
+  ops-lock-reread-2-report    7280 bytes, `## Task` headings 0, Finding headings 1, dispositions ['n/a (read-only state check, no']
+  active execution_lock rows `(0 rows)` per report: 4b 2, re-read 1 2, re-read 2 3 ; re-read 1 line 'LOCK-RECHECK: IDLE' 1 ; verdicts '3/3 PASSED, 0 skipped' in 4b 1
+  hygiene finding in re-read 2: the 08:03Z seat's SSM session still Active server-side ('stale, from the 08:03Z re-read seat') 1, terminated 1 ; impossible 0
+  retro's ledger line: '7 discharged, 3 re-deferred' present 1 ; 'rb_all_idle plus compensating lock reads' present 1 ; impossible 0
+  same severity grammar over the 45 sprint-review seat files (positive control, must be > 0): 45
+  severity lines of critical or major in the three reports: 0 (headings carry no severity grade; the 4b report has Tasks, the two re-reads one `state read only` Finding each, disposition n/a)
+
+== 7. retro (party persona rounds + analyst shards + Dispatch C) and gate-validation[retro]
+  findings table rows 41: {'IMPORTANT': 25, 'MODERATE': 12, 'CRITICAL': 4} ; by pass {'PM': 7, 'AR': 6, 'DV': 6, 'SM': 7, 'TEA': 7, 'QA': 8}
+  provenance block counts (critical, major, minor): ('4', '25', '12') ; table (CRITICAL, IMPORTANT, MODERATE): (4, 25, 12) : MATCH
+  C/M-class rows (CRITICAL+IMPORTANT) 29
+  improvements I-n in the retro: 8 ; F-ids cited by them: 22 of 41 table rows ; F-ids cited but not in the table (0 expected): 0
+   I-1 cites  3 finding ids (CRITICAL among them: []) ; lands as: lesson in this doc
+   I-2 cites  4 finding ids (CRITICAL among them: []) ; lands as: push candidate `PC-S322-RETRO-CARRY-DERIVATION-REPOINT-BLINDS-TREE-MAT
+   I-3 cites  5 finding ids (CRITICAL among them: []) ; lands as: extension edit (this retro)
+   I-4 cites  4 finding ids (CRITICAL among them: ['F-QA-1', 'F-TEA-3']) ; lands as: conventions edit (this retro)
+   I-5 cites  2 finding ids (CRITICAL among them: []) ; lands as: CO item (this retro)
+   I-6 cites  1 finding ids (CRITICAL among them: []) ; lands as: carried, named
+   I-7 cites  0 finding ids (CRITICAL among them: []) ; lands as: carried
+   I-8 cites  6 finding ids (CRITICAL among them: ['F-AR-1', 'F-AR-3', 'F-QA-1', 'F-TEA-3']) ; lands as: carried, named
+  landing (absent at 6ee289617, present at f7e60625b):
+   I-2 push candidate id PC-S322-RETRO-CARRY-DERIVATION-REPOINT-BLINDS-TREE-MATCH       at base 0, at close 1, at 1449b5c72 (the #1320 ledger backfill) 1
+   I-5 CO item id CO-S322-DOTENV-IMPORT-INJECTION-RESIDUAL                       at base 0, at close 1, at 1449b5c72 (the #1320 ledger backfill) 1
+   I-3 extension edit gate-validation-domain.md: 9 claim spans from the improvement text; in target at base 6, at close 6, new (absent at base, present at close) 0 ; target changed by the retro PR: True
+   I-4 conventions edit coding-conventions.md: 3 claim spans from the improvement text; in target at base 1, at close 1, new (absent at base, present at close) 0 ; target changed by the retro PR: True
+   I-3 emitted paragraph `**Re-open obligation naming.**` in gate-validation-domain.md: at base 0, at close 1
+   I-4 emitted heading `## Validator Tests Against the Live Config Shape` in coding-conventions.md: at base 0, at close 1
+   added lines of the retro PR in those three targets: 127, at base 10, at close 127 (100.0%)
+   I-8 (CRITICAL product findings 'existing COs'): ids named 4 ; present in the carry-over backlog at base 2, at close 4  (a present-at-base id means an earlier record already carried the finding: REFOUND by id)
+   control: impossible CO id at base 0 (must be 0); the backlog file length at base 210578 bytes (must be > 0)
+  retro gate verdict: 9 checks {'PASS': 9} ; non-PASS 0 (gate-validation[retro]: 9 shards, 0 repairs)
+  Dispatch C next-sprint inputs (records at the repo HEAD, not at f7e60625b):
+   next-inputs.md: 4958 bytes, 8 CO ids; cited in s323 planning files (46 files): 8 of 8 ; confound control, 200 other backlog ids cited in s323: 193 ; impossible id 0
+
+== 8. handoff (1 spawn, label attribution)
+  start 2026-11-11T11:31:03.647Z end 2026-11-11T11:31:29.836Z role dev $0.26 0.4 min: Fix check-31 fixture interpreter
+  s319 handoff rows: 0 (control: s322 1)
+  commit 0140ef67d (fix(s322-ff): route check-31 fixture through the pinned venv (admission guard)
+): files ['scripts/ai-dlc-local/tests/test-s262-check31-cited-sha.sh'] ; added lines 4, at parent 0, at ship 4 (100.0%)

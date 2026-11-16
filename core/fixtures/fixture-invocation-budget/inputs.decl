@@ -16,3 +16,4 @@ core/fixtures/lib/preamble.sh
 # from every subject tree, and MCOL mutates that copy.
 !scripts/collect-counted-stores.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/pool-span.sh

@@ -27,7 +27,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # and the set is non-empty. J1 (at the end) asserts the units ENTERED equal the units DECLARED, so a
 # dispatch loop that skipped one cannot read green.
 #
-# THESE ARMS REPORT THROUGH FAILURES OR EXIT 2, NEVER THROUGH ASSERTIONS.
+# THESE ARMS REPORT THROUGH bad OR EXIT 2, NEVER THROUGH ASSERTIONS.
 # THE SHARDS. This file is dealt across SHARDS as a SCHEDULING BOUNDARY, not a subject boundary: the pre-push
 # pool is POLE-BOUND, so each shard is a directory it can start on its own. `-b` and `-c` are one-line
 # drivers that run this file with `--group`; no `--group` runs shard 'a'. Every shard pays the one seed,
@@ -153,13 +153,14 @@ done
 [ -n "$CLOSER" ] || { printf 'FAIL: cannot locate ledger-reverify.sh from %s. Looked in:\n%s' "$DIR" "$LOOKED"; exit 1; }
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$CLOSER")" && pwd)/$(basename "$CLOSER")"
 
-# lib/mutant.sh defines fx_inproc, which inproc_run calls, and needs ok() and bad() defined first: ok prints
-# its line as given and bad counts a failure. Sourced here, before inproc.sh, which then finds fx_inproc defined and
-# sources nothing; inproc_run strips ok, bad and the library helpers from the subject's subshell like every other
-# fixture function. row_is, row_has and row_lacks return 1 on a FAIL, so a caller capturing $? holds that arm's own
-# verdict.
-ok() { printf '%s\n' "$1"; }
-bad() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
+# lib/report.sh defines ok and bad, which lib/mutant.sh needs first; lr_okf and lr_badf take a printf format and its
+# arguments and report the formatted line (one trailing newline dropped) through them. mutant.sh defines fx_inproc,
+# which inproc_run calls. Sourced here, before inproc.sh, which then finds fx_inproc defined and sources nothing;
+# inproc_run strips ok, bad and the library helpers from the subject's subshell like every other fixture function.
+# row_is, row_has and row_lacks return 1 on a FAIL, so a caller capturing $? holds that arm's own verdict.
+. "$DIR/../lib/report.sh" || { echo "FIXTURE BROKEN: lib/report.sh not found beside $DIR" >&2; exit 2; }
+lr_okf()  { local _l; printf -v _l "$@"; ok "${_l%$'\n'}"; }
+lr_badf() { local _l; printf -v _l "$@"; bad "${_l%$'\n'}"; }
 [ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$DIR/../lib/mutant.sh"
@@ -225,7 +226,6 @@ trap '[ -n "${LR_UNIT_ERR:-}" ] && [ -s "$LR_UNIT_ERR" ] && cat "$LR_UNIT_ERR" >
 # exit-code reads OUT_RC, so neither re-renders the whole ledger to ask its question.
 OUT="$(cd / && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"; OUT_RC=$?
 
-FAILURES=0
 ASSERTIONS=0
 
 # LR_LM is the label matcher the row helpers share, prepended to their awk programs. A label is a
@@ -254,17 +254,15 @@ row_is() {
   got="$(printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" "$LR_LM"'lm($2, l) {print $1; exit}')"
   if [ "$want" = "ABSENT" ]; then
     if [ -z "$got" ]; then
-      printf '  ok    %-22s no row  (%s)\n' "$label" "$why"
+      lr_okf '%-22s no row  (%s)\n' "$label" "$why"
     else
-      FAILURES=$((FAILURES + 1))
-      printf '  FAIL  %-22s got=%s want=no-row  (%s)\n' "$label" "$got" "$why"
+      lr_badf '%-22s got=%s want=no-row  (%s)\n' "$label" "$got" "$why"
       return 1
     fi
   elif [ "$got" = "$want" ]; then
-    printf '  ok    %-22s %s  (%s)\n' "$label" "$got" "$why"
+    lr_okf '%-22s %s  (%s)\n' "$label" "$got" "$why"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s got=%s want=%s  (%s)\n' "$label" "${got:-<none>}" "$want" "$why"
+    lr_badf '%-22s got=%s want=%s  (%s)\n' "$label" "${got:-<none>}" "$want" "$why"
     printf '%s\n' "$OUT" | sed 's/^/          | /'
     return 1
   fi
@@ -279,10 +277,9 @@ row_has() {
   local label="$1" want="$2" why="$3"
   ASSERTIONS=$((ASSERTIONS + 1))
   if printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" -v s="$want" "$LR_LM"'lm($2, l) && $1 == s {f=1} END{exit !f}'; then
-    printf '  ok    %-22s %s present  (%s)\n' "$label" "$want" "$why"
+    lr_okf '%-22s %s present  (%s)\n' "$label" "$want" "$why"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s %s MISSING  (%s)\n' "$label" "$want" "$why"
+    lr_badf '%-22s %s MISSING  (%s)\n' "$label" "$want" "$why"
     printf '%s\n' "$OUT" | sed 's/^/          | /'
     return 1
   fi
@@ -291,12 +288,11 @@ row_lacks() {
   local label="$1" bad="$2" why="$3"
   ASSERTIONS=$((ASSERTIONS + 1))
   if printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" -v s="$bad" "$LR_LM"'lm($2, l) && $1 == s {f=1} END{exit !f}'; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s %s present but must not be  (%s)\n' "$label" "$bad" "$why"
+    lr_badf '%-22s %s present but must not be  (%s)\n' "$label" "$bad" "$why"
     printf '%s\n' "$OUT" | sed 's/^/          | /'
     return 1
   else
-    printf '  ok    %-22s no %s  (%s)\n' "$label" "$bad" "$why"
+    lr_okf '%-22s no %s  (%s)\n' "$label" "$bad" "$why"
   fi
 }
 
@@ -305,10 +301,9 @@ detail_has() {
   local label="$1" want="$2" why="$3"
   ASSERTIONS=$((ASSERTIONS + 1))
   if printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" -v s="$want" "$LR_LM"'lm($2, l) && index($3, s) > 0 {f=1} END{exit !f}'; then
-    printf '  ok    %-22s detail names "%s"  (%s)\n' "$label" "$want" "$why"
+    lr_okf '%-22s detail names "%s"  (%s)\n' "$label" "$want" "$why"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s no row for this label carries "%s" in its detail  (%s)\n' "$label" "$want" "$why"
+    lr_badf '%-22s no row for this label carries "%s" in its detail  (%s)\n' "$label" "$want" "$why"
     printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" "$LR_LM"'lm($2, l)' | sed 's/^/          | /'
   fi
 }
@@ -316,11 +311,10 @@ detail_lacks() {
   local label="$1" bad="$2" why="$3"
   ASSERTIONS=$((ASSERTIONS + 1))
   if printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" -v s="$bad" "$LR_LM"'lm($2, l) && index($3, s) > 0 {f=1} END{exit !f}'; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s a row for this label still carries "%s"  (%s)\n' "$label" "$bad" "$why"
+    lr_badf '%-22s a row for this label still carries "%s"  (%s)\n' "$label" "$bad" "$why"
     printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" "$LR_LM"'lm($2, l)' | sed 's/^/          | /'
   else
-    printf '  ok    %-22s no row carries "%s"  (%s)\n' "$label" "$bad" "$why"
+    lr_okf '%-22s no row carries "%s"  (%s)\n' "$label" "$bad" "$why"
   fi
 }
 
@@ -425,10 +419,9 @@ done
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$_ok" = 1 ] && [ "$(tail -1 "$_w/seeded.cli")" = 0 ] && [ "$(tail -1 "$_w/refusal.cli")" = 2 ] \
    && [ "$(grep -c . "$_w/noledger.cli")" = 1 ] && grep -q '^INPUT-UNRESOLVED' "$_w/swapped.cli" && [ "$(cmp -s "$_w/seeded.cli" <(printf '%s\n%s\n' "$OUT" "$OUT_RC") && echo same)" = same ]; then
-  printf '  ok    %-22s in process equals the CLI byte for byte, rc included, on the seeded ledger (rc 0), swapped arguments (INPUT-UNRESOLVED), an absent ledger (silent) and a refusal (rc 2)\n' "inproc-seam"
+  lr_okf '%-22s in process equals the CLI byte for byte, rc included, on the seeded ledger (rc 0), swapped arguments (INPUT-UNRESOLVED), an absent ledger (silent) and a refusal (rc 2)\n' "inproc-seam"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the in-process run differs from the CLI on an outcome above, or the outcomes are not distinct\n' "inproc-seam"
+  lr_badf '%-22s the in-process run differs from the CLI on an outcome above, or the outcomes are not distinct\n' "inproc-seam"
 fi
 } # end lr_unit_inproc_seam
 
@@ -459,11 +452,10 @@ cwd_probe="$OUT"   # the baseline, taken from `/`
 cwd_atcons="$(cd "$CONS" && lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$cwd_probe" = "$cwd_atcons" ]; then
-  printf '  ok    %-22s byte-identical from `/` and from the CONSUMER root — a receipt is evaluated at the consumer root, not wherever the caller stands
+  lr_okf '%-22s byte-identical from `/` and from the CONSUMER root — a receipt is evaluated at the consumer root, not wherever the caller stands
 ' "cwd-invariance"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the verdicts CHANGED with the working directory. A `verify: sh` receipt names consumer-relative paths; run from elsewhere its grep exits non-zero on a missing file and the entry reads as absorbed. That direction closes live entries.
+  lr_badf '%-22s the verdicts CHANGED with the working directory. A `verify: sh` receipt names consumer-relative paths; run from elsewhere its grep exits non-zero on a missing file and the entry reads as absorbed. That direction closes live entries.
 ' "cwd-invariance"
   diff <(printf '%s\n' "$cwd_atcons") <(printf '%s\n' "$cwd_probe") | sed 's/^/          | /' | head -12
 fi
@@ -492,19 +484,15 @@ row_is "validate-fixture-prereq.sh" NEEDS-REVIEW \
 ASSERTIONS=$((ASSERTIONS + 1))
 nm_det="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /A narrative closure record/ && $1=="NEEDS-REVIEW"{print $3; exit}')"
 if [ -z "$nm_det" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s no NEEDS-REVIEW row for the prose-titled manual record at all\n' "nonid-manual-detail"
+  lr_badf '%-22s no NEEDS-REVIEW row for the prose-titled manual record at all\n' "nonid-manual-detail"
 elif ! grep -q '^unresolved: ' <<<"$nm_det"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the detail does not OPEN with a cause token, so this cause cannot be told from the other three: %s\n' "nonid-manual-detail" "$(printf '%s' "$nm_det" | cut -c1-90)"
+  lr_badf '%-22s the detail does not OPEN with a cause token, so this cause cannot be told from the other three: %s\n' "nonid-manual-detail" "$(printf '%s' "$nm_det" | cut -c1-90)"
 elif ! grep -q 'not an entry id' <<<"$nm_det"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the detail never says the LABEL is the defect, so the operator is told to fix the receipt: %s\n' "nonid-manual-detail" "$(printf '%s' "$nm_det" | cut -c1-110)"
+  lr_badf '%-22s the detail never says the LABEL is the defect, so the operator is told to fix the receipt: %s\n' "nonid-manual-detail" "$(printf '%s' "$nm_det" | cut -c1-110)"
 elif ! grep -q 'BULLET GRAMMAR IS NOT THE THING TO CHANGE' <<<"$nm_det"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the detail does not warn off narrowing the bullet grammar, which is the remedy PC-S305 is filed against\n' "nonid-manual-detail"
+  lr_badf '%-22s the detail does not warn off narrowing the bullet grammar, which is the remedy PC-S305 is filed against\n' "nonid-manual-detail"
 else
-  printf '  ok    %-22s opens with the cause token, names the LABEL as the defect, and warns off narrowing the grammar\n' "nonid-manual-detail"
+  lr_okf '%-22s opens with the cause token, names the LABEL as the defect, and warns off narrowing the grammar\n' "nonid-manual-detail"
 fi
 
 # THE TRAP, AND IT IS THE REASON THIS ARM SET EXISTS RATHER THAN A ONE-LINE GRAMMAR NARROWING.
@@ -620,13 +608,11 @@ row_is "PC-FIXTURE-HEADING-NO-VERIFY" ABSENT          "heading opens an entry, s
 ASSERTIONS=$((ASSERTIONS + 1))
 brow="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /Entry B/ {print $3; exit}')"
 if grep -q 'absorbed this at 0\.101\.0' <<<"$brow"; then
-  printf '  ok    %-22s names 0.101.0  (the version that absorbed it, not theirs 0.103.0)\n' "absorbing-version"
+  lr_okf '%-22s names 0.101.0  (the version that absorbed it, not theirs 0.103.0)\n' "absorbing-version"
 elif grep -q 'absorbed this at 0\.103\.0' <<<"$brow"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s names theirs 0.103.0 — the tip, not the absorbing release; this string is copied into a permanent ledger annotation\n' "absorbing-version"
+  lr_badf '%-22s names theirs 0.103.0 — the tip, not the absorbing release; this string is copied into a permanent ledger annotation\n' "absorbing-version"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s no recognisable version in the close row: %s\n' "absorbing-version" "$brow"
+  lr_badf '%-22s no recognisable version in the close row: %s\n' "absorbing-version" "$brow"
 fi
 
 # THE OTHER COMMIT SHAPE, and it is the one the version used to be wrong for. `MARKER_B` above
@@ -639,16 +625,13 @@ ASSERTIONS=$((ASSERTIONS + 1))
 vrow="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /Entry V/ {print $3; exit}')"
 case "$vrow" in
   *'absorbed this at 0.102.0'*)
-    printf -v _m '  ok    %-22s names 0.102.0  (the release CONTAINING the fix, not the blob at it)' "release-containing"; ok "$_m" ;;
+    printf -v _m '%-22s names 0.102.0  (the release CONTAINING the fix, not the blob at it)' "release-containing"; ok "$_m" ;;
   *'absorbed this at 0.101.0'*)
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s names 0.101.0 — the VERSION blob AT the absorbing commit, one release early\n' "release-containing" ;;
+    lr_badf '%-22s names 0.101.0 — the VERSION blob AT the absorbing commit, one release early\n' "release-containing" ;;
   *'absorbed this at 0.103.0'*)
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s names 0.103.0 — theirs, so the walk found nothing and fell back\n' "release-containing" ;;
+    lr_badf '%-22s names 0.103.0 — theirs, so the walk found nothing and fell back\n' "release-containing" ;;
   *)
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s no recognisable version in Entry V row: %s\n' "release-containing" "$vrow" ;;
+    lr_badf '%-22s no recognisable version in Entry V row: %s\n' "release-containing" "$vrow" ;;
 esac
 
 # BL-704: release_containing asks `git diff --quiet <c>^ <c> -- VERSION`, which follows a textconv
@@ -670,13 +653,11 @@ tc_led="$(lr_subledger textconv 'Entry B was live')" || tc_led="$DIST/no-such-su
 tc_out="$(lr_eng "$CLOSER" "$TCD" "$BASE" "$CONS" "$THEIRS" "$tc_led" 2>/dev/null)"
 tc_b="$(printf '%s\n' "$tc_out" | awk -F'\t' '$2 ~ /Entry B/ {print $3; exit}')"
 if [ -z "$tc_bump" ] || [ "$tc_plain" -ne 0 ] || [ "$tc_raw" -ne 1 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the seeded driver is not live (plain diff rc=%s, --no-textconv rc=%s; wanted 0 and 1), so the arm would pass on a driver that does nothing\n' "textconv-version" "$tc_plain" "$tc_raw"
+  lr_badf '%-22s the seeded driver is not live (plain diff rc=%s, --no-textconv rc=%s; wanted 0 and 1), so the arm would pass on a driver that does nothing\n' "textconv-version" "$tc_plain" "$tc_raw"
 elif grep -q 'absorbed this at 0\.101\.0' <<<"$tc_b"; then
-  printf '  ok    %-22s a textconv driver mapping every VERSION blob to one text still names 0.101.0 for Entry B (the bump test reads bytes)\n' "textconv-version"
+  lr_okf '%-22s a textconv driver mapping every VERSION blob to one text still names 0.101.0 for Entry B (the bump test reads bytes)\n' "textconv-version"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s Entry B row does not name 0.101.0 under the driver -- the bump test followed textconv and read the bumping commit as unchanged: %s\n' "textconv-version" "$(printf '%s' "$tc_b" | cut -c1-120)"
+  lr_badf '%-22s Entry B row does not name 0.101.0 under the driver -- the bump test followed textconv and read the bumping commit as unchanged: %s\n' "textconv-version" "$(printf '%s' "$tc_b" | cut -c1-120)"
 fi
 
 # A NAMED-UPSTREAM ROW CARRIES NO VERSION, DELIBERATELY. The join is on the commit MESSAGE, and a
@@ -693,26 +674,22 @@ fi
 ASSERTIONS=$((ASSERTIONS + 1))
 nrow="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM" {print $3; exit}')"
 if [ -z "$nrow" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s no NAMED-UPSTREAM row at all — the arms below cannot discriminate\n' "named-no-version"
+  lr_badf '%-22s no NAMED-UPSTREAM row at all — the arms below cannot discriminate\n' "named-no-version"
 elif grep -qE 'at v[0-9]+\.[0-9]+\.[0-9]+|\(v[0-9]+\.[0-9]+\.[0-9]+,' <<<"$nrow"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the row still renders a version: %s\n' "named-no-version" "$(printf '%s' "$nrow" | cut -c1-140)"
+  lr_badf '%-22s the row still renders a version: %s\n' "named-no-version" "$(printf '%s' "$nrow" | cut -c1-140)"
 elif grep -q 'NAMES this entry.s id in ' <<<"$nrow"; then
-  printf '  ok    %-22s no version, and it still says where upstream names the id\n' "named-no-version"
+  lr_okf '%-22s no version, and it still says where upstream names the id\n' "named-no-version"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s no version, but the row no longer says WHERE: %s\n' "named-no-version" "$(printf '%s' "$nrow" | cut -c1-140)"
+  lr_badf '%-22s no version, but the row no longer says WHERE: %s\n' "named-no-version" "$(printf '%s' "$nrow" | cut -c1-140)"
 fi
 
 # An unresolvable substring must fall back to theirs' VERSION, not print an empty version.
 # A close row with no version at all is worse than one carrying the tip's.
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$OUT" | awk -F'\t' '$1=="CLOSE-CANDIDATE"' | grep -q 'at \.\|at $\|at  '; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s a close row rendered an EMPTY version\n' "version-fallback"
+  lr_badf '%-22s a close row rendered an EMPTY version\n' "version-fallback"
 else
-  printf '  ok    %-22s no close row rendered an empty version\n' "version-fallback"
+  lr_okf '%-22s no close row rendered an empty version\n' "version-fallback"
 fi
 
 # A verb wrapped in backticks is a formatting slip, not a different verb — on BOTH ends.
@@ -740,10 +717,9 @@ for probe in "Entry BT:whole receipt in one code span (trailing backtick on the 
   plabel="${probe%%:*}"; pwhy="${probe#*:}"
   pstatus="$(printf '%s\n' "$bt_out" | awk -F'\t' -v l="$plabel" '$2 ~ l {print $1; exit}')"
   if [ "$pstatus" = "CLOSE-CANDIDATE" ]; then
-    printf '  ok    %-22s %s\n' "backtick:${plabel##* }" "$pwhy"
+    lr_okf '%-22s %s\n' "backtick:${plabel##* }" "$pwhy"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s got=%s want=CLOSE-CANDIDATE — %s; a formatting habit must not change the verdict\n' "backtick:${plabel##* }" "${pstatus:-<none>}" "$pwhy"
+    lr_badf '%-22s got=%s want=CLOSE-CANDIDATE — %s; a formatting habit must not change the verdict\n' "backtick:${plabel##* }" "${pstatus:-<none>}" "$pwhy"
   fi
 done
 rm -f "$btick"
@@ -774,17 +750,15 @@ an_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$anch" 2>&1)"
 pm="$(printf '%s\n' "$an_out" | awk -F'\t' '$2 ~ /Entry PM/ {print $1; exit}')"
 br="$(printf '%s\n' "$an_out" | awk -F'\t' '$2 ~ /Entry BR/ {print $1; exit}')"
 if [ "$pm" = "CLOSE-CANDIDATE" ]; then
-  printf '  ok    %-22s prose after the receipt does not overwrite it\n' "anchor:prose"
+  lr_okf '%-22s prose after the receipt does not overwrite it\n' "anchor:prose"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s got=%s want=CLOSE-CANDIDATE — a mid-sentence mention replaced the real receipt (last-match-wins)\n' "anchor:prose" "${pm:-<none>}"
+  lr_badf '%-22s got=%s want=CLOSE-CANDIDATE — a mid-sentence mention replaced the real receipt (last-match-wins)\n' "anchor:prose" "${pm:-<none>}"
 fi
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$br" = "CLOSE-CANDIDATE" ]; then
-  printf '  ok    %-22s a <br>-prefixed receipt still registers\n' "anchor:br"
+  lr_okf '%-22s a <br>-prefixed receipt still registers\n' "anchor:br"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s got=%s want=CLOSE-CANDIDATE — the anchor dropped a real receipt written after an HTML break\n' "anchor:br" "${br:-<none>}"
+  lr_badf '%-22s got=%s want=CLOSE-CANDIDATE — the anchor dropped a real receipt written after an HTML break\n' "anchor:br" "${br:-<none>}"
 fi
 rm -f "$anch"
 
@@ -802,10 +776,9 @@ label_is() {
   ASSERTIONS=$((ASSERTIONS + 1))
   got="$(printf '%s\n' "$OUT" | awk -F'\t' -v p="$pat" '$2 ~ p {print $2; exit}')"
   if [ "$got" = "$want" ]; then
-    printf '  ok    %-22s label is the whole id  (%s)\n' "$pat" "$why"
+    lr_okf '%-22s label is the whole id  (%s)\n' "$pat" "$why"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s got=[%s] want=[%s]  (%s)\n' "$pat" "${got:-<none>}" "$want" "$why"
+    lr_badf '%-22s got=[%s] want=[%s]  (%s)\n' "$pat" "${got:-<none>}" "$want" "$why"
   fi
 }
 
@@ -819,20 +792,18 @@ label_is "PC-FIXTURE-HEADING-LONG-BEFORE-DASH" \
 ASSERTIONS=$((ASSERTIONS + 1))
 clipped="$(printf '%s\n' "$OUT" | awk -F'\t' 'length($2)==70{n++} END{print n+0}')"
 if [ "$clipped" -eq 0 ]; then
-  printf '  ok    %-22s no label lands on the old seventy-character cap\n' "label-width"
+  lr_okf '%-22s no label lands on the old seventy-character cap\n' "label-width"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s %s label(s) are exactly 70 bytes — the clip is back\n' "label-width" "$clipped"
+  lr_badf '%-22s %s label(s) are exactly 70 bytes — the clip is back\n' "label-width" "$clipped"
 fi
 
 # The closer must NEVER exit nonzero — it is a classifier and a close never blocks apply.
 ASSERTIONS=$((ASSERTIONS + 1))
 rc="$OUT_RC"   # the baseline's own exit status: the same invocation, not a second render
 if [ "$rc" -eq 0 ]; then
-  printf '  ok    %-22s exit 0  (classifier never blocks)\n' "exit-code"
+  lr_okf '%-22s exit 0  (classifier never blocks)\n' "exit-code"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s exit=%s want=0  (a close must never block apply)\n' "exit-code" "$rc"
+  lr_badf '%-22s exit=%s want=0  (a close must never block apply)\n' "exit-code" "$rc"
 fi
 
 } # end lr_unit_sh_missing_subject
@@ -852,10 +823,9 @@ NOLED="$(dirname "$DIST")/consumer-with-no-ledger"
 rm -rf "$NOLED"; mkdir -p "$NOLED"
 empty="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$NOLED" "$THEIRS" 2>&1)"; empty_rc=$?
 if [ -z "$empty" ] && [ "$empty_rc" -eq 0 ]; then
-  printf '  ok    %-22s silent, exit 0  (real consumer root, default ledger absent -> genuinely nothing to re-verify)\n' "no-ledger"
+  lr_okf '%-22s silent, exit 0  (real consumer root, default ledger absent -> genuinely nothing to re-verify)\n' "no-ledger"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s rc=%s output=[%s] — a consumer that never filed a candidate must stay silent\n' "no-ledger" "$empty_rc" "$empty"
+  lr_badf '%-22s rc=%s output=[%s] — a consumer that never filed a candidate must stay silent\n' "no-ledger" "$empty_rc" "$empty"
 fi
 
 # ARM 1 — an explicitly-supplied arg-5 path that is not readable. Nothing was re-verified, and
@@ -866,10 +836,9 @@ ASSERTIONS=$((ASSERTIONS + 1))
 bad5="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DIST/nonexistent-ledger.md" 2>/dev/null)"; b5_rc=$?
 bad5_n="$(printf '%s\n' "$bad5" | awk -F'\t' '$1=="INPUT-UNRESOLVED"{c++} END{print c+0}')"
 if [ "$bad5_n" -eq 1 ] && grep -qF 'nonexistent-ledger.md' <<<"$bad5"; then
-  printf -v _m '  ok    %-22s one INPUT-UNRESOLVED row naming the arg-5 path' "bad-arg5"; ok "$_m"
+  printf -v _m '%-22s one INPUT-UNRESOLVED row naming the arg-5 path' "bad-arg5"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s got %s INPUT-UNRESOLVED row(s); an unreadable arg-5 path must not read as a clean corpus\n' "bad-arg5" "$bad5_n"
+  lr_badf '%-22s got %s INPUT-UNRESOLVED row(s); an unreadable arg-5 path must not read as a clean corpus\n' "bad-arg5" "$bad5_n"
   printf '%s\n' "$bad5" | sed 's/^/          | /'
 fi
 
@@ -883,10 +852,9 @@ ASSERTIONS=$((ASSERTIONS + 1))
 swapped="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"; sw_rc=$?
 sw_n="$(printf '%s\n' "$swapped" | awk -F'\t' '$1=="INPUT-UNRESOLVED"{c++} END{print c+0}')"
 if [ "$sw_n" -eq 1 ]; then
-  printf -v _m '  ok    %-22s swapped args report, though the ledger path is the DEFAULT one' "swapped-args"; ok "$_m"
+  printf -v _m '%-22s swapped args report, though the ledger path is the DEFAULT one' "swapped-args"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s got %s INPUT-UNRESOLVED row(s) — an arg-5-only check cannot see this case\n' "swapped-args" "$sw_n"
+  lr_badf '%-22s got %s INPUT-UNRESOLVED row(s) — an arg-5-only check cannot see this case\n' "swapped-args" "$sw_n"
   printf '%s\n' "$swapped" | sed 's/^/          | /'
 fi
 
@@ -895,10 +863,9 @@ fi
 ASSERTIONS=$((ASSERTIONS + 1))
 # The statuses are those of the two runs above, captured where they ran -- not two more runs.
 if [ "$sw_rc" -eq 0 ] && [ "$b5_rc" -eq 0 ]; then
-  printf '  ok    %-22s both caller-error arms exit 0  (classifier never blocks)\n' "input-exit-code"
+  lr_okf '%-22s both caller-error arms exit 0  (classifier never blocks)\n' "input-exit-code"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s swapped=%s bad-arg5=%s want 0/0 — reporting by exit code blocks apply\n' "input-exit-code" "$sw_rc" "$b5_rc"
+  lr_badf '%-22s swapped=%s bad-arg5=%s want 0/0 — reporting by exit code blocks apply\n' "input-exit-code" "$sw_rc" "$b5_rc"
 fi
 
 } # end lr_unit_caller_error
@@ -918,13 +885,11 @@ abs_out="$(printf '%s\n' "$OUT" | sort)"
 rel_n="$(printf '%s\n' "$rel_out" | grep -c . )"
 abs_n="$(printf '%s\n' "$abs_out" | grep -c . )"
 if [ "$rel_n" -eq 0 ] || [ "$abs_n" -eq 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s one side produced NO rows (rel=%s abs=%s) — two empty sets agree, which proves nothing\n' "consumer-form" "$rel_n" "$abs_n"
+  lr_badf '%-22s one side produced NO rows (rel=%s abs=%s) — two empty sets agree, which proves nothing\n' "consumer-form" "$rel_n" "$abs_n"
 elif [ "$rel_out" = "$abs_out" ]; then
-  printf -v _m '  ok    %-22s %s rows, byte-identical whether the root arrives as "." or absolute' "consumer-form" "$rel_n"; ok "$_m"
+  printf -v _m '%-22s %s rows, byte-identical whether the root arrives as "." or absolute' "consumer-form" "$rel_n"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the ROOT ARGUMENT decided a verdict:\n' "consumer-form"
+  lr_badf '%-22s the ROOT ARGUMENT decided a verdict:\n' "consumer-form"
   diff <(printf '%s\n' "$rel_out") <(printf '%s\n' "$abs_out") | sed 's/^/          | /'
 fi
 
@@ -954,20 +919,18 @@ lr_unit_receipts_undecided() {
 ASSERTIONS=$((ASSERTIONS + 1))
 und="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}')"
 if grep -q "^1 of 5 'theirs_has' receipt" <<<"$und"; then
-  printf '  ok    %-22s 1 of 5 — the control is excluded, the vacuous entry still counts in the total, and the refused anchors do not\n' "undecided-tally"
+  lr_okf '%-22s 1 of 5 — the control is excluded, the vacuous entry still counts in the total, and the refused anchors do not\n' "undecided-tally"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s want "1 of 5", got: %s\n' "undecided-tally" "${und:-<no row>}"
+  lr_badf '%-22s want "1 of 5", got: %s\n' "undecided-tally" "${und:-<no row>}"
 fi
 
 # It must reach the operator, which means NOT being STILL-LIVE: emit-report.sh filters that one
 # status out, and that filter is exactly why this confidence has been invisible.
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$OUT" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{n++} END{exit !(n==1)}'; then
-  printf '  ok    %-22s exactly one run-scoped row, and its status is not STILL-LIVE\n' "undecided-once"
+  lr_okf '%-22s exactly one run-scoped row, and its status is not STILL-LIVE\n' "undecided-once"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s want exactly one RECEIPTS-UNDECIDED row\n' "undecided-once"
+  lr_badf '%-22s want exactly one RECEIPTS-UNDECIDED row\n' "undecided-once"
 fi
 
 # SILENT AT ZERO. A ledger whose receipts are all well-anchored must say nothing, or the row is
@@ -980,10 +943,9 @@ z_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$zled" 2>/dev/null)
 z_n="$(printf '%s\n' "$z_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
 z_live="$(printf '%s\n' "$z_out" | awk -F'\t' '$1=="STILL-LIVE"{c++} END{print c+0}')"
 if [ "$z_n" -eq 0 ] && [ "$z_live" -eq 1 ]; then
-  printf '  ok    %-22s no row when every receipt moved in range (control: the run still emitted its STILL-LIVE)\n' "undecided-silent"
+  lr_okf '%-22s no row when every receipt moved in range (control: the run still emitted its STILL-LIVE)\n' "undecided-silent"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s got %s undecided row(s) and %s still-live on a well-anchored ledger; want 0 and 1\n' "undecided-silent" "$z_n" "$z_live"
+  lr_badf '%-22s got %s undecided row(s) and %s still-live on a well-anchored ledger; want 0 and 1\n' "undecided-silent" "$z_n" "$z_live"
 fi
 rm -f "$zled"
 
@@ -1068,10 +1030,9 @@ sbc_probe EX-NEITHER "$SBC_EXNEITHER" 1 1
 sbc_rc 'true' "$THEIRS"; sbc_ctl_t=$?
 sbc_rc 'exit 3' "$THEIRS"; sbc_ctl_f=$?
 if [ -z "$sbc_bad" ] && [ "$sbc_ctl_t" -eq 0 ] && [ "$sbc_ctl_f" -eq 3 ]; then
-  printf '  ok    %-22s all seven probe receipts carry the rc pair their arm depends on, measured through the engine own wrapper (control: a trivial receipt answers 0 and an exit-3 receipt answers 3, so the runner is not returning a constant)\n' "sbc-preconditions"
+  lr_okf '%-22s all seven probe receipts carry the rc pair their arm depends on, measured through the engine own wrapper (control: a trivial receipt answers 0 and an exit-3 receipt answers 3, so the runner is not returning a constant)\n' "sbc-preconditions"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s a probe receipt does not carry the rc pair its arm assumes%s (runner control: %s/%s, want 0/3) -- a receipt that matches at NEITHER ref reads exactly like one the pull did not move, so every count below would be unreadable\n' "sbc-preconditions" "${sbc_bad:- none}" "$sbc_ctl_t" "$sbc_ctl_f"
+  lr_badf '%-22s a probe receipt does not carry the rc pair its arm assumes%s (runner control: %s/%s, want 0/3) -- a receipt that matches at NEITHER ref reads exactly like one the pull did not move, so every count below would be unreadable\n' "sbc-preconditions" "${sbc_bad:- none}" "$sbc_ctl_t" "$sbc_ctl_f"
 fi
 
 # THE LEDGER. One entry per class, so each count below has exactly one member and a number that
@@ -1104,32 +1065,28 @@ sbc_det="$(printf '%s\n' "$sbc_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print
 sbc_row() { # <label> <want-status>
   ASSERTIONS=$((ASSERTIONS + 1))
   if printf '%s\n' "$sbc_out" | awk -F'\t' -v l="$1" -v s="$2" "$LR_LM"'lm($2, l) && $1 == s {f=1} END{exit !f}'; then
-    printf '  ok    %-22s %s\n' "$1" "$2"
+    lr_okf '%-22s %s\n' "$1" "$2"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s want %s, got: %s\n' "$1" "$2" "$(printf '%s\n' "$sbc_out" | awk -F'\t' -v l="$1" "$LR_LM"'lm($2, l) {print $1; exit}')"
+    lr_badf '%-22s want %s, got: %s\n' "$1" "$2" "$(printf '%s\n' "$sbc_out" | awk -F'\t' -v l="$1" "$LR_LM"'lm($2, l) {print $1; exit}')"
     printf '%s\n' "$sbc_out" | sed 's/^/          | /'
   fi
 }
 sbc_det_has() { # <name> <substring> <why>
   ASSERTIONS=$((ASSERTIONS + 1))
   if [ -n "$sbc_det" ] && [ "${sbc_det#*"$2"}" != "$sbc_det" ]; then
-    printf '  ok    %-22s %s\n' "$1" "$3"
+    lr_okf '%-22s %s\n' "$1" "$3"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s the undecided detail does not carry "%s" (%s). Detail: %s\n' "$1" "$2" "$3" "${sbc_det:-<no row>}"
+    lr_badf '%-22s the undecided detail does not carry "%s" (%s). Detail: %s\n' "$1" "$2" "$3" "${sbc_det:-<no row>}"
   fi
 }
 sbc_det_lacks() { # <name> <substring> <why>
   ASSERTIONS=$((ASSERTIONS + 1))
   if [ -z "$sbc_det" ]; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s there is no undecided row at all, so this absence is not a measurement (%s)\n' "$1" "$3"
+    lr_badf '%-22s there is no undecided row at all, so this absence is not a measurement (%s)\n' "$1" "$3"
   elif [ "${sbc_det#*"$2"}" = "$sbc_det" ]; then
-    printf '  ok    %-22s %s\n' "$1" "$3"
+    lr_okf '%-22s %s\n' "$1" "$3"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s the undecided detail carries "%s" and must not (%s)\n' "$1" "$2" "$3"
+    lr_badf '%-22s the undecided detail carries "%s" and must not (%s)\n' "$1" "$2" "$3"
   fi
 }
 
@@ -1179,13 +1136,11 @@ sbc_mv_u="$(printf '%s\n' "$sbc_mv" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} 
 sbc_mv_r="$(printf '%s\n' "$sbc_mv" | awk -F'\t' '$1=="STILL-LIVE" || $1=="CLOSE-CANDIDATE"{c++} END{print c+0}')"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$sbc_mv_r" -lt 2 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the movers-only ledger produced %s verdict row(s), not 2 -- the run did not happen, so its silence establishes nothing\n' "sbc-silent-movers" "$sbc_mv_r"
+  lr_badf '%-22s the movers-only ledger produced %s verdict row(s), not 2 -- the run did not happen, so its silence establishes nothing\n' "sbc-silent-movers" "$sbc_mv_r"
 elif [ "$sbc_mv_u" -eq 0 ]; then
-  printf '  ok    %-22s a ledger whose receipts ALL moved in range emits no undecided row (control: both verdict rows still reported)\n' "sbc-silent-movers"
+  lr_okf '%-22s a ledger whose receipts ALL moved in range emits no undecided row (control: both verdict rows still reported)\n' "sbc-silent-movers"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s %s undecided row(s) on a ledger where every receipt moved -- the count is a constant, not a finding\n' "sbc-silent-movers" "$sbc_mv_u"
+  lr_badf '%-22s %s undecided row(s) on a ledger where every receipt moved -- the count is a constant, not a finding\n' "sbc-silent-movers" "$sbc_mv_u"
 fi
 
 # SILENCE, ARM TWO: THE NULL DIFFERENTIAL. Driven with base == theirs, every receipt answers the
@@ -1196,13 +1151,11 @@ sbc_nl_u="$(printf '%s\n' "$sbc_nl" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} 
 sbc_nl_r="$(printf '%s\n' "$sbc_nl" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$sbc_nl_r" -eq 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the null-differential run emitted no rows at all, so its silence is an engine that did not run\n' "sbc-silent-null"
+  lr_badf '%-22s the null-differential run emitted no rows at all, so its silence is an engine that did not run\n' "sbc-silent-null"
 elif [ "$sbc_nl_u" -eq 0 ]; then
-  printf '  ok    %-22s base == theirs emits no undecided row (control: %s other rows still reported) -- a pull that moved nothing is a different claim, made by saying nothing\n' "sbc-silent-null" "$sbc_nl_r"
+  lr_okf '%-22s base == theirs emits no undecided row (control: %s other rows still reported) -- a pull that moved nothing is a different claim, made by saying nothing\n' "sbc-silent-null" "$sbc_nl_r"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s %s undecided row(s) on a NULL differential -- every receipt reads one tree twice, so the count measures the invocation\n' "sbc-silent-null" "$sbc_nl_u"
+  lr_badf '%-22s %s undecided row(s) on a NULL differential -- every receipt reads one tree twice, so the count measures the invocation\n' "sbc-silent-null" "$sbc_nl_u"
 fi
 
 # --- A RECEIPT THAT READS STDIN MUST NOT EAT THE ENTRIES AFTER IT ------------------------------
@@ -1249,10 +1202,9 @@ for si in eval base; do
   got="$(si_verdicts "$CLOSER" "$led")"
   ASSERTIONS=$((ASSERTIONS + 1))
   if [ "$got" = "$SI_WANT" ]; then
-    printf '  ok    %-22s all three entries report, with their own verdicts, after a receipt that reads stdin at the %s site\n' "stdin-$si" "$si"
+    lr_okf '%-22s all three entries report, with their own verdicts, after a receipt that reads stdin at the %s site\n' "stdin-$si" "$si"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s got "%s", want "%s" -- a receipt that reads stdin ate the entries after it, and the report is shorter with rc 0\n' "stdin-$si" "$got" "$SI_WANT"
+    lr_badf '%-22s got "%s", want "%s" -- a receipt that reads stdin ate the entries after it, and the report is shorter with rc 0\n' "stdin-$si" "$got" "$SI_WANT"
   fi
 done
 
@@ -1283,20 +1235,18 @@ row_has "PC-FIXTURE-TWO-RECEIPTS" STILL-LIVE \
 # The ordinal has to be on the row, or two rows for one entry are unattributable.
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$OUT" | grep -F 'PC-FIXTURE-TWO-RECEIPTS' | grep -q '\[receipt 1/2\]'; then
-  printf '  ok    %-22s rows carry their receipt ordinal\n' "receipt-ordinal"
+  lr_okf '%-22s rows carry their receipt ordinal\n' "receipt-ordinal"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s two rows for one entry with no ordinal to tell them apart\n' "receipt-ordinal"
+  lr_badf '%-22s two rows for one entry with no ordinal to tell them apart\n' "receipt-ordinal"
 fi
 
 # A SINGLE-receipt entry must be byte-unchanged — no ordinal suffix. Otherwise the fix rewrites
 # every row in every consumer report to buy a two-entry improvement.
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$OUT" | grep -F 'Entry A' | grep -q '\[receipt '; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s a single-receipt entry grew an ordinal suffix\n' "single-unchanged"
+  lr_badf '%-22s a single-receipt entry grew an ordinal suffix\n' "single-unchanged"
 else
-  printf '  ok    %-22s single-receipt rows unchanged (no suffix)\n' "single-unchanged"
+  lr_okf '%-22s single-receipt rows unchanged (no suffix)\n' "single-unchanged"
 fi
 
 } # end lr_unit_every_receipt
@@ -1351,10 +1301,9 @@ row_lacks "PC-S902-SHARED-PREFIX-SECOND" NAMED-UPSTREAM \
 ambig_n="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS" && $2=="PC-S902"{n++} END{print n+0}')"
 ASSERTIONS=$((ASSERTIONS+1))
 if [ "$ambig_n" = "1" ]; then
-  printf '  ok    %-22s exactly one ambiguous row for the two entries sharing PC-S902\n' "ambiguous-collapse"
+  lr_okf '%-22s exactly one ambiguous row for the two entries sharing PC-S902\n' "ambiguous-collapse"
 else
-  printf '  FAIL  %-22s %s ambiguous row(s) — the prefix fact is being repeated per entry\n' "ambiguous-collapse" "$ambig_n"
-  FAILURES=$((FAILURES+1))
+  lr_badf '%-22s %s ambiguous row(s) — the prefix fact is being repeated per entry\n' "ambiguous-collapse" "$ambig_n"
 fi
 
 # THE CONTROL, and without it the arms above only prove the code runs. An id-shaped label
@@ -1392,27 +1341,26 @@ s902_row="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS" &&
 s953_row="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS" && $2=="PC-S953" {print $3; exit}')"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$s902_n" -ne 2 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s FIXTURE BROKEN — PC-S902 is cited by %s commit(s) in the seed, want 2; the list arm has nothing to get wrong\n' "ambiguous-lists-all" "$s902_n"
+  lr_badf '%-22s FIXTURE BROKEN — PC-S902 is cited by %s commit(s) in the seed, want 2; the list arm has nothing to get wrong\n' "ambiguous-lists-all" "$s902_n"
 else
   _miss=0; for _s in $s902_set; do case "$s902_row" in *"$_s"*) ;; *) _miss=$((_miss + 1)) ;; esac; done
   case "$s902_row" in
     *"in 2 commits, ALL of them:"*"and 2 entries in this ledger carry it"*)
       if [ "$_miss" -eq 0 ]; then
-        printf -v _m '  ok    %-22s PC-S902 names BOTH citing commits and the commit count, and keeps the entry-count phrase ledger-rotate parses' "ambiguous-lists-all"; ok "$_m"
+        printf -v _m '%-22s PC-S902 names BOTH citing commits and the commit count, and keeps the entry-count phrase ledger-rotate parses' "ambiguous-lists-all"; ok "$_m"
       else
-        FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s PC-S902 says two commits but lacks %s of their shas\n' "ambiguous-lists-all" "$_miss"
+        lr_badf '%-22s PC-S902 says two commits but lacks %s of their shas\n' "ambiguous-lists-all" "$_miss"
       fi ;;
-    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s PC-S902 row does not name its 2 citing commits and the 2 entries: %s\n' "ambiguous-lists-all" "${s902_row:-<no row>}" ;;
+    *) lr_badf '%-22s PC-S902 row does not name its 2 citing commits and the 2 entries: %s\n' "ambiguous-lists-all" "${s902_row:-<no row>}" ;;
   esac
 fi
 ASSERTIONS=$((ASSERTIONS + 1))
 case "$s953_row|$s902_row" in
   *"NONE of them changes a path under core/ or templates/"*"|"*"NONE of them changes"*)
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s PC-S902 (cited by a core commit) also reads docs-only — the reach is not discriminating\n' "ambiguous-reach" ;;
+    lr_badf '%-22s PC-S902 (cited by a core commit) also reads docs-only — the reach is not discriminating\n' "ambiguous-reach" ;;
   *"NONE of them changes a path under core/ or templates/"*"|"*)
-    printf '  ok    %-22s PC-S953 (one docs-only citation) says no citing commit changes core/ or templates/; PC-S902 does not\n' "ambiguous-reach" ;;
-  *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s PC-S953 row does not carry the docs-only reach: %s\n' "ambiguous-reach" "${s953_row:-<no row>}" ;;
+    lr_okf '%-22s PC-S953 (one docs-only citation) says no citing commit changes core/ or templates/; PC-S902 does not\n' "ambiguous-reach" ;;
+  *) lr_badf '%-22s PC-S953 row does not carry the docs-only reach: %s\n' "ambiguous-reach" "${s953_row:-<no row>}" ;;
 esac
 
 # The reach rows over a ledger holding only the entries they read.
@@ -1428,10 +1376,9 @@ if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ON
    && [ "$(reach_kind "$rc_ctl" PC-S952-MERGE-NAMING)" = NAMED-UPSTREAM ] \
    && [ "$(reach_kind "$rc_ctl" PC-S954-RELEASE-COMMIT-NAMING)" = NAMED-UPSTREAM ] \
    && grep -q "in 2 commits, ALL of them:" <<<"$rc_ctl"; then
-  printf -v _m '  ok    %-22s the engine over the small ledger reproduces S950/S951/S952/S954 and the two-commit S902 row' "reach-control"; ok "$_m"
+  printf -v _m '%-22s the engine over the small ledger reproduces S950/S951/S952/S954 and the two-commit S902 row' "reach-control"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the engine over the small ledger does not reproduce the reach rows\n' "reach-control"
+  lr_badf '%-22s the engine over the small ledger does not reproduce the reach rows\n' "reach-control"
 fi
 fi
 
@@ -1481,10 +1428,9 @@ co_ctl_read="$(co_read "$co_ctl")"
 co_ctl_want=""; for _i in $CO_IDS; do co_ctl_want="$co_ctl_want $_i=$(co_expect "$_i")"; done; co_ctl_want="${co_ctl_want# }"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$co_ctl_read" = "$co_ctl_want" ]; then
-  printf -v _m '  ok    %-22s the engine over the six-entry ledger reproduces every S955-S959 kind' "cited-control"; ok "$_m"
+  printf -v _m '%-22s the engine over the six-entry ledger reproduces every S955-S959 kind' "cited-control"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the engine over the six-entry ledger read {%s}, want {%s}\n' "cited-control" "$co_ctl_read" "$co_ctl_want"
+  lr_badf '%-22s the engine over the six-entry ledger read {%s}, want {%s}\n' "cited-control" "$co_ctl_read" "$co_ctl_want"
 fi
 
 # --- THE FAIL-OPEN PATH. When the filter's own git call fails, the naming set must come back
@@ -1507,10 +1453,9 @@ co_failopen() { # <engine> -> S955's kind with the filter's git call failing, or
 ASSERTIONS=$((ASSERTIONS + 1))
 co_fo="$(co_failopen "$CLOSER")"
 if [ "$co_fo" = NAMED-UPSTREAM ]; then
-  printf -v _m '  ok    %-22s with the filter'"'"'s git call failing, S955 reads the pre-filter NAMED-UPSTREAM -- a tool error is never a CITED-ONLY row' "cited-fail-open"; ok "$_m"
+  printf -v _m '%-22s with the filter'"'"'s git call failing, S955 reads the pre-filter NAMED-UPSTREAM -- a tool error is never a CITED-ONLY row' "cited-fail-open"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s with the filter'"'"'s git call failing S955 read %s, want NAMED-UPSTREAM (BROKEN = the shim never fired)\n' "cited-fail-open" "${co_fo:-<no row>}"
+  lr_badf '%-22s with the filter'"'"'s git call failing S955 read %s, want NAMED-UPSTREAM (BROKEN = the shim never fired)\n' "cited-fail-open" "${co_fo:-<no row>}"
 fi
 
 # --- THE BOOTSTRAPPING CELL. `ledger-reverify.sh` is read by the ENGINE THE CONSUMER LAST INSTALLED:
@@ -1527,10 +1472,9 @@ co_fn="$( SELF="$CO_BOOT"; . "$CO_BOOT/lib.sh" >/dev/null 2>&1; ledger_close_awk
 co_np="$(printf '%s\n' "$co_pat" | grep -c .)" || co_np=0
 if [ "$co_prc" = 0 ] && [ "$co_np" = 1 ] && [ -n "$co_fn" ] \
    && printf '**ADOPTED UPSTREAM (v1.0.0, verified x)**\nplain\n' | awk "$co_fn"' { if (ledger_body_closes($0)) c++ } END { exit (c == 1) ? 0 : 1 }'; then
-  printf '  ok    %-22s the shipped lib.sh extractor lifts exactly one close rule from this ledger-reverify.sh, and it compiles and closes one of two probe lines\n' "boot-close-extract"
+  lr_okf '%-22s the shipped lib.sh extractor lifts exactly one close rule from this ledger-reverify.sh, and it compiles and closes one of two probe lines\n' "boot-close-extract"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s ledger_close_awk_pattern over this ledger-reverify.sh: rc=%s lines=%s fn=%s -- the previous engine would refuse the pull that delivers it\n' "boot-close-extract" "$co_prc" "$co_np" "${co_fn:+present}"
+  lr_badf '%-22s ledger_close_awk_pattern over this ledger-reverify.sh: rc=%s lines=%s fn=%s -- the previous engine would refuse the pull that delivers it\n' "boot-close-extract" "$co_prc" "$co_np" "${co_fn:+present}"
 fi
 } # end lr_unit_cited_only
 lr_unit_off_subject() {
@@ -1611,8 +1555,7 @@ os_rc=0
   echo 6 >> "$OSD/core/scripts/other.sh"; c 'fix: absorb PC-S970-MANUAL-RECEIPT'
 ) >/dev/null 2>&1 || os_rc=$?
 if [ "$os_rc" -ne 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s FIXTURE BROKEN -- the off-subject world could not be built\n' "off-subject-seed"
+  lr_badf '%-22s FIXTURE BROKEN -- the off-subject world could not be built\n' "off-subject-seed"
   return 0
 fi
 OSB="$(git -C "$OSD" rev-list --max-parents=0 HEAD 2>/dev/null)"
@@ -1637,11 +1580,10 @@ VERSION
 "*) : ;; *) os_shape=bad ;; esac
 fi
 if [ "$os_shape" != ok ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s FIXTURE BROKEN -- the release shapes are wrong (S962 branch release, S963 merge release)\n' "off-subject-seed"
+  lr_badf '%-22s FIXTURE BROKEN -- the release shapes are wrong (S962 branch release, S963 merge release)\n' "off-subject-seed"
   return 0
 fi
-printf '  ok    %-22s the world carries a branch-shaped release (S962) and a merge that changes VERSION (S963)\n' "off-subject-seed"
+lr_okf '%-22s the world carries a branch-shaped release (S962) and a merge that changes VERSION (S963)\n' "off-subject-seed"
 cat > "$OSW/ledger.md" <<'OSLED'
 # Push-candidate ledger
 
@@ -1696,25 +1638,24 @@ os_ctl_read="$(os_read "$os_ctl")"
 os_ctl_want=""; for _i in $OS_IDS; do os_ctl_want="$os_ctl_want $_i=$(os_expect "$_i")"; done; os_ctl_want="${os_ctl_want# }"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$os_ctl_read" != "$os_ctl_want" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the shipped engine over the S960-S970 world read {%s}, want {%s}\n' "off-subject-control" "$os_ctl_read" "$os_ctl_want"
+  lr_badf '%-22s the shipped engine over the S960-S970 world read {%s}, want {%s}\n' "off-subject-control" "$os_ctl_read" "$os_ctl_want"
   return 0
 else
-  printf -v _m '  ok    %-22s the shipped engine reproduces every S960-S970 kind: third class, over-expansion, untouched consumer path and listing cell OFF-SUBJECT; squash, branch and merge releases, second-path, touched consumer path, ambiguous basename and manual NAMED-UPSTREAM' "off-subject-control"; ok "$_m"
+  printf -v _m '%-22s the shipped engine reproduces every S960-S970 kind: third class, over-expansion, untouched consumer path and listing cell OFF-SUBJECT; squash, branch and merge releases, second-path, touched consumer path, ambiguous basename and manual NAMED-UPSTREAM' "off-subject-control"; ok "$_m"
 fi
 # THE ROW TEXT NAMES THE SUBJECT, and a basename-resolved one by BOTH spellings.
 os_det() { printf '%s\n' "$os_ctl" | awk -F'\t' -v l="$1" '$1 == "NAMED-UPSTREAM-OFF-SUBJECT" && $2 == l {print $3; exit}'; }
 ASSERTIONS=$((ASSERTIONS + 1))
 case "$(os_det PC-S967-CONSUMER-PATH-UNTOUCHED)" in
   *"scripts/ai-dlc/os-cl2.sh resolved by basename to core/scripts/os-cl2.sh"*)
-    printf '  ok    %-22s S967 names the receipt'"'"'s consumer-layout spelling AND the dist path it resolved to\n' "off-subject-basename" ;;
-  *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s S967 does not name both scripts/ai-dlc/os-cl2.sh and core/scripts/os-cl2.sh: %s\n' "off-subject-basename" "$(os_det PC-S967-CONSUMER-PATH-UNTOUCHED | cut -c1-200)" ;;
+    lr_okf '%-22s S967 names the receipt'"'"'s consumer-layout spelling AND the dist path it resolved to\n' "off-subject-basename" ;;
+  *) lr_badf '%-22s S967 does not name both scripts/ai-dlc/os-cl2.sh and core/scripts/os-cl2.sh: %s\n' "off-subject-basename" "$(os_det PC-S967-CONSUMER-PATH-UNTOUCHED | cut -c1-200)" ;;
 esac
 ASSERTIONS=$((ASSERTIONS + 1))
 case "$(os_det PC-S960-THIRD-CLASS)" in
-  *"resolved by basename"*) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s S960 says its path was basename-resolved, but it is present at theirs as written\n' "off-subject-path" ;;
-  *"core/scripts/os-third.sh"*) printf '  ok    %-22s S960 names its receipt path as written and claims no basename resolution\n' "off-subject-path" ;;
-  *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s S960 does not name core/scripts/os-third.sh: %s\n' "off-subject-path" "$(os_det PC-S960-THIRD-CLASS | cut -c1-200)" ;;
+  *"resolved by basename"*) lr_badf '%-22s S960 says its path was basename-resolved, but it is present at theirs as written\n' "off-subject-path" ;;
+  *"core/scripts/os-third.sh"*) lr_okf '%-22s S960 names its receipt path as written and claims no basename resolution\n' "off-subject-path" ;;
+  *) lr_badf '%-22s S960 does not name core/scripts/os-third.sh: %s\n' "off-subject-path" "$(os_det PC-S960-THIRD-CLASS | cut -c1-200)" ;;
 esac
 # THE LISTING FAILURE CELL: a git shim refuses ONLY the per-commit subject listing (`--no-walk`
 # with `-m` and without `--stdin`; `named_reach` passes `--stdin`, so reach stays `code`) and leaves
@@ -1732,10 +1673,9 @@ os_lf() { # <engine> -> S969's kind with the subject listing failing, or BROKEN
 ASSERTIONS=$((ASSERTIONS + 1))
 os_lfk="$(os_lf "$CLOSER")"
 if [ "$os_lfk" = NAMED-UPSTREAM ]; then
-  printf -v _m '  ok    %-22s with the subject listing failing, S969 keeps the old kind NAMED-UPSTREAM -- a git error is never an OFF-SUBJECT row' "off-subject-listfail"; ok "$_m"
+  printf -v _m '%-22s with the subject listing failing, S969 keeps the old kind NAMED-UPSTREAM -- a git error is never an OFF-SUBJECT row' "off-subject-listfail"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s with the subject listing failing S969 read %s, want NAMED-UPSTREAM (BROKEN = the shim never fired)\n' "off-subject-listfail" "${os_lfk:-<no row>}"
+  lr_badf '%-22s with the subject listing failing S969 read %s, want NAMED-UPSTREAM (BROKEN = the shim never fired)\n' "off-subject-listfail" "${os_lfk:-<no row>}"
 fi
 
 # --- SIBLING ATTRIBUTION (cells S1001-S1030, S1099) ---------------------------------------------
@@ -1853,8 +1793,7 @@ sb_rc=0
   sw sb-V.sh ANCHY_V_ fixedV; c 'fix: absorb PC-S1042-SIB-OPEN-LIVE; cross-references PC-S1041-OFFENDER-OPEN'
 ) >/dev/null 2>&1 || sb_rc=$?
 if [ "$sb_rc" -ne 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s FIXTURE BROKEN -- the sibling world could not be built\n' "sibling-seed"
+  lr_badf '%-22s FIXTURE BROKEN -- the sibling world could not be built\n' "sibling-seed"
   return 0
 fi
 SBB="$(git -C "$SBD" rev-list --max-parents=0 HEAD 2>/dev/null)"
@@ -1869,11 +1808,10 @@ sb_par() { # <id> <parent ordinal> -> 1 when the naming merge has a diff for <fi
 }
 sb_shape="$(sb_par PC-S1019-MERGE-P2-X 1 sb-J.sh)$(sb_par PC-S1019-MERGE-P2-X 2 sb-J.sh)$(sb_par PC-S1021-MERGE-P1-X 1 sb-K.sh)$(sb_par PC-S1021-MERGE-P1-X 2 sb-K.sh)$(sb_par PC-S1023-MERGE-CONCAT-X 1 sb-L.sh)$(sb_par PC-S1023-MERGE-CONCAT-X 2 sb-L.sh)"
 if [ -z "$SBB" ] || [ -z "$SBT" ] || [ "$sb_shape" != 011011 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s FIXTURE BROKEN -- the merge shapes are wrong (got %s, want 011011)\n' "sibling-seed" "$sb_shape"
+  lr_badf '%-22s FIXTURE BROKEN -- the merge shapes are wrong (got %s, want 011011)\n' "sibling-seed" "$sb_shape"
   return 0
 fi
-printf '  ok    %-22s the world carries a merge seen against its second parent only (S1019), one against its first only (S1021) and one against both (S1023)\n' "sibling-seed"
+lr_okf '%-22s the world carries a merge seen against its second parent only (S1019), one against its first only (S1021) and one against both (S1023)\n' "sibling-seed"
 cat > "$SBW/ledger.md" <<'SBLED'
 # Push-candidate ledger
 
@@ -2030,19 +1968,18 @@ sb_never_rows="$(printf '%s\n' "$sb_ctl" | awk -F'\t' '$2 == "PC-S1099-NEVER" {c
 sb_never_named="$(printf '%s\n' "$sb_ctl" | awk -F'\t' '$2 == "PC-S1099-NEVER" && $1 ~ /^NAMED-/ {c++} END {print c+0}')"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$sb_ctl_read" != "$sb_ctl_want" ] || [ "$(sb_kind "$sb_ctl" PC-S1006-INCOMMIT-Y)" != "$NU" ] || [ "$sb_never_rows" -lt 1 ] || [ "$sb_never_named" != 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the shipped engine over S1001-S1041 read {%s} S1006=%s never=%s/%s, want {%s} S1006=%s never>=1/0\n' "sibling-control" "$sb_ctl_read" "$(sb_kind "$sb_ctl" PC-S1006-INCOMMIT-Y)" "$sb_never_rows" "$sb_never_named" "$sb_ctl_want" "$NU"
+  lr_badf '%-22s the shipped engine over S1001-S1041 read {%s} S1006=%s never=%s/%s, want {%s} S1006=%s never>=1/0\n' "sibling-control" "$sb_ctl_read" "$(sb_kind "$sb_ctl" PC-S1006-INCOMMIT-Y)" "$sb_never_rows" "$sb_never_named" "$sb_ctl_want" "$NU"
   return 0
 else
-  printf -v _m '  ok    %-22s the shipped engine reproduces every S1001-S1041 kind; closed and archived siblings attribute nothing, the in-commit sibling stays NAMED-UPSTREAM and the never-named control has a row and no NAMED- row' "sibling-control"; ok "$_m"
+  printf -v _m '%-22s the shipped engine reproduces every S1001-S1041 kind; closed and archived siblings attribute nothing, the in-commit sibling stays NAMED-UPSTREAM and the never-named control has a row and no NAMED- row' "sibling-control"; ok "$_m"
 fi
 # THE ROW NAMES ONLY THE SIBLING WHOSE ANCHOR SAT ON THE CHANGED LINE.
 ASSERTIONS=$((ASSERTIONS + 1))
 sb_det="$(printf '%s\n' "$sb_ctl" | awk -F'\t' '$1 == "NAMED-UPSTREAM-SIBLING-ATTRIBUTED" && $2 == "PC-S1041-OFFENDER-OPEN" {print $3; exit}')"
 case "$sb_det" in
   *"receipt substring there: PC-S1042-SIB-OPEN-LIVE ("*"core/scripts/sb-V.sh"*|*"core/scripts/sb-V.sh"*"receipt substring there: PC-S1042-SIB-OPEN-LIVE ("*)
-    printf '  ok    %-22s S1041 names its receipt file and exactly the sibling whose anchor changed\n' "sibling-detail" ;;
-  *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s S1041 does not name sb-V.sh and exactly PC-S1042-SIB-OPEN-LIVE: %s\n' "sibling-detail" "$(printf '%s' "$sb_det" | cut -c1-240)" ;;
+    lr_okf '%-22s S1041 names its receipt file and exactly the sibling whose anchor changed\n' "sibling-detail" ;;
+  *) lr_badf '%-22s S1041 does not name sb-V.sh and exactly PC-S1042-SIB-OPEN-LIVE: %s\n' "sibling-detail" "$(printf '%s' "$sb_det" | cut -c1-240)" ;;
 esac
 # THE CLOSE RULE STAYS SINGLE-HOMED: the shipped lib.sh lifts exactly one body rule and one entry-line
 # rule from this ledger-reverify.sh -- the lift the previous release's lib.sh performs on the pull
@@ -2052,9 +1989,9 @@ SB_BOOT="$SBW/boot"; mkdir -p "$SB_BOOT"; cp "$(dirname "$CLOSER")"/*.sh "$SB_BO
 sb_lift="$( SELF="$SB_BOOT"; . "$SB_BOOT/lib.sh" >/dev/null 2>&1; ledger_close_awk_pattern >/dev/null 2>&1 && ledger_entry_line_close_awk >/dev/null 2>&1 && echo ok )"
 sb_n1="$(grep -cE '^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$' "$CLOSER")" || sb_n1=0
 if [ "$sb_lift" = ok ] && [ "$sb_n1" = 1 ]; then
-  printf '  ok    %-22s lib.sh lifts exactly one close rule and one entry-line rule (body-rule matches: %s)\n' "sibling-close-lift" "$sb_n1"
+  lr_okf '%-22s lib.sh lifts exactly one close rule and one entry-line rule (body-rule matches: %s)\n' "sibling-close-lift" "$sb_n1"
 else
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s lift=%s body-rule matches=%s, want ok and 1 -- the close rule must stay single-homed on one line\n' "sibling-close-lift" "${sb_lift:-refused}" "$sb_n1"
+  lr_badf '%-22s lift=%s body-rule matches=%s, want ok and 1 -- the close rule must stay single-homed on one line\n' "sibling-close-lift" "${sb_lift:-refused}" "$sb_n1"
 fi
 } # end lr_unit_off_subject
 lr_unit_unreadable_path() {
@@ -2119,9 +2056,9 @@ else
   ASSERTIONS=$((ASSERTIONS + 1))
   case "$(u_row "$U_H" "Entry U-HAS")|$(u_row "$U_H" "Entry U-KEEP")|$(u_row "$U_H" "Entry U-NEW")|$(u_row "$U_H" "Entry U-NOWHERE")" in
     STILL-LIVE*"|NEEDS-REVIEW|vacuous predicate:"*"|STILL-LIVE"*"|NEEDS-REVIEW|unresolved:"*)
-      if grep -q 'unreadable' <<<"$U_H"; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the HEALTHY world reads unreadable somewhere — the refusal fires on readable objects\n' "unreadable-control"
-      else printf '  ok    %-22s healthy world: has STILL-LIVE, keep vacuous, new-at-theirs STILL-LIVE, nowhere unresolved, no unreadable row\n' "unreadable-control"; fi ;;
-    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN — the healthy world does not decide as seeded: %s\n' "unreadable-control" "$(printf '%s\n' "$U_H" | cut -f1,2 | tr '\n' ' ')" ;;
+      if grep -q 'unreadable' <<<"$U_H"; then lr_badf '%-22s the HEALTHY world reads unreadable somewhere — the refusal fires on readable objects\n' "unreadable-control"
+      else lr_okf '%-22s healthy world: has STILL-LIVE, keep vacuous, new-at-theirs STILL-LIVE, nowhere unresolved, no unreadable row\n' "unreadable-control"; fi ;;
+    *) lr_badf '%-22s FIXTURE BROKEN — the healthy world does not decide as seeded: %s\n' "unreadable-control" "$(printf '%s\n' "$U_H" | cut -f1,2 | tr '\n' ' ')" ;;
   esac
   # Break each world, ONCE, and keep it broken.
   mv "$(u_obj blob T top.txt)" "$UW/blob/moved" \
@@ -2132,7 +2069,7 @@ else
     && mv "$(u_obj cached T top.txt)" "$UW/cached/moved" \
     && mv "$(u_obj base B keep.txt)" "$UW/base/moved" \
     && mv "$(u_obj ver T VERSION)" "$UW/ver/moved" \
-    || { FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN — an object could not be moved aside, so no unreadable world exists\n' "unreadable-worlds"; }
+    || { lr_badf '%-22s FIXTURE BROKEN — an object could not be moved aside, so no unreadable world exists\n' "unreadable-worlds"; }
   # u_score <engine> -> "blob tree cached base ver" verdict letters: R = refused as unreadable
   u_score() {
     local b t c k v
@@ -2148,17 +2085,17 @@ else
   U_S="$(u_score "$CLOSER")"
   ASSERTIONS=$((ASSERTIONS + 1))
   if [ "$U_S" = "R R R R R" ]; then
-    printf -v _m '  ok    %-22s missing blob, missing subtree, unread blob behind a cached has, unread base blob, unread VERSION: all refused (%s)' "unreadable-refused" "$U_S"; ok "$_m"
+    printf -v _m '%-22s missing blob, missing subtree, unread blob behind a cached has, unread base blob, unread VERSION: all refused (%s)' "unreadable-refused" "$U_S"; ok "$_m"
   else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s want R R R R R (blob tree cached base ver), got %s\n' "unreadable-refused" "$U_S"
+    lr_badf '%-22s want R R R R R (blob tree cached base ver), got %s\n' "unreadable-refused" "$U_S"
   fi
   # Near-miss in a BROKEN world: the new-at-theirs path and the path that resolves nowhere still
   # decide as in the healthy world, so the refusal is keyed on unreadability, not on any failure.
   _bw="$(u_run "$CLOSER" base)"
   ASSERTIONS=$((ASSERTIONS + 1))
   case "$(u_row "$_bw" "Entry U-NEW")|$(u_row "$_bw" "Entry U-NOWHERE")" in
-    STILL-LIVE*"|NEEDS-REVIEW|unresolved:"*) printf '  ok    %-22s beside an unreadable base blob, a path new at theirs and a path that resolves nowhere decide as before\n' "unreadable-near-miss" ;;
-    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the near-misses moved in the broken world: %s\n' "unreadable-near-miss" "$(u_row "$_bw" "Entry U-NEW") / $(u_row "$_bw" "Entry U-NOWHERE")" ;;
+    STILL-LIVE*"|NEEDS-REVIEW|unresolved:"*) lr_okf '%-22s beside an unreadable base blob, a path new at theirs and a path that resolves nowhere decide as before\n' "unreadable-near-miss" ;;
+    *) lr_badf '%-22s the near-misses moved in the broken world: %s\n' "unreadable-near-miss" "$(u_row "$_bw" "Entry U-NEW") / $(u_row "$_bw" "Entry U-NOWHERE")" ;;
   esac
 fi
 
@@ -2228,16 +2165,13 @@ s904_touched() { case "$(git -C "$DIST" show --format= --name-only "$1" 2>/dev/n
     *core/scripts/s904-subject.sh*) return 0 ;; *) return 1 ;; esac; }
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$s904_n" -ne 3 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s %s commit(s) name %s, want 3 — below three there is no middle commit, and the two forms are the same string\n' "named-seed-shape" "$s904_n" "$s904_id"
+  lr_badf '%-22s %s commit(s) name %s, want 3 — below three there is no middle commit, and the two forms are the same string\n' "named-seed-shape" "$s904_n" "$s904_id"
 elif s904_touched "$s904_new" || s904_touched "$s904_old"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s an END of the range is the absorbing commit, so electing the two ends would have been RIGHT here and the arm below tests nothing\n' "named-seed-shape"
+  lr_badf '%-22s an END of the range is the absorbing commit, so electing the two ends would have been RIGHT here and the arm below tests nothing\n' "named-seed-shape"
 elif ! s904_touched "$s904_mid"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the MIDDLE commit %s did not touch core/scripts/s904-subject.sh, so no commit in this range absorbed the entry\n' "named-seed-shape" "${s904_mid:-<none>}"
+  lr_badf '%-22s the MIDDLE commit %s did not touch core/scripts/s904-subject.sh, so no commit in this range absorbed the entry\n' "named-seed-shape" "${s904_mid:-<none>}"
 else
-  printf '  ok    %-22s 3 commits name PC-S904; the MIDDLE one (%s) absorbed it and NEITHER end (%s newest, %s oldest) did\n' "named-seed-shape" "$s904_mid" "$s904_new" "$s904_old"
+  lr_okf '%-22s 3 commits name PC-S904; the MIDDLE one (%s) absorbed it and NEITHER end (%s newest, %s oldest) did\n' "named-seed-shape" "$s904_mid" "$s904_new" "$s904_old"
 fi
 
 # THE ARM. Every sha that names an id must appear in that id's row. The offender and BOTH
@@ -2251,13 +2185,11 @@ m904="$(named_missing "$OUT" "$s904_id")"
 m905="$(named_missing "$OUT" "$s905_id")"
 m906="$(named_missing "$OUT" "$s906_id")"
 if [ "$m904" = NOROW ] || [ "$m905" = NOROW ] || [ "$m906" = NOROW ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s a NAMED-UPSTREAM row is MISSING (904=%s 905=%s 906=%s) — a row that never appeared hides nothing and reports nothing, so this arm cannot discriminate\n' "named-lists-all" "$m904" "$m905" "$m906"
+  lr_badf '%-22s a NAMED-UPSTREAM row is MISSING (904=%s 905=%s 906=%s) — a row that never appeared hides nothing and reports nothing, so this arm cannot discriminate\n' "named-lists-all" "$m904" "$m905" "$m906"
 elif [ "$m904" -eq 0 ] && [ "$m905" -eq 0 ] && [ "$m906" -eq 0 ]; then
-  printf -v _m '  ok    %-22s every naming sha is on its row — 3 for PC-S904 (the middle one included), 2 for PC-S906, 1 for PC-S905' "named-lists-all"; ok "$_m"
+  printf -v _m '%-22s every naming sha is on its row — 3 for PC-S904 (the middle one included), 2 for PC-S906, 1 for PC-S905' "named-lists-all"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s naming shas ABSENT from their rows: PC-S904 %s of 3, PC-S906 %s of 2, PC-S905 %s of 1. A commit the row does not name is a commit the operator never reads\n' "named-lists-all" "$m904" "$m906" "$m905"
+  lr_badf '%-22s naming shas ABSENT from their rows: PC-S904 %s of 3, PC-S906 %s of 2, PC-S905 %s of 1. A commit the row does not name is a commit the operator never reads\n' "named-lists-all" "$m904" "$m906" "$m905"
   printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM"{print $2"  "substr($3,1,120)}' | sed 's/^/          | /'
 fi
 
@@ -2279,13 +2211,11 @@ c904="$(stated_count "$OUT" "$s904_id")"
 c905="$(stated_count "$OUT" "$s905_id")"
 c906="$(stated_count "$OUT" "$s906_id")"
 if [ -z "$c904" ] || [ -z "$c905" ] || [ -z "$c906" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s a row states no commit count at all (904=[%s] 905=[%s] 906=[%s]) — without one the operator cannot tell a complete list from a truncated one\n' "named-count-agrees" "$c904" "$c905" "$c906"
+  lr_badf '%-22s a row states no commit count at all (904=[%s] 905=[%s] 906=[%s]) — without one the operator cannot tell a complete list from a truncated one\n' "named-count-agrees" "$c904" "$c905" "$c906"
 elif [ "$c904" = "3" ] && [ "$c906" = "2" ] && [ "$c905" = "1" ]; then
-  printf '  ok    %-22s the stated counts are 3 / 2 / 1 and each matches the number of shas the row carries\n' "named-count-agrees"
+  lr_okf '%-22s the stated counts are 3 / 2 / 1 and each matches the number of shas the row carries\n' "named-count-agrees"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s stated counts 904=%s 906=%s 905=%s against derived 3 / 2 / 1 — the row is telling the operator to read a different number of commits than it names\n' "named-count-agrees" "$c904" "$c906" "$c905"
+  lr_badf '%-22s stated counts 904=%s 906=%s 905=%s against derived 3 / 2 / 1 — the row is telling the operator to read a different number of commits than it names\n' "named-count-agrees" "$c904" "$c906" "$c905"
 fi
 
 } # end lr_unit_named_commits
@@ -2301,10 +2231,9 @@ row_has "The derivation:" ENTRY-SWALLOWED \
 # It must name WHICH entry went dark, or the operator has a complaint and no subject.
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $3 ~ /PC-FIXTURE-SWALLOWED-BY-ANNOTATION/{f=1} END{exit !f}'; then
-  printf '  ok    %-22s names the entry it truncated, and that it captured the receipt\n' "swallowed-names-entry"
+  lr_okf '%-22s names the entry it truncated, and that it captured the receipt\n' "swallowed-names-entry"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s reported a swallow without naming the entry that went silent\n' "swallowed-names-entry"
+  lr_badf '%-22s reported a swallow without naming the entry that went silent\n' "swallowed-names-entry"
 fi
 
 # THE CONTROL SET, and both must be able to fail. Without them the assertion above is satisfied
@@ -2326,10 +2255,9 @@ lr_unit_no_colon_swallow() {
 
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /False CLOSE-CANDIDATE/ && $3 ~ /PC-FIXTURE-NO-COLON-SWALLOWED/{f=1} END{exit !f}'; then
-  printf '  ok    %-22s names the entry that went dark, so the operator has a subject and not just a complaint\n' "no-colon-names-entry"
+  lr_okf '%-22s names the entry that went dark, so the operator has a subject and not just a complaint\n' "no-colon-names-entry"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s reported the no-colon swallow without naming PC-FIXTURE-NO-COLON-SWALLOWED\n' "no-colon-names-entry"
+  lr_badf '%-22s reported the no-colon swallow without naming PC-FIXTURE-NO-COLON-SWALLOWED\n' "no-colon-names-entry"
   printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED"' | sed 's/^/          | /'
 fi
 
@@ -2370,19 +2298,15 @@ row_lacks "Entry ORPHAN-RECEIPT-MIDLINE" CLOSE-CANDIDATE \
 ASSERTIONS=$((ASSERTIONS + 1))
 ml_det="$(printf '%s\n' "$OUT" | awk -F'\t' '$2=="Entry ORPHAN-RECEIPT-MIDLINE" && $1=="NEEDS-REVIEW" {print $3; exit}')"
 if [ -z "$ml_det" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s no NEEDS-REVIEW row for the subject at all — the detail arms below cannot discriminate\n' "midline-detail"
+  lr_badf '%-22s no NEEDS-REVIEW row for the subject at all — the detail arms below cannot discriminate\n' "midline-detail"
 elif ! grep -q '^mid-line receipt: ' <<<"$ml_det"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the detail does not OPEN with the cause token, so this cause cannot be told from the other three: %s\n' "midline-detail" "$(printf '%s' "$ml_det" | cut -c1-100)"
+  lr_badf '%-22s the detail does not OPEN with the cause token, so this cause cannot be told from the other three: %s\n' "midline-detail" "$(printf '%s' "$ml_det" | cut -c1-100)"
 elif ! grep -qE 'line [0-9]+ of its body' <<<"$ml_det"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the detail names no line number: %s\n' "midline-detail" "$(printf '%s' "$ml_det" | cut -c1-120)"
+  lr_badf '%-22s the detail names no line number: %s\n' "midline-detail" "$(printf '%s' "$ml_det" | cut -c1-120)"
 elif ! grep -q 'verify: theirs_has' <<<"$ml_det"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the detail names no verb, so the operator cannot tell which receipt went unrun: %s\n' "midline-detail" "$(printf '%s' "$ml_det" | cut -c1-120)"
+  lr_badf '%-22s the detail names no verb, so the operator cannot tell which receipt went unrun: %s\n' "midline-detail" "$(printf '%s' "$ml_det" | cut -c1-120)"
 else
-  printf '  ok    %-22s the row opens with the cause token and names the line and the verb\n' "midline-detail"
+  lr_okf '%-22s the row opens with the cause token and names the line and the verb\n' "midline-detail"
 fi
 
 # AND THE LINE NUMBER IS THE OFFENDING LINE, not merely a number. Derived from the seeded ledger
@@ -2393,10 +2317,9 @@ LED_ML="$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
 ml_want="$(awk '/^  <br>A session resuming from that snapshot reads a fully-shipped sprint as pending work\. verify: theirs_has/{print NR; exit}' "$LED_ML")"
 ml_got="$(printf '%s' "$ml_det" | sed -n 's/.*line \([0-9][0-9]*\) of its body.*/\1/p')"
 if [ -n "$ml_want" ] && [ "$ml_want" = "$ml_got" ]; then
-  printf '  ok    %-22s the reported line %s IS the offending body line in the seeded ledger\n' "midline-line" "$ml_got"
+  lr_okf '%-22s the reported line %s IS the offending body line in the seeded ledger\n' "midline-line" "$ml_got"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s reported line %s, offending line in the ledger is %s (empty = the seed line moved and this arm lost its subject)\n' "midline-line" "${ml_got:-<none>}" "${ml_want:-<none>}"
+  lr_badf '%-22s reported line %s, offending line in the ledger is %s (empty = the seed line moved and this arm lost its subject)\n' "midline-line" "${ml_got:-<none>}" "${ml_want:-<none>}"
 fi
 
 # THE EIGHT SILENT CLASSES. Each is a REAL shape in the corpora and each would be reported by a
@@ -2425,10 +2348,9 @@ ASSERTIONS=$((ASSERTIONS + 1))
 ml_two_n="$(printf '%s\n' "$OUT" | awk -F'\t' '$2=="Entry TWO-MIDLINE-RECEIPTS" && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{c++} END{print c+0}')"
 ml_two_v="$(printf '%s\n' "$OUT" | awk -F'\t' '$2=="Entry TWO-MIDLINE-RECEIPTS" && $1=="NEEDS-REVIEW" {print $3; exit}')"
 if [ "$ml_two_n" = 1 ] && grep -q 'verify: theirs_has' <<<"$ml_two_v"; then
-  printf '  ok    %-22s two offending lines in one entry emit ONE row, naming the FIRST (theirs_has, not the theirs_lacks below it)\n' "midline-one-row"
+  lr_okf '%-22s two offending lines in one entry emit ONE row, naming the FIRST (theirs_has, not the theirs_lacks below it)\n' "midline-one-row"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s %s row(s) for the two-offence entry, naming: %s (want 1 row naming theirs_has)\n' "midline-one-row" "$ml_two_n" "$(printf '%s' "$ml_two_v" | sed -n 's/.*carries .verify: \([a-z_]*\).*/\1/p')"
+  lr_badf '%-22s %s row(s) for the two-offence entry, naming: %s (want 1 row naming theirs_has)\n' "midline-one-row" "$ml_two_n" "$(printf '%s' "$ml_two_v" | sed -n 's/.*carries .verify: \([a-z_]*\).*/\1/p')"
 fi
 
 } # end lr_unit_midline_receipt
@@ -2523,16 +2445,13 @@ uescape_offenders() {
 ASSERTIONS=$((ASSERTIONS + 1))
 read -r ue_off ue_rows ue_sw ue_nm < <(printf '%s\n' "$OUT" | uescape_scan)
 if [ "$ue_rows" -eq 0 ] || [ "$ue_sw" -eq 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s scanned %s row(s), %s of them ENTRY-SWALLOWED — a zero over an empty corpus is not a finding, and this arm would have passed against a subject that printed nothing\n' "detail-no-uescape" "$ue_rows" "$ue_sw"
+  lr_badf '%-22s scanned %s row(s), %s of them ENTRY-SWALLOWED — a zero over an empty corpus is not a finding, and this arm would have passed against a subject that printed nothing\n' "detail-no-uescape" "$ue_rows" "$ue_sw"
 elif [ "$ue_nm" -eq 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the PC-FIXTURE-UESCAPE-NEAR-MISS detail is not among the %s scanned rows, so a zero here does not establish that the pattern separates a real escape from an adjacent one\n' "detail-no-uescape" "$ue_rows"
+  lr_badf '%-22s the PC-FIXTURE-UESCAPE-NEAR-MISS detail is not among the %s scanned rows, so a zero here does not establish that the pattern separates a real escape from an adjacent one\n' "detail-no-uescape" "$ue_rows"
 elif [ "$ue_off" -eq 0 ]; then
-  printf -v _m '  ok    %-22s no detail in %s rows (%s ENTRY-SWALLOWED) carries backslash-u-HHHH, and the near-miss row carrying a lone backslash, the token u2026 and a 3-hex backslash-u did NOT trip it' "detail-no-uescape" "$ue_rows" "$ue_sw"; ok "$_m"
+  printf -v _m '%-22s no detail in %s rows (%s ENTRY-SWALLOWED) carries backslash-u-HHHH, and the near-miss row carrying a lone backslash, the token u2026 and a 3-hex backslash-u did NOT trip it' "detail-no-uescape" "$ue_rows" "$ue_sw"; ok "$_m"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s %s detail field(s) carry a literal backslash-u-HHHH escape. emit() prints a detail through a %%s conversion, which does not interpret escapes, so those six characters reach the operator and the byte-compared report verbatim. Write the character itself\n' "detail-no-uescape" "$ue_off"
+  lr_badf '%-22s %s detail field(s) carry a literal backslash-u-HHHH escape. emit() prints a detail through a %%s conversion, which does not interpret escapes, so those six characters reach the operator and the byte-compared report verbatim. Write the character itself\n' "detail-no-uescape" "$ue_off"
   printf '%s\n' "$OUT" | uescape_offenders | sed 's/^/          | /'
 fi
 
@@ -2557,10 +2476,9 @@ row_is "PC-FIXTURE-INLINE-SPAN-LINE" STILL-LIVE \
   "an entry whose body opens a line with an inline code span still reports"
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /PC-FIXTURE-QUOTED-INSIDE-FENCE/ && $3 ~ /PC-FIXTURE-QUOTING-ENTRY/ && $3 ~ /fenced code block/{f=1} END{exit !f}'; then
-  printf '  ok    %-22s the fence row names the entry it truncated and says the line sits inside a fence\n' "fence-names-entry"
+  lr_okf '%-22s the fence row names the entry it truncated and says the line sits inside a fence\n' "fence-names-entry"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the fence row does not name PC-FIXTURE-QUOTING-ENTRY as the truncated entry, or does not say the line is fenced\n' "fence-names-entry"
+  lr_badf '%-22s the fence row does not name PC-FIXTURE-QUOTING-ENTRY as the truncated entry, or does not say the line is fenced\n' "fence-names-entry"
   printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED"' | sed 's/^/          | /'
 fi
 row_lacks "PC-FIXTURE-AFTER-QUOTE" ENTRY-SWALLOWED \
@@ -2622,16 +2540,13 @@ sfxA_post="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" || $1=="RE
 sfxA_leak="$(printf '%s\n' "$OUT" | awk -F'\t' '($1=="ENTRY-SWALLOWED" || $1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {c++} END{print c+0}')"
 sfxA_ctl="$(printf '%s\n' "$OUT" | awk -F'\t' '$1!="ENTRY-SWALLOWED" && $1!="RECEIPTS-UNDECIDED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {c++} END{print c+0}')"
 if [ "$sfxA_post" -eq 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s no ENTRY-SWALLOWED or RECEIPTS-UNDECIDED row was emitted at all, so this arm has no population\n' "suffix-shape-a"
+  lr_badf '%-22s no ENTRY-SWALLOWED or RECEIPTS-UNDECIDED row was emitted at all, so this arm has no population\n' "suffix-shape-a"
 elif [ "$sfxA_ctl" -eq 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s no row OUTSIDE the post-loop statuses carries an ordinal — suffixes are not being emitted at all, so a clean post-loop reading proves nothing\n' "suffix-shape-a"
+  lr_badf '%-22s no row OUTSIDE the post-loop statuses carries an ordinal — suffixes are not being emitted at all, so a clean post-loop reading proves nothing\n' "suffix-shape-a"
 elif [ "$sfxA_leak" -eq 0 ]; then
-  printf '  ok    %-22s all %s post-loop rows carry no receipt suffix, while %s receipt-scoped rows still carry theirs\n' "suffix-shape-a" "$sfxA_post" "$sfxA_ctl"
+  lr_okf '%-22s all %s post-loop rows carry no receipt suffix, while %s receipt-scoped rows still carry theirs\n' "suffix-shape-a" "$sfxA_post" "$sfxA_ctl"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s %s of %s post-loop rows wear the last entry ordinal — a run-scoped or annotation row attributed to a receipt that did not produce it\n' "suffix-shape-a" "$sfxA_leak" "$sfxA_post"
+  lr_badf '%-22s %s of %s post-loop rows wear the last entry ordinal — a run-scoped or annotation row attributed to a receipt that did not produce it\n' "suffix-shape-a" "$sfxA_leak" "$sfxA_post"
   printf '%s\n' "$OUT" | awk -F'\t' '($1=="ENTRY-SWALLOWED" || $1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {print $1"\t"$2}' | sed 's/^/          | /'
 fi
 
@@ -2671,22 +2586,17 @@ nou_leak="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $3 ~
 nou_ctl="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1!="ENTRY-SWALLOWED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {c++} END{print c+0}')"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ -z "$SFX_LB" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the suffix sub-ledger cut was refused, so this shape have no corpus\n' "suffix-shape-b"
+  lr_badf '%-22s the suffix sub-ledger cut was refused, so this shape have no corpus\n' "suffix-shape-b"
 elif [ "$nou_und" -ne 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the stripped ledger still emitted %s RECEIPTS-UNDECIDED row(s), so this shape never reached the empty-bucket state it exists to test\n' "suffix-shape-b" "$nou_und"
+  lr_badf '%-22s the stripped ledger still emitted %s RECEIPTS-UNDECIDED row(s), so this shape never reached the empty-bucket state it exists to test\n' "suffix-shape-b" "$nou_und"
 elif [ "$nou_sw" -eq 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the stripped ledger produced no ENTRY-SWALLOWED row, so this arm has no population\n' "suffix-shape-b"
+  lr_badf '%-22s the stripped ledger produced no ENTRY-SWALLOWED row, so this arm has no population\n' "suffix-shape-b"
 elif [ "$nou_ctl" -eq 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s no receipt-scoped row on the stripped ledger carries an ordinal — suffixes are absent entirely, so the absence below proves nothing\n' "suffix-shape-b"
+  lr_badf '%-22s no receipt-scoped row on the stripped ledger carries an ordinal — suffixes are absent entirely, so the absence below proves nothing\n' "suffix-shape-b"
 elif [ "$nou_leak" -eq 0 ]; then
-  printf '  ok    %-22s with the undecided bucket EMPTY, all %s ENTRY-SWALLOWED rows are still suffix-free (a reset sited inside that block never runs here)\n' "suffix-shape-b" "$nou_sw"
+  lr_okf '%-22s with the undecided bucket EMPTY, all %s ENTRY-SWALLOWED rows are still suffix-free (a reset sited inside that block never runs here)\n' "suffix-shape-b" "$nou_sw"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s %s of %s ENTRY-SWALLOWED rows wear an ordinal when no RECEIPTS-UNDECIDED row is emitted — the reset is sited inside a block this ledger never enters\n' "suffix-shape-b" "$nou_leak" "$nou_sw"
+  lr_badf '%-22s %s of %s ENTRY-SWALLOWED rows wear an ordinal when no RECEIPTS-UNDECIDED row is emitted — the reset is sited inside a block this ledger never enters\n' "suffix-shape-b" "$nou_leak" "$nou_sw"
 fi
 
 # SHAPE C — a multi-receipt entry whose rows are NOT all receipt verdicts. PC-FIXTURE-NAMED-MANUAL
@@ -2697,13 +2607,11 @@ ASSERTIONS=$((ASSERTIONS + 1))
 nm_tot="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /PC-FIXTURE-NAMED-MANUAL/{c++} END{print c+0}')"
 nm_sfx="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /PC-FIXTURE-NAMED-MANUAL/ && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
 if [ "$nm_tot" -lt 3 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s PC-FIXTURE-NAMED-MANUAL emitted %s row(s), want at least 3 (one NAMED-UPSTREAM and one HAND-REVIEW per receipt) — the seed lost this arm subject\n' "suffix-shape-c" "$nm_tot"
+  lr_badf '%-22s PC-FIXTURE-NAMED-MANUAL emitted %s row(s), want at least 3 (one NAMED-UPSTREAM and one HAND-REVIEW per receipt) — the seed lost this arm subject\n' "suffix-shape-c" "$nm_tot"
 elif [ "$nm_sfx" -eq "$nm_tot" ]; then
-  printf '  ok    %-22s every one of PC-FIXTURE-NAMED-MANUAL %s rows carries its own receipt ordinal, NAMED-UPSTREAM included\n' "suffix-shape-c" "$nm_tot"
+  lr_okf '%-22s every one of PC-FIXTURE-NAMED-MANUAL %s rows carries its own receipt ordinal, NAMED-UPSTREAM included\n' "suffix-shape-c" "$nm_tot"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s only %s of PC-FIXTURE-NAMED-MANUAL %s rows carry an ordinal — a legitimate row lost its attribution, which is a reset consuming the suffix rather than scoping it\n' "suffix-shape-c" "$nm_sfx" "$nm_tot"
+  lr_badf '%-22s only %s of PC-FIXTURE-NAMED-MANUAL %s rows carry an ordinal — a legitimate row lost its attribution, which is a reset consuming the suffix rather than scoping it\n' "suffix-shape-c" "$nm_sfx" "$nm_tot"
   printf '%s\n' "$OUT" | grep -F 'PC-FIXTURE-NAMED-MANUAL' | sed 's/^/          | /'
 fi
 
@@ -2774,19 +2682,17 @@ awk '/^## PC-FIXTURE-ESCAPED-BACKTICK/{p=1} /^## PC-FIXTURE-EOF-FENCE/{p=0} p' "
 ASSERTIONS=$((ASSERTIONS + 1))
 tiny_n="$(grep -c '^## PC-FIXTURE-' "$TINY")" || tiny_n=0
 if [ "$tiny_n" -eq 10 ]; then
-  printf '  ok    %-22s the tiny ledger carries exactly the ten backslash entries\n' "tiny-ledger"
+  lr_okf '%-22s the tiny ledger carries exactly the ten backslash entries\n' "tiny-ledger"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the tiny ledger carries %s entries, not 10\n' "tiny-ledger" "$tiny_n"
+  lr_badf '%-22s the tiny ledger carries %s entries, not 10\n' "tiny-ledger" "$tiny_n"
 fi
 # The same tiny ledger through the shipped closer: the refusal row AND the close.
 tiny_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$TINY" 2>&1)"
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$tiny_out" | awk -F'\t' '$2 ~ /PC-FIXTURE-ESCAPED-BACKTICK/ && $1=="NEEDS-REVIEW" && index($3,"contains a backslash")>0 {a=1} $2 ~ /PC-FIXTURE-BARE-BACKTICK/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && b)}'; then
-  printf '  ok    %-22s the closer on the tiny ledger: escaped refused with the backslash reason, bare closes\n' "tiny-control"
+  lr_okf '%-22s the closer on the tiny ledger: escaped refused with the backslash reason, bare closes\n' "tiny-control"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the closer does not reproduce the two baseline rows on the tiny ledger\n' "tiny-control"
+  lr_badf '%-22s the closer does not reproduce the two baseline rows on the tiny ledger\n' "tiny-control"
   printf '%s\n' "$tiny_out" | sed 's/^/          | /'
 fi
 } # end lr_unit_two_line_sh
@@ -2811,11 +2717,10 @@ ASSERTIONS=$((ASSERTIONS + 1))
 dist_head_v="$(cat "$DIST/VERSION" 2>/dev/null)"
 dist_theirs_v="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null)"
 if [ -n "$dist_head_v" ] && [ -n "$dist_theirs_v" ] && [ "$dist_head_v" != "$dist_theirs_v" ]; then
-  printf '  ok    %-22s the checkout reads %s and theirs reads %s — a $DIST path read and a rev-spec read return DIFFERENT bytes, so the arms below can discriminate\n' \
+  lr_okf '%-22s the checkout reads %s and theirs reads %s — a $DIST path read and a rev-spec read return DIFFERENT bytes, so the arms below can discriminate\n' \
     "checkout-past-theirs" "$dist_head_v" "$dist_theirs_v"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the checkout (%s) and theirs (%s) read the same VERSION, so every $DIST-as-path arm below passes for the wrong reason and proves nothing\n' \
+  lr_badf '%-22s the checkout (%s) and theirs (%s) read the same VERSION, so every $DIST-as-path arm below passes for the wrong reason and proves nothing\n' \
     "checkout-past-theirs" "${dist_head_v:-<none>}" "${dist_theirs_v:-<none>}"
 fi
 
@@ -2832,13 +2737,11 @@ ASSERTIONS=$((ASSERTIONS + 1))
 tt_rec="$CONS/theirs-tree-path.txt"
 tt_path="$(cat "$tt_rec" 2>/dev/null)"
 if [ -z "$tt_path" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s no receipt recorded a $THEIRS_TREE path, so the materializer never ran and this arm has no subject\n' "theirs-tree-cleanup"
+  lr_badf '%-22s no receipt recorded a $THEIRS_TREE path, so the materializer never ran and this arm has no subject\n' "theirs-tree-cleanup"
 elif [ -d "$tt_path" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the materialized tree %s SURVIVED the run — the EXIT trap did not remove it, and a pool twelve-wide leaks one per invocation with no symptom\n' "theirs-tree-cleanup" "$tt_path"
+  lr_badf '%-22s the materialized tree %s SURVIVED the run — the EXIT trap did not remove it, and a pool twelve-wide leaks one per invocation with no symptom\n' "theirs-tree-cleanup" "$tt_path"
 else
-  printf -v _m '  ok    %-22s the materialized tree was removed on EXIT (recorded path is gone, and the receipt asserted it existed while running)' "theirs-tree-cleanup"; ok "$_m"
+  printf -v _m '%-22s the materialized tree was removed on EXIT (recorded path is gone, and the receipt asserted it existed while running)' "theirs-tree-cleanup"; ok "$_m"
 fi
 # ...and a DISTRIBUTION path under $THEIRS_TREE is not a consumer subject. The SH-DIST-PATH
 # pairing one spelling along: an extractor reading `$THEIRS_TREE/core/...` as a missing consumer
@@ -2923,21 +2826,21 @@ lz_verdict() { # <closer>
   after="$(tt_count)"
   delta=$((after - before))
   if ! printf '%s\n' "$out" | awk -F'\t' '$2 ~ /NOTREE-B/ && $1=="STILL-LIVE" {f=1} END{exit !f}'; then
-    printf '  FAIL  %-22s the tree-free ledger produced no control row, so this run establishes nothing about laziness\n' "theirs-tree-lazy"
+    lr_badf '%-22s the tree-free ledger produced no control row, so this run establishes nothing about laziness\n' "theirs-tree-lazy"
     printf '%s\n' "$out" | sed 's/^/          | /'
     return 1
   elif grep -q THEIRS_TREE <<<"$out"; then
-    printf '  FAIL  %-22s a ledger naming no $THEIRS_TREE receipt still produced a row mentioning the materializer\n' "theirs-tree-lazy"
+    lr_badf '%-22s a ledger naming no $THEIRS_TREE receipt still produced a row mentioning the materializer\n' "theirs-tree-lazy"
     printf '%s\n' "$out" | sed 's/^/          | /'
     return 1
   elif [ "$delta" -ne 0 ]; then
-    printf '  FAIL  %-22s this engine left %+d of its own theirs-trees behind across a ledger with no $THEIRS_TREE receipt — something was materialized and not cleaned\n' "theirs-tree-lazy" "$delta"
+    lr_badf '%-22s this engine left %+d of its own theirs-trees behind across a ledger with no $THEIRS_TREE receipt — something was materialized and not cleaned\n' "theirs-tree-lazy" "$delta"
     return 1
   fi
-  printf '  ok    %-22s a ledger with no $THEIRS_TREE receipt materializes nothing (no materializer row, this engine'"'"'s own theirs-tree count delta %+d) while its control row still reports\n' "theirs-tree-lazy" "$delta"
+  lr_okf '%-22s a ledger with no $THEIRS_TREE receipt materializes nothing (no materializer row, this engine'"'"'s own theirs-tree count delta %+d) while its control row still reports\n' "theirs-tree-lazy" "$delta"
 }
 ASSERTIONS=$((ASSERTIONS + 1))
-lz_verdict "$CLOSER"; R_lazy=$?; [ "$R_lazy" = 0 ] || FAILURES=$((FAILURES + 1))
+lz_verdict "$CLOSER"; R_lazy=$?
 # THE OTHER DIRECTION, AND WITHOUT IT THE ARM ABOVE IS SATISFIED BY A PREFIX NOTHING EVER USES.
 # A count that is always zero reads exactly like a count that is correctly zero, so the same
 # counter must be shown to RISE while a $THEIRS_TREE receipt is being evaluated. The receipt
@@ -2947,11 +2850,10 @@ ASSERTIONS=$((ASSERTIONS + 1))
 tt_live="$(cat "$CONS/theirs-tree-path.txt" 2>/dev/null)"
 case "$tt_live" in
   */ledger-reverify-theirs.*)
-    printf '  ok    %-22s a run WITH a $THEIRS_TREE receipt builds a tree carrying this engine'"'"'s own prefix (%s), so the zero above is a measured zero and not an unused counter\n' \
+    lr_okf '%-22s a run WITH a $THEIRS_TREE receipt builds a tree carrying this engine'"'"'s own prefix (%s), so the zero above is a measured zero and not an unused counter\n' \
       "theirs-tree-prefix" "$(basename "$tt_live")" ;;
   *)
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s the materialized tree does not carry this engine'"'"'s prefix (%s), so the laziness counter above can never rise and its zero establishes nothing\n' \
+    lr_badf '%-22s the materialized tree does not carry this engine'"'"'s prefix (%s), so the laziness counter above can never rise and its zero establishes nothing\n' \
       "theirs-tree-prefix" "${tt_live:-<none recorded>}" ;;
 esac
 # ...AND IN THE PRIVATE TMPDIR THE LAZINESS ARM COUNTS. The prefix alone is not enough: the arm
@@ -2972,11 +2874,10 @@ rm -f "$CONS/lz-tree-path.txt"
 ASSERTIONS=$((ASSERTIONS + 1))
 case "$lz_live" in
   "$LZ_TMP"/ledger-reverify-theirs.*)
-    printf '  ok    %-22s under TMPDIR=<private dir> the tree is materialized INSIDE it (%s), so the laziness count reads the directory the engine actually writes\n' \
+    lr_okf '%-22s under TMPDIR=<private dir> the tree is materialized INSIDE it (%s), so the laziness count reads the directory the engine actually writes\n' \
       "theirs-tree-prefix" "$(basename "$lz_live")" ;;
   *)
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s under TMPDIR=%s the tree was recorded at %s — a TMPDIR the engine ignores would leave the laziness counter reading 0 forever, so its zero establishes nothing\n' \
+    lr_badf '%-22s under TMPDIR=%s the tree was recorded at %s — a TMPDIR the engine ignores would leave the laziness counter reading 0 forever, so its zero establishes nothing\n' \
       "theirs-tree-prefix" "$LZ_TMP" "${lz_live:-<none recorded>}" ;;
 esac
 
@@ -2987,10 +2888,9 @@ esac
 ASSERTIONS=$((ASSERTIONS + 1))
 trap_n="$(grep -cE '^trap .* EXIT$' "$CLOSER")" || trap_n=0
 if [ "$trap_n" -eq 1 ]; then
-  printf '  ok    %-22s the closer installs exactly ONE EXIT trap, and its handler removes BOTH temporaries — a second trap would silently replace the first\n' "one-exit-trap"
+  lr_okf '%-22s the closer installs exactly ONE EXIT trap, and its handler removes BOTH temporaries — a second trap would silently replace the first\n' "one-exit-trap"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the closer installs %s EXIT traps; bash traps REPLACE each other, so all but the last are dead and their temporaries leak with no symptom\n' "one-exit-trap" "$trap_n"
+  lr_badf '%-22s the closer installs %s EXIT traps; bash traps REPLACE each other, so all but the last are dead and their temporaries leak with no symptom\n' "one-exit-trap" "$trap_n"
 fi
 } # end lr_unit_dist_checkout
 lr_unit_bootstrap_window() {
@@ -3021,10 +2921,9 @@ lr_unit_bootstrap_window() {
   ASSERTIONS=$((ASSERTIONS + 1))
   badref_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "0000000000000000000000000000000000000000" "$LED_BOOT" 2>&1)"
   if printf '%s\n' "$badref_out" | awk -F'\t' '$2 ~ /BOOT-GUARDED/ && $1=="NEEDS-REVIEW" {a=1} $2 ~ /BOOT-GUARDED/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && !b)}'; then
-    printf '  ok    %-22s with the tree unmaterializable the receipt is NEEDS-REVIEW, never CLOSE — a tool failure must not manufacture the verdict that loses data\n' "theirs-tree-unavailable"
+    lr_okf '%-22s with the tree unmaterializable the receipt is NEEDS-REVIEW, never CLOSE — a tool failure must not manufacture the verdict that loses data\n' "theirs-tree-unavailable"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s a $THEIRS_TREE receipt whose tree could not be materialized did not read NEEDS-REVIEW; every read inside an absent tree fails, so this is a close manufactured from a tool failure\n' "theirs-tree-unavailable"
+    lr_badf '%-22s a $THEIRS_TREE receipt whose tree could not be materialized did not read NEEDS-REVIEW; every read inside an absent tree fails, so this is a close manufactured from a tool failure\n' "theirs-tree-unavailable"
     printf '%s\n' "$badref_out" | sed 's/^/          | /'
   fi
 
@@ -3050,16 +2949,13 @@ row_has "PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM" NAMED-UPSTREAM \
 ASSERTIONS=$((ASSERTIONS + 1))
 rl_det="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM" && $2=="PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM" {print $3; exit}')"
 if [ "$rl_n" != 1 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the receipt-less named entry emitted %s rows, want exactly 1 — a 0/0 row that reaches the verb dispatch invents a receipt verdict\n' "receiptless-one-row" "$rl_n"
+  lr_badf '%-22s the receipt-less named entry emitted %s rows, want exactly 1 — a 0/0 row that reaches the verb dispatch invents a receipt verdict\n' "receiptless-one-row" "$rl_n"
 elif ! grep -q 'carries NO verify: receipt' <<<"$rl_det"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the row does not say the entry carries no receipt: %s\n' "receiptless-one-row" "$(printf '%s' "$rl_det" | cut -c1-110)"
+  lr_badf '%-22s the row does not say the entry carries no receipt: %s\n' "receiptless-one-row" "$(printf '%s' "$rl_det" | cut -c1-110)"
 elif grep -q 'no receipt in this entry can see\|re-anchor or drop the stale receipt' <<<"$rl_det"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the row tells the operator to fix a receipt the entry does not have\n' "receiptless-one-row"
+  lr_badf '%-22s the row tells the operator to fix a receipt the entry does not have\n' "receiptless-one-row"
 else
-  printf '  ok    %-22s exactly one row, and its detail says the entry carries no receipt and closes by annotation\n' "receiptless-one-row"
+  lr_okf '%-22s exactly one row, and its detail says the entry carries no receipt and closes by annotation\n' "receiptless-one-row"
 fi
 row_is "FIXTURE-CAPS-HEADING-NOT-AN-ID" ABSENT \
   "all-caps and hyphenated, named by a commit verbatim, but not an entry id -> the shared id rule keeps it silent"
@@ -3077,10 +2973,9 @@ bb_above='$2 ~ /PC-FIXTURE-DASHED-ABOVE-BARE-BOLD/ {n++} END{print n+0}'
 ASSERTIONS=$((ASSERTIONS + 1))
 bb_n="$(printf '%s\n' "$OUT" | awk -F'\t' "$bb_above")"
 if [ "$bb_n" = 1 ]; then
-  printf '  ok    %-22s the dashed entry above the record emits exactly one row — the record receipt is not attributed to it\n' "bare-bold-neighbour"
+  lr_okf '%-22s the dashed entry above the record emits exactly one row — the record receipt is not attributed to it\n' "bare-bold-neighbour"
 else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the dashed entry above the record emitted %s rows, want 1 — the record was swallowed into it\n' "bare-bold-neighbour" "$bb_n"
+  lr_badf '%-22s the dashed entry above the record emitted %s rows, want 1 — the record was swallowed into it\n' "bare-bold-neighbour" "$bb_n"
 fi
 # THE NEAR-MISS. A body line OPENING with a bold id that closes before a comma is a MENTION. The
 # looser `^-? ?\*\*PC-` rule matches it, splits the host, and moves the host receipt onto the
@@ -3139,14 +3034,14 @@ MS_R="$(dirname "$CLOSER")"
 ASSERTIONS=$((ASSERTIONS + 1))
 ms_v="$(memo_standalone "$MS_R")"
 case "$ms_v" in
-  ok*) printf -v _m '  ok    %-22s a standalone run with AI_DLC_RECONCILE_MEMO unset leaves 0 reconcile-memo.* in its private TMPDIR, while its control row still reports' "memo-standalone-clean"; ok "$_m" ;;
-  *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s — the memo directory outlives the run, and nothing in the row set can show it\n' "memo-standalone-clean" "$ms_v" ;;
+  ok*) printf -v _m '%-22s a standalone run with AI_DLC_RECONCILE_MEMO unset leaves 0 reconcile-memo.* in its private TMPDIR, while its control row still reports' "memo-standalone-clean"; ok "$_m" ;;
+  *)   lr_badf '%-22s %s — the memo directory outlives the run, and nothing in the row set can show it\n' "memo-standalone-clean" "$ms_v" ;;
 esac
 ASSERTIONS=$((ASSERTIONS + 1))
 mc_v="$(memo_composed "$MS_R")"
 case "$mc_v" in
-  ok*) printf -v _m '  ok    %-22s a sourcer that arms its own trap … EXIT after lib.sh, with a handler that calls exit 3, still removes the memo (%s)' "memo-trap-composed" "$mc_v"; ok "$_m" ;;
-  *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s — a later trap X EXIT in a sourcer dropped lib.sh'"'"'s cleanup\n' "memo-trap-composed" "$mc_v" ;;
+  ok*) printf -v _m '%-22s a sourcer that arms its own trap … EXIT after lib.sh, with a handler that calls exit 3, still removes the memo (%s)' "memo-trap-composed" "$mc_v"; ok "$_m" ;;
+  *)   lr_badf '%-22s %s — a later trap X EXIT in a sourcer dropped lib.sh'"'"'s cleanup\n' "memo-trap-composed" "$mc_v" ;;
 esac
 
 # --- A SUBSHELL'S OWN EXIT TRAP MUST NOT TAKE THE PARENT'S MEMO WITH IT ------------------------
@@ -3192,14 +3087,14 @@ memo_errexit() { # <reconcile-dir> -> "ok ..." / "FAIL ..."
 ASSERTIONS=$((ASSERTIONS + 1))
 st_v="$(memo_subshell_trap "$MS_R")"
 case "$st_v" in
-  ok*) printf -v _m '  ok    %-22s x=$(trap : EXIT; :) in a sourcer leaves the main shell'"'"'s memo directory in place' "memo-subshell-trap"; ok "$_m" ;;
-  *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s\n' "memo-subshell-trap" "$st_v" ;;
+  ok*) printf -v _m '%-22s x=$(trap : EXIT; :) in a sourcer leaves the main shell'"'"'s memo directory in place' "memo-subshell-trap"; ok "$_m" ;;
+  *)   lr_badf '%-22s %s\n' "memo-subshell-trap" "$st_v" ;;
 esac
 ASSERTIONS=$((ASSERTIONS + 1))
 ee_v="$(memo_errexit "$MS_R")"
 case "$ee_v" in
-  ok*) printf -v _m '  ok    %-22s under set -e a failing sourcer still runs its own EXIT handler with the original status (%s)' "memo-errexit-handler" "$ee_v"; ok "$_m" ;;
-  *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s\n' "memo-errexit-handler" "$ee_v" ;;
+  ok*) printf -v _m '%-22s under set -e a failing sourcer still runs its own EXIT handler with the original status (%s)' "memo-errexit-handler" "$ee_v"; ok "$_m" ;;
+  *)   lr_badf '%-22s %s\n' "memo-errexit-handler" "$ee_v" ;;
 esac
 
 } # end lr_unit_memo_lifecycle
@@ -3262,8 +3157,8 @@ idc_why() {
 for _c in $IDC_CELLS; do
   ASSERTIONS=$((ASSERTIONS + 1))
   _t="${_c%%:*}"; _w="${_c##*:}"; _g="$(idc_cell "$OUT" "$_c")"
-  if [ "$_g" = "$_w" ]; then printf '  ok    %-22s %s  (%s)\n' "id-class-$_t" "$_g" "$(idc_why "$_t")"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s read %s, want %s  (%s)\n' "id-class-$_t" "$_g" "$_w" "$(idc_why "$_t")"; fi
+  if [ "$_g" = "$_w" ]; then lr_okf '%-22s %s  (%s)\n' "id-class-$_t" "$_g" "$(idc_why "$_t")"
+  else lr_badf '%-22s read %s, want %s  (%s)\n' "id-class-$_t" "$_g" "$_w" "$(idc_why "$_t")"; fi
 done
 
 # The cells below read a ledger cut to this block alone.
@@ -3366,16 +3261,15 @@ idc_ctl_rows="$(idc_rows "$CLOSER")"
 for _c in $IDC_DCELLS; do
   ASSERTIONS=$((ASSERTIONS + 1))
   _t="${_c%%:*}"; _r="${_c#*:}"; _w="${_c##*:}"; _g="$(idc_dcls "$idc_ctl_rows" "${_r%:*}")"
-  if [ "$_g" = "$_w" ]; then printf '  ok    %-22s %s  (sh CLOSE-CANDIDATE detail)\n' "id-class-$_t" "$_g"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s detail reads %s, want %s (v<theirs> is %s, the naming commit %s)\n' "id-class-$_t" "$_g" "$_w" "${IDC_TV:-?}" "${IDC_S818:-<none>}"; fi
+  if [ "$_g" = "$_w" ]; then lr_okf '%-22s %s  (sh CLOSE-CANDIDATE detail)\n' "id-class-$_t" "$_g"
+  else lr_badf '%-22s detail reads %s, want %s (v<theirs> is %s, the naming commit %s)\n' "id-class-$_t" "$_g" "$_w" "${IDC_TV:-?}" "${IDC_S818:-<none>}"; fi
 done
 ASSERTIONS=$((ASSERTIONS + 1))
 idc_ctl="$(idc_read "$idc_ctl_rows")"
 if [ "$idc_ctl" != "$(idc_want)" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the engine over the cut read {%s}, want {%s}\n' "id-class-control" "$idc_ctl" "$(idc_want)"
+  lr_badf '%-22s the engine over the cut read {%s}, want {%s}\n' "id-class-control" "$idc_ctl" "$(idc_want)"
 else
-  printf -v _m '  ok    %-22s the engine over the cut reproduces every id-class cell' "id-class-control"; ok "$_m"
+  printf -v _m '%-22s the engine over the cut reproduces every id-class cell' "id-class-control"; ok "$_m"
 fi
 
 } # end lr_unit_id_class
@@ -3390,8 +3284,8 @@ lr_unit_bl890() {
   local _rec _wc _o _rc _bad
   _rec="$DIR/receipt-bl890.sh"
   if [ ! -f "$_rec" ]; then
-    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s receipt-bl890.sh is not beside this fixture\n' "receipt-bl890"
+    ASSERTIONS=$((ASSERTIONS + 1))
+    lr_badf '%-22s receipt-bl890.sh is not beside this fixture\n' "receipt-bl890"
     return 0
   fi
   if [ "$B2_ISDIST" = 0 ] && ! grep -qF 'label_entry_id' "$CLOSER"; then
@@ -3406,14 +3300,13 @@ lr_unit_bl890() {
   # SCRUB-RAN (BL-965): the receipt's AI_DLC_* scrub must have unset its probe; presence-shaped, so a
   # receipt that printed nothing fails it too.
   ASSERTIONS=$((ASSERTIONS + 1))
-  if grep -q '^SCRUB-RAN ' <<< "$_o"; then printf '  ok    %-22s the receipt'"'"'s AI_DLC_* scrub unset its probe variable\n' "bl890-SCRUB-RAN"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s receipt-bl890.sh printed no SCRUB-RAN line -- env is unreachable and its AI_DLC_* scrub is a no-op\n' "bl890-SCRUB-RAN"; fi
+  if grep -q '^SCRUB-RAN ' <<< "$_o"; then lr_okf '%-22s the receipt'"'"'s AI_DLC_* scrub unset its probe variable\n' "bl890-SCRUB-RAN"
+  else lr_badf '%-22s receipt-bl890.sh printed no SCRUB-RAN line -- env is unreachable and its AI_DLC_* scrub is a no-op\n' "bl890-SCRUB-RAN"; fi
   if [ "$_rc" -ne 0 ]; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s the shipped engine did not answer every cell (rc=%s): %s\n' "receipt-bl890" "$_rc" "$(printf '%s\n' "$_o" | grep -v '^ok ' | head -6 | tr '\n' ' ')"
+    lr_badf '%-22s the shipped engine did not answer every cell (rc=%s): %s\n' "receipt-bl890" "$_rc" "$(printf '%s\n' "$_o" | grep -v '^ok ' | head -6 | tr '\n' ' ')"
     return 0
   fi
-  printf '  ok    %-22s a suffixed label is asked by its bare id (s1, s2, s3; sibling join sib/sibY), its never-named twin is silent (s0), a suffixed label whose prefix is cited bare is ambiguous on the prefix (amb), and every refused shape stays silent (r1-r6); c0 is the bare-id control\n' "receipt-bl890"
+  lr_okf '%-22s a suffixed label is asked by its bare id (s1, s2, s3; sibling join sib/sibY), its never-named twin is silent (s0), a suffixed label whose prefix is cited bare is ambiguous on the prefix (amb), and every refused shape stays silent (r1-r6); c0 is the bare-id control\n' "receipt-bl890"
 } # end lr_unit_bl890
 lr_unit_bl932() {
 # --- A LABEL WHOSE ID IS CLOSED BY ONE PUNCTUATION MARK IS ASKED ABOUT BY ITS ID (BL-932) ---------------
@@ -3426,8 +3319,8 @@ lr_unit_bl932() {
   _rec="$DIR/receipt-bl932.sh"
   _rd="$(dirname "$CLOSER")"
   if [ ! -f "$_rec" ]; then
-    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s receipt-bl932.sh is not beside this fixture\n' "receipt-bl932"
+    ASSERTIONS=$((ASSERTIONS + 1))
+    lr_badf '%-22s receipt-bl932.sh is not beside this fixture\n' "receipt-bl932"
     return 0
   fi
   if [ "$B2_ISDIST" = 0 ] && { ! grep -qF '(\.+|:|' "$CLOSER" || ! grep -qF '[A-Za-z0-9_.-]*[A-Za-z0-9_-]/))' "$_rd/lib.sh"; }; then
@@ -3440,14 +3333,13 @@ lr_unit_bl932() {
   _o="$(bash "$_rec" "$_rd" "" "$_wc" 2>&1)"; _rc=$?
   # SCRUB-RAN (BL-965), as in lr_unit_bl890.
   ASSERTIONS=$((ASSERTIONS + 1))
-  if grep -q '^SCRUB-RAN ' <<< "$_o"; then printf '  ok    %-22s the receipt'"'"'s AI_DLC_* scrub unset its probe variable\n' "bl932-SCRUB-RAN"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s receipt-bl932.sh printed no SCRUB-RAN line -- env is unreachable and its AI_DLC_* scrub is a no-op\n' "bl932-SCRUB-RAN"; fi
+  if grep -q '^SCRUB-RAN ' <<< "$_o"; then lr_okf '%-22s the receipt'"'"'s AI_DLC_* scrub unset its probe variable\n' "bl932-SCRUB-RAN"
+  else lr_badf '%-22s receipt-bl932.sh printed no SCRUB-RAN line -- env is unreachable and its AI_DLC_* scrub is a no-op\n' "bl932-SCRUB-RAN"; fi
   if [ "$_rc" -ne 0 ]; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s the shipped engine did not answer every cell (rc=%s): %s\n' "receipt-bl932" "$_rc" "$(printf '%s\n' "$_o" | grep -v '^ok ' | head -6 | tr '\n' ' ')"
+    lr_badf '%-22s the shipped engine did not answer every cell (rc=%s): %s\n' "receipt-bl932" "$_rc" "$(printf '%s\n' "$_o" | grep -v '^ok ' | head -6 | tr '\n' ' ')"
     return 0
   fi
-  printf '  ok    %-22s an id closed by one mark is asked by its bare id (d1-d5 dot, k1-k2 colon, m1 em dash; i1 inner dot), and a second mark, another mark, prose after it or a bare prefix stays silent (n1-n4); c0 is the bare-id control\n' "receipt-bl932"
+  lr_okf '%-22s an id closed by one mark is asked by its bare id (d1-d5 dot, k1-k2 colon, m1 em dash; i1 inner dot), and a second mark, another mark, prose after it or a bare prefix stays silent (n1-n4); c0 is the bare-id control\n' "receipt-bl932"
 } # end lr_unit_bl932
 lr_unit_label_prefix() {
 # --- A LABEL READS ONLY ITS OWN ROW ------------------------------------------------------------------
@@ -3458,27 +3350,26 @@ lr_unit_label_prefix() {
   pf_out="$(printf 'NEEDS-REVIEW\tEntry PFX-ZZ-SUBJECT is the longer id.\tlonger-detail\nSTILL-LIVE\tEntry PFX-ZZ is the shorter id.\tshorter-detail\n')"
   for k in row_is row_lacks; do
     if [ "$k" = row_is ]; then
-      r="$( OUT="$pf_out"; ASSERTIONS=0; FAILURES=0; row_is "Entry PFX-ZZ" STILL-LIVE "probe" 2>&1 | head -1 )"
+      r="$( OUT="$pf_out"; ASSERTIONS=0; fails=0; oks=0; row_is "Entry PFX-ZZ" STILL-LIVE "probe" 2>&1 | head -1 )"
     else
-      r="$( OUT="$pf_out"; ASSERTIONS=0; FAILURES=0; row_lacks "Entry PFX-ZZ" NEEDS-REVIEW "probe" 2>&1 | head -1 )"
+      r="$( OUT="$pf_out"; ASSERTIONS=0; fails=0; oks=0; row_lacks "Entry PFX-ZZ" NEEDS-REVIEW "probe" 2>&1 | head -1 )"
     fi
     ASSERTIONS=$((ASSERTIONS + 1))
     case "$r" in
-      "  ok "*) printf '  ok    %-22s the shipped %s reads only its own row, not the longer entry whose label it prefixes\n' "prefix-$k" "$k" ;;
-      *) FAILURES=$((FAILURES + 1))
-         printf '  FAIL  %-22s want the shipped helper to read only its own row, got [%s]\n' "prefix-$k" "$r" ;;
+      "  ok "*) lr_okf '%-22s the shipped %s reads only its own row, not the longer entry whose label it prefixes\n' "prefix-$k" "$k" ;;
+      *)
+         lr_badf '%-22s want the shipped helper to read only its own row, got [%s]\n' "prefix-$k" "$r" ;;
     esac
   done
 } # end lr_unit_label_prefix
 
 # --- DISPATCH: every unit, then the joins that say they all ran ---------------------------------
-printf '  ok    %s\n' "$LR_JOIN_LINE"
+lr_okf '%s\n' "$LR_JOIN_LINE"
 # THE SHARED CONTROL IS EXACTLY SIX, CHECKED HERE AND NOT BESIDE IT. Everything between the
 # shared control and this line is a function DEFINITION, so a unit body left at top level, or a
 # helper call outside any unit, executes before this point and moves the count.
 if [ "$ASSERTIONS" -ne 6 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s %s assertions ran before dispatch, want the shared control'"'"'s 6 -- something outside every lr_unit_ ran\n' "[shared]" "$ASSERTIONS"
+  lr_badf '%-22s %s assertions ran before dispatch, want the shared control'"'"'s 6 -- something outside every lr_unit_ ran\n' "[shared]" "$ASSERTIONS"
 fi
 # A seed that exits 1 must read FIXTURE BROKEN: seed exited, and exit 2, and not fall through to assertions on four
 # empty variables (placed after the shared-control count, which is exactly six and would move). It drives THIS
@@ -3495,21 +3386,19 @@ if [ -z "${LR_SEED:-}" ] && [ "$LR_GROUP" = a ]; then
   rm -rf "$_sm"
   ASSERTIONS=$((ASSERTIONS + 1))
   if [ "$_smr" = 2 ] && grep -qF 'FIXTURE BROKEN: seed exited' <<< "$_smo"; then
-    printf '  ok    %-22s a seed that exits 1 reads FIXTURE BROKEN: seed exited, exit 2\n' "seed-fails"
+    lr_okf '%-22s a seed that exits 1 reads FIXTURE BROKEN: seed exited, exit 2\n' "seed-fails"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s rc=%s want 2 and the text FIXTURE BROKEN: seed exited\n' "seed-fails" "$_smr"
+    lr_badf '%-22s rc=%s want 2 and the text FIXTURE BROKEN: seed exited\n' "seed-fails" "$_smr"
   fi
   ASSERTIONS=$((ASSERTIONS + 1))
   if [ "$_scr" = 2 ] && grep -qF 'FIXTURE BROKEN' <<< "$_sco" && ! grep -qF 'seed exited' <<< "$_sco"; then
-    printf '  ok    %-22s a seed that exits 0 with junk reads BROKEN without seed exited (the harness discriminates)\n' "seed-fails-ctl"
+    lr_okf '%-22s a seed that exits 0 with junk reads BROKEN without seed exited (the harness discriminates)\n' "seed-fails-ctl"
   else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s rc=%s want 2, FIXTURE BROKEN and no seed exited\n' "seed-fails-ctl" "$_scr"
+    lr_badf '%-22s rc=%s want 2, FIXTURE BROKEN and no seed exited\n' "seed-fails-ctl" "$_scr"
   fi
 fi
 # A unit's stderr is captured to a FILE with `2>`, never with `$( )`, which would run the unit in
-# a subshell and lose every ASSERTIONS and FAILURES it moved. It is replayed to stderr after the
+# a subshell and lose every ASSERTIONS, oks and fails it moved. It is replayed to stderr after the
 # unit, and by the EXIT trap if the unit exits from inside its body.
 LR_ENTERED=""
 for _u in $LR_MINE; do
@@ -3521,8 +3410,7 @@ for _u in $LR_MINE; do
   # J2: a call to a helper this file does not define, or a variable another unit used to set,
   # prints to stderr and the unit runs on with fewer assertions -- which otherwise reads PASS.
   if grep -qE 'run\.sh: line [0-9]+: .*(command not found|unbound variable)$' "$LR_UNIT_ERR"; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s unit %s hit: %s\n' "[J2]" "$_u" \
+    lr_badf '%-22s unit %s hit: %s\n' "[J2]" "$_u" \
       "$(grep -E 'run\.sh: line [0-9]+: .*(command not found|unbound variable)$' "$LR_UNIT_ERR" | head -1)"
   fi
   LR_UNIT_ERR=""
@@ -3530,8 +3418,7 @@ for _u in $LR_MINE; do
   # The one exemption is DECLARED by the unit (LR_SKIPPED=1, on a consumer whose installed engine
   # predates the arms it would run); an early return declares nothing and is still caught.
   if [ "$ASSERTIONS" -le "$_before" ] && [ -z "$LR_SKIPPED" ]; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s unit %s made no assertion -- an emptied or early-returning unit reads exactly like a passing one\n' "[floor]" "$_u"
+    lr_badf '%-22s unit %s made no assertion -- an emptied or early-returning unit reads exactly like a passing one\n' "[floor]" "$_u"
   fi
 done
 # J1: the SET of units entered equals the set DECLARED IN THIS FILE'S TEXT, re-derived here rather
@@ -3539,15 +3426,9 @@ done
 lr_got="$(printf '%s\n' $LR_ENTERED | grep . | sort)"
 lr_want="$(sed -n 's/^lr_unit_\([a-z0-9_]*\)() {$/\1/p' "$LR_SELF" | grep -xF -f <(printf '%s\n' $LR_MINE) | sort)"
 if [ -z "$lr_want" ] || [ "$lr_got" != "$lr_want" ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s entered {%s}, declared {%s}\n' "[J1]" \
+  lr_badf '%-22s entered {%s}, declared {%s}\n' "[J1]" \
     "$(printf '%s' "$lr_got" | tr '\n' ' ')" "$(printf '%s' "$lr_want" | tr '\n' ' ')"
 fi
 LR_DONE=1
 echo
-if [ "$FAILURES" -gt 0 ]; then
-  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong in shard '$LR_GROUP' of '$SHARDS'."
-  exit 1
-fi
-echo "PASS: all $ASSERTIONS assertions correct in shard '$LR_GROUP' of '$SHARDS'."
-exit 0
+report_end "ledger-reverify shard '$LR_GROUP' of '$SHARDS'"

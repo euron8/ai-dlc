@@ -2,5 +2,6 @@
 # its own directory for a VERSION marker (run.sh:26-32). VERSION is outside the hook's key universe.
 # copy-only: core/fixtures/plan-rotate/run.sh:29 run.sh walks up for the marker; nothing reads its content
 VERSION
+core/fixtures/lib/report.sh
 !scripts/plan-rotate.sh
 !scripts/validate-plan-shape.sh

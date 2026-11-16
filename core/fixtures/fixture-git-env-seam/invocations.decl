@@ -1,9 +1,5 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-# Re-measured for BL-965 (194 -> 296, +102), two agreeing counted runs, the rise tallied by path from the counted start
-# logs against a counted base run (194): `env` is now declared, so the six unarmed U cells run trunk-push-bound for the
-# first time under hermetic-run.sh, 17 starts each (its run.sh 1, validate-audit-anchors.sh 9, its mutant copies
-# control 1, m1 2, m2 2, m3 1, m4 1). Mutant u127 adds none: its runner resolves nowhere and starts no bash.
-# PW3 (* 98->61, one counted run on the squash): the driven fixtures lost their batteries, trunk-push-bound 17->9
-# starts per run (driven 3 times: the H2 canary, cells A and U) and setup-config-drift 43->30 (driven once, cell B).
-61 *
-3 scripts/validate-fixture-git-env.sh
+# Set from one counted run through core/scripts/hermetic-run.sh (the judge's own J2 output).
+# BL-1117 (* 61->51): no whole-tree copy and no H2 canary, so trunk-push-bound runs twice (cells A and U, 9 starts
+# each) and setup-config-drift once (cell B, 30); arm V is gone, so the validator starts twice, both in arm W.
+51 *
+2 scripts/validate-fixture-git-env.sh

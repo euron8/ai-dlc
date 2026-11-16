@@ -201,7 +201,8 @@ K5)
   # The counted store has NO directory for this project until the counted write below, as on the first push after
   # the store is renamed: a and b read the legacy store with the counted one absent.
   [ ! -e "$t/S/$root" ] || { echo "K5 BROKEN: the counted store exists before any counted write"; exit 2; }
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$s/.githooks/pre-push" > "$t/pool.sh"
+  . "$K_ROOT/core/fixtures/lib/pool-span.sh" || { echo "K5 BROKEN: cannot source lib/pool-span.sh"; exit 2; }
+  pool_span "$s/.githooks/pre-push" "$t/pool.sh" FIXTURE_POOL || { echo "K5 BROKEN: no FIXTURE_POOL span"; exit 2; }
   printf '%s\n' '. "$1" 2>/dev/null' 'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$2/list"' \
     'apply_readset_skip "$2/list" "$2" > "$2/ann" 2>&1' > "$t/drv.sh"
   printf 'decl\t#judge f1 decl unlisted\n' > "$t/kr.same"; printf 'decl\t#judge f1 decl listed\n' > "$t/kr.moved"

@@ -1,0 +1,208 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z (OUT = extract.py, spawns.py, analyze.py, roll.py, roll.py --seats at that window). Command: python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/req_yield_s322.py $OUT $GRAPH_CLONE, where GRAPH_CLONE is a file:// clone of graph holding main plus graph's refs/remotes/origin/* (the s322 sprint-review fix commits are reachable only from origin/ai-dlc/carry-over/epic5-closeout)
+graph $GRAPH_CLONE spawns $OUT
+
+== 1. cost s322 requirements: 106 spawns $239.96 2044.8 agent-min over 8 stories = 13.25 spawns $30.00 4.26 agent-h per story
+   part                                     spawns         $ agent-min |  sp/st     $/st agent-h/st
+   authoring                                     2      7.47      33.0 |   0.25     0.93     0.07
+   party                                        21     58.48     301.7 |   2.62     7.31     0.63
+   party-repair-shard                            9     11.45      55.5 |   1.12     1.43     0.12
+   party-repair-serial                           9     14.37     137.5 |   1.12     1.80     0.29
+   p1 review                                    10     64.72     709.4 |   1.25     8.09     1.48
+   p1 follow-up: shard repair                    9     10.11     368.0 |   1.12     1.26     0.77
+   p1 follow-up: serial/fan-in/other             3      7.39      37.5 |   0.38     0.92     0.08
+   p2 review                                    10     21.65     152.6 |   1.25     2.71     0.32
+   p2 follow-up: shard repair                    5      4.75      18.9 |   0.62     0.59     0.04
+   p2 follow-up: serial/fan-in/other             8      5.89      25.1 |   1.00     0.74     0.05
+   p3 review                                    10     18.76     117.6 |   1.25     2.34     0.24
+   p4 review                                    10     14.93      88.0 |   1.25     1.87     0.18
+   partition sum 106 spawns $239.96 2044.8 min against label 106 $239.96 2044.8, catch-all rows 0 (must be 0): MATCH
+
+== 1. cost s322 gate-validation[requirements]: 22 spawns $9.55 39.5 agent-min over 8 stories = 2.75 spawns $1.19 0.08 agent-h per story
+   part                                     spawns         $ agent-min |  sp/st     $/st agent-h/st
+   gate: PRD validate run                        1      1.28       5.6 |   0.12     0.16     0.01
+   gate: adjudicate round 1                     10      3.96      15.5 |   1.25     0.50     0.03
+   gate: repair                                  1      0.90       3.8 |   0.12     0.11     0.01
+   gate: adjudicate round 2                     10      3.40      14.6 |   1.25     0.43     0.03
+   partition sum 22 spawns $9.55 39.5 min against label 22 $9.55 39.5, catch-all rows 0 (must be 0): MATCH
+
+== 1. cost s319 requirements: 156 spawns $234.07 1386.9 agent-min over 20 stories = 7.80 spawns $11.70 1.16 agent-h per story
+   part                                     spawns         $ agent-min |  sp/st     $/st agent-h/st
+   authoring                                     5     19.14      60.3 |   0.25     0.96     0.05
+   party                                        36     42.21     455.9 |   1.80     2.11     0.38
+   party-repair-shard                           12      8.34      41.4 |   0.60     0.42     0.03
+   party-repair-serial                           1      7.44      60.1 |   0.05     0.37     0.05
+   elic                                         19     50.04     276.9 |   0.95     2.50     0.23
+   elic-repair-shard                            13      7.82      35.1 |   0.65     0.39     0.03
+   elic-repair-serial                            1      5.02      31.1 |   0.05     0.25     0.03
+   p1 review                                    19     42.28     197.1 |   0.95     2.11     0.16
+   p1 verdict stamps                            14      4.65      12.4 |   0.70     0.23     0.01
+   p1 follow-up: shard repair                   11      5.27      15.9 |   0.55     0.26     0.01
+   p1 follow-up: serial/fan-in/other             6     12.66      94.3 |   0.30     0.63     0.08
+   p2 review                                    19     29.20     106.4 |   0.95     1.46     0.09
+   partition sum 156 spawns $234.07 1386.9 min against label 156 $234.07 1386.9, catch-all rows 0 (must be 0): MATCH
+
+== 1. cost s319 gate-validation[requirements]: 2 spawns $1.72 11.2 agent-min over 20 stories = 0.10 spawns $0.09 0.01 agent-h per story
+   part                                     spawns         $ agent-min |  sp/st     $/st agent-h/st
+   gate: adjudicate round 1                      2      1.72      11.2 |   0.10     0.09     0.01
+   partition sum 2 spawns $1.72 11.2 min against label 2 $1.72 11.2, catch-all rows 0 (must be 0): MATCH
+
+== 1a. BL-1035 slice in s322 requirements (current extractor), spawn start dates read from spawns.jsonl: ['2026-11-09']
+   14:00:00 to 15:08:37Z: 32 spawns $77.39 6.50 agent-h   (BL-812 records 32 spawns $77.39 6.50 agent-h as the part the old extractor kept in the gate label)
+   14:00:00 to 19:08Z   : 61 spawns $167.41 26.82 agent-h   (BL-812 records 61 spawns $167.41 26.82 agent-h; 29 of them $90.02 were already requirements)
+   the lead's brief dates the slice 2026-11-11; spawns.jsonl start dates read ['2026-11-09']: DIFFERS (reported, not a control)
+
+== 1b. where the s319 -> s322 per-story difference sits ($ per story; s322 divisor 8, s319 divisor 20)
+   family                              $/st 319  $/st 322    delta | sp/st 319 sp/st 322
+   authoring                               0.96      0.93    -0.02 |      0.25      0.25
+   party review                            2.11      7.31    +5.20 |      1.80      2.62
+   party repair                            0.79      3.23    +2.44 |      0.65      2.25
+   elicitation                             3.14      0.00    -3.14 |      1.65      0.00
+   adversarial p1 follow-up                0.90      2.19    +1.29 |      0.85      1.50
+   adversarial p1 review (incl. stamps)      2.35      8.09    +5.74 |      1.65      1.25
+   adversarial p2 follow-up                0.00      1.33    +1.33 |      0.00      1.62
+   adversarial p2 review (incl. stamps)      1.46      2.71    +1.25 |      0.95      1.25
+   adversarial p3 review (incl. stamps)      0.00      2.34    +2.34 |      0.00      1.25
+   adversarial p4 review (incl. stamps)      0.00      1.87    +1.87 |      0.00      1.25
+   sum of deltas +18.29 against step delta +18.29
+
+== 2. yield s322 (records read at e0ebaf019; subject files ['SPEC', 'architecture-impact', 'prd', 'product-brief'])
+   party seat files (20, committed): findings headed critical/major 95 (CRITICAL 0), all severities 151 (minor 56)
+   second count: 78 distinct seat C/M findings named by a party-family repair `- source:` line (of 95 C/M); of the C/M: {'NO-BLOCK-LINKED': 17, 'REPAIRED': 78}; 200 source tokens in all, 193 resolve to a seat C/M heading
+   party-family repair records: C/M blocks 151 by disposition {'escalated': 54, 'repaired': 97}
+   architect seats 10  C/M  50  $ 40.45  $/C/M  0.81  seats with 0 C/M: -
+   dev       seats 10  C/M  45  $ 16.43  $/C/M  0.37  seats with 0 C/M: -
+   round  files   C(head)   M(head)      $     $/CM | joined file: heads  provenance  | shard sum: heads  provenance
+   p1        10         2        39  64.72     1.58 | joined heads (2, 39) prov (2, 39) | shard prov (2, 39)  [heads vs shard prov MATCH; joined vs shard sum MATCH]
+   p2        10         0        11  21.65     1.97 | joined heads (0, 11) prov (0, 11) | shard prov (0, 11)  [heads vs shard prov MATCH; joined vs shard sum MATCH]
+   p3        10         0         8  18.76     2.34 | joined heads (0, 8) prov (0, 8) | shard prov (0, 8)  [heads vs shard prov MATCH; joined vs shard sum MATCH]
+   p4        10         0         3  14.93     4.98 | joined heads (0, 3) prov (0, 3) | shard prov (0, 3)  [heads vs shard prov MATCH; joined vs shard sum MATCH]
+   per-shard C/M (cost from the matching spawn description; shard with 0 C/M listed):
+     p1     1:2($4.42) 2:5($7.85) 3:2($4.49) 4:1($8.50) 5:7($6.26) 6:3($8.06) 7:4($6.17) 8:6($7.98) 9:2($3.32) cross:9($7.68)
+     p2     1:0($0.64) 2:1($3.09) 3:1($0.82) 4:0($1.95) 5:1($2.36) 6:0($3.28) 7:2($2.06) 8:3($3.22) 9:0($0.62) cross:3($3.61)
+     p3     1:0($0.99) 2:0($2.90) 3:0($0.78) 4:0($0.86) 5:2($1.57) 6:0($1.05) 7:2($2.12) 8:2($3.63) 9:0($0.86) cross:2($3.99)
+     p4     1:0($0.81) 2:0($1.59) 3:0($0.85) 4:0($0.81) 5:1($2.05) 6:0($0.92) 7:0($1.29) 8:2($2.66) 9:0($1.07) cross:0($2.87)
+   repair records (C/M blocks, disposition) and survival FLOOR in blocks:
+       requirements-party-repair.md             before: 4 sha tokens parsed, 0 of 4 files matched to a committed state, 4 fell back to pre-sprint; blocks 93
+       requirements-party-serial-repair-p1.md   before: 0 sha tokens parsed, 0 of 4 files matched to a committed state, 4 fell back to pre-sprint; blocks 58
+     party  C/M blocks 151  disposition {'escalated': 54, 'repaired': 97}
+            survival {'NOT-REPAIRED': 54, 'BASE-NEW-SHIPPED': 54, 'NO-SPAN': 25, 'OLD-ONLY': 3, 'BASE-NEW-SUPERSEDED': 4, 'NO-TARGET': 9, 'BASE-NEW-NOT-SEEN-AFTER': 2}
+       requirements-repair-p1.md                before: 4 sha tokens parsed, 2 of 4 files matched to a committed state, 2 fell back to pre-sprint; blocks 49
+     p1     C/M blocks  49  disposition {'repaired': 44, 'escalated': 5}
+            survival {'NO-SPAN': 26, 'BASE-NEW-NOT-SEEN-AFTER': 3, 'OLD-ONLY': 5, 'NOT-REPAIRED': 5, 'EXACT-FILES-NEW-SHIPPED': 7, 'BASE-NEW-SHIPPED': 1, 'NO-TARGET': 2}
+            link floor: 41 review C/M findings: {'REPAIRED-LINKED': 40, 'ESCALATED/OTHER-LINKED': 1}; 0 source tokens did not resolve to a shard C/M finding (joined-file or repair-record refs: not mappable)
+       requirements-repair-p2.md                before: 4 sha tokens parsed, 4 of 4 files matched to a committed state, 0 fell back to pre-sprint; blocks 10
+       requirements-serial-repair-p2.md         before: 4 sha tokens parsed, 4 of 4 files matched to a committed state, 0 fell back to pre-sprint; blocks 17
+     p2     C/M blocks  27  disposition {'repaired': 23, 'escalated': 4}
+            survival {'NEW-SHIPPED': 9, 'NOT-REPAIRED': 4, 'NO-SPAN': 2, 'NO-TARGET': 10, 'OLD-ONLY': 2}
+            link floor: 11 review C/M findings: {'REPAIRED-LINKED': 8, 'NO-BLOCK-LINKED': 3}; 4 source tokens did not resolve to a shard C/M finding (joined-file or repair-record refs: not mappable)
+     p3     no repair record file (requirements-repair-p3.md, requirements-serial-repair-p3.md)
+     p4     no repair record file (requirements-repair-p4.md, requirements-serial-repair-p4.md)
+   CRITICAL review findings: 2
+     p1 cross#F-1 ### F-1 — CRITICAL — The organic-predicate SHALL (SPEC CAP-2) substitutes behavi -> linked repair blocks [('repaired', 'EXACT-FILES-NEW-SHIPPED', '(decisions appended, then Render 1 line)'), ('escalated', 'NOT-REPAIRED', 'er-epic5-closeout/SPEC.md:26 (escalated)')]
+     p1 cross#F-2 ### F-2 — CRITICAL — The CAP-6 "no-widening" SHALL certifies a live-capital prop -> linked repair blocks [('repaired', 'BASE-NEW-NOT-SEEN-AFTER', 'ain-rebalancer-epic5-closeout/SPEC.md:42')]
+   p3: no repair record, resolution record only (lead applied the operator's CHANGE_APPROACH, no p3 repair spawns); p3 resolution says STOP no pass-3 remediator True
+   p4: deferral record names 3 deferred MAJORs (['5.md#F-1', '8.md#F-1', '8.md#F-2'])
+     deferred `5.md#F-1`: spans 3; present at the p4-reviewed state 0 (reviewed shas committed for 4 of 4 files); present at ship 0
+     deferred `8.md#F-1`: spans 4; present at the p4-reviewed state 4 (reviewed shas committed for 4 of 4 files); present at ship 4
+     deferred `8.md#F-2`: spans 3; present at the p4-reviewed state 1 (reviewed shas committed for 4 of 4 files); present at ship 2
+     s322/architecture-context.md at the record ref: present; names the three sources [True, True, True]
+   p3 resolution (lead-applied, no spawn): spans of its RESOLVE section 18 (SPAN level, not blocks) against the pass-3 reviewed state: {'OLD-ONLY': 8, 'NEW-GONE': 5, 'NEW-SHIPPED': 5}; reviewed shas committed for 4 of 4 files
+
+== 2. yield s319 (records read at 1da426ef9; subject files ['SPEC', 'architecture-impact', 'prd', 'product-brief'])
+   party seat files (36, committed): findings headed critical/major 81 (CRITICAL 0), all severities 181 (minor 100)
+   second count: 77 distinct seat C/M findings named by a party-family repair `- source:` line (of 81 C/M); of the C/M: {'ESCALATED/OTHER': 14, 'NO-BLOCK-LINKED': 4, 'REPAIRED': 63}; 117 source tokens in all, 94 resolve to a seat C/M heading
+   party-family repair records: C/M blocks 60 by disposition {'escalated': 13, 'repaired': 47}
+   architect seats 18  C/M  48  $ 40.62  $/C/M  0.85  seats with 0 C/M: ['architect:3', 'architect:5', 'architect:6']
+   dev       seats 18  C/M  33  $  1.59  $/C/M  0.05  seats with 0 C/M: ['dev:12', 'dev:2', 'dev:8']
+   round  files   C(head)   M(head)      $     $/CM | joined file: heads  provenance  | shard sum: heads  provenance
+   elic      19        14        72  50.04     0.58 | joined heads (14, 72) prov (14, 72) | shard prov (14, 72)  [heads vs shard prov MATCH; joined vs shard sum MATCH]
+   p1        19         0        27  42.28     1.57 | joined heads (0, 27) prov (0, 27) | shard prov (0, 27)  [heads vs shard prov MATCH; joined vs shard sum MATCH]
+   p2        19         0         0  29.20      nan | joined heads (0, 0) prov (0, 0) | shard prov (0, 0)  [heads vs shard prov MATCH; joined vs shard sum MATCH]
+   per-shard C/M (cost from the matching spawn description; shard with 0 C/M listed):
+     elic   1:4($1.88) 2:4($1.53) 3:2($2.07) 4:9($3.83) 5:0($1.05) 6:2($1.09) 7:2($2.22) 8:5($3.71) 9:7($2.00) 10:5($1.82) 11:2($2.48) 12:2($1.34) 13:3($1.77) cross-1:9($4.17) cross-2:7($3.56) cross-3:5($4.29) cross-4:6($3.30) cross-5:5($4.12) cross-6:7($3.81)
+     p1     1:1($1.37) 2:0($1.81) 3:2($1.16) 4:1($1.41) 5:0($0.85) 6:1($1.18) 7:0($0.97) 8:2($2.71) 9:3($1.90) 10:2($1.31) 11:2($2.59) 12:1($1.41) 13:1($3.71) cross-1:1($2.85) cross-2:3($2.35) cross-3:4($6.25) cross-4:1($2.31) cross-5:0($2.77) cross-6:2($3.36)
+     p2     1:0($1.60) 2:0($0.94) 3:0($1.17) 4:0($1.38) 5:0($0.78) 6:0($1.10) 7:0($0.81) 8:0($1.56) 9:0($1.38) 10:0($1.31) 11:0($1.14) 12:0($1.90) 13:0($1.28) cross-1:0($1.83) cross-2:0($1.91) cross-3:0($2.73) cross-4:0($1.65) cross-5:0($2.03) cross-6:0($2.69)
+   repair records (C/M blocks, disposition) and survival FLOOR in blocks:
+       requirements-party-repair.md             before: 0 sha tokens parsed, 0 of 4 files matched to a committed state, 4 fell back to pre-sprint; blocks 60
+     party  C/M blocks  60  disposition {'repaired': 47, 'escalated': 13}
+            survival {'OLD-ONLY': 4, 'NO-SPAN': 18, 'BASE-NEW-SHIPPED': 20, 'NOT-REPAIRED': 13, 'BASE-NEW-NOT-SEEN-AFTER': 4, 'NO-TARGET': 1}
+       requirements-elicitation-repair.md       before: 0 sha tokens parsed, 0 of 4 files matched to a committed state, 4 fell back to pre-sprint; blocks 71
+     elic   C/M blocks  71  disposition {'repaired': 60, 'escalated': 11}
+            survival {'BASE-NEW-SHIPPED': 29, 'OLD-ONLY': 6, 'NOT-REPAIRED': 11, 'NO-SPAN': 17, 'BASE-NEW-NOT-SEEN-AFTER': 3, 'BASE-NEW-SUPERSEDED': 1, 'NO-TARGET': 4}
+            link floor: 86 review C/M findings: {'REPAIRED-LINKED': 82, 'ESCALATED/OTHER-LINKED': 4}; 5 source tokens did not resolve to a shard C/M finding (joined-file or repair-record refs: not mappable)
+       requirements-repair-p1.md                before: 0 sha tokens parsed, 0 of 4 files matched to a committed state, 4 fell back to pre-sprint; blocks 37
+     p1     C/M blocks  37  disposition {'repaired': 29, 'escalated': 8}
+            survival {'BASE-NEW-SHIPPED': 17, 'NO-SPAN': 4, 'NOT-REPAIRED': 8, 'BASE-NEW-NOT-SEEN-AFTER': 2, 'OLD-ONLY': 2, 'NO-TARGET': 4}
+            link floor: 27 review C/M findings: {'REPAIRED-LINKED': 26, 'ESCALATED/OTHER-LINKED': 1}; 1 source tokens did not resolve to a shard C/M finding (joined-file or repair-record refs: not mappable)
+     p2     no repair record file (requirements-repair-p2.md, requirements-serial-repair-p2.md)
+     p3     no repair record file (requirements-repair-p3.md, requirements-serial-repair-p3.md)
+     p4     no repair record file (requirements-repair-p4.md, requirements-serial-repair-p4.md)
+   CRITICAL review findings: 14
+
+== 4. gate-validation[requirements]: what each adjudication run returned (part files) and what the repair left at ship
+   s322: 20 adjudicator spawns (02:28:43 .. 02:40:26); 20 part files in 2 runs
+     run 20261110T022808Z: 10 part files, 10 verdicts {'FAIL': 1, 'PASS': 9}
+       FAIL check 29; next run's verdict on the same check: ('023530', 'PASS') | Check 29 re-graded on SPEC.md (_bmad-output/specs/s322/per-chain-rebalancer-epic5-closeout/SPEC.md), Check 28 IN-FORCE (spec dir and SPEC.md
+     run 20261110T023530Z: 10 part files, 10 verdicts {'PASS': 10}
+     non-adjudicator gate spawn pm-escalated PRD validate run with block $1.28 final_text (<=1500 kept): 22/validation-report.md` and `/Users/n8/git/graph/_bmad-output/planning-artifacts/s322/validation-report.html`. The Sprint 322 section is lines 1186–1546 of `prd.md`. - Grade: Excellent, because every dimension is strong or adequate and there is no High or Critical finding. The findings are 0 Critical, 2 Medium and 5 Low. - The two Medium findings are that FR-S322-5 has no fixed acceptance until D-4 is answered, and 
+     non-adjudicator gate spawn remediator SPEC repair via render path $0.90 final_text (<=1500 kept):  in CAP-2, and every threshold, literal, sha and comparison from the old text is carried into the six `success` fields. I checked this by grep and by reading the new text against the old, not with a validator.  What changed: - **CAP-6:** it now opens `WHEN the offramp-gas wrap is prepared, THE read-only GET … SHALL record …`, with a separate `IF … THEN` escalation bullet. - **Constraints:** the "other three literals 
+   gate repair records at the ship ref: ['_bmad-output/planning-artifacts/s322/gate-planning-repair-p1.md']
+     gate-planning-repair-p1.md: SPEC sha before 7b2f9311 (committed state: 968036d99), after 665f3d0e (committed state: 1e78061fd); SPEC at ship 995a883c -> ship differs from the repair's bytes (later edits)
+     spans of the `## Repair applied` lines: 19; absent from the SPEC before the repair: 14; present in the committed repaired state: 2; present in SPEC at ship: 2
+   s319: 2 adjudicator spawns (14:15:29 .. 14:23:34); 2 part files in 1 runs
+     run 20261017T141509Z: 2 part files, 10 verdicts {'PASS': 10}
+   gate repair records at the ship ref: none
+
+== 5. controls
+   s322 description token present 'Adversarial pN' x30 (must be >0); impossible token QZXV-REQ-DESC-NEVER-9916 x0 (must be 0)
+   s322 corpus loaded 80 texts 2076827 bytes: 'MAJOR' x881 (must be >0); impossible finding token QZXV-REQ-FINDING-NEVER-9917 x0 (must be 0)
+   s322 committed states of the subject files: 25 distinct shas over ['SPEC', 'architecture-impact', 'prd', 'product-brief']
+   s319 description token present 'Adversarial pN' x19 (must be >0); impossible token QZXV-REQ-DESC-NEVER-9916 x0 (must be 0)
+   s319 corpus loaded 103 texts 1791150 bytes: 'MAJOR' x688 (must be >0); impossible finding token QZXV-REQ-FINDING-NEVER-9917 x0 (must be 0)
+   s319 committed states of the subject files: 21 distinct shas over ['SPEC', 'architecture-impact', 'prd', 'product-brief']
+   impossible step reads 0 spawns (must be 0)
+   seeded seat-heading grammar (a critical, a major, a minor, a near-miss header note): MATCH
+   seeded classify cases (6, both directions): MATCH
+
+== controls summary
+   MATCH    s322 requirements partition sums to the label
+   MATCH    s322 requirements reads 106 spawns, $30.00 per story, $239.96 (lead's (106, 30.0, 239.96))
+   MATCH    s322 gate-validation[requirements] partition sums to the label
+   MATCH    s322 gate-validation[requirements] reads 22 spawns, $1.19 per story, $9.55 (lead's (22, 1.19, 9.55))
+   MATCH    s319 requirements partition sums to the label
+   MATCH    s319 requirements reads 156 spawns, $11.70 per story, $234.07 (lead's (156, 11.7, 234.07))
+   MATCH    s319 gate-validation[requirements] partition sums to the label
+   MATCH    s319 gate-validation[requirements] reads 2 spawns, $0.09 per story, $1.72 (lead's (2, 0.09, 1.72))
+   MATCH    slice 14:00-15:08:37 = 32 spawns, $77.39, 6.50 h (BL-812)
+   MATCH    slice 14:00-19:08 = 61 spawns, $167.41, 26.82 h (BL-812)
+   MATCH    family deltas sum to the step delta
+   MATCH    s322 party seat C/M heading count positive (95)
+   MATCH    s322 p1 heading count equals shard provenance count
+   MATCH    s322 p1 joined file C/M equals shard sum
+   MATCH    s322 p2 heading count equals shard provenance count
+   MATCH    s322 p2 joined file C/M equals shard sum
+   MATCH    s322 p3 heading count equals shard provenance count
+   MATCH    s322 p3 joined file C/M equals shard sum
+   MATCH    s322 p4 heading count equals shard provenance count
+   MATCH    s322 p4 joined file C/M equals shard sum
+   MATCH    s322 p4 deferral record read (3 sources)
+   MATCH    s319 party seat C/M heading count positive (81)
+   MATCH    s319 elic heading count equals shard provenance count
+   MATCH    s319 elic joined file C/M equals shard sum
+   MATCH    s319 p1 heading count equals shard provenance count
+   MATCH    s319 p1 joined file C/M equals shard sum
+   MATCH    s319 p2 heading count equals shard provenance count
+   MATCH    s319 p2 joined file C/M equals shard sum
+   MATCH    s322 gate part files found (positive)
+   MATCH    gate repair spans present at the repaired state (control for the ship count)
+   MATCH    s319 gate part files found (positive)
+   MATCH    s322 impossible description token reads 0 beside a present one
+   MATCH    s322 impossible finding token reads 0 beside a present one
+   MATCH    s322 subject files resolved (4)
+   MATCH    s319 impossible description token reads 0 beside a present one
+   MATCH    s319 impossible finding token reads 0 beside a present one
+   MATCH    s319 subject files resolved (4)
+   MATCH    impossible step reads 0
+   MATCH    seeded seat heading grammar can read CRITICAL (real files carry none)
+   MATCH    seeded classify cases
+   40 controls, 0 DIFFER

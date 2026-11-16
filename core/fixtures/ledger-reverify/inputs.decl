@@ -4,6 +4,7 @@ core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 core/skills/ai-dlc-update/reconcile/preclassify.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh
 core/fixtures/lib/inproc.sh
 core/fixtures/lib/mutant.sh
 # The dist-only shards (b, c) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.

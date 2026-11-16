@@ -166,14 +166,16 @@ Builder:
 6. Send the lead the sha and remove your worktree.
 
 Lead:
-1. Squash commits that ship together into one commit on `origin/main`; rerun builder step 5 on that tree.
-2. Call the advisor in its own message, then push from a clean worktree at that sha, backgrounded, to a named
+1. A brief states, from the record, its subject's cost, a failure it caught, and who would notice it gone. With no
+   catch on record, delete the subject instead.
+2. Squash commits that ship together into one commit on `origin/main`; rerun builder step 5 on that tree.
+3. Call the advisor in its own message, then push from a clean worktree at that sha, backgrounded, to a named
    branch, with the exit written to a file.
-3. On a red, send each failing unit from the log to its owner.
-4. If `origin/main` moved since the push, rebase, rerun builder step 5 and push again. Then `gh pr create` and
+4. On a red, send each failing unit from the log to its owner.
+5. If `origin/main` moved since the push, rebase, rerun builder step 5 and push again. Then `gh pr create` and
    `gh pr merge --squash`, subject and body from files.
-5. Verify once: `origin/main`'s tree equals the pushed tree, with the previous main tree as a DIFF control.
-6. Detach the main checkout at the new `origin/main`.
+6. Verify once: `origin/main`'s tree equals the pushed tree, with the previous main tree as a DIFF control.
+7. Detach the main checkout at the new `origin/main`.
 
 While builder sessions are active, the lead runs the roll call in `docs/roll-call.md` every 45 minutes, as written.
 

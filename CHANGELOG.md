@@ -19,6 +19,60 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1145.0] - 2026-11-15
+
+### BL-1139: the role contracts name the MCP advisor consult
+
+The advisor paragraph in all 18 `core/team-roles/*.md` files now tells an agent that holds no `advisor` tool but holds `mcp__advisor__consult` to call the consult at the same two points. While an agent holds `advisor`, a consult does not count.
+
+### BL-1101: a lead brief states its subject's cost, catch and noticer
+
+`CLAUDE.md`'s lead process gains a first step: a brief states, from the record, its subject's cost, a failure it caught, and who would notice it gone, and with no catch on record the subject is deleted instead. The old lead steps 1-6 are now 2-7.
+
+### BL-1124 PARTIAL: readset_decl_parse resolves tools without a subshell per line
+
+In both pre-push hooks (identical lines under I66), `readset_decl_parse` walks the tool search path with builtins instead of a `$( )` subshell per `tools.decl` line. It keeps the `:` field semantics and first-match-wins. This removes about 13,573 forks from a push that misses the whole-suite key, counted from the code and the corpus. A VS-IDENTITY row is added in both hooks.
+
+### BL-1133 PARTIAL: the push skips a consumer twin whose distribution twin covers it
+
+`cl_select` (both hooks) decides a `<fx>@consumer` unit `skip` with flag `d` when its distribution twin is a recorded `skip` on this tree and no moved key row is layout-sensitive. A row is layout-sensitive when it is added or removed, a listing, tool or span row, under `tests/fixtures/`, the runner or mapper, or not a byte copy of its own declared distribution source. A unit with a `.dunres` row never takes the skip. `scripts/predict-push-set.sh` takes the same skip. BL-1146 is filed.
+
+### BL-1119: concurrent counter rc generation no longer truncates
+
+`scripts/validate-fixture-invocations.sh`'s `fxc_gen_rc` writes the rc atomically, so concurrent `--gen-rc` runs into one directory all log every row. This was the cause of subject 1's pool-width movement.
+
+### BL-1130: every record-binding hook span goes through pool_span
+
+The 15 hand-`sed` hook-span sites in fixtures go through `core/fixtures/lib/pool-span.sh`, which now unsets `REC_ROOT`, and `scripts/pool-span-allowlist.txt` holds 0 rows. `scripts/invalidation-guard.sh --self-probe` no longer leaves key files in the real verdict store under a throwaway root. The 7 fixtures that source the library declare it in `inputs.decl`.
+
+### BL-843 PARTIAL: a typed-count warning measured and not built
+
+Over 374 graph gate states (175 evaluated), the candidate warning fires 24 times over 5 stories, and only s322 1-4 carries a stale count, so the warning is not built. The `Outcome measured:` line is still owed.
+
+### BL-1117: fixture-git-env-seam drives the root without copying the tree
+
+The fixture no longer copies the tree, its arm V is gone, and its `inputs.decl` is set from the accepted trace. BL-1140 and BL-1145 are filed.
+
+### BL-910 and BL-1008 PARTIAL: a seed's red keeps its evidence lines
+
+`scripts/seed-verdict-store.sh` keeps the indented `      | ` evidence lines under each `FAIL` line when it prints a red, so `cwd_why`'s and A00's evidence survives a seed.
+
+### BL-1056 PARTIAL: five more fixtures report through the shared library
+
+apply-restamp-worklist, ledger-reverify, plan-rotate, readset-skip and reconcile-emit-report report through `core/fixtures/lib/report.sh`. Their 5 `:report` rows leave `fixture-contract-allowlist.txt`.
+
+### BL-841 and BL-972 PARTIAL: the s323 edge and a late-write probe
+
+The analysis extractors take the s322/s323 window edge, and `ask_split_late_write_probe.py` covers an attachment written after the answer. The close readings wait for a complete s323.
+
+### BL-812 and BL-819: s322 readings
+
+Progress paragraphs record the s322 readings. BL-1141 is filed.
+
+### BL-1134 PARTIAL and BL-1138: the install dirty probe stays whole-tree
+
+No tried tracer change carries `scripts/install.sh`'s dirty-probe burst. A correct "does any tracked file differ" answer must stat every tracked file, so the probe is unchanged. BL-1138 records the measured candidates. BL-1144 (accepted traces silently lose stat reports) is filed.
+
 ## [0.1144.0] - 2026-11-15
 
 ### BL-1135: the advisor gate binds a no-grant agent that holds the MCP consult
