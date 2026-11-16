@@ -111,9 +111,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-restamp-worklist.XXXXXX")" || {
   echo "apply-restamp-worklist: FIXTURE BROKEN — mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-fails=0; asserts=0
-ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+. "$HERE/../lib/report.sh" || { echo "apply-restamp-worklist: FIXTURE BROKEN — lib/report.sh not found beside $HERE" >&2; exit 2; }
 
 # ---------------------------------------------------------------------------- shards ----
 # THIS FILE IS FOUR SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
@@ -600,8 +598,7 @@ if grep -q -- 'unknown option: --finish' <<< "$PROBE"; then
   if [ "$IS_DIST" = 1 ]; then
     bad "the resolved apply.sh ($APPLY) rejects --finish, so the whole subject of this fixture is absent. HARD in the distribution: the subject must be present here."
     echo
-    echo "apply-restamp-worklist: FAIL ($fails)"
-    exit 1
+    report_end apply-restamp-worklist
   fi
   printf '  SKIP  %s\n' "the installed apply.sh predates --finish and the handback guard; both land with this same pull"
   echo
@@ -3293,19 +3290,6 @@ if sg ar; then
 ARSEG=all; ar_cells
 fi  # ---- end of unit ar
 
-echo "  [shard $GROUP of apply-restamp-worklist: $asserts assertions, $fails failed]"
+echo "  [shard $GROUP of apply-restamp-worklist: $((oks + fails)) assertions, $fails failed]"
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "PASS  apply-restamp-worklist: a run that hands back a WORKLIST or a DECISION row leaves"
-  echo "      .ai-dlc-version at base and .ai-dlc-applying on disk, says so as DECISION"
-  echo "      restamp-withheld rather than RESOLVED restamp, and names --finish so the operator"
-  echo "      can stamp once the work is disposed; --finish stamps from theirs and runs no"
-  echo "      resolution phase; and a pull with nothing outstanding still stamps as it did."
-  echo "      --finish also checks that <theirs> IS the ref the tree was written from, keyed on"
-  echo "      the core/ tree so a docs-only move still finishes, refusing by leaving the stamp"
-  echo "      and the marker untouched, and saying UNCHECKED rather than nothing when the"
-  echo "      in-flight record cannot answer."
-  exit 0
-fi
-echo "$NAME: FAIL ($fails)"
-exit 1
+report_end "$NAME"

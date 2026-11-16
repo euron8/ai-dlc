@@ -158,118 +158,10 @@ victim_intact() { # victim_intact <n> <repo> <bare> <name>
   return 0
 }
 
-# A copy of the tree, so the driven fixtures run against a tree that is not $ROOT.
-#
-# IT IS A WHOLE-TREE COPY, AND THE FIRST CUT OF THIS FIXTURE COPIED ONLY THE SEAM
-# AND THE DRIVEN FIXTURE. That tree is missing the validators the driven fixture
-# resolves at startup, so it exited `FIXTURE ERROR: cannot locate
-# validate-audit-anchors.sh` BEFORE reaching any `git init` — and a fixture that
-# never runs cannot clobber. All four mutants therefore "survived" against a
-# pristine victim, which reads exactly like a seam that works. The tell was that
-# arm A passed too: in a partial tree BOTH worlds are inert, so the arm was
-# comparing two runs of nothing. Copy the whole tree.
-#
-# `.claude/worktrees` IS THE CLAUDE CODE HARNESS'S OWN AGENT CHECKOUTS, NOT THIS PROJECT'S
-# STATE AND NOT ANY PROJECT'S. It is gitignored under `.claude/*`, it appears in whatever
-# number of concurrent sessions happen to be running, and this repo's own code names it only
-# to record that `git ls-files` correctly drops it
-# (`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1992`). Copying it made this
-# fixture's cost a function of ambient harness activity: measured on one tree, 34 agent
-# checkouts, 871M of a 1.0G copy, 15x the file count, 8 copies per run -- ~10s each against
-# ~0s with it excluded, three interleaved reps, sides asserted to differ first.
-#
-# IT ALSO RACED. `tar` walks those directories while another session is deleting one, which
-# is the ONLY reason the breakage below was ever observed rather than shipping silently.
-# The exclusion is narrow ON PURPOSE: `.claude/rules/**` is un-ignored by negation and is
-# tracked, so excluding all of `.claude` would drop files this tree legitimately carries.
-#
-# THE COPY READS NO FILE'S DATA, AND THE COUNT IS THE COPY'S OWN LIST (BL-1117). A byte copy
-# plus a second whole-tree `tar` just to count read every file's data twice, a burst the
-# sandbox read-set tracer drops reports under. `mktree_clone` walks the tree ONCE with
-# `scandir` (no stat per entry), clones each file with APFS clonefile(2), and prints the number
-# of entries it walked; that number is the source count. Where clonefile is unavailable
-# (another volume, a non-APFS filesystem, a refused clone) its first clone fails and it exits 3, the partial destination
-# is removed, the tar copy runs instead, and the source count is a metadata-only `find` over
-# the same three prunes. The path taken is printed, so a trace of the fallback says so.
-mktree_clone() { # mktree_clone <src> <dest> -- prints the entries cloned; rc 3 = no clonefile
-  python3 -I -c '
-import ctypes, os, sys
-src, dst = sys.argv[1], sys.argv[2]
-try:
-    libc = ctypes.CDLL("libc.dylib", use_errno=True)
-    libc.clonefile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
-except (OSError, AttributeError):
-    sys.exit(3)
-prune = {".git", "node_modules", os.path.join(".claude", "worktrees")}
-n = cloned = 0
-def walk(rel):
-    global n, cloned
-    with os.scandir(os.path.join(src, rel)) as it:
-        for e in it:
-            r = os.path.join(rel, e.name) if rel else e.name
-            if r in prune:
-                continue
-            t = os.path.join(dst, r)
-            if e.is_symlink():
-                os.symlink(os.readlink(e.path), t)
-            elif e.is_dir(follow_symlinks=False):
-                os.mkdir(t)
-                walk(r)
-            elif libc.clonefile(e.path.encode(), t.encode(), 1) != 0:
-                err = ctypes.get_errno()
-                if cloned == 0:  # the first clone failed: no clone here at all
-                    sys.exit(3)
-                raise OSError(err, "clonefile failed: " + r)
-            else:
-                cloned += 1
-            n += 1
-walk("")
-print(n)
-' "$1" "$2"
-}
-mktree() { # mktree <dest>
-  local dest="$1" src_n dst_n rc
-  rm -rf "$dest"
-  # `git archive HEAD` would miss the uncommitted seam on the branch that adds it.
-  # Copy the working tree, excluding .git so the copy is not itself a repository.
-  mkdir -p "$dest" || return 1
-  src_n="$(mktree_clone "$ROOT" "$dest")"; rc=$?
-  if [ "$rc" -eq 3 ]; then
-    echo "  copy: tar (clonefile unavailable)"
-    rm -rf "$dest" && mkdir -p "$dest" || return 1
-    ( cd "$ROOT" && tar cf - --exclude='./.git' --exclude='./node_modules' --exclude='./.claude/worktrees' . ) \
-      | ( cd "$dest" && tar xf - ) || return 1
-    src_n="$( ( cd "$ROOT" && find . -mindepth 1 \( -path ./.git -o -path ./node_modules -o -path ./.claude/worktrees \) -prune -o -print 2>/dev/null ) | grep -c .)" || src_n=0
-  elif [ "$rc" -ne 0 ]; then
-    return 1
-  else
-    echo "  copy: clonefile"
-  fi
-  # THE TAR PIPE'S `||` READS THE *READER* TAR'S STATUS AND NOTHING ELSE. There is no `pipefail`
-  # in this fixture or in `core/fixtures/lib/preamble.sh` (`set -u` at the top of this file is
-  # the only `set` line), so a WRITER that fails mid-walk -- a vanishing directory, an
-  # unreadable file -- exits non-zero into a reader that exits 0, and the pipeline reports 0.
-  # Constructed and measured: a writer failing on a missing member exits 1 alone and 0 through
-  # the pipe, landing 50 of 51 files. The two `[ -f ]` probes below pass on that tree, because
-  # they name two files out of thousands.
-  #
-  # THAT IS THE EXACT STATE THE HEADER ABOVE SAYS IS UNDETECTABLE: a partial tree makes the
-  # driven subject bail at its own startup check, every mutant "survives" against an untouched
-  # victim, and the unmutated arm passes too because two inert runs compare equal. So the copy
-  # asserts its own COMPLETENESS rather than the presence of two names, on either path, and it
-  # fails CLOSED: any shortfall returns 1, which `broken` turns into FIXTURE BROKEN. Both counts
-  # exclude the root entry (`-mindepth 1`; the clone walk never yields its own root).
-  dst_n="$( ( cd "$dest" && find . -mindepth 1 2>/dev/null ) | grep -c .)" || dst_n=0
-  # A zero on either side is a broken measurement, never a clean one: it would make the
-  # comparison below pass by comparing two nothings, which is this fixture's own defect class.
-  [ "$src_n" -gt 0 ] && [ "$dst_n" -gt 0 ] || return 1
-  [ "$dst_n" -ge "$src_n" ] || {
-    printf '    copy is SHORT: %s entries landed of %s in the stream\n' "$dst_n" "$src_n" >&2
-    return 1
-  }
-  [ -f "$dest/core/fixtures/lib/preamble.sh" ] || return 1
-  [ -f "$dest/core/fixtures/$SUBJECT/run.sh" ] || return 1
-}
+# The driven fixtures run from $ROOT itself, where the pool runs them. GIT_DIR points every armed cell at the
+# mktemp victim, so a broken seam can wreck only the victim, and arm URC proves the unarmed twin ran to rc 0.
+TREE="$ROOT"
+SUBJECT_C="setup-config-drift"
 
 echo "fixture-git-env-seam"
 
@@ -297,24 +189,6 @@ git config -f "$WORK/sanity/repo/.git/config" user.name WRECKED 2>/dev/null
 [ "$(victim_bare "$WORK/sanity")" = "true" ] || broken "core.bare was set to true and the reader still does not see it; this channel cannot observe the config-only wreck"
 [ "$(victim_username "$WORK/sanity")" = "WRECKED" ] || broken "user.name was rewritten and the reader still returns the sentinel; this channel cannot observe the config-only wreck"
 ok "H1b harness: core.bare reads not-true and user.name reads the sentinel on a fresh victim, and BOTH move when written — the config-only wreck is observable"
-
-# H2. THE DRIVEN FIXTURE MUST ACTUALLY RUN IN A COPY TREE, and this arm exists
-# because its absence shipped a fully vacuous battery. A partial copy made
-# $SUBJECT exit at its own startup check before reaching `git init`; it then
-# clobbered nothing in EVERY world, so all four mutants "survived" against a
-# pristine victim and arm A passed for the same reason. Two inert runs compare
-# equal. Establish that the mutable copy can reach its git calls at all, in the
-# UNMUTATED tree, before reading any mutant's verdict.
-# ONE COPY OF THE TREE SERVES EVERY ARM: the canary and arm A read the same bytes, driven unarmed and armed.
-TREE="$WORK/tree"
-mktree "$TREE" || broken "could not copy the tree"
-SUBJECT_C="setup-config-drift"
-canary_out="$( cd "$TREE" && bash "core/fixtures/$SUBJECT/run.sh" 2>&1 )"
-case "$canary_out" in
-  *"FIXTURE ERROR"*|*"FIXTURE BROKEN"*)
-    broken "the driven fixture $SUBJECT cannot run in a copied tree: $(printf '%s' "$canary_out" | head -1). Every mutant below would survive against an untouched victim and read as a working seam." ;;
-esac
-ok "H2 driven fixture $SUBJECT runs in the copy tree — verdicts are about the seam, not about a broken copy"
 
 # --- A. THE SHIPPING TREE, ON THREE CELLS ------------------------------------
 # A cell is one driven fixture in the shared tree against a fresh victim:
@@ -368,8 +242,8 @@ else
 fi
 
 # --- W. THE VALIDATOR'S POPULATION GRAMMAR, driven against a probe tree ------
-# Arm V below asserts the validator is GREEN on the shipping tree, which a
-# validator whose population excluded every offender also is. This arm asserts it
+# The validator's verdict on the shipping tree is the pre-push step `fixture git-env scrub`,
+# which a validator whose population excluded every offender also passes. This arm asserts it
 # can FIRE on the form that motivated the widening, and that the OLD grammar
 # cannot — so a revert to the literal `git init` population fails here rather than
 # passing quietly.
@@ -503,8 +377,9 @@ V_SRC="$ROOT/scripts/validate-fixture-git-env.sh"
 if [ ! -f "$V_SRC" ]; then
   fail "W  scripts/validate-fixture-git-env.sh is absent — the grammar has no subject"
 else
+  echo "HERMETIC-CONSUMED scripts/validate-fixture-git-env.sh"
   build_probe "$Wp" || broken "could not build the validator probe tree"
-  w_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$Wp/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1)"
+  w_out="$( AI_DLC_PROJECT_ROOT="$Wp" bash "$Wp/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1)"
   w_rc=$?
 
   # W0. THE OUTPUT MUST NAME THE PROBE TREE. A validator that resolved its own root
@@ -599,29 +474,12 @@ else
   printf '#!/usr/bin/env bash\ngit -C "$1" init -q\n' > "$ud/seed.sh"
   chmod +x "$ud/run.sh" "$ud/seed.sh"
   ( cd "$Wp" && git add -A -f ) >/dev/null 2>&1 || broken "W9 could not track the seeded case; git grep would not see it and the arm would pass vacuously"
-  u_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$Wp/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1)"
+  u_out="$( AI_DLC_PROJECT_ROOT="$Wp" bash "$Wp/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1)"
   case "$u_out" in
     *"unresolved-site/run.sh(init-site-unresolved)"*) ok "W9 a member whose init site resolves by NEITHER route is REPORTED as (init-site-unresolved) — an unreadable file is not acquitted, and a comment naming seed.sh is not a call" ;;
     *"unresolved-site"*) fail "W9 the unresolvable member is reported, but not as (init-site-unresolved) — some other branch fired and the refusal branch is untested." ;;
     *) fail "W9 a member whose init site cannot be resolved was ACQUITTED. The position arms then pass silently over exactly the file nobody can reason about." ;;
   esac
-fi
-
-# --- V. THE VALIDATOR, driven rather than read ------------------------------
-# The seam is half the remedy; the binding that a new fixture must source it is
-# the other half, and a fixture nobody drives is a green light nobody earned.
-V="$ROOT/scripts/validate-fixture-git-env.sh"
-if [ ! -f "$V" ]; then
-  fail "V  scripts/validate-fixture-git-env.sh is absent — the binding half of this remedy is gone"
-else
-  echo "HERMETIC-CONSUMED scripts/validate-fixture-git-env.sh"
-  AI_DLC_PROJECT_ROOT="$ROOT" bash "$V" --max-unscrubbed 0 >/dev/null 2>&1
-  v_rc=$?
-  if [ "$v_rc" -eq 0 ]; then
-    ok "V  validator passes on the shipping tree at ceiling 0"
-  else
-    fail "V  validator exits $v_rc on the shipping tree at ceiling 0 — a fixture in the population does not source the seam"
-  fi
 fi
 
 echo

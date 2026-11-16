@@ -1,0 +1,175 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z (OUT = extract.py, spawns.py, analyze.py, roll.py, roll.py --seats at that window). Command: python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/co_yield_s322.py $OUT $GRAPH_CLONE, where GRAPH_CLONE is a file:// clone of graph holding main plus graph's refs/remotes/origin/* (the s322 sprint-review fix commits are reachable only from origin/ai-dlc/carry-over/epic5-closeout)
+== CONTROLS (cost): impossible description token reads 0 spawns; a real token ('coe p1 shard') reads 7
+== CONTROL elicitation: s322 carry-over-evaluation spawns naming elicitation 0 (s322 ran none); s319 reads 19 (known present)
+
+== COST s322 carry-over-evaluation (8 stories)
+  analyst draft                                    1 spawns  $   5.70     27.1 agent-min
+  party dispatcher                                 1 spawns  $   2.35     21.7 agent-min
+  party cross (4 seats)                            4 spawns  $   4.42     18.3 agent-min
+  party part (4 seats x 7)                        28 spawns  $  28.08    122.4 agent-min
+  party repair, section shards + reruns           12 spawns  $  14.63     76.9 agent-min
+  party repair, serial lane + fan-in               2 spawns  $   6.78     36.8 agent-min
+  adv p1 part (7 shards)                           7 spawns  $  37.01    293.7 agent-min
+  adv p1 cross                                     1 spawns  $   5.36     44.2 agent-min
+  S7-cap edit (between p1 and its repair)          1 spawns  $   0.27      0.5 agent-min
+  adv p1 repair, section shards + rerun            8 spawns  $   7.13     28.1 agent-min
+  adv p1 repair, serial lane + fan-in              2 spawns  $   2.11     10.2 agent-min
+  adv p2 part (6 shards)                           6 spawns  $  21.00    140.1 agent-min
+  adv p2 cross (3 runs)                            3 spawns  $  22.20    147.1 agent-min
+  adv p2 repair, section shards                    6 spawns  $   3.25     10.8 agent-min
+  adv p2 repair, serial lane                       1 spawns  $   2.24    341.6 agent-min
+  adv p3 part (6 shards)                           6 spawns  $  10.26     62.8 agent-min
+  adv p3 cross                                     1 spawns  $   2.84     15.4 agent-min
+  adv p3 deferral record                           1 spawns  $   0.29      0.3 agent-min
+  route: s321 minors triage rows                   1 spawns  $   8.21     59.2 agent-min
+  PARTITION SUM                                   92 spawns  $ 184.13   1457.2 agent-min  ($23.02 per story)
+  label total (bl812_rederive.agg)                92 spawns  $ 184.13   1457.2 agent-min
+  control partition sums to label totals, no UNMATCHED: MATCH
+
+== COST s319 carry-over-evaluation (20 stories)
+  analyst draft                                    1 spawns  $   2.05     11.2 agent-min
+  party part                                      24 spawns  $  18.81     81.4 agent-min
+  party cross                                     24 spawns  $  16.47     70.1 agent-min
+  party repair (serial party remediator)           1 spawns  $   7.08     41.5 agent-min
+  elicitation part                                 6 spawns  $   9.46     44.9 agent-min
+  elicitation cross                                6 spawns  $   9.54     43.7 agent-min
+  elicitation repair (sections + serial)           7 spawns  $   5.26     46.3 agent-min
+  adv p1 part                                      6 spawns  $   4.71     11.6 agent-min
+  adv p1 cross                                     6 spawns  $   7.61     28.1 agent-min
+  adv p1 repair (sections + re-run)                7 spawns  $   5.68     31.7 agent-min
+  PARTITION SUM                                   88 spawns  $  86.66    410.5 agent-min  ($4.33 per story)
+  label total (bl812_rederive.agg)                88 spawns  $  86.66    410.5 agent-min
+  control partition sums to label totals, no UNMATCHED: MATCH
+
+== FINDINGS s319 at 1da426ef9: C/M by round x width (heading parse | independent grep -c | provenance findings_critical+major)
+  party  files  48  C/M heading parse 115 (part  62, cross  53; CRITICAL 0)  grep -c 115  provenance n/a (party/elic files carry none)
+         control two counts agree: MATCH
+  elic   files  12  C/M heading parse  41 (part  21, cross  20; CRITICAL 1)  grep -c  41  provenance n/a (party/elic files carry none)
+         control two counts agree: MATCH
+  p1     files  12  C/M heading parse   3 (part   0, cross   3; CRITICAL 0)  grep -c   3  provenance 3
+         control two counts agree: MATCH
+  control impossible finding token F-9999 found in 0 findings (must be 0); real token F-1 found in 57
+
+== FINDINGS s322 at e0ebaf019: C/M by round x width (heading parse | independent grep -c | provenance findings_critical+major)
+  party  files  32  C/M heading parse  63 (part  52, cross  11; CRITICAL 0)  grep -c  63  provenance n/a (party/elic files carry none)
+         control two counts agree: MATCH
+  p1     files   8  C/M heading parse  34 (part  29, cross   5; CRITICAL 0)  grep -c  34  provenance 34
+         control two counts agree: MATCH
+  p2     files   7  C/M heading parse   9 (part   7, cross   2; CRITICAL 0)  grep -c   9  provenance 9
+         control two counts agree: MATCH
+  p3     files   7  C/M heading parse   2 (part   1, cross   1; CRITICAL 0)  grep -c   2  provenance 2
+         control two counts agree: MATCH
+  control impossible finding token F-9999 found in 0 findings (must be 0); real token F-1 found in 43
+
+== s322 C/M per raiser (party seat x section 1..7 + cross; adversarial shard)
+  party architect-1=1 architect-2=1 architect-3=2 architect-4=2 architect-5=1 architect-6=4 architect-7=2 architect-cross=2 dev-2=3 dev-3=3 dev-4=3 dev-5=1 dev-6=3 dev-7=1 dev-cross=4 pm-1=1 pm-2=2 pm-3=2 pm-4=4 pm-5=1 pm-6=3 pm-7=1 pm-cross=3 tea-2=2 tea-3=1 tea-4=2 tea-5=2 tea-6=2 tea-7=2 tea-cross=2
+        by seat: {'architect': 15, 'dev': 18, 'pm': 17, 'tea': 13}
+        section 1: 2 C/M over 4 seats
+        section 2: 8 C/M over 4 seats
+        section 3: 8 C/M over 4 seats
+        section 4: 11 C/M over 4 seats
+        section 5: 5 C/M over 4 seats
+        section 6: 12 C/M over 4 seats
+        section 7: 6 C/M over 4 seats
+  p1    coe-p1/1=2 coe-p1/2=2 coe-p1/3=6 coe-p1/4=5 coe-p1/5=5 coe-p1/6=5 coe-p1/7=4 coe-p1/cross=5
+  p2    coe-p2/1=1 coe-p2/2=2 coe-p2/3=3 coe-p2/4=1 coe-p2/cross=2
+  p3    coe-p3/3=1 coe-p3/cross=1
+
+== REPAIR RECORDS (s322): blocks by record, severity, disposition, unresolvable source tokens
+  carry-over-evaluation-party-repair-p1.md             blocks 107  sev {'MAJOR': 53, 'MINOR': 53, 'NOTE': 1}  disp {'repaired': 79, 'escalated': 27, 'skipped': 1}  unresolved source tokens 0
+  carry-over-evaluation-party-serial-repair-p1.md      blocks  71  sev {'MAJOR': 39, 'MINOR': 14, '?': 18}  disp {'repaired': 55, 'escalated': 16}  unresolved source tokens 0
+  coe-repair-p1.md                                     blocks  60  sev {'MAJOR': 30, 'MINOR': 16, '?': 14}  disp {'repaired': 50, 'escalated': 8, '?': 2}  unresolved source tokens 0
+  coe-serial-repair-p1.md                              blocks   9  sev {'MAJOR': 7, 'MINOR': 2}  disp {'repaired': 8, 'skipped': 1}  unresolved source tokens 0
+  coe-repair-p2.md                                     blocks  20  sev {'MAJOR': 7, 'MINOR': 13}  disp {'repaired': 16, 'escalated': 4}  unresolved source tokens 0
+  coe-serial-repair-p2.md                              blocks  17  sev {'MAJOR': 4, 'MINOR': 13}  disp {'repaired': 17}  unresolved source tokens 0
+  control impossible source key cited by 0 blocks (must be 0); real key ('carry-over-evaluation-pm-1','F-1') cited by 1
+
+== s322 C/M findings joined to repair blocks (REPAIRED = a citing block has disposition repaired)
+  party C/M  63: REPAIRED  63  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  p1    C/M  34: REPAIRED  33  ESCALATED-ONLY  0  NO-BLOCK  1   control sum MATCH
+  p2    C/M   9: REPAIRED   9  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  p3    C/M   2: REPAIRED   0  ESCALATED-ONLY  0  NO-BLOCK  2   control sum MATCH
+  NO-BLOCK detail (key F-id): coe-p1/cross F-1, coe-p3/3 F-1, coe-p3/cross F-1
+  p3 has no repair record by design: coe-deferral-p3.md defers its 2 MAJORs to the requirements step (not repaired here)
+
+== s322 which record repaired each C/M finding, by round x width (a finding cited by blocks of several records is listed under each)
+  party part  C/M  52 -> {'carry-over-evaluation-party-repair-p1.md': 52, 'carry-over-evaluation-party-serial-repair-p1.md': 12}
+  party cross C/M  11 -> {'carry-over-evaluation-party-serial-repair-p1.md': 11}
+  p1    part  C/M  29 -> {'coe-repair-p1.md': 29, 'coe-serial-repair-p1.md': 7}
+  p1    cross C/M   5 -> {'(no repaired block)': 1, 'coe-serial-repair-p2.md': 4}
+  p2    part  C/M   7 -> {'coe-repair-p2.md': 6, 'coe-serial-repair-p2.md': 1}
+  p2    cross C/M   2 -> {'coe-serial-repair-p2.md': 2}
+  p3    part  C/M   1 -> {'(no repaired block)': 1}
+  p3    cross C/M   1 -> {'(no repaired block)': 1}
+
+== s322 per-width marginal catch over DEFECTS (union-find: C/M findings of one round that share a repair block are one defect; a ceiling on defect count)
+  round party C/M findings  63 -> defects  37 (control findings in components 63 MATCH=True); only cross 4, only part files 33, both 0
+    raised by exactly one review file: 27 of 37; by 2+ files: 10
+    distinct seats per defect: {1: 27, 2: 3, 3: 2, 4: 5}
+    seat pm        is the ONLY seat on  7 defects (those defects are lost if the seat is dropped)
+    seat architect is the ONLY seat on  7 defects (those defects are lost if the seat is dropped)
+    seat dev       is the ONLY seat on  7 defects (those defects are lost if the seat is dropped)
+    seat tea       is the ONLY seat on  6 defects (those defects are lost if the seat is dropped)
+    section 1:  2 defects touch it,  2 are raised by that section's files alone
+    section 2:  6 defects touch it,  6 are raised by that section's files alone
+    section 3:  7 defects touch it,  7 are raised by that section's files alone
+    section 4: 11 defects touch it, 11 are raised by that section's files alone
+    section 5:  2 defects touch it,  2 are raised by that section's files alone
+    section 6:  2 defects touch it,  2 are raised by that section's files alone
+    section 7:  3 defects touch it,  3 are raised by that section's files alone
+    cross-file defects, per seat file: {'architect-cross': 2, 'dev-cross': 4, 'pm-cross': 3, 'tea-cross': 2}
+  round p1    C/M findings  34 -> defects  34 (control findings in components 34 MATCH=True); only cross 5, only part files 29, both 0
+    raised by exactly one review file: 34 of 34; by 2+ files: 0
+    defects with ONE shard as sole raiser, per shard: {'1': 2, '2': 2, '3': 6, '4': 5, '5': 5, '6': 5, '7': 4, 'cross': 5}; raised by 2+ shards: 0
+  round p2    C/M findings   9 -> defects   9 (control findings in components 9 MATCH=True); only cross 2, only part files 7, both 0
+    raised by exactly one review file: 9 of 9; by 2+ files: 0
+    defects with ONE shard as sole raiser, per shard: {'1': 1, '2': 2, '3': 3, '4': 1, 'cross': 2}; raised by 2+ shards: 0
+  round p3    C/M findings   2 -> defects   2 (control findings in components 2 MATCH=True); only cross 1, only part files 1, both 0
+    raised by exactly one review file: 2 of 2; by 2+ files: 0
+    defects with ONE shard as sole raiser, per shard: {'3': 1, 'cross': 1}; raised by 2+ shards: 0
+
+== TEXTS: draft 59640 B sha d419310f...; p2 .before 168029 B sha c4be61ba... (record says c4be61ba: MATCH); ship 176196 B sha 97b1a95e... (record says 97b1a95e: MATCH)
+   party read sha 86906f13, the .draft file is sha d419310f: the draft is a stand-in for the party's text, not that text
+
+== s322 REFOUND and REPAIR-INTRODUCED token proxies, per round (C/M)
+  party C/M  63: shares tokens with an EARLIER round's finding   0, a LATER round's  34, another file of the same round  49
+  p1    C/M  34: shares tokens with an EARLIER round's finding  18, a LATER round's   8, another file of the same round  11
+        token proxy: REPAIR-INTRODUCED  20 (a token absent from the draft, present in the previous repair record)  all-tokens-in-draft   1  neither  13
+  p2    C/M   9: shares tokens with an EARLIER round's finding   5, a LATER round's   1, another file of the same round   2
+        token proxy: REPAIR-INTRODUCED   6 (a token absent from the draft, present in the previous repair record)  all-tokens-in-draft   0  neither   3
+  p3    C/M   2: shares tokens with an EARLIER round's finding   1, a LATER round's   0, another file of the same round   0
+        token proxy: REPAIR-INTRODUCED   2 (a token absent from the draft, present in the previous repair record)  all-tokens-in-draft   0  neither   0
+  control: zero-token findings 3 of 108 (a zero-token finding can never be REFOUND by this rule)
+
+== s322 SURVIVAL FLOOR per repair record (C/M blocks, disposition repaired): claim spans at the draft / at the p2 .before / at ship
+   before-text for p1 and party repairs is NOT in git (squash merge); draft arm overstates NEW for later repairs, ship arm is the survival floor
+  carry-over-evaluation-party-repair-p1.md             C/M repaired blocks 37: SHIPPED 24 GONE  3 NO-SPAN 10  absent-at-draft AND at-ship 10
+  carry-over-evaluation-party-serial-repair-p1.md      C/M repaired blocks 31: SHIPPED  6 GONE  4 NO-SPAN 21  absent-at-draft AND at-ship 4
+  coe-repair-p1.md                                     C/M repaired blocks 24: SHIPPED 16 GONE  4 NO-SPAN  4  absent-at-draft AND at-ship 15
+  coe-serial-repair-p1.md                              C/M repaired blocks  7: SHIPPED  1 GONE  4 NO-SPAN  2  absent-at-draft AND at-ship 1
+  coe-repair-p2.md                                     C/M repaired blocks  6: SHIPPED  5 GONE  0 NO-SPAN  1  absent-at-draft AND at-ship 5; absent-at-p2-before AND at-ship 4
+  coe-serial-repair-p2.md                              C/M repaired blocks  4: SHIPPED  2 GONE  0 NO-SPAN  2  absent-at-draft AND at-ship 2; absent-at-p2-before AND at-ship 0
+  control impossible span at ship: False (must be False); real span 'Section 1a' at ship: True
+
+== the p2 remediator Projection (c) names (coe serial lane p2)
+  spawn rows: 1; control impossible description reads 0
+  agent-a42bd92a401e0e693 start 2026-11-09T06:24:28.146Z end 2026-11-09T12:06:01.276Z minutes 341.6 calls 38 usd $2.24
+  transcript records 213, tool calls {'Read': 11, 'Bash': 20, 'Edit': 25, 'mcp__plugin_context-mode_context-mode__ctx_execute': 1, 'Write': 1}, Edits on carry-over-evaluation.md 15
+  largest gap 333.4 min before record 196 (12:05:48.392000); next gap 2.5 min; active time 8.2 min = lifetime 341.6 - largest gap 333.4
+  record 196 (the message that ended the gap): The coordinator sent a message while you were working: The round-one closure check reports ESCALATED-COUNT: 4 — your four escalated-item entries are repaired but carry no `closes:` line, so the join's closure check cannot see them as closed. The join's first-r
+  last record of the work before the gap (06:32:22.664000): [{'type': 'text', 'text': 'The serial lane is done and the part record is closed with `--mark`. It holds 17 entries; `--check-part` exits clean and all 14 derivations replay. The document went from sha `5c9ffb28…d388c` to `97b1a95e…b59b`, and every edit stayed
+  produced: coe-serial-repair-p2.md, 17 entries, sev {'MAJOR': 4, 'MINOR': 13}, disp {'repaired': 17}, sha before 5c9ffb28 after 97b1a95e (the shipped sha)
+  closes lines in the record: 4; `- advisor:` called; `- derivations:` replayed 14
+  C/M findings (any round) cited by its blocks: ['coe-p1/cross#F-2', 'coe-p1/cross#F-3', 'coe-p1/cross#F-4', 'coe-p1/cross#F-5', 'coe-p2/2#F-1', 'coe-p2/cross#F-1', 'coe-p2/cross#F-2']
+  its block headings: coe-p2/2.md#F-1 — MAJOR; coe-p2/2.md#F-3 — MINOR; coe-p2/2.md#F-4 — MINOR; coe-p2/cross.md#F-5 (M-2 sibling cite) — MINOR; coe-p2/5.md#F-1 — MINOR; coe-p2/cross.md#F-2 — MAJOR; coe-p2/cross.md#F-3 — MINOR; coe-p2/cross.md#F-4 — MINOR; coe-p2/cross.md#F-6 — MINOR; coe-p2/cross.md#F-7 — MINOR; coe-p2/cross.md#F-7 (dict span) — MINOR; coe-p2/cross.md#F-8 (A.9(4)) — MINOR; coe-p2/cross.md#F-9 — MINOR; coe-p2/cross.md#F-9 (arms cite) — MINOR; coe-p2/cross.md#F-10 — MINOR; coe-p1/cross.md#F-2 — MAJOR; coe-p1/cross.md#F-4 — MAJOR
+
+== GATE LABEL gate-validation[carry-over-evaluation]
+  s322: 20 spawns $7.06 22.0 agent-min; first start 2026-11-09T13:46:02.669Z last start 2026-11-09T13:52:43.481Z
+      Gate adjudicator shard N/N   10 spawns $3.35
+      Re-adjudicate shard N/N      10 spawns $3.70
+  s319: 2 spawns $1.16 7.2 agent-min; first start 2026-10-15T21:49:46.737Z last start 2026-10-15T21:49:49.950Z
+      Gate adjudicator shard N/N    2 spawns $1.16
+  s322 final_text FAIL reads by wave (final_text is each adjudicator's closing message): {('wave 1', 'no FAIL'): 9, ('re-adjudication', 'no FAIL'): 10, ('wave 1', 'FAIL'): 1}
+  planning verdict file planning-20261109T134906Z: {'PASS': 10}, series planning-s322-20261109T134029Z
+  wave 1 FAIL spawns: ['Gate adjudicator shard 3/10']
+  the FAIL's entry S322-L2-SCOPE-RECONFIRMATION-BASE-ENABLE-PREMISE-FALSIFIED in docs/escalations/pending.md at e0ebaf019: found True, `Status:** RESOLVED` within it True (control impossible entry id found: False)

@@ -727,6 +727,99 @@ No verdict changes: elicitation KEEP, adversarial p1 KEEP, party KEEP, architect
 
 Still owed under item 1: step-value readings for the steps that rose on s322 (named in the b257 paragraph above; the data is available and was not read here). Items 2 and 3 stay as ruled. The entry stays PARTIAL, `verify: manual` stays, and no `Outcome measured:` line is written.
 
+**Progress (batch 257, W9-18; the entry stays open, `verify: manual` unchanged).** Item 1's row now carries the lead seat beside the subagent seat, per step, from a program. `bl812_rederive.py row` printed machine hours, tokens, subagent dollars and spawns per step and no lead figure (its per-step line); BL-819 item 3 records that gap as "BL-812's lead figures: not met". Command: `python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/outcome_row.py <OUT> 322 321 319` over one extraction at `EXTRACT_WIN_END=2026-11-12T14:41:00Z` (s322 complete; s323 is still running on graph, so no later sprint is complete); output `out/outcome_row.s322-complete.txt`. Per step, per story: lead active h, calls, tokens and dollars, subagent active h and dollars (roll.py's own `seat_sum`, pricing and FALLBACK, imported), and spawns, subagent dollars and machine hours (`bl812_rederive`'s helpers, imported). Controls, same run, every one MATCH for s322, s321 and s319:
+- C1 lead h, lead $, lead tokens and subagent $ summed over the steps equal the whole-bucket figures;
+- C2 every step's lead h and lead $ equal `seats.txt`'s rendering (20, 16 and 19 steps);
+- C3 per-step machine hours sum to `roll.txt` TOTAL; C4 per-step spawns and spawn dollars sum to the sprint totals;
+- an impossible step reads 0 in `steps.csv` and `spawns.jsonl`; the s319 whole-bucket lead figures, 2.74 h and $23.6 per story, equal BL-819's recorded table.
+- Hand-run once: on the same OUT, `bl812_rederive.py row` has 0 of 20 s322 per-step lines naming a lead figure, `outcome_row.py` 20 of 20. A mutant pricing every step on the whole bucket (`seat_sum(..., None, ...)`) reads C1 DIFFERS on all four sums and C2 0 MATCH, 20 DIFFERS.
+
+Whole pipeline bucket, per story, s322 against s321 and s319: lead active 4.85 h against 2.28 and 2.74; lead calls 1163.0 against 285.1 and 318.7; lead $44.9 token-equivalent (API $0.0, FALLBACK to s321's hosted mix) against $20.4 and $23.6; subagent $123.7 against $75.1 and $88.1. At this window the s322 whole-sprint row reads 8.35 machine h, $123.74 subagent and 82.38 spawns per story, against the b257 row's 8.12, $123.27 and 81.62 at 12:32:58Z; the later window adds the s322 records from 12:32:58Z to 14:41:00Z. The per-step lead cells for s322 are in the output; the implementation pair reads lead 0.792 + 0.517 h and $6.6 + $4.2 per story against s319's 0.907 + 0.408 h and $7.2 + $3.4, so lead hours on the pair are flat (1.31 against 1.32 h) and lead dollars rose $0.2 at a priced-not-paid local lead.
+
+Still owed under item 1: the step-value readings for the steps that rose on s322 (next in this unit). Items 2 and 3 stay as ruled. No `Outcome measured:` line is written.
+
+**Progress (batch 257, W9-18, the s322 step-value readings; the entry stays open, `verify: manual` unchanged).** Item 1's step-value clause on s322, for every label that rose.
+- Population: `bl812_rederive.py rose <OUT> 322 319` at the same window names 13 labels that rose on subagent dollars: carry-over-evaluation, requirements, sprint-review, deploy-validate, retro, handoff, bug-investigation, and `gate-validation[x]` for implementation, architecture, carry-over-evaluation, requirements, retro and bug-investigation. On token-equivalent dollars it adds architecture and stories-test-strategy.
+- Graph records: a `file://` scratch clone holding graph's main and its `refs/remotes/origin/*`. The s322 sprint-review fix commits are reachable only from `origin/ai-dlc/carry-over/epic5-closeout`. Ship ref e0ebaf019 (the s322 sprint merge); close f7e60625b.
+- Four new scripts under `docs/analysis/pipeline-efficiency-s317-s322/scripts/`, each `python3 -I <script> <OUT> <clone>`, with output in `out/<script>.txt`: `req_yield_s322.py`, `co_yield_s322.py`, `tail_yield_s322.py` and `gate_yield_s322.py`.
+  - Every script partitions its labels' `spawns.jsonl` rows by description, and every partition sums to the label totals: MATCH on spawns, dollars and agent-minutes, for s322 and s319.
+  - Every finding count is taken two ways and agrees. Every reported zero sits beside a present token in the same run, and every impossible token reads 0.
+  - Each script's output is byte-identical across repeated runs. Two scripts printed a dict in hash order, and they now sort it.
+  - The partition control can fail. `req_yield_s322.py` and `gate_yield_s322.py` first ended in catch-all buckets, so their sums matched by construction: a hand mutant dropping a part still read 106 spawns and $239.96 against the label. Both now also require the catch-all to hold 0 rows, and on the real run it does. Hand-run once, each reader's mutant reads DIFFERS:
+    - req: drop the party-repair-shard rule, 9 catch-all rows;
+    - gate: drop the qa class, 28 and 4 rows;
+    - co: drop the party dispatcher, UNMATCHED;
+    - tail: drop the per-story seat rule, 40 unmatched.
+  - The readers carry no `--self-test`; the mutants above are their one-time proof.
+- Readings follow "A step with no measured value goes". A narrowing candidate is recorded only, because one sprint never supports removing a pass.
+
+- **The per-story rises are mostly the divisor.** s322 has 8 stories against s319's 20. In absolute dollars:
+  - requirements $239.96 against $234.07;
+  - sprint-review plus its gate $82.08 against $98.99;
+  - `gate-validation[implementation]` $71.20 against $92.11, and implementation plus its gate $17.08 per story against $30.68;
+  - carry-over-evaluation $184.13 against $86.66, the one large absolute rise. Its causes are read in Projection (c) above.
+- **requirements** (`req_yield_s322.py`, 40 controls, 0 DIFFERS).
+  - Party: 95 C/M findings from 20 seats, 0 CRITICAL; 78 of them name a repaired block. Reading: KEEP.
+  - p1: 41 C/M, including 2 CRITICAL from the cross shard, at $1.58 per C/M; 40 of 41 link to a repaired block. Reading: KEEP. Failure case: cross#F-1, the CAP-2 organic-predicate substitution, whose repair is at ship on the exact files.
+  - p2: 11 C/M, 9 repair blocks at ship on exact files. Reading: KEEP. Failure case: stale text the p1 repair left.
+  - p3: 8 C/M. Reading: KEEP. Failure case: every blocking finding was a false statement the p2 repair wrote.
+  - p4: 3 MAJOR, all deferred to architecture, at $4.98 per C/M. Reading: narrowing candidate.
+  - Per-shard yield of 1 to 9 C/M in p1: narrowing candidate.
+  - `gate-validation[requirements]`: Check 29 FAIL in round 1, repaired, all PASS in round 2. Reading: KEEP. The PRD validate run ($1.28) has no measured value.
+  - Not measurable: a survival floor for party and for p1's SPEC and architecture-impact, because the pre-repair states were never committed.
+- **carry-over-evaluation** (`co_yield_s322.py`). It answers Projection (c)'s "per-width catch yield was not measured".
+  - KEEP:
+    - party part, 52 C/M; each of its four seats is the only seat on 6 or 7 defects, so no seat is redundant;
+    - party cross, 11 C/M, on defects no section part raised;
+    - p1, 29 C/M at $1.28 each ($37.01), and p1 cross 5 ($5.36);
+    - p2 part, 7 C/M, on defects the p1 repair introduced.
+  - Narrowing candidate: p2 cross, 3 runs, $22.20 for 2 MAJOR.
+  - No measured value this sprint: p3, 7 spawns and $13.10 (part $10.26, cross $2.84) plus a $0.29 deferral record, whose 2 MAJORs were deferred to requirements and ship unfixed.
+  - Not review work: the routing row ($8.21).
+  - Projection (c)'s 341.6-minute p2 remediator worked about 8.2 minutes. One 333.4-minute gap followed, matching an open HARD_BLOCK whose operator authorization is stamped 12:05:26Z. Its 17 repair entries produced the shipped document text. Reading: KEEP, and the 341.6 minutes are not agent work.
+  - `gate-validation[carry-over-evaluation]`: Check 2 FAIL on shard 3 of 10 (a HARD_BLOCK with no Status line), RESOLVED at ship. Reading: KEEP. The 10 re-adjudication spawns ($3.70) that re-ran PASS shards for a new nonce are a narrowing candidate.
+- **sprint-review, deploy-validate, retro, handoff** (`tail_yield_s322.py`).
+  - Seats: 45 seats ($60.75), 45 C/M, 0 CRITICAL, merged to 26 major entries, of which 22 were fixed.
+  - Fix survival: the 30 fix commits keep 98.7% of their added lines at ship. Must-differ control: the post-merge commit 6ee289617 keeps 15.7%.
+  - Reading: seats KEEP. Failure cases: T-9 (the admission verifier wired into no lane, 0 earlier hits) and T-25 (the watchdog exiting 0 on a failing suite).
+  - Triage KEEP; fixers KEEP.
+  - Gate: KEEP. Its Check 3 caught a `locked_requirements` frontmatter change that the step's own fix commit 28388fb70 introduced, which no seat raised.
+  - Narrowing candidates: the adversary one-shot, 0 C/M, $2.84; and pm and dev seats, which have 0 sole-source fixed majors.
+  - The rise has two causes. Opus architect and tea seats are $44.17 of the $60.75 of seat dollars (73%; 54% of the both-label $82.08). A mostly fixed round of about $70 is divided by 8 stories. The cross collapse, 30 seats to 5, is the only part that fell.
+  - deploy-validate: 3 ops seats, $5.16, pre-roll live reads of the execution lock and 3/3 smoke passes, 0 C/M. Reading: KEEP on consequence (a roll over an active execution lock); no catch this sprint.
+  - retro: 41 findings (4 CRITICAL, 25 IMPORTANT) and 8 improvements; I-2 and I-5 landed ids, and I-3 and I-4 emitted new text at close. Reading: KEEP.
+  - `gate-validation[retro]`: 9 PASS, 0 FAIL. Reading: no measured value this sprint, narrowing candidate.
+  - handoff: one $0.26 dev spawn whose check-31 fixture fix is at ship. Reading: KEEP.
+- **`gate-validation[implementation]`, `[architecture]`, `[bug-investigation]` and bug-investigation** (`gate_yield_s322.py`).
+  - `gate-validation[implementation]`: 14 verdict files, 8 FAIL checks of 210.
+    - Check 19 accounts for 6 of the 8 FAILs, all documentary. It is a narrowing candidate: its FAIL chain is 9 spawns, $9.01.
+    - Check 11a on story 1.3: pass-1 code review APPROVED and QA PASS. The gate's live run found all 4 tests failing on a `networkidle` timeout; the rework passed 4 of 4. Reading: adjudicator KEEP, on that catch.
+    - Code review: C1/M12. Reading: KEEP.
+    - Gate QA: 4 seats, $10.45, 0 C/M on stories 1, 2, 3 and 5. Reading: no measured value.
+    - Dev build spawns charged to the gate by label window: $12.62, with no gate yield.
+  - `gate-validation[architecture]`: $36.11 of its $40.34 is the architecture party round and its repairs, booked to the gate label in s322.
+    - Party round: 95 findings, 1 CRITICAL, 42 MAJOR. Reading: KEEP. Failure case: pm-cross F-1, a spine row contradicting SPEC, PRD and AD-8, repaired at ship.
+    - Adjudicator shards: 10 PASS, 0 FAIL. Reading: no measured value this sprint.
+  - `gate-validation[bug-investigation]`: one adversary on story 1.8 raised 2 CRITICAL and 7 MAJOR. Reading: KEEP. Failure case: AC6 proved the fix with `--collect-only`, which runs no session; at ship the story cites a full `-n 8` run.
+  - bug-investigation (15 spawns, $25.00) found the root cause of the operator's 2026-11-10 xdist crash: per-worker collection footprint times 8 workers, and admission gates that never ran. Reading: KEEP. It shipped as stories 1.6 to 1.8 (the admission guard and watchdog scripts are at ship). One gap: the floating `pytest>=8.0` specifier the analysis names is still in both pyproject files at ship.
+- **architecture and stories-test-strategy rose on token-equivalent dollars only** (`out/outcome_row.s322-complete.txt`).
+  - architecture: lead $1.5 to $2.6 per story, subagent $9.5 to $8.7.
+  - stories-test-strategy: lead $2.9 to $5.6, subagent $22.1 to $20.8.
+  - The whole rise is the lead seat, priced at s321's hosted mix (FALLBACK) while its API dollars are $0.0. Its classes are read in BL-819's W9-18 paragraph. The subagent rounds fell, so the clause does not bind them.
+
+So every label that rose on s322 on subagent dollars carries a reading. architecture and stories-test-strategy do not: their token-equivalent rise is lead `other` and merge, and BL-819 leaves `other` NOT DECIDED on s322, so their reading waits on it. Recorded narrowing candidates:
+- requirements p4 and p1's per-shard spread;
+- carry-over p2 cross and the re-adjudication series;
+- the Check 19 FAIL chain;
+- gate QA on clean stories;
+- the sprint-review adversary one-shot and its pm and dev seats;
+- the zero-FAIL adjudicator shards of `gate-validation[architecture]` and `[retro]`.
+Not measured, with the data unavailable: the survival floors whose pre-repair state was never committed. Not measured, with the data available: finding correctness beyond span presence.
+
+The five parts that read "no measured value" (carry-over p3, gate QA on clean stories, the zero-FAIL adjudicator shards of `gate-validation[architecture]` and `[retro]`, and the requirements PRD validate run) are filed as BL-1141, to be decided on s323's reading.
+
+Item 1's step-value clause now carries a reading for every label that rose on s321, and on s322 for every label but architecture and stories-test-strategy, which wait on BL-819's `other`. Items 2 and 3 stay as ruled (BL-810 PARTIAL; BL-809 item 3). The entry closes only on a measured sprint after the fixes: s323 is running. No `Outcome measured:` line is written.
+
 Step: pipeline
 
 verify: manual
@@ -991,6 +1084,52 @@ Item 2 still owes two things, so it is not closed:
 
 Still owed: value evidence for other, merge, repair and step-reread on s322, where they rose (the data is available and not read here). The unit was briefed on s321, but item 2(b)'s owed list was set on s319 to s322, and on s321 those classes fell, so s322 is the sprint that still decides them. Also owed: the s321 merge and other cells outside implementation named above; the s322 class cells re-derived on the current extractor; item 3's closing graph sprint; the Known gap (batch 254) row-add decision; and L3 on BL-912's outcome line.
 
+**Progress (batch 257, W9-18; the entry stays open, `verify: manual` unchanged).** Item 3's lead figures per step, and item 2(b) on s322. One extraction at `EXTRACT_WIN_END=2026-11-12T14:41:00Z` (s322 complete; s323 is still running on graph). Every output carries its command in its first line.
+
+- **Item 3, lead hours and lead dollars per step.** `outcome_row.py` prints them beside the subagent figures for every step (BL-812's W9-18 paragraph, `out/outcome_row.s322-complete.txt`). The open claim "BL-812's lead figures: not met" is answered for s322, s321 and s319 by a program a closing sprint reruns unchanged. Item 3 still closes only on a measured closing sprint.
+- **s322 class cells on the current extractor.** `lead_class_value.py <OUT> 322 319`, output `out/lead_class_value.s322.txt`. Control: its 771 cells against `classes.txt`, 771 MATCH. The same script at `321 319` reproduces the committed `out/lead_class_value.txt` byte for byte after the header line, so the s321 readings above are unchanged on this run. Under the closing reading's rule (a class did not fall if its per-story hours OR calls did not fall), almost every s322 cell did not fall, because lead calls per story rose 3.65 times (318.7 to 1163.0, all steps).
+- **The step-reread join is short on s322, and why.** That script's step-reread control reads 348 charged messages against `classes.jsonl`'s 398 on s322 (DIFFERS by −50), and 128 against 129 on s319. It drops a Read whose tool_result is an error, while extract.py classes a call at tool_use time.
+  - A scratch probe that keeps those Reads reads 398 of 398 (s322) and 123 of 123 (s321), and 130 against 129 (s319).
+  - s322 has 118 step-file Read messages with an error result, against 4 in s319 and 0 in s321. The commonest error texts are context-mode's one-read size refusal and the AI/DLC post-compact recovery refusal.
+- **What the classes are made of, per call.** New `scripts/lead_class_denied.py` runs extract.py once more with one injected Classer subclass, inserted at an anchor that must occur exactly once. It records every lead call's class as extract.py assigns it, the call's tools, and whether every tool_use was refused by a hook (DENIED), errored (ERRORED), never ran a tool (TEXT), or ran (RAN). Outputs `out/lead_class_denied.s322.txt` (against s319) and `out/lead_class_denied.s321.txt`. Controls, same run:
+  - C1: calls per (sprint, step, class) against `classes.jsonl`, 693 MATCH, 0 DIFFERS, and the scratch `classes.jsonl` is BYTE-EQUAL to the reference, so the injection moved no class.
+  - C2: an impossible tool name reads 0 beside Read 5379.
+  - C3: pipeline-bucket cells against `lead_class_value.cells()`, 675 MATCH, 0 DIFFERS.
+  - `--self-test` passes, seeding every fate. A first version applied `step_base` twice and folded every `gate[x]` into `gate`. C3 could not see it, because it keys on the grouping applied once, and the gate block read 0.0: fixed, and recorded here as the arm's blind spot.
+- **Per story, all steps, pipeline bucket, s319 to s322** (lead seat ratio 3.65):
+  - other: 146.9 to 542.0 calls (TEXT 97.5 to 87.6, RAN 48.3 to 433.6);
+  - merge: 77.0 to 290.4, ratio 3.77, RAN 76.0 to 281.8;
+  - repair: 2.5 to 9.6, ratio 3.77;
+  - step-reread: 6.5 to 49.8, ratio 7.71, of them 4.5 DENIED (all buckets: 36 DENIED of 398);
+  - compaction-recovery: 2.2 to 35.9, ratio 15.94, of them 16.1 DENIED (all buckets: 129 DENIED of 287, against 0 of 45 in s319 and 0 of 55 in s321).
+- **Readings, by "A step with no measured value goes":**
+  - **merge: KEEP.** Failure case: no other element reads a subagent's deliverable into the lead's join. It rose at the lead seat's call rate (3.77 against 3.65; implementation 1.45 against 1.71), so the rise is the local lead's call rate, not more merging. Per step, the cells that rose faster than their own step are listed in the output; they carry the same failure case.
+  - **repair: MERGE into BL-812 item 1's s322 round readings.** A repair call dispatches a fix round, and that round's yield is its value; it is read with the rounds (owed next in this unit).
+  - **step-reread: KEEP, as on s321.** Of 348 charged messages, 202 are AFTER-COMPACTION, 71 NEW-RANGE, 53 OVERLAP, 21 COVERED, 1 CHANGED and 0 REPEAT. The 21 COVERED messages (at most 0.06 h and $0.77 by call share) and the 36 DENIED calls returned nothing new: a narrowing candidate, recorded only. Its cost sits with the two Read refusals named above.
+  - **compaction-recovery: KEEP by ruling** (compaction is normal operation). The 129 denied recovery calls are a narrowing candidate, recorded only.
+  - **other: NOT DECIDED, and the b255 MERGE basis does not hold on s322.** In s319 two thirds of `other` calls ran no tool (TEXT 97.5 of 146.9, RAN 48.3). In s322, 433.6 of 542.0 ran one; by first tool (RAN and TEXT, of 521.2 per story) they are Bash 245.5, text 87.6, context-mode `ctx_execute` 56.9, Read 54.8, Edit 25.4, `ctx_search` 21.1 and Write 10.0. In implementation, TEXT went from 39.7 to 11.0 and RAN from 6.0 to 69.1. So s322 `other` is mostly tool work that extract.py's precedence list does not name, not waiting. Deciding it needs that list to class Bash programs and context-mode calls. extract.py is held by another unit, so the extension is owed.
+- **s321 merge and other cells outside implementation** (`out/lead_class_denied.s321.txt`, lead seat ratio 0.89 against s319):
+  - merge 77.0 to 85.9 (1.12), RAN 76.0 to 84.6. Merge cells rising faster than their step: architecture 6.0 to 8.0, deploy-validate 5.8 to 17.5, sprint-review 1.1 to 5.4, stories-test-strategy 8.8 to 12.8, implementation, requirements, retro, ui-direction, gate[architecture], gate[requirements], gate[sprint-review] and gate[stories-test-strategy]. Reading: KEEP, on merge's failure case.
+  - other fell, 146.9 to 99.5 (0.68), RAN 48.3 to 45.5. Every other cell outside implementation is at or below its step's ratio except gate[requirements] (0.4 to 1.2 calls, ratio 3.00 against 2.80) and route (1.2 to 1.1, 0.90 against 0.81). Reading: the clause does not bind those cells; the two exceptions are recorded, at 1.2 and 1.1 calls per story.
+
+Still owed: `other` on s322 (the classifier extension above); repair with BL-812 item 1's s322 rounds; item 3's closing graph sprint (s323 running); the Known gap (batch 254) row-add decision (next in this unit); and L3 on BL-912's outcome line.
+
+**Progress (batch 257, W9-18, the row-add decision and repair; the entry stays open, `verify: manual` unchanged).**
+
+- **Known gap (batch 254), the row-add decision: TAKEN, KEEP.**
+  - The subject is `ai-dlc-inflight-row.sh`'s `say_unwritten` remedy: "in-flight row NOT written", plus a hand-written `--row-add` or `--row-replace` line, exit 2.
+  - Command: `python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/rowadd_decision.py <graph lead transcripts> <periods>`; output `out/rowadd_decision.txt`, which carries the command in its first line.
+  - The boundary is graph 380dc4968 (2026-11-11T19:27:12Z, the 0.1049.0 to 0.1056.0 reconcile). It is the first graph commit whose dispatch guard carries THE DELIVERABLE-LINE DENY; 068328969 before it does not, and both carry the era sentence.
+  - s322 before the deny: 449 lead Agent calls, 263 dispatches answered NOT-WRITTEN, all with the reason "no Deliverable line". 210 hand `--row-add`/`--row-replace` calls, 157 of them naming a NOT-WRITTEN dispatch.
+  - After it, through s323 to date (to 2026-11-15): 162 Agent calls and 37 deliverable-line denies. 0 NOT-WRITTEN dispatches, and 9 hand row ops, none naming one. Control, same run: the hook's own phrase is found in 527 strings before the boundary, and an impossible phrase reads 0 in every period. `--self-test` passes.
+  - Reading: the remedy's cost went from 263 firings and 157 hand calls to 0, which is the 0.1052.0 deny doing its job, so there is nothing left to save by removing the remedy. Its failure case stands: it is the only report the lead gets that a dispatch has no row, which would leave the waiter and Check 22 reading a row that does not exist. Judged on consequence: KEEP, with no shipped code change. Limit: the post-deny population is 162 Agent calls, and only 18 of them are in s323, so the s323 half of this reading is thin.
+  - The 9 hand row ops after the deny are not the remedy's; they belong to L3, judged on BL-912.
+- **repair, with BL-812 item 1's s322 rounds.** Those rounds are now read (BL-812's W9-18 step-value paragraph): every repair part that a round's yield reaches is KEEP there. requirements party, p1 and p2 repairs; carry-over party, p1 and p2 repairs; sprint-review fixers; and the gate repairs. So the lead's repair class (2.5 to 9.6 calls per story, s319 to s322), which dispatches those parts, is decided with them: KEEP.
+
+- **Correction (the W9-18 merge reading above).** It said merge "rose at the lead seat's call rate ... so the rise is the local lead's call rate, not more merging". `out/lead_class_denied.s322.txt` prints merge ABOVE the lead seat's ratio in two places: all steps (3.77 against 3.65) and `gate[implementation]` (2.91 against 2.55). Only in implementation is it below (1.45 against 1.71). So the call-rate explanation holds for implementation alone. Elsewhere merge grew somewhat faster than the lead as a whole, and that excess is not explained. The KEEP stands on merge's failure case, not on the rate.
+
+Still owed: `other` on s322 (the classifier extension in the W9-18 paragraph above); item 3's closing graph sprint (s323 running); and L3 on BL-912's outcome line.
+
 verify: manual
 
 ## BL-911 — a planning convergence pass after the first re-dispatches the whole shard map, so every extra pass costs a full-width round of wall clock
@@ -1227,6 +1366,8 @@ Outcome measured: claim 1, lane-idle minutes during a pending operator ask, on s
 
 **Still PARTIAL (batch 257 wave 3, lead ai-dlc-35).** BL-972's fix landed in 62a88119c, VERSION 0.1092.0, on 2026-11-12, and graph pulled 0.1101.0 on 2026-11-13 at 06:57Z. Since then graph's lead transcripts carry 8 `AskUserQuestion` calls in 2 sessions (`0e678bad`, `0ef7ba46`); the control, the 2026-10-27 day, reads 18. No pre-ask mechanism is built. At all 10 of s321's FINISHED-INSIDE asks nothing was held at the ask, so such a mechanism has no population, and a deny on the ask would hold the question back, which BL-972 forbids. Claim 2 is blocked on a complete post-rule sprint (s323) and on BL-994. Before s323 is read, `extract.py` needs an s323 edge: its last edge, `("2099-01-01T00:00:00Z",322)`, labels every post-s322 ask as s322.
 
+**PARTIAL (v0.1145.0) — the s323 edge and the late-write probe are built; the close reading is still owed (batch 257, W9-12).** The edge and the probe are BL-972's PARTIAL paragraph of this release, and their figures are there. They are not restated here. s323 is incomplete. graph's commit subjects on every ref since 2026-11-05 carry s322's close (`f7e60625b`, 2026-11-12T12:32:58Z, the control) and no s323 close or retro. The spawn ledger on `ai-dlc/carry-over/s323-per-chain-consolidation` holds 40 s323 rows, all on 2026-11-13. Since s322 only one `/ai-dlc` lead has run (`0ef7ba46`, 2026-11-13T08:16:50Z to 13:17Z). BL-994 landed (v0.1136.0) and measured a non-blocking route, a plain-text question that ends the turn. Whether that re-rules BL-972's contact shape is the operator's question, and the lead put it to the operator separately. Still owed: claim 2 on a complete s323, read by `ask_split.py` with the new edge. It rides on BL-972.
+
 verify: manual
 
 ## BL-842 — Check 22 routes a spawn-ledger binding question to the operator
@@ -1274,6 +1415,23 @@ Decision rule: the step-value ruling, "A step with no measured value goes" (`.cl
 **Progress (batch b245 close; batch b248).** The seed-once cut is done in v0.971.0 (902d6f7e0): the receipt's world is built once per run, at `core/fixtures/story-evidence-scaffold/run.sh:986`, where `b43_run` calls `rcpt_run "$WORK/rw-bl843"`. Before that commit this entry's receipt rebuilt its world on every mutant call, about 3600 of 8800 starts.
 
 **Reading on s321 and s322 complete (batch 256; not an `Outcome measured:` line).** Population: graph main 1449b5c72 (committed 2026-11-12T13:25Z, after the s322 close at 12:32:58Z), read through a read only clone. The review files were read at 6ee289617 and are unchanged at 1449b5c72: `git diff --name-only 6ee289617 1449b5c72 -- docs/reviews/s320 docs/reviews/s321 docs/reviews/s322` lists 0 files, against a control of 134 files changed overall. Between those shas one s322 story file (story-1-4) gained 1 line, which carries none of `capture-heads`, `HARD GATE mapping` or `Instances:`. Outcome era: s320 is before, and s321 and s322 are both after. A pickaxe (`git log -S`) first adds `--render-dar`, qa.md's `## Finding Class` and `## Class Sweep (HARD GATE)`, and implementation.md's `--route` at 72e1cd749, graph's s320 merge commit (0.969.0). The s321 base is 0672c7221 (0.969.0) and the s322 base is 5596361ce (0.1028.0); graph's s320 story tips read 0.952.0. Counts at both bases: `--render-dar` 15 (control `--list-captures` 9); `^## Finding Class` 1 (control `Verdict` 12); `--route` 2; `^## Class Sweep (HARD GATE)` 1; the impossible token `ZZNOPE-8f3a1q` reads 0 everywhere. The installs moved mid-sprint (s321 0.969 to 0.1028; s322 0.1028 to 0.1061). The figures come from the committed `docs/reviews/s32N/` files, story files and sprint-status `status:` values, not from the extractor's `gate-validation[...]` spans, so BL-1003 (a gate span has no end when the lead never closes it) does not affect them. Check: the s322 listing at graph 1449b5c72 holds 72 paths: 16 gate-2 review files (`<story>-qa-validation[-pM].md`, 14 unique passes once story 4's two names are unified), 20 gate-1 review files, and 36 shard files under `shards/` (18 per gate); so 34 paths contain `qa-validation` and 38 contain `code-review`. This entry's measure is a hand classification from finding titles and bodies, not a mechanical count. Gate-2 NEEDS_REWORK passes whose Critical or Important findings are capture-head, count or Dev Agent Record metadata, with no CODE or TEST finding: s320 (before) 7 of 15 (1-3 p1, 1-3 p2, 4-1 p2, 4-1 p3, 4-2 p2, 4-2 p3, 4-2 p5; 9 if the two mixed passes 3-3 p1 and 4-2 p1 are counted); s321 5 of 11 (2-4 p1, 3-4 p1, 4-3 p2, 6-1 p1, 6-1 p2); s322 1 of 4 unique (4 p3). After (s321 and s322): 6 of 15. The wider EVIDENCE|BOOKKEEPING reading, which adds missing mutation-RED and Strategy-row findings: s320 8 of 15, s321 8 of 11, s322 3 of 4. Rendered `capture-heads` block (regex `<!-- capture-heads[: ]` over the s<N> story files; negative control 0, positive control 22 occurrences in the validator): s320 0 of 13 stories (12 cite captures); s321 23 of 25 (5-5 and 5-6 cite no capture); s322 6 of 8 (1-4 and 1-6 cite capture directories with no block; whether `--list-captures` counts those is unmeasured). Reading: the block was adopted, and the record-metadata rework class did not collapse (7 of 15 to 6 of 15). The BL-838 column for this entry, gate-2 passes per story, is given above: BL-838 column (highest `-p<N>` per story per gate; `code-review` is gate 1 and `qa-validation` is gate 2), reproduced with its controls: s317 17 stories, 1.71 / 1.18, 9 at pass 1 through both gates; s318 13 stories, 2.23 / 1.38, 4 at pass 1; s319 18 stories, 3.00 / 1.78, 4 at pass 1; s320 13 stories, 1.77 / 2.23, 5 at pass 1; an impossible sprint dir (`ZZNOPE-8f3a1q`) reads 0 files. s321: 24 stories, gate-1 / gate-2 2.12 / 1.50, 6 of 24 at pass 1 through both gates. s322: 8 stories, 2.50 / 1.75, 2 of 8 (stories 2 and 5); gate-2 passes per story 1,1,2,4,1,1,2,2 (sum 14) and gate-1 passes 3,1,4,3,1,2,2,4 (sum 20); sprint-status lists all 8 stories as `status: done`. Story 4 is filed under two names (`4-qa-validation*` and `1-4-qa-validation*`, with byte-identical p2 and p3 pairs) and is unified. Gate-2 passes per story: s320 2.23 (before), s321 1.50 and s322 1.75 (after). Confounds: dev and QA moved to sonnet from s321 (BL-838), specs got denser and gates were added, and the populations are 8 to 24 stories. Not ready to close next release: the record-metadata class did not collapse. A Step line is added by lead ruling. This entry also lacks the seat, dollar and token figures the close arm requires. The entry stays PARTIAL with `verify: manual`; no `LANDED`, `Verdict:` or `Outcome measured:` line is written.
+
+**PARTIAL (v0.1145.0); measured, no arm built (batch 257, W9-23).** The question was whether a typed count with no rendered capture count is a gap worth a handoff WARN. Graph's six after-fix record-metadata rejects, read by finding at graph HEAD 3abb1edd6:
+- s321 2-4 p1 (a lost provenance block, derived `grep -c` fences that replay empty) is not a retype.
+- s321 3-4 p1 is the existing `head-tree` WARN on mutation captures.
+- s321 6-1 p1 and p2 are stale Dev Agent Record prose, which a render cannot reach.
+- s321 4-3 p2's capture items are Suggestions.
+- s322 4 p3 (`32 passed` after a rework to 34) is the one retype, and the shipped block cannot reach it. At its reviewed sha 2bd341fe5, the `Full-collection run:` value types the count and cites only a capture directory, and no capture is tracked there. `--list-captures` lists 0, and `--render-dar --check` exits 0. Control, same validator: s321 2-4 at 9ea960039 lists 2 captures and renders both counts.
+
+A draft arm was built and measured but not committed. It warned `full-collection-uncaptured` when RUN-GATE accepts the value as a run (exit 0), the render counted no capture the value cites (`DAR_NCOUNT` 0), and the value matches the render's own `<n> passed|failed` grammar. It was driven, base f29ff3693 against changed, over every gate state on a file:// clone of graph with all refs fetched. Population: 417 non-shard `code-review` and `qa-validation` files under `docs/reviews/s317` to `s322`. Of these, 374 states have a resolving `reviewed-sha` and exactly one story file; excluded are 15 with no sha and 28 naming no story. 199 of the 374 read `LEGACY` (dev.md at the frozen sha prescribes no column-0 label), so (k) does not run there, and 175 are evaluated. The clone is checked out, with graph's `docs/coding-conventions.md` at ed61de745 on disk, which the validator reads.
+
+Result: 0 states moved any other line or any exit. 24 states fire, over 5 stories: s320 3-1 (3), s321 3-1 (6), s321 4-1 (4), s321 5-5 (2) and s322 1-4 (9). Only s322 1-4 has a stale-count finding in any review pass; the other four have none.
+
+A first run with no conventions file and the story mapping mis-resolving s322 story 1-1 (370 states, 171 evaluated) refused 93 base states `full-collection-filtered` instead of 26. It fired 18 states over 3 stories, with the same single catch.
+
+One true catch in three sprints is below one per sprint, so by lead ruling the arm is not built.
+
+Still owed: the `Outcome measured:` line from a graph sprint (gate-2 passes per story, the BL-838 column).
 
 Step: implementation
 
@@ -2306,6 +2464,8 @@ verify: manual
 
 **Progress, batch 257 wave 5 (stays PARTIAL; `verify: manual` unchanged).** An external tool losing writes to an early-exit reader on the `--arms I81` path is ruled out as C4's cause at this entry's tree, by a forcing shape the line above did not use. A scratch PATH shim (grep, sed, awk, sort, cat, cut, tr, uniq, find, ls, comm, head, tail, diff, wc, paste, xargs, basename, dirname, git, md5, shasum, cksum, jq, python3, perl) re-emits a piped tool's output one line per write, pausing 2 ms before each of lines 2 to 61, under SIGPIPE ignored, so a reader that leaves after any of those lines makes its writer report EPIPE. Controls in the same run: `grep . <300000 lines> | head -1` reported EPIPE through the shim, and `grep: stdout: Broken pipe` through the real grep. `--arms I81` on a seeded I81 divergence, from a scratch cwd with VEM_SELF exported (C4's shape), took the shim's pipe branch 57 times at both e90d3a159 (the filing tree) and 39184970b and lost 0 writes, rc 1, the seed named. Without VEM_SELF, and at e3d2dfc35, it also lost 0. The same shim caught 35 to 36 lost writes per full or all-ids run at e90d3a159 and e3d2dfc35 and 0 at 39184970b, from two early-exit readers off the I81 path. The first is I75's `i75_norm` sed feeding `grep -qE` in `i75_failsclosed`, which 0.1081.0 replaced with an awk that reads to the end. The second is I82's `printf … | grep -E '.' | head -1` (`i82b_a1`), which 0.1125.0 replaced with one awk. The grep one matches the one recorded EPIPE red, `validator-arm-selection` at 2026-11-12T11:29Z (`.git/ai-dlc-fixture-failures.20261112T112907Z.80628`: the all-ids run's stderr gained `grep: stdout: Broken pipe`). Builtin writers are outside the shim. A one-line scan of the prologue, the I81 unit and the verdict block for `printf` or `echo` piped into `head`, `grep -q`/`-m`, a quitting `sed` or an exiting `awk` finds only I81's probe text, which is written to a file (7 matches file-wide at each tree, the control). Multi-line pipelines are outside that scan. No diagnosed recurrence exists: the 20 failure archives from 2026-11-06 to 2026-11-15 carry no enforcement-map-sites section (they carry 49 red-unit sections in all). Still owed: the cause, from `cwd_why` at the next occurrence, then the fix in the test (BL-868).
 
+**PARTIAL (v0.1145.0) — a seed's red now keeps `cwd_why`'s evidence; the cause and the fix are OPEN.** `cwd_why` writes its evidence (each failing cell's rc, its want-grep result, its diff against C1's `s.out`) as separate lines indented `      | ` under the one `  FAIL  ` line `bad` prints. `scripts/seed-verdict-store.sh` printed a red unit's output only on lines matching `FAIL|J[1-5]|BROKEN|ERROR|REQUIRED input|^hermetic-run: <fx>: rc=` and deleted the rest with its work directory on exit, and `scripts/pregate-self-check.sh` deletes its `--keep` copies on exit and prints a tail of the same filtered lines, so an occurrence in a seed or a pregate would have lost the evidence this entry waits for. The red-print filter now also passes `^      [|] `, held by `core/fixtures/seed-verdict-store-red-print` arm a5. A pregate red still shows only the last 20 lines of that print (`scripts/pregate-self-check.sh:324`), so a long red's evidence can lose its head there. Push reds were never affected: the push's failure archive keeps each red unit's whole output. A bash fork retry adding a stray stderr line to one cell (rc unchanged, `cmp -s` failing) is refuted for `/bin/bash` 3.2.57: under a static `ulimit -u` below the live process count, fork EAGAIN is fatal and prints `fork: Resource temporarily unavailable` with no `fork: retry` line. A limit exhausted only for a moment was not forced. No recurrence: the 20 timestamped push failure archives the hook keeps in the main checkout's `.git` (every worktree's push writes there), 2026-11-09T02:40Z to 2026-11-15T16:00Z, carry 32 red-unit sections (the control) and no enforcement-map-sites section; of the live record and `.clean`, only `.clean` carries one. Still owed: the cause, from `cwd_why` at the next push or seed occurrence, then the fix in the test (BL-868).
+
 verify: manual
 
 ## BL-915 — the suite carries tests written only to close a backlog entry, and the owner rules require one for every close
@@ -2536,6 +2696,25 @@ Provenance: batch 254, BL-841 R1 by ruling of lead ai-dlc-7f; id allocated by ai
 
 **Still PARTIAL (batch 257 wave 3, lead ai-dlc-35).** The contact-shape fix landed in 62a88119c, VERSION 0.1092.0, on 2026-11-12; that is the first commit `git log -S 'dispatch, then ask' -- core/skills/ai-dlc/SKILL.md` returns. graph pulled 0.1101.0 on 2026-11-13 at 06:57Z. Since then graph's non-sidechain lead transcripts carry 8 `AskUserQuestion` calls in 2 sessions (`0e678bad`, `0ef7ba46`), with the last lead record at 2026-11-14T16:51Z. Control, same scan: the 2026-10-27 day reads 18 asks, as recorded. s323 is incomplete, so no outcome reading is taken. Trap for the closer: `extract.py`'s last edge is `("2099-01-01T00:00:00Z",322)`, so `ask_split.py` labels every post-s322 ask as s322, a pre-rule sprint. An s323 edge is owed before the `Outcome measured:` reading. The entry is blocked on a complete post-rule sprint, and on BL-994 for any lever beyond the prose.
 
+**PARTIAL (v0.1145.0) — the s323 edge and the late-write probe are built; the close reading and the contact-shape re-rule are owed (batch 257, W9-12).**
+
+The edge. `EDGES` in `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` now ends `("2026-11-13T08:00:00Z",322),("2099-01-01T00:00:00Z",323)`. The restated copy in `docs/analysis/pipeline-efficiency-s317-s322/scripts/lead_class_value.py` carries the same edge, and the two lists are equal under `ast.literal_eval`. Neither file gains or loses a line, so no `extract.py:<line>` citation moves.
+- Derivation, from graph read only. The s322 lead `e444bf13` has its last record at 2026-11-12T14:40:12Z. The `/ai-dlc-update` sessions `629f04b7` and `4957633f` follow, the last record at 2026-11-13T06:57:49Z. The s323 lead `0ef7ba46` (`/ai-dlc`, branch `ai-dlc/carry-over/s323-per-chain-consolidation`) opens at 2026-11-13T08:16:50Z. The spawn ledger on that branch agrees: the last s322 row is 2026-11-13T03:38:21Z and the first s323 row is 2026-11-13T08:21:41Z.
+- Like every edge, this one assigns update sessions by time. Of the 9 asks it labels s323, 6 are `0ef7ba46`'s and 3 come from update sessions (`0e678bad` 2, `f7ff0ac0` 1).
+- Unchanged where it must be. At `EXTRACT_WIN_END=2026-11-11T10:30:00Z`, `extract.py`'s OUT directory and `ask_split.py`'s output are byte-identical, base against tip, and the two `extract.py` files differ (`cmp` 1). Both read the fixed extractor, so both differ from the committed `out/ask_split.txt` by 3 lines, the BL-1003 change that `out/bl1003_rederive.txt` records: the 2 s322 step rows, and the s322 "NONE-RUNNING minutes by step" line losing its `gate-validation[carry-over-evaluation] 0` term. At `EXTRACT_WIN_END=2026-11-12T14:41:00Z` (s322 complete), `ask_split.py` is byte-identical, and so is `lead_class_value.py <OUT> 321 319` at its committed window.
+- Control. With an open window, base gives 0 `s323` ask rows and the tip gives 9. `operator_asks.py` ignores `EXTRACT_WIN_END`, and read today it moves those 9 asks from s322 (39 to 30) into s323.
+- Mutant. An edge placed at `2026-11-12T00:00:00Z` moves an s322-complete ask into s323 (s322 25 asks to 24), and its output differs from base at the s322-complete window.
+
+The late-write probe. This entry's Receipt says: if the harness's ask mechanism changes, check what these columns record under it before reading them. BL-994 (v0.1136.0) measured that change. On Claude Code 2.1.325 the ask's assistant record is written at answer time, stamped at issue time. On all 9 asks since s322 (graph's `0ef7ba46` 6, on 2.1.323; `0e678bad` 2 and `f7ff0ac0` 1, on 2.1.325), the ask record is stamped 3.9 to 9.8 s after its message's first record, so the stamp is issue time.
+- `docs/analysis/pipeline-efficiency-s317-s322/scripts/ask_split_late_write_probe.py` loads `ask_split.py`'s own `session_asks()` by `ast`, so the corpus does not run. It reads three seeded sessions with the same lines in different orders. The ask record is written when issued, or directly before its answer, or directly before its answer with the notification attachment written after the answer's `tool_result` (BL-994's `queued_command` shape).
+- Asserted equal, each with a non-zero anchor on the early side: the ask count, the wait, the bucket, ENQ and ENQ-AGENT, ADJ-DISPATCH and its input flag, HELD-AT-ASK on both anchors with the race count, the lanes running at the ask, and DRAINED-AT-ASK. Every one is keyed on (timestamp, file index) or on message.id. It exits 0.
+- RMV, DLV and ACT are positional in file order. The probe reports them and never asserts them: RMV and DLV read 1 early and 0 on both late orders. So a late write zeroes those three by construction, and none of them is a close key.
+- Hand-run mutants, once. Keying `ask_split.py`'s positions on file index alone (`pos = (i, i)`) is killed on both late orders: race 0 against 1, and lanes running `['aL', 'aN']` against `['aN']`. Dropping the late file's background dispatch is killed by the same-lines control. With that control's exit removed, it is killed by ADJ (1 against 0) and by lanes running.
+
+Still owed:
+1. The `Outcome measured:` reading on a complete s323. s323 has 40 ledger rows, all on 2026-11-13. graph has no s323 close on any ref, against s322's close at `f7e60625b`.
+2. The contact shape on BL-994's evidence. BL-994 found a non-blocking route, a plain-text question that ends the turn, and the re-rule is the operator's. The lead put it to the operator separately (batch 257). Rule 11(a) and the batch-256 ruling stand until then.
+
 verify: manual
 
 ## BL-982 — `core/fixtures/backlog-receipt-binding` carries 30 more in-process validator runs on the suite pole since 0.1070.0, and an in-process pass is invisible to the `invocations.decl` cost guard, so a cost added that way passes every count check
@@ -2677,6 +2856,8 @@ Provenance: batch 256, filed by ai-dlc-a7 (lead); id allocated by the lead.
 
 **Progress, batch 257 wave 5 (stays PARTIAL; `verify: manual` unchanged).** The Sep 19 occurrence is a content red, not load: in the same run `layer-contract-conformance-b`'s control printed `validate-enforcement-map.sh`'s I63 finding on `core/skills/ai-dlc/SKILL.md`, and six fixtures that run that validator over a pristine tree read FIXTURE BROKEN together (`.git/ai-dlc-fixture-failures.clean`). ai-dlc-48's seed is therefore the only load-shaped occurrence on record. The two EPIPE writers found under BL-910's per-line shim with SIGPIPE ignored (I75 and I82, both since removed) did not move A00's rc: full runs lost 35 and 36 writes at e90d3a159 and e3d2dfc35 and still exited 0, and lost 0 at 39184970b, rc 0. That seed's tree, 680965157, also predates the runner's ignored SIGPIPE: its `core/scripts/hermetic-run.sh` carries 0 `trap '' PIPE` lines (0.1100.0 added it). No diagnosed recurrence exists: the 20 failure archives from 2026-11-06 to 2026-11-15 carry no enforcement-map-sites section. Still owed: the cause, from the A00 stderr print at the next occurrence, then the fix in the test (BL-868).
 
+**PARTIAL (v0.1145.0) — a seed's red now keeps A00's stderr print; the cause and the fix are OPEN.** The one load-shaped occurrence was a seed, and the seed path dropped the evidence this entry waits for. A00 prints the validator's stderr (or "(the validator wrote nothing to stderr)") as lines indented `      | ` under the one `  FAIL  ` line `bad` prints. `scripts/seed-verdict-store.sh` printed a red unit's output only on lines matching `FAIL|J[1-5]|BROKEN|ERROR|REQUIRED input|^hermetic-run: <fx>: rc=` and deleted the rest with its work directory on exit, so only the validator's own `FAIL:` lines survived; a `tool-fail:` line, a `vem_entry` refusal, a shell error and the empty-stderr line did not. `scripts/pregate-self-check.sh` deletes its `--keep` copies on exit and prints a tail of the same filtered lines. The red-print filter now also passes `^      [|] `, held by `core/fixtures/seed-verdict-store-red-print` arm a5. A pregate red still shows only the last 20 lines of that print (`scripts/pregate-self-check.sh:324`), so a long red's evidence can lose its head there. Push reds were never affected: the push's failure archive keeps each red unit's whole output. Correction to the Evidence paragraph: at 680965157 A00 ran `vem_entry >/dev/null 2>&1`, and that tree's seeder carried the same filter, so "0 fork or not-found lines" could not see the validator's stderr and does not exclude a fork or tool failure inside the validator. A bash fork retry is refuted as a silent cause for `/bin/bash` 3.2.57: under a static `ulimit -u` below the live process count, fork EAGAIN is fatal and prints `fork: Resource temporarily unavailable`, with no `fork: retry` line; `kern.maxprocperuid` is 10666, above the occurrence's 3,877 processes. A limit exhausted only for a moment was not forced. No recurrence: the 20 timestamped push failure archives the hook keeps in the main checkout's `.git`, 2026-11-09T02:40Z to 2026-11-15T16:00Z, carry 32 red-unit sections (the control) and no enforcement-map-sites section; of the live record and `.clean`, only `.clean` carries one. Still owed: the cause, from the A00 stderr print at the next push or seed occurrence, then the fix in the test (BL-868).
+
 verify: manual
 
 ## BL-1005 — s321 stories adversarial p2 and p3 made 19 shard reads of story text unchanged since the prior pass, at $7.57 and 0.48 spawn-hours, for 0 CRITICAL or MAJOR
@@ -2771,6 +2952,15 @@ verify: manual
 
 
 ## BL-1056 — fixtures have no written contract, so each is built bespoke and every builder rediscovers how the fixture system works
+
+**PARTIAL (v0.1145.0; batch 257, W9-03).** apply-restamp-worklist, ledger-reverify, plan-rotate, readset-skip and reconcile-emit-report now report through `core/fixtures/lib/report.sh`, and their 5 `:report` rows are dropped from `fixture-contract-allowlist.txt`. The file is its header plus `validate-fixture-hygiene.sh --derive-h10` on the edited tree.
+- apply-restamp-worklist and readset-skip: `asserts` is `oks + fails`. readset-skip's arm-count floor is a `bad`. Each ends with `report_end "$NAME"`, and apply-restamp-worklist's subject-absent exit is `report_end` too.
+- reconcile-emit-report: `broken` and `wp_start`/`wp_end` move the library's `fails`. The tail is `report_end "reconcile-emit-report shard '<g>' of '<shards>'"`, and the `-b`/`-c` drivers' verdict-names-this-shard grep reads that line.
+- plan-rotate: its two-column `%-26s %s` calls go through `pr_ok`/`pr_bad`, which `printf -v` the label into the same bytes and call `ok`/`bad`. `FAIL=1` is gone.
+- ledger-reverify: the direct `printf '  ok    …'` / `printf '  FAIL  …'` sites go through `lr_okf`/`lr_badf`, which take the format and call `ok`/`bad`. `FAILURES` is gone: each increment counted the FAIL line beside it, or, at `lz_verdict`'s caller, the one its callee printed. `ASSERTIONS` stays as control logic: the shared control of 6, the per-unit floor and the `row_is` probes. The tail is `report_end "ledger-reverify shard '<g>' of '<shards>'"`.
+- `core/fixtures/lib/report.sh` is a declared input of all five and of their shard drivers (apply-restamp-worklist-b/c/d, readset-skip-b/c/d, reconcile-emit-report-b/c, ledger-reverify-b/c).
+
+Remainder: backlog-receipt-traced-removal's row (W6-11), and world adoption, which is still not bound by an arm. Its false-positive set has not been measured.
 
 **PARTIAL (v0.1141.0; batch 257, W7-04).** hermetic-runner and self-update-gate now report through `core/fixtures/lib/report.sh`, and their 2 `:report` rows are dropped from `fixture-contract-allowlist.txt`.
 - hermetic-runner runs its main-pass arms in parallel subshells. Each subshell resets `oks`/`fails` and writes them to `par/<arm>.n`. The parent sums them and names an arm whose `fails` is non-zero in its `FAIL arms:` line, as the `FAILED` list did. The cwd pair is named `cwd` the same way. The always-on `VERBOSE` gate is gone.
@@ -2917,20 +3107,6 @@ Provenance: batch 257, ruled by lead ai-dlc-a9 on the operator's approval; id al
 verify: manual
 
 
-## BL-1101 — no step asks whether an expensive mechanism should exist before it is optimized
-
-**DEFECT.** OPEN. Filed 2026-11-14. Owner: CLAUDE.md "## Build process" (lead steps) and a premise-reviewer subagent definition.
-
-The lead and its advisor review HOW a change is built, never WHETHER its subject should exist. Batch 257's PW release spent a builder splitting the 1001 s `backlog-receipt-binding` battery into six shards before the operator asked, in one sentence, whether it should exist; every mutation battery was then deleted. The advisor saw the same evidence and did not ask either: a reviewer sharing the lead's rulebook and the code's own justification headers shares its frame.
-
-Fix: (1) a premise reviewer, `.claude/agents/premise-reviewer.md` with `omitClaudeMd: true` and read-only tools, given ONLY a data directory built outside the repo (the durations record, the gate's step timings, the fixture and validator list with one-line subjects and ship status; no code, no fixture headers, since path-scoped rules load again on a matching read), the operator ruling "a step with no measured value goes", and one question: what would you delete, and what evidence would keep each item. (2) A lead step in CLAUDE.md's "## Build process", before dispatching a build: the brief states what the mechanism costs, what it buys and who would notice it gone. (3) A periodic subtraction pass over `.claude/rules/` and the validators, judged on the cost each adds. Before relying on (1), confirm the subagent cannot quote `operator-rulings.md`, since the docs imply but do not state that unconditional rule files are omitted.
-
-Receipt: the first premise-review run over the post-PW gate, its deletion list, and the operator's ruling on it.
-
-Provenance: batch 257, operator request to file it and not take it on now; id allocated by lead ai-dlc-35.
-
-verify: manual
-
 ## BL-1118 — hermetic-run has a buildable undeclared-tool arm, and shipping it voids every verdict
 
 **NOTE.** OPEN. Filed 2026-11-15. Owner: `core/scripts/hermetic-run.sh` (HR_SANDBOX).
@@ -2943,26 +3119,6 @@ BL-984's `command_not_found_handle` arm cannot be built on bash 3.2. A PATH trap
 Owed: the false-positive set, measured; a cost-bounded farm; and a delivery path that carries existing verdicts forward.
 
 **Progress (batch 257; the entry stays OPEN).** No code shipped. All three owed items remain: the false-positive set, the cost-bounded farm and the delivery path. Two things block them. The arm's PATH sits inside HR_SANDBOX, so shipping it voids every declared fixture's verdict (C20). Measuring its false-positive set across the suite is a census, which the batch's build process forbids.
-
-verify: manual
-
-## BL-1117 — fixture-git-env-seam reads every file's data twice, so its sandbox trace drops reports and its `core/fixtures/` line cannot be narrowed
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/fixture-git-env-seam/run.sh` `:191` (the whole-tree copy, `tar cf - --exclude=… . | tar xf -`) and `:214` (the population count, `tar cf - … . | tar tf -`).
-
-Traced with `--list --tracer sandbox` in the main checkout at 30a78d884, at load 19-28. The fixture was omitted with 61 drop notices and a 2-path loss canary (`core/fixtures/apply-drift-refile-b/invocations.decl` and `tools.decl`). bsdtar made 107,071 of its window's 114,221 reports, in two sequential processes:
-- the `:191` copy: 54,651 reports, peaking at 3,839 per 100 ms, with 4 notices;
-- the `:214` count: 52,420 reports, peaking at 5,192 per 100 ms, with 57 notices.
-
-All 61 notices fall in those bsdtar seconds. In the same run, ledger-status-vocabulary's single tar of the tracked set peaked at 2,551 per 100 ms and lost nothing. Removing the `:214` tar alone still leaves the `:191` copy's 4 notices.
-
-Owed: a copy and a count that do not read every file's data, so the fixture traces completely at push load. Then its whole-directory `core/fixtures/` declaration (a `docs/inputs-decl-whole-rows.tsv` row), which reruns it on almost every push, can be narrowed against an accepted trace. The count can be taken from the list the copy is made from. Measure the fix with one `--list --tracer sandbox` trace in the main checkout.
-
-Receipt: `verify: manual`. Completeness is the deriver's drop count and loss canary over a live stream.
-
-Provenance: batch 257, wave 3 (ai-dlc-73), from BL-1068's trace; id allocated by the lead.
-
-**PARTIAL (v0.1135.0) — the copy and the count shipped; the trace still omits the fixture, and the narrowing is OPEN.** `mktree` now copies with one `scandir` walk and APFS clonefile(2), reading no file's data, and takes the source count from that walk; the `:214` tar is gone. Where the first clone fails it prints `copy: tar` and falls back to the tar copy, counted by a metadata-only `find`. Traced with `--list --tracer sandbox` in the main checkout at 140e429ed: OMITTED on 19 drop notices, with no loss-canary finding. The clone walk made 7,855 reports in 0.6 s. No notice fell in the clone walk (peak 1,744 per 100 ms) or the git burst (2,019 per 100 ms); the window does not name the source of the 19. Open: (1) the sender of those notices, and a clean trace. (2) The `core/fixtures/` narrowing cannot be taken from a trace. The deriver keys every `file*` op under the trace tree as a read, so the clone walk makes every path a row. The driven fixtures read the copy in `$WORK`, outside the traced subpaths, so the trace never sees what the verdict depends on.
 
 verify: manual
 
@@ -3034,82 +3190,14 @@ Width 12, re-derived on r1135 (0.1135.0's first push, 12-way, 156 units, every u
   - install-scaffold-ignored (`core/`, `patterns/`, `templates/`) and schema-install-fallback (`core/`, `templates/`). Both OMITTED again on stream drops, solo as well (6 and 9 drops).
   - procsub-staged-refusal `core/skills/` (39 of 88 files read) and vocabulary-index `core/` (167 of 1841) stay `legacy`. Their narrowing needs subdirectory rows, which the shrink-only list refuses.
 
-verify: manual
+**PARTIAL (v0.1145.0) — (c)'s first cut shipped; the rest of (c) stays owed. (d)'s remainder is BL-1134 and (e)'s is BL-1133.**
 
-## BL-1119 — two fixtures' counted starts move with pool width, and divergence-hard-block's cached world loses objects mid-copy
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/fixtures/budget-summary-verdict/`, `core/fixtures/whole-read-pool/` (subject 1); `core/fixtures/divergence-hard-block/run.sh:74`-`:84` (`seed_world`) and `seed.sh:279`-`:303` (subject 2).
-
-Two subjects, and the entry closes only when both do. All rows below are ai-dlc-f1's, from its BL-1102 hands g3 and g4. The trees were working trees over 30a78d884 and are gone. The logs named here are still on disk and were read by this filing.
-
-1. **Counted starts move with the outer width.** Each run was `FXCOUNT_JUDGE=… FXCOUNT_DIR=<one shared dir> FXCOUNT_RC=… bash core/scripts/hermetic-run.sh --root <wt> <fx> </dev/null` under `xargs -P N`, with no `AI_DLC_*` variable set. The `*` row is invocations.decl's J3 bash-starts count.
-   - budget-summary-verdict: `*` reads 222 and the `core/scripts/wait-for-deliverable.sh` row reads 78 at width 1 (two runs) and width 2. At width 6, alongside 24 other fixtures, they read 220 and 77.
-   - whole-read-pool: `*` reads 91 at widths 1 and 2, and 90 at width 6.
-   - The logs are under `/var/folders/yz/_m377xss13g_h6cfz2wt0kdc0000gn/T/tmp.ZD1gsK9syv/`. `out2/` (width 6) reads `measured 220`, `measured 77` and `measured 90`. `out3/` (width 2) reads `measured 222`, `measured 78` and `measured 91`. `o4/` (width 1) reads `invocation budget ok: 222`.
-   - The committed rows at 39184970b are `222 *`, `78 core/scripts/wait-for-deliverable.sh` and `91 *`. The B10 re-push gate, at 6 jobs and load near 15, passed both fixtures on those rows.
-   - So the low reading appeared once, in one hand batch: 25 fixtures queued under `xargs -P 6`. It is not reproduced. No base run was made under load. Every run had `/dev/null` stdin, so the stdin-kind cause (counted starts bimodal on a socket against `/dev/null` stdin) was neither tested nor ruled out.
-2. **divergence-hard-block went red intermittently: 2 of 6 tip runs, one of them solo.** Each red was `FAIL  CAP era-merge-after: dispatch/stop/gate = 'SEED SEED SEED', want 'capped capped fail'`, 2 failed and 48 passed.
-   - The red log, `/private/tmp/claude-501/-Users-n8-git-ai-dlc/56bb0546-dd4e-4212-8dd4-95ece924cacf/scratchpad/g4.5ahsLG/old/cr.divergence-hard-block.out`, carries 20 `cp:` lines. One is `<cache>/era-merge-after/./.git/objects/64: unable to copy extended attributes … No such file or directory`.
-   - The base log beside it (`base-cr.divergence-hard-block.out`, solo, 215 starts) carries 0.
-   - Object directories vanished from the cached world while `seed_world`'s `cp -Rp` read them. The cache is a per-run `mktemp -d` (`run.sh:65`), and `run.sh` starts no background work: `wait` and trailing `&` both count 0. So another run sharing the cache is ruled out.
-   - The untested candidate is a detached child of `seed.sh`'s own `git commit` and `git merge`. Its `g()` sets neither `gc.auto` nor `maintenance.auto` (git 2.56.0 on this box).
-   - The diff 30a78d884..e81fdf387 does not touch `run.sh`, and its 4 `seed.sh` lines are all comments. So the red is not shown to come from the BL-1102 change, and it is not shown to come from load.
-
-Fix: for subject 1, run base and tip at widths 1, 2 and 6, with stdin forced to a socket and then to `/dev/null`. Also run with one `FXCOUNT_DIR` per run against a shared one. All the g3 runs shared one directory. Each fixture's start log is `$FXCOUNT_DIR/<fixture>`, and `core/scripts/hermetic-run.sh:609` truncates it when a run starts. So separate a lost update in the counter from a change in the fixture before opening the fixtures. Fix the cause in the fixture, so that the count is the same at every width and stdin kind. Never use a ± row, a widened bound or a retry (`.claude/rules/operator-rulings.md`, "Zero tests depend on load"). For subject 2, find which process removes `.git/objects/<xx>` from the cached world, and make the world quiescent before `mv` puts it in the cache. One candidate is `-c gc.auto=0 -c maintenance.auto=false` in `seed.sh`'s `g()`. Prove the fix with a forced-interleaving probe, not with repeated runs.
-
-**PARTIAL (v0.1137.0) — subject 2 shipped; subject 1 (counted starts that move with pool width) is OPEN.** The process that removes `.git/objects/<xx>` is the detached `git maintenance run --auto --quiet --detach` that every `git commit` and `git merge` in `seed.sh` starts: `GIT_TRACE` counts 4 such starts per era-merge world, and nothing waits for them. When a run's trigger is met, the run repacks and prune-packs the store. On Apple git 2.54.0 the trigger is two loose objects in `objects/17`; on Homebrew git 2.56.0 it is 28 (27 does not pack). Both readings come from a fresh repository with `maintenance.autoDetach=false`. The sandbox's `git` is Apple git 2.54.0: `readset_tools` puts `/usr/bin/git --exec-path`, `/Library/Developer/CommandLineTools/usr/libexec/git-core`, ahead of `/opt/homebrew/bin`. The red's tree is gone, so the reading was taken at commit e81fdf387, BL-1102 g4, under that git. There, the unpatched `seed.sh` era-merge-after world holds 2 loose objects in `objects/17`, and its own maintenance packs it (4 starts, 30 objects in-pack). All ten of the red's vanished directories (64 dc b0 a1 f0 ce 2d 48 12 40) are in that world. At this tree the same world holds 0 in `objects/17`, so the defect is latent and returns with the content. Both `g()` definitions in `seed.sh` now pass `-c maintenance.auto=false`. The forced probe was a scratch copy of the base and fixed `seed.sh`, with 20000 loose blobs and two `objects/17` blobs planted before the era-merge `--no-ff` merge, under Apple git 2.54.0. Base detached: 4 maintenance starts, and 256 object directories when `seed.sh` returned, settling to 0 (20034 in-pack). Fix: 0 starts, and 256 directories that stay 256. Mutant `-c gc.auto=0` alone: 4 starts, settling to 76 directories, so it is not the fix. A single forced run of `seed_world`'s `mv` plus `cp -Rp` on the base did not land inside the window (cp rc 0).
-
-Provenance: batch 257, wave 4, filed by ai-dlc-a8 from ai-dlc-f1's rows (relayed by lead ai-dlc-35); id allocated by the lead.
-
-verify: manual
-
-## BL-1130 — a fixture world that drives or sources the pre-push pool without its own `AI_DLC_VERDICT_STORE` writes records into the real verdict store
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: one of `scripts/validate-fixture-hygiene.sh` (a static arm), `core/scripts/hermetic-run.sh` (per-run stores) or `.githooks/pre-push` (a post-suite root check). Choose by the false-positive set each one measures.
-
-BL-1115 (B12) moves the pass and key records from the per-clone git dir into the shared store. They go to `<store>/<kind>/<repository root commit>/`, where `<store>` is `AI_DLC_VERDICT_STORE`, or `$HOME/.cache/ai-dlc/verdicts` when that is unset. The kinds are fixture-keys, fixture-verified, suite-key, presuite-keys, consumer-placement-keys and pregate-green. A fixture world is its own repository with its own root commit. If it runs the hook without a store of its own, it writes those records into the real store under a throwaway root.
-
-Two effects:
-- throwaway roots accumulate in the real store without bound;
-- a world that sources the pool from the repo root can inherit `REC_ROOT` and write under ai-dlc's own root commit (`89857cfe9`), which corrupts the real key and verified records.
-
-Verified, with the tree named:
-- At 5a2319f46 (67's BL-1115 commit, parent 39184970b), `.githooks/pre-push:1953`-`:1958` builds the base from `AI_DLC_VERDICT_STORE`, or `$HOME/.cache/ai-dlc/verdicts` when it is unset. It resolves `REC_ROOT` only when `REC_ROOT` is empty (`:1957`), so a value already set in the process is used as is. `REC_ROOT` is not exported (`export REC_ROOT` occurs 0 times), so the leak needs a pool sourced into the same shell, not a child hook.
-- The shape already occurs at d619fe62a for one kind. `cl_publish` writes `<base>/consumer-placement-keys/<root>` (`.githooks/pre-push:2729`). The real store holds two roots under `consumer-placement-keys/`: `89857cfe9` (ai-dlc's root) and `0196bbccda293ee7aa4ccf0f282cafd2a291787f`, which is no object in this repository. The stray root holds one record, `stub-shipping.key`, written 2026-11-14 00:55. The stub-shipping world is built only by prepush-worktree-env-scrub (`run.sh:131`). At d619fe62a that fixture passes a per-world store on both hook drives (`:165`, `:301`), and its last three edits (70ef6ee87, 56877eb4d, d619fe62a) all postdate the record. So which version wrote it is not determined.
-- Static screen at d619fe62a: 32 fixtures' `run.sh` name a pre-push hook. 12 of them name `AI_DLC_VERDICT_STORE` in their shell files and 20 do not. Neither group bounds the offenders. Naming the variable does not show that every drive sets it: prepush-worktree-env-scrub is in the 12, and its world wrote the stray record above. And a fixture that drives the hook through another fixture's `run.sh` is not among the 32 at all (pregate step e's wrapper rounds, `scripts/pregate-self-check.sh:351`-`:365`).
-
-Reported by ai-dlc-67's BL-1115 report, not verified here: one prepush-pool-depth run at 5a2319f46 wrote 12 roots into the real store, and 0 after per-world stores were added. The other hook-declaring fixtures were screened only statically.
-
-Owed: one mechanism, with its false-positive set measured on the B12 tree before it ships. Candidates are a fixture-hygiene arm (a world that drives the hook sets its own store), per-run stores in hermetic-run, or a post-suite check that every root under the real store is ai-dlc's or a declared consumer's. Removing the stray `0196bbccd` root is part of the fix.
-
-**PARTIAL (v0.1142.0; batch 257, W7-06).** prepush-pool-depth now extracts both its FIXTURE_POOL spans through `pool_span` (`run.sh:291`, `:1412`), and its row is dropped from `scripts/pool-span-allowlist.txt`. Its verdict and its 66 assertions are the same at base and tip. Whether a plain run at base left records in the real store was not measured.
-
-Remaining: the 4 rows still in `scripts/pool-span-allowlist.txt` (fixture-invocation-budget, pregate-self-check, readset-skip, suite-content-key), and the three non-fixture items under the v0.1138.0 "Remaining" list below.
-
-**PARTIAL (v0.1141.0; batch 257, W7-04).** hermetic-runner, seed-verdict-store-red-print and self-update-gate now extract FIXTURE_POOL through `pool_span`, and their 3 rows are dropped from `scripts/pool-span-allowlist.txt`.
-- self-update-gate-c's pu-readset world was a live writer. Its world sourced the hand-extracted pool and ran `run_fixtures` with no store, because the preamble's `AI_DLC_*` unset loop had cleared it. A plain run with its own scratch HOME left 4 records in that HOME's default store at base, all under one throwaway root: `fixture-keys/<root>/fa.key` and `.prev`, and `fixture-verified/<root>` and `.format`. At tip the same run leaves 0.
-- hermetic-runner pins its own store (`run.sh:106`), and every census drive in seed-verdict-store-red-print sets one. Both left 0 records at base, so for them the migration is clause C25 only. The `AI_DLC_VERDICT_STORE=""` in seed-verdict-store-red-print's `pw_run` drives a hand-written stub hook, not a `pool_span` output, so that cell still gets its empty store.
-
-Remaining: the 5 rows still in `scripts/pool-span-allowlist.txt` (fixture-invocation-budget, pregate-self-check, prepush-pool-depth, readset-skip, suite-content-key), and the three non-fixture items under the v0.1138.0 "Remaining" list below.
-
-**PARTIAL (v0.1138.0).** The mechanism ships; the remainder is named under "Remaining" below.
-
-The pool path cannot reach the real store: `core/scripts/hermetic-run.sh:617` runs every declared fixture under `env -i ... HOME="$HR_WORK/home"`. The stray records come from plain `bash core/fixtures/<fx>/run.sh` runs, which CLAUDE.md sanctions, and the defect stands on that path.
-
-What landed:
-- `core/fixtures/lib/pool-span.sh`, `pool_span <hook> <out> <SPAN>...`: writes the named hook spans under a first line `export AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$PWD.verdicts}"`, so a world that sources `<out>` after a `cd` into itself files every record (the RECORD_HOME span at source, later `rec_home` calls, and every child) under `<world>.verdicts` unless the caller set a store.
-- `scripts/validate-fixture-hygiene.sh` H13, keyed on the emission site: a command-position `sed` or `awk` whose quoted argument carries `FIXTURE_POOL_BEGIN` or `RECORD_HOME_BEGIN` FAILs, heredoc-written drivers included. Its down-only allowlist is `scripts/pool-span-allowlist.txt` (H13STALE, H13DUP, H13NOREASON, H13-M4). Fixture contract clause C25.
-- consumer-suite-pool and presuite-units extract through `pool_span`.
-
-Stray records removed by exact listing (contents in the sha message): `consumer-placement-keys/0196bbccda293ee7aa4ccf0f282cafd2a291787f/`, which held `stub-shipping.key` AND `stub-shipping.key.prev` (the entry above names only the first), and a second stray, the top-level `40b46e0f45ea8896d46fdf5f1144ae8ffbb1555c/` holding one story-evidence-scaffold consumer-layout record. Its writer is not determined.
-
-Remaining:
-- the 8 rows of `scripts/pool-span-allowlist.txt` (fixture-invocation-budget, hermetic-runner, pregate-self-check, prepush-pool-depth, readset-skip, seed-verdict-store-red-print, self-update-gate, suite-content-key), each migrated to `pool_span` by the owner of its fixture-contract or fixture-inprocess allowlist row, dropping its row;
-- path (b): an undeclared `@consumer` fixture runs plain as `bash tests/fixtures/<f>/run.sh` with `AI_DLC_VERDICT_STORE` set to the real store base (`.githooks/pre-push:3441`-`:3446`); a world it builds without a store of its own writes there;
-- scripts that load a record-binding span themselves rather than through a fixture (`scripts/pregate-self-check.sh:432` writes pregate-green through `rec_home`); H13 reads only fixture files;
-- the `REC_ROOT` inheritance effect stated above was never reproduced; no stray under `89857cfe9` was observed.
-
-Provenance: batch 257, B12, filed by ai-dlc-f2 for lead ai-dlc-7b from ai-dlc-67's BL-1115 report; id allocated by the lead. W6-14 by ai-dlc-b7. W7-06 by ai-dlc-bf.
+(c): the instrument read `select` at 57 to 77 s on r1140 to r1143 (width 12, 4 to 51 units), the largest phase outside the pool. On r1142 that was 57 of `run_fixtures`' 78 s. Read from the code, the largest per-line fork source found was in `readset_decl_parse` (READSET_KEYROWS span, both hooks). `rec_import`, `readset_local_validate`, `readset_decl_tool_hashes` and `readset_decl_keys` were not counted. For each `tools.decl` line, it resolved the tool in a `$( )` subshell. That is 7958 lines over the 293 declared fixtures on the distribution pass, plus 5615 over the 220 shipping fixtures on `cl_select`'s consumer-layout pass. So about 13,573 forks ran on every push that missed the whole-suite key. hermetic-run.sh sources the same span, so each declared unit's run paid it again for its own tools.
+- The cut: the lookup now walks the search path with builtins. The fields are those of the IFS=: split, and the first match wins.
+- Proof: a hand probe sourced the old and new spans side by side. `readset_decl_parse` over all 293 declared fixtures gave byte-identical output: 16394 lines, 7958 T rows. A synthetic search-path matrix also agreed on every row. It covered an empty path, `A:`, `A::B`, `:B`, `B:A`, `A:B:`, `::`, `:` and a missing dir, with a tool in two dirs, a non-executable first hit, an absent tool, and `tmp` to make an empty field reach `/tmp`.
+- Mutants, both killed: dropping the first-match `break` failed the corpus and 3 matrix rows. Appending a trailing `:` failed 3 matrix rows.
+- A `VS-IDENTITY 1` row pins the new span sha in both hooks. Every parse row is unchanged, so no stored entry changes meaning.
+- Still owed: the other per-fixture forks of the parse (4 to 6 awk/cat per declared fixture) and of `readset_verdicts` (per run candidate), and the consumer layout's `bash <mapper> --map` start per shipping fixture with a `core/` path. The `select` figure on the push that delivers this cut is its measurement.
 
 verify: manual
 
@@ -3122,6 +3210,8 @@ BL-1124 (e) measured the `@consumer` twin set: 823 unit runs and one catch event
 Fix: add that join (a shipping fixture's declarations name no `.dist-only` fixture's files) at the selection step, then skip a `<fx>@consumer` unit whose distribution twin passed on the same key and whose read set holds no layout-sensitive input; mirror the selection in `predict-push-set.sh`. Weigh the remaining twin set again against what it catches.
 
 Provenance: batch 257, wave 6, the BL-1124 (e) remainder named by ai-dlc-48 (W6-13); id allocated by the lead.
+
+**PARTIAL (v0.1145.0) — the distribution-twin skip shipped; the re-weigh of the remaining twin set stays owed to the push that delivers it.** `cl_select` (both hooks, identical lines under I66) now decides a `<fx>@consumer` unit `skip` with flag `d`, instead of `run` on a changed key, when two things hold. First, its distribution twin's `.kdec` row is a `skip`, meaning a pass is recorded on this tree's distribution key. Second, no key row that moved between the unit's prospective record and its placement record is layout-sensitive. Layout-sensitive rows are these: an added or removed row; a listing, tool or span row; any row under `tests/fixtures/`; the runner or the mapper; and any row that is not a byte copy of ITS OWN distribution source. That source is the declared path the consumer-layout parse (`.cl/.dparse`) mapped the row from, and its hash in the distribution `.now` must equal the row's. So a row no declaration maps runs, which covers every row of an undeclared unit, and so does a file `install.sh` renders over another path's bytes. A unit with a `.dunres` row never takes the skip. That row means a declared input the installed tree lacks, which has no key row on either side, so it stays selected and `hermetic-run.sh` refuses it. That refusal is the join the entry asked for: pw2's shape, a shard driver declaring `core/fixtures/adversarial-shard-merge-b/run.sh`, ran under a forced all-skip distribution decision in the hand probe. Every `d` unit is named on its own gate line. It publishes no record and stays out of `.k.always`, `.rskip` and `.vs.all`. Its PENDING count is still read from its old placement record. `scripts/predict-push-set.sh` hands its distribution decisions to `census-consumer-layout.sh --predict` through `AI_DLC_CL_DIST_OUT`, so the prediction takes the same skip. The census and `--only` never take it. Byte-identical code that resolves paths differently once installed is acquitted, and I33 owns that class (lead ruling D2). Owed: weigh the twin set the delivering push still runs against what it catches.
 
 verify: manual
 
@@ -3148,6 +3238,19 @@ Fix: make the sandbox tracer deliver a lossless window for an install-heavy fixt
 
 Provenance: batch 257, wave 7, the BL-1124 (d) remainder named by ai-dlc-82 (W7-07); id allocated by the lead.
 
+**PARTIAL (v0.1145.0; batch 257, W8-03).** None of the tracer changes tried here delivers this window, and no window on record has carried the `install.sh` burst whole. Measured at f29ff3693 in the main checkout, `--tracer sandbox --declared-out`, with no other deriver window running:
+- Three runs, all OMITTING both fixtures. The step-1 run, at load 4.7-6.0, dropped 6 and 14 times. Run 1, at load 13.7-16.8, dropped 6 and 24 times. Run 2, at load 16.8-24.9 with the traced run clamped to `taskpolicy -c maintenance` instead of `background`, dropped 7 and 36 times in windows of 36 s and 85 s, against 27 s and 49 s.
+- Every drop instant is preceded by the same burst. In the 100 ms before each of the 8 distinct instants of the step-1 run there are 2,630-3,439 reports, all from `git`: `file-read-metadata` and `file-test-existence` in about equal halves, spread across the tracked tree of the trace copy. Each burst is one `git` pid lasting about 20 ms, consistent with `scripts/install.sh:24`, `git -C "$AI_DLC_ROOT" diff-index --quiet HEAD --`, once per install run. That command lstats every tracked entry: in a scratch clone of f29ff3693, `GIT_TRACE2_PERF` reads `preload/sum_lstat:2399` against `read/cache_nr:2399`, on 3 of 3 runs. The burst pid's own argv was not observed. cp and the per-second averages (4.5-5k/s) are not the trigger, and the burst holds no `.git/**` or `file-read-xattr` line, so cutting those reports relieves nothing.
+- The loss is upstream of every stream client. In run 1, two observer streams used the deriver's predicate narrowed to one operation. The `file-read-data` observer matches almost nothing in the burst, yet it lost messages at all 8 of the main stream's drop instants, each about 20 ms earlier, and nowhere else. The `file-test-existence` observer lost messages at the same 8. Splitting a window across op-partitioned clients therefore cannot help.
+- Unreporting either operation class is excluded. In two windows from earlier traces with no drop notice, 299 and 342 paths were reported by `file-test-existence` alone, and 66 and 152 by `file-read-metadata` alone.
+- THE WINDOWS WITH NO DROP NOTICE WERE NOT LOSSLESS. Two earlier sandbox traces in this batch were ACCEPTED with 0 drop notices: install-scaffold-ignored in `/private/tmp/ai-dlc-readset-sandbox-501-f19-s4`, and schema-install-fallback in `-f19-s1`. In them, each `git` pid with over 800 reports reported only 639-1,073 of the copy's 2,281 and 2,280 tracked files, where the lstat count above says it statted all of them. So the kernel or logd loses stat reports with no notice, and the loss canary cannot see it, because atime moves only on a data read. The drop-notice guard and the canary together accept a short set. Through other readers, the two accepted sets still hold 1,757 and 1,615 of the 1,767 tracked `core/` files, and every tracked `templates/` and `patterns/` file.
+
+The 5 `legacy` rows are SUPPORTED, not narrowable, for as long as `install.sh:24` stats the whole tracked tree: `diff-index` lstats every tracked path under `core/`, `templates/` and `patterns/`. The raw windows are scratch files and are not committed, so these counts cannot be re-derived from the tree.
+
+Remaining:
+- BL-1138: whether `install.sh:24` needs a whole-tree `diff-index`. A cheaper dirty probe would remove the burst, and a trace would then decide whether the 5 rows narrow.
+- BL-1144: the silent stat loss above. An accepted sandbox window can be short with no drop notice and a zero canary.
+
 verify: manual
 
 ## BL-1136 — the recover gate's advisor stage stands down for a lead with no built-in grant, though it holds `mcp__advisor__consult`
@@ -3173,5 +3276,123 @@ verify: manual
 Fix: credit `tool_use`, `server_tool_use` and `advisor_tool_result` only on `type == "assistant"` lines (the gated `tool_result` on `user` lines). Before landing, replay granted and no-grant consumer transcripts with and without the restriction, and enumerate every verdict that moves.
 
 Provenance: batch 257, wave 8, found by ai-dlc-d8 (W8-01) in BL-1135's replay; the lead kept granted verdicts byte-unchanged there and allocated this id.
+
+verify: manual
+
+## BL-1138 — install.sh's dirty probe lstats the whole tracked source tree on every install, which a sandbox trace cannot carry
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `scripts/install.sh` (the dirty probe at `:24`; `:21` at f29ff3693, where the measurements were taken).
+
+`scripts/install.sh:24` runs `git -C "$AI_DLC_ROOT" diff-index --quiet HEAD --` on every install to decide whether the source tree is dirty. That lstats every tracked path of the source tree (`GIT_TRACE2_PERF` `preload/sum_lstat` equals `read/cache_nr`). Under the sandbox tracer one such probe is a burst of 2,630-3,439 reports in 100 ms. The kernel or logd loses part of every such burst on record, upstream of every `log stream` client (BL-1134). Sometimes there is a drop notice, which omits the fixture, and sometimes there is none. Both fixtures measured, install-scaffold-ignored and schema-install-fallback, were omitted on every trace in this batch's wave 8, and their read-set rows must cover the whole tracked tree. Other fixtures that run `install.sh` were not measured.
+
+Fix: answer the same dirty question without a whole-tree lstat, or show that the whole-tree answer is needed. A probe and a mutant show the flag answers the same on a clean tree, a modified tracked file, a staged change and an untracked file. Then a lossless sandbox trace of install-scaffold-ignored and schema-install-fallback decides whether BL-1134's 5 `legacy` rows in `docs/inputs-decl-whole-rows.tsv` narrow.
+
+Provenance: batch 257, wave 8, the BL-1134 remainder named by ai-dlc-d4 (W8-03); id allocated by the lead.
+
+**Progress (batch 257, W8-03b; the lead ruled no `install.sh` change; the entry stays OPEN).** The whole-tree answer is needed. Every measurement below is from a scratch clone of 903875300 (B20's `install.sh`), with 2,405 tracked files:
+- The current probe, `diff-index --quiet HEAD --`, reads `preload/sum_lstat:2405`. It answers rc 0 on a clean tree, rc 1 on a modified tracked file, rc 1 on a staged change, rc 0 when the only change is an untracked file, and rc 1 on a docs-only edit.
+- `diff-index --cached --quiet HEAD` makes 0 lstats, but answers rc 0 on an unstaged edit where the current probe answers 1. That is a wrong answer.
+- `diff-index --quiet HEAD -- core templates patterns` reads `sum_lstat:1867` (`core/` alone is 1,857), so the burst stays. It answers rc 0 on a docs-only edit where the current probe answers 1. That is a different answer.
+- `-c core.preloadIndex=false diff-index --quiet HEAD --` gives the same answers. Its lstat count is unmeasured, because `sum_lstat` counts preload threads only. It reschedules the same whole-tree lstat and does not remove it.
+- So any correct answer to "does any tracked file differ" lstats every tracked file. No candidate above is a counter-example.
+- The `-dirty` suffix has a behavioural reader. A stamp that does not resolve, such as `<sha>-dirty`, still renders its row in `core/skills/ai-dlc-update/reconcile/emit-report.sh:288`-`:290`, where "it records no base this render can confirm". Without the suffix, a dirty install's stamp would resolve. `validate-hook-registration.sh:362` strips the suffix and is not behavioural.
+- The attribution of the burst to `install.sh:24` is still "consistent with". The number of `install.sh` runs each fixture makes has not been reconciled against the large `git` pids per window: 6 with over 1,000 reports in install-scaffold-ignored's step-1 window, and 2 with over 800 in schema-install-fallback's `f19-s1` window, so a second whole-tree git call is not excluded.
+
+Remaining: the row-narrowing half (a lossless trace deciding whether BL-1134's 5 `legacy` rows narrow) is blocked on BL-1144: by operator ruling, traced map rows are frozen until that is fixed.
+
+verify: manual
+
+## BL-1140 — the whole-row ratchet refuses a same-fixture replacement that keeps the row count level
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `scripts/invalidation-guard.sh --ratchet` arm r3 (`:264`).
+
+r3 keys a list row on its fixture and declared line, and refuses any key the base copy lacks. A fixture that narrows a whole directory line to a smaller whole directory line therefore cannot keep a row for it, even when it drops its old row in the same change and the list does not grow. Measured on fixture-git-env-seam (BL-1117): the trace showed it reads the listing of `core/skills/ai-dlc-update/reconcile/` (setup-config-drift/run.sh:113 globs that directory). Replacing its row `fixture-git-env-seam	core/fixtures/	legacy` with `fixture-git-env-seam	core/skills/ai-dlc-update/reconcile/	whole` is refused with `r3 a list row the base copy lacks (the list may only shrink): fixture-git-env-seam core/skills/ai-dlc-update/reconcile/`. So BL-1117 declares the 36 files one per line instead, and a file added to that directory does not move the fixture's key.
+
+Fix: let r3 accept a new row for a fixture that drops one of its own base rows in the same change, provided the new line is narrower than the dropped one and the list's row count does not grow. Then declare `core/skills/ai-dlc-update/reconcile/` in `core/fixtures/fixture-git-env-seam/inputs.decl` with a `whole` row, in place of its 36 file lines.
+
+Provenance: batch 257, wave 9, named by ai-dlc-19 (W9-05) while landing BL-1117; id allocated by the lead.
+
+verify: manual
+
+## BL-1141 — five s322 step parts read "no measured value", and one sprint cannot decide whether they go
+
+**DEFECT (efficiency).** OPEN. Filed 2026-11-15. Owner: the step text under `core/skills/ai-dlc/steps/` that dispatches each part; the fix names the file and line for each one.
+
+BL-812's W9-18 step-value paragraph reads every label that rose on s322 on subagent dollars. Five parts carry no measured value there. Figures are s322, from `docs/analysis/pipeline-efficiency-s317-s322/out/` at `EXTRACT_WIN_END=2026-11-12T14:41:00Z`.
+
+| Part | s322 cost | s322 reading | Failure case it exists for |
+|---|---|---|---|
+| carry-over-evaluation p3 (part and cross) | 7 spawns, $13.10, plus a $0.29 deferral record (`co_yield_s322.txt`) | 2 MAJOR, both deferred to requirements and shipped unfixed | a defect the p2 repair wrote into the carry-over evaluation |
+| `gate-validation[implementation]` gate QA | 4 seats, $10.45 (`gate_yield_s322.txt`) | 0 C/M and no rework on stories 1, 2, 3 and 5 | a story whose acceptance criteria fail after code review APPROVED |
+| `gate-validation[architecture]` adjudicator shards | 10 spawns, $3.81 (`gate_yield_s322.txt`) | 10 checks, 0 FAIL | the architecture step advancing over a failing gate check |
+| `gate-validation[retro]` adjudicator shards | 9 spawns, $3.49 (`tail_yield_s322.txt`) | 9 PASS, 0 FAIL | the retro step advancing over a failing gate check |
+| requirements PRD validate run | 1 spawn, $1.28 (`req_yield_s322.txt`) | grade Excellent, 0 Critical, 2 Medium, 5 Low; no committed record joins it to a fix | a PRD defect reaching architecture |
+
+"A step with no measured value goes" (`.claude/rules/operator-rulings.md`) decides each part, but one sprint never supports removing a pass. A zero-FAIL gate is also judged on consequence, because its catch is rare.
+
+Fix: read the same five parts on s323 once it is complete, with the s322 readers ported to s323's parts and refs.
+- A part with a catch on s323 is KEEP.
+- A part with no measured value on both sprints is removed or narrowed in its step file, with the projected saving stated.
+- For the two adjudicator parts, the reading also weighs consequence. A part judged KEEP on consequence names the failure it guards against.
+
+Dependencies:
+- None of the five needs extract.py's classifier, because each is a subagent part partitioned from `spawns.jsonl` by description.
+- The s323 extraction does need the s322/s323 sprint edge in extract.py's EDGES, which W9-12 is adding, and the same edge in `lead_class_value.py`'s copy.
+
+Baseline: s322
+
+Expected movement: a projection to read s323 against, not a bar. A part with no measured value on s323 either goes or is narrowed, removing up to its s322 cost: $13.10, $10.45, $3.81, $3.49 and $1.28, $32.13 in all at s322's 8 stories. A part with a catch on s323 stays at its cost.
+
+Provenance: batch 257, wave 9, the five s322 "no measured value" parts named by ai-dlc-cb (W9-18); id allocated by the lead.
+
+Step: pipeline
+
+verify: manual
+
+## BL-1144 — accepted sandbox trace windows lose stat reports silently; neither the drop guard nor the atime canary can see a lost stat
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: the sandbox tracer's fail-closed judge in `core/scripts/derive-fixture-readsets.sh` (`rs_fx_judge`: the drop-notice guard and `readset_loss_canary`).
+
+`rs_fx_judge` omits a window on a `=== Messages dropped during live streaming` notice, or on a loss-canary hit: a path whose atime moved but that the stream never reported. A lost `file-read-metadata` or `file-test-existence` report trips neither, because the stream prints no notice for it and a stat does not move atime. So a window that lost only stat reports is ACCEPTED, and its set is short, which is the silent-skip direction.
+
+Measured on two windows ACCEPTED in batch 257 with 0 drop notices and a zero canary:
+- install-scaffold-ignored, `/private/tmp/ai-dlc-readset-sandbox-501-f19-s4`, tree 5897d226: each `git` pid with over 800 reports reported 639-1,073 of the copy's 2,281 tracked files.
+- schema-install-fallback, `/private/tmp/ai-dlc-readset-sandbox-501-f19-s1`, tree ec9e5626: the same measure reads 807-909 of 2,280.
+
+Those pids are consistent with `scripts/install.sh:24`, `git diff-index --quiet HEAD --`, which lstats every tracked entry: in a scratch clone of f29ff3693, `GIT_TRACE2_PERF` reads `preload/sum_lstat:2399` against `read/cache_nr:2399`, on 3 of 3 runs. In those two windows the bursts peaked at 1,584-1,818 reports per 100 ms, against 2,562 or more in every window where drops were noticed (BL-1134). The two accepted sets still hold 1,757 and 1,615 of the 1,767 tracked `core/` files, because other readers in each fixture read them.
+
+How much the other accepted fixtures lost is UNMEASURED. Every trace-narrowed row in `docs/inputs-decl-whole-rows.tsv` and `.ai-dlc-fixture-readsets.tsv` rests on windows this guard pair accepted.
+
+Owed: a loss guard that can see a lost stat, with its false-positive set measured before it ships; then a measure of which accepted rows it would have refused. The raw windows are scratch files and are not committed, so these counts cannot be re-derived from the tree.
+
+Provenance: batch 257, wave 8, found by ai-dlc-d4 (W8-03) while checking BL-1134; id allocated by the lead.
+
+verify: manual
+
+## BL-1145 — I87 cannot see a `$(VAR=...` prefix assignment
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `scripts/validate-enforcement-map.sh` I87, the assignment match in `I87_EXPOSED_AWK` (`:8870`).
+
+I87 counts `AI_DLC_X=` as an assignment only after `^`, a blank, `;` or `export`. A prefix assignment opening a command substitution, `"$(AI_DLC_X=... cmd)"`, follows a `(` and is not counted, so a fixture that assigns the key there is reported as naming it unassigned. Measured on fixture-git-env-seam (BL-1117): with arm V's `  AI_DLC_PROJECT_ROOT="$ROOT" bash` deleted, its only assignments were arm W's two `w_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash ...)"` lines, and `bash scripts/validate-enforcement-map.sh` exited 1 with `FAIL: I87 ... fixture-git-env-seam AI_DLC_PROJECT_ROOT`. The same two lines spelled `"$( AI_DLC_PROJECT_ROOT=..."` exited 0 with no I87 line. The program is the same in both spellings; only the grammar differs. BL-1117 shipped the spaced spelling.
+
+Fix: add `\(` (and the `$(` form) to the match's leading alternation, prove on a probe tree that the unspaced form is acquitted and an unassigned name is still reported, and measure the false-positive set across the live fixtures.
+
+Provenance: batch 257, wave 9, found by ai-dlc-19 (W9-05) on BL-1117's pregate; id allocated by the lead.
+
+verify: manual
+
+## BL-1146 — a counted run's consumer-layout selection can never reuse a `<fx>@consumer` pass from the verdict store
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `.githooks/pre-push` consumer-layout store lookup (`cl_select`'s `readset_keys` pass, `readset_vs_input`, the `pool_cl` dispatch), with `core/git-hooks/pre-push` under I66.
+
+`fxcount_arm` exports `FXCOUNT_JUDGE` and `FXCOUNT_KEYROWS` before the suite runs. With `FXCOUNT_JUDGE` set, `readset_vs_input` (`pre-push:1879`) adds the invocation judge's `#judge` row to every digest input. That includes the consumer-layout lookup `cl_select` makes inside the installed tree. A `<fx>@consumer` unit runs uncounted: the pool dispatch at `pre-push:3504` passes `env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE`, so the entry `hermetic-run.sh` writes carries no `#judge` row. A counted selection therefore never matches a consumer-layout pass. Only an uncounted caller, a bare `scripts/census-consumer-layout.sh`, gets those hits.
+
+Measured: BL-1133's hand probe ran on f29ff3693 plus its patch, twice. The census launched by `scripts/predict-push-set.sh`, which runs `fxcount_arm`, decided 4 units `d`, and then 23. A bare census over the same tree, run straight after each, decided the same 4, and then the same 23, `v`, meaning skipped on a store entry. The store lookup runs before the distribution decisions are read.
+
+Unverified inference: the push gate's `cl_select` runs after `fxcount_arm`, so it should get no consumer-layout store hits. The r1143 gate line `verdict store: 34 fixture(s) skipped on a pass recorded elsewhere: …@consumer` would then be unconfirmed placement-record skips (`.vs.u`), which the same line prints. That has not been checked against a gate run.
+
+Fix: key the consumer-layout lookup the way its entries are written. Either drop the judge row from `cl_select`'s lookup, or write the `#judge` row into `<fx>@consumer` entries. Then prove on a counted predict that a consumer pass recorded uncounted is reused.
+
+Provenance: batch 257, wave 8, found by ai-dlc-63 (W8-02) in BL-1133's hand probe; id allocated by the lead.
 
 verify: manual

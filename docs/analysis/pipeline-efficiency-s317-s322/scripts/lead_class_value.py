@@ -46,7 +46,7 @@ WIN_END = os.environ.get("EXTRACT_WIN_END")
 STEP_RE = re.compile(r"skills/ai-dlc(?:-update)?/steps/([A-Za-z0-9_.-]+)\.md")   # extract.py:42, byte-equal
 EDGES = [("2026-09-28T19:10:00Z", 314), ("2026-09-30T20:58:00Z", 315), ("2026-10-05T14:00:00Z", 316),
          ("2026-10-12T02:30:00Z", 317), ("2026-10-14T22:00:00Z", 318), ("2026-10-23T09:53:00Z", 319),
-         ("2026-10-30T00:10:03Z", 320), ("2026-11-09T00:00:00Z", 321), ("2099-01-01T00:00:00Z", 322)]   # extract.py:57
+         ("2026-10-30T00:10:03Z", 320), ("2026-11-09T00:00:00Z", 321), ("2026-11-13T08:00:00Z", 322), ("2099-01-01T00:00:00Z", 323)]   # extract.py:57
 IMPOSSIBLE_STEP = "qzxv-never-step-6630"
 ROW = re.compile(r"^\s+(\S+)\s+active\s+([\d.]+) h\s+gap\s+([\d.]+) h\s+calls\s+([\d.]+)\s+tok")
 

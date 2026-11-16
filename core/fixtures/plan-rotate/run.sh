@@ -48,14 +48,15 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/seeds" "$WORK/roots"
 
-FAIL=0
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found beside $HERE" >&2; exit 2; }
 echo "plan-rotate fixture"
 echo "  subject: $SUBJ"
 echo "HERMETIC-CONSUMED $SUBJ"
 echo
 
-ok()  { if [ "$#" -eq 1 ]; then printf '  ok    %s\n' "$1"; else printf '  ok    %-26s %s\n' "$1" "$2"; fi; }
-bad() { if [ "$#" -eq 1 ]; then printf '  FAIL  %s\n' "$1"; else printf '  FAIL  %-26s %s\n' "$1" "$2"; fi; FAIL=1; }
+# pr_ok/pr_bad <arm> <message>: the two-column `%-26s %s` label, reported through lib/report.sh's ok/bad.
+pr_ok()  { if [ "$#" -eq 1 ]; then ok "$1"; else local _l; printf -v _l '%-26s %s' "$1" "$2"; ok "$_l"; fi; }
+pr_bad() { if [ "$#" -eq 1 ]; then bad "$1"; else local _l; printf -v _l '%-26s %s' "$1" "$2"; bad "$_l"; fi; }
 broken() { printf 'FIXTURE BROKEN: %s\n' "$1" >&2; exit 2; }
 
 # HERE-STRING, NEVER A PIPE. `grep -q` leaves at its first match while the writer is still
@@ -485,7 +486,7 @@ while IFS= read -r _s; do
   [ -n "$_s" ] || continue
   _n="$(grep -cF -- "$_s" "$SUBJ")" || _n=0
   if [ "$_n" -lt 1 ]; then
-    bad "discriminators" "the subject emits no copy of: $_s"
+    pr_bad "discriminators" "the subject emits no copy of: $_s"
     sent_ok=0
   fi
 done <<<"$SENTS"
@@ -494,12 +495,12 @@ while IFS= read -r _a; do
   while IFS= read -r _b; do
     [ -n "$_b" ] || continue
     if [ "$_a" != "$_b" ] && case "$_a" in *"$_b"*) true ;; *) false ;; esac; then
-      bad "discriminators" "one arm's sentence contains another's, so it cannot discriminate: [$_a] vs [$_b]"
+      pr_bad "discriminators" "one arm's sentence contains another's, so it cannot discriminate: [$_a] vs [$_b]"
       sent_ok=0
     fi
   done <<<"$SENTS"
 done <<<"$SENTS"
-[ "$sent_ok" -eq 1 ] && ok "discriminators" "$N_SENTS verdict sentences, each emitted by the subject, none a substring of another"
+[ "$sent_ok" -eq 1 ] && pr_ok "discriminators" "$N_SENTS verdict sentences, each emitted by the subject, none a substring of another"
 
 # THE SEED PAIR MUST DIFFER ON THE PROPERTY THAT DISCRIMINATES, AND IT IS ASSERTED BEFORE IT IS
 # USED. Two seeds that differ somewhere else read as a working receipt and are not one: the whole
@@ -509,14 +510,14 @@ pi_info="${PARA_INFO_LINE#\`\`\`}"
 ro_info="${REAL_OPENER_LINE#\`\`\`}"
 case "$pi_info" in
   *'`'*) case "$ro_info" in
-           *'`'*) bad "seed-pair" "both fence seeds carry a delimiter in the info string — the pair discriminates nothing" ;;
-           *)     ok  "seed-pair" "the pair differs exactly on the info string: one carries a delimiter, the other does not" ;;
+           *'`'*) pr_bad "seed-pair" "both fence seeds carry a delimiter in the info string — the pair discriminates nothing" ;;
+           *)     pr_ok  "seed-pair" "the pair differs exactly on the info string: one carries a delimiter, the other does not" ;;
          esac ;;
-  *) bad "seed-pair" "the paragraph seed carries NO delimiter in its info string, so it is a real opener and the pair is inverted" ;;
+  *) pr_bad "seed-pair" "the paragraph seed carries NO delimiter in its info string, so it is a real opener and the pair is inverted" ;;
 esac
 cmp -s "$WORK/seeds/para-info.md" "$WORK/seeds/real-opener.md" \
-  && bad "seed-pair" "the two fence seeds are byte-identical" \
-  || ok "seed-pair" "and the two seeds differ on disk"
+  && pr_bad "seed-pair" "the two fence seeds are byte-identical" \
+  || pr_ok "seed-pair" "and the two seeds differ on disk"
 
 # =============================================================================================
 # THE CALIBRATION, AND THE CEILINGS IT DERIVES. See the ceiling block above for why they are not
@@ -539,7 +540,7 @@ CEIL_ONE_SPAN=$((F_ONE + (BASE_BYTES - F_ONE) / 2))
 if [ "$PTR_B" -le 0 ] || [ "$CEIL" -le $((LIVE_CORE_B + PTR_B)) ] || [ "$CEIL_ONE_SPAN" -ge "$BASE_BYTES" ] || [ "$CEIL_ONE_SPAN" -le "$F_ONE" ]; then
   broken "the derived bands are empty: seed=$BASE_BYTES section=$SPAN1_B retro=$SPAN2_B pointer=$PTR_B F_ONE=$F_ONE CEIL=$CEIL CEIL_ONE_SPAN=$CEIL_ONE_SPAN"
 fi
-ok "calibration" "seed $BASE_BYTES = core $LIVE_CORE_B + section $SPAN1_B + retro $SPAN2_B; pointer $PTR_B; CEIL=$CEIL (both spans), CEIL_ONE_SPAN=$CEIL_ONE_SPAN (section only)"
+pr_ok "calibration" "seed $BASE_BYTES = core $LIVE_CORE_B + section $SPAN1_B + retro $SPAN2_B; pointer $PTR_B; CEIL=$CEIL (both spans), CEIL_ONE_SPAN=$CEIL_ONE_SPAN (section only)"
 
 # =============================================================================================
 # THE CONFORMING BASE. Every seeded defect is this plan with one thing changed.
@@ -561,14 +562,14 @@ if [ "$BASE_RC" -ne 0 ]; then
   # subject regression wearing a harness failure's label, which is the inverse of the confusion
   # `CLAUDE.md` records about hand-rolled suite loops.
   if has "$S_ARM1" "$BASE_OUT" || has "$S_ARM2" "$BASE_OUT" || has "$S_ARM3" "$BASE_OUT" || has "$S_ARM3X" "$BASE_OUT"; then
-    bad "base-applies" "the conforming plan was refused by one of its own acceptance arms (exit $BASE_RC): $(head -3 <<<"$BASE_OUT" | tr '\n' '|')"
+    pr_bad "base-applies" "the conforming plan was refused by one of its own acceptance arms (exit $BASE_RC): $(head -3 <<<"$BASE_OUT" | tr '\n' '|')"
     echo
     echo "plan-rotate: FAIL — the subject cannot rotate a conforming plan, so no arm below is readable." >&2
-    exit 1
+    report_end plan-rotate
   fi
   broken "the conforming seed was refused for a reason no acceptance arm names (exit $BASE_RC) — the seed no longer reaches the behaviour under test: $BASE_OUT"
 fi
-ok "base-applies" "the conforming plan rotates and exits 0"
+pr_ok "base-applies" "the conforming plan rotates and exits 0"
 
 [ -f "$LAST_ARCH" ] || broken "the conforming --apply wrote no archive at $LAST_ARCH"
 BASE_LIVE="$(cat "$LAST_PLAN")"
@@ -581,17 +582,17 @@ BASE_ARCH="$(cat "$LAST_ARCH")"
 sent_fail=0
 while IFS= read -r _t; do
   [ -n "$_t" ] || continue
-  has "$_t" "$BASE_LIVE" || { bad "live-set" "a section the declaration block names LIVE is not in the live remainder: $_t"; sent_fail=1; }
-  has "$_t" "$BASE_ARCH" && { bad "live-set" "a LIVE sentinel was written into the archive: $_t"; sent_fail=1; }
+  has "$_t" "$BASE_LIVE" || { pr_bad "live-set" "a section the declaration block names LIVE is not in the live remainder: $_t"; sent_fail=1; }
+  has "$_t" "$BASE_ARCH" && { pr_bad "live-set" "a LIVE sentinel was written into the archive: $_t"; sent_fail=1; }
 done <<<"$LIVE_SENTINELS"
 while IFS= read -r _t; do
   [ -n "$_t" ] || continue
-  has "$_t" "$BASE_ARCH" || { bad "moved-set" "a spent sentinel did not reach the archive: $_t"; sent_fail=1; }
-  has "$_t" "$BASE_LIVE" && { bad "moved-set" "a spent sentinel is still in the live remainder: $_t"; sent_fail=1; }
+  has "$_t" "$BASE_ARCH" || { pr_bad "moved-set" "a spent sentinel did not reach the archive: $_t"; sent_fail=1; }
+  has "$_t" "$BASE_LIVE" && { pr_bad "moved-set" "a spent sentinel is still in the live remainder: $_t"; sent_fail=1; }
 done <<<"$MOVED_SENTINELS"
 if [ "$sent_fail" -eq 0 ]; then
-  ok "live-set" "all 4 hand-typed live sentinels are in the live half and none is in the archive"
-  ok "moved-set" "all 4 hand-typed spent sentinels are in the archive and none is in the live half"
+  pr_ok "live-set" "all 4 hand-typed live sentinels are in the live half and none is in the archive"
+  pr_ok "moved-set" "all 4 hand-typed spent sentinels are in the archive and none is in the live half"
 fi
 
 # --- BOTH BOUNDARY GRAMMARS FIRED -----------------------------------------------------------
@@ -604,13 +605,13 @@ fi
 if ! has "RETRO-SEVEN-SENTINEL" "$BASE_ARCH"; then
   broken "the ceiling constant $CEIL left the retrospective run in place; class 2 is untested"
 fi
-ok "base-both-grammars" "both boundary grammars moved a span: a section run and a retrospective BATCH run"
+pr_ok "base-both-grammars" "both boundary grammars moved a span: a section run and a retrospective BATCH run"
 
 # --- THE THREE ACCEPTANCE ARMS RAN AND PASSED ------------------------------------------------
 if has "$S_ARM1OK" "$BASE_OUT" && has "$S_ARM2OK" "$BASE_OUT" && has "$S_ARM3OK" "$BASE_OUT"; then
-  ok "base-arms-ran" "all three acceptance arms reported PASS on the conforming rotation"
+  pr_ok "base-arms-ran" "all three acceptance arms reported PASS on the conforming rotation"
 else
-  bad "base-arms-ran" "an acceptance arm did not report on a successful rotation: $BASE_OUT"
+  pr_bad "base-arms-ran" "an acceptance arm did not report on a successful rotation: $BASE_OUT"
 fi
 
 # --- CONSERVATION, MEASURED BY THIS FIXTURE AND NOT READ OFF THE SUBJECT ---------------------
@@ -634,9 +635,9 @@ LC_ALL=C sort "$WORK/seeds/base.md" > "$WORK/exp.sorted"
 LC_ALL=C grep -v '^[[:space:]]*$' "$WORK/exp.sorted" > "$WORK/exp.nb"
 LC_ALL=C grep -v '^[[:space:]]*$' "$WORK/got.raw"    > "$WORK/got.nb"
 if cmp -s "$WORK/exp.nb" "$WORK/got.nb"; then
-  ok "conservation" "every non-blank line of the original is present exactly once across the two halves"
+  pr_ok "conservation" "every non-blank line of the original is present exactly once across the two halves"
 else
-  bad "conservation" "$(diff "$WORK/exp.nb" "$WORK/got.nb" | head -6 | tr '\n' '|')"
+  pr_bad "conservation" "$(diff "$WORK/exp.nb" "$WORK/got.nb" | head -6 | tr '\n' '|')"
 fi
 
 # --- THE POINTER ------------------------------------------------------------------------------
@@ -647,13 +648,13 @@ fi
 PTR_N="$(LC_ALL=C grep -cF "$PTR_KEY" "$LAST_PLAN")" || PTR_N=0
 PTR_LINE="$(LC_ALL=C grep -F "$PTR_KEY" "$LAST_PLAN")"
 if [ "$PTR_N" -ne 1 ]; then
-  bad "pointer" "expected exactly one pointer line in the live plan, found $PTR_N"
+  pr_bad "pointer" "expected exactly one pointer line in the live plan, found $PTR_N"
 elif has "$WORK" "$PTR_LINE"; then
-  bad "pointer" "the pointer carries an absolute sandbox path, which resolves on one machine only: $PTR_LINE"
+  pr_bad "pointer" "the pointer carries an absolute sandbox path, which resolves on one machine only: $PTR_LINE"
 elif grep -qE 'docs/plans/archive/probe\.md:[0-9]' <<<"$PTR_LINE"; then
-  bad "pointer" "the pointer is a path:line citation into the archive; a later rotation re-numbers it and the citation arm then fails a correct rotation"
+  pr_bad "pointer" "the pointer is a path:line citation into the archive; a later rotation re-numbers it and the citation arm then fails a correct rotation"
 else
-  ok "pointer" "one pointer line, repo-relative, and not a path:line citation"
+  pr_ok "pointer" "one pointer line, repo-relative, and not a path:line citation"
 fi
 
 # THE POINTER IS ONE LINE THAT ACCUMULATES. A second rotation must leave ONE pointer -- never a
@@ -687,17 +688,17 @@ PTR_N2="$(LC_ALL=C grep -cF "$PTR_KEY" "$LAST_PLAN")" || PTR_N2=0
 PTR_2="$(LC_ALL=C grep -F "$PTR_KEY" "$LAST_PLAN")"
 HDR_N2="$(LC_ALL=C grep -cF 'archived sections' "$LAST_ARCH")" || HDR_N2=0
 if [ "$FIRST_RC" -ne 0 ] || [ "$SECOND_RC" -ne 0 ]; then
-  bad "pointer-refresh" "a two-step rotation was refused (first $FIRST_RC, second $SECOND_RC): $SECOND_OUT"
+  pr_bad "pointer-refresh" "a two-step rotation was refused (first $FIRST_RC, second $SECOND_RC): $SECOND_OUT"
 elif ! has "RETRO-SEVEN-SENTINEL" "$(cat "$LAST_ARCH")"; then
-  bad "pointer-refresh" "the second rotation moved nothing — the arm would pass on a no-op"
+  pr_bad "pointer-refresh" "the second rotation moved nothing — the arm would pass on a no-op"
 elif [ "$PTR_N2" -ne 1 ]; then
-  bad "pointer-refresh" "a second rotation left $PTR_N2 pointer lines; a stale range beside a fresh one is worse than none"
+  pr_bad "pointer-refresh" "a second rotation left $PTR_N2 pointer lines; a stale range beside a fresh one is worse than none"
 elif [ "$PTR_1" = "$PTR_2" ]; then
-  bad "pointer-refresh" "the pointer names the same range after a second rotation moved a further span — it was not refreshed"
+  pr_bad "pointer-refresh" "the pointer names the same range after a second rotation moved a further span — it was not refreshed"
 elif [ "$HDR_N2" -ne 1 ]; then
-  bad "pointer-refresh" "a second rotation wrote $HDR_N2 archive headers into one archive file"
+  pr_bad "pointer-refresh" "a second rotation wrote $HDR_N2 archive headers into one archive file"
 else
-  ok "pointer-refresh" "a second rotation appends to the one archive, refreshes the single pointer, and its range moves"
+  pr_ok "pointer-refresh" "a second rotation appends to the one archive, refreshes the single pointer, and its range moves"
 fi
 
 # THE FIRST RANGE SURVIVES THE SECOND ROTATION, AS THE LEADING TOKEN. Both range lists are cut
@@ -713,11 +714,11 @@ R2_N="$(tr ',' '\n' <<<"$R_2" | LC_ALL=C grep -c '[0-9]')" || R2_N=0
 if [ -z "$R_1" ] || [ "${R_1#*,}" != "$R_1" ]; then
   broken "the first rotation's pointer did not carry exactly one range token, so the accumulate arm cannot name the first range: $PTR_1"
 elif [ "$R2_N" -lt 2 ]; then
-  bad "pointer-accumulate" "after a second rotation the pointer carries $R2_N range(s) ($R_2); the first rotation's $R_1 was erased"
+  pr_bad "pointer-accumulate" "after a second rotation the pointer carries $R2_N range(s) ($R_2); the first rotation's $R_1 was erased"
 elif [ "$R2_FIRST" != "$R_1" ]; then
-  bad "pointer-accumulate" "the pointer's first range is '$R2_FIRST', not the first rotation's '$R_1' -- ranges must append in run order: $R_2"
+  pr_bad "pointer-accumulate" "the pointer's first range is '$R2_FIRST', not the first rotation's '$R_1' -- ranges must append in run order: $R_2"
 else
-  ok "pointer-accumulate" "the second rotation's pointer opens on the first rotation's range $R_1 and carries $R2_N range(s): $R_2"
+  pr_ok "pointer-accumulate" "the second rotation's pointer opens on the first rotation's range $R_1 and carries $R2_N range(s): $R_2"
 fi
 
 # =============================================================================================
@@ -787,9 +788,9 @@ p10_hits() { # p10_hits <root> -> prints the number of P10 findings over the def
 EXAMINED="$( cd "$LV" && bash scripts/validate-plan-shape.sh 2>&1 | LC_ALL=C sed -n 's/^validate-plan-shape: \([0-9][0-9]*\) plan(s) checked.*/\1/p' )"
 ARCH_SPENT="$(LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED' "$LAST_ARCH")" || ARCH_SPENT=0
 if [ "$EXAMINED" = "1" ] && [ "$ARCH_SPENT" -gt 0 ]; then
-  ok "archive-outside-corpus" "the validator examined 1 plan, not 2, while the archive carries $ARCH_SPENT discharge token(s) of its own — a spent record is allowed to say so, and the depth-1 corpus is why"
+  pr_ok "archive-outside-corpus" "the validator examined 1 plan, not 2, while the archive carries $ARCH_SPENT discharge token(s) of its own — a spent record is allowed to say so, and the depth-1 corpus is why"
 else
-  bad "archive-outside-corpus" "expected 1 examined plan beside an archive carrying a discharge token; got examined='$EXAMINED' archive-tokens=$ARCH_SPENT"
+  pr_bad "archive-outside-corpus" "expected 1 examined plan beside an archive carrying a discharge token; got examined='$EXAMINED' archive-tokens=$ARCH_SPENT"
 fi
 
 # THE SEED ITSELF MUST NOT CARRY A BANNER TOKEN, AND THIS IS A MEASURED DEFECT IN THIS ARM'S
@@ -805,7 +806,7 @@ fi
 SEED_HEAD_TOK="$(head -12 "$WORK/seeds/base.md" | LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED')" || SEED_HEAD_TOK=0
 SEED_ALL_TOK="$(LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED' "$WORK/seeds/base.md")" || SEED_ALL_TOK=0
 if [ "$SEED_HEAD_TOK" -eq 0 ] && [ "$SEED_ALL_TOK" -gt 0 ]; then
-  ok "seed-is-live" "the seed's head -12 window carries no discharge token, against a control of $SEED_ALL_TOK over the whole seed — so the zero is a real absence and the liveness arms below have a subject"
+  pr_ok "seed-is-live" "the seed's head -12 window carries no discharge token, against a control of $SEED_ALL_TOK over the whole seed — so the zero is a real absence and the liveness arms below have a subject"
 else
   broken "the conforming seed carries $SEED_HEAD_TOK discharge token(s) in its own head -12 window (whole seed: $SEED_ALL_TOK). The seed is ALREADY discharged, so P9..P13 never run on it and every liveness verdict below would be an absence with no subject. Reword the seed; the banner vocabulary is DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED, read case-insensitively."
 fi
@@ -824,11 +825,11 @@ cp "$WORK/rotated-offender.md" "$ROTATED"
 OFF_HITS="$(p10_hits "$LV")"
 
 if [ "$OFF_HITS" -ge 1 ] && [ "$NM_HITS" -eq 0 ]; then
-  ok "rotated-plan-stays-live" "P10 FIRES on the rotated plan when its resume line names an ancestor ($OFF_HITS hit) and stays silent when it names itself — the rotation did not silence the liveness arms"
+  pr_ok "rotated-plan-stays-live" "P10 FIRES on the rotated plan when its resume line names an ancestor ($OFF_HITS hit) and stays silent when it names itself — the rotation did not silence the liveness arms"
 elif [ "$OFF_HITS" -eq 0 ]; then
-  bad "rotated-plan-stays-live" "P10 is SILENT on a rotated plan whose resume line names an ancestor. The rotation wrote a DISCHARGE token into the validator's head -12 window, so P9/P10/P11/P12/P13 all stopped running on the file the rotation exists to keep healthy — a gate that goes green because five arms died. Check the pointer string for the discharge vocabulary."
+  pr_bad "rotated-plan-stays-live" "P10 is SILENT on a rotated plan whose resume line names an ancestor. The rotation wrote a DISCHARGE token into the validator's head -12 window, so P9/P10/P11/P12/P13 all stopped running on the file the rotation exists to keep healthy — a gate that goes green because five arms died. Check the pointer string for the discharge vocabulary."
 else
-  bad "rotated-plan-stays-live" "P10 fired on a rotated plan that names ITSELF ($NM_HITS hit(s)) — the arm flags everything and its offender verdict says nothing"
+  pr_bad "rotated-plan-stays-live" "P10 fired on a rotated plan that names ITSELF ($NM_HITS hit(s)) — the arm flags everything and its offender verdict says nothing"
 fi
 
 # --- REPORT MODE WRITES NOTHING ---------------------------------------------------------------
@@ -836,15 +837,15 @@ fi
 RR="$(mkroot report)" || broken "could not build the report sandbox root"
 drive "$RR" "$WORK/seeds/base.md" probe --ceiling "$CEIL"
 if [ "$LAST_RC" -ne 0 ]; then
-  bad "report-mode" "the bare report run was refused (exit $LAST_RC): $LAST_OUT"
+  pr_bad "report-mode" "the bare report run was refused (exit $LAST_RC): $LAST_OUT"
 elif [ "$LAST_UNTOUCHED" != yes ]; then
-  bad "report-mode" "the bare report run rewrote the plan"
+  pr_bad "report-mode" "the bare report run rewrote the plan"
 elif [ "$LAST_WROTE" = yes ]; then
-  bad "report-mode" "the bare report run created an archive"
+  pr_bad "report-mode" "the bare report run created an archive"
 elif ! has "would move" "$LAST_OUT"; then
-  bad "report-mode" "the bare report run wrote nothing and also said nothing: $LAST_OUT"
+  pr_bad "report-mode" "the bare report run wrote nothing and also said nothing: $LAST_OUT"
 else
-  ok "report-mode" "a bare run reports what would move and leaves both files untouched"
+  pr_ok "report-mode" "a bare run reports what would move and leaves both files untouched"
 fi
 
 # --- THE CEILING BOUNDARY DISCRIMINATES -------------------------------------------------------
@@ -858,9 +859,9 @@ drive "$RR" "$WORK/seeds/base.md" probe --ceiling "$((BASE_BYTES - 1))"
 OVER_RC="$LAST_RC"; OVER_OUT="$LAST_OUT"
 if has "$S_NOTHING" "$AT_OUT" && [ "$AT_RC" -eq 0 ] \
    && ! has "$S_NOTHING" "$OVER_OUT" && has "would move" "$OVER_OUT"; then
-  ok "ceiling-boundary" "a plan AT the ceiling ($BASE_BYTES bytes) has nothing to move; one byte over it rotates"
+  pr_ok "ceiling-boundary" "a plan AT the ceiling ($BASE_BYTES bytes) has nothing to move; one byte over it rotates"
 else
-  bad "ceiling-boundary" "the ceiling does not discriminate at its own boundary (at: rc=$AT_RC, over: rc=$OVER_RC)"
+  pr_bad "ceiling-boundary" "the ceiling does not discriminate at its own boundary (at: rc=$AT_RC, over: rc=$OVER_RC)"
 fi
 
 # =============================================================================================
@@ -870,23 +871,23 @@ drive "$RR" "$WORK/seeds/para-info.md" probe --ceiling "$CEIL" --apply
 PI_RC="$LAST_RC"; PI_OUT="$LAST_OUT"; PI_LIVE=""
 [ -f "$LAST_PLAN" ] && PI_LIVE="$(cat "$LAST_PLAN")"
 if [ "$PI_RC" -ne 0 ] || has "$S_UNTERM" "$PI_OUT"; then
-  bad "info-string-paragraph" "a backtick run whose info string carries a delimiter was read as a FENCE (exit $PI_RC): $(head -3 <<<"$PI_OUT" | tr '\n' '|')"
+  pr_bad "info-string-paragraph" "a backtick run whose info string carries a delimiter was read as a FENCE (exit $PI_RC): $(head -3 <<<"$PI_OUT" | tr '\n' '|')"
 elif ! has "LIVE-HAZARD-SENTINEL" "$PI_LIVE"; then
-  bad "info-string-paragraph" "the plan rotated but the live section holding the paragraph did not survive"
+  pr_bad "info-string-paragraph" "the plan rotated but the live section holding the paragraph did not survive"
 else
-  ok "info-string-paragraph" "a backtick run with a delimiter in its info string is a PARAGRAPH: the plan rotates"
+  pr_ok "info-string-paragraph" "a backtick run with a delimiter in its info string is a PARAGRAPH: the plan rotates"
 fi
 
 drive "$RR" "$WORK/seeds/real-opener.md" probe --ceiling "$CEIL" --apply
 RO_RC="$LAST_RC"; RO_OUT="$LAST_OUT"
 if [ "$RO_RC" -eq 0 ]; then
-  bad "unterminated-fence" "a real opener that never closes was rotated at exit 0 — every boundary below it is a fenced line"
+  pr_bad "unterminated-fence" "a real opener that never closes was rotated at exit 0 — every boundary below it is a fenced line"
 elif ! has "$S_UNTERM" "$RO_OUT"; then
-  bad "unterminated-fence" "it refused, but not by the unterminated-fence finding: $RO_OUT"
+  pr_bad "unterminated-fence" "it refused, but not by the unterminated-fence finding: $RO_OUT"
 elif [ "$LAST_WROTE" = yes ] || [ "$LAST_UNTOUCHED" != yes ]; then
-  bad "unterminated-fence" "the refusal wrote to disk"
+  pr_bad "unterminated-fence" "the refusal wrote to disk"
 else
-  ok "unterminated-fence" "the same line WITHOUT a delimiter in its info string is a real opener, and an unterminated one is refused"
+  pr_ok "unterminated-fence" "the same line WITHOUT a delimiter in its info string is a real opener, and an unterminated one is refused"
 fi
 
 # A FENCE WHOLLY INSIDE ONE SECTION IS NOT A CUT. The quiet twin of the fence-cut refusal: the
@@ -895,11 +896,11 @@ drive "$RR" "$WORK/seeds/fenced-heading.md" probe --ceiling "$CEIL" --apply
 FH_RC="$LAST_RC"; FH_OUT="$LAST_OUT"; FH_LIVE=""
 [ -f "$LAST_PLAN" ] && FH_LIVE="$(cat "$LAST_PLAN")"
 if [ "$FH_RC" -ne 0 ]; then
-  bad "fenced-heading-quiet" "a fence quoting a heading inside a live section was refused (exit $FH_RC): $(head -3 <<<"$FH_OUT" | tr '\n' '|')"
+  pr_bad "fenced-heading-quiet" "a fence quoting a heading inside a live section was refused (exit $FH_RC): $(head -3 <<<"$FH_OUT" | tr '\n' '|')"
 elif ! has "QUOTED-HEADING-INSIDE-A-FENCE" "$FH_LIVE"; then
-  bad "fenced-heading-quiet" "the quoted heading was treated as a section boundary and its text left the live half"
+  pr_bad "fenced-heading-quiet" "the quoted heading was treated as a section boundary and its text left the live half"
 else
-  ok "fenced-heading-quiet" "a heading quoted inside a fence is not a boundary, and the live section keeps it"
+  pr_ok "fenced-heading-quiet" "a heading quoted inside a fence is not a boundary, and the live section keeps it"
 fi
 
 # =============================================================================================
@@ -909,13 +910,13 @@ expect_refusal() { # expect_refusal <arm> <seed> <sentence> [args...]
   local arm="$1" sf="$2" sent="$3"; shift 3
   drive "$RR" "$sf" probe "$@"
   if [ "$LAST_RC" -eq 0 ]; then
-    bad "$arm" "exited 0 on a plan it cannot partition safely: $(head -2 <<<"$LAST_OUT" | tr '\n' '|')"
+    pr_bad "$arm" "exited 0 on a plan it cannot partition safely: $(head -2 <<<"$LAST_OUT" | tr '\n' '|')"
   elif ! has "$sent" "$LAST_OUT"; then
-    bad "$arm" "refused (exit $LAST_RC) but not by its own finding — the operator is handed the wrong remedy: $(head -4 <<<"$LAST_OUT" | tr '\n' '|')"
+    pr_bad "$arm" "refused (exit $LAST_RC) but not by its own finding — the operator is handed the wrong remedy: $(head -4 <<<"$LAST_OUT" | tr '\n' '|')"
   elif [ "$LAST_WROTE" = yes ] || [ "$LAST_UNTOUCHED" != yes ]; then
-    bad "$arm" "the refusal wrote to disk"
+    pr_bad "$arm" "the refusal wrote to disk"
   else
-    ok "$arm" "refused by its own finding at exit $LAST_RC, and wrote nothing"
+    pr_ok "$arm" "refused by its own finding at exit $LAST_RC, and wrote nothing"
   fi
 }
 expect_refusal "refuse-nonamed"    "$WORK/seeds/nonamed.md"    "$S_NONAMED" --ceiling "$CEIL" --apply
@@ -932,21 +933,21 @@ expect_refusal "refuse-unreachable" "$WORK/seeds/base.md"      "$S_UNREACH" --ce
 NC_BYTES="$(wc -c < "$WORK/seeds/nocand.md" | tr -d ' ')"
 drive "$RR" "$WORK/seeds/nocand.md" probe --ceiling "$((NC_BYTES / 2))" --apply
 if [ "$LAST_RC" -ne 2 ]; then
-  bad "no-candidates-refuses" "an over-ceiling plan with no archivable span exited $LAST_RC, not 2: $(head -2 <<<"$LAST_OUT" | tr '\n' '|')"
+  pr_bad "no-candidates-refuses" "an over-ceiling plan with no archivable span exited $LAST_RC, not 2: $(head -2 <<<"$LAST_OUT" | tr '\n' '|')"
 elif ! has "$S_NOCAND" "$LAST_OUT"; then
-  bad "no-candidates-refuses" "refused, but not by the no-candidate finding: $(head -3 <<<"$LAST_OUT" | tr '\n' '|')"
+  pr_bad "no-candidates-refuses" "refused, but not by the no-candidate finding: $(head -3 <<<"$LAST_OUT" | tr '\n' '|')"
 elif has "$S_NOTHING" "$LAST_OUT" || has "at or under" "$LAST_OUT"; then
-  bad "no-candidates-refuses" "the refusal also carries the UNDER-ceiling phrasing, so a caller keyed on it reads success"
+  pr_bad "no-candidates-refuses" "the refusal also carries the UNDER-ceiling phrasing, so a caller keyed on it reads success"
 elif [ "$LAST_WROTE" = yes ] || [ "$LAST_UNTOUCHED" != yes ]; then
-  bad "no-candidates-refuses" "the refusal wrote to disk (archive=$LAST_WROTE, plan untouched=$LAST_UNTOUCHED)"
+  pr_bad "no-candidates-refuses" "the refusal wrote to disk (archive=$LAST_WROTE, plan untouched=$LAST_UNTOUCHED)"
 else
-  ok "no-candidates-refuses" "over the ceiling with no span of any class: exit 2, its own sentence, plan byte-identical, no archive"
+  pr_ok "no-candidates-refuses" "over the ceiling with no span of any class: exit 2, its own sentence, plan byte-identical, no archive"
 fi
 drive "$RR" "$WORK/seeds/nocand.md" probe --ceiling "$NC_BYTES" --apply
 if [ "$LAST_RC" -eq 0 ] && has "$S_NOTHING" "$LAST_OUT" && ! has "$S_NOCAND" "$LAST_OUT" && [ "$LAST_UNTOUCHED" = yes ]; then
-  ok "no-candidates-quiet" "the same seed at its exact size ($NC_BYTES) exits 0 with nothing to move and is not refused"
+  pr_ok "no-candidates-quiet" "the same seed at its exact size ($NC_BYTES) exits 0 with nothing to move and is not refused"
 else
-  bad "no-candidates-quiet" "the same seed AT its own size did not exit 0 with nothing to move (exit $LAST_RC): $(head -2 <<<"$LAST_OUT" | tr '\n' '|')"
+  pr_bad "no-candidates-quiet" "the same seed AT its own size did not exit 0 with nothing to move (exit $LAST_RC): $(head -2 <<<"$LAST_OUT" | tr '\n' '|')"
 fi
 
 # =============================================================================================
@@ -994,11 +995,11 @@ BNR="$(mkroot batch-nearmiss)" || broken "could not build the batch near-miss sa
 drive "$BNR" "$WORK/seeds/batch.md" probe --ceiling "$((B_TOTAL - 1))" --apply
 BN_ARCH="$(cat "$LAST_ARCH" 2>/dev/null)"
 if [ "$LAST_RC" -ne 0 ]; then
-  bad "batch-nearmiss" "the batch seed one byte over the ceiling was refused (exit $LAST_RC): $(head -3 <<<"$LAST_OUT" | tr '\n' '|')"
+  pr_bad "batch-nearmiss" "the batch seed one byte over the ceiling was refused (exit $LAST_RC): $(head -3 <<<"$LAST_OUT" | tr '\n' '|')"
 elif has "REC-" "$BN_ARCH" || ! has "SPENT-BATCH-SENTINEL" "$BN_ARCH"; then
-  bad "batch-nearmiss" "at a ceiling the spent section alone reaches, class 3 moved anyway, or the spent section did not: $(LC_ALL=C grep -o 'REC-[0-9]*-OPEN' <<<"$BN_ARCH" | tr '\n' ' ')"
+  pr_bad "batch-nearmiss" "at a ceiling the spent section alone reaches, class 3 moved anyway, or the spent section did not: $(LC_ALL=C grep -o 'REC-[0-9]*-OPEN' <<<"$BN_ARCH" | tr '\n' ' ')"
 else
-  ok "batch-nearmiss" "at a ceiling the spent section alone reaches, only it moves and no batch record does"
+  pr_ok "batch-nearmiss" "at a ceiling the spent section alone reaches, only it moves and no batch record does"
 fi
 B_P=$(( $(wc -c < "$LAST_PLAN" | tr -d ' ') - (B_TOTAL - B_S1) ))
 [ "$B_P" -gt 0 ] && [ "$B_MIN" -gt $((4 * B_P)) ] \
@@ -1074,9 +1075,9 @@ batch_verdict() {
 batch_run batch-records "$SUBJ" "$B_CEIL"
 BV="$(batch_verdict)"
 if [ "$BV" = ok ] && has "$S_ARM4OK" "$B_OUT"; then
-  ok "batch-records" "at $B_CEIL (R_$B_K=$B_RK + P/2, P=$B_P) records 101..$B_NMAX move oldest-first as one range beside the spent section; 140 and its fenced 999 stay live; the archive grew by exactly those lines"
+  pr_ok "batch-records" "at $B_CEIL (R_$B_K=$B_RK + P/2, P=$B_P) records 101..$B_NMAX move oldest-first as one range beside the spent section; 140 and its fenced 999 stay live; the archive grew by exactly those lines"
 else
-  bad "batch-records" "$BV$(has "$S_ARM4OK" "$B_OUT" || echo " (and no arm 4 PASS)")"
+  pr_bad "batch-records" "$BV$(has "$S_ARM4OK" "$B_OUT" || echo " (and no arm 4 PASS)")"
 fi
 
 # --- BATCH-PROTECTED-FLOOR: THE PROTECTED RECORD IS WHAT STANDS BETWEEN THE PLAN AND THE CEILING --
@@ -1087,9 +1088,9 @@ fi
 batch_run batch-floor "$SUBJ" "$B_FLOOR"
 if [ "$B_RC" -eq 2 ] && has "$S_UNREACH" "$B_OUT" && ! has "$S_ARM4" "$B_OUT" \
    && [ "$B_UNTOUCHED" = yes ] && [ "$B_ARCH_SAME" = yes ]; then
-  ok "batch-protected-floor" "at $B_FLOOR only archiving record 140 would reach the ceiling; the rotation refuses as unreachable and writes nothing"
+  pr_ok "batch-protected-floor" "at $B_FLOOR only archiving record 140 would reach the ceiling; the rotation refuses as unreachable and writes nothing"
 else
-  bad "batch-protected-floor" "expected an UNREACHABLE refusal writing nothing (exit $B_RC, plan untouched=$B_UNTOUCHED, archive unchanged=$B_ARCH_SAME): $(head -2 <<<"$B_OUT" | tr '\n' '|')"
+  pr_bad "batch-protected-floor" "expected an UNREACHABLE refusal writing nothing (exit $B_RC, plan untouched=$B_UNTOUCHED, archive unchanged=$B_ARCH_SAME): $(head -2 <<<"$B_OUT" | tr '\n' '|')"
 fi
 
 # THE QUIET TWIN OF EVERY SHAPE REFUSAL, AND IT IS THE ARM THAT KEEPS THEM USABLE. A plan under
@@ -1102,13 +1103,13 @@ quiet_under_ceiling() { # quiet_under_ceiling <arm> <seed>
   b="$(wc -c < "$sf" | tr -d ' ')"
   drive "$RR" "$sf" probe --ceiling "$((b + 1))" --apply
   if [ "$LAST_RC" -ne 0 ]; then
-    bad "$arm" "a plan UNDER the ceiling was refused for its shape (exit $LAST_RC): $(head -2 <<<"$LAST_OUT" | tr '\n' '|')"
+    pr_bad "$arm" "a plan UNDER the ceiling was refused for its shape (exit $LAST_RC): $(head -2 <<<"$LAST_OUT" | tr '\n' '|')"
   elif ! has "$S_NOTHING" "$LAST_OUT"; then
-    bad "$arm" "a plan under the ceiling exited 0 without saying it had nothing to move: $LAST_OUT"
+    pr_bad "$arm" "a plan under the ceiling exited 0 without saying it had nothing to move: $LAST_OUT"
   elif [ "$LAST_UNTOUCHED" != yes ]; then
-    bad "$arm" "a plan under the ceiling was rewritten"
+    pr_bad "$arm" "a plan under the ceiling was rewritten"
   else
-    ok "$arm" "under the ceiling it is not asked about its shape, and nothing is written"
+    pr_ok "$arm" "under the ceiling it is not asked about its shape, and nothing is written"
   fi
 }
 quiet_under_ceiling "quiet-nonamed"    "$WORK/seeds/nonamed.md"
@@ -1132,11 +1133,11 @@ CWD_B_RC=$?
 CWD_C="$( cd "$CW/docs/plans" && bash "$CW/scripts/plan-rotate.sh" "$CW/docs/plans/probe.md" --ceiling "$CEIL" 2>&1 )"
 CWD_C_RC=$?
 if [ "$CWD_A_RC" -ne 0 ]; then
-  bad "cwd-invariance" "the subject failed from the repo root (exit $CWD_A_RC): $CWD_A"
+  pr_bad "cwd-invariance" "the subject failed from the repo root (exit $CWD_A_RC): $CWD_A"
 elif [ "$CWD_A" = "$CWD_B" ] && [ "$CWD_A" = "$CWD_C" ] && [ "$CWD_B_RC" -eq 0 ] && [ "$CWD_C_RC" -eq 0 ]; then
-  ok "cwd-invariance" "identical report and exit 0 from the repo root, from /, and from the plan's own directory"
+  pr_ok "cwd-invariance" "identical report and exit 0 from the repo root, from /, and from the plan's own directory"
 else
-  bad "cwd-invariance" "the answer moved with the caller's directory (rc $CWD_A_RC/$CWD_B_RC/$CWD_C_RC)"
+  pr_bad "cwd-invariance" "the answer moved with the caller's directory (rc $CWD_A_RC/$CWD_B_RC/$CWD_C_RC)"
 fi
 
 # A MISSING SUBJECT IS NOT A PASS, ASSERTED BY RE-INVOKING THIS FILE. The control is that the
@@ -1146,15 +1147,10 @@ fi
 ( bash "$HERE/run.sh" "$WORK/no-such-plan-rotate.sh" >/dev/null 2>&1 )
 MISS_RC=$?
 if [ "$MISS_RC" -eq 2 ]; then
-  ok "missing-subject" "an argument naming no file exits 2, and does not silently fall back to the tree's own copy"
+  pr_ok "missing-subject" "an argument naming no file exits 2, and does not silently fall back to the tree's own copy"
 else
-  bad "missing-subject" "a named-but-absent subject exited $MISS_RC; the run would score the tree copy"
+  pr_bad "missing-subject" "a named-but-absent subject exited $MISS_RC; the run would score the tree copy"
 fi
 
 echo
-if [ "$FAIL" -eq 0 ]; then
-  echo "plan-rotate: PASS — every assertion holds."
-  exit 0
-fi
-echo "plan-rotate: FAIL — an assertion regressed." >&2
-exit 1
+report_end plan-rotate

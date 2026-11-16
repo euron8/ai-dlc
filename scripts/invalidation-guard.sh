@@ -359,9 +359,11 @@ g_e2e_probe() {
 }
 g_e2e_run() { # <repo> <seed 1|0>: the composer once; prints KDEC lines and the judge's output; seed publishes every record
   ( cd "$1" || exit 2
+    # The store is set BEFORE the source: the pool's RECORD_HOME span resolves KEYS_DIR at source time, and the
+    # readset_keys_write below writes there.
+    export AI_DLC_VERDICT_STORE="$G_W/e2e-store"
     sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' .githooks/pre-push > "$G_W/e2e-pool.sh"
     source "$G_W/e2e-pool.sh" > /dev/null 2>&1
-    export AI_DLC_VERDICT_STORE="$G_W/e2e-store"
     out="$(mktemp -d "$G_W/e2e-out.XXXXXX")" || exit 2
     for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$out/list"
     READSET_NO_CHANGE=0; apply_readset_skip "$out/list" "$out" > /dev/null 2>&1

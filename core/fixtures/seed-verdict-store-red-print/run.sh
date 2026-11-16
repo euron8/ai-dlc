@@ -18,6 +18,8 @@
 #        a4 every hermetic-run.sh the subject starts reads /dev/null on stdin, as the push's pool gives it, though the
 #           subject itself is driven from a regular file (BL-1053: a counted run inheriting a session's socket stdin
 #           leaves a `bash -c` at shell level 1 uncounted)
+#        a5 a line indented `      | ` (a fixture's evidence under its FAIL line) is printed, though it names no verdict
+#           token, and the noise beside it is not
 # BL-1092 CELLS (one drive each)
 #   b_pred   census --predict lists both shipping units as `run <fx>@consumer`, CONSUMER 2, runs and writes nothing
 #   b_only   census --only cl-a@consumer runs only cl-a; the re-predict then lists cl-b and no longer cl-a (seeding X@consumer
@@ -70,7 +72,7 @@ fx="$1"; n=1
 # a4's record: one line per start, `devnull` when stdin is /dev/null. The cwd is the scratch root, so ../ is outside it.
 if [ /dev/stdin -ef /dev/null ]; then echo "$fx devnull" >> ../stdin.rec; else echo "$fx other" >> ../stdin.rec; fi
 case "$fx" in
-  red-filter) echo "J3 mismatch: cell-x counted 9, declared 4"; while [ "$n" -le 8 ]; do echo "noise $n"; n=$((n + 1)); done; r=1 ;;
+  red-filter) echo "J3 mismatch: cell-x counted 9, declared 4"; while [ "$n" -le 8 ]; do echo "noise $n"; [ "$n" = 4 ] && echo "      | evidence-under-fail"; n=$((n + 1)); done; r=1 ;;
   red-plain)  while [ "$n" -le 8 ]; do echo "plain $n"; n=$((n + 1)); done; r=1 ;;
   green)      echo "okline-must-not-print"; r=0 ;;
   *) exit 2 ;;
@@ -111,6 +113,7 @@ cell() { # <arm> <out file> -> 0 when the arm holds on that output
     a2) has "$2" "plain 1" && has "$2" "plain 8" && has "$2" "hermetic-run: red-plain: rc=1" ;;
     a3) has "$2" "green rc=0" && ! has "$2" "okline-must-not-print" ;;
     a4) [ "$(grep -c ' devnull$' "$2.stdin")" = 3 ] && [ "$(grep -c . "$2.stdin")" = 3 ] ;;
+    a5) has "$2" "      | evidence-under-fail" && ! has "$2" "noise 5" ;;
   esac
 }
 
@@ -130,6 +133,8 @@ if cell a3 "$T/control.out"; then ok "a3 the pass path prints its rc line and no
 else bad "a3 the pass path changed"; sed 's/^/  | /' "$T/control.out"; fi
 if cell a4 "$T/control.out"; then ok "a4 every hermetic-run.sh the subject starts reads /dev/null on stdin, the subject itself driven from a file"
 else bad "a4 a hermetic-run.sh the subject started did not read /dev/null on stdin"; sed 's/^/  | /' "$T/control.out.stdin"; fi
+if cell a5 "$T/control.out"; then ok "a5 a red prints the evidence line indented under its FAIL line, sitting among unprinted noise"
+else bad "a5 the indented evidence line was not printed, or the noise around it was"; sed 's/^/  | /' "$T/control.out"; fi
 
 
 # ============================================================================================================
@@ -390,5 +395,5 @@ if cell_of s_skip "$(subj_of s_skip)"; then ok "n-s_skip holds on the unmutated 
 if cell_of p_dist "$(subj_of p_dist)"; then ok "n-p_dist holds on the unmutated subject"; else bad "n-p_dist does not hold on the unmutated subject"; fi
 if cell_of p_cons "$(subj_of p_cons)"; then ok "n-p_cons holds on the unmutated subject"; else bad "n-p_cons does not hold on the unmutated subject"; fi
 
-echo "seed-verdict-store-red-print: 4 arms; BL-1092: $(printf "%s" "$G_CELLS" | wc -w | tr -d " ") cells"
+echo "seed-verdict-store-red-print: 5 arms; BL-1092: $(printf "%s" "$G_CELLS" | wc -w | tr -d " ") cells"
 report_end seed-verdict-store-red-print

@@ -23,6 +23,5 @@ sed
 seq
 sh
 sort
-tar
 tr
 wc

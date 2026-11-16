@@ -1,0 +1,96 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z. Command: EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/spawns.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/analyze.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py $OUT > $OUT/roll.txt && python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py $OUT --seats > $OUT/seats.txt && python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py $OUT --classes > $OUT/classes.txt && EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/lead_class_denied.py $SCRATCH_OUT $OUT 321 319
+C1 calls.jsonl against classes.jsonl calls: 693 MATCH, 0 DIFFERS; scratch classes.jsonl BYTE-EQUAL to the reference
+C2 tool names: Read 5379, impossible QzxvNoSuchTool4417 0
+C3 pipeline-bucket calls per (sprint, step, class) against lead_class_value.cells(): 675 MATCH, 0 DIFFERS
+pipeline-bucket lead calls: 38299 of 44133
+-- all steps, pipeline bucket, per story; lead seat calls s321 285.1 against s319 318.7, ratio 0.89
+   class                s        calls   DENIED  ERRORED     TEXT      RAN | call ratio A/B against the lead seat
+   dispatch             s319      14.7      0.1      0.2      0.0     14.3 | 
+   dispatch             s321      12.9      0.0      0.0      0.0     12.8 | 0.88, AT-OR-BELOW the lead seat's 0.89; RAN calls 12.8 against 14.3
+   merge                s319      77.0      0.2      0.7      0.0     76.0 | 
+   merge                s321      85.9      0.4      0.9      0.0     84.6 | 1.12, ABOVE the lead seat's 0.89; RAN calls 84.6 against 76.0
+   repair               s319       2.5      0.0      0.0      0.0      2.5 | 
+   repair               s321       2.2      0.0      0.0      0.0      2.1 | 0.86, AT-OR-BELOW the lead seat's 0.89; RAN calls 2.1 against 2.5
+   gate-run             s319      20.9      0.0      0.1      0.0     20.8 | 
+   gate-run             s321      21.6      0.1      0.0      0.0     21.5 | 1.03, ABOVE the lead seat's 0.89; RAN calls 21.5 against 20.8
+   step-reread          s319       6.5      0.1      0.0      0.0      6.4 | 
+   step-reread          s321       4.9      0.0      0.0      0.0      4.9 | 0.76, AT-OR-BELOW the lead seat's 0.89; RAN calls 4.9 against 6.4
+   compaction-recovery  s319       2.2      0.0      0.0      0.2      2.0 | 
+   compaction-recovery  s321       2.2      0.0      0.0      0.0      2.2 | 0.98, ABOVE the lead seat's 0.89; RAN calls 2.2 against 2.0
+   snapshot             s319      48.0      0.1      0.2      0.0     47.6 | 
+   snapshot             s321      55.9      0.5      0.3      0.0     55.1 | 1.17, ABOVE the lead seat's 0.89; RAN calls 55.1 against 47.6
+   other                s319     146.9      0.6      0.6     97.5     48.3 | 
+   other                s321      99.5      0.3      0.5     53.2     45.5 | 0.68, AT-OR-BELOW the lead seat's 0.89; RAN calls 45.5 against 48.3
+-- implementation, per story; lead seat calls s321 62.5 against s319 103.5, ratio 0.60
+   class                s        calls   DENIED  ERRORED     TEXT      RAN | call ratio A/B against the lead seat
+   dispatch             s319       7.2      0.0      0.1      0.0      7.0 | 
+   dispatch             s321       4.6      0.0      0.0      0.0      4.6 | 0.64, ABOVE the lead seat's 0.60; RAN calls 4.6 against 7.0
+   merge                s319      28.3      0.1      0.2      0.0     28.0 | 
+   merge                s321      19.6      0.1      0.1      0.0     19.4 | 0.69, ABOVE the lead seat's 0.60; RAN calls 19.4 against 28.0
+   repair               s319       0.3      0.0      0.0      0.0      0.3 | 
+   repair               s321       0.1      0.0      0.0      0.0      0.1 | 0.40, AT-OR-BELOW the lead seat's 0.60; RAN calls 0.1 against 0.3
+   gate-run             s319       5.2      0.0      0.1      0.0      5.1 | 
+   gate-run             s321       6.1      0.0      0.0      0.0      6.0 | 1.18, ABOVE the lead seat's 0.60; RAN calls 6.0 against 5.1
+   step-reread          s319       0.5      0.0      0.0      0.0      0.5 | 
+   step-reread          s321       0.5      0.0      0.0      0.0      0.5 | 1.16, ABOVE the lead seat's 0.60; RAN calls 0.5 against 0.5
+   compaction-recovery  s319       0.9      0.0      0.0      0.0      0.9 | 
+   compaction-recovery  s321       0.6      0.0      0.0      0.0      0.6 | 0.67, ABOVE the lead seat's 0.60; RAN calls 0.6 against 0.9
+   snapshot             s319      15.4      0.0      0.1      0.0     15.4 | 
+   snapshot             s321      14.0      0.0      0.0      0.0     13.9 | 0.90, ABOVE the lead seat's 0.60; RAN calls 13.9 against 15.4
+   other                s319      45.7      0.1      0.0     39.7      6.0 | 
+   other                s321      17.0      0.0      0.0     11.7      5.2 | 0.37, AT-OR-BELOW the lead seat's 0.60; RAN calls 5.2 against 6.0
+-- gate[implementation], per story; lead seat calls s321 37.8 against s319 41.5, ratio 0.91
+   class                s        calls   DENIED  ERRORED     TEXT      RAN | call ratio A/B against the lead seat
+   dispatch             s319       2.5      0.0      0.1      0.0      2.5 | 
+   dispatch             s321       2.1      0.0      0.0      0.0      2.1 | 0.83, AT-OR-BELOW the lead seat's 0.91; RAN calls 2.1 against 2.5
+   merge                s319       9.7      0.1      0.1      0.0      9.5 | 
+   merge                s321       8.7      0.0      0.0      0.0      8.7 | 0.89, AT-OR-BELOW the lead seat's 0.91; RAN calls 8.7 against 9.5
+   repair               s319       0.5      0.0      0.0      0.0      0.5 | 
+   repair               s321       0.1      0.0      0.0      0.0      0.1 | 0.27, AT-OR-BELOW the lead seat's 0.91; RAN calls 0.1 against 0.5
+   gate-run             s319       7.5      0.0      0.1      0.0      7.3 | 
+   gate-run             s321       8.3      0.1      0.0      0.0      8.2 | 1.11, ABOVE the lead seat's 0.91; RAN calls 8.2 against 7.3
+   step-reread          s319       1.6      0.0      0.0      0.0      1.6 | 
+   step-reread          s321       1.7      0.0      0.0      0.0      1.7 | 1.07, ABOVE the lead seat's 0.91; RAN calls 1.7 against 1.6
+   compaction-recovery  s319       0.2      0.0      0.0      0.0      0.2 | 
+   compaction-recovery  s321       0.3      0.0      0.0      0.0      0.3 | 1.40, ABOVE the lead seat's 0.91; RAN calls 0.3 against 0.2
+   snapshot             s319       9.2      0.0      0.1      0.0      9.1 | 
+   snapshot             s321       9.2      0.1      0.0      0.0      9.0 | 1.00, ABOVE the lead seat's 0.91; RAN calls 9.0 against 9.1
+   other                s319      10.5      0.0      0.0      8.1      2.4 | 
+   other                s321       7.5      0.0      0.0      3.3      4.2 | 0.72, AT-OR-BELOW the lead seat's 0.91; RAN calls 4.2 against 2.4
+-- merge and other, every step, per story: calls (RAN) s319 -> s321, with each cell's call ratio against its step's
+   architecture                 merge     6.0 (  6.0) ->    8.0 (  8.0)  ratio 1.34, step 0.97  ABOVE
+   architecture                 other     9.9 (  2.4) ->    7.1 (  1.3)  ratio 0.71, step 0.97  AT-OR-BELOW
+   carry-over-evaluation        merge     1.8 (  1.8) ->    0.0 (  0.0)  ratio n/a, step n/a  AT-OR-BELOW
+   carry-over-evaluation        other     7.7 (  3.6) ->    0.0 (  0.0)  ratio n/a, step n/a  AT-OR-BELOW
+   deploy-validate              merge     5.8 (  5.7) ->   17.5 ( 17.2)  ratio 2.99, step 2.76  ABOVE
+   deploy-validate              other     5.6 (  3.3) ->   12.1 (  5.6)  ratio 2.16, step 2.76  AT-OR-BELOW
+   gate[architecture]           merge     0.1 (  0.1) ->    0.4 (  0.4)  ratio 8.80, step 1.63  ABOVE
+   gate[architecture]           other     0.3 (  0.2) ->    0.2 (  0.1)  ratio 0.67, step 1.63  AT-OR-BELOW
+   gate[carry-over-evaluation]  merge     0.3 (  0.3) ->    0.0 (  0.0)  ratio n/a, step n/a  AT-OR-BELOW
+   gate[carry-over-evaluation]  other     0.3 (  0.3) ->    0.0 (  0.0)  ratio n/a, step n/a  AT-OR-BELOW
+   gate[implementation]         merge     9.7 (  9.5) ->    8.7 (  8.7)  ratio 0.89, step 0.91  AT-OR-BELOW
+   gate[implementation]         other    10.5 (  2.4) ->    7.5 (  4.2)  ratio 0.72, step 0.91  AT-OR-BELOW
+   gate[requirements]           merge     0.1 (  0.1) ->    0.5 (  0.5)  ratio 3.47, step 2.80  ABOVE
+   gate[requirements]           other     0.4 (  0.2) ->    1.2 (  1.0)  ratio 3.00, step 2.80  ABOVE
+   gate[sprint-review]          merge     0.3 (  0.3) ->    0.8 (  0.8)  ratio 2.29, step 0.96  ABOVE
+   gate[sprint-review]          other     0.8 (  0.5) ->    0.2 (  0.2)  ratio 0.32, step 0.96  AT-OR-BELOW
+   gate[stories-test-strategy]  merge     1.6 (  1.6) ->    0.5 (  0.5)  ratio 0.29, step 0.23  ABOVE
+   gate[stories-test-strategy]  other     3.3 (  0.6) ->    0.4 (  0.2)  ratio 0.11, step 0.23  AT-OR-BELOW
+   handoff                      merge     1.5 (  1.4) ->    0.8 (  0.8)  ratio 0.53, step 0.65  AT-OR-BELOW
+   handoff                      other     8.9 (  4.4) ->    4.9 (  2.9)  ratio 0.55, step 0.65  AT-OR-BELOW
+   implementation               merge    28.3 ( 28.0) ->   19.6 ( 19.4)  ratio 0.69, step 0.60  ABOVE
+   implementation               other    45.7 (  6.0) ->   17.0 (  5.2)  ratio 0.37, step 0.60  AT-OR-BELOW
+   pre-step                     other     1.1 (  0.8) ->    1.3 (  1.3)  ratio 1.26, step 1.26  AT-OR-BELOW
+   requirements                 merge     8.8 (  8.7) ->    8.2 (  8.1)  ratio 0.93, step 0.79  ABOVE
+   requirements                 other    21.1 ( 10.0) ->   13.4 (  5.4)  ratio 0.64, step 0.79  AT-OR-BELOW
+   retro                        merge     2.6 (  2.6) ->    2.6 (  2.4)  ratio 0.97, step 0.72  ABOVE
+   retro                        other     4.4 (  3.5) ->    2.6 (  1.8)  ratio 0.59, step 0.72  AT-OR-BELOW
+   route                        other     1.2 (  1.2) ->    1.1 (  1.1)  ratio 0.90, step 0.81  ABOVE
+   sprint-review                merge     1.1 (  1.1) ->    5.4 (  5.4)  ratio 4.91, step 1.45  ABOVE
+   sprint-review                other     5.2 (  3.3) ->    3.2 (  0.7)  ratio 0.60, step 1.45  AT-OR-BELOW
+   stories-test-strategy        merge     8.8 (  8.7) ->   12.8 ( 12.3)  ratio 1.47, step 1.37  ABOVE
+   stories-test-strategy        other    20.4 (  5.7) ->   27.2 ( 14.5)  ratio 1.34, step 1.37  AT-OR-BELOW
+   ui-direction                 merge     0.1 (  0.1) ->    0.1 (  0.1)  ratio 1.60, step 0.80  ABOVE
+   ui-direction                 other     0.1 (  0.0) ->    0.0 (  0.0)  ratio 0.80, step 0.80  AT-OR-BELOW
+-- s319 other, RAN and TEXT calls by first tool, per story (of 145.8): (text) 97.5, Bash 40.1, Read 4.0, AskUserQuestion 1.1, ToolSearch 0.8, Edit 0.8, TaskStop 0.5, Skill 0.2
+-- s321 other, RAN and TEXT calls by first tool, per story (of 98.7): (text) 53.2, Bash 33.1, Read 5.7, Write 2.4, Edit 1.2, ToolSearch 1.0, AskUserQuestion 0.8, ListAgents 0.4

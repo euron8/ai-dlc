@@ -14,8 +14,9 @@
 # Output: the counted store, the number of fixture directories listed, the hook's read-set and verdict-store lines,
 # `RUN <n>`, then one `run <fixture>` line per fixture the push would run. <out dir>/run holds the `.kdec` rows.
 # Then the consumer layout, decided by scripts/census-consumer-layout.sh --predict (the hook's own cl_select over a
-# scratch install of <tree>, the shared uncounted verdict store base and the placement records, read-only): the hook's
-# consumer-layout line, its verdict-store line naming every `<fixture>@consumer` unit skipped on a store entry or an
+# scratch install of <tree>, the shared uncounted verdict store base and the placement records, read-only), handed
+# <out dir>/out as AI_DLC_CL_DIST_OUT so it takes the hook's distribution-twin skip on the decisions printed above: the
+# hook's consumer-layout line, the line naming every unit that skip took, its verdict-store line naming every `<fixture>@consumer` unit skipped on a store entry or an
 # unconfirmed placement record (the gate prints the same line), `CONSUMER <m>`, and one `run <fixture>@consumer` line per unit the push would run as
 # `<fixture>@consumer`. `bash scripts/seed-verdict-store.sh <fixture>@consumer ...` seeds exactly those units.
 # Exit 0 = predicted; 2 = could not predict (bad arguments, a non-empty out dir, no hook span, no fixture listed,
@@ -54,7 +55,7 @@ awk -F'\t' '$2 == "run"' "$O/out/.kdec" > "$O/run"
 echo "RUN $(grep -c . "$O/run" || true)"
 awk -F'\t' '{ print "run " $1 }' "$O/run"
 [ -f scripts/census-consumer-layout.sh ] || { echo "predict-push-set: $T has no scripts/census-consumer-layout.sh" >&2; exit 2; }
-TMPDIR="$O/tmp" bash scripts/census-consumer-layout.sh --predict > "$O/consumer.out" 2> "$O/consumer.err" < /dev/null \
+TMPDIR="$O/tmp" AI_DLC_CL_DIST_OUT="$O/out" bash scripts/census-consumer-layout.sh --predict > "$O/consumer.out" 2> "$O/consumer.err" < /dev/null \
   && grep -q '^CONSUMER [0-9][0-9]*$' "$O/consumer.out" \
   || { cat "$O/consumer.err" >&2; echo "predict-push-set: the consumer-layout selection failed" >&2; exit 2; }
 grep -v '^   \.\.      ' "$O/consumer.out" | grep -v '^tree: '

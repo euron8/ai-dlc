@@ -153,9 +153,7 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
-fails=0; oks=0
-ok()  { printf '  ok    %s\n' "$1"; oks=$((oks+1)); }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found beside $HERE" >&2; exit 2; }
 
 # --- THE COMPARISON SEAM, AND WHY THIS FILE RENDERS ALMOST NOTHING TWICE ------------------------
 # `emit-report.sh --verify --region-from <file>` skips the render and hands <file>'s bytes to the one
@@ -2268,11 +2266,4 @@ if [ -z "$rer_want" ] || [ "$rer_got" != "$rer_want" ] || [ -n "$rer_foreign" ];
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "reconcile-emit-report: PASS"
-  echo "PASS: all $oks assertions correct in shard '$GROUP' of '$SHARDS'."
-  exit 0
-fi
-echo "reconcile-emit-report: $fails assertion(s) FAILED" >&2
-echo "FAIL: $fails of $((oks + fails)) assertions wrong in shard '$GROUP' of '$SHARDS'."
-exit 1
+report_end "reconcile-emit-report shard '$GROUP' of '$SHARDS'"

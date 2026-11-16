@@ -1,0 +1,205 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z (OUT = extract.py, spawns.py, analyze.py, roll.py, roll.py --seats at that window). Command: python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/gate_yield_s322.py $OUT $GRAPH_CLONE, where GRAPH_CLONE is a file:// clone of graph holding main plus graph's refs/remotes/origin/* (the s322 sprint-review fix commits are reachable only from origin/ai-dlc/carry-over/epic5-closeout)
+== 1. per-label spawns, subagent $ and agent-minutes (spawns.jsonl; agent-minutes SUM parallel spawns)
+s319 gate-validation[implementation]    spawns 134  $  92.11    724.1 min (12.07 h)  per story (20) $4.61  | brief: $4.61 MATCH
+s322 gate-validation[implementation]    spawns  39  $  71.20    505.6 min ( 8.43 h)  per story (8) $8.90  | brief: $8.90 MATCH
+s319 gate-validation[architecture]      spawns   1  $   0.92      9.0 min ( 0.15 h)  per story (20) $0.05  | brief: $0.05 MATCH
+s322 gate-validation[architecture]      spawns  32  $  40.34    210.0 min ( 3.50 h)  per story (8) $5.04  | brief: $5.04 MATCH
+s319 gate-validation[bug-investigation] spawns   0  $   0.00      0.0 min ( 0.00 h)  per story (20) $0.00  | brief: $0.00 MATCH
+s322 gate-validation[bug-investigation] spawns   2  $   2.68     12.5 min ( 0.21 h)  per story (8) $0.33  | brief: $0.33 MATCH
+s319 bug-investigation                  spawns   0  $   0.00      0.0 min ( 0.00 h)  per story (20) $0.00  | brief: $0.00 MATCH
+s322 bug-investigation                  spawns  15  $  25.00    186.2 min ( 3.10 h)  per story (8) $3.13  | brief: $3.13 MATCH
+s319 implementation                     spawns 496  $ 521.54   5708.6 min (95.14 h)  per story (20) $26.08
+s322 implementation                     spawns  68  $  65.41    327.3 min ( 5.46 h)  per story (8) $8.18
+s319 NEVER-STEP-ZZQ                     spawns   0  $   0.00      0.0 min ( 0.00 h)  per story (20) $0.00  | impossible-step control, must be 0
+s322 NEVER-STEP-ZZQ                     spawns   0  $   0.00      0.0 min ( 0.00 h)  per story (8) $0.00  | impossible-step control, must be 0
+like-for-like pair, implementation + gate-validation[implementation] (subagent $):
+   s319 impl $521.54 + gate $92.11 = $613.65 = $30.68/story  spawns 630  107.2 agent-h  | impl share 85%
+   s321 impl $286.46 + gate $160.70 = $447.16 = $17.89/story  spawns 280  52.1 agent-h  | impl share 64%
+   s322 impl $65.41 + gate $71.20 = $136.61 = $17.08/story  spawns 107  13.9 agent-h  | impl share 48%
+   s319 -> s322 per story: pair -13.61; gate label alone +4.29; implementation alone -17.90
+
+== 2. partitions (each must SUM to the label total)
+gate-validation[implementation] s319: label 134 spawns $92.11 724.1 min
+     code review                                   40 spawns $  48.39   192.9 min  ($2.42/story)
+     qa                                            28 spawns $   1.83   210.1 min  ($0.09/story)
+     gate adjudicator                              54 spawns $  35.52   264.4 min  ($1.78/story)
+     dev build or rework                            2 spawns $   0.19    30.5 min  ($0.01/story)
+     remediator                                    10 spawns $   6.17    26.2 min  ($0.31/story)
+     ops live reads                                 0 spawns $   0.00     0.0 min  ($0.00/story)
+     partition sum 134 / $92.11 / 724.1 min vs label, catch-all rows 0 (must be 0)  MATCH
+gate-validation[implementation] s322: label 39 spawns $71.20 505.6 min
+     code review                                   14 spawns $  14.63   159.3 min  ($1.83/story)
+     qa                                             4 spawns $  10.45   116.8 min  ($1.31/story)
+     gate adjudicator                              13 spawns $  20.47    98.5 min  ($2.56/story)
+     dev build or rework                            5 spawns $  15.08    64.9 min  ($1.89/story)
+     remediator                                     0 spawns $   0.00     0.0 min  ($0.00/story)
+     ops live reads                                 3 spawns $  10.57    66.1 min  ($1.32/story)
+     partition sum 39 / $71.20 / 505.6 min vs label, catch-all rows 0 (must be 0)  MATCH
+gate-validation[architecture] s319: label 1 spawns $0.92 9.0 min
+     gate adjudicator shards                        1 spawns $   0.92     9.0 min  ($0.05/story)
+     architecture-party round (4 seats x 4 shards + dispatch)   0 spawns $   0.00     0.0 min  ($0.00/story)
+     remediator repair of the party round           0 spawns $   0.00     0.0 min  ($0.00/story)
+     remediator J2 amendment (Check 24 repair)      0 spawns $   0.00     0.0 min  ($0.00/story)
+     partition sum 1 / $0.92 / 9.0 min vs label, catch-all rows 0 (must be 0)  MATCH
+gate-validation[architecture] s322: label 32 spawns $40.34 210.0 min
+     gate adjudicator shards                       10 spawns $   3.81    10.8 min  ($0.48/story)
+     architecture-party round (4 seats x 4 shards + dispatch)  17 spawns $  26.39   135.6 min  ($3.30/story)
+     remediator repair of the party round           4 spawns $   9.72    62.1 min  ($1.21/story)
+     remediator J2 amendment (Check 24 repair)      1 spawns $   0.42     1.5 min  ($0.05/story)
+     partition sum 32 / $40.34 / 210.0 min vs label, catch-all rows 0 (must be 0)  MATCH
+gate-validation[bug-investigation] s319: label 0 spawns $0.00 0.0 min
+     adversary                                      0 spawns $   0.00     0.0 min  ($0.00/story)
+     gate adjudicator                               0 spawns $   0.00     0.0 min  ($0.00/story)
+     partition sum 0 / $0.00 / 0.0 min vs label, catch-all rows 0 (must be 0)  MATCH
+gate-validation[bug-investigation] s322: label 2 spawns $2.68 12.5 min
+     adversary                                      1 spawns $   1.42     7.7 min  ($0.18/story)
+     gate adjudicator                               1 spawns $   1.25     4.8 min  ($0.16/story)
+     partition sum 2 / $2.68 / 12.5 min vs label, catch-all rows 0 (must be 0)  MATCH
+bug-investigation s322: label 15 spawns $25.00 186.2 min
+     root-cause adversary (2c)                      1 spawns $   1.65     8.0 min  ($0.21/story)
+     story 1.4 gate rework (dev, review, QA, closing writer)   4 spawns $   2.44    13.6 min  ($0.30/story)
+     story 1.8 spec repair/fold/amendments/role files   5 spawns $   6.85    23.2 min  ($0.86/story)
+     bug analysis (analyst)                         3 spawns $   6.50    28.9 min  ($0.81/story)
+     remediator of the analysis findings            1 spawns $   0.80     2.5 min  ($0.10/story)
+     story 1.8 dev build                            1 spawns $   6.76   110.0 min  ($0.84/story)
+     partition sum 15 / $25.00 / 186.2 min vs label, catch-all rows 0 (must be 0)  MATCH
+
+== 3a. gate-adjudication verdict files (implementation gate), joined to adjudicator spawns
+files at close ref f7e60625b: gate-adjudication 78 (brief 78 MATCH), gate-transition 85 (brief 85 MATCH)
+   by kind: {'implementation-TS.verdict.json': 15, 'planning-TS.part.jsonl': 30, 'planning-TS.verdict.json': 3, 'retro-TS.part.jsonl': 9, 'retro-TS.verdict.json': 1, 'sprint-review-TS.part.jsonl': 8, 'sprint-review-TS.repair.md': 1, 'sprint-review-TS.verdict.json': 2, 'story-TS.part.jsonl': 8, 'story-TS.verdict.json': 1}
+verdict files 15; adjudicator spawns in gate-validation[implementation] and gate-validation[bug-investigation]: 14; every file joined to a spawn: True; every spawn has a file: True
+generated_at      story  spawn (label)                     series                      FAIL  failed checks
+11-11T02:10       6      Gate-3 adjudication  (impl)       story1x6-014202Z               1  ['1']
+11-11T02:40       6      Gate-3 adjudication  (impl)       story1x6-014202Z               0  []
+11-11T04:10       7      G3 adjudicator story (impl)       story1x7-035923Z               0  []
+11-11T07:45       4      Gate-3 adjudicator s (impl)       story1x4-072424Z               1  ['19']
+11-11T08:05       4      Gate-3 adjudicator 1 (bug-)       story1x4-075416Z               0  []
+11-11T10:38       8      Gate 3 adjudication  (impl)       story1x8-102922Z               1  ['19']
+11-11T10:58       8      Gate 3 adjudication  (impl)       story1x8-105218Z               0  []
+11-12T00:28       3      Gate-3 adjudication  (impl)       story1x3-001944Z               2  ['11a', '19']
+11-12T02:20       2      1.2 gate-3 adjudicat (impl)       story2-015823Z                 0  []
+11-12T02:23       5      1.5 gate-3 adjudicat (impl)       story5-021502Z                 0  []
+11-12T02:42       1      1.1 gate-3 adjudicat (impl)       story1-022714Z                 1  ['19']
+11-12T02:45       3      1.3 gate-3 p2 adjudi (impl)       story1x3-001944Z               1  ['19']
+11-12T02:58       1      1.1 gate-3 re-run ad (impl)       story1-022714Z                 1  ['19']
+11-12T03:04       3      1.3 gate-3 p3 adjudi (impl)       story1x3-001944Z               0  []
+11-12T03:16       1      1.1 gate-3 p3 adjudi (impl)       story1-022714Z                 0  []
+gate-validation[implementation]: 13 adjudicator spawns $20.47, 14 verdict files, 7 with a FAIL, 8 FAIL checks (210 checks read); $1.46 per file, $2.92 per FAIL file if only those counted
+gate-validation[bug-investigation]: 1 adjudicator spawns $1.25, 1 verdict files, 0 with a FAIL, 0 FAIL checks (15 checks read); $1.25 per file, $1.25 per FAIL file if only those counted
+FAIL checks, and the next verdict on the same check in a later file of the same story:
+   11-11T02:10 story 6 check 1   -> next PASS | Gate-1 re-review file 6-code-review-p2.md (the -p2 sibling supersedes unsuffixed 6-code-review.md, which reads
+   11-11T07:45 story 4 check 19  -> next PASS | Scope fires. Story 1.4 carries discrimination-evidence ACs: AC4 (mutation-RED, C26_UNFIXED=1 BAD with exit 1),
+   11-11T10:38 story 8 check 19  -> next PASS | Scope fires and the Self-Discrimination Map citation is absent. Scope, tested against the 1.4 precedent (imple
+   11-12T00:28 story 3 check 11a -> next PASS | Check 11a applies and its bar is unmet. Applicability: the three tests this story rewires are live-against-pro
+   11-12T00:28 story 3 check 19  -> next FAIL | Scope fires and the reviewer's verdict lacks the required Self-Discrimination Map citation. Scope: arm (b) - t
+   11-12T02:42 story 1 check 19  -> next FAIL | Scope fires, applied as the gate applied it to 1.3 (FAIL, 20261112T001944Z) and 1.4/1.8: arm (c) AC1 and AC2 a
+   11-12T02:45 story 3 check 19  -> next PASS | Scope fires: the story's ACs are discrimination-evidence ACs (five mutation-RED captures of a detector helper,
+   11-12T02:58 story 1 check 19  -> next PASS | Scope fires, as the gate applied it at pass 1 (FAIL, 20261112T022714Z) and to 1.3/1.4/1.8: arm (c) AC1 and AC2
+check-19 share of FAIL checks: 6 of 8
+s319 implementation verdict files (per-sprint dir, read at ref fb6f198e7): 14 files, 210 checks, 5 with a FAIL, 5 FAIL checks, over 20 stories (s322: 15 files over 8 stories); check ids failing: {'11': 2, '9': 3}
+s321 verdict files sit in the undated root _bmad-output/gate-adjudication/ and are joined by date window in gate_label_yield.py 3c; not repeated here
+stories with an implementation verdict file 8 of 8; first file had a FAIL: [1, 3, 4, 6, 8]; last file all PASS: 8
+
+== 3b. review files docs/reviews/sNNN (whole sprint, ALL step labels; blob-deduplicated; no per-label attribution possible)
+s319 code-review   series 18 files  54 unverdicted 0 NEEDS_REWORK files 29 in 12 series, last file APPROVED/PASS: 12 of 12 | C/M by #### headings: C 22 M 181; by Class: lines: C 0 M 0
+s319 qa-validation series 18 files  32 unverdicted 0 NEEDS_REWORK files 11 in  8 series, last file APPROVED/PASS: 8 of 8 | C/M by #### headings: C 3 M 42; by Class: lines: C 0 M 0
+   s319 shard files (180, the parts the merged files above already contain, not added): C/M headings C 14 M 73, Class: lines C 0 M 0
+   s319 identical blobs counted once across names: 0
+s321 code-review   series 24 files  52 unverdicted 0 NEEDS_REWORK files 23 in 16 series, last file APPROVED/PASS: 16 of 16 | C/M by #### headings: C 5 M 53; by Class: lines: C 5 M 53
+s321 qa-validation series 24 files  37 unverdicted 0 NEEDS_REWORK files 11 in  8 series, last file APPROVED/PASS: 8 of 8 | C/M by #### headings: C 7 M 23; by Class: lines: C 7 M 23
+   s321 shard files (55, the parts the merged files above already contain, not added): C/M headings C 1 M 33, Class: lines C 1 M 33
+   s321 identical blobs counted once across names: 0
+s322 code-review   series  8 files  20 unverdicted 0 NEEDS_REWORK files  5 in  5 series, last file APPROVED/PASS: 5 of 5 | C/M by #### headings: C 1 M 12; by Class: lines: C 1 M 12
+s322 qa-validation series  8 files  14 unverdicted 0 NEEDS_REWORK files  4 in  3 series, last file APPROVED/PASS: 3 of 3 | C/M by #### headings: C 0 M 7; by Class: lines: C 0 M 7
+   s322 shard files (30, the parts the merged files above already contain, not added): C/M headings C 1 M 9, Class: lines C 1 M 9
+   s322 identical blobs counted once across names: 2 [('docs/reviews/s322/4-qa-validation-p2.md', 'docs/reviews/s322/1-4-qa-validation-p2.md'), ('docs/reviews/s322/4-qa-validation-p3.md', 'docs/reviews/s322/1-4-qa-validation-p3.md')]
+s322 series at ship (story, kind): pass:verdict[C/M by headings]
+   story 1 code-review   p1:APPRO[0/2]  p2:APPRO[0/0]  p3:APPRO[0/0]
+   story 1 qa-validation p1:PASS[0/0]
+   story 2 code-review   p1:APPRO[0/0]
+   story 2 qa-validation p1:PASS[0/0]
+   story 3 code-review   p1:APPRO[0/0]  p2:NEEDS[0/1]  p3:APPRO[0/0]  p4:APPRO[0/0]
+   story 3 qa-validation p1:PASS[0/0]  p2:PASS[0/0]
+   story 4 code-review   p1:APPRO[0/1]  p2:NEEDS[0/1]  p3:APPRO[0/0]
+   story 4 qa-validation p1:NEEDS[0/1]  p2:PASS[0/0]  p3:NEEDS[0/1]  p4:PASS[0/0]
+   story 5 code-review   p1:APPRO[0/0]
+   story 5 qa-validation p1:PASS[0/0]
+   story 6 code-review   p1:NEEDS[0/3]  p2:APPRO[0/0]
+   story 6 qa-validation p1:PASS[0/1]
+   story 7 code-review   p1:NEEDS[0/3]  p2:APPRO[0/0]
+   story 7 qa-validation p1:NEEDS[0/1]  p2:PASS[0/0]
+   story 8 code-review   p1:NEEDS[1/1]  p2:APPRO[0/0]  p3:APPRO[0/0]  p4:APPRO[0/0]
+   story 8 qa-validation p1:NEEDS[0/2]  p2:PASS[0/1]
+s322 NEEDS_REWORK series: [(('3', 'code-review'), 'APPRO->NEEDS->APPRO->APPRO'), (('4', 'code-review'), 'APPRO->NEEDS->APPRO'), (('4', 'qa-validation'), 'NEEDS->PASS->NEEDS->PASS'), (('6', 'code-review'), 'NEEDS->APPRO'), (('7', 'code-review'), 'NEEDS->APPRO'), (('7', 'qa-validation'), 'NEEDS->PASS'), (('8', 'code-review'), 'NEEDS->APPRO->APPRO->APPRO'), (('8', 'qa-validation'), 'NEEDS->PASS')]
+review spawns by label, s322 (code-review + qa roles): {'gate-validation[implementation]': 18, 'bug-investigation': 2, 'implementation': 35, 'sprint-review': 9, 'retro': 1}
+
+== 3c. gate-transition plan files (s322): one plan per story x gate x pass
+plan files 51 (+ 34 capture lists); passes per gate: {'g1': 20, 'g2': 14, 'g3': 15, 'gclose': 2}
+   stories with a gate-1 pass 2 or later (rework): ['1', '3', '4', '6', '7', '8'] of 8; gate-3 pass 2 or later: ['1', '3', '4', '6', '8']
+   gate-log lines by level: {'WARN': 177, 'SKIP': 77, 'other': 6, 'Rule': 3} (FAIL/REFUSED lines: 0; WARN lines are the positive control); routes {'serial': 22, 'record-only': 6, 'gate3': 15, 'partitioned': 6, 'close': 2}; nonzero steering-count lines 0
+
+== 3d. gate-labelled dev, ops and re-review spawns against the story's review series at ship (s322)
+   11-10T23:53 dev build or rework    S322 story 1.6 dev                       $ 1.86  19.0 min | story 6: co NEEDS/APPRO; qa PASS
+   11-11T00:12 code review            Gate-1 pass 2 review story 6             $ 0.56 103.8 min | story 6: co NEEDS/APPRO; qa PASS
+   11-11T10:42 code review            Record-only gate-1 p4 re-review          $ 0.97   8.3 min | story None: 
+   11-12T00:22 dev build or rework    Story 1.1 dev-escalated fixture          $ 3.71  16.0 min | story 1: co APPRO/APPRO/APPRO; qa PASS
+   11-12T00:23 dev build or rework    Story 1.2 dev re-dispatch                $ 3.07  10.9 min | story 2: co APPRO; qa PASS
+   11-12T00:23 dev build or rework    Story 1.5 dev from zero                  $ 5.84  17.7 min | story 5: co APPRO; qa PASS
+   11-12T00:32 ops live reads         11a live attempt ops seat                $ 1.47   6.0 min | story None: 
+   11-12T00:52 ops live reads         1.1 live-ops observation reads           $ 7.85  55.4 min | story 1: co APPRO/APPRO/APPRO; qa PASS
+   11-12T00:57 dev build or rework    1.3 rework dev seat                      $ 0.60   1.3 min | story 3: co APPRO/NEEDS/APPRO/APPRO; qa PASS/PASS
+   11-12T01:04 ops live reads         1.3 live re-run ops seat                 $ 1.26   4.7 min | story 3: co APPRO/NEEDS/APPRO/APPRO; qa PASS/PASS
+   11-12T01:11 code review            1.3 gate-1 pass-3 serial review          $ 0.75   3.3 min | story 3: co APPRO/NEEDS/APPRO/APPRO; qa PASS/PASS
+   11-12T02:49 code review            1.3 gate-1 p4 re-review                  $ 1.17   7.9 min | story 3: co APPRO/NEEDS/APPRO/APPRO; qa PASS/PASS
+FAIL-chain spawns (pass-2+ adjudicators and re-reviews, by description): 9 spawns $9.01 of label $71.20
+story 1.3 named catch (gate-3 Check 11a FAIL -> live attempt -> fix): 'networkidle' mentions in the pass-1 review files 0 (3-code-review 0, 3-qa-validation 0), in later p2+ files 20; the dev fix text 'domcontentloaded' in story-3 review files after the fix 5
+   11a live-attempt ops seat final_text: [['all 4 tests failed on the networkidle timeout, so the nav-count assertion was never exercised live.']]
+
+== 3e. gate-validation[architecture]: the party round and the J2 repair
+party files 16 (spine shards: 16 expected = 4 seats x (3 shards + cross): MATCH); '## F-n (sev)' headings: {'critical': 1, 'major': 42, 'minor': 52}; second count, headings naming critical/major: 43
+   per seat C/M headed findings: {'architect': 14, 'dev': 7, 'tea': 13, 'pm': 9}
+   architecture planning verdict 2026-11-10T08:25:19Z: 10 checks, FAIL 0 (series planning-s322-20261110T081758Z)
+   J2 repair record: disposition ['repaired', 'repaired'], 'failed check: Check 24 arm J2' x1, edit hunks named: ['_bmad-output/planning-artifacts/s322/architecture-impact.md:5', '_bmad-output/planning-artifacts/s322/architecture-impact.md:5']
+   repair records (planning-artifacts/s322/*repair*.md) 41; those whose text names the architecture party round: 10 (control: naming 'adversarial': 20)
+   s319 architecture-party-round spawns by step label: none
+   s321 architecture-party-round spawns by step label: none
+   s322 architecture-party-round spawns by step label: {'gate-validation[architecture]': (16, 25.01)}
+   the architecture label ran 36 spawns $69.64: 15 spawns $49.63 of them are adversary shards; the party round (03:14) is in gate-validation[architecture], so party cost is booked to the gate label
+
+== 3f. bug-investigation: records, provenance counts, dispositions, shipped fix (s322)
+   s322/bug-analysis-xdist-worker-cap.md                                  present | provenance at - C - M - m - | F- headings -
+   s322/bug-analysis-adversarial-xdist-worker-cap.md                      present | provenance at 11-10T23:03 C 0 M 6 m 2 | F- headings -
+   bug-analysis-xdist-runtime-footprint-crash-guard.md                    present | provenance at - C - M - m - | F- headings -
+   bug-analysis-adversarial.md                                            present | provenance at 11-11T07:41 C 0 M 3 m 3 | F- headings {'major': 3, 'minor': 3}
+   s322/bug-fix-oneshot-xdist-crash-admission-controls.md                 present | provenance at 11-11T07:55 C 2 M 7 m 3 | F- headings {'critical': 2, 'major': 7, 'minor': 3}
+   s322/bug-fix-oneshot-xdist-collection-footprint-bisect-and-pin.md      present | provenance at 11-11T02:10 C 1 M 9 m 4 | F- headings -
+   s322/bug-fix-oneshot-test-harness-repair-measure-and-cap.md            present | provenance at 11-10T23:21 C 2 M 7 m 4 | F- headings -
+   analysis 2 disposition table rows by disposition: {'REPAIRED': 6}; ladder-layer tokens at ship: 'L12' x7, 'L4a' x3 (both from the 2c repair); control impossible token x0
+   analysis 1 lead disposition section present x1; the two analysis files are single-commit records (git log counts: analysis 2 1, story 1.8 1), so no pre-repair blob exists in the clone: before-absence of repaired text is NOT measurable
+   story 1.8 at ship carries repair text: 'single-home' x4, 'PYTEST_PIN' x2, one-shot F-1 premise 'collect-only -n 8' x5, '### F-' headings in the story x0
+   shipped at e0ebaf019: scripts/pytest_admission.py              present, 5304 bytes
+   shipped at e0ebaf019: scripts/pytest-footprint-watchdog.py     present, 7916 bytes
+   shipped at e0ebaf019: scripts/pytest-admission.conf            present, 306 bytes
+   PYTEST_PIN line at ship: ['PYTEST_PIN=9.1.1']
+   floating specifier '"pytest>=8.0"' (the analysis's L12 producer) still at ship: rebalancer+server pyproject x2 (positive control: 'pytest-xdist' x2 in rebalancer/pyproject.toml)
+   story 1.6 review series at ship: {'code-review': 'NEEDS->APPRO', 'qa-validation': 'PASS'}
+   story 1.7 review series at ship: {'code-review': 'NEEDS->APPRO', 'qa-validation': 'NEEDS->PASS'}
+   story 1.8 review series at ship: {'code-review': 'NEEDS->APPRO->APPRO->APPRO', 'qa-validation': 'NEEDS->PASS'}
+   admission-controls story 1.8 ACs proof: 8-qa-validation shard text 'collected total' / '2 failed, 9234 passed' x2 (the run is a full execution, not collect-only)
+   instance-selector bug analysis (_bmad-output/implementation-artifacts/s322/bug-analysis-instance-selector-pollution.md) present True; spawns in bug-investigation naming it: 0; in sprint-review label: 1
+survival floor, party finding pm-cross F-1 (AD-5 row rewrote the CAP-6 Day-0 route): false text quoted in the finding file x1 (control, >0); false text in the spine at ship x0 (0 = repaired); repaired text 'GET /api/rebalancer/config` on the Base instance' in spine x1 (>0); absent-before needs the pre-repair spine blob, which was not read: NOT measured
+survival floor, one-shot F-1 on story 1.8 (AC6 proved by collect-only -n 8): finding file names the premise x11 (control, >0); story at ship carries the repaired AC6 text 'a FULL `-n 8` run (not `--collect-only`' x1 (>0); admission proof run in the QA record: '2 failed, 9234 passed' x2
+
+== 4. NOT measured
+   - review files carry no label: C/M above are whole-sprint, not per label. Available: attribution by commit time is unreliable (files land at the sprint merge).
+   - the claim texts of dev rework (what a gate finding changed in code) are in product repo commits not in this clone's file tree reads; survival floor here is series-ended-APPROVED/PASS, not span survival.
+   - s319 gate-3 FAIL checks come from verdict files under s319/gate-adjudication read at the s321 merge; no per-spawn join for s319 (adjudicator_agent_id mostly a placeholder, joined by story+time for s322 only).
+
+== 5. controls
+gate-validation[implementation]    description token 'adjudicat|review|analys|dev|party|architect' present in 30 spawns (>0 expected); impossible token ZQX-NO-SUCH-DESC-4417 in 0 (must be 0)
+gate-validation[architecture]      description token 'adjudicat|review|analys|dev|party|architect' present in 19 spawns (>0 expected); impossible token ZQX-NO-SUCH-DESC-4417 in 0 (must be 0)
+gate-validation[bug-investigation] description token 'adjudicat|review|analys|dev|party|architect' present in 1 spawns (>0 expected); impossible token ZQX-NO-SUCH-DESC-4417 in 0 (must be 0)
+bug-investigation                  description token 'adjudicat|review|analys|dev|party|architect' present in 9 spawns (>0 expected); impossible token ZQX-NO-SUCH-DESC-4417 in 0 (must be 0)
+impossible finding token ZQX-NO-SUCH-FINDING-6602 in s322 review corpus x0 (must be 0); positive 'Critical' x68, 'Class:' x24 (>0)
+units counted twice across s319/s322: []
+s322 review series entries 34; spawns.jsonl s322 rows 659

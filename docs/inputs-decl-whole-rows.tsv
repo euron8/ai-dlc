@@ -66,7 +66,6 @@ enforcement-map-sites	templates/	whole
 enforcement-map-sites	core/	whole
 finding-grammar-binding	!core/scripts/	whole
 finding-grammar-binding	!core/hooks/	whole
-fixture-git-env-seam	core/fixtures/	legacy
 fixture-inprocess	!.githooks/pre-push	whole
 fixture-inprocess	!core/git-hooks/pre-push	whole
 fixture-invocation-budget	!core/scripts/hermetic-run.sh	whole

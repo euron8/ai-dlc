@@ -3,9 +3,12 @@
 #
 #   pool_span <hook> <out> <SPAN>...
 #
-# Writes to <out> each named `# <SPAN>_BEGIN` .. `# <SPAN>_END` span of <hook>, in the hook's file order, under one
-# first line:
+# Writes to <out> each named `# <SPAN>_BEGIN` .. `# <SPAN>_END` span of <hook>, in the hook's file order, under these
+# two first lines:
 #   export AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$PWD.verdicts}"
+#   unset REC_ROOT
+# The second makes every source resolve the root commit from its own $PWD: RECORD_HOME keeps a REC_ROOT already set in
+# the shell, so a second source in another world would file that world's records under the first world's root.
 # Source <out> from inside the world it drives (after a `cd` into it), as hook_drive runs a hook from its tree. Every
 # record home then resolves under that world's own store, <world>.verdicts, unless the caller set a non-empty one: the
 # RECORD_HOME span (which FIXTURE_POOL carries) at the source, rec_home calls later in that shell, and every child it
@@ -23,6 +26,6 @@ pool_span() {
     grep -qx "# ${s}_BEGIN" "$hk" && grep -qx "# ${s}_END" "$hk" || return 1
     prog="$prog/^# ${s}_BEGIN\$/,/^# ${s}_END\$/p;"
   done
-  { printf '%s\n' 'export AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$PWD.verdicts}"'; sed -n "$prog" "$hk"; } > "$out" || return 1
+  { printf '%s\n' 'export AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$PWD.verdicts}"' 'unset REC_ROOT'; sed -n "$prog" "$hk"; } > "$out" || return 1
   [ "$(grep -c . "$out")" -gt "$(($# * 2))" ]
 }

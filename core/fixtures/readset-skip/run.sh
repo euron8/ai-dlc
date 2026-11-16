@@ -33,11 +33,11 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # core/fixtures/consumer-suite-pool (worlds p, s, w, t, ST=3) and core/fixtures/prepush-pool-depth (PN_STALL).
 AI_DLC_POOL_STALL=99999; export AI_DLC_POOL_STALL
 
-asserts=0; fails=0
-ok()     { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
-bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+RS_LIB="$(cd "$(dirname "$0")/../lib" && pwd)"
+. "$RS_LIB/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE BROKEN" >&2; exit 2; }
-. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$RS_LIB/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$RS_LIB/pool-span.sh" || { echo "FIXTURE BROKEN: cannot source lib/pool-span.sh" >&2; exit 2; }
 # ---------------------------------------------------------------------------- shards ----
 # THIS FILE IS FOUR SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
 # BOUNDARY. Every section below is a UNIT guarded by `if sg <unit>; then ... fi`; `--group <x>` runs
@@ -377,7 +377,7 @@ ps_sandbox_skip() { # <group>: 0 (skip it, SKIP printed) inside a sandbox where 
 # not where the record lives (scripts/validate-verdict-identity.sh W1 holds the hook's own sites).
 rs_rec_pin() { printf '%s\n' 'KEYS_DIR="$GITDIR/ai-dlc-fixture-keys"; VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"; VERIFIED_FORMAT="$VERIFIED_RECORD.format"'; }
 POOL="$WORK/pool.sh"
-sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$HOOK" > "$POOL" && rs_rec_pin >> "$POOL"
+pool_span "$HOOK" "$POOL" FIXTURE_POOL && rs_rec_pin >> "$POOL"
 [ -s "$POOL" ] || broken "extracted an empty FIXTURE_POOL block from $HOOK"
 grep -q 'apply_readset_skip' "$POOL" || broken "the extracted block carries no apply_readset_skip"
 # THE RESOLVED BLOCK'S FIXTURE ROOT -- `core/fixtures` in the distribution's hook, `tests/fixtures` in
@@ -392,7 +392,7 @@ FXROOT="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$POOL" | sort -u)"
 HK_N=0
 for _hk in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_hk" ] || continue
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_hk" > "$WORK/hk.pool"
+  pool_span "$_hk" "$WORK/hk.pool" FIXTURE_POOL
   grep -q 'apply_readset_skip' "$WORK/hk.pool" || broken "${_hk#"$ROOT"/} carries no FIXTURE_POOL block with apply_readset_skip"
   HK_N=$((HK_N+1))
   echo "HERMETIC-CONSUMED ${_hk#"$ROOT"/}"
@@ -4392,7 +4392,7 @@ CK_N=0
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_h" ] || continue
   CK_N=$((CK_N+1)); CK_P="$CK_W/pool.$CK_N.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$CK_P" && rs_rec_pin >> "$CK_P"
+  pool_span "$_h" "$CK_P" FIXTURE_POOL && rs_rec_pin >> "$CK_P"
   CK_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$CK_P" | sort -u)"
   [ "$(printf '%s\n' "$CK_X" | grep -c .)" -eq 1 ] || broken "read '$CK_X' as ${_h#"$ROOT"/}'s fixture root; need exactly one"
   eval "CK_H$CK_N=\"\$_h\"; CK_PP$CK_N=\"\$CK_P\"; CK_XX$CK_N=\"\$CK_X\""
@@ -4707,7 +4707,7 @@ TK_N=0
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_h" ] || continue
   TK_N=$((TK_N+1)); TK_P="$CK_W/tkpool.$TK_N.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$TK_P" && rs_rec_pin >> "$TK_P"
+  pool_span "$_h" "$TK_P" FIXTURE_POOL && rs_rec_pin >> "$TK_P"
   TK_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$TK_P" | sort -u)"
   tk_all "$TK_P" "$TK_X" "h$TK_N"
   for _w in $TK_WORLDS; do
@@ -5027,7 +5027,7 @@ for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -n "$DERIVER" ] || break
   [ -f "$_h" ] || continue
   DG_N=$((DG_N+1)); DG_P="$CK_W/dgpool.$DG_N.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$DG_P" && rs_rec_pin >> "$DG_P"
+  pool_span "$_h" "$DG_P" FIXTURE_POOL && rs_rec_pin >> "$DG_P"
   DG_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$DG_P" | sort -u)"
   # Every world runs against the first hook only. I66 holds the two FIXTURE_POOL blocks to one program except
   # FXROOT, which ckw's (d, wiring) world drives end to end on the second hook.
@@ -5075,7 +5075,8 @@ else
   rc_seed() { # <repo> <change ch: yes|no> <stale st: yes|no> <unmapped un: yes|no>
     local r="$1" f k
     mkdir -p "$r/.githooks" "$r/core/scripts" "$r/src" || return 1
-    { printf '#!/bin/bash\nFXROOT="core/fixtures/"\n'; sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p;/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p;/^# RECORD_HOME_BEGIN$/,/^# RECORD_HOME_END$/p' "$HOOK"; } > "$r/.githooks/pre-push"
+    pool_span "$HOOK" "$WORK/rc.rh.span" READSET_UNIVERSE READSET_VS RECORD_HOME || return 1
+    { printf '#!/bin/bash\nFXROOT="core/fixtures/"\n'; cat "$WORK/rc.rh.span"; } > "$r/.githooks/pre-push"
     cp "$SB/deriver.sh" "$r/core/scripts/derive-fixture-readsets.sh" || return 1
     : > "$r/.ai-dlc-fixture-readsets.tsv"
     for f in ch cl nd st ${4:+un}; do
@@ -5325,7 +5326,7 @@ VS_N=0
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_h" ] || continue
   VS_N=$((VS_N+1)); VS_P="$WORK/vspool.$VS_N.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$VS_P" && rs_rec_pin >> "$VS_P"
+  pool_span "$_h" "$VS_P" FIXTURE_POOL && rs_rec_pin >> "$VS_P"
   VS_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$VS_P" | sort -u)"
   [ "$VS_N" -eq 1 ] && { VS_P1="$VS_P"; VS_X1="$VS_X"; }
   VS_ARMS=$((VS_ARMS+1)); _g="$(vs_world "$VS_P" "$VS_X" "$VS_RUN" "$WORK/vs.h$VS_N" 2>/dev/null)"
@@ -5473,7 +5474,7 @@ VS_CN=0
 for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$_h" ] || continue
   VS_CN=$((VS_CN+1)); VS_CP="$WORK/vscpool.$VS_CN.sh"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$VS_CP" && rs_rec_pin >> "$VS_CP"
+  pool_span "$_h" "$VS_CP" FIXTURE_POOL && rs_rec_pin >> "$VS_CP"
   VS_CX="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$VS_CP" | sort -u)"
   [ "$VS_CN" -eq 1 ] && { VS_CX1="$VS_CX"; VS_CH1="$_h"; }
   _g="$(vs_census "$VS_CP" "$VS_CX" "$VS_RUN" "$WORK/vs.c$VS_CN" "$_h" 2>/dev/null)"
@@ -5499,8 +5500,8 @@ vs_hprobe() { # <name> <from> <to> [<source hook>]
   [ "$n" = 1 ] || { bad "VS PROBE $1: anchor matched $n time(s) in ${s##*/}, not 1 -- DID NOT APPLY"; return 1; }
   MF="$2" MT="$3" awk '{ i = index($0, ENVIRON["MF"]); if (i > 0) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$s" > "$VS_HP" \
     || { bad "VS PROBE $1: awk DID NOT APPLY"; return 1; }
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$s" > "$VS_HPP.src" && rs_rec_pin >> "$VS_HPP.src"
-  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$VS_HP" > "$VS_HPP" && rs_rec_pin >> "$VS_HPP"
+  pool_span "$s" "$VS_HPP.src" FIXTURE_POOL && rs_rec_pin >> "$VS_HPP.src"
+  pool_span "$VS_HP" "$VS_HPP" FIXTURE_POOL && rs_rec_pin >> "$VS_HPP"
   if cmp -s "$s" "$VS_HP" || cmp -s "$VS_HPP.src" "$VS_HPP"; then bad "VS PROBE $1: the hook copy or its pool is unchanged"; return 1; fi
   return 0
 }
@@ -5764,13 +5765,9 @@ aw_gate
 # that passed, so the arm count is asserted against the number this file actually carries.
 BASE_ARMS=0; sg arms && BASE_ARMS=16
 EXPECTED=$(( BASE_ARMS + PRE_ARMS + ${IGN_ARMS:-0} + ${NEW_ARMS:-0} + ${MERGE_ARMS:-0} + ${CONTROL_ARMS:-0} + ${TRACE_ARMS:-0} + ${BOTH_ARMS:-0} + ${LT_ARMS:-0} + ${CK_ARMS:-0} + ${TK_ARMS:-0} + ${DG_ARMS:-0} + ${RC_ARMS:-0} + ${VS_ARMS:-0} + ${SLOT_ARMS:-0} ))
-if [ "$asserts" -lt "$EXPECTED" ]; then
-  printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
-  fails=$((fails+1))
+if [ $((oks + fails)) -lt "$EXPECTED" ]; then
+  bad "only $((oks + fails)) assertions ran; this fixture carries $EXPECTED — it exited early and a short green run reads exactly like a passing one"
 fi
 
 echo
-if [ "$fails" -eq 0 ]; then
-  echo "$NAME: PASS ($asserts assertions)"; exit 0
-fi
-echo "$NAME: $fails of $asserts assertion(s) FAILED"; exit 1
+report_end "$NAME"

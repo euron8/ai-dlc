@@ -1465,6 +1465,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 28342ca57c853d53b8dfea1c1b7ed7e05593aba85c12e9aafe8c31e5d35ae89c a fixture's own run.sh keyed on its comment-stripped text where the executor parses both alike, a stored raw row of today's bytes reading as it (BL-1062); a + file narrowed by section.decl keyed on that section (BL-1061)
 # VS-IDENTITY 1 b2ec0b25c1096bc624ac08968284825ee5ec5aecd6f3f5540127caa1e7701f0c an entry may end in `#pending <n>` (BL-998); an entry without it is reused with its count unrecorded, so no existing entry changes meaning
 # VS-IDENTITY 1 786022459096dffaab204f2ccb876acf8a4f6d6f38fa1e237af948531f071c77 another fixture's inputs.decl is no longer keyed through a covering directory and a `<dir>/*/<name>` line expands to F rows (BL-1071); every row an existing entry carries keeps its value
+# VS-IDENTITY 1 f89e84291bd6c193454135df357f44d0c104e2cec7d76423cdbd7d1f138bee89 the tools.decl search path is walked with builtins, no fork per line (BL-1124); every parse row is byte-identical, so no entry changes meaning
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -1642,7 +1643,7 @@ readset_tail_sha() { # <file>: the top-level lines after its last line that is e
   awk '{ a[NR] = $0 } $0 == "}" { e = NR } END { for (i = e + 1; i <= NR; i++) print a[i] }' "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
 }
 readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix>
-  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" t k p rq dp name found seen="|" ga gb gn gf ge
+  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" t k p rq dp name found seen="|" ga gb gn gf ge xr
   printf '%s\tN\n' "$fx"
   awk -v fx="$fx" -v pl="$w.p" 'BEGIN { printf "" > pl } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
       r = 0; x = 0; while ((c = substr($0, 1, 1)) == "!" || c == "+") { if (c == "!") r = 1; else x = 1; $0 = substr($0, 2) }
@@ -1712,7 +1713,14 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
         continue ;;
     esac
     case "$t" in */*) printf '%s\tX\ttpath\t%s\n' "$fx" "$t"; continue ;; esac
-    found="$( IFS=:; for p in $xpd; do [ -x "$p/$t" ] && { printf '%s' "$p/$t"; break; }; done )"
+    # THE SEARCH PATH IS WALKED WITH BUILTINS, ONE FIELD PER `:`, FIRST MATCH WINS: no fork per tools.decl line. The
+    # fields are those of an IFS=: word split (an empty field is kept, a trailing `:` adds none, an empty path has none).
+    found=""; xr="$xpd"
+    while [ -n "$xr" ]; do
+      p="${xr%%:*}"
+      case "$xr" in *:*) xr="${xr#*:}" ;; *) xr="" ;; esac
+      [ -x "$p/$t" ] && { found="$p/$t"; break; }
+    done
     [ -n "$found" ] || { printf '%s\tX\ttnone\t%s\n' "$fx" "$t"; continue; }
     case "$seen" in *"|${found##*/}=$found|"*) continue ;; *"|${found##*/}="*) printf '%s\tX\tdup\t%s\n' "$fx" "${found##*/}"; continue ;; esac
     seen="$seen${found##*/}=$found|"; printf '%s\tT\t%s\n' "$fx" "$found"
@@ -2336,10 +2344,31 @@ readset_keys_write() { # <out> [<keys dir>, default $KEYS_DIR]
 # run_fixtures reads. Only AI_DLC_FIXTURE_NO_SKIP=1 (`all`) runs every candidate.
 # cl_select <out> <all|keys|census>: writes <out>/.cl.sel, the bare names this push runs as `<fx>@consumer`.
 # `census` is scripts/census-consumer-layout.sh's mode, the only one that selects with no record present.
-# It prints the selection line, up to ten `<fx>@consumer: <reason>` rows, and the verdict-store line naming every
-# `<fx>@consumer` unit skipped on a store entry or on an unconfirmed placement record.
+# It prints the selection line, up to ten `<fx>@consumer: <reason>` rows, the line naming every unit the
+# distribution-twin skip took, and the verdict-store line naming every `<fx>@consumer` unit skipped on a store entry
+# or on an unconfirmed placement record.
+# THE DISTRIBUTION-TWIN SKIP (BL-1133). A unit cl_select would run because a key moved (flag `k`) is decided
+# `<fx>\tskip\t\td\t<state>` instead when its DISTRIBUTION twin's row in the distribution decisions is a `skip` (a
+# pass recorded on this tree's distribution key) and no key row that moved between the unit's prospective record
+# (.cl/.k/<fx>) and its placement record is LAYOUT-SENSITIVE. A row is layout-sensitive when it was added or
+# removed, is a listing (`<dir>/`), a tool (an absolute path) or a span row (`#` in the key), sits under
+# tests/fixtures/ (the fixture's own run.sh and declarations, and lib/), is the runner or the mapper
+# (scripts/ai-dlc/hermetic-run.sh, scripts/ai-dlc/core-paths.sh), or is not a byte copy of ITS OWN distribution
+# source: the declared path the consumer-layout parse (.cl/.dparse) mapped it from, an F row's or, under a D row, the
+# declared directory plus the rest of the path, must carry the same hash in the distribution's `.now`. A row no
+# declaration maps (an undeclared unit's whole-tree keys) and a file install.sh renders over another path's bytes
+# are layout-sensitive. Only a byte-copied subject file moving is
+# acquitted; the class it lets through, identical bytes resolving paths differently once installed, is I33's. A
+# unit with a `.dunres` row (a declared input the installed tree lacks, among the consumer-layout parse's
+# refusals) always runs, so hermetic-run.sh refuses it: such an input has no key row on either side
+# (readset_decl_keys), so nothing need move for it.
+# The distribution decisions are <out> itself in `keys` mode, and the directory AI_DLC_CL_DIST_OUT names in `census`
+# mode (scripts/predict-push-set.sh sets it for --predict; the census and its --only never do); they are read only
+# when their `.now` is non-empty and their `.kdec` decides every fixture under FXROOT. A record that cannot be read,
+# or holds no row, keeps the unit running. A `d` row publishes no record and is not a consumer-layout pass:
+# `.k.always`, `.rskip` and `.vs.all` leave it out.
 cl_select() {
-  local out="$1" c b n_c n_s why="" kd vh base p
+  local out="$1" c b n_c n_s why="" kd vh base p dd="" n_d=0
   [ -n "${cl_tree:-}" ] || return 0
   for b in "$cl_tree"/tests/fixtures/*/; do
     [ -f "$b/run.sh" ] || continue
@@ -2386,19 +2415,49 @@ cl_select() {
   elif [ "$2" != census ] && ! cl_any_record "$kd" "$(cat "$c/.vsdir" 2>/dev/null)"; then
     printf 'no consumer-layout record exists in %s, so every one of the %s candidates would run -- run the one-time census from a clean worktree at this sha: bash scripts/census-consumer-layout.sh\n' "$kd" "$n_c" > "$out/.cl.refused"; return 0
   else
+    if [ "$2" = keys ]; then dd="$out"; elif [ "$2" = census ]; then dd="${AI_DLC_CL_DIST_OUT:-}"; fi
+    for p in "$FXROOT"*/; do [ ! -f "$p/run.sh" ] || n_d=$((n_d + 1)); done
+    if [ -n "$dd" ] && [ -s "$dd/.now" ] && [ -s "$dd/.kdec" ] && [ "$(grep -c . "$dd/.kdec")" = "$n_d" ]; then
+      KN="$dd/.now" KD="$dd/.kdec" KP="$c/.dparse" KU="$c/.dunres" awk -F'\t' -v c="$c" -v kd="$kd" '
+        function rows(f, A,   l, i, n) { n = 0
+          while ((getline l < f) > 0) { if (substr(l, 1, 1) == "#") continue
+            i = index(l, "\t"); if (i > 1) { A[substr(l, 1, i - 1)] = substr(l, i + 1); n++ } }
+          close(f); return n }
+        function src(f, k,   j, p) { if ((f SUBSEP k) in MF) return MF[f, k]
+          for (j = 1; j <= ND[f]; j++) { p = DI[f, j] "/"; if (index(k, p) == 1) return DS[f, j] "/" substr(k, length(p) + 1) }
+          return "" }
+        function sens(f, k, v,   s) { if (k ~ /^\// || k ~ /\/$/ || index(k, "#") > 0 || index(k, "tests/fixtures/") == 1 \
+            || k == "scripts/ai-dlc/hermetic-run.sh" || k == "scripts/ai-dlc/core-paths.sh") return 1
+          s = src(f, k); return !(s in NOW) || NOW[s] != v }
+        function quiet(f,   N, R, k) {
+          if (rows(c "/.k/" f, N) == 0 || rows(kd "/" f ".key", R) == 0) return 0
+          for (k in R) if (!(k in N)) return 0
+          for (k in N) { if (!(k in R)) return 0; if (N[k] != R[k] && sens(f, k, N[k])) return 0 }
+          return 1 }
+        BEGIN { while ((getline l < ENVIRON["KN"]) > 0) { i = index(l, "\t"); if (i > 1) NOW[substr(l, 1, i - 1)] = substr(l, i + 1) }
+                while ((getline l < ENVIRON["KD"]) > 0) { split(l, a, "\t"); if (a[2] == "skip") P[a[1]] = 1 }
+                while ((getline l < ENVIRON["KP"]) > 0) { split(l, a, "\t")
+                  if (a[2] == "F" && a[5] != "") MF[a[1], a[3]] = a[5]
+                  else if (a[2] == "D" && a[5] != "") { ND[a[1]]++; DI[a[1], ND[a[1]]] = a[3]; DS[a[1], ND[a[1]]] = a[5] } }
+                while ((getline l < ENVIRON["KU"]) > 0) { i = index(l, "\t"); if (i > 1) U[substr(l, 1, i - 1)] = 1 } }
+        $2 == "run" && $4 == "k" && ($1 in P) && !($1 in U) && quiet($1) { print $1 "\tskip\t\td\t" $5; next }
+        { print }' "$c/.kdec" > "$c/.kdec.t" && mv "$c/.kdec.t" "$c/.kdec" || rm -f "$c/.kdec.t"
+    fi
     awk -F'\t' '$2 == "run" { print $1 }' "$c/.kdec" > "$out/.cl.sel"
     awk -F'\t' '$2 == "skip" && ($4 == "v" || $4 == "m" || $4 == "b") { print $1 }' "$c/.kdec" > "$c/.k.always"
   fi
   n_s="$(grep -c . "$out/.cl.sel")"; case "$n_s" in ''|*[!0-9]*) n_s=0 ;; esac
   printf '   ..    consumer layout: %s of %s shipping fixture(s) run as <fx>@consumer in %s%s\n' "$n_s" "$n_c" "$cl_tree" "${why:+ -- every one, because $why}"
   [ -n "$why" ] || awk -F'\t' '$2 == "run" && n < 10 { n++; print "   ..      " $1 "@consumer: " $3 }' "$c/.kdec"
+  [ -n "$why" ] || awk -F'\t' '$4 == "d" { n++; s = s " " $1 "@consumer" }
+    END { if (n) print "   ..    consumer layout: " n " <fx>@consumer unit(s) skipped, the distribution twin passed on this key and every moved installed input is a byte copy of a distribution file:" s }' "$c/.kdec"
   # EVERY UNIT SKIPPED ON A PASS RECORDED ELSEWHERE IS NAMED, in the distribution's own verdict-store line: a store hit
   # (`.vs`, readset_verdicts' hit list) and a record skip whose record is still UNCONFIRMED (`.vs.u`: cl_publish marked
   # it and no run that reached its end has cleared the mark, so a stopped run or a census wrote it). A record a
   # completed run published or confirmed is counted on the selection line and not named, as the distribution counts
   # its key-record skips.
   if [ -z "$why" ]; then
-    awk -F'\t' '$2 == "skip" && $4 != "v" { print $1 }' "$c/.kdec" > "$c/.rskip"
+    awk -F'\t' '$2 == "skip" && $4 != "v" && $4 != "d" { print $1 }' "$c/.kdec" > "$c/.rskip"
     while IFS= read -r b; do [ ! -f "$kd/.unconfirmed/$b" ] || printf '%s\n' "$b"; done < "$c/.rskip" > "$c/.vs.u"
     cat "$c/.vs" "$c/.vs.u" > "$c/.vs.all" 2>/dev/null
   fi
