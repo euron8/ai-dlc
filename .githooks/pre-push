@@ -2797,7 +2797,10 @@ cl_select() {
   while IFS= read -r b; do [ ! -f "$cl_tree/tests/fixtures/$b/inputs.decl" ] || printf '%s\n' "$b"; done < "$out/.cl.all" > "$c/.mapped.all"
   : > "$c/.kdec"
   printf 'READSET_VS_PENDING=%q\n' "${READSET_VS_PENDING:-}" >> "$out/.cl.pub"
+  # THE STORE LOOKUP IS KEYED AS ITS ENTRIES ARE WRITTEN: an @consumer unit runs uncounted (pool_cl's `env -u`), so
+  # its entry carries no `#judge` row, and a counted run's judge must not be demanded of it here.
   ( cd "$cl_tree" || exit 1
+    unset FXCOUNT_JUDGE FXCOUNT_KEYROWS FXCOUNT_LEGACY_STORE FXCOUNT_LEGACY_OK
     KEYS_DIR="$kd"; FXROOT="tests/fixtures/"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; AI_DLC_VERDICT_STORE="$base"
     readset_manifest "$c"
     [ -s "$c/.now" ] || exit 1

@@ -45579,3 +45579,29 @@ Provenance: batch 257, wave 9, the W9-11 roll-call note; id allocated by the lea
 
 verify: manual
 
+## BL-1146 — a counted run's consumer-layout selection can never reuse a `<fx>@consumer` pass from the verdict store
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `.githooks/pre-push` consumer-layout store lookup (`cl_select`'s `readset_keys` pass, `readset_vs_input`, the `pool_cl` dispatch), with `core/git-hooks/pre-push` under I66.
+
+`fxcount_arm` exports `FXCOUNT_JUDGE` and `FXCOUNT_KEYROWS` before the suite runs. With `FXCOUNT_JUDGE` set, `readset_vs_input` (`pre-push:1879`) adds the invocation judge's `#judge` row to every digest input. That includes the consumer-layout lookup `cl_select` makes inside the installed tree. A `<fx>@consumer` unit runs uncounted: the pool dispatch at `pre-push:3504` passes `env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE`, so the entry `hermetic-run.sh` writes carries no `#judge` row. A counted selection therefore never matches a consumer-layout pass. Only an uncounted caller, a bare `scripts/census-consumer-layout.sh`, gets those hits.
+
+Measured: BL-1133's hand probe ran on f29ff3693 plus its patch, twice. The census launched by `scripts/predict-push-set.sh`, which runs `fxcount_arm`, decided 4 units `d`, and then 23. A bare census over the same tree, run straight after each, decided the same 4, and then the same 23, `v`, meaning skipped on a store entry. The store lookup runs before the distribution decisions are read.
+
+Unverified inference: the push gate's `cl_select` runs after `fxcount_arm`, so it should get no consumer-layout store hits. The r1143 gate line `verdict store: 34 fixture(s) skipped on a pass recorded elsewhere: …@consumer` would then be unconfirmed placement-record skips (`.vs.u`), which the same line prints. That has not been checked against a gate run.
+
+Fix: key the consumer-layout lookup the way its entries are written. Either drop the judge row from `cl_select`'s lookup, or write the `#judge` row into `<fx>@consumer` entries. Then prove on a counted predict that a consumer pass recorded uncounted is reused.
+
+Provenance: batch 257, wave 8, found by ai-dlc-63 (W8-02) in BL-1133's hand probe; id allocated by the lead.
+
+**LANDED (v0.1151.0).** Batch 257, W12-01, ai-dlc-5a. `cl_select`'s subshell, in both hooks under I66, unsets `FXCOUNT_JUDGE`, `FXCOUNT_KEYROWS`, `FXCOUNT_LEGACY_STORE` and `FXCOUNT_LEGACY_OK` before `readset_keys`. The consumer-layout lookup is therefore keyed the way `pool_cl`'s uncounted units write their entries, with no `#judge` row. The fix took the first of the entry's two options. Writing a `#judge` row into `<fx>@consumer` entries would attest a count those units never ran under. `census-consumer-layout.sh` and `scripts/predict-push-set.sh` drive the hook's own `cl_select`, so they take the fix unchanged. A unit a counted push decided `run` or `d` before is now decided `v`, and its placement record is written through `cl_write`'s `.k.always`. A bare census did the same before this change. The probe below drove the census path. The push that delivers this release is the first gate run of the fix, and it leaves the entry's r1143 inference unchecked.
+
+The premise was checked on the shared store. 3,089 consumer-layout entries were read, and 0 carry `#judge` at line 7. Control: 5,405 of 5,405 counted entries carry it.
+
+The probe was hand-run once. It ran `census-consumer-layout.sh --predict --pool <span>` from a clean worktree at 0.1148.0, one arm at a time, with no store file count or mtime moving across the four arms:
+- Uncounted control, base span: `CONSUMER 2`, with 5 store skips (hermetic-runner and readset-skip, -b, -c and -d, all `@consumer`).
+- Armed with `fxcount_arm`, base span: `CONSUMER 7`, with no store line.
+- Armed, fixed span: `CONSUMER 2`, the same 5 skips, and a run set byte-equal to the control's.
+- Mutant (the unset without `FXCOUNT_JUDGE`), armed: `CONSUMER 7`, with a run set byte-equal to the unfixed arm's.
+
+verify: manual
+

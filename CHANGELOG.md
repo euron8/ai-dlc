@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1151.0] - 2026-11-16
+
+### BL-1146: a counted push reuses a `<fx>@consumer` pass recorded uncounted
+
+`cl_select` in `.githooks/pre-push` and `core/git-hooks/pre-push` unsets `FXCOUNT_JUDGE`, `FXCOUNT_KEYROWS`, `FXCOUNT_LEGACY_STORE` and `FXCOUNT_LEGACY_OK` inside its subshell before `readset_keys`. The consumer-layout store lookup is then keyed the way `pool_cl`'s uncounted units write their entries, with no `#judge` row. Before this change, a push armed by `fxcount_arm` (and `scripts/predict-push-set.sh`) could never match one. The edit is byte-identical in both hooks.
+
+### Rules and records
+
+- BL-1133 records the `<fx>@consumer` units the pushes of 0.1145.0 to 0.1149.0 ran. The weigh of the remaining twin set is owed on the push that delivers BL-1146.
+
 ## [0.1150.0] - 2026-11-16
 
 ### BL-1142: the foreground-budget hook denies a foreground `--complete-repair` beat

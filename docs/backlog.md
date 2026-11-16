@@ -3304,6 +3304,18 @@ Provenance: batch 257, wave 6, the BL-1124 (e) remainder named by ai-dlc-48 (W6-
 
 **PARTIAL (v0.1145.0) — the distribution-twin skip shipped; the re-weigh of the remaining twin set stays owed to the push that delivers it.** `cl_select` (both hooks, identical lines under I66) now decides a `<fx>@consumer` unit `skip` with flag `d`, instead of `run` on a changed key, when two things hold. First, its distribution twin's `.kdec` row is a `skip`, meaning a pass is recorded on this tree's distribution key. Second, no key row that moved between the unit's prospective record and its placement record is layout-sensitive. Layout-sensitive rows are these: an added or removed row; a listing, tool or span row; any row under `tests/fixtures/`; the runner or the mapper; and any row that is not a byte copy of ITS OWN distribution source. That source is the declared path the consumer-layout parse (`.cl/.dparse`) mapped the row from, and its hash in the distribution `.now` must equal the row's. So a row no declaration maps runs, which covers every row of an undeclared unit, and so does a file `install.sh` renders over another path's bytes. A unit with a `.dunres` row never takes the skip. That row means a declared input the installed tree lacks, which has no key row on either side, so it stays selected and `hermetic-run.sh` refuses it. That refusal is the join the entry asked for: pw2's shape, a shard driver declaring `core/fixtures/adversarial-shard-merge-b/run.sh`, ran under a forced all-skip distribution decision in the hand probe. Every `d` unit is named on its own gate line. It publishes no record and stays out of `.k.always`, `.rskip` and `.vs.all`. Its PENDING count is still read from its old placement record. `scripts/predict-push-set.sh` hands its distribution decisions to `census-consumer-layout.sh --predict` through `AI_DLC_CL_DIST_OUT`, so the prediction takes the same skip. The census and `--only` never take it. Byte-identical code that resolves paths differently once installed is acquitted, and I33 owns that class (lead ruling D2). Owed: weigh the twin set the delivering push still runs against what it catches.
 
+**PARTIAL (v0.1151.0).** Batch 257, W12-01, ai-dlc-5a. What the pushes since the skip shipped ran, read from the gate logs of 0.1145.0 to 0.1149.0 (every gate exit 0):
+
+| push | `<fx>@consumer` run | `d` skips | red `@consumer` |
+|---|---|---|---|
+| 0.1145.0 | 207 of 220 | 12 | 0 |
+| 0.1146.0 | 45 of 220 | 0 | 0 |
+| 0.1147.0 | 13 of 220 | 0 | 0 |
+| 0.1148.0 | 2 of 220 | 0 | 0 |
+| 0.1149.0 | 7 of 220 | 10 | 0 |
+
+The `ok … @consumer` rows in each log equal its run count, so no unit went unreported. The consumer `verdict store:` line, which joins store hits with unconfirmed-record skips, named 1 unit at 0.1145.0 and 38 at 0.1146.0, and none at the other three pushes. In the record, the last red `@consumer` unit is in the failure record of 2026-11-15T00:04:45Z, 20 units, which predates the skip. BL-1146 changes this set: before it, a counted push could not reuse an `@consumer` store pass. The gate logs carry no per-unit cost. Owed: the weigh on the push that delivers BL-1146, meaning twins run, their loaded cost from `.git/ai-dlc-fixture-durations`, and catches. The operator then rules whether the remaining twin set stays.
+
 verify: manual
 
 ## BL-1134 — install-scaffold-ignored and schema-install-fallback omit on every sandbox trace, so their 5 legacy rows cannot narrow
@@ -3467,22 +3479,6 @@ I87 counts `AI_DLC_X=` as an assignment only after `^`, a blank, `;` or `export`
 Fix: add `\(` (and the `$(` form) to the match's leading alternation, prove on a probe tree that the unspaced form is acquitted and an unassigned name is still reported, and measure the false-positive set across the live fixtures.
 
 Provenance: batch 257, wave 9, found by ai-dlc-19 (W9-05) on BL-1117's pregate; id allocated by the lead.
-
-verify: manual
-
-## BL-1146 — a counted run's consumer-layout selection can never reuse a `<fx>@consumer` pass from the verdict store
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `.githooks/pre-push` consumer-layout store lookup (`cl_select`'s `readset_keys` pass, `readset_vs_input`, the `pool_cl` dispatch), with `core/git-hooks/pre-push` under I66.
-
-`fxcount_arm` exports `FXCOUNT_JUDGE` and `FXCOUNT_KEYROWS` before the suite runs. With `FXCOUNT_JUDGE` set, `readset_vs_input` (`pre-push:1879`) adds the invocation judge's `#judge` row to every digest input. That includes the consumer-layout lookup `cl_select` makes inside the installed tree. A `<fx>@consumer` unit runs uncounted: the pool dispatch at `pre-push:3504` passes `env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE`, so the entry `hermetic-run.sh` writes carries no `#judge` row. A counted selection therefore never matches a consumer-layout pass. Only an uncounted caller, a bare `scripts/census-consumer-layout.sh`, gets those hits.
-
-Measured: BL-1133's hand probe ran on f29ff3693 plus its patch, twice. The census launched by `scripts/predict-push-set.sh`, which runs `fxcount_arm`, decided 4 units `d`, and then 23. A bare census over the same tree, run straight after each, decided the same 4, and then the same 23, `v`, meaning skipped on a store entry. The store lookup runs before the distribution decisions are read.
-
-Unverified inference: the push gate's `cl_select` runs after `fxcount_arm`, so it should get no consumer-layout store hits. The r1143 gate line `verdict store: 34 fixture(s) skipped on a pass recorded elsewhere: …@consumer` would then be unconfirmed placement-record skips (`.vs.u`), which the same line prints. That has not been checked against a gate run.
-
-Fix: key the consumer-layout lookup the way its entries are written. Either drop the judge row from `cl_select`'s lookup, or write the `#judge` row into `<fx>@consumer` entries. Then prove on a counted predict that a consumer pass recorded uncounted is reused.
-
-Provenance: batch 257, wave 8, found by ai-dlc-63 (W8-02) in BL-1133's hand probe; id allocated by the lead.
 
 verify: manual
 
