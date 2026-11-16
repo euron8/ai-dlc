@@ -136,6 +136,52 @@ for _s in $SHARDS; do
 done
 rm -rf "$JW"
 echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
+
+# IN PROCESS (BL-878). Every drive goes through vac_run. A script at the subject's own path (the validator, or a copy a
+# world lays out as core/scripts/) is SOURCED in a subshell, which its column-0 guard stops after defining vac_main, and
+# vac_main is called there: its `exit`, `set -u` and EXIT trap end with that subshell, and BASH_SOURCE inside it is
+# the sourced file, so siblings resolve beside that copy as they do for the program. The subshell first drops every
+# fixture function and unexported fixture variable and turns pipefail off, so the call starts as the program would;
+# exported variables and prefix assignments reach it as they reach the program. Any other script (a relocated copy
+# in a flat or scripts/ai-dlc/ directory, the memo's probe) still runs as a program: its location is the property.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a validator with neither its `vac_main() {` line nor the column-0 source
+# guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE BROKEN in the distribution); exactly one half FAILs; an unreadable one is FIXTURE
+# ERROR.
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+grep -q '^vac_main() {$' "$VALIDATOR"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$DIR" ;;
+  10) echo "  FAIL  $VALIDATOR defines \`vac_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vac_main in this shell"; echo "$NAME: 1 FAILED"; exit 1 ;;
+  *) echo "  FAIL  $VALIDATOR carries the column-0 source guard but no \`vac_main() {\` line -- a respelled subject this fixture cannot drive"; echo "$NAME: 1 FAILED"; exit 1 ;;
+esac
+vac_run() { # vac_run <script> <args...> -> the program's stdout, stderr and exit status
+  case "$1" in
+    "$VALIDATOR"|*/core/scripts/validate-adversarial-convergence.sh) ;;
+    *) bash "$@"; return ;;
+  esac
+  ( set +o pipefail +u
+    _vr_keep='^(BASH.*|IFS|OPTIND|OPTERR|LINENO|RANDOM|SRANDOM|SECONDS|EPOCH.*|PIPESTATUS|FUNCNAME|GROUPS|EUID|UID|PPID|SHELLOPTS|HOSTNAME|HOSTTYPE|MACHTYPE|OSTYPE|DIRSTACK|PS[0-9]|SHLVL|PWD|OLDPWD|HOME|PATH|TMPDIR|_vr_.*)$'
+    _vr_exp=" $(compgen -e | tr '\n' ' ') "
+    for _vr_i in 1 2 3 4 5 6 7 8; do # a caller's local, unset, uncovers the caller's caller's binding: repeat
+      _vr_n=0
+      for _vr_v in $(compgen -v); do
+        [[ $_vr_v =~ $_vr_keep ]] && continue
+        case "$_vr_exp" in *" $_vr_v "*) continue ;; esac
+        unset "$_vr_v" 2>/dev/null && _vr_n=$((_vr_n + 1))
+      done
+      [ "$_vr_n" -eq 0 ] && break
+    done
+    for _vr_v in $(compgen -A function); do case "$_vr_v" in fx_inproc) ;; *) unset -f "$_vr_v" ;; esac; done
+    unset _vr_keep _vr_exp _vr_i _vr_n _vr_v
+    . "$1" || exit 125
+    fx_inproc "$1"; shift; vac_main "$@" )
+}
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 trap 'rm -rf "$ROOT"' EXIT
 
@@ -188,9 +234,9 @@ vrun() {
   f="$VMEMO_DIR/${key%% *}"
   if [ ! -f "$f.rc" ]; then
     case "$mode" in
-      both)  bash "$script" "$@" > "$f.out" 2>&1 ;;
-      out)   bash "$script" "$@" > "$f.out" 2>/dev/null ;;
-      split) bash "$script" "$@" > "$f.out" 2> "$f.err" ;;
+      both)  vac_run "$script" "$@" > "$f.out" 2>&1 ;;
+      out)   vac_run "$script" "$@" > "$f.out" 2>/dev/null ;;
+      split) vac_run "$script" "$@" > "$f.out" 2> "$f.err" ;;
     esac
     printf '%s\n' "$?" > "$f.rc"
   fi
@@ -336,6 +382,41 @@ rcpt_cell() { # <label> <receipt> <validator> <want rc 0|1>
 echo "check-24 adversarial-convergence fixture (shard $GROUP)"
 echo
 if sg core; then
+
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome --------------------
+# Each is compared with the in-process vac_run on the same input: stdout, stderr and exit separately, byte for byte,
+# and each asserts its own outcome, so two runs that both printed nothing cannot read as equivalent. Outcomes: gate
+# exit 0 (converged), gate exit 1 (a failed check), exit 2 (the staging directory did not run: TMPDIR names no
+# directory), and --cycle-state exit 3 (the STOP code).
+EQ="$ROOT/eq"; mkdir -p "$EQ" || broken "cannot create $EQ"
+eqv() { # eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two answers are identical
+  local id="$1"; shift
+  vac_run "$VALIDATOR" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  # mktemp's random suffix is the one byte run that differs between any two runs, the program against itself included.
+  local s; for s in ip cl; do sed 's/\(validate-adversarial-convergence\.\)[A-Za-z0-9]\{6\}/\1XXXXXX/g' "$EQ/$id.$s.err" > "$EQ/$id.$s.e" \
+    && mv "$EQ/$id.$s.e" "$EQ/$id.$s.err" || return 1; done
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_cell() { # eq_cell <cell-id> <want rc> <file: out|err> <must-say> <args...>
+  local id="$1" want="$2" ch="$3" say="$4"; shift 4
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if eqv "$id" "$@" && [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && grep -qF -- "$say" "$EQ/$id.cl.$ch"; then
+    printf '  ok    %-28s the program answers exit %s exactly as the in-process call does (stdout, stderr, exit)\n' "$id" "$want"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s in-process rc=%s / program rc=%s want %s, saying "%s"\n' "$id" "$(cat "$EQ/$id.ip.rc")" "$(cat "$EQ/$id.cl.rc")" "$want" "$say"
+    head -3 "$EQ/$id.ip.out" "$EQ/$id.cl.out" "$EQ/$id.ip.err" "$EQ/$id.cl.err" | sed 's/^/          | /'
+  fi
+}
+eq_cell cli-pass 0 out "PASS: the cycle converged" \
+  --series "$ROOT/converged/s1-adversarial-pass" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+eq_cell cli-fail 1 out "FAIL" \
+  --series "$ROOT/refused-to-converge/s1-adversarial-pass" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+TMPDIR="$ROOT/no-such-dir" eq_cell cli-nostage 2 err "the staging directory did not run (mktemp failed); no verdict" \
+  --series "$ROOT/converged/s1-adversarial-pass" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+eq_cell cli-state 3 out "STALLED" \
+  --series "$ROOT/stalled/s1-adversarial-p" --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
 
 # --- backward compatibility (pre-v0.52.0 artifacts: no prior_scope field) -----
 expect converged           0 "clean terminal pass -- the cycle the machinery should produce"
@@ -680,7 +761,7 @@ cp -R "$ROOT/stalled-resolved" "$FORGE/series"
 cp "$ROOT"/*.jsonl "$FORGE/" 2>/dev/null
 sed -i.bak 's/^invoked_at: .*/invoked_at: 2099-01-01T00:00:00Z/' "$FORGE/series/s1-adversarial-p4.md"
 rm -f "$FORGE/series/s1-adversarial-p4.md.bak"
-forge_out="$(bash "$VALIDATOR" --series "$FORGE/series/s1-adversarial-p" --cycle-state \
+forge_out="$(vac_run "$VALIDATOR" --series "$FORGE/series/s1-adversarial-p" --cycle-state \
   --transcript-dir "$ROOT" 2>/dev/null)"
 forge_rc=$?
 forge_state="$(printf '%s' "$forge_out" | cut -f1)"
@@ -850,7 +931,7 @@ else
     if [ -z "$SERIES" ]; then
       state="(empty)"; rc="-"
     else
-      out="$(bash "$VALIDATOR" --series "$SERIES" --cycle-state 2>/dev/null)"; rc=$?
+      out="$(vac_run "$VALIDATOR" --series "$SERIES" --cycle-state 2>/dev/null)"; rc=$?
       state="$(printf '%s' "$out" | cut -f1)"
     fi
     if [ "$state" = "$want_state" ] && [ "$rc" = "$want_rc" ]; then
@@ -954,7 +1035,7 @@ else
       printf -- '- **%s:** repaired\n' "$lbl"            > "$BT/bold-$lbl.md"
       printf -- '  _%s:_ repaired\n' "$lbl"              > "$BT/ital-$lbl.md"
       for form in plain bold ital; do
-        repair_field "$lbl" "$BT/$form-$lbl.md" || printf '%s\n' "$form:$lbl" >> "$BT/misses"
+        fx_inproc "$VALIDATOR"; repair_field "$lbl" "$BT/$form-$lbl.md" || printf '%s\n' "$form:$lbl" >> "$BT/misses"
       done
     done
     # CONTROL, and it is the one that matters: the eval'd reader must still REJECT. A
@@ -962,11 +1043,11 @@ else
     printf 'The disposition was recorded and the edit made; see the derivation.\n' > "$BT/prose.md"
     printf -- '- **edit sites:** a.md:4\n- derivation (why): x\n### Derivation 1 — y\n' > "$BT/offlabel.md"
     for lbl in disposition edit derivation; do
-      repair_field "$lbl" "$BT/prose.md"    && printf '%s\n' "control-prose:$lbl"    >> "$BT/misses"
-      repair_field "$lbl" "$BT/nonexistent" 2>/dev/null && printf '%s\n' "control-absent:$lbl" >> "$BT/misses"
+      fx_inproc "$VALIDATOR"; repair_field "$lbl" "$BT/prose.md"    && printf '%s\n' "control-prose:$lbl"    >> "$BT/misses"
+      fx_inproc "$VALIDATOR"; repair_field "$lbl" "$BT/nonexistent" 2>/dev/null && printf '%s\n' "control-absent:$lbl" >> "$BT/misses"
     done
-    repair_field edit       "$BT/offlabel.md" && printf 'control-offlabel:edit\n'       >> "$BT/misses"
-    repair_field derivation "$BT/offlabel.md" && printf 'control-offlabel:derivation\n' >> "$BT/misses"
+    fx_inproc "$VALIDATOR"; repair_field edit       "$BT/offlabel.md" && printf 'control-offlabel:edit\n'       >> "$BT/misses"
+    fx_inproc "$VALIDATOR"; repair_field derivation "$BT/offlabel.md" && printf 'control-offlabel:derivation\n' >> "$BT/misses"
     bind_miss="$(cat "$BT/misses" 2>/dev/null | tr '\n' ' ')"
     if [ -n "$bind_miss" ]; then
       bind_fail "the reader in $VALIDATOR and the template in $REMEDIATOR disagree: $bind_miss"
@@ -1088,8 +1169,8 @@ expect_says k2-sha-moved prd-adversarial-p "K2-sha-moved-pending" \
 k2_silent() {  # $1 case  $2 why
   local out ctl
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/$1/prd-adversarial-p" 2>&1)"
-  ctl="$(bash "$VALIDATOR" --series "$ROOT/k2-shardable-post/prd-adversarial-p" 2>&1)"
+  out="$(vac_run "$VALIDATOR" --series "$ROOT/$1/prd-adversarial-p" 2>&1)"
+  ctl="$(vac_run "$VALIDATOR" --series "$ROOT/k2-shardable-post/prd-adversarial-p" 2>&1)"
   if grep -qF -- "K2 -- SECTIONS" <<<"$out"; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s K2 spoke where it must be SILENT -- %s\n' "$1" "$2"
@@ -1110,7 +1191,7 @@ K2_NOPROG="$ROOT/k2-noprog"; mkdir -p "$K2_NOPROG"
 cp "$VALIDATOR" "$K2_NOPROG/validate-adversarial-convergence.sh"
 cp "$(dirname "$VALIDATOR")/validate-steering-budget.sh" "$K2_NOPROG/validate-steering-budget.sh"
 ASSERTIONS=$((ASSERTIONS + 1))
-k2np_out="$(bash "$K2_NOPROG/validate-adversarial-convergence.sh" --series "$ROOT/k2-shardable-post/prd-adversarial-p" 2>&1)"
+k2np_out="$(vac_run "$K2_NOPROG/validate-adversarial-convergence.sh" --series "$ROOT/k2-shardable-post/prd-adversarial-p" 2>&1)"
 k2np_rc=$?
 if [ -e "$K2_NOPROG/partition-document.sh" ]; then
   FAILURES=$((FAILURES + 1))
@@ -1302,7 +1383,7 @@ K2H_WORLDS="old-serial old-splits terminal untracked merge-squash merge-true"
 K2H_REAL="SILENT FAIL FAIL FAIL/FB PENDING PENDING"
 k2h_cell() {  # $1 script basename  $2 world
   local out v
-  out="$(bash "$K2H/$2/$(cat "$K2H/$2/.layout")/$1" --series "$K2H/$2/prd-adversarial-p" 2>&1)"
+  out="$(vac_run "$K2H/$2/$(cat "$K2H/$2/.layout")/$1" --series "$K2H/$2/prd-adversarial-p" 2>&1)"
   case "$out" in
     *"FAIL (K2 -- SECTIONS)"*)    v=FAIL ;;
     *"PENDING (K2 -- SECTIONS)"*) v=PENDING ;;
@@ -1326,7 +1407,7 @@ k2h_score "K2 in-force copy" validate-adversarial-convergence.sh "$K2H_REAL"
 expect_says_k2h() {  # $1 world  $2 label  $3... required substrings
   local w="$1" label="$2" out missing="" want; shift 2
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$K2H/$w/$(cat "$K2H/$w/.layout")/validate-adversarial-convergence.sh" --series "$K2H/$w/prd-adversarial-p" 2>&1)"
+  out="$(vac_run "$K2H/$w/$(cat "$K2H/$w/.layout")/validate-adversarial-convergence.sh" --series "$K2H/$w/prd-adversarial-p" 2>&1)"
   for want in "$@"; do grep -qF -- "$want" <<<"$out" || missing="$missing \"$want\""; done
   if [ -z "$missing" ]; then printf '  ok    %-28s %s\n' "$label" "says what it must"
   else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s missing:%s\n' "$label" "$missing"; fi
@@ -1436,7 +1517,7 @@ expect drift-list 0 "RESIDUE: a comma list is not one file, even when its first 
 # THE SKIP IS IN THE PROCEDURE BECAUSE A BARE --series MATCHING NOTHING FAILS. gate-validation.md
 # tells the gate to skip a sprint dir holding no *-adversarial-p series; this pins why.
 ASSERTIONS=$((ASSERTIONS + 1))
-es_out="$(bash "$VALIDATOR" --series "$ROOT/drift-empty-sprint/$J2P" 2>&1)"; es_rc=$?
+es_out="$(vac_run "$VALIDATOR" --series "$ROOT/drift-empty-sprint/$J2P" 2>&1)"; es_rc=$?
 if [ "$es_rc" -eq 1 ] && grep -qF -- "matched nothing" <<<"$es_out"; then
   printf '  ok    %-28s exit=1 "matched nothing" (%s)\n' "drift-empty-sprint" "the procedure skips such a sprint rather than running the check"
 else
@@ -1451,7 +1532,7 @@ fi
 # full verdict is 0 must exit 0 AND print the SUBSET RUN line on stderr. A second --arms is refused too.
 ag_cell() { # <validator> <cwd> <args...> -> "<rc>|<refusal or SUBSET or none>"
   local v="$1" cwd="$2" err rc; shift 2
-  err="$( cd "$cwd" && bash "$v" --series "$ROOT/drift-repair-linked/$J2P" --transcript-dir "$ROOT" "$@" 2>&1 >/dev/null )"; rc=$?
+  err="$( cd "$cwd" && vac_run "$v" --series "$ROOT/drift-repair-linked/$J2P" --transcript-dir "$ROOT" "$@" 2>&1 >/dev/null )"; rc=$?
   case "$err" in
     *"is not a comma list of K,K2,K3,L,H,J2,J3"*) printf '%s|shape' "$rc" ;;
     *"--arms needs a list of"*)                   printf '%s|empty' "$rc" ;;
@@ -1562,7 +1643,7 @@ else
 fi
 h_cell() {  # $1 script  $2 world -> <class>/<exit>
   local out rc v
-  out="$(bash "$1" --series "$HW/$2/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"; rc=$?
+  out="$(vac_run "$1" --series "$HW/$2/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"; rc=$?
   case "$out" in
     *"The only structured record for pass"*)  v=FOREIGN ;;
     *"PENDING (H -- REPAIR-RECORD)"*)         v=PENDING ;;
@@ -1588,7 +1669,7 @@ h_score "H series-named record" "$VALIDATOR" "$H_REAL"
 expect_says_h() {  # $1 world  $2 label  $3... required substrings
   local w="$1" label="$2" out missing="" want; shift 2
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$HW/$w/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  out="$(vac_run "$VALIDATOR" --series "$HW/$w/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
   for want in "$@"; do grep -qF -- "$want" <<<"$out" || missing="$missing \"$want\""; done
   if [ -z "$missing" ]; then printf '  ok    %-28s %s\n' "$label" "says what it must"
   else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s missing:%s\n' "$label" "$missing"; fi
@@ -1600,8 +1681,8 @@ expect_says_h misnamed-post "H-misnamed-own-rename" "The only structured record 
 expect_silent_h() {  # $1 world  $2 token that must be absent  $3 world where it is present (control)
   local out ctl
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$HW/$1/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
-  ctl="$(bash "$VALIDATOR" --series "$HW/$3/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  out="$(vac_run "$VALIDATOR" --series "$HW/$1/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  ctl="$(vac_run "$VALIDATOR" --series "$HW/$3/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
   if grep -qF -- "$2" <<<"$out"; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s "%s" fired in %s\n' "H-remedy-$1" "$2" "$1"
   elif ! grep -qF -- "$2" <<<"$ctl"; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s CONTROL: "%s" absent from %s too\n' "H-remedy-$1" "$2" "$3"
   else printf '  ok    %-28s the other remedy is silent here, present in %s\n' "H-remedy-$1" "$3"; fi
@@ -2412,7 +2493,7 @@ if [ "$L_BUILT" -eq 1 ]; then
 fi
 L_OUT="$LW/out"
 l_run() { # <validator> <world> -> L_RC, $L_OUT. The ceiling keeps git from answering for an ancestor.
-  GIT_CEILING_DIRECTORIES="$LWP" bash "$1" --series "$LW/$2/s9/stories-adversarial-p" \
+  GIT_CEILING_DIRECTORIES="$LWP" vac_run "$1" --series "$LW/$2/s9/stories-adversarial-p" \
     --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" > "$L_OUT" 2>&1; L_RC=$?
 }
 l_cell() { # <world> <want rc> <must-not-say | -> <must-say>...

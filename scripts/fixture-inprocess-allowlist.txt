@@ -4,7 +4,6 @@
 # conversion deletes its fixture's row in the same change, and the invocation judge FAILs a listed fixture that passes.
 # The reason names the subjects and carries NO count: nothing reads field 2, so a name that goes stale is accepted, and the
 # live count is the validator's R diagnostic, computed fresh on every run.
-adversarial-citation	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell
 adversarial-shard-merge	core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/scripts/content-seal.sh runs outside a declared cell
 adversarial-shard-merge-b	core/scripts/content-seal.sh runs outside a declared cell
 adversarial-shard-merge-c	core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/scripts/content-seal.sh runs outside a declared cell
@@ -30,12 +29,8 @@ bmad-invocation-resolve	core/scripts/validate-bmad-invocations.sh runs outside a
 budget-summary-verdict	core/scripts/validate-artifact-budget.sh runs outside a declared cell; core/scripts/verdict.sh runs outside a declared cell; core/scripts/wait-for-deliverable.sh runs outside a declared cell
 census-hermetic-coverage	scripts/census-hermetic-coverage.sh runs outside a declared cell
 check-15-bypass	core/scripts/validate-stub-audit.sh runs outside a declared cell
-check-24-adversarial-convergence	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell
 check-24-adversarial-convergence-b	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell
 check-24-adversarial-convergence-c	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell
-check-24-adversarial-convergence-d	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell
-check-24-adversarial-convergence-e	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell
-check-24-adversarial-convergence-f	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell
 consumer-machinery-inventory	core/scripts/validate-layer-entries.sh runs outside a declared cell
 content-seal	core/scripts/join-remediator-shards.sh runs outside a declared cell; core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/hooks/ai-dlc-content-seal.sh runs outside a declared cell; core/scripts/validate-gate-adjudication.sh runs outside a declared cell; core/scripts/wait-for-deliverable.sh runs outside a declared cell; core/scripts/content-seal.sh runs outside a declared cell
 core-paths-audit-diff	core/scripts/core-paths.sh runs outside a declared cell

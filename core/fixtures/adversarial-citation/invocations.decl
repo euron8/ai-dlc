@@ -5,5 +5,7 @@
 # start partition-document.sh, merge-adversarial-shards.sh and their staged K3 copies (partition-document 40,
 # partition-subject 10, under the validator's own tmp); and the four BL-923 whole-directory copies (control, K2,
 # K3, L) start 24 validator, 17 partition-document and 4 merge copies.
-79 *
-27 core/scripts/validate-adversarial-convergence.sh
+63 *
+3 core/scripts/validate-adversarial-convergence.sh
+# Re-measured (BL-878, W12-18) by one counted run: the validator runs in process through vac_run (inproc row); it starts only in its cli cells (cells.decl).
+30 inproc:core/scripts/validate-adversarial-convergence.sh

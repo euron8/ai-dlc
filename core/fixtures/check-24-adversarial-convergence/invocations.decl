@@ -1,4 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 # Re-measured when unit tstrat moved to requirements-step arm (m): its 10 validator starts left this shard.
-277 *
-151 core/scripts/validate-adversarial-convergence.sh
+130 *
+4 core/scripts/validate-adversarial-convergence.sh
+# Re-measured (BL-878, W12-18) by one counted run: the validator runs in process through vac_run (inproc row); it starts only in its cli cells (cells.decl).
+155 inproc:core/scripts/validate-adversarial-convergence.sh
