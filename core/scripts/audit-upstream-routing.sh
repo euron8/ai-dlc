@@ -183,7 +183,7 @@ lines = open(backlog, encoding="utf-8", errors="replace").read().split("\n")
 # and reports a smaller, cleaner-looking corpus.
 HEAD = re.compile(r"^#{2,4}\s+\[?(CO-[A-Z0-9][A-Z0-9.-]*)\]?")
 PATH = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.*-]+)+\.(?:sh|md|py|json|yaml|yml)")
-PC   = re.compile(r"(?<![\w-])PC-[A-Z0-9][A-Z0-9.-]*(?![\w-])")
+PC   = re.compile(r"(?<![\w-])PC-[A-Z0-9][A-Z0-9_.-]*(?![\w-])")
 
 heads = [(i, m.group(1)) for i, l in enumerate(lines) for m in [HEAD.match(l)] if m]
 entries = []

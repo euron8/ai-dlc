@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1160.0] - 2026-11-16
+
+### An underscore in a push-candidate id no longer truncates it; BL-1160 filed
+
+- `core/scripts/audit-upstream-routing.sh`: the candidate-id regex admits `_`. A carry-over entry whose only upstream citation carries an underscore used to match nothing, because the lookahead rejected every truncation, and the entry read as unpaired. On a scratch backlog the old regex pairs 1 of 2 cited entries and the new one pairs 2. On the consumer's carry-over backlog the installed, old and new copies print byte-identical reports, so no rows were added there.
+- `docs/plans/graph-ledger-full-drain.md`, "Derive the state": the `filed.txt`, `pc()`, commit-message and worklist-join greps admit `_`. Before, the batch's underscore id read as unfiled, untouched and unnamed while two archived entries cite it; two other underscore ids were truncated in the same sets. f08 now reports a versionless absorbing commit as the VERSION at that commit, labelled `versionless <sha>`, where it printed `UNNAMED`. An underscore control and a filed-id control were added.
+- BL-1156 is stamped and rotated.
+- BL-1160 is filed: `validate-adversarial-convergence.sh` aborts with `SORTED[@]: unbound variable` under bash 3.2 when no file in a series carries a pass number.
+
 ## [0.1159.0] - 2026-11-16
 
 ### BL-1134 and BL-1138: the install-heavy fixtures' whole rows are decided; content-seal declares what it reads

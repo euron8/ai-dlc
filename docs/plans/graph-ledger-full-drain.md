@@ -45,13 +45,13 @@ silences P9 through P13 on this file. **A record is moved whole, including any s
 written inside it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in
 a batch record.
 
-**BATCH 257 — CLOSED.** Landed: `v0.1102.0` to `v0.1159.0` (46 versioned releases; `0.1109.0`-`0.1111.0`, `0.1113.0`, `0.1115.0`-`0.1121.0` and `0.1123.0` never landed) plus versionless commits, last `20ac0fc6f`. The batch closed on the operator's word with wave 13 unstaffed.
+**BATCH 257 — CLOSED.** Landed: `v0.1102.0` to `v0.1160.0` (47 versioned releases; `0.1109.0`-`0.1111.0`, `0.1113.0`, `0.1115.0`-`0.1121.0` and `0.1123.0` never landed) plus versionless commits. The batch closed on the operator's word; wave 13 ran only W13-01 (versionless close docs, `d53f696ba`) and W13-02 (`0.1160.0`).
 Leads in order: `ai-dlc-15` (opened at `0.1101.0` `0569579f4`), `ai-dlc-a9`, `ai-dlc-35`, `ai-dlc-7b`. Batch 256's lead `ai-dlc-a7` never ran actions 6, 6b and 9; this close covers both batches. Rulings and NOTEs are in the commit that adds this record. No `graph-*` session is ever messaged.
-- **Landed (`git log --reverse --format='%h %s' 0569579f4..20ac0fc6f`; each subject names its ids):** `0.1102.0` BL-1029; `0.1103.0` BL-510/615; `0.1104.0` BL-844; `0.1105.0` BL-1009 advances; `0.1106.0` BL-1017; `0.1107.0` BL-1028; `0.1108.0` BL-1042 plus ten; `0.1112.0` BL-1048; `0.1114.0` BL-1050; `0.1122.0` BL-1049; bundles B1-B6 `0.1124.0`-`0.1129.0` (`0.1129.0` carries F2, BL-1016); `0.1130.0` PW (BL-1090-1100); bundles B7-B25 `0.1131.0`-`0.1149.0`; wave 12 (W12-01 to W12-21) `0.1150.0`-`0.1159.0` plus versionless W12-06/08/09/13/14/20/21. Closed in wave 12: BL-1140/1142, 1146, 982, 1143/1145/1154, 1157, 899 and 1056 (LANDED), 1144, 1158, 1151, 1134/1138, 1156. Next VERSION `0.1160.0`; next free id `BL-1160`; `docs/backlog.md` 54 headings.
-- **BL-1156's LANDED line reads `vVERSION_PLACEHOLDER`** (`20ac0fc6f` was versionless); the next versioned release stamps it.
+- **Landed (`git log --reverse --format='%h %s' 0569579f4..20ac0fc6f`; each subject names its ids):** `0.1102.0` BL-1029; `0.1103.0` BL-510/615; `0.1104.0` BL-844; `0.1105.0` BL-1009 advances; `0.1106.0` BL-1017; `0.1107.0` BL-1028; `0.1108.0` BL-1042 plus ten; `0.1112.0` BL-1048; `0.1114.0` BL-1050; `0.1122.0` BL-1049; bundles B1-B6 `0.1124.0`-`0.1129.0` (`0.1129.0` carries F2, BL-1016); `0.1130.0` PW (BL-1090-1100); bundles B7-B25 `0.1131.0`-`0.1149.0`; wave 12 (W12-01 to W12-21) `0.1150.0`-`0.1159.0` plus versionless W12-06/08/09/13/14/20/21. Closed in wave 12: BL-1140/1142, 1146, 982, 1143/1145/1154, 1157, 899 and 1056 (LANDED), 1144, 1158, 1151, 1134/1138, 1156. Wave 13: `0.1160.0` W13-02 (the derive block's PC-id grammar admits `_`, f08 names a versionless absorb, `audit-upstream-routing.sh`'s id regex admits `_`; BL-1160 filed). Next VERSION `0.1161.0`; next free id `BL-1161`; `docs/backlog.md` 54 headings.
+- **BL-1156's LANDED line is stamped `v0.1160.0`** and `0.1160.0` rotated it to the archive.
 - **Live entries by what their own text says the next step waits on, at `20ac0fc6f`** (a lead-granted trace slot is not an external wait):
-  - Buildable now: BL-583 (the I66 single-hook escape), BL-878 (next allowlist slice), BL-984 (LEFT OPEN rows; the hermetic-run arm is ruled "Record unbuildable"), BL-1030 (remainder (1), gate 2's record-only route), BL-1068 (stat volume, then a re-trace in a slot), BL-1124, BL-1148 (no mechanism proposed yet), BL-1152, BL-1153 (false-positive set first), BL-1155 (guarded `--declared-out` re-traces in a slot), BL-1159, and BL-819's `open` class (data on disk; its close waits on a graph sprint).
-  - Administrative close (WITHDRAWN or LANDED, heading still live): BL-909, BL-1014, BL-1074, BL-1085, BL-1156.
+  - Buildable now: BL-583 (the I66 single-hook escape), BL-878 (next allowlist slice), BL-984 (LEFT OPEN rows; the hermetic-run arm is ruled "Record unbuildable"), BL-1030 (remainder (1), gate 2's record-only route), BL-1068 (stat volume, then a re-trace in a slot), BL-1124, BL-1148 (no mechanism proposed yet), BL-1152, BL-1153 (false-positive set first), BL-1155 (guarded `--declared-out` re-traces in a slot), BL-1159, BL-1160 (filed in `0.1160.0`, after this list's sha; NOTE: exit before arm D on an empty `SORTED`), and BL-819's `open` class (data on disk; its close waits on a graph sprint).
+  - Administrative close (WITHDRAWN or LANDED, heading still live): BL-909, BL-1014, BL-1074, BL-1085.
   - The operator's: BL-847 strict mechanism B (standing ruling, only the operator reopens it); the contact-shape re-rule in BL-841/BL-972.
   - A measurement not yet on disk: BL-584, BL-806, BL-910, BL-1008, BL-1133.
   - Every other live entry waits on a graph sprint.
@@ -132,7 +132,8 @@ archive               92             122         30
 embed a version: `PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0`. A `[A-Z0-9-]`
 character class stops at the `.`, so the loose arm above MATCHES the line and extracts
 `…-NON-EXECUTABLE-AT-0` — a truncated id that is a FALSE MEMBER of the set, joins against no
-backlog citation, and never appears as an absence. The class is `[A-Z0-9.-]` below for that reason.
+backlog citation, and never appears as an absence. The class is `[A-Z0-9_.-]` below for that reason
+(the `_` is the same defect: an id like `…-HR_BIN-…` truncates to `…-HR` without it).
 Cardinality is unaffected (122 either way); one id stops being wrong.
 
 Under the widened class the bullet forms partition with NO REMAINDER, which is the control that the
@@ -367,7 +368,7 @@ wc -l < /tmp/live_main.txt                          # main's live ids. 0 is LEGI
 # cannot fall below main's live set minus what the union has archived, so assert that floor.
 comm -23 /tmp/live_main.txt /tmp/arch.txt | wc -l    # the FLOOR
 wc -l < /tmp/live.txt                                # must be >= the floor above
-grep -rohE 'PC-[A-Z0-9][A-Z0-9.-]+' docs/backlog.md docs/backlog.archive.md | sed -E 's/[.-]+$//' | sort -u > /tmp/filed.txt
+grep -rohE 'PC-[A-Z0-9][A-Z0-9_.-]+' docs/backlog.md docs/backlog.archive.md | sed -E 's/[.-]+$//' | sort -u > /tmp/filed.txt
 wc -l < /tmp/live.txt                                 # LIVE candidates -- the denominator
 wc -l < /tmp/arch.txt                                 # already closed upstream, NOT our workload
 comm -12 /tmp/live.txt /tmp/arch.txt | wc -l          # control: must be 0, the two sets partition
@@ -419,6 +420,9 @@ grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.
 grep -cx 'PC-S317-3.2-DERIVATION-HOOK-CWD' /tmp/filed.txt   # control: 1, a DOTTED id in the BACKLOG. Before batch 223's
                                                       # widening this read `PC-S317-3`, so a shipped candidate scored
                                                       # UNFILED and UNTOUCHED (measured: 348 -> 345 ids with the strip)
+grep -cx 'PC-S323-GATE-ADJUDICATION-S23-PRE-STRIPS-HR_BIN-BUT-NOT-THE-TRAP-FARM' /tmp/filed.txt   # control: 1, an UNDERSCORE id
+                                                      # in the BACKLOG. Without `_` in the class it reads `...-HR` and the id
+                                                      # scores UNFILED, UNTOUCHED and UNNAMED while archived entries cite it
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
@@ -432,10 +436,10 @@ instead of a measurement of coverage. **Report the partition below. Never report
 entry counts as progress.**
 
 ```
-pc() { grep -rohE 'PC-[A-Z0-9][A-Z0-9.-]+' "$1" | sed -E 's/[.-]+$//' | sort -u; }
+pc() { grep -rohE 'PC-[A-Z0-9][A-Z0-9_.-]+' "$1" | sed -E 's/[.-]+$//' | sort -u; }
 pc docs/backlog.archive.md > /tmp/closed_here
 pc docs/backlog.md         > /tmp/open_here
-git log --format='%B' origin/main | grep -ohE 'PC-[A-Z0-9][A-Z0-9.-]+' | sed -E 's/[.-]+$//' | sort -u > /tmp/in_msgs
+git log --format='%B' origin/main | grep -ohE 'PC-[A-Z0-9][A-Z0-9_.-]+' | sed -E 's/[.-]+$//' | sort -u > /tmp/in_msgs
 comm -12 /tmp/live.txt /tmp/closed_here                    # DISCHARGED, still live upstream
 comm -12 /tmp/live.txt /tmp/open_here                      # in flight
 comm -23 /tmp/live.txt <(sort -u /tmp/closed_here /tmp/open_here)   # untouched
@@ -482,7 +486,7 @@ Run the JOIN, never the bare `awk` half — the `awk` alone answers a question a
 
 ```
 LC_ALL=C awk '/^## BL-[0-9]+/{if(id!=""){out()}; id=$2; pcs=""}
-     match($0,/PC-[A-Z0-9][A-Z0-9.-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
+     match($0,/PC-[A-Z0-9][A-Z0-9_.-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
      END{if(id!=""){out()}}
      function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md > /tmp/entry_pcs.tsv
 wc -l < /tmp/entry_pcs.tsv     # INSTRUMENT: entries citing ANY PC id. NOT the worklist.
@@ -565,10 +569,17 @@ cat VERSION                                                                     
 # over `comm live closed_here` read PENDING 2 where 7 were. A live id printing a VERSION is
 # PENDING (shipped, consumer has not pulled); UNNAMED is unworked. The id is a variable, never
 # a literal placeholder (a `<id>` typed verbatim returns a real, meaningless commit).
-for id in $(cat /tmp/live.txt) PC-ZZ-IMPOSSIBLE-CONTROL-Q7; do
+# A VERSIONLESS absorb (a commit naming the id that does not bump VERSION) is invisible to the
+# `-- VERSION` pathspec. Only when no versioned commit names the id, report the VERSION at the
+# oldest commit that does, labelled versionless with its sha: read that commit before calling it
+# an absorb, since a docs commit that only mentions an id takes the same row.
+for id in $(cat /tmp/live.txt) PC-ZZ-IMPOSSIBLE-CONTROL-Q7 PC-ZZ_IMPOSSIBLE-CONTROL-Q7; do
   sha="$(git log --format='%H' -F --grep="$id" origin/main -- VERSION | tail -1)"
-  printf '%s\t%s\n' "$id" "$( [ -n "$sha" ] && git show "${sha}:VERSION" || echo UNNAMED )"
-done                                    # the last row IS the control, run in the same loop: it must print UNNAMED
+  vsha="$(git log --format='%H' -F --grep="$id" origin/main | tail -1)"
+  if [ -n "$sha" ]; then printf '%s\t%s\n' "$id" "$(git show "${sha}:VERSION")"
+  elif [ -n "$vsha" ]; then printf '%s\t%s (versionless %s)\n' "$id" "$(git show "${vsha}:VERSION")" "$(git rev-parse --short=9 "$vsha")"
+  else printf '%s\tUNNAMED\n' "$id"; fi
+done                                    # the last two rows ARE the controls, run in the same loop: both must print UNNAMED
 ```
 
 **AT MOST ONE RUNBOOK IS LIVE: the newest, `ls docs/plans/graph-pull-*.md | sort -V | tail -1`, and only
@@ -1248,7 +1259,7 @@ given at batch 90.
    ```
    # /tmp/live.txt comes from `### Derive the state; do not trust the numbers below` -- BOTH record forms
    awk '/^## BL-[0-9]+/{if(id!=""){out()}; id=$2; pcs=""}
-        match($0,/PC-[A-Z0-9][A-Z0-9.-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
+        match($0,/PC-[A-Z0-9][A-Z0-9_.-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
         END{if(id!=""){out()}}
         function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md \
    | while IFS="$(printf '\t')" read -r id pcs; do
