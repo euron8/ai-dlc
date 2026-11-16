@@ -22,3 +22,4 @@ seq
 sort
 tr
 wc
+mkfifo

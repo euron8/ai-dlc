@@ -44,6 +44,33 @@ SUFL_RUNNER_ARG="${1:-}"
 # shellcheck source=lib.sh
 . "$HERE/lib.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh"
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# IN PROCESS (BL-878). The checker is SOURCED once into this shell (its guard returns after defining suf_main) and every
+# arm calls suf_main through suf_run (lib.sh) in a subshell. Each suf_run call (lib.sh) is one fx_inproc pass (the inproc: row); the
+# five cli cells at the end run it as a program.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped checker, and
+# sourcing a pre-wrap checker would run its argument refusal in this shell. So the shape is checked first, on its two
+# halves: neither the `suf_main() {` line nor the column-0 source guard is a checker that predates the wrap, which
+# prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled checker this fixture can no longer drive,
+# which FAILS. The distribution cannot reach the SKIP unnoticed: C5 (validate-fixture-inprocess.sh) refuses a cli
+# subject without the guard, and J3 refuses the start count moving.
+suf_def=0; suf_guard=0
+grep -q '^suf_main() {$' "$RUNNER"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $RUNNER (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || suf_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$RUNNER"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $RUNNER (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || suf_guard=1
+if [ "$suf_def$suf_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$suf_def" = 0 ]; then echo "  FAIL  $RUNNER carries the column-0 source guard but no \`suf_main() {\` line -- a respelled checker this fixture cannot drive" >&2; echo "self-update-fixture-log: FAIL (1)" >&2; exit 1; fi
+if [ "$suf_guard" = 0 ]; then echo "  FAIL  $RUNNER defines \`suf_main() {\` but carries no column-0 source guard -- a respelled checker; sourcing it would run suf_main in this shell" >&2; echo "self-update-fixture-log: FAIL (1)" >&2; exit 1; fi
+# The operand is the resolved path lib.sh picked, so this source takes its own pairing: one pass (the inproc: row).
+fx_inproc "$RUNNER"
+. "$RUNNER" || { echo "FIXTURE BROKEN: sourcing $RUNNER failed" >&2; exit 2; }
+declare -F suf_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $RUNNER defined no suf_main" >&2; exit 2; }
 echo "MODE: PUSH"
 
 # --- Parts G1 to G5: the RECORDED GATE VERDICT is what authorises the cycle ------------------
@@ -1062,7 +1089,7 @@ bh_n() { local n; n="$(grep -c . "$BH_S" 2>/dev/null)" || n=0; printf '%s' "$n";
 bh_run() { # bh_run <checker> [names...] -> "rc=<n> runs=<n>"
   local c="$1" rc=0; shift
   rm -f "$BH_S"
-  bash "$c" "$DIST" "$D_BASE" "$D_THEIRS" "$BH_C" "$@" > "$BH_C.out" 2>&1 || rc=$?
+  suf_run "$DIST" "$D_BASE" "$D_THEIRS" "$BH_C" "$@" > "$BH_C.out" 2>&1 || rc=$?
   printf 'rc=%s runs=%s' "$rc" "$(bh_n)"
 }
 bh_got="$(bh_run "$RUNNER" bh-fx)"
@@ -1089,7 +1116,7 @@ fi
 #   ctl  the commit writes `green-one/run.sh`, shippable at theirs     -> exit 0
 sc_run() { # sc_run <consumer> -> "rc=<n>"; output in <consumer>.out
   local rc=0
-  bash "$RUNNER" "$DIST" "$D_BASE" "$D_THEIRS" "$1" > "$1.out" 2>&1 || rc=$?
+  suf_run "$DIST" "$D_BASE" "$D_THEIRS" "$1" > "$1.out" 2>&1 || rc=$?
   printf 'rc=%s' "$rc"
 }
 SC9="$(mktemp -d)"; sufl_tmp "$SC9"; SC12="$(mktemp -d)"; sufl_tmp "$SC12"; SCC="$(mktemp -d)"; sufl_tmp "$SCC"
@@ -1170,7 +1197,7 @@ d12_cell() { # d12_cell <checker> <cell> -> 1 when the cell's assertion holds, 0
     *) printf X; return ;;
   esac
   o="$SCX/$c.$(basename "$(dirname "$(dirname "$r")")").out"
-  bash "$r" "$dist" "$D_BASE" "$D_THEIRS" "$cons" > "$o" 2>&1 || rc=$?
+  suf_run "$dist" "$D_BASE" "$D_THEIRS" "$cons" > "$o" 2>&1 || rc=$?
   grep -q '^GATE-RECORD: NOT-REQUIRED' "$o" || { printf X; return; }
   n="$(grep -c '^GATE-RECORD: SLICE' "$o")" || n=0
   case "$c" in
@@ -1344,7 +1371,7 @@ ud_cell() { # ud_cell <checker> <cell> -> 1 when the cell's assertion holds, 0 w
     *) printf X; return ;;
   esac
   o="$UDW/$c.$(basename "$(dirname "$(dirname "$r")")").out"
-  bash "$r" "$dist" "$UD_B" "$UD_T" "$cons" > "$o" 2>&1 || rc=$?
+  suf_run "$dist" "$UD_B" "$UD_T" "$cons" > "$o" 2>&1 || rc=$?
   grep -q '^GATE-RECORD: NOT-REQUIRED' "$o" || { printf X; return; }
   n="$(grep -c '^GATE-RECORD: SLICE' "$o")" || n=0
   case "$c" in
@@ -1376,11 +1403,12 @@ if [ "$ud_built" = 1 ]; then
 
   # UD4: the remedy, through the real push wrapper, on a consumer with a bare origin and a matching OK record.
   UD4C="$UDW/c4"; UD4_PUSH="$RECONCILE/self-update-push.sh"
+  echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/self-update-push.sh"
   ud4_push() { # ud4_push <out> <tag> -> the wrapper's exit; stdout/stderr in $UDW/ud4-<tag>.{out,err}
     local rc=0
     ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
       export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
-      cd / && bash "$UD4_PUSH" "$UD4C" origin su "$1" "$UDD" "$UD_B" "$UD_T" ) > "$UDW/ud4-$2.out" 2> "$UDW/ud4-$2.err" || rc=$?
+      cd / && FXCELL="ud4-$2" bash "$UD4_PUSH" "$UD4C" origin su "$1" "$UDD" "$UD_B" "$UD_T" ) > "$UDW/ud4-$2.out" 2> "$UDW/ud4-$2.err" || rc=$?
     printf '%s' "$rc"
   }
   ud4_ok=0
@@ -1432,6 +1460,55 @@ if [ "$ud_built" = 1 ]; then
   fi
 
 fi
+
+# --- the cli cells (cells.decl): the checker run as a PROGRAM once per distinct CLI outcome -----------------------
+# The outcomes are exit x output class: 0 with the `GATE-RECORD: OK` line, 0 with NOT-REQUIRED, 2 with the argument
+# refusal on stderr, 2 with the no-record refusal on stdout and its remedy on stderr, 2 with a SLICE line on stdout.
+# One `FXCELL=<id> bash "$RUNNER"` start per outcome, each compared with the in-process call on the same world: stdout,
+# stderr and exit separately, byte for byte. A cell also asserts its own outcome (a positive conjunct, so two runs that
+# both printed nothing cannot read as equivalent), and the cells must differ from one another.
+EQ="$(mktemp -d)"; sufl_tmp "$EQ"
+eqv() { # <cell-id> <dist> <base> <theirs> <consumer> [extra...] -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"; shift
+  suf_run "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$RUNNER" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -c 300 "$EQ/$1.ip.out")" "$(head -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -c 300 "$EQ/$1.cl.out")" "$(head -c 300 "$EQ/$1.cl.err")"; }
+echo "== cli cells"
+gin_restore
+gin_seed_clean 300
+gin_write_slice
+if eqv cli-ok "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" && [ "$(cat "$EQ/cli-ok.cl.rc")" = 0 ] && grep -q '^GATE-RECORD: OK ' "$EQ/cli-ok.cl.out"; then
+  ok "cli-ok: the program accepts the recorded OK verdict exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-ok: the program and the in-process call differ, or the outcome is not exit 0 with a GATE-RECORD: OK line ($(eq_twin cli-ok))"; fi
+if eqv cli-notrequired "$DIST" "$D_BASE" "$D_THEIRS" "$SCC/c" && [ "$(cat "$EQ/cli-notrequired.cl.rc")" = 0 ] \
+   && grep -q '^GATE-RECORD: NOT-REQUIRED' "$EQ/cli-notrequired.cl.out"; then
+  ok "cli-notrequired: the program takes the delivery-pull tolerance exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-notrequired: the program and the in-process call differ, or the outcome is not exit 0 with NOT-REQUIRED ($(eq_twin cli-notrequired))"; fi
+if eqv cli-usage "$DIST" "$D_BASE" "$D_THEIRS" "$BH_C" bh-fx && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && grep -qF 'runs NO fixture' "$EQ/cli-usage.cl.err"; then
+  ok "cli-usage: the program refuses a fifth argument exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not the exit-2 argument refusal ($(eq_twin cli-usage))"; fi
+gin_restore
+rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+seed_record "$GLOG" "$DIST" "$D_QUIET" "$D_SHIP" OK 301 >/dev/null || bad "FIXTURE ERROR: could not seed the cli-refused unrelated-range record"
+if eqv cli-refused "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" && [ "$(cat "$EQ/cli-refused.cl.rc")" = 2 ] && grep -q '^GATE-RECORD:' "$EQ/cli-refused.cl.out" \
+   && grep -qF 'self-update-gate.sh' "$EQ/cli-refused.cl.err"; then
+  ok "cli-refused: the program refuses a consumer with no record for the range exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-refused: the program and the in-process call differ, or the outcome is not exit 2 with a GATE-RECORD line and the gate remedy ($(eq_twin cli-refused))"; fi
+if eqv cli-slice "$DIST" "$D_BASE" "$D_THEIRS" "$SC9/c" && [ "$(cat "$EQ/cli-slice.cl.rc")" = 2 ] \
+   && grep -q '^GATE-RECORD: SLICE named-distonly — DIST-ONLY' "$EQ/cli-slice.cl.out"; then
+  ok "cli-slice: the program refuses a .dist-only fixture directory exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-slice: the program and the in-process call differ, or the outcome is not exit 2 with a SLICE DIST-ONLY line ($(eq_twin cli-slice))"; fi
+cli_same=0
+for _a in cli-ok cli-notrequired cli-usage cli-refused cli-slice; do for _b in cli-ok cli-notrequired cli-usage cli-refused cli-slice; do
+  [ "$_a" \< "$_b" ] || continue
+  cmp -s "$EQ/$_a.cl.out" "$EQ/$_b.cl.out" && cmp -s "$EQ/$_a.cl.err" "$EQ/$_b.cl.err" && cmp -s "$EQ/$_a.cl.rc" "$EQ/$_b.cl.rc" && cli_same=$((cli_same + 1))
+done; done
+if [ "$cli_same" = 0 ]; then ok "cli cells discriminate: no two of the five outcomes gave the same stdout, stderr and exit"
+else bad "cli cells do not discriminate: $cli_same pair(s) of cells gave the same stdout, stderr and exit"; fi
 
 echo
 if [ "$fails" -eq 0 ]; then

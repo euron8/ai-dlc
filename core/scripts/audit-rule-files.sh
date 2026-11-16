@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+arf_main() {
 set -euo pipefail
 
 # audit-rule-files.sh — the mechanical half of retro's rule-file audit
@@ -966,3 +967,6 @@ else:
     _gated = all_findings
 sys.exit(1 if _gated else 0)
 PY
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+arf_main "$@"

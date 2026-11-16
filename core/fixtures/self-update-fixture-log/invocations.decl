@@ -1,3 +1,7 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-66 *
-47 core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
+# Counted run through core/scripts/hermetic-run.sh (the judge's own J3 output). The checker's starts are the five cli
+# cells of cells.decl plus the two the real self-update-push.sh makes in UD4 (nested); the wrapper itself is started
+# three times (the e2e cells). Every other bash start is a world builder, the gate, the hook shims and apply.sh.
+26 *
+7 core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
+3 core/skills/ai-dlc-update/reconcile/self-update-push.sh
+51 inproc:core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh

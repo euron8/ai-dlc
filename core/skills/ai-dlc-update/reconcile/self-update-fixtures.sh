@@ -31,6 +31,7 @@
 #         arguments, the range unresolvable, a `$DIST` that is not the distribution, a staging
 #         write that failed, or no acceptable gate record. A check that could not run must not
 #         exit 0: "nothing refused" and "nothing checked" are the same byte to the caller.
+suf_main() {
 set -u
 
 SU_USAGE="usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>"
@@ -52,7 +53,7 @@ DIST="$1"; BASE="$2"; THEIRS="$3"; CONSUMER="$4"
 CONSUMER="$(cd "$CONSUMER" 2>/dev/null && pwd)" || {
   echo "self-update-fixtures: consumer-root not a directory: ${4}" >&2; exit 2; }
 
-SELF="$(cd "$(dirname "$0")" && pwd)"
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="$CONSUMER/_bmad-output/ai-dlc-update"
 
 # lib.sh IS SOURCED FOR `memo_has_path`, the one `.dist-only` oracle `preclassify.sh` already
@@ -951,3 +952,6 @@ if [ -n "$GATE_REC" ]; then
   echo "GATE-RECORD: OK $GATE_REC"
 fi
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+suf_main "$@"

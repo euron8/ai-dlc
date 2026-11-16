@@ -1,3 +1,5 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-46 *
-22 core/skills/ai-dlc-update/reconcile/retired-tokens.sh
+# Counted run through core/scripts/hermetic-run.sh (the judge's own J3 output). The detector's starts are the three
+# cli cells of cells.decl; the rest of `*` is run.sh, the preclassify.sh drives and the world builders' git.
+33 *
+3 core/skills/ai-dlc-update/reconcile/retired-tokens.sh
+25 inproc:core/skills/ai-dlc-update/reconcile/retired-tokens.sh

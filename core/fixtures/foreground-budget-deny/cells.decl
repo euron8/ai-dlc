@@ -1,0 +1,10 @@
+# foreground-budget-deny's starts of core/hooks/ai-dlc-foreground-budget.sh (BL-879 grammar). Every other drive is in
+# process: run.sh sources the hook once and calls fgb_main in a subshell with the payload on stdin. The hook always
+# exits 0, so the cli cells are output classes (a deny, silence, silence with the fail-open line, the printf-built
+# parse-failure deny, the jq-absent fail-open), each started as FXCELL=<id> bash "$HOOK" in eqv() and compared byte
+# for byte with the in-process call on the same payload.
+cli core/hooks/ai-dlc-foreground-budget.sh cli-deny
+cli core/hooks/ai-dlc-foreground-budget.sh cli-allow
+cli core/hooks/ai-dlc-foreground-budget.sh cli-failopen
+cli core/hooks/ai-dlc-foreground-budget.sh cli-parsefail
+cli core/hooks/ai-dlc-foreground-budget.sh cli-nojq

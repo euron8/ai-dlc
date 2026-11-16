@@ -90,6 +90,32 @@ for _hc in "$SUBJ" "$GUARD_F" "$MANIFEST_F" "$SITES_F"; do
   echo "HERMETIC-CONSUMED $(cd "$(dirname "$_hc")" && pwd -P)/$(basename "$_hc")"
 done
 
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECTS. A consumer can receive this file one pull before the wrapped subjects, and
+# sourcing a pre-wrap one would run its body in this shell (the hook would read stdin, the router would parse argv).
+# Each subject's shape is checked first, on its two halves: neither the `<p>_main() {` line nor the column-0 source
+# guard is a subject that predates the wrap, which prints SKIP and exits 0 -- never an ok. Exactly one half is a
+# respelled subject this fixture can no longer drive, which FAILS. A subject that cannot be read is a fixture error.
+wrap_state() { # <file> <prefix> -> WS_STATE=none|both|def-only|guard-only
+  local d=0 g=0 x
+  grep -q "^$2_main() {\$" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  case "$d$g" in 00) WS_STATE=none ;; 11) WS_STATE=both ;; 10) WS_STATE=def-only ;; *) WS_STATE=guard-only ;; esac
+}
+wrap_state "$SUBJ" upr; ws_subj="$WS_STATE"
+wrap_state "$GUARD_F" cwg; ws_guard="$WS_STATE"
+for _w in "$ws_subj $SUBJ upr" "$ws_guard $GUARD_F cwg"; do
+  set -- $_w
+  case "$1" in
+    def-only)   echo "   FAIL  $2 defines \`$3_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $3_main in this shell" >&2; echo "upstream-routing: FAIL (1)" >&2; exit 1 ;;
+    guard-only) echo "   FAIL  $2 carries the column-0 source guard but no \`$3_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "upstream-routing: FAIL (1)" >&2; exit 1 ;;
+  esac
+done
+if [ "$ws_subj" = none ] || [ "$ws_guard" = none ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2; exit 2; }
 # `jq` is the GUARD's own dependency, not this fixture's convenience. Without it the guard reads an
 # empty tool_name, falls through its `case` to `exit 0`, and ALLOWS every path — a fail-open that
@@ -100,9 +126,20 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=29
+EXPECTED_ASSERTIONS=37
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# IN PROCESS (BL-878). The router and the guard are each SOURCED once into this shell (their guards return after
+# defining upr_main and cwg_main) and every drive calls the function in a subshell, so a subject's `exit`, `set -uo
+# pipefail`, cd and AI_DLC_PROJECT_ROOT stay there. Each call is one fx_inproc pass (the inproc: rows), paired on its line.
+. "$SUBJ" || { echo "FIXTURE BROKEN: sourcing $SUBJ failed" >&2; exit 2; }
+declare -F upr_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $SUBJ defined no upr_main" >&2; exit 2; }
+. "$GUARD_F" || { echo "FIXTURE BROKEN: sourcing $GUARD_F failed" >&2; exit 2; }
+declare -F cwg_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $GUARD_F defined no cwg_main" >&2; exit 2; }
 show() { sed 's/^/        /' <<<"$1"; }
 # Here-string, never a pipe. Under `pipefail` a `grep -q` that matches early exits while the
 # writer is still pushing, and the pipeline then reports the writer's EPIPE — a MATCH read as a
@@ -126,13 +163,16 @@ echo "upstream-routing:"
 # AI_DLC_PROJECT_ROOT; the arms exercising the REAL subject pass `-` and let it resolve, because
 # that resolution is itself under test at assertions 26 and 28.
 _run() { # _run <script> <backlog> <outfile> <root|-> <cwd> <txt|json>
-  if [ "$6" = json ]; then
-    if [ "$4" = "-" ]; then ( cd "$5" && bash "$1" --backlog "$2" --json >"$3" 2>"$3.err" )
-    else ( cd "$5" && AI_DLC_PROJECT_ROOT="$4" bash "$1" --backlog "$2" --json >"$3" 2>"$3.err" ); fi
-  else
-    if [ "$4" = "-" ]; then ( cd "$5" && bash "$1" --backlog "$2" >"$3" 2>&1 )
-    else ( cd "$5" && AI_DLC_PROJECT_ROOT="$4" bash "$1" --backlog "$2" >"$3" 2>&1 ); fi
-  fi
+  local script="$1" backlog="$2" out="$3" root="$4" cwd="$5" mode="$6"
+  ( cd "$cwd" || exit 2
+    [ "$root" = "-" ] || export AI_DLC_PROJECT_ROOT="$root"
+    # A COPY is sourced inside this subshell, so the real upr_main stays defined in this shell for the next arm; it
+    # sits under core/scripts/, so its calls are counted under the subject's inproc: row.
+    if [ "$script" != "$SUBJ" ]; then
+      . "$script" || exit 2
+    fi
+    if [ "$mode" = json ]; then fx_inproc "$script"; upr_main --backlog "$backlog" --json >"$out" 2>"$out.err"
+    else fx_inproc "$script"; upr_main --backlog "$backlog" >"$out" 2>&1; fi )
   RC=$?
 }
 # Default cwd is the project ROOT: that is where the pre-push hook runs a fixture, and it is the
@@ -271,21 +311,21 @@ EOF
 # extracted from the body at all" — and assertion 3 would read them identically. A stub `--list`
 # emitting `*` makes every EXTRACTED path report, so the extracted set becomes observable through
 # the shipping extractor rather than through a second implementation of it.
-mkdir -p "$WORK/stub-all" "$WORK/stub-empty"
-cp "$SUBJ" "$WORK/stub-all/audit-upstream-routing.sh"
-cp "$SUBJ" "$WORK/stub-empty/audit-upstream-routing.sh"
-cat >"$WORK/stub-all/core-paths.sh" <<'EOF'
+mkdir -p "$WORK/stub-all/core/scripts" "$WORK/stub-empty/core/scripts"
+cp "$SUBJ" "$WORK/stub-all/core/scripts/audit-upstream-routing.sh"
+cp "$SUBJ" "$WORK/stub-empty/core/scripts/audit-upstream-routing.sh"
+cat >"$WORK/stub-all/core/scripts/core-paths.sh" <<'EOF'
 #!/usr/bin/env bash
 [ "${1:-}" = "--list" ] && { printf '*\n'; exit 0; }
 exit 2
 EOF
-cat >"$WORK/stub-empty/core-paths.sh" <<'EOF'
+cat >"$WORK/stub-empty/core/scripts/core-paths.sh" <<'EOF'
 #!/usr/bin/env bash
 [ "${1:-}" = "--list" ] && exit 0
 exit 2
 EOF
 
-run_json "$WORK/stub-all/audit-upstream-routing.sh" "$AGREE_BL" "$WORK/all.json" "$ROOT"
+run_json "$WORK/stub-all/core/scripts/audit-upstream-routing.sh" "$AGREE_BL" "$WORK/all.json" "$ROOT"
 all_rc=$RC
 missed=""
 if [ "$all_rc" = "0" ]; then
@@ -343,7 +383,7 @@ EOF
 guard_says() {   # <project-relative path> -> deny | allow
   local out
   out="$(printf '{"tool_name":"Write","tool_input":{"file_path":"%s"}}' "$1" \
-         | CLAUDE_PROJECT_DIR="$GTREE" bash "$GUARD_F" 2>/dev/null)"
+         | ( export CLAUDE_PROJECT_DIR="$GTREE"; fx_inproc "$GUARD_F"; cwg_main ) 2>/dev/null)"
   if has '"permissionDecision": *"deny"' "$out"; then printf 'deny'; else printf 'allow'; fi
 }
 # Asked once and cached: the sandbox does not move between assertions 3 and 31, and the guard is a
@@ -489,9 +529,9 @@ fi
 # =============================================================================================
 
 # --- 13. the sibling core-paths.sh is absent --------------------------------------------------
-mkdir -p "$WORK/nosib"
-cp "$SUBJ" "$WORK/nosib/audit-upstream-routing.sh"
-run_txt "$WORK/nosib/audit-upstream-routing.sh" "$MAIN" "$WORK/nosib.txt" "$ROOT"; nosib_rc=$RC; nosib_txt="$(cat "$WORK/nosib.txt")"
+mkdir -p "$WORK/nosib/core/scripts"
+cp "$SUBJ" "$WORK/nosib/core/scripts/audit-upstream-routing.sh"
+run_txt "$WORK/nosib/core/scripts/audit-upstream-routing.sh" "$MAIN" "$WORK/nosib.txt" "$ROOT"; nosib_rc=$RC; nosib_txt="$(cat "$WORK/nosib.txt")"
 if [ "$nosib_rc" = "2" ] && has 'EXAMINED NOTHING' "$nosib_txt" && ! has 'MISROUTED' "$nosib_txt"; then
   ok "no core-paths.sh beside the subject -> exit 2 EXAMINED NOTHING, and no MISROUTED line"
 else
@@ -500,7 +540,7 @@ else
 fi
 
 # --- 14. `--list` produced no globs ----------------------------------
-run_txt "$WORK/stub-empty/audit-upstream-routing.sh" "$MAIN" "$WORK/empty.txt" "$ROOT"; empty_rc=$RC; empty_txt="$(cat "$WORK/empty.txt")"
+run_txt "$WORK/stub-empty/core/scripts/audit-upstream-routing.sh" "$MAIN" "$WORK/empty.txt" "$ROOT"; empty_rc=$RC; empty_txt="$(cat "$WORK/empty.txt")"
 if [ "$empty_rc" = "2" ] && has 'EXAMINED NOTHING' "$empty_txt" && ! has 'MISROUTED (0)' "$empty_txt"; then
   ok "an EMPTY glob set -> exit 2, not a confident MISROUTED (0) over a dead predicate"
 else
@@ -536,7 +576,7 @@ else
 fi
 
 # A copy of the subject beside a copied core-paths.sh: the no-manifest arm below drives it.
-CTL="$WORK/subj-copy"
+CTL="$WORK/subj-copy/core/scripts"
 mkdir -p "$CTL"; cp "$SUBJ" "$CTL/audit-upstream-routing.sh"; cp "$CPATHS" "$CTL/core-paths.sh"
 
 
@@ -1025,6 +1065,63 @@ else
   bad "PAIRED BUT UNPLACEABLE with zero findings: rc=$pairz_rc/$pairzj_rc, MISROUTED(0)=$(has 'MISROUTED (0)' "$pairz_txt" && echo yes || echo NO), findings=${pairz_find:-?} (want 0), section [${pairz_sec:-ABSENT}], json=${pairz_n:-?} (want 1) — an exit in the zero-findings branch hides the section on exactly the corpus it exists for, while --json goes on carrying the list"
   show "$pairz_txt"
 fi
+
+# --- the cli cells (cells.decl): each subject run as a PROGRAM once per distinct CLI outcome ---------------------
+# The router's outcomes are exit x output class: 0 with the prose report on stdout, 0 with the JSON report, 2 with the
+# DISARMED refusal on stderr, 2 with the usage line on stderr. The guard exits 0 on every path, so its outcomes are
+# output classes: the deny JSON on stdout, nothing. One `FXCELL=<id> bash <subject>` start per outcome, each compared
+# with the in-process call on the same input: stdout, stderr and exit separately, byte for byte. A cell also asserts
+# its own outcome (a positive conjunct, so two runs that both printed nothing cannot read as equivalent), and the
+# classes of each subject must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eq_cmp() { cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.err" "$EQ/$1.cl.err" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc"; }
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+eqv() { # <cell-id> <upr_main args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}, both runs from the project root
+  local id="$1"; shift
+  ( cd "$ROOT" && fx_inproc "$SUBJ"; upr_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$ROOT" && FXCELL="$id" bash "$SUBJ" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  eq_cmp "$id"
+}
+eqg() { # <cell-id> <project-relative path> -> $EQ/<id>.{ip,cl}.{out,err,rc}: one Write payload through the guard
+  local id="$1" json
+  json="$(printf '{"tool_name":"Write","tool_input":{"file_path":"%s"}}' "$2")"
+  printf '%s' "$json" | ( export CLAUDE_PROJECT_DIR="$GTREE"; fx_inproc "$GUARD_F"; cwg_main ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  printf '%s' "$json" | CLAUDE_PROJECT_DIR="$GTREE" FXCELL="$id" bash "$GUARD_F" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  eq_cmp "$id"
+}
+echo "cli cells"
+if eqv cli-report --backlog "$MAIN" && [ "$(cat "$EQ/cli-report.cl.rc")" = 0 ] && has 'CO-S401-UNPAIRED' "$(cat "$EQ/cli-report.cl.out")" \
+   && [ ! -s "$EQ/cli-report.cl.err" ]; then
+  ok "cli-report: the program reports the seeded misroute exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-report: the program and the in-process call differ, or the outcome is not exit 0 naming CO-S401-UNPAIRED ($(eq_twin cli-report))"; fi
+if eqv cli-json --backlog "$MAIN" --json && [ "$(cat "$EQ/cli-json.cl.rc")" = 0 ] && has '"entries"' "$(cat "$EQ/cli-json.cl.out")" \
+   && [ ! -s "$EQ/cli-json.cl.err" ]; then
+  ok "cli-json: the program emits the JSON report exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-json: the program and the in-process call differ, or the outcome is not exit 0 with the JSON report ($(eq_twin cli-json))"; fi
+if eqv cli-refuse --backlog "$WORK/no-such-backlog.md" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-refuse.cl.out" ] \
+   && has 'EXAMINED NOTHING' "$(cat "$EQ/cli-refuse.cl.err")"; then
+  ok "cli-refuse: the program refuses an absent backlog exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 2 with EXAMINED NOTHING on stderr ($(eq_twin cli-refuse))"; fi
+if eqv cli-usage --help && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && has '^usage: audit-upstream-routing.sh' "$(cat "$EQ/cli-usage.cl.err")"; then
+  ok "cli-usage: the program prints its usage line exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-usage))"; fi
+if ! cmp -s "$EQ/cli-report.cl.out" "$EQ/cli-refuse.cl.out" && ! cmp -s "$EQ/cli-report.cl.rc" "$EQ/cli-refuse.cl.rc" \
+   && ! cmp -s "$EQ/cli-report.cl.out" "$EQ/cli-json.cl.out" && ! cmp -s "$EQ/cli-refuse.cl.err" "$EQ/cli-usage.cl.err"; then
+  ok "router cli cells discriminate: the report, the JSON, the refusal and the usage line differ in stdout, stderr or exit"
+else bad "router cli cells do not discriminate: two of cli-report, cli-json, cli-refuse and cli-usage gave the same output"; fi
+if eqg cli-deny "scripts/ai-dlc/core-paths.sh" && [ "$(cat "$EQ/cli-deny.cl.rc")" = 0 ] \
+   && has '"permissionDecision": *"deny"' "$(cat "$EQ/cli-deny.cl.out")" && [ ! -s "$EQ/cli-deny.cl.err" ]; then
+  ok "cli-deny: the guard program denies a core write exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-deny: the program and the in-process call differ, or the outcome is not exit 0 with a deny decision ($(eq_twin cli-deny))"; fi
+if eqg cli-allow "src/services/billing.py" && [ "$(cat "$EQ/cli-allow.cl.rc")" = 0 ] \
+   && [ ! -s "$EQ/cli-allow.cl.out" ] && [ ! -s "$EQ/cli-allow.cl.err" ]; then
+  ok "cli-allow: the guard program allows a consumer write exactly as the in-process call does (nothing on stdout or stderr, exit 0)"
+else bad "cli-allow: the program and the in-process call differ, or the outcome is not exit 0 with no output ($(eq_twin cli-allow))"; fi
+if ! cmp -s "$EQ/cli-deny.cl.out" "$EQ/cli-allow.cl.out"; then
+  ok "guard cli cells discriminate: the core write and the consumer write give different stdout"
+else bad "guard cli cells do not discriminate: cli-deny and cli-allow gave the same stdout"; fi
 
 echo ""
 report_end upstream-routing "$EXPECTED_ASSERTIONS"

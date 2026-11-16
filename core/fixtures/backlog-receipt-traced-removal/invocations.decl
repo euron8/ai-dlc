@@ -11,6 +11,6 @@
 # the one self-nested row. c-m1-e2e and cli-wire drive real --score-one and --r13-one workers.
 # inproc 9: untraced_fn 3 (one per r13_untraced call) and base_setup 3 per pass (vbr_sec_env, vbr_sec_args,
 # vbr_sec_setup) x 2 passes = 6; every in-process call is paired with its own fx_inproc (arm P2).
-111 *
-73 scripts/validate-backlog-receipts.sh
+105 *
+70 scripts/validate-backlog-receipts.sh
 9 inproc:scripts/validate-backlog-receipts.sh

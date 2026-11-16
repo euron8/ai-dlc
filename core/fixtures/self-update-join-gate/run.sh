@@ -65,10 +65,23 @@ if [ ! -f "$GATE" ] || ! git -C "$D_ROOT" rev-parse --git-dir >/dev/null 2>&1; t
   exit 0
 fi
 
+# IN PROCESS (BL-878). The gate is SOURCED once into this shell (its guard returns after defining sug_main), and every
+# run that is not a cli or e2e cell calls sug_main inside a subshell `( )`, so the gate's own `exit`, its EXIT trap,
+# its `set -uo pipefail` and its `cd` end with that subshell. Each call of sug_main is paired with an fx_inproc on the
+# line before it (arm P2), and so is the source; together they are the inproc: row.
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+
+fx_inproc "$GATE"
+. "$GATE" || { echo "FIXTURE BROKEN: sourcing $GATE failed" >&2; exit 2; }
+declare -F sug_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $GATE defined no sug_main" >&2; exit 2; }
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 echo "self-update-join-gate:"
@@ -87,16 +100,12 @@ OUTD="$WORK/out"; mkdir -p "$OUTD"
 # Either way `cp -c` can die PARTWAY, leaving a half-tree that the gate would then read as a
 # consumer missing files — so the destination is removed before the slow path re-copies it.
 #
-# ONE IMPLEMENTATION, EXPORTED RATHER THAN RESTATED. The pool below runs in a child `bash -c`,
-# and a second copy of this logic there is a copy that can drift from this one. `export -f`
-# carries the function into the child; if that import ever fails the child's copy step fails,
-# the `.done` marker is never written, and the `dropped` arm reports it as a failure — the
-# broken state is loud rather than a silently slower path nobody compares.
+# THE POOL BELOW IS IN THIS SHELL, so `clone_tree` is called directly; there is no child `bash -c` to carry a second
+# copy of it. A missing `.done` marker still means a run did not finish, and the `dropped` arm reports it.
 clone_tree() {
   rm -rf "$2"
   cp -Rc "$1" "$2" 2>/dev/null || { rm -rf "$2"; cp -R "$1" "$2"; }
 }
-export -f clone_tree
 
 # ======================= PHASE 1: build the anchor-stripped consumer =======================
 # The anchor-stripped consumer for assertion 5, also built here: its absence is a FIXTURE
@@ -128,28 +137,35 @@ if [ "$N_RUNS" -lt 3 ]; then
   exit 2
 fi
 
-# THREE, and fixed rather than tunable for the reason the sibling pools state in place: this
-# pool nests inside the pre-push suite's own, so a knob here multiplies against the knob
-# there and the PRODUCT is what lands on the machine. Three is the run count — there is no
-# gain from a wider pool than there is work, and every slot beyond it is contention the
-# sibling fixtures pay for.
-SUJG_JOBS=3
-AI_DLC_SUJG_OUT="$OUTD" AI_DLC_SUJG_RUNS="$RUNS" \
-  AI_DLC_SUJG_DIST="$DIST" AI_DLC_SUJG_BASE="$BASE" AI_DLC_SUJG_THEIRS="$THEIRS" \
-  xargs -P "$SUJG_JOBS" -I{} bash -c '
-    l="$1"
-    g="$(awk -F"\t" -v k="$l" "\$1==k{print \$2}" "$AI_DLC_SUJG_RUNS")"
-    c="$(awk -F"\t" -v k="$l" "\$1==k{print \$3}" "$AI_DLC_SUJG_RUNS")"
-    f="$(awk -F"\t" -v k="$l" "\$1==k{print \$4}" "$AI_DLC_SUJG_RUNS")"
-    [ -n "$g" ] && [ -n "$c" ] && [ -n "$f" ] || exit 0
-    set --; [ "$f" = - ] || set -- "$f"
-    priv="$AI_DLC_SUJG_OUT/$l.consumer"
-    clone_tree "$c" "$priv" || exit 0
-    bash "$g" "$@" "$AI_DLC_SUJG_DIST" "$AI_DLC_SUJG_BASE" "$AI_DLC_SUJG_THEIRS" "$priv" \
-      > "$AI_DLC_SUJG_OUT/$l.txt" 2> "$AI_DLC_SUJG_OUT/$l.err"
-    printf done > "$AI_DLC_SUJG_OUT/$l.done"
-    rm -rf "$priv"
-  ' _ {} < <(cut -f1 "$RUNS")
+# THREE background jobs, one per registered run, fixed rather than tunable: this pool nests inside the pre-push suite's
+# own, so a knob here multiplies against the knob there and the PRODUCT is what lands on the machine. Three is the run
+# count; there is no gain from a wider pool than there is work.
+#
+# r_old (column 4 `-`, the unflagged run) is the ONE e2e cell: its real SAFE-STOP walk starts the gate again as a child
+# process per release candidate (`bash "$SELF_SRC"`), a mechanism that cannot exist in a subshell, and the nested row of
+# cells.decl covers those children by their parent, which has to be a logged gate start. Every flagged run is one
+# in-process call of sug_main.
+sujg_one() { # sujg_one <label>
+  local l="$1" g c f priv
+  g="$(awk -F"\t" -v k="$l" '$1==k{print $2}' "$RUNS")"
+  c="$(awk -F"\t" -v k="$l" '$1==k{print $3}' "$RUNS")"
+  f="$(awk -F"\t" -v k="$l" '$1==k{print $4}' "$RUNS")"
+  [ -n "$g" ] && [ -n "$c" ] && [ -n "$f" ] || return 0
+  [ "$g" = "$GATE" ] || return 0
+  set --; [ "$f" = - ] || set -- "$f"
+  priv="$OUTD/$l.consumer"
+  clone_tree "$c" "$priv" || return 0
+  if [ "$f" = - ]; then
+    FXCELL=r-old bash "$g" "$@" "$DIST" "$BASE" "$THEIRS" "$priv" > "$OUTD/$l.txt" 2> "$OUTD/$l.err"
+  else
+    fx_inproc "$GATE"
+    ( sug_main "$@" "$DIST" "$BASE" "$THEIRS" "$priv" ) > "$OUTD/$l.txt" 2> "$OUTD/$l.err"
+  fi
+  printf done > "$OUTD/$l.done"
+  rm -rf "$priv"
+}
+while IFS= read -r _l; do sujg_one "$_l" & done < <(cut -f1 "$RUNS")
+wait
 
 # verdict <label> — the captured output, or the empty string if the job was dropped.
 # A MISSING VERDICT IS A FAILURE, not a gap: serially a run that never happened could not
@@ -283,8 +299,8 @@ printf 'exit 0\n' > "$RCD/dist/core/scripts/validate-probe.sh"
 RC_BASE="$( cd "$RCD/dist" && git rev-parse HEAD )"
 printf 'scripts/ai-dlc/validate-probe.sh\n' > "$RCD/consumer/.githooks/pre-push"
 
-# rcpair <cur-rc> <new-rc> -> the gate's verdict token for validate-probe.sh
-rcpair() {
+# rc_setup <cur-rc> <new-rc> -- writes the pair into the rc world and commits the incoming side; sets RC_T to that commit
+rc_setup() {
   printf 'exit %s\n' "$1" > "$RCD/consumer/scripts/ai-dlc/validate-probe.sh"
   # THE MARKER IS LOAD-BEARING. The gating set is `invoked AND changed in BASE..THEIRS`, and
   # BASE ships `exit 0`. Without it, the pair `<cur> 0` writes a file byte-identical to BASE,
@@ -292,8 +308,14 @@ rcpair() {
   # reads as an empty verdict rather than as a result. Every pair must be a real change.
   printf '# pair %s-%s\nexit %s\n' "$1" "$2" "$2" > "$RCD/dist/core/scripts/validate-probe.sh"
   ( cd "$RCD/dist" && git add -A && git commit -q -m "new $2" --allow-empty ) >/dev/null 2>&1
-  local theirs; theirs="$( cd "$RCD/dist" && git rev-parse HEAD )"
-  bash "${3:-$GATE}" "$FLAG" "$RCD/dist" "$RC_BASE" "$theirs" "$RCD/consumer" 2>&1 \
+  RC_T="$( cd "$RCD/dist" && git rev-parse HEAD )"
+}
+
+# rcpair <cur-rc> <new-rc> -> the gate's verdict token for validate-probe.sh, from one in-process call of sug_main
+rcpair() {
+  rc_setup "$1" "$2"
+  fx_inproc "$GATE"
+  ( sug_main "$FLAG" "$RCD/dist" "$RC_BASE" "$RC_T" "$RCD/consumer" ) 2>&1 \
     | grep -oE 'SELF-UPDATE-(OK|DEFER|UNDECIDED)[[:space:]]+validate-probe\.sh' | head -1 \
     | awk '{print $1}'
 }
@@ -349,19 +371,20 @@ ENC="$WORK/enc"
 mkdir -p "$ENC" && git -C "$ENC" -c init.defaultBranch=main init -q . \
   || { echo "FIXTURE ERROR: could not init the enclosing repository" >&2; exit 2; }
 RC_THEIRS="$( cd "$RCD/dist" && git rev-parse HEAD )"
-# enc_run <label> <gate> -> runs the flagged gate on a fresh enclosed copy; prints the stdout+stderr, then the line
+# enc_run <label> -> runs the flagged gate on a fresh enclosed copy; prints the stdout+stderr, then the line
 # RECORD-FILE-PRESENT when a verdict record exists in that copy afterwards (derived from the disk, not the text).
 enc_run() {
   local sub="$ENC/sub-$1" n=0 f
   clone_tree "$RCD/consumer" "$sub"
   # The rc-pair runs above recorded into the rc consumer; a copied record would satisfy rec for any gate.
   rm -rf "$sub/_bmad-output"
-  bash "$2" "$FLAG" "$RCD/dist" "$RC_BASE" "$RC_THEIRS" "$sub" > "$WORK/$1.enc.out" 2> "$WORK/$1.enc.err"
+  fx_inproc "$GATE"
+  ( sug_main "$FLAG" "$RCD/dist" "$RC_BASE" "$RC_THEIRS" "$sub" ) > "$WORK/$1.enc.out" 2> "$WORK/$1.enc.err"
   for f in "$sub/_bmad-output/ai-dlc-update/"self-update-gate-*.md; do [ -f "$f" ] && n=$((n + 1)); done
   cat "$WORK/$1.enc.out" "$WORK/$1.enc.err"
   [ "$n" -gt 0 ] && echo RECORD-FILE-PRESENT
 }
-E_U="$(enc_run u "$GATE")"
+E_U="$(enc_run u)"
 if grep -q 'NOT-A-VERDICT' "$WORK/u.enc.err" 2>/dev/null && ! grep -q 'NOT-A-VERDICT' "$WORK/u.enc.out" 2>/dev/null; then :; else
   bad "nav: the flagged enclosed run did not print NOT-A-VERDICT on stderr alone"; fi
 if grep -q '^record: ' <<<"$E_U" && grep -qx 'RECORD-FILE-PRESENT' <<<"$E_U"; then
@@ -374,6 +397,58 @@ if awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" && $2 == "pre-push" && $3 ~ /UNSUPP
 else
   bad "lay: under --no-safe-stop-advice the enclosed consumer was not refused — the flag reached the layout arm"
 fi
+
+# ============================================================================
+# THE CLI CELLS (cells.decl). The gate run as a PROGRAM once per distinct CLI outcome, each compared byte for byte
+# (stdout, stderr, exit) with one in-process call of sug_main on the same input: a passing verdict row (OK), a refusing
+# one (DEFER), an UNDECIDED row, and the usage refusal (exit 2). The three verdict outcomes run on the rc world, a
+# state the cell sets up itself with rc_setup and clears of the verdict record before each side. `date` is a function
+# exported to both sides because the record's name and header carry a clock stamp that stderr prints (`record: <path>`):
+# without it the two runs could never match. A cell also asserts its own outcome (a positive conjunct, so two runs that
+# both printed nothing cannot read as equivalent), and the passing and refusing cells must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # eqv <cell-id> <cur-rc> <new-rc> -- or `eqv <cell-id> usage` -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"
+  date() { case "$*" in *%Y%m%d*) echo 20260101T000000Z ;; *) echo 2026-01-01T00:00:00Z ;; esac; }
+  export -f date
+  if [ "$2" = usage ]; then
+    fx_inproc "$GATE"
+    ( sug_main "$FLAG" --safe-stop ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    FXCELL="$id" bash "$GATE" "$FLAG" --safe-stop > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  else
+    rc_setup "$2" "$3"
+    rm -rf "$RCD/consumer/_bmad-output"
+    fx_inproc "$GATE"
+    ( sug_main "$FLAG" "$RCD/dist" "$RC_BASE" "$RC_T" "$RCD/consumer" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    rm -rf "$RCD/consumer/_bmad-output"
+    FXCELL="$id" bash "$GATE" "$FLAG" "$RCD/dist" "$RC_BASE" "$RC_T" "$RCD/consumer" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  fi
+  unset -f date
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -c 300 "$EQ/$1.ip.out")" "$(head -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -c 300 "$EQ/$1.cl.out")" "$(head -c 300 "$EQ/$1.cl.err")"; }
+eq_row() { # eq_row <cell-id> <verdict token> -> the program's stdout names validate-probe.sh under that token, exit 0
+  [ "$(cat "$EQ/$1.cl.rc")" = 0 ] && grep -qE "^$2[[:space:]]+validate-probe\.sh" "$EQ/$1.cl.out"
+}
+echo "== cli cells"
+if eqv cli-ok 2 2 && eq_row cli-ok SELF-UPDATE-OK; then
+  ok "cli-ok: the program answers an equal-codes pull OK exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-ok: the program and the in-process call differ, or the outcome is not an OK row ($(eq_twin cli-ok))"; fi
+if eqv cli-defer 0 1 && eq_row cli-defer SELF-UPDATE-DEFER; then
+  ok "cli-defer: the program DEFERS a newly failing script exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-defer: the program and the in-process call differ, or the outcome is not a DEFER row ($(eq_twin cli-defer))"; fi
+if eqv cli-undecided 2 1 && eq_row cli-undecided SELF-UPDATE-UNDECIDED; then
+  ok "cli-undecided: the program answers disagreeing non-zero codes UNDECIDED exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-undecided: the program and the in-process call differ, or the outcome is not an UNDECIDED row ($(eq_twin cli-undecided))"; fi
+if eqv cli-usage usage && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && grep -q 'applies to a classify run only' "$EQ/cli-usage.cl.err"; then
+  ok "cli-usage: the program refuses --no-safe-stop-advice --safe-stop exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the refusal ($(eq_twin cli-usage))"; fi
+if ! cmp -s "$EQ/cli-ok.cl.out" "$EQ/cli-defer.cl.out" && ! cmp -s "$EQ/cli-defer.cl.out" "$EQ/cli-undecided.cl.out" \
+   && ! cmp -s "$EQ/cli-ok.cl.rc" "$EQ/cli-usage.cl.rc"; then
+  ok "cli cells discriminate: the OK, DEFER and UNDECIDED cells differ on stdout and the usage cell on exit"
+else bad "cli cells do not discriminate: two cells with different outcomes gave the same stdout or exit"; fi
 
 # ============================================================================
 # cs: NO SHIPPED CALLER PASSES THE FLAG. One awk over every file of core/skills/ai-dlc-update/ except the gate,

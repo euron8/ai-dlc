@@ -1,4 +1,8 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-70 *
-21 core/scripts/audit-upstream-routing.sh
-11 core/hooks/ai-dlc-core-guard.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output). inproc rows (fx_inproc, one
+# per source): the router and the guard once each, and one more router source per relocated copy (the stub-all, nosib,
+# stub-empty and noman arms).
+44 *
+4 core/scripts/audit-upstream-routing.sh
+2 core/hooks/ai-dlc-core-guard.sh
+29 inproc:core/scripts/audit-upstream-routing.sh
+13 inproc:core/hooks/ai-dlc-core-guard.sh

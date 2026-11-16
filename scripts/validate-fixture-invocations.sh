@@ -195,6 +195,7 @@
 # FXC-IDENTITY 1 f4035938f576baa486a7c6acd4b69d429eb974eecac63c27277279fb6af02691 cost only: per-row forks cut, C5's guard table built once, the --b2-census self-probe memoised (BL-1065); every output byte-identical
 # FXC-IDENTITY 1 773c3d37115fb87226d647e883483c839cffc54dddd02a8750483c73805dcb8a the J5 arm and the matrix allowlist removed with every mutation battery; every judged fixture's row format unchanged
 # FXC-IDENTITY 1 4ab7b9213aef40bc9e9cfa591abbab63a184703d40186176cd88c5dad937be0e cost only: the --b2-census self-probe and its memo removed (BL-1102); no fixture's judgement moves
+# FXC-IDENTITY 1 0889dc63e00b73cd2d67c4ddd77760a23176d8b7db276e28565303de8be1c90a the static join's `A` row for an absent or unopenable cli subject (BL-878); fxc_judge is unchanged, so no counted fixture's judgement moves
 set -u
 FXC_FORMAT=1
 
@@ -1080,6 +1081,8 @@ fxc_p2_scan() {
 #   X\t<fx>\t<reason>                    REFUSED: the dynamic arms cannot pass this tree
 #   P\t<fx>                              predicted to pass (the counted run decides)
 #   O\t<fx>\t<why>                       out of population (`.undeclarable`, or no inputs.decl)
+#   A\t<subject>                         a `cli` subject of some cells.decl that is absent or unopenable under <root>,
+#                                        once per subject, before the per-fixture rows: an absent input, never C5
 #   E\t<fx>\t<arm>\t<line>\t<reason>     a static finding: C2 (grammar, a cell subject that is no path row), C4, C5,
 #                                        and P2 (fxc_p2_scan, run once over the tree; <line> is `<file>:<line>`; a P2
 #                                        row carries a sixth field, the drive line's text with blank runs collapsed)
@@ -1105,8 +1108,9 @@ fxc_static_join() {
   # C5's guard table, once over the tree: `<subject>\t<G|U>` for every `cli` subject of any cells.decl, from ONE
   # fxc_cells_parse and ONE fxc_guarded over the subjects present as files this shell can OPEN (one awk dies on an
   # unopenable file and drops every file after it). Openability is tested by opening, never by a mode test, which the
-  # pre-suite key does not carry (S15, BL-917). A subject absent, unopenable or empty takes no row, so the join awk
-  # reads it as unguarded, as a per-subject call printing nothing did.
+  # pre-suite key does not carry (S15, BL-917). A subject ABSENT or UNOPENABLE is an absent INPUT, not a finding: it
+  # takes an `A` guard row, which C5 skips, and prints one tree-wide `A\t<subject>` row, which
+  # validate-fixture-inprocess.sh refuses on. An EMPTY subject is present and takes no row, so C5 reads it unguarded.
   set --
   for cf in "$root"/core/fixtures/*/cells.decl; do [ -f "$cf" ] && { : < "$cf"; } 2>/dev/null && set -- "$@" "$cf"; done
   : > "$w/gt"
@@ -1116,6 +1120,11 @@ fxc_static_join() {
     while IFS= read -r p; do [ -n "$p" ] && [ -f "$root/$p" ] && { : < "$root/$p"; } 2>/dev/null && set -- "$@" "$root/$p"; done < "$w/cli"
     [ $# -gt 0 ] && R="$root/" awk -F'\t' 'BEGIN { r = ENVIRON["R"]; n = length(r) }
       substr($2, 1, n) == r { print substr($2, n + 1) "\t" $1 }' <(fxc_guarded "$@") > "$w/gt"
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      { [ -f "$root/$p" ] && { : < "$root/$p"; } 2>/dev/null; } && continue
+      printf '%s\tA\n' "$p" >> "$w/gt"; printf 'A\t%s\n' "$p"
+    done < "$w/cli"
   fi
   for d in "$root"/core/fixtures/*/; do
     d="${d%/}"; fx="${d##*/}"
@@ -1143,7 +1152,7 @@ fxc_static_join() {
       $1 == "R" { if (!($4 in N)) { print "E\t" fx "\tC2\t" $7 "\t" $3 " row names " $4 ", which is no path row of invocations.decl"; bad = 1 }
                   if ($3 == "nested") { if (!($5 in N)) { print "E\t" fx "\tC2\t" $7 "\tnested row names child " $5 ", which is no path row of invocations.decl"; bad = 1 } else NEST[$5] = 1 }
                   else CC[$4]++
-                  if ($3 == "cli" && G[$4] != "G") { print "E\t" fx "\tC5\t" $7 "\tcli subject " $4 " carries no column-0 BASH_SOURCE source guard statement"; G[$4] = "R"; bad = 1 } }
+                  if ($3 == "cli" && G[$4] != "G" && G[$4] != "A") { print "E\t" fx "\tC5\t" $7 "\tcli subject " $4 " carries no column-0 BASH_SOURCE source guard statement"; G[$4] = "R"; bad = 1 } }
       END { for (s in N) { n = N[s] + 0; c = CC[s] + 0
               if (n == 0 && c == 0) continue
               if (n == c || ((s in NEST) && n >= c)) continue

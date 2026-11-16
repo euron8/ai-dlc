@@ -67,6 +67,33 @@ echo "  subject: ${SUBJECT#"$ROOT"/}"
 echo "HERMETIC-CONSUMED ${SUBJECT#"$ROOT"/}"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# IN PROCESS (BL-878). The subject is SOURCED once into this shell (its guard returns after defining rad_main) and
+# every render calls rad_main in a subshell, so the subject's own `exit`, `set -uo pipefail` and variables stay there.
+# The source is one fx_inproc pass (the inproc: row).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped
+# render-agent-definitions.sh, and sourcing a pre-wrap subject would run its whole body in this shell. So the shape is
+# checked first, on its two halves: neither the `rad_main() {` line nor the column-0 source guard is a subject that
+# predates the wrap, which prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled subject this
+# fixture can no longer drive, which FAILS. The distribution cannot reach the SKIP unnoticed: C5
+# (validate-fixture-inprocess.sh) refuses a cli subject without the guard, and J3 refuses the start count moving.
+rad_def=0; rad_guard=0
+grep -q '^rad_main() {$' "$SUBJECT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJECT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rad_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJECT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJECT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rad_guard=1
+if [ "$rad_def$rad_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$rad_def" = 0 ]; then echo "   FAIL  $SUBJECT carries the column-0 source guard but no \`rad_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "agent-definition-render: FAIL (1)" >&2; exit 1; fi
+if [ "$rad_guard" = 0 ]; then echo "   FAIL  $SUBJECT defines \`rad_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run rad_main in this shell" >&2; echo "agent-definition-render: FAIL (1)" >&2; exit 1; fi
+fx_inproc "$SUBJECT"
+. "$SUBJECT" || { echo "FIXTURE BROKEN: sourcing $SUBJECT failed" >&2; exit 2; }
+declare -F rad_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $SUBJECT defined no rad_main" >&2; exit 2; }
 
 # fresh -> the PROJECT root of a new scratch world. seed.sh prints the `mktemp` directory it
 # created; the project lives one level inside it, and `drop` removes exactly what the seed
@@ -96,9 +123,10 @@ clone() {
   mkdir -p "$WLD/$2" && cp -R "$1" "$c" && printf '%s\n' "$c"
 }
 
-render() { # <subject> <project> [args...]
-  local subj="$1" p="$2"; shift 2
-  bash "$subj" --root "$p" "$@" 2>&1
+render() { # <subject> <project> [args...] -- one in-process call of rad_main; the subject argument is the sourced one
+  local p="$2"; shift 2
+  fx_inproc "$SUBJECT"
+  ( rad_main --root "$p" "$@" ) 2>&1
 }
 
 # THE SEED MUST BE ABLE TO EXPRESS EVERY DEFECT. Derived from the seeded declaration rather
@@ -454,10 +482,63 @@ arm_body_carries_protected_read_line() {
   grep -qxF -- 'A path `.claude/hooks/ai-dlc-protect.sh` protects (its PROTECTED_PATTERNS) is read with the native Read tool, never with a context-mode tool (ctx_*): the hook denies those calls.' "$f"
 }
 
+# THE CLI CELLS (cells.decl). The subject run as a PROGRAM once per distinct CLI outcome, each compared with the in-process
+# call on the same input: stdout, stderr, exit and the definitions left on disk, separately, byte for byte. Both sides get
+# a fresh copy of the same seed at the SAME path, because the report names the settings path and a write leaves files. A
+# cell also asserts its own outcome (a positive conjunct, so two runs that both did nothing cannot read as equivalent).
+eq_digest() { ( cd "$1/.claude/agents" 2>/dev/null && shasum -a 256 -- *.md 2>/dev/null ); return 0; }
+eqv() { # eqv <cell-id> <seed project> [args...] -> 0 when the two agree; the program's side is in $WLD/eq/<id>/cl.*
+  local id="$1" src="$2" d w
+  shift 2
+  d="$WLD/eq/$id"; w="$d/project"; mkdir -p "$d" || return 1
+  rm -rf "$w"; cp -R "$src" "$w" || return 1
+  fx_inproc "$SUBJECT"
+  ( rad_main --root "$w" "$@" ) > "$d/ip.out" 2> "$d/ip.err"; echo "$?" > "$d/ip.rc"; eq_digest "$w" > "$d/ip.dig"
+  rm -rf "$w"; cp -R "$src" "$w" || return 1
+  FXCELL="$id" bash "$SUBJECT" --root "$w" "$@" > "$d/cl.out" 2> "$d/cl.err"; echo "$?" > "$d/cl.rc"; eq_digest "$w" > "$d/cl.dig"
+  cmp -s "$d/ip.out" "$d/cl.out" && cmp -s "$d/ip.err" "$d/cl.err" && cmp -s "$d/ip.rc" "$d/cl.rc" && cmp -s "$d/ip.dig" "$d/cl.dig"
+}
+cl_rc() { cat "$WLD/eq/$1/cl.rc"; }
+cl_has() { grep -q -- "$2" "$WLD/eq/$1/cl.out" "$WLD/eq/$1/cl.err"; }
+arm_cli_write() {
+  eqv cli-write "$PRE" || return 1
+  [ "$(cl_rc cli-write)" = 0 ] && cl_has cli-write 'definition(s) written' && grep -q " $WITH_EFFORT.md\$" "$WLD/eq/cli-write/cl.dig"
+}
+arm_cli_check_current() {
+  eqv cli-check-current "$1" --check || return 1
+  [ "$(cl_rc cli-check-current)" = 0 ] && cl_has cli-check-current 'OK: agent definitions current'
+}
+arm_cli_check_drifted() {
+  eqv cli-check-drifted "$PRE" --check || return 1
+  [ "$(cl_rc cli-check-drifted)" = 1 ] && grep -q . "$WLD/eq/cli-check-drifted/cl.out" "$WLD/eq/cli-check-drifted/cl.err"
+}
+arm_cli_refuse() {
+  local b="$WLD/eq/bad-src"
+  mkdir -p "$b" && rm -rf "$b/project" && cp -R "$PRE" "$b/project" || return 1
+  printf '{ "aiDlcRoles": \n' > "$b/project/.claude/settings.json"
+  eqv cli-refuse "$b/project" || return 1
+  [ "$(cl_rc cli-refuse)" = 2 ] && [ ! -s "$WLD/eq/cli-refuse/cl.out" ] && cl_has cli-refuse 'not parseable JSON; refusing to render from it'
+}
+arm_cli_not_applicable() {
+  local n="$WLD/eq/na-src"
+  mkdir -p "$n" && rm -rf "$n/project" && cp -R "$PRE" "$n/project" || return 1
+  jq 'del(.aiDlcRoles)' "$n/project/.claude/settings.json" > "$n/s.new" || return 1
+  mv "$n/s.new" "$n/project/.claude/settings.json" || return 1
+  eqv cli-not-applicable "$n/project" || return 1
+  [ "$(cl_rc cli-not-applicable)" = 3 ] && cl_has cli-not-applicable '^NOT APPLICABLE: '
+}
+# The four outcomes that are not a write are four distinct exit codes, so no two cells can read as one.
+arm_cli_cells_discriminate() {
+  local a b c d
+  a="$(cl_rc cli-check-current)"; b="$(cl_rc cli-check-drifted)"; c="$(cl_rc cli-refuse)"; d="$(cl_rc cli-not-applicable)"
+  [ "$a $b $c $d" = "0 1 2 3" ]
+}
+
 ARMS="renders_model_bearing_roles persona_with_model_is_defined marker_sits_below_the_frontmatter no_file_for_model_less_role effort_line_tracks_the_declaration
 invalid_effort_omitted_and_reported omit_claude_md_tracks_the_declaration check_joins_declaration_to_projection
 foreign_definition_untouched stale_projection_is_caught_and_cleared check_never_writes
-three_states_are_distinct idempotent body_carries_protected_read_line"
+three_states_are_distinct idempotent body_carries_protected_read_line
+cli_write cli_check_current cli_check_drifted cli_refuse cli_not_applicable cli_cells_discriminate"
 
 run_arms() { # <subject> [arms...] -> "<name>:<0|1>" per arm. ONE seed and ONE render per subject.
   local subj="$1" name rc SP ARMS="$ARMS"
@@ -466,7 +547,8 @@ run_arms() { # <subject> [arms...] -> "<name>:<0|1>" per arm. ONE seed and ONE r
   SP="$WLD/project"
   PRE="$WLD/pre/project"                     # snapshot of the seed BEFORE any render
   mkdir -p "$WLD/pre" && cp -R "$SP" "$PRE" || { for name in $ARMS; do printf '%s:1\n' "$name"; done; return; }
-  bash "$subj" --root "$SP" >"$WLD/render.out" 2>"$WLD/render.err"; SH_RC=$?
+  fx_inproc "$SUBJECT"
+  ( rad_main --root "$SP" ) >"$WLD/render.out" 2>"$WLD/render.err"; SH_RC=$?
   SH_OUT="$(cat "$WLD/render.out")"; SH_ERR="$(cat "$WLD/render.err")"
   for name in $ARMS; do
     "arm_$name" "$SP" "$subj" >/dev/null 2>&1 && rc=0 || rc=1
@@ -493,6 +575,12 @@ while IFS=: read -r name rc; do
     three_states_are_distinct)           msg="NOT APPLICABLE(3), drifted(1) and current(0) are three distinct exit codes" ;;
     body_carries_protected_read_line)    msg="the rendered body carries the line telling a teammate to read a protected path with native Read, never a context-mode tool" ;;
     idempotent)                          msg="four renders are byte-identical and leave no duplicate" ;;
+    cli_write)                           msg="cli-write: the program writes the definitions exactly as the in-process call does (stdout, stderr, exit 0, files)" ;;
+    cli_check_current)                   msg="cli-check-current: the program says OK over a current tree exactly as the in-process call does (exit 0)" ;;
+    cli_check_drifted)                   msg="cli-check-drifted: the program reports a missing definition exactly as the in-process call does (exit 1, nothing written)" ;;
+    cli_refuse)                          msg="cli-refuse: the program refuses unparseable settings exactly as the in-process call does (exit 2)" ;;
+    cli_not_applicable)                  msg="cli-not-applicable: the program says NOT APPLICABLE exactly as the in-process call does (exit 3)" ;;
+    cli_cells_discriminate)              msg="cli cells discriminate: current, drifted, refused and not-applicable are exits 0, 1, 2 and 3" ;;
     *)                                   msg="$name" ;;
   esac
   if [ "$rc" -eq 0 ]; then

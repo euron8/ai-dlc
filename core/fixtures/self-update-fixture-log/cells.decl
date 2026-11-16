@@ -1,0 +1,16 @@
+# self-update-fixture-log's starts of core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh (BL-879 grammar). Every
+# other drive is in process: run.sh sources the checker once and calls suf_main through suf_run in a subshell. One cli
+# cell per distinct CLI outcome (exit 0 OK, exit 0 NOT-REQUIRED, exit 2 argument refusal, exit 2 no-record refusal,
+# exit 2 SLICE refusal), each started as FXCELL=<id> bash "$RUNNER" in eqv() and compared byte for byte with the
+# in-process call on the same world.
+cli core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh cli-ok
+cli core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh cli-notrequired
+cli core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh cli-usage
+cli core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh cli-refused
+cli core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh cli-slice
+# UD4 drives the real self-update-push.sh three times (ud4-first, ud4-same, ud4-new), each started as
+# FXCELL=ud4-<tag> bash "$UD4_PUSH"; the wrapper runs the checker beside itself, which the nested row covers.
+e2e core/skills/ai-dlc-update/reconcile/self-update-push.sh ud4-first why=UD4's first push: the remedy's refusal through the real wrapper
+e2e core/skills/ai-dlc-update/reconcile/self-update-push.sh ud4-same why=UD4's second push with the same out file: the already-exists refusal
+e2e core/skills/ai-dlc-update/reconcile/self-update-push.sh ud4-new why=UD4's third push with a new out file: the OK record and the landed push
+nested core/skills/ai-dlc-update/reconcile/self-update-push.sh core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh why=the wrapper runs the checker beside itself before the push

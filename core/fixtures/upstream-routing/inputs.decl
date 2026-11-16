@@ -12,3 +12,4 @@
 core/scripts/core-paths.sh
 core/hooks/ai-dlc-context-provenance.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh

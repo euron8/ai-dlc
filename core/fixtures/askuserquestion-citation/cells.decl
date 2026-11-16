@@ -1,0 +1,9 @@
+# askuserquestion-citation's starts of core/scripts/validate-steering-budget.sh (BL-879 grammar). Every other drive is in
+# process: run.sh sources the validator once and calls sb_main in a subshell. One cli cell per distinct CLI outcome
+# (exit 0 MATCH, exit 2 NOMATCH, exit 2 NOMATCH-TRANSCRIPT-PRUNED, exit 1 refusal, exit 0 --count integer), each started as FXCELL=<id> bash <validator> in eqv() and compared byte for
+# byte with the in-process call on the same input.
+cli core/scripts/validate-steering-budget.sh cli-match
+cli core/scripts/validate-steering-budget.sh cli-nomatch
+cli core/scripts/validate-steering-budget.sh cli-pruned
+cli core/scripts/validate-steering-budget.sh cli-refuse
+cli core/scripts/validate-steering-budget.sh cli-count

@@ -1,0 +1,6 @@
+# core-write-guard's starts of core/hooks/ai-dlc-core-guard.sh (BL-879 grammar). Every other drive is in process:
+# run.sh sources the hook once and calls cwg_main in a subshell. One cli cell per distinct CLI outcome (the hook exits 0
+# on every path, so the outcomes are output classes: deny JSON on stdout, nothing on stdout), each started as
+# FXCELL=<id> bash "$HOOK" in eqv() and compared byte for byte with the in-process call on the same payload.
+cli core/hooks/ai-dlc-core-guard.sh cli-deny
+cli core/hooks/ai-dlc-core-guard.sh cli-allow

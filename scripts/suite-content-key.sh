@@ -36,6 +36,7 @@
 # MUST treat a non-zero exit, or an empty key, as "run the suite" -- this script
 # failing must never be the thing that skips it.
 
+sck_main() {
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
@@ -344,3 +345,6 @@ case "$KEY" in
   *) die "computed key is not a sha256 ('$KEY') -- refusing to emit a value a caller would compare against" ;;
 esac
 printf '%s\n' "$KEY"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+sck_main "$@"

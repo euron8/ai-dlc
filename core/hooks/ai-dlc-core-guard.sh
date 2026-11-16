@@ -41,6 +41,7 @@
 # INSTALL: wired by templates/settings.json.template (PreToolUse matcher
 #   "Edit|Write|MultiEdit"); upserted by reconcile/settings-merge.sh on pull.
 
+cwg_main() {
 set -u
 
 INPUT="$(cat)"
@@ -304,3 +305,6 @@ done <<< "$OLD"
 
 # Every replaced line is declared /ai-dlc-setup config — allow the fill.
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+cwg_main "$@"

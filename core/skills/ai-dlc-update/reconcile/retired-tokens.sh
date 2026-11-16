@@ -77,6 +77,7 @@
 #   2  a refusal, never a finding or a clean: a producer this detector reads did not run,
 #      or preclassify.sh listed no rows at all, so no subject set exists to report on
 
+rt_main() {
 set -u
 # Globbing off for the whole run: no word list here relies on pathname expansion.
 set -f
@@ -98,7 +99,7 @@ ONLY="${5:-}"
 
 # `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
 # `/x.sh` is `/`, which is what `dirname` answered.
-case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
 SELF="$(cd "$SELF" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "retired-tokens: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
@@ -291,3 +292,6 @@ else
 fi
 
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rt_main "$@"

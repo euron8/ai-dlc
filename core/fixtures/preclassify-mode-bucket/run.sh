@@ -86,6 +86,44 @@ trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 broken() { printf 'FIXTURE BROKEN: %s\n' "$1" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# IN PROCESS (BL-878). The subject is SOURCED once into this shell (its guard returns after defining prec_main) and
+# every arm calls prec_main in a subshell, so the subject's own `exit`, `set -u`, `set -f` and traps stay there. The
+# source is one fx_inproc pass (the inproc: row). A subshell is never the top shell of the subject's failure signal
+# (`kill -USR1 $$`), and no arm here forces a git failure, so this shell ignores USR1: a regressed subject that did
+# signal would then leave a wrong answer for an arm to fail on, never end this run.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped
+# preclassify.sh, and sourcing a pre-wrap subject would run its whole body in this shell. So the shape is checked
+# first, on its two halves: neither the `prec_main() {` line nor the column-0 source guard is a subject that predates
+# the wrap, which prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled subject this fixture can no
+# longer drive, which FAILS. The distribution cannot reach the SKIP unnoticed: C5 (validate-fixture-inprocess.sh)
+# refuses a cli subject without the guard, and J3 refuses the start count moving.
+PCS="$RECON/preclassify.sh"
+prec_def=0; prec_guard=0
+grep -q '^prec_main() {$' "$PCS"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $PCS (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || prec_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$PCS"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $PCS (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || prec_guard=1
+if [ "$prec_def$prec_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$prec_def" = 0 ]; then echo "   FAIL  $PCS carries the column-0 source guard but no \`prec_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "preclassify-mode-bucket: FAIL (1)" >&2; exit 1; fi
+if [ "$prec_guard" = 0 ]; then echo "   FAIL  $PCS defines \`prec_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run prec_main in this shell" >&2; echo "preclassify-mode-bucket: FAIL (1)" >&2; exit 1; fi
+fx_inproc "$PCS"
+. "$PCS" || { echo "FIXTURE BROKEN: sourcing $PCS failed" >&2; exit 2; }
+declare -F prec_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $PCS defined no prec_main" >&2; exit 2; }
+trap : USR1
+
+# pc_ip <rows> <err> <subject args...> -> prec_main's exit status; stdout and stderr land in the two files
+pc_ip() {
+  local _r="$1" _e="$2"; shift 2
+  fx_inproc "$PCS"
+  ( prec_main "$@" ) > "$_r" 2> "$_e"
+}
 
 # --- the case table --------------------------------------------------------------------
 # id | core/git-hooks/<file> | expected base..theirs STATUS | the bucket the FIXED code emits
@@ -271,12 +309,13 @@ ok "S3 the consumer's exec bits are as the case table declares"
 # no-match (see M_ANCHOR below). `ENVIRON` does no escape processing at all, so a bucket
 # name containing a backslash could not quietly become a different string.
 
-# vector <reconcile-dir> -> "C1=<bucket> C2=<bucket> ..." for every case, in table order.
+# vector -> "C1=<bucket> C2=<bucket> ..." for every case, in table order.
 # `<none>` when no row was emitted, so an arm demanding a bucket string is PRESENCE-shaped
 # and a subject that emits nothing fails it by construction rather than passing quietly.
 vector() {
-  local dir="$1" out
-  out="$(bash "$dir/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null || true)"
+  local out
+  pc_ip "$WORK/vec.rows" /dev/null "$DIST" "$BASE" "$THEIRS" "$CONS"
+  out="$(<"$WORK/vec.rows")"
   PCMB_TABLE="$CASE_TABLE" PCMB_OUT="$out" awk 'BEGIN {
     n = split(ENVIRON["PCMB_TABLE"], rows, "\n")
     m = split(ENVIRON["PCMB_OUT"], lines, "\n")
@@ -326,7 +365,7 @@ EXPECTED="$(expected_sig)"
 NCASES="$(grep -c . <<<"$CASE_TABLE")"
 
 # --- A. THE FIXED SUBJECT, over every arm of both branches -------------------------------
-SIG_CLEAN="$(vector "$RECON")"
+SIG_CLEAN="$(vector)"
 if [ "$SIG_CLEAN" = "$EXPECTED" ]; then
   ok "A the shipping preclassify.sh buckets all $NCASES cases correctly, across both branches"
 else
@@ -334,6 +373,32 @@ else
   bad "A   expected: $EXPECTED"
   bad "A   got:      $SIG_CLEAN"
 fi
+
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome --------------------------
+# The outcomes are exit x output class: 0 with the default mode's rows, 0 with --untangle's rows (below, in its own
+# world), 2 with the refusal line on stderr. One `FXCELL=<id> bash "$PCS"` start per outcome, each compared with the
+# in-process call on the same input: stdout, stderr and exit separately, byte for byte. A cell also asserts its own
+# outcome (a positive conjunct, so two runs that both printed nothing cannot read as equivalent).
+EQ="$WORK/eq"; mkdir -p "$EQ" || broken "mkdir eq"
+eqv() { # <cell-id> <subject args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"; shift
+  pc_ip "$EQ/$id.ip.out" "$EQ/$id.ip.err" "$@"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$PCS" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s rows=%s err=[%s] / program rc=%s rows=%s err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(grep -c . "$EQ/$1.ip.out")" \
+  "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(grep -c . "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+if eqv cli-rows "$DIST" "$BASE" "$THEIRS" "$CONS" && [ "$(cat "$EQ/cli-rows.cl.rc")" = 0 ] \
+   && [ "$(grep -c . "$EQ/cli-rows.cl.out")" -ge "$NCASES" ] && [ ! -s "$EQ/cli-rows.cl.err" ]; then
+  ok "cli-rows: the program buckets the $NCASES cases exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-rows: the program and the in-process call differ, or the outcome is not exit 0 with a row per case ($(eq_twin cli-rows))"; fi
+if eqv cli-refuse "$WORK/no-such-dist" "$BASE" "$THEIRS" "$CONS" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-refuse.cl.out" ] \
+   && [ "$(cat "$EQ/cli-refuse.cl.err")" = "preclassify: dist-repo not a directory: $WORK/no-such-dist" ]; then
+  ok "cli-refuse: the program refuses a dist that is not a directory exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 2 with the refusal line ($(eq_twin cli-refuse))"; fi
+if ! cmp -s "$EQ/cli-rows.cl.out" "$EQ/cli-refuse.cl.out" && ! cmp -s "$EQ/cli-rows.cl.rc" "$EQ/cli-refuse.cl.rc"; then
+  ok "cli cells discriminate: the classifying and the refusing input give different stdout and exit"
+else bad "cli cells do not discriminate: cli-rows and cli-refuse gave the same stdout or exit"; fi
 
 # =========================================================================================
 # BL-100 / BL-364 -- `--untangle` READS THE MODE, AND ITS MANIFEST LISTING IS NOT C-QUOTED
@@ -386,7 +451,7 @@ if [ "$U_RUN" = 1 ]; then
   cp "$UD/core/rules/plain.md" "$UC/.claude/rules/plain.md"
   cp "$UD/core/rules/$CAFE" "$UC/.claude/rules/$CAFE"; chmod 755 "$UC/.claude/rules/$CAFE"
   printf 'edited rule CONSUMER\n' > "$UC/.claude/rules/edited.md"
-  u_rows() { bash "$1/preclassify.sh" "$UD" "$UH" "$UH" "$UC" --untangle 2>/dev/null; }
+  u_rows() { pc_ip "$WORK/u.rows" /dev/null "$UD" "$UH" "$UH" "$UC" --untangle; cat "$WORK/u.rows"; }
   u_b() { printf '%s\n' "$1" | LC_ALL=C awk -F'\t' -v p="$2" '$2==p {print $4}'; }
   score_u() { # score_u <recon> -> failing cells, then `.`
     local _r="" r1 r2
@@ -412,6 +477,14 @@ if [ "$U_RUN" = 1 ]; then
     bad "BL-100/BL-364 cell(s) [$got] failed on --untangle"
   fi
 
+  # cli-untangle: the --untangle mode's rows, in the world u_verdict last scored, compared with the in-process call.
+  chmod 755 "$UC/.githooks/pre-push"; chmod 644 "$UC/.claude/rules/plain.md"
+  if eqv cli-untangle "$UD" "$UH" "$UH" "$UC" --untangle && [ "$(cat "$EQ/cli-untangle.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-untangle.cl.err" ] \
+     && [ "$(u_b "$(cat "$EQ/cli-untangle.cl.out")" core/rules/edited.md)" = 'BOTH-CHANGED->CLASSIFY' ] \
+     && [ "$(u_b "$(cat "$EQ/cli-untangle.cl.out")" core/git-hooks/pre-push)" = ALREADY-AT-THEIRS ]; then
+    ok "cli-untangle: the program lists the --untangle rows exactly as the in-process call does (stdout, stderr, exit 0)"
+  else bad "cli-untangle: the program and the in-process call differ, or the outcome is not exit 0 with the untangle rows ($(eq_twin cli-untangle))"; fi
+
   # --- BL-685 D1: the untangle listing reads THEIRS' TREE, not the dist INDEX ------------------
   # A BARE dist has no index, so a plain `ls-files "$glob"` listed nothing and --untangle emitted
   # ZERO rows -- byte-identical to "nothing to untangle". U7 runs the same world with the dist
@@ -432,13 +505,14 @@ if [ "$U_RUN" = 1 ]; then
     git clone -q --bare "$UD" "$UB" >/dev/null 2>&1 || broken "bare clone of the untangle dist"
     # SEED CONTROL: the bare clone's index really is empty, else U7 cannot express the defect.
     [ -z "$(git -C "$UB" ls-files 2>/dev/null)" ] || broken "a plain ls-files in the bare untangle clone listed paths, so U7 cannot express BL-685 D1"
-    u7_n() { # u7_n <recon> -> how many rows --untangle emits against the bare dist
+    u7_n() { # u7_n <dist> -> how many rows --untangle emits against that dist
       local n
-      n="$(bash "$1/preclassify.sh" "$UB" "$UH" "$UH" "$UC" --untangle 2>/dev/null | grep -c .)" || n=0
+      pc_ip "$WORK/u7.rows" /dev/null "$1" "$UH" "$UH" "$UC" --untangle
+      n="$(grep -c . "$WORK/u7.rows")" || n=0
       printf '%s\n' "$n"
     }
-    u7_co="$(bash "$RECON/preclassify.sh" "$UD" "$UH" "$UH" "$UC" --untangle 2>/dev/null | grep -c .)" || u7_co=0
-    u7_bare="$(u7_n "$RECON")"
+    u7_co="$(u7_n "$UD")"
+    u7_bare="$(u7_n "$UB")"
     if [ "$u7_co" -gt 0 ] && [ "$u7_bare" = "$u7_co" ]; then
       ok "BL-685 U7: with a BARE dist --untangle lists its rows from theirs' tree ($u7_bare, as from the checkout)"
     else

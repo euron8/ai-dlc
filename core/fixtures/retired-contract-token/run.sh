@@ -42,6 +42,37 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# IN PROCESS (BL-878). The detector is SOURCED once into this shell (its guard returns after defining rt_main) and
+# every arm calls rt_main in a subshell, so the detector's own `exit`, `set -u`, `set -f` and EXIT trap stay in that
+# subshell. Each rt_run call is one fx_inproc pass (the inproc: row). The three cli cells at the end run it as a program.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped
+# retired-tokens.sh, and sourcing a pre-wrap detector would run its `${1:?usage}` in this shell. So the shape is checked
+# first, on its two halves: neither the `rt_main() {` line nor the column-0 source guard is a subject that predates the
+# wrap, which prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled subject this fixture can no longer
+# drive, which FAILS. The distribution cannot reach the SKIP unnoticed: C5 (validate-fixture-inprocess.sh) refuses a
+# cli subject without the guard, and J3 refuses the start count moving.
+rt_def=0; rt_guard=0
+grep -q '^rt_main() {$' "$DETECT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $DETECT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rt_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$DETECT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $DETECT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rt_guard=1
+if [ "$rt_def$rt_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$rt_def" = 0 ]; then echo "   FAIL  $DETECT carries the column-0 source guard but no \`rt_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "retired-contract-token: FAIL (1)" >&2; exit 1; fi
+if [ "$rt_guard" = 0 ]; then echo "   FAIL  $DETECT defines \`rt_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run rt_main in this shell" >&2; echo "retired-contract-token: FAIL (1)" >&2; exit 1; fi
+. "$DETECT" || { echo "FIXTURE BROKEN: sourcing $DETECT failed" >&2; exit 2; }
+declare -F rt_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $DETECT defined no rt_main" >&2; exit 2; }
+# One in-process call. pipefail is switched off inside the subshell because the program runs without it.
+# Each call is one fx_inproc pass (the inproc: row), the line before it.
+rt_run() { ( set +o pipefail
+  fx_inproc "$DETECT"
+  rt_main "$@" ); }
 
 CORE_PATH="core/scripts/validate-artifact-budget.sh"
 DIST="$WORK/dist"
@@ -92,7 +123,7 @@ git -C "$DIST" add -A >/dev/null 2>&1
 git -C "$DIST" commit -qm theirs >/dev/null 2>&1
 THEIRS_SHA="$(git -C "$DIST" rev-parse HEAD)"
 
-run_detect() { bash "$DETECT" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null; }
+run_detect() { rt_run "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null; }
 
 echo "retired-contract-token"
 
@@ -126,7 +157,7 @@ fi
 RTF="$WORK/pc-rows"
 bash "$(dirname "$DETECT")/preclassify.sh" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" > "$RTF" 2>/dev/null
 RT_STAND="$out"
-RT_FLAG="$(bash "$DETECT" --bucket-rows "$RTF" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null)"
+RT_FLAG="$(rt_run --bucket-rows "$RTF" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null)"
 if [ "$(grep -c . "$RTF")" -gt 0 ] && [ -n "$RT_FLAG" ] && [ "$RT_FLAG" = "$RT_STAND" ]; then
   ok "--bucket-rows changes no verdict: the flagged and standalone runs agree row-for-row"
 elif [ "$(grep -c . "$RTF")" -eq 0 ]; then
@@ -144,7 +175,7 @@ fi
 # or a truncated write, is byte-indistinguishable from a clean tree at the only place an
 # operator reads. Measured before this arm existed: all four reconcile fixtures stayed green
 # with that hole open.
-RT_EMPTY="$(bash "$DETECT" --bucket-rows /dev/null "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null)"
+RT_EMPTY="$(rt_run --bucket-rows /dev/null "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null)"
 if grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan' <<<"$RT_EMPTY"; then
   ok "an EMPTY --bucket-rows file does not acquit: the detector re-derives rather than reporting clean"
 else
@@ -234,8 +265,8 @@ OURS
 }
 # stderr only; stdout discarded. `2>&1 >/dev/null` in that order.
 # An optional third argument is the per-path fifth argument both program callers pass.
-err_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" ${3:+"$3"} 2>&1 >/dev/null; }
-out_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" ${3:+"$3"} 2>/dev/null; }
+err_of() { rt_run "$DIST" "$2" "$THEIRS_SHA" "$CONS" ${3:+"$3"} 2>&1 >/dev/null; }
+out_of() { rt_run "$DIST" "$2" "$THEIRS_SHA" "$CONS" ${3:+"$3"} 2>/dev/null; }
 
 # p5 drives THREE worlds. Two consumer-deleted CLASSIFY files listed and neither opened
 # (the listed count asserted as a number); the incident's own shape, nothing listed at
@@ -294,7 +325,7 @@ if [ "$P8_ISDIST" = 0 ] && ! grep -q '^  exit 2$' <<<"$P8_BLOCK"; then
   printf '  SKIP  p8 exit-code conjunct -- the installed retired-tokens.sh predates the exit-2 refusal; it lands with the pull that carries this fixture (this is not a pass)\n'
   P8_RC=0
 fi
-rc_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" >/dev/null 2>&1; printf '%s' "$?"; }
+rc_of() { rt_run "$DIST" "$2" "$THEIRS_SHA" "$CONS" >/dev/null 2>&1; printf '%s' "$?"; }
 p8() {
   seed_at_theirs
   o="$(out_of "$1" "$THEIRS_SHA")"; e="$(err_of "$1" "$THEIRS_SHA")"
@@ -323,6 +354,40 @@ if p7 "$DETECT"; then ok "a run that matched says nothing on stderr: the rows ar
 else bad "a NOTE was printed beside real rows, or the rows are gone"; fi
 if p8 "$DETECT"; then ok "preclassify producing no rows is refused, not reported as a clean NOTE"
 else bad "an unresolvable input reads as a clean scan"; fi
+
+# --- the cli cells (cells.decl): the detector run as a PROGRAM once per distinct CLI outcome ----------------------
+# The outcomes are exit x output class: 0 with rows on stdout and stderr empty, 0 with no row and the denominator NOTE
+# on stderr, 2 with the refusal on stderr. One `FXCELL=<id> bash "$DETECT"` start per outcome, each compared with the
+# in-process call on the same world: stdout, stderr and exit separately, byte for byte. A cell also asserts its own
+# outcome (a positive conjunct, so two runs that both printed nothing cannot read as equivalent), and the cells must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <base-ref> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" b="$2"
+  rt_run "$DIST" "$b" "$THEIRS_SHA" "$CONS" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$DETECT" "$DIST" "$b" "$THEIRS_SHA" "$CONS" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+echo "== cli cells"
+seed_severed
+if eqv cli-rows "$BASE_SHA" && [ "$(cat "$EQ/cli-rows.cl.rc")" = 0 ] && grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan' "$EQ/cli-rows.cl.out" \
+   && [ ! -s "$EQ/cli-rows.cl.err" ]; then
+  ok "cli-rows: the program reports the severed contract exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-rows: the program and the in-process call differ, or the outcome is not exit 0 with the row and a silent stderr ($(eq_twin cli-rows))"; fi
+seed_repointed
+if eqv cli-note "$BASE_SHA" && [ "$(cat "$EQ/cli-note.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-note.cl.out" ] \
+   && grep -q '2 of 3 CLASSIFY file(s) opened, 1 carrying' "$EQ/cli-note.cl.err"; then
+  ok "cli-note: the program states its denominator exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-note: the program and the in-process call differ, or the outcome is not exit 0 with the denominator NOTE ($(eq_twin cli-note))"; fi
+seed_at_theirs
+if eqv cli-refuse "$THEIRS_SHA" && { [ "$P8_RC" = 0 ] || [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ]; } && [ ! -s "$EQ/cli-refuse.cl.out" ] \
+   && grep -q 'produced no rows' "$EQ/cli-refuse.cl.err"; then
+  ok "cli-refuse: the program refuses exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not the exit-2 refusal ($(eq_twin cli-refuse))"; fi
+if ! cmp -s "$EQ/cli-rows.cl.out" "$EQ/cli-note.cl.out" && ! cmp -s "$EQ/cli-note.cl.err" "$EQ/cli-refuse.cl.err" && ! cmp -s "$EQ/cli-rows.cl.err" "$EQ/cli-note.cl.err"; then
+  ok "cli cells discriminate: the rows, the NOTE and the refusal give different output"
+else bad "cli cells do not discriminate: two of cli-rows, cli-note and cli-refuse gave the same output"; fi
 
 echo ""
 report_end retired-contract-token

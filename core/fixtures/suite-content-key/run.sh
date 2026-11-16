@@ -32,6 +32,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 DIST="$(cd "$HERE/../../.." && pwd)"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "suite-content-key: FIXTURE BROKEN" >&2; exit 2; }
 
 echo "suite-content-key:"
@@ -68,8 +69,15 @@ git -C "$T" config user.name  f
 git -C "$T" add -A                        || broken "git add failed"
 git -C "$T" commit -q -m base             || broken "git commit failed"
 
+# IN PROCESS (BL-878). The copy's key script is SOURCED once (its guard returns after defining sck_main; its root is the
+# copy, from its own BASH_SOURCE) and every key is one sck_main call in a `( )` subshell, so the subject's `exit`, `cd`
+# and `set` stay there. Mode and content edits of the copy are read from disk at each call, never from the sourced text.
+# Each sck_main call is one fx_inproc pass (the inproc: row). The only separate-program starts of the subject are the four cli
+# cells of cells.decl, each compared byte for byte with the in-process call (cli_eqv below).
 KEY="$T/scripts/suite-content-key.sh"
-key() { bash "$KEY" 2>/dev/null; }
+. "$KEY" || broken "sourcing the copy's key script failed"
+declare -F sck_main > /dev/null || broken "sourcing the copy's key script defined no sck_main"
+key() { ( fx_inproc "$KEY"; sck_main 2>/dev/null ); }
 
 # --- 0. SANITY: a well-formed key at all --------------------------------------
 K0="$(key)"
@@ -87,6 +95,34 @@ if [ "$(key)" = "$K0" ]; then
 else
   bad "the key is not deterministic over an unchanged tree — every push would miss and the suite would always run"
 fi
+
+# --- CLI CELLS: one separate-program start per distinct outcome, equal to the in-process answer ----------------
+# cli_eqv <id> <expected rc> <args...>: one `FXCELL=<id> bash "$KEY"` start and one sck_main call over the same untouched
+# tree must agree on stdout, stderr and exit status byte for byte, and the exit status must be the one stated.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+cli_eqv() {
+  local id="$1" want="$2"; shift 2
+  ( fx_inproc "$KEY"; sck_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$KEY" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" \
+     && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"; then ok "EQUIV $id: the in-process call and the program agree on stdout, stderr and exit $want"
+  else bad "EQUIV $id: in-process rc $(cat "$EQ/$id.ip.rc") vs program rc $(cat "$EQ/$id.cl.rc") (want $want), or their output differs"; fi
+}
+cli_eqv cli-key 0
+case "$(cat "$EQ/cli-key.cl.out")" in
+  ????????????????????????????????????????????????????????????????) ok "cli-key prints one well-formed sha256 key" ;;
+  *) bad "cli-key printed '$(cat "$EQ/cli-key.cl.out")', not one sha256 key" ;;
+esac
+[ ! -s "$EQ/cli-key.cl.err" ] && ok "cli-key writes nothing to stderr" || bad "cli-key wrote to stderr"
+cli_eqv cli-summary 0 --summary
+grep -q '^included tops: ' "$EQ/cli-summary.cl.out" && grep -q '^paths hashed:  [1-9]' "$EQ/cli-summary.cl.out" \
+  && ok "cli-summary prints the included tops and a non-zero hashed count" || bad "cli-summary printed no included-tops line or a zero hashed count"
+cli_eqv cli-explain 0 --explain
+grep -qx '### tools' "$EQ/cli-explain.cl.out" && grep -qx '### contents' "$EQ/cli-explain.cl.out" \
+  && ok "cli-explain prints the contents and tools components" || bad "cli-explain printed no contents or tools component"
+cli_eqv cli-usage 1 --no-such-option
+grep -q '^suite-content-key: usage: ' "$EQ/cli-usage.cl.err" && [ ! -s "$EQ/cli-usage.cl.out" ] \
+  && ok "cli-usage refuses an unknown option with the usage line on stderr and nothing on stdout" || bad "cli-usage did not print the usage line on stderr only"
 
 # --- helper: mutate, key, restore, report -------------------------------------
 # Asserts the POSITIVE outcome in each direction and requires the mutation to have
@@ -230,10 +266,10 @@ if [ "$k3p" = "$KP" ]; then ok "k3 an EDIT of docs/plans/p.md does NOT move it (
 else bad "k3 an edit of docs/plans/p.md moved the outer key -- the + opt-in widened to the whole excluded top"; fi
 
 printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n+docs/absent.md\n' > "$T/core/fixtures/gamma/inputs.decl"
-if bash "$KEY" > /dev/null 2>&1; then bad "k4 a + naming an absent file still produced a key -- a skip would be authorised over a file nobody hashed"
+if ( fx_inproc "$KEY"; sck_main ) > /dev/null 2>&1; then bad "k4 a + naming an absent file still produced a key -- a skip would be authorised over a file nobody hashed"
 else ok "k4 a + naming an absent file refuses the key (the caller runs the suite)"; fi
 printf '!scripts/suite-content-key.sh\n+!docs/backlog.md\n' > "$T/core/fixtures/gamma/inputs.decl"
-if bash "$KEY" > /dev/null 2>&1; then bad "k6 a line carrying + and ! together still produced an outer key"
+if ( fx_inproc "$KEY"; sck_main ) > /dev/null 2>&1; then bad "k6 a line carrying + and ! together still produced an outer key"
 else ok "k6 a line carrying + and ! together refuses the outer key (one marker per line)"; fi
 krows "$WORK/span.sh" '!+docs/backlog.md' > /dev/null
 k6="$(awk -F'\t' '$2 == "X" && $3 == "plusbang"' "$WORK/k.parse" | grep -c .)" || k6=0
@@ -317,6 +353,16 @@ cp -R "$DIST/scripts" "$BW/tpl/scripts"
 # The driver: <hook> <w1|w2> <world dir> <template> -> the step's output, ---BANNER--- and the banner, ---LOG--- and the key log.
 cat > "$BW/drv.sh" <<'DRV'
 set -uo pipefail
+# IN PROCESS (BL-878). The hook's step starts the world's key script as `bash scripts/suite-content-key.sh [args]`, and this
+# driver does too; both go through this function, which answers that one command by sourcing the world's copy and calling
+# sck_main in a subshell (one fx_inproc pass each; run.sh exports fx_inproc) and passes every other `bash` through.
+bash() {
+  case "${1:-}" in
+    scripts/suite-content-key.sh) shift
+      ( fx_inproc "$PWD/scripts/suite-content-key.sh"; . "$PWD/scripts/suite-content-key.sh" && sck_main "$@" ) ;;
+    *) command bash "$@" ;;
+  esac
+}
 hook="$1"; w="$2"; t="$3"
 cp -Rp "$4" "$t" || exit 3
 cd "$t" || exit 3
@@ -359,6 +405,7 @@ echo "---BANNER---"
 ( . "$sp/banner" ) 2>&1
 echo "---LOG---"; cat "$KEY_LOG"
 DRV
+export -f fx_inproc
 bl954_run() { # <hook> <world> <tag> -> output on stdout
   bash "$BW/drv.sh" "$1" "$2" "$BW/w.$3.$2" "$BW/tpl" 2>&1
 }
@@ -380,7 +427,7 @@ BHOOK="$T/.githooks/pre-push"
 grep -q '^# SUITE_BANNER_BEGIN$' "$BHOOK" || broken "BL-954: the hook carries no SUITE_BANNER span"
 BR1="$(bl954_run "$BHOOK" w1 base)"; BR2="$(bl954_run "$BHOOK" w2 base)"
 grep -q 'STEP-RC 0' <<< "$BR1" || broken "BL-954 W1 driver: the step did not return 0: $(printf '%s' "$BR1" | tail -5 | tr '\n' '|')"
-grep -q 'STEP-RC 0' <<< "$BR2" || broken "BL-954 W2 driver: the step did not return 0: [$BR2] key.sh: $(cd "$BW/w.base.w2" 2>&1 && bash scripts/suite-content-key.sh 2>&1 | head -3)"
+grep -q 'STEP-RC 0' <<< "$BR2" || broken "BL-954 W2 driver: the step did not return 0: [$BR2]"
 if bl954_okw1 "$BR1"; then ok "W1 key MISSED, every read-set unchanged: the banner names the read-set arm, not 'unchanged content key', and the log says MISS ($(bl954_banner "$BR1" | cut -c1-150))"
 else bad "W1 the read-set world's banner/log is wrong: $(printf '%s' "$BR1" | tail -6 | tr '\n' '|')"; fi
 if bl954_okw2 "$BR2"; then ok "W2 key matched its record: the banner names the content-key arm and the log says HIT ($(bl954_banner "$BR2" | cut -c1-150))"

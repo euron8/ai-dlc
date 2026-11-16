@@ -230,6 +230,7 @@
 #
 # Compatible with bash 3.2.
 
+fgb_main() {
 set -uo pipefail
 
 say() { printf 'ai-dlc-foreground-budget: %s\n' "$1" >&2; }
@@ -422,3 +423,6 @@ jq -n --arg reason "$REASON" \
     }
   }'
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+fgb_main "$@"

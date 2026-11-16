@@ -412,10 +412,18 @@ I_TB="$(IG rev-parse -q --verify "${I_T}:core/scripts/gate-changed.sh" 2>/dev/nu
 # NOT forwarded: the checker refuses them, which is arm BH's subject and no other arm's.
 CKD="$(mktemp -d)"; sufl_tmp "$CKD"
 CK_N=0; CK_LAST=""
+# One IN-PROCESS call of the checker (BL-878): run.sh sources the checker once, and every arm calls suf_main in a
+# subshell, so the checker's own `exit`, `set -u`, EXIT trap and lib.sh `trap` shadow stay in that subshell. The EXIT
+# disposition is reset first because bash 3.2 reports the parent's `trap -p` inside a subshell, and the checker would
+# compose this fixture's cleanup into its own handler. pipefail is off inside because the program runs without it.
+# Each call is one fx_inproc pass (the inproc: row), the line before it.
+suf_run() { ( trap - EXIT; set +o pipefail
+  fx_inproc "$RUNNER"
+  suf_main "$@" ); }
 ck() { # ck <dist> <base> <theirs> <consumer> [ignored...] -> the checker's exit; its stdout echoed
   local rc=0
   CK_N=$((CK_N + 1)); CK_LAST="$CKD/ck-$CK_N.out"
-  bash "$RUNNER" "$1" "$2" "$3" "$4" > "$CK_LAST" || rc=$?
+  suf_run "$1" "$2" "$3" "$4" > "$CK_LAST" || rc=$?
   cat "$CK_LAST"
   return "$rc"
 }

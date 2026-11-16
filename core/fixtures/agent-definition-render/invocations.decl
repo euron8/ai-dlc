@@ -1,4 +1,5 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-44 *
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output); starts are run.sh plus the cli cells of cells.decl, every other drive in process (BL-878).
+25 *
 0 core/git-hooks/pre-push
-24 core/scripts/render-agent-definitions.sh
+5 core/scripts/render-agent-definitions.sh
+30 inproc:core/scripts/render-agent-definitions.sh
