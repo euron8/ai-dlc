@@ -97,7 +97,6 @@ layer-crosswalk-home	core/skills/ai-dlc-update/reconcile/	legacy
 layer-crosswalk-home	core/skills/ai-dlc/	legacy
 layer-extends-grain	core/skills/ai-dlc-update/reconcile/	whole
 layer-qualifier-grain	core/skills/ai-dlc-update/reconcile/	whole
-layer-readopt-gate	core/skills/ai-dlc-update/reconcile/	whole
 layer-title-join	core/skills/ai-dlc-update/reconcile/	whole
 ledger-reverify-dist-only-reach	!core/skills/ai-dlc-update/reconcile/	legacy
 ledger-reverify-unfalsifiable	core/skills/ai-dlc-update/reconcile/	whole

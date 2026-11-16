@@ -1,5 +1,9 @@
-# layer-readopt-gate drives four scripts in the reconcile directory, so the directory is declared whole. The scripts the verdict depends on carry a sentinel in run.sh.
-core/skills/ai-dlc-update/reconcile/
+# The reconcile files this fixture reads, from a guarded sandbox trace (--declared-out). The scripts the verdict depends on carry a sentinel in run.sh.
+core/skills/ai-dlc-update/reconcile/consumer-read.sh
+core/skills/ai-dlc-update/reconcile/layer-drift.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/preclassify.sh
+core/skills/ai-dlc-update/reconcile/setup-sites.md
 !core/skills/ai-dlc-update/reconcile/readopt-override.sh
 !core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 !core/skills/ai-dlc-update/reconcile/register-drift.sh

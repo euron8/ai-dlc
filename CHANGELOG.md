@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1148.0] - 2026-11-16
+
+### BL-1144: guarded re-trace of the mapped fixtures; layer-readopt-gate's declaration narrowed
+
+- `.ai-dlc-fixture-readsets.tsv`: under the STAT LOSS guard, `--tracer sandbox` traces of 0.1146.0 add one row each. hook-registration-join gains `core/hooks/ai-dlc-advisor-detect.sh` (46 paths) and retro-compliance-workflow gains `core/fixtures/lib/layout.sh` (14 paths). No row is dropped.
+- `core/fixtures/layer-readopt-gate/inputs.decl`: in place of the whole `core/skills/ai-dlc-update/reconcile/` directory, it names the 8 reconcile files the fixture reads, 5 newly and 3 already marked `!` (required). Its row in `docs/inputs-decl-whole-rows.tsv` is deleted. The proof is a counted hermetic run by the builder: 56 assertions, required_missing=0, the same 56 as on the directory declaration.
+- The guard omitted three other fixtures for lost stat reports, so their `whole` rows stay.
+
+### BL-915: closed
+
+retro-compliance-workflow's map row was the last row owed, so the entry is LANDED.
+
 ## [0.1147.0] - 2026-11-16
 
 ### BL-1149: rule-29 names its one beat exception where it states the bounds
