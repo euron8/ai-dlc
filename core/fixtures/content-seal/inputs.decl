@@ -12,9 +12,9 @@
 !core/scripts/gate_adjudication.py
 # --mark / --mark-repair, the one sanctioned Bash write into the sealed set (arms CS-K*, CS-J6..J9).
 !core/scripts/wait-for-deliverable.sh
+# wait-for-deliverable.sh sources its start-time sibling when it is present.
+core/scripts/wfd-start-of.sh
 core/scripts/validate-adversarial-convergence.sh
-core/scripts/validate-steering-budget.sh
-core/scripts/validate-suppression-lifetime.sh
 core/scripts/validate-artifact-budget.sh
 core/scripts/validate-artifact-derivations.sh
 core/scripts/validate-provenance-block.sh
@@ -23,7 +23,6 @@ core/scripts/partition-subject.sh
 core/schemas/provenance-block.json
 core/schemas/gate-adjudication-verdict.json
 core/skills/ai-dlc/enforcement-map.yaml
-core/team-roles/remediator.md
 # BL-750: the CURRENT-state adversary role file the marker-admission arms (CS-A*) copy into their worlds.
 !core/team-roles/adversary.md
 core/hooks/ai-dlc-gate-remediation-guard.sh

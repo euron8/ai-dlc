@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1159.0] - 2026-11-16
+
+### BL-1134 and BL-1138: the install-heavy fixtures' whole rows are decided; content-seal declares what it reads
+
+- `docs/inputs-decl-whole-rows.tsv`: install-scaffold-ignored `core/`, `patterns/` and `templates/`, and schema-install-fallback `core/` and `templates/`, move from `legacy` to `whole`. Each fixture runs `scripts/install.sh`, whose dirty probe at `:24` (`git diff-index --quiet HEAD --`) lstats every tracked path. The rows hold `whole` while `:24` stands, and a change to `:24` reopens them.
+- The sandbox windows of both fixtures are refused by the STAT LOSS guard. Their lower bounds still cover 1,836 and 1,807 of 1,841 `core/` files, every `patterns/` file and 4 of 5 templates. The large `git` pids per window match the `:24` runs: 4 starts plus 2 install.sh copies in install-scaffold-ignored, and 2 program runs plus 3 in-process runs in schema-install-fallback. The tracer loss on these bursts stays open in BL-1155.
+- `core/fixtures/content-seal/inputs.decl` (BL-976's trace duty) is derived from an accepted sandbox window (122 paths, 0 loss):
+  - the sourced `core/scripts/wfd-start-of.sh` is added;
+  - three unread lines are dropped;
+  - the `core/fixtures/adversarial-shard-merge/` directory stays whole (`legacy`). Declared as files, its `lib.sh`'s two `. "$1"` drives enter `scripts/validate-fixture-inprocess.sh` P2 as new rows; P2 does not scan a directory-declared lib (BL-1159).
+  A hermetic run with the 8 files declared passes with the same 62 `ok` labels and `required_missing=0`; the directory line declares a superset of them.
+
 ## [0.1158.0] - 2026-11-16
 
 ### BL-878 (first batch): the adversarial-convergence validator runs in process in its fixtures
