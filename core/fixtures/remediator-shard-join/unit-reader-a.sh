@@ -122,21 +122,36 @@ ua_oldsib() {
 ua_tpl() {
   local f="$WORK/ua-tpl.$1" b="$2" w; shift 2
   # A CLI-A run builds every world afresh, so its hook rows come from the CLI hook too.
-  if [ -n "${UA_CLI:-}" ]; then "$b" "$@"; return; fi
+  if [ -n "${UA_CLI:-}" ]; then ua_build "$b" "$@"; return; fi
   if [ -s "$f" ]; then
     w="$(cat "$f")"
     if [ -e "$w" ]; then mv "$w" "$(mktemp -d "$WORK/ua-used.XXXXXX")/w" || return 1; fi
     cp -Rp "$w.tpl" "$w" || return 1
   else
-    w="$("$b" "$@")" && [ -n "$w" ] && [ -d "$w" ] || return 1
+    w="$(ua_build "$b" "$@")" && [ -n "$w" ] && [ -d "$w" ] || return 1
     cp -Rp "$w" "$w.tpl" || return 1
     printf '%s' "$w" > "$f"
   fi
   printf '%s' "$w"
 }
+# ua_build <builder> [args]: each builder called by its literal name, and the rename below spelled `name() body`, so
+# P2 (scripts/validate-fixture-invocations.sh) resolves every command word here to a non-entry.
+ua_build() {
+  local b="$1"; shift
+  case "$b" in
+    _ua_orig_g6_world) _ua_orig_g6_world "$@" ;;
+    _ua_orig_r5_world) _ua_orig_r5_world "$@" ;;
+    _ua_orig_nl_world) _ua_orig_nl_world "$@" ;;
+    _ua_orig_doc_world) _ua_orig_doc_world "$@" ;;
+    _ua_orig_subj_world) _ua_orig_subj_world "$@" ;;
+    *) echo "FIXTURE BROKEN: ua_tpl has no builder $b" >&2; return 2 ;;
+  esac
+}
 for _f in g6_world r5_world nl_world subj_world doc_world three_writers; do
   declare -F "$_f" > /dev/null || { echo "FIXTURE BROKEN: lib.sh defines no $_f" >&2; exit 2; }
-  eval "_ua_orig_$(declare -f "$_f")"
+  UA_DF="$(declare -f "$_f")"; UA_DP="$_f () "
+  [ "${UA_DF#$UA_DP}" != "$UA_DF" ] || { echo "FIXTURE BROKEN: declare -f $_f does not open with '$UA_DP'" >&2; exit 2; }
+  eval "_ua_orig_${_f}() ${UA_DF#$UA_DP}"
 done
 g6_world() { ua_tpl g6 _ua_orig_g6_world; }
 r5_world() { ua_tpl r5 _ua_orig_r5_world; }

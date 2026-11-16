@@ -81,10 +81,13 @@ bash() {
       join) fx_inproc $RSJ_J; ub_scrub "$UB_JV" "$UB_JF"; join_main "$@" ;;
       hook) fx_inproc $RSJ_H; ub_scrub "" ""; set --; ( . "$UB_F"; hook_pretool_head ) ;;
       cap) [[ "$UB_F" != */core/* ]] || fx_inproc "$UB_F"; ub_scrub "" ""; set --; . "$UB_F" ;;
-      dval) ub_scrub "" ""
+      dval)
+        # A pass is logged only when the file is the subject itself ($DVAL, $CONV): a world's installed copy and
+        # p_vcrash's crash-injected copy are no pass of it. Decided before ub_scrub, which unsets DVAL and CONV.
+        UB_P=""; case "$UB_F" in "$DVAL") UB_P="$DVAL" ;; "$CONV") UB_P="$CONV" ;; esac
         case "$UB_F" in
-          */validate-artifact-derivations.sh) . "$UB_F"; vad_cli "$@" ;; # the loadable validator: sourcing runs nothing
-          *) . "$UB_F" "$@" ;;
+          */validate-artifact-derivations.sh) [ -z "$UB_P" ] || fx_inproc "$UB_P"; ub_scrub "" ""; . "$UB_F"; vad_cli "$@" ;; # the loadable validator: sourcing runs nothing
+          *) [ -z "$UB_P" ] || fx_inproc "$UB_P"; ub_scrub "" ""; . "$UB_F" "$@" ;;
         esac ;;
     esac
   )
@@ -191,21 +194,39 @@ three_writers() { ub_tw_copy "$1"; }
 # run (UB_CLI set) builds every world afresh, so its hook rows come from the CLI hook.
 ub_tpl() { # <key> <builder> [args] -> the world path
   local f="$WORK/ub-tpl.$1" b="$2" w; shift 2
-  if [ -n "${UB_CLI:-}" ]; then "$b" "$@"; return; fi
+  if [ -n "${UB_CLI:-}" ]; then ub_build "$b" "$@"; return; fi
   if [ -s "$f" ]; then
     w="$(cat "$f")"
     if [ -e "$w" ]; then mv "$w" "$(mktemp -d "$WORK/ub-used.XXXXXX")/w" || return 1; fi
     cp -Rp "$w.tpl" "$w" || return 1
   else
-    w="$("$b" "$@")" && [ -n "$w" ] && [ -d "$w" ] || return 1
+    w="$(ub_build "$b" "$@")" && [ -n "$w" ] && [ -d "$w" ] || return 1
     cp -Rp "$w" "$w.tpl" || return 1
     printf '%s' "$w" > "$f"
   fi
   printf '%s' "$w"
 }
+# ub_build <builder> [args]: each builder called by its literal name, and the rename below spelled `name() body`, so
+# P2 (scripts/validate-fixture-invocations.sh) resolves every command word here to a non-entry.
+ub_build() {
+  local b="$1"; shift
+  case "$b" in
+    _ub_orig_unwm_build) _ub_orig_unwm_build "$@" ;;
+    _ub_orig_uw_build) _ub_orig_uw_build "$@" ;;
+    _ub_orig_uwamb_build) _ub_orig_uwamb_build "$@" ;;
+    _ub_orig_uwshard_build) _ub_orig_uwshard_build "$@" ;;
+    _ub_orig_sibw_build) _ub_orig_sibw_build "$@" ;;
+    _ub_orig_untilfut_build) _ub_orig_untilfut_build "$@" ;;
+    _ub_orig_deriv_world) _ub_orig_deriv_world "$@" ;;
+    _ub_orig_subj_world) _ub_orig_subj_world "$@" ;;
+    *) echo "FIXTURE BROKEN: ub_tpl has no builder $b" >&2; return 2 ;;
+  esac
+}
 for _f in unwm_build uw_build uwamb_build uwshard_build sibw_build untilfut_build deriv_world subj_world; do
   declare -F "$_f" > /dev/null || { echo "FIXTURE BROKEN: lib.sh defines no $_f" >&2; exit 2; }
-  eval "_ub_orig_$(declare -f "$_f")"
+  UB_DF="$(declare -f "$_f")"; UB_DP="$_f () "
+  [ "${UB_DF#$UB_DP}" != "$UB_DF" ] || { echo "FIXTURE BROKEN: declare -f $_f does not open with '$UB_DP'" >&2; exit 2; }
+  eval "_ub_orig_${_f}() ${UB_DF#$UB_DP}"
 done
 unwm_build() { ub_tpl unwm _ub_orig_unwm_build; }
 uw_build() { ub_tpl "uw-$(printf '%s|' "$@" | cksum | cut -d' ' -f1)" _ub_orig_uw_build "$@"; }
@@ -446,6 +467,7 @@ pass_file() { # <n> <major> <verdict> <invoked_at>
 }
 pass_file 1 3 EXIT_CONDITION_NOT_MET 2026-08-24T15:08:19Z
 pass_file 2 0 EXIT_CONDITION_MET 2026-08-24T15:30:09Z
+echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"  # SEAM-B-CONV, H1 and H2 drive it below
 bash "$CONV" --series "$pa/stories-adversarial-p" > "$WORK/h1.out" 2>&1; h1=$?
 UB_CLI=1 command bash "$CONV" --series "$pa/stories-adversarial-p" > "$WORK/h1.cli" 2>&1; h1c=$?
 run_join "$JOIN" "$w"; jrc=$RC

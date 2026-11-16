@@ -2623,17 +2623,21 @@ p_untilfut() { # <join> <offset seconds> -> RC, $JO of the three-writer world cl
 # when run) is called, so `exit` and every MK_* global end with the cell. pipefail is off, as the CLI
 # runs. cs_run is content-seal.sh's own seal_main the same way. <wfd> is the file to drive, so a
 # copy is sourced, never re-implemented.
+# fx_inproc (lib/mutant.sh) logs two passes per call, only when <wfd> is the subject itself ($SRCDIR's copy, the
+# layout's own): the validator's, on the source of <wfd> (whose pairing covers vad_load, the first entry call after
+# it), and the mark's, on wfd_mark_main. A copy directory's wait-for-deliverable.sh and validator log nothing.
 wfd_run() { # <wfd> <--mark|--mark-repair> args... -> the CLI's stdout, stderr and exit status
-  local _w="$1"; shift
-  ( set +o pipefail; . "$_w" || exit 125
+  local _w="$1" _s=""; shift
+  [ "$_w" != "$SRCDIR/wait-for-deliverable.sh" ] || _s=1
+  ( set +o pipefail; [ -z "$_s" ] || fx_inproc "$SRCDIR/validate-artifact-derivations.sh"; . "$_w" || exit 125
     # The validator beside <wfd> is sourced and loaded in this same subshell, so the replay --mark runs
     # (wait-for-deliverable.sh takes its VAD_LOADED branch only when the loaded functions came from
     # that very $MK_VAL) is vad_invoke in process. A copy directory's own validator is therefore the
     # one loaded, and each call reloads it: p_vcrash's crash-injected validator copy is read on its call.
     . "$(dirname "$_w")/validate-artifact-derivations.sh" || exit 125
     vad_load
-    wfd_mark_main "$@" )
+    [ -z "$_s" ] || fx_inproc "$_w"; wfd_mark_main "$@" )
 }
 cs_run() { # <mode> args... -> content-seal.sh <mode> args...
-  ( set +o pipefail; . "$SRCDIR/content-seal.sh" || exit 125; seal_main "$@" )
+  ( set +o pipefail; . "$SRCDIR/content-seal.sh" || exit 125; fx_inproc "$SRCDIR/content-seal.sh"; seal_main "$@" )
 }

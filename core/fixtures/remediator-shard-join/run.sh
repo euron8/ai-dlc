@@ -166,6 +166,9 @@ fi
 # ---- unit-mark.sh: MK0, the in-process --mark seam pinned to the CLI. EC37 and EC40-EC43 below drive the same seam.
 bash "$HERE/unit-mark.sh"; _um=$?
 case "$_um" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-mark.sh exited $_um (FIXTURE BROKEN); nothing was asserted" ;; esac
+echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"  # EC40-EC43 drive it in process (lib.sh wfd_run)
+echo "HERMETIC-CONSUMED core/scripts/validate-artifact-derivations.sh"  # wfd_run loads it beside the mark
+echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"  # EC41-EC42 seal and check through it (lib.sh cs_run)
 if p_markderive "$SRCDIR/wait-for-deliverable.sh"; then ok "EC40: --mark on a remediator part derives the words from the path -- coe-repair-p1/2.md written coe remediator 2, the shifted call coe 7 remediator 7 written coe remediator 7, requirements-party-repair/05.md called with wrong words written requirements-party remediator 05 and 03.md keeps its correct spelling, coe-party-serial-repair-p1/lane-1.md keeps lane-1, a 1/8 brief shard becomes the file name; a plain/ file keeps the caller's words"
 else bad "EC40: --mark did not derive the remediator part marker words (BL-796)"; fi
 # EC41 (BL-804): --mark / --mark-repair replay a remediator record stating `derivations: not replayed`.
@@ -498,6 +501,8 @@ else
   if cps3; then ok "CPS3: CPS4's world with jq off PATH -> --check-part rc 0 with a line opening 'NOTE: SEAT-ROWS: SKIP jq-absent', no WARN"
   else bad "CPS3: with jq absent the seat-row join did not SKIP by name (rc=$RC): $(head -4 "$JO")"; fi
   cps_part "$CPS1W"; cp "$CPS1W/$PRD/01.md" "$WORK/cps.before"
+  echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"  # MKPW drives it in process (lib.sh wfd_run)
+  echo "HERMETIC-CONSUMED core/scripts/validate-artifact-derivations.sh"  # wfd_run loads it beside the mark
   # The world root is passed as cps_chk passes it: without it the join walks up from its own script dir, which in the
   # consumer layout is the consumer, whose installed rulebook carries the seat-record sentence (install-date-unreadable).
   AI_DLC_PROJECT_ROOT="$CPS1W" wfd_run "$SRCDIR/wait-for-deliverable.sh" --mark "$CPS1W/$PRD/01.md" stories remediator 01 findings=1 > "$JO" 2>&1; RC=$?
@@ -512,12 +517,15 @@ fi
 # matched. The cited round is always `architecture` (pcd_src); SRC1 and SRC4 add an uncited `requirements` round.
 SR_G=/Users/n8/git/graph/_bmad-output/party-mode/s305
 sr_frow() { printf '{"v":1,"ts":"%s","sprint":305,"role":"%s","role_contract_cited":true,"tool_use_id":"toolu_sf%s","shard":"%s","mark":"rendered","mark_file":"%s"}\n' "$SR_TS" "$1" "$2" "$3" "$4"; }
-sr_fbuild() { # <seat commit epoch> <requirements seats 0|1> <rows fn> -> a --sources world
-  local w s; w="$(pcb_src)" || return 1
+sr_fbuild() { # <pre|post: seat commit epoch> <requirements seats 0|1> <rows fn> -> a --sources world
+  # Every argument is a literal word, so P2 (scripts/validate-fixture-invocations.sh) resolves the `"$3"` command
+  # word below to a rows function, never a subject entry.
+  local w s e; case "$1" in pre) e="$SR_SPRE" ;; post) e="$SR_SPOST" ;; *) return 1 ;; esac
+  w="$(pcb_src)" || return 1
   mkdir -p "$w/.claude/skills/ai-dlc/steps" && printf '# Gate procedures\n\n%s\n' "$SR_LINE" > "$w/.claude/skills/ai-dlc/steps/_gate-procedures.md" || return 1
   if [ "$2" = 1 ]; then for s in $SEATS; do printf '# x\n' > "$w/_bmad-output/party-mode/s305/requirements-$s.md" || return 1; done; fi
   "$3" > "$w/_bmad-output/spawn-ledger.jsonl" || return 1
-  git -C "$w" init -q . && sr_commit "$w" "$1" _bmad-output/party-mode && sr_commit "$w" "$SR_INST" .claude/skills/ai-dlc/steps/_gate-procedures.md || return 1
+  git -C "$w" init -q . && sr_commit "$w" "$e" _bmad-output/party-mode && sr_commit "$w" "$SR_INST" .claude/skills/ai-dlc/steps/_gate-procedures.md || return 1
   printf '%s' "$w"
 }
 # SRC1, DEFECT 1: the cited round's rows field-less and pre-install, the requirements round's rows post-install and naming
@@ -543,8 +551,8 @@ sr_rows_c5() { SR_TS="$SR_PRE"; sr_frow architect 1 "1/4 ## A" "$SR_G/architectu
 # runs under a mktemp JR_ROOT, seats committed before the install -> dated by the rows, judged, every seat covered.
 sr_rows_c6() { SR_TS="$SR_POST"; sr_frow architect 1 "1/4 ## A" "$SR_G/architecture-architect-1.md"; sr_frow dev 2 "1/4 ## A" "$SR_G/architecture-dev-1.md"
   sr_frow dev 3 "4/4 ## D" "$SR_G/architecture-dev-4.md"; sr_frow tea 4 "1/4 ## A" "$SR_G/architecture-tea-1.md"; }
-SRC1W="$(sr_fbuild "$SR_SPRE" 1 sr_rows_c1)"; SRC2W="$(sr_fbuild "$SR_SPRE" 0 sr_rows_c2)"; SRC3W="$(sr_fbuild "$SR_SPRE" 0 sr_rows_c3)"
-SRC4W="$(sr_fbuild "$SR_SPRE" 1 sr_rows_c4)"; SRC5W="$(sr_fbuild "$SR_SPRE" 0 sr_rows_c5)"; SRC5BW="$(sr_fbuild "$SR_SPOST" 0 sr_rows_c5)"
+SRC1W="$(sr_fbuild pre 1 sr_rows_c1)"; SRC2W="$(sr_fbuild pre 0 sr_rows_c2)"; SRC3W="$(sr_fbuild pre 0 sr_rows_c3)"
+SRC4W="$(sr_fbuild pre 1 sr_rows_c4)"; SRC5W="$(sr_fbuild pre 0 sr_rows_c5)"; SRC5BW="$(sr_fbuild post 0 sr_rows_c5)"
 # SRC7: architect-1, dev-4 and tea-1 by field-less rows at K 4; dev-1 named by its own field-row AND carrying a field-less
 # row at K 9 -> a field seat never votes K, so the round's K is 4 and dev-1 is covered by its field-row: SOURCES rc 0.
 sr_rows_c7() { SR_TS="$SR_POST"; sr_row architect true 1 "1/4 ## A"; sr_row dev true 2 "1/9 ## A"; sr_row dev true 3 "4/4 ## D"; sr_row tea true 4 "1/4 ## A"
@@ -562,12 +570,12 @@ sr_rows_c9() { SR_TS="$SR_POST"; sr_row architect true 1 "1/4 ## A"; sr_row dev 
 sr_rows_c10() { SR_TS="$SR_POST"; sr_row architect true 1 "1/4 ## A"; sr_row dev true 2 "1/4 ## A"; sr_row dev true 3 "4/4 ## D"
   sr_frow tea 4 "1/4 ## A" "/a"
   printf '{"v":1,"ts":"%s","sprint":305,"role":"tea","role_contract_cited":false,"tool_use_id":"toolu_sf5","shard":"1/4 ## A","mark":"rendered","mark_file":"%s"}\n' "$SR_TS" "$SR_G/architecture-tea-1.md"; }
-SRC6W="$(sr_fbuild "$SR_SPRE" 0 sr_rows_c6)"; SRC7W="$(sr_fbuild "$SR_SPRE" 0 sr_rows_c7)"; SRC8W="$(sr_fbuild "$SR_SPRE" 0 sr_rows_c8)"
+SRC6W="$(sr_fbuild pre 0 sr_rows_c6)"; SRC7W="$(sr_fbuild pre 0 sr_rows_c7)"; SRC8W="$(sr_fbuild pre 0 sr_rows_c8)"
 # SRC11: tea-1's only row is a field-row whose mark_file the brief quoted (`"<path>"`) -> one pair of quotes stripped,
 # the tail matches architecture-tea-1.md: covered, SOURCES rc 0.
 sr_rows_c11() { SR_TS="$SR_POST"; sr_row architect true 1 "1/4 ## A"; sr_row dev true 2 "1/4 ## A"; sr_row dev true 3 "4/4 ## D"
   sr_frow tea 4 "1/4 ## A" "\\\"$SR_G/architecture-tea-1.md\\\""; }
-SRC9W="$(sr_fbuild "$SR_SPRE" 0 sr_rows_c9)"; SRC10W="$(sr_fbuild "$SR_SPRE" 0 sr_rows_c10)"; SRC11W="$(sr_fbuild "$SR_SPRE" 0 sr_rows_c11)"
+SRC9W="$(sr_fbuild pre 0 sr_rows_c9)"; SRC10W="$(sr_fbuild pre 0 sr_rows_c10)"; SRC11W="$(sr_fbuild pre 0 sr_rows_c11)"
 if [ -z "$SRC1W" ] || [ -z "$SRC2W" ] || [ -z "$SRC3W" ] || [ -z "$SRC4W" ] || [ -z "$SRC5W" ] || [ -z "$SRC5BW" ] || [ -z "$SRC6W" ] || [ -z "$SRC7W" ] || [ -z "$SRC8W" ] || [ -z "$SRC9W" ] || [ -z "$SRC10W" ] || [ -z "$SRC11W" ] || [ -z "$SR_LINE" ]; then
   bad "SRC: FIXTURE BROKEN -- a seat-file-row world could not be built"
 else
