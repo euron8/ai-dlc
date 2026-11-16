@@ -2800,12 +2800,16 @@ R14_EOF
 #   or the repo root (`$ROOT/`, `$root/`, bare) that is TRACKED (B2), read from EXECUTABLE lines
 #   only (a line whose first non-blank character is `#` is dropped), and every named `*.sh` or
 #   shell-shebang file the closure EXECUTES (the expansion rule below) read the same way. Basename
-#   matching is forbidden. A path built from
-#   any other variable is not named: NAMED IS A FLOOR, and every traced read outside it is
+#   matching is forbidden. A VARIABLE-BUILT path is named when the same text assigns the variable a
+#   literal path (`V=w/d` or `V="w/d"`, outside an open quote; any later non-literal assignment to V in the
+#   scope forgets it) and
+#   then reads `$V/<literal>` or `${V}/<literal>`: the joined path resolves as a bare token does, so it is
+#   removed ALONE like any named read. A path built from any other variable (a loop or glob member, a
+#   computed value) is not named: NAMED IS A FLOOR, and every traced read outside it is
 #   ENUMERATED -- counted on the population line every run and removed TOGETHER in one extra
 #   removal per judged receipt (row path `ENUMERATED(<n>)`), judged as a named removal is: a receipt
 #   that still answers 0 or 1 with every enumerated input gone is measuring an empty population. A
-#   single enumerated file is never removed alone (BL-899 stays PARTIAL on that). The removal set is
+#   single enumerated file is never removed alone. The removal set is
 #   NAMED ∩ READ; a named file the baseline did not read is counted named-unread.
 #   HOW THE NAMED SET REACHED ITS SHAPE (the narrowing, measured by the owner's reference closure script over base
 #   0bb1ee28d, batch 256): with comment lines included the closure SATURATED at 340 files for every seed, through the
@@ -3007,6 +3011,22 @@ function push(c) { if (!(c in EXD)) { EXD[c] = 1; ne++; EQ[ne] = c } }
 # resolve <text> <refdir>: every resolved token is NAMED; one in an executed position is queued for expansion; one
 # assigned to a variable is remembered in ASG; a variable in an executed position is remembered in EXV.
 function resolve(text, refdir,    rest, off, m, pre, v, path, nc, c, i, ms, ml, isx, av, vn) {
+  # ASSIGNMENTS FIRST, in text order: `V=<literal path>` (unquoted or quoted, no expansion, outside an open quote)
+  # is remembered in LITV for this scope, so a later `$V/<literal>` on this line or a later one resolves to a NAMED
+  # token; ANY other assignment to V (an expansion, a substitution) forgets it.
+  rest = text; off = 0
+  while (match(rest, GASG) > 0) {
+    ms = RSTART; ml = RLENGTH
+    m = substr(rest, ms, ml); rest = substr(rest, ms + ml)
+    pre = substr(text, 1, off + ms - 1); off = off + ms + ml - 1
+    if (inq(pre)) continue
+    v = m; sub(/^[;&|[:space:]]/, "", v); sub(/=$/, "", v)
+    if (isdirvar(v) || isrootvar(v)) continue
+    if (match(rest, LITVAL) > 0) {
+      path = substr(rest, 1, RLENGTH); sub(/[;&|[:space:]]$/, "", path); gsub(DQ, "", path); gsub(SQ, "", path)
+      LITV[v] = path
+    } else if (v in LITV) delete LITV[v]
+  }
   rest = text; off = 0
   while (match(rest, TOK) > 0) {
     ms = RSTART; ml = RLENGTH
@@ -3017,7 +3037,10 @@ function resolve(text, refdir,    rest, off, m, pre, v, path, nc, c, i, ms, ml, 
       if (match(m, DN0) > 0 || match(m, DNB) > 0) { vn = "dirname"; path = substr(m, RLENGTH + 1) }
       else if (match(m, VARP) > 0) { v = substr(m, 1, RLENGTH - 1); gsub(/[${}]/, "", v); vn = "var"; path = substr(m, RLENGTH + 1) }
     }
-    if (vn == "var" && !isdirvar(v) && !isrootvar(v)) continue
+    if (vn == "var" && !isdirvar(v) && !isrootvar(v)) {
+      if (!(v in LITV)) continue
+      path = jn(LITV[v], path); vn = ""
+    }
     nc = 0
     if (vn == "dirname" || (vn == "var" && isdirvar(v))) { nc++; C[nc] = norm(jn(refdir, path)) }
     else if (vn == "var") { nc++; C[nc] = norm(path) }
@@ -3047,7 +3070,7 @@ function resolve(text, refdir,    rest, off, m, pre, v, path, nc, c, i, ms, ml, 
 # endscope: a variable assigned a path and executed in the same text queues that path; the scope is then cleared.
 function endscope(   v, n, a, i) {
   for (v in EXV) if (v in ASG) { n = split(ASG[v], a, " "); for (i = 1; i <= n; i++) if (a[i] != "") push(a[i]) }
-  split("", EXV); split("", ASG)
+  split("", EXV); split("", ASG); split("", LITV)
 }
 BEGIN {
   TOK = "([$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?/|[$][(]dirname \"?[$]0\"?[)]/|[$][(]dirname \"?[$][{]BASH_SOURCE[[]0[]][}]\"?[)]/)?([.][.]?/)*([A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+[.][A-Za-z0-9]+"
@@ -3056,6 +3079,8 @@ BEGIN {
   VARP = "^[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?/"
   VREF = "[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?"
   DQ = "\""; SQ = sprintf("%c", 39)
+  GASG = "(^|[;&|[:space:]])[A-Za-z_][A-Za-z0-9_]*="
+  LITVAL = "^[" DQ SQ "]?[A-Za-z0-9_./-]+[" DQ SQ "]?([;&|[:space:]]|$)"
   nn = 0; ne = 0; ntr = 0
 }
 { TR[$0] = 1; ntr++ }
