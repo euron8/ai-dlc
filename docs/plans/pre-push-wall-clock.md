@@ -198,8 +198,8 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
      placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
      the moment its turn comes.
-   - BUNDLE BY DEFAULT. Ready releases are collected by the lead onto one integration branch and
-     gated once. The rule is stated in full under that label in
+   - BUNDLE ONLY TO CUT WALL CLOCK. Ready releases are collected by the lead onto one integration branch and
+     gated once only when that cuts overall wall clock. The rule is stated in full under that label in
      `docs/plans/graph-ledger-full-drain.md` action 0; follow it there.
 1. **REMOVE TOTAL WORK. The lever is repeated I/O over the same files, and it is the largest
    single finding in this plan.** Operator's own lead at batch 119, confirmed by derivation:
