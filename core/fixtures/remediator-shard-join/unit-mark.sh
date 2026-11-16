@@ -14,6 +14,8 @@ UM_HERE="$(cd "$(dirname "$0")" && pwd)"
 [ -f "$UM_HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $NAME: lib.sh is absent beside $0" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$UM_HERE/lib.sh" > /dev/null || { echo "FIXTURE BROKEN: $NAME: sourcing lib.sh failed" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$UM_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: $NAME: cannot source lib/mutant.sh" >&2; exit 2; } # fx_inproc, for wfd_run's passes
 WFD="$SRCDIR/wait-for-deliverable.sh"
 [ -f "$WFD" ] || { echo "FIXTURE BROKEN: $NAME: $WFD absent" >&2; exit 2; }
 sw="$(mktemp -d "$WORK/mk0.XXXXXX")" || { echo "FIXTURE BROKEN: $NAME: no scratch" >&2; exit 2; }

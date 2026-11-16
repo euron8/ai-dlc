@@ -4,7 +4,7 @@
 !core/scripts/join-remediator-shards.sh
 !core/hooks/ai-dlc-gate-remediation-guard.sh
 !core/hooks/ai-dlc-derivation-capture.sh
-core/scripts/validate-adversarial-convergence.sh
+!core/scripts/validate-adversarial-convergence.sh
 core/scripts/partition-document.sh
 core/scripts/partition-subject.sh
 # Subject mode writes its pair separator from the sibling merge's --pair-sep, whose key reads the
@@ -13,12 +13,12 @@ core/scripts/partition-subject.sh
 core/scripts/merge-adversarial-shards.sh
 core/scripts/validate-provenance-block.sh
 core/schemas/provenance-block.json
-core/scripts/validate-artifact-derivations.sh
+!core/scripts/validate-artifact-derivations.sh
 # The record-mode seal check runs whenever the library sits beside the join; without it here the
 # sandbox takes the absent-sibling path and the --sources/--escalations arms never reach the shipped one.
-core/scripts/content-seal.sh
+!core/scripts/content-seal.sh
 # EC37 closes its parts with the real --mark, resolved beside the join.
-core/scripts/wait-for-deliverable.sh
+!core/scripts/wait-for-deliverable.sh
 core/team-roles/remediator.md
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/mutant.sh

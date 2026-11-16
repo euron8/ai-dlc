@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1152.0] - 2026-11-16
+
+### BL-982: remediator-shard-join's in-process passes are counted
+
+`remediator-shard-join` and `remediator-shard-join-b` now count every in-process pass of `wait-for-deliverable.sh`, `validate-artifact-derivations.sh`, `content-seal.sh` and `validate-adversarial-convergence.sh` on an `inproc:` row. Each subject a shard drives is declared `!` there and prints `HERMETIC-CONSUMED` where it runs. P2 (`scripts/validate-fixture-inprocess.sh`) now resolves each of the shards' 14 dynamic command words to a non-entry: `sr_fbuild` takes literal arguments, `ua_tpl` and `ub_tpl` call their builders by name, and the builder rename is spelled as a function definition. P2 OWED goes from 207 rows to 198, with 0 NEW. A pass is logged only for the subject's own path, never for a world's installed copy or a crash-injected copy.
+
+### Rules and records
+
+- BL-982 closes. By operator ruling the 198 rows that remain are out of scope: readset-skip's spans, drivers and hermetic-run sites; dist-clone's two phantoms; six extracted spans or fixture-written files; and two receipt sources. P2 keeps printing them OWED and still refuses any new unpaired drive.
+- BL-1152 is filed: P2 cannot see an in-process call of an unguarded subject's functions after its counted source. Re-measured on 0.1149.0, that route is 147 rows over 33 sites in 5 fixtures, all calls of `core/git-hooks/pre-push` functions. The entry also carries the `lib/mutant.sh` comment pair.
+
 ## [0.1151.0] - 2026-11-16
 
 ### BL-1146: a counted push reuses a `<fx>@consumer` pass recorded uncounted
