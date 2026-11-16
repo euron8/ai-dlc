@@ -7,3 +7,4 @@
 # Sourced first by run.sh; it unsets GIT_* variables, which are already absent under env -i.
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/layout.sh

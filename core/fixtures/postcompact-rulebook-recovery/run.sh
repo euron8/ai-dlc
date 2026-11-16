@@ -49,6 +49,7 @@ trap 'chmod -R u+w "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED $HOOK"
 echo "HERMETIC-CONSUMED $VAL"
 [ -n "${GATE:-}" ] && [ -f "$GATE" ] && echo "HERMETIC-CONSUMED $GATE"
+[ -n "${GATE:-}" ] && [ -f "$(dirname "$GATE")/ai-dlc-advisor-detect.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$GATE")/ai-dlc-advisor-detect.sh"
 [ -n "${POSTCOMPACT:-}" ] && [ -f "$POSTCOMPACT" ] && echo "HERMETIC-CONSUMED $POSTCOMPACT"
 [ -f "$(dirname "$HOOK")/ai-dlc-context-provenance.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$HOOK")/ai-dlc-context-provenance.sh"
 [ -f "$(dirname "$HOOK")/ai-dlc-handoff-pending.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$HOOK")/ai-dlc-handoff-pending.sh"
@@ -57,6 +58,7 @@ _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.cla
 [ -n "$_PRS" ] && echo "HERMETIC-CONSUMED $_PRS"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 skip() { # skip <what> <why> — tolerated only where the subject legitimately has not arrived
   if [ "${IS_DIST:-0}" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
@@ -85,10 +87,10 @@ hook_run() { # hook_run <subject> <project> [args...] -- stdin is the payload
   _hr_f="$1"; _hr_p="$2"; shift 2
   # `hash -r`: a shim PATH given for this call (the sed and sleep shims) must win over a command this
   # script already looked up, exactly as it does in a fresh bash that has looked up nothing.
-  ( set +u +e +o pipefail; hash -r; CLAUDE_PROJECT_DIR="$_hr_p"; export CLAUDE_PROJECT_DIR; . "$_hr_f" "$@" )
+  ( set +u +e +o pipefail; hash -r; CLAUDE_PROJECT_DIR="$_hr_p"; export CLAUDE_PROJECT_DIR; [[ "$_hr_f" != */core/hooks/* ]] || fx_inproc "$_hr_f"; . "$_hr_f" "$@" )
 }
 val_run() { # val_run [args...] -- the budget validator, in process; stdout, stderr and the exit are its own
-  ( set +u +e +o pipefail; hash -r; . "$VAL" "$@" )
+  ( set +u +e +o pipefail; hash -r; fx_inproc "$VAL" && . "$VAL" "$@" )
 }
 # THE PAYLOADS ARE BUILT WITH printf, NOT jq, and they carry only fixture-chosen ids and paths under
 # $WORK. A $WORK that a JSON string could not carry verbatim is refused here, once, so a TMPDIR with a
@@ -920,6 +922,10 @@ tline() {
     adv)      printf '{"type":"assistant","message":{"id":"m-adv%s","content":[{"type":"server_tool_use","id":"s-adv","name":"advisor","input":{}}]}}\n' "$RANDOM" ;;
     advok)    printf '{"type":"assistant","message":{"id":"m-res","content":[{"type":"advisor_tool_result","tool_use_id":"s-adv","content":{"type":"advisor_result","text":"ok"}}]}}\n' ;;
     advunav)  printf '{"type":"assistant","message":{"id":"m-res","content":[{"type":"advisor_tool_result","tool_use_id":"s-adv","content":{"type":"advisor_tool_result_error","error_code":"unavailable"}}]}}\n' ;;
+    grantoff) printf '{"type":"attachment","attachment":{"type":"advisor_tool","available":false,"model":"m","toolChange":"remove"}}\n' ;;
+    roster)   printf '{"type":"attachment","attachment":{"type":"deferred_tools_delta","addedNames":["mcp__advisor__consult"],"removedNames":[]}}\n' ;;
+    consult)  printf '{"type":"assistant","message":{"id":"m-con%s","content":[{"type":"tool_use","id":"t-con%s","name":"mcp__advisor__consult","input":{"question":"q"}}]}}\n' "$RANDOM" "$RANDOM" ;;
+    blobadv)  printf '{"type":"api-request-blob","hash":"h","sessionId":"sess-A","message":{"role":"user","content":[{"type":"server_tool_use","id":"s-adv","name":"advisor","input":{}}]}}\n' ;;
   esac
 }
 # acall <gate> <project> <tool> <transcript> [agent_id] [session] -> "<decision>|<reason>"
@@ -1065,6 +1071,66 @@ a_session() {
   allowed "$d" || { printf 'FAIL:another session was held on this lead R touchpoint\n'; return; }
   printf 'PASS\n'
 }
+# A12. No grant, but the lead HOLDS mcp__advisor__consult (BL-1136): held, naming that tool, file
+#      kept; a consult after the digest Read clears it and removes the file (the ALLOW twin, one
+#      line apart); a consult BEFORE the digest Read does not.
+a_holder() {
+  _p="$(a_world "$1" roster boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the lead Reads did not arm the advisor stage\n'; return; }
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:a no-grant lead holding the consult was not held on R\n'; return; }
+  grep -q 'call mcp__advisor__consult' <<<"${d#*|}" || { printf 'FAIL:the no-grant deny does not name mcp__advisor__consult\n'; return; }
+  [ -e "$_p/$OW" ] || { printf 'FAIL:the held no-grant lead lost its owed file\n'; return; }
+  _p="$(a_world "$1" roster boundary digest consult)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" || { printf 'FAIL:a consult after the digest Read did not clear the no-grant lead\n'; return; }
+  [ -e "$_p/$OW" ] && { printf 'FAIL:the consult cleared the stage but left its file\n'; return; }
+  _p="$(a_world "$1" roster boundary consult digest)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:a consult BEFORE the digest Read satisfied R\n'; return; }
+  printf 'PASS\n'
+}
+# A13. A granted lead's consult is not its attempt; a withdrawn grant with the consult held is held
+#      on the consult. The deny texts name the built-in tool and the consult respectively.
+a_grantcons() {
+  _p="$(a_world "$1" grant boundary digest consult)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:a consult cleared a GRANTED lead\n'; return; }
+  grep -q 'You hold the built-in advisor tool' <<<"${d#*|}" || { printf 'FAIL:the granted deny does not name the built-in tool\n'; return; }
+  _p="$(a_world "$1" grant grantoff roster boundary digest)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:a withdrawn grant with the consult held was not held\n'; return; }
+  grep -q 'call mcp__advisor__consult' <<<"${d#*|}" || { printf 'FAIL:the withdrawn-grant deny does not name mcp__advisor__consult\n'; return; }
+  printf 'PASS\n'
+}
+# A14. An advisor attempt re-carried on an `api-request-blob` line clears nothing (BL-1137). The
+#      ALLOW twin is A2: the same attempt on an assistant line clears.
+a_blob() {
+  _p="$(a_world "$1" grant boundary digest blobadv)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:a blob-carried advisor attempt cleared R\n'; return; }
+  [ -e "$_p/$OW" ] || { printf 'FAIL:a blob-carried advisor attempt removed the owed file\n'; return; }
+  printf 'PASS\n'
+}
+# A15. The detection library unreadable: the stage WARNS on stderr and is silent, file kept. The
+#      control is the same world through the shipped gate, which refuses.
+a_nolib() {
+  _p="$(a_world "$1" grant boundary digest)"
+  _c="$(a_world "$1" grant boundary digest)"
+  d="$(acall "$1" "$_c" Agent "$_c/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:CONTROL: the shipped gate did not refuse the owed call\n'; return; }
+  _ld="$(mktemp -d "$WORK/nolib.XXXXXX")"; cp "$1" "$_ld/ai-dlc-recover-gate.sh"
+  [ -e "$_ld/ai-dlc-advisor-detect.sh" ] && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the library is beside the copy\n'; return; }
+  _id="tin-nolib$RANDOM"
+  printf '{"type":"assistant","message":{"id":"m-%s","content":[{"type":"tool_use","id":"%s","name":"Agent","input":{}}]}}\n' "$_id" "$_id" >> "$_p/t.jsonl"
+  _no="$(printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"%s","tool_input":{}}' "$_p/t.jsonl" "$_id" \
+    | hook_run "$_ld/ai-dlc-recover-gate.sh" "$_p" 2>"$_ld/err")"
+  _ne="$(cat "$_ld/err")"
+  [ -z "$_no" ] || { printf 'FAIL:the gate without its library printed a decision\n'; return; }
+  grep -q 'WARN: ai-dlc-recover-gate: the advisor detection library is unreadable' <<<"$_ne" || { printf 'FAIL:the gate without its library gave no stderr WARN\n'; return; }
+  [ -e "$_p/$OW" ] || { printf 'FAIL:the gate without its library removed the owed file\n'; return; }
+  printf 'PASS\n'
+}
 
 # NO ARM ASSERTS THAT THE INJECTED BLOCK NAMES R, because it does not. The block has no room
 # to spare for it: the headroom under the cliff in gate-resume's worst gate-in-flight world is
@@ -1084,7 +1150,7 @@ r_re="$(a_reclear "$HOOK")"
 if [ "$r_re" = PASS ]; then ok "R: a new recovery clears the advisor window the previous one left"
 else bad "R: a new recovery clears the advisor window the previous one left — ${r_re#FAIL:}"; fi
 
-APREDS="deny after before unavail nogrant mate nodigest bound session"
+APREDS="deny after before unavail nogrant mate nodigest bound session holder grantcons blob nolib"
 
 a_tpl "$GATE"
 for _n in $APREDS; do
@@ -1094,7 +1160,11 @@ for _n in $APREDS; do
     after)    label="R: an advisor attempt after the digest Read clears the stage" ;;
     before)   label="R: an advisor attempt BEFORE the digest Read does not satisfy it" ;;
     unavail)  label="R: an 'unavailable' advisor result stands the stage down" ;;
-    nogrant)  label="R: a lead with no advisor grant line is never held" ;;
+    nogrant)  label="R: a lead holding neither advisor is never held" ;;
+    holder)   label="R: a no-grant lead holding mcp__advisor__consult is held until a consult after the digest Read" ;;
+    grantcons) label="R: a granted lead's consult does not clear it; a withdrawn grant with the consult held is held" ;;
+    blob)     label="R: an advisor attempt on an api-request-blob line clears nothing" ;;
+    nolib)    label="R: the detection library unreadable -> stderr WARN, silent, owed file kept" ;;
     mate)     label="R: a teammate's dispatch is untouched while the lead owes R, and the lead is still held" ;;
     nodigest) label="R: no readable postcompact digest, no stage" ;;
     bound)    label="R: the escape bound -- three refusals, then the stage stands down" ;;

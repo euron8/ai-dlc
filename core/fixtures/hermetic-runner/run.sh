@@ -57,6 +57,8 @@
 #      "Remove the marker", never "Point TMPDIR"
 #   Z4 the same shape with the system temp dir under a $HOME that carries a marker: neither remedy
 #      ("Point TMPDIR", "Remove the marker") is given
+#   TR the undeclared-tool trap: an undeclared cmp is exit 0 with a warning naming it, in both layouts; ALLOW twin:
+#      cmp declared -> 0 and no warning; a trap farm on PATH is reused, none built
 #   cwd  the verdict is the same from two different working directories
 #
 # The probe is a throwaway git repo under mktemp: the runner's --key-only reads `git ls-files`.
@@ -199,6 +201,11 @@ EOF
 stub_knode()     { cat <<'EOF'
 cat data/a.txt >/dev/null || exit 1
 node -e 'console.log("node-ran-b207")'
+EOF
+}
+stub_trap()      { cat <<'EOF'
+cat data/a.txt >/dev/null || exit 1
+if cmp -s data/a.txt data/a.txt 2>/dev/null; then echo trap-cmp-same; else echo trap-cmp-differ; fi
 EOF
 }
 stub_lcons()     { cat <<'EOF'
@@ -714,8 +721,12 @@ arm_K() {
   edit_hook "$PD4" "s|^READSET_TOOL_XP=\"\"|READSET_TOOL_XP=\"$xd\"|"
   hook_dump "$PD4" "$PD4/.githooks/pre-push" "$WK/K7.o"
   yes "two different paths, unkeyed line first: the hook writes a .dunres row" "$(cat "$WK/K7.o/.dunres" 2>/dev/null)" "duplicate basename b207tool"
-  # ?node with a node -e stub: runs if node is on PATH, else SKIP.
-  if command -v node >/dev/null 2>&1; then
+  # ?node with a node -e stub: runs if node is on PATH, else SKIP. A stub of an enclosing run's undeclared-tool trap
+  # (a directory carrying .hr-trap-farm) is not node.
+  local nd
+  nd="$(command -v node 2>/dev/null)" || nd=""
+  [ -z "$nd" ] || [ ! -f "${nd%/*}/.hr-trap-farm" ] || nd=""
+  if [ -n "$nd" ]; then
     mk_probe "$WK/K3" stub_knode 'data/a.txt' '?node'
     run_hr "$WK/K3"
     eq "?node with node on PATH: exit 0" "$RC" 0
@@ -1353,6 +1364,42 @@ arm_Z4() {
   no "system temp dir under a marked HOME: the remedy does NOT point TMPDIR elsewhere" "$OUT" "Point TMPDIR" "do not remove the marker"
   no "system temp dir under a marked HOME: the remedy does NOT say to remove the marker" "$OUT" "Remove the marker." "do not remove the marker"
 }
+# TR: the undeclared-tool trap. The probe calls cmp, undeclared, in the swallowed shape (an `if` on its status, stderr
+# to /dev/null). The run WARNS naming cmp, in both layouts (a probe root with core/scripts/ is the distribution layout,
+# one without it the consumer layout), with exit 0 and the call still answering as not found. ALLOW twin: cmp
+# declared, exit 0, no warning. COST: a run whose PATH carries a built trap farm reuses it, building none in its own
+# TMPDIR.
+arm_TR() {
+  CUR=TR
+  local P1="$WK/TR1" P2="$WK/TR2" P3="$WK/TR3" farm="" d n w="WARNING undeclared tool(s) called: cmp --"
+  mk_probe "$P1" stub_trap 'data/a.txt'; mk_dist "$P1"
+  run_hr "$P1"
+  eq "distribution, undeclared cmp: exit 0, the verdict unchanged" "$RC" 0
+  yes "distribution, undeclared cmp: the warning names it" "$OUT" "$w"
+  yes "distribution, undeclared cmp: the call still answered as not found" "$OUT" "trap-cmp-differ"
+  mk_probe "$P2" stub_trap 'data/a.txt' 'cmp'; mk_dist "$P2"
+  run_hr "$P2"
+  eq "distribution, cmp declared: exit 0" "$RC" 0
+  no "distribution, cmp declared: no warning" "$OUT" "WARNING undeclared tool" "trap-cmp-same"
+  mk_probe "$P3" stub_trap 'data/a.txt'
+  run_hr "$P3"
+  eq "consumer layout, undeclared cmp: exit 0, the verdict unchanged" "$RC" 0
+  yes "consumer layout, undeclared cmp: the warning names it" "$OUT" "$w"
+  for d in $(IFS=:; printf '%s ' $PATH) "${TMPDIR:-/tmp}"/ai-dlc-hr-trapc.*; do [ -f "$d/.hr-trap-farm" ] && { farm="$d"; break; }; done
+  [ -n "$farm" ] || { bad "$CUR: no trap farm on PATH or in TMPDIR after a distribution run"; return; }
+  mkdir -p "$WK/TRt" || exit 2
+  OUT="$(PATH="$PATH:$farm" TMPDIR="$WK/TRt" bash "$RUN" --root "$P1" probe 2>&1)"; RC=$?
+  eq "a farm on PATH: exit 0" "$RC" 0
+  yes "a farm on PATH: the warning names cmp" "$OUT" "$w"
+  n="$(ls -A "$WK/TRt" | grep -c '^ai-dlc-hr-trap')" || n=0
+  eq "a farm on PATH is reused: none built in the run's own TMPDIR" "$n" 0
+}
+# mk_dist <probe>: give the probe root a core/scripts/ directory, the runner's distribution-layout test.
+mk_dist() {
+  mkdir -p "$1/core/scripts" && printf 'k\n' > "$1/core/scripts/keep.txt" \
+    && ( cd "$1" && git add -A && git -c user.name=t -c user.email=t@t commit -qm dist ) >/dev/null 2>&1 \
+    || { echo "FIXTURE ERROR: could not make $1 a distribution-layout probe" >&2; exit 2; }
+}
 run_arms() { arm_A; arm_B; arm_C; arm_D; arm_E; arm_F; arm_H; arm_I; arm_K; arm_L; arm_N; }
 
 # --- main run -----------------------------------------------------------------------------------
@@ -1364,9 +1411,9 @@ mkdir -p "$WORK/par"
 stray_check
 # Under a stray marker the runner refuses every probe run before it builds a sandbox, so only the Z arms'
 # DENY cells can say anything: every other arm SKIPs, naming the marker, rather than reading as a regression.
-ARMS="A B C D E F H I K L N G J P Q R S T U V W X XR Y Y2 Y3 Z1 Z2 Z3 Z4"
+ARMS="A B C D E F H I K L N G J P Q R S T TR U V W X XR Y Y2 Y3 Z1 Z2 Z3 Z4"
 if [ -n "$STRAY" ]; then
-  echo "  SKIP  arms A B C D E F H I K L N G J P Q R S T U V W X XR Y Y2 Y3 and cwd: each needs a probe run the stray marker refuses"
+  echo "  SKIP  arms A B C D E F H I K L N G J P Q R S T TR U V W X XR Y Y2 Y3 and cwd: each needs a probe run the stray marker refuses"
   ARMS="Z1 Z2 Z3 Z4"
 fi
 for _a in $ARMS; do

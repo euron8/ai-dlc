@@ -18,13 +18,11 @@
 # another unit assigned, and `i54_files` read that way inside a `$( )` killed only the subshell --
 # exit 0, no finding, an arm silently scanning nothing.
 #
-# WHY THE CLEAN-TREE SWEEP IS NOT VACUOUS, WHICH IS THE OBVIOUS OBJECTION. On a clean corpus
-# every arm reports nothing, so comparing a selected run's FINDINGS against a full run's
-# compares empty with empty ninety-four times and reads exactly like ninety-four proofs. The
-# non-vacuous content of arm 4 is its STDERR predicate -- `unbound variable`, `command not
-# found`, `syntax error` -- which is precisely what a broken slice emits and what a clean one
-# cannot. Arm 6 carries the findings half, against a tree seeded to make several arms speak at
-# once.
+# WHY THE SWEEP IS NOT VACUOUS, WHICH IS THE OBVIOUS OBJECTION. It runs on the SEEDED tree, where
+# several arms speak at once, and its predicate is the STDERR of each selected run -- `unbound
+# variable`, `command not found`, `syntax error` -- which is precisely what a broken slice emits
+# and what a clean one cannot, plus an exit of 0 or 1 and a subset check against the seeded plain
+# run's lines. The attribution arms read the same per-id runs for the findings half.
 #
 # IDS IN ONE UNIT ARE NOT A DEFECT AND ARE NOT TREATED AS ONE. Ten arm headers are indented
 # because they sit inside an enclosing block, so they share a unit with the column-0 arm above
@@ -40,6 +38,7 @@ unset CLAUDE_PROJECT_DIR
 
 NAME="validator-arm-selection"
 DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 
 # --- THE SHARD SPLIT, AND IT IS A MEASUREMENT RATHER THAN A PREFERENCE --------------------
 # This unit became the pre-push suite's POLE the release it was added. The suite's makespan
@@ -47,19 +46,18 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # so an inner pool here cannot reach it.
 #
 # THE PARTITION IS BY PREREQUISITE, NOT ROUND-ROBIN, and that is forced rather than chosen.
-# The phases fall into two clusters with DISJOINT prerequisites: some differential against the
-# plain-tree baseline, some against a seeded tree. A round-robin deal would put members of both
-# clusters in both shards and every shard would pay both prerequisites. Splitting on the cluster
-# boundary means the baseline is computed once and the seeded tree once.
+# Shard 'a' holds the phases that need no seeded tree (the width knob, the refusal arms and the
+# real tree's plain run); shard 'b' holds every phase that reads the seeded tree's runs, so the
+# seeded tree and its three runs are paid once, by one shard.
 #
-# WHAT REPLACES THE PER-SHARD CONTROL. Shard 'a' here IS the control -- arm 0's plain run
-# licenses arms 3 and 4 and nothing else. Shard 'b' differentials against the SEEDED tree, and
+# WHAT REPLACES THE PER-SHARD CONTROL. Shard 'a' here IS the control -- arm 0's plain run holds
+# the real tree to a pass and nothing else. Shard 'b' differentials against the SEEDED tree, and
 # its control is the `N_SEEDED < 3` guard below: a validator that had stopped running produces
 # no findings on that tree and the shard reports FIXTURE BROKEN rather than a clean sweep.
 # Neither shard can report green having run nothing.
 SHARDS="a b"
-PHASES_a="width unknown-id grammar all-ids sweep"
-PHASES_b="attrib union partition"
+PHASES_a="width unknown-id grammar plain"
+PHASES_b="attrib all-ids sweep union partition"
 
 # --- THE INNER POOL WIDTH, resolved in ONE place -------------------------------------------
 # Default 6 (the reasoning is beside the pools below). The read-set deriver runs this fixture
@@ -127,15 +125,15 @@ for cand in "$DIR/../../.." "$DIR/../.."; do
 done
 if [ -z "$ROOT" ]; then
   echo "$NAME: SKIP — distribution-only (validate-enforcement-map.sh and render-invariant-index.sh live in this repository's own scripts/ and are not shipped to consumers)"
-  exit 0
+  fx_skip_exit "$DIR"
 fi
 
 VAL="$ROOT/scripts/validate-enforcement-map.sh"
 RENDERER="$ROOT/scripts/render-invariant-index.sh"
 # The hermetic runner's REQUIRED-input sentinel, printed where the subject is resolved, after the
 # distribution-only SKIP above and before any arm drives it. Printed once, by the top-level run only:
-# the --attrib-chunk / --sweep-chunk workers below re-enter this file and must not repeat it.
-case "${1:-}" in --attrib-chunk|--sweep-chunk) : ;; *) echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh" ;; esac
+# the --attrib-chunk workers below re-enter this file and must not repeat it.
+case "${1:-}" in --attrib-chunk) : ;; *) echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh" ;; esac
 SEED="$ROOT/core/fixtures/enforcement-map-sites/seed.sh"
 
 # --- the per-chunk worker, re-entered through xargs ---------------------------------------
@@ -156,52 +154,38 @@ inproc_source() { # inproc_source <validator> -- the one source of a worker or a
 # (lib/mutant.sh) for the invocation judge. A worker re-enters this file and exits before the top level defines
 # ok/bad and sources that library, so it sources it here after lib/report.sh (the library refuses to load without ok/bad).
 case "${1:-}" in
-  --attrib-chunk|--sweep-chunk)
+  --attrib-chunk)
     . "$DIR/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
     . "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; } ;;
 esac
 if [ "${1:-}" = "--attrib-chunk" ]; then
-  # One selected run per id against the seeded tree, recording only whether it produced findings
-  # and which. Split out from the sweep worker because the predicate is different -- here a
-  # finding is the POINT, there it is the offence.
+  # One selected run per id against the seeded tree. It keeps each id's stdout, stderr and exit
+  # status (o./e./rc.) for the sweep and the all-ids arms, and the id's sorted FAIL: lines (f.)
+  # for the attribution arms: one pass serves all three. The seeded plain run is still running
+  # while this worker runs, so the subset check against it is made by the caller, after both
+  # waits; the broken-slice and exit predicates need no baseline and are made here, as printed
+  # lines on stdout.
   at_val="$2"; at_dir="$3"; at_ids="$4"
   inproc_source "$at_val"
   while IFS= read -r at_id; do
     [ -n "$at_id" ] || continue
-    fx_inproc "$at_val"; vem_entry --arms "$at_id" >/dev/null 2>"$at_dir/raw.$at_id"
-    if grep -q '^FAIL:' "$at_dir/raw.$at_id"; then
-      grep '^FAIL:' "$at_dir/raw.$at_id" | sort > "$at_dir/f.$at_id"
+    fx_inproc "$at_val"; vem_entry --arms "$at_id" >"$at_dir/o.$at_id" 2>"$at_dir/e.$at_id"
+    at_rc=$?
+    echo "$at_rc" > "$at_dir/rc.$at_id"
+    if grep -q '^FAIL:' "$at_dir/e.$at_id"; then
+      grep '^FAIL:' "$at_dir/e.$at_id" | sort > "$at_dir/f.$at_id"
     fi
-    rm -f "$at_dir/raw.$at_id"
+    # `Broken pipe` is a writer killed by an early-exit reader (the i75_failsclosed shape); its line
+    # count varies run to run, so a byte compare of two runs catches it only by chance, and this does.
+    hits="$(grep -c -E 'unbound variable|command not found|syntax error|Broken pipe' "$at_dir/e.$at_id" || true)"
+    [ "${hits:-0}" -eq 0 ] || printf '%s\tbroken-slice\t%s\n' "$at_id" "$(head -1 "$at_dir/e.$at_id" | cut -c1-120)"
+    [ "$at_rc" -eq 0 ] || [ "$at_rc" -eq 1 ] || printf '%s\texit\t%s\n' "$at_id" "$at_rc"
+    # ONE stderr line is exempt from the subset check, by its fixed prefix and nothing looser: the
+    # selector's own `--arms NOTE:` naming the unit it actually ran (BL-274). A plain run cannot print
+    # it, so without this every id that shares a unit would score not-a-subset. Any OTHER new line
+    # still does -- the prefix is anchored and literal.
+    grep -v '^validate-enforcement-map: --arms NOTE: ' "$at_dir/e.$at_id" > "$at_dir/e.$at_id.f" || :
   done < "$at_ids"
-  exit 0
-fi
-
-if [ "${1:-}" = "--sweep-chunk" ]; then
-  sw_val="$2"; sw_out="$3"; sw_err="$4"; sw_dir="$5"; sw_ids="$6"
-  inproc_source "$sw_val"
-  while IFS= read -r sw_id; do
-  [ -n "$sw_id" ] || continue
-  fx_inproc "$sw_val"; vem_entry --arms "$sw_id" > "$sw_dir/o.$sw_id" 2> "$sw_dir/e.$sw_id"
-  sw_rc=$?
-  hits="$(grep -c -E 'unbound variable|command not found|syntax error' "$sw_dir/e.$sw_id" || true)"
-  [ "${hits:-0}" -eq 0 ] || printf '%s\tbroken-slice\t%s\n' "$sw_id" "$(head -1 "$sw_dir/e.$sw_id" | cut -c1-120)"
-  [ "$sw_rc" -eq 0 ] || [ "$sw_rc" -eq 1 ] || printf '%s\texit\t%s\n' "$sw_id" "$sw_rc"
-  # Every line the selected run prints must be one the full run printed. An EMPTY baseline
-  # would make `grep -vxF -f` treat every line as new, so the caller guarantees both baselines
-  # are non-empty before dispatching and this asserts it rather than assuming it.
-  if [ ! -s "$sw_out" ]; then
-    printf '%s\tno-baseline\tthe full run produced empty stdout\n' "$sw_id"
-  else
-    # ONE stderr line is exempt, by its fixed prefix and nothing looser: the selector's own
-    # `--arms NOTE:` naming the unit it actually ran (BL-274). A plain run cannot print it, so
-    # without this every id that shares a unit would score not-a-subset. Any OTHER new line still
-    # does -- the prefix is anchored and literal.
-    grep -v '^validate-enforcement-map: --arms NOTE: ' "$sw_dir/e.$sw_id" > "$sw_dir/e.$sw_id.f" || :
-    extra="$( { grep -vxF -f "$sw_out" "$sw_dir/o.$sw_id"; grep -vxF -f "$sw_err" "$sw_dir/e.$sw_id.f"; } | grep -c . || true)"
-    [ "${extra:-0}" -eq 0 ] || printf '%s\tnot-a-subset\t%s line(s)\n' "$sw_id" "$extra"
-  fi
-  done < "$sw_ids"
   exit 0
 fi
 
@@ -251,14 +235,14 @@ trap 'rm -rf "$TMP"' EXIT
 
 # THE INNER POOL WIDTH IS DELIBERATELY NARROW. This unit runs inside the suite's 16-way pool,
 # and a knob here multiplies against a knob there; six is chosen so the two selected-run sweeps
-# (94 ids each, ~0.6 CPU-seconds apiece) do not sit on the critical path while the unit still
+# (one pass over every id, ~0.6 CPU-seconds) does not sit on the critical path while the unit still
 # demands well under a third of the box on its own.
 #
-# AND IT IS NOT THE LEVER: the two sweeps together are a quarter of the unit; the rest is
+# AND IT IS NOT THE LEVER: the sweep is a small part of the unit; the rest is
 # near-full validator runs, each of which is a single serial process no inner pool can touch.
 # The directory split above is what those needed.
 #
-# JOBS is resolved once, from VAS_INNER_POOL_WIDTH, near the top of this file; both pools read it.
+# JOBS is resolved once, from VAS_INNER_POOL_WIDTH, near the top of this file; the pool reads it.
 
 # The declared id set, taken from the SERVED grammar rather than a fresh grep. The reason is
 # recorded in render-invariant-index.sh: a column-0 pattern finds 83 of the header-shaped
@@ -318,7 +302,7 @@ if [ "$GROUP" = a ]; then
 fi
 
 # --- THE WIDTH KNOB: unset is 6, 1 reaches the pool, a bad value is FIXTURE BROKEN ----------
-# Driven through `--print-width`, which prints the very variable both pools read. Each cell is
+# Driven through `--print-width`, which prints the very variable the pool reads. Each cell is
 # presence-shaped -- a specific number or a specific exit must APPEAR -- so a resolver that
 # ignored the knob fails the `1` cell, one that ignored the default fails the unset cell, and
 # one that accepted anything fails both refusal cells. `env -u` makes the unset cell hold even
@@ -358,7 +342,7 @@ fi
 # THE WIDTH IS ALSO CHECKED WHERE THE POOLS USE IT, not only where it is resolved. The cells
 # above drive `--print-width`, which reads JOBS at the resolver; a pool that hard-sets its own
 # width, or a JOBS re-assigned below the resolver, passes every one of them. This is a
-# SOURCE-TEXT check of this file: every pool site reads "$JOBS", there are exactly 2, and JOBS
+# SOURCE-TEXT check of this file: every pool site reads "$JOBS", there is exactly 1, and JOBS
 # is assigned exactly once. Comment lines are skipped. The patterns are assembled from pieces
 # (`x''args`, `J''OBS=`) so the text of this check cannot match itself, and no assertion
 # message below names the pool command followed by its width flag.
@@ -372,29 +356,26 @@ width_sites() { # $1 file; prints "<pool sites> <of which read JOBS> <JOBS assig
     $0 ~ ("(^|[^A-Za-z0-9_])" jb) { a++ }
     END { printf "%d %d %d\n", p, j, a }' "$1"
 }
-width_sites_ok() { [ "$1" = "2 2 1" ]; }
+width_sites_ok() { [ "$1" = "1 1 1" ]; }
 ws_real="$(width_sites "$0")"
 if width_sites_ok "$ws_real"; then
-  ok "WIDTH SITES (source-text check): both pool sites of this file read \"\$JOBS\" and JOBS is assigned once ('$ws_real')"
+  ok "WIDTH SITES (source-text check): the pool site of this file reads \"\$JOBS\" and JOBS is assigned once ('$ws_real')"
 else
-  bad "WIDTH SITES (source-text check): this file does not have exactly 2 pool sites all reading \"\$JOBS\" with JOBS assigned once — read '$ws_real' as '<sites> <reading JOBS> <assignments>', expected '2 2 1'. A pool that does not read JOBS, or a JOBS re-set after the resolver, makes the --print-width cells above prove nothing about the pools"
+  bad "WIDTH SITES (source-text check): this file does not have exactly 1 pool site reading \"\$JOBS\" with JOBS assigned once — read '$ws_real' as '<sites> <reading JOBS> <assignments>', expected '1 1 1'. A pool that does not read JOBS, or a JOBS re-set after the resolver, makes the --print-width cells above prove nothing about the pools"
 fi
 fi
 
 # --- Arm 0: CONTROL — the real tree passes a plain run ------------------------------------
-# Every "selection reproduced the full run" below is a comparison against this run's output.
-# A dirty baseline does not merely weaken them: the verdict block prints its `OK:` line only
-# on a clean run, so a failing baseline makes every selected run's summary a line the full run
-# never printed and the subset arm reports ninety-four unattributable offenders.
-#
-# IT IS A PREREQUISITE, NOT A PHASE, and it is paid only by the shard that holds a phase
-# needing it. Shard 'b' differentials against the seeded tree instead and never runs this.
-if want_any all-ids sweep; then
+# The real tree is clean, so a plain run exits 0 and its verdict block prints the `OK:` line.
+# Shard 'b' differentials against the seeded tree, whose plain run exits 1 by design, so this
+# run is the only one that holds the real tree to a pass.
+if want plain; then
+RAN="$RAN plain"
 fx_inproc "$VAL"; vem_entry > "$TMP/full.out" 2> "$TMP/full.err"; FULL_RC=$?
 if [ "$FULL_RC" -eq 0 ]; then
-  ok "plain run of validate-enforcement-map.sh exits 0 (the differentials below are attributable)"
+  ok "plain run of validate-enforcement-map.sh exits 0 on the real tree"
 else
-  bad "plain run of validate-enforcement-map.sh exits $FULL_RC — the baseline this fixture differentials against is already dirty, so nothing below is evidence about selection: $(grep -m1 '^FAIL:' "$TMP/full.err" | cut -c1-140)"
+  bad "plain run of validate-enforcement-map.sh exits $FULL_RC — the real tree is not clean: $(grep -m1 '^FAIL:' "$TMP/full.err" | cut -c1-140)"
 fi
 fi
 
@@ -445,53 +426,6 @@ else
 fi
 fi
 
-# --- Arm 3: EVERY declared id selected must be BYTE-IDENTICAL to a plain run ---------------
-# One line, and it exercises every region boundary at once: preamble, every unit range, and
-# the epilogue. If a boundary is off by a line, some arm's body is attributed to its
-# neighbour and either runs twice or not at all, and this comparison sees it.
-if want all-ids; then
-RAN="$RAN all-ids"
-ALL="$(tr '\n' ',' < "$IDS" | sed 's/,$//')"
-fx_inproc "$VAL"; vem_entry --arms "$ALL" > "$TMP/all.out" 2> "$TMP/all.err"; ALL_RC=$?
-if [ "$ALL_RC" -eq "$FULL_RC" ] && cmp -s "$TMP/full.out" "$TMP/all.out" && cmp -s "$TMP/full.err" "$TMP/all.err"; then
-  ok "--arms with all $N_IDS declared ids is byte-identical to a plain run (stdout, stderr, exit $FULL_RC)"
-else
-  bad "--arms with every declared id DIFFERS from a plain run (exit $ALL_RC vs $FULL_RC). A region boundary is misplaced, which means some arm's body belongs to its neighbour. $(diff "$TMP/full.out" "$TMP/all.out" 2>&1 | head -3 | tr '\n' ' ')$(diff "$TMP/full.err" "$TMP/all.err" 2>&1 | head -3 | tr '\n' ' ')"
-fi
-fi
-
-# --- Arm 4: EVERY id alone must run without a broken slice ---------------------------------
-# The predicate is the stderr of the selected run, not its findings: on a clean tree the
-# findings are empty on both sides and prove nothing (see the header). An arm reading a name a
-# skipped unit assigned emits `unbound variable`; a missing function emits `command not
-# found`; a mis-sliced region emits a syntax error. All three are invisible to the exit code
-# whenever the read happens inside a `$( )`, which is why they are matched by TEXT.
-if want sweep; then
-RAN="$RAN sweep"
-mkdir -p "$TMP/sw" "$TMP/sw.chunks"
-# EACH ID IS RUN ALONE, one call per id (131 rows carry 135 ids; only 3 rows share ids, so one
-# per row would save 4 runs and sample nothing). Batching ids into one call is rejected because
-# a slice can break ONLY when its id runs alone: a hoisted `TEMPLATE` assignment removed
-# kills `--arms I14` alone while the same call with I13 beside it passes. A chunk worker keeps
-# that: it runs one in-process `vem_entry --arms <id>` per id. This sweep runs against
-# the clean real tree ($VAL); the attribution sweep runs against the seeded tree, a different
-# state, so the two cannot share outputs.
-chunk_ids "$IDS" "$TMP/sw.chunks" \
-  | xargs -0 -n1 -P "$JOBS" bash "$0" --sweep-chunk "$VAL" "$TMP/full.out" "$TMP/full.err" "$TMP/sw" \
-  > "$TMP/sweep.txt" 2>"$TMP/sweep.err"
-SWEEP_DONE="$(ls "$TMP/sw" 2>/dev/null | grep -c '^o\.' || true)"
-SWEEP_N="$(grep -c . "$TMP/sweep.txt" || true)"
-# THE POOL MUST BE ASSERTED TO HAVE RUN. A dispatch that produced no verdicts reports zero
-# offenders, which is the same output as a clean sweep.
-if [ "${SWEEP_DONE:-0}" -ne "$N_IDS" ]; then
-  broke "the sweep dispatched $N_IDS id(s) but only ${SWEEP_DONE:-0} produced output; the pool did not run and a zero below would mean nothing. stderr: $(head -2 "$TMP/sweep.err")"
-elif [ "${SWEEP_N:-0}" -eq 0 ]; then
-  ok "all $N_IDS ids run alone with no broken slice and no output the full run did not produce"
-else
-  bad "$SWEEP_N id(s) do not survive being selected alone — a unit reads a value another unit assigns, or a region boundary is wrong: $(head -3 "$TMP/sweep.txt" | tr '\n' '|')"
-fi
-fi
-
 # --- the seeded tree ----------------------------------------------------------------------
 # A whole TREE, not a lone script copy: the validator resolves REPO_ROOT from its own location,
 # so a copy sitting beside nothing exits 2 with `required input not found`.
@@ -499,7 +433,7 @@ fi
 # PREREQUISITE, paid by whichever shard holds a phase that differentials against this tree.
 # It is cheap -- measured at under a second -- so it is not what the shard split is about.
 T=""
-if want_any attrib union partition; then
+if want_any attrib all-ids sweep union partition; then
 if [ ! -f "$SEED" ]; then
   broke "no seed at $SEED — this fixture builds its seeded tree from enforcement-map-sites' seed and cannot proceed without it"
 fi
@@ -540,39 +474,52 @@ groups() {
 }
 
 # --- Arm 6: the FINDINGS differential, on a tree seeded to make several arms speak ---------
-# The clean-tree sweep cannot see this direction. This tree carries two additions -- a new
-# core subtree and a new fixture directory -- which between them produce several findings
-# across several arms.
+# This tree carries two additions -- a new core subtree and a new fixture directory -- which
+# between them produce several findings across several arms.
 #
 # PREREQUISITE, and it is the expensive half of shard 'b': one plain run of the seeded tree's
-# validator and one attribution sweep, dispatched together. The `N_SEEDED < 3` guard inside it is
+# validator, one `--arms` run of every declared id, and one attribution sweep, dispatched
+# together. The sweep runs each id alone ONCE and keeps its stdout, stderr and exit status, so
+# the sweep arm and the attribution arms read the same runs. The `N_SEEDED < 3` guard inside it is
 # THIS SHARD'S CONTROL -- a validator that had stopped running produces no findings on a tree
 # seeded to make several arms speak, and the shard reports FIXTURE BROKEN rather than a clean
 # differential over an empty set.
 #
-# THE TWO UNITS RUN CONCURRENTLY, and only the two raw commands are backgrounded. Neither reads
-# the other's output: the plain run writes `$TMP/seeded.err`, the sweep writes `$TMP/at.sel` and
-# `$TMP/sel.*`, and both only READ the seeded tree -- which is why `seeded.err` lives in `$TMP`
+# THE THREE UNITS RUN CONCURRENTLY, and only the raw commands are backgrounded. None reads
+# another's output: the plain run writes `$TMP/seeded.out` and `$TMP/seeded.err`, the all-ids
+# run writes `$TMP/all.out` and `$TMP/all.err`, the sweep writes `$TMP/at.sel` and `$TMP/sel.*`,
+# and all three only READ the seeded tree -- which is why the plain run's files live in `$TMP`
 # and never in `$T`, where the sweep would be scanning a file the plain run was still writing.
 # Each pid is waited on its own and its status read on the next line; a bare `wait` would
 # return 0 over a sweep that died. Every guard and every assignment runs HERE, in the parent,
 # after both waits -- a `broke` inside a background job would end the job, not the fixture.
-if want_any attrib union partition; then
-# This attribution sweep runs against the SEEDED tree ($TV), a different state from arm 4's
-# clean-tree sweep, so the two cannot share outputs. Attribution is by asking the selector per
-# id, never by reading message text, so it cannot be batched into one call.
-( inproc_source "$TV"; fx_inproc "$TV"; vem_entry ) > /dev/null 2>"$TMP/seeded.err" &
+if want_any attrib all-ids sweep union partition; then
+# Attribution is by asking the selector per id, never by reading message text, so it cannot be
+# batched into one call; EACH ID IS RUN ALONE, because a slice can break ONLY when its id runs
+# alone: a hoisted `TEMPLATE` assignment removed kills `--arms I14` alone while the same call
+# with I13 beside it passes. A chunk worker keeps that: one in-process `vem_entry --arms <id>`
+# per id.
+ALL="$(tr '\n' ',' < "$IDS" | sed 's/,$//')"
+( inproc_source "$TV"; fx_inproc "$TV"; vem_entry ) > "$TMP/seeded.out" 2>"$TMP/seeded.err" &
 seeded_pid=$!
-attrib "$TV" sel "$IDS" &
+( inproc_source "$TV"; fx_inproc "$TV"; vem_entry --arms "$ALL" ) > "$TMP/all.out" 2>"$TMP/all.err" &
+all_pid=$!
+attrib "$TV" sel "$IDS" > "$TMP/sel.sweep" &
 attrib_pid=$!
 wait "$seeded_pid"
 seeded_rc=$?
+wait "$all_pid"
+ALL_RC=$?
 wait "$attrib_pid"
 attrib_rc=$?
 # The seeded run exits 1 BY DESIGN -- the tree is seeded to produce findings -- so 0 and 1 are
 # both a run that completed; anything else is a validator that could not run at all.
 if [ "$seeded_rc" -ne 0 ] && [ "$seeded_rc" -ne 1 ]; then
   broke "the seeded tree's plain validator run exited $seeded_rc (0 or 1 expected); the differential below would compare against a run that did not complete. stderr: $(head -2 "$TMP/seeded.err" | cut -c1-140)"
+fi
+# THE ALL-IDS RUN COMPLETES TOO: exit 0 or 1, like the seeded run it is compared with.
+if [ "$ALL_RC" -ne 0 ] && [ "$ALL_RC" -ne 1 ]; then
+  broke "the seeded tree's --arms run of every declared id exited $ALL_RC (0 or 1 expected); the byte comparison below would compare against a run that did not complete. stderr: $(head -2 "$TMP/all.err" | cut -c1-140)"
 fi
 # THE SWEEP'S STATUS IS THE ONLY WITNESS TO ITS DEATH. A sweep killed part-way leaves a partial
 # `sel.ids`, and the floors below read a short list exactly as they read a long one.
@@ -586,6 +533,58 @@ if [ "${N_SEEDED:-0}" -lt 3 ]; then
 fi
 N_ATTRIB="$(grep -c . "$TMP/sel.ids" || true)"
 N_GROUPS="$(groups sel)"
+fi
+
+# --- Arm 3: EVERY declared id selected must be BYTE-IDENTICAL to a plain run ---------------
+# One line, and it exercises every region boundary at once: preamble, every unit range, and
+# the epilogue. If a boundary is off by a line, some arm's body is attributed to its
+# neighbour and either runs twice or not at all, and this comparison sees it. It runs on the
+# seeded tree, where the plain run's stderr is not empty, so the byte comparison carries
+# content on both sides.
+if want all-ids; then
+RAN="$RAN all-ids"
+if [ ! -s "$TMP/seeded.err" ]; then
+  broke "the seeded plain run wrote nothing to stderr; the byte comparison below would compare two empty files"
+fi
+if [ "$ALL_RC" -eq "$seeded_rc" ] && cmp -s "$TMP/seeded.out" "$TMP/all.out" && cmp -s "$TMP/seeded.err" "$TMP/all.err"; then
+  ok "--arms with all $N_IDS declared ids is byte-identical to a plain run of the seeded tree (stdout, stderr, exit $seeded_rc)"
+else
+  bad "--arms with every declared id DIFFERS from a plain run of the seeded tree (exit $ALL_RC vs $seeded_rc). A region boundary is misplaced, which means some arm's body belongs to its neighbour. $(diff "$TMP/seeded.out" "$TMP/all.out" 2>&1 | head -3 | tr '\n' ' ')$(diff "$TMP/seeded.err" "$TMP/all.err" 2>&1 | head -3 | tr '\n' ' ')"
+fi
+fi
+
+# --- Arm 4: EVERY id alone must run without a broken slice ---------------------------------
+# The predicate is the stderr of the selected run, not its findings alone: an arm reading a
+# name a skipped unit assigned emits `unbound variable`; a missing function emits `command not
+# found`; a mis-sliced region emits a syntax error; a pipe writer killed by an early-exit reader
+# emits `Broken pipe`. All four are invisible to the exit code
+# whenever the read happens inside a `$( )`, which is why they are matched by TEXT. The workers
+# apply the text and exit predicates as they run; the subset check against the seeded plain
+# run is made here, over every id's stdout and stderr at once, because the plain run was still
+# running while the workers were. ONE stderr line is exempt, by its fixed prefix and nothing
+# looser (the worker strips it into `e.<id>.f`).
+if want sweep; then
+RAN="$RAN sweep"
+SWEEP_DONE="$(ls "$TMP/at.sel" 2>/dev/null | grep -c '^o\.' || true)"
+SWEEP_N="$(grep -c . "$TMP/sel.sweep" || true)"
+# THE POOL MUST BE ASSERTED TO HAVE RUN. A dispatch that produced no verdicts reports zero
+# offenders, which is the same output as a clean sweep.
+if [ "${SWEEP_DONE:-0}" -ne "$N_IDS" ]; then
+  broke "the sweep dispatched $N_IDS id(s) but only ${SWEEP_DONE:-0} produced output; the pool did not run and a zero below would mean nothing"
+fi
+sw_extra_e="$(grep -H -vxF -f "$TMP/seeded.err" "$TMP"/at.sel/e.*.f | grep -c . || true)"
+# The selected run of a clean arm prints the verdict block's `OK: ` line, which the seeded plain run
+# (a failing run) never prints, so that one fixed prefix is exempt from the stdout subset check.
+if [ -s "$TMP/seeded.out" ]; then
+  sw_extra_o="$(cat "$TMP"/at.sel/o.* | grep -v '^OK: ' | grep -vxF -f "$TMP/seeded.out" | grep -c . || true)"
+else
+  sw_extra_o="$(cat "$TMP"/at.sel/o.* | grep -v '^OK: ' | grep -c . || true)"
+fi
+if [ "${SWEEP_N:-0}" -eq 0 ] && [ "${sw_extra_e:-0}" -eq 0 ] && [ "${sw_extra_o:-0}" -eq 0 ]; then
+  ok "all $N_IDS ids run alone on the seeded tree with no broken slice and no output the full run did not produce"
+else
+  bad "$SWEEP_N id(s) do not survive being selected alone and ${sw_extra_e:-0} stderr / ${sw_extra_o:-0} stdout line(s) are not the seeded plain run's — a unit reads a value another unit assigns, or a region boundary is wrong: $(head -3 "$TMP/sel.sweep" | tr '\n' '|')$(grep -H -vxF -f "$TMP/seeded.err" "$TMP"/at.sel/e.*.f | head -2 | cut -c1-120 | tr '\n' '|')"
+fi
 fi
 
 if want attrib; then

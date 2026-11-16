@@ -4,4 +4,5 @@
 # inproc rows (fx_inproc, one per source): the subject once.
 6 *
 3 core/scripts/file-mtime.sh
-1 inproc:core/scripts/file-mtime.sh
+# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
+10 inproc:core/scripts/file-mtime.sh

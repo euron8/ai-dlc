@@ -47,6 +47,7 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 
 # WALK UP FROM THIS FILE FOR THE SUBJECT ITSELF, in either install layout, and never for
 # `VERSION`. Counting `..` hops answers differently from core/fixtures/<name>/ here and
@@ -73,7 +74,7 @@ echo "preclassify-mode-bucket"
 if [ -z "$RECON" ]; then
   echo "  skip  reconcile/preclassify.sh not present in this tree (neither install layout)"
   echo "  0 failed, 1 skipped"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 # Print the RESOLVED path, so the log names the subject the arms loaded.
 echo "  subject: $RECON/preclassify.sh"
@@ -110,7 +111,7 @@ grep -q '^prec_main() {$' "$PCS"; _gx=$?
 grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$PCS"; _gx=$?
 [ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $PCS (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
 [ "$_gx" -ne 0 ] || prec_guard=1
-if [ "$prec_def$prec_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$prec_def$prec_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
 if [ "$prec_def" = 0 ]; then echo "   FAIL  $PCS carries the column-0 source guard but no \`prec_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "preclassify-mode-bucket: FAIL (1)" >&2; exit 1; fi
 if [ "$prec_guard" = 0 ]; then echo "   FAIL  $PCS defines \`prec_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run prec_main in this shell" >&2; echo "preclassify-mode-bucket: FAIL (1)" >&2; exit 1; fi
 fx_inproc "$PCS"

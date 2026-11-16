@@ -162,7 +162,7 @@ EOF
 in_sb() { # in_sb <sandbox> [args...]
   local s="$1/scripts/render-path-mapping.sh"; shift
   [ "$s" = "$LOADED" ] || { echo "FIXTURE BROKEN: a drive of $s while the rpm_main sourced last is ${LOADED:-none}"; return 2; }
-  ( cd "$TMP" && rpm_main "$@" 2>&1 )
+  ( cd "$TMP" && fx_inproc "$s" && rpm_main "$@" 2>&1 )
 }
 render_in() { in_sb "$1"; }
 write_in()  { in_sb "$1" --write; }
@@ -247,7 +247,7 @@ seed_not_built() { bad "$1 -- the seed edit matched nothing; no broken-input wor
 # The real renderer is sourced once, here; controlA, controlE and the cli-ok and cli-usage cells drive it before any
 # sandbox copy is sourced.
 use "$RENDERER"
-if outA="$( cd "$REPO" && rpm_main --check 2>&1 )" \
+if outA="$( cd "$REPO" && fx_inproc "$LOADED" && rpm_main --check 2>&1 )" \
    && grep -qF "$OK_TAIL" <<<"$outA"; then
   # PC-S330 BY NAME. The git-hooks omission is the one that cost a consumer a silent no-op
   # self-update -- the hook written to `.claude/git-hooks/pre-push`, an inert orphan, while
@@ -267,9 +267,9 @@ fi
 # --- controlE: --check is cwd-invariant --------------------------------------
 # The renderer walks up from its own path for a VERSION marker rather than counting `..` hops, and a
 # fixture that is green only from one cwd may be asserting nothing. Three cwds, one answer.
-e_root="$( ( cd "$REPO" && rpm_main --check ) 2>&1; echo "rc=$?" )"
-e_slash="$( ( cd / && rpm_main --check ) 2>&1; echo "rc=$?" )"
-e_tmp="$( ( cd "$TMP" && rpm_main --check ) 2>&1; echo "rc=$?" )"
+e_root="$( ( cd "$REPO" && fx_inproc "$LOADED" && rpm_main --check ) 2>&1; echo "rc=$?" )"
+e_slash="$( ( cd / && fx_inproc "$LOADED" && rpm_main --check ) 2>&1; echo "rc=$?" )"
+e_tmp="$( ( cd "$TMP" && fx_inproc "$LOADED" && rpm_main --check ) 2>&1; echo "rc=$?" )"
 if [ "$e_root" = "$e_slash" ] && [ "$e_root" = "$e_tmp" ] && grep -qF "$OK_TAIL" <<<"$e_root"; then
   ok "controlE   --check answers identically from the repo root, / and a temp dir"
 else
@@ -288,7 +288,7 @@ EQ="$TMP/eq"; mkdir -p "$EQ"
 eqv() { # <cell-id> <copy sourced last> <cwd> <renderer as invoked> [args...] -> $EQ/<id>.{ip,cl}.{out,err,rc}
   local id="$1" cp_="$2" cwd="$3" inv="$4"; shift 4
   [ "$cp_" = "$LOADED" ] || { echo "FIXTURE BROKEN: cell $id compares $cp_ while the rpm_main sourced last is ${LOADED:-none}" >&2; exit 2; }
-  ( cd "$cwd" && rpm_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$cwd" && fx_inproc "$cp_" && rpm_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
   ( cd "$cwd" && FXCELL="$id" bash "$inv" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
   cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
 }

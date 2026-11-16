@@ -28,6 +28,7 @@
 #                                                   them, sourced in a fresh subshell; with a worlds dir the receipt
 #                                                   seeds its scratch repositories there ONCE and every later call
 #                                                   reads them (RCPT_WORLD, each receipt's header)
+declare -F fx_inproc > /dev/null || . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 _UT_GUARD='[ "${BASH_SOURCE[0]}" = "$0" ] || return 0'
 rcpt_run() {
   (
@@ -53,7 +54,7 @@ _ut_fresh() { # clears the caller's options, functions and private variables; ke
   local _v _f _ex=" "
   set +e +f +u +o pipefail
   for _f in $(compgen -A function); do
-    case "$_f" in _ut_bash|_ut_fresh|_ut_loadable|he_run|he_run_env|ro_run|ss_run|rcpt_run) ;; *) unset -f "$_f" ;; esac
+    case "$_f" in _ut_bash|_ut_fresh|_ut_loadable|he_run|he_run_env|ro_run|ss_run|rcpt_run|fx_inproc) ;; *) unset -f "$_f" ;; esac
   done
   for _v in $(compgen -e); do _ex="$_ex$_v "; done
   for _v in $(compgen -v); do
@@ -88,8 +89,8 @@ _ut_bash() { # <file> <args>: `bash <file> <args>`, in process when <file> is lo
   (
     _UT_SELF="$1"; shift
     # shellcheck source=/dev/null
-    . "$_UT_SELF" || exit 2
+    fx_inproc "$_UT_SELF" && . "$_UT_SELF" || exit 2
     bash() { _ut_bash "$@"; }
-    "$_m" "$@"
+    fx_inproc "$_UT_SELF" && "$_m" "$@"
   )
 }

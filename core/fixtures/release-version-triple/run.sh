@@ -24,6 +24,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
 # This validator is DISTRIBUTION tooling, not shipped to consumers -- it governs
@@ -34,7 +35,7 @@ VALIDATOR="$ROOT/scripts/validate-release-version.sh"
 if [ ! -f "$VALIDATOR" ]; then
   echo "FIXTURE SKIP: validate-release-version.sh not present (consumer install)" >&2
   echo "release-version-triple: PASS (skipped -- distribution-only validator)"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 echo "HERMETIC-CONSUMED scripts/validate-release-version.sh"
 

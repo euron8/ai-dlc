@@ -6,7 +6,9 @@ which now holds only `fx_inproc`, the in-process pass counter. No fixture carrie
 mutation battery; `scripts/validate-fixture-hygiene.sh` fails the push on one.
 `pool-span.sh` holds `pool_span`, the one way a fixture extracts a record-binding hook
 span (`FIXTURE_POOL`, `RECORD_HOME`); its first line defaults the store to the sourcing
-world's, and `scripts/validate-fixture-hygiene.sh` H13 fails a hand extraction. The rest
+world's, and `scripts/validate-fixture-hygiene.sh` H13 fails a hand extraction.
+`layout.sh` holds `fx_dist_layout` and `fx_skip_exit`: a fixture's install layout read from its own directory, and
+the end of a subject-absent SKIP, which exits 0 on a consumer and FIXTURE BROKEN, exit 2, in the distribution. The rest
 of this file is about `preamble.sh`.
 
 **No `run.sh`, deliberately.** There is no condition here to drive. The file is a

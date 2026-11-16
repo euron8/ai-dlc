@@ -2506,6 +2506,12 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
 # span shas equal the current ones, so a record of a runner whose SPANS did not move carries forward. One entry: the
 # runner the consumer-placement census keyed (BL-1043, its 210 records under consumer-placement-keys/).
 READSET_RUNNER_LEGACY="424152daacd574e7998875de703bcfa957951fe690809e7208bcb95b3b449c06:ad96b5dbb41480ae48a6dd818f8ead71a3fe6618d5f897a95bc7b58e5a0069e1:90f62e6944174ca1c9e82d68bf2ca14c7cffda305e5f9189bb6c2827e5f618e6"
+# THE RUNNER CARRY: `<old HR_SANDBOX span sha>:<new HR_SANDBOX span sha>` pairs. A key record whose `<runner>#HR_SANDBOX`
+# row holds the OLD sha, read while the current span sha is the NEW one, is read as holding the new one and republished
+# (c `m`), so a runner span edit that only ADDS a way to fail re-runs no fixture its other rows do not move: a pass
+# carried this way is exactly the guarantee it had before the edit, and the new arm judges each fixture on its next
+# run. A pair whose NEW sha is not the current span is inert. One pair: the undeclared-tool trap (BL-1118).
+READSET_RUNNER_CARRY="ad96b5dbb41480ae48a6dd818f8ead71a3fe6618d5f897a95bc7b58e5a0069e1:366c7a6c930e1b61a719e0d5122fa54c2c3626ee89943c19652bd0b5d1e64238"
 readset_keys() { # <list> <out>
   local list="$1" out="$2" seed=0 v2=/dev/null lp=/dev/null lv=/dev/null pp=/dev/null pv=/dev/null tab
   tab="$(printf '\t')"
@@ -2535,7 +2541,7 @@ readset_keys() { # <list> <out>
   : > "$out/.khdr"; : > "$out/.kout"; : > "$out/.kpn"
   KPN="$out/.kpn" KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
   KM="$out/.mapped.all" KLOC="$out/.local.valid" KC="$out/.krecs" KF="$out/.kl" KH="$out/.khdr" KO="$out/.kout" \
-  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" KDL="$out/.dfull" KRL="$READSET_RUNNER_LEGACY" awk -v seed="$seed" -v root="$FXROOT" '
+  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" KDL="$out/.dfull" KRL="$READSET_RUNNER_LEGACY" KRC="$READSET_RUNNER_CARRY" awk -v seed="$seed" -v root="$FXROOT" '
     function rd(file, arr,   l, t) { while ((getline l < file) > 0) { t = index(l, "\t"); arr[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     function kids(file, set,   l, t, p, i) { while ((getline l < file) > 0) { t = index(l, "\t"); p = (t ? substr(l, 1, t - 1) : l)
         while ((i = match(p, /\/[^\/]*$/)) > 0) { set[substr(p, 1, i - 1) SUBSEP substr(p, i + 1)] = 1; p = substr(p, 1, i - 1) } } }
@@ -2579,6 +2585,7 @@ readset_keys() { # <list> <out>
         subtree(d "/" a[j]) }
       return 1 }
     BEGIN {
+      rcn = split(ENVIRON["KRC"], rca, " "); for (rcj = 1; rcj <= rcn; rcj++) if (split(rca[rcj], rcb, ":") == 2) RCY[rcb[1] SUBSEP rcb[2]] = 1
       rln = split(ENVIRON["KRL"], rla, " "); for (rlj = 1; rlj <= rln; rlj++) if (split(rla[rlj], rlb, ":") == 3) { RLS[rlb[1]] = rlb[2]; RLT[rlb[1]] = rlb[3] }
       rd(ENVIRON["KN"], NV); rd(ENVIRON["KLN"], LN); rd(ENVIRON["KLP"], LP); rd(ENVIRON["KLV"], LV)
       kids(ENVIRON["KPP"], CP); kids(ENVIRON["KPV"], CV)
@@ -2626,6 +2633,8 @@ readset_keys() { # <list> <out>
         if (has && (f in DECL)) for (k in K) if (k ~ /#HR_(SANDBOX|EXIT)$/ && (!(k in R) || (seed && R[k] == "-"))) { w = k; sub(/#HR_[A-Z]+$/, "", w)
             ow = (w in R) ? R[w] : ((seed && (w in VV)) ? VV[w] : "-")
             if (ow != "-" && (((w in NV) && ow == NV[w]) || ((ow in RLS) && ((k ~ /#HR_SANDBOX$/) ? RLS[ow] : RLT[ow]) == cv(f, k)))) { R[k] = cv(f, k); lg = 1 } }
+        # A RECORD UNDER A CARRIED RUNNER SPAN (READSET_RUNNER_CARRY): its old HR_SANDBOX row reads as the current one.
+        if (has && (f in DECL)) for (k in K) if (k ~ /#HR_SANDBOX$/ && (k in R) && ((R[k] SUBSEP cv(f, k)) in RCY)) { R[k] = cv(f, k); lg = 1 }
         # A DECLARED FIXTURE IS COMPARED ON THE ROWS IT HAS NOW: a recorded row it no longer keys is ignored, except under
         # its own directory, where a recorded file now absent runs it; its own inputs.decl row is dropped when every path
         # it declares has a row (`.dfull`: a narrowed declaration skips, a widened one gains a row and runs).

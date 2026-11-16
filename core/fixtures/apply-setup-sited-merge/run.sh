@@ -37,6 +37,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 NAME=apply-setup-sited-merge
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 [ -f "$HERE/lib.sh" ] || { echo "$NAME: FIXTURE BROKEN -- lib.sh is absent beside this fixture" >&2; exit 2; }
 . "$HERE/lib.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
@@ -48,7 +49,7 @@ if ! grep -qF 'say RESOLVED setup-site-merge' "$REC/apply.sh"; then
     echo; echo "apply-setup-sited-merge: FAIL (1)"; exit 1
   fi
   echo "SKIP: subject predates setup-site-merge"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 lib_init
 

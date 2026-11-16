@@ -480,21 +480,18 @@ echo "== B5. the dossier's upstream-change panel must SAY when nothing drifted =
 # two directions are driven by two different anchors of the same seeded core file — a
 # single anchor could not produce both.
 PANEL="$CONS/.claude/skills/ai-dlc/overrides/SKILL__PanelQuiet.md"
+panel_filter() { # stdin: a dossier -> just the upstream-change panel
+  awk '/WHAT UPSTREAM CHANGED/{p=1} /SUPERSEDED CORE TEXT/{p=0} p'
+}
 panel_of() { # $1 override path -> just the upstream-change panel
-  bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$1" 2>&1 \
-    | awk '/WHAT UPSTREAM CHANGED/{p=1} /SUPERSEDED CORE TEXT/{p=0} p'
+  bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$1" 2>&1 | panel_filter
 }
 
-# -- QUIET DIRECTION: an anchor that did NOT drift.
-cat > "$PANEL" <<EOF
----
-shadows: SKILL.md#Rule 7
-base_sha: ${BASE}
-reason: shadows a section upstream did not touch in this range.
----
-Body that restates nothing.
-EOF
-qp="$(panel_of "$PANEL")"
+# -- QUIET DIRECTION: an anchor that did NOT drift. NO RUN OF ITS OWN: the panel span, from WHAT UPSTREAM CHANGED to
+# SUPERSEDED CORE TEXT, is a function of the shadow ids, BASE_SHA and THEIRS only (readopt-override.sh), and the Rule 7
+# dossier above (short_out: shadows SKILL.md#Rule 7, the same base_sha) carries exactly that state, so its panel is
+# this arm's panel (cmp-equal on the base tree). The loud direction below keeps its own run.
+qp="$(panel_filter <<<"$short_out")"
 if grep -qE '\(none -- all [0-9]+ compared anchor' <<<"$qp"; then
   ok "an unchanged anchor renders an explicit 'nothing drifted' sentence"
 else

@@ -1,12 +1,15 @@
 # self-update-gate and its three shard drivers (b, c, d, which exec the parent's run.sh --group) share ONE declaration shape;
-# the only line that differs is the pre-push hook, REQUIRED (!) only in the shards whose units print its HERMETIC-CONSUMED sentinel.
-# self-update-gate reads two things outside its own directory. The gate under test, with the
-# whole reconcile directory because the gate sources preclassify.sh and setup-sites.md beside
-# itself and the arms read unregistered-drift.sh and preclassify.sh by name. And the shipped
-# pre-push hook, which three arms scan (gate_argv_scan over the real hook, the FIXTURE_POOL
-# block for the pu-readset world, and the depth probe); on a consumer it maps to .githooks/pre-push.
-# Every other tree the fixture drives is seeded by seed.sh or built per arm under mktemp.
-!core/skills/ai-dlc-update/reconcile/
+# apart from the c lines marked below (d declares the directory whole), the only line that differs is the pre-push hook, REQUIRED (!) only in the shards whose units print its HERMETIC-CONSUMED sentinel.
+# The gate under test reads its closure beside itself: self-update-gate.sh loads preclassify.sh, which sources
+# consumer-read.sh and lib.sh and reads setup-sites.md; run.sh's engine copies take those files by name (sg_copy).
+core/skills/ai-dlc-update/reconcile/self-update-gate.sh
+core/skills/ai-dlc-update/reconcile/preclassify.sh
+core/skills/ai-dlc-update/reconcile/consumer-read.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+!core/skills/ai-dlc-update/reconcile/setup-sites.md
+# Unit pu runs the push wrapper beside the gate, which runs self-update-fixtures.sh.
+core/skills/ai-dlc-update/reconcile/self-update-push.sh
+core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
 !core/git-hooks/pre-push
 # Sourced by the parent run.sh's first line.
 core/fixtures/lib/preamble.sh

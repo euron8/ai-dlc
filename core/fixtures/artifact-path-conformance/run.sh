@@ -83,7 +83,7 @@ src_vap() { # src_vap <validator copy>
 VAP_SOURCED=""
 vreal() { # vreal <args...> -- one in-process call of the SHIPPED validator; refuses if another copy is sourced
   [ "$VAP_SOURCED" = "$VAL" ] || { echo "FIXTURE BROKEN: a shipped-validator drive while ${VAP_SOURCED:-nothing} is sourced" >&2; return 2; }
-  vap_main "$@"
+  fx_inproc "$VAL" && vap_main "$@"
 }
 w_def=0; w_guard=0
 grep -q '^vap_main() {$' "$VAL"; _gx=$?

@@ -49,6 +49,7 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 D_ROOT="$(cd "$HERE/../../.." && pwd)"
 GATE="$D_ROOT/core/skills/ai-dlc-update/reconcile/self-update-gate.sh"
 FLAG=--no-safe-stop-advice
@@ -62,7 +63,7 @@ FLAG=--no-safe-stop-advice
 # worktree `.git` is a FILE, so a directory test skipped this fixture green in normal use.
 if [ ! -f "$GATE" ] || ! git -C "$D_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   echo "self-update-join-gate: SKIP — distribution-only (needs the distribution's git history to derive a check-adding range)"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 
 # IN PROCESS (BL-878). The gate is SOURCED once into this shell (its guard returns after defining sug_main), and every
@@ -311,6 +312,51 @@ rc_setup() {
   RC_T="$( cd "$RCD/dist" && git rev-parse HEAD )"
 }
 
+# THE CLI CELLS OK, DEFER AND UNDECIDED RUN HERE, and their in-process side IS the rc table's answer for the same three
+# pairs (2,2 / 0,1 / 2,1): an eqv in-process call is rc_setup <cur> <new> followed by the very sug_main call rcpair makes,
+# so those three rc-pair runs are not repeated. rcpair below keeps 0,2 / 1,1 / 3,3 / 1,0. The cell definitions are
+# described at "THE CLI CELLS" further down, where cli-usage and the discrimination arm stay.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # eqv <cell-id> <cur-rc> <new-rc> -- or `eqv <cell-id> usage` -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"
+  date() { case "$*" in *%Y%m%d*) echo 20260101T000000Z ;; *) echo 2026-01-01T00:00:00Z ;; esac; }
+  export -f date
+  if [ "$2" = usage ]; then
+    fx_inproc "$GATE"
+    ( sug_main "$FLAG" --safe-stop ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    FXCELL="$id" bash "$GATE" "$FLAG" --safe-stop > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  else
+    rc_setup "$2" "$3"
+    rm -rf "$RCD/consumer/_bmad-output"
+    fx_inproc "$GATE"
+    ( sug_main "$FLAG" "$RCD/dist" "$RC_BASE" "$RC_T" "$RCD/consumer" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    rm -rf "$RCD/consumer/_bmad-output"
+    FXCELL="$id" bash "$GATE" "$FLAG" "$RCD/dist" "$RC_BASE" "$RC_T" "$RCD/consumer" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  fi
+  unset -f date
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -c 300 "$EQ/$1.ip.out")" "$(head -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -c 300 "$EQ/$1.cl.out")" "$(head -c 300 "$EQ/$1.cl.err")"; }
+eq_row() { # eq_row <cell-id> <verdict token> -> the program's stdout names validate-probe.sh under that token, exit 0
+  [ "$(cat "$EQ/$1.cl.rc")" = 0 ] && grep -qE "^$2[[:space:]]+validate-probe\.sh" "$EQ/$1.cl.out"
+}
+echo "== cli cells"
+if eqv cli-ok 2 2 && eq_row cli-ok SELF-UPDATE-OK; then
+  ok "cli-ok: the program answers an equal-codes pull OK exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-ok: the program and the in-process call differ, or the outcome is not an OK row ($(eq_twin cli-ok))"; fi
+if eqv cli-defer 0 1 && eq_row cli-defer SELF-UPDATE-DEFER; then
+  ok "cli-defer: the program DEFERS a newly failing script exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-defer: the program and the in-process call differ, or the outcome is not a DEFER row ($(eq_twin cli-defer))"; fi
+if eqv cli-undecided 2 1 && eq_row cli-undecided SELF-UPDATE-UNDECIDED; then
+  ok "cli-undecided: the program answers disagreeing non-zero codes UNDECIDED exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-undecided: the program and the in-process call differ, or the outcome is not an UNDECIDED row ($(eq_twin cli-undecided))"; fi
+# rc_tok <cell-id> -> the verdict token for validate-probe.sh in that cell's in-process output, read as rcpair reads it
+rc_tok() {
+  cat "$EQ/$1.ip.out" "$EQ/$1.ip.err" | grep -oE 'SELF-UPDATE-(OK|DEFER|UNDECIDED)[[:space:]]+validate-probe\.sh' | head -1 \
+    | awk '{print $1}'
+}
+
 # rcpair <cur-rc> <new-rc> -> the gate's verdict token for validate-probe.sh, from one in-process call of sug_main
 rcpair() {
   rc_setup "$1" "$2"
@@ -320,8 +366,8 @@ rcpair() {
     | awk '{print $1}'
 }
 
-RC_22="$(rcpair 2 2)"; RC_01="$(rcpair 0 1)"; RC_02="$(rcpair 0 2)"; RC_11="$(rcpair 1 1)"
-RC_33="$(rcpair 3 3)"; RC_21="$(rcpair 2 1)"; RC_10="$(rcpair 1 0)"
+RC_22="$(rc_tok cli-ok)"; RC_01="$(rc_tok cli-defer)"; RC_02="$(rcpair 0 2)"; RC_11="$(rcpair 1 1)"
+RC_33="$(rcpair 3 3)"; RC_21="$(rc_tok cli-undecided)"; RC_10="$(rcpair 1 0)"
 if [ -z "$RC_22$RC_01$RC_02$RC_11$RC_33$RC_21$RC_10" ]; then
   bad "rc-pair harness produced no verdicts at all — the table below would be seven silent passes"
 else
@@ -406,41 +452,7 @@ fi
 # exported to both sides because the record's name and header carry a clock stamp that stderr prints (`record: <path>`):
 # without it the two runs could never match. A cell also asserts its own outcome (a positive conjunct, so two runs that
 # both printed nothing cannot read as equivalent), and the passing and refusing cells must differ.
-EQ="$WORK/eq"; mkdir -p "$EQ"
-eqv() { # eqv <cell-id> <cur-rc> <new-rc> -- or `eqv <cell-id> usage` -> $EQ/<id>.{ip,cl}.{out,err,rc}
-  local id="$1"
-  date() { case "$*" in *%Y%m%d*) echo 20260101T000000Z ;; *) echo 2026-01-01T00:00:00Z ;; esac; }
-  export -f date
-  if [ "$2" = usage ]; then
-    fx_inproc "$GATE"
-    ( sug_main "$FLAG" --safe-stop ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
-    FXCELL="$id" bash "$GATE" "$FLAG" --safe-stop > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
-  else
-    rc_setup "$2" "$3"
-    rm -rf "$RCD/consumer/_bmad-output"
-    fx_inproc "$GATE"
-    ( sug_main "$FLAG" "$RCD/dist" "$RC_BASE" "$RC_T" "$RCD/consumer" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
-    rm -rf "$RCD/consumer/_bmad-output"
-    FXCELL="$id" bash "$GATE" "$FLAG" "$RCD/dist" "$RC_BASE" "$RC_T" "$RCD/consumer" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
-  fi
-  unset -f date
-  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
-}
-eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
-  "$(head -c 300 "$EQ/$1.ip.out")" "$(head -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -c 300 "$EQ/$1.cl.out")" "$(head -c 300 "$EQ/$1.cl.err")"; }
-eq_row() { # eq_row <cell-id> <verdict token> -> the program's stdout names validate-probe.sh under that token, exit 0
-  [ "$(cat "$EQ/$1.cl.rc")" = 0 ] && grep -qE "^$2[[:space:]]+validate-probe\.sh" "$EQ/$1.cl.out"
-}
-echo "== cli cells"
-if eqv cli-ok 2 2 && eq_row cli-ok SELF-UPDATE-OK; then
-  ok "cli-ok: the program answers an equal-codes pull OK exactly as the in-process call does (stdout, stderr, exit 0)"
-else bad "cli-ok: the program and the in-process call differ, or the outcome is not an OK row ($(eq_twin cli-ok))"; fi
-if eqv cli-defer 0 1 && eq_row cli-defer SELF-UPDATE-DEFER; then
-  ok "cli-defer: the program DEFERS a newly failing script exactly as the in-process call does (stdout, stderr, exit 0)"
-else bad "cli-defer: the program and the in-process call differ, or the outcome is not a DEFER row ($(eq_twin cli-defer))"; fi
-if eqv cli-undecided 2 1 && eq_row cli-undecided SELF-UPDATE-UNDECIDED; then
-  ok "cli-undecided: the program answers disagreeing non-zero codes UNDECIDED exactly as the in-process call does (stdout, stderr, exit 0)"
-else bad "cli-undecided: the program and the in-process call differ, or the outcome is not an UNDECIDED row ($(eq_twin cli-undecided))"; fi
+echo "== cli cells (the OK, DEFER and UNDECIDED cells run above, beside the rc table they share a state with)"
 if eqv cli-usage usage && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
    && grep -q 'applies to a classify run only' "$EQ/cli-usage.cl.err"; then
   ok "cli-usage: the program refuses --no-safe-stop-advice --safe-stop exactly as the in-process call does (stdout, stderr, exit 2)"

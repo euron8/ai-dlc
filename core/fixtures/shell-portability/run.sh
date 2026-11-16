@@ -8,10 +8,22 @@
 # run and a scanner whose patterns stopped matching anything produce the identical line, so
 # the arms are proven here or not at all.
 #
-# `m*` seeds an OFFENDER into a sandbox corpus and asserts the shipped validator reports it, and
-# only the arm it names. `n*` seeds a measured near-miss (usually the fix an arm prescribes) and
-# asserts silence. `m8`/`m10*` empty one corpus and assert the refusal names that corpus. m14 runs
-# /bin/bash 3.2 as the oracle for S13. Each seed is one grammar the arm must spell.
+# RUN STRUCTURE. Every arm of the validator is per-file independent (S1-S11 grep one line at a
+# time; S12 and S13 reset at the first line of each file; S14 parses each selected file alone; S15
+# keys a site on its file and line text), so the seeds below are NOT one world each. They are ONE
+# merged world, every seed its own file under a unique path the arm under test scans, and the
+# validator runs ONCE over it. Each assertion reads that one output through a per-arm, per-file hit
+# parser (`mw_hits`): a block opens at `^FAIL: <arm>:`, its rows are `^    <file>:`, and the next
+# `^FAIL:` ends it. The only couplings between files are the dead-corpus gate and the refusal exit,
+# so the runs that exercise those stay SOLO: the control, m8, m10, m10b, m10c and both r1 runs. x7
+# stays solo too: its subject is the CALLER's locale, which the merged run does not vary.
+#
+# `m*` seeds an OFFENDER file and asserts the shipped validator reports it, and only the arm it
+# names. `n*` seeds a measured near-miss (usually the fix an arm prescribes) and asserts silence:
+# no block names its file AND its offender twin's file is in that arm's block in the same run, so a
+# validator that printed nothing fails every near-miss. `m8`/`m10*` empty one corpus and assert the
+# refusal names that corpus. m14 runs /bin/bash 3.2 as the oracle for S13. Each seed is one
+# grammar the arm must spell.
 #
 #   control  a clean seed                                        -> must PASS
 #   m1  S1  `sed -i 's/x/y/'` with no suffix and no ''            -> must FAIL
@@ -46,7 +58,7 @@
 #           script (BL-917)                                       -> must FAIL
 #   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
-#   m7b S7  plain and escaped-quote replacement backrefs          -> must FAIL, 2 counted lines
+#   m7b S7  plain and escaped-quote replacement backrefs          -> must FAIL, 3 counted lines
 #   n8  S7  octal escape past the replacement string (BL-681)     -> must NOT fail
 #   n3      braced, `HEAD:`-literal, `"${SHA}:` and the braced
 #           ESCAPED-quote rev-paths                             -> must NOT fail
@@ -116,25 +128,6 @@ seed() { # seed <dir> [extra-line...]
   ( cd "$d" && git init -q . && git add -A >/dev/null 2>&1 )
 }
 
-# S11's corpus is `core/fixtures/*/*.sh`, which neither `seed` (writes `scripts/`) nor
-# `seed_core` (writes `core/<rel>` at any depth, but the caller would have to spell the
-# fixture path) targets by name. Stdin, for `seed_shell`'s reason: every S11 seed carries
-# double quotes, a `$` and often a `||`, and each level of argument escaping is a chance to
-# seed a shape nobody meant.
-seed_fixture() { # seed_fixture <dir> <fixture-name> <file>   (subject lines on stdin)
-  local d="$1" name="$2" file="$3"
-  mkdir -p "$d/core/fixtures/$name"
-  { printf '%s\n' '#!/usr/bin/env bash'; cat; } > "$d/core/fixtures/$name/$file"
-  ( cd "$d" && git add -A >/dev/null 2>&1 )
-}
-
-seed_core() { # seed_core <dir> <path-under-core> <line...>
-  local d="$1" rel="$2"; shift 2
-  mkdir -p "$(dirname "$d/core/$rel")"
-  printf '%s\n' "$@" > "$d/core/$rel"
-  ( cd "$d" && git add -A >/dev/null 2>&1 )
-}
-
 # THE S10 SEEDS COME IN ON STDIN, NOT AS ARGUMENTS, AND THAT IS NOT STYLE. Every census shape
 # S10 was written against carries single quotes, double quotes and a `$` at once, and one of
 # them carries all three plus an em-dash. Passed as a `seed` argument each needs three levels
@@ -148,12 +141,39 @@ seed_shell() { # seed_shell <dir>   (subject lines on stdin)
   ( cd "$d" && git add -A >/dev/null 2>&1 )
 }
 
+# The merged world's writers. Each sets `F_<name>` to the file's path, and every assertion reads
+# that variable: under `set -u` a misspelt name is an unbound-variable error, never a silent
+# assertion about a file that does not exist. A seed's file path is unique to it and lies in the
+# corpus of the arm it exercises: `*.sh` anywhere is SHELL, `core/*` is CORE, `core/*` minus `.sh`
+# is CORE TEXT, `core/fixtures/*/*.sh` is FIXTURE shell (S11's whole corpus).
+MW="$TMP/merged"
+mw_reg() { # mw_reg <name> <relpath>
+  eval "F_$1=\$2"
+  mkdir -p "$(dirname "$MW/$2")"
+}
+mw_sh() { # mw_sh <name> <relpath> <line...>     (shebang, then the lines)
+  local rel="$2"
+  mw_reg "$1" "$rel"
+  shift 2
+  { printf '%s\n' '#!/usr/bin/env bash'; printf '%s\n' "$@"; } > "$MW/$rel"
+}
+mw_sh_in() { # mw_sh_in <name> <relpath>         (shebang, then stdin verbatim)
+  mw_reg "$1" "$2"
+  { printf '%s\n' '#!/usr/bin/env bash'; cat; } > "$MW/$2"
+}
+mw_txt() { # mw_txt <name> <relpath> <line...>   (the lines only, no shebang)
+  local rel="$2"
+  mw_reg "$1" "$rel"
+  shift 2
+  printf '%s\n' "$@" > "$MW/$rel"
+}
+
 # `</dev/null` IS LOAD-BEARING, NOT TIDINESS. `scan` ends in `grep -HnE "$pat" "$@"`, and with
 # an empty file list grep reads STDIN -- so a subject whose corpus is empty blocks forever
 # instead of reporting. Under the suite's 16-way pool stdin is a live descriptor, so the hang is
 # real there and invisible in an interactive run, which happens to get EOF.
 run_v() { ( cd "$1" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null ); }
-# The validator's output over a world, run ONCE per distinct world and cached on disk.
+# The validator's output over a solo world, run ONCE per distinct world and cached on disk.
 pre_out() { # pre_out <dir>
   local f
   f="$PRE_DIR/$(basename "$1").out"
@@ -174,87 +194,7 @@ else
   exit 1
 fi
 
-arm_check() { # arm_check <name> <dir> <arm-id>
-  local n="$1" d="$2" arm="$3" out nfail
-  out="$(pre_out "$d")"
-  if [ -z "$out" ]; then bad "$n -- validator produced NO output; the harness died"; return; fi
-  nfail="$(grep -c '^FAIL:' <<<"$out")"
-  if ! grep -q "^FAIL: ${arm}:" <<<"$out"; then
-    bad "$n -- ${arm} did not fire on its own violation"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; return
-  fi
-  if [ "$nfail" -ne 1 ]; then
-    bad "$n -- $nfail FAIL lines; a seed must fail ONLY its own arm, so the arms are entangled"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; return
-  fi
-  ok "$n -- fired on its own arm, and only its own"
-}
-
-# arm_check with the COUNT asserted. `arm_check` is satisfied by one hit line, so a pattern
-# that found one of five seeded shapes passes it identically to one that found all five --
-# which is exactly the failure S10's first cut shipped (12 of 23 census lines, reported as a
-# pass on the other eleven). Every m11 shape is a distinct grammar from the census, so the
-# number is the assertion and a presence is not.
-count_check() { # count_check <name> <dir> <arm-id> <expected-hit-lines>
-  local n="$1" d="$2" arm="$3" want="$4" out nfail nhits
-  out="$(pre_out "$d")"
-  if [ -z "$out" ]; then bad "$n -- validator produced NO output; the harness died"; return; fi
-  nfail="$(grep -c '^FAIL:' <<<"$out")" || nfail=0
-  nhits="$(grep -c '^    ' <<<"$out")" || nhits=0
-  if ! grep -q "^FAIL: ${arm}:" <<<"$out"; then
-    bad "$n -- ${arm} did not fire on its own violation"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -6; return
-  fi
-  if [ "$nfail" -ne 1 ]; then
-    bad "$n -- $nfail FAIL lines; a seed must fail ONLY its own arm, so the arms are entangled"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -6; return
-  fi
-  if [ "$nhits" -ne "$want" ]; then
-    bad "$n -- ${arm} reported $nhits offending line(s), not the $want seeded. A pattern that"
-    note "               spells only some of its subject's grammars scores the rest as non-instances."
-    printf '%s\n' "$out" | sed 's/^/      /' | head -10; return
-  fi
-  ok "$n -- fired on its own arm, and only its own, on all $want seeded line(s)"
-}
-
-seed "$TMP/m1" "sed -i 's/x/y/' f"                            ; arm_check "m1 S1 sed -i bare"        "$TMP/m1" S1
-seed "$TMP/m2" "mapfile -t arr < f"                           ; arm_check "m2 S2 mapfile"            "$TMP/m2" S2
-seed "$TMP/m3" "declare -A map"                               ; arm_check "m3 S3 declare -A"         "$TMP/m3" S3
-seed "$TMP/m4" "setsid sleep 1"                               ; arm_check "m4 S4 setsid"             "$TMP/m4" S4
-seed "$TMP/m5" "grep -E 'a\\sb' f"                            ; arm_check "m5 S5 backslash-s grep"   "$TMP/m5" S5
-seed "$TMP/m6" "sed -E 's/a\\sb/c/' f"                        ; arm_check "m6 S6 backslash-s sed"    "$TMP/m6" S6
-seed "$TMP/m7" "awk '{ gsub(/(a)b/, \"\\1x\") }' f"           ; arm_check "m7 S7 awk backreference"   "$TMP/m7" S7
-
-# m9 -- S8. The offender is in a `.md`, which is where the sites that motivated the arm live:
-# the text a human copies out of a runbook is not usually in a script.
-seed "$TMP/m9"
-seed_core "$TMP/m9" skills/pull.md \
-  'Recover the template from the distribution:' \
-  '' \
-  '    t=$(mktemp); git -C <dist> show <theirs>:templates/settings.json.template > "$t"'
-arm_check "m9 S8 unquoted rev-path" "$TMP/m9" S8
-
-# m11 -- S10. FIVE SEEDS AND NOT ONE, because S10's subject is five different grammars and its
-# first cut could spell only some of them. Every line below is a VERBATIM census shape from the
-# tree S10 was measured on, not a shape derived from what the pattern accepts:
-#
-#   1  an `awk` `sub()` whose class is the `[--...-]` separator run   (relabel-extension-checks.sh)
-#   2  a `sed -E` stripping the `[.--]` heading terminator            (validate-layer-entries.sh)
-#   3  a `grep -nE` over a gate-log row, class `[|--...-]`            (validate-gate-manifest.sh)
-#   4  a `grep -oE` whose NEGATED class `[^--]*` spans to an em-dash  (layer-reference-resolution)
-#   5  the `#{2,4}` heading grammar bound to a variable               (validate-layer-entries.sh)
-#
-# Line 5 is the one the first cut's `[^#]*` context span could not cross; the other four shapes
-# carry no `#`, so the arm reads a COUNT and not a presence.
-seed_shell "$TMP/m11" <<'M11EOF'
-awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
-  cid="$(printf '%s' "$h" | sed -E 's/[[:space:]]*[.—]$//')"
-  ROW="$(grep -nE '^\|[[:space:]]*(\[core\][[:space:]]*)?14[[:space:]]*[|—-]' "$GATE_LOG" | tail -1)"
-  apf="$(grep -oE "SECTION ID OUT OF BAND[^—]*— '[^']*' allocates" <<<"$out" | head -1)"
-CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
-M11EOF
-count_check "m11 S10 multibyte bracket class" "$TMP/m11" S10 5
-
+# --- the solo worlds: the dead-corpus gate, the caller's locale and the refusal exit ----------
 # m8 and m10 -- the corpora emptied, one each. An arm set that scans nothing passes every
 # assertion it never made, and the two corpora are counted SEPARATELY precisely so a dead
 # `core/*` listing cannot hide behind a live `*.sh` one. One combined arm here would be
@@ -320,87 +260,20 @@ seed "$TMP/m10b"
 empty_fixture "$TMP/m10b"
 empty_check "m10b" "$TMP/m10b" "the FIXTURE shell corpus (both wider corpora still live)" "FIXTURE shell"
 
-# m12 -- S11. The offender is a fixture SEED entering a sandbox it just built and then running
-# repo-mutating git, which is the shape the arm was written against: if the `cd` fails the
-# script keeps going and `git init` lands in the PROCESS working directory. The seed lives
-# under `core/fixtures/*/`, because that is S11's whole corpus and a `scripts/` copy of the
-# same line is structurally invisible to it.
-seed "$TMP/m12"
-seed_fixture "$TMP/m12" some-unit seed.sh <<'M12EOF'
-WORK="$(mktemp -d)"
-cd "$WORK"
-git init -q .
-M12EOF
-arm_check "m12 S11 unguarded cd in a fixture script" "$TMP/m12" S11
-
-# m12b -- THE `set -e` SEED: the arm's "does not acquit on set -e" claim needs a seed carrying a
-# `set -e` line. m12b is m12's seed plus `set -euo pipefail`.
-seed "$TMP/m12b"
-seed_fixture "$TMP/m12b" strict-unit seed.sh <<'M12BEOF'
-set -euo pipefail
-WORK="$(mktemp -d)"
-cd "$WORK"
-git init -q .
-M12BEOF
-arm_check "m12b S11 unguarded cd under set -euo pipefail" "$TMP/m12b" S11
-
-# m12c -- D1: THE SKIP MUST NOT REACH PAST A `;`. The first cut's skip was
-# `cd[[:space:]].*(\|\||&&|\\$)`, whose `.*` runs to end of line, so ANY guard token anywhere
-# past the `cd` acquitted it -- including one belonging to a different command, and including
-# one inside a STRING. Four offenders, every one ACQUITTED by the shipped grammar when measured:
-# the arm's own subject (`git init` past the semicolon), an unrelated `||`, a trailing backslash
-# on a following command, and a `&&` inside a quoted echo. All four are seeded together and the
-# COUNT is asserted, because a pattern that spells one of the four passes a presence check
-# identically to one that spells all four.
-seed "$TMP/m12c"
-seed_fixture "$TMP/m12c" semi-unit seed.sh <<'M12CEOF'
-cd "$W"; git init . && git add -A
-cd "$W"; [ -d x ] || mkdir x
-cd "$W"; git init . \
-cd "$W"; echo "a && b"
-M12CEOF
-count_check "m12c S11 guard token past a semicolon" "$TMP/m12c" S11 4
-
-# --- seeds whose verdict the SHIPPED validator must give: offenders reported by their own arm,
-# near-misses silent. Cache-sharing worlds (x4/x11/x20 on m10*, x5 on m11, x12 on m12b, x13 on m12c,
-# x21 on n8, x23 on m15, x28 on m16) are asserted by those m/n arms.
-silent_check() { # silent_check <label> <dir>
-  local n="$1" d="$2" out
-  out="$(pre_out "$d")"
-  if grep -q "^validate-shell-portability: PASS" <<<"$out"; then
-    ok "$n"
-  else
-    bad "$n -- the shipped validator reported this near-miss"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -6
-  fi
+# m10c -- the CORE TEXT corpus emptied. `doc` is `core/*` minus `*.sh`, a SUBSET of `instr`, so the
+# one world where ONLY its condition fires is a `core/` holding shell files and nothing else:
+# remove the clean `.md`, keep the fixture seed. `instr` and `fixture` both stay live.
+empty_doc() { # empty_doc <dir>   -- every non-`.sh` file under `core/`; the `.sh` ones stay
+  rm -f "$1/core/skills/clean.md"
+  ( cd "$1" && git rm -q --cached core/skills/clean.md >/dev/null 2>&1 )
 }
+seed "$TMP/m10c"
+empty_doc "$TMP/m10c"
+empty_check "m10c" "$TMP/m10c" "the CORE TEXT corpus (core and fixture shell still live)" "CORE TEXT"
 
-seed "$TMP/x1"
-seed_core "$TMP/x1" skills/pull.md \
-  '    git -C <dist> show <theirs>:templates/settings.json.template > "$t"'
-arm_check "x1 S8 unquoted rev-path in a .md" "$TMP/x1" S8
-
-seed "$TMP/x2"
-seed_core "$TMP/x2" scripts/pull.sh \
-  '#!/usr/bin/env bash' \
-  '#   Recover with: git -C <dist> show <theirs>:templates/settings.json.template > "$t"' \
-  'echo done'
-arm_check "x2 S8 rev-path in a comment of a core/*.sh is reported" "$TMP/x2" S8
-
-seed "$TMP/x3"
-seed_core "$TMP/x3" skills/pull.md \
-  'Recover the template from the distribution:' \
-  '' \
-  '    t=$(mktemp); git -C <dist> \' \
-  '      show <theirs>:templates/settings.json.template > "$t"'
-arm_check "x3 S8 wrapped rev-path rendering is reported" "$TMP/x3" S8
-
-seed_shell "$TMP/x6" <<'X6EOF'
-sed -i.bak 's|^SECTION_RE = re.compile(r".*")$|SECTION_RE = re.compile(r"^## Sprint ([0-9]+) [—\-]+ (.+)")|' "$MUT" && rm -f "$MUT.bak"
-X6EOF
-silent_check "x6 S10 python re.compile line inside a sed replacement is silent under the shipped validator" "$TMP/x6"
-
-# x7 -- the shipped validator under a UTF-8 locale still reports S10's corpus finding.
+# x7 -- the shipped validator under a UTF-8 locale still reports S10's corpus finding. SOLO: the
+# subject is the caller's locale, which the one merged run does not vary. The validator pins
+# `LC_ALL=C` for its own scan, so what this world holds is that the pin overrides the caller.
 UTF8_LOCALE=""
 _locales="$(locale -a 2>/dev/null)"
 for _l in en_US.UTF-8 C.UTF-8 en_GB.UTF-8; do
@@ -422,60 +295,177 @@ X7EOF
   fi
 fi
 
-seed_shell "$TMP/x8" <<'X8EOF'
+# r1 -- an awk arm that cannot OPEN a listed file refuses (exit 2), never PASS. BSD awk abandons
+# the rest of its file list at an unopenable one, so a tracked file deleted from the worktree
+# made S12 and S13 report PASS over a partial corpus. Control first: the same tree, file present,
+# PASSES -- so the refusal below is the deletion and not the seed.
+r1_run() { ( cd "$1" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null; echo "rc=$?" ); }
+seed "$TMP/r1"
+printf '%s\n' '#!/usr/bin/env bash' 'echo listed' > "$TMP/r1/scripts/a0.sh"
+( cd "$TMP/r1" && git add -A >/dev/null 2>&1 )
+r1_ctl="$(r1_run "$TMP/r1")"
+rm "$TMP/r1/scripts/a0.sh"
+r1_out="$(r1_run "$TMP/r1")"
+r1_ok=1
+grep -q '^validate-shell-portability: PASS' <<<"$r1_ctl" && grep -qx 'rc=0' <<<"$r1_ctl" || r1_ok=0
+grep -qx 'rc=2' <<<"$r1_out" || r1_ok=0
+grep -q '^validate-shell-portability: PASS' <<<"$r1_out" && r1_ok=0
+grep -q '^validate-shell-portability: REFUSED' <<<"$r1_out" || r1_ok=0
+for r1_a in S12 S13 S14; do
+  grep -q "^REFUSED: ${r1_a}: .*unopenable: scripts/a0.sh" <<<"$r1_out" || r1_ok=0
+done
+if [ "$r1_ok" -ne 1 ]; then
+  bad "r1 unopenable listed file -- control PASS rc 0 and refusal rc 2 naming S12, S13 and S14 and scripts/a0.sh were not both seen"
+  printf '%s\n' "$r1_ctl" "$r1_out" | sed 's/^/      /' | head -8
+else
+  ok "r1 unopenable listed file -- refused rc 2 naming S12, S13 and S14 (control PASS rc 0)"
+fi
+
+# --- THE MERGED WORLD: every seed its own file, one validator run ---------------------------
+seed "$MW"
+# S15's merged world: the clean `s15-step` (one listed site, the control) plus one step script per
+# S15 seed, each carrying the listed site and its own allowlist row, so its only NEW row is the
+# seeded one. m16 appends an UNLISTED tree-path `-x` test to the script the hook STEPS, so the seed
+# derivation, the closure and the grammar must all hold to reach it. x29 duplicates the listed site.
+printf '%s\n' 'step "s15" \' '  bash scripts/s15-step' \
+  'step "s15-m16" \' '  bash scripts/w-s15-m16' \
+  'step "s15-x29" \' '  bash scripts/w-s15-x29' 'PRESUITE_DONE=1' > "$MW/.githooks/pre-push"
+mw_txt m16 scripts/w-s15-m16 '#!/usr/bin/env bash' '[ -s "$WORK/listed" ] || exit 2' '[ -x docs/x.sh ] || exit 1'
+mw_txt x29 scripts/w-s15-x29 '#!/usr/bin/env bash' '[ -s "$WORK/listed" ] || exit 2' '[ -s "$WORK/listed" ] || exit 2'
+printf 'scripts/w-s15-m16\t[ -s "$WORK/listed" ] || exit 2\tscratch: the seed mktemp dir\n' >> "$MW/scripts/presuite-metadata-allowlist.txt"
+printf 'scripts/w-s15-x29\t[ -s "$WORK/listed" ] || exit 2\tscratch: the seed mktemp dir\n' >> "$MW/scripts/presuite-metadata-allowlist.txt"
+
+mw_sh m1 scripts/w-m1.sh "sed -i 's/x/y/' f"
+mw_sh m2 scripts/w-m2.sh "mapfile -t arr < f"
+mw_sh m3 scripts/w-m3.sh "declare -A map"
+mw_sh m4 scripts/w-m4.sh "setsid sleep 1"
+mw_sh m5 scripts/w-m5.sh "grep -E 'a\\sb' f"
+mw_sh m6 scripts/w-m6.sh "sed -E 's/a\\sb/c/' f"
+mw_sh m7 scripts/w-m7.sh "awk '{ gsub(/(a)b/, \"\\1x\") }' f"
+
+# m9 -- S8. The offender is in a `.md`, which is where the sites that motivated the arm live:
+# the text a human copies out of a runbook is not usually in a script.
+mw_txt m9 core/skills/w-m9.md \
+  'Recover the template from the distribution:' \
+  '' \
+  '    t=$(mktemp); git -C <dist> show <theirs>:templates/settings.json.template > "$t"'
+
+# m11 -- S10. FIVE SEEDS AND NOT ONE, because S10's subject is five different grammars and its
+# first cut could spell only some of them. Every line below is a VERBATIM census shape from the
+# tree S10 was measured on, not a shape derived from what the pattern accepts:
+#
+#   1  an `awk` `sub()` whose class is the `[--...-]` separator run   (relabel-extension-checks.sh)
+#   2  a `sed -E` stripping the `[.--]` heading terminator            (validate-layer-entries.sh)
+#   3  a `grep -nE` over a gate-log row, class `[|--...-]`            (validate-gate-manifest.sh)
+#   4  a `grep -oE` whose NEGATED class `[^--]*` spans to an em-dash  (layer-reference-resolution)
+#   5  the `#{2,4}` heading grammar bound to a variable               (validate-layer-entries.sh)
+#
+# Line 5 is the one the first cut's `[^#]*` context span could not cross; the other four shapes
+# carry no `#`, so the arm reads a COUNT and not a presence.
+mw_sh_in m11 scripts/w-m11.sh <<'M11EOF'
+awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
+  cid="$(printf '%s' "$h" | sed -E 's/[[:space:]]*[.—]$//')"
+  ROW="$(grep -nE '^\|[[:space:]]*(\[core\][[:space:]]*)?14[[:space:]]*[|—-]' "$GATE_LOG" | tail -1)"
+  apf="$(grep -oE "SECTION ID OUT OF BAND[^—]*— '[^']*' allocates" <<<"$out" | head -1)"
+CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
+M11EOF
+
+# m12 -- S11. The offender is a fixture SEED entering a sandbox it just built and then running
+# repo-mutating git, which is the shape the arm was written against: if the `cd` fails the
+# script keeps going and `git init` lands in the PROCESS working directory. The seed lives
+# under `core/fixtures/*/`, because that is S11's whole corpus and a `scripts/` copy of the
+# same line is structurally invisible to it.
+mw_sh_in m12 core/fixtures/w-m12/seed.sh <<'M12EOF'
+WORK="$(mktemp -d)"
+cd "$WORK"
+git init -q .
+M12EOF
+
+# m12b -- THE `set -e` SEED: the arm's "does not acquit on set -e" claim needs a seed carrying a
+# `set -e` line. m12b is m12's seed plus `set -euo pipefail`.
+mw_sh_in m12b core/fixtures/w-m12b/seed.sh <<'M12BEOF'
+set -euo pipefail
+WORK="$(mktemp -d)"
+cd "$WORK"
+git init -q .
+M12BEOF
+
+# m12c -- D1: THE SKIP MUST NOT REACH PAST A `;`. The first cut's skip was
+# `cd[[:space:]].*(\|\||&&|\\$)`, whose `.*` runs to end of line, so ANY guard token anywhere
+# past the `cd` acquitted it -- including one belonging to a different command, and including
+# one inside a STRING. Four offenders, every one ACQUITTED by the shipped grammar when measured:
+# the arm's own subject (`git init` past the semicolon), an unrelated `||`, a trailing backslash
+# on a following command, and a `&&` inside a quoted echo. All four are seeded together and the
+# COUNT is asserted, because a pattern that spells one of the four passes a presence check
+# identically to one that spells all four.
+mw_sh_in m12c core/fixtures/w-m12c/seed.sh <<'M12CEOF'
+cd "$W"; git init . && git add -A
+cd "$W"; [ -d x ] || mkdir x
+cd "$W"; git init . \
+cd "$W"; echo "a && b"
+M12CEOF
+
+# --- seeds whose verdict the SHIPPED validator must give: offenders reported by their own arm,
+# near-misses silent. (x4/x11/x20 -- the old cache-sharing worlds on m10*, x5 on m11, x12 on m12b,
+# x13 on m12c, x21 on n8, x23 on m15 and x28 on m16 -- are asserted by those m/n arms.)
+mw_txt x1 core/skills/w-x1.md \
+  '    git -C <dist> show <theirs>:templates/settings.json.template > "$t"'
+
+mw_txt x2 core/scripts/w-x2.sh \
+  '#!/usr/bin/env bash' \
+  '#   Recover with: git -C <dist> show <theirs>:templates/settings.json.template > "$t"' \
+  'echo done'
+
+mw_txt x3 core/skills/w-x3.md \
+  'Recover the template from the distribution:' \
+  '' \
+  '    t=$(mktemp); git -C <dist> \' \
+  '      show <theirs>:templates/settings.json.template > "$t"'
+
+mw_sh_in x6 scripts/w-x6.sh <<'X6EOF'
+sed -i.bak 's|^SECTION_RE = re.compile(r".*")$|SECTION_RE = re.compile(r"^## Sprint ([0-9]+) [—\-]+ (.+)")|' "$MUT" && rm -f "$MUT.bak"
+X6EOF
+
+mw_sh_in x8 scripts/w-x8.sh <<'X8EOF'
 note=" [resolved by basename from '$path' — not dist-relative]"
 X8EOF
-silent_check "x8 S10 bracketed prose aside with spaces is silent under the shipped validator" "$TMP/x8"
 
-seed "$TMP/x9" 'WORK="$(mktemp -d)"' 'cd "$WORK"' 'git init -q .'
-silent_check "x9 S11 unguarded cd seeded under scripts/ is silent (outside S11's corpus)" "$TMP/x9"
+mw_sh x9 scripts/w-x9.sh 'WORK="$(mktemp -d)"' 'cd "$WORK"' 'git init -q .'
 
-seed "$TMP/x10"
-seed_fixture "$TMP/x10" paren-unit seed.sh <<'X10EOF'
+mw_sh_in x10 core/fixtures/w-x10/seed.sh <<'X10EOF'
 WORK="$(mktemp -d)"
 ( cd "$WORK"
   git init -q . )
 X10EOF
-arm_check "x10 S11 bare-paren unguarded cd is reported" "$TMP/x10" S11
 
-seed_shell "$TMP/x14" <<'X14EOF'
+mw_sh_in x14 scripts/w-x14.sh <<'X14EOF'
 id=$(grep -m1 -oE '\bID-[0-9]+\b' f)
 [[ $line =~ $id ]] && echo seen
 tok="$(grep -m1 -oE '\bLR-[0-9]+\b' f)"
 [[ $row =~ $tok ]] && echo seen
 X14EOF
-silent_check "x14 S12 command-substitution-valued variable on the right of =~ is silent" "$TMP/x14"
 
-seed_shell "$TMP/x15" <<'X15EOF'
+mw_sh_in x15 scripts/w-x15.sh <<'X15EOF'
 g='\bfoo\b'
 grep -E "$g" f
 echo 'if [[ $x =~ $g ]]; then' > f
 X15EOF
-silent_check "x15 S12 =~ named inside a quoted string is silent" "$TMP/x15"
 
-seed "$TMP/x16"
-seed_core "$TMP/x16" scripts/restore.sh \
+mw_txt x16 core/scripts/w-x16.sh \
   '#!/usr/bin/env bash' \
   'git -C "$DIST" show "$BASE:core/scripts/validate-thing.sh" > "$DIST/core/scripts/validate-thing.sh"'
-silent_check "x16 S8b unbraced rev-path in a bash script under core/ is silent" "$TMP/x16"
 
-seed "$TMP/x17"
-seed_core "$TMP/x17" skills/pull.md \
+mw_txt x17 core/skills/w-x17.md \
   '    git -C "$DIST" show "$THEIRS:core/scripts/validate-thing.sh" > "$t"'
-arm_check "x17 S8b unbraced \$VAR: rev-path in a .md is reported" "$TMP/x17" S8b
 
-seed "$TMP/x18"
-seed_core "$TMP/x18" skills/pull.md \
+mw_txt x18 core/skills/w-x18.md \
   '    git show "$T1:templates/settings.json.template" > "$t"'
-arm_check "x18 S8b variable name carrying a digit is reported" "$TMP/x18" S8b
 
-seed "$TMP/x19"
-seed_core "$TMP/x19" skills/reconcile.md \
+mw_txt x19 core/skills/w-x19.md \
   'theirs = git -C "$DIST" show "$THEIRS:$CORE_PATH"' \
   'docs   = git -C "$DIST" show "$THEIRS:docs/notes.md"'
-silent_check "x19 S8b \$-after-colon and non-modifier-letter forms are silent" "$TMP/x19"
 
-seed_shell "$TMP/x22" <<'X22EOF'
+mw_sh_in x22 scripts/w-x22.sh <<'X22EOF'
 if true; then
   x="$(
     # the scorer's own subshell (bash -c's PPID) is excluded
@@ -483,17 +473,15 @@ if true; then
   )"
 fi
 X22EOF
-arm_check "x22 S13 comment-only apostrophe offender is reported" "$TMP/x22" S13
 
-seed_shell "$TMP/x24" <<'X24EOF'
+mw_sh_in x24 scripts/w-x24.sh <<'X24EOF'
 v="$(cat <<'X'
 a ) here
 X
 )"
 X24EOF
-arm_check "x24 S13 lone ) in a heredoc body inside \$( ) is reported" "$TMP/x24" S13
 
-seed_shell "$TMP/x25" <<'X25EOF'
+mw_sh_in x25 scripts/w-x25.sh <<'X25EOF'
 m=0; k=1
 (( m = 1 << k ))
 y="$(
@@ -501,45 +489,19 @@ y="$(
   echo "$k"
 )"
 X25EOF
-arm_check "x25 S13 bare case pattern after a (( << )) is reported" "$TMP/x25" S13
 
-seed_shell "$TMP/x27" <<'X27EOF'
+mw_sh_in x27 scripts/w-x27.sh <<'X27EOF'
 if true; then
   amutant_arm a "$(amut n 'x "$(p"){y} 1')" z
 fi
 X27EOF
-arm_check "x27 S13 brace-expanded word after an unclosed quoted \$( is reported" "$TMP/x27" S13
-
-seed "$TMP/x29"
-printf '%s\n' '[ -s "$WORK/listed" ] || exit 2' >> "$TMP/x29/scripts/s15-step"
-( cd "$TMP/x29" && git add -A >/dev/null 2>&1 )
-x29_pre="$(pre_out "$TMP/x29")"
-if grep -q "^FAIL: S15:" <<<"$x29_pre" && grep -q 'scripts/s15-step:' <<<"$x29_pre" && [ "$(grep -c '^FAIL:' <<<"$x29_pre")" -eq 1 ]; then
-  ok "x29 S15 duplicated listed site is reported as NEW (S15 alone)"
-else
-  bad "x29 S15 -- the duplicated listed site was not reported as NEW (S15 alone)"
-  printf '%s\n' "$x29_pre" | sed 's/^/      /' | head -6
-fi
 
 # --- negative arms: the measured false positives must stay silent -----------
-seed "$TMP/n1" "sed -i '' 's/x/y/' f" "sed -i.bak 's/x/y/' f && rm -f f.bak"
-if out="$(run_v "$TMP/n1")" && grep -q "PASS" <<<"$out"; then
-  ok "CONTROL n1 -- the portable sed -i pair is NOT reported"
-else
-  bad "n1 -- the correct sed -i form was flagged; the arm fires on its own fix"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -4
-fi
+mw_sh n1 scripts/w-n1.sh "sed -i '' 's/x/y/' f" "sed -i.bak 's/x/y/' f && rm -f f.bak"
 
-seed "$TMP/n2" 'python3 -c "import re; print(re.sub(r\"^(a)$\", r\"\1b\", x))"'
-if out="$(run_v "$TMP/n2")" && grep -q "PASS" <<<"$out"; then
-  ok "CONTROL n2 -- a python re.sub backreference is NOT reported as an awk one"
-else
-  bad "n2 -- python's re.sub was flagged; the language subtraction is broken"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -4
-fi
+mw_sh n2 scripts/w-n2.sh 'python3 -c "import re; print(re.sub(r\"^(a)$\", r\"\1b\", x))"'
 
-seed "$TMP/n3"
-seed_core "$TMP/n3" skills/correct.md \
+mw_txt n3 core/skills/w-n3.md \
   'The correct renderings, none of which is the defect S8 hunts:' \
   '' \
   '    git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"' \
@@ -552,12 +514,6 @@ seed_core "$TMP/n3" skills/correct.md \
   '# and the ESCAPED-quote form BRACED, which m9c seeds unbraced -- the two together pin the' \
   '# escape-aware arm to the braces rather than to the backslash:' \
   '#   say X "run: git show \\"${theirs}:<path>\\" > \\"\$t\\""'
-if out="$(run_v "$TMP/n3")" && grep -q "PASS" <<<"$out"; then
-  ok "CONTROL n3 -- braced, HEAD-literal and \"\$SHA: rev-paths are NOT reported"
-else
-  bad "n3 -- S8 flagged a correct rev-path rendering; the arm fires on its own fix"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -4
-fi
 
 # m9b -- S8's OTHER offender form, and the one this arm shipped as its own prescribed FIX for
 # four releases. `m9` seeds the UNQUOTED rendering; this seeds the QUOTED-but-UNBRACED one.
@@ -571,12 +527,10 @@ fi
 # one character that separates a working paste from a corrupted ref. Without this seed the
 # widening is invisible: `m9`'s unquoted offender fires under the OLD pattern too, so `m9`
 # alone cannot tell the widened arm from the narrow one it replaced.
-seed "$TMP/m9b"
-seed_core "$TMP/m9b" skills/pull.md \
+mw_txt m9b core/skills/w-m9b.md \
   'Recover the template from the distribution:' \
   '' \
   '    t=$(mktemp); git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"'
-arm_check "m9b S8 quoted-but-unbraced rev-path" "$TMP/m9b" S8
 
 # m9c -- the ESCAPED-quote form, and it is the shape that matters most in this class. The other
 # two seeds are text a reader may adapt; this one is a string a tool PRINTS at the moment the
@@ -590,33 +544,18 @@ arm_check "m9b S8 quoted-but-unbraced rev-path" "$TMP/m9b" S8
 # most exposed one in it, and it survived the consumer's ADOPTED-UPSTREAM close of
 # `PC-S333` at v0.425.0. Two verifications passed over a live instance because the grammar
 # could not spell it. That is why the arm is escape-aware rather than quote-aware.
-seed "$TMP/m9c"
-seed_core "$TMP/m9c" scripts/emit.sh \
+mw_txt m9c core/scripts/w-m9c.sh \
   '#!/usr/bin/env bash' \
   'say WORKLIST settings-merge ".claude/settings.json" \' \
   '  "run: git -C <dist> show \"<theirs>:templates/settings.json.template\" > \"\$t\""'
-arm_check "m9c S8 escaped-quote rev-path (a PRINTED remedy)" "$TMP/m9c" S8
 
 # m9d -- S8b. The ref is already a VARIABLE, which S8's `<ref>:` placeholder grammar cannot spell.
 # The seed is the shape the reader produces by dropping the braces from a correct site, in a
 # `.md`, and it carries NO angle bracket, so S8 cannot also fire and the kill is S8b's alone.
-seed "$TMP/m9d"
-seed_core "$TMP/m9d" skills/pull.md \
+mw_txt m9d core/skills/w-m9d.md \
   'Read the incoming copy of the validator:' \
   '' \
   '    git -C "$DIST" show "$THEIRS:core/scripts/validate-thing.sh" > "$t"'
-arm_check "m9d S8b unbraced \$VAR: rev-path in a .md" "$TMP/m9d" S8b
-
-# m10c -- the CORE TEXT corpus emptied. `doc` is `core/*` minus `*.sh`, a SUBSET of `instr`, so the
-# one world where ONLY its condition fires is a `core/` holding shell files and nothing else:
-# remove the clean `.md`, keep the fixture seed. `instr` and `fixture` both stay live.
-empty_doc() { # empty_doc <dir>   -- every non-`.sh` file under `core/`; the `.sh` ones stay
-  rm -f "$1/core/skills/clean.md"
-  ( cd "$1" && git rm -q --cached core/skills/clean.md >/dev/null 2>&1 )
-}
-seed "$TMP/m10c"
-empty_doc "$TMP/m10c"
-empty_check "m10c" "$TMP/m10c" "the CORE TEXT corpus (core and fixture shell still live)" "CORE TEXT"
 
 # n4 -- S10's negatives, one line per acquitting mechanism. Every line here is either the FIX
 # S10 prescribes or one of the three narrowings its header records, and each is acquitted by a
@@ -643,7 +582,7 @@ empty_check "m10c" "$TMP/m10c" "the CORE TEXT corpus (core and fixture shell sti
 # the tracked shell corpus S10_SKIP subtracts ZERO of S10_PAT's hits: all four python sites
 # fail the context test first. They are kept because they are the shapes the arm's header names
 # as its python false-positive set, and a widening of the context span would surface them.
-seed_shell "$TMP/n4" <<'N4EOF'
+mw_sh_in n4 scripts/w-n4.sh <<'N4EOF'
 awk '{ sub(/[[:space:]]*(—|–|-)[[:space:]].*$/, "", s) }' f
 HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+)[[:space:]]*(\.|—)'
   ROW="$(grep -nE '^\|[[:space:]]*(\[core\][[:space:]]*)?14[[:space:]]*(\||—|-)' "$GATE_LOG" | tail -1)"
@@ -655,12 +594,6 @@ ok "prose naming a class in a message ([…]) is a string, not a class"
 note=" [resolved by basename from '$path' — not dist-relative]"
 #   a grep -E '[—–-]' named in a comment is prose, not code
 N4EOF
-if out="$(run_v "$TMP/n4")" && grep -q "PASS" <<<"$out"; then
-  ok "CONTROL n4 -- alternations, python, message prose, a bracketed aside and a comment are NOT reported"
-else
-  bad "n4 -- S10 flagged a correct form; the arm fires on its own fix or on prose"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -8
-fi
 
 # n5 -- S11's negatives, one line per acquitting mechanism. Every line is either the FIX S11
 # prescribes or one of the two narrowings its header records:
@@ -683,8 +616,7 @@ fi
 # separator; `cd "$x" || exit 2; git init .` has a `;` AFTER the guard, which the bound must not
 # read as disqualifying. A narrowing that closed m12c by refusing every line containing a `;`
 # would report this one, and the arm would be flagging its own remedy.
-seed "$TMP/n5"
-seed_fixture "$TMP/n5" guarded-unit seed.sh <<'N5EOF'
+mw_sh_in n5 core/fixtures/w-n5/seed.sh <<'N5EOF'
 cd "$WORK" || exit 2
 cd "$WORK" && git init -q .
 cd "$WORK" || exit 2; git init .
@@ -695,12 +627,6 @@ SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
   && git init -q . )
 #   cd "$WORK" named in a comment is prose, not an unguarded chdir
 N5EOF
-if out="$(run_v "$TMP/n5")" && grep -q "PASS" <<<"$out"; then
-  ok "CONTROL n5 -- guarded cd, subshell-and, a substitution target, SELF_DIR, a continuation and a comment are NOT reported"
-else
-  bad "n5 -- S11 flagged a correct form; the arm fires on its own fix or on prose"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -8
-fi
 
 # m13 -- S12. SIX SEEDS, COUNTED, because S12 is a JOIN and each seed is a different way the two
 # ends meet: an inline escape (1), a double-quoted variable consumed below its assignment (2), a
@@ -708,7 +634,7 @@ fi
 # `${v}` consumer of an UNQUOTED assignment whose `\\<` shell-unescapes to `\<` (4), an escape
 # other than `\b` (5), and one inside an `if` compound (6). Lines carrying only an assignment or
 # only a clean consumer are not counted, so the number is the join and not a line grep.
-seed_shell "$TMP/m13" <<'M13EOF'
+mw_sh_in m13 scripts/w-m13.sh <<'M13EOF'
 [[ $x =~ \bfoo\b ]] && echo 1
 re="\b(foo)\b"
 [[ $x =~ $re ]] && echo 2
@@ -719,18 +645,103 @@ w=^\\<local
 [[ $n =~ ^\d+$ ]] || echo 5
 if [[ "$z" =~ x\sy ]]; then :; fi
 M13EOF
-count_check "m13 S12 GNU escape reaching [[ =~ ]]" "$TMP/m13" S12 6
+
+# n6 -- S12's negatives. Every line is a correct `=~` or a correct `\b`: an anchored inline ERE, a
+# QUOTED literal RHS, a clean variable, a grep count checked by `=~`, a tainted variable that only
+# feeds `grep`, a comment and a string naming `=~`, an EVEN backslash run (a literal backslash,
+# measured to match `a\bc`), a spelled-out word boundary, and the check-15-bypass shape of `=~`
+# inside an awk program.
+mw_sh_in n6 scripts/w-n6.sh <<'N6EOF'
+if [[ $x =~ ^a ]]; then :; fi
+[[ "$x" =~ "a.b" ]] && echo lit
+pat='^[0-9]+$'
+[[ $n =~ $pat ]] || n=0
+n=$(printf %s a | grep -cE "\bfoo\b")
+[[ $n =~ ^[0-9]+$ ]] || n=0
+id=$(grep -m1 -oE '\bID-[0-9]+\b' f)
+[[ $line =~ $id ]] && echo seen
+g='\bfoo\b'
+grep -E "$g" f
+# [[ $x =~ $g ]] named in a comment is prose
+echo "[[ \$x =~ \$g ]] in a string is prose"
+lb='a\\bc'
+[[ $x =~ $lb ]] && echo literal-backslash
+k="(^|[^[:alnum:]_])stub([^[:alnum:]_]|$)"
+[[ $x =~ $k ]] && echo word
+awk '/^      \[\[ \$bl =~ \\\(/ { print }' f
+N6EOF
+
+# n7 -- S8b's negatives in a `.md`, one per acquitting property: the BRACED form (the remedy), a
+# `$`-after-colon form (classify-block's shape), a non-modifier letter (`docs/`), a literal ref,
+# and a markdown `#` heading carrying the braced form, which `keep` scans and must still pass.
+mw_txt n7 core/skills/w-n7.md \
+  '# Reading `git show "${THEIRS}:core/x"` safely' \
+  '' \
+  '    git -C "$DIST" show "${THEIRS}:core/scripts/validate-thing.sh" > "$t"' \
+  '    git -C "$DIST" show "$THEIRS:$CORE_PATH" > "$t"' \
+  '    git -C "$DIST" show "$THEIRS:docs/notes.md" > "$t"' \
+  '    git show HEAD:core/scripts/validate-thing.sh > "$t"'
+
+# m7b / n8 -- S7 is scoped to the REPLACEMENT string (BL-681). The old pattern read a
+# backslash-digit ANYWHERE after the first comma, so an octal escape in a later `print` on a
+# gsub line was reported as a backreference. m7b: a real backreference, plain and inside an
+# escaped-quote replacement -> both counted. n8: the original line, whose `\037` is past the
+# closing quote of `" "` -> silent.
+mw_sh_in m7b scripts/w-m7b.sh <<'M7BEOF'
+awk '{ gsub(/x/, "\\1", s) }' f
+awk '{ gsub(/x/, "a\"\\1", s) }' f
+awk '{ gsub(/a,(b)/, "\\1") }' f
+M7BEOF
+
+mw_sh_in n8 scripts/w-n8.sh <<'N8EOF'
+awk '
+  if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }
+' f
+awk '{ sub(/a/, "x\"", s); print "\037" }' f
+awk '{ sub(/a/, "b", s); printf "x,\037" }' f
+N8EOF
+
+# m15 -- S14's subject, seeded where the gate's own `bash -n` never looks: a FIXTURE script. A
+# heredoc body carrying one apostrophe inside `"$( )"`, which `/bin/bash` 3.2 cannot parse.
+mw_sh_in m15 core/fixtures/w-m15/run.sh <<'M15EOF'
+v="$(cat <<'X'
+it's here
+X
+)"
+echo "$v"
+M15EOF
+
+# n9 -- S14's near-misses, each one property from m15 and each parsed and RUN by 3.2: a balanced
+# apostrophe pair in the identical structure, a backtick substitution carrying the lone apostrophe,
+# and the lone apostrophe in a function's heredoc that the substitution calls (S14's remedy).
+mw_sh_in n9 core/fixtures/w-n9/run.sh <<'N9EOF'
+v="$(cat <<'X'
+it's x's here
+X
+)"
+w="`cat <<'X'
+it's here
+X
+`"
+f() { cat <<'X'
+it's here
+X
+}
+u="$(f)"
+echo "$v $w $u"
+N9EOF
 
 # m14 -- S13, AND THE ORACLE IS BASH, NOT A SECOND GRAMMAR. S13 is a hand-written reading of how
 # /bin/bash 3.2 closes a command substitution, and `bash -n` accepts every shape it hunts, so the
 # only thing that can say the grammar is right is bash running the same text. The ORACLE copy
 # wraps each seed body with stubs for the commands it calls and RUNS it under /bin/bash 3.2: any
 # stderr, or a missing `AFTER` line, is BREAK. The SUBJECT copy goes through the shipped
-# validator: an S13 report is FLAG. The two verdicts must AGREE, and each must equal the seed's
-# declared expectation, so a drift between the grammar and bash is a FAILURE of this fixture
-# rather than a silent miss. `set -n` is NOT the oracle in any placement: as the file's first
-# statement it hides every form (rc 0, empty stderr), and inside the OUTER `$(` it hides every
-# NESTED form -- which is why each form carries a nested BREAK seed below.
+# validator, as its own file in the merged world: an S13 row naming that file is FLAG. The two
+# verdicts must AGREE, and each must equal the seed's declared expectation, so a drift between the
+# grammar and bash is a FAILURE of this fixture rather than a silent miss. `set -n` is NOT the
+# oracle in any placement: as the file's first statement it hides every form (rc 0, empty stderr),
+# and inside the OUTER `$(` it hides every NESTED form -- which is why each form carries a nested
+# BREAK seed below.
 #
 # EVERY BREAK SEED MUST PASS `bash -n` FIRST. The hazard is a construct a parse accepts; a seed
 # `bash -n` rejects is a parse error, outside the class, and the oracle answers NSYN for it, which
@@ -742,7 +753,7 @@ count_check "m13 S12 GNU escape reaching [[ =~ ]]" "$TMP/m13" S12 6
 # The wrapper is `if true; then ... fi` plus a line after, because form (c) was first measured at
 # a top-level `if` and the early close skips the rest of the block.
 S13DIR="$TMP/s13"; mkdir -p "$S13DIR"
-S13_N=0; S13_AGREE=0; S13_BAD=0
+: > "$S13DIR/list"
 s13_oracle() { # s13_oracle <body-file>  -> prints BREAK, ok, or NSYN (bash -n rejects it)
   local f="$S13DIR/oracle.$$.sh" e o
   { echo 'amutant_arm() { :; }'; echo 'amut() { :; }'; echo 'f() { :; }'; echo 'm() { :; }'; echo 'if true; then'
@@ -752,23 +763,14 @@ s13_oracle() { # s13_oracle <body-file>  -> prints BREAK, ok, or NSYN (bash -n r
   o="$(cat "$f.out")"
   if [ -n "$e" ] || ! grep -qx AFTER <<<"$o"; then echo BREAK; else echo ok; fi
 }
-s13_subject() { # s13_subject <name> <body-file>  -> prints FLAG or ok
-  local d="$TMP/s13-$1" out
-  seed_shell "$d" < <(echo 'if true; then'; cat "$2"; echo 'fi')
-  out="$(run_v "$d")"
-  if grep -q '^FAIL: S13:' <<<"$out"; then echo FLAG; else echo ok; fi
-}
+# The seed: the body file, the bash 3.2 oracle's verdict on it now, and the subject's own file in
+# the merged world. The subject's verdict is read from the ONE merged run, after it (s13_eval).
 s13_seed() { # s13_seed <name> <BREAK|ok>   (body on stdin)
-  local n="$1" want="$2" f="$S13DIR/$1.body" o s
+  local n="$1" want="$2" f="$S13DIR/$1.body" o
   cat > "$f"
-  S13_N=$((S13_N + 1))
-  o="$(s13_oracle "$f")"; s="$(s13_subject "$n" "$f")"
-  if { [ "$want" = BREAK ] && [ "$o" = BREAK ] && [ "$s" = FLAG ]; } || { [ "$want" = ok ] && [ "$o" = ok ] && [ "$s" = ok ]; }; then
-    S13_AGREE=$((S13_AGREE + 1))
-  else
-    S13_BAD=$((S13_BAD + 1))
-    bad "m14 $n -- declared $want, bash 3.2 says $o, S13 says $s. The grammar and the shell disagree."
-  fi
+  o="$(s13_oracle "$f")"
+  { printf '%s\n' '#!/usr/bin/env bash'; echo 'if true; then'; cat "$f"; echo 'fi'; } > "$MW/scripts/w-s13-$n.sh"
+  printf '%s\t%s\t%s\n' "$n" "$want" "$o" >> "$S13DIR/list"
 }
 
 # the oracle's own control, before any seed is scored
@@ -951,6 +953,159 @@ X
   v="$(hf)"
   [ "$v" = 'a ) here' ] || echo "WRONG VALUE [$v]" >&2
 EOF
+
+# --- RUN THE VALIDATOR ONCE over the merged world, then read that one output -----------------
+( cd "$MW" && git add -A >/dev/null 2>&1 )
+MW_OUT="$(run_v "$MW")"; MW_RC=$?
+
+# The per-arm, per-file hit parser. A block opens at `^FAIL: <arm>:`, its rows are
+# `^    <file>:`, and the next `^FAIL:` ends it. The arm id is read whole, so S8 and S8b are two
+# arms, and S15 may print several headers. The old global count of `^    ` lines is NOT used: S15's
+# NEW and STALE rows start with four spaces too, and a count over all rows is not a count over one
+# file's rows.
+MW_HITS="$TMP/merged.hits"
+awk '/^FAIL: / { a = $2; sub(/:$/, "", a); next }
+  /^    / && a != "" { f = substr($0, 5); sub(/:.*$/, "", f); print a "\t" f }' <<<"$MW_OUT" > "$MW_HITS"
+hit_n() { awk -F'\t' -v a="$1" -v f="$2" '$1 == a && $2 == f { n++ } END { print n + 0 }' "$MW_HITS"; }       # hit_n <arm> <file>
+other_n() { awk -F'\t' -v a="$1" -v f="$2" '$1 != a && $2 == f { n++ } END { print n + 0 }' "$MW_HITS"; }    # rows naming <file> under any OTHER arm
+file_n() { awk -F'\t' -v f="$1" '$2 == f { n++ } END { print n + 0 }' "$MW_HITS"; }                           # rows naming <file> under ANY arm
+file_arms() { awk -F'\t' -v f="$1" '$2 == f { print $1 }' "$MW_HITS" | sort -u | paste -sd ' ' -; }
+rows_of() { grep -F "    $1:" <<<"$MW_OUT" | sed 's/^/      /' | head -"$2"; }
+
+# run level: the run FAILED (rc 1, not a refusal and not a pass), it printed rows, and the set of
+# arms it reported is exactly the set the seeds exercise. S9 is absent by design: no seed offends it.
+mw_want="$(printf '%s\n' S1 S2 S3 S4 S5 S6 S7 S8 S8b S10 S11 S12 S13 S14 S15 | sort -u | paste -sd ' ' -)"
+mw_got="$(awk '/^FAIL: / { a = $2; sub(/:$/, "", a); print a }' <<<"$MW_OUT" | sort -u | paste -sd ' ' -)"
+mw_nrows="$(grep -c . "$MW_HITS")" || mw_nrows=0
+if [ -z "$MW_OUT" ]; then
+  bad "merged world -- validator produced NO output; the harness died"
+elif [ "$MW_RC" -ne 1 ]; then
+  bad "merged world -- validator exited $MW_RC, not 1: the seeded offenders did not make it a finding run"
+  printf '%s\n' "$MW_OUT" | sed 's/^/      /' | head -6
+elif [ "$mw_got" != "$mw_want" ]; then
+  bad "merged world -- the FAIL headers are [$mw_got], not the seeded arms [$mw_want]"
+elif [ "$mw_nrows" -lt 1 ]; then
+  bad "merged world -- the hit parser read no row from a run that reported findings"
+else
+  ok "merged world -- one run, rc 1, the FAIL headers are exactly the seeded arms ($mw_want), $mw_nrows parsed row(s)"
+fi
+
+# An offender: its file is in its OWN arm's block and in no other arm's block.
+offender() { # offender <label> <arm> <file>
+  local n="$1" arm="$2" f="$3" own oth
+  own="$(hit_n "$arm" "$f")"; oth="$(other_n "$arm" "$f")"
+  if [ "$own" -ge 1 ] && [ "$oth" -eq 0 ]; then
+    ok "$n -- fired on its own arm, and only its own"
+  else
+    bad "$n -- ${arm} named $f in $own row(s) (want 1 or more) and the other arms named it in $oth (want 0: a seed must fail ONLY its own arm; arms: $(file_arms "$f"))"
+    rows_of "$f" 4
+  fi
+}
+# offender with the COUNT asserted. `offender` is satisfied by one hit line, so a pattern
+# that found one of five seeded shapes passes it identically to one that found all five --
+# which is exactly the failure S10's first cut shipped (12 of 23 census lines, reported as a
+# pass on the other eleven). Every m11 shape is a distinct grammar from the census, so the
+# number is the assertion and a presence is not. The count is over THIS file's rows in this arm's
+# block, so a second seed in the same run cannot move it.
+counted() { # counted <label> <arm> <file> <expected-hit-lines>
+  local n="$1" arm="$2" f="$3" want="$4" own oth
+  own="$(hit_n "$arm" "$f")"; oth="$(other_n "$arm" "$f")"
+  if [ "$own" -eq "$want" ] && [ "$oth" -eq 0 ]; then
+    ok "$n -- fired on its own arm, and only its own, on all $want seeded line(s)"
+  else
+    bad "$n -- ${arm} reported $own offending line(s) in $f, not the $want seeded; the other arms named it in $oth (want 0). A pattern"
+    note "               that spells only some of its subject's grammars scores the rest as non-instances."
+    rows_of "$f" 10
+  fi
+}
+# A near-miss: no block names its file, AND its offender twin's file is in the twin arm's block in
+# the same run, so a validator that printed nothing fails here by the second conjunct.
+nearmiss() { # nearmiss <label> <file> <twin-arm> <twin-file>
+  local n="$1" f="$2" ta="$3" tf="$4"
+  if [ ! -f "$MW/$f" ]; then
+    bad "$n -- $f is not in the merged world, so its silence would be about a file that does not exist"
+  elif [ "$(hit_n "$ta" "$tf")" -lt 1 ]; then
+    bad "$n -- its offender twin $tf is NOT in ${ta}'s block in the same run, so a silence here proves nothing"
+  elif [ "$(file_n "$f")" -ne 0 ]; then
+    bad "$n -- the shipped validator reported this near-miss (arms: $(file_arms "$f"))"
+    rows_of "$f" 6
+  else
+    ok "$n -- no arm names $f, and its offender twin ($tf) is in ${ta}'s block in the same run"
+  fi
+}
+
+offender "m1 S1 sed -i bare"        S1 "$F_m1"
+offender "m2 S2 mapfile"            S2 "$F_m2"
+offender "m3 S3 declare -A"         S3 "$F_m3"
+offender "m4 S4 setsid"             S4 "$F_m4"
+offender "m5 S5 backslash-s grep"   S5 "$F_m5"
+offender "m6 S6 backslash-s sed"    S6 "$F_m6"
+offender "m7 S7 awk backreference"  S7 "$F_m7"
+offender "m9 S8 unquoted rev-path" S8 "$F_m9"
+counted "m11 S10 multibyte bracket class" S10 "$F_m11" 5
+offender "m12 S11 unguarded cd in a fixture script" S11 "$F_m12"
+offender "m12b S11 unguarded cd under set -euo pipefail" S11 "$F_m12b"
+counted "m12c S11 guard token past a semicolon" S11 "$F_m12c" 4
+offender "x1 S8 unquoted rev-path in a .md" S8 "$F_x1"
+offender "x2 S8 rev-path in a comment of a core/*.sh is reported" S8 "$F_x2"
+offender "x3 S8 wrapped rev-path rendering is reported" S8 "$F_x3"
+nearmiss "x6 S10 python re.compile line inside a sed replacement is silent under the shipped validator" "$F_x6" S10 "$F_m11"
+nearmiss "x8 S10 bracketed prose aside with spaces is silent under the shipped validator" "$F_x8" S10 "$F_m11"
+nearmiss "x9 S11 unguarded cd seeded under scripts/ is silent (outside S11's corpus)" "$F_x9" S11 "$F_m12"
+offender "x10 S11 bare-paren unguarded cd is reported" S11 "$F_x10"
+nearmiss "x14 S12 command-substitution-valued variable on the right of =~ is silent" "$F_x14" S12 "$F_m13"
+nearmiss "x15 S12 =~ named inside a quoted string is silent" "$F_x15" S12 "$F_m13"
+nearmiss "x16 S8b unbraced rev-path in a bash script under core/ is silent" "$F_x16" S8b "$F_x17"
+offender "x17 S8b unbraced \$VAR: rev-path in a .md is reported" S8b "$F_x17"
+offender "x18 S8b variable name carrying a digit is reported" S8b "$F_x18"
+nearmiss "x19 S8b \$-after-colon and non-modifier-letter forms are silent" "$F_x19" S8b "$F_x17"
+offender "x22 S13 comment-only apostrophe offender is reported" S13 "$F_x22"
+offender "x24 S13 lone ) in a heredoc body inside \$( ) is reported" S13 "$F_x24"
+offender "x25 S13 bare case pattern after a (( << )) is reported" S13 "$F_x25"
+offender "x27 S13 brace-expanded word after an unclosed quoted \$( is reported" S13 "$F_x27"
+offender "x29 S15 duplicated listed site is reported as NEW (S15 alone)" S15 "$F_x29"
+nearmiss "CONTROL n1 -- the portable sed -i pair is NOT reported" "$F_n1" S1 "$F_m1"
+nearmiss "CONTROL n2 -- a python re.sub backreference is NOT reported as an awk one" "$F_n2" S7 "$F_m7"
+nearmiss "CONTROL n3 -- braced, HEAD-literal and \"\$SHA: rev-paths are NOT reported" "$F_n3" S8 "$F_m9"
+offender "m9b S8 quoted-but-unbraced rev-path" S8 "$F_m9b"
+offender "m9c S8 escaped-quote rev-path (a PRINTED remedy)" S8 "$F_m9c"
+offender "m9d S8b unbraced \$VAR: rev-path in a .md" S8b "$F_m9d"
+nearmiss "CONTROL n4 -- alternations, python, message prose, a bracketed aside and a comment are NOT reported" "$F_n4" S10 "$F_m11"
+nearmiss "CONTROL n5 -- guarded cd, subshell-and, a substitution target, SELF_DIR, a continuation and a comment are NOT reported" "$F_n5" S11 "$F_m12"
+counted "m13 S12 GNU escape reaching [[ =~ ]]" S12 "$F_m13" 6
+nearmiss "CONTROL n6 -- a quoted literal, clean variables, grep-only escapes, prose and an even backslash run are NOT reported" "$F_n6" S12 "$F_m13"
+nearmiss "CONTROL n7 -- braced, \$-after-colon, non-modifier-letter and literal-ref rev-paths in a .md are NOT reported" "$F_n7" S8b "$F_m9d"
+counted "m7b S7 replacement backreference, plain, escaped-quote and comma-in-regex (A4)" S7 "$F_m7b" 3
+nearmiss "CONTROL n8 -- an octal escape past the gsub replacement's closing quote is NOT a backreference" "$F_n8" S7 "$F_m7b"
+offender "m15 S14 apostrophe in a heredoc inside \$( )" S14 "$F_m15"
+nearmiss "CONTROL n9 -- a balanced pair, a backtick substitution and a function-held heredoc are NOT reported" "$F_n9" S14 "$F_m15"
+offender "m16 S15 unlisted metadata test in a pre-suite script" S15 "$F_m16"
+
+# The S15 control, in the same run: the clean `scripts/s15-step` (one listed site, one row) is named
+# by no block, while its two siblings are -- so S15 matched a known site and still fired.
+nearmiss "s15 control -- the clean pre-suite step matching its listed site is silent" scripts/s15-step S15 "$F_m16"
+
+# m14 verdicts: bash 3.2 and the validator must AGREE on every seed, each equal to its declared
+# verdict. The subject's verdict is FLAG when its own file is in S13's block, `ok` only when it is
+# NOT and an offender (x22) IS in that block in the same run, and NOTWIN when there is no S13 block
+# to read a silence against -- which no declared verdict matches.
+s13_subject() { # s13_subject <name> -> prints FLAG, ok or NOTWIN
+  local f="scripts/w-s13-$1.sh"
+  if [ "$(hit_n S13 "$f")" -ge 1 ]; then echo FLAG
+  elif [ "$(hit_n S13 "$F_x22")" -ge 1 ]; then echo ok
+  else echo NOTWIN; fi
+}
+S13_N=0; S13_AGREE=0; S13_BAD=0
+while IFS="$(printf '\t')" read -r s13_n s13_want s13_o; do
+  S13_N=$((S13_N + 1))
+  s13_s="$(s13_subject "$s13_n")"
+  if { [ "$s13_want" = BREAK ] && [ "$s13_o" = BREAK ] && [ "$s13_s" = FLAG ]; } || { [ "$s13_want" = ok ] && [ "$s13_o" = ok ] && [ "$s13_s" = ok ]; }; then
+    S13_AGREE=$((S13_AGREE + 1))
+  else
+    S13_BAD=$((S13_BAD + 1))
+    bad "m14 $s13_n -- declared $s13_want, bash 3.2 says $s13_o, S13 says $s13_s. The grammar and the shell disagree."
+  fi
+done < "$S13DIR/list"
 # THE SEED COUNT IS DERIVED from this file's own `s13_seed` call sites, never written: a literal
 # beside a growing seed list went stale once already. The floor guards a grep that matched nothing.
 _s13_decl=$(grep -c '^s13_seed [^ ]* \(BREAK\|ok\) <<' "$0")
@@ -961,149 +1116,4 @@ else
   bad "m14 S13 -- $S13_AGREE of $S13_N seeds agreed (expected $_s13_decl of $_s13_decl declared)"
 fi
 
-# r1 -- an awk arm that cannot OPEN a listed file refuses (exit 2), never PASS. BSD awk abandons
-# the rest of its file list at an unopenable one, so a tracked file deleted from the worktree
-# made S12 and S13 report PASS over a partial corpus. Control first: the same tree, file present,
-# PASSES -- so the refusal below is the deletion and not the seed.
-r1_run() { ( cd "$1" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null; echo "rc=$?" ); }
-seed "$TMP/r1"
-printf '%s\n' '#!/usr/bin/env bash' 'echo listed' > "$TMP/r1/scripts/a0.sh"
-( cd "$TMP/r1" && git add -A >/dev/null 2>&1 )
-r1_ctl="$(r1_run "$TMP/r1")"
-rm "$TMP/r1/scripts/a0.sh"
-r1_out="$(r1_run "$TMP/r1")"
-r1_ok=1
-grep -q '^validate-shell-portability: PASS' <<<"$r1_ctl" && grep -qx 'rc=0' <<<"$r1_ctl" || r1_ok=0
-grep -qx 'rc=2' <<<"$r1_out" || r1_ok=0
-grep -q '^validate-shell-portability: PASS' <<<"$r1_out" && r1_ok=0
-grep -q '^validate-shell-portability: REFUSED' <<<"$r1_out" || r1_ok=0
-for r1_a in S12 S13 S14; do
-  grep -q "^REFUSED: ${r1_a}: .*unopenable: scripts/a0.sh" <<<"$r1_out" || r1_ok=0
-done
-if [ "$r1_ok" -ne 1 ]; then
-  bad "r1 unopenable listed file -- control PASS rc 0 and refusal rc 2 naming S12, S13 and S14 and scripts/a0.sh were not both seen"
-  printf '%s\n' "$r1_ctl" "$r1_out" | sed 's/^/      /' | head -8
-else
-  ok "r1 unopenable listed file -- refused rc 2 naming S12, S13 and S14 (control PASS rc 0)"
-fi
-
-# n6 -- S12's negatives. Every line is a correct `=~` or a correct `\b`: an anchored inline ERE, a
-# QUOTED literal RHS, a clean variable, a grep count checked by `=~`, a tainted variable that only
-# feeds `grep`, a comment and a string naming `=~`, an EVEN backslash run (a literal backslash,
-# measured to match `a\bc`), a spelled-out word boundary, and the check-15-bypass shape of `=~`
-# inside an awk program.
-seed_shell "$TMP/n6" <<'N6EOF'
-if [[ $x =~ ^a ]]; then :; fi
-[[ "$x" =~ "a.b" ]] && echo lit
-pat='^[0-9]+$'
-[[ $n =~ $pat ]] || n=0
-n=$(printf %s a | grep -cE "\bfoo\b")
-[[ $n =~ ^[0-9]+$ ]] || n=0
-id=$(grep -m1 -oE '\bID-[0-9]+\b' f)
-[[ $line =~ $id ]] && echo seen
-g='\bfoo\b'
-grep -E "$g" f
-# [[ $x =~ $g ]] named in a comment is prose
-echo "[[ \$x =~ \$g ]] in a string is prose"
-lb='a\\bc'
-[[ $x =~ $lb ]] && echo literal-backslash
-k="(^|[^[:alnum:]_])stub([^[:alnum:]_]|$)"
-[[ $x =~ $k ]] && echo word
-awk '/^      \[\[ \$bl =~ \\\(/ { print }' f
-N6EOF
-if out="$(run_v "$TMP/n6")" && grep -q "PASS" <<<"$out"; then
-  ok "CONTROL n6 -- a quoted literal, clean variables, grep-only escapes, prose and an even backslash run are NOT reported"
-else
-  bad "n6 -- S12 flagged a correct form; the arm fires on a grep consumer, on prose or on its own fix"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -8
-fi
-
-# n7 -- S8b's negatives in a `.md`, one per acquitting property: the BRACED form (the remedy), a
-# `$`-after-colon form (classify-block's shape), a non-modifier letter (`docs/`), a literal ref,
-# and a markdown `#` heading carrying the braced form, which `keep` scans and must still pass.
-seed "$TMP/n7"
-seed_core "$TMP/n7" skills/correct-vars.md \
-  '# Reading `git show "${THEIRS}:core/x"` safely' \
-  '' \
-  '    git -C "$DIST" show "${THEIRS}:core/scripts/validate-thing.sh" > "$t"' \
-  '    git -C "$DIST" show "$THEIRS:$CORE_PATH" > "$t"' \
-  '    git -C "$DIST" show "$THEIRS:docs/notes.md" > "$t"' \
-  '    git show HEAD:core/scripts/validate-thing.sh > "$t"'
-if out="$(run_v "$TMP/n7")" && grep -q "PASS" <<<"$out"; then
-  ok "CONTROL n7 -- braced, \$-after-colon, non-modifier-letter and literal-ref rev-paths in a .md are NOT reported"
-else
-  bad "n7 -- S8b flagged a correct rev-path; the arm fires on its own fix or on a safe letter"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -8
-fi
-
-# m7b / n8 -- S7 is scoped to the REPLACEMENT string (BL-681). The old pattern read a
-# backslash-digit ANYWHERE after the first comma, so an octal escape in a later `print` on a
-# gsub line was reported as a backreference. m7b: a real backreference, plain and inside an
-# escaped-quote replacement -> both counted. n8: the original line, whose `\037` is past the
-# closing quote of `" "` -> silent.
-seed_shell "$TMP/m7b" <<'M7BEOF'
-awk '{ gsub(/x/, "\\1", s) }' f
-awk '{ gsub(/x/, "a\"\\1", s) }' f
-awk '{ gsub(/a,(b)/, "\\1") }' f
-M7BEOF
-count_check "m7b S7 replacement backreference, plain, escaped-quote and comma-in-regex (A4)" "$TMP/m7b" S7 3
-
-seed_shell "$TMP/n8" <<'N8EOF'
-awk '
-  if (inwin) { gsub(/[ \t]+/, " ", win); print head "\037" win }
-' f
-awk '{ sub(/a/, "x\"", s); print "\037" }' f
-awk '{ sub(/a/, "b", s); printf "x,\037" }' f
-N8EOF
-if out="$(run_v "$TMP/n8")" && grep -q "^validate-shell-portability: PASS" <<<"$out"; then
-  ok "CONTROL n8 -- an octal escape past the gsub replacement's closing quote is NOT a backreference"
-else
-  bad "n8 -- S7 flagged a backslash-digit outside the replacement string"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -6
-fi
-# m15 -- S14's subject, seeded where the gate's own `bash -n` never looks: a FIXTURE script. A
-# heredoc body carrying one apostrophe inside `"$( )"`, which `/bin/bash` 3.2 cannot parse.
-seed "$TMP/m15"
-seed_fixture "$TMP/m15" probe-heredoc run.sh <<'M15EOF'
-v="$(cat <<'X'
-it's here
-X
-)"
-echo "$v"
-M15EOF
-arm_check "m15 S14 apostrophe in a heredoc inside \$( )" "$TMP/m15" S14
-
-# n9 -- S14's near-misses, each one property from m15 and each parsed and RUN by 3.2: a balanced
-# apostrophe pair in the identical structure, a backtick substitution carrying the lone apostrophe,
-# and the lone apostrophe in a function's heredoc that the substitution calls (S14's remedy).
-seed "$TMP/n9"
-seed_fixture "$TMP/n9" probe-heredoc run.sh <<'N9EOF'
-v="$(cat <<'X'
-it's x's here
-X
-)"
-w="`cat <<'X'
-it's here
-X
-`"
-f() { cat <<'X'
-it's here
-X
-}
-u="$(f)"
-echo "$v $w $u"
-N9EOF
-if out="$(run_v "$TMP/n9")" && grep -q "PASS" <<<"$out"; then
-  ok "CONTROL n9 -- a balanced pair, a backtick substitution and a function-held heredoc are NOT reported"
-else
-  bad "n9 -- S14 flagged a form /bin/bash 3.2 parses; the arm fires on its own remedy"
-  printf '%s\n' "$out" | sed 's/^/      /' | head -8
-fi
-
-# m16: S15 over a seeded pre-suite closure. The offender is appended to the script the seed's hook
-# STEPS (scripts/s15-step), so the seed derivation, the closure and the grammar must all hold to reach it.
-seed "$TMP/m16"
-printf '%s\n' '[ -x docs/x.sh ] || exit 1' >> "$TMP/m16/scripts/s15-step"
-( cd "$TMP/m16" && git add -A >/dev/null 2>&1 )
-arm_check "m16 S15 unlisted metadata test in a pre-suite script" "$TMP/m16" S15
 report_end shell-portability

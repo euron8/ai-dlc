@@ -4,4 +4,5 @@
 # <sandbox>/scripts/render-path-mapping.sh.
 4 *
 3 scripts/render-path-mapping.sh
-11 inproc:scripts/render-path-mapping.sh
+# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
+37 inproc:scripts/render-path-mapping.sh

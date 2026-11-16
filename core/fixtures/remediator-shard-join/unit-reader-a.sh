@@ -50,7 +50,7 @@ ua_on() { [ -z "${UA_ONLY:-}" ] && return 0; case " $UA_ONLY " in *" $1 "*) retu
 UA_LC0="${LC_ALL-}"; UA_LCSET="${LC_ALL+1}"
 UA_V0=" $(compgen -v | tr '\n' ' ') "; UA_F0=" $(compgen -A function | tr '\n' ' ') "
 # shellcheck source=/dev/null
-. "$JOIN" || { echo "FIXTURE BROKEN: sourcing $JOIN failed" >&2; exit 2; }
+fx_inproc "$JOIN" && . "$JOIN" || { echo "FIXTURE BROKEN: sourcing $JOIN failed" >&2; exit 2; }
 declare -F join_main >/dev/null || { echo "FIXTURE BROKEN: $JOIN defined no join_main when sourced; nothing was asserted" >&2; exit 2; }
 # The join's own top-level names: what sourcing it added, measured, never hand-listed.
 UA_JV=""; for _ua in $(compgen -v); do case "$UA_V0" in *" $_ua "*) ;; *) UA_JV="$UA_JV $_ua" ;; esac; done

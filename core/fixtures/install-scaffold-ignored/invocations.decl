@@ -8,3 +8,5 @@
 23 *
 4 scripts/install.sh
 0 scripts/install-scaffold-ignore.sh
+# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
+15 inproc:scripts/install-scaffold-ignore.sh

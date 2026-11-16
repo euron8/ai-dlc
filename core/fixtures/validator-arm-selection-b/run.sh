@@ -7,11 +7,10 @@
 # its single longest DIRECTORY, and `core/fixtures/*/run.sh` is what it globs — so the 6-way
 # pool already inside one directory could not change it.
 #
-# THE SPLIT IS ON THE PREREQUISITE BOUNDARY, not round-robin. The sibling's phases fall into
-# two clusters: some differential against a plain-tree validator run, some against a SEEDED
-# tree. Dealing them out in turn would make both shards pay both prerequisites; splitting on
-# the cluster boundary means each is computed exactly once, so this shard costs no extra CPU.
-# This directory holds the seeded-tree cluster.
+# THE SPLIT IS ON THE PREREQUISITE BOUNDARY, not round-robin. The sibling holds the phases that
+# need no seeded tree; this directory holds every phase that reads the seeded tree's runs (a plain
+# run, a run of every declared id, and one run per id), so the seeded tree and those runs are
+# computed exactly once, by this shard.
 #
 # The shard set and the partition are declared in the sibling, joined against the phase guards
 # grepped out of that same file, and checked by shard 'a': a phase named in no shard, a phase

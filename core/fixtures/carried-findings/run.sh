@@ -302,7 +302,7 @@ printf '# QA Validation: 1\n\nreviewed-sha: 9d8f14d171cfd4629858bc1315901d89d12e
 printf '# QA Validation: 1\n\nreviewed-sha: 9d8f14d171cfd4629858bc1315901d89d12e8d80\n\n## Findings\n\n### Notes\n\n#### a heading under Notes is not a finding\n\nbody\n\n### Important\n\n#### %s\n\nbody\n' "$I0" > "$S/top-notes.md"
 p2 "$S/top-i0-p2.md" APPROVED "$(c_res "$I0")"
 
-run() { own "$1"; out="$(set +o pipefail; vcf_main "$2" "$3" 2>&1)"; rc=$?; }
+run() { own "$1"; out="$(set +o pipefail; fx_inproc "$1" && vcf_main "$2" "$3" 2>&1)"; rc=$?; }
 
 # ---- the topology repository ----------------------------------------------------------------------
 G() { git -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
@@ -508,7 +508,7 @@ arm_S5() { run "$1" "$S/leadin-bullet.md" "$S/leadin-p2.md"
 # bold span with no finding id -> lead-in prose.
 arm_WR1() { run "$1" "$S/wrap-mark.md" "$S/empty.md"
             [ "$rc" -eq 1 ] && grep -q 'Critical finding that is not a "#### " heading' <<<"$out" || return 1
-            local a; a="$(set +o pipefail; vcf_main --list "$S/wrap-mark.md" 2>/dev/null)"; [ "$?" -eq 1 ] && [ -z "$a" ]; }
+            local a; a="$(set +o pipefail; fx_inproc "$V" && vcf_main --list "$S/wrap-mark.md" 2>/dev/null)"; [ "$?" -eq 1 ] && [ -z "$a" ]; }
 arm_WR2() { run "$1" "$S/wrap-nomark.md" "$S/empty.md"
             [ "$rc" -eq 0 ] && grep -q '^PASS: 0 prior' <<<"$out" && grep -q '^NOTE: .*: \*\*C1 .*not carried' <<<"$out"; }
 arm_WR3() { run "$1" "$S/wrap-prose.md" "$S/empty.md"
@@ -542,18 +542,18 @@ arm_QP() { run "$1" "$RQ/docs/reviews/s8/6-qa-validation.md" "$RQ/docs/reviews/s
            [ "$rc" -eq 0 ] && grep -q '^PASS: 2 prior' <<<"$out"; }
 # LIST: --list prints exactly the carry strings on stdout, in file order, and NOTEs on stderr.
 arm_LIST() { local a b; own "$1"
-             a="$(set +o pipefail; vcf_main --list "$S/merged.md" 2>/dev/null)" || return 1
+             a="$(set +o pipefail; fx_inproc "$V" && vcf_main --list "$S/merged.md" 2>/dev/null)" || return 1
              [ "$a" = "$H1$NLF$H3$NLF$H2" ] || return 1
-             b="$(set +o pipefail; vcf_main --list "$S/span-prior.md" 2>/dev/null)" || return 1
+             b="$(set +o pipefail; fx_inproc "$V" && vcf_main --list "$S/span-prior.md" 2>/dev/null)" || return 1
              [ "$b" = "I1. stale cache" ] || return 1
-             [ "$(set +o pipefail; vcf_main --list "$S/span-prior.md" 2>&1 >/dev/null | grep -c '^NOTE:')" -eq 2 ]; }
+             [ "$(set +o pipefail; fx_inproc "$V" && vcf_main --list "$S/span-prior.md" 2>&1 >/dev/null | grep -c '^NOTE:')" -eq 2 ]; }
 NLF='
 '
 # TA: top-level findings are carried. --list prints both, --classes their Class or `-`, in order.
 arm_TA() { local a b; own "$1"
-           a="$(set +o pipefail; vcf_main --list "$S/top.md" 2>/dev/null)" || return 1
+           a="$(set +o pipefail; fx_inproc "$V" && vcf_main --list "$S/top.md" 2>/dev/null)" || return 1
            [ "$a" = "$T1$NLF$T2" ] || return 1
-           b="$(set +o pipefail; vcf_main --classes "$S/top.md" 2>/dev/null)" || return 1
+           b="$(set +o pipefail; fx_inproc "$V" && vcf_main --classes "$S/top.md" 2>/dev/null)" || return 1
            [ "$b" = "EVIDENCE$TAB_$T1$TAB_-$NLF-$TAB_$T2$TAB_-" ]; }
 # TQ: the same prior at gate 2, the qa.md key present, a p2 with no carried: line for T2 -> 1.
 arm_TQ() { run "$1" "$RQ/docs/reviews/s9/1-2-qa-validation.md" "$RQ/docs/reviews/s9/1-2-qa-validation-p2.md"
@@ -605,7 +605,7 @@ EQ="$WORK/eq"; mkdir -p "$EQ" || exit 2
 eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
   local id="$1"; shift
   own "$V"
-  ( set +o pipefail; cd "$WORK" && vcf_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( set +o pipefail; cd "$WORK" && fx_inproc "$V" && vcf_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
   ( cd "$WORK" && FXCELL="$id" bash "$V" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
   cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
 }

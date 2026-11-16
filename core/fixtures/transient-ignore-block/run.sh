@@ -25,6 +25,7 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 
 # WALK UP FROM THIS FILE FOR THE SUBJECT ITSELF, in either layout, and never for `VERSION`.
 # Two separate reasons and both have bitten this repo. Counting `..` hops answers differently
@@ -58,7 +59,7 @@ echo "transient-ignore-block"
 if [ -z "$SUBJECT" ] || [ -z "$SCHEMA" ]; then
   echo "  skip  sync-transient-ignore.sh / pipeline-state-paths.json not present in this tree (subject='${SUBJECT:-none}' schema='${SCHEMA:-none}')"
   echo "  0 failed, 1 skipped"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 if ! command -v jq >/dev/null 2>&1; then
   echo "  FIXTURE BROKEN: jq is absent, so the expected pattern set cannot be derived from the declaration"

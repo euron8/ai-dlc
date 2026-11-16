@@ -6,6 +6,7 @@
 !core/skills/ai-dlc/core-manifest.md
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/layout.sh
 # Shard c runs unit b7. B7 drives the shipping apply.sh and the helper beside it, and apply.sh shells to its siblings, so the directory is required whole with the receipt it runs.
 !core/skills/ai-dlc-update/reconcile/derivation-differential.sh
 !core/skills/ai-dlc-update/reconcile/apply.sh

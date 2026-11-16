@@ -3,6 +3,7 @@
 # drives beside the validator only if present. Each prints a sentinel from run.sh after env.sh loads.
 !core/hooks/ai-dlc-recover.sh
 !core/hooks/ai-dlc-recover-gate.sh
+!core/hooks/ai-dlc-advisor-detect.sh
 !core/hooks/ai-dlc-postcompact.sh
 !core/hooks/ai-dlc-context-provenance.sh
 !core/hooks/ai-dlc-handoff-pending.sh
@@ -11,3 +12,4 @@
 core/skills/ai-dlc/SKILL.md
 !core/schemas/pause-routing.json
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh

@@ -1,0 +1,3 @@
+# R14 of scripts/validate-backlog-receipts.sh loads only this span of the rotate script the world carries; the fixture
+# copies the script into its world and never runs it.
+scripts/backlog-rotate.sh LANDED_FORM

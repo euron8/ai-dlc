@@ -120,7 +120,9 @@ BW_Q=""; BW_PATH=""
 # its own tail runs. Its `exit` and EXIT trap end that subshell, so a beat costs a subshell, not a bash start. It is
 # sourced once per beat because it reads its AI_DLC_* tuning at source time and the call sites vary that tuning.
 # Each source is one fx_inproc pass (the inproc: row), called in the call site's FOREGROUND on the line before the
-# subshell, so a backgrounded beat that is reaped early cannot move the count (BL-868).
+# subshell, so a backgrounded beat that is reaped early cannot move the count (BL-868). The wfd_beat_main call is a
+# second pass (P2's per-call unit), logged inside the subshell after wfd_mark_main returns and before the beat
+# writes anything a reaper waits on, so it is logged in every reap path too.
 #   wsd_enter <fresh|chain> <work> [NAME=value...] runs FIRST inside that subshell: cd to the world, export the env
 #   words the CLI was started with plus AI_DLC_PROJECT_ROOT, and turn pipefail off, as the program runs. Then:
 #   THE PARENT SHELL. The CLI ran every beat with a fresh parent pid, so a beat never found a `.shell-<its PPID>`
@@ -145,7 +147,7 @@ beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and
   local subj="$1" w="$2"; shift 2
   fx_inproc "$subj"
   ( wsd_enter fresh "$w" PATH="${BW_PATH:-$PATH}" AI_DLC_WAIT_BEAT_SECS="${BW_Q:-1}" AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 && . "$subj" || exit 97
-    wfd_mark_main "$@" deliv.md; wfd_beat_main "$@" deliv.md ) > "$BEATOUT" 2>&1
+    wfd_mark_main "$@" deliv.md; fx_inproc "$subj" && wfd_beat_main "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -317,7 +319,7 @@ chained_beat() { # <subject> <work> [args...] -> as beat_with, with a sibling be
   # `bash -c` wrapper's `$$` (and its trailing `exit $?`) arranged when the subject was a child of that wrapper.
   fx_inproc "$subj"
   ( wsd_enter chain "$w" AI_DLC_WAIT_BEAT_SECS=60 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 && . "$subj" || exit 97
-    wfd_mark_main "$@" deliv.md; wfd_beat_main "$@" deliv.md ) > "$BEATOUT" 2>&1
+    wfd_mark_main "$@" deliv.md; fx_inproc "$subj" && wfd_beat_main "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -374,7 +376,7 @@ W="$( bash "$SEED" stale-marker )"
 sleep_stub "$W/.stub" gate
 fx_inproc "$SUBJ"
 ( wsd_enter fresh "$W" PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS=60 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 && . "$SUBJ" || exit 97
-  wfd_mark_main deliv.md; wfd_beat_main deliv.md ) >/dev/null 2>&1 & PID=$!
+  wfd_mark_main deliv.md; fx_inproc "$SUBJ" && wfd_beat_main deliv.md ) >/dev/null 2>&1 & PID=$!
 seen=0
 # The beat is parked when the stub has RECORDED its first poll sleep, which is after every pre-loop lease write, so the
 # marker is read at a fixed point of the beat (and the beat's clock reads before the release do not move with load).
@@ -494,7 +496,7 @@ rm -rf "$W"
 knob_beat() { # <work> <quantum> <steering budget>
   fx_inproc "$SUBJ"
   ( wsd_enter fresh "$1" PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS="$2" AI_DLC_STEERING_BUDGET="$3" AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=3 AI_DLC_MAX_WAIT_BEATS=6 && . "$SUBJ" || exit 97
-    wfd_mark_main deliv.md; wfd_beat_main deliv.md ) > "$BEATOUT" 2>&1 || true
+    wfd_mark_main deliv.md; fx_inproc "$SUBJ" && wfd_beat_main deliv.md ) > "$BEATOUT" 2>&1 || true
 }
 C08_knob_split_forward() {
 W="$( bash "$SEED" knob-split-forward )"
@@ -569,7 +571,7 @@ run_stale() { # <subject> -> MS_LEASE MS_KILL_T MS_DISCRIM ; leaves W
   MS_T0="$(clock_now)"
   fx_inproc "$1"
   ( wsd_enter fresh "$W" PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS="$MS_Q" AI_DLC_WAIT_POLL_SECS="$MS_POLL" AI_DLC_WAIT_MARGIN_SECS="$MS_MARGIN" AI_DLC_MAX_WAIT_BEATS=6 && . "$1" || exit 97
-    wfd_mark_main deliv.md; wfd_beat_main deliv.md ) >/dev/null 2>&1 & pid=$!
+    wfd_mark_main deliv.md; fx_inproc "$1" && wfd_beat_main deliv.md ) >/dev/null 2>&1 & pid=$!
   until [ -s "$STUB_LOG" ] || ! kill -0 "$pid" 2>/dev/null || [ ! -d "$W" ]; do sleep 0.02; done
   reap_tree "$pid"
   MS_KILL_T="$(clock_now)"
@@ -682,7 +684,7 @@ GUARD_PATH=""
 guard() {
   fx_inproc "$SUBJ"
   ( wsd_enter fresh "$W" PATH="${GUARD_PATH:-$PATH}" AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 && . "$SUBJ" || exit 97
-    wfd_mark_main --progress-path "$1" deliv.md; wfd_beat_main --progress-path "$1" deliv.md ) >/dev/null 2>&1; echo $?; }
+    wfd_mark_main --progress-path "$1" deliv.md; fx_inproc "$SUBJ" && wfd_beat_main --progress-path "$1" deliv.md ) >/dev/null 2>&1; echo $?; }
 if [ "$(guard _bmad-output)" = "64" ]; then
   ok "progress-guards: the state dir is refused — it is written by this beat every poll"
 else bad "progress-guards: --progress-path _bmad-output accepted; progress is then always true and NON-DELIVERY can never fire"; fi
@@ -800,7 +802,7 @@ bg_beat() {
   local subj="$1" w="$2" o="$3" q="$4" p="$5"; shift 5
   fx_inproc "$subj"
   ( wsd_enter fresh "$w" PATH="${BG_PATH:-$PATH}" AI_DLC_WAIT_BEAT_SECS="$q" AI_DLC_WAIT_POLL_SECS="$p" AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_WAIT_SETTLE_SECS=2 && . "$subj" || exit 97
-    wfd_mark_main "$@"; wfd_beat_main "$@" ) > "$o" 2>&1 &
+    wfd_mark_main "$@"; fx_inproc "$subj" && wfd_beat_main "$@" ) > "$o" 2>&1 &
   BG=$!
 }
 until_event() { # <command...> -- returns once the command succeeds; NO count and NO time cap. A hang
@@ -1037,7 +1039,7 @@ C48_cli_equivalence() {
     cp -Rp "$w" "$EQD/$id.pristine" || { echo "FIXTURE ERROR: $id: cannot copy the world" >&2; exit 2; }
     fx_inproc "$SUBJ"
     ( wsd_enter fresh "$w" PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 && . "$SUBJ" || exit 97
-      wfd_mark_main "$@" deliv.md; wfd_beat_main "$@" deliv.md ) > "$EQD/$id.ip.out" 2> "$EQD/$id.ip.err"; echo "$?" > "$EQD/$id.ip.rc"
+      wfd_mark_main "$@" deliv.md; fx_inproc "$SUBJ" && wfd_beat_main "$@" deliv.md ) > "$EQD/$id.ip.out" 2> "$EQD/$id.ip.err"; echo "$?" > "$EQD/$id.ip.rc"
     mv "$w" "$EQD/$id.ip.world" && cp -Rp "$EQD/$id.pristine" "$w" || { echo "FIXTURE ERROR: $id: cannot restore the world" >&2; exit 2; }
     ( cd "$w" && export PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
         AI_DLC_PROJECT_ROOT="$PWD" && FXCELL="$id" bash "$SUBJ" "$@" deliv.md ) > "$EQD/$id.cl.out" 2> "$EQD/$id.cl.err"; echo "$?" > "$EQD/$id.cl.rc"

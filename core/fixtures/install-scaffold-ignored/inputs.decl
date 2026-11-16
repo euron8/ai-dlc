@@ -11,4 +11,5 @@ core/
 patterns/
 templates/
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh
 core/fixtures/*/inputs.decl

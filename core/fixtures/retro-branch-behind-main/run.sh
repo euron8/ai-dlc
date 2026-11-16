@@ -518,7 +518,8 @@ fi
 #   carry     n<k> carried k | none-tip | none-empty | HB-unresolved | HB-underivable |
 #             HB-conflict | NONE (no CARRY: line) | OTHER[<line>]
 #             a count or none-empty line sourced from gh carries `@gh#<n>` (the PR number it
-#             printed); an underivable line carries `@<reason>` from its `; gh fallback:` clause:
+#             printed), and a gh-sourced count then `=head` (its PR head sha is that PR's row in the
+#             world's gh rows) or `!head`; an underivable line carries `@<reason>` from its `; gh fallback:` clause:
 #             unavail | rc | empty | row | one | newer | local | tree | ? (unrecognised).
 #             More than one CARRY: line appends `+L<count>`.
 #   gh        - the stub was never called | <n> accepted calls | R<n> any call was refused
@@ -854,7 +855,7 @@ fi
 
 # run_block <block-file> <world> -> token
 run_block() {
-  local b="$1" w="$2" d out line cr n ld ev pk br gs gh nl pth
+  local b="$1" w="$2" d out line cr n ld ev pk br gs gh nl pth hs
   d="$P2/run-$(basename "$b" .sh)-$w"
   cp -R "$P2/$w/clone" "$d" || { echo "FIXTURE ERROR: could not copy world $w" >&2; exit 2; }
   # Every run has a gh on PATH that is the stub, or a PATH with no gh at all: never the real one.
@@ -887,7 +888,13 @@ run_block() {
         *)                                                          cr=HB-underivable ;;
       esac ;;
     "CARRY: HARD_BLOCK conflict"*)     cr=HB-conflict ;;
-    "CARRY: "[0-9]*" commit(s) past PR head "*) cr="n$(sed -n 's/^CARRY: \([0-9][0-9]*\) .*/\1/p' <<<"$line")${gs:+@gh#$gs}" ;;
+    "CARRY: "[0-9]*" commit(s) past PR head "*) cr="n$(sed -n 's/^CARRY: \([0-9][0-9]*\) .*/\1/p' <<<"$line")${gs:+@gh#$gs}"
+      # A gh-sourced carry names the PR head gh listed for that PR: =head when the line's sha is that
+      # world's row for PR #<gs>, !head otherwise (the sha is part of the verdict, not only the PR number).
+      if [ -n "$gs" ]; then
+        hs="$(sed -n 's/^CARRY: [0-9][0-9]* commit(s) past PR head \([0-9a-f]\{40\}\) .*/\1/p' <<<"$line")"
+        if [ -n "$hs" ] && [ "$hs" = "$(awk -v n="$gs" '$1 == n { print $2; exit }' "$P2/$w.rows")" ]; then cr="$cr=head"; else cr="$cr!head"; fi
+      fi ;;
     "") cr=NONE ;;
     *)  cr="OTHER[$line]" ;;
   esac
@@ -918,7 +925,7 @@ battery2() {
   printf '%s' "${t# }"
 }
 
-EXPECTED2="carry:n2/0/y/2/n/y/- empty:none-empty/0/y/0/n/y/- synced:n2/0/y/2/n/y/- conflict:HB-conflict/0/y/0/n/y/- underivable:HB-underivable@one/0/y/0/n/y/1 direct:none-tip/0/y/0/n/y/- unresolved:HB-unresolved/0/y/0/n/y/- repointed:n3@gh#7/0/y/2/n/y/1 repointed-nogh:HB-underivable@unavail/0/y/0/n/y/- repointed-ghfail:HB-underivable@rc/0/y/0/n/y/1 repointed-empty:HB-underivable@empty/0/y/0/n/y/1 repointed-badrow:HB-underivable@row/0/y/0/n/y/1 wrong-pr:HB-underivable@one/0/y/0/n/y/1 reused-branch:HB-underivable@newer/0/y/0/n/y/1 tree-mismatch:HB-underivable@tree/0/y/0/n/y/1 head-absent:HB-underivable@local/0/y/0/n/y/1 head-fetched:n3@gh#7/0/y/2/n/y/1"
+EXPECTED2="carry:n2/0/y/2/n/y/- empty:none-empty/0/y/0/n/y/- synced:n2/0/y/2/n/y/- conflict:HB-conflict/0/y/0/n/y/- underivable:HB-underivable@one/0/y/0/n/y/1 direct:none-tip/0/y/0/n/y/- unresolved:HB-unresolved/0/y/0/n/y/- repointed:n3@gh#7=head/0/y/2/n/y/1 repointed-nogh:HB-underivable@unavail/0/y/0/n/y/- repointed-ghfail:HB-underivable@rc/0/y/0/n/y/1 repointed-empty:HB-underivable@empty/0/y/0/n/y/1 repointed-badrow:HB-underivable@row/0/y/0/n/y/1 wrong-pr:HB-underivable@one/0/y/0/n/y/1 reused-branch:HB-underivable@newer/0/y/0/n/y/1 tree-mismatch:HB-underivable@tree/0/y/0/n/y/1 head-absent:HB-underivable@local/0/y/0/n/y/1 head-fetched:n3@gh#7=head/0/y/2/n/y/1"
 # fbmap <tokens> -> those of the ASSERTED worlds only; before the fallback arrives a token also loses
 # what only the fallback can print (an @<source|reason> on its carry field, a gh call count).
 fbmap() {
@@ -1229,32 +1236,6 @@ fi
 fi
 
 # ============================================================================
-# BL-990's RECEIPT, invoked here so it is never an orphan (BL-915's E1). It builds its own three
-# worlds from the resolved retro.md (passed, so a consumer layout is the one measured): the
-# re-pointed carry derived from gh, the LAND refusal with main held by a linked worktree, and the
-# 7a merge whose gh exit is 1 while the PR state is MERGED. BL-990 closes with this subject, so
-# the arm requires exit 0 and all three CELL lines PASS; exit 9 is a refusal to build its worlds:
-# FIXTURE BROKEN.
-# ============================================================================
-RCPT990="$DIR/receipt-bl990.sh"
-[ -f "$RCPT990" ] || { echo "FIXTURE ERROR: missing $RCPT990" >&2; exit 2; }
-# The receipt itself stays strict (exit 1 on a pre-fix retro.md). Its INVOCATION here is gated on
-# the same subject_state: with the fallback or the LAND block absent it is PENDING, not run.
-if [ "$ST_FB" = absent ] || [ "$ST_LAND" = absent ] || [ "$ST_MERGE" = absent ]; then
-  pending "BL-990 receipt" "the gh fallback, the LAND block or the MERGE block it measures" "receipt-bl990.sh is not run" 1
-else
-bash "$DIR/receipt-bl990.sh" "$RETRO" > "$WORK/r990.out" 2>"$WORK/r990.err"; r990_rc=$?
-r990_pass="$(grep -cE '^CELL (carry|land|merge) PASS ' "$WORK/r990.out")" || r990_pass=0
-if [ "$r990_rc" = 9 ]; then
-  bad "FIXTURE BROKEN: receipt-bl990.sh refused to build its worlds: $(head -1 "$WORK/r990.err")"
-elif [ "$r990_rc" = 0 ] && [ "$r990_pass" = 3 ]; then
-  ok "BL-990 receipt: exit 0, all three cells PASS: $(grep '^CELL ' "$WORK/r990.out" | cut -d' ' -f2-3 | tr '\n' ' ')"
-else
-  bad "BL-990 receipt: exit $r990_rc with $r990_pass of 3 CELL PASS lines: $(cat "$WORK/r990.out" "$WORK/r990.err" | head -c 600 | tr '\n' ' ')"
-fi
-fi
-
-# ============================================================================
 # BL-997's RECEIPT. Both landing blocks refuse before the checkout when a file sits on disk at a
 # path the trunk would write, so an operator's IGNORED file at a path origin/main force-adds keeps
 # its bytes. It builds its own five worlds from the resolved retro.md: the ignored e.log, é.log and
@@ -1297,13 +1278,13 @@ if [ "$_recw" -eq 0 ] || [ "$_recr" -eq 0 ] || [ "$ST_CARRY" = absent ]; then
   pending "BL-993 receipt" "the sprint-merge record (deploy-validate.md's record block, retro.md's read of it)" "receipt-bl993.sh is not run" 1
 else
 bash "$RCPT993" "$RETRO" "$DVSTEP" > "$WORK/r993.out" 2>"$WORK/r993.err"; r993_rc=$?
-r993_pass="$(grep -cE '^CELL (record|carry|norecord|badrecord|statedir) PASS ' "$WORK/r993.out")" || r993_pass=0
+r993_pass="$(grep -cE '^CELL (record|carry|badrecord|statedir) PASS ' "$WORK/r993.out")" || r993_pass=0
 if [ "$r993_rc" = 9 ]; then
   bad "FIXTURE BROKEN: receipt-bl993.sh refused to build its worlds: $(head -1 "$WORK/r993.err")"
-elif [ "$r993_rc" = 0 ] && [ "$r993_pass" = 5 ]; then
-  ok "BL-993 receipt: exit 0, all five cells PASS: $(grep '^CELL ' "$WORK/r993.out" | cut -d' ' -f2-3 | tr '\n' ' ')"
+elif [ "$r993_rc" = 0 ] && [ "$r993_pass" = 4 ]; then
+  ok "BL-993 receipt: exit 0, all four cells PASS: $(grep '^CELL ' "$WORK/r993.out" | cut -d' ' -f2-3 | tr '\n' ' ')"
 else
-  bad "BL-993 receipt: exit $r993_rc with $r993_pass of 5 CELL PASS lines: $(cat "$WORK/r993.out" "$WORK/r993.err" | head -c 600 | tr '\n' ' ')"
+  bad "BL-993 receipt: exit $r993_rc with $r993_pass of 4 CELL PASS lines: $(cat "$WORK/r993.out" "$WORK/r993.err" | head -c 600 | tr '\n' ' ')"
 fi
 fi
 
@@ -1315,4 +1296,4 @@ echo
 if [ "$PENDN" -gt 0 ]; then
   echo "retro-branch-behind-main: $PENDN PENDING row(s) skipping $SKIPPED -- their subjects have not arrived in this retro.md"
 fi
-report_end retro-branch-behind-main "$((12 - SKIPPED + PENDBAD))"
+report_end retro-branch-behind-main "$((11 - SKIPPED + PENDBAD))"

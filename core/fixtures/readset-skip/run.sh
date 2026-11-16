@@ -3116,7 +3116,14 @@ STUB
 # The deriver launches a fixture as `env VAS_INNER_POOL_WIDTH=1 bash <run.sh>`; look past that.
 _c=1; [ "$1" = env ] && { _c=2; for _w in "${@:2}"; do case "$_w" in *=*) _c=$((_c+1)) ;; *) break ;; esac; done; }
 if [ "${!_c}" = bash ]; then
-  while IFS= read -r p; do [ -n "$p" ] && ss_emit "x Sandbox: bash(1) allow file-read-data $PWD/$p"; done < "$STUB_SB"
+  # A list line `M <path>` reports a lone file-read-metadata, the shape of a lookup whose existence report was lost.
+  while IFS= read -r p; do
+    case "$p" in
+      '') ;;
+      'M '*) ss_emit "x Sandbox: bash(1) allow file-read-metadata $PWD/${p#M }" ;;
+      *) ss_emit "x Sandbox: bash(1) allow file-read-data $PWD/$p" ;;
+    esac
+  done < "$STUB_SB"
 else
   for a in "$@"; do case "$a" in /*) ss_wait "$a"; ss_emit "x Sandbox: cat(1) allow file-read-data $a" ;; esac; done
 fi
@@ -3264,13 +3271,14 @@ d/-p'
     # loses reads as a drop notice or an atime-only path is what this arm and the drop arms model. The
     # stub sandbox-exec reports ONLY the paths in the list it is handed, while fxa really reads
     # run.sh and src/a.sh, so the atime leg sees both:
-    #   lossy list  run.sh alone      -> fxa OMITTED naming `LOSS CANARY: 1 path(s)`, 0 drop notices;
+    #   lossy list  run.sh alone, plus a lone metadata report on src/other.sh
+    #                                 -> fxa OMITTED naming `LOSS CANARY: 1 path(s)` and `STAT LOSS: 1`, 0 drop notices;
     #   whole list  run.sh + src/a.sh -> fxa MAPPED.
     # Its own PATH dir carries ONLY the sandbox-exec stub: the `id` stub above answers uid 0, which
     # `--tracer sandbox` refuses.
     SX="$WORK/sbxstub"; mkdir -p "$SX" || broken "mkdir failed"
     cp "$SB/sandbox-exec" "$SX/sandbox-exec" || broken "could not copy the sandbox-exec stub"
-    printf '%s\n' core/fixtures/fxa/run.sh > "$SX/lossy.list"
+    printf '%s\n' core/fixtures/fxa/run.sh 'M src/other.sh' > "$SX/lossy.list"
     printf '%s\n' core/fixtures/fxa/run.sh src/a.sh > "$SX/whole.list"
     : > "$SX/feed"
     SX_TR="$(cd "$WORK" && pwd -P)/sbx.tr"
@@ -3321,6 +3329,14 @@ d/-p'
     case "$CL" in
       " fxa OMITTED ("*"LOSS CANARY: 1 path(s)"*"|0") ok "CANARY: a sandbox-tracer window that lost a read with NO drop notice OMITS the fixture, naming 'LOSS CANARY: 1 path(s)'" ;;
       *) bad "CANARY: the lossy stub window was not omitted naming 'LOSS CANARY: 1 path(s)' with 0 drop notices: '$CL' — $(tail -2 "$WORK/sbx.out" | tr '\n' ' ')" ;;
+    esac
+    # THE STAT-PAIRING GUARD'S WIRING, end to end on the same run: the lossy window's lone metadata report on
+    # src/other.sh must reach rs_fx_judge's call site and come out as the run's own STAT LOSS reason. The
+    # whole run below, with no metadata report, is its twin.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    case "$CL" in
+      " fxa OMITTED ("*"STAT LOSS: 1 metadata report(s)"*"|0") ok "STAT LOSS END TO END: the deriver run on a window with one lone metadata report omits fxa naming 'STAT LOSS: 1 metadata report(s)'" ;;
+      *) bad "STAT LOSS END TO END: the lossy stub window's lone metadata report did not reach the run's omission reason: '$CL' — $(tail -2 "$WORK/sbx.out" | tr '\n' ' ')" ;;
     esac
     TRACE_ARMS=$((TRACE_ARMS+1))
     case "$CW" in
@@ -3410,30 +3426,82 @@ d/-p'
       bad "CANARY UNREADABLE: expected 'unreadable' and an omission reason, got '$CU' / '$CUW' (span lines: $(grep -c . "$CAN_SPAN"))"
     fi
 
+    # THE STAT-PAIRING GUARD, driven from its sentinels on seeded windows in the kernel's own line shape.
+    # The offender window holds two unpaired metadata reports, neither first: one lone, and one whose
+    # existence report came from a DIFFERENT pid (the rule is per process). Its near-misses: a paired
+    # lookup, an existence-only lookup, and an unpaired metadata report outside the tree. The twin adds
+    # the two missing existence reports and must count 0; a missing window must read `unreadable`; and
+    # the deriver's own guard line must omit on the count and on `unreadable` and stay quiet on 0.
+    SP_SPAN="$WORK/statpair.sh"; SP_T="$WORK/sp.tree"
+    sed -n '/^# READSET_STATPAIR_BEGIN$/,/^# READSET_STATPAIR_END$/p' "$DERIVER" > "$SP_SPAN"
+    sp_line() { printf '2026-11-13 22:46:22.%s Df kernel[0:db9%s] [com.apple.sandbox.reporting:violation] Sandbox: %s allow %s %s\n' "$1" "$1" "$2" "$3" "$4"; }
+    { sp_line 101 'cat(9)' file-test-existence "$WORK/sp.mark/.readset-sentinel"
+      sp_line 102 'bash(10)' file-test-existence "$SP_T/src/a.sh"
+      sp_line 103 'bash(10)' file-read-metadata "$SP_T/src/a.sh"
+      sp_line 104 'bash(10)' file-test-existence "$SP_T/src/absent"
+      sp_line 105 'git(20)' file-test-existence "$SP_T/core/x"
+      sp_line 106 'git(21)' file-read-metadata "$SP_T/core/x"
+      sp_line 107 'git(22)' file-read-metadata "$SP_T/src/b.sh"
+      sp_line 108 'git(23)' file-read-metadata "$WORK/elsewhere/c.sh"
+    } > "$WORK/sp.win"
+    { cat "$WORK/sp.win"
+      sp_line 109 'git(21)' file-test-existence "$SP_T/core/x"
+      sp_line 110 'git(22)' file-test-existence "$SP_T/src/b.sh"
+    } > "$WORK/sp.twin"
+    sp_with() { # each call is one in-process pass of the deriver's span, logged by fx_inproc
+      fx_inproc "$DERIVER"
+      ( . "$SP_SPAN"; readset_stat_pairing "$1" "$SP_T" "$2" ) 2>/dev/null
+    }
+    sp_why() { # $1 statpair value; runs the deriver's own guard line on it
+      local statpair="$1" why="" fx=fxa WORK="$WORK" g
+      g="$(grep -m1 '^  \[ "\$statpair" = 0 \]  || why=' "$DERIVER")"
+      eval "$g"; printf '%s' "$why"
+    }
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    SPO="$(sp_with "$WORK/sp.win" "$WORK/sp.win.rows")"; SPW="$(sp_why "$SPO")"
+    SPR="$(cat "$WORK/sp.win.rows" 2>/dev/null)"
+    if [ "$SPO" = 2 ] && [ "$SPR" = "$(printf 'git(21)\tcore/x\ngit(22)\tsrc/b.sh')" ] \
+      && case "$SPW" in "STAT LOSS: 2 metadata report(s)"*) true ;; *) false ;; esac; then
+      ok "STAT PAIRING: a lone metadata report and one paired only in another pid count 2, named exactly, and the deriver's guard omits the fixture for them"
+    else
+      bad "STAT PAIRING: expected 2 rows git(21) core/x, git(22) src/b.sh and a STAT LOSS reason, got '$SPO' / '$SPR' / '$SPW' (span lines: $(grep -c . "$SP_SPAN"))"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    SPT="$(sp_with "$WORK/sp.twin" "$WORK/sp.twin.rows")"; SPTW="$(sp_why "$SPT")"
+    SPU="$(sp_with "$WORK/sp.no-such-win" "$WORK/sp.u.rows")"; SPUW="$(sp_why "$SPU")"
+    if [ "$SPT" = 0 ] && [ -z "$SPTW" ] && [ "$SPU" = unreadable ] \
+      && case "$SPUW" in "STAT LOSS: unreadable"*) true ;; *) false ;; esac; then
+      ok "STAT PAIRING TWIN: the same window with both existence reports added counts 0 and is not omitted; a missing window reads 'unreadable' and is"
+    else
+      bad "STAT PAIRING TWIN: expected 0 with no reason, then 'unreadable' with a reason, got '$SPT' / '$SPTW' / '$SPU' / '$SPUW'"
+    fi
+
     # A ONE-FIXTURE `--list` WHOSE FIXTURE IS OMITTED STILL WRITES THE MAP, DROPPING ITS STALE ROWS.
     # Seed a stale `fxa` row the trace can never produce, trace fxa with a lossy stream (the canary
-    # omits it), and read the map: the stale row must be GONE, `other`'s rows kept, and the header
-    # must name fxa as OMITTED.
+    # omits it), and read the map: the stale row must be GONE, `other`'s rows kept, the map must carry
+    # NO `# OMITTED` line (a line recording one run's omissions rewrote the tracked map whenever the
+    # omitted set changed), and the run's stdout must name fxa as OMITTED.
     printf 'other\tsrc/other.sh\nother\tcore/fixtures/other/run.sh\nthird\tcore/fixtures/third/run.sh\nfxa\tsrc/STALE-ROW\n' > "$BR/.ai-dlc-fixture-readsets.tsv"
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm stale ) >/dev/null 2>&1 || broken "could not seed the stale map row"
-    omit_run() { # $1 deriver copy; prints "<stale rows>|<other rows>|<OMITTED header rows>"
-      local s o h
+    omit_run() { # $1 deriver copy; prints "<stale rows>|<other rows>|<OMITTED map lines>|<stdout OMITTED report>"
+      local s o h v
       cp "$1" "$STUB_DERIVER"
       ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/lossy.list" \
           AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/omit.out" 2>&1 </dev/null
       stub_reap "${SB:-}"
       s="$(grep -c 'STALE-ROW' "$BR/.ai-dlc-fixture-readsets.tsv")" || s=0
       o="$(grep -c '^other	' "$BR/.ai-dlc-fixture-readsets.tsv")" || o=0
-      h="$(grep -c '^# OMITTED by the last run (always run): fxa$' "$BR/.ai-dlc-fixture-readsets.tsv")" || h=0
+      h="$(grep -c '^# OMITTED' "$BR/.ai-dlc-fixture-readsets.tsv")" || h=0
+      v="$(grep -c ' OMITTED and therefore always run: fxa$' "$WORK/omit.out")" || v=0
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
-      printf '%s|%s|%s' "$s" "$o" "$h"
+      printf '%s|%s|%s|%s' "$s" "$o" "$h" "$v"
     }
     TRACE_ARMS=$((TRACE_ARMS+1))
     OR="$(omit_run "$SB/deriver.sh")"
-    if [ "$OR" = "0|2|1" ]; then
-      ok "OMITTED --list: a one-fixture refresh whose fixture is omitted writes the map, drops its stale row, keeps the other fixture's rows and names it OMITTED"
+    if [ "$OR" = "0|2|0|1" ]; then
+      ok "OMITTED --list: a one-fixture refresh whose fixture is omitted writes the map, drops its stale row, keeps the other fixture's rows, writes no OMITTED line into the map and names it OMITTED on stdout"
     else
-      bad "OMITTED --list: expected stale 0, other 2, OMITTED header 1, got '$OR' — $(tail -2 "$WORK/omit.out" | tr '\n' ' ')"
+      bad "OMITTED --list: expected stale 0, other 2, OMITTED map lines 0, stdout OMITTED report 1, got '$OR' — $(tail -2 "$WORK/omit.out" | tr '\n' ' ')"
     fi
 
     # `--all` WITH ONE FIXTURE OMITTED, END TO END. The function arms above drive the extracted spans;
@@ -3443,12 +3511,12 @@ d/-p'
     # does not die. The stub sandbox-exec reports ONE stream list for every launch, so each world is
     # a union list:
     #   world O  {fxa/run.sh, plan-shape/run.sh, validate-plan-shape.sh}: fxa's src/a.sh read is
-    #            unreported, so the canary omits fxa and plan-shape maps. The fix writes the map with
-    #            the OMITTED header naming fxa and prints the plan-shape PRESENCE line; base dies
+    #            unreported, so the canary omits fxa and plan-shape maps. The fix writes the map, with
+    #            no OMITTED line, names fxa OMITTED on stdout and prints the plan-shape PRESENCE line; base dies
     #            "merge dropped 'fxa'" and never reaches the plan-shape pair.
     #   world S  {fxa/run.sh, src/a.sh, plan-shape/run.sh}: plan-shape is the omitted one, fxa maps
     #            (with both omitted, `--all` dies "zero fixtures mapped"). The fix prints the SKIP
-    #            line and writes the map naming plan-shape OMITTED.
+    #            line, writes the map with no OMITTED line and names plan-shape OMITTED on stdout.
     #            A MAPPED `plan-shape-x` sibling sits in both worlds: its rows begin with the string
     #            `plan-shape`, so a D1 guard that greps `^plan-shape` without the tab reads them as
     #            plan-shape's own and runs the pair on an omitted plan-shape, so the sibling
@@ -3462,33 +3530,34 @@ d/-p'
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm plan-shape ) >/dev/null 2>&1 || broken "could not seed the plan-shape fixture"
     [ "$(find "$BR/core/fixtures" -mindepth 2 -maxdepth 2 -name run.sh | grep -c .)" -ge 2 ] \
       || broken "the --all world holds fewer than two fixture directories, so the base newline list cannot carry a newline and the arm cannot discriminate"
-    all_run() { # $1 deriver copy  $2 stream list  $3 header name; prints "<rc>|<header rows>|<presence>|<skip>|<merge dropped>"
-      local r h p k m
+    all_run() { # $1 deriver copy  $2 stream list  $3 omitted name; prints "<rc>|<OMITTED map lines>|<presence>|<skip>|<merge dropped>|<stdout OMITTED report>"
+      local r h p k m v
       cp "$1" "$STUB_DERIVER"
       ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
           AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --all --tracer sandbox ) > "$WORK/all.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SB:-}"
-      h="$(grep -cx "# OMITTED by the last run (always run): $3" "$BR/.ai-dlc-fixture-readsets.tsv")" || h=0
+      h="$(grep -c '^# OMITTED' "$BR/.ai-dlc-fixture-readsets.tsv")" || h=0
+      v="$(grep -c " OMITTED and therefore always run: $3\$" "$WORK/all.out")" || v=0
       p="$(grep -c "^  PASS  plan-shape's read-set names its own subject" "$WORK/all.out")" || p=0
       k="$(grep -cxF '  SKIP  plan-shape controls: plan-shape OMITTED this run' "$WORK/all.out")" || k=0
       m="$(grep -c "merge dropped 'fxa'" "$WORK/all.out")" || m=0
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
-      printf '%s|%s|%s|%s|%s' "$r" "$h" "$p" "$k" "$m"
+      printf '%s|%s|%s|%s|%s|%s' "$r" "$h" "$p" "$k" "$m" "$v"
     }
     TRACE_ARMS=$((TRACE_ARMS+1))
     AO="$(all_run "$SB/deriver.sh" "$SX/allO.list" fxa)"
-    if [ "$AO" = "0|1|1|0|0" ]; then
-      ok "--all, fxa OMITTED: the deriver writes the map with the OMITTED header naming fxa, and the plan-shape pair RUNS under --all (its presence line printed)"
+    if [ "$AO" = "0|0|1|0|0|1" ]; then
+      ok "--all, fxa OMITTED: the deriver writes the map with no OMITTED line, names fxa OMITTED on stdout, and the plan-shape pair RUNS under --all (its presence line printed)"
     else
-      bad "--all, fxa OMITTED: expected rc 0, OMITTED header 1, plan-shape presence 1, skip 0, merge-dropped 0; got '$AO' — $(grep -m1 -E 'ERROR|merge dropped' "$WORK/all.out" | tr '\n' ' ')$(tail -2 "$WORK/all.out" | tr '\n' ' ')"
+      bad "--all, fxa OMITTED: expected rc 0, OMITTED map lines 0, plan-shape presence 1, skip 0, merge-dropped 0, stdout OMITTED report 1; got '$AO' — $(grep -m1 -E 'ERROR|merge dropped' "$WORK/all.out" | tr '\n' ' ')$(tail -2 "$WORK/all.out" | tr '\n' ' ')"
     fi
     TRACE_ARMS=$((TRACE_ARMS+1))
     AS="$(all_run "$SB/deriver.sh" "$SX/allS.list" plan-shape)"
-    if [ "$AS" = "0|1|0|1|0" ]; then
-      ok "--all, plan-shape OMITTED: the deriver prints the exact SKIP line for the plan-shape pair and writes the map naming plan-shape OMITTED"
+    if [ "$AS" = "0|0|0|1|0|1" ]; then
+      ok "--all, plan-shape OMITTED: the deriver prints the exact SKIP line for the plan-shape pair, writes the map with no OMITTED line and names plan-shape OMITTED on stdout"
     else
-      bad "--all, plan-shape OMITTED: expected rc 0, header 1, presence 0, SKIP line 1, merge-dropped 0; got '$AS' — $(tail -2 "$WORK/all.out" | tr '\n' ' ')"
+      bad "--all, plan-shape OMITTED: expected rc 0, OMITTED map lines 0, presence 0, SKIP line 1, merge-dropped 0, stdout OMITTED report 1; got '$AS' — $(tail -2 "$WORK/all.out" | tr '\n' ' ')"
     fi
 
     # THE UNREAD CONTROL. A fixture that reads the planted control file is the stand-in for a reset
@@ -3786,8 +3855,8 @@ STUB
     # group, and removes the flag). The map must hold fxw1's and
     # fxw2's NEW rows, none of their OLD ones, fxw3's OLD row and no fxw3 NEW row.
     # The identity arm runs the same three UNINTERRUPTED, with fxw2 omitted by the canary (its read
-    # of src/w2.sh is unreported), so the final map carries an OMITTED line and drops a mid-list
-    # fixture's rows.
+    # of src/w2.sh is unreported), so the final map drops a mid-list fixture's rows and the run's
+    # stdout names it OMITTED.
     mkdir -p "$BR/core/fixtures/fxw1" "$BR/core/fixtures/fxw2" "$BR/core/fixtures/fxw3" || broken "mkdir failed"
     printf '#!/bin/bash\ncat src/w1.sh >/dev/null\n' > "$BR/core/fixtures/fxw1/run.sh"
     printf '#!/bin/bash\ncat src/w2.sh >/dev/null\n' > "$BR/core/fixtures/fxw2/run.sh"
@@ -3921,18 +3990,19 @@ STUB
       bad "INTERRUPTED GROUP: expected '1|0' (recorded group alive before the kill | alive after the reap), got '$IWG'"
     fi
     # The identity arm. The fix's run must have written per fixture and reached a map that MOVED (new
-    # rows, fxw2's OLD row dropped, the OMITTED line). The per-fixture call's output lands in $WORK/fxw1.write; it
+    # rows, fxw2's OLD row dropped, no OMITTED line in the map, fxw2 named OMITTED on stdout). The per-fixture call's output lands in $WORK/fxw1.write; it
     # prints the controls but no `wrote` line (that `say` follows only the final call), so the
     # evidence it ran is the discrimination control's PASS line, which precedes the write.
     TRACE_ARMS=$((TRACE_ARMS+1))
     IU="$(iw_run "$SB/deriver.sh" "$SX/fxw.omit.list" no "$WORK/iw.full.tsv")"
     IU_W="$(grep -c '^  PASS  CONTROL: ' "$SX_TR/w/fxw1.write" 2>/dev/null)" || IU_W=0
     IUS="$(iw_sig "$WORK/iw.full.tsv")"
-    IUH="$(grep -cx '# OMITTED by the last run (always run): fxw2' "$WORK/iw.full.tsv")" || IUH=0
-    if [ "$IU|$IU_W|$IUS|$IUH" = "0|no|1|100010|2|0|1" ]; then
-      ok "IDENTITY: an uninterrupted run that wrote after each fixture ends on a map holding fxw1's and fxw3's new rows, none of the old ones, the untraced fixture's rows, and the OMITTED line for the mid-list fxw2"
+    IUH="$(grep -c '^# OMITTED' "$WORK/iw.full.tsv")" || IUH=0
+    IUV="$(grep -c ' OMITTED and therefore always run: fxw2$' "$WORK/iw.full.out")" || IUV=0
+    if [ "$IU|$IU_W|$IUS|$IUH|$IUV" = "0|no|1|100010|2|0|0|1" ]; then
+      ok "IDENTITY: an uninterrupted run that wrote after each fixture ends on a map holding fxw1's and fxw3's new rows, none of the old ones, the untraced fixture's rows and no OMITTED line, and names the mid-list fxw2 OMITTED on stdout"
     else
-      bad "IDENTITY: expected '0|no|1|100010|2|0|1' (rc|reached fxw3|per-fixture controls|new/old rows fxw1..3|other rows|tmp files|OMITTED header), got '$IU|$IU_W|$IUS|$IUH' — the fix run's omissions: $(grep -E '^  [a-z0-9_.-]+ +OMITTED \(' "$WORK/iw.full.out" | tr -s ' ' | tr '\n' ' ')"
+      bad "IDENTITY: expected '0|no|1|100010|2|0|0|1' (rc|reached fxw3|per-fixture controls|new/old rows fxw1..3|other rows|tmp files|OMITTED map lines|stdout OMITTED report), got '$IU|$IU_W|$IUS|$IUH|$IUV' — the fix run's omissions: $(grep -E '^  [a-z0-9_.-]+ +OMITTED \(' "$WORK/iw.full.out" | tr -s ' ' | tr '\n' ' ')"
     fi
 
     # THE DIGEST WRITER (BL-471), DRIVEN WHOLE. The BR runner carries only an FXROOT line, so it has no

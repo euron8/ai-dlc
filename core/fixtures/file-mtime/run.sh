@@ -83,10 +83,10 @@ declare -F fm_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $SUBJ defined
 # run <tz> <dir> <args...> -> OUT, RC: one in-process call of fm_main
 run() {
   local tz="$1" d="$2"; shift 2
-  OUT="$(cd "$d" && export TZ="$tz" && fm_main "$@" 2>&1)"; RC=$?
+  OUT="$(cd "$d" && export TZ="$tz" && fx_inproc "$SUBJ" && fm_main "$@" 2>&1)"; RC=$?
 }
 run_shim() {
-  OUT="$(cd "$W" && export TZ=UTC PATH="$SHIM:$PATH" && fm_main rec.md 2>&1)"; RC=$?
+  OUT="$(cd "$W" && export TZ=UTC PATH="$SHIM:$PATH" && fx_inproc "$SUBJ" && fm_main rec.md 2>&1)"; RC=$?
 }
 TAB="$(printf '\t')"
 
@@ -100,7 +100,7 @@ arm_miss()  {
   [ "$RC" -eq 1 ] && [ "$OUT" = "nope.md${TAB}MISSING
 rec.md${TAB}${LIT_E}${TAB}${LIT_I}" ]
 }
-arm_noargs() { OUT="$(fm_main 2>&1)"; RC=$?; [ "$RC" -eq 2 ]; }
+arm_noargs() { OUT="$(fx_inproc "$SUBJ" && fm_main 2>&1)"; RC=$?; [ "$RC" -eq 2 ]; }
 
 echo "== real script"
 if arm_utc; then ok "UTC: literal epoch and ISO stamp"
@@ -124,7 +124,7 @@ else bad "no-args arm: rc=$RC out=[$OUT]"; fi
 EQ="$WORK/eq"; mkdir -p "$EQ"
 eqv() { # <cell-id> <tz> <dir> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
   local id="$1" tz="$2" d="$3"; shift 3
-  ( cd "$d" && export TZ="$tz" && fm_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$d" && export TZ="$tz" && fx_inproc "$SUBJ" && fm_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
   ( cd "$d" && TZ="$tz" FXCELL="$id" bash "$SUBJ" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
   cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
 }

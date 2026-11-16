@@ -32,6 +32,7 @@ set -u
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset CLAUDE_PROJECT_DIR
 DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 
 # Any argument is a usage error, never a silent run.
 case "${1:-}" in
@@ -47,7 +48,7 @@ unset AI_DLC_LAYER_CONTRACT
 VAL="$DIR/../../../scripts/validate-enforcement-map.sh"
 if [ ! -f "$VAL" ]; then
   echo "ledger-status-vocabulary: SKIP — validate-enforcement-map.sh is distribution-only and is not installed in a consumer tree."
-  exit 0
+  fx_skip_exit "$DIR"
 fi
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
 # ok, bad and report_end come from lib/report.sh, sourced before lib/mutant.sh. fx_inproc (one row per in-process

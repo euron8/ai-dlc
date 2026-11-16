@@ -40,7 +40,6 @@ fixture-inprocess	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub c
 fixture-invocation-budget	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 gate-verdict-grep-shape	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 handoff-record-carries-return	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
-hermetic-consumption	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 invariant-index	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 known-skills-extension	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 layer-absorption-retire	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
@@ -60,7 +59,6 @@ ledger-reverify-unfalsifiable	run.sh carries no AI_DLC_* scrub; unexposed at the
 ledger-rotate	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 mandatory-rules-clean-tree	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 mutation-red-replay	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
-party-wave-barrier	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 path-mapping-render	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 plan-rotate	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 preclassify-rename-row	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment

@@ -97,6 +97,7 @@ set -uo pipefail
 [ "$#" -eq 0 ] || { echo "update-preflight-push: usage: run.sh" >&2; exit 2; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 NAME="update-preflight-push"
 
 # THE SUBJECT IN BOTH LAYOUTS, candidates named side by side off the fixture's own location.
@@ -114,7 +115,7 @@ if [ -z "$SUBJ" ]; then
   echo "  SKIP  ai-dlc-update/SKILL.md resolves from $HERE in neither layout, so this fixture landed ahead of its subject and asserted nothing"
   echo
   echo "$NAME: SKIP (subject absent)"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$SUBJ")" && pwd -P)/$(basename "$SUBJ")"

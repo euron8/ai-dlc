@@ -9,7 +9,8 @@
 # traced runs; one counted hermetic-run.sh run at AI_DLC_FIXTURE_JOBS=12 measured 102 (J3), the other rows as declared.
 102 *
 5 scripts/validate-enforcement-map.sh
-7 inproc:scripts/validate-enforcement-map.sh
+# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
+9 inproc:scripts/validate-enforcement-map.sh
 3 scripts/fork-profile.sh
 # Re-measured for BL-878 (validator-fork-budget in process) from two agreeing counted hermetic-run.sh runs. Base 0bd891bd7
 # declares 1116 and 22; the 22 validator starts were, by logged parent: 16 from receipt-bl898.sh (5 full-run worlds plus

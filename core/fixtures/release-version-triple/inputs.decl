@@ -5,6 +5,7 @@ core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
 # The fx_inproc helper (in-process drives of the subject).
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh
 # The validator under test. Distribution tooling in scripts/, not core/scripts/. The fixture
 # SKIP-and-PASSes when it is absent, so it is REQUIRED: absent, the verdict would still read PASS.
 !scripts/validate-release-version.sh

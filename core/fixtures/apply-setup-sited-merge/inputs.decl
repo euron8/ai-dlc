@@ -3,3 +3,4 @@
 !core/skills/ai-dlc-update/reconcile/
 # run.sh sources the preamble.
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/layout.sh

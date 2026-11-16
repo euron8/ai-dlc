@@ -33,6 +33,7 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 SUBJ="$(pick "${1:-}" \
@@ -45,7 +46,7 @@ SUBJ="$(pick "${1:-}" \
 # a missing subject is the shape `consumer-boundary.md` names explicitly.
 if [ -z "$SUBJ" ]; then
   echo "SKIP: predicate-differential.sh is not present in this tree yet (a core fixture ships ahead of its subject). Nothing was asserted."
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/predicate-differential.sh"
 

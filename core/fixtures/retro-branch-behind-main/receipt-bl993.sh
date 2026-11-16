@@ -14,9 +14,8 @@
 #   carry      retro Step 1 on that branch after three more commits. PASS on exactly
 #              `CARRY: 4 commit(s) past PR head P (merged PR #7, from the sprint-merge record) ...`
 #              (the record commit and the three) with the gh log empty.
-#   norecord   the same world with the record block never run. PASS when Step 1 prints
-#              `CARRY: HARD_BLOCK underivable` and the gh log is non-empty: the world cannot be
-#              carried without the record, so the carry cell's pass is the record's doing.
+#              (The record-less control is run.sh part 2's repointed-ghfail world: the same
+#              re-pointed shape with no record reads HB-underivable after asking gh.)
 #   badrecord  the same world with a hand-committed record whose squash is not on origin/main.
 #              PASS when Step 1 prints `CARRY: HARD_BLOCK underivable — the sprint-merge record`
 #              and the gh log is empty: a refused record is never overridden by a derivation.
@@ -73,7 +72,7 @@ awk '/^### 1\. Context Loading/{s=1} s && /^### 2\./{exit}
 [ -s "$W/step1.sh" ] || die "the Step 1 block did not extract from $RETRO"
 awk '/^# deploy-validate Step 2: record the sprint-PR merge$/{on=1} on && /^```$/{exit} on{print}' "$DV" > "$W/record.tmpl"
 
-# world <name> <none|block|bad> -> builds $W/<name>-c (the retro clone) and sets P, M, ROUT. A non-empty
+# world <name> <block|bad> -> builds $W/<name>-c (the retro clone) and sets P, M, ROUT. A non-empty
 # SD is the AI_DLC_STATE_DIR the record block and Step 1 run under; empty runs both on the default.
 SD=""
 world() {
@@ -133,15 +132,6 @@ else
   else
     echo "CELL carry FAIL gh $g; $(grep -m1 '^CARRY: ' <<<"$cout" || echo 'no CARRY line')"; fail=1
   fi
-fi
-
-# ---- norecord ---------------------------------------------------------------------------------
-world norec none
-cout="$(step1 norec)"; g="$(ghcalls)"
-if grep -q '^CARRY: HARD_BLOCK underivable' <<<"$cout" && [ "$g" = asked ]; then
-  echo "CELL norecord PASS with no record the re-pointed branch is underivable and Step 1 asked gh"
-else
-  echo "CELL norecord FAIL gh $g; $(grep -m1 '^CARRY: ' <<<"$cout" || echo 'no CARRY line')"; fail=1
 fi
 
 # ---- badrecord --------------------------------------------------------------------------------

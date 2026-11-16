@@ -54,6 +54,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset CLAUDE_PROJECT_DIR 2>/dev/null || true
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 GROUP=a
 while :; do
   case "${1:-}" in
@@ -157,7 +158,7 @@ VALIDATOR="$(pick "$HERE/../../scripts/validate-artifact-derivations.sh" \
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: an absent subject SKIPS LOUDLY, never passes.
 if [ -z "$READER" ] || [ -z "$DIFFER" ]; then
   echo "SKIP: check-owed-derivations.sh or derivation-differential.sh is not present in this tree yet (a core fixture ships ahead of its subject). Nothing was asserted."
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 [ -n "$VALIDATOR" ] || { echo "FIXTURE ERROR: cannot locate validate-artifact-derivations.sh" >&2; exit 2; }
 # The LIVING sweep asks core-paths.sh --is-core, a SIBLING of the reader, which reads the core manifest

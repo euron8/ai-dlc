@@ -1012,6 +1012,52 @@ readset_loss_canary() {
 }
 # READSET_CANARY_END
 
+# READSET_STATPAIR_BEGIN
+# THE STAT-PAIRING GUARD: the loss guard that can see a lost stat. Under this profile one path lookup
+# of a tree file by one process is reported as a `file-test-existence` line and then a
+# `file-read-metadata` line, so a (process, path) pair holding a metadata report and no existence
+# report is a report the stream lost. Neither the drop-notice guard nor the atime canary can see that
+# loss: no notice is printed and a stat does not move atime. The window ($1) is read for every
+# `Sandbox: ` line under the tree ($2/); the unpaired `<proc(pid)>\t<path>` rows go to $3, sorted, and
+# their COUNT is printed, or `unreadable` when the window could not be read, which the caller's
+# guard omits on, as it does a non-zero count. An existence report with no metadata report is NOT
+# counted: lookups of absent paths are reported that way, and a pair cut by the end sentinel
+# leaves its existence half inside the window.
+# IT SEES ONLY A LOST EXISTENCE HALF, AND CLAIMS NO COMPLETENESS. A lost metadata half leaves an
+# existence-only pair, which is not counted (above), and a lookup that lost both reports leaves
+# nothing to pair. A zero here says no lookup in the window lost its existence half alone -- never
+# that the window is whole; what it refuses is a floor on the windows that lost stats.
+# FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING, WITH NO NARROWING: this judge, replayed over 142
+# windows the drop guard and the canary had accepted, refuses 11. Of the 87 that never exceeded 200
+# reports in any 10 ms, it refuses 1, on 1 row. That row and each row of the 4 refusals in windows
+# peaking under 400 were checked for a natural shape: in every one, other processes of the same
+# program in the same fixture's windows report the same path paired, so the row is a loss, and none
+# is exempted.
+readset_stat_pairing() {
+  local n
+  if awk -v tree="$2/" '
+    {
+      i = index($0, "Sandbox: "); if (i == 0) next
+      rest = substr($0, i + 9)
+      j = index(rest, ") allow "); if (j == 0) next
+      head = substr(rest, 1, j - 1); rest = substr(rest, j + 8)
+      sp = index(rest, " "); if (sp == 0) next
+      op = substr(rest, 1, sp - 1); path = substr(rest, sp + 1)
+      if (index(path, tree) != 1) next
+      k = head ")\t" substr(path, length(tree) + 1)
+      if (op == "file-read-metadata") m[k] = 1
+      else if (op == "file-test-existence") e[k] = 1
+    }
+    END { for (k in m) if (!(k in e)) print k }' "$1" > "$3" 2>/dev/null \
+    && LC_ALL=C sort -o "$3" "$3" 2>/dev/null; then
+    n="$(grep -c . "$3")" || n=0
+    printf '%s\n' "$n"
+  else
+    printf 'unreadable\n'
+  fi
+}
+# READSET_STATPAIR_END
+
 # READSET_LOCALMAP_BEGIN
 # `--local-map` mode's four helpers. Kept between sentinels so core/fixtures/readset-skip drives
 # the shipped logic on seeded files; none of them reads a global (readset_local_rows calls the
@@ -1697,8 +1743,10 @@ readset_nest_bypass() {
 # after 2 clean traces wrote neither. readset_write_map is the whole merge-guard-control-write
 # sequence, called in a SUBSHELL with LIST set to the fixtures traced so far after each accepted
 # fixture (so a `die` there skips that write and leaves the previous map in place), and once more
-# at the end over the whole LIST, which writes the OMITTED line and is the map an uninterrupted run
-# always wrote. Its merge reads the map the previous call wrote; that map differs from the original
+# at the end over the whole LIST, which is the map an uninterrupted run always wrote. THE MAP CARRIES
+# NO RECORD OF THIS RUN'S OMISSIONS: a line naming them changed the tracked file whenever one run's
+# omitted set differed from the last, a clean run included (BL-584). An omitted fixture keeps no rows,
+# and the run's own stdout names it (`OMITTED and therefore always run:`). Its merge reads the map the previous call wrote; that map differs from the original
 # only in fixtures this run already traced, and the final merge replaces all of those, so the final
 # map is byte-identical to the end-only one. core/fixtures/readset-skip kills a 3-fixture run in its
 # third fixture and asserts the first two landed, and cmp-s an uninterrupted map against end-only.
@@ -1886,7 +1934,6 @@ if [ -e "$MAP" ]; then cp -p "$MAP" "$MAP_TMP" || die "could not stage $MAP_TMP 
   echo "# it recomputes the same value over the tree it is pushing."
   echo "#"
   echo "# fixtures mapped: $M_FIX    entries: $M_ENT"
-  [ -n "$OMITTED" ] && echo "# OMITTED by the last run (always run): $OMITTED"
   cat "$MERGED"
   LC_ALL=C sort -u "$WORK/digest.carried" "$WORK/digest.new"
 } > "$MAP_TMP" || { rm -f "$MAP_TMP"; die "could not write $MAP_TMP -- $MAP is unchanged"; }
@@ -2078,7 +2125,7 @@ rs_fx_judge() {
   # and a truncated path maps to the wrong file or to none, which reads exactly like a clean
   # trace.
   last="$(grep -nF "$SENT_KEY" "$raw" 2>/dev/null | tail -1 | cut -d: -f1)"; : "${last:=0}"
-  lost=0; nest_bypass=0
+  lost=0; nest_bypass=0; statpair=0
   if [ "$TRACER" = fs_usage ]; then
     tail -n "+$(( last + 1 ))" "$raw" 2>/dev/null \
       | grep -v 'RdData\|WrData' \
@@ -2098,6 +2145,9 @@ rs_fx_judge() {
     # silent-skip direction. Measured on this machine at load ~38: even the scoped profile drops
     # under a burst of a few hundred opens, and every burst that lost paths printed the notice.
     lost="$(grep -c 'dropped during' "$WORK/$fx.win" 2>/dev/null)" || lost=0
+    # A LOST STAT PRINTS NO NOTICE AND MOVES NO ATIME, so neither the guard above nor the canary
+    # below sees it; readset_stat_pairing does.
+    statpair="$(readset_stat_pairing "$WORK/$fx.win" "$TREE" "$WORK/$fx.statpair")"
     sandbox_paths < "$WORK/$fx.win" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
     [ -z "${RS_ESC:-}" ] || nest_bypass="$(readset_nest_bypass "$MARKDIR/.readset-nest" < "$WORK/$fx.win")" || nest_bypass=unreadable
   fi
@@ -2152,6 +2202,7 @@ rs_fx_judge() {
   [ "$flushed" -eq 1 ] || why="${why:+$why; }no end sentinel in the stream -- the tail of the window is unknown"
   [ "$lost" -eq 0 ]    || why="${why:+$why; }the stream dropped reports $lost time(s) in this window"
   [ "$canary" = 0 ]    || why="${why:+$why; }LOSS CANARY: $canary path(s) the fixture read (atime) are absent from the stream -- see $WORK/$fx.canary"
+  [ "$statpair" = 0 ]  || why="${why:+$why; }STAT LOSS: $statpair metadata report(s) with no existence report from the same process for the same path -- see $WORK/$fx.statpair"
   [ "$unread_moved" -eq 0 ] || why="${why:+$why; }UNREAD CONTROL: $UNREAD_CTL left the 2001 atime epoch -- the reset did not hold or something walked the tree"
   [ "$nest_bypass" = 0 ] || why="${why:+$why; }NEST BYPASS: $nest_bypass escaped sandbox-exec exec(s) not made by the nest shim -- a nested run went unreported"
   [ "$n" -gt 0 ]      || why="${why:+$why; }empty read-set"

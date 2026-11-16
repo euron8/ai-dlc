@@ -14,3 +14,4 @@ core/scripts/
 # is keyed whole, not on its comment-stripped text.
 core/fixtures/story-evidence-scaffold/run.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh

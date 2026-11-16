@@ -238,7 +238,10 @@ g_probe_keys() { # <probe dir> <hook path>: rewrite .dkeys from the probe tree's
 # readset_decl_parse does (CR stripped, blank and `#` lines dropped, leading `!`/`+` stripped to classify).
 #   r1  a whole-program or whole-directory inputs.decl line with no list row (keyed on the exact line)
 #   r2  a list row no inputs.decl carries
-#   r3  a list row, or a `#program` row, absent from the base copy: the list may only shrink (reclassing is free)
+#   r3  a list row, or a `#program` row, absent from the base copy: the list may only shrink (reclassing is free).
+#       One exception, a narrowing: a new row is accepted when the same fixture drops a base DIRECTORY row this
+#       change, the new line strictly extends that row's line with the same leading `!`/`+` markers, and the
+#       fixture's row count does not grow. Each accepted narrowing prints one `narrowing accepted:` line.
 #   r4  a malformed row: a class other than whole|legacy, or a duplicate
 #   r5  a distribution tree (its index tracks .githooks/pre-push) whose list is not tracked, or whose two hooks do
 #       not both define readset_invalidation_guard and call it after apply_readset_skip
@@ -248,20 +251,34 @@ g_ratchet() { # <root> <base list file, or empty when the base has none> <check 
   set -- "$root/$G_FXROOT"*/inputs.decl
   [ -f "$1" ] || { printf 'ratchet: no inputs.decl under %s%s -- an empty corpus is not a pass\n' "$root/" "$G_FXROOT"; return 1; }
   [ -f "$root/$G_LIST" ] || { printf 'ratchet: %s absent\n' "$G_LIST"; return 1; }
-  G_BASE="$base" G_LISTF="$root/$G_LIST" awk -F'\t' '
+  : > "$G_W/narrow.out"
+  G_BASE="$base" G_LISTF="$root/$G_LIST" G_NAR="$G_W/narrow.out" awk -F'\t' '
+    function mk(s) { match(s, /^[!+]*/); return substr(s, 1, RLENGTH) }
+    # nparent <fx> <line>: the dropped base directory row of the same fixture that <line> strictly extends, or ""
+    function nparent(fx, line,   pk, b, pl, m) {
+      if (CC[fx] > BC[fx]) return ""
+      m = mk(line)
+      for (pk in B) { split(pk, b, "\t")
+        if (b[1] != fx || (pk in L)) continue
+        pl = b[2]
+        if (pl !~ /\/$/ || mk(pl) != m) continue
+        if (length(line) > length(pl) && substr(line, 1, length(pl)) == pl) return pl }
+      return "" }
     BEGIN { while ((r = (getline l < ENVIRON["G_LISTF"])) > 0) { sub(/\r$/, "", l); split(l, a, "\t")
               if (a[1] == "#program") { P[a[2]] = 1; continue }
               if (l == "" || substr(l, 1, 1) == "#") continue
-              k = a[1] "\t" a[2]; if (k in L) print "r4 duplicate list row: " a[1] " " a[2]; L[k] = 1
+              k = a[1] "\t" a[2]; if (k in L) print "r4 duplicate list row: " a[1] " " a[2]; L[k] = 1; CC[a[1]]++
               if (a[3] != "whole" && a[3] != "legacy") print "r4 class is neither whole nor legacy: " a[1] " " a[2] " [" a[3] "]" }
             if (r < 0) { print "r2 the list cannot be read"; exit }
             if (ENVIRON["G_BASE"] != "") { nb = 0
               while ((r = (getline l < ENVIRON["G_BASE"])) > 0) { sub(/\r$/, "", l); split(l, a, "\t")
                 if (a[1] == "#program") { BP[a[2]] = 1; continue }
                 if (l == "" || substr(l, 1, 1) == "#") continue
-                B[a[1] "\t" a[2]] = 1; nb++ }
+                B[a[1] "\t" a[2]] = 1; BC[a[1]]++; nb++ }
               if (r < 0) { print "r3 the base list cannot be read"; exit }
-              for (k in L) if (!(k in B)) { split(k, a, "\t"); print "r3 a list row the base copy lacks (the list may only shrink): " a[1] " " a[2] }
+              for (k in L) if (!(k in B)) { split(k, a, "\t"); pl = nparent(a[1], a[2])
+                if (pl != "") { print "invalidation-guard ratchet: narrowing accepted: " a[1] " " pl " -> " a[2] > ENVIRON["G_NAR"]; continue }
+                print "r3 a list row the base copy lacks (the list may only shrink): " a[1] " " a[2] }
               for (p in P) if (!(p in BP)) print "r3 a #program row the base copy lacks: " p
               for (p in BP) if (!(p in P)) print "r3 a #program row was removed: " p } }
     FNR == 1 { fx = FILENAME; sub(/\/inputs\.decl$/, "", fx); sub(/.*\//, "", fx); nf++ }
@@ -285,23 +302,30 @@ g_ratchet() { # <root> <base list file, or empty when the base has none> <check 
 }
 # The ratchet's self-probe: a seeded corpus, each finding class fired, and the near-misses quiet.
 g_ratchet_probe() {
-  local P="$G_W/rprobe" out bad="" c
-  mkdir -p "$P/core/fixtures/a" "$P/core/fixtures/b" "$P/docs" || return 2
+  local P="$G_W/rprobe" out bad="" c nl=""
+  mkdir -p "$P/core/fixtures/a" "$P/core/fixtures/b" "$P/core/fixtures/c" "$P/docs" || return 2
   printf '!.githooks/pre-push\r\ncore/scripts/\n# a comment/\n\nnotes/x.md\n.githooks/pre-push.bak\n' > "$P/core/fixtures/a/inputs.decl"
   printf '+core/rules/\n' > "$P/core/fixtures/b/inputs.decl"
-  printf '#program\t.githooks/pre-push\na\t!.githooks/pre-push\twhole\na\tcore/scripts/\tlegacy\n' > "$P/base.tsv"
-  # near-miss world: the list covers every whole line exactly (CRLF line included), b's line is in the base
-  printf '#program\t.githooks/pre-push\na\t!.githooks/pre-push\tlegacy\na\tcore/scripts/\tlegacy\n' > "$P/docs/inputs-decl-whole-rows.tsv"
+  printf '#program\t.githooks/pre-push\na\t!.githooks/pre-push\twhole\na\tcore/scripts/\tlegacy\nc\tcore/hooks/\twhole\n' > "$P/base.tsv"
+  # near-miss world: the list covers every whole line exactly (CRLF line included), b's line is in the base, and c
+  # narrows its base row core/hooks/ to core/hooks/sub/ (accepted, and printed as a narrowing)
+  printf 'core/hooks/sub/\n' > "$P/core/fixtures/c/inputs.decl"
+  printf '#program\t.githooks/pre-push\na\t!.githooks/pre-push\tlegacy\na\tcore/scripts/\tlegacy\nc\tcore/hooks/sub/\twhole\n' > "$P/docs/inputs-decl-whole-rows.tsv"
   printf '+core/rules/\n' > "$P/core/fixtures/b/inputs.decl.off"; mv "$P/core/fixtures/b/inputs.decl" "$P/core/fixtures/b/x"
   : > "$P/core/fixtures/b/inputs.decl"
   out="$(g_ratchet "$P" "$P/base.tsv" 0)" || bad="$bad near-miss:fired[$out]"
-  # offender world: b gains a whole line with no row (r1), a row with no line (r2), a row the base lacks (r3), a bad class (r4)
+  IFS= read -r nl < "$G_W/narrow.out"
+  [ "$nl" = "invalidation-guard ratchet: narrowing accepted: c core/hooks/ -> core/hooks/sub/" ] || bad="$bad near-miss:no-narrowing[$nl]"
+  # offender world: b gains a whole line with no row (r1), a row with no line (r2), a row the base lacks (r3), a bad class
+  # (r4); c replaces its base row with a same-count row that does not extend it (r3)
   mv "$P/core/fixtures/b/inputs.decl.off" "$P/core/fixtures/b/inputs.decl"
-  printf 'b\tgone/\tlegacy\na\tcore/scripts/\tsometimes\n' >> "$P/docs/inputs-decl-whole-rows.tsv"
+  printf 'core/hookz/\n' > "$P/core/fixtures/c/inputs.decl"
+  printf '#program\t.githooks/pre-push\na\t!.githooks/pre-push\tlegacy\na\tcore/scripts/\tlegacy\nc\tcore/hookz/\twhole\nb\tgone/\tlegacy\na\tcore/scripts/\tsometimes\n' > "$P/docs/inputs-decl-whole-rows.tsv"
   out="$(g_ratchet "$P" "$P/base.tsv" 0)" && bad="$bad offender:quiet"
   for c in 'r1 a whole-directory line with no list row (declare the files or spans it reads): b +core/rules/' \
            'r2 a list row no inputs.decl carries (delete it): b gone/' 'r3 a list row the base copy lacks (the list may only shrink): b gone/' \
-           'r4 class is neither whole nor legacy: a core/scripts/ [sometimes]'; do
+           'r4 class is neither whole nor legacy: a core/scripts/ [sometimes]' \
+           'r3 a list row the base copy lacks (the list may only shrink): c core/hookz/'; do
     g_has "$out" "$c" || bad="$bad offender:missing[${c%% *}]"
   done
   { g_has "$out" 'notes/x.md' || g_has "$out" 'pre-push.bak' || g_has "$out" 'a comment'; } && bad="$bad offender:near-miss-fired"
@@ -422,7 +446,9 @@ case "$mode" in
     fi
     git ls-files --error-unmatch -- scripts/invalidation-guard.sh > /dev/null 2>&1 && [ -f docs/backlog.md ] && r5=1
     if g_ratchet "$PWD" "$base" "$r5"; then
-      printf 'invalidation-guard ratchet: %s whole-program/whole-directory row(s), none new, none stale\n' "$(awk -F'\t' '$1 !~ /^#/ && NF >= 3' "$G_LIST" | grep -c .)"
+      LC_ALL=C sort "$G_W/narrow.out"
+      printf 'invalidation-guard ratchet: %s whole-program/whole-directory row(s), %s narrowing(s) accepted, no other new row, none stale\n' \
+        "$(awk -F'\t' '$1 !~ /^#/ && NF >= 3' "$G_LIST" | grep -c .)" "$(grep -c . "$G_W/narrow.out")"
       exit 0
     fi
     exit 1 ;;

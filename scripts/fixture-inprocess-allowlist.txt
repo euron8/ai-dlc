@@ -89,7 +89,6 @@ mutation-red-replay	core/scripts/validate-mutation-red.sh runs outside a declare
 operator-request-capture	core/hooks/ai-dlc-pause.sh runs outside a declared cell
 owed-derivations	core/skills/ai-dlc-update/reconcile/derivation-differential.sh runs outside a declared cell
 owed-derivations-c	core/skills/ai-dlc-update/reconcile/derivation-differential.sh runs outside a declared cell; core/skills/ai-dlc-update/reconcile/apply.sh runs outside a declared cell; core/scripts/validate-artifact-derivations.sh runs outside a declared cell
-party-wave-barrier	scripts/audit-party-wave-barrier.sh runs outside a declared cell
 pause-hook-origin	core/hooks/ai-dlc-pause.sh runs outside a declared cell
 pause-question-in-prose	core/hooks/ai-dlc-continue.sh runs outside a declared cell
 plan-rotate	scripts/plan-rotate.sh runs outside a declared cell; scripts/validate-plan-shape.sh runs outside a declared cell

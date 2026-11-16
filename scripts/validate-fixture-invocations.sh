@@ -176,9 +176,9 @@
 # fixtures declaring those directories; every count that moves takes the `c+kxglob` form. A row that moves between
 # passes on the same tree is a fixture defect to fix or list, never a tolerance.
 #
-# EDITING core/scripts/hermetic-run.sh BETWEEN HR_SANDBOX_BEGIN AND HR_SANDBOX_END CHANGES ITS `#runner` DIGEST,
-# which voids every recorded pass in the verdict store: the next push runs the whole suite once. The arming lives
-# inside that span, so this mechanism's own landing is such an edit.
+# EDITING core/scripts/hermetic-run.sh BETWEEN HR_SANDBOX_BEGIN AND HR_SANDBOX_END CHANGES ITS `#runner` DIGEST and
+# every declared fixture's `<runner>#HR_SANDBOX` key row, so every recorded pass re-runs unless the hooks'
+# READSET_RUNNER_CARRY pins the old span sha to the new one. The arming lives inside that span.
 #
 # Distribution-only: repo-root scripts/ is never installed, and nothing on a consumer sets the three variables.
 #
@@ -197,6 +197,7 @@
 # FXC-IDENTITY 1 4ab7b9213aef40bc9e9cfa591abbab63a184703d40186176cd88c5dad937be0e cost only: the --b2-census self-probe and its memo removed (BL-1102); no fixture's judgement moves
 # FXC-IDENTITY 1 0889dc63e00b73cd2d67c4ddd77760a23176d8b7db276e28565303de8be1c90a the static join's `A` row for an absent or unopenable cli subject (BL-878); fxc_judge is unchanged, so no counted fixture's judgement moves
 # FXC-IDENTITY 1 23e7b1c0546c4cacfb343a221e840f02e5e1f7701eb0bf5343fae282ef207418 fxc_gen_rc writes a temp file and renames it onto fxcount.rc (BL-1119); the rc bytes are unchanged, so no fixture's judgement moves
+# FXC-IDENTITY 1 c4decebcf8a21abd7ecb63cd3b9a08414e3c1249ecf721e84aa4a7c513671316 remedy text only: FXC_CELLS_REMEDY no longer names the deleted readset-stage1-verdict (BL-915); no fixture's judgement moves
 set -u
 FXC_FORMAT=1
 
@@ -1180,7 +1181,7 @@ fxc_inproc_listed() {
   [ -f "$FXC_INPROC_ALLOW" ] || return 1
   F="$1" awk -F'\t' '$0 ~ /^[[:space:]]*(#|$)/ { next } $1 == ENVIRON["F"] { f = 1 } END { exit f ? 0 : 1 }' "$FXC_INPROC_ALLOW"
 }
-FXC_CELLS_REMEDY="build the fixture in-process (.claude/rules/fixture-mutants.md 'One run per distinct state'; the reference fixtures BL-878 names: push-drain-refusals, ledger-reverify-unfalsifiable, readset-stage1-verdict, story-evidence-scaffold), and declare each remaining start in cells.decl -- \`cli <subject> <cell-id>\`, \`e2e <subject> <cell-id> why=<reason>\`, \`nested <parent> <child> why=<reason>\` -- started as \`FXCELL=<cell-id> bash <subject>\`"
+FXC_CELLS_REMEDY="build the fixture in-process (.claude/rules/fixture-mutants.md 'One run per distinct state'; the reference fixtures BL-878 names: push-drain-refusals, ledger-reverify-unfalsifiable, story-evidence-scaffold), and declare each remaining start in cells.decl -- \`cli <subject> <cell-id>\`, \`e2e <subject> <cell-id> why=<reason>\`, \`nested <parent> <child> why=<reason>\` -- started as \`FXCELL=<cell-id> bash <subject>\`"
 
 # fxc_judge <fixture> <decl> <log> <root>: messages on stdout; returns 0 pass, 1 FAIL, 2 BROKEN.
 fxc_judge() {

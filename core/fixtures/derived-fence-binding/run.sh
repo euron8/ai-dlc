@@ -44,13 +44,14 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 D_ROOT="$(cd "$HERE/../../.." && pwd)"
 
 # Distribution-only. validate-enforcement-map.sh is not shipped, so on a consumer there is
 # nothing to test. Say so and stop; do not fake a pass.
 if [ ! -f "$D_ROOT/scripts/validate-enforcement-map.sh" ]; then
   echo "derived-fence-binding: SKIP — distribution-only (validate-enforcement-map.sh is not shipped to consumers)"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"

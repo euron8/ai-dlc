@@ -20,7 +20,10 @@
 #   THE CALL BOUND  -- this script never runs longer than the BEAT QUANTUM
 #                      (AI_DLC_WAIT_BEAT_SECS). Every invocation is ONE beat and
 #                      returns inside it, so the lead is re-invoked and can act
-#                      on whatever landed.
+#                      on whatever landed. One exception: under --complete-repair
+#                      --dispatch the beat keeps polling past its deadline while
+#                      the dispatched agent's transcript advanced inside the last
+#                      quantum, charging one beat per extension (LIVE EXTENSION).
 #   THE SEQUENCE BOUND -- beats are COUNTED across calls in a sidecar. At
 #                      max_wait_beats the script declares Rule 20 non-delivery.
 #                      An unbounded wait is a hang, not a gag (Rule 29).
@@ -2090,6 +2093,40 @@ dispatch_live() {
 }
 
 # ---------------------------------------------------------------------------
+# LIVE EXTENSION (BL-541): under --complete-repair --dispatch, a beat that reaches its deadline
+# while the one dispatched agent's own transcript took a turn inside the last quantum keeps
+# polling in the same call instead of returning WAITING. Each such return woke the lead for a
+# turn whose only work was to re-arm. $1 = the epoch the current quantum started. Returns 0 to
+# extend, and charges the pending counter one beat, exactly as the re-armed call would have.
+# Scope is dispatch_live's: one target, one resolved agent, not stalled, not FAILED, LIVE. On top
+# of LIVE, the newest turn (dispatch_live's dl_m_) must be strictly AFTER the quantum's start: a
+# transcript that exists, or whose last turn predates this quantum, is not an advancing writer,
+# so a hung agent returns at the quantum as before. ONE EXTENDER PER RECORD: nothing refuses a
+# second beat on a target that already has a live one, and two extending beats would both charge
+# its counter every quantum. So each sleeping beat in this mode stamps `<key>.arm` with its pid and
+# start epoch, the newest arm overwriting it, and only the beat whose stamp is still there may
+# extend; an older beat returns at its next deadline, so an overlap lasts at most one quantum, as
+# before this mode existed. Never extends a counter at or
+# past MAX_BEATS, so the sequence bound and the cap/grant block on the next call are unchanged.
+# The call can run MAX_BEATS x BUDGET, so it is for the BACKGROUNDED lead join that rule-28 and
+# _gate-procedures.md arm; a foreground call in this mode overruns its Bash timeout.
+# ---------------------------------------------------------------------------
+live_extend() {
+  [ "$COMPLETE_REPAIR" -eq 1 ] || return 1
+  [ -n "$LE_ARM" ] || return 1
+  [ "$(cat "$LE_ARM" 2>/dev/null)" = "$LE_ARM_V" ] || return 1
+  dispatch_live || return 1
+  case "${dl_m_:-}" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$dl_m_" -gt "$1" ] || return 1
+  le_c_="${COUNTER_DIR}/$(key_of "$PENDING")"
+  le_b_="$(cat "$le_c_" 2>/dev/null || echo 0)"
+  case "$le_b_" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$le_b_" -lt "$MAX_BEATS" ] || return 1
+  printf '%s' "$(( le_b_ + 1 ))" > "$le_c_" 2>/dev/null || return 1
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # DISPATCH FAILED: A DISPATCHED AGENT THAT DIED BEFORE DELIVERING (BL-975). Scope: the RESOLVED
 # dispatched agents (DP_ROW_AGENTS_); without --dispatch nothing is read and nothing printed. An
 # agent is FAILED only while AT LEAST ONE joined target is not delivered by is_delivered -- the
@@ -2656,7 +2693,8 @@ for t in $TARGETS; do
     case "$g" in ''|*[!0-9]*) g=0 ;; esac
     # --complete-repair: the record is appended only at the end, so the target cannot grow and
     # its own mark never grants. The dispatched agent's own transcript is that wait's evidence of
-    # work (dispatch_live), read here and nowhere else. A pure read, so a chained sibling and a
+    # work (dispatch_live), read here for the grant and in live_extend for the in-call extension
+    # (LIVE EXTENSION). A pure read, so a chained sibling and a
     # fresh arm after the cap get the same answer as a sleeping beat.
     # LIVE (0) replaces the remedy, and grants only under --complete-repair; RECENT (2) and
     # STOPPED (3) never grant (dispatch_live). Only the GRANT is gated on the mode: any resolved
@@ -2904,7 +2942,8 @@ IFS="$OLDIFS"
 # the wait must be finite -- THE CALL BOUND in the header. It is BUDGET minus a reserve of
 # one poll interval (at least MARGIN) because the loop sleeps AFTER its check, so the
 # worst-case beat ends at DEADLINE + POLL, which is then at most BUDGET.
-# WHEN HIT: the loop breaks and the code below RE-EVALUATES is_delivered for every path, so
+# WHEN HIT: live_extend (LIVE EXTENSION) may move it one BUDGET later; otherwise
+# the loop breaks and the code below RE-EVALUATES is_delivered for every path, so
 # a file that landed during the last sleep is still reported DELIVERED; anything else is
 # reported WAITING and costs the beat already charged above. Exit 0 either way.
 # LOAD-FREE: the deadline is a wall-clock epoch, not a count of polls, so a loaded box
@@ -2914,7 +2953,16 @@ IFS="$OLDIFS"
 # window opens in time, and that belongs to SETTLE above, not here.
 RESERVE="$MARGIN"
 [ "$POLL" -gt "$RESERVE" ] && RESERVE="$POLL"
-DEADLINE=$(( $(date +%s) + BUDGET - RESERVE ))
+QSTART="$(date +%s)"
+DEADLINE=$(( QSTART + BUDGET - RESERVE ))
+LE_ARM=""; LE_ARM_V=""
+if [ "$COMPLETE_REPAIR" -eq 1 ]; then
+  case "$PENDING" in
+    *'|'*) ;;
+    *) LE_ARM="${COUNTER_DIR}/$(key_of "$PENDING").arm"; LE_ARM_V="$WD_SELF_PID $QSTART"
+       sidecar_put "$LE_ARM" "$LE_ARM_V" ;;
+  esac
+fi
 
 # ---------------------------------------------------------------------------
 # Beat-liveness marker (v0.81.0). A live, backgrounded beat is the ONLY state in
@@ -2953,7 +3001,10 @@ all_present() {
 while :; do
   if all_present; then break; fi
   lp_now_="$(date +%s)"
-  [ "$lp_now_" -ge "$DEADLINE" ] && break
+  if [ "$lp_now_" -ge "$DEADLINE" ]; then
+    live_extend "$QSTART" || break
+    QSTART="$lp_now_"; DEADLINE=$(( DEADLINE + BUDGET ))
+  fi
   # A dispatched agent that died breaks the beat early, once per agent per join (DISPATCH FAILED, above).
   df_early_break "$lp_now_" && break
   sleep "$POLL"

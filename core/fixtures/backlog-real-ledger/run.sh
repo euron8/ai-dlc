@@ -53,6 +53,8 @@ find_one() { # find_one <relative path>... -> the first candidate that is a file
 RECEIPTS="$(find_one "$DIR/../../scripts/validate-backlog-receipts.sh" "$DIR/../../../scripts/validate-backlog-receipts.sh")" || RECEIPTS=""
 SIZE="$(find_one "$DIR/../../scripts/validate-backlog-size.sh" "$DIR/../../../scripts/validate-backlog-size.sh")" || SIZE=""
 REVERIFY="$(find_one "$DIR/../../scripts/backlog-reverify.sh" "$DIR/../../../scripts/backlog-reverify.sh")" || REVERIFY=""
+# R14 of the receipts validator loads the LANDED_FORM span of the rotate script beside it.
+ROTATE="$(find_one "$DIR/../../scripts/backlog-rotate.sh" "$DIR/../../../scripts/backlog-rotate.sh")" || ROTATE=""
 LIBSRC="$(find_one "$DIR/../../skills/ai-dlc-update/reconcile/lib.sh" "$DIR/../../../core/skills/ai-dlc-update/reconcile/lib.sh")" || LIBSRC=""
 REVSRC="$(find_one "$DIR/../../skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$DIR/../../../core/skills/ai-dlc-update/reconcile/ledger-reverify.sh")" || REVSRC=""
 # The could-not-measure rule both the classifier and the receipts validator source from beside them.
@@ -60,13 +62,14 @@ RLIB="$(find_one "$DIR/../../scripts/backlog-receipt-lib.sh" "$DIR/../../../scri
 # The frozen ledger (BL-872); see the header. REAL_LEDGER keeps its name: it is a real ledger, frozen.
 REAL_LEDGER=""
 [ -f "$DIR/ledger.snapshot" ] && REAL_LEDGER="$DIR/ledger.snapshot"
-for _p in RECEIPTS SIZE REVERIFY LIBSRC REVSRC RLIB REAL_LEDGER; do
+for _p in RECEIPTS SIZE REVERIFY ROTATE LIBSRC REVSRC RLIB REAL_LEDGER; do
   eval "_v=\${$_p}"
   [ -n "$_v" ] || { echo "FIXTURE BROKEN: backlog-real-ledger could not resolve $_p" >&2; exit 2; }
 done
 echo "HERMETIC-CONSUMED scripts/validate-backlog-receipts.sh"
 echo "HERMETIC-CONSUMED scripts/validate-backlog-size.sh"
 echo "HERMETIC-CONSUMED scripts/backlog-reverify.sh"
+echo "HERMETIC-CONSUMED scripts/backlog-rotate.sh"
 
 TMP="$(mktemp -d)"
 cleanup() {
@@ -90,6 +93,7 @@ seed_r() { # seed_r <dir>
   cp "$LIBSRC" "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
   cp "$REVSRC" "$d/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
   cp "$REVERIFY" "$d/scripts/backlog-reverify.sh"
+  cp "$ROTATE" "$d/scripts/backlog-rotate.sh"
   # The receipts validator reads its F-STEP vocabulary from the extractor and the step basenames.
   mkdir -p "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts" "$d/core/skills/ai-dlc/steps"
   # A seeded extractor: the validator reads only these two lines of it, and the step set is the one step file

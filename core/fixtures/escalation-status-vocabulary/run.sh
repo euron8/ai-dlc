@@ -75,7 +75,7 @@ ev() { # ev <copy> <args...> -- one in-process run of <copy>, which must be the 
       "${LONE_V:-}"|"${SIB_V:-}") : ;;
       *) export AI_DLC_PROJECT_ROOT="$ESV_ROOT" ;;
     esac
-  ( set +o pipefail; esv_main "$@" )
+  ( set +o pipefail; fx_inproc "$c" && esv_main "$@" )
   )
 }
 ESV_REL="core/scripts/$(basename "$VALIDATOR")"

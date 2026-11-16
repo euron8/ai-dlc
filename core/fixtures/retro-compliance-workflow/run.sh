@@ -58,6 +58,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 
 # --- tree root: WALK UP for a marker, never count `..` hops -------------------
 # A hop count answers differently from the repo root, from this directory, and from a
@@ -136,7 +137,7 @@ if [ -z "$WF" ] || [ -z "$VP" ] || [ -z "$SCHEMA" ]; then
              "A7 empty extraction hard-fails"; do
         skip "$a — subject absent in both layouts:$miss"
     done
-    exit 0
+    fx_skip_exit "$HERE"
 fi
 
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
@@ -148,7 +149,7 @@ if ! bash "$HERE/seed.sh" "$SEED" >/dev/null 2>"$WORK/seed.err"; then
     for a in "A1" "A2" "A3" "A4" "A5" "A6" "A7"; do
         skip "$a — seed unavailable: $(tr -d '\n' < "$WORK/seed.err")"
     done
-    exit 0
+    fx_skip_exit "$HERE"
 fi
 
 PY="$HERE/extract.py"

@@ -5,4 +5,5 @@
 # $MUT/<name>/core/scripts/ so the copy keeps the subject's relative path.
 71 *
 4 core/scripts/validate-artifact-paths.sh
-1 inproc:core/scripts/validate-artifact-paths.sh
+# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
+9 inproc:core/scripts/validate-artifact-paths.sh

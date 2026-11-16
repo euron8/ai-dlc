@@ -41530,7 +41530,9 @@ Receipt: `core/fixtures/retro-branch-behind-main/receipt-bl990.sh`, run as the `
 
 Provenance: batch 256, cluster N9; id allocated by the lead.
 
-verify: sh bash core/fixtures/retro-branch-behind-main/receipt-bl990.sh
+Receipt moved (batch 257, W9-10, BL-915): `receipt-bl990.sh` is deleted. Its three cells are `run.sh` parts 2-4, and the carry cell's exact PR-head sha is part 2's `=head` token, so the receipt is the fixture.
+
+verify: sh bash core/fixtures/retro-branch-behind-main/run.sh
 
 ## BL-989 — gate repair record field grammar: arm 8 reads column 0 only, so a bullet `- repaired_checks:` row silently defeats the lift, and remediator.md documents no grammar
 
@@ -45250,3 +45252,121 @@ Provenance: batch 257, wave 8, raised by ai-dlc-d8 (W8-01) in BL-1135's sha repo
 
 verify: manual
 
+## BL-1118 — hermetic-run has a buildable undeclared-tool arm, and shipping it voids every verdict
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/scripts/hermetic-run.sh` (HR_SANDBOX).
+
+BL-984's `command_not_found_handle` arm cannot be built on bash 3.2. A PATH trap can be. hermetic-run would put a trap directory after `$HR_BIN` on the fixture's PATH. The directory holds one `#!/bin/sh` stub for each executable name in the fixed tool dirs that the fixture does not declare. Each stub appends its own name to a log that hermetic-run names, and exits 127. hermetic-run then fails a fixture whose log is non-empty. Because the stubs run under `#!/bin/sh`, the invocation counter does not count them. This channel also sees a call whose stderr is redirected, which a scan for `command not found` in the run log cannot.
+- The false-positive set is unmeasured. A `command -v <tool>` fallback now finds the stub, so it takes the other branch.
+- C20 keys every declared fixture on `<runner>#HR_SANDBOX`, so shipping the arm forces a whole-suite rerun, which the standing rules forbid. Part of what is owed is a way to ship it that does not void every verdict.
+- Cost is unmeasured: building one stub per tool-dir name for each fixture.
+
+Owed: the false-positive set, measured; a cost-bounded farm; and a delivery path that carries existing verdicts forward.
+
+**Progress (batch 257; the entry stays OPEN).** No code shipped. All three owed items remain: the false-positive set, the cost-bounded farm and the delivery path. Two things block them. The arm's PATH sits inside HR_SANDBOX, so shipping it voids every declared fixture's verdict (C20). Measuring its false-positive set across the suite is a census, which the batch's build process forbids.
+
+**LANDED (v0.1146.0).** The arm, the farm and the delivery path ship together. The arm WARNS; making it a FAIL is BL-1143.
+- **The arm.** `core/scripts/hermetic-run.sh` HR_SANDBOX puts a trap directory after `$HR_BIN` on the fixture's PATH, holding one `#!/bin/sh` stub per executable name in the fixed tool dirs. Each stub appends its name to `HR_TRAP_LOG`, prints `<name>: command not found` and exits 127, so the call answers as before. A non-empty log prints `WARNING undeclared tool(s) called: <names>` in both layouts, and the verdict is unchanged. It is not a FAIL because a fixture carried across the landing (below) would meet it on another change's push. A `?name` that resolves to a stub is `not on PATH`.
+- **The farm, cost-bounded.** Built once per name set under the invoker's TMPDIR and reused. A nested runner finds the enclosing farm on its own PATH. A slot holding another name set is left alone, and that run uses its own build. The build runs only tools the span already runs, so a fixture driving the runner declares nothing new.
+- **The delivery path.** `READSET_RUNNER_CARRY` in both pre-push hooks' `readset_keys` pins the old HR_SANDBOX span sha to the new one: a key record under the old span reads as current. A pin naming any other span is inert.
+- **Measured** with `scripts/predict-push-set.sh`:
+  - control, f29ff3693: RUN 0, CONSUMER 5;
+  - a no-op span edit on f29ff3693, no carry: 293 of 295, and 220 of 220;
+  - the carry on f29ff3693 (5e52d8013): 57 and 42 (the prototype read 44 and 17; the difference is this unit's own hook, fixture, backlog and judge-comment edits);
+  - the carry rebased onto ea8c9fb0c: 49 and 30;
+  - the same tree with a one-digit wrong pin: 293 and 220.
+- `scripts/invalidation-guard.sh --predict`:
+  - on the final tree before the re-pin, the pin inert: 293 selected;
+  - after the re-pin, on 5e52d8013: 57 selected, 0 FAIL; rebased onto ea8c9fb0c: 49 selected, 0 FAIL.
+- **False-positive set.** Enumerated statically, in two populations.
+  - The fixture directories: 44 lexical `command -v`/`type`/`which`/`hash` sites. Of the 6 code sites, 5 are unaffected, and hermetic-runner's `command -v node` is fixed to ignore a stub.
+  - The subject scripts: 128 sites, reached by 79 fixtures by name and 132 with directory reach. This population is BL-1143's.
+- **Receipt:** `core/fixtures/hermetic-runner` arm TR.
+  - An undeclared `cmp` in the swallowed shape warns, naming it, with exit 0, in the distribution and consumer layouts alike. Its ALLOW twin (`cmp` declared) gives no warning.
+  - A run with a farm on PATH builds none in its own TMPDIR.
+  - Hand-run mutants, each killing TR: the trap off PATH, the warning made a FAIL, and the PATH discovery removed.
+
+verify: manual
+
+## BL-1136 — the recover gate's advisor stage stands down for a lead with no built-in grant, though it holds `mcp__advisor__consult`
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/hooks/ai-dlc-recover-gate.sh` (the advisor stage, `:248`), and its fixture.
+
+BL-1135 gated the advisor gate's no-grant agents on the MCP consult. The recover gate's touchpoint-R stage restates that gate's detection (`:67-72`, not byte-bound) and still deletes the owed file and allows the call when the grant is not `on` (`:248`). A probe at f29ff3693 drove the shipped recover gate with touchpoint R owed: the owed file present, no marker, a `compact_boundary`, then a digest Read, no advisor since, and an incoming `Agent` call.
+- Granted lead: DENY, owed file kept.
+- No-grant lead with `mcp__advisor__consult` in its `deferred_tools_delta` roster: SILENT, owed file deleted.
+
+Fix: credit a consult as the no-grant lead's attempt and stand down only when the lead holds neither advisor, using BL-1135's held test, and add the matching cells to the recover gate's fixture.
+
+Provenance: batch 257, wave 8, measured read-only by ai-dlc-d8 (W8-01) while fixing BL-1135; id allocated by the lead.
+
+**LANDED (v0.1146.0).** Both gates now load their advisor detection from one sibling library, `core/hooks/ai-dlc-advisor-detect.sh`, replacing the restated copy in the recover gate. It holds the grant, the consult roster, the attempt, result and consult tests, the held test and the credited line types. The recover gate's touchpoint-R stage now treats a lead three ways:
+- A no-grant lead that holds `mcp__advisor__consult` is held until it consults after the digest Read, and the deny names that tool.
+- A granted lead is cleared by a built-in attempt only, and stands down on `unavailable`.
+- A lead holding neither advisor is deleted and allowed, as before.
+
+The stand-down at the fast path and after the wait both read the held test. With the library unreadable, either gate WARNs on stderr and is silent.
+
+The hand probe at edb812bc1, base vs tip:
+- No-grant holder: SILENT with the owed file deleted -> DENY with the file kept.
+- Consult before the digest Read: SILENT -> DENY.
+- Withdrawn grant plus the roster: SILENT -> DENY.
+- Unchanged: granted DENY, granted with a consult only DENY, a consult after the digest Read clears, neither held SILENT.
+
+Mutant `:248` back to the grant-only test flips the holder cells to SILENT.
+
+`postcompact-rulebook-recovery` adds R cells holder, grantcons, blob and nolib (100 ok). `scripts/install.sh:445` installs the library beside both gates, and `validate-hook-registration.sh` on the installed tree reads UNREGISTERED none.
+
+verify: manual
+
+## BL-1137 — the advisor gate's scan credits tool calls on `api-request-blob` lines, which re-carry earlier assistant content
+
+**DEFECT.** OPEN. Filed 2026-11-15. Re-tiered from NOTE by the lead: the replay found a false DENY of a compliant lead (888e1365). Owner: `core/hooks/ai-dlc-advisor-gate.sh` `scan()` (both arms; `ai-dlc-recover-gate.sh`'s `r_scan` restates it).
+
+`scan()` reads `message.content` blocks on every line type. Graph transcripts carry `api-request-blob` lines (113 session files, 90 of them granted) that re-carry assistant blocks. In f7ff0ac0, 57 of 57 blob `tool_use` blocks repeat an id already on an assistant line, up to 206 lines later, and blobs in 75 files carry a `server_tool_use`. A repeated gated call moves the last gated action later, which could deny a call an advisor attempt already cleared. A repeated advisor attempt moves the last attempt later, which could acquit a gated action made after the real attempt. Measured effect, one session: replaying f7ff0ac0 at each of its 8 push/merge calls with blob lines dropped changes no verdict (BL-1135's replay).
+
+Fix: credit `tool_use`, `server_tool_use` and `advisor_tool_result` only on `type == "assistant"` lines (the gated `tool_result` on `user` lines). Before landing, replay granted and no-grant consumer transcripts with and without the restriction, and enumerate every verdict that moves.
+
+Provenance: batch 257, wave 8, found by ai-dlc-d8 (W8-01) in BL-1135's replay; the lead kept granted verdicts byte-unchanged there and allocated this id.
+
+**LANDED (v0.1146.0).** `adv_blocks` in `core/hooks/ai-dlc-advisor-detect.sh` credits blocks by line type:
+- `tool_use`, `server_tool_use` and `advisor_tool_result` only on `assistant` lines.
+- `tool_result` only on `user` lines.
+- Nothing on any other line type, including `api-request-blob`.
+
+Both gates' scans read the library. Corpus shape, graph `~/.claude` transcripts with subagents (6373 files): `advisor_tool_result` sits on 7127 assistant lines, 3020 blob lines and 0 user lines (control in the same run: 331761 user `tool_result`s). So the restriction keeps every real `unavailable` result.
+
+The replay covered the 113 graph main transcripts carrying blob lines (90 granted). It judged every EXECUTED call (a tool_use paired with a non-error tool_result) on the cut through its own line three ways: base, base with blob lines dropped, and tip.
+- Advisor gate, lead calls of every gated kind: push, merge, gate close, gate-log append, MCP merge, and the hook's own classifier decides each one. 1877 executed calls, 0 verdicts move:
+  - 1568 selected by `git push`, `gh `, `gate-checkpoint` or `## Gate Log:`, an MCP merge, or a gate-log.md edit (1201 granted, 367 no-grant).
+  - 309 more Bash calls that only a looser git-then-push, `pr merge` or `Gate Log` pattern catches, which covers `git -C <d> push`, `git -c ... push` and the like (189 granted, 120 no-grant).
+- Advisor gate, teammates: the 4607 graph subagent transcripts carrying blob lines. 14694 executed edits selected by a superset of `matekind`'s paths, every one granted. 3 move, each base SILENT -> tip DENY and blobs-dropped DENY. Each is a base false acquittal:
+  - 888e1365 agent-abdfc329... Write at line 203: a blob at 128 re-carries the real advisor attempt from 120 after a verdict write that had already used it.
+  - df04e9cd agent-a2a72bef... Edit at 1062: the same shape, real attempt at 136, blob at 143.
+  - 888e1365 agent-abf02ea7... Edit at 154: the Edit at 147 failed (`is_error`, so the gate drops it), and a blob at 151 re-carries it. Base then reads it as a deliverable already written, and acquits the next Edit of that shard as a re-write.
+- Recover gate, 259 dispatch/write calls after a digest Read, judged per recovery until each variant stops owing (at most 12 a recovery), three sessions differ. No tip row reads the no-library verdict (SILENT with the owed file kept): 0 rows, against 165 SILENT with the file deleted.
+  - Base vs blobs-dropped differs in 1 row, granted 888e1365 at line 8893. A blob at 8877 re-carries the digest Read after the real advisor attempt at 8871, so base DENIED a lead that had complied. The tip reads SILENT.
+  - Every other moved row is base SILENT -> tip DENY in two no-grant consult holders, e444bf13 and df04e9cd: BL-1136's fix, 7 recoveries entered with no consult. The 3-message escape bounds each.
+
+The synthetic control moves in both gates (blob advisor attempt: base SILENT -> tip DENY), and a re-run of the three moved sessions on the final tree is byte-identical.
+
+`advisor-gate-deny` arm BLOB adds 4 cells (247), and the edb812bc1 hook fails b-adv, b-push and b-consult. Mutant (blob lines credited) flips the recover blob cell to SILENT. NOLIB holds the stderr WARN.
+
+verify: manual
+
+## BL-1147 — a LANDED line that backlog-rotate.sh refuses passes every builder check and pregate
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `scripts/backlog-rotate.sh` (the LANDED forms it moves), `scripts/validate-backlog-receipts.sh` (the arm that judges them before a push).
+
+`backlog-rotate.sh` moves a LANDED entry only when its first line opening `**LANDED (v<digit>` is `**LANDED (v<version>, verified <sha>)...` or the sha-less `**LANDED (v<version>).**`. Any other form reads `sha ABSENT`, and the rotate REFUSES (exit 2). A builder writes the line with `vVERSION_PLACEHOLDER`, and no builder check or pregate applied rotate's grammar to it, so the refusal surfaced only at the lead's squash.
+- Twice in batch 257: ai-dlc-20's line, then BL-1130's `**LANDED (vVERSION_PLACEHOLDER; batch 257, W9-08).**`. Stamped to v0.1144.0 on a scratch copy at a9b528530, a dry-run rotate read `[sha ABSENT]` and REFUSING, rc 2; the form `**LANDED (vVERSION_PLACEHOLDER).** (batch 257, W9-08.)` read `[sha-less, v0.1144.0]`, rc 0.
+
+**LANDED (v0.1146.0).** (batch 257, ai-dlc-21.)
+- `backlog-rotate.sh` keeps its two forms in one function, `landed_form`, inside `# LANDED_FORM_BEGIN` .. `# LANDED_FORM_END`. The two sed programs are byte-identical to the inline ones they replace, and a dry-run's output is byte-identical before and after on four ledgers: the live one, a sha-less close, the in-paren refusal (rc 2) and a verified-sha close.
+- `validate-backlog-receipts.sh` R14 extracts that span from the rotate script beside it, stamps `vVERSION_PLACEHOLDER` to `v0.0.0`, and applies `landed_form` to each live entry's first line opening `**LANDED (v`. A line in neither form FAILs. A missing span is a refusal (exit 2). PARTIAL lines are out of scope: they never rotate.
+- False-positive set, by r14_judge itself: 0 over the 1040 archived LANDED lines (820 sha, 220 sha-less) and 0 over the live ledger, which carries none.
+- backlog-real-ledger and backlog-receipt-traced-removal copy `scripts/backlog-rotate.sh` into the worlds where they run the validator, and key only its `LANDED_FORM` span (`spans.decl`); neither runs rotate. Without that copy, R14 refuses inside the world (traced-removal `cli-wire -- rc 2`).
+
+Provenance: batch 257, found at the B21 squash by lead ai-dlc-7b; filed and built by ai-dlc-21; id allocated by the lead.
+
+verify: manual
