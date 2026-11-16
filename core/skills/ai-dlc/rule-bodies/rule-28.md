@@ -197,10 +197,12 @@ paragraph and does not restate it.
 (files, sections and subject axes, with its cross agent), an elicitation
 round, and a sharded party round (seats x parts, seats x sections, seats x
 subject-parts) may be run by ONE round-dispatcher. An unsharded party round
-runs on the Skill and is not dispatcher-run. A repair round is lead-dispatched,
-never run by a dispatcher: `join-remediator-shards.sh` folds a nested
-writer into its dispatcher, so every shard of one dispatcher would read as
-ONE writer. A code review or QA round is lead-dispatched, never run by a
+runs on the Skill and is not dispatcher-run. A sharded repair round (one
+remediator per part) may be run by ONE round-dispatcher too:
+`join-remediator-shards.sh` folds a nested writer into its parent only
+when the parent's own spawn has a spawn-ledger row, and a round-dispatcher's
+spawn has none, so each member joins as its own writer and the lead still
+runs that join. A code review or QA round is lead-dispatched, never run by a
 dispatcher: its members build detached worktrees, which is (a). A
 gate-adjudicator round, a dev story wave and every round not named here
 are lead-dispatched too. The lead records the round's epoch as below,

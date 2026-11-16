@@ -163,8 +163,9 @@
 #     to their own line, so one site losing its lens cannot be covered by the other. Keep each
 #     pinned phrase on ONE line.
 #   - a wide leaf round may be run by ONE round-dispatcher (rule-28.md (a) and "A wide round is run
-#     by a round-dispatcher", _dispatch-protocol.md "Round-dispatcher brief"): repair, code review and
-#     QA rounds stay lead-dispatched, each excluded in its own sentence so a scope inversion fails;
+#     by a round-dispatcher", _dispatch-protocol.md "Round-dispatcher brief"): code review and QA
+#     rounds stay lead-dispatched, each excluded in its own sentence so a scope inversion fails; a
+#     sharded repair round may be dispatcher-run, its members never folded into the dispatcher;
 #     the dispatcher joins in the FOREGROUND and ends in one return-file write; the lead joins that
 #     file alone. The r28-rd-* and dp-rd-* rows are para pins, read by the corpus arm below (--report).
 #   - a sharded party round is per-seat role-bound `Agent` spawns and an unsharded one stays on the
@@ -676,7 +677,8 @@ r28-serial-join|S|rule-bodies/rule-28.md|**A notification the live beat already 
 r28-rd-carveout|S|rule-bodies/rule-28.md||**Everything else is delegated.**|- **(a) Orchestration** --|para|may be delegated to ONE round-dispatcher; the round's epoch, its join program, the Rule 20 re-dispatch decision and the disposition stay with the lead.
 r28-rd-scope-in|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|An adversarial-pass round (files, sections and subject axes, with its cross agent), an elicitation round, and a sharded party round (seats x parts, seats x sections, seats x subject-parts) may be run by ONE round-dispatcher.
 r28-rd-party-skill|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|An unsharded party round runs on the Skill and is not dispatcher-run.
-r28-rd-repair-out|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|A repair round is lead-dispatched, never run by a dispatcher
+r28-rd-repair-in|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|A sharded repair round (one remediator per part) may be run by ONE round-dispatcher too
+r28-rd-repair-member|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|folds a nested writer into its parent only when the parent's own spawn has a spawn-ledger row
 r28-rd-review-out|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|A code review or QA round is lead-dispatched, never run by a dispatcher
 r28-rd-foreground|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|joins them with FOREGROUND `wait-for-deliverable.sh --complete
 r28-rd-shard-header|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|wait-for-deliverable.sh --complete [--shard-header <axis>] --since <epoch> --dispatch <agentId> --dispatch <agentId> ...
@@ -701,6 +703,7 @@ dp-rd-tpl-foreground|S|steps/_dispatch-protocol.md|**Dispatch-prompt cache disci
 dp-rd-tpl-shard-header|S|steps/_dispatch-protocol.md|**Dispatch-prompt cache discipline.**|**Dev-brief bug-class checklist.**|You are a round-dispatcher.|para|wait-for-deliverable.sh --complete [--shard-header <axis>] --since <epoch> --dispatch <agentId> --dispatch <agentId> ...
 dp-rd-tpl-dispatch-each|S|steps/_dispatch-protocol.md|**Dispatch-prompt cache discipline.**|**Dev-brief bug-class checklist.**|You are a round-dispatcher.|para|(one `--dispatch` per member)
 dp-rd-tpl-notification|S|steps/_dispatch-protocol.md|**Dispatch-prompt cache discipline.**|**Dev-brief bug-class checklist.**|A member's task-notification is not a turn's work|para|Post no status line, restate none of its findings or counts, and re-check or read nothing
+dp-rd-repair|S|steps/_dispatch-protocol.md|**Dispatch-prompt cache discipline.**|**Dev-brief bug-class checklist.**|**A repair round through this brief.**|para|a member's own subagent folds into that member, never into the dispatcher
 dp-rd-tpl-notification-carve|S|steps/_dispatch-protocol.md|**Dispatch-prompt cache discipline.**|**Dev-brief bug-class checklist.**|A member's task-notification is not a turn's work|para|Three are acted on: one whose status is failed
 impl-cross-statedir|S|steps/implementation.md|### 6. Orchestrate|### 7.|**Gate-2 dispatch: the validation partitions by changed-file group too.**|para|a beat state directory of its own, given as an absolute path outside the shard directory, and never the lead's.
 adv-ls-files|R|adversary.md|## Constraints|## Escalation|- **List a code path your brief does not cite before you open it.**|para|list it with `git ls-files <dir-or-glob>` and read only what that returns.

@@ -289,6 +289,14 @@ first; only the tail varies per round.
 
 The lead's beat over the return file carries `--dispatch <dispatcher agentId>` (Rule 28, "The round's epoch is written down before wave 1.").
 
+**A repair round through this brief.** A sharded repair round goes out
+through this brief with one remediator brief per part, `Axis: none`, and
+each member's part file as its deliverable path. The lead runs the round's
+`join-remediator-shards.sh` over the parts once the return file is
+written. Each member joins as its own writer, and a member's own subagent
+folds into that member, never into the dispatcher (Rule 28, "A wide round
+is run by a round-dispatcher.").
+
 **Dev-brief bug-class checklist.** When the dev-brief includes a
 bug-class finding from the code-reviewer (see `code-reviewer.md`
 bug-class audit mandate), the dev MUST grep for same-shape call-sites

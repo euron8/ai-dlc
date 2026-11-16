@@ -196,7 +196,7 @@ fi
 
 fi # sg head
 if sg tail; then
-# ---- unit-reader-a.sh: SJ1-SJ9/SJ1o, EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38, RR1-RR20, AL1-AL9, NW1, LN1-LN8 and
+# ---- unit-reader-a.sh: SJ1-SJ9/SJ1o, EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38, RR1-RR20, AL1-AL9, NW1-NW2, LN1-LN8 and
 # LN10-LN16, LP1-LP5, NL1-NL8c, asked in process through the same lib.sh predicates;
 # its SEAM-A and CLI-A cells keep one CLI pass and refusal per join mode it owns. One literal call line.
 bash "$HERE/unit-reader-a.sh"; _ura=$?
