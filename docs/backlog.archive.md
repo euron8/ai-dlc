@@ -45370,3 +45370,21 @@ verify: manual
 Provenance: batch 257, found at the B21 squash by lead ai-dlc-7b; filed and built by ai-dlc-21; id allocated by the lead.
 
 verify: manual
+## BL-1149 — rule-29 states three beat bounds as unconditional beside the `--complete-repair --dispatch` exception
+
+**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/skills/ai-dlc/rule-bodies/rule-29.md`.
+
+`rule-29.md` names one exception to the beat quantum: a `--complete-repair --dispatch` beat keeps polling past the quantum while its agent's transcript advances, charging one beat per quantum (the beat-quantum bullet, :147-151 on 925d02f39). Three other sentences in the same file still read as unconditional:
+- :136-137, "The script refuses to sleep twice in one call". Under the exception, a single call sleeps across several quanta.
+- :175-176, "the beat is clamped inside the quantum".
+- :188, "The loop goes in the beat count, never inside the call."
+
+**LANDED (v0.1147.0).** (batch 257, ai-dlc-48.)
+- :136-137 now say that the script refuses to start a second beat in one call. That is what the per-shell sibling guard refuses, and the exception never starts a second beat.
+- :175-176 add the exception in parentheses: it polls on only while its agent's transcript advances, one counted beat per quantum.
+- :188 keeps its bold sentence and adds that the exception keeps the bound, because each quantum it polls on inside one call is charged to the beat count.
+- Wording only. No mechanism changes, and `wait-for-deliverable.sh` is untouched.
+
+Provenance: batch 257, found in the W9-11 (BL-541) roll-call reply by ai-dlc-48; the lead ruled it a post-B22 follow-up; id allocated by the lead.
+
+verify: manual

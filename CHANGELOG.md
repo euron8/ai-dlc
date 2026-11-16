@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1147.0] - 2026-11-16
+
+### BL-1149: rule-29 names its one beat exception where it states the bounds
+
+`core/skills/ai-dlc/rule-bodies/rule-29.md` no longer states three beat bounds as unconditional beside the `--complete-repair --dispatch` exception. The script refuses a second beat in one call; the exception polls on only while its agent's transcript advances, and each quantum it polls inside one call is charged to the beat count. Wording only.
+
+### BL-982, BL-583 and BL-1140: follow-ups to 0.1146.0
+
+- `core/fixtures/remediator-shard-join/lib.sh` drops a `lib/mutant.sh` source line that nothing in it uses.
+- BL-982's W9-10 paragraph names its owed sites by function, and its P2 figure reads 207 in 14 on 0.1146.0.
+- BL-583's `derived-fence-binding` Owed row is struck: the narrowing shipped with BL-1140. BL-1140's figure reads 2,024 to 152 key rows.
+
 ## [0.1146.0] - 2026-11-15
 
 ### BL-1136 and BL-1137: one advisor detection for both gates
