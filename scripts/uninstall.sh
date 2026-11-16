@@ -3,13 +3,16 @@
 # Removes all AI/DLC components from a target project.
 # Does NOT remove BMAD Method or _bmad-output/ (planning artifacts are yours).
 
+# The whole program is ai_dlc_uninstall_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition.
+ai_dlc_uninstall_main() {
 set -e
 
 # The distribution checkout this script runs from. uninstall.sh is never shipped to a
 # consumer, so core/ and templates/ are on disk beside it, and the removal sets for the
 # unprefixed shared directories (.claude/schemas/, .claude/rules/) are derived from there
 # by basename rather than hand-listed. Absolute, because the caller may pass `.` as root.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 AI_DLC_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PROJECT_ROOT="${1:-.}"
@@ -478,3 +481,7 @@ fi
 echo ""
 echo "To also remove BMAD Method: rm -rf _bmad/"
 echo "To remove planning artifacts: rm -rf _bmad-output/"
+}
+# Executed, it runs; sourced, it has defined ai_dlc_uninstall_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ai_dlc_uninstall_main "$@"

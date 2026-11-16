@@ -8,7 +8,7 @@
 # copy of the validator, run from the copy's tree in its cheap mode `--r13-drive <corpus|score>` (the
 # validator's header beside DEFAULT_MAX_R13), and every worker that start launches (--score-one, --closed-one,
 # --r13-one) is covered by the ONE self-nested row of cells.decl. The in-process passes that remain (fx_inproc) are
-# r13_untraced called as a function, and vbr_sec_setup alone for the --base states; none of them reaches score_ledger, score_closed or r13_removals, so none starts a worker. ONE end-to-end
+# r13_untraced and m1_driver_absent called as functions, and vbr_sec_setup alone for the --base states; none of them reaches score_ledger, score_closed or r13_removals, so none starts a worker. ONE end-to-end
 # CLI run (cell cli-wire) proves the corpus wiring and the --traced-removal flag.
 # THE WORLDS ARE BUILT ONCE: the one-receipt worlds g/u/o/x/e as templates copied per drive (a drive that commits or writes a record gets its own
 # copy and its own record store, so no drive replays a green another drive wrote).
@@ -94,7 +94,7 @@ mkworld() {
     : > "$d/w/keep.txt"
     printf '# Probe backlog\n\n## BL-1401 — manual only\n\nverify: manual\n' > "$d/docs/backlog.md"
   elif [ "$2" = m ]; then
-    printf '# Probe backlog\n\n## BL-1401 — never built\n\nverify: sh bash w/never.sh\n\n## BL-1402 — guarded\n\nverify: sh bash w/g.sh\n\n## BL-1403 — unguarded\n\nverify: sh bash w/u.sh\n' > "$d/docs/backlog.md"
+    printf '# Probe backlog\n\n## BL-1401 — never built\n\nverify: sh bash w/never.sh\n\n## BL-1402 — guarded\n\nverify: sh bash w/g.sh\n\n## BL-1403 — unguarded\n\nverify: sh bash w/u.sh\n\n## BL-1404 — never built, an option before the driver\n\nverify: sh bash -e w/never2.sh\n' > "$d/docs/backlog.md"
   else
     printf '# Probe backlog\n\n## BL-1401 — world %s\n\nverify: sh bash w/drv.sh\n' "$2" > "$d/docs/backlog.md"
   fi
@@ -200,15 +200,38 @@ base_setup() {
     fx_inproc scripts/validate-backlog-receipts.sh; vbr_sec_setup; echo "SETUP-OK" ) > "$2" 2>&1
   echo "$?" > "$2.rc"
 }
+# m1_chain_fn <copy> <out> -- m1_driver_absent over the chain `bash w/a.sh && bash w/gone.sh`, where a PRESENT w/a.sh
+# exits 1 after printing w/gone.sh's own "No such file" line. Three states, one property apart:
+#   (i)   exit 1, no option before w/gone.sh: w/gone.sh never ran, so the guard admits nothing (empty);
+#   (ii)  exit 1, `-e` before w/gone.sh: the option admission names it (DRIVER-ABSENT-UNRESOLVED-BASE, no base);
+#   (iii) exit 127, no option: the 127 admission names it.
+# World m cannot carry state (i): a present failing driver would move its e2e population.
+m1_chain_fn() {
+  local t="$TMP/m1chain"
+  mkdir -p "$t/w" && printf 'exit 1\n' > "$t/w/a.sh" && printf 'bash: w/gone.sh: No such file or directory\n' > "$t/err" \
+    || broken "the m1-chain tree did not build"
+  ( cd "$(dirname "$(dirname "$1")")" || exit 2
+    fx_inproc scripts/validate-backlog-receipts.sh
+    # shellcheck source=/dev/null
+    . scripts/validate-backlog-receipts.sh || exit 2
+    BR_L3_BASE=""
+    # Each in-process call is paired with its own fx_inproc (P2): the first by the line before the source above.
+    printf '[%s] [%s] [%s]\n' "$(m1_driver_absent 1 "$t/err" "$t" 'bash w/a.sh && bash w/gone.sh')" \
+      "$(fx_inproc scripts/validate-backlog-receipts.sh; m1_driver_absent 1 "$t/err" "$t" 'bash w/a.sh && bash -e w/gone.sh')" \
+      "$(fx_inproc scripts/validate-backlog-receipts.sh; m1_driver_absent 127 "$t/err" "$t" 'bash w/a.sh && bash w/gone.sh')" ) > "$2" 2>&1
+}
+M1CHAIN_WANT='[] [driver-absent/DRIVER-ABSENT-UNRESOLVED-BASE] [driver-absent/DRIVER-ABSENT-UNRESOLVED-BASE]'
+cell_c_m1_chain() { [ "$(cat "$1" 2>/dev/null)" = "$M1CHAIN_WANT" ]; }
 
 # --- controls ------------------------------------------------------------------------------
 C="$TMP/cap"; mkdir -p "$C"
 # c-m1-e2e: M1 THROUGH REAL WORKERS. World
 # m, one tagged start: BL-1401 `bash w/never.sh` (absent at HEAD and at --base) reads EXCLUDED-DRIVER-ABSENT-AT-BASE;
 # BL-1402's guarded driver and BL-1403's driver, removed, read driver-absent (R13-PASS) and BL-1402's guarded file
-# exits 9; BL-1403's unguarded file is UNGUARDED-READ (within a ceiling of 1). A --score-one worker classifies the
-# baselines and --r13-one workers the removals.
-cell_c_m1_e2e() { has "$1" "R13-POPULATION: 3 open sh receipt(s), 3 traced, " && has "$1" ", 1 EXCLUDED-DRIVER-ABSENT-AT-BASE, 0 baseline-cm, " \
+# exits 9; BL-1403's unguarded file is UNGUARDED-READ (within a ceiling of 1). BL-1404 `bash -e w/never2.sh` exits 1,
+# not 127, and reads EXCLUDED only through M1's option admission (exit 1 when an option precedes P); without it the
+# receipt scores as a measurement. A --score-one worker classifies the baselines and --r13-one workers the removals.
+cell_c_m1_e2e() { has "$1" "R13-POPULATION: 4 open sh receipt(s), 4 traced, " && has "$1" ", 2 EXCLUDED-DRIVER-ABSENT-AT-BASE, 0 baseline-cm, " \
   && has "$1" "removals: 1 exit 9, 3 in the cannot-measure set, 1 UNGUARDED-READ" \
   && has "$1" "$(printf 'UNGUARDED-READ\tBL-1403\tw/ud.txt\texit=1')" && [ "$(rcof "$1")" = 0 ]; }
 m1e2e_run() { # m1e2e_run <copy> <out> <cell>
@@ -217,7 +240,7 @@ m1e2e_run() { # m1e2e_run <copy> <out> <cell>
     --base "$(git -C "$w" rev-parse HEAD)" "$w/docs/backlog.md"
 }
 m1e2e_run "$D" "$C/m1e2e" c-m1-e2e
-if cell_c_m1_e2e "$C/m1e2e"; then ok "c-m1-e2e -- real workers read an EXCLUDED driver, two guarded driver removals and one UNGUARDED-READ"
+if cell_c_m1_e2e "$C/m1e2e"; then ok "c-m1-e2e -- real workers read two EXCLUDED drivers (exit 127, and exit 1 behind -e), two guarded driver removals and one UNGUARDED-READ"
 else bad "c-m1-e2e -- rc $(rcof "$C/m1e2e"): $(grep -E 'R13-POPULATION|UNGUARDED|FAIL' "$C/m1e2e" | tr '\n' ' ')"; fi
 
 WG="$(world g)"; wcheck "$WG"; S1="$(store)"
@@ -267,6 +290,10 @@ else bad "c-restricted -- raw exit $(cat "$C/notrun.raw" 2>/dev/null): $(grep -F
 untraced_fn "$D" "$C/untraced"
 if cell_c_untraced "$C/untraced"; then ok "c-untraced -- r13_untraced reads 1 untraced, then 0 when traced, then 0 when R2 refused it before a checkout"
 else bad "c-untraced -- read '$(cat "$C/untraced")', want '1 0 0'"; fi
+
+m1_chain_fn "$D" "$C/m1chain"
+if cell_c_m1_chain "$C/m1chain"; then ok "c-m1-chain -- a present driver's exit 1 with a later driver's diagnostic admits nothing; an option or exit 127 names the later driver"
+else bad "c-m1-chain -- read '$(cat "$C/m1chain")', want '$M1CHAIN_WANT'"; fi
 
 # THE TWO-SIDED CEILING. c-stale-high: world u (1 unguarded row) under a ceiling of 2 FAILS with the lower-it message;
 # the equal case is c-within-write below, and the above case is red-fail above.

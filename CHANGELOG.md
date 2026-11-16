@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1144.0] - 2026-11-15
+
+### BL-1135: the advisor gate binds a no-grant agent that holds the MCP consult
+
+`core/hooks/ai-dlc-advisor-gate.sh` no longer stands down for an agent with no `advisor_tool` grant attachment when that agent holds `mcp__advisor__consult`. Such an agent's push, merge and verdict write are denied until it calls the consult. A granted agent stays on the built-in advisor only. An agent with neither stays silent. This absorbs PC-S323. BL-1136 (the same stand-down in `ai-dlc-recover-gate.sh`) and BL-1137 are filed.
+
+### BL-1045: a distribution run that names no verdict store records nothing
+
+A counter-armed `core/scripts/hermetic-run.sh` run in the distribution that names no verdict store no longer writes to a root-keyed store that no push reads. It prints that a push reads only `counted-<vk>` and that `scripts/seed-verdict-store.sh` seeds it.
+
+### BL-878 PARTIAL: the installer pair and the rules-floor hook run in process
+
+`scripts/install.sh`, `scripts/uninstall.sh` and `core/hooks/ai-dlc-rules-floor.sh` are wrapped for in-process cells, and schema-install-fallback and shipped-rule-version-floor drive them in process. Their CLI behaviour is unchanged in both layouts.
+
+### BL-899 PARTIAL and BL-1126: the M1 census and the R13 row set
+
+`scripts/validate-backlog-receipts.sh` carries the M1 false-positive census, the exit-code ruling and the M1 option, with chain seeds in backlog-receipt-traced-removal. BL-1126 closes: BL-878's and BL-899's lines now name the row set R13 reads.
+
+### BL-1004: the sprint-review pm seats are kept
+
+The pm seats are kept on graph s322's reading. The analysis is in `docs/analysis/step-value-sprint-review-pm-seats-s322.md`.
+
 ## [0.1143.0] - 2026-11-15
 
 ### BL-878 PARTIAL: 14 more fixtures run their subjects in process

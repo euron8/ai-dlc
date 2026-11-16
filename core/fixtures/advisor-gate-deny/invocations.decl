@@ -2,6 +2,7 @@
 # BL-868 (* 249->269): +7 the rr-noid sleep-count shim, its self-check and the noid-wait mutant; +13 the appender cells'
 # poll sleeps, now counted through the shim that appends on the hook's own poll (rr-late 9, rr-seen 4) -- a fixed count.
 # BL-983 (* 269->270): +1 the bash start of receipt-bl983.sh, run by run.sh. cmp (now declared) is not a bash start.
-247 *
-229 core/hooks/ai-dlc-advisor-gate.sh
+# BL-1135 (* 247->263, hook 229->245): +16, one hook start per NOGRANTMCP cell.
+263 *
+245 core/hooks/ai-dlc-advisor-gate.sh
 0 core/hooks/ai-dlc-context-provenance.sh

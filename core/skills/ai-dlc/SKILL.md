@@ -1074,9 +1074,11 @@ shipped. Declared a GAP.
 ### Rule 32 -- Consult the advisor tool at named touchpoints when it is available
 
 When the harness gives you an `advisor` tool, you MUST call it at each touchpoint below; it
-takes no parameters and forwards your whole transcript to a separate reviewer. If the tool is
-absent, or a call returns an error, continue without it -- a missing or failed advisor never
-blocks, delays or fails a step. The touchpoints:
+takes no parameters and forwards your whole transcript to a separate reviewer. When it does not
+but you hold `mcp__advisor__consult`, call that tool at the same touchpoints instead; while you
+hold the built-in tool, a consult does not count. If you hold neither, or a call returns an
+error, continue without it -- a missing or failed advisor never blocks, delays or fails a step.
+The touchpoints:
 
 - **R -- post-compact recovery.** After the `postcompact-digest.md` Read, and after arming any
   fresh beat the In-Flight Teammates rows require (`run_in_background: true`), then call the

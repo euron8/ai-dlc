@@ -1,0 +1,10 @@
+# command: same extraction, then python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py $OUT --seats; rows: the header and the sprint-review plus gate-validation[sprint-review] group
+per story; STORIES = {317: 21, 318: 13, 319: 20, 320: 13, 321: 25, 322: 8}; $ token-equivalent, API beside it where it differs
+-- sprint-review plus gate-validation[sprint-review] [pipeline]
+   before s317+s318 pooled (34 stories): 0.37 h gap-inclusive (gap 0.14 h), token-equivalent $13.4 (API $12.2), 29.4M tokens; lead active 0.24 h, lead $1.7 (API $0.5), subagent active 1.22 h, subagent $11.7; lead-seat local share 76% of 975 calls
+   s317 (21 stories): 0.34 h gap-inclusive (gap 0.05 h), token-equivalent $14.8 (API $12.9), 32.6M tokens; lead active 0.29 h, lead $1.9 (API $0.0), subagent active 1.44 h, subagent $12.9; lead-seat local share 100% of 745 calls
+   s318 (13 stories): 0.43 h gap-inclusive (gap 0.28 h), token-equivalent $11.0 (API $11.0), 24.3M tokens; lead active 0.15 h, lead $1.3, subagent active 0.86 h, subagent $9.7; lead-seat local share 0% of 230 calls
+   s319 (20 stories): 0.13 h gap-inclusive (gap 0.05 h), token-equivalent $5.8 (API $5.8), 16.2M tokens; lead active 0.08 h, lead $0.9, subagent active 0.54 h, subagent $4.9; lead-seat local share 0% of 238 calls
+   s320 (13 stories): 0.16 h gap-inclusive (gap 0.09 h), token-equivalent $1.5 (API $1.5), 3.3M tokens; lead active 0.07 h, lead $0.4, subagent active 0.11 h, subagent $1.1; lead-seat local share 0% of 97 calls
+   s321 (25 stories): 0.14 h gap-inclusive (gap 0.00 h), token-equivalent $9.4 (API $9.4), 19.7M tokens; lead active 0.14 h, lead $1.1, subagent active 0.53 h, subagent $8.4; lead-seat local share 0% of 396 calls
+   s322 (8 stories): 0.29 h gap-inclusive (gap 0.07 h), token-equivalent $12.6 (API $10.3), 30.2M tokens; lead active 0.22 h, lead $2.3 (API $0.0), subagent active 0.48 h, subagent $10.3; lead-seat local share 100% of 498 calls

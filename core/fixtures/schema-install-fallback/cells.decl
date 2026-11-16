@@ -1,0 +1,6 @@
+# schema-install-fallback's starts of scripts/install.sh (BL-879 grammar). Every other drive is in process: run.sh
+# calls ai_dlc_install_main through lib/inproc.sh's inproc_run. One cli cell per distinct CLI outcome (exit 0 installs,
+# exit 1 refuses a target with no _bmad/), each started as FXCELL=<id> bash "$INSTALL" in eq_run() and compared byte
+# for byte with the in-process call on the same input. cli-install-ok's in-process twin builds the tree the arms read.
+cli scripts/install.sh cli-install-ok
+cli scripts/install.sh cli-install-refuse

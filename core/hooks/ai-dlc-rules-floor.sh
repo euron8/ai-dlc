@@ -25,6 +25,9 @@
 # FAIL-OPEN, ALWAYS. A detector that blocks a session is worse than the defect it
 # reports. Every path exits 0.
 
+# The whole program is arf_main, so a fixture can SOURCE this file and call it in process; nothing above
+# the guard at the end runs in the sourcing shell except that definition.
+arf_main() {
 set -u
 cat >/dev/null 2>&1 || true   # drain stdin (unused)
 
@@ -104,3 +107,7 @@ else
 fi
 
 exit 0
+}
+# Executed, it runs; sourced, it has defined arf_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+arf_main "$@"

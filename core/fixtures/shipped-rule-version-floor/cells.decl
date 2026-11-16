@@ -1,0 +1,12 @@
+# shipped-rule-version-floor's starts of scripts/install.sh, scripts/uninstall.sh and core/hooks/ai-dlc-rules-floor.sh
+# (BL-879 grammar). Every other drive is in process: run.sh calls ai_dlc_install_main, ai_dlc_uninstall_main and
+# arf_main through lib/inproc.sh's inproc_run. One cli cell per distinct CLI outcome, each started as
+# FXCELL=<id> bash <subject> in eq_run() and compared with the in-process call on the same input:
+# install.sh exit 0 (installs) and exit 1 (no _bmad/); uninstall.sh exit 0 (uninstalls) and exit 1 (nothing
+# installed); the hook, which always exits 0, silent (no rule file) and loud (a rule file below the floor).
+cli scripts/install.sh cli-install-ok
+cli scripts/install.sh cli-install-refuse
+cli scripts/uninstall.sh cli-uninstall-ok
+cli scripts/uninstall.sh cli-uninstall-refuse
+cli core/hooks/ai-dlc-rules-floor.sh cli-hook-silent
+cli core/hooks/ai-dlc-rules-floor.sh cli-hook-loud

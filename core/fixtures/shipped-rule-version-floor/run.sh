@@ -66,11 +66,33 @@ echo "HERMETIC-CONSUMED scripts/install.sh"
 echo "HERMETIC-CONSUMED scripts/uninstall.sh"
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-rules-floor.sh"
 
+
 # Scrub ambient AI_DLC_* before invoking any hook. A consumer that tunes one of these in
 # settings.json would otherwise fail this fixture against a hook behaving correctly, and
 # its pre-push gate would then block every push. The fixture must test the CODE, not the
 # environment it happens to run in.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
+# IN PROCESS (BL-878). Every drive of the three subjects calls its entry function through lib/inproc.sh's
+# inproc_run, in a subshell made to look like a fresh `bash <subject>`. No inproc_load: one pass sources the path it
+# names, so a pass is logged under its own subject, a copy under $TMP/nested-* included (suffix-matched). No call
+# sits under if, !, && or ||: install.sh's and uninstall.sh's own `set -e` would be suspended there, and the
+# in-process answer would stop being the program's. The program runs only in the cli cells (cells.decl).
+# Each subject must carry both halves of the wrap: its `<p>_main() {` line and the column-0 source guard. Sourcing
+# a subject with neither would run its body in the subshell on inproc_run's arguments; one half alone is a
+# respelled subject this fixture cannot drive.
+for _s in "$INSTALL:ai_dlc_install_main" "$UNINSTALL:ai_dlc_uninstall_main" "$HOOK:arf_main"; do
+  _f="${_s%:*}"; _m="${_s##*:}"
+  grep -qx "$_m() {" "$_f"; _gm=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$_f"; _gg=$?
+  if [ "$_gm" -gt 1 ] || [ "$_gg" -gt 1 ]; then echo "FIXTURE ERROR: cannot read $_f" >&2; exit 2; fi
+  if [ "$_gm" -ne 0 ] || [ "$_gg" -ne 0 ]; then
+    echo "FAIL  $_f is not loadable: \`$_m() {\` line $([ "$_gm" -eq 0 ] && echo present || echo MISSING), column-0 source guard $([ "$_gg" -eq 0 ] && echo present || echo MISSING)" >&2
+    exit 1
+  fi
+done
+unset _s _f _m _gm _gg
+. "$DIR/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 rc=0
@@ -133,7 +155,7 @@ nested_target() {
 # nested_check <install script> <target> <log> -> prints the failed sub-arm ids, nothing when clean
 nested_check() {
   local inst="$1" t="$2" log="$3" n="$2/tests/fixtures/lib/sub"
-  bash "$inst" "$t" > "$log" 2>&1 || echo I-rc
+  inproc_run "$inst" ai_dlc_install_main "$t" > "$log" 2>&1; [ "$?" -eq 0 ] || echo I-rc
   grep -q 'echo nested' "$n/exec.sh" 2>/dev/null || echo I-exec-content
   [ -x "$n/exec.sh" ] || echo I-exec-mode
   [ -f "$n/data.txt" ] || echo I-data
@@ -149,7 +171,7 @@ nested_check() {
 # fixture lands as its directory with the dotfile absent.
 dotonly_check() {
   local inst="$1" log="$2" t; t="$(mktemp -d "$TMP/dotonly-tgt.XXXXXX")"; mkdir -p "$t/_bmad"; ( cd "$t" && git init -q . )
-  bash "$inst" "$t" > "$log" 2>&1 || echo I-dotonly-rc
+  inproc_run "$inst" ai_dlc_install_main "$t" > "$log" 2>&1; [ "$?" -eq 0 ] || echo I-dotonly-rc
   [ -d "$t/tests/fixtures/zz-dotonly" ] || echo I-dotonly-dir
   [ -e "$t/tests/fixtures/zz-dotonly/.keep" ] && echo I-dotonly-dotfile-landed
   return 0
@@ -161,7 +183,7 @@ dotonly_check() {
 nested_refusal() {
   local inst="$1" t log="$TMP/install-i-nogit.log"
   t="$(mktemp -d "$TMP/nested-nogit-tgt.XXXXXX")"; mkdir -p "$t/_bmad"; ( cd "$t" && git init -q . )
-  if bash "$inst" "$t" > "$log" 2>&1; then echo I-nogit-rc; fi
+  inproc_run "$inst" ai_dlc_install_main "$t" > "$log" 2>&1; [ "$?" -ne 0 ] || echo I-nogit-rc
   grep -q 'is not a git work tree of its own' "$log" || echo I-nogit-msg
   [ -e "$t/.claude" ] && echo I-nogit-wrote
   return 0
@@ -188,7 +210,7 @@ arm_i() {
   if [ -n "$r" ]; then
     note "FAIL  I a shipping fixture's subdirectory did not install whole: $(echo $r) ($(grep -m1 'is a directory' "$TMP/install-i.log"))"; rc=1
   else
-    bash "$d/scripts/uninstall.sh" "$t" --force > "$TMP/uninstall-i.log" 2>&1
+    inproc_run "$d/scripts/uninstall.sh" ai_dlc_uninstall_main "$t" --force > "$TMP/uninstall-i.log" 2>&1
     if [ -e "$t/tests/fixtures/lib/sub/exec.sh" ] || [ -e "$t/tests/fixtures/lib/sub/data.txt" ]; then
       note "FAIL  I uninstall left a shipping fixture's nested files behind"; rc=1
     else
@@ -209,7 +231,7 @@ hook_out() { # hook_out <project-dir> <AI_AGENT value or empty>
   # test; otherwise the fallback would silently answer with THIS machine's real version
   # and every arm below would pass for the wrong reason.
   CLAUDE_PROJECT_DIR="$d" AI_AGENT="$agent" PATH="$empty:/usr/bin:/bin" \
-    bash "$HOOK" </dev/null 2>&1
+    inproc_run "$HOOK" arf_main </dev/null 2>&1
 }
 
 proj() { local d; d="$(mktemp -d "$TMP/p.XXXXXX")"; mkdir -p "$d/.claude/rules"; printf '%s' "$d"; }
@@ -265,11 +287,54 @@ grep -q 'UNRESOLVED' <<<"$(hook_out "$d" "")" \
   && note "ok    E version unresolvable -- reported, not assumed fine" \
   || { note "FAIL  E an unresolvable version was treated as meeting the floor"; rc=1; }
 
+# --- the cli cells (cells.decl): each subject run as a PROGRAM once per distinct CLI outcome --------------------
+# Each cell starts the subject as FXCELL=<id> bash <subject> and makes the in-process call on the same input, in the
+# same world rebuilt at the same path, and holds the two to one answer: stdout, stderr, exit code, and the target's
+# file list. The hook mints a fresh provenance nonce per run, so its 16-hex nonce is the one field normalised. A cell
+# that matches but lands on the wrong outcome FAILs as well. cli-install-ok is arm F's install and cli-uninstall-ok
+# is arm G's uninstall: their in-process twins build the trees F, G and H read, so neither adds a run of its own.
+EQ="$TMP/eq"; mkdir -p "$EQ" || exit 2
+eq_world() { rm -rf "$1"; mkdir -p "$1/_bmad"; ( cd "$1" && git init -q . ); }
+eq_nobmad() { rm -rf "$1"; mkdir -p "$1"; }
+eq_tree() { ( cd "$1" && find . -path ./.git -prune -o -print | LC_ALL=C sort ); }
+eq_norm() { sed 's/nonce=[0-9a-f]\{16\}/nonce=N/g' "$1"; }
+eq_same() { # <id> -> 0 when the program's and the in-process answer agree on every recorded channel
+  local id="$1" x
+  for x in out err rc tree; do
+    [ -f "$EQ/$id.cl.$x" ] || [ -f "$EQ/$id.ip.$x" ] || continue
+    [ "$(eq_norm "$EQ/$id.cl.$x")" = "$(eq_norm "$EQ/$id.ip.$x")" ] || { echo "$x"; return 1; }
+  done
+  return 0
+}
+eq_rc() { cat "$EQ/$1.cl.rc"; }
+# eq_run <id> <world-builder> <target> <subject> <main> <args...>: <target> is rebuilt by <world-builder> before
+# each side; stdin is $EQ_IN (default /dev/null). The in-process side runs second, so its tree is the one left.
+eq_run() {
+  local id="$1" mk="$2" t="$3" s="$4" m="$5"; shift 5
+  "$mk" "$t"
+  FXCELL="$id" bash "$s" "$@" < "${EQ_IN:-/dev/null}" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  [ -d "$t" ] && eq_tree "$t" > "$EQ/$id.cl.tree"
+  "$mk" "$t"
+  inproc_run "$s" "$m" "$@" < "${EQ_IN:-/dev/null}" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  [ -d "$t" ] && eq_tree "$t" > "$EQ/$id.ip.tree"
+  return 0
+}
+eq_verdict() { # <id> <want rc> <positive line regex, on stdout> <what>
+  local id="$1" want="$2" re="$3" what="$4" d
+  d="$(eq_same "$id")"; local same=$?
+  if [ "$same" -eq 0 ] && [ "$(eq_rc "$id")" = "$want" ] && grep -Eq "$re" "$EQ/$id.cl.out"; then
+    note "ok    $id: the program $what exactly as the in-process call does (stdout, stderr, exit $want, file list)"
+  else
+    note "FAIL  $id: the program and the in-process call differ ($d) or the outcome is not exit $want with /$re/ (program exit $(eq_rc "$id"))"; rc=1
+  fi
+}
+
 # --- F: install.sh ships the file, with no version gate ---------------------
-t="$(mktemp -d "$TMP/tgt.XXXXXX")"; mkdir -p "$t/_bmad"; ( cd "$t" && git init -q . )
+t="$TMP/tgt-f"
 oldbin="$(mktemp -d "$TMP/old.XXXXXX")"
 printf '#!/bin/bash\necho "1.9.0 (Claude Code)"\n' > "$oldbin/claude"; chmod +x "$oldbin/claude"
-PATH="$oldbin:$PATH" bash "$INSTALL" "$t" > "$TMP/install.log" 2>&1
+PATH="$oldbin:$PATH" eq_run cli-install-ok eq_world "$t" "$INSTALL" ai_dlc_install_main "$t"
+eq_verdict cli-install-ok 0 '^Installation complete!$' "installs into a fresh target"
 if [ -f "$t/.claude/rules/$RULE" ]; then
   note "ok    F install ships the rule with no copy-time version gate"
 else
@@ -281,7 +346,11 @@ fi
 
 # --- G: uninstall by prefix, keeping the consumer's own ---------------------
 printf '# a rule this consumer wrote\n' > "$t/.claude/rules/consumer-own.md"
-printf 'y\n' | bash "$UNINSTALL" "$t" > "$TMP/uninstall.log" 2>&1
+cp -Rp "$t" "$TMP/tgt-g" || exit 2
+eq_gworld() { rm -rf "$1"; cp -Rp "$TMP/tgt-g" "$1"; }
+printf 'y\n' > "$EQ/yes"
+EQ_IN="$EQ/yes" eq_run cli-uninstall-ok eq_gworld "$t" "$UNINSTALL" ai_dlc_uninstall_main "$t"
+eq_verdict cli-uninstall-ok 0 '^To also remove BMAD Method' "uninstalls an installed target, answering y"
 if [ -f "$t/.claude/rules/$RULE" ]; then
   note "FAIL  G the shipped rule survived uninstall; it would keep loading into every session"
   note "      of a repo that no longer has AI/DLC installed"; rc=1
@@ -373,7 +442,8 @@ seed_consumer() {
     > "$d/.claude/settings.json"
 }
 hs="$(mktemp -d "$TMP/seeded.XXXXXX")"; seed_consumer "$hs"
-bash "$INSTALL" "$hs" > "$TMP/install-h.log" 2>&1 || { echo "run.sh: install into the seeded world failed" >&2; exit 2; }
+inproc_run "$INSTALL" ai_dlc_install_main "$hs" > "$TMP/install-h.log" 2>&1
+[ "$?" -eq 0 ] || { echo "run.sh: install into the seeded world failed" >&2; exit 2; }
 n_inst=0; for f in "$hs/.claude/hooks/"ai-dlc-*.sh; do [ -f "$f" ] && n_inst=$((n_inst+1)); done
 if [ "$n_inst" -ne "$EXP_HOOKS" ] || ! grep -q 'hooks/ai-dlc-' "$hs/.claude/settings.json"; then
   echo "run.sh: seeded install did not produce $EXP_HOOKS registered hooks (got $n_inst) -- H cannot discriminate" >&2; exit 2
@@ -399,7 +469,7 @@ jq -e '.aiDlcRoles.dev.model == "opus" and .aiDlcRoles.pm.model == "sonnet" and 
   "$hs/.claude/settings.json" >/dev/null 2>&1 \
   || { echo "run.sh: seeded install did not keep the tuned dev role beside untuned template roles -- H7/H8 cannot discriminate" >&2; exit 2; }
 
-bash "$UNINSTALL" "$hs" --force > "$TMP/uninstall-h.log" 2>&1
+inproc_run "$UNINSTALL" ai_dlc_uninstall_main "$hs" --force > "$TMP/uninstall-h.log" 2>&1
 grep -q 'aiDlcRoles.dev' "$TMP/uninstall-h.log" && grep -q 'aiDlcRoles.qa' "$TMP/uninstall-h.log" \
   && grep -q 'Consumer-tuned AI/DLC configuration left in place' "$TMP/uninstall-h.log" \
   || { note "FAIL  H7 the closing listing does not name the tuned roles left in place"; rc=1; }
@@ -409,6 +479,25 @@ h_seed="$(h_check "$hs" seeded)"
 if [ -z "$h_seed" ]; then note "ok    H seeded install -> uninstall removed every AI/DLC file and registration, kept every consumer-authored one"
 else note "FAIL  H seeded-world arms failed: $(echo $h_seed)"; rc=1; fi
 
+# --- the remaining cli cells (cells.decl): the two refusals and the hook's two outputs ---------------------------
+eq_hook_world() { rm -rf "$1"; mkdir -p "$1/.claude/rules"; [ "$EQ_HOOK_RULE" = 1 ] && printf 'x\n' > "$1/.claude/rules/$RULE"; return 0; }
+eq_run cli-install-refuse eq_nobmad "$EQ/t" "$INSTALL" ai_dlc_install_main "$EQ/t"
+eq_verdict cli-install-refuse 1 '^Warning: BMAD Method not detected' "refuses a target with no _bmad/"
+eq_run cli-uninstall-refuse eq_world "$EQ/t" "$UNINSTALL" ai_dlc_uninstall_main "$EQ/t" --force
+eq_verdict cli-uninstall-refuse 1 '^AI/DLC does not appear to be installed' "refuses a target with nothing installed"
+EQ_HOOK_RULE=0 CLAUDE_PROJECT_DIR="$EQ/t" AI_AGENT=claude-code_1-9-0_agent PATH="$TMP/nobin-eq:/usr/bin:/bin" \
+  eq_run cli-hook-silent eq_hook_world "$EQ/t" "$HOOK" arf_main
+if eq_same cli-hook-silent >/dev/null && [ "$(eq_rc cli-hook-silent)" = 0 ] && [ ! -s "$EQ/cli-hook-silent.cl.out" ] \
+   && [ ! -s "$EQ/cli-hook-silent.cl.err" ]; then
+  note "ok    cli-hook-silent: the program is silent with no rule file exactly as the in-process call is (exit 0)"
+else note "FAIL  cli-hook-silent: the program and the in-process call differ, or the hook spoke with no rule file"; rc=1; fi
+EQ_HOOK_RULE=1 CLAUDE_PROJECT_DIR="$EQ/t" AI_AGENT=claude-code_1-9-0_agent PATH="$TMP/nobin-eq:/usr/bin:/bin" \
+  eq_run cli-hook-loud eq_hook_world "$EQ/t" "$HOOK" arf_main
+eq_verdict cli-hook-loud 0 'FLOOR NOT MET' "reports a rule file below the floor"
+if [ "$(eq_rc cli-install-ok)" != "$(eq_rc cli-install-refuse)" ] && [ "$(eq_rc cli-uninstall-ok)" != "$(eq_rc cli-uninstall-refuse)" ] \
+   && ! cmp -s "$EQ/cli-hook-silent.cl.out" "$EQ/cli-hook-loud.cl.out"; then
+  note "ok    cli cells discriminate: install and uninstall each exit 0 and 1, and the hook's two outputs differ"
+else note "FAIL  cli cells do not discriminate: a subject's two cells gave one answer"; rc=1; fi
 
 # --- I --------------------------------------------------------------------------------------
 arm_i

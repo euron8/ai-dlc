@@ -118,7 +118,6 @@ review-shard-merge	core/scripts/merge-review-shards.sh runs outside a declared c
 review-shard-merge-c	core/scripts/content-seal.sh runs outside a declared cell
 review-shard-merge-f	core/scripts/content-seal.sh runs outside a declared cell
 route-read-required	core/hooks/ai-dlc-acknowledge.sh runs outside a declared cell
-schema-install-fallback	scripts/install.sh runs outside a declared cell
 scope-confirmation	core/hooks/ai-dlc-answer-capture.sh runs outside a declared cell; core/scripts/validate-scope-confirmation.sh runs outside a declared cell
 serial-remediation-worklist	core/scripts/partition-subject.sh runs outside a declared cell; core/scripts/serial-remediation-worklist.sh runs outside a declared cell; core/scripts/partition-document.sh runs outside a declared cell
 settings-merge-documented-form	core/skills/ai-dlc-update/reconcile/settings-merge.sh runs outside a declared cell
@@ -126,7 +125,6 @@ settings-merge-unparseable-template	core/skills/ai-dlc-update/reconcile/settings
 setup-config-drift	core/skills/ai-dlc-update/reconcile/unregistered-drift.sh runs outside a declared cell
 setup-site-drift	core/skills/ai-dlc-update/reconcile/setup-site-drift.sh runs outside a declared cell
 shell-portability	scripts/validate-shell-portability.sh runs outside a declared cell
-shipped-rule-version-floor	core/hooks/ai-dlc-rules-floor.sh runs outside a declared cell; scripts/uninstall.sh runs outside a declared cell; scripts/install.sh runs outside a declared cell
 snapshot-archive-rotate	core/hooks/ai-dlc-continue.sh runs outside a declared cell; core/scripts/rotate-snapshot-archive.sh runs outside a declared cell; core/hooks/ai-dlc-pause.sh runs outside a declared cell
 snapshot-conservation	core/scripts/validate-snapshot-conservation.sh runs outside a declared cell
 snapshot-evidence-cell	core/scripts/sprint-status.sh runs outside a declared cell; core/scripts/validate-artifact-budget.sh runs outside a declared cell; core/scripts/check-owed-derivations.sh runs outside a declared cell

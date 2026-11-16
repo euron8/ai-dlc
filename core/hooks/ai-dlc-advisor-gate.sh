@@ -17,18 +17,30 @@
 #     Crediting it here would reverse that ruling for exactly
 #     the agents it binds. So a granted agent that calls the MCP tool and retries is denied again,
 #     and the deny text says why: it names the built-in tool as the one to call and says the MCP
-#     consult does not clear. An agent with NO grant is silent before the scan and never reaches it.
-#   - When the agent's most recent `advisor_tool_result` carries `error_code: "unavailable"` the
-#     harness withdraws the tool, no call can clear a deny, and the gate only WARNS. A later
-#     result that is not `unavailable` re-arms the deny.
+#     consult does not clear.
+#   - AN AGENT WITH NO GRANT (none, or withdrawn) IS GATED ON THE MCP CONSULT (BL-1135, operator
+#     ruling), as the operator-home ancestor's no-grant arm is: a `tool_use` named
+#     `mcp__advisor__consult` after the last gated action (or inside THE WINDOW) is its attempt, and
+#     its deny names that tool. It is gated only when the transcript shows it HOLDS the consult: the
+#     latest `deferred_tools_delta` attachment naming `mcp__advisor__consult` lists it in
+#     `addedNames` (not `removedNames`), or, with no such attachment, a consult call is on disk.
+#     An agent holding neither advisor is SILENT, so no deny is ever unclearable. Measured on graph:
+#     a 2026-11-15 lead session (no grant, `deepseek41`) lists the consult in three such attachments and
+#     made 0 consults across its pushes and a merge; two no-grant sessions from before the advisor
+#     MCP server was configured list none. KNOWN GAP: a harness that loads MCP tools without a
+#     `deferred_tools_delta` line reads as holding nothing and is silent, as before.
+#   - When a GRANTED agent's most recent `advisor_tool_result` carries `error_code: "unavailable"`
+#     the harness withdraws the tool, no call can clear a deny, and the gate only WARNS. A later
+#     result that is not `unavailable` re-arms the deny. A no-grant agent never reads this.
 #   - NO CONFIG KNOB AND NO DEFAULT on whether the gate applies (THE RE-READ's
 #     `ADVISOR_GATE_REREADS` and `ADVISOR_GATE_NET` bound the wait for the incoming call's line and
 #     never acquit a call whose line is on disk; THE WINDOW's `ADVISOR_GATE_WINDOW` sizes
 #     the recency window and never turns the gate off). That is decided PER AGENT from that
 #     agent's own transcript: the harness writes an `attachment` line of type `advisor_tool`
-#     (`available`, `toolChange`, `model`) when it grants the tool. No such line -> silent.
-#     The LATEST such line wins; `available: false` or `toolChange: "remove"` is a withdrawn
-#     grant -> silent. A lead on a local model and teammates on Anthropic models is normal.
+#     (`available`, `toolChange`, `model`) when it grants the tool. No such line -> the no-grant
+#     arm above. The LATEST such line wins; `available: false` or `toolChange: "remove"` is a
+#     withdrawn grant -> the no-grant arm. A lead on a local model and teammates on Anthropic models
+#     is normal.
 #     WITHDRAWAL, MEASURED (`claude -p` 2.1.291, PreToolUse logging hook): a session on
 #     claude-opus-5-5 wrote `{"type":"advisor_tool","available":true,"model":"claude-fable-5-1",
 #     "toolChange":"add"}`; `--resume` with `--model qwen38flash-mlx` (a fresh session on it carries
@@ -90,7 +102,8 @@
 #     step 6 and delivers through step 8 "reused as-is" (push, PR, operator-approved merge). All
 #     three ARE the subject, so the false-positive set under this ruling is empty; the cost is one
 #     deny per merge on a lead that holds the advisor tool and has not called it, cleared by one
-#     call. A lead with no grant (a local model) is silent, as everywhere.
+#     call (the MCP consult, for a lead with no grant that holds it). A lead holding neither
+#     advisor is silent, as everywhere.
 #     Measured on graph's 0.791 -> 0.793 update session: `gh pr merge 1230` and `gh pr merge 1231`
 #     ran standalone from the update cwd with 0 advisor attempts, both exempt before this change.
 #   - EXCLUDED BY COMMAND TEXT, because PreToolUse sees the cwd branch BEFORE the command runs:
@@ -168,7 +181,7 @@
 # pre-push hook. Measured on graph twice (s319, 01:54Z and 03:05Z, two leads on two models), each
 # justified as an `_bmad-output/`-only change, the second right after an advisor call. So it runs
 # right after the parse, BEFORE every stand-down: empty KIND, the `ai-dlc-update/*` branch, no
-# transcript, a withdrawn or absent grant (a local-model lead), and L3.
+# transcript, an agent holding neither advisor (a local-model lead with no MCP consult), and L3.
 #   UPDATER: an /ai-dlc-update session (last ai-dlc marker in the handed transcript, the I126 scan)
 #   stands down; no transcript, no marker, or an /ai-dlc marker still DENIES (fail closed).
 #   SCOPE: any agent, lead or teammate (graph's subagent transcripts carry 0 such pushes), and
@@ -548,10 +561,16 @@ WIN=$((10#$WIN))
 scan() {
 jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg tuid "$TUID" --arg fp "$FP" --arg kind "$KIND" --argjson win "$WIN" "$CLASSIFY"'
   reduce (inputs | (fromjson? // empty) as $l | select(($l | type) == "object") | [input_line_number, $l]) as [$n, $l]
-    ({grant: null, adv: 0, res: "-", g: {}, last: 0, seen: 0, order: [], madv: {}, cur: null};
+    ({grant: null, adv: 0, res: "-", g: {}, last: 0, seen: 0, order: [], madv: {}, cur: null,
+      roster: null, mcp: 0, mmadv: {}};
      .last = $n
      | if ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "advisor_tool") then
        .grant = (($l.attachment.available != false) and ($l.attachment.toolChange != "remove"))
+     elif ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "deferred_tools_delta") then
+       (if (($l.attachment.removedNames // []) | if type == "array" then any(.[]; . == "mcp__advisor__consult") else false end)
+        then .roster = false else . end)
+       | (if (($l.attachment.addedNames // []) | if type == "array" then any(.[]; . == "mcp__advisor__consult") else false end)
+          then .roster = true else . end)
      else
        (if $l.type == "assistant" then ((($l.message.id? // "") | tostring) | if . == "" then "L\($n)" else . end) else null end) as $mk
        | (if $mk != null and .madv[$mk] == null then (.order += [$mk] | .madv[$mk] = false) else . end)
@@ -563,6 +582,8 @@ jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg t
            .adv = $n | (if $mk != null then .madv[$mk] = true else . end)
          elif $b.type == "advisor_tool_result" then
            .res = (if (($b.content | if type == "object" then .error_code else null end) // "") == "unavailable" then "U" else "R" end)
+         elif ($b.type == "tool_use" and $b.name == "mcp__advisor__consult") then
+           .mcp = $n | (if $mk != null then .mmadv[$mk] = true else . end)
          elif ($b.type == "tool_use" and (($b.id // "") | tostring) != "" and (($b.id | tostring) != $tuid)) then
            ({name: $b.name, input: ($b.input // {})} | kindx($role) | sub("^gatelogw$"; "gatelog")
             | sub("^hdrw$"; "")) as $k
@@ -578,21 +599,29 @@ jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg t
   | (if $tuid == "" then .g |= with_entries(select(.value[0] != $last)) else . end)
   | ([.g[] | select(.[2] == $kind) | .[0]] | max // 0) as $act
   | ([.g[] | select(.[1] != "" and .[1] == $fp)] | length) as $same
-  | .order as $o | ($o | length) as $len | .madv as $ma | .cur as $cur
+  | .order as $o | ($o | length) as $len | .madv as $ma | .mmadv as $mm | .cur as $cur
   | (if .seen == 1 and $cur != null then (([range(0; $len) | select($o[.] == $cur)] | first) // $len)
      else $len end) as $ci
-  | (if ([range([0, $ci - $win + 1] | max; [$ci + 1, $len] | min) | $ma[$o[.]] // false] | any) then 1 else 0 end) as $inwin
-  | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.adv) \($act) \(.res) \($same) \(.seen) \($inwin)"' "$JUDGED" 2>/dev/null
+  | [range([0, $ci - $win + 1] | max; [$ci + 1, $len] | min)] as $wr
+  | (if ([$wr[] | $ma[$o[.]] // false] | any) then 1 else 0 end) as $inwin
+  | (if ([$wr[] | $mm[$o[.]] // false] | any) then 1 else 0 end) as $minwin
+  | (if .roster == true or (.roster == null and .mcp > 0) then 1 else 0 end) as $held
+  | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.adv) \($act) \(.res) \($same) \(.seen) \($inwin) \(.mcp) \($minwin) \($held)"' "$JUDGED" 2>/dev/null
 }
-# judge: sets GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN INWIN from STATE, and V to allow | owed.
+# judge: sets GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN INWIN LAST_MCP MINWIN MHELD from STATE, and
+# V to allow | owed. An agent whose grant is not `on` is credited for an `mcp__advisor__consult` call.
 judge() {
-  read -r GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN INWIN <<<"$STATE"
+  read -r GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN INWIN LAST_MCP MINWIN MHELD <<<"$STATE"
   V=owed
   # A teammate re-writing a deliverable it already wrote un-denied is not a new gated action.
   if [ "$ROLE" = mate ] && [ "${SAME:-0}" -gt 0 ] 2>/dev/null; then V=allow; fi
   if [ "${LAST_ADV:-0}" -gt "${LAST_ACT:-0}" ] 2>/dev/null; then V=allow; fi
   # THE WINDOW: an advisor attempt within the last $WIN assistant turns clears the call.
   if [ "${INWIN:-0}" = 1 ]; then V=allow; fi
+  if [ "${GRANT:-none}" != on ]; then
+    if [ "${LAST_MCP:-0}" -gt "${LAST_ACT:-0}" ] 2>/dev/null; then V=allow; fi
+    if [ "${MINWIN:-0}" = 1 ]; then V=allow; fi
+  fi
   return 0
 }
 # L3: a push whose outgoing commits touch only `_bmad-output/` owes no consult. The change set is
@@ -626,8 +655,9 @@ l3_exempt() (
 )
 STATE="$(scan)" || { say "the transcript could not be scanned ($JUDGED); gate skipped"; exit 0; }
 judge
-# The grant line is written at session start, long before any gated call, so the first read decides it.
-[ "${GRANT:-none}" = on ] || exit 0
+# The grant line and the tool roster are written at session start, long before any gated call, so the
+# first read decides them. No grant: gated only when the agent holds `mcp__advisor__consult` (MHELD).
+[ "${GRANT:-none}" = on ] || [ "${MHELD:-0}" = 1 ] || exit 0
 # L3 is decided before the re-read, so a `_bmad-output/`-only push never waits on the poll.
 if [ "$V" != allow ] && [ "$KIND" = push ] && l3_exempt; then exit 0; fi
 # The re-read: an owed verdict (DENY or WARN) on a read that did not yet hold the incoming call's
@@ -704,11 +734,14 @@ warn() {
   exit 0
 }
 
-if [ "${LAST_RES:--}" = U ]; then
+if [ "${GRANT:-none}" = on ] && [ "${LAST_RES:--}" = U ]; then
   warn "ai-dlc-advisor-gate: this ${KIND} is owed an advisor call (SKILL.md Rule 32), and this agent's most recent advisor result is an 'unavailable' error, so the harness has withdrawn the tool and the call is NOT blocked. A later successful advisor result re-arms the gate."
 fi
 case "$KIND" in
   push) _what="git push" ;; merge) _what="PR merge" ;; close) _what="gate close" ;;
   gatelog) _what="Check 12 gate-log append" ;; verdict) _what="verdict or repair-record write" ;; *) _what="$KIND" ;;
 esac
+if [ "${GRANT:-none}" != on ]; then
+  deny "ai-dlc-advisor-gate: DENIED -- call mcp__advisor__consult in a message of its own, read its answer, then retry the same command. This ${_what} is a SKILL.md Rule 32 touchpoint, and this agent has no built-in advisor grant but holds mcp__advisor__consult, with no consult since its last ${_what}. Each kind (push, PR merge, gate close, gate-log append, verdict write) owes its own consult; one consult covers the next action of every kind. Any consult clears this, including one that errors. This is not a push or merge failure: do not record it as one."
+fi
 deny "ai-dlc-advisor-gate: DENIED -- call the advisor in a message of its own, read its answer, then retry the same command. This ${_what} is a SKILL.md Rule 32 touchpoint, and this agent holds the advisor tool with no advisor attempt since its last ${_what}. Each kind (push, PR merge, gate close, gate-log append, verdict write) owes its own call; one call covers the next action of every kind. Any attempt clears this, including one that errors; if the advisor answers 'unavailable' the gate drops to a warning. This is not a push or merge failure: do not record it as one. This agent holds the built-in advisor tool, so call the built-in advisor tool itself; a call to mcp__advisor__consult does not clear this gate."
